@@ -1,0 +1,2546 @@
+arXiv 2606.04574  https://arxiv.org/abs/2606.04574
+
+Dynamic Multi-Pair Trading Strategy in Cryptocurrency Markets with
+Deep Reinforcement Learning ⋆
+Damian Lebiedźa,1, Robert Ślepaczukb,1
+aFaculty of Economic Sciences, University of Warsaw, ul. Długa 44/50, Warsaw, 00-241, Poland
+bQuantitative Finance Research Group, Department of Quantitative Finance and Machine Learning, Faculty of
+Economic Sciences, University of Warsaw, ul. Długa 44/50, Warsaw, 00-241, Poland
+Abstract
+This study aims to determine whether the application of Deep Reinforcement Learning (DRL) as
+a specialized execution overlay can enhance pair trading in highly volatile cryptocurrency mar-
+kets. Although classical implementations of the strategy have proven successful in traditional
+equities, they frequently exhibit rigidity and suffer from severe divergence risks when applied to
+high-variance environments. To construct a robust system, we developed a hierarchical "Filter-
+then-Rank" pair selection methodology and a custom "Fixed Risk, Adaptive Mean" execution
+model. The system employs a Proximal Policy Optimization (PPO) agent with a Long Short-Term
+Memory (LSTM) layer to govern execution decisions within strict deterministic risk management
+boundaries. Evaluated on 1-hour interval data from the Binance USD-M Futures market, the
+selected RL policy achieved an Out-Of-Sample performance that substantially outperformed the
+heuristic baseline, although the results varied considerably across five random seeds, with four of
+the five seeds exceeding the baseline in both CAGR and Sortino Ratio. A stationary circular block
+bootstrap test of the Agent’s risk-adjusted outperformance yields p-values of approximately 0.06,
+which fall just short of the conventional 5% significance threshold. Ultimately, this study con-
+tributes to the quantitative finance literature by introducing a hybrid architecture that combines
+statistical arbitrage with DRL execution policies. Furthermore, it applies safe reinforcement learn-
+ing via deterministic shielding, with results indicating that anchoring a neural policy to statistically
+robust boundaries mitigates severe divergence risks.
+Keywords:Deep Reinforcement Learning, Deterministic Shielding, Hierarchical Systems,
+Quantitative Finance, Statistical Arbitrage
+1. Introduction
+Statistical arbitrage encompasses a wide range of strategies designed to exploit temporary pric-
+ing anomalies and structural inefficiencies between linked assets. Although classical methodologies
+have been successful in traditional equities, cryptocurrency markets are characterized by high
+volatility and frequent regime changes [2], which introduce persistent frictions and divergence risks
+to arbitrage strategies [28]. Consequently, traditional pair trading is significantly more difficult to
+implement in this domain [12]. The primary objective of this study is to propose and evaluate
+a Dynamic Multi-Pair Trading Strategy that utilizes Deep Reinforcement Learning (DRL) as a
+specialized execution overlay. This research is of significant importance because it addresses the
+rigidity of traditional implementations of the strategy, proposing a more adaptive, hybrid frame-
+work.
+The main aim of this study is synthesized in the following hypotheses:
+H1:A dynamic statistical baseline, driven by a hierarchical pair selection framework and a custom
+⋆The replication of the full research is possible due to public GitHub repository which can be accessed at:
+https://github.com/damianlebiedz/pair-trading-with-rl
+1Email addresses: damian.lebiedz@gmail.com (Damian Lebiedź, corresponding author) ORCID: 0009-0008-5762-
+075X, rslepaczuk@wne.uw.edu.pl (Robert Ślepaczuk) ORCID: 0000-0001-5227-2014
+arXiv:2606.04574v3  [cs.LG]  31 Oct 2026
+execution concept, outperforms traditional benchmarks in the Out-Of-Sample period.
+H2:Deploying Deep Reinforcement Learning as an execution overlay enhances the profitability
+and risk-adjusted performance of a heuristic statistical arbitrage baseline.
+Moreover, we ask the following research questions:
+RQ1:Can a dynamic, multi-pair statistical arbitrage strategy capture a persistent edge within the
+highly volatile cryptocurrency market?
+RQ2:Does deploying Deep Reinforcement Learning as an execution overlay enhance the profitabil-
+ity of a heuristic baseline?
+RQ3:How do different reinforcement learning configurations, specifically the design of reward
+functions and observation spaces, or the implementation of a risk management overlay, impact the
+Out-Of-Sample robustness in high-noise trading environments?
+To navigate the complexities of cryptocurrency markets, this study constructs a dynamic statis-
+tical baseline utilizing a hierarchical "Filter-then-Rank" pair selection methodology and a custom
+"Fixed Risk, Adaptive Mean" execution model. This framework trades a "snapshot equilibrium"
+rather than relying on static [14] or continuous rolling [4, 24] mean-reversion. Furthermore, while
+contemporaryquantitativeresearchincreasinglyexploresconventionalend-to-endRLarchitectures,
+where agents attempt to simultaneously extract predictive signals and learn execution policies di-
+rectly from raw market data [15], these unconstrained models frequently suffer from extreme policy
+instabilityandOut-Of-Sampleoverfitting. Therefore, ourmethodologydeliberatelydecouplesthese
+processes. We strictly deploy a Proximal Policy Optimization (PPO) agent with an LSTM archi-
+tecture exclusively as an execution layer on top of the statistically validated baseline, operating
+within hard deterministic boundaries. The empirical analysis utilizes 1-hour interval data from the
+Binance USD-M Futures market, divided into an In-Sample period (2024) and the Out-Of-Sample
+period (2025).
+This research makes several applied and empirical contributions to the quantitative finance
+literature. First, it provides an empirical application of "safe reinforcement learning via shielding"
+in high-noise environments by evaluating whether a hybrid architecture can mitigate the brittleness
+of conventional end-to-end models. Second, it develops a hierarchical pair selection framework that
+integrates traditional statistical cointegration with strict structural constraints (such as the Hurst
+exponent and beta coefficients) to systematically isolate high-conviction anomalies. By employing
+this framework, the study aims to empirically investigate the trade-off between alpha concentration
+and risk diversification across varying portfolio sizes. Third, it introduces an execution heuristic
+tailoredspecificallytoabsorbthestructuraldriftandregimeshiftsinherenttohighlyvolatiledigital
+assets, challenging the rigidity of classical continuous frameworks. Finally, the study indicates
+that anchoring a neural policy to statistically robust boundaries mitigates severe divergence risks,
+paving the way for safer DRL integration in algorithmic trading. The methodology includes explicit
+safeguards against look-ahead and survivorship biases.
+The structure of this paper is organized as follows. Section 2 provides a comprehensive review
+of the relevant literature. Section 3 outlines the research methodology, detailing the custom frame-
+work, data sources, and the configuration of the DRL algorithm, alongside the evaluation metrics
+and benchmarks. Section 4 presents the baseline formulation and its phased optimization. Section
+5 evaluates the baseline’s performance, supported by a sensitivity analysis. Section 6 assesses the
+strategy using the RL execution overlay, featuring both a sensitivity analysis and a post-hoc abla-
+tion study. Ultimately, the final section presents the overarching conclusions of the study, provides
+answers to the hypotheses and research questions, and outlines directions for future work.
+2. Literature Review
+Statistical arbitrage has evolved from simple empirical heuristics into complex stochastic and
+machine learning frameworks. The seminal distance-based approach matched assets by minimum
+sum of squared historical price deviations during a formation period and traded subsequent di-
+vergences, establishing the empirical viability of pair trading in equity markets [14]. However,
+2
+such non-parametric heuristics suffer from severe divergence risks, as they implicitly assume that
+historical co-movements persist indefinitely while ignoring the underlying forces driving the equilib-
+rium. To formalize this relationship, the literature adopted cointegration as a rigorous econometric
+alternative, identifying genuine long-term equilibria between non-stationary time series [10, 41].
+In the cointegration testing debate, the multivariate Johansen procedure offers theoretical sym-
+metry and higher statistical power, but its eigenvalue decomposition imposes severe computational
+bottlenecks in high-frequency rolling-window settings; the Engle-Granger two-step heuristic re-
+mains highly effective for strictly bivariate spreads and substantially more tractable [20, 6]. To mit-
+igate the limitations of any single statistical metric, modern frameworks emphasize multi-stage fil-
+tering. Augmenting cointegration with explicit structural constraints, in particular the Hurst expo-
+nent computed via rescaled-range analysis, helps separate genuine mean-reverting (anti-persistent,
+H <0.5) spreads from random walks and trending anomalies, while recent contributions further
+leverage graph clustering to identify topologically interconnected pair universes [7, 18, 33, 34, 23].
+Beyond pair selection, spread modelling has shifted from static parameters [14] toward continu-
+ous-time, time-varying formulations. State-space models with Kalman filtering allow the unob-
+servable spread mean to be dynamically updated as a hidden state, while the Ornstein-Uhlenbeck
+framework represents the spread as a mean-reverting diffusion process and introduces the dimen-
+sionlesss-score for trade timing based on the spread’s half-life [9, 4]. Despite their theoretical
+elegance, these continuous models struggle in cryptocurrency markets, which display extreme id-
+iosyncratic volatility, fat-tailed distributions, abrupt regime changes, fragmented liquidity, and
+substantial execution slippage. Under such conditions, OU mean-reversion speed estimates break
+down and frictionless assumptions become unrealistic, rendering theoretically optimal continuous
+hedging practically unviable [2, 12, 24, 28].
+To address these non-linearities, Deep Reinforcement Learning (DRL) has emerged as a flexible
+alternative for algorithmic trading and dynamic portfolio management, offering the capacity to
+learn execution policies directly from market data without rigid econometric assumptions [19, 26].
+Within statistical arbitrage specifically, DRL agents have been shown to optimize pair-trading
+execution and dynamically adapt position sizing to changing market variance, outperforming static
+econometric baselines in cryptocurrency settings [22, 40, 42]. Closest to our setting, Vergara and
+Kristjanpoller [40] apply DRL to a statistical arbitrage strategy in the cryptocurrency market; this
+study retains the statistical pair selection and heuristic baseline, and evaluates the DRL agent as an
+execution overlay constrained by deterministic risk rules. Architecturally, modern implementations
+increasingly replace value-based methods with actor-critic algorithms, particularly Proximal Policy
+Optimization (PPO), whose clipped objective enforces a trust region that prevents destructive
+policy updates in volatile regimes; LSTM augmentations further address the partial observability
+of financial time series [35, 11, 17].
+An equally critical design dimension is the reward function. Standard RL maximizes expected
+returns without regard for variance, which encourages excessive risk-taking in financial environ-
+ments. Drawing on Prospect Theory and the formalization of risk-sensitive RL, asymmetric reward
+shaping that penalizes losses more heavily than it rewards gains internalizes downside risk and sta-
+bilizes policy learning [21, 29]. Nevertheless, unconstrained DRL applied directly to financial
+series remains fragile: out-of-distribution regimes trigger unstable behaviour, and the literature in-
+creasingly warns against backtest overfitting, advocating robust parameter plateaus over isolated
+mathematical peaks [5, 32, 25].
+To mechanically mitigate such instability, the machine learning literature has formalized Safe
+Reinforcement Learning via Shielding, where a deterministic, non-learned layer enforces hard oper-
+ationalguardrailsoverastochasticpolicy, whilestricttemporalconstraintsduringtrainingstabilize
+value estimation [13, 1, 30, 8]. Although well documented in robotics, the integration of shielding
+with classical quantitative risk management to constrain DRL trading agents in high-frequency,
+friction-heavy markets remains underexplored. Contemporary end-to-end models that attempt to
+learn feature extraction, cointegration detection, sizing, and execution jointly suffer from high sam-
+ple complexity and out-of-sample brittleness, particularly when underlying market regimes shift
+[15, 43]. Taken together, the current literature suggests that neither classical static frameworks nor
+unconstrained DRL alone are sufficient to extract robust alpha in cryptocurrency pair trading: the
+former lack adaptivity, the latter lack safety. This precisely motivates our contribution, namely a
+decoupled hybrid architecture in which cointegration, Hurst-based structural filters, and dynami-
+3
+cally anchored statistical boundaries act as a deterministic shield over a risk-sensitive PPO-LSTM
+execution policy, explicitly designed to address this gap in the highly volatile cryptocurrency do-
+main.
+3. Methodology
+3.1. Technical Implementation
+Empirical analysis was conducted using a custom end-to-end framework engineered exclusively
+for this research. To ensure complete methodological transparency, the entire simulation engine
+was developed from the ground up, leveraging core libraries directly rather than relying on existing
+backtesting frameworks. This custom architecture allows an unconstrained and precise realization
+of the proposed execution mechanics. The complete source code is available in the public GitHub
+repository2.
+The system is built on Python 3.12. This setup allows users to run the framework seamlessly
+within isolated Docker containers, guaranteeing a consistent runtime environment regardless of the
+host machine. The framework’s architecture is highly modular, orchestrated through dedicated
+execution scripts. The Reinforcement Learning module is built in strict compliance with the
+Gymnasium API, ensuring standardized and scalable agent-environment interactions. For the
+algorithmic backbone, the framework leverages Stable-Baselines3 along with its extension, SB3-
+Contrib. These libraries provide reliable, highly optimized implementations of state-of-the-art
+DRL algorithms, such as Recurrent PPO used throughout the experiments. Furthermore, the
+DRL training process is fully integrated with Weights & Biases (W&B).
+Readers and researchers interested in replicating the study, or running the framework with
+their own custom parameters, are referred to the detailed tutorial provided in the repository’s
+README.md file.
+Consequently, unless otherwise stated, all figures and tables presented in this study are the
+author’s own calculations.
+3.2. Data
+This study utilizes historical market data sourced from the officialBinance Data Visionarchive
+for the USD-M Futures segment. Raw historical dumps were downloaded directly from the ex-
+change’s AWS S3 Bucket archives3. The analysis presented in this study operates on a 1-hour (1h)
+timeframe.
+The dataset is partitioned into an In-Sample (IS) training period, covering the year 2024, and
+an Out-Of-Sample (OOS) testing period spanning 2025. To facilitate the dynamic pair selection
+methodology, the data retrieval process for the initial trading iteration (January 2024) begins on
+November 1, 2023. Consequently, the contiguous dataset used for this study spans from Novem-
+ber 1, 2023, 00:00 UTC, to December 31, 2025, 23:59 UTC. The final data point corresponds to
+the hourly OHLCV candle opening at 23:00 UTC on the last day of the OOS period, ensuring
+a complete and uninterrupted observation of the market dynamics throughout the investigated
+timeframe.
+Universe Formation and Liquidity Constraints
+The key feature of the data framework is its dynamic, monthly-revised structure. Rather than
+utilizing a static basket of assets, the study operates on a sequence of rolling windows where a
+unique universe is constructed for each trading month. This iterative approach ensures that the
+model works consistently in the most relevant market segments.
+For each iteration, the candidate pool is filtered based on the preceding 2-month formation
+period. During this window, the average daily quoted volume (USDT) is analyzed for all avail-
+able instruments, allowing the assets to be sorted by liquidity. Crucially, assets that exhibit data
+2The repository can be accessed at:https://github.com/damianlebiedz/pair-trading-with-rl
+3Binance Data Vision,https://data.binance.vision/?prefix=data/futures/um/monthly/klines(accessed:
+March 16, 2026).
+4
+gaps during this historical period are strictly excludedpriorto ranking. This completeness re-
+quirement is applied strictlyex-ante, utilizing only information available at the time of selection,
+thereby preventing look-ahead bias. Consequently, for every period, a candidate pool of most liq-
+uid assets (by defaultN= 100) is advanced to the pair selection pipeline. This liquidity criterion
+ensures adequate market depth, which is essential for minimizing execution slippage and mitigate
+microstructural frictions such as bid-ask bounce [14, 7].
+Sample Size and Statistical Power Justification
+While classical pair trading literature frequently evaluates strategies over multi-decade hori-
+zons using daily observations (e.g., Gatev et al., 2006), this study deliberately focuses on a high-
+resolution one-year Out-Of-Sample period. In the context of micro-structural statistical arbitrage,
+the 1-hour interval yields exactly 8,760 data points per asset in Out-Of-Sample 2025. More im-
+portantly, the dynamic selection of 20 pairs evaluated over 12 rolling months translates to 240
+pair-month execution episodes within the OOS period alone. This cross-sectional breadth and
+high data granularity allow a detailed assessment of short-term mean-reverting anomalies. How-
+ever, since these episodes are not statistically independent, they complement rather than replace
+validation across multiple market cycles, as discussed among the limitations in Section 7.
+3.3. Hierarchical Evaluation
+The backtesting framework is structured around a strict four-tier hierarchy. This design allows
+for both granular performance attribution and overall performance simulation.
+•Level 1. Single-Pair Monthly Backtest (Micro-Level):The fundamental building
+block of the simulation. It represents the isolated execution of the strategy on one specific
+pair over a discrete one-month trading window. Crucially, at this micro-level, a stricttrade-
+to-trade compoundingmechanism is applied. The capital base is updated immediately upon
+the closure of each position, ensuring that the asset quantity for any subsequent trade is
+determined strictly at its entry and remains frozen throughout the trade’s lifespan.
+•Level 2. Multi-Pair Monthly Portfolio:For any given month, the independent results
+of selected pairs (n= 20by default) are aggregated. This level evaluates the cross-sectional
+diversification based on a pair selection procedure.
+•Level 3. Multi-Period, Multi-Pair Aggregation:The monthly multi-pair portfolios
+are sequentially chained across 12 rolling iterations, representing a full year. At this level, a
+sequential compoundingmechanism is applied. The cumulative net profit or loss realized at
+the end of a preceding month directly adjusts the initial capital base allocated for the sub-
+sequent month’s operations. This accurately reflects real-world portfolio growth and ensures
+methodological consistency when evaluating the strategy’s exponential capital accumulation
+over time.
+•Level 4. Full In-Sample/Out-Of-Sample Analysis (Macro-Level):The fully merged
+12-month multi-pair results for 2024 constitute the complete In-Sample (IS) performance.
+Correspondingly, the chained 12-month results for 2025 form the Out-Of-Sample (OOS)
+verification, enabling a comprehensive assessment of the model’s capacity to generalize across
+completely unseen annual market regimes.
+5
+Figure 1: Dynamic Rolling Window Hierarchy: Level 1.
+month
+t + 1tt - 1t - 2
+Universe Formation & Pair Selection
+Beta Calculation Performance
+W
+Level 1 at t0
+rolling every month
+rolling every hour
+t - W
+Where W is Z-Score Window
+Note: The diagram illustrates the strictly chronological data flow inside Level 1, designed to eliminate look-ahead bias.
+The 2-month Formation Window (t−2, t−1) is completely isolated from the 1-month Trading Window (t).
+3.4. Market Frictions and Leverage Mechanics
+Transaction Fees
+In realistic quantitative backtesting, explicitly accounting for market frictions is essential to
+evaluate the true viability of a strategy. By default, this study applies a 0.05% transaction fee per
+execution, aligning with the standard USDT taker fee rate for regular users on the Binance for
+USD-M Futures4. However, to test the strategy’s sensitivity to unmodeled frictions, the assump-
+tions verification phase includes a 0.10% friction rate. This elevated rate serves as a composite
+proxy, encapsulating both the baseline 0.05% commission and an additional 0.05% penalty designed
+to simulate execution slippage in highly volatile cryptocurrency regimes. This is a simplified proxy
+rather than a realistic execution model, as funding payments, spreads, market impact, partial fills
+and latency are not simulated.
+Leverage Mechanics and Liquidation Threshold
+To facilitate a fair comparison of risk-adjusted returns, the strategy’s capital exposure is scaled
+to align its structural risk profile with the higher-volatility benchmarks [3].
+As established in Subsection 3.3, the strategy operates on a stricttrade-to-trade compounding
+basis. To preserve methodological consistency, the leveraged variant natively adopts exactly the
+same mechanism.
+Formally, for a given leverage factorL, the strategy allocates a specific base margin upon
+generating an entry signal. This margin is multiplied byLto establish the position’sNotional
+Value. Crucially, both the step-wise profit and loss (PnL) and the transaction fees are explicitly
+derived from this amplified nominal exposure. Throughout the duration of the trade, the absolute
+quantity of engaged leveraged assets remains fixed. This ensures that the leveraged strategy is
+governed by the identical underlying logic as the unleveraged baseline, with performance deviations
+driven solely by the scaled exposure and proportionally magnified market frictions.
+Furthermore, simulating a highly leveraged margin account requires the incorporation of a
+strict liquidation engine to maintain mathematical validity and market realism. In this framework,
+a "Net PnL Liquidation Threshold" is enforced. A position is force-closed (margin call) at the exact
+moment the unrealized net PnL (inclusive of expected exit transaction fees) reaches100%of the
+initially allocated margin. Additionally, if the pair-specific equity is fully exhausted, the strategy
+is declared bankrupt, permanently halting trading operations for that particular asset pair. This
+accurately captures the absolute "Risk of Ruin" inherent in leveraged cryptocurrency markets [39].
+While real-world exchanges implement a Maintenance Margin requirement that triggers liquidation
+slightly before the full exhaustion of the margin balance, this study adopts a 100% threshold as a
+simplification to ensure mathematical tractability and focus on the fundamental risk of ruin.
+4Binance Futures Fee Structure,https://www.binance.com/en/fee/futureFee(accessed: March 16, 2026).
+6
+3.5. Pair Selection
+To construct a robust bucket of assets, we implement a two-stage "Filter-then-Rank" (Com-
+posite Scoring with Hard Penalty) methodology, relying on a multi-stage selection instead of a
+single statistical metric [7, 24]. Our architecture intentionally separates the evaluation of a pair’s
+statistical quality from its structural usefulness, ensuring that only pairs exhibiting both strong
+equilibrium and active mean-reverting properties are selected.
+The pair selection process is executed iteratively for each trading month. For a given period
+(e.g., January 2024), the algorithm utilizes the preceding 2-month formation window (Novem-
+ber–December 2023) and performs selection on the universe ofN= 100most liquid assets based
+on their average daily volume during these two months. Subsequently, thePair Selectionpipeline
+evaluates all potential combinations within this specific candidate pool.
+Before any statistical evaluation, all raw asset close prices within the 2-month formation win-
+dow are transformed into natural logarithms. This transformation will ensure that the modeled
+spreads represent symmetric percentage differentials.
+Stage 1: Statistical Scoring (Quality Assessment)
+In the first stage, we evaluate the fundamental relationship between two assets to determine
+theirlong-termequilibriumandshort-termlineardependence. Foreverypotentialpaircombination
+formed from theN= 100candidate pool, we compute aRaw Scoredefined as a uniformly weighted
+sum of its normalized cointegration strength and its coefficient of determination:
+Raw Score= 0.5·(1−p EG) + 0.5·R 2 (1)
+wherep EG is the p-value derived from the Augmented Engle-Granger two-step method [10], and
+R2 is the squared Pearson correlation coefficient. While the cointegration ensures that the spread
+does not wander indefinitely over the long term, theR2 metric complements this by capturing the
+short-term variance explained by the linear fit. This composite metric allows us to rank pairs from
+the most to the least statistically robust.
+The equal weighting (50/50) of cointegration strength and the coefficient of determination (R2)
+serves as a balanced heuristic designed to identify pairs that exhibit both a long-term equilibrium
+and short-term signal clarity. Crucially, rather than applying an arbitrary absolute acceptance
+threshold (e.g., Raw Score>0.70), the methodology enforces a strict cardinality constraint by
+dynamically selecting only the topnpairs (with a default ofn= 20) out of 4,950 potential com-
+binations. This mechanism strictly isolates the extreme right tail of the distribution (e.g., the top
+0.4% for the default parameter). Because the Composite Score is a convex combination of two
+metrics strictly bounded within the [0, 1] interval, the ranking favors combinations with strong
+composite scores. A pair exhibiting a strong correlation but weak cointegration (or vice versa)
+may be outranked by combinations excelling in both. The topnranking may therefore reduce
+the sensitivity to the exact 50/50 weighting; however, the scoring weights and the Hurst threshold
+were not systematically sensitivity-tested in this study.
+Stage 2: Structural Filtering (Suitability Validation)
+While a highRaw Scoreindicates a strong historical relationship, it does not guarantee suit-
+ability for a mean-reversion strategy. A highly correlated pair might be in a diverging trend, or its
+relationship might be inverted. To address this, we apply strict structural filters using the Hurst
+exponent (H) [18] and the hedge ratio (β).
+Crucially, bothHandβare estimated over the exact same 2-month formation window used
+for Stage 1. The hedge ratioβis derived with Ordinary Least Squares (OLS) regression (pA,t =
+α+βp B,t +ϵ t). Rather than blending these metrics into the continuous Composite Score - which
+risks allowing an exceptionally high correlation to mask disqualifying structural flaws, we treat
+them as hard constraints:
+•Mean-Reversion Constraint (H <0.5):The Hurst exponent quantifies the long-term
+memory of a time series. A value ofH= 0.5signifies a pure random walk. A value of
+H >0.5indicates persistent (trending) behavior. Therefore, only spreads exhibiting anti-
+persistence (H <0.5) possess the mean-reverting properties required to validate the core
+premise of statistical arbitrage [33, 34].
+7
+•Hedge Feasibility Constraint (β >0):A non-positive beta indicates an inverse or non-
+existent linear relationship, making standard long/short hedge ratio construction inappro-
+priate.
+Final Composite Scoring Model
+Final Score=
+(
+0.5·(1−p EG) + 0.5·R 2 ifH <0.5andβ >0
+0.0ifH >= 0.5orβ≤0 (2)
+Following this evaluation, the pairs are ranked in descending order, based on their Final Score,
+and the top n (wheren= 20by default in this analysis), pairs are selected for the subsequent
+trading month. For this final basket, the total capital allocated for the given trading month is
+distributed on a strict equal-weight basis, assigning exactly 1/n of the available funds to each pair.
+Methodological Considerations in Cointegration Testing
+While the Johansen cointegration test [20] is frequently highlighted in econometric literature for
+its theoretical superiority, specifically its symmetry (independence from the choice of the dependent
+variable) and higher statistical power in identifying cointegrating vectors, the Engle-Granger (EG)
+two-step approach [10] was deliberately selected for this framework due to specific architectural
+and computational requirements.
+First, the framework operates on a dynamic rolling-window basis evaluatingN= 100assets,
+resulting inN(N−1)/2 = 4950unique pair combinations tested in a single trading month. Imple-
+menting the Johansen test, which requires complex eigenvalue decomposition for each combination
+iteratively across the dataset, introduces severe computational bottlenecks (O(N2)complexity per
+rolling step). The EG test provides a computationally tractable heuristic that aligns with the
+requirements of high-frequency backtesting engines.
+Second, the primary limitation of the EG test, its sensitivity to variable ordering which can
+lead to asymmetric cointegration estimations (e.g., asset A cointegrates with asset B, but not vice
+versa, potentially distorting the hedge ratio), is explicitly acknowledged and mitigated within the
+broader pair selection pipeline. The framework does not rely solely on the EG test. As detailed in
+Stage 2, any structural flaws or spurious asymmetries passed by the EG test are heavily filtered
+out by strict deterministic constraints, namely the Hurst exponent requirement (H <0.5) and the
+Hedge Feasibility constraint (β >0).
+Ultimately, the EG test serves strictly as an initial, fast mathematical sieve in Stage 1. By
+coupling it with robust secondary filters and focusing strictly on bivariate relationships (where Jo-
+hansen’s multivariate advantages are less critical), the framework successfully isolates high-quality
+mean-reverting pairs while maintaining computational efficiency.
+Survivorship Bias and Look-ahead Mitigation
+The selection pipeline is designed to be strictly immune to survivorship bias. If an asset was
+available and met the liquidity criteria during the 2-month formation window, it remains a valid
+candidate for the subsequent trading month, even if it was delisted during that active testing
+period. The trading engine recognizes this discontinuity and simulates an immediate emergency
+liquidation of the open position at the last available quoted price, fully realizing and booking any
+incurred losses.
+3.6. Baseline Strategy Framework
+The framework employs a strictSignal on Close, Execute on Openarchitecture to eliminate
+look-ahead bias. To mirror real-world execution, raw hourly candles (indexed by open time) are
+re-indexed to their exactclose time. For example, a candle covering price action from00:00:00to
+00:59:59is timestamped at01:00:00. Consequently, for a trading month starting at00:00:00,
+the first actionable data point is the fully formed candle at01:00:00.
+At any discrete stept, statistical indicators are calculated exclusively using the finalized close
+price fromt−1. If a signal is generated, the simulated order is executed at theopen priceof
+the candle beginning att. This structural separation between the signal-triggering price (historical
+8
+close) and the fill price (subsequent open) ensures that the model acts only on information available
+at that exact moment.
+Crucially, because thePair Selectionpipeline is performed monthly, a strictterminal liquidation
+policy is enforced at the end of each testing window. At the final timestamp of the period (e.g.,
+2024-02-01 00:00:00), any open trades are forcefully closed at the last available close price. This
+mandatory liquidation ensures that PnL is fully realized within the correct period and that the
+subsequent month begins with a neutral cash position, ready for the newly reconstituted set of
+pairs.
+3.6.1. The Fixed Risk, Adaptive Mean Model
+The core execution logic of the strategy deviates from the classical, strictly stationary pair
+trading frameworks (e.g., Gatev et al., 2006) to better accommodate the persistent micro-structural
+drift characteristic of cryptocurrency markets. Rather than executing a continuous rolling mean-
+reversion, the proposed architecture trades asnapshot equilibrium. We conceptualize this approach
+as theFixed Risk, Adaptive Meanmodel.
+The system operates in a discrete action space, where the portfolio exposure is either long
+leg (1.0), short leg (−1.0), or neutral/out-of-market (0.0) [42]. When a signal is generated, the
+strategy commits 100% of the available capital allocated to that specific pair.
+To ensure scale-invariance, all price data are transformed into natural logarithms. LetpA,t
+andp B,t denote the log-prices at the current time stept, and lett0 represent the timestamp of
+position entry. The decision-making proxy, the Conditional Z-Score (Zt), is derived based on the
+operational state of the portfolio:
+Zt =
+( (pA,t−βtpB,t )−µt
+σt if Positiont−1 = 0(Market State)(pA,t−βt0 pB,t )−µt
+σt0 if Positiont−1 ̸= 0(Position State) (3)
+A critical feature of this equation is the decoupling of the estimation horizons. While the
+hedge ratio (β) is estimated over a long-term, one-month rolling window to capture the stable,
+wider relationship between the pair, the Z-Score components (µandσ) are evaluated over a much
+shorter, one-week rolling window (Z-Score Window = 168hours by default in this analysis). This
+dual-window approach allows the strategy to anchor its physical exposure to a robust, long-term
+ratio, while remaining agile enough to exploit short-term, local micro-structural price anomalies.
+In theMarket State, the strategy uses rolling beta (βt) and standard deviation (σt) to evaluate
+new opportunities against current market conditions. Once a position is initiated, the strategy
+transitions to thePosition State, where the hedge ratio (βt0) and volatility anchor (σt0) are frozen.
+However, the mean (µt) remains adaptive (live) in both states to account for structural price drift.
+This behavior is governed by three foundational pillars:
+State-Dependent Hedge Ratio (βt0)
+In the classical pair trading literature, strategies often rely on a strict 1:1 dollar-neutral capital
+allocation (β= 1.0,w A = 0.5, wB = 0.5) [14, 41]. However, this equal-weighting approach carries
+a significant structural drawback. If one asset exhibits significantly higher idiosyncratic volatility
+than its paired counterpart, a rigid 1:1 capital split leaves the portfolio heavily exposed to unhedged
+directional market risk.
+To address this limitation, the proposed strategy utilizes a dynamic hedging mechanism oper-
+ating across two distinct states:
+•Market State (Out-of-Position):While searching for entry opportunities,β t is con-
+tinuously re-calculated at each discrete time steptusing an OLS regression over a rolling
+one-month lookback window. This window spans from the first close price of the preceding
+month to the current close price att. The system is strictly immune to look-ahead bias due
+to theSignal on Close, Execute on Openarchitecture, ensuring that signals derived from fi-
+nalized data are executed only at the subsequent marketopen. During this state, the spread
+is evaluated as:
+Spreadt =p A,t −β tpB,t (4)
+9
+•Position State (In-Position):Upon generating an entry signal at the close of a candlet0,
+the optimal hedge ratioβt0 (derived from the one-month window ending att0) is immediately
+locked for the entire duration of the trade. During this state, the spread for allt > t0 is
+evaluated as:
+Spreadt =p A,t −β t0 pB,t (5)
+This ensures that the strategy tracks the performance of the exact physical inventory held,
+maintaining the mathematical integrity of the trade against subsequent shifts in the rolling
+market correlation. Capital weights are established strictly att0 usingw A = 1/(1 +βt0 )and
+wB =β t0 /(1 +β t0 ).
+Immediately upon position liquidation, the system reverts to the Market State, resuming the
+calculation of the spread and Z-Score using the rolling market beta (βt) to identify the next mean-
+reversion opportunity.
+This structural freezing is a practical necessity. Continuously rebalancing to match a rolling
+beta hedge ratio during an active trade would generate excessive portfolio turnover, entirely erod-
+ing the statistical edge through cumulative transaction commissions [4].
+State-Dependent Standard Deviation (σt0,Volatility Anchor)
+During an active position, the standard deviation of the spread - acting as the denominator in
+the Z-Score equation - is strictly frozen at its entry value (σt0). This architectural decision prevents
+the phenomenon of "denominator error" or false Mean-Reversion Signals. In the highly volatile
+markets, a sudden exogenous volatility shock will cause the rolling standard deviation to spike. If
+the denominator is left unfrozen, it mathematically dilutes the Z-Score, forcing it artificially toward
+zero. Freezingσ t0 at entry solidifies the initial unit of risk/reward, defending the mathematical
+integrity of the exit logic against purely noisy volatility expansions.
+•Market State (Out-of-Position):The strategy utilizes a rolling standard deviation (σt),
+calculated over the specified Z-Score Window (168 hours by default).
+•Position State (In-Position):Upon position initiation, the standard deviation is strictly
+locked at its entry value (σt0). The Z-score is then calculated using this constant value.
+Live Mean (µt)
+Conversely, the rolling mean of the spread (µt) is continuously updated based on the current
+Z-Score Window:
+µt = 1W
+W−1X
+k=0
+Spreadt−k (6)
+If the mean is frozen at entry and the market undergoes a permanent regime shift, the strategy
+risks holding a stranded asset indefinitely, waiting for a historical equilibrium that no longer exists.
+A live mean allows the strategy to slowly adapt to the new equilibrium.
+3.6.2. Stop Loss Architecture
+To protect the portfolio from structural breakdowns and prolonged regime shifts, the frame-
+work implements a robust, three-tier risk management architecture. The system relies on prede-
+fined mathematical boundaries rather than arbitrary percentage drops, ensuring that risk scales
+proportionally to the statistical properties of the spread.
+Deterministic Stop Loss Threshold
+The primary Stop Loss (SL) parameter is defined mathematically as a static multiplier of the
+predefined Entry Threshold (Entrythr), rather than a multiplier of the actual execution Z-Score
+(Zt0):
+SLthr =Entry thr ×SL (7)
+This deterministic approach is crucial when operating on discrete, hourly intervals. In highly
+volatile markets, an hourly candle might close with an extreme Z-Score spike (e.g., 5.50). If the
+strategy calculated the SL dynamically based on the execution Z-Score, the risk boundary would
+10
+widen disproportionately (to 11.0), exposing the portfolio to unpredictable drawdowns. By fixing
+the SL Threshold to the Entry parameter, the maximum allowed deviation remains constant. A
+late entry means the position has less room to maneuver before hitting the SL, penalizing the
+imperfect execution latency without compromising the global risk limits.
+SL Lock (Regime Filter)
+To prevent the strategy from repeatedly taking losses, the model employs anSL Lockmech-
+anism. If a position is liquidated via Stop Loss, the specific pair is immediately blacklisted from
+opening new trades. This lock is lifted only when the spread definitively proves it has returned to
+an equilibrium state - when the Z-Score crosses the Exit Threshold boundary (e.g., returning to
+the mean, if Exit Threshold = 0.0). This regime filter effectively forces the strategy to stay out of
+trending, non-stationary market phases.
+Time Decay Stop Loss
+Topreventcapitalfrombeingtiedupinstagnant, non-revertingspreads, thestrategyintroduces
+a temporal feature known asTime Decay SL. By default, this mechanism enforces a strict time
+limit on active trades based on the Z-Score Window.
+If a trade remains open for an extended period, the original SL Threshold begins to linearly
+contract towards the Exit Threshold. In this study, the decay initiates once the trade duration
+reaches 50% of the Z-Score Window and steadily tightens at each calculation step. By the time
+the trade duration equals the full Z-Score Window length, the SL Threshold converges completely
+with the Exit Threshold, forcing a mandatory liquidation. This temporal tightening mechanism
+penalizes prolonged market exposure.
+3.6.3. Signal Generation and Execution Mechanics
+The chronological flow of a single algorithmic step is defined as follows:
+1.Calculation (t):At the close of the hourly candle at timet, all rolling statistics and the
+conditional Z-Score (Zt) are computed using definitive historical data.
+2.Decision (t):Initially, the algorithm verifies the SL Lock status. If the pair is currently
+locked due to a recent stop-loss liquidation, all entry signals are suppressed untilZt crosses
+the Exitthr boundary, proving a return to equilibrium. If the pair is tradable, the system
+evaluatesZ t and its predecessor (Zt−1) against the thresholds (Entrythr, Exitthr) and the
+defined risk boundary (SLthr):
+•Long Entry:Triggered if the Z-Score crosses below the negative entry threshold from
+above (Zt−1 >−Entry thr ≥Z t). The signal is only valid if the divergence has not
+breached the Stop Loss boundary (Zt >−SL thr).
+•Short Entry:Triggered if the Z-Score crosses above the positive entry threshold from
+below (Zt−1 <Entry thr ≤Z t). Similarly, the signal is valid only ifZt < SLthr.
+•Standard Exit (Take Profit):If a position is active, a liquidation signal is triggered
+when the Z-Score reverts to the equilibrium mean, defined by the Exit Threshold (cross-
+ing0.0by default). For a Long position, this occurs whenZ t ≥ −Exitthr; for a Short
+position, whenZ t ≤Exit thr.
+•Stop Loss Exit (Risk Liquidation):A mandatory liquidation is triggered if the
+divergence expands beyond the predefined risk boundary. For a Long position, this
+occurs whenZ t ≤ −SLthr; for a Short position, whenZt ≥SL thr.
+3.Execution (t+ 1):If an entry or exit signal is generated at the close oft, the simulated
+order is routed and executed at the open price of the subsequent candle. This structural
+separation ensures the model acts only on fully finalized information, reflecting the practical
+constraints of computational processing.
+3.7. Reinforcement Learning Implementation
+The integration of Reinforcement Learning (RL) in this study departs from conventional end-
+to-end trading architectures, where agents are expected to derive both signals and execution logic
+from raw market data [19]. Instead, we implement the RL agent as aDynamic Execution Overlay.
+11
+3.7.1. Algorithm
+To handle temporal dependencies, we utilize Proximal Policy Optimization (PPO) [35] with
+a Long Short-Term Memory (LSTM) architecture [17]. The recurrent layer allows the agent to
+maintain an internal "memory" of recent market dynamics, which is crucial for identifying shifting
+regimes.
+The key hyperparameters of the PPO algorithm and the recurrent network architecture are
+summarized in Table 1.
+Table 1: PPO and LSTM Network Hyperparameters.
+Category Parameter V alue
+OptimizationLearning Rate 0.0003
+Batch Size 256
+Optimization Epochs 10
+Clipping Range (ϵ) 0.2
+RL DynamicsGamma (γ) 0.999
+Entropy Coefficient (c2) 0.01
+Number of Steps (nsteps) 256
+ArchitectureLSTM Hidden Size 128
+Number of LSTM Layers 1
+Shared LSTM False
+Enable Critic LSTM True
+T rainingPasses per Pair 20
+Seed 42
+Note: The choice of a high discount factor (γ= 0.999) reflects the objective of prioritizing long-term portfolio stability
+over immediate localized gains. Furthermore, the inclusion of anLSTM-based Criticis a deliberate architectural decision;
+it enables the value network to more accurately estimate the expected reward by considering the historical context of the
+spread’s trajectory. Finally, thePasses per Pairparameter dictates the number of training iterations executed over a
+single, one-month episode provided in the training dataset.
+By setting thisPasses per Pairmultiplier to 20, the agent iterates through the entire historical
+training set multiple times, effectively defining the total number of training epochs required for
+policy stabilization. This approach ensures that the model is sufficiently exposed to the underlying
+market dynamics to achieve convergence. Crucially, this repetition does not introduce data leakage
+despite the use of a recurrent architecture (LSTM). Since the implementation resets the LSTM
+hidden states at the conclusion of each 168-step episode, the agent is prevented from memorizing
+global chronological sequences and is instead forced to learn generalizable features within the local
+context of each pair.
+Regarding the discount factor,γ= 0.999was selected to align with the strictly finite horizon of
+the environment. In a 168-hour episode, this value ensures that rewards at the end of the window
+still retain approximately 84.6% of their original weight (≈0.999168). Such a high discount factor
+is essential for pair trading strategies to prevent myopic (short-sighted) behavior, as mean reversion
+often requires holding positions for a significant portion of the available time. While values very
+close to 1.0 can cause instability in infinite-horizon problems, the fixed duration of these episodes
+naturally bounds the optimization process, ensuring robust learning without the need for lowerγ
+values.
+3.7.2. Observation Space
+To address the "curse of dimensionality" and identify the most impactful features for policy
+convergence, we designed a modular observation space:
+•Autonomous:Focuses on fundamental trade mechanics. The state vectorst ∈R 3 includes
+the current Z-Score, the agent’s active position status, and the normalized time spent in the
+position (tpos/W, whereWisZ-Score Window).
+12
+•Standard:Adds the baseline’s heuristic guidance. The state vectors t ∈R 4 extends the
+Autonomoussetbyincludingthediscretesignal(1,0,−1)generatedbythebaselinestatistical
+model.
+•Full:The state vectors t ∈R 5 expands the Standard set by incorporating the Hurst exponent
+(Ht) [18] computed over the identical lookback window asβt.
+To ensure stable policy convergence and mitigate the risk of vanishing or exploding gradients
+during training, the heterogeneous features of the selected observation space undergo dynamic
+normalization. Utilizingarunningmeanandvariancealgorithm[11], thestatespaceiscontinuously
+standardizedtoazeromeanandunitvariance, withextrememarketoutlierssystematicallyclipped.
+This critical preprocessing step guarantees that the neural network receives symmetrically scaled
+inputs, effectively resolving the inherent scale disparities between different features before the state
+representation is fed into the agent’s policy network.
+3.7.3. Reward Function
+The reward function is the core component that aligns the agent’s policy with risk-adjusted
+profitability. We implement three distinct schemes, all incorporating an asymmetric loss aversion
+coefficientλinspired byProspect Theory[21] and formalized technically within the Risk-Sensitive
+Reinforcement Learning framework [29]. This ensures that negative returns are penalized more
+severely than positive gains are rewarded. In all cases, a portfolio bankruptcy event results in a
+terminal penalty of -1.0.
+1. Step-based Asymmetric Reward (StepPnL)
+This approach provides a dense reward signal. Its formulation evaluates the net return at each
+discrete time stept. This forces the agent to internalize the continuous cost of capital, market
+fluctuations, and execution fees (ft):
+rt = ∆P nLt −f tEquityt , R t =
+(
+rt ifr t ≥0
+λ·r t ifr t <0 (8)
+To evaluate the impact of downside risk penalization, two configurations for the multiplier were
+tested in this study:λ= 1.0(representing a symmetric baseline) andλ= 1.2(introducing an
+asymmetric penalty for negative returns).
+To ensure numerical stability during the gradient update process, the reward function incor-
+porates a terminal state logic. IfEquityt ≤0, the environment triggers a bankruptcy event, and
+the agent receives a fixed penalty of -1.0, bypassing the division in Eq. 8. Furthermore, since the
+In-Sample training is conducted strictly on an unleveraged basis (1x leverage), the equity fluctua-
+tions remain within a stable range, preventing extreme reward scaling issues that could otherwise
+arise in highly leveraged scenarios.
+Importantly, this approach ensures that leverage remains transparent to the agent’s policy.
+Since the observation space excludes capital-related variables and focuses solely on statistical in-
+dicators and position status, the transition to a 10x leverage during testing does not change the
+agent’s inputs. Even if higher leverage leads to a faster ’risk of ruin’, the agent’s logic remains
+unaffected because it is incapable of perceiving the margin level, and once liquidated, it simply
+ceases to make further actions while outside the market.
+2. Trade-based Realized Reward (TradePnL)
+To mitigate the noise inherent in financial time series, this scheme provides a sparse reward
+signal only when a trade is finalized. This allows the agent to ignore temporary adverse excursions:
+rtrade = P nLtradeEquityt , R t =
+
+
+
+rtrade iftrade_endedandr trade ≥0
+λ·r trade iftrade_endedandr trade <0
+0otherwise
+(9)
+Consistent with theStepPnLapproach, the identical multiplier configurations (λ∈ {1.0,1.2}) were
+applied to penalize finalized losing trades.
+13
+3. Hybrid Signal-Action Reward (HybridAction)
+This formulation combines realizedTradePnL(rtrade) with an immediate reinforcement signal
+(Φt) triggered during position entry [42]. LetSt ∈ {−1,0,1}denote the baseline mean-reverting
+signal andA t ∈ {−1,0,1}denote the agent’s chosen action. The dynamic componentΦt is defined
+relative to the total round-trip fee (2ft) and a tuning multiplierm:
+Φt =
+
+
+
++2ft ·mifA t =S t andS t ̸= 0(Action Bonus)
+−2ft ·mifA t = 0andS t ̸= 0(Omission Penalty)
+−4ft ·mifA t =−S t andS t ̸= 0(Contrarian Penalty)
+0otherwise
+(10)
+In this study, we set the multiplier tom= 0.2, effectively making the signal-following bonus equal
+to 40% of the transaction cost. The final reward for this hybrid scheme is the sum of the sparse
+trade reward and the dense action signal:
+Rt =R tradet + Φt (11)
+It is crucial to explicitly state that the HybridActionReward scheme is designed as a deliberate
+testofthe"guidedexploration"paradigm, ratherthanascenariooffullyautonomousenhancement.
+The inclusion of the Omission Penalty (where the agent is penalized for remaining neutral when the
+baseline signal triggers, i.e.,At = 0andS t ̸= 0) inherently hard-codes the baseline heuristic into
+the reward landscape. The architectural objective here is not to create an independent decision-
+maker, but to empirically investigate whether explicitly forcing the agent to mimic the validated
+statistical signals accelerates policy convergence, or conversely, if such circular logic constrains
+the neural network’s capacity to optimize micro-execution timing. Acknowledging this internal
+constraint makes the subsequent Out-Of-Sample ablation study between fully autonomous rewards
+(e.g., StepPnL) and explicitly guided rewards interpretable. HybridActionReward is therefore only
+an evaluated experimental variant (Agents 13–18, see Table 5 in Section 6); the selected Agent 2
+uses the StepPnLReward.
+3.7.4. Training Diagnostic Metrics
+To ensure transparency, all training sessions were monitored using the Weights & Biases (W&B)
+platform. Consequently, all the training diagnostic figures presented in this study represent the
+author’s own elaboration of data captured during the agents’ training and logged via W&B.
+To monitor the effectiveness of the training phase, four primary diagnostic metrics are utilized.
+These indicators provide insight into the optimization process of the Proximal Policy Optimization
+(PPO) algorithm [35]:
+1. Mean Episode Reward (Rmean)
+The episode reward represents the total sum of step-based rewards (rt) accumulated by the
+agent over a discrete one-month trading window, which constitutes a single episode in this envi-
+ronment. The total reward for an episode of lengthTis defined as:
+Repisode =
+TX
+t=1
+rt (12)
+To continuously assess training progress, the learning framework tracks the Mean Episode Reward
+(Rmean), calculated internally as a rolling average over up to 100 most recent episodes. An upward
+trajectory indicates that agents are successfully learning to better maximize the reward function
+over time.
+2. Value Loss (LV F)
+Value loss measures the mean squared error (MSE) between the state-value function estimated
+by the Critic network (Vθ(st)) and the actual future discounted rewards observed during training
+(V targt ). It is defined as:
+LV F=E t (Vθ(st)−V targt )2 (13)
+14
+A decreasing and stabilizing value loss indicates that the Critic is becoming increasingly accurate
+at estimating the expected cumulative reward for a given market state.
+3. Explained Variance (EV)
+The explained variance quantifies the proportion of the variance in the future discounted re-
+wards that is successfully captured by the Critic’s value function. It is a critical indicator of the
+signal-to-noise ratio within the agent’s internal representation:
+EV= 1− Var(V targt −V θ(st))
+Var(V targt ) (14)
+The dynamic ofEVdepends on the characteristics of the reward function. A consistent upward
+trend indicates that the Critic is increasingly able to distinguish structural patterns from stochastic
+noise.
+4. Policy Entropy (H)
+Entropy measures the degree of randomness in the agent’s action distribution (π). It serves
+as a primary mechanism to balance the fundamental exploration-exploitation trade-off [38] during
+training, ensuring that the agent does not prematurely converge to a suboptimal policy (Adenotes
+the discrete action space):
+H(π(·|s t)) =−
+X
+a∈A
+π(a|st) logπ(a|s t)(15)
+The stabilization of entropy at a non-zero plateau ensures that the policy remains adaptive and
+continues to explore the state space, preventing the model from prematurely collapsing into a rigid
+and potentiallyoverfittedstate.
+3.7.5. Agent Execution and Risk Management Overlay
+Transitioning from the baseline heuristic model, the framework introduces a Deep Reinforce-
+ment Learning (DRL) agent to govern trade execution. Rather than relying on staticZt entry
+thresholds, the agent continuously evaluates the market state and autonomously outputs discrete
+actions (Long, Short, or Neutral/Out-of-Market).
+However, DRL policies applied to financial time series are notoriously susceptible to out-of-
+distribution (OOD) market regimes. In unseen environments, unconstrained agents often exhibit
+unpredictable behaviors during structural breakdowns [13]. To ensure capital preservation and
+mitigate this inherent unpredictability, we implement a heuristicRisk Management Overlayduring
+the deployment phase.
+This architecture acts as a deterministic, non-learned shielding layer that enforces strict execu-
+tion guardrails over the RL agent’s stochastic actions [1]. While the agent maintains full autonomy
+to enter positions and can choose to close them early, the overlay enforces a hard boundary based
+on the validated baseline parameters: a static Take-Profit (Exit Threshold = 0.0) and a rigorous
+Stop Loss (SL). If the agent fails to liquidate a position before these boundaries are breached, the
+overlay overrides the neural network and forces a mandatory exit. In the evaluated configuration,
+the overlay also applies the SL Lock and the progressive Time Decay SL. The time-based close
+at the end of the Z-Score Window and the margin-exhaustion liquidation (Subsection 3.4) are
+separate execution constraints that remain active even when the overlay is disabled.
+This dual-layer approach, combining a dynamic RL execution policy with a static risk overlay,
+serves to truncate unbounded losses during permanent regime changes. By isolating the RL agent’s
+decision-making from the heuristic risk overlay, the system assigns each layer the task it is best
+suited for: Reinforcement Learning optimizes execution timing, while deterministic rules bound the
+downside that a learned policy cannot reliably control under out-of-distribution conditions. The
+ablation in Table 9 supports this division of roles, as disabling the overlay increases the maximum
+drawdown from 35.27% to 65.09%. Unlike formally verified shields [1], these limits are heuristic
+rather than provably safe.
+15
+3.7.6. Agent Training Environment and Autonomy
+During the In-Sample training phase, the heuristic Risk Management Overlay (detailed in Sec-
+tion 3.7.5) is explicitly disabled. The Reinforcement Learning agent operates in a fully autonomous
+mode, granting the neural policy unrestricted control over the actions.
+The training process is executed directly on the historical data structured by the baseline
+strategy’s In-Sample (2024) backtest. By default, the environment simulates 12 monthly itera-
+tions across a portfolio of 20 dynamically selected pairs, yielding a total of 240 distinct, single-pair
+monthly episodes. The DRL algorithm iteratively traverses these isolated backtests, learning exe-
+cution policies based on the exact market regimes.
+This unconstrained environment is computationally essential for effective exploration [8]. Im-
+posing deterministic boundaries during training would prematurely truncate episodes, artificially
+censoring the reward signal and biasing the value function estimation [30]. By forcing the agent to
+independently execute exit actions, the network learns to natively associate delayed liquidations
+with decaying portfolio value. The agent is trained at 1x leverage to prevent ’Policy Collapse’, a
+state where extreme bankruptcy penalties during exploration could lead to an overly passive policy.
+Since the observation space contains no capital-, margin- or leverage-related variables (see Subsec-
+tion 3.7.3), the learned mapping from market states to actions is identical at 1x and 10x leverage;
+leverage scales the financial consequences of the actions, not the decisions themselves. Likewise,
+the overlay is applied only at deployment by design: as a non-learned shield, it overrides the policy
+only when the validated baseline boundaries are breached and does not alter the policy’s inputs.
+In the Out-Of-Sample phase, the Agent and the Baseline operate under the same 10x leverage, fee
+assumptions and exit boundaries (Exit Threshold, Stop Loss, SL Lock and Time Decay SL), so
+the performance difference between them stems from the execution decisions of the learned policy.
+However, to prevent infinite episode horizons caused by permanently diverging, non-stationary
+pairs, the training environment enforces a single structural constraint: Time Decay Stop (Temporal
+Truncation). If a position reaches this maximum duration limit (Z-Score Window = 168 hours by
+default), the environment forces a mandatory liquidation at the current market price.
+Crucially, while the other heuristic exit rules are disabled, the underlying mathematical ar-
+chitecture of the environment remains identical to the baseline model. TheFixed Risk, Adaptive
+Meanframework is strictly enforced throughout the training phase to ensure consistency across
+environments.
+3.8. Performance Metrics
+To comprehensively evaluate the performance, we employ a standard suite of quantitative met-
+rics. LetV t denote a portfolio equity value at timet, andRt denote the periodic return.
+Compound Annual Growth Rate (CAGR)
+CAGR=
+ VT
+V0
+ 1
+Y
+−1(16)
+whereV T is the final portfolio value,V0 is the initial allocated capital, andYrepresents the total
+duration of the testing period expressed in years. Because multi-period aggregation applies cap-
+ital compounding, the CAGR directly reflects the true exponential growth rate of the simulated
+portfolio.
+Annualized Volatility (σann)
+σann =
+vuutAF· 1N−1 NXt=1(Rt − ¯R)2 (17)
+whereNis the number of observations,R t is the return at timet, ¯Ris the mean return, andAF
+is the annualization factor (e.g., 8760 for hourly data).
+Maximum Drawdown (MDD)[27]
+16
+MDD= max
+t∈[0,T]
+ Pt −V t
+Pt
+
+(18)
+whereP t = maxτ∈[0,t] Vτ is the historical peak (high-water mark) of the portfolio value up to time
+t. This metric assesses the largest peak-to-trough drop, capturing extreme tail risks.
+Sharpe Ratio (Ann.)[36]
+Sharpe= CAGR−R f
+σann
+(19)
+whereR f is the risk-free rate.
+Sortino Ratio (Ann.)[37]
+Sortino= CAGR−R f
+σd
+(20)
+whereσ d is the annualized downside deviation, defined as:
+σd =
+vuutAF· 1N NXt=1 min(0, Rt −R target)2 (21)
+with the minimum acceptable return (Rtarget) set to zero.
+Calmar Ratio
+The Calmar ratio, frequently employed in the evaluation of systematic trading strategies (e.g.,
+Korniejczuk and Ślepaczuk [23]), is defined as:
+Calmar= CAGRMDD (22)
+Operational Metrics
+In addition to return and risk metrics, we report several operational statistics that provide
+deeper insight into the strategy’s structural efficiency and the agent’s behavior. The percentage-
+based trade metrics are calculated from realized trade PnL relative to the allocated entry capital,
+incorporating the leverage applied during execution:
+•Win Count and Lose Count:The absolute number of profitable and unprofitable round-
+trip transactions, respectively, executed across the portfolio, net of the transaction fees
+recorded at position closing.
+•AverageWinReturnandAverageLossReturn:Themeanpercentagereturngenerated
+exclusively by the winning trades, and the mean percentage loss incurred by the losing trades.
+•Average Trade Return:The overall mean percentage return calculated across all executed
+trades, reflecting the per-trade expected value of the strategy, including the leverage applied
+during execution.
+•Average Trade Duration:The mean duration, measured in hourly steps, that a position
+is held open before liquidation.
+Metric Evaluation Paradigm
+As the empirical evaluation of the strategy deliberately employs a leverage factor (detailed
+in Subsection 3.4), it is important to emphasize that all reported statistics, both portfolio-level
+risk/return metrics (e.g., CAGR, Annual Volatility, Max Drawdown) and trade-level operational
+metrics, are calculated strictly on a post-leverage basis. This ensures that the evaluated perfor-
+mance reflects the true operational reality of the margin account.
+17
+3.9. Benchmark Selection
+To evaluate the performance of the baseline strategy, its cumulative returns were compared
+against two distinct benchmarks:
+•Buy-and-Hold Bitcoin (B&H BTC):Represents a passive long-only exposure to the
+BTCUSDT trading pair. To ensure a fair comparison, it accounts for a 0.05% transaction
+commission incurred during both the initial entry and the final liquidation.
+•Equal-WeightPortfolio(B&HEWP):Representsapassiveallocationacrossthemonthly
+universe (N= 100assets). At the start of each month, capital is rebalanced to an equal 1%
+weight per asset. The portfolio is held passively until the next month, allowing weights to
+drift. This benchmark incorporates:
+–Monthly Turnover Costs:A 0.05% fee is applied to all buy/sell orders during the uni-
+verse update and rebalancing.
+–Delisting Handling:Assets with missing data are treated as forced liquidations; the
+recovered capital (net of fees) is held as cash until the end of the month.
+It is important to note that the B&H EWP benchmark operates on a strictmonth-to-month
+compoundingbasis. The aggregate portfolio equity at the end of a given month serves as
+the initial capital base for the subsequent month’s equal-weight reallocation. This ensures a
+mathematically fair and methodologically consistent comparison with the strategy’s sequen-
+tially compounded equity curve.
+Leverage and Risk Alignment
+In this study, the performance of the strategies is evaluated using a leverage factor (see Subsec-
+tion 3.4), while the benchmarks are evaluated unleveraged (1x). This discrepancy is intentional,
+grounded in the fundamental risk profiles of the respective approaches. Statistical arbitrage strate-
+gies historically exhibit significantly lower baseline volatility and shallower drawdowns compared
+to passive directional exposure [14, 24]. To facilitate a fair comparison of returns, the strategy’s
+capital exposure is scaled to align its structural risk profile with the native risk metrics of the
+benchmarks [3]. However, this scaling is not a formal volatility- or drawdown-matching procedure;
+the 1x BTC and EWP benchmarks therefore serve as descriptive market context, while the pri-
+mary evaluation is the comparison between Agent 2 and the baseline, both at 10x leverage under
+identical fee assumptions.
+Mathematical Formulation of Benchmarks
+LetP i,t denote the price of assetiat timet, andR i,t = (P i,t/Pi,t−1)−1denote its periodic
+return. The cumulative return of the benchmarks is formalized as follows:
+1.B&H BTC (V BT C,T):With initial valueV 0 and commissionc= 0.0005:
+VBT C,T=V 0(1−c)
+" TY
+t=1
+(1 +R BT C,t)
+#
+(1−c)(23)
+2.B&H EWP (V EW P,m):For monthmand universeU m, the return (net of aggregate rebal-
+ancing costsc m) is:
+REW P,m=
+"
+1
+N
+X
+i∈Um
+ Y
+t∈m
+(1 +R i,t)
+!#
+−c m (24)
+where for any assetidelisted at timeτ∈m,R i,t = 0for allt > τ, simulating a transition to
+cash. The total portfolio valueVEW P,MafterMmonths is obtained through the sequential
+compounding of these net monthly returns:
+VEW P,M=V 0
+MY
+m=1
+(1 +R EW P,m)(25)
+18
+4. Baseline Strategy Formulation
+The primary objective of the baseline strategy is to establish a robust training dataset for the
+Reinforcement Learning (RL) agent. Extensive full-space grid search optimization in algorithmic
+tradingfrequentlyleadstoIn-Sample(IS)overfittingandsevereOut-Of-Sample(OOS)degradation
+[5]. To mitigate this, we implemented a phased, heuristic parameter selection methodology.
+By optimizing the strategy in sequential stages, we prioritize the discovery of "parameter
+plateaus" over isolated performance spikes, which drastically improves OOS generalization [25].
+This methodology allows us to first prove the efficacy of the core mean-reversion engine before
+applying secondary risk and allocation filters, creating a stable environment with distinct trading
+and stop-loss boundaries for the subsequent Deep Reinforcement Learning phase [22, 43].
+4.1. Baseline Backtesting Methodology
+To rigorously prevent look-ahead bias, baseline parameter optimization is conducted strictly
+within the one-year In-Sample (IS) period (2024). The IS evaluation process for any given param-
+eter set follows a structured protocol:
+•Monthly Granularity:The one-year backtest is decomposed into 12 discrete monthly
+iterations. In each iteration, the strategy trades pairs, which are dynamically re-selected at
+the start of each month based on the selection procedure described in Section 3.5.
+•Metric Distribution:By analyzing the distribution (median, mean, and interquartile
+range) of the Sortino Ratio (Ann.) across these 12 monthly data points, we can identify
+parameter regions that demonstrate consistent profitability across the 12 months of the In-
+Sample year, rather than relying on a single aggregate return.
+To ensure a robust and unbiased hyperparameter optimization process, the performance distri-
+butions in Figures 2-7 are constructed using separately evaluated monthly Sortino Ratios (without
+leverage, with default fee rate = 0.05%). At this stage of evaluation, capital compounding is
+deliberately excluded. This methodological safeguard ensures that performance metrics are not
+disproportionately skewed by late-stage months, where the accumulated capital is higher. By
+maintaining constant capital boundaries within each isolated month, the optimization process cor-
+rectly isolates the raw predictive edge of the parameters.
+Static Architecture and Sequential Optimization
+Before initiating the optimization sequence, several structural parameters were strictly locked.
+These static parameters act as the invariant core of the strategy.
+•Pairs = 20:Portfolio size; capped to maintain highly cointegrated allocations. Varying this
+size during optimization risks cherry-picking historically "lucky" pair combinations rather
+than evaluating the system’s underlying logic.
+•Z-Score Window = 168:Fixed at one week to capture short-term micro-structural anoma-
+lies. While this specific horizon might appear arbitrary, it is grounded in two justifications:
+–First, regarding market dynamics, a 168-hour window (roughly 1/4 of a trading month)
+ensures rolling metrics remain highly responsive to short-term reversions. This allows
+the spread to diverge and revert multiple times per episode, aligning with empirical
+evidence that shorter windows best adapt to sudden regime shifts in highly volatile
+cryptocurrency markets [24, 12].
+–Second, the Z-Score Window and Entry Threshold are inherently interdependent; ex-
+panding the window smooths the standard deviation, directly altering threshold breach
+frequencies. Optimizing both simultaneously risks severe data-mining bias and curve-
+fitting. In sequential optimization, it is methodologically sounder to deterministically
+lock the physical time horizon first, and subsequently optimize the statistical boundary
+(Entry Threshold) to fit that constraint.
+19
+•Exit Threshold = 0.0: Fixed deterministically without optimization because it serves
+as the fundamental theoretical anchor of the strategy. Statistical arbitrage relies strictly
+on mean-reversion, meaning that the predictive edge is exhausted exactly when the spread
+reverts to its historical equilibrium. Locking the exit exactly at zero is not an optimization
+oversight, but a strict boundary condition that defines the strategy’s mathematical identity,
+eliminating the need for empirical grid search.
+Crucially, to ensure these static choices are not the result of arbitrary curve-fitting, their ro-
+bustness is explicitly verified in the Sensitivity Analysis (Table 3). Having established these rigid
+constraints, we isolate the dynamic execution parameters: the Entry Threshold and the Stop Loss
+multiplier.
+To optimize these variables, we performed a sequential optimization procedure instead of a
+full-space global grid search. In a multi-dimensional global search, it is notoriously difficult to
+isolate the marginal contribution of any individual parameter. Consequently, such exhaustive
+searches frequently gravitate toward mathematically optimal but structurally fragile combinations
+that overfit to a historical market noise [32]. Therefore, we applied a phased, hierarchical approach,
+methodologically aligned with modern multi-stage quantitative systems [43].
+By structurally freezing secondary parameters while evaluating the primary ones, we isolate the
+fundamental statistical validity of the core mean-reverting edge. Specifically, the Entry Threshold
+is first optimized independently, without the interference of a Stop Loss, to identify a natural,
+unconstrained market regime plateau. The Stop Loss multiplier is subsequently fitted only after
+this pure entry edge is secured. This sequential search comprehensively maps the performance
+landscape, prioritizing the discovery of broad, resilient "parameter plateaus" over isolated, over-
+optimized peaks.
+4.1.1. Stage 1: Entry Threshold Optimization
+The Stop Loss (SL) multiplier has been turned off to evaluate the quality of the pure entry
+signal. A coarse grid search was executed over a broad parameter space:
+Entry Threshold∈ {2.0,2.25,2.5,2.75,3.0,3.25,3.5,3.75,4.0}
+Figure 2: Coarse Grid Search for the Entry Threshold.
+2.00 2.25 2.50 2.75 3.00 3.25 3.50 3.75 4.00
+0.00
+5.00
+10.00
+2.00 2.25 2.50 2.75 3.00 3.25 3.50 3.75 4.00
+0.50
+1.00
+1.50
+2.00
+2.50
+Median
+Mean
+Entry Threshold Entry Threshold
+Sortino Ratio
+Sortino Ratio
+Panel A: Distribution by Entry Threshold Panel B: Median & Mean by Entry Threshold
+Note: The Stop Loss (SL) multiplier is disabled to evaluate the pure entry signal. Panel A displays the distribution of
+monthly Sortino Ratios in the one-year In-Sample backtest (2024), while Panel B tracks the mean and median of this
+distribution. Constant parameters: Exit Threshold = 0.0, Z-Score Window = 168, Pairs = 20.
+As illustrated in Figure 2, conducting the initial search without a structural Stop Loss reveals
+the raw predictive power of the mean-reversion signal. Two distinct regions of interest emerge,
+exhibiting localized peaks in the median Sortino ratio: the 3.0 threshold and the 3.5 threshold.
+However, relying solely on isolated performance spikes without assessing the surrounding pa-
+rameter landscape frequently leads to In-Sample (IS) overfitting. Statistically, requiring a higher
+20
+Z-Score divergence significantly reduces the absolute number of executed trades. This diminished
+sample size naturally increases the probability of the algorithm curve-fitting to rare, idiosyncratic
+market anomalies, highly profitable outliers that artificially inflate IS metrics but exhibit poor
+Out-Of-Sample (OOS) generalization. Consequently, any apparent optimum at these elevated
+levels must be approached with a strong prior of skepticism.
+Torigorouslydifferentiatebetweenstructurallysound"parameterplateaus"andfragile"param-
+eter islands", high-resolution analysis with a fine-grained step size of 0.05 was conducted around
+both candidates.
+Figure 3: High-Resolution Local Sensitivity Analysis: 3.5 Entry Threshold.
+3.25 3.30 3.35 3.40 3.45 3.50 3.55 3.60 3.65 3.70 3.75
+0.00
+5.00
+10.00
+3.25 3.30 3.35 3.40 3.45 3.50 3.55 3.60 3.65 3.70 3.75
+1.20
+1.40
+1.60
+1.80
+2.00
+2.20
+Median
+Mean
+Entry Threshold Entry Threshold
+Sortino Ratio
+Sortino Ratio
+Panel A: Distribution by Entry Threshold Panel B: Median & Mean by Entry Threshold
+Note: The search is conducted around the 3.5 region with a 0.05 step size (SL disabled). Panel A displays the distribution
+of monthly Sortino Ratios in the one-year In-Sample backtest (2024), while Panel B tracks the mean and median of this
+distribution. Constant parameters: Exit Threshold = 0.0, Z-Score Window = 168, Pairs = 20.
+High-resolution analysis around the 3.5 threshold (Figure 3) reveals a highly alarming statistical
+profile. Although the median Sortino ratio remains high around 3.5, the mean expected value is
+significantly lower. This severe divergence between the median and the mean indicates a highly left-
+skewed (negatively skewed) return distribution. In practice, this signifies that the strategy’s typical
+monthly performance is artificially inflated by rare outliers, while the mathematical expectation
+is dragged down by severe drawdown events. This confirms that the 3.50 threshold is, with high
+certainty, a fragile, overfitted artifact.
+Figure 4: High-Resolution Local Sensitivity Analysis: 3.0 Entry Threshold.
+2.75 2.80 2.85 2.90 2.95 3.00 3.05 3.10 3.15 3.20 3.25
+0.00
+5.00
+10.00
+2.75 2.80 2.85 2.90 2.95 3.00 3.05 3.10 3.15 3.20 3.25
+1.00
+1.50
+2.00
+2.50
+Median
+Mean
+Entry Threshold Entry Threshold
+Sortino Ratio
+Sortino Ratio
+Panel A: Distribution by Entry Threshold Panel B: Median & Mean by Entry Threshold
+Note: The search is conducted around the 3.0 region with a 0.05 step size (SL disabled). Panel A displays the distribution
+of monthly Sortino Ratios in the one-year In-Sample backtest (2024), while Panel B tracks the mean and median of this
+distribution. Constant parameters: Exit Threshold = 0.0, Z-Score Window = 168, Pairs = 20.
+21
+In contrast, the local analysis surrounding the 3.0 region (Figure 4) highlights a better view.
+Even though the median looks unstable, what is more important is the mean’s behavior: unlike
+in the previous landscape, it is naturally above the median and significantly more stable. The
+graceful degradation of performance across adjacent parameters ensures that the model’s edge is
+derived from a structural mean-reverting property rather than a coincidental data fit. The mean
+curve shows the steadily degrading plateau. Consequently, the value of an Entry Threshold = 3.0
+was selected for the next stage.
+4.1.2. Stage 2: Stop Loss Optimization
+In this stage, the Entry Threshold was locked at the newly validated 3.0 to explore the broader
+Stop Loss parameter space:
+Stop Loss∈ {1.25,1.5,1.75,2.0,2.25,2.5,2.75,3.0,3.25}
+Figure 5: Coarse Grid Search for the Stop Loss.
+1.25 1.50 1.75 2.00 2.25 2.50 2.75 3.00 3.25
+0.00
+5.00
+10.00
+1.25 1.50 1.75 2.00 2.25 2.50 2.75 3.00 3.25
+−1.00
+0.00
+1.00
+2.00
+Median
+Mean
+Stop Loss Stop Loss
+Sortino Ratio
+Sortino Ratio
+Panel A: Distribution by Stop Loss Panel B: Median & Mean by Stop Loss
+Note: Entry Threshold locked at the 3.0 optimum from Stage 1. Panel A displays the distribution of monthly Sortino
+Ratios in the one-year In-Sample backtest (2024), while Panel B tracks the mean and median of this distribution. Constant
+parameters: Entry Threshold = 3.0, Exit Threshold = 0.0, Z-Score Window = 168, Pairs = 20.
+The coarse search highlighted an optimum at SL = 2.0 (Figure 5). However, another region of
+interest emerged at the SL multiplier of 1.5. Visually, this parameter appeared highly attractive,
+exhibiting a tight Interquartile Range with the entire boxplot body positioned strictly above zero.
+To conclusively differentiate between an overfitted artifact and a structurally sound parameter,
+similarly to the previous analysis of Entry Threshold, high-resolution Coarse-to-Fine analysis was
+conducted around both local optima.
+22
+Figure 6: High-Resolution Local Sensitivity Analysis: 1.5 Stop Loss.
+1.25 1.30 1.35 1.40 1.45 1.50 1.55 1.60 1.65 1.70 1.75
+0.00
+5.00
+10.00
+1.25 1.30 1.35 1.40 1.45 1.50 1.55 1.60 1.65 1.70 1.75
+0.00
+0.50
+1.00
+1.50
+Median
+Mean
+Stop Loss Stop Loss
+Sortino Ratio
+Sortino Ratio
+Panel A: Distribution by Stop Loss Panel B: Median & Mean by Stop Loss
+Note: The search is conducted around the 1.5 region with a 0.05 step size. Panel A displays the distribution of monthly
+Sortino Ratios in the one-year In-Sample backtest (2024), while Panel B tracks the mean and median of this distribution.
+Constant parameters: Entry Threshold = 3.0, Exit Threshold = 0.0, Z-Score Window = 168, Pairs = 20.
+High-resolution analysis around the 1.50 value of the Stop Loss multiplier (Figure 6) revealed
+visible fragility. Performance exhibited severe discontinuity, where a minimal parameter shift of
+±0.05precipitated an explosion in negative variance. This indicates that the 1.50 threshold is
+likely an overfitted In-Sample artifact.
+Figure 7: High-Resolution Local Sensitivity Analysis: 2.0 Stop Loss.
+1.75 1.80 1.85 1.90 1.95 2.00 2.05 2.10 2.15 2.20 2.25
+0.00
+5.00
+10.00
+1.75 1.80 1.85 1.90 1.95 2.00 2.05 2.10 2.15 2.20 2.25
+0.50
+1.00
+1.50
+2.00
+2.50
+Median
+Mean
+Stop Loss Stop Loss
+Sortino Ratio
+Sortino Ratio
+Panel A: Distribution by Stop Loss Panel B: Median & Mean by Stop Loss
+Note: The search is conducted around the 2.0 region with a 0.05 step size. Panel A displays the distribution of monthly
+Sortino Ratios in the one-year In-Sample backtest (2024), while Panel B tracks the mean and median of this distribution.
+Constant parameters: Entry Threshold = 3.0, Exit Threshold = 0.0, Z-Score Window = 168, Pairs = 20.
+In contrast, the region surrounding 2.0 (Figure 7) exhibited a smooth convex optimization
+landscape. Although the median at Stop Loss = 2.0 exceeds the mean, the critical difference lies in
+the behavior of the mean itself. Instead of collapsing, the mean forms a highly stable and resilient
+plateau across the range from 1.85 to 2.10.
+This relationship (M edian > M ean) is structurally expected when optimizing a Stop Loss pa-
+rameter. A rigid stop-loss mechanism forcefully truncates adverse excursions, realizing predefined
+losses to prevent catastrophic tail risks. Consequently, the mathematical mean is naturally pulled
+down by these executed stop-outs, while the "typical" performance (the median) remains elevated
+because the threshold is wide enough not to be triggered by standard market noise. The key in-
+dicator of robustness here is that the mean maintains a stable plateau and the variance remains
+tightly controlled, efficiently balancing the trade-off between premature liquidations and tail-risk
+exposure.
+23
+Furthermore, while the absolute mathematical peak of the median occurred marginally lower
+at 1.95, we deliberately selected 2.0 as the final parameter. Selecting the absolute In-Sample peak
+introduces an unnecessary risk of micro-overfitting. Choosing 2.0 prioritizes structural simplicity,
+aligns symmetrically with the 3.0 entry threshold (equating to a strict Stop Loss Threshold = 6.0).
+5. Baseline Strategy Evaluation
+Having established a structurally robust parameter configuration (Entry Threshold = 3.0, Exit
+Threshold = 0.0, Stop Loss = 2.0, Z-Score Window = 168, Pairs = 20) through hierarchical op-
+timization, the finalized baseline strategy was evaluated over the full In-Sample (IS) period and
+subsequently validated on the unseen Out-Of-Sample (OOS) dataset. The primary goal of this eval-
+uation is not to present a flawless trading system, but to verify that the baseline generates a stable,
+positive expectancy in unseen market conditions, thereby providing a legitimate environment for
+the subsequent Reinforcement Learning training phase.
+Prior to presenting the empirical results, it is imperative to reiterate that the baseline strategy is
+evaluated under a strict 10x leverage regime. As formalized in Subsection 3.4, this native,trade-to-
+tradeleverage mechanism is applied to systematically scale the strategy’s capital exposure, thereby
+aligning its structural risk profile with the inherently high-variance benchmarks.
+5.1. In-Sample & Out-Of-Sample Baseline Performance Analysis
+Figure 8: Cumulative Performance of the Baseline Strategy
+Apr
+2024
+Jul Oct Jan
+2025
+−50%
+0%
+50%
+100%
+150%
+Apr
+2025
+Jul Oct Jan
+2026
+Baseline (0.05% fees, 10x lev) BTC B&H (0.05% fees) EWP B&H (0.05% fees)
+Cumulative Return
+Panel A: In-Sample Performance (2024) Panel B: Out-of-Sample Performance (2025)
+Note: The figure compares the optimized baseline strategy against Buy-and-Hold Bitcoin (BTC) and Equal-Weight Portfolio
+(EWP) benchmarks. Panel A presents the In-Sample period (2024), and Panel B covers the Out-Of-Sample period (2025).
+Baseline parameters: Entry Threshold = 3.0, Stop Loss = 2.0, Exit Threshold = 0.0, Z-Score Window = 168, Pairs = 20.
+All curves account for 0.05% transaction fees, with the baseline utilizing 10x leverage (see Subsection 3.4).
+24
+Table 2: Out-Of-Sample Performance of the Baseline Strategy Against Benchmarks (2025).
+Metric Baseline (10x) BTC B&H EWP B&H
+CAGR 30.40% -6.43% -62.73%
+Annual Volatility 61.78% 44.36% 61.45%
+Max Drawdown 34.13% 34.75% 69.36%
+Win Count 371 - -
+Loss Count 245 - -
+Win Rate 60.23% - -
+Avg Win Return 22.89% - -
+Avg Loss Return -31.43% - -
+Avg Trade Return 1.28% - -
+Avg Trade Duration 55.04 - -
+Sharpe Ratio (Ann.) 0.4921 -0.1451 -1.0208
+Sortino Ratio (Ann.) 0.5360 -0.1848 -1.2795
+Calmar Ratio 0.8908 -0.1852 -0.9044
+Note: Baseline: 0.05% fees, leverage 10x; BTC/EWP B&H benchmarks: 0.05% fees. All reported metrics, both portfolio-
+level (CAGR, Annual Volatility, Max Drawdown, and Risk-Adjusted Ratios) and percentage-based trade-return metrics,
+are calculated on a post-leverage basis (see Subsection 3.8).
+The results demonstrate that the leveraged baseline strategy successfully outperformed both
+the B&H BTC and B&H EWP benchmarks. Specifically, the baseline achieved a CAGR of 30.40%,
+along with an Annual Volatility of 61.78% and a Maximum Drawdown of 34.13%. This asymmet-
+ric risk-return profile is further reflected in a positive Sortino Ratio of 0.5360. However, it is
+crucial to reiterate that the primary objective of this baseline was to establish a stable foundation.
+By verifying its positive expectancy and structural robustness under rigorous margin conditions,
+the baseline provides a legitimate environment for the subsequent Deep Reinforcement Learning
+training phase.
+5.2. Sensitivity Analysis
+To verify the structural stability of the baseline strategy, a comprehensive two-tier sensitivity
+analysis was performed. The first tier evaluates broad parameter variations, specifically testing
+wide grid increments (e.g., 0.5 steps for execution thresholds and 48-hour shifts for the Z-Score
+Window). This macro-level evaluation tests the strategy’s resilience against major parameter
+miscalibration. The second tier functions as a structural ablation study, designed to test the
+foundational assumptions of the trading engine. Specifically, we assess the performance impact of
+the following modifications:
+•Varying Fee Structures:Evaluating the strategy’s sensitivity to transaction costs.
+•Beta Hedge Deactivation:Reverting from the dynamic empirical hedge to a strictly
+dollar-neutral allocation (fixedβ= 1).
+•Risk Overlay Ablation:Disabling specific Stop Loss (SL) mechanisms (SL Lock,Time
+Decay SL) to isolate and quantify their individual contributions to tail-risk reduction.
+The corresponding equity curves for each parameter perturbation (Entry Threshold, Exit
+Threshold, Stop Loss, Pairs and Z-Score Window) are reported in Appendix A, Figures A.18–
+A.22.
+25
+Table 3: Sensitivity Analysis of Out-Of-Sample Baseline Strategy Performance (2025).
+Baseline Entry Threshold Exit Threshold Stop Loss Pairs Z-Score Window
+- 2.5 3.5 -0.5 0.5 1.5 2.5 10 30 120 216
+CAGR 30.40% -13.97% -25.18% -18.09% 29.89% -31.57% 22.29% 15.99% -18.94% -43.50% -15.20%
+Annual Volatility 61.78% 72.61% 51.51% 65.74% 58.73% 46.27% 70.42% 80.15% 51.89% 60.47% 62.26%
+Max Drawdown 34.13% 46.66% 55.70% 48.06% 38.09% 40.68% 49.93% 45.16% 39.93% 52.42% 60.50%
+Win Count 371 564 213 324 413 277 395 188 526 466 313
+Loss Count 245 381 152 277 233 325 216 127 382 310 215
+Win Rate 60.23% 59.68% 58.36% 53.91% 63.93% 46.01% 64.65% 59.68% 57.93% 60.05% 59.28%
+Avg Win Return 22.89% 20.37% 26.14% 25.77% 20.23% 24.25% 22.68% 22.19% 23.79% 19.00% 25.89%
+Avg Loss Return -31.43% -27.00% -38.17% -30.71% -32.78% -20.40% -37.75% -30.72% -31.68% -29.06% -35.57%
+Avg Trade Return 1.28% 1.27% -0.64% -0.26% 1.11% 0.14% 1.32% 0.86% 0.45% -0.20% 0.87%
+Avg Trade Duration 55.04 47.89 56.59 63.00 45.06 39.19 63.13 52.50 54.03 41.30 65.90
+Sharpe Ratio (Ann.) 0.4921 -0.1924 -0.4888 -0.2752 0.5090 -0.6823 0.3165 0.1996 -0.3651 -0.7193 -0.2441
+Sortino Ratio (Ann.) 0.5360 -0.2171 -0.4943 -0.2975 0.5393 -0.7204 0.3517 0.1919 -0.4141 -0.7351 -0.2710
+Calmar Ratio 0.8908 -0.2994 -0.4521 -0.3765 0.7847 -0.7760 0.4463 0.3542 -0.4744 -0.8298 -0.2512
+Note: Baseline (0.05% fees, leverage 10x): Entry Threshold = 3.0, Exit Threshold = 0.0, Stop Loss = 2.0, Pairs = 20, Z-Score Window = 168. The 10x leverage is applied to the baseline to
+scale its inherently lower structural volatility and align its risk profile with the unleveraged benchmarks (see Subsection 3.9). Consequently, all calculated performance metrics represent the
+post-leverage performance of the strategy (see Subsection 3.8).
+26
+Assumptions Verification
+The equity curves for each assumption ablation (Fee Rate, Beta Hedge, SL Lock and Time
+Decay SL) are provided in Appendix A, Figures A.23–A.26.
+Table 4: Assumptions Verification: Out-Of-Sample Baseline Strategy Performance (2025).
+Metric Baseline Fee Rate0.00% Fee Rate0.10% Unhedged SL LockDisabled Time Decay
+SL
+Disabled
+CAGR 30.40% 80.52% -6.02% -19.39% 1.98% -1.13%
+Annual Volatility 61.78% 61.35% 62.24% 58.46% 67.33% 64.32%
+Max Drawdown 34.13% 31.64% 39.26% 59.57% 46.13% 39.79%
+Win Count 371 373 370 361 420 371
+Loss Count 245 243 246 240 287 243
+Win Rate 60.23% 60.55% 60.06% 60.07% 59.41% 60.42%
+Avg Win Return 22.89% 23.26% 22.45% 22.78% 23.93% 22.77%
+Avg Loss Return -31.43% -31.20% -31.79% -33.04% -34.58% -33.64%
+Avg Trade Return 1.28% 1.77% 0.79% 0.49% 0.18% 0.44%
+Avg Trade Duration 55.04 55.04 55.04 53.29 57.97 60.31
+Sharpe Ratio (Ann.) 0.4921 1.3125 -0.0968 -0.3316 0.0294 -0.0175
+Sortino Ratio (Ann.) 0.5360 1.4329 -0.1050 -0.3591 0.0327 -0.0194
+Calmar Ratio 0.8908 2.5450 -0.1534 -0.3255 0.0429 -0.0284
+Note: Baseline (0.05% fees, leverage 10x): Beta Hedge = True, SL Lock = True, Time Decay SL = True. The 10x leverage
+is applied to the baseline to scale its inherently lower structural volatility and align its risk profile with the unleveraged
+benchmarks (see Subsection 3.9). Consequently, all calculated performance metrics represent the post-leverage performance
+of the strategy (see Subsection 3.8).
+The comprehensive sensitivity analysis reveals that while the baseline strategy captures a gen-
+uine mean-reverting edge, its Out-Of-Sample success is highly conditional on strict structural
+constraints. The ablation study (Table 4) demonstrates significant degradation when the foun-
+dational assumptions are removed. This suggests that dynamic hedging and strict regime filters
+are important components for limiting tail-risk events. Regarding parameter perturbations (Table
+3), the model shows severe vulnerability to overly restrictive settings and hyper-reactive lookback
+periods, highlighting the inherent limitations and fragility of relying on static heuristics in highly
+noisy cryptocurrency markets.
+Ultimately, these findings perfectly motivate the subsequent integration of Deep Reinforcement
+Learning. The baseline successfully validates the core mathematical architecture (theFixed Risk,
+Adaptive Meanframework) and justifies the necessity of maintaining strict risk overlays. However,
+its significant sensitivity to rigid execution parameters underscores the need for a more adaptive
+decision engine. Consequently, the RL agent introduced in the next section is deployed precisely to
+replace these rigid thresholds with a dynamic, non-linear execution policy, operating safely within
+the boundaries of the verified risk management framework.
+27
+6. RL Strategy Evaluation
+Table 5: Agent Configuration Overview.
+Agent Reward Spaceλ
+1 StepPnLReward Autonomous 1.0
+2 StepPnLReward Autonomous 1.2
+3 StepPnLReward Standard 1.0
+4 StepPnLReward Standard 1.2
+5 StepPnLReward Full 1.0
+6 StepPnLReward Full 1.2
+7 TradePnLReward Autonomous 1.0
+8 TradePnLReward Autonomous 1.2
+9 TradePnLReward Standard 1.0
+10 TradePnLReward Standard 1.2
+11 TradePnLReward Full 1.0
+12 TradePnLReward Full 1.2
+13 HybridActionReward Autonomous 1.0
+14 HybridActionReward Autonomous 1.2
+15 HybridActionReward Standard 1.0
+16 HybridActionReward Standard 1.2
+17 HybridActionReward Full 1.0
+18 HybridActionReward Full 1.2
+Note: Agent indexing corresponds to experimental configuration grid combining reward function, agent space, andλreward
+parameter (see Subsections 3.7.2 and 3.7.3).
+6.1. Training Analysis
+To simplify the identification of long-term trends, an Exponential Moving Average (EMA) was
+applied for the related training metrics. The two Actor-side diagnostics (Mean Episode Reward and
+Entropy Loss) are presented below in Figures 9 and 10, while the auxiliary Critic-side diagnostics
+(Value Loss and Explained Variance) are reported in Appendix A, Figures A.16 and A.17. In these
+visualizations, raw current values are displayed in the background, while the foreground illustrates
+the EMA-smoothed trajectories.
+28
+Figure 9: Training Diagnostic: Mean Episode Reward.
+0.5M 1M 1.5M 2M 2.5M 3M
+−0.3
+−0.25
+−0.2
+−0.15
+−0.1
+−0.05
+0
+1 – StepPnLReward, Autonomous, λ=1.0 2 – StepPnLReward, Autonomous, λ=1.2
+3 – StepPnLReward, Standard, λ=1.0 4 – StepPnLReward, Standard, λ=1.2
+5 – StepPnLReward, Full, λ=1.0 6 – StepPnLReward, Full, λ=1.2
+7 – TradePnLReward, Autonomous, λ=1.0 8 – TradePnLReward, Autonomous, λ=1.2
+9 – TradePnLReward, Standard, λ=1.0 10 – TradePnLReward, Standard, λ=1.2
+11 – TradePnLReward, Full, λ=1.0 12 – TradePnLReward, Full, λ=1.2
+13 – HybridActionReward, Autonomous, λ=1.0 14 – HybridActionReward, Autonomous, λ=1.2
+15 – HybridActionReward, Standard, λ=1.0 16 – HybridActionReward, Standard, λ=1.2
+17 – HybridActionReward, Full, λ=1.0 18 – HybridActionReward, Full, λ=1.2
+Mean Episode Reward
+Exponential Moving Average (α=0.1)
+Global Training Steps
+Mean Reward
+Note: The figure illustrates mean episode reward obtained by various RL agent configurations during single 1-month
+training episodes. Raw current values are displayed in the background, with an Exponential Moving Average (α= 0.1)
+overlay highlighting long-term trends. An upward trend indicates that the agents learns to better maximize the reward
+function over time.
+29
+Figure 10: Training Diagnostic: Entropy Loss.
+0.5M 1M 1.5M 2M 2.5M 3M
+−1
+−0.8
+−0.6
+−0.4
+−0.2
+0
+1 – StepPnLReward, Autonomous, λ=1.0 2 – StepPnLReward, Autonomous, λ=1.2
+3 – StepPnLReward, Standard, λ=1.0 4 – StepPnLReward, Standard, λ=1.2
+5 – StepPnLReward, Full, λ=1.0 6 – StepPnLReward, Full, λ=1.2
+7 – TradePnLReward, Autonomous, λ=1.0 8 – TradePnLReward, Autonomous, λ=1.2
+9 – TradePnLReward, Standard, λ=1.0 10 – TradePnLReward, Standard, λ=1.2
+11 – TradePnLReward, Full, λ=1.0 12 – TradePnLReward, Full, λ=1.2
+13 – HybridActionReward, Autonomous, λ=1.0 14 – HybridActionReward, Autonomous, λ=1.2
+15 – HybridActionReward, Standard, λ=1.0 16 – HybridActionReward, Standard, λ=1.2
+17 – HybridActionReward, Full, λ=1.0 18 – HybridActionReward, Full, λ=1.2
+Entropy Loss
+Exponential Moving Average (α=0.1)
+Global Training Steps
+Entropy Loss
+Note: The figure illustrates measure of policy randomness obtained by various RL agent configurations during single
+1-month training episodes. Raw current values are displayed in the background, with an Exponential Moving Average
+(α= 0.1) overlay highlighting long-term trends. The stabilization at a non-zero plateau demonstrates a healthy balance
+between exploration of learned patterns and continued exploration of the state space.
+Training diagnostic metrics confirm robust and stable learning dynamics across all configura-
+tions. The Mean Episode Reward followed a consistent upward trajectory, recovering from initial
+losses caused by transaction costs to converge on a stable, near-zero or positive plateau. This
+progress was supported by the Critic network, where Value Loss narrowed to a consistent band
+(0.10–0.20) for all evaluated agents (see Appendix A, Figure A.16).
+While the Explained Variance (Appendix A, Figure A.17) peaked at a high level above 0.70, we
+observed a notably slower growth rate for agents utilizing the StepPnLReward. This is inherently
+tied to the dense nature of the step-based function, which forces the Critic to account for hourly
+price fluctuations and execution fees at every discrete interval. Such high-frequency noise reduces
+the signal-to-noise ratio, making the state-value function significantly more difficult to approximate
+than in sparser, trade-based reward schemes.
+Furthermore, while the Explained Variance converging above 0.70 might intuitively raise con-
+cerns about the Critic network overfitting to training trajectories, evaluating it on a holdout
+validation set is methodologically flawed within the PPO framework. The Critic is strictly an
+auxiliary network used exclusively during In-Sample training for advantage estimation. During
+Out-Of-Sample deployment, the Critic is entirely discarded, and execution is governed solely by
+the Actor network. Consequently, the Critic’s ability to generalize is structurally irrelevant. The
+true measure of the system’s resistance to overfitting lies exclusively in the Actor’s Out-Of-Sample
+30
+performance, evaluated in subsequent sections.
+Finally, the stabilization of Entropy Loss at a non-zero plateau (-0.20 to -0.40) ensured a healthy
+balance between exploitation and continued exploration, preventing the policy from premature
+convergence or overfitting.
+6.2. Model Selection
+Having confirmed healthy learning dynamics, the definitive model selection was conducted
+based on the In-Sample (2024) backtest performance. Evaluating Reinforcement Learning agents
+solely on standard quantitative metrics (such as the Sortino Ratio) frequently leads to "metric
+hacking" [32].
+Crucially, both the baseline formulation and the RL model selection must be conducted on
+the identical In-Sample dataset. This is not a methodological oversight, but a strict architectural
+necessity of the hybrid framework. The RL agent is not an independent end-to-end trading system;
+it acts strictly as an execution overlay designed to optimize the exact mean-reverting regimes
+isolated by the baseline. Furthermore, during Out-Of-Sample deployment, the agent’s actions
+are constrained by the deterministic Risk Management Overlay, which relies entirely on heuristics
+(Entry Threshold, Stop Loss) derived from the baseline’s In-Sample behavior. Evaluating the agent
+on a different, unseen validation set before applying the risk overlay would sever the structural link
+between the learned policy and the baseline environment it was designed to navigate.
+To ensure that the selected RL agent genuinely acts as an intelligent optimization layer over the
+established statistical foundation, the model selection followed a two-stage hierarchical framework
+focused on structural consistency:
+•Regime-Fidelity Filter (Trade Duration Alignment):As a primary filter, we required
+candidate agents to closely match the heuristic Baseline’s Average Trade Duration (∼55
+hours). In financial Reinforcement Learning, unconstrained agents frequently suffer from
+"reward hacking," learning to exploit specific historical data sequences that fail to gener-
+alize Out-Of-Sample. To mitigate this, the duration alignment acts as a strict structural
+regularizer. It forces the agent to operate within the time regime and half-life explicitly
+confirmed during the pair selection phase, preventing the neural network from drifting into
+noisy, high-frequency scalping or long-term trend-following.
+•Win Rate Maximization:Among the duration-aligned candidates, the final model was
+selected by maximizing the Win Rate. In the context of thin-margin statistical arbitrage, the
+win rate serves as a highly reliable proxy for signal precision and execution timing accuracy.
+This dual-filter approach ensures that the RL agent enhances execution logic without increasing
+tail-risk exposure. Crucially, the evaluation of In-Sample performance for model selection was
+conducted with the heuristic Risk Management Overlay explicitly disabled. Since the parameters
+of this overlay were optimized over this exact same historical period (as detailed in Section 4),
+applying them during the agent evaluation phase would introduce a form of look-ahead bias and
+artificially mask the agent’s true learned policy. By evaluating the agents in an unconstrained
+environment, we isolate and assess the pure predictive capability of the neural network. This
+ensures that the selected model genuinely internalized the market dynamics and learned optimal
+execution timing autonomously, rather than relying on the heuristically fitted guardrails.
+The Risk Management Overlay is subsequently activated only for the Out-Of-Sample deploy-
+ment to serve as a deterministic safety shield against unseen regimes. Consequently, this architec-
+tural asymmetry precludes the direct comparison and correlation of aggregate performance metrics
+between the IS and OOS periods. The unconstrained IS phase naturally generates highly variable
+equity curves that do not reflect the behavior of the final shielded system. Thus, attempting to
+correlate IS and OOS aggregate performance would be methodologically flawed. To ensure ro-
+bust OOS generalization, the model selection process evaluates the intrinsic quality of the agent’s
+decisions instead, relying on Average Trade Duration and Win Rate to isolate its true predictive
+edge.
+31
+Table 6: Comparison of In-Sample RL Models Performance (2024).
+1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18
+CAGR -14.86% 72.98% 294.66% -1.07% 11.32% 266.42% -31.29% 26.14% -13.82% 92.03% 10.70% 256.15% -49.02% 368.11% 15.05% 26.62% -55.91% 322.34%
+Annual Volatility 173.04% 94.22% 196.04% 149.25% 172.63% 80.91% 146.66% 172.07% 161.42% 206.75% 153.73% 144.60% 203.62% 172.81% 141.02% 164.00% 174.32% 179.33%
+Max Drawdown 81.87% 57.11% 76.89% 71.47% 82.19% 31.81% 79.92% 70.52% 83.32% 84.39% 83.52% 70.35% 86.28% 79.29% 75.90% 84.64% 87.96% 75.65%
+Win Count 578 759 926 714 833 1009 618 677 812 771 955 636 873 771 691 620 1359 770
+Loss Count 415 276 482 429 476 455 403 436 448 465 484 350 493 439 377 430 695 437
+Win Rate 58.21% 73.33% 65.77% 62.47% 63.64% 68.92% 60.53% 60.83% 64.44% 62.38% 66.37% 64.50% 63.91% 63.72% 64.70% 59.05% 66.16% 63.79%
+Avg Win Return 30.16% 15.49% 23.76% 20.85% 24.23% 11.67% 28.32% 28.53% 23.35% 25.53% 20.23% 26.83% 23.83% 26.82% 25.54% 29.55% 14.90% 24.26%
+Avg Lose Return -40.37% -36.34% -39.47% -30.50% -39.51% -19.63% -40.56% -39.62% -40.49% -38.26% -35.89% -39.38% -39.47% -39.68% -40.89% -38.41% -26.10% -36.50%
+Avg Trade Return 0.69% 1.67% 2.11% 1.58% 1.05% 1.94% 1.13% 1.84% 0.65% 1.53% 1.35% 3.33% 0.98% 2.70% 2.09% 1.72% 1.02% 2.26%
+Avg Trade Duration 107.85 45.61 87.61 63.32 92.35 22.04 98.64 102.05 89.41 92.91 76.99 92.73 93.61 92.63 92.40 101.00 51.21 86.80
+Sharpe Ratio (Ann.) -0.0859 0.7746 1.5031 -0.0072 0.0656 3.2926 -0.2134 0.1519 -0.0856 0.4451 0.0696 1.7714 -0.2408 2.1301 0.1068 0.1623 -0.3207 1.7975
+Sortino Ratio (Ann.) -0.1155 0.9764 2.0082 -0.0085 0.0860 3.7930 -0.2751 0.2031 -0.1167 0.6027 0.0891 2.2566 -0.3105 2.9274 0.1377 0.2161 -0.4038 2.3540
+Calmar Ratio -0.1815 1.2779 3.8321 -0.0149 0.1377 8.3758 -0.3916 0.3707 -0.1659 1.0905 0.1282 3.6411 -0.5681 4.6426 0.1983 0.3145 -0.6356 4.2610
+Note: The 10x leverage is applied to the agents to scale its inherently lower structural volatility and align its risk profile with the unleveraged benchmarks (see Subsection 3.9). Consequently,
+all calculated performance metrics represent the post-leverage performance of the strategy (see Subsection 3.8). Crucially, to assess the pure learned policy and avoid look-ahead bias from
+heuristically optimized boundaries, Risk Management Overlay = False during this In-Sample evaluation. Agents: 1 – StepPnLReward, Autonomous,λ= 1.0, 2 – StepPnLReward, Autonomous,
+λ= 1.2, 3 – StepPnLReward, Standard,λ= 1.0, 4 – StepPnLReward, Standard,λ= 1.2, 5 – StepPnLReward, Full,λ= 1.0, 6 – StepPnLReward, Full,λ= 1.2, 7 – TradePnLReward,
+Autonomous,λ= 1.0, 8 – TradePnLReward, Autonomous,λ= 1.2, 9 – TradePnLReward, Standard,λ= 1.0, 10 – TradePnLReward, Standard,λ= 1.2, 11 – TradePnLReward, Full,λ= 1.0,
+12 – TradePnLReward, Full,λ= 1.2, 13 – HybridActionReward, Autonomous,λ= 1.0, 14 – HybridActionReward, Autonomous,λ= 1.2, 15 – HybridActionReward, Standard,λ= 1.0, 16 –
+HybridActionReward, Standard,λ= 1.2, 17 – HybridActionReward, Full,λ= 1.0, 18 – HybridActionReward, Full,λ= 1.2.
+32
+Table 6 presents the In-Sample performance metrics across all evaluated RL configurations.
+According to that, three agents (2, 4, and 17) demonstrated Avg Trade Duration similar to the
+Baseline (respectively 45.61, 63.32, and 51.21 vs 55.04 of Baseline). The Agent 2, trained with the
+StepPnLReward(λ= 1.2) and operating within theAutonomousSpace demonstrated the highest
+In-Sample Win Rate among all candidates (73.33%).
+It is crucial to note the discrepancy: the majority of other agents trade, on average, twice as
+long as the Baseline, while Agent 6 trades for less than half as long (22.04 hours). Although Agent
+6 achieved the highest In-Sample Sortino Ratio (3.7930), we interpreted its drastically shortened
+holding period as a sign that it may have decoupled from the statistical anomaly. By effectively
+reducing the expected mean-reverting half-life by more than 50%, Agent 6 may have transitioned
+from trading the cointegrated equilibrium to exploiting transient microstructural noise. Such high-
+frequency behavior rarely generalizes to Out-Of-Sample cryptocurrency markets due to persistent
+frictions like transaction costs and slippage. Therefore, Agent 2 was preferred over Agent 6. This
+interpretation is consistent with the post-hoc Out-Of-Sample results (Table 11), in which the
+Sortino Ratio of Agent 6 fell from 3.7930 to 0.9673.
+This alignment suggests that the RL Agent 2 internalized the natural half-life of the mean-
+reverting spread, optimizing entry and exit precision without drifting into directional risk or high-
+frequency overfitting. Consequently, this structurally sound policy was selected as the definitive
+RL Strategy for Out-Of-Sample verification.
+6.3. Out-Of-Sample Performance Analysis
+Figure 11: Cumulative Out-Of-Sample Performance of the Agent 2 Strategy.
+Jan
+2025
+Apr Jul Oct
+−50%
+0%
+50%
+100%
+150%
+200%
+Baseline (0.05% fees, lev 10x) Agent 2 (0.05% fees, lev 10x) BTC B&H (0.05% fees)
+EWP B&H (0.05% fees)
+Out-Of-Sample Performance (2025)
+Cumulative Return
+Note: The figure compares the Agent 2 performance against Baseline, Buy-and-Hold Bitcoin (BTC) and Equal-Weight
+Portfolio (EWP) benchmarks in the Out-Of-Sample period (2025). Agent 2 parameters: StepPnLReward, Autonomous,
+λ= 1.2. Baseline parameters: Entry Threshold = 3.0, Stop Loss = 2.0, Exit Threshold = 0.0, Z-Score Window = 168,
+Pairs = 20. All curves account for 0.05% transaction fees, with the Agent 2 and Baseline utilizing 10x leverage.
+33
+Table 7: Out-Of-Sample Performance of Agent 2 Against Baseline and Benchmarks (2025).
+Metric Baseline (10x) Agent 2 (10x) BTC B&H EWP B&H
+CAGR 30.40% 199.45% -6.43% -62.73%
+Annual Volatility 61.78% 70.68% 44.36% 61.45%
+Max Drawdown 34.13% 35.27% 34.75% 69.36%
+Win Count 371 816 - -
+Loss Count 245 299 - -
+Win Rate 60.23% 73.18% - -
+Avg Win Return 22.89% 13.62% - -
+Avg Loss Return -31.43% -30.62% - -
+Avg Trade Return 1.28% 1.76% - -
+Avg Trade Duration 55.0406 33.0726 - -
+Sharpe Ratio (Ann.) 0.4921 2.8220 -0.1451 -1.0208
+Sortino Ratio (Ann.) 0.5360 3.2494 -0.1848 -1.2795
+Calmar Ratio 0.8908 5.6557 -0.1852 -0.9044
+Note: Baseline: 0.05% fees, 10x leverage; Agent 2 (StepPnLReward, Autonomous,λ= 1.2): 0.05% fees, 10x leverage;
+Benchmarks: 0.05% fees. The 10x leverage is applied to the baseline and agent strategies to scale their inherently lower
+structural volatility and align their risk profile with the unleveraged benchmarks (see Subsection 3.9). Consequently, all
+calculated performance metrics represent the post-leverage performance of the strategies (see Subsection 3.8).
+As illustrated in Figure 11, Agent 2 outperforms both the baseline strategy and the benchmarks
+in the Out-Of-Sample period. The RL execution overlay achieved a Sortino Ratio (Ann.) of
+3.2494, improving upon the baseline’s 0.5360 (while both include 0.05% fees and leverage of 10x).
+Furthermore, the agent effectively enhanced execution timing, raising the win rate to 73.18% from
+60.23% without increasing the maximum drawdown, which remained remarkably stable at 35.27%
+compared to the baseline’s 34.13%. However, this result corresponds to a single training run (seed
+42) and should not be regarded as representative; the dispersion across random seeds is analyzed
+in Subsection 6.5.4.
+6.4. Sensitivity Analysis
+The corresponding equity curves for each parameter perturbation of Agent 2 (Entry Threshold,
+Exit Threshold, Stop Loss, Z-Score Window and Pairs) are reported in Appendix A, Figures A.27–
+A.31, while the equity curves for each assumption ablation of Agent 2 (Fee Rate, Beta Hedge,
+SL Lock, Time Decay SL and Risk Management Overlay) are provided in Appendix A, Figures
+A.32–A.36.
+34
+Table 8: Sensitivity Analysis of Out-Of-Sample Agent Performance (2025).
+Agent 2 Entry Threshold Exit Threshold Stop Loss Pairs Z-Score Window
+- 2.5 3.5 -0.5 0.5 1.5 2.5 10 30 120 216
+CAGR 199.45% 126.90% 170.41% 154.91% 175.12% 53.70% 201.41% 345.79% 78.54% -18.46% 136.82%
+Annual Volatility 70.68% 58.75% 74.88% 71.35% 70.98% 54.30% 78.09% 92.89% 61.30% 70.64% 69.27%
+Max Drawdown 35.27% 28.41% 37.23% 39.14% 34.89% 31.30% 38.72% 38.75% 27.56% 57.23% 47.33%
+Win Count 816 769 828 819 842 715 835 425 1161 965 678
+Loss Count 299 341 278 307 308 388 267 146 465 402 243
+Win Rate 73.18% 69.28% 74.86% 72.74% 73.22% 64.82% 75.77% 74.43% 71.40% 70.59% 73.62%
+Avg Win Return 13.62% 13.72% 13.45% 13.62% 13.36% 14.03% 13.58% 13.68% 13.77% 11.93% 14.81%
+Avg Loss Return -30.62% -25.58% -33.65% -31.06% -30.46% -22.31% -34.33% -31.41% -31.18% -26.92% -33.75%
+Avg Trade Return 1.76% 1.65% 1.61% 1.44% 1.62% 1.25% 1.98% 2.15% 0.92% 0.51% 1.99%
+Avg Trade Duration 33.07 28.65 35.56 33.25 31.79 26.02 36.65 31.02 32.53 26.39 40.42
+Sharpe Ratio (Ann.) 2.8220 2.1598 2.2758 2.1713 2.4671 0.9889 2.5793 3.7225 1.2811 -0.2613 1.9753
+Sortino Ratio (Ann.) 3.2494 2.4857 2.6384 2.4933 2.8351 1.0993 3.0275 3.8762 1.5107 -0.2738 2.2620
+Calmar Ratio 5.6557 4.4670 4.5771 3.9577 5.0195 1.7154 5.2010 8.9238 2.8491 -0.3225 2.8905
+Note: Agent 2 (StepPnLReward, Autonomous,λ= 1.2; 0.05% fees, lev 10x): Exit Threshold = 0.0, Stop Loss = 2.0, Pairs = 20, Z-Score Window = 168, Risk Management Overlay = True. The
+10x leverage is applied to the agent to scale its inherently lower structural volatility and align its risk profile with the unleveraged benchmarks (see Subsection 3.9). Consequently, all calculated
+performance metrics represent the post-leverage performance of the strategy (see Subsection 3.8).
+35
+Table 9: Assumptions Verification: Out-Of-Sample Agent Performance (2025).
+Agent 2 Fee Rate Unhedged SL Lock Time Decay SL Risk Management Overlay
+- 0.00% 0.10% (No Beta Hedge) Disabled Disabled Disabled
+CAGR 199.45% 446.83% 63.29% 300.72% 115.22% 189.08% 78.11%
+Annual Volatility 70.68% 70.41% 70.99% 66.50% 79.63% 71.93% 91.55%
+Max Drawdown 35.27% 31.47% 43.56% 46.95% 52.70% 37.69% 65.09%
+Win Count 816 820 802 801 964 815 817
+Loss Count 299 295 313 292 439 300 252
+Win Rate 73.18% 73.54% 71.93% 73.28% 68.71% 73.09% 76.43%
+Avg Win Return 13.62% 14.06% 13.36% 14.01% 15.60% 13.65% 13.10%
+Avg Loss Return -30.62% -30.54% -29.72% -30.68% -31.74% -30.93% -37.17%
+Avg Trade Return 1.76% 2.26% 1.26% 2.07% 0.79% 1.65% 1.25%
+Avg Trade Duration 33.07 33.07 33.07 32.40 34.70 34.86 43.27
+Sharpe Ratio (Ann.) 2.8220 6.3459 0.8915 4.5221 1.4469 2.6285 0.8532
+Sortino Ratio (Ann.) 3.2494 7.3387 1.0204 5.6702 1.6845 3.0431 0.9874
+Calmar Ratio 5.6557 14.1993 1.4531 6.4052 2.1862 5.0170 1.2000
+Note: Agent 2 (StepPnLReward, Autonomous,λ= 1.2; 0.05% fees, leverage 10x): Exit Threshold = 0.0, Stop Loss = 2.0, Pairs = 20, Z-Score Window = 168, Risk Management Overlay =
+True. The 10x leverage is applied to the agent to scale its inherently lower structural volatility and align its risk profile with the unleveraged benchmarks (see Subsection 3.9). Consequently,
+all calculated performance metrics represent the post-leverage performance of the strategy (see Subsection 3.8). Risk Management Overlay Disabled removes the heuristic Take-Profit and Stop
+Loss enforcement and the associated SL Lock, but retains the time-based close at the end of the Z-Score Window and the margin-exhaustion liquidation.
+36
+The sensitivity analysis confirms that the RL execution overlay largely mirrors the structural
+robustness of the baseline. While disabling the Beta Hedge surprisingly yielded higher CAGR
+and Sortino Ratio (Ann.), this outperformance initially suggested a potential increase in unhedged
+directional market exposure. Theoretically, removing the hedging component shifts the strategy’s
+risk profile towards a more concentrated exposure to individual asset volatility. However, to verify
+whether this result stems from a higher risk premium or a genuine statistical edge, a formal
+econometric validation is presented in Subsection 6.5.1.
+Most importantly, the ablation study highlights the importance of the deterministic shield-
+ing layer. When the Risk Management Overlay is disabled, the portfolio suffers a catastrophic
+maximum drawdown of 65.09% and annual volatility of 91.55%. This starkly illustrates that
+while DRL excels at optimizing localized execution timing, it cannot inherently safeguard against
+out-of-distribution shocks without hard-coded risk guardrails, supporting the proposed hybrid ar-
+chitecture in the evaluated setting.
+Moreover, the sensitivity analysis regarding portfolio cardinality (10 and 30 pairs vs default
+20) confirms the structural robustness of the system and the efficacy of the pair selection mecha-
+nism. Reducing the portfolio to the top 10 pairs yields a significantly higher CAGR of 345.79%
+and an improved Sortino Ratio (Ann.) of 3.8762, demonstrating that the "Filter-then-Rank"
+methodology successfully concentrates capital on pairs with the highest predictive expectancy.
+Conversely, expanding the portfolio to 30 pairs leads to performance degradation (CAGR: 78.54%,
+Sortino Ratio: 1.5107) as lower-ranked pairs with weaker cointegration enter the basket. How-
+ever, this expansion facilitates greater diversification, resulting in lower annual volatility (61.30%
+vs. 70.68%) and a reduced Maximum Drawdown (27.56% vs. 35.27%) compared to the 20-pair
+baseline. This predictable behavior across varying portfolio sizes confirms that the strategy avoids
+over-parameterization and follows a clear alpha-concentration versus risk-diversification trade-off.
+Furthermore, the evaluation of transaction costs highlights the structural resilience of the strat-
+egy against severe market frictions. The isolated predictive engine demonstrates a massive edge
+in a zero-fee simulation, achieving a Sortino Ratio (Ann.) of 7.3387 and a CAGR of 446.83%. Al-
+though the model comfortably absorbs the standard 0.05% baseline commission, its true durability
+emerges under stress-test conditions. Applying a harsh 0.10% friction rate, a proxy encapsulating
+both commission and execution slippage (see Subsection 3.4), still yields a CAGR of 63.29% and
+a Sortino Ratio of 1.0204.
+6.5. Post-hoc Ablation Study
+Having evaluated the strategy on unseen data without look-ahead bias, this section conducts a
+retrospective, post-hoc analysis of the entire Out-Of-Sample period. By evaluating all configura-
+tions after the fact, we aim to deconstruct how different architectures and stochastic initializations
+ultimately impacted the final policy generalization.
+6.5.1. Evaluation of the Beta Hedge Constraint
+The anomaly observed during the assumptions verification phase, where the Unhedged (Beta-
+Hedge = False) variant of Agent 2 exhibited a higher CAGR and Sortino Ratio compared to the
+Hedged model, motivated a post-hoc investigation. Initially, this outperformance was suspected
+to be an artifact of unhedged directional exposure, in which the strategy simply captures the un-
+derlying market trend rather than exploiting a mean-reverting edge. To empirically validate this
+hypothesis and isolate the true source of the generated returns, an Ordinary Least Squares (OLS)
+regression was conducted. The daily returns of both the Hedged and Unhedged variants of Agent
+2 were regressed against the daily returns of the BTC benchmark over the entire Out-Of-Sample
+period (2025).
+Table 10: Post-Hoc Ablation Regression Analysis: Agent 2 Hedged vs Unhedged Against BTC Benchmark.
+Strategyα p-value (α)β p-value (β)R 2
+Agent 2 (Hedged) 0.0038 0.0594 0.1789 0.0497 0.0106
+Agent 2 (Unhedged) 0.0044 0.0201 0.0461 0.5929 0.0008
+Note: Ordinary Least Squares (OLS) regression of daily strategy returns against the BTC benchmark returns in the Out-
+Of-Sample period.αrepresents the daily abnormal return intercept, whileβrepresents the market exposure coefficient.
+All curves (Agents and BTC Benchmark) account for 0.05% transaction fees, with the Agents utilizing 10x leverage.
+37
+The empirical results presented in Table 10 show no statistically significant directional market
+exposure for the unhedged variant. For the Unhedged strategy, the estimated market exposure
+coefficient (β) is remarkably low at 0.0461 and statistically insignificant (p-value = 0.5929). Con-
+versely, it exhibits a positive and statistically significant daily abnormal return intercept (α) of
+0.0044 (p-value = 0.0201). Paradoxically, enforcing the dynamic hedging module (Beta Hedge =
+True) introduces a minor but statistically significant market correlation (β= 0.1789, p-value =
+0.0497) while simultaneously diminishing the significance of theαcomponent (p-value = 0.0594).
+These findings suggest a low BTC exposure of the unhedged policy in the evaluated period, al-
+though a one-factor regression does not establish complete market neutrality. A plausible expla-
+nation for the performance difference is that the mechanical beta hedge forces the portfolio to
+maintain costly short positions in a highly noisy environment, injecting microstructural friction
+rather than isolating risk.
+6.5.2. Evaluation of Agent Configurations
+Having established the robustness of Agent 2 through Out-Of-Sample (OOS) testing and sen-
+sitivity analysis, we now conduct a post-hoc evaluation of all RL configurations. Figures 12, 13,
+and 14 illustrate the isolated OOS equity curves of all trained agents by their reward functions.
+Figure 12: Out-Of-Sample Equity Curves: StepPnLReward.
+Mar
+2025
+May Jul Sep Nov Jan
+2026
+−50%
+0%
+50%
+100%
+150%
+200%
+1 - StepPnLReward, Autonomous, λ=1.0 2 - StepPnLReward, Autonomous, λ=1.2
+3 - StepPnLReward, Standard, λ=1.0 4 - StepPnLReward, Standard, λ=1.2
+5 - StepPnLReward, Full, λ=1.0 6 - StepPnLReward, Full, λ=1.2
+Out-Of-Sample Performance (2025) - StepPnLReward
+Cumulative Return
+Note: The figure displays the Out-Of-Sample (2025) performance of RL agents trained using the dense StepPnLReward
+function. The plotted curves represent combinations of different observation spaces (Autonomous, Standard, Full) and loss
+aversion multipliers (λ= 1.0andλ= 1.2). All simulations incorporate 0.05% fees and 10x leverage.
+38
+Figure 13: Out-Of-Sample Equity Curves: TradePnLReward.
+Mar
+2025
+May Jul Sep Nov Jan
+2026
+−50%
+0%
+50%
+100%
+7 - TradePnLReward, Autonomous, λ=1.0 8 - TradePnLReward, Autonomous, λ=1.2
+9 - TradePnLReward, Standard, λ=1.0 10 - TradePnLReward, Standard, λ=1.2
+11 - TradePnLReward, Full, λ=1.0 12 - TradePnLReward, Full, λ=1.2
+Out-Of-Sample Performance (2025) - TradePnLReward
+Cumulative Return
+Note: The figure displays the Out-Of-Sample (2025) performance of RL agents trained using the sparse TradePnLReward
+function. The plotted curves represent combinations of different observation spaces (Autonomous, Standard, Full) and loss
+aversion multipliers (λ= 1.0andλ= 1.2). All simulations incorporate 0.05% fees and 10x leverage.
+Figure 14: Out-Of-Sample Equity Curves: HybridActionReward.
+Mar
+2025
+May Jul Sep Nov Jan
+2026
+−50%
+0%
+50%
+100%
+13 - HybridActionReward, Autonomous, λ=1.0 14 - HybridActionReward, Autonomous, λ=1.2
+15 - HybridActionReward, Standard, λ=1.0 16 - HybridActionReward, Standard, λ=1.2
+17 - HybridActionReward, Full, λ=1.0 18 - HybridActionReward, Full, λ=1.2
+Out-Of-Sample Performance (2025) - HybridActionReward
+Cumulative Return
+Note: The figure displays the Out-Of-Sample (2025) performance of RL agents trained using the HybridActionReward
+function. The plotted curves represent combinations of different observation spaces (Autonomous, Standard, Full) and loss
+aversion multipliers (λ= 1.0andλ= 1.2). All simulations incorporate 0.05% fees and 10x leverage.
+39
+Table 11: Comparison of Out-Of-Sample RL Models Performance (2025).
+1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18
+CAGR 63.24% 199.45% -5.19% 84.16% -52.60% 65.98% 74.22% 56.97% 67.55% 56.36% -27.28% 17.60% -16.62% 45.64% 68.81% 83.53% -48.01% 49.50%
+Annual Volatility 84.55% 70.68% 113.17% 64.72% 107.69% 70.19% 83.58% 105.09% 100.97% 100.33% 90.51% 65.64% 134.32% 107.82% 77.98% 86.25% 110.14% 90.24%
+Max Drawdown 57.36% 35.27% 71.73% 44.28% 75.75% 49.77% 54.05% 64.87% 73.58% 60.13% 66.96% 51.33% 72.28% 67.81% 61.17% 53.87% 73.07% 57.49%
+Win Count 807 816 1656 622 1996 1136 885 1212 1449 1010 1522 668 1876 1315 710 801 2039 1053
+Loss Count 349 299 542 411 721 605 351 474 479 423 509 262 595 491 319 359 975 428
+Win Rate 69.81% 73.18% 75.34% 60.21% 73.46% 65.25% 71.60% 71.89% 75.16% 70.48% 74.94% 71.83% 75.92% 72.81% 69.00% 69.05% 67.65% 71.10%
+Avg Win Return 15.65% 13.62% 9.97% 16.15% 7.83% 9.26% 13.22% 13.06% 10.96% 15.11% 8.78% 13.30% 10.15% 12.38% 16.33% 16.37% 8.37% 12.86%
+Avg Lose Return -32.95% -30.62% -28.52% -21.15% -20.54% -15.10% -30.99% -30.13% -29.40% -32.01% -24.01% -31.43% -29.54% -29.99% -32.72% -32.60% -16.34% -27.59%
+Avg Trade Return 0.98% 1.76% 0.48% 1.31% 0.30% 0.79% 0.66% 0.92% 0.94% 1.20% 0.56% 0.70% 0.59% 0.86% 1.13% 1.21% 0.38% 1.17%
+Avg Trade Duration 48.90 33.07 37.66 35.43 28.35 15.29 43.93 44.87 39.62 49.96 31.53 43.73 38.34 43.27 49.59 50.88 26.11 40.54
+Sharpe Ratio (Ann.) 0.7480 2.8220 -0.0459 1.3004 -0.4884 0.9401 0.8879 0.5421 0.6690 0.5617 -0.3014 0.2681 -0.1237 0.4234 0.8823 0.9685 -0.4359 0.5485
+Sortino Ratio (Ann.) 0.8800 3.2494 -0.0530 1.4993 -0.5777 0.9673 1.0406 0.6234 0.8104 0.6766 -0.3587 0.3272 -0.1424 0.4870 1.0473 1.1606 -0.5076 0.6322
+Calmar Ratio 1.1026 5.6557 -0.0723 1.9008 -0.6944 1.3258 1.3732 0.8781 0.9181 0.9374 -0.4074 0.3428 -0.2299 0.6731 1.1248 1.5505 -0.6570 0.8610
+Note: The 10x leverage is applied to the agents to scale its inherently lower structural volatility and align its risk profile with the unleveraged benchmarks (see Subsection 3.9). Consequently,
+all calculated performance metrics represent the post-leverage performance of the strategy (see Subsection 3.8). Risk Management Overlay = True (see Subsection 3.7.5). Agents: 1 –
+StepPnLReward, Autonomous,λ= 1.0, 2 – StepPnLReward, Autonomous,λ= 1.2, 3 – StepPnLReward, Standard,λ= 1.0, 4 – StepPnLReward, Standard,λ= 1.2, 5 – StepPnLReward,
+Full,λ= 1.0, 6 – StepPnLReward, Full,λ= 1.2, 7 – TradePnLReward, Autonomous,λ= 1.0, 8 – TradePnLReward, Autonomous,λ= 1.2, 9 – TradePnLReward, Standard,λ= 1.0, 10 –
+TradePnLReward, Standard,λ= 1.2, 11 – TradePnLReward, Full,λ= 1.0, 12 – TradePnLReward, Full,λ= 1.2, 13 – HybridActionReward, Autonomous,λ= 1.0, 14 – HybridActionReward,
+Autonomous,λ= 1.2, 15 – HybridActionReward, Standard,λ= 1.0, 16 – HybridActionReward, Standard,λ= 1.2, 17 – HybridActionReward, Full,λ= 1.0, 18 – HybridActionReward, Full,
+λ= 1.2.
+40
+Two critical observations emerge from this retrospective analysis. First, overly complex or
+sparse reward schemes (such asTradePnLandHybridAction) suffered severe OOS degradation.
+Second, in terms of observation spaces, an unexpected divergence was observed: agents operating
+without the explicit baseline signal embedded in their state representation frequently demonstrated
+superior adaptability.
+However, this representational autonomy during the learning phase does not invalidate the
+necessity of the statistical baseline. As shown by the prior ablation study, the deterministic
+Risk Management Overlay, derived directly from the baseline’s Entry Threshold and Stop Loss
+multiplier, remains an important component of Out-Of-Sample performance. This highlights a
+critical architectural distinction: while Deep RL demands an unconstrained observation space to
+effectively optimize execution timing, its final policy must remain strictly governed by external
+heuristic guardrails to prevent catastrophic tail-risk events.
+These findings indicate a potential structural deficiency within the Full observation space. How-
+ever, it remains to be verified whether this performance decline is due to abstract informational
+friction or measurable statistical redundancies. To resolve this, Subsection 6.5.3 provides a Statis-
+tical Audit of the state representation, specifically examining the interaction between the Z-Score
+and the Hurst exponent through correlation and Variance Inflation Factor (VIF) analysis.
+6.5.3. Diagnosing State-Space Dimensionality Overhead
+To diagnose the root cause of performance degradation in the Full space, a statistical audit
+of the state vector components was conducted based on 240 training episodes (corresponding to
+the 12-month backtests spanning In-Sample 2024 for the top 20 pairs, the same as used for agent
+training). Five episodes (2.1% of the sample) were excluded from the calculations due to zero trade
+activity, which would preclude reliable estimation of variance and correlation.
+Table 12: Global Interaction Analysis: Pooled Correlation Matrix of State Variables.
+Metric Z-Score Hurst Position Signal Norm. Time
+in Position
+Z-Score 1.0000 -0.0397 -0.6378 -0.2110 -0.0366
+Hurst -0.0397 1.0000 0.0109 0.0097 0.0273
+Position -0.6378 0.0109 1.0000 0.2182 0.0724
+Signal -0.2110 0.0097 0.2182 1.0000 0.0119
+Norm. Time in Position -0.0366 0.0273 0.0724 0.0119 1.0000
+Note: The correlation matrix is computed on the pooled dataset aggregated acrossN= 235valid In-Sample 2024 training
+episodes to capture global feature interactions. Normalized Time in Position = Time in Position / Z-Score Window (where
+Z-Score Window = 168), see Subsection 3.7.2.
+Table 13: Multicollinearity Diagnostics: Pooled Variance Inflation Factor (VIF) Assessment.
+Metric Z-Score Hurst Position Signal Norm. Time in
+Position
+VIF 1.7040 1.1432 1.7149 1.0597 1.1482
+Note: Variance Inflation Factor (VIF) values quantify the impact of multicollinearity on the variance of estimated coef-
+ficients. The VIF values are computed on the pooled dataset aggregated acrossN= 235valid In-Sample 2024 training
+episodes. A VIF value below 5 indicates the absence of severe multicollinearity. Normalized Time in Position = Time in
+Position / Z-Score Window (where Z-Score Window = 168), see Subsection 3.7.2.
+As illustrated in Tables 12 and 13, the aggregated data analysis directly addresses the hypoth-
+esis of feature multicollinearity. The global Variance Inflation Factor (VIF) for the Hurst exponent
+(Ht) is notably low (1.14), well below the critical threshold of 5. Furthermore,H t exhibits a
+near-zero global correlation with the primary Z-Score signal. This empirically rejects the premise
+that the performance degradation is driven by gradient instability caused by highly collinear in-
+puts.Instead, the degradation may be rooted in noise injection and state-space dimensionality
+overhead. WhileH t provides statistically orthogonal information, it is a slow-moving, structural
+metric computed over a long formation window. Consequently, it lacks the high-frequency pre-
+dictive variance required for micro-execution timing compared to highly dynamic Z-Score. Given
+41
+the finite representational capacity of the LSTM network, forcing the agent to process this non-
+actionable feature dilutes the signal-to-noise ratio (SNR). The network inefficiently allocates its
+gradient updates to filter out this independent statistical noise, which ultimately hinders its ability
+to isolate critical, short-term execution triggers, which is consistent with the better performance
+of the parsimonious Autonomous space.
+6.5.4. Evaluation of Seed Variance
+To ensure that the results obtained for Agent 2 are not a product of coincidental stochas-
+tic alignment, a robustness check was performed across five independent random seeds (s∈
+{0,1,42,100,999}). This approach addresses the common criticism in Deep Reinforcement Learn-
+ing literature regarding sensitivity to initial weight states and sampling order [16].
+Figure 15: Training Diagnostic: Seed Variance Analysis of Mean Episode Reward.
+0.5M 1M 1.5M 2M 2.5M 3M
+−0.14
+−0.12
+−0.1
+−0.08
+−0.06
+−0.04
+−0.02
+0
+± 1 Std Dev Agent 2 (Mean, 5 seeds)
+Mean Episode Reward - Seed Variance Analysis
+Exponential Moving Average (α=0.1) across 5 independent seeds
+Global Training Steps
+Mean Reward
+Note: TheplotillustratesthetrainingconvergenceofAgent2acrossfiveindependentrandomseeds(s∈ {0,1,42,100,999}).
+The solid line represents the mean of episode rewards smoothed with an Exponential Moving Average (α= 0.1), while the
+shaded area denotes the±1standard deviation interval.
+The training diagnostics presented in Figure 15 demonstrate that despite different random
+initializations of the neural networks, all agents followed a structurally similar and convergent
+learning trajectory. The initial high variance, characteristic of the exploration phase, gradually
+diminished as the agents learned the underlying mean-reverting dynamics of the cryptocurrency
+pairs. A notable observation is the stabilization of the standard deviation band until approxi-
+mately 2.5M training steps, followed by a marginal widening in the final stage of the process.
+This specific dynamic is highly characteristic of deep reinforcement learning applied to noisy fi-
+nancial time series. During the initial training phases, all independently seeded agents successfully
+converge on the fundamental macro-level mean-reverting dynamics, resulting in tightly clustered
+performance. However, as training progresses into the final stages, the agents attempt to extract
+marginal gains by fine-tuning their policies to the high-frequency market noise [32]. Driven by
+their distinct random initializations, individual agents begin to over-optimize for different micro-
+structural anomalies within the In-Sample dataset. This divergent fine-tuning naturally explains
+the slight widening of the performance variance at the end of the training cycle, a phenomenon con-
+42
+sistent with the documented issues of policy instability and reproducibility in deep reinforcement
+learning [16, 11].
+The translation of training stability into market performance is presented in Figure A.37 in
+Appendix A. While the magnitude of cumulative returns exhibits noticeable dispersion, with Seed
+42 acting as an upper outlier and Seed 100 underperforming, the overall directionality remains
+positive. The observed variance is a documented phenomenon in DRL applied to finance, where
+minor differences in trade timing under 10x leverage can lead to significantly different terminal
+equity levels. Detailed performance metrics for each run are summarized in Table 14.
+Table 14: Assumptions Verification: Out-Of-Sample Performance Stability Across Random Seeds (Agent 2, 2025).
+Metric Seed 0 Seed 1 Seed 42 Seed 100 Seed 999 Mean Std Dev
+CAGR 33.46% 48.69% 199.45% -3.00% 43.20% 64.36% 69.91%
+Annual Volatility 53.56% 59.23% 70.68% 40.23% 66.50% 58.04% 10.68%
+Max Drawdown 42.50% 47.95% 35.27% 42.48% 59.11% 45.46% 7.92%
+Win Rate 61.21% 64.70% 73.18% 57.24% 67.90% 64.85% 5.47%
+Avg Trade Duration 50.81 47.55 33.07 3.86 43.97 35.85 17.07
+Sharpe Ratio (Ann.) 0.6247 0.8220 2.8220 -0.0745 0.6497 0.9688 0.9762
+Sortino Ratio (Ann.) 0.6593 0.8906 3.2494 -0.0532 0.7331 1.0958 1.1245
+Calmar Ratio 0.7872 1.0155 5.6557 -0.0706 0.7308 1.6237 2.0491
+Note: Out-of-Sample (2025) performance metrics for Agent 2, evaluated across 5 independent random initializations to
+assess policy robustness. Alongside individual seed performance, the aggregated mean and standard deviation (Std Dev)
+are provided to quantify outcome variance. All calculations assume 0.05% trading fees and a 10x leverage multiplier.
+The analysis of Out-Of-Sample performance across multiple seeds reveals significant disper-
+sion in terminal returns, underscored by a CAGR standard deviation of 69.91%. This variance
+highlights the inherent sensitivity of Deep RL agents to their initial weight states and sampling
+trajectories when navigating highly stochastic financial environments. While the originally se-
+lected Seed 42 (CAGR 199.45%) represents an optimistic upper bound of the policy’s potential,
+the underperformance of Seed 100 (CAGR -3.00%) serves as a critical demonstration that even a
+structurally sound reward architecture can occasionally converge to a suboptimal local minimum
+during the final policy fine-tuning phase.
+However, the evaluation should not rely on isolated extremes. The mean CAGR of 64.36% and
+a positive mean Sortino Ratio of 1.0958 across all independent runs are considerably lower than the
+Seed 42 results, yet still roughly double those of the baseline (30.40% and 0.5360, respectively).
+The fact that four out of five independent runs generated positive returns in the unseen 2025
+period suggests that the agent captured part of the underlying mean-reverting signal rather than
+an isolated stochastic anomaly.
+6.5.5. Statistical Significance of Out-of-Sample Performance
+To address the risk of Out-of-Sample randomness, a stationary circular block bootstrap proce-
+dure [31] was conducted (10,000 iterations, 168-hour block size to account for weekly seasonality
+and autocorrelation in hourly cryptocurrency returns). To ensure exact reproducibility of the
+statistical tests, the pseudo-random number generator was initialized with a fixed seed (42).
+Table 15: Out-Of-Sample Statistical Significance Testing of Performance Differences.
+Metric Baseline Agent 2 Difference (∆) 95% CI of Diff. p-value
+Sharpe Ratio (Ann.) 0.4921 2.8220 2.3299 [-0.4265, 11.3742] 0.0603
+Sortino Ratio (Ann.) 0.5360 3.2494 2.7134 [-0.5014, 13.9533] 0.0593
+Note: Baseline: 0.05% fees, 10x leverage; Agent 2 (StepPnLReward, Autonomous,λ= 1.2): 0.05% fees, 10x leverage.
+Statistical significance computed via stationary circular block bootstrap methodology to account for autocorrelation and
+non-normality in hourly cryptocurrency returns (Block Bootstrap, 10 000 iterations, block = 168h, seed = 42). CI denotes
+Confidence Interval. The null hypothesis states that Agent 2 does not outperform the Baseline (H0 : ∆≤0).
+As shown in Table 15, the differences in Sharpe and Sortino ratios between Agent 2 and the
+Baseline have p-values of 0.0603 and 0.0593, respectively, and both 95% confidence intervals include
+43
+zero, so the outperformance falls just short of the conventional 5% significance threshold. These
+tests refer to the single reported Agent 2 run and were not corrected for multiple testing across
+the evaluated configurations and post-hoc analyses, and should therefore be read as exploratory.
+At the same time, the near-threshold p-values were obtained over a single year of hourly data,
+in which overcoming the inherent noise of cryptocurrency returns requires a substantial nominal
+outperformance; a longer Out-Of-Sample horizon would be needed to determine whether the effect
+reaches conventional significance.
+6.5.6. Sub-Period Performance Stability
+To address the risk of temporal overfitting, where aggregate annual outperformance might be
+disproportionately driven by a single, highly favorable market regime, a granular sub-period analy-
+sis of theOut-Of-Sample (2025)datasetwasconducted. Cryptocurrency marketsfrequentlyexhibit
+rapid structural shifts in volatility and liquidity throughout a single calendar year. Consequently,
+evaluating the strategy in distinct quarterly segments (Q1–Q4) allows an assessment of temporal
+stability. ThisapproachexamineswhethertheoutperformanceoftheDeepReinforcementLearning
+execution overlay (Agent 2) over the heuristic baseline persists across varying market conditions,
+rather than being driven by an isolated anomaly.
+Table 16: Sub-Period Out-Of-Sample Performance of the Baseline and Agent 2 (2025).
+Metric Q1 2025 Q2 2025 Q3 2025 Q4 2025
+Baseline Agent 2 Baseline Agent 2 Baseline Agent 2 Baseline Agent 2
+CAGR 90.77% 237.43% 10.13% 164.93% 116.47% 49.31% -33.29% 525.29%
+Annual Volatility 58.71% 64.70% 67.54% 78.39% 48.91% 53.09% 69.86% 82.74%
+Max Drawdown 25.85% 16.62% 33.27% 23.07% 23.78% 30.81% 25.44% 29.88%
+Sharpe Ratio (Ann.) 1.5461 3.6699 0.1499 2.1040 2.3811 0.9287 -0.4764 6.3485
+Sortino Ratio (Ann.) 1.9499 4.6306 0.1730 2.5028 2.9129 1.0773 -0.4515 6.8420
+Calmar Ratio 3.5114 14.2839 0.3043 7.1485 4.8977 1.6004 -1.3086 17.5815
+Note: Performance metrics isolated for each calendar quarter of 2025. All metrics are calculated by rebasing the initial
+capital at the start of each period to ensure independent evaluation. Baseline and Agent 2 utilize 0.05% fees and 10x
+leverage.
+The sub-period evaluation suggests that the outperformance of the RL execution overlay is not
+anartifactofasinglefavorablemarketphase. AsillustratedinTable16, Agent2generatedsuperior
+risk-adjusted returns (Sharpe, Sortino, and Calmar Ratios) in three out of the four analyzed
+quarters compared to the baseline. Most notably, during the adverse market conditions of Q4
+2025, the baseline strategy suffered a severe degradation in performance, yielding negative returns
+(CAGR of -33.29%) and failing to generate positive expectancy. In contrast, Agent 2 remained
+profitable in this quarter, achieving an annualized CAGR of 525.29% and a Calmar Ratio of 17.58,
+although annualized figures based on a single quarter should be interpreted with caution. While
+the baseline temporarily outperformed in Q3, the reported Agent 2 run remained profitable over
+the evaluated OOS period.
+7. Conclusions and Further Research
+The primary contribution of this study to the quantitative finance literature lies in empirically
+showing that, in the evaluated setting, the persistent divergence risks inherent in highly volatile
+cryptocurrency markets [28, 12] can be effectively mitigated through a decoupled hybrid architec-
+ture. While contemporary research increasingly favors end-to-end Deep Reinforcement Learning
+(DRL) for financial portfolio optimization [19, 15], the findings of this study validate the concerns
+regarding neural policy instability and out-of-sample brittleness [16, 5]. By empirically demonstrat-
+ing that DRL can yield superior results when constrained as a specialized execution overlay, this
+research successfully bridges classical statistical arbitrage with modern expert systems. Rather
+than relying on the rigid applications of foundational frameworks, such as the static, distance-
+based method Gatev et al. [14], this research demonstrates that navigating non-stationary digital
+asset regimes requires a fundamentally dynamic approach. By introducing the "Filter-then-Rank"
+44
+methodology and the "Fixed Risk, Adaptive Mean" model, this study proposes a highly adaptive
+alternative that effectively overcomes the structural limitations of static mean-reverting models
+highlighted by Do and Faff [7]. Ultimately, the application of this architecture provides a practical
+realization of "safe reinforcement learning via shielding" [13, 1], suggesting that neural execution
+timing should remain anchored within statistical boundaries.
+The empirical findings of this study provide a comprehensive validation of the proposed method-
+ology through the lens of two primary hypotheses. The first hypothesis (H1) posited thata dynamic
+statistical baseline, driven by a hierarchical pair selection framework and a custom execution con-
+cept, outperforms traditional benchmarks in the Out-Of-Sample period. Addressing H1 and the
+first research question (RQ1), the results indicate that the baseline strategy, even without neural
+optimization, captured an edge in the evaluated period by employing cointegration and struc-
+tural filters to mitigate the risk of divergence. This suggests that the "Filter-then-Rank" selection
+pipeline identifies pairs that exhibited mean-reverting properties in the evaluated period. The pre-
+cise efficacy of the pair-selection mechanism was demonstrated during the sensitivity analysis of
+the neural execution model, which revealed a clear alpha-concentration versus risk-diversification
+trade-off: restricting the basket to fewer top-scoring pairs maximized profitability, while expanding
+cardinality systematically reduced volatility. Separately, the second hypothesis (H2) stated that
+deploying Deep Reinforcement Learning as an execution overlay enhances the profitability and risk-
+adjusted performance of a heuristic statistical arbitrage baseline. To address H2 and the second
+research question (RQ2), the optimized PPO-LSTM agent demonstrated superior timing precision,
+with a Sortino Ratio of 3.2494 compared to 0.5360 for the baseline. Viewed holistically, the results
+for H1 and H2 suggest that the two components are complementary: while the statistical baseline
+provides the pair selection and risk boundaries, the DRL overlay acts as a non-linear optimizer
+that internalizes the natural half-life of spreads. However, a stationary circular block bootstrap
+procedure yields p-values of approximately 0.06, which fall just short of the conventional 5% signif-
+icance threshold, and the magnitude of the improvement varied substantially across random seeds,
+although four of the five seeds outperformed the baseline.
+Addressing the third research question (RQ3), which asked how different reinforcement learning
+configurations and risk overlays impact Out-Of-Sample robustness, the extensive post-hoc ablation
+studies conducted at the conclusion of this research offer critical insights into the internal mechanics
+of the model. A statistical audit of the state-space dimensionality, including a Variance Inflation
+Factor (VIF) analysis, revealed that feeding slow-moving structural metrics into the agent’s ob-
+servation space created informational friction rather than beneficial multicollinearity; therefore,
+representational autonomy yielded the highest signal-to-noise ratio. Furthermore, the ablation of
+the beta hedge constraint showed no statistically significant BTC exposure of the unhedged agent,
+although this does not establish market neutrality or explain the performance difference. Most
+importantly, the ablation of the Risk Management Overlay indicated that the deterministic shield-
+ing layer plays a key role in limiting losses; without it, the agent’s policy became unstable during
+out-of-distribution shocks, leading to catastrophic drawdowns. Additionally, the sub-period per-
+formance stability analysis revealed that while the heuristic baseline struggled during the adverse
+structural shifts in the final quarter (Q4) of the testing period, the reported Agent 2 run remained
+profitable in that quarter.
+These insights suggest that an RL-driven execution overlay can enhance capital efficiency and
+adaptability in high-noise environments. However, these practical implications must be contex-
+tualized within explicit limitations. The Out-Of-Sample validation was deliberately constrained
+to a single calendar year (2025) to maintain high-resolution data integrity; thus, the model’s re-
+silience across multi-year macroeconomic cycles remains an open question. Model selection relied
+exclusively on In-Sample data; the Out-Of-Sample period was subsequently used in the post-hoc
+analyses, which serve a diagnostic purpose rather than as independent validation. Moreover, the
+ablation study of seed variance highlighted significant dispersion in terminal returns, emphasiz-
+ing the inherent fragility of neural network convergence and suggesting the necessity of ensemble
+methods or "seed-averaging" for live deployment. Finally, while the simulation included elevated
+transaction fees as a simplified proxy for execution costs, the absence of a direct limit order book
+slippage simulation dictates caution regarding market impact in thin-margin scenarios, demanding
+strict capacity constraints for real-world capital allocation.
+Building upon this hybrid foundation, several concrete next steps emerge for future research.
+45
+Transitioning from static lookback windows to dynamic state-space models, such as the Kalman
+Filter, couldprovideamoreresponsiveestimationofthespread’shiddenmeanandvariance, further
+reducing the lag in Z-score derivation. Additionally, portfolio construction could be improved
+by introducing score-weighted capital allocation proportional to the Final Composite Score, or
+a secondary meta-RL agent tasked with dynamically adjusting pair cardinality based on global
+market risk indicators. Ultimately, given the agent’s documented sensitivity to informational
+friction, a comprehensive exploration of alternative state representations and advanced reward
+architectures will further enhance the efficiency of the proposed execution overlay.
+46
+Appendix A. Supplementary Figures
+This appendix consolidates the supplementary figures supporting the main analysis. It contains
+the auxiliary Critic-side training diagnostics for the RL agents (Section 6), and the equity-curve
+figures for the sensitivity analysis and assumptions verification of both the baseline strategy (Sec-
+tion 5) and the RL execution overlay (Section 6). The accompanying summary tables remain in
+the main text.
+RL Training Diagnostics (Critic-Side)
+Figure A.16: Training Diagnostic: Value Loss.
+0.5M 1M 1.5M 2M 2.5M 3M
+0
+0.1
+0.2
+0.3
+0.4
+0.5
+1 – StepPnLReward, Autonomous, λ=1.0 2 – StepPnLReward, Autonomous, λ=1.2
+3 – StepPnLReward, Standard, λ=1.0 4 – StepPnLReward, Standard, λ=1.2
+5 – StepPnLReward, Full, λ=1.0 6 – StepPnLReward, Full, λ=1.2
+7 – TradePnLReward, Autonomous, λ=1.0 8 – TradePnLReward, Autonomous, λ=1.2
+9 – TradePnLReward, Standard, λ=1.0 10 – TradePnLReward, Standard, λ=1.2
+11 – TradePnLReward, Full, λ=1.0 12 – TradePnLReward, Full, λ=1.2
+13 – HybridActionReward, Autonomous, λ=1.0 14 – HybridActionReward, Autonomous, λ=1.2
+15 – HybridActionReward, Standard, λ=1.0 16 – HybridActionReward, Standard, λ=1.2
+17 – HybridActionReward, Full, λ=1.0 18 – HybridActionReward, Full, λ=1.2
+Value Loss
+Exponential Moving Average (α=0.05)
+Global Training Steps
+Value Loss
+Note: The figure illustrates prediction error of the critic network obtained by various RL agent configurations during single
+1-month training episodes. Raw current values are displayed in the background, with an Exponential Moving Average
+(α= 0.05) overlay highlighting long-term trends. A decreasing and stabilizing loss indicates that the critic is becoming
+increasingly accurate at estimating the state-value function.
+47
+Figure A.17: Training Diagnostic: Explained Variance.
+0.5M 1M 1.5M 2M 2.5M 3M
+0
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+1 – StepPnLReward, Autonomous, λ=1.0 2 – StepPnLReward, Autonomous, λ=1.2
+3 – StepPnLReward, Standard, λ=1.0 4 – StepPnLReward, Standard, λ=1.2
+5 – StepPnLReward, Full, λ=1.0 6 – StepPnLReward, Full, λ=1.2
+7 – TradePnLReward, Autonomous, λ=1.0 8 – TradePnLReward, Autonomous, λ=1.2
+9 – TradePnLReward, Standard, λ=1.0 10 – TradePnLReward, Standard, λ=1.2
+11 – TradePnLReward, Full, λ=1.0 12 – TradePnLReward, Full, λ=1.2
+13 – HybridActionReward, Autonomous, λ=1.0 14 – HybridActionReward, Autonomous, λ=1.2
+15 – HybridActionReward, Standard, λ=1.0 16 – HybridActionReward, Standard, λ=1.2
+17 – HybridActionReward, Full, λ=1.0 18 – HybridActionReward, Full, λ=1.2
+Explained Variance
+Exponential Moving Average (α=0.05)
+Global Training Steps
+Variance Fraction
+Note: The figure illustrates proportion of the variance in rewards correctly predicted by the critic network, obtained
+by various RL agent configurations during single 1-month training episodes. Raw current values are displayed in the
+background, with an Exponential Moving Average (α= 0.05) overlay highlighting long-term trends. A high value indicates
+that the critic has developed a robust internal representation.
+48
+Baseline Strategy: Sensitivity Analysis
+Figure A.18: Sensitivity Analysis: Entry Threshold Variations.
+Jan
+2024
+Apr Jul Oct
+−40%
+−20%
+0%
+20%
+40%
+60%
+Jan
+2025
+Apr Jul Oct
+Baseline (0.05% fees, 10x lev) Entry Threshold = 2.5 Entry Threshold = 3.5
+Cumulative Return
+Panel A: In-Sample Performance (2024) Panel B: Out-of-Sample Performance (2025)
+Note: The figure illustrates the performance impact of varying the Entry Threshold (2.5 and 3.5) compared to the optimized
+baseline parameter (3.0). Panel A displays In-Sample performance (2024), and Panel B displays Out-Of-Sample performance
+(2025). Other parameters remain fixed at baseline defaults. All curves account for 0.05% transaction fees and 10x leverage.
+Figure A.19: Sensitivity Analysis: Exit Threshold Variations.
+Jan
+2024
+Apr Jul Oct
+−20%
+0%
+20%
+40%
+60%
+80%
+100%
+Jan
+2025
+Apr Jul Oct
+Baseline (0.05% fees, 10x lev) Exit Threshold = -0.5 Exit Threshold = 0.5
+Cumulative Return
+Panel A: In-Sample Performance (2024) Panel B: Out-of-Sample Performance (2025)
+Note: The figure illustrates the performance impact of varying the Exit Threshold (-0.5 and 0.5) compared to the default
+baseline parameter (0.0). Panel A displays In-Sample performance (2024), and Panel B displays Out-Of-Sample performance
+(2025). Other parameters remain fixed at baseline defaults. All curves account for 0.05% transaction fees and 10x leverage.
+49
+Figure A.20: Sensitivity Analysis: Stop Loss Variations.
+Jan
+2024
+Apr Jul Oct
+−40%
+−20%
+0%
+20%
+40%
+60%
+Jan
+2025
+Apr Jul Oct
+Baseline (0.05% fees, 10x lev) Stop Loss = 1.5 Stop Loss = 2.5
+Cumulative Return
+Panel A: In-Sample Performance (2024) Panel B: Out-of-Sample Performance (2025)
+Note: The figure illustrates the performance impact of varying the Stop Loss multiplier (1.5 and 2.5) compared to the
+optimized baseline parameter (2.0). Panel A displays In-Sample performance (2024), and Panel B displays Out-Of-Sample
+performance (2025). Other parameters remain fixed at baseline defaults. All curves account for 0.05% transaction fees and
+10x leverage.
+Figure A.21: Sensitivity Analysis: Pairs Variations.
+Jan
+2024
+Apr Jul Oct
+−50%
+0%
+50%
+100%
+Jan
+2025
+Apr Jul Oct
+Baseline (0.05% fees, 10x lev) Pairs = 10 Pairs = 30
+Cumulative Return
+Panel A: In-Sample Performance (2024) Panel B: Out-of-Sample Performance (2025)
+Note: The figure illustrates the performance impact of varying the number of pairs (30 and 10) compared to the default
+baseline parameter (20). Panel A displays In-Sample performance (2024), and Panel B displays Out-Of-Sample performance
+(2025). Other parameters remain fixed at baseline defaults. All curves account for 0.05% transaction fees and 10x leverage.
+50
+Figure A.22: Sensitivity Analysis: Z-Score Window Variations.
+Jan
+2024
+Apr Jul Oct
+−60%
+−40%
+−20%
+0%
+20%
+40%
+60%
+Jan
+2025
+Apr Jul Oct
+Baseline (0.05% fees, 10x lev) Z-Score Window = 120 Z-Score Window = 216
+Cumulative Return
+Panel A: In-Sample Performance (2024) Panel B: Out-of-Sample Performance (2025)
+Note: The figure illustrates the performance impact of varying the Z-Score Window length (216h and 120h) compared to the
+default baseline parameter (168h). Panel A displays In-Sample performance (2024), and Panel B displays Out-Of-Sample
+performance (2025). Other parameters remain fixed at baseline defaults. All curves account for 0.05% transaction fees and
+10x leverage.
+Baseline Strategy: Assumptions Verification
+Figure A.23: Assumptions Verification: Fee Rate Variations.
+Jan
+2024
+Apr Jul Oct
+0%
+50%
+100%
+Jan
+2025
+Apr Jul Oct
+Baseline (0.05% fees, 10x lev) Fee Rate = 0.00% Fee Rate = 0.10%
+Cumulative Return
+Panel A: In-Sample Performance (2024) Panel B: Out-of-Sample Performance (2025)
+Note: The figure illustrates the performance impact of varying the Fee Rate (0.00% and 0.10%) compared to the default
+baseline parameter (0.05%). Panel A displays In-Sample performance (2024), and Panel B displays Out-Of-Sample perfor-
+mance (2025). Other parameters remain fixed at baseline defaults. All curves account for 0.05% transaction fees and 10x
+leverage.
+51
+Figure A.24: Assumptions Verification: Beta Hedge disabled.
+Jan
+2024
+Apr Jul Oct
+−60%
+−40%
+−20%
+0%
+20%
+40%
+60%
+Jan
+2025
+Apr Jul Oct
+Baseline (0.05% fees, 10x lev) Beta Hedge = False
+Cumulative Return
+Panel A: In-Sample Performance (2024) Panel B: Out-of-Sample Performance (2025)
+Note: The figure illustrates the performance impact of disabling the beta hedge (fixedβ= 1.0) compared to the baseline.
+Panel A displays In-Sample performance (2024), and Panel B displays Out-Of-Sample performance (2025). Other parame-
+ters remain fixed at baseline defaults. All curves account for 0.05% transaction fees and 10x leverage.
+Figure A.25: Assumptions Verification: SL Lock disabled.
+Jan
+2024
+Apr Jul Oct
+−20%
+0%
+20%
+40%
+60%
+Jan
+2025
+Apr Jul Oct
+Baseline (0.05% fees, 10x lev) SL Lock = False
+Cumulative Return
+Panel A: In-Sample Performance (2024) Panel B: Out-of-Sample Performance (2025)
+Note: The figure illustrates the performance impact of disabling the SL Lock mechanism compared to the baseline. Panel
+A displays In-Sample performance (2024), and Panel B displays Out-Of-Sample performance (2025). Other parameters
+remain fixed at baseline defaults. All curves account for 0.05% transaction fees and 10x leverage.
+52
+Figure A.26: Assumptions Verification: Time Decay SL disabled.
+Jan
+2024
+Apr Jul Oct
+−20%
+0%
+20%
+40%
+60%
+Jan
+2025
+Apr Jul Oct
+Baseline (0.05% fees, 10x lev) Time Decay SL = False
+Cumulative Return
+Panel A: In-Sample Performance (2024) Panel B: Out-of-Sample Performance (2025)
+Note: The figure illustrates the performance impact of disabling the Time Decay SL mechanism compared to the baseline.
+Panel A displays In-Sample performance (2024), and Panel B displays Out-Of-Sample performance (2025). Other parame-
+ters remain fixed at baseline defaults. All curves account for 0.05% transaction fees and 10x leverage.
+RL Strategy: Sensitivity Analysis
+Figure A.27: Sensitivity Analysis: Entry Threshold Variations (Agent 2).
+Jan
+2025
+Apr Jul Oct
+0%
+50%
+100%
+150%
+200%
+Agent 2 Entry Threshold = 2.5 Entry Threshold = 3.5
+Cumulative Return
+Out-of-Sample Performance (2025)
+Note: The figure illustrates the Out-Of-Sample performance impact of varying the Entry Threshold (2.5 and 3.5) compared
+to the optimized baseline parameter (3.0). Agent 2 configuration: StepPnLReward, Autonomous Space,λ= 1.2. Other
+parameters remain fixed at baseline defaults. All curves account for 0.05% transaction fees and 10x leverage.
+53
+Figure A.28: Sensitivity Analysis: Exit Threshold Variations (Agent 2).
+Jan
+2025
+Apr Jul Oct
+0%
+50%
+100%
+150%
+200%
+Agent 2 Exit Threshold = -0.5 Exit Threshold = 0.5
+Cumulative Return
+Out-of-Sample Performance (2025)
+Note: The figure illustrates the Out-Of-Sample performance impact of varying the Exit Threshold (-0.5 and 0.5) compared
+to the default baseline parameter (0.0). Agent 2 configuration: StepPnLReward, Autonomous Space,λ= 1.2. Other
+parameters remain fixed at baseline defaults. All curves account for 0.05% transaction fees and 10x leverage.
+Figure A.29: Sensitivity Analysis: Stop Loss Variations (Agent 2).
+Jan
+2025
+Apr Jul Oct
+0%
+50%
+100%
+150%
+200%
+Agent 2 Stop Loss = 1.5 Stop Loss = 2.5
+Cumulative Return
+Out-of-Sample Performance (2025)
+Note: The figure illustrates the Out-Of-Sample performance impact of varying the Stop Loss multiplier (2.5 and 1.5)
+compared to the optimized baseline parameter (2.0). Agent 2 configuration: StepPnLReward, Autonomous Space,λ= 1.2.
+Other parameters remain fixed at baseline defaults. All curves account for 0.05% transaction fees and 10x leverage.
+54
+Figure A.30: Sensitivity Analysis: Z-Score Window Variations (Agent 2).
+Jan
+2025
+Apr Jul Oct
+−50%
+0%
+50%
+100%
+150%
+200%
+Agent 2 Z-Score Window = 120 Z-Score Window = 216
+Cumulative Return
+Out-of-Sample Performance (2025)
+Note: The figure illustrates the Out-Of-Sample performance impact of varying the Z-Score Window length (216h and 120h)
+compared to the default baseline parameter (168h). Agent 2 configuration: StepPnLReward, Autonomous Space,λ= 1.2.
+Other parameters remain fixed at baseline defaults. All curves account for 0.05% transaction fees and 10x leverage.
+Figure A.31: Sensitivity Analysis: Pairs Variations (Agent 2).
+Jan
+2025
+Apr Jul Oct
+0%
+100%
+200%
+300%
+Agent 2 Pairs = 10 Pairs = 30
+Cumulative Return
+Out-of-Sample Performance (2025)
+Note: The figure illustrates the Out-Of-Sample performance impact of varying the number of active pairs (30 and 10)
+compared to the default baseline parameter (20). Agent 2 configuration: StepPnLReward, Autonomous Space,λ= 1.2.
+Other parameters remain fixed at baseline defaults. All curves account for 0.05% transaction fees and 10x leverage.
+55
+RL Strategy: Assumptions Verification
+Figure A.32: Assumptions Verification: Fee Rate Variations (Agent 2).
+Jan
+2025
+Apr Jul Oct
+0%
+100%
+200%
+300%
+400%
+Agent 2 Fee Rate = 0.00% Fee Rate = 0.10%
+Cumulative Return
+Out-of-Sample Performance (2025)
+Note: The figure illustrates the Out-Of-Sample performance impact of varying the transaction Fee Rate (0.00% and 0.10%)
+compared to the default parameter (0.05%). Agent 2 configuration: StepPnLReward, Autonomous Space,λ= 1.2. Other
+parameters remain fixed at baseline defaults. All curves account for 0.05% transaction fees and 10x leverage.
+Figure A.33: Assumptions Verification: Beta Hedge Disabled (Agent 2).
+Jan
+2025
+Apr Jul Oct
+0%
+100%
+200%
+300%
+Agent 2 Beta Hedge = False
+Cumulative Return
+Out-of-Sample Performance (2025)
+Note: The figure illustrates the Out-Of-Sample performance impact of disabling the beta hedge (reverting to a fixedβ= 1.0
+allocation) compared to the default dynamic empirical hedge. Agent 2 configuration: StepPnLReward, Autonomous Space,
+λ= 1.2. Other parameters remain fixed at baseline defaults. All curves account for 0.05% transaction fees and 10x leverage.
+56
+Figure A.34: Assumptions Verification: SL Lock Disabled (Agent 2).
+Jan
+2025
+Apr Jul Oct
+0%
+50%
+100%
+150%
+200%
+Agent 2 SL Lock = False
+Cumulative Return
+Out-of-Sample Performance (2025)
+Note: The figure illustrates the Out-Of-Sample performance impact of disabling the Stop Loss Lock regime filter compared
+to the fully constrained strategy. Agent 2 configuration: StepPnLReward, Autonomous Space,λ= 1.2. Other parameters
+remain fixed at baseline defaults. All curves account for 0.05% transaction fees and 10x leverage.
+Figure A.35: Assumptions Verification: Time Decay SL Disabled (Agent 2).
+Jan
+2025
+Apr Jul Oct
+0%
+50%
+100%
+150%
+200%
+Agent 2 Time Decay SL = False
+Cumulative Return
+Out-of-Sample Performance (2025)
+Note: The figure illustrates the Out-Of-Sample performance impact of disabling the temporal tightening of the Stop Loss
+limit compared to the fully constrained strategy. Agent 2 configuration: StepPnLReward, Autonomous Space,λ= 1.2.
+Other parameters remain fixed at baseline defaults. All curves account for 0.05% transaction fees and 10x leverage.
+57
+Figure A.36: Assumptions Verification: Risk Management Overlay Disabled (Agent 2).
+Jan
+2025
+Apr Jul Oct
+0%
+50%
+100%
+150%
+200%
+Agent 2 Risk Management Overlay = False
+Cumulative Return
+Out-of-Sample Performance (2025)
+Note: The figure demonstrates the Out-Of-Sample performance degradation resulting from disabling the heuristic Take-
+Profit and Stop Loss enforcement and the associated SL Lock; the time-based close at the end of the Z-Score Window and
+the margin-exhaustion liquidation remain in place. Agent 2 configuration: StepPnLReward, Autonomous Space,λ= 1.2.
+Other parameters remain fixed at baseline defaults. All curves account for 0.05% transaction fees and 10x leverage.
+Figure A.37: Assumptions Verification: Out-of-Sample Performance Stability across 5 Seeds (Agent 2).
+Apr
+2025
+Jul Oct
+0%
+50%
+100%
+150%
+200%
+Seed 0 Seed 1 Seed 42 Seed 100 Seed 999
+Out-Of-Sample Performance Stability Across Random Seeds
+Cumulative Return
+Note: The plot presents the cumulative returns for Agent 2 evaluated across five independent random seeds during the
+Out-of-Sample period (2025). All results account for 0.05% fee rates and a leverage of 10x. Seed 42 represents the original
+baseline configuration.
+58
+References
+[1] Alshiekh, M., Bloem, R., Ehlers, R., Könighofer, B., Niekum, S., Topcu, U., 2018. Safe rein-
+forcement learning via shielding. Proceedings of the AAAI Conference on Artificial Intelligence
+32. URL:https://doi.org/10.1609/aaai.v32i1.11797.
+[2] Ardia, D., Bluteau, K., Rüede, M., 2019. Regime changes in bitcoin garch volatility dynamics.
+Finance Research Letters 29, 266–271. URL:https://doi.org/10.1016/j.frl.2018.08.
+009.
+[3] Asness, C., Frazzini, A., Pedersen, L., 2012. Leverage aversion and risk parity. Financial
+Analysts Journal 68, 47–59. URL:https://doi.org/10.2469/faj.v68.n1.1.
+[4] Avellaneda, M., Lee, J.H., 2010. Statistical arbitrage in the us equities market. Quantitative
+Finance 10, 761–782. URL:https://doi.org/10.1080/14697680903124632.
+[5] Bailey, D., Borwein, J.J., Lopez de Prado, M., Zhu, Q., 2014. Pseudo-mathematics and finan-
+cial charlatanism: The effects of backtest overfitting on out-of-sample performance. Notices
+of the American Mathematical Society 61, 458. URL:https://doi.org/10.1090/noti1105.
+[6] Caldeira, J.F., Moura, G.V., 2013. Selection of a portfolio of pairs based on cointegration:
+A statistical arbitrage strategy. Brazilian Review of Finance 11, 49–80. URL:https://doi.
+org/10.12660/rbfin.v11n1.2013.4785.
+[7] Do, B., Faff, R., 2010. Does simple pairs trading still work? Financial Analysts Journal 66,
+83–95. URL:https://doi.org/10.2469/faj.v66.n4.1.
+[8] Dulac-Arnold, G., Levine, N., Mankowitz, D.J., Li, J., Paduraru, C., Gowal, S., Hester, T.,
+2021. Challenges of real-world reinforcement learning: definitions, benchmarks and analysis.
+Machine Learning 110, 2419–2468. URL:https://doi.org/10.1007/s10994-021-05961-4.
+[9] Elliott, R.J., *, J.V.D.H., Malcolm, W.P., 2005. Pairs trading. Quantitative Finance 5,
+271–276. URL:https://doi.org/10.1080/14697680500149370.
+[10] Engle, R.F., Granger, C.W.J., 1987. Co-integration and error correction: Representation, esti-
+mation, and testing. Econometrica 55, 251–276. URL:https://doi.org/10.2307/1913236.
+[11] Engstrom, L., Ilyas, A., Santurkar, S., Tsipras, D., Janoos, F., Rudolph, L., Madry, A., 2020.
+Implementation matters in deep policy gradients: A case study on ppo and trpo. URL:
+https://arxiv.org/abs/2005.12729,arXiv:2005.12729.
+[12] Fischer, T.G., Krauss, C., Deinert, A., 2019. Statistical arbitrage in cryptocurrency mar-
+kets. Journal of Risk and Financial Management 12. URL:https:/doi.org/10.3390/
+jrfm12010031.
+[13] García, J., Fern, o Fernández, 2015. A comprehensive survey on safe reinforcement learning.
+Journal of Machine Learning Research 16, 1437–1480. URL:http://jmlr.org/papers/v16/
+garcia15a.html.
+[14] Gatev, E., Goetzmann, W.N., Rouwenhorst, K.G., 2006. Pairs trading: Performance of a
+relative-value arbitrage rule. The Review of Financial Studies 19, 797–827. URL:https:
+//doi.org/10.1093/rfs/hhj020.
+[15] Guijarro-Ordonez, J., Pelger, M., Zanotti, G., 2022. Deep learning statistical arbitrage. URL:
+https://arxiv.org/abs/2106.04028,arXiv:2106.04028.
+[16] Henderson, P., Islam, R., Bachman, P., Pineau, J., Precup, D., Meger, D., 2018. Deep rein-
+forcement learning that matters. Proceedings of the AAAI Conference on Artificial Intelligence
+32. URL:https://doi.org/10.1609/aaai.v32i1.11694.
+[17] Hochreiter, S., Schmidhuber, J., 1997. Long short-term memory. Neural Computation 9,
+1735–1780. URL:https://doi.org/10.1162/neco.1997.9.8.1735.
+59
+[18] Hurst, H.E., 1951. Long-term storage capacity of reservoirs. Transactions of the American
+Society of Civil Engineers 116, 770–799. URL:https://doi.org/10.1061/TACEAT.0006518.
+[19] Jiang, Z., Xu, D., Liang, J., 2017. A deep reinforcement learning framework for
+the financial portfolio management problem. URL:https://arxiv.org/abs/1706.10059,
+arXiv:1706.10059.
+[20] Johansen, S., 1988. Statisticalanalysisofcointegrationvectors. JournalofEconomicDynamics
+and Control 12, 231–254. URL:https://doi.org/10.1016/0165-1889(88)90041-3.
+[21] Kahneman, D., Tversky, A., 1979. Prospect theory: An analysis of decision under risk.
+Econometrica 47, 263–291. URL:http://doi.org/10.2307/1914185.
+[22] Kim, T., Kim, H.Y., 2019. Optimizing the pairs-trading strategy using deep reinforcement
+learning with trading and stop-loss boundaries. Complexity 2019. URL:https://doi.org/
+10.1155/2019/3582516.
+[23] Korniejczuk, A., Ślepaczuk, R., 2024. Statistical arbitrage in multi-pair trading strategy based
+on graph clustering algorithms in us equities market. URL:https://arxiv.org/abs/2406.
+10695,arXiv:2406.10695.
+[24] Krauss, C., 2017. Statistical arbitrage pairs trading strategies: Review and outlook. Journal
+of Economic Surveys 31, 513–545. URL:https://doi.org/10.1111/joes.12153.
+[25] Lin, H.Y., ChiangLin, C.Y., Tseng, H.W., 2024. Optimal parameter selection and indica-
+tor design for technical analysis strategies by computer software: An empirical analysis of
+the taiwan futures market. Engineering Proceedings 74. URL:https://doi.org/10.3390/
+engproc2024074056.
+[26] Liu, X.Y., Yang, H., Chen, Q., Zhang, R., Yang, L., Xiao, B., Wang, C.D., 2022. Finrl: A
+deep reinforcement learning library for automated stock trading in quantitative finance. URL:
+https://arxiv.org/abs/2011.09607,arXiv:2011.09607.
+[27] Magdon-Ismail, M., Atiya, A.F., Pratap, A., Abu-Mostafa, Y.S., 2004. On the maximum
+drawdown of a brownian motion. Journal of Applied Probability 41, 147–161. URL:http:
+//doi.org/10.1239/jap/1077134674.
+[28] Makarov, I., Schoar, A., 2020. Trading and arbitrage in cryptocurrency markets. Journal of
+Financial Economics 135, 293–319. URL:https://doi.org/10.1016/j.jfineco.2019.07.
+001.
+[29] Mihatsch, O., Neuneier, R., 2002. Risk-sensitive reinforcement learning. Machine Learning
+49, 267–290. URL:https://doi.org/10.1023/A:1017940631555.
+[30] Pardo, F., Tavakoli, A., Levdik, V., Kormushev, P., 2022. Time limits in reinforcement
+learning. URL:10.48550/arXiv.1712.00378,arXiv:1712.00378.
+[31] Politis, D.N., Romano, J.P., 1994. The stationary bootstrap. Journal of the American Statisti-
+cal Association 89, 1303–1313. URL:https://doi.org/10.1080/01621459.1994.10476870.
+[32] López de Prado, M., 2018. Advances in Financial Machine Learning. John Wiley & Sons.
+URL:https://books.google.pl/books?id=v0RKDwAAQBAJ.
+[33] Qian, B., Rasheed, K., 2007. Stock market prediction with multiple classifiers. Applied
+Intelligence 26, 25–33. URL:https://doi.org/10.1007/s10489-006-0001-7.
+[34] Ramos-Requena, J., Trinidad-Segovia, J., Sánchez-Granero, M., 2017. Introducing hurst ex-
+ponent in pair trading. Physica A: Statistical Mechanics and its Applications 488, 39–45.
+URL:https://doi.org/10.1016/j.physa.2017.06.032.
+[35] Schulman, J., Wolski, F., Dhariwal, P., Radford, A., Klimov, O., 2017. Proximal
+policy optimization algorithms. URL:https://doi.org/10.48550/arXiv.1707.06347,
+arXiv:1707.06347.
+60
+[36] Sharpe, W.F., 1966. Mutual fund performance. The Journal of Business 39, 119–138. URL:
+http://doi.org/10.1086/294846.
+[37] Sortino, F.A., Price, L.N., 1994. Performance measurement in a downside risk framework.
+The Journal of Investing 3, 59–64. URL:https://doi.org/10.3905/joi.3.3.59.
+[38] Sutton, R.S., Barto, A.G., 2018. Reinforcement learning: An introduction. Second ed.,
+The MIT Press, Cambridge, Massachusetts. URL:http://incompleteideas.net/book/
+the-book-2nd.html.
+[39] Thorp, E.O., 2008. Chaper 9 - the kelly criterion in blackjack sports betting, and the stock
+market*. Handbook of Asset and Liability Management 1, 385–428. URL:https://doi.org/
+10.1016/B978-044453248-0.50015-0.
+[40] Vergara, G., Kristjanpoller, W., 2024. Deep reinforcement learning applied to statistical
+arbitrage investment strategy on cryptomarket. Applied Soft Computing 153, 111255. URL:
+https://doi.org/10.1016/j.asoc.2024.111255.
+[41] Vidyamurthy, G., 2004. Pairs Trading: Quantitative Methods and Analysis. John Wiley &
+Sons.
+[42] Yang, H., Malik, A., 2024. Reinforcement learning pair trading: A dynamic scaling ap-
+proach. Journal of Risk and Financial Management 17, 555. URL:http://doi.org/10.
+3390/jrfm17120555.
+[43] Zhang, Y., Goel, D., Ahmad, H., Szabo, C., 2025. Regimefolio: A regime aware ml system
+for sectoral portfolio optimization in dynamic markets. URL:https://doi.org/10.48550/
+arXiv.2510.14986,arXiv:2510.14986.
+61

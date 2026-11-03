@@ -1,0 +1,1518 @@
+arXiv 2605.21975  https://arxiv.org/abs/2605.21975
+
+Reasoning through Verifiable Forecast Actions:
+Consistency-Grounded RL for Financial LLMs
+Jialin Chen1, Aosong Feng1, Harshit Verma1, Siyi Gu1, Haiwen Wang1,
+Ali Maatouk1, Yifeng Gao2, Yixuan He3, Leandros Tassiulas1, Rex Ying1
+1Yale University,2University of Texas Rio Grande Valley,3Arizona State University
+Abstract
+Financial markets are characterized by extreme non-stationarity, low signal-to-noise
+ratios, and strong dependence on external information such as news, company fun-
+damentals, and macroeconomic signals. Yet, existing approaches either abstract
+time-series into text or decouple forecasting from language-based reasoning, lead-
+ing to a fundamental mismatch between qualitative reasoning and quantitative
+outcomes. To address this, we introduceSTOCK-R1, a time-series–enhanced LLM
+that unifies stock forecasting and financial reasoning through a verifiable forecast
+action. Based on a tool-call design, the model first emits a forecast action, which
+is a structured and interpretable representation of its qualitative market outlook.
+It then invokes a time-series decoder conditioned on this action to generate dis-
+tributional future trajectories, leading to more informed question answering and
+financial reasoning. We optimize the full pipeline with reinforcement learning,
+where rewards jointly reflect answer validity, forecast accuracy, and consistency
+between generated actions and observed time-series dynamics. In addition, rewards
+are reweighted by a sample-level uncertainty scalar, encouraging the model to
+accommodate varying uncertainty in market dynamics. We evaluateSTOCK-R1
+on financial question answering and stock forecasting over a large-scale 10-year
+benchmark. Our method consistently outperforms time-series baselines and general-
+purpose LLMs, improving reasoning accuracy by 17.7% (4B) and 25.9% (8B).
+These findings demonstrate that structuring the forecast actions establishes a pow-
+erful synergy between language reasoning and temporal prediction, enabling LLMs
+to reason through verifiable, interpretable, and numerically grounded decisions.
+1 Introduction
+Many high-stakes decision-making problems require reasoning over evolving systems whose behavior
+cannot be explained by a single modality. Financial markets provide a particularly challenging
+instance of this setting: price movements are noisy, non-stationary, and tightly coupled with news,
+macroeconomic conditions and company fundamentals. Consequently, forecasting based only on
+past price trajectories remains difficult for both statistical models [1, 2, 3] and recent deep time-series
+architectures [4, 5, 6, 7], as the predictive signals often extend beyond the observed numerical history.
+To examine whether external context provides measurable predictive information, we conduct a simple
+non-parametric diagnostic experiment. A k-nearest-neighbor regressor [8] predicts future cumulative
+returns by averaging outcomes from historically similar market states, where similarity is computed
+either from price history alone or from price history together with other textual contexts. Figure 1
+shows that adding company-specific information, including business profiles, news, and fundamentals,
+consistently improves Pearson correlation between predicted and ground-truth returns as well as out-
+of-sample (OOS) R2 [9]. This result shows that textual market context carries non-trivial predictive
+signals beyond historical price dynamics, highlighting its value for financial forecasting.
+Preprint.
+arXiv:2605.21975v1  [cs.LG]  21 May 2026
+Price
++Macro Econ+Profile +News+Fundamentals+Multi-signal
+0.05
+0.10
+0.15
+0.20Pearson Correlation
+0.075
+0.110
+0.145
+0.164
+0.179
+0.158
+0.01
+0.02
+0.03
+0.04
+Out-of-Sample R2
+0.012
+0.015
+0.031 0.031
+0.037
+0.028
+Pearson Corr
+OOS R2
+Figure 1: Pearson correlation and out-of-
+sample (OOS) R2 for stock return prediction
+under different context settings.
+These observations motivate multimodal financial
+modeling, but existing approaches still lack a princi-
+pled mechanism for coupling numerical forecasting
+with language-based reasoning. One line of work aug-
+ments time-series models with news or fundamentals
+as auxiliary covariates [10, 11, 12], improving pre-
+dictive performance but offering limited capacity for
+open-ended reasoning. Another line builds financial
+LLMs [13, 14, 15, 16, 17] that can synthesize market
+narratives, yet they remain limited in representing
+dense numerical sequences and performing precise
+quantitative reasoning [18, 19, 20]. Recent RL-based LLM approaches for time-series forecasting
+further improve temporal reasoning by training LLMs to generate reasoning traces or direct fore-
+casts [21, 22]. However, they still collapse semantic reasoning and numerical trajectory modeling
+into a single token-prediction objective, leaving their interaction weakly structured and difficult to
+verify. This suggests a natural question:can we design an explicit, verifiable interface through which
+an LLM contributes contextual reasoning about market dynamics, while delegating trajectory-level
+numerical generation to a dedicated time-series decoder?
+However, this raises a central cross-modal alignment challenge. The LLM reasons over discrete
+semantic abstractions, whereas the time-series decoder generates continuous temporal trajectories.
+To enable effective synergy between the two modalities, the LLM must be able to use its contextual
+understanding to guide the decoder toward informed numerical generation. Conversely, the generated
+trajectory should remain consistent with the context, reducing mismatches between reasoning and
+forecasting. More broadly, this reflects a common challenge in cross-modal reasoning: aligning
+semantic reasoning with modality-specific generation without introducing hallucinated outputs.
+To address this gap, we introduceSTOCK-R1, a financial LLM that couples language reasoning
+and numerical forecasting. The core design is astructured forecast action, a field-factorized discrete
+profile describing key temporal attributes, such as direction, drawdown, and turning-point behavior,
+produced by the knowledgeable policy model. This action serves as an executable signal for the time-
+series decoder, allowing the LLM’s semantic assessment to guide numerical trajectory generation.
+At the same time, the action can be evaluated against modality-derived evidence at the field level,
+providing a verifiable bridge between qualitative reasoning and quantitative forecasting.
+Training proceeds in two stages. We first perform supervised fine-tuning (SFT) using modality-derived
+forecast profiles to warm up action generation and downstream reasoning. We then apply a GRPO-
+based [23] reinforcement learning stage, where the policy is optimized with a reward that combines
+answer validity, forecast accuracy, and action-level consistency between discrete fields and observed
+time-series behavior. To improve robustness under noisy market regimes, we incorporateuncertainty-
+aware reweightinginto the RL objective, which down-weights samples of high-uncertainty during
+policy updates. Together with the structured action space, this design enables more precise credit
+assignment than unstructured free-from rationales. Empirically,STOCK-R1achieves state-of-the-art
+performance across price movement forecasting and financial QA on a newly curated large-scale
+benchmark across 10-year S&P 500 stocks. These results suggest that verifiable forecast actions
+provide an effective interface for coupling language reasoning with temporal prediction.
+Our contributions are threefold: (1) We introduce forecast actions as an executable interface for
+effectively coupling language-based reasoning with trajectory-level time-series forecasting. (2) We
+propose a consistency-grounded reinforcement learning objective with uncertainty-aware reweighting,
+which aligns predictive commitments, generated trajectories, and final answers under noisy market
+dynamics. (3) We curate a large-scale financial benchmark with aligned temporal signals and textual
+context, together with an evaluation suite for forecasting, financial QA, and multimodal reasoning.
+2 Related Work
+General Time-Series Forecasting. The field of time-series forecasting has evolved from statistical
+baselines [ 2, 24] to sophisticated deep learning architectures. Transformer-based models have
+become the dominant paradigm, aimed at capturing long-range dependencies [25, 26, 7, 5, 27, 28, 29].
+With the rise of large language models, recent works have attempted to use pre-trained LLMs
+2
+for time series [30, 31, 32, 33], which typically align time-series embeddings with the text space
+of frozen LLMs. This line of research has recently progressed toward time-series foundation
+models [34, 35, 36, 37, 38, 39], emphasizing large-scale pretraining across diverse datasets, stronger
+generalization, and transferability across tasks and domains. However, these methods primarily focus
+on forecasting benchmarks where patterns are relatively stationary, nor do they typically integrate
+auxiliary multimodal context to explain their predictions.
+Stock Prediction and Quantitative Modeling. Financial forecasting presents unique challenges
+due to the stochastic nature of market dynamics. Previous approaches [2, 40, 41, 42, 43] focus on
+extracting patterns from historical stock data, implicitly assuming that past prices contain sufficient
+information for future prediction, which contradicts the Efficient Market Hypothesis [44]. Recent
+multimodal approaches [45, 11, 10, 46] augment time-series models with external information such
+as textual news or relational graphs to capture cross-asset and event-driven dependencies. However,
+they typically treat auxiliary modalities as feature-level enhancements for forecasting or prediction.
+In contrast, our method is designed to natively handle reasoning-centric financial tasks, enabling
+coherent forecasting and answer generation.
+Financial LLMs and Trading Agents. Financial LLMs have attracted growing interest recently [13,
+47, 14, 15, 16]. While excelling in knowledge-intensive tasks, they struggle with forward-looking
+trend prediction. In parallel, research has investigated agent-based and RL-driven frameworks [48,
+49, 17], which focus on portfolio or risk optimization and interactive market play, but do not natively
+support fine-grained forecasting or reasoning for future market in context-rich QA settings. Our work
+explores an orthogonal and complementary direction, emphasizing grounded forecasting to support
+complex financial question answering.
+3 Methodology
+As illustrated in Figure 2,STOCK-R1operates as an action-conditioned tool-use pipeline for financial
+reasoning. Given multimodal stock inputs (Sec. 3.1), we first pre-train a multi-channel time-series
+encoder that generates future trajectories and uncertainty estimates (Sec. 3.2). The policy LLM then
+emits a structured forecast action that invokes the time-series decoder (Sec. 3.3), whose trajectory
+output is returned as numerical evidence for final answer generation. The pipeline is initialized
+with joint supervised fine-tuning (Sec. 3.4) and further optimized through consistency-grounded
+reinforcement learning with uncertainty-aware updates (Sec. 3.5).
+3.1 Multimodal Time-Series Data Formulation
+The fundamental challenge in financial time-series forecasting stems from market non-stationarity.
+Raw series often exhibit shifting statistical patterns over time, making patterns learned from his-
+torical observations unreliable under future market conditions and substantially weakening model
+generalization. To mitigate this, we reframe the pre-training objective from deterministic point
+forecasting to probabilistic density estimation [ 50]. Given a multichannel input representation,
+Xt = [Ot−L:t, Ht−L:t, Lt−L:t, Ct−L:t, Vt−L:t]∈R 5×L, encompassing the Open, High, Low, Close,
+and V olume (OHLCV) over a lookback windowL, we transform these raw signals into log-return
+formats, defined formally as rNt = ln( NtCt−1 ) for N∈ {O, H, L, C}and rVt = ln( Vt+1Vt−1+1 ), which
+effectively converts the non-stationary sequence into a quasi-stationary signal suitable for efficient
+representation learning [51].
+To complement these numerical signals with semantic context, we align the time-series data with a
+structured modality Tt. This includes: (1)Macroeconomic Data: Key indicators such as US Treasury
+yields (e.g.,2Y , 10Y spreads) and inflation metrics that drive broad market sentiment ; (2)Company
+Fundamentals: Quarterly financial snapshots including revenue, operating margins, and leverage
+ratios (e.g.,debt-to-equity); and (3)Business & News Context: A summary of the company’s core
+operations alongside recent headlines and sentiment analysis. These heterogeneous data sources are
+serialized into a unified textual prompt, serving as the grounding context for the model’s reasoning.
+Data collection details and examples are provided in Appendix A.
+3
+1. Multimodal Market Context
+Historical OHLCV
+Time Series
+Macro Signals
+News & Events
+Fundamentals
+Financial Question
+“Will the stock recover within 10 days under mixed signals?”
+🌐
+📄
+🏛
+aMultichannel 
+Time-series Encoder
+bContext Encoder
+🌐
+📄
+🏛
+ Macro/Fundamental/
+News embeddings
+TS 
+Tokens
++ 
+Context 
+Tokens
+2. Multimodal Encoding
+3. Policy Model
+I need to first predict how things might evolve in 
+the future. … there will be hard reversal back 
+toward … <forecast_action>
+{direction:    up | down | sideways
+volatility_level:   low | medium | high
+……
+turning_point_count:   <int>,
+peak_timing_bin:   <e.g. t+8_t+10> }
+Structured Interpretable Forecast Action
+Tool-call 
+w.Action
+Trajectory & Uncertainty
+Integrate & 
+Context Update
+Continuous Reasoning
+…
+<answer> Price is 
+expected to rise over the 
+next 10 days, driven by 
+improving momentum and 
+supportive fundamentals. 
+</answer> 
+•Answer Correctness
+•Text-TS Consistency
+•Forecast Precision 
+•Action Accuracy
+Reward Design
+Dual-Modal Rollout
++ Text 𝜏!
+……
+Uncertainty-aware GRPO
+"𝐴𝜏"=𝒘𝝉𝐴(𝜏")
+Update 
+Policy LLM
++ Text 𝜏#
++ Text 𝜏$
+Multichannel
+Time-series Decoder 
+𝑝𝑦,𝑤	history,action)
+Uncertainty Scalar
+Figure 2: Overview ofSTOCK-R1. The model encodes multimodal market context into unified
+tokens, then uses a policy LLM to generate a structured forecast action that conditions a multichannel
+time-series decoder. The predicted trajectory and uncertainty are returned to the LLM for grounded
+financial reasoning, with the whole policy optimized via uncertainty-aware dual-modal rollout.
+3.2 Multi-Signal Time Series Encoder Pre-training
+Time Series Encoder Architecture. We employ a causal attention-based transformer that uniformly
+encodes the multichannel input Xt ∈R 5×L, enabling the model to learn joint representations across
+both temporal and variable dimensions. To rigorously preserve temporal consistency within this
+flattened space, we implement Rotary Positional Embeddings (RoPE) [52] where positional indices
+are assigned strictly according to the timestamp t. The core Multi-variate Time Attention mechanism
+refines standard self-attention by injecting a learnable binary bias B into the attention scores, which
+explicitly differentiates between intra-variable dependencies (where variable indices vi =v j) and
+inter-variable cross-correlations (where vi ̸=v j). This is complemented by a causal block-diagonal
+mask M that enforces strict autoregressive constraints, ensuring that predictions at time t depend
+solely on the historyτ≤tacross all channels. More details are given in Appendix B.1.
+Pretraining Objectives. We employ a reconstructive objective to train the time-series encoder,
+ensuring that the resulting flattened latent tokens Hts ∈R K×d m, where K represents the number of
+time-series tokens and dm is the LLM’s model dimension. These latent tokens are used as time-series
+tokens and prepended to the textual tokens as part of the LLM input, allowing the policy model to
+jointly attend to numerical market dynamics and semantic market context. Traditional point-wise
+forecasting often fails in financial contexts because it ignores the inherent stochasticity of market
+dynamics. To address this, we project Hts to model the conditional probability of future returns
+as dynamic Gaussian distributions N(µ t+s, σ2t+s) for Open, Close, and V olume. For the intraday
+extremes (High and Low), which reflect the volatility boundaries, we employ quantile regression to
+estimate tail risks. The training objective LTS combines the Negative Log-Likelihood (NLL) and the
+quantile lossρ τ for the volatility boundaries over the horizonS:
+LTS =
+SX
+s=1
+X
+i∈{O,C,V}
+λi
+ (rit+s −µ it+s)2
+2(σit+s)2 + 12 ln  (σit+s)2 + Xj∈{H,L} λjρτj rjt+s −q (j,τj )t+s  ,
+where the quantile loss function ρτ (u) =u(τ−I u<0). Specifically, we target the 95th percentile for
+the High price and the 5th percentile for the Low (i.e., τH = 0.95;τL = 0.05). This formulation not
+only provides a predictive mean but also allows us to explicitly quantify market uncertainty, defined
+as the aggregate variance U= Ps,i(σit+s)2, which is further normalized to a bounded range to serve
+as a calibrated stability signal for downstream reinforcement learning.
+3.3 Structured Forecast Actions
+Single-Action Tool-Call Interface. The pretrained time-series model generates future trajectories
+from historical signals. However, it does not utilize how market context should shape the forecast.
+We therefore formulate forecasting-enhanced reasoning as a single-action tool-call process, where
+4
+the LLM emits a structured forecast action as the argument to a dedicated time-series decoder. This
+action serves as a semantic-to-numeric interface, converting the LLM’s contextual market assessment
+into an executable control signal that modulates the decoder’s forecast distribution.
+Action Space Definition. Let the forecast action consist of K forecast-relevant fields, where each
+field describes one temporal attribute of the future trajectory, such as trend direction, end-point
+movement, turning-point behavior, or peak timing. For the k-th field, we define its value set as Ak,
+which is finite and can be either categorical or ordinal. For example, a categorical field such as
+trend direction has Ak ={up,flat,down} , while an ordinal field such as volatility level width uses
+discretized bins Ak ={1, . . . , Bk}. The complete forecast action space is the Cartesian product over
+all fieldsA forecast =A 1 × · · · × AK.
+Given the multimodal context s and user query q, the policy LLM πθ generates a forecast action
+a= (a 1, . . . , aK)∈ Aforecast by a∼π θ(· |s, q). This field-factorized construction makes the
+action interpretable, exposes fine-grained temporal commitments, and enables field-level supervision
+and reward computation that would be difficult to obtain from free-form natural-language rationales.
+Action-conditioned Forecasting Tool. The forecast action invokes the time-series decoder in
+a single tool-call interface (by generating <forecast_action>). Given the encoded historical
+embedding Hts and a structured action a, we embed its categorical and ordinal fields, concatenate
+them into a unified action representation, and feed it into an MLP action encoder eψ(·) to obtain
+the continuous conditioning vector za for the decoder. The time-series decoder ϕ(·) then generates
+future trajectories conditioned on both the historical time-series representation and the encoded
+action ˆyt+1:t+S ∼p ϕ(· |Hts, eψ(a)). Thus, different forecast actions can induce different forecast
+distributions under the same historical context. After execution, the decoder output is serialized as the
+observation returned by <forecast_action>, and the LLM completes the final answer conditioned
+on the original context, the structured action, and the numerical trajectory.
+Why Forecast Actions. The central challenge is bridging the LLM’s semantic reasoning and
+the decoder’s numerical generation while preserving cross-modal faithfulness. Forecast actions
+provide this missing interface by summarizing the LLM’s market outlook into structured temporal
+attributes, which directly condition the decoder’s generation. This intermediate action space renders
+the interaction (i)controllable, as distinct actions induce distinct predictive distributions over future
+trajectories; (ii)verifiable, as each field of the action can be evaluated against both the subsequently
+generated forecast and the realized outcome; and (iii)trainable, as reinforcement learning can assign
+credit to each attribute rather than solely at the entire prediction.
+3.4 Joint SFT with Context-Aware Forecasting Decoder
+To bootstrap supervised training in the financial domain, we distill cold-start trajectories from GPT-5
+under the same tool-call format. Given a multimodal market context, the teacher generates financial
+questions covering diverse perspectives, constructs action-grounded reasoning, and then completes
+the reasoning and answers specific to the question. During supervised data construction, the target
+action is deterministically derived from the realized future trajectory, providing field-level supervision
+for the LLM’s intermediate forecast decision. During inference, the LLM emits the structured action
+before invoking<forecast_action>. More details are given in Appendix A.3.
+In this stage, the policy LLM is trained to generate a forecast rationale, emit valid and precise
+structured forecast action a, consume the decoder trajectory returned by <forecast_action>, and
+produce the final reasoning trace and answer. The SFT objective contains two coupled terms. First,
+LTS (in Sec. 3.2) trains the encoder and decoder to model future trajectories using the distribution-
+aware loss, now conditioned on the forecast action when available. Second, LSFT trains the LLM
+with a next-token prediction objective to follow the reasoning-action-tool-answer format. The overall
+objective is therebyL total =L SFT +λ tsLTS.
+3.5 Reinforcement Learning for Grounded Reasoning
+After SFT, the model can follow the tool-call format, but supervised learning alone does not guarantee
+that the generated action, decoder trajectory, and final answer remain mutually consistent. We
+therefore introduce an uncertainty-aware reinforcement learning (RL) stage over the full dual-modal
+rollout. For each state s= (X t,T t, q), the policy first samples a textual forecast action ˆa, the
+5
+time-series decoder then generates a numerical trajectory ˆyt+1:t+S ∼p ϕ(· |Hts, eψ(ˆa)), and the
+LLM finally produces an answer ˆzconditioned on the original context, action, and the time-series
+rollout. This dual-modal rollout explicitly couples the LLM’s reasoning capability with the action-
+conditioned decoder: a poor action can degrade the forecast, and an inconsistent forecast can reduce
+the reward assigned to the reasoning trace. At the same time, financial labels are intrinsically noisy
+under high-volatility regimes; hence, the RL update should account for the calibrated uncertainty Uq
+estimated by the distribution-aware time-series module in Sec. 3.2.
+Reward Design. The reward evaluates both modalities. We define the total reward as
+R=R ans +αR act +βR prec +γR cons,
+where α, β, and γ are weighting coefficients that balance the contributions of each reward. Each
+component targets a distinct failure mode:
+• Answer Correctness (Rans)evaluates the final answer according to the task type. For categorical
+or decision-oriented queries, we use exact matching over the target class; for open numerical
+questions, correctness is computed with tolerance-aware scoring.
+• Action Accuracy (Ract)evaluates whether the generated forecast action ˆamatches the ground-
+truth action a⋆ =g(y t+1:t+S) derived from the realized future trajectory. We compare the two
+actions field by field: categorical fields are scored by exact matching, while ordinal fields receive
+distance-aware partial credit.
+• Forecast Precision (Rprec)measures the accuracy of the decoder-generated trajectory against the
+realized time series. We use scale-normalized errors for price and volume and direction-aware
+metrics for return movement, so the reward remains comparable across assets.
+• Action-Trajectory Consistency (Rcons)verifies whether the structured action is consistent with
+the time-series trajectory produced by the decoder. We parse the generated trajectory into a profile
+˜ah =g(ˆyt+1:t+S) and compare it with the policy action ˆah field by field. Categorical fields are
+scored by exact agreement, while ordinal fields receive distance-sensitive similarity.
+The consistency term is central to the proposed alignment mechanism. It prevents the LLM from
+emitting a bullish action while the decoder returns a bearish trajectory, or from claiming low volatility
+while generating a wide forecast range. Because the reward depends jointly on the policy-selected
+action and the decoder-conditioned forecast, it provides credit assignment across the interface between
+the LLM parametersθand the decoder parametersϕ.
+Uncertainty-Aware Consistency-Grounded GRPO. For each query, we sample a group of dual-
+modal rollouts {oi}Gi=1, where each rollout contains the generated action, numerical trajectory, and
+final answer. The group-relative advantage is computed from the total reward above, allowing the
+model to compare alternative actions and answers under the same market state. To avoid overfitting
+noisy credit assignment in unstable market regimes, we optimize the policy with a GRPO-style
+objective [23] by further reweighting the learning signal with the normalized forecast uncertainty Uq
+predicted by the pre-trained time-series encoder, which is defined as:
+Ju-GRPO(θ) =Eq,{oi} w(Uq) 1G
+GX
+i=1
+1
+|oi|
+|oi|X
+t=1
+n
+min
+h
+rt(θ) ˆAi,t,clip(r t(θ)) ˆAi,t
+i
+−βD KL [πθ||πref ]
+o
+.
+We normalize the sample uncertainty weight w(Uq) using a threshold-based exponential decay func-
+tion (see Appendix B.4 for the detailed formulation), which effectively down-weights contributions
+from high-volatility samples. This mechanism ensures that policy updates are driven primarily by
+identifiable and stable market regimes, while maintaining conservative updates during highly stochas-
+tic periods. Integrating the estimated volatility effectively forces the policy to discover consistent and
+reliable structural patterns where ground-truth outcomes can be logically inferred from the context.
+4 Experiments
+We evaluateSTOCK-R1on complex financial QA (Sec. 4.1), time-series forecasting (Sec. 4.2),
+followed by ablation studies on time-series input and analysis on the quality of forecast actions
+(Sec. 4.3). We further provide a model scalability analysis in Appendix C.4 and an investment
+simulation in Appendix C.5 to evaluate the quality of the model’s predictive buy/sell signals.
+6
+4.1 Reasoning-based Financial QA
+Experimental Setting. We evaluate predictive and financial question answering across five task
+categories, which are designed to assess both numerical foresight and the ability to integrate het-
+erogeneous financial signals. We compareSTOCK-R1against strong language-model baselines,
+including general-purpose LLMs (Llama3 [ 53], Qwen3 [ 54], GPT-5, OpenAI-o3) and domain-
+adapted financial reasoning models (Fin-o1 [ 15], Fin-R1 [ 14], DianJin-R1 [ 16]).STOCK-R1is
+instantiated on top of Qwen3-4B [54] and Qwen3-8B as the base language models. All models are
+evaluated using task-specific accuracy. Experiment configurations are provided in Appendix C.2.
+Table 1: Performance comparison across financial QA tasks. Best
+performance is inbold, while the second-best is underlined .
+Model Forecast Event Fundamental News Multi-signal Avg.QA Detection QA Analysis Reasoning
+General-purpose LLM
+Llama3-3B 2.53 48.87 45.68 42.72 56.54 39.27
+Llama3-8B 3.21 44.10 47.13 51.77 54.81 40.20
+Qwen3-4B 7.92 65.58 48.94 35.11 57.82 43.07
+Qwen3-8B 6.23 39.42 47.06 44.79 52.69 38.04
+Qwen3-30B 10.34 55.35 45.40 51.41 63.39 45.18
+Llama3-70B 5.35 53.25 59.34 55.28 60.85 46.81
+DeepSeek-V3.2 3.37 56.90 44.58 42.00 60.95 41.56
+GPT-5 8.16 51.08 52.69 60.49 61.24 46.73
+OpenAI-o3 2.78 53.43 57.76 57.89 67.07 47.79
+Financial LLM
+Fin-R1-8B 40.28 49.35 56.41 60.48 60.28 53.36
+Fin-o1-14B 32.86 31.89 41.27 53.5369.1245.73
+DianJin-R1-32B 38.42 63.71 52.47 62.40 62.58 55.92
+STOCK-R1-4B 51.00 68.52 59.70 61.83 63.02 60.81
+STOCK-R1-8B 56.78 67.49 61.08 67.16 67.45 63.99
+Results.Table 1 shows
+thatSTOCK-R1consistently
+achieves the strongest overall
+performance across predictive
+and reasoning-centric financial
+QA tasks. The most pronounced
+gain appears in Forecast QA,
+where general-purpose LLMs
+perform poorly despite their
+large scale, suggesting that
+textual reasoning alone is insuffi-
+cient for precise forward-looking
+numerical prediction. In con-
+trast,STOCK-R1substantially
+improves this category by
+grounding the reasoning process
+in trajectory-level time-series
+forecasts. Beyond pure forecast-
+ing,STOCK-R1also performs
+strongly on Event Detection, Fundamental QA, News Analysis, and Multi-signal Reasoning,
+indicating that the proposed action-conditioned forecasting interface does not merely improve
+numerical prediction but also supports broader context-aware financial reasoning. Compared with
+domain-adapted financial LLMs,STOCK-R1achieves higher average accuracy at both 4B and 8B
+scales, demonstrating that explicitly coupling language reasoning with dedicated temporal generation
+is more effective than relying on financial instruction tuning alone. Overall, these results suggest that
+verifiable forecast actions provide a practical mechanism for aligning market-context interpretation
+with numerical forecasting evidence. See Appendix C.6 for case studies in QA tasks.
+4.2 Time Series Forecasting
+Baselines. We conduct a comprehensive evaluation ofSTOCK-R1on the time-series forecast task
+against three distinct categories of baselines: (1) Time Series Foundation Models evaluated in a
+zero-shot setting (e.g.,Moirai [ 38], Chronos [39]); (2) Time Series Models trained from scratch.
+Specifically, we include general forecasters, ARIMA and Prophet [3, 1], and re-pretrain the stock-
+specific model Kronos [ 41]. We also include state-of-the-art baselines such as AutoTimes [ 33],
+Time-LLM [30], and FSCA [32]. These methods leverage LLMs to incorporate textual summaries,
+but do not naturally support the ingestion of lengthy, temporally-aligned multimodal context, often
+limiting their ability to model high-frequency market dynamics; and (3) Multimodal Large Language
+Models (e.g.,GPT-5, Qwen3 [ 54]) that understand time series in text space. We report separate
+results for our model in Unimodal(U)and Multimodal(M)settings to quantify the gain from textual
+grounding. Performance is measured using Mean Absolute Percentage Error (MAPE) and Root Mean
+Square Error (rMSE) for numerical precision (Price, V olume, Returns), Directional Accuracy (Acc.)
+for trend prediction horizons of next 3, 5, and 10 days, and Mean Absolute Error (MAE) for volatility
+estimation. More experimental details are given in Appendix C.1.
+Results Analysis. As shown in Table 2, among pure time-series approaches,STOCK-R1 (U)achieves
+state-of-the-art or highly competitive performance across numerical precision, return prediction, and
+volatility estimation. Notably, it obtains the best volatility MAE, suggesting that the distribution-
+aware pretraining objective better captures market risk dynamics than standard point-forecasting
+7
+Table 2: Holistic Forecasting Performance Comparison. We evaluateSTOCK-R1against Zero-
+shot Foundation Models, Supervised Time Series Models, and Multimodal LLMs.(U)denotes
+Unimodal input (Time Series only), and(M)denotes Multimodal input (Time Series + Text). The
+best performance is inbold, while the second-best performance is underlined .
+Model Price↓Price↓V olume↓V olume↓Return↓3-day↑5-day↑10-day↑V olatility↓
+(MAPE) (rMSE) (MAPE) (rMSE) (rMSE) Acc. (%) Acc. (%) Acc. (%) (MAE×10 −3)
+Time Series
+Foundation Models
+(Zero-shot)
+Timer-XL 0.946 1.460 6.758 1.392 0.955 44.7 43.8 40.3 7.212
+Moirai 0.031 1.395 7.293 1.367 0.048 53.2 52.8 54.5 2.709
+MOMENT 0.076 1.484 6.150 1.409 0.104 49.2 48.5 46.6 2.937
+Chronos-T5 0.031 1.411 7.097 1.376 0.051 50.5 50.1 49.6 6.453
+Time-MoE 0.035 1.437 5.7591.3580.052 48.5 48.6 48.4 3.008
+Time Series Models
+(Train-from-scratch)
+ARIMA 0.035 1.405 6.134 1.415 0.061 53.4 53.0 50.0 –
+Prophet 0.058 1.416 6.128 1.377 0.083 47.3 45.9 49.9 2.966
+DLinear 0.038 1.433 6.019 1.388 0.055 51.8 51.7 50.8 3.015
+Mamba 0.037 1.448 6.345 1.464 0.053 52.3 53.0 53.3 3.146
+TimeMixer 0.031 1.401 6.087 1.403 0.049 53.8 54.6 55.2 2.946
+TimesNet 0.031 1.423 6.037 1.387 0.046 52.2 50.3 53.5 2.898
+PatchTST 0.037 1.409 5.991 1.395 0.055 52.9 51.1 51.7 14.124
+NSTransformer 0.031 1.391 6.074 1.399 0.048 53.3 51.1 53.2 2.928
+iTransformer 0.032 1.415 6.098 1.399 0.046 54.4 53.8 53.3 2.967
+AutoTimes 0.042 1.444 5.938 1.384 0.059 52.9 51.4 49.4 2.634
+Time-LLM 0.049 1.450 6.108 1.411 0.070 50.2 51.4 46.9 3.383
+Kronos 0.036 1.371 5.725 1.385 0.051 50.8 52.5 54.2 2.634
+FSCA0.0291.365 5.983 1.394 0.042 54.9 53.2 53.5 2.835
+STOCK-R1(U) 0.029 1.339 5.316 1.384 0.041 55.1 55.3 55.0 2.537
+Language Models
+(Multimodal Input)
+Qwen3-4B 0.036 1.320 7.945 1.422 0.050 56.4 55.6 58.6 2.778
+Qwen3-8B 0.0441.3038.373 1.417 0.060 55.6 55.9 59.2 2.682
+Llama3-3B 0.039 1.328 – – 0.057 50.5 52.3 53.1 2.884
+Llama3-8B 0.035 1.324 5.393 1.418 0.049 55.1 55.7 57.8 2.758
+GPT-5 0.032 1.334 8.409 1.411 0.046 55.2 54.6 56.6 2.903
+STOCK-R1(M) 0.031 1.319 5.872 1.380 0.040 57.6 58.8 59.6 2.602
+losses. ComparingSTOCK-R1 (U)andSTOCK-R1 (M), multimodal context brings the clearest
+gains in directional accuracy across 3-, 5-, and 10-day horizons, while numerical precision remains
+broadly comparable. This pattern is consistent with the role of textual signals in financial markets:
+news, fundamentals, and macro context often provide directional cues about future movement, but do
+not necessarily determine exact price levels. Overall,STOCK-R1 (M)outperforms general-purpose
+LLMs by combining semantic market context with a dedicated time-series forecasting module,
+yielding stronger directional prediction without sacrificing trajectory-level numerical fidelity.
+4.3 Ablation Studies and Analysis
+Time-series Tokens Yields better Forecasting Performance. Figure 3a examines the impact of
+explicitly injecting time-series as soft tokens across different financial reasoning tasks. We observe
+consistent performance gains from time-series tokens at both 4B and 8B scales, indicating that the
+benefits are robust to model capacity. The largest relative improvements appear in Forecast QA,
+where access to explicit temporal dynamics is critical for anticipating future movements. However,
+without time-series tokens, models struggle to infer quantitative trends from textual context alone.
+For other types of questions, the gains are more moderate but still consistent. Overall, the average
+accuracy improves across all tasks and scales, demonstrating that time-series tokens serve as a general
+and task-agnostic inductive bias that enhances both predictive and reasoning-intensive financial QA.
+Forecast QA Event Detection Fundamental News Analysis Multi-signal Average
+30
+40
+50
+60
+70Accuracy
+51.0
+68.5
+59.7
+51.8
+63.0
+59.0
+37.8
+61.2
+55.2
+52.4
+62.1
+53.7
+56.8
+67.5
+61.1
+67.2 67.5
+64.1
+41.3
+58.2
+60.8
+68.5 68.9
+59.6
+4B w/ TS 4B w/o TS 8B w/ TS 8B w/o TS
+(a)Performance comparison across QA tasksw/
+andw/otime-series token.
+Action Quality
+−0.01
+0.00
+0.01
+0.02
+0.03
+0.04
+0.05
+0.06
+Accuracy Improvement
+4B-SFT
+4B-RL
+8B-SFT
+8B-RL
+(b)RL improves action
+quality beyond SFT
+Action Quality
+−0.2
+0.0
+0.2
+0.4
+Accuracy Improvement
+-0.23
+0.06
+0.31
+-0.21
+0.12
+0.39SFT RL
+(c)Better actions lead
+to higher accuracy
+Figure 3: Ablation and Analysis of Time-Series Grounding and Action Quality
+RL Enhances Action Quality and Improves Directional Accuracy. As shown in Figure 3b, RL
+primarily acts as a mechanism for refining the model’s forecast action space. We measure action
+quality by field-level accuracy, comparing each generated forecast-action field with the corresponding
+8
+target field derived from the realized future trajectory. In particular, RL systematically shifts the
+model toward producing higher-quality and more internally consistent actions, suggesting that its
+core effect is to improve the precision and reliability of the intermediate decision interface. Moreover,
+Figure 3c suggests a strong and consistent correlation between action quality and directional accuracy
+improvement, with Pearson correlation coefficients exceeding 0.65 across settings. This indicates
+that better-aligned forecast actions translate into more accurate directional prediction, and the RL
+stage further amplifies this effect by enforcing qualitative–numerical consistency during training.
+Importantly, this relationship is monotonic and model-agnostic, suggesting that the structured action
+serves as an effective bottleneck that mediates between high-level reasoning and numerical prediction.
+Table 3: Ablation study of RL variants
+and reward components.
+Method Avg. QA Acc.
+SFTw/thinking57.3±0.8
++ GRPO66.0±1.1
++ u-GRPO67.5±0.6
+w/oR act (Actions)63.2±0.8
+w/oR prec (Forecast)66.4±1.1
+0 50 100 150 200 250 300
+Step
+1.0
+1.1
+1.2
+1.3Entropy
+w/ uncertainty
+w/o uncertainty
+Figure 4: The entropy curve with and
+without uncertainty-aware reweighting.
+Answer-
+Evidence
+Trajectory-
+Action
+Logical
+Validity
+Action
+Success
+20
+35
+50
+65Score (%)
+w/o RL w/o Rcons Full model
+45.9
+18.5
+38.7
+61.764.3
+37.2
+51.4
+71.3
+65.4
+53.8
+58.1
+70.4
+Figure 5: Ablation of RL components
+on numerical grounding metrics
+Uncertainty-Aware RL Stabilizes Cross-Modal Align-
+ment.Table 3 shows that u-GRPO achieves the best
+average accuracy, while removing either the action re-
+ward Ract or the forecast precision reward Rprec leads to
+performance degradation. The larger drop from remov-
+ing Ract highlights the importance of explicitly super-
+vising the intermediate forecast action. Figure 4 further
+shows that uncertainty-aware reweighting stabilizes RL
+training: without uncertainty weighting, policy entropy
+drops more sharply in the early stage, indicating prema-
+ture convergence and reduced exploration. In contrast,
+uncertainty-aware reweighting maintains higher entropy
+by down-weighting high-volatility, low-reliability samples,
+which helps preserve exploration and yields stronger late-
+stage performance. These results suggest that the reward
+design improves both cross-modal credit assignment and
+optimization robustness under noisy market dynamics.
+Consistency Reward Improves Numerical Ground-
+ing.To probe how RL helps beyond task accuracy, we
+use LLM-based rubrics to evaluate numerical grounding
+across four dimensions, including answer–evidence con-
+sistency, trajectory–action alignment, logical validity, and
+action success rate (detailed in Appendix C.7). As shown
+in Figure 5, removing RL entirely causes the largest degra-
+dation, confirming that reinforcement learning is essential
+not only for answer correctness but also for aligning the
+model’s qualitative outlook, numerical forecast, and final
+reasoning. More revealingly, removing only the consis-
+tency reward Rcons preserves answer–evidence consis-
+tency but disproportionately harms trajectory–action align-
+ment, indicating that final-answer supervision alone cannot
+ensure the structured forecast action remains numerically
+compatible with the generated trajectory. The consistency
+reward thus provides fine-grained credit assignment at the
+action–trajectory interface, preventing forecast actions that
+are semantically plausible but numerically unsupported.
+5 Conclusion
+We introduceSTOCK-R1, a time-series-enhanced financial LLM framework that couples language-
+based market reasoning with trajectory-level numerical forecasting through executable forecast
+actions. Instead of requiring the LLM to directly generate dense future trajectories,STOCK-R1uses
+forecast actions as an intermediate interface to guide a dedicated time-series decoder and to support
+verifiable alignment between reasoning, forecasting, and final answers. We further optimize this
+process with consistency-grounded RL and uncertainty-aware reweighting, improving robustness
+under noisy and non-stationary market dynamics. Experiments show thatSTOCK-R1improves
+both financial QA and time-series forecasting, demonstrating the value of explicitly grounding LLM
+reasoning in modality-specific temporal prediction.
+9
+References
+[1] Sean J Taylor and Benjamin Letham. Prophet: forecasting at scale.PeerJ Preprints, 5:e3190v2,
+2017.
+[2] Adebiyi A Ariyo, Adewumi O Adewumi, and Charles K Ayo. Stock price prediction using the
+arima model. In2014 UKSim-AMSS 16th international conference on computer modelling and
+simulation, pages 106–112. IEEE, 2014.
+[3] George EP Box, Gwilym M Jenkins, Gregory C Reinsel, and Greta M Ljung.Time series
+analysis: forecasting and control. John Wiley & Sons, 2015.
+[4] Ailing Zeng, Muxi Chen, Lei Zhang, and Qiang Xu. Are transformers effective for time series
+forecasting? InProceedings of the AAAI conference on artificial intelligence, volume 37, pages
+11121–11128, 2023.
+[5] Yong Liu, Tengge Hu, Haoran Zhang, Haixu Wu, Shiyu Wang, Lintao Ma, and Mingsheng Long.
+itransformer: Inverted transformers are effective for time series forecasting.arXiv preprint
+arXiv:2310.06625, 2023.
+[6] Yong Liu, Haixu Wu, Jianmin Wang, and Mingsheng Long. Non-stationary transformers:
+Exploring the stationarity in time series forecasting.Advances in neural information processing
+systems, 35:9881–9893, 2022.
+[7] Y Nie. A time series is worth 64words: Long-term forecasting with transformers.arXiv preprint
+arXiv:2211.14730, 2022.
+[8] Padraig Cunningham and Sarah Jane Delany. K-nearest neighbour classifiers-a tutorial.ACM
+computing surveys (CSUR), 54(6):1–25, 2021.
+[9] John Y Campbell and Samuel B Thompson. Predicting excess stock returns out of sample: Can
+anything beat the historical average?The Review of Financial Studies, 21(4):1509–1531, 2008.
+[10] Shuqi Li, Yuebo Sun, Yuxin Lin, Xin Gao, Shuo Shang, and Rui Yan. Causalstock: Deep
+end-to-end causal discovery for news-driven multi-stock movement prediction.Advances in
+Neural Information Processing Systems, 37:47432–47454, 2024.
+[11] Yumo Xu and Shay B Cohen. Stock movement prediction from tweets and historical prices.
+InProceedings of the 56th Annual Meeting of the Association for Computational Linguistics
+(Volume 1: Long Papers), pages 1970–1979, 2018.
+[12] Shuqi Li, Weiheng Liao, Yuhan Chen, and Rui Yan. Pen: prediction-explanation network to
+forecast stock price movement with better explainability. InProceedings of the AAAI Conference
+on Artificial Intelligence, volume 37, pages 5187–5194, 2023.
+[13] Shijie Wu, Ozan Irsoy, Steven Lu, Vadim Dabravolski, Mark Dredze, Sebastian Gehrmann,
+Prabhanjan Kambadur, David Rosenberg, and Gideon Mann. Bloomberggpt: A large language
+model for finance.arXiv preprint arXiv:2303.17564, 2023.
+[14] Zhaowei Liu, Xin Guo, Fangqi Lou, Lingfeng Zeng, Jinyi Niu, Zixuan Wang, Jiajie Xu, Weige
+Cai, Ziwei Yang, Xueqian Zhao, et al. Fin-r1: A large language model for financial reasoning
+through reinforcement learning.arXiv preprint arXiv:2503.16252, 2025.
+[15] Lingfei Qian, Weipeng Zhou, Yan Wang, Xueqing Peng, Han Yi, Yilun Zhao, Jimin Huang,
+Qianqian Xie, and Jian-yun Nie. Fino1: On the transferability of reasoning-enhanced llms and
+reinforcement learning to finance.arXiv preprint arXiv:2502.08127, 2025.
+[16] Jie Zhu, Qian Chen, Huaixia Dou, Junhui Li, Lifan Guo, Feng Chen, and Chi Zhang. Dianjin-
+r1: Evaluating and enhancing financial reasoning in large language models.arXiv preprint
+arXiv:2504.15716, 2025.
+[17] Yijia Xiao, Edward Sun, Tong Chen, Fang Wu, Di Luo, and Wei Wang. Trading-r1: Financial
+trading with llm reasoning via reinforcement learning.arXiv preprint arXiv:2509.11420, 2025.
+10
+[18] Eric Wallace, Yizhong Wang, Sujian Li, Sameer Singh, and Matt Gardner. Do nlp models
+know numbers? probing numeracy in embeddings. InProceedings of the 2019 Conference on
+Empirical Methods in Natural Language Processing and the 9th International Joint Conference
+on Natural Language Processing (EMNLP-IJCNLP), pages 5307–5315, 2019.
+[19] Mingtian Tan, Mike A Merrill, Vinayak Gupta, Tim Althoff, and Thomas Hartvigsen. Are
+language models actually useful for time series forecasting?Advances in Neural Information
+Processing Systems, 37:60162–60191, 2024.
+[20] Jialin Chen, Aosong Feng, Ziyu Zhao, Juan Garza, Gaukhar Nurbek, Cheng Qin, Ali Maatouk,
+Leandros Tassiulas, Yifeng Gao, and Rex Ying. Mtbench: A multimodal time series benchmark
+for temporal reasoning and question answering.arXiv preprint arXiv:2503.16858, 2025.
+[21] Tong Guan, Zijie Meng, Dianqi Li, Shiyu Wang, Chao-Han Huck Yang, Qingsong Wen, Zuozhu
+Liu, Sabato Marco Siniscalchi, Ming Jin, and Shirui Pan. Timeomni-1: Incentivizing complex
+reasoning with time series in large language models.arXiv preprint arXiv:2509.24803, 2025.
+[22] Yucong Luo, Yitong Zhou, Mingyue Cheng, Jiahao Wang, Daoyu Wang, Tingyue Pan, and
+Jintao Zhang. Time series forecasting as reasoning: A slow-thinking approach with reinforced
+llms.arXiv preprint arXiv:2506.10630, 2025.
+[23] Zhihong Shao, Peiyi Wang, Qihao Zhu, Runxin Xu, Junxiao Song, Xiao Bi, Haowei Zhang,
+Mingchuan Zhang, YK Li, Yang Wu, et al. Deepseekmath: Pushing the limits of mathematical
+reasoning in open language models.arXiv preprint arXiv:2402.03300, 2024.
+[24] Sean J Taylor and Benjamin Letham. Forecasting at scale.The American Statistician, 72(1):37–
+45, 2018.
+[25] Haoyi Zhou, Shanghang Zhang, Jieqi Peng, Shuai Zhang, Jianxin Li, Hui Xiong, and Wancai
+Zhang. Informer: Beyond efficient transformer for long sequence time-series forecasting. In
+Proceedings of the AAAI conference on artificial intelligence, volume 35, pages 11106–11115,
+2021.
+[26] Haixu Wu, Jiehui Xu, Jianmin Wang, and Mingsheng Long. Autoformer: Decomposition trans-
+formers with auto-correlation for long-term series forecasting.Advances in neural information
+processing systems, 34:22419–22430, 2021.
+[27] Aosong Feng, Jialin Chen, Juan Garza, Brooklyn Berry, Francisco Salazar, Yifeng Gao, Rex
+Ying, and Leandros Tassiulas. Efficient high-resolution time series classification via attention
+kronecker decomposition.arXiv preprint arXiv:2403.04882, 2024.
+[28] Tian Zhou, Ziqing Ma, Qingsong Wen, Xue Wang, Liang Sun, and Rong Jin. Fedformer:
+Frequency enhanced decomposed transformer for long-term series forecasting.arXiv preprint
+arXiv:2201.12740, 2022.
+[29] Jongseon Kim, Hyungjoon Kim, HyunGi Kim, Dongjun Lee, and Sungroh Yoon. A compre-
+hensive survey of deep learning for time series forecasting: architectural diversity and open
+challenges.Artificial Intelligence Review, 58(7):1–95, 2025.
+[30] Ming Jin, Shiyu Wang, Lintao Ma, Zhixuan Chu, James Y Zhang, Xiaoming Shi, Pin-Yu
+Chen, Yuxuan Liang, Yuan-Fang Li, Shirui Pan, et al. Time-llm: Time series forecasting by
+reprogramming large language models.arXiv preprint arXiv:2310.01728, 2023.
+[31] Ching Chang, Wen-Chih Peng, and Tien-Fu Chen. Llm4ts: Two-stage fine-tuning for time-series
+forecasting with pre-trained llms.CoRR, 2023.
+[32] Yuxiao Hu, Qian Li, Dongxiao Zhang, Jinyue Yan, and Yuntian Chen. Context-alignment:
+Activating and enhancing llm capabilities in time series.arXiv preprint arXiv:2501.03747,
+2025.
+[33] Yong Liu, Guo Qin, Xiangdong Huang, Jianmin Wang, and Mingsheng Long. Autotimes: Au-
+toregressive time series forecasters via large language models.Advances in Neural Information
+Processing Systems, 37:122154–122184, 2024.
+11
+[34] Kashif Rasul, Arjun Ashok, Andrew Robert Williams, Arian Khorasani, George Adamopoulos,
+Rishika Bhagwatkar, Marin Biloš, Hena Ghonia, Nadhir Hassen, Anderson Schneider, et al.
+Lag-llama: Towards foundation models for time series forecasting. InR0-FoMo: Robustness of
+Few-shot and Zero-shot Learning in Large Foundation Models, 2023.
+[35] Mononito Goswami, Konrad Szafer, Arjun Choudhry, Yifu Cai, Shuo Li, and Artur Dubrawski.
+Moment: A family of open time-series foundation models.arXiv preprint arXiv:2402.03885,
+2024.
+[36] Xiaoming Shi, Shiyu Wang, Yuqi Nie, Dianqi Li, Zhou Ye, Qingsong Wen, and Ming Jin.
+Time-moe: Billion-scale time series foundation models with mixture of experts.arXiv preprint
+arXiv:2409.16040, 2024.
+[37] Yong Liu, Guo Qin, Xiangdong Huang, Jianmin Wang, and Mingsheng Long. Timer-xl: Long-
+context transformers for unified time series forecasting.arXiv preprint arXiv:2410.04803,
+2024.
+[38] Gerald Woo, Chenghao Liu, Akshat Kumar, Caiming Xiong, Silvio Savarese, and Doyen Sahoo.
+Unified training of universal time series forecasting transformers. 2024.
+[39] Abdul Fatir Ansari, Lorenzo Stella, Caner Turkmen, Xiyuan Zhang, Pedro Mercado, Huibin
+Shen, Oleksandr Shchur, Syama Sundar Rangapuram, Sebastian Pineda Arango, Shubham
+Kapoor, et al. Chronos: Learning the language of time series.arXiv preprint arXiv:2403.07815,
+2024.
+[40] Fuli Feng, Xiangnan He, Xiang Wang, Cheng Luo, Yiqun Liu, and Tat-Seng Chua. Temporal
+relational ranking for stock prediction.ACM Transactions on Information Systems (TOIS),
+37(2):1–30, 2019.
+[41] Yu Shi, Zongliang Fu, Shuo Chen, Bohan Zhao, Wei Xu, Changshui Zhang, and Jian Li. Kronos:
+A foundation model for the language of financial markets.arXiv preprint arXiv:2508.02739,
+2025.
+[42] Hyunwoo Lee, Jihyeong Jeon, Jaemin Hong, and U Kang. Mitigating distribution shift in stock
+price data via return-volatility normalization for accurate prediction. InProceedings of the 34th
+ACM International Conference on Information and Knowledge Management, pages 1458–1467,
+2025.
+[43] Yitong Duan, Lei Wang, Qizhong Zhang, and Jian Li. Factorvae: A probabilistic dynamic
+factor model based on variational autoencoder for predicting cross-sectional stock returns. In
+Proceedings of the AAAI conference on artificial intelligence, volume 36, pages 4468–4476,
+2022.
+[44] Burton G Malkiel. Efficient market hypothesis. InFinance, pages 127–134. Springer, 1989.
+[45] Raehyun Kim, Chan Ho So, Minbyul Jeong, Sanghoon Lee, Jinkyu Kim, and Jaewoo Kang.
+Hats: A hierarchical graph attention network for stock movement prediction.arXiv preprint
+arXiv:1908.07999, 2019.
+[46] Shengkun Wang, Taoran Ji, Linhan Wang, Yanshen Sun, Shang-Ching Liu, Amit Kumar, and
+Chang-Tien Lu. Stocktime: A time series specialized large language model architecture for
+stock price prediction.arXiv preprint arXiv:2409.08281, 2024.
+[47] Neng Wang, Hongyang Yang, and Christina Dan Wang. Fingpt: Instruction tuning benchmark
+for open-source large language models in financial datasets.arXiv preprint arXiv:2310.04793,
+2023.
+[48] Rui Sun, Yifan Sun, Sheng Xu, Li Zhao, Jing Li, Daxin Jiang, Chen Hua, and Zuo Bai. Trade-r1:
+Bridging verifiable rewards to stochastic environments via process-level reasoning verification.
+arXiv preprint arXiv:2601.03948, 2026.
+[49] Yijia Xiao, Edward Sun, Di Luo, and Wei Wang. Tradingagents: Multi-agents llm financial
+trading framework.arXiv preprint arXiv:2412.20138, 2024.
+12
+[50] Andrew W Lo and A Craig MacKinlay. Stock market prices do not follow random walks:
+Evidence from a simple specification test.The review of financial studies, 1(1):41–66, 1988.
+[51] Eugene F Fama. Efficient capital markets: A review of theory and empirical work.The journal
+of Finance, 25(2):383–417, 1970.
+[52] Jianlin Su, Murtadha Ahmed, Yu Lu, Shengfeng Pan, Wen Bo, and Yunfeng Liu. Roformer:
+Enhanced transformer with rotary position embedding.Neurocomputing, 568:127063, 2024.
+[53] Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad Al-Dahle,
+Aiesha Letman, Akhil Mathur, Alan Schelten, Amy Yang, Angela Fan, et al. The llama 3 herd
+of models.arXiv e-prints, pages arXiv–2407, 2024.
+[54] An Yang, Anfeng Li, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu,
+Chang Gao, Chengen Huang, Chenxu Lv, et al. Qwen3 technical report.arXiv preprint
+arXiv:2505.09388, 2025.
+13
+A Dataset Curation
+A.1 Data Collection and Preprocessing
+To construct a robust multimodal benchmark, we aggregate high-frequency market data and unstruc-
+tured textual signals from distinct providers, ensuring strict temporal synchronization.
+Numerical Data Acquisition and Preprocessing.. Historical daily pricing data, covering Open, High,
+Low, Close, and V olume (OHLCV) for the S&P 500 universe, is retrieved via theyfinance API1.
+To mitigate the inherent non-stationarity of raw prices and facilitate efficient representation learning,
+we apply a log-return transformation to the raw inputs Xt. Specifically, raw price components
+are normalized relative to the previous day’s closing price, formally defined as rNt = ln( NtCt−1 ) for
+N∈ {O, H, L, C}. Similarly, the volume sequence is log-normalized as rVt = ln( Vt+1Vt−1+1 ) to reduce
+the impact of outliers.
+Textual Data Collection and Alignment.. Semantic context is sourced from public market API2 to
+complement the numerical signals. We enforce a rigorous alignment protocol to prevent look-ahead
+bias and ensure causal validity. For any given trading dayt:
+1. Company Fundamentals: We retrieve the most recently published quarterly financial statement
+prior tot(e.g.,revenue, operating margins, leverage ratios).
+2. Business & News Context: We aggregate news articles from a fixed lookback window using strict
+keyword matching based on the company’s ticker and official name, retaining only information
+available before market close att−1.
+3. Macroeconomic Data: Key indicators such as US Treasury yields (e.g.,2Y vs. 10Y spreads)
+and inflation metrics are similarly aligned by selecting the latest available release prior to time t.
+These heterogeneous data sources are cleaned and serialized into a unified structured prompt Tt,
+serving as the grounding context for the model.
+A.2 Dataset Statistics
+Time-Series Data. Our numerical dataset consists of daily equity time series spanning from2015-
+01-01 to 2025-10-01over theS&P 500universe. For each stock, we record five standard market
+channels,i.e., Open, High, Low, Close,andVolume(OHLCV), at daily resolution. After aligning
+trading calendars and removing missing or inactive tickers, the dataset contains approximately 2,700
+trading days per asset. All price-related channels are transformed into log-returns relative to the
+previous close to mitigate non-stationarity, while volume is log-normalized. The resulting multivariate
+time series serves as the numerical backbone for both forecasting and reasoning tasks.
+Question Answering Data. On top of the aligned time-series and textual context, we construct
+a large-scale financial QA dataset covering five task categories:Forecast QA, Event Detection,
+Fundamental QA, News Analysis,andMulti-signal Reasoning. The dataset contains 40,000 training
+questions and 4,000 evaluation questions, each paired with temporally aligned numerical trajectories,
+macroeconomic indicators, company fundamentals, and the 10 most recent news contexts. All
+questions are grounded at a specific decision time t, with answers constrained to use only information
+available prior to or at t to avoid look-ahead bias. Each QA instance includes a structured reasoning
+trace and a final answer, enabling both supervised fine-tuning and reinforcement learning for time-
+series-grounded reasoning.
+A.3 Cold-start Data Generation
+Synthesizing high-quality supervision via model distillation is essential for bootstrapping reasoning
+in specialized financial domains, where generalist models often struggle to jointly integrate numerical
+dynamics and semantic context [14, 47, 23]. Based on the unified multimodal context, we construct
+cold-start trajectories that follow a tool-call interface. Concretely, GPT-5 first produces a concise
+market analysis, then emits a structured action followed by <forecast_action> that specifies
+forecast-relevant fields. This action is used to condition the time-series decoder, and the returned
+trajectory is provided to the model for final reasoning and a concise answer in <answer>. Our
+1https://ranaroussi.github.io/yfinance/
+2https://massive.com/
+14
+pipeline consists of three stages, each targeting a specific source of noise or inefficiency in synthetic
+supervision:
+1. Domain-Aware Question Synthesis. We prompt GPT-5 to generate questions across diverse
+financial tasks (e.g., Forecast QA,Event Detection,News Analysis, andMulti-signal Reasoning)
+to cover varied reasoning horizons and decision objectives.
+2. Action-grounded Reasoning Construction. For each query, we derive a target forecast action
+from the realized future trajectory and require the teacher trace to justify an action that is consistent
+with available historical, textual, and macroeconomic evidence. This produces supervision for the
+reasoning before the intermediate action that will consequently control the decoder.
+3. Tool-aware Verification and Filtering. We execute the action-conditioned<forecast_action>
+to obtain a numerical trajectory, verify whether the trajectory supports the target answer, and filter
+out samples that are either inconsistent or trivially solvable by a smaller baseline (e.g.,Qwen3-4B).
+This yieldsD SFT with explicit reasoning-action-answer alignment.
+A.4 Examples
+Examples of Questions
+Forecasting QA Questions:
+• What will be the maximum drawdown within the nextxtrading days?
+• What will be the percentage change in the closing price over the nextxdays??
+Price-action Event Detection Questions:
+• Will the stock drop more than 5% from today’s close within the nextxdays?
+• Will the stock hit more than 5% from today’s close in the nextxdays?
+Fundamental Questions:
+• Given the current 10-year vs 2-year Treasury yield spread, is the stock predicted to have
+higher volatility or lower volatility in the next 10 days?
+• If the 1-month yield exceeds the 10-year yield (yield curve inversion), will the stock’s
+next-10-day cumulative return stay positive?
+News Analysis Questions:
+• Given the 10 most recent headlines, will the stock’s predicted 7-day cumulative return
+stay positive?
+• If most news sentiment is negative, will the stock still recover above today’s price within
+10 days?
+Multi-signal Reasoning Questions:
+• Given the current market conditions, will the stock’s predicted volatility rise or fall?
+• Combining macro shifts, news flow, and price forecasts, will you recommend a scale-in,
+scale-out, or stay-flat strategy?
+Examples of Multi-signal Input
+Ticker:XYZ
+Date:2025-06-20
+Company:Block, Inc. (XYZ)
+Business Summary:Founded in 2009, Block provides payment services to merchants, along
+with related services. The company also launched Cash App, a person-to-person payment
+network. In 2024, Square’s payment volume was almost USD 250 million.
+Macro Snapshot:
+• US 1M Treasury yield: 4.20%
+• US 3M Treasury yield: 4.39%
+• US 2Y Treasury yield: 3.90%
+• US 10Y Treasury yield: 4.38%
+• US 30Y Treasury yield: 4.89%
+Fundamentals (Q1 2025):
+• revenue: 5.77B
+• gross profit: 2.29B
+• operating income: 329.30M
+15
+• net income: 188.72M
+• gross margin: 40.00%
+• operating margin: 6.00%
+• net margin: 3.00%
+• operating cash flow margin: 2.00%
+• total assets: 36.40B
+• total liabilities: 14.96B
+• shareholders’ equity: 21.44B
+• current ratio: 2.27
+• quick ratio: 2.26
+• liabilities-to-equity: 0.70
+• debt-to-assets: 0.41
+• working capital: 11.03B
+• asset turnover: 0.16
+• effective tax rate: 17.00%
+• cash from operations: 133.34M
+• cash from investing: 914.71M
+• cash from financing: -1.21B
+• net cash flow: -141.34M
+News:
+•2025-06-08: The 3 Best Growth Stocks to Buy With $100 Right Now
+The article discusses three growth stocks that have been beaten down by the market
+but could produce incredible returns going forward: Marvell Technology, Block, and
+DraftKings. It highlights the growth prospects and potential value of these companies.
+Sentiment:positive
+Sentiment Reason:The article believes Block’s Cash App and Square businesses have
+long-term growth potential, and the recent sell-off in the stock price presents a good
+opportunity for growth investors.
+•2025-05-31: Better Growth Stock: Block vs. SoFi Technologies
+The article compares two fintech companies, SoFi Technologies and Block (formerly
+Square), and suggests that SoFi has a more promising future than Block. SoFi is benefiting
+from the growing trend of online banking, while Block’s growth is slowing due to
+increased competition in the payment processing space and uncertainty around the
+adoption of blockchain technology.
+Sentiment:negative
+Sentiment Reason:The article suggests that Block’s growth is slowing due to increased
+competition in the payment processing space and uncertainty around the adoption of
+blockchain technology, which the company has prioritized.
+. . .
+B Method Details
+B.1 Time-series Encoder
+Additional Details on Multi-Signal Time-Series Encoder. We provide a more explicit formulation
+of the multi-signal time-series encoder used in Sec. 3.2. Given a multichannel input sequence
+Xt ∈R C×L with channel index v∈ {1, . . . , C}and temporal index τ≤t , we flatten the sequence
+into a token stream while preserving temporal order. Each token embedding is augmented with
+Rotary Positional Embeddings (RoPE), where the rotation angle is a deterministic function of the
+absolute timestamp τ, ensuring that relative temporal offsets are encoded directly in the query–key
+inner product. Formally, for attention head h, the rotated queries and keys are given by ˜q(h)τ =
+RoPE(q(h)τ , τ), ˜k(h)τ = RoPE(k(h)τ , τ).
+To enforce causal consistency across all variables, we introduce a block-diagonal causal mask
+M∈ {0,−∞}(CL)×(CL) , where
+M(τ,v),(τ ′,v′) =
+0, τ ′ ≤τ,
+−∞,otherwise.
+16
+This mask guarantees that representations at time τ only attend to historical observations from all
+channels. In addition, we inject a learnable binary bias matrixB into the attention logits to distinguish
+intra-variable dependencies from inter-variable correlations:
+B(τ,v),(τ ′,v′) =
+bintra, v=v ′,
+binter, v̸=v ′,
+where bintra and binter are trainable scalars shared across layers. The resulting attention computation
+for headhis
+Attn(h)(τ, v) =X
+τ ′,v′
+softmax
+ 
+˜q(h)τ,v · ˜k(h)τ ′,v′
+√dh +M (τ,v),(τ ′,v′) +B (τ,v),(τ ′,v′)
+!
+v(h)τ ′,v′.
+The encoder outputs a sequence of latent time-series tokens Hts ∈R K×d m, which are subsequently
+projected to parametric distribution heads. For each forecasting horizon s∈ {1, . . . , S}and target
+variablei∈ {O, C, V}, we obtain the mean and variance parameters via linear projections:
+µ(i)t+s =w (i)⊤µ htst , σ (i)t+s = softplusw(i)⊤σ htst  ,
+where htst denotes the aggregated latent state corresponding to time t. The softplus activation ensures
+positivity of σ and stabilizes training. For high and low prices, separate heads predict quantile
+estimates q(H,τH )t+s and q(L,τL)t+s , enabling asymmetric modeling of upside and downside risk. Together,
+this design allows the encoder to produce both point forecasts and calibrated uncertainty estimates,
+which are later consumed by the forecasting decoder and the uncertainty-aware reinforcement learning
+stage.
+B.2 Structured Forecast Actions
+{
+"future_window": "t+1_t+10",
+"start_value": <float>,
+"end_value": <float>,
+"max_value": <float>,
+"min_value": <float>,
+"mean_close": <float>,
+"direction": "<up | down | flat>",
+"end_change_pct": <float>,
+"range_pct": <float>,
+"volatility_level": "<low | medium | high>",
+"range_width_bin": "<narrow | moderate | wide>",
+"max_drawdown_bin": "<low | medium | high>",
+"turning_point_count": <int>,
+"peak_timing_bin": "<early | middle | late>",
+"trough_timing_bin": "<early | middle | late>",
+"monotonicity": "<increasing | decreasing | mixed>",
+"trendline_fit": "<weak | moderate | strong>",
+"tail_risk_level": "<low | medium | high>"
+}
+Each action is implemented as a JSON-style dictionary containing three groups of fields: numerical
+summary statistics of the future trajectory, categorical or ordinal market states, and temporal shape
+descriptors. During supervised data construction, the target action is deterministically derived
+from the realized future trajectory, providing field-level supervision for the LLM’s intermediate
+forecast decision. During inference, the LLM emits the same structured action before invoking
+<forecast_action>; the action fields are embedded and passed through an MLP action encoder to
+produce the conditioning vector for the time-series decoder. This design makes the LLM’s market
+outlook explicit, executable, and field-wise verifiable.
+17
+B.3 Reinforcement Learning Preliminary
+Our RL training is based on GRPO algorithm [23], which is a variant of policy-gradient optimization
+designed for large language models, where per-query baselines are estimated from a group of sampled
+rollouts rather than a learned value function.
+Rollout Generation. Given an input queryq, the current policyπθ generates a group ofG independent
+rollouts {oi}Gi=1, where each rollout oi = (ai,1, . . . , ai,Ti ) corresponds to a complete response
+trajectory (e.g.,reasoning steps and final answer). Each rollout is evaluated by a scalar reward
+functionR i =R(o i), which may incorporate correctness, formatting, or task-specific criteria.
+Group-Relative Advantage. Instead of estimating a value baseline, GRPO computes a group-relative
+advantage by normalizing rewards within each rollout group: ˆAi = Ri−Mean(R)Std.(R) . This formulation
+encourages rollouts that perform better than the group average while suppressing uniformly poor
+generations, providing a low-variance baseline without additional critic training.
+Optimization Objective. GRPO adopts a PPO-style clipped objective applied at the token level. For
+each rollouto i, the objective is defined as
+LGRPO(θ) =Eq,{oi}
+
+ 1
+G
+GX
+i=1
+1
+|oi|
+|oi|X
+t=1
+min
+
+ri,t(θ) ˆAi,clip(r i,t(θ),1−ϵ,1 +ϵ) ˆAi
+
+−βKL(π θ ∥π ref)
+
+ ,
+(1)
+where ri,t(θ) = πθ(ai,t|q,ai,<t)πref(ai,t|q,ai,<t), is the likelihood ratio between the current policy and a frozen
+reference policy πref. The KL penalty regularizes policy updates and stabilizes training, while the
+clipping parameter ϵ prevents excessively large gradient steps. In this work, GRPO provides the
+foundation upon which we introduce uncertainty-aware reweighting to better handle stochastic and
+noisy financial environments (Sec. 3.5).
+B.4 Uncertainty Reweighting
+Uncertainty Weighting Formulation. To modulate the learning signal based on market volatility,
+we calculate the sample weight w(Uq) using an exponential decay function anchored to a stability
+thresholdu 0. The formulation is defined as:
+w(Uq) =
+(
+1.0ifU q ≤u 0
+exp
+
+−α· Uq−u0uhi−u0
+
+ifU q > u0
+(2)
+where α is a hyperparameter controlling the decay rate, and uhi represents the upper bound used for
+normalization.
+C Experiments
+C.1 Experimental Settings
+To rigorously evaluate the performance of our proposed method, we benchmark against state-of-the-art
+time series forecasting models, including training-from-scratch ones and foundation models.
+Evaluation Metrics for Time-Series Forecasting.For the n-th instance, let the historical close at
+the last observed day be c(0)n and the future close trajectory over horizon H= 10 be {cn,h}Hh=1, with
+predictions {ˆcn,h}Hh=1. We report (i)Priceerrors: mean absolute percentage error (MAPE) and root
+mean squared error (RMSE).
+MAPEprice = 1N H
+NX
+n=1
+HX
+h=1
+ ˆcn,h −c n,hcn,h  ,RMSE price = vuut 1N H NXn=1 HXh=1  z(ˆcn,h)−z(c n,h)2,
+(3)
+where z(·) is instance-wise normalization (applied per sample across the horizon to reduce scale
+effects).
+18
+(ii)Returnmetrics based on simple returns relative to the historical close (with ϵ >0 for numerical
+stability):
+rn,h = cn,h
+max(c(0)n , ϵ)−1,ˆr n,h = ˆcn,hmax(c(0)n , ϵ)−1,(4)
+and daily-return RMSE across all horizons,
+RMSEreturn =
+vuut 1
+N H
+NX
+n=1
+HX
+h=1
+ 
+ˆrn,h −r n,h
+2
+.(5)
+Directional accuracy at horizon k∈ {3,5,10} uses cumulative return ˆR(k)n = ˆrn,k and R(k)n =r n,k:
+DAk = 1N
+NX
+n=1
+I
+h
+sign( ˆR(k)n ) = sign(R(k)n )i.(6)
+(iii)Volatilityis evaluated by realized volatility over the predicted/true close paths as the sum of
+squared log-returns:
+R Vn =
+H−1X
+h=1
+
+log max(cn,h+1, ϵ)−log max(cn,h, ϵ)
+2
+,
+cR Vn =
+H−1X
+h=1
+
+log max(ˆcn,h+1, ϵ)−log max(ˆcn,h, ϵ)
+2
+.
+(7)
+We reportMAE RV = 1N PNn=1  cR Vn −R Vn and the coefficient of determination.
+(iv)Volumemetrics follow the same horizon-based aggregation on the future volume series {vn,h}
+and predictions{ˆvn,h}, using instance-wise normalizationz(·):
+MAPEvol = 1N H
+NX
+n=1
+HX
+h=1
+ z(ˆvn,h)−z(v n,h)max(z(vn,h), ϵ) ,
+RMSEvol =
+vuut 1
+N H
+NX
+n=1
+HX
+h=1
+ 
+z(ˆvn,h)−z(v n,h)
+2
+.
+(8)
+C.2 Hyper-parameter Settings
+For time-series encoder pretraining, we use a 90-day input window to predict the next 10 trading
+days. The encoder adopts a patch length of 5 with dropout set to 0.1. We sweep model capacities by
+varying the hidden dimension dmodel ∈ {512,768,1024}, paired with {8,12,16} attention heads and
+{10,16} Transformer layers. All models are trained for 50 epochs using AdamW with learning rate
+1×10 −4 and weight decay 0.01, a cosine learning-rate schedule with 1000 warmup steps. Unless
+otherwise stated, pretraining uses market data spanning 2015-01-01 to 2025-01-01 and test from
+2025-01-01 to 2025-10-01. Table 4 summarizes the architectural configurations of the time-series
+encoders at different scales.
+Table 4: Architecture configurations of the time-series encoder at different scales.
+Encoder Size Hidden Dim # Layers # Attention Heads # Parameters
+Small 512 8 8 27M
+Base 768 12 12 65M
+Large 1024 16 16 119M
+For supervised fine-tuning (SFT), we fine-tune Qwen3-4B-Instruct-2507 and Qwen3-8B using
+LoRA with rank r= 32 , scaling factor α= 32 , applied to projection and feed-forward modules,
+and initialize the model with pre-trained time-series encoder checkpoints. Supervised fine-tuning is
+conducted with the AdamW optimizer with learning rate 2×10 −5 and weight decay 0.01, cosine
+warmup of 100 steps for 5 epochs.
+19
+0 50 100 150 200 250 300
+Step
+1.0
+1.1
+1.2
+1.3Entropy
+w/ uncertainty
+w/o uncertainty
+0
+ 200
+ 400
+ 600
+ 800
+ 1000
+ 1200
+Step
+0.625
+0.650
+0.675
+0.700
+0.725
+0.750
+0.775
+0.800
+0.825Reward
+8B G=4
+8B G=8
+8B G=12
+4B G=4
+4B G=8
+4B G=12
+Figure 6:Left:Policy entropy over training steps, comparing training with and without uncertainty-
+aware reweighting.Right:Reward convergence under different group sizes.
+For reinforcement learning, we employ VERL with uncertainty-aware reweighting of the learning
+signal. We select the reward weights through validation search and use α= 1.0 , β= 0.5 , and
+γ= 1.0 as the default setting, which empirically yields the best trade-off among action accuracy,
+forecast precision, and action–trajectory consistency. The uncertainty parameters are set tou0 = 0.25,
+uhi = 0.50, whi = 0.50, and ucap = 1.0 in Eq. 2. Group size G is tuned over {4,8,12} and the
+default configuration is set toG= 8.
+C.3 Effect of Uncertainty and Rollout Size
+Figure 6 (Left) illustrates the role of uncertainty-aware reweighting in stabilizing training dynamics
+and improving downstream performance. As shown in the left panel, training without uncertainty
+leads to a faster and more pronounced decrease in policy entropy in the early stage of RL training,
+indicating premature loss of exploration and increasingly deterministic behavior. This entropy
+collapse is also accompanied by higher instability across training steps. Instead, uncertainty-aware
+reweighting maintains consistently higher entropy, encouraging sustained exploration by down-
+weighting high-volatility and low-reliability samples. This difference in learning dynamics translates
+into better late-stage performance: while the model trained without uncertainty saturates early,
+the uncertainty-aware reweighting continues to improve and achieves higher accuracy ultimately.
+These results suggest that uncertainty-aware reweighting mitigates premature convergence, preserves
+exploration under noisy market regimes, and leads to more robust policy optimization.
+Figure 6 (Right) studies the effect of the group size G on training reward convergence for both
+STOCK-R1-4B andSTOCK-R1-8B. Across both model scales, we observe that increasing G
+generally improves reward stability and final convergence, as larger groups provide a more reliable
+estimate of relative advantages. The impact is more pronounced for the smaller 4B model, indicating
+higher variance in policy updates and suboptimal optimization. In contrast, the 8B model is more
+robust to smaller group sizes, though it still benefits from moderate increases in G. To balance
+optimization quality and training efficiency, we therefore select G= 8 as the default rollout number.
+C.4 Scalability Analysis
+102 103
+Model Size (Millions)
+48
+49
+50
+51
+52
+53
+54
+55
+56 10-Days Directional Accuracy (%)
+Training since
+2015-01
+2016-01
+2017-01
+2018-01
+2019-01
+2020-01
+2021-01
+2022-01
+2023-01
+2024-01
+Figure 7: Scalability analysis of pretraining perfor-
+mance w.r.t model size (log scale) and training data.
+We investigate the scalability of the pro-
+posed time-series encoder along two criti-
+cal dimensions: pre-training data size and
+model capacity. As illustrated in Figure 7,
+we systematically vary the training data du-
+ration by shifting the start date from 2015
+to 2024, while keeping the test set fixed.
+Simultaneously, we scale the model size
+from approximately 20M to 2B parame-
+ters by adjusting the depth and width of
+the Transformer layers. First, we observe
+an obvious performance stratification re-
+garding data scalability: models trained on
+longer historical horizons (represented by
+20
+cooler colors,e.g.,2015-2016) consistently outperform those trained on limited recent data (warmer
+colors), validating that extensive historical context helps capture diverse market regimes. Second,
+regarding model scalability, we observe a growth in performance that saturates at a specific capac-
+ity threshold at approximately 102M parameters, indicating that the size is sufficiently robust for
+uni-modal time-series pretraining, balancing high predictive accuracy with computational efficiency
+before the integration of multimodal reasoning layers.
+Table 5: QA performance ofSTOCK-R1-4B with different sizes of time-series encoder.
+Setting Stage Pure Forecast Event Detection Macro Fundamental News Sentiment Multi-Signal Reasoning Overall
+4B - Small SFT 37.04 63.26 50.78 48.99 58.05 52.00SFT + u-GRPO 48.11 59.18 48.80 60.09 71.07 57.50
+4B - Base SFT 45.62 65.75 48.61 56.64 65.80 56.50SFT + u-GRPO 51.00 68.52 59.70 51.83 63.02 59.00
+4B - Large SFT 41.62 58.12 60.00 57.37 60.36 55.60SFT + u-GRPO 50.28 60.22 61.38 55.49 63.72 58.21
+Table 5 examines how encoder capacity interacts with the underlying LLM size in downstream
+financial QA tasks. We do not observe a clear monotonic trend with respect to encoder scale. While
+moderate encoder capacity performs competitively, further scaling does not consistently translate
+into additional gains. Overall, these results highlight the importance of considering encoder–LLM
+capacity matching rather than indiscriminately increasing model size.
+C.5 Investment Simulation
+Backtest Setting. To assess whether improved forecasting performance translates into economically
+meaningful decisions, we further evaluate all time-series models in a unified investment simulation.
+We design a standardized backtesting strategy that converts each model’s 10-day close-price forecast
+into discrete buy or sell signals. At each trading step, the predicted cumulative return is normalized
+by recent realized volatility to form a z-score signal. When the signal exceeds a fixed threshold, the
+strategy enters a long or short position with a fixed capital allocation and holds it for a fixed horizon.
+This protocol enforces identical trading rules across all models, ensuring that return differences stem
+from forecasting quality rather than strategy engineering.
+Results. Table 6 reports portfolio-level metrics over U.S. equities spanning multiple market sectors,
+including technology (e.g.,NVDA), finance (e.g.,JPM), consumer (e.g.,WMT), and broad-market
+indices (e.g.,SPY). Overall,STOCK-R1achieves the strongest risk-adjusted performance, with the
+highest Sharpe ratio and annualized return among all baselines. While exhibiting a higher market
+beta,STOCK-R1maintains a competitive drawdown, indicating that its increased exposure to the
+market is driven by more confident and selective trend exploitation rather than excessive risk-taking.
+In contrast, several classical time-series baselines yield unstable or even negative Sharpe ratios.
+Table 6: Backtesting (from 2025-01-01 to 2025-10-01) performance of
+forecasting models (SP: Sharpe Ratio,AR: Annualized Return,MDD:
+Maximum Drawdown,TT: Total Traders,WR: Win Rate)
+Model SP AR MDD Beta TT WR(%)
+ARIMA 0.455 -2.78 16.15 0.080 12.33 51.03
+Prophet -0.813 0.56 11.83 0.239 15.56 41.39
+NSTransformer 0.414 8.67 8.26 0.204 13.22 48.38
+TimesNet 0.027 11.22 7.60 0.280 13.56 47.44
+iTransformer 0.873 10.00 8.21 0.308 13.6761.21
+PatchTST 0.976 15.677.190.221 13.00 51.25
+TimeMixer 0.705 17.78 7.85 0.305 13.11 50.67
+DLinear -0.266 20.78 10.20 0.134 15.11 37.67
+Mamba -0.008 25.22 8.57 0.400 13.33 47.42
+STOCK-R1 1.059 31.89 12.11 0.521 14.00 59.48
+We also observe distinct be-
+havioral differences in de-
+cision patterns across mod-
+els. For instance, DLin-
+ear [7] frequently exhibits
+a contrarian pattern, tend-
+ing to go short during ris-
+ing markets and go long
+during drawdowns, which
+leads to systematic trend
+misalignment. In compar-
+ison,STOCK-R1produces
+more market-aware deci-
+sions, selectively increasing
+exposure when predictive
+signals are strong and re-
+maining conservative under
+ambiguous conditions. This behavior is reflected in its higher win rate and superior Sharpe ratio,
+suggesting that the model predicts more decision-relevant signals beyond short-term price fluctuations.
+21
+(a) Dlinear (b) Mamba Simple (c) PatchTST (d) StockR1
+(1) Directional Trading Signal Prediction for $NVDA
+(a) Dlinear (b) Mamba Simple (c) PatchTST (d) StockR1
+(b) Directional Trading Signal Prediction for $GOOGL
+(a) Dlinear (b) Mamba Simple (c) PatchTST (d) StockR1
+(c) Directional Trading Signal Prediction for $MSFT
+Figure 8: Directional Trading Signal Generated by Different Models
+Figure 8 provides a qualitative comparison of trading signals generated by different forecasting models
+under the unified backtesting protocol described in Sec. C.5. Although all models are evaluated
+using the same signal extraction and execution rules, their resulting buy/sell behaviors exhibit
+markedly different temporal patterns, reflecting distinct implicit decision logics. Classical linear and
+decomposition-based models (e.g.,DLinear) exhibit highly reactive and oscillatory signals, often
+trading against prevailing trends, indicating short-horizon extrapolation and poor trend awareness.
+More expressive neural forecasters (e.g.,PatchTST) generate smoother, trend-following signals but
+tend to maintain persistent exposure across regime shifts due to point-forecast objectives that lack
+explicit uncertainty modeling. In contrast,STOCK-R1produces more selective and market-aware
+signals, increasing exposure primarily when predictive signals are strong and remaining conservative
+under ambiguous or volatile conditions. As a result,STOCK-R1achieves superior risk-adjusted
+performance (Table 6), indicating that its advantage stems from improved decision relevance rather
+than trading strategy engineering. We acknowledge that accurately predicting short-term price
+movements remains inherently challenging in financial markets; nevertheless, our goal is not perfect
+directional accuracy, but to provide more informative and risk-aware buy/sell signals that better
+support practical decision-making.
+C.6 Case Studies
+As shown in the case study, the model exhibits strong high-level consistency across its reasoning
+trace, structured forecast action, and decoded time series. The reasoning identifies sustained selling
+pressure and repeated failure near the 87 - 88 resistance range, which is reflected in the forecast
+action as direction = down . The time-series decoder further supports this outlook by predicting a
+decline in closing price by Day 7. Although minor numerical discrepancies may still exist between
+the qualitative reasoning and decoded trajectory, their overall directional and semantic alignment
+provides sufficient grounding for the model to reach the correct answer.
+A Case Study of Model Internal Consistency
+Ticker: SBUX,Date: 2025-05-15
+Question: Will the predicted 7-day cumulative return stay positive?
+Response:
+To answer this, I need to first look at and predict how things might evolve in the future.
+22
+SBUX has been under sustained selling pressure: from the mid-$90s in late March/early April
+the stock has declined steadily to the current level around $86, and momentum indicators remain
+weak. The recent bounce from $81 appears to be a relief rally within a broader downtrend rather
+than a true reversal, as the stock has failed to reclaim the $87–88 resistance zone on declining
+volume.
+Fundamentally, the turnaround remains uncertain. Q2 2025 results show solid revenue growth but
+thin margins (7% operating, 4% net) and a highly leveraged balance sheet (liabilities-to-equity
+∼-5, current ratio 0.64). The May 12 article highlights “consumer pressure” and “turnaround
+challenges,” and the May 8 piece frames Starbucks as a buy only if investors are willing to wait
+for a long-term recovery, implying near-term downside risk.
+Given this backdrop, the stock is likely to break below current support in the first few sessions,
+testing the low-$80s to high-$70s area as sellers reassert control. A trough near $77–78 is
+plausible around mid-window, followed by a partial recovery toward the low-$80s as bargain
+hunters step in. However, the recovery is unlikely to reclaim the $86 starting level within the
+forecast window, leaving the cumulative return negative.▷reasoning traces generated by the LLM
+<forecast_action>▷structured forecast generated by the LLM
+{future_window: t+1_t+10
+start_value: 86.0 end_value: 83.6
+max_value: 84.8 min_value: 77.6
+direction: down end_change_pct: -2.79
+volatility: medium peak_timing: t+8_t+8
+trough_timing: t+5_t+6 monotonicity: non_monotonic
+mean_close: 81.3 tail_risk: medium
+... }
+The time-series decoder forecasts the future 10 days’ prices and volume:
+<forecast_ts>▷generated by a time-series decoder in a tool-call way
+Close price: [82.36, 79.73, 82.24, 80.74, 78.20, 77.57, 80.97, 84.80, 82.40,
+83.63]
+High price: [89.23, 84.13, 85.98, ...]
+Low price: [81.68, 72.52, 77.86, ...]
+Volume: [12916896, ...]
+To determine if the predicted 7-day cumulative return will stay positive, I need to calculate
+the cumulative return over the next 7 days using the forecasted close prices. The formula for
+cumulative return is:
+((P_{t+7} - P_t) / P_t) * 100, where P_t is today’s close and P_{t+7} is the forecasted close 7
+days from now.
+Today’s close: 85.94
+Forecasted close prices for the next 7 days: [82.37, 79.73, 82.25, 80.74, 78.20, 77.57, 80.98]
+Step 1: Calculate the cumulative return over 7 days:
+Day 1: (82.37 - 85.94) / 85.94 = -0.04 (4.16% drop)
+Day 2: (79.73 - 82.37) / 82.37 = -0.03 (3.18% drop)
+Day 3: (82.25 - 79.73) / 79.73 = 0.03 (3.15% gain)
+Day 4: (80.74 - 82.25) / 82.25 = -0.02 (1.84% drop)
+Day 5: (78.20 - 80.74) / 80.74 = -0.03 (3.15% drop)
+Day 6: (77.57 - 78.20) / 78.20 = -0.01 (0.79% drop)
+Day 7: (80.98 - 77.57) / 77.57 = 0.04 (4.41% gain)
+Step 2: Calculate the cumulative return after 7 days:
+((80.97 - 85.94) / 85.94) * 100 =-5.78%
+Step 3: Check if the cumulative return is positive:
+-5.78% is negative.
+Therefore, the predicted 7-day cumulative return will not stay positive.
+23
+<answer>No</answer>
+C.7 Numerical Grounding Evaluation Rubric
+We evaluate the numerical grounding quality of model outputs using an LLM-based judge. The judge
+receives each sample’s question, generated reasoning, forecast hint (a structured JSON summary
+including start/end/max/min values, direction, and percentage change), the full forecast time series,
+and the model’s predicted answer. Crucially, the judge is instructed to assess internal numerical
+faithfulness. The rubric defines four metrics, each scored continuously in[0,1]:
+• Answer–Evidence Consistency (M1).Whether the final answer is consistent with the numerical
+evidence in the forecast time series and hint.
+• Trajectory–Action Alignment (M2).A field-level match ratio between the forecast action and
+the generated time series. The judge checks whether summary statistics (e.g.,start value, end
+value, max, min, direction, percentage change) faithfully reflect the underlying price arrays, with a
+small rounding tolerance (≤0.02).
+• Logical Validity (M3).Whether the final answer, forecast action, generated time series, and
+reasoning are mutually consistent.
+• Action Success Rate (M4).Whether the model successfully generates a complete, executable
+forecast action with all required fields, assessing structural completeness rather than correctness.
+The full evaluation prompt, including detailed scoring guidelines and output format specifications, is
+available in our codebase.
+D Discussion
+LLM Usage. We use LLMs as part of the data construction, evaluation, and writing-assistance
+pipeline. Specifically, GPT-5 is used to synthesize cold-start reasoning trajectories under our tool-call
+format. We also use LLM-based rubrics to assess numerical grounding and reasoning consistency in
+model outputs. In addition, LLMs were used to assist with language polishing, clarity refinement,
+and organization of the manuscript.
+Limitation. This work focuses on daily-resolution equity data from S&P 500 stocks, where aligned
+OHLCV signals, fundamentals, news, and macroeconomic context are relatively accessible. Ex-
+tending the framework to higher-frequency trading data, broader asset classes, and longer-horizon
+macro-financial reasoning is a promising direction for future work. Our current forecast action design
+captures key trajectory-level attributes, but richer action spaces could further model uncertainty,
+regime shifts, and multi-asset dependencies. Future work may also explore tighter integration with
+portfolio-level objectives and adaptive action schemas for different financial tasks.
+Social Impact. Financial forecasting systems can support market analysis, risk assessment, and
+decision-oriented reasoning, but they should not be interpreted as guaranteed investment advice.
+Our framework emphasizes verifiable intermediate actions and numerical grounding, which may
+improve transparency compared with purely text-based financial reasoning models. At the same time,
+responsible deployment requires careful monitoring, human oversight, and evaluation under changing
+market conditions. We release the framework as a research contribution toward more interpretable
+multimodal financial reasoning rather than as an automated trading system.
+24

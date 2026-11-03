@@ -1,0 +1,975 @@
+arXiv 1812.10371  https://arxiv.org/abs/1812.10371
+
+Distributional Robust Kelly Strategy: Optimal
+Strategy under Uncertainty in the Long-Run
+Qingyun Sun
+School of Mathematics
+Stanford University
+sunqingyun1708@gmail.com
+Stephen Boyd
+School of Electrical Engineering
+Stanford University
+boyd@stanford.edu
+Abstract
+In classic Kelly gambling, bets are chosen to maximize the expected log growth
+of wealth, under a known probability distribution. Breiman [ 1, 2] provides rigor-
+ous mathematical proofs that Kelly strategy maximizes the rate of asset growth
+(asymptotically maximal magnitude property), which is thought of as the principal
+justiﬁcation for selecting expected logarithmic utility as the guide to portfolio
+selection. Despite very nice theoretical properties, the classic Kelly strategy is
+rarely used in practical portfolio allocation directly due to practically unavoidable
+uncertainty. In this paper we consider the distributional robust version of the Kelly
+gambling problem, in which the probability distribution is not known, but lies in a
+given set of possible distributions. The bet is chosen to maximize the worst-case
+(smallest) expected log growth among the distributions in the given set.
+Computationally, this distributional robust Kelly gambling problem is convex, but
+in general need not be tractable. We show that it can be tractably solved in a
+number of useful cases when there is a ﬁnite number of outcomes with standard
+tools from disciplined convex programming.
+Theoretically, in sequential decision making with varying distribution within a given
+uncertainty set, we prove that distributional robust Kelly strategy asymptotically
+maximizes the worst-case rate of asset growth, and dominants any other essentially
+different strategy by magnitude. Our results extends Breiman’s theoretical result
+and justiﬁes that the distributional robust Kelly strategy is the optimal strategy in
+the long-run for practical betting with uncertainty.
+1 Introduction
+The Classic Kelly strategy maximizes the expected logarithmic utility. It was proposed by John
+Kelly in a 1956 classic paper [ 3]. The earliest discussion of logarithmic utility dates back to 1730
+in connection to Daniel Bernoulli’s discussion [ 4] of the St. Petersburg game. In 1960 and 1961,
+Breiman [1, 2] proved that logarithmic utility was clearly distinguished by its optimality properties
+from other (essentially) different utilities as a guide to portfolio selection. The most important
+property is the asymptotically maximal magnitude property, which states that the Kelly strategy
+asymptotically maximizes the growth rate of assets and dominates the growth rate of any essentially
+different strategies by magnitude. As Thorp commented in [ 5], "This is to our mind the principal
+justiﬁcation for selecting E log X as the guide to portfolio selection."
+Although the classic Kelly strategy has very nice theoretical properties, it is rarely used in practical
+portfolio allocation directly. The major hurdle is that in practical portfolio allocation the estimated
+nominal distribution of return is almost never accurate and uncertainty is unavoidable. Such uncer-
+tainty arises from multiple sources. First, the empirical nominal distribution will invariably differ
+from the unknown true distribution that generated the training samples, so uncertainty comes from
+Preprint. Under review.
+the gap between empirical in-sample (training) distribution and out-of-sample distribution, and imple-
+menting the optimal decisions using empirical nominal distribution often leads to disappointment
+in out-of-sample tests. In decision analysis this phenomenon is sometimes termed the optimizer’s
+curse. Second, uncertainty can come from a distribution shift from the model training environment
+and the model deployment environment, as a special but common case, in investment the major
+difﬁculty is the return time series is typically non-stationary. Third, in investment, the estimation
+errors from even the mean estimation and covariance estimation could be quite signiﬁcant, and the
+further measurements of higher order distributional information beyond the ﬁrst two moments of
+return might be uninformative due to noise in measurements.
+In this paper, we identify the uncertainty problem of the classic Kelly strategy, and propose the
+distributional robust version of the Kelly strategy in which the probability distribution is not known,
+but lies in a given set of possible distributions. The distributional robust version of Kelly strategy
+choose bets to maximize the worst-case (smallest) expected log growth among the distributions in the
+given set.
+Computationally, this distributional robust Kelly gambling problem is convex, but in general need not
+be tractable. In this work, we show that for a large class of uncertainty sets, the distributional robust
+Kelly problems can be transformed to tractable form that follow disciplined convex programming
+(DCP) rules. DCP tractable form can be solved via domain speciﬁc languages like CVXPY .
+Theoretically, we extend Breiman’s asymptotically maximal magnitude result and proved that distri-
+butional robust version Kelly’s strategy asymptotically maximizes the worst-case rate of asset growth
+when the sequence of probabilities vary in the uncertainty set.
+Numerically, we also tested the algorithm in a horse race gambling numerical example, and we indeed
+observe signiﬁcant improvement of worst-case wealth growth.
+Gambling. We consider a setting where a gambler repeatedly allocates a fraction of her wealth
+(assumed positive) across n different bets in multiple rounds. We assume there are n bets available to
+the gambler, who can bet any nonnegative amount on each of the bets. We let b À IRn denote the bet
+allocation (in fraction of wealth), so b g 0 and 1T b =1 , where 1 is the vector with all entries one.
+Letting Sn denote the probability simplex in IRn, we have b À Sn. With bet allocation b, the gambler
+is betting Wb i (in dollars) on outcome i, where W> 0 is the gambler’s wealth (in dollars).
+We let r À IRn+ denote the random returns on the n bets, with ri g 0 the amount won by the gambler
+for each dollar she puts on bet i. With allocation b, the total she wins is rT bW , which means her
+wealth increases by the (random) factor rT b. We assume that the returns r in different rounds are IID.
+We will assume that rn =1 almost surely, so bn corresponds to the fraction of wealth the gambler
+holds in cash; the allocation b = en := (0, … , 0, 1) corresponds to not betting at all. Since her wealth
+is multiplied in each round by the IID random factor rT b, the log of the wealth over time is therefore
+a random walk, with increment distribution given by the random variable log(rT b).
+Finite outcome case. We consider here the case where one of K events occurs, i.e., r is supported
+on only K points. We let r1, … ,r K denote the return vectors, and ⇡ =( ⇡1, … ,⇡ K )À SK the
+corresponding probabilities. We collect the K payoff vectors into a matrix R À IRnùK , with columns
+r1, … ,r K . The vector RT b À IRK gives the wealth growth factor in the K possible outcomes. The
+mean log growth rate is
+G⇡ (b)= E⇡ log(rT b)= ⇡T log(RT b)=
+K…
+k=1
+⇡k log(rTk b),
+where the log in the middle term is applied to the vector elementwise. This is the mean drift in the
+log wealth random walk.
+Kelly gambling. In a 1956 classic paper [ 3], John Kelly proposed to choose the allocation vector b
+so as to maximize the mean log growth rate G⇡ (b), subject to b g 0, 1T b =1 . This method was called
+the Kelly criterion; since then, much work has been done on this topic [ 6, 5, 7, 8, 9, 10]. The mean log
+growth rate G⇡ (b) is a concave function of b, so choosing b is a convex optimization problem [ 11, 12].
+It can be solved analytically in simple cases, such as when there are K =2 possible outcomes. It is
+easily solved in other cases using standard methods and algorithms, and readily expressed in various
+2
+domain speciﬁc languages (DSLs) for convex optimization such as CVX [ 13], CVXPY [ 14, 15],
+Convex.jl [16], or CVXR [ 17]. We can add additional convex constraints on b, which we denote as
+b À B, with B”S K a convex set. These additional constraints preserve convexity, and therefore
+tractability, of the optimization problem. While Kelly did not consider additional constraints, or
+indeed the use of a numerical optimizer to ﬁnd the optimal bet allocation vector, we still refer to
+the problem of maximizing G⇡ (b) subject to b À B as the Kelly (gambling) problem (KP). There
+have been many papers exploring and extending the Kelly framework; for example, a drawdown risk
+constraint, that preserves convexity (hence, tractability) is described in [ 18]. The Bayesian version of
+Kelly optimal betting is described in [ 19]. In [ 20], Kelly gambling is generalized to maximize the
+proportion of wealth relative to the total wealth in the population.
+Distributional robust Kelly gambling. In this paper we study a distributional robust version of
+Kelly gambling, in which the probability distribution ⇡ is not known. Rather, it is known that ⇡ À⇧ ,
+a set of possible distributions. We deﬁne the worst-case log growth rate (under ⇧) as
+G⇧(b) = inf⇡À⇧ G⇡ (b).
+This is evidently a concave function of b, since it is an inﬁmum of a family of concave functions
+of b, i.e., G⇡ (b) for ⇡ À⇧ . The distributional robust Kelly problem (DRKP) is to choose b À B to
+maximize G⇧(b),
+maximize inf⇡À⇧ E⇡ log(rT b)
+subject to b À B.
+This is in principle a convex optimization problem, speciﬁcally a distributional robust problem; but
+such problems in general need not be tractable, as discussed in [ 21, 22, 23] The purpose of this paper
+is to show how the DRKP can be tractably solved for some useful probability sets ⇧ via disciplined
+convex programming. In this paper we call an optimization problem "DCP tractable" in a strict and
+speciﬁc sense when the optimization problem is a disciplined convex problem, so that it can be solved
+via domain speciﬁc languages like CVXPY .
+Related work on uncertainty aversion. In decision theory and economics, there are two important
+concepts, risk and uncertainty. Risk is about the situation when a probability can be assigned to each
+possible outcome of a situation. Uncertainty is about the situation when the probabilities of outcomes
+are unknown. Uncertainty aversion, also called ambiguity aversion, is a preference for known risks
+over unknown risks. Uncertainty aversion provides a behavioral foundation for maximizing the utility
+under the worst of a set of probability measures; see [ 24, 25, 26, 27] for more detailed discussion.
+The Kelly problem addresses risk; the distributional robust Kelly problem is a natural extension that
+considers uncertainty aversion.
+Related work on distributional robust optimization. Distributional robust optimization is a
+well studied topic. Previous work on distribution robust optimization studied ﬁnite-dimensional
+parametrization for probability sets including moments, support or directional deviations constraints in
+[28, 29, 30, 31, 32, 33]. Beyond ﬁnite-dimensional parametrization of the probability set, researchers
+have also studied non-parametric distances for probability measure, like f -divergences (e.g., Kullback-
+Leibler divergences) [34, 35, 36, 37, 38] and Wasserstein distances [39, 40, 41, 42].
+Contribution
+• We propose distributional robust Kelly strategy to account for uncertainty in practical
+investment, where we maximize the worst-case (smallest) expected log growth among the
+distributions in the given set. Theoretically, we proved that distributional robust version
+Kelly strategy asymptotically maximizes the worst-case rate of asset growth when the
+sequence of probabilities vary in the uncertainty set and dominant any other essentially
+different strategy by magnitude.
+• For a large class of uncertainty sets including polyhedral sets, ellipsodial sets, f -divergence
+ball, Wasserstein ball and uncertainty set with estimated mean and covariance, we concretely
+derived the disciplined convex programming (DCP) forms of distributional robust Kelly
+problems and provided concrete software implementations using CVXPY , with a simple
+horse gamble example to numerically verify that distributional robust Kelly strategies indeed
+lead to a better worst-case wealth growth, and also lead to more diverse bet vector in this
+example.
+3
+2 DCP tractable forms for distributional robust Kelly strategy
+In this section we show how to formulate DRKP as a DCP tractable convex optimization problem
+for a variety of distribution sets. The key is to derive a DCP tractable description of the worst-case
+log growth G⇧(b). We use duality to express G⇧(b) as the value of a convex maximization problem,
+which allows us to solve DRKP as one convex problem.
+Polyhedron deﬁned by linear inequalities and equalities.
+Theorem 1. F or polyhedron uncertainty set given by a ﬁnite set of linear inequalities and equalities,
+⇧={ ⇡ À SK › A0⇡ = d0,A 1⇡ f d1},
+where A0 À IRm0ùK , b0 À IRm0 , A1 À IRm1ùK , b1 À IRm1 , the distributional robust Kelly problem is
+maximize min(log(RT b)+ AT0   + AT1  )* dT0   * dT1  subject to b À B,   g 0,
+with variables b,  ,  . The problem follows the disciplined convex programming (DCP) rules.
+Box uncertainty set. As a commonly used special case of polyhedron, we consider box.
+Theorem 2. for box uncertainty set
+⇧={ ⇡ À SK › ⇡ * ⇡nom f ⇢},
+, where ⇡nom À SK is the nominal distribution, and ⇢ À IRn+ is a vector of radii, (The inequality⇡ * ⇡nom f ⇢ is interpreted elementwise), the distributional robust Kelly problem is
+maximize min(log(RT b)+  )*( ⇡nom)T   * ⇢T  
+subject to b À B,
+with variables b,  . The problem follows the disciplined convex programming (DCP) rules.
+Ellipsoidal uncertainty set Here we consider the case when ⇧ is the inverse image of a p-norm
+ball, with p g 1, under an afﬁne mapping. As usual we deﬁne q by 1_p + 1_q =1 . This includes an
+ellipsoid (and indeed the box set described above) as a special case.
+Theorem 3. F or ellipsoidal uncertainty set
+⇧={ ⇡ À SK › ÒW *1(⇡ * ⇡nom)Òp f 1},
+where W is a nonsingular matrix, the distributional robust Kelly problem is
+maximize (⇡nom)T (u)* ÒW T (u *  1)Òq
+subject to u f log(RT b),
+b À B,
+with variables b, u,  . The problem follows the disciplined convex programming (DCP) rules.
+This DRKP problem follows DCP rule because ⇡nom,T u is a linear function of u, *ÒW T (u *  1)Òq is
+a concave function of u and   for q g 1, and log(RT b) is a concave function of b, hence u f log(RT b)
+is a concave constraint. Therefore, this DRKP problem is maximizing a concave objective concave
+constraint problem that follows DCP rule.
+The proof of the theorem is based on the Lagrangian duality and Hölder equality for the p-norm:
+supÒzÒpf1 zT W T x = ÒW T xÒq ,
+Divergence based distribution set Let ⇡1,⇡ 2 À SK be two distributions. For a convex function
+f : IR+ ô IRwith f (1) = 0 , the f -divergence of ⇡1 from ⇡2 is deﬁned as
+Df (⇡1Ò⇡2)= ⇡T2 f (⇡1_⇡2),
+where the ratio is meant elementwise. Recall that the Fenchel conjugate of f is f <(s) = sup tg0(ts *
+f (t)).
+4
+Theorem 4. F orf -divergence ball uncertainty set
+⇧={ ⇡ À SK › Df (⇡Ò⇡nom) f ✏},
+where ✏> 0 is a given value, the distributional robust Kelly problem is
+maximize *(⇡nom)T w * ✏  *  
+subject to w g  f <( z  )
+z g * log(RT b)*  
+  g 0,b À B,
+with variables b,  ,  , w, z.
+The problem follows the disciplined convex programming (DCP) rules.
+Here
+ f <( z  )=(  f )<(z) = suptg0 (tz *  f (t)),
+is the perspective function of the non-decreasing convex function f <(z), so it is also a convex function
+that is non-decreasing in z. Additionally, * log(RT b)*   is a convex function of b and  ; then
+from the DCP composition rule, we know this form of DRKP is convex. Concrete examples of f *
+divergence function and their Fenchel conjugate funuctions are provided in supplementary material
+for the convenience of readers.
+Wasserstein distance uncertainty set with ﬁnite support When ⇡ and ⇡nom both have ﬁnite
+supports, the Wasserstein distance Dc (⇡, ⇡nom) with cost c À IRKùKnom+ is deﬁned as the optimalvalue of the problem
+minimize ≥i,j Qij cij
+subject to Q1 = ⇡, Q T 1 = ⇡nom,Q g 0,
+with variable Q. The Wasserstein distance has several other names, including Monge-Kantorovich,
+earth-mover, or optimal transport distance [ 39, 40, 41, 42]. The Wasserstein uncertainty set would be
+better to prepare for black swans events comparing to f -divergence uncertainty set, as it does not
+require ⇡ to be absolutely continuous with respect to the nominal distribution.
+Theorem 5. F or Wasserstein distance ball uncertainty set
+⇧={ ⇡ À SK › Dc (⇡, ⇡nom) f s},
+with s> 0. the distributional robust Kelly problem is
+maximize
+⇠≥
+j ⇡nomj mini(log(RT b)i +  cij )* s ⇡
+subject to b À B,   g 0,
+where   À IR+ is the dual variable.
+The problem follows the disciplined convex programming (DCP) rules.
+The problem follows the disciplined convex programming (DCP) rules, because log(RT b)i +  cij
+is a concave function of b and  , therefore mini(log(RT b)i +  cij ) is a concave function of b and  ,
+then the entire objective is a concave function of b and  ; and the constraint b À B and   g 0 also
+follows DCP rule. We comment that although we allow ⇡ to have different support from ⇡nom, we still
+consider the simple setting of ﬁnite event space for ⇡ for technical clarity. The extension to the general
+setting for different norm form of cost c could be ﬁnd in [ 43]. Computing the Wasserstein distance
+between two discrete distributions can be converted to solving a tractable linear program that is
+susceptible to the network simplex algorithm, dual ascent methods, or specialized auction algorithms
+[44, 45, 46]. Efﬁcient approximation schemes can be found in the survey [ 47] of algorithms for
+the ﬁnite-dimensional transportation problem. However, as soon as at least one of the two involved
+distributions is not discrete, the Wasserstein distance can no longer be evaluated in polynomial time.
+5
+Uncertainty set with estimated mean and covariance matrix of return For the application
+in stock investment, typically quantitative investors are only able to obtain estimated mean and
+covariance matrix, with error bounds on the estimation errors. Following the original paper by Delage
+and Y e [28] and the review paper [48], we consider the following uncertainty set.
+Theorem 6. F or uncertainty set with estimator 0 and ⌃0 for mean and covariance matrix of random
+vector r À IRn,
+⇧={ ⇡ À SK ›( E⇡ r *  0)T ⌃*10 (E⇡ r *  0) f %1, E⇡ [(r *  0)(r *  0)T ] …% 2},
+if there exists ⇡0 À⇧ such that E⇡0 r =  0, E⇡0 (r *  0)(r *  0)T =⌃ 0, then the distributional robustKelly problem has the same optimal value as the following SDP problem,
+minimize u1 + u2
+subject to u1 g * log(rTi b)* rÒi Y ri * rÒi y, ≈i =1 , … ,K,
+u2 g (%2⌃0 +  0 Ò0 )÷ Y +  Ò0 y + ˘%1Ò⌃ 120 (y +2 Y  0)Ò,
+Y   0,
+b À B,
+where u1,u 2 À I R,Y À IRnùn and y À IRn are auxiliary variables.
+The problem is a SDP problem, therefore follows the disciplined convex programming (DCP) rules.
+3 Theoretical properties of distributional robust Kelly strategy
+In the following, we will extend Brieman’s classical optimality property of the Kelly strategy to
+distributional robust Kelly strategy. We show that for sequential decision making problems under
+uncertainty, distributional robust Kelly strategy is
+Consider a sequential gambling setting with a ﬁxed uncertainty set ⇧. For the Nth period random
+return vector rN has distribution ⇡N . ⇡N could vary freely for different N and the only condition is
+that ⇡N À⇧ for any N. In this theoretical section, we consider the more general setting where the
+event (outcome) space is not necessarily ﬁnite, we only assume that return is bounded rN,i À [0,R M ]
+for all i, N. let bN be the proportional betting vector for the N-th period such that bN g 0, 1T bN =1 ,
+denote the (sequential) strategy ⇤=( b1, … ,b N , …). This strategy’s wealth growth at the N-th
+period is VN := rTN bN . This strategy’s accumulated wealth growth is SN , deﬁned recursively asS0 =1 , SN+1 = SN VN . Let ON*1 be the outcomes during the ﬁrst N *1 investment periods. Let
+V ?N := rTN b?N . S?N = S?N*1V ?N*1 where b?N is the distributional robust bet at the N-th period thatmaximizes
+inf
+⇡N À⇧
+E⇡N [log(rT b)› ON*1]
+Theorem 7. F or any strategy ⇤ leading to the fortune SN , limN SNS?N exists almost surely and
+inf ⇡1,…,⇡N À⇧ E limN SNS?N f 1.
+The critical proof idea is to leverage the maximizing property of the distributional robust bet
+b?N , using superlinear property of the operator E := inf ⇡N À⇧ E⇡N : inf ⇡N À⇧ E⇡N (S1 + S2) g
+inf ⇡N À⇧ E⇡N (S1) + inf ⇡N À⇧ E⇡N (S2), eventually using Fatou’s lemma to switch the order of limitand expectation.
+Proof sketch . Here we highlight some of the key technical points, with the full proof in the supple-
+mentary material. We have
+inf
+⇡N À⇧
+E⇡N [ SNS?N › ON*1] = inf⇡N À⇧ E⇡N [ VNV ?N › ON*1] SN*1S?N*1
+with
+inf
+⇡1,…,⇡N*1,⇡N À⇧
+E⇡1,…,⇡N*1,⇡N limN
+SN
+S?N f inf⇡1,…,⇡N*1,⇡N*1À⇧ E⇡1,…,⇡N*1 limN
+SN*1
+S?N*1 f S0S?0 =1 .
+6
+To prove the theorem, we only need prove that for any bN ,
+inf
+⇡N À⇧
+E⇡N ( VNV ?N › ON*1) f 1
+Now, for any ✏> 0, by the maximizing property of the distributional robust bet b?N , we have
+inf
+⇡N À⇧
+E(✏ log(VN ) + (1 * ✏) log(V ?N )› ON*1) f inf⇡N À⇧ E(log(V ?N )› ON*1)
+Rewrite the left side, using superlinear property of E := inf ⇡N À⇧ E⇡N , we have
+inf
+⇡N À⇧
+E[ 1✏ log(1 + ✏1* ✏ VNV ?N )› ON*1] f 1✏ log( 11* ✏ )
+taking lower limit ✏ ô 0+, since VNV ?N ) are bounded, from Fatou’s lemma, we have
+inf
+⇡N À⇧
+E[ VN
+V ?N )› ON*1] = inf⇡N À⇧ E[lim✏ô0+
+1
+✏ log(1 + ✏1* ✏ VNV ?N )› ON*1] f lim✏ô0+ 1✏ log( 11* ✏ )=1
+We call ⇤ a nonterminating strategy if there are no values of bs such that Vs = rTs bs =0 for any s.
+Theorem 8. If ⇤ is a nonterminating strategy, the set limNôÿ SNS?N =0 is almost surely equal to the
+set on which ≥ÿN=1[inf ⇡N À⇧ E⇡N [log(V ?N ) * log(VN )› ON*1]] = ÿ .
+The critical proof idea is to combine previous theorem and a generalized martingale convergence
+theorem on the sequence
+S?N
+SN
+* inf
+⇡N À⇧
+E⇡s [
+S?N
+SN
+› ON*1]=
+N…
+s=1
+{log(V ?s ) * log(Vs) * inf⇡sÀ⇧ E[log(V ?s ) * log(Vs)› Os*1]}
+using non-linear expectation theory developed by [ 49, 50] on the non-linear expectation operator
+E := inf ⇡N À⇧ E⇡N .
+We comment that if the two strategies ⇤ and ⇤? satisfy the condition ≥ÿN=1[inf ⇡N À⇧ E⇡N [log(V ?N )*
+log(VN )› ON*1]] = ÿ , then we call ⇤ and ⇤? "essentially different" strategies under uncertainty.
+The two theorems proved in this section could be stated as:
+In sequential decision making problem under uncertainty, when the sequence of distributions of return
+vary in a given uncertainty set, distributional robust Kelly strategy asymptotically maximizes the
+worst-case rate of asset growth, and dominants any other essentially different strategy by magnitude.
+4 Numerical example
+In this section we illustrate distributional robust Kelly gambling with a simple horse racing example.
+Our example is a simple horse race with n horses, with bets placed on each horse placing, i.e., coming
+in ﬁrst or second. There are thus K = n(n * 1)_2 outcomes (indexed as j, k with j<k f n), and n
+bets (one for each horse to place). We consider two simple uncertainty sets, the box set with parameter
+⌘ and l2 ball set with radius c. We ﬁrst describe the nominal distribution of outcomes ⇡nom. We model
+the speed of the horses as independent random variables, with the fastest and second fastest horses
+placing. With this model, ⇡nom is entirely described by the probability that horse i comes in ﬁrst, we
+which denote  i. For j<k , we have ⇡nomjk = P (horse j and k are the ﬁrst two )=  j  k( 11* i + 11* j ).
+For the return matrix, we use parimutuel betting, with the fraction of bets on each horse equal to
+ i, the probability that it will win (under the nominal probability distribution). The return matrix
+R À IRnùK then has the form (we index the columns (outcomes) by the pair jk, with j<k )
+Ri,jk =
+h
+n
+l
+nj
+n
+1+ j _ k i = jn
+1+ k_ j
+i = k
+0 i Ã{ j, k},
+7
+Growth rate bK bRK : box with ⌘ =0 .26 bRK : ball with c =0 .016
+⇡nominal 4.3% 2.2% 2.2%
+⇡worst *2.2% 0.7% 0.4%
+Table 1: For box uncertainty set with ⌘ =0 .26 and ball uncertainty set with c =0 .016, we compare the growth
+rate and worst-case growth rate for the Kelly optimal and the distributional robust Kelly optimal bets.
+Figure 1: The Kelly optimal bets bK for the nominal distribution, and the distributional robust optimal bets for
+the box and ball uncertainty sets, ordered by the descending order of bK .
+First, we show growth rate and worst-case growth rate for the Kelly optimal and the distributional
+robust Kelly optimal bets under two uncertainty sets. In table 1, we show the comparison for box
+uncertainty set with ⌘ =0 .26 and for ball uncertainty set with c =0 .016. The two parameters are
+chosen so that the worst case growth of Kelly bets for both uncertainty sets are *2.2%. In particular,
+using standard Kelly betting, we lose money (when the distribution is chosen as the worst one for
+the Kelly bets). We can see that, as expected, the Kelly optimal bet has higher log growth under
+the nominal distribution, and the distributional robust Kelly bet has better worst-case log growth.
+We see that the worst-case growth of the distributional robust Kelly bet is signiﬁcantly better than
+the worst-case growth of the nominal Kelly optimal bet. In particular, with robust Kelly betting,
+we make money, even when the worst distribution is chosen. The nominal Kelly optimal bet bK
+and the distributional robust Kelly bet bRK for both uncertainty sets in ﬁgure 11. For each of our
+bets bK and bRK shown above, we ﬁnd a corresponding worst case distribution, denoted ⇡wc,K and
+⇡wc,RK , which minimize G⇡ (b) over ⇡ À⇧ . These distributions, shown for box uncertainty set and
+ball uncertainty set in ﬁgure 3, achieve the corresponding worst-case log growth for the two bet
+vectors. Finally, in ﬁgure 2, we compare the expected wealth logarithmic growth rate as we increase
+the size of the uncertainty sets. For the box uncertainty set we choose ⌘ À [0, 0.3], and for the ball
+uncertainty set we choose c À [0, 0.02], we look at the expected growth for both the kelly bet bK and
+the distributional robust kelly bet bRK under both the nominal probability ⇡nom and the worst case
+probability ⇡worst .
+Figure 2: Plots of the expected growth under nominal distribution and worst-case distribution under the box
+and ball uncertainty set family. The blue, green, orange, red line are ⇡nom,T log(RT bK ), ⇡worst,T⌘ log(RT bK ),
+⇡nom,T log(RT bRK⌘ ), ⇡wc,T⌘ log(RT bRK⌘ ). For the box uncertainty set we choose ⌘ À [0 , 0.3], and for the ball
+uncertainty set we choose c À [0, 0.02].
+8
+Figure 3: For box uncertainty set with ⌘ =0 .26 and ball uncertainty set with c =0 .016, we show the nominal
+distribution ⇡nom (sorted) and the two worst-case distributions ⇡wc,K and ⇡wc,RK .
+5 Discussion about how to choose uncertainty set
+Uncertainty set estimation via chance constraints To use distributional robust Kelly strategy in
+practical, one of the limitation is that it could be hard to estimate a high quality uncertainty set and the
+choice of uncertainty set depends on domain knowledge. There are two major considerations in the
+choice of the uncertainty set, ﬁrst is tractability, which is discussed through the lens of DCP tractable
+form in this paper, second is efﬁciency, or the trade-off between coverage and tightness, i.e. whether
+it is too conservative and how well it reﬂects the actual variability in our problem. We make some
+comment on the selection advice for uncertainty set. From the relation between chance constraint and
+uncertainty set, as discussed in section 6 of [51, 52], we could use probabilistic tools to efﬁciently
+represent uncertainty sets through chance constraint such as drawdown control, including value at
+Risk, conditional value at risk, tail bound from moments[ 18]. In quantitative investment practice, due
+to the noisy nature of stocks or futures market data, the scarcity of effective observations, the return
+non-stationarity, the uncertainty set presented in theorem 6 would be a good starting point. Besides
+the long-run optimality of growth rate proved here, an interesting question is to study the ﬁnite time
+property of the distributional robust Kelly strategy and compare both the achieved growth rate in
+ﬁnite time and the probability of having a given level of drawdown with the distributional robust
+version of mean-variance strategy.
+Uncertainty set estimation via conformal prediction Recent uncertainty quantiﬁcation method-
+ology development on conformal prediction [ 53, 54, 55] has provided statistical tools to generate
+set-valued predictions for black-box predictors with rigorous error control and formal ﬁnite-sample
+coverage guarantee, as shown in [ 56, 57]. As a future direction, we will explore the usage of
+conformal prediction to construct computational tractable uncertainty set from data for investment.
+Uncertainty set tuning via bi-level optimization and differentiation through solution of convex
+problem To automate the tuning of the parameters for the uncertainty set, we could use bi-level
+optimization [ 58] to learn uncertainty set by back-propagation over the parameter ✓. We could
+set up a higher-level objective L(✓) to tune the parameters ✓. For example, given out of samples
+observations that are not accessible when we ﬁt the mean the functional form of ⇧, we could deﬁne
+an out-of-sample Kelly loss as the higher-level objective:
+b?(✓) = arg max
+bÀB
+min
+⇡À⇧(✓)
+E⇡ log(rT b).
+max
+✓
+L(✓)= 1N
+N…
+i=1
+log(rTi b?(✓))
+Our method relies on recently developed methods[ 58] that can efﬁciently evaluate the derivative
+of the solution of a disciplined convex optimization problem with respect to its parameters. Using
+previous result in this paper, this distributional robust optimization problem can be transformed
+into a disciplined convex optimization, which allows automated differentiation with respect to the
+solution map b?(✓). We have provided CVXPY code for the uncertainty sets and their corresponding
+tuning/learning example in PyTorch in the supplementary material, which would allow users to learn
+uncertainty sets through the recently developed software framework to embed our problem into
+differentiable programming framework to learn the uncertainty set.
+9
+6 Supplementary Material: Concrete examples of divergences functions and
+their Fenchel conjugates
+We remark that there is a one-parameter family of f -divergences generated by the ↵-function with
+↵ À IR, where we can deﬁne the generalization of natural logarithm by
+log↵ (t)= t↵*1 *1↵ *1 .
+For ↵ ë 1, it is a power function, for ↵ ô 1, it is converging to the natural logarithm. Now if we
+assume f↵ (1) = 0 and f ®↵ (t) = log ↵ (t), then we have
+f↵ (t)= t↵ *1* ↵(t * 1)↵(↵ * 1) .
+The Fenchel conjugate is
+f <↵ (s)= 1↵ ((1 + (↵ * 1)s) ↵↵*1 * 1).
+We now show some more speciﬁc examples of f -divergences; for a more detailed discussion see
+[37].
+• KL-divergence. With f (t)= t log(t)* t +1 , we obtain the KL-divergence. We have
+f <(s) = exp( s)*1 . This corresponds to ↵ =1 .
+• Reverse KL-divergence. With f (t) = * log( t)+ t *1 , the f -divergence is the reverse
+KL-divergence. We have f <(s) = * log(1 * s) for s< 1. This corresponds to ↵ =0 .
+• Pearson  2-divergence. With f (t)= 12 (t * 1)2, we obtain the Pearson  2-divergence. We
+have f <(s)= 12 (s + 1)2 * 12 , s> *11. This corresponds to ↵ =2 .
+• Neyman  2-divergence. With f (t)= 12t (t * 1)2, we obtain the Neyman  2-divergence. We
+have f <(s)=1* ˘1*2 s, s< 12 . This corresponds to ↵ = *1.
+• Hellinger-divergence. With f (t) = 2(
+˘
+t * 1)2, we obtain the Hellinger-divergence. We
+have f <(s)= 2s2*s , s< 2. This corresponds to ↵ = *1.
+• Total variation distance. With f (t)= t *1 , the f -divergence is the total variation distance.
+We have f <(s) = *1 for s f *1 and f <(s)= s for *1 f s f 1.
+7 Supplementary Material: Proof of theorems in section 2
+Proof of Theorem 1
+Proof of theorem 1. The worst-case log growth rate G⇧(b) is given by the optimal value of the linear
+program (LP)
+minimize ⇡T log(RT b)
+subject to 1T ⇡ =1 ,⇡ g 0,
+A0⇡ = d0,A 1⇡ f d1,
+(1)
+with variable ⇡.
+We form a dual of this problem, working with the constraints A0⇡ = d0, A1⇡ f d1; we keep the
+simplex constraints ⇡ g 0, 1T ⇡ =1 as an indicator function IS (⇡) in the objective. The Lagrangian
+is
+L(⌫,  , ⇡)= ⇡T log(RT b)+ ⌫T (A0⇡ * d0)+
+ T (A1⇡ * d1)+ IS (⇡),
+where ⌫ À IRm0 and   À IRm1 are the dual variables, with   g 0. Minimizing over ⇡ we obtain the
+dual function,
+g(⌫,  ) = inf ⇡ÀSK L(⌫,  , ⇡)
+= min(log(RT b)+ AT0 ⌫ + AT1  )* dT0   * dT1  ,
+10
+where the min of a vector is the minimum of its entries. The dual problem associated with (1) is then
+maximize min(log(RT b)+ AT0   + AT1  )* dT0   * dT1  subject to   g 0,
+with variables  ,  . Using Slater’s condition for simplex, strong duality can easily be veriﬁed.
+Therefore, this dual problem has the same optimal value as (1), i.e.,
+G⇧(b) = sup ⌫, g0( min(log( RT b)+ AT0   + AT1  )
+*dT0   * dT1  ).
+Using this expression for G⇧(b), the DRKP becomes
+maximize min(log(RT b)+ AT0   + AT1  )* dT0   * dT1  subject to b À B,   g 0,
+with variables b,  ,  .
+Proof of Theorem 2
+Proof of theorem 2. Using the general method above, expressing the limits as A1⇡ f d1 with
+A1 =
+4
+I
+*I
+5
+,d 1 =
+4
+⇡nom + ⇢
+⇢ * ⇡nom
+5
+,
+the DRKP problem becomes
+maximize  min(log(RT b)+  + *  *)  *
+(⇡nom)T ( + *  *)* ⇢T ( + +  *)
+subject to b À B,   + g 0,  * g 0,
+with variables b,  +,  *. Deﬁning   =  + *  *, we have   =  + +  *, so the DRKP becomes
+maximize min(log(RT b)+  )*( ⇡nom)T   * ⇢T  
+subject to b À B,
+with variables b,  .
+Proof of Theorem 3
+Proof of theorem 3. We deﬁne x = * log( RT b), z = W *1(⇡ * ⇡nom), and Dp,W ={ z › ÒzÒp f
+1, 1T Wz =0 ,⇡ nom + Wz g 0}. Then we have
+G⇧(b) = * sup ⇡À⇧((⇡ * ⇡nom)T x +( ⇡nom)T x)
+= * supzÀDp,W zT W T x +( ⇡nom)T x
+= sup , g0 (* supÒzÒpf1 zT W T (x +   *  1)+
+(⇡nom)T (  + x))
+= sup , g0 (*ÒW T (x +   *  1)Òq +
+(⇡nom)T (*  * x)).
+Here the second last equation is the Lagrangian form where we keep the p-norm constraint as a
+convex indicator, and the last equation is based on the Hölder equality
+supÒzÒpf1 zT W T (x +   *  1) = ÒW T (x +   *  1)Òq ,
+Using Slater’s condition, strong duality can easily be veriﬁed. Using this expression for G⇧(b), and
+let u =* x *   = log(RT b)*   f log(RT b), then the DCP formulation of DRKP becomes
+maximize (⇡nom)T (u)* ÒW T (u *  1)Òq
+subject to u f log(RT b),
+b À B,
+with variables b, u,  .
+This DRKP problem follows DCP rule because ⇡nom,T u is a linear function of u, *ÒW T (u *  1)Òq is
+a concave function of u and   for q g 1, and log(RT b) is a concave function of b, hence u f log(RT b)
+is a concave constraint. Therefore, this DRKP problem is maximizing a concave objective concave
+constraint problem that follows DCP rule.
+11
+Proof of Theorem 4
+Proof of theorem 4. We deﬁne x = * log( RT b) again. Our goal is to minimize *G⇧(b)=
+sup⇡À⇧ ⇡T x. We form a dual of this problem, working with the constraints Df (⇡Ò⇡0) f ✏ and
+1T ⇡ =1 ; we keep the constraint ⇡ g 0 implicit. With dual variables   À IR+,   À IR, then for ⇡ g 0,
+the Lagrangian is
+L( ,  , ⇡)= ⇡T x +  (*(⇡nom)T f ( ⇡⇡nom )+ ✏)
+* (eT ⇡ * 1) + I+(⇡),
+where I+ is the indicator function of IRK+ . The dual objective function is
+sup⇡g0 L( ,  , ⇡)
+= sup⇡g0(≥Ki=1 ⇡nomi ( ⇡i⇡nomi xi * ⇡i⇡nomi   *  f ( ⇡i⇡nomi )))+ ✏ +  
+= ≥Ki=1 ⇡0,i suptig0(ti(xi *  )*  f (ti)) +  ✏ +  
+= ≥Ki=1 ⇡0,i f <( xi*   )+  ✏ +  .
+Using Slater’s condition, strong duality can easily be veriﬁed. We can write the problem as
+maximize *(⇡nom)T  f <( * log(RT b)*   )*  ✏ *  subject to   g 0,b À B,
+with variables b,  ,  . We transform the problem to follow the disciplined convex programming (DCP)
+rules by convex relaxation of the equality constraint. Now DRKP becomes
+maximize *(⇡nom)T w * ✏  *  
+subject to w g  f <( z  )
+z g * log(RT b)*  
+  g 0,b À B,
+with variables b,  ,  , w, z.
+Here
+ f <( z  )=(  f )<(z) = suptg0 (tz *  f (t)),
+is the perspective function of the non-decreasing convex function f <(z), so it is also a convex function
+that is non-decreasing in z. Additionally, * log(RT b)*   is a convex function of b and  ; then from
+the DCP composition rule, we know this form of DRKP is convex.
+Proof of Theorem 5
+Proof of theorem 5. The worst-case log growth G⇧(b) is given by the value of the following LP ,
+minimize ⇡T log(RT b)
+subject to Q1 = ⇡, Q T 1 = ⇡nom,Q g 0,≥
+i,j Qij cij f s,
+with variable Q. Using strong duality for LP , the DRKP becomes
+maximize
+⇠≥
+j ⇡nomj mini(log(RT b)i +  cij )* s ⇡
+subject to b À B,   g 0.
+where   À IR+ is the dual variable.
+The problem follows the disciplined convex programming (DCP) rules, because log(RT b)i +  cij is a
+concave function of b and  , therefore mini(log(RT b)i +  cij ) is a concave function of b and  , then
+the entire objective is a concave function of b and  ; and the constraint b À B and   g 0 also follows
+DCP rule.
+12
+Proof of Theorem 6
+Proof of theorem 6. Following [28] lemma 1, to prove our theorem, we only need to verify Slater’s
+constraint qualiﬁcation conditions for strong duality and verify that log(rT b) is integrable for all ⇡ in
+⇧.
+For Slater’s constraint qualiﬁcation conditions, we only need to ﬁnd a strictly feasible ⇡ in ⇧. Since
+there exists ⇡0 À⇧ such that E⇡0 r =  0, E⇡0 (r *  0)(r *  0)T =  0, ⇡0 is a strictly feasible point in⇧.
+For integrablility, notice that E⇡ log(rT b) is on ﬁnite event space, so the result would naturally be
+ﬁnite for any ⇧ as a subset of K-dimensional probability simplex.
+8 Supplementary Material: Proof of theorems in section 3
+Proof of Theorem 7 [Proof of theorem 7]
+Proof. We have
+inf
+⇡N À⇧
+E⇡N [ SNS?N › ON*1] = inf⇡N À⇧ E⇡N [ VNV ?N › ON*1] SN*1S?N*1
+If we can prove that for any bN ,
+inf
+⇡N À⇧
+E⇡N ( VNV ?N › ON*1) f 1
+then SNS?N is a decreasing semimartingale under non-linear expectation theory [49], with
+inf
+⇡1,…,⇡N*1,⇡N À⇧
+E⇡1,…,⇡N*1,⇡N limN
+SN
+S?N f inf⇡1,…,⇡N*1,⇡N*1À⇧ E⇡1,…,⇡N*1 limN
+SN*1
+S?N*1 f S0S?0 =1
+Now, for any ✏> 0, by the maximizing property of the distributional robust bet b?N , we have
+inf
+⇡N À⇧
+E(✏ log(VN ) + (1 * ✏) log(V ?N )› ON*1) f inf⇡N À⇧ E(log(V ?N )› ON*1)
+Rewrite the left side, we have
+inf
+⇡N À⇧
+E(✏ log(VN )+(1*✏) log(V ?N )› ON*1) = log(1* ✏)+ inf⇡N À⇧ E[log(V ?N )+log(1+ ✏1* ✏ VNV ?N )› ON*1]
+Using superlinear property of E := inf ⇡N À⇧ E⇡N , we have
+inf
+⇡N À⇧
+E[log(V ?N )+log(1+ ✏1* ✏ VNV ?N )› ON*1] g inf⇡N À⇧ E[log(V ?N )› ON*1]+ inf⇡N À⇧ E[log(1+ ✏1* ✏ VNV ?N )› ON*1]
+Therefore, combine this inequity with the previous inequity from the maximizing property of the
+distributional robust bet b?N , we have
+inf
+⇡N À⇧
+E[ 1✏ log(1 + ✏1* ✏ VNV ?N )› ON*1] f 1✏ log( 11* ✏ )
+taking lower limit ✏ ô 0+, since VNV ?N ) are bounded, from Fatou’s lemma, we have
+inf
+⇡N À⇧
+E[ VN
+V ?N )› ON*1] = inf⇡N À⇧ E[lim✏ô0+
+1
+✏ log(1 + ✏1* ✏ VNV ?N )› ON*1]
+flim✏ô0+ inf⇡N À⇧ E[ 1✏ log(1 + ✏1* ✏ VNV ?N )› ON*1]
+flim✏ô0+
+1
+✏ log( 11* ✏ )=1
+13
+Proof of Theorem 8
+Proof of theorem 8. The two sequences
+SN
+S?N * inf⇡N À⇧ E⇡N [ SNS?N › ON*1]= N…s=1{log(Vs) * log(V ?s ) * inf⇡sÀ⇧ E[log(Vs) * log(V ?s )› Os*1]}
+and
+S?N
+SN
+* inf
+⇡N À⇧
+E⇡s [
+S?N
+SN
+› ON*1]=
+N…
+s=1
+{log(V ?s ) * log(Vs) * inf⇡sÀ⇧ E[log(V ?s ) * log(Vs)› Os*1]}
+both form G-martingale sequences under nonlinear expectation E := inf ⇡N À⇧ E⇡N as deﬁned in[49]. Therefore, from nonlinear expectation version of Doob’s martingale convergence theorem
+[49, 50], both sequences converge to a ﬁnite value almost surely if ≥Ns=1{log(V ?s ) * log( Vs)*
+inf ⇡sÀ⇧ E[log(V ?s ) * log(Vs)› Os*1]} is uniformly bounded almost surely for all N. From previous
+theorem, we know SNS?N f 1. Therefore, limNôÿ SNS?N =0 almost surely if and only if ≥ÿN=1[log(VN )*
+log(V ?N ) * inf ⇡N À⇧ E⇡N [log(V ?N ) * log(VN )› ON*1]] = ÿ
+9 Details of the horse racing numerical example
+In this section we provide additional details of the horse racing numerical example. Our example
+is a simple horse race with n horses, with bets placed on each horse placing, i.e., coming in ﬁrst or
+second. There are thus K = n(n * 1)_2 outcomes (indexed as j, k with j<k f n), and n bets (one
+for each horse to place). We ﬁrst describe the nominal distribution of outcomes ⇡nom. We model
+the speed of the horses as independent random variables, with the fastest and second fastest horses
+placing. With this model, ⇡nom is entirely described by the probability that horse i comes in ﬁrst, we
+which denote  i. For j<k , we have
+⇡nomjk = P (horse j and k are the ﬁrst two )
+= P (j is 1st, k is 2nd)+ P (k is 1st, j is 2nd)
+= P (j is 1st)P (k is 2nd › j is 1st)
++P (k is 1st)P (j is 2nd › k is 1st)
+=  j ( k_(1 *  j )) +  k( j _(1 *  k))
+=  j  k( 11* i + 11* j ).
+The fourth line uses P (k is 2nd › j is 1st)=  k_(1 *  j ).
+For the return matrix, we use parimutuel betting, with the fraction of bets on each horse equal to
+ i, the probability that it will win (under the nominal probability distribution). The return matrix
+R À IRnùK then has the form
+Ri,jk =
+h
+n
+l
+nj
+n
+1+ j _ k i = jn
+1+ k_ j i = k
+0 i Ã{ j, k},
+where we index the columns (outcomes) by the pair jk, with j<k .
+Our set of possible distributions is the box
+⇧⌘ ={ ⇡ › ⇡ * ⇡nom f ⌘⇡nom, 1T ⇡ =1 ,⇡ g 0},
+where ⌘ À (0, 1), i.e., each probability can vary by ⌘ from its nominal value.
+Another uncertainty set is the ball
+⇧c ={ ⇡ › Ò⇡ * ⇡nomÒ2 f c, 1T ⇡ =1 ,⇡ g 0}
+For our speciﬁc example instance, we take n = 20 horses, so there are K = 190 outcomes. We
+choose  i, the probability distribution of the winning horse, proportional to exp zi, where we sample
+14
+independently zi Ì N (0, 1_4). This results in  i ranging from around 20% (the fastest horse) to
+around 1% (the slowest horse).
+First, we show growth rate and worst-case growth rate for the Kelly optimal and the distributional
+robust Kelly optimal bets under two uncertainty sets. In table 1 of the main paper, we show the
+comparison for box uncertainty set with ⌘ =0 .26 and for ball uncertainty set with c =0 .016. The
+two parameters are chosen so that the worst case growth of Kelly bets for both uncertainty sets are
+*2.2%. In particular, using standard Kelly betting, we lose money (when the distribution is chosen as
+the worst one for the Kelly bets). We can see that, as expected, the Kelly optimal bet has higher log
+growth under the nominal distribution, and the distributional robust Kelly bet has better worst-case
+log growth. We see that the worst-case growth of the distributional robust Kelly bet is signiﬁcantly
+better than the worst-case growth of the nominal Kelly optimal bet. In particular, with robust Kelly
+betting, we make money, even when the worst distribution is chosen. The nominal Kelly optimal bet
+bK and the distributional robust Kelly bet bRK for both uncertainty sets in ﬁgure 1 of main paper. For
+each of our bets bK and bRK shown above, we ﬁnd a corresponding worst case distribution, denoted
+⇡wc,K and ⇡wc,RK , which minimize G⇡ (b) over ⇡ À⇧ . These distributions, shown for box uncertainty
+set and ball uncertainty set in ﬁgure 3 of main paper, achieve the corresponding worst-case log growth
+for the two bet vectors. Finally, we compare the expected wealth logarithmic growth rate as we
+increase the size of the uncertainty sets. For the box uncertainty set we choose ⌘ À [0, 0.3], and for
+the ball uncertainty set we choose c À [0, 0.02], we look at the expected growth for both the kelly bet
+bK and the distributional robust kelly bet bRK under both the nominal probability ⇡nom and the worst
+case probability ⇡worst .
+10 Supplementary Material: Details for learning uncertainty set through
+bi-level optimization
+To use distributional robust Kelly strategy, one of the limitation is the requirement to tune of the
+parameters for the uncertainty set. Tuning is often done by hand, or by simple methods such as a
+crude grid search. In this section we propose a method to automate this process, by adjusting the
+parameters using an approximate gradient of the performance metric with respect to the parameters.
+To give more colors to the general setup presented in the discussion section (section 5) of main paper,
+we consider a more concrete setting of learning uncertainty with features (covariates). Assuming that
+we are playing sequential gambling games, where each game is characterized by features (covariates)
+X. We represent the nominal return distribution as a function of features: ⇡0 = h✓0 (X), here h✓0 is
+a logistic function h✓0 (X) = exp( ✓T0 X)_Z or in general a deep neural network with parameter ✓0,the radius/shape of the uncertainty set is parametrized by ✓1. For example, in the transformed lp ball
+uncertainty set, ✓1 = W . The uncertainty set ⇧(✓; X) has parameter ✓ =( ✓0,✓ 1).
+For a given uncertainty set with parameter ✓ and feature X, the distributional robust Kelly strategy is
+the solution to the convex optimization problem:
+b?(✓; X) = arg max
+bÀB
+min
+⇡À⇧(✓;X)
+E⇡ log(rT b).
+To automatically tuning the parameters, we could deﬁne a performance metric with respect to the
+parameters L(✓). For example, given out of samples observations Xi, ri that are not accessible
+when we ﬁt the mean the functional form of ⇧, we could deﬁne an out-of-sample Kelly loss as the
+performance metric:
+max
+✓
+L(✓)= 1N
+N…
+i=1
+log(rTi b?(✓; Xi))
+Using this performance metric as the high level objective, we could choose the uncertainty set
+parameter ✓ through bi-level optimization using approximate gradient method. Our method relies
+on recently developed methods[ 58] that can efﬁciently evaluate the derivative of the solution of a
+disciplined convex optimization problem with respect to its parameters. Using previous result in this
+paper, this distributional robust optimization problem can be transformed into a disciplined convex
+optimization, which allows automated differentiation with respect to the solution map b?(✓; X).W e
+have provided CVXPY code for the uncertainty sets in this paper, which would allow users to use
+them through the recently developed software framework to embed our problem into differential
+programming framework like Tensorﬂow and PyTorch to learn the uncertainty set via deep learning.
+15
+11 Supplementary Material: CVXPY example codes
+All of the formulations of distributional robust Kelly problem (DRKP) are not only tractable, but
+easily expressed in domain speciﬁc language for convex optimization. The CVXPY code to specify
+and solve the DRKP for ball and box constraints, for example, is given below.
+For box uncertainty set, ⇧⇢ ={ ⇡ › ⇡ * ⇡nom f ⇢, 1T ⇡ =1 ,⇡ g 0}, the CVXPY code is
+pi_nom = Parameter(K, nonneg=True)
+rho = Parameter(K,nonneg=True)
+b = Variable(n)
+mu = Variable(K)
+wc_growth_rate = min(log(R.T *b) + mu)
+-pi_nom.T*abs(mu)
+-rho.T*mu
+constraints = [sum(b) == 1, b >= 0]
+DRKP = Problem(Maximize(wc_growth_rate),
+constraints)
+DRKP.solve()
+For ball uncertainty set, ⇧c ={ ⇡ › Ò⇡ * ⇡nomÒ2 f c, 1T ⇡ =1 ,⇡ g 0}, the CVXPY code is
+pi_nom = Parameter(K, nonneg=True)
+c = Parameter((1,1), nonneg=True)
+b = Variable(n)
+U = Variable(K)
+mu = Variable(K)
+log_growth = log(R.T *b)
+wc_growth_rate = pi_nom.T *F-c*norm(U-mu,2)
+constraints = [sum(b) == 1,
+b >= 0,
+U <= log_growth]
+DRKP = Problem(Maximize(wc_growth_rate),
+constraints)
+DRKP.solve()
+Here R is the matrix whose columns are the return vectors, pi_nom is the vector of nominal
+probabilities. rho is K dimensional box constraint and c is radius of the ball. For each problem, the
+second to last line forms the problem, and in the last line the problem is solved. The robust optimal
+bet is written into b.value.
+To learn uncertainty set, we could parametrize ⇡0 via logistic model ⇡0 = softmax(✓X ), where
+✓ À IRKùM is the parameter to learn, X À IRM is a feature of each game.
+The full python notebook code for the horse gambling example is also attached at appendix. The
+computational resource used is fairly light-weight. All the computation in the notebook is done via
+Google’s Colab, and the notebook is also easy to run with laptops.
+To give a taste of the framework, for ball uncertainty set, ⇧⇢ ={ ⇡ › ⇡*⇡nom f ⇢, 1T ⇡ =1 ,⇡ g 0},
+the CVXPY code to build CvxpyLayer is
+import cvxpy as cvx
+import torch
+from cvxpylayers.torch import CvxpyLayer
+# generate_ball_problem
+pi_0 = cvx.Parameter(K, nonneg=True)
+rho = cvx.Parameter(K, nonneg=True)
+R_cvx = cvx.Parameter((n,K), nonneg=True)
+b = cvx.Variable(n)
+mu = cvx.Variable(K)
+log_growth = cvx.log(R_cvx.T@b )
+rob_growth_rate = cvx.min(log_growth + mu )
+rob_growth_rate = rob_growth_rate - pi_0.T@mu - rho.T@cvx.abs(mu)
+constraints = [cvx.sum(b) == 1, b >= 0]
+DRKP = cvx.Problem(cvx.Maximize(rob_growth_rate), constraints)
+16
+Figure 4: The trained ⇡nom with error bar from box constraint, ⇡nom is initialized at uniform distribution.
+Figure 5: The training loss for training ⇢ using projected ADAM optimizer (onto non-negative vectors), ⇢ is
+initialized at rho = (0.1, … , 0.1) using PyTorch with initial step size 10*6.
+problem = DRKP
+parameters=[R_cvx, pi_0, rho]
+policy = CvxpyLayer(problem, parameters, [b])
+The training code using PyTorch looks like:
+# Initialize:
+Rho = torch.from_numpy(np.ones(K) *1e-4).requires_grad_(True)
+log_Pi_0 = torch.from_numpy(np.zeros(K)).requires_grad_(True)
+torch_variables = [log_Pi_0, Rho]
+R_torch = torch.from_numpy(R)
+Pi_test_torch = torch.from_numpy(Pi_test)
+# Loss:
+def evaluate( R_torch, log_Pi_0, Rho, Pi_test_torch):
+Pi_0 = torch.nn.functional.softmax(log_Pi_0)
+b, = policy(R_torch, Pi_0, Rho)
+logs = torch.log(R_torch.T @ b)
+cost = - torch.sum(Pi_test_torch *logs[None,:])
+return cost
+# Training:
+iters = 100
+results = []
+optimizer = torch.optim.Adam(torch_variables, lr=1e-2)
+for i in range(iters):
+optimizer.zero_grad()
+17
+loss = evaluate(R_torch, log_Pi_0, Rho, Pi_test_torch)
+loss.backward()
+optimizer.step()
+# Project so that Rho is non-negative
+Rho.data = torch.max(Rho.data,torch.zeros_like(Rho.data))
+results.append(loss.item())
+print("(iter %d) loss: %g " % (i, results[-1]))
+18
+References
+[1] Leo Breiman et al. Optimal gambling systems for favorable games. 1961.
+[2] Leo Breiman. Investment policies for expanding businesses optimal in a long-run sense. Naval
+Research Logistics Quarterly, 7(4):647–651, 1960.
+[3] John Kelly. A new interpretation of information rate. IRE Transactions on Information Theory ,
+2(3):185–189, 1956.
+[4] Daniel Bernoulli. Exposition of a new theory on the measurement of risk. In The Kelly capital
+growth investment criterion: Theory and practice , pages 11–24. World Scientiﬁc, 2011.
+[5] Edward Thorp. Portfolio choice and the Kelly criterion. In Stochastic Optimization Models in
+Finance, pages 599–619. Elsevier, 1975.
+[6] Leonard Maclean, Edward Thorp, and William Ziemba. The Kelly Capital Growth Investment
+Criterion: Theory and Practice , volume 3. World Scientiﬁc Publishing, 2011.
+[7] Mark Davis and Sebastien Lleo. Fractional Kelly strategies in continuous time: Recent develop-
+ments. In Handbook of the Fundamentals of Financial Decision Making , pages 753–788. World
+Scientiﬁc Publishing, 2012.
+[8] Leonard Maclean, Edward Thorp, and William Ziemba. Long-term capital growth: the good and
+bad properties of the Kelly and fractional Kelly capital growth criteria. Quantitative Finance,
+10(7):681–687, 2010.
+[9] Edward Thorp. Understanding the Kelly criterion. In The Kelly Capital Growth Investment
+Criterion: Theory and Practice , pages 509–523. World Scientiﬁc, 2011.
+[10] Joseph Kadane. Partial-Kelly strategies and expected utility: Small-edge asymptotics. Decision
+Analysis, 8(1):4–9, 2011.
+[11] Martin Andersen, Joachim Dahl, and Lieven V andenberghe. CVXOPT : A Python package for
+convex optimization, version 1.1.5., 2013.
+[12] Stephen Boyd and Lieven V andenberghe. Convex Optimization. Cambridge University Press,
+2004.
+[13] Michael Grant and Stephen Boyd. CVX: Matlab software for disciplined convex programming,
+version 2.1. http://cvxr.com/cvx, March 2014.
+[14] Steven Diamond and Stephen Boyd. CVXPY: A Python-embedded modeling language for
+convex optimization. Journal of Machine Learning Research , 17(83):1–5, 2016.
+[15] Akshay Agrawal, Robin V erschueren, Steven Diamond, and Stephen Boyd. A rewriting system
+for convex optimization problems. Journal of Control and Decision , 5(1):42–60, 2018.
+[16] Madeleine Udell, Karanveer Mohan, David Zeng, Jenny Hong, Steven Diamond, and Stephen
+Boyd. Convex optimization in Julia. SC14 Workshop on High Performance Technical Computing
+in Dynamic Languages, 2014.
+[17] Anqi Fu, Balasubramanian Narasimhan, and Stephen Boyd. CVXR: An R package for disci-
+plined convex optimization. arXiv preprint arXiv:1711.07582, 2017.
+[18] Enzo Busseti, Ernest K Ryu, and Stephen Boyd. Risk-constrained Kelly gambling. arXiv
+preprint arXiv:1603.06183, 2016.
+[19] Sid Browne and Ward Whitt. Portfolio choice and the Bayesian Kelly criterion. Advances in
+Applied Probability, 28(4):1145–1176, 1996.
+[20] Andrew Lo, Allen Orr, and Ruixun Zhang. The growth of relative wealth and the Kelly criterion.
+Journal of Bioeconomics, 20(1):49–67, 2018.
+19
+[21] Arkadi Nemirovski, Anatoli Juditsky, Guanghui Lan, and Alexander Shapiro. Robust stochastic
+approximation approach to stochastic programming. SIAM Journal on Optimization, 19(4):1574–
+1609, 2009.
+[22] Arkadi Nemirovski and Dmitri Y udin. On Cesari’s convergence of the steepest descent method
+for approximating saddle points of convex-concave functions. Doklady Akademii Nauk SSSR ,
+239:1056–1059, 1978.
+[23] Arkadi Nemirovski and Dmitri Y udin. Problem Complexity and Method Efﬁciency in Optimiza-
+tion. Wiley, 1983.
+[24] Craig Fox and Amos Tversky. Ambiguity aversion and comparative ignorance. The quarterly
+journal of economics, 110(3):585–603, 1995.
+[25] James Dow and Sergio Ribeiro da Costa Werlang. Uncertainty aversion, risk aversion, and the
+optimal choice of portfolio. Econometrica: Journal of the Econometric Society , pages 197–204,
+1992.
+[26] Paolo Ghirardato and Massimo Marinacci. Risk, ambiguity, and the separation of utility and
+beliefs. Mathematics of operations research, 26(4):864–890, 2001.
+[27] Larry Epstein. A deﬁnition of uncertainty aversion. In Uncertainty in Economic Theory , pages
+187–224. Routledge, 2004.
+[28] Erick Delage and Yinyu Y e. Distributionally robust optimization under moment uncertainty
+with application to data-driven problems. Operations research, 58(3):595–612, 2010.
+[29] Kai Y ang, Yihong Wu, Jianwei Huang, Xiaodong Wang, and Sergio V erdú. Distributed robust
+optimization for communication networks. In INFOCOM 2008. The 27th Conference on
+Computer Communications. IEEE , pages 1157–1165. IEEE, 2008.
+[30] Mathias Bürger, Giuseppe Notarstefano, and Frank Allgöwer. Distributed robust optimiza-
+tion via cutting-plane consensus. In Decision and Control (CDC), 2012 IEEE 51st Annual
+Conference on, pages 7457–7463. IEEE, 2012.
+[31] Joel Goh and Melvyn Sim. Distributionally robust optimization and its tractable approximations.
+Operations research, 58(4-part-1):902–917, 2010.
+[32] Xin Chen, Melvyn Sim, and Peng Sun. A robust optimization perspective on stochastic
+programming. Operations Research, 55(6):1058–1071, 2007.
+[33] Almir Mutapcic and Stephen Boyd. Cutting-set methods for robust convex optimization with
+pessimizing oracles. Optimization Methods & Software , 24(3):381–406, 2009.
+[34] Takeru Miyato, Shin-ichi Maeda, Masanori Koyama, Ken Nakae, and Shin Ishii. Distributional
+smoothing with virtual adversarial training. arXiv preprint arXiv:1507.00677, 2015.
+[35] John Duchi, Peter Glynn, and Hongseok Namkoong. Statistics of robust optimization: A
+generalized empirical likelihood approach. arXiv preprint arXiv:1610.03425, 2016.
+[36] Dimitris Bertsimas, Vishal Gupta, and Nathan Kallus. Data-driven robust optimization. Mathe-
+matical Programming, 167(2):235–292, 2018.
+[37] Aharon Ben-Tal, Dick Den Hertog, Anja De Waegenaere, Bertrand Melenberg, and Gijs Rennen.
+Robust solutions of optimization problems affected by uncertain probabilities. Management
+Science, 59(2):341–357, 2013.
+[38] Hongseok Namkoong and John Duchi. Stochastic gradient methods for distributionally robust
+optimization with f-divergences. In Advances in Neural Information Processing Systems , pages
+2208–2216, 2016.
+[39] Jose Blanchet, Lin Chen, and Xunyu Zhou. Distributionally robust mean-variance portfolio
+selection with Wasserstein distances. arXiv preprint arXiv:1802.04885, 2018.
+20
+[40] Jose Blanchet, Y ang Kang, and Karthyek Murthy. Robust Wasserstein proﬁle inference and
+applications to machine learning. arXiv preprint arXiv:1610.05627, 2016.
+[41] Peyman Mohajerin Esfahani and Daniel Kuhn. Data-driven distributionally robust optimization
+using the Wasserstein metric: Performance guarantees and tractable reformulations. Mathemati-
+cal Programming, pages 1–52, 2017.
+[42] Soroosh Shaﬁeezadeh-Abadeh, Peyman Mohajerin Esfahani, and Daniel Kuhn. Distributionally
+robust logistic regression. In Advances in Neural Information Processing Systems , pages
+1576–1584, 2015.
+[43] Daniel Kuhn, Peyman Mohajerin Esfahani, Viet Anh Nguyen, and Soroosh Shaﬁeezadeh-
+Abadeh. Wasserstein distributionally robust optimization: Theory and applications in machine
+learning. In Operations Research & Management Science in the Age of Analytics , pages
+130–166. INFORMS, 2019.
+[44] Dimitri P Bertsekas. Network optimization: continuous and discrete models . Athena Scientiﬁc
+Belmont, 1998.
+[45] Dimitris Bertsimas and John N Tsitsiklis. Introduction to linear optimization, volume 6. Athena
+Scientiﬁc Belmont, MA, 1997.
+[46] Dimitri P Bertsekas. A new algorithm for the assignment problem. Mathematical Programming,
+21(1):152–171, 1981.
+[47] Gabriel Peyré, Marco Cuturi, et al. Computational optimal transport: With applications to data
+science. F oundations and Trends® in Machine Learning, 11(5-6):355–607, 2019.
+[48] Hamed Rahimian and Sanjay Mehrotra. Distributionally robust optimization: A review. arXiv
+preprint arXiv:1908.05659, 2019.
+[49] Shige Peng. Nonlinear expectations and stochastic calculus under uncertainty. arXiv preprint
+arXiv:1002.4546, 24, 2010.
+[50] H Mete Soner, Nizar Touzi, and Jianfeng Zhang. Martingale representation theorem for the
+g-expectation. Stochastic Processes and their Applications , 121(2):265–287, 2011.
+[51] John Duchi. Optimization with uncertain data. Notes, 2018, 2018.
+[52] Polina Alexeenko and Eilyan Bitar. Nonparametric estimation of uncertainty sets for robust
+optimization. In 2020 59th IEEE Conference on Decision and Control (CDC) , pages 1196–1203.
+IEEE, 2020.
+[53] Y aniv Romano, Evan Patterson, and Emmanuel J Candès. Conformalized quantile regression.
+arXiv preprint arXiv:1905.03222, 2019.
+[54] Ryan Tibshirani and Rina Foygel. Conformal prediction under covariate shift. Advances in
+neural information processing systems, 2019.
+[55] William Fithian and Lihua Lei. Conditional calibration for false discovery rate control under
+dependence. arXiv preprint arXiv:2007.10438, 2020.
+[56] Anastasios Angelopoulos, Stephen Bates, Jitendra Malik, and Michael I Jordan. Uncertainty
+sets for image classiﬁers using conformal prediction. arXiv preprint arXiv:2009.14193, 2020.
+[57] Stephen Bates, Anastasios Angelopoulos, Lihua Lei, Jitendra Malik, and Michael I Jordan.
+Distribution-free, risk-controlling prediction sets. arXiv preprint arXiv:2101.02703, 2021.
+[58] A. Agrawal, B. Amos, S. Barratt, S. Boyd, S. Diamond, and Z. Kolter. Differentiable convex
+optimization layers. In Advances in Neural Information Processing Systems , 2019.
+21

@@ -1,0 +1,1019 @@
+arXiv 2309.16008  https://arxiv.org/abs/2309.16008
+
+Optimal Entry and Exit with Signature in Statistical Arbitrage
+Boming Ning∗1, Prakash Chakraborty2, and Kiseop Lee1
+1Department of Statistics, Purdue University
+2Department of Industrial and Manufacturing Engineering, The Pennsylvania State
+University
+March 6, 2024
+Abstract
+In this paper, we explore an optimal timing strategy for the trading of price spreads exhibiting
+mean-reverting characteristics. A sequential optimal stopping framework is formulated to analyze
+the optimal timings for both entering and subsequently liquidating positions, all while considering
+the impact of transaction costs. Then we leverages a refined signature optimal stopping method to
+resolve this sequential optimal stopping problem, thereby unveiling the precise entry and exit tim-
+ings that maximize gains. Our framework operates without any predefined assumptions regarding
+the dynamics of the underlying mean-reverting spreads, offering adaptability to diverse scenarios.
+Numerical results are provided to demonstrate its superior performance when comparing with
+conventional mean reversion trading rules.
+Keywords— mean-reversion trading; signature method; optimal stopping time
+1 Introduction
+Statistical arbitrage, also referred to mean reversion trading, is a trading strategy that employs sta-
+tistical methods to identify pricing discrepancies between assets and capitalize on them for profit. It
+is widely used by traders and fund managers to simultaneously establish positions in two correlated
+assets and speculate on the resultant spread’s path behavior. While modeling the dynamics of a single
+asset can be challenging, statistical models excel in capturing the mean-reverting behavior exhibited
+by pairs of assets or securities. The mean reversion trading process comprises three fundamental steps:
+(1) the identification of co-moving assets, (2) the construction of spreads, and (3) the design of trading
+rules. The first two steps can be referred to as the formation period, while the last constitutes the
+trading period.
+The process of identifying assets for statistical arbitrage relies on principles grounded in market
+dynamics, such as the co-movement of risk-on assets in the same direction or the correlation between
+stocks within a shared sector. For a trading pair to be considered profitable, it is imperative that the
+two assets exhibit a certain degree of correlation. This strategy entails the simultaneous purchase of one
+asset and sale of another, thereby achieving market neutrality within the designated group or sector,
+with the ultimate goal of capitalizing on the subsequent price convergence between these two assets.
+Empirical research has substantiated the presence of mean-reverting price behavior in various instances,
+including pairs of stocks and/or ETFs, disparities between futures and their corresponding spot prices,
+and spreads between physical commodities and commodity stocks/ETFs. Additionally, automated
+methodologies have been developed to identify portfolios with mean-reverting characteristics. In the
+context of this paper, we undertake a preliminary selection of several stock pairs in the US market,
+guided by human expertise, spanning diverse sectors, ranging from airlines to the technology industry.
+Each pair comprises two stocks originating from the same industry, thereby affording a comprehensive
+examination of mean reversion within different sectors.
+∗Corresponding author; Email: ningb@purdue.edu
+1
+arXiv:2309.16008v4  [q-fin.CP]  4 Mar 2024
+The constructed spreads are essential to possess a mean-reverting characteristic, as this property
+underpins the opportunities available to traders engaged in statistical arbitrage. To illustrate, when
+the price of a spread deviates below its long-term mean, traders adopt a long position in the spread and
+await its reversion to the mean, thereby securing a profitable outcome. In the numerical experiments of
+the paper, we embrace a statistical approach to construct these spreads. For any given pair of stocks,
+we configure the spread to best conform to the Ornstein-Uhlenbeck (OU) model. More precisely, we
+ascertain the optimal ratio between the two stocks, as well as the model parameters, in a manner
+that maximizes the likelihood of the resulting spread time series. Notably, this method represents an
+extension of the conventional maximum likelihood estimation (MLE) approach, which traditionally
+focuses solely on determining the model parameters.
+Within the trading period, investors confront the intricate task of deciding the optimal trading rules
+for both entering and exiting a position, a determination contingent upon the dynamic fluctuations
+in the price of the risky asset. Investors are presented with the choice of either entering the market
+immediately or exercising patience while monitoring the prevailing market prices, awaiting a more
+propitious moment. After executing the initial trade, the investor encounters the consequential decision
+of pinpointing the most advantageous instance for closing the position. This challenge motivates the
+central inquiry of our research—namely, the investigation of the optimal timing of trades.
+In response to this challenge, we introduce a optimal trading timing framework designed to system-
+atically assess the optimal moments for both initiating and subsequently liquidating positions. Our
+methodology formulates a sequential optimal stopping problem to analyze the optimal trading timings,
+and capitalizes on the signature optimal stopping method, a powerful tool for solving this sequential
+optimal stopping problem, consequently revealing the precise timings for entry and exit that yield
+maximal gains. Importantly, our framework is adapted to a broad spectrum of mean reversion dy-
+namics, with the Ornstein-Uhlenbeck (OU) model serving as a prime illustration in our experimental
+investigations.
+The remainder of this paper is structured as follows. In Section 2, we offer a comprehensive review
+of relevant literature. Section 3 lays the foundation by introducing the fundamental concepts pertaining
+to the signature. Within Section 3.3, we expound upon the signature optimal stopping method. In
+Section 4, we elaborate on our proposed framework for optimizing entry and exit decisions, presenting
+the associated solutions. The empirical validation of our methodology through numerical experiments,
+encompassing both simulated and real-world data, is detailed in Section 5. Finally, Section 6 provides
+concluding remarks.
+2 Related Research
+Examples of mean-reverting spreads are well-documented in a variety of empirical studies spanning
+diverse asset classes. They have been observed in pairs of stocks and ETFs (Gatev et al. (2006),
+Avellaneda and Lee (2010), Montana and Triantafyllopoulos (2011), Leung and Li (2016)), futures
+contracts (Brennan and Schwartz (1990), Dai et al. (2011)), physical commodity and commodity
+stocks/ETFs (Kanamura et al. (2010)), as well as cryptocurrencies (Leung and Nguyen (2019)).
+The work of Gatev et al. (2006) stands as one of the pioneering studies in the realm of mean reversion
+trading, often referred to as pairs trading due to their method’s reliance on pairs to construct a mean-
+reverting process. They introduce the widely adopted Distance Method (DM) and conduct empirical
+testing using CRSP stocks spanning from 1962 to 2002. The DM method initiates a trading position
+for a pair of assets when their prices deviate from each other by more than two historical standard
+deviations, subsequently closing the position when the prices converge again. Their findings reveal
+an excess return of 1.3 % for the top 5 pairs identified by the DM method and 1.4% for the top 20
+pairs. Furthermore, Do and Faff (2012) delve into the profitability of pairs trading while accounting
+for transaction costs. Their research extends the understanding of the practicality of pairs trading
+by incorporating the impact of transaction expenses, offering valuable insights into the real-world
+feasibility of this trading strategy.
+In addition to the Distance Method (DM), cointegration tests are commonly employed in various
+alternative methods for mean reversion trading. Vidyamurthy (2004) elucidate a cointegration frame-
+work for mean reversion trading, drawing inspiration from Engle and Granger’s error correction model
+representation of cointegrated series as presented in the seminal work of Engle and Granger (1987).
+Galenko et al. (2012) explore an active ETF trading strategy built upon cointegrated time series.
+2
+Their research leverages the concept of cointegration to develop trading strategies within the context
+of exchange-traded funds. Leung and Nguyen (2019) construct cointegrated portfolios of cryptocurren-
+cies using the Engle-Granger two-step approach and the Johansen cointegration test, exemplifying the
+versatility of cointegration in portfolio construction across diverse asset classes. Huck and Afawubo
+(2015) undertake a comparative analysis of the performance of the DM method and cointegration-
+based approaches using the components of the S&P 500 index. This study sheds light on the relative
+merits of these two methodologies in the context of mean reversion trading.
+Another popular approach in mean reversion trading is the stochastic spread method, which charac-
+terizes the path behavior of the spread using a stochastic process exhibiting mean-reverting properties.
+In this methodology, the construction of spreads and the extraction of trading signals typically rely on
+the analysis of parameters within the underlying stochastic model. For instance, Elliott et al. (2005)
+introduce a mean-reverting Gaussian Markov chain model to describe the dynamics of spreads. They
+utilize this model’s estimates in comparison with observed spread data to make informed trading de-
+cisions. Expanding on this framework, Do et al. (2006) delve deeper into the methodology proposed
+by Elliott et al. and present a generalized stochastic residual spread method. This method is de-
+signed to model relative mispricing, offering a broader perspective on the stochastic spread approach
+in mean reversion trading. In their comprehensive work, Leung and Li (2016) provide insights into
+optimal mean reversion trading strategies founded on various stochastic modeling approaches. Their
+research encompasses a range of models, including the Ornstein-Uhlenbeck (OU) model, Exponential
+OU Model, and CIR Model, elucidating how these different models can be leveraged to optimize mean
+reversion trading strategies. This work contributes to the broader understanding of mean reversion
+trading by exploring the effectiveness of diverse stochastic frameworks.
+Furthermore, various alternative methods for mean reversion trading have emerged in recent years.
+Some of these methods leverage copulas (Liew and Wu (2013), Xie et al. (2016)), Principal Component
+Analysis (PCA) (Avellaneda and Lee (2010), and machine learning techniques (Guijarro-Ordonez et al.
+(2021)) to identify trading opportunities based on statistical patterns and relationships among assets.
+In addition to these methodologies, new optimization algorithms have been proposed to construct
+spreads with maximum in-sample mean reversion. Notably, some of these algorithms are designed
+for automation, enabling the simultaneous analysis of a large number of stocks (d’Aspremont (2011),
+Leung et al. (2020)). These advancements reflect the ongoing innovation in the field of mean reversion
+trading, offering traders and researchers a diverse set of tools and techniques to explore.
+In the domain of optimal timing strategies for trading mean-reverting spreads, several notable
+studies have contributed to the understanding of this field. Ekstr¨ om et al. (2011) investigate the
+optimal single liquidation timing in the context of the Ornstein-Uhlenbeck (OU) model with zero long-
+run mean and no transaction costs. Song et al. (2009) introduce a numerical stochastic approximation
+scheme to solve for optimal buy-low-sell-high strategies over a finite time horizon. Leung and Li (2015)
+address an optimal double stopping problem, providing optimal entry and exit decision rules. They
+derive analytical solutions for both the entry and exit problems under the assumption of an OU process.
+These studies collectively contribute to the advancement of optimal timing strategies for trading mean-
+reverting spreads, offering various perspectives and methodologies for tackling this challenging problem.
+The current paper is motivated by the model introduced by these prior researchers, proposing a
+sequential optimal stopping problem to determine optimal trading times without assuming specific
+dynamics for the spread.
+The utilization of the signature method in the paper to address the optimal stopping problem
+aligns with recent developments in mathematical finance. Bayer et al. (2021) have introduced a novel
+approach to solving optimal stopping problems based on signature theory. Importantly, this method
+does not require specific assumptions about the underlying stochastic process other than it being a
+continuous (geometric) random rough path. The core concept revolves around considering classic
+stopping times approximated as signature optimal stopping times, which can be decided through a
+functional of the signature associated with the stochastic process. Bayer et al. demonstrate that
+optimizing over these classes of signature stopping times effectively solves the original optimal stopping
+problem. This transformation allows for the problem to be reformulated as an optimization task
+dependent solely on the truncated signature. Furthermore, Bayer et al. introduce a numerical solution
+to the signature optimal stopping problem by formulating the problem as an optimization task involving
+the minimization of a loss function associated with the truncated signature. This numerical approach
+provides a practical tool to implement the signature-based framework for solving optimal stopping
+3
+problems, making it applicable to a wide range of real-world scenarios. They illustrate the practicality
+of this method in the context of optimal stopping for fractional Brownian motions.
+Indeed, motivated by the innovative methodology introduced by Bayer et al. (2021), our paper
+embarks on an exploration of the potential application of the signature framework to tackle the optimal
+entry and exit problem in mean reversion trading. This extension highlights the remarkable versatility
+and promising capabilities of signature-based methods in effectively addressing a wide spectrum of
+challenges within financial contexts.
+3 Preliminaries of Signature
+Signature methods play an important role in this paper. In this section, we will introduce the theory
+of signatures that will serve as a foundational framework for the article.
+3.1 Tensor algebra
+A signature is an infinite series that takes values in a specific graded space known as the tensor
+algebra. To provide a solid foundation for understanding signatures, we will begin by introducing the
+fundamentals of tensor algebra.
+The tensor product of two vectors u = (ui) and v = (vj) is given by:
+(u ⊗ v)i,j = uivj
+For example, if u = (u1, u2) ∈ R2 and v = (v1, v2, v3) ∈ R3, then their tensor product is given by
+u ⊗ v =
+
+u1v1 u1v2 u1v3
+u2v1 u2v2 u2v3
+
+∈ R2×3.
+The concept of the tensor product can indeed be extended to accommodate multiple vectors or tensors.
+To illustrate, consider the example of taking the 3-way tensor product of three vectors u = [1, 2], v =
+[3, 4], w = [5, 6]:
+1
+2
+
+⊗
+3
+4
+
+⊗
+5
+6
+
+=
+
+1 ·
+
+3
+4
+
+⊗
+
+5
+6
+
+2 ·
+3
+4
+
+⊗
+5
+6
+
+
+ =
+
+
+15 18
+20 24
+30 36
+40 48
+
+
+In this context, the resulting tensor u ⊗ v ⊗ w is a 2 × 2 × 2 array, where the ( i, j, k)-th entry is
+the product of the i-th entry of u, the j-th entry of v, and the k-th entry of w.
+Let U and V represent two vector spaces with bases {u1, . . . ,um} and {v1, . . . ,vn}, respectively.
+The tensor product space U ⊗ V is defined as the vector space formed by the linear combinations of all
+possible products ui ⊗ vj, where i ranges from 1 to m and j ranges from 1 to n. Formally, we express
+this as follows:
+U ⊗ V = span{ui ⊗ vj|1 ≤ i ≤ m, 1 ≤ j ≤ n}.
+The tensor product space U ⊗ V possesses a natural basis {ui ⊗ vj | 1 ≤ i ≤ m, 1 ≤ j ≤ n}. As an
+illustrative example, consider U = R2 and V = R3. In this case, the tensor product space U ⊗ V has
+a dimension of 2 × 3 = 6, and a possible basis can be represented as follows:
+u1 ⊗ v1 =
+1
+0
+
+⊗
+
+
+1
+0
+0
+
+ =
+
+
+1 0
+0 0
+0 0
+
+
+u1 ⊗ v2 =
+1
+0
+
+⊗
+
+
+0
+1
+0
+
+ =
+
+
+0 0
+1 0
+0 0
+
+
+...
+u2 ⊗ v3 =
+0
+1
+
+⊗
+
+
+0
+0
+1
+
+ =
+
+
+0 0
+0 0
+0 1
+
+
+4
+The concept of tensor product for two spaces can be readily extended to multiple spaces. Let Rd,
+where d ≥ 1, be a finite-dimensional real vector space with a basis {e1, · · ·, ed}. Then, ( Rd)⊗n is the
+tensor product of n copies of Rd, resulting in a vector space with dn dimensions. Each element in this
+tensor product space is represented as a tensor formed by taking the tensor product of n vectors, each
+belonging to Rd. We can define a basis for ( Rd)⊗n as follows:
+{ei1 ⊗ · · · ⊗ein | ij ∈ {1, · · ·, d} for j = 1, · · ·, n}.
+Based on ( Rd)⊗n, we can provide the definition for the extended tensor algebra.
+Definition 3.1 (Extended tensor algebra) The extended tensor algebra over Rd is defined by
+T ((Rd)) := {a = (an)∞n=0 | an ∈ (Rd)⊗n}.
+Given a = (ai)∞i=0, b = (bi)∞i=0 ∈ T ((Rd)), define the sum and product by
+a + b := (ai + bi)∞i=0
+a ⊗ b :=
+ iX
+k=0
+ak ⊗ bi−k
+!∞
+i=0
+.
+We also define the action on R given by λa := (λai)∞i=0 for λ ∈ R.
+Likewise, we can define the tensor algebra as the space of all finite sequences of tensors. Addi-
+tionally, we can define the truncated tensor algebra as the space of sequences of tensors of a specified,
+fixed length. These definitions allow us to work with sequences of tensors, accommodating various
+mathematical operations and analyses in this paper.
+Definition 3.2 (Tensor algebra) The tensor algebra over Rd, denoted by T (Rd) ⊂ T ((Rd)), is given
+by
+T (Rd) := {a = (an)∞n=0 | an ∈ (Rd)⊗n and ∃N ∈ N such that an = 0 ∀n ≥ N }.
+Definition 3.3 (Truncated tensor algebra) The truncated tensor algebra of order n ∈ N over Rd is
+defined by
+T (N )(Rd) := {a = (an)∞n=0 | an ∈ (Rd)⊗n and an = 0 ∀n ≥ N }.
+In the context of the dual space and linear functions on the tensor algebra, let {e∗1, · · ·, e∗d} be
+a dual basis for ( Rd)∗, where ( Rd)∗ represents the dual space of Rd. This dual space consists of all
+continuous linear functions mapping from Rd to R. We can define a basis for (( Rd)∗)⊗n as follows:
+{e∗i1 ⊗ · · · ⊗e∗in | ij ∈ {1, · · ·, d} for j = 1, · · ·, n}.
+We denote the dual space of T ((Rd)) as T ((Rd)∗) := ((Rd)∗)⊗n.
+It’s important to note that there exists a natural pairing between T ((Rd)∗) and T ((Rd)), which
+we denote as ⟨·, ·⟩ : T ((Rd)∗) × T ((Rd)) → R. Consequently, the dual space T ((Rd)∗) encompasses all
+continuous linear functions defined on the extended tensor algebra T ((Rd)).
+3.2 Signature
+We will now introduce a pivotal concept in this paper: the signature of a path. For a given path
+X : [0 , T] 7→ Rd, we denote the coordinate paths as ( X 1t , · · ·, Xdt ), where each X i : [0 , T] 7→ R
+represents a real-valued path. For any single index i ∈ {1, · · ·, d} and 0 ≤ a ≤ b ≤ T , we define the
+quantity:
+S(X)ia,b =
+Z
+a<s<b
+dX is = X ib − X ia,
+which signifies the increment of the i-th coordinate of the path within the time interval t ∈ [a, b].
+For any pair of indices i, j∈ {1, · · ·, d}, we define the second-order path integral:
+S(X)i,ja,b =
+Z
+a<r<s<b
+dX irdX js ,
+5
+and this concept can be generalized to arbitrary orders. For any integer n ≥ 1 and a collection of
+indices i1, · · ·, in ∈ {1, · · ·, d}, we define:
+S(X)i1,··· ,ina,b =
+Z
+a<t1<···<tn<b
+dX i1t1 · · ·dX intn ,
+referred to as the n-fold iterated integral of X along the indices i1, · · ·, in. The vector comprising all
+the n-fold iterated integrals of X is defined as:
+Xna,b := S(X)i1,··· ,ina,b i1, · · ·, in ∈ {1, · · ·, d} .
+In fact, Xna,b belongs to ( Rd)⊗n, and we can express it concisely using the tensor product symbol:
+Xna,b =
+Z
+a<t1<···<tn<b
+dXt1 ⊗ · · · ⊗dXtn ∈ (Rd)⊗n.
+Example 3.4 Consider a path X : [0, T] 7→ R3, then
+X1a,b =  S(X)1a,b, S(X)2a,b, S(X)3a,b ,
+X2a,b = S(X)1,1a,b, S(X)1,2a,b, S(X)1,3a,b, S(X)2,1a,b, S(X)2,2a,b, S(X)2,3a,b, S(X)3,1a,b, S(X)3,2a,b, S(X)3,3a,b .
+Now, we can introduce the definition of a signature.
+Definition 3.5 (Signature) Let 0 ≤ a < b≤ T . For a path X : [0, T] → Rd, we define the signature
+of X over [a, b] by
+X<∞a,b := (1, X1a,b, · · ·, Xna,b, · · ·) ∈ T ((Rd)),
+where
+Xna,b :=
+Z
+a<t1<···<tn<b
+dXt1 ⊗ · · · ⊗dXtn ∈ (Rd)⊗n.
+Similarly, the truncated signature of order N is defined by
+X≤Na,b := (1, X1a,b, · · ·, XNa,b) ∈ T (N )((Rd)).
+If we refer to the signature of X without specifying the interval over which the signature is taken,
+we will implicitly refer to X<∞0,T .
+In practical applications of the signature method, we typically transform the original path into
+an augmented path and then compute the truncated signature of the augmented path as the input
+features for any algorithm. Specifically, given a d-dimensional path Xt : [0 , T] → Rd, we denote its
+augmentation by bXt = ( t, Xt) ∈ R1+d, and define the augmented signature bX≤∞ and bX≤⌊p⌋ as the
+signature and ⌊p⌋-truncated signature of bXt, respectively.
+Due to the first dimension of the augmented path (time) being monotonically increasing, the signa-
+ture bX≤∞ provides a complete characterization of bX (and therefore X). See Hambly and Lyons(2010).
+However, computing the entire signature with infinite length is not feasible, so the truncated signature
+with a fixed order p is used in the practice of the signature method. As a result, the time series to be
+analyzed in this paper will first be transformed to its truncated augmented signature for analysis.
+3.3 Signature Optimal Stopping Method
+In this section, we introduce the signature optimal stopping method proposed by Bayer et al.(2021),
+which will be applied in our approach to solve the proposed sequential signature optimal stopping
+problems.
+6
+3.3.1 Signature Optimal Stopping Time
+The general optimal stopping problem involves determining an optimal stopping time that maximizes
+the value of the underlying process. Fix the probability space (Ω , F , P). Suppose Xt is a stochastic
+process and denote the filtration generated by X as (Ft), Ft = σ(Xs : 0 ≤ s ≤ t). Consider a payoff
+process Y : [0, T] × Ω → R being a real-valued continuous stochastic process adapted to the filtration
+(Ft), then the optimal stopping problem for Yt is
+sup
+τ ∈T
+E[Yτ ∧T ], (1)
+where τ is a stopping time adapted to ( Ft) and T is the space of all ( Ft)-stopping times
+Similarly, the signature optimal stopping problem also involves determining an optimal stopping
+time to maximize the expected payoff of a stochastic process before a fixed time. However, the
+key difference between the two problems lies in the filtration used to define stopping times, which
+fundamentally affects the information available for making stopping decisions. Specifically, let (Ω, F , P)
+be a probability space. Given a d-dimensional path Xt : [0 , T] → Rd and bX denotes its augmented
+signature in bΩpT . The filtration generated by the signatures are defined as (Gt), Gt = σ(bX0,s : 0 ≤ s ≤ t)
+and denote by S the space of all ( Gt)-stopping times. S is referred as the space of signature stopping
+times. Consider a payoff process Y : [0, T] × Ω → R being a real-valued continuous stochastic process
+adapted to the filtration ( Gt), then the signature optimal stopping problem for Yt is:
+sup
+τ ∈S
+E[Yτ ∧T ] (2)
+where τ is a signature stopping time adapted to ( Gt).
+In summary, the general optimal stopping problem utilizes ( Ft), a filtration based on the observ-
+able trajectory of the stochastic process Xt, to determine stopping times τ using data up to time
+t. Conversely, the signature optimal stopping problem employs ( Gt), generated from Xt’s augmented
+signatures bX, which encapsulate both positions and dynamic patterns over time, offering richer infor-
+mation for stopping decisions. This enriched filtration potentially provides a more detailed insight into
+Xt’s behavior, guiding the derivation of stopping times.
+3.3.2 Randomized Stopping Time
+The fundamental concept for addressing the signature optimal stopping problem lies in the utilization
+of randomized stopping times. As demonstrated by Bayer et al., randomized stopping times are, in
+fact, equivalent to signature stopping times. Consequently, the signature optimal stopping problem,
+as depicted in Equation (2), can be effectively transformed into an equivalent problem known as the
+randomized optimal stopping problem.
+Firstly, we introduce the concept of randomized stopping time. Define bΩpT as the space of all the p-
+truncated augmented signatures, that is, elements of bΩpT are p-truncated signatures of some augmented
+paths (t, Xt). For a given time horizon T >0, we define Λ T := St∈[0,T ] bΩpt , referring to it as the space
+of stopped signatures. Then, we denote a continuous stopping policy θ as a Borel measurable mapping
+θ : Λ T → R, and the space of continuous stopping policies as Θ := C(ΛT , R). θ is called a stopping
+policy because it can be employed to define the randomized stopping time based on its mapping value.
+Definition 3.6 (Randomized stopping time) Let Z be a non-negative random variable independent of
+augmented signature bX and such that P (Z = 0) = 0 . For a continuous stopping policy θ ∈ Θ, we
+define the randomized stopping time by
+τ rθ := inf
+(
+t ≥ 0 :
+Z t∧T
+0
+θ(bX|[0,s])2ds ≥ Z
+)
+(3)
+where inf ϕ = +∞.
+Randomized stopping times, which are derived from continuous stopping policies, possess the ca-
+pability to approximate signature stopping times, as demonstrated in the following theorem [2, Propo-
+sition 4.2].
+7
+Theorem 3.7 For every stopping time τ ∈ S, there exists a sequence θn ∈ Θ such that the randomized
+stopping times τ rθn satisfy τ rθn → τ almost surely as n → ∞. In particular, if E[∥Y ∥∞] < ∞, then
+sup
+θ∈Θ
+E[Yτ rθ ∧T ] = supτ ∈S E[Yτ ∧T ]. (4)
+An astonishing result is that the general stopping time can be approximated by using stopping
+policies that are linear functions of the signature. The space of linear signature stopping policies
+Θl ⊂ Θ is defined as
+Θl = {θ ∈ Θ : ∃l ∈ T ((R1+d)∗) such that θ(bX|[0,t]) = ⟨l, bX<∞0,t ⟩ ∀bX|[0,t] ∈ ΛT }.
+Note that every l ∈ T ((R1+d)∗) defines a stopping policy θl ∈ Θ by setting θ(bX|[0,t]) = ⟨l, bX<∞0,t ⟩.
+Then we introduce the following notation for randomized stopping times associated to linear signature
+stopping policies
+τ rl := τ rθl = inf
+(
+t ≥ 0 :
+Z t∧T
+0
+⟨l, bX<∞0,s ⟩2ds ≥ Z
+)
+. (5)
+The subsequent theorem, detailed in [2, Proposition 5.3], demonstrates that the randomized stop-
+ping times linked to linear signature stopping policies are able to approximate general randomized
+stopping times.
+Theorem 3.8 Assume that Z has a continuous density and E[∥Y ∥∞] < ∞. Then
+sup
+θ∈Θ
+E[Yτ rθ ∧T ] = supθ∈Θl E[Yτ rθ ∧T ].
+It follows that
+sup
+θ∈Θ
+E[Yτ rθ ∧T ] = supl∈T ((R1+d)∗) E[Yτ rl ∧T ]. (6)
+Continuing our exploration, we turn our attention to the evaluation of the optimal stopping problem
+with regard to a specific stopping policy θ. This evaluation plays a crucial role as it serves as a pivotal
+loss function, which will be utilized in the process of identifying the optimal linear policy during
+training. [2, Proposition 4.4] offers comprehensive details into this matter.
+Theorem 3.9 Let FZ denote the cumulative distribution function of Z. Then
+E[Yτ rθ ∧T ] =
+Z T
+0
+Ytd eF (t) + YT (1 − eF (T )) = Y0 +
+Z T
+0
+(1 − eF (t))dYt (7)
+where the second integral is implicitly defined by integration by parts and
+eF (t) := FZ
+Z t
+0
+θ(bX|[0,s])2ds
+
+.
+In particular, if Z has a density fZ,
+E[Yτ rθ ∧T ] =
+Z T
+0
+Yt θ(bX|[0,t])2 fZ
+Z t
+0
+θ(bX|[0,s])2ds
+
+dt + YT (1 − eF (T )). (8)
+3.3.3 Implementation of Signature Optimal Stopping Method
+In this section, we detail the implementation of solving the optimal signature stopping problem, uti-
+lizing the previously introduced theorems.
+The initial step involves discretizing the paths, where we establish a time grid comprising equidistant
+points denoted as {tj}j=0,1,...,n, with tj = jn T . After discretization, we compute the signature of the
+time-augmented path ( tj, Xtj )0≤j≤n, denoted by bX0,tj . Then, we adapt the definition of randomized
+stopping times to the discrete-time setting. Given a positive random variable Z and a continuous
+stopping rule θ ∈ Θ, we define the discrete version of the randomized stopping time in (3) as follows:
+8
+νrθ := inf
+(
+0 ≤ j ≤ n :
+jX
+i=0
+θ(bX|[0,ti])2 ≥ Z
+)
+(9)
+The discrete version of randomized stopping times associated with linear signature stopping policies
+is defined as:
+νrl := inf
+(
+0 ≤ j ≤ n :
+jX
+i=0
+⟨l, bX<∞0,ti ⟩2 ≥ Z
+)
+(10)
+The similar results established in Theorems 3.7 to 3.9 also extend to discrete stopping times.
+Building upon Theorem 3.9, we can represent the expected payoff in (7) as follows:
+E[Yνrθ ] = Y0 +
+n−1X
+j=0
+GZ
+ jX
+i=0
+θ(bX|[0,ti])2
+!
+(Yj+1 − Yj), (11)
+where GZ = 1 − FZ.
+We can further elaborate on the loss function for linear stopping policies based on the regular
+form of the expected payoff provided above. Given a data-set comprising M samples in the format
+(X (m)j , Y(m)j )1≤m≤M,0≤j≤n and a predetermined truncation level N ≥ 1, we compute the N -truncated
+augmented signature of the path on each sub-interval [0 , tj] for each series of samples, define as bX(m)0,tj .
+Subsequently, we establish the following loss function for the linear stopping policyθl based on Equation
+(11):
+loss(l) = − 1M
+MX
+i=1
+
+
+Y (m)0 +
+n−1X
+j=0
+GZ
+ jX
+i=0
+⟨l, bX(m)i ⟩2
+!
+(Y (m)j+1 − Y (m)j )
+
+
+ . (12)
+Equations (10) and (12) will serve as our foundational framework for addressing the signature
+optimal stopping problem. Initially, we utilize Equation (12) to derive the optimal linear policy l∗
+from the training samples. Subsequently, we determine the optimal stopping time for the target time
+series by applying Equation (10).
+4 Signature Optimal Mean Reversion Trading
+The main contribution of this paper is the development of an innovative trading strategy tailored for
+mean reversion markets. Our methodology hinges on the formulation of a sequence of optimal stopping
+problems, aimed at identifying the most advantageous moments for both market entry and exit.
+In addition, we propose a solution to these optimal stopping problems through a sequential signature-
+based optimal stopping framework. This serves as a robust approximation to the broader, more gen-
+eral optimal stopping challenges commonly found in financial mathematics. Notably, our approach is
+highly adaptable, accommodating any form of mean-reverting dynamics. This framework empowers
+us to derive a sequence of optimal timing solutions for trading activities, thereby elevating the existing
+mean-reversion trading rules in both theoretical constructs and real-world applications.
+4.1 Sequential Signature Optimal Stopping Framework
+Given that a price process or portfolio value following a mean-reverting process, our primary goal is
+to investigate the optimal timing for opening a long position and subsequently closing the position.
+To achieve this, we first introduce a framework that involves solving a sequence of signature optimal
+stopping problems.
+4.1.1 Long Strategy
+Suppose that the investor trades on a spread or portfolio whose value process ( Xt)t≥0 follows a mean
+reverting process. Recall that bX denotes the augmented signature of Xt and the filtration generated
+by signatures is (Gt), where Gt = σ(bX0,s : 0 ≤ s ≤ t). Denote by S the space of all (Gt)-stopping times.
+9
+Let us define the shorthand notation for the expectation conditional on the starting value x as
+Ex{·} := E{·|X0 = x}. If the long position is opened at some time τ0 > 0, then the investor will pay
+the value Xτ0 plus a constant transaction cost c >0. Assuming that r >0 is the investor’s subjective
+constant discount rate, the total cost of entering a long position is e−rτ0 (Xτ0 + c). Our goal is to
+minimize the expectation of the entering cost. Therefore, we obtain the following optimal stopping
+problem for finding the optimal time of entering a long position:
+sup
+τ0∈S
+Ex0 {e−rτ0 (−Xτ0 − c)}, (13)
+where S is the space of all ( Ft)-stopping times. In a word, we are minimizing the expected cost of
+entering a long position, given the initial point x0.
+After obtaining the optimal time to enter a long position, denoted by τ ∗0 , the next question is when
+to exit the position. If the position is closed at time ν0, the investor will receive the value Xν0 and
+pay a constant transaction cost ˆc >0. To maximize the expected discounted value, the investor solves
+the optimal stopping problem:
+sup
+ν0∈S
+Exτ ∗0 {e−ˆrν0 (Xν0 − ˆc)}. (14)
+Here, we aim to maximize the expectation of discounted earnings conditional on the starting point
+xτ ∗0 . Note that the pre-entry and post-entry discount rates, ˆ r and r, as well as the entry and exit
+transaction costs ˆc and c, can differ in our analysis.
+Then we can solve a sequence of optimal stopping problems iteratively to obtain the optimal entry
+and exit times. That is, for i = 1, 2, 3, . . ., we solve the following equations iteratively:
+sup
+τi∈S
+Exν∗i−1 {e−rτi (−Xτi − c)},
+sup
+νi∈S
+Exτ ∗i {e−ˆrνi (Xνi − ˆc)}. (15)
+Thus, we get the optimal times of trading {τ ∗0 , ν∗0 , τ∗1 , ν∗1 , τ∗2 , ν∗2 , · · · }.
+4.1.2 Short Strategy
+In the short strategy, our main objective is to determine the optimal timing for opening and subse-
+quently closing a short position, similar to the long strategy. We only need to change the order of
+equations for the optimal stopping problems in (14). Specifically, we obtain the first optimal entry
+time ν∗0 and exit time τ ∗0 by solving:
+sup
+ν0∈S
+Ex0 {e−rν0 (Xν0 − c)},
+sup
+τ0∈S
+Exν∗0 {e−ˆrτ0 (−Xτ0 − ˆc)}. (16)
+Next, we solve the following equations iteratively for i = 1, 2, 3, · · ·:
+sup
+νi∈S
+Exτ ∗i−1 {e−rνi (Xνi − c)},
+sup
+τi∈S
+Exν∗i {e−ˆrτi (−Xτi − ˆc)} (17)
+to obtain the optimal trading times {ν∗0 , τ∗0 , ν∗1 , τ∗1 , ν∗2 , τ∗2 , · · · }. The intuition behind is opening a
+short position when the spread price reaches a high value, and closing the position as the price drops
+significantly.
+4.2 Non-Randomization of Signature Stopping Times
+Following the signature optimal stopping framework, we attempt to deploy linear signature stopping
+times, denoted νrl , as specified in Equation (10), to ascertain the optimal stopping times for a given
+stochastic process. The optimization of the linear policy l∗ is conducted via a minimization of the
+loss function presented in Equation (12), and subsequently, the policy is applied to determine the
+signature optimal stopping time for the observed time series. However, the randomization introduced
+10
+Figure 1: Approximating indicator function using sigmoid function.
+by the random variable Z in Equation (10) typically precludes a deterministic solution of stopping
+time. To address this challenge, we propose a novel approach by replacing the random variable Z with
+a constant k to provide a deterministic solution for the optimal stopping time, while preserving the
+applicability of Equations (10) and (12).
+Specifically, the non-randomized stopping time associated with linear signature stopping policies is
+then defined as follows:
+νl := inf
+(
+0 ≤ j ≤ n :
+jX
+i=0
+⟨l, bX<∞0,ti ⟩2 ≥ k
+)
+, (18)
+where k is a positive constant. This approach allows us to compute the stopping time without relying on
+randomness, offering a deterministic solution. Therefore, in our practical implementation, we calculate
+the optimal stopping time based on Equation (18) once we have determined the optimal linear stopping
+policy l∗.
+Substituting the random variable Z with a constant k transforms the cumulative distribution func-
+tion of Z into an indicator function. Thus, this substitution introduces non-differentiability into the
+loss function. Such non-differentiability poses computational challenges, particularly in the application
+of gradient-based optimization methods which are foundational to our algorithm’s practical implemen-
+tation. To overcome this challenge, we propose a refinement to the loss function as originally defined in
+Equation (12). Initially, we substitute GZ with Gk, defined as Gk = 1 − Fk. Here, Fk(x) = I{x > k},
+with I as the indicator function. To facilitate gradient-based optimization, we approximate Fk using
+a sigmoid function centered at k. The approximation bFk(x) is given by:
+bFk(x) = 11 + e−µ·(x−k)
+where µ is a large positive constant that sharpens the sigmoid function. Figure 1 illustrates the
+approximation of the indicator function using a sigmoid function, providing a visual representation
+of how the sigmoid curve serves as a smoothed substitute for the step-like behavior of the indicator
+function. In the subsequent experiments, we employ a µ value of 20.
+Subsequently, we employ the following modified loss function in our practical implementation:
+loss(l) = − 1M
+MX
+i=1
+
+
+Y (m)0 +
+n−1X
+j=0
+bGk
+ jX
+i=0
+⟨l, bX(m)i ⟩2
+!
+(Y (m)j+1 − Y (m)j )
+
+
+ , (19)
+where bGk = 1 − bFk. This formulation allows for gradient-based methods to be effectively employed for
+optimization.
+In this section, we have provided a comprehensive overview of our implementation process of sig-
+nature optimal stopping method, with a particular emphasis on the non-randomization of signature
+11
+stopping times and the refined loss function. This loss function in (19) serves as a crucial compo-
+nent in our training procedure. Upon successfully obtaining the optimal linear policy, we proceed to
+compute the corresponding optimal signature stopping time using Equation (18). This comprehensive
+methodology help us solve the complex sequential signature optimal stopping problems in section 4.1.
+4.3 Training Samples Generation
+To implement the tailored signature optimal stopping method introduced in Section 4.2, this section
+delves into the training procedures employed in our methodology. The whole process can be applied
+to both long and short strategies, but we will focus on the long strategy in this discussion.
+Recall that the long strategy framework is grounded in the formulations presented by equations (13),
+(14), and (15). To solve the first signature optimal stopping problem (13), we need to obtain the optimal
+linear function l∗0 by minimizing the loss function given in equation (19). However, we can only observe
+one path Xt, 0 ≤ t ≤ T , which is actually our target time series. So we first generate training samples
+of Xt starting at a given initial value x, and the corresponding payoff process Yt = e−rt(−Xt − c).
+We then use these samples to minimize the loss function to obtain the optimal linear function l∗0,1.
+Once we obtain the optimal linear stopping policy l∗0,1, we can use it to approximate the optimal entry
+time τ ∗0 by the linear non-randomized optimal stopping time defined in equation (18). Specifically, the
+optimal entry time is given by:
+τ ∗0 = inf
+(
+0 ≤ j ≤ n :
+jX
+i=0
+⟨l∗0,1, bX≤N0,ti ⟩2 ≥ k
+)
+where n is the number of discretization intervals, bX≤N0,ti is the N -truncated augmented signature of the
+path Xt from time 0 to time ti, and k is a positive threshold value.
+To address the optimal exit problem specified in Equation (14), it is necessary to simulate sample
+paths of Xt starting from the new initial value Xτ ∗0 over the time interval [ τ ∗0 , T]. The payoff process
+is calculated as Yt = e−ˆrt(Xt − ˆc). We then can obtain another optimal linear function l∗0,2 using the
+generated samples, and the optimal exit time is given by:
+ν∗0 = inf
+(
+0 ≤ j ≤ n :
+jX
+i=0
+⟨l∗0,2, bX≤Nτ ∗0 ,τ ∗0 +ti ⟩2 ≥ k
+)
+where bX≤Nτ ∗0 ,τ ∗0 +ti is the N -truncated augmented signature of the path of Xt from time τ ∗0 to time τ ∗0 +ti.
+We can continue this computation process to solve the sequence of problems in (15) and thus obtain
+{τ ∗0 , ν∗0 , τ∗1 , ν∗1 , τ∗2 , ν∗2 , · · · }, where each pair of values (τ ∗n, ν∗n) corresponds to the optimal entry and exit
+times for the n-th trading. To be more specific, for n ≥ 1, we have:
+Generate sample paths of Xt starting from Xν∗n−1 over [ν∗n−1, T] and Yt = e−rt(−Xt − c);
+Use the signature optimal stopping method to obtain l∗n,1 and τ ∗n;
+Generate sample paths of Xt starting from Xτ ∗n over [τ ∗n, T] and Yt = e−ˆrt(Xt − ˆc);
+Use the signature optimal stopping method to obtain l∗n,2 and ν∗n.
+We continue this process until we reach the end of the trading period. At each step, we obtain the
+optimal linear function and the corresponding optimal stopping time, which can be used to guide our
+trading decisions.
+As for the methods for generating training sample paths from the observed time series Xt, we
+have several choices. The initial approach is block bootstrapping [3], a widely utilized method in the
+bootstrapping of time series data. This technique involves resampling contiguous blocks of data points,
+thereby preserving the data’s inherent structures. An alternative strategy involves fitting the observed
+path to a parametric statistical or stochastic model, subsequently generating new samples from this
+model. For instance, the path could be modeled using an Autoregressive (AR) model or an Ornstein-
+Uhlenbeck (OU) process. Additionally, generative machine learning approaches, such as time-series
+Generative Adversarial Networks (GAN) [27], present a modern method for sample path generation.
+Researchers have the flexibility to select the most suitable method to fulfill the requirements of the
+algorithm, considering the specific characteristics of the observed data.
+12
+5 Numerical Experiments
+In this section, we undertake numerical experiments to rigorously assess the efficacy of our proposed
+methodologies. We initiate our evaluation by scrutinizing the performance of the proposed optimal
+trading timing approach through its application to simulated mean reversion spreads. Following this,
+we extend our analysis to real-world scenarios by evaluating the mean reversion trading performance
+of our method across four carefully chosen, highly correlated asset pairs in the U.S. stock markets.
+5.1 Experiments on Simulated Data
+In this section, we conduct simulated experiments on the effectiveness of the proposed signature optimal
+mean reversion trading method.
+5.1.1 T est on Signature Optimal Stopping Method
+In this part, we conduct simulations to gauge the effectiveness of the signature-based optimal stopping
+method in the context of mean reversion spreads. We employ the Ornstein-Uhlenbeck (OU) process
+to simulate a mean-reverting spread, governed by the following stochastic differential equation:
+dXt = θ(µ − Xt)dt + σdWt.
+Our primary aim is to identify the supremum of the expected value of the OU process at the signature
+optimal stopping time, formally expressed as:
+sup
+τ ∈S
+E[Xτ ∧T ].
+By leveraging this simulation framework, we intend to rigorously evaluate the capability of the signature
+optimal stopping method to accurately identify optimal stopping values in mean-reverting contexts.
+In applying the signature optimal stopping method to solve the optimal stopping problem for an
+Ornstein-Uhlenbeck (OU) process, our approach consists of two distinct phases. In the first phase, we
+synthesize a dataset consisting of 100 training samples. These samples are used to compute the optimal
+linear function l∗ that minimizes the loss function, as delineated in Equation (19). In the second phase,
+we generate a supplementary set of 10 testing samples. Utilizing the previously computed optimal linear
+function l∗, we ascertain the optimal stopping times for these test cases in accordance with Equation
+(18) and record the corresponding values of path at that time. This two-step procedure enables a
+comprehensive evaluation of the method’s performance, both in terms of its optimization capabilities
+and its generalizability to new instances.
+In this specific experiment, the parameters that define the Ornstein-Uhlenbeck (OU) process are set
+as follows: µ = 10, θ = 10, and σ = 1. As depicted in Figure 2, the graph displays the trajectories of the
+10 testing samples. The calculated average optimal stopping value is found to be 10.23. Importantly,
+the maxima for the majority of these paths are observed to cluster around 10.4, which lends credence
+to the computed optimal stopping value of 10.23. This result compellingly validates the effectiveness of
+the signature optimal stopping methodology, as it consistently produces high optimal stopping values
+for the simulated OU processes.
+We have also executed a series of tests to examine the optimal stopping values generated by the
+signature method across a range of parameter combinations within the Ornstein-Uhlenbeck (OU)
+process. The aggregate findings of these tests are consolidated in Table 1. Significantly, all the optimal
+stopping values obtained exceeded the long-term mean of 10. A particularly insightful observation
+is the positive correlation between the optimal stopping value and the volatility parameter σ. This
+observed relationship underscores the sensitivity of the optimal stopping decision to the volatility of
+the underlying process, highlighting the nuanced interplay between process parameters and stopping
+outcomes.
+13
+Figure 2: The paths of the 10 testing samples.
+µ σ θ Optimal Stopping Value
+1 1.0 10 10.1284
+5 1.0 10 10.2311
+10 1.0 10 10.2332
+15 1.0 10 10.2005
+20 1.0 10 10.1703
+10 0.1 10 10.0025
+10 0.5 10 10.0713
+10 1.0 10 10.2264
+10 1.5 10 10.3599
+10 2.0 10 10.5173
+Table 1: The optimal stopping value estimated by signature method on simulated mean-reversion
+process. Parameters µ ∈ {1, 5, 10, 15, 20} and σ ∈ {0.1, 0.5, 1.0, 1.5, 2.0}.
+5.1.2 Simulation on Signature Optimal Mean Reversion T rading
+In this section, we conduct simulations using the Ornstein-Uhlenbeck (OU) process to test the effec-
+tiveness of our proposed optimal trading timing method for identifying both entry and exit times in
+mean-reverting markets. We continue to simulate the mean-reversion paths by an OU model. This
+simulation study serves to validate the utility of our approach in generating actionable trading decisions
+based on the underlying stochastic process.
+Figure 3 displays the performance of our simulation, where we have marked optimal entry times
+using red points and optimal exit times with green points. This color-coded representation provides
+an intuitive snapshot of how adeptly our method identifies strategic moments to both enter and exit
+trades in a mean-reverting market. As is evident from the graph, our method proves highly effective,
+consistently point times that align well with the natural peaks and troughs of the mean-reverting
+process. These results lend robust empirical support to the theoretical analysis of our proposed trading
+timing methodology. Moreover, they offer compelling evidence that our approach can serve as a
+valuable tool for traders and portfolio managers seeking to exploit mean-reversion opportunities in
+financial markets. The simulation outcomes underscore the practical applicability and accuracy of
+our algorithm, confirming its utility for making well-informed, timely trading decisions based on the
+dynamics of the underlying stochastic process.
+14
+(a)
+ (b)
+(c)
+ (d)
+Figure 3: The sequential optimal entry and exit times for a simulated mean reversion process based
+on optimal trade timing framework.
+5.2 Experiments in Real Market
+In this section, we broaden the application of our signature optimal mean reversion trading method-
+ology to a real-world trading context. It is important to emphasize that our method operates without
+making any assumptions about the dynamics of the underlying traded spreads in real market.
+Initially, we handpick four highly co-integrated stock pairs from diverse sectors within the U.S.
+market to create their corresponding spreads: WM-RSG from waste management, UAL-DAL from the
+airline industry, V-MA from financial services, and GS-MS from investment banking. A comprehensive
+description of these companies is provided in Table 2. Data pertaining to the daily closing prices for
+these stocks was collected for the period spanning January 1, 2021, to December 31, 2022. The data
+was sourced via the Yahoo! Finance API 1.
+Figure 4 depicts the price trajectories of each stock pair, revealing a notable similarity in the price
+paths within each pair. For the sake of clarity and comparability, we have normalized each price series
+by dividing it by its respective initial value. This normalization allows for a more straightforward
+visual assessment of the relative movements between the stocks in each pair, thereby setting the stage
+for the forthcoming trading experiments.
+1https://pypi.org/project/yfinance/
+15
+Pairs Symbols Description
+WM-RSG Waste Management and Republic Services provide waste management
+and environmental services
+UAL-DAL United Airlines and Delta Air Lines are two major American airline
+operating a large domestic and international route network.
+V-MA Visa and Mastercard are two large-cap stocks in the payment industry
+GS-MS Goldman Sachs and Morgan Stanley are American multinational investment bank
+and financial services company.
+Table 2: The stock pairs used for testing and the description of the company.
+Figure 4: Normalized historical daily close prices of six pairs of stocks from 1/1/2021–12/31/2022.
+From top to bottom: WM-RSG, UAL-DAL, V-MA, GS-MS, where each pair shows visibly persistent
+comovement.
+In the experiments, we simulated one full year of trading activity, as visually presented in Figure 5.
+Specifically, we created asset pairs based on the daily adjusted closing prices from the first year,
+covering a period of 252 trading days. These pairs were then actively traded over the course of the
+subsequent year. By doing so, we aim to evaluate the real-world applicability and effectiveness of our
+signature-based optimal stopping method within a time frame that captures a meaningful range of
+market conditions. This setup allows us to assess how well the trading rules, derived from the initial
+year’s data, generalize to unseen data in the following year. In the setup of the proposed signature
+optimal mean reversion trading method, the training samples generation procedure employed OU
+process and the threshold value k = 0.05.
+As illustrated in Figure 5, our algorithm excels in identifying the opportunities of trading, con-
+sistently entering positions at low prices and exiting at higher prices. This behavior serves as a
+compelling demonstration to the efficacy of our signature-based optimal trading strategy. This strong
+16
+performance underscores the algorithm’s utility as a valuable tool for market participants seeking to
+exploit mean-reversion opportunities with optimized entry and exit timings.
+(a) WM-RSG
+ (b) UAL-DAL
+(c) V-MA
+ (d) GS-MS
+Figure 5: The constructed spreads and optimal entry and exit time points. Red spot is entry point
+and Green spot is exit point.
+In the final phase of our analysis, we contrast the performance of our signature-based optimal
+trading strategy with a baseline strategy across all four asset pairs. The baseline strategy follows a
+simple rule: go long on Xt when its price falls below M A(Xt) − k × Std(Xt), and liquidate the position
+when the price rises above M A(Xt) + k × Std(Xt). Here we write M A(Xt) and Std(Xt) to represent
+the moving average and standard deviation of past spread, respectively.
+Table 3 presents a thorough comparison of performance metrics for both the baseline and the
+signature optimal trading (SOT) strategies. In this evaluation, the baseline strategy employs a constant
+k value of 0.1 for its trading rules and leverages the preceding 100 samples to compute both the moving
+average and standard deviation. Figure 6 graphically illustrates the cumulative returns generated by
+each strategy over a one-year time frame.
+As revealed by Table 3, our proposed signature optimal trading strategy substantially outperforms
+the baseline model in key performance metrics, including higher cumulative returns and a more favor-
+able daily Sharpe ratio. This head-to-head comparison is specifically tailored to underscore the superior
+efficacy of the SOT approach. It compellingly attests to the enhanced performance and incremental
+value that our method brings to the table in trading scenarios.
+The visual representation of cumulative returns in Figure 6 serves as another pivotal element in
+our comparative assessment. It provides an intuitive snapshot of how the respective trading strategy
+compound over a one-year period. By offering this view, we further reinforce the idea that the SOT
+strategy is not only theoretically robust but also practically effective and adaptable to real-world
+market conditions. This comprehensive evaluation aims to highlight the enduring viability and real-
+world utility of the SOT methodology.
+17
+WM/RSG UAL/DAL V/MA GS/MS
+Baseline SOT Baseline SOT Baseline SOT Baseline SOT
+DailyRet (%) 0.0110 0.0390 0.0401 0.1443 0.0107 0.0275 0.0119 0.0604
+DailyStd (%) 0.3513 0.4321 0.8244 0.8122 0.4177 0.5306 0.3362 0.5986
+Sharpe 0.0313 0.0903 0.0487 0.1777 0.0255 0.0519 0.0354 0.1012
+MaxDD (%) -1.9309 -0.7674 0 0 -0.7057 -0.2954 -2.2522 -7.9006
+CumPnL (%) 2.6363 10.0345 9.6431 42.4559 2.4857 6.7732 2.8829 15.8486
+TradeNum 9 5 4 6 3 7 4 6
+Table 3: Performance summary for all 4 pairs portfolios for baseline and the signature optimal trading
+(SOT). From the top to bottom rows, we report the annualized return, annualized standard deviation,
+Sharpe ratio, maximum drawdown and number of tradings.
+(a) WM-RSG
+ (b) UAL-DAL
+(c) V-MA
+ (d) GS-MS
+Figure 6: The accumulative returns for baseline and SOT.
+6 Conclusions
+In this research paper, we have presented an innovative approach to identifying optimal timing strate-
+gies for trading price spreads with mean-reverting properties. Specifically, we formulated a sequential
+optimal stopping problem that accounts for the timing of both position entry and liquidation, while
+also incorporating transaction costs. To tackle this challenging problem, we employed the signature op-
+timal stopping method, a powerful tool for determining the optimal entry and exit times that maximize
+trading returns.
+Our approach is distinguished by its versatility: it is designed to operate without any assumptions
+of mean reversion dynamics, making it broadly applicable to a variety of trading scenarios. To validate
+the efficacy of our methodology, we carried out a comprehensive set of numerical experiments. These
+experiments served to compare the performance of our approach against conventional mean-reversion
+18
+trading rules. The results consistently demonstrated the superior performance of our signature-based
+optimal trading strategy in terms of key metrics such as cumulative returns and Sharpe ratios.
+In summary, this paper makes a significant contribution to the field of quantitative finance by
+introducing a robust and adaptable method for optimizing trading decisions in mean-reverting markets.
+Our findings affirm that the signature optimal stopping method offers not only theoretical rigor but
+also practical utility, presenting a compelling solution to a complex problem in finance. While our
+focus has been on specific asset pairs and trading conditions, the general principles and techniques
+introduced here have the potential for broader applications, opening up avenues for future research
+and practical implementations.
+References
+[1] Marco Avellaneda and Jeong-Hyun Lee. Statistical arbitrage in the us equities market. Quanti-
+tative Finance, 10(7):761–782, 2010.
+[2] Christian Bayer, Paul Hager, Sebastian Riedel, and John Schoenmakers. Optimal stopping with
+signatures. arXiv preprint arXiv:2105.00778 , 2021.
+[3] Jeremy Berkowitz and Lutz Kilian. Recent developments in bootstrapping time series. Econo-
+metric Reviews, 19(1):1–48, 2000.
+[4] Michael J. Brennan and Eduardo S. Schwartz. Arbitrage in stock index futures. Journal of
+Business, 63(1):S7–S31, 1990.
+[5] Min Dai, Yifei Zhong, and Yue Kuen Kwok. Optimal arbitrage strategies on stock index futures
+under position limits. Journal of Futures Markets , 31(4):394–406, 2011.
+[6] Alexandre d’Aspremont. Identifying small mean-reverting portfolios. Quantitative Finance , 11
+(3):351–364, 2011.
+[7] Binh Do and Robert Faff. Are pairs trading profits robust to trading costs? Journal of Financial
+Research, 35(2):261–287, 2012.
+[8] Binh Do, Robert Faff, and Kais Hamza. A new approach to modeling and estimation for pairs
+trading. In Proceedings of 2006 financial management association European conference, volume 1,
+pages 87–99. Citeseer, 2006.
+[9] Erik Ekstr¨ om, Carl Lindberg, and Johan Tysk. Optimal liquidation of a pairs trade. Advanced
+mathematical methods for finance , pages 247–255, 2011.
+[10] R.J. Elliott, J. Van Der Hoek, and W.P. Malcolm. Pairs trading. Quantitative Finance , 5(3):
+271–276, 2005.
+[11] Robert F Engle and Clive WJ Granger. Co-integration and error correction: representation,
+estimation, and testing. Econometrica, 55(2):251–276, 1987.
+[12] Alexander Galenko, Elmira Popova, and Ivilina Popova. Trading in the presence of cointegration.
+The Journal of Alternative Investments , 15(1):85–97, 2012.
+[13] Evan Gatev, William N Goetzmann, and K Geert Rouwenhorst. Pairs trading: Performance of a
+relative-value arbitrage rule. Review of Financial Studies , 19(3):797–827, 2006.
+[14] Jorge Guijarro-Ordonez, Markus Pelger, and Greg Zanotti. Deep learning statistical arbitrage.
+Available at SSRN 3862004 , 2021.
+[15] Ben Hambly and Terry Lyons. Uniqueness for the signature of a path of bounded variation and
+the reduced path group. Annals of Mathematics , pages 109–167, 2010.
+[16] Nicolas Huck and Komivi Afawubo. Pairs trading and selection methods: is cointegration supe-
+rior? Applied Economics, 47(6):599–613, 2015.
+19
+[17] T. Kanamura, S.T. Rachev, and F.J. Fabozzi. A profit model for spread trading with an applica-
+tion to energy futures. The Journal of Trading , 5(1):48–62, 2010.
+[18] Tim Leung and Xin Li. Optimal mean reversion trading with transaction costs and stop-loss exit.
+International Journal of Theoretical and Applied Finance , 18(03):1550020, 2015.
+[19] Tim Leung and Xin Li. Optimal Mean Reversion Trading: Mathematical Analysis and Practical
+Applications. Modern Trends in Financial Engineering. World Scientific Publishing Company,
+2016.
+[20] Tim Leung and Hung Nguyen. Constructing cointegrated cryptocurrency portfolios for statistical
+arbitrage. Studies in Economics and Finance , 2019.
+[21] Tim Leung, Jize Zhang, and Aleksandr Aravkin. Sparse mean-reverting portfolios via penalized
+likelihood optimization. Automatica, 111:108651, 2020.
+[22] Rong Qi Liew and Yuan Wu. Pairs trading: A copula approach. Journal of Derivatives & Hedge
+Funds, 19(1):12–30, 2013.
+[23] G. Montana and K. Triantafyllopoulos. Dynamic modeling of mean reverting spreads for statistical
+arbitrage. Computational Management Science , 8:23–49, 2011.
+[24] QS Song, George Yin, and Qing Zhang. Stochastic optimization methods for buying-low-and-
+selling-high strategies. Stochastic Analysis and Applications , 27(3):523–542, 2009.
+[25] Ganapathy Vidyamurthy. Pairs Trading: quantitative methods and analysis , volume 217. John
+Wiley & Sons, 2004.
+[26] Wenjun Xie, Rong Qi Liew, Yuan Wu, and Xi Zou. Pairs trading with copulas. The Journal of
+Trading, 11(3):41–52, 2016.
+[27] Jinsung Yoon, Daniel Jarrett, and Mihaela Van der Schaar. Time-series generative adversarial
+networks. Advances in neural information processing systems , 32, 2019.
+20

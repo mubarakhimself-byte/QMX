@@ -1,0 +1,1324 @@
+arXiv 2603.20319  https://arxiv.org/abs/2603.20319
+
+Implementation Risk in Portfolio Backtesting: A
+Previously Unquantified Source of Error
+Don Yin1*, Takeshi Miki2, Vladislav Lesnichenko3, Vasyl Gural4
+1*Department of Clinical Neurosciences, University of Cambridge,
+Cambridge, United Kingdom.
+2Saltkeep.
+3,4Independent Researcher.
+*Corresponding author(s). E-mail(s): dy323@cam.ac.uk;
+Contributing authors: tm858@cam.ac.uk; lesnichenko.study@gmail.com;
+vasylguraljr@gmail.com;
+Abstract
+Every portfolio backtest depends on a simulation engine, yet no study has asked
+whether different engines produce the same result for the same strategy. We iso-
+late this question by running 15 benchmark strategies through five independent
+engines (a purpose-built reference implementation and four open-source libraries)
+on 30 stratified asset buckets drawn from 180 S&P 500 constituents over five years
+under four transaction-cost regimes (0, 18, 36, and 60 basis points). We propose
+four metrics grounded in metrology and sensitivity analysis to quantify what
+we termimplementation risk: engine spread (ES), implementation uncertainty
+interval (IUI), divergence amplification factor (DAF), and conclusion sensitiv-
+ity indicator (CSI). At zero transaction cost all engines agree exactly, which
+establishes that divergence under nonzero costs is attributable to cost-model
+differences alone. Cost-driven divergence is structured, not random: it scales
+monotonically with cost intensity (Spearmanρ= 0.93,p <0.001), remains
+below 0.75 percentage points for 12 of 15 benchmarks, but reaches 3.71% in total
+return for high-turnover rotation strategies under the heaviest cost regime, an
+ambiguity equivalent to roughly$37 M per year for a$1 B portfolio. Engine choice
+does not reverse the Sharpe-ratio sign in our sample (CSI= 0), but forensic anal-
+ysis of three engines examined during quality control uncovers seven previously
+undocumented defects, including a library default in Backtrader that silently
+divides the user-specified commission rate by 100 before applying it. These find-
+ings establish that implementation risk is a material and previously invisible
+1
+arXiv:2603.20319v1  [q-fin.PM]  19 Mar 2026
+source of error for cost-intensive strategies, and that multi-engine comparison is
+the most effective diagnostic for detecting it.
+Keywords:backtesting, implementation risk, model risk, portfolio simulation,
+transaction costs, reproducibility
+JEL Classification:G11 , C63 , C18
+1 Introduction
+Nearly every quantitative finance study relies on a backtest. Whether the study pro-
+poses a new factor, evaluates an allocation rule, or stress-tests a hedging strategy, the
+backtest is the de facto standard of evidence. Yet no paper has tested the backtest-
+ing engine itself. The code that simulates order execution, applies transaction costs,
+marks portfolios to market, and compounds returns is implicitly trusted, treated as
+though the choice of implementation were inconsequential. This paper asks a simple
+question: does it matter which backtesting engine you use?
+We introduce the concept ofimplementation risk, defined as the variability in
+backtest outcomes attributable solely to the choice of simulation engine, with strategy
+logic, input data, and cost specification held fixed. In other words, if two research
+teams implement the identical strategy on the identical data with the identical fee
+schedule but press “run” in different open-source backtesting libraries, how different
+can their results be? The answer, we show, depends almost entirely on how the engine
+handles trading costs, and the magnitude is large enough to matter in practice.
+The question is timely for two reasons. First, the Federal Reserve’s SR 11-7
+guidance (Board of Governors of the Federal Reserve System 2011) establishes a com-
+prehensive framework for model risk management and requires institutions to validate
+every model that informs a material decision. Portfolio backtests clearly meet that
+threshold, yet SR 11-7 says nothing about simulation-engine risk; its examples focus on
+pricing models, loss-given-default estimators, and stress-test projections rather than
+2
+on the software that replays historical trades. Second, a growing literature on backtest
+overfitting (Bailey and Lopez de Prado 2014) has sharpened awareness that reported
+Sharpe ratios can be inflated by data mining, multiple testing, and in-sample selec-
+tion bias. That literature addressesstatisticalerror (the risk of picking a strategy that
+looked good by chance) but does not addressengine-levelerror (the risk that two
+pieces of code produce different numbers for the same strategy). Implementation risk
+is therefore a second, independent source of backtest unreliability that existing safe-
+guards leave unexamined. To our knowledge, this channel has received no systematic
+scrutiny despite decades of backtest-driven allocation decisions.
+Our approach is designed for causal isolation. We construct a reusable bench-
+mark suite comprising 15 strategies in five categories: simple allocation rules (equal
+weight, buy-and-hold, inverse volatility), signal-driven strategies (simple moving aver-
+age (SMA) momentum, cross-sectional momentum), machine learning (ML) signals
+(four model families), high-turnover rotation strategies that stress-test cost sensitiv-
+ity, and a zero-cost ablation control. Each strategy is executed through a reference
+implementation and four independent open-source backtesting engines on 30 non-
+overlapping, stratified asset buckets drawn from 180 S&P 500 constituents over the
+period 2020–2024. The reference implementation’s cost model is a direct, auditable
+translation of the proportional-cost specification (Algorithm 1); divergence under
+nonzero costs therefore reflects each engine’s cost-model implementation choices rela-
+tive to this specification. The stratification ensures that results are not artefacts of a
+single asset universe; the five-year window provides a mix of bull, bear, and sideways
+regimes including the COVID-19 drawdown and the 2022 rate-hiking cycle.
+To quantify divergence we develop a formal measurement framework with four
+metrics. Engine spread (ES) captures the cross-engine coefficient of variation for
+each performance statistic. The implementation uncertainty interval (IUI) provides an
+3
+uncertainty band around each reported statistic, motivated by measurement uncer-
+tainty in metrology. The divergence amplification factor (DAF) measures how much
+a cost-bearing benchmark amplifies divergence relative to its zero-cost baseline. The
+conclusion sensitivity indicator (CSI) flags the most dangerous case: whether the sign
+of the Sharpe ratio flips across engines, which means one engine says the strategy is
+profitable while another says it is not.
+The results are striking: at zero cost all five engines agree exactly, which indicates
+that divergence is attributable to the cost model alone. Under nonzero costs, diver-
+gence rises monotonically with cost intensity (Spearmanρ= 0.93,p <0.001) yet
+remains below 0.75% for 12 of the 15 benchmarks. Engine choice never reverses the sign
+of the Sharpe ratio. Forensic analysis of engines examined during quality control reveals
+seven defects spanning five failure-mode categories: cost-model bugs, infrastructure
+bugs, architectural bugs, specification divergence, and complexity sensitivity.
+The practical implications are concrete and quantifiable: even modest divergences
+translate to material dollar-value ambiguity for institutional portfolios (Section 7).
+Fund managers, risk officers, and regulators can use our metrics as acceptance criteria:
+if ES on a candidate strategy exceeds a tolerable threshold, the backtest should be
+re-run on a second engine before capital is allocated.
+This paper makes three contributions. First, it provides the first large-scale com-
+parison of backtesting engines, filling a gap in the model-risk literature. Second, it
+proposes a formal measurement framework, grounded in metrology and sensitivity-
+analysis principles, that practitioners can apply to quantify implementation risk in
+comparable settings. Third, it releases a fully reusable open benchmark suite, including
+a purpose-built reference implementation, strategy definitions, data-sampling protocol,
+and evaluation code, so that future engine developers can certify correctness against
+a common reference.
+4
+The remainder of the paper is organised as follows. Section 2 reviews related
+work on model risk, backtest overfitting, and engine comparisons. Section 3 formalises
+the implementation-risk framework and defines the four metrics. Section 4 describes
+the experimental design, including the benchmark strategies, engine selection, data
+pipeline, and cost specifications. Section 5 presents the main results. Section 6 reports
+the forensic failure-mode analysis. Section 7 discusses practical implications, and
+Section 8 concludes.
+2 Related Work
+Our study sits at the intersection of three literatures: model risk regulation, backtest
+overfitting, and backtesting-engine design. We review each in turn and highlight where
+existing work stops and our contribution begins.
+2.1 Model risk and SR 11-7
+The Federal Reserve’s SR 11-7 guidance (Board of Governors of the Federal Reserve
+System 2011) defines model risk as “the potential for adverse consequences from deci-
+sions based on incorrect or misused model outputs and reports.” The guidance requires
+that every model informing a material business decision undergo independent vali-
+dation, including assessment of conceptual soundness, outcome analysis, and ongoing
+monitoring. Although SR 11-7 is broadly scoped, its illustrative examples (pricing
+models, allowance-for-loan-loss estimators, stress-test projections) do not mention
+backtesting engines explicitly. In practice this means that institutions validate the
+strategy(the model) but not thesimulator(the engine that produces the backtest
+numbers the strategy is judged on).
+Alonso Robisco and Carb´ o Mart ´ ınez (2022) provide a useful parallel. They quan-
+tify model risk for credit-scoring applications by comparing multiple machine-learning
+classifiers on the same loan portfolio and measuring dispersion in discriminatory power
+5
+(the area under the receiver operating characteristic curve). Their “models” corre-
+spond to our “engines”; their dependent variable is classification performance, ours is
+portfolio return; their regulatory anchor is the internal ratings-based validation frame-
+work under the Basel Accords, ours is the Sharpe ratio that triggers an allocation
+decision. The analogy is direct: if replacing one credit-scoring model with another
+changes the capital requirement, that is model risk; if replacing one backtesting engine
+with another changes the reported Sharpe ratio, that is implementation risk. Giudici
+and Raffinetti (2023) propose a broader trustworthiness framework for AI in finance
+and argue that models must be assessed across multiple dimensions (sustainability,
+accuracy, fairness, explainability) to meet regulatory standards such as the Euro-
+pean AI Act. Our work adds a further dimension, implementation consistency, to the
+simulation layer of quantitative finance.
+2.2 Backtest overfitting and multiple testing
+A large and influential literature addresses the statistical reliability of backtests. White
+(2000) introduces the Reality Check, a bootstrap procedure that accounts for the full
+universe of strategies examined when testing whether the best performer is genuinely
+superior. Hansen (2005) refines this with the Superior Predictive Ability test, which
+improves power by re-centring the null distribution. Romano and Wolf (2005) pro-
+pose a stepwise extension that controls the family-wise error rate while identifying
+all strategies that significantly outperform the benchmark, not just the single best.
+These methods protect against data-snooping bias: the risk that a strategy appears
+profitable only because it was selected from a large search space.
+Bailey and Lopez de Prado (2014) sharpen the critique with the deflated Sharpe
+ratio, which adjusts the significance threshold for a reported Sharpe ratio by the num-
+ber of trials, skewness, and kurtosis of the return series. In a companion paper, Bailey
+et al. (2014) analyse the effects of backtest overfitting on out-of-sample performance
+6
+and show that the probability of selecting an overfit strategy grows rapidly with the
+number of trials. Harvey et al. (2016) survey the broader “factor zoo” problem and rec-
+ommend that new factors clear at-statistic hurdle of 3.0 rather than the conventional
+2.0, given the hundreds of factors already tested.
+Our work is complementary to this literature, not a substitute. The overfitting
+literature addresseswhich strategy to trustgiven that many were tried; we address
+which number to trustgiven that the same strategy can produce different outputs in
+different engines. Statistical overfitting and implementation risk are two independent
+sources of backtest unreliability: a strategy can pass every multiple-testing correction
+yet still yield materially different Sharpe ratios depending on the engine that runs it.
+Conversely, a strategy can show perfect cross-engine agreement yet still be overfit to
+the in-sample period. A complete validation framework must address both.
+2.3 Engine comparisons
+Despite the proliferation of open-source backtesting libraries, no academic paper runs
+the same strategy on the same data through multiple engines and measures the diver-
+gence in reported performance. Wiecki et al. (2016) present the closest related work:
+they compare in-sample and out-of-sample performance of strategies submitted to the
+Quantopian platform and demonstrate that in-sample Sharpe ratios are poor pre-
+dictors of live returns. Their analysis, however, uses a single engine (Zipline); the
+performance gap they document reflects overfitting and regime change, not engine-level
+divergence.
+P´ erignon et al. (2024) provide the most direct evidence to date on computational
+reproducibility in finance. They ask 168 teams to reproduce the findings of six pub-
+lished papers using the original code and data, and find that only 52% of 1,000
+tests yield the same conclusion. Their study isolates researcher-level variation (differ-
+ences in software environments, package versions, and execution paths) rather than
+7
+engine-level variation (the same algorithm run through different simulation engines
+on identical inputs). Our work complements theirs: we hold the researcher constant
+and vary the engine, which isolates a narrower but previously unmeasured channel of
+implementation risk.
+Boyd et al. (2017) introducecvxportfolio, a convex-optimisation framework for
+multi-period trading with realistic transaction costs. While the library is carefully
+engineered and includes a sophisticated cost model, the authors benchmark only
+against themselves (a single-period mean-variance baseline), never against an inde-
+pendent engine. The same pattern holds across the broader ecosystem: Backtrader,
+VectorBT, bt, and other popular libraries publish speed benchmarks, feature matri-
+ces, and application programming interface (API) comparisons, but none publish
+cross-engine correctness comparisons.
+The gap is understandable; constructing a fair comparison requires aligning data
+feeds, rebalancing calendars, cost specifications, and return-computation conventions
+across libraries that were never designed to interoperate, but the gap is consequential.
+Without cross-engine validation, every result produced by a single engine carries an
+unquantified margin of implementation uncertainty. This absence is notable given the
+maturity of the backtesting ecosystem; comparable engineering disciplines (from com-
+piler testing to numerical weather prediction) adopted cross-tool verification decades
+ago.
+3 Implementation Risk Framework
+This section formalises the concept of implementation risk and introduces four quanti-
+tative metrics for measuring it. it then proposes a taxonomy of failure modes observed
+in backtesting engines and states a scaling conjecture that links divergence to cost
+intensity.
+8
+3.1 Formal definition
+Letsdenote a fully specified investment strategy (including signal construction,
+rebalancing rule, and position-sizing logic),da fixed dataset of asset prices, and
+ca cost specification (commission rate, slippage model, borrowing cost). LetE=
+{e1, e2, . . . , eK}be a set ofKbacktesting engines, each of which implements a function
+Rek (s, d, c) that maps the triple (s, d, c) to a return series. We defineimplementation
+riskas the variability of outcomes across engines for fixed inputs:
+IR(s, d, c) = Vare∈E
+
+f
+ 
+Re(s, d, c)
+
+,(1)
+wheref(·) is a summary statistic of interest (e.g. annualised Sharpe ratio, cumulative
+return, maximum drawdown). When IR = 0 for all summary statistics (Equation 1),
+the engines areimplementation-equivalentfor that (s, d, c) triple.
+Conceptually, we treat theKengines as exchangeable draws from a population of
+plausible implementations, analogous to the treatment of measurement instruments
+in ISO 5725 (ISO 1994), where multiple laboratories measure the same quantity and
+the inter-laboratory variance quantifies reproducibility. A design choice is thats,d,
+andcmust be held strictly constant across engines; any residual variation is then
+attributable to implementation differences alone, which enables causal isolation.
+3.2 Metrics
+We propose four complementary metrics, each of which captures a different facet of
+implementation risk. Together they move from magnitude (how large is the spread?)
+to sensitivity (does the spread change conclusions?).
+The concept of software-induced variability has precedents in other domains: cli-
+mate science calls it structural uncertainty or inter-model spread, metrology calls it
+inter-laboratory variability (ISO 5725), and software engineering calls it numerical
+9
+reproducibility. Each of our four metrics adapts a tool from one of these traditions
+to the backtesting context; the methodological novelty lies in the domain-specific
+synthesis rather than in the invention of new statistical machinery.
+3.2.1 Engine spread (ES)
+Engine spread quantifies the relative dispersion of a summary statistic across engines.
+For a given strategy-bucket-cost combination, let{f 1, . . . , fK}be the values of
+summary statisticfproduced byKengines. The coefficient-of-variation form is
+EScvf = σf¯f ×100,(2)
+where ¯fandσ f are the cross-engine mean and standard deviation. The range form,
+useful when the distribution is heavy-tailed orKis small, is
+ESrangef = maxk fk −mink fk.(3)
+Both variants are reported in our results. In practice we report ESrange (Equation 3) as
+the primary metric throughout the results section because the coefficient-of-variation
+form (Equation 2) becomes unstable when the cross-engine mean ¯fis near zero.
+The concept mirrors the “multi-model spread” used in climate-projection ensembles
+by Tebaldi and Knutti (2007), where the same forcing scenario is run through mul-
+tiple general circulation models and the inter-model spread characterises structural
+uncertainty.
+3.2.2 Implementation uncertainty interval (IUI)
+While engine spread summarises dispersion in a single number, practitioners often
+need an interval estimate: a band around the reported Sharpe ratio within which the
+10
+“true” engine-agnostic value plausibly lies. We define:
+IUIf = ¯f±t 0.025, K−1 ·s f ,(4)
+wheres f is the sample standard deviation acrossKengines (withK−1 degrees of
+freedom) andt 0.025, K−1 is the Student-tcritical value. Thet-multiplier accounts for
+the uncertainty ins f whenKis small (hereK= 5, sot 0.025,4 ≈2.78). The construction
+is motivated by the expanded-uncertainty framework of the Guide to the Expression
+of Uncertainty in Measurement (GUM) (JCGM 2008), but differs from GUM in one
+respect: GUM targets the uncertainty of a mean estimate (usings f /
+√
+K), whereas
+IUI usess f directly to characterise the full spread of engine outputs. The resulting
+band is wider than a confidence interval for the population mean and narrower than
+a formal (p, γ) tolerance interval; it serves as a practical uncertainty band for inter-
+engine variability rather than a formally calibrated statistical interval. A narrow IUI
+means the reported statistic is robust to engine choice; a wide IUI signals that the
+backtest result is engine-dependent and warrants scrutiny.
+The exchangeability assumption underlying IUI is a modelling convenience, not a
+claim about random sampling. The five engines were selected because they are the
+most widely adopted open-source Python backtesting libraries, not drawn from a well-
+defined population. The IUI therefore captures a variability band conditional on this
+specific engine sample; adding engines from outside the current sample could widen
+or narrow it.
+3.2.3 Divergence amplification factor (DAF)
+Different experimental conditions (cost levels, rebalancing frequencies, strategy com-
+plexity) may amplify or attenuate implementation risk. The divergence amplification
+factor captures this by comparing the engine spread of a given benchmark to that of
+a minimal-complexity reference benchmark (in our experiments, BM01, equal-weight
+11
+monthly rebalancing):
+DAFf =
+ESrangef (benchmark)
+ESrangef (reference) .(5)
+DAF is well defined whenever the reference benchmark exhibits nonzero engine spread;
+BM01 satisfies this condition with ES range = 0.379 percentage points (pp). Concep-
+tually, DAF is analogous to a condition number in numerical analysis: it measures
+how much a perturbation in the “input” (engine choice) is amplified in the “output”
+(performance statistic) as the problem difficulty (cost intensity) increases. The fram-
+ing draws on the sensitivity-analysis tradition of Saltelli et al. (2008), who advocate
+decomposing output variance into contributions from individual input factors.
+3.2.4 Conclusion sensitivity indicator (CSI)
+The most consequential form of implementation risk is not a large spread per se but
+a qualitative reversal: one engine reports a positive Sharpe ratio (strategy is prof-
+itable) while another reports a negative one (strategy destroys value). The conclusion
+sensitivity indicator is a binary flag:
+CSI(s, d, c) =
+
+
+
+1 if∃j, ksuch that sgn(f j)̸= sgn(f k),
+0 otherwise,
+(6)
+wheref j andf k are the Sharpe ratios from enginesjandk. A CSI = 1 is an imme-
+diate red flag: the investment decision (go/no-go) depends on which engine was used,
+precisely the kind of outcome SR 11-7 (Board of Governors of the Federal Reserve
+System 2011) warns against. The indicator is inspired by the concept ofpredictive
+multiplicityintroduced by Marx et al. (2020), who show that competing models can
+assign conflicting predictions to the same individual; CSI transposes this idea from
+classification to portfolio evaluation.
+12
+3.3 Failure-mode taxonomy
+Forensic analysis of engines excluded during our quality-control phase reveals five
+recurring categories of implementation failure. We define each briefly; detailed case
+studies appear in Section 6.
+1.Cost-model bugs.The engine applies transaction costs incorrectly, for example,
+it may charge commission on notional value rather than on the traded delta,
+or double-count slippage on round-trip trades. This is the dominant source of
+divergence in our sample.
+2.Infrastructure bugs.Errors in calendar alignment, price look-up, or dividend
+handling cause the engine to use stale or misaligned data when it computes
+portfolio values. These bugs produce small but persistent drift.
+3.Architectural bugs.Limitations inherent in the engine’s design, such as inabil-
+ity to process fractional shares, forced end-of-day settlement when the strategy
+specifies intraday execution, or hard-coded assumptions about trading frequency,
+constrain the strategy specification and introduce systematic bias.
+4.Specification divergence.The engine interprets an ambiguous specification
+differently from other engines, for example, it may apply costs at trade time
+versus at settlement time, or compute returns on a gross versus net basis. Neither
+interpretation is “wrong” in isolation, but the inconsistency across engines creates
+divergence.
+5.Complexity sensitivity .The engine handles simple strategies correctly but
+introduces errors as strategy complexity increases (more assets, higher turnover,
+non-linear cost models), often because internal numerical routines lose precision
+or buffer sizes overflow.
+13
+3.4 A scaling conjecture
+The observation that divergence scales with cost intensity admits a simple formalisa-
+tion.
+Conjecture 1LetNdenote the number of rebalancing events over the backtest horizon
+andδ c the per-trade cost-model discrepancy between two engines. If cost errors accumulate
+approximately linearly across trades, the cumulative return divergenceDsatisfiesD=O(N·
+δc).
+The intuition is straightforward: each rebalance introduces a cost-model error of
+orderδ c, and these errors accumulate overNtrades. Strategies with high turnover
+(largeN) or complex cost models (largeδ c) should therefore exhibit greater implemen-
+tation risk. We test this prediction in Section 5, where the rank correlation between
+a composite cost-intensity score and engine spread isρ= 0.93. we regard this as the
+simplest non-trivial prediction the framework generates; the strength of its observed
+support suggests that cost-model disagreement is the dominant channel. The linear
+scaling is an approximation; in practice, compounding effects, path-dependent cost
+models, and margin constraints can produce super-linear accumulation, but the first-
+order term dominates in the moderate-turnover regime covered by our benchmark
+suite.
+4 Benchmark Design
+This section describes the experimental apparatus: strategy suite, asset universe,
+engine selection, cost specification, and statistical analysis plan. Every component is
+defined so that an independent team can reproduce the experiment from the released
+code and data. The design is intentionally reusable; future studies can plug into the
+same infrastructure.
+14
+4.1 Strategy suite
+We construct 15 benchmark strategies in five categories that span a broad range of
+portfolio construction methods, turnover profiles, and cost sensitivities (Table 1 and
+Figure 1).
+Thesimplecategory contains four strategies that require no predictive signal.
+BM01 applies equal weighting with monthly rebalancing and serves as the canonical
+baseline. BM02 is a stay-drift (buy-and-hold) strategy that purchases equal weights
+on day one and never rebalances, which provides a near-zero-turnover reference. BM06
+weights each asset inversely proportional to its trailing 60-day realised volatility and
+rebalances monthly. BM12 replicates BM01 at daily frequency, which increases the
+number of rebalancing events by a factor of roughly 20 and thereby amplifies any
+per-trade cost-model discrepancy.
+Thesignalcategory includes two momentum strategies. BM05 applies a 200-day
+SMA filter: the signal is computed daily but trades execute only at monthly rebalance
+dates; each asset is held when its closing price exceeds the SMA and sold otherwise.
+BM07 implements cross-sectional momentum with a 12-month look-back that excludes
+the most recent month (12-1), which selects the top two performers from the asset
+bucket and rebalances monthly.
+The ML category uses a single template, BM08, instantiated with four learn-
+ers: gradient-boosted regression (GBR), random forest (RF), multi-layer perceptron
+(MLP), and elastic net. All variants share an identical walk-forward protocol with
+a rolling six-month training window, a 21-day gap between training and prediction,
+and five features: 21-, 63-, and 126-day returns plus 20- and 60-day realised volatility.
+Each month the top two assets by predicted return are selected to test whether engine
+divergence is amplified when the signal carries estimation noise.
+Therotation/allocationcategory stresses turnover and cost sensitivity. BM03 per-
+forms a large rotation that reshuffles the entire portfolio at every monthly rebalance.
+15
+T able 1Benchmark strategy suite. Fifteen strategies in five categories that cover simple
+allocation rules, signal-driven strategies, machine-learning signals, high-turnover rotation, and
+a zero-cost ablation control. Cost regimes range from 0 to 60 bps per trade.
+ID Name Category Cost regime Rebal.
+BM01 equal-weight monthly simple baseline (18 bps) monthly
+BM02 stay-drift (buy-and-hold) simple baseline (18 bps) once
+BM03 large rotation rotation baseline (18 bps) monthly
+BM04 large rotation + 2×costs rotation 2×baseline (36 bps) monthly
+BM05 SMA momentum (200-day) signal baseline (18 bps) monthly
+BM06 inverse-volatility (60d) simple baseline (18 bps) monthly
+BM07 cross-momentum (12-1, top 2) signal baseline (18 bps) monthly
+BM08gbr ML signal, GBR ML baseline (18 bps) monthly
+BM08rf ML signal, RF ML baseline (18 bps) monthly
+BM08mlp ML signal, MLP ML baseline (18 bps) monthly
+BM08enet ML signal, elastic net ML baseline (18 bps) monthly
+BM09 daily binary switch ablation zero (0 bps) daily
+BM10 cash-starved settlement rotation baseline (18 bps) monthly
+BM11 concentrated cascade rotation heavy (60 bps) monthly
+BM12 daily equal-weight simple baseline (18 bps) daily
+BM04 is identical to BM03 but applies a doubled cost multiplier (2×baseline), which
+isolates the marginal effect of cost intensity while turnover is held fixed. BM10 sim-
+ulates a cash-starved settlement environment in which available capital is allocated
+in three tiers (60/30/10) to a rotating set of assets, which introduces path-dependent
+cash constraints. BM11 is a concentrated cascade that allocates 95% of the portfolio
+to a single asset with heavy transaction costs (60 basis points (bps)), which creates
+the most extreme cost-sensitivity scenario in the suite.
+Theablationcategory contains a single strategy, BM09, that serves as the causal
+isolation control. BM09 switches daily between two assets at zero transaction cost.
+Because no cost model is invoked, any non-zero divergence across engines would indi-
+cate a flaw in the experimental harness rather than a cost-model difference. This
+strategy is the linchpin of our identification argument: if engines agree exactly at zero
+cost, all divergence observed under non-zero costs can be attributed to the cost model
+alone.
+16
+Fig. 1Mean equity curves across 30 asset buckets for all 15 benchmark strategies. Shaded bands
+show±1 standard deviation of bucket-to-bucket variation. The five engine traces per benchmark are
+nearly indistinguishable at this scale, consistent with high agreement for most strategies.
+17
+4.2 Asset universe and stratified buckets
+The asset universe comprises 180 constituents of the S&P 500, drawn from all 11
+Global Industry Classification Standard sectors, with 16–17 stocks per sector. From
+these 180 stocks we construct 30 non-overlapping buckets of six stocks each. Every
+stock appears in exactly one bucket and every bucket contains six distinct sectors,
+which ensures that no bucket is dominated by a single industry.
+Bucket generation follows the rerandomisation framework of Morgan and Rubin
+(2012), itself rooted in the principles of controlled experimentation introduced by
+Fisher (1935). We generate 20,000 candidate partitions and retain the one that min-
+imises the Mahalanobis distance across three covariates: annualised volatility, average
+pairwise correlation, and log total return over the sample period. The resulting allo-
+cation achieves a sector chi-squared statistic of 0.16 (p= 1.000) and an entropy ratio
+of 0.9998, which indicates near-perfect sector balance.
+The full downloaded dataset spans January 2018 to December 2024 (1,761 trading
+days). The first two years (2018–2019) serve exclusively as a look-back buffer for
+strategies that require historical features: the four ML benchmarks (BM08 variants)
+train on this period, while signal strategies (BM05, BM06, BM07) use it for initial
+moving-average and momentum warm-up. All portfolio evaluation takes place over
+the backtest period of January 2020 to December 2024, which yields 1,258 trading
+days. All strategies use only daily adjusted-close prices; no open, high, low, or volume
+data enter any strategy or engine. Prices were obtained from Yahoo Finance via the
+yfinancePython library (Aroussi 2024). The adjusted-close series accounts for stock
+splits and dividend reinvestments, which produces a total-return series suitable for
+portfolio simulation. All 180 stocks have complete price histories over this window with
+zero missing values, which eliminates survivorship-bias and missing-value imputation
+concerns. Raw price data are not redistributed; the released code includes a download
+script that reproduces the exact dataset from Yahoo Finance’s public servers. The
+18
+T able 2Backtesting engines evaluated in this study. Five engines form the active
+comparison set. Zipline-Reloaded was excluded due to an unfixable trading-calendar
+alignment bug; NautilusTrader was excluded due to four compounding errors (silent
+truncation, double commissions, position-mode mismatch, and arithmetic overflow);
+QuantConnect Lean was excluded because its C# core lacks a native Python API. Version
+numbers refer to the releases used throughout the experiment.
+Engine Package Version Language Architecture Status
+Ours (internal) – Python vectorised retained
+btbt1.1.0 Python tree-structured retained
+vectorbtvectorbt0.26.2 Python vectorised retained
+Backtraderbacktrader1.9.78 Python event-driven retained
+cvxportfoliocvxportfolio1.3.0 Python optimisation retained
+Zipline-Reloadedzipline-reloaded3.0 Python event-driven excluded
+NautilusTradernautilus trader1.178 Rust/Python event-driven excluded
+QuantConnect LeanLean– C# event-driven excluded
+backtest period encompasses the COVID-19 drawdown (February–March 2020), the
+subsequent recovery rally, the 2022 rate-hiking sell-off, and the 2023–2024 rebound,
+which provides a mix of bull, bear, and range-bound regimes.
+4.3 Engine selection
+Eight backtesting engines were evaluated (Table 2): bt (Morissette 2014), vectorbt
+(Polakow 2020), Backtrader (Rodriguez 2015), cvxportfolio (Boyd et al. 2017), Zipline-
+Reloaded (Jansen 2020), NautilusTrader (Nautech Systems 2021), QuantConnect Lean
+(QuantConnect 2013), and our reference implementation. Five form the active com-
+parison set and three were excluded during quality control. All five retained engines are
+pip-installable Python packages, which ensures replicability in any standard Python
+environment.
+Our reference implementation was developed independently for this study and
+serves as the ground-truth calibrator. We acknowledge that this makes the reference
+correct by construction relative to its own specification; divergence measured against
+it reflects disagreement with this specification, not absolute error in any external
+sense. The zero-cost ablation (BM09) provides an engine-independent validation: all
+five engines agree exactly when no cost model is invoked, which indicates that the
+19
+non-cost logic path is equivalent across all implementations. Its cost computation is
+an arithmetic translation of Algorithm 1 with no hidden state, no implicit rounding,
+and no framework abstractions between the specification and the code.
+Three additional engines were evaluated but excluded after quality control. Zipline-
+Reloaded was excluded due to an unfixable trading-calendar bug that caused date
+misalignment on rebalancing days. NautilusTrader exhibited four compounding errors:
+a position-mode mismatch (HEDGING versus NETTING semantics), silent truncation
+of the backtest after 62 of 1,258 trading days, double-charged commissions, and a
+fixed-point arithmetic overflow at scale; these could not be resolved within the study
+period. QuantConnect Lean was excluded because its C# core lacks a native Python
+API, which makes identical strategy logic impossible without a confounding translation
+layer.
+4.4 Transaction cost specification
+All engines apply a proportional cost model in which every trade incurs a fixed fraction
+of the trade’s notional value. Four cost regimes are used, summarised below:
+Regime Cost Benchmarks
+zero-cost 0 bps BM09
+baseline 18 bps BM01–03, 05–08, 10, 12
+2×baseline 36 bps BM04
+heavy 60 bps BM11
+The baseline regime of 18 bps decomposes into 15 bps for commission and 3 bps for
+price impact (slippage), calibrated to the all-in cost of a retail brokerage that executes
+US large-cap equities in 2024. The heavy regime of 60 bps (50 bps commission plus
+10 bps slippage) is deliberately conservative; for reference, DeMiguel et al. (2009) use
+20
+50 bps one-way in their comparison of portfolio rules. The zero-cost regime applied to
+BM09 is not a modelling convenience but a methodological necessity: it provides the
+causal counterfactual against which all cost-driven divergence is measured.
+4.5 Statistical analysis plan
+The analysis plan was specified in full before any engine outputs were compared. 1
+Because every benchmark is run on each of the
+ 5
+2
+
+= 10 pairwise engine combinations
+across 30 independent buckets, the primary unit of observation is the per-bucket pair-
+wise divergence in total return (and, separately, in Sharpe ratio, compound annual
+growth rate, annualised volatility, and maximum drawdown).
+Theprimary testis a one-samplet-test of whether the mean pairwise divergence
+differs from zero, withp-values corrected for multiplicity using the Benjamini–
+Hochberg false-discovery-rate procedure. This procedure controls the expected propor-
+tion of false discoveries at ratequnder the positive regression dependence on a subset
+condition, which Benjamini and Yekutieli (2001) show is satisfied when test statis-
+tics are positively correlated, a property that holds naturally here because the same
+engine pair contributes to multiple benchmark comparisons. In total the correction
+covers 150 primary tests (15 benchmarks×10 engine pairs) atq= 0.05.
+Threerobustness checkssupplement the primary test. The Wilcoxon signed-rank
+test provides a non-parametric alternative that does not assume normality. A Monte
+Carlo permutation test with 10,000 random draws supplies an exactp-value free of
+distributional assumptions. The two one-sided tests (TOST) procedure of Schuirmann
+(1987) tests for practical equivalence at two pre-specified margins, 10 bps and 50 bps,
+and addresses the dual question: are divergences not merely statistically significant
+but also economically meaningful?
+1The analysis plan was formalised in internal project documentation prior to running comparisons but
+was not deposited with a public pre-registration registry.
+21
+Diagnostic testsinclude the Shapiro–Wilk test and quantile–quantile (Q–Q) plots
+for assessing the normality assumption required by the primaryt-test. A pseudo-
+replication check assesses the exchangeability of the 30 buckets via cluster bootstrap
+(resampling buckets with replacement and recomputing the cost–divergence Spearman
+correlation), supplemented by lag-1 autocorrelation of the per-bucket divergence series
+under lexicographic bucket ordering.
+Concordance analysisuses Lin’s concordance correlation coefficient (CCC) (Lin
+1989), computed per benchmark across the 30 buckets, to assess whether engines
+preserve not only the mean level of each metric but also the within-bucket ranking. A
+CCC of 1.0 indicates perfect agreement in both location and scale; values below 1.0
+reveal systematic biases or rank reversals that a simple mean comparison might miss.
+5 Results
+This section presents the findings in five parts: the zero-cost agreement baseline, cost-
+driven divergence across all 15 benchmarks, ordinal versus cardinal agreement, the
+four implementation-risk metrics, and a battery of statistical robustness checks.
+5.1 Zero-cost perfect agreement
+BM09, the daily binary switch executed at zero transaction cost, produces identical
+results across all five engines. Every one of the
+ 5
+2
+
+= 10 pairwise comparisons yields a
+relative difference of exactly 0.0000% in total return. This result validates the exper-
+imental harness: when the cost model is removed, all five engines are functionally
+identical in rebalancing calendar, price look-up convention, and return-compounding
+arithmetic. The zero-cost baseline serves as a causal isolation device; any diver-
+gence observed under non-zero costs can be attributed exclusively to differences in
+transaction-cost implementation. this result is central to the study’s identification
+22
+T able 3Pairwise relative difference in total return (%) across
+five engines for each benchmark. Mean and max are taken over
+the 10 engine pairs after averaging across 30 buckets. Three tiers
+emerge: simple strategies show a maximum pairwise divergence
+near 0.18%, signal and ML strategies span 0.28–0.49%, and
+rotation strategies reach 3.71%.
+ID Category Cost (bps) Mean (%) Max (%)
+BM09 ablation 0 0.0000 0.0000
+BM01 simple 18 0.1144 0.1799
+BM02 simple 18 0.1187 0.1799
+BM06 simple 18 0.1136 0.1799
+BM12 simple 18 0.1098 0.1799
+BM10 rotation 18 0.1754 0.2720
+BM05 signal 18 0.1859 0.2750
+BM07 signal 18 0.1999 0.3012
+BM08mlp ML 18 0.2769 0.4075
+BM08enet ML 18 0.2524 0.4109
+BM08gbr ML 18 0.3000 0.4672
+BM08rf ML 18 0.3014 0.4881
+BM11 rotation 60 1.2195 2.1552
+BM03 rotation 18 2.3032 3.6091
+BM04 rotation 36 2.4411 3.7077
+strategy: it transforms every subsequent divergence measurement from a correlation
+into a causally identified quantity.
+5.2 Cost-driven divergence
+Table 3 reports the mean and maximum pairwise relative difference in total return for
+each of the 15 benchmarks, computed across all 10 engine pairs and averaged over 30
+asset buckets.
+The results fall into three tiers (Figure 2). The first tier comprises the simple and
+ablation strategies (BM01, BM02, BM06, BM09, BM12), for which the maximum
+pairwise divergence never exceeds 0.1799%. The second tier includes the signal and ML
+strategies (BM05, BM07, BM08 variants), where maximum divergences range from
+0.2750% to 0.4881%. The third tier contains the rotation strategies (BM03, BM04,
+BM10, BM11), which span 0.2720% (BM10, constrained by tiered cash allocation) to
+3.7077% (BM04, full rotation at doubled cost).
+23
+Fig. 2Divergence heatmap across all 15 benchmarks and 10 engine pairs. Colour intensity encodes
+the mean pairwise relative difference in total return; the three-tier structure is clearly visible, with
+rotation strategies (BM03, BM04, BM11) producing the largest divergences.
+Two patterns stand out. First, turnover matters more than cost level within the
+third tier: BM03 and BM04 (full monthly rotation) exhibit maximum divergences of
+3.6091% and 3.7077%, which exceed BM11 (2.1552%) even though BM11 carries a
+heavier per-trade cost of 60 bps. BM11 concentrates 95% of capital in a single asset,
+which limits the total number of cost-bearing trades. Second, BM10 achieves a low
+maximum divergence (0.2720%) despite being a rotation strategy because its tiered
+cash-allocation rule constrains each trade’s notional value. The near-equality of BM03
+(3.6091%) and BM04 (3.7077%) despite a doubled cost rate is consistent with the
+floor decomposition in Section 5.5.5: the dominant source of divergence is a fixed cost-
+deduction timing convention (the 0.18% floor), not the cost rate itself; doubling the
+rate amplifies only the residual above the floor.
+The monotonic relationship between cost intensity and divergence is supported
+quantitatively (Figure 3). A composite cost-intensity score, defined as the product of
+24
+per-trade cost and annual turnover, correlates with the ES metric: Pearsonr= 0.68
+(p= 0.006), Spearmanρ= 0.93 (p <0.001), consistent with Conjecture 1.
+Fig. 3Mean pairwise divergence versus composite cost-intensity score. The near-monotonic gradient
+indicates that cost intensity is the primary predictor of engine disagreement (Spearmanρ= 0.93,
+p <0.001).
+Figure 4 decomposes the cost-intensity relationship by strategy complexity, which
+provides direct support for Conjecture 1.
+the cost-intensity gradient identifies how much divergence to expect, but does not
+reveal whether different engine pairs disagree for the same reasons. Figure 5 addresses
+this question. the left panel plots per-benchmark divergence for two representative
+engine pairs (bt versus ours, and ours versus vectorbt) on log-scaled axes; the Spear-
+man correlation ofρ= 0.60 indicates that the magnitude of disagreement for one
+pair is only weakly predictive of the magnitude for another. the right panel profiles
+25
+Fig. 4Divergence decomposed by strategy complexity. Higher-turnover strategies accumulate more
+cost-model disagreement, consistent with the linear scaling predicted by Conjecture 1.
+divergence against five driver categories (total cost, cost per trade, trade count, ML
+signal, and volatility) for each of the ten engine pairs via Spearman correlations. the
+fingerprint varies across pairs: some show stronger sensitivity to cost per trade, while
+others are more influenced by volatility or ML signal composition. this heterogeneity
+means that validation against a single alternative engine can detect only the subset of
+disagreements to which that specific pair is sensitive.
+Fig. 5Anatomy of inter-engine divergence. Left: per-benchmark divergence for two representative
+engine pairs on log-scaled axes; the moderate Spearman correlation (ρ= 0.60) indicates that pair-
+wise disagreements are only weakly coupled. Right: divergence driver fingerprint showing Spearman
+correlations between each driver (total cost, cost per trade, trade count, ML signal, volatility) and
+per-benchmark divergence for all ten engine pairs. The heterogeneous fingerprint across pairs indi-
+cates that no single engine pair captures the full spectrum of cost-model disagreement.
+26
+5.3 Ordinal versus cardinal agreement
+Lin’s CCC, computed per benchmark across the 30 asset buckets, assesses whether
+engines agree on the within-bucket ranking, not only the mean level.
+Twelve of the 15 benchmarks achieve a minimum CCC of 1.000 (to three decimal
+places) on every metric (Figure 6). The three exceptions are BM03 (CCC min,ann vol =
+0.8756), BM04 (CCCmin,ann vol = 0.8632), and BM11 (CCCmin,ann vol = 0.9958). Even
+in the worst case (BM04), the engines strongly agree on which buckets perform well
+and which perform poorly.
+Fig. 6Lin’s CCC for each benchmark and metric pair. Twelve of fifteen benchmarks show near-
+perfect concordance (≥1.000 to three decimal places); the three rotation strategies (BM03, BM04,
+BM11) show slightly reduced but still strong ordinal agreement.
+A researcher using any of the five engines would rank the same asset universes in
+nearly the same order, even where reported returns differ by several percentage points.
+5.4 Implementation risk metrics
+We report the four metrics from Section 3: ES (Equation 3), IUI (Equation 4), DAF
+(Equation 5), and CSI (Equation 6).
+27
+5.4.1 ES
+ES (range of total returns across five engines) scales with cost intensity: ES = 0.379 pp
+for BM01, ES = 0.874 pp for BM11, ES = 2.339 pp for BM03, and ES = 1.040 pp for
+BM04.
+5.4.2 IUI
+The IUI width (uncertainty band) is 1.069 pp for BM01, 2.408 pp for BM11, 5.942 pp
+for BM03, and 2.079 pp for BM04. These widths indicate the range of values a practi-
+tioner might observe by switching engines; they should accompany any single-engine
+backtest result as a measure of implementation variability.
+5.4.3 DAF
+DAF is computed relative to BM01 (the simplest cost-bearing benchmark, ES range =
+0.379 pp); values greater than one indicate that a benchmark amplifies cost-model
+disagreement beyond the baseline. The largest values are BM03 (DAF = 6.178), BM04
+(DAF = 2.747), and BM11 (DAF = 2.308); rotation strategies amplify cost-model
+disagreement by a factor of two to six.
+5.4.4 CSI
+Across all 15 benchmarks, CSI = 0; engine choice never reverses the sign of the Sharpe
+ratio. BM11, the only benchmark with a negative mean Sharpe, illustrates this: all five
+engines report negative ratios (ours =−0.1151, bt =−0.1219, vectorbt =−0.1151,
+backtrader =−0.1225, cvxportfolio =−0.1211), and CSI sharpe frac = 1.0 indicates
+unanimous agreement on unprofitability. The closest any benchmark comes to a sign
+reversal is BM11, where the most negative Sharpe ratio across engines is−0.1225
+(backtrader) and the least negative is−0.1151 (ours and vectorbt). The gap of 0.0073
+28
+in absolute Sharpe ratio means that divergence would need to grow by roughly an
+order of magnitude beyond the observed range before CSI could reach one.
+5.5 Statistical robustness
+5.5.1 TOST equivalence
+BM09 achieves equivalence at the 10 bps margin for all 10 engine pairs. Simple strate-
+gies (BM01, BM02, BM06, BM12) achieve equivalence at 50 bps or 10 bps for all pairs.
+The only benchmarks with non-equivalent pairs are BM03 and BM04 (many pairs)
+and BM11 (some pairs), as shown in Figure 7.
+Fig. 7TOST equivalence classification at 10 bps and 50 bps margins across benchmarks and engine
+pairs. Light cells indicate equivalence at the tighter margin; progressively darker shading indicates
+equivalence only at 50 bps or non-equivalence. Rotation strategies (BM03, BM04) and BM11 contain
+the only non-equivalent pairs.
+29
+5.5.2 Wilcoxon signed-rank test
+The non-parametric Wilcoxon signed-rank test agrees with the parametrict-test in
+every case (Figure C4 in Appendix C), which rules out the possibility that conclusions
+are artefacts of distributional assumptions.
+5.5.3 Permutation test
+A sign-flip permutation test (10,000 draws) is applied to each strategy category. The
+ablation category (BM09) is excluded because its per-bucket divergences are negligible
+in magnitude (they round to 0.0000% at display precision); applying the sign-flip
+test to floating-point noise would produce a spurious rejection. For the remaining
+categories: simplep= 0.0001, signalp= 0.0001, MLp= 0.0001, rotationp= 0.4187
+(not significant). The non-significance of the rotation category reflects high cross-
+bucket variance rather than absence of divergence.
+5.5.4 Pseudo-replication diagnostic
+Because all 30 buckets share the same time period (2020–2024) and draw from cor-
+related S&P 500 stocks, we assess exchangeability via two complementary checks.
+First, a cluster bootstrap resamples the 30 buckets with replacement (5,000 draws),
+recomputes the benchmark-level mean divergence, and re-estimates the Spearman
+ρbetween cost intensity and engine spread. The bootstrap 95% confidence interval
+captures sampling variability under potential bucket dependence; values reported in
+Appendix C. Second, lag-1 autocorrelation of the per-bucket divergence series is com-
+puted under lexicographic bucket ordering as a supplementary diagnostic. Per-category
+means range from−0.020 to 0.049, with 95% confidence intervals that include or lie
+close to zero. We note that lag-1 autocorrelation is sensitive to the choice of order-
+ing; the lexicographic ordering has no structural significance. The non-overlapping
+30
+bucket design and rerandomisation balance (Section 4) eliminate shared-stock con-
+founds and balance covariates across buckets by construction. Residual dependence
+from the shared time period and common market factors may reduce the effective
+sample size for within-benchmark inference, but the benchmark-level cost–divergence
+relationship (ρ= 0.93) and the three-tier structure are ordinal findings that do not
+depend on within-bucket independence.
+5.5.5 Floor decomposition
+A systematic 0.18% floor appears across virtually all engine pairs, which traces to
+an initial-value convention: backtrader and cvxportfolio report pre-trade equity, while
+our engine, bt, and vectorbt report post-trade equity. The difference equals the cost
+of initial portfolio construction at 18 bps on a fully invested portfolio. For simple
+strategies the residual above the floor is near zero; for rotation strategies the residual
+dominates and reflects genuine cost-model disagreement on subsequent trades.
+5.5.6 Power analysis
+a post hoc power analysis (Appendix C) shows thatn= 30 buckets provides greater
+than 80% power at equivalence margins of 10–25 bps for all non-rotation categories.
+6 Forensic Analysis
+The preceding section established that divergence among the five retained engines
+is small, structured, and attributable to cost-model differences. This section exam-
+ines implementation defects discovered during engine integration. Two of the three
+engines that failed quality control, Zipline-Reloaded and NautilusTrader, are anal-
+ysed alongside Backtrader, which was retained after the defects documented below
+were diagnosed and patched. QuantConnect Lean, the third excluded engine, is omit-
+ted from this analysis because its exclusion reflects a language-barrier limitation (C#
+31
+core with no native Python API) rather than an implementation defect amenable to
+source-code forensics. We document these defects in detail for two reasons: they vali-
+date the failure-mode taxonomy introduced in Section 3, and they illustrate the kinds
+of implementation errors that a multi-engine comparison is designed to catch.
+6.1 Backtrader: cost-model misconfiguration
+Backtrader exhibited two bugs, both definitive upon source-code inspection.
+The first is a 100×undercharge of proportional commissions. In
+CommInfoBase. init (line 157 ofcomminfo.py), the default parameterpercabsis
+set toFalse. Whenpercabs=False, the engine divides the user-supplied commission
+rate by 100 before applying it. If the user passescommission=0.0018with the intent
+of specifying 18 basis points, the engine applies only 0.18 basis points, a factor-of-100
+error. The behaviour is documented in a cryptic docstring but contradicts the con-
+vention of every other engine in our sample, all of which interpret the commission
+rate as an absolute proportion. The fix is to setpercabs=True, which disables the
+implicit division. Under our taxonomy this is acost-model bug: the engine’s default
+parameterisation silently misinterprets the user’s cost specification.
+The second bug concerns fill ordering and margin rejection. The method
+check submitted()(lines 558–583 ofbbroker.py) iterates over pending orders by
+popping them from a first-in-first-out deque and pseudo-executing each against the
+running cash balance. If the running cash balance falls below zero at any point during
+this sequential pass, the engine triggers an immediate margin rejection. The conse-
+quence is that buy orders whose funding depends on proceeds from sell orders later in
+the deque are rejected before those sell orders are processed. This is entirely undocu-
+mented. In a rebalancing context where multiple positions are simultaneously increased
+and decreased, the order in which the engine processes fills determines whether the
+portfolio can be constructed at all. The fix requires atomic delta computation with
+32
+a sells-first ordering so that proceeds are available before purchases are attempted.
+Under our taxonomy this is aninfrastructure bug: the execution-sequencing logic
+produces incorrect rejections that are unrelated to the strategy or cost specification.
+After both fixes are applied, Backtrader’s pairwise divergence against the retained
+engines falls to 0.00–3.58%, consistent with the cost-driven divergence structure
+described in Section 5. The most striking confirmation is benchmark BM09 (zero cost),
+which originally showed 97.08% divergence and drops to exactly 0.000% after correc-
+tion, indicating that the anomaly was entirely attributable to the two bugs above. this
+collapse from 97% to exactly zero constitutes a strong form of bug-fix validation and
+exposes a central danger of single-engine work: before correction, Backtrader produced
+a plausible equity curve that gave no indication of a hundredfold cost undercharge.
+6.2 Zipline-Reloaded: calendar architecture failure
+Zipline-Reloaded failed at the data-ingestion stage with a session-alignment asser-
+tion error. The root cause lies incalendar utils.get calendar, which delegates
+toexchange calendars.get calendarwith inconsistent keyword arguments across
+code paths. During data ingestion the call passesstart=1990-01-01; during runtime
+the same function is called without thestartparameter. Theexchange calendars
+library caches calendar instances by a composite key that includes both the exchange
+name and the keyword arguments. Because the two call sites supply different kwargs,
+the cache produces two distinct calendar instances rather than returning the same
+one. Downstream code assumes a single shared calendar and raises an assertion failure
+when session indices do not align.
+This bug cannot be fixed by user-side configuration; it requires a patch to the
+library’s internal calendar-resolution logic to ensure that all call sites pass identical
+kwargs. Under our taxonomy this is anarchitectural bug: the failure arises not from
+33
+a single misparameterised line but from a structural inconsistency in the calendar
+subsystem’s caching contract.
+6.3 NautilusTrader: compounding failures
+NautilusTrader could not be brought into agreement with the other engines despite
+successive attempts to resolve each issue as it appeared.
+The first obstacle was aspecification divergence. In its default HEDGING mode the
+engine generates a new position identifier for every order, so selling shares to reduce
+a long position creates a separate short position rather than reducing the existing
+long. The HEDGING mode is designed for strategies that maintain simultaneous long
+and short positions in the same instrument, but our benchmarks assume net-position
+(NETTING) semantics.
+Switching to NETTING mode resolved the position-accounting issue but exposed
+a silent truncation: the engine processed 62 of the 1,258 trading days in the sample
+and then terminated without error or diagnostic output. Under our taxonomy this is
+aninfrastructure bug; the resulting equity curve simply stopped, and the user would
+have no indication that the backtest was incomplete.
+With the truncation worked around, acost-model bugbecame apparent: commis-
+sions were applied twice. Our engine wrapper reserves cash for expected transaction
+fees before submitting orders, and the NautilusTrader engine also charges fees inter-
+nally via itsMakerTakerFeeModel. The combined effect is a double deduction of
+transaction costs, an integration-layer error in which the wrapper and the engine both
+assume responsibility for cost accounting.
+A further limitation emerged at scale: the engine’s fixed-point arithmetic overflows
+for large notional values, which terminates the process rather than returning an error.
+Under our taxonomy this is acomplexity-sensitivitydefect that restricts the engine to
+modest portfolio sizes.
+34
+6.4 Lessons for the taxonomy
+The issues documented above span all five failure-mode categories introduced in
+Section 3: cost-model bugs (Backtrader’s percabs default, NautilusTrader’s double
+commission), infrastructure bugs (Backtrader’s fill ordering, NautilusTrader’s silent
+truncation), an architectural bug (Zipline-Reloaded’s calendar caching), specifica-
+tion divergence (NautilusTrader’s HEDGING semantics), and complexity sensitivity
+(NautilusTrader’s fixed-point overflow).
+Cost-model bugs and infrastructure bugs are the most frequent categories; each
+accounts for two of the seven issues. This is consistent with the main finding of the
+paper: divergence among retained engines is driven almost entirely by differences in
+cost-model implementation. The forensic cases show that these differences can be far
+more severe when an engine’s default configuration silently misinterprets the user’s
+intent.
+More broadly, the fact that all five taxonomy categories appear across just three
+engines’ initial integration failures suggests that the taxonomy is comprehensive, at
+least for the class of proportional-cost, market-order backtests studied here. The
+forensic exercise also shows that multi-engine comparison is not merely a statistical
+convenience; it is the most efficient diagnostic tool for detecting implementation errors
+that would otherwise remain hidden in single-engine workflows. Without such com-
+parison, the Backtrader percabs bug would produce a plausible but incorrect equity
+curve, the Zipline-Reloaded calendar failure would block execution entirely, and the
+NautilusTrader issues would either silently truncate results or crash at scale. Each
+of these failure modes was discovered only because the affected engine’s output was
+compared against the consensus of the retained engines.
+35
+7 Practical Implications
+The preceding results converge on a single message: implementation risk is real,
+measurable, and structured. This section translates those findings into actionable
+guidance.
+7.1 When does engine choice matter?
+The answer has three tiers. For simple allocation rules and signal-driven strategies (12
+of the 15 benchmarks), the maximum pairwise divergence in annualised Sharpe ratio
+is below 0.75%. At this level the economic impact is negligible; any of the five engines
+would yield the same investment conclusion.
+For high-turnover or cost-intensive strategies (BM03, BM04, BM11), divergence
+rises to the 2–4% range and becomes material. A 3.71% divergence in Sharpe ratio
+(BM04) is large enough to shift a strategy’s ranking in a multi-strategy selection
+exercise or alter a risk-budgeting model’s output.
+The cost-intensity gradient (Section 5) provides a predictive rule: strategies char-
+acterised by high turnover and high proportional cost rates are precisely those that
+require multi-engine validation. Practitioners can triage validation effort accordingly:
+run a second engine only when the cost-intensity score exceeds a risk-tolerance-
+calibrated threshold.
+A 0.10% divergence in annualised return corresponds to approximately$1 M per
+year in ambiguity for a portfolio with$1 B in assets under management (AUM). This
+linear translation lets institutions scale the figure to their own asset base (Figure 8).
+For the worst-case benchmark (BM04, 3.71% divergence), the implied ambiguity is
+approximately$37 M per year per$1 B AUM, material whenever the margin between
+competing strategies is thin or capital is allocated by Sharpe-ratio ranking.
+Maximum drawdown, a metric of particular concern to risk managers, also exhibits
+engine-dependent variation. Figure 9 compares drawdown profiles across engines for
+36
+Fig. 8Dollar-value translation of implementation risk. Each bar shows the implied annual ambiguity
+per$1 B AUM for a given benchmark, computed as max pairwise divergence in annualised return.
+each benchmark. For simple and signal strategies the drawdown paths are virtu-
+ally indistinguishable, whereas rotation benchmarks (BM03, BM04) show drawdown
+discrepancies that mirror the return divergences documented in Table 3: the same
+cost-model timing conventions that shift total returns also shift the depth of measured
+drawdowns.
+Figure 10 extends this comparison to all standard performance metrics. for 12 of
+the 15 benchmarks, the engine spread remains below 0.5% on every metric, and ordinal
+rankings are preserved (rankρ >0.99 for every pair). the outliers belong exclusively
+to rotation strategies, where Sharpe ratio, max drawdown, and annualised volatility
+each show engine spreads exceeding 2%. CAGR shows intermediate sensitivity. the
+37
+Fig. 9Drawdown comparison across engines for all 15 benchmarks. Differences in drawdown statis-
+tics are concentrated in rotation and high-turnover strategies.
+within-bucket range of Sharpe ratios, by contrast, is nearly unaffected by engine choice
+across all benchmarks, because the cost-model offset shifts all buckets’ Sharpe ratios
+by approximately the same amount and thus preserves cross-bucket dispersion. this
+metric-level decomposition lets practitioners identify which summary statistics require
+multi-engine verification for a given strategy type.
+7.2 Multi-validator recommendation
+A natural response to implementation risk is to validate one’s backtest against a
+second engine. Our results suggest that a single alternative validator may not suffice.
+Pairwise divergence profiles (Section 5, Figure 11) are not perfectly correlated across
+engine pairs: two engines may agree on one strategy family yet diverge on another,
+so validating against one alternative provides no protection against a failure mode
+specific to a third.
+We recommend at least two independent validators, chosen to maximise imple-
+mentation diversity (e.g. one event-driven and one vectorised engine), with an explicit
+38
+Fig. 10Sensitivity of standard performance metrics to engine choice. Each dot represents one bench-
+mark; the horizontal axis measures the ES in percentage points. Most benchmarks cluster near zero;
+outliers belong to rotation strategies. Rank correlation exceeds 0.99 across all engine pairs for every
+metric, which indicates that ordinal conclusions are robust even where cardinal values diverge.
+audit of each engine’s cost model against a reference specification such as Algo-
+rithm 1. The cost model is the single component driving divergence; verifying correct
+parameterisation eliminates the dominant source of implementation risk.
+The three excluded engines illustrate what happens when implementation risk
+goes undetected. Zipline-Reloaded’s calendar bug prevented execution entirely, Nau-
+tilusTrader’s compounding defects would have silently corrupted a live portfolio, and
+QuantConnect Lean’s C# core made faithful strategy translation impossible. Even
+among retained engines, Backtrader’spercabsdefault would have produced a 100×
+cost undercharge, which would have yielded plausible but incorrect equity curves had it
+not been caught during integration. Each of these failures was discovered only through
+systematic multi-engine comparison, which validates the central recommendation of
+this section.
+39
+Fig. 11Pairwise engine agreement across all 15 benchmarks. Each cell shows the mean absolute
+divergence for one engine pair and one benchmark. The pattern indicates that agreement depends on
+cost intensity rather than on any specific engine pair.
+7.3 Connection to backtest overfitting
+Implementation risk and statistical overfitting are orthogonal sources of backtest unre-
+liability (Section 2). A strategy that survives deflated Sharpe ratio correction may
+still produce different economics in a different engine; conversely, perfect cross-engine
+agreement does not guard against in-sample overfitting. A complete validation frame-
+work therefore requires both: multiple-testing adjustment (e.g. the deflated Sharpe
+ratio of Bailey and Lopez de Prado (2014)) for the strategy-selection layer, and
+multi-engine comparison for the simulation layer.
+8 Conclusion
+This paper introduced implementation risk, the variability in backtest outcomes
+attributable solely to engine choice, and provided the first large-scale measurement
+40
+of its magnitude. Causal isolation is anchored by a reference implementation devel-
+oped for this study whose cost model is a direct translation of the proportional-cost
+specification (Algorithm 1), which provides a ground-truth baseline against which all
+divergence is measured.
+At zero cost all five engines produce identical equity curves, which establishes per-
+fect causal isolation of the cost-model channel. Under nonzero costs, divergence scales
+monotonically with cost intensity (Spearmanρ= 0.93,p <0.001) and partitions into
+three tiers: negligible (<0.75%, 12 of 15 benchmarks), moderate (≈2%, BM11), and
+material (3.6–3.7%, the two full-rotation strategies BM03 and BM04). CSI = 0 for all
+15 strategies; engine choice never reverses the sign of the Sharpe ratio. Forensic anal-
+ysis of three engines examined during quality control revealed seven distinct defects
+spanning all five failure-mode categories, with cost-model bugs as the most frequent.
+For most strategies engine choice is a second-order concern, but for cost-intensive
+strategies the implied ambiguity can reach tens of millions of dollars per$1 B AUM,
+which warrants routine multi-engine validation.
+Taken together, these findings deliver the three contributions outlined in Section 1:
+(1) to our knowledge, the first large-scale cross-engine comparison under proportional
+cost models; (2) a formal four-metric measurement framework grounded in metrology;
+and (3) an open benchmark suite for ongoing community validation. The practical
+conclusion is that implementation risk, though modest for most strategies, is neither
+negligible nor unpredictable: it concentrates in cost-intensive strategies and can be
+detected with a straightforward multi-engine protocol.
+Several limitations remain. We tested only proportional cost models; fixed-cost,
+tiered, and market-impact models may differ. All benchmarks use market orders at
+the close; limit-order and intraday strategies add execution-model complexity not yet
+addressed. Five engines, though the broadest comparison in the literature, do not
+exhaust the available universe. The zero CSI may partly reflect large absolute Sharpe
+41
+ratios; strategies near the zero-Sharpe boundary deserve separate study. of these, we
+consider the restriction to proportional costs the most pressing to address next: real-
+world trading costs are predominantly nonlinear, and since the cost channel is where
+divergence concentrates, the practical importance of multi-engine validation may be
+larger than our current estimates suggest.
+From a regulatory perspective, our findings suggest that SR 11-7 model validation
+should be extended to cover the simulation layer, where ES and CSI serve as natural
+acceptance metrics.
+We release the full benchmark suite as an open resource; we intend it to serve
+as a correctness counterpart to MLPerf’s speed benchmarks (Mattson et al. 2020):
+a common reference point for certifying engine fidelity and quantifying residual
+implementation uncertainty.
+Future work should examine rolling-window divergence for temporal stability and
+threshold-free cluster enhancement for robustness across the full parameter space of
+cost rates and rebalancing frequencies.
+Acknowledgements.The authors thank the developers of bt, vectorbt, backtrader,
+and cvxportfolio for maintaining open-source backtesting engines that made this study
+possible.
+Declarations
+• F unding:Not applicable.
+• Competing interests:The authors declare no competing interests.
+• Ethics approval:Not applicable. This study uses publicly available financial
+market data and involves no human or animal subjects.
+• Data availability:Derived data (metrics, equity curves, divergence tables) and
+bucket definitions will be deposited at Zenodo upon acceptance. Raw price data
+can be reproduced via the included download script using Yahoo Finance.
+42
+• Code availability:The benchmark suite, engine wrappers, and our backtesting
+engine will be released at https://github.com/don-yin/backtest-engine under the
+MIT licence upon acceptance.
+• Author contribution:D.Y. designed the study, developed the backtesting
+engine and benchmark suite, conducted the experiments, performed the statistical
+analysis, and wrote the manuscript. T.M. contributed to the experimental design
+and code review. V.L. contributed to the forensic analysis. V.G. contributed to
+the engine integration and testing.
+Appendix A Reference Implementation Pseudocode
+Algorithm 1 presents the reference proportional-cost backtest loop that serves as
+the ground-truth specification for our benchmark suite. All five retained engines
+are expected to produce identical equity curves when their cost models faithfully
+implement this logic, a prediction supported by the zero-cost experiments in Section 5.
+Algorithm 1Proportional-cost backtest loop.
+Require:weight scheduleW∈R T×N , close pricesP∈R T×N , initial capitalC 0 >0,
+cost ratec≥0
+Ensure:daily equity series{E t}Tt=1
+1:h←0∈R N ▷share holdings
+2:cash←C 0
+3:foreach rebalance datet= 1, . . . , Tdo
+4:V t ←cash +h ⊤pt ▷mark to market
+5:w t ←W t,: ▷target weights from schedule
+6:δ←w t ·V t −h⊙p t ▷trade deltas
+7:cost t ←c· ∥δ∥1 ▷proportional transaction cost
+8:V nett ←V t −cost t ▷post-cost portfolio value
+9:h←(w t ·V nett )⊘p t ▷reallocate to target weights
+10:cash←V nett −h ⊤pt ▷residual cash
+11:E t ←V nett
+12:end for
+13:return{E t}Tt=1
+43
+The algorithm operates in three phases per rebalance date. First, it marks the
+portfolio to market by computing the current valueV t from share holdings and close
+prices (line 4). Second, it computes trade deltasδas the vector difference between
+target and current dollar positions, then deducts the proportional costc· ∥δ∥ 1 from
+the portfolio value (lines 6–8). Third, it reallocates the post-cost valueV nett according
+to the target weights and updates share holdings via element-wise division by the price
+vector (lines 9–10).
+Two implementation details deserve comment. The cost is deducted from the total
+portfolio value before reallocation, which means that the cost reduces all positions
+proportionally rather than being charged against cash alone. This “cost-then-allocate”
+convention is the simplest correct approach and matches the default behaviour of most
+vectorised engines. Event-driven engines that deduct cost on a per-order basis must
+produce the same aggregate deduction for the algorithm to be considered faithful.
+For strategies that rebalance less frequently than daily, the equity series on non-
+rebalance days is computed by mark-to-market:E t = cash +h ⊤pt with no trading.
+The algorithm as written shows only the rebalance-day logic; the daily mark-to-market
+pass is implicit.
+The second detail is that the algorithm assumes fractional shares. All five retained
+engines are configured to allow fractional holdings, which eliminates rounding as a
+source of divergence. The impact of integer-share constraints is left to future work.
+Appendix B Engine Configuration Details
+Table B1 lists the five retained engines together with their versions, Python packages,
+and configuration parameters. Each engine was configured to match the reference
+specification in Algorithm 1 as closely as the API permits; non-obvious settings are
+noted below.
+44
+T able B1Engine configurations used in the benchmark suite.
+Engine Version Package Configuration notes
+Ours – (internal) direct translation of Algorithm 1; fractional shares;
+cost deducted before reallocation
+bt 1.1.0bt bt.Backtestwith commissions lambda;
+integer positions=False
+vectorbt 0.26.2vectorbt Portfolio.from orderswith
+size type="targetpercent",group by=True,
+cash sharing=True
+Backtrader 1.9.78backtrader percabs=Truerequired; sells-first ordering fix applied
+cvxportfolio 1.3.0cvxportfolioforward returnsr t = (p t+1 −p t)/pt withshift(-1)
+to align close-to-close convention
+B.1 Our engine
+The reference implementation is a direct translation of Algorithm 1 into NumPy
+vectorised operations. It was developed specifically for this study to serve as a mini-
+mal, auditable reference specification, rather than adopted from a pre-existing library.
+Divergence measured against it reflects disagreement with this specification, not abso-
+lute error in any external sense. It accepts a weight matrixW, a close-price matrix
+P, initial capitalC 0, and a scalar cost ratec, and returns the daily equity series. No
+execution model, slippage model, or calendar logic is involved; the implementation is
+intentionally minimal so that the code and the specification are the same thing.
+B.2 bt (pmorissette)
+bt provides a tree-structured strategy API in which each node represents an allocation
+step. Commissions are specified as a callable that receives the dollar trade value and
+returns the fee. We setinteger positions=Falseto enable fractional shares and
+passed a lambda that returns|q| ·p·cas the proportional cost for each fill.
+45
+B.3 vectorbt
+vectorbt is a fully vectorised engine that operates on NumPy arrays rather than
+simulating order-by-order. ThePortfolio.from ordersconstructor accepts target-
+percent orders directly viasize type="targetpercent". We enabledgroup by=True
+andcash sharing=Trueso that all assets within a benchmark share a single cash
+account, which matches the single-portfolio assumption of Algorithm 1.
+B.4 Backtrader
+Backtrader is an event-driven engine that processes bars sequentially. Two non-obvious
+settings were required. First,percabs=Truemust be set explicitly to prevent the
+engine from dividing the commission rate by 100 (Section 6.1). Second, the fill-ordering
+logic was patched to process sell orders before buy orders, which prevents spurious
+margin rejections during rebalancing. Both issues are documented in detail in the
+forensic analysis (Section 6).
+B.5 cvxportfolio
+cvxportfolio models returns as forward-looking:r t = (pt+1 −p t)/pt. To align with the
+close-to-close convention used by the other engines, the return series must be shifted
+by one period withshift(-1). Without this adjustment the engine’s equity curve is
+offset by one day, which produces apparent divergence that is purely a timing artefact
+rather than a genuine cost-model difference.
+Appendix C Statistical Diagnostics
+This appendix collects diagnostic analyses that validate the statistical methodology
+used in the main text.
+46
+C.1 Normality assessment
+The primaryt-test of mean pairwise divergence assumes approximately normal dis-
+tributions within each benchmark category. Figure C1 shows Q–Q plots for the
+per-bucket divergence series, stratified by category. The simple, signal, and ablation
+categories track the normal reference line closely; the ML category shows minor depar-
+tures in the tails; the rotation category exhibits heavier tails, consistent with the
+higher cross-bucket variance documented in Section 5. These departures motivate the
+non-parametric robustness checks reported below.
+C.2 Power analysis
+For simple, signal, ML, and ablation benchmarks,n= 30 buckets provides greater than
+80% power at equivalence margins of 10–25 bps (Figure C2). For rotation strategies
+(BM03, BM04, BM10, BM11), power reaches 80% only at margins of approximately
+100–130 bps, which reflects the higher cross-bucket variance in this category.
+C.3 Permutation test distributions
+Figure C3 shows the Monte Carlo null distributions (10,000 draws) for each benchmark
+category alongside the observed test statistic. The simple, signal, ML, and ablation
+categories reject the null of no divergence (p= 0.0001). The rotation category does
+not (p= 0.4187); this non-rejection reflects high cross-bucket variance rather than
+absence of divergence.
+C.4 Wilcoxon robustness
+The non-parametric Wilcoxon signed-rank test provides a distribution-free check on
+the parametrict-test conclusions. Figure C4 comparesp-values from both tests for
+47
+Fig. C1Q–Q plots of per-bucket divergence for each benchmark category. Departures from the
+diagonal indicate non-normality; the rotation category shows the largest tails.
+48
+Fig. C2Statistical power versus equivalence margin by benchmark category. Then= 30 design
+achieves greater than 80% power at 10–25 bps for simple, signal, ML, and ablation categories; rotation
+strategies require margins of 100–130 bps to reach 80% power.
+every benchmark-pair combination. All points cluster near the diagonal, which indi-
+cates that the two tests agree and that the parametric conclusions are not artefacts
+of distributional assumptions.
+Appendix D Data Quality Control
+This appendix documents the quality-control checks applied to the price data and the
+stratified bucket construction.
+D.1 Price data
+The full downloaded dataset comprises 180 S&P 500 constituents with complete daily
+adjusted-close histories from January 2018 to December 2024 (1,761 trading days, zero
+missing values). The first two years (2018–2019) serve as a look-back buffer for ML
+training and signal warm-up; all portfolio evaluation uses the backtest period of Jan-
+uary 2020 to December 2024 (1,258 trading days). Only adjusted-close prices are used;
+no open, high, low, or volume data enter any strategy or engine. Figure D1 plots log-
+scale, sector-coloured price trajectories for the full seven-year download, which includes
+the training buffer. The backtest period spans the COVID-19 drawdown (February to
+49
+Fig. C3Monte Carlo permutation test null distributions. The observed mean absolute divergence
+(vertical line) falls far outside the null distribution for simple, signal, ML, and ablation categories
+(p= 0.0001). Rotation is non-significant (p= 0.4187) due to high cross-bucket variance.
+50
+Fig. C4Wilcoxon signed-rankp-values versus parametrict-testp-values for all benchmark-pair
+combinations. Points near the diagonal indicate agreement between parametric and non-parametric
+tests.
+March 2020), the 2022 rate-hiking sell-off, and the subsequent recovery, which provides
+a mix of bull, bear, and range-bound regimes.
+All 180 stocks have complete daily observations for every trading day in the sample;
+no stock-month pair contains missing data and no imputation was required. Table D1
+summarises the universe-level and sector-level descriptive statistics over the backtest
+period.
+D.2 Bucket stratification
+The 30 non-overlapping buckets of six stocks each are constructed via Mahalanobis
+rerandomisation (Morgan and Rubin 2012) over three covariates: mean annualised
+volatility, mean pairwise correlation, and log total return. From 20,000 candidate
+permutations the procedure selects the assignment that minimises the Mahalanobis
+51
+Fig. D1Log-scale adjusted-close prices for all 180 stocks over the full download period (2018–2024),
+coloured by sector. Portfolio evaluation begins in January 2020; the preceding two years provide the
+ML training and signal warm-up buffer described in the text. No gaps or stale prices are present.
+T able D1descriptive statistics for the 180-stock universe,
+computed over the backtest period (January 2020 to
+December 2024). panel A reports aggregate statistics across all
+stocks. panel B reports sector-level averages of annualised
+volatility, annualised return, and maximum drawdown.
+panel A: universe-level statistics
+number of stocks 180
+full download period Jan 2018 to Dec 2024 (1,761 days)
+backtest period Jan 2020 to Dec 2024 (1,258 days)
+mean annualised return (%) 19.36
+mean annualised volatility (%) 33.81
+mean maximum drawdown (%) 47.59
+mean pairwise correlation 0.39
+min / max pairwise correlation−0.05 / 0.92
+panel B: sector breakdown
+sectornvol. (%) ret. (%) MDD (%)
+communication services 16 35.77 10.34 56.0
+consumer discretionary 17 36.62 36.18 50.4
+consumer staples 16 24.69 12.55 34.5
+energy 16 45.92 15.82 65.7
+financials 16 34.62 16.53 47.8
+healthcare 16 27.94 15.43 38.7
+industrials 16 31.74 15.80 45.6
+information technology 17 39.31 57.43 48.4
+materials 16 35.69 13.86 48.7
+real estate 17 32.90 11.45 49.1
+utilities 17 26.75 5.48 38.9
+52
+distance between bucket-level and population covariate means (best score 43.79 out
+of 20,000 candidates).
+A chi-square test of sector balance yieldsχ 2 = 0.156 (p= 1.00) and nor-
+malised Shannon entropy of 0.9998, both of which indicate near-perfect sector balance
+(Figure D2). Every bucket contains stocks from exactly six distinct sectors.
+Fig. D2Sector representation across the 30 stratified buckets. Each bucket contains six stocks from
+six distinct sectors (χ 2 = 0.156,p= 1.00).
+Figure D3 shows that the buckets span mean pairwise correlations of 0.28 to 0.46
+and annualised volatilities of 0.29 to 0.41, which ensures that results are not artefacts
+of a single dependence or risk regime.
+References
+Alonso Robisco A, Carb´ o Mart ´ ınez JM (2022) Measuring the model risk-adjusted
+performance of machine learning algorithms in credit default prediction. Financial
+Innovation 8:70. https://doi.org/10.1186/s40854-022-00366-1
+Aroussi R (2024) yfinance: download market data from Yahoo! Finance’s API. URL
+https://github.com/ranaroussi/yfinance, python package, version 0.2.36
+Bailey DH, Lopez de Prado M (2014) The deflated Sharpe ratio: Correcting for selec-
+tion bias, backtest overfitting, and non-normality. Journal of Portfolio Management
+53
+Fig. D3Bucket diversity: mean pairwise correlation versus mean annualised volatility for each of
+the 30 buckets. The spread indicates that the stratification covers a wide range of dependence and
+risk conditions.
+40(5):94–107
+Bailey DH, Borwein JM, Lopez de Prado M, et al (2014) Pseudo-mathematics
+and financial charlatanism: The effects of backtest overfitting on out-of-sample
+performance. Notices of the American Mathematical Society 61(5):458–471
+Benjamini Y, Yekutieli D (2001) The control of the false discovery rate in multiple
+testing under dependency. Annals of Statistics 29(4):1165–1188
+Board of Governors of the Federal Reserve System (2011) Supervisory guidance on
+model risk management. Tech. Rep. SR Letter 11-7, Board of Governors of the
+Federal Reserve System
+Boyd S, Busseti E, Diamond S, et al (2017) Multi-period trading via convex
+optimization. Foundations and Trends in Optimization 3(1):1–76
+54
+DeMiguel V, Garlappi L, Uppal R (2009) Optimal versus naive diversification: How
+inefficient is the 1/N portfolio strategy? Review of Financial Studies 22(5):1915–1953
+Fisher RA (1935) The Design of Experiments. Oliver and Boyd, Edinburgh
+Giudici P, Raffinetti E (2023) SAFE artificial intelligence in finance. Finance Research
+Letters 56:104088
+Hansen PR (2005) A test for superior predictive ability. Journal of Business and
+Economic Statistics 23(4):365–380
+Harvey CR, Liu Y, Zhu H (2016) . . . and the cross-section of expected returns. Review
+of Financial Studies 29(1):5–68
+ISO (1994) Accuracy (trueness and precision) of measurement methods and results.
+Tech. Rep. ISO 5725-1:1994, International Organization for Standardization
+Jansen S (2020) zipline-reloaded: a Pythonic algorithmic trading library. URL https:
+//github.com/stefan-jansen/zipline-reloaded, community continuation of Quan-
+topian’s Zipline
+JCGM (2008) Evaluation of measurement data – guide to the expression of uncer-
+tainty in measurement. Tech. Rep. JCGM 100:2008, Joint Committee for Guides in
+Metrology
+Lin LIK (1989) A concordance correlation coefficient to evaluate reproducibility.
+Biometrics 45(1):255–268
+Marx C, Calmon F, Ustun B (2020) Predictive multiplicity in classification. In: Pro-
+ceedings of the 37th International Conference on Machine Learning (ICML), pp
+6765–6774
+55
+Mattson P, Cheng C, Diamos G, et al (2020) MLPerf training benchmark. In:
+Proceedings of Machine Learning and Systems (MLSys)
+Morgan KL, Rubin DB (2012) Rerandomization to improve covariate balance in
+experiments. Annals of Statistics 40(2):1263–1282
+Morissette P (2014) bt: flexible backtesting for Python. URL https://github.com/
+pmorissette/bt
+Nautech Systems (2021) NautilusTrader: high-performance algorithmic trading plat-
+form. URL https://github.com/nautechsystems/nautilus trader
+P´ erignon C, Akmansoy O, Hurlin C, et al (2024) Computational reproducibility in
+finance: Evidence from 1,000 tests. Review of Financial Studies 37(11):3558–3593.
+https://doi.org/10.1093/rfs/hhae029
+Polakow O (2020) vectorbt: vectorised backtesting, analytics, and optimisation for
+Python. URL https://github.com/polakowo/vectorbt
+QuantConnect (2013) Lean: open-source algorithmic trading engine. URL https://
+github.com/QuantConnect/Lean
+Rodriguez D (2015) backtrader: Python backtesting library for trading strategies. URL
+https://github.com/mementum/backtrader
+Romano JP, Wolf M (2005) Stepwise multiple testing as formalized data snooping.
+Econometrica 73(4):1237–1282
+Saltelli A, Ratto M, Andres T, et al (2008) Global Sensitivity Analysis: The Primer.
+John Wiley and Sons
+56
+Schuirmann DJ (1987) A comparison of the two one-sided tests procedure and the
+power approach for assessing the equivalence of average bioavailability. Journal of
+Pharmacokinetics and Biopharmaceutics 15(6):657–680
+Tebaldi C, Knutti R (2007) The use of the multi-model ensemble in proba-
+bilistic climate projections. Philosophical Transactions of the Royal Society A
+365(1857):2053–2075
+White H (2000) A reality check for data snooping. Econometrica 68(5):1097–1126
+Wiecki T, Campbell A, Lent J, et al (2016) All that glitters is not gold: Comparing
+backtest and out-of-sample performance on a large cohort of trading algorithms.
+Journal of Investing 25(3):69–80
+57

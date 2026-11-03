@@ -1,0 +1,1561 @@
+arXiv 2610.01115  https://arxiv.org/abs/2610.01115
+
+Certified Alpha Capacity:
+Statistical Arbitrage
+When Learning Takes Time
+Nicolò Bonacorsi
+Department of Applied Physics and Applied Mathematics
+Columbia University
+New York, NY 10027, USA
+nb3328@columbia.edu
+ORCID: 0009-0005-0479-3102
+Abstract
+Statistical validation takes time, and alpha can decay before the evidence justifies de-
+ployment. We quantify the surviving opportunity through Certified Alpha Capacity: the
+maximum expected value remaining under prescribed false-deployment and power constraints.
+In a canonical Gaussian experiment, we derive an exact certification frontier and the sharp
+lawKα,β/log (1/ε)for residual information capacity just above it. Near the frontier, a single
+interim decision can preserve orders of magnitude more capacity than fixed-time testing.
+Mapping information into cash reveals why equally certifiable signals can retain different
+economic values. In the specified competitive equilibrium, lifetime information approaches the
+certification frontier exponentially as research costs vanish.
+AMS 2020 Subject Classification:Primary 62L10, 62L15. Secondary 60G40, 62M10.
+Keywords:Certified Alpha Capacity, alpha decay, sequential testing, information theory, quanti-
+tative finance, optimal stopping, multiple testing.
+1. Introduction
+A promising trading signal creates a timing problem before it creates a portfolio position. Evidence
+takes time to accumulate, and the opportunity can weaken during that time. A large current
+signal may disappear before it supports a reliable deployment decision; a smaller, persistent signal
+may permit enough observation to justify action. Statistical arbitrage therefore requires assessing
+both the evidence needed to act and the opportunity remaining when that evidence arrives.
+Research on post-publication attenuation, slow exploitation, and alpha dynamics documents
+the importance of persistence for investment opportunities [27–29, 35]. Selecting among many
+candidate signals also increases the burden of establishing a reliable discovery [12–14]. Together,
+these mechanisms make the value available after validation depend on the relative rates of learning
+and economic decay.
+We study this dependence throughCertified Alpha Capacity(CAC). A certification contract fixes
+a maximum false-deployment probability under an economic boundary model and a required
+deployment probability under the alternative. Kullback–Leibler information measures separation
+from that boundary and provides a clock for accumulated evidence and remaining information
+lifetime. A stopping rule chooses when to certify, subject to the contract, and receives the value
+left at that decision. The framework joins a reliability requirement to the reward from timely
+action within a specified observation experiment.
+1
+arXiv:2610.01115v2  [stat.ME]  4 Oct 2026
+Sequential testing and group-sequential design supply the statistical foundation. Likelihood
+processes control errors as observations arrive [1, 2]; error spending and optimal designs allocate
+the reliability budget across monitoring dates [3–6]. Opportunistic detection and time-sensitive
+testing make terminal constraints central to the decision [7–9]. Our central result quantifies the
+value reliable stopping can preserve when the lifetime is only just sufficient for certification: a sharp
+inverse-logarithmic law with matching bounds over admissible stopping rules (Theorem 3.2). A
+small surplus of lifetime information has a quantitative value given by this explicit stopping-value
+law.
+The implications connect statistical feasibility to arbitrage economics. At false-deployment level
+0.05and power0 .90, the sharp constant isK0.05,0.10≃ 11.15. In the zero-hurdle exponential
+benchmark, a Bonferroni search over 100 candidates with annualized instantaneous Sharpe
+2 requires a half-life of about 7.24 years (Section 5). An ordered family of unknown decay
+profiles retains an exact least-profile frontier (Theorem 7.1), while competitive entry drives excess
+lifetime information exponentially toward that frontier as research costs vanish (Corollary 8.2). A
+descriptive funding benchmark illustrates the link between estimated lifetime information and
+persistence (Section 9).
+Economic interpretation requires a payoff map. Information in a Gaussian drift experiment is
+quadratic in the drift gap, whereas expected cashflow from a bounded position is linear in that gap.
+Equal lifetime information can thus support different cash values after learning. This connects
+CAC to learning with deadlines and decision-valued experimental design [17, 18, 20, 33, 34].
+Information acquisition and arbitrage can also change other participants’ opportunities [21, 23–25],
+and statistical limits of arbitrage connect econometric discrimination to market opportunities [22].
+CAC isolates the timing constraint within a declared observation law, payoff map, and lifetime
+mechanism.
+2. Model
+2.1. Probabilistic setup and information time
+On a common observation space, letF = (Ft)be the usual right-continuous augmentation of
+σ{(Xu,Yu) : u≤t} , and letP0,P 1 be locally equivalent laws. The signalX and loadingθ are
+predictable, and
+dYt =θ tXtdt+σdB (1)t (P1), σ >0,(2.1)
+dYt =σdB (0)t (P0),(2.2)
+where eachB(i) is Brownian in the stated law and filtration. We impose local square integrability
+and the exponential-martingale conditions for Girsanov (Novikov suffices on bounded horizons).
+The joint law of(X,Y )is assumed to have the likelihood below: the initial observation has the
+same law and the predictor supplies no additional likelihood factor. Predictability alone does not
+imply this joint-law assumption. A common completion is used on each horizon.
+Define the continuous information clock and its stopped inverse by
+At =σ−2
+∫ t
+0
+θ2uX2udu, H=A T,(2.3)
+tinv(s) = inf{t:A t>s}∧T,G s =F tinv(s).(2.4)
+Here T is economic death, deterministic or anF-stopping time;A denotes the value ofH when
+deterministic. The information filtrationG = (Gs)is constant afterH, and flat calendar-clock
+2
+intervals are collapsed. Girsanov gives the log likelihood
+Λt =
+∫ t
+0
+θuXu
+σ dB(0)u −At/2 (P 0),(2.5)
+Λt =
+∫ t
+0
+θuXu
+σ dB(1)u +At/2 (P 1).(2.6)
+ThusZ s = Λtinv(s) satisfies, up toH,
+Zs = ~B(1)s +s/2 (P 1), Z s = ~B(0)s −s/2 (P 0),(2.7)
+dP1
+dP0
+⏐⏐⏐⏐
+Gs
+=e Zs.(2.8)
+At a random horizon the precise identity is stopped:Zs = ~B(i)s∧H± (s∧H )/2. Any Brownian
+extension afterH is auxiliary on an enlarged space. For a boundedG-stopping timeS, write PSi
+for the restriction to its stopped sigma-fieldGS, andTA for the stopping times0≤S≤A.
+We use DKL(P∥Q ) = EP log(dP/dQ)and kl(p,q ) = plog (p/q) + (1−p ) log((1−p )/(1−q )),
+extended to boundary arguments by lower semicontinuity. All logarithms are natural;Φis the
+standard normal cdf,¯Φ = 1− Φ, zu = Φ−1(u), andx+ = max(x, 0). Matrix inequalities use the
+positive-definite order. Principal model-specific notation is collected in Appendix G.
+2.2. Economic value on the information clock
+At a fixed calendar time, suppress the time subscript and writeX and θ for the current signal
+value and drift loading. For the quadratic instantaneous trading objective
+qθX− γ2q2, γ >0,
+where q∈R is the position andγ is the quadratic trading-cost coefficient, the full-information
+optimal position isq∗ =θX/γ. Its value rate is
+θ2X2
+2γ dt= σ22γ dAt.
+Thus statistical information and perfect-information economic value are carried by the same
+clock. When H = A is deterministic, define the lifetime path information and integrated
+perfect-information value by
+Ilife := DKL(PA1∥PA0 ), V PI :=
+∫ T
+0
+θ2tX2t
+2γ dt,
+where the superscriptPIstands for perfect information.
+Theorem 2.1(Statistical information and full-information value).In the deterministic
+information-horizon benchmarkH=A,
+Ilife = A2, V PI = σ22γA= σ2γIlife.
+More generally, for any boundedG-stopping timeSsatisfyingS≤Halmost surely,
+DKL(PS1∥PS0 ) =E 1[ZS] = 12 E1[S].
+3
+Proof.For every bounded stopping timeS, the stopped likelihood-ratio identity gives
+dP1
+dP0
+⏐⏐⏐⏐
+GS
+=e ZS.
+Therefore
+DKL(PS1∥PS0 ) =E 1[ZS].
+Under P1, Zs = ~B(1)s +s/2. Boundedness ofS makes optional sampling applicable to~B(1), so
+E1[~B(1)S ] = 0and hence E1[ZS] = E1[S]/2. For deterministic S = A, this givesIlife = A/2.
+The economic identity follows from the full-information quadratic value calculation immediately
+above.
+Under this reduction, signal amplitude, feature units, calendar half-life and lookback enter the
+certification problem through the total information generated before the economic endpoint.
+3. Reliable certification before decay
+Fix error parametersα,β∈ (0, 1), whereα is the maximum false-deployment probability underP0
+and1 −β is the required deployment probability underP1. Unless stated otherwise we consider
+the nondegenerate regime1−β≥α.
+With only a type-I constraint, a procedure can deploy immediately with probabilityα without
+learning anything about the signal. A power target strictly aboveα rules out this lottery and
+makes certification depend on evidence accumulated under the alternative.
+Throughout the canonical experiment, the observation filtration is augmented at time zero by a
+variableUrnd∼Unif (0, 1), independent of the observed path under both hypotheses and with
+the same law under both. This permits binary randomized decisions without adding information
+about the hypothesis.
+For deterministic information lifetimeA, a certification/deployment rule is a pair(S,δ ), where
+S∈T A and δ∈{ 0, 1} isGS-measurable. The event{δ = 1} means that the signal is certified and
+deployed. On{δ= 0}we may, without loss, setS=A. Define
+cα,β(A) := supE 1[(A−S)δ]
+over all such rules satisfying
+P0(δ= 1)≤α,P 1(δ= 1)≥1−β.
+Below the feasibility threshold, we extend the capacity by zero as a reporting convention; the
+no-deployment rule does not satisfy the power constraint. The corresponding expected post-
+certification value, measured in economic units, is
+CACα,β(A) = σ22γcα,β(A).
+3.1. Exact Gaussian certification threshold
+Theorem 3.1(Exact Gaussian certification threshold).In the canonical Brownian likelihood
+experiment, the largest possible probability of deployment by information timeA among all level-α
+rules is
+πα(A) = Φ
+(√
+A−z 1−α
+)
+.
+4
+Consequently a false-deployment targetα and power target1−β are statistically feasible by death
+if and only if
+A≥A crit(α,β) =
+(
+z1−α +z 1−β
+)2.
+Equivalently, in KL units,
+Ilife≥I crit(α,β) := 12(z1−α +z 1−β)2.
+Positive post-certification value requiresA>A crit: at the critical point the full lifetime is needed
+merely to attain the requested statistical discrimination.
+Proof. If A = 0, the two observation laws coincide. No level-α decision has power exceeding
+α, and the decision1{Urnd≤α} attains it. NecessarilyS = 0, so residual value is zero. Thus the
+displayed formula holds atA= 0. AssumeA>0for the Gaussian threshold argument below.
+Every decision made by a rule withS≤A isGA-measurable, so the Neyman–Pearson lemma
+applies to the full experiment observed up toA. The full path likelihood ratio at timeA is eZA,
+andZ A is sufficient for testing the two simple path laws. UnderP0 andP 1,
+ZA∼N(−A/2,A), Z A∼N(A/2,A),
+respectively. Neyman–Pearson gives the level-αthreshold
+cA :=− A2 +√Az 1−α, Z A≥c A,
+whose P1-probability equalsΦ(
+√
+A−z 1−α). Solvingπα(A)≥ 1−β gives the displayed threshold.
+If A>A crit, choose a deterministic test timet∈ (Acrit,A ); the level-α Neyman–Pearson test att
+has power greater than1−β and leaves positive timeA−t whenever it deploys. At the critical
+point withAcrit> 0, feasibility forces the rule to attain the extremal Neyman–Pearson receiver-
+operating-characteristic (ROC) point. Because the terminal likelihood ratio has a continuous
+distribution, the level-α most-powerful test is unique up to null sets; thusδ =1 EA almost surely,
+where EA :={ZA≥c A}. If P1(S <A)> 0, then on{S <A} the conditional incrementZA−ZS
+is Gaussian with strictly positive varianceA−S, so0 <P 1(EA|G S)< 1. Sinceδ isGS-measurable
+and δ =1 EA, this would implyP1(EA|G S) =δ∈{ 0, 1}, a contradiction. ThusS =A almost
+surely at the critical point and the post-certification value is zero.
+For example, withα= 0.05and power0.90,
+Acrit = 8.5638473507...,I crit = 4.2819236753...nats.
+IfI denotes the KL information available to an arbitrary binary decision experiment, the generic
+data-processing bound isI≥kl (0.9, 0.05) = 2.3762054... nats, which is below the canonical
+Gaussian requirement.
+A constructive fixed-time lower bound forA>Acrit is
+cα,β(A)≥sup
+Acrit≤t<A
+(A−t) Φ
+(√
+t−z 1−α
+)
+.
+It tests once at timet. The optimal stopping rule can only improve on this benchmark.
+The zero residual value at the critical horizon is the endpoint implication of the most-powerful
+Gaussian test. In the discrete Gaussian experiment, Clerico et al. [9, Sections 6 and 8] likewise
+show that the hard-deadline power-optimal test cannot reject before its deadline. The next result
+quantifies the residual value obtainable when the information horizon exceeds that endpoint by a
+vanishing amount.
+5
+3.2. Near-critical capacity
+Assume0<α<1−β <1. For the remainder of the paper writeA ∗ :=A crit(α,β). Let
+φN(x) := (2π)−1/2e−x2/2
+denote the standard normal density. The fixed-time rule atA∗ earns(1 −β )(A−A ∗)when it is
+embedded in a longer horizon. Sequential certification has a different local scale.
+Theorem 3.2(Sharp near-critical capacity).For the canonical Brownian likelihood experiment,
+cα,β(A∗) = 0, c α,β(A∗ +ε)∼ Kα,βlog(1/ε), ε↓0,
+where
+Kα,β := A∗2 ([1 +z 21−β](1−β) +z 1−βφN(z1−β)).(3.1)
+The upper bound holds over randomized stopping rules. A binary conditional-error crossing rule
+attains the limit. Consequently
+lim
+ε↓0
+cα,β(A∗ +ε)
+ε = +∞.
+The constant has a direct Gaussian interpretation. For a standard normal dummy variableNG,
+Kα,β = A∗2 E[(z1−β−N G)2+].
+The positive part measures the squared terminal likelihood margin on paths that can support
+an earlier certificate; the expectation averages that margin across the alternative distribution.
+The constant measures information time in the canonical experiment; cash value follows from the
+payoff maps of Section 6.
+Forα= 0.05and power0.90,
+K0.05,0.10 = 11.1460491583....
+Appendix E proves the universal upper bound and the attaining construction. The fixed-time
+benchmark is(1−β)ε, so the adaptive-to-fixed-time value ratio diverges at rate
+1
+εlog(1/ε).
+εInterim fractiont/ATwo-look value Fixed-time value
+10−1 0.50 1.585621 9×10 −2
+10−2 0.80 1.001639 9×10 −3
+10−3 0.80 0.788752 9×10 −4
+10−4 0.80 0.610641 9×10 −5
+10−5 0.80 0.466293 9×10 −6
+10−6 0.90 0.386198 9×10 −7
+Table 1: Residual information-time value atα = 0.05, β = 0.10and A =A∗ +ε. The two-look
+column reports feasible policies selected from five interim fractions; it is a lower bound on
+unrestricted capacity. The fixed-time column tests atA∗.
+The sharp law concerns a deterministic information horizon and allows the preterminal monitoring
+date to move withε. Fixed monitoring grids and positive implementation leads define different
+local problems; Appendix E.5 records the corresponding boundary shift.
+6
+10−6 10−5 10−4 10−3 10−2 10−1
+Distance from frontier, ε = A − A *
+10−6
+10−5
+10−4
+10−3
+10−2
+10−1
+100
+101
+Expected information time saved
+a
+Sharp asymptotic reference
+Feasible two-look values
+Fixed-time benchmark
+10−6 10−5 10−4 10−3 10−2 10−1
+Distance from frontier, ε = A − A *
+10−1
+2 × 10−1
+3 × 10−1
+4 × 10−1
+6 × 10−1
+Asymptotic scale (coefficient 1)
+b
+Information: exponent 1
+Unit cash: exponent 2/3
+Unit cash: exponent 3/5
+Figure 1: Near-frontier information and cash-value scales. Left: the sharp asymptotic reference
+Kα,β/log (1/ε), feasible two-look values from Table 1, and the fixed-time benchmark, atα = 0.05
+and β = 0.10. The reference is not a computed finite-horizon optimum. Right: logarithmic scales
+with coefficients normalized to one; the cash exponents require the uniform reward assumptions
+in Section 6. The exponent(p + 1)/(2p + 1)is2 /3for a transverse crossing (p = 1) and3/5for a
+quadratic tangency (p= 2).
+3.3. A general information lower bound
+Proposition 3.3(Information lower bound for reliable certification).Suppose A > 0and
+1−β≥α. Whenever the reliable constraint set is nonempty, its capacity satisfies
+A−c α,β(A)
+2 ≥kl(1−β,α).
+Hence
+CACα,β(A)
+VPI ≤1− kl(1−β,α)Ilife .
+Feasibility requires the right-hand side to be nonnegative; otherwise no rule satisfies the declared
+power and type-I targets.
+Proof. Take any feasible rule and writeR = E1[(A−S )δ], p = P1(δ = 1), andq = P0(δ = 1).
+SettingS=Aon nondeployment gives
+R=A−E 1S.
+The stopped likelihood ratio iseZS, so data processing from the stopped path to the binary
+decisionδyields
+1
+2 E1S= D KL(PS1∥PS0 )≥kl(p,q)≥kl(1−β,α),
+where the last inequality usesp≥ 1−β≥α≥q and the monotonicity of binary relative entropy
+on this region. Hence every feasible rule satisfiesR≤A− 2 kl(1−β,α ). Taking the supremum
+over feasible rules proves the result.
+The exact Gaussian threshold gives the feasibility boundary in the canonical experiment. The
+KL inequality extends the information-budget argument beyond that model and also bounds the
+economic value consumed by certification.
+7
+4. Economic boundary and the value of information
+Value-of-information methods evaluate evidence through the decision it changes [31–34]. Let
+bt<θ t be a predictable economic-boundary loading and impose the joint-likelihood and Girsanov
+assumptions of Section 2.1 for the gapθ−b . The initial observation and predictor add no separate
+likelihood factor. For the corresponding lawsPθ,Pb,
+Aθ,bt =σ−2
+∫ t
+0
+(θu−bu)2X2udu,D KL(Ptθ∥Ptb) = 12 EθAθ,bt .
+Remaining flat during learning forgoes θ2tX2tdt/(2γ), so its price per KL nat isΠ flatt =
+(σ2/γ)[θt/(θt−bt)]2, which diverges near the boundary. The statistical experiment itself remains
+regular.
+Theorem 4.1(Value relative to the economic boundary).At a fixed time, foru(q;θ) =qθX−
+γq2/2with γ >0, the optima areqθ =θX/γ and qb =bX/γ. Their regret under the true loading
+is
+[u(qθ;θ)−u(q b;θ)]dt= (θ−b) 2X22γ dt= σ22γ dAθ,b.
+The boundary-relative price per KL nat is thereforeΠrelative =σ 2/γ, independent of the gap.
+Proof. Complete the square inu and divide the regret rate by the Gaussian drift-change KL rate
+(θ−b) 2X2/(2σ2).
+The conversion depends on the admissible pre-certification policy:Πflat applies to zero exposure,
+while the analysis below uses the boundary-relative benchmark.
+4.1. Several assets: value per unit of information
+For dYt = µdt + Σ1/2dBt and u(q;µ) = q⊤µ−q ⊤Γq/2, assumeΣ , Γ∈S d++. The true and
+boundary path laws shareΣ; put∆ =µ−bandΨ = Σ 1/2Γ−1Σ1/2.
+Theorem 4.2(Multivariate value–information bound).For the boundary position qb = Γ−1b
+relative toqµ = Γ−1µ, the regret and KL rates aredR = ∆⊤Γ−1∆dt/2and dI = ∆⊤Σ−1∆dt/2.
+For∆̸= 0,
+dR
+dI = ∆⊤Γ−1∆∆⊤Σ−1∆∈[λ min(Ψ),λ max(Ψ)].
+The ratio is direction-independent exactly whenΨ =cId for c> 0, equivalentlyΓ = c−1Σ; then it
+equalsc.
+Proof. Complete the square for regret and use Gaussian Girsanov for KL. Withx = Σ−1/2∆,
+the ratio is the Rayleigh quotientx⊤Ψx/(x⊤x); it is constant in every direction exactly when
+Ψ =cI d.
+5. Alpha Survival Frontiers
+Alpha decay has been studied both as a post-discovery empirical phenomenon and as an input to
+trading and strategy-durability models [35–38, 43]. The object here is the amount of statistical
+information that remains before the signal reaches its economic boundary. For the local terminal
+asymptotics in this section, take the drift and covariance paths to be deterministic; the same
+formulas hold pathwise on any realization for which the stated expansions are valid. Let the
+8
+observedd-dimensional return channel, under the true market model and an economic-boundary
+model, differ by drift gap
+∆t =µ t−bt∈R d,
+with instantaneous noise covarianceΣt∈S d++. Throughout this section, a superscript(b)on an
+information quantity means that KL divergence is measured relative to the economic-boundary
+model b = (bt). LetT be the end of the opportunity’s economic lifetime. Assume that ast↑T ,
+for somep>0and nonzeroc∈R d,
+∆t =c(T−t) p +o((T−t) p),Σ t→Σ T≻0.
+Define remaining KL information from timetuntil death by
+I(b)rem(t) := 12∫ Tt ∆⊤s Σ−1s ∆sds.
+Theorem 5.1(Remaining information near the economic endpoint).Under the assumptions
+above,
+I(b)rem(t) = c⊤Σ−1T c2(2p+ 1) (T−t) 2p+1 +o((T−t) 2p+1).
+In particular, for a transverse crossingp= 1,
+I(b)rem(t)∼ c⊤Σ−1T c6 (T−t) 3.
+Proof. Put u = T−s . By the assumed expansion and continuity of matrix inversion on the
+positive-definite cone,
+∆⊤T−u Σ−1T−u ∆T−u =u 2pc⊤Σ−1T c+o(u 2p).
+Integrating fromu= 0tou=T−tgives
+I(b)rem(t) = 12c⊤Σ−1T c(T−t) 2p+12p+ 1 +o((T−t) 2p+1).
+Economic value and the latest start.Put Vµ:brem(t) := 12∫Tt ∆⊤s Γ−1s ∆sds. For quadratic
+economic curvatureΓt→ ΓT≻ 0, completing the square and integrating as above givesVµ:brem(t)∼
+[c⊤Γ−1T c/(2(2p + 1))](T−t )2p+1. ThusVµ:brem/I(b)rem→ (c⊤Γ−1T c)/(c⊤Σ−1T c). If∆ T−u =cup andΣ
+is constant on the terminal interval, the information law is exact. WithI∗ = [z1−α +z1−β]2/2, a
+newly started experiment needs at least
+ℓ∗ = [2(2p+ 1)I∗/(c⊤Σ−1c)]1/(2p+1)
+units of remaining time, provided this boundary lies in the stated interval. For a smooth crossing
+this gives the local asymptotic scale of the latest-start boundary; the global boundary depends
+on the full path geometry. An experiment already running also carries its likelihood state and
+remaining error budget.
+Positive economic hurdle.For µt = µ0e−λdect,0 < b < µ0, λdec > 0, death occurs at
+T=λ −1dec log(µ0/b). Writingrb =b/µ 0, direct integration against boundary driftbgives
+I(b)life = µ202σ2λdec[ 12−2rb + 32r2b +r 2b log(1/rb)]∼ µ20(1−r b)36σ2λdec (rb↑1).
+The bracket expands as(1−rb)3/3 +O((1−rb)4). LocallyµT−u−b∼bλ decu, so Theorem 5.1
+also givesI (b)rem(T−ℓ)∼b 2λ2decℓ3/(6σ2).
+9
+5.1. Zero-hurdle exponential model: the Alpha Survival Frontier
+If the economic boundary is zero andµt = µ0e−λdect for all t≥ 0, the calendar horizon is
+unbounded while total lifetime information remains finite:
+Ilife = 12σ2
+∫ ∞
+0
+µ20e−2λdectdt= µ204σ2λdec.
+Let
+S:= µ0
+σ , h 1/2 := log 2λdec
+be the instantaneous Sharpe (with time units fixed consistently) and alpha half-life. Then
+Ilife = S2h1/24 log 2.
+Reliable certification is feasible only if
+S2h1/2
+4 log 2≥ 12[z1−α +z 1−β]2,
+or equivalently
+h1/2≥h min(S;α,β) := 2 log 2S2 [z1−α +z 1−β]2.
+We refer to this boundary as the canonicalAlpha Survival Frontier.
+Forα= 0.05, power1−β= 0.90:
+instantaneous SharpeSminimum half-life
+1.0 11.872
+1.5 5.276
+2.0 2.968
+3.0 1.319
+These thresholds use the calendar-time unit implicit in the scaling ofSand are implied by the
+stated exponential-decay model.
+5.2. Multiple testing and search breadth
+Large-scale strategy search creates the familiar multiplicity and selection problem in empirical
+finance [12–14]. SupposeM∈N candidate signals are screened under familywise false-deployment
+budgetα F∈(0,1). Under Bonferroni, assign
+αM = αFM.
+The canonical information threshold for one selected signal is then
+I(M)crit = 12[z1−αF/M +z 1−β]2.
+Under a Bonferroni allocation, this is the exact per-test Gaussian threshold. Bonferroni remains
+valid under arbitrary dependence; additional dependence information can support less conservative
+allocations.
+The zero-hurdle exponential survival frontier becomes
+h(M)min (S) = 2 log 2S2 [z1−αF/M +z 1−β]2.
+Atα F = 0.05, power0.90:
+10
+M h min,S= 1S= 1.5S= 2S= 3
+1 11.872 5.276 2.968 1.319
+10 20.627 9.168 5.157 2.292
+100 28.979 12.880 7.245 3.220
+1000 37.085 16.482 9.271 4.121
+Search breadth and unequal budgets.Inverting the one-candidate power envelope gives the
+minimum levelαmin(I,β ) = ¯Φ(√2I−z 1−β). HenceM Bonfmax =⌊αF/αmin⌋ (zero means no feasible
+candidate). Independent tests permit the Sidak inversionM Sidakmax =⌊log(1−αF )/log (1−α min)⌋;
+Bonferroni needs no independence.
+Remark5.2 (Heterogeneous Bonferroni feasibility).Within the separable union-bound architecture,
+candidatej with informationIj≥ 0and power1−βj needsα∗j = ¯Φ(√2Ij−z1−βj). All targets are
+feasible exactly when∑jα∗j≤α F: necessity follows from the marginal envelopes and sufficiency
+from the union bound. With equal candidate values, sorting these costs and taking the longest
+feasible prefix maximizes cardinality; heterogeneous values give a0–1knapsack constraint.
+For fixedαF,β, Gaussian tail inversion givesI(M)crit ∼logMasM→∞.
+5.3. A dimensionless feasibility ratio
+For a declared model, boundary and error allocation, defineCR =Ilife/Icrit(α,β ), using the
+declared per-test level under multiplicity. In the canonical experiment,CR< 1is infeasible,
+CR = 1is terminal feasibility, andCR> 1permits reliable certification. This ratio is a design-
+feasibility diagnostic; statistical evidence and deployment decisions depend on the observed
+likelihood and the selected stopping rule. An ongoing experiment must retain its likelihood state
+Zs and original error allocation, as in Appendix B. The terminal envelopeπα(CRA∗)bounds
+the power of every rule satisfying the declared false-deployment bound; a stopping policy that
+preserves economic value can have lower power.
+11
+1.0 1.5 2.0 2.5 3.0 3.5 4.0
+Instantaneous Sharpe ratio, S
+1
+10
+Minimum half-life, hmin  (years)
+S = 2, M = 100: hmin = 7.24 years
+M = 1
+M = 10
+M = 1, 000
+M = 100
+Figure 2: Canonical Alpha Survival Frontier for familywise false-deployment level0.05and power
+0.90. Each curve gives the minimum half-life required at a given instantaneous Sharpe for a
+Bonferroni search overM candidates. The highlighted point isS= 2, M = 100, for which the
+minimum half-life is7.245years. The pale-red outline is a visual emphasis of theM = 100curve.
+6. Certification timing and post-certification cash value
+The capacitycα,β(A)measures information time left at certification. A trading payoff is generally
+a function of that residual clock. The sharp near-critical law from Section 3.2 transfers to payoff
+maps through their local dependence on residual information.
+Forρ R >0define the canonical residual-moment function
+Mα,β(ρR) :=A ρR∗ E[(NG +z 1−β)2ρR+ ], N G∼N(0,1),(6.1)
+whereA∗ =Acrit(α,β )as in Section 3.2. The reward extension is taken along a family of canonical
+experiments withA =A∗ +ε↓A ∗. LetRA : [0,A ]→ [0,∞ )be deterministic measurable residual
+rewards satisfyingRA(0) = 0, uniformly bounded forA in a right neighborhood ofA∗. Assume
+that, for somea0>0andρ R >0,
+RA(u)/uρR−→a 0 uniformly asA↓A ∗ andu↓0.
+Appendix E.4 then gives
+sup
+(S,δ)
+E1[RA(A−S)δ]∼ a0Mα,β(ρR)[2 log(1/ε)]ρR, ε↓0,(6.2)
+where the supremum is over the same reliable certification rules as in Section 3.
+6.1. Bounded exposure near economic death
+Use the scalar boundary-relative drift gap from Section 5. Suppose that, asu↓0,
+∆T−u =cu p +o(up), σ T−u→σ T >0, c>0,
+12
+with the same crossing orderp >0as in Theorem 5.1. A unit position is opened only after
+certification and then held through the economic endpointT. Its expected boundary-relative
+cash reward from timetis
+Vunit(t) :=
+∫ T
+t
+∆sds.
+Theorem 5.1 gives the residual information-time scale
+2I(b)rem(T−u)∼ c2σ2T (2p+ 1)u2p+1,
+while
+Vunit(T−u)∼ cp+ 1up+1.
+Hence
+Vunit∼K unitp uρpinfo, ρ p := p+ 12p+ 1, K unitp := cp+ 1
+(
+σ2T (2p+ 1)
+c2
+)ρp
+,(6.3)
+when uinfo := 2I(b)rem denotes residual boundary-relative information time. For the near-critical
+statement, consider a family with total informationA↓A ∗ whose terminal expansions are uniform
+and whose residual reward maps satisfy the hypotheses above. The constantsc and σT denote
+positive limiting terminal coefficients. Combining (6.2) and (6.3) gives the sharp cash-value
+capacity
+CACcashα,β (A∗ +ε)∼ Kunitp Mα,β(ρp)[2 log(1/ε)]ρp .(6.4)
+For a transverse crossing,p = 1and ρp = 2/3, so the attainable post-certification cash value is of
+order
+[log(1/ε)]−2/3.
+The exponent differs from the information-time exponent because a bounded position accumulates∫
+∆tdt, whereas the likelihood clock accumulates
+∫
+∆2t/σ2t dt.
+For the exponential gap
+∆t =µ 0e−λdect−b, T=λ dec−1 log(µ0/b),
+Section 5 hasp= 1andc=bλ dec. Formula (6.4) applies directly.
+6.2. A fixed deployment fee
+A fixed round-trip fee shifts the last economically useful certification time away from the zero-edge
+endpoint. Consider the local linear gap
+∆t =c(T−t),0≤t≤T,
+and a fixed feeFfee∈ (0,cT 2/2). The last entry time with nonnegative expected net cash reward
+is
+Tfee =T−ℓ fee, ℓ fee =
+√
+2Ffee
+c .
+Take constant volatilityσ >0and use the information horizon ending at the last admissible entry
+date:
+Afee := 1σ2
+∫ Tfee
+0
+c2(T−t) 2dt= c2
+3σ2 (T 3−ℓ 3fee).
+13
+The near-critical fee law below usesAfee =A∗ +ε. Ifufee is the information time remaining to
+Tfee, the exact net reward from certifying at that state is
+Rfee(ufee) = c2
+
+
+(
+ℓ3fee + 3σ2ufeec2 )2/3−ℓ 2fee.(6.5)
+Thus
+Rfee(ufee)∼ σ2cℓfeeufee, u fee↓0,
+and the sharp net-return capacity returns to the inverse-logarithmic scale:
+CACfeeα,β(A∗ +ε)∼ σ2Kα,βcℓfee log(1/ε).(6.6)
+The fee changes the local asymptotic law because the relevant deployment boundary is reached
+while the underlying drift gap is still strictly positive.
+6.3. Cash value beyond lifetime information
+The ratioCR identifies statistical feasibility in the canonical simple-hypothesis experiment. Cash
+value also depends on how the reward is distributed along the information clock. In particular, two
+opportunities can share the same current edge, volatility, calendar horizon, total future cash value,
+lifetime information and the sameCR, while having different local crossing orders at economic
+death. Equation (6.4) then gives different certification-constrained cash values. Appendix E.6
+gives an explicit pair with identicalCRand different asymptotic exponents.
+7. Unknown decay and robust certification
+The preceding sections condition on a specified boundary-relative drift profile. We now require a
+single observable policy to satisfy the same false-deployment and power targets over a declared
+family of possible decay paths.
+7.1. Ordered families
+Fix a deterministic horizonTand let{∆ ϑ :ϑ∈Θ}be continuous scalar drift gaps satisfying
+∆ϑ(t)≥∆ (t)>0,0≤t<T,∆ (T)≥0,
+where the least profile∆belongs to the family. Under alternativeϑ,
+dYt = ∆ϑ(t)dt+σdB t,
+while the boundary law has zero drift. Define the least-profile information clock and matched
+log-likelihood by
+At := 1σ2
+∫ t
+0
+∆(u)2du, A :=A T,
+Zt := 1σ2
+∫ t
+0
+∆(u)dYu− 12At.
+For0<α<1−β <1, define the robust residual-information capacity by
+crobα,β(A) := sup
+(S,δ)
+inf
+ϑ∈Θ
+Eϑ[(A−S)δ],
+14
+where S≤A is a stopping time on the deterministic least-profile information clock,0≤δ≤ 1is
+measurable atS, and the common policy satisfiesE0δ≤α and infϑ Eϑδ≥ 1−β . The declared
+family is suppressed in the capacity notation.
+Theorem 7.1(Ordered-family robust frontier).Among all terminal decisions of size at mostα,
+sup
+δ:E 0δ≤α
+inf
+ϑ∈Θ
+Eϑδ= Φ
+(√
+A−z 1−α
+)
+.
+Consequently a common certificate with power at least1−β for everyϑ∈ Θexists if and only if
+A≥A∗.
+IfA =A∗ +ε, the robust residual-information capacity satisfies
+crobα,β(A)∼ Kα,βlog(1/ε).
+For a common bounded, nonnegative, nondecreasing rewardR(u)with R(0) = 0, assumeR(u)∼
+a0uρR with the uniformity required by the reward-transfer result. Thensup(S,δ) infϑ Eϑ[R(A−S )δ]
+obeys (6.2) with the least-profile constant. The same conclusion holds for member-specific payoff
+maps when every member’s reward at each calendar time dominates this least-profile reward.
+The matched statistic is ordered pathwise under a common Brownian coupling, and the least profile
+belongs to the declared family. It determines terminal worst-case power. The conditional-error
+crossing rule stops no later for larger profiles; under the stated reward-ordering assumption, this
+also establishes the sharp robust-reward lower bound. The least member supplies the matching
+upper bound.
+For the exponential family
+∆θ,λdec(t) =θe−λdect−b,
+with θ∈ [θ−,θ +], λdec∈ [λdec,−,λ dec,+]and θ− > b >0, the common least profile up to the
+earliest economic death is
+∆(t) =θ−e−λdec,+t−b, T=λ dec,+−1 log(θ−/b).
+The policy is constructed from∆ and the observed path, uniformly over the declared parameter
+rectangle.
+7.2. Nonordered families and least-favorable mixtures
+For nonordered profiles, robust feasibility depends on the geometry of the alternative family
+beyond memberwise lifetime information. Consider a finite Gaussian experiment with whitened
+observationY∈R n:
+Y∼N(0,I n) (P 0),Y∼N(m j,In) (P j), j= 1,...,J.
+For a terminal decision0≤δ≤1, define
+πrob := sup
+E0δ≤α
+min
+1≤j≤J
+Ejδ.
+Let
+Lj(y) = exp
+(
+m⊤j y− 12∥mj∥2
+)
+,
+and let
+WJ :=
+
+
+w∈[0,1] J :
+J∑
+j=1
+wj = 1
+
+
+
+be the simplex of mixture weights. Forw= (w1,...,w J)∈W J, setLw =∑jwjLj.
+15
+Proposition 7.2(Least-favorable mixture).The exact robust terminal power satisfies
+πrob = minw∈WJ sup0≤δ≤1,E 0δ≤α E0[Lwδ].
+For fixedw, the inner problem is the Neyman–Pearson test ofP0 against the mixture likelihood
+Lw. A saddle pair exists.
+This formulation exposes a strict uncertainty penalty at the individual frontier. If two distinct
+nonzero alternatives satisfy
+∥m1∥2 =∥m 2∥2 =A∗,
+then each member separately attains power1−β at sizeα, but no common level-α decision
+attains that power under both members.
+For the two exponential profiles used in the numerical benchmark, calibrated so that each profile
+individually lies atCR = 1for α = 0.05and power0.90, the optimal common test has worst-profile
+power
+0.8655488924....
+Scaling both profile norms by the same factor, uniform power0.90is recovered at
+CR= 1.1268349125....
+Thus the geometry of the alternative family enters robust certification even when every profile
+has the same oracle lifetime information.
+7.3. Transfer from an estimated model
+LetΠbe a common class of admissible policies. Forπ∈ Π, letδπ∈{ 0, 1} denote its deployment
+decision and letRj(π)denote its integrable reward under alternativej. Write
+size(π) =P 0(δπ = 1),pow j(π) =P j(δπ = 1),V j(π) =E j[Rj(π)].
+Approximate-model quantities carry hats. Suppose uniformly overΠand the declared alternatives
+that
+|size(π)− ˆsize(π)|≤η P,
+|powj(π)− ˆpowj(π)|≤η P,|V j(π)− ˆVj(π)|≤η V.
+Fix the scalar objective before optimization. Here we use
+U(π) := inf
+j
+Vj(π), ˆU(π) := infj ˆVj(π).
+A policy optimized forˆUunder the tightened approximate constraints
+ˆsize≤α−η P, ˆpowj≥1−β+η P for allj,
+satisfies the original reliability contract under the true model. Its worst-case value gap is bounded
+by the optimization error,2ηV, and the value of the statistical safety margin, provided the
+twice-tightened true feasible set is nonempty. This is a bound for the declared scalar objective, not
+simultaneous optimality for every memberwise reward. Appendix F gives the precise statement.
+For an estimated model, the stated uniform approximation bounds must hold conditionally on
+the information used to freeze that model, or on an explicitly specified event; they do not follow
+merely from fitting a parametric family.
+16
+8. Market equilibrium with certification costs
+Information acquisition and arbitrage are endogenous in several market-equilibrium models
+[21, 23–25]. More recent work studies competition among factor investors and the empirical role
+of post-publication attenuation, arbitrage capital, and implementation frictions [26–30]. The
+preceding sections take opportunity lifetime as given. We now allow arbitrage activity to shorten
+it. An explicit crowding map links aggregate research intensity to the remaining information
+budget, so the CAC threshold becomes an equilibrium constraint.
+Retain the reliable-information threshold
+I∗ :=I crit(α,β) = 12[z1−α +z 1−β]2.
+LetvKL> 0denote economic value per KL nat. In the canonical scalar model, Theorem 4.1 gives
+vKL =σ2/γ. Define the optimal reliable CAC economic surplus at lifetime informationI≥ 0by
+C⋆(I) := vKL
+2 cα,β(2I).
+The equilibrium arguments below use only the resulting value function and its stated regularity;
+Appendix B gives the corresponding randomized constrained-stopping representation. For the
+equilibrium result we require the natural regularity thatC⋆ is continuous, with
+C⋆(I) = 0 (I≤I ∗), C ⋆(I)>0 (I>I ∗).
+In the canonical model, the CAC value is strictly increasing above the frontier. Indeed, if one KL
+nat of perfect-information value is worthvKL, then embedding anyε-optimal rule atI1 in the
+longer horizonI2 >I 1≥I∗ adds vKL(I2−I 1)on every deployment, whose probability under
+the alternative law is at least1−β. Lettingε↓0gives
+C⋆(I2)−C ⋆(I1)≥v KL(1−β)(I 2−I 1).
+Thus the constructive linear surplus
+C0(I) =v KL(1−β)(I−I ∗)+
+is a lower envelope of the optimal CAC value.
+LetI0> 0be the no-crowding lifetime-information endowment and letx≥ 0denote aggregate
+arbitrage/research intensity. The remaining information budget is
+I=G(x),
+where G : [0,∞ )→ [0,I 0]is continuous and strictly decreasing, withG(0) =I0. The canonical
+exponential-crowding benchmark uses a crowding sensitivityχ>0and is
+G(x) = I0
+1 +χx,
+which arises whenλdec,0> 0denotes the baseline exponential decay rate and crowding accelerates
+it fromλ dec,0 toλ dec,0(1 +χx).
+Suppose each unit of active arbitrage capital pays marginal research or implementation costψ >0.
+In a competitive market with many individually small arbitrageurs, aggregate post-certification
+value C⋆(G(x))is allocated proportionally across active capacity. Positive-entry equilibrium
+satisfies
+C⋆(G(x))
+x =ψ,
+or equivalently
+C⋆(G(x)) =ψx.
+17
+Theorem 8.1(Competitive equilibrium under certification costs).Assume C⋆ and G have the
+properties above. IfI0>I∗ and there is a finitex∗ with G(x∗) =I∗, then for everyψ >0there
+is a unique positive equilibriumxψ∈(0,x ∗)satisfying
+C⋆(G(xψ)) =ψx ψ.
+Under the entry dynamic
+˙x=η{C⋆(G(x))−ψx}, η >0,
+this equilibrium is globally asymptotically stable. Its residual informationIψ =G(x ψ)satisfies
+I∗<I ψ <I 0,I ψ↓I∗ asψ↓0.
+IfI 0≤I∗, the no-entry equilibriumx= 0is globally stable.
+Proof. Put Fψ(x) = C⋆(G(x))−ψx . It is continuous and strictly decreasing, withFψ(0) > 0
+and Fψ(x∗) = −ψx∗ < 0, so it has one root in(0,x∗). Its sign points toward that root on
+[0,∞ ); monotonicity implies the one-sided Lipschitz inequality(x−y )(Fψ(x)−Fψ(y))≤ 0, hence
+uniqueness of the scalar flow and global asymptotic stability. For0<ψ 1<ψ 2, evaluatingFψ1 at
+xψ2 showsxψ1 >x ψ2. Its limit asψ↓ 0cannot be below x∗, since thenC⋆(G(xψ))would have a
+positive limit whileψxψ→0. Thusx ψ↑x∗ andI ψ↓I∗. IfI 0≤I∗, the flow is˙x=−ηψx.
+The equilibrium divides opportunities at the certification frontier. Below the frontier, reliable
+post-certification value is zero. Above the frontier, rents finance entry and crowding reduces
+the remaining information budget. As research cost falls, the equilibrium residual information
+approaches the reliable-information threshold.
+The lower envelopeC0 also yields a useful nonasymptotic bound. SinceG is strictly decreasing,
+writeG−1 for its inverse on its range. The optimal equilibrium satisfies
+Iψ−I∗≤ ψG−1(I∗)vKL(1−β) .
+ForG(x) =I 0/(1 +χx),
+Iψ−I∗≤ ψχvKL(1−β) (I0I∗−1).
+Hence the residual excess information above the CAC frontier vanishes at least linearly with
+research cost, without requiring differentiability of the stopping value at the threshold.
+Corollary 8.2(Sharp concentration of the equilibrium gap).Under the hypotheses of Theorem 8.1,
+assume0<α<1−β <1and retain
+C⋆(I) = vKL
+2 cα,β(2I).
+Letx∗ =G−1(I∗). Asψ↓0,
+log 1Iψ−I∗∼ vKLKα,β2x∗ 1ψ.(8.1)
+Equivalently,
+Iψ−I∗ = exp
+[
+−vKLKα,β
+2x∗ψ +o(1/ψ)
+]
+.
+18
+Proof.Theorem 8.1 givesx ψ→x∗>0andI ψ↓I∗. SinceA∗ = 2I∗, Theorem 3.2 gives
+cα,β(2Iψ)∼ Kα,βlog(1/[2(Iψ−I∗)]).
+The equilibrium identityC⋆(Iψ) =ψx ψ implies
+log
+(
+1
+2(Iψ−I∗)
+)
+∼ vKLKα,β
+2x∗ψ .
+The additive constantlog 2is negligible on the1/ψscale, which proves (8.1).
+8.1. A finite number of competing arbitrageurs
+The proportional allocation in the large-number competitive model can itself be obtained as the
+limit of a strategic game with finitely many arbitrageurs. LetN≥ 2arbitrage desks choose efforts
+ei≥ 0, with aggregateE :=∑Ni=1ei; writee−i for the vector of efforts of desks other thani. Let
+R(E) :=C ⋆(G(E)).
+ForE >0, deski receives proportional shareei/E of the endogenous post-certification value pool
+and paysψei:
+ui(ei,e−i) = eiER(E)−ψe i, u i(0,0) := 0.
+Atasymmetricinteriorequilibrium, write EN > 0foraggregateequilibriumeffort. Differentiability
+ofRatE N gives
+ψ=
+(
+1− 1N)R(EN)EN + 1NR′(EN).
+The second term is a strategic prize-destruction effect. IfR′(EN) < 0, a finite arbitrageur
+internalizes the reduction in the total opportunity caused by additional effort. For the following
+comparison, assume symmetric interior equilibria exist for everyN≥ 2, thatR is continuously
+differentiable and strictly decreasing in its positive-rent region(0,E∗), with R(0) > 0and
+R(E∗) = 0, and that
+FN(E) :=
+(
+1− 1N)R(E)E + 1NR′(E)
+is strictly decreasing there. Then the corresponding rootsEN increase withN, sinceFN+1(E)>
+FN(E), and converge to the unique competitive rootR(E)/E = ψ for ψ > 0. These are
+conditional comparative statics; the first-order equation alone does not establish existence of a
+Nash equilibrium.
+A closed-form benchmark is obtained by using the globally defined clipped linear information
+impact
+G(E) = (I0−κ crowdE)+, κ crowd>0,
+with the constructive post-certification value
+C0(I) =a(I−I ∗)+, a=v KL(1−β).
+Proposition 8.3(Exact finite- N linear benchmark).Let N≥ 2,I0 >I∗, a,κ crowd > 0, and
+ψ≥ 0. Writing∆I =I0−I∗, define the rent pool for allE≥ 0by R(E) =a(∆I−κ crowdE)+.
+The proportional-share game has a unique symmetric equilibrium with positive gross rent. If
+19
+ψ >0, it is also the unique symmetric equilibrium with positive aggregate effort. Its aggregate
+effort is
+EN = a∆I(N−1)N(aκ crowd +ψ) .
+Define the equilibrium residual information byIeqN :=I0−κ crowdEN. The equilibrium remains in
+the positive-rent region, and its residual information satisfies
+IeqN−I∗ = ∆I aκcrowd +NψN(aκ crowd +ψ) .
+Equivalently,
+IeqN−I∗
+I0−I∗
+= ψaκcrowd +ψ + aκcrowdN(aκ crowd +ψ) .
+In particular, ifψ= 0, then
+IeqN =I∗ +I0−I∗N .
+Proof.See Appendix B.1.
+The first term in the residual-information fraction comes from research cost; the second comes
+from having only finitely many competitors. Along the symmetric positive-rent equilibrium
+branch, a finite set of arbitrageurs leaves positive excess information even when research itself
+is costless; only the large-number competitive limit of this branch reaches the CAC frontier.
+In the symmetric linear benchmark,1/N is also the Herfindahl index of effort shares, so the
+zero-cost residual-information fraction equals market concentration. With nonlinear crowding or
+asymmetric payoffs the relationship changes with the market technology.
+In the zero-hurdle exponential Gaussian model,I =S 2h1/2/(4 log 2). Consequently, for opportu-
+nities that are actively compressed by many low-cost arbitrageurs,
+S2h1/2−→4 log 2I∗.
+This limit describes opportunities whose lifetime is actively compressed by many low-cost arbi-
+trageurs.
+Remark8.4.The equilibrium comparisons condition on implementation technology. Heterogeneity
+in research cost, crowding and competitive breadth can change their pooled sign; the opportunity’s
+information budget alone is not a cross-sectional prediction of its rate of decay [30].
+20
+2 5 10 20 50 100
+Number of arbitrageurs, N
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7Residual information fraction
+q = ψ/(aκcrowd)
+q = 0
+q = 0.1
+q = 0.5
+Figure 3: Residual excess lifetime information along the symmetric positive-rent equilibrium
+branch of the exact linear-information strategic benchmark. With zero research cost the residual
+fraction is exactly1/N; positive research cost creates an additional limiting gap even as the
+number of competitors becomes large. Dotted lines markq/(1 +q), whereq =ψ/(aκcrowd); the
+pale-red outline highlightsq= 0.1.
+9. Funding persistence as a lifetime signal
+Funding persistence provides a descriptive illustration [39–42]. The benchmark uses BTC-
+USDT and ETH-USDT on Binance, Bybit, Gate, HTX, KuCoin and MEXC at eight-hour
+settlements. Events require 180 pre-event days, absolute funding above its trailing 95th percentile,
+a seven-day cooldown and complete seven-day follow-up; 543 of 545 events have finite scores.
+The W = 540pre-event settlements fit the no-intercept AR(1) fj+1 = ϕfj +εj+1 by least
+squares, with residual sample standard deviationˆσε. For0 < ˆϕ < 1, setˆλdec =−log ˆϕ and
+Lscore =f 2t/[4ˆσ2εˆλdecIcrit(0.05, 0.10)]. The threshold is4.2819236753... nats; normalization leaves
+ranks unchanged. Comparators arezedge,t =|ft|/sf,t, wheresf,t is the pre-event funding standard
+deviation, and the historicaltstatistic ofsgn(f t)fj. The outcome isY7d,t =∑21k=1 sgn(ft)ft+k.
+Figure 4 displays the estimates computed from the supplied event table: lifetime, edge and
+historical-t associations are0.4741,0 .3833and0 .3606. Residualizing lifetime midranks on edge
+midranks with an intercept leaves association0.2777(95% interval[0 .1228, 0.4061]). Intervals
+use 5,000 calendar-month cluster bootstrap resamples across 38 months, with seed 1729. On the
+same 543-event panel, the rank correlation betweenLscore and the sign-oriented AR(1) cumulative
+forecast ˆmt =|ft|∑21k=1ˆϕk is0.9222, rising to0.9952when this forecast is divided by its conditional
+AR(1) standard deviation. The reproduction guide supplies the forecast-variance formula, event
+table and source identities. The score thus summarizes the AR(1) persistence channel. These
+retrospective quantities concern signed funding; net trading returns additionally require execution,
+hedge, financing and collateral costs.
+21
+0.0 0.2 0.4 0.6
+Spearman association with next-seven-day signed funding
+Lifetime score
+Current edge magnitude
+Historical t statistic
+Lifetime component | edge
+0.474
+0.383
+0.361
+0.278
+Figure 4: Descriptive funding benchmark, 543 events. Points report Spearman associations with
+next-seven-day sign-oriented funding; horizontal whiskers show calendar-month cluster bootstrap
+95% intervals from 5,000 resamples. The last row residualizes lifetime-score rank on current-edge
+rank.
+10. Discussion
+CAC distinguishes evidence already accumulated, evidence that can still arrive before economic
+death, and value remaining after certification. A research team can use the frontier to screen a
+proposed validation budget: a high current edge does not compensate for an information lifetime
+too short to satisfy the declared reliability contract. The screen concerns a new experiment; an
+experiment already in progress also requires its current likelihood state.
+For a portfolio manager, residual information and implementable cash value are separate objects.
+Near the frontier, their logarithmic rates can differ, and equal certifiability ratios need not imply
+equal economic rankings. Trading limits, fees, implementation delays and the shape of the
+remaining drift must enter the reward map. The theorems concern hypotheses within a specified
+drift experiment; realized portfolio profits lie outside their scope.
+The theoretical conclusions also have explicit model limits. The canonical likelihood must describe
+the joint observed experiment; predictability of a signal alone does not make its likelihood
+contribution disappear. Reward transfer requires uniform local behavior and control away from
+the boundary. Ordered uncertainty preserves a least-profile frontier only with a compatible reward
+order; nonordered alternatives require a common minimax test. Estimated-model guarantees
+require uniform approximation bounds that include the null.
+The funding exercise connects the lifetime perspective to an observable market quantity. Its
+retrospectiveassociationscharacterizesigned-fundingpersistence. Aprospectivetradingevaluation
+would additionally specify execution, financing, hedging and portfolio constraints, yielding a
+distinct estimand from the persistence quantity studied here.
+11. Conclusion
+This perspective suggests treating validation speed as part of strategy design. A useful research
+rule must account for both the evidence needed to act and the opportunity remaining when that
+evidence arrives. Extending the analysis to richer observation models, implementable portfolio
+constraints and endogenous information acquisition would connect the certification frontier more
+closely to the allocation of arbitrage capital.
+22
+12. Code and data availability
+The AlphaValue research package contains the numerical routines, synthetic examples, tests,
+editable figures and reproduction code for the theoretical and descriptive funding results reported
+here. The software archive is versioned at Zenodo under the concept DOI 10.5281/zenodo.23070742.
+Third-party funding histories remain subject to their source licenses; the reproduction guide
+identifies the required source revision and input paths. The derived event table, source-file
+identities and numerical references are included. The reproduction command recomputes the
+funding estimates and intervals offline; reconstructing the event table from raw histories requires
+the pinned inputs. The public bundle is scoped to this article. A clean editable installation uses
+python -m pip install -e ’.[test,plot]’followed bypython reproduce/run.py.
+References
+[1] A. Wald.Sequential Analysis. Wiley, New York, 1947.
+[2] D. Siegmund.Sequential Analysis: Tests and Confidence Intervals. Springer, New York,
+1985.
+[3] P. C. O’Brien and T. R. Fleming. A Multiple Testing Procedure for Clinical Trials.Biometrics,
+35(3):549–556, 1979. doi:10.2307/2530245.
+[4] K.K.G.LanandD.L.DeMets. DiscreteSequentialBoundariesforClinicalTrials.Biometrika,
+70(3):659–663, 1983. doi:10.1093/biomet/70.3.659.
+[5] J. D. Eales and C. Jennison. An Improved Method for Deriving Optimal One-Sided Group
+Sequential Tests.Biometrika, 79(1):13–24, 1992. doi:10.1093/biomet/79.1.13.
+[6] S. Barber and C. Jennison. Optimal Asymmetric One-Sided Group Sequential Tests.
+Biometrika, 89(1):49–60, 2002. doi:10.1093/biomet/89.1.49.
+[7] W. Zhang, G. V. Moustakides, and H. V. Poor. Opportunistic Detection Rules: Finite and
+Asymptotic Analysis.IEEE Transactions on Information Theory, 62(4):2140–2152, 2016.
+https://arxiv.org/abs/1602.03969.
+[8] D. W. Ham, S. Jasin, and X. Zhao. A General Framework for Optimal Group Sequential
+Testing via Mixed-Integer Linear Programming. arXiv:2605.03406, 2026. https://arxiv.org/
+abs/2605.03406.
+[9] E. Clerico, T. Wegel, I. Azangulov, and P. Rebeschini. Time-sensitive anytime-valid testing.
+arXiv:2605.06521, 2026. https://arxiv.org/abs/2605.06521.
+[10] H. Wang and A. Ramdas. Anytime-valid t-tests and confidence sequences for
+Gaussian means with unknown variance.Sequential Analysis, 44(1):56–110, 2025.
+doi:10.1080/07474946.2024.2428245.
+[11] N. W. Koning and S. van Meer. Anytime validity is free: inducing sequential tests.Journal
+of the Royal Statistical Society: Series B (Statistical Methodology), 88(4):1366–1384, 2026.
+doi:10.1093/jrsssb/qkag050.
+[12] C. R. Harvey, Y. Liu, and H. Zhu. ... and the Cross-Section of Expected Returns.Review
+of Financial Studies, 29(1):5–68, 2016. doi:10.1093/rfs/hhv059.
+23
+[13] D. H. Bailey and M. López de Prado. The Deflated Sharpe Ratio: Correcting for Selection
+Bias, Backtest Overfitting, and Non-Normality.Journal of Portfolio Management, 40(5):94–
+107, 2014. doi:10.3905/jpm.2014.40.5.094.
+[14] D. H. Bailey, J. Borwein, M. López de Prado, and Q. J. Zhu. The Probability of Backtest
+Overfitting.Journal of Computational Finance, 20(4):39–69, 2017.
+[15] D. C. Nachman. Optimal Stopping with a Horizon Constraint.Mathematics of Operations
+Research, 5(1):126–134, 1980. doi:10.1287/moor.5.1.126.
+[16] D. P. Kennedy. On a constrained optimal stopping problem.Journal of Applied Probability,
+19(3):631–641, 1982.
+[17] P. I. Frazier and A. J. Yu. Sequential Hypothesis Testing under Stochastic Deadlines. In
+Advances in Neural Information Processing Systems 20, 2007.
+[18] S. Dayanik and A. J. Yu. Reward-Rate Maximization in Sequential Identification under a
+Stochastic Deadline.SIAM Journal on Control and Optimization, 51(4):2922–2948, 2013.
+doi:10.1137/100818005.
+[19] E. Ekström and Y. Wang. Stopping Problems with an Unknown State.Journal of Applied
+Probability, 61(2):515–528, 2024. doi:10.1017/jpr.2023.52.
+[20] S. Campbell, G. Gaitsgori, R. Groenewald, and I. Karatzas. Grab It Before It’s Gone: Testing
+Uncertain Rewards under a Stochastic Deadline.Stochastic Processes and their Applications,
+201:105069, 2026. doi:10.1016/j.spa.2026.105069.
+[21] S. J. Grossman and J. E. Stiglitz. On the Impossibility of Informationally Efficient Markets.
+American Economic Review, 70(3):393–408, 1980.
+[22] R. Da, S. Nagel, and D. Xiu. The Statistical Limit of Arbitrage. NBER Working Paper
+No. 33070, 2024. doi:10.3386/w33070.
+[23] S. Basak and B. Croitoru. On the Role of Arbitrageurs in Rational Markets.Journal of
+Financial Economics, 81(1):143–173, 2006. doi:10.1016/j.jfineco.2004.11.004.
+[24] J.-P.Zigrand. AGeneralEquilibriumAnalysisofStrategicArbitrage.Journal of Mathematical
+Economics, 40(8):923–952, 2004. doi:10.1016/j.jmateco.2003.09.002.
+[25] J.-P. Zigrand. Endogenous Market Integration, Manipulation and Limits to Arbitrage.
+Journal of Mathematical Economics, 42(3):301–314, 2006. doi:10.1016/j.jmateco.2004.12.010.
+[26] V. DeMiguel, A. Martín-Utrera, and R. Uppal. Can Competition Increase Profits in Factor
+Investing?Management Science, 71(7):5552–5571, 2025. doi:10.1287/mnsc.2022.02684.
+[27] R. D. McLean and J. Pontiff. Does Academic Research Destroy Stock Return Predictability?
+Journal of Finance, 71(1):5–32, 2016. doi:10.1111/jofi.12365.
+[28] H. Jacobs and S. Müller. Anomalies across the Globe: Once Public, No Longer Existent?
+Journal of Financial Economics, 135(1):213–230, 2020. doi:10.1016/j.jfineco.2019.06.004.
+[29] G. Kaplanski. The Race to Exploit Anomalies and the Cost of Slow Trading.Journal of
+Financial Markets, 62:100754, 2023. doi:10.1016/j.finmar.2022.100754.
+[30] D. Muravyev, N. D. Pearson, and J. M. Pollet. Anomalies and Their Short-Sale Costs.
+Journal of Finance, 80(6):3639–3694, 2025. doi:10.1111/jofi.13501.
+24
+[31] S. Jaimungal and X. Shi. Short Communication: The Price of Information.SIAM Journal
+on Financial Mathematics, 15(3):SC54–SC67, 2024. doi:10.1137/24M1644791.
+[32] E. Lehrer and T. Wang. The Value of Information in Stopping Problems.Economic Theory,
+78(2):619–648, 2024. doi:10.1007/s00199-023-01543-8.
+[33] F. S. Anand, J. H. Lee, and M. J. Realff. Optimal decision-oriented Bayesian design of experi-
+ments.Journal of Process Control, 20(9):1084–1091, 2010. doi:10.1016/j.jprocont.2010.06.011.
+[34] S.Zhong, W.Shen, T.Catanach, andX.Huan. Goal-OrientedBayesianOptimalExperimental
+Design for Nonlinear Models Using Markov Chain Monte Carlo.SIAM/ASA Journal on
+Uncertainty Quantification, 14(1):19–47, 2026. doi:10.1137/24M1649344.
+[35] J. Pénasse. Understanding Alpha Decay.Management Science, 68(5):3966–3973, 2022.
+doi:10.1287/mnsc.2022.4353.
+[36] A. Varma. The Public-Signal Alpha Half-Life Hypothesis. SSRN Working Paper 7395678,
+2026. doi:10.2139/ssrn.7395678.
+[37] M. S. Zulfiqar. When Alpha Dies: A Signal Autopsy Approach to Predicting Strategy Decay.
+SSRN Working Paper 7376818, 2026. doi:10.2139/ssrn.7376818.
+[38] C. Ma and P. Smith. On the Effect of Alpha Decay and Transaction Costs on the Multi-period
+Optimal Trading Strategy. arXiv:2502.04284, 2025.
+[39] E. Inan. Predictability of Funding Rates. SSRN Working Paper 5576424, 2025.
+doi:10.2139/ssrn.5576424.
+[40] S. He, S. Wang, and T. Zhang. A Shared Template Without Shared Feedback: Fund-
+ing Rates in Cryptocurrency Perpetual Futures. SSRN Working Paper 6185958, 2026.
+doi:10.2139/ssrn.6185958.
+[41] T. Lau. The Funding Carry and a Cross-Venue Spread on Perpetual Futures: A Significance-
+Tested Study of Hyperliquid and Centralized Venues. SSRN Working Paper 6993978, 2026.
+doi:10.2139/ssrn.6993978.
+[42] P. Zhivkov, V. Todorov, and S. Georgiev. Temporal Dynamics of Market Microstruc-
+ture in Cryptocurrency Perpetual Futures: Econometric Evidence from Centralized and
+Decentralized Exchanges.International Journal of Financial Studies, 14(5):103, 2026.
+doi:10.3390/ijfs14050103.
+[43] N. Alexander and F. J. Fabozzi. Measuring Strategy-Decay Risk: Minimum Regime Per-
+formance and the Durability of Systematic Investing.Journal of Portfolio Management,
+52(4):198–219, 2026. doi:10.3905/jpm.2025.1.807.
+[44] J. R. Baxter and R. V. Chacon. Compactness of stopping times.Zeitschrift für Wahrschein-
+lichkeitstheorie und Verwandte Gebiete, 40(3):169–181, 1977. doi:10.1007/BF00736045.
+A. Capacity with a type-I error constraint
+With only a size constraint, letcα(A) = supE 1[(A−S )δ]over S∈T A and binaryGS-measurable
+δ with P0(δ = 1)≤α . Independent randomization is available at time zero, socα(A)≥αA . The
+economic value isCACα(A) =σ 2cα(A)/(2γ).
+25
+Theorem A.1(Nonasymptotic converse without a fixed power target).ForA> 0,rα =cα(A)/A
+obeysA(1−rα)/2≥kl (rα,α ), and is bounded above by the unique root¯r∈[α, 1)of A(1−¯r) =
+2 kl(¯r,α).
+Proof. For a feasible rule of rewardR, setr =R/A, p = P1(δ = 1), q = P0(δ = 1)and S =A
+on nondeployment. Thenp≥r , q≤α , and(A−R )/2 = DKL(PS1∥PS0 )≥kl (p,q )≥kl (r,α )when
+r≥α . Apply this to a maximizing sequence and use continuity; the caserα =α is immediate.
+The root is unique becauseA(1−r )− 2 kl(r,α )strictly decreases from positive to negative on
+[α,1).
+As A↓ 0, rα→α : the limiting value comes from the permitted lottery alone. An evidence-added
+report can subtractαA.
+Constructive threshold.For h > 0, put τh = inf{s : Zs ≥h} . Brownian drift µ has
+first-passage cdf
+Fµ(t;h) = Φ((µt−h)/
+√
+t) +e 2µhΦ((−µt−h)/√t).
+The uniquehA with F−1/2(A;hA) = α gives the exact-level valueLα(A) =
+∫A
+0 F1/2(t;hA)dt≤
+cα(A). The anytime boundaryh∞ = log(1/α)hasP 0(τh∞ <∞) =α.
+Theorem A.2(Asymptotic information cost of certification).For fixed α∈ (0, 1), A−c α(A)→
+2 log(1/α)asA→∞. Hence
+CACα(A)
+VPI = 1− log(1/α)Ilife +o(I−1life), V PI−CACα(A)→ σ2γ log(1/α).
+Proof. Under P1, the hitting time ofh = log(1/α)has mean2h, sogA :=A−cα(A)≤E 1(τh∧A)→
+2h. The converse givesgA/2≥kl (1−gA/A,α); boundedness ofgA makes its right side converge
+toh, proving the matching lower bound.
+B. Constrained stopping representation
+Setting S = A on nondeployment makes the objectiveA−E 1S, linking it to optimal group-
+sequential design [5, 6, 8]. In the convexified class, a rule uses anGS-measurable deployment
+probabilityρdep∈ [0, 1]. WriteTs,A for stopping times in[s,A ]and E(1)s,z for the likelihood diffusion
+started atZs =z.
+Theorem B.1(Lagrange representation for the type-I constrained problem).In the randomized
+stopping class,
+cα(A) = infλLag≥0{λLagα+V λLag(0,0)}, V λLag(s,z) = supS∈Ts,A E(1)s,z(A−S−λ Lage−ZS)+.
+Proof. The stopped likelihood identity givesE0ρdep = E1[e−ZSρdep]. Maximizing the Lagrangian
+pointwise overρdep∈ [0, 1]gives the positive-part payoff and weak duality. Randomized stopping
+times on a bounded horizon are compact in the Baxter–Chacon topology [44]; bounded rewards
+and uniformly integrable stopped likelihood ratios give continuity of reward and size in this
+Brownian model. The attainable set is therefore compact and convex. The no-deploy rule strictly
+satisfies size whenα>0, so separation gives a nonnegative multiplier and no duality gap.
+This construction uses the classical constrained-stopping framework [15, 16], with related deadline
+formulationsin[ 17–20]. WithgeneratorL = 12∂zz+ 12∂z, thecontinuationequationis ∂sV +LV = 0,
+26
+with obstacle(A−s−λ Lage−z)+. In the positive-obstacle region,(∂s +L)(A−s−λ Lage−z) =−1,
+and the stopping boundary is an upper boundarybλLag(s). ForλLag > 0, VλLag(s,z ) =V1(s,z−
+logλ Lag)and bλLag = logλ Lag +b1. Under smooth fit and the standard boundary regularity, the
+early-exercise representation and boundary equation are
+VλLag(s,z) =
+∫ A
+s
+P(1)s,z{Zu≥b λLag(u)}du,
+A−s−λ Lage−bλLag(s) =
+∫ A
+s
+Φ
+(
+bλLag(s) + (u−s)/2−b λLag(u)√u−s
+)
+du.
+For reliable CAC, addω≥ 0: the stopping payoff becomes(A−S +ω−λ Lage−ZS)+, defining
+VλLag,ω, and the dual objective isλLagα−ω (1−β ) +VλLag,ω(0, 0)under strong-duality hypotheses.
+Feasibility must first be checked by Theorem 3.1. For finite multipliers ands<A , waiting until
+any deterministicu∈ (s,A )has positive expected payoff by Gaussian full support. Immediate
+nondeployment cannot be optimal in this cost-free dual; an abandonment region requires observa-
+tion cost or another binding constraint. The continuation state(s,z )includes both time and log
+likelihood.
+B.1. Finite-player equilibrium proof
+Proof of Proposition 8.3.
+Proof.In the positive-rent region the payoff is
+ui = eiEa∆I−(aκ crowd +ψ)e i.
+SetV0 :=a∆I andk :=aκcrowd +ψ. Define the aggregate rival effort byE−i :=∑j̸=iej. Against
+E−i>0, the first and second derivatives are
+∂ui
+∂ei
+= V0E−i
+(ei +E−i)2−k, ∂2ui∂e2i =− 2V0E−i(ei +E−i)3 <0.
+Atasymmetricequilibrium ei =eandE =Ne, thefirst-orderconditiongives e =V0(N− 1)/(N 2k)
+and hence the statedEN. Moreover,
+κcrowdEN
+∆I = aκcrowd(N−1)N(aκ crowd +ψ) <1,
+so the solution lies strictly above the CAC frontier. SubstitutingIeqN =I0−κ crowdEN yields the
+residual-information identities. A unilateral deviation that pushes aggregate effort beyond the
+positive-rent region obtains zero gross rent and nonpositive net payoff, whereas the stated interior
+equilibrium gives a strictly positive payoff. Strict concavity in each player’s own effort within the
+positive-rent region gives uniqueness among symmetric equilibria with positive gross rent. When
+ψ >0, any zero-rent profile with positive symmetric effort yields negative payoff and is improved
+by choosing zero. Whenψ = 0, additional zero-rent equilibria can exist, and no global uniqueness
+claim is made.
+C. Unknown scale and predictable regressors
+C.1. A pairwise KL necessary condition
+Let P0,P 1 be declared null and alternative laws on the observed sample space, and require
+supQ0∈P0Q0(δ= 1)≤αandinf Q1∈P1Q1(δ= 1)≥1−β >α.
+27
+Theorem C.1(Pairwise KL necessary condition).Every compatible pair( Q1,Q 0)∈P 1×P 0
+withQ 1≪Q 0 satisfiesD KL(Q1∥Q0)≥kl(1−β,α).
+Proof. Data processing toδ gives the binary KL; onp≥ 1−β > α≥q , it is minimized at
+(1−β,α).
+AR(1) benchmark.For Xt+1 =ϕXt +ξt+1, Yt+1 =θXt +εt+1, assume independent centered
+Gaussian innovation sequences of variancesvX,vR > 0,|ϕ|< 1, and stationaryX. The boundary
+companion has loading b and the same nuisance parameters and initial law. The expected
+per-observation KL is
+κKL(θ,ϕ,v R,vX;b) = (θ−b) 2vX2vR(1−ϕ 2).
+For a declared compact rectangle, letκKL be its infimum. The minimum uses the smallest|θ−b|
+and|ϕ|, smallestvX and largestvR; if the persistence interval contains zero, its minimum is at
+zero. Every minimizing boundary companion must belong to the null family. IfκKL > 0, then
+Lhor≥⌈kl (1−β,α )/κKL⌉ is necessary. Marginal envelopes without a compatible joint pair do
+not prove impossibility.
+C.2. Sequential certification with predictable regressors
+ForFt-measurable Xt before observingYt+1, assumeYt+1 =θXt +εt+1, εt+1|F t∼N (0,v )with
+v≤¯v. Testθ≤bagainstθ≥b+d,d>0. Forq >0, define
+ℓα = log(1/α), λ q =
+√
+2ℓα/(¯vq), Qt =
+∑
+s<t
+X2s, U t =∑
+s<t
+Xs(Ys+1−bXs),
+andE t = exp(λqUt−λ 2q¯vQt/2),τ q = inf{t:Q t≥q},τ E = inf{t:E t≥1/α}.
+Theorem C.2(Predictable-design e-process certificate).Under every null, Et is a nonnegative
+supermartingale andPθ,v(τE <∞)≤α. Under every alternative, ifI q =d 2q/(2¯v)>ℓα,
+Pθ,v(τE >τ q, τq <∞)≤e −(
+√
+Iq−√ℓα)2.
+ConsequentlyIq≥ [
+√
+log(1/α) +
+√
+log(1/β)]2 gives power1−β by τq if τq <∞ almost surely
+throughout the alternative class. Without reachability, only the displayed joint-event bound is
+asserted.
+Proof. The conditional Gaussian mgf is at most one under the null, proving validity. Under an
+alternative, putNt =∑s<tXsεs+1; then logEt≥ (λqd−λ 2q¯v/2)Qt +λqNt. Failure at finiteτq
+implies Nτq≤−c qQτq, wherecq =d−λ q¯v/2−ℓα/(λqq) =d−
+√
+2ℓα¯v/q >0. Optional sampling
+and Markov’s inequality for the nonnegative supermartingaleexp(−ζNt−ζ 2¯vQt/2)bound this
+event byexp[−q(ζcq−ζ 2¯v/2)]. Optimizing atζ=cq/¯vgives the result.
+Estimated d or ¯vrequire adding their confidence-set failure to the error budget. Unknown-
+variance inference is discussed in [10, 11]; the software includes fixed-design Studentization and
+Normal–Inverse-Gamma monitoring benchmarks, whose joint-model and clock assumptions must
+be checked separately.
+28
+C.3. Discrete information–value identity
+Use the stationary AR model above overLhor periods. A position qt with q−1 = 0earns
+θXtqt−γq 2t/2−λ tr(qt−qt−1)2/2, withγ >0, λtr≥ 0, and terminal penaltyηTq2Lhor−1/2, ηT≥ 0.
+Define backward fromKLhor =η T,Λ qLhor = 0,
+Dt =γ+λ tr +Kt+1, a t =λ tr/Dt, g t(ϕ) = (1 +ϕΛqt+1)/Dt,
+Kt =λ tr(γ+K t+1)/Dt,Λ qt =λ trgt(ϕ).
+The full-information and boundary feedbacks areqθt =a tqθt−1 +θgtXt andq bt =a tqbt−1 +bgtXt.
+Theorem C.3(Discrete information–value identity).The expected regret of the boundary policy
+and return-channel information satisfy
+Rθ:bLhor = vX(θ−b) 22(1−ϕ 2) Lhor−1∑t=0 Dtg2t = ΠLhorIθ:bLhor,return,
+whereIθ:bLhor,return = LhorvX(θ−b )2/[2vR(1−ϕ 2)]andΠ Lhor = (vR/Lhor)∑tDtg2t. With λtr =
+ηT = 0,Π Lhor =v R/γ.
+Proof. Backward completion of the Bellman square gives the feedbacks. Evaluated at the boundary
+policy’s own inventory, its one-period Bellman loss isDt[(θ−b )gtXt]2/2. Continuation values
+telescope, including terminal inventory cost. Take stationary expectationsEX2t =vX/(1−ϕ 2)
+and divide by KL. When costs vanish,Dtg2t = 1/γ.
+For contemporaneous innovation correlation|ρcorr|< 1with the same variances, joint Gaussian
+KL isIθ:bLhor,full =Iθ:bLhor,return/(1−ρ 2corr); the full-information price per nat is(1−ρ 2corr)ΠLhor. Zero
+correlation supplies the least-information member only when it belongs to the declared family.
+D. Random economic lifetime
+Let H =AT, and consider aG-stopping timeS≤H and a binaryGS-measurable deployment
+decision δ, with no deployment at death. AssumeE1H <∞, the stopped likelihood identity,
+and that observing the deadline adds no likelihood factor omitted fromZ. Localization andL2
+optional sampling giveDKL(PS1∥PS0 ) = E1S/2. Data processing therefore implies the necessary
+obstruction
+1
+2 E1H≥kl(1−β,α)
+for sizeα and power1−β >α. The mean is insufficient: lower tails control how often certification
+can finish. Let τcert be the deployment time, withτcert = +∞ on nondeployment. If F (h)
+and SH(h)lower-bound P1(τcert≤h )and P1(H > h)for a fixed rule, the union bound gives
+P1(τcert<H )≥sup h[F (h) +SH(h)− 1]+ without independence. The canonical terminal power
+envelope gives the complementary upper boundP1(δ = 1,S <H )≤inf h{πα(h) + P1(H >h)}∧ 1
+whenever the stopped experiment embeds in that canonical experiment.
+For a common deadline law independent of the likelihood process under both hypotheses, let
+H∼Exp (ϱ), ϱ >0, and deploy atτh = inf{s : Zs≥h} only ifτh < H. Put sϱ =
+√
+1/4 + 2ϱ,
+a0 =s ϱ + 1/2anda 1 =s ϱ−1/2. The Brownian first-passage Laplace transform gives
+P0(τh<H) =e −a0h,P 1(τh<H) =e −a1h.
+29
+Thush =−logα/a 0 gives exact sizeα and powerπexpα,ϱ =αa1/a0. This constant-threshold rule
+meets the power target when that quantity is at least1−β . Settingr = log(1−β )/logα∈ (0, 1)
+and solving equality yields
+ϱbench = r2(1−r) 2, E1H2 = (1−r) 2r .
+At α = 0.05, power0 .90, the benchmark mean is about26 .47KL nats versus4 .28for a
+deterministic deadline. This constant-threshold rule gives a constructive benchmark; the optimal
+random-deadline frontier remains open.
+E. Sharp near-critical capacity
+This appendix proves Theorem 3.2 and the reward transfer used in Section 6. Throughout,
+A∗ :=A crit(α,β) = (z 1−α +z 1−β)2,
+and
+cA :=− A2 +√Az 1−α, δ NPA :=1{ZA≥cA}, π α(A) := Φ(√A−z 1−α).
+A randomized rule consists of a stopping timeS≤A and a deployment probability0≤δ≤ 1
+measurable with respect toGS, satisfying
+E0δ≤α,E 1δ≥1−β.
+Write
+u:=A−S, x:=Z S−cA.
+Forρ R >0, define the residual-moment capacity
+c[ρR]α,β (A) := supE 1[uρRδ]
+over the same reliable rule class, and set
+Mα,β(ρR) :=A ρR∗ E[(NG +z 1−β)2ρR+ ], N G∼N(0,1).
+Theorem E.1(Sharp residual-moment law).For everyρ R >0,
+c[ρR]α,β (A∗) = 0,
+and
+lim
+ε↓0
+[log(1/ε)]ρRc[ρR]α,β (A∗ +ε) = 2−ρRMα,β(ρR).
+The upper bound holds over randomized rules, and a binary conditional-error crossing rule attains
+the limit.
+Theorem 3.2 is the caseρR = 1.
+30
+E.1. Conditional Gaussian penalty
+ForN G∼N(0,1)define
+q(u,x) :=E
+[
+(e−x−u/2−√uN G−1) +].
+FixA max >A∗ andη∈(0,1). There existsc η >0such that, for0<u≤A max,
+q(u,x)≥c ηuexp
+[
+−(1 +η)x 2+
+2u
+]
+.(E.1)
+To obtain the bound, restrictNG to
+[
+−x+/√u−√u/2−2,−x +/√u−√u/2−1 ].
+On this interval the payoff is at leaste
+√u− 1≥√u. A lower bound on the Gaussian density,
+together with(a+b) 2≤(1 +η)a 2 + (1 +η−1)b2, gives (E.1).
+For a feasible rule atA=A∗ +ε, define the Neyman–Pearson deficit
+dA :=E 0[(eZA−ecA)(δNPA −δ)]
+=π α(A)−E 1δ−e cA(α−E 0δ).(E.2)
+The integrand is nonnegative pointwise, and hence
+0≤d A≤π α(A)−(1−β) =O(ε).
+Conditioning atS and retaining the paths that deploy below the terminal Neyman–Pearson cutoff
+yields
+dA≥E 1[δ1{u>0}q(u,x)].(E.3)
+UnderP 1, conditional onGS, the incrementZA−ZS isN(u/2,u).
+E.2. Universal upper bound
+Let
+Λε := log(1/ε)
+and define
+Bη :=
+{
+u>0 :uΛ ε> 1 +η2(1−η) x2+
+}
+.
+OnB η, (E.1) and (E.3) imply
+E1[δu1Bη] =O(ε η).
+If0<ρ R≤1, concavity on the measure with densityδ1Bη gives
+E1[δuρR1Bη]≤{E 1[δu1Bη]}ρR.
+IfρR≥ 1, useuρR≤A ρR−1max u. Hence the contribution ofBη, multiplied byΛρRε , vanishes uniformly
+over feasible rules.
+OnB cη,
+ΛρRε uρR≤
+( 1 +η
+2(1−η)
+)ρR
+x2ρR+ .
+Takingρ R = 1first givesE 1[δu] =O(Λ−1ε ). SinceδisG S-measurable,
+E1[δ(ZA−ZS)2] =E 1[δ(u+u 2/4)] =O(Λ−1ε ).
+31
+Conditional Gaussian moment bounds then yield, for every fixedk>0,
+E1[δ|ZA−ZS|k]−→0.
+Consequently,
+E1[δ(ZS−cA)2ρR+ ]≤E 1[(ZA−cA)2ρR+ ] +o(1).
+Lettingη↓0gives
+lim sup
+ε↓0
+ΛρRε c[ρR]α,β (A∗ +ε)≤2 −ρRMα,β(ρR).
+AtA =A∗, (E.2) gives dA = 0. Since q(u,x )> 0for every u> 0and finite x, (E.3) forces δu = 0
+almost surely, soc[ρR]α,β (A∗) = 0.
+E.3. Attaining conditional-error crossing rule
+ForA>A ∗ define the terminal threshold calibrated to power1−β,
+~cA :=A/2−
+√
+Az 1−β,
+and its null rejection probability
+αtermA :=P 0(ZA≥~cA) = 1−Φ(√A−z 1−β)<α,¯α A := αtermAα .
+UnderP 0 the conditional terminal-rejection probability
+Ccet :=P 0(ZA≥~cA|G t) = Φ
+(Zt−~cA−(A−t)/2√
+A−t
+)
+, t<A,
+is a bounded continuous martingale. LetSA be its first crossing of¯αA before A, withSA =A if
+no crossing occurs, and set
+δceA :=1{SA<A}.
+Every terminal-positive path crosses the boundary. Optional sampling gives
+P0(δceA = 1) =α,P 1(δceA = 1)≥P 1(ZA≥~cA) = 1−β.
+Thus the rule is feasible.
+Asε↓0,
+1−¯αA∼ φN(z1−α)2α√A∗ ε, [Φ−1(¯αA)]2∼2Λ ε.
+On a crossing, let
+uremA :=A−S A.
+Then
+Φ−1(¯αA)√uremA =Z SA−~cA−u remA /2.
+Couple the experiments underP1 using Zt =Bt +t/2on[0 ,A max], and puturemA = 0when no
+crossing occurs. For allA sufficiently close toA∗, writekA = Φ−1(¯αA)> 0. There is a random
+variableM dom with every finite moment, independent ofA, such that on a crossing
+0≤k A
+√
+uremA =Z SA−~cA−u remA /2≤M dom.
+Thus k2AuremA ≤M 2dom, and the residual time tends to zero on crossing paths. IfZA∗ > cA∗,
+terminal rejection, and hence a crossing, occurs for all sufficiently smallA−A ∗. Brownian
+32
+continuity then gives convergence to(ZA∗−cA∗)2. IfZA∗ <c A∗, an infinite sequence of crossings
+would haveSA→A∗ and a negative limiting right-hand side in the crossing identity, which is
+impossible. The equality event has probability zero. Consequently,
+k2AuremA −→(ZA∗−cA∗)2+
+almost surely and, by domination, in every finiteLq. Since[Φ−1(¯αA)]2/(2Λε)→1,
+ΛρRε E1[(uremA )ρRδceA ]−→2 −ρRMα,β(ρR).
+This matches the upper bound and proves Theorem E.1. AtρR = 1,
+Kα,β = 12Mα,β(1) = A∗2 ([1 +z 21−β](1−β) +z 1−βφN(z1−β)).
+E.4. General residual rewards
+LetRA : [0,A ]→ [0,∞ )be measurable and uniformly bounded forA near A∗, withRA(0) = 0.
+SupposeRA(u)/uρR→a 0 > 0uniformly as A↓A ∗ and u↓ 0. Fix h >0and choose m > ρR.
+The residual-moment theorem gives, uniformly over feasible rules,
+E1[δ1{u≥h}]≤h −mE1[δum] =O([log(1/ε)]−m).
+Uniform boundedness makes the reward contribution onu≥h negligible after multiplication
+by[ log(1/ε)]ρR. For eachη >0, the uniform local expansion gives, for sufficiently smallh and
+A−A ∗,
+(a0−η)u ρR≤R A(u)≤(a 0 +η)u ρR,0<u<h.
+The upper residual-moment bound and the attaining conditional-error rule give matching upper
+and lower reward bounds. The discardedu≥h part of theρR-moment is also negligible, since it
+is bounded byhρR−mE1[δum]. Lettingη↓0yields
+sup
+(S,δ)
+E1[RA(A−S)δ]∼ a0Mα,β(ρR)[2 log(1/ε)]ρR.
+The value atu= 0contributes nothing becauseR A(0) = 0. This proves (6.2).
+E.5. Monitoring grids and implementation lead
+The sharp law allows the preterminal monitoring date to approach the horizon withε. A fixed
+finite grid with a final preterminal gap bounded away from zero defines a different local asymptotic
+regime. If every counted certificate must precede economic death by a fixed information-time
+lead ℓ >0, then the observation horizon available for certification isA−ℓ and the feasibility
+boundary shifts toA∗ +ℓ. Calendar-time lead and information-time lead coincide only under a
+unit-speed information clock.
+E.6. Equal lifetime information, different cash capacity
+On[0,1]define
+∆(1)(t) = 1−t,∆ (2)(t) = (1−t) 2(1 +b polyt+a polyt2),
+where
+apoly := 135−5
+√
+345
+8 , b poly := 2− 2apoly5 .
+33
+Direct integration gives
+∆(1)(0) = ∆(2)(0) = 1,
+∫ 1
+0
+∆(1)(t)dt=
+∫ 1
+0
+∆(2)(t)dt= 12,
+and ∫ 1
+0
+[∆(1)(t)]2dt=
+∫ 1
+0
+[∆(2)(t)]2dt= 13.
+With the same constant volatility, the two opportunities have the same current edge, physical
+horizon, integrated future cash value, lifetime information andCR. To make the near-critical
+family explicit, take the common volatilityσ2A = 1/(3A)and let A↓A ∗. Both experiments then
+have information horizonA, with positive limiting volatility and fixed terminal profiles satisfying
+the uniform reward hypotheses. Their local crossing orders arep= 1andp= 2, so (6.4) gives
+CACcash1 (A∗ +ε)≍[log(1/ε)] −2/3,
+CACcash2 (A∗ +ε)≍[log(1/ε)] −3/5.
+Lifetime information determines feasibility; cash value also depends on the payoff map.
+F. Proofs for unknown decay and model transfer
+F.1. Ordered least-profile family
+Let∆ andA t be as in Section 7.1. The standardized matched statistic
+¯ZlfT :=
+∫T
+0 ∆(u)dYu
+σ2√A
+isN(0,1)under the boundary law. Under alternativeϑits mean is
+∫T
+0 ∆(u)∆ϑ(u)du
+σ2√A ≥
+√
+A.
+Therefore1{ ¯ZlfT≥z1−α} has sizeα and worst-case powerΦ(√A−z1−α), attained at the least member.No level-α rule can have larger worst-case power because the least member belongs to the family.
+For the sharp capacity statement, apply the conditional-error crossing policy from Appendix E
+on the deterministic least-profile clock. Coupling each alternative and the least member with the
+same Brownian path gives
+Zϑt−Z lft = 1σ2
+∫ t
+0
+∆(u)[∆ϑ(u)−∆ (u)]du≥0.
+Hence every least-profile crossing occurs no later under the other alternatives. Residual least-
+profile information is then pathwise larger. The same is true of the coupled payoff for a common
+nonnegative nondecreasing residual reward, or for the memberwise-dominating payoff maps
+specified in the theorem. The least member supplies the matching upper bound, so the sharp
+constants coincide with the simple least-profile constants.
+34
+F.2. Least-favorable mixtures
+For the finite Gaussian experiment of Section 7.2, define
+Dα :={δ∈L ∞(P0) : 0≤δ≤1,E 0δ≤α}.
+Forw∈W J,
+E0[Lwδ] =
+J∑
+j=1
+wjEjδ
+is continuous and bilinear in(δ,w ). The decision set is weak-star compact and convex, andWJ is
+compact and convex. The minimax theorem yields
+sup
+δ∈Dα
+min
+j
+Ejδ= minw∈WJ supδ∈Dα E0[Lwδ].
+The inner problem is a Neyman–Pearson test against the mixture likelihoodLw.
+If two distinct alternatives satisfy∥m1∥2 =∥m2∥2 = A∗, each has individual maximal power
+1−β . A common rule attaining that power under both would be a most-powerful size-α test for
+each member. Continuous Gaussian likelihoods make each most-powerful test unique up to null
+sets, whereas distinct equal-norm vectors define distinct rejection halfspaces. Hence the individual
+frontiers cannot be attained simultaneously.
+F.3. Same-contract approximation
+Let the policy notation be as in Section 7.3. Tightened approximate feasibility implies
+size(ˆπ)≤ ˆsize(ˆπ) +ηP≤α,
+powj(ˆπ)≥ ˆpowj(ˆπ)−η P≥1−βfor everyj.
+Define
+Π(a,p) :={π∈Π : size(π)≤a,inf
+j
+powj(π)≥p},U ⋆(a,p) := sup
+π∈Π(a,p)
+U(π).
+Assume2ηP <min (α,β )and thatΠ( α− 2ηP, 1−β +2ηP )is nonempty. Supposeˆπ isεopt-optimal
+for the tightened approximate problem with objectiveˆU. Uniform memberwise reward error
+implies|U(π)− ˆU(π)|≤η V. Every policy in the twice-tightened true class is feasible for the
+once-tightened approximate problem. Comparingˆπ to an arbitrary such policy, and taking the
+supremum, gives
+U(ˆπ)≥U ⋆(α−2η P,1−β+ 2η P )−2η V−ε opt.
+Consequently,
+U⋆(α,1−β)−U( ˆπ)≤2η V +ε opt
++U ⋆(α,1−β)−U ⋆(α−2η P,1−β+ 2η P ).
+The last difference is the loss due to tightening the reliability contract. This argument guarantees
+the fixed worst-case criterion; each member’s separate optimum remains outside this guarantee.
+A sufficient probability bound is obtained from total variation, with conventionTV(P,Q ) :=
+supE|P(E)−Q(E)|, where the supremum is over measurable events. If
+max
+j∈{0,1,...,J}
+TV(Pj, ˆPj)≤η P,
+35
+then every bounded history-measurable deployment probability changes by at mostηP. If the
+reward range has length at mostVspan and the approximate payoff differs pointwise by at most
+κV, one may take
+ηV =V spanηP +κV.
+Pinsker’s inequality gives
+TV(Pj, ˆPj)≤
+√
+1
+2 DKL(Pj∥ˆPj).
+For finite-dimensional Gaussian history laws with common positive-definite covarianceΣand
+meansm, ˆm,
+TV{N(m,Σ),N( ˆm,Σ)}= 2Φ
+(
+∥Σ−1/2(m− ˆm)∥
+2
+)
+−1.
+These inequalities put model-estimation error and the certification margin on the same probability
+scale.
+G. Notation and scope of the models
+Decorations distinguish mathematical roles; local model assumptions remain part of each result.
+Symbol Meaning and scope
+P0,P 1;U rnd Null/alternative laws; independent auxiliary uniform randomizer avail-
+able at time zero.
+α,β Size and nondeployment bounds; sharp asymptotics require0<α<
+1−β <1.
+At;H=A T ;A Likelihood quadratic-variation clock; random terminal clock; deter-
+ministic horizon.
+tinv(s);Z s Stopped inverse clock; log likelihood in information time.
+S,δ;ρ dep Stopping time and binary decision; convexified deployment probability
+in[0,1].
+cα,β(A) Reliable residual-information capacity, reported as zero below feasi-
+bility.
+A∗,I ∗ Critical information time and KL information,A∗ = 2I∗.
+∆;c,p Boundary drift gap; terminal coefficient (vector or scalar as stated)
+and crossing orderp>0.
+λdec;λ Lag,ωDecay rate; nonnegative size/power dual multipliers.
+λq;λ tr Predictable-certificate tilt; quadratic turnover-cost coefficient.
+vKL;v R,vX Value per KL nat; return and predictor innovation variances.
+ρcorr;ρ R Innovation correlation; positive residual-reward exponent.
+κcrowd;κ KL Linear crowding sensitivity; stationary pairwise information rate.
+Lhor;L score Discrete horizon; empirical lifetime score with descriptive scope.
+Lj,Lw Alternative and mixture likelihood ratios in the finite robust experi-
+ment.
+U(π);η P,ηV Worst-member transfer value; uniform probability/reward approxi-
+mation bounds.
+Kα,β;Mα,β(ρR) Sharp inverse-logarithmic constant; critical Gaussian positive-part
+moment.
+RA(u);K unitp Residual reward with the stated uniform local expansion; unit-
+exposure reward coefficient.
+36

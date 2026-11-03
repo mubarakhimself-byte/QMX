@@ -1,0 +1,623 @@
+arXiv 2610.28348  https://arxiv.org/abs/2610.28348
+
+Characterizing Cross-Relay Generalization Failure
+in Machine Learning-Based Power System
+Protection
+Nithin Pradeep Nadayil Kizhakkethil 1,*, Julian Oelhaf 1, Christian Bergler 2, Andreas Maier 1, Siming Bayer 1
+1Pattern Recognition Lab, Friedrich-Alexander-Universit ¨at Erlangen-N ¨urnberg
+2Department of Electrical Engineering, Media and Computer Science, Ostbayerische Technische Hochschule Amberg-Weiden
+*Corresponding author: nithin.pradeep.nadayil@fau.de
+Abstract—Machine learning-based fault detectors are often
+evaluated at the relay locations used for training, although local
+voltage and current measurements vary across power networks.
+This work investigates cross-relay generalization for binary detec-
+tion of faults anywhere in the network using local measurements,
+rather than line-selective tripping. Using 50 ms windows from a
+simulated 110 kV transmission network, we evaluate a multilayer
+perceptron across all 64 source–target combinations of eight
+relays and five random seeds. A shared simulation-level split
+and source-only threshold selection provide a controlled held-
+out evaluation without target-specific calibration. Despite nearly
+unchanged mean F1-scores (0.730 within-relay versus 0.734 cross-
+relay), the mean false-positive rate (FPR) increases from 0.088 to
+0.341, while the mean false-negative rate decreases from 0.399 to
+0.318. The change is strongly directional: models trained at Bus
+2 relays yield a mean FPR of 0.670 at Bus 1 and Bus 3 relays,
+compared with 0.096 for cross-relay transfers within the same
+bus group. Linear probing indicates that learned representations
+retain coarse bus-group information, while exploratory class-
+conditional latent distribution analysis shows no consistent mono-
+tonic association with transfer errors. These findings demonstrate
+that aggregate metrics can conceal location-structured changes in
+false-alarm behavior, highlighting the importance of evaluating
+error types separately when assessing cross-relay generalization.
+Index Terms—Power system protection, fault detection, cross-
+relay generalization, distribution shift, multilayer perceptron,
+representation analysis
+I. INTRODUCTION
+Power system protection is a fundamental component of
+modern electrical grids, enabling the rapid detection and
+isolation of faults to maintain system stability, equipment
+safety, and operational reliability. Protection relays (PRs)
+continuously monitor local electrical quantities, such as phase
+voltages and currents, and initiate protective actions when
+abnormal operating conditions are detected. With the in-
+creasing deployment of digital substations and standardized
+communication protocols such as IEC 61850, large volumes
+of high-resolution relay measurements have become available,
+creating new opportunities for machine learning (ML)-based
+protection systems [1], [2].
+ML has emerged as a promising approach for fault detection
+in power system protection [3], [4]. Recent studies have
+investigated ML-based methods for fault detection, fault clas-
+sification, and fault localization using electrical measurements,
+including multilayer perceptron (MLP)-based approaches for
+transmission-line protection [5], [6]. A broad range of learning
+architectures has been explored in power system protection,
+including conventional ML methods and deep learning models
+such as MLPs, Convolutional Neural Networks (CNNs), Re-
+current Neural Networks (RNNs), and topology-aware Graph
+Neural Networks (GNNs) [7], [8]. While these approaches
+often report strong performance under their respective eval-
+uation settings, their ability to generalize across different
+measurement locations remains less clearly characterized.
+However, such evaluations often implicitly assume compara-
+ble measurement distributions across training and deployment
+locations. In practical power systems, this assumption may
+not hold. PRs are installed at different locations throughout
+the transmission network, and the electrical signals observed
+at each relay depend on their position relative to the fault,
+network topology, and power flow conditions. Consequently,
+measurements recorded at different relay locations exhibit dis-
+tinct statistical characteristics, while the asymmetric changes
+in classification errors under pairwise cross-relay transfer
+remain insufficiently characterized for relay-local models. In
+particular, it remains unclear which error type dominates,
+whether aggregate metrics reveal this behavior, and whether
+the failure exhibits topology-related structure.
+Although generalization under distribution shift has received
+increasing attention in machine learning [9], [10], relatively
+little attention has been given to cross-relay generalization in
+power system protection. Existing work primarily evaluates
+models using random train-test splits or fixed measurement
+locations, making it difficult to determine whether the learned
+representations capture relay-independent fault characteristics
+or simply memorize relay-specific measurement distributions.
+Although topology-aware approaches have demonstrated
+generalization to unseen grids without retraining [8], the
+transfer behavior of models trained using measurements from
+individual relay locations remains less well characterized.
+This work therefore investigates pairwise cross-relay transfer
+using a controlled MLP baseline, with particular emphasis on
+asymmetric changes in false-positive and false-negative rates.
+Answering this requires more than overall classification
+arXiv:2610.28348v1  [cs.LG]  20 Oct 2026
+Bus3 Bus2 Bus1
+R3 R1
+R4 R2
+R7 R5
+R8 R6
+Ext. Grid 1Ext. Grid 3
+Load 2
+Protection Relay
+Fig. 1. Schematic of the Double Line grid topology. The diagram illustrates
+the transmission lines, the buses, and PRs. Measurements are recorded at the
+PRs and transmitted to the substations at each bus.
+performance: accuracy or F1-score may change little while the
+types of errors change substantially, and the learned represen-
+tations may still encode relay-location information. We there-
+fore investigate cross-relay generalization using exhaustive
+pairwise transfer experiments between all transmission-line
+PRs, examining overall performance, false-positive and false-
+negative behavior, and relay-location structure in the learned
+representations. The objective is not to assume that transfer
+should be invariant, but to determine how and to what extent
+generalization fails, and whether the failures show systematic
+structure related to relay location and network topology.
+II. SYSTEMSETUP ANDDATA
+A. EMT Simulation Dataset
+The experiments in this work are conducted using the
+AdaptGrid subset of the EvEMTBench electromagnetic tran-
+sient (EMT) simulation dataset generated in DIgSILENT Pow-
+erFactory [2]. The dataset is based on a 110 kV double-line
+transmission network consisting of three buses interconnected
+by four transmission lines, as illustrated in Fig. 1. The network
+is instrumented with 11 measurement locations, comprising
+eight transmission-line PRs, two external-grid measurement
+points, and one load measurement point. Each PR records syn-
+chronized three-phase voltage and current measurements [2].
+Each measurement location records three-phase voltages
+and currents sampled at 9.6 kHz. The six electrical quantities
+measured at locationmare represented as
+xm(t) =
+IA(t)I B(t)I C(t)V A(t)V B(t)V C(t)⊤ ,
+whereIandVdenote the three-phase currents and voltages,
+respectively. Concatenating the measurements from all eleven
+locations yields a 66-dimensional feature vector for each
+simulation time step.
+The dataset incorporates significant operating-condition
+variability through randomization of loading conditions,
+source characteristics, fault locations, inception angles, and
+fault impedances. This produces a diverse collection of op-
+erating scenarios that enables a comprehensive evaluation of
+machine learning models under varying network conditions.
+B. Fault Scenarios and Class Distribution
+The experiments use fault-event simulations from the
+AdaptGrid subset of EvEMTBench [2], excluding switching
+events. The dataset contains 4,667 simulations and 107,341
+windows per relay, comprising 73,000 fault (68.01%) and
+34,341 non-fault (31.99%) windows.
+The binary labely_fault_presentdenotes the global
+network fault state. Empirical verification showed that all
+labels agree with an event-overlap ratio threshold of1/240:
+windows withoverlap_ratio≥1/240are labeled as
+faults. Positive labels include fault initiation, ongoing faults,
+and fault clearing, rather than fault onset alone.
+The dataset covers seven fault categories, including
+single-line-to-ground, line-to-line, double-line-to-ground,
+three-phase, and incipient faults, with varying fault locations
+and operating conditions. The task therefore concerns global
+fault-state detection from local relay measurements, not
+conventional zone-selective tripping.
+C. Window Extraction and Preprocessing
+Following the sliding-window preprocessing approach
+in [4], each EMT simulation is segmented into fixed-length
+overlapping windows of synchronized three-phase voltage and
+current measurements.
+Let
+X={x(t)} Tt=1,
+denote the multivariate signal of a single simulation, where
+x(t)∈R 66.
+A window beginning at time indexkis defined as
+Wk =
+
+
+x(k)
+x(k+ 1)
+...
+x(k+L−1)
+
+ ∈R L×66,
+whereL= 480samples corresponds to a duration of50 ms
+at a sampling frequency of9.6 kHz. Consecutive windows
+are extracted every5 ms, producing overlapping windows that
+capture the temporal evolution of the fault and provide a new
+input window every5 ms.
+Each extracted sample is therefore represented as
+Wk ∈R 480×66.
+Since this work investigates relay generalization, only the
+eight transmission-line PRs are considered in the subse-
+quent experiments. For each transmission-line PR, indexed by
+r∈ {1, . . . ,8}, only the six locally measured channels are
+extracted from the global windowW k, yielding the relay-
+specific input
+W(r)k ∈R 480×6.(1)
+whererdenotes the relay under consideration.
+III. METHODS
+This work characterizes cross-relay generalization through
+three complementary aspects: predictive performance under
+source-to-target transfer, changes in error behavior (False
+Positive Rate (FPR) and False Negative Rate (FNR)), and
+differences in the learned representations across relay loca-
+tions, analyzed using linear probes and MMD 2. A multilayer
+perceptron (MLP) serves as a controlled baseline to isolate
+the influence of relay-location-dependent measurement distri-
+butions.
+A. Multilayer Perceptron
+The MLP operates on minimally processed, raw relay-local
+measurements without input normalization or hand-crafted
+feature engineering. As defined in (1), each input window of
+raw three-phase voltages and currents is flattened into a feature
+vector
+z∈R 2880.
+It is processed by two fully connected hidden layers with
+256 and 128 neurons, each followed by a ReLU activation. A
+final linear output neuron produces a fault logit, converted
+to a probability by a sigmoid function during inference.
+The network has approximately 770,561 trainable parameters.
+As this architecture is a controlled baseline rather than a
+representative protection model, the magnitude of the observed
+degradation should not be generalized to other architectures.
+B. Training Settings
+The MLP is trained with binary cross-entropy with logits
+and the Adam optimizer (learning rate1.38×10 −4, no weight
+decay), using a batch size of 1024 for at most 200 epochs.
+Early stopping with a patience of 20 epochs is applied, and
+the parameters from the best validation-loss epoch are retained.
+After training, the operating threshold is selected on the
+source relay’s validation set by maximizing Youden’sJstatis-
+tic,
+J(t) = TPR(t)−FPR(t).
+The threshold is then frozen and used for the source relay
+and all target relays, so no target-relay information influences
+the operating point. ROC AUC is computed from continuous
+raw model logits and is independent of this threshold.
+Performance is reported as accuracy, F1-score, ROC AUC,
+FPR, and FNR, with the fault class as positive. FPR is the
+fraction of non-fault windows classified as faults, and FNR is
+the fraction of fault windows classified as non-faults.
+C. Pairwise Cross-Relay Evaluation
+Each of the eight transmission-line protection relays serves
+as a source for an independent model, which is evaluated at
+the source relay and at each of the seven target relays. This
+yields an8×8transfer matrix of 64 pairs: eight self evaluations
+on the diagonal and 56 ordered cross-relay evaluations off the
+diagonal.
+A shared simulation-level split, generated with seed 42, is
+reused across all eight relays. It comprises 3,266 training,
+700 validation, and 701 test simulations, corresponding to
+75,118, 16,100, and 16,123 windows per relay, respectively.
+All windows originating from the same simulation remain in
+the same partition. Self- and cross-relay evaluations use the
+same held-out test simulations.
+The complete experiment is repeated for five random seeds
+(42, 5, 10, 25, and 100), which affect model initialization and
+training but not the fixed simulation-level partition. Results are
+reported as mean±standard deviation across seeds.
+To examine location structure, the 56 ordered cross-relay
+pairs are divided by bus group (Bus 1: R1, R2; Bus 2: R3–
+R6; Bus 3: R7, R8) into within-group pairs (16), Bus 1–Bus 3
+pairs (8), pairs from Bus 2 to Bus 1 or Bus 3 (16), and pairs
+from Bus 1 or Bus 3 to Bus 2 (16). Mean FPR and FNR
+are computed per category from the five-seed mean transfer
+matrices.
+D. Representation Analysis
+Representations are taken from the 128-dimensional penul-
+timate layer of each source-trained MLP of the seed-42 run.
+All representation analyses use one fixed study subset, drawn
+once and embedded by every source-trained model, so that
+differences between models are not caused by different input
+samples. For each of the eight relays, 150 fault and 150
+non-fault windows are sampled uniformly at random without
+replacement with seed 42 from all non-switching windows
+of that relay, giving 300 windows per relay and 2,400 in
+total. The subset is not restricted to a data partition and
+therefore contains windows from training, validation, and test
+simulations; it comprises 1,878 distinct simulations. Sampling
+is class-balanced and performed independently for each relay,
+so relays are not matched on simulation or window position.
+Relay identity is predicted from the representations with
+multinomial logistic regression (ℓ 2 penalty,C= 1) on
+standardized features, and bus-group identity (Bus 1, Bus 2,
+or Bus 3) with a separate probe of the same type. Because
+overlapping windows from one simulation are strongly depen-
+dent, both probes are evaluated with five-fold stratified cross-
+validation grouped by simulation, so that all windows from the
+same EMT simulation fall in the same fold. The chance level is
+1/8for relay identification. Because Bus 2 contains four relays
+and Bus 1 and Bus 3 two each, the majority-class baseline
+for bus-group identification is 0.50. To quantify the relay-
+identification result, the domain confusion score is computed
+from the mean out-of-fold accuracyA domain andA chance = 1/8:
+C= 1− Adomain −A chance
+1−A chance
+,(2)
+whereC= 1corresponds to chance-level relay identifica-
+tion andC= 0to perfect identification.
+Differences between source and target representations are
+quantified with the squared maximum mean discrepancy
+(MMD2) [11]. Let{z si }ni=1 and{z tj}mj=1 denote the source-
+and target-relay representations. The empirical estimator is
+given in (3).
+\MMD
+2
+= 1n2
+nX
+i=1
+nX
+i′=1
+k(zsi ,z si′)
++ 1m2
+mX
+j=1
+mX
+j′=1
+k(ztj,z tj′)
+− 2nm
+nX
+i=1
+mX
+j=1
+k(zsi ,z tj),
+(3)
+with the RBF kernelk(z,z ′) = exp(−∥z−z′∥22/(2σ2)). The
+bandwidth is set per source model by the median heuristic on
+the 300 source-relay embeddings and kept fixed for all target
+relays of that source. MMD 2 is computed separately per class
+withn=m= 150: between non-fault windows, which is
+related to the cross-relay FPR, and between fault windows,
+which is related to the cross-relay FNR. This gives 56 ordered
+source-target pairs per class. The associations with the seed-42
+error rates are quantified with Pearson (linear) and Spearman
+(monotonic) correlation and are interpreted descriptively.
+IV. RESULTS
+A. Overall Cross-Relay Performance
+Table I summarizes self- and cross-relay performance across
+five seeds. Cross-relay transfer reduces accuracy (0.7010 to
+0.6747) and ROC AUC (0.7929 to 0.7493). The change in
+error profile is larger: mean FPR rises from 0.0879 to 0.3406,
+while mean FNR falls from 0.3986 to 0.3181. Cross-relay
+degradation is therefore not a uniform increase in errors but a
+shift towards false positives. Because the threshold is fixed
+on the source validation set, this shift reflects the model’s
+behavior under the target measurement distribution, not target-
+specific re-tuning.
+The F1-score is nearly unchanged (0.7302 to 0.7336) be-
+cause the rise in false positives is offset by the fall in false
+negatives. Aggregate metrics such as F1 can therefore hide
+substantial changes in error behavior.
+Averages also conceal severe individual failures. The worst
+source-target pair in each seed averages an FPR of 0.9081
+across seeds. The worst-pair FNR (0.5727) exceeds the mean
+self FNR, so the decrease in FNR holds on average but not
+for every pair.
+B. Error Behavior Across Relay Pairs
+Fig. 2 shows the pairwise FPR and FNR matrices, averaged
+over five seeds. False-positive behavior depends strongly on
+the source-target combination. For models trained at Bus 2
+relays, the mean FPR at Bus 1 and Bus 3 relays ranges
+from 0.497 to 0.807, whereas transfer within a bus group
+and between Bus 1 and Bus 3 remains close to the self-relay
+level. The FNR matrix shows a different pattern, and pairs with
+high FPR do not have high FNR. Together with the aggregate
+results, this indicates that the main deterioration under cross-
+relay transfer is the increase in false-positive rate.
+TABLE I
+SELF-RELAY,CROSS-RELAY,AND WORST-PAIR PERFORMANCE ACROSS
+FIVE SEEDS(MEAN±STANDARD DEVIATION). WORSTCROSS DENOTES
+THE WORST INDIVIDUAL SOURCE-TARGET PAIR FOR EACH METRIC IN
+EACH SEED.
+Metric Self Cross Worst Cross
+Accuracy0.7010±0.0069 0.6747±0.0059 0.5734±0.0232
+F10.7302±0.0095 0.7336±0.0098 0.5747±0.0441
+ROC AUC0.7929±0.0058 0.7493±0.0070 0.6809±0.0052
+FPR0.0879±0.0134 0.3406±0.0379 0.9081±0.0908
+FNR0.3986±0.0159 0.3181±0.0256 0.5727±0.0568
+TABLE II
+MEAN CROSS-RELAYFPRANDFNRBY BUS-GROUP RELATIONSHIP OF
+SOURCE AND TARGET RELAY. VALUES ARE AVERAGES OVER THE RELAY
+PAIRS IN EACH CATEGORY,COMPUTED FROM THE FIVE-SEED MEAN
+TRANSFER MATRICES(FIG. 2).
+Source→target Pairs FPR FNR
+Within bus group 16 0.096 0.385
+Bus 1↔Bus 3 8 0.132 0.405
+Bus 2→Bus 1/3 16 0.670 0.166
+Bus 1/3→Bus 2 16 0.360 0.361
+The degradation is also structured by location. Table II
+quantifies this structure. Models trained at Bus 2 relays show
+a mean FPR of 0.670 at Bus 1 and Bus 3 relays. Transfer
+within a bus group (0.096) and between Bus 1 and Bus 3
+(0.132) stays close to the mean self-relay level of 0.088. The
+reverse direction, from Bus 1 or Bus 3 to Bus 2, is elevated but
+weaker (0.360). The FNR shows the complementary behavior:
+Bus 2-trained models rarely miss faults at Bus 1 and Bus 3
+(0.166), consistent with their tendency to flag windows there
+as faulty. Source relays with the lowest mean cross-relay
+FPR (R2, R7, R8) also show the highest mean cross-relay
+FNR, which indicates a more conservative operating point
+and not better transfer. Cross-relay failure is therefore not a
+random loss of performance between arbitrary relays. The task
+uses the global fault-state label from local measurements, so
+these results characterize cross-location generalization and not
+conventional zone-selective relay operation.
+C. Representation Analysis
+On the class-balanced study subset, individual relay iden-
+tity is only weakly recoverable from the penultimate-layer
+representation under simulation-grouped cross-validation. The
+mean out-of-fold accuracy across the eight source-trained
+models is 0.266, compared with a chance level of 0.125.
+Applying (2) gives
+C= 1− 0.266−0.1251−0.125 = 0.839.
+The representation is therefore not strongly discriminative at
+the individual-relay level, but it is also not fully relay-invariant.
+Coarser location information is more recoverable. The bus-
+group probe reaches a mean out-of-fold accuracy of 0.709
+R1 R2 R3 R4 R5 R6 R7 R8
+Test Relay
+R1
+R2
+R3
+R4
+R5
+R6
+R7
+R8 Training Relay
+.150 .135 .526 .478 .490 .429 .135 .141
+.160 .094 .365 .331 .338 .300 .104 .068
+.620 .553 .042 .028 .028 .035 .567 .497
+.725 .655 .096 .072 .075 .073 .670 .584
+.807 .750 .125 .071 .076 .077 .766 .684
+.759 .707 .191 .104 .117 .070 .720 .654
+.147 .074 .389 .328 .343 .268 .086 .055
+.230 .156 .335 .289 .297 .255 .171 .112
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+False Positive Rate
+R1 R2 R3 R4 R5 R6 R7 R8
+Test Relay
+R1
+R2
+R3
+R4
+R5
+R6
+R7
+R8 Training Relay
+.364 .399 .258 .286 .276 .303 .402 .440
+.350 .401 .334 .360 .347 .374 .402 .457
+.187 .228 .392 .413 .405 .420 .224 .270
+.124 .158 .366 .392 .385 .404 .155 .204
+.090 .120 .340 .374 .364 .384 .117 .158
+.123 .153 .320 .367 .355 .388 .149 .188
+.378 .437 .369 .402 .392 .423 .434 .494
+.328 .392 .383 .417 .407 .438 .387 .453
+0.1
+0.2
+0.3
+0.4
+0.5
+False Negative Rate
+Fig. 2. Pairwise cross-relay transfer matrices for the MLP baseline (mean over five seeds). Rows denote the training relay and columns the test relay; diagonal
+entries are within-relay evaluation.(a)FPR.(b)FNR.
+across the eight models, compared with 0.50 for always
+predicting Bus 2. The confusion matrix in Fig. 3 shows that
+Bus 1 measurements are mostly predicted as Bus 1 or Bus 3,
+and Bus 2 measurements are mostly predicted as Bus 2. This
+coarse structure is consistent with the transfer pattern: Bus 1
+and Bus 3 measurements are confused with each other, and
+transfer between Bus 1 and Bus 3 relays stays close to the self-
+relay FPR (0.132), whereas Bus 2 measurements are separated
+from both and Bus 2-trained models fail at Bus 1 and Bus 3
+relays (FPR 0.670). The probe is symmetric and cannot explain
+why the reverse direction is weaker. The analysis is diagnostic,
+not causal: retained location information does not by itself
+show that it causes the degradation.
+D. Representation Distribution Differences and Error
+MMD2 is computed per class and related to the matching
+error rate over the 56 ordered pairs of the seed-42 run. Between
+non-fault windows, MMD 2 has a Pearson correlation ofr=
+−0.384and a Spearman correlation ofρ=−0.190with cross-
+relay FPR. Between fault windows, the corresponding values
+with FNR arer= 0.349andρ= 0.045. The FPR association
+is negative, so larger latent distances are associated with
+lower false-positive rates, opposite to the naive expectation
+that greater shift means worse transfer. The rank correlations
+are weak, so the linear associations do not indicate a robust
+monotonic relationship.
+The observed MMD 2 values indicate differences between
+relay-specific latent distributions, but show no consistent
+monotonic association with cross-relay transfer errors. Source
+and target samples with similar aggregate distributions can still
+lie differently relative to the decision boundary, so MMD 2
+is best treated as a diagnostic of representation shift and
+not as an explanation of generalization failure. A possible
+explanation for the negative FPR association is that a source
+Bus 1 Bus 2 Bus 3
+Predicted Bus
+Bus 1
+Bus 2
+Bus 3 True Bus
+276 33 291
+40 1125 35
+264 35 301
+200
+400
+600
+800
+1000
+Fig. 3. Linear probe confusion matrix for bus-group identification (Bus 1,
+Bus 2, Bus 3) from the penultimate-layer activations of the MLP trained on
+relay R1, shown as an illustrative example (grouped five-fold cross-validation,
+out-of-fold predictions). The confusion pattern shows that coarse bus-group
+information remains in the representation.
+model that flags most non-fault target windows as faults maps
+them into a compact region of its latent space, which can
+reduce the measured MMD 2 even though the transfer error
+is large. This hypothesis is not tested here. The correlations
+come from a single seed, the 56 ordered pairs share source
+models and target relays and are therefore not independent,
+and the bandwidth is source-specific, so MMD 2 values are
+not strictly comparable across sources. The correlations are
+therefore reported descriptively.
+V. CONCLUSION
+This work characterized how an MLP fault detector trained
+at one relay location behaves at other locations, using exhaus-
+tive pairwise transfer across eight transmission-line PRs in
+a simulated 110 kV network, with a shared simulation-level
+split and a source-validation threshold. Overall degradation is
+moderate: mean accuracy falls from 0.7010 to 0.6747 and ROC
+AUC from 0.7929 to 0.7493. The error profile changes far
+more. Mean FPR rises from 0.0879 to 0.3406, with the per-
+seed worst relay pair averaging 0.908, while mean FNR falls
+from 0.3986 to 0.3181, so the F1-score is nearly unchanged
+(0.7302 to 0.7336). Cross-relay transfer thus shifts the balance
+towards false positives, and aggregate metrics can hide this.
+The FNR decrease holds only on average, since the worst-pair
+FNR (0.573) exceeds the mean self value.
+The degradation is structured by location: it depends on the
+source-target pair, and high FPR occurs mainly when models
+trained at Bus 2 relays are applied at Bus 1 or Bus 3 relays.
+It is weaker in the reverse direction and stays close to the
+self-relay level between Bus 1 and Bus 3. Linear probing
+shows that individual relay identity is only weakly recoverable,
+but coarse bus-group information remains in the representa-
+tion, consistent with this pattern. In a single-seed, descriptive
+analysis, class-conditional MMD 2 correlates negatively with
+FPR (r=−0.38,ρ=−0.19) and positively with FNR
+(r= 0.35,ρ= 0.04). The FPR sign is opposite to the naive
+expectation that greater shift means worse transfer, and the
+rank correlations are weak. MMD 2 is therefore a diagnostic
+of representation shift, not an explanation of transfer error.
+These results motivate evaluating cross-relay generalization
+with FPR and FNR reported separately. The study is limited
+to one simulated network, one baseline architecture, and a
+global fault-state label, so the magnitudes should not be gen-
+eralized. Future work should test whether domain adaptation
+and invariant representation learning [12] reduce the location
+dependence, and validate on additional network configurations
+and measured field data.
+ACKNOWLEDGMENT
+This project was funded by the Deutsche Forschungsge-
+meinschaft (DFG, German Research Foundation) - 535389056.
+The authors gratefully acknowledge the scientific support
+and high-performance computing resources provided by the
+Erlangen National High Performance Computing Center
+(NHR@FAU) at Friedrich-Alexander-Universit ¨at Erlangen-
+N¨urnberg (FAU) under NHR project b304dc. NHR funding is
+provided by the German federal and Bavarian state authorities.
+REFERENCES
+[1] M. A. Aftab, S. M. S. Hussain, I. Ali, and T. S. Ustun, “IEC 61850
+based substation automation system: A survey,”International Journal
+of Electrical Power & Energy Systems, vol. 120, p. 106008, Sep. 2020.
+[2] G. Kordowich, J. Loebel, J. Oelhaf, A. Maier, S. Bayer, C. Bergler,
+and J. Jaeger, “A simulation based dataset of faults and events for
+machine learning in power systems,” arXiv preprint arXiv:2608.19777,
+2026. [Online]. Available: https://arxiv.org/abs/2608.19777
+[3] A. Abdullah, “Ultrafast Transmission Line Fault Detection Using
+a DWT-Based ANN,”IEEE Transactions on Industry Applications,
+vol. 54, no. 2, pp. 1182–1193, Mar. 2018.
+[4] J. Oelhaf, G. Kordowich, P. A. P ´erez-Toro, T. Arias-Vergara, A. Maier,
+J. J ¨ager, and S. Bayer, “A Systematic Evaluation of Machine Learning
+Methods for Fault Detection and Line Identification in Electrical Power
+Grids,” inICASSP 2025 - 2025 IEEE International Conference on
+Acoustics, Speech and Signal Processing (ICASSP). IEEE, Apr. 2025,
+pp. 1–5.
+[5] L. Tran, “Integration of neural network and distance relay to improve the
+fault localization on transmission lines,”Turkish Journal of Electrical
+Engineering and Computer Sciences, vol. 31, no. 3, pp. 566–580, 2023.
+[6] G. K. N, J. Raj, and L. R. Chandran, “Transmission Line Monitoring
+and Protection with ANN aided Fault Detection, Classification and
+Location,” in2021 2nd International Conference on Smart Electronics
+and Communication (ICOSEC). IEEE, Oct. 2021, pp. 883–889.
+[7] J. Oelhaf, G. Kordowich, M. Pashaei, C. Bergler, A. Maier, J. J ¨ager,
+and S. Bayer, “A Scoping Review of Machine Learning Applications in
+Power System Protection and Disturbance Management,”International
+Journal of Electrical Power & Energy Systems, vol. 172, p. 111257,
+Nov. 2025.
+[8] G. Kordowich, J. Oelhaf, A. Maier, S. Bayer, and J. J ¨ager, “A Graph
+Neural Network-Based Approach for Power System Protection,” in2025
+IEEE Kiel PowerTech. IEEE, Jun. 2025, pp. 1–6.
+[9] I. Gulrajani and D. Lopez-Paz, “In search of lost domain generalization,”
+inInternational Conference on Learning Representations, 2021.
+[10] P. W. Koh, S. Sagawa, H. Marklund, S. M. Xie, M. Zhang, A. Balsub-
+ramani, W. Hu, M. Yasunaga, R. L. Phillips, I. Gao, T. Lee, E. David,
+I. Stavness, W. Guo, B. Earnshaw, I. Haque, S. M. Beery, J. Leskovec,
+A. Kundaje, E. Pierson, S. Levine, C. Finn, and P. Liang, “WILDS:
+A benchmark of in-the-wild distribution shifts,” inProceedings of the
+38th International Conference on Machine Learning, ser. Proceedings
+of Machine Learning Research, M. Meila and T. Zhang, Eds., vol. 139.
+PMLR, Jul. 2021, pp. 5637–5664.
+[11] A. Gretton, K. M. Borgwardt, M. J. Rasch, B. Sch ¨olkopf, and A. Smola,
+“A kernel two-sample test,”Journal of Machine Learning Research,
+vol. 13, no. 25, pp. 723–773, 2012.
+[12] Y . Ganin, E. Ustinova, H. Ajakan, P. Germain, H. Larochelle, F. Lavi-
+olette, M. March, and V . Lempitsky, “Domain-adversarial training of
+neural networks,”Journal of Machine Learning Research, vol. 17,
+no. 59, pp. 1–35, 2016.

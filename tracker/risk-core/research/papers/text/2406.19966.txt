@@ -1,0 +1,650 @@
+arXiv 2406.19966  https://arxiv.org/abs/2406.19966
+
+Simulating Financial Market via
+Large Language Model based Agents
+Shen Gao1, Yuntao Wen1, Minghang Zhu2, Jianing Wei1,
+Yuhan Cheng2, Qunzi Zhang2, Shuo Shang1∗
+1 University of Electronic Science and Technology of China
+2 Shandong University
+shengao@uestc.edu.cn yuntaowenx@gmail.com mhzhu@mail.sdu.edu.cn
+jedi.shang@gmail.com
+Abstract
+Most economic theories typically assume that financial market participants are
+fully rational individuals and use mathematical models to simulate human behavior
+in financial markets. However, human behavior is often not entirely rational and
+is challenging to predict accurately with mathematical models. In this paper, we
+propose Agent-based Simulated Financial Market (ASFM), which first constructs
+a simulated stock market with a real order matching system. Then, we propose a
+large language model based agent as the stock trader, which contains the profile,
+observation, and tool-learning based action module. The trading agent can compre-
+hensively understand current market dynamics and financial policy information,
+and make decisions that align with their trading strategy. In the experiments, we
+first verify that the reactions of our ASFM are consistent with the real stock market
+in two controllable scenarios. In addition, we also conduct experiments in two
+popular economics research directions, and we find that conclusions drawn in
+our ASFM align with the preliminary findings in economics research. Based on
+these observations, we believe our proposed ASFM provides a new paradigm for
+economic research.
+1 Introduction
+For a long time, market institutions such as fund companies and policy-making institutions such as
+central banks have been seeking a type of theoretical model capable of modeling economic operations
+to effectively analyze the outcomes of policy implementation and simulate the future functioning
+of the economy. Economists have long struggled to solve the problem of modeling complex human
+behavior. However, a fundamental assumption in traditional economic theory is that participants
+in economic markets are rational. For the past 100 years, economic research has followed certain
+economic assumptions, mostly based on rationality, with a few considering some features of irrational
+behavior. Nonetheless, these methods cannot fully capture complex human behavior.
+Since it is hard to fully model the operating principles of the financial market, economic regulatory
+policies cannot achieve the expected effects by using the prediction based on economic theory.
+Therefore, some economists have proposed behavioral economics [1, 2], which aims to explore the
+social, cognitive, and emotional factors influencing economic decisions made by individuals and
+groups. In recent years, this field has become a hot topic in economics, exemplified by the awarding
+of the 2017 Nobel Prize in Economics to Richard Thaler for his significant contributions to behavioral
+economics and behavioral finance [ 3, 4]. Since humans are not fully rational and their behavior
+∗ Corresponding author.
+Preprint. Under review.
+arXiv:2406.19966v1  [cs.CL]  28 Jun 2024
+under irrational conditions is difficult to predict, it still remains challenging to model complex human
+behavior using mathematical models.
+Additionally, some economists have proposed experimental economics [5, 6], which involves using
+human experiments to test different economic theories and new market mechanisms. Experimental
+economics helps researchers understand the principles of market and trading system operations.
+However, the most commonly used method [7–9] in experimental economics involves employing
+human subjects to simulate real trading in a laboratory environment. This approach is not only costly
+but also difficult to scale for large-scale and long-term experiments.
+The large language models (LLMs) based agents have emerged as a novel research direction in
+recent years [10–12]. LLM-based agents typically encompass the following modules: agent profile
+definition [10], agent memory construction [13, 14], agent planning capabilities [15], and executable
+actions [16]. Due to the reasoning and external tool usage capabilities, researchers begin exploring
+how multiple agents could collaborate to accomplish more complex tasks [17, 18]. These works have
+shown that large language models exhibit a high degree of consistency in simulating human behavior.
+In this paper, we propose Agent-based Simulated Financial Market (ASFM), a stock market simu-
+lation framework based on language model agents. First, we constructed a simulated stock trading
+market, encompassing most industry sectors present in the real financial market and implementing
+an order-matching trading mechanism identical to that of real markets. Subsequently, we developed
+several stock trading agents with diverse profiles and trading strategies. We equip each agent with
+a market observation module and stock trading capabilities. Additionally, we also simulate the
+proportions of various participants in the real financial market, making the trading data in ASFM
+more closely resemble that of a real financial market.
+In the experiment, we first validated two controlled scenarios within the simulated market: the effects
+of interest rate changes and the impact of inflation shock on the stock market. Through these two
+experiments, we confirm that our proposed ASFM can effectively simulate the principles of a real
+market, thereby verifying the accuracy of the proposed simulation methods. Based on ASFM, we
+further explored two crucial issues in economic research: the impact of trader behavior bias and the
+large trader impact. By conducting long-term simulation experiments in these two scenarios, we can
+find that ASFM shows consistency with the preliminary findings in recent economic research.
+Our contributions are as follows:
+• Our paper reveals that by integrating LLMs with the mechanisms of economic and financial
+operations, our proposed ASFM and technical route of policy analysis are expected to undergo a
+comprehensive revolution for economic research.
+• We construct an actual trading matching system and employ several simulated listed companies
+consistent with the real market.
+• We propose an LLM-based stock trading agent, that can observe market fluctuations and receive
+external economic news, using tool learning to perform stock trading in the simulated market based
+on their observations.
+• We demonstrate the consistent observation between our simulated financial market and the real-
+world market by conducting quantitative simulation experiments in several complex scenarios.
+2 ASFM Framework
+2.1 Problem Formulation
+First, we define the simulated stock market as M = {M1, . . . ,Mm}, which consists of m listed
+companies. Each listed company Mi = {Si, HTi } is composed of its business description Si and the
+stock prices over the past T days HTi . To simulate the stock market, we construct n trader agents
+A = {A1, . . . ,An}. Each agent Ai = {Di, Ui, Wi} consists of its trading strategy Di, the stocks it
+holds Ui with quantities, and the cash it owns Wi. After observing stock price changes and current
+economic news P , the agents complete stock transactions by selecting tools from the toolset T and
+generate the tool execution code C. The toolset T includes three tools: Sell, Buy, and Hold. Each
+tool accepts three parameters: stock code, quantity, and price. Our task is to enable the LLM-based
+2
+Figure 1: Comparison between our proposed Agent-based Simulated Financial Market (ASFM)
+(shown in the right) and traditional economic research paradigm (shown in the left). ASFM does not
+require any human annotator involved and only uses the LLM-based agents to conduct micro-financial
+market simulation.
+agents to choose the appropriate tool in T based on their profile Ai and observe market conditions,
+finally generating the code C for trading decisions and placing orders in the trading system.
+2.2 Overall Framework
+In this section, we detail the Agent-based Simulated Financial Market (ASFM). An overview of
+ASFM is shown in Figure 1. ASFM has two main parts:
+(1) Simulated Stock Market. To construct a simulated stock market, we first define several publicly
+listed companies and describe their main business activities. Then, we constructed an order-matching
+system according to the rules of the real-world stock market. Finally, we implemented a stock price
+updating algorithm to update the stock prices daily based on trading activities.
+(2) LLM-based Trading Agent. We first define each agent’s profile and initial capital. For an
+agent to complete stock trades, it should observe the stock market trends before trading in the
+market. Therefore, we implement an observation module to enable the agent to understand stock
+price fluctuations. Finally, we enabled the agent to interact with the simulated stock market by using
+a tool-learning paradigm.
+2.3 Simulated Stock Market
+2.3.1 Listed Company
+In the real-world stock market, numerous publicly listed companies issue and trade stocks in the
+stock market. Therefore, we first define what companies are listed in our simulated stock market. To
+better simulate real-world market, we created several simulated companies according to the industry
+sector distribution proportions observed in the real-world stock market. When defining each stock,
+we initially provide its historical price data HTi and a description of the company’s main business
+activities Si. During the initialization of the simulated stock market, we used real stock data as the
+starting prices for the first five days. We show an example listed company description below:
+Company Name: IT008
+Sector: Information Technology
+Main Business Si: A leading software development and information technology services provider
+Historical Prices HTi : [80.00, 79.75, 80.50, 81.25, 81.75...]
+Initial Prices: Based on the first five days’ real stock data
+3
+2.3.2 Order Matching System
+An order matching system is a system that matches buy and sell orders for a stock market. In this
+paper, we use two types of transaction matching mechanisms: opening order matching and continuous
+order matching.
+Opening matching orders refer to the process where sellers place sell orders and buyers place buy
+orders in the trading market. The market determines the transaction price based on the principles of
+price priority and time priority [19]. For each stock, we prioritize matching the lowest sell orders and
+the highest buy orders. The transaction price is the average price of the sell and buy prices. When all
+the stock quantity of the lowest sell order or all the stock quantity of the highest buy order has been
+traded, then proceed to match the second lowest sell order or the second highest order, and repeat
+this step until trading stops. There are two conditions for the trading stop: (1) the buy orders or sell
+orders on one side are completely exhausted, and (2) the price of the lowest sell order is higher than
+the price of the highest buy order.
+Continuous order matching refers to the process where, after the initial orders at the opening have not
+been fully executed, the unmatched orders are made available as indicative orders that agents can
+observe. Agents can adjust their bids based on these indicative orders and place new orders.
+Stock Price Updating Strategy At the end of each trading day, we use the average transaction
+price of each stock as the closing price for that day. We then use the closing price of each stock to
+calculate and update each agent’s total assets based on the value of the stocks they hold.
+2.4 LLM-based Trading Agent
+2.4.1 Agent Profile
+In real stock trading, different individuals adopt various investment strategies, leading to significantly
+different trading behaviors. To better simulate a real stock market, we first define the investment
+strategy Di of the i-th agent when constructing the trading agents and then inform the agent of the
+detailed trading preference of this strategy. In this paper, we define four types of different investment
+strategies: value investors, institutional investors, contrarian investors, and aggressive investors. For
+example, when defining a value investing agent, we specify in its profile that it should focus on finding
+stocks whose market prices are below their intrinsic values and identify and invest in high-quality
+companies undervalued by the market. More detailed profiles are provided in Appendix A.1.
+Additionally, we allocated initial capital to each agent. To help agents understand their current
+holdings, we designed an independent account management mechanism for each agent. After each
+transaction, our system calculates the agent’s remaining cash balance Wi, quantities of held stocks
+Ui, and rate of return, among other common statistical data. Based on this information, we construct
+the trader agent prompt Ia as follows:
+You are an investor in the stock market, andDi {strategy_description}
+[Wallet Wi] {wallet_cash}
+[Stock Ui] {stocks_hold}
+2.4.2 Agent Observation
+To help agents better understand the current market fluctuations, we prompt the agent to observe
+stock trading data and current economic policies. We use the observation prompt Io to the agent with
+three types of information: (1) the stock price over the past 15 days, (2) the historical prices of the
+stock’s order book, and (3) current economic policy news:
+...Omit the description for the input information...
+[Stock Market Situation] {stocks_company}{stocks_history_price}
+[Orders] {orders_history}
+[Economic News] {news}
+Please follow the steps below to generate the answer step by step:
+...Omit the instructions for generating observation results...
+4
+With these three types of information, agents can comprehend the stock’s price movements and adjust
+their investment action based on the latest economic policy information.
+2.4.3 Agent Action
+Inspired by recent work on LLM tool learning [20–22], we defined stock trading as three tools for the
+agent: buying stocks, selling stocks, and holding stocks. Specifically, the parameters for these tools
+are “stock code, quantity, and price”. Finally, we use the profile prompt Ia and observation prompt
+Io as the input of agent to produce the trading action execution:
+C = A(Ia, Io, It), (1)
+where A is the LLM-based agent, C indicates the tool execution code, and It is the tool document
+and demonstration instruction. Additionally, we limit each agent to perform no more than two buy or
+sell operation per stock each day.
+3 Experimental Setup
+3.1 Evaluation Metrics
+To quantitatively evaluate the trading dynamics in our simulated stock market, we employed four
+commonly used stock market metrics:
+(1) Order Number (ON) : This refers to the total number of buy and sell orders, reflecting the
+willingness of buyers and sellers at that price.
+(2) Order Execution Rate (OER): This is the ratio of order volume to the order quantity, reflecting
+the efficiency of order execution or the proportion of orders that result in trades.
+(3) Turnover Rate (TR): This is the ratio of stock trading volume to the number of shares outstanding
+over a certain period, measuring the liquidity and market activity of the stock.
+(4) Volatility (VO): This represents the standard deviation of the stock’s rate of change, indicating
+the extent of price fluctuations and measuring the stock’s price stability and risk level.
+Due to the limited space, we omit the detailed definition for each metric.
+3.2 Ablation Models
+To verify the effectiveness of each module in ASFM, we also employ several ablation models:
+(1) ASFM w/o Prof. : We use the same simple profile for each agent, which only instructs the agent
+to use the trade tools according to the observation results.
+(2) ASFM w/o Obser. : We remove the observation module and only use the stock price of recent
+days as input to the agent.
+3.3 Simulated Stocks
+In our experiments, we referenced the distribution of listed companies in China’s A-shares market
+and used the main business descriptions of real listed companies as a blueprint to create simulated
+companies covering 11 industry sectors. These sectors are energy, materials, industrial, consumer
+discretionary, consumer staples, healthcare, financial, information technology, telecommunication
+services, utilities, and real estate.
+3.4 Simulated Agents
+As shown in § 2.4.1, we define 4 types of investors with different investment strategies. In our
+experiments, we reference investors’ distribution proportions in China’s A-shares market. According
+to statistics of China’s A-shares market, the proportions of value investors, institutional investors,
+contrarian investors, and aggressive investors in A-shares are approximately 2:1:1:1, respectively.
+Based on the composition of capital in China’s A-share market, we also set the initial capital of each
+type of agent to 20K, 15K, 0.4K, and 6K respectively.
+5
+Table 1: Evaluation metrics of different models.
+ON OER TR VO
+ASFM 1855 17.25% 62.26% 1.45%
+w/o Prof. 320↓82.7% 13.98%↓19.0% 10.12%↓83.7% 0.37% ↓74.5%
+w/o Obser. 802↓56.8% 28.30%↑64.1% 44.16%↓29.1% 3.24%↑123%
+All Value Investors 1021 ↓45.0% 13.70%↓20.3% 23.91%↓61.6% 0.97%↓33.1%
+All Aggressive Investors 3837 ↑107% 9.42%↓45.4% 168.87%↑171% 2.68%↓84.8%
+3.5 Simulated Scenarios
+The ultimate goal of our framework is to simulate the real stock market’s response to economic
+regulatory policies. Therefore, we first verify whether our ASFM can exhibit reactions consistent
+with real stock traders in some simple and controllable scenarios. We simulated the following two
+scenarios for the agents and observed their performance:
+(1) Federal cuts interest rates : A Federal interest rate cut refers to the decision by the Federal
+Reserve’s Board of Governors to adjust monetary policy by lowering the federal funds rate. A rate cut
+is a form of expansionary monetary policy, typically designed to reduce bank interest rates, thereby
+increasing the money supply and leading to a depreciation of the dollar. This type of policy generally
+has a positive impact on the stock market.
+(2) Inflation shock: Central banks (e.g., the Federal Reserve) usually set an inflation target (e.g., 2%)
+to maintain price stability and economic health. When the actual inflation rate deviates from this
+target, it triggers a series of shocks and chain reactions. In the experiment, we inform the agents of
+the current inflation rate by releasing news to agents.
+The above two scenarios usually have a determinate influence on the stock market. However, the real
+financial market is influenced by numerous factors, making accurate trending prediction challenging.
+Some factors are complex and remain widely studied issues in economics [23–26]. Given that the
+goal of our framework is to simulate the stock market under the influence of complex factors, it aims
+to assist policymakers in better understanding the potential impacts of their policies on the market.
+We also select two currently popular research directions in economics, using our proposed ASFM
+framework to simulate these factors and investigate whether the conclusions drawn in our simulated
+environment align with the preliminary findings in economics research:
+(1) Trader with behavior bias: In § 3.4, we defined several agents with different trading strategies.
+To better simulate the real stock market, we used the actual proportions of investor types when
+constructing the agents. To study how stock market volatility varies with different proportions of
+investor types, we alter the investor type ratios and compare it with the financial market with real
+investor type ratios.
+(2) Large trader impact: In macroeconomics, numerous studies [ 27–29] have shown that large
+traders can exercise a disproportionate influence on the likelihood and severity of a financial crisis by
+fomenting and orchestrating attacks against weakened currency pegs. This highlights the significant
+difference in market impact between large and small traders. Therefore, we explore how the amount
+of capital affects the final returns of the agent.
+4 Experimental Results
+4.1 Ablation Study
+To verify the effectiveness of each module in our trader agent, we remove the profile and observation
+module in the agent as ablation models. From the results shown in Table 1, we can find that when we
+remove the profile module and use the same simple trading instruction for each agent, we obtain the
+lowest turnover rate and volatility. When all agents share the same trading strategy, their actions tend
+to converge. For example, if all agents decide to buy a particular stock at the same time, it becomes
+challenging to complete transactions, resulting in low turnover rates and volatility.
+6
+When we remove the observation module, the agent is unable to comprehensively understand the
+current market conditions, resulting in more random trading behaviors. This led to increased volatility.
+The lack of informed trading disrupted the strategic interactions typically present in the stock market,
+resulting in a higher order execution rate.
+-0.05
+0
+0.05
+0.1
+0.15
+Return
+Cutting Interest
+1 5 10 15 20 25 30
+Time
+0
+25
+50
+75Volume
+(a) The top shows the average stock return, and the bottom
+shows the order number.
+1 5 10 15 20 25 30
+Time
+20
+40
+60
+80
+100
+120Price
+Energy
+Real Estate
+Information T echnology
+Financials
+(b) Stock price.
+Figure 2: The impact of cutting interest rates policy shock.
+0% 1% 2% 3% 4% 5% 6% 7% 8%
+Inflation Rate
+0%
+10%
+20%
+30%
+40%
+Return
+Institutional Investors
+Aggressive Investors
+Contrarian Investors
+Value Investors
+Average
+Figure 3: Stock return under different inflation
+rate.
+0 5 10 15 20 25 30
+Time
+0.00
+0.05
+0.10
+0.15
+0.20Return
+4000
+8000
+12000
+16000
+20000
+24000
+Figure 4: Average return for the agent with
+different initial capital.
+4.2 Policy Shock Analysis: Influence of Cutting Interest Rates
+To verify the impact of a rate cut on the stock market, on the 10th day of normal trading, we informed
+each agent about the Federal rate cut by releasing news, such as “According to the latest minutes
+of the Federal Open Market Committee (FOMC) monetary policy meeting, the Federal Reserve
+has decided to cut interest rates by 50 basis points, continuing to maintain the target range for the
+federal funds rate”. Figure 2(a) illustrates the changes in returns for various agents following the
+announcement of the Federal rate cut. As shown in Figure 2(a), after informing the simulated market
+about the rate cut, the average return of all stocks gradually increased.
+This phenomenon observed in our simulation system aligns with current economic theories. Accord-
+ing to contemporary economic viewpoints, a rate cut typically has a positive impact on the stock
+market because it lowers borrowing costs for businesses and consumers, stimulates consumption and
+investment, enhances economic growth expectations, and reduces the attractiveness of fixed-income
+products.
+Furthermore, different industries respond differently to rate cuts. For instance, highly leveraged
+sectors like real estate and energy may benefit significantly due to their sensitivity to interest rate
+changes, as lower financing costs can substantially boost their profitability. Conversely, the financials
+(e.g., banks) might experience a contraction in net interest margins, which could have some negative
+effects. Figure 2(b) shows the stock price changes in the real estate and financials in our simulated
+market, which also reflect observations consistent with traditional economic theories.
+7
+4.3 Influence of Inflation Shock
+In the experiment, we informed each agent of the current inflation rate on the first day by releasing
+news, such as “In recent months, the national inflation rate has risen to a high point in the past
+decade, attracting widespread attention from the market and residents. According to data from the
+National Bureau of Statistics, the inflation rate has now reached 8.5%”. After 30 trading days, we
+calculated the rate of return for each agent and the average return for all stocks in the simulated stock
+market. Figure 3 shows the return rate of various agents under different inflation shocks. As shown
+in Figure 3, both excessively high and excessively low inflation rates negatively impact the rate of
+return. Conversely, when the inflation rate is between 2-3%, all the agents’ returns and the average
+return of the overall stock market reach relatively high levels.
+This phenomenon observed in our simulation system aligns with current economic theories. Contem-
+porary economic research [25, 26] suggests that high inflation often indicates increased production
+and operational costs, which weaken consumer purchasing power and reduce demand. Additionally,
+high inflation is typically associated with increased economic uncertainty, leading to a decline in
+investor confidence. Similarly, low inflation or deflation reflects weak demand in the economy. Low
+inflation is usually correlated with slower economic growth and reduced willingness of businesses to
+expand. Generally, moderate inflation (around 2-3%) is considered a hallmark of a healthy economy
+and typically has a positive impact on the stock market.
+4.4 LLM and Behavioral Economics: Exploring the Trader with Behavior Bias
+As shown in § 3.5, we altered the investor type ratios to explore the influence of behavior bias. We
+explore the market dynamics under two scenarios: (1) all participants in the market are value investors
+and (2) all participants are aggressive investors. Table 1 presents the results for these two scenarios.
+As shown in Table 1, when the market consists entirely of value investors, the overall market volatility
+is lower by 0.1% compared to the setting with a real market distribution. In contrast, when the market
+consists entirely of aggressive investors, there is a significantly higher order quantity and turnover
+rate, and the market volatility also shows a notable increase.
+The modeling of behavioral economics has long perplexed economists [30, 31] since the behavior
+patterns of irrational individuals are difficult to describe with rigorous mathematics. Consequently,
+when economic models include irrational individuals, these models are often difficult to formulate
+and solve. In contrast to rule-based microeconomic models, LLMs can better understand complex
+human behavior patterns than mathematical models. Within the framework of LLM-based simula-
+tion framework presented in this paper, human behavioral characteristics and biases can be easily
+incorporated into economic models.
+4.5 Exploring the Large Trader Impact
+To explore the large trader impact, we initialize agents with different amounts of starting capital
+and observed the changes in their returns. As shown in Figure 4, small traders generally exhibit a
+higher rate of return growth after 30 trading days, whereas large traders tend to show poorer return
+performance. Preliminary economic research [32–34] suggests that this phenomenon can be attributed
+to the large trader’s substantial capital, which makes it difficult to find sufficient trading counterparts
+for their buy and sell orders. Consequently, the action of large trader is less flexible compared to
+small trader. From the results of this experiment, it demonstrate that ASFM maintains consistency
+with traditional economic conclusions even in scenarios with these indeterminate conclusions.
+5 Future Directions
+Although the ASFM can effectively simulate the operating principles of financial markets, it remains
+a pilot study using LLM-based agents in economic modeling. There are still many directions that
+need further exploration:
+(1) More financial market participants and behaviors need to be incorporated, such as banks, loans,
+bond issuance, and a wider variety of asset types. In real-world financial markets, these elements are
+crucial components, and their impact on the economy should be considered.
+8
+(2) The operational status of listed companies needs to change with market fluctuations, which in
+turn affects their stock prices.
+(3) More agent behaviors should be considered, such as employment, purchasing mutual funds, and
+buying real estate. These common factors may also influence personal assets.
+6 Related Work
+Language Model based Agent. Large language models have demonstrated rich world knowl-
+edge [16, 35], complex logical reasoning abilities [36], and in-context learning capabilities [37] in
+various natural language understanding and generation tasks. Recently, many studies have explored
+the construction of LLM-based agents by setting profiles, inputting knowledge as memory, and
+endowing them with the ability to call external tools [ 17, 20]. Researchers have also proven the
+effectiveness of LLM-based agents in many tasks such as tool learning [22, 18], recommendation
+systems [38, 39], and multi-modal tasks [40, 41]. Furthermore, some works have started to explore
+how to construct communication mechanisms among multiple agents, allowing them to collaborate on
+more complex tasks such as travel planning [15], software development [42], and scriptwriting [43].
+Large Language Models in Economics Research. Large language models have been widely used
+in economics research. Researchers collect data of the financial domain to instruct models for many
+tasks such as sentiment analysis [13, 44], text classification [45], named entity recognition [46], and
+stock movement prediction [47]. In the task of stock movement prediction, Lopez-Lira and Tang [48]
+use ChatGPT to analyze sentiment trends and establish their correlation with stock market movements;
+Xie et al. [49] combines financial data and news to fine-tune large models, integrating numerical
+and textual features to predict stock prices; Tong et al. [50] assigns large models to play different
+experts, generating predictions from sentiment analysis, technical analysis, and history analysis, and
+synthesizing them to produce state-of-the-art stock price predictions. These works demonstrate that
+LLMs have a good understanding of financial knowledge, and are capable of tackling financial tasks.
+Economic behavior is a complex form of social behavior, such as investing, employment, and taxation.
+[51] proposed using LLM-based agents to simulate macroeconomic markets. They first constructed
+mathematical models for banks and governments, which generated various economic indicators.
+Then they provide these indicators to the agents, and the agents output consumption and employment
+indices and feedback into the bank and government models, thereby achieving a simulation of the
+macroeconomic market. However, under the traditional mathematical models paradigm, this method
+only used the LLM-based agent as a numerical indices prediction module. In contrast, our ASFM
+represents a fully agent-based microeconomic model where all decisions are made by the agents
+based on their observations. Unlike traditional mathematical models, this approach offers a novel
+paradigm for modeling complex human behaviors in economic research.
+7 Conclusion
+In this paper, we present a pioneering approach Agent-based Simulated Financial Market (ASFM) to
+model the financial market by using LLM-based agents. To build a trader agent, we employ three
+modules to establish the stock market’s trading ability, including the profile module with trading
+strategy instructions, the observation module to understand the dynamics of market and economic
+policies, and the tool-learning based action module. By creating a simulated stock market with an
+actual trading mechanism, numerous agents with different trading strategies and initial capital can
+conduct trading in the ASFM. To verify the consistency between the simulated market and the real
+stock market, we construct four scenarios including a federal interest rate cut, inflation shock, the
+impact of trader behavior bias, and large trader impact. From these experiments, we observe that
+our ASFM demonstrates a sophisticated understanding of market dynamics and financial policy
+information. The agents make decisions based on their trading strategy, mirroring the complexity and
+variability of human behavior more accurately than traditional mathematical economic models. And
+the ASFM offers a new perspective for a more dynamic and realistic simulation of financial markets
+research.
+9
+References
+[1] Scott Rick and George Loewenstein. The role of emotion in economic behavior. Handbook of
+emotions, 3:138–158, 2008.
+[2] Adam M Lavecchia, Heidi Liu, and Philip Oreopoulos. Behavioral economics of education:
+Progress and possibilities. In Handbook of the Economics of Education, volume 5, pages 1–74.
+Elsevier, 2016.
+[3] Nicholas Barberis and Richard Thaler. A survey of behavioral finance. Handbook of the
+Economics of Finance, 1:1053–1128, 2003.
+[4] Daniel Kahneman, Jack L Knetsch, Richard Thaler, et al. Fairness as a constraint on profit
+seeking: Entitlements in the market. American economic review, 76(4):728–741, 1986.
+[5] Vernon L Smith. Experimental economics: Induced value theory. The American Economic
+Review, 66(2):274–279, 1976.
+[6] Douglas D Davis and Charles A Holt. Experimental economics. Princeton university press,
+2021.
+[7] Vernon L Smith. An experimental study of competitive market behavior. Journal of political
+economy, 70(2):111–137, 1962.
+[8] Dan Ariely and Michael I Norton. Psychology and experimental economics: A gap in abstraction.
+Current Directions in Psychological Science, 16(6):336–339, 2007.
+[9] Daniel Kahneman and Vernon Smith. Foundations of behavioral and experimental economics.
+Nobel Prize in Economics Documents, 1(7):1–25, 2002.
+[10] Joon Sung Park, Joseph O’Brien, Carrie Jun Cai, Meredith Ringel Morris, Percy Liang, and
+Michael S Bernstein. Generative agents: Interactive simulacra of human behavior. In Proceed-
+ings of the 36th Annual ACM Symposium on User Interface Software and Technology, pages
+1–22, 2023.
+[11] Ruibo Liu, Ruixin Yang, Chenyan Jia, Ge Zhang, Denny Zhou, Andrew M Dai, Diyi Yang,
+and Soroush V osoughi. Training socially aligned language models in simulated human society.
+arXiv preprint arXiv:2305.16960, 2023.
+[12] Theodore R Sumers, Shunyu Yao, Karthik Narasimhan, and Thomas L Griffiths. Cognitive
+architectures for language agents. arXiv preprint arXiv:2309.02427, 2023.
+[13] Jean Lee, Hoyoul Luis Youn, Josiah Poon, and Soyeon Caren Han. Stockemotions: discover
+investor emotions for financial sentiment analysis and multivariate time series. arXiv preprint
+arXiv:2301.09279, 2023.
+[14] Lei Wang, Chen Ma, Xueyang Feng, Zeyu Zhang, Hao Yang, Jingsen Zhang, Zhiyuan Chen,
+Jiakai Tang, Xu Chen, Yankai Lin, et al. A survey on large language model based autonomous
+agents. Frontiers of Computer Science, 18(6):1–26, 2024.
+[15] Jian Xie, Kai Zhang, Jiangjie Chen, Tinghui Zhu, Renze Lou, Yuandong Tian, Yanghua Xiao,
+and Yu Su. Travelplanner: A benchmark for real-world planning with language agents. arXiv
+preprint arXiv:2402.01622, 2024.
+[16] Hongxin Zhang, Weihua Du, Jiaming Shan, Qinhong Zhou, Yilun Du, Joshua B Tenenbaum,
+Tianmin Shu, and Chuang Gan. Building cooperative embodied agents modularly with large
+language models. In The Twelfth International Conference on Learning Representations, 2023.
+[17] Yujia Qin, Shihao Liang, Yining Ye, Kunlun Zhu, Lan Yan, Yaxi Lu, Yankai Lin, Xin Cong,
+Xiangru Tang, Bill Qian, et al. Toolllm: Facilitating large language models to master 16000+
+real-world apis. arXiv preprint arXiv:2307.16789, 2023.
+[18] Cheng-Yu Hsieh, Si-An Chen, Chun-Liang Li, Yasuhisa Fujii, Alexander Ratner, Chen-Yu Lee,
+Ranjay Krishna, and Tomas Pfister. Tool documentation enables zero-shot tool-usage with large
+language models. arXiv preprint arXiv:2308.00675, 2023.
+10
+[19] Maureen O’Hara. Market microstructure theory. 1995.
+[20] Yujia Qin, Shengding Hu, Yankai Lin, Weize Chen, Ning Ding, Ganqu Cui, Zheni Zeng, Yufei
+Huang, Chaojun Xiao, Chi Han, et al. Tool learning with foundation models. arXiv preprint
+arXiv:2304.08354, 2023.
+[21] Shen Gao, Zhengliang Shi, Minghang Zhu, Bowen Fang, Xin Xin, Pengjie Ren, Zhumin Chen,
+Jun Ma, and Zhaochun Ren. Confucius: Iterative tool learning from introspection feedback by
+easy-to-difficult curriculum. In Proceedings of the AAAI Conference on Artificial Intelligence,
+volume 38, pages 18030–18038, 2024.
+[22] Yuchen Zhuang, Yue Yu, Kuan Wang, Haotian Sun, and Chao Zhang. Toolqa: A dataset for llm
+question answering with external tools. Advances in Neural Information Processing Systems,
+36, 2024.
+[23] Md Mahmudul Alam and Gazi Uddin. Relationship between interest rate and stock price:
+empirical evidence from developed and developing countries. International Journal of Business
+and Management (ISSN 1833-3850), 4(3):43–51, 2009.
+[24] Richard Clarida, Jordi Gali, and Mark Gertler. Monetary policy rules and macroeconomic
+stability: evidence and some theory. The Quarterly journal of economics , 115(1):147–180,
+2000.
+[25] Vikesh Gokal, Subrina Hanif, et al. Relationship between inflation and economic growth ,
+volume 4. Economics Department, Reserve Bank of Fiji Suva, 2004.
+[26] Jacob Boudoukh and Matthew Richardson. Stock returns and inflation: A long-horizon perspec-
+tive. The American economic review, 83(5):1346–1355, 1993.
+[27] Giancarlo Corsetti, Amil Dasgupta, Stephen Morris, and Hyun Song Shin. Does one soros
+make a difference? a theory of currency crises with large and small traders. The Review of
+Economic Studies, 71(1):87–113, 01 2004. ISSN 0034-6527. doi: 10.1111/0034-6527.00277.
+URL https://doi.org/10.1111/0034-6527.00277.
+[28] Holger Kraft and Christoph Kuehn. Large traders and illiquid options: Hedging vs. manipulation.
+JOURNAL OF ECONOMIC DYNAMICS & CONTROL, 35(11):1898–1915, NOV 2011. ISSN
+0165-1889. doi: 10.1016/j.jedc.2011.06.001.
+[29] Christina E. Bannier. Big elephants in small ponds: Do large traders make financial markets
+more aggressive? Journal of Monetary Economics, 52(8):1517–1531, 2005. ISSN 0304-3932.
+doi: https://doi.org/10.1016/j.jmoneco.2004.09.005. URL https://www.sciencedirect.
+com/science/article/pii/S0304393205001169.
+[30] J Bradford De Long, Andrei Shleifer, Lawrence H Summers, and Robert J Waldmann. Noise
+trader risk in financial markets. Journal of political Economy, 98(4):703–738, 1990.
+[31] David Hirshleifer. Presidential address: Social transmission bias in economics and finance. The
+Journal of Finance, 75(4):1779–1831, 2020.
+[32] Gary L Gastineau and Robert A Jarrow. Large-trader impact and market regulation. Financial
+Analysts Journal, 47(4):40–51, 1991.
+[33] Peter Bank and Dietmar Baum. Hedging and portfolio optimization in financial markets with a
+large trader. Mathematical Finance: An International Journal of Mathematics, Statistics and
+Financial Economics, 14(1):1–18, 2004.
+[34] Rüdiger Frey. Perfect option hedging for a large trader. Finance and Stochastics, 2:115–141,
+1998.
+[35] Xiangru Tang, Anni Zou, Zhuosheng Zhang, Yilun Zhao, Xingyao Zhang, Arman Cohan, and
+Mark Gerstein. Medagents: Large language models as collaborators for zero-shot medical
+reasoning. arXiv preprint arXiv:2311.10537, 2023.
+[36] Justin Chih-Yao Chen, Swarnadeep Saha, and Mohit Bansal. Reconcile: Round-table conference
+improves reasoning via consensus among diverse llms. arXiv preprint arXiv:2309.13007, 2023.
+11
+[37] Yao Fu, Hao Peng, Tushar Khot, and Mirella Lapata. Improving language model negotiation
+with self-play and in-context learning from ai feedback. arXiv preprint arXiv:2305.10142, 2023.
+[38] Xu Huang, Jianxun Lian, Yuxuan Lei, Jing Yao, Defu Lian, and Xing Xie. Recommender
+ai agent: Integrating large language models for interactive recommendations. arXiv preprint
+arXiv:2308.16505, 2023.
+[39] Jizhi Zhang, Keqin Bao, Wenjie Wang, Yang Zhang, Wentao Shi, Wanhong Xu, Fuli Feng, and
+Tat-Seng Chua. Prospect personalized recommendation on large language model-based agent
+platform. arXiv preprint arXiv:2402.18240, 2024.
+[40] Zhao Yang, Jiaxuan Liu, Yucheng Han, Xin Chen, Zebiao Huang, Bin Fu, and Gang Yu.
+Appagent: Multimodal agents as smartphone users. arXiv preprint arXiv:2312.13771, 2023.
+[41] Zhengyuan Yang, Linjie Li, Jianfeng Wang, Kevin Lin, Ehsan Azarnasab, Faisal Ahmed,
+Zicheng Liu, Ce Liu, Michael Zeng, and Lijuan Wang. Mm-react: Prompting chatgpt for
+multimodal reasoning and action. arXiv preprint arXiv:2303.11381, 2023.
+[42] Chen Qian, Xin Cong, Cheng Yang, Weize Chen, Yusheng Su, Juyuan Xu, Zhiyuan Liu,
+and Maosong Sun. Communicative agents for software development. arXiv preprint
+arXiv:2307.07924, 2023.
+[43] Yi Zheng, Chongyang Ma, Kanle Shi, and Haibin Huang. Agents meet okr: An object
+and key results driven agent system with hierarchical self-collaboration and self-evaluation.
+ArXiv, abs/2311.16542, 2023. URL https://api.semanticscholar.org/CorpusID:
+265466401.
+[44] Raj Shah, Kunal Chawla, Dheeraj Eidnani, Agam Shah, Wendi Du, Sudheer Chava, Natraj
+Raman, Charese Smiley, Jiaao Chen, and Diyi Yang. When flue meets flang: Benchmarks and
+large pretrained language model for financial domain. In Proceedings of the 2022 Conference
+on Empirical Methods in Natural Language Processing, pages 2322–2335, 2022.
+[45] Xianzhi Li, Xiaodan Zhu, Zhiqiang Ma, Xiaomo Liu, and Sameena Shah. Are chatgpt and gpt-4
+general-purpose solvers for financial text analytics? an examination on several typical tasks.
+arXiv preprint arXiv:2305.05862, 2023.
+[46] Lefteris Loukas, Manos Fergadiotis, Ilias Chalkidis, Eirini Spyropoulou, Prodromos Malakasio-
+tis, Ion Androutsopoulos, and Georgios Paliouras. Finer: Financial numeric entity recognition
+for xbrl tagging. In Proceedings of the 60th Annual Meeting of the Association for Computa-
+tional Linguistics (Volume 1: Long Papers), pages 4419–4431, 2022.
+[47] Yejun Soun, Jaemin Yoo, Minyong Cho, Jihyeong Jeon, and U Kang. Accurate stock movement
+prediction with self-supervised learning from sparse noisy tweets. In 2022 IEEE International
+Conference on Big Data (Big Data), pages 1691–1700. IEEE, 2022.
+[48] Alejandro Lopez-Lira and Yuehua Tang. Can chatgpt forecast stock price movements? return
+predictability and large language models. arXiv preprint arXiv:2304.07619, 2023.
+[49] Qianqian Xie, Weiguang Han, Xiao Zhang, Yanzhao Lai, Min Peng, Alejandro Lopez-Lira, and
+Jimin Huang. Pixiu: A large language model, instruction data and evaluation benchmark for
+finance. arXiv preprint arXiv:2306.05443, 2023.
+[50] Hanshuang Tong, Jun Li, Ning Wu, Ming Gong, Dongmei Zhang, and Qi Zhang. Ploutos:
+Towards interpretable stock movement prediction with financial large language model. arXiv
+preprint arXiv:2403.00782, 2024.
+[51] Nian Li, Chen Gao, Yong Li, and Qingmin Liao. Large language model-empowered agents for
+simulating macroeconomic activities. arXiv preprint arXiv:2310.10436, 2023.
+12
+A Appendix
+A.1 Instruction of Agent Trading Strategy
+The detailed trading preference description of each agent as follows:
+• Value investor: You are a value investor focused on identifying stocks whose market
+prices are below their intrinsic values. Your investment decisions are based on thorough
+financial analysis, seeking long-term stable returns rather than short-term price fluctuations.
+By examining the fundamentals of companies, such as profitability, financial health, and
+industry position, you can identify and invest in high-quality companies undervalued by the
+market. As a value investor, you patiently wait for the market to reassess the true value of
+these stocks, realizing the appreciation of your investments.
+• Institutional investor: You are an institutional investor, typically representing a large
+investment company. You possess substantial capital and expertise, engaging in the purchase
+and sale of stocks, bonds, and other financial assets. Your investment decisions are based on
+in-depth market analysis, long-term financial planning, and sophisticated risk management
+strategies. Your primary goal is to secure stable and reliable returns for the institution or its
+beneficiaries you represent.
+• Contrarian investor: You are a contrarian investor, specializing in finding stocks that are
+generally overlooked or undervalued by the market. You believe in buying when market
+sentiment is low and selling when it’s high, aiming to profit from this approach. Your
+strategy requires a high level of patience and steadfast determination, as well as a deep
+understanding of market psychology and fundamental analysis, to be greedy when others
+are fearful and thus achieve capital appreciation.
+• Aggressive investor: You are an Aggressive investor, focusing on profiting from short-term
+market fluctuations. You prefer quick trades, using technical analysis and market trends
+to predict immediate price movements. Your investment strategy often involves higher
+risks, but it can also yield quicker returns. You need to constantly stay sensitive to market
+dynamics and be ready to enter and exit the market at any time to respond to rapidly changing
+market conditions.
+A.2 Detailed Definition of Companies
+We show the detailed definition of the simulated listed company below:
+• EN001: An energy company primarily engaged in oil and gas extraction. Initial Prices:
+[10.00, 10.20, 10.50, 10.35, 10.60]
+• MA002: A specialized chemical materials producer, whose products are widely used in
+construction and manufacturing. Initial Prices: [20.00, 19.85, 20.15, 20.50, 20.75]
+• IN003: An industrial company providing mechanical equipment and automation solutions.
+Initial Prices: [30.00, 29.50, 30.25, 30.75, 31.00]
+• CC004: A company specializing in high-end electronic consumer products, such as smart-
+phones and laptops. Initial Prices: [40.00, 39.50, 40.25, 41.00, 41.50]
+• DC005: A producer and seller of daily consumer goods, such as food and beverages. Initial
+Prices: [50.00, 49.75, 50.50, 50.25, 51.00]
+• HC006: A healthcare company providing innovative medical devices and pharmaceuticals.
+Initial Prices: [60.00, 59.50, 60.25, 60.75, 61.50...]
+• FI007: A provider of comprehensive financial services, including banking, insurance, and
+asset management. Initial Prices: [70.00, 70.50, 71.00, 71.50, 72.00]
+• IT008: A leading software development and information technology services provider.
+Initial Prices: [80.00, 79.75, 80.50, 81.25, 81.75]
+13
+• TS009: An operator of extensive telecommunications networks, providing data and commu-
+nication services. Initial Prices: [90.00, 90.50, 91.00, 91.50, 92.00]
+• UT010: A utility company providing water, electricity, and natural gas services. Initial
+Prices: [100.00, 99.50, 100.25, 100.75, 101.50]
+• RE011: A company primarily engaged in real estate development and management, covering
+commercial and residential projects. Initial Prices: [110.00, 110.50, 111.00, 111.50, 112.00]
+14

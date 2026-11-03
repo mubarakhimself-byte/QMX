@@ -1,0 +1,3118 @@
+arXiv 2610.36491  https://arxiv.org/abs/2610.36491
+
+Simple Portfolios that Deliver Consistent Decent Returns
+Oskar Edén Wallberg1,2 Alexander Karolin1,2
+February 5, 2026
+Abstract
+Portfolio construction has been studied extensively in both academia and industry. Its
+applications range from pension funds and hedge funds to private savings. The aca-
+demic literature centers on methodology, commonly evaluated in settings that allow
+short selling, leverage, and frequent trading. Industry, on the other hand, operates un-
+der real constraints, but its data and methods are proprietary and largely unpublished.
+Neither is directly available to the private investor. This paper is an empirical study
+of established portfolio construction methods in the setting of the private investor. We
+consider a small investable universe of liquid US ETFs, where trading is monthly and
+carries a cost, and neither shorting nor leverage is permitted. Portfolio construction
+is posed as a convex optimization problem, its inputs are estimated from public data,
+and every parameter is interpretable. We denote such portfolios simple. We show
+that simple portfolios of as few as three ETFs deliver consistent and decent returns,
+without tuning to the backtest period. To find them, we have developed a framework,
+which we share publicly, able to backtest hundreds of portfolios on a standard laptop
+over a twenty year period or longer. When no return forecast is made, portfolios are
+constructed from risk alone, using methods such as risk parity and minimum volatil-
+ity, built on a statistical factor model fitted with expectation maximization. When a
+forecast is made, we combine the Markowitz formulation with momentum signals and
+ridge regression. We report what works and what each component adds, weighing its
+gain against its complexity and the effort it demands of the investor. The findings
+are supported by numerical experiments over the past two decades, and the proposed
+portfolios outperform the standard 60/40 allocation.
+Keywords:Portfolio construction, exchange-traded funds, convex optimization, factor risk
+models, return forecasting, risk-based asset allocation, backtesting, retail investing
+1KTH Royal Institute of Technology, Stockholm, Sweden.
+2Visiting Student Researcher (VSR) at Stanford University under Professor Stephen P. Boyd.
+Both authors contributed equally to this work.
+This work was supported by the foundations of the Royal Swedish Academy of Sciences (Kungl. Veten-
+skapsakademien), through Stiftelsen Claes Adelskölds medalj- och stipendiefond, grant ES2025-0064.
+arXiv:2610.36491v1  [q-fin.PM]  27 Oct 2026
+Contents
+1 Introduction 1
+1.1 Investing and diversification . . . . . . . . . . . . . . . . . . . . . . . . . . . 1
+1.2 Quantitative trading . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 3
+1.3 Previous work . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 6
+1.4 This paper . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 7
+2 Assets 9
+2.1 Investable universe . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 9
+2.2 Asset categories . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 10
+3 Portfolio construction 14
+3.1 Mathematical model . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 14
+3.2 Simple trading strategies . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 15
+3.3 Markowitz . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 18
+3.4 Portfolio selection . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 19
+4 Risk model 20
+4.1 Risk forecasting . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 20
+4.2 Simple covariance estimators . . . . . . . . . . . . . . . . . . . . . . . . . . . 20
+4.3 Factor models . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 23
+5 Alpha model 26
+5.1 Return forecasting . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 26
+5.2 Simple alphas . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 27
+5.3 Regression models . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 28
+6 Numerical experiments 31
+6.1 Data and backtest . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 31
+6.2 Simple strategies . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 33
+6.3 Risk and alpha model . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 43
+6.4 Proposed portfolios . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 47
+7 Conclusions 48
+8 Acknowledgments 49
+A Mathematical derivations 58
+B Tables 61
+C Code 66
+D For the European investor 69
+1 Introduction
+Portfolio construction was first formalized by Harry Markowitz in 1952 [Mar52]. The main
+idea behind portfolio construction is to balance risk and reward by diversifying investments.
+Markowitz was able to define diversification in mathematical terms, however the concept has
+been known for much longer. As far back as the third century, the Talmud advised splitting
+wealth three ways, one in land, one in business, and one held in reserve [Mar99]. The core
+concepts still apply today, and investing has grown significantly in popularity. Professional
+investors such as Warren Buffett and Peter Lynch diversify across tens or hundreds of in-
+vestments, while quantitative hedge funds such as Citadel hold positions in thousands of
+different financial instruments. For the private investor, tracking such quantities of assets
+requires time and effort beyond what is reasonable. In this paper, we present some modern
+portfolio construction techniques applied to portfolios with a more manageable number of
+assets, making them practical for private investors to replicate and maintain.
+1.1 Investing and diversification
+A common problem all investors face is how to allocate their capital in a way that balances
+risk and return. There are many options to choose from in financial markets, including
+securities such as stocks, bonds, and mutual funds. A more recent addition, the exchange-
+traded fund (ETF), has become an increasingly popular alternative. An ETF is a fund
+traded like a stock, meaning that it can be bought and sold throughout the trading day,
+unlike a mutual fund. An ETF holds a basket of underlying assets such as stocks, bonds, or
+commodities, and typically tracks an index. The most traded ETF has the ticker (identifier)
+SPY [Stab], and tracks the Standard and Poor’s 500 (S&P 500). The S&P 500 is a market
+index that tracks the performance of the 500 largest publicly traded companies in the US.
+A long-standing fact is that it is difficult to consistently outperform a broad market
+index such as the S&P 500, even for professional managers [Mal03, SP 25]. Warren Buffett
+famously bet a financial institute $1 million that no funds they selected could outperform the
+S&P 500, net of fees, over a 10-year period (2008–2017) [Buf18]. Buffett won. A natural first
+investment is therefore to simply hold the S&P 500, e.g., via SPY. Figure 1 shows the growth
+of SPY over the past two decades, with an initial investment growing roughly sevenfold.
+2005
+2006
+2007
+2008
+2009
+2010
+2011
+2012
+2013
+2014
+2015
+2016
+2017
+2018
+2019
+2020
+2021
+2022
+2023
+2024
+20252025
+1
+3
+5
+7Growth of $1 Financial Crisis
+COVID-19
+Russia-Ukraine
+Growth of SPY
+Figure 1:An investment in SPY grows roughly sevenfold over two decades.
+1
+The path to a sevenfold total return is far from smooth. The average annual return of SPY
+over this period is10%, meaning that if you were to invest $100 at the beginning of a given
+year you would expect to have $110 at the end of that year. This is however just an average.
+In reality the return of SPY will be higher or lower for some years. In fact, the majority of
+the losses and gains from SPY come from a small minority of days, as seen in Figure 2.
+3.0%
+ 2.5%
+ 2.0%
+ 1.5%
+ 1.0%
+ 0.5%
+ +0.0% +0.5% +1.0% +1.5% +2.0% +2.5% +3.0%
+0%
+4%
+8%
+12%Percent of days
+Bottom 5% of days
+41% of total losses
+Top 5% of days
+33% of total gains
+Distribution of SPY daily returns
+Figure 2:A small minority of days accounts for most of SPY’s gains and losses.
+We refer to the magnitude of these variations as the volatility, or the "riskiness" of investing
+in an asset. For SPY, the annual volatility is19%, meaning that the annual returns typically
+fall within−9%and29%(10%±19%) in a given year, though not always. Some years
+have seen extreme drawdowns such as during the Financial Crisis in 2008, the COVID-19
+pandemic in 2020, and the start of the Russia-Ukraine war in 2022. The largest drawdown
+was during the Financial Crisis when SPY fell by55%from its peak, wiping out an estimated
+$7trillion of market cap in the S&P 500 [Bru09].
+One simple method for mitigating volatility and large drawdowns is to diversify invest-
+ments into multiple assets that do not experience losses and gains at the same time. The
+most famous and very simple example of diversification is the 60/40 portfolio [DMS24],
+which can be replicated with ETFs by combining SPY with AGG into a 60:40 ratio. AGG
+is an ETF that tracks an index of US aggregate bonds. Bonds have historically had a low
+or slightly negative correlation with equities such as SPY. Figure 3 shows the cumulative
+return of SPY, AGG, and the 60/40 portfolio over the same period.
+2005
+2006
+2007
+2008
+2009
+2010
+2011
+2012
+2013
+2014
+2015
+2016
+2017
+2018
+2019
+2020
+2021
+2022
+2023
+2024
+20252025
+1
+3
+5
+7Growth of $1
+Growth of 60/40
+SPY
+60/40
+AGG
+Figure 3:The 60/40 keeps most of SPY’s growth at nearly half its volatility.
+2
+Looking at the figure, SPY ends with the largest total return but is also the most volatile
+of the three. AGG, on the other hand, grows much more slowly with an average annual
+return of3%, but is much more stable with a volatility of5%. The 60/40 portfolio falls
+somewhere in between, with an average annual return of8%and a volatility of11%. The
+same pattern shows up in the drawdowns. During the 2008 Financial Crisis AGG only fell
+by13%and the 60/40 by36%, compared to SPY’s55%. By mixing in some bonds, you
+keep some of SPY’s long-run growth while almost halving the volatility and taking a much
+smaller hit during bad years. This is the value of diversification, by combining assets whose
+returns are mostly independent you end up with a portfolio that gives you a better balance
+between risk and return than either asset on its own. The trade-off between return and risk
+is often expressed as a ratio, formally known as the Sharpe ratio [Sha66]. The Sharpe ratio
+expresses the efficiency of the portfolio and can be interpreted as return per unit of risk
+taken. Between 2005 and 2025 the Sharpe ratios for AGG, SPY, and 60/40 were 0.23, 0.45,
+and 0.51, respectively.
+1.2 Quantitative trading
+So far we have only looked at risk and return with one famous example of a portfolio.
+In practice, investing involves many more considerations. Which assets should be held, in
+what proportions, and when should they be bought or sold? Most private investors have no
+systematic framework to answer these questions, constructing their investment philosophy
+instead from experience and word of mouth [MN11, HKS04, KK12]. Decisions made this
+way have historically underperformed the market [DAL24, BO00, FL08]. An alternative is to
+make decisions systematically. One example of this is quantitative trading, where every rule
+is mathematically defined and decisions are computed from historical data. The investor’s
+job now reduces to choosing a trading strategy and following it.
+To make these decisions systematically, a mathematical framework can be used. One
+widely used framework is the Markowitz formulation [Mar52] expressed as a convex problem.
+The original Markowitz formulation models the trade-off between return and risk, and adding
+cost gives us a complete model for quantitative trading. A simplification of this model can
+be expressed as a general convex problem,
+maximize Return−Risk−Cost
+subject to Trading limits,
+where the return is maximized while risk and cost are minimized, subject to limits on the
+trades. Each of the three terms can be modeled mathematically. The risk is captured by a
+risk model, the return by a forecast, and the cost by a cost model. Forecasted returns are
+commonly known as alpha, hence the forecast is described as an alpha model. Combining
+the three gives a complete portfolio construction model, as in Figure 4.
+Portfolio Construction Model
+Risk Model Alpha Model Cost Model
+Figure 4:Basic structure of quantitative trading, adapted from [Nar24, p. 17].
+3
+Trading.The model of Figure 4 decide what to buy at a given time, but how frequently a
+quantitativestrategytradesvaries. Somelargefirmsutilizehighfrequencytrading, executing
+trades multiple times per second, while others trade far less often. Regardless of strategy,
+you must trade at some frequency. Consider a simple strategy such as the 60/40 of Figure 3.
+Simply buying SPY and AGG in a 60:40 ratio in 2005 and never touching the portfolio would
+have ended 2025 at an 86:14 ratio, as seen in Figure 5, because SPY outgrew AGG. The
+drifted portfolio is no longer the one chosen. Its volatility in 2025 was11%against8%for the
+maintained version, so without trading, the risk profile walks away from what the investor
+intended. For a fixed weight strategy such as the 60/40, restoring the target weights, selling
+what has grown and buying what has lagged, is known as rebalancing. Rebalancing also
+carries a second benefit, in that it systematically trims positions after they have risen and
+adds to them after they have fallen, without any attempt to time the market. The 60/40 is
+a deliberately simple example, where trading only ever restores the same fixed weights. A
+strategy can equally well decide to move capital from one asset to another based on another
+heuristic than weight drifting, and the trades then serve whatever the strategy dictates.
+2005
+2006
+2007
+2008
+2009
+2010
+2011
+2012
+2013
+2014
+2015
+2016
+2017
+2018
+2019
+2020
+2021
+2022
+2023
+2024
+2025
+60%
+40%
+SPY
+AGG
+60/40 buy-and-hold portfolio weights
+86%
+14%
+Figure 5:Without rebalancing, the 60/40 drifts to an 86:14 split
+Risk model.In §1.1 we saw that what matters for a portfolio is not just how much each
+asset moves, but also how the asset returnsrmove together. The risk model collects both
+into a single object, the covariance matrixΣ = Cov(r). For a universe ofnassets the
+covariance matrix is ann×ngrid,
+Σ =
+
+
+σ21 σ12 · · ·σ1n
+σ21 σ22 · · ·σ2n
+... ... ... ...
+σn1 σn2 · · ·σ2n
+
+ ,
+where each diagonal entryσ 2i is the variance of assetiand each off-diagonal entryσ ij is
+the covariance between assetsiandj. Just like volatility, variance is also a measurement
+of risk and describes how much an asset moves on its own, while covariance describes how
+two assets move together. A large positiveσij means two assets tend to rise and fall as one,
+while a negative value means one tends to rise when the other falls. This is the property
+diversification relies on, and from this single object the risk of any portfolio can be computed.
+4
+Alpha.The risk model describes how asset returns move together, but says nothing about
+where they are headed. That forecast is the job of the alpha model. Within the financial
+literature alpha is the expected asset returns over the next period,
+αt =E[r t+1].
+Within the context of Markowitz, alpha does not have to be the exact future return of the
+assets. Rather it can be simplified and estimation errors can be reduced using robustification
+techniques. Some simplifications include reducing alpha to a yes or no question, whether the
+return of asset A will be positive or negative tomorrow. Another simplification is forecasting
+only the relative order of the investable assets. Simple forecasting methods use previous
+returns of each asset to model future returns. However, in industry alpha is more diffuse,
+and can be interpreted as some information about how the prices of assets will move in the
+future. Examples of data that have been used to achieve alpha are satellite imagery, weather
+forecasts, or social media sentiment. For the curious reader, [Nar20] gives a more thorough
+breakdown, best enjoyed while taking lunch.
+Cost model.Trading is not free and each trade incurs two main costs. The first is the
+broker fee, or commission, charged to execute the trade. The second is the bid-ask spread.
+At any moment an asset has two quoted prices, the bid, the highest price a buyer will pay,
+and the ask, the lowest price a seller will accept. The spread is the gap between them, and
+it is a cost to both sides. Suppose you want to sell asset A. The ask price is $101 and the
+bid price is $99. The effective price sits in the middle at $100, so selling at the $99 bid costs
+you $1 against that midpoint, half the $2 spread. Spreads are usually quoted in basis points,
+where one hundred basis points equal 1% of the price. A $2 spread on a $100 asset is a
+200 basis point spread, and the half-spread paid by each side is 100 basis points. Figure 6
+illustrates this with the common example of SPY.
+Figure 6:Each side of a trade pays the half-spread against the midpoint.
+The figure shows the price of SPY, with the bid and ask quoted on either side as dashed
+lines. The true price lies in the middle, and the distance from the midpoint to either quote is
+the half-spread, what a buyer or seller actually pays. Cost models can be made considerably
+more detailed, accounting for fees, currency conversion, and the price impact of large orders,
+but they are often simplified to a fixed percentage charged on the value of every trade.
+5
+1.3 Previous work
+This paper is an empirical study of portfolio construction applied to a universe of ETFs.
+ApplyingsystematicportfoliomethodstoETFsisitselfanactiveareaofresearch, withrecent
+work studying multi-asset ETF portfolios built from prediction and optimization [LLD25],
+momentum and trend-following across asset classes [Lu+25], and the effect of rebalancing
+on ETF-only portfolios [Bán+24]. Our contribution is not a new method but a transparent
+application of well-established techniques to a simple, retail-accessible universe, with an
+emphasis on what each component contributes. Further work on the topic can be found
+in [devanathan:2026], which was developed in parallel within the same group at Stanford.
+Portfolioconstruction.TheoriginalMarkowitzformulationhasbeenstudiedthoroughly,
+and many variations exist. A few examples include the Black-Litterman model [BL92],
+robust mean-variance optimization [GI03], and the modern Markowitz at seventy formu-
+lation [Boy+24]. These variations were, among other reasons, developed to address the
+estimation sensitivity that return forecasting introduces in the original Markowitz formula-
+tion. There are however multiple methods that do not require an estimated future return.
+Common methods include minimum variance [CST06], inverse volatility [Lee11], risk par-
+ity [Qia05], and maximum diversification [CC08]. These methods instead construct portfolios
+based on asset risk.
+Risk model.Many portfolio construction methods require a risk model which is a covari-
+ance matrix of asset returns estimated from a rolling window of historical data. Estimating
+this matrix well is difficult, and a large part of current financial research goes into producing
+robust estimates [Tzi+26, Joh25, PHB25, Ced25]. Using a naive sample covariance intro-
+duces multiple problems. One of the problems being that when the number of assets is large
+relative to the number of observations the estimate becomes unreliable. Another problem is
+that using large covariance matrices is computationally inefficient. One way to handle this
+problem is to use a factor model. Factor models have a long history. The concept of factor
+analysis was first introduced by Spearman in 1904 [Spe04]. It was later adopted in finance
+where asset returns are modeled as being driven by a few common factors plus idiosyncratic
+noise. While such models date back to the single-factor CAPM [Sha64], the framework was
+popularized by Fama and French, who introduced empirically tested models with multiple
+factors [FF92, FF93]. Factor models are widely used today in industry [MSC24, Axi24]
+and academia [FFL08, FLM13, LW03] and results in interpretable, faster and more reliable
+covariance estimate. Most factor models use economically interpretable factors, such as the
+market. An alternative is to extract factors statistically from the returns themselves, for
+instance through principal component analysis or related latent-factor methods [CK86].
+Alpha.The return forecast, or alpha, is a central part of the Markowitz formulation, and
+receives a great deal of attention in both academia and industry [KNS20, KPS19, BHT25,
+Lóp20]. Return prediction is difficult. The signal-to-noise ratio in financial data is extremely
+low, far lower than in most other domains where statistical learning is applied [Lóp18]. It is
+easy to overfit to noise rather than signal, and therefore it limits the complexity of the models
+that can be used. A common response to the low signal-to-noise ratio is regularization,
+6
+which constrains the model to reduce overfitting. Examples include ridge regression [HK70],
+Laplacian-regularized models [TBB21], and the broader use of shrinkage and sign constraints.
+Whetheralphapredictionworksisdebatedinacademia. GoyalandWelch[GW08]foundthat
+a long list of popular predictors fail to beat the historical mean out of sample, while Campbell
+and Thompson [CT08] showed that the same predictors do beat it once weak restrictions are
+imposed. Within industry, alpha is achieved by having an edge against the market. Data and
+methods used to produce alpha are highly confidential and employees working with alpha
+prediction often have to sign long non-disclosure and non-compete agreements [Zuc19].
+Software.Software for solving optimization problems is almost as old as the methods
+themselves. The first nontrivial linear program ever solved took nine people around four
+months on hand calculators in the 1940s [Bix12], a calculation that solvers now finish in-
+stantly.1 Today the field of convex optimization has matured and been adopted in many
+software libraries such as CVXPY for Python [DB16], Convex.jl for Julia [Ude+14], and
+CVXR for R [FNB20]. These libraries have produced a wave of accessible portfolio opti-
+mization tools. A few examples are Portfolio Visualizer [Sil23], PyPortfolioOpt [Mar21],
+Riskfolio-Lib [Caj24], and CVXPortfolio [BDB+24]. Their coverage varies widely, from
+simple web-based backtesting and visualization to specific methods such as mean-variance
+optimization, risk parity [Lóp16], and multi-period construction. Commercial alternatives
+also exist and are widely used in industry [Axi24, MSC24, Bla24].
+1.4 This paper
+This paper studies portfolios that are simple, and yields consistent, and decent returns.
+None of the methods we use are new. Techniques are gathered from across the portfolio
+construction literature and industry practitioners and we apply them to one universe under
+one set of rules, and report what works. The rules are the same for every portfolio. We use
+no leverage and no shorting, target an annual volatility of8%, and earn the federal funds rate
+on cash. Strategies trade monthly with a5basis points bid-ask spread and are backtested
+from 2005-01-01 to 2025-01-01. We do not tune parameters to this period. The results are
+presented for research and educational purposes and do not constitute investment advice.
+By simple we mean three things. First, the strategies are implementable. They use only
+public data and a small set of well-known, liquid US ETFs. Second, the math is explainable.
+We use no deep learning and no construction methods that are hard to interpret. We take a
+clear set of ETFs, divide them into asset classes, and run well-understood methods on each.
+Third, the parameters are interpretable. We use quantities a reader can reason about, such
+as a hard target-volatility constraint and turnover limits stated as percentages. If you want
+a higher volatility target, you change one number.
+By consistent we mean a portfolio should do well across the whole period, not just in
+a few good years. We measure this with the Sharpe ratio, maximum drawdown, and, as a
+stricter test, with the lower quantile of the twenty recorded annual Sharpe ratios. By decent
+we mean annual returns in the range of 6% to 10%.
+1Throughout this project we were challenged to solve at least one billion Markowitz problems, an ambition
+that would have made those nine people faint.
+7
+We study two families of portfolios. In the first family, we make no return forecast at all.
+The allocation methods are fixed weights, inverse volatility, minimum volatility, risk parity,
+and maximum diversification, either combined across different asset classes or applied to
+just a few select assets. In the second family, each asset produces its own alpha signal. We
+combine all of these signals and solve a single Markowitz problem for each trading day. In
+the final section we present reasonable portfolios for the different methods we have explored.
+We benchmark against the reference60/40portfolio. A backtest over two decades can
+look good simply because of how a portfolio handled one or two extreme events, so we also
+check how sensitive our proposed portfolios are to the choice of window. Each portfolio is
+rerun over two truncated periods, one with the first five years removed, which excludes the
+Financial Crisis, and one with the last five removed, which excludes the COVID-19 pandemic
+and the start of the Russia-Ukraine war. If a portfolio performs well in all three windows
+we can consider it to be less dependent on a specific event.
+Software.Along with this paper we release three resources. The first is a web-based
+tool that lets readers explore the historical performance of some of the simple portfolios we
+construct, with interactive controls for the relevant parameters. The second is our codebase,
+made open source so that the strategies described can be replicated, extended, or used as a
+starting point for new portfolio designs. Both are available at
+https://github.com/AlexEmrik/consistent-decent-returns.
+The third is an open source package which lets anyone create a factor risk model through a
+simple python API. It is installed via
+pip install covforge
+Outline.The rest of the paper follows the structure of the Markowitz formulation, from
+the assets it allocates across to the inputs it requires. In §2 we define the asset universe,
+organizedintocategoriesbyassetclassandunderlyingstructure. In§3wesetuptheportfolio
+construction problem, present the simple trading strategies and the modified Markowitz
+formulation we use throughout, and describe how the portfolios are selected. In §4 and
+§5 we cover the two inputs the strategies requires, the risk model, from simple covariance
+estimatorstothefactormodel, andthereturnforecast, fromsimplealphastoridgeregression.
+Finally, in §6 we report the experiments, including the data, backtest, parameter choices,
+and results, and conclude in §7.
+What we have found.Simple strategies work surprisingly well, often performing as well
+as or better than more complicated approaches. Some quantitative methods for investing
+stand out as particularly useful. One example is volatility control, which lets the investor
+target a desired level of volatility. Among the simple strategies, fixed weights stand out as
+both effective and extremely simple given an educated selection of ETFs. Given that we
+are limited to open data, risk forecasting works surprisingly well while return prediction
+proves to be futile. However, with simple alpha signals and some robustification, Markowitz
+portfolio optimization is still able to deliver consistent decent returns.
+8
+2 Assets
+Portfolio construction is the problem of deciding how to allocate capital across a set of assets.
+This section defines the universe of ETFs we invest in, organized into categories by asset class
+and underlying structure. From this universe the simple strategies of §3 later select portfolios
+of three to five ETFs, while the Markowitz formulation is given whole asset categories.
+2.1 Investable universe
+Our universe consists of the 59 US-listed ETFs given in Table 1, spanning the three asset
+classes: equities, fixed income, and alternatives. We include only large, liquid ETFs from
+established issuers, and exclude leveraged and inverse products, which amplify an index’s
+daily moves or bet against them. The ETFs themselves come in a few different kinds. Some
+track an index, such as SPY tracking the S&P 500, and AGG tracking a broad index of US
+bonds. Others hold a single asset, so their value simply follows its price. GLD holds gold and
+IBIT holds bitcoin. A few hold more complicated financial instruments tied to the price of an
+asset rather than the asset itself. We return to these in §2.2. Together the ETFs cover most
+of what an investor can reach with an online brokerage account. This includes several kinds
+of equities and bonds, commodities, and the recent addition of cryptocurrencies. Table 26
+in the appendix gives a short description and summary statistics for each ETF.
+T able 1:Asset universe by class.
+Asset class ETF s
+Equities SPY QQQ VTV VUG MDY IWM SCHD USMV QUAL XLK XLV XLF
+XLY XLI XLP XLE XLU XLB IBB IYR EWJ EWG EWU EWA
+EWH EWS EWZ EWT EWY EWP EWW EWI EWD EWL EWC
+Fixed income AGG TLT IEF TIP MUB LQD LQDH HYG BNDX EMB IAGG VWOB
+Alternatives GLD SLV PPLT CPER USO UGA CORN WEAT SOYB CANE IBIT ETHA
+Survivorship bias.Our universe was selected from ETFs trading today, and none of the
+59 were delisted during the 2005–2025 backtest window; it is therefore survivorship-biased by
+construction. Roughly one third of all ETFs ever launched in the US have been liquidated,
+with 189 closures in 2024 alone and approximately 1,550 over the preceding decade [Kip25,
+Mor25]. However, closures concentrate disproportionately in segments excluded from our
+universe. The typical liquidated ETF has fewer than $50M in assets under management,
+a sub-five-year track record, and underperformed broad benchmarks by several percentage
+pointsinthetrailingyearpriortoliquidation[Mor24]. Leveragedandinverseproducts, which
+we exclude entirely, account for a closure rate of 52% versus 31% for regular ETFs [Cha24].
+We therefore expect the resulting upward bias on reported Sharpe ratios to be modest,
+though we do not estimate it formally.
+9
+2.2 Asset categories
+Within each asset class some ETFs are structurally very different. We therefore divide the
+three classes further into a total of nine categories as seen in Table 2, each grouping ETFs
+that are similar in what they hold and how they hold it. The categorization is our own
+rather than an industry standard, and reflects the nature of the ETFs in our universe.
+T able 2:Asset universe by class and category.
+Class Category
+Equities Market SPY QQQ VTV VUG MDY IWM SCHD USMV QUAL
+Sector XLK XLV XLF XLY XLI XLP XLE XLU XLB IBB IYR
+Country EWJ EWG EWU EWA EWH EWS EWZ EWT EWY EWP EWW
+EWI EWD EWL EWC
+Fixed income Government AGG TLT IEF TIP MUB
+Corporate LQD LQDH HYG
+Global BNDX EMB IAGG VWOB
+Alternatives Physical GLD SLV PPLT
+Futures CPER USO UGA CORN WEAT SOYB CANE
+Crypto IBIT ETHA
+Equities.ETFs within the Equities asset class consist of broad baskets of stocks. Simply
+put, owning a stock equates to owning a share of a company. Thus, owning an ETF within
+the Equities asset class equates to owning many small shares in different companies. We
+split Equities into three categories: Market, Sector, and Country.
+The Market category consists of nine ETFs spanning US market-cap, style, and factor
+exposures [Staa, Blab, Van, Cha, Inv]. ETFs in this category are generally considered
+good buy-and-hold investments for the investor who does not engage in active portfolio
+construction. They tend to yield the highest average annual returns out of the categories
+and perform consistently well, but suffer during market crashes. Correlation within the
+Market category is very high. What differs is the risk profile, with QQQ at one end having
+an annual volatility of 22% while USMV at the other has only 14%.
+The Sector category consists of the nine original Select Sector SPDRs [Stac], which
+together divide the companies of the S&P 500 by sector [MSC]. All of the SPDR ETF
+tickers begin with XL. We complement them with two ETFs covering biotechnology and
+real estate [Blab]. The nine original SPDRs are often grouped into defensive and offensive
+ones. Defensive sectors, such as health care and consumer staples, are less volatile and hold
+up better in distressed markets. Offensive sectors, such as technology and financials, trend
+periodically, delivering strong returns in good years but deeper drawdowns in bad ones.
+The Country category consists of fifteen ETFs, with tickers beginning with EW, each
+trackinganMSCIindexofasinglecountry’sequitymarket[Blaa]. Theycoverbothdeveloped
+markets, such as the UK and Sweden, and emerging markets, such as Brazil and South
+10
+Korea. The ETFs trade in dollars while the stocks they hold trade in each country’s own
+currency. They are unhedged, meaning this currency effect is not removed. The Sweden
+ETF EWD, for example, combines the performance of Swedish stocks with the move of the
+krona against the dollar, and loses value when the krona weakens even if the value of the
+underlying stocks is unchanged. The country ETFs are highly correlated with the US market
+and correlations with SPY range between 68% and 84%. Over shorter periods the country
+ETFs have outperformed SPY. However, over the past two decades every one of them has
+underperformed, with average annual returns ranging between 1% and 8% against SPY’s
+10%. Figure 7 shows all fifteen ETFs together with SPY.
+2005
+2006
+2007
+2008
+2009
+2010
+2011
+2012
+2013
+2014
+2015
+2016
+2017
+2018
+2019
+2020
+2021
+2022
+2023
+2024
+20252025
+1
+3
+5
+7Growth of $1
+Growth of SPY and Countries
+SPY
+Countries
+Figure 7:SPY outgrows all of the single country ETFs.
+Fixedincome.ETFswithintheFixedincomeassetclassconsistofvaryingformsofbonds.
+A bond is a contract between the investor and an issuing institution, typically a government
+or a company. Investing in a bond equates to lending out money to that institution for an
+agreed period and receiving interest payments, known as coupons, in return. What makes
+bonds differ from normal loans is that the contract can be traded on the market, adding
+speculative value on top of the coupons and issue price. We split Fixed income into three
+categories depending on the type of issuer and region: Government, Corporate, and Global.
+The Government category consists of five ETFs that hold bonds issued by the US gov-
+ernment and related debt [Blab]. Their returns are lower than those of equities, but so is
+their risk. Government bond correlations with SPY are among the lowest in the investable
+universe, some even being negative. The negative correlation can be explained by their val-
+uation having an inverse relationship to the federal funds rate (FFR). The FFR tends to
+be cut during economic downturns when equities fall. A clear example of this was the 2008
+Financial Crisis. As the FFR was cut, the fixed coupons of existing bonds became more
+attractive than the new lower rates, causing government bond prices to rise. Long-term
+Treasury bonds are the most sensitive to changes in the FFR. Between 2020 and 2023 TLT,
+which holds 20+ year Treasuries, lost close to half of its value as the FFR rose.
+TheCorporatecategoryconsistsofthreeETFsthatholdbondsissuedbycompanies[Blab].
+A company is less certain to repay its loans than the US government, since companies can
+default and go bankrupt. Corporate bonds therefore pay higher interest to attract lenders.
+LQD lends to large, financially strong companies, while HYG lends to weaker companies
+that pay the highest interest. The third ETF, LQDH, holds LQD together with a hedge
+11
+that removes its interest-rate risk. Corporate bonds are more correlated with the stock mar-
+ket than government bonds. LQD has a correlation of 19% with SPY and HYG 68%, the
+highest of any bond ETF, and HYG lost roughly a third of its value in the 2008 Financial
+Crisis. The average annual returns in the Corporate category range from 3% to 5%, slightly
+above the government ETFs.
+The Global category consists of four ETFs that hold bonds issued outside the US [Blab,
+Van]. BNDX and IAGG lend to developed-world governments and companies. Both are
+hedged, meaning the currency effect described for the Country category is removed. They
+have the lowest volatility of any bond ETF, 4%, and near-zero correlation with SPY. EMB
+and VWOB instead hold bonds issued exclusively by governments in emerging markets, such
+as Mexico and Brazil. These governments issue some of their bonds in US dollars, and it
+is those that these ETFs hold, so the money is lent and repaid in dollars and the currency
+effect does not apply. The interest is higher because repayment is less certain. A government
+that has borrowed in dollars must find dollars to repay, which becomes harder when its own
+currency weakens. Because of this, the volatility of EMB and VWOB is higher than that of
+the US government bond ETFs, at 11% and 9% respectively, and their correlation with SPY
+is significantly higher.
+Alternatives.The Alternatives asset class consists of ETFs that hold commodities and
+cryptocurrencies. These are the ETFs where structure matters most. As noted in §2.1, some
+hold the asset itself while others hold financial instruments tied to its price. We therefore
+split Alternatives by structure into three categories: Physical, Futures, and Crypto.
+The Physical category consists of three ETFs that each hold a precious metal in vaults:
+GLD holds gold, SLV silver, and PPLT platinum [Staa, Blab, Abe]. A share corresponds
+to an amount of metal in the vault, so each ETF follows the spot price of its metal, less
+a small fee. All three are nearly uncorrelated with the rest of the universe. Among the
+precious metals, gold stands out. It has served as a store of value for millennia and remains
+a reserve asset for central banks today, and it is the only one of the three that has appreciated
+significantly over time. Put plainly, gold is the one physical commodity in our universe suited
+to buy and hold.
+The Futures category consists of seven ETFs covering energy, agriculture, and industrial
+metals [USC, Teu]. As Figure 8 shows, every one of them has lost to holding plain cash
+2005
+2006
+2007
+2008
+2009
+2010
+2011
+2012
+2013
+2014
+2015
+2016
+2017
+2018
+2019
+2020
+2021
+2022
+2023
+2024
+20252025
+0
+1
+2Growth of $1
+Growth of Cash and Futures
+Cash
+Futures
+Figure 8:Holding cash outperforms all futures.
+12
+earning the FFR over the backtest period, and the reason lies in how these ETFs are built.
+Unlike gold, these commodities are impractical to vault, so the ETFs in this category hold
+futures contracts. A futures contract is an agreement to buy a fixed amount of a commodity,
+at a fixed price, on a fixed date in the future. However, even though they could, managers of
+future-based ETFs never take delivery. As a contract approaches its delivery date, the fund
+sells it and buys a new contract with a later date, a procedure known as rolling. The later
+contract is usually the more expensive one, since whoever promises delivery further out must
+store, insure, and finance the commodity for longer and charges for it, a situation known as
+contango. When a futures-based ETF is in contango, the fund loses a little money on every
+roll, and the losses compound. Over days or weeks the ETF therefore tracks its respective
+commodity price closely, but over years it drifts steadily below it. These ETFs can therefore
+not be bought and held. They are instruments for taking commodity exposure over shorter
+horizons.
+The Crypto category consists of two ETFs: IBIT holds bitcoin and ETHA holds ether,
+the two largest cryptocurrencies [Blab]. The Crypto ETFs are the most recently listed ETFs
+in the investable universe. IBIT was listed in January 2024 and ETHA in July. Their annual
+volatilities and returns are many times those of SPY, and both have at one point lost more
+than 80% of their value from an all time high. At the same time they are largely uncorrelated
+with the other assets in the universe. Crypto therefore requires special treatment in our
+experiments. Following [JB24], we record bitcoin and ether returns from 2017, extending
+the two ETFs backward with the prices of the coins they hold. This gives eight years of
+history rather than one. We nevertheless treat these observations with caution. Before
+2024 crypto could not be reached through an ordinary brokerage account. Bitcoin has also
+returned over 50% per year since 2017, meaning that large allocations can easily dominate
+historical portfolio performance. We therefore allow Crypto in selected experiments and
+portfolios under §5.2, but restrict it to modest allocations so that the results do not depend
+disproportionately on its exceptional historical returns.
+Correlationbetweencategories.Figure9showsthecorrelationbetweeneachofthenine
+categories. The three Equities categories together with corporate bonds show the highest
+correlation. Outside this block correlations are low.
+Market Sector Country Corporate Government Global Physical Futures
+Sector
+Country
+Corporate
+Government
+Global
+Physical
+Futures
+Crypto
+0.98
+0.89 0.89
+0.51 0.51 0.53
+-0.22 -0.20 -0.19 0.30
+0.29 0.30 0.32 0.45 0.26
+0.21 0.23 0.34 0.19 0.13 0.21
+0.37 0.39 0.46 0.24 -0.15 0.14 0.36
+0.17 0.16 0.15 0.11 0.02 0.09 0.10 0.06
+Figure 9:High correlation concentrates in the equity categories and corporate bonds.
+13
+3 Portfolio construction
+Portfolio construction concerns the problem of deciding how to allocate capital across a set
+of assets. This section begins by introducing the notation and terminology for portfolio
+weights, cash, returns, and risk, objects fundamental to portfolio construction regardless
+of the trading strategy. Our notation is similar to that of [Boy+24]. We then present a
+set of common trading strategies in increasing order of complexity: fixed weights, simple
+optimization, and our version of the Markowitz formulation.
+3.1 Mathematical model
+Assets and cash weights.We consider a universe ofninvestable assets. A portfolio is
+described by a vector of asset weightsw∈R n, where each weightwi denotes the fraction
+of capital invested in asseti, sow i = 0.10corresponds to allocating10%of the portfolio
+to asseti. The holdings sum to one, representing all available capital, and the fraction not
+invested in assets is held as cashc∈R. Writing1∈R n for the vector with all entries one,
+and permitting neither short selling nor leverage, every portfolio in this paper satisfies the
+constraints
+1Tw+c= 1, w≥0, c≥0.
+Portfolio risk and return.Each assetiyields a returnr i over the investment period,
+the fractional change in its price adjusted for dividends, splits, and other corporate actions.
+We collect these in the return vectorr= (r1, . . . , rn)∈R n, so that the return of a portfolio
+is the weighted sumrTw. Future returns are, however, uncertain, and the strategies of this
+section handle this uncertainty through two quantities, the portfolio risk and the forecasted
+portfolio return,
+wTΣw, α Tw,
+whereΣ∈R n×n is the covariance matrix of the returns andα∈R n is a forecast of the
+expected asset returns. The diagonal entriesΣ ii = Var(r i)of the covariance matrix hold
+each asset’s individual risk, how much the asset moves on its own, while the off-diagonal
+entriesΣ ij = Cov(ri, rj)hold the covariances, how each pair of assets moves together. The
+vector of asset volatilitiesσ∈R n, is defined as,
+σi =
+p
+Σii.
+The total portfolio risk is reduced either by holding lower risk assets or by holding assets
+with low or negative correlation, which is the diversification effect of §1.1 in mathematical
+form. The risk enters nearly every strategy that follows, while the forecastαis used only by
+the Markowitz formulation of §3.3. The estimation of both is the subject of §4 and §5, and
+throughout this section they are treated as known.
+Optimization problem formulation.The strategies of this section differ in how they
+choose the weights. The simplest methods fixwdirectly, through a fixed allocation, or decide
+14
+was a function ofσ. The rest obtainwby solving an optimization problem, which in its
+most general form can be written as
+minimizef 0(x)
+subject tof i(x)≤0, i= 1, . . . , m,
+gi(x) = 0, i= 1, . . . , p,
+wherexdenotes the optimization variables,f 0 is the objective function, andfi andg i are
+inequality and equality constraints. For us the variablesxare the portfolio weightsw, the
+constraints are the portfolio constraints mentioned above among others, and the objective
+is built from the portfolio’s risk and forecasted return. All of the problems we pose are
+convex, which means they can be solved reliably and in fractions of a second on a standard
+laptop [DB16].
+3.2 Simple trading strategies
+In this section we present five simple long only strategies, following the risk-based asset
+allocation framework of [Lee11]. Fixed weights (with and without volatility control), inverse
+volatility, minimum variance, risk parity, and maximum diversification. The first two do not
+use any optimization at all while the other three do.
+Fixed weights.Thesimplestwayofchoosingyourportfolioweightsistouseafixedweight
+strategy. The fixed weight trading strategy does not require a forecast of any kind. The
+weights are predetermined and trading only serves to keep the weights at their desired level.
+Our benchmark portfolio, the 60/40, is an example of this strategy, in which the weights of
+SPY and AGG are fixed tow= (0.6,0.4). A common general version of the fixed weight
+trading strategy is using equal weights. The equal weight strategy simply allocates capital
+equally across allnassets as,
+w= 1n .(1)
+It is well documented that the fixed weight strategy is hard to beat out of sample, because
+there is nothing in it to misestimate [DGU09].
+Volatility control.Fixed weights control risk only implicitly, through the choice of assets
+but the actual risk of the portfolio is whatever the market delivers and changes over time.
+The 60/40 realized an average volatility of 8% over the past two decades, but roughly 23%
+during the 2008 Financial Crisis. Volatility control is a method that makes risk explicit, by
+treating cash as a risk-free asset and scaling down its positions in the portfolio so that the
+estimated volatility stays below a chosen target riskσtgt. Scaling the weightswby a factor
+θand holding the rest as cash scales the portfolio volatility by the same factor, so the target
+is met by holdingθwin assets andc= 1−1 T θwin cash, with
+θ= σtgt√
+wTΣw ,(2)
+15
+capped atθ= 1since we do not permit leverage. The portfolio is thus fully invested in calm
+markets and moves partly to cash in turbulent ones. This turns risk into an interpretable
+parameter. Investors who want a portfolio with a maximum risk of8%simply setσtgt = 8%.
+Inverse volatility.The inverse-volatility portfolio sizes each position relative to its own
+risk, so that every asset contributes a similar amount of volatility to the portfolio [Lee11,
+LLM12],
+w= σ−1
+1Tσ−1 .(3)
+Lower risk assets therefore occupy larger holdings. Take the 60/40 as an example. SPY
+carries an annual volatility of19%against AGG’s5%, so despite the 60/40 split of capital,
+nearly all of the portfolio’s movement comes from SPY. Sized by inverse volatility instead,
+the same two assets would roughly be split as20%SPY and80%AGG. The weights use only
+eachasset’sindividualvolatilityandignorecorrelations. Whentheassetsareuncorrelated, or
+share the same pairwise correlation, inverse volatility coincides with the risk parity strategy
+laterin thischapter[MRT10], butwhencorrelations differitmisjudges therisk, sincean asset
+that moves with the rest of the portfolio contributes more than its own volatility suggests.
+For this reason it is also known as naive risk parity [SS20]. Its simplicity keeps it popular in
+practice, and the rule is applied across asset classes [Lee11, LLM12, SS20].
+Minimum volatility.The minimum volatility portfolio minimizes the total portfolio vari-
+ance subject to being fully invested and our long-only constraints [CST06],
+minimize
+w
+wTΣw
+subject to1 Tw= 1, w≥0. (4)
+Minimum volatility is a cash free strategy, since cash is assumed to be risk free the strategy
+would simply collapse into cash only. It uses the full covariance matrix, so it can exploit
+assets that offset one another. However, with no notion of return, it concentrates capital in
+the assets with the lowest volatility. For example, in an investable universe that includes
+stable but low-yielding bonds, the minimum volatility portfolio invests almost exclusively
+in the bonds, accepting very low returns in exchange for low risk. Despite this, minimum
+volatility portfolios have historically delivered returns comparable to the broad market at
+considerably lower risk [CST06, BBW11]. The strategy is behind one of the ETFs in our
+own universe: USMV, the ETF that individually has the highest Sharpe ratio in the Market
+category, holding a minimum volatility portfolio of US large- and mid-cap stocks [Blab].
+Risk parity.The risk parity strategy penalizes each asset not only for its own volatility
+but for its covariance with the rest of the portfolio. As a result, two assets with the same
+volatility can receive different weights if their correlations with the rest of the portfolio differ.
+Unlike inverse volatility, weights are formed such that each asset holding contributes equally
+to the total portfolio risk [Qia06]. This equal risk contribution (ERC) condition can be
+16
+expressed through the following convex formulation [MRT10],
+minimize
+w
+1
+2 wTΣw−ρ1 T log(w)
+subject to1 Tw+c= 1, w >0, c≥0, (5)
+where the regularization parameterρ >0balances the two objectives of minimizing portfolio
+risk and having a similar split between assets. Whenρ= 0it degenerates into minimum
+volatility as in (4), and forρ≫0the solution collapses into equal weights as in (1). The
+logarithmic term forces every weight to stay strictly positive, causing all assets to be held
+to some degree throughout the entire investing period. When all asset pairs share the
+same covariance the ERC weights coincide with the inverse volatility portfolio of (3). This
+is why inverse volatility has been called the naive risk parity [MRT10]. Risk parity was
+popularized in conjunction with the All Weather portfolio of Bridgewater Associates [Bri]
+and has since become a standard investment strategy among institutional investors [Ron13,
+AFP12, Cha+11].
+Maximum diversification.The maximum diversification portfolio directly targets the
+reduction in portfolio risk that comes from combining assets. It does so by maximizing
+the diversification ratio, defined as the weighted average of the individual asset volatilities
+divided by the volatility of the portfolio they form. The ratio equals one for a single asset
+and increases as less correlated assets are combined, making it a natural measure of the
+diversification effect discussed in §1.1. The standard formulation of the Most Diversified
+Portfolio (MDP), introduced by [CC08], is
+maximize
+w
+wTσ√
+wTΣw
+subject to1 Tw= 1, w≥0.
+(6)
+With the long-only constraintw≥0, the problem generally does not admit a closed-form
+solution. It can instead be reformulated as the convex quadratic program (QP)
+minimize
+y
+yTCy
+subject to1 Ty= 1, y≥0, (7)
+whereyaretheportfolioweightsexpressedonavolatility-scaledbasisandCisthecorrelation
+matrix of returns. The full derivation is given in Appendix A. The MDP is closely related
+to the minimum volatility portfolio of (4) and the inverse volatility portfolio of (3), and
+coincides with each under particular conditions [CFR13]. When all assets have the same
+volatility, MDP coincides with minimum volatility. When all asset pairs have the same
+correlation, MDP instead coincides with inverse volatility. In the general case, it accounts for
+both differences in individual volatilities and differences in correlations, making it especially
+relevant when the correlation structure contains meaningful cross-sectional variation. Its
+theoretical appeal is that if all assets offer the same expected excess return per unit of
+standalonerisk, theMDPalsomaximizestheportfolioSharperatio[CFR13]. Itcantherefore
+be viewed as extending the intuition of inverse volatility by incorporating the correlation
+structure explicitly.
+17
+3.3 Markowitz
+The simple strategies of §3.2 all assume no knowledge of future returns. Suppose instead you
+have a belief about how your assets will perform, e.g. that your equities will outperform your
+fixed income assets, or even an exact figure for each asset produced by a forecast. A natural
+extension of a method like minimum volatility is then to not only minimize risk but also max-
+imize expected return. This exact trade-off was formalized by Markowitz [Mar52] in 1952.
+The work was recognized with the 1990 Nobel Memorial Prize in Economic Sciences [The90],
+and still underpins portfolio allocation today, both in academia [KTF14, Kim+21, Boy+24]
+and in industry [MSC24, Axi24, Bla24]. At its core the idea is simple: collect the expected
+returns in a vectorα, and maximize the return it implies for your portfolio while weighing
+that against the portfolio risk. The problem can be expressed in several ways. We present
+two standard formulations, followed by the modified version we use throughout this paper.
+Formulated with a soft risk constraint.One way to express the trade-off is to sub-
+tract the portfolio risk from the expected return in the objective, scaled by a risk-aversion
+parameterγ >0,
+maximizeα Tw−γ w TΣw
+subject to1 Tw+c= 1, c≥0, w≥0. (8)
+The parameterγis a trade-off parameter between the two objective terms and is used to
+decide how much variance the investor is willing to accept per unit of expected return. A
+smallγtolerates more risk, while a largeγdoes the opposite. Asγapproaches zero the
+penalty disappears and the solver puts everything into the single asset with the highest
+expected return, and asγgrows the penalty dominates until the portfolio only holds cash.
+Formulated with a hard risk constraint.The alternative is to take risk out of the
+objective and impose it as a constraint with a target volatilityσtgt,
+maximizeα Tw
+subject to1 Tw+c= 1, c≥0, w≥0,
+wTΣw≤σ 2tgt.
+(9)
+Because cash can always be held, any target volatility is reachable, and the optimizer simply
+scales down its weights with cash until the constraint is met. The target volatility works
+as an upper limit, in the same way as the volatility control of (2) and realized volatility
+will sit close toσ tgt except if the inherent risk of the portfolio is below that ofσtgt. One
+example of this would be using very largeσtgt for a portfolio of low risk bond ETFs. Both
+formulations describe the same trade-off and can produce the same portfolios, so nothing
+is lost by choosing one over the other. What differs is the parameter you have to set. An
+investor who wants at most8%risk setsσtgt = 8%. However, the value ofγthat yields that
+same portfolio cannot be predetermined, and since it depends on the scale ofαit has to be
+adjusted if the asset universe changes. For the sake of interpretability we therefore use the
+hard risk constraint formulation in our extended version below.
+18
+In this paper.Throughout this paper we use a modified version of the Markowitz formu-
+lation, similar to that of [Boy+24]. In its original form the problem responds sharply to the
+return forecast, and small changes inαproduce large changes in the weights [Mic89, BG91,
+DGU09]. This is particularly important since, as mentioned in §1.3,αis very difficult to
+estimate. We define our modified Markowitz formulation as,
+maximizeα Tw−κ∥w−w pre∥1
+subject to1 Tw+c= 1, c≥0, w≥0
+wTΣw≤σ 2tgt,∥w−w pre∥1 ≤T tgt,
+|w−w pre| ≤δw,0≤w≤w max,
+(10)
+wherew pre are the weights before trading andκis the trading cost, a small percentage
+charged on every dollar bought or sold. Since∥w−w pre∥1 is the total amount traded, the
+penaltyκ∥w−w pre∥1 represents the total cost for a given trade. The capsTtgt andδ w limit
+how much of the portfolio, and how much of any single position, may change in one trade.
+Without them a negative entry inαwould empty that entire position in one trade, which
+is a drastic response to a number we know to be noisy. Finallywmax limits the size of any
+single holding, which lets an investor cap exposure to an asset regardless of how attractive
+its forecast looks, for example holding crypto at no more than a few percent of the portfolio.
+Regret bound.As an upper bound on achievable performance, we also report a regret
+bound strategy that uses realized future returns as the alpha forecast in the Markowitz
+formulation [Boy+14]. This strategy is not implementable in practice but bounds the per-
+formance any return-forecasting model could achieve given the same risk model and con-
+straints. Frequent trading while knowing future returns leads to unreasonably high Sharpe
+ratios. Therefore, the regret bound is only allowed to trade yearly to keep the comparison
+on a reasonable scale against implementable strategies.
+3.4 Portfolio selection
+Simple strategies.The simple strategies can all be run on the full universe, but the result
+would not be a portfolio anyone would hold. Spreading capital equally across all 59 assets
+assumeseveryoneofthemisworthholdingfortwodecades. Italsoletsthecompositionofthe
+universe decide the allocation, since 35 of the 59 assets are equities the portfolio would hold
+roughly60%equities by construction, a split we never chose. We therefore run the simple
+strategies on small portfolios instead. Backtests are fast, so under the simplest strategies we
+search every combination of three, four, and five ETFs, less for a single winner than for what
+the top portfolios share, which asset classes they draw from, in what proportions, and which
+assets never appear. The simple optimization-based strategies are then examined further on
+portfolios found from these tests.
+Markowitz.Markowitz needs no such selection. It is built for large universes, and the
+optimizer allocates capital on its own, with the forecastedαdeciding what it holds. The
+one selection left is at the category level. If the forecast cannot extract information from an
+entire category, it is better removed, which we evaluate through an ablation test in §6.3.
+19
+4 Risk model
+Portfolio construction requires an estimate of future risk. While future market conditions
+cannot be observed directly, historical returns contain information about the volatility of
+individual assets and how they tend to move together, and a risk model uses this infor-
+mation to estimate the covariance structure that will prevail over the period for which the
+portfolio is constructed. This section explains what a risk model is and how the covariance
+is forecast from historical returns. We present two simple estimators, the rolling-window
+sample covariance and the exponentially weighted moving average (EWMA), followed by a
+more sophisticated approach based on a statistical factor model.
+4.1 Risk forecasting
+Risk forecasting is concerned with estimating the covariance matrixΣ, which describes both
+the variability of individual assets and their co-movement. Following the original formulation
+of [Mar52], diversification arises from the covariance structure between assets, making an
+accurate estimate ofΣcentral to nearly every portfolio construction method. A useful way
+for the reader to think about the covariance matrix is simply as
+Σ−encodes future “riskiness” of assets.
+The rolling-window and EWMA estimators are procedural approaches to covariance estima-
+tion. Both construct a risk forecast by aggregating observed historical returns according to
+a predetermined rule, require few assumptions, and are straightforward to implement.
+The statistical factor model is particularly useful for large investment universes, where
+estimating every pairwise relationship directly becomes increasingly difficult. It introduces
+several important mathematical concepts, including statistical factors, regularization, and
+expectation maximization. These methods require a somewhat heavier mathematical treat-
+ment, and are deferred to Appendix A, where the reader can find details about the deriva-
+tions. To keep the main discussion intuitive and readable, the focus here is on the structure
+of the factor model, why it is useful, and how its resulting covariance estimate should be
+interpreted.
+4.2 Simple covariance estimators
+Although the future covariance matrix cannot be observed directly, historical asset returns
+providevaluableinformationabouthowassetstendtomovetogether. Acovarianceestimator
+summarizes these historical relationships into a single matrix that serves as our best estimate
+of future risk. Figure 10 illustrates the general covariance estimation process.
+Rt
+(T × n)
+Σt
+(n × n)
+f (x)
+Figure 10:The covariance estimator represented as a black box operation on historical returns.
+20
+While no estimator can predict future market conditions perfectly, even simple statistical
+models often produce estimates that are sufficiently accurate for portfolio construction. His-
+torical returns are collected in the return matrixRt ∈R T×n, and a covariance estimator
+transforms these observations into an estimated covariance matrixˆΣt ∈R n×n. We represent
+the estimator abstractly as a mathematical function,
+Σt+h ≈ ˆΣt =f(R t),
+where the unknown future covariance matrixΣt+h is approximated by the estimateˆΣt con-
+structed from the historical return matrixRt. Different covariance estimators correspond
+to different choices of the functionf(·), each making different statistical assumptions about
+the observed returns. Throughout this section we will introduce several increasingly sophis-
+ticated choices off(·), all of which map the same historical return matrixRt to an estimate
+of future risk. Here,Tdenotes the number of historical return observations contained inRt,
+whilendenotes the number of assets in the investment universe.
+Regardless of the estimator, they all seek to approximate the same underlying quan-
+tity: the future covariance matrixΣt+h. Throughout this paper we assume zero-mean daily
+returns,E[r] = 0, under which the covariance matrix equals the second moment,
+Σ =E[rr T],
+which must be estimated from a finite sample of historical returns. Different covariance
+estimators differ primarily in how they weight and summarize these observations. In this
+sectionwecovertwosimplebutwidelyusedestimators: therolling-windowsamplecovariance
+and the exponentially weighted moving average (EWMA) [Joh+23].
+Rolling window estimate.The simplest choice of the covariance estimatorf(·)is the
+uniformly weighted sample covariance. The underlying assumption is that the average co-
+variance observed over the most recent L trading days provides a reasonable estimate of the
+covariance over the future forecasting horizon. In other words, the expected future risk is
+approximated by the sample average of the most recent observations, with each day receiving
+equal weight. Also that each observation within this lookback window is equally informative
+when forecasting future risk. The covariance forecast is therefore obtained by averaging the
+pairwise products of the historical asset returns,
+ˆΣt = 1L RTt Rt,(11)
+whereR t = [r t−1, rt−2, . . . , rt−L]T ∈R L×n contains the trailing return observations over a
+lookback period ofLtrading days. Figure 11 illustrates this computation graphically.
+Rt
+(L × n)
+RtT
+(n × L)
+Σt
+(n × n)
+1
+L
+Figure 11:Illustration of rolling window covariance estimation, from (11).
+21
+Each column ofRt corresponds to the historical returns overLdays for one asset. The matrix
+multiplicationR Tt Rt computes the pairwise covariance between every asset in the universe,
+producingann×ncovariancematrix. Thefactor1/Lnormalizestheseaccumulatedproducts
+to adjust the covariance estimates to a daily scale.
+The choice of the lookback windowLreflects a trade-off between estimation accuracy
+and responsiveness to changing market conditions. A short lookback adapts quickly to
+changes in volatility and correlation, but produces a noisier covariance estimate because it
+is based on fewer observations. Conversely, a longer lookback reduces estimation noise by
+averaging over more observations, but may incorporate outdated return relationships that
+are no longer relevant for forecasting future risk. The faster market conditions change, the
+shorterLshould generally be to avoid placing excessive weight on stale data. Consequently,
+there is no universally optimal choice ofL, and its value depends on both the forecasting
+horizonhand the persistence of the underlying covariance structure. Another limitation of
+the rolling-window estimator is that every observation within the lookback window receives
+exactly the same weight, so a return observed yesterday influences the estimate just as much
+as a return observedLdays ago, until it abruptly leaves the window altogether.
+The choice ofLis also constrained by the number of assetsn. WhenL≤n, the
+estimated covariance matrix is guaranteed to be rank deficient, implying the existence of
+zero-risk portfolios that do not exist in the true market. Even whenLis only slightly larger
+thann, the covariance matrix may remain poorly conditioned and numerically unstable , so
+in practiceL≫nis generally preferred. For large investment universes, of sayn= 1000
+assets, this would require multi-year lookback windows, which both increases computational
+cost and incorporates progressively more outdated market information.
+EWMA covariance estimate.Another widely used choice of the covariance estimator
+f(·)is the exponentially weighted moving average (EWMA). Rather than assigning equal
+importance to every historical return within a fixed lookback window, the EWMA estimator
+assigns exponentially decreasing weights to older observations. Consequently, recent market
+movements have a greater influence on the covariance forecast, while older observations con-
+tinue to contribute with gradually diminishing weight. The covariance forecast is computed
+as
+ˆΣt = 1ηt RTt WtRt,(12)
+whereR t = [rt−1, rt−2, . . . , r1]∈R (t−1)×n contains all historical return observations available
+up to dayt−1. Figure 12 illustrates this computation.
+Rt
+((t – 1) × n)
+RtT
+(n × (t – 1))
+Σt
+(n × n)
+1
+ηt
+Wt
+((t – 1) × (t – 1))
+Figure 12:Illustration of EWMA covariance estimation, from (12).
+22
+Unlike the rolling-window estimator, which only considers the most recentLobservations,
+the EWMA estimator uses the entire return history while gradually reducing the influence
+of older observations through the diagonal weighting matrix
+Wt = diag(λt−1, λt−2, . . . , λ1).
+Each diagonal entryλi along the diagonal ofWspecifies the weight assigned to one historical
+return observationri. SinceW t is diagonal, every row ofRt is weighted independently before
+the pairwise covariances are computed. The normalization constantηt is given by the sum
+of the EWMA weights, ensuring that the covariance estimate remains on the same scale
+regardless of the number of observations.
+The observation weights are parameterized through a half-lifeH, measured in trading
+days. Rather than specifying every weight individually, the weights are generated according
+to the exponential decayλτ = 0.5 τ /H, whereτdenotes the age of the observation in days.
+Consequently, an observation that isHdays old receives half the weight of the most recent
+observation, while older observations receive progressively smaller weights. The half-life
+therefore provides an intuitive way of controlling how quickly historical information loses
+influence. Smaller values ofHplace greater emphasis on recent observations, whereas larger
+values retain information from a longer history.
+Unlike the rolling-window estimator, EWMA never discards observations abruptly. In-
+stead, every historical return continues to contribute to the covariance estimate, with its
+influence gradually fading as it becomes older. Since the estimator uses the entire available
+return history, numerical stability is determined primarily by the total number of available
+observations rather than by a fixed lookback window. In practice, provided that sufficiently
+many observations are available, typicallyt−1≫n, the covariance estimate remains full
+rank while avoiding the abrupt discontinuities introduced by a rolling window. Reported
+half-life values range from a few days to several hundred days depending on the intended
+application [LS96, PPK04, Bol15]. Another practical advantage of EWMA is that the co-
+variance estimate can be updated recursively as new return observations become available,
+ˆΣt =λ 1 ˆΣt−1 + (1−λ 1)rt−1rTt−1,
+rather than being recomputed from the entire return history each day. This makes the
+EWMA estimator computationally efficient while still incorporating all previously observed
+market information.
+4.3 Factor models
+Thecovarianceestimatorsintroducedaboveestimatehoweverypairofassetsmovestogether.
+This works well when the number of assets is small relative to the amount of historical data
+available. As the investment universe grows, however, the number of relationships that
+must be estimated grows quickly. Fornassets, the covariance matrix containsn(n−1)/2
+distinct pairwise covariances. With 1,000 assets, this already amounts to almost half a
+million relationships, all estimated from the same finite history of returns. Many of these
+estimates will inevitably reflect noise rather than persistent relationships in the market.
+23
+Factor models address this problem by imposing structure on how assets are allowed to
+move together. Rather than estimating every relationship independently, a factor model
+assumes that much of the co-movement between assets can be explained by a small number
+of common sources of variation, called factors. For example, two equity ETFs may move
+together not because their relationship is unique, but because both respond to the same
+broad movement in the equity market. If many assets share such common movements, it
+can be more reliable to estimate these underlying factors than every pairwise relationship
+separately.
+There are two common ways to define these factors [Ced25]. Economic factor models
+specify them explicitly, using interpretable quantities such as the market, size, and value
+factors of Fama and French [FF92, FF93]. Statistical factor models instead infer the common
+movements directly from observed asset returns. We use the latter approach, so the factors
+need not have an economic interpretation. However, the first factor tends to capture the
+market movement. The factor model we use follows the form of [Ced25] and is given by,
+rt =F tft +ϵ t.(13)
+Figure 13 illustrates the factor model geometrically. The matrixFt ∈R n×k is called the
+factor loading matrix, but can simply be understood as a collection of weights: each row
+corresponds to one asset and describes how sensitive that asset is to each of thekfactor
+returns. Each entry off t ∈R k is the return of one common factor. The productF tft
+therefore combines the factor returns according to the sensitivities to produce the factor-
+driven return of each asset.
+(n)
+rt
+(n)
+ϵtft
+(k)
+Ft
+(n × k)
+Figure 13:Illustration of the factor model in (13).
+This is essentially the familiar linear relationy=mx+bin vectorized form, withFt playing
+the role of the slopes,ft the explanatory variables, andϵt ∈R n the remaining unexplained
+component. The number of factorskis a hyperparameter, which we elaborate on in the
+following part.
+Factor covariance estimate.Earlier we introduced a covariance estimator as a function
+f(·)that maps the historical return matrixRt to a covariance estimateˆΣt. For the simple es-
+timators above, this mapping could be written in a single equation, whereas the factor model
+requires several intermediate steps. The factor modelr=F f+ϵin (13) is an assumption
+about the structure of asset returns which lets us derive the decomposed form of the covari-
+ance matrix in (14), later used to construct the covariance estimate. The full estimation
+procedure involves volatility scaling, winsorization, EWMA correlation estimation, eigende-
+composition, and expectation maximization (EM). We leave these mathematical details to
+Appendix A and focus here on the resulting covariance estimate and its interpretation.
+24
+The assumption in (13) has a useful consequence for the covariance matrix. The term
+F fcaptures the returns explained by the common factors, whileϵcaptures the remaining
+asset-specific returns. If these two components are unrelated, their contributions to risk
+can also be separated. We therefore assume that the asset-specific returns are uncorrelated
+with the common factors and with each other, so that any co-movement between assets is
+only explained through the common factors. We also normalize the factors to have unit
+covariance. Under these assumptions, the covariance estimate takes the decomposed form
+ˆΣt =F tF Tt +D t,(14)
+whereF tF Tt captures the covariance explained by the common factors andDt ∈R n×n is a
+diagonal matrix containing the remaining asset-specific variances. Figure 14 illustrates how
+these two components combine to form the covariance estimate.
+Σt
+(n × n)
+Ft
+(n × k)
+FtT
+(k × n)
+Dt
+(n × n)
+Figure 14:Illustration of the factor covariance estimate in (14).
+The important distinction from the simple covariance estimators is that the off-diagonal re-
+lationships are no longer estimated independently. Instead, they must be explained through
+thekcommon factors. Whenk≪n, this substantially reduces the flexibility of the model:
+rather than estimatingO(n 2)covariance relationships, the common covariance structure is
+described by theO(nk)entries ofF. This acts as a form of regularization. Relationships
+supported by common movements across many assets are retained, while isolated relation-
+ships caused primarily by sampling noise are less likely to enter the covariance estimate. The
+resulting estimate can therefore be more robust when the number of assets is large relative
+to the available data [LW04]. For large asset universes, the resulting low-rank structure can
+also substantially reduce computational cost.
+The factor model equation in (13) and the covariance decomposition in (14) provide
+complementary views of the same underlying structure:
+total asset returns
+r
+← −common factor-driven part
+F f
++asset-specific part
+ϵ
+,
+total asset risk
+ˆΣ
+← −common factor-driven part
+F FT
++asset-specific part
+D
+.
+The factor model equation separates asset returns into movements shared across the in-
+vestment universe and movements specific to individual assets. The covariance decompo-
+sition carries this same structure over to risk:F FT captures the risk arising from shared
+movements, whileDcaptures the remaining risk specific to each asset. Consequently, co-
+movement between different assets is explained through the common factors. The factor
+model therefore reduces a large covariance estimation problem to estimating a small set of
+shared movements, how strongly each asset responds to them, and whatever risk remains is
+attributed as specific to each asset.
+25
+5 Alpha model
+Markowitz portfolio optimization requires, outside of the risk estimate, also some estimate
+of the future attractiveness of investments. An alpha model attempts to summarize the
+information contained in historical data into such a forecast. This section explains what an
+alpha model is and how a return forecast is constructed from historical prices. We present
+two simple signals, momentum and a moving average, followed by a fitted model that uses
+ridge regression.
+5.1 Return forecasting
+Return forecasting is concerned with estimatingα, meant to capture the performance of
+investments over the coming investing period. Unlike risk, returns generally exhibit much
+weakerstatisticalstructure, makingusefulalphaestimationconsiderablymoredifficult[Mer80,
+GW08]. Following the terminology of Grinold and Kahn [GK00], alpha is often introduced
+as a forecast of expected excess return. Throughout this paper, however, it is helpful to
+adopt a slightly broader interpretation as,
+α−encodes future “goodness” of assets.
+Theattractivenessofaninvestmentcanbecapturedthroughmanydifferentsignals, asshown
+in Figure 15, of which we focus on trend and reversion in this paper.
+Price Fundamentals
+Trend Reversion Technical Sentiment Value Growth Supply/Demand Quality Tactical/Events
+Figure 15:Taxonomy of alpha models, adapted from [Nar24, p. 29].
+Momentum and the moving-average signal are procedural alphas constructed directly from
+historical prices. Both apply predetermined rules to recently observed price movements
+and carry the resulting information forward as an indication of future attractiveness. They
+require no fitted statistical model, are straightforward to implement, and provide an intuitive
+starting point.
+Statisticalreturnforecastinginsteadestimatestherelationshipbetweeninformationavail-
+able today and subsequently realized returns from historical data. This provides a consid-
+erably more flexible framework: rather than specifying beforehand how a particular signal
+should translate into alpha, a statistical model attempts to learn that relationship from the
+data. However, any forecasting model is ultimately constrained by the data it has access
+to. Institutional investors may combine sophisticated statistical models with proprietary
+datasets, alternative information, or other signals unavailable to the average market partic-
+ipant. Our objective is different. We restrict the forecasting problem to public, historically
+observable market data so that the resulting models remain reproducible and accessible. The
+regression models introduced later should therefore only be viewed as increasingly flexible
+methods for extracting whatever predictive information is present in the available features.
+26
+5.2 Simple alphas
+There are countless ways to construct an alpha signal from historical market data. Prices
+and returns can be aggregated and transformed in many ways, producing a jungle of possible
+signals. The purpose of this section is not to exhaustively search for the best-performing
+alpha. Instead, we consider two simple and interpretable textbook alphas to investigate
+whether useful information can be extracted from recent prices: momentum, which retains
+the magnitude of recent returns, and a moving-average signal, which reduces the forecast to
+the direction of the recent price trend.
+Momentum.The simplest alpha we consider is momentum, where the return over a recent
+period is carried forward directly as the forecast. An asset that has recently appreciated
+receives a positive alpha, while an asset that has declined receives a negative one. The
+minimal underlying assumption is that price movements exhibit some persistence, such that
+assets performing well relative to their recent history may continue to do so over the near
+future. We use one-month momentum, computed from the log return over the precedingL
+trading days,
+momt = log
+ pt−1
+pt−L
+
+=
+t−1X
+τ=t−L
+log(rτ ),(15)
+wherep t−1 is the most recently observed price andpt−L is the priceLtrading days earlier.
+Their log ratio is the continuously compounded return over the lookback period, so the
+signal preserves both direction and magnitude. Momentum is inherently backward-looking
+and reacts slowly to changes, progressively tilting the portfolio toward or away from an asset
+rather than attempting to anticipate the turning point itself. The lookbackLcontrols the
+trade-off between reactivity and stability. Short windows react quicker to changing trends
+but are more exposed to short-term noise, while longer windows produce smoother signals
+but respond more slowly when conditions change.
+Moving average.The moving-average signal instead reduces the alpha to a directional
+forecast. Rather than extrapolating the magnitude of recent returns, the signal asks only
+whether the current price lies sufficiently above or below its recent trend. LettingLdenote
+the lookback window, we define
+movt = 2×1
+ 
+pt > ρL
+t−1X
+τ=t−L
+pτ
+!
+−1,(16)
+where the trailing average provides a slowly moving reference level for the current price and
+ρcontrols the threshold required to classify the trend as positive. For example, withL= 50
+andρ= 1.2the alpha only gives a buy signal when the price is 20% above the 50-day moving
+average. The signal takes only two values,+1when the price is sufficiently above its trailing
+average and−1otherwise, so unlike momentum, the distance from the average carries no
+additional information. The signal therefore acts as a simple gate, participating while the
+price remains in a favorable trend and moving away as soon as that trend disappears. Since
+the current price is compared directly with the slower-moving reference, the signal reacts
+more quickly than momentum.
+27
+5.3 Regression models
+Returning to the textbook definition of alpha as an expected future return, we can construct
+a set of features available at daytand estimate how these features have historically related
+to returns over the subsequent horizon ofhdays. The fitted relationship can then be applied
+to the information available today to produce a return forecastˆrt+h, which is used directly, or
+after some transformation, as the alpha supplied to Markowitz. This turns alpha forecasting
+into a conventional supervised learning problem, but an unusually difficult one.
+Features and dataset.Any return forecasting model is ultimately limited by the informa-
+tion made available to it. We restrict this information to public and historically observable
+market data, keeping the forecasts reproducible and consistent with the simple investment
+framework considered throughout this paper. Lettingpt denote the price of assetiat dayt,
+x(S,L)t = log
+ pt−S
+pt−L
+
+,(17)
+isafeatureanalogoustothesimplemomentumalphamentionedin§5.2withthetwolookback
+parametersSandL. Here,x (S,L)i,t is a data feature which covers the period betweent−L
+tot−S, thus a window ofL−Sdays. With the addition of the parameterSwe are able
+to create a dataset of features covering non-overlapping periods of historical returns. The
+three very simple and classical textbook features we use in our experiments are,
+STRt =−log
+ pt−1
+pt−21
+
+,MTM t = log
+ pt−21
+pt−252
+
+,LTR t =−log
+ pt−252
+pt−756
+
+,(18)
+where STR is the short-term reversal feature, MTM is the medium-term momentum feature,
+and LTR is the long-term reversal features, also shown in Figure 16.
+t – 756 t – 252 t – 21
+LTR MTM STR
+t + ht
+Figure 16:The three features cover non-overlapping windows of past returns.
+The reversal effect is captured by the minus signs, and is based on the assumption that
+the future price will move in the opposite direction of the short- and long-term trends.
+For each assetiin the asset universe we form a datasetX∈R T×3 consisting of the three
+aforementioned features, specific to that asset. That dataset is then used in a rolling window
+fashion to backtest the regression model while producing an alpha over the period 2005–2025.
+Return predictability.Predicting returns is difficult not because statistical models can-
+notfithistoricalfinancialdata, butbecausethereisverylittlepersistentsignaltofit. Auseful
+way to conceptualize a future return is as the sum of a component that can, in principle, be
+inferred from information available today and a component that cannot,
+rt+h =f(X t) +ε t+h,(19)
+28
+wheref(X t)represents the predictable component contained in the feature vectorXt, while
+εt+h collects the remaining unpredictable variation. For financial returns, the central diffi-
+culty is that the latter is generally much larger than the former,
+Var [f(Xt)]≪Var [ε t+h].(20)
+Thesignal-to-noiseratioisconsequentlyverylow. Evenamodelthatestimatesf(X t)reason-
+ably well can therefore produce forecasts that appear weak when compared with individual
+realized returns, since each realization remains dominated byεt+h. This weak dependence is
+already visible in the return series themselves. If past returns contained strong information
+about future returns, substantial dependence would remain across nearby lags. For broad
+and liquid assets such as SPY, however, return autocorrelations tend to be small, leaving
+comparatively little structure for a forecasting model to exploit. Figure 17 illustrates this
+through the autocorrelation function (ACF) of SPY returns across successive lags.
+0 6 12 18 24
+Lag (months)
+1
+0
+1
+Autocorrelation of SPY monthy returns
+Figure 17:SPY shows little to no autocorrelation due to the stochastic nature of returns.
+Low signal-to-noise also changes how model complexity should be viewed. A flexible model
+has more freedom to discover relationships in the training data, but when most historical
+variation is noise, it also has more freedom to explain patterns that occurred by chance. A
+good in-sample fit can therefore be obtained without learning a relationship that persists
+out of sample. This is the familiar bias–variance trade-off, but it becomes particularly
+important for return forecasting. Reducing model bias by adding flexibility can quickly
+increase estimation variance as the model adapts to noise. Model complexity is therefore not
+automatically an advantage. The objective is instead to use enough flexibility to capture the
+weak systematic component of returns while restricting the model sufficiently that random
+historical variation is not mistaken for persistent structure.
+Ridge regression.We use a linear model to estimate the relationship between the features
+and subsequent returns. For a feature vectorxt ∈R F, holding theFfeatures observed at
+dayt, the return over the followinghdays is modeled as
+ˆrt+h =x Tt θ,(21)
+whereθ∈R F contains one coefficient for each feature. Each coefficient describes the di-
+rection and magnitude of the estimated relationship between its feature and the return that
+29
+follows. This makes the model transparent, since the contribution of every feature to a
+forecast can be read directly from its coefficient.
+Every asset is given its own model, fitted on its own dataset. A row of the dataset pairs
+the features observed at daytwith the return realized over the subsequenthdays,
+xt = (STRt,MTM t,LTR t), y t =r t+h,(22)
+so in our caseF= 3. Stacking the rows over time gives the arraysX∈RT×F andy∈R T,
+one pair per asset.
+At each forecasting datetthe coefficients are re-estimated from theHmost recent pairs
+whose outcome is known. A pair with feature datesis complete only once its targetrs+h
+has been realized before the forecast is made, so the newest usable feature date ist−h−1,
+and the split becomes
+Xtrn =X [t−h−H:t−h−1] , y trn =y [t−h−H:t−h−1] , x tst =x t, y tst =y t,(23)
+withX trn ∈R H×F andy trn ∈R H. The gap ofhdays between the last training pair and
+today is what keeps future information out of the fit. The features observed today,xtst, are
+held out for the forecast, and their outcomeytst is realized onlyhdays later, entering the
+evaluation of §6.3 but never the training sample.
+The simplest estimate ofθis ordinary least squares (OLS), which minimizes the squared
+prediction error over the training set. The simplicity is attractive but does not prevent
+overfitting. OLS is free to assign large coefficients to relationships that arose largely from
+noise, the problem grows as the number of parameters rises relative to the amount of training
+data, and correlated features make the estimates sensitive to small changes in the sample. We
+therefore use ridge regression, which adds anL2 penalty on the magnitude of the coefficients,
+ˆθ= arg min
+θ
+∥ytrn −X trnθ∥22 +λ∥θ∥ 22 =  X TtrnXtrn +λI F −1 X Ttrn ytrn,(24)
+whereλ≥0sets the strength of the regularization andI F is the identity matrix. The first
+equality defines the estimator and the second is its closed form solution. Atλ= 0the
+penalty disappears and the solution reduces to OLS. Asλgrows, large coefficients become
+progressively more costly, and a feature must show stronger evidence in the training data
+before it earns influence over the forecast. The shrinkage deliberately trades bias for lower
+estimation variance. A relationship that appears predictive only by chance would otherwise
+receive a large coefficient and swing as the training window moves forward, and ridge presses
+such coefficients toward zero. In the low signal-to-noise setting described above, a forecast
+near zero is not necessarily a failure. It can simply reflect that the data offers too little
+evidence for a stronger prediction.
+The fitted coefficients applied to the held out features give the forecast,ˆrt+h =x Ttst ˆθ,
+which directly or after a transformation is the alpha supplied to Markowitz. The closed form
+matters in practice. The model is re-estimated at every trading date, separately for every
+asset and specification, and avoiding iterative optimization keeps the cost of these repeated
+fits low. More flexible nonlinear models could capture relationships a linear model cannot,
+but they bring additional computational cost, more modeling choices, and greater capacity
+to fit the noise that already dominates the data. For our purposes ridge regression is the
+compromise between regularization, interpretability, and computational efficiency.
+30
+6 Numerical experiments
+This section presents the numerical experiments that we have run to test the different trading
+strategies discussed above. We start by defining how our backtest is setup and runs. In §6.2
+we give intuition behind the choice of ETFs for the simple trading strategies defined in §3.2.
+In §6.3 we evaluate the risk models presented in §4 and selection of alpha in §5. We end
+by showing the performance of a smaller set of reasonable portfolios and strategies derived
+from the conclusions of the previous sections.
+6.1 Data and backtest
+Data.Daily adjusted close prices for all assets are sourced from Yahoo Finance [Yah] via
+the yfinance Python package [Aro24]. Macroeconomic time series, such as the federal funds
+rate, are retrieved from the Federal Reserve Economic Data (FRED) database [Fed] accessed
+via the fredapi package [Wel].
+Backtest.We evaluate our portfolio construction methods through a daily backtest cover-
+ing 2005-01-01 to 2025-01-01, a total ofT= 5,032trading dayst= 1,2, . . . , T. Every trade
+in it is decided by one of the strategies of §3, and we consider the universe ofnassets of §2.1
+plus cash. Leth t ∈R n denote the dollar holdings in each asset andct ∈Rthe cash balance
+at the start of dayt. We allow no shorting and no leverage, soht ≥0andc t ≥0. The net
+asset value (NAV) and the portfolio weights are
+vt =1 Tht +c t, w t =h t/vt,
+with the remaining fraction1−1 Twt held as cash. Each day the holdings drift with the
+realized return vectorrt ∈R n and cash earns the federal funds raterf,t,
+ht+1 = diag(1 +r t)h t, c t+1 = (1 +r f,t)c t.(25)
+On a day without trading this is the entire update. On a trading date, trades are assumed
+to execute at the start of daytat the previous day’s closing price, after which holdings drift.
+Writingw pre for the weights carried into the trade, the turnover on daytis
+τt = 12 ∥wt −w pre∥1,(26)
+so that moving capital out of one asset and into another counts once rather than twice.
+Every dollar bought or sold pays half of a bid-ask spread ofκ= 5basis points, and the cost
+κ τt vt is deducted from cash. The Python code for the backtest loop and each of trading
+strategies it uses to update the portfolio weights can be found in Appendix 1 and 2.
+Not every ETF in the universe of §2.1 was listed on the first day of the backtest, and
+the exact listing dates are given in Table 26. The backtest is simply not allowed to buy an
+asset before it was listed, so the number of assets a strategy can choose from grows over
+the period. We also require assets to have a minimum amount of 126 trading days before it
+becomes available, since the risk model and the return forecasts both need a trailing window
+of observations.
+31
+Evaluation.We evaluate strategies using six performance metrics. These are the annual-
+ized geometric excess returnre, the annualized realized volatilityσ, the maximum drawdown
+(MDD), the Sharpe ratio (SR), the average annual turnover (TO), and the lower quartile
+(LQ) of the per-year Sharpe ratio. Letrp,t ∈Rdenote the realized portfolio return on day
+t. We definere andσas,
+re =
+ TY
+t=1
+1 +r p,t
+1 +r f,t
+!252/T
+−1, σ=
+ 
+252
+T
+TX
+t=1
+(rp,t −¯rp)2
+!1/2
+,(27)
+where¯rp = (1/T) PTt=1 rp,t is the sample mean and the factor252annualizes the per-period
+estimate under the assumption that daily returns are uncorrelated across time. The return
+is measured net of the risk-free rate while the volatility is measured on the portfolio return
+itself. We use the geometric mean because it equals the realized compound return, whereas
+the arithmetic mean overstates compound performance whenever returns vary [Fer02]. We
+write MDD, SR, and LQ as,
+MDD = max
+1≤t≤T
+Dt,SR = re
+σ ,LQ =Q 0.25
+ 
+{SRy}y
+
+,(28)
+whereD t = max1≤τ≤t (Vτ −V t)/Vτ is the running drawdown at timet,Vt is the portfolio NAV
+at timet, MDD is the worst such drawdown over the backtest, andSRy is the annualized
+Sharpe ratio within calendar yeary. LQ is the empirical25th percentile of the per-year
+Sharpe ratios and is our measure of weak-year consistency. Turnover is reported as the
+average over calendar years ofPt∈y τt, so a TO of0.20means that a fifth of the portfolio
+changed in a typical year.
+Parameters.The portfolio construction methods of §3 and the risk and alpha models of
+§4 and §5 introduce a number of free parameters. We fix these once and use the same values
+throughout, unless stated otherwise. None are finely tuned. In each case we take a round
+number within the range reported in the literature, rather than optimizing for any single
+metric. Table 3 lists the parameters central to the backtest and the trading strategies, while
+the remaining model parameters are given in §6.3.
+T able 3:Parameters central to the backtest and the trading strategies.
+Model Parameter Description V alue
+Backtestr f Return on cash FFR
+T Trading days 5,032
+Wbacktest Backtest window 2005-01-01 to 2025-01-01
+Hmin Minimum history before an asset is investable126 days
+Strategiesσ tgt Target annual volatility 8%
+ρ Regularization in risk parity 1×10 −5
+tfreq Trading frequency Monthly
+MarkowitzT tgt Turnover limit per rebalance 10%
+δw Position change limit per rebalance 5%
+wmax Maximum weight in a single asset 10%
+κ Trading cost 5×10 −4
+32
+6.2 Simple strategies
+The simple strategies of §3.2 each need a smaller portfolio to run on. This section examines
+the candidate portfolios for each strategy. The strategies are ordered by complexity, and
+each addresses a specific shortcoming of the strategy before it. For each strategy we report
+what it addresses, our findings on portfolio composition, and which assets are reasonable to
+include.
+Fixed weights.We begin with equal weights. We backtest every combination of three,
+four, and five ETFs, rebalancing monthly, and rank the resulting portfolios twice: first by
+SR alone and then by SR followed by LQ. We exclude two groups of assets from the search.
+First, the Country and Futures categories, since they are not suitable buy-and-hold assets, as
+established in §2.2, and the fixed-weight strategy can do little beyond buying, holding, and
+rebalancing. Second, we exclude any ETF that was not listed at the start of the backtest.
+An investor in 2005 could not have selected an asset that did not yet exist, and introducing
+new ETFs as they became available would change the portfolio composition during the
+experiment. These restrictions leave 23 ETFs. Rather than testing every possible allocation
+for every combination, we initially restrict the search to equal weights. This separates
+two questions that would otherwise be mixed together: which assets should a fixed-weight
+portfolio contain, and how should capital be divided among them? Here we focus on the
+first question and return to the choice of proportions afterwards. Table 27 in the appendix
+reports the top 60 portfolios under both ranking criteria for each portfolio size, while Table 4
+presents the best portfolios under each criterion.
+T able 4:Top portfolios of 3, 4, and 5 ETFs, ranked by SR and by SR+LQ.
+Criteria ETF s r σMDD TO SR LQ
+SR QQQ/IEF/GLD 0.10 0.09 0.22 0.18 0.81 0.44
+QQQ/XLP/TLT/GLD 0.10 0.09 0.22 0.19 0.84 0.62
+QQQ/XLP/IEF/TIP/GLD 0.08 0.08 0.19 0.16 0.84 0.50
+SR+LQ XLK/XLV/GLD 0.12 0.13 0.33 0.18 0.74 0.73
+QQQ/XLU/AGG/GLD 0.09 0.10 0.27 0.18 0.74 0.80
+SPY/QQQ/XLP/TLT/GLD 0.10 0.10 0.26 0.18 0.77 0.81
+The two ranking criteria favor somewhat different portfolios. When ranked by SR, the
+strongestportfolioscombineanaggressiveequityposition, typicallyQQQ,withintermediate-
+or long-term government bonds such as IEF or TLT and an allocation to gold through GLD.
+These portfolios reach Sharpe ratios around0.80–0.84at roughly8%–9%volatility, with
+maximum drawdowns around19%–22%. Ranking by SR+LQ instead shifts the portfolios
+toward equities. For example, the highest-ranked three-ETF portfolio replaces the bond
+allocation with XLV, combining the growth-oriented XLK with a less volatile, defensive
+equity sector and gold. This shift comes at the cost of higher overall volatility and larger
+maximum drawdowns, but substantially improves LQ: compared with the top three-ETF
+portfolio ranked by SR, volatility rises from9%to13%and MDD from22%to33%, while
+LQ increases from0.44to0.73. The difference reflects what the two consistency measures
+33
+capture. LQ is based on the lower quartile of annual Sharpe ratios and therefore rewards
+portfolios that perform consistently across years, while a single extreme loss has limited
+influence on the measure. MDD behaves in the opposite way: it is determined entirely by
+the most severe peak-to-trough loss. Since the backtest contains three major market crashes,
+the two measures can therefore favor different portfolio compositions. Government bonds
+such as IEF and TLT provide protection during severe equity downturns and improve MDD,
+whereas replacing some of this protection with additional equity exposure, such as XLV
+or XLU, can improve performance across a larger share of individual years and therefore
+increase LQ.
+Common characteristics.Despite these differences, the strongest portfolios share a clear
+structure and generally draw from all three asset classes. Gold appears particularly consis-
+tently: GLD, the only Alternatives ETF with sufficient history to enter the search, is present
+in every one of the top fifteen portfolios at each portfolio size and in most of the remain-
+ing top 60. Fixed-income allocations are dominated by government bonds. Although the
+corporate bond ETF LQD occasionally appears, government bond alternatives rank higher
+for the same equity-and-gold combinations. The equity allocation, meanwhile, is typically
+concentrated in growth-oriented assets, with larger portfolios often adding either a defensive
+equity sector or a second government bond position. Adding more ETFs therefore provides
+only limited improvement. Moving from three to four or five assets increases the best Sharpe
+ratio only slightly, from0.81for three ETFs to0.84for both four and five ETFs, and the
+additional holdings are usually variations of exposures already present in the portfolio. The
+main result is consequently not a particular winning combination of ETFs, but a recurring
+allocation across distinct sources of risk: growth-oriented equities provide return, govern-
+ment bonds provide protection during equity downturns, and gold adds a third source of
+diversification.
+Choosing the split.The equal-weight search identifies which assets work well together,
+but leaves open whether their exact proportions matter. This is particularly relevant for
+fixed-weight portfolios such as the 60/40, where the allocation itself is part of the strategy.
+To isolate this effect, we select SPY, AGG, and GLD as representative ETFs for equities,
+fixedincome, andalternatives, andbacktesteveryallocationbetweentheminten-percentage-
+point increments. Table 28 in the appendix reports the full sweep, while Figure 18 shows
+the average allocation of the ten best-performing splits under each ranking criterion.
+34% 34%
+44%
+SR
+SR+LQ 23%
+SPY AGG GLD
+32%
+34%
+SPY/AGG/GLD
+Figure 18:The best fixed splits hold all three assets in comparable proportions.
+The results suggest that the exact allocation matters less than holding all three asset classes.
+When ranked by SR, the best-performing splits are centered close to an equal allocation
+34
+between SPY, AGG, and GLD. Ranking by SR+LQ shifts some weight from gold toward
+equities, but the same three-way structure remains. The sweep also allows us to compare
+these portfolios directly with the traditional 60/40 portfolio. The 60/40 portfolio has a
+Sharpe ratio of0.51and a maximum drawdown of0.36. By adding gold and adjusting the
+allocation across all three asset classes, the best portfolio with a 30/40/30 split increases the
+Sharpe ratio to0.67and reduces the maximum drawdown to0.22.
+Volatility control.We next use the risk model to control the overall volatility of the
+portfolio. The simplest example is a portfolio containing only SPY. Figure 19 shows how
+the allocation between SPY and cash changes when an8%volatility target is applied.
+2005
+2006
+2007
+2008
+2009
+2010
+2011
+2012
+2013
+2014
+2015
+2016
+2017
+2018
+2019
+2020
+2021
+2022
+2023
+2024
+20252025
+0.0
+1.0
+SPY
+Cash
+SPY vc8% portfolio weights
+Figure 19:Volatility control moves the portfolio into cash when volatility rises.
+The volatility control in (2) does not change the relative allocation between the assets in
+a portfolio. Instead, it scales the entire portfolio against cash until its estimated volatility
+reaches the targetσtgt. For SPY, this means investing more in the market when volatility is
+low and moving more of the portfolio into cash when volatility rises. This behavior is partic-
+ularly visible during the turbulent periods of 2008–2009 and 2020–2021. Figure 20 compares
+SPY with its volatility-controlled counterpart during the three major market crashes in the
+backtest.
+2008
+2009
+0.6
+1.0Growth of $1
+Financial Crisis
+SPY vc8
+SPY
+2020
+2021
+COVID-19
+2022
+2023
+Russia-Ukraine
+Portfolio performance in stressed markets
+Figure 20:Volatility control softens all three major drawdowns
+In all three crashes, volatility control reduces the drawdown by lowering market exposure as
+volatility increases. The trade-off is that the strategy can be slow to increase its exposure
+35
+again once the market begins to recover, causing it to miss part of the rebound. This is par-
+ticularly clear during the rapid recovery following the COVID-19 crash in the second panel.
+Table 28 in the appendix repeats the SPY/AGG/GLD allocation sweep with volatility con-
+trol and shows three main effects. First, the strategy brings the realized risk of the different
+allocations much closer together. Without volatility control, realized volatility ranges from
+approximately5%to17%. With an8%target, the portfolios are instead limited to approx-
+imately this level, with deviations of around±1%due to errors in the risk forecast. Second,
+maximum drawdown decreases across the allocations, with the largest improvements occur-
+ring in the most aggressive portfolios. For example, the near-all-equity 90/0/10 allocation
+sees its maximum drawdown fall from50%to20%. Third, this reduction in risk does not
+necessarily come at the expense of the Sharpe ratio. The best allocation retains an SR of
+0.67, while the SR of the 90/0/10 allocation increases from0.50to0.57as the volatility
+control reduces its exposure during the worst periods. Volatility control therefore provides
+a simple way to manage how much risk the portfolio takes, but it does not determine where
+that risk should come from. Since every holding is scaled by the same factor, the investor
+must still decide which assets to hold and how to allocate between them. The next strategy
+takes a step toward solving this problem by sizing each position according to its individual
+risk.
+Inverse volatility.Inverse volatility replaces the static allocation of fixed weights with
+an allocation that adapts to changes in risk. Under (3), each asset is weighted inversely to
+its estimated volatility, giving larger positions to less volatile assets and smaller positions to
+more volatile ones. These weights are recomputed at every trade, allowing the portfolio to
+adjust as market conditions change.
+We first apply inverse volatility to the best equal-weight portfolios from the previous
+section. The results are shown in Table 5.
+T able 5:Inverse volatility on the top equal weight portfolios, ranked by SR and SR+LQ.
+Criteria ETF s r σMDD TO SR LQ
+SR QQQ/IEF/GLD 0.07 0.07 0.19 0.28 0.84 0.21
+QQQ/XLP/TLT/GLD 0.10 0.09 0.21 0.33 0.91 0.70
+QQQ/XLP/IEF/TIP/GLD 0.06 0.06 0.16 0.29 0.80 0.17
+SR+LQ XLK/XLV/GLD 0.11 0.13 0.32 0.32 0.75 0.73
+QQQ/XLU/AGG/GLD 0.07 0.07 0.19 0.30 0.76 0.64
+SPY/QQQ/XLP/TLT/GLD 0.10 0.10 0.21 0.32 0.86 0.83
+The main result is that inverse volatility works best when the assets have reasonably similar
+levels of volatility. In this case, no single asset dominates the allocation, but the weights can
+still adjust as their relative risks change. For example, TLT has a volatility of around15%,
+which is comparable to the equity and gold ETFs it is combined with. In portfolios containing
+TLT, inverse-volatility weighting improves the allocation: for QQQ/XLP/TLT/GLD, the
+Sharpe ratio increases from0.84under equal weights to0.91, while LQ increases from0.62
+to0.70. When all assets have very similar volatility, the inverse-volatility allocation instead
+remains close to equal weights and performance changes little. The weakness of the strategy
+36
+appears when one asset is much less volatile than the others. Since a low volatility directly
+translates into a large weight, a sufficiently calm asset can dominate the portfolio. IEF,
+for example, has a volatility of around7%and receives roughly60%of QQQ/IEF/GLD.
+Although the Sharpe ratio increases slightly, the portfolio becomes much more dependent
+on bonds: annual return falls from10%to7%, while LQ falls from0.44to0.21. The same
+problem is even more pronounced for low-volatility assets such as AGG. Inverse volatility
+therefore does not necessarily favor the asset that provides the most useful diversification; it
+simply favors the asset with the lowest individual volatility.
+To see whether this pattern holds more generally, we repeat the exhaustive search using
+inverse-volatility weights. The top 60 portfolios for each portfolio size are reported in Ta-
+ble 29. The same broad portfolio structure found under equal weights remains: the strongest
+portfolios combine growth-oriented equities, defensive equities, government bonds, and gold.
+However, the best Sharpe ratios increase from0.81,0.84, and0.84under equal weights to
+0.84,0.91, and0.90under inverse volatility for portfolios of three, four, and five ETFs,
+respectively. TLT also performs better in these portfolios than lower-volatility aggregate
+bonds, supporting the earlier result that inverse volatility is most effective when the assets
+provide different sources of risk without having vastly different volatility levels. This leads
+to the main limitation of inverse volatility: it considers each asset separately. The strategy
+knows how volatile an asset is, but not whether it moves together with the other assets
+in the portfolio. Adding several similar equity ETFs therefore gives each of them its own
+allocation and can unintentionally increase the portfolio’s total equity exposure. Likewise,
+including a very low-volatility bond ETF can cause fixed income to dominate the portfolio.
+Inverse volatility can determine the size of each position, but it cannot determine which
+assets should be held together. The remaining strategies address this limitation by using the
+full covariance structure, allowing both individual risk and the relationships between assets
+to influence the allocation.
+Minimum volatility.Minimum volatility of (4) is the first strategy to use the full co-
+variance matrix, which addresses exactly what inverse volatility lacked. It can distinguish
+a diversifying asset from a duplicate. What it cannot see is return, and this section shows
+both sides of that trade-off. We run it through three tests that the two remaining strategies
+will repeat, a duplicate asset, a set of complementary assets, and an extreme asset. Table 6
+starts with SPY and AGG, the assets of the 60/40, and then adds VTV and VUG.
+T able 6:Adding equities similar to SPY does not change the split between equities and AGG.
+ETF s r σMDD TO SR LQ
+SPY/AGG 0.04 0.05 0.18 0.18 0.38−0.03
+SPY/VTV/VUG/AGG 0.04 0.05 0.16 0.28 0.39−0.04
+AGG has a volatility of5%against SPY’s19%, and with no notion of return, minimum
+volatility holds the pair in a near 10/90 split, as seen in Figure 21.
+37
+2005
+2006
+2007
+2008
+2009
+2010
+2011
+2012
+2013
+2014
+2015
+2016
+2017
+2018
+2019
+2020
+2021
+2022
+2023
+2024
+20252025
+0.0
+1.0 SPY
+AGG
+SPY/AGG portfolio weights
+Figure 21:AGG dominating the minimum volatility portfolio due to its low volatility.
+The portfolio earns4%per year at a Sharpe ratio of0.38, well below the0.51of the fixed
+60/40 split of the same two assets. This is the concentration problem described in §3.2.
+Adding VTV and VUG changes almost nothing since minimum volatility recognizes that the
+three equities are highly correlated and splits the same small allocation between them.
+The concentration in AGG comes from the asset selection as much as from the method,
+since AGG is the only low volatility asset available. Table 7 instead replaces AGG with TLT
+and GLD, complementary assets whose volatilities are closer to SPY’s.
+T able 7:Complementary assets of similar risk give minimum volatility something to balance.
+ETF s r σMDD TO SR LQ
+SPY/AGG 0.04 0.05 0.18 0.18 0.38−0.03
+SPY/TLT 0.08 0.09 0.30 0.37 0.65 0.38
+SPY/GLD 0.11 0.13 0.32 0.56 0.70 0.61
+SPY/TLT/GLD 0.09 0.09 0.23 0.59 0.87 0.56
+With similar volatilities their covariance decides the allocation. TLT with SPY raises the
+Sharpe ratio from0.38to0.65and GLD with SPY reaches0.70, and combining all three
+reaches0.87with an LQ of0.56, on par with the best equal weight portfolios. Minimum
+volatility thus finds good proportions within complementary assets of similar risk, and can
+be trusted with more, as USMV of §3.2 shows on US stocks.
+In the last experiment we add IBIT, the bitcoin ETF extended back to 2017 as described
+in §2.2. Table 8 shows the result.
+T able 8:Minimum volatility does not hold IBIT.
+ETF s r σMDD TO SR LQ
+SPY/TLT/GLD 0.09 0.09 0.23 0.59 0.87 0.56
+SPY/TLT/GLD/IBIT 0.09 0.09 0.23 0.59 0.86 0.56
+Nothing changes. To an objective that only minimizes risk, bitcoin is only risk, and the
+optimizer sets the position to zero. The next strategy instead enforces a more equal split of
+the risk.
+38
+Risk parity.Risk parity uses the same covariance matrix but with a different objective.
+The formulation in (5) forces every asset to contribute the same share of the total portfolio
+risk, so no asset can be dropped and no asset can dominate. We run the same three tests,
+starting with the duplicates in Table 9.
+T able 9:Each added equity claims its own share of the total risk.
+ETF s r σMDD TO SR LQ
+SPY/AGG 0.05 0.06 0.18 0.20 0.58 0.19
+SPY/VTV/VUG/AGG 0.07 0.08 0.22 0.30 0.61 0.22
+The equal risk condition changes both rows. SPY and AGG now split the risk evenly
+instead of the capital, which gives SPY a meaningful weight and raises the Sharpe ratio from
+minimum volatility’s0.38to0.58. Adding VTV and VUG shows how risk parity handles
+more assets of similar risk profile. Each equity claims its own equal share, so three quarters
+of the portfolio risk now comes from equities, as seen in Figure 22.
+2005
+2006
+2007
+2008
+2009
+2010
+2011
+2012
+2013
+2014
+2015
+2016
+2017
+2018
+2019
+2020
+2021
+2022
+2023
+2024
+20252025
+0.0
+1.0
+VUG
+VTV
+SPY
+AGG
+SPY/VTV/VUG vs AGG portfolio weights
+Figure 22:Added equities account for more of the total portfolio weight and are split evenly.
+Volatility, however, rises from6%to8%. The problem that was present in inverse volatility
+returns, now in risk rather than in capital. Table 10 repeats the complementary asset test.
+T able 10:Risk parity is the first strategy that handles AGG well.
+ETF s r σMDD TO SR LQ
+SPY/AGG 0.05 0.06 0.18 0.20 0.58 0.19
+SPY/TLT 0.08 0.09 0.30 0.27 0.63 0.43
+SPY/GLD 0.11 0.13 0.32 0.40 0.69 0.50
+SPY/AGG/GLD 0.07 0.07 0.18 0.28 0.74 0.64
+SPY/TLT/GLD 0.09 0.09 0.23 0.32 0.79 0.25
+The notable rows are the ones holding AGG. Since no asset can contribute more than its
+equal share of the risk, the low volatility bond can no longer dominate, and risk parity is the
+first strategy where AGG improves the portfolio. SPY/AGG/GLD reaches a Sharpe ratio of
+39
+0.74with an LQ of0.64, the most consistent of the SPY portfolios in these tests. Replacing
+AGG with TLT raises the Sharpe ratio to0.79but LQ falls to0.25, so we keep the AGG
+version for the final test in Table 11.
+T able 11:Risk parity must hold IBIT and benefits from it.
+ETF s r σMDD TO SR LQ
+SPY/AGG/GLD 0.07 0.07 0.18 0.28 0.74 0.64
+SPY/AGG/GLD/IBIT 0.08 0.08 0.21 0.31 0.84 0.72
+Where minimum volatility excluded bitcoin, risk parity must hold it, and the equal risk
+condition decides how much. IBIT enters at a weight of a few percent, and since bitcoin
+is nearly uncorrelated with the rest, the Sharpe ratio rises from0.74to0.84and LQ from
+0.64to0.72. Being forced to hold every asset, works in the investor’s favor here, but the
+same rule means risk parity would, if allowed, also hold the futures ETFs of §2.2. The final
+strategy can again exclude assets, this time for being redundant rather than volatile.
+Maximum diversification.Maximum diversification also uses the full covariance matrix
+as minimum volatility and risk parity but instead seeks the portfolio where combining assets
+results in the largest diversification ratio of (6). The reformulation in (7) is solved on the
+correlation matrix, with every asset scaled by its own volatility beforehand, so the volatility
+of an asset no longer decides how much of it is held. Table 12 starts with the duplicate test.
+T able 12:Maximum diversification drops SPY as redundant.
+ETF s r σMDD TO SR LQ
+SPY/AGG 0.05 0.06 0.18 0.19 0.52 0.21
+SPY/VUG/VTV/AGG 0.05 0.06 0.17 0.35 0.50 0.15
+The strategy allocates its capital in a unique way. VTV and VUG together essentially form
+SPY, and to the diversification ratio the two parts are the marginally more diversified way
+of holding the same exposure, so SPY is dropped as redundant, as seen in Figure 23.
+2005
+2006
+2007
+2008
+2009
+2010
+2011
+2012
+2013
+2014
+2015
+2016
+2017
+2018
+2019
+2020
+2021
+2022
+2023
+2024
+20252025
+0.0
+1.0 VTV/VUG
+AGG
+SPY/VTV/VUG vs AGG portfolio weights
+Figure 23:SPY is replaced by VTV and VUG as the more diversifying constituents.
+40
+Performance is close to unchanged, which is expected. The strategy holds the same exposure
+through different tickers. The SPY/AGG pair is also worth noting. It reaches a Sharpe ratio
+of0.52against minimum volatility’s0.38, because the objective works on correlations rather
+than volatilities, so AGG no longer dominates the portfolio even though it is still the only
+low volatility asset available. Table 13 repeats the complementary asset test.
+T able 13:The choice of bond matters less under maximum diversification.
+ETF s r σMDD TO SR LQ
+SPY/AGG 0.05 0.06 0.18 0.19 0.52 0.21
+SPY/TLT 0.08 0.09 0.29 0.25 0.64 0.41
+SPY/GLD 0.11 0.13 0.32 0.32 0.68 0.37
+SPY/TLT/GLD 0.09 0.09 0.24 0.38 0.82 0.54
+Which bond sits next to SPY matters much less than before. Under minimum volatility,
+SPY/AGG achives a Sharpe ratio of0.38and SPY/TLT0.65, a gap driven almost entirely
+by their volatility levels. Here the same pair of portfolios achieve0.52and0.64, and the re-
+maining difference comes from correlation. TLT has a correlation of−0.32with SPY against
+AGG’s−0.01in Table 26, and a negative correlation is exactly what the diversification ra-
+tio rewards, so the strategy still prefers TLT, but now for a better reason. Adding GLD
+completes the trio, and SPY/TLT/GLD reaches a Sharpe ratio of0.82. Table 14 adds IBIT.
+T able 14:IBIT is nearly uncorrelated with the other assets, which the diversification ratio rewards.
+ETF s r σMDD TO SR LQ
+SPY/TLT/GLD 0.09 0.09 0.24 0.38 0.82 0.54
+SPY/TLT/GLD/IBIT 0.10 0.09 0.28 0.42 0.90 0.54
+This is the setting the strategy was built for. IBIT is close to uncorrelated with everything
+else in the universe, which is exactly what the objective rewards, and because every asset
+is scaled by its own volatility, the position stays small on its own. Nothing forces the
+strategy to hold bitcoin, as risk parity did, and nothing caps the position, as minimum
+volatility effectively did by excluding it. The optimizer simply holds a small amount because
+it improves the portfolio, and the Sharpe ratio rises from0.82to0.90with LQ unchanged.
+Every portfolio so far has used a smaller subset of assets. The last question is whether
+the strategy can be trusted with a larger selection, which minimum volatility and risk parity
+could not. As a test, we hand maximum diversification all 30 ETFs in the Market, Sector,
+Government, Physical, and Crypto categories, the same categories we previously included in
+the exhaustive search. No three to five ETFs are chosen, instead the strategy gets everything
+in each category and must find the allocation on its own. Table 15 reports the result.
+T able 15:Maximum diversification run on five whole asset categories.
+Categories r σMDD TO SR LQ
+Market/Sector/Government/Physical/Crypto 0.07 0.07 0.21 1.50 0.73 0.34
+41
+It works. The strategy holds a broad mix across the asset classes throughout, as seen in
+Figure 24, and delivers a Sharpe ratio of0.73on a selection where minimum volatility would
+have concentrated in the lowest volatility bonds. The cost is turnover. Rebalancing thirty
+positions every month turns the portfolio over one and a half times per year, and the smaller
+selected portfolios above reach higher Sharpe ratios at a fraction of the effort. Selecting at
+the category level is possible, but for an investor willing to pick a handful of ETFs, it is not
+worth the trading.
+2005
+2006
+2007
+2008
+2009
+2010
+2011
+2012
+2013
+2014
+2015
+2016
+2017
+2018
+2019
+2020
+2021
+2022
+2023
+2024
+20252025
+0.0
+1.0 Equity
+FI
+Alt.
+Portfolio weights by asset class
+Figure 24:Maximum diversification successfully holding a broad ETF portfolio.
+Finally, for the curious reader, we show the portfolio of five assets that achieved the highest
+Sharpe ratio for any simple strategy we found. This portfolio used maximum diversification,
+and the assets included is not far from what we consider to be reasonable. The portfolio and
+related metrics can be seen in Table 16.
+T able 16:The best simple strategy portfolio found.
+ETF s r σMDD TO SR LQ
+QQQ/XLP/TLT/GLD/IBIT* 0.11 0.09 0.25 0.54 1.02 0.60
+QQQ and XLP as offensive and defensive equities, TLT, GLD, and a small position in IBIT,
+weighted by maximum diversification, reach a Sharpe ratio of1.02with an LQ of0.60. We
+report this combination as a reference rather than propose it, since it was found by searching
+over the backtest period itself, and its performance is therefore a product of hindsight. It
+nevertheless summarizes the section well. The best simple portfolios keep returning to the
+same core concept. The concept being, two equities that complement each other, a long
+term bond, gold, and a small position in an uncorrelated extreme asset such as bitcoin,
+held together by a rule that uses the full covariance matrix. Simple and implementable.
+However, there is more to portfolio construction. Every strategy in this section is blind to
+return, which is why the assets had to be picked by hand, with no futures and no single
+country funds among them. The Markowitz formulation of §3.3 removes that restriction by
+letting a forecast decide which assets are worth holding, and the next two sections cover the
+two forecasts it needs, including the covariance matrix that has been trated as given in this
+section above.
+42
+6.3 Risk and alpha model
+Before the portfolio backtests of §6.4 we evaluate the two forecasts on their own. Follow-
+ing[Joh+23], aforecastcanbejudgeddirectly, bystatisticalmeasuresofhowwellitdescribes
+the quantity it predicts, or indirectly, by the performance of the portfolios built on it. This
+section does the former, and states the parameter values used for each model.
+Risk model.We first fix the number of factors for the factor model of §4 by examining
+the cumulative share of variance explained by the leading principal components. The first
+component alone explains half of all variance in the universe, which can be interpreted as the
+market factor, and the first ten explain89%, after which each additional component adds
+around one percentage point. We usek= 10throughout. Table 17 lists all of the relevant
+risk model parameters.
+T able 17:Risk model parameters.
+Parameter Description V alue
+L Lookback, rolling window covariance 126 days
+Hvar EWMA half-life, variances 42 days
+Hcov EWMA half-life, correlations 126 days
+k Number of statistical factors 10
+We evaluate our covariance forecast against the true realized volatility. At the end of each
+month every model produces a forecastˆΣt, and the target is the realized covarianceΣt of
+the following 21 trading days, since we trade monthly. The distance between the two is the
+Frobenius norm, relative to the magnitude of the target,
+∥A∥F =
+ X
+i
+X
+j
+A2ij
+1/2
+, d t = ∥ ˆΣt −Σ t∥F
+∥Σt∥F
+,
+so the empty forecast ˆΣt = 0scores exactly one, a perfect forecast zero, and the reported
+value is the fraction of the realized covariance the model fails to capture. Table 18 reports
+the average ofdt over the backtest for each model.
+T able 18:Normalized Frobenius distance between forecast and realized covariance.
+Class Sample EWMA K10
+Equities 0.191 0.1880.181
+Fixed income 0.208 0.2130.205
+Alternatives 0.225 0.2210.218
+Full universe 0.228 0.2270.221
+The factor model performs better for every asset class and over the full universe, but the gain
+is marginal, and all three models leave roughly a fifth of the realized covariance unexplained.
+For a small universe of, say, three assets, either simple estimator is a fully reasonable substi-
+tute for the factor model. We, nevertheless, use the factor model proposed in all experiments
+above in §6.2 and that follow.
+43
+Regression model.The regression forecasts of §5.3 are evaluated out of sample. At each
+trading date the model is fitted on the trailing window, using the parameters of Table 19,
+which is then used our prediction of returns for the following period.
+T able 19:Regression model parameters.
+Parameter Description V alue
+Lridge Lookback, regression training window 252 days
+Hridge Half-life, training sample weights 252 days
+h Forecast horizon 21 days
+The predictionsˆrt are then compared with the actual realized returnsrt through the out-of-
+sampleR 2,
+R2 = 1−
+P
+t(rt −ˆrt)2P
+t r2t .
+Since returns are treated as zero mean, the denominator is the error of the forecast that
+always predicts zero. This gives us that aR 2 = 1represents a perfect forecast, while a
+R2 = 0is exactly as good as always saying zero, andR2 <0is worse than saying nothing at
+all. To evaluate the importance of the regulization parameterλ, we sweep it across several
+orders of magnitude and evaluate the model at each level. Figure 25 shows the result,
+reporting the meanR 2 across all ETFs with one standard deviation plotted with dashed
+lines.
+10−1 100 101 102
+γ
+0.0
+-0.3
+-0.6 R 2
+Mean return forecast
+Out-of-sample R 2 of the ridge forecasts
+±1 SD across ETFs
+Figure 25:Regularization improvesR 2 by shrinking the forecast toward zero mean guess.
+Every entry in the figure is negative, so at no level of regularization does the model beat the
+zero forecast for a single asset. TheR2 nevertheless improves as the regularization grows,
+since increasingλshrinks the coefficients and thus the predictions toward zero, whoseR2 is
+zero by construction. This matters for how the forecast should be judged. A portfolio built
+on the model may well backtest decently, but a model whose statistical score improves only
+as it regularizes away its parameters offers no evidence that such performance is more than
+noise. We therefore conclude that our attempts at fitting a model bear no statistical support,
+though this does not mean return prediction is impossible. Our code is open for the reader
+to search for statistical support themselves, but at this point we defer to Markowitz’s own
+words when asked about estimating expected returns, “That’s your job, not mine” [Boy+24].
+44
+Simple signals.The simple signals of §5.2, with parameters given in Table 20, cannot be
+scored with the out-of-sampleR2 above. The moving average only takes the values±1and
+momentum only assumes that recent returns persist, so neither makes a claim about the size
+of future returns.
+T able 20:Simple signal parameters.
+Parameter Description V alue
+Lmom Lookback, momentum 21 days
+Lmov Lookback, moving average 50 days
+ρ Threshold, moving average 1.0
+We therefore evaluate them indirectly, through the performance of the portfolios they build.
+Each signal is run through the Markowitz problem of §3.3 on the full universe of §2.1, first
+with every asset receiving the one-month momentum signal, then with every asset receiving
+the moving average signal. Table 21 reports both.
+T able 21:Each signal run through Markowitz on the full universe.
+Portfolio on full universe r σMDD TO SR LQ
+1-month momentum signal 0.06 0.09 0.20 1.08 0.43−0.03
+50-day moving average signal 0.05 0.08 0.23 1.06 0.45 0.48
+Both portfolios perform considerably worse than the simple strategies of §6.2. The Sharpe
+ratios of0.43and0.45are roughly those of holding SPY alone, and both portfolios trade
+more than their full value in a typical year. The momentum is always invested somewhere
+and its LQ of−0.03means its weak years do not beat cash, while the moving average keeps
+an LQ of0.48, since it moves the portfolio into cash when few assets are trending. A likely
+explanation is the universe itself, which still contains the categories that §2.2 argued against
+holding, and a monthly signal under the turnover limits of (10) cannot always keep them
+out. We therefore run an ablation test, removing one category at a time and rerunning the
+entire backtest, nine runs per signal. Tables 22 and 23 report the results, with the categories
+we later remove highlighted in grey.
+T able 22:Momentum ablation. Each row removes one category from the universe. Grey rows
+mark the categories we later remove.
+Removed category r σMDD TO SR LQ
+Market 0.06 0.09 0.21 1.08 0.44−0.01
+Sectors 0.06 0.09 0.20 1.04 0.47 0.00
+Countries 0.06 0.09 0.19 1.05 0.51 −0.22
+Government 0.06 0.09 0.25 1.04 0.44 0.15
+Corporate 0.06 0.09 0.19 1.08 0.43−0.01
+Global 0.06 0.09 0.20 1.08 0.42−0.10
+Physical 0.05 0.09 0.19 1.07 0.41 0.10
+Futures 0.06 0.09 0.20 1.02 0.53 −0.12
+Crypto 0.04 0.09 0.24 1.07 0.29−0.14
+45
+Each row is the full universe with one category removed, so a Sharpe ratio above the0.45and
+0.43baselines means the category hurt the overall performance. For momentum, removing
+Futures gives the largest improvement, to0.53, and removing Countries the second largest,
+to0.51. Countries is the only category whose removal improves both signals, in line with
+Figure 7. The improvement from removing Sectors, to0.47, is the one result we did not
+expect. A possible explanation is that sectors that trend have larger drawdowns that a
+one-month window cannot anticipate. At the other end, removing Crypto lowers the Sharpe
+ratio to0.29, the largest change in either test. Momentum works best on assets with strong
+trends, and bitcoin has clearly had strong trends.
+T able 23:Moving average ablation. Each row removes one category from the universe. Grey rows
+mark the categories we later remove.
+Removed category r σMDD TO SR LQ
+Market 0.05 0.07 0.20 1.06 0.42 0.32
+Sectors 0.05 0.07 0.20 1.03 0.40 0.43
+Countries 0.06 0.08 0.23 1.05 0.48 0.23
+Government 0.06 0.09 0.27 0.98 0.50 0.44
+Corporate 0.05 0.08 0.23 1.08 0.44 0.20
+Global 0.05 0.08 0.23 1.05 0.46 0.51
+Physical 0.05 0.08 0.23 1.05 0.45 0.42
+Futures 0.05 0.08 0.23 1.02 0.45 0.39
+Crypto 0.05 0.08 0.22 1.06 0.43 0.34
+For the moving average, removing Countries, Government, or Global improves the portfolio,
+while removing Market or Sectors makes it worse. The signal handles bonds poorly since
+a signal that only asks whether the price is above its trend gives a bond ETF returning
+3%little to no room for inclusion. We remove the highlighted categories and rerun both
+portfolios. Table 24 shows both portfolios after the removals.
+T able 24:Both signals after removing the categories flagged by their ablations.
+Portfolio after ablation r σMDD TO SR LQ
+1-month momentum signal 0.08 0.08 0.16 0.81 0.78 0.40
+50-day moving average signal 0.06 0.08 0.23 1.04 0.51 0.30
+Momentum improves substantially. The Sharpe ratio rises from0.43to0.78, the drawdown
+falls from0.20to0.16, LQ rises from−0.03to0.40, and turnover falls to0.81, still several
+times that of the simple strategies. The moving average improves to0.51while its LQ falls
+from0.48to0.30. The removals were chosen using the backtest results themselves, so some
+of the improvement is still due to selection. However, Futures and Countries were argued
+against in §2.2 on structural grounds, before any backtest was run. We therefore consider
+the selection bias introduced by the ablation to be modest, though not zero. Momentum is
+also a standard signal in industry practice [Nar24], and its resulting portfolio holds 26 ETFs
+across six categories, with no individual asset selected by hand. We call this the Momentum
+Universe and carry it to §6.4.
+46
+6.4 Proposed portfolios
+From the experiments above we propose four portfolios, listed in increasing order of the
+involvement they demand of the investor. SPY under 8% volatility control, SPY/AGG/GLD
+in an equal weight split, SPY/TLT/GLD/IBIT under maximum diversification, and the
+Momentum Universe of §6.3 under Markowitz. We benchmark against the 60/40, and the
+regret bound of §3.3 marks an upper bound. Figure 26 shows the growth of each portfolio
+and Table 25 reports the metrics. Table 30 in the appendix repeats them over two truncated
+windows, and the ordering between the portfolios holds.
+2005
+2006
+2007
+2008
+2009
+2010
+2011
+2012
+2013
+2014
+2015
+2016
+2017
+2018
+2019
+2020
+2021
+2022
+2023
+2024
+20252025
+1
+3
+5
+7Growth of $1
+Growth of proposed portfolios
+Maximum div
+Markowitz
+SBG
+60/40
+SPY vc8
+Figure 26:Growth of the proposed portfolios over the full backtest.
+T able 25:Performance of the proposed portfolios over the full backtest.
+Portfolio Strategy r σMDD TO SR LQ
+SPY/AGG (60/40) Fixed weights 0.07 0.10 0.30 0.12 0.52 0.13
+SPY Buy-and-hold vc8% 0.06 0.09 0.20 0.29 0.53−0.03
+SPY/AGG/GLD Equal weights 0.08 0.09 0.24 0.17 0.68 0.49
+SPY/TLT/GLD/IBIT Maximum diversification 0.10 0.09 0.28 0.42 0.90 0.54
+Momentum Universe Markowitz 0.08 0.08 0.16 0.81 0.78 0.40
+Full universe Regret bound* 0.43 0.26 0.36 0.83 1.57 1.38
+47
+7 Conclusions
+This paper studied portfolio construction from the perspective of the private investor. All
+methods were evaluated under the same setting: 59 liquid US ETFs, no shorting or leverage,
+monthly trading with a 5 basis point spread, an 8% volatility target, and data from 2005–
+2025, with no parameters tuned to the evaluation period. Under these conditions, simple
+portfolios containing as few as three ETFs achieve consistent and decent returns, and the
+portfolios we propose outperform the 60/40 benchmark.
+The clearest result concerns asset selection. The strongest simple portfolios combine
+growth-oriented equities, government bonds, and gold, while the exact allocation appears
+less important than including all three. An equally weighted portfolio of SPY, AGG, and
+GLD raises the Sharpe ratio from 0.52 for the 60/40 to 0.68 and reduces maximum drawdown
+from 30% to 24%, while requiring only one additional asset.
+The simple strategies also perform well relative to more sophisticated alternatives. Fixed
+weights is difficult to improve upon for a well-chosen set of ETFs, while volatility control
+provides a direct and interpretable way to manage risk. The optimization-based strategies
+offer different advantages depending on the assets included. Minimum volatility is most
+suitable for complementary assets with comparable risk, while risk parity handles large
+differences in volatility more naturally. Maximum diversification is better suited to broader
+universes with more varied correlation structures. The strongest portfolio we propose uses
+maximum diversification across SPY, TLT, GLD, and IBIT, achieving a Sharpe ratio of 0.90.
+The risk and alpha models lead to different conclusions. Risk forecasting proved use-
+ful, with the factor model producing the strongest covariance estimates, closely followed
+by simpler estimators. Return forecasting was demonstrated within the same simple and
+transparent framework, using only publicly available price data rather than proprietary in-
+formation. In this setting, ridge regression never outperforms the zero forecast out of sample
+and improves only as regularization shrinks its predictions toward zero. This does not rule
+out richer return models or data sources, but highlights the difficulty of extracting predic-
+tive information from price history alone. The simpler momentum signal, when applied to
+a restricted universe, allows the Markowitz portfolio to achieve a Sharpe ratio of 0.78 and
+the smallest maximum drawdown among the proposed portfolios, although with substan-
+tially higher turnover. Markowitz also reduces the need to select individual ETFs in advance
+beyond broad asset categories.
+These results should be interpreted with some considerations in mind. All performance
+is historical, the ETF universe is survivorship biased, and some use of prior knowledge when
+defining the universe is unavoidable. A strategy with perfect knowledge of future returns
+and yearly rebalancing achieves a Sharpe ratio of 1.57, as shown by the regret bound. The
+sensitivity analysis shows that the proposed portfolios do not depend on a single market
+crisis, although the relative performance of the 60/40 improves when the Financial Crisis
+is excluded. Finally, the framework relies entirely on public data, open-source code, and
+interpretable parameters, allowing the results to be reproduced and extended.
+48
+8 Acknowledgments
+We would like to thank Professor Stephen P. Boyd for hosting us in his lab group at Stan-
+ford University, for supervising this work, and for teaching us the ways of simplicity. His
+guidance helped shape this project and his overall mentorship will remain invaluable to us
+for years to come. We are especially grateful for the many discussions we had with Stephen
+throughout the project, as well as with members of the group, whose suggestions, feedback,
+and ideas directed this work as it developed. We would especially like to acknowledge the
+members of the lab with whom we had the opportunity to work most closely. Thank you,
+Daniel Cederberg for your cheerful spirit and for carefully breaking down problems in an
+intuitive way, Nikhil Devanathan for your patience with our many questions and insightful
+and structured answers, Alexandros Tzikas for your ability to identify promising new direc-
+tions and always checking in on us, and Maximilian Schaller for your profound insights and
+thorough illustrative explanations of optimization problems. We would also like to direct a
+thank you to the entirety of the CVX group and the people we met. Thank you Logan Bell,
+Jaewook Lee, Jimmy Tran, Clara Baynham, and Kasper Johansson.
+This work was supported by the foundations of the Royal Swedish Academy of Sciences
+(Kungl. Vetenskapsakademien), through Stiftelsen Claes Adelskölds medalj- och stipendie-
+fond, grant ES2025-0064. We thank them for their generous contribution to our research
+and stay at Stanford University.
+Figure 27:Our quest for the global optimum.
+It is difficult to capture an experience like this in just a few words. Instead, we turn to the
+hand-drawn illustration above, which hangs framed in the lab and, in many ways, captures
+the spirit of our time there. This past semester has truly been a journey, and we wish
+everyone the very best as they continue their own quest for the global optimum.
+49
+References
+[Abe] Aberdeen Investments.abrdn Physical Platinum Shares ETF.url:https://
+www.aberdeeninvestments.com/en- us/institutional/funds/view- all-
+funds / abrdn - physical - platinum - shares - etf - us0032601066(visited on
+07/28/2026).
+[AFP12] Clifford S. Asness, Andrea Frazzini, and Lasse Heje Pedersen. “Leverage Aver-
+sion and Risk Parity”. In:Financial Analysts Journal68.1 (2012), pp. 47–59.
+[Aro24] RanAroussi.yfinance: Download market data from Yahoo! Finance’s API.https:
+//github.com/ranaroussi/yfinance. 2024.
+[Axi24] Axioma (SimCorp).Axioma Portfolio Optimizer.https://www.simcorp.com/
+en/products/investment-management/axioma. Accessed: 2026-05-30. 2024.
+[Bán+24] Attila Bányai et al. “The Impact of Rebalancing Strategies on ETF Portfolio
+Performance”. In:Journal of Risk and Financial Management17.12 (2024),
+p. 533.doi:10.3390/jrfm17120533.
+[BBW11] Malcolm Baker, Brendan Bradley, and Jeffrey Wurgler. “Benchmarks as Limits
+to Arbitrage: Understanding the Low-Volatility Anomaly”. In:Financial Ana-
+lysts Journal67.1 (2011), pp. 40–54.doi:10.2469/faj.v67.n1.4.
+[BDB+24] Enzo Busseti, Steven Diamond, Stephen Boyd, et al.CVXPortfolio: Portfolio
+Optimization and Simulation.https://www.cvxportfolio.com. 2024.
+[BG91] Michael J. Best and Robert R. Grauer. “On the Sensitivity of Mean-Variance-
+Efficient Portfolios to Changes in Asset Means: Some Analytical and Compu-
+tational Results”. In:The Review of Financial Studies4.2 (1991), pp. 315–342.
+doi:10.1093/rfs/4.2.315.
+[BHT25] Jozef Baruńík, Martin Hronec, and Ondřej Tobek. “Forecasting Stock Return
+Distributions Around the Globe with Quantile Neural Networks”. In:arXiv
+preprint arXiv:2408.07497(2025).
+[Bix12] Robert E. Bixby. “A Brief History of Linear and Mixed-Integer Programming
+Computation”. In:Documenta Mathematica, Extra Volume: Optimization Sto-
+ries. 2012, pp. 107–121.
+[BL92] Fischer Black and Robert Litterman. “Global Portfolio Optimization”. In:Fi-
+nancial Analysts Journal48.5 (1992), pp. 28–43.
+[Blaa] BlackRock.International ETFs. iShares.url:https://www.ishares.com/us/
+strategies/international-etfs(visited on 07/27/2026).
+[Blab] BlackRock.iShares ETFs.url:https://www.ishares.com/us/products/
+etf-investments(visited on 02/05/2026).
+[Bla24] BlackRock.Aladdin.https://www.blackrock.com/aladdin. Accessed: 2026-
+05-30. 2024.
+50
+[BO00] Brad M. Barber and Terrance Odean. “Trading Is Hazardous to Your Wealth:
+The Common Stock Investment Performance of Individual Investors”. In:The
+Journal of Finance55.2 (2000), pp. 773–806.
+[Bol15] B.Bollen.“WhatShouldtheValueofLambdaBeintheExponentiallyWeighted
+Moving Average Volatility Model?” In:Applied Economics47.8 (2015), pp. 853–
+860.doi:10.1080/00036846.2014.982853.
+[Boy+14] Stephen Boyd et al. “Performance Bounds and Suboptimal Policies for Multi-
+Period Investment”. In:Foundations and Trends in Optimization1.1 (2014),
+pp. 1–72.doi:10.1561/2400000001.
+[Boy+24] S. Boyd et al. “Markowitz Portfolio Construction at Seventy”. In:arXiv preprint
+arXiv:2401.05080(2024).url:https://arxiv.org/abs/2401.05080.
+[Bri] BridgewaterAssociates.The All Weather Story.url:https://www.bridgewater.
+com/research-and-insights/the-all-weather-story(visitedon07/30/2026).
+[Bru09] Markus K. Brunnermeier. “Deciphering the Liquidity and Credit Crunch 2007–
+2008”. In:Journal of Economic Perspectives23.1 (2009), pp. 77–100.doi:10.
+1257/jep.23.1.77.
+[Buf18] Warren E. Buffett.Berkshire Hathaway Inc. 2017 Annual Report — Chairman’s
+Letter.https://www.berkshirehathaway.com/letters/2017ltr.pdf. 2018.
+[Caj24] Dany Cajas.Riskfolio-Lib: Portfolio Optimization and Quantitative Strategic
+Asset Allocation in Python.https://riskfolio-lib.readthedocs.io. 2024.
+[CC08] Yves Choueifaty and Yves Coignard. “Toward Maximum Diversification”. In:
+The Journal of Portfolio Management35.1 (2008), pp. 40–51.doi:10.3905/
+JPM.2008.35.1.40.
+[Ced25] Daniel Cederberg. “T-Rex: Fitting a Robust Factor Model via Expectation-
+Maximization”. In:arXiv preprint arXiv:2505.12117(2025). arXiv:2505.12117
+[stat.ML].url:https://arxiv.org/abs/2505.12117.
+[CFR13] Yves Choueifaty, Tristan Froidure, and Julien Reynier. “Properties of the Most
+Diversified Portfolio”. In:Journal of Investment Strategies2.2 (2013), pp. 49–70.
+[Cha] Charles Schwab.Schwab ETFs.url:https://www.schwabassetmanagement.
+com/products/etfs(visited on 02/05/2026).
+[Cha+11] Denis Chaves et al. “Risk Parity Portfolio vs. Other Asset Allocation Heuristic
+Portfolios”. In:The Journal of Investing20.1 (2011), pp. 108–118.
+[Cha24] Charles Schwab.What Happens If Your ETF Closes?Accessed: 2026-05-01.
+2024.url:https : / / www . schwab . com / learn / story / what - happens - if -
+your-etf-closes.
+[CK86] Gregory Connor and Robert A. Korajczyk. “Performance Measurement with
+the Arbitrage Pricing Theory: A New Framework for Analysis”. In:Journal of
+Financial Economics15.3 (1986), pp. 373–394.
+51
+[CST06] Roger Clarke, Harindra de Silva, and Steven Thorley. “Minimum-Variance Port-
+folios in the U.S. Equity Market”. In:The Journal of Portfolio Management33.1
+(2006), pp. 10–24.doi:10.3905/jpm.2006.661366.
+[CT08] John Y. Campbell and Samuel B. Thompson. “Predicting Excess Stock Returns
+Out of Sample: Can Anything Beat the Historical Average?” In:The Review of
+Financial Studies21.4 (2008), pp. 1509–1531.
+[DAL24] DALBAR, Inc.Quantitative Analysis of Investor Behavior. Tech. rep. DAL-
+BAR,Inc.,2024.url:https://www.dalbar.com/qaib(visitedon08/01/2026).
+[DB16] Steven Diamond and Stephen Boyd. “CVXPY: A Python-Embedded Modeling
+Language for Convex Optimization”. In:Journal of Machine Learning Research
+17.83 (2016), pp. 1–5.
+[DGU09] Victor DeMiguel, Lorenzo Garlappi, and Raman Uppal. “Optimal Versus Naive
+Diversification: How Inefficient is the 1/N Portfolio Strategy?” In:The Review
+of Financial Studies22.5 (2009), pp. 1915–1953.doi:10.1093/rfs/hhm075.
+[DLR77] A. P. Dempster, N. M. Laird, and D. B. Rubin. “Maximum Likelihood from
+Incomplete Data via the EM Algorithm”. In:Journal of the Royal Statistical
+Society. Series B (Methodological)39.1 (1977), pp. 1–38.url:https://www.
+jstor.org/stable/2984875.
+[DMS24] Elroy Dimson, Paul Marsh, and Mike Staunton.The Performance of the 60/40
+Portfolio: A Historical Perspective. Tech. rep. CFA Institute Research Founda-
+tion, 2024.url:https://rpc.cfainstitute.org/research/reports/2025/
+performance-of-the-60-40-portfolio.
+[Eur14] European Parliament and Council of the European Union.Regulation (EU) No
+1286/2014 of the European Parliament and of the Council of 26 November 2014
+on key information documents for packaged retail and insurance-based invest-
+ment products (PRIIPs). Official Journal of the European Union, L 352, pp.
+1–23. Applicable from 1 January 2018. 2014.url:https://eur-lex.europa.
+eu/eli/reg/2014/1286/oj(visited on 08/07/2026).
+[Fed] Federal Reserve Bank of St. Louis.Federal Reserve Economic Data (FRED).
+https://fred.stlouisfed.org. Accessed: 2025-05-04.
+[Fer02] E. Robert Fernholz.Stochastic Portfolio Theory. New York: Springer, 2002.
+[FF92] E. F. Fama and K. R. French. “The Cross-Section of Expected Stock Returns”.
+In:The Journal of Finance47.2 (1992), pp. 427–465.doi:10.1111/j.1540-
+6261.1992.tb04398.x.
+[FF93] E. F. Fama and K. R. French. “Common Risk Factors in the Returns on Stocks
+and Bonds”. In:Journal of Financial Economics33.1 (1993), pp. 3–56.doi:
+10.1016/0304-405X(93)90023-5.
+[FFL08] Jianqing Fan, Yingying Fan, and Jinchi Lv. “High Dimensional Covariance
+Matrix Estimation Using a Factor Model”. In:Journal of Econometrics147.1
+(2008), pp. 186–197.doi:10.1016/j.jeconom.2008.09.017.
+52
+[FL08] Andrea Frazzini and Owen A. Lamont. “Dumb Money: Mutual Fund Flows and
+the Cross-Section of Stock Returns”. In:Journal of Financial Economics88.2
+(2008), pp. 299–322.
+[FLM13] Jianqing Fan, Yuan Liao, and Martina Mincheva. “Large Covariance Estimation
+by Thresholding Principal Orthogonal Complements”. In:Journal of the Royal
+Statistical Society, Series B75.4 (2013), pp. 603–680.
+[FNB20] Anqi Fu, Balasubramanian Narasimhan, and Stephen Boyd. “CVXR: An R
+Package for Disciplined Convex Optimization”. In:Journal of Statistical Soft-
+ware94.14 (2020), pp. 1–34.
+[GI03] Donald Goldfarb and Garud Iyengar. “Robust Portfolio Selection Problems”. In:
+Mathematics of Operations Research28.1 (2003), pp. 1–38.
+[GK00] Richard C. Grinold and Ronald N. Kahn.Active Portfolio Management: A
+Quantitative Approach for Producing Superior Returns and Controlling Risk.
+2nd ed. New York: McGraw-Hill, 2000.
+[GW08] Amit Goyal and Ivo Welch. “A Comprehensive Look at the Empirical Perfor-
+mance of Equity Premium Prediction”. In:Review of Financial Studies21.4
+(2008), pp. 1455–1508.doi:10.1093/rfs/hhm014.
+[HK70] Arthur E. Hoerl and Robert W. Kennard. “Ridge Regression: Biased Estimation
+for Nonorthogonal Problems”. In:Technometrics12.1 (1970), pp. 55–67.doi:
+10.1080/00401706.1970.10488634.
+[HKS04] Harrison Hong, Jeffrey D. Kubik, and Jeremy C. Stein. “Social Interaction and
+Stock-Market Participation”. In:The Journal of Finance59.1 (2004), pp. 137–
+163.
+[Inv] Invesco.Invesco QQQ Trust, Series 1.url:https://www.invesco.com/qqq-
+etf/en/about.html(visited on 02/05/2026).
+[JB24] Kasper Johansson and Stephen Boyd. “Simple and Effective Portfolio Construc-
+tion with Crypto Assets”. In:arXiv preprint arXiv:2412.02654(2024).
+[Joh+23] K. Johansson et al. “A Simple Method for Predicting Covariance Matrices of
+Financial Returns”. In:Foundations and Trends in Econometrics12.4 (2023),
+pp. 324–407.doi:10.1561/0800000047.
+[Joh25] Kasper Johansson. “Convex Optimization in Quantitative Finance”. ProQuest
+Dissertations & Theses, 32200952. PhD dissertation. Stanford University, 2025.
+[Kim+21] Jang Ho Kim et al. “Mean–Variance Optimization for Asset Allocation”. In:The
+Journal of Portfolio Management47.5 (2021), pp. 24–40.doi:10.3905/jpm.
+2021.1.219.
+[Kip25] Kiplinger.What to Do When Your ETF Closes. Accessed: 2026-05-01. 2025.
+url:https://www.kiplinger.com/investing/what- to- do- when- your-
+etf-closes.
+[KK12] Markku Kaustia and Samuli Knüpfer. “Peer Performance and Stock Market
+Entry”. In:Journal of Financial Economics104.2 (2012), pp. 321–338.
+53
+[KNS20] SerhiyKozak,StefanNagel,andShrihariSantosh.“ShrinkingtheCross-Section”.
+In:Journal of Financial Economics135.2 (2020), pp. 271–292.
+[KPS19] Bryan T. Kelly, Seth Pruitt, and Yinan Su. “Characteristics Are Covariances:
+A Unified Model of Risk and Return”. In:Journal of Financial Economics134.3
+(2019), pp. 501–524.
+[KTF14] Petter N. Kolm, Reha Tütüncü, and Frank J. Fabozzi. “60 Years of Portfolio
+Optimization: Practical Challenges and Current Trends”. In:European Journal
+of Operational Research234.2 (2014), pp. 356–371.doi:10 . 1016 / j . ejor .
+2013.10.060.
+[Lee11] Wai Lee. “Risk-Based Asset Allocation: A New Answer to an Old Question?” In:
+The Journal of Portfolio Management37.4 (2011), pp. 11–28.doi:10.3905/
+jpm.2011.37.4.011.
+[LLD25] Yuxuan Linghu, Zhiyuan Liu, and Qi Deng. “Integrated Prediction and Multi-
+period Portfolio Optimization”. In:arXiv preprint arXiv:2512.11273(2025).
+[LLM12] Raul Leote de Carvalho, Xiao Lu, and Pierre Moulin. “Demystifying Equity
+Risk-Based Strategies: A Simple Alpha plus Beta Description”. In:The Journal
+of Portfolio Management38.3 (2012), pp. 56–70.
+[Lóp16] Marcos López de Prado. “Building Diversified Portfolios that Outperform Out
+of Sample”. In:The Journal of Portfolio Management42.4 (2016), pp. 59–69.
+[Lóp18] Marcos López de Prado.Advances in Financial Machine Learning. John Wiley
+& Sons, 2018.
+[Lóp20] Marcos López de Prado.Machine Learning for Asset Managers. Cambridge
+University Press, 2020.
+[LS96] J. Longerstaey and M. Spencer.RiskMetrics TM—Technical Document. Tech.
+rep. Fourth Edition. New York: J.P. Morgan/Reuters, 1996.url:https : / /
+www.msci.com/documents/10199/5915b101-4206-4ba0-aee2-3449d5c7e95a
+(visited on 04/30/2026).
+[Lu+25] Joseph Lu et al. “TrendFolios: A Portfolio Construction Framework for Utilizing
+Momentum and Trend-Following in a Multi-Asset Portfolio”. In:arXiv preprint
+arXiv:2506.09330(2025).
+[LW03] Olivier Ledoit and Michael Wolf. “Improved Estimation of the Covariance Ma-
+trix of Stock Returns with an Application to Portfolio Selection”. In:Journal of
+Empirical Finance10.5 (2003), pp. 603–621.doi:10.1016/S0927- 5398(03)
+00007-0.
+[LW04] Olivier Ledoit and Michael Wolf. “A Well-Conditioned Estimator for Large-
+Dimensional Covariance Matrices”. In:Journal of Multivariate Analysis88.2
+(2004), pp. 365–411.
+[Mal03] Burton G. Malkiel. “The Efficient Market Hypothesis and Its Critics”. In:Jour-
+nal of Economic Perspectives17.1(2003),pp.59–82.doi:10.1257/089533003321164958.
+54
+[Mar21] RobertAndrewMartin.PyPortfolioOpt: Portfolio Optimization in Python.https:
+//pyportfolioopt.readthedocs.io. 2021.
+[Mar52] H. Markowitz. “Portfolio Selection”. In:The Journal of Finance7.1 (1952),
+pp. 77–91.doi:10.2307/2975974.
+[Mar99] Harry M. Markowitz. “The Early History of Portfolio Theory: 1600–1960”. In:
+Financial Analysts Journal55.4 (1999), pp. 5–16.
+[Mer80] Robert C. Merton. “On Estimating the Expected Return on the Market: An Ex-
+ploratoryInvestigation”.In:Journal of Financial Economics8.4(1980),pp.323–
+361.doi:10.1016/0304-405X(80)90007-0.
+[Mic89] Richard O. Michaud. “The Markowitz Optimization Enigma: Is ‘Optimized’
+Optimal?” In:Financial Analysts Journal45.1 (1989), pp. 31–42.doi:10 .
+2469/faj.v45.n1.31.
+[MN11] Ulrike Malmendier and Stefan Nagel. “Depression Babies: Do Macroeconomic
+Experiences Affect Risk Taking?” In:The Quarterly Journal of Economics126.1
+(2011), pp. 373–416.
+[Mor24] Morningstar.ETFs in 2023: A Tale of Success and Failure. Accessed: 2026-05-
+01. 2024.url:https : / / www . morningstar . com / funds / etfs - 2023 - tale -
+success-failure.
+[Mor25] Morningstar.Active ETF Launches and Liquidations: 2024 in Review. Accessed:
+2026-05-01. 2025.url:https://www.morningstar.com/business/insights/
+blog/active-etf-launches-and-liquidations-2024.
+[MRT10] Sébastien Maillard, Thierry Roncalli, and Jérôme Teïletche. “The Properties of
+Equally Weighted Risk Contribution Portfolios”. In:The Journal of Portfolio
+Management36.4 (2010), pp. 60–70.doi:10.3905/jpm.2010.36.4.060.
+[MSC] MSCI and S&P Dow Jones Indices.Global Industry Classification Standard
+(GICS) Methodology.url:https://www.msci.com/our-solutions/indexes/
+gics(visited on 02/05/2026).
+[MSC24] MSCI.Barra Optimizer.https://www.msci.com/our-solutions/analytics/
+barra-optimizer. Accessed: 2026-05-30. 2024.
+[Nar20] Rishi Narang.Evolving Trends—How Quants Are Earning Alpha. Chat With
+Traders, episode 207 (podcast). Interview, 26 Nov. 2020. Nov. 2020.
+[Nar24] R. K. Narang.Inside the Black Box: A Simple Guide to Systematic Investing.
+3rd. Hoboken, NJ: Wiley, 2024.isbn: 9781119931898.
+[PHB25] Tetiana Parshakova, Trevor Hastie, and Stephen Boyd. “Fitting Multilevel Fac-
+tor Models”. In:SIAM Journal on Mathematics of Data Science(2025).doi:
+10.1137/24M1697992.
+[PPK04] S. Pafka, M. Potters, and I. Kondor. “Exponential Weighting and Random-
+Matrix-Theory-Based Filtering of Financial Covariance Matrices for Portfolio
+Optimization”. In:arXiv preprint cond-mat/0402573(2004).url:https : / /
+arxiv.org/abs/cond-mat/0402573.
+55
+[Qia05] Edward Qian. “Risk Parity Portfolios: Efficient Portfolios Through True Diver-
+sification”. In:Panagora Asset Management White Paper(2005).
+[Qia06] Edward Qian. “On the Financial Interpretation of Risk Contribution: Risk Bud-
+gets Do Add Up”. In:Journal of Investment Management4.4 (2006), pp. 1–11.
+[Ron13] Thierry Roncalli.Introduction to Risk Parity and Budgeting. Chapman & Hal-
+l/CRC, 2013.
+[RT82] Donald B. Rubin and Dorothy T. Thayer. “EM algorithms for ML factor anal-
+ysis”. In:Psychometrika47.1 (1982), pp. 69–76.doi:10.1007/BF02293851.
+[Sch+22] MaximilianSchalleretal.“EmbeddedCodeGenerationwithCVXPY”.In:IEEE
+Control Systems Letters6 (2022), pp. 2653–2658.
+[Sha64] William F. Sharpe. “Capital Asset Prices: A Theory of Market Equilibrium
+under Conditions of Risk”. In:The Journal of Finance19.3 (1964), pp. 425–
+442.doi:10.1111/j.1540-6261.1964.tb02865.x.
+[Sha66] William F. Sharpe. “Mutual Fund Performance”. In:The Journal of Business
+39.1 (1966), pp. 119–138.
+[Sil23] SiliconCloudTechnologies.Portfolio Visualizer.https://www.portfoliovisualizer.
+com. Accessed: 2026-05-30. 2023.
+[SP 25] S&P Dow Jones Indices.SPIVA U.S. Year-End 2024 Scorecard. Tech. rep. Ac-
+cessed: 2026-05-27. S&P Global, 2025.url:https : / / www . spglobal . com /
+spdji/en/spiva/article/spiva-us.
+[Spe04] C. Spearman. ““General Intelligence,” Objectively Determined and Measured”.
+In:The American Journal of Psychology15.2 (1904), pp. 201–292.doi:10 .
+2307/1412107.
+[SS20] HidehikoShimizuandTakayukiShiohama.“ConstructingInverseFactorVolatil-
+ity Portfolios: A Risk-Based Asset Allocation for Factor Investing”. In:Interna-
+tional Review of Financial Analysis68 (2020), p. 101438.
+[Staa] State Street Global Advisors.SPDR ETFs.url:https://www.ssga.com/us/
+en/intermediary/etfs(visited on 02/05/2026).
+[Stab] State Street Global Advisors.SPDR S&P 500 ETF Trust (SPY). State Street
+Global Advisors.url:https://www.ssga.com/us/en/intermediary/etfs/
+state-street-spdr-sp-500-etf-trust-spy(visited on 04/28/2026).
+[Stac] State Street Global Advisors.The Select Sector SPDR ETFs.url:https :
+//www.ssga.com/us/en/intermediary/capabilities/equities/sector-
+investing/select-sector-etfs(visited on 02/05/2026).
+[TBB21] Jonathan Tuck, Shane Barratt, and Stephen Boyd. “A Distributed Method for
+Fitting Laplacian Regularized Stratified Models”. In:Journal of Machine Learn-
+ing Research22.60 (2021), pp. 1–37.
+[Teu] Teucrium.Teucrium Agricultural ETFs.url:https://teucrium.com(visited
+on 07/28/2026).
+56
+[The90] The Royal Swedish Academy of Sciences.The Sveriges Riksbank Prize in Eco-
+nomic Sciences in Memory of Alfred Nobel 1990.https://www.nobelprize.
+org/prizes/economic-sciences/1990/press-release/. Accessed 2026-07-
+31. 1990.
+[Tzi+26] Alexandros E. Tzikas et al. “Enhancing a Risk Model by Adding Transient
+Statistical Factors”. In:arXiv preprint arXiv:2605.12977(2026).
+[Ude+14] Madeleine Udell et al. “Convex Optimization in Julia”. In:SC14 Workshop on
+High Performance Technical Computing in Dynamic Languages(2014).
+[USC] USCF Investments.USCF Funds.url:https://www.uscfinvestments.com
+(visited on 07/28/2026).
+[Van] Vanguard.Vanguard ETFs.url:https://investor.vanguard.com/investment-
+products/list/etfs(visited on 02/05/2026).
+[Wel] MortadaWelch.fredapi: Python API for FRED.https://github.com/mortada/
+fredapi.
+[Yah] Yahoo.Yahoo Finance.https://finance.yahoo.com. Accessed: 2025-05-04.
+[Zuc19] GregoryZuckerman.The Man Who Solved the Market: How Jim Simons Launched
+the Quant Revolution. Portfolio / Penguin, 2019.
+57
+A Mathematical derivations
+Derivation of the MDP QP formulation
+From the original formulation of the MDP in (6), we rewritey=Dσw, whereσ 2 = diag (Σ)
+andD σ = diag (σ). Substitutingw=D −1σ ygives,
+wTσ√
+wTΣw = (D−1σ y)Tσp(D−1σ y)TΣ(D−1σ y) = 1TypyT(D−1σ ΣD−1σ )y = 1TypyTCy ,
+and the constraint1 Tw=1 T(D−1σ y). The objective is scale invariant with respect tow,
+letting us scale the constraint1Twto become1 T(Dσw) =1 T(DσD−1σ y) =1 Tybefore solving
+foryand then rescaling the solution back tow. We reformulate the optimization problem
+with the new constraints as,
+maximize
+y
+1Typ
+yTCy
+subject to1 Ty= 1, y≥0.
+The new constraint fixes the numerator, making this maximization problem equivalent to
+minimizing the denominator. This gives the final formulation,
+minimize
+y
+yTCy
+subject to1 Ty= 1, y≥0.
+After solving fory∗, undo the change of variables and normalize,
+w∗ = D−1σ y∗
+1TD−1σ y∗ .
+58
+Derivation of the factor model decomposition
+Consider the factor model
+r=F f+ϵ,
+withE[f] = 0,E[ϵ] = 0,Cov(f, ϵ) = 0, andCov(f) =I k. Taking the covariance gives
+Σ = Cov(F f+ϵ)
+=FCov(f)F T + Cov(ϵ)
+=F FT +D,
+where the cross-covariance terms vanish becauseCov(f, ϵ) = 0. Assuming that the idiosyn-
+cratic returns are mutually uncorrelated gives
+D= Cov(ϵ) = diag(σ 21, . . . , σ2n).
+Hence,
+Σ =F FT +D.
+Estimation of the statistical factor model
+At each timet, the factor model is estimated from the historical return matrixRt. Let
+Dσ,t = diag(ˆσ1,t, . . . ,ˆσn,t)
+contain the EWMA volatility estimates with half-lifeHvar. After winsorization, the returns
+are standardized as
+˜Rt =R tD−1σ,t .
+Using the EWMA weighting matrixW t with half-lifeH cov, the weighted second-moment
+matrix is
+St = ˜RTt Wt ˜Rt.
+Because the volatility and correlation estimates use separate EWMA half-lives, the diagonal
+ofS t is not necessarily equal to one. We therefore normalize it to obtain the correlation
+matrix
+Ct =D −1S,tStD−1S,t, D S,t = diag(St)1/2.
+The EM algorithm is initialized from the leadingkeigenpairs of
+Ct =Q tΛtQTt .
+Retaining the leadingkcomponents gives
+F0,t =Q k,tΛ1/2k,t , D 0,t = diag  Ct −F 0,tF T0,t .
+The factor loading matrix is the rank-kapproximation of the correlation structure, while
+D0,t contains the residual diagonal variance. Starting from(F0,t, D0,t), the EM updates in
+below produce the fitted correlation decomposition
+Ct ≈F ∗t F ∗Tt +D ∗t .
+59
+Finally, the decomposition is returned to the original volatility scale:
+Ft =D σ,tF ∗t , D t =D σ,tD∗t Dσ,t,
+which gives the covariance forecast
+ˆΣt =F tF Tt +D t.
+Derivation of the EM updates for factor analysis
+Given the correlation matrixCt, we seek the maximum-likelihood estimates of(F, D)under
+the factor model
+r=F f+ϵ, f∼ N(0, I k), ϵ∼ N(0, D),
+whereDis diagonal. Since the factorsfare latent, we estimate(F, D)using the EM
+algorithm [DLR77, RT82].
+E-step.For a current estimate(F (j), D(j)), define
+G(j) =  Ik +F (j)TD(j)−1F (j)−1 , L (j) =G (j)F (j)TD(j)−1.
+Under the joint Gaussian model, the conditional moments of the latent factors are
+E[f|r] =L (j)r,Cov(f|r) =G (j).
+Using the input correlation matrixCt from Appendix A, the corresponding cross-moment
+and factor second moment are
+M (j)rf =C tL(j)T, M (j)f f =L (j)CtL(j)T +G (j).
+M-step.Holding these conditional moments fixed, maximizing the expected complete-data
+log-likelihood gives
+F (j+1) =M (j)rf
+
+M (j)f f
+−1
+,
+followed by
+D(j+1) = diagCt −2M (j)rf F (j+1)T +F (j+1)M (j)f fF (j+1)T .
+The diagonal restriction onDallows each asset to have its own idiosyncratic variance while
+assuming that idiosyncratic returns are uncorrelated across assets.
+Initialization and termination.The algorithm is initialized using the rank-keigende-
+composition described in Appendix A. The iterations continue until the relative changes in
+bothFandDfall below a toleranceτ,
+∥F (j+1) −F (j)∥F
+∥F (j)∥F < τ, ∥D(j+1) −D (j)∥F∥D(j)∥F < τ.
+60
+B Tables
+T able 26:Individual ETFs.
+Category ETF ρSPY ρAGG ρGLD r σMDD SR LQ Description Issuer Listed
+Market SPY 1.00−0.01 0.06 0.10 0.19 0.55 0.45 0.08 S&P 500 SSGA 1993-01-22
+Equity MDY 0.93−0.02 0.06 0.09 0.22 0.55 0.35 0.08 S&P MidCap 400 SSGA 1995-05-04
+QQQ 0.92−0.01 0.04 0.15 0.22 0.53 0.59 0.14 NASDAQ 100 Invesco 1999-03-10
+IWM 0.89−0.04 0.06 0.08 0.24 0.59 0.25−0.18 Russell 2000 iShares 2000-05-29
+VUG 0.96 0.01 0.07 0.12 0.20 0.51 0.51 0.26 Growth index Vanguard 2004-02-01
+VTV 0.96−0.06 0.05 0.09 0.19 0.59 0.36 0.01 Value index Vanguard 2004-02-01
+USMV 0.91 0.12 0.10 0.12 0.14 0.33 0.77 0.43 MSCI min vol iShares 2011-10-20
+SCHD 0.91 0.03 0.06 0.13 0.15 0.33 0.73 0.08 Dividend equity Schwab 2011-10-20
+QUAL 0.98 0.09 0.03 0.13 0.17 0.34 0.68 0.45 MSCI quality iShares 2013-07-18
+Sector XLK 0.91−0.01 0.04 0.14 0.22 0.53 0.56 0.25 Technology SSGA 1998-12-22
+Equity XLP 0.77 0.01 0.03 0.09 0.14 0.32 0.52 0.25 Consumer staples SSGA 1998-12-22
+XL V 0.82 0.02 0.02 0.10 0.17 0.39 0.48 0.08 Health care SSGA 1998-12-22
+XLY 0.90−0.02 0.01 0.11 0.22 0.59 0.43 0.18 Consumer discret. SSGA 1998-12-22
+XLU 0.66 0.12 0.12 0.09 0.19 0.46 0.38 0.07 Utilities SSGA 1998-12-22
+XLI 0.91−0.04 0.05 0.10 0.21 0.62 0.38 0.01 Industrial SSGA 1998-12-22
+XLF 0.84−0.10−0.04 0.06 0.30 0.83 0.13−0.20 Financial SSGA 1998-12-22
+XLB 0.86−0.02 0.19 0.08 0.23 0.60 0.26−0.35 Materials SSGA 1998-12-22
+XLE 0.73−0.05 0.16 0.08 0.30 0.71 0.19−0.30 Energy SSGA 1998-12-22
+IYR 0.77 0.02 0.07 0.06 0.28 0.74 0.15−0.07 Real estate iShares 2000-06-19
+IBB 0.72 0.03 0.03 0.09 0.24 0.40 0.30−0.28 Biotechnology iShares 2001-02-12
+Country EWJ 0.76 0.04 0.12 0.04 0.20 0.54 0.10−0.46 MSCI Japan iShares 1996-03-12
+Equity EWG 0.83 0.01 0.16 0.05 0.25 0.63 0.14−0.22 MSCI Germany iShares 1996-03-12
+EWU 0.84 0.00 0.16 0.04 0.23 0.64 0.08−0.28 MSCI UK iShares 1996-03-12
+EW A 0.81 0.04 0.20 0.07 0.27 0.67 0.17−0.31 MSCI Australia iShares 1996-03-12
+EWH 0.71−0.06 0.10 0.05 0.24 0.64 0.13−0.26 MSCI Hong Kong iShares 1996-03-12
+EWS 0.76−0.04 0.14 0.06 0.23 0.64 0.20−0.35 MSCI Singapore iShares 1996-03-12
+EWP 0.76−0.01 0.13 0.03 0.27 0.61 0.06−0.27 MSCI Spain iShares 1996-03-12
+EWW 0.74 0.01 0.15 0.05 0.28 0.65 0.13−0.46 MSCI Mexico iShares 1996-03-12
+EWI 0.77−0.01 0.13 0.01 0.28 0.70−0.01−0.42 MSCI Italy iShares 1996-03-12
+EWD 0.81−0.01 0.15 0.06 0.29 0.68 0.15−0.41 MSCI Sweden iShares 1996-03-12
+EWL 0.79 0.06 0.18 0.07 0.19 0.52 0.28−0.21 MSCI Switzerland iShares 1996-03-12
+EWC 0.80 0.04 0.28 0.06 0.22 0.61 0.21−0.06 MSCI Canada iShares 1996-03-12
+EWY 0.75−0.02 0.15 0.04 0.30 0.74 0.09−0.51 MSCI South Korea iShares 2000-05-09
+EWT 0.73−0.01 0.12 0.08 0.25 0.63 0.25−0.11 MSCI Taiwan iShares 2000-06-23
+EWZ 0.68 0.03 0.19 0.04 0.38 0.77 0.07−0.60 MSCI Brazil iShares 2000-07-14
+Government AGG −0.01 1.00 0.21 0.03 0.05 0.18 0.23−0.36 US aggregate iShares 2003-09-29
+FI TLT −0.32 0.70 0.17 0.03 0.15 0.48 0.10−0.41 US treas. 20Y+ iShares 2002-07-30
+IEF −0.30 0.76 0.21 0.03 0.07 0.24 0.20−0.57 US treas. 7-10Y iShares 2002-07-30
+TIP −0.11 0.67 0.27 0.03 0.06 0.15 0.24−0.43 US TIPS iShares 2003-12-07
+MUB 0.13 0.49 0.11 0.03 0.05 0.14 0.34−0.15 US municipal iShares 2007-09-10
+Corporate LQD 0.19 0.70 0.15 0.04 0.09 0.25 0.25−0.31 US iBoxx IG corp. iShares 2002-07-30
+FI HYG 0.68 0.23 0.04 0.05 0.11 0.34 0.30−0.26 US high yield corp. iShares 2007-04-11
+LQDH 0.50 0.28 0.07 0.03 0.06 0.25 0.22−0.49 Hedged IG corp. iShares 2014-06-17
+Global EMB 0.38 0.40 0.18 0.04 0.11 0.35 0.26−0.18 EM USD iShares 2007-12-19
+FI VWOB 0.54 0.59 0.24 0.03 0.09 0.27 0.18−0.07 EM govt. Vanguard 2013-06-04
+BNDX 0.10 0.74 0.28 0.03 0.04 0.16 0.24 0.12 Hedged intl. Vanguard 2013-06-04
+IAGG 0.06 0.70 0.27 0.02 0.04 0.14 0.09−0.55 Aggregate intl. iShares 2015-11-12
+Physical GLD 0.06 0.21 1.00 0.09 0.18 0.46 0.41−0.15 Gold SSGA 2004-11-19
+Alt. SL V 0.23 0.17 0.80 0.03 0.31 0.76 0.06−0.47 Silver iShares 2006-04-28
+PPLT 0.32 0.16 0.60 −0.04 0.23 0.71−0.22−0.71 Platinum abrdn 2010-01-08
+Futures USO 0.37−0.06 0.19 −0.10 0.37 0.98−0.31−0.83 Oil USCF 2006-04-09
+Alt. UGA 0.38−0.04 0.17 0.01 0.36 0.87 0.01−0.37 Gasoline USCF 2008-02-28
+CORN 0.10−0.01 0.11 −0.02 0.22 0.78−0.15−0.88 Corn Teucrium 2010-06-09
+SOYB 0.13−0.01 0.14 0.00 0.18 0.54−0.08−0.55 Soybean Teucrium 2011-09-19
+CANE 0.12 0.00 0.10 −0.06 0.24 0.81−0.28−0.79 Sugar Teucrium 2011-09-19
+WEAT 0.03 0.00 0.10 −0.11 0.27 0.82−0.46−1.03 Wheat Teucrium 2011-09-19
+CPER 0.23−0.01 0.15 0.00 0.31 0.58−0.04−0.42 Copper USCF 2011-11-15
+Crypto IBIT 0.26 0.11 0.11 0.53 0.69 0.83 0.72 0.32 Bitcoin iShares 2024-01-10
+Alt. ETHA 0.29 0.09 0.12 0.33 0.88 0.94 0.34−0.24 Ethereum iShares 2024-07-23
+61
+T able 27:Equal weight portfolios ranked by Sharpe ratio.
+# 3 ETF s SR LQ 4 ETF s SR LQ 5 ETF s SR LQ
+1 QQQ IEF GLD0.81 0.44 QQQ XLP TLT GLD0.84 0.62 QQQ XLP IEF TIP GLD0.84 0.50
+2 XLK IEF GLD0.79 0.52 QQQ XLP IEF GLD0.84 0.62 QQQ XLP AGG IEF GLD0.84 0.55
+3 QQQ TIP GLD0.79 0.33 XLK XLP TLT GLD0.82 0.59 QQQ XLP TLT IEF GLD0.83 0.52
+4 QQQ XLP GLD0.78 0.70 XLK XLP IEF GLD0.82 0.50 XLK XLP IEF TIP GLD0.83 0.40
+5 QQQ AGG GLD0.78 0.46 QQQ XL V TLT GLD0.81 0.51 QQQ XLP TLT TIP GLD0.82 0.44
+6 QQQ TLT GLD0.78 0.36 QQQ XLP TIP GLD0.81 0.60 QQQ XLP AGG TLT GLD0.82 0.56
+7 XLK XLP GLD0.77 0.58 QQQ XL V IEF GLD0.81 0.55 XLK XLP AGG IEF GLD0.82 0.44
+8 XLK TIP GLD0.77 0.43 QQQ XLP AGG GLD0.80 0.65 QQQ XLP IEF LQD GLD0.82 0.48
+9 QQQ LQD GLD0.76 0.45 XLK XL V TLT GLD0.80 0.47 QQQ XLP AGG TIP GLD0.82 0.54
+10 XLK TLT GLD0.76 0.44 QQQ AGG IEF GLD0.80 0.41 XLK XLP TLT IEF GLD0.82 0.44
+11 XLK AGG GLD0.76 0.51 QQQ IEF TIP GLD0.80 0.29 QQQ XL V XLP TLT GLD0.81 0.65
+12 QQQ XL V GLD0.75 0.57 QQQ XLK TLT GLD0.80 0.50 QQQ XL V IEF TIP GLD0.81 0.53
+13 XLK LQD GLD0.75 0.40 XLK XL V IEF GLD0.79 0.71 QQQ XL V TLT IEF GLD0.81 0.41
+14 VUG IEF GLD0.74 0.44 XLK XLP TIP GLD0.79 0.48 QQQ XLK XLP TLT GLD0.81 0.68
+15 XLK XL V GLD0.74 0.73 QQQ XLP LQD GLD0.79 0.62 XLK XLP TLT TIP GLD0.81 0.47
+16 QQQ IEF TIP0.74 0.31 XLK XLP AGG GLD0.79 0.53 QQQ XLK TLT IEF GLD0.81 0.41
+17 QQQ XLP TLT0.74 0.40 QQQ XLK IEF GLD0.79 0.49 XLK XLP AGG TLT GLD0.81 0.47
+18 QQQ XLK GLD0.73 0.46 XLK AGG IEF GLD0.78 0.46 QQQ XL V AGG IEF GLD0.81 0.55
+19 QQQ XLU GLD0.73 0.72 XLK IEF TIP GLD0.78 0.38 QQQ XL V TLT TIP GLD0.80 0.35
+20 VUG XLP GLD0.73 0.65 QQQ AGG TIP GLD0.78 0.31 XLK XL V XLP TLT GLD0.80 0.70
+21 QQQ XLP IEF0.72 0.49 QQQ IEF LQD GLD0.78 0.39 XLK XL V IEF TIP GLD0.80 0.51
+22 QQQ AGG IEF0.72 0.29 VUG XLP TLT GLD0.78 0.58 XLK XL V TLT IEF GLD0.80 0.29
+23 XLP IEF GLD0.72 0.06 VUG XLP IEF GLD0.78 0.69 XLK XLP IEF LQD GLD0.80 0.37
+24 VUG TIP GLD0.72 0.33 QQQ XL V TIP GLD0.78 0.58 QQQ XLP TLT LQD GLD0.80 0.56
+25 XL V IEF GLD0.71 0.14 QQQ VUG TLT GLD0.78 0.49 QQQ XLK IEF TIP GLD0.80 0.39
+26 XLK XLP TLT0.71 0.38 QQQ XLU IEF GLD0.77 0.74 XLK XLP AGG TIP GLD0.80 0.42
+27 XL V XLP GLD0.71 0.36 XLK XLP LQD GLD0.77 0.46 QQQ XL V AGG TLT GLD0.80 0.47
+28 VUG TLT GLD0.71 0.36 QQQ XL V AGG GLD0.77 0.59 QQQ XLK TLT TIP GLD0.80 0.35
+29 VUG AGG GLD0.71 0.48 QQQ XLU TLT GLD0.77 0.61 QQQ XLP TIP LQD GLD0.80 0.47
+30 XLY IEF GLD0.71 0.27 XLK XL V TIP GLD0.77 0.63 XLK XL V AGG IEF GLD0.80 0.60
+31 XLK XLU GLD0.71 0.65 XLK AGG TIP GLD0.77 0.40 QQQ XLK AGG TLT GLD0.80 0.45
+32 QQQ VUG GLD0.71 0.56 XLK IEF LQD GLD0.77 0.36 QQQ XL V XLP IEF GLD0.80 0.61
+33 XLK IEF TIP0.71 0.19 QQQ TIP LQD GLD0.77 0.30 XLK XL V TLT TIP GLD0.80 0.32
+34 SPY IEF GLD0.70 0.57 VUG XLK TLT GLD0.77 0.54 QQQ XLK AGG IEF GLD0.80 0.43
+35 XLP AGG GLD0.70 0.05 SPY QQQ TLT GLD0.77 0.63 QQQ XL V IEF LQD GLD0.79 0.63
+36 QQQ XL V TLT0.70 0.18 QQQ VUG IEF GLD0.76 0.63 QQQ XLK XLP IEF GLD0.79 0.67
+37 XLK XLP IEF0.70 0.60 QQQ XLK TIP GLD0.76 0.46 XLK XL V AGG TLT GLD0.79 0.36
+38 XLP TIP GLD0.70−0.03 XL V XLP IEF GLD0.76 0.37 QQQ VUG XLP TLT GLD0.79 0.73
+39 VUG XLK GLD0.70 0.55 XLK XL V AGG GLD0.76 0.77 QQQ XLK XL V TLT GLD0.79 0.65
+40 VUG LQD GLD0.70 0.49 QQQ XLI TLT GLD0.76 0.62 QQQ XLP AGG LQD GLD0.79 0.54
+41 VUG XL V GLD0.70 0.53 QQQ XLY TLT GLD0.76 0.53 XLK XLP TLT LQD GLD0.79 0.43
+42 QQQ AGG TIP0.70 0.33 VUG XL V TLT GLD0.76 0.51 QQQ VUG TLT IEF GLD0.79 0.38
+43 XLY XLP GLD0.70 0.30 QQQ XL V LQD GLD0.76 0.65 QQQ XL V AGG TIP GLD0.79 0.61
+44 XLK AGG IEF0.69 0.23 QQQ AGG LQD GLD0.76 0.42 XLK XL V XLP IEF GLD0.79 0.71
+45 QQQ XLP TIP0.69 0.45 QQQ XLK AGG GLD0.76 0.52 VUG XLP IEF TIP GLD0.79 0.56
+46 XL V TIP GLD0.69 0.12 XL V XLP TLT GLD0.76 0.25 XLK XLP TIP LQD GLD0.78 0.35
+47 SPY QQQ GLD0.69 0.62 XLK XLU IEF GLD0.76 0.73 QQQ XL V TLT LQD GLD0.78 0.46
+48 QQQ XLY GLD0.69 0.36 VUG XLP TIP GLD0.76 0.68 XLK XL V IEF LQD GLD0.78 0.57
+49 XLP LQD GLD0.69 0.14 QQQ AGG TLT GLD0.76 0.33 QQQ XLK IEF LQD GLD0.78 0.39
+50 XL V AGG GLD0.69 0.20 XLK XLU TLT GLD0.75 0.59 QQQ XLK TLT LQD GLD0.78 0.45
+51 XLK XL V TLT0.69 0.31 XLK XLY TLT GLD0.75 0.40 VUG XLP AGG IEF GLD0.78 0.65
+52 QQQ IEF LQD0.69 0.26 VUG XLK IEF GLD0.75 0.59 VUG XLK XLP TLT GLD0.78 0.72
+53 QQQ XLK TLT0.69 0.37 QQQ VTV TLT GLD0.75 0.75 QQQ XLP XLU TLT GLD0.78 0.58
+54 XLK XLY GLD0.69 0.29 XLY XLP TLT GLD0.75 0.47 QQQ VUG IEF TIP GLD0.78 0.41
+55 XLY TIP GLD0.68 0.24 VUG XL V IEF GLD0.75 0.61 QQQ AGG IEF TIP GLD0.78 0.26
+56 XLY TLT GLD0.68 0.24 QQQ TLT TIP GLD0.75 0.22 XLK XL V AGG TIP GLD0.78 0.57
+57 SPY XLP GLD0.68 0.66 XLY XLP IEF GLD0.75 0.44 QQQ VUG TLT TIP GLD0.78 0.32
+58 XL V LQD GLD0.68 0.30 SPY XLK TLT GLD0.75 0.66 QQQ XLU IEF TIP GLD0.78 0.54
+59 QQQ XLI GLD0.68 0.54 QQQ XLU TIP GLD0.75 0.65 QQQ XLK XLU TLT GLD0.78 0.76
+60 QQQ XL V IEF0.68 0.18 QQQ XLP IEF TIP0.75 0.47 VUG XLK TLT IEF GLD0.78 0.44
+62
+T able 28:Fixed weight splits of SPY/AGG/GLD sorted by SR.
+SPY/AGG/GLD SPY/AGG/GLD vc8
+W eightsr σMDD SR LQ W eightsr σMDD SR LQ
+30/40/300.07 0.08 0.22 0.67 0.56 30/30/400.07 0.08 0.15 0.67 0.40
+30/50/200.07 0.07 0.20 0.67 0.62 40/20/400.07 0.08 0.17 0.67 0.26
+40/30/300.08 0.10 0.26 0.67 0.51 40/30/300.07 0.08 0.18 0.66 0.33
+40/20/400.09 0.11 0.28 0.66 0.39 50/00/500.07 0.08 0.18 0.66 0.18
+30/30/400.08 0.10 0.24 0.66 0.42 50/10/400.07 0.08 0.19 0.66 0.20
+40/40/200.08 0.09 0.25 0.65 0.66 40/10/500.07 0.08 0.17 0.66 0.23
+50/10/400.10 0.12 0.32 0.65 0.37 30/20/500.07 0.08 0.15 0.66 0.18
+20/50/300.07 0.08 0.18 0.65 0.32 30/40/300.07 0.07 0.17 0.66 0.45
+20/60/200.06 0.06 0.17 0.65 0.42 60/00/400.07 0.09 0.20 0.65 0.25
+40/10/500.10 0.12 0.30 0.65 0.30 40/40/200.07 0.07 0.19 0.65 0.54
+50/20/300.09 0.11 0.30 0.65 0.48 40/00/600.07 0.08 0.17 0.65 0.07
+50/00/500.10 0.13 0.33 0.64 0.28 50/20/300.07 0.08 0.19 0.65 0.37
+30/20/500.09 0.11 0.26 0.64 0.27 60/10/300.07 0.08 0.20 0.65 0.39
+60/00/400.10 0.14 0.36 0.63 0.36 30/50/200.06 0.07 0.18 0.64 0.56
+20/40/400.07 0.09 0.20 0.63 0.24 20/40/400.07 0.08 0.15 0.64 0.22
+40/00/600.10 0.13 0.31 0.63 0.19 30/10/600.07 0.08 0.15 0.64 0.01
+50/30/200.08 0.10 0.29 0.63 0.54 20/30/500.07 0.08 0.15 0.64 0.14
+30/60/100.06 0.07 0.20 0.63 0.58 70/00/300.07 0.09 0.20 0.63 0.32
+60/10/300.10 0.13 0.35 0.62 0.54 60/20/200.07 0.08 0.20 0.63 0.30
+30/10/600.09 0.12 0.28 0.61 0.16 50/30/200.07 0.08 0.19 0.63 0.42
+40/50/100.07 0.08 0.24 0.61 0.47 20/50/300.06 0.07 0.16 0.63 0.28
+20/70/100.05 0.06 0.17 0.61 0.36 30/00/700.07 0.08 0.17 0.62−0.10
+20/30/500.08 0.10 0.22 0.61 0.18 70/10/200.07 0.09 0.20 0.62 0.23
+60/20/200.09 0.12 0.34 0.60 0.44 40/50/100.06 0.07 0.18 0.62 0.41
+70/00/300.10 0.14 0.39 0.60 0.45 20/20/600.07 0.08 0.18 0.61−0.01
+30/00/700.10 0.14 0.30 0.59 0.07 20/60/200.05 0.06 0.17 0.60 0.42
+50/40/100.08 0.10 0.29 0.59 0.41 80/00/200.07 0.09 0.21 0.60 0.18
+20/20/600.09 0.12 0.25 0.58 0.14 30/60/100.05 0.06 0.18 0.60 0.58
+10/60/300.06 0.07 0.16 0.58 0.06 60/30/100.07 0.08 0.19 0.60 0.21
+70/10/200.10 0.14 0.40 0.57 0.36 20/10/700.07 0.08 0.20 0.59−0.11
+10/70/200.05 0.06 0.16 0.57 0.10 50/40/100.06 0.08 0.19 0.59 0.29
+10/50/400.06 0.08 0.17 0.57 0.02 70/20/100.07 0.08 0.20 0.59 0.14
+60/30/100.08 0.12 0.35 0.56 0.35 20/00/800.07 0.08 0.21 0.58−0.16
+20/10/700.09 0.13 0.27 0.56 0.06 10/40/500.06 0.08 0.17 0.58 0.02
+80/00/200.10 0.16 0.45 0.55 0.30 80/10/100.07 0.09 0.20 0.58 0.09
+10/40/500.07 0.10 0.20 0.55 0.00 10/50/400.06 0.07 0.16 0.57−0.01
+70/20/100.09 0.13 0.40 0.54 0.26 90/00/100.07 0.09 0.20 0.57 0.06
+30/70/000.05 0.07 0.20 0.54 0.24 20/70/100.05 0.06 0.17 0.57 0.36
+40/60/000.06 0.08 0.24 0.54 0.18 10/30/600.06 0.08 0.20 0.56−0.01
+20/00/800.10 0.15 0.30 0.53 0.00 10/60/300.05 0.07 0.16 0.55−0.02
+10/30/600.08 0.11 0.23 0.53−0.02 40/60/000.05 0.07 0.18 0.55 0.18
+50/50/000.07 0.10 0.30 0.52 0.13 60/40/000.06 0.08 0.19 0.55 0.07
+10/80/100.04 0.05 0.17 0.52 0.12 70/30/000.06 0.08 0.20 0.55 0.03
+80/10/100.10 0.15 0.45 0.52 0.20 10/20/700.06 0.08 0.22 0.54−0.05
+10/20/700.08 0.13 0.28 0.51−0.04 80/20/000.06 0.09 0.20 0.54 0.00
+60/40/000.08 0.11 0.36 0.51 0.14 50/50/000.06 0.08 0.19 0.54 0.11
+20/80/000.05 0.06 0.18 0.50 0.16 10/10/800.06 0.08 0.23 0.53−0.06
+90/00/100.10 0.17 0.50 0.50 0.16 90/10/000.06 0.09 0.20 0.53−0.02
+70/30/000.08 0.13 0.41 0.49 0.15 30/70/000.05 0.06 0.18 0.53 0.24
+10/10/800.09 0.14 0.33 0.49−0.05 10/70/200.05 0.06 0.16 0.53 0.00
+80/20/000.09 0.15 0.46 0.48 0.15 10/00/900.06 0.08 0.24 0.52−0.07
+10/00/900.09 0.16 0.38 0.47−0.07 00/50/500.06 0.08 0.20 0.49 0.00
+00/60/400.06 0.08 0.19 0.47 0.16 00/40/600.06 0.08 0.23 0.49−0.13
+00/50/500.06 0.10 0.21 0.47 0.09 00/30/700.06 0.08 0.25 0.48−0.19
+00/70/300.05 0.07 0.19 0.46 0.15 10/80/100.04 0.05 0.17 0.48 0.06
+90/10/000.10 0.17 0.51 0.46 0.11 00/20/800.06 0.08 0.26 0.47−0.18
+00/40/600.07 0.11 0.27 0.46 0.00 00/60/400.05 0.07 0.18 0.47 0.08
+00/30/700.07 0.13 0.32 0.45−0.06 20/80/000.04 0.05 0.18 0.47 0.16
+00/20/800.08 0.14 0.37 0.44−0.12 00/10/900.06 0.08 0.27 0.47−0.15
+00/80/200.04 0.06 0.19 0.43 0.02 00/70/300.05 0.07 0.19 0.43 0.00
+00/10/900.09 0.16 0.41 0.42−0.14 00/80/200.04 0.06 0.19 0.38−0.06
+10/90/000.04 0.05 0.18 0.40 0.05 10/90/000.03 0.05 0.17 0.36−0.03
+00/90/100.04 0.05 0.19 0.36−0.20 00/90/100.03 0.05 0.19 0.30−0.20
+63
+T able 29:Inverse volatility portfolios ranked by Sharpe ratio
+# 3 ETF s SR LQ 4 ETF s SR LQ 5 ETF s SR LQ
+1 QQQ IEF GLD0.84 0.21 QQQ XLP TLT GLD0.91 0.70 QQQ XLK XLP TLT GLD0.90 0.68
+2 QQQ TLT GLD0.84 0.37 QQQ XLP IEF GLD0.90 0.66 QQQ XLK XLP IEF GLD0.88 0.60
+3 XLK IEF GLD0.82 0.29 QQQ XLK TLT GLD0.90 0.50 QQQ XLK XL V TLT GLD0.88 0.63
+4 XLK TLT GLD0.81 0.46 QQQ XL V TLT GLD0.89 0.53 QQQ XL V XLP TLT GLD0.88 0.62
+5 QQQ XLP TLT0.80 0.41 QQQ XLK IEF GLD0.89 0.49 QQQ VUG XLP TLT GLD0.87 0.77
+6 QQQ XLP GLD0.80 0.76 XLK XLP TLT GLD0.88 0.73 QQQ XLK XLU TLT GLD0.87 0.78
+7 VUG IEF GLD0.79 0.22 XLK XL V TLT GLD0.88 0.51 QQQ XLY XLP TLT GLD0.87 0.67
+8 QQQ XLP IEF0.78 0.45 XLK XLP IEF GLD0.88 0.54 QQQ XLK XL V IEF GLD0.86 0.52
+9 QQQ XL V TLT0.78 0.28 QQQ XL V IEF GLD0.88 0.56 SPY QQQ XLP TLT GLD0.86 0.83
+10 VUG TLT GLD0.78 0.40 SPY QQQ TLT GLD0.88 0.72 XLK XL V XLP TLT GLD0.86 0.61
+11 SPY IEF GLD0.78 0.41 QQQ VUG TLT GLD0.87 0.63 QQQ VUG XLP IEF GLD0.86 0.60
+12 QQQ AGG GLD0.78 0.24 QQQ VTV TLT GLD0.87 0.85 VUG XLK XLP TLT GLD0.86 0.76
+13 XLK XLP GLD0.78 0.73 QQQ XLY TLT GLD0.87 0.64 QQQ XLI XLP TLT GLD0.86 0.77
+14 QQQ TIP GLD0.77−0.06 QQQ VUG IEF GLD0.87 0.60 QQQ XL V XLP IEF GLD0.86 0.61
+15 SPY TLT GLD0.77 0.41 QQQ XLI TLT GLD0.86 0.76 XLK XLY XLP TLT GLD0.86 0.61
+16 QQQ XLK TLT0.77 0.35 SPY QQQ IEF GLD0.86 0.68 QQQ VUG XL V TLT GLD0.86 0.65
+17 XLK XLP TLT0.77 0.37 XLK XL V IEF GLD0.86 0.52 QQQ XLK XLU IEF GLD0.86 0.77
+18 QQQ XL V GLD0.77 0.61 VUG XLK TLT GLD0.86 0.53 QQQ XL V XLY TLT GLD0.86 0.58
+19 QQQ XLK IEF0.76 0.37 QQQ VTV IEF GLD0.86 0.82 QQQ XLY XLP IEF GLD0.85 0.71
+20 XLK XL V TLT0.76 0.30 XLK XLY TLT GLD0.86 0.57 QQQ VTV XLP TLT GLD0.85 0.86
+21 QQQ XLK GLD0.76 0.39 QQQ XLY IEF GLD0.86 0.54 QQQ VTV XLK TLT GLD0.85 0.83
+22 QQQ XLU GLD0.76 0.85 SPY XLK TLT GLD0.86 0.74 QQQ XLK XLY TLT GLD0.85 0.58
+23 XLK AGG GLD0.76 0.27 VUG XLP TLT GLD0.85 0.69 SPY QQQ XLP IEF GLD0.85 0.75
+24 XLK XLP IEF0.76 0.44 QQQ XLI IEF GLD0.85 0.63 QQQ XLK XLI TLT GLD0.85 0.63
+25 XLY IEF GLD0.76 0.36 VUG XLK IEF GLD0.85 0.51 QQQ VUG XLK TLT GLD0.85 0.64
+26 QQQ XL V IEF0.75 0.23 VTV XLK TLT GLD0.85 0.76 SPY QQQ XLK TLT GLD0.85 0.67
+27 SPY QQQ TLT0.75 0.36 QQQ XLU TLT GLD0.85 0.58 VUG XLK XLP IEF GLD0.85 0.68
+28 QQQ VTV TLT0.75 0.48 SPY XLK IEF GLD0.84 0.59 SPY XLK XLP TLT GLD0.85 0.92
+29 XLY TLT GLD0.75 0.45 VUG XLP IEF GLD0.84 0.68 XLK XL V XLY TLT GLD0.85 0.53
+30 XLK XL V GLD0.75 0.73 XLK XLY IEF GLD0.84 0.54 QQQ VUG XLU TLT GLD0.85 0.86
+31 XLK TIP GLD0.75 0.04 XLK XLI TLT GLD0.84 0.70 SPY QQQ XL V TLT GLD0.85 0.81
+32 QQQ VUG TLT0.75 0.40 QQQ XLU IEF GLD0.84 0.55 XLK XL V XLP IEF GLD0.85 0.61
+33 QQQ XLI TLT0.75 0.30 VUG XL V TLT GLD0.84 0.61 VUG XLK XL V TLT GLD0.85 0.74
+34 XL V TLT GLD0.74 0.20 VTV XLK IEF GLD0.84 0.70 QQQ XL V XLU TLT GLD0.84 0.65
+35 QQQ VUG IEF0.74 0.36 XLY XLP TLT GLD0.83 0.59 QQQ XL V XLI TLT GLD0.84 0.68
+36 VUG XLP GLD0.74 0.81 QQQ XLP TIP GLD0.83 0.42 QQQ XLI XLP IEF GLD0.84 0.69
+37 SPY QQQ IEF0.74 0.36 XL V XLY TLT GLD0.83 0.53 QQQ XLP XLU TLT GLD0.84 0.73
+38 QQQ VUG GLD0.74 0.51 SPY XLP TLT GLD0.83 0.57 XLK XLY XLP IEF GLD0.84 0.72
+39 VUG XLP TLT0.74 0.36 XLK XLI IEF GLD0.83 0.60 QQQ XLY XLU TLT GLD0.84 0.85
+40 XLK XLU GLD0.74 0.76 VUG XL V IEF GLD0.82 0.56 XLK XLI XLP TLT GLD0.84 0.86
+41 XLK XL V IEF0.73 0.23 XLK XLU TLT GLD0.82 0.52 QQQ VUG XL V IEF GLD0.84 0.61
+42 QQQ XLU TLT0.73 0.39 XLY XLP IEF GLD0.82 0.49 QQQ VTV XLP IEF GLD0.84 0.76
+43 QQQ VTV IEF0.73 0.49 SPY VUG TLT GLD0.82 0.73 QQQ VTV XL V TLT GLD0.84 0.78
+44 XLP TLT GLD0.73 0.15 SPY XLP IEF GLD0.82 0.55 QQQ VUG XLK IEF GLD0.84 0.46
+45 VUG XLK TLT0.73 0.30 QQQ XLF TLT GLD0.82 0.60 QQQ XLK XLY IEF GLD0.84 0.54
+46 QQQ XLY GLD0.73 0.37 QQQ MDY TLT GLD0.82 0.55 QQQ VTV XLK IEF GLD0.84 0.74
+47 SPY XLK TLT0.73 0.44 VUG XLY TLT GLD0.82 0.65 QQQ XL V XLY IEF GLD0.84 0.50
+48 VUG AGG GLD0.73 0.25 SPY XL V TLT GLD0.82 0.64 VTV XLK XLP TLT GLD0.84 0.81
+49 QQQ XLY TLT0.73 0.25 QQQ XLK TIP GLD0.82 0.30 SPY QQQ XLK IEF GLD0.84 0.57
+50 QQQ XLI IEF0.72 0.20 XLK XLU IEF GLD0.82 0.51 SPY XLK XLP IEF GLD0.83 0.83
+51 VUG XLK GLD0.72 0.55 XL V XLP TLT GLD0.82 0.33 QQQ XLP IBB TLT GLD0.83 0.47
+52 QQQ XLP TIP0.72 0.23 VTV VUG TLT GLD0.81 0.70 SPY QQQ XLU TLT GLD0.83 0.93
+53 VUG XLP IEF0.72 0.42 XLK XLP TIP GLD0.81 0.47 SPY XLK XL V TLT GLD0.83 0.77
+54 XLY XLP GLD0.72 0.39 SPY VUG IEF GLD0.81 0.69 QQQ XLK XLI IEF GLD0.83 0.52
+55 VTV XLK TLT0.72 0.40 SPY XLY TLT GLD0.81 0.56 QQQ VUG XLU IEF GLD0.83 0.84
+56 VUG TIP GLD0.72−0.03 QQQ XL V TIP GLD0.81 0.55 VUG XLK XLU TLT GLD0.83 0.82
+57 VUG XLK IEF0.72 0.29 XL V XLY IEF GLD0.81 0.56 QQQ XLP XLU IEF GLD0.83 0.71
+58 QQQ XLU IEF0.72 0.49 VUG XLY IEF GLD0.81 0.63 QQQ XLK TLT IEF GLD0.83 0.25
+59 XLK XLY GLD0.72 0.31 VUG XLI TLT GLD0.81 0.68 XLK XL V XLI TLT GLD0.83 0.65
+60 SPY QQQ GLD0.72 0.59 QQQ XLF IEF GLD0.81 0.66 VUG XL V XLP TLT GLD0.83 0.63
+64
+T able 30:Sensitivity check on final portfolios.
+2005–2025 (Full backtest window)
+Portfolios Strategy r σMDD TO SR LQ
+SPY/AGG (60/40) Fixed weights 0.07 0.10 0.30 0.12 0.52 0.13
+SPY Buy-and-hold vc8% 0.06 0.09 0.20 0.29 0.53−0.03
+SPY/AGG/GLD Equal weights 0.08 0.09 0.24 0.17 0.68 0.49
+SPY/TLT/GLD/IBIT Maximum diversification 0.10 0.09 0.28 0.42 0.90 0.54
+Momentum Universe Markowitz 0.08 0.08 0.16 0.81 0.78 0.40
+2010–2025 (Excluding the financial crisis)
+Portfolios Strategy r σMDD TO SR LQ
+SPY/AGG (60/40) Fixed weights 0.08 0.09 0.20 0.10 0.78 0.61
+SPY Buy-and-hold vc8% 0.07 0.09 0.20 0.28 0.70−0.04
+SPY/AGG/GLD Equal weights 0.08 0.08 0.17 0.13 0.75 0.26
+SPY/TLT/GLD/IBIT Maximum diversification 0.11 0.09 0.28 0.38 1.02 0.84
+Momentum Universe Markowitz 0.09 0.09 0.16 0.81 0.86 0.32
+2005–2020 (Excluding the COVID-19 pandemic and the start of the Russia-Ukraine war)
+Portfolios Strategy r σMDD TO SR LQ
+SPY/AGG (60/40) Fixed weights 0.07 0.09 0.30 0.13 0.58 0.13
+SPY Buy-and-hold vc8% 0.06 0.09 0.18 0.32 0.57 0.00
+SPY/AGG/GLD Equal weights 0.08 0.09 0.24 0.19 0.71 0.26
+SPY/TLT/GLD/IBIT Maximum diversification 0.10 0.08 0.15 0.43 1.09 0.44
+Momentum Universe Markowitz 0.08 0.08 0.12 0.80 0.83 0.51
+65
+C Code
+Throughout this project several million backtests have been run, most of which solve one
+convex problem per trading date. We first present code examples that illustrate how the
+backtest and our trading strategies are implemented in Python. We then collect some of the
+implementation choices that made this scale possible, which together reduced the running
+time of the exhaustive search from days to under an hour.
+The backtest loop
+A backtest is a loop over trading days, and everything inside the loop should be plain vector
+and matrix operations. We load the adjusted closing prices once, convert them to a return
+matrixR∈R T×n, andfromthatpointontouchonlyNumPyarrays. Labeleddatastructures
+such as pandas dataframes are convenient but slow because of their per-operation overhead
+which dominates execution time. Restricting pandas to the boundary of the program and
+running the loop on NumPy arrays sped up each computed backtest by roughly 2 times.
+Listing 1 shows the loop in full.
+Listing 1:The backtest loop
+1for i in range ( T ) :
+2cash *= 1.0 + ffr [ i ]
+3holdings *= 1.0 + returns [ i ]
+4holdings *= universe [ i ]
+5nav = cash + holdings . sum ()
+6weights = holdings / nav
+7if i in t r a d i n g _ d a y s :
+8w_new = c o n s t r u c t _ p o r t f o l i o (
+9c u r r _ w e i g h t s = weights ,
+10alphas = alphas [ i ] ,
+11F = Fs [ i ] ,
+12D_half = D_halves [ i ] ,
+13universe = universe [ i ] ,
+14)
+15turnover = 0.5 * np . abs ( w_new - weights ) . sum ()
+16cash = (1.0 - w_new . sum () - spread * turnover ) * nav
+17holdings = w_new * nav
+18weights = w_new
+19navs [ i ] = nav
+20c o m p os i t io n [ i ] = weights
+The strategies
+Insideconstruct_portfolioeach strategy is a few lines of code, and all of the strategies of
+§3 are given in Listing 2. The formula-based ones are plain NumPy, and the optimization-
+based ones are direct transcriptions of their formulations into CVXPY.
+66
+Listing 2:The trading strategies
+1import cvxpy as cp
+2import numpy as np
+3
+4def e q u a l _ w e i g h t s ( universe ) :
+5return universe / universe . sum ()
+6
+7def i n v e r s e _ v o l a t i l i t y ( sigma , universe ) :
+8inv = universe / sigma
+9return inv / inv . sum ()
+10
+11def v o l a t i l i t y _ c o n t r o l (w , F , D_half , sigma_tgt ) :
+12sigma_hat = np . linalg . norm ( np . r_ [ F . T @ w , D_half * w ])
+13return min (1.0 , sigma_tgt / sigma_hat ) * w
+14
+15w = cp . Variable ( n )
+16F = cp . Parameter (( n , k ) )
+17D_half = cp . Parameter (n , nonneg = True )
+18risk_sqrt = cp . hstack ([ F . T @ w , cp . multiply ( D_half , w ) ])
+19risk = cp . s u m _ sq u a re s ( risk_sqrt )
+20
+21min_vol = cp . Problem (
+22cp . Minimize ( risk ) , [ cp . sum ( w ) == 1 , w >= 0])
+23
+24r i sk _ p ar i t y = cp . Problem (
+25cp . Minimize (0.5 * risk - rho * cp . sum ( cp . log ( w ) ) ) ,
+26[ cp . sum ( w ) <= 1 , w >= 1e -8])
+27
+28y = cp . Variable ( n )
+29F_c = cp . Parameter (( n , k ) )
+30d_c = cp . Parameter (n , nonneg = True )
+31mdp = cp . Problem (
+32cp . Minimize ( cp . s u m _ sq u a re s ( F_c . T @ y )
+33+ cp . s u m _s q u a re s ( cp . multiply ( d_c , y ) ) ) ,
+34[ cp . sum ( y ) == 1 , y >= 0])
+35
+36alpha = cp . Parameter ( n )
+37w_pre = cp . Parameter ( n )
+38cash = cp . Variable ( nonneg = True )
+39trade = w - w_pre
+40markowitz = cp . Problem (
+41cp . Maximize ( alpha @ w - kappa * cp . norm1 ( trade ) ) ,
+42[ cp . sum ( w ) + cash == 1 , w >= 0 , w <= w_max ,
+43cp . norm2 ( risk_sqrt ) <= sigma_tgt ,
+44cp . norm1 ( trade ) <= T_tgt ,
+45cp . abs ( trade ) <= delta_w ])
+67
+Two formulation habits
+Both of the following are standard advice in the convex optimization literature, and both
+transfer directly to portfolio problems. First, risk is better expressed through a norm than
+through a quadratic form. The constraintwTΣw≤σ 2tgt and the constraint∥LTw∥2 ≤σ tgt,
+withLthe Cholesky factor ofΣ, describe the same set, but the norm version hands the solver
+a second-order cone directly and avoids squaring the conditioning of the problem. When the
+covariance comes from the factor model of §4.3, the full matrixFΣf F T +Dshould never be
+assembled. The portfolio variance splits into a factor part and an idiosyncratic part,
+wTΣw=∥ ˜F Tw∥ 22 +∥D 1/2w∥ 22,
+where ˜F=F L f andL f is the Cholesky factor ofΣ f, so the risk constraint involves one
+k-vector and onen-vector rather than ann×nmatrix. This is the form used in Listing 2.
+Atn= 59the saving is modest, but the formulation costs nothing, and it is the version that
+scales as the universe grows.
+Parallelism
+A single backtest is serial, since the holdings on daytdepend on those on dayt−1. The
+backtests themselves are independent of each other, so we run them in parallel. We use a
+pool of twelve worker processes, one per core. Processes rather than threads, since Python’s
+global interpreter lock prevents threads from running Python code simultaneously. The price
+data is loaded and sliced once before the pool starts, so each worker only receives the arrays
+its own backtest needs.
+Going faster
+The setup above is fast enough for everything in this paper. If it were not, the same
+parametrized problems can be compiled. CVXPYgen [Sch+22] generates custom C code
+for a fixed problem structure, removing the remaining Python overhead from each solve, and
+slots into the loop with an unchanged interface. We did not need it for the results reported
+here, but for a larger universe, more frequent trading, or a wider hyperparameter sweep, it
+is the natural next step.
+68
+D For the European investor
+This paper only considers ETFs that are accessible to American investors. Since January
+2018, EU regulation requires any fund sold to European retail investors to provide a key
+information document [Eur14], which US-listed ETFs do not have. The ETFs in this report
+can therefore not be bought through an ordinary European brokerage account. Equivalents
+are instead available through European UCITS funds that track the same or closely related
+indices. Table 31 lists the most relevant ETFs in this paper together with a European
+equivalent.
+T able 31:European equivalents of selected ETFs presented in this paper.
+ETF European equivalent Ticker ISIN
+SPY iShares Core S&P 500 UCITS ETF USD (Acc) SXR8 IE00B5BMR087
+QQQ iShares Nasdaq 100 UCITS ETF (Acc) SXRV IE00B53SZB19
+VUG Amundi Russell 1000 Growth UCITS ETF (Acc) MWOW IE0005E8B9S4
+VTV iShares Edge MSCI USA Value Factor UCITS ETF (Acc) QDVI IE00BD1F4M44
+MDY SPDR S&P 400 U.S. Mid Cap UCITS ETF (Acc) SPY4 IE00B4YBJ215
+IWM SPDR Russell 2000 U.S. Small Cap UCITS ETF (Acc) ZPRR IE00BJ38QD84
+USMV iShares Edge S&P 500 Minimum Volatility UCITS ETF (Acc) IBCK IE00B6SPMN59
+XLK SPDR S&P U.S. Technology Select Sector UCITS ETF (Acc) ZPDT IE00BWBXM948
+XLP SPDR S&P U.S. Consumer Staples Select Sector UCITS ETF (Acc) ZPDS IE00BWBXM385
+XLV SPDR S&P U.S. Health Care Select Sector UCITS ETF (Acc) ZPDH IE00BWBXM617
+XLU SPDR S&P U.S. Utilities Select Sector UCITS ETF (Acc) ZPDU IE00BWBXMB69
+AGG iShares US Aggregate Bond UCITS ETF USD (Dist) EUNX IE00B44CGS96
+IEF iShares USD Treasury Bond 7-10yr UCITS ETF (Dist) IUSM IE00B1FZS798
+TLT iShares USD Treasury Bond 20+yr UCITS ETF (Dist) IS04 IE00BSKRJZ44
+TIP iShares USD TIPS UCITS ETF (Acc) IUST IE00B1FZSC47
+GLD iShares Physical Gold ETC PPFB IE00B4ND3602
+SLV WisdomTree Physical Silver VZLC JE00B1VS3333
+IBIT iShares Bitcoin ETP IB1T XS2940466316
+ETHA VanEck Ethereum ETN VETH DE000A3GPSP7
+Several UCITS funds often track the same index. The funds listed here were selected because
+theyareavailablethroughAvanza, alargeSwedishonlinebrokerage, sothataprivateinvestor
+can buy them directly. Other brokers may list other lines of the same fund, and the ISIN
+rather than the ticker is what identifies it.
+The backtests of this paper assume that dividends are reinvested. This corresponds to an
+accumulating share class, marked (Acc), which reinvests the dividends inside the fund. Not
+every broker or fund offers this, and where we could not find an (Acc) equivalent we list the
+distributing class, marked (Dist), which pays the dividends out to the investor instead. The
+resulting return on your investment is mostly the same assuming you reinvest the dividends
+that is paid out. It does, however, affect what the price chart shows. The quoted price of a
+distributing fund usually excludes the dividends already paid out, so its growth may appear
+weaker than the return that is actually delivered.
+69

@@ -1,0 +1,980 @@
+arXiv 2608.13096  https://arxiv.org/abs/2608.13096
+
+FlowLOB: Efficient and Controllable Limit Order Book
+Generation with Flow Matching
+Zhuohan Wang∗
+Simudyne
+United Kingdom
+Andreea Bacalum
+Simudyne
+United Kingdom
+Ollie Olby
+Simudyne
+United Kingdom
+Carmine Ventre
+King’s College London
+United Kingdom
+Namid Stillman
+Simudyne
+United Kingdom
+namid@simudyne.com
+Abstract
+Limit order book (LOB) simulators are most useful to practitioners
+when they combine realistic market dynamics, computationally ef-
+ficient sampling, controllable scenario generation, and the ability to
+generalize beyond the instruments seen during training—properties
+that existing agent-based and deep generative simulators provide
+only partially. We presentFlowLOB, a conditionalflow-matching
+generator ofLOBtrajectories, trained on multiple Hong Kong Ex-
+change (HKEX) symbols at three sampling frequencies (0.1s,1s,10s)
+in tick-relative representation that transfers to unseen instruments.
+Because flow and diffusion models admit a common formulation,
+we train both with identical data, architecture, and budget, and
+sample both through the same fixed-step ODE solvers, yielding
+a controlled comparison of sampling efficiency and fidelity. Flow
+matching attains its best quality with only10ODE-solver steps,
+whereas diffusion needs many more function evaluations to ap-
+proach the same fidelity. At this efficient operating point, FlowLOB
+improves realism over baselines, two learned and two agent-based
+models, in most distributional metrics at the two finer sampling
+frequencies. We evaluate counterfactual controllability with a dis-
+tributional test that asks whether changing a scenario condition
+moves the generated statistic toward the corresponding real tail
+regime; FlowLOB satisfies this criterion in most tested settings.
+Both realism and control effects transfer zero-shot on a held-out
+symbol. We additionally conduct ablation studies on the network
+architecture and the learning rate.
+Keywords
+Flow models, Limit Order Books, Generative Models
+1 Introduction
+Simulation is central to many workflows in quantitative finance.
+Backtesting a trading strategy, stress-testing an execution algo-
+rithm, and training a reinforcement-learning agent all require far
+more market data than history provides: for any instrument, the
+market offers exactly one realized path [ 5, 35]. There are no re-
+peated trials and no counterfactuals—no way to observe how the
+same trading day would have unfolded under higher volatility or
+thinner liquidity. A simulator of the limit order book (LOB), the
+fundamental data structure of modern electronic markets, is the
+standard escape from this constraint [6, 42], and its value hinges
+∗Joint affiliation with King’s College London.
+on three properties: the realism of what it generates, the cost of
+generating it, and the degree to which it can be steered toward
+scenarios of interest.
+Existing LOB simulators deliver these properties only in part.
+Agent-based models—zero-intelligence traders [12, 13] and Hawkes-
+process order flow [3], composed into platforms such as ABIDES [6]—
+are interpretable and easy to steer, but reproduce only a subset of
+the stylized facts of real markets [9]. Deep generative models close
+the realism gap: generative adversarial networks [7, 8, 24, 45], au-
+toregressive event models [ 25, 30], and most recently diffusion
+models [2, 4, 43, 44, 48] produce order books that are difficult to
+distinguish from real data. But they come at a price. First, diffusion
+sampling is expensive by construction [15, 40]: a single trading day
+at0.1-second resolution comprises roughly200,000book states, so
+a50-step sampler spends50network evaluations on each. Fast sam-
+plers [29, 37, 38, 47] mitigate this, but treat the symptom rather than
+the problem. Second, these models are almost universally trained
+one-model-per-symbol, so nothing can be said about instruments
+outside the training set. Third, while conditional generation is com-
+mon, conditionalvalidityis rarely tested: models are conditioned
+on a regime, but whether the generated data actually belong to
+that regime is left unmeasured. What practitioners need is a LOB
+generator that is simultaneously realistic, cheap enough to sample
+at scale, controllable with measurable effect, and general across
+instruments. No existing simulator provides all four.
+We presentFlowLOB, a flow-matching [27, 28] generative model
+of limit order book trajectories. FlowLOB models windows of book
+states (ten price levels per side, prices and volumes) with a∼100M-
+parameter adaLN-Zero transformer [33], trained jointly on eight
+Hong Kong Exchange symbols at three different sampling frequen-
+cies (0.1s,1s,10s), and conditioned on four interpretable channels:
+trend, volatility, liquidity, and order-book imbalance.
+Our contributions are fourfold:
+• Generality.For each sampling frequency, FlowLOB is trained
+as a shared simulator across eight HKEX symbols rather
+than one model per symbol. The tick-relative representa-
+tion enables zero-shot transfer to a ninth held-out symbol
+without retraining, and we repeat the evaluation at0.1s,1s,
+and10s to test this behavior across temporal resolutions.
+• Efficient sampling.We place flow models and diffusion
+models on equal footing: one dataset, one backbone, one
+training recipe, and one family of fixed-step ODE solvers [22].
+1
+arXiv:2608.13096v1  [cs.LG]  13 Aug 2026
+Wang et al.
+Under this matched setup, 10 Euler steps already put FlowLOB
+at its best or nearly best quality. At the same sampling com-
+pute, its marginal distributional error is4–120× lower than
+diffusion across price and volume features.
+• Realism.We compare the pooled price and volume distri-
+butions of generated books against real data under four dis-
+tance metrics, against two learned baselines (LOB-S5 [30],
+LOB-GAN [8]) and two agent-based baselines (Hawkes [3,
+21], Zero Intelligence traders [ 12, 13]). FlowLOB attains
+the smallest distance in30of the32resulting parameter
+combinations at the0 .1s and1s frequencies, on both the
+in-distribution and the held-out symbol.
+• Controllability.Conditioning passes a distributional valid-
+ity test, moving the generated statistic’s distribution toward
+the real tail regime in42of48cases considered, with liq-
+uidity and imbalance reliably steerable at every frequency.
+From a practitioner perspective, FlowLOB matches key require-
+ments for synthetic market-data engines used in downstream ML
+development and validation [31, 32]. It samples efficiently enough
+for large-scale rollouts, steers rare regimes, transfers across instru-
+ments including unseen ones, and outputs L2 book states suitable
+for snapshot-based policies such as dynamic execution.
+2 Related Work
+Realistic and controllable LOB simulation.Market simulation
+has traditionally been agent-based: zero-intelligence traders [12, 13]
+and Hawkes-process order flow [3], composed into platforms such
+as ABIDES [6]. These models are transparent and steerable, but
+realism audits find they reproduce only part of the stylized facts
+of real markets [ 9, 42]. Learned generators progressively closed
+this gap: GANs over order streams and book states [ 7, 8, 20, 24],
+autoregressive event models [25, 30], and most recently diffusion
+models, which set the current realism standard for both message-
+level and book-level generation [2, 4, 43, 48]. The controllability
+that agent-based models offered has been rebuilt on top of these
+learned generators only recently, typically via conditional or guided
+diffusion [16]: DIGMA [19] guides a diffusion-based meta agent
+toward target market dynamics, CoFinDiff [41] conditions financial
+time series on trend and volatility, and DiffLOB [ 44] combines a
+WaveNet-style diffusion backbone with ControlNet-style condition-
+ing to generate counterfactual order books under high and low
+regimes of book-level statistics. Following DiffLOB, we focus on L2
+order book states generation rather than order flow generation.
+Diffusion, flow matching, and efficient sampling.Diffusion
+models generate by learning to invert a gradual noising process [15,
+36], a view unified in continuous time by score-based SDEs [39, 40],
+whose deterministic probability-flow ODE permits sampling by
+numerical integration. Paired with transformer backbones [33] and
+guidance [10, 16], this family dominates generative modeling across
+domains [46], including the financial applications above. Its main
+practical liability is inference cost: high-quality samples require
+many network evaluations along the reverse process [15, 40]. One
+line of work accelerates a trained diffusion model post hoc, through
+implicit samplers [37], high-order and dedicated ODE solvers [22,
+29, 47], and distillation into consistency models [ 38]. A second
+line changes the training objective itself: flow matching [27] and
+rectified flow [ 28] learn near-straight probability paths that are
+cheap to integrate by construction, are unified with diffusion under
+the stochastic-interpolant view [1, 17], and scale to state-of-the-art
+generation [11]. In finance, flow matching has reached time-series
+generation [14, 18] and trading policies [26], but not the order book
+itself, and no prior work compares the two objectives for market
+generation under matched data, architecture, and compute.
+3 Methodology
+The methodology section has four parts: a matched flow/diffusion
+training setup, a common ODE sampling protocol, a tick-relative
+representation for multi-symbol LOB data, and a transformer back-
+bone that aligns market history with scenario controls.
+3.1 Flow and Diffusion Training
+Let𝑥0∼𝑝 data(𝑥|𝑐) denote a target LOB window and let𝑐 denote
+the conditioning tensor constructed from the preceding market
+state and scenario variables. We train two conditional generative
+objectives on the same pairs (𝑥0,𝑐) : flow matching [ 27, 28] and
+diffusion [15, 40]. This pairing lets us compare two ways of learning
+a transport from noise to realistic book trajectories while holding
+the data, conditioning, architecture, and optimizer fixed.
+Flow matching learns a velocity field along a prescribed path
+from Gaussian noise to data. With𝑧∼N( 0,𝐼) and linear interpola-
+tion𝑥𝑡 =( 1−𝑡)𝑧+𝑡𝑥 0 for𝑡∈[ 0, 1], the target velocity is constant,
+𝑥0−𝑧. The flow model𝑣 𝜃(𝑥𝑡,𝑐,𝑡)is trained by
+LFM(𝜃)=E 𝑡,𝑧,(𝑥 0,𝑐)
+
+∥𝑣𝜃(𝑥𝑡,𝑐,𝑡)−(𝑥 0−𝑧)∥22.
+Sampling then follows the learned velocity field from noise at𝑡= 0
+to data at𝑡=1.
+The diffusion baseline is trained in the same conditional re-
+gression template, but uses the variance-preserving noising path
+𝑥𝑡 =𝛼 𝑡𝑥0+𝜎 𝑡𝜖, with 𝜖∼N( 0,𝐼) and schedule(𝛼𝑡,𝜎 𝑡) moving
+data toward Gaussian noise as𝑡 increases. The network predicts
+the injected noise,
+LDM(𝜃)=E 𝑡,𝜖,(𝑥 0,𝑐)
+
+∥𝜖𝜃(𝑥𝑡,𝑐,𝑡)−𝜖 ∥22.
+At sampling time this prediction is converted into the probability-
+flow ODE field used in Sec. 3.2.
+3.2 ODE Sampling and Inference Cost
+Both trained objectives are sampled through deterministic ODEs,
+which gives a common way to measure generation cost. In both
+cases, sampling can be written as integrating a learned field
+𝑑𝑥𝑡
+𝑑𝑡 =𝑢(𝑥 𝑡,𝑡,𝑐),
+with the conditioning tensor𝑐 held fixed throughout the trajectory.
+For flow matching, the learned velocity is used directly,𝑢(𝑥,𝑡,𝑐)=
+𝑣𝜃(𝑥,𝑐,𝑡) , and the ODE is integrated from 𝑡= 0to 𝑡= 1. For
+diffusion, the noise prediction is converted into the correspond-
+ing probability-flow ODE field and integrated in the reverse time
+direction, from the noisy endpoint toward the data endpoint.
+We sample both models with the same family of fixed-step
+solvers: Euler, Heun, and fourth-order Runge–Kutta (RK4). These
+solvers require one, two, and four network evaluations per step,
+respectively, so a run with𝑁 solver steps costs𝑁 ,2𝑁 , or4𝑁 neural
+2
+FlowLOB: Efficient and Controllable Limit Order Book Generation with Flow Matching
+function evaluations (NFE). This accounting lets us compare solvers
+at equal model-call budgets rather than equal step counts. We use
+NFE, rather than wall-clock time, as the primary inference-cost unit
+because it isolates the algorithmic cost of sampling from implemen-
+tation details such as batching, hardware, and kernel efficiency.
+This shared sampler is what makes the flow-versus-diffusion
+comparison controlled. Each sweep varies only the numerical method
+and step count applied to a fixed checkpoint; the training data, con-
+ditioning variables, backbone, and optimizer are unchanged. Thus
+any quality–cost difference observed in Sec. 4.2 reflects the learned
+generative dynamics and their ease of numerical integration, rather
+than a different architecture or sampling budget.
+3.3 LOB Representation and Conditioning
+The raw order book is first converted into fixed-length windows on
+a uniform time grid. At each sampling frequency, we resample the
+top ten ask and bid levels by taking the first observation in each
+bin and forward-filling empty bins. A training example consists
+of two consecutive windows: a past window, which provides the
+observed market state, and a target window. The generated target
+is represented as 𝑥∈R 2×20×32 , with two channels for price and
+volume, twenty book levels ordered from the outer ask to the outer
+bid, and thirty-two future time steps.
+Prices are not represented in absolute currency units. This is
+important for HKEX data because different symbols can trade at
+different price levels and under different tick sizes. We therefore
+use a tick-relative local representation: the first price coordinate
+records the mid-price change between consecutive states, while the
+remaining coordinates record adjacent level gaps within the book,
+all measured in ticks. Volumes 𝑉 are transformed level-wise as
+log(𝑉+ 1). Together, tick normalization for prices and logarithmic
+normalization for volumes remove much of the instrument-specific
+scale while preserving the local geometry and depth profile of the
+book. This makes the pooled multi-symbol training problem better
+posed and is a key reason the same model can be evaluated zero-shot
+on a held-out symbol.
+The conditioning tensor𝑐∈R 7×20×32 is aligned with the target
+window. It contains the past-window price and volume representa-
+tion, time of day and four scenario channels. We include time of day
+to capture HKEX’s strong intraday structure, including the midday
+lunch break and the double-U-shaped volume profile. Unlike Dif-
+fLOB [44], which discards the first and last trading hours, we retain
+the full continuous-auction period. The computed time-of-day ratio
+is clamped to[0, 1] at session boundaries. The scenario channels
+encode trend, volatility, liquidity, and order-book imbalance. Trend
+and volatility are window-level summaries and are broadcast across
+levels and time, while liquidity and imbalance are computed at each
+future time step and broadcast across levels. This construction gives
+the model both the recent market state and an explicit description
+of the regime the generated continuation should satisfy.
+3.4 Architecture
+FlowLOB uses an adaLN-Zero transformer [33, 34] backbone. We
+choose this backbone because adaptive normalization has become
+a standard scalable way to condition large generative transformers,
+and because it separates global process-time modulation from local
+market conditioning. Each cell of the level–time grid is treated as
+one token, so a target window is represented as20× 32tokens. The
+noisy state𝑥𝑡 and conditioning tensor𝑐 are concatenated channel-
+wise before projection, which preserves the alignment between
+generated quantities and their controls: a liquidity or imbalance
+value specified for a particular future step is attached to the tokens
+for that same step.
+We use separate learned embeddings for book level and time step,
+and inject the ODE time 𝑡 through adaptive layer-normalization
+blocks. Thus market conditioning enters through the token features,
+while the generative process time enters through modulation of
+the transformer dynamics. A linear output head maps the final
+token representations back to the price and volume channels of the
+generated LOB window.
+4 Experimental Results
+In this section, we first specify the data, model settings, and base-
+lines. We then compare flow matching and diffusion under matched
+samplers to choose a quality–cost operating point (Sec. 4.2). Using
+that fixed sampling budget, we evaluate realism against learned
+and agent-based baselines on both an in-distribution symbol and
+a held-out symbol (Sec. 4.3). Finally, we test whether the scenario
+variables defined in Sec. 3.3 produce measurable counterfactual
+changes (Sec. 4.4) and ablate the main architectural and optimiza-
+tion choices (Sec. 4.5). Unless stated otherwise, each experiment
+reuses the same trained checkpoints and varies only the factor
+under study.
+4.1 Experimental Setup
+Data.We use level-2 order book data from the Hong Kong Exchange
+(HKEX), ten price levels per side, for eight symbols spanning tech-
+nology, financials, automotive, and semiconductors, i.e., 5, 700, 981,
+1024, 1211, 1299, 1810, and 9618 (all .HK). Trading sessions are 09:30–
+12:00 and 13:00–16:00, giving5.5trading hours per day—198,000,
+19,800, and1 ,980grid points at the0 .1s,1s, and10s frequencies
+respectively. Training data covers 2025-09-01 to 2025-11-15, vali-
+dation 2025-11-16 to 2025-11-30, and all evaluation uses December
+2025, which covers a variety of market conditions due to the end of
+year period. One further symbol, 9999.HK, is excluded from training
+entirely and evaluated zero-shot. Throughout, we report results
+on 700.HK as a representative in-distribution symbol and 9999.HK
+as the zero-shot held-out symbol; results are qualitatively similar
+across the other in-distribution symbols.
+Training settings.All runs share the remaining configuration:
+AdamW without weight decay, effective batch size1024(micro-
+batch256,4accumulation steps), up to500epochs with early stop-
+ping (patience20), and conditioning dropout0 .5for classifier-free
+guidance. Both transformer and UNet settings use the∼100M con-
+figuration. For every run, we evaluate the checkpoint with the best
+validation loss.
+Baselines.We compare against both agent-based and learned LOB
+generators. The zero-intelligence (ZI) and compound Hawkes (re-
+ported as Hawkes) baselines are adapted from the calibration proce-
+dures of Kawawa-Beaudan et al. [23]. ZI samples order side, action
+type, inter-arrival time, volume, and price depth from fitted mar-
+ginal distributions, providing a stochastic baseline that reproduces
+3
+Wang et al.
+10 2
+10 1
+100
+0.1s
+(a)
+price
+100
+101
+(b)
+volume
+10 1
+100
+1s
+(c)
+101
+(d)
+10 20 50 100 200
+101
+6 × 100
+2 × 101
+10s
+(e)
+10 20 50 100 200
+2 × 101
+3 × 101
+4 × 101
+(f)
+NFE (function evaluations)
+Flow · Euler
+Diffusion · Euler
+Flow · Heun
+Diffusion · Heun
+Flow · RK4
+Diffusion · RK4
+Best per panel
+Figure 1: Sample quality versus inference cost. 𝑊1 distance to the
+real pooled price (left) and volume (right) marginals at the three sam-
+pling frequencies (rows), against NFE on a log–log scale. Solid: flow
+matching; dashed: diffusion; one curve per solver; the star marks
+the best point per panel. Flow with Euler at 𝑁= 10— the cheapest
+configuration in the sweep — is the best point in four of six panels.
+simple empirical marginals but not conditional market dynamics.
+Hawkes adds temporal dependence by fitting a multivariate Hawkes
+process to event arrivals grouped by action and side, while sam-
+pling volumes and price depths from fitted marginal distributions.
+We also compare against learned baselines for LOB generation.
+LOB-GAN follows the conditional GAN architecture of Coletta et
+al. [8], generating order flow from a real history window. LOB-S5
+treats LOB generation as an autoregressive sequence-modelling
+problem using a structured state-space network [30]. All baseline
+outputs are converted to the same sampled LOB representation
+before evaluation.
+4.2 Inference Quality vs. Cost
+For each sampling frequency, we take the trained flow-matching
+and diffusion checkpoints from Sec. 4.1 and vary only the ODE
+solver and number of solver steps. We sweep Euler, Heun, and
+RK4 over𝑁∈{10,20,30,40,50}, and report inference cost in NFE.
+We use Wasserstein-1 distance𝑊1 as a lightweight quality proxy
+to compare generated and real pooled marginals of the price and
+volume features. Figure 1 shows that flow matching reaches its best
+quality at very small sampling budgets. With Euler sampling at
+10steps, FlowLOB obtains lower 𝑊1 than the matched diffusion
+sampler by4–120× across price and volume marginals. Even when
+diffusion is allowed up to200NFEs, no diffusion configuration in
+our sweep matches FlowLOB-Euler-10 in five of the six settings. The
+only exception is the1s price marginal, where diffusion matches
+at20NFEs by Heun; however, the same configurations remain
+substantially worse on volume.
+These patterns suggest that solver error is already small for
+FlowLOB at low NFE. Flow matching learns a deterministic trans-
+port that coarse Euler can follow well, while diffusion must resolve
+a reverse denoising path across noise levels, so errors accumulate
+at the same NFE. Once flow solver error is small, more ODE steps
+mainly integrate the same imperfect vector field more accurately,
+which need not improve distributional quality. Higher-order solvers
+can also query intermediate off-path states where the learned field is
+less calibrated, whereas coarse Euler may smooth over local model
+errors.
+This reduction in sampling cost has practical consequences. In
+applications such as portfolio risk analysis, execution stress testing,
+or reinforcement learning, a simulator is rarely queried once for a
+single instrument. Users typically need many trajectories across
+multiple symbols, regimes, and random seeds. In that setting, the
+difference between a sampler that is accurate after ten network
+evaluations and one that requires many tens or hundreds of evalu-
+ations directly compounds into the number of scenarios that can
+be explored under a fixed compute budget.
+We therefore use flow matching with Euler sampling at 𝑁=
+10as the default operating point for the rest of the paper. This
+is the cheapest configuration in the sweep and is already on the
+observed quality–cost frontier. All subsequent FlowLOB realism
+and controllability experiments inherit this setting unless stated
+otherwise.
+4.3 Realism
+We next evaluate whether FlowLOB generates realistic book con-
+tinuations at the operating point selected in Sec. 4.2. Figure 2 first
+compares generated and real books through derived market sta-
+tistics and cross-level dependence. The top row shows mid-price
+return and bid–ask spread distributions for 700.HK and the held-
+out 9999.HK across all three sampling frequencies. At the finer
+frequencies, FlowLOB reproduces both the concentration of returns
+near zero and the small but important spread tail. The bottom row
+shows that the generated books also recover the main cross-level
+volume-correlation structure near the touch, as well as the weaker
+dependence pattern of the less liquid held-out symbol.
+We then quantify marginal realism in Table 1, which compares
+generated and real pooled marginals of the price and volume fea-
+tures. We report Wasserstein-1 (𝑊1), Kolmogorov–Smirnov (KS),
+Kullback–Leibler (KL), and Jensen–Shannon (JS) distances, with
+lower values indicating closer agreement. We do not include Dif-
+fLOB as a separate realism baseline because its setting is not directly
+matched to our multi-symbol task. Moreover, Sec. 4.2 has estab-
+lished the efficiency advantage of flow matching by a controlled
+diffusion–flow comparison. At0.1s and1s, FlowLOB gives the clos-
+est marginal match across nearly all comparisons, achieving the
+4
+FlowLOB: Efficient and Controllable Limit Order Book Generation with Flow Matching
+1.5
+ 0.0 1.5
+10 3
+10 2
+10 1
+100
+return probability
+0.1s
+1.5
+ 0.0 1.5
+mid-price return (ticks)
+10 2
+10 1
+100
+700.HK
+1s
+2.5
+ 0.0 2.5
+10 3
+10 2
+10 1
+100
+10s
+1.5
+ 0.0 1.5
+10 3
+10 2
+10 1
+100
+0.1s
+2
+ 0 2
+mid-price return (ticks)
+10 3
+10 2
+10 1
+100
+9999.HK
+1s
+4
+ 0 4
+10 4
+10 3
+10 2
+10 1
+100
+10s
+0 2
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+spread probability
+0 2
+spread (ticks)
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+0 2
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+0 2 4
+0.0
+0.2
+0.4
+0.6
+0.8
+0 2 4
+spread (ticks)
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+0 2 4
+0.0
+0.2
+0.4
+0.6
+0.8
+Real FlowLOB
+A10
+A1
+B1
+B10
+volumes · real
+0.1s
+700.HK
+1s
+ 10s
+ 0.1s
+9999.HK
+1s
+ 10s
+A10
+A1
+B1
+B10
+volumes · flow
+A10
+A1
+B1
+B10
+volumes · real
+A10 A1 B1 B10
+A10
+A1
+B1
+B10
+volumes · flow
+A10 A1 B1 B10
+ A10 A1 B1 B10
+ A10 A1 B1 B10
+ A10 A1 B1 B10
+ A10 A1 B1 B10
+1.00
+0.75
+0.50
+0.25
+0.00
+0.25
+0.50
+0.75
+1.00
+correlation
+Figure 2: Realism diagnostics beyond pooled marginals. Top subplot is about Mid-price return and bid–ask spread distributions. Bottom subplot
+is about cross-level correlation of volumes and volume changes across the 20 book levels (A10–A1, B1–B10). Real versus FlowLOB, for 700.HK
+and the held-out 9999.HK across the three sampling frequencies.
+best distance in 30 of the 32 price/volume metric cells. Relative to
+the strongest non-FlowLOB baseline, FlowLOB makes a median
+4.5× smaller distance. On 700.HK, FlowLOB is best in all cells at
+0.1s and in six of eight cells at1s, where ZI slightly improves the
+price𝑊1 and price KS distances. On the held-out 9999.HK symbol,
+FlowLOB is best in every0 .1s and1s cell. These gains indicates
+that the selected low-NFE sampler preserves high-frequency LOB
+structure. Its strong performance at0.1s and1s supports the tick-
+relative representation introduced in Sec. 3.3: by removing much
+of the symbol-specific price and volume scale, the same generator
+can transfer to an unseen instrument without retraining.
+The main limitation appears at the coarsest frequency. At10s,
+FlowLOB no longer dominates the marginal metrics: ZI gives the
+best price distances on both symbols, and LOB-S5 is competitive or
+best on several volume distances. The diagnostics in Fig. 2 show the
+5
+Wang et al.
+Table 1: Realism: distances between generated and real pooled marginals (lower is better; best per frequency–symbol block in bold).
+700.HK 9999.HK
+𝑊1 KS KL JS𝑊 1 KS KL JS
+Freq. Method price volume price volume price volume price volume price volume price volume price volume price volume
+0.1s
+FlowLOB0.01683 791.8 0.002337 0.01066 6.572e-5 0.01025 1.923e-5 0.002559 0.008337 1020 0.01511 0.02853 2.785e-5 0.008375 6.852e-6 0.002289
+LOB-S5 0.5660 4610 0.03852 0.04304 0.009084 0.2461 0.002291 0.008273 0.7296 3709 0.1392 0.1590 0.1173 0.1868 0.02119 0.04011
+LOB-GAN 0.8921 3.150e4 0.08873 0.6158 0.06465 1.216 0.01401 0.2391 0.7901 6789 0.1439 0.3306 0.1087 0.5501 0.02190 0.1198
+Hawkes 10.73 2.995e4 0.1137 0.5321 0.08033 1.200 0.02471 0.2284 9.053 9482 0.09567 0.2976 0.1336 0.4521 0.03211 0.1064
+ZI 0.1461 7337 0.009761 0.1414 0.003240 0.08502 0.0009035 0.02087 0.3941 7212 0.06502 0.1981 0.01688 0.2110 0.004859 0.05524
+1s
+FlowLOB 0.151831210.014330.02311 0.001220 0.01731 0.0003604 0.003681 0.08184 1540 0.02445 0.07212 0.0006185 0.05187 0.0001562 0.01203
+LOB-S5 0.5613 4601 0.03828 0.04296 0.009078 0.2299 0.002268 0.008303 0.7304 3703 0.1392 0.1590 0.1170 0.1854 0.02114 0.04001
+LOB-GAN 0.8904 3.156e4 0.08813 0.6166 0.06480 1.195 0.01401 0.2396 0.7933 6808 0.1445 0.3314 0.1087 0.5428 0.02194 0.1199
+Hawkes 10.55 2.995e4 0.1137 0.5325 0.08002 1.213 0.02456 0.2288 9.023 9486 0.09600 0.2980 0.1343 0.4509 0.03221 0.1065
+ZI0.145473310.0095270.1415 0.003173 0.08490 0.0008823 0.02086 0.3922 7217 0.06490 0.1988 0.01693 0.2112 0.004868 0.05536
+10s
+FlowLOB 4.942 1.541e4 0.2256 0.1762 0.2462 0.1931 0.07953 0.02425 2.113 3835 0.15480.16050.28610.12300.085070.03059
+LOB-S5 0.557444130.038160.042520.008888 0.2150 0.0023050.0079480.718137450.1368 0.1631 0.09986 0.1825 0.01986 0.03869
+LOB-GAN 0.8688 3.056e4 0.08414 0.5960 0.04392 1.172 0.01014 0.2267 0.7752 7336 0.1421 0.3470 0.1049 0.5027 0.02191 0.1186
+Hawkes 10.49 2.997e4 0.1138 0.5314 0.09067 1.280 0.02674 0.2281 8.721 9509 0.09620 0.2996 0.1251 0.4582 0.02969 0.1068
+ZI0.144572500.0096260.14010.002735 0.08137 0.00073910.020280.391871070.065200.19650.014840.20460.0043110.05383
+same boundary: the generated10s return distributions are heavier-
+tailed than the real distributions, and the volume-correlation plots
+show stronger cross-level dependence than observed in the data.
+We interpret this as a limitation of the current model at coarse
+sampling frequencies, where the same calendar span provides fewer
+training windows and where returns occupy a wider multi-tick
+support. The realism advantage of FlowLOB is therefore clearest at
+the high-frequency settings where fast sampling is most valuable.
+This limitation may be mitigated by training on a larger symbol
+universe and a longer historical period.
+4.4 Counterfactual Generation
+The realism tests above ask whether generated books match market
+data under realized conditions. We now ask whether the condition-
+ing variables can be used as controls. We use “counterfactual” in the
+simulator sense: the observed past window is held fixed, while one
+requested scenario variable is replaced by a high- or low-regime
+value. Controllability is then evaluated on the generated book itself,
+by recomputing the controlled statistic and checking whether its
+distribution moves toward the corresponding real tail regime. For
+each scenario variable defined in Sec. 3.3—trend, volatility, liquidity,
+and imbalance—and for each direction, high or low, we generate
+two sets of samples from the same past windows. Reference samples
+use the realized scenario values. Counterfactual samples replace
+one scenario variable with values drawn from the corresponding
+high or low5%tail of its training-set distribution, while all other
+conditioning inputs are unchanged. The target regime is the match-
+ing high or low5%tail of the same statistic computed on real test
+windows. Let𝑊 cf1 denote the Wasserstein-1 distance between the
+recomputed statistic of the counterfactual samples and the real
+test-set tail data, and let𝑊 ref1 denote the corresponding distance for
+the reference samples. We say the control is valid for a cell when
+𝑊 cf1 <𝑊 ref1 . This criterion is deliberately distributional: it does not
+reward a model for merely receiving a condition, but only when
+the generated books themselves exhibit the requested regime more
+closely than the reference continuation.
+Table 2 shows that conditioning moves generated books toward
+the requested regime in 42 of 48 cells. The most reliable controls are
+the volume-related variables, liquidity and imbalance, which are
+Table 2: Counterfactual validity: 𝑊1 distance from the recomputed
+statistic of counterfactual (Cf.) and reference (Ref.) samples to the
+real5%tail regime. Bold marks the smaller distance; an asterisk
+indicates a full-precision win that appears tied after rounding.
+0.1s 1s 10s
+Symbol Channel Sel. Cf. Ref. Cf. Ref. Cf. Ref.
+700.HK
+trend high 0.549 ∗0.549 1.401.415.496.65low 0.555 ∗0.555 ∗1.371.37 11.56.82
+volatility high0.1920.2120.1510.3230.4080.472low0.0060.0080.0420.067 0.8740.866
+liquidity high0.2050.4630.2170.5050.6190.807low0.4040.5800.2550.5390.2510.288
+imbalance high0.5170.5510.2280.5620.3400.450low0.3270.3380.0920.3260.4050.440
+9999.HK
+trend high ∗0.5360.536 ∗1.611.616.346.66low ∗0.5340.5341.651.66 9.416.14
+volatility high0.1860.1960.1630.3660.6320.658low0.0060.0080.0430.071 0.8270.817
+liquidity high0.1870.2780.0470.3230.5520.585low0.5200.5920.1350.5470.3020.305
+imbalance high0.2730.2830.0810.3030.2470.279low0.3060.3180.0590.2980.2880.325
+valid for all symbols, frequencies, and directions. These variables
+are computed directly from the generated depth profile at each
+future step, so their signal is closely aligned with the output tensor.
+For 700.HK, the less reliable cases are concentrated in trend and
+volatility. Trend shows near-ties at the finest frequency, where the
+empirical high- and low-trend tail regimes are weakly separated,
+and its low-regime control fails at10s for both symbols. Volatility-
+low also fails at10s. Thus the main failures occur either when the
+target statistic is weakly expressed over the generated horizon or
+at the coarsest frequency, consistent with the realism boundary
+observed in Sec. 4.3. The held-out 9999.HK results are broadly
+consistent with 700.HK, showing that controllability is not only a
+symbol-specific effect but also transfers to an unseen symbol.
+4.5 Ablation Study
+We finally ablate the two design choices likely to affect the preced-
+ing claims: the transformer backbone and the learning rate. The
+6
+FlowLOB: Efficient and Controllable Limit Order Book Generation with Flow Matching
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5distance to real
+W1 price
+0.00
+0.01
+0.02
+0.03
+0.04
+0.05
+K-S price
+0.00
+0.01
+0.02
+0.03
+0.04
+0.05
+0.06
+0.07
+KL price
+0.000
+0.005
+0.010
+0.015
+0.020
+0.025
+0.030
+0.035
+JS price
+proposed
+unet lr 5e-4 lr 5e-5
+0
+10000
+20000
+30000
+40000distance to real
+W1 volume
+proposed
+unet lr 5e-4 lr 5e-5
+0.00
+0.05
+0.10
+0.15
+0.20
+0.25
+K-S volume
+proposed
+unet lr 5e-4 lr 5e-5
+0.00
+0.05
+0.10
+0.15
+0.20
+0.25
+0.30
+0.35
+KL volume
+proposed
+unet lr 5e-4 lr 5e-5
+0.00
+0.02
+0.04
+0.06
+0.08
+0.10
+0.12
+0.14
+JS volume
+700.HK 9999.HK
+Figure 3: Ablation results at1s. We compare the proposed transformer configuration against a parameter-matched UNet and two learning-rate
+variants. Bars show distances between generated and real pooled price and volume marginals for the in-distribution symbol 700.HK and the
+held-out symbol 9999.HK; lower is better.
+ablation is not intended to exhaust the architecture space; rather, it
+tests whether the proposed configuration is robust under changes
+that directly affect realism and zero-shot transfer. For the backbone
+ablation, we replace the transformer with a UNet of comparable
+parameter count while keeping the data representation and sampler
+fixed. For the learning-rate ablation, we compare the default rate
+1𝑒− 4with one higher and one lower rate. All ablations are run
+at the1s frequency, sampled with Euler at 𝑁= 10, and evaluated
+with the same marginal distances as in Sec. 4.3.
+Figure 3 shows that the transformer backbone is important, es-
+pecially out of distribution. A parameter-matched UNet trails the
+proposed model on most price and volume metrics, and the degra-
+dation is largest on the held-out 9999.HK symbol. This suggests
+that attending over the level–time grid helps the model use the
+shared tick-relative representation for cross-symbol generalization,
+rather than merely fitting the in-distribution symbol.
+The learning-rate ablation shows a smaller but useful trade-off. A
+higher learning rate degrades both price and volume realism, while
+a lower learning rate improves some price marginal distances but
+weakens volume fidelity. We therefore keep the default learning rate
+as a balanced operating point rather than selecting a configuration
+tuned for a single metric. Across the ablations, the qualitative rank-
+ing is similar on 700.HK and 9999.HK, supporting the conclusion
+that the realism and controllability results above are not artifacts
+of a lucky training setting.
+5 Conclusion
+We introduced FlowLOB, a conditional flow-matching model for
+generating limit order book trajectories. The model combines a tick-
+relative LOB representation, scenario conditioning, and a level–time
+transformer backbone to train a single generator across multiple
+HKEX symbols. Under a matched comparison with diffusion, flow
+matching reaches its best sample quality with only 10 Euler steps,
+giving a practical low-NFE operating point for generating many
+market trajectories across symbols and regimes. At this efficient
+operating point, FlowLOB matches high-frequency price and vol-
+ume distributions more closely than the evaluated agent-based and
+learned baselines on most metrics, transfers to a held-out symbol
+without retraining, and supports measurable control over liquidity
+and imbalance regimes.
+The results should be read as a first step rather than a final ac-
+count of market simulation. The current model is strongest at the
+finer sampling frequencies, while its advantage weakens at coarser
+resolution; trend control is also less reliable over short windows.
+These limitations are useful because they identify where larger data,
+broader symbol coverage, longer contexts, and different condition-
+ing designs should matter most. More broadly, this paper provides
+the experimental basis for studying scaling laws in financial market
+simulation. FlowLOB gives a controlled setting in which data scale,
+model size, sampling cost, symbol diversity, and controllability can
+be varied systematically. The next step is to move from showing that
+flow-based LOB generation is efficient, realistic, and steerable in
+this setting to quantifying how these properties improve as market
+simulators are scaled with bigger models and more budgets.
+References
+[1] Michael S. Albergo, Nicholas M. Boffi, and Eric Vanden-Eijnden. 2023. Stochastic
+Interpolants: A Unifying Framework for Flows and Diffusions.arXiv preprint
+arXiv:2303.08797(2023).
+[2] Alfred Backhouse, Kang Li, Jakob Foerster, Anisoara Calinescu, and Stefan
+Zohren. 2025. Painting the Market: Generative Diffusion Models for Financial
+Limit Order Book Simulation and Forecasting.arXiv preprint arXiv:2509.05107
+(2025).
+[3] Emmanuel Bacry, Iacopo Mastromatteo, and Jean-François Muzy. 2015. Hawkes
+Processes in Finance.Market Microstructure and Liquidity1, 1 (2015), 1550005.
+7
+Wang et al.
+[4] Leonardo Berti, Bardh Prenkaj, and Paola Velardi. 2025. TRADES: Generating Re-
+alistic Market Simulations with Diffusion Models.arXiv preprint arXiv:2502.07071
+(2025).
+[5] Hans Bühler, Lukas Gonon, Josef Teichmann, and Ben Wood. 2019. Deep Hedging.
+Quantitative Finance19, 8 (2019). arXiv:1802.03042.
+[6] David Byrd, Maria Hybinette, and Tucker Hybinette Balch. 2020. ABIDES:
+Towards High-Fidelity Multi-Agent Market Simulation. InProceedings of the 2020
+ACM SIGSIM Conference on Principles of Advanced Discrete Simulation. 11–22.
+[7] Andrea Coletta, Aymeric Moulin, Svitlana Vyetrenko, and Tucker Balch. 2022.
+Learning to Simulate Realistic Limit Order Book Markets from Data as a World
+Agent. InProceedings of the 3rd ACM International Conference on AI in Finance.
+428–436.
+[8] Andrea Coletta, Matteo Prata, Michele Conti, Emanuele Mercanti, Novella
+Bartolini, Aymeric Moulin, Svitlana Vyetrenko, and Tucker Balch. 2021. To-
+wards Realistic Market Simulations: A Generative Adversarial Networks Ap-
+proach. InProceedings of the 2nd ACM International Conference on AI in Finance.
+arXiv:2110.13287.
+[9] Rama Cont. 2001. Empirical Properties of Asset Returns: Stylized Facts and
+Statistical Issues.Quantitative Finance1, 2 (2001), 223–236.
+[10] Prafulla Dhariwal and Alexander Quinn Nichol. 2021. Diffusion Models Beat
+GANs on Image Synthesis. InAdvances in Neural Information Processing Systems,
+Vol. 34. 8780–8794. arXiv:2105.05233.
+[11] Patrick Esser, Sumith Kulal, Andreas Blattmann, Rahim Entezari, Jonas Müller,
+Harry Saini, Yam Levi, Dominik Lorenz, Axel Sauer, Frederic Boesel, Dustin
+Podell, Tim Dockhorn, Zion English, Kyle Lacey, Alex Goodwin, Yannik Marek,
+and Robin Rombach. 2024. Scaling Rectified Flow Transformers for High-
+Resolution Image Synthesis. InProceedings of the 41st International Conference
+on Machine Learning. arXiv:2403.03206.
+[12] J. Doyne Farmer, Paolo Patelli, and Ilija I. Zovko. 2005. The Predictive Power of
+Zero Intelligence in Financial Markets.Proceedings of the National Academy of
+Sciences102, 6 (2005), 2254–2259.
+[13] Dhananjay K. Gode and Shyam Sunder. 1993. Allocative Efficiency of Markets
+with Zero-Intelligence Traders: Market as a Partial Substitute for Individual
+Rationality.Journal of Political Economy101, 1 (1993), 119–137.
+[14] Panjing He, Mingyue Cheng, Li Li, and XiaoHan Zhang. 2025. TimeFlow: To-
+wards Stochastic-Aware and Efficient Time Series Generation via Flow Matching
+Modeling.arXiv preprint arXiv:2511.07968(2025).
+[15] Jonathan Ho, Ajay Jain, and Pieter Abbeel. 2020. Denoising Diffusion Probabilistic
+Models. InAdvances in Neural Information Processing Systems, Vol. 33. 6840–6851.
+arXiv:2006.11239.
+[16] Jonathan Ho and Tim Salimans. 2022. Classifier-Free Diffusion Guidance. In
+NeurIPS Workshop on Deep Generative Models. arXiv:2207.12598.
+[17] Peter Holderrieth and Ezra Erives. 2026. An Introduction to Flow Matching and
+Diffusion Models.arXiv preprint arXiv:2506.02070(2026).
+[18] Yang Hu, Xiao Wang, Zezhen Ding, Lirong Wu, Huatian Zhang, Stan Z. Li, Sheng
+Wang, Jiheng Zhang, Ziyun Li, and Tianlong Chen. 2024. FlowTS: Time Series
+Generation via Rectified Flow.arXiv preprint arXiv:2411.07506(2024).
+[19] Yu-Hao Huang, Chang Xu, Yang Liu, Weiqing Liu, Wu-Jun Li, and Jiang Bian. 2026.
+Controllable Financial Market Generation with Diffusion Guided Meta Agent. In
+Proceedings of the AAAI Conference on Artificial Intelligence. arXiv:2408.12991.
+[20] Hanna Hultin, Henrik Hult, Alexandre Proutiere, Samuel Samama, and Ala
+Tarighati. 2023. A Generative Model of a Limit Order Book Using Recurrent
+Neural Networks.Quantitative Finance23, 6 (2023), 931–958.
+[21] Konark Jain, Nick Firoozye, Jonathan Kochems, and Philip Treleaven. 2024. Limit
+Order Book dynamics and order size modelling using Compound Hawkes Process.
+Finance Research Letters69 (2024), 106157.
+[22] Tero Karras, Miika Aittala, Timo Aila, and Samuli Laine. 2022. Elucidating
+the Design Space of Diffusion-Based Generative Models. InAdvances in Neural
+Information Processing Systems, Vol. 35. 26565–26577. arXiv:2206.00364.
+[23] Maxime Kawawa-Beaudan, Srijan Sood, Kassiani Papasotiriou, Daniel Borrajo,
+and Manuela Veloso. 2026. TradeFM: A generative foundation model for trade-
+flow and market microstructure.arXiv preprint arXiv:2602.23784(2026).
+[24] Junyi Li, Xintong Wang, Yaoyang Lin, Arunesh Sinha, and Michael P. Wellman.
+2020. Generating Realistic Stock Market Order Streams. InProceedings of the
+AAAI Conference on Artificial Intelligence, Vol. 34. 727–734.
+[25] Yang Li and Zhi Chen. 2025. ByteGen: A Tokenizer-Free Generative Model for
+Orderbook Events in Byte Space.arXiv preprint arXiv:2508.02247(2025).
+[26] Yang Li, Zhi Chen, and Steve Yang. 2025. FlowHFT: Imitation Learning via Flow
+Matching Policy for Optimal High-Frequency Trading under Diverse Market
+Conditions.arXiv preprint arXiv:2505.05784(2025).
+[27] Yaron Lipman, Ricky T. Q. Chen, Heli Ben-Hamu, Maximilian Nickel, and Matt
+Le. 2023. Flow Matching for Generative Modeling. InInternational Conference
+on Learning Representations. arXiv:2210.02747.
+[28] Xingchao Liu, Chengyue Gong, and Qiang Liu. 2023. Flow Straight and Fast:
+Learning to Generate and Transfer Data with Rectified Flow. InInternational
+Conference on Learning Representations. arXiv:2209.03003.
+[29] Cheng Lu, Yuhao Zhou, Fan Bao, Jianfei Chen, Chongxuan Li, and Jun Zhu.
+2022. Dpm-solver: A fast ode solver for diffusion probabilistic model sampling
+in around 10 steps.Advances in neural information processing systems35 (2022),
+5775–5787.
+[30] Peer Nagy, Sascha Frey, Silvia Sapora, Kang Li, Anisoara Calinescu, Stefan Zohren,
+and Jakob Foerster. 2023. Generative AI for End-to-End Limit Order Book
+Modelling: A Token-Level Autoregressive Generative Model of Message Flow
+Using a Deep State Space Network. InProceedings of the 4th ACM International
+Conference on AI in Finance. arXiv:2309.00638.
+[31] Yuqi Nie, John M Mulvey, H Vincent Poor, Chenyu Yu, and Hao Huang. 2026.
+Deep generative models meet statistical methods: a generalized framework for
+financial regime identification.Annals of Operations Research(2026), 1–28.
+[32] Ollie Olby, Andreea Bacalum, Rory Baggott, and Namid Stillman. 2025. Right
+Place, Right Time: Market Simulation-based RL for Execution Optimisation. In
+Proceedings of the 6th ACM International Conference on AI in Finance. 898–905.
+[33] William Peebles and Saining Xie. 2023. Scalable Diffusion Models with Trans-
+formers. InProceedings of the IEEE/CVF International Conference on Computer
+Vision. arXiv:2212.09748.
+[34] Ethan Perez, Florian Strub, Harm De Vries, Vincent Dumoulin, and Aaron
+Courville. 2018. Film: Visual reasoning with a general conditioning layer. In
+Proceedings of the AAAI conference on artificial intelligence, Vol. 32.
+[35] Vamsi K Potluru, Daniel Borrajo, Andrea Coletta, Niccolò Dalmasso, Yousef
+El-Laham, Elizabeth Fons, Mohsen Ghassemi, Sriram Gopalakrishnan, Vikesh
+Gosai, Eleonora Kreačić, et al. 2023. Synthetic data applications in finance.arXiv
+preprint arXiv:2401.00081(2023).
+[36] Jascha Sohl-Dickstein, Eric A. Weiss, Niru Maheswaranathan, and Surya Ganguli.
+2015. Deep Unsupervised Learning using Nonequilibrium Thermodynamics. In
+Proceedings of the 32nd International Conference on Machine Learning. 2256–2265.
+arXiv:1503.03585.
+[37] Jiaming Song, Chenlin Meng, and Stefano Ermon. 2021. Denoising Diffu-
+sion Implicit Models. InInternational Conference on Learning Representations.
+arXiv:2010.02502.
+[38] Yang Song, Prafulla Dhariwal, Mark Chen, and Ilya Sutskever. 2023. Consistency
+Models. InProceedings of the 40th International Conference on Machine Learning.
+arXiv:2303.01469.
+[39] Yang Song and Stefano Ermon. 2019. Generative Modeling by Estimating Gra-
+dients of the Data Distribution. InAdvances in Neural Information Processing
+Systems, Vol. 32. arXiv:1907.05600.
+[40] Yang Song, Jascha Sohl-Dickstein, Diederik P. Kingma, Abhishek Kumar, Stefano
+Ermon, and Ben Poole. 2021. Score-Based Generative Modeling through Stochas-
+tic Differential Equations. InInternational Conference on Learning Representations.
+arXiv:2011.13456.
+[41] Yuki Tanaka, Ryuji Hashimoto, Takehiro Takayanagi, Zhe Piao, Yuri Murayama,
+and Kiyoshi Izumi. 2025. CoFinDiff: Controllable Financial Diffusion Model for
+Time Series Generation. InProceedings of the Thirty-Fourth International Joint
+Conference on Artificial Intelligence. 9357–9365. arXiv:2503.04164.
+[42] Svitlana Vyetrenko, David Byrd, Nick Petosa, Mahmoud Mahfouz, Danial Der-
+vovic, Manuela Veloso, and Tucker Balch. 2020. Get Real: Realism Metrics for
+Robust Limit Order Book Market Simulations. InProceedings of the 1st ACM
+International Conference on AI in Finance. arXiv:1912.04941.
+[43] Zhuohan Wang and Carmine Ventre. 2025. DiffVolume: Diffusion Models for Vol-
+ume Generation in Limit Order Books. InProceedings of the 6th ACM International
+Conference on AI in Finance. 587–595. arXiv:2508.08698.
+[44] Zhuohan Wang and Carmine Ventre. 2026. DiffLOB: Diffusion Models
+for Counterfactual Generation in Limit Order Books. InProceedings of the
+35th International Joint Conference on Artificial Intelligence (IJCAI-ECAI 2026).
+arXiv:2602.03776.
+[45] Magnus Wiese, Robert Knobloch, Ralf Korn, and Peter Kretschmer. 2020. Quant
+GANs: Deep Generation of Financial Time Series.Quantitative Finance20, 9
+(2020). arXiv:1907.06673.
+[46] Ling Yang, Zhilong Zhang, Yang Song, Shenda Hong, Runsheng Xu, Yue Zhao,
+Wentao Zhang, Bin Cui, and Ming-Hsuan Yang. 2023. Diffusion models: A
+comprehensive survey of methods and applications.ACM computing surveys56,
+4 (2023), 1–39.
+[47] Wenliang Zhao, Lujia Bai, Yongming Rao, Jie Zhou, and Jiwen Lu. 2023. Unipc:
+A unified predictor-corrector framework for fast sampling of diffusion models.
+Advances in Neural Information Processing Systems36 (2023), 49842–49869.
+[48] Zetao Zheng, Guoan Li, Deqiang Ouyang, Decui Liang, and Jie Shao. 2024. Limit
+Order Book Event Stream Prediction with Diffusion Model.Data Science and
+Engineering(2024). arXiv:2412.09631.
+8

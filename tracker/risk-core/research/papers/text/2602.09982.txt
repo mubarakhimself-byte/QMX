@@ -1,0 +1,929 @@
+arXiv 2602.09982  https://arxiv.org/abs/2602.09982
+
+Kelly Betting as Bayesian Model Evaluation:
+A Framework for Time-Updating Probabilistic Forecasts
+Michael Beuoy
+inpredictable.com
+michael.beuoy@gmail.com
+Abstract
+This paper proposes a new way of evaluating the accuracy and validity of probabilistic
+forecasts that change over time (such as an in-game win probability model, or an election
+forecast). Under this approach, each model to be evaluated is treated as a canonical Kelly
+bettor, and the models are pitted against each other in an iterative betting contest. The growth
+or decline of each model’s bankroll serves as the evaluation metric. Under this approach, market
+consensus probabilities and implied model credibilities can be updated real time as each model
+updates, and do not require one to wait for the final outcome. Using a simulation model, it
+will be shown that this method is in general more accurate than traditional average log-loss
+and Brier score methods at distinguishing a correct model from an incorrect model. This Kelly
+approach is shown to have a direct mathematical and conceptual analogue to Bayesian inference,
+with bankroll serving as a proxy for Bayesian credibility.
+1 Introduction
+Forecast evaluation can be a fraught topic, particularly with the general public. Probabilistic
+thinking does not come naturally to most, making it difficult to understand the performance of
+a prediction that conveys something short of ironclad certainty. Typically, one will often see a
+probabilistic forecast collapsed into a binary proposition and evaluated as such. For example, all
+probabilities greater than 50% (e.g. 51%, 90%, 99.9999%) are viewed equally as a prediction of
+certainty for the outcome in question. Conversely, you will sometimes see probabilistic forecasts
+viewed as practically unfalsifiable—as long as you predicted a probability greater than 0% (even if
+it was 0.1%), your forecast can never be wrong.
+The waters become even muddier when evaluating forecasts that change over time. Outside of
+sporting events, the most widely known time-updating forecasts are those that attempt to forecast
+the outcome of elections, such as the models and probabilities once published at FiveThirtyEight.
+Despite updating on a daily basis, election forecasts are often judged by the accuracy of their last
+forecast, published the morning of the election. On its surface, this seems somewhat odd. What
+value is a forecast where you will likely know the outcome within 24 hours anyway? Surely the
+forecasts produced 3, 4, 5 months in advance of the election would be more valuable and a better
+test of forecasting skill?
+Returning to sports, the most common time-updating forecasts are in-game win probability
+models. And these are often judged by their “worst” prediction, particularly in the case of improb-
+able comebacks. When the New England Patriots overcame a 28–3 deficit in Super Bowl LI, the
+infinitesimal win probability given to the Patriots at their lowest point was held up by some as proof
+of the uselessness of win probability as a metric.
+1
+arXiv:2602.09982v1  [stat.ME]  10 Feb 2026
+Fortunately, there do exist statistically sound tools for general forecast evaluation, such as
+log loss, Brier score, and calibration tests. These tests do a good job of punishing overconfident
+predictions while rewarding well-calibrated predictions.
+However, these evaluation tools are not specifically suited to time-updating forecasts. For ex-
+ample, if Model A estimates the probability of an outcome initially at 70%, but then updates it
+to 30% at a later time, how would we compare that to Model B, which estimated 30% all along?
+Assume in this case that the outcome did occur. A traditional approach would just be to take the
+average log loss or Brier score of each estimate and then compare. But such an approach ignores
+the order in which each model makes its predictions. Couldn’t one argue that Model B performed
+better because it got to the 30% answer quicker than the first model? Even though it ends up with
+a worse average log loss score? And should we view Model A with less credibility because of that?
+Or was Model B just lucky, having hit upon the right answer for the wrong reasons, and Model A
+was the one appropriately reacting to new information as it came to light?
+These questions are difficult to answer in general, but what this paper proposes is a method
+of forecast evaluation that provides an unambiguous, accurate, and fundamentally Bayesian way of
+answering this question. We’ll start with a simple example involving some friendly wagers.
+2 A Simple Example
+Suppose we have two modelers, Bob and Alice, who both have their own independent forecasts for
+an upcoming basketball game. In addition, both Bob and Alice can update their forecast after the
+completion of each quarter.
+Bob and Alice’s estimates are summarized in Table 1 below.
+Table 1: Bob and Alice’s home team win probability estimates at the beginning of each quarter
+home team win probability
+forecast as of:Bob Alice
+Start of 1st Quarter 80% 50%
+Start of 2nd Quarter 50% 50%
+Start of 3rd Quarter 50% 80%
+Start of 4th Quarter 80% 80%
+Let’s say that the home team ended up winning this game. How would we evaluate the accuracy
+of Bob and Alice’s forecasts? A common approach in this situation would be to calculate a Brier
+score or log loss for each forecast made, and then average that number. Under this evaluation, Bob
+and Alice performed equally well, with Brier scores of 0.145 and log loss of 0.66 (using a base 2 log).
+What if, instead of comparing Brier scores or log loss, Bob and Alice were to wager against each
+other real time, using their respective probability models? It turns out that if we assume both Bob
+and Alice follow the Kelly criterion in determining their bet sizes, we can calculate a unique odds
+at each point of the game in which Bob and Alice would agree to a wager.
+For example, if we assume Bob and Alice both start with a $50 bankroll, they would agree to a
+bet at 7/13 odds, or an implied probability of 65%. Bob would be willing to make a bet of $21.43
+at those odds, and Alice would be willing to accept a bet (as the bookmaker) of $21.43 at those
+same odds.
+As the game progresses and Bob and Alice update their probabilities, they can continue to find a
+mutually agreed upon bet size and odds that reflects both their latest probability estimates, as well
+2
+as the existing wagers they have already made. For example, after the 1st quarter, when Bob has
+updated his probability estimate to 50%, while Alice remains at 50%, they would then agree to a
+bet of $16.48 at even odds. However, in this case, Bob has become the bookmaker and is accepting
+$16.48 from Alice, the bettor.
+It turns out that under this approach, we end up with a clear winner between Bob and Alice.
+At the end of the game, Bob has lost $9.45 of his $50 by betting with Alice, who has now added
+that $9.45 to her $50 bankroll.
+The math to calculate these bets is straightforward, and will be demonstrated in subsequent
+sections.
+3 Binary Probabilities with Multiple Bettors
+We will start with the simple example of binary probabilities, and then extend the method to an
+arbitrary number of mutually exclusive outcomes.
+3.1 Optimal Kelly betting with existing bets
+The Kelly criterion is a bet-sizing strategy that prescribes the percentage of bankroll one should
+wager on an outcome, given the odds offered and the estimated true probability of the outcome.
+The most familiar version of the Kelly criterion expresses the fraction of bankroll to be wagered,
+given the estimated probability and odds:
+f=p− 1−po
+Wherefis the fraction of bankroll to wager,pis the estimated probability of the outcome to occur,
+andois the odds offered.
+This formula can be generalized to the situation where a bettor has existing bets on the outcome.
+Denotewas a bettor’swin shares, and define it as the money a bettor would stand to win (orlose,
+ifwis negative) if the outcome in question occurred.
+In this situation, the Kelly Criterion can be generalized as (see Appendix A.1 for a derivation):
+f=p− (1−p)o 1 + wb  (1)
+This reduces to the more familiar version of the Kelly criterion when a bettor has no existing
+win shares (w= 0).
+3.2 Determining a “market clearing price” with multiple Kelly bettors and ex-
+isting bets
+Using formula (1), we can now calculate the desired bet size for a bettor that reflects both their
+estimate of the outcome probabilitypas well as any bets they have already made, as reflected by
+their win shares amount,w.
+For the case ofnbettors, denotep i as the outcome probability assigned by theith bettor,bi
+as the bankroll held by theith bettor andw i as the win shares held by theith bettor. Assume
+that each bettor follows formula (1) when determining what fraction of their bankroll to invest in a
+proposed set of odds. One can establish a formula for the market clearing price where, in aggregate,
+all bets are matched up with willing bookmakers among thenbettors.
+3
+Formula (2) below is the market clearing price, expressed in terms of the implied probability
+from the market odds (refer to Appendix A.2 for the derivation):
+market probability=
+P pibi
+1− P piwi (2)
+This is a generalization of a formula from Beygelzimer et al. [2012], which found that in the case
+of a market without existing bets, the “market clearing” price is the bankroll-weighted probability
+estimate of the market participants. In the general case where there are existing bets to account
+for, the market probability contains a denominator term which is 1 minus the sum product of each
+bettor’s win shares times each bettor’s probability. Formula (2) reduces to the original 2012 result
+if all win shares are set to zero.
+Using formulas (1) and (2), we can evaluate multiple forecast models against each other in a de
+facto betting contest. A key advantage of this approach is that it allows for a real time updating of
+the performance of each model. In other words, you do not need to wait until the bet is “settled”
+in order to update evaluation of model performance. Using the market consensus probability,mp,
+each model’s portfolio of bets can be marked to market.
+Returning to our Bob and Alice example, when Bob reduced his original probability estimate
+from 80% to 50% (and Alice stayed put at 50%), the marked-to-market value of Bob’s portfolio
+dropped from $50 to $45. If we view bankroll as analogous to credibility (in a Bayesian sense), our
+Bayesian prior that Bob and Alice were equally probable to have the correct model, has now been
+updated to Bob being 45% likely to have the correct model, and Alice upgraded to 55%.
+3.3 Procedure for evaluating multiple forecast models against each other in the
+case of binary probabilities
+We now have a straightforward algorithm for evaluating real-time forecast models against each
+other. The steps are as follows:
+•Step 1:Calculate the market clearing probability according to formula (2):
+market probability=
+P pibi
+1− P piwi
+This is a simple calculation based solely on each bettor’s bankroll, outstanding win shares,
+and latest probability estimate.
+•Step 2:Convert the market probability into odds via the formulao= (1−p)/pand then
+calculate each bettor’s wager as a fraction of their bankroll according to formula (1):
+f=p− (1−p)o 1 + wb 
+•Step 3(optional): Calculate each bettor’s “marked to market” bankroll. The market con-
+sensus probability can be used to evaluate each bettor’s expected bankroll, which is equal to
+their bankroll plus the expected value of their win shares. This provides a running evaluation
+of how each bettor is doing in this prediction contest. One does not have to wait for the event
+to be over and the bets to be settled.
+•Step 4:Update each bettor’s bankroll and win shares based on the fraction of bankroll
+bet from step 2. Win shares are updated in accordance with the market clearing odds. For
+example, if a bettor is wagering 20% of their $100 bankroll at 2-1 market odds, you reduce
+their bankroll by $20 and increase their win shares by $60 (= [bet amount]×[odds + 1])
+4
+•Step 5:Repeat Steps 1–4 as new information is revealed and the bettors update their prob-
+ability estimates.
+•Step 6:Settling the bet. In the event of a win, each bettor’s bankroll is increased/decreased
+by their outstanding win shares amount. Note that, by necessity, some bettors will have
+negative win shares and will thus see a reduction in their bankroll. They are the bookmakers
+paying out on winning wagers. In the event of a loss, all win shares have a value of zero and
+each bettor is left with their existing bankroll as their end result.
+Steps 1–6 show how one can create an evaluation metric for competing real-time forecast models.
+One can find a similar approach in Sethi et al. [2025], in which the authors applied a Kelly-based
+betting approach to evaluate the accuracy of models predicting the outcome of the 2024 US pres-
+idential and congressional elections. However, in that approach, the betting odds are determined
+by Polymarket, a crypto-based prediction market, rather than set by consensus as in this paper’s
+approach.
+Returning to the example from the introduction, here is how these steps would play out:
+Table 2: Illustration of the methodology with a hypothetical example where two modelers wager
+against each other on a basketball game.
+win prob bankroll win shares market credibility bet amount +/- win shares
+qtrBob Alice Bob Alice Bob AliceprobBob Alice Bob Alice Bob Alice
+Q1 80% 50% 0.50 0.50 0.00 0.00 65% 50% 50% 0.21−0.21 0.33−0.33
+Q2 50% 50% 0.29 0.71 0.33−0.33 50% 45% 55%−0.16 0.16−0.33 0.33
+Q3 50% 80% 0.45 0.55 0.00 0.00 66% 45% 55%−0.22 0.22−0.33 0.33
+Q4 80% 80% 0.67 0.33−0.33 0.33 80% 41% 59% 0.27−0.27 0.33−0.33
+Final 0.41 0.59 0.00 0.00
+Bob, by continually being one step behind Alice, sees 9% of his credibility siphoned away over
+the course of the game. Also note that in this case, the actual outcome of the game is immaterial
+to the final result for Bob and Alice. In general, it can be shown that when all market participants
+agree on the probabilities at any point in the game, all bets get effectively settled, and every market
+participant’s win shares go to zero.
+Compared to traditional methods like average log loss or Brier score, this metric has a more
+tangible, real world interpretation: if you let each model bet according to the Kelly criterion, models
+can be evaluated by how their bankroll shrinks or grows as a result of this betting contest. In the
+following section we will show that bankroll in this context has both a conceptual and mathematical
+analogue to Bayesian credibility. To demonstrate this, we will first show how the algorithm above
+can be generalized to the case of multinomial probabilities.
+4 The General Case with Multinomial Probabilities and Multiple
+Bettors
+The approach described in Section 3 will now be generalized to account for an arbitrary number of
+mutually exclusive outcomes. Real world examples from the sporting world include in-match soccer
+probabilities (win/loss/draw) or in-season team futures, such as predicting the winner of an MLB
+division.
+5
+4.1 Kelly betting with multiple outcomes and existing bets
+To best model multinomial outcomes, we will dispense with the bankroll/bet distinction of the
+previous section, and instead specify the positions held by each model in terms of the bankroll they
+would ultimately be left with in the event of each outcome. This avoids having to arbitrarily set
+aside one outcome as the “no bet” option. This approach also aligns with that taken by Kelly in his
+original paper [Kelly, 1956], and will result in a generalization of his original result.
+Definew i as the win shares held on theith outcome by the bettor. In this situation there is
+no additional bankroll to speak of, sowi represents the sum total of funds the bettor would be left
+with in the event of theith outcome. Under this definition, a bettor with no existing bets to speak
+of would simply have a uniformwi for each outcome, wherewi is just their bankroll.
+To illustrate with the Bob and Alice example from the introduction, after the 1st quarter, rather
+than saying that Bob has a bankroll of $21.53 and win shares of $32.97, we instead describe Bob’s
+position in terms of his ending bankroll under each potential outcome:
+•w home_win = $61.54 (=$21.53 + $32.97)
+•w home_loss = $21.53 (=$21.53 + $0.00)
+We now definepi as the probability assigned to theith outcome by the bettor, andmi as the
+corresponding market probability, meaning the probability implied by the available market odds for
+each outcome.
+We can now calculate how a bettor’s win shares shift as the result of a new round of Kelly
+wagering. We will denote the bettor’s updated win shares asw ′i, and can be expressed as (see
+Appendix A.3 for a derivation):
+w′i = pimi nXi=1 miwi (3)
+This is a generalization of a result from John Kelly’s original paper [Kelly, 1956], which found
+that when the market odds are fair, the optimal wagering strategy is to bet in proportion to one’s
+own probability estimates for each outcome,independent of the market odds being offered.
+To see how this generalizes Kelly’s original result, note that betting a fractionpi of your bankroll
+bat market oddso i means that you will end up with the following bankroll under each potential
+outcomei:
+wi = pimi b
+Wherem i is the probability of outcomeiimplied by the market oddsoi (mi = 1/(1 +o i)).
+This is a less general version of formula (3), specific to the situation where a bettor has no
+existing bets. The generalization in formula (3) states that when you have existing bets, you are in
+effect betting in proportion to your marked to market bankroll, which is the expected value of your
+existing positions, according to the market probabilities:
+“marked to market” bankroll=
+nX
+i=1
+miwi
+4.1.1 Calculating market clearing odds with multiple outcomes and multiple bettors
+In the case ofnpossible outcomes andmKelly bettors, we will now calculate the implied market
+clearing odds as a function of each bettor’s existing positions and current probability estimates. We
+define the following:
+6
+•w ij = win shares held on theith outcome by thejth bettor
+•p ij = probability estimate of theith outcome from thejth bettor
+•o i = the “market clearing” odds for theith outcome. These are the odds in which all bettors
+have matching “bookmakers” for the wagers they wish to place
+•m i = the probability of theith outcome implied by the market oddsoi
+•∆ ij = win shares to be purchased (or sold) on theith outcome by thejth bettor
+If we considerp ij andw kj as twon×mmatricespandw, and the market probabilitiesm i
+as a vectorm, the condition for market-clearing odds can be written as (see Appendix A.4 for a
+derivation):
+(pwT )m=m(4)
+Written this way, we see that the market clearing probabilitymis an eigenvector of the matrix
+pwT with eigenvalue 1. We will refer to the matrixpwT asM.Mis ann×nmatrix in which
+theijth element is the sum product of the probability estimates for outcomeitimes the win shares
+held on outcomej, summed over all market participants. The matrixMcan be interpreted as a
+conditional probability matrix of sorts, where theijth element tells you the posterior probability
+of outcomej, in the event that outcomeihas occurred. Or, in conditional probability notation,
+Mij =P(j|i).
+4.1.2 A self-evaluating market
+If we multiply our matrix equation (4) by the matrixwT on both sides we get the following:
+wT (pwT )m=w T m
+Or, regrouping terms:
+(wT p)(wT m) =w T m(5)
+The vectorw T mis a vector of lengthm, in which theith element is the sum product of the
+market probabilities times theith bettor’s portfolio, (recall thatwtells you the bankroll each bettor
+will end up with for each potential outcome). Put another way, this vector is the expected value of
+each bettor’s portfolio, using the market consensus probabilities to calculate the expected value. If
+we define this vector asc, wherecstands for credibility, we can see from equation (5) thatcis an
+eigenvector of the matrixwT p.
+The matrixw T pis anm×mmatrix with an intuitive interpretation. Theijth element of this
+matrixisthesumproductoftheithbettor’sprobabilityestimatestimesthejthbettor’sportfolio. In
+other words, this matrix tells us what each bettor thinks of every other bettor’s portfolio (including
+their own). We will define the matrixwT pasS(whereSstands for self-evaluating market). We
+can now rewrite equation (5) more simply as:
+Sc=c
+Our credibility vectorcis an eigenvector ofS, with an eigenvalue of 1. The matrixSis also a
+left-stochastic matrix and thus the eigenvectorcwith eigenvalue of 1 is guaranteed to exist.
+The credibility vectorcand the market clearing probability vectormare connected via the
+following matrix equations:
+c=w T m
+m=pc
+7
+So, one need only solve for either the eigenvector ofpw T orw T pand then use one of the
+equations above to convertmtocorctom.
+The procedure described in Section 3.3 can now be extended to the general case of multinomial
+probabilities. In Step 1, formula (2) for the market probability is replaced with the eigenvector of
+the market odds matrixM. Step 2 is replaced by formula (A.5) from the Appendix, which tells
+you how to adjust each bettor’s win shares, given a set of market oddsm.
+Several illustrations of the approach across multiple sports and types of forecasts are provided
+in Appendix B of this paper.
+4.1.3 Bankroll as credibility: Connection to Bayes’ Theorem
+Formula (3) has a direct connection to Bayes’ theorem. To show this, instead of treating bankroll
+as a financial metric, we will interpret it instead as a likelihood of a model being the correct model.
+This was the motivation for having the total of all bankrolls sum to 1. How can we reframe the
+Kelly approach in Bayesian terms?
+The hypothesis we wish to evaluate (in a Bayesian way) is the likelihood of each model being
+correct. The evidence we use to evaluate the hypothesis and update our priors are the actual
+outcomes that each model is trying to predict. Using the standard version of Bayes’ formula, define
+P(A|B)as the likelihood that modelAis the correct model, given that outcomeBoccurred. Then,
+according to Bayes’ theorem,P(A|B)can be calculated as:
+P(A|B) = P(B|A)·P(A)P(B)
+We can now show that, under a suitable interpretation of our Kelly-based betting contest,
+formula (3) is equivalent to Bayes’ theorem above.
+If we interpret bankroll as a likelihood, then the termP(A|B)is justw B, the bettor’s ending
+bankroll conditioned upon the eventBhaving occurred.
+Moving to the right side of Bayes’ formula,P(B|A)is the probability thatBwill occur, given
+thatAis the correct model. Using our previous definitions, this is justpB, the probability assigned
+to outcomeBby modelA.
+P(B)is the total probability that outcomeBwill occur, taking into account all models. Trusting
+the wisdom of the crowd,P(B)is the probability ofBimplied by the market odds, ormB.
+P(A)is our prior estimate of the likelihood that modelAis the correct model. We define this
+with the help of the market probabilities as well. We do this by calculating the expected bankroll
+(i.e. likelihood) of bettorA’s portfolio, using the market probabilities to assess expected value:
+nX
+i=1
+miwi
+To summarize:
+•P(A|B)→w B (the probability thatAis the correct model given outcomeB)
+•P(B|A)→p B (the probability ofBif modelAis the correct model)
+•P(B)→m B (the market consensus probability ofB)
+•P(A)→ Pni=1 miwi (our Bayesian prior, the likelihood thatAis the correct model)
+8
+So, plugging these terms into Bayes’ theorem gives us:
+wB = pBmB nXi=1 miwi
+Which is identical to formula (3), with different subscripts.
+5 Simulating Various Models to Demonstrate the Value of This
+Approach
+5.1 Creating a hypothetical sports contest to model and then simulating
+To illustrate the value of this approach in identifying more accurate models, we will model and
+simulate a volleyball-like contest in which the actual probability of a team winning any given point
+is constant. The rules of this simplified game are that the first team to 100 points wins, but they
+must win by at least 2 points.
+The true win probabilities at any given game state can be calculated straightforwardly, given
+the probability of winning a single point. In what follows, we will create one “correct” model, and
+various “incorrect” models to then demonstrate how this paper’s approach fares when attempting
+to identify the correct model from the actual outcome of simulated games. In particular, we will
+see when this approach is superior to more traditional approaches of forecast evaluation, such as
+log loss and Brier score. These incorrect models were crafted in an attempt to recreate common
+situations in which a forecast model can go wrong.
+5.2 When the incorrect model has the wrong point probability
+For the first example, we will assume that the actual probability of Team A winning a point against
+team B is 50%. We will then pit two models against each other in an in-game prediction contest:
+•Correct model—Assumes Team A has a 50% probability to win each point
+•Incorrect model—Assumes Team A has a 53% probability to win each point
+As an example, if the score was 10–15 in favor of Team B, the correct model would calculate the
+probability of Team A winning the game to be 35.2%. But the incorrect modeler would calculate
+that same probability as 66.2%.
+Below are the results of simulating 10,000 games, using a simulated point win probability of
+50%. We will use three evaluation metrics: ending bankroll (this paper’s approach), average log loss
+score (straight average across all points played), and average Brier score (straight average across all
+points played).
+For each simulation round, we record which model received the higher score according to these
+three metrics. Here are the results. “Accuracy” is defined as the percent of times that the correct
+model scored the higher metric.
+9
+Table 3: Distinguishing between a correct model with 0.50 point probability and an incorrect model
+with 0.53 point probability
+Evaluation Metric Accuracy
+Kelly Bankroll 55.1%
+Average Log Loss 49.9%
+Average Brier Score 49.9%
+So, 55.1% of the time, the correct model ends the game with a higher bankroll than the incorrect
+model. But 49.9% of the time, the correct model ended with a better log loss score than the incorrect
+model.
+Sticking with this example, we can also simulate when the correct probability is 0.53:
+•Correct model—Assumes Team A has a 53% probability to win each point
+•Incorrect model—Assumes Team A has a 50% probability to win each point
+Simulating 10,000 times, we get the following result:
+Table 4: Distinguishing between a correct model with 0.53 point probability and an incorrect model
+with 0.50 point probability
+Evaluation Metric Accuracy
+Kelly Bankroll 76.3%
+Average Log Loss 80.5%
+Average Brier Score 80.5%
+Contrary to the first example, the Kelly approach was less accurate in identifying the correct
+model, compared to averaging of either log loss or Brier scores. However, we will see in a subsequent
+section that when the contest is iterated, the Kelly approach outperforms log loss and Brier methods
+over the long term across a broad range of point probability scenarios.
+5.3 When the incorrect model has faulty recency bias
+For the second example, the incorrect model will start with the correct point probability, 0.50.
+However, as the game progresses, the incorrect model begins updating its point probabilities based
+on the actual point outcomes. More specifically, the incorrect model treats the prior 10 points
+played with 10% credibility when projecting the future probability of winning a point:
+•Incorrect model Team A point probability = (90%×0.50) + (10%×[Percent of points won
+by Team A for prior 10 points played])
+Below are the results of simulating 10,000 games in this manner, and recording which approach
+was more accurate in identifying the correct model:
+10
+Table 5: Distinguishing between a correct model with 0.50 point probability and an incorrect model
+with faulty recency bias
+Evaluation Metric Accuracy
+Kelly Bankroll 96.0%
+Average Log Loss 73.1%
+Average Brier Score 80.2%
+5.4 When the incorrect model uses variables with no predictive value
+In this example, we will simulate a situation when an incorrect model starts with the correct point
+probability of 0.50, but then updates that probability as the game progresses based on a variable
+that has no predictive value. The point probability the incorrect model uses follows a random walk,
+in which after each point the forecasted point probability is adjusted up or down by the following
+amount:
+•([random number between 0 and 1]−0.5) / 35
+The modeled point probabilities are restricted to stay within the values of 0.40 and 0.60. These
+parameters were chosen in order to create a plausibly incorrect model, rather than an outlandishly
+incorrect model.
+Below are the results of simulating 10,000 games in this manner, and recording which approach
+was more accurate in identifying the correct model.
+Table 6: Distinguishing between a correct model with 0.50 point probability and an incorrect model
+that uses a variable with no predictive value
+Evaluation Metric Accuracy
+Kelly Bankroll 74.4%
+Average Log Loss 57.6%
+Average Brier Score 58.3%
+As seen from the results in Tables 5 and 6, the Kelly approach is particularly adept at identifying
+incorrect models that are unnecessarily volatile.
+6 Adding Iteration to the Simulations
+6.1 Utilizing the Bayesian Nature of the Kelly Approach
+A key advantage of the Kelly approach is its Bayesian nature, allowing it to have “memory” when
+dealing with an iterated comparison of models. More specifically, suppose you have a sequence of
+games in which you have two models forecasting the in-game probability of winning. As we would
+in any typical betting contest, we can let each model’s ending bankroll from the prior game be used
+as the starting bankroll for the new game. As shown in Section 4.1.3, bankroll in this context has
+a conceptual and mathematical analog to Bayesian credibility. Each in-game betting result informs
+our priors of how we start the subsequent game.
+When iterated, it will be shown in the next section that the Kelly approach is superior to
+traditional log loss and Brier methods across a robust set of scenarios.
+11
+6.2 Simulating an Iterated Betting Contest
+For this simulation, we will extend our simulation in Section 5.2 to a11×11grid of “correct” and
+“incorrect” models, in which both models will take on all distinct combinations of the following point
+probabilities: 0.45, 0.46, 0.47, 0.48, 0.49, 0.50, 0.51, 0.52, 0.53, 0.54, and 0.55. The simulation will
+then iterate over 50 games in sequence. For the Kelly approach, the ending bankroll from one game
+carries over to the start of the next game. For the log loss and Brier score approaches, models will
+be evaluated by average log loss and Brier score over all points played to that point.
+This 50 game approach is simulated 1,000 times for each point probability combination. The
+accuracy after 1, 10, 25, and 50 contests is shown below.
+Herearetheresultsafterasinglegameofbetting. TheKellyapproach“wins” ifitmorefrequently
+identifies the correct model than if one would just compare average Log Loss or Brier Score for each
+model. A Scenario here means a specific choice of “correct” model point probability (e.g. 0.54) and
+“incorrect” model point probability (e.g. 0.47).
+Table 7: Model evaluation accuracy after a single game
+Method Scenarios W on
+n%
+Kelly 50 45%
+Tie 14 13%
+Log Loss or Brier 46 42%
+Total 110 100%
+As we saw in Section 5.2, after a single round, there are scenarios where Log Loss and Brier
+score are more accurate. The Kelly approach holds just a slight advantage in terms of Scenarios
+“won”.
+Here are the results after just 5 rounds. “5 rounds” in this case means that the contest was
+repeated 5 times, with each model’s Kelly bankroll at the end of a round carrying over to the start
+of the next round.
+Table 8: Model evaluation accuracy after 5 games
+Method Scenarios W on
+n%
+Kelly 98 89%
+Tie 1 1%
+Log Loss or Brier 11 10%
+Total 110 100%
+Even after 5 rounds of betting, the advantage of the Kelly approach is apparent. Of the 110
+scenarios, it was most accurate in 98 of those, and tied for best accuracy in 1 scenario. It only lost
+to either average log loss or Brier score 11 times (10%).
+Here are the results after 25 rounds of betting. There are now even fewer scenarios (3 out of
+110), in which the Kelly approach doesn’t at least tie for best accuracy.
+12
+Table 9: Model evaluation accuracy after 25 games
+Method Scenarios W on
+n%
+Kelly 76 69%
+Tie 31 28%
+Log Loss or Brier 3 3%
+Total 110 100%
+And finally, here are the results after 50 rounds of betting. Only 2 scenarios (out of 110) remain
+in which the Kelly approach did not at least tie for best accuracy.
+Table 10: Model evaluation accuracy after 50 games
+Method Scenarios W on
+n%
+Kelly 61 55%
+Tie 47 43%
+Log Loss or Brier 2 2%
+Total 110 100%
+Refer to the charts in Appendix Section C for additional detail on which specific scenarios the
+Kelly model over or under performed against Log Loss and Brier Score.
+7 In-Game Evaluations of Model Credibility
+7.1 Evaluating models prior to completion of the contest
+AnotheradvantageoftheKellyapproachisthatitallowsfor“realtime” evaluationofmodelaccuracy
+and credibility, prior to the completion of the contest. In the preceding sections, the comparison
+to average log loss and Brier score methods required knowing the outcome of the game before
+calculating a log loss or Brier score. Using the simulation examples from the previous sections, we
+will show how the Kelly approach can identify which model is more accurate (in a Bayesian way)
+in the early stages of the game.
+In this paper, we refer to a model’s “credibility” and a model’s “bankroll” interchangeably.
+7.2 In-game evaluations where the incorrect model has the wrong point prob-
+ability
+The table below shows the average implied credibility each model has after 10, 25, 50, and 100
+points played. This is based on the same simulation of 10,000 games from the previous section.
+13
+Table 11: Correct model point probability: 0.50, Incorrect model point probability: 0.53
+A verage Model Credibility
+After point: correct model incorrect model
+10 50.2% 49.8%
+25 50.6% 49.4%
+50 51.1% 48.9%
+100 52.1% 47.9%
+Table 12: Correct model point probability: 0.53, Incorrect model point probability: 0.50
+A verage Model Credibility
+After point: correct model incorrect model
+10 50.3% 49.7%
+25 50.7% 49.3%
+50 51.3% 48.7%
+100 52.5% 47.5%
+While not showing sizable gains in credibility (there is a ceiling to what one can statistically
+conclude from just a sample of points), these results do show that the Kelly approach is able to tilt
+its credibility estimates towards the correct model early on in the contest, and prior to knowing the
+outcome.
+7.3 In-game evaluations where the incorrect model has faulty recency bias
+The table below shows the same results for the situation in which the correct point probability
+is 0.50, but the incorrect model erroneously adjusts its point probabilities in response to recent
+in-game performance.
+Table 13: Correct model point probability of 0.50 versus a faulty recency bias model
+A verage Model Credibility
+Point correct model incorrect model
+10 50.1% 49.9%
+25 52.1% 47.9%
+50 54.7% 45.3%
+100 58.2% 41.8%
+7.4 In-game evaluations where the incorrect model uses variables with no pre-
+dictive value
+Here are the results where the incorrect model point probabilities drift according to a random
+variable.
+14
+Table 14: Correct model point probability of 0.50 versus a model using non-predictive variables
+A verage Model Credibility
+Point correct model incorrect model
+10 50.6% 49.4%
+25 51.9% 48.1%
+50 54.1% 45.9%
+100 57.9% 42.1%
+As we see from this example and the prior recency bias one, the Kelly approach is particularly
+good at downgrading the credibility of models that show unnecessary volatility.
+8 Advantages of the Methodology
+This approach has multiple advantages over traditional scoring methods such as log loss and Brier
+score, including:
+•Using simulations, the preceding sections showed that the Kelly approach is more accurate in
+separating correct models from incorrect models across a broad range of scenarios
+•The evaluation metric is time order-dependent, and, in general, rewards models that are more
+prescient and less volatile than their competitors, as we saw with the Bob and Alice example
+•Average log loss and Brier score when applied to in-game forecasts can sometimes be skewed
+by arbitrary over-weighting of predictions, such as if the model probabilities are changing by
+very small amounts, each updated probability gets weighted equally in the log loss or Brier
+score. Under this paper’s approach, small changes to probabilities lead to commensurately
+small bets, and thus do not have a material impact on the evaluation metric
+•Model credibility can be evaluated real time as the event progresses, and doesn’t need to wait
+until the final outcome
+•This approach has an easily understood practical interpretation (will you win money betting
+this model) and is fundamentally Bayesian in its approach
+•The approach works naturally in a situation where you may not view each model with equala
+prioricredibility. As with Bayesian analysis in general, one is free to specify pre-game priors
+(i.e. bankrolls) for each model. For example, we could have started Alice with a $75 bankroll
+and Bob with a $25 bankroll in the opening example.
+•Building on the previous point, the approach can be implemented in a sequential way, with
+the ending bankroll from a previous contest carrying over into the subsequent contest, just
+as one would do with an updated Bayesian prior. We saw in Section 6 that this sequential
+evaluation feature results in a clear advantage in assessing model accuracy.
+9 Conclusion
+From election models to in-game sports wagering to rapidly growing prediction markets such as
+Polymarket and Kalshi, probabilistic forecasts that update over time are having a moment, as they
+15
+say. This increasing prevalence calls for a rigorous evaluation framework with which to judge the
+accuracy and utility of these types of predictions—one that is tailored to their time updating nature
+and improves upon existing, simpler methods, such as averaging log loss or Brier scores. This paper
+provides a flexible and easily applied framework to evaluate such forecasts in real time, with both
+solid theoretical and practical underpinnings.
+Acknowledgments
+The author thanks Michael Lopez for his advice and guidance on the structure and focus of this
+paper, particularly his suggestion to use simulations to demonstrate the utility of this approach.
+Thank you to Brian Burke for providing ESPN win probability data for the NFL evaluation example.
+The author also thanks Andrew Patton and Rajiv Sethi for their advice and encouragement.
+A Formula Derivations
+A.1 The Kelly Criterion when there are existing bets
+We can generalize the Kelly criterion to the case where a bettor has existing positions by returning
+to the core definition, which is that Kelly bettors seek to optimize the expected log of their long
+term wealth. We will denotewas a bettor’swin shares, and define it as the money a bettor would
+stand to win if their bets were successful. When a bettor has existing win shares,w, the expected
+log of their long term wealth,G, can be expressed as follows:
+G=plog(b+bf o+w) + (1−p) log(b−f b)
+Maximizing this expression with respect tofand solving forf:
+pbo
+b+f bo+w − (1−p)bb−bf = 0
+f=p− (1−p)o 1 + wb  (1)
+A.2 Determining a market clearing price for binary probabilities
+This market clearing price condition can be expressed formally as:
+nX
+i=1
+fibi = 0(A.1)
+Wheref i is the fraction of bankroll bet (or fraction accepted for a bet iffi is negative), andbi is
+the current bankroll for theith bettor. Iffi is negative, this means the bettor is accepting, rather
+than placing a bet.
+One can combine Equations (1) and (A.1) and then solve foro, the market clearing odds that
+ensures each bettor is either placing or accepting a bet according to the Kelly criterion. To simplify
+the formulas, and to better draw the connection to Bayesian credibility, it is assumed that the
+combined bankroll of allnparticipants sums to 1:
+nX
+i=1
+bi = 1(A.2)
+16
+In addition, it is assumed that all market participants start off with zero win shares. Since win
+shares can only be exchanged on a zero-sum basis and cannot be created or destroyed, the total
+sum of all held win shares among market participants must always sum to zero:
+nX
+i=1
+wi = 0(A.3)
+The market clearing odds can be derived by combining formulas (1) and (A.1):
+nX
+i=1
+
+pibi − (1−p i)o bi − (1−p i)wio  = 0
+Solving foro, we find that the “market clearing” price for a collection ofnKelly bettors with
+existing bets is:
+market odds= 1− P pibiP pibi − P piwiP pibi
+Where equations (A.2) and (A.3) have been used to simplify the expression.
+This can be expressed even more simply in terms of the probability implied by these odds:
+market probability=
+P pibi
+1− P piwi (2)
+A.3 Derivation of Kelly betting with multiple outcomes and existing bets
+Following Kelly’s original formulation, assume that the market odds are “fair”, in that there is no
+“track take” or “vigorish” baked into the odds. This condition can be expressed as:
+nX
+i=1
+mi = 1
+Assume now that our hypothetical bettor seeks to maximize the expected logarithm of their
+long term wealth, as dictated by the Kelly criterion. This can only be achieved by making and/or
+accepting bets at the given market odds. Making bets in this manner shifts their win shares from
+wi tow ′i, which we’ll express asw′i =w i + ∆i. This can be treated as a constrained optimization
+problem, where the bettor seeks to optimize the expected logarithm of their wealth via∆i, subject
+to the constraint that∆i must be in accordance with market odds. What this means in practice is
+that the bettor must fund any bets viaacceptingbets on different outcomes. The market odds are,
+in effect, the exchange rate for swapping win shares.
+This constraint on∆i can be expressed formally as:
+nX
+i=1
+∆imi = 0
+To illustrate with an example, if the market probabilities for a game were 0.25 (3 to 1 odds) for
+the home team to win and 0.75 for the away team to win (1 to 3 odds), and you wished to increase
+your win shares on the home team by $2, you would first make a $0.50 bet on the home team at 3
+to 1 odds. In order to fund that bet, you would need to accept a bet on the away team at $0.50,
+which is the equivalent of selling $0.67 win shares on the away team. $2×0.25−$0.67×0.75 =
+0, in accordance with the formula above.
+17
+Calculating∆ i is a constrained optimization problem, which can be handled via a Lagrange
+multiplier. Optimizing the expected log of one’s bankroll subject to the constraint imposed by the
+market odds requires one to optimize the following expression with respect to∆i andλ:
+nX
+i=1
+pi ·log (w i + ∆i)−λ
+nX
+i=1
+∆imi
+Whereλis the Lagrangian multiplier used to impose the constraint. Differentiating with respect
+to∆ i and setting to zero: pi
+wi + ∆i
+−λm i = 0(A.4)
+Solve forλfirst by summing overi:
+nX
+i=1
+pi =λ
+nX
+i=1
+miwi +λ
+nX
+i=1
+mi∆i
+The term on the left side of the equation sums to 1, being a sum of probabilities over all possible
+outcomes. And the 2nd term on the right side sums to zero, per the original constraint. Solving for
+the Lagrangian multiplierλ:
+λ= 1Pn
+i=1 miwi
+One can now plug this into equation (A.4) above and solve for∆i:
+∆i = pimi nXk=1 mkwk −w i (A.5)
+And sincew ′i =w i + ∆i, one can express the end state win shares for each bettor simply as:
+w′i = pimi nXi=1 miwi (3)
+A.4 Derivation of market-clearing odds when there are multiple outcomes
+The condition for market clearing odds is as follows:
+mX
+j=1
+∆ij = 0(A.6)
+For each outcomei, the net change in win shares among market participants must sum to zero.
+Win shares cannot be created or destroyed, only swapped between bettors in accordance with the
+market odds.
+Combining formulas (A.5) and (A.6), we can now solve for the market clearing probabilitiesmi.
+mX
+j=1
+ 
+pij
+mi
+nX
+k=1
+mkwkj −w ij
+!
+= 0
+Like win shares, the market’s overall bankroll (which we have set to 1) cannot change. What
+this means is that for each potential outcomei, the sum of win shares across all bettors must sum
+to 1 (the money has to go somewhere):
+mX
+j=1
+wij = 1
+18
+Combining this with our previous formula, we obtain the following condition for the market
+clearing probabilitiesm i: mX
+j=1
+nX
+k=1
+pijwkj mk =m i
+If we considerpij andw kj as twon×mmatricespandw, and the market probabilitiesm i as
+a vectorm, we can rewrite this equation in matrix form as:
+(pwT )m=m(4)
+A.5 Connection to the PageRank Algorithm
+The process for solving for the credibility vector has a close mathematical connection to the PageR-
+ank algorithm [Brin and Page, 1998], developed by Larry Page of Google.
+The PageRank algorithm is based on two key principles:
+1. A web page’s value, or rank, can be determined by the number of web pages that link to it
+2. Links from high value web pages should count more when determining a web page’s rank
+So, PageRank defines a web page as high value if it receives inbound links from high value
+web pages. This definition, on its surface, seems circular. But the PageRank algorithm is a way
+to bootstrap one’s way into a self-consistent ranking of web pages that resolves this circularity.
+This involves creating a ranking matrixA, in which theijth element tells you what percentage
+of outbound links from web pagejgo to web pagei. This is web pagej’s “vote” for web pagei.
+Solving for the PageRank vector,R, amounts to finding the dominant eigenvector of the ranking
+matrixA.
+The math behind the PageRank algorithm is more complex than the math used in this paper,
+owing to the realities of web pages and how they link to each other. Page needed to account for
+closed loops, and had special adjustments for “dangling links” in order to make the math of the
+PageRank algorithm workable. These mathematical difficulties do not occur in our self-evaluating
+market matrixS.
+Similar to PageRank, the procedure in Section 4 for evaluating the credibility of each model
+relies on the following:
+1. The credibility (or likelihood of being correct) of each model is determined by how each
+modeler evaluates that model’s existing portfolio of bets
+2. Models with higher credibility count for more in the evaluation of each model
+In the same way that PageRank exploited the fact that web pages are both a recipient of
+inbound links and a generator of outbound links, our procedure for solving for the credibility vector
+cleverages the fact that each model has a portfolio of bets that can be evaluated, as well as its own
+set of probabilities with which it can evaluate all the other models (including its own).
+Larry Page used the concept of a “random surfer” to explain the meaning of PageRank. If you
+have an internet user that randomly clicks on outbound links, going from web page to web page,
+the PageRank vector tells you the amount of time one would expect to spend on each site as a
+“random surfer”. More technically, it is the steady state probability distribution for the Markov
+process described by the random surfer’s browsing habits.
+19
+We can extend the random surfer analogy to our self-evaluating market. Rather than random
+surfers, we have random bettors. Pick a bettor in our market at random and have them evaluate
+the expected value of each bettor’s portfolio according to their own probability estimates (this just
+corresponds to a column in our matrixS). We then randomly jump to a new bettor, where the
+probability of jumping from bettor A to bettor B is just bettor A’s subjective evaluation of bettor
+B’s portfolio. Repeat this process indefinitely, and the proportion of time one jumps to a specific
+bettor A corresponds to that bettor’s credibility, as well as the steady state distribution of the
+Markov process.
+B Example Applications of the Methodology
+B.1 NFL In-Game Win Probability
+We will first illustrate the methodology with four examples from the NFL. There are several models
+that forecast the probability of an NFL team winning a game based on game situation. For this
+illustration we will use the win probability model developed by ESPN Analytics and the Open
+Source Football (OSF) win probability model that can be accessed through the R package nflfastR.
+Table 15 summarizes the results.
+Table 15: Model performance for Open Source Football (OSF) and ESPN, summarized for four
+NFL games. The “winning” model score is underlined.
+log loss brier score kelly credibility
+gameOSF ESPN OSF ESPN OSF ESPN
+2/4/18 – PHI @ NE 0.805 0.580 0.192 0.123 46.2% 53.8%
+1/29/23 – CIN @ KC 0.619 0.524 0.128 0.100 45.4% 54.6%
+12/10/23 – LA @ BAL 0.775 0.873 0.176 0.206 65.4% 34.6%
+12/18/23 – PHI @ SEA 2.354 2.111 0.633 0.576 60.2% 39.8%
+A verage 1.138 1.022 0.282 0.251 54.3% 45.7%
+The PHI @ SEA game is an instructive example, as it’s a game where the more traditional
+average log loss and Brier score methods yield a different result than the Kelly-based approach.
+From Figure 1 below, one can see that the ESPN model had Seattle with the higher win probability
+for most of the game, but that flips midway through the 4th quarter. From Figure 2, we see that
+the implied credibility of the two models did not move much for most of the game, until the final
+minute.
+20
+Figure 1: Comparison of in-game win probabilities for Open Source Football and ESPN for the
+Seahawks–Eagles game on December 18, 2023
+Figure 2: Implied model credibility for Open Source Football and ESPN, evaluated in-game
+Table 16 shows game state and corresponding win probability estimates for both models for the
+final minute. Table 17 shows how those probability estimates are converted into market odds, bets,
+and real-time model credibilities. The biggest drop in credibility for the ESPN model occurs when
+the market win probability flips from 24% to 85% (the Seahawks, trailing by 4, scored a touchdown
+21
+on 3rd and 10 from the Eagles’ 29 yard line, with 0:28 left to go). ESPN’s credibility takes a hit
+because of therelativelikelihood it gave the Seahawks (18.8%), compared to Open Source Football
+(29.4%).
+Table 16: Game state and corresponding win probabilities from the Open Source Football (OSF)
+and ESPN models for the final minute of the 12/18/23 PHI @ SEA game
+score win prob
+q clock pos yl down togoPHI SEA OSF ESPN
+4 1:00 SEA 63 2 10 17 13 18.3% 9.5%
+4 0:56 SEA 63 3 10 17 13 16.1% 7.3%
+4 0:40 SEA 29 1 10 17 13 36.6% 28.3%
+4 0:36 SEA 29 2 10 17 13 33.7% 22.6%
+4 0:33 SEA 29 3 10 17 13 29.4% 18.8%
+4 0:28 PHI 75 1 10 17 20 80.0% 91.3%
+Table 17: Resulting market odds, bets, and model credibility results for the Open Source Football
+(OSF) and ESPN win probability models, for the final minute of the 12/18/23 PHI @ SEA game
+win prob bankroll win shares credibility
+q clockOSF ESPN Market OSF ESPN OSF ESPN OSF ESPN
+4 1:00 18.3% 9.5% 13.9% 0.486 0.514 0.161−0.161 0.509 0.491
+4 0:56 16.1% 7.3% 11.6% 0.482 0.518 0.189−0.189 0.504 0.496
+4 0:40 36.6% 28.3% 32.5% 0.479 0.521 0.220−0.220 0.550 0.450
+4 0:36 33.7% 22.6% 28.5% 0.518 0.482 0.101−0.101 0.546 0.454
+4 0:33 29.4% 18.8% 24.4% 0.506 0.494 0.140−0.140 0.540 0.460
+4 0:28 80.0% 91.3% 84.9% 0.505 0.495 0.148−0.148 0.630 0.370
+B.2 Major League Baseball Division Win Probabilities
+The second example comes from Major League Baseball and will allow us to evaluate modeling
+of multinomial probabilities. For the 2022 MLB season, both FiveThirtyEight [FiveThirtyEight,
+2022] and FanGraphs [FanGraphs, 2022] published forecasted probabilities of each team winning
+their respective division throughout the season. FiveThirtyEight archived these probabilities on a
+weekly basis. These were then merged with the corresponding FanGraphs forecast. Each division
+was treated as a separate betting contest, with the results summarized in Table 18 below.
+22
+Table 18: Performance of the FiveThirtyEight and FanGraphs division winner forecasts (winning
+metric is underlined)
+log loss brier score kelly credibility
+division538 FanGraphs 538 FanGraphs 538 FanGraphs
+AL East 0.065 0.071 0.028 0.033 51.4% 48.6%
+AL Central 0.276 0.310 0.155 0.171 55.8% 44.2%
+AL West 0.047 0.029 0.018 0.010 45.0% 55.0%
+NL East 0.294 0.311 0.176 0.189 45.9% 54.1%
+NL Central 0.217 0.255 0.133 0.159 52.8% 47.2%
+NL West 0.040 0.062 0.012 0.025 54.6% 45.4%
+A verage 0.156 0.173 0.087 0.098 50.9% 49.1%
+Figures 3–5 illustrate the methodology for the NL East division race.
+Figure 3: Weekly division win probabilities for each team, shown separately for FanGraphs and
+FiveThirtyEight
+23
+Figure 4: Market consensus division win probabilities by week for the 2022 NL East Division
+Figure 5: Weekly model credibility for FanGraphs and FiveThirtyEight, based on the 2022 NL East
+division race
+24
+This is another example where the Kelly results are at odds with the traditional log loss and
+Brier score results. The FiveThirtyEight model loses credibility by August because of the growth in
+the Mets’ win probability and the decline in the Phillies’ win probability. In both cases, FanGraphs
+modeling was more prescient than FiveThirtyEight’s as seen in Figure 3.
+B.3 NBA In-Game Win Probability
+In this example, we will show how the approach can be applied sequentially throughout a series of
+games, where the ending bankroll/credibility at one game serves as the starting bankroll for the
+next game. The two probability models to be compared are FiveThirtyEight’s NBA In-Game win
+probability model [FiveThirtyEight, 2023] and the author’s NBA In-Game win probability published
+at inpredictable.com [Inpredictable, 2023].
+The models will bet against each other for the entirety of the 2023 NBA playoffs. Games are
+ordered sequentially so that the ending bankroll/credibility numbers from one game are used as the
+starting point for the next game. This allows for a more substantive and Bayesian-focused test of
+the accuracy of the models.
+Figure 6 illustrates the play-by-play and game-by-game evolution of the credibility of the Five-
+ThirtyEight and the inpredictable models. Each lightly shaded line represents the start of a new
+game. Bothmodelsbeginat50%credibility. After84gamesand31,000+plays, theFiveThirtyEight
+model ends up with net credibility gain of +13.8%.
+Figure 6: In-game credibility for the FiveThirtyEight and Inpredictable in-game probability models,
+calculated sequentially over the course of the 2023 NBA playoffs
+Towards the end of the playoffs, note the sharp shift in credibility from Inpredictable to FiveThir-
+tyEight. This shift can be traced to a single play at the conclusion of Game 6 of the Eastern
+25
+Conference Finals. With 3 seconds left, the Celtics trailed the Heat by 1. Off the inbounds pass,
+Marcus Smart’s three pointer was off the mark, but Derrick White was able to get the rebound plus
+the tip in to win the game at the buzzer for Boston.
+The play by play data records this as an offensive rebound for the Celtics, followed by the game
+winning shot. At the point of the offensive rebound (down 1, with 1 second left), butpriorto the
+game winner, FiveThirtyEight gave the Celtics a 19% chance of victory, while Inpredictable gave
+the Celtics just a 5% chance. Because the Celtics won, the net effect was to shift FiveThirtyEight’s
+credibility from 47% to 69%. While this may seem like a large shift based on a single play, this does
+serve to highlight the Bayesian nature of this approach.
+To use an example more typically employed in Bayesian reasoning, instead of competing proba-
+bility models, imagine if one had two bags of white and black balls, where the 1st bag had 95 white
+balls and 5 black balls, and the 2nd bag had 81 white balls and 19 black balls. One of the bags
+is chosen at random and a ball is selected from the bag. Prior to knowing the color of the ball,
+the probability of the 2nd bag being the chosen bag is 50%. But if the selected ball is black, the
+posterior probability of the 2nd bag being chosen jumps to 79%. Similar to Bayesian updating, an
+improbable outcome shifts model bankrolls based on the assessed relative likelihood of the observed
+result.
+C Additional Simulation Exhibits
+The charts below are supplements to the analysis summarized in Section 6.2, in which a simulated
+betting contest is iterated over several trials.
+Each square in the chart below denotes which model evaluation approach was most accurate in
+identifying the correct model (K=Kelly approach, L=Average log loss, B= Average Brier score). If
+more than one letter is displayed in a square, that means that the model evaluation approaches tied
+in terms of accuracy. Green squares indicate where the Kelly approach was most accurate, yellow
+squares indicate where it tied for highest accuracy, and red squares indicate when either the Log
+Loss or Brier Score approach was more accurate.
+26
+Figure 7: Model evaluation accuracy grid after 1 game
+27
+Figure 8: Model evaluation accuracy grid after 5 games
+28
+Figure 9: Model evaluation accuracy grid after 25 games
+29
+Figure 10: Model evaluation accuracy grid after 50 games
+References
+Alina Beygelzimer, John Langford, and David Pennock. Learning performance of prediction markets
+with kelly bettors.arXiv preprint arXiv:1201.6655, 2012. URLhttps://arxiv.org/pdf/1201.
+6655.pdf.
+Sergey Brin and Lawrence Page. The anatomy of a large-scale hypertextual web search engine. In
+Proceedings of the Seventh International Conference on World Wide Web, pages 107–117, 1998.
+doi: 10.1016/S0169-7552(98)00110-X.
+FanGraphs. MLB playoff odds, 2022. URLhttps://www.fangraphs.com/standings/
+playoff-odds.
+FiveThirtyEight. 2022 MLB predictions, 2022. URLhttps://projects.fivethirtyeight.com/
+2022-mlb-predictions/.
+FiveThirtyEight. 2022-23 NBA predictions, 2023. URLhttps://projects.fivethirtyeight.com/
+2023-nba-predictions/games/.
+Inpredictable. NBA win probability game box scores, 2023. URLhttps://stats.inpredictable.
+com/nba/wpBox.php.
+Jr. Kelly, John L. A new interpretation of information rate.Bell System Technical Journal, 35(4):
+917–926, July 1956.
+30
+Rajiv Sethi, Julie Seager, Fred Morstatter, Daniel M. Benjamin, Amanda Hammell, Ting Liu,
+Shreyas Patel, and Ramya Subramanian. Political prediction and the wisdom of crowds.SSRN,
+2025. URLhttps://papers.ssrn.com/sol3/papers.cfm?abstract_id=5296936.
+31

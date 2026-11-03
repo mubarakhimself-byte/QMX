@@ -1,0 +1,665 @@
+arXiv 1805.08679  https://arxiv.org/abs/1805.08679
+
+Requirements and Assessment of Languages
+and Frameworks for Adaptation Models
+Thomas Vogel and Holger Giese
+Hasso Plattner Institute at the University of Potsdam, Germany
+{thomas.vogel,holger.giese}@hpi.uni-potsdam.de
+Abstract. Approaches to self-adaptive software systems use models at
+runtime to leverage beneﬁts of model-driven engineering (MDE) for pro-
+viding views on running systems and for engineering feedback loops.
+Most of these approaches focus on causally connecting runtime mod-
+els and running systems, and just apply typical MDE techniques, like
+model transformation, or well-known techniques, like event-condition-
+action rules, from other ﬁelds than MDE to realize a feedback loop.
+However, elaborating requirements for feedback loop activities for the
+speciﬁc case of runtime models is rather neglected.
+Therefore, we investigate requirements for Adaptation Models that
+specify the analysis, decision-making, and planning of adaptation as part
+of a feedback loop. In particular, we consider requirements for a modeling
+language of adaptation models and for a framework as the execution en-
+vironment of adaptation models. Moreover, we discuss patterns for using
+adaptation models within the feedback loop regarding the structuring of
+loop activities and the implications on the requirements for adaptation
+models. Finally, we assess two existing approaches to adaptation models
+concerning their ﬁtness for the requirements discussed in this paper.
+1 Introduction
+Self-adaptation capabilities are often required for modern software systems to
+dynamically change the conﬁguration in response to changing environments or
+goals [4]. Models@run.time are a promising approach for self-adaptive software
+systems since models may provide appropriate abstractions of a running sys-
+tem and its environment, and beneﬁts of model-driven engineering (MDE) are
+leveraged to the runtime phases of software systems [3].
+Most models@run.time eﬀorts to self-adaptive software systems focus on
+causally connecting models to running systems and just apply typical or well-
+known techniques from MDE or other ﬁelds on top of these models. These tech-
+niques are used for engineering a feedback loop that controls self-adaptation by
+means of monitoring and analyzing the running system and its environment,
+and the planning and execution of changes to the running system [12].
+For example, the causal connection has been a topic for discussions at the
+last two workshops on models@run.time [1, 2], or the work of [15] particu-
+larly addresses the causal connection and it just applies MDE techniques, like
+This is a post-peer-review, pre-copyedit version of an article published in Lecture Notes in Computer
+Science Vol. 7167. The ﬁnal authenticated version is available online at: https://doi.org/10.1007/
+978-3-642-29645-1_18 .
+arXiv:1805.08679v1  [cs.SE]  17 May 2018
+168 T. Vogel and H. Giese
+model transformation, on top to show their technical feasibility. We proposed
+an approach to use incremental model synchronization techniques to maintain
+multiple, causally connected runtime models at diﬀerent abstraction levels, and
+thereby, we support the monitoring and the execution of adaptations [16, 18].
+While causal connections provide basic support for monitoring and for exe-
+cuting changes, they do not cover the analysis and planning steps of a feedback
+loop, which decide if and how the system should be adapted. For these steps,
+techniques originating from other ﬁelds than MDE are used. Most approaches,
+like [7, 10], employ rule-based mechanisms in some form of event-condition-action
+rules that exactly specify when and how adaptation should be performed, and
+thus, the designated target conﬁguration is predeﬁned. In contrast, search-based
+techniques just prescribe goals that the system should achieve. Triggered by con-
+ditions or events and guided by utility functions they try to ﬁnd the best or at
+least a suitable target conﬁguration fulﬁlling these goals (cf. [9, 13]).
+All these approaches focus on applying such decision-making techniques for
+the analysis and planning steps, but they do not systematically investigate the
+requirements for such techniques in conjunction with models@run.time. Elicit-
+ing these requirements might help in engineering new or tailored decision-making
+techniques for the special case of models@run.time approaches to self-adaptive
+systems. Therefore, we elaborate requirements for such techniques by taking
+an MDE perspective. The techniques should be speciﬁed by models, which we
+named Adaptation Models in an attempt to categorize runtime models [19]. How-
+ever, the categorization does not cover any requirements for runtime models.
+In this paper, which is a revision of [17], we discuss requirements for adapta-
+tion models, in particular requirements for languages to create such models and
+for frameworks that employ and execute such models within a feedback loop.
+By language we mean a broad view on metamodels, constraints, and model op-
+erations, which are all used to create and apply adaptation models. Moreover,
+we discuss patterns for using adaptation models within the feedback loop. The
+patterns and the requirements for adaptation models inﬂuence each other, which
+impacts the design of the feedback loop by providing alternatives for structuring
+loop activities. Finally, we assess two existing approaches to adaptation models
+concerning their ﬁtness for the language and framework requirements.
+The paper is structured as follows. Section 2 reviews related work, and Sec-
+tion 3 sketches the role of adaptation models in self-adaptive systems. Section 4
+discusses the requirements for adaptation models, while Section 5 presents diﬀer-
+ent patterns of employing such models within a feedback loop. Section 6 discusses
+the assessment of existing approaches to adaptation models with respect to the
+requirements. The last section concludes the paper and outlines future work.
+2 Related Work
+As already mentioned, most models@run.time approaches to self-adaptive soft-
+ware systems focus on applying techniques for decision-making and do not sys-
+tematically elaborate on the related requirements [7–10, 13]. A few approaches
+Adaptation Models: Requirements, Patterns, and Assessment 169
+Fig. 1. Feedback Loop and Runtime Models (cf. [19])
+merely consider the requirement of performance and eﬃciency for their adapta-
+tion mechanisms to evaluate the applicability at runtime [9, 13]. Likewise, in [14]
+several decision-making mechanisms are discussed in the context of ubiquitous
+computing applications by means of performance and scalability regarding the
+size of the managed system and its conﬁguration space. In general, rule-based
+mechanisms are considered as eﬃcient since they exactly prescribe the whole
+adaptation, while for search-based approaches performance is critical and often
+improved by applying heuristics or by reducing the conﬁguration space.
+This is also recognized by [8] that attests eﬃciency and support for early
+validation as beneﬁts for rule-based approaches. However, they suﬀer from scal-
+ability issues regarding the management and validation of large sets of rules.
+In contrast, search-based approaches may cope with these scalability issues, but
+they are not as eﬃcient as rule-based approaches and they provide less support
+for validation. As a consequence, a combination of rule-based and search-based
+techniques is proposed in [8] to balance their beneﬁts and drawbacks.
+To sum up, if requirements or characteristics of decision-making techniques are
+discussed, these discussions are limited to performance, scalability, and support
+for validation, and they are not done systematically. One exception is the work
+of Cheng [5] who discusses requirements for a self-adaptation language that is
+focused on specifying typical system administration tasks. However, the require-
+ments do not generally consider self-adaptive software systems and they do not
+address speciﬁcs of models at runtime. Nevertheless, some of the requirements
+that are discussed in this paper are derived from this work.
+3 Adaptation Models
+Before discussing requirements for adaptation models, we sketch the role of these
+models based on a conceptual view on a feedback loop as depicted in Figure 1.
+The steps of monitoring and analyzing the system and its environment, and the
+planning and execution of changes are derived from autonomic computing [12],
+while we discussed the diﬀerent models and their usage in a feedback loop in [19].
+Reﬂection Models describe the running system and its environment, and they
+are causally connected to the system. According to observations of the system
+and environment, the monitor updates the reﬂection models. Reasoning on these
+models is done by the analyze step to decide whether the system fulﬁlls its goals
+or not, and thus, whether adaptation is required or not. The reasoning is speciﬁed
+170 T. Vogel and H. Giese
+by Evaluation Models, which can be constraints that are checked on reﬂection
+models. If adaptation is required, the planning step devises a plan deﬁning how
+the system should be adapted, which is guided by Change Models to explore the
+system’s variability or conﬁguration space. Deciding on the designated target
+conﬁguration is guided by evaluation models to analyze diﬀerent adaptation
+options, and the selected option is applied on reﬂection models. Finally, the
+execute step performs and eﬀects the adaptations on the running system.
+By Adaptation Models we generally consider evaluation and change models re-
+gardless of the concrete rule-based or search-based techniques that are employed
+for the analysis and planning steps, and thus, for the decision-making. This view
+on adaptation models is similar to [7], which just presents one adaptation model
+for the speciﬁc approach but no general discussion of such models.
+4 Requirements for Adaptation Models
+In this section, we describe requirements for adaptation models to be used in
+self-adaptive systems to analyze and decide on adaptation needs, and to plan and
+decide on how to adapt the running system. We assume that the self-adaptive
+system employs models at runtime, which inﬂuence the requirements. At ﬁrst, we
+discuss requirements for a modeling language used to create adaptation models.
+Then, we elaborate the requirements for a framework as the execution environ-
+ment for adaptation models. Being in the early requirements phase, we take
+a broad MDE view on the notion of language as combinations of metamodels,
+constraints, and model operations, which are all used to create and apply models.
+Likewise to the common understanding that requirements for real-world ap-
+plications cannot be completely and deﬁnitely speciﬁed at the beginning of a
+software project, we think that the same is true for the requirements discussed
+here. It is likely that some of these requirements may change, become irrelevant,
+or new ones emerge when engineering concrete adaptation models for a speciﬁc
+self-adaptive system and domain. Thus, we do not claim that the requirements
+are complete and ﬁnalized with respect to their enumeration and deﬁnitions.
+4.1 Language Requirements for Adaptation Models
+Language requirements (LR) for adaptation models can be divided into func-
+tional and non-functional ones. Functional requirements target the concepts that
+are either part of adaptation models or that are referenced by adaptation mod-
+els. These concepts are needed for the analysis, decision-making, and planning.
+Thus, functional requirements determine the expressiveness of the language. In
+contrast, non-functional language requirements determine the quality of adapta-
+tion models. At ﬁrst functional, then non-functional requirements are discussed.
+F unctional Language Requirements
+LR-1 Goals: Enabling a self-adaptive system to continuously provide the desired
+functionality to users or other systems, adaptation models have to know about
+the current goals of the system. These goals as a functional speciﬁcation deﬁne
+Adaptation Models: Requirements, Patterns, and Assessment 171
+what the system should do, and this information needs to be available in an
+operationalized form to relate it with the actual behavior of the running system.
+This is the foundation for adapting the functional behavior of the system.
+LR-2 Quality Dimensions : While LR-1 considers what the system should do,
+quality dimensions address how the system should provide the functionality in
+terms of quality of service (QoS). To support QoS-aware adaptations, qualities,
+like performance or security, must be characterized by adaptation models (cf. [5]).
+LR-3 Preferences: Since multiple quality dimensions (LR-2) may be relevant
+for the managed system, preferences across the dimensions must be expressed to
+trade-oﬀ and balance competing qualities (cf. [5]). Likewise, preferences for goals
+(LR-1) are necessary if several valid behavioral alternatives are feasible and not
+distinguished by the quality dimensions.
+Thus, the language for adaptation models must incorporate the concepts of
+goals (LR-1), qualities (LR-2), and preferences (LR-3) in an operationalized
+form, such that they can be referenced or described and automatically processed
+by adaptation models. Goals, qualities, and preferences serve as references for the
+running system as they state what the system should do and how it should be.
+LR-4 Access to Reﬂection Models : Adaptation models must reference and
+access reﬂection models to obtain information about the current situation of the
+running system and environment for analysis and to change the reﬂection models
+to eﬀect adaptations. Thus, a language for adaptation models must be based on
+the languages of reﬂection models.
+LR-5 Events: Adaptation models should reference information from events
+emitted by the monitor step when updating the reﬂection models due to runtime
+phenomena of the system. Besides serving as a trigger for starting the decision-
+making process, events support locating the phenomena in the reﬂection models
+(LR-4). Thus, evaluating the system and its environment (LR-6) may start right
+from the point in the reﬂection models where the phenomena have occurred.
+LR-6 Evaluation Conditions : A language for adaptation models must sup-
+port the speciﬁcation of conditions to evaluate the running system and its envi-
+ronment (cf. [5]). These conditions relate the goals (LR-1), qualities (LR-2), and
+preferences (LR-3) to the actual running system represented by reﬂection mod-
+els (LR-4). Therefore, conditions may refer to events notifying about runtime
+phenomena (LR-5) as a starting point for evaluation, and they should be able
+to capture complex structural patterns for evaluating architectural properties.
+LR-7 Evaluation Results : Adaptation models must capture the results of
+computing the evaluation conditions (LR-6) because these results identify and
+decide on adaptation needs especially when the conditions are not met by the
+system. Adaptation models may annotate and reference the evaluation results
+in reﬂection models (LR-4) to locate adaptation needs in the running system.
+LR-8 Adaptation Options : Adaptation models must capture the variability
+of the system to know the options for adaptation related to reﬂection models
+(LR-4). These options deﬁne the conﬁguration space for the system.
+LR-9 Adaptation Conditions : Adaptation models must consider adaptation
+conditions since not all adaptation options (LR-8) are feasible in every situation.
+172 T. Vogel and H. Giese
+Thus, conditions should constrain all adaptation options to applicable ones for
+certain situations (cf. [5]). To characterize a situation for an adaptation option,
+conditions should refer to reﬂection models (LR-4), events (LR-5), evaluation
+results (LR-7), or other adaptation options. Likewise to such pre-conditions for
+adaptation options, post-conditions and invariants should be considered.
+LR-10 Adaptation Costs and Beneﬁts : Adaptation models should charac-
+terize costs and beneﬁts of adaptation options (LR-8) as a basis to select among
+several possible options in certain situation (cf. [5]). Costs should indicate that
+adaptations are not for free, and beneﬁts should describe the expected eﬀects
+of adaptation options on the goals (LR-1) and qualities (LR-2) of the system.
+By relating costs and beneﬁts to the preferences of the system (LR-3), suitable
+adaptation options should be selected and applied on the reﬂection models.
+LR-11 History of Decisions : Adaptation models should capture a history of
+decisions, like evaluation results (LR-7) or applied adaptation options (LR-8),
+to enable learning mechanisms for improving future decisions.
+Non-functional Language Requirements
+LR-12 Modularity, Abstractions and Scalability : An adaptation model
+should be a composition of sub-models rather than a monolithic model to cover
+all concepts for decision-making. E.g., evaluation conditions (LR-6) and adap-
+tation options (LR-8) need to be part of the same sub-model, and even diﬀerent
+adaptation options can be speciﬁed in diﬀerent sub-models. Thus, the language
+should support modular adaptation models. Moreover, the language should en-
+able the modeling at diﬀerent abstraction levels for two reasons. First, the level
+depends on the abstraction levels of the employed reﬂection models (LR-4),
+and second, lower level adaptation model concepts should be encapsulated and
+lifted to appropriate higher levels. E.g., several simple adaptation options (LR-8)
+should be composable to complex adaptation options. Language support for
+modularity and diﬀerent abstractions promote scalability of adaptation models.
+LR-13 Side Eﬀects : The language should clearly distinguish between con-
+cepts that cause side eﬀects on the running system and those that do not. E.g.,
+computing an evaluation condition (LR-6) should not aﬀect the running system,
+while applying an adaptation option (LR-8) ﬁnally should. Making the concepts
+causing side eﬀects explicit is relevant for consistency issues (FR-1).
+LR-14 Parameters: The language should provide constructs to parameter-
+ize adaptation models. Parameters can be used to adjust adaptation models at
+runtime, like changing the preferences (LR-3) according to varying user needs.
+LR-15 Formality: The language should have a degree of formality that enables
+on-line and oﬀ-line validation or veriﬁcation of adaptation models, e.g., to detect
+conﬂicts or thrashing eﬀects in the adaptation mechanisms.
+LR-16 Reusability: The core concepts of the language for adaptation models
+should be independent of the languages used for reﬂection models in an approach.
+This leverages the reusability of the language for adaptation models.
+LR-17 Ease of Use : The design of the language should consider its ease of use
+because adaptation models are created by software engineers. This inﬂuences,
+among others, the modeling paradigm, the notation, and the tool support. Prefer-
+Adaptation Models: Requirements, Patterns, and Assessment 173
+ably the language should be based on a declarative modeling paradigm, which
+is often more convenient and less error-prone than an imperative one. Likewise,
+appropriate notations and tools are required to support an engineer in creating,
+validating, or verifying adaptation models.
+4.2 F ramework Requirements for Adaptation Models
+In the following, we describe framework requirements (FR) for adaptation mod-
+els. By framework we consider the execution environment of adaptation models,
+which determines how adaptation models are employed and executed in the
+feedback loop. Thus, only requirements speciﬁc for such a framework are dis-
+cussed. Typical non-functional requirements for software systems, like reliability
+or security, are also relevant for adaptation mechanisms, but they are left here.
+FR-1 Consistency: The execution of adaptation models should preserve the
+consistency of reﬂection models and of the running system. E.g., when adapting
+a causally connected reﬂection model, the corresponding set of model changes
+should be performed atomically and correctly. Thus, the framework should evalu-
+ate the invariants, pre- and post-conditions (LR-9) for adaptation options (LR-8)
+at the model level, before adaptations are executed to the running system.
+FR-2 Incrementality: The framework should leverage incremental techniques
+to apply or execute adaptation models to promote eﬃciency. E.g., events (LR-5)
+or evaluation results (LR-7) annotated to reﬂection models should be used to di-
+rectly locate starting points for evaluation or adaptation planning, respectively.
+Or, adaptation options (LR-8) should be incrementally applied on original reﬂec-
+tion models rather than on copies. Incrementality could avoid costly operations,
+like copying or searching potentially large models.
+FR-3 Reversibility: Supporting incremental operations on models (FR-2), the
+framework should provide the ability to incrementally reverse performed opera-
+tions. E.g., the conﬁguration space has to be explored for adaptation planning
+by creating a path of adaptation options (LR-8) applied on reﬂection models.
+Finding a suitable path might require to turn around and to try alternative
+directions without completely rejecting the whole path. Thus, do and undo of
+operations leverages, among others, incremental planning of adaptation.
+FR-4 Priorities: The framework should utilize priorities to organize modular
+adaptation models (LR-12) to eﬃciently and easily identify ﬁrst entry points for
+executing or applying adaptation models. E.g., priorities can be assigned to dif-
+ferent evaluation conditions (LR-6) based on their criticality, and the framework
+should check the conditions in decreasing order of their criticality.
+FR-5 Time Scales : The framework should simultaneously support diﬀerent
+time scales of analysis and adaptation planning. For example, in known and
+mission-critical situations quick and precisely speciﬁed reactions might be nec-
+essary (cf. rule-based techniques), while in other situations comprehensive and
+sophisticated reasoning and planning are feasible (cf. search-based techniques).
+FR-6 Flexibility: The framework should be ﬂexible by allowing adaptation
+models to be added, removed, and modiﬁed at runtime. This supports including
+learning eﬀects, and it considers the fact that all conceivable adaptation scenarios
+174 T. Vogel and H. Giese
+Fig. 2. Decoupled Analysis and Planning
+ Fig. 3. Coupled Analysis and Planning
+cannot be anticipated at development-time. Moreover, it is a prerequisite of
+adaptive or hierarchical control using multiple feedback loops (cf. [12, 19]).
+5 Feedback Loop Patterns for Adaptation Models
+In the following, we discuss feedback loop patterns for adaptation models and
+how the functional language requirements (cf. Section 4.1) map to these pat-
+terns while considering the framework requirements (cf. Section 4.2). The non-
+functional language requirements are not further addressed here because they
+are primarily relevant for designing a language for adaptation models and not for
+actually applying such models. The patterns diﬀer in the coupling of the analy-
+sis and planning steps of a feedback loop, which inﬂuences the requirements for
+adaptation models. Moreover, the adaptation model requirements likely impact
+the patterns and designs of the loop. Thus, this section provides a preliminary
+basis for investigating dependencies between requirements and loop patterns.
+5.1 Analysis and Planning – Decoupled
+The ﬁrst pattern of a feedback loop depicted in Figure 2 decouples the analysis
+and planning steps as originally proposed (cf. Section 3). The ﬁgure highlights
+functional language requirements (LR) at points where the concepts of the corre-
+sponding requirements are relevant. This does not mean that adaptation models
+must cover all these points, but they must know about the concepts.
+In response to events notifying about changes in the running system or en-
+vironment, the monitor updates the reﬂection models and annotates the events
+(LR-5) to these models. The analyze step uses these events to locate the changes
+in the reﬂection models and to start reasoning at these locations. Reasoning is
+speciﬁed by evaluation models deﬁning evaluation conditions (LR-6) that relate
+the goals (LR-1), qualities (LR-2), and preferences (LR-3) to the characteristics
+of the running system. These characteristics are obtained by accessing reﬂection
+models (LR-4). Analysis is performed by evaluating the conditions and probably
+enhanced by consulting past analyses (LR-11). This produces analysis results
+(LR-7) that are annotated to the reﬂection models to indicate adaptation needs.
+Adaptation Models: Requirements, Patterns, and Assessment 175
+The planning step uses these results (LR-7) attached to reﬂection models (LR-4)
+to devise a plan for adaptation. Planning is based on change models specify-
+ing adaptation options (LR-8) and their conditions (LR-9), costs, and beneﬁts
+(LR-10). This information and probably plans devised in the past (LR-11) are
+used to ﬁnd suitable adaptation options to create potential target conﬁgurations
+by applying these options on reﬂection models. These reﬂection models that pre-
+scribe alternative target conﬁgurations are analyzed with the help of evaluation
+models to select the best conﬁguration among them. In contrast to the analyze
+step that uses evaluation models to reason about the current conﬁguration (de-
+scriptive reﬂection models), the planning step uses them to analyze potential
+target conﬁgurations (prescriptive reﬂection models). Finally, the execute step
+enacts the selected adaptation options (LR-8) to the running system.
+This pattern is similar to the generic idea of search-based approaches since
+planning is done by exploring adaptation options (LR-8, 9, 10) that are evaluated
+(LR-6, 7, 11) for their ﬁtness for the preferenced system goals (LR-1, 2, 3) based
+on the current situation of the system and environment (LR-4). Explicitly cover-
+ing all language requirements for adaptation models, this pattern rather targets
+comprehensive and sophisticated analysis and planning steps working at longer
+time scales (FR-5), while eﬃciency concerns could be tackled by incrementality.
+This pattern leverages incrementality (FR-2) since the coordination between
+diﬀerent steps of the loop is based on events, analysis results, and applied adap-
+tation options, which directly point to location in reﬂection models for start-
+ing analysis, planning, or executing changes. Moreover, analysis and planning
+steps may incrementally interleave. Based on ﬁrst analysis results that are pro-
+duced by evaluation conditions with highest priorities (FR-4), a planning process
+might start before the whole system and environment have been completely ana-
+lyzed. However, incrementality requires the reversibility of performed operations
+(FR-3) to ensure consistency of reﬂection models (FR-1), e.g., when alternative
+adaptation options are tested on-line on reﬂection models and ﬁnally discarded.
+5.2 Analysis and Planning – Coupled
+In contrast to decoupling the analyze and planning steps, they can be closely
+integrated into one step, which is sketched in Figure 3. Based on events (LR-5),
+the integrated analyze/plan step computes evaluation conditions (LR-6) that
+are directly mapped to adaptation options (LR-8). If a condition is met, the
+corresponding adaptation options are applied on the reﬂection models and ﬁnally
+executed to the running system. Access to reﬂection models (LR-4) is realized
+by the analyze/plan step as a link between adaptation and reﬂection models.
+In Figure 3, the language requirements written in brackets are not explicitly
+covered by adaptation models because this pattern precisely speciﬁes the adap-
+tation by directly relating evaluation conditions to the application of adaptation
+options. This relation implicitly covers some of the requirements listed in brack-
+ets. E.g., it is assumed that the applied adaptation options eﬀect the system in
+a way that fulﬁlls the desired goals, qualities, and preferences (LR-1, 2, 3).
+176 T. Vogel and H. Giese
+Considering the events and the mapping of evaluation conditions to adaptation
+options, this pattern is similar to rule-based approaches using event-conditions-
+action rules. Covering the whole decision-making process and integrating analysis
+and planning into one step, adaptation models as depicted in Figure 3 cannot be
+clearly diﬀerentiated into evaluation and change models.
+Thus, this pattern targets adaptation mechanisms requiring quick reactions to
+runtime phenomena by enabling adaptation at rather short time scales (FR-5).
+Moreover, eﬃciency is improved by incrementality (FR-2) and priorities (FR-4).
+The steps may incrementally coordinate each other through locating events and
+applied adaptation options in reﬂection models for analysis/planning and execut-
+ing changes to the system. Priorities may be used to order evaluation conditions
+for quickly identifying critical situations that need urgent reactions, while condi-
+tions for non-critical situations can be evaluated without strict time constraints.
+The consistency requirement (FR-1) is not explicitly covered because it is
+assumed that the mapping of conditions to adaptation options preserves consis-
+tency by design of such rule-based mechanisms. Since these mechanisms strictly
+prescribe the adaptation, there need not to be any options left that have to be
+decided at runtime. This reduces the need for reversible operations (FR-3).
+5.3 Discussion
+Regarding the two diﬀerent feedback loop patterns and their eﬀects on adap-
+tation models, we can make two observations. First, it might be necessary to
+combine both patterns in a self-adaptive system if simultaneous support for dif-
+ferent time scales (FR-5) is required or if a speciﬁc self-adaptive system requires
+both ﬂavors of rule-based and search-based decision-making mechanisms. Sec-
+ond, we think that these two patterns span a range of several other patterns.
+By explicitly covering more and more language requirements, the adaptation
+models get more elaborate, and we may move stepwise from the coupled pattern
+(cf. Section 5.2) toward the decoupled one (cf. Section 5.1). Which pattern and
+adaptation models suit best depends on the concrete self-adaptive system, espe-
+cially on the system’s domain requirements. Finally, the requirement of ﬂexibility
+(FR-6) has not been discussed for the two patterns. However, it is relevant for
+both of them since it is usually not possible to anticipate all adaptation scenarios
+at development-time, which requires adjusting adaptation models at runtime.
+6 Assessment of Approaches to Adaptation Models
+In this section, we assess two approaches to adaptation models, namelyStitch [5]
+and Story Diagrams [11], concerning their support for the requirements presented
+in this paper. After sketching both approaches, the assessment is discussed.
+Stitch is a self-adaptation language developed in the context of Rainbow [5],
+which is a framework for self-adaptive systems based on architecture description
+language (ADL) techniques, in particular the Acme ADL. The focus of Stitch is
+to capture routine system administration tasks as explicit adaptation strategies
+Adaptation Models: Requirements, Patterns, and Assessment 177
+consisting of condition-action pairs. The conditions expressed in a ﬁrst-order
+predicate logic are evaluated on an ADL-based reﬂection model (cf. Section 3)
+describing the running system. If a condition is met indicating a need for adap-
+tation, the actions associated with this condition are analyzed based on utility
+preferences and the most promising action is directly executed to the system.
+Story Diagrams [11], originally introduced in [6], are a general purpose graph
+transformation approach. They extend activity diagrams from the Uniﬁed Mod-
+eling Language (UML) by specifying each activity using a graph transformation
+rule, called Story Pattern . Thus, a Story Diagram deﬁnes the control ﬂow be-
+tween multiple Story Patterns. Story Diagrams and Patterns are speciﬁed on one
+or more user-deﬁned metamodels and they work on corresponding instances of
+these metamodels. In the context of adaptation, they work on reﬂection models
+(cf. Section 3). A Story Pattern speciﬁes a pattern that has to be matched in the
+reﬂection model. If a match has been found, the side eﬀects of the rule – if any
+are speciﬁed – are executed by changing the model. Moreover, patterns can be
+extended with constraints speciﬁed in the Object Constraint Language (OCL) to
+allow more sophisticated conditions. Following MDE principles, Story Diagrams
+leverage the usage of MDE techniques, like OCL. Moreover, Story Diagrams
+themselves conform to a metamodel, which enables an interpreter to directly
+execute them and which in the end supports higher order transformations.
+6.1 Assessment of Stitch and Story Diagrams
+Having outlined both approaches to adaptation models, we analyze them with
+respect to their support for the requirements discussed in Section 4. Table 1 lists
+all requirements and shows the degree of support by both approaches. It has to be
+noted that both languages make use of other languages, primarily languages for
+reﬂection models, to specify an adaptation. E.g., an adaptation model may spec-
+ify a condition, like component.rt> MAX RT, to identify whether the response
+time of a running component exceeds a threshold. While the response times
+are provided by reﬂection models ( component.rt is part of the reﬂection model
+language), the adaptation model just deﬁnes the threshold and references the
+reﬂection model. Thus, Stitch and Story Diagram models are not self-contained.
+Concerning functional language requirements, Stitch focuses on QoS-aware
+adaptation and thus, it provides full support for quality dimensions (LR-2) and
+preferences across these dimensions (LR-3). Functional goals (LR-1) are not
+considered. Story Diagrams may provide full support for goals, qualities, and
+preferences (LR-1, 2, 3) as they work on reﬂection models and use OCL, which is
+similar to Stitch. To cover goals, Story Diagrams may even use an explicit goal
+model describing the designated functionality in addition to reﬂection models.
+Access to reﬂection models (LR-4) is supported by both languages though
+Stitch strategies just have read access for analysis, but they do not perform
+changes on the model before executing them to the system. This might be helpful
+for model-based planning or testing of adaptation and thus, Stitch provides
+medium support. Story Diagrams and especially Story Patterns explicitly read
+and write (change) reﬂection models, such that we attest them full support here.
+178 T. Vogel and H. Giese
+T able 1. Requirements (Req.), Stitch, and Story Diagrams (SD): ’–’ denotes no sup-
+port, ’M’ medium support, and ’ F ’ full support for the requirements.
+F unctional Language Requirements
+Req. Stitch SD Req. Stitch SD Req. Stitch SD
+LR-1 – F LR-5 M F LR-9 F F
+LR-2 F F LR-6 F F LR-10 F F
+LR-3 F F LR-7 – F LR-11 M F
+LR-4 M F LR-8 F F
+Non-functional Language Requirements
+Req. Stitch SD Req. Stitch SD Req. Stitch SD
+LR-12 M F LR-14 M F LR-16 M M
+LR-13 – M LR-15 – M LR-17 M F
+F ramework Requirements
+Req. Stitch SD Req. Stitch SD Req. Stitch SD
+FR-1 M F FR-3 – M FR-5 – F
+FR-2 – M FR-4 – F FR-6 – F
+While Stitch uses events (LR-5) only as triggers for the adaptation process
+to compute all evaluation conditions, the Story Diagram interpreter uses as well
+the information contained in change events to locate points in reﬂection models
+where evaluation conditions as Story Patterns should be checked. Thus, event
+information is used to ﬁlter the conditions irrelevant for these locations, which
+improves eﬃciency. This motivates the medium resp. full support for events.
+Evaluation conditions (LR-6) and adaptation conditions (LR-9) are supported
+by both approaches based on the integration of some form of ﬁrst-order predicate
+logic (Acme predicates in case of Stitch, and OCL for Story Diagrams). How-
+ever, Story Patterns provide additional means to specify structural conditions
+by means of patterns containing structured model elements to be checked.
+Stitch does not explicitly capture evaluation results (LR-7) as they are used
+in a transient way to select adaptation strategies. In contrast, Story Diagrams
+may provide full support by employing Story Patterns just for analysis purposes.
+Thus, the pattern to be matched speciﬁes the evaluation condition and the corre-
+sponding side eﬀects compute results that are annotated to the reﬂection models.
+Both approaches provide full support for adaptation options (LR-8) and adap-
+tation costs and beneﬁts (LR-10). Likewise to Stitch that uses multiple strategies
+and that deﬁnes cost-beneﬁt attributes of each adaptation step, multiple Story
+Diagrams or multiple Story Patterns enriched with such attributes are feasible
+for specifying and selecting appropriate adaptations to be performed.
+Finally, since Stitch does not clearly separate the analysis and planning steps,
+it just maintains a history (LR-11) for the applied adaptation strategies, but not
+for the analysis results as they are not explicitly captured. In contrast to this
+medium support, Story Diagrams or Patterns explicitly addressing evaluation
+results as well as the applied adaptation options may keep a history of both.
+Concerning non-functional language requirements, Stitch partially supports
+modularity, abstractions, and scalability (LR-12) by the strategy, tactic, and
+operator concepts. Operators are system-level commands that are bundled in
+tactics to describe an adaptation step, and a strategy orchestrates multiple of
+Adaptation Models: Requirements, Patterns, and Assessment 179
+these steps. Thus, Stitch is limited to these three levels of abstraction. In con-
+trast, besides Story Diagrams and Story Patterns already provide an initial ab-
+straction, Story Diagrams can be nested in other Story Diagrams without any
+restrictions.
+Stitch does not distinguish between concepts causing side eﬀects or not (LR-13)
+as the strategies are considered as inherently causing eﬀects on the running sys-
+tem. In contrast, Story Patterns can be statically analyzed whether they poten-
+tially cause side eﬀects as well as they can be annotated to make it explicit.
+Parameters (LR-14) are supported by both. While Stitch seems to be re-
+stricted on parameters of basic data types, Story Diagrams and Patterns may
+have arbitrary parameters including references to objects of user-deﬁned classes.
+While the Stitch language is not based on a formal foundation (LR-15), Story
+Patterns built upon the graph transformation theory. This enables support for
+formal validation and veriﬁcation, which is, however, impeded if OCL is used.
+Regarding reusability (LR-16) both languages, Stitch and Story Diagrams, are
+similar as they are independent of the languages used for the reﬂection models.
+However, the concrete adaptation models created with Stitch or Story Diagrams
+use and reference concepts of the reﬂection model languages. Thus, the concrete
+adaptation models are coupled to the types of reﬂection models.
+Stitch is basically an imperative scripting language and its tool support re-
+quires improvement [5]. For Story Diagrams and Patterns, the declarative notion
+of graph transformations and graphical editors assist an engineer in modeling and
+validating adaptation models. Therefore, checks for syntactical well-formedness,
+an interpreter, and a visual debugger are provided. This causes the diﬀerent
+ratings of both approaches concerning the ease of use requirement (LR-17).
+Finally, the support for the framework requirements is discussed. Since Stitch’s
+adaptation strategies that have been selected to tackle the current adaptation
+need are directly executed to the running system, only limited support for consis-
+tency (FR-1) is provided. Consistency is only addressed by observing intermedi-
+ate eﬀects of the executed adaptation on the running system but not beforehand
+at the model level. The other framework requirements are not covered by Stitch.
+Since Story Diagrams completely work on reﬂection models, consistency can
+be continuously checked at the model level. Incrementality (FR-2) is supported
+for single Story Patterns, and reversibility (FR-3) for typical model changes
+by tracking primitive operations performed on the model. Both requirements
+are hard to satisfy if OCL is used. Incremental evaluation of OCL statements is
+often not possible and for the case of side eﬀects the inverse statements might not
+be detectable. Prioritizing (FR-4) Story Diagrams and Patterns to be executed
+is supported, and it is required for diﬀerent time scales (FR-5). E.g., a Story
+Pattern deﬁning the whole adaptation for urgent situations must have a higher
+priority to be executed than other Patterns that jointly deﬁne a sophisticated
+adaptation by separating analysis and planning steps. Since Story Diagrams and
+Patterns are interpreted at runtime, they can replaced or modiﬁed on-line, e.g.,
+by higher order transformations. This satisﬁes the ﬂexibility requirement (FR-6).
+180 T. Vogel and H. Giese
+6.2 Discussion of the Assessment
+The conducted assessment of Stitch and Story Diagrams concerning the require-
+ments presented in this paper is constrained by two aspects. First, the analysis
+of Stitch is solely based on literature [5]. Second, the analysis of Story Diagrams
+for their ﬁtness to specify adaptation models is based on our experience with
+Story Diagrams and thus, it has been done from a conceptual point of view.
+The fact that Stitch does not support several requirements does not necessarily
+reveal design ﬂaws, but it is rather motivated by the speciﬁc setting. On the one
+hand and as argued in [5], Stitch focuses on system administration tasks that
+could be tackled well by rule-based approaches and it limits runtime reasoning on
+computing utilities to select one among multiple applicable adaptation strategies.
+Thus, Stitch does not aim to support search-based mechanisms. On the other
+hand, Stitch is not based on MDE principles and it does not take into account
+speciﬁcs of models@run.time. However, using an ADL model at runtime, Stitch
+is still related to the research ﬁeld for which the requirements are relevant.
+Concerning the diﬀerent feedback loop patterns discussed in Section 5, Stitch
+targets the pattern that couples the analysis and planning steps, which is similar
+to rule-based approaches. However, since Stitch supports utility-based analysis
+and selection of competing adaptation strategies (rules), it shares characteristics
+with the decoupled pattern. This motivates the need for explicitly capturing,
+e.g., qualities and preferences (LR-2, 3), which need not to be the case for pure
+rule-based approaches that do not allow competing or even conﬂicting rules.
+Finally, Story Diagrams seem to be a promising language for adaptation mod-
+els because they follow MDE principles, they are directly interpretable and ﬂexi-
+ble, and they seamlessly integrate with any user-deﬁned metamodel for reﬂection
+models. However, Story Diagrams are a general-purpose language and not specif-
+ically tailored for adaptation models. This might be a drawback, but we think
+that concepts speciﬁc for adaptation models (like goals (LR-1)) can be covered
+by a diﬀerent language (like for goal models), which can be integrated with Story
+Diagrams. Which of the diﬀerent feedback loop patterns (cf. Section 5) can be
+covered by Story Diagrams requires further investigations or even experiences
+from employing Story Diagrams in a concrete self-adaptive system.
+7 Conclusion and Future Work
+In this paper, we have elaborated the requirements for adaptation models that
+specify the decision-making process in self-adaptive software systems using mod-
+els@run.time. In particular, requirements for a modeling language incorporating
+metamodels, constraints, and model operations for creating and applying adap-
+tation models have been discussed, as well as requirements for a framework that
+executes adaptation models. Moreover, we discussed patterns of a self-adaptive
+system’s feedback loop with respect to the requirements for adaptation models.
+Additionally, we have assessed two existing languages and frameworks, namely
+Stitch and Story Diagrams, concerning their ﬁtness for the requirements.
+Adaptation Models: Requirements, Patterns, and Assessment 181
+As future work, we want to elaborate the conducted assessment to conﬁrm
+evidence for the relevance and completeness of the requirements. Moreover, we
+plan to use Story Diagrams for specifying adaptation models in our approach [16,
+18] to close the feedback loop. Additionally, this can be seen as an evaluation of
+the promising results that Story Diagrams achieved in the assessment.
+References
+1. Bencomo, N., Blair, G., Fleurey, F., Jeanneret, C.: Summary of the 5th Interna-
+tional Workshop on Models@run.time. In: Dingel, J., Solberg, A. (eds.) MODELS
+2010 Workshops. LNCS, vol. 6627, pp. 204–208. Springer, Heidelberg (2011)
+2. Bencomo, N., Blair, G., France, R., Mu˜ noz, F., Jeanneret, C.: 4th International
+Workshop on Models@run.time. In: Ghosh, S. (ed.) MODELS 2009 Workshops.
+LNCS, vol. 6002, pp. 119–123. Springer, Heidelberg (2010)
+3. Blair, G., Bencomo, N., France, R.B.: Models@run.time. Computer 42(10), 22–27
+(2009)
+4. Cheng, B.H.C., de Lemos, R., Giese, H., Inverardi, P., Magee, J., Andersson, J.,
+Becker, B., Bencomo, N., Brun, Y., Cukic, B., Di Marzo Serugendo, G., Dustdar,
+S., Finkelstein, A., Gacek, C., Geihs, K., Grassi, V., Karsai, G., Kienle, H.M.,
+Kramer, J., Litoiu, M., Malek, S., Mirandola, R., M¨ uller, H.A., Park, S., Shaw,
+M., Tichy, M., Tivoli, M., Weyns, D., Whittle, J.: Software Engineering for Self-
+Adaptive Systems: A Research Roadmap. In: Cheng, B.H.C., de Lemos, R., Giese,
+H., Inverardi, P., Magee, J. (eds.) Software Engineering for Self-Adaptive Systems.
+LNCS, vol. 5525, pp. 1–26. Springer, Heidelberg (2009)
+5. Cheng, S.W.: Rainbow: Cost-Eﬀective Software Architecture-Based Self-
+Adaptation. Ph.D. thesis, Carnegie Mellon University, Pittsburgh, USA (2008)
+6. Fischer, T., Niere, J., Torunski, L., Z¨ undorf, A.: Story Diagrams: A New Graph
+Rewrite Language Based on the Uniﬁed Modeling Language and Java. In: Ehrig,
+H., Engels, G., Kreowski, H.-J., Rozenberg, G. (eds.) TAGT 1998. LNCS, vol. 1764,
+pp. 296–309. Springer, Heidelberg (2000)
+7. Fleurey, F., Dehlen, V., Bencomo, N., Morin, B., J´ ez´ equel, J.-M.: Modeling and
+Validating Dynamic Adaptation. In: Chaudron, M.R.V. (ed.) MODELS 2008
+Workshops. LNCS, vol. 5421, pp. 97–108. Springer, Heidelberg (2009)
+8. Fleurey, F., Solberg, A.: A Domain Speciﬁc Modeling Language Supporting Spec-
+iﬁcation, Simulation and Execution of Dynamic Adaptive Systems. In: Sch¨ urr, A.,
+Selic, B. (eds.) MODELS 2009. LNCS, vol. 5795, pp. 606–621. Springer, Heidelberg
+(2009)
+9. Floch, J., Hallsteinsen, S., Stav, E., Eliassen, F., Lund, K., Gjorven, E.: Using
+Architecture Models for Runtime Adaptability. Software 23(2), 62–70 (2006)
+10. Georgas, J.C., Hoek, A., Taylor, R.N.: Using Architectural Models to Manage and
+Visualize Runtime Adaptation. Computer 42(10), 52–60 (2009)
+11. Giese, H., Hildebrandt, S., Seibel, A.: Improved Flexibility and Scalability by In-
+terpreting Story Diagrams. In: GT-VMT 2009. vol. 18. ECEASST (2009)
+12. Kephart, J.O., Chess, D.: The Vision of Autonomic Computing. Computer 36(1),
+41–50 (2003)
+13. Ramirez, A.J., Cheng, B.H.: Evolving Models at Run Time to Address Functional
+and Non-Functional Adaptation Requirements. In: Models@run.time 2009. CEUR-
+WS.org, vol. 509, pp. 31–40 (2009)
+182 T. Vogel and H. Giese
+14. Rouvoy, R.: Requirements of mechanisms and planning algorithms for self-
+adaptation. Deliverable D1.1 of MUSIC (EU-FP6 project) (2007)
+15. Song, H., Huang, G., Chauvel, F., Sun, Y.: Applying MDE Tools at Runtime:
+Experiments upon Runtime Models. In: Models@run.time 2010. CEUR-WS.org,
+vol. 641, pp. 25–36 (2010)
+16. Vogel, T., Giese, H.: Adaptation and Abstract Runtime Models. In: SEAMS 2010.
+pp. 39–48. ACM (2010)
+17. Vogel, T., Giese, H.: Language and Framework Requirements for Adaptation Mod-
+els. In: Models@run.time 2011. CEUR-WS.org, vol. 794, pp. 1–12 (2011)
+18. Vogel, T., Neumann, S., Hildebrandt, S., Giese, H., Becker, B.: Incremental Model
+Synchronization for Eﬃcient Run-Time Monitoring. In: Ghosh, S. (ed.) MODELS
+2009 Workshops. LNCS, vol. 6002, pp. 124–139. Springer, Heidelberg (2010)
+19. Vogel, T., Seibel, A., Giese, H.: The Role of Models and Megamodels at Runtime.
+In: Dingel, J., Solberg, A. (eds.) MODELS 2010 Workshops. LNCS, vol. 6627, pp.
+224–238. Springer, Heidelberg (2011)

@@ -1,0 +1,1308 @@
+arXiv 2610.00951  https://arxiv.org/abs/2610.00951
+
+Negative Oil & Nickel Squeeze: A Feedback Model for Extreme
+Commodity Futures Prices
+Iosif Zimbidis∗ Ronnie Sircar†
+October 2, 2026
+Abstract
+On April 20, 2020, the May front-month WTI oil futures contract, one day before its expira-
+tion date, opened near $17/barrel and dropped far below zero in a single trading day, reaching
+an intraday low of−$40.32 and settling at−$37.63. Such market behavior was unforeseen at
+the time. This event, and the March 2022 nickel squeeze, illustrate how constraints on physical
+delivery create pressure to close futures positions and distort futures prices. We develop a feed-
+back model that connects the resulting price distortion to a roll option, and to the imbalance
+between delivery-constrained long and short positions. Under lognormal benchmark dynamics,
+the roll-option value is shown to satisfy a pricing PDE which is nonlinear because its payoff
+depends on the observed futures price, which itself includes the feedback correction. Remark-
+ably, in both cases, there is an explicit solution in terms of classical Black-Scholes-Margrabe
+exchange option formulas, up to solving a scalar equation. We show this allows that prices may
+go negative under distortion of a positive-price lognormal model. An analogous construction
+applies when the lognormal base is switched to Bachelier normal dynamics. Illustrations based
+on WTI and nickel show the imbalance required to reproduce the extreme event prices under
+the benchmark assumptions.
+1 Introduction
+Commodity futures link financial trading to physical delivery. Storage, convenience yield and the
+term structure of supply and demand are central to their valuation; see, for example, Bouchouev
+(2023). Participation by financial investors and the interaction between trading and fundamentals
+add further channels through which prices can move (Tang and Xiong, 2012; Cheng and Xiong,
+2014). During periods of market stress, however, the ability to hold a contract through delivery can
+differ sharply across participants. Traders who must close their positions may then face a limited
+set of counterparties able and willing to absorb them.
+Two episodes motivate this paper. On April 20, 2020, the May WTI futures contract settled at
+−$37.63/bbl on its penultimate trading day, amid a collapse in oil demand and severe constraints
+on storage and delivery (Commodity Futures Trading Commission, 2020). On March 8, 2022,
+the LME three-month nickel price reached $101,365/ton during a short squeeze, before trading
+was suspended and that day’s trades were canceled (Oliver Wyman, 2023). Both raise a related
+question: how can pressure to exit positions amplify a futures-price movement when access to
+physical delivery is limited?
+∗ORFE Department, Princeton University
+†ORFE Department, Bendheim Center for Finance and Andlinger Center for Energy & the Environment, Princeton
+University
+1
+arXiv:2610.00951v1  [q-fin.MF]  1 Oct 2026
+We address this question through a model that separates traders by their license (or not) to take
+delivery. An imbalance among unlicensed positions creates one-sided demand to close-out: excess
+longs must sell, and excess shorts must buy. The cost of this constraint is represented by a roll op-
+tion. Since the option payoff depends on the observed futures price, and the observed price includes
+the option-value correction, the pricing equation contains feedback, and is thereby nonlinear.
+Our model is explanatory. It takes a benchmark price as an input, and builds an additional mecha-
+nism through which constrained positions can move the observed price away from that benchmark.
+Its main advantage is analytical tractability: despite the nonlinear pricing PDE, the specifications
+studied here admit exact solutions in terms of standard option-pricing formulas. These represen-
+tations make the direction and magnitude of feedback transparent, and allow the implications of
+benchmark and imbalance assumptions to be quantified.
+1.1 Contract structure and motivating events
+The two episodes differ in their contract structure and delivery constraints, but both feature a class
+of market participants that cannot remain in the futures contract through physical settlement. We
+first describe the institutional features of the WTI and LME nickel markets and the circumstances
+surrounding the April 2020 oil’s price collapse and the March 2022 nickel squeeze. We then show how
+these distinct settings give rise to the common mechanism studied in the paper: forced liquidation
+by delivery constrained traders and the resulting pressure on observed futures prices. Additional
+contract specifications and delivery details for the two markets are summarized in Appendix A.
+1.1.1 NYMEX WTI crude oil and the April 2020 collapse
+The NYMEX West Texas Intermediate (WTI) crude oil futures contract is physically settled by
+delivering 1,000 barrels of WTI-grade crude at Cushing, Oklahoma. Trading ends shortly before the
+delivery month according to the schedule specified by the exchange (CME Group, n.d.). Physical
+settlement requires access to storage, pipeline capacity, and the operational arrangements necessary
+to receive or deliver crude at Cushing.
+Many financial participants do not possess this infrastructure and therefore close or roll their front-
+month positions before the delivery process begins. Producers, refiners, merchants, and other
+commercial participants may have the arrangements needed to remain in the contract through
+settlement, although commercial status alone does not guarantee delivery capacity. Throughout
+the paper, we refer to these groups as unlicensed and licensed traders, respectively, where the
+terminology describes the delivery capability within the model rather than an actual regulatory
+classification.
+The May 2020 WTI contract provides a striking example of a forced long liquidation, which we
+call Case 1. On April 20, 2020, its penultimate trading day, the contract initially traded at around
+$17/bbl and ended the day at−$37.63/bbl. A series of events over the previous weeks had driven
+down the price of physical barrels and amplified the downward pressure on the futures contract.
+The COVID-19 pandemic sharply reduced oil demand, while the breakdown of production negoti-
+ations between Russia and Saudi Arabia added to supply pressures (Commodity Futures Trading
+Commission, 2020). Although a replacement agreement was announced on April 12, it did not take
+effect until May 1.
+Meanwhile, Cushing inventories reached 59.7 million barrels on April 17, up from 55.0 million barrels
+one week earlier (U.S. Energy Information Administration, 2020). Open interest in the expiring
+2
+contract was 108,593 lots, corresponding to 108.6 million barrels (Commodity Futures Trading
+Commission, 2020). These conditions made physical delivery particularly unattractive and, for
+many financial participants, operationally infeasible. The concentration of the price collapse in the
+final hours is consistent with liquidation pressure, alongside the deterioration in physical-market
+conditions.
+The open-interest data provide additional context, but do not identify which positions were delivery-
+constrained. Open interest fell from 108,593 to 13,044 contracts during April 20, implying that
+approximately 88% of outstanding positions were closed during the day. Relative to its April 2
+peak of 634,727 contracts, residual open interest on the penultimate trading day was only 2.06%,
+the smallest among the 198 WTI front-month expiration cycles from 2010 to 2024, compared with a
+median of 5.55%. We calculate these statistics using contract-level open-interest data obtained from
+Bloomberg. These figures document extensive position closure. They are consistent with a large
+price concession during liquidation, but aggregate open interest alone cannot establish the size or
+ownership of the constrained imbalance. This distinction motivates the mixing weightεintroduced
+in Section 2.1: it measures the intensity of the delivery-constrained positional imbalance relative
+to total open interest, rather than the fraction of positions remaining after liquidation.
+A particularly important source of forced selling is documented by Bouchouev (2023,§3.5). The
+Bank of China had offered an OTC oil-linked product, YuanYouBao, to domestic retail investors
+and hedged its exposure through long NYMEX WTI futures positions. Those positions had to be
+liquidated on April 20 through the Trading-at-Settlement (TAS) mechanism. As selling pressure
+intensified, TAS liquidity became insufficient even at the minimum permitted value, and the re-
+maining orders had to be executed in the regular order book during the final part of the session
+(Bouchouev, 2020). In the terminology of our model, this is a Case 1 event, in which unlicensed
+traders are net long and must sell into a limited pool of licensed traders.
+1.1.2 LME three-month nickel and the March 2022 squeeze
+The March 2022 LME nickel squeeze provides the mirror-image Case 2 event. The LME nickel
+contract differs from WTI in several important respects. The LME offers daily prompt dates out to
+three months and quotes a rolling three-month tenor; an individual position nevertheless has a fixed
+delivery date. Physical delivery takes place through LME-approved warehouses and requires eligible
+Class I refined nickel. Much of global nickel production, however, consists of Class II material that
+is not deliverable against the LME contract. Consequently, even a physical nickel producer may be
+unable to satisfy an LME short position using its own production (Oliver Wyman, 2023).
+This distinction became critical during March 7–8, 2022. Concerns about the availability of de-
+liverable nickel intensified following Russia’s invasion of Ukraine, contributing to reduced liquidity
+ahead of the squeeze (Oliver Wyman, 2023). Warranted nickel stocks in LME warehouses had
+declined from 173,000 tonnes on September 15, 2021, to approximately 80,000 tonnes by February
+24, 2022 (Oliver Wyman, 2023, p. 15). Against this backdrop, the nickel futures price rose sharply,
+reaching $101,365/ton on March 8 before the LME suspended trading and subsequently canceled
+that day’s transactions. The episode led to an FCA enforcement investigation (Financial Conduct
+Authority, 2023) and litigation concerning the cancellation of trades (High Court of Justice, 2023).
+Large short positions and rising margin requirements contributed to the squeeze. Some producers
+used LME contracts to hedge Class II nickel, which was not deliverable against those contracts. As
+prices rose, participants reduced their short exposures through purchases, adding further upward
+pressure in a market with limited liquidity (Oliver Wyman, 2023). This mechanism illustrates
+3
+Case 2: delivery constrained shorts face pressure to buy back their positions.
+1.1.3 A common feedback mechanism
+The episodes motivate two directions of the same feedback mechanism. In Case 1, constrained
+traders are net long and closing their positions puts downward pressure on the observed price. In
+Case 2, they are net short and covering puts upward pressure on the price. For WTI, the relevant
+constraint is access to storage and delivery arrangements at Cushing. For nickel, it includes the
+mismatch between a producer’s output and the exchange’s deliverable grade. Section 2.1 formalizes
+the position imbalance.
+Our approach is related to models in which trading changes the price dynamics faced by the traders
+themselves. Frey and Stremme (1997) examine how the implementation of dynamic hedging strate-
+gies changes the underlying asset’s price dynamics and volatility. Sircar and Papanicolaou (1998)
+account for the effect of dynamic hedging on the underlying asset price and, in turn, on derivative
+values. Their construction leads to a nonlinear pricing PDE and explains how hedging demand
+can increase volatility. In commodity markets, Chan, Sircar, and Stein (2015) introduce portfolio-
+optimizing investors alongside traditional commodity demand. Their feedback model studies how
+investors’ positions affect commodity prices and their correlation with financial markets. Basak
+and Pavlova (2016) develop an equilibrium model with institutional investors whose performance
+is measured relative to a commodity index. They show how financialization affects futures prices,
+volatilities and correlations, and transmits shocks to spot prices and inventories when storage is
+included. Sockin and Xiong (2015) examine an informational feedback channel in which commodity
+prices influence producers’ decisions by conveying information about economic conditions, thereby
+affecting commodity demand. More directly related to the WTI episode, Ma and Wang (2021)
+develop a three-player game-theoretic model in which strategic interactions can generate negative
+oil prices.
+The common feature is that financial trading enters price formation. Our model focuses on a
+specific source of this interaction: the need to close positions when physical delivery is unavailable.
+Feedback acts through a roll-option value, which depends on the same observed price that it helps
+determine. The benchmark is supplied externally, and the imbalance is held fixed within each
+valuation. The model therefore complements the broader equilibrium and trading mechanisms
+above. Its main analytical contribution is an exact reduction of this particular nonlinear pricing
+problem to standard option formulas, coupled with a scalar equation.
+1.2 Contributions
+The paper makes three related contributions. First, it links market segmentation to a pricing
+distortion. A normalized imbalance of unlicensed long and short positions determines the weight
+ε, while a roll option measures the cost associated with closing the excess position. The resulting
+feedback relation accommodates both downward and upward distortions.
+Second, we derive and solve the associated nonlinear pricing problem. Under lognormal benchmark
+dynamics, homogeneity reduces the PDE to one state variable, and a change of variables converts
+it to the classical Margrabe equation. The resulting exact representation expresses the solution
+through a standard put or call Black-Scholes pricing formula. Under normal dynamics, an analogous
+reduction gives Bachelier representations.
+Third, we use the representation to characterize the implications of the feedback mechanism and
+4
+to construct event illustrations. In particular, we show how the distortion can drive an observed
+oil futures price below zero even when the underlying licensed price remains positive, and we
+identify the role of the position imbalance and calendar-spread dynamics in determining when such
+a crossing can occur. We then use the WTI and nickel episodes to illustrate the magnitude and
+direction of the resulting price distortions.
+2 Feedback Model
+As discussed earlier, commodity futures markets differ fundamentally from equity markets because
+they include distinct classes of participants with different objectives and delivery capabilities. Pro-
+ducers, merchants, and commodity trading firms primarily use futures contracts to hedge the price
+risk of physical inventories or future production. By contrast, financial participants trade futures
+for speculation, portfolio diversification, or financial hedging.
+To capture this segmentation, we distinguish between two types of traders, based on the delivery
+rules of major commodity exchanges such as the CME.
+1.Licensed traders. These are producers, merchants, and commodity trading firms that are
+authorized to make or take physical delivery at contract maturity.
+2.Unlicensed traders. These include hedge funds and other financial participants who trade
+commodity futures for speculative or hedging purposes but are not authorized to participate
+in physical delivery.
+The key distinction is that an unlicensed trader must close its position before contract maturity,
+whereas a licensed trader may hold the contract until expiration and either make or take physical
+delivery. This reflects the market structure observed in both canonical events, where speculative
+participants were required to liquidate their positions before maturity. Maintaining an open position
+beyond that point without delivery eligibility is generally prohibited by exchange rules and may
+result in financial penalties or trading restrictions.
+We introduce this market segmentation to describe the observed futures price, defined asF obst,T .
+LetF lict,T denote the licensed price, namely the price that would prevail if all market participants
+were licensed and no forced liquidation occurred. The difference between the two arises from the
+presence of the unlicensed traders and is captured by a third quantity, the distorted futures price
+Ht,T,T 2. This is the price at which the unlicensed component of the market clears.
+Throughout the paper,F t,T2 denotes the observed price of a later-month futures contract, where
+T2 > T. Since this contract matures well after the front-month contract, it is not subject to the
+same liquidation pressure and is therefore treated as undistorted. In the WTI oil application, this
+is the next-month contract.
+The following sections derive the relationship betweenF obst,T ,F lict,T ,H t,T,T 2, andF t,T2 from a market-
+clearing argument based on the open-interest composition of the futures market.
+2.1 Market Structure and Open Interest
+At any timet < T, the open interest in the contract maturing atTdecomposes by trader type and
+side of the trade. Letℓ Lt , ℓUt denote the long positions held by licensed and unlicensed traders at
+timet, respectively, ands Lt , sUt the corresponding short positions. We summarize the decomposition
+5
+in the open-interest matrix
+Long Short
+Licensed ℓLt sLt
+Unlicensed ℓUt sUt
+(1)
+Since every futures contract has exactly one long and one short counterparty, the total open interest
+is
+OIt =ℓ Lt +ℓ Ut =s Lt +s Ut .(2)
+The delivery constraint, as we discussed earlier, introduces an asymmetry in the two rows of
+the table. In particular, by maturityT, all unlicensed positions must be closed, while licensed
+positions can remain open and proceed to physical settlement. The delivery constraint introduces
+an asymmetry between the two classes of traders. LetT ′ < Tdenote the time by which unlicensed
+positions must be closed before physical settlement atT. Licensed positions may remain open
+beyondT ′ and proceed to delivery. Consequently, the net unlicensed exposure immediately prior
+to liquidation,
+ℓUT ′ −s UT ′,
+determines the direction of the forced order flow. This creates two distinct regimes identified as
+Case 1 and Case 2 for the rest of our paper.
+Case 1: Net unlicensed long positions (ℓUT ′ > sUT ′)
+The first case occurs when within the unlicensed segment the long positions outnumber the short
+positions. After theℓ UT ′ −s UT ′ excess unlicensed long positions are closed against licensed shorts,
+the number of surviving licensed shorts iss LT ′ −  ℓUT ′ −s UT ′ =ℓ LT ′, where the equality follows from
+the open-interest identity (2). Thus, after all unlicensed positions have been cleared, the remaining
+licensed market is balanced, withℓ LT ′ long andℓ LT ′ short positions, consistent with physical delivery.
+We model the observed futures price as the volume-weighted average of quantities associated with
+the two classes of traders:
+F obst,T = ℓLT ′ +s UT ′
+OIT ′
+F lict,T + ℓUT ′ −s UT ′
+OIT ′
+Ht,T,T 2.(3)
+The weights are nonnegative and sum to one by (2). The deviation ofF obst,T from the fundamental
+is thus governed by the gap betweenH t,T,T 2 andF lict,T , scaled by the net unlicensed long imbalance
+(ℓUT ′ −s UT ′)/OIT ′. The explicit characterization ofH t,T,T 2 is deferred to Section 2.3.
+Case 2: Net unlicensed short positions (sUT ′ > ℓUT ′)
+The mirror situation occurs when unlicensed shorts dominate the segment. A net unlicensed short
+of sizes UT ′ −ℓ UT ′ must close by buying from licensed longs. By the analogous argument, after all
+unlicensed positions clear, the remaining licensed positions satisfy the volume-weighted average
+observed futures price given by
+F obst,T = sLT ′ +ℓ UT ′
+OIT ′
+F lict,T + sUT ′ −ℓ UT ′
+OIT ′
+Ht,T,T 2,(4)
+where hereH t,T,T 2 denotes the distorted price of an unlicensed short, characterized in Section 2.3
+via Corollary 2.1.
+6
+Equations (3) and (4) share the structure of a convex combination between the licensed priceF lict,T
+and the distorted priceH t,T,T 2. Defining the net unlicensed imbalance, as a fraction of the net
+unlicensed exposure over total open interest
+ε:= |ℓUT ′ −s UT ′|OIT ′ ,(5)
+we obtain the unified pricing formula
+F obst,T = (1−ε)F lict,T +ε Ht,T,T 2.(6)
+Assumption 1.Throughout this paper, we assumeε <1.
+2.2 Fundamental Futures Pricing
+The framework we develop in this paper is built on top of any standard commodity-pricing model
+for the licensed futures priceF lict,T in equation (6). The rest of the equation provides a structural
+mechanism that maps this fundamental price into the observed futures price.
+Several standard frameworks can supplyF lic to our model. These include classical cost-of-carry
+models with storage costs and convenience yields, lognormal dynamics commonly used for futures
+prices, and the models of Schwartz (1997), which incorporate mean reversion in commodity prices
+and, in their multi-factor specifications, stochastic convenience yields and interest rates. These
+models, together with a broader overview of the commodity-pricing literature, are presented in
+Bouchouev (2023).
+These classical frameworks produce a fundamental futures price that is, by construction, positive
+and consistent with the absence of arbitrage. The mechanism introduced in the following subsection
+adds a structural correction that generates the extreme price distortions observed in practice due
+to exit pressure. The main structural component of our framework is therefore the mappingF lic 7→
+F obs through the recursive feedback equation derived below in Section 2.3.
+2.3 Speculative Futures Pricing
+The distorted futures price follows from a market-clearing argument. We consider separately the
+two possible imbalances in unlicensed positions.
+In Case 1, unlicensed traders hold an excess long position that must be closed before maturity.
+These traders are therefore forced to sell their contracts, while only licensed traders can take the
+opposite side of the transaction. This creates one-sided selling pressure and can push the observed
+futures price below its fundamental value. The cost of this restriction can be represented through
+a roll option. A licensed trader can hold the front-month futures contract through maturity and
+take delivery of the commodity. An unlicensed trader cannot. To maintain the same exposure
+beyond maturity, the unlicensed trader must instead close the front-month position and replace it
+with a position in the next-month futures contract. We model this transaction as the long-side
+roll option,R (+). The value of this option measures the cost associated with being unable to
+take delivery and being forced to close the front-month position. We therefore interpretR (+) as
+the close-out premium borne by an unlicensed long trader. The corresponding distorted price is
+Ht,T,T 2 =F lict,T −R (+)t .
+In Case 2, the direction of the imbalance is reversed. Unlicensed traders hold an excess short
+position that must be closed before maturity. They are therefore forced to buy the front-month
+7
+contract to cover their positions. This one-sided buying pressure can push the observed futures
+price above its fundamental value. The corresponding restriction is represented by the short-side
+roll optionR (−). Its value measures the additional cost faced by an unlicensed short trader who
+must buy back the front-month contract rather than settle through delivery. We interpretR (−) as
+the squeeze premium generated by forced short covering:H t,T,T 2 =F lict,T +R (−)t .
+We now define these two roll options more precisely. Both are non-negative option payoffs written
+on the spread between the front-month and a later-month contract. Which option is relevant is
+determined by the open-interest imbalance:R (+) applies when unlicensed traders are net long,
+whileR (−) applies when they are net short.
+Because the underlying commodity is not itself directly tradable on the futures exchange, we
+represent its value at timeTusing the discounted value of the next-month futures contract. Let
+F obst,T denote the observed futures price at timetof the front-month futures contract whose maturity
+isT, and letF obsT,T 2 denote the futures price at timeTof the contract maturing atT 2 > T. Let
+∆ =T 2 −Tdenote the time between the two maturities, typically one month, and letD:=e −r∆
+denote the discount factor fromT 2 toT, assumed constant. The factorDdiscounts between the
+two delivery datesTandT 2. Separately, we express the roll option terms in futures price units:
+they represent conditional expected terminal payoffs rather than time-tpresent values. Under
+deterministic interest rates, their discounted counterparts are conventional option values, as in
+Black (1976).
+The terminal payoffs of the two roll options are then
+R(+)T = DF obsT,T 2 −F obsT,T + , R (−)T = F obsT,T −DF obsT,T 2+ .(7)
+Thus,R (+)T is positive when the front-month contract trades below the discounted next-month
+contract (contango), whileR (−)T is positive when the front-month contract trades above it (back-
+wardation). The two options therefore capture distortions in opposite directions.
+The next-month futures contract is itself traded on the exchange. However, because its maturityT 2
+remains sufficiently far from the front-month maturityT, it is not yet exposed to the same forced-
+liquidation mechanism. We therefore assume that its observed price coincides with its licensed
+price over the relevant period. An unlicensed trader can trade only the market futures contract
+and must close any remaining position by the end of the last trading session. Consequently, the
+trader is exposed to the prevailing observed priceF obsT at forced liquidation.
+Combining this with (6), we obtain
+F obst,T =
+
+
+
+F lict,T −εR (+)t , ℓ UT ′ > sUT ′ (Case 1),
+F lict,T +εR (−)t , ℓ UT ′ < sUT ′ (Case 2), ε=
+ℓUT ′ −s UT ′
+OIT ′
+.(8)
+The deviation from the licensed price comes from the roll option, which determines the value of
+the constraint faced by unlicensed traders, whileεmeasures the size of the unlicensed position
+imbalance relative to total open interest.
+In Case 1,R (+)t measures the close-out premium associated with forced selling by unlicensed long
+traders. Because these traders cannot take delivery, they must liquidate their positions even when
+the front-month price is depressed. This mechanism pushesF obst,T < Flict,T , as in the April 2020
+8
+WTI episode. In Case 2,R (−)t measures the squeeze premium associated with forced buying by
+unlicensed short traders. These traders must purchase contracts to close their short positions,
+generating upward price pressure and potentially producingF obst,T > Flict,T , as in a classical short
+squeeze, such as the March 2022 nickel episode.
+Thus, the same market-clearing mechanism generates distortions in either direction. An excess unli-
+censed long position activatesR (+) and creates downward pressure, while an excess unlicensed short
+position activatesR (−) and creates upward pressure. The composition of open interest determines
+both the direction of the distortion and, throughε, its magnitude.
+Since the roll option term adjusts the futures quote, we use its undiscounted conditional expectation:
+R(±)t :=E QhR(±)T | Fti , t∈[0, T].(9)
+Consequently, theR (±) terms referenceF obs through (7), which thenfeeds backintoF obs through
+(8). Putting it together gives
+F obst,T =
+
+
+
+F lict,T −εE Q
+
+DF obsT,T 2 −F obsT,T
++
+| Ft
+
+,(Case 1),
+F lict,T +εE Q
+
+F obsT,T −DF obsT,T 2
++
+| Ft
+
+,(Case 2),
+(10)
+which reveals the nonlinearity of the pricing mechanism.
+2.4 Roll-Option Pricing PDE
+Pricing the distortion thus reduces to pricing the operative roll-option valueV ±, with one essential
+complication. The terminal payoff (7) ofR (±) involvesF obsT , which is itself constructed from
+V ± through (8). The option is therefore self-referential and coupled to its own price through
+the feedback equation, and the standard Black-style replication argument must be extended to
+internalize this coupling.
+We work with the following geometric Brownian motion (GBM) model. Under the risk–neutral
+measureQ, suppose
+dF lict,T
+F lict,T =σ 1(t)dW 1t , dF obst,T2F obst,T2 =σ 2(t)dW 2t , d⟨W 1, W2⟩t =ρ dt,(11)
+whereW 1, W2 areQ-Brownian motions,σ 1(·), σ2(·)>0, and the correlation coefficientρ∈(−1,1)
+is constant. We will see that, as our feedback mechanism is implemented pointwise in time, the
+resulting dynamics for (F obst,T , Fobst,T2) will be Markovian with respect to the filtration generated by
+(W 1, W2), and so we look for
+R±t =V ±(t, Fobst,T , Fobst,T2),
+whereV ±(t, f1, f2) are deterministic functions:
+V ±(t, f1, f2) =E QR(±)T  F obst,T =f 1, Fobst,T2 =f 2, t∈[0, T], f 1 ∈R +, f2 ∈R +,(12)
+withR ±T defined in (7). The possible valuesf 2 ofF obst,T2 are strictly positive, the next month futures
+price is a GBM (and it is not affected by the distortion feedback). We also takef 1 to be strictly
+9
+positive for now, since traders are pricing under the presumption thatF obst,T also cannot go negative
+since the baseline futures priceF lict,T is also GBM. We address how the model changes if the observed
+F obst,T does become negative in Section 2.8.
+We start with Case 1, where
+F obst,T =F lict,T −εV +
+
+t, Fobst,T , Fobst,T2
+
+.(13)
+The following proposition characterizesV + as the solution of a nonlinear feedback PDE.
+Proposition 1.Suppose thatV +(t, f1, f2)∈ C1,2,2([0, T)×R + ×R +). ThenV + solves
+V +t + 12 J + σ21(t)f 21 V +f1f1 +K + σ1(t)σ2(t)f 1f2 V +f1f2 + 12 σ22(t)f 22 V +f2f2 = 0,(14)
+with diffusion multipliers
+J + := (B+)2 +ε 2(C +)2 −2ρεB +C+
+(A+)2 , K + := ρB+ −εC +A+ ,
+given in terms of the feedback coefficients
+A+ := 1 +εV +f1 , B + := 1 +ε V +f1 , C + :=  f2f1  σ2(t)σ1(t) V +f2 .(15)
+The terminal condition is
+V +(T, f1, f2) =  Df2 −f 1+.(16)
+Proof.Under the forward-pricing convention (9),V + andF lict,T areQ-martingales. As the difference
+of two martingales,F obst,T is an Itˆ o martingale, and it admits the representation
+dF obst,T =β t dW 1t +γ t dW 2t .(17)
+Applying Itˆ o’s formula toV+
+
+t, Fobst,T , Fobst,T2
+
+and using (17) together with (11), we have
+dV + =V +t dt+V +f1  βt dW 1t +γ t dW 2t  +V +f2 f2σ2(t)dW 2t
++ 12 V +f1f1 β2t + 2ρβtγt +γ 2t  dt+ 12 V +f2f2 f 22 σ22(t)dt+V +f1f2 ρβt +γ t f2σ2(t)dt.(18)
+On the other hand, from (13), we have
+ε dV+ = h (f1 +εV +)σ1(t)−β t dW 1t −γ t dW 2t i.(19)
+Equating thedW 1t coefficients in (18) and (19) yields
+βt = (f1 +εV +)σ 1(t)A+ , A + := 1 +εV +f1 ,(20)
+while from thedW 2t coefficients, we obtain
+γt =−
+εV +f2 f2σ2(t)
+A+ .(21)
+Finally, from thedtcoefficients, as the right-hand side of (19) is purely stochastic, we have
+0 =V +t + 12 V +f1f1 β2t + 2ρβtγt +γ 2t  + 12 V +f2f2 f 22 σ22(t) +V +f1f2 ρβt +γ t f2σ2(t).(22)
+Substituting (20) and (21) into (22) yields the PDE (14). The terminal condition (16) follows
+directly from the payoff in (7).
+10
+Corollary 2.1(Case 2 roll-option PDE).Suppose thatV −(t, f1, f2)∈ C1,2,2([0, T)×R + ×R +).
+In Case 2, unlicensed short positions must be covered by buying before maturity, so
+F obst,T =F lict,T +εV −
+
+t, Fobst,T , Fobst,T2
+
+.
+ThenV − solves
+V −t + 12 J − σ21(t)f 21 V −f1f1 +K − σ1(t)σ2(t)f 1f2 V −f1f2 + 12 σ22(t)f 22 V −f2f2 = 0,(23)
+with terminal condition
+V −(T, f1, f2) =  f1 −Df 2+,(24)
+and diffusion multipliers
+J − := (B−)2 +ε 2(C −)2 + 2ρεB−C−
+(A−)2 , K − := ρB− +εC −A− (25)
+given in terms of the feedback coefficients
+A− := 1−εV −f1 , B − := 1−ε V −f1 , C − :=  f2f1  σ2(t)σ1(t) V −f2 .(26)
+Proof.The Case 2 feedback relation can be written as
+F obst,T =F lict,T −(−ε)V −
+
+t, Fobst,T , Fobst,T2
+
+.
+Hence the derivation of Proposition 1 applies withV + replaced byV − andεreplaced by−ε. This
+changes the sign of every term containing a single factor ofε, yielding (26) and (25). The terminal
+condition (24) follows from the Case 2 payoff in (7).
+We note that the feedback PDEs (14) and (23) are quasilinear, in that the nonlinearities from
+the diffusion multiplier come as functions of (V ±, V±f1 , V±f2 ), but not of the highest second-order
+derivativesV ±fifj .
+2.5 Margrabe dimension reduction and explicit formulas
+When there is no distortion, that isε= 0, we have
+A± =B ± =J ± = 1, K ± =ρ,
+and theV ± reduce to the standard calendar exchange option pricing functions under a bivariate
+lognormal model:V ± ≡V (0)±, whereV (0)±(t, f1, f2) solve the linear PDE and terminal conditions
+V (0)±t + 12 σ21(t)f 21 V (0)±f1f1 +ρσ 1(t)σ2(t)f 1f2 V (0)±f1f2 + 12 σ22(t)f 22 V (0)±f2f2 = 0,(27)
+V (0)+(T, f1, f2) = (Df2 −f 1)+, V (0)−(T, f1, f2) = (f1 −Df 2)+.
+From this, one can show thatV (0)± are homogeneous of degree one in (f 1, f2), that is
+V (0)±(t, λf1, λf2)≡λV (0)±(t, f1, f2),for allλ >0.
+Consequently, we have the following explicit formulas.
+11
+Lemma 2.2.The exchange option pricing functionsV (0)±, solutions of the PDE problems (27),
+admit the representation
+V (0)+(t, f1, f2) =f 2P(t, ξ), V (0)−(t, f1, f2) =f 2C(t, ξ), ξ:=f 1/f2,
+where the put pricePsolves the one-dimensional linear PDE
+Pt + 12 σ2M (t)ξ2Pξξ = 0, t < T, ξ >0,(28)
+with terminal conditionP(T, ξ) =
+ 
+D−ξ
++, and where
+σ2M (t) =σ 21(t) +σ 22(t)−2ρ σ1(t)σ2(t).(29)
+The call option price functionCsolves the same PDE (28) asP, but with terminal condition
+C(T, ξ) =
+ 
+ξ−D
++. The Black-Scholes-Margrabe put price function is given explicitly:
+P(t, ξ) =D N(−d2(t, ξ))−ξ N(−d1(t, ξ)),(30)
+while the corresponding call price function is
+C(t, ξ) =ξ N(d1(t, ξ))−D N(d2(t, ξ)),(31)
+where
+d1,2(t, ξ) =log(ξ/D)± 12 Σ2M (t, T)ΣM (t, T) ,Σ M (t, T) :=sZ Tt σ2M (s)ds,(32)
+andNis the standard normal c.d.f.
+Proof.The formulas follow from the exchange option formula of Margrabe (1978), with determin-
+istic time-dependent volatilities incorporated through the integrated variance Σ 2M (t, T).
+2.6 Dimension reduction for nonlinear feedback PDEs
+We observe that the diffusion multipliersJ + andK + in the PDE (14) are functions ofB +/A+ and
+C+/A+. Under the scaling
+V + 7→λ −1V +, f 1 7→λ −1f1, f 2 7→λ −1f2,
+we have
+B+
+A+ = f1 +εV +f1 +εf 1V +f1 , C+A+ = f2σ2(t)V +f2σ1(t)(f1 +εf 1V +f1 ) ,
+both independent ofλ >0.
+By analogy with the Margrabe dimension-reduction for the caseε= 0 in Lemma 2.2, we look for a
+solution forV + of the formV +(t, f1, f2) =f 2G+(t, ξ), whereG+ depends on (f 1, f2) through the
+calendar ratioξ:=f 1/f2. Remarkably, the dimension reduction is possible even for the nonlinear
+PDE with feedbackε >0.
+12
+Proposition 2(Case 1 dimension reduction).LetV +(t, f1, f2) be a classical solution of the Case 1
+PDE (14), with terminal condition (16). Then we have
+V +(t, f1, f2) =f 2G+(t, ξ), ξ:=f 1/f2,(33)
+where the reduced functionG + solves the one-dimensional nonlinear PDE
+G+t + 12  B+A+ 2 σ2M (t)ξ2G+ξξ = 0, t < T, ξ >0,(34)
+with terminal condition
+G+(T, ξ) = D−ξ +,(35)
+and where
+A+ := 1 +εG +ξ , B + := 1 +ε G+ξ .(36)
+Proof.The result follows from inserting the form (33) into the PDE (14) and terminal condition
+(16) forV + using the relations
+V +f1 =G +ξ , V +f2 =G + −ξG +ξ , f 2V +f1f1 =G +ξξ , f 2V +f1f2 =−ξG +ξξ , f 2V +f2f2 =ξ 2G+ξξ .
+Corollary 2.3(Case 2 dimension reduction).LetV −(t, f1, f2) be a classical solution of the Case 2
+PDE (23), with terminal condition (24). ThenV −(t, f1, f2) =f 2G−(t, ξ), whereξ=f 1/f2, and
+G− solves
+G−t + 12  B−A− 2 σ2M (t)ξ2G−ξξ = 0,(37)
+with terminal condition
+G−(T, ξ) = ξ−D +,(38)
+and where
+A− := 1−εG −ξ , B − := 1−ε G−ξ .
+The Margrabe varianceσ 2M (t) is given in (29).
+Proof.The proof is analogous to the proof of Proposition 2.
+Remark 2.4.While Case 1 has a rollover option whose payoff is positive in the case of contango
+between the front and next month futures prices, the valuation ofV + is related to the feedback
+valuation of aput optionon the calendar spread (35). Conversely, Case 2 has a rollover option with
+positive payoff in backwardation, and involves feedback valuation of acall optionon the calendar
+spread (38).
+13
+2.7 Explicit Solutions
+We can solve forG ±, and henceV ±, explicitly, up to the unique solution of a scalar equation.
+Proposition 3(Case 1).LetG + solve the reduced Case 1 feedback PDE (34) with terminal
+condition (35). ThenG +(t, ξ) is given by the unique solution of the scalar equation
+G+(t, ξ) = 11−ε P  t, ξ+εG+(t, ξ) ,(39)
+whereP(t, ξ) is the standard Black-Scholes-Margrabe put price function given explicitly in (30).
+Proof.The PDE (34) forG + can be written
+G+t + 12 σ2M (t)
+ 
+ξ+εG +
+1 +εG +ξ
+!2
+G+ξξ = 0.
+Assumea priorithat 1 +εG +ξ (t, ξ)>0, so that the mapξ7→y:=ξ+εG +(t, ξ) is locally invertible,
+and define the change of variable
+G+(t, ξ) =H(t, y), y(t, ξ) :=ξ+εG +(t, ξ).(40)
+DifferentiatingH(t, y) =G +(t, ξ) gives
+Hy =
+G+ξ
+1 +εG +ξ , H yy =
+G+ξξ
+
+1 +εG +ξ
+3 , ξ t =− εG+t1 +εG +ξ .
+Hence we obtain
+G+t = 1 +εG +ξ  Ht, G +ξξ = 1 +εG +ξ 3 Hyy.
+Substitution into the reduced feedback PDE gives
+
+1 +εG +ξ
+ 
+Ht + 12 σ2M (t)y2Hyy
+
+= 0.
+Since 1 +εG +ξ >0,Hsolves the Margrabe PDE (28). The terminal condition is
+H(T, y) = 11−ε (D−y) +,which leads toH(t, y) = 11−ε P(t, y),
+and therefore to (39). It remains to verify the assumed invertibility and the uniqueness of the
+solution to (39). For the Margrabe put,P ξ(t, y) =−N(−d 1(t, y)), so that−1≤P ξ(t, y)≤0.
+Therefore, for 0≤ε <1,
+1−ε≤1 +εG +ξ (t, ξ)≤1.
+Thus the invertibility condition assumed above indeed holdsa posteriori. Finally, for fixed (t, ξ)
+define
+Φ(g) := (1−ε)g−P(t, ξ+εg).
+Since
+Φ′(g) = 1−ε−εP ξ(t, ξ+εg) = 1−ε(1 +P ξ(t, ξ+εg))≥1−ε >0,
+Φ is strictly increasing. Hence (39) has at most one solution. Existence follows from the construction
+above.
+14
+Corollary 2.5(Case 2 scalar representation).For 0≤ε <1 andξ >0, the Case 2 feedback value
+is determined by
+(1−ε)G −(t, ξ) =C t, ξ−εG−(t, ξ) ,(41)
+whereCis given by (31). The solution is unique among values for whichy=ξ−εG −(t, ξ)>0,
+andV −(t, f1, f2) =f 2G−(t, f1/f2).
+Proof.As in Case 1, setG −(t, ξ) =H(t, y), now withy=ξ−εG −(t, ξ). The transformed PDE is
+the Margrabe equation and its terminal value is (y−D) +/(1−ε). ThusH(t, y) =C(t, y)/(1−ε).
+To verify invertibility and existence directly, define
+ξ=y+ ε1−ε C(t, y).
+This map is strictly increasing from (0,∞) onto (0,∞) because 0≤C y ≤1. It defines a uniquey
+for eachξ >0, and hence the stated solution. Moreover,
+G−ξ = Cy(t, y)1−ε+εC y(t, y),1−εG −ξ = 1−ε1−ε+εC y(t, y)∈[1−ε,1],
+which verifies the nonvanishing denominator in the original PDE. AtT, the same increasing map
+givesG −(T, ξ) = (ξ−D) +.
+The preceding transformations motivate the following direct proof of uniqueness.
+Corollary 2.6(Uniqueness of the Case 1 feedback price).The Case 1 roll-option price consistent
+with the feedback relation (13) and the forward-pricing convention (9) is unique. It is given by
+V +(t, f1, f2) =f 2G+
+
+t, f1
+f2
+
+,
+whereG + is the solution in Proposition 3. Consequently, this function is the unique Case 1 feedback
+pricing solution of the nonlinear PDE problem (14)–(16).
+Proof.At timeT, the terminal payoff in (7) and the Case 1 feedback relation (13) give
+V +T = DF obsT,T 2 −F obsT,T + = DF obsT,T 2 −F licT,T +εV +T + .
+Solving this scalar equation pointwise gives
+V +T = 11−ε DF obsT,T 2 −F licT,T + .(42)
+By the forward-pricing convention (9),V +t =E Q V +T | Ft. The pair (F lict,T , Fobst,T2) follows the
+bivariate GBM dynamics in (11). Therefore, using (42) and the Margrabe put-price functionPin
+(30),
+V +t = F obst,T21−ε P  t, F lict,TF obst,T2 ! .
+Now suppose
+F obst,T =f 1, F obst,T2 =f 2, V +t =v.
+15
+From (13),
+F lict,T =f 1 +εv.
+It follows thatvmust satisfy
+v= f2
+1−ε P
+
+t, f1 +εvf2
+
+.(43)
+For fixed (t, f1, f2), define
+Ψ(v) :=v− f2
+1−ε P
+
+t, f1 +εvf2
+
+.
+SinceP ξ(t, ξ)∈[−1,0],
+Ψ′(v) = 1− ε1−ε Pξ
+
+t, f1 +εvf2
+
+≥1>0.
+Thus (43) has at most one solution for each (t, f 1, f2). Existence is supplied by Proposition 3:
+setting
+ξ= f1
+f2
+, v=f 2G+(t, ξ),
+reduces (43) exactly to (39). HenceV +(t, f1, f2) =f 2G+
+
+t, f1f2
+
+is the unique Case 1 feedback
+price. Since Proposition 1 shows that this price satisfies (14)–(16), the result follows.
+Corollary 2.7(Case 2).LetG −(t, ξ) solve the reduced Case 2 feedback PDE (37) with terminal
+condition (38). ThenG − is determined by the unique solution of the scalar equation
+G−(t, ξ) = 11−ε C t, ξ−εG−(t, ξ) ,
+whereC(t, ξ) is the standard Black-Scholes-Margrabe call price function given explicitly in (31).
+Furthermore,V −(t, f1, f2) =f 2 G−(t, ξ) is theuniquesolution inC 1,2,2([0, T)×R + ×R +) of the
+nonlinear PDE problem (23)–(24).
+Proof.The proof follows similarly to that of Proposition 3, with the transformationy=ξ−εG −,
+and Corollary 2.6.
+2.8 Oil in Negative Territory
+The lognormal specification in (11) constrains the licensed priceF lict,T to remain positive, so that
+any negativity of the observed front-month futures priceF obst,T must come from the correction term
+−εV + in (13). We first analyze the stochastic dynamics ofF obst,T .
+Recall from (17) that under the risk–neutral measureQ,F obst,T is a martingale:
+dF obst,T =β t dW 1t +γ t dW 2t .(44)
+Using the explicit solution of Proposition 3, we write
+βt =β(t, Fobst,T , Fobst,T2), γ t =γ(t, Fobst,T , Fobst,T2),
+16
+where
+γ(t, f1, f2) =− εσ2(t)f21−ε DN(−d 2(t, ξ+εG+(t, ξ))), ξ=f 1/f2,
+β(t, f1, f2) =σ 1(t)f1 − σ1(t)σ2(t) γ(t, f1, f2),
+withd 2 defined in (32). For 0< ε <1,t < T, positive integrated variance and positiveσ1(t), σ2(t),
+we haveγ t <0 andβ t > σ1(t)f1. This comparison concerns individual diffusion loadings. The total
+instantaneous variance isβ 2t + 2ρβtγt +γ 2t and cannot be ordered from the first loading alone.
+Atf 1 = 0, the scalar representation gives 0< G +(t,0)<∞, and
+γ(t,0, f2) =− εDσ2(t)f21−ε N  −d2(t, εG+(t,0))  ,
+β(t,0, f2) =− σ1(t)σ2(t) γ(t,0, f2).
+Consequently, whenσ 2M (t)>0, the instantaneous variance at zero is
+β2t + 2ρβtγt +γ 2t = γ2tσ2(t)2 σ2M (t)>0.
+Zero is therefore not a degeneracy of the diffusion in the interior of the admissible domain. Under
+the regularity assumptions of the model, paths can cross it into negative prices. Equivalence of the
+pricing and physical measures on the finite modelling horizon preserves whether such a crossing
+event has positive probability, although its probability need not be the same under the two measures.
+2.9 Bachelier Base Model
+In the April 2020 regime it is natural to allow the base model forF lict,T itself to cross zero: with
+Cushing storage at operational capacity at that time, the value of an undeliverable barrel was
+effectively negative, and the CME itself switched its options settlement model from Black (lognormal
+dynamics) to Bachelier (normal dynamics) on April 22, 2020 to allow for negative prices (CME
+Clearing, 2020). The next proposition adapts the feedback mechanism to arithmetic dynamics: the
+scaling homogeneity of the geometric model is replaced by translation invariance, the calendar ratio
+by the calendar spread, and the Black-Scholes-Margrabe put and call exchange option formulas by
+analogous Bachelier formulas.
+Proposition 4(Normal dynamics: feedback PDE, spread reduction, and Bachelier limit).Under
+Q, suppose bothF lict,T andF obst,T2 follow arithmetic Brownian dynamics:
+dF lict,T = ¯σ1(t)dW 1t , dF obst,T2 = ¯σ2(t)dW 2t , d⟨W 1, W2⟩t =ρ dt,
+where ¯σ1(·),¯σ2(·)≥0 are dollar volatilities, andF obst,T is given by the long-side feedback relation
+(13). The rollover option valueV + is defined in (12). Then we have:
+(i) AssumingV +(t, f1, f2)∈ C1,2,2 on [0, T)×R×R (+), it solves the nonlinear PDE
+V +t + 12 ¯σ21 −2ρ¯σ1C+ + (C+)2(A+)2 V +f1f1 + ρ¯σ1 −C +A+ ¯σ2 V +f1f2 + 12 ¯σ22 V +f2f2 = 0,(45)
+withA + := 1 +εV +f1 ,C + :=ε¯σ2(t)V +f2 , and terminal conditionV +(T, f1, f2) = (Df2 −f 1)+.
+17
+(ii)Spread reduction.The PDE (45) and its terminal data are invariant under the translation
+(f1, f2)7→(f 1 +Dc, f2 +c),c∈R, soV + depends on (f 1, f2) only through the calendar
+spread and admits the representation
+V +(t, f1, f2) =G +(t, s), s:=Df 2 −f 1 ∈R.(46)
+The reduced functionG + : [0, T]×R→R + solves the nonlinear PDE problem
+G+t + 12 Σ2N (t) 1−εG +s 2 G+ss = 0, G +(T, s) =s+,(47)
+where
+Σ2N (t) := ¯σ21(t)−2ρD¯σ 1(t)¯σ2(t) +D 2¯σ22(t) (48)
+is the arithmetic variance of the spread, the Bachelier analogue ofσ 2M in (29).
+(iii)Bachelier limit.In the no-feedback limitε→0, (47) is the heat equation and we have
+V + →V (0)+, whereV (0)+(t, f1, f2) =P B(t, s) with
+PB(t, s) =s N
+ s
+v
+
++v ϕ
+ s
+v
+
+, v 2 :=
+Z T
+t
+Σ2N (u)du,(49)
+the Bachelier spread-option value, replacing the Black-Scholes-Margrabe formula of the log-
+normal model. Hereϕis the standard normal p.d.f.
+Proof. (i)The argument follows the proof of Proposition 1. WritingdF obst,T =β t dW 1t +γ t dW 2t
+(zero drift by the martingale property), and matching coefficients between the Itˆ o expansion ofV+
+anddV + =ε −1(dF lic −dF obs) gives
+βt = ¯σ1(t)A+ , γ t =− ε V+f2 ¯σ2(t)A+ ,
+and the drift identification yields the PDE (45) withC + =ε¯σ2V +f2 .(ii)follows from routine
+calculations with the transformation (46).(iii)atε= 0, (47) is the heat equation with terminals +;
+the stated formula is its classical solution,E[(s+vZ) +] =sN(s/v) +vϕ(s/v) forZ∼ N(0,1).
+As with the lognormal base model, we have an explicit solution, up to solving a nonlinear scalar
+equation.
+Proposition 5.The Case 1 reduced normal-dynamics feedback function, solution of the nonlinear
+PDE problem (47) has explicit solution
+G+(t, s) = 11−ε PB t, s−εG+(t, s) ,
+whereP B is given in (49). Moreover, the solution is unique in the sense of Corollary 2.6.
+Proof.The proof follows similar to those of Proposition 3 and Corollary 2.6, and we omit the
+details.
+18
+Proposition 6(Normal dynamics: Case 2 feedback PDE, spread reduction, and Bachelier limit).
+UnderQ, suppose bothF lict,T andF obst,T2 follow arithmetic Brownian dynamics:
+dF lict,T = ¯σ1(t)dW 1t , dF obst,T2 = ¯σ2(t)dW 2t , d⟨W 1, W2⟩t =ρ dt,
+where ¯σ1(·),¯σ2(·)≥0 are dollar volatilities, andF obst,T is given by the short-side feedback relation
+in Corollary 2.1. The rollover option valueV − is defined in (12). Then we have:
+(i) AssumingV −(t, f1, f2)∈ C1,2,2 on [0, T)×R×R (+), it solves the nonlinear PDE
+V −t + 12 ¯σ21 + 2ρ¯σ1C− + (C−)2(A−)2 V −f1f1 + ρ¯σ1 +C −A− ¯σ2 V −f1f2 + 12 ¯σ22 V −f2f2 = 0,(50)
+with
+A− := 1−εV −f1 , C − :=ε¯σ2(t)V −f2 ,
+and terminal conditionV −(T, f1, f2) = (f1 −Df 2)+.
+(ii)Spread reduction.The PDE (50) and its terminal data are invariant under the translation
+(f1, f2)7→(f 1 +Dc, f2 +c), c∈R,
+soV − depends on (f 1, f2) only through the calendar spread and admits the representation
+V −(t, f1, f2) =G −(t, s), s:=f 1 −Df 2 ∈R.(51)
+The reduced functionG − : [0, T]×R→R + solves the nonlinear PDE problem
+G−t + 12 Σ2N (t) 1−εG −s 2 G−ss = 0, G −(T, s) =s+,(52)
+where Σ2N (t) is given in (48).
+(iii)Bachelier limit.In the no-feedback limitε→0, (52) is the heat equation and we have
+V − →V (0)−, where
+V (0)−(t, f1, f2) =C B(t, s)
+with
+CB(t, s) =s N
+ s
+v
+
++v ϕ
+ s
+v
+
+, v 2 :=
+Z T
+t
+Σ2N (u)du,(53)
+the Bachelier spread-option value for the short-side payoff, replacing the Black-Scholes-Margrabe
+formula of the lognormal model.
+Proof.The results follow from the analogous Case 1 arguments in Proposition 4, with the signs of
+the feedback terms reversed and the Case 2 terminal payoff (f 1 −Df 2)+.
+Finally, we give the explicit solution.
+Proposition 7.The Case 2 reduced normal-dynamics feedback function, solution of the nonlinear
+PDE problem (52), has explicit solution
+G−(t, s) = 11−ε CB t, s−εG−(t, s) ,
+whereC B is given in (53). Moreover, the solution is unique in the sense of the analogous Case 2
+result to Corollary 2.6.
+Proof.The proof follows from the analogous Case 1 proof, withV + andG + replaced byV − and
+G−, respectively, andP B replaced byC B.
+19
+3 Properties of the Solution
+The representations in Proposition 3 and Corollary 2.5 allow us to study option values, admissible
+prices and the effect of feedback on the diffusion. We then use Monte Carlo paths to illustrate
+negative-price crossings. Throughout this section, we takeσ 1, σ2 to be constants.
+3.1 Feedback premium and option values
+We compare values at the same observed prices. On the common domainξ >0, define the feedback
+premium by
+Π±(t, ξ;ε) :=G±(t, ξ;ε)−G ±(t, ξ; 0).
+Implicit differentiation of the scalar pricing equations gives
+∂G+(t, ξ;ε)
+∂ε = G+(t, ξ;ε)N(d+1 )1−ε+εN(−d +1 ) ≥0, ∂G−(t, ξ;ε)∂ε = G−(t, ξ;ε)N(−d−1 )1−ε+εN(d −1 ) ≥0,(54)
+whered ±1 =d ±1 (t, ξ±εG ±). Both denominators are strictly positive. The feedback premia are
+therefore nonnegative and nondecreasing inε. At fixedf 1, f2, the same conclusion holds forV ± =
+f2G±.
+Figure 1 shows the values and the additional premium separately. At the strike, both no-feedback
+values are approximately 3.10 price units. Atε= 0.95, they rise to 11.25 in Case 1 and 8.06 in
+Case 2. The premium is not constant across observed prices, and its dependence on moneyness
+differs between the two cases.
+3.2 Extension to Negative Observed Prices
+The formulas in Proposition 3 and Corollary 2.5 were derived initially on the positive-price domain.
+Consider first Case 1. Letz:=ξ+εG +(t, ξ). From Proposition 3, (1−ε)G+(t, ξ) =P(t, z), so that
+ξ=z− ε1−ε P(t, z).
+The map fromz >0 toξis strictly increasing. Asz↓0, using (30),P(t, z)→D, and therefore
+ξ→ −εD1−ε . Hence the Case 1 feedback model extends continuously fromf 1 >0 throughf 1 = 0
+and into negative observed prices. It remains well-defined on the domain
+ξ >− εD1−ε ,equivalentlyf 1 >− εD1−ε f2.(55)
+Forε >0, zero lies strictly inside this domain. Thus the observed front-month priceF obst,T can
+become negative while the licensed priceF lict,T remains positive. Beyond this boundary, the feedback
+price is no longer defined.
+Case 2 is different. Writingz:=ξ−εG −(t, ξ)>0, Corollary 2.5 givesξ=z+εG −(t, ξ). Since
+z >0 andG − ≥0, it follows thatξ >0. Thus, in Case 2, the admissible domain remainsf 1 >0,
+whereas in Case 1 the feedback model extends through zero and into negative observed prices up
+to the boundary (55).
+20
+0 15 27 40 54
+Observed price f1
+0
+10
+20
+30V +
+(a) Case 1: option value
+0 15 27 40 54
+Observed price f1
+0
+10
+20
+30V −
+(b) Case 2: option value
+0 15 27 40 54
+Observed price f1
+0
+2
+4
+6
+8V ±(ε) − V ±(0)
+(c) Case 1: feedback premium
+0 15 27 40 54
+Observed price f1
+0
+2
+4
+6
+8V ±(ε) − V ±(0)
+(d) Case 2: feedback premium
+ε = 0 ε = 0.2 ε = 0.4 ε = 0.6 ε = 0.8 ε = 0.95
+Figure 1: Option values and feedback premia at fixed observed prices. Panels (a)–(b) showV +
+andV −; panels (c)–(d) showV ±(ε)−V ±(0) =f 2Π±. Parameters areD= 0.90,σ M = 0.50,
+T−t= 1/3 year andf 2 = 30. The shared legend identifiesεin all panels; vertical dotted lines
+indicatef 1 =Df 2 = 27. Prices and option values use the same arbitrary price unit.
+3.3 Effective variance and zero crossing
+The variance coefficients of the reduced PDEs are
+(σ±eff )2(t, ξ) =
+ 
+ξ±εG ±
+1±εG ±ξ
+!2
+σ2M (t).
+These are state-dependent variance coefficients, rather than percentage volatilities. Without feed-
+back they reduce toξ 2σ2M (t). Figure 2 shows their different behavior in the two cases.
+In Case 1, whenε >0,t < Tandσ 2M (t)>0, we haveG +(t,0)>0 and 1 +εG +ξ ≥1−ε >0.
+The coefficient is therefore positive at zero. Together with the diffusion calculation in Section 2.8,
+this shows why zero need not prevent the observed price from crossing into negative territory. In
+Case 2, the admissible domain remainsξ >0 and the coefficient tends to zero asξ↓0.
+21
+0.0 0.5 1.0 1.5
+Observed ratio ξ
+0.0
+0.5
+1.0
+1.5
+2.0
+2.5
+3.0
+Effective variance (σ±eff)2
+(a) Case 1
+0.0 0.5 1.0 1.5
+Observed ratio ξ
+(b) Case 2
+ε = 0 ε = 0.2 ε = 0.4 ε = 0.6 ε = 0.8
+Figure 2: Reduced-PDE variance coefficients in Case 1 (a) and Case 2 (b), withD= 0.90,σ M = 0.50
+andT−t= 1/3 year. Both panels use the same scales and imbalance colors. Only admissible
+states are shown; vertical dotted lines indicateξ= 0.
+3.4 Monte Carlo illustration
+We now illustrate crossings along paths starting from a positive observed price. Keeping the Case 1
+diffusion coefficientsβandγderived in Section 2.8, consider
+dF obst =µF obst dt+β t dW 1t +γ t dW 2t , µ∈ {−0.3,0,0.3}.(56)
+Time is measured in years. The second contract has zero drift and retains its lognormal dynamics,
+withd⟨W 1, W2⟩t =ρ dt. The caseµ= 0 is the derived risk-neutral model. The other two cases are
+drift-sensitivity scenarios; their drift coefficients are not estimated risk premia.
+For the inputs in Figure 3, the fractions of the paths detected below zero at least once are 62.9%,
+61.0% and 59.0% forµ=−0.3, 0 and 0.3, respectively. Their pointwise 95% Monte Carlo intervals
+at the final time are approximately [62.3,63.6]%, [60.3,61.6]% and [58.3,59.7]%. These cumulative
+frequencies record whether a path has been detected below zero at any simulation time, rather than
+whether it is negative at maturity.
+4 Applications to the WTI Collapse and the Nickel Squeeze
+We use our model pricing formulas in Section 2.7 to calculate the implied imbalance given the
+observed futures priceF obst,T and a posited benchmark priceF lict,T which could plausibly have prevailed
+in the absence of exit pressure.
+For a downward distortion (Case 1) or an upward distortion (Case 2), respectively, the implied
+imbalance satisfies
+ε+t V +(t, Fobst,T , Fobst,T2;ε t) =F lict,T −F obst,T , ε −t V −(t, Fobst,T , Fobst,T2;ε t) =F obst,T −F lict,T .
+22
+0 1 2 3 4
+Elapsed time (months)
+−40
+−20
+0
+20
+40
+Observed price
+(a) μ = −0.3
+0 1 2 3 4
+Elapsed time (months)
+−40
+−20
+0
+20
+40
+Observed price
+(b) μ = 0
+0 1 2 3 4
+Elapsed time (months)
+−40
+−20
+0
+20
+40
+Observed price
+(c) μ = 0.3
+0 1 2 3 4
+Elapsed time (months)
+0
+20
+40
+60Cumulative crossing frequency (%)
+(d) Crossing below zero
+μ = −0.3
+μ = 0
+μ = 0.3
+5–95% range 25–75% range Median First three paths
+Figure 3: Case 1 Monte Carlo illustration. Panels (a)–(c) show the median, central 50% and
+90% ranges, and the first three sample paths forµ=−0.3,0,0.3, respectively. Panel (d) shows
+cumulative crossing frequencies with pointwise 95% intervals. Inputs areF obs0,T = 10,F 0,T2 = 25,
+ε= 0.80,D= 1,T= 1/3 year and (σ 1, σ2, ρ) = (0.50,0.30,0.30), givingσ M = 0.50.
+Using the scalar pricing identities, withV ± evaluated at the observed price pair and the corre-
+sponding imbalance, we obtain
+(1−ε +t )V + =F obst,T2P
+ 
+t,
+F obst,T +ε tV +
+F obst,T2
+!
+=F obst,T2P
+ 
+t,
+F lict,T
+F obst,T2
+!
+,
+(1−ε −t )V − =F obst,T2C
+ 
+t,
+F obst,T −ε tV −
+F obst,T2
+!
+=F obst,T2C
+ 
+t,
+F lict,T
+F obst,T2
+!
+.
+Solving for the imbalance gives
+ε+t = F lict,T −F obst,T
+F lict,T −F obst,T +F obst,T2P
+
+t,
+F lict,T
+F obst,T2
+ , ε −t = F obst,T −F lict,T
+F obst,T −F lict,T +F obst,T2C
+
+t,
+F lict,T
+F obst,T2
+ .(57)
+For the lognormal formulas, we requireF lict,T >0 andF obst,T2 >0. Case 1 applies whenF obst,T ≤F lict,T ,
+and Case 2 whenF obst,T ≥F lict,T . With positive integrated variance, the corresponding option values
+23
+are strictly positive, so each applicable inversion gives a uniqueε ±t ∈[0,1). Each time point is
+a separate constant imbalance valuation; the sequence does not specify dynamics forε t. We use
+D= 1 in both baseline event illustrations.
+4.1 WTI: the April 2020 collapse
+On April 20, 2020, the May and June WTI contracts recorded official daily settlement prices of
+−37.63 and 20.43 USD/bbl, respectively. The May contract expired the next day (Commodity
+Futures Trading Commission, 2020). For the settlement inputs in Table 1, the implied imbalance
+is approximatelyε= 0.87.
+Input WTI: Case 1
+Observed front priceF obst,T −37.63
+Second-contract priceF obst,T2 20.43
+BenchmarkF lict,T 13.14
+Benchmark ratio
+F lict,T
+F obst,T2 0.64
+Discount factorD1.00
+Effective volatilityσ M 0.52
+Remaining timeT−t(years) 2/252
+Implied imbalanceε0.87
+Table 1: Conditional WTI calculation using the May and June official settlements on April 20,
+2020. Prices are in USD/bbl. The benchmark is assumed, and volatility is estimated from pre-
+event returns.
+We next repeat the calculation intraday on April 20 using 268 timestamp matched five-minute
+closing prices for the May and June contracts. These provide the observed pair (F obst,T , Fobst,T2) at
+each sampled time. The five-minute May and June WTI futures prices used in the following are
+obtained from Bloomberg.
+To specify the benchmark throughout the day, we set
+F lict,T =λF obst,T2, λ= F obst0,TF obst0,T2 ≈0.64,
+wheret 0 is the first observation, midnight on April 20. Thus the benchmark follows the June
+contract while preserving the initial May–June price ratio. This construction sets the initial implied
+imbalance to zero. It measures subsequent departures from the initial relation, without establishing
+that the market was free of exit pressure att 0.
+The volatility input is estimated from the difference between the May and June log returns over
+March 18–April 17. We retain 5,974 returns between consecutive five-minute observations, exclud-
+ing returns across missing bars or session breaks. Annualizing with 252×276 five-minute intervals
+givesσ M = 0.5203. This is a historical relative-price volatility used as a pricing input, rather than
+an option implied volatility. The remaining horizon decreases to April 21 at 14:30 and is measured
+in the same trading time units, excluding the daily maintenance interval.
+At each timestamp, we first constructF lict,T from the observed June price. We then evaluate the
+Margrabe put atF lict,T /F obst,T2 =λ, using the remaining horizon, and substitute its value and the
+24
+00:00 06:00 12:00 18:00 24:00
+20 April 2020 (New York time)
+−40
+−30
+−20
+−10
+0
+10
+20
+30
+USD per barrel
+(a) Futures prices
+F obs⋅, T F obs⋅, T2 F lic⋅, T
+00:00 06:00 12:00 18:00 24:00
+20 April 2020 (New York time)
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0εt
+(b) Implied imbalance
+εt ε *t
+Figure 4: WTI prices and conditional implied imbalance on April 20, 2020. Panel (a) shows the May
+contractF obst,T , the June contractF obst,T2 and the assumed benchmarkF lict,T = 0.64×F obst,T2. Panel (b)
+shows the implied imbalanceε +t in purple and the zero-price thresholdε ∗t in orange.
+observed price gap into (57). This givesε +t directly. The prices in panel (a) of Figure 4 therefore
+determine the implied-imbalance series in panel (b), conditional on the benchmark and pricing
+inputs.
+The May price falls sharply while the June price, and hence the assumed benchmark, remain
+positive. The resulting increase in the price gap raises the implied imbalance, which reaches 0.87
+at 15:30, when the sampled May price is−$38.96/bbl. As the May price recovers, the inferred
+imbalance declines to approximately 0.6182 at the final observation. The peak estimate differs
+from the settlement estimate because the two calculations use different observed price pairs.
+4.2 Nickel: the March 2022 squeeze
+The three-month nickel price reached $101,365/tonne at 06:08 on March 8, 2022, before retreating;
+trading was suspended at 08:15 (Oliver Wyman, 2023). The LME subsequently canceled trades
+executed from midnight that day, so the high is a reported pre-cancellation trade price, not a
+settlement (London Metal Exchange, 2022).
+As in the WTI case, we specify a benchmark price and calculate the imbalance implied by (57). See
+Table 2. Here, however, our dataset does not contain synchronized intraday three-month and fifteen-
+month quotes. We therefore retain a constructed path through the reported three-month levels of
+approximately $50,000 at 01:00, $60,000 at 04:49, $70,000 at 05:44 and $101,365 at 06:08 (Oliver
+Wyman, 2023, p. 21). Times are London time (GMT). The fifteenth-month path is illustrative; it
+is not an observed contract series. Intraday data is not available through Bloomberg for the period
+March 8 – March 15, 2022.
+To specify the benchmark, we use the three-month and fifteen-month curves in Exhibit 5 of Oliver
+25
+Input Nickel: Case 2
+Reported three-month highF obst,T 101,365
+Fifteen-month priceF obst,T2 60,195
+BenchmarkF lict,T 62,863.41
+Benchmark ratio
+F lict,T
+F obst,T2 1.04
+Discount factorD1.00
+Effective volatilityσ M 0.5
+Remaining timeT−t(years) 1/4
+Implied imbalanceε0.9346
+Table 2: Conditional nickel calculation at the reported three-month high. Prices are in USD/tonne.
+The fifteen-month price and benchmark are scenario values; the ratio and effective volatility are
+approximate inputs extracted from the historical chart.
+Wyman (2023, p. 15). The final plotted values give an approximate ratio
+λ= F3M
+F15M
+≈1.04.
+We retain this ratio throughout the illustration and setF lict,T =λF obst,T2.
+At the reported high, the observed price exceeds the benchmark by approximately 38,501.59. Equa-
+tion (57) therefore givesε≈0.9346. This value depends on the assumed fifteen-month path and
+benchmark; it is not an independent estimate of historical position imbalance.
+5 Conclusion
+This paper develops an explanatory model of how delivery constraints can amplify commodity
+futures price movements. Separating participants by their ability to participate in physical deliv-
+ery links the direction of the price distortion to the imbalance of constrained positions. Excess
+constrained longs generate downward pressure, while excess constrained shorts generate upward
+pressure. A roll option connects this pressure to the observed price, producing a nonlinear feed-
+back relation.
+The main analytical contribution is an exact representation of the resulting pricing solution. Under
+lognormal benchmark dynamics, dimension reduction and a change of variables connect the non-
+linear PDE to the Margrabe exchange option formula. At a given observed price state, valuation
+requires one scalar root. The normal dynamics extension provides an analogous Bachelier represen-
+tation. These results make the feedback mechanism accessible without numerically solving the PDE
+and allow its effects on option values, admissible prices and effective variance to be studied directly.
+In particular, the lognormal benchmark can remain positive while the observed price crosses zero.
+The WTI and nickel illustrations show how the mechanism can generate large distortions in either
+direction. Their role is to relate the model to recognizable market events and to quantify the imbal-
+ance required under stated assumptions. They do not establish that feedback alone caused either
+event, or that the implied imbalance equals the actual historical position imbalance. Benchmark
+prices, the later-maturity futures price and the relevant horizon all matter. The model comple-
+26
+01:00 03:00 05:00 16 Mar
+08:00
+March 2022 (London time)
+40
+50
+60
+70
+80
+90
+100Nickel price (USD thousand/tonne)
+Trades cancelled
+45.59
+(a) Futures prices
+F obs⋅, T F obs⋅, T2 F lic⋅, T
+01:00 03:00 05:00 16 Mar
+08:00
+March 2022 (London time)
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0εt
+Trades cancelled
+(b) Implied imbalance
+εt
+Figure 5: Nickel price scenario and conditional Case 2 imbalance. Panel (a) shows the constructed
+three-month pathF obs·,T , the illustrative fifteen-month pathF obs·,T2 and the posited benchmarkF lic·,T .
+Diamonds on March 8 mark reported price anchors. Panel (b) shows the resulting implied imbal-
+ance. The displayed March 8 trades were subsequently canceled. The isolated blue diamond is the
+three-month opening price of $45,590/tonne at 08:00 on March 16 (Oliver Wyman, 2023).
+ments existing explanations based on fundamentals, liquidity and market structure by isolating the
+consequences of constrained position closure.
+Several extensions follow naturally. The first is a nonconstant imbalance. A deterministic time-
+dependentε(t) could represent a changing concentration of positions as a closure date approaches. A
+stochasticε t could respond to prices, margin calls, liquidity and changes in participants’ positions.
+Such extensions require a new dynamic pricing derivation: differentiating the feedback relation
+introduces terms involving changes inε t and, in the stochastic case, covariation terms. Substituting
+a time-varying estimate into the constant-εformula is therefore not, by itself, a solution of the
+extended model. It would be useful to determine which reductions remain available and how
+stochastic imbalance changes the probability and persistence of extreme prices.
+A second direction is empirical. Applying the framework to a broader set of historical squeezes,
+liquidation episodes and less stressed contract expiries would help assess when this mechanism is
+informative and when it is insufficient. This would require synchronized prices across maturities,
+measures of liquidity and delivery conditions, and sensitivity analysis for the fundamental bench-
+mark. Comparisons across events could then examine whether the model’s implications extend
+beyond the two motivating examples.
+The most important data requirement is contract-specific information on positions and delivery
+capability. Aggregate open interest or broad commercial and noncommercial classifications do not
+identify the licensed and unlicensed groups used here. Positions would need to be linked, where
+possible, to access to eligible inventory, storage and delivery arrangements. Such data would allow
+the imbalance to be measured independently of the price inversion, turning the present explanatory
+27
+illustrations into tests of the proposed feedback mechanism.
+A Contract specifications and delivery constraints
+This appendix summarizes the contract features and delivery constraints relevant to the two ap-
+plications. Throughout the paper, “licensed” refers to the ability to use the relevant delivery
+arrangements. It is a modelling distinction, rather than a regulatory classification, and does not
+necessarily coincide with the distinction between commercial and non-commercial traders. The
+tables summarize selected features of the cited contract specifications.
+A.1 Case 1: NYMEX WTI crude oil
+NYMEX WTI futures are listed by delivery month and provide for physical delivery of eligible
+crude at Cushing, Oklahoma. A trader holding a long position into the delivery process must be
+able to arrange receipt of the oil. Table 3 summarizes the relevant contract features.
+F eature NYMEX WTI futures
+Contract and code Light Sweet Crude Oil futures; CL.
+Contract unit 1,000 US barrels.
+Price quotation US dollars per barrel.
+Delivery calendar Monthly delivery contracts.
+End of trading The third business day before the 25th calendar day of the
+preceding month; if the 25th is not a business day, the third
+business day before the last business day preceding it, subject to
+exchange calendar rules.
+Settlement Physical delivery during the contract’s delivery month.
+Eligible material Light sweet crude meeting the exchange’s quality and delivery
+requirements.
+Delivery arrangements Eligible pipeline or storage facilities at Cushing, Oklahoma.
+Model-relevant
+constraint
+A long without access to the necessary receipt, storage and
+operational arrangements may need to close before delivery.
+Table 3: Selected WTI contract features relevant to Case 1. Source: NYMEX Rulebook, Chap-
+ter 200 (CME Group, n.d.).
+A.2 Case 2: LME nickel
+LME nickel futures trade for specified delivery dates, known as prompt dates, including the widely
+quoted three-month tenor. Each position has a fixed prompt date; maintaining a constant three-
+month exposure requires rolling the position. Table 4 summarizes the relevant contract features.
+28
+F eature LME nickel futures
+Contract and code Primary nickel futures; NI.
+Contract unit 6 metric tonnes.
+Price quotation US dollars per metric tonne.
+Delivery calendar Daily prompt dates out to three months, weekly dates from three
+to six months, and monthly dates thereafter out to 63 months.
+End of trading Up to the close of the first Ring on the business day before the
+prompt date, under the exchange’s prompt-date rules.
+Settlement Physical delivery on the specified prompt date.
+Eligible material Approved nickel meeting the minimum 99.80% purity
+requirement and the exchange’s brand and form specifications.
+Delivery arrangements Transfer of warrants for eligible metal in LME-approved
+warehouses.
+Model-relevant
+constraint
+A short without access to eligible metal may need to buy it or
+close the futures position; ownership of other nickel products
+does not itself meet the delivery requirement.
+Table 4: Selected LME nickel contract features relevant to Case 2. Sources: LME contract spec-
+ifications (London Metal Exchange, n.d.a) and prompt-date guidance (London Metal Exchange,
+n.d.b).
+References
+S. Basak and A. Pavlova. A model of financialization of commodities.The Journal of Finance, 71(4):
+1511–1556, 2016. doi: 10.1111/jofi.12408.
+F. Black. The pricing of commodity contracts.Journal of Financial Economics, 3(1–2):167–179, 1976. doi:
+10.1016/0304-405X(76)90024-6.
+I. Bouchouev. Negative oil prices put spotlight on investors. Energy Risk,
+Apr. 2020. URLhttps://www.energyrisk.com/oil-refined-products/7949778/
+negative-oil-prices-put-spotlight-on-investors. Published 30 April 2020.
+I. Bouchouev.Virtual Barrels: Quantitative Trading in the Oil Market. Springer Texts in Business
+and Economics. Springer Nature, Cham, Switzerland, 2023. ISBN 978-3-031-36150-0. doi: 10.1007/
+978-3-031-36151-7.
+P. Chan, R. Sircar, and M. V. Stein. A feedback model for the financialization of commodity markets.SIAM
+Journal on Financial Mathematics, 6(1):870–899, 2015. doi: 10.1137/140995349.
+I.-H. Cheng and W. Xiong. Financialization of commodity markets.Annual Review of Financial Economics,
+6:419–441, 2014. doi: 10.1146/annurev-financial-110613-034432.
+CME Clearing. Switch to Bachelier options pricing model: Effective April 22, 2020, Apr. 2020. URLhttps://
+www.cmegroup.com/notices/clearing/2020/04/Chadv20-171.html. Clearing Advisory 20-171, issued
+21 April 2020.
+CME Group.NYMEX Rulebook, Chapter 200: Light Sweet Crude Oil Futures. CME Group, n.d. URL
+https://www.cmegroup.com/rulebook/NYMEX/2/200.pdf. Accessed 30 September 2026.
+Commodity Futures Trading Commission. Interim staff report on trading in NYMEX WTI crude oil futures
+contract leading up to, on, and around April 20, 2020. Technical report, Commodity Futures Trad-
+ing Commission, Nov. 2020. URLhttps://www.cftc.gov/media/5296/InterimStaffReportNYMEX_
+WTICrudeOil/download.
+29
+Financial Conduct Authority. Update on our public statement on the London
+Metal Exchange, Mar. 2023. URLhttps://www.fca.org.uk/news/statements/
+update-our-public-statement-london-metal-exchange. Published 3 March 2023.
+R. Frey and A. Stremme. Market volatility and feedback effects from dynamic hedging.Mathematical
+Finance, 7(4):351–374, 1997. doi: 10.1111/1467-9965.00036.
+High Court of Justice. R (Elliott Associates L.P. and others) v London Metal Exchange and LME
+Clear Limited. [2023] EWHC 2969 (Admin), 2023. URLhttps://www.lme.com/-/media/files/news/
+co19952022-ac2022lon000890-co20072022-ac2022lon000901-final-judgment-291123.pdf. King’s
+Bench Division, Administrative Court. Judgment dated 29 November 2023.
+London Metal Exchange. Nickel market update, 2022. URLhttps://www.lme.com/-/media/Files/News/
+Notices/2022/03/TRADING-22-057-NICKEL-MARKET-UPDATE_.pdf. Notice 22/057, 10 March 2022.
+London Metal Exchange. LME nickel: Contract specifications, n.d.a. URLhttps://www.lme.com/en/
+Metals/Non-ferrous/LME-Nickel/Contract-specifications. Accessed 28 September 2026; cited for
+selected contract features, not as an archived 2022 rulebook.
+London Metal Exchange. Prompt date structure, n.d.b. URLhttps://www.lme.com/
+Sustainability-and-Physical-Markets/Physical-market-benefits/Prompt-date-structure.
+Accessed 28 September 2026.
+C. Ma and X. Wang. Strategic interactions and negative oil prices.Annals of Financial Economics, 16(3):
+2150013, 2021. doi: 10.1142/S2010495221500135.
+W. Margrabe. The value of an option to exchange one asset for another.The Journal of Finance, 33(1):
+177–186, 1978. doi: 10.1111/j.1540-6261.1978.tb03397.x.
+Oliver Wyman. Independent review of events in the nickel market in March 2022: Final report.
+Independent review, Oliver Wyman and NERA, commissioned by LME Group, Jan. 2023. URL
+https://www.lme.com/-/media/Files/Trading/New-initiatives/Nickel-independent-review/
+Independent-Review-of-Events-in-the-Nickel-Market-in-March-2022---Final-Report.pdf.
+E. S. Schwartz. The stochastic behavior of commodity prices: Implications for valuation and hedging.The
+Journal of Finance, 52(3):923–973, 1997. doi: 10.1111/j.1540-6261.1997.tb02721.x.
+K. R. Sircar and G. Papanicolaou. General Black–Scholes models accounting for increased market volatility
+from hedging strategies.Applied Mathematical Finance, 5(1):45–82, 1998. doi: 10.1080/135048698334727.
+M. Sockin and W. Xiong. Informational frictions and commodity markets.The Journal of Finance, 70(5):
+2063–2098, 2015. doi: 10.1111/jofi.12261.
+K. Tang and W. Xiong. Index investment and the financialization of commodities.Financial Analysts
+Journal, 68(6):54–74, 2012. doi: 10.2469/faj.v68.n6.5.
+U.S. Energy Information Administration. Cushing, OK ending stocks excluding SPR of crude oil. Weekly
+data seriesW EPC0 SAX YCUOK MBBL, 2020. URLhttps://www.eia.gov/dnav/pet/hist/LeafHandler.
+ashx?n=PET&s=W_EPC0_SAX_YCUOK_MBBL&f=W. 2020 observations; accessed 30 September 2026.
+30

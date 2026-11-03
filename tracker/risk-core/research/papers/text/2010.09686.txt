@@ -1,0 +1,4305 @@
+arXiv 2010.09686  https://arxiv.org/abs/2010.09686
+
+Estimating means of bounded random variables by betting
+Ian Waudby-Smith1 and Aaditya Ramdas 12
+Departments of Statistics 1 and Machine Learning 2
+Carnegie Mellon University
+{ianws, aramdas}@cmu.edu
+August 29, 2022
+Abstract
+This paper derives conﬁdence intervals (CI) and time-uniform conﬁdence sequences (CS) for
+the classical problem of estimating an unknown mean from bounded observations. We present
+a general approach for deriving concentration bounds, that can be seen as a generalization and
+improvement of the celebrated Chernoﬀ method. At its heart, it is based on a class of composite
+nonnegative martingales, with strong connections to testing by betting and the method of mixtures.
+We show how to extend these ideas to sampling without replacement, another heavily studied
+problem. In all cases, our bounds are adaptive to the unknown variance, and empirically vastly
+outperform existing approaches based on Hoeﬀding or empirical Bernstein inequalities and their
+recent supermartingale generalizations by Howard et al. [39]. In short, we establish a new state-of-
+the-art for four fundamental problems: CSs and CIs for bounded means, when sampling with and
+without replacement.
+1 Introduction 3
+2 Concentration inequalities via nonnegative supermartingales 5
+2.1 Conﬁdence sequences and the method(s) of mixtures . . . . . . . . . . . . . . . . . . . 6
+2.2 Nonparametric conﬁdence sequences via sequential testing . . . . . . . . . . . . . . . . 6
+2.3 Connections to the Chernoﬀ method . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8
+3 Warmup: exponential supermartingales and predictable plug-ins 8
+3.1 Predictable plug-in Cramer-Chernoﬀ supermartingales . . . . . . . . . . . . . . . . . . 9
+3.2 Application: closed-form empirical Bernstein conﬁdence sets . . . . . . . . . . . . . . . 10
+3.3 Guiding principles for deriving predictable plug-ins . . . . . . . . . . . . . . . . . . . . 11
+4 The capital process, betting, and martingales 13
+4.1 Connections to betting . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 14
+4.2 Connections to likelihood ratios . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 15
+4.3 Adaptive, constrained adversaries . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 15
+4.4 The hedged capital process . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16
+5 Betting while sampling without replacement (WoR) 19
+5.1 Existing (super)martingale-based conﬁdence sequences or tests . . . . . . . . . . . . . 19
+5.2 The capital process for sampling without replacement . . . . . . . . . . . . . . . . . . 20
+5.3 Powerful betting schemes . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 21
+5.4 Relationship to composite null testing . . . . . . . . . . . . . . . . . . . . . . . . . . . 23
+6 A brief selective history on betting and its mathematical applications 23
+1
+arXiv:2010.09686v7  [math.ST]  25 Aug 2022
+7 Summary 25
+A Proofs of main results 31
+A.1 Proof of Proposition 1 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 31
+A.2 Proof of Theorem 2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 32
+A.3 Proof of Proposition 2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 32
+A.4 Proof of Proposition 3 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 33
+A.5 Proof of Theorem 3 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 33
+A.6 Proof of Lemma 3 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 35
+A.7 Proof of Proposition 5 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 36
+A.8 Proof of Proposition 4 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 37
+A.9 Proof of Theorem 4 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 38
+B How to bet: deriving adaptive betting strategies 38
+B.1 Predictable plug-ins yield good betting strategies . . . . . . . . . . . . . . . . . . . . . 38
+B.2 Growth rate adaptive to the particular alternative (GRAPA) . . . . . . . . . . . . . . 39
+B.3 Approximate GRAPA (aGRAPA) . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 40
+B.4 Lower-bound on the wealth (LBOW) . . . . . . . . . . . . . . . . . . . . . . . . . . . . 40
+B.5 Online Newton Step (ONS-m) . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 42
+B.6 Diversiﬁed Kelly betting (dKelly) . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 42
+B.7 Conﬁdence Boundary (ConBo) . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 43
+B.8 Sequentially Rebalanced Portfolio (SRP) . . . . . . . . . . . . . . . . . . . . . . . . . . 44
+C Simulations 45
+C.1 Time-uniform conﬁdence sequences (with replacement) . . . . . . . . . . . . . . . . . . 46
+C.2 Fixed-time conﬁdence intervals (with replacement) . . . . . . . . . . . . . . . . . . . . 47
+C.3 Time-uniform conﬁdence sequences (without replacement) . . . . . . . . . . . . . . . . 48
+C.4 Fixed-time conﬁdence intervals (without replacement) . . . . . . . . . . . . . . . . . . 49
+D Simulation details 50
+D.1 Time-uniform conﬁdence sequences (with replacement) . . . . . . . . . . . . . . . . . . 50
+D.2 Fixed-time conﬁdence intervals (with replacement) . . . . . . . . . . . . . . . . . . . . 51
+D.3 Time-uniform conﬁdence sequences (without replacement) . . . . . . . . . . . . . . . . 52
+D.4 Fixed-time conﬁdence intervals (without replacement) . . . . . . . . . . . . . . . . . . 54
+D.5 Betting “conﬁdence distributions”: conﬁdence sets at several resolutions . . . . . . . . 54
+E Additional theoretical results 55
+E.1 Betting conﬁdence sets are tighter than Hoeﬀding . . . . . . . . . . . . . . . . . . . . . 55
+E.2 Optimal convergence of betting conﬁdence sets . . . . . . . . . . . . . . . . . . . . . . 57
+E.2.1 An iterated logarithm betting conﬁdence sequence . . . . . . . . . . . . . . . . 57
+E.2.2 The √n-convergence of betting CIs . . . . . . . . . . . . . . . . . . . . . . . . . 60
+E.3 On the width of empirical Bernstein conﬁdence intervals . . . . . . . . . . . . . . . . . 62
+E.4 aGRAPA sublevel sets need not be intervals: a worst-case example . . . . . . . . . . . 66
+E.5 Betting conﬁdence sequences for non-iid data . . . . . . . . . . . . . . . . . . . . . . . 66
+E.6 Owen’s empirical likelihood ratio and Mykland’s dual likelihood ratio . . . . . . . . . . 67
+F An extended history of betting and its applications 68
+2
+1 Introduction
+This work presents a new approach to two fundamental problems: (Q1) how do we produce a conﬁdence
+interval for the mean of a distribution with (known) bounded support usingn independent observations?
+(Q2) given a ﬁxed list ofN (nonrandom) numbers with known bounds, how do we produce a conﬁdence
+interval for their mean by samplingn≤ N of them without replacement in a random order? We
+work in a nonasymptotic and nonparametric setting, meaning that we do not employ asymptotics or
+parametric assumptions. Both (Q1) and (Q2) are well studied questions in probability and statistics,
+but we bring new conceptual tools to bear, resulting in state-of-the-art solutions to both.
+We also consider sequential versions of these problems where observations are made one-by-one;
+we derive time-uniform conﬁdence sequences, or equivalently, conﬁdence intervals that are valid at
+arbitrary stopping times. In fact, we ﬁrst describe our techniques in the sequential regime, because the
+employed proof techniques naturally lend themselves to this setting. We then instantiate the derived
+bounds for the more familiar setting of a ﬁxed sample size when a batch of data is observed all at once.
+Our supermartingale techniques can be thought of as generalizations of classical methods for deriving
+concentration inequalities, but we prefer to present them in the language of betting, since this is a
+more accurate reﬂection of the authors’ intuition.
+Arguably the most famous concentration inequality for bounded random variables was derived
+by Hoeﬀding [35]. What is now referred to as “Hoeﬀding’s inequality” was in fact improved upon in
+the same paper where he derived a Bernoulli-type upper bound on the moment generating function of
+bounded random variables [35, Equation (3.4)]. While these bounds are already reasonably tight in a
+worst-case sense, the resulting conﬁdence intervals do not adapt to non-Bernoulli distributions with
+lower variance. Inequalities by Bennett [8], Bernstein [11] and Bentkus [9] improve upon Hoeﬀding’s,
+but such improvements require knowledge of nontrivial upper bounds on the variance. This led to
+the development of so-called “empirical Bernstein inequalities” by Audibert et al. [3]and Maurer and
+Pontil [54], which outperform Hoeﬀding’s method for low-variance distributions at large sample sizes by
+estimating the variance from the data. Our new, and arguably quite simple, approaches to developing
+bounds signiﬁcantly outperform these past works (e.g. Figure 1).1 We also show that the same
+conceptual (betting) framework extends to without-replacement sampling, resulting in signiﬁcantly
+tighter bounds than classical ones by Serﬂing [74], improvements by Bardenet and Maillard [5] and
+previous state-of-the-art methods due to Waudby-Smith and Ramdas [88].
+For providing intuition, our approach can be described in words as follows:If we are allowed to
+repeatedly bet against the mean beingm, and if we make a lot of money in the process, then we can
+safely excludem from the conﬁdence set.The rest of this paper makes the above claim more precise by
+showing smart, adaptive strategies for (automated) betting, quantifying the phrase “a lot of money”,
+and explaining why such an exclusion is mathematically justiﬁed. At the risk of brieﬂy losing the
+unacquainted reader, here is a slightly more detailed high-level description:
+For eachm∈ [0, 1], we set up a “fair” multi-round game of statistician against nature whose
+payoﬀ rules are such that if the true mean happened to equalm, then the statistician can
+neither gain nor lose wealth in expectation (their wealth in them-th game is a nonnegative
+martingale), but if the mean is notm, then it is possible to bet smartly and make money.
+Each round involves the statistician making a bet on the next observation, nature revealing
+the observation and giving the appropriate (positive or negative) payoﬀ to the statistician.
+The statistician then plays all these games (one for eachm) in parallel, starting each with
+one unit of wealth, and possibly using a diﬀerent, adaptive, betting strategy in each. The
+1−α conﬁdence set at timet consists of allm∈ [0, 1] such that the statistician’s money in
+the corresponding game has not crossed1/α. The true meanµ will be in this set with high
+probability.
+1github.com/wannabesmith/betting-paper-simulations has code to reproduce ﬁgures. Thebetting module of the
+Python package in github.com/gostevehoward/confseq has the main algorithms, but the package also contains implemen-
+tations from other papers.
+3
+Our choice of language above stems from a game-theoretic approach towards probability, as developed in
+the books by Shafer and Vovk [76, 77] and a recent paper by Shafer [75], but from a purely mathematical
+viewpoint, our results are extensions of a uniﬁed supermartingale approach towards nonparametric
+concentration and estimation described in Howard et al. [38, 39]; related supermartingale approaches
+were studied by [42], [40]. We elaborate on this viewpoint in Section 4.1. The most directly related
+works to our own are by [34], whose preprint has initial explorations of methods similar to ours for
+with-replacement sequential testing and estimation, and [80], who credits Kaplan for a computationally
+intractable variant of our approach for sequential testing in the without-replacement case. Apart
+from several novel results, the present paper extends these past works indepth, breadth and unity:
+our work contains a deeper empirical and theoretical investigation from statistical and computational
+viewpoints, places our work in a broader context of related work in both settings, and uniﬁes the
+with- and without-replacement methodology for both testing and estimation in both ﬁxed-time and
+sequential settings.
+We now have the appropriate context for a concrete formalization of our problem, which is slightly
+more general than introduced above. After that, we describe the game, why the rules of engagement
+result in valid statistical inference, and derive computationally and statistically eﬃcient betting
+strategies.
+Time-uniform conﬁdence sequences
+0.00 0.25 0.50 0.75 1.00
+0
+2
+4
+6pdf
+Xi  Beta(10, 30)
+101 102 103 104
+time t
+0.00
+0.25
+0.50
+0.75
+1.00Confidence sequence
+101 102 103 104
+time t
+0.00
+0.25
+0.50
+0.75
+1.00CS width
+PrPl-H [Prop 1]
+PrPl-EB [Thm 2]
+Hedged [Thm 3]
+Fixed-time conﬁdence intervals
+0.00 0.25 0.50 0.75 1.00
+0
+2
+4
+6pdf
+Xi  Beta(10, 30)
+102 103 104
+sample size n
+0.00
+0.25
+0.50
+0.75Confidence interval
+102 103 104
+sample size n
+0.00
+0.25
+0.50
+0.75CI width
+H-CI [H63]
+EB-CI [MP09]
+PrPl-EB-CI [Rmk 1]
+Hedged-CI [Rmk 3]
+Figure 1: Time-uniform 95% conﬁdence sequences (upper row) and ﬁxed-time 95% conﬁdence intervals
+(lower row) for the mean of independent and idenically distributed (iid) draws from a Beta(10, 30)
+distribution (unknown to the methods). The betting approaches (Hedged and Hedged-CI) adapt to
+both the small variance and asymmetry of the data, outperforming the other methods. For a detailed
+empirical comparison under a larger variety of settings, see Section C; for additional comparisons under
+non-iid data, see Section E.5.
+Outline. We summarize the broad approach in Section 2. As a warmup, we derive a new predictable
+plug-in method for deriving conﬁdence sequences using exponential supermartingales (Section 3),
+which already leads to computationally eﬃcient and visually appealing empirical Bernstein conﬁdence
+intervals and sequences. We then further improve on the aforementioned methods by developing a new
+martingale approach to deriving time-uniform and ﬁxed-time conﬁdence sets for means of bounded
+random variables, and connect the developed ideas to betting (Section 4). Section B discusses some
+4
+principles to derive powerful betting strategies to obtain tight conﬁdence sets. We then show how
+our techniques also extend to sampling without replacement (Section 5). Revealing simulations are
+performed along the way to demonstrate the eﬃcacy of the new methods, with a more extensive
+comparison with past work in Section C. Section 6 summarizes how betting ideas have shaped
+mathematics, outside of our paper’s focus on statistical inference. We postpone proofs to Section A
+and further theoretical insights to Section E.
+2 Concentration inequalities via nonnegative supermartingales
+To set the stage, letQm be the set of all distributions on[0, 1], where each distribution has meanm.
+Note thatQm is a convex set of distributions and it has no common dominating measure, since it
+consists of both discrete and continuous distributions.
+Consider the setting where we observe a (potentially inﬁnite) sequence of[0, 1]-valued random
+variables with conditional meanµ for some unknownµ∈ [0, 1]. We write this as(Xt)∞t=1∼P for some
+P∈P µ, wherePµ is the set of all distributionsP on [0, 1]∞ such thatEP (Xt|X1,...,X t−1) =µ. This
+includes familiar settings such as independent observations, whereXi∼Qi∈Q µ, or i.i.d. observations
+where allQi’s are identical, but captures more general settings where the conditional distribution of
+Xt given the past is an element ofQµ. When one only observesn outcomes, it suﬃces to imagine
+throwing away the rest, so that in what follows, we avoid new notation for distributionsP over ﬁnite
+length sequences.
+We are interested in deriving tight conﬁdence sets forµ, typically intervals, with no further
+assumptions. Speciﬁcally, for a given error toleranceα∈ (0, 1), a (1−α) conﬁdence interval (CI) is a
+random setCn≡C(X1,...,X n)⊆ [0, 1] such that
+∀n≥ 1, inf
+P∈PµP (µ∈Cn)≥ 1−α. (1)
+As mentioned earlier, the inequality by [35] implies that we can choose
+Cn :=
+(
+Xn±
+√
+log(2/α)
+2n
+)
+∩ [0, 1]. (2)
+Above, we write(a±b) to mean (a−b,a +b) for brevity.
+This inequality is derived by what is now known as the Chernoﬀ method [12], involving an analytic
+upper bound on the moment generating function of a bounded random variable. However, we will
+proceed diﬀerently; we adopt a hypothesis testing perspective, and couple it with a generalization of
+the Chernoﬀ method. As mentioned in the introduction, we ﬁrst consider the sequential regime where
+data are observed one after another over time, since nonnegative supermartingales — the primary
+mathematical tools used throughout this paper — naturally arise in this setup. As we will see, these
+sequential bounds can be instantiated for a ﬁxed sample size, yielding tight conﬁdence intervals for this
+more familiar setting. These will be much tighter than the Hoeﬀding conﬁdence interval(2), which is
+itself one such ﬁxed-sample-size instantiation [38, Figures 4 and 6].
+Let us brieﬂy review some terminology. For succinctness, we use the notationXt1 := (X1,...,X t).
+Deﬁne the sigma-ﬁeldFt := σ(Xt1) generated by Xt1 withF0 being the trivial sigma-ﬁeld. The
+canonical ﬁltrationF := (Ft)∞t=0 refers to the increasing sequence of sigma-ﬁeldsF0⊂F 1⊂F 2⊂··· .
+A stochastic process(Mt)∞t=0 is called atest supermartingalefor P if (Mt)∞t=0 is a nonnegative process
+adapted toF, M0 = 1, and
+EP (Mt|F t−1)≤Mt−1 for eacht≥ 1. (3)
+(Mt)∞t=0 is called atest martingale for P if the above “≤” is replaced with “=”. We sometimes shorten
+(Mt)∞t=0 to just(Mt) for brevity. If the above property holds simultaneously for allP∈P , we call(Mt)
+a test (super)martingale forP. We say that a sequence(λt)∞t=1 is predictable if λt isFt−1-measurable
+for eacht≥ 1, meaningλt can only depend onXt−11 . (In)equalities are interpreted in an almost sure
+sense.
+5
+2.1 Conﬁdence sequences and the method(s) of mixtures
+Even though the concentration inequalities thus far have been described in a setting where the sample
+size n is ﬁxed in advance, all of our ideas stem from a sequential approach towards uncertainty
+quantiﬁcation. The goal there is not to produce one conﬁdence setCn, but to produce an inﬁnite
+sequence (Ct)∞t=1 such that
+sup
+P∈Pµ
+P (∃t≥ 1 : µ /∈Ct)≤α. (4)
+Such a (Ct)∞t=1 is called aconﬁdence sequence(CS), and preferablylimt→∞Ct ={µ}. It is known [39,
+Lemma 3] that(4) is equivalent to requiring thatsupP∈PµP (µ /∈Cτ)≤α for arbitrary stopping times
+τ with respect toF.
+As detailed in the next subsection, one general way to construct a CS is to invert a family of
+sequential tests based on applying Ville’s maximal inequality [81] to a test (super)martingale. In fact,
+Ramdas et al. [64] proved that this is (in some formal sense) a universal method to construct CSs,
+meaning that any other approach can in principle be recovered or dominated by the aforementioned
+one.
+Designing test supermartingales is nontrivial, and the task of making it have “power one” against
+composite alternatives is often accomplished via themethod of mixtures. This can arguably be traced
+back (in a nonstochastic context) to Ville’s 1939 thesis and (in a stochastic context) to Wald [85].
+Robbins and collabarators [69, 68, 21] applied the method to derive CSs, and these ideas have been
+extended to a variety of nonparametric settings by Howard et al. [38, 39]. The latter paper describes
+several variants: conjugate mixtures, discrete mixtures, stitching and inverted stitching.
+These works form our vantage point for the rest of the paper, but we extend them in several ways.
+First, we describe a “predictable plug-in” technique that is implicit in the work of Ville. It can be
+viewed as a nonparametric extension of a passing remark in the parametric setting in the textbook by
+Wald [1945] and later explored in the parametric case by [73].
+Like Ville’s work in the binary setting, the predictable plug-in method connects the game-theoretic
+approach and the aforementioned mixture methods — succinctly, the plugged-in value determines
+the bet, where each bet is implicitly targeting a diﬀerent alternative (much like the components of a
+mixture). Following this translation, prior work on using the method mixtures for conﬁdence sequences
+can be viewed as using the same betting strategy (mixture distribution) for every value ofm. We
+ﬁnd that there is signiﬁcant statistical beneﬁt to betting diﬀerently for eachm (but tied together in a
+speciﬁc way, not in an ad hoc manner). One must typically specify the mixture distribution in advance
+of observing data, but betting can be viewed as building up a data-dependent mixture distribution
+on the ﬂy (this led us to previously name our approach as the “predictable mixture” method). These
+sequential perspectives are powerful, even if only interested in ﬁxed-sample CIs.
+2.2 Nonparametric conﬁdence sequences via sequential testing
+As seen above, it is straightforward to derive a conﬁdence interval forµ by resorting to a nonparametric
+concentration inequality like Hoeﬀding’s. In contrast, it is also well known that CIs are inversions of
+families of hypothesis tests (as we will see below), so one could presumably derive CIs by ﬁrst specifying
+tests. However, the literature on nonparametric concentration inequalities, such as Hoeﬀding’s, has not
+commonly utilized a hypothesis testing perspective to derive concentration bounds; for example the
+excellent book on concentration by Boucheron, Lugosi, and Massart [12] has no examples of such an
+approach. This is presumably because the underlying nonparametric, composite hypothesis tests may
+be quite challenging themselves, and one may not have nonasymptotically valid solutions or closed-form
+analytic expressions for these tests. This is in contrast to simple parametric nulls, where it is often
+easy to calculate ap-value based on likelihood ratios. In abandoning parametrics, and thus abandoning
+likelihood ratios, it may be unclear how to deﬁne a powerful test or calculate a nonasymptotically
+validp-value. This is where betting and test (super)martingales come to the rescue. Ramdas et al. [64,
+Proposition 4] prove that not only do likelihood ratios form test martingales, but every (nonparametric,
+composite) test martingale is also a (nonparametric, composite) likelihood ratio.
+6
+Theorem 1(4-step procedure for supermartingale conﬁdence sets). On observing (Xt)∞t=1∼P from
+P∈P µ for some unknownµ∈ [0, 1], do
+(a) Consider the composite null hypothesisHm0 :P∈P m for eachm∈ [0, 1].
+(b) For each indexm∈ [0, 1], construct a nonnegative processMmt ≡Mm(X1,...,X t) such
+that the process (Mµt )∞t=0 indexed by µ has the following property: for eachP ∈P µ,
+(Mµt )∞t=0 is upper-bounded by a test (super)martingale forP, possibly a diﬀerent one for
+eachP.
+(c) For eachm∈ [0, 1] consider the sequential test(φmt )∞t=1 deﬁned by
+φmt := 1(Mmt ≥ 1/α),
+whereφmt = 1 represents a rejection ofHm0 after t observations.
+(d) Deﬁne Ct as the set ofm∈ [0, 1] for whichφmt fails to rejectHm0 :
+Ct :={m∈ [0, 1] :φmt = 0}.
+Then (Ct)∞t=1 is a (1−α)-conﬁdence sequence forµ: supP∈PµP (∃t≥ 1 :µ /∈Ct)≤α.
+The above result relies centrally on Ville’s inequality [81], which states that if(Lt)≡ (Lt)∞t=1 is
+(upper bounded by) a test martingale forP, then we haveP (∃t≥ 1 :Lt≥ 1/α)≤α. See [38, Section
+6] for a short proof.
+Proof of Theorem 1.By Ville’s inequality,φmt is a level-α sequential hypothesis test, in the sense that
+for anyP∈P µ, we haveP (∃t≥ 1 :φµt = 1)≤α. Now, by deﬁnition of the sets(Ct)∞t=1, we have that
+µ /∈Ct at some timet≥ 1 if and only if there exists a timet≥ 1 such thatφµt = 1, and hence
+sup
+P∈Pµ
+P (∃t≥ 1 : µ /∈Ct) = sup
+P∈Pµ
+P (∃t≥ 1 : φµt = 1)≤α, (5)
+which completes the proof.
+At a high level, this approach is not new. Composite test supermartingales forP have been used in
+past works on concentration inequalities and/or conﬁdence sequences (which are related but diﬀerent),
+from the initial series of works by Robbins and collaborators in the 1960s and 1970s, to [27], to recent
+work by Jun and Orabona [40, Section 7.2] and Howard et al. [38, 39]. Test martingales have also been
+explicitly considered in some hypothesis testing problems [83, 78]; the latter paper popularized the
+term “test martingale” that we borrow, but unlike us, used it primarily for singletonP ={P}. We
+highlight an (independently developed) unpublished preprint by Hendriks [34] that has overlaps with
+the current paper in the with-replacement setting, and some complementary results. For singleton
+(parametric) classesP, Wald’s sequential likelihood ratio statistic is a test martingale, so all of the
+above methods can be viewed as inverting nonparametric or composite generalizations of Wald’s tests.
+Nevertheless, we make two additional comments. First, the requirement in step (b) of the algorithm
+that the process (Mmt ) be upper-bounded by a test (super)martingale for eachP∈P was posited
+by [38], and has recently been christened a e-process forP [65] (see also [32]). E-processes are strictly
+more general than test (super)martingales forP in the sense that there exist many interesting classes
+P for which nontrivial test (super)martingales do not exist, but one can design powerful e-processes
+forP. Second, one must take care to design test (super)martingales for eachm that are tied together
+across m in a nontrivial manner that improves statistical power while maintaining computational
+tractability. All the conﬁdence sets in this paper (both in the sequential and batch settings) will be
+based on this 4-step procedure, but with diﬀerent carefully chosen processes(Mmt ). In the language of
+betting, we will come up with new, powerful ways to bet for eachm, and also tie together the betting
+strategies for diﬀerentm.
+7
+2.3 Connections to the Chernoﬀ method
+By virtue of(Ct)∞t=1 being a time-uniform conﬁdence sequence, we also have thatCn is a (1−α)-
+conﬁdence interval forµ for any ﬁxed sample sizen. In fact, the celebrated Chernoﬀ method results
+in such a conﬁdence interval. So, how exactly are the two approaches related? The answer is simple:
+Theorem 1 generalizes and improves on the Chernoﬀ method. To elaborate, recall that Hoeﬀding
+proved that
+sup
+P∈Pµ
+EP [exp(λ(X−µ)−λ2/8)]≤ 1, for anyλ∈ R, (6)
+and so ifXn1 are independent (say), the following process can be used in Step (b):
+Mmt :=
+t∏
+i=1
+exp
+(
+λ(Xi−m)−λ2/8). (7)
+Usually, the only fact that matters for the Chernoﬀ method is thatEP [Mmt ]≤ 1, and Markov’s
+inequality is applied (instead of Ville’s) in Step (c). To complete the story, the Chernoﬀ method then
+involves a smart choice forλ. Settingλ :=
+√
+8 log(1/α)/n recovers the familiar Hoeﬀding inequality for
+the batch sample-size setting. Taking a union bound overXn1 and−Xn1 yields the Hoeﬀding conﬁdence
+interval (2) exactly. Using our 4-step approach, the resulting conﬁdence sequence is a time-uniform
+generalization of Hoeﬀding’s inequality, recovering the latter precisely including constants at timen;
+see [38] for this and other generalizations.
+In recent parlance, a statistic likeMmt , which has at most unit expectation under the null, has
+been called a betting score [75] or ane-value [82] and their relationship to sequential testing [32]
+and estimation [64] as an alternative top-values has been recently examined. In parametric settings
+with singleton nulls and alternative hypotheses, the likelihood ratio is ane-value. For composite null
+testing, the split likelihood ratio statistic [87] (and its variants) are e-values. However, our setup is
+more complex:Pm is highly composite, there is no common dominating measure to deﬁne likelihood
+ratios, but Hoeﬀding’s result yields ane-value. (In fact, it yields test supermartingale and hence an
+e-process, which is an e-value even at stopping times.)
+In summary, the Chernoﬀ method is simply one powerful, but as it turns out, rather limited way
+to construct ane-value. This paper provides better constructions ofMmt , whose expectation is exactly
+equal to one, thus removing one source of looseness in the Hoeﬀding-type approach above, as well as
+better ways to pick the tuning parameterλ, which will correspond to our bet.
+3 Warmup: exponential supermartingales and predictable plug-
+ins
+A central technique for constructing conﬁdence sequences (CSs) is Robbins’method of mixtures[68],
+see also [21, 69, 71, 72, 73]. Related ideas of “pseudo-maximization” or Laplace’s method were further
+popularized and extended by de la Peña et al. [26, 27, 28], and has led to several other followup
+works [1, 4, 38, 42].
+However, beyond the case when the data are (sub)-Gaussian, the method of mixtures rarely leads to
+a closed-form CS; it yields animplicit construction forCt which can sometimes be computed eﬃciently
+(e.g. using conjugate mixtures [39]), but is otherwise analytically opaque and computationally tedious.
+Below, we provide an alternative construction — called the “predictable plug-in” — that is exact,
+explicit and eﬃcient (computationally and statistically).
+In the next section, our CSs avoid exponential supermartingales, and are much tighter than the
+recent state-of-the-art in [39]. The ones in this section match the latter but are simpler to compute, so
+we present them ﬁrst.
+8
+3.1 Predictable plug-in Cramer-Chernoﬀ supermartingales
+Suppose (Xt)∞t=1∼ P for some P ∈P µ wherePµ is the set of all distributions on∏∞i=1[0, 1] so
+that EP (Xt|F t−1) =µ for eacht. The Hoeﬀding process(MHt (m))∞t=0 for a given candidate mean
+m∈ [0, 1] is given by
+MHt (m) :=
+t∏
+i=1
+exp (λ(Xi−m)−ψH (λ)) (8)
+with MH0 (m)≡ 1 by convention. HereψH(λ) :=λ2/8 is an upper bound on the cumulant generating
+function (CGF) for [0, 1]-valued random variables withλ∈ R chosen in some strategic way. For
+example, to maximizeMHn (m) at a ﬁxed sample sizen, one would setλ :=√8 log(1/α)/n as in the
+classical ﬁxed-time Hoeﬀding inequality [35].
+Following Howard et al. [39], we have that(MHt (µ))∞t=0 is a nonnegative supermartingale with respect
+tothecanonicalﬁltration. Therefore, byVille’smaximalinequalityfornonnegativesupermartingales[ 81,
+38],
+P
+(
+∃t≥ 1 : MHt (µ)≥ 1/α)≤α. (9)
+Robbins’ method of mixtures proceeds by noting that
+∫
+λ∈RMHt (m)dF (λ) is also a supermartingale for
+any “mixing” probability distributionF (λ) on R and thus
+P
+(
+∃t≥ 1 :
+∫
+λ∈R
+MHt (µ)dF (λ)≥ 1/α
+)
+≤α. (10)
+In this particular case, ifF (λ) is taken to be the Gaussian distribution, then the above integral can
+be computed in closed-form [38]. For other distributions or altogether diﬀerent supermartingales (i.e.
+other than Hoeﬀding), the integral may be computationally tedious or intractable.
+To combat this, instead of ﬁxingλ∈ R or integrating over it, consider constructing a sequence
+λ1,λ 2,... which is predictable, and thusλt can depend onXt−11 . Then,
+M PrPl-Ht (m) :=
+t∏
+i=1
+exp(λi(Xi−m)−ψH (λi)) (11)
+is also a test supermartingale forPm (and hence Ville’s inequality applies). We call such a sequence
+(λt)∞t=1 a predictable plug-in. While not always explicitly referred to by this exact name, predictable
+plug-ins have appeared in works on parametric sequential analysis by Wald [86, Eq. (10:10)], Robbins
+and Siegmund [73, Eq. (4)], Dawid [24], and Lorden and Pollak [52] as well as in the information
+theory literature [66]. As we will see, these techniques also prove useful in nonparametric testing and
+estimation problems both in sequential and batch settings.
+Using M PrPl-Ht (m) as the process in Step (b) of Theorem 1 results in a lower CS forµ, while
+constructing an analogous supermartingale using(−Xt)∞t=1 yields an upper CS. Combining these by
+taking a union bound results in the predictable plug-in Hoeﬀding CS which we introduce now.
+Proposition 1 (Predictable plug-in Hoeﬀding CS[PrPl-H]). Suppose that (Xt)∞t=1∼P for some
+P∈P µ. For any chosen real-valued predictable(λt)∞t=1,
+C PrPl-Ht :=
+(∑t
+i=1λiXi∑t
+i=1λi
+± log(2/α) +∑ti=1ψH(λi)∑t
+i=1λi
+)
+forms a (1−α)-CS forµ,
+as does its running intersection,⋂i≤tCHi .
+A sensible choice of predictable plug-in is given by
+λPrPl-Ht :=
+√
+8 log(2/α)
+t log(t + 1)∧ 1, (12)
+9
+for reasons which will be discussed in Section 3.3. The proof of Proposition 1 is provided in Section A.1.
+As alluded to earlier, predictable plug-ins are actually theleast interesting when using Hoeﬀding’s
+sub-Gaussian bound because of the available closed form Gaussian-mixture boundary. However, the
+story becomes more interesting when either (a) the method of mixtures is computationally opaque or
+complex, or (b) the optimal choice ofλ is based on unknown but estimable quantities. Both (a) and (b)
+are issues that arise when computing empirical Bernstein-type CSs and CIs. In the following section,
+we present predictable plug-in empirical Bernstein-type CSs and CIs which are both computationally
+and statistically eﬃcient.
+3.2 Application: closed-form empirical Bernstein conﬁdence sets
+To prepare for the results that follow, consider the empirical Bernstein-type process,
+M PrPl-EBt (m) :=
+t∏
+i=1
+exp{λi(Xi−m)−viψE(λi)} (13)
+where, following Howard et al. [38, 39], we have deﬁnedvi := 4(Xi−ˆµi−1)2 and
+ψE(λ) := (− log(1−λ)−λ)/4 for λ∈ [0, 1). (14)
+As we revisit later, the appearance of the constant 4 is to facilitate easy comparison toψH, since
+limλ→0+ψE(λ)/ψH(λ) = 1. In short,ψE is nonnegative, increasing on[0, 1), and grows quadratically
+near 0.
+UsingM PrPl-EBt (m) in Step (b) in Theorem 1 — and applying the same procedure but with(Xt)∞t=1
+and m replaced by (−Xt)∞t=1 and−m combined with a union bound over the resulting CSs — we get
+the following CS.
+Theorem 2(Predictable plug-in empirical Bernstein CS[PrPl-EB]). Suppose (Xt)∞t=1∼P for some
+P∈P µ. For any(0, 1)-valued predictable(λt)∞t=1,
+C PrPl-EBt :=
+(∑t
+i=1λiXi∑t
+i=1λi
+± log(2/α) +∑ti=1viψE(λi)∑t
+i=1λi
+)
+forms a (1−α)-CS forµ,
+as does its running intersection,⋂i≤tC PrPl-EBi .
+In particular, we recommend the predictable plug-in(λPrPl-EBt )∞t=1 given by
+λPrPl-EBt :=
+√
+2 log(2/α)
+ˆσ2t−1t log(1 +t)∧c, ˆσ2t :=
+1
+4 +∑ti=1(Xi−ˆµi)2
+t + 1 , ˆµt :=
+1
+2 +∑ti=1Xi
+t + 1 (15)
+for somec∈ (0, 1) (a reasonable default being 1/2 or 3/4). This choice was inspired by the ﬁxed-time
+empirical Bernstein as well as the widths of time-uniform CSs (more details are provided in Section 3.3).
+The sequences of estimators(ˆµt)∞t=1 and (ˆσ2t )∞t=1 can be interpreted as predictable, regularized sample
+means and variances. This technique was employed by Kotłowski et al. [45] for misspeciﬁed exponential
+families in the so-calledmaximum likelihood plug-in strategy.
+The proof of Theorem 2 relies on establishing thatM PrPl-EBt (m) is a test supermartingale forPm.
+This latter fact is related to, but cannot be derived directly from, a powerful deterministic inequality for
+bounded numbers due to Fan et al. [30]. One needs an additional trick from Howard et al. [39, Section
+A.8] which swaps(Xi−m)2 with (Xi−ˆµi−1)2, for any predictableˆµi−1, within the variance termvi.
+It is this additional piece which yields both tighter andclosed-form CSs; details are in Section A.2.
+We remark that before taking the running intersection, the above intervals are symmetric around the
+weighted sample mean, but this symmetry will not carry forward to other CSs in the paper.
+Figure 2 compares the conjugate mixture empirical-Bernstein CS (CM-EB) due to Howard et al.
+[39] with our predictable plug-in empirical-Bernstein CS (PrPl-EB). The two CSs perform similarly,
+but our closed-formPrPl-EB is over 500 times faster to compute than CM-EB (in our experience)
+which requires root ﬁnding at each step. However, our later bounds will be tighter than both of these.
+10
+Time-uniform empirical Bernstein conﬁdence sequences
+0.00 0.25 0.50 0.75 1.00
+0.950
+0.975
+1.000
+1.025
+1.050pdf
+Xi  Beta(1, 1)
+101 102 103 104
+time t
+0.00
+0.25
+0.50
+0.75
+1.00Confidence sequence
+101 102 103 104
+time t
+0.00
+0.25
+0.50
+0.75
+1.00CS width
+CM-EB [HRMS20]
+PrPl-EB [Thm 2]
+Figure 2: Empirical Bernstein CSs produced via a predictable plug-in (PrPl) with (λt)∞t=1 from
+(15) match (or slightly improve) those obtained via conjugate mixtures (CM) by [39]; the former is
+closed-form, but the latter is not and requires numerical methods.
+Remark 1. Theorem 2 yields computationally and statistically eﬃcient empirical Bernstein-type CIs
+for a ﬁxed sample sizen. Recalling (15), we recommend using⋂i≤nC PrPl-EBi along with the predictable
+sequence
+λPrPl-EB(n)t :=
+√
+2 log(2/α)
+nˆσ2t−1 ∧c. (16)
+We call the resulting conﬁdence interval the “predictable plug-in empirical Bernstein conﬁdence interval”
+or [PrPl-EB-CI] for short; see Figure 3.
+IfX1,...,X n are independent, then at the expense of computation, the above CI can be eﬀectively
+derandomized to remove the eﬀect of the ordering of variables. One can randomly permute the dataB
+times to obtain(~X1,b,..., ~Xn,b) and correspondingly compute~M PrPl-EBn,b (m), one for each permutation
+b∈{ 1,...,B }. Averaging over these permutations, deﬁne~M PrPl-EBn (m) := 1B∑Bb=1~M PrPl-EBn,b (m). For
+each b, M PrPl-EBn,b (µ) has expectation at most one (by linearity of expectation). Thus,~M PrPl-EBn (µ)
+is ae-value (i.e. it has expectation at most 1). By Markov’s inequality,~C PrPl-EBn :={m∈ [0, 1] :
+~M PrPl-EBn (m)< 1/α} is a (1−α)-CI forµ. This set is not available in closed-form and the intersection⋂
+i≤n ~C PrPl-EBi no longer yield a valid CI. In our experience, this derandomization procedure neither
+helps nor hurts. In any case, both⋂i≤nCi and ~Cn will be signiﬁcantly improved in Section 4.4.
+In Section E.3, we show that in iid settings the width of [PrPl-EB-CI] scales with the true (unknown)
+standard deviation:
+√n( log(2/α) +∑ni=1viψE(λi)∑n
+i=1λi
+)
+a.s.
+−−→σ
+√
+2 log(2/α). (17)
+Notice that(17) is the same asymptotic behavior that one would observe for CIs based on Bernstein’s
+or Bennett’s inequalities, both of which require knowledge of the true varianceσ2, while [PrPl-EB-CI]
+does not. This is in contrast to the empirical Bernstein CIs of Maurer and Pontil [54] whose limit would
+be σ
+√
+2 log(4/α). In the maximum variance case whereσ = 1/2, (17) yields the same asymptotic
+behavior as Hoeﬀding’s CI (2).
+Untilnow, wepresentedvariouspredictableplug-ins— (λPrPl-Ht )∞t=1, (λPrPl-EBt )∞t=1, and(λPrPl-EB(n)t )nt=1
+— but have not provided intuition for why these are sensible choices. Next, we discuss guiding principles
+for deriving predictable plug-ins.
+3.3 Guiding principles for deriving predictable plug-ins
+Let us begin our discussion with the predictable plug-in Hoeﬀding process(11) and the resulting CS
+in Proposition 1, which has a half-width
+Wt = log(2/α) +∑ti=1λ2i/8∑t
+i=1λi
+11
+Fixed-time empirical Bernstein conﬁdence intervals
+0.00 0.25 0.50 0.75 1.00
+0.950
+0.975
+1.000
+1.025
+1.050pdf
+Xi  Beta(1, 1)
+101 102 103 104
+sample size n
+0.00
+0.25
+0.50
+0.75
+1.00Confidence interval
+101 102 103 104
+sample size n
+0.00
+0.25
+0.50
+0.75
+1.00CI width
+EB-CI [AMS07]
+EB-CI [MP09]
+PrPl-EB-CI [Rmk 1]
+Figure 3: Our predictable plug-in (PrPl) empirical Bernstein (EB) CI is signiﬁcantly tighter than those
+of [54] and [3].
+Table 1: Below, we think oflogx as log(x+ 1)to avoid trivialities. The claimed rates are easily checked
+by approximating the sums as integrals, and taking derivatives. For example,ddx log logx = 1/x logx,
+so the sum of∑i≤t 1/i logi≍ log logt. It is worth remarking that fort = 1080, the number of atoms
+in the universe,log logt≈ 5.2, which is why we treatlog logt as a constant when expressing the rate
+for Wt. The iterated logarithm pattern in the the last two lines can be continued indeﬁnitely.
+Strategy (λi)∞i=1 ∑ti=1λi ∑ti=1λ2i Width Wt
+≍ 1/i ≍ logt ≍ 1 1 / logt
+≍
+√
+logi/i ≍√t logt ≍ log2t ≍ log3/2t/√t
+≍ 1/
+√
+i ≍
+√
+t ≍ logt ≍ logt/
+√
+t
+≍ 1/√i logi ≍√t/ logt ≍ log logt ≍√logt/t
+≍ 1/√i logi log logi ≍√t/ logt ≍ log log logt ≍√logt/t
+To ensure thatWt→ 0 as t→∞ , it is clear that we wantλt
+a.s.
+−−→0, but at what rate? As a sensible
+default, we recommend settingλt≍ 1/√t logt so thatWt = ~O(√logt/t) which matches the width of
+the conjugate mixture Hoeﬀding CS [38, Proposition 2] (here~O treatsO(log logt) factors as constants).
+See Table 1 for a comparison between rates forλt and their resulting CS widths.
+Now consider the predictable plug-in empirical Bernstein process(13) and the resulting CS of
+Theorem 2, which has a half-width
+Wt = log(2/α) +∑ti=1 4(Xi−ˆµi−1)2ψE(λi)∑t
+i=1λi
+By two applications of L’Hôpital’s rule, we have that
+ψE(λ)
+ψH (λ)
+λ→0+
+−−−−→1. (18)
+Performing some approximations for smallλi to help guide our choice of(λt)∞t=1 (without compromising
+validity of resulting conﬁdence sets) we have that
+Wt≈ log(2/α) +∑ti=1 4(Xi−µ)2λ2i/8∑t
+i=1λi
+. (19)
+Thus, in the special case of i.i.d.Xi with varianceσ2, for large enought,
+EP (Wt|F t−1) ≲ log(2/α) +σ2∑ti=1λ2i/2∑t
+i=1λi
+. (20)
+12
+If we were to setλ1 =λ2 =··· =λ⋆∈ R and minimize the above expression for a speciﬁc timet⋆, this
+amounts to minimizing
+log(2/α) +σ2t⋆λ⋆2/2
+t⋆λ⋆ , (21)
+which is achieved by setting
+λ⋆ :=
+√
+2 log(2/α)
+σ2t⋆ . (22)
+This is precisely why we suggested the predictable plug-in(λPrPlt )∞t=1 given by(15), where the additional
+log(t + 1) is included in an attempt to enforceWt = ~O(√logt/t).
+The above calculations are only used as guiding principles to sharpen the conﬁdence sets, butall
+such schemes retain the validity guarantee. As long as(λt)∞t=1 is [0, 1)-valued and predictable, we have
+that (MEt (µ))∞t=0 is a test supermartingale forPµ which can be used in Theorem 1 to obtain diﬀerent
+valid CSs forµ.
+Foreshadowing our attempt to generalize this procedure in the next section, notice that the expo-
+nential function was used throughout to ensure nonnegativity, but that any other test supermartingale
+would have suﬃced. In fact, if a martingale is used in place of a supermartingale, then Ville’s inequality
+is tighter.
+Next, we present a testmartingale, removing a source of looseness in the conﬁdence sets derived thus
+far. We discuss its betting interpretation, provide other guiding principles for settingλi (equivalently,
+for betting), which will involve attempting to maximize the expected log-wealth in the betting game.
+4 The capital process, betting, and martingales
+In Section 3, we generalized the Cramer-Chernoﬀ method to derive predictable plug-in exponential
+supermartingales and used this result to obtain tight empirical Bernstein CSs and CIs. In this section,
+we consider an alternative process which can be interpreted as the wealth accumulated from a series of
+bets in a game. This process is a central object of study in the game-theoretic probability literature
+where it is referred to as thecapital process[76]. We discuss its connections to the purely statistical goal
+of constructing CSs and CIs and demonstrate how these sets improve on Cramer-Chernoﬀ approaches,
+including the empirical Bernstein conﬁdence sets of the previous section.
+Consider the same setup as in Section 3: we observe an inﬁnite sequence of conditionally mean-µ
+random variables,(Xt)∞t=1∼P from some distributionP∈P µ. Deﬁne thecapital processKt(m) for
+anym∈ [0, 1],
+Kt(m) :=
+t∏
+i=1
+(1 +λi(m)· (Xi−m)), (23)
+withK0(m) := 1 and where (λt(m))∞t=1 is a (−1/(1−m), 1/m)-valued predictable sequence, and
+thus λt(m) can depend onXt−11 . Note that for each t≥ 1, we haveXt∈ [0, 1], m∈ [0, 1] and
+λt(m)∈ (−1/(1−m), 1/m). Here and below, 1/m should be interpreted as∞ when m = 0 and
+similarly for 1/(1−m) and m = 1, respectively. Importantly,(1 +λt(m)· (Xt−m))∈ [0,∞), and
+thusKt(m)≥ 0 for allt≥ 1. Following similar techniques to the previous section, the reader may
+easily check thatKt(µ) is a test martingale. Moreover, we have the stronger result summarized in the
+following central proposition.
+Proposition 2. Suppose a draw from some distributionP yields a sequenceX1,X 2,... of [0, 1]-valued
+random variables, and letµ∈ [0, 1] be a constant. The following four statements imply each other:
+(a) EP (Xt|F t−1) =µ for allt∈ N, whereFt−1 =σ(X1,...,X t−1).
+(b) There exists a constantλ∈ R\{0} for which (Kt(µ))∞t=0 is a strictly positive test martingale for
+P.
+(c) For every ﬁxedλ∈ (− 11−µ, 1µ), (Kt(µ))∞t=0 is a test martingale forP.
+13
+(d) For every(− 11−µ, 1µ)-valued predictable sequence(λt)∞t=1, (Kt(µ))∞t=0 is a test martingale forP.
+Further, the intervals(− 11−µ, 1µ) mentioned above can be replaced by any subinterval containing at
+least one nonzero value, like[−1, 1] or (−0.5, 0.5). Finally, every test martingale forPµ is of the form
+(Kt(µ)) for some predictable sequence(λt).
+The proof can be found in Section A.3. While the subsequent theorems will primarily make use of
+(a) =⇒ (d), the above proposition establishes a core fact: the assumption of the (conditional) means
+being identicallyµ is anequivalent restatementof our capital process being a test martingale. Thus,
+test martingales are not simply “technical tools” to deal with means of bounded random variables, they
+are fundamentally at the very heart of the problem deﬁnition itself.
+Proposition 2 can be generalized to another remarkable, yet simple, result: for any set of distributions
+S, every test martingale forS has the same form.
+Proposition 3(Universal representation). For any arbitrary set of (possibly unbounded) distributions
+S, (Mt) is a test martingale forS if and only ifMt =∏ti=1(1 +λiZi) for someZi≥− 1 such that
+ES[Zi|Fi−1] = 0 for everyS∈S , and some predictableλi such thatλiZi≥− 1. The same claim also
+holds for test supermartingales forS, with the aforementioned “= 0” replaced by “≤ 0”.
+The proof can be found in Section A.4. The above proposition immediately makes this paper’s
+techniques actionable for a wide class of nonparametric testing and estimation problems. We give an
+example relating to quantiles later.
+4.1 Connections to betting
+It is worth pausing to clarify how the capital processKt(m) and Proposition 2 can be viewed in terms
+of betting. We imagine that nature implicitly posits a hypothesisHm0 — which we treat as a game
+providing us a chance to make money if the hypothesis is wrong, by repeatedly betting some of our
+capital againstHm0 . We start the game with a capital of 1 (i.e.K0(m) := 1), and design a bet of
+bt :=st|λmt| at each step, wherest∈{− 1, 1}. Setting st := 1 indicates that we believe thatµ > m
+while st :=−1 indicates the opposite.|λmt| indicates the amount of our capital that we are willing
+to put at stake at timet: settingλmt = 0 results in neither losing nor gaining any capital regardless
+of the outcome, while settingλmt ∈{− 1/(1−m), 1/m} means that we are willing to risk all of our
+capital on the next outcome.
+However, ifHm0 is true (i.e.m =µ), then by Proposition 2, our capital process is a martingale.
+In betting terms, no matter how clever a betting strategy(λmt )∞t=1 we devise, we cannot expect to
+make (or lose) money at each step. If on the other hand,Hm0 is false, then a clever betting strategy
+will make us a lot of money. In statistical terms, when our capital exceeds1/α, we can conﬁdently
+reject the hypothesisHm0 since if it were true (and the game were fair) then by Ville’s inequality [81],
+the a priori probability of thisever occurring is at mostα. We imagine simultaneously playing this
+game withHm′0 for eachm′∈ [0, 1]. At any timet, the gamesm′∈ [0, 1] for which our capital is small
+(< 1/α) form a CS.
+Both the Cramer-Chernoﬀ processes of Section 3 andKt(m) are nonnegative and tend to increase
+when µ > m. However, onlyKt(m) is a test martingale when m = µ; the others are test super-
+martingales. A test martingale is the wealth accumulated in a “fair game” where our capital stays
+constant in expectation, while a test supermartingale is the wealth accumulated in a game where our
+capital is expected to decrease (not strictly). Larger values of capital correspond to rejectingHm0 more
+readily. Therefore, test supermartingales tend to yield conservative tests compared to their martingale
+counterparts.
+More generally,every nonnegative supermartingale can be regarded as the wealth process of a
+gambler playing a game with odds that are fair or stacked against them. In other words, there is a
+one-to-one correspondence between wealths of hypothetical gamblers and nonnegative supermartingales.
+Taking this perspective, every statement involving nonnegative supermartingales (and thus likelihood
+14
+ratios) are statements about betting, and vice versa. Mixture methods that combine nonnegative
+supermartingales are simply strategies to hedge across various instruments available to the gambler.
+Thus, the gambling analogy can be entirely dropped, and our results would ﬁnd themselves comfortably
+nestled in the rich literature on martingale methods for concentration inequalities, but we mention the
+betting analogy for intuition so that the mathematics are animated and easier to absorb.
+Ville introduced martingales into modern mathematical probability theory, and centered them
+around their betting interpretation. Since then, ideas from betting have appeared in various ﬁelds,
+including probability theory, statistical testing and estimation, information theory, and online learning
+theory. While our paper focuses on the utility of betting in some statistical inference tasks, Section F
+provides a brief overview of the use of betting in other mathematical disciplines.
+4.2 Connections to likelihood ratios
+As alluded to in the previous subsection, useful intuition is provided via the connection to likelihood
+ratios.Kt(m) is a “composite” test martingale forPm, meaning that it is a nonnegative martingale
+starting at one for everyP∈P m (recall thatP is a distribution over inﬁnite sequences of observations
+with conditional meanm).
+If we were dealing with a single distribution such asQ∞, meaning a product distribution where every
+observation is drawn iid fromQ, then one may pick any alternativeQ′ that is absolutely continuous
+with respect toQ, to observe that the likelihood ratio∏ti=1Q′(Xi)/Q(Xi) is a test martingale forQ∞.
+However, sincePm is highly composite and nonparametric and is not even dominated by a single
+measure (as it contains atomic measures, continuous measures, and all their mixtures), it is unclear
+how one can even begin to write down a likelihood ratio. Nevertheless, Ramdas et al. [64, Proposition
+4] show that if(Mt) is a composite test martingale for anyS, then for every distributionQ∈S , Mt
+equals the likelihood ratio of someQ′ against Q (where Q′ depends onQ).
+Thus, not only is every likelihood ratio a test martingale, but every (composite) test martingale can
+also be represented as a likelihood ratio. Hence, in a formal sense, test martingales are nonparametric
+composite generalizations of likelihood ratios, which are at the very heart of statistical inference. When
+this observation is combined with Proposition 2, it should be no surprise any longer that the capital
+processKt(m) (even devoid of any betting interpretation) is fundamental to the problem at hand. In
+Section E.6 we also observe connections to the empirical likelihood of [61] and the dual likelihood of
+[57].
+4.3 Adaptive, constrained adversaries
+Despite the analogies to betting, the game described so far appears to be purely stochastic in the sense
+that nature simply commits to a distributionP∈P µ for some unknownµ∈ [0, 1] and presents us
+observations fromP. However, Proposition 2 can be extended to a more adversarial setup, but with a
+constrained adversary.
+To elaborate, recall the diﬀerence betweenQ andP from the start of Section 2 and consider a
+game with three players: an adversary, nature, and the statistician. First, the adversary commits to
+a µ∈ [0, 1]. Then, the game proceeds in rounds. At the start of roundt, the statistician publicly
+discloses the bets for everym, which could depend onX1,...,X t−1. The adversary picks a distribution
+Qt∈Q µ, which could depend onX1,...,X t−1 and the statistician’s disclosed bets, and handsQt to
+nature. Nature simply acts like an arbitrator, ﬁrst verifying that the adversary chose aQt with mean
+µ, and then drawsXt∼Qt and presentsXt to the statistician.
+In this fashion, the adversary does not need to pickµ and P∈P µ at the start of the interaction,
+which is the usual stochastic setup, but can instead build the distributionP in a data-dependent
+fashion over time. In other words, the adversary does not commit to a distributionP, but instead to a
+rule for buildingP from the data. Of course, they do not need to disclose this rule, or even be able
+express what this rule would do on any other hypothetical outcomes other than the one observed. The
+15
+results in this paper, which build on the central Proposition 2, continue to hold in this more general
+interaction model.
+A geometric reason why we can move from the stochastic model ﬁrst described to the above
+(constrained) adversarial model, is that the above distributionP lies in the “fork convex hull” ofPµ.
+Fork-convexity is a sequential analogue of convexity [65]. Informally, the fork-convex hull of a set of
+distributions over sequences is the set of predictable plug-ins of these distributions, and is much larger
+than their convex hull (mixtures). If a process is a nonnegative martingale under every distribution in
+a set, then it is also a nonnegative martingale under every distribution in the fork convex hull of that
+set. No results about fork convexity are used anywhere in this paper, and we only mention it for the
+mathematically curious.
+4.4 The hedged capital process
+We now return to the purely statistical problem of using the capital processKt(m) to construct time-
+uniform CSs and ﬁxed-time CIs. We might be tempted to useKt(µ) as the nonnegative martingale
+in Theorem 1 to conclude thatBt :={m∈ [0, 1] :Kt(m)< 1/α}forms a (1−α)-CS forµ. Unlike the
+empirical Bernstein CS of Section 3,Bt cannot be computed in closed-form. Instead, we theoretically
+need to compute the family of processes{Kt(m)}m∈[0,1] and include thosem∈ [0, 1] for whichKt(m)
+remains below 1/α. This is not practical as the parameter space[0, 1] is uncountably inﬁnite. But if
+we know a priori thatBt is guaranteed to produce an interval for eacht, then it is straightforward to
+ﬁnd a superset ofBt by either performing a grid search on(0, 1/g, 2/g,..., (g− 1)/g, 1) for some large
+g∈ N, or by employing root-ﬁnding algorithms. This motivates thehedged capital process, deﬁned for
+anyθ,m∈ [0, 1] as
+K±t (m) := max{θK+t (m), (1−θ)K−t (m)}, (24)
+where K+t (m) :=
+t∏
+i=1
+(1 +λ+i (m)· (Xi−m)),
+and K−t (m) :=
+t∏
+i=1
+(1−λ−i (m)· (Xi−m)),
+and (λ+t (m))∞t=1 and (λ−t (m))∞t=1 are predictable sequences of[0, 1m)- and [0, 11−m)-valued random
+variables, respectively.
+K±t (m) can be viewed from the betting perspective as dividing one’s capital into proportions ofθ
+and (1−θ) and making two series of simultaneous bets, positing thatµ≥m, andµ<m , respectively
+which accumulate capital inK+t (m) andK−t (m). Ifµ⁄=m, then we expect that one of these strategies
+will perform poorly, while we expect the other to make money in the long term. Ifµ =m, then we
+expect neither strategy to make money. The maximum of these processes is upper-bounded by their
+convex combination,
+M±t :=θK+t + (1−θ)K−t .
+BothK±t andM±t can be used for Step (b) of Theorem 1 to yield a CS. Empirically, both yield
+intervals, but only the former provably so.
+Theorem 3(Hedged capital CS[Hedged]). Suppose (Xt)∞t=1∼P for someP∈P µ. Let (˜λ+t )∞t=1
+and (˜λ−t )∞t=1 be real-valued predictable sequences not depending onm, and for eacht≥ 1 let
+λ+t (m) :=|˜λ+t|∧ cm, λ −t (m) :=|˜λ−t|∧ c1−m, (25)
+for somec∈ [0, 1) (some reasonable defaults beingc = 1/2 or 3/4). Then
+B±t :={m∈ [0, 1] :K±t (m)< 1/α} forms a (1−α)-CS forµ,
+as does its running intersection⋂i≤t B±i . Further, B±t is an interval for eacht≥ 1. Finally, replacing
+K±t (m) byM±t (m) yields a tighter(1−α)-CS forµ.
+16
+Time-uniform conﬁdence sequences: high-variance, symmetric data
+0.00 0.25 0.50 0.75 1.00
+0.0
+0.2
+0.4pmf
+Xi  Bernoulli(1/2)
+101 102 103 104
+time t
+0.00
+0.25
+0.50
+0.75
+1.00Confidence sequence
+101 102 103 104
+time t
+0.00
+0.25
+0.50
+0.75
+1.00CS width
+PrPl-H [Prop 1]
+PrPl-EB [Thm 2]
+Hedged [Thm 3]
+Time-uniform conﬁdence sequences: low-variance, asymmetric data
+0.00 0.25 0.50 0.75 1.00
+0
+2
+4
+6pdf
+Xi  Beta(10, 30)
+101 102 103 104
+time t
+0.00
+0.25
+0.50
+0.75
+1.00Confidence sequence
+101 102 103 104
+time t
+0.00
+0.25
+0.50
+0.75
+1.00CS width
+PrPl-H [Prop 1]
+PrPl-EB [Thm 2]
+Hedged [Thm 3]
+Figure 4: Predictable plug-in Hoeﬀding, empirical Bernstein, and hedged capital CSs under two
+distributional scenarios. Notice that the latter roughly matches the others in the Bernoulli(1/2) case,
+but shines in the low-variance, asymmetric scenario.
+For reasons given in Section B.1, we recommend setting˜λ+t = ˜λ−t =λPrPl±t as
+λPrPl±t :=
+√
+2 log(2/α)
+ˆσ2t−1t log(t + 1), ˆσ2t := 1/4 +∑ti=1(Xi−ˆµi)2t + 1 , and ˆµt := 1/2 +∑ti=1Xit + 1 , (26)
+for eacht≥ 1, and truncation levelc := 1/2 or 3/4; see Figure 4. A reasonable point estimator forµ is
+argminm∈[0,1]K±t (m) or argminm∈[0,1]M±t (m) (see Figure 18).
+Remark 2. SinceK±t (m)≤ M±t (m), the latter conﬁdence sequence is tighter. In the proof of
+Theorem 3, we use a property of themax function to establish quasiconvexity ofK±t (m), implying that
+B±t is an interval. We ﬁnd the diﬀerence in empirical performance negligible (Figure 5). For the
+interested reader, Section E.4 constructs a (pathological) CS that is almost surely not an interval.
+Remark 3.Theorem 3 yields tight hedged CIs for a ﬁxed sample sizen. Recalling (26), we recommend
+using⋂i≤n B±i , and setting˜λ+t = ˜λ−t = ˜λ±t given by
+˜λ±t :=
+√
+2 log(2/α)
+nˆσ2t−1 . (27)
+We refer to the resulting CI as the “hedged capital conﬁdence interval” or[Hedged-CI]for short, and
+demonstrate its superiority to past work in Figure 6.
+Similar to the discussion after Remark 1, ifX1,...,X n are independent, then one can permute the
+data many times and average the resulting capital processes to eﬀectively derandomize the procedure.
+The proof of Theorem 3 is in Section A.5. Unlike the empirical Bernstein-type CSs and CIs of
+Section 3, those based on the hedged capital process are not necessarily symmetric. In fact, we
+empirically ﬁnd through simulations that these CSs and CIs are able to adapt and beneﬁt from this
+asymmetry (see Figures 4 and 6). While it is not obvious from the deﬁnition ofB±t , bets can be
+17
+101 102 103 104 105
+time t
+10 13
+10 8
+10 3
+102
+107
+Wealth (log-scale)
+m = 0.1
++
+t (m)
+ t (m)
+ ±
+t (m) (max)
+ ±
+t (m) (sum)
+101 102 103 104 105
+time t
+10 13
+10 8
+10 3
+102
+107
+m = 0.01
+101 102 103 104 105
+time t
+10 13
+10 8
+10 3
+102
+107
+m = 0.01
+101 102 103 104 105
+time t
+10 13
+10 8
+10 3
+102
+107
+m = 0.1
+Figure 5: A comparison of capital processesK+t (m),K−t (m), the hedged capital processK±t (m), and its
+upper-bounding nonnegative martingale,M±t (m) under four alternatives (from left to right):m≪µ,
+m<µ , m>µ , m≫µ. Whenm<µ , we see thatK+t (m) increases, whileK−t (m) approaches zero,
+but the opposite is true whenm>µ . Notice that not much is gained by taking a sumM±t (m) rather
+than a maximumK±t (m), since one ofK+t (m) andK−t (m) vastly dominates the other, depending on
+whether m>µ or m<µ .
+Fixed-time conﬁdence intervals: high-variance, symmetric data
+0.00 0.25 0.50 0.75 1.00
+0.0
+0.2
+0.4pmf
+Xi  Bernoulli(1/2)
+102 103 104
+sample size n
+0.00
+0.25
+0.50
+0.75
+1.00Confidence interval
+102 103 104
+sample size n
+0.00
+0.25
+0.50
+0.75
+1.00CI width
+H-CI [H63]
+EB-CI [MP09]
+PrPl-EB-CI [Rmk 1]
+Hedged-CI [Rmk 3]
+Fixed-time conﬁdence intervals: low-variance, asymmetric data
+0.00 0.25 0.50 0.75 1.00
+0
+2
+4
+6pdf
+Xi  Beta(10, 30)
+102 103 104
+sample size n
+0.00
+0.25
+0.50
+0.75Confidence interval
+102 103 104
+sample size n
+0.00
+0.25
+0.50
+0.75CI width
+H-CI [H63]
+EB-CI [MP09]
+PrPl-EB-CI [Rmk 1]
+Hedged-CI [Rmk 3]
+Figure 6: Hoeﬀding (H), empirical Bernstein (EB), and hedged capital CIs under two distributional
+scenarios. Similar to the time-uniform setting, the betting approach tends to outperform the other
+bounds, especially for low-variance, asymmetric data.
+18
+chosen such that hedged capital CSs and CIs converge at the optimal rates ofO(
+√
+log logt/t) and
+O(1/√n), respectively (see Section E.2) and such that for suﬃciently largen, hedged capital CIs almost
+surely dominate those based on Hoeﬀding’s inequality (see Section E.1). However, the implications
+of time-uniform convergence rates are subtle, and optimal rates are not always desirable in practical
+applications (see [39, Section 3.5]). Nevertheless, we ﬁnd that hedged capital CSs and CIs signiﬁcantly
+outperform past works even for small sample sizes (see Section C). Some additional tools for visualizing
+CSs acrossα and t are provided in Section D.5.
+In Section B, we discuss some guiding principles for deriving powerful betting strategies, presenting
+the hedged capital CSs and CIs as special cases along with the following game-theoretic betting
+schemes:
+• Growth rate adaptive to the particular alternative (GRAPA),
+• Approximate GRAPA (aGRAPA),
+• Lower-bound on the wealth (LBOW),
+• Online Newton step-m (ONS-m),
+• Diversiﬁed Kelly betting (dKelly),
+• Conﬁdence boundary bets (ConBo), and
+• Sequentially rebalanced portfolio (SRP).
+Each of these betting strategies have their respective beneﬁts, whether computational, conceptual, or
+statistical which are discussed further in Section B.
+5 Betting while sampling without replacement (WoR)
+This section tackles a slightly diﬀerent problem, that of sampling without replacement (WoR) from
+a ﬁnite set of real numbers in order to estimate its mean. Importantly, theN numbers in the ﬁnite
+population (x1,...,x N) are ﬁxed and nonrandom. What is random is only the order of observation;
+the model for sampling uniformly at random without replacement (WoR) posits that at timet≥ 1,
+Xt| (X1,...,X t−1)∼ Uniform ((x1,...,x N)\(X1,...,X t−1)). (28)
+All probabilities are thus to be understood as solely arising from observing ﬁxed entities in a random
+order, with no distributional assumptions being made on the ﬁnite population. We consider the same
+canonical ﬁltrationF = (Ft)Nt=0 as before. Fort≥ 1, letFt :=σ(Xt1) be the sigma-ﬁeld generated by
+X1,...,X t and letF0 be the empty sigma-ﬁeld. For succinctness, we use the notation[a] :={1,...,a }.
+For eachm∈ [0, 1], letLm :={xN1 ∈ [0, 1]N :∑Ni=1xi/N =m} be the set of all unordered lists
+of N≥ 2 real numbers in[0, 1] whose average ism. For instance,L0 andL1 are both singletons,
+but otherwiseLm is uncountably inﬁnite. LetPm be the set of all measures onFN that are formed
+as follows: pick an arbitrary element ofLm, apply a uniformly random permutation, and reveal the
+elements one by one. Thus, every element ofPm is a uniform measure on theN! permutations of some
+element inLm, so there is a one-to-one mapping betweenLm andPm.
+DeﬁneP :=⋃mPm and letµ represent the true unknown mean, meaning that the data is drawn
+from someP∈P µ. For everym∈ [0, 1], we posit a composite null hypothesisH 0m : P∈P m, but
+clearly only one of these nulls is true. We will design betting strategies to test these nulls and thus
+ﬁnd eﬃcient conﬁdence intervals or sequences forµ. It is easier to present the sequential case ﬁrst,
+since that is arguably more natural for sampling WoR, and discuss the ﬁxed-time case later.
+5.1 Existing (super)martingale-based conﬁdence sequences or tests
+Several papers have considered estimating the mean of a ﬁnite set of nonrandom numbers when
+sampling WoR, often by constructing concentration inequalities [35, 74, 5, 88]. Notably, Hoeﬀding
+19
+[35] showed that the same bound for sampling with replacement(2) can be used when sampling
+WoR. Serﬂing [74] improved on this bound, which was then further reﬁned by Bardenet and Maillard
+[5]. While test supermartingales appeared in some of the aforementioned works, Waudby-Smith and
+Ramdas [88] identiﬁed better test supermartingales which yield explicit Hoeﬀding- and empirical
+Bernstein-type concentration inequalities and CSs for sampling WoR that signiﬁcantly improved on
+previous bounds. Consider their exponential Hoeﬀding-type supermartingale,
+M H-W oRt := exp
+{ t∑
+i=1
+[
+λi
+(
+Xi−µ + 1N− (i− 1)
+i−1∑
+j=1
+(Xj−µ)
+)
+−ψH (λi)
+]}
+, (29)
+and their exponential empirical Bernstein-type supermartingale,
+M EB-W oRt := exp
+{ t∑
+i=1
+[
+λi
+(
+Xi−µ + 1N− (i− 1)
+i−1∑
+j=1
+(Xj−µ)
+)
+−viψE(λi)
+]}
+, (30)
+where (λt)Nt=1 is any predictableλ-sequence (real-valued forM H-WoRt , but [0, 1)-valued forM EB-WoRt ),
+vi = 4(Xi−ˆµi−1)2 as before, andψH(·) and ψE(·) are deﬁned as in Section 3. DeﬁningM H-WoR0 ≡
+M EB-WoR0 := 1, [88] prove that(M H-WoRt )Nt=0 and (M EB-WoRt )Nt=0 are test supermartingales with respect
+toF, and hence can be used in Step (b) of Theorem 1.
+In recent work on election audits, Stark [80] credits Harold Kaplan for proposing
+MKt :=
+∫ 1
+0
+t∏
+i=1
+(
+1 +γ
+[
+Xi
+1− (i− 1)/N
+µ−∑i−1j=1Xi/N− 1
+])
+dγ. (31)
+The “Kaplan martingale”(MKt )Nt=0 was employed for election auditing, but it is a polynomial of degree
+t and is computationally expensive for larget [80].
+Next, we mimic the approach of Section 4 to derive a capital process for sampling WoR. We then
+derive WoR analogues of the eﬃcient betting strategies from Section B.
+5.2 The capital process for sampling without replacement
+Deﬁne the predictable sequence(µWoRt )t∈[N ] where
+µW oRt := E[Xt|Ft−1] = Nµ−∑t−1i=1XiN− (t− 1) . (32)
+It is clear thatµWoRt ∈ [0, 1], since it is the mean of the unobserved elements of{xi}i∈[N ]. (µWoRt )t∈[N ]
+is unobserved sinceµ is unknown, so it is helpful to deﬁne
+mW oRt := Nm−∑t−1i=1XiN− (t− 1) . (33)
+Now, let(λt(m))Nt=1 be a predictable sequence such thatλt(m) is(− 11−mW oRt , 1mW oRt )-valued. Deﬁne
+the without-replacement capital processKWoRt (m),
+KW oRt (m) :=
+t∏
+i=1
+(
+1 +λi(m)· (Xi−mW oRi )) (34)
+withKWoR0 (m) := 1. The following result is analogous to Proposition 2.
+Proposition 4. LetXN1 be a WoR sample fromxN1 ∈ [0, 1]N. The following two statements imply
+each other:
+1. EP (Xt|F t−1) =µWoRt for eacht∈ [N].
+20
+2. For every predictable sequence withλt(m)∈
+(
+− 1(1−µW oRt ), 1µW oRt
+)
+, (KWoRt (µ))∞t=0 is a test martin-
+gale.
+The other claims within Proposition 2 also hold above with minor modiﬁcation, but we do not
+mention them again for brevity. Further, Proposition 3 technically covers WoR sampling as well. We
+now present a “hedged” capital process and powerful betting schemes for sampling WoR, to construct
+a CS forµ = 1N∑Ni=1xi.
+5.3 Powerful betting schemes
+Similar to Section 4.4, deﬁne the hedged capital process for sampling WoR:
+KWoR,±t (m) := max
+{
+θ
+t∏
+i=1
+(
+1 +λ+i (m)· (Xi−mWoRt )),
+(1−θ)
+t∏
+i=1
+(
+1−λ−i (m)· (Xi−mWoRt ))
+}
+for some predictable(λ+t (m))Nt=1 and (λ−t (m))Nt=1 taking values in[0, 1/mWoRt ] and [0, 1/(1−mWoRt )]
+at timet, respectively. Using
+(
+KWoR,±t (m))∞t=0 as the process in Step (b) of Theorem 1, we obtain theCS summarized in the following theorem.
+Theorem 4(WoR hedged capital CS[Hedged-WoR]). Given a ﬁnite populationxN1 ∈ [0, 1]N with
+meanµ := 1N∑Ni=1xi =µ, suppose thatX1,X 2,...X N are sampled WoR fromxN1 . Let ( ˙λ+t )∞t=1 and
+( ˙λ−t )∞t=1 be real-valued predictable sequences not depending onm, and for eacht≥ 1 let
+λ+t (m) :=| ˙λ+t|∧ cmWoRt , λ −t (m) :=| ˙λ−t|∧ c1−mWoRt ,
+for somec∈ [0, 1) (some reasonable defaults beingc = 1/2 or 3/4). Then
+B±,WoRt :={m∈ [0, 1] :K±,WoRt (m)< 1/α} forms a (1−α)-CS forµ,
+as does⋂i≤t B±,WoRi . Furthermore, B±,WoRt is an interval for eacht≥ 1.
+The proof of Theorem 4 is in Section A.9. We recommend setting˙λ+t = ˙λ−t =λPrPl±t as was done
+earlier in (26); for eacht≥ 1, andc := 1/2, let
+λPrPl±t :=
+√
+2 log(2/α)
+ˆσ2t−1t log(t + 1), ˆσ2t :=
+1
+4 +∑ti=1(Xi−ˆµi)2
+t + 1 , andˆµt :=
+1
+2 +∑ti=1Xi
+t + 1 ,
+See Figure 7 for a comparison to the best prior work.
+Remark 4. As before, we can use Theorem 4 to derive powerful CIs for the mean of a nonrandom set
+of bounded numbers given a ﬁxed sample sizen≤N. We recommend using⋂i≤n B±,WoRi , and setting
+˙λ+t = ˙λ−t = ˙λ±t as in (27): ˙λ±t :=√ 2 log(2/α)nˆσ2t−1 . We refer to the resulting CI as[Hedged-WoR-CI];
+see Figure 8.
+Notice that constructing a WoR test martingale only relies on changing the ﬁxed conditional meanµ
+tothetime-varyingconditionalmean µWoRt := Nµ−∑t−1i=1XiN−t+1 andnowdesigning (−1/(1−µWoRt ), 1/µWoRt )-
+valued bets instead of(−1/(1−µ), 1/µ)-valued ones. In this way, it is possible to adapt any of the
+betting strategies in Section B to sampling WoR, yielding a wide array of solutions to this estimation
+problem.
+21
+WoR time-uniform conﬁdence sequences: high-variance, symmetric data
+0.00 0.25 0.50 0.75 1.00
+0
+2000
+4000
+Discrete 0/1 high variance
+101 102 103 104
+time t
+0.00
+0.25
+0.50
+0.75
+1.00Confidence sequence
+101 102 103 104
+time t
+0.00
+0.25
+0.50
+0.75
+1.00CS width
+H-WoR [WR20]
+EB-WoR [WR20]
+Hedged-WoR [Thm 4]
+hgKelly
+WoR time-uniform conﬁdence sequences: low-variance, asymmetric data
+0.2 0.4
+0
+1000
+2000
+Real-valued concentrated
+101 102 103 104
+time t
+0.00
+0.25
+0.50
+0.75
+1.00Confidence sequence
+101 102 103 104
+time t
+0.00
+0.25
+0.50
+0.75
+1.00CS width
+H-WoR [WR20]
+EB-WoR [WR20]
+Hedged-WoR [Thm 4]
+hgKelly
+Figure 7: Without-replacement betting CSs versus the predictable plug-in supermartingale-based CSs [88].
+Similar to the with-replacement case, the betting approach matches or vastly outperforms past state-of-the art
+methods.
+WoR ﬁxed-time conﬁdence intervals: high-variance, symmetric data
+0.00 0.25 0.50 0.75 1.00
+0
+2000
+4000
+Discrete 0/1 high variance
+102 103 104
+sample size n
+0.00
+0.25
+0.50
+0.75
+1.00Confidence interval
+102 103 104
+sample size n
+0.00
+0.25
+0.50
+0.75
+1.00CI width
+H-WoR-CI [WR20]
+EB-WoR-CI [WR20]
+Hedged-WoR-CI [Rmk 4]
+WoR ﬁxed-time conﬁdence intervals: low-variance, asymmetric data
+0.2 0.4
+0
+1000
+2000
+3000
+Real-valued concentrated
+102 103 104
+sample size n
+0.0
+0.2
+0.4
+0.6Confidence interval
+102 103 104
+sample size n
+0.0
+0.2
+0.4
+0.6CI width
+H-WoR-CI [WR20]
+EB-WoR-CI [WR20]
+Hedged-WoR-CI [Rmk 4]
+Figure 8: WoR analogue of the hedged capital CI versus the WoR Hoeﬀding- and empirical Bernstein-type
+CIs [88]. Similar to with-replacement, the betting approach has excellent performance.
+22
+5.4 Relationship to composite null testing
+This paper focuses primarily on estimation, but we end with a note that our CSs (or CIs) yield valid,
+sequential (or batch) tests for composite null hypothesesH0 :µ∈S for anyS⊂ [0, 1]. Speciﬁcally, for
+any of our capital processesKt(m),
+pt := sup
+m∈S
+1
+Kt(m)
+is an “anytime-valid p-value” forH0, as is~pt := infs≤t ps, meaning that
+sup
+P∈⋃m∈SPmP (pτ≤α)≤α for arbitrary stopping timesτ.
+Alternately, pt is also the smallest α for which our (1−α)-CS does not intersect S. Similarly,
+et := infm∈SKt(m) is an “e-process” forH0, meaning that
+sup
+P∈⋃m∈SPm EP [eτ]≤ 1 for arbitrary stopping timesτ.
+For more details on inference at arbitrary stopping times, we refer the reader to Howard et al.
+[38, 39], Grünwald et al. [32], Ramdas et al. [64].
+6 A brief selective history on betting and its mathematical ap-
+plications
+From a purely statistical perspective, this paper could be viewed as tackling the problem of deriving
+sharp conﬁdence sets for means of bounded random variables. In this pursuit, we ﬁnd that a technique
+with excellent empirical performance happens to have strong connections to the topics of betting
+and gambling. While we provide a more detailed discussion in Section F, here we brieﬂy summarize
+some of the ways in which betting ideas have appeared in and shaped probability, statistical inference,
+information theory, and online learning, in the broad context of our paper.
+• Probability: The 1939 PhD thesis of [81] brought betting and martingales to the forefront of
+modern probability theory, by giving actionable interpretations to Kolmogorov’s newly developed
+measure-theoretic probability, and dealing a near-fatal blow to the theory of collectives by von
+Mises. Ville showed that forany eventA of probability measure zero (like sequences violating
+the law of large numbers), he could design an explicit betting strategy that never bets more than
+it has, whose wealth (a test martingale) grows without to inﬁnity if the eventA occurs. Ville
+worked with binary sequences, but his result holds more generally; see [76].
+One may view Ville’s result as a theorem in measure-theoretic probability theory; what he
+eﬀectively proved was: the event that a test (super)martingale exceeds1/α has probability at
+most α (Ville’s inequality in this paper). This holds for anyα∈ [0, 1], treating 1/0≡ +∞, with
+the α = 0 case being the most remarkable part. But Ville’s result is also an axiomatic building
+block forgame-theoretic probability[84, 76, 77]. Many classical results in probability can been
+derived in completely game-theoretic terms [76, 77]. The capital processes used for deriving
+CSs are of the same form as those used to derive these foundational theorems of game-theoretic
+probability, despite the two goals being quite diﬀerent.
+• Statistical inference: The famous book of Wald [85] was the ﬁrst to thoroughly present and
+study sequential hypothesis testing. Despite not being presented in this way by Wald, we know
+in hindsight that the sequential probability ratio test (SPRT) is quite centrally based on the fact
+that the likelihood ratio is a nonnegative martingale. Two decades later, Robbins and colleagues
+built on Wald’s sequential testing work in several ways, including to estimation via conﬁdence
+23
+sequences [21, 22, 23, 69, 70, 71, 72, 73, 68, 49]. The recent work of Howard et al. [38, 39], Ramdas
+et al. [65], Wasserman et al. [87] extends the early work of Wald, Robbins and colleagues to a
+broader class of problems using exponential supermartingales and “e-processes”, which can be
+seen as nonparametric, composite generalizations of the SPRT martingale. Connections between
+betting and the works of Wald, Robbins et al., and Howard et al. are implicit in those works, but
+can now be seen in hindsight, and our paper makes these connections explicit.
+• Information theory: Working in the new ﬁeld of information theory, Kelly Jr [44] made direct
+connections to betting by showing that the capacity of a channel (itself fundamentally related to
+entropy and the Kullback-Leibler divergence) is given by the maximal rate of growth of wealth
+of a gambler in a simple game with iid Bernoulli(p) observations and knownp. [13] generalized
+Kelly’s results signiﬁcantly, and Krichevsky and Troﬁmov [46] extended these results beyond the
+case of knownp using a mixture method. Thomas Cover’s interest in these techniques spans
+several decades [16, 17, 18, 7, 6], culminating in his famous universal portfolio algorithm [19].
+The results of Krichevsky-Troﬁmov and Cover are essentially regret inequalities, leading directly
+to the ﬁnal subﬁeld below.
+• Onlinelearning : ThetechniquesofKrichevsky, TroﬁmovandCoverfoundextensiveapplications
+to sequential prediction with the logarithmic loss[15]. Here, one derivesregret inequalitiesfor
+the total loss accumulated when predicting the next observation from a potentially adversarial
+sequence. This problem is fundamentally connected to online convex optimization, for which
+Orabona and colleagues use parameter-free betting algorithms to derive regret inequalities
+[59, 60, 41, 20, 40]. Rakhlin and Sridharan [63] articulated a deep connection between martingale
+concentration and deterministic regret inequalities, and Jun and Orabona [40, Section 7.1]
+derive concentration bounds for the general setting of Banach space-valued observations with
+sub-exponential noise.
+Probability
+Statistical inference
+Information theory
+Online learning
+1939
+Ville
+1966
+Martin-Löf
+1993–2019
+Shafer & Vovk
+2007–2011
+Kumon, Takemura,
+& Takeuchi
+1945–47
+Wald
+1967–1976
+Robbins, Darling,
+Siegmund & Lai
+2018–21
+Shafer
+Grünwald et al.
+Howard et al.
+Ramdas et al.
+1956
+Kelly Jr
+1974–1991
+Cover
+1981
+Krichevsky & Troﬁmov
+2006
+Cesa-Bianchi
+& Lugosi
+2016–2020
+Orabona, Jun, & Pal;
+Rakhlin & Sridharan
+Figure 9: A brief selective history of betting ideas appearing (often implicitly) in various literatures. As
+discussed further in Section F, these subﬁelds have rarely cited each other, but ideas are now beginning
+to permeate. Several authors did not explicitly use the language of betting, and their inclusion above
+is due to reinterpreting their work in hindsight.
+24
+7 Summary
+Nonparametric conﬁdence sequences are particularly useful in sequential estimation because they
+enable valid inference at arbitrary stopping times, but they are underappreciated as powerful tools to
+provide accurate inference even at ﬁxed times. Recent work [38, 39] has developed several time-uniform
+generalizations of the Cramer-Chernoﬀ technique utilizing “line-crossing” inequalities and using various
+variants of Robbins’ method of mixtures (discrete mixtures, conjugate mixtures and stitching) to
+convert them to “curve-crossing” inequalities.
+This work adds new techniques to the toolkit: to complement the aforementioned mixture methods,
+we develop a “predictable plug-in” approach. When coupled with existing nonparametric supermartin-
+gales, it yields (for example) computationally eﬃcient empirical-Bernstein conﬁdence sequences. One
+of our major contributions is to thoroughly develop the theory and methodology for a new nonnegative
+martingale approach to estimating means of bounded random variables in both with- and without-
+replacement settings. These convincingly outperform all existing published work that we are aware of,
+for CIs and CSs, both with and without replacement.
+Our methods are particularly easy to interpret in terms of evolving capital processes and sequential
+testing by betting [75] but we go much further by developing powerful and eﬃcient betting strategies
+that lead to state-of-the-art variance-adaptive conﬁdence sets that are signiﬁcantly tighter than
+past work in all considered settings. In particular, Shafer espousescomplementary beneﬁts of such
+approaches, ranging from improved scientiﬁc communication, ties to historical advances in probability,
+and reproducibility via continued experimentation (also see [32]), but our focus here has been on
+developing a new state of the art for a set of classical, fundamental problems.
+There appear to be nontrivial connections to online learning theory [45, 48, 60, 20], and to empirical
+and dual likelihoods (see Section E.6 and an extended historical review of betting in Section F). The
+reductions from regret inequalities to concentration bounds described in [63] and [40] are fascinating,
+but existing published bounds are loose in the constants and not competitive in practice compared to
+our direct approach. Exploring deeper connections may yield other conﬁdence sequences or betting
+strategies.
+It is clear to us, and hopefully to the reader as well, that the ideas behind this work (adaptive
+statistical inference by betting) form the tip of the iceberg—they lead to powerful, eﬃcient, nonasymp-
+totic, nonparametric inference and can be adapted to a range of other problems. As just one example,
+letPp,q represent the set of all continuous distributions such that thep-quantile ofXt, conditional
+on the past, is equal toq. This is also a nonparametric, convex set of distributions with no common
+reference measure. Nevertheless, for any predictable(λi), it is easy to check that
+Mt =
+t∏
+i=1
+(1 +λi(1Xi≤q−p))
+is a test martingale forPp,q. Settingp = 1/2 and q = 0, for example, we can sequentially test if the
+median of the underlying data distribution is the origin. The continuity assumption can be relaxed,
+and this test can be inverted to get a conﬁdence sequence for any quantile. We do not pursue this
+idea further in the current paper because the recent (rather diﬀerent) nonnegative martingale methods
+of Howard and Ramdas [37] already provide a challenging benchmark for that problem. Typically, one
+test martingale-based method cannot uniformly dominate another, and the large gains in this paper
+were made possible because all previous published approaches implicitly or explicitly employed test
+supermartingales, while we employ test martingales that are computationally simple to implement.
+To conclude, we opine that “game-theoretic statistical inference” is in its nascency, and we expect
+much theoretical and practical progress in coming years. We hope the reader shares our excitement in
+this regard.
+Acknowledgments. AR acknowledges funding from NSF DMS 1916320, an Adobe faculty research
+award and an NSF DMS (CAREER) 1945266. This work used the Extreme Science and Engineering
+25
+Discovery Environment (XSEDE), which is supported by National Science Foundation grant number
+ACI-1548562. Speciﬁcally, it used the Bridges system, which is supported by NSF award number ACI-
+1445606, at the Pittsburgh Supercomputing Center (PSC) [58]. The authors thank Harrie Hendriks,
+Philip Stark, Francesco Orabona, Kwang-Sung Jun, Nikos Karampatziakis and Arun Kuchibhotla
+for discussions on an early preprint, as well as Glenn Shafer, Vladimir Vovk and Peter Grünwald for
+broader discussions.
+References
+[1] Yasin Abbasi-Yadkori, Dávid Pál, and Csaba Szepesvári. Improved algorithms for linear stochastic
+bandits. In Advances in Neural Information Processing Systems, pages 2312–2320, 2011. 8
+[2] Theodore Anderson. Conﬁdence limits for the expected value of an arbitrary bounded random
+variable with a continuous distribution function. Technical report, Stanford University Department
+of Statistics, 1969. 51
+[3] Jean-Yves Audibert, Rémi Munos, and Csaba Szepesvári. Tuning bandit algorithms in stochastic
+environments. InAlgorithmic Learning Theory, 2007. 3, 12
+[4] Akshay Balsubramani. Sharp ﬁnite-time iterated-logarithm martingale concentration.
+arXiv:1405.2639, 2014. 8
+[5] Rémi Bardenet and Odalric-Ambrym Maillard. Concentration inequalities for sampling without
+replacement. Bernoulli, 21(3):1361–1385, 2015. 3, 19, 20
+[6] Robert Bell and Thomas M Cover. Game-theoretic optimal portfolios.Management Science, 34
+(6):724–733, 1988. 24, 69
+[7] Robert M Bell and Thomas M Cover. Competitive optimality of logarithmic investment.Mathe-
+matics of Operations Research, pages 161–166, 1980. 24, 69
+[8] George Bennett. Probability Inequalities for the Sum of Independent Random Variables.Journal
+of the American Statistical Association, 57(297):33–45, 1962. 3, 52
+[9] Vidmantas Bentkus. On Hoeﬀding’s inequalities.The Annals of Probability, 32(2):1650–1673,
+2004. 3, 51
+[10] Vidmantas Bentkus, N Kalosha, and M Van Zuijlen. On domination of tail probabilities of (super)
+martingales: explicit bounds. Lithuanian Mathematical Journal, 46(1):1–43, 2006. 51, 52
+[11] Sergei Bernstein. Theory of probability. Gastehizdat Publishing House, 1927. 3
+[12] Stéphane Boucheron, Gábor Lugosi, and Pascal Massart.Concentration inequalities: a nonasymp-
+totic theory of independence. Oxford University Press, Oxford, 1st edition, 2013. 5, 6
+[13] LeoBreiman. Optimalgamblingsystemsforfavorablegames. Berkeley Symposium on Mathematical
+Statistics and Probability, 4.1(65-78), 1961. 24
+[14] Olivier Cappé, Aurélien Garivier, Odalric-Ambrym Maillard, Rémi Munos, and Gilles Stoltz.
+Kullback-Leibler upper conﬁdence bounds for optimal sequential allocation. The Annals of
+Statistics, pages 1516–1541, 2013. 39
+[15] Nicolò Cesa-Bianchi and Gábor Lugosi.Prediction, learning, and games. Cambridge university
+press, 2006. 24, 69, 70
+[16] Thomas M Cover. Universal gambling schemes and the complexity measures of Kolmogorov and
+Chaitin. Technical Report, no. 12, 1974. 24, 69
+26
+[17] Thomas M Cover. An algorithm for maximizing expected log investment return.IEEE Transactions
+on Information Theory, 30(2):369–373, 1984. 24, 69
+[18] Thomas M Cover. Log optimal portfolios. InChapter in “Gambling Research: Gambling and Risk
+Taking,” Seventh International Conference, volume 4, 1987. 24, 69
+[19] Thomas M Cover. Universal portfolios.Mathematical Finance, 1(1):1–29, 1991. 24, 69
+[20] Ashok Cutkosky and Francesco Orabona. Black-box reductions for parameter-free online learning
+in Banach spaces. InProceedings of the 31st Conference On Learning Theory, volume 75, 2018.
+24, 25, 40, 42, 70
+[21] D. A. Darling and Herbert Robbins. Conﬁdence sequences for mean, variance, and median.
+Proceedings of the National Academy of Sciences, 58(1):66–68, 1967. 6, 8, 24, 69
+[22] D. A. Darling and Herbert Robbins. Inequalities for the Sequence of Sample Means.Proceedings
+of the National Academy of Sciences, 57(6):1577–1580, 1967. 24, 69
+[23] D. A. Darling and Herbert Robbins. Iterated Logarithm Inequalities.Proceedings of the National
+Academy of Sciences, 57(5):1188–1192, 1967. 24, 69
+[24] A Philip Dawid. Present position and potential developments: Some personal views statistical
+theory the prequential approach.Journal of the Royal Statistical Society: Series A (General), 147
+(2):278–290, 1984. 9, 69, 70
+[25] A Philip Dawid. Prequential analysis.Encyclopedia of Statistical Sciences, 1:464–470, 1997. 69, 70
+[26] Victor H. de la Peña, Michael J. Klass, and Tze Leung Lai. Self-normalized processes: exponential
+inequalities, moment bounds and iterated logarithm laws. The Annals of Probability, 32(3):
+1902–1933, 2004. ISSN 0091-1798, 2168-894X. 8
+[27] Victor H. de la Peña, Michael J. Klass, and Tze Leung Lai. Pseudo-maximization and self-
+normalized processes. Probability Surveys, 4:172–192, 2007. 7, 8
+[28] Victor H. de la Peña, Tze Leung Lai, and Qi-Man Shao.Self-normalized processes: limit theory
+and statistical applications. Springer, Berlin, 2009. 8
+[29] Joseph Leo Doob.Stochastic Processes, volume 10. New York Wiley, 1953. 68
+[30] Xiequan Fan, Ion Grama, and Quansheng Liu. Exponential inequalities for martingales with
+applications. Electronic Journal of Probability, 20(1):1–22, 2015. 10, 32, 35, 38, 41
+[31] Peter Grünwald.The minimum description length principle. MIT press, 2007. 69
+[32] Peter Grünwald, Rianne de Heide, and Wouter Koolen. Safe testing. arXiv preprint
+arXiv:1906.07801, 2019. 7, 8, 23, 25, 39, 69
+[33] Peter Hall and Barbara La Scala. Methodology and algorithms of empirical likelihood.International
+Statistical Review, pages 109–127, 1990. 66
+[34] Harrie Hendriks. Test martingales for bounded random variables.arXiv preprint arXiv:1801.09418,
+2018. 4, 7
+[35] Wassily Hoeﬀding. Probability inequalities for sums of bounded random variables.Journal of the
+American Statistical Association, 58(301):13–30, March 1963. 3, 5, 9, 19, 20, 31, 50, 51, 52
+[36] Junya Honda and Akimichi Takemura. An asymptotically optimal bandit algorithm for bounded
+support models. InCOLT, pages 67–79. Citeseer, 2010. 39
+27
+[37] Steven R. Howard and Aaditya Ramdas. Sequential estimation of quantiles with applications to
+A/B testing and best-arm identiﬁcation.Bernoulli, 28(3):1704 – 1728, 2022. 25
+[38] Steven R. Howard, Aaditya Ramdas, Jon McAuliﬀe, and Jasjeet Sekhon. Time-uniform Chernoﬀ
+bounds via nonnegative supermartingales.Probability Surveys, 17:257–317, 2020. 4, 5, 6, 7, 8, 9,
+10, 12, 23, 24, 25, 38, 41, 51, 68, 69, 70
+[39] Steven R. Howard, Aaditya Ramdas, Jon McAuliﬀe, and Jasjeet Sekhon. Time-uniform, nonpara-
+metric, nonasymptotic conﬁdence sequences.The Annals of Statistics, 49(2):1055–1080, 2021. 1,
+4, 6, 7, 8, 9, 10, 11, 19, 23, 24, 25, 38, 41, 50, 51, 58, 68, 69, 70
+[40] Kwang-Sung Jun and Francesco Orabona. Parameter-free online convex optimization with sub-
+exponential noise. InConference on Learning Theory, pages 1802–1823. PMLR, 2019. 4, 7, 24, 25,
+42, 69, 70
+[41] Kwang-Sung Jun, Francesco Orabona, Stephen Wright, and Rebecca Willett. Improved strongly
+adaptive online learning using coin betting. InArtiﬁcial Intelligence and Statistics, pages 943–951.
+PMLR, 2017. 24, 42, 69, 70
+[42] Emilie Kaufmann and Wouter M. Koolen. Mixture martingales revisited with applications to
+sequential tests and conﬁdence intervals.Journal of Machine Learning Research, 22(246):1–44,
+2021. 4, 8
+[43] Michael Kearns and Lawrence Saul. Large deviation methods for approximate probabilistic
+inference. In Proceedings of the Fourteenth Conference on Uncertainty in Artiﬁcial Intelligence,
+UAI’98, pages 311–319, 1998. 51
+[44] John L Kelly Jr. A new interpretation of information rate.Bell System Technical Journal, 35(4):
+917–926, 1956. 24, 39, 69
+[45] Wojciech Kotłowski, Peter Grünwald, and Steven De Rooij. Following the ﬂattened leader. In
+Conference on Learning Theory, pages 106–118. Citeseer, 2010. 10, 25
+[46] Raphail Krichevsky and Victor Troﬁmov. The performance of universal encoding.IEEE Transac-
+tions on Information Theory, 27(2):199–207, 1981. 24, 69, 70
+[47] Arun K Kuchibhotla and Qinqing Zheng. Near-optimal conﬁdence sequences for bounded random
+variables. International Conference on Machine Learning, 2021. 51, 52
+[48] Masayuki Kumon, Akimichi Takemura, and Kei Takeuchi. Sequential optimizing strategy in
+multi-dimensional bounded forecasting games.Stochastic Processes and their Applications, 121(1):
+155–183, 2011. 25, 39
+[49] Tze Leung Lai. On Conﬁdence Sequences.The Annals of Statistics, 4(2):265–280, March 1976.
+ISSN 0090-5364, 2168-8966. 24, 69
+[50] Erik Learned-Miller and Philip S Thomas. A new conﬁdence interval for the mean of a bounded
+random variable.arXiv preprint arXiv:1905.06208, 2019. 51
+[51] Qiang Jonathan Li.Estimation of mixture models. PhD thesis, Yale University, 1999. 69
+[52] Gary Lorden and Moshe Pollak. Nonanticipating estimation applied to sequential analysis and
+changepoint detection.The Annals of Statistics, 33(3):1422–1454, June 2005. ISSN 0090-5364,
+2168-8966. 9
+[53] Per Martin-Löf. The deﬁnition of random sequences.Information and control, 9(6):602–619, 1966.
+68
+28
+[54] Andreas Maurer and Massimiliano Pontil. Empirical Bernstein bounds and sample variance
+penalization. In Proceedings of the Conference on Learning Theory, 2009. 3, 11, 12, 51, 52
+[55] Michael McKerns, Leif Strand, Tim Sullivan, Alta Fang, and Michael Aivazis. Building a framework
+for predictive science.Proceedings of the 10th Python in Science Conference, 2011. 50
+[56] Volodymyr Mnih, Csaba Szepesvári, and Jean-Yves Audibert. Empirical Bernstein stopping. In
+Proceedings of the 25th International Conference on Machine Learning, pages 672–679. ACM,
+2008. 51
+[57] Per Aslak Mykland. Dual likelihood.The Annals of Statistics, pages 396–421, 1995. 15, 67
+[58] Nicholas A. Nystrom, Michael J. Levine, Ralph Z. Roskies, and J. Ray Scott. Bridges: A
+uniquely ﬂexible hpc resource for new communities and data analytics. InProceedings of the
+2015 XSEDE Conference: Scientiﬁc Advancements Enabled by Enhanced Cyberinfrastructure,
+XSEDE ’15, pages 30:1–30:8, New York, NY, USA, 2015. ACM. ISBN 978-1-4503-3720-5. doi:
+10.1145/2792745.2792775. URL http://doi.acm.org/10.1145/2792745.2792775. 26
+[59] Francesco Orabona and David Pal. Coin betting and parameter-free online learning.Advances in
+Neural Information Processing Systems, 29:577–585, 2016. 24, 69, 70
+[60] Francesco Orabona and Tatiana Tommasi. Training deep networks without learning rates through
+coin betting. InAdvances in Neural Information Processing Systems, pages 2160–2170, 2017. 24,
+25, 42, 69, 70
+[61] Art B Owen.Empirical likelihood. CRC press, 2001. 15, 66, 67
+[62] My Phan, Philip S Thomas, and Erik Learned-Miller. Towards practical mean bounds for small
+samples. International Conference on Machine Learning, 2021. 52, 53
+[63] Alexander Rakhlin and Karthik Sridharan. On equivalence of martingale tail bounds and
+deterministic regret inequalities. InConference on Learning Theory, pages 1704–1722. PMLR,
+2017. 24, 25, 69, 70
+[64] Aaditya Ramdas, Johannes Ruf, Martin Larsson, and Wouter Koolen. Admissible anytime-valid
+sequential inference must rely on nonnegative martingales.arXiv preprint arXiv:2009.03167, 2020.
+6, 8, 15, 23
+[65] Aaditya Ramdas, Johannes Ruf, Martin Larsson, and Wouter M Koolen. Testing exchangeability:
+Fork-convexity, supermartingales and e-processes.International Journal of Approximate Reasoning,
+2021. 7, 16, 24
+[66] Jorma Rissanen. Universal coding, information, prediction, and estimation.IEEE Transactions
+on Information Theory, 30(4):629–636, 1984. 9, 69, 70
+[67] Jorma Rissanen. Stochastic Complexity in Statistical Inquiry, volume 15. World Scientiﬁc, 1998.
+69, 70
+[68] Herbert Robbins. Statistical methods related to the law of the iterated logarithm.The Annals of
+Mathematical Statistics, 41(5):1397–1409, 1970. 6, 8, 24, 69
+[69] Herbert Robbins and David Siegmund. Iterated logarithm inequalities and related statistical pro-
+cedures. InMathematics of the Decision Sciences, Part II, pages 267–279. American Mathematical
+Society, Providence, 1968. 6, 8, 24, 69
+[70] Herbert Robbins and David Siegmund. Probability distributions related to the law of the iterated
+logarithm. Proc. of the National Academy of Sciences, 62(1):11–13, January 1969. ISSN 0027-8424.
+24, 69
+29
+[71] Herbert Robbins and David Siegmund. Boundary crossing probabilities for the Wiener process
+and sample sums.The Annals of Mathematical Statistics, 41(5):1410–1429, 1970. 8, 24, 69
+[72] Herbert Robbins and David Siegmund. A class of stopping rules for testing parametric hypotheses.
+In Proceedings of the Sixth Berkeley Symposium on Mathematical Statistics and Probability,
+volume 4, pages 37–41, 1972. 8, 24, 69
+[73] Herbert Robbins and David Siegmund. The expected sample size of some tests of power one.The
+Annals of Statistics, 2(3):415–436, May 1974. 6, 8, 9, 24, 69
+[74] Robert J Serﬂing. Probability inequalities for the sum in sampling without replacement.The
+Annals of Statistics, pages 39–48, 1974. 3, 19, 20
+[75] Glenn Shafer. The language of betting as a strategy for statistical and scientiﬁc communication.
+Journal of the Royal Statistical Society, Series A, 2021. 4, 8, 25
+[76] Glenn Shafer and Vladimir Vovk.Probability and Finance: It’s Only a Game!John Wiley &
+Sons, February 2001. ISBN 978-0-471-46171-5. 4, 13, 23, 40, 68, 70
+[77] Glenn Shafer and Vladimir Vovk.Game-Theoretic Foundations for Probability and Finance. John
+Wiley & Sons, 2019. 4, 23, 68, 70
+[78] Glenn Shafer, Alexander Shen, Nikolai Vereshchagin, and Vladimir Vovk. Test Martingales, Bayes
+Factors andp-Values. Statistical Science, 26(1):84–101, 2011. 7
+[79] Claude Elwood Shannon. A mathematical theory of communication.The Bell System Technical
+Journal, 27(3):379–423, 1948. 69
+[80] Philip B Stark. Sets of half-average nulls generate risk-limiting audits: SHANGRLA. InInterna-
+tional Conference on Financial Cryptography and Data Security, pages 319–336. Springer, 2020. 4,
+20
+[81] Jean Ville. Étude Critique de la Notion de Collectif.PhD thesis, Paris, 1939. 6, 7, 9, 14, 23, 68
+[82] Vladimir Vovk. Testing randomness online.Statistical Science, 36(4):595–611, 2021. 8
+[83] Vladimir Vovk, Alexander Gammerman, and Glenn Shafer.Algorithmic learning in a random
+world. Springer Science & Business Media, 2005. 7
+[84] Vladimir G Vovk. A logic of probability, with application to the foundations of statistics.Journal
+of the Royal Statistical Society: Series B (Methodological), 55(2):317–341, 1993. 23
+[85] Abraham Wald. Sequential Tests of Statistical Hypotheses.Annals of Mathematical Statistics, 16
+(2):117–186, 1945. 6, 23, 68, 69
+[86] Abraham Wald.Sequential Analysis. John Wiley & Sons, New York, 1947. 9
+[87] Larry Wasserman, Aaditya Ramdas, and Sivaraman Balakrishnan. Universal inference.Proceedings
+of the National Academy of Sciences, 2020. ISSN 0027-8424. 8, 24
+[88] Ian Waudby-Smith and Aaditya Ramdas. Conﬁdence sequences for sampling without replacement.
+Advances in Neural Information Processing Systems, 33, 2020. 3, 19, 20, 22, 38, 52, 54
+[89] Shengjia Zhao, Enze Zhou, Ashish Sabharwal, and Stefano Ermon. Adaptive concentration
+inequalities for sequential decision problems. In30th Conference on Neural Information Processing
+Systems, 2016. 51
+30
+A Proofs of main results
+We ﬁrst introduce a lemma which will aid in the proofs to follow.
+Lemma 1(Predictable plug-in Chernoﬀ supermartingales). Suppose thatX1,X 2,···∼ P, and for
+some µ,vt and ψ(λ), we have that for anyλ∈ Λ⊆ R,
+EP [exp(λ(Xt−µ)−vtψ(λ))|F t−1]≤ 1 for eacht≥ 1 . (35)
+Then, for anyΛ-valued sequence(λt)∞t=1 that is predictable with respect toF,
+Mψt (µ) :=
+t∏
+i=1
+exp (λi(Xi−µ)−viψ(λi))
+forms a test supermartingale with respect toF.
+Proof. Writing out the conditional expectation ofMψt for anyt≥ 2,
+E
+(
+Mψt (µ)|F t−1
+)
+= E
+( t∏
+i=1
+exp (λi(Xi−µ)−viψ(λi))
+⏐⏐⏐Ft−1)
+(i)
+=
+t−1∏
+i=1
+exp (λi(Xi−µ)−viψ(λi)) E [exp (λt(Xt−µ)−vtψ(λt))|F t−1]| {z }
+≤1 by assumption
+=Mψt−1(µ),
+where (i) follows from the fact thatexp (λi(Xi−µ)−viψ(λi)) isFt−1-measurable fori≤t− 1. Since
+F0 was assumed to be trivial, forM1 we have that
+E[Mψ1 (µ)|F0] = E [exp (λ1(X1−µ)−v1ψ(λ1))]| {z }
+≤1 by assumption
+,
+which completes the proof.
+A.1 Proof of Proposition 1
+The proof proceeds in three steps. First, apply a standard MGF bound by Hoeﬀding [35]. Second, we
+apply Lemma 1. Finally, we apply Theorem 1 to obtain a CS and take a union bound.
+Step 1. By Hoeﬀding [35], we have thatE [exp(λt(Xt−µ)−ψH(λt))|F t−1]≤ 1 since Xt∈ [0, 1]
+almost surely and sinceλt isFt−1-measurable.
+Step 2. By Step 1 and Lemma 1, we have that
+M PrPl-Ht (µ) :=
+t∏
+i=1
+exp (λi(Xi−µ)−ψH(λi))
+forms a test supermartingale.
+Step 3. By Step 2 combined with Theorem 1, we have that
+P
+(
+∃t≥ 1 :µ≤
+∑t
+i=1λiXi∑t
+i=1λi
+− log(1/α) +∑ti=1ψH(λi)∑t
+i=1λi
+)
+= P
+(
+∃t≥ 1 :M PrPl-Ht (µ)≥ 1/α)≤α.
+31
+Applying the same bound to(−Xt)∞t=1 with mean−µ and taking a union bound, we have the desired
+result,
+P
+(
+∃t≥ 1 :µ /∈
+(∑t
+i=1λiXi∑t
+i=1λi
+± log(2/α) +∑ti=1ψH(λi)∑t
+i=1λi
+))
+≤α,
+which completes the proof.
+A.2 Proof of Theorem 2
+By Lemma 1 combined with Theorem 1, it suﬃces to prove that
+EP [exp{λt(Xt−µ)−vtψE(λt)}|F t−1]≤ 1.
+For succinctness, denote
+Yt :=Xt−µ and δt :=ˆµt−µ.
+Note that EP (Yt|F t−1) = 0. It then suﬃces to prove that for any[0, 1)-bounded,Ft−1- measurable
+λt≡λt(Xt−11 ),
+E
+[
+exp
+{
+λtYt− 4(Yt−δt−1)2ψE(λt)
+}⏐⏐⏐Ft−1]≤ 1.
+Indeed, in the proof of Proposition 4.1 in Fan et al. [30], exp{ξλ−4ξ2ψE(λ)}≤ 1 +ξλ for anyλ∈ [0, 1)
+and ξ≥− 1. Settingξ :=Yt−δt−1 =Xt−ˆµt−1,
+E
+[
+exp
+{
+λtYt− 4(Yt−δt−1)2ψE(λt)
+}⏐⏐⏐Ft−1]
+= E
+[
+exp
+{
+λt(Yt−δt−1)− 4(Yt−δt−1)2ψE(λt)}⏐⏐Ft−1] exp(λtδt−1)
+≤ E
+[
+1 + (Yt−δt−1)λt|F t−1
+]
+exp(λtδt−1)
+(i)
+= E
+[
+1−δt−1λt|F t−1
+]
+exp(λtδt−1)
+(ii)
+≤ 1,
+where equality (i) follows from the fact thatYt is conditionally mean zero, and inequality(ii) follows
+from the inequality1−x≤ exp(−x) for allx∈ R. This completes the proof.
+A.3 Proof of Proposition 2
+We proceed by proving(d) =⇒ (c) =⇒ (b) =⇒ (a) =⇒ (d).
+Proof of (d) =⇒ (c). This claim follows from the fact that forλ∈ [−1/(1−µ), 1/µ], we have that
+(λ,λ,... ) is a [−1/(1−µ), 1/µ]-valued predictable sequence.
+Proof of (c) =⇒ (b). By the assumption of (c), we have that forλ = 0.5,Kt(µ) forms a test
+martingale. Furthermore, sinceXi,µ∈ [0, 1] for eachi∈{ 1, 2,... }, we have that1 + 0.5(Xi−µ)> 0
+almost surely for eachi. Therefore, (Kt(µ))∞t=1 is a strictly positive test martingale.
+Proof of (b) =⇒ (a). Suppose that there existsλ∈ R\{ 0} such thatKt(µ) forms a strictly positive
+martingale. Then we must have
+Kt−1(µ) = E (Kt(µ)|F t−1)
+=Kt−1(µ)· E (1 +λ(Xi−µ)|F t−1)
+=Kt−1(µ)· [1 +λ(E(Xt|F t−1)−µ)].
+Now sinceKt−1(µ)> 0, we have that
+1 +λ(E(Xt|F t−1)−µ) = 1.
+32
+Since λ⁄= 0 by assumption, we have thatE(Xt|F t−1) =µ as required.
+Proof of (a) =⇒ (d). Let (λt(µ))∞t=1 be a (−1/(1−µ), 1/µ)-valued predictable sequence. Then
+Kt(µ) is clearly nonnegative andK0(µ) = 1 by deﬁnition. Writing out the conditional mean of the
+capital process for anyt≥ 1,
+E (Kt(µ)|F t−1) =Kt−1(µ)· E (1 +λt(µ)(Xi−m)|F t−1)
+=Kt−1(µ)· [1 +λt(µ)(E(Xi|F t−1)−µ)]
+=Kt−1(µ),
+and thusKt(µ) forms a test martingale.
+The proof of the ﬁnal part of the proposition is simple. Let(Mt) be a test martingale forPµ.
+Deﬁne Yt := Mt/Mt−1 if Mt−1 > 0, and asYt := 0 otherwise. Now note thatMt =∏ti=1Yt and
+EP [Yt|Ft−1] = 1 for anyP∈P µ. In other words, every test martingale is a product of nonnegative
+random variables with conditional mean one. Now rewriteYt as (1 +ft(Xt)) for some predictable
+function ft. SinceYt is nonnegative, we must haveft(Xt)≥− 1 , and sinceYt is conditional mean one,
+we must haveft(Xt) is conditional mean zero. Such a representation in fact holds true for any test
+martingale, and we have not yet used the fact that we are working with test martingales forPµ. Now,
+the proof ends by noting that the only predictable functionsft with the latter property under every
+P∈P µ has the formλt(Xt−µ) for some predictableλt; any nonlinear function ofXt would not have
+mean zero underevery distribution with meanµ.
+This completes the proof of Proposition 2 altogether.
+A.4 Proof of Proposition 3
+We only prove the martingale part of the proposition, since the supermartingale aspect follows
+analogously, and as mentioned early in the paper, inequalities and equalities are meant in an almost
+sure sense.
+First, it is easy to check that if(Mt) is a test martingale forS, thenMt is the product of nonnegative
+conditionally unit mean terms, that isMt =∏ti=1Yi such that for allS∈S , we haveES[Yi|Fi−1] = 1
+and Yi≥ 0. (Indeed, one can identifyYi := MiMi−1 1Mi−1>0.) Now, deﬁneZ′i :=Yi− 1, and note that
+Z′i≥− 1, and ES[Z′i|Ft−1] = 0. Thus,Mt has been represented as∏ti=1(1 +Z′i). Now, the proof is
+completed by noting that any suchZ′i can be written asλiZi for a predictableλi (this step is purely
+cosmetic).
+A.5 Proof of Theorem 3
+First, we present Lemma 2 which establishes that the hedged capital process is a quasiconvex function
+of m (and thus has convex sublevel sets). We then invoke this lemma to prove the main result.
+Lemma 2. Letθ∈ [0, 1] and
+K±t (m) := max{θK+t (m), (1−θ)K−t (m)}
+≡ max
+{
+θ
+t∏
+i=1
+(1 +λ+i (m)· (Xi−m)), (1−θ)
+t∏
+i=1
+(1−λ−i (m)· (Xi−m))
+}
+be the hedged capital process as in Section 4. Consider the(1−α) conﬁdence set of the same theorem,
+B±t ≡ B±(X1,...,X t) :=
+{
+m∈ [0, 1] :K±t (m)< 1α}.
+Then B±t is an interval on[0, 1].
+33
+Proof. Since sublevel sets of quasiconvex functions are convex, it suﬃces to prove thatK±t (m) is
+a quasiconvex function ofm∈ [0, 1]. The crux of the argument is: the product of nonnegative
+nonincreasing functions is quasiconvex, the product of nonnegative nondecreasing functions is also
+quasiconvex, and the maximum of quasiconvex functions is quasiconvex.
+To elaborate, we will proceed in two steps. First, we use an induction argument to show that
+K+t (m) andK−t (m) are nonincreasing and nondecreasing, respectively, and hence quasiconvex. Finally,
+we note thatK±t (m) := max{θK+t (m), (1−θ)K−t (m)} is a maximum of quasiconvex functions and is
+thus itself quasiconvex.
+Step 1. First, since ˙λ+t does not depend onm, we have that
+1 +λ+t (m)(Xt−m) := 1 +(| ˙λ+t|∧ cm) (Xt−m)
+is nonnegative and nonincreasing inm for eacht∈{ 1, 2,... }. (To see this, consider the terms with
+and without truncation separately.) Suppose for the sake of induction that
+t−1∏
+i=1
+(
+1 +λ+i (m)(Xi−m))
+is nonnegative and nonincreasing inm. Then,
+K+t (m) :=
+t∏
+i=1
+(
+1 +λ+i (m)(Xi−m))
+=
+(
+1 +λ+t (m)(Xt−m))·t−1∏
+i=1
+(
+1 +λ+i (m)(Xi−m))
+is a product of nonnegative and nonincreasing functions, and is thus itself nonnegative and nonincreasing.
+By a similar argument,K−t (m) is nonnegative andnondecreasing.K+t (m) andK−t (m) are thus both
+quasiconvex.
+Step 2. Since the maximum of quasiconvex functions is quasiconvex, we infer that
+K±t (m) := max{θK+t (m), (1−θ)K−t (m)}
+is quasiconvex. In particular, the sublevel sets of quasiconvex functions is convex, and thus
+B±t :=
+{
+m∈ [0, 1] :K±t (m)< 1α}
+is an interval, which completes the proof of Lemma 2.
+Proof of Theorem 3.The proof proceeds in three steps. First we show thatK±t (µ) is upper-bounded
+by test martingale. Second, we apply the 4-step procedure in Theorem 1 to get a CS forµ. Third and
+ﬁnally, we invoke Lemma 2 to conclude that the CS is indeed convex at each timet.
+Step 1. We ﬁrst upper boundK±t (m) as follows:
+K±t (m) := max{θK+t (m), (1−θ)K−t (m)}
+≤θK+t (m) + (1−θ)K−t (m) =:M±t (m).
+34
+By Proposition 2, we have thatK+t (µ) andK−t (µ) are test martingales forP. For eachP∈P , writing
+out the conditional expectation ofM±t (µ) for anyt≥ 1,
+EP
+[
+M±t (µ)|F t−1] = EP[θK+t (µ) + (1−θ)K−t (µ)⏐⏐⏐Ft−1]
+=θEP (K+t (µ)|F t−1) + (1−θ)EP (K−t (µ)|F t−1)
+=θK+t−1(µ) + (1−θ)K−t−1(µ)
+=M±t−1(µ),
+andM±0 (µ) =θK+0 (µ) + (1−θ)K−0 (µ) = 1. Therefore, (M±t (µ))∞t=0 is a test martingale forP.
+Step 2. By Step 1 combined with Theorem 1 we have that
+B±t :=
+{
+m∈ [0, 1] :K±t (m)< 1α}
+forms a (1−α)-CS forµ.
+Step 3. Finally, by Lemma 2, we have thatB±t is an interval for eacht∈{ 1, 2,... }, which completes
+the proof of Theorem 3.
+A.6 Proof of Lemma 3
+Following the proof of Lemma 4.1 in Fan et al. [30], we have that the function
+f(x) :=
+
+
+
+log(1 +x)−x
+x2/2 x∈ (−1,∞)\{ 0}
+−1 x = 0
+(36)
+is an increasing and continuous function inx (note thatf(0) is deﬁned as−1 because it is a removable
+singularity). For anyy≥−m and λ∈ [0, 1/m) we have
+λy≥−mλ> −1. (37)
+Combining (36) and (37), we have
+log(1 +λy)−λy
+λ2y2/2 ≥ log(1−mλ) +mλλ2m2/2 ,
+and thus, log(1 +λy)−λy
+(i)
+≥ y2
+m2 (log(1−mλ) +mλ).
+Above, (i) can be quickly veriﬁed for the case whenλy = 0, and follows from(36) and (37) otherwise.
+Rearranging terms, we obtain the ﬁrst half of the desired result,
+log(1 +λy)≥λy + y2
+m2 (log(1−mλ) +mλ). (38)
+Now, for anyy≤ 1−m and λ∈ (−1/(1−m), 0], we have
+λy≥ (1−m)λ> −1,
+and proceed similarly to before to obtain
+log(1 +λy)≥λy + y2
+(1−m)2 (log(1 + (1−m)λ)− (1−m)λ),
+which completes the proof.
+35
+A.7 Proof of Proposition 5
+Since sublevel sets of convex functions are convex, it suﬃces to prove that with probability one,
+KhgKellyn (m) is a convex function inm on the interval[0, 1].
+We proceed in three steps. First, we show that if two functions are (a) both nonincreasing (or both
+nondecreasing), (b) nonnegative, and (c) convex, then their product is convex. Second, we use Step 1
+and an induction argument to prove that∏ti=1(1 +γ(Xi/m− 1)) is convex for any ﬁxedγ∈ [0, 1].
+Third and ﬁnally, we show thatKhgKellyn (m) is a convex combination of convex functions and is thus
+itself convex.
+Step 1. The claim is that if two functionsf andg are (a) both nonincreasing (or both nondecreasing),
+(b) nonnegative, and (c) convex on a setS⊆ R, then their product is also convex onS. Letx1,x 2∈S ,
+and lett∈ [0, 1]. Furthermore, abbreviate f(x1) by f1, g(x1) by g1, and similarly forf2 and g2.
+Writing out the productfg evaluated attx1 + (1−t)x2,
+(fg )(tx1 + (1−t)x2) =f(tx1 + (1−t)x2)g(tx1 + (1−t)x2)
+=|f(tx1 + (1−t)x2)||g(tx1 + (1−t)x2)|
+≤|tf2 + (1−t)f2||tg1 + (1−t)g2|
+=t2f1g1 +t(1−t) (f1g2 +f2g1) + (1−t)2f2g2,
+where the second equality follows from assumption thatf and g are nonnegative, and the inequality
+follows from the assumption that they are both convex. To show convexity of(fg ), it then suﬃces to
+show that,
+(
+tf1g1 + (1−t)f2g2
+)
+−
+(
+t2f1g1 +t(1−t) [f1g2 +f2g1] + (1−t)2f2g2
+)
+≥ 0. (39)
+To this end, write out the above expression and group terms,
+(
+tf1g1 + (1−t)f2g2
+)
+−
+(
+t2f1g1 +t(1−t) [f1g2 +f2g1] + (1−t)2f2g2
+)
+= (1−t)tf1g1 +t(1−t)f2g2−t(1−t)[f1g2 +f2g1]
+=t(1−t)
+(
+f1g1 +f2g2−f1g2−f2g1
+)
+=t(1−t)(f1−f2)(g1−g2).
+Now, notice thatt(1−t)≥ 0 since t∈ [0, 1] and that (f1−f2)(g1−g2)≥ 0 by the assumption thatf
+and g are both nonincreasing or nondecreasing. Therefore, we have satisﬁed the inequality in(39),
+and thusfg is convex onS.
+Step 2. Now, we prove convexity of∏ti=1(1 +γ(Xi/m− 1)) for a ﬁxedγ∈ [0, 1]. First note that
+for anyγ∈ [0, 1], 1 +γ(Xi/m− 1) is a nonincreasing, nonnegative, and convex function inm∈ [0, 1].
+Suppose for the sake of induction that conditions (a), (b), and (c) hold for∏n−1i=1 (1 +γ(Xi/m− 1)).
+By the inductive hypothesis, we have that
+n∏
+i=1
+(1 +γ(Xi/m− 1)) = (1 +γ(Xn/m− 1))·
+n−1∏
+i=1
+(1 +γ(Xi/m− 1))
+is a product of functions satisfying (a) through (c). By Step 1,∏ni=1(1 +γ(Xi/m− 1)) is convex
+in m∈ [0, 1]. A similar argument can be made forK−n (m), but instead of the multiplicands being
+nonincreasing, they are now nondecreasing.
+36
+Step 3. Now, notice that for the evenly-spaced points(λ1+,...,λ G+) on [0, 1/m], we have that
+(γ1+,...,γ G+) = (mλ1+,...,mλ G+) are G evenly-spaced points on[0, 1]. It then follows that for any
+m and anyg∈{ 0, 1,...,G },
+m↦→
+n∏
+i=1
+(1 +λg+(Xi−m))
+is a nonincreasing, nonnegative, and convex function inm∈ [0, 1]. It follows that
+1
+G
+G∑
+g=1
+n∏
+i=1
+(1 +λg+(Xi−m))
+is convex inm∈ [0, 1]. A similar argument goes through for1G∑Gg=1∏ni=1(1 +λg+(Xi−m). Finally,
+since θ∈ [0, 1], we have that
+θ
+G
+G∑
+g=1
+n∏
+i=1
+(1 +λg+(Xi−m)) + 1−θG
+G∑
+g=1
+n∏
+i=1
+(1 +λg−(Xi−m))
+is a convex combination of convex functions inm∈ [0, 1]. It then follows that
+{m∈ [0, 1] :KhgKellyt (m)< 1/α}
+is an interval, which completes the proof.
+A.8 Proof of Proposition 4
+Proof of (1)=⇒(2). By deﬁnition ofKWoRt (µ), we have
+E
+(
+KWoRt (µ)|F t−1) = t−1∏
+i=1
+(
+1 +λi(µ)· (Xi−µWoRt ))· E(1 +λt(µ)· (Xt−µWoRt )|F t−1)
+=KWoRt−1 (µ)·(1 +λt(µ)· (E(Xt|F t−1)−µWoRt ))
+=KWoRt−1 (µ).
+SinceKWoR0 (µ)≡ 1 by convention, we have thatKWoRt (µ) is a martingale.
+Now, note that sinceXt∈ [0, 1] andλWoRt (µ)∈ [−1/(1−µWoRt ), 1/µWoRt ] for eacht by assumption,
+we have that 1 +λt(µ)·
+(
+Xt−µWoRt )≥ 0 and thusKWoRt (µ)≥ 0. Therefore, KWoRt (µ) is a test
+martingale.
+Proof of (2)=⇒ (1). Suppose thatKWoRt (µ) is a test martingale for any(λt(µ))Nt=1 with λt(µ)∈
+[−1/(1−µWoRt , 1/µWoRt ], but suppose for the sake of contradiction thatE(Xt⋆|F t⋆−1)⁄=µWoRt⋆ for
+some t⋆∈{ 1, 2,... }. Setλ1 =λ2 =··· =λt⋆−1 = 0 and λt⋆ = 1. Then,
+KWoRt⋆ (µ)≡K WoRt⋆−1(µ)· (1 +λt⋆(Xt⋆−µWoRt⋆ )) = 1 +Xt⋆−µWoRt⋆ .
+By assumption ofKWoRt (µ) forming a martingale, we have thatE(KWoRt⋆ (µ)|F t⋆−1) =KWoRt⋆−1(µ) = 1.
+On the other hand, sinceE (Xt⋆|F t⋆−1)⁄=µWoRt⋆ , we have
+E
+(
+KWoRt⋆ (µ)|F t⋆−1) = E(1 +Xt⋆−µWoRt⋆ |F t⋆−1)⁄= 1,
+a contradiction. Therefore, we must have thatE (Xt|F t−1) =µWoRt for eacht, which completes the
+proof of (2) =⇒ (1) and Proposition 4.
+37
+A.9 Proof of Theorem 4
+The proof thatB±,WoRt forms a (1−α)-CS forµ proceeds in exactly the same manner as Theorem 3,
+noting that E (Xt|F t−1) =µWoRt instead ofµ.
+To show thatB±,WoRt is indeed an interval for eacht≥ 1, we note that the proof of Theorem 3 applies
+since mWoRt is increasing or decreasing if and only ifm is increasing or decreasing, respectively.
+B How to bet: deriving adaptive betting strategies
+In Section 4.4, we presented CSs and CIs via the hedged capital process. We suggested a speciﬁc
+betting scheme which has strong empirical performance but did not discuss where it came from. In this
+section, we derive various betting strategies and discuss their statistical and computational properties.
+B.1 Predictable plug-ins yield good betting strategies
+First and foremost, we will examine why any predictable plug-in for empirical Bernstein-type CSs and
+CIs (i.e. those recommended in Theorem 2 and Remark 1) yield eﬀective betting strategies. Consider
+the hedged capital process
+K±t (m) := max
+{
+θ
+t∏
+i=1
+(1 +λ+i (Xi−m)), (1−θ)
+t∏
+i=1
+(1−λ−i (Xi−m))
+}
+≡ max
+{
+θK+t (m), (1−θ)K−t (m)} ,
+where (λ+t (m))∞t=1 and (λ−t (m))∞t=1 are [0, 1/m]-valued and[0, 1/(1−m)]-valued predictable sequences
+as in Theorem 3. First, consider the “positive” capital process,K+t (µ) evaluated atm =µ. An inequality
+that has been repeatedly used to derive empirical Bernstein inequalities [38, 39, 88], including the
+current paper is the following due to Fan et al. [30, equation 4.12]: for anyy≥− 1 and λ∈ [0, 1), we
+have
+log(1 +λy)≥λy− 4ψE(λ)y2. (40)
+where ψE(λ) is as deﬁned in(14). If the predictable sequence(λ+t (m))∞t=1 is further restricted to[0, 1),
+then by (40) we have
+K+t (µ) :=
+t∏
+i=1
+(1 +λ+i (Xi−µ)) ≥ exp
+( t∑
+i=1
+λ+i (Xi−µ)−
+t∑
+i=1
+4(Xi−µ)2ψE(λ+i )
+)
+(i)
+≈ exp
+( t∑
+i=1
+λ+i (Xi−µ)−
+t∑
+i=1
+4(Xi−ˆµi−1)2ψE(λ+i )
+)
+=M PrPl-EBt (µ),
+where (i) follows from the approximationsˆµt−1≈ µ for large t. Not only does the approximate
+inequalityK+t (µ) &M PrPl-EBt (µ) shed light on why a sensible empirical Bernstein predictable plug-in
+translates to a sensible betting strategy, but also why we might expectK+t (m) to be more powerful
+than M PrPl-EBt (m) for the same [0, 1)-valued predictable sequence (λ+t (m))∞t=1. Moreover, K+t (m)
+has the added ﬂexibility of allowing(λt(m))∞t=1 to take values in[0, 1/m]⊃ [0, 1) which we ﬁnd —
+through simulations — tends to improves empirical performance (see Figure 19 in Section E.2.2).
+Finally, a similar story holds forK−t (µ) with the added caveat that(λ−t )∞t=1 can instead take values in
+[0, 1/(1−m)]⊃ [0, 1) which as before, seems to improve empirical performance.
+Despite the success of predictable plug-ins as betting strategies, it is natural to wonder whether it
+is preferable to focus on directly maximizing capital over time. As will be seen in the following section,
+these capital-maximizing approaches tend to have improved empirical performance, but are not always
+guaranteed to produce convex conﬁdence sets (i.e. intervals). Nevertheless, it is worth examining some
+of these strategies both for their intuitive appeal and excellent empirical performance.
+38
+B.2 Growth rate adaptive to the particular alternative (GRAPA)
+As alluded to in Section 6, Kelly Jr [44] dealt with capital processes, betting strategies, etc. in the
+ﬁelds of information and communication theory in the pursuit of maximizing the information rate
+over a channel. Kelly suggested that an eﬀective betting strategy is one that maximizes a gambler’s
+expected log-capital — i.e. the growth rate of the gambler’s capital — under a particular alternative.2
+However, Kelly’s setup was a simpliﬁed special case of ours: Kelly’s observations were binary, and
+the exact alternative was assumed known, while ours are merely bounded in[0, 1] with an unknown
+alternative. Nevertheless, the principle of maximizing the log-capital can be adapted to our setting
+under bounded observations and an unknown alternative. We summarize this adaptation here and
+refer to it as maximizing the “growth rate adaptive to the particular alternative” or “GRAPA” for
+short.
+Write the log-capital process at timet as
+𝓁t(λt1,m ) := log(Kt(m)) =
+t∑
+i=1
+log(1 +λi(m)(Xi−m)), (41)
+for a general[−1/(1−m), 1/m]-valued sequence (λt(m))∞t=1. If we were to choose a single value of
+λHS :=λ1 =··· =λt which maximizes the log-capital𝓁t “in hindsight” (i.e. based onall of the previous
+data), then this value is given by
+∂𝓁t(λHS,m )
+∂λHS =
+t∑
+i=1
+Xi−m
+1 +λHS(Xi−m)
+set
+= 0.
+However,λHS is clearly not predictable. Following Kumon et al. [48] (who referred to this as the
+“sequential optimization strategy”), we set(λGRAPAt (m))∞t=1 such that
+1
+t− 1
+t−1∑
+i=1
+Xi−m
+1 +λGRAPAt (m)(Xi−m)
+set
+= 0, (42)
+truncated to lie between(−c/(1−m),c/m ) using somec≤ 1. Importantly,λGRAPAt (m) only depends
+on X1,...,X t−1, and is thus predictable.
+This rule is a sequentially adaptive version of the worst-case “GROW” criterion of Grünwald et al.
+[32]. To see the connection, one can derive(42) from a slightly diﬀerent motivation. At thet-th step,
+we want to chooseλt(m) so that the wealth multiplier(1 +λt(m)(Xt−m)) is as large as possible.
+The ideal choice would be
+λ∗t (m) := argmax
+λ∈[−1/(1−m),1/m]
+EPµ[log(1 +λ(Xt−m))|F t−1], (43)
+wherePµ is the unknown true distribution. Writing down the stationary condition for this optimization
+problem by diﬀerentiating through the expectation, we get
+EPµ
+[ Xt−m
+1 +λ∗t (m)(Xt−m)|F t−1
+]
+= 0. (44)
+Since Pµ is unknown, using a simple empirical plug-in estimator yields (42).
+CSs constructed from(λGRAPAt (m))∞t=1 tend to have excellent empirical performance, but can be
+prohibitively slow due to the required root-ﬁnding in(42) for each timet andm∈ [0, 1] (or a suﬃciently
+ﬁne grid of[0, 1]). A similar but computationally inexpensive alternative to GRAPA is “approximate
+GRAPA” (aGRAPA), which we derive now.
+2This objective has also been arrived at indirectly as the dual in optimization programs for deriving regret bounds for
+Kullback-Leibler-based UCB algorithms in multi-armed bandit problems [36, 14].
+39
+B.3 Approximate GRAPA (aGRAPA)
+Rather than solve(42), we take the Taylor approximation of(1 +y)−1 by (1−y) for y≈ 0 to obtain
+1
+t− 1
+t−1∑
+i=1
+Xi−m
+1 +λaGRAPAt (m)(Xi−m)≈ 1t− 1
+t−1∑
+i=1
+(
+1−λaGRAPAt (m)(Xi−m)) (Xi−m)
+= 1t− 1
+t−1∑
+i=1
+(Xi−m)− λaGRAPAt (m)t− 1 t−1∑i=1(Xi−m)2
+set
+= 0,
+which, after appropriate truncation leads what we call the “approximate GRAPA” (aGRAPA) betting
+strategy,
+λaGRAPAt (m) :=− c1−m∨ ˆµt−1−mˆσ2t−1 + (ˆµt−1−m)2∧ cm,
+for some truncation levelc≤ 1. This expression is quite natural: we bet more aggressively if our
+empirical mean is far away fromm, and are further emboldened if the empirical variance is small.
+101 102 103 104 105
+t
+2.0
+1.5
+1.0
+0.5
+0.0
+0.5
+1.0
+1.5
+2.0
+aGRAPA
+t
+Xi  Bernoulli(1/2)
+m = 0.3 m = 0.45 m = 0.5 m = 0.55 m = 0.7
+101 102 103 104 105
+t
+2.0
+1.5
+1.0
+0.5
+0.0
+0.5
+1.0
+1.5
+2.0
+Xi  Beta(1, 1)
+Figure 10:λaGRAPAt for various values ofm under two distributions: Bernoulli(1/2) and Beta(1, 1).
+The dotted lines show the “oracle” bets, meaningλaGRAPAt with estimates of the mean and variance
+replaced by their true values. As time passes, bets stabilize and approach their oracle quantities.
+As alluded to at the end of Section B.1, CSs derived using the capital processKt(m) with arbitrary
+betting schemes are not always guaranteed to produce a convex set (interval). In fact, it is possible to
+construct scenarios where the sublevel sets ofKaGRAPAt (m) are nonconvex inm (see Section E.4 for an
+example). In our experience, this type of situation is not common, and one must actively search for
+such pathological examples.
+B.4 Lower-bound on the wealth (LBOW)
+Instead of maximizinglog(Kt(m)), we may aim to do so for a tight lower-bound on the wealth (LBOW).
+This technique has proven useful in the game-theoretic probability literature [76, Proof of Lemma 3.3]
+and [20, Proof of Theorem 1]. Our lower bound will rely on an extension of Fan’s inequality(40) to
+λ∈ (−1/(1−m), 1/m), summarized in the following lemma.
+40
+Lemma 3. If y≥−m, then for anyλ∈ [0, 1/m), we have
+log(1 +λy)≥λy + y2
+m2 (log(1−mλ) +mλ).
+On the other hand, ify≤ 1−m, then for anyλ∈ (−1/(1−m), 0], we have
+log(1 +λy)≥λy + y2
+(1−m)2 (log(1 + (1−m)λ)− (1−m)λ).
+Thus, fory∈ [−m, 1−m], both of the above inequalities hold.
+The proof is an easy generalization of inequality(40) by Fan et al. [30], and also follows from
+similar observations about the subexponential functionψE in Howard et al. [38, 39], but we prove it
+from ﬁrst principles in Section A.6 for completeness. Using Lemma 3, we have forλL+∈ [0, 1/m), the
+following lower-bound on𝓁(λL+,m ),
+𝓁(λL+,m ) := log
+( t∏
+i=1
+(1 +λL+(Xi−m))
+)
+≥λL+
+t∑
+i=1
+(Xi−m) + log(1−mλL+) +mλL+m2 t∑i=1(Xi−m)2, (45)
+and forλL−∈ (−1/(1−m), 0], we have
+𝓁(λL−,m ) := log
+( t∏
+i=1
+(1 +λL−(Xi−m))
+)
+≥ λL−
+t∑
+i=1
+(Xi−m) + log(1 + (1−m)λL−)− (1−m)λL−(1−m)2 t∑i=1(Xi−m)2. (46)
+Importantly, if∑ti=1(Xi−m) is positive, then (45) is concave, while if negative,(46) is concave.
+Maximizing (45) or (46) depending on the sign of∑ti=1(Xi−m) we obtain the following “hindsight”
+choice forλL,
+λL =
+
+
+
+∑t
+i=1(Xi−m)
+m∑ti=1(Xi−m) +∑ti=1(Xi−m)2 if
+t∑
+i=1
+(Xi−m)≥ 0,
+∑t
+i=1(Xi−m)
+−(1−m)∑ti=1(Xi−m) +∑ti=1(Xi−m)2 if
+t∑
+i=1
+(Xi−m)≤ 0.
+Of course, this choice ofλL is not predictable and thus is not a valid betting strategy in the framework
+of the current paper. This motivates the following strategy,(λLt (m))∞t=1 given by
+λLt (m) := −c1−m∨ ˆµt−1−mωt−1|ˆµt−1−m| +ˆσ2t−1 + (ˆµt−1−m)2∧ cm, (47)
+where ωt :=
+{
+m ifˆµt−m≥ 0 ,
+1−m ifˆµt−m< 0 .
+Similarly to the aGRAPA betting procedure, LBOW is computationally-inexpensive but is not
+guaranteed to produce an interval. The expression also carries similar intuition to the GRAPA case.
+41
+101 102
+time t
+10 1
+100
+101
+102
+103
+104
+Wealth (log-scale)
+m =
+101 102
+time t
+10 1
+100
+101
+102
+103
+104 m >
+101 102
+time t
+10 1
+100
+101
+102
+103
+104 m
+GRAPA
+aGRAPA
+LBOW
+gKelly
+Figure 11: Comparison of the wealth process under various game-theoretic betting strategies with
+100 repeats. In this example, the 1000 observations are drawn from a Beta(10, 10) distribution, and
+the candidate meansm being tested are 0.5, 0.51, and 0.55 (from left to right). Notice that these
+strategies perform similarly, but have varying computational costs (see Table 2).
+B.5 Online Newton Step (ONS-m)
+Betting algorithms play an essential role in online learning as several optimization problems can be
+framed in terms of coin-betting games [20, 60, 41, 40]. While the downstream application is diﬀerent,
+the game-theoretic techniques of maximizing wealth are almost immediately applicable to the problem
+at hand. Here, we consider a slight modiﬁcation to the Online Newton Step (ONS) algorithm due to
+Cutkosky and Orabona [20].
+Algorithm 1:ONS-m.
+Result: (λOt (m))Tt=1
+λO1 (m)← 1;
+for t∈{ 1,...,T − 1} do
+yt←Xt−m ;
+Set zt←yt/(1−ytλOt (m)) ;
+At← 1 +∑ti=1z2i ;
+λOt+1(m)← −c1−m∨(λOt (m)− 22−log(3) ztAt)∧ cm ;
+end
+Through simulations, we ﬁnd that ONS-m performs competitively. However, its lack of closed-form
+expression makes it a slightly more computationally-expensive alternative to aGRAPA and LBOW,
+but not nearly as expensive as GRAPA (see Table 2).
+B.6 Diversiﬁed Kelly betting (dKelly)
+Instead of committing to one betting strategy such as aGRAPA or LBOW, we can simply take the
+average capital amongD separate strategies. This follows from the fact that an average of test
+martingales is itself a test martingale. That is, if(λ1t )∞t=1, (λ2t )∞t=1,..., (λDt )∞t=1 are D separate betting
+strategies, then
+KdKellyt (µ) := 1D
+D∑
+d=1
+t∏
+i=1
+(
+1 +λdi (µ)(Xi−µ))
+42
+forms a test martingale. Following Kelly’s original motivation to maximize (expected) log-capital,
+notice that by Jensen’s inequality,
+log
+(
+KdKellyt
+)
+> 1D
+D∑
+d=1
+log
+( t∏
+i=1
+(
+1 +λdi (µ)(Xi−µ))
+)
+.
+In other words, the log-capital of the diversiﬁed bets is strictly larger than the average log-capital
+among the diverse candidate bets.
+Grid Kelly betting (gKelly). While it is possible to use any ﬁnite collection of strategies, we
+focus our attention on a particularly simple (and useful) example where the bets are constant values on
+a grid. Speciﬁcally, divide the interval[−1/(1−m), 1/m] up intoG evenly-spaced pointsλ1,...,λ G.
+Then deﬁne thegKelly capital processKgKellyt by
+KgKellyt (m) := 1G
+G∑
+g=1
+t∏
+i=1
+(1 +λg(Xi−m)).
+When used to construct conﬁdence sequences forµ,KgKellyt demonstrates excellent empirical perfor-
+mance. Moreover, this procedure can be slightly modiﬁed into “Hedged gKelly” (hgKelly) so that
+conﬁdence sequences constructed using gKelly are intervals almost surely.
+In order to mimic the unknown optimalλ∗, D or G should not be kept constant, but itself grow
+slowly (say logarithmically) witht. In game-theoretic terms, one should slowly add more strategies to
+the portfolio, in order to asymptotically match the performance of the optimal one over time. (When
+adding a newλg to an existing mixture, it obviously only begins to contribute to the wealth from
+the following step onwards; formallyG would be replaced byGt, and∏ti=1(1 +λg(Xi−m) would be
+replaced by∏ti=tg(1 +λg(Xi−m) if λg was ﬁrst introduced aftertg− 1 steps.)
+Hedged gKelly. First, divide the interval[−1/(1−m), 0] and [0, 1/m] intoG evenly-spaced points:
+(λ1−,...,λ G−) and (λ1+,...,λ G+), respectively. Then deﬁne the “Hedged grid Kelly capital process”
+KhgKellyt given by
+KhgKellyt (m) := θG
+G∑
+g=1
+t∏
+i=1
+(
+1 +λg+(Xi−m)) + 1−θG G∑g=1 t∏i=1(1 +λg−(Xi−m)),
+where θ∈ [0, 1] (a reasonable default beingθ = 1/2).
+Proposition 5. If (Xt)∞t=1∼ P for some P ∈P µ, thenKhgKellyt (µ) forms a test martingale and
+BhgKellyt :={m∈ [0, 1] :KhgKellyt (m)< 1/α} is a CS forµ that forms an interval for eacht≥ 1.
+The proof in Section A.7 proceeds by showing thatKhgKellyt is a convex function ofm and hence
+its sublevel sets are intervals.
+B.7 Conﬁdence Boundary (ConBo)
+The aforementioned strategies beneﬁt from targeting bets against a particular null hypothesis,Hm0
+for eachm∈ [0, 1], but this has the drawback ofKt(m) potentially not being quasiconvex inm. One
+of the advantages of the hedged capital process as described in Theorem 3 is thatK±t (m) is always
+quasiconvex, and thus its sublevel sets (and hence the conﬁdence setsB±t ) are intervals.
+In an eﬀort to develop game-theoretic betting strategies which generate conﬁdence sets which
+are intervals, we present the Conﬁdence Boundary (ConBo) bets. Rather than bet against the
+43
+null hypotheses Hm0 for each m∈ [0, 1], consider two sequences of nulls, (Hut0 )∞t=1 and (Hlt0 )∞t=1
+corresponding to upper and lower conﬁdence boundaries, respectively. The ConBo betλCBt is then
+targeted againstut−1 and lt−1 using any game-theoretic betting strategy (e.g.∗GRAPA,∗Kelly,
+LBOW, or ONS-m). LettingλGt (m) be any such strategy, we summarize the ConBo betting scheme in
+Algorithm 2.
+Corollary 1(Conﬁdence boundary CS[ConBo]). In Algorithm 2,
+BCBt forms a (1−α)-CS forµ,
+as does⋂i≤t BCBi . Further, BCBt is an interval for anyt≥ 1.
+Algorithm 2:ConBo
+Result: (KCBt (m))Tt=1
+l0← 0 ; u0← 1;
+KCB+0 (m)←K CB−0 (m)← 1;
+for t∈{ 1,...,T } do
+λCB+t ← max{λGt (lt−1), 0}∧c/m; // Compute ConBo bets
+λCB−t ←⏐⏐min{λGt (ut−1), 0}⏐⏐∧c/(1−m);
+KCB+t (m)←[1 +λCB+t (Xt−m)]·K CB+t−1 (m); // Update capital
+KCB−t (m)←[1−λCB−t (Xt−m)]·K CB−t−1 (m);
+KCBt (m)← max{θKCB+t (m), (1−θ)KCB−t (m)}; // Hedging
+BCBt ←{m∈ [0, 1] :Kt(m)< 1/α} ;
+lt← inf BCBt ; // Update confidence boundaries to bet against
+ut← sup BCBt ;
+end
+We can also adapt the ConBo betting scheme outlined in Algorithm 2 to the without-replacement
+setting by replacingm bymWoRt for each timet.
+Corollary 2(WoR conﬁdence boundary CS[ConBo-WoR]). Under the same conditions as Theo-
+rem 4, deﬁneλCB-WoR+t and λCB-WoR−t as in Algorithm 2 but withm replaced bymWoRt . Then,
+BCB-WoRt :={m∈ [0, 1] :KCB-WoRt < 1/α} forms a (1−α)-CS forµ,
+as does⋂i≤t BCB-WoRi . Further, BCB-WoRt is an interval for eacht≥ 1.
+B.8 Sequentially Rebalanced Portfolio (SRP)
+Implicitly, none of the aforementioned strategies take advantage of “rebalancing”, meaning the ability
+to take ones capitalKt at timet, diversify it in any manner at timet + 1, and repeat. This has had
+the mathematical advantage of being able to write the resulting capital process(Kt(m))∞t=1 in the
+following general, but closed-form expression:
+Kt(m) :=
+D∑
+d=1
+θd
+t∏
+i=1
+(1 +λdi (m)· (Xi−m)),
+whereD≥ 1 is as in Section B.6,(λ1t (m))∞t=1,..., (λDt (m))∞t=1 are [−1/(1−m), 1/m]-valued predictable
+sequences as usual, and(θd)Dd=1 are convex weights such that∑Dd=1θd = 1. However, a more general
+44
+capital process martingale can be written but instead of having a closed-form product expression, it
+can be written recursively as
+KSRPt (m) :=
+Dt∑
+d=1
+(1 +λdt (m)· (Xt−m))·θdt·K SRPt−1 (m), (48)
+where (λdt )Dtd=1 are [1/(1−m), 1/m]-valued predictable bets,(θdt )Dtd=1 are predictable convex weights
+that sum to 1 (conditional onXt−11 ), and we have set the initial capitalKSRP0 (m) to 1 as usual.
+Adopting the betting interpretation,(48) is a rather intuitive procedure. At each time stept, the
+gambler divides their previous capitalKSRPt−1 (m) up intoDt≥ 1 portions given byθ1t·K SRPt−1 (m),...,θ Dtt ·
+KSRPt−1 (m), then invests these wealths with betsλ1t (m),...,λ Dtt (m), respectively. The gambler’s wealths
+are then updated to
+(1 +λ1t (m)· (Xt−m))·θ1t·K SRPt−1 (m),..., (1 +λDtt (m)· (Xt−m))·θDtt ·K SRPt−1 (m),
+which are then combined via summation to yield a ﬁnal capital of (48).
+It is now routine to check that the process given by(48) is a nonnegative martingale when evaluated
+at µ since
+E
+(
+KSRPt (µ)|Xt−11 ) = Dt∑
+d=1
+KSRPt−1 (µ)·θDtt ·
+
+1 +λt(µ)
+
+E(Xt|Xt−11 )−µ| {z }
+=0
+
+
+
+
+=KSRPt−1 (µ)
+Dt∑
+d=1
+θDtt
+| {z }
+=1
+=KSRPt−1 (µ).
+Note that SRP is the most general and customizable betting strategy presented in this paper, since it
+can be composed of any of the previously discussed strategies, and includes each of them as a special
+case.
+C Simulations
+This section contains a comprehensive set of simulations comparing our new conﬁdence sets presented
+against previous works. We present simulations for building both time-uniform CSs and ﬁxed-time
+CIs with or without replacement. Each of these are presented under four distributional “themes”: (1)
+discrete, high-variance; (2) discrete, low-variance; (3) real-valued, evenly spread; and (4) real-valued,
+concentrated.
+45
+C.1 Time-uniform conﬁdence sequences (with replacement)
+0.00 0.25 0.50 0.75 1.00
+0.0
+0.2
+0.4pmf
+Xi  Bernoulli(1/2)
+101 102 103 104
+time t
+0.00
+0.25
+0.50
+0.75
+1.00Confidence sequence
+101 102 103 104
+time t
+0.00
+0.25
+0.50
+0.75
+1.00CS width
+0.00 0.25 0.50 0.75 1.00
+0.0
+0.2
+0.4
+0.6
+0.8pmf
+Xi  Bernoulli(1/10)
+101 102 103 104
+time t
+0.00
+0.25
+0.50
+0.75
+1.00Confidence sequence
+101 102 103 104
+time t
+0.00
+0.25
+0.50
+0.75
+1.00CS width
+0.00 0.25 0.50 0.75 1.00
+0.950
+0.975
+1.000
+1.025
+1.050pdf
+Xi  Beta(1, 1)
+101 102 103 104
+time t
+0.00
+0.25
+0.50
+0.75
+1.00Confidence sequence
+101 102 103 104
+time t
+0.00
+0.25
+0.50
+0.75
+1.00CS width
+0.00 0.25 0.50 0.75 1.00
+0
+2
+4
+6pdf
+Xi  Beta(10, 30)
+101 102 103 104
+time t
+0.00
+0.25
+0.50
+0.75
+1.00Confidence sequence
+PrPl-H [Prop 1]
+PrPl-EB [Thm 2]
+Hedged [Thm 3]
+hgKelly
+BANCO [JO19]
+A-Bentkus [KZ21]
+Bernoulli [HRMS20]
+101 102 103 104
+time t
+0.00
+0.25
+0.50
+0.75
+1.00CS width
+Figure 12: Comparing Hedged, hgKelly, PrPl-EB, and PrPl-H CSs alongside other time-uniform
+conﬁdence sequences in the literature; further details in Section D.1. Clearly, the betting approach is
+dominant in all settings.
+46
+C.2 Fixed-time conﬁdence intervals (with replacement)
+0.00 0.25 0.50 0.75 1.00
+0.0
+0.2
+0.4pmf
+Xi  Bernoulli(1/2)
+102 103 104
+sample size n
+0.00
+0.25
+0.50
+0.75
+1.00Confidence interval
+102 103 104
+sample size n
+0.00
+0.25
+0.50
+0.75
+1.00CI width
+0.00 0.25 0.50 0.75 1.00
+0.0
+0.2
+0.4
+0.6
+0.8pmf
+Xi  Bernoulli(1/10)
+102 103 104
+sample size n
+0.00
+0.25
+0.50
+0.75Confidence interval
+102 103 104
+sample size n
+0.0
+0.2
+0.4
+0.6
+0.8CI width
+0.00 0.25 0.50 0.75 1.00
+0.950
+0.975
+1.000
+1.025
+1.050pdf
+Xi  Beta(1, 1)
+102 103 104
+sample size n
+0.00
+0.25
+0.50
+0.75
+1.00Confidence interval
+102 103 104
+sample size n
+0.00
+0.25
+0.50
+0.75
+1.00CI width
+0.00 0.25 0.50 0.75 1.00
+0
+2
+4
+6pdf
+Xi  Beta(10, 30)
+102 103 104
+sample size n
+0.00
+0.25
+0.50
+0.75Confidence interval
+H-CI [H63]
+Bentkus-CI [B04]
+EB-CI [MP09]
+PrPl-EB-CI [Rmk 1]
+Hedged-CI [Rmk 3]
+Anderson [A69]
+102 103 104
+sample size n
+0.00
+0.25
+0.50
+0.75CI width
+Figure 13: Hedged capital, Anderson, Bentkus, Maurer-Pontil empirical Bernstein, and predictable
+plug-in empirical Bernstein CIs under four distributional scenarios. Further details can be found in
+Section D.2. Clearly, the betting approach is dominant in all settings.
+47
+C.3 Time-uniform conﬁdence sequences (without replacement)
+0.00 0.25 0.50 0.75 1.00
+0
+2000
+4000
+Discrete 0/1 high variance
+101 102 103 104
+time t
+0.00
+0.25
+0.50
+0.75
+1.00Confidence sequence
+101 102 103 104
+time t
+0.00
+0.25
+0.50
+0.75
+1.00CS width
+H-WoR [WR20]
+EB-WoR [WR20]
+Hedged-WoR [Thm 4]
+hgKelly
+0.00 0.25 0.50 0.75 1.00
+0
+2000
+4000
+6000
+8000
+Discrete 0/1 low variance
+101 102 103 104
+time t
+0.0
+0.2
+0.4
+0.6
+0.8Confidence sequence
+101 102 103 104
+time t
+0.0
+0.2
+0.4
+0.6
+0.8CS width
+H-WoR [WR20]
+EB-WoR [WR20]
+Hedged-WoR [Thm 4]
+hgKelly
+0.00 0.25 0.50 0.75 1.00
+0
+250
+500
+750
+1000
+Real-valued evenly spread
+101 102 103 104
+time t
+0.00
+0.25
+0.50
+0.75
+1.00Confidence sequence
+101 102 103 104
+time t
+0.00
+0.25
+0.50
+0.75
+1.00CS width
+H-WoR [WR20]
+EB-WoR [WR20]
+Hedged-WoR [Thm 4]
+hgKelly
+0.2 0.4
+0
+1000
+2000
+Real-valued concentrated
+101 102 103 104
+time t
+0.00
+0.25
+0.50
+0.75
+1.00Confidence sequence
+101 102 103 104
+time t
+0.00
+0.25
+0.50
+0.75
+1.00CS width
+H-WoR [WR20]
+EB-WoR [WR20]
+Hedged-WoR [Thm 4]
+hgKelly
+Figure 14: Hedged capital, Hoeﬀding, and empirical Bernstein CSs for the mean of a ﬁnite set of
+bounded numbers when sampling WoR. Further details can be found in Section D.3. Clearly, the
+betting approach is dominant in all settings.
+48
+C.4 Fixed-time conﬁdence intervals (without replacement)
+0.00 0.25 0.50 0.75 1.00
+0
+2000
+4000
+Discrete 0/1 high variance
+102 103 104
+sample size n
+0.00
+0.25
+0.50
+0.75
+1.00Confidence interval
+102 103 104
+sample size n
+0.00
+0.25
+0.50
+0.75
+1.00CI width
+H-WoR-CI [WR20]
+EB-WoR-CI [WR20]
+Hedged-WoR-CI [Rmk 4]
+0.00 0.25 0.50 0.75 1.00
+0
+2000
+4000
+6000
+8000
+Discrete 0/1 low variance
+102 103 104
+sample size n
+0.0
+0.2
+0.4
+0.6Confidence interval
+102 103 104
+sample size n
+0.0
+0.2
+0.4
+0.6CI width
+H-WoR-CI [WR20]
+EB-WoR-CI [WR20]
+Hedged-WoR-CI [Rmk 4]
+0.00 0.25 0.50 0.75 1.00
+0
+250
+500
+750
+1000
+Real-valued evenly spread
+102 103 104
+sample size n
+0.00
+0.25
+0.50
+0.75Confidence interval
+102 103 104
+sample size n
+0.00
+0.25
+0.50
+0.75CI width
+H-WoR-CI [WR20]
+EB-WoR-CI [WR20]
+Hedged-WoR-CI [Rmk 4]
+0.2 0.4
+0
+1000
+2000
+3000
+Real-valued concentrated
+102 103 104
+sample size n
+0.0
+0.2
+0.4
+0.6Confidence interval
+102 103 104
+sample size n
+0.0
+0.2
+0.4
+0.6CI width
+H-WoR-CI [WR20]
+EB-WoR-CI [WR20]
+Hedged-WoR-CI [Rmk 4]
+Figure 15: Fixed-time hedged capital, Hoeﬀding-type, and empirical Bernstein-type CIs for the mean
+of a ﬁnite set of bounded numbers when sampling WoR. Further details can be found in Section D.4.
+Clearly, the two betting approaches (Hedged and ConBo) are dominant in all settings.
+49
+Table 2: Typical computation time for constructing a CS from time 1 to 103 for the mean of
+Bernoulli(1/2)-distributed random variables. The three betting CSs were computed for 1000 evenly-
+spaced values ofm in [0, 1], while a coarser grid would have sped up computation. All CSs were
+calculated on a laptop powered by a quad-core 2GHz 10th generation Intel Core i5. Parallelization
+was carried out using the Python library,multiprocess [55].
+Betting scheme Interval (a.s.) Computation time (seconds)
+ConBo+LBOW ✓ 0.08
+Hedged+(λPrPl±t )∞t=1 ✓ 0.25
+hgKelly (G = 20) ✓ 1.38
+aGRAPA 0.35
+LBOW 0.25
+ONS-m 12.45
+Kelly 197.38
+D Simulation details
+In each simulation containing conﬁdence sequences or intervals and their widths, we took an average
+over 5 random draws from the relevant distribution. For example, in the “Time-uniform conﬁdence
+sequences” plot of Figure 1, the CSs (PrPl-H, PrPl-EB, and Hedged) were averaged over 5 random
+draws from a Beta(10, 30) distribution. Computation times for various strategies are given in Table 2.
+D.1 Time-uniform conﬁdence sequences (with replacement)
+Each of the CSs considered in the time-uniform (with replacement) case are presented as explicit
+theorems and propositions throughout the paper. Speciﬁcally,
+• PrPl-H: Predictable plug-in Hoeﬀding (Proposition 1);
+• PrPl-EB: Predictable plug-in empirical Bernstein (Theorem 2);
+• Hedged: Hedged capital process (Theorem 3); and
+• hgKelly: Hedged grid-Kelly (Proposition 5).
+Bernoulli [HRMS20] Section C compared these against the conjugate mixture sub-Bernoulli
+conﬁdence sequence by Howard et al. [39], recalled below.
+Hoeﬀding [35, Equation (3.4)], presented the sub-Bernoulli upper-bound on the moment generating
+function of bounded random variables for anyλ> 0:
+EP (exp{λ(Xi−µ)})≤ 1−µ +µ exp{λ},
+which can be used to construct ane-value by noting that
+EP
+(
+exp
+{
+λ(Xi−µ)− log(1−µ +µeλ)}|F i−1)≤ 1.
+Then, Howard et al. [39] showed that the cumulative product process
+t∏
+i=1
+(
+exp
+{
+λ(Xi−µ)− log(1−µ +µeλ)}) (49)
+forms a test supermartingale, as does a mixture of(49) for any probability distributionF (λ) on R+:
+∫
+λ∈R+
+t∏
+i=1
+(
+exp
+{
+λXi− log(1−µ +µeλ)})dF (λ). (50)
+50
+In particular, Howard et al. [39] takeF (λ) to be a beta distribution so that the integral(50) can
+be computed in closed-form. Using(50) in Step (b) in Theorem 1 yields the “Bernoulli [HRMS20]”
+conﬁdence sequence.
+There are yet other improvements of Hoeﬀding’s inequality, for example one that goes by the name
+of Kearns-Saul [43] but was incidentally noted in Hoeﬀding’s original paper itself. This inequality, and
+other variants, are looser than the sub-Bernoulli bound and so we exclude them here; see Howard et al.
+[38] for more details. Most importantly, none of these adapt to the true underlying variance of the
+random variables, unlike most of our new techniques.
+A-Bentkus[KZ21] Wealsocomparedourboundsagainstthe“adaptiveBentkusconﬁdencesequence”
+(A-Bentkus) due to Kuchibhotla and Zheng [47, Section 3.5]. These combine a maximal version of
+Bentkus et al.’s concentration inequality [47, Theorem 1] with the “stitching” technique [89, 56, 39] — a
+method to obtain inﬁnite-horizon concentration inequalities by taking a union bound over exponentially-
+spaced ﬁnite time horizons.
+D.2 Fixed-time conﬁdence intervals (with replacement)
+For the ﬁxed-time CIs included from this paper, we have
+• PrPl-EB-CI: Predictable plug-in empirical Bernstein CI (Remark 1); and
+• Hedged-CI: Hedged capital process CI (Remark 3).
+These were compared against CIs due to Hoeﬀding [35], Maurer and Pontil [54], Anderson [2], and
+Bentkus [9] which we now recall.
+H-CI [H63] These intervals refer to the CIs based on Hoeﬀding’s classical concentration inequalities
+[35]. Speciﬁcally, for a sample sizen≥ 1, “H-CI [H63]” refers to the CI,
+1
+n
+n∑
+i=1
+Xi±
+√
+log(2/α)
+2n .
+Anderson [A69] These intervals refer to the conﬁdence intervals due to Anderson [2] which take a
+unique approach by considering the entire sample cumulative distribution function, rather than just
+the mean and variance. Consequently, however, Anderson’s CIs require iid observations, rather than
+the more general setup we consider. We nevertheless ﬁnd that even in the iid setting, our approach
+outperforms Anderson’s.
+Suppose X1,...,X n
+iid
+∼ P are [0, 1]-bounded with meanEP (X1) =µ. LetX(1),...,X (n) denote the
+order statistics ofXn1 with the convention thatX(0) := 0 and X(n+1) := 1. Following the notation of
+Learned-Miller and Thomas [50], Anderson’s CI is given by
+[ n∑
+i=1
+uDKWi (−X(n−(i+1)) +X(n−i)), 1− n∑
+i=1
+uDKWi (X(i+1)−X(i))
+]
+,
+where uDKWi =(i/n−√log(2/α)/2n)∨ 0. Learned-Miller and Thomas [50, Theorem 2] show that
+Anderson’s CI is always tighter than Hoeﬀding’s. The authors also introduce a bound which is strictly
+tighter than Anderson’s which they conjecture has valid(1−α)-coverage, but we do not compare to
+this bound here.
+51
+EB-CI [MP09] The empirical Bernstein CI of Maurer and Pontil [54] is given by
+1
+n
+n∑
+i=1
+Xi±
+√
+2ˆσ2 log(4/α)
+n + 7 log(4/α)3(n− 1) ,
+andˆσ2 is the sample variance.
+Bentkus-CI [B04] Bentkus’ conﬁdence interval requires an a-priori upper bound onVar(Xi) for
+each i. As alluded to in the introduction, we do not consider concentration bounds which require
+knowledge of the variance. However, since we assumeXi∈ [0, 1], we have the trivial upper bound,
+Var(Xi)≤ 14, which we implicitly use throughout our computation of Bentkus’ conﬁdence interval.
+Deﬁne the independent, mean-zero random variables(Gi)ni=1 as
+Gi :=
+{
+− 14 w.p. 45
+1 w.p. 15 ,
+an important technical device which has appeared in seminal works by Hoeﬀding [35, Equation (2.14)]
+and Bennett [8, Equation (10)]. Then the “Bentkus-CI” is
+1
+n
+n∑
+i=1
+Xi± W⋆αn ,
+where W⋆α∈ [0,n ] is given by the value ofWα such that
+inf
+y∈[0,n] : y≤Wα
+E
+[∑n
+i=1(Gi−y)2+]
+(Wα−y)2+ =α.
+Eﬃcient algorithms have been developed to solve the above [10, Section 9], [47].
+PTL-𝓁2 [PTL21] The work by Phan et al. [62] proposes an interesting but computationally intensive
+approach to constructing conﬁdence intervals for means of iid bounded random variables. Speciﬁcally,
+we will focus on their tightest bound (according to [62, Figure 4]) which makes use of the𝓁2 norm in
+its derivation (and which we thus refer to as PTL-𝓁2).
+For example, computing PTL-𝓁2 conﬁdence intervals3 from a sampleX1,...,X 300∼ Unif[0, 1]
+of n = 300 uniformly distributed random variables took upwards of 11 minutes while our betting
+conﬁdence interval (Remark 3) took less than 0.5 seconds. For this reason, we conduct a small-scale
+simulation of sample sizes 5-200 (see Figure 16). We ﬁnd that PTL-𝓁2 performs extremely well for
+the low-variance continuous distribution Beta(10, 30) but poorly for sample sizes closer to 200 for
+Bernoulli data. Nevertheless, PTL-𝓁2 requires i.i.d. data (while we only require boundedness and
+conditional meanµ) and PTL-𝓁2 does not have time-uniform or without-replacement analogues.
+D.3 Time-uniform conﬁdence sequences (without replacement)
+The WoR CSs which were introduced in this paper include
+• Hedged-WoR: Without replacement hedged capital process (Theorem 4); and
+• hgKelly-WoR: Without replacement analogue of hgKelly (Proposition 5).
+The CSs labeled “H-WoR [WR20]” and “EB-WoR [WR20]” are the without-replacement Hoeﬀding-
+and empirical Bernstein-type CSs due to Waudby-Smith and Ramdas [88] which we recall now.
+3We used code by Phan et al. [ 62] with their default tuning parameters, available at
+github.com/myphan9/small_sample_mean_bounds.
+52
+0.00 0.25 0.50 0.75 1.00
+0.0
+0.2
+0.4pmf
+Xi  Bernoulli(1/2)
+102
+sample size n
+0.00
+0.25
+0.50
+0.75
+1.00Confidence interval
+102
+sample size n
+0.2
+0.4
+0.6
+0.8
+1.0CI width
+0.00 0.25 0.50 0.75 1.00
+0.0
+0.2
+0.4
+0.6
+0.8pmf
+Xi  Bernoulli(1/10)
+102
+sample size n
+0.0
+0.2
+0.4
+0.6
+0.8Confidence interval
+102
+sample size n
+0.2
+0.4
+0.6
+0.8CI width
+0.00 0.25 0.50 0.75 1.00
+0.950
+0.975
+1.000
+1.025
+1.050pdf
+Xi  Beta(1, 1)
+102
+sample size n
+0.00
+0.25
+0.50
+0.75
+1.00Confidence interval
+102
+sample size n
+0.2
+0.4
+0.6
+0.8
+1.0CI width
+0.00 0.25 0.50 0.75 1.00
+0
+2
+4
+6pdf
+Xi  Beta(10, 30)
+102
+sample size n
+0.0
+0.2
+0.4
+0.6
+0.8Confidence interval
+H-CI [H63]
+PTL- 2-CI [PTL21]
+EB-CI [MP09]
+PrPl-EB-CI [Rmk 1]
+Hedged-CI [Rmk 3]
+102
+sample size n
+0.0
+0.2
+0.4
+0.6
+0.8CI width
+Figure 16: Various with-replacement ﬁxed-time conﬁdence intervals, including that of Phan et al. [62]
+(PTL-𝓁2-CI). While PTL-𝓁2-CI performs very well in the Beta(10, 30) regime, it appears to suﬀer for
+Bernoulli(1/2) with largern. In any case, PTL-𝓁2-CI relies on iid data, while the other four methods
+do not.
+53
+H-WoR [WR20] Deﬁne the weighted WoR mean estimator and the Hoeﬀding-typeλ-sequence,
+ˆµWoRt (λt1) :=
+∑t
+i=1λi(Xi + 1N−i+1∑i−1j=1Xj)∑t
+i=1λi(1 + i−1N−i+1) , and λt :=
+√
+8 log(2/α)
+t log(t + 1)∧ 1,
+respectively. Then “H-CS [WR20]” refers to the WoR Hoeﬀding-type CS,
+ˆµWoRt (λt1)±
+∑t
+i=1ψH(λi) + log(2/α)∑t
+i=1λi
+(
+1 + i−1N−i+1
+) .
+EB-WoR [WR20] Analogously to the Hoeﬀding-type CSs, “EB-CS [WR20]” corresponds to the
+empirical Bernstein-type CSs for sampling WoR due to Waudby-Smith and Ramdas [88]. These CSs
+take the form
+ˆµWoRt (λt1)±
+∑t
+i=1 4(Xi−ˆµi−1)2ψE(λi) + log(2/α)∑t
+i=1λi
+(
+1 + i−1N−i+1
+) ,
+where in this case, we have
+λt :=
+√
+2 log(2/α)
+ˆσ2t−1t log(t + 1)∧ 12, ˆσ2t := 1/4 +∑ti=1(Xi−ˆµi)2t + 1 , and ˆµt := 1t t∑i=1Xi. (51)
+D.4 Fixed-time conﬁdence intervals (without replacement)
+The only ﬁxed-time CI introduced in this paper isHedged-WoR-CI: the without-replacement hedged
+capital process CI described in Section 5. The other two are both due to Waudby-Smith and Ramdas
+[88] which we describe now.
+H-WoR-CI [WR20] This corresponds to the CI described in Corollary 3.1 of Waudby-Smith and
+Ramdas [88]. This has the form
+ˆµWoRn ±
+√
+1
+2 log(2/α)√n + 1√n∑ni=1 i−1N−i+1.
+EB-WoR-CI [WR20] Similarly, this CI corresponds to that described in Corollary 3.2 of Waudby-
+Smith and Ramdas [88]. Speciﬁcally, “EB-WoR-CI [WR20]” is deﬁned as
+ˆµWoRn (λn1 )±
+∑n
+i=1 4(Xi−ˆµi−1)2ψE(λi) + log(2/α)∑n
+i=1λi
+(
+1 + i−1N−i+1
+) ,
+where
+λt :=
+√
+2 log(2/α)
+nˆσ2t−1 ∧ 12, ˆσ2t := 1/4 +∑ti=1(Xi−ˆµi)2t + 1 , andˆµt := 12 +∑ti=1Xit + 1 , (52)
+andˆµWoRn is deﬁned as
+ˆµWoRt (λt1) :=
+∑t
+i=1λi(Xi + 1N−i+1∑i−1j=1Xj)∑t
+i=1λi(1 + i−1N−i+1) .
+D.5 Betting “conﬁdence distributions”: conﬁdence sets at several resolu-
+tions
+Figures 17 and 18 demonstrate two tools to visualize CSs at variousα and t.
+54
+100 101 102 103
+Time t
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0Confidence sequence
+ 0.1
+0.2
+0.3
+0.4
+(0, 1/2)
+Figure 17: This plot shows the aGRAPA CS for allα∈ [0, 1/2] under Unif[0, 1] data.
+0.00 0.25 0.50 0.75 1.00
+m
+0
+1
+2
+3
+4
+5
+61/ t(m)
+Time t = 25.
+0.00 0.25 0.50 0.75 1.00
+m
+0
+2
+4
+6
+8
+10
+Time t = 100.
+0.00 0.25 0.50 0.75 1.00
+m
+0
+5
+10
+15
+20
+Time t = 250.
+GRAPA
+aGRAPA
+LBOW
+Figure 18: Here we plot the inverse wealth1/Kt(m) in gamem against m∈ [0, 1], att = 25, 100, 250
+for three diﬀerent betting strategies. Note the diﬀerenty-axis scales. Despite not being normalized
+to yield a “conﬁdence distribution”, this is a useful visual tool. For example, the mode in each plot
+signiﬁes them against which we have minimum wealth, which is a reasonable point estimator forµ.
+Further, the superlevel set for anyα∈ [0, 1] yields exactly the(1−α)-CS forµ (for that corresponding
+time and strategy) since it yields allm with wealth less than1/α. Last, for anym∈ [0, 1], the height
+(truncated at one) is anytime-validp-value for the null hypothesis that the mean equalsm.
+E Additional theoretical results
+E.1 Betting conﬁdence sets are tighter than Hoeﬀding
+In this section, we demonstrate that the betting approach can dominate Hoeﬀding for suﬃciently large
+sample sizes. First, we show that for anyx,m∈ (0, 1) and anyλ∈ R, thenγ≡γm(λ) can be set as
+γm(λ) := exp{−mλ−λ2/8} (exp(λ)− 1),
+so that
+Hm(x) := exp{λ(x−m)−λ2/8}| {z }
+Hoeﬀding term
+≤ 1 +γ(x−m)| {z }
+Capital process term
+=:Km(x)
+for anyx,m∈ [0, 1]. In particular, the Hoeﬀding-type and capital process supermartingales are built
+from precisely the above terms, respectively, and so ifHm(x)≤K m(x) for anyx∈ [0, 1], then their
+respective supermartingales will satisfy the same inequality almost surely.
+55
+Proposition 6(Capital process dominates Hoeﬀding process). Supposex,m∈ [0, 1] and λ∈ R. Then
+there existsγm(λ)∈ R such that
+Hm(x) := exp(λ(x−m)−λ2/8)≤ 1 +γm(λ)(x−m) =:Km(x).
+Note that Proposition 6 alone does not conﬁrm that the Hoeﬀding-based CIs will be dominated
+by capital process-based CIs sinceγ must be within[−1/(1−m), 1/m] forKm(x) to be nonnegative.
+However, it is easy to verify that for allλ ∈ [−0.45, 0.45], we have that γ ∈ [−1, 1] and thus
+Km(x)≥ 0. When constructing a Hoeﬀding-type(1−α)-conﬁdence interval, for example, one would set
+λHn :=√8 log(2/α)/n, makingλHn ∈ [−0.45, 0.45] whenevern≥ 40 log(2/α), in which case a capital
+process-based CI will dominate a Hoeﬀding-based CI almost surely.
+Proof of Proposition 6.We prove the result forλ≥ 0 and remark that this implies the result for the
+case whenλ≤ 0 by considering (1−x) and (1−m) instead ofx and m, respectively.
+The proof proceeds in 3 steps. First, we consider the line segmentLm(x) connecting Hm(0) and
+Hm(1) and note that by convexity ofHm(x), we have thatHm(x)≤Lm(x) for allx∈ [0, 1]. We then
+ﬁnd the slope of this line segment and setγ to this value so that the lineKm(x) := 1 + γ(x−m)
+has the same slope asLm(x). Finally, we demonstrate that Lm(0)≤K m(0), and conclude that
+Hm(x)≤Lm(x)≤K m(x) for allx∈ [0, 1].
+Step 1. Note thatHm(x) is a convex function inx∈ [0, 1], and thus
+∀x∈ [0, 1], Hm(x)≤Hm(0) + [Hm(1)−Hm(0)]x =:Lm(x).
+Step 2. Observe that the slope ofLm(x) is Hm(1)−Hm(0). Settingγ :=Hm(1)−Hm(0) we have
+thatKm(x) and Lm(x) are parallel.
+Step 3. It remains to show thatKm(0)≥ Lm(0)≡ Hm(0) for every m∈ [0, 1]. Consider the
+following equivalent statements:
+Km(0)≥Hm(0)
+⇐⇒1−m [Hm(1)−Hm(0)]≥Hm(0)
+⇐⇒1−m exp
+(
+λ−λm−λ2/8)≥ (1−m) exp(−λm−λ2/8)
+⇐⇒1≥ exp
+(
+−λm−λ2/8) [1−m +m exp(λ)]
+⇐⇒ exp
+(
+λm +λ2/8)≥ [1−m +m exp(λ)]
+⇐⇒a(λ) := exp
+(
+λm +λ2/8)− [1−m +m exp(λ)]≥ 0.
+Now, note thata is smooth anda(0) = 0 and so it suﬃces to show that its derivativea′(λ)≥ 0 for all
+λ≥ 0. To this end, consider the following equivalent statements.
+a′(λ)≡
+(
+m + λ4) exp(λm +λ2/8)−m exp(λ)≥ 0
+⇐⇒
+(
+m + λ4) exp(λm +λ2/8)≥m exp(λ)
+⇐⇒ ln
+(
+1 + λ4m) +λm +λ2/8≥λ
+⇐⇒b(λ) := ln
+(
+1 + λ4m) +λm +λ2/8−λ≥ 0,
+56
+and hence it suﬃces to show thatb(λ)≥ 0. Similar toa(λ), we have thatb(0) = 0 and so it suﬃces to
+show that its derivative,b′(λ)≥ 0 for allλ≥ 0. Indeed,
+b′(λ)≡ 14m +λ +m + λ4− 1≥ 0
+⇐⇒c(λ) := 1 +m(4m +λ) +λ4 (4m +λ)− 4m−λ≥ 0
+Since c(λ) is a convex quadratic, it is straightforward to check that
+argmin
+λ∈R
+c(λ) = 2− 4m,
+and thatc(2− 4m) = 0. In conclusion, if we setγ≡γm(λ) as
+γm(λ) :=Hm(1)−Hm(0) = exp{−mλ−λ2/8} (exp(λ)− 1),
+then Hm(x)≤K m(x) := 1 +γm(λ)(x−m) for everym∈ [0, 1]. This completes the proof.
+E.2 Optimal convergence of betting conﬁdence sets
+In Section B, it was mentioned that for nonnegative martingales, Ville’s inequality is nearly an equality
+and hence martingale-based CSs are nearly tight in a time-uniform sense. However, it is natural to
+wonder what other theoretical guarantees betting CSs/CIs can have in addition to their empirical
+performance. In the time-uniform setting, CSs for the mean cannot attain widths which scale faster
+than≍
+√
+log logt/t, due to the law of the iterated logarithm. Similarly, ﬁxed-time CIs cannot scale
+faster than≍ 1/√n. In this section, we show that it is possible to choose betting strategies such that
+the resulting CSs and CIs scale at the optimal rates ofO(
+√
+log logt/t) and O(1/√n), respectively.
+E.2.1 An iterated logarithm betting conﬁdence sequence
+We will establish the law of the iterated logarithm (LIL) convergence rate by carefully constructing a
+capital process martingale whose resulting CS is — for suﬃciently larget — tighter than a larger CS
+which itself attains the required LIL rate.
+Before stating the result in Proposition 7, letζ(s) :=∑∞k=1 1ks be the Riemann zeta function and
+for eachk∈{ 1, 2,... }, deﬁne
+λk :=
+√
+8 log (ksζ(s))
+ηk+1/2 , and
+γk(m) = exp
+{
+−mλk−λ2k/8} (exp(λk)− 1)∧ 1,
+where η >1 is some user-chosen constant. Letkt denote the (unique) integer such thatlogηt≤kt≤
+logηt + 1. Deﬁne the process
+KLt := 12KL+t (m) + 12KL−t (m)
+where KL+t (m) := 1kstζ(s)
+t∏
+i=1
+(1 +γkt(Xi−m)) and
+KL−t (m) := 1kstζ(s)
+t∏
+i=1
+(1−γkt(Xi−m)).
+57
+Note thatKL+t (m) andKL−t (m) are both upper-bounded by the inﬁnite mixtures
+KL+t (m)≤
+∞∑
+k=1
+1
+ksζ(s)
+t∏
+i=1
+(1 +γk(Xi−m)) and (53)
+KL−t (m)≤
+∞∑
+k=1
+1
+ksζ(s)
+t∏
+i=1
+(1−γk(Xi−m)), (54)
+which themselves form nonnegative martingales whenm =µ by Fubini’s theorem. Consequently,
+CLt :=
+{
+m∈ [0, 1] :KLt (m)< 1α}
+forms a (1−α)-CS forµ. The following proposition establishes the LIL rate ofCLt .
+Proposition 7. The CS (CLt )∞t=1 has a width ofO(√log logt/t), meaning
+ν(CLt ) =O
+(√
+log logt
+t
+)
+,
+whereν is the Lebesgue measure.
+Proof. The proof proceeds in three steps. In Step 1, we construct a distinct but related CS (which
+we will denote by(C×t )∞t=1) via the stitching technique [39]. In Step 2, we demonstrate that this
+stitched CS achieves the desired rate by deriving an analytically tractible superset whose width scales
+as O(
+√
+log logt/t). Finally, in Step 3, we will show that the stitched CSC×t is a superset ofCLt for all
+t suﬃciently large, thus implying the ﬁnal result.
+Step 1. Constructing the stitched CSC×t : In the language of betting, the idea behind stitching
+is to ﬁrst divide one’s capital up into inﬁnitely many portionsw1,w 2,... such that∑∞k=1wk = 1,
+and then place a constant betλk using a capital ofwk on a designated epoch of time, which will be
+chosen to be geometrically spaced. In what follows, the portionswk will be given bywk = 1ζ(s)ks,
+and we will divide time{1, 2, 3,... } up into epochs demarcated by the endpointsηk−1 and ηk for
+eachk∈{ 1, 2, 3,... } and for some user-speciﬁedη >1 (e.g. η = 1.1). The constant betsλk will be
+chosen so that they are eﬀective betweenηk−1 and ηk and lead toO(√log logt/t) widths after being
+combined across epochs.
+The construction of the stitched boundary essentially follows (a simpliﬁed version of) the proof of
+Theorem 1 in Howard et al. [39, Section A.1], but we present the derivation here for completeness.
+Consider the Hoeﬀding-type process for a ﬁxedλ∈ R:
+Mλt (m) := exp{λSt(m)−tλ2/8}, (55)
+where St(m) :=∑ti=1(Xi−m). As discussed in Section 3,Mt(µ) forms a test supermartingale, and
+hence by Ville’s inequality we have
+P
+
+∃t≥ 1 :St(µ)≥ r +tλ2/8λ| {z }
+gλ,r(t)
+
+≤e−r.
+We have typically usedr = log(1/α) throughout the paper, but the above alternative notation will help
+in the following discussion. Using the notation of Howard et al. [39, Section A.1], deﬁne the boundary
+58
+above asgλ,r(t) := (r +tλ2/8)/λ, and let
+λk :=
+√
+8rk
+ηk−1/2,
+where rk := log
+(ksζ(s)
+α/2
+)
+.
+Some algebra will reveal that plugging the above choices ofλk and rk intogλ,r(t) yields
+gλk,rk(t) :=
+√
+rkt
+8
+(√
+ηk−1/2
+t +
+√ t
+ηk−1/2
+)
+,
+resulting in the following concentration inequality for eachk:
+P (∃t≥ 1 :St(µ)≥gλk,rk(t))≤ exp{−rk}.
+Let kt denote the (unique) epoch number such thatηkt−1≤ t≤ ηkt (i.e. such that logηt≤ kt≤
+logηt + 1). Now, we take a union bound overk = 1, 2, 3,... resulting in the following boundary,
+P
+(
+∃t≥ 1 :St(µ)≥gλkt,rkt (t)
+)
+≤
+∞∑
+k=1
+exp{−rk} = α/2ζ(s)
+∞∑
+k=1
+1
+ks
+| {z }
+ζ(s)
+=α/2.
+Repeating all of the previous steps for−S(µ) and taking a union bound, we arrive at the(1−α)
+stitched CS (C×t )∞t=1 given by
+C×t :=
+(
+1
+t
+t∑
+i=1
+Xi± gλkt,rkt (t)t
+)
+,
+with the guarantee thatP (∃t≥ 1 :µ /∈C×t )≤α.
+Step 2. Demonstrating thatC×t achieves the desired LIL width:Now, we will simply upper-
+bound gλkt,rkt (t) by an analytical boundary depending explicitly ont (rather than implicitly through
+kt) to see that it achieves the desired LIL width. First, notice that
+√
+ηkt−1/2/t +√t/ηkt−1/2 is
+uniquely minimized whent =ηkt−1/2 and hence its maximum on the interval(ηkt−1,ηkt) must be at
+the endpoints. Therefore,
+√
+ηkt−1/2/t +√t/ηkt−1/2≤η1/4 +η−1/4 and thus for eachk, we have
+gλkt,rkt (t)≤
+√
+rktt
+8
+(
+η1/4 +η−1/4
+)
+for allηkt−1≤t≤ηkt.
+Furthermore, for allηkt−1≤ t≤ ηkt, we have thatkt≤ logηt + 1. Applying this inequality to the
+above, we obtain the ﬁnal bound which does not depend onk,
+gλkt,rkt (t)≤
+√
+t log
+(
+2
+(
+logηt + 1
+)s
+ζ(s)/α
+)
+8
+(
+η1/4 +η−1/4
+)
+for allk.
+In conclusion, we have that
+C×t ⊆
+
+1
+t
+t∑
+i=1
+Xi±
+√
+log
+(
+2
+(
+logηt + 1
+)s
+ζ(s)/α
+)
+8t
+(
+η1/4 +η−1/4
+)
+
+,
+and thusC×t =O(√log logt/t), as desired.
+59
+Step 3. Showing thatCLt ⊆C×t for allt large enough: This step in the proof essentially follows
+immediately from the discussion in Section E.1. We justiﬁed that forλ≥ 0, settingγ as
+γ = exp
+{
+−mλ−λ2/8} (exp(λ)− 1)∧ 1,
+yields 1 +γ(x−m)≥ exp
+{
+λ(x−m)−λ2/8} for allx,m∈ [0, 1] if λ is suﬃciently small (i.e. so that
+γ is not relying on truncation at 1). Sinceλk is decreasing int, it follows that fort suﬃciently large,
+t∏
+i=1
+(1 +γkt(Xi−m))≥ exp
+{
+λktSt(m)−λ2kt/8} almost surely.
+Therefore, fort suﬃciently large,
+KL+t (m) := 1kstζ(s)
+t∏
+i=1
+(1 +γkt(Xi−m))
+≥ 1kstζ(s) exp{λktSt(m)−λ2kt/8} =:H∞+t (m)
+and similarly forKL−t (m),
+KL−t (m)≥ 1kstζ(s) exp{−λktSt(m)−λ2kt/8} =:H∞−t (m).
+Therefore, for suﬃciently larget, we have
+CLt :=
+{
+m∈ [0, 1] :KLt (m)< 1α}
+⊆
+{
+m∈ R : max
+{1
+2H∞+t (m), 12H∞−t (m)}< 1α}| {z }
+(⋆)
+and it is straightforward to verify that(⋆) is preciselyC×t .
+In summary, we constructed a CSC×t using the stitching technique in Step 1, and then showed that
+ν(C×t ) =O(√log logt/t) in Step 2. Finally in Step 3, we showed that our discrete mixture betting CS
+CLt is a subset ofC×t for t suﬃciently large, and hence by subadditivity of measures,
+ν(CLt ) =O
+(√
+log logt
+t
+)
+,
+which completes the proof.
+Remark 5. Notice thatKL+t andKL−t can be made strictly more powerful if they are replaced by
+adding additional terms, as long as the ﬁnal sums are upper-bounded by(53) and (54), respectively. In
+particular, any ﬁnite sum analogue of(53) and (54) would have suﬃced, as long asKL+t andKL−t
+form a term in each sum, respectively. We presentedKL+t andKL−t in their current forms for the sake
+of notational (and computational) simplicity.
+E.2.2 The √n-convergence of betting CIs
+Proposition 8. SupposeXn1 ∼P are independent observations from a distributionP∈P µ with mean
+µ∈ [0, 1]. Letλn∈ (0, 1) such thatλn≍ 1/√n. Then the conﬁdence interval,
+Cn :=
+{
+m∈ [0, 1] :K±n < 1α} has an asymptotic width ofO(1/√n).
+60
+Proof. Writing out the capital process with positive bets, we have by Lemma 3 that for anym∈ [0, 1],
+K+n (m) :=
+n∏
+i=1
+(1 +λn(Xi−m))
+≥ exp
+(
+λn
+n∑
+i=1
+(Xi−m)−ψE(λn)
+n∑
+i=1
+4(Xi−m)2
+)
+≥ exp
+(
+λn
+n∑
+i=1
+(Xi−m)− 4nψE(λn)
+)
+=:B+t (m),
+and similarly for negative bets,
+K−n (m) :=
+n∏
+i=1
+(1−λn(Xi−m))
+≥ exp
+(
+−λn
+t∑
+i=1
+(Xi−m)− 4nψE(λn)
+)
+=:B−t (m).
+For anyθ∈ (0, 1), consider the set,
+Sn :=
+{
+m :B+t (m)< 1θα}⋂{m :B−t (m)< 1(1−θ)α}
+Now notice that the1/α-level set ofK±n (m) := max{θK+n (m), (1−θ)K−n (m)} is a subset ofSn:
+Cn =
+{
+m :K+n (m)< 1θα}⋂{m :K−n (m)< 1(1−θ)α}⊆S n.
+On the other hand, it is straightforward to derive a closed-form expression forSn:
+
+
+∑n
+i=1Xi
+n − log
+( 1
+θα
+)
++ 4nψE(λn)
+nλn
+,
+∑n
+i=1Xi
+n +
+log
+(
+1
+(1−θ)α
+)
++ 4nψE(λn)
+nλn
+
+,
+which in the typical case ofθ = 1/2 has the cleaner expression,
+∑n
+i=1Xi
+n ± log(2/α) + 4nψE(λn)nλn .
+As discussed in Section B, we have by two applications of L’Hôpital’s rule thatψE (λn)ψH (λn) n→∞−−−−→1, where
+ψH(λn) :=λ2n/8≍ 1/n and thus the widthWn ofSn scales as
+Wn := 2· log(1/α) + 4nψE(λn)nλn ≍ log(1/α)√n + 4n/n√n ≍ 1√n.
+Since Cn⊆S n, we have thatCn has a width ofO(1/√n), which completes the proof.
+Despite these results, the hedged capital CI presented and recommended in Section 4.4 does not
+satisfy the assumptions of the above proof. In particular, we recommended using the variance-adaptive
+predictable plug-in,
+λPrPl-EB(n)t :=
+√
+2 log(2/α)
+nˆσ2t−1 , ˆσ2t := 1/4 +∑ti=1(Xi−ˆµi)2t + 1 , and ˆµt := 1/2 +∑ti=1Xit + 1 , (56)
+61
+using a truncation which depends onm,
+λ+t (m) :=λ±t ∧ cm, λ −t (m) :=−(λ±t ∧ c1−m), (57)
+and ﬁnally deﬁning the hedged capital process for eacht∈{ 1,...,n }:
+K±t (m) := max
+{
+θ
+t∏
+i=1
+(1 +λ+i (m)· (Xi−m)), (1−θ)
+t∏
+i=1
+(1−λ−i (m)· (Xi−m))
+}
+.
+Furthermore, the resulting CI is deﬁned as an intersection,
+Bn :=
+n⋂
+t=1
+{
+m∈ [0, 1] :K±t (m)< 1α}. (58)
+All of these tweaks (i.e. making bets predictable, truncating beyond(0, 1), and taking an intersection)
+do not in any way invalidate the type-I error, but we ﬁnd (through simulations) that they tighten the
+CIs, especially in low-variance, asymmetric settings (see Figure 19).
+0.00 0.25 0.50 0.75 1.00
+0.0
+0.2
+0.4pmf
+Xi  Bernoulli(1/2)
+102 103 104
+sample size n
+0.2
+0.4
+0.6
+0.8Confidence interval
+102 103 104
+sample size n
+0.0
+0.2
+0.4
+0.6
+0.8CI width
+No tweaks
+PrPl
+PrPl, m
+PrPl, m, ni = 1
+0.00 0.25 0.50 0.75 1.00
+0
+2
+4
+6pdf
+Xi  Beta(10, 30)
+102 103 104
+sample size n
+0.0
+0.2
+0.4
+0.6Confidence interval
+102 103 104
+sample size n
+0.0
+0.2
+0.4
+0.6CI width
+No tweaks
+PrPl
+PrPl, m
+PrPl, m, ni = 1
+Figure 19: Hedged capital CIs with various added tweaks. The CIs labeled “No tweaks” refer to those
+which satisfy the conditions of Proposition 8. The other three plots diﬀer in which “tweaks” have been
+added. Those with “PrPl” in the legend use the predictable plug-in approach deﬁned in(56); those
+with m in the legend have been truncated usingm as outlined in(57); ﬁnally, the plots with∩ni=1 in
+their legends had their running intersections taken as in (58).
+E.3 On the width of empirical Bernstein conﬁdence intervals
+Recall the predictable plug-in empirical Bernstein conﬁdence interval:
+C PrPl-EB(n)n :=
+(∑n
+i=1λiXi∑n
+i=1λi
+± log(2/α) +∑ni=1viψE(λi)∑n
+i=1λi
+)
+,
+62
+where
+λt :=
+√
+2 log(2/α)
+nˆσ2t−1 , ˆσ2t :=
+1
+4 +∑ti=1(Xi−ˆµi)2
+t + 1 ,andˆµt :=
+1
+2 +∑ti=1Xi
+t + 1 .
+Below, we analyze the asymptotic behavior of the width ofC PrPl-EB(n)n in the i.i.d. setting. In
+Proposition 9, we will show that if the data are drawn i.i.d. from a distributionQ∈Q µ having variance
+σ2, then the half-widthWn of C PrPl-EB(n)n scales as
+√nWn ≡ √n(log(2/α) +∑ni=1viψE(λi)∑n
+i=1λi
+)
+a.s.
+−−→σ
+√
+2 log(2/α), (59)
+and hence the width is asymptotically proportional to the standard deviation.
+First, let us prove a few lemmas aboutnonrandom sequences of numbers, which will be helpful
+in what follows. These are simple facts for which we could not ﬁnd a proof to reference, so we prove
+them below for completeness.
+Lemma 4. Suppose (an)∞n=1 is a sequence of real numbers such thatan→a. Then their cumulative
+average also converges toa, meaning that 1n∑ni=1ai→a.
+Proof. Let ϵ> 0 and chooseN≡Nϵ∈ N such that whenevern≥N, we have
+|an−a|<ϵ. (60)
+Moreover, choose
+M≡MN >
+∑N
+i=1|ai−a|
+ϵ (61)
+and note that n−N− 1
+n < 1. (62)
+Let n≥ max{N,M}. Then we have by the triangle inequality,
+⏐⏐⏐⏐⏐ 1n n∑i=1(ai−a)⏐⏐⏐⏐⏐≤ 1n N∑i=1|ai−a| + 1n n∑i=N +1|ai−a|
+≤ 1n
+N∑
+i=1
+|ai−a| + 1n(n−N− 1)ϵ by (60)
+≤ 2ϵ by (61) and (62),
+which can be made arbitrarily small. This completes the proof of Lemma 4.
+Lemma 5. Let (an)∞n=1 and (bn)∞n=1 be sequences of numbers such that
+an→ 0 and (63)
+|bn|≤ C for someC≥ 0 and for alln≥ 1. (64)
+Then anbn→ 0. Further, if(An) is a sequence of random variables such thatAn→ 0 almost surely,
+then Anbn→ 0 almost surely.
+The proof is trivial, since|Anbn|≤ C|An| which converges to zero almost surely.
+Now, we prove that a modiﬁed variance estimator is consistent.
+Lemma 6. LetX1,...,X n
+i.i.d.
+∼ Q∈Q µ with Var(Xi) =σ2. Then the modiﬁed variance estimator
+ˆσ2n := 1n
+n∑
+i=1
+(Xi−ˆµi−1)2
+converges toσ2, Q-almost surely.
+63
+Proof. By direct substitution,
+ˆσ2n := 1n
+n∑
+i=1
+(Xi−ˆµi−1)2 = 1n
+n∑
+i=1
+(Xi−µ +µ−ˆµi−1)2
+= 1n
+n∑
+i=1
+(Xi−µ)2
+| {z }
+a.s.
+−−→σ2
+− 2n
+n∑
+i=1
+(Xi−ˆµi−1)(ˆµi−1−µ)
+| {z }
+(⋆)
++ 1n
+n∑
+i=1
+(µ−ˆµi−1)2
+| {z }
+(⋆⋆)
+.
+Now, note thatˆµi−1−µ
+a.s.
+−−→0 and|Xi−ˆµi−1|≤ 1 for eachi. Therefore, by Lemma 5, (Xi−
+ˆµi−1)(ˆµi−1−µ)
+a.s.
+−−→0, and by Lemma 4,(⋆)
+a.s.
+−−→0. Furthermore, we have that(µ−ˆµi−1)2 a.s.−−→0
+and so by another application of Lemma 4, we have(⋆⋆)
+a.s.
+−−→0. This completes the proof of Lemma 6.
+Next, let us analyze the second term in the numerator in the margin ofC PrPl-EB(n)n ,
+log(2/α) +∑ni=1viψE(λi)∑n
+i=1λi
+. (65)
+Lemma 7. Under the same assumptions as Lemma 6,
+n∑
+i=1
+viψE(λi)
+a.s.
+−−→log(2/α).
+Proof. Recall that ψE (λ)ψH (λ) λ→0−−−→1, andˆσ2t t→∞−−−→σ2. By deﬁnition ofλi, we have thatλi a.s.−−→0 and
+thus we may also write
+ψE(λi)
+ψH(λi) = 1 +Ri and (66)√
+σ2
+ˆσ2t = 1 +R′i (67)
+for someRi,R′i a.s.−−→0. Thus, we rewrite the left hand side of the claim as
+n∑
+i=1
+viψE(λi) =
+n∑
+i=1
+viψH(λi)ψE(λi)ψH(λi) =
+n∑
+i=1
+vi(λ2i/8)(1 +Ri)
+=
+n∑
+i=1
+vi· 2 log(2/α)8ˆnσ2i−1 · (1 +Ri)
+=
+n∑
+i=1
+vi· 2 log(2/α)8nσ2 · (1 +R′i)· (1 +Ri)
+=
+n∑
+i=1
+4(Xi−ˆµi−1)2· 2 log(2/α)8nσ2 · (1 +Ri +R′i +RiR′i).
+DeﬁningR′′i =Ri +R′i +RiR′i for brevity, and noting thatR′′i → 0 almost surely, the above expression
+64
+becomes
+n∑
+i=1
+viψE(λi) =
+n∑
+i=1
+(Xi−ˆµi−1)2· log(2/α)nσ2 · (1 +R′′i )
+= log(2/α)σ2
+[
+1
+n
+n∑
+i=1
+(Xi−ˆµi−1)2· (1 +R′′i )
+]
+= log(2/α)σ2
+
+ 1n n∑i=1(Xi−ˆµi−1)2| {z }
+a.s.
+−−→σ2 by Lemma 6
++ 1n
+n∑
+i=1
+(Xi−ˆµi−1)2R′′i
+| {z }
+a.s.
+−−→0 by Lemma 5
+
+ a.s.−−→log(2/α),
+which completes the proof of Lemma 7.
+Now, consider the denominator in (65).
+Lemma 8. Continuing with the same notation,
+1√n
+n∑
+i=1
+λi
+a.s.
+−−→
+√
+2 log(2/α)
+σ2 .
+Proof. Let R′i be as in (67). Then,
+1√n
+n∑
+i=1
+λi = 1√n
+n∑
+i=1
+√
+2 log(2/α)
+nˆσ2i−1
+= 1√n
+n∑
+i=1
+√
+2 log(2/α)
+nσ2 · (1 +R′i)
+=
+√
+2 log(2/α)
+σ2 · 1n
+n∑
+i=1
+(1 +R′i)
+| {z }
+a.s.
+−−→1 by Lemma 4
+a.s.
+−−→
+√
+2 log(2/α)
+σ2 ,
+completing the proof of Lemma 8.
+We are now able to combine Lemmas 7 and 8 to prove the main result.
+Proposition 9. Denoting the half-width ofC PrPl-EB(n)n as Wn, and assuming the data are drawn iid
+from a distributionQ∈Q µ with varianceσ2, we have
+√nWn ≡ √n(log(2/α) +∑ni=1viψE(λi)∑n
+i=1λi
+)
+a.s.
+−−→σ
+√
+2 log(2/α). (68)
+Thus, the width is asymptotically proportional to the standard deviation.
+Proof. By direct rearrangement of the left hand side, we see that
+√n(log(2/α) +∑ni=1viψE(λi)∑n
+i=1λi
+)
+= log(2/α) +∑ni=1viψE(λi)1√n∑ni=1λi
+a.s.
+−−→log(2/α) + log(2/α)
+σ−1
+√
+2 log(2/α)
+=σ
+√
+2 log(2/α),
+which completes the proof of Proposition 9.
+65
+E.4 aGRAPA sublevel sets need not be intervals: a worst-case example
+In the proof of Theorem 3, we demonstrated that the hedged capital process with predictable plug-in
+bets yielded convex conﬁdence sets, making their construction more practical. However, this proof was
+made simple by taking advantage of the fact that the sequences before truncation( ˙λ+t )∞t=1 and ( ˙λ−t )∞t=1
+did not depend onm∈ [0, 1]. This raises the natural question, of whether there are betting-based
+conﬁdence sets which are nonconvex when these sequences depend onm. Here, we provide a (somewhat
+pathological) example of the aGRAPA process with nonconvex sublevel sets.
+Consider the aGRAPA bets,
+λaGRAP At := ˆµt−1−mˆσ2t−1 + (ˆµt−1−m)2 whereˆµt := 1/2 +∑ti=1Xit + 1 , ˆσ2t := 1/20 +∑ti=1(Xi−ˆµi)2t + 1 . (69)
+Furthermore, suppose that the observed variables areX1 =X2 = 0. Then it can be veriﬁed that
+KaGRAPA2 (m) =(1 +λaGRAPA1 (X1−m))( 1 +λaGRAPA2 (X2−m))
+=
+(
+1 + 1/2−m1/20 + (1/2−m)2 (−m))( 1 + 1/4−m0.05625 + (1/4−m)2 (−m)),
+which does not yield convex sublevel sets. For example,KaGRAPA2 (0.08)< 0.85 andKaGRAPA2 (0.4)<
+0.85 butKaGRAPA2 (0.03)> 0.85. In particular, the sublevel set,
+{
+m∈ [0, 1] :KaGRAPA2 (m)< 0.85}
+is not convex. In our experience, however, situations like the above do not arise frequently. In fact, we
+needed to actively search for these examples and use a rather small “prior” variance of1/20 which
+we would not use in practice. Furthermore, the sublevel set given above is at the0.85 level while
+conﬁdence sets are compared against1/α which is always larger than 1 and typically larger than 10.
+We believe that it may be possible to restrict(λaGRAPAt )∞t=1 and/or the conﬁdence level,α∈ (0, 1) in
+some way so that the resulting conﬁdence sets are convex. One reason to suspect that this may be
+possible is because of the intimate relationship betweenλaGRAPAt , λGRAPAt , and the optimal hindsight
+bets, λHS. Speciﬁcally, we show in Section E.6 that the optimal hindsight capitalKHSt is exactly the
+empirical likelihood ratio [61] which is known to generate convex conﬁdence sets for the mean [33]. We
+leave this question as a direction for future work.
+E.5 Betting conﬁdence sequences for non-iid data
+The CSs presented in this paper are valid under the assumption that each observation is bounded
+in [0, 1] with conditional meanµ. That is, we require thatX1,X 2,... are [0, 1]-valued with E(Xt|
+Ft−1) =µ for eacht, which includes familiar regimes such as independent and identically-distributed
+(iid) data from some common distributionP with meanµ. Despite the generality of our results, we
+made matters simpler by focusing the simulations in Section C on the iid setting. For the sake of
+completeness, we present a simulation to examine the behavior of our CSs in the presence of some
+non-iid data.
+In this setup, we draw the ﬁrst several hundred or thousand observations independently from a
+Beta(10, 10) — a distribution whose mean is1/2 but whose variance is small (≈ 0.012) — while the
+remaining observations are independently drawn from a Bernoulli(1/2) whose mean is also1/2 but
+with a maximal variance of1/4. We chose to start the data oﬀ with low-variance observations in an
+attempt to “trick” our betting strategies into adapting to the wrong variance. Empirically, we ﬁnd
+that the hedged capital (Theorem 3) and ConBo (Corollary 1) CSs start oﬀ strong, adapting to the
+small variance of a Beta(10, 10). After several Bernoulli(1/2) observations, the CSs remain tight, but
+seem to shrink less rapidly. Nevertheless, we ﬁnd that the hedged capital and ConBo CSs greatly
+outperform the Hoeﬀding (Proposition 1) and empirical Bernstein (Theorem 2) predictable plug-in CSs
+(see Figure 20). Regardless of empirical performance, all methods considered producevalid CSs forµ.
+66
+250 observations from Beta(10, 10), followed by all Bernoulli(1/2)
+101 102 103 104
+time t
+0.00
+0.25
+0.50
+0.75
+1.00Confidence sequence
+101 102 103 104
+time t
+0.00
+0.25
+0.50
+0.75
+1.00CS width
+PrPl-H [Prop 1]
+PrPl-EB [Thm 2]
+Hedged [Thm 4]
+hgKelly
+2500 observations from Beta(10, 10), followed by all Bernoulli(1/2)
+101 102 103 104
+time t
+0.00
+0.25
+0.50
+0.75
+1.00Confidence sequence
+101 102 103 104
+time t
+0.00
+0.25
+0.50
+0.75
+1.00CS width
+PrPl-H [Prop 1]
+PrPl-EB [Thm 2]
+Hedged [Thm 4]
+hgKelly
+Figure 20: CSs for the true meanµ = 1/2 for non-iid data. In top pair of plots, the ﬁrst 250 observations
+were independently drawn from a Beta(10, 10) while the subsequent observations are drawn from a
+Bernoulli(1/2). The bottom pair of plots is similar, but with 2500 initial draws from a Beta(10, 10)
+instead of 250. In both cases, the betting-based CSs (Hedged and ConBo) tend to outperform those
+based on supermartingales.
+E.6 Owen’s empirical likelihood ratio and Mykland’s dual likelihood ratio
+Let x1,...,x t∈ [0, 1] and recall the optimal hindsight capital processKHSt (m),
+KHSt (m) :=
+t∏
+i=1
+(1 +λHS(xi−m)) where λHS solves
+t∑
+i=1
+xi−m
+1 +λHS(xi−m) = 0.
+Now, letQm≡Q m(xt1) be the collection of discrete probability measures with support{x1,...,x t}
+and meanm. LetQ≡Q (xt1) :=⋃m∈[0,1]Qm and deﬁne the empirical likelihood ratio [61],
+ELt(m) := supQ∈Q
+∏t
+i=1Q(xi)
+supQ∈Qm
+∏t
+i=1Q(xi)
+.
+Owen [61] showed that the numerator equals(1/t)t and the denominator equals
+t∏
+i=1
+(1 +λEL(xi−m))−1 where λEL solves
+t∑
+i=1
+xi−m
+1 +λEL(xi−m) = 0.
+Notice that the above product is exactly the reciprocal ofKHSt and thatλEL =λHS. Therefore for
+eachm∈ [0, 1],
+ELt(m) = (1/t)tKHSt (m).
+Furthermore, given the connection between the empirical and dual likelihood ratios for independent
+data [57], the hindsight capital process is also proportional to the dual likelihood ratio in this case.
+67
+F An extended history of betting and its applications
+(This is an expanded version of Section 6 and Figure 9.)
+The use of betting-related ideas in probability, statistics, optimization, ﬁnance and machine learning
+has evolved in many diﬀerent parallel threads, emanating from diﬀerent inﬂuential early works and
+thus having diﬀerent roots and evolutions. Since these threads have had little interaction for many
+decades now, we consider it worthwhile to mention them in some detail. Two notes of caution:
+• We anticipate missing some authors and works in our broad strokes below, but a thorough
+coverage would be better suited to a longer survey paper on the topic. For example, we entirely
+skip the ﬁeld of mathematical ﬁnance, since betting is literally a foundation of the entire ﬁeld
+(and theoretical and applied progress on martingales, betting strategies, and related topics has
+been phenomenal).
+• Many of the authors listed below have used the language of betting in their works explicitly, but
+others have not — and may even prefer (or have preferred)not to do so. Thus, our references
+should be treated with a pinch of salt, as some connections that we draw to betting may be more
+apparent in hindsight (to us) than foresight (to the authors).
+If we had to pick the most critical early authors without whom our work would have been impossible,
+it would be Ville, Wald, Kelly and Robbins; later inﬂuences on us have been via Lai, Cover, Shafer,
+Vovk, Grunwald and the second author’s own earlier works [38, 39]. These authors stand out below.
+Probability. Ville’s 1939 PhD thesis [81] contained an important and rather remarkable result of its
+time that connected measure-theoretic probability with betting, and indeed brought the very notion of
+a martingale into probability theory. In brief, Ville proved that for every event of measure zero, there
+exists a betting strategy for which a gambler’s wealth process (a nonnegative martingale) grows to
+inﬁnity if that event occurs. For example, the strong law of large numbers (SLLN) and the law of the
+iterated logarithm (LIL) are two classic measure-theoretic statements that occur on all sequences of
+observations, except for a null set according to some underlying probability measure (where the two
+null sets for the two laws are diﬀerent). Ville proved that it is possible to bet on the next outcome
+such that if the LIL were false for that particular sequence of observations, then the gambler’s wealth
+would grow in an unbounded fashion.
+Doob’s monumental papers and book [29] in the following decades stripped martingales of their
+betting roots and presented them as some of the most powerful tools of measure-theoretic probability
+theory, with applications to many other branches of mathematics. (However, betting could be viewed
+as instances of “Doob’s martingale transform”.) These betting roots were revived in the 1960s with the
+renewed interest in algorithmic deﬁnitions of randomness, due to Kolmogorov, Martin-Löf [53] and
+many others.
+More recently, Shafer and Vovk [76, 77] have produced two seminal books that aim bring betting
+and martingales to the front and center of probability and ﬁnance, aiming to derive much (if not
+all) of probability theory from purely game-theoretic principles based on betting strategies. The
+product martingale wealth process that appears in our work also appears in theirs (indeed, it is a
+fundamental process), but Shafer and Vovk did not explore the topics in our paper (conﬁdence sequences,
+explicit computationally eﬃcient betting strategies, sampling without replacement, thorough numerical
+simulations, and so on). Indeed, their book has a thorough treatment of probability and ﬁnance, but
+with respect to statistical inference, there is little explicit methodology for practice. Perhaps they were
+aware of such a statistical utility, but they did not explicitly recognize or demonstrate the excellent
+power of betting in practice (when properly developed) for problems such as ours.
+Statistical inference. Using the power of hindsight, we now know that Wald’s inﬂuential work on
+the sequential probability ratio test was implicitly based on martingale techniques [85]. Wald derived
+many fundamental results that he required from scratch without having the general language that was
+68
+being set up by Doob in parallel to his work. In the case of testing a simple nullH0 :θ =θ∗ against a
+composite alternativeH0 :θ⁄=θ∗, Wald [85, Eq (10:10)] suggests forming the likelihood ratio process∏n
+i=1fθi−1(Xi)/∏ni=1fθ∗(Xi), whereθi−1 is a mapping fromX1,...,X i−1 to Θ; in other words,θi−1
+is predictable. In the language of our paper, this is a predictable plug-in, and the ﬁrst appearance of
+betting-like ideas in the statistical literature. However, beyond this passing equation in a parametric
+setup, the idea appears to have lain dormant.
+Robbins (along with students and colleagues Siegmund, Darling, and Lai) quickly realized the
+power of Wald’s and Ville’s ideas as well as martingales more generally, and pursued a rather broad
+agenda around sequential testing and estimation, including the introduction and extensive study of
+conﬁdence sequences and the method of mixtures [23, 21, 22, 69, 70, 71, 72, 73, 49]. Robbins and
+Siegmund also analyzed Wald’s “betting” test, and proved in some generality that its behavior is similar
+to a mixture likelihood ratio test [73, Section 6]. Most of Wald’s and Robbins’ work was parametric,
+but Robbins did explicitly study the sub-Gaussian setting in some detail [68]. Building on a vast
+literature of Chernoﬀ-style concentration inequalities that exploded after Robbins’ time, Howard et al.
+[38, 39] recently extended mixture methods of Robbins to derive conﬁdence sequences under a large
+class of nonparametric settings using exponential supermartingales. Howard et al. [38, 39] recognized
+Wald’s betting idea, but did not develop it nonparametrically beyond a brief mention in the paper as a
+direction for future work. The current work takes this natural next step in some thorough detail.
+Information and coding theory. Soon after the seminal work of Shannon [79], another researcher
+at AT&T Bell Labs, John Larry Kelly Jr. wrote a paper titled “A New Interpretation of Information
+Rate” which explicitly connected betting with the new ﬁeld of information theory, complementing the
+work of Shannon [44]. In short, he proved that it is possible to bet on the symbols in a communication
+channel at odds consistent with their probabilities in order to have a gambler’s wealth grow exponentially,
+with the exponent equaling the rate of transmission over the channel. More explicitly, given a sequence
+of Bernoulli random variables with probabilityp> 1/2, Kelly proved that betting a(2p− 1) fraction of
+your current wealth on the next outcome being 1 is the unique strategy that maximizes the expected
+log wealth of the gambler.
+When the probabilityp changes at each step in an unknown manner, the “universal coding” work of
+Krichevsky and Troﬁmov [46] showed that a mixture method involving the Jeﬀreys prior and maximum
+likelihood can achieve nearly the optimal wealth in hindsight, with the expected log wealth of their
+strategy only being worse than the optimal oracle log-wealth by a factor that is logarithmic in the
+number of rounds; these observations work for any discrete alphabet, not just a binary. Cover’s interest
+in these techniques spans several decades [16, 17, 18, 7, 6], culminating in his famous universal portfolio
+algorithm [19], that today forms a standard textbook topic in information theory.
+There are other parts of information/coding theory that could be seen as related in some ways to
+betting through the use of (what are now called) e-variables: these include the topics of prequential
+model selection and minimum description length; see works by Rissanen [66, 67], Dawid [24, 25],
+Grünwald [31], Grünwald et al. [32], Li [51] and references therein.
+Online learning and sequential prediction under log loss.In the 1990s, the problems studied
+by Krichevsky, Troﬁmov, and Cover continued to be extended — often dropping the information
+theoretic context — under the title of sequential prediction under the logarithmic loss. In the active
+subﬁeld of online learning, the previous results were eﬀectively “regret bounds” against potentially
+adversarial sequences of observations, with a chapter devoted to the problem in the book on prediction,
+learning and games by Cesa-Bianchi and Lugosi [15]. More recently, Orabona and colleagues such as
+Pal and Jun have found powerful implications of these ideas in deriving parameter-free algorithms for
+online convex optimization [59, 60, 41, 40].
+Rakhlin and Sridharan [63] found that deterministic regret inequalities can be used to derive
+concentration inequalities for martingales, connecting the two rich ﬁelds. Later, Jun and Orabona [40]
+also derive concentration inequalities using their betting-based regret bounds, with explicit bounds
+69
+derived in the sub-Gaussian and bounded settings. However, because regret bounds could be tight
+in rate but are typically loose in constants, the resulting concentration inequalities are not tight in
+practice. Thus, we view this line of work as important and complementary to our explorations, which
+are diﬀerent in their motivation, derivation and practicality.
+Typically, none of these lines of literature have cited the others.For example, the important paper
+of Rakhlin and Sridharan [63] does not mention the work of Ville, Wald or Robbins, or even of Vovk
+and Shafer. Similarly, despite the books of Shafer and Vovk having a wonderful coverage of the history
+of probability and martingales stemming back hundreds of years, even their recent 2019 book [77] does
+not cite the coding theory and online learning literature very much, including the works of Orabona
+and coauthors [59, 60, 41, 20, 40], Krichevsky and Troﬁmov [46], or Rakhlin and Sridharan [63]. Recent
+work of Orabona and colleagues also in turn has no mention of the books of Shafer and Vovk [76, 77],
+or works of Ville, Wald, Robbins, Howard, their coauthors and other recent authors. The work of
+Howard et al. [38, 39] does cite the Wald and Robbins literatures, as well as the books of Shafer and
+Vovk and pioneering work of Ville, but does not form connections to information/coding theory nor to
+online learning. The excellent book of Cesa-Bianchi and Lugosi [15] does not cite Ville, the seminal
+martingale works of Robbins, or the 2001 book by Shafer and Vovk.4
+The reason for the lack of intersection of these parallel threads is likely manifold, and deﬁnitely
+far from malicious: (a) these works were and continue to be published in diﬀerent literatures, (b)
+these works had diﬀerent goals in mind, meaning that they were addressing diﬀerent problems and
+often using diﬀerent techniques, (c) our understanding of these literatures and their relationships is
+constantly evolving and far from complete; it is likely that no author has a command over all these
+parallel literatures, and indeed this should not be expected.
+In the preface of their 2006 book, Cesa-Bianchi and Lugosi write
+Prediction of individual sequences, the main theme of this book, has been studied in
+various ﬁelds, such as statistical decision theory, information theory, game theory, machine
+learning, and mathematical ﬁnance. Early appearances of the problem go back as far as
+the 1950s, with the pioneering work of Blackwell, Hannan, and others. Even though the
+focus of investigation varied across these ﬁelds, some of the main principles have been
+discovered independently. Evolution of ideas remained parallel for quite some time. As
+each community developed its own vocabulary, communication became diﬃcult. By the
+mid-1990s, however, it became clear that researchers of the diﬀerent ﬁelds had a lot to
+teach each other. When we decided to write this book, in 2001, one of our main purposes
+was to investigate these connections and help ideas circulate more ﬂuently. In retrospect,
+we now realize that the interplay among these many ﬁelds is far richer than we suspected.
+... Today, several hundreds of pages later, we still feel there remains a lot to discover. This
+book just shows the ﬁrst steps of some largely unexplored paths. We invite the reader to
+join us in ﬁnding out where these paths lead and where they connect.
+Thus it is clear that Cesa-Bianchi and Lugosi already foresaw that there were many connections
+between the ﬁelds that have been unstated, underappreciated, undiscovered and underutilized. The
+connections we brieﬂy point out above between these literatures, both historical and modern, are
+themselves new in their own right (not existing in any of the aforementioned books or papers) and may
+be considered a small contribution of this paper. A more thorough investigation of these connections
+may be the topic of a future survey paper, or indeed, a book on these topics.
+4Authors like like Rissanen [66, 67] and Dawid [24, 25] are not cited in most of these works, perhaps because the
+connections of their works to betting are indirect.
+70

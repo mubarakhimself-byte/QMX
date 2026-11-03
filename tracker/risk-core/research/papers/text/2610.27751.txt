@@ -1,0 +1,1128 @@
+arXiv 2610.27751  https://arxiv.org/abs/2610.27751
+
+1
+Market Regime-Based Multi-Asset Portfolio
+Optimization Using Nested Clustered Optimization
+for Tactical Asset Allocation
+Supriadi1,2 and Bambang Siswoyo 3
+Abstract—We investigate the interaction between market regime
+detection and Nested Clustered Optimization (NCO) for tactical
+asset allocation across heterogeneous multi asset portfolios.
+The central empirical question is whether conditioning the
+NCO pipeline, encompassing covariance estimation, hierarchical
+clustering, and weight allocation, on latent market states genuinely
+enhances risk adjusted performance, or conversely, whether
+estimation uncertainty within regime filtered sub samples induces
+severe turnover and performance drag. We implement a causal
+rolling Gaussian Hidden Markov Model (HMM) coupled with an
+adaptive rebalancing mechanism that distinguishes regime shifts
+from portfolio weight drift. The framework is evaluated on a
+monthly Indonesian multi asset universe comprising sovereign
+bond yields (SBN), the LQ45 equity index, spot gold (XAU/IDR),
+foreign exchange (CNY/IDR), and Bitcoin (BTC/IDR) across
+a 56 month out of sample period (January 2021 to August
+2025). Rigorous walk forward backtesting reveals that standard
+regime agnostic NCO achieves remarkable capital preservation
+and risk adjusted efficiency, delivering a 29.97% cumulative
+return (5.78% annualized), a maximum drawdown of only 2.18%,
+a Calmar ratio of 2.65, and low monthly turnover of 5.41%. In
+contrast, conditioning NCO on an unconstrained HMM in a small
+multi asset universe amplifies parameter estimation noise and
+induces excessive rebalancing (47 events; 24.58% average monthly
+turnover), which erodes net cumulative return to 1.60% and
+increases drawdown to 9.99%. These findings demonstrate that
+without explicit transition persistence or asymmetric downside
+objectives, regime switching frameworks can degrade rather than
+improve clustered portfolio stability, establishing crucial empirical
+boundaries for machine learning asset allocation.
+Index Terms—market regime detection, nested clustered opti-
+mization, tactical asset allocation, hidden Markov model, multi-
+asset portfolio, adaptive rebalancing, walk-forward backtesting,
+Indonesian capital markets.
+I. INTRODUCTION
+Modern portfolio theory, established in the seminal work
+of Markowitz [1], formalizes asset allocation as a quadratic
+trade-off between expected return and variance. While mathe-
+matically elegant, classical mean-variance optimization (MVO)
+suffers from acute out-of-sample fragility. As demonstrated
+by Michaud [2], quadratic programming acts as an “error
+maximizer,” placing excessive long weights on assets with
+1Supriadi is with the COCONUT Computer Club, Makassar, Indonesia
+(e-mail: supriadi@coconut.or.id).
+2Supriadi is with the Master Program in Information Systems,
+Universitas Komputer Indonesia, Bandung, Indonesia (e-mail: supri-
+adi.75124007@mahasiswa.unikom.ac.id).
+3Bambang Siswoyo is with the Master Program in Information Sys-
+tems, Universitas Komputer Indonesia, Bandung, Indonesia (e-mail: bam-
+bang.siswoyo@email.unikom.ac.id).
+overestimated expected returns or understated covariances.
+Furthermore, DeMiguel et al. [3] showed that naive 1/N
+diversification frequently outperforms optimized portfolios out
+of sample due to severe parameter estimation error, while
+Bayesian shrinkage approaches such as Black and Litterman [4]
+and covariance regularization by Ledoit and Wolf [5], [6] only
+partially resolve structural rank deficiencies in ill-conditioned
+covariance matrices.
+In practical multi-asset allocation, these estimation chal-
+lenges are compounded by pervasive non-stationarity, time-
+varying correlations, fat-tailed distributions, and structural
+breaks [7], [8]. During financial crises and market distress,
+cross-asset correlations spike discontinuously, shattering the
+diversification benefits anticipated during tranquil regimes [9],
+[10].
+To mitigate these vulnerabilities, financial machine learning
+has developed two distinct paradigms: (i) structural graph
+clustering and (ii) dynamic regime conditioning. Within the
+structural paradigm, Mantegna [11] and Onnela et al. [12]
+pioneered the application of minimum spanning trees and hier-
+archical clustering to analyze correlation taxonomies. Building
+on random matrix theory [13], [14], L’opez de Prado [15]
+developed Hierarchical Risk Parity (HRP), which replaces
+matrix inversion with hierarchical tree clustering and recursive
+bisection. Subsequently, L’opez de Prado [16], [17] formulated
+Nested Clustered Optimization (NCO). NCO decomposes
+the global portfolio problem into modular intra-cluster and
+inter-cluster sub-problems, effectively insulating orthogonal
+asset clusters from noise propagation while retaining custom
+optimization objectives [18]–[20].
+Concurrently, the regime-conditioning paradigm utilizes
+Hidden Markov Models (HMMs) and Markov-switching frame-
+works to detect latent macroeconomic environments (e.g.,
+expansion, high growth, crisis) and tactically adjust portfolio
+exposures [21]–[26]. Intuitively, combining regime detection
+with clustered optimization appears compelling: if market
+regimes dictate correlation regimes, conditioning covariance
+estimation and hierarchical trees on the active regime should
+yield superior tactical asset allocation (TAA).
+However, conditioning complex optimization pipelines on
+latent regimes introduces an acute, often overlooked trade-off:
+estimation error vs. regime adaptiveness[27], [28]. In empir-
+ical practice, estimating state-dependent covariance matrices
+requires partitioning historical data into regime-specific sub-
+samples. In small multi-asset universes over realistic rolling
+windows, these sub-samples suffer severe sample starvation
+arXiv:2610.27751v4  [q-fin.PM]  29 Oct 2026
+2
+(Tk < N), inflating parameter uncertainty and causing erratic
+portfolio turnover that rapidly compounds under transaction
+costs [29].
+a) Research Questions.:This paper systematically inves-
+tigates this trade-off by implementing and rigorously stress-
+testing a regime-conditioned NCO framework against static
+NCO and classical benchmarks. We address three central
+research questions:
+RQ1 Does market regime conditioning genuinely enhance
+Nested Clustered Optimization out of sample, or does
+parameter estimation uncertainty within regime-filtered
+windows introduce detrimental noise and turnover drag?
+RQ2 How does static (regime-agnostic) NCO compare against
+classical Minimum Variance and independent Hierarchical
+Risk Parity (HRP) in preserving capital across high-
+volatility multi-asset regimes?
+RQ3 What is the exact empirical impact of adaptive rebalanc-
+ing rules (distinguishing regime transitions from weight
+drift) and transaction cost friction on net portfolio alpha?
+b) Key Contributions.:To answer these questions, we
+evaluate our models on an empirical 5-asset Indonesian multi-
+asset universe spanning sovereign fixed-income yields (SBN),
+large-cap equities (LQ45), spot gold (XAU/IDR), currency
+(CNY/IDR), and Bitcoin (BTC/IDR) over an 80-month period
+(January 2019 to August 2025) with a 56-month causal out-of-
+sample testing window (January 2021 to August 2025). Our
+primary contributions are threefold:
+1) Empirical Demarcation of Regime Conditioning Bound-
+aries:We demonstrate that conditioning NCO on an
+unconstrained 3-state HMM in a small multi-asset universe
+(N= 5 ) severely degrades performance, producing
+a net cumulative return of only 1.60% compared to
+29.97% for standard regime-agnostic NCO. We dissect
+the mathematical causes: sample starvation in rolling sub-
+windows (Tk ≈4–8 ), label oscillation (26 regime shifts),
+and turnover drag (24.58%/month).
+2) Validation of Graph Clustering for Capital Preserva-
+tion:Standard NCO delivers exceptional risk mitigation,
+restricting maximum drawdown to an industry-leading
+2.18% and achieving a Calmar ratio of 2.65, substantially
+outperforming Minimum Variance (4.75% MDD, 0.78
+Calmar), independent HRP (4.21% MDD, 0.41 Calmar),
+and Equal Weight (15.27% MDD).
+3) Decomposition of Rebalancing Mechanisms:We introduce
+a formal distinction between regime-driven and drift-
+driven rebalancing events under an adaptive threshold
+δ= 0.05 . We show that out of 47 active rebalancing
+events in Regime-NCO, 26 were driven by state transitions
+and 20 by weight drift, proving that turnover is primarily
+fueled by regime instability rather than organic market
+drift.
+II. RELATEDWORK
+A. Regime-Switching Models and Dynamic Asset Allocation
+The study of structural changes in financial time series
+originates with the Markov-switching autoregressive framework
+of Hamilton [21]. Subsequent literature demonstrated that asset
+return distributions, factor risk premia, and inter-asset correla-
+tions vary fundamentally across market states [8], [22]–[25].
+In multi-asset allocation, Kritzman et al. [26] proposed regime-
+conditioned asset allocation to defend against tail shocks,
+while Nystrup et al. [30], [31] implemented Hidden Markov
+Models within model predictive control (MPC) frameworks to
+dynamically adjust equity-bond allocations.
+Recent machine learning contributions have expanded
+regime-aware allocation through advanced statistical represen-
+tations. Costa [32] analyzed risk parity portfolio construction
+across Markov states, while Bouzouita et al. [33] developed
+causal Wasserstein HMMs to preserve stable state identi-
+ties across rolling calibration windows. Zhang et al. [34]
+introduced RegimeFolio, combining macroeconomic regime
+filtering with ensemble learners for sectoral equity optimization.
+Concurrently, Verma et al. [35] combined HMM regime
+inference with deep reinforcement learning, and Fernandes
+and Desell [36] developed financially guided deep learning
+architectures. To address spurious state switching, Shu et
+al. [37] introduced statistical jump models that penalize non-
+persistent state transitions. Furthermore, Boukardagha [38]
+and Bouy’e et al. [39] evaluated macro regimes in cross-asset
+settings, observing that downside protection often trades off
+against estimation noise.
+B. Hierarchical Clustering and Robust Graph Allocations
+The vulnerability of Markowitz portfolios to covariance
+noise has stimulated extensive research into graph theory and
+network filtering [11], [12], [40]–[42]. L’opez de Prado [15]
+established Hierarchical Risk Parity (HRP), which arranges
+assets on a hierarchical dendrogram and allocates risk via top-
+down recursive bisection, eliminating the need to invert the
+covariance matrix. Raffinot [18], [19] generalized hierarchical
+clustering to include Equal Risk Contribution (HERC) and
+Minimum Variance variants.
+Building on random matrix denoising [13], [14], L’opez
+de Prado [16], [17] developed Nested Clustered Optimization
+(NCO). Unlike HRP, NCO retains Markowitz optimization but
+confines quadratic programming to modular intra-cluster and
+inter-cluster stages. Burtini and Loeppky [20] demonstrated
+that NCO provides robust out-of-sample diversification across
+global equity markets. Nevertheless, how NCO interacts with
+dynamic regime conditioning remains an unaddressed empirical
+frontier.
+C. Turnover Regularization and Estimation Risk
+A critical consideration in tactical asset allocation is execu-
+tion friction. As formalized by Muthuraman and Kumar [43]
+and Boyd et al. [29], optimal dynamic trading under propor-
+tional transaction costs requires establishing a no-trade band
+around target weights. Without explicit turnover regularization,
+tactical models experience severe performance drag. Sepp
+et al. [27] and Oliveira et al. [28] warned that parameter
+uncertainty in regime-switching models frequently degrades
+out-of-sample returns below those of passive benchmarks.
+3
+D. Literature Comparison
+Table I situates this study among representative contributions
+in regime-based and machine-learning asset allocation.
+III. METHODOLOGY
+A. Problem Statement and Preliminaries
+Consider a multi-asset universe of N assets. Let rt ∈R N
+denote the vector of asset returns at time t. At each decision
+boundary, the portfolio manager determines the allocation
+vectorw t ∈R N subject to:
+w⊤t 1= 1,w t ≥0,(1)
+representing a long-only, fully-invested portfolio constraint. The
+realized portfolio return at time t is rp,t =w ⊤t rt. The goal
+is to dynamically adjust the weights to adapt to time-varying
+market environments (regimes) while controlling risk.
+B. Gaussian Hidden Markov Model for Regime Detection
+1) Model Choice and Justification:We employ a Gaussian
+HMM for regime detection because it captures persistent
+macroeconomic cycles through its transition probability matrix,
+provides posterior probabilities for soft state assignments,
+maps latent states directly to intuitive economic regimes
+(e.g., expansion, stagnation, crisis), and maintains a compact
+parameter footprint that limits overfitting.
+2) Feature Vector:The HMM is fitted on feature vector ft
+computed
+from data available at or beforet:
+ft =
+
+¯reqt , σeqt ,¯rbondt ,∆e t⊤,(2)
+where ¯reqt and σeqt denote the rolling mean and realized
+volatility of the equity index (LQ45), ¯rbondt is the rolling mean
+return of sovereign bonds (SBN), and ∆et is the monthly return
+of the bilateral exchange rate (CNY/IDR).
+3) Model Specification:Let st ∈ {1, . . . , K}denote the
+unobserved market state at time t, governed by a first-order
+Markov chain with transition probability matrix A∈R K×K
+where Aij = Pr(s t =j|s t−1 =i) with PKj=1 Aij = 1 ,
+and initial distribution πk = Pr(s1 =k) . Conditional on the
+latent state st =k , feature observations follow a multivariate
+Gaussian emission distribution:
+ft |(s t =k)∼ N(µk,Σ obsk ).(3)
+4) Number of States Selection:
+BIC(K) =−2 ˆℓK +m K lnT train,(4)
+evaluated for K∈ {2,3,4}. The selected K= 3 minimizes
+BIC.
+5) Regime Labeling:States are labeled post-estimation by
+ranking the mean equity return feature:
+• Regime 1 (Bullish): high equity mean return, low volatility.
+•Regime 2 (Sideways/Neutral): near-zero equity return,
+moderate volatility.
+•Regime 3 (Bearish): negative equity return,
+high volatility, elevated FX stress.
+6) Causal Rolling Estimation:
+Definition 1 (Causal Regime Label):
+ˆst iscausalif computed using only
+{fτ :τ≤t}.
+At each decision timet:
+1) Extract windowD t ={f τ :t−W+ 1≤τ≤t}.
+2) Fit HMM onD t via Baum-Welch.
+3) Apply Viterbi decoding to obtainˆs t−W+1 , . . . ,ˆst.
+4) Set current regimeˆs t (last element).
+5) Weights governed by ˆst applied from t+ 1 (one-day
+execution lag).
+C. Nested Clustered Optimization under Regimes
+1) Regime-Specific Covariance Estimation:Let D(k)t =
+{rτ ∈ Dt : ˆsτ =k} denote the regime-filtered sub-sample
+with effective sample size Tk =|D (k)t |. With demeaned return
+vector ˜r(k)τ =r τ −¯r(k), the unbiased regime sample covariance
+matrix is:
+ˆΣ(k) = 1Tk −1 X
+τ∈D (k)t
+˜r(k)τ  ˜r(k)τ ⊤.(5)
+When Tk < N+ 5 , direct matrix inversion becomes ill-
+conditioned. To ensure positive definiteness and suppress
+parameter error, we implement adaptive shrinkage toward the
+unconditional covariance matrix ˆΣ:
+˜Σ(k) =α (k)t ˆΣ(k) +  1−α (k)t  ˆΣ,(6)
+where α(k)t = min(1, Tk/Wmin) represents the adaptive
+shrinkage weight governed by the thresholdW min = 2N.
+a) RMT Denoising and Regularization:The covariance
+matrix is denoised via analytical shrinkage [5] to stabilize
+eigenvalue dispersion against Marchenko–Pastur noise bound-
+aries [13].
+2) Distance Matrix and Clustering:Denoting the de-
+noised correlation matrix as C(k) with elements C (k)ij =
+ˆΣ(k)dn,ij/q ˆΣ(k)dn,ii ˆΣ(k)dn,jj , the proper pairwise metric distance
+d(k)ij ∈[0,1]is given by:
+d(k)ij = q 12  1−C (k)ij .(7)
+Average-linkage (UPGMA) hierarchical tree clustering is per-
+formed on distance matrix D(k), with the optimal cluster count
+M determined via the maximum Silhouette score criterion [44].
+3) Intra-Cluster and Inter-Cluster Optimization:
+a) Intra-cluster allocation.:For each cluster m∈
+{1, . . . , M}comprising asset subset Im ={i:c(i) =m} ,
+the intra-cluster allocation vector u∗m solves the constrained
+minimum-variance problem over the unit simplex ∆m ={u≥
+0|1 ⊤u= 1}:
+u∗m = arg minum∈∆m u⊤mΣ(k)m um.(8)
+b) Inter-cluster allocation.:Condensing the cluster covari-
+ance into Σcl =W ⊤intra ˜Σ(k)Wintra, the inter-cluster weight
+vector v∗ optimizes allocation across clusters over the simplex
+∆M :
+v∗ = arg min
+v∈∆M
+v⊤Σclv.(9)
+4
+TABLE I
+LITERATURE COMPARISON ACROSS PORTFOLIO DESIGN,REGIME MODELING,AND REBALANCING FRAMEWORKS.
+Study Asset Universe Method Regime Model Rebalancing Core Finding / Focus
+L’opez de Prado [15] US Equities HRP None Static / Periodic Hierarchical tree clus-
+tering eliminates covari-
+ance matrix inversion er-
+rors.
+L’opez de Prado [17] Global Multi-Asset NCO None Periodic Two-step clustering re-
+solves Markowitz ill-
+conditioning.
+Ang and Timmermann [8] Multi-Asset Mean-Var Markov Switching Discrete States Regime shifts alter opti-
+mal allocation between
+stocks and bonds.
+Costa [32] Multi-Asset Risk Parity 3-State HMM Monthly Regime-dependent co-
+variance improves down-
+side tracking.
+Nystrup et al. [31] Multi-Asset MPC Gaussian HMM Dynamic Penalties Turnover penalties pre-
+vent cost erosion in
+switching regimes.
+Sepp et al. [27] US Multi-Asset Risk-Based Macro Regimes Periodic Estimation error often
+erodes regime-switching
+tactical gains.
+Shu et al. [37] Multi-Asset Mean-Var Jump Model Discrete Jump penalties suppress
+noise-induced regime
+whipsawing.
+This Study ID Multi-Asset NCO / HRP Rolling HMM Adaptive (δ= 0.05) Identifies sample star-
+vation and delineates
+boundaries of regime
+NCO.
+c) Final composite weights.:The final asset allocation
+vectorw (k)t is synthesized via modular product:
+w(k)i,t =v ∗c(i) ·u ∗c(i),i,such that
+NX
+i=1
+w(k)i,t = 1.(10)
+Algorithm 1Regime-Specific NCO at Decision Timet
+Require:D t, current regimeˆst =k
+1:ComputeD (k)t ; estimate ˜Σ(k)
+with fallback; apply shrinkage
+2:Compute angular distance matrixD (k)
+3: Apply average-linkage clustering; select M via Silhouette
+4:form= 1, . . . , Mdo
+5:Solve intra-cluster MV (Eq. 8)→u ∗m
+6:end for
+7:BuildΣ cl; solve inter-cluster MV
+(Eq. 9)→v ∗
+8:w (k)i ←v ∗c(i) ·u ∗c(i),i for alli
+returnw (k)
+D. Tactical Asset Allocation, Downside Risk, and Adaptive
+Rebalancing
+To monitor downside tail risk throughout the backtest,
+we evaluate the Conditional Value-at-Risk (CVaR at 95%
+confidence) following Rockafellar and Uryasev [45] alongside
+standard drawdown metrics.
+In this framework, regime information informs tactical asset
+allocation indirectly through the NCO inputs (covariance matrix
+and clustering hierarchy) rather than via rigid, hand-crafted
+allocation heuristics.
+Definition 2 (Adaptive Rebalancing Trigger):
+At timet, rebalancing is triggered ifeither:
+(i) Regime change:ˆs t ̸= ˆst−1, or
+(ii) Weight drift:max i |wmkti (t)−w (k)i (t)|> δ.
+IV. IMPLEMENTATION
+A. Data and Preprocessing
+The empirical multi-asset universe reflects the heterogeneous
+structural dynamics of an emerging capital market [46], [47].
+We assemble five distinct asset classes observed monthly from
+January 2019 to August 2025 (T= 80months):
+1) Sovereign Bonds (SBN): Monthly percentage changes
+in the Indonesia 10-Year Government Bond Yield series
+from Investing.com.Important empirical disclosure:As a
+yield-based benchmark, surges in yields (such as during
+the March 2020 COVID-19 shock, +14.81%) reflect bond
+price depreciations, testing portfolio resilience against
+sovereign stress [10].
+2) Equity Benchmark (LQ45): Monthly closing index of the
+45 most capitalized and liquid equities on the Indonesia
+Stock Exchange (IDX), sourced from Yahoo Finance
+(ˆJKLQ45).
+3) Spot Gold (XAU/IDR): Spot Gold denominated directly
+in Indonesian Rupiah (XAU/IDR) historical closing series
+from Investing.com, capturing domestic currency safe-
+haven dynamics [48].
+5
+4) Foreign Exchange (CNY/IDR): Chinese Yuan to Indone-
+sian Rupiah monthly exchange rate from Investing.com,
+reflecting major bilateral trade flows.
+5) Cryptocurrency (BTC/IDR): Bitcoin denominated in In-
+donesian Rupiah from Investing.com, introducing high
+growth momentum, non-linear volatility, and asymmetric
+co-movements [49], [50].
+To ensure full mathematical consistency between feature
+extraction and portfolio accounting:
+1) Portfolio Wealth Evolution:Net asset value (NA V) evolves
+strictly under monthly simple returns Ri,t = Pi,t−Pi,t−1Pi,t−1 .
+Gross portfolio return is Rgrossp,t =w ⊤t Rt, and net return
+is Rnetp,t =R grossp,t −c×TO t, with proportional friction
+c= 10bps.
+2) Annualization and Performance Metrics:Geometric com-
+pounding determines annualized returns Ann.R= (1 +
+CR)12/56 −1, and annualized volatility is σann =s p ×√12
+where sp is the sample standard deviation (ddof= 1 ). The
+benchmark risk-free hurdle is set to rf = 0.479% monthly
+(5.75% annualized), corresponding to the empirical Bank
+Indonesia 7-Day Reverse Repo Rate (BI-Rate) average
+over the 2021–2025 out-of-sample window. Annualized
+excess Sharpe ratio is SR= (Ann.R−r f )/σann, while
+the zero-hurdle Sharpe ratio is SR0 =Ann.R/σ ann.
+Annualized Sortino ratio is SOR= (Ann.R−r f )/σdown,
+where σdown is computed from returns below rf , and the
+Calmar ratio is CAL=Ann.R/MDD.
+3) HMM Feature Transformation:Monthly log-returns ℓi,t =
+ln(1 +Ri,t) are utilized exclusively for computing rolling
+stationary features (mean returns and realized volatilities)
+fed into the HMM.
+B. Benchmarks and Strategy Specifications
+We compare the proposed Regime-NCO strategy against five
+distinct benchmark configurations:
+1) Equal Weight (1/N): A passive strategy allocating equal
+weight (1/N= 20%) to each asset, rebalanced monthly.
+2) Buy-and-Hold: A passive strategy starting with equal
+weights but letting them drift with asset returns without
+rebalancing.
+3) Minimum Variance: A standard Markowitz optimizer that
+minimizes the portfolio variance using the unconditional
+sample covariance matrix.
+4) Hierarchical Risk Parity (HRP): An independent imple-
+mentation of the graph-based recursive bisection allocation
+proposed by L’opez de Prado [15], utilizing single-linkage
+hierarchical tree clustering and inverse-variance risk parity
+without quadratic matrix inversion, rebalanced monthly.
+5) Standard NCO (No Regime): A regime-agnostic Nested
+Clustered Optimization pipeline using the unconditional
+sample covariance matrix.
+C. Transaction Costs
+Following realistic portfolio constraints, transaction costs
+are charged at a flat rate of c= 10 basis points (0.10%) on
+the absolute change in portfolio weights during rebalancing:
+TCt =c
+NX
+i=1
+|wi,t −w mkti,t−|,(11)
+where wi,t is the target weight and wmkti,t− is the pre-rebalancing
+market-drifted weight. This proportional cost model penalizes
+excessive turnover and simulates friction in emerging markets.
+D. Evaluation Settings and Walk-Forward Protocol
+Estimation window W = 24 months; holding horizon h = 1
+month;
+step size ∆ = 1 month; out-of-sample period is 56 months
+(Jan 2021 – Aug 2025).
+Algorithm 2Walk-Forward Backtesting Loop
+Require:r 1:T , windowW, horizonh, step∆,
+costc, driftδ
+1:V 0 ←1
+2:forj= 0,1, . . .whilet j +h≤Tdo
+3:t j ←W+j∆
+4:Fit HMM; decodeˆs tj
+5:Computew (ˆstj ) via Algorithm 1
+6:ifregime changed orj= 0then
+7:Compute TC; adjustV; updatew curr
+8:end if
+9:forτ=t j + 1tot j +hdo
+10:UpdateV τ ; check weight drift trigger
+11:end for
+12:end for
+return{V t}, rebalancing log
+V. RESULTS
+This section reports the empirical findings from backtesting
+the HMM-NCO framework
+on the monthly multi-asset dataset over the 56-month out-
+of-sample period (Jan 2021 – Aug 2025).
+A. Regime Detection Results
+The causal rolling Gaussian HMM segments the 56-month
+out-of-sample evaluation period (January 2021 to August 2025)
+into three distinct macroeconomic regimes, as illustrated in
+Fig. 1: 17 months under Regime 1 (Bullish, 30.36%), 30
+months under Regime 2 (Sideways/Neutral, 53.57%), and 9
+months under Regime 3 (Bearish, 16.07%). Visual inspection
+of Fig. 1 reveals that while the model successfully identifies
+major market phases—such as the post-pandemic recovery
+and subsequent localized contractions—causal step-by-step
+estimation triggers a total of 26 discrete regime transitions over
+56 months, indicating significant state switching across rolling
+windows.
+The empirical validity of these decoded states is corrob-
+orated by the regime-conditional return and risk moments
+reported in Table II. Across the three states, the multi-asset
+universe exhibits starkly divergent behavior. Under Regime 1
+(Bullish), Indonesian sovereign bonds (SBN) generate an aver-
+age monthly return of +0.76% (σ= 3.49% ), while spot gold
+6
+Fig. 1. Decoded market regimes overlaid on the LQ45 price index. Shaded
+areas represent the three regimes: Bullish (green), Sideways (yellow), and
+Bearish (red).
+displays strong appreciation (+1.87%/month). Under Regime
+2 (Sideways), Bitcoin experiences aggressive upside expansion
+(+9.36%/month, σ= 18.01% ) while domestic equities (LQ45)
+record modest gains ( +0.56%/month). In Regime 3 (Bearish),
+severe contraction grips both equities (LQ45, −0.77%/month)
+and crypto assets (BTC, −3.96%/month), whereas foreign
+exchange (CNY/IDR) acts as a modest defensive cushion
+(+0.08%/month).
+These distributional divergences induce profound reorgani-
+zations in the inter-asset correlation structure, as rendered in
+the pairwise correlation heatmaps of Fig. 2. In tranquil bullish
+periods (left panel), sovereign bonds exhibit moderate positive
+comovement with foreign currency and gold. During sideways
+markets (middle panel), correlation clusters loosen, providing
+favorable conditions for hierarchical diversification. In contrast,
+during bearish stress (right panel), cross-asset correlations shift
+discontinuously: equity-bond correlations turn negative as flight-
+to-safety dynamics emerge, and gold decouples from risk assets.
+When these regime-conditional parameters are propagated
+through the NCO pipeline, they translate into distinct tac-
+tical asset allocations (Table III). In Bullish and Sideways
+environments, NCO allocates balanced risk weights across
+sovereign bonds (25.28%–29.00%), foreign exchange (34.51%–
+40.52%), and gold (19.84%–20.17%), with modest equity
+exposure (13.43%–16.07%) and fractional Bitcoin allocations
+(0.57%–0.60%). During Bearish regimes, the model executes a
+flight to safe havens, expanding gold to 28.54% and retaining
+39.02% in foreign exchange, while slashing equity weights to
+6.22%. Although economically coherent, this dynamic weight
+reshuffling creates substantial trading volume, as examined
+next.
+B. Main Performance Comparison
+Table IV presents the comprehensive out-of-sample perfor-
+mance metrics for the proposed Regime-NCO strategy against
+static NCO, True HRP, Minimum Variance (MV), Equal Weight
+(1/N), and Buy-and-Hold across the 56-month evaluation
+horizon (January 2021 to August 2025). The historical backtest
+trajectories are visually documented in Fig. 3 through Fig. 6.
+a) Cumulative Performance and Capital Preservation.:
+As illustrated in Fig. 3, standard regime-agnostic NCO
+demonstrates steady, monotonic capital growth throughout
+the backtest, achieving a cumulative net return of 29.97%
+(5.78% annualized) with an annualized volatility of 4.65%. It
+substantially outperforms classical Minimum Variance (18.45%
+cumulative, 3.69% annualized) and True HRP (8.27% cu-
+mulative, 1.72% annualized). Although unmanaged passive
+benchmarks—Equal Weight (76.70% cumulative) and Buy-and-
+Hold (87.98% cumulative)—produce higher nominal returns
+due to unhedged exposure to Bitcoin rallies, their returns come
+at the expense of severe tail risk. Conversely, Regime-NCO
+suffers dramatic performance drag, ending the 56-month period
+with a cumulative net return of only 1.60% (0.34% annualized).
+b) Rolling Risk-Adjusted Consistency.:Fig. 4 compares
+the rolling 12-month Sharpe ratio dynamics between Static
+NCO and Regime-NCO. Static NCO maintains a resilient,
+predominantly positive risk-adjusted trajectory across changing
+market cycles. In contrast, Regime-NCO exhibits severe
+Sharpe instability, plunging into negative territory repeatedly
+during 2022 and 2024. Because regime conditioning relies
+on filtered historical windows, optimal weights are updated
+with a structural lag, rotating into defensive assets after market
+drawdowns have already bottomed out.
+c) Tactical Allocation and Turnover Friction.:The mech-
+anism behind this performance divergence is visible in the
+tactical weight evolution depicted in Fig. 5. The 26 regime
+switches induce continuous, large-magnitude weight realign-
+ments between sovereign bonds, foreign currency, and spot
+gold. This aggressive portfolio reshuffling produces an average
+monthly turnover of 24.58% for Regime-NCO, compared to
+just 5.41% for Static NCO, 3.59% for True HRP, and 1.36%
+for Minimum Variance. Compounded by 10 bps transaction
+costs and execution friction, this turnover severely erodes net
+portfolio returns.
+d) Drawdown and Tail Risk Mitigation.:Fig. 6 displays
+the drawdown trajectories of all strategies. Static NCO demon-
+strates outstanding capital preservation, restricting maximum
+drawdown to an industry-leading 2.18% and achieving a CVaR
+(95%) of 1.67% and a Calmar ratio of 2.65. This performance
+comfortably surpasses Minimum Variance (4.75% MDD, 0.78
+Calmar), True HRP (4.21% MDD, 0.41 Calmar), Equal Weight
+(15.27% MDD), and Buy-and-Hold (21.17% MDD). In contrast,
+Regime-NCO experiences an expanded drawdown of 9.99%
+(CVaR of 3.85%), demonstrating that unconstrained state
+switching impairs rather than enhances downside protection.
+C. Statistical Significance and Performance Testing
+To assess whether differences in risk-adjusted performance
+are statistically meaningful, we conduct pairwise Sharpe ratio
+hypothesis tests following Jobson and Korkie [51] with the
+finite-sample variance correction developed by Memmel [52]:
+z=
+cSRi − cSRjq
+σ2ij/T ,(12)
+where the asymptotic variance is σ2ij = 2(1−ρ 2ij) + 12  SR2i +
+SR2j −2SR iSRjρ2ij, with ρij denoting the sample correlation
+between strategy returns ri,t and rj,t. The test is complemented
+by heteroskedasticity and autocorrelation consistent (HAC)
+robust standard errors [53], [54].
+7
+Fig. 2. Regime-conditional pairwise asset correlation matrices for the out-of-sample period. The three panels show shifts in correlation structures across
+Bullish (left), Sideways (middle), and Bearish (right) market states.
+TABLE II
+REGIME-CONDITIONAL STATISTICS(MEAN/STD IN%/MONTH, JAN2021 – AUG2025).
+Regime 1 (Bull) Regime 2 (Side) Regime 3 (Bear)
+Assetµ σ µ σ µ σ
+SBN 0.7641 3.4886 -0.0060 3.4669 -0.3800 3.3643
+LQ45 -1.2294 4.2803 0.5563 3.6483 -0.7689 5.1610
+Gold 1.8706 3.7232 1.7020 4.3380 -0.2833 1.8506
+Valas -0.3859 1.3328 -0.0240 1.5263 0.0844 1.2005
+BTC -0.6759 15.6970 9.3583 18.0107 -3.9633 15.6109
+Freq. 30.36% (17 m) 53.57% (30 m) 16.07% (9 m)
+TABLE III
+AVERAGE REGIME-CONDITIONAL PORTFOLIO WEIGHTS(%, JAN2021 –
+AUG2025).
+Asset Regime 1 (Bull) Regime 2 (Side) Regime 3 (Bear)
+SBN 29.00 25.28 25.90
+LQ45 16.07 13.43 6.22
+Gold 19.84 20.17 28.54
+Valas 34.51 40.52 39.02
+BTC 0.57 0.60 0.32
+Total 100.00 100.00 100.00
+Fig. 3. Cumulative portfolio value growth (logarithmic scale) for the proposed
+HMM-NCO strategy and all benchmark portfolios during the out-of-sample
+period (January 2021 – August 2025).
+Furthermore, to protect against backtest overfitting and
+data mining bias in walk-forward evaluation, we evaluate the
+distribution of test statistics in light of the Deflated Sharpe
+Fig. 4. Rolling 12-month Sharpe ratio comparison between the proposed
+HMM-NCO (regime-aware) and standard NCO (regime-agnostic) strategies.
+Ratio (DSR) framework of Bailey and L’opez de Prado [55]
+and backtesting standards articulated by Harvey and Liu [56].
+Table V reports pairwisep-values against Regime-NCO.
+The test confirms that the outperformance of static NCO
+over Regime-NCO is statistically significant at the 1% level
+(p= 0.0073 ), conclusively rejecting the hypothesis of equal
+risk-adjusted returns.
+D. Robustness and Sensitivity Analysis
+The robustness of the HMM-NCO system is analyzed
+across key operational dimensions: rebalancing drift threshold
+δ, transaction execution friction, and sovereign bond return
+modeling.
+8
+TABLE IV
+AUDITED OUT-OF-SAMPLE PORTFOLIO PERFORMANCE COMPARISON(JANUARY2021 – AUGUST2025, 56 MONTHS). RISK-FREE RATEr f = 0.479%
+MONTHLY(5.75%P.A., BANKINDONESIABI-RATE AVERAGE2021–2025). CR: CUMULATIVERETURN(%). ANN.R: COMPOUNDANNUALGROWTH
+RATE(%,GEOMETRIC ANNUALIZATION (1 +CR)12/56 −1 ). VOL: ANNUALIZEDVOLATILITY(%, sp × √12). SR: ANNUALIZEDEXCESSSHARPERATIO
+((ANN.R−r f )/VOL ). SOR: ANNUALIZEDSORTINORATIO. MDD: MAXIMUMDRAWDOWN(%). CAL: CALMARRATIO( ANN.R/MDD ). TO: AVERAGE
+MONTHLYTURNOVER(%/MO). NOTE: THE ZERO-HURDLE ANNUALIZEDSHARPE RATIO(ANN.R/VOL)FORSTATICNCOIS1.242.
+Strategy CR(%) Ann.R(%) V ol(%) SR SOR MDD(%) CAL CVaR95(%) TO(%/mo)
+Regime-NCO (Adap) 1.60 0.34 5.52 -0.9791 -1.3124 9.99 0.0340 3.85 24.58
+NCO (No Regime) 29.97 5.78 4.65 0.0063 0.0128 2.18 2.6506 1.67 5.41
+Equal Weight (1/N) 76.70 12.97 13.02 0.5551 1.0176 15.27 0.8496 6.67 0.00
+Buy-and-Hold 87.98 14.48 17.56 0.4975 0.8974 21.17 0.6841 9.47 0.00
+Min. Variance (MV) 18.45 3.69 4.70 -0.4371 -0.6258 4.75 0.7773 2.64 1.36
+True HRP 8.27 1.72 3.42 -1.1802 -1.6007 4.21 0.4074 2.23 3.59
+Fig. 5. Stacked area chart showing the tactical asset allocation weight evolution
+of the proposed HMM-NCO portfolio across time.
+Fig. 6. Out-of-sample portfolio drawdowns comparison across all portfolio
+strategies.
+TABLE V
+PAIRWISESHARPE RATIO TEST p-VALUES VS. REGIME-NCO (56 MONTHS).
+Benchmarkz-statisticp-value
+NCO (No Regime) 2.684 0.0073**
+Min. Variance (MV) 1.942 0.0521*
+True HRP 0.612 0.5405
+Equal Weight (1/N) 2.891 0.0038**
+Buy-and-Hold 2.514 0.0119*
+1) Rebalancing Drift Thresholds and Turnover Breakdown:
+Table VI audits the rebalancing events and turnover break-
+down across all strategies under the baseline adaptive trigger
+(δ= 0.05 ). Over the 56-month period, Regime-NCO triggered
+TABLE VI
+AUDIT OF REBALANCING EVENTS AND TURNOVER BREAKDOWN(56
+MONTHS).
+Strategy / Rebalance Mode Total Regime Drift TO (%/mo)
+Regime-NCO (δ= 0.05) 47 26 20 24.58
+NCO (No Regime, Monthly) 55 0 55 5.41
+True HRP (Monthly) 55 0 55 3.59
+Min. Variance (Monthly) 55 0 55 1.36
+Buy-and-Hold 0 0 0 0.00
+47 rebalancing interventions—26 driven by regime shifts
+and 20 by weight drift exceeding δ (in addition to initial
+inception)—generating 24.58% average monthly turnover. In
+contrast, Static NCO and True HRP execute scheduled monthly
+rebalancings with vastly lower turnover (5.41% and 3.59%,
+respectively). Sensitivity analysis varying δ∈[0.02,0.10]
+reveals that portfolio turnover is overwhelmingly governed
+by regime switches rather than organic drift, confirming the
+robustness of the adaptive mechanism.
+2) Sovereign Bond Repricing and Duration Robustness:
+To examine the sensitivity of portfolio outcomes to sovereign
+fixed income specifications, we evaluate an analytical duration-
+convexity repricing model for the Indonesian 10-year sovereign
+bond (SBN):
+RTRSBN,t ≈ −D∗∆yt + 12 Cx(∆yt)2 + yt−112 ,(13)
+where ∆yt =y t −y t−1 is the monthly shift in 10-year
+benchmark yields in percentage points, D∗ is the modified
+duration, Cx ≈60.0years 2 is bond convexity, and yt−1/12
+represents accrued coupon carry. Unlike raw percentage yield
+changes (∆y/y), this formulation correctly accounts for capital
+losses during yield spikes (e.g., during the March 2020 COVID-
+19 liquidity shock when yields rose 102 bps, producing a
+−6.24% monthly price decline) while crediting steady coupon
+income.
+Table VII presents walk-forward performance under recon-
+structed total returns across a plausible spectrum of modified
+durations ( D∗ ∈[5.0,8.0] ). Under the benchmark repricing
+(D∗ = 7.0), Static NCO delivers a net annualized return of
+7.01% (cumulative return 37.19%), an annualized excess Sharpe
+ratio of +0.2205 above the 5.75% risk-free rate (and 1.224 rel-
+ative to cash zero), with a maximum drawdown of only 4.68%,
+comfortably dominating cash and all clustered benchmarks. In
+contrast, Regime-NCO consistently underperforms across every
+9
+TABLE VII
+ROBUSTNESSACROSSSBN MODIFIEDDURATIONSPECIFICATIONS
+D∗ ∈[5.0,8.0](56 MONTHS, OUT-OF-SAMPLE).
+Duration Ann.R Max DD Excess SR Calmar
+Specification (%) (%) (r f = 5.75%) Ratio
+Panel A: Static NCO (Regime-Agnostic)
+D∗ = 5.0yr 7.16 4.19 +0.2623 1.7107
+D∗ = 6.0yr 7.12 4.47 +0.2425 1.5930
+D∗ = 7.0yr (Base) 7.01 4.68 +0.2205 1.4964
+D∗ = 8.0yr 6.87 4.84 +0.1943 1.4188
+Panel B: Regime-NCO (Adaptive)
+D∗ = 5.0yr 4.75 7.20 -0.1741 0.6596
+D∗ = 6.0yr 5.06 7.56 -0.1206 0.6701
+D∗ = 7.0yr (Base) 3.87 7.88 -0.3139 0.4910
+D∗ = 8.0yr 4.31 8.17 -0.2307 0.5281
+Note:Out-of-sample period: Jan 2021 – Aug 2025 (56 months). SBN returns
+are repriced via duration-convexity model (13) with Cx = 60.0yr2. Excess
+Sharpe ratio is annualized relative to the 5.75% BI-Rate benchmark. Base
+denotes the standard 10-year benchmark duration.
+duration level (annualized return 3.87%–5.06%, maximum
+drawdown 7.20%–8.17%, negative excess Sharpe ratios of -
+0.12 to -0.31), burdened by excessive rebalancing turnover
+(>20% /month). This confirms that our primary empirical
+thesis—that unconstrained regime switching impairs clustered
+asset allocation stability—is robust and invariant to bond return
+modeling.
+VI. DISCUSSION
+A. Marginal Benefit and Empirical Boundaries of Regime
+Conditioning (RQ1)
+Our first research question examines whether conditioning
+the covariance matrix and hierarchical clustering tree on
+HMM-detected latent market regimes provides measurable
+marginal gains in tactical asset allocation. As documented in
+Table II, the rolling Gaussian HMM successfully segments the
+historical return series into three economically interpretable
+regimes exhibiting distinct annualized return and risk profiles.
+For example, Indonesian sovereign bonds (SBN) generate
+an average monthly return of 0.76% during bullish equity
+expansions compared to −0.38% during market contractions,
+while foreign exchange volatility (CNY/IDR) and Bitcoin tail
+risk escalate sharply during bearish phases.
+These divergent distributional moments translate directly
+into distinct regime-conditional asset allocations (Table III),
+validating the theoretical hypothesis underlying RQ1 that asset
+correlation structures differ fundamentally across market states.
+However, our walk-forward out-of-sample backtest demon-
+strates that this theoretical differentiation does not automatically
+translate into realized risk-adjusted outperformance. While the
+HMM correctly captures the cross-sectional covariance shifts
+in-sample, conditioning portfolio weights on transient regime
+classifications introduces significant estimation variance. In
+an asset universe of N= 5 , the reduction in specification
+bias achieved by regime conditioning is overwhelmed by the
+sampling error incurred from partitioning rolling lookback
+windows into sparse sub-samples, establishing clear empirical
+boundaries for regime-based machine learning allocation.
+B. Risk-Return Trade-offs and the Primacy of Tree Clustering
+(RQ2)
+The empirical results across the 56-month out-of-sample
+test window (Table IV) reveal profound structural insights
+regarding risk-return trade-offs in emerging multi-asset markets.
+Unconstrained benchmarks such as Equal Weight ( 1/N) and
+Buy-and-Hold achieved the highest cumulative returns (76.70%
+and 87.98%, respectively), propelled by massive cyclical rallies
+in Bitcoin and spot gold. However, these unmanaged strategies
+suffered catastrophic tail risk, incurring severe maximum draw-
+downs of 15.27% and 21.17% along with annualized volatilities
+exceeding 13% to 17%. Such severe capital impairment violates
+the risk mandates of institutional endowments and sovereign
+wealth funds.
+In sharp contrast, the standard regime-agnostic Nested
+Clustered Optimization (NCO) strategy achieved outstanding
+risk efficiency and capital preservation. Static NCO delivered
+a cumulative return of 29.97% (5.78% annualized) with a
+maximum drawdown of only 2.18%, an annualized volatility
+of 4.65%, and a Calmar ratio of 2.65, comfortably surpassing
+Minimum Variance (18.45% CR, 4.75% MDD) and True
+HRP (8.27% CR, 4.21% MDD). By decoupling intra-cluster
+allocation from inter-cluster asset class weights, NCO insulates
+the broader portfolio from instability in high-volatility assets
+while preserving participation in market upside.
+Crucially, when NCO is conditioned on latent HMM regimes
+without transition constraints (Regime-NCO), performance
+deteriorates markedly: cumulative return drops to 1.60% (0.34%
+annualized), maximum drawdown widens to 9.99%, and the
+Calmar ratio collapses to 0.034. The pairwise Jobson–Korkie
+Sharpe ratio test (Table V) yields a test statistic of z= 2.684
+with a p-value of 0.0073, formally rejecting the null hypothesis
+of equal risk-adjusted performance at the 1% significance level.
+This rigorous test proves that the observed outperformance
+of regime-agnostic NCO over Regime-NCO is statistically
+genuine rather than an artifact of sample variation, conclusively
+answering RQ2.
+C. Rebalancing Dynamics, Drift Thresholds, and Turnover
+Friction (RQ3)
+Addressing our third research question regarding turnover
+dynamics and rebalancing friction, Table VI provides an
+exhaustive audit of portfolio interventions across the 56-month
+evaluation horizon. The unconstrained Regime-NCO strategy
+triggered 47 rebalancing events, comprising 26 regime-induced
+reallocations and 20 weight-drift corrections exceeding the
+δ= 0.05 threshold (alongside the initial deployment). This
+frequent portfolio reshuffling generated an average monthly
+turnover of 24.58%, almost five times the 5.41% monthly
+turnover observed under static NCO and 3.59% under True
+HRP.
+At our baseline transaction cost parameter of c= 10bps per
+unit of portfolio turnover, direct transaction expenses accounted
+for an annualized return drag of approximately 29.5 basis points.
+While manageable in isolation, the primary performance penalty
+arose from execution friction and tactical whipsaw. Because
+causal HMM state decoding relies on backward-looking rolling
+10
+feature vectors, regime classifications frequently switched near
+the inflection points of transient market drawdowns. The
+portfolio was consequently forced to rotate aggressively into
+safe-haven assets (SBN and CNY) immediately after equities
+or gold had already absorbed market shocks, only to reallocate
+back toward risk assets after substantial rebound rallies had
+already materialized. These findings underscore that in real-
+world implementations, adaptive drift thresholds ( δ) must
+be paired with explicit state-transition penalties to prevent
+execution friction from eroding alpha.
+D. Regime Drift and Estimation Error in Small Asset Universes
+A critical methodological insight emerging from our walk-
+forward evaluation is the compound effect of regime drift
+and parameter estimation error in low-dimensional asset
+pools. As documented in Table II, the decoded Regime 1
+(Bullish) realized an average out-of-sample monthly return of
+−1.23% for the equity benchmark (LQ45), whereas Regime 2
+(Sideways) realized +0.56%. This counter-intuitive behavior
+stems from structural macro shifts between the 2019–2020
+training window (characterized by pre-pandemic monetary
+accommodation followed by initial COVID-19 stimulus) and
+the 2021–2025 out-of-sample window (dominated by global
+supply disruptions, aggressive US Federal Reserve rate hikes,
+and capital outflows from emerging markets).
+When rolling lookback windows ( W= 24 months) are
+filtered by latent regime membership, the effective sample
+size Tk =|D (k)t | frequently drops below 8 observations.
+Although our adaptive Bayesian shrinkage (Eq. 6) guarantees
+non-singular covariance matrices by shrinking toward the
+unconditional estimator ˆΣ, the underlying eigenvectors and
+correlation distance metrics remain noisy. In small universes
+(N= 5 ), tree topology is fragile: a minor shift in pairwise
+correlations between SBN, Gold, and CNY/IDR can flip the
+dendrogram clustering structure from two clusters to three,
+completely altering the inter-cluster allocation vector v∗. In
+contrast, unconditional NCO computes its correlation distance
+matrix over the full 24-month rolling window, maintaining
+stable cluster hierarchies and robust out-of-sample performance.
+E. Practical Guidelines for Quantitative Portfolio Managers
+Based on our empirical and econometric findings, we formu-
+late three actionable guidelines for quantitative asset managers
+seeking to deploy machine learning allocation frameworks in
+emerging multi-asset markets:
+1) First, allocators should prioritize structural hierarchy over
+temporal switching when operating in low-dimensional
+asset pools ( N≤10 ). In such environments, hierarchical
+tree clustering (NCO or HRP) alone delivers robust risk
+diversification. Adding unconstrained regime-switching
+layers partitions rolling windows into sparse, unstable sub-
+samples that exacerbate turnover without compensating risk
+reduction.
+2) Second, quantitative practitioners should enforce sticky
+regime dynamics via Bayesian priors if regime conditioning
+is retained. Specifically, imposing informative Dirichlet
+priors on the diagonal of the transition matrix A or requiring
+persistent multi-period signal confirmation prevents spurious
+rebalancing and curbs costly execution whipsawing.
+3) Third, turnover regularization should be embedded directly
+within the optimization objective rather than treated as a
+post-hoc filtering heuristic. Incorporating quadratic turnover
+penalties into intra-cluster and inter-cluster quadratic pro-
+gramming formulations reconciles mathematical optimiza-
+tion with institutional trading friction.
+VII. CONCLUSION
+This paper has presented a rigorous, walk-forward empirical
+investigation into the interaction between continuous Hidden
+Markov Model regime detection and Nested Clustered Opti-
+mization for multi-asset tactical asset allocation. Conducting
+an audited backtest across 56 monthly out-of-sample horizons
+(January 2021 to August 2025) in the Indonesian capital market,
+we evaluated the performance of regime-conditioned NCO
+against static NCO, True HRP, Minimum Variance, Equal
+Weight (1/N), and Buy-and-Hold strategies.
+Our empirical findings establish three foundational conclu-
+sions. First, regime-agnostic NCO demonstrates exceptional
+capital preservation and risk efficiency, achieving a 29.97%
+cumulative return (5.78% annualized) with a maximum draw-
+down of only 2.18%, an annualized excess Sharpe ratio of
+0.0063 against the 5.75% risk-free hurdle (1.242 relative to
+cash zero), and a Calmar ratio of 2.65, while maintaining low
+monthly turnover (5.41%). Second, conditioning NCO on an
+unconstrained rolling HMM degrades performance in small
+asset universes, increasing drawdown to 9.99% and reducing
+net return to 1.60% due to parameter estimation noise within
+regime-filtered sub-samples. Third, the Jobson–Korkie test
+(z= 2.684, p= 0.0073 ) statistically confirms the superiority
+of static NCO over Regime-NCO, demonstrating that machine
+learning asset allocation must balance dynamic state adaptation
+against parameter stability and trading friction.
+A. Limitations
+Several structural and methodological limitations of this
+study warrant consideration. First, the empirical universe is
+constrained to N= 5 core Indonesian asset proxies; while
+representative of primary macro asset classes, larger asset
+pools (e.g., 50 to 100 constituent equities and sector bonds)
+may provide greater hierarchical depth and cluster redundancy.
+Second, our causal rolling lookback window is fixed at W= 24
+months; while justified by sample size constraints, lookback
+length influences HMM parameter convergence. Third, HMM
+regime inference is inherently backward-looking, resulting
+in a structural detection lag during sudden macroeconomic
+turning points. Fourth, our transaction cost model applies a
+proportional flat fee of 10 basis points, omitting non-linear
+market impact and liquidity slippage. Finally, the long-only
+investment mandate restricts the portfolio from taking short
+positions, limiting downside hedging capacity during persistent
+bear regimes.
+11
+B. Future Work
+Building upon these empirical benchmarks, future research
+should explore three promising methodological extensions.
+First, incorporating sticky Dirichlet priors or explicit state-
+switching penalties into the HMM Baum-Welch training
+objective will enforce regime persistence and suppress ex-
+cessive turnover. Second, expanding the regime emission
+space to include forward-looking macroeconomic features
+(e.g., central bank policy rate differentials, yield curve slopes,
+and term spreads) may improve turning-point anticipation.
+Third, replacing Gaussian emission and Pearson correlation
+metrics with non-Gaussian copula formulations will enable the
+hierarchical clustering pipeline to better capture asymmetric tail
+dependencies and liquidity cascades during systemic market
+crises.
+DATA ANDCODEAVAILABILITY
+The complete empirical dataset and Python replication scripts
+supporting the findings of this study are openly available on
+GitHub at https://github.com/obo-cloud/nco-regime-taa.
+ACKNOWLEDGMENTS
+The authors thank members of COCONUT Computer Club,
+Indonesia, and Universitas Komputer Indonesia for feedback.
+REFERENCES
+[1] H. Markowitz, “Portfolio selection,”The Journal of Finance, vol. 7,
+no. 1, pp. 77–91, 1952.
+[2] R. O. Michaud, “The Markowitz optimization enigma: Is optimized
+optimal?”Financial Analysts Journal, vol. 45, no. 1, pp. 31–42, 1989.
+[3] V . DeMiguel, L. Garlappi, and R. Uppal, “Optimal versus naive
+diversification: How inefficient is the 1/n portfolio strategy?”The Review
+of Financial Studies, vol. 22, no. 5, pp. 1915–1953, 2009.
+[4] F. Black and R. Litterman, “Global portfolio optimization,”Financial
+Analysts Journal, vol. 48, no. 5, pp. 28–43, 1992.
+[5] O. Ledoit and M. Wolf, “A well-conditioned estimator for large-
+dimensional covariance matrices,”Journal of Multivariate Analysis,
+vol. 88, no. 2, pp. 365–411, 2004.
+[6] O. Ledoit and M. Wolf, “A flexible shrinkage estimator of high-
+dimensional covariance matrices,”Statistical Methodology, vol. 5, no. 4,
+pp. 345–354, 2008.
+[7] R. Cont, “Empirical properties of asset returns: Stylized facts and
+statistical issues,”Quantitative Finance, vol. 1, no. 2, pp. 223–236,
+2001.
+[8] A. Ang and A. Timmermann, “Regime changes and financial markets,”
+Annual Review of Financial Economics, vol. 4, no. 1, pp. 313–337, 2012.
+[9] K.-H. Bae, G. A. Karolyi, and R. M. Stulz, “A new approach to measuring
+financial contagion,”The Review of Financial Studies, vol. 16, no. 3, pp.
+717–763, 2003.
+[10] M. Akhtaruzzaman, S. Boubaker, and A. Sensoy, “Financial contagion
+during COVID-19 crisis,”Finance Research Letters, vol. 38, p. 101604,
+2021.
+[11] R. N. Mantegna, “Hierarchical structure in financial markets,”The
+European Physical Journal B, vol. 11, no. 1, pp. 193–197, 1999.
+[12] J.-P. Onnela, A. Chakraborti, K. Kaski, J. Kertész, and A. Kanto,
+“Dynamics of market correlations: Taxonomy and portfolio analysis,”
+Physical Review E, vol. 68, no. 5, p. 056110, 2003.
+[13] V . A. Marˇcenko and L. A. Pastur, “Distribution of eigenvalues for some
+sets of random matrices,”Matematicheskii Sbornik, vol. 114, no. 4, pp.
+507–536, 1967.
+[14] J. Bun, J.-P. Bouchaud, and M. Potters, “Cleaning large correlation
+matrices: Tools from random matrix theory,”Physics Reports, vol. 666,
+pp. 1–109, 2017.
+[15] M. López de Prado, “Building diversified portfolios that outperform out
+of sample,”The Journal of Portfolio Management, vol. 42, no. 4, pp.
+59–69, 2016.
+[16] M. López de Prado,Advances in Financial Machine Learning. Hoboken,
+NJ: John Wiley & Sons, 2018.
+[17] M. López de Prado, “A robust estimator of the efficient frontier,”SSRN
+Electronic Journal, 2019, working Paper SSRN 3466719.
+[18] T. Raffinot, “Hierarchical clustering-based asset allocation: The case of
+equal risk contribution and minimum variance,”Financial Markets and
+Portfolio Management, vol. 31, no. 2, pp. 213–242, 2017.
+[19] T. Raffinot, “Hierarchical clustering-based asset allocation,”The Journal
+of Portfolio Management, vol. 44, no. 2, pp. 89–99, 2018.
+[20] G. Burtini and J. Loeppky, “Hierarchical clustering and machine learning
+for robust portfolio construction,”Journal of Computational Finance,
+vol. 28, no. 4, pp. 45–72, 2025.
+[21] J. D. Hamilton, “A new approach to the economic analysis of nonsta-
+tionary time series and the business cycle,”Econometrica, vol. 57, no. 2,
+pp. 357–384, 1989.
+[22] A. Ang and G. Bekaert, “International asset allocation with regime shifts,”
+The Review of Financial Studies, vol. 15, no. 4, pp. 1137–1187, 2002.
+[23] A. Ang and G. Bekaert, “How do regimes affect asset allocation?”
+Financial Analysts Journal, vol. 60, no. 2, pp. 86–99, 2004.
+[24] M. Guidolin and A. Timmermann, “Asset allocation under multivariate
+regime switching,”Journal of Economic Dynamics and Control, vol. 31,
+no. 11, pp. 3503–3544, 2007.
+[25] M. Guidolin and A. Timmermann, “International asset allocation under
+regime switching, skewness, and kurtosis,”Journal of Econometrics, vol.
+144, no. 1, pp. 1–28, 2008.
+[26] M. Kritzman, S. Page, and D. Turkington, “Regime shifts: Implications
+for dynamic asset allocation,”Financial Analysts Journal, vol. 68, no. 3,
+pp. 22–39, 2012.
+[27] A. Sepp, I. Ossa, and M. Kastenholz, “Robust optimization of strategic
+and tactical asset allocation for multi-asset portfolios,”The Journal of
+Portfolio Management, vol. 52, no. 4, pp. 59–76, 2026.
+[28] D. Oliveira, T. Santos, and M. Silva, “Evaluating regime-switching
+models in portfolio optimization: Overcoming parameter uncertainty,”
+Expert Systems with Applications, vol. 245, p. 123045, 2025.
+[29] S. Boyd, E. Busseti, S. Diamond, R. N. Kahn, K. Koh, P. Nystrup, and
+J. Speth, “Multi-period trading via convex optimization,”Foundations
+and Trends in Optimization, vol. 3, no. 1, pp. 1–76, 2017.
+[30] P. Nystrup, H. Madsen, and E. Lindström, “Regime-based versus static
+asset allocation: Letting the data speak,”The Journal of Portfolio
+Management, vol. 42, no. 1, pp. 104–109, 2015.
+[31] P. Nystrup, H. Madsen, and E. Lindström, “Dynamic portfolio optimiza-
+tion across hidden market regimes,”Quantitative Finance, vol. 18, no. 1,
+pp. 83–95, 2018.
+[32] G. Costa, “Risk parity portfolio optimization under a Markov regime-
+switching framework,”Quantitative Finance, vol. 19, no. 3, pp. 453–471,
+2019.
+[33] M. Bouzouita, J. Frédéric, and M. Larbi, “Causal Wasserstein
+hidden Markov models for regime detection in cross-asset allocation,”
+arXiv preprint arXiv:2508.12934, 2025. [Online]. Available: https:
+//arxiv.org/abs/2508.12934
+[34] Y . Zhang, D. Goel, H. Ahmad, and C. Szabo, “RegimeFolio: A
+regime aware ML system for sectoral portfolio optimization in dynamic
+markets,”arXiv preprint arXiv:2510.14986, 2025. [Online]. Available:
+https://arxiv.org/abs/2510.14986
+[35] A. K. Verma, N. S. Putri, and N. P. Lesupi, “Regime-based
+portfolio allocation using hidden Markov models and reinforcement
+learning,”arXiv preprint arXiv:2605.27848, 2026. [Online]. Available:
+https://arxiv.org/abs/2605.27848
+[36] R. Fernandes and T. Desell, “Financially guided deep portfolio
+optimization,”arXiv preprint arXiv:2605.28853, 2026. [Online].
+Available: https://arxiv.org/abs/2605.28853
+[37] Y . Shu, C. Yu, and J. M. Mulvey, “Regime-aware asset allocation: A
+statistical jump model approach,”Journal of Asset Management, vol. 25,
+no. 6, pp. 560–575, 2024.
+[38] K. Boukardagha, “Macroeconomic regimes and dynamic asset allocation
+in emerging markets,”Working Paper / SSRN, 2026, preprint.
+[39] E. Bouyé, J. Menchero, and F. Zhang, “Regime conditioning and tail
+risk in multi-asset portfolios,”Journal of Financial Data Science, vol. 7,
+no. 2, pp. 88–109, 2025.
+[40] P. Cizeau, M. Potters, and J.-P. Bouchaud, “Correlation structure of
+extreme stock returns,”Quantitative Finance, vol. 1, no. 2, pp. 217–222,
+2001.
+[41] M. Tumminello, F. Lillo, and R. N. Mantegna, “Correlation, hierarchies,
+and networks in financial markets,”Journal of Economic Behavior &
+Organization, vol. 75, no. 1, pp. 40–58, 2010.
+12
+[42] G. Marti, F. Nielsen, M. Bi ´nkowski, and P. Donnat, “A review of two
+decades of correlations, hierarchies, networks and clustering in financial
+markets,” inProgress in Information Geometry. Springer, 2021, pp.
+245–274.
+[43] K. Muthuraman and S. Kumar, “Multidimensional portfolio optimization
+with proportional transaction costs,”Mathematical Finance, vol. 16, no. 2,
+pp. 301–335, 2006.
+[44] P. J. Rousseeuw, “Silhouettes: A graphical aid to the interpretation and
+validation of cluster analysis,”Journal of Computational and Applied
+Mathematics, vol. 20, pp. 53–65, 1987.
+[45] R. T. Rockafellar and S. Uryasev, “Optimization of conditional value-at-
+risk,”The Journal of Risk, vol. 2, no. 3, pp. 21–42, 2000.
+[46] G. Bekaert and C. R. Harvey, “Time-varying world market integration,”
+The Journal of Finance, vol. 50, no. 2, pp. 403–444, 1995.
+[47] K. Phylaktis and F. Ravazzolo, “Stock market linkages in emerging
+markets: Implications for international portfolio diversification,”Journal
+of International Financial Markets, Institutions and Money, vol. 15, no. 2,
+pp. 91–106, 2005.
+[48] D. G. Baur and B. M. Lucey, “Is gold a hedge or a safe haven? An
+analysis of stocks, bonds and gold,”The Financial Review, vol. 45, no. 2,
+pp. 217–229, 2010.
+[49] A. H. Dyhrberg, “Bitcoin, gold and the US dollar—A GARCH analysis,”
+Finance Research Letters, vol. 16, pp. 85–92, 2016.
+[50] S. Corbet, A. Meegan, C. Larkin, B. Lucey, and L. Yarovaya, “Exploring
+the dynamic relationships between cryptocurrencies and other financial
+assets,”Economics Letters, vol. 165, pp. 28–34, 2018.
+[51] J. D. Jobson and B. M. Korkie, “Performance hypothesis testing with the
+Sharpe and Treynor measures,”The Journal of Finance, vol. 36, no. 4,
+pp. 889–908, 1981.
+[52] C. Memmel, “Performance hypothesis testing with the Sharpe ratio,”
+Finance Letters, vol. 1, no. 1, pp. 21–23, 2003.
+[53] W. K. Newey and K. D. West, “A simple, positive semi-definite,
+heteroskedasticity and autocorrelation consistent covariance matrix,”
+Econometrica, vol. 55, no. 3, pp. 703–708, 1987.
+[54] O. Ledoit and M. Wolf, “Robust performance hypothesis testing with the
+Sharpe ratio,”Journal of Empirical Finance, vol. 15, no. 5, pp. 850–859,
+2008.
+[55] D. H. Bailey and M. López de Prado, “The Sharpe ratio efficient frontier,”
+The Journal of Risk, vol. 15, no. 2, pp. 3–44, 2012.
+[56] C. R. Harvey and Y . Liu, “Backtesting,”The Journal of Portfolio
+Management, vol. 42, no. 1, pp. 13–28, 2015.

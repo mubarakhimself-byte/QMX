@@ -1,0 +1,1318 @@
+arXiv 2312.11132  https://arxiv.org/abs/2312.11132
+
+Asset and Factor Risk Budgeting: A Balanced Approach
+Adil Rengim CETINGOZ ∗ Olivier GU ´EANT†
+Abstract
+Portfolio optimization methods have evolved significantly since Markowitz introduced the
+mean-variance framework in 1952. While the theoretical appeal of this approach is unde-
+niable, its practical implementation poses important challenges, primarily revolving around
+the intricate task of estimating expected returns. As a result, practitioners and scholars
+have explored alternative methods that prioritize risk management and diversification. One
+such approach is Risk Budgeting, where portfolio risk is allocated among assets according to
+predefined risk budgets. The effectiveness of Risk Budgeting in achieving true diversification
+can, however, be questioned, given that asset returns are often influenced by a small number
+of risk factors. From this perspective, one question arises: is it possible to allocate risk at
+the factor level using the Risk Budgeting approach? First, we introduce a comprehensive
+framework to address this question by introducing risk measures directly associated with
+risk factor exposures and demonstrating the desirable mathematical properties of these risk
+measures, making them suitable for optimization. Then, we propose a novel framework to
+find portfolios that effectively balance the risk contributions from both assets and factors.
+Leveraging standard stochastic algorithms, our framework enables the use of a wide range
+of risk measures to construct diversified portfolios.
+Keywords: diversification, factor models, factor investing, portfolio optimization, risk
+budgeting, risk measures, stochastic algorithms
+∗Universit´ e Paris 1 Panth´ eon-Sorbonne, Centre d’Economie de la Sorbonne, 106 Boulevard de l’Hˆ opital, 75642
+Paris Cedex 13, France, adil-rengim.cetingoz@etu.univ-paris1.fr. Corresponding author.
+†Universit´ e Paris 1 Panth´ eon-Sorbonne, Centre d’Economie de la Sorbonne, 106 Boulevard de l’Hˆ opital, 75642
+Paris Cedex 13, France, olivier.gueant@univ-paris1.fr.
+1
+arXiv:2312.11132v2  [q-fin.PM]  24 May 2024
+1 Introduction
+In Markowitz’ seminal 1952 paper [24], portfolio selection is described as a two-stage proce-
+dure. The first stage involves forming beliefs about the future evolution of asset returns, and
+the second stage concerns portfolio construction based on these beliefs. Modern portfolio theory
+provides fundamental results for the second stage, by mathematically formalizing the benefits
+of the ubiquitous concept of diversification and proposing a clear investment objective for in-
+vestors, based on mean-variance analysis. However, the complexity of the first stage often leads
+to erroneous beliefs on expected returns that Markowitz’ portfolios excessively reflect in asset
+weightings (see [4] and [28]).
+Two main lines of research have therefore coexisted to improve the portfolio selection process in
+the academic literature and in the asset management industry.
+On the one hand, a considerable amount of effort has been devoted to improving the second
+stage, by reducing the sensitivity to input parameters and obtaining practically more plausible
+portfolios. Some methods have attempted to retain expected returns within the picture, such as
+the Black-Litterman model [5] and entropy pooling [26], while other methods omit them fully
+(or partially) and only involve the covariance matrix in the portfolio selection process – so-called
+risk-based methods. Among risk-based methods, there are several fundamental approaches based
+on different rationales.1 Minimum Variance (MV) portfolio is one of them, corresponding to the
+portfolio with the minimum risk (as measured by variance) among all the possible fully invested
+portfolios. Another approach is that of the Most-Diversified portfolio, as defined in [10], which
+seeks to maximize the ratio between the weighted sum of the volatilities of individual assets
+and the total volatility of the portfolio. Equal Risk Contribution (or Risk Parity) is another
+risk-based approach that differs from the previous two in motivation. Rather than focusing on
+optimizing a final statistic of the portfolio, it aims to allocate portfolio risk equally across its
+assets. Risk Budgeting (RB) is a generalization of this approach, which allows the user to choose
+the target risk contribution of each asset by setting asset-specific risk budgets. Risk Budgeting
+has become a popular method, particularly over the last two decades, thanks to some interesting
+theoretical properties (see [6], [7] and [32]).
+On the other hand, with regard to the first stage of portfolio selection, the quest for a better
+understanding of the true drivers of asset returns and the risk-return relationship dates back
+to the 1960s, when the Capital Asset Pricing Model (CAPM) was independently developed by
+Sharpe, Lintner, Mossin and Treynor (see [23, 29, 35, 38]). The CAPM establishes a linear
+relationship between the expected excess returns of risky assets and the expected excess return
+of the market portfolio, resulting in a single-factor model for asset returns. The arbitrage pricing
+theory (APT) developed in [34] extends this original approach to a multi-factor framework,
+without identifying the risk factors. The Fama-French three-factor model proposed in [14] is one
+of the most famous factor models, expanding the CAPM by introducing size and value factors
+on top of the market factor. There are other prominent models that later introduced new factors
+like momentum, profitability, quality, investments, etc. (see for instance [8] and [15]). Over the
+years, the number of factors proposed by academics and practitioners has grown considerably,
+giving rise to the phenomenon of the factor zoo, as stated by [11]. However, a recent study argues
+that most of these factors are redundant (see [36]).
+In the context of a factor model, exploring and controlling exposure to underlying factors be-
+come crucial. For example, [19] explores portfolios designed to achieve specific factor expo-
+1Interestingly, most of them boil down mathematically to minimizing the portfolio risk under a specific con-
+straint with different parameters (see [17] and [30]).
+2
+sures, highlighting the existence of infinitely many portfolios meeting the desired factor expo-
+sures. In [13], the effectiveness of the equally-weighted factor portfolio is compared to alternative
+factor-allocation schemes. Although risk-based approaches have been explored, in particular the
+feasibility of Risk Budgeting to obtain diversified factor-focused portfolios, it should be noted
+that, with the exception of a few papers dealing with factor risk contributions in the context of
+correlated factors (see [25] and [33]), most papers consider factor risk budgeting portfolios on
+uncorrelated factors. This is often achieved by using techniques like principal / independent com-
+ponent analysis or Minimum-Torsion Bets to decorrelate existing factors (see [1], [21] and [27]).
+The primary objective of this paper is to propose a rigorous mathematical framework for con-
+structing diversified portfolios that effectively mitigate the concentration of risk at both the asset
+and factor levels, especially in the presence of dependent or correlated risk factors. In a setting
+where asset returns are driven by specific factors, the central challenge for portfolio managers
+is to manage exposures to these factors effectively. Our first contribution addresses this chal-
+lenge by introducing a specific formalization through a factor risk measure – a mapping from
+factor exposures to risk – that enables the selection of a unique vector of asset exposures. We
+demonstrate the financial viability and essential mathematical properties of the proposed factor
+risk measure, which are crucial for its effective use in risk management and portfolio optimiza-
+tion. These findings and ideas might be of interest beyond risk budgeting techniques for factor
+investing in general.
+Additionally, we show that our factor risk measure leads to a formal definition and solution
+of the Factor Risk Budgeting problem, which involves allocating portfolio risk across chosen
+risk factors according to predefined risk budgets for each factor. This represents the second
+contribution of our work. Furthermore, we present an optimization framework that integrates
+the principles of Factor Risk Budgeting with classical Risk Budgeting to design portfolios that
+account for both asset and factor risk contributions. To the best of our knowledge, this integrated
+framework represents a novel contribution to the asset management literature and aims to serve
+as a practical methodology for achieving diversification. Finally, we highlight the stochastic
+formulation of the proposed optimization problem, which allows portfolio managers to efficiently
+work with a wide range of risk measures when quantifying portfolio risk.
+In Section 2, we outline the classical Risk Budgeting problem and present an efficient method to
+find Risk Budgeting portfolios. In Section 3, we present linear factor models and the concept of
+factor exposures. Then, we introduce factor risk measures which map factor exposures to risk.
+We show that these factor risk measures possess all the necessary mathematical properties to be
+used for risk management and portfolio optimization, especially for Risk Budgeting. Section 4
+precisely defines the Factor Risk Budgeting problem. In Section 5, we propose the Asset-Factor
+Risk Budgeting framework that seeks a balance between classical Risk Budgeting and Factor
+Risk Budgeting, considering both asset and factor risk contributions. Section 6 presents two
+case studies where we construct equity portfolios under the BARRA risk model and cross-asset
+portfolios in the context of a macroeconomic factor model to exemplify the use of Factor Risk
+Budgeting and Asset-Factor Risk Budgeting portfolios.
+2 Risk Budgeting: the classical problem
+2.1 Notations and main concepts
+In this paper, we consider a probability space (Ω , F , P) where we denote by L0(Ω, Rd) the set of
+Rd-valued random variables, i.e. measurable functions defined on Ω with values in Rd (d ≥ 1).
+3
+At the core of risk management lies the fundamental concept of risk measures: mathematical
+functions that map random variables onto real numbers. In the context of Risk Budgeting, our
+focus centers on risk measures ρ defined on A ⊂ L0(Ω, R) satisfying the following properties: 2
+∀Z ∈ A, ∀λ ≥ 0, ρ (λZ) = λρ(Z) (positive homogeneity)
+∀Z1, Z2 ∈ A, ρ (Z1 + Z2) ≤ ρ(Z1) + ρ(Z2) (sub-additivity) .
+In asset management, the risk is associated with a portfolio made of multiple assets. Therefore,
+we consider a financial universe of d assets whose joint returns are given by a random vector
+X = (X1, . . . , Xd)′ where (1, X1, . . . , Xd) is assumed to be linearly independent. Given a vector
+of asset exposures denoted by y ∈ Rd, the loss associated with y is the random variable −y′X
+and the risk is ρ(−y′X).3 This leads to a function Rρ,X that we call an asset exposure risk
+measure associated with ρ and X:
+Rρ,X : y 7→ ρ(−y′X).
+Rρ,X is hereafter denoted by R when there is no ambiguity. We assume that R is continuous
+on Rd and continuously differentiable on Rd \{0}.4 We also assume that ∀y ∈ Rd \{0}, R(y) > 0,
+i.e. the risk of a non-zero financial position is always positive. We finally make the assumption
+that R is additive solely under scaled asset exposures:
+∀y1, y2 ∈ Rd \ {0}, R(y1 + y2) = R(y1) + R(y2) = ⇒ ∃c >0, y 1 = cy2.
+In practice, the vectors of asset exposures y of portfolios are often vectors of weights. In this
+paper, a portfolio is denoted by a vector of weights θ which might belong to
+∆d = {θ ∈ Rd|θ1 + . . .+ θd = 1} for general portfolios ,
+∆≥0d = {θ ∈ Rd+|θ1 + . . .+ θd = 1} for long-only portfolios ,
+or
+∆>0d = {θ ∈ (R∗+)d|θ1 + . . .+ θd = 1} for strictly long-only portfolios.
+While R(θ) provides an assessment of the total risk associated with the portfolio, it is equally
+important to measure the individual contributions of each asset to this total risk. In other words,
+it is interesting to understand how R(θ) can be decomposed into asset-level risk contributions.
+This decomposition of risk can be performed (thanks to the positive homogeneity property),
+using Euler homogeneous function theorem, i.e.
+R(θ) =
+dX
+i=1
+θi∂iR(θ),
+where ∂iR(θ) is the partial derivative of R with respect to the variable θi at point θ. In the
+above sum, the ith term is called the risk contribution of asset i to the total risk of the portfolio.
+The concept of risk contribution is a fundamental notion in the Risk Budgeting framework.
+2The set A depends on the context. It is typically L1(Ω, R) or L2(Ω, R).
+3The vector y can be interpreted as a portfolio where short positions and leverage are allowed.
+4The risk measure ρ and the distribution of X are assumed to be chosen to ensure that the mentioned properties
+for R are satisfied.
+4
+2.2 Formulation of the Risk Budgeting problem and associated theo-
+retical results
+In the context of Risk Budgeting, the central objective is to achieve predefined levels of risk
+contributions from the assets of the portfolio. Formally, this task consists of determining portfolio
+weights to ensure that the proportion of risk contribution allocated to each asset, relative to total
+risk, corresponds precisely to the risk budgets assigned to them.
+Definition 1. Let b ∈ ∆>0d be a vector of risk budgets. We say that a vector of weights θ ∈ ∆>0d
+solves the Risk Budgeting problem RB b if and only if
+θi∂iR(θ) = biR(θ),
+for every i ∈ {1, . . . , d}.
+Remark 1. This is the classical definition of Risk Budgeting where only strictly long-only port-
+folios are taken into account. If we remove this constraint, there exist multiple solutions in ∆d
+to RB b (see [3] for a detailed analysis in the case of volatility).
+Questions that naturally arise from the above definition concern the existence and uniqueness of
+a solution. The constructive theorem that follows, proved in [9], states the existence of a unique
+solution to the Risk Budgeting problem.
+Theorem 1. Let b ∈ ∆>0d .
+Let g : R+ → R be a continuously differentiable convex and increasing function. Let the function
+Γg : (R∗+)d → R be defined by
+Γg : y 7→ g
+ 
+R(y)
+
+−
+dX
+i=1
+bi log yi.
+There exists a unique minimizer y∗ of the function Γg.
+There exists a unique solution θ ∈ ∆>0d of RB b and θ = y∗Pdi=1 y∗i .
+The importance of Theorem 1 goes beyond confirming the existence of a unique solution. Rather
+than directly engaging with the system of non-linear equations that characterize the original
+problem given by Definition 1, this theorem highlights the possibility of approaching the Risk
+Budgeting problem through unconstrained convex minimization problems. The latter technique
+has clear benefits in terms of mathematical properties and computational efficiency. Furthermore,
+the choice of the function g is free, making the approach versatile, as we illustrate in the next
+section.
+2.3 Computation of Risk Budgeting portfolios
+Early research on Risk Budgeting and most applications have focused on the case where the
+co-movements of asset returns are measured by their covariance matrix Σ and the risk of a
+portfolio with asset exposures y is measured by its volatility, i.e. R(y) := √y′Σy (R satisfies
+our assumptions whenever Σ is invertible – an assumption that we consider throughout the
+paper). For a given Σ, the volatility of the portfolio and its gradient can easily be computed.
+Consequently, the Risk Budgeting problem for volatility can be solved efficiently using a gradient
+descent procedure, by choosing g(x) = x2 and minimizing over ( R∗+)d the function
+Γg : y 7→
+ 
+R(y)
+2
+−
+dX
+i=1
+bi log yi = y′Σy −
+dX
+i=1
+bi log yi. (1)
+5
+However, the scope of risk measures used in portfolio management goes well beyond volatility
+and includes a wide variety of symmetric and asymmetric risk measures. In [2], the authors
+consider Risk Parity when the risk measure is chosen to be mean absolute deviation around the
+mean and provide a comprehensive mathematical analysis of the specific problem. Considering
+the inherent asymmetry and heavy-tailed nature of asset return distributions, the literature on
+Risk Budgeting has also touched upon other asymmetric risk measures. For instance, in [22],
+Risk Budgeting portfolios are constructed for Expected Shortfall. 5 In order to employ the afore-
+mentioned gradient descent procedure effectively, they make a specific assumption about asset
+returns. Precisely, they assume that asset returns follow a mixture of two multivariate Gaussian
+distributions – a setting in which Expected Shortfall exhibits a semi-analytic formula (see [9]
+for an extension to Student mixtures). In cases where there are no parametric assumptions on
+asset returns or when dealing with more complex risk measures, gradient computation often
+necessitates approximations through computationally intensive methods (see [16]). 6
+There exists, however, an alternative path that relies on a common representation shared by
+a wide range of risk measures. Precisely, we are interested in RB-compatible risk measures as
+defined in [9] which are characterized as minima. Indeed, in that case, we can transform the
+optimization problem, whose solution (after normalization) gives the Risk Budgeting portfolio,
+into a stochastic optimization problem.
+Formally, if there exists a continuously differentiable, convex and increasing functiong : R+ → R
+such that
+g
+ 
+R(y)
+
+= g
+ 
+ρ(−y′X) = min
+ζ∈Z
+E
+
+H(ζ, −y′X)
+for some set Z and some function H, then Γ g in Theorem 1 writes
+Γg : y 7→ minζ∈Z E
+
+H(ζ, −y′X) − dX
+i=1
+bi log yi.
+Therefore, the RB b problem boils down to the stochastic optimization problem
+min
+y∈(R∗+)d,ζ∈Z E
+h
+H(ζ, −y′X) −
+dX
+i=1
+bi log yi
+i
+.
+If ( y∗, ζ∗) is a solution of the above stochastic optimization problem, then θ := y∗/ Pdi=1 y∗i
+solves RBb.
+In fact, the set of risk measures that enable the above stochastic path for the computation of
+Risk Budgeting portfolios is quite broad. All deviation measures and spectral risk measures (as
+formalized in [9]) fall within this framework. Volatility and Expected Shortfall are the two most
+popular members of these classes, respectively. For volatility, i.e. ρ(Z) = minζ∈R
+p
+E [(Z − ζ)2],
+the RBb problem becomes, 7 upon choosing g : x 7→ x2,
+min
+(y,ζ )∈(R∗+)d×R E
+h
+(−y′X − ζ)2 −
+dX
+i=1
+bi log yi
+i
+.
+5The Expected Shortfall at level α ∈ (0, 1) of a continuous random variable (loss) Z ∈ L1 with positive density
+is defined by E[Z|Z ≥ VaRα(Z)] where P(Z ≥ VaRα(Z)) = 1 − α.
+6In [20], the authors tackle the Risk Budgeting problem for dynamic risk measures.
+7Of course, using a stochastic gradient descent algorithm in the case of volatility is not the best option. A
+gradient descent on Eq. (1) is more efficient.
+6
+For Expected Shortfall, i.e. ρ(Z) = min ζ∈R E
+
+ζ + 11−α (Z − ζ)+ as formulated by Rockafellar-
+Uryasev (see [31]), the RB b problem, when g is the identity map, becomes
+min
+(y,ζ )∈(R∗+)d×R E
+h
+ζ + 11 − α (−y′X − ζ)+ −
+dX
+i=1
+bi log yi
+i
+. (2)
+It is essential to highlight that this approach is suited to a broad spectrum of asset return
+distributions. Furthermore, it exhibits a high level of versatility, when it comes to using different
+risk measures. For many risk measures, a stochastic gradient descent algorithm based on the
+above ideas is a great option to effectively tackle Risk Budgeting problems.8 Beyond volatility and
+Expected Shortfall, some other examples of risk measures covered by the stochastic framework
+are mean absolute deviation around the median, power spectral risk measure and variantile [39].
+In this section, we have outlined the Risk Budgeting problem and presented a computational ap-
+proach for obtaining Risk Budgeting portfolios. These portfolios are designed to provide optimal
+asset allocation, achieving predefined levels of risk contribution from each asset. However, in a
+financial context where asset returns are influenced by a small number of common underlying
+factors, it becomes crucial to consider controlling exposure to these factors rather than focusing
+solely on asset weights. Consequently, we should shift our focus towards evaluating the risk
+contributions of these underlying factors, as opposed to those of individual assets. These critical
+considerations are the topic of the next sections.
+3 Assessing risk through the lens of risk factors
+3.1 Linear factor models and factor exposures
+It is common practice for portfolio and risk managers to write X as a linear function of m factor
+returns modelled by F ∈ L0(Ω, Rm) and d idiosyncratic components modelled by ϵ ∈ L0(Ω, Rd)
+where F and ϵ are assumed to be independent. This modelling framework is commonly known
+as a linear factor model and is mathematically expressed as
+X = βF + ϵ, (3)
+where β ∈ Rd×m is the matrix of factor loadings.
+Factor loadings characterize the sensitivity of assets to specific risk factors. They provide a
+quantitative measure of how much the return of an asset are expected to fluctuate in response
+to a one-unit change in a particular risk factor. These risk factors encompass a broad spectrum,
+including economic factors such as economic growth and inflation, stock-specific features like
+size, value, quality and profitability, and statistical factors extracted from data. Factor loadings
+are typically estimated through statistical techniques like regression analysis.
+The number of factors m is typically chosen to be much smaller than the total number of portfolio
+assets d. Throughout this paper, we maintain the condition m < dand we also assume that the
+factor loading matrix β is full rank, i.e. rank( β) = m.
+In the modeling framework of Eq. (3), the portfolio loss for a given vector of asset exposures y is
+−y′X = −w′F − y′ϵ,
+where w = β′y is the vector of factor exposures associated with y.
+8In [12], the authors propose using cutting planes algorithm for the specific case of Expected Shortfall.
+7
+In such a model, one is mostly interested in managing the portfolio risk through factor exposures
+and achieving diversification among factors rather than solely focusing on the exposures to the
+individual assets since their returns are actually dependent on the returns of the underlying
+factors. Therefore, it makes sense to try to achieve a desired level of factor exposures w by
+finding a vector of asset exposures y that satisfies w = β′y. However, an issue arises due to the
+existence of an infinite number of asset exposure vectors that meet this condition.
+Because β is full rank, one of these infinitely many vectors is ¯ yw = β(β′β)−1w.9 Therefore, we
+clearly see that β′y = w ⇐ ⇒β′y = β′ ¯yw ⇐ ⇒y − ¯yw ∈ Ker(β′) = Im(β)⊥. Thus, the set of
+asset exposures with the factor exposures w is the affine subspace ¯yw + Im(β)⊥. Amongst all the
+vectors y ∈ ¯yw + Im(β)⊥ of asset exposures compatible with a vector of factor exposures w, some
+may be more favourable than others when considering additional criteria that are important for
+portfolio managers. In the following section, we address this concern and introduce a risk-based
+framework to tackle this issue.
+3.2 From factor exposures to portfolio risk: a factor risk measure
+Within the set of asset exposures that achieve the desired level of factor exposures, it can indeed
+be interesting to find the vector of asset exposures associated with the minimum level of risk.
+This is the purpose of the next paragraphs. We introduce below a function that maps a vector
+of factor exposures into the minimum achievable risk, among all feasible asset exposures.
+Definition 2. For a full-rank matrix β ∈ Rd×m and an asset exposure risk measure R : Rd → R
+satisfying the assumptions of Section 2, we define the factor risk measure SR,β : Rm → R
+(hereafter simply denoted by S) by
+S : w 7→ inf
+y∈¯yw+Im(β)⊥
+R(y) = inf
+u∈Im(β)⊥
+R(β(β′β)−1w + u).
+Remark 2. If the asset exposure risk measure is volatility, i.e. R(y) := √y′Σy, then
+S(w) = R
+ 
+Σ−1β β′Σ−1β−1w = qw′ β′Σ−1β−1w.
+Remark 3. S is convex as it can be expressed with the infimal convolution 10 of R and XIm(β)⊥ :
+S(w) = R□XIm(β)⊥ (β(β′β)−1w),
+where XF (u) =
+(
+0 u ∈ F
++∞ u /∈ F .
+In order to study S, we start with two propositions regarding R□XIm(β)⊥ .
+Proposition 2. ∀y ∈ Rd, there exists a unique u∗(y) ∈ Im(β)⊥ such that
+inf
+u∈Im(β)⊥
+R(y + u) = R(y + u∗(y)).
+9For instance, [33] considers this specific case.
+10We recall that the infimal convolution of two functions ϕ and ψ is defined as
+ϕ□ψ(a) = inf{ϕ(a − b) + ψ(b)|b ∈ Rd}.
+8
+Proof. Let m = min
+x∈Rd,∥x∥=1R(x) > 0. Then, ∀y ∈ Rd \ {0},
+R(y) = ∥y∥R
+ y
+∥y∥
+
+≥ ∥y∥m.
+Therefore, R is coercive.
+We deduce that the convex function u ∈ Im(β)⊥ 7→ R(y + u) is coercive and therefore ∀y ∈ Rd,
+∃u∗ ∈ Im(β)⊥ such that
+R(y + u∗) = inf
+u∈Im(β)⊥
+R(y + u) = min
+u∈Im(β)⊥
+R(y + u) =: m.
+Now, if y ∈ Im(β)⊥, u∗ is unique and given by −y as R(0) = 0.
+On the contrary, if y /∈ Im(β)⊥, and if u∗1, u∗2 ∈ Im(β)⊥ are such that
+R(y + u∗1) = R(y + u∗2) = m,
+then,
+m ≤ R
+
+y + u∗1 + u∗2
+2
+
+= R
+ y + u∗1
+2 + y + u∗22  ≤ R(y + u∗1)2 + R(y + u∗2)2 ≤ m.
+In other words, we are in the equality case of the sub-additivity property of R. As y /∈ Im(β)⊥,
+y + u∗1 ̸= 0 and y + u∗2 ̸= 0. Therefore
+∃c >0, y + u∗1 = c(y + u∗2).
+Thus, (1 − c)y = cu∗1 − u∗2 ∈ Im(β)⊥ so that c = 1 and u∗1 = u∗2.
+Proposition 3. The convex function R□XIm(β)⊥ is proper, positively homogeneous on Rd and
+continuously differentiable on Rd \ Im(β)⊥ with
+∀y ∈ Rd \ Im(β)⊥, ∇(R□XIm(β)⊥ )(y) = ∇R(y − u∗(y)).
+Proof. R and XIm(β)⊥ are nonnegative and, therefore, R□XIm(β)⊥ ≥ 0. Moreover, 0 ∈ Im(β)⊥,
+so R□XIm(β)⊥ ≤ R. This proves that R□XIm(β)⊥ is proper.
+By positive homogeneity, we have R□XIm(β)⊥ (0) = 0, and for all y ∈ Rd and λ >0:
+R□XIm(β)⊥ (λy) = infx∈Rd R(λy − x) + XIm(β)⊥ (x)
+= inf
+˜x∈Rd
+R(λy − λ˜x) + XIm(β)⊥ (λ˜x)
+= λ inf
+˜x∈Rd
+R(y − ˜x) + XIm(β)⊥ (˜x)
+= λR□XIm(β)⊥ (y).
+The dual conjugate of R□XIm(β)⊥ is
+(R□XIm(β)⊥ )∗ = R∗ + (XIm(β)⊥ )∗ = R∗ + XIm(β).
+For all y, p∈ Rd, we have
+p′y − R(y) ≤ ∥p∥∥y∥ −m∥y∥
+9
+where m = min
+x∈Rd,∥x∥=1R(x) > 0. So, ∀p ∈ ¯B(0, m), R∗(p) = 0.
+In particular, 0 ∈ ri(dom(R∗)) and 0 ∈ ri(domXIm(β)) = Im(β).
+So ri(dom(R∗)) ∩ ri(domXIm(β)) ̸= ∅ and we have ∀p ∈ dom(R∗) ∩ Im(β) that11
+∂(R∗ + XIm(β))(p) = ∂R∗(p) + ∂XIm(β)(p) = ∂R∗(p) + Im(β)⊥.
+Now, ∀y ∈ Rd \ Im(β)⊥,
+p ∈ ∂(R□XIm(β)⊥ )(y) ⇐ ⇒y ∈ ∂((R□XIm(β)⊥ )∗)(p)
+⇐ ⇒
+(
+p ∈ dom(R∗) ∩ Im(β)
+y ∈ ∂R∗(p) + Im(β)⊥
+⇐ ⇒
+(
+p ∈ dom(R∗) ∩ Im(β)
+∃u ∈ Im(β)⊥, y− u ∈ ∂R∗(p)
+⇐ ⇒
+(
+p ∈ dom(R∗) ∩ Im(β)
+∃u ∈ Im(β)⊥, p= ∇R(y − u)
+as y − u ̸= 0, since y /∈ Im(β)⊥.
+Therefore, if p ∈ ∂(R□XIm(β)⊥ )(y), then ∃u ∈ Im(β)⊥ such that p = ∇R(y − u) ∈ Im(β). This is
+exactly the first order condition of the convex optimization problem of Proposition 2. Therefore,
+u = u∗(y) and p = ∇R(y−u∗(y)). Differentiability then comes from the fact that subdifferentials
+are singletons on Rd \ Im(β)⊥ and continuous differentiability is a consequence of convexity. In
+particular
+∇(R□XIm(β)⊥ )(y) = ∇R(y − u∗(y)).
+From the above Propositions, we deduce the following Proposition on S which is central for our
+analysis.
+Proposition 4. S is positively homogeneous, convex on Rm and continuously differentiable on
+Rm \ {0}. Moreover,
+∀w ̸= 0, ∇S(w) = (β′β)−1β′∇R β(β′β)−1w + u∗(β(β′β)−1w).
+Proof. This result is a consequence of the definition of S and the above propositions since, for
+w ̸= 0, β(β′β)−1w ∈ Im(β) \ {0} ⊂Rd \ Im(β)⊥.
+The function S allows to compute the minimum risk achievable for a given vector of factor expo-
+sures, and thus assesses the suitability of a given factor allocation scheme, for example, in terms
+of risk compliance. By Proposition 2, this minimum risk is associated with a unique vector of
+asset exposures given by y∗(w) = β(β′β)−1w + u∗(β(β′β)−1w).
+The fact that S is positively homogeneous and continuously differentiable on Rm \ {0} enables
+to compute the sensitivity of the portfolio risk to the factors for a given vector of factor or asset
+exposures.
+11∂f (x) denotes the subdifferential, the set of all subgradients of f at x.
+10
+Given a vector w of factor exposures, Euler homogeneous function theorem leads to a breakdown
+of risk as 12
+S(w) =
+mX
+i=1
+wi∂iS(w) = w′∇S(w).
+This measure of risk S(w) corresponds to R(y∗(w)): the risk associated with the optimal (with
+respect to R) portfolio with factor exposures w. Now, given a vector of asset exposures y, we
+can consider the associated factor exposures β′y and examine the breakdown of risk:
+R(y) = R(y) − R(y∗(β′y)) + R(y∗(β′y))
+= R(y) − R(y∗(β′y))| {z }
+(I)
++ S(β′y)| {z }
+(II)
+.
+(I) is a nonnegative term, equal to 0 if and only if y = y∗(β′y). It corresponds to the risk of
+not choosing the optimal portfolio given factor exposures. (II) corresponds to the risk associated
+with the risk factors as measured by S. Of course, (II) can be broken down as above across risk
+factors using Euler homogeneous function theorem.
+In addition to evaluating portfolio risk through a factor-based approach, we can take it a step
+further and actively manage the risk contributions of the factors using the concept of Risk
+Budgeting introduced in Section 2, though with S replacing R because they share the same
+fundamental properties needed for Risk Budgeting (see Proposition 4). This is the purpose of
+the next section.
+4 Factor Risk Budgeting: managing risk contributions of
+factors
+4.1 Framing the problem of Factor Risk Budgeting
+In the previous section, we established that it is possible to introduce a factor risk measure, i.e.
+a function mapping a vector of factor exposures to a risk figure. We also demonstrated that this
+function adheres to all the necessary properties of asset exposure risk measures, particularly in
+the context of Risk Budgeting, making it well-suited for portfolio construction.
+By analogy with Risk Budgeting, we can use S to define a Factor Risk Budgeting portfolio
+allocating risk across the underlying risk factors given factor risk budgets. Mathematically, we
+define the Factor Risk Budgeting (FRB) problem as follows:
+Definition 3. Let β ∈ Rd×m be a full rank matrix of factor loadings. Let b ∈ ∆>0m be a vector
+of factor risk budgets. We say that a vector of weights θ ∈ ∆d, solves the Factor Risk Budgeting
+problem FRBb if and only if
+wi∂iS(w) = biS(w),
+for every i ∈ {1, . . . , m} where w = β′θ ∈ (R∗+)m.
+Remark 4. In the above definition, the vector w of factor exposures has positive coordinates.
+However, Factor Risk Budgeting portfolios are not necessarily long-only portfolios.
+12As stated in Proposition 4, the risk contribution of the factor i, i.e. wi∂iS(w), can be easily calculated using
+∇R. When the risk measure is volatility, this gradient has an analytic form. As for the sensitivity of Expected
+Shortfall, general expressions exist (see [18] and [37]).
+11
+By analogy with Theorem 1, we can state the following result:
+Theorem 5. Let b ∈ ∆>0m .
+Let g : R+ → R be a continuously differentiable convex and increasing function. Let the function
+Γg : (R∗+)m → R be defined by
+Γg : w 7→ g
+ 
+S(w)
+
+−
+mX
+i=1
+bi log wi.
+There exists a unique minimizer w∗ of the function Γg.
+Then, ∀y ∈ y∗(w∗) + Im(β)⊥, Pdi=1 yi ̸= 0 = ⇒ θ(y) = yPdi=1 yi ∈ ∆d is solution of FRB b.
+Moreover, if θ ∈ ∆d is solution of FRB b, then w = β′θ is proportional to w∗.
+From Theorem 5, solving FRB b boils down to solving a minimization problem of the form
+min
+w∈(R∗+)m
+g
+ 
+S(w)
+
+−
+mX
+i=1
+bi log wi.
+However, as g is increasing, we have
+min
+w∈(R∗+)m
+g
+ 
+S(w)
+
+−
+mX
+i=1
+bi log wi = minw∈(R∗+)m g
+ 
+min
+y∈Rd,β′y=w R(y)
+!
+−
+mX
+i=1
+bi log wi
+= min
+w∈(R∗+)m
+min
+y∈Rd,β′y=w g(R(y)) −
+mX
+i=1
+bi log wi
+= min
+y∈C
+g(R(y)) −
+mX
+i=1
+bi log (β′y)i (4)
+where C =
+
+y ∈ Rd|(β′y)i > 0, ∀i ∈ {1, . . . , m}	.
+In other words, the fact thatS is itself defined as a minimum depending onR allows to solve FRBb
+through a minimization problem involving R only (not S). Moreover, solving this minimization
+problem leads to a vector of asset exposures that is the best in terms of risk, given the associated
+factor exposures.
+Now, if g
+ 
+R(y)
+
+= min ζ∈Z E
+
+H(ζ, −y′X) for some set Z and some function H, the above
+problem writes
+min
+y∈C
+min
+ζ∈Z
+E
+
+H(ζ, −y′X) − mX
+i=1
+bi log (β′y)i = miny∈C,ζ∈Z EhH(ζ, −y′X) − mXi=1 bi log (β′y)ii. (5)
+If (y∗, ζ∗) is a solution of the above stochastic optimization problem, then, as soon asPdi=1 y∗i ̸= 0,
+θ := y∗/ Pdi=1 y∗i solves FRBb.
+We clearly see that the computational methodologies that are applicable to the classical Risk
+Budgeting problem are equally suitable for the computation of Factor Risk Budgeting portfolios.
+Moreover, the same set of risk measures as for Risk Budgeting can be used for Factor Risk
+Budgeting.
+12
+4.2 The case of long-only portfolios
+It is essential to note that Factor Risk Budgeting portfolios presented above constitute fully
+invested general portfolios. In practice, short positions are not always permitted, and asset
+weights generally have to comply with certain constraints. Especially, it is often the case that
+portfolios are restricted to be long only. We therefore highlight two possible approaches for the
+case of long-only portfolios in an FRB setting.
+Solving Problem (4) or (5) results in an FRB portfolio θ ∈ ∆d and a vector of factor exposures w∗
+that satisfy the condition set out in the Definition 3. Since θ is not necessarily long only, one
+possible approach is to look for an alternative portfolio that respects the constraints and produces
+the same factor exposures w∗. Precisely, this can be done on the basis of our initial risk-based
+approach by solving
+min
+y∈Rd+,β′y=w∗
+R(y)
+and normalizing its solution. Such an approach allows us to search for an FRB portfolio satisfying
+our constraint. However, it requires the set
+
+y ∈ Rd+|β′y = w∗	 to be non-empty, which is not
+necessarily true in all cases.
+Another approach can therefore be to incorporate the long-only constraint directly in Problem (4)
+or (5) and consider the set C≥0 = y ∈ Rd+|(β′y)i > 0, ∀i ∈ {1, . . . , m}	 for the variable y.13
+There, of course, still exists a unique minimizer that solves the aforementioned problem. Nev-
+ertheless, θ := y∗/ Pdi=1 y∗i ∈ ∆≥0d , now, may not guarantee a solution to FRB b. On the other
+hand, we expect this to be a portfolio in which the factor risk contributions are close to the factor
+risk budgets. We consider this latter approach in the numerical section of this paper and analyse
+the proximity of factor risk contributions to factor risk budgets for long-only FRB portfolios.
+5 Balancing asset and factor risk contributions
+5.1 Asset-Factor Risk Budgeting portfolios
+Although FRB portfolios may present a theoretical appeal, they can run into a number of prac-
+tical pitfalls. The search for a precise match in factor risk budgets can lead to concentrated
+portfolios in asset weights, especially in the original long-short setting, amplifying individual
+asset risk contributions. Likewise, classical RB portfolios may contain hidden risks associated
+with the underlying risk factors since the sole focus is to satisfy desired risk contribution at the
+asset level.
+Consequently, a framework benefiting from both ideas can be of practical use to construct port-
+folios which take asset and factor risk contributions into account together in the same setting.
+The fact that FRB portfolios can be found by solving an optimization problem (Problem (4)
+or (5)) involving only R allows us to propose an optimization framework that seeks a balanced
+solution between FRB and classical RB portfolios.
+13Even the set C≥0 is not always non-empty, meaning that there may not even exist a nonnegative vector of asset
+exposures leading to a positive vector of factor exposures. A simple approach to establish this by contradiction
+is to consider β whose elements are negative. In such a scenario, no nonnegative vector y can lead to a positive
+vector w = β′y. However, this constraint is more of a theoretical limitation than a practical one: in most practical
+situations, C≥0 is a non-empty set.
+13
+More precisely, for given vectors representing asset risk budgetsba ∈ ∆>0d and factor risk budgets
+bf ∈ ∆>0m , we can consider the following optimization problem:
+min
+y∈C>0
+g(R(y)) − λa
+dX
+i=1
+bai log yi − λf
+mX
+i=1
+bf i log (β′y)i, (6)
+where C>0 = y ∈ (R∗+)d|(β′y)i > 0, ∀i ∈ {1, . . . , m}	 and λa, λf ∈ R∗+ are asset and factor
+importance parameters.
+Of course, if g
+ 
+R(y)
+
+= minζ∈Z E
+
+H(ζ, −y′X) for some set Z and some function H, the above
+problem writes
+min
+y∈C>0,ζ∈Z E
+h
+H(ζ, −y′X) − λa
+dX
+i=1
+bai log yi − λf
+mX
+i=1
+bf i log (β′y)i
+i
+. (7)
+If (y∗, ζ∗) is a solution of the above stochastic optimization problem, then, θ := y∗/ Pdi=1 y∗i is
+called the Asset-Factor Risk Budgeting (AFRB) portfolio.
+As a result, the AFRB portfolio is obtained by solving an optimization problem that involves
+minimizing a risk term subject to two logarithmic barriers. The risk measure and the barriers
+naturally prevent asset and factor exposures from diverging and approaching zero, ensuring that
+the resulting portfolios are balanced in terms of both exposure types and associated risks. By
+adjusting the importance parameters, one can introduce varying degrees of sensitivity to different
+types of risk contributions, thus enabling the introduction of tilts towards certain aspects.
+We should note that AFRB portfolios never exactly match the given risk budgets for assets and
+factors. However, this formulation allows us to explore a compromise solution that reconciles the
+advantages of FRB portfolios as well as penalizing large deviations from asset risk budgets.
+5.2 Illustration with a simple model
+Let us examine a simple model with 4 assets and 3 factors to gain insight into the proposed
+Asset-Factor Risk Budgeting framework and its distinctions from FRB and classical RB. For
+simplicity, we adopt the volatility risk measure and assume the following arbitrary parameters.14
+β =
+
+
+0.9 0 .0 0 .5
+1.1 0 .5 0 .0
+1.2 0 .3 0 .2
+0.8 0 .1 0 .7
+
+ and Σ =
+
+
+0.0449 0 .0396 0 .0442 0 .0323
+0.0396 0 .0734 0 .0543 0 .0357
+0.0442 0 .0543 0 .0689 0 .0401
+0.0323 0 .0357 0 .0401 0 .0531
+
+.
+With these specifications, we can compute the RB, FRB and AFRB portfolios through Prob-
+lems (1), (4) and (6), respectively, based on the risk budgets ba = (0 .25, 0.25, 0.25, 0.25) for
+assets and bf = (1/3, 1/3, 1/3) for factors. For AFRB, we also require the importance parame-
+ters (λa, λf ), which we set to (0 .2, 0.8) in this simple example.
+Table 1 illustrates the portfolios computed under the aforementioned setting. As expected, the
+RB portfolio evenly distributes its risk across the assets. In contrast, the FRB portfolio appears
+concentrated on two assets, both in terms of weights and risk contributions. In particular, it
+has the highest total risk across our three portfolios. We clearly see that the AFRB portfolio
+prevents excessive asset risk concentration within the portfolio.
+14The parameters are taken from the example presented in [33].
+14
+θi θi∂iR(θ)
+Asset RB FRB AFRB RB FRB AFRB
+1 27.86 -6.60 18.26 5.28 -1.05 3.33
+2 22.60 34.95 25.72 5.28 7.93 6.00
+3 21.98 8.87 17.97 5.28 1.90 4.22
+4 27.56 62.78 38.05 5.28 13.38 7.63
+P
+1≤i≤4 100.00 100.00 100.00 21.13 22.16 21.18
+Table 1: Asset weights and associated asset risk contributions (in %) of the portfolios computed
+using the different methods.
+To conduct a similar analysis from the perspective of the underlying risk factors, we refer to
+Table 2. Firstly, for the three portfolios, we observe significant differences in risk allocation
+across factors, although they have similar factor exposures. Factor risk contributions in the FRB
+portfolio are perfectly in line with the chosen risk budgets, potentially leading to the previously
+observed unbalanced asset weights. Conversely, the RB portfolio, lacking sensitivity to factors
+by definition, is highly exposed to the risk of the first factor. The AFRB portfolio, designed with
+sensitivity to both assets and factors, mitigates that effect with only a negligible increase in the
+total portfolio risk.
+wi wi∂iS(w)
+Factor RB FRB AFRB RB FRB AFRB
+1 98.36 93.37 96.73 16.64 7.39 13.87
+2 20.65 26.42 22.06 1.80 7.39 3.22
+3 37.62 42.42 39.36 2.66 7.39 4.08
+P
+1≤i≤3 156.63 162.21 158.15 21.11 22.16 21.17
+Table 2: Factor exposures and associated factor risk contributions (in %) of the portfolios com-
+puted using the different methods.
+5.3 Choosing the importance parameters
+The selection of the importance parameters is a critical aspect. Ultimately, Asset-Factor Risk
+Budgeting aims to identify portfolios whose normalized risk contributions closely align with a
+reference vector of risk budgets. Hence, it is essential to assess how far we deviate from the risk
+budgets in terms of risk contributions for given values of ( λa, λf ).
+Relative entropy serves as a useful tool for conducting such analyses since risk budgets are strictly
+positive and sum up to 1, making them a suitable reference distribution for risk contributions. 15
+Specifically, we can compute an asset-based relative entropy score Pdi=1 qi log (qi/bai ) and a
+factor-based relative entropy score Pmi=1 si log (si/bfi ), respectively, where qi = θi∂iR(θ)/R(θ)
+and si = wi∂iS(w)/S(w). These scores provide insights into the degree of deviation from the
+target risk contributions and can be helpful to determine the importance parameters. By selecting
+a pair where both relative entropy scores are low, one can identify the importance parameters
+that result in a small amount of deviation from the desired risk allocations.
+15We assume nonnegative risk contributions, which is typically the case for long-only portfolios in assets and
+factors. In the event of negative risk contributions, one can utilize a norm as a distance measure to conduct a
+similar analysis.
+15
+0.01 0.11 0.21 0.31 0.41 0.51 0.61 0.71 0.81 0.91
+f
+0.3
+0.271
+0.241
+0.212
+0.183
+0.154
+0.124
+0.095
+0.066
+0.036 a
+Asset-based relative entropy
+0.01 0.11 0.21 0.31 0.41 0.51 0.61 0.71 0.81 0.91
+f
+0.3
+0.271
+0.241
+0.212
+0.183
+0.154
+0.124
+0.095
+0.066
+0.036 a
+Factor-based relative entropy
+0.05
+0.10
+0.15
+0.20
+0.25
+0.30
+0.35
+0.05
+0.10
+0.15
+0.20
+0.25
+0.30
+0.35
+0.40
+Figure 1: The impact of the choice of ( λa, λf ) on the distance of normalized risk contributions
+from specified risk budgets at the asset level (left) and factor level (right).
+Figure 1 illustrates the relative entropy scores of risk contributions for the AFRB portfolios
+computed across a range of different parameter values in the above model. As expected, as
+λa increases, normalized asset risk contributions tend to converge towards ba, evidenced by the
+asset-based relative entropy score approaching zero. However, this convergence is associated
+with an increase in factor-based relative entropy, indicating a shift in factor risk contributions.
+Conversely, to achieve normalized factor risk contributions that closely match bf , one should
+choose λf to be greater than λa. Therefore, it is crucial to ensure that the selected parameters
+maintain a good balance between both relative entropy scores. Additionally, one can adopt a
+systematic approach to conduct a grid search for a point that minimizes a combined score, e.g.
+the mean of asset-based and factor-based relative entropy scores.
+6 Numerical applications with financial data
+6.1 Analysis of risk-based portfolios in an equity factor model
+In this section, we construct various risk-based portfolios using the BARRA US Equity (USE3)
+model.16 The USE3 is a multi-factor model covering 67 factors: 54 industry factors and 13 style
+factors (e.g. momentum, growth and size). The covariance matrix of the factor returns is
+provided, revealing the estimated relationship between the factors. The model covers a wide
+range of US equities, and provides the factor loading of each stock on each risk factor, as well as
+the idiosyncratic components for individual assets. 17 It therefore corresponds to having a factor
+model of the following form:
+Σ = βΣf β′ + Σidio,
+where Σ f is the covariance matrix of factor returns and Σ idio is a diagonal matrix containing
+idiosyncratic variances of asset returns.
+These parameters are sufficient to compute portfolios using risk-based methods when the risk
+measure is chosen to be volatility. It is indeed interesting to use the covariance matrix from
+a specialized proprietary model to construct portfolios for any risk-based method, but it is
+16A detailed description of the model can be found online or requested through https://www.msci.com/www/
+research-report/united-states-equity-model-use3/015920189 .
+17It is worth noting that they implement a multi-industry approach, which means that stocks can have loadings
+on multiple industry factors. This approach enhances the model.
+16
+particularly interesting in the case of FRB and its variants since we also have the matrix of
+factor loadings.
+We consider the stocks in the S&P500 index as of 31/10/2023 as our investment universe. 18 We
+also use the parameters of the BARRA model for the same date. We calculate two Minimum
+Variance portfolios, one without constraint and another one with a long-only constraint, denoted
+by MV and MV + respectively. We also compute an RB portfolio (solving Problem (1)) where
+the risk budgets for each asset are equal – called the ERC portfolio. To introduce factor risk
+sensitivity into the portfolio construction process, we consider three different portfolios. The
+first is an FRB portfolio, in which factor risk budgets are chosen to be equal and computed by
+solving Problem (4). We call it the Equal Factor Risk Contribution portfolio, EFRC. The second
+portfolio is similar, but we restrict the weights to be positive following the ideas presented in
+Section 4.2. In other words, it is the portfolio obtained by solving Problem (4) under the
+constraint associated with the set C≥0. We denote it by EFRC +. We also consider the Equal
+Asset-Factor Risk Contribution portfolio, EAFRC which aims to find a balance between factor
+risk contributions and asset risk contributions as formalized by Problem (6) where we use equal
+asset and factor risk budgets and the following importance parameters: λa = 0.3 and λf = 0.7.
+Finally, we also include the equally-weighted portfolio, EW, in our analysis which is often a
+competitive challenger of risk-based methods.
+0.0 2.5 5.0 7.5 10.0 12.5 15.0 17.5 20.0
+Volatility (%)
+MV
+MV +
+ERC
+EFRC +
+EFRC
+EAFRC
+EW
+0.05
+ 0.00 0.05 0.10 0.15 0.20
+PC1
+0.075
+0.050
+0.025
+0.000
+0.025
+0.050
+0.075
+0.100
+0.125
+PC2
+EW
+ERC
+MV
+MV +
+EFRC
+EFRC +
+EAFRC
+Figure 2: Annualized ex-ante volatilities (left) and latent space representations (right) of the
+portfolios.
+Figure 2 gives an initial idea of how the different portfolios produced by the above methods
+compare. We observe that the portfolios that are based on risk contributions have similar ex-
+ante volatilities, while they appear very different in terms of positioning in the graph on the right
+obtained by applying a PCA on the asset weights to locate the portfolios in a two-dimensional
+space. EFRC seems to deviate from the other portfolios in order to perfectly match its factor risk
+budgets. However, adding long-only constraint (EFRC+) and introducing asset risk budgets into
+the picture (EAFRC) shifts the resulting portfolios towards ERC and EW in terms of positioning.
+Unsurprisingly, Minimum Variance portfolios, MV and MV+ present the lowest ex-ante risks and
+form a cluster far away from the other portfolios in the latent space.
+Furthermore, to better understand portfolios from the point of view of diversification both in
+terms of weights and risk contributions, we can plot the Lorenz curves which represent the
+cumulative sum of the sorted elements of the different vectors.
+In Figure 3, we plot Lorenz curves based on the vector of asset weights and the vector of asset
+risk contributions for portfolios of interest. In the graph on the left, the curve for EW lies on the
+18The index actually has 503 components, as three of them have two share classes listed. We filter them and
+end up with a universe of 500 assets.
+17
+equality line and can be regarded as the least-concentrated portfolio in terms of asset weights,
+since the capital is evenly distributed across assets. We observe that ERC and EAFRC portfolios
+are not very far from this line, indicating that the asset weights do not significantly depart from
+each other for these portfolios. On the contrary, MV + and EFRC+ produce portfolios where the
+majority of assets have weights close to zero, resulting in more concentrated portfolios. Assessing
+diversification for long-short portfolios is not straightforward, however, and we observe that the
+proportions of long and short positions are similar for the MV and EFRC portfolios, resulting
+in U -shaped Lorenz curves. In the graph on the right, we see a very similar picture, except
+that ERC is obviously now the least-concentrated portfolio in terms of asset risk contributions,
+spreading portfolio risk evenly across assets. EAFRC is close to both EW and ERC on both
+graphs.
+0 100 200 300 400 500
+Number of assets
+1.5
+1.0
+0.5
+0.0
+0.5
+1.0
+Asset weights
+0 100 200 300 400 500
+Number of assets
+1.5
+1.0
+0.5
+0.0
+0.5
+1.0
+Asset risk contributions
+EW
+ERC
+MV
+MV +
+EFRC
+EFRC +
+EAFRC
+Figure 3: Lorenz curves of asset weights (left) and asset risk contributions (right) (in %) for
+different portfolios
+The results of the same analysis on factor risk contributions (using Proposition 4) are depicted
+in Figure 4. This time, EFRC plays the benchmark role as the least-concentrated portfolio in
+terms of factor risk contributions, distributing risk across factors equally. EFRC + and EAFRC
+follow this portfolio, providing factor risk distributions that are close to factor risk budgets. EW,
+ERC, MV + and MV are portfolios that do not allow factor risk contributions to be controlled
+by definition, and can result in portfolios where risk is concentrated on a small set of factors.
+0 10 20 30 40 50 60 70
+Number of factors
+0.75
+0.50
+0.25
+0.00
+0.25
+0.50
+0.75
+1.00
+Factor risk contributions
+EW
+ERC
+MV
+MV +
+EFRC
+EFRC +
+EAFRC
+Figure 4: Lorenz curves of factor risk contributions (in %) for different portfolios
+In short, we see that the EW and ERC portfolios are well-balanced in terms of asset weights and
+asset risk contributions, while the Lorenz curves for factor risk contributions indicate a potential
+18
+concentration of factor risk. The EFRC portfolio achieves perfectly an equal allocation of factor
+risk, but may suffer from a concentration of asset weights and asset risk contributions, as does
+the EFRC+ portfolio. However, the EAFRC portfolio is, as expected, interesting for balancing
+asset and factor risk contributions. It seems to be the only strategy in our case that achieves a
+balance across all three attributes. Consequently, Asset-Factor Risk Budgeting portfolios may
+be strong candidates for managing the relationship between the three different pillars of portfolio
+risk management.
+6.2 Constructing diversified cross-asset portfolios
+In this section, we illustrate a case where we construct cross-asset portfolios within the framework
+of a macroeconomic factor model. Different asset classes can be affected by common macroeco-
+nomic factors, and it can therefore be interesting to manage the risk exposure to these factors
+when managing a cross-asset portfolio.
+This often requires portfolio managers to first define the set of factors of interest to their invest-
+ment universe. Then, as most macroeconomic factors are only observable at very low frequency
+(quarterly or annually), they should find proxy portfolios that approximate the returns / move-
+ments of these factors, so as to be able to perform a sensitivity analysis and find the factor
+loadings of the assets. They can then optimize portfolios or perform a risk analysis for a given
+portfolio based on a chosen risk measure.
+We consider an investment universe of 15 assets 19 corresponding to 4 government bond indices
+(U.S. 10-Year Government Bond Index, Canada 10-Year Government Bond Index, Germany 10-
+Year Government Bond Index, U.K. 10-Year Government Bond Index), 7 equity indices (U.S.
+Large-Cap Equity Index, U.S. Small-Cap Equity Index, Eurozone Large-Cap Equity Index, Eu-
+rozone Small-Cap Equity Index, U.K. Equity Index, Japanese Equity Index, Emerging Markets
+Equity Index), and 3 commodities (Crude Oil, Gold, Copper). We focus on 4 macroeconomic
+factors of interest called Growth, Real Rates, Broad Commodities and Emerging Markets. These
+factors are respectively represented by the S&P Developed BMI Index, the S&P Global Devel-
+oped Sovereign Inflation-Linked Bond Index, the S&P GSCI Index, and an index long emerging
+markets equity (S&P Emerging BMI Index), short developed markets equity (S&P Developed
+BMI Index) and long emerging market currencies (MSCI Intl. Emerging Market Currency). For
+the latter, equity and FX indices are used in the same factor to better capture the overall risk
+of emerging markets. 20 The choice of risk factors and their proxies follows the model in [19].
+Our objective is to investigate three strategies, namely Risk Budgeting, long-only Factor Risk
+Budgeting and Asset-Factor Risk Budgeting, where Expected Shortfall is chosen as the risk
+measure. More specifically, we want to analyse the performance of these strategies, but especially
+the evolution of asset and factor risk contributions over time by performing a backtest where
+we rebalance our portfolio on a weekly basis to obtain the desired portfolios based on the new
+information.
+Our database consists of daily returns between January 2015 and November 2023. We consider
+a 5-year look-back window, which implies that at each rebalancing, we take into account data
+from the last 5 years. Consequently, the first portfolio is calculated in January 2020. At each
+19The corresponding tickers are respectively TY1 Comdty, CN1 Comdty, RX1 Comdty, G 1 Comdty, ES1 Index,
+RTY1 Index, VG1 Index, SXE1 Index, Z 1 Index, NH1 Index, MES1 Index, CRUD LN Equity, IGLN LN Equity
+and COPA LN Equity.
+20The S&P indices can be found on S&P Dow Jones Indices public website: https://www.spglobal.com/spdji/
+en/.
+19
+rebalancing, we run an OLS regression using the weekly returns of each asset and the factors to
+obtain the matrix of factor loadings. 21
+First, we look at the case of the RB strategy. The risk budgets are chosen as
+ba =
+
+0.1, 0.1, 0.1, 0.1, 0.47 , 0.47 , 0.47 , 0.47 , 0.47 , 0.47 , 0.47 , 0.23 , 0.23 , 0.23  .
+The choice of risk budgets depends on the portfolio manager. In our case, we assign 40% of risk
+budgets to bonds and equities, and 20% to commodities. We then allocate these budgets equally
+within each class. The strategy corresponds to finding the RB portfolio for Expected Shortfall
+with a threshold α = 95% by solving Problem (2) using daily returns in the look-back window
+and rebalancing the portfolio on the last business day of each week.
+2020-07 2021-01 2021-07 2022-01 2022-07 2023-01 2023-07
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Asset weights
+Commodities
+Equities
+Government Bonds
+2020-07 2021-01 2021-07 2022-01 2022-07 2023-01 2023-07
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Asset Risk Contributions
+2020-07 2021-01 2021-07 2022-01 2022-07 2023-01 2023-07
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Factor Risk Contributions
+Emerging Markets
+Broad Commodities
+Real Rates
+Growth
+Figure 5: Evolution of asset weights and asset / factor risk contributions (in %) for the Risk
+Budgeting strategy
+In Figure 5, we observe that the asset weights are stable over time and that the risk contributions
+of the assets are very well aligned with the given vector of risk budgets, with the exception of small
+deviations which are linked to the accuracy of the Expected Shortfall estimates at a relatively
+high threshold α on a sample with a limited number of points. However, when we examine the
+factor risk contributions, which the RB portfolio does not take into account when optimizing
+portfolios, we observe that the risk contributions of Real Rates can reach levels of the order of
+70%, which should preferably be avoided. On the contrary, the risk contributions from Broad
+Commodities are often marginal, despite the fact that 20% of risk budgets have been allocated
+to the commodity asset class through asset risk budgets.
+To address this issue, we can consider the long-only FRB strategy that allows us to control factor
+risk contributions. We choose the following factor risk budgets for Growth, Real Rates, Broad
+Commodities and Emerging Markets respectively:
+bf = (0.35, 0.35, 0.20, 0.10).
+The long-only FRB strategy is expected to allocate risk across the factors very closely to the
+selected factor risk budgets (although not perfectly in line, as weights are constrained to be
+positive) keeping factor risk contributions at desired levels. As shown in Figure 6, this expectation
+is validated, with factor risk contributions of the portfolio consistently aligning with the chosen
+factor risk budgets. However, in this scenario, we lose control over asset risk contributions,
+resulting in highly fluctuating asset weights. This outcome is undesirable for an investment
+strategy as it leads to high turnover and consequently increased costs.
+21If the associated relationship between assets and factors is not statistically significant ( p-value greater
+than 0.05), we consider the associated factor loading to be equal to 0 for the given period.
+20
+2020-07 2021-01 2021-07 2022-01 2022-07 2023-01 2023-07
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Asset weights
+Commodities
+Equities
+Government Bonds
+2020-07 2021-01 2021-07 2022-01 2022-07 2023-01 2023-07
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Asset Risk Contributions
+2020-07 2021-01 2021-07 2022-01 2022-07 2023-01 2023-07
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Factor Risk Contributions
+Emerging Markets
+Broad Commodities
+Real Rates
+Growth
+Figure 6: Evolution of asset weights and asset / factor risk contributions (in %) for the long-only
+Factor Risk Budgeting strategy.
+The Asset-Factor Risk Budgeting strategy can bring solutions to the issues oberserved with
+the two above strategies. We consider the same asset and factor risk budgets, ba and bf . We
+also need to set the asset and factor importance parameters, which we choose equal: λa = 0.5
+and λf = 0.5. We can now compute the AFRB portfolio by solving Problem (7) for Expected
+Shortfall with a threshold α = 95% on a weekly basis and implement the AFRB strategy.
+2020-07 2021-01 2021-07 2022-01 2022-07 2023-01 2023-07
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Asset weights
+Commodities
+Equities
+Government Bonds
+2020-07 2021-01 2021-07 2022-01 2022-07 2023-01 2023-07
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Asset Risk Contributions
+2020-07 2021-01 2021-07 2022-01 2022-07 2023-01 2023-07
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Factor Risk Contributions
+Emerging Markets
+Broad Commodities
+Real Rates
+Growth
+Figure 7: Evolution of asset weights and asset / factor risk contributions (in %) for the Asset-
+Factor Risk Budgeting strategy.
+In Figure 7, we observe that the AFRB strategy maintains a balance between asset and factor risk
+contributions. Compared with the case of RB, we observe a deviation from asset risk budgets.
+However, this is the price we have to pay to stay close to factor risk budgets. We note that
+the risk contribution of Broad Commodities is no longer small as it was with the RB strategy,
+and that we achieve a significant exposure to this factor while preserving the stability of asset
+weights contrary to the case of the long-only FRB. Growth and Real Rates now have balanced
+contributions, in line with factor risk budgets. Thanks to the importance parameters, we can
+choose to be more conservative in one of the two types of risk contributions, depending on the
+investment objective or market conditions. In short, the AFRB strategy can provide a flexible
+framework for better risk management of investment portfolios.
+Although the primary objective of these strategies is diversification rather than return maxi-
+mization, it is still important to understand their behavior and performance beyond pure risk
+allocation figures. However, due to the limited length of our dataset, we can only analyse the
+strategies over a period of nearly four years which may not be sufficient to draw extensive con-
+clusions, all the more given the major events over the period: the Covid-19 outbreak, the major
+increases in interest rates by central banks, periods of intense geopolitical tensions leading to
+war, etc.
+21
+2020-01 2020-07 2021-01 2021-07 2022-01 2022-07 2023-01 2023-07 2024-01
+90
+95
+100
+105
+110 RBFRB (long-only)
+AFRB
+Figure 8: Cumulative performances of different strategies
+ˆµ ˆσ ˆES0.95 MaxDD Turnover
+RB -1.42 6.55 0.93 17.12 1.00
+FRB (long-only) -0.07 7.99 1.18 16.71 17.25
+AFRB -0.62 7.04 1.01 16.26 2.43
+Table 3: Sample mean (annualized), volatility (annualized), Expected Shortfall (daily), maximum
+drawdown and average turnover of the strategies (in %)
+Table 3 demonstrates the main statistics associated with the different strategies computed on
+daily returns after transaction costs. 22 We observe negative annualized returns from the three
+strategies, primarily due to their high exposure to government bonds asset class and real rates
+factor, which performed poorly after the end of 2021 due to the increases in interest rates. How-
+ever, the long-only FRB and AFRB strategies mitigate these losses by avoiding high exposures
+to this factor and also by providing significant exposure to the commodity factor, a factor that
+performed well after the Covid-19 outbreak. In terms of management costs, the long-only FRB
+strategy seems inefficient, despite the fact that it is the best performer, due to its high turnover,
+necessitating significant changes in positions every week and resulting in high transaction costs,
+which, in total, amounted to 0.31% in our backtest (with 0.02% for the RB and 0.05% for the
+AFRB).23 Conversely, the AFRB strategy is a low turnover strategy similar to the RB strategy
+limiting the implementation cost as well as allowing for a control on exposures to the desired
+factors.
+7 Conclusion
+In this paper, we address the question of incorporating factor risk contributions into the portfolio
+optimization process. First, we recall the concept of Risk Budgeting, which takes into account
+the risk contributions of individual assets. Next, we develop the necessary tools and propose a
+factor risk measure that allows us to apply these ideas to underlying risk factors in the presence
+of a linear factor model. We then formally define Factor Risk Budgeting and an associated
+stochastic optimization problem for finding FRB portfolios for a large set of risk measures.
+Finally, we propose a framework that combines RB and FRB to obtain portfolios that control
+the risk induced by both assets and factors. We conclude the paper with two case studies where
+we construct portfolios based on our ideas using equity and macroeconomic factor models.
+22We account for transaction costs by factoring in bid/ask spreads of 0.02% for equities, 0.01% for bonds, and
+0.05% for commodities.
+23It is important to note that the results may vary under other transaction cost schemes or rebalancing fre-
+quencies.
+22
+Acknowledgment
+The authors would like to thank the participants of QuantMinds International 2023 held in
+London, the 68th Euro Working Group for Commodity and Financial Modelling (EWGCFM)
+conference held at Khalifa University in Abu Dhabi, and the XXV Workshop on Quantitative
+Finance held in Bologna for their valuable contributions to the discussions that occurred during
+these events. The quantitative teams at Amundi should also be thanked for their support. We
+would also like to express our gratitude to the two anonymous referees whose comments helped
+us to improve our article.
+Data Availability Statement
+The data that support the findings of this study are available from the corresponding author
+upon reasonable request.
+23
+References
+[1] Livia Amato and Harald Lohre. Diversifying macroeconomic factors—for better or for worse.
+Available at SSRN 3730154 , 2020.
+[2] C ¸ agın Ararat, Francesco Cesarone, Mustafa C ¸ elebi Pınar, and Jacopo Maria Ricci. Mad
+risk parity portfolios. Annals of Operations Research, pages 1–26, 2024.
+[3] Xi Bai, Katya Scheinberg, and Reha Tutuncu. Least-squares approach to risk parity in
+portfolio selection. Quantitative Finance, 16(3):357–376, 2016.
+[4] Michael J Best and Robert R Grauer. On the sensitivity of mean-variance-efficient portfolios
+to changes in asset means: some analytical and computational results. The Review of
+Financial Studies , 4(2):315–342, 1991.
+[5] Fischer Black and Robert Litterman. Global portfolio optimization. Financial Analysts
+Journal, 48(5):28–43, 1992.
+[6] Benjamin Bruder, Nazar Kostyuchyk, and Thierry Roncalli. Risk parity portfolios with
+skewness risk: An application to factor investing and alternative risk premia. Available at
+SSRN 2813384 , 2016.
+[7] Benjamin Bruder and Thierry Roncalli. Managing risk exposures using the risk budgeting
+approach. Available at SSRN 2009778 , 2012.
+[8] Mark M Carhart. On persistence in mutual fund performance. The Journal of Finance ,
+52(1):57–82, 1997.
+[9] Adil Rengim Cetingoz, Jean-David Fermanian, and Olivier Gu´ eant. Risk budgeting portfo-
+lios: Existence and computation. Mathematical Finance, n/a(n/a), 2023.
+[10] Yves Choueifaty and Yves Coignard. Toward maximum diversification. The Journal of
+Portfolio Management , 35(1):40–51, 2008.
+[11] John H Cochrane. Presidential address: Discount rates. The Journal of finance, 66(4):1047–
+1108, 2011.
+[12] B Freitas Paulo da Costa, Silvana M Pesenti, and Rodrigo S Targino. Risk budgeting
+portfolios from simulations. European Journal of Operational Research , 311(3):1040–1056,
+2023.
+[13] Hubert Dichtl, Wolfgang Drobetz, Harald Lohre, Carsten Rother, and Patrick Vosskamp.
+Optimal timing and tilting of equity factors. Financial Analysts Journal , 75(4):84–102,
+2019.
+[14] Eugene F Fama and Kenneth R French. The cross-section of expected stock returns. The
+Journal of Finance , 47(2):427–465, 1992.
+[15] Eugene F Fama and Kenneth R French. A five-factor asset pricing model. Journal of
+Financial Economics, 116(1):1–22, 2015.
+[16] J´ erˆ ome Gava, Francisco Guevara, and Julien Turc. Turning tail risks into tailwinds. The
+Journal of Portfolio Management , 47(4):41–70, 2021.
+24
+[17] J´ erˆ ome Gava and Julien Turc. The properties of alpha risk parity portfolios. Entropy,
+24(11):1631, 2022.
+[18] Christian Gourieroux, Jean-Paul Laurent, and Olivier Scaillet. Sensitivity analysis of values
+at risk. Journal of empirical finance , 7(3-4):225–245, 2000.
+[19] David Greenberg, Abhilash Babu, and Andrew Ang. Factors to assets: mapping factor
+exposures to asset allocations. The Journal of Portfolio Management , 42(5):18–27, 2016.
+[20] Sebastian Jaimungal, Silvana M Pesenti, Yuri F Saporito, and Rodrigo S Targino. Risk
+budgeting allocation for dynamic risk measures. arXiv preprint arXiv:2305.11319 , 2023.
+[21] Nathan Lassance, Victor DeMiguel, and Fr´ ed´ eric Vrins. Optimal portfolio diversification
+via independent component analysis. Operations Research, 70(1):55–72, 2022.
+[22] Edmond Lezmi, Hassan Malongo, Thierry Roncalli, and Rapha¨ el Sobotka. Portfolio alloca-
+tion with skewness risk: A practical guide. Available at SSRN 3201319 , 2018.
+[23] John Lintner. Security prices, risk, and maximal gains from diversification. The Journal of
+Finance, 20(4):587–615, 1965.
+[24] Harry Markowitz. Portfolio selection. The Journal of Finance , 7(1):77–91, 1952.
+[25] Attilio Meucci. Risk contributions from generic user-defined factors. The Risk Magazine ,
+pages 84–88, 2007.
+[26] Attilio Meucci. Fully flexible views: Theory and practice. arXiv preprint arXiv:1012.2848 ,
+2010.
+[27] Attilio Meucci, Alberto Santangelo, and Romain Deguest. Risk budgeting and diversification
+based on optimized uncorrelated factors. Available at SSRN 2276632 , 2015.
+[28] Richard O Michaud. The markowitz optimization enigma: Is ‘optimized’optimal? Financial
+Analysts Journal, 45(1):31–42, 1989.
+[29] Jan Mossin. Equilibrium in a capital asset market. Econometrica: Journal of the Econo-
+metric Society, pages 768–783, 1966.
+[30] Jean-Charles Richard and Thierry Roncalli. Smart beta: Managing diversification of mini-
+mum variance portfolios. In Risk-Based and Factor Investing , pages 31–63. Elsevier, 2015.
+[31] R Tyrrell Rockafellar and Stanislav Uryasev. Conditional value-at-risk for general loss
+distributions. Journal of banking & finance , 26(7):1443–1471, 2002.
+[32] Thierry Roncalli. Introduction to risk parity and budgeting . CRC Press, 2013.
+[33] Thierry Roncalli and Guillaume Weisang. Risk parity portfolios with risk factors. Quanti-
+tative Finance, 16(3):377–388, 2016.
+[34] Stephen A Ross. The arbitrage theory of capital asset pricing. Journal of Economic Theory,
+13(3):341 – 360, 1976.
+[35] William F Sharpe. Capital asset prices: A theory of market equilibrium under conditions
+of risk. The Journal of Finance , 19(3):425–442, 1964.
+25
+[36] Alexander Swade, Matthias X Hanauer, Harald Lohre, and David Blitz. Factor zoo (. zip).
+Available at SSRN , 2023.
+[37] Dirk Tasche. Risk contributions and performance measurement. Report of the Lehrstuhl f¨ ur
+mathematische Statistik, TU M¨ unchen, 1999.
+[38] Jack L Treynor. Toward a theory of market value of risky assets. Econometric Modeling:
+Capital Markets , 1962.
+[39] Ruodu Wang and Yunran Wei. Risk functionals with convex level sets. Mathematical
+Finance, 30(4):1337–1367, 2020.
+26

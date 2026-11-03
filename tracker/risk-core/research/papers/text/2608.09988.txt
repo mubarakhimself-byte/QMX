@@ -1,0 +1,726 @@
+arXiv 2608.09988  https://arxiv.org/abs/2608.09988
+
+OpenPM: Auditable Point-in-Time Evaluation for
+LLM Portfolio-Management Agents
+Xinying Cai1,∗,Minghao Guo1,∗,Jiahe Liu2,Jiaojiao Han3,Bangwei Guo1,Yitao Long4,
+Yuxuan Chen5,Bohan Wu6,Dimitris N. Metaxas1,Raymond Li7,†
+1Rutgers University,2Technical University of Denmark,3New Jersey Institute of Technology,
+4New York University,5Columbia University,6University of Illinois Urbana-Champaign,
+7University of British Columbia
+Abstract
+Large language models are increasingly used to read markets, assess risk, and allocate
+capital. However, reported results for LLM trading agents can be inflated by look-ahead
+leakage, optimistic execution, and risk mandates that are described but not enforced. We
+presentOpenPM, an auditable point-in-time evaluation framework for LLM portfolio-
+management agents. In OpenPM, an agent manages a $1M long-only book over the S&P
+500 universe using market data at five-minute intervals. Every record visible to the agent
+must be available at the decision time. Natural-language risk mandates are converted into
+typed constraints and enforced on the executed portfolio. Each run produces audit artifacts,
+including a contamination certificate, a cost-sensitivity curve, and a constraint-adherence
+report. We also build a reference agent named the tiered allocator, where typed analysts
+score candidates, a constructor LLM proposes weights, and a deterministic critic guarantees
+feasibility. Weisolateconstructorbehaviorbycapturinganalystevidenceonceandreplaying
+it across constructor models. In our short-window case study, stronger constructors show
+modest and model-dependent gains over equal weighting on the same pool, but analyst
+quality matters more than constructor choice, and turnover is the main cost driver. All
+returns are upper bounds on a single frozen window without market impact, not validated
+alpha. OpenPM’s code and data are available atgithub.com/aslcai/OpenPM-Bench and
+huggingface.co/datasets/aslcai/OpenPM-Bench.
+1 Introduction
+Large language models are increasingly used in financial decision systems that read market context, assess
+risk, and allocate capital (Yang et al., 2023; Wu et al., 2023; Zhang et al., 2024). For a practitioner, the key
+question is not whether an agent looks strong in an offline backtest, but whether that result would survive
+deployment. The agent must use only information that was available at the decision time, its returns must
+survivetradingcosts,anditsfinalportfoliomustrespectthestatedriskmandate. Smallchoicesindataaccess,
+executionmodeling,andconstrainthandlingcancreateapparentskillthatdisappearsinproduction(Lietal.,
+2025a; Chen et al., 2025). We treat credible evaluation as an engineering artifact, and build OpenPM as one.
+We focus on three practical failures in LLM trading-agent evaluation that abenchmark, not a better model,
+must control.(i) Information leakage:agent-visible records can include information that was not knowable
+at the decision time, such as features that use future observations or records stamped by event time rather
+than availability time (Bailey et al., 2014; López de Prado, 2018); this is closely related to NLP benchmark
+contamination(Sainzetal.,2023).(ii)Optimisticexecution:returnsreportedwithoutspread, slippage, and
+turnover costs are upper bounds, not deployable estimates (Chen et al., 2025).(iii) Unenforced mandates:
+natural-language risk mandates, such as “conservative” or “at most 20 names,” are often used only for
+post-hoc scoring rather than enforced on the executed portfolio, so a model that ignores its mandate is never
+caught. Although OpenPM is instantiated in portfolio management, these failures are not unique to trading.
+Trading is a useful stress test for agent evaluation (Guo et al., 2026a; Xu et al., 2026b) because it combines
+∗Equal contribution.
+†Corresponding author.
+arXiv:2608.09988v1  [cs.CE]  6 Aug 2026
+OpenPM: Auditable Point-in-Time Evaluation for LLM Portfolio-Management Agents
+Benchmark / agent Task / universe Cadence
+NL mandate
+to portfolio
+Leakage
+control
+Cost-aware
+labels
+FinBen (Xie et al., 2024) Text / QA — No None No
+FinMem, TradingAgents (Yu et al., 2023; Xiao et al., 2024) Single-stock agent Daily Verbal None Limited
+FinCon (Yu et al., 2024) Portfolio, 3 assets Daily Verbal (CVaR) None Limited
+InvestorBench (Li et al., 2025b) Mostly single-stock Daily No Partial Partial
+QuantAgent (Xiong et al., 2025) Directional, per-instr. 1h / 4h No Sampled No
+MarketSenseAI (Fatouros et al., 2025) Stock-pick→portfolio Monthly No Live post-cutoff No
+StockBench (Chen et al., 2025) Portfolio, DJIA-20 Daily No Contam.-free Partial
+DeepFund (Li et al., 2025a) Portfolio, 5 tickers Daily No Post-cutoff Partial
+LiveTradeBench (Yu et al., 2025) Portfolio, 15 names Daily, live No Live forward Partial
+PortBench (Zhao et al., 2026) Portfolio, 6 asset cls. Monthly Post-hoc (PAS) PiT replay Partial
+OpenPM (ours) PIT portfolio, S&P 500 intraday–once Enforced (critic) Row-gate + cert. Yes
+Table 1: Design comparison with representative LLM trading benchmarks and agents.NL mandate to
+portfolioindicates whether natural-language investor constraints are enforced on the portfolio weights.
+Leakage controlsummarizes the benchmark’s look-ahead, contamination, and point-in-time availability
+mechanism. OpenPM is the only one combining an S&P 500-scale equity universe, sub-daily observations,
+row-level availability gating, critic-enforced mandate compliance, and cost-aware labels.
+temporal grounding, multiple information sources, constrained action, noisy outcomes, and cost-sensitive
+execution. The same pattern appears in many deployed agents acting in open-ended environments (Xu et al.,
+2026a): unavailableinformationcanleakintothestate,simulatorscanbetoooptimistic,andnatural-language
+instructions can be treated as soft preferences rather than enforceable constraints.
+WepresentOpenPM,whichaddressesthesefailuresdirectly. Anagentmanagesasingle$1Mlong-onlybook
+over an S&P 500 universe, emitting dollar-denominated orders at an hourly, daily, or once-then-held cadence
+over 5-minute market-state observations. A single availability gate fixes information access: no agent-visible
+record enters a decision at timeT unless its availability timestamp is≤T , and future-looking labels are held
+out for scoring. Every run is scored not only on return, but also onwhetherit used unavailable information,
+howsensitive it is to execution costs, andwhetherit obeyed its mandate. As a reference agent, we build a
+tiered allocator(§4), where typed analyst LLMs score candidates, a constructor LLM proposes weights, and a
+deterministic in-loop risk critic projects the proposal onto the feasible set. Thus, a deterministic projection,
+not the model, guarantees that the constraints hold.
+Our contributions are:
+• A point-in-time portfolio benchmark.We formalize availability-gated evaluation for portfolio agents
+over an S&P 500 universe, with label-free price, liquidity, regime, event, news, and filings state under a
+single data contract and execution-aware labels held out for scoring.
+• An accountability-first evaluation protocol.Each run produces a per-model contamination certificate, a
+transaction-cost-sensitivity curve, a constraint-adherence report, per-name and sector attribution, and a
+backtest-bias checklist, so every reported number is tied to the conditions that produced it.
+• A reference allocator and diagnostic case study.We build a tiered allocator separating analyst evidence,
+constructor decisions, deterministic risk projection, and execution. On frozen evidence it gives four
+findings: construction gains are modest and model-dependent, equal-weighting a strong candidate set
+is a hard baseline, analyst quality matters more than constructor choice, and turnover drives cost. The
+deterministic critic is necessary because it enforces feasibility rather than trusting the LLM. Returns are
+no-market-impact upper bounds, not validated alpha.
+Wearedeliberateaboutscope: followingrigor-forwardtradingbenchmarks(Lietal.,2025a;Chenetal.,2025;
+Yu et al., 2025), we makeno validated-alpha claim: fills are priced off single-venue IEX TOPS (not NBBO), the
+window is short, and prompts were iterated on overlapping data, so we report relative ordering rather than
+absolute returnlevels. All results are tied to a frozen dataset fingerprint on a fixed commit.
+2 Related Work
+Table 1 situates OpenPM against representative related work; it contrasts design, not performance, with
+deliberately conservative labels.
+Financial LLMs and trading agents.Domain models and holistic benchmarks (Yang et al., 2023; Wu
+et al., 2023; Xie et al., 2024) target language understanding, not point-in-time trading. Single-system trading
+2
+OpenPM: Auditable Point-in-Time Evaluation for LLM Portfolio-Management Agents
+agents (Yu et al., 2023; Li et al., 2023; Xiao et al., 2024; Yu et al., 2024; Fatouros et al., 2025; Li et al., 2025c;
+Zhao et al., 2025; Xiong et al., 2025) add memory, role structure, and verbal risk discussion, but are agent
+systems rather than reusable benchmarks, decide daily or slower over a handful of assets, and never bind a
+natural-language mandate to the executed weights, often reporting large historical returns without leakage
+or cost controls (Table 1).
+Rigor-forward agent benchmarks.The closest cohort foregrounds contamination (Chen et al., 2025; Li
+et al., 2025a; Yu et al., 2025; Li et al., 2025b). PortBench (Zhao et al., 2026), closest to us, ingests natural-
+language investor profiles but scores mandate alignment post hoc rather than enforcing it, and finds 90%
+of model–profile pairs fail to beat equal-weight, consistent with our finding that equal-weight is hard to
+beat. All operate over small universes with no row-level availability gate; OpenPM instead (Table 1) pairs an
+S&P 500-scale, sub-daily-to-once portfolio task with a per-record availability gate, a per-run contamination
+certificate,andadeterministicin-loopcriticthatenforcesthemandateontheweights,followingmethodology
+work on contamination (Sainz et al., 2023) and backtest overfitting (Bailey et al., 2014; López de Prado, 2018;
+Lo, 2002; Harvey et al., 2016).
+3 Benchmark Design
+3.1 Task
+OpenPM frames portfolio management as a sequence of point-in-time rebalancing decisions over a single
+shared book. The agent starts with $1,000,000 cash and at each decision timeT receives a label-free cross-
+section as ofT. It observes this cross-section every 5-minute bar butrebalanceson a configurable schedule
+(hourly, daily, or once), emitting a possibly empty list of dollar-denominatedbuy/sell orders; anything not
+mentioned is held. The book is long-only and unlevered, enforced structurally (buys clip to cash, sells to
+shares held), trading whole shares. Buys fill at the ask and sells at the bid, so the side-aware half-spread is
+charged at execution time, not assumed away. Universe, number of decisions, and scores are properties of a
+data release, not the task.
+3.2 Point-in-Time Data Environment
+The central invariant is that agent-visible information must be available no later than the decision time at
+which it is used. Every record carries an availability timestamp and enters the state at decision timeT only
+if ts_available≤T . This is distinct from event time and bar-end time: a quarterly filing is stamped by
+its EDGARacceptanceDateTime, macro series by their FRED/ALFRED vintage, and bar-derived features
+become available only after the bar closes. Gating on availability is designed to prevent conditioning on
+information unavailable atT.
+Thegateisexercisedbyunittestsandre-checkedatruntimebythecontaminationcertificate(§5),designedto
+preventlook-aheadleakageandauditedforthemodeswetest. Theagent-visiblestateexposessixtypedlayers,
+each computable point-in-time:price/bar,liquidity,regime,event,news, andfilings. The fields in each layer and
+their availability stamps are given in App. A. Agents do not observe raw price levels; price information is
+provided through derived and normalized features, which reduces direct price-level memorization risk.
+3.3 Natural-Language Risk Mandates
+A run carries a risk mandate. A preset word maps deterministically to typedRiskConstraints (conservative:
+≤5%per name,≤30names, 10%cash;balanced: ≤10%, ≤20names;aggressive: ≤25%, ≤10names). Free-form
+text (“a cautious retiree”, an investor persona and value profile (Du et al., 2025a,b)) is parsed by an LLM via
+forcedtool-useintothesametypedenvelopewithaconfidence;alow-confidenceorcontradictorymandateis
+flagged and defaulted to balanced. Parsing is configuration-time, outside the leakage surface. Unlike verbal
+risk discussion in prior agents, the constraints are typed once and then enforced.
+3.4 Labels and Evaluation Targets
+Labels are evaluation-only and future-looking, barred from the agent at the file and column level. We score
+each book on its executable (cost-aware) return: fills clear at the quoted side, charging the side-aware half-
+spread (no slippage or market impact). Corporate-action adjustment makes the book total-return capable
+(dividends reinvested as cash).
+3
+OpenPM: Auditable Point-in-Time Evaluation for LLM Portfolio-Management Agents
+Point-in-time availability gate: a record enters the agent-visible state at decision timeT only when ts_available≤T
+NL mandate
+→typed
+Candidate
+gate
+Six LLM
+analysts
+Aggregate
++ top-K
+Constructor
+LLM
+Risk
+critic
+Fill
+simulator
+Equity
+curve
+RiskConstraints
+manifest Gate log Prompt &score logs Scorematrix Rawproposal Projectiondiff Fill ledger Contam. cert.Bias checklist
+Figure 1: The OpenPM evaluation pipeline. A point-in-time availability gate (top) governs what each stage
+may see; the 8 stages turn a natural-language mandate into an executed, audited portfolio, calling an LLM
+onlyattheanalystsandconstructor(therestaredeterministic)andemittingaversionedauditartifact(bottom
+row) at every step.
+4 The Tiered Allocator
+The flagship agent is an eight-stage tiered allocator mapping the multi-analyst “trading-firm” template onto
+the leak-gated layers, with deterministic stages bracketing the LLM calls. The firm metaphor is not the
+contribution. It is saturated in prior agents (Xiao et al., 2024; Yu et al., 2024); what is specific to OpenPM
+is its instantiation on point-in-time data: typed leak-gated analyst channels (including 8-K item codes as a
+structured,acceptance-time-gatedfeed,aleak-safechannel,notavalidatedsignalsource),anatural-language
+mandate compiled to typed constraints, and a deterministic in-loop critic that projects the weight vector onto
+them at decision time rather than scoring it afterward.
+The architecture is shown in Figure 1. A natural-language mandate is first compiled into typed constraints.
+A liquidity-only gate then bounds the cross-section to at most 50 tradable names. Six parallel cheap-model
+analysts independently score typed information channels—technical, regime, events, news, 8-K item codes,
+and BM25-retrieved 10-K/10-Q narrative —with a score in[−1,1] and a confidence value; routing such
+heterogeneous evidence to specialized analysts relates to LLM-based information routing (Guo et al., 2026b).
+Separately, a deterministic liquidity analyst emits per-name position caps. We aggregate analyst scores
+using a confidence-weighted average,comp(s)= Pa waca,sxa,s/ Pa waca,s, with uniformwa = 1 after anIC-weightedvariantfailedoutofsample. Astrongerconstructorthenproposeslong-onlyweightsviatool-use,
+seeingtheper-analystmatrixandspreadsbutnotrawpricesor(bydefault)thecompositeorcandidateorder.
+The deterministic critic then projects the proposal onto the feasible set (long-only, top-N (the name-count
+cap), per-name and liquidity clipping, cash/gross/turnover scaling), and a fill simulator marks the executed
+book at the quoted side. Each stage is designed to be independently ablatable and emits a versioned audit
+artifact; backbones are bring-your-own-key and the analyst and constructor tiers can differ.
+5 Experimental Setup
+Dataset.We freeze a point-in-time S&P 500 universe consisting of 508 names that are active on at least one
+date between 2026-02-19 and 2026-05-01. Each run records a content hash of the frozen data snapshot. The
+evaluation window spans 2026-03-02 to 2026-05-01, covering 44 trading days and 3,432 five-minute bars. At
+each bar, membership is gated point-in-time, so only names active in the index at that bar are eligible; this
+yields to 504 active names during evaluation. Within each session, no rebalancing happens in the first 60
+minutes (12 five-minute bars) after the open; this post-open gate also gives the rolling features time to warm
+up. The data is 2026-dated, after every evaluated backbone’s knowledge cutoff.
+Constructor-isolationsetup.Ourcentralonce-modeexperimentisolatestheconstructorbyholdinganalyst
+evidence fixed. We first run the six-analyst tier and freeze its output as an analyst capture: per-name
+scores and confidences over the liquidity-gated≤50-name pool. We create six captures from two analyst
+backbones (DeepSeek-V3.2, gpt-5) and three seeds, since MoE serving is not perfectly bit-reproducible
+even at temperature zero. Each capture is then replayed through five constructors (gpt-5, claude-opus-4.7,
+DeepSeek-V3.2, qwen3-max, andgpt-4o-mini) atK∈ {30,40,50}, reusing the cached analyst outputs rather
+than recomputing them (Lin et al., 2025). The constructor observes the per-analyst confidence matrix and
+spreads, but not raw prices, the composite score, or the candidate order; candidates are shuffled before
+construction. This yields 90 LLM constructor cells on one decision date, plus 216 baseline cells. The daily
+sweep in §6.4 complements this controlled setting by rerunning each constructor over 44 daily rebalances at
+K= 50with fixedDeepSeek-V3.2analysts, reporting one point estimate per constructor.
+4
+OpenPM: Auditable Point-in-Time Evaluation for LLM Portfolio-Management Agents
+DeepSeek-V3.2analysts(K=50)gpt-5analysts(K=50)
+Constructor Net Shp MDD Turn∆EW Beat N mW Net Shp MDD Turn∆EW Beat N mW
+LLM constructors
+gpt-57.0 1.738.4 0.96−1.0 5/916.9 8.712.5 2.817.8 0.96 +5.3 9/914.6 8.8
+Opus-4.76.4 1.61 8.4 1.00−1.6 2/9 19.6 8.3 10.8 2.61 7.6 0.94 +3.69/918.9 8.3
+DeepSeek-V3.22.2 0.64 8.4 1.01−5.8 2/9 16.3 7.4 11.1 2.51 7.8 0.95 +3.9 8/9 14.6 7.6
+Qwen3-Max1.1 0.37 9.0 0.97−6.9 0/9 11.6 8.7 8.3 1.76 8.7 0.92 +1.1 8/9 10.3 9.3
+gpt-4o-mini0.1 0.127.40.91−7.9 0/9 9.6 9.3 5.1 1.287.30.92−2.1 4/9 10.0 9.4
+No-LLM baselines(same frozen capture)
+Same-pool EW8.0 2.03 7.9 1.01— —19.9 5.0 7.2 1.85 8.9 1.01— —19.9 5.0
+Composite-rank0.6 0.31 5.6 0.96−7.4 0/9 19.9 8.7 0.9 0.41 5.8 0.96−6.3 0/9 19.9 8.3
+Random-N(mean)0.7 0.32 7.6 1.03−7.2—19.9 5.0 0.7 0.32 7.6 1.03−6.5—19.9 5.0
+Market references
+SPY buy-and-hold5.8 2.01 8.6— — — — —Identical undergpt-5analysts:
+Always-flat (cash)0.0 0.00 0.0— — — — —objective market constants, not analyst-dependent.
+Table 2:Constructor comparison(balanced mandate, once-then-hold 2026-03-02 to 2026-05-01, K=50,
+means over three seeds). Columns split by theanalyst backboneproducing the byte-identical frozen capture
+(DeepSeek-V3.2vs. gpt-5). ∆EW: active return vs. same-pool EW (pp);Beat: cells beating same-pool EW
+over 3seeds×3K (pooled over allK, whereas Net and∆EW areK=50, so a backbone can show∆EW<0
+yet Beat>0 by clearing EW at smallerK);mW: max single-name weight% (10% cap);bold: best LLM
+per column; Gross omitted (≈Net). Full per-K multi-metric grid in Table 5. Returns are single-window,
+no-market-impact upper bounds (§7); ordering, not validated alpha.
+Baselines.Every baseline consumes the same frozen capture and runs the same backtest and critic with no
+LLM call.Same-pool equal-weight(EW) buys the top-N names by composite score with equal weights,
+testing whether a constructor improves over simply splitting capital across the highest-ranked candidates.
+Composite-rankingsizes by inverse volatility over positive-composite names.Random-Nequal-weights a
+seeded random draw (ten seeds). Market references areSPYandalways-flat.
+Evaluation protocol.Each run reports equity-curve metrics, including total return, Sharpe, net-of-cost
+Sharpe, Sortino, maximum drawdown, turnover, and exposure. We also report a five-point cost-sensitivity
+curve at{0,0.5,1,1.5,2}× the default transaction cost, together with a binarybeat-all-benchmarksverdict
+indicating whether the run outperforms equal-weight, SPY, and always-flat. For accountability, every run
+emits three audit artifacts: a constraint-adherence report, a per-run contamination certificate with status
+PASS/FAIL/UNKNOWN, and a backtest-bias checklist. Per-name and per-sector P&L are reconciled to the
+aggregate equity curve.
+6 Results
+We analyze two regimes: a controlled once-mode constructor-isolation grid (§6.1–§6.3) and a realistic daily
+rebalancing sweep (§6.4). We report ordering and structure, not precise sizing (§7).
+6.1 Can an LLM construct a portfolio?
+Table2isthebenchmark’scentralquestion: holdingtheanalystevidencebyte-identical,cananLLMconstruc-
+tor beat splitting the book evenly across the same candidates? A qualified yes that depends on signal quality.
+The constructors ordergpt-5> Opus-4.7 >DeepSeek-V3.2 >Qwen3-Max >gpt-4o-mini, an ordering stable
+when pooled acrossK∈ {30,40,50}(Beat EW14/18,11/18,10/18,8/18,4/18; Sharpe tracks returns).
+The key dependence is the analyst capture. On thegpt-5capture, where same-pool EW returns7.2%, four of
+five constructors beat EW atK=50 (gpt-5:+5.3 points; DeepSeek:+3.9; Opus:+3.6; Qwen:+1.1), with only
+gpt-4o-minitrailing (−2.1). However, on theDeepSeek-V3.2capture, none of the constructors beat EW; the
+best, gpt-5, reaches∆EW=−1.0 point. The inverse-volatility composite-ranking baseline is much weaker
+(0.6–0.9% net return,0/18Beat-EW), so same-pool EW is the hard naive baseline; the upstream analyst lever
+this exposes is quantified in §6.2.
+Structurally, the strongest constructors add value mostly by re-weighting the EW roster rather than replacing
+it: their holdings overlap with EW is approximately0.75–0.78. The weakest constructor departs most from
+5
+OpenPM: Auditable Point-in-Time Evaluation for LLM Portfolio-Management Agents
+Constructor Net% Gross% Shp Turn
+Beat
+all
+Opus-4.713.7 14.8 4.3222.9✓
+DeepSeek-V3.29.7 10.7 3.01 25.8✓
+gpt-4o-mini5.1 6.8 1.77 41.4—
+Qwen3-Max4.8 7.4 1.58 43.6—
+gpt-54.2 5.5 1.35 21.6—
+Table 3: Daily-cadence sweep: 44 rebalances, 2026-03-02 to 2026-05-01, balanced mandate, K=50,
+DeepSeek-V3.2 analysts; single runs (point estimates). “Beat all” = beats SPY (5.8%) and cash, net of
+cost.
+the roster and loses (gpt-4o-mini: 0.39 overlap; details in App. C). Overall, construction adds value when
+the upstream signal is strong enough to act on; otherwise, the constructor cannot reliably improve over the
+hard EW baseline.
+6.2 The analyst tier is the larger lever
+The constructor is not where most of the value lives. Re-running the same constructors on different analyst
+capturesseparatesthetwotiers: movingfromthe DeepSeek-V3.2analystcapturetothe gpt-5analystcapture
+raises constructor performance across models, while same-pool EW changes only modestly (8.0%→7.2% )
+(Table 2). This indicates that the stronger analyst capture does not merely improve the candidate pool; it
+provides evidence that capable constructors can exploit through re-weighting. Conversely, when the analyst
+signal is weaker, constructors often fall below same-pool EW, showing that construction cannot reliably
+rescue poor upstream signal. The practical implication is to spend compute first on the analyst tier and
+then use the cheapest capable constructor—a heterogeneous allocation of compute across specialized LLM
+components that echoes budget-controllable multi-LLM routing (Mei et al., 2025).
+6.3 Mandate compliance and the critic’s role
+A portfolio benchmark should distinguish raw mandate adherence from post-critic feasibility. Under the
+balancedmandate(per-namecap 10%,atmost 20names),therawproposalsfromallfiveconstructorsacross
+six captures satisfy both explicit caps: the largest single-name weight is exactly the10.0%cap in 24 of 90 cells
+and never exceeds it, and no constructor proposes more than20names. Thus, in this setting, the mandate’s
+explicit weight and name-count caps do not bind after construction.
+The critic’s active work is instead liquidity enforcement. The per-name liquidity hard-clip, which can be
+tighterthanthemandateandisnotdirectlyvisibletothemodel,bindsin37of90cells,concentratedinweaker
+constructors (Qwen: 16/18; gpt-4o-mini: 17/18). We report these liquidity clips separately from mandate
+breaches, so they are not miscounted as failures to follow the natural-language mandate.
+Thisresultshowsthatmanyconstructorscanfollowsimplenumericmandates,butitdoesnotjustifyassuming
+compliance in general. The critic remains on the critical path as a deterministic feasibility layer. It enforces
+both the user mandate and trading constraints that the model may not observe, while the adherence report
+makes any breach measurable under tighter mandates or other constructors.
+6.4 Cost and cadence: turnover, not spread, governs net return
+Because the candidate gate screens to a liquidity-ranked pool, spread is not the bottleneck; turnover is. In
+once-then-hold mode, the book turns over only at construction, so net and gross returns are nearly identical
+(Opus: 10.77%grossvs. 10.76%net, about2bpsperdollartraded). Indailymode, however, costsarecharged
+at each of 44 rebalances.Opus and DeepSeek still beat the market references net of cost, returning13.7%
+and 9.7% versus SPY’s5.8% and cash (Table 3). But cumulative turnover now rises to22–44 times, so the
+high-churn constructorsgpt-4o-mini (41) and Qwen (44) pay1.7–2.5 percentage points of cost drag and
+slip below SPY. Low turnover alone is not sufficient.gpt-5has the lowest turnover (22) but only4.2% net
+return. The winning pattern is therefore to select well and trade sparingly. Figure 2 (Appendix C) plots net
+return against turnover and highlightsgpt-5as a low-turnover, low-return exception. These single-run point
+estimates suggest that daily-or-slower cadence is viable for disciplined constructors, while also showing that
+6
+OpenPM: Auditable Point-in-Time Evaluation for LLM Portfolio-Management Agents
+per-model rankings are regime- and date-sensitive. We therefore emphasize structural findings rather than a
+fixed model ranking.
+6.5 Leakage and bias accounting
+The contamination certificate is PASS for all five constructors, whose knowledge cutoffs precede the 2026
+window (gpt-5∼2024 -09, gpt-4o-mini∼2024 -10, Qwen3-Max∼2025 -06, DeepSeek-V3.2∼2025 -07, Opus-4.7
+∼2026-01, the thinnest margin); all runs are causality-, chronology-, and parity-clean. The bias checklist flags
+cost realism, market impact, and data-snooping every run.
+7 Conclusion
+OpenPM fixes information access with a uniform availability gate and scores every run for leakage, cost
+optimism, and mandate adherence alongside return. Interrogating its flagship allocator on byte-identical
+evidence, we find genuine but conditional LLM construction skill: under a strong analyst capture most
+constructors beat equal-weighting the same candidates, under a weak one none do, and the upstream analyst
+tiermovesreturnsmorethantheconstructorchoice. Skilllocalizesupstreamofconstruction. Atdailycadence
+thestrongestconstructorsbeateverymarketbenchmarknetofcost,withturnoverthemaincostdriver. These
+are single-window, no-market-impact upper bounds, not validated alpha—the kind of claim a point-in-time,
+audited benchmark is built to keep honest.
+Limitations
+WescopeOpenPMdeliberatelyandinterpretitsresultsasdiagnosticevidenceratherthandeployabletrading
+performance.Simulation idealization.As in any backtest, fills clear at the quoted side, and we do not
+model market impact or queue dynamics. Net returns are therefore upper bounds at non-trivial notional and
+should be read for ordering rather than as achievable returns. Quotes are single-venue IEX TOPS rather than
+consolidated NBBO; for the liquidity-screened names traded by the allocator, this makes realized spread
+costs conservative, but it does not close the market-impact gap.Scope of the snapshot.Our controlled
+comparison is a point-in-time snapshot over one S&P 500 window, with robustness drawn from repeated
+analyst captures rather than independent market regimes. We therefore report relative ordering and point
+estimates, not calibrated effect sizes or statistical alpha (Lo, 2002; Card et al., 2020; Harvey et al., 2016). The
+ordering in Table 2 should be read as snapshot evidence, since a small number of strongly trending names
+can drive much of the spread between constructors. Broader generalization across decision dates, intraday
+cadences, markets, and backbones is future work.Coverage.The universe is U.S. large-cap equities, and
+signals such as options and intraday fundamentals are out of scope.Leakage.The availability gate and
+contamination certificate are designed to enforce point-in-time access across the modes we evaluate. As
+with any audit, they reduce and bound leakage risk rather than proving that every possible configuration is
+leakage-free (Song et al., 2024) .
+Ethical Considerations
+This work is a research benchmark, not investment advice or a deployable trading system; its returns are
+explicitly upper bounds under an optimistic cost model and must not be read as achievable performance.
+We use only publicly available market, filing (SEC EDGAR), macro (FRED), and news (GDELT) data,
+within their terms, and do not redistribute licensed raw market data. LLM backbones are accessed under
+a bring-your-own-key scheme that never stores or logs secrets. Deploying LLM allocators on real capital
+without realistic cost, impact, and risk controls could cause financial harm; although the backbones we tested
+respected their numeric mandate, compliance cannot be assumed for tighter mandates or other models,
+which is why we keep a deterministic enforcement layer on the critical path rather than trusting the model.
+We disclose that AI assistants were used for code and writing support; all claims were verified by the authors
+against the saved run artifacts.
+7
+OpenPM: Auditable Point-in-Time Evaluation for LLM Portfolio-Management Agents
+Acknowledgments
+References
+David H. Bailey, Jonathan M. Borwein, Marcos López de Prado, and Qiji Jim Zhu. 2014. Pseudo-mathematics
+and financial charlatanism: The effects of backtest overfitting on out-of-sample performance.Notices of the
+American Mathematical Society, 61(5):458–471.
+Dallas Card, Peter Henderson, Urvashi Khandelwal, Robin Jia, Kyle Mahowald, and Dan Jurafsky. 2020. With
+little power comes great responsibility. InProceedings of the 2020 Conference on Empirical Methods in Natural
+Language Processing (EMNLP), pages 9263–9274.
+Yanxu Chen, Zijun Yao, Yantao Liu, Amy Xin, Jin Ye, Jianing Yu, Lei Hou, and Juanzi Li. 2025. StockBench:
+Can LLM agents trade stocks profitably in real-world markets?arXiv preprint arXiv:2510.02209.
+Bangde Du, Minghao Guo, Songming He, Ziyi Ye, Xi Zhu, Weihang Su, Shuqi Zhu, Yujia Zhou, Yongfeng
+Zhang, Qingyao Ai, and 1 others. 2025a. TwinVoice: A multi-dimensional benchmark towards digital
+twins via LLM persona simulation.arXiv preprint arXiv:2510.25536.
+Bangde Du, Ziyi Ye, Zhijing Wu, Monika A. Jankowska, Shuqi Zhu, Qingyao Ai, Yujia Zhou, and Yiqun Liu.
+2025b. SimVBG: Simulating individual values by backstory generation. InProceedings of the 2025 Conference
+on Empirical Methods in Natural Language Processing, pages 13104–13133.
+George Fatouros, Konstantinos Metaxas, John Soldatos, and Manos Karathanassis. 2025. MarketSenseAI 2.0:
+Enhancing stock analysis through LLM agents.arXiv preprint arXiv:2502.00415.
+Minghao Guo, Qingyue Jiao, Zeru Shi, Yihao Quan, Boxuan Zhang, Danrui Li, Liwei Che, Wujiang Xu,
+ShilongLiu,ZiruiLiu,MubbasirKapadia,VladimirPavlovic,JiangLiu,MengdiWang,YiyuShi,DimitrisN.
+Metaxas, and Ruixiang Tang. 2026a. MemEye: A visual-centric evaluation framework for multimodal
+agent memory.Preprint, arXiv:2605.15128.
+Minghao Guo, Qingcheng Zeng, Xujiang Zhao, Yanchi Liu, Wenchao Yu, Mengnan Du, Haifeng Chen, and
+Wei Cheng. 2026b. DeepSieve: Information sieving via LLM-as-a-knowledge-router. InFindings of the
+Association for Computational Linguistics: EACL 2026, pages 3054–3077.
+Campbell R. Harvey, Yan Liu, and Heqing Zhu. 2016. ... and the cross-section of expected returns.The Review
+of Financial Studies, 29(1):5–68.
+Changlun Li, Yao Shi, Chen Wang, Qiqi Duan, Runke Ruan, Weijie Huang, Haonan Long, Lijun Huang,
+Nan Tang, and Yuyu Luo. 2025a. Time travel is cheating: Going live with DeepFund for real-time fund
+investment benchmarking.arXiv preprint arXiv:2505.11065.
+Haohang Li, Yupeng Cao, Yangyang Yu, Shashidhar Reddy Javaji, Zhiyang Deng, Yueru He, Yuechen Jiang,
+ZiningZhu,K.p.Subbalakshmi,JiminHuang,LingfeiQian,XueqingPeng,JordanW.Suchow,andQianqian
+Xie. 2025b. INVESTORBENCH: A benchmark for financial decision-making tasks with LLM-based agent.
+InProceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long
+Papers), pages 2509–2525, Vienna, Austria. Association for Computational Linguistics.
+Xiangyu Li, Yawen Zeng, Xiaofen Xing, Jin Xu, and Xiangmin Xu. 2025c. HedgeAgents: A balanced-aware
+multi-agent financial trading system. InCompanion Proceedings of the ACM Web Conference 2025 (WWW
+Companion).
+Yang Li, Yangyang Yu, Haohang Li, Zhi Chen, and Khaldoun Khashanah. 2023. TradingGPT: Multi-agent
+system with layered memory and distinct characters for enhanced financial trading performance.arXiv
+preprint arXiv:2309.03736.
+Shuhang Lin, Zhencan Peng, Lingyao Li, Xiao Lin, Xi Zhu, and Yongfeng Zhang. 2025. Cache mechanism for
+agent RAG systems.arXiv preprint arXiv:2511.02919.
+Andrew W. Lo. 2002. The statistics of Sharpe ratios.Financial Analysts Journal, 58(4):36–52.
+Marcos López de Prado. 2018.Advances in Financial Machine Learning. John Wiley & Sons.
+Kai Mei, Wujiang Xu, Minghao Guo, Shuhang Lin, and Yongfeng Zhang. 2025. OmniRouter: Budget and
+performance controllable multi-LLM routing.ACM SIGKDD Explorations Newsletter, 27(2):107–116.
+Oscar Sainz, Jon Campos, Iker García-Ferrero, Julen Etxaniz, Oier Lopez de Lacalle, and Eneko Agirre.
+2023. NLP evaluation in trouble: On the need to measure LLM data contamination for each benchmark.
+InFindings of the Association for Computational Linguistics: EMNLP 2023, pages 10776–10787, Singapore.
+Association for Computational Linguistics.
+8
+OpenPM: Auditable Point-in-Time Evaluation for LLM Portfolio-Management Agents
+Wenjia Song, Hailun Ding, Na Meng, Peng Gao, and Danfeng Yao. 2024. Madeline: Continuous and low-cost
+monitoring with graph-free representations to combat cyber threats. In2024 Annual Computer Security
+Applications Conference (ACSAC), pages 874–889.
+Shijie Wu, Ozan Irsoy, Steven Lu, Vadim Dabravolski, Mark Dredze, Sebastian Gehrmann, Prabhanjan
+Kambadur,DavidRosenberg,andGideonMann.2023. BloombergGPT:Alargelanguagemodelforfinance.
+arXiv preprint arXiv:2303.17564.
+Yijia Xiao, Edward Sun, Di Luo, and Wei Wang. 2024. TradingAgents: Multi-agents LLM financial trading
+framework.arXiv preprint arXiv:2412.20138.
+Qianqian Xie, Weiguang Han, Zhengyu Chen, Ruoyu Xiang, Xiao Zhang, Yueru He, Mengxi Xiao, Dong Li,
+Yongfu Dai, Duanyu Feng, Yijing Xu, Haoqiang Kang, Ziyan Kuang, Chenhan Yuan, Kailai Yang, Zheheng
+Luo,TianlinZhang,ZhiweiLiu,GuojunXiong,and15others.2024. FinBen: Aholisticfinancialbenchmark
+for large language models.arXiv preprint arXiv:2402.12659. NeurIPS 2024 Datasets and Benchmarks Track.
+FeiXiong,XiangZhang,AosongFeng,SiqiSun,andChenyuYou.2025. QuantAgent: Price-drivenmulti-agent
+LLMs for high-frequency trading.arXiv preprint arXiv:2509.09995.
+Wujiang Xu, Jiaojiao Han, Minghao Guo, Kai Mei, Xi Zhu, Han Zhang, and Dimitris N. Metaxas. 2026a. AEL:
+Agent evolving learning for open-ended environments.arXiv preprint arXiv:2604.21725.
+Wujiang Xu, Yu Wang, Kai Mei, Kaiqu Liang, Zhenting Wang, Mingyu Jin, Han Zhang, Shi-Xiong Zhang,
+WenyueHua, SambitSahu, and1others.2026b. MemGym: Along-horizonmemoryenvironmentforLLM
+agents.arXiv preprint arXiv:2605.20833.
+HongyangYang,Xiao-YangLiu,andChristinaDanWang.2023. FinGPT:Open-sourcefinanciallargelanguage
+models.arXiv preprint arXiv:2306.06031.
+HaofeiYu,FenghaiLi,andJiaxuanYou.2025. LiveTradeBench: Seekingreal-worldalphawithlargelanguage
+models.arXiv preprint arXiv:2511.03628.
+Yangyang Yu, Haohang Li, Zhi Chen, Yuechen Jiang, Yang Li, Denghui Zhang, Rong Liu, Jordan W. Suchow,
+and Khaldoun Khashanah. 2023. FinMem: A performance-enhanced LLM trading agent with layered
+memory and character design.arXiv preprint arXiv:2311.13743.
+Yangyang Yu, Zhiyuan Yao, Haohang Li, Zhiyang Deng, Yupeng Cao, Zhi Chen, Jordan W. Suchow, Rong
+Liu, Zhenyu Cui, Zhaozhuo Xu, Denghui Zhang, Koduvayur Subbalakshmi, Guojun Xiong, Yueru He,
+Jimin Huang, Dong Li, and Qianqian Xie. 2024. FinCon: A synthesized LLM multi-agent system with
+conceptual verbal reinforcement for enhanced financial decision making.arXiv preprint arXiv:2407.06567.
+Chong Zhang, Xinyi Liu, Zhongmou Zhang, Mingyu Jin, Lingyao Li, Zhenting Wang, Wenyue Hua, Dong
+Shu, Suiyuan Zhu, Xiaobo Jin, and 1 others. 2024. When ai meets finance (stockagent): Large language
+model-based stock trading in simulated real-world environments.arXiv preprint arXiv:2407.18957.
+Tianjiao Zhao, Jingrao Lyu, Stokes Jones, Harrison Garber, Stefano Pasquali, and Dhagash Mehta. 2025.
+AlphaAgents: Large language model based multi-agents for equity portfolio constructions.arXiv preprint
+arXiv:2508.11152.
+Yuxuan Zhao, Sijia Chen, and Ningxin Su. 2026. PortBench: A correlation-aware, full-pipeline benchmark for
+LLM-driven portfolio management.arXiv preprint arXiv:2605.27887.
+A Point-in-Time Feature Contract
+This appendix documents what the agent observes and, for each field, when that evidence becomes available.
+The point is not to inventory columns but to show that the leakage gate of §3 is enforced field by field: every
+layer carries an availability stamp, and a field enters the state at decision timeT only once that stamp is
+≤T . All counts below are read from the freeze manifest and the released parquet/NDJSON files, not from
+intermediate reports.
+Composition.Thereleaseisasinglecontent-hashedfreezeofthe508point-in-timeS&P500membersactive
+over the collection span; bar-level membership gating leaves 504 names tradable across the 44-day evaluation
+window (2026-03-02 to 2026-05-01, 3,432 five-minute decision bars per name). After point-in-time gating
+and cold-start removal this yields 1,739,121 agent-visible decision records, drawn from five precomputed
+five-minute layers (≈2.0M rows each) and three evidence sources: 1,462,952 entity-resolved GDELT articles,
+210,801 filing-body chunks across 506 symbols, and 2,020 Finnhub consensus rows.
+9
+OpenPM: Auditable Point-in-Time Evaluation for LLM Portfolio-Management Agents
+Table4: Evidencechannelsandtheirpoint-in-timeavailability. Eachrowisatypedchanneltheagentobserves
+as of decision timeT; theavailability stampis the gate enforced in §3—a field enters the state only once its
+stamp is≤T .Fieldsgives the per-layer count with examples;filingsis a decision-time retrieval channel rather
+than a dense per-bar layer. Liquidity uses IEX TOPS venue-only top-of-book, not consolidated NBBO; the
+full field list ships with the released data card.
+Layer Captures Source Availability stamp (PIT gate)Fields (n, example)
+Price/bar intraday returns,
+volatility, VWAP distance,
+gaps, time-of-day
+IEX TOPS 5-min
+bars
+bar close; 60-min post-open
+warmup
+14 (return_5m)
+Liquidity spread, quoted depth,
+illiquidity flag
+IEX TOPS
+top-of-book
+bar close 6 (mean_spread_bps)
+Regime market/sector-relative
+return, beta, breadth,
+curve slope, risk-on
+SPY & sector
+ETFs;
+FRED/ALFRED
+bar close; FRED daily
+vintage (backward as-of);
+5-day warmup
+15 (risk_on_score)
+Event earnings timing, EPS
+surprise, post-earnings
+drift
+SEC 8-K Item 2.02;
+Finnhub
+8-KacceptanceDateTime;
+next-event forecast only if
+≤21 days
+11 (pead_active)
+News news flow, recency,
+headline sentiment
+GDELT GEG
+(entity-resolved)
+publish+30-min lag;
+salience≥0.05
+4
+(news_flow_zscore)
+Filings
+(re-
+trieval)
+8-K item-code counts;
+10-K/10-Q body passages
+SEC EDGARacceptanceDateTime;
+gate-then-BM25 atT
+filings_meta,
+filings_body
+Layers and availability.The agent-visible state is a JSON object per (symbol, decision time) built from six
+typed evidence channels, each independently computable as of the decision bar. Table 4 lists the channels,
+their provenance, and the availability stamp that gates each—the same gate enforced in §3. Agents never
+observe raw pricelevels: price information enters only through the derived and normalizedbar_statefields,
+which limits direct price-level memorization. Five channels are dense per-bar layers; the sixth,filings, is a
+decision-time retrieval channel consumed by two analysts (filings_metaover gated 8-K item-code counts
+and filings_body over leak-gated BM25 retrieval of 10-K/10-Q passages), so it is listed separately. The full
+per-field list ships with the released data card.
+B Evaluation Protocol and Metric Definitions
+Every metric is produced by a single deterministic evaluator from the executed equity curve; we give the
+exact definitions so reported numbers are reproducible. Abaris a five-minute regular-session decision bar.
+The equity curveE0, . . . , ET is anchored to the opening NAVE0 (pre-trade equity at bar 0, so every strategy
+starts from the same capital and pays its bar-0 entry cost), and per-bar simple returns arert =E t/Et−1 −1.
+The risk-free rate is taken as zero and the annualization factor is√78×252(78 bars per trading day).
+Executable (cost-aware) return.Fills clear at the quoted side—buys at the ask, sells at the bid—and held
+positions are marked at the mid, so the side-aware half-spread is realized immediately as a mark-to-mid
+markdown. A fill ofq shares costsc=q|p fill −mid|, i.e.q(ask−mid) for a buy andq(mid−bid) for a sell.
+The headlinenet returnis R=E T /E0 −1, with cost already embedded inET; thegross(frictionless) return
+adds the realized cost back,Rg = (ET + Pt ct)/E0 −1 (first-order), and thecost dragisRg −R. Books arecorporate-action adjusted with dividends reinvested as cash, soRis a total return.
+Risk-adjusted metrics.With µr and σr the sample mean and standard deviation (denominatorn−1) of
+{rt}, the annualized Sharpe is(µr/σr)√78×252 at zero risk-free rate. Sortino uses the downside deviation
+σ−r computed over the negative bars only,µr/σ−r (per-bar, not annualized). Maximum drawdown is the
+largest peak-to-trough fractional drop of the anchored curve.
+Turnoverandcostsensitivity.Turnoveristhetotalgrossdollarvolumetradedovertherun(buysandsells)
+divided by mean equity,τ= Ptexecuted_usdt/E (whole-window, not annualized). The churn-adjusted
+10
+OpenPM: Auditable Point-in-Time Evaluation for LLM Portfolio-Management Agents
+ConstructorKNet% Shp∆EW Beat
+gpt-53010.5 2.59 +2.9 5/6
+409.8 2.41 +2.2 5/6
+509.7 2.27 +2.1 4/6
+Opus-4.7 309.5 2.32 +1.9 4/6
+409.0 2.23 +1.4 4/6
+508.6 2.11 +1.0 3/6
+DeepSeek-V3.2 308.7 1.99 +1.1 3/6
+407.7 1.82 +0.1 4/6
+506.6 1.57−1.0 3/6
+Qwen3-Max 307.7 1.72 +0.2 3/6
+406.8 1.52−0.8 3/6
+504.7 1.06−2.9 2/6
+gpt-4o-mini305.6 1.37−2.0 2/6
+403.1 0.82−4.5 1/6
+502.6 0.70−5.0 1/6
+equal-weight all7.6 1.94— —
+ranking 301.2 0.52−6.4 0/6
+400.8 0.36−6.8 0/6
+500.8 0.36−6.8 0/6
+Table5: Per-K constructorgrid,meansoversixanalystcaptures( DeepSeek-V3.2and gpt-5backbones ×three
+seeds), once-then-hold 2026-03-02 to 2026-05-01.Net%: total net return;∆EW: active return vs. same-pool
+equal-weight (pp);Beat: captures (of six) beating same-pool EW.gemini-2.5-flash excluded (degenerate
+all-cash). Single-window upper bounds, not validated alpha (§7).
+Sharpe applies a heuristic penalty,Sharpe/(1 +τ) , and return per unit turnover isR/τ. The cost-sensitivity
+curve reportsR(m) = (E T + (1−m) Pt ct)/E0 −1 for m∈ {0,0.5,1,1.5,2} , wherem=1 is the actual run
+and m=0is frictionless. Exposure is the mean per-bar invested fractioninvestedt/Et; long-only makes net
+and gross exposure coincide.
+Active and beat metrics.Each LLM book is compared, on thesamefrozen analyst capture, against four
+no-LLM baselines—same-pool equal-weight (top-N by composite), composite-ranking (inverse volatility
+over positive-composite names), random-N (ten seeds), and the market references SPY buy-and-hold and
+always-flat cash. The active return∆EW is the paired differenceRconstructor −R EW at the same capture and
+K (in points).Beatcounts the cells in whichRconstructor > REW: Table 2 pools all18 cells (6 captures× 3
+values ofK), whereas the per-Kgrid (Table 5) reports wins out of 6. Thebeat-all-benchmarksverdict is true
+iffRstrictly exceeds same-pool equal-weight, SPY, and always-flat, all net of cost; the daily sweep (Table 3)
+reports the SPY-and-cash form.
+C Additional Results
+Selection overlap.Jaccard overlap of each constructor’s holdings with same-pool equal-weight (§6.1) ranges
+from 0.78(Opus,theleastdeparture)and 0.75(gpt-5)downto 0.39(gpt-4o-mini,themost);meanpairwise
+overlap across the five constructors is0.56.
+Full per-K grid.Table 5 reports every constructor acrossK∈ {30,40,50} , pooled over the six analyst
+captures (two backbones× three seeds). Three patterns hold acrossK: (i) the ordering is stable (gpt-5
+> Opus-4.7 > DeepSeek-V3.2 > Qwen3-Max >gpt-4o-mini ); (ii) the edge over same-pool equal-weight
+shrinks asK grows—a larger pool pulls every constructor toward EW, so∆EW falls (gpt-5+2.9→+2.1 pp,
+DeepSeek-V3.2 +1.1→ −1.0pp) and Beat rates decline; and (iii) onlygpt-5and Opus-4.7 clear EW at half
+or more of the captures for everyK, whereasgpt-4o-miniclears it in at most2/6and the inverse-volatility
+ranking baseline never (0/6). The weaker constructors also crowd the10% cap (mW9.0–9.3%) into≈10
+names, while the stronger ones spread acrossN≈15–19well below the cap.
+11
+OpenPM: Auditable Point-in-Time Evaluation for LLM Portfolio-Management Agents
+18 20 22 24 26 28 30 32 34 36 38 40 42 44 46 48
+5
+10
+15
+SPY5.8%
+Opus-4.7
+DeepSeek-V3.2
+gpt-4o-mini
+Qwen3-Maxgpt-5
+Summed turnover (44 daily rebalances)
+Net return (%)
+beats all (net)
+below SPY (net)
+Figure2: Netreturnvs.summedturnoveratdailycadence(Table3, DeepSeek-V3.2analysts). Thedisciplined
+Opus-4.7 and DeepSeek-V3.2 sit upper-left (low turnover, high net); the high-turnovergpt-4o-mini and
+Qwen sit lower-right, dragged below SPY by cost.gpt-5is the informative outlier: thelowestturnover yet
+still below SPY, so trading sparingly is necessary but not sufficient—selection must also be good. Single runs
+(point estimates).
+gpt-5 gpt-4o-mini
+Net return+11.5% +0.7%
+Ann. Sharpe2.71 0.29
+Holdings (N)15 10
+Max name weight9.0% 9.3%
+Overlap w/ EW (Jaccard)0.75 0.43
+INTCattribution
+HeldINTC8.5%dropped
+INTCP&L+$104k —
+Total P&L+$110k+$3k
+Table 6: Two constructors on one byte-identical analyst capture (gpt-5 analysts, seed 1,K=50). The stronger
+constructorre-weightsthecandidatepoolandkeepsthetop-rankedname;theweakeroneconcentratesatthe
+mandate cap and drops it. Single-cell values; three-seed means appear in Table 2. Source:constructor_eval
+run artifacts.
+D Case Study
+We walk through two decisions from the once-mode grid (§6.1), both on the window’s most consequential
+name, Intel (INTC): the first fixes the analyst evidence and varies the constructor, the second fixes the
+constructor and varies the analyst capture.
+D.1 Same evidence, different constructor
+Handed thesamefrozen gpt-5 analyst capture (seed 1,K=50), in which the analysts rankINTC second
+of the 50 candidates, the strongest and weakest constructors diverge sharply (Table 6).gpt-5 re-weights
+the candidate pool: it keeps15 of the20 same-pool names (Jaccard0.75), tilts toward conviction without
+breaching the10%cap, and holdsINTCat 8.5%. gpt-4o-miniinstead departs: it concentrates ten names, each
+pinned at the mandate cap (Jaccard0.43), and dropsINTCaltogether.
+One name drives the gap.Both books are scored on identical prices, yetgpt-5 returns +11.5% against
+gpt-4o-mini’s +0.7%, and attribution explains nearly all of the difference: ofgpt-5’s +$110k attributed P&L,
+INTC alone contributes+$104k, so dropping the name its own analysts ranked second leavesgpt-4o-mini
+near breakeven (+$3k). The pattern is robust within this capture and candid about its own fragility: across
+the three seedsgpt-5always holdsINTCand returns11–13%, whereasgpt-4o-miniholds it in only one seed,
+and in exactly that seed it too reaches+13.1%. Construction skill here is less about breadth than aboutacting
+on the strongest signal, and a single trending name accounts for much of the spread between constructors (§7).
+12
+OpenPM: Auditable Point-in-Time Evaluation for LLM Portfolio-Management Agents
+DeepSeek cap.gpt-5cap.
+Analyst composite(withheld from constructor)
+INTCcomposite rank#7/50 #2/50
+INTCcomposite score0.40 0.47
+gpt-5constructor
+INTCweight0% 8.5%
+Net return+3.1% +11.5%
+DeepSeek-V3.2constructor
+INTCweight0% 8.0%
+Net return+2.1% +11.2%
+Table7: Theanalyst-tierlever: oneconstructorheldfixedwhiletheanalystcaptureisswapped(seed1, K=50).
+Both captures hand the constructor the same liquidity-gated pool, includingINTC; the gpt-5 analysts rank it
+second and the DeepSeek analysts seventh, and the constructor holds it only under the higher-conviction
+capture. Single-cell values. Source:constructor_evalrun artifacts.
+D.2 Same constructor, different evidence
+Holding the constructor fixed and swapping the analyst capture isolates the upstream effect. Because the
+liquiditygateisdeterministic,bothcaptureshandtheconstructorthesame 50-namepool, INTCincluded;only
+the analysts’ read of it differs. The gpt-5 analysts converge bullish and confident (events+0.9 at confidence
+0.9,technical +0.5)andrank INTCsecondoffifty,whereastheDeepSeekanalystsaredivided(technical −0.3,
+lower event confidence) and rank it seventh. Handed the gpt-5 capture, the gpt-5 constructor buysINTC at
+8.5% and returns+11.5%; handed the DeepSeek capture it holds none and returns+3.1%, though only the
+evidence changed (Table 7). The flip is not model-specific: the DeepSeek constructor moves the same way,
+and the weakest constructors holdINTC under neither capture, so the constructor can act only on what the
+analysts surface and upstream evidence quality sets the ceiling (§6.2).
+E Reproducibility Details
+Every number we report is backed by a saved run directory. This appendix describes how those runs are
+produced and what each one stores.
+Environment and access.All runs use Python 3.11 with pandas 3.0 and read the single content-hashed
+freeze of §5. Model backbones are accessed under a bring-your-own-key scheme through one OpenRouter
+endpoint,withthekeytakenfromtheenvironmentandneverlogged,andeverycalldecodesattemperature0.
+The analyst and constructor tiers are configured independently, so the two can share a backbone or differ.
+Shared configuration.Unless stated otherwise, both modes use the balanced mandate (long-only, a10%
+per-name cap, at most20names, and no cash buffer), a liquidity-gated pool ofK=50 candidates, and the
+deterministic critic and per-name liquidity clip on the critical path. The aggregated composite is withheld
+from the constructor and the candidate order is shuffled, the mandate is supplied to the constructor in its
+prompt, regime evidence uses the compact render of §4, and the cross-section is PIT membership-gated.
+The six analysts run onDeepSeek-V3.2throughout, so only the constructor and, in once-mode, the analyst
+capture vary.
+Once-mode grid.The central experiment follows a capture-once, replay-many design. We run the six-
+analyst tier once for each (analyst backbone, seed) pair and freeze its output as an analyst capture, then
+replay that frozen capture through every constructor with no further analyst calls. Two analyst backbones
+(DeepSeek-V3.2 and gpt-5) and three seeds give six captures, which we replay through five constructors
+(gpt-5, claude-opus-4.7, DeepSeek-V3.2, qwen3-max, andgpt-4o-mini) atK∈ {30,40,50}, for the90 LLM
+cells and216 no-LLM baseline cells of a single decision date. Because the evidence is byte-identical across
+constructors, the constructor is the only component that changes. We also rangemini-2.5-flashbut exclude
+it from the results: it returned an essentially all-cash book on every input, including bullish controls, so its
+weights are not a meaningful allocation.
+13
+OpenPM: Auditable Point-in-Time Evaluation for LLM Portfolio-Management Agents
+Daily sweep.The daily experiment runs the full pipeline with no replay, once per constructor, rebalancing
+on each of the 44 trading days atK=50 with the same DeepSeek-V3.2 analysts. Each run invokes the
+agents.portfolio module with thellm_tiered provider, the balanced risk preset, and a daily rebalance
+over the 2026-03-02 to 2026-05-01 window, changing only the constructor model between runs; the resolved
+settings are recorded in the run manifest. Rebalancing is held to the first bar at least 60 minutes after the
+open and then to once per day, both fixed canonical behavior. As these are single runs, we read them as point
+estimates.
+Runartifacts.Eachrunwritesaself-describingdirectory. Amanifestrecordsthefullresolvedconfiguration
+together with the dataset and capture hashes and token usage; the per-stage logs hold the analyst score
+matrix, the composite, and the constructor’s proposed and executed weights; the trade and portfolio logs
+store the quoted bid, ask, and mid behind every fill alongside the reconciled equity curve; the evaluation
+logs hold the full metric set with the constraint-adherence report, the contamination certificate, and the
+backtest-bias checklist; and a redacted log preserves the prompts and replies. The once-mode grid and the
+daily sweep are kept under their own experiment directories, so any reported value can be traced to the run
+that produced it.
+14

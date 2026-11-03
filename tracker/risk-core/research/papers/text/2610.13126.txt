@@ -1,0 +1,1346 @@
+arXiv 2610.13126  https://arxiv.org/abs/2610.13126
+
+MLP-Initialized Reinforcement Learning for Exit Timing in SPX
+Short-Straddle Portfolios∗
+Wang Jianning
+School of Physical and Mathematical
+Sciences, Nanyang Technological
+University
+Singapore
+JWANG106@e.ntu.edu.sg
+Robert Ślepaczuk✉
+University of Warsaw, Department of
+Quantitative Finance and Machine
+Learning
+Warsaw, Poland
+rslepaczuk@wne.uw.edu.pl
+Paweł Sakowski
+University of Warsaw, Department of
+Quantitative Finance and Machine
+Learning
+Warsaw, Poland
+p.sakowski@uw.edu.pl
+Abstract
+This paper studies exit timing for SPX short-straddle portfolios us-
+ing a two-stage supervised and reinforcement-learning framework.
+Historical episodes first generate ex-post optimal hold/exit labels for
+training a multilayer perceptron (MLP) using only contemporane-
+ously available state variables at deployment. The trained MLP then
+initializes reinforcement-learning actors that are fine-tuned with
+a risk-aware trading reward. Out-of-sample evaluation over 2024–
+2026 shows that the supervised MLP substantially outperforms
+passive holding and representative fixed-time and profit-and-loss-
+based exit rules. Across seven independent seeds, MLP-initialized
+Actor–Critic averages 37.54% cumulative return and a Sharpe ratio
+of 1.705, compared with 35.01% and 1.651 for the supervised MLP.
+Actor–Critic trained from scratch averages only 0.18% return. These
+findings show that oracle-guided supervised learning provides a
+stable foundation for reward-based policy fine-tuning in a sparse
+and path-dependent option-exit problem.
+CCS Concepts
+•Computing methodologies → Neural networks;Reinforce-
+ment learning;•Applied computing→Economics.
+Keywords
+SPX index options, short straddles, exit timing, reinforcement learn-
+ing, actor-critic, advantage-weighted regression, supervised learn-
+ing, variance risk premium, transaction costs
+1 Introduction
+Short-volatility strategies seek to earn the premium embedded
+in option prices but remain exposed to large market moves and
+volatility expansions. A short straddle, which sells a call and put
+with the same strike and expiration, is a canonical example linked to
+the variance risk premium [4, 7]. Its asymmetric loss profile makes
+the timing of position closure central to practical performance.
+This paper studies when an existing SPX short straddle should
+be closed before expiration. At each decision time, a policy observes
+contemporaneous market, quote, and position variables and chooses
+whether to hold or exit. We propose a two-stage framework. First,
+ex-post optimal exits from historical training episodes generate
+labels for a supervised multilayer perceptron (MLP). Second, the
+trained MLP initializes reinforcement-learning actors that are fine-
+tuned using a risk-aware trading reward. Future information is
+∗Full version of the paper accepted at ACM ICAIF 2026 (Milan, November 14–17, 2026).
+used only for offline training-label construction and never as an
+out-of-sample policy input.
+All policies are evaluated on the same locked 2024–2026 out-
+of-sample episodes under common bid–ask execution, commis-
+sions, settlement, position sizing, and portfolio accounting. The
+supervised MLP substantially outperforms hold-to-expiry and rep-
+resentative fixed-time and profit-and-loss-based rules. Across seven
+seeds, MLP-initialized Actor–Critic raises average cumulative re-
+turn from 35.01% to 37.54% and average Sharpe ratio from 1.651 to
+1.705. AWR and AWAC broadly preserve supervised performance,
+whereas raw Actor–Critic averages only 0.18% return, highlighting
+the importance of supervised initialization.
+This paper makes three contributions. First, it formulates SPX
+short-straddle exit timing as a sequential learning problem under
+realistic execution and portfolio accounting. Second, it introduces
+an oracle-guided supervised policy that initializes reward-based
+reinforcement-learning fine-tuning. Third, it provides multi-seed
+evidence against passive, mechanical, and raw-RL controls, together
+with reward-shaping, synthetic-fill, and equal-notional robustness
+checks.
+2 Background and Related Work
+2.1 Short Straddles and Exit Timing
+A straddle is an options strategy that combines a call and a put
+option with the same underlying asset, strike price, and expiration
+date [27]. This paper focuses on short straddles on SPX index op-
+tions. In a short straddle, the trader sells both the call and the put
+and receives the initial option premium. The strategy benefits when
+the underlying index remains close to the strike and the option
+time value decays before expiration.
+For a short straddle with strike 𝐾, call premium 𝐶0, and put
+premium𝑃0, the expiration profit before transaction costs can be
+written as
+Π𝑇 =𝐶 0+𝑃 0−|𝑆 𝑇−𝐾|.(1)
+This study examines the voluntary exit timing problem for ex-
+isting short-straddle positions before expiration. Since SPX index
+options are European-style and cash-settled [8], terminal payoff is
+determined by cash settlement rather than physical delivery. Hold-
+ing too long may expose the portfolio to tail losses, while exiting
+too early may sacrifice remaining premium. Exit timing is there-
+fore central to converting the short-volatility premium into a more
+stable trading strategy.
+Simple time-based and profit-and-loss-based exits provide impor-
+tant benchmarks for evaluating a learned exit policy. Fixed-horizon
+exits test whether performance can be explained by shortening
+arXiv:2610.13126v1  [q-fin.TR]  9 Oct 2026
+ICAIF ’26, November 14–17, 2026, Milan, Italy Wang et al.
+exposure mechanically, while profit targets and stop losses test
+whether a constant threshold is sufficient to control losses or har-
+vest gains. Stop-loss rules are widely used in practice, but their
+effectiveness depends on return dynamics, persistence, and transac-
+tion costs rather than following mechanically from loss limitation
+alone [16].
+A fair comparison requires these rules to be evaluated on the
+same short-straddle opportunities and under the same execution
+and portfolio-accounting assumptions as the learned policy. The
+present study therefore uses hold-to-expiry, fixed-time, profit-target
+and stop-loss, and combined exits as progressively more active
+non-learning benchmarks. These comparisons distinguish state-
+dependent exit timing from the passive variance-risk premium and
+from improvements that could be reproduced by a constant calendar
+or profit-and-loss rule.
+2.2 Variance Risk Premium and Volatility
+Selling
+Short-option strategies are often motivated by the variance risk
+premium. In equity index markets, implied volatility in option prices
+tends to exceed subsequent realized volatility, so option sellers may
+earn compensation for bearing volatility and tail risk [4, 7]. A short
+straddle is a natural volatility-selling strategy because it receives
+premium upfront and profits when the realized movement of the
+underlying index remains limited.
+This premium comes with substantial downside risk. Short-
+volatility strategies can generate frequent small profits but suffer
+large losses when the underlying index moves sharply or volatil-
+ity expands. Existing literature links option returns and volatility
+risk premia to compensation for systematic volatility and down-
+side risk [3, 9]. Therefore, average return alone is not sufficient for
+evaluating a short-straddle strategy.
+Accordingly, this paper evaluates each exit policy using portfolio
+return, Sharpe ratio, and maximum drawdown. The purpose of
+exit timing is to retain the premium-harvesting benefit of short
+straddles while reducing exposure to large adverse moves.
+2.3 Machine Learning for Trading Decisions
+Machine learning provides a natural way to model trading decisions
+from market and contract-level state variables. In this paper, the
+exit decision is formulated as a binary classification problem. At
+each decision time𝑡, the model observes a state vector𝑠𝑡 that sum-
+marizes the current short-straddle position and market condition,
+and outputs the probability of closing the position:
+𝑓𝜃(𝑠𝑡)=Pr(𝑎 𝑡 =exit|𝑠 𝑡).
+The state vector includes variables such as moneyness, time-to-
+maturity, option quote features, spread-related measures, volatility-
+risk-premium signals, and position holding-time features.
+The training labels are generated from ex-post optimal exit deci-
+sions within historical contract episodes. For each historical short-
+straddle episode, the best feasible exit time is computed using the
+realized future path under the same transaction-cost and settlement
+assumptions used in the backtest. States before the selected exit
+time are labeled as hold, while the selected exit state and subse-
+quent states are labeled as exit. This transforms a noisy sequential
+decision problem into a supervised classification problem.
+This construction is related to imitation learning and learning
+from demonstrations, in which a policy is trained to reproduce
+actions supplied by an expert or oracle [ 1, 24]. The setting here
+is specifically offline oracle-guided classification: the oracle labels
+a fixed historical dataset, and the MLP is not allowed to query
+the oracle interactively or observe future outcomes at deployment.
+Unlike interactive imitation-learning methods such as DAgger, the
+proposed procedure does not aggregate new oracle labels from
+states visited by the learned policy.
+Future information is used only offline to construct training
+labels and to calculate a non-tradable diagnostic ceiling. At test time,
+the MLP observes only contemporaneously available state variables
+and does not observe future prices or future option values. The
+supervised MLP is a tradable policy, whereas the ex-post optimal
+exit rule is neither tradable nor included as a competing deployable
+strategy.
+2.4 Reinforcement Learning for Trading
+Reinforcement learning (RL) studies sequential decision problems
+in which an agent interacts with an environment and learns from
+rewards [26]. The exit-timing problem can be represented as a
+Markov decision process with state 𝑠𝑡 , action 𝑎𝑡 , reward𝑟𝑡 , and
+transition dynamics. In this paper, the action space is binary:
+𝑎𝑡∈{hold,exit}.
+A policy𝜋𝜃(𝑎𝑡|𝑠 𝑡) maps the current trading state to a distribution
+over actions. The objective is to maximize expected discounted
+reward:
+max
+𝜃
+E𝜋𝜃
+" 𝑇∑︁
+𝑡=0
+𝛾𝑡𝑟𝑡
+#
+.(2)
+Here,𝛾∈[0,1]is the discount factor.
+In trading applications, RL is attractive because it can optimize se-
+quential objectives that include transaction costs, delayed rewards,
+and path-dependent risk. However, direct RL training from random
+initialization is often unstable in financial markets, where rewards
+are noisy, nonstationary, and dominated by rare adverse events.
+This is especially relevant for short-option strategies, which may
+generate frequent small gains but occasional large losses. Therefore,
+this paper uses RL primarily as a second-stage optimizer initialized
+from a supervised MLP exit policy, rather than relying only on raw
+RL from scratch.
+3 Data and Trading Environment
+3.1 Data Source and Coverage
+The option data consist of licensed Cboe SPX index-option quota-
+tions accessed by the research team through an institutional data
+agreement held by one of the co-authors. The dataset contains 30-
+minute observations from 2016 through 2026 for near-the-money
+SPX options with moneyness ratios between 0.95 and 1.05 and re-
+maining maturities from 0 to 21 trading days. The available fields
+include call and put bid and ask quotations, strike price, expiration,
+implied volatility, option Greeks, and the contemporaneous SPX
+index level.
+MLP-Initialized RL for SPX Short-Straddle Exit Timing ICAIF ’26, November 14–17, 2026, Milan, Italy
+The 30-minute sampling scheme produces up to 13 intraday
+decision times per trading day. Data from 2016–2023 are used for
+label construction, supervised learning, and reinforcement-learning
+fine-tuning, while observations from 2024–2026 form the locked
+out-of-sample evaluation period. The S&P 500 series displayed as
+a market reference in the NAV figure is obtained separately from
+Yahoo Finance using the yfinance package [2, 31]; it is not used
+to construct the SPX option trades or train the exit policies.
+3.2 SPX Short-Straddle Episodes
+The raw option panel is filtered before episode construction. Obser-
+vations with non-finite bid, ask, implied-volatility, or underlying-
+index values are removed. The underlying index level must be
+positive, option bids must be non-negative, and observations for
+which the ask is below the bid are excluded. Duplicate contract-time
+observations are removed, and call and put records are matched
+by expiration, strike, and quote timestamp. A straddle observation
+is retained only when both option legs are available at the same
+timestamp. These filters prevent non-finite, negative, or internally
+inconsistent quotations from directly determining the reported
+entry and exit fills.
+Across the complete episode set, synthetic continuation bars ac-
+count for 5.40% of observations. Their shares are 5.69% in the 2016–
+2023 training period and 5.03% in the 2024–2026 out-of-sample
+period. A detailed audit of episode coverage, strategy exits, and
+conservative synthetic-fill assumptions is reported in Appendix A.2.
+The empirical environment is constructed from daily SPX short-
+straddle episodes. On each entry day, the strategy opens a short
+call and a short put with the same strike price 𝐾 and expiration
+date. The target maturity is approximately 20 trading days. The
+contracts are SPX index options, which are European-style and
+cash-settled [8]. After entry, the strike and expiration are fixed, and
+the position is observed through time until it is either closed by the
+trading policy or settled at expiration.
+At each decision time 𝑡, the policy observes the current state
+of the open position, including the underlying index level, money-
+ness, remaining time-to-maturity, quote and spread information,
+volatility-related signals, holding time, and unrealized profit and
+loss. The available action is binary:
+𝑎𝑡∈{hold,exit}.
+If the policy chooses hold, the position remains open. If it chooses
+exit, the short straddle is closed and the episode ends. If no exit
+occurs before expiration, the position is cash-settled at terminal
+intrinsic value.
+3.3 Portfolio Construction
+The backtest is conducted at the portfolio level rather than as iso-
+lated single-contract episodes. The portfolio uses 20 reusable capi-
+tal slots to represent overlapping TTM-20 short-straddle positions.
+Since a new candidate trade is introduced each trading day and
+each contract has an approximately 20-day target maturity, the 20
+slots form a rolling portfolio structure.
+Each slot can hold at most one active short-straddle position.
+The same trained exit policy is applied to every active slot. When
+a position exits or expires, the corresponding slot is reused for
+the next entry assigned to that slot. Thus, the 20-slot structure
+should be interpreted as portfolio capital allocation rather than 20
+independently trained agents.
+3.4 State Variables
+All tradable policies use the same observation vector constructed
+by the trading environment at each decision time. In the final ex-
+periments, the environment uses the position-augmented state
+specification, so the state vector has dimension 17. The state is
+written as
+𝑠𝑡 =[𝑥𝑡, 𝑝𝑡].(3)
+Here, 𝑥𝑡 contains market and quote variables, and 𝑝𝑡 contains
+position-specific variables. In the implementation, ratio features
+are computed with standard numerical safeguards and the final
+observation is clipped to the range[−20,20].
+The base market and quote component is
+𝑥𝑡 =
+
+𝜏𝑡/260,tod 𝑡,VRP 𝑡/10,spreadrel 𝑡/¯𝑠rel,
+score𝑡/¯𝑞,ΔRV13 𝑡/𝜎ΔRV13,
+1{quote available},1{synthetic bar},
+timevalue𝑡/mid𝑡,pos 𝑡,PnL 𝑡
+
+.
+Here𝜏𝑡 is the remaining number of bars to expiration, tod𝑡 is the
+time-of-day variable, VRP𝑡 is the volatility-risk-premium proxy,
+spreadrel𝑡 is the relative bid–ask spread, and score𝑡 is the liquidity-
+adjusted VRP score. The constants ¯𝑠rel, ¯𝑞, and𝜎ΔRV13 are computed
+from the training sample and used to normalize the relative spread,
+score, and realized-volatility-change feature. The fixed divisor of 10
+rescales the VRP proxy to a magnitude comparable with the other
+numerical state inputs without changing its sign or ordering. The
+clipping interval[−20, 20] limits the influence of extreme ratios
+and numerical outliers on neural-network optimization. Both pre-
+processing conventions are fixed before out-of-sample evaluation
+and applied identically to all policies.
+The position-specific component is
+𝑝𝑡 =
+
+ℎ𝑡/260, 𝜏entry/260, 𝜏𝑡/𝜏entry,
+𝑉𝑡/𝑉entry,(𝑆 𝑡−𝑆 entry)/𝑆 entry,
+𝑚𝑡−𝑚 entry.
+Hereℎ𝑡 is the number of bars held since entry,𝜏entry is the time-to-
+maturity at entry,𝑉𝑡 is the current position value,𝑉 entry is the entry
+value,𝑆𝑡 is the current index level, and𝑚𝑡 =𝐾/𝑆 𝑡 is moneyness.
+The variable pos𝑡 equals+1for an active short straddle and0for a
+flat slot. The unrealized PnL feature is set to zero when no position
+is active.
+The state design reflects the economic structure of the exit-
+timing problem. Time-to-maturity and time of day describe where
+the contract is in its lifecycle. Quote and spread variables capture
+the cost of closing the position, which is important because op-
+tion bid–ask spreads vary with contract characteristics and trading
+activity [12, 28]. Volatility and VRP-related features reflect the
+short-volatility exposure of the strategy and the role of variance
+risk premia in option markets [ 4, 7]. Position variables describe
+how far the active trade has moved from entry in both option-value
+and underlying-index terms.
+ICAIF ’26, November 14–17, 2026, Milan, Italy Wang et al.
+Table 1: State variables used by the exit policies.
+Index Variable Description
+1𝜏 𝑡/260Remaining bars to expiration
+2tod 𝑡 Time of day
+3VRP 𝑡/10VRP proxy
+4spreadrel 𝑡/¯𝑠rel Relative spread
+5score 𝑡/¯𝑞Liquidity-adjusted VRP score
+6ΔRV13 𝑡/𝜎ΔRV13 Realized-volatility change
+7 Quote flag Quote availability indicator
+8 Synthetic flag Synthetic-bar indicator
+9timevalue 𝑡/mid𝑡 Remaining time-value ratio
+10pos 𝑡 Position indicator
+11PnL 𝑡 Current normalized PnL
+12ℎ 𝑡/260Holding time
+13𝜏 entry/260Entry time-to-maturity
+14𝜏 𝑡/𝜏entry Fraction of entry maturity remaining
+15𝑉 𝑡/𝑉entry Current value relative to entry value
+16(𝑆 𝑡−𝑆 entry)/𝑆 entry Underlying return since entry
+17𝑚 𝑡−𝑚 entry Moneyness change since entry
+Only information available at the decision time is included in
+𝑠𝑡 . Future prices and future option values are used only offline to
+construct supervised exit labels and diagnostic benchmarks. This
+separation prevents look-ahead bias in out-of-sample evaluation.
+3.5 Transaction Costs and Settlement
+Transaction costs and bid–ask execution are included throughout
+the portfolio simulation. The implementation uses the same execu-
+tion rule for all tradable strategies. When a short straddle is opened,
+the strategy sells the straddle at the bid price:
+𝐹 entry𝑡 =𝐵 straddle𝑡 .
+Here,𝐵straddle𝑡 is the combined bid price of the call and put legs.
+When an active short straddle is closed before expiration, the strat-
+egy buys back the straddle at the ask price:
+𝐹 exit𝑡 =𝐴 straddle𝑡 .
+If a real quote is not available during a simulated continuation
+segment, the exit cost is replaced by the simulated short-exit cost
+used by the environment. Synthetic continuation bars are explicitly
+flagged in the state and are never presented as observed market
+quotations. Appendix A.2 reports their frequency and evaluates
+more conservative synthetic half-spread assumptions.
+For a position with𝑛 contracts and option multiplier𝑀, the gross
+dollar profit from closing a short straddle before expiration is
+PnLgross𝑡 =𝑛𝑀 𝐹 entry0 −𝐹 exit𝑡 .
+The simulation also charges a fixed commission per option contract.
+Since a straddle has two option legs, the commission paid at each
+entry or exit event is
+Comm=2𝑐𝑛.
+Here,𝑐 is the commission per option contract. In the experiments,
+𝑐= $1.50. Therefore, a round-trip short-straddle trade incurs com-
+missions on both entry and exit. Including these costs is important
+because trading frictions can materially affect option strategy per-
+formance [10, 12, 18, 28].
+If a position is held to expiration, the terminal settlement value
+is the intrinsic value of the straddle:
+𝐼𝑇 =|𝑆 𝑇−𝐾|.
+The gross dollar profit at expiration is therefore
+PnLgross𝑇 =𝑛𝑀 𝐹 entry0 −𝐼𝑇.(4)
+This settlement rule is consistent with the European-style, cash-
+settled nature of SPX index options [8]. The same execution, settle-
+ment, and accounting conventions are used for the hold-to-expiry
+benchmark, the rule-based exit policies, the supervised MLP policy,
+and all reinforcement-learning policies.
+3.6 Evaluation Metrics
+All strategies are evaluated using the same out-of-sample portfo-
+lio simulation. The performance panel reports cumulative return,
+annualized compounded return (ARC), annualized standard devia-
+tion (ASD), maximum drawdown magnitude (MD), maximum loss
+duration (MLD), three reward-to-risk measures, Sharpe ratio, Cal-
+mar ratio, hit rate, and number of trades. Mean episode profit and
+loss is reported in the text and in the robustness tables. ARC an-
+nualizes portfolio growth over the evaluation horizon, while ASD
+measures annualized return volatility. MD measures the largest
+peak-to-trough portfolio loss, and MLD measures the longest pe-
+riod during which portfolio NAV remains below its previous high.
+All NAV-based metrics are computed after mapping each portfolio
+path to the common real 30-minute quote grid over the shared
+out-of-sample calendar window. ARC uses the common calendar
+horizon𝑇≈2.42years.
+The three additional reward-to-risk measures are defined as
+IR∗ = ARCASD,IR ∗∗ = ARCMD,IR ∗∗∗ = ARCMLD.
+Under these definitions, IR∗∗ is numerically equal to the Calmar
+ratio. Hit rate is the fraction of entered short-straddle episodes with
+positive net dollar PnL, and the trade count is the number of entered
+straddles. Cumulative return is retained for economic interpreta-
+tion, while ARC provides the horizon-consistent annualized return
+measure required for comparison with annualized risk statistics.
+Maximum drawdown and loss duration are particularly relevant
+for short-volatility strategies because losses may be both severe
+and persistent [22, 23].
+The deployable benchmark strategies include hold-to-expiry,
+three representative rule-based exit policies, and raw reinforcement
+learning from scratch. The rule-based policies consist of a fixed-time
+exit, a profit-target and stop-loss rule, and a combined rule. The
+proposed tradable models include the supervised MLP exit policy
+and MLP-initialized reinforcement-learning variants. Separately,
+the ex-post best-exit oracle is reported as a non-tradable diagnostic
+ceiling. Because it observes each episode’s realized future path, it
+is excluded from the main comparison of deployable strategies.
+MLP-Initialized RL for SPX Short-Straddle Exit Timing ICAIF ’26, November 14–17, 2026, Milan, Italy
+Figure 1: Supervised MLP exit-policy training from ex-post
+exit labels.
+4 Methodology
+4.1 Stage 1: Supervised MLP Exit Policy
+The first stage converts the exit-timing problem into a supervised
+binary classification problem. For each historical short-straddle
+episode𝑖, let𝑡= 0,...,𝑇 𝑖 denote the sequence of decision times
+after entry. The position is first opened at𝑡= 0, and the subsequent
+states are used to construct an exit-label dataset.
+Let𝐹 entry𝑖,0 denote the entry fill price of the short straddle. For
+each feasible exit time𝑡, define𝐹 exit𝑖,𝑡 as the cost of closing the short
+straddle. If the contract has reached expiration, the exit value is the
+terminal intrinsic value,
+𝐹 exit𝑖,𝑡 =|𝑆 𝑖,𝑡−𝐾𝑖|.
+Otherwise, the exit value is computed from the available quote using
+the same bid–ask execution rule used in the portfolio backtest.
+The realized dollar profit from exiting episode𝑖at time𝑡is
+Πexit𝑖,𝑡 =𝑀 𝐹 entry𝑖,0 −𝐹 exit𝑖,𝑡 −4𝑐.(5)
+Here,𝑀 is the option contract multiplier and𝑐 is the commission
+per option contract. The factor4𝑐 accounts for two option legs at
+entry and two option legs at exit.
+A minimum holding constraint is imposed before an exit label
+can be assigned. Letℎmin denote the minimum holding period. In
+all reported experiments,ℎ= 26intraday bars, corresponding to
+approximately two trading days at 13 observations per trading day.
+The ex-post optimal exit time is then defined as
+𝜏★𝑖 =arg max𝑡∈{ℎ min,...,𝑇𝑖} Πexit𝑖,𝑡 .(6)
+This step uses the realized historical path only offline. It is not
+available to the trading policy during out-of-sample evaluation.
+The supervised label is defined as
+𝑦𝑖,𝑡 =1{𝑡≥𝜏 ★𝑖}.(7)
+This label design teaches the classifier not only to exit at the
+ex-post optimal time, but also to keep recommending exit if the
+position remains open after that point.
+Given the observed state vector 𝑠𝑖,𝑡 , the MLP outputs an exit
+logit
+𝑧𝑖,𝑡 =𝑓 𝜃( ˜𝑠𝑖,𝑡).
+Figure 2: MLP-initialized reinforcement learning fine-tuning.
+Here, the input is standardized using training-sample mean and
+standard deviation,
+˜𝑠𝑖,𝑡 = 𝑠𝑖,𝑡−𝜇 train𝜎train .
+The predicted exit probability is
+ˆ𝑝𝑖,𝑡 =𝜎(𝑧 𝑖,𝑡)=Pr(𝑦 𝑖,𝑡 =1|𝑠 𝑖,𝑡).
+Here,𝜎(·)is the logistic sigmoid function.
+The network is a fully connected MLP with two hidden layers
+and ReLU activations:
+𝑓𝜃( ˜𝑠)=𝑊 3𝜙(𝑊2𝜙(𝑊1 ˜𝑠+𝑏 1)+𝑏 2)+𝑏 3.(8)
+Here,𝜙(𝑥)=max(𝑥,0).
+Because exit labels are sparse relative to hold labels, the model
+is trained using weighted binary cross-entropy:
+LMLP =−
+∑︁
+𝑖,𝑡
+
+𝛼𝑦𝑖,𝑡 log ˆ𝑝𝑖,𝑡+(1−𝑦 𝑖,𝑡)log(1− ˆ𝑝𝑖,𝑡).(9)
+Here, the positive-class weight is
+𝛼= 𝑁hold
+𝑁exit
+.
+This weighting matches the implementation and compensates for
+the imbalance between hold and exit observations.
+Figure 1 summarizes this supervised training pipeline. Historical
+realized paths are used offline to generate ex-post exit labels, while
+the trained MLP policy uses only contemporaneously available
+state variables during out-of-sample trading.
+4.2 Stage 2: Reinforcement Learning
+Fine-Tuning
+The second stage refines the supervised exit policy using reinforce-
+ment learning. After Stage 1, the trained MLP provides a strong
+initialization for the RL actor. In other words, the same neural
+network parameterization is reused as the policy network, but its
+weights are no longer optimized against hindsight labels. Instead,
+they are further updated to improve trading performance in the
+short-straddle environment [17, 26].
+Figure 2 summarizes the fine-tuning pipeline. The supervised
+MLP initializes the RL actor, which then interacts with the trading
+environment and is updated using realized trading rewards.
+ICAIF ’26, November 14–17, 2026, Milan, Italy Wang et al.
+At each decision time𝑡, the agent observes the current state𝑠𝑡
+and selects an action
+𝑎𝑡∈{hold,exit}.
+The action is executed in the trading environment, which returns
+a trading reward 𝑟𝑡 computed from the realized outcome of the
+chosen action. In the final experiments, the same minimum holding
+constraint used in the supervised stage is retained, withℎmin = 26
+bars.
+The actor defines a policy𝜋𝜃(𝑎𝑡|𝑠 𝑡) over the binary action space,
+and the supervised MLP is used to initialize the actor parameters,
+𝜃 actor0 =𝜃 MLP.
+This initialization allows reinforcement learning to start from a
+policy that already captures the main exit patterns learned from
+historical data, rather than from a random policy.
+The reinforcement learning objective is to maximize the expected
+discounted return,
+𝐽(𝜃)=E 𝜋𝜃
+" 𝑇𝑖∑︁
+𝑡=0
+𝛾𝑡𝑟𝑡
+#
+.(10)
+During training, the actor parameters are updated using trading
+rewards instead of supervised labels. In actor-critic style updates,
+a value function𝑉𝜓(𝑠𝑡) is learned in parallel, and the advantage
+signal
+𝐴𝑡 =𝐺𝑡−𝑉𝜓(𝑠𝑡).
+is used to improve the policy. Here𝐺𝑡 denotes the realized return-
+to-go from time𝑡.
+The policy-gradient update can be written as
+∇𝜃𝐽(𝜃)≈
+∑︁
+𝑖,𝑡
+∇𝜃 log𝜋𝜃(𝑎𝑖,𝑡|𝑠 𝑖,𝑡)𝐴𝑖,𝑡.(11)
+In the advantage-weighted variants used in the experiments, ac-
+tions with higher advantage receive larger update weight, which
+encourages the policy to favor exits that improve trading perfor-
+mance while preserving the stabilizing effect of the supervised
+initialization [20, 21].
+The key idea is that Stage 1 provides an informed policy ini-
+tialization, while Stage 2 adapts that policy to the actual trading
+objective through reward-driven optimization.
+4.3 RL Training Variants and Raw RL From
+Scratch
+This subsection describes the reinforcement learning variants used
+in the empirical study. All RL models share the same trading envi-
+ronment, state representation, action space, and transaction-cost
+assumptions. This follows the standard Markov decision process
+formulation, in which a policy maps observed states into actions
+and is optimized using realized rewards [ 26]. In this paper, the
+reinforcement-learning variants differ only in initialization and
+policy-update objective.
+All RL runs use the shaped trading reward defined below. Let
+𝑉 before𝑡 denote the value of the active position before the action is
+applied, and let𝑉 after𝑡 denote the value after the action. For an active
+position with entry value𝑉 entry, the normalized value change is
+Δ𝑣𝑡 =
+ 𝑉 before𝑡 −𝑉 after𝑡  pos𝑡−
+𝑉 entry .
+Here, pos𝑡− is the position before the action; it equals +1for an
+active short straddle.
+For an active short-straddle position, let Δ𝑣𝑡 denote the normal-
+ized change in position value, PnL𝑡 denote the normalized realized
+profit and loss, and TC𝑡 denote the spread-based transaction-cost
+penalty. The shaped reward is
+𝑟 hold𝑡 =Δ𝑣𝑡+𝛽 VRPpos𝑡− VRP𝑡−TC𝑡
+−𝜆𝐶𝑡 1{pos𝑡− =+1}−𝜉1{𝜏 𝑡≤65,pos 𝑡− ≠0}. (12)
+The reward is then
+𝑟𝑡 =
+(
+PnL𝑡−TC𝑡, 𝑎 𝑡 =exitor𝑡is terminal,
+𝑟 hold𝑡 ,otherwise. (13)
+The first branch is used when the position is closed or settled, so
+the learning signal is the realized normalized PnL net of transaction
+cost. The second branch is used while the position remains active.
+It combines mark-to-market improvement, a VRP holding term,
+transaction-cost control, a CVaR-based short-volatility risk penalty,
+and a late-holding penalty.
+The transaction-cost penalty is
+TC𝑡 =𝜅spreadrel 𝑡 1{𝑎𝑡 =exit}.(14)
+The penalty is applied only when the policy executes a closing
+trade. To define the tail-risk signal, let
+𝑅short𝑢 =𝑉 mid𝑢−1−𝑉 mid𝑢𝑉 mid𝑢−1
+denote the one-bar return of a short straddle, where 𝑉 mid𝑢 is its
+mid-quote value. Let 𝑞0.05,𝑡 be the empirical 5% quantile of the
+available short-straddle returns in the trailing 260-bar windowW𝑡 .
+The CVaR signal is the positive magnitude of the average left-tail
+return:
+𝐶𝑡 =−
+˝
+𝑢∈W 𝑡 𝑅short𝑢 1{𝑅short𝑢 ≤𝑞 0.05,𝑡}˝
+𝑢∈W 𝑡 1{𝑅short𝑢 ≤𝑞 0.05,𝑡} .(15)
+The contract-level estimate requires at least 30 historical observa-
+tions. When fewer observations are available, the contemporaneous
+5% left-tail CVaR estimate of the underlying index return is used as
+a fallback. Thus, larger𝐶𝑡 represents greater estimated downside
+exposure for the active short straddle.
+In the final RL training runs, the coefficients are set to𝜅= 1.5,
+𝛽VRP = 0.5,𝜆= 0.2, and𝜉= 0.05. This reward design encourages the
+agent to hold short straddles when the volatility premium is attrac-
+tive, but penalizes liquidity costs, tail-risk exposure, and late-stage
+holding risk. When the position is closed or reaches expiration, the
+same reward function evaluates the step using realized normalized
+PnL net of the transaction-cost penalty, aligning the training ob-
+jective with the portfolio accounting rule used in out-of-sample
+evaluation.
+The coefficients were fixed before final out-of-sample evaluation.
+Their role is examined through a multi-seed reward ablation using
+the common seed set{1, 3, 5, 7, 11}. The ablation compares the full
+shaped reward with three alternatives: removal of the CVaR penalty,
+removal of the VRP component, and a direct reward containing
+realized trading performance and transaction costs without the
+additional VRP and CVaR shaping terms.
+MLP-Initialized RL for SPX Short-Straddle Exit Timing ICAIF ’26, November 14–17, 2026, Milan, Italy
+The first distinction across RL variants is initialization. In the pro-
+posed MLP-initialized setting, the actor starts from the supervised
+MLP parameters:
+𝜃 actor0 =𝜃 MLP.(16)
+This uses the supervised exit model as a warm start for policy
+optimization. Such initialization is useful because neural policies
+can be sensitive to random initialization and optimization instability,
+especially in nonlinear financial control problems [5, 13, 14]. In the
+raw RL baseline, the actor is initialized randomly:
+𝜃 raw0 ∼I.
+Here,I denotes the default neural-network initialization. The raw
+RL baseline therefore tests whether reinforcement learning alone
+is sufficient for the exit-timing task.
+The standard actor-critic variant follows the policy-gradient
+framework with a learned value baseline [17, 25, 26, 30]. For each
+trajectory, define the realized return-to-go as
+𝐺𝑡 =
+𝑇∑︁
+𝑘=𝑡
+𝛾𝑘−𝑡𝑟𝑘.(17)
+The critic estimates the state value𝑉𝜓(𝑠𝑡) and is trained by mini-
+mizing
+L𝑉 =
+∑︁
+𝑡
+ 𝑉𝜓(𝑠𝑡)−𝐺 𝑡2.(18)
+The advantage estimate is
+𝐴𝑡 =𝐺𝑡−𝑉𝜓(𝑠𝑡).(19)
+The actor is then updated to increase the probability of actions with
+positive advantage:
+LAC =−
+∑︁
+𝑡
+log𝜋𝜃(𝑎𝑡|𝑠 𝑡)𝐴𝑡.(20)
+Thus, if an exit or hold action produces better realized return than
+expected, the policy becomes more likely to choose that action in
+similar states. This advantage-based update is particularly useful
+in trading problems because it separates realized reward from the
+state-dependent baseline value [17, 19, 29].
+The AWR variant uses advantage-weighted regression [21]. In-
+stead of applying the advantage linearly, AWR converts the advan-
+tage into a positive sample weight:
+𝑤𝑡 =exp
+𝐴𝑡
+𝛽
+
+.(21)
+Here,𝛽>0is a temperature parameter. The actor objective is
+LAWR =−
+∑︁
+𝑡
+𝑤𝑡 log𝜋𝜃(𝑎𝑡|𝑠 𝑡).(22)
+This objective can be interpreted as weighted supervised learning
+on actions sampled from the trading trajectories, where actions
+with higher estimated advantage receive larger training weight.
+This makes AWR conceptually aligned with the two-stage design
+in this paper: the policy is initialized by supervised learning and
+then refined by advantage-weighted updates.
+The AWAC-style variant uses the same return-to-go and state-
+value critic as the AWR variant rather than learning a separate
+action-value critic. It uses the advantage estimate in Equation 19,
+where𝐺𝑡 is the realized discounted return-to-go and𝑉𝜓 is trained
+Table 2: Reinforcement learning training variants.
+Variant Initialization Policy update
+Raw RL Random RL reward only
+Actor-Critic MLP Policy gradient with advantage
+AWR MLP Advantage-weighted regression
+AWAC MLP Advantage-weighted actor-critic
+using Equation 18. The AWAC-style weight applies a non-negative
+advantage filter:
+𝑤 AWAC𝑡 =exp
+ max{𝐴𝑡,0}
+𝛽
+
+.(23)
+The weight is clipped at the same maximum value used in the
+implementation. The actor objective is
+LAWAC =−
+∑︁
+𝑡
+𝑤 AWAC𝑡 log𝜋𝜃(𝑎𝑡|𝑠 𝑡).(24)
+Thus, actions whose realized return exceeds the learned state-value
+baseline receive increased weight, while negative-advantage actions
+retain unit weight rather than being exponentially downweighted.
+We refer to this implementation as an AWAC-style variant because
+it uses non-negative advantage-weighted actor updates, although
+it does not train a separate𝑄𝜓(𝑠𝑡,𝑎𝑡)critic.
+Table 2 summarizes the training variants used in the methodol-
+ogy.
+The purpose of including raw RL from scratch is methodological
+rather than merely empirical. If the raw RL policy performs poorly
+while MLP-initialized variants improve, then the results support the
+paper’s central claim: reinforcement learning is most effective in
+this problem when used as a second-stage optimizer initialized from
+a supervised exit policy, rather than as a standalone learner. This is
+consistent with prior work showing that reinforcement learning
+can be useful in option and hedging applications, but that financial
+decision problems remain sensitive to reward design, transaction
+costs, and training stability [5, 6, 11, 15, 29].
+5 Experimental Design
+5.1 Train/Test Split
+The empirical analysis uses a chronological train-test split rather
+than a random split. This is important because option markets
+are time ordered, and randomly mixing observations across time
+could leak future market information into the training process. All
+model training and parameter estimation are performed using data
+before the out-of-sample evaluation period, while the final portfolio
+performance is measured on a later test period.
+The main out-of-sample test period is 2024–2026. Historical data
+before the test period are used for supervised label construction,
+MLP training, and reinforcement-learning fine-tuning. When a vali-
+dation stage is required for model selection or checkpoint selection,
+the data are divided into three chronological blocks: a training pe-
+riod, a validation period, and a locked out-of-sample test period.
+When pilot validation is used, it is restricted to pre-test data; the
+2024–2026 period is held out for final evaluation and is not used
+for hyperparameter or checkpoint selection.
+ICAIF ’26, November 14–17, 2026, Milan, Italy Wang et al.
+The supervised MLP labels are constructed only within the train-
+ing data. For each training episode, the ex-post best exit time is
+computed using that episode’s realized path, and the resulting la-
+bels are used to train the classifier. These hindsight labels are not
+used during out-of-sample trading. In the test period, the trained
+policy observes only the contemporaneous state𝑠𝑡 and produces a
+hold or exit decision.
+Future prices in the test period are used only after the decision
+is made to compute realized portfolio performance.
+The same principle is applied to feature standardization. The
+mean and standard deviation used to normalize the MLP inputs are
+estimated from the training sample only. These training-sample sta-
+tistics are then applied unchanged to validation and out-of-sample
+observations. This prevents the model from using information about
+the distribution of future test data.
+All strategies are evaluated under the same out-of-sample port-
+folio simulator. The hold-to-expiry benchmark, representative rule-
+based exit policies, raw RL baseline, supervised MLP policy, and
+MLP-initialized RL variants are applied to the same test-period
+episode pool and portfolio construction rules. This ensures that
+performance differences reflect the exit policy and its resulting
+capital reuse rather than differences in data, execution assumptions,
+or evaluation protocol.
+5.2 Evaluation Protocol and Main Comparisons
+All exit strategies are evaluated using the same out-of-sample port-
+folio simulator over 2024–2026. Each strategy is applied to the
+same pool of SPX short-straddle episodes and uses the same daily
+candidate-selection rule, initial capital, 20-slot portfolio structure,
+stress-budget position sizing, bid–ask execution, commissions, mar-
+gin requirements, and maintenance-liquidation rule. The compo-
+nent that differs across strategies is the exit decision. Because earlier
+exits release portfolio slots sooner, the resulting number of accepted
+episodes and the rate of capital reuse are endogenous consequences
+of each exit policy.
+In the main specification, cumulative portfolio return is size-
+weighted and incorporates dynamic compounding within each slot.
+Under stress-budget sizing, the number of contracts assigned to a
+new position is computed from the slot’s current NAV. A profitable
+slot can therefore support a larger subsequent position, while losses
+reduce its later position size. The reported main return consequently
+reflects both exit-policy decisions and the portfolio consequences
+of reinvesting gains under the common sizing rule. To separate exit-
+policy performance from this dynamic compounding channel, an
+equal-notional robustness specification fixes each entered position
+at one short-straddle contract.
+The evaluation includes five groups of exit policies. The first is a
+hold-to-expiry benchmark, in which each short straddle remains
+open until cash settlement. This benchmark measures the passive
+short-volatility premium without discretionary exit timing.
+The second group consists of three representative rule-based exit
+benchmarks. The fixed-time rule closes a position after 65 intraday
+bars, corresponding to approximately five trading days. The thresh-
+old rule exits when profit reaches 25% of the entry premium or when
+loss reaches 50% of the entry premium. The combined rule exits
+when either the fixed holding horizon or one of the profit-and-loss
+3.0
+3.5
+4.0
+4.5Portfolio NAV ($mm)
+OOS Portfolio NAV: Common Real 30-Minute Quote Grid (2024-2026)
+Hold-to-expiry
+Fixed 5-day exit
+25% PT / 50% SL
+Combined rule
+Raw AC from scratch
+Supervised MLP exit model
+AWR + MLP init
+AWAC + MLP init
+AC + MLP init
+S&P 500 index (normalized)
+2023-12 2024-03 2024-06 2024-09 2024-12 2025-03 2025-06 2025-09 2025-12 2026-03 2026-06
+Date
+−12.5
+−10.0
+−7.5
+−5.0
+−2.5
+0.0
+Drawdown (%)
+Figure 3: Out-of-sample portfolio NA V and drawdown for
+the deterministic strategies, representative reinforcement-
+learning runs, and the normalized S&P 500 market reference
+over 2024–2026, after mapping each portfolio path to the
+common real 30-minute quote grid.
+thresholds is reached. All three rules retain the same 26-bar min-
+imum holding constraint used by the learned exit policies. These
+benchmarks test whether the learned models provide value beyond
+simple calendar-based and profit-and-loss-based exit heuristics.
+The third policy is a raw Actor-Critic model trained from random
+initialization. This model serves as a control for whether reinforce-
+ment learning alone can discover a useful exit policy in this sparse
+and path-dependent trading environment.
+The fourth policy is the supervised MLP exit model. It is trained
+from ex-post exit labels constructed only from training-period
+episodes and is applied out of sample using contemporaneously
+available state variables. This comparison measures how much
+exit-timing value can be captured through supervised learning.
+The fifth group consists of MLP-initialized reinforcement-learning
+policies, including Actor-Critic, AWR, and AWAC. These models
+initialize the actor from the supervised MLP and subsequently fine-
+tune the policy using the trading reward. This group tests whether
+reward-based policy improvement provides incremental value be-
+yond the supervised exit model.
+In addition to these five deployable groups, the evaluation reports
+an ex-post best-exit oracle as a diagnostic ceiling. For each out-
+of-sample episode, the oracle uses the complete realized future
+path to select the most profitable feasible exit after the same 26-
+bar minimum holding period. It uses the same bid–ask execution,
+commissions, settlement, position sizing, and portfolio simulator as
+the tradable policies. However, because its decision requires future
+information, it is reported separately and is not included in the
+main tradable-strategy table or NAV comparison.
+Figure 3 presents the out-of-sample NAV and drawdown paths
+for these exit strategies. The normalized S&P 500 series is shown
+separately in the figure as a market reference only; it is not treated
+as a short-straddle strategy or as a directly comparable exit-policy
+benchmark. The figure illustrates both final portfolio performance
+and the timing and severity of drawdowns.
+MLP-Initialized RL for SPX Short-Straddle Exit Timing ICAIF ’26, November 14–17, 2026, Milan, Italy
+6 Results
+The S&P 500 reference series is constructed from daily closing prices
+of the S&P 500 index downloaded from Yahoo Finance using the
+ticker ^GSPC through the yfinance package [2, 31]. It is included
+only as a normalized market reference and is not a short-straddle
+strategy.
+6.1 Portfolio Performance
+Table 3 reports the canonical out-of-sample performance panel
+for the benchmark and supervised exit strategies. In addition to
+cumulative return, the table reports annualized return and risk mea-
+sures, drawdown magnitude and duration, reward-to-risk ratios, hit
+rate, and trade count. All NAV-based metrics are computed on the
+common real 30-minute quote grid over the shared OOS calendar
+window, so annualized quantities use a common horizon rather
+than strategy-specific NAV row counts. Because the benchmark
+and supervised policies are deterministic after training, Table 3
+reports their individual portfolio paths. Reinforcement-learning re-
+sults depend on stochastic optimization and are therefore reported
+separately as cross-seed means and standard deviations in Table 4.
+Hold-to-expiry earns 11.56% with a Sharpe ratio of 0.441 and
+MD of 12.82%. The three mechanical exits fail to improve its re-
+turn profile. In contrast, the supervised MLP returns 35.01%, raises
+Sharpe to 1.651, and reduces MD to 4.04%. Its advantage over all
+three rules indicates that it learns more than a constant holding
+horizon or a fixed profit-and-loss threshold.
+6.2 Oracle Ceiling and the Remaining Imitation
+Gap
+The ex-post best-exit oracle observes the complete future path of
+each episode and is therefore a non-tradable diagnostic ceiling.
+Under the same portfolio simulator and 26-bar minimum holding
+period, it achieves 373.02% cumulative return, an ARC of 89.87%,
+a Sharpe ratio of 6.305, maximum drawdown of 4.32%, and mean
+episode PnL of $19,261. The corresponding mean PnL values are
+$1,802 for the supervised MLP and $1,932 for AC+MLP, showing
+that the learned policies recover only a limited fraction of the ex-
+post opportunity available in the realized paths.
+6.3 Effect of MLP-Initialized Reinforcement
+Learning
+Table 4 reports the cross-seed performance of the principal MLP-
+initialized Actor–Critic policy. Across seven independent training
+seeds, AC+MLP achieves an average cumulative return of37.54%±
+0.92%, an average ARC of14.05%± 0.32%, and an average Sharpe
+ratio of1.705±0.027. Maximum drawdown remains stable at3.96%±
+0.16%, compared with 4.04% for the supervised MLP. Average mean
+episode PnL increases from approximately $1,802 for the supervised
+policy to$1,932±$47after Actor–Critic fine-tuning.
+The seven-seed AC+MLP result therefore increases average cu-
+mulative return by 2.53 percentage points and average Sharpe ratio
+by 0.054 relative to the supervised MLP. The average paired episode-
+level PnL difference is $129.94. A paired𝑡-test yields𝑡= 1.330and
+𝑝= 0.184, while the Wilcoxon signed-rank test yields 𝑝= 0.681.
+The economic improvement is therefore positive on average, al-
+though the episode-level difference is not statistically significant at
+conventional levels. These results indicate that Actor–Critic fine-
+tuning provides an incremental average improvement over the
+supervised policy.
+The alternative advantage-weighted updates provide support-
+ing evidence on the role of supervised initialization. Across five
+seeds, AWR+MLP achieves a cumulative return of35.23%± 1.93%
+and a Sharpe ratio of1 .648± 0.045, while AWAC+MLP achieves
+35.19%± 1.76%and1 .655± 0.053. These variants broadly preserve
+the supervised MLP’s performance but do not provide the same av-
+erage incremental improvement as Actor–Critic. They are therefore
+interpreted as robustness variants of the supervised-first framework
+rather than as the principal performing models.
+6.4 Equal-Notional Robustness
+Under fixed-one-contract sizing, the average ordering of AC+MLP,
+the supervised MLP, and hold-to-expiry is preserved, although
+the AC+MLP increment narrows to 0.45 percentage points and is
+not statistically significant (𝑝= 0.645). Dynamic sizing therefore
+amplifies but does not solely generate the average ranking; complete
+common-grid results appear in Table 8 in the appendix.
+6.5 Reward-Shaping Ablation
+To test whether the Actor–Critic ranking is an artifact of the hand-
+specified reward coefficients, we repeat the AC+MLP experiment
+across the common seed set{1, 3, 5, 7, 11} under four reward speci-
+fications. Table 5 reports the results. The full reward achieves a cu-
+mulative return of35.56%±2.73%and a Sharpe ratio of1.661±0.093.
+Removing the CVaR term produces36.80%±1.07%and1 .677±0.057,
+while removing the VRP component produces34.30%± 1.87%and
+1.655±0.066. The direct-reward specification achieves35.11%±1.18%
+and1.627±0.053.
+The four specifications produce broadly similar out-of-sample
+performance, so the effectiveness of MLP initialization is not driven
+by one reward-shaping component. The CVaR term does not gen-
+erate the return ranking: removing it slightly raises average return
+and Sharpe but worsens average maximum drawdown from 4.00%
+to 4.16%. Removing the VRP term reduces average return but im-
+proves average maximum drawdown to 3.70%. These results suggest
+that the shaping components influence the return–drawdown trade-
+off rather than mechanically creating the overall advantage of the
+supervised-first policy.
+6.6 Raw Reinforcement Learning From Scratch
+Actor–Critic trained from scratch performs poorly and is highly
+sensitive to stochastic training. Across five independent seeds, raw
+AC achieves an average cumulative return of0 .18%± 4.35%, an
+average Sharpe ratio of−0.102± 0.339, an average maximum draw-
+down of8.70%± 2.67%, and an average mean episode PnL of only
+$10± $226. Relative to the supervised MLP, the average paired
+episode-level PnL difference is−$1,794. The difference is statisti-
+cally significant under both the paired𝑡-test (𝑝= 3.01× 10−13) and
+Wilcoxon signed-rank test (𝑝= 3.80× 10−12). This contrast shows
+that reinforcement learning alone does not explain the performance
+of the two-stage framework.
+ICAIF ’26, November 14–17, 2026, Milan, Italy Wang et al.
+Table 3: Canonical out-of-sample performance metrics for the deterministic benchmark and supervised exit policies over
+2024–2026.
+Strategy Cum. return ARC ASD MD MLD IR ∗ IR∗∗ IR∗∗∗ Sharpe Calmar Hit rate Trades
+Hold-to-expiry 11.56% 4.62% 11.95% 12.82% 0.73 0.386 0.360 0.063 0.441 0.360 56.9% 425
+Fixed 5-day -2.12% -0.88% 5.08% 9.78% 1.44 -0.173 -0.090 -0.006 -0.150 -0.090 57.4% 479
+25% PT / 50% SL 1.91% 0.78% 7.33% 10.45% 1.88 0.107 0.075 0.004 0.144 0.075 66.5% 477
+Combined rule 1.15% 0.47% 4.31% 6.52% 2.04 0.110 0.073 0.002 0.133 0.073 56.4% 495
+Supervised MLP 35.01% 13.19% 7.76% 4.04% 0.29 1.700 3.266 0.450 1.651 3.266 56.2% 559
+Notes:Return is cumulative; ARC, ASD, and MD are reported in percentage terms; MLD is reported in years. All NAV-based metrics are computed on the common real 30-minute
+quote grid over the shared OOS calendar window, with 𝑇≈ 2.42years used for ARC. IR ∗, IR∗∗, and IR∗∗∗ follow the definitions in the Evaluation Metrics subsection. Under
+these definitions, IR∗∗ is numerically equal to Calmar. Hit rate is the percentage of entered straddles with positive net episode PnL, and Trades is the number of entered straddles.
+Reinforcement-learning policies are reported separately in Table 4 because their performance varies across independently trained seeds.
+Table 4: Multi-seed canonical out-of-sample performance of the reinforcement-learning policies over 2024–2026. Values are
+mean±sample standard deviation across independently trained seeds.
+Policy Seeds Cum. return ARC ASD MD MLD IR ∗ IR∗∗ IR∗∗∗ Sharpe Calmar Hit rate Trades
+Raw AC 50.18%±4.35% 0.06%±1.77% 4.84%±3.71% 8.70%±2.67% 2.022±0.744−0.124±0.323−0.012±0.162 0.006±0.020−0.102±0.339−0.012±0.162 52.3%±2.8% 454.8±34.9
+AWR + MLP 535.23%±1.93% 13.26%±0.67% 7.81%±0.23% 3.95%±0.11% 0.272±0.041 1.697±0.051 3.359±0.163 0.496±0.079 1.648±0.045 3.359±0.163 56.6%±0.3% 561.4±12.5
+AWAC + MLP 535.19%±1.76% 13.25%±0.61% 7.77%±0.11% 3.88%±0.05% 0.282±0.024 1.705±0.060 3.411±0.142 0.473±0.057 1.655±0.053 3.411±0.142 56.4%±0.5% 557.0±9.0
+AC + MLP 737.54%±0.92% 14.05%±0.32% 7.97%±0.14% 3.96%±0.16% 0.283±0.029 1.763±0.031 3.549±0.112 0.502±0.060 1.705±0.027 3.549±0.112 56.7%±0.3% 567.3±6.2
+Notes:Each canonical metric is first computed separately from the complete portfolio path generated by each independently trained policy and is then summarized across seeds.
+Each path is evaluated on the common real 30-minute quote grid over the shared OOS calendar window. Raw AC, AWR+MLP, and AWAC+MLP use five independent runs; AC+MLP
+uses seven. ARC, ASD, and MD are reported in percentage terms, and MLD is reported in years. IR∗, IR∗∗, and IR∗∗∗ follow the definitions in the Evaluation Metrics subsection. Under
+these definitions, IR∗∗ is numerically equal to Calmar. Hit rate is the percentage of entered straddles with positive net episode PnL, and Trades is the number of entered straddles.
+Table 5: Five-seed reward-shaping ablation for AC+MLP over
+2024–2026. Values are mean±sample standard deviation.
+Reward Cum. return Sharpe MaxDD Mean PnL
+Full shaped35.56%±2.73% 1.661±0.093−4.00%±0.03% $1,830±$140
+No CVaR36.80%±1.07% 1.677±0.057−4.16%±0.17% $1,894±$55
+No VRP34.30%±1.87% 1.655±0.066−3.70%±0.20% $1,765±$96
+Direct35.11%±1.18% 1.627±0.053−3.93%±0.14% $1,807±$61
+Notes:Every specification uses Seeds 1, 3, 5, 7, and 11. NAV-based metrics use the com-
+mon real 30-minute quote grid and common calendar horizon; Mean PnL is computed
+from episode-level outcomes. “Direct” removes both the CVaR and VRP shaping terms
+while retaining realized trading performance and transaction costs.
+7 Limitations
+The 2024–2026 out-of-sample period contains no sustained volatil-
+ity shock comparable to 2008 or March 2020. The observed approxi-
+mately 4% drawdowns should therefore not be interpreted as upper
+bounds on naked short-straddle tail risk. The simulator includes
+bid–ask execution, margin constraints, maintenance liquidation,
+and risk-aware training, but it cannot fully reproduce crisis-period
+price gaps, volatility jumps, spread widening, liquidity shortages,
+or forced deleveraging. Evaluation over longer and more severe
+volatility regimes remains necessary.
+The synthetic-fill sensitivity check is limited to the supervised
+MLP and one AC+MLP run. It establishes that these audited paths
+do not execute exits on synthetic bars, but it does not imply that
+synthetic continuation states are irrelevant to every possible policy
+or market regime.
+The incremental AC+MLP advantage is smaller under fixed-one-
+contract sizing, indicating that part of its economic magnitude in
+the main stress-budget specification is associated with the timing
+of gains and subsequent slot-level capital scaling. Although the av-
+erage policy ordering is preserved, the equal-notional episode-level
+difference between AC+MLP and the supervised MLP is not statis-
+tically significant. The reported RL increment should therefore be
+interpreted as an average economic improvement that is amplified
+by dynamic position sizing rather than as a uniform episode-level
+advantage.
+8 Conclusion
+This paper develops a two-stage framework for SPX short-straddle
+exit timing in which an oracle-guided supervised MLP initializes
+reinforcement-learning policies. The supervised policy substan-
+tially outperforms passive holding and representative mechanical
+exits. Across seven seeds, Actor–Critic fine-tuning provides a pos-
+itive average economic improvement, although its episode-level
+increment is not statistically significant. Raw Actor–Critic performs
+poorly, while the reward and equal-notional checks show that the
+main average ranking is not solely generated by one shaping com-
+ponent or dynamic position sizing. Overall, supervised initialization
+is what makes reward-based fine-tuning viable in this sparse and
+path-dependent trading problem.
+9 Code and Data Availability
+The code used for the main experiments is available at: https://
+github.com/Justinnnn0313/spx-short-straddle-rl.
+The underlying SPX option quotations are proprietary Cboe
+data accessed through an institutional license held by one of the
+co-authors. The license does not permit redistribution of the source
+option-quote files, and these data are therefore not included in
+the public repository. Researchers with lawful access to equivalent
+MLP-Initialized RL for SPX Short-Straddle Exit Timing ICAIF ’26, November 14–17, 2026, Milan, Italy
+Cboe SPX option data can use the released code to reproduce the
+data-processing, model-training, and portfolio-evaluation pipeline.
+Acknowledgments
+The authors gratefully acknowledge financial support from the
+Odyssey Research Programme at the School of Physical and Math-
+ematical Sciences, Nanyang Technological University.
+Ethics and Privacy Statement
+This study uses licensed financial-market data and involves no hu-
+man subjects or personally identifiable information. The results are
+intended for research and should not be interpreted as investment
+advice or as evidence that the policies eliminate short-volatility tail
+risk.
+References
+[1] Brenna D. Argall, Sonia Chernova, Manuela Veloso, and Brett Browning. 2009. A
+Survey of Robot Learning from Demonstration.Robotics and Autonomous Systems
+57, 5 (2009), 469–483. doi:10.1016/j.robot.2008.10.024
+[2] Ran Aroussi. 2026. yfinance: Download Market Data from Yahoo! Finance’s
+API. Python package version 1.5.1; accessed on 2026-07-22. https://github.com/
+ranaroussi/yfinance
+[3] Gurdip Bakshi and Nikunj Kapadia. 2003. Delta-Hedged Gains and the Negative
+Market Volatility Risk Premium.The Review of Financial Studies16, 2 (2003),
+527–566. doi:10.1093/rfs/hhg002
+[4] Tim Bollerslev, George Tauchen, and Hao Zhou. 2009. Expected Stock Returns
+and Variance Risk Premia.The Review of Financial Studies22, 11 (2009), 4463–4492.
+doi:10.1093/rfs/hhp008
+[5] Hans Buehler, Lukas Gonon, Josef Teichmann, and Ben Wood. 2019. Deep
+Hedging.Quantitative Finance19, 8 (2019), 1271–1291. doi:10.1080/14697688.
+2019.1571683
+[6] Jay Cao, Jacky Chen, John Hull, and Zissis Poulos. 2020. Deep Hedging of
+Derivatives Using Reinforcement Learning.The Journal of Financial Data Science
+2, 4 (2020), 10–27. doi:10.3905/jfds.2020.1.043
+[7] Peter Carr and Liuren Wu. 2009. Variance Risk Premiums.The Review of Financial
+Studies22, 3 (2009), 1311–1341. doi:10.1093/rfs/hhn038
+[8] Cboe Global Markets. 2026. S&P 500 Index Options Product Specifications.
+Accessed 2026-07-15. https://www.cboe.com/tradable-products/sp-500/spx-
+options/spx-specifications/
+[9] Joshua D. Coval and Tyler Shumway. 2001. Expected Option Returns.The Journal
+of Finance56, 3 (2001), 983–1009. doi:10.1111/0022-1082.00352
+[10] Harold Demsetz. 1968. The Cost of Transacting.The Quarterly Journal of
+Economics82, 1 (1968), 33–53. doi:10.2307/1882244
+[11] Jun Du, Ming Jin, Petter N. Kolm, Gordon Ritter, Yixuan Wang, and Bintong
+Zhang. 2020. Deep Reinforcement Learning for Option Replication and Hedging.
+The Journal of Financial Data Science2, 4 (2020), 44–57. doi:10.3905/jfds.2020.1.045
+[12] Thomas J. George and Francis A. Longstaff. 1993. Bid-Ask Spreads and Trad-
+ing Activity in the S&P 100 Index Options Market.Journal of Financial and
+Quantitative Analysis28, 3 (1993), 381–397. doi:10.2307/2331420
+[13] Xavier Glorot and Yoshua Bengio. 2010. Understanding the Difficulty of Training
+Deep Feedforward Neural Networks. InProceedings of the Thirteenth International
+Conference on Artificial Intelligence and Statistics (Proceedings of Machine Learning
+Research, Vol. 9). PMLR, 249–256. https://proceedings.mlr.press/v9/glorot10a.html
+[14] Ian Goodfellow, Yoshua Bengio, and Aaron Courville. 2016.Deep Learning. MIT
+Press.
+[15] Igor Halperin. 2019. The QLBS Q-Learner Goes NuQLear: Fitted Q Iteration,
+Inverse RL, and Option Portfolios.Quantitative Finance19, 9 (2019), 1543–1553.
+doi:10.1080/14697688.2019.1584756
+[16] Kathryn M. Kaminski and Andrew W. Lo. 2014. When Do Stop-Loss Rules Stop
+Losses?Journal of Financial Markets18 (2014), 234–254. doi:10.1016/j.finmar.
+2013.07.001
+[17] Vijay R. Konda and John N. Tsitsiklis. 2000. Actor-Critic Algorithms. InAdvances
+in Neural Information Processing Systems, Vol. 12.
+[18] Hayne E. Leland. 1985. Option Pricing and Replication with Transactions Costs.
+The Journal of Finance40, 5 (1985), 1283–1301. doi:10.1111/j.1540-6261.1985.
+tb02383.x
+[19] John Moody and Matthew Saffell. 2001. Learning to Trade via Direct Re-
+inforcement.IEEE Transactions on Neural Networks12, 4 (2001), 875–889.
+doi:10.1109/72.935097
+[20] Ashvin Nair, Abhishek Gupta, Murtaza Dalal, and Sergey Levine. 2020.
+AWAC: Accelerating Online Reinforcement Learning with Offline Datasets.
+arXiv:2006.09359 [cs.LG]
+[21] Xue Bin Peng, Aviral Kumar, Grace Zhang, and Sergey Levine. 2019. Advantage-
+Weighted Regression: Simple and Scalable Off-Policy Reinforcement Learning.
+arXiv:1910.00177 [cs.LG]
+[22] R. Tyrrell Rockafellar and Stanislav Uryasev. 2000. Optimization of Conditional
+Value-at-Risk.The Journal of Risk2, 3 (2000), 21–41. doi:10.21314/JOR.2000.038
+[23] R. Tyrrell Rockafellar and Stanislav Uryasev. 2002. Conditional Value-at-Risk for
+General Loss Distributions.Journal of Banking & Finance26, 7 (2002), 1443–1471.
+doi:10.1016/S0378-4266(02)00271-6
+[24] Stéphane Ross, Geoffrey J. Gordon, and J. Andrew Bagnell. 2011. A Reduction of
+Imitation Learning and Structured Prediction to No-Regret Online Learning. In
+Proceedings of the Fourteenth International Conference on Artificial Intelligence and
+Statistics (Proceedings of Machine Learning Research, Vol. 15). PMLR, 627–635.
+[25] John Schulman, Philipp Moritz, Sergey Levine, Michael I. Jordan, and Pieter
+Abbeel. 2016. High-Dimensional Continuous Control Using Generalized Ad-
+vantage Estimation. InProceedings of the International Conference on Learning
+Representations. arXiv:1506.02438 [cs.LG] https://arxiv.org/abs/1506.02438
+[26] Richard S. Sutton and Andrew G. Barto. 2018.Reinforcement Learning: An Intro-
+duction(2 ed.). MIT Press.
+[27] The Options Industry Council. 2019.Options Strategies Quick Guide.
+Educational reference for option strategy definitions and payoff dia-
+grams. https://www.optionseducation.org/getattachment/007fe864-029a-490d-
+8dc1-3b58bd558f64/options-strategies-quick-guide.pdf
+[28] Jason Wei and Jinguo Zheng. 2010. Trading Activity and Bid–Ask Spreads of
+Individual Equity Options.Journal of Banking & Finance34, 12 (2010), 2897–2916.
+doi:10.1016/j.jbankfin.2010.02.012
+[29] Wen Wen, Yuyu Yuan, and Jincui Yang. 2021. Reinforcement Learning for Options
+Trading.Applied Sciences11, 23 (2021), 11208. doi:10.3390/app112311208
+[30] Ronald J. Williams. 1992. Simple Statistical Gradient-Following Algorithms for
+Connectionist Reinforcement Learning.Machine Learning8 (1992), 229–256.
+doi:10.1007/BF00992696
+[31] Yahoo Finance. 2026. S&P 500 (^GSPC) Historical Data. Daily historical prices
+accessed on 2026-07-22. https://finance.yahoo.com/quote/%5EGSPC/history/
+A Implementation and Portfolio Construction
+Details
+This appendix reports the implementation details used for the final
+reinforcement-learning experiments and the out-of-sample portfo-
+lio simulation. The reported reinforcement-learning configurations
+were fixed after preliminary pilot runs and then held unchanged
+for the final 2024–2026 out-of-sample evaluation. No model hyper-
+parameters were selected using the 2024–2026 out-of-sample test
+period.
+A.1 Environment and State Variables
+The trading environment uses an exit-timing formulation for SPX
+short-straddle positions. At each decision time, the policy observes
+a vector of market, quote, and position-state variables. In the fi-
+nal reinforcement-learning runs, the observation setting uses the
+position-augmented state representation. The base state contains
+time-to-maturity, time-of-day, variance-risk-premium, relative bid–
+ask spread, model score, recent realized-volatility change, quote-
+availability indicators, synthetic-bar indicators, simulated time-
+value information, current position, and normalized running PnL.
+The position-augmented representation adds holding time, entry
+maturity, remaining maturity relative to entry maturity, current
+exit value relative to entry value, underlying return since entry,
+and moneyness drift since entry.
+All observations are numerically cleaned and clipped to the inter-
+val[−20, 20]. The final position-augmented state has dimension 17.
+Invalid actions are remapped to the hold action. Exits are permitted
+only when the quote is exitable and, except at terminal settlement,
+after the minimum holding period has elapsed.
+ICAIF ’26, November 14–17, 2026, Milan, Italy Wang et al.
+Table 6: Synthetic-bar coverage and fill-sensitivity audit.
+Period Synthetic bars Total bars Share
+Full sample 301,645 5,585,856 5.40%
+Training, 2016–2023 178,791 3,144,059 5.69%
+OOS, 2024–2026 122,854 2,441,797 5.03%
+Notes:In the OOS sample, 2,014 of 9,794 episodes (20.56%) contain at least one synthetic
+continuation bar. The supervised MLP has 0 synthetic exits among 559 exits, while the
+AC+MLP sensitivity run has 0 among 562 exits.
+A.2 Synthetic-Quote Audit and Fill Sensitivity
+Synthetic continuation bars are used when a complete real-time
+call–put quotation is unavailable but an episode must continue to-
+ward its exit or expiration. These bars are explicitly identified by the
+synthetic-bar state indicator and are not treated as observed Cboe
+quotations. Across the complete episode set, 301,645 of 5,585,856
+bars are synthetic, corresponding to 5.40% of all observations. The
+share is 5.69% during 2016–2023 and 5.03% during the 2024–2026
+out-of-sample period. At the episode level, 20.56% of out-of-sample
+episodes contain at least one synthetic continuation bar, although
+such episodes may contain predominantly real quotations.
+We further examine whether learned-policy performance de-
+pends on optimistic synthetic exits. In the supervised MLP eval-
+uation, none of the 559 executed exits occurs on a synthetic bar.
+In a single AC+MLP run used for the fill-sensitivity audit, none of
+the 562 executed exits occurs on a synthetic bar. We then multiply
+the synthetic half-spread assumption by 1.25, 1.50, and 2.00 while
+leaving real-quote execution unchanged. Because neither policy
+executes an exit on a synthetic bar, the conservative synthetic-fill
+assumptions do not change their realized portfolio results.
+Under both the baseline and doubled synthetic half-spread as-
+sumptions, the supervised MLP retains a cumulative return of
+35.01%, a Sharpe ratio of 1.651, and a maximum drawdown of 4.04%.
+That AC+MLP run retains a cumulative return of 39.58%, a Sharpe
+ratio of 1.802, and a maximum drawdown of 4.02%; these are single-
+run values and are not directly comparable with the cross-seed
+means in Table 4. This invariance does not imply that synthetic
+bars are economically irrelevant in every application; rather, it
+shows that the reported fills of these audited learned-policy paths
+are not generated by exits executed on synthetic quotations.
+A.3 Reward Parameters
+The final RL experiments use the shaped reward specification de-
+scribed in the main text. The reward parameters are held fixed
+across the RL comparisons:
+𝜅=1.5, 𝛽 VRP =0.5, 𝜆=0.2, 𝜉=0.05.
+The minimum holding period is 26 intraday bars. With 13 intraday
+bars per trading day, this corresponds to approximately two trading
+days.
+A.4 Reinforcement-Learning Hyperparameters
+Table 7 summarizes the training configurations used for the re-
+ported RL policies. The MLP-initialized models load the supervised
+exit model into the actor before RL fine-tuning, while the raw Actor-
+Critic baseline uses random initialization.
+The principal AC+MLP results use the consecutive odd-numbered
+seed sequence{17, 19, 21, 23, 25, 27, 29}. Raw Actor–Critic, AWR+MLP,
+and AWAC+MLP are each summarized across five independent
+runs. Separately, the reward ablation uses the matched seed set
+{1, 3, 5, 7, 11} for every reward specification so that differences are
+attributable to reward design rather than stochastic initialization.
+For the AWR and AWAC variants, the advantage-weighting tem-
+perature is set to 2.0, the maximum importance weight is clipped
+at 20, the minibatch size is 512, and one update epoch is used per
+training iteration. All RL models are trained on 2016–2023 episodes
+and evaluated out of sample on 2024–2026 episodes.
+A.5 Out-of-Sample Positioning and Capital
+Allocation
+The portfolio simulator starts with total capital
+𝑊0 =$3,000,000
+and divides it into 20 capital slots. Each slot therefore starts with
+𝑊 slot0 =𝑊020.
+Each slot can hold at most one straddle episode at a time. When
+a slot finishes an episode, its updated capital is recycled into the
+next available eligible episode. The portfolio NAV is the sum of the
+mark-to-market NAV across all slots.
+For each out-of-sample trading date, the simulator selects one
+candidate straddle episode. Candidate episodes are sorted by close-
+ness to the target maturity, closeness to at-the-money moneyness,
+smaller relative spread, and earlier quote time. The target maturity
+is 20 trading days. This rule produces a daily sequence of tradable
+candidate episodes without using future out-of-sample performance
+information.
+Each portfolio slot maintains its own marked-to-market NAV.
+When a position closes, its realized net PnL remains in that slot
+and becomes the capital base for the next position assigned to
+it. The main stress-budget specification is therefore dynamically
+compounded at the slot level rather than rebalanced to a fixed
+notional after each episode.
+Position size is determined by a stress-budget rule. Let𝑐= $1.50
+denote the commission per option leg, per contract, and per trans-
+action event, consistent with the definition in the main text. For a
+short straddle entered at premium𝑃 entry𝑡 with underlying level𝑆𝑡 ,
+the per-contract stress loss is
+𝐿stress𝑡 =max{0,0.15𝑆 𝑡−𝑃 entry𝑡 }𝑀+4𝑐.
+Here𝑀= 100is the option contract multiplier. The term4𝑐= $6.00
+is the full round-trip commission for one straddle contract: two
+option legs at entry and two option legs at exit.
+𝑛𝑡 =
+$
+0.50𝑊 slot𝑡
+𝐿stress𝑡
+%
+,
+subject to available-capital and margin constraints.
+For the equal-notional robustness specification, the stress-budget
+sizing rule is replaced by
+𝑛equal𝑡 =1.
+MLP-Initialized RL for SPX Short-Straddle Exit Timing ICAIF ’26, November 14–17, 2026, Milan, Italy
+Table 7: Reinforcement-learning configurations used in the final reported experiments.
+Model Init. Iter. LR𝛾Episodes/update Entropy coeff. BC coeff. Value coeff. Runs
+Raw Actor-Critic Random 3005×10 −6 0.997 8 0.0010 0.00 0.5 5
+Actor-Critic + MLP MLP 3005×10 −6 0.997 8 0.0010 0.05 0.5 7
+AWR + MLP MLP 1201×10 −5 0.997 32 0.0005 0.01 0.5 5
+AWAC + MLP MLP 1201×10 −5 0.997 32 0.0005 0.01 0.5 5
+Table 8: Equal-notional out-of-sample robustness over 2024–
+2026.
+Policy Return Sharpe MaxDD Total PnL Mean PnL Trades
+Hold-to-expiry 15.67% 0.544 -12.63% $470,077 $818 454
+Supervised MLP 35.04% 1.566 -3.94% $1,051,183 $1,803 577
+AC + MLP35.49%±1.93% 1.590±0.056−4.00%±0.12% $1,064,626±$57,979 $1,826±$99 574.6±8.1
+Notes:Every entered position contains exactly one short-straddle contract. AC+MLP
+values are mean± sample standard deviation across seven independently trained
+policies. NAV-based metrics use the common real 30-minute quote grid and com-
+mon calendar horizon. All other execution, margin, and portfolio assumptions are
+unchanged.
+For every entered episode, this removes variation in contract count
+caused by prior slot performance while retaining the same candi-
+date episodes, exit policies, bid–ask execution, commissions, and
+portfolio-slot mechanics.
+The number of entered trades can differ from the stress-budget
+specification because fixing the contract count changes whether
+an otherwise identical candidate passes the available-capital and
+margin constraints.
+For short straddles, the required entry capital per contract is
+𝐾𝑡 =max{𝑃 entry𝑡 𝑀,0.20𝑆 𝑡𝑀}.
+The final contract count is capped so that the slot has enough capital
+to cover required entry capital plus the one-way entry commission.
+During the episode, the maintenance requirement is
+𝐾maint𝑡 =0.15𝑆 𝑡𝑀𝑛𝑡.
+If the mark-to-market slot NAV falls below this requirement, the
+simulator liquidates the position at the current exit fill and records
+the liquidation in the portfolio accounting.
+A.6 Execution and Accounting
+For a short straddle, entry is executed at the observed straddle bid
+and discretionary exit is executed at the observed straddle ask. If
+the position reaches expiration, settlement value is computed as
+𝑉 settle𝑇 =|𝑆 𝑇−𝐾|,
+Here,𝐾 is the strike. Dollar PnL for a short straddle with𝑛𝑡 contracts
+is computed as
+PnL=
+
+𝑃 entry𝑡 −𝑃 exit𝑡 𝑀𝑛𝑡−Commission,
+For a discretionary round-trip exit,
+Commission=4𝑐𝑛 𝑡,
+whereas each individual entry or exit event incurs2𝑐𝑛𝑡 . The same
+total round-trip commission applies when the second transaction
+event is terminal settlement.
+Analogous accounting applies when the position expires and the
+exit value is replaced by the settlement value. Let
+𝑟𝑡 = 𝑊𝑡𝑊𝑡−1 −1
+denote the 30-minute simple return of aggregate marked-to-market
+portfolio NAV. The reported Sharpe ratio is
+Sharpe= ¯𝑟𝑠(𝑟)√252×13= ¯𝑟𝑠(𝑟)√3276,
+Here, ¯𝑟 and𝑠(𝑟) are the sample mean and sample standard deviation
+of the 30-minute portfolio-return series. Returns are not adjusted
+for a separate risk-free rate; equivalently, the calculation assumes a
+zero risk-free return at the 30-minute horizon. The same convention
+is applied to all strategies.
+Portfolio cumulative return, ARC, ASD, MD, MLD, and Calmar
+are computed from the same marked-to-market portfolio NAV series
+after mapping each path to the common real 30-minute quote grid.
+MLD is measured as the longest elapsed calendar time, expressed
+in years, during which portfolio NAV remains below its previous
+running maximum. Hit rate is the fraction of entered straddles with
+positive net episode PnL, and trade count is the number of entered
+straddles.

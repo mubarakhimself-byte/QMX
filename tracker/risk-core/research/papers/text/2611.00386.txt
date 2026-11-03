@@ -1,0 +1,1629 @@
+arXiv 2611.00386  https://arxiv.org/abs/2611.00386
+
+Dependence-Aware Risk Assessment and Optimal Design of
+AI-Agent Safeguard Systems
+Yijia Li 1 Maochao Xu 2∗ Peng Zhao 3
+1School of Statistics and Data Science,
+Shanghai University of International Business and Economics, China
+2Department of Mathematics, Illinois State University, USA
+3School of Mathematics and Statistics, Jiangsu Normal University, China
+Abstract
+Large language model (LLM) agents increasingly rely on safeguards to prevent unautho-
+rized actions while preserving legitimate service. However, existing risk assessments often
+focus on individual safeguard performance while overlooking dependence among safeguard
+decisions. This paper develops a dependence-aware framework for risk assessment and
+optimal design of multi-component AI safeguard systems, jointly selecting configurations and
+operating policies for sequential layered screening and selective verification. We establish
+stochastic comparisons of layered-screening error probabilities and invocation costs under
+lower-orthant ordering. For selective verification, we characterize exactly which policies have
+error probabilities and review costs that respond monotonically to stronger dependence under
+supermodular ordering. For a fixed first stage and reviewer, we show that the optimal routing
+map is a two-threshold rule in the first-stage likelihood ratio, and that a reviewer enters an
+optimal policy only when its cost is below a quality-adjusted combination of the error losses.
+We further develop exact optimization algorithms for selecting safeguard subsets, execution
+orders, and verification policies under specified risk and cost requirements. An accompanying
+open-source software package, Dependence-Aware Policy Optimization Algorithms (DAPOA),
+facilitates the practical implementation of the proposed framework. Numerical experiments
+show that ignoring dependence can lead to inaccurate risk assessments and infeasible safe-
+guard designs, with independence-based selections violating security requirements in six of
+eight scenarios. An empirical study using four LLM safeguards on benchmark-derived agent
+actions further demonstrates the practical implications of dependence modeling. Under the
+principal operating setting, dependence-aware selection lowers held-out total cost by 39.6%
+relative to independence-based selection.
+Keywords:AI-agent safeguards; copula; optimal design; stochastic comparisons.
+∗Corresponding author. Email: mxu2@ilstu.edu
+1
+arXiv:2611.00386v1  [cs.AI]  30 Oct 2026
+1 Introduction
+LLM agents increasingly act through tools that retrieve information, modify records, execute code,
+and communicate with external services. An agent can propose an action that is syntactically
+valid but unauthorized, such as sending information to an unapproved recipient or changing a
+record when the user requested only a read. Such proposals can arise from ordinary model errors
+or from indirect prompt injection, in which instructions embedded in external content redirect
+the agent’s behavior (Greshake et al., 2023; Debenedetti et al., 2024). Developers therefore deploy
+safeguards that screen agent inputs, outputs, and actions. Examples include learned content
+classifiers such as Llama Guard (Inan et al., 2023), programmable policy enforcement through
+NeMo Guardrails (Rebedea et al., 2023), and the prompt-injection and goal-alignment checks
+integrated in LlamaFirewall (Chennabasappa et al., 2025). When such components are combined,
+system risk depends on each safeguard’s performance, how their errors overlap, and the rule used
+to combine their decisions. A safeguard layer operates on demand and has two consequential
+failure modes. Asecurity missallows an unauthorized action, whereas afalse blockstops an
+authorized action and interrupts service. Current practice uses several approaches to combining
+safeguards. Two approaches that arise in practice are layered screening and cascade verification.
+Inlayered screening, several safeguards are applied as successive layers to a proposed action,
+and the action proceeds only if every layer allows it. Thus, a blocking decision by any safeguard
+can stop the action. LlamaFirewall, for example, halts the agent when either its injection
+detector or its goal-alignment check raises a flag (Chennabasappa et al., 2025). Under this rule,
+an additional layer cannot increase the miss probability, but it can contribute false blocks of
+its own. In LlamaFirewall’s AgentDojo evaluation, task utility was 47.0% with the injection
+detector alone, 43.1% with the alignment check alone, and 42.7% with both (Chennabasappa
+et al., 2025). Forcascade verification(i.e., flag-to-review), an inexpensive safeguard first screens
+the proposed action, and flagged actions are escalated to a more costly reviewer for further
+verification. Anthropic’s Constitutional Classifiers++ provides a content-safety example: a
+lightweight linear probe screens all exchanges and escalates suspicious ones to a second-stage
+classifier, whose final decision combines the probe and classifier scores (Cunningham et al., 2026).
+A cascade blocks an action only when the screen refers it and the reviewer confirms it, and it
+misses an attack whenever either stage does. Its security-miss probability therefore depends on
+the screen’s miss probability and on the reviewer’s miss probability conditional on referral.
+Currentpracticeoftenevaluatesandtunessafeguardslargelyinisolation, reportingcomponent
+detection and false-positive rates, or system-level performance for a single fixed configuration.
+System risk under alternative combination rules is then either not assessed or computed, implicitly,
+as if component errors were independent. This assumption is difficult to justify in practice as
+safeguards in the same system inspect the same context: an injected instruction that appears in
+a retrieved document is presented to every layer that reads it. Many safeguards are themselves
+language models, or probes on language-model activations, that share pretraining corpora,
+architectures, and often a base model family; some are trained on synthetic data generated from
+the same policy or constitution. Attacks also vary in intrinsic difficulty, so an obfuscated or
+semantically disguised instruction that defeats one detector tends to defeat others, a phenomenon
+2
+recently documented for the errors of LLMs (Kim et al., 2025). Finally, architecture itself induces
+dependence: in a cascade, the reviewer sees only the actions the screen selects, and its decision
+may reuse the screen’s score (Cunningham et al., 2026). Ignoring this dependence biases the
+assessment of system risk.
+Dependence modeling plays a central role in reliability engineering and operations research.
+For example, Wu (2024) models the dependence between the age and usage of items under
+two-dimensional warranty with copulas and derives preventive maintenance policies from the
+resulting failure process. Rahimi et al. (2026) characterize ordering policies for multi-item
+inventory systems with autocorrelated and cross-correlated demands and report substantial cost
+reductions relative to policies that treat demands as independent. In portfolio credit derivatives,
+the dependence among default times drives pricing, and Lei et al. (2023) estimate copula
+sensitivities that quantify how changes in the dependence level affect the output. Kim & Weber
+(2022) use copula-based models to assess worst-case average value at risk under tail uncertainty,
+with an application to cyber risk. Cyber-risk research has also quantified the losses caused by
+security failures: Eling & Wirfs (2019) analyze actual cyber-event costs using operational risk
+data, and Dacorogna et al. (2023) develop a method for modeling heavy-tailed cyber losses. For
+security planning, Paul & Zhang (2021) develop a two-stage stochastic programming model for
+allocating prevention, detection, containment, and intelligence resources, and Li et al. (2026)
+represent dependent compromises in multi-tenant cloud systems and connect joint risk assessment
+to defensive decisions. Where these studies model dependence, it is among inputs, losses, or
+compromised assets. In a safeguard system, the relevant dependence is among the decisions of
+components that screen the same action.
+Safeguard execution is also related to sequential testing, where costly tests are ordered to
+determine a system’s state. Rostami et al. (2019) develop exact methods for testing serial systems
+under precedence constraints, and Rostami & Rostami (2026) study exact sequencing in sparse
+precedence networks. Agnetis et al. (2022) consider testing and search when limited resources
+and deadlines restrict the available decisions. In the safeguard setting studied here, the decisions
+include the component subset, execution order, reviewer, and final response to each first-stage
+pattern. The objective accounts for invocation costs and the consequences of both security misses
+and false blocks, using separate joint decision distributions for unauthorized and authorized
+actions. Stochastic comparisons provide a complementary way to assess system designs under
+structural assumptions on dependence. Navarro & Fernández-Martínez (2021) use copulas
+and distortion functions to compare redundancy mechanisms and determine where redundant
+components should be placed. Argyris et al. (2025) derive conditions for multidimensional
+stochastic dominance between discrete joint distributions with respect to specified classes of
+value functions.
+Correlated errors among LLMs have been documented (Kim et al., 2025), and recent work
+shows that layered LLM defenses can be defeated jointly by staged attacks (McKenzie et al.,
+2026). To our knowledge, however, the joint distribution of safeguard decisions has not been
+modeled and used to compare alternative combination policies or to design how safeguards are
+selected, ordered, and combined. This gap matters because the effect of the joint distribution on
+system risk and cost depends on the policy that combines the decisions. In layered screening, the
+3
+joint outcomes of the selected safeguards determine system errors, while their execution order
+determines how often each safeguard is invoked. In a cascade, the referral rule determines when
+the reviewer is used and which actions rely on its decision. These considerations raise two related
+questions: (i) how can joint safeguard decisions be modeled and translated into policy-specific
+measures of risk and cost; and (ii) how can these measures be used to select safeguards, execution
+orders, reviewers, and referral rules under operational constraints? To address these questions,
+we introduce two policy classes for the design of AI-agent action safeguards, building on layered
+screening and cascade verification used in practice.Sequential layered screeningselects and
+orders a subset of safeguards, stopping when any selected safeguard returns BLOCK.Selective
+verificationselects first-stage safeguards and a reviewer, then assigns each joint first-stage
+decision pattern to automatic allowance, automatic blocking, or review. These classes include
+fixed layered configurations and flag-to-review cascades as special cases. We assess and optimize
+their risk and operating cost using the class-conditional joint distribution of safeguard decisions.
+Our main contributions are as follows.
+• Dependence-aware assessment and design formulation.We develop a copula-based framework
+for modeling the class-conditional joint distribution of safeguard decisions. For sequential
+layered screening and selective verification, we derive system-level miss and false-block
+probabilities and establish stochastic comparisons that characterize how dependence among
+safeguard decisions affects policy risk and invocation costs. For selective verification, we
+prove that a policy’s error probabilities respond monotonically to stronger dependence if
+and only if its final-decision rule is supermodular or submodular, and its referrals and review
+cost do so if and only if its referral rule is.
+• Dependence-Aware Policy Optimization Algorithms (DAPOA).We formulate two design
+problems: minimizing expected total cost subject to risk requirements, and minimizing the
+security-miss probability subject to a cost constraint. For a fixed first stage and reviewer, we
+show that the optimal routing map is a two-threshold rule in the first-stage likelihood ratio.
+DAPOA uses subset dynamic programming to select safeguards and their execution order
+for sequential layered screening, and binary optimization to select safeguards, reviewers,
+referral regions, and final decisions for selective verification. The searches return an optimal
+feasible policy within the admitted classes for the supplied class-conditional distributions.
+The algorithms are implemented in the open-source (DAPOA)1 package.
+• Numerical and empirical evaluation.Through numerical experiments, we identify when
+dependence materially changes estimated system risk, policy feasibility, and the optimal
+design. Using agent-action safeguard data, we evaluate the fitted joint model and compare
+the risk and operating costs of layered, cascade, and selective verification policies. The results
+show how joint safeguard outcomes can be translated into safeguard selection, execution order,
+and review decisions, and delineate the conditions under which accounting for dependence
+improves the risk–cost tradeoff.
+The remainder of the paper is organized as follows. Section 2 defines the safeguard policies,
+1https://github.com/MSMCI-lab/DAPOA
+4
+introduces the class-conditional copula representation, and formulates the risk-constrained design
+problems. Section 3 establishes the dependence comparisons, characterizes the verification
+policies whose risk responds monotonically to dependence, derives the structure of optimal
+routing maps, and develops exact algorithms for safeguard selection, execution ordering, and
+selective verification. Sections 4 and 5 present the numerical and empirical studies, respectively.
+Section 6 discusses the findings, limitations, and future research directions. The Supplementary
+Material provides copula definitions, family-specific calculations, and supplementary empirical
+methods and results.
+Table 1 summarizes the main notation used throughout the paper.
+Table 1: Main notation.
+Notation Definition
+Y True authorization status:Y = 1for an unauthorized action andY = 0for an
+authorized action
+m, jNumber of available safeguards and safeguard index
+Dj,D,d Decision of safeguardj; potential decision vectorD= ( D1,...,D m); and a
+realizationd∈{0,1} m
+Py, pjy, qy(d) Class-conditional probabilityPy(·) = Pr(·|Y =y); marginal blocking probabil-
+ityp jy =P y(Dj = 1); and joint pattern probabilityqy(d) =P y(D=d)
+π, Gπ,P Operating policy; final system decision; and admissible policy classP =PL∪PR
+M(π), B(π)Security-miss probabilityP 1(Gπ = 0)and false-block probabilityP 0(Gπ = 1)
+cj, ωCost of invoking safeguardjand target proportion of unauthorized actions
+K(π;ω), J(π;ω)Expected operating cost and total expected cost, respectively
+ℓM, ℓB Expected losses per security miss and false block
+α, β, bUpper bounds on miss and false-block probabilities and operating-cost budget
+S, σSelected safeguard set and its execution order under layered screening
+F, h, H, W First-stage safeguard set; reviewer index; reviewer decisionH =Dh; and first-
+stage patternW= (D j :j∈F)
+Aπ,B π,Q π Automatic-allow, automatic-block, and review regions under selective verification
+sy(w), ty(w) First-stage pattern probability Py(W =w)and joint probability Py(W =
+w,H= 1)that the pattern occurs and the reviewer blocks
+λ(w), κy First-stage likelihood ratio and the reviewer’s conditional BLOCK rate
+2 A Dependence-Aware Framework for Safeguard Risk Assess-
+ment and Design
+This section first defines the system error measures and the two classes of safeguard policies.
+Then, we introduce how the copula can be used to model joint distributions of safeguard decisions.
+Finally, we define the cost criteria and formulate the corresponding policy-design problems.
+2.1 System error measures and safeguard policies
+Consider a candidate action proposed by an LLM agent. Let Y∈ { 0, 1} denote its true
+authorization status, whereY = 1indicates that the action violates the trusted authorization
+specification andY = 0indicates that it is authorized. Suppose thatm≥ 2safeguard components
+5
+are available, each returning a binary decision
+Dj =
+
+
+
+0,if safeguardjreturnsallow,
+1,if safeguardjreturnsblock.
+The vectorD= ( D1,...,D m)collects the decisions that the safeguards would return if all
+were applied to the same candidate under a fixed evaluation protocol. Apolicyπ specifies
+which components to invoke and how the observed decisions determine the final system decision
+Gπ∈{ 0, 1}, whereGπ = 1denotesblockand Gπ = 0representsallow. The policy is fixed
+before a new candidate is evaluated and cannot observe the true labelY or the decisions of
+safeguards that have not been invoked. Writing
+Py(·) = Pr(·|Y=y), y∈{0,1},
+we define the security miss and false-block probabilities as
+M(π) =P 1(Gπ = 0), B(π) =P 0(Gπ = 1).
+The first is the probability of allowing an unauthorized action; the second is the probability of
+blocking an authorized action.
+In the following, we describe the proposed two policy classes.
+• Sequential layered screening.A policy selects a nonempty subset S⊆ {1,...,m} of
+safeguards and an invocation orderσ = (j1,...,j |S|). The action is blocked as soon as any
+selected safeguard returns BLOCK and is allowed only if all selected safeguards return
+ALLOW. Thus, the final decision is
+Gπ =1
+
+
+
+∑
+j∈S
+Dj≥1
+
+
+.
+The security miss and false-block probabilities are
+M(π) =P 1(Dj = 0,∀j∈S), B(π) = 1−P 0(Dj = 0,∀j∈S).
+The selected set determines the final decision and its error probabilities. The invocation
+order determines which safeguards are reached before termination and therefore affects
+operating cost, which is defined in Section 2.3. FixingS and σ recovers a fixed layered
+screening configuration in practice.
+• Selective verification.A two-stage policy selects a nonempty first-stage setF⊊{ 1,...,m}
+and a reviewerH = Dh, whereh /∈F. All safeguards inF are invoked, producing the
+binary decision patternW = (Dj :j∈F )in a fixed order. The pattern space{0, 1}|F| is
+partitioned into an automatic-allow regionAπ, an automatic-block regionBπ, and a review
+6
+regionQπ. The reviewer is invoked only whenW∈Q π, in which case its decision is final:
+Gπ =1{W∈B π}+1{W∈Q π}H.(2.1)
+The corresponding error probabilities are
+M(π) =P 1(W∈A π) +P 1(W∈Q π,H= 0),(2.2)
+B(π) =P 0(W∈B π) +P 0(W∈Q π,H= 1).(2.3)
+The design variables areF,h, and the routing partition.
+Theflag-to-reviewcascade is a special case of the selective verification. It automatically
+allows the unanimous-ALLOW pattern, refers every pattern containing at least one BLOCK
+to the reviewer, and does not automatically block any pattern. The final decision is
+GπF =1
+
+
+
+∑
+j∈F
+Dj≥1
+
+
+H.(2.4)
+Its security miss and false-block probabilities are
+M(π F) =P 1
+
+∑
+j∈F
+Dj = 0
+
+ +P 1
+
+∑
+j∈F
+Dj≥1,H= 0
+
+,
+B(πF) =P 0
+
+∑
+j∈F
+Dj≥1,H= 1
+
+.
+We retain the flag-to-review cascade as a practical baseline and as the policy used for the
+analytical cascade comparison. The proposed framework, however, searches the broader
+selective verification class, which can treat different flagged patterns differently and can
+also review the unanimous-ALLOW pattern.
+2.2 Copula modeling of joint safeguard decisions
+Because the dependence among safeguard misses on unauthorized actions may differ from that
+among false blocks on authorized actions, we propose to model the joint safeguard decisions
+separately for the two classes.
+Specifically, letujy denote the conditional marginal distribution function ofDj, forj =
+1,...,m and y∈{ 0, 1}. A copulaCy provides a representation of the class-conditional joint
+distribution:
+Py(D≤d) =C y(u1y(d1),...,u my(dm)).
+In particular, the probability of a binary decision patternd∈{ 0, 1}m is obtained by finite
+differences:
+qy(d) =P y(D=d) =
+∑
+ϵ∈{0,1}m
+(−1)|ϵ|Cy(u1y(d1−ϵ 1),...,u my(dm−ϵm)),(2.5)
+7
+where|ϵ| = ∑jϵj, ujy(−1) = 0, ujy(0) = 1−p jy, andujy(1) = 1(Joe, 2014). The copula
+families provide flexible representations of the pattern probabilitiesq0 and q1, which determine
+the risk and cost measures used in policy design.
+For the policy classes discussed in this work, we present the explicit representations below.
+• For the sequential layered screening, letS ={j1,...,j s}, wheres =|S|. Letpjy =Py(Dj =
+1), the security miss and false-block probabilities can be represented as
+M(π) =C 1(1−p j1,1,...,1−p js,1), B(π) = 1−C 0(1−p j1,0,...,1−p js,0).
+Under the independence, these expressions reduce to
+M Π(π) = ∏
+j∈S
+(1−p j1), B Π(π) = 1− ∏
+j∈S
+(1−p j0).
+•For selective verification, define, forw∈{0,1} |F|,
+sy(w) =P y(W=w) =
+∑
+d∈{0,1}m:
+(dj)j∈F =w
+qy(d),
+ty(w) =P y(W=w,H= 1) =
+∑
+d∈{0,1}m:
+(dj)j∈F =w, dh=1
+qy(d),
+(2.6)
+the probability of the first-stage pattern and the joint probability that the pattern occurs
+and the reviewer returns BLOCK. The referral probability isPy(W∈Q π) =∑w∈Qπsy(w);
+for the flag-to-review cascade withF={j 1,...,j f}it equals
+Py(W̸=0) = 1−s y(0) = 1−C y(1−p j1,y,...,1−p jf,y).
+The error probabilities in Eqs. (2.2)–(2.3) can be written as
+M(π) =
+∑
+w∈Aπ
+s1(w) +
+∑
+w∈Qπ
+{s1(w)−t 1(w)}, B(π) =
+∑
+w∈Bπ
+s0(w) +
+∑
+w∈Qπ
+t0(w).
+Clearly, dependence can affect not only assessed risk but also the preferred component
+configuration and routing policy.
+In this work, we consider four popular copula families: Gaussian, Student-t, Clayton, and
+Gumbel copulas (Joe, 2014). The Gaussian and Student-t families permit heterogeneous positive
+and negative association, with the latter also allowing symmetric tail dependence. Clayton and
+Gumbel capture positive dependence with lower- and upper-tail asymmetry, respectively. The
+copula definitions and parameter specifications are provided in the Supplementary Material.
+2.3 Costs and safeguard design
+Safeguard design must account for security misses, false blocks, and the cost of invoking
+components. A policy determines both its error probabilities and which safeguards are invoked
+8
+on a given action; the latter may vary because of early stopping or referral. We first define
+expected operating cost and the costs of incorrect decisions, then formulate two constrained
+design problems.
+Let cj≥ 0denote the operating cost incurred each time safeguardj is invoked, measured in
+monetary or appropriately normalized computational units. For a potential decision vectord,
+letSπ(d)denote the set of safeguards that policyπ would invoke. The set actually invoked on a
+candidate is thus the random setSπ(D). Because invocation can depend on earlier decisions,
+this set may vary across candidates. The expected operating cost per candidate is
+K(π;ω) =
+m∑
+j=1
+cj [ωP1{j∈S π(D)}+ (1−ω)P 0{j∈S π(D)}],
+where ω∈ [0, 1]is the proportion of unauthorized actions in the target deployment population.
+Equivalently, in terms of the pattern probabilities,
+K(π;ω) =
+∑
+d∈{0,1}m
+
+ ∑
+j∈Sπ(d)
+cj
+
+ [ωq1(d) + (1−ω)q 0(d)].
+We treat eachcj as fixed under the evaluation protocol. When token usage varies across
+candidates, we use the mean cost as an approximation. We further consider costs of incorrect
+system decisions. Let ℓM≥ 0and ℓB≥ 0denote the loss per security miss and false block,
+respectively. The total expected cost is
+J(π;ω) =K(π;ω) +ωℓ MM(π) + (1−ω)ℓ BB(π).(2.7)
+For the two policy classes, we have the following:
+• Sequential layered screening. For an ordered policyσ = (j1,...,j |S|), safeguard jr is
+invoked only if all preceding safeguards return ALLOW. Hence,
+K(π;ω) =
+|S|∑
+r=1
+cjr
+[
+ωP1(Dj1 =···=D jr−1 = 0) + (1−ω)P 0(Dj1 =···=D jr−1 = 0)
+]
+,
+where both probabilities equal one forr= 1. Its total expected cost is
+J(π;ω) =K(π;ω) +ωℓ MM(S) + (1−ω)ℓ BB(S).
+• Selective verification. For the first-stage setF and reviewerH, the expected operating
+cost is
+K(π;ω) =
+∑
+j∈F
+cj +ch
+[
+ωP1(W∈Q π) + (1−ω)P 0(W∈Q π)
+]
+.(2.8)
+Its total expected cost follows from Eq.(2.7). For the flag-to-review special case, Eq.(2.8)
+becomes
+K(πF;ω) =
+∑
+j∈F
+cj +ch
+[
+ωP1(W̸=0) + (1−ω)P 0(W̸=0)
+]
+.
+9
+Risk-constrained safeguard design.Let P =PL∪PR be the finite set of admissible policies.
+A policy inPL specifies a safeguard subsetS and an invocation orderσ. A policy inPR specifies
+a first-stage setF, a reviewerh, and a routing map that assigns each first-stage decision pattern
+to an automatic decision or to the reviewer, whose decision is then final. In practice,P can be
+constructed by retaining only policies that satisfy the application’s operational requirements.
+These may restrict reviewer eligibility, limit the number of selected safeguards, or prescribe the
+routing action for particular patterns. When admissible, single-safeguard rules and fixed layered
+and flag-to-review configurations are included as comparison policies. The class specific copula
+modeling provides the probabilities needed to evaluate the risk and expected cost of each policy.
+In practice, selecting a safeguard policy depends on how security, service disruption, and
+operating cost are prioritized. Minimizing total expected cost accounts for safeguard invocation
+and the consequences of both types of error, but the resulting policy may still exceed an
+acceptable miss or false-block rate. Our first formulation therefore imposes explicit limits on
+both errors. When preventing unauthorized actions is the primary goal, the second formulation
+minimizes the miss probability subject to an operating budget and a false-block limit.
+Specifically, the first objective is to minimize total expected cost subject to limits on both
+types of system error:
+πJ∈arg min
+π∈P
+J(π;ω)
+subject toM(π)≤α, B(π)≤β.
+(2.9)
+Here α and β are prespecified upper bounds on the security-miss and false-block probabilities,
+respectively. The second problem minimizes the security-miss probability subject to an expected
+operating-cost budget and a false-block limit:
+πM∈arg min
+π∈P
+M(π)
+subject toK(π;ω)≤b, B(π)≤β.
+(2.10)
+Here b is an operating-cost budget. A problem is infeasible if no policy inP satisfies its
+constraints.
+3 Dependence Effects and Dependence-Aware Policy Optimiza-
+tion
+This section has three purposes. First, we establish how dependence changes the risk and
+operating cost of fixed safeguard architectures when component-level performance is held
+constant (Sections 3.1 and 3.2). For layered screening the direction of the change is always
+determined; for selective verification we characterize exactly which policies have a determined
+direction. Second, we derive the structure of the optimal routing map for a fixed first stage
+and reviewer (Section 3.3): it is a two-threshold rule in the first-stage likelihood ratio, and the
+reviewer is used only when its cost is below an explicit function of its conditional error rates
+and the error losses. Third, we present the optimization algorithms that constitute DAPOA.
+These algorithms incorporate copula-based modeling of dependence among safeguards to select
+10
+components and operating rules that optimize the specified objectives subject to the stated
+constraints.
+3.1 Dependence effects in sequential layered screening
+For each authorization classy∈{ 0, 1}, consider two joint distributionsP (1)y and P (2)y with
+identical marginals, and letD(r)y ∼P (r)y ,r= 1,2. We say thatD (2)y is smaller thanD(1)y in the
+lower-orthant order if
+D(2)y ≤lo D(1)y ⇐⇒P (2)y (D≤d)≥P (1)y (D≤d)for everyd∈R m,(3.1)
+where≤lo denotes the lower-orthant order (Shaked & Shanthikumar, 2007). This ordering implies
+that any subset of safeguards is at least as likely to issue simultaneous ALLOW decisions under
+P (2)y as underP (1)y . Related stochastic comparisons have been studied for reliability systems
+with dependent components (Navarro & Fernández-Martínez, 2021).
+For a fixed layered-screening policyπ with selected setS, s =|S|, let(j1,...,j s)denote its
+ordered safeguards. Under distributionP (r)y , letN (r)π denote the random number of safeguards
+invoked. The corresponding total invocation cost is
+V (r)π =
+N(r)π∑
+k=1
+cjk,
+wherec j≥0is the fixed cost of invoking safeguardj.
+Proposition 3.1.Suppose Eq. (3.1) holds fory = 0, 1. Then, for every layered-screening policy
+π,
+M (1)(π)≤M (2)(π), B (1)(π)≥B (2)(π).
+Moreover, for eachy∈{0,1},
+N (1)π |Y=y≤ stN (2)π |Y=y, V (1)π |Y=y≤ stV (2)π |Y=y.
+Consequently,
+K(1)(π;ω)≤K (2)(π;ω), ω∈[0,1].
+The proof is given in Section S2.1 of the Supplementary Material. Theorem 3.1 shows that
+dependence among safeguard decisions affects both system reliability and operating cost. Under
+the specified lower-orthant ordering, a greater probability of simultaneous ALLOW decisions
+leads to a higher security-miss probability and expected invocation cost, but a lower false-block
+probability.
+Table 2 summarizes sufficient parameter orderings under which the four copula families
+considered in Section 2.2 satisfy the lower-orthant ordering in Theorem 3.1. The full verifications
+are provided in Section S2.4 of the Supplementary Material; see also Joe (2014).
+11
+Table 2: Sufficient within-family parameter conditions for the lower-orthant ordering with fixed
+component margins.
+Copula family Parameter ordering from model 1 to model 2 Ordering Eq. (3.1)
+GaussianΣ (1)y ⪯off Σ(2)y ✓
+Student-tΣ (1)y ⪯off Σ(2)y andν (1)y =ν (2)y ✓
+Clayton0≤θ (1)y ≤θ (2)y ✓
+Gumbel1≤θ (1)y ≤θ (2)y ✓
+Here y∈{ 0, 1} denotes the authorization class andr∈{ 1, 2} indexes the two dependence models.Σ(r)y is the
+positive-definite copula correlation matrix, andΣ(1)y ⪯off Σ(2)y means[Σ (1)y ]ij≤ [Σ(2)y ]ij for everyi̸ = j. The
+Student-tparameterν (r)y >0denotes degrees of freedom;θ (r)y is the Clayton or Gumbel dependence parameter.
+3.2 Dependence effects in selective verification
+Unlike layered screening, selective verification assigns different actions to different first-stage
+decision patterns. Its error probabilities depend on the automatic-block and review regions
+together with the reviewer’s decision, while its operating cost depends on the probability of
+referral. We therefore use the supermodular order to relate changes in dependence to the
+interaction structure of the decision and referral rules.
+For two distributions of(W,H)on{0,1} |F|+1, writeP (1)y ≤smP (2)y if
+E(1)y [a(W,H)]≤E (2)y [a(W,H)]
+for every supermodular functiona (Shaked & Shanthikumar, 2007). A real-valued function on a
+binary decision space is supermodular when every two-coordinate cross-difference
+∆ija(z) =a(0,0,z) +a(1,1,z)−a(1,0,z)−a(0,1,z)
+is nonnegative, with the remaining coordinates fixed atz. It is submodular when all these
+differences are nonpositive.
+Theorem 3.2.Fix a selective verification policyπ. LetGπ be its final-decision rule in Eq.(2.1),
+and letrπ(w) =1{w∈Q π}be its referral indicator.
+a) The following are equivalent:
+(i)G π is supermodular (submodular);
+(ii)M (2)(π)≤M (1)(π)(≥) wheneverP (1)1 ≤smP (2)1 ;
+(iii)B (2)(π)≥B (1)(π)(≤) wheneverP (1)0 ≤smP (2)0 .
+b) The following are equivalent:
+(i)r π is supermodular (submodular);
+(ii)P (2)y (W∈Q π)≥P (1)y (W∈Q π)(≤) wheneverP (1)y ≤smP (2)y , fory= 0,1.
+In this case,K(2)(π;ω)≥K (1)(π;ω)(≤) wheneverP (1)y ≤smP (2)y fory = 0, 1, by Eq.(2.8).
+12
+The proof is given in Section S2.2 of the Supplementary Material. Theorem 3.2 shows that
+in each case the sign structure of the rule is the sufficient and necessary condition: a policy’s
+errors move in the same direction under every supermodular increase in dependence if and
+only if its final-decision rule is supermodular or submodular, and its referrals do so if and only
+if its referral rule is. A supermodular final-decision rule increases the BLOCK probability in
+each authorization class, reducing security misses while increasing false blocks; a submodular
+rule gives the opposite comparisons. Operating cost follows the referral rule: it increases for a
+supermodular referral indicator and decreases for a submodular one.
+We present the following example for illustration.
+Example 3.1.Assume there are two first-stage safeguards and a reviewer. Consider the
+following two scenarios:
+•Let the policy refer only the pattern11and automatically allow00,10, and01. Then
+Aπ ={00,10,01},B π =∅,Q π ={11},
+so Gπ(d1,d 2,h ) = d1d2h and rπ(d1,d 2) = d1d2 are both supermodular. Fory = 0, 1, let
+P (1)y assign probability1/8to each configuration( D1,D 2,H ). Obtain P (2)y by adding
+ε = 0.025to the unconditional cell probabilities of(0, 0, 1)and(1 , 1, 1)and subtracting it
+from(1,0,1)and(0,1,1). Each component margin remains1/2, andP (1)y ≤smP (2)y .
+The BLOCK probability increases from0.125to0 .150and the referral probability from
+0.250to0 .275in each class. Thus the changes have exactly the directions shown by
+Theorem 3.2:
+M (1)(π) = 0.875−→M (2)(π) = 0.850,
+B(1)(π) = 0.125−→B (2)(π) = 0.150,
+K(2)(π;ω)−K (1)(π;ω) = 0.025ch>0,0≤ω≤1.
+•Let the policy refer any pattern other than00:
+AπF ={00},B πF =∅,Q πF ={10,01,11}.
+The referral indicatorrπF(d1,d 2) =d1∨d 2 is submodular. Thus Theorem 3.2 shows fewer
+referrals and lower operating cost under the same dependence change. Indeed, the referral
+probability falls from0.750to0.725in each class.
+Note that the BLOCK-decision functionGπF(d1,d 2,h ) =h(d1∨d 2)has∆ 12GπF =−1at
+H = 1but∆ 1HGπF = 1at D2 = 0, so it is neither supermodular nor submodular. By
+Theorem 3.2(a), the direction of its error probabilities under supermodular increases is
+therefore not determined; Example 3.2 below exhibits both directions.
+For the flag-to-review cascade, we have the following result.
+Corollary 3.3.Let πF be the flag-to-review cascade in Eq.(2.4). Its referral indicatorrπF(w) =
+1−∏j∈F (1−wj)is submodular, so under every classwise supermodular increase in dependence
+13
+its referral probabilities and operating cost cannot increase. If|F|≥ 2, its final-decision rule
+GπF(w,h ) = hrπF(w)is neither supermodular nor submodular, so by Theorem 3.2(a) the
+direction of its miss and false-block probabilities is undetermined: some supermodular increases
+raise them and others lower them.
+The following example exhibits the two opposite directions explicitly for a cascade with two
+first-stage safeguards.
+Example 3.2.Take F ={1, 2} and refer a pattern whenever at least one first-stage safeguard
+returns BLOCK, allowing it otherwise. Thus
+GπF(d1,d 2,h) =h(d 1∨d 2).
+This function is neither supermodular nor submodular:∆12GπF =−1when h = 1, whereas
+∆1HGπF = 1whend 2 = 0.
+In each class, let the baseline assign probability1/8to every configuration( D1,D 2,H ).
+Construct two alternatives, each from this baseline, using a mass transfer of sizeε = 0.025. The
+D1–D2 transfer addsε to(0 , 0, 1)and(1 , 1, 1)and subtracts it from(1, 0, 1)and(0 , 1, 1). The
+D1–H transfer addsε to(0 , 0, 0)and(1 , 0, 1)and subtracts it from(1, 0, 0)and(0 , 0, 1). Both
+preserve the component margins and increase the class-conditional distribution in supermodular
+order. Applying the same transfer in both classes gives
+Py(W∈Q πF)M(π F)B(π F) ∆K
+Uniform baseline0.750 0.625 0.375 0
+D1–D2 transfer0.725 0.650 0.350−0.025c h
+D1–Htransfer0.750 0.600 0.400 0
+where∆ K is the change in operating cost from the baseline and both first-stage safeguards are
+always invoked.
+The first transfer reduces referrals and reviewer cost; the second leaves both unchanged,
+consistent with Theorem 3.3. Their effects on misses and false blocks reverse because the
+transfers act at cross-differences ofGπF with opposite signs. Thus supermodular ordering alone
+gives no common direction for these errors under this routing rule, as Theorem 3.2(a) implies
+for any rule that is neither supermodular nor submodular.
+3.3 Dependence-Aware Policy Optimization Algorithms (DAPOA)
+This section develops DAPOA, a unified procedure for optimizing safeguard policies. The
+algorithms select safeguards, execution orders, reviewers, and routing decisions as applicable to
+each policy class. An objective selectorO∈{J,M} determines which design problem is solved:
+O =J gives the minimum-total-cost problem Eq.(2.9), andO =M gives the minimum-miss
+problem Eq. (2.10).
+DAPOA searches the two policy classes separately and compares their best feasible policies
+under the selected objective. For sequential layered screening, it first finds the least-cost execution
+14
+order for every candidate safeguard subset and then selects a feasible subset. For selective
+verification, it evaluates candidate first-stage sets and reviewers and optimizes the allow, block,
+or refer assignment of each first-stage decision pattern. Both searches use the fittedq0 and q1 in
+Eq. (2.5) to evaluate system errors and operating cost.
+3.3.1 Selecting and ordering layered safeguards
+For a fixed subsetS, layered screening allows an action exactly when every safeguard inS returns
+ALLOW, and, under any execution order, a safeguard is invoked exactly when every safeguard
+before it has returned ALLOW. The probability that a set of safeguards jointly returns ALLOW
+therefore determines both the error probabilities ofS and the expected cost of each execution
+order. ForS⊆{1,...,m}, define the class-conditional by
+ay(S) =
+∑
+d:dj=0 (j∈S)
+qy(d),
+and the deployment-mixture probability:
+¯a(S) =ωa1(S) + (1−ω)a 0(S), (3.2)
+where ay(∅) = 1. LetK∗(S)be the minimum expected operating cost over all execution orders
+of S. If safeguardj is placed last, it is invoked only when every safeguard inS\{j} returns
+ALLOW. Its contribution to expected cost is thereforecj¯a(S\{j} ). Note that the probability
+¯a(S\{j} )depends only on their set, not on their order. Thus, those safeguards should be
+arranged at their minimum expected cost. Minimizing over the choice ofjgives
+K∗(S) = min
+j∈S
+{K∗(S\{j}) +c j¯a(S\{j})}, S̸=∅, (3.3)
+Here K∗(∅) = 0. Therefore, a cost-minimizing order can be achieved by choosing a minimizing
+jin the recurrence Eq. (3.3) as the last safeguard and repeating this step forS\{j}.
+The feasible selected sets for the two design objectives are
+FJ ={S∈S adm :a 1(S)≤α,1−a 0(S)≤β},
+FM ={S∈S adm :K∗(S)≤b,1−a 0(S)≤β}, (3.4)
+whereSadm is the prespecified collection of allowable nonempty safeguard subsets of{1,...,m} .
+ForO=J, the terminal subset minimizes
+K∗(S) +ωℓ Ma1(S) + (1−ω)ℓ B{1−a 0(S)}overS∈F J.
+ForO = M, it minimizesa1(S)over S∈F M. Algorithm 1 solves both design problems for
+sequential layered screening with early stopping. The returned policy invokes safeguards in the
+recovered order and stops at the first BLOCK.
+Givenq0 andq1, all subset probabilitiesay(S)can be computed inO(m2m)time. Algorithm 1
+then evaluates2m states andm2m−1 transitions. Its time complexity isO(m2m). Although
+15
+the running time of Algorithm 1 grows exponentially withm, exact selection and ordering
+are practical. Published safeguard systems include configurations with a modest number of
+components, such as the two-scanner combination evaluated for LlamaFirewall and the two-stage
+cascade used in Constitutional Classifiers++ (Chennabasappa et al., 2025; Cunningham et al.,
+2026). Exact optimization is practical for candidate pools of this scale: withm = 5, the layered
+recurrence visits 32 subsets and evaluates 80 transitions.
+Algorithm 1Optimal policy and objective value for sequential layered screening
+Input:a 0,a 1,(c j)mj=1,ω,β,O∈{J,M},S adm;α,ℓ M,ℓ B ifO=J, andbifO=M
+Output:(π ∗L,v∗L); orInfeasible
+1:¯a(S)←ωa 1(S) + (1−ω)a 0(S)for allS
+2:K ∗(∅)←0
+3:fors= 1,...,mdo
+4:for allS⊆{1,...,m}with|S|=sdo
+5:j ∗(S)∈arg min j∈S{K∗(S\{j}) +c j¯a(S\{j})}
+6:K ∗(S)←K ∗(S\{j ∗(S)}) +c j∗(S)¯a(S\{j∗(S)})
+7:end for
+8:end for
+9:ifO=Jthen
+10:F←F J from Eq. (3.4)
+11:else
+12:F←F M from Eq. (3.4)
+13:end if
+14:ifF=∅then
+15:returnInfeasible
+16:end if
+17:ifO=Jthen
+18:S ∗∈arg min S∈F{K∗(S) +ωℓ Ma1(S) + (1−ω)ℓ B[1−a 0(S)]}
+19:v ∗L←K∗(S∗) +ωℓ Ma1(S∗) + (1−ω)ℓ B[1−a 0(S∗)]
+20:else
+21:S ∗∈arg min S∈F a1(S);v ∗L←a 1(S∗)
+22:end if
+23:T←S ∗; initializeσ∗ as the empty sequence
+24:whileT̸=∅do
+25:j←j ∗(T); prependjtoσ ∗
+26:T←T\{j}
+27:end while
+28:return(π ∗L,v∗L)withπ ∗L = (S∗,σ∗)
+3.3.2 Selecting the first stage, reviewer, and routing map
+To optimize selective verification, we consider each admissible first-stage–reviewer pair(F,h ),
+with h /∈F, and optimize its routing map. A routing map assigns each first-stage pattern
+w∈{ 0, 1}|F| to automatic ALLOW, automatic BLOCK, or REVIEW. For a referred pattern,
+the reviewer’s decision determines the final outcome. Every safeguard inF is invoked before
+routing; reviewerh is invoked only for a referred pattern. WriteWF ={0, 1}|F| for the pattern
+space, and recallsy(w)andt y(w)from Eq. (2.6).
+16
+For a routing partition(Aπ,Bπ,Qπ)ofW F, we have,
+M(π) =
+∑
+w∈Aπ
+s1(w) +
+∑
+w∈Qπ
+{s1(w)−t 1(w)}, B(π) =
+∑
+w∈Bπ
+s0(w) +
+∑
+w∈Qπ
+t0(w),
+K(π;ω) =c F +ch
+∑
+w∈Qπ
+{ωs1(w) + (1−ω)s 0(w)},
+(3.5)
+wherec F =∑j∈F cj. ForO=J, the routing map for a fixed(F,h)solves
+min
+(Aπ,Bπ,Qπ)
+J(π;ω)subject toM(π)≤α, B(π)≤β,(3.6)
+where the minimum is over partitions ofWF. ForO=M, it solves
+min
+(Aπ,Bπ,Qπ)
+M(π)subject toK(π;ω)≤b, B(π)≤β.(3.7)
+The quantities in Eq.(3.5), and henceJ(π;ω)in Eq. (2.7), are linear in the indicators1{w∈B π}
+and1{w∈Q π}, so both problems are binary linear programs with two binary variables per
+pattern. Operational restrictions can be imposed by fixing the region of particular patterns.
+Structure of the optimal routing map.The binary programs Eqs.(3.6)–(3.7) return an
+optimal routing map for each pair(F,h ). It is interesting to study: which patterns are referred
+to the reviewer and why, whether a reviewer is worth including at all, and where dependence
+among the safeguards enters the routing decision. For a fixed pair(F,h), let
+φA(w) =ωℓ Ms1(w), φ B(w) = (1−ω)ℓ Bs0(w),
+φQ(w) =c h{ωs1(w) + (1−ω)s 0(w)}
++ωℓ M{s1(w)−t 1(w)}+ (1−ω)ℓ Bt0(w)
+(3.8)
+be the expected losses from automatically allowing, automatically blocking, or referring pattern
+w, the last including the reviewer’s invocation cost. Substituting Eq. (3.5) into Eq. (2.7) gives
+J(π;ω) =c F +
+∑
+w∈Aπ
+φA(w) +
+∑
+w∈Bπ
+φB(w) +
+∑
+w∈Qπ
+φQ(w),
+so each pattern contributes only the loss of the action assigned to it.
+Consider first minimizingJ(π;ω)over all routing maps for(F,h ), that is, Eq.(3.6) without
+the constraints. For a fixed(F,h ), total expected cost iscF plus the sum of the pattern losses in
+Eq. (3.8). Thus, in the absence of risk constraints, a routing map minimizesJ(π;ω)if and only
+if it assigns each pattern a choice with the smallest pattern loss. In particular, REVIEW is a
+minimum-loss choice atwif and only if its loss is no greater than either the automatic-ALLOW
+or automatic-BLOCK loss. These two comparisons are equivalent to
+ωℓMt1(w)≥c h{ωs1(w) + (1−ω)s 0(w)}+ (1−ω)ℓ Bt0(w),
+(1−ω)ℓ B{s0(w)−t 0(w)}≥c h{ωs1(w) + (1−ω)s 0(w)}+ωℓ M{s1(w)−t 1(w)}.
+(3.9)
+17
+If both inequalities are strict, REVIEW is the unique minimum-loss choice forw. Equality in
+either comparison means that REVIEW ties with at least one automatic decision. The first
+inequality compares REVIEW with automatic ALLOW. Reviewing avoids miss losses when the
+reviewer blocks an unauthorized action, but incurs invocation cost and may falsely block an
+authorized action. The second compares REVIEW with automatic BLOCK. Reviewing avoids
+false-block losses when the reviewer allows an authorized action, but incurs invocation cost
+and may allow an unauthorized action. If an unconstrained cost-minimizing routing map also
+satisfies M(π)≤α and B(π)≤β , it solves Eq.(3.6). The next result gives a likelihood-ratio
+threshold rule. LetH adm denote the set of admissible first-stage reviewer pairs:
+Hadm⊆{(F,h) :∅̸=F⊆{1,...,m}, h∈{1,...,m}\F}.
+This set incorporates operational restrictions on which safeguards may form the first stage and
+serve as the reviewer.
+Theorem 3.4.Fix( F,h )∈H adm. Suppose s0(w) > 0and ty(w) = κysy(w)for allwand
+y= 0,1, with constantsκ 0,κ 1∈[0,1]. Letλ(w) =s 1(w)/s0(w)and
+λA = min
+{(1−ω)ℓ B
+ωℓM
+, (1−ω)(c h +ℓBκ0)ω(ℓMκ1−ch)+
+}
+,
+λB = max
+{
+(1−ω)ℓ B
+ωℓM
+, (1−ω){ℓ B(1−κ 0)−c h}+
+ω{ch +ℓM(1−κ 1)}
+}
+,
+(3.10)
+with x/0 = +∞ for x> 0. ThenλA≤λ B, andJ(π;ω)is minimized over all routing maps for
+(F,h )by allowingwif λ(w)<λ A, referring it ifλA<λ (w)<λ B, and blocking it ifλ(w)>λ B.
+The interval(λA,λB)is nonempty if and only if
+ch<(κ 1−κ 0) ℓMℓBℓM +ℓB.(3.11)
+The proof is given in Section S2.3 of the Supplementary Material. Theorem 3.4 answers the
+three questions posed above. First, the reviewer is used for patterns whose likelihood ratio is
+intermediate. A pattern withλ(w)>λ B is strong evidence of an unauthorized action and is
+blocked automatically, and a pattern withλ(w)<λ A is strong evidence of an authorized action
+and is allowed automatically; only the ambiguous patterns between the two thresholds justify
+the reviewer’s cost. Second, by Eq.(3.11), the reviewer can be worth invoking for some pattern
+only if its cost is below(κ1−κ 0)ℓMℓB/(ℓM +ℓB). Third, dependence among the first-stage
+safeguards leaves the thresholds unchanged and enters only through the likelihood ratios.
+The following example illustrates Theorem 3.4.
+Example 3.3.Consider two first-stage safeguards and a reviewer, withω = 1/2, ℓM =ℓB = 1,
+and ch = 0.2. Assumeκ1 = 0.9and κ0 = 0.1. The pattern losses in Eq.(3.8), divided bys0(w),
+are
+φA(w)
+s0(w) = λ(w)2 , φQ(w)s0(w) = 0.15{1 +λ(w)}, φB(w)s0(w) = 12,
+and Eq.(3.10) givesλA = 3/7and λB = 7/3. Condition Eq.(3.11) holds becausech = 0.2< 0.4.
+18
+These quantities depend onω, the losses,ch, andκy, but not on the joint distribution of the
+first-stage decisions.
+Under Model 1, the first-stage patterns have class-conditional probabilities
+w 00 01 10 11
+s0(w) 0.40 0.20 0.20 0.20
+s1(w) 0.08 0.12 0.20 0.60
+with likelihood ratios0.2,0 .6,1, and3. The map minimizing J(π;ω)therefore allows00, refers
+01and10, and blocks11. Model 2 is obtained by adding0.09to the probabilities of00and11
+and subtracting0.09from those of01and10, separately in each authorization class, with the
+reviewer unchanged:
+w 00 01 10 11
+s0(w) 0.49 0.11 0.11 0.29
+s1(w) 0.17 0.03 0.11 0.69
+This transfer preserves every safeguard’s BLOCK probability and increases the distribution of
+(W,H )in the supermodular order of Section 3.2. Because it acts only onW,κ0 andκ1, and hence
+the thresholds, are unchanged. The likelihood ratio of01falls from0.6to0 .03/0.11 = 3/11<λ A,
+so its optimal assignment changes from REVIEW to automatic ALLOW. Patterns00and10
+keep their assignments, and11remains blocked because0.69/0.29≈2.38>λ B; see Figure 1.
+0.00 0.25 0.50 0.75 1.00
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+Pattern loss / s0(w)
+ALLOW REVIEW
+λA = 3/7
+00
+00
+01
+01 (λ = 3/11)
+10 (unchanged)
+2.25 2.50 2.75 3.00
+BLOCK
+λB = 7/3
+1111 (λ = 2.38)
+Likelihood ratio λ(w) = s1(w)/s0(w)
+Automatic ALLOW REVIEW Automatic BLOCK Model 1 Model 2
+Figure 1: Pattern losses, divided bys0(w), and likelihood-ratio thresholds. Hollow and filled
+markers show each pattern under Models 1 and 2, colored by its optimal assignment. The
+transfer leaves the component margins and the thresholds unchanged, but moves pattern01from
+the REVIEW region to the automatic-ALLOW region. The horizontal axis is broken between
+1.15and2.15.
+Algorithm 2 searches an optimal policy over both policy classes, i.e., sequential layered
+policies and selective verification policies. Note that Algorithm 1 returns the optimum over
+admissible sequential layered policies. For each admissible first-stage reviewer pair(F,h ), the
+binary program optimizes over all routing rules for that pair. Comparing these optima therefore
+gives a globally optimal policy within the specified candidate classes for the suppliedq0 and q1,
+19
+provided every routing program is solved to global optimality or established infeasible.
+Algorithm 2Optimal safeguard policy and its risk and cost metrics
+Input:q 0,q 1,(c j)mj=1,ω,β,O∈{J,M},S adm,H adm;α,ℓ M,ℓ B ifO=J, andbifO=M
+Output:An optimal policy and its metrics,Infeasible, orUnresolved
+1:Computea y(S)from Eq. (3.2)
+2:Run Algorithm 1; letr L be its output
+3:found←false
+4:ifr L = (π∗L,v∗L)then
+5:(π ∗,v∗)←(π ∗L,v∗L)
+6:found←true
+7:end if
+8:for all(F,h)∈H adm in a fixed orderdo
+9:Computes y(w)andt y(w)from Eq. (2.6)
+10:ifO=Jthen
+11:r←Solve[Eq.Eq.(3.6)]
+12:else
+13:r←Solve[Eq.Eq.(3.7)]
+14:end if
+15:ifr=Unresolvedthen
+16:returnUnresolved
+17:end if
+18:ifr= (A,B,Q)then
+19:π F,h←(F,h,A,B,Q)
+20:v F,h←J(π F,h;ω)ifO=J; otherwisev F,h←M(π F,h)
+21:iffound = falsethen
+22:(π ∗,v∗)←(π F,h,v F,h)
+23:found←true
+24:else
+25:ifv F,h <v∗ then
+26:(π ∗,v∗)←(π F,h,v F,h)
+27:end if
+28:end if
+29:end if
+30:end for
+31:iffound = falsethen
+32:returnInfeasible
+33:end if
+34:return(π ∗,M(π∗),B(π∗),K(π∗;ω),v ∗)
+Givenq0 andq1, the layered dynamic program takesO(m2m)time. The selective verification
+search considers at mostm(2m−1−1)nonempty first-stage–reviewer pairs(F,h )with h /∈F. For
+a pair withf =|F|, the routing program has2f first-stage patterns and2f+1 binary variables.
+Since each pattern has three routing choices, there are32f possible routing rules. For example,
+if F ={1, 2} and h = 3, thenf = 2. The four first-stage patterns yield eight binary variables
+and3 4 = 81possible routing rules. These procedures support practical use with safeguard pools
+of modest size.The policy search is performed once, offline, on calibration data; at deployment,
+each action is screened by the selected policy alone, so the cost of the search does not affect
+per-action screening time.
+20
+4 Numerical Study
+This section examines the effects of policy flexibility and dependence information on safeguard
+design. To assess policy flexibility, under each specified dependence model, we compare the
+optimal feasible policy in the baseline class (i.e., sequential layered screening and flag-to-review
+cascades) with the optimal feasible policy in the full class.
+Table 3: Specified heterogeneous safeguard pool.
+Safeguard Miss probability1−p j1 False blockp j0 cj
+D1 0.160 0.030 0.20
+D2 0.080 0.120 0.35
+D3 0.100 0.050 0.65
+D4 0.035 0.025 2.00
+We use four safeguards with the distinct marginal error probabilities and invocation costs in
+Table 3. SafeguardD1 is the least costly but has the largest miss probability. SafeguardD2
+detects more unauthorized actions, at the expense of more false blocks;D3 provides a different
+security–service trade-off. SafeguardD4 has the smallest error probabilities and the highest
+invocation cost. No component is designated as the reviewer in advance: every safeguard may be
+selected as a screen or as a reviewer in an admissible configuration. We examine two optimization
+problems withω = 0.10. The minimum-total-cost problem Eq.(2.9) imposes( α,β ) = (0.05, 0.10)
+and uses(ℓM,ℓB) = (100,10), giving
+J(π; 0.10) =K(π; 0.10) + 10M(π) + 9B(π).(4.1)
+At operating budgetb= 2, the minimum-miss problem Eq. (2.10) becomes
+minπ M(π)
+subject toB(π)≤0.10, K(π; 0.10)≤2.
+(4.2)
+Table 4 specifies eight class-conditional dependence scenarios. S0 is the independence model.
+S1 uses a Gaussian copula with moderate dependence in both classes measured by Kendall’s
+τy. S2 and S3 reverse which class has stronger dependence, using(τ0,τ 1) = (0.10, 0.50)and
+(0.50, 0.10), respectively. S4–S6 replace the Gaussian copula in S1 with Student-t, Clayton, and
+Gumbel copulas while holdingτ0 =τ1 = 0.30. For the Gaussian and Student-t scenarios S1–S4,
+we set homogeneous correlationρy = sin(πτy/2); the Student-t degrees of freedom are fixed at
+five. The Clayton and Gumbel parameters areθy = 2τy/(1−τy)and θy = 1/(1−τy), respectively.
+S7 uses pair-specific Gaussian correlations to examine dependence that varies across safeguard
+pairs. Its Gaussian correlation matrices are specified by
+Σy = diag(1−b 21y,...,1−b 24y) +byb⊤y,
+b0 = (0.80,0.70,0.30,0.55) ⊤,b 1 = (0.35,0.85,0.75,0.45) ⊤.
+The baseline optimizes over every nonempty ordered layered-screening policy and every
+21
+Table 4: Dependence specifications with the same margins and costs.
+Scenario Copulaτ 0 τ1 Scenario Copulaτ 0 τ1
+S0 Independence 0.00 0.00 S4 Student-t 5 0.30 0.30
+S1 Gaussian 0.30 0.30 S5 Clayton 0.30 0.30
+S2 Gaussian 0.10 0.50 S6 Gumbel 0.30 0.30
+S3 Gaussian 0.50 0.10 S7 Gaussian, pair-specific – –
+flag-to-review cascade with nonempty first-stage setF and reviewerh /∈F. The full class retains
+the layered policies and permits each first-stage pattern to be automatically allowed, blocked,
+or referred to the reviewer. As specified in Section 2.1, all safeguards inF are invoked before
+routing. For this four-safeguard pool, there are 64 ordered layered policies. For each of the
+four possible reviewers, any nonempty subset of the other three safeguards can serve asF,
+giving4(2 3− 1) = 28eligible( F,h )pairs. Enumerating the ALLOW/BLOCK/REVIEW routing
+maps for these pairs gives 27,324 selective verification specifications and hence 27,388 candidate
+configurations in the full class.
+4.1 Minimizing total cost
+For each scenario S0–S7, the search uses the distribution in Table 4, with safeguard margins
+and costs held fixed. For the objective in Eq.(4.1), the full search selects a selective verification
+policy in each of the eight scenarios, although sequential layered policies are also eligible. Table 5
+Table5: Distinctverificationpoliciesselectedbytheprimaryminimum-total-costsearch. Patterns
+list decisions in increasing safeguard order withinF; 0 denotes ALLOW and 1 denotes BLOCK.
+Patterns outsideB andQ are automatically allowed. All safeguards inF are invoked before
+routing.
+Policy Selected inF hB Q
+R1 S0{1,2}3{11} {10,01}
+R2 S1,S3,S6{1,2}4{11} {10,01}
+R3 S4{1,2}4{10,11} {01}
+R4 S2,S5{1,2,3}4{101,111} {100,010,110,001,011}
+R5 S7{1,2}3{10,11} {01}
+lists the five distinct selective verification policies selected across the eight scenarios. They
+use three routing maps. R1 and R2 automatically block pattern11and refer the single-flag
+patterns10and01, but use different reviewers. R3 and R5 instead automatically block10and
+11and refer only01, again differing in reviewer. R4 selects a larger first-stage set and refers
+five of its eight decision patterns. All five policies automatically allow the all-ALLOW pattern.
+Thus, changing the joint decision distribution can change not only which reviewer is selected
+but also which first-stage patterns are blocked or referred, even though the component margins
+and invocation costs remain fixed across scenarios. The final-decision rule of each of R1–R5
+is neither supermodular nor submodular; for R1 and R2, for instance,∆12Gπ = 1when the
+reviewer allows, whereas∆1HGπ =−1when D2 = 1. By Theorem 3.2(a), the direction of their
+response to a change in dependence is therefore not determined in advance; the independence
+comparison below shows that it is upward for misses in every dependent scenario.
+22
+To assess the value of the proposed policy class, we compare its optimized designs with
+sequential layered screening and flag-to-review cascading. For each scenario, the baseline is
+the best feasible policy across those two architectures, while the full search additionally allows
+pattern-specific selective verification. Both searches use the same joint distribution, costs, and
+risk constraints. Table 6 measures the improvement attributable to flexible routing. It compares
+the selected policy with the best feasible baseline in each scenario.
+Table 6: Best feasible baseline and full-class policy in each scenario underM≤ 0.05, B≤
+0.10, and(ω,ℓM,ℓB) = (0.10, 100, 10). Both are optimized using the scenario’s specified joint
+distribution. The baseline class contains sequential layered screening and flag-to-review cascading;
+the full class additionally permits selective verification. Policies R1–R5 are defined in Table 5.
+Best feasible baseline Full-class selection
+Scenario PolicyM B K JPolicyM B K J
+S0C(1,2; 4)0.0474 0.0037 1.0110 1.5174 R1 0.0342 0.0107 0.6475 1.0865
+S1L(1,3)0.0413 0.0726 0.7779 1.8441 R2 0.0488 0.0230 0.8071 1.5017
+S2L(4)0.0350 0.0250 2.0000 2.5750 R4 0.0490 0.0105 1.5555 2.1399
+S3L(1,3)0.0233 0.0658 0.7779 1.6032 R2 0.0297 0.0326 0.7831 1.3740
+S4L(1,3)0.0460 0.0693 0.7779 1.8612 R3 0.0485 0.0385 0.7617 1.5938
+S5L(4)0.0350 0.0250 2.0000 2.5750 R4 0.0490 0.0102 1.5550 2.1369
+S6L(1,3)0.0345 0.0651 0.7779 1.7084 R2 0.0432 0.0275 0.7843 1.4635
+S7L(1,3)0.0291 0.0761 0.7779 1.7541 R5 0.0418 0.0388 0.6194 1.3873
+In S0, the best baseline is the flag-to-review cascadeC(1, 2; 4), while the full search selects
+R1. The best baseline is layered screening in every other scenario:L(1, 3)in S1, S3, S4, S6, and
+S7, and the single safeguardL(4)in S2 and S5. The full search reduces total expected cost by
+14.3%–28.4% relative to these scenario-specific baselines. It should be noted that the selected
+policy need not improve every metric. In S1, for example, R2 has a higher miss probability
+than the layered baseline (0.0488versus0 .0413), but a substantially lower false-block probability
+(0.0230versus0 .0726). Both satisfy the risk constraints, and the reduction in false-block loss
+yields a lower total cost (1.5017versus1.8441).
+Dependence versus independence models.To assess the value of dependence information,
+we compare the policy selected under each scenario’s dependence model with the policy selected
+under independence (R1, selected in S0 in Table 6). We evaluate this fixed independence-selected
+policy and each scenario’s dependence-aware selection under the same scenario-specific joint
+distribution, holding the policy class, costs, and risk requirements fixed.
+When the selected policies are evaluated under each scenario’s specified dependence model,
+R1 exceeds the miss limit in S1, S2, and S4–S7 (Figure 2). Its miss probability reaches0.0905in
+S5, compared with the limitα = 0.05. The dependence-aware search selects a feasible policy in
+every scenario. In S1, S3, and S6, it selects R2 instead of R1: the first-stage safeguards and
+routing rule remain the same, but the reviewer changes fromD3 to D4. Thus, accounting for
+dependence can change reviewer selection without changing the first-stage architecture.
+S3 distinguishes loss of optimality from loss of feasibility. The independence selected R1
+remains feasible but hasJ = 1.4918, compared withJ = 1.3740for the dependence-aware R2, a
+reduction of7.9%. R2’s higher operating cost (0.7831versus0 .6258) is offset by lower error losses.
+In S2 and S5, the independence-selected policy has a smallerJ than the dependence-aware
+23
+Table 6: Best feasible baseline and full-class policy in each scenario underM≤ 0.05, B≤
+0.10, and(ω,ℓM,ℓB) = (0.10, 100, 10). Both are optimized using the scenario’s specified joint
+distribution. The baseline class contains sequential layered screening and flag-to-review cascading;
+the full class additionally permits selective verification. Policies R1–R5 are defined in Table 5.
+Best feasible baseline Full-class selection
+Scenario PolicyM B K JPolicyM B K J
+S0C(1,2; 4)0.0474 0.0037 1.0110 1.5174 R1 0.0342 0.0107 0.6475 1.0865
+S1L(1,3)0.0413 0.0726 0.7779 1.8441 R2 0.0488 0.0230 0.8071 1.5017
+S2L(4)0.0350 0.0250 2.0000 2.5750 R4 0.0490 0.0105 1.5555 2.1399
+S3L(1,3)0.0233 0.0658 0.7779 1.6032 R2 0.0297 0.0326 0.7831 1.3740
+S4L(1,3)0.0460 0.0693 0.7779 1.8612 R3 0.0485 0.0385 0.7617 1.5938
+S5L(4)0.0350 0.0250 2.0000 2.5750 R4 0.0490 0.0102 1.5550 2.1369
+S6L(1,3)0.0345 0.0651 0.7779 1.7084 R2 0.0432 0.0275 0.7843 1.4635
+S7L(1,3)0.0291 0.0761 0.7779 1.7541 R5 0.0418 0.0388 0.6194 1.3873
+loss yields a lower total cost (1.5017versus1.8441).
+Dependence versus independence models.To assess the value of dependence information,
+we compare the policy selected under each scenario’s dependence model with the policy selected
+under independence (R1, selected in S0 in Table 6)). We evaluate this fixed independence-selected
+policy and each scenario’s dependence-aware selection under the same scenario-specific joint
+distribution, holding the policy class, costs, and reliability requirements fixed.
+When the selected policies are evaluated under each scenario’s specified dependence model,
+R1 exceeds the miss limit in S1, S2, and S4–S7 (Figure 1). Its miss probability reaches0.0905in
+S5, compared with the limitα = 0.05. The dependence-aware search selects a feasible policy in
+every scenario. In S1, S3, and S6, it selects R2 instead of R1: the first-stage safeguards and
+routing rule remain the same, but the reviewer changes fromD3 to D4. Thus, accounting for
+dependence can change reviewer selection without changing the first-stage architecture.
+S0 S1 S2 S3 S4 S5 S6 S7
+0.00
+0.02
+0.04
+0.06
+0.08
+0.10Evaluated security-miss probability
+Selected using dependence model Selected assuming independence Miss limit = 0.05
+Figure 1: Security-miss probabilities of total-cost policies selected using either the scenario’s
+dependence model (circles) or its same-margin independence model (squares). The dashed line
+marksα= 0.05.
+S3 distinguishes loss of optimality from loss of feasibility. The independence-selected R1
+remains feasible but hasJ = 1.4918, compared withJ = 1.3740for the dependence-aware R2, a
+reduction of7.9%. R2’s higher operating cost (0.7831versus0 .6258) is offset by lower error losses.
+In S2 and S5, the independence-selected policy has a smallerJ than the dependence-aware
+optimum, but violates the miss constraint. It is therefore not a cheaper feasible alternative.
+20
+Figure 2: Security-miss probabilities of total-cost policies selected using either the scenario’s
+dependence model (circles) or its same-margin independence model (squares). The dashed line
+marksα= 0.05.
+optimum, but violates the miss constraint. It is therefore not a cheaper feasible alternative.
+4.2 Security under operating budgets
+We now consider the minimum-miss problem Eq.(4.2). Since the cost ofD4 isc4 = 2in Table 3,
+this budget permits a policy that invokesD4 for every candidate. Table 7 compares the best
+feasible baseline and full-class policies. It also reports the miss probability of the policy selected
+under independence, with all policies evaluated under each scenario’s dependence model.
+Table 7: Minimum-miss designs underK(π; 0.10)≤ 2and B(π)≤ 0.10. Mind is the miss
+probability of the independence-selected policy R6. All reported metrics are evaluated under the
+scenario’s dependence model.
+Best feasible baseline Full-class selection
+Scenario PolicyM KPolicyM K M ind
+S0L(1,4)0.0056 1.9780 R6 0.0018 1.4020 0.0018
+S1L(1,4)0.0176 1.9780L(1,4)0.0176 1.9780 0.0189
+S2L(1,4)0.0271 1.9780L(1,4)0.0271 1.9780 0.0382
+S3L(1,4)0.0090 1.9780 R6 0.0054 1.3451 0.0054
+S4L(1,4)0.0201 1.9780L(1,4)0.0201 1.9780 0.0235
+S5L(1,4)0.0279 1.9780L(1,4)0.0279 1.9780 0.0380
+S6L(1,4)0.0137 1.9780 R6 0.0112 1.3569 0.0112
+S7L(1,4)0.0090 1.9780L(1,4)0.0090 1.9780 0.0144
+We compare the best feasible layered-screening or flag-to-review baseline with the full policy
+class, with both optimized under each scenario’s joint distribution. The best baseline isL(1, 4)
+in every scenario. Early stopping allows this two-component policy to satisfy the budget, with
+K = 1.9780. The full search selects the same policy in five scenarios but improves the miss
+probability in S0, S3, and S6 by selecting R6. This policy usesF ={1, 2, 3} and reviewerD4: it
+automatically allows000, refers010, and automatically blocks every other first-stage pattern.
+Thus, the additional routing choices improve security in some scenarios, but not uniformly across
+the specified distributions.
+The independence-based search selects R6. Table 7 evaluates this selection under each
+24
+scenario’s joint distribution. R6 satisfies the operating-budget and false-block constraints
+throughout, but is not always minimum-miss. For example, in S2 its miss probability is0.0382,
+compared with0.0271for the dependence-aware selection L(1, 4). Dependence information
+therefore changes the preferred architecture in this case even though the independence selected
+policy remains feasible.
+5 Empirical Study
+In this section, we evaluate the proposed framework using an empirical dataset of authorized and
+unauthorized agent actions. We investigate how dependence among safeguard decisions affects
+system risk and policy selection, and assess the effectiveness of DAPOA in identifying safeguard
+configurations under specified risk and cost requirements. Figure 3 illustrates the overall empirical
+procedure, including dependence modeling, optimal policy selection, and evaluation on held-out
+data.
+Q: Qwen G: Gemma Mi: Ministral H: Sonnet
+Action dataset
+τ 2-Bench
+Retail and airline
+1,262 paired units
+2,524 actions
+Calibration set
+664 actions per class
+347 users
+Q, G, Mi, H outputs
+Evaluation set
+598 actions per class
+338 users
+Q, G, Mi, H outputs
+Dependence modeling
+Binary-pattern likelihood
+AIC model selection
+Gaussian in both classes
+Independence comparator
+Operating requirements
+Invocation costs cj; mixture ω
+Error consequences ℓM , ℓB; risk limits α, β; budget b
+Exact safeguard policy optimization
+Algorithm 1: subset and execution order
+Algorithm 2: exact search over layered
+and selective-verification policies
+Selected policy
+Policy evaluation on held-out data
+Recorded Q, G, Mi, H outputs
+Apply selected policy
+Risk and cost
+Miss probability M
+False-block probability B
+Operating cost K
+Total cost J
+ˆq0, ˆq1
+Reoptimize
+Figure 3: Overview of dependence-aware safeguard risk assessment and optimal policy selection.
+5.1 Dataset and experimental implementation
+The studied data are constructed from the retail and airline environments ofτ 2-Bench (Barres
+et al., 2026), a benchmark for conversational agents that interact with simulated users and
+database-backed tools under domain-specific policies. These environments represent customer-
+service operations in which a tool call must satisfy both business rules and the user’s request.
+Retail cases are generated from six request templates and sandbox tool responses, while airline
+cases cover reservations and bookings, baggage, flight changes, passenger names, cancellations,
+and certificates. Each unit contains a trusted interaction context together with one authorized
+action and one unauthorized variant. The authorized action is the confirmed sandbox call,
+whereas the unauthorized action is obtained by the first applicable perturbation of eligibility,
+cabin, scope, target, refund destination, recipient, or reason. Labels follow from this construction
+and the trusted authorization specification, independently of safeguard outputs.
+25
+The dataset comprises 1,262 paired units: 555 retail orders and 707 airline cases, giving
+2,524 candidate actions. We divide the data into a calibration set and an evaluation set so that
+dependence modeling and safeguard-policy selection are carried out without using the actions on
+which the resulting policies are subsequently assessed. The calibration set is used to estimate the
+marginal error rates and dependence structure and to select the safeguard configuration, whereas
+the evaluation set is used to assess the selected policy. The split is made at the user level and
+stratified by source environment; all orders or reservations belonging to the same user, together
+with both actions in each pair, remain in the same set. Calibration contains 664 authorized and
+664 unauthorized actions from 347 users, and evaluation contains 598 actions of each class from
+338 different users; see Table 8. This grouping prevents user-specific information from appearing
+in both model development and evaluation.
+Table 8: Composition of the action-authorization dataset. Each paired unit contains one
+authorized and one unauthorized action. Users are disjoint between calibration and evaluation.
+Set Users Paired units Authorized Unauthorized
+Calibration 347 664 664 664
+Evaluation 338 598 598 598
+Total 685 1,262 1,262 1,262
+Each safeguard is evaluated independently on the same candidate action and trusted context.
+The prompt asks whether the proposed action is authorized under the specification and requires
+a response with anALLOWorBLOCKdecision and a short explanation.
+The empirical study uses four LLM-based authorization safeguards: Qwen3 8B (Q), Gemma4
+E4B (G), Ministral 3 8B (Mi), and Claude Sonnet 5 (H). The three local models are evaluated
+through Ollama using the identifiers qwen3:8b, gemma4:e4b, and ministral-3:8b. Local
+inference is performed on a Mac with an Apple M4 Pro processor and 24 GB of unified memory.
+Sonnet is accessed through the Claude Code command-line interface. The local models are
+evaluated at temperature zero with an 8,192-token context allocation; the maximum recorded
+local input length is 4,724 tokens. Additional implementation details are provided in Section S3
+of the Supplementary Material.
+To compare policies with different invocation patterns, we assign each safeguard a fixed
+normalized invocation cost. Local inference is valued at an assumed rate of $0.20 per million
+input-plus-output tokens. Although Sonnet responses were obtained through a subscription
+interface, they are valued using the API-equivalent rates, namely $2 per million input tokens and
+$10 per million output tokens (Anthropic, 2026). These rates provide a common accounting basis;
+they are not the actual expenditure incurred in collecting the responses. Qwen is normalized
+to cQ = 0.10, and the costs of the remaining safeguards are determined from calibration-based
+call usage under the specified token-price convention. We retain the fixed baseline coefficients
+reported in Table 9 throughout the dataset. The consequence lossesℓM and ℓB use the same
+normalized cost unit and are illustrative decision inputs. Details of the cost construction are
+provided in Section S3 of the Supplementary Material.
+Table 9 reports the marginal error counts of the four safeguards in the calibration sample,
+26
+Table 9: Component errors in the calibration sample and fixed baseline invocation costs. Error
+counts are based on 664 actions per authorization class.
+Componentc j Misses False blocks
+Qwen (Q) 0.1000 124 9
+Gemma (G) 0.1040 172 2
+Ministral (Mi) 0.1020 13 20
+Sonnet (H) 1.2840 2 0
+together with their normalized invocation costs. The safeguards differ substantially in their
+marginal performance. Sonnet has the fewest calibration misses and no observed calibration
+false blocks, but incurs the highest invocation cost. These calibration outcomes are used to
+estimate the marginal distributions and dependence structure for subsequent policy selection.
+For unauthorized actions, the blocking proportions for(Q,G,Mi,H)are
+(540/664,492/664,651/664,662/664).
+The corresponding proportions for authorized actions are(9/664, 2/664, 20/664, 0). Dependence
+estimation therefore uses all four safeguards for unauthorized actions and the three varying local
+safeguards for authorized actions. Sonnet’s authorized-class decision is constant in calibration
+and is attached through its empirical margin. Table 10 reports the sample pairwise associations
+Table 10: Sample Kendall’sτ between local safeguards’ binary decisions in the calibration sample.
+Each authorization class contains 664 actions.
+Pair Unauthorized Authorized
+(Q,G)0.431−0.006
+(Q,Mi)0.211 0.208
+(G,Mi)0.214 0.151
+separately for the two authorization classes. For unauthorized actions, all three coefficients are
+positive, with the strongest association between Qwen and Gemma. For authorized actions,
+the Qwen–Gemma association is close to zero, whereas both pairs involving Ministral remain
+positively associated. The Qwen–Ministral association is similar across classes, while the other
+two pairs exhibit different association strengths. For unauthorized actions, positive association
+also characterizes the corresponding security-miss indicators; for authorized actions, BLOCK
+decisions are themselves false-block indicators. These observations reveal different patterns of
+error overlap across safeguard pairs and authorization classes.
+To accommodate different pairwise strengths, we fit Gaussian and Student-t copulas. The
+exchangeable multivariate Clayton and Gumbel specifications do not allow these distinct pairwise
+strengths. With margins fixed at their calibration proportions, dependence parameters are
+estimated by maximizing the likelihood of the observed binary decision patterns. Model selection
+is based on the Akaike information criterion (AIC), including independence as a candidate. AIC
+selects the Gaussian copula for both classes: the Gaussian, Student-t, and independence values
+are1412 .28,1414 .80, and1554.30for unauthorized actions, and292 .98,295 .01, and302.00
+for authorized actions. Further details of the estimation and model-selection procedures are
+27
+provided in Section S3 of the Supplementary Material.
+We consider two classes of safeguard policies. The baseline class includes sequential layered
+screening with different safeguard subsets and invocation orders, together with flag-to-review
+cascades. The full class additionally allows flexible ALLOW/BLOCK/REVIEW routing based on
+the first-stage decisions. With four safeguards, the full class contains 64 ordered layered-screening
+policies and 27,324 selective verification policies across 28 first-stage reviewer combinations,
+giving a total of 27,388 candidate configurations. All four single-safeguard policies are included.
+For the principal analysis, we setω = 0.50,( ℓM,ℓB) = (100, 10), and(α,β ) = (0.05, 0.10), with
+invocation costs given in Table 9. We also consider the minimum-miss problem withβ = 0.10
+and operating budgetsb∈{ 0.25, 0.50, 1.00}. For each operating setting, DAPOA is applied
+to select the optimal safeguard policy under the fitted copula model and the independence
+assumption. Comparing policies selected under the same requirements allows us to assess
+the effects of dependence modeling and the additional flexibility of selective verification. The
+authorization labels are used for calibration and evaluation; the selected policies operate using
+only observed safeguard decisions. Additional implementation details are provided in Section S3
+of the Supplementary Material.
+5.2 Impact of dependence on safeguard design
+Table 11 reports the policies selected under independence and under Gaussian dependence
+modeling, together with their evaluation performance, for the principal setting and four variations.
+In the table,πI invokesQ, G, and Mi, allows when all three allow, blocks when at least two
+block, and otherwise refers to Sonnet. The policyπV invokesQ and G, blocks when both block,
+and otherwise refers to Sonnet. In each case Sonnet’s decision is final when review is invoked.
+Table 11: Optimal policy selections in the full class and evaluation performance under different
+operating settings. Unless otherwise specified, parameters take their principal values. Error
+counts are based on 598 actions per class. Sequential arrows denote stopping at the first BLOCK.
+The dagger indicates a violation of at least one evaluation risk limit.
+Setting Model Selected policy Misses False blocks ˆK ˆJ
+ℓM = 10IndependenceMi→G15 32 0.1529 0.5458
+GaussianMi17 30 0.1020 0.4950
+Principal (ℓM = 100) Independenceπ I 14 9 0.3779 1.6237
+GaussianMi→H0 30 0.7300 0.9809
+ℓM = 1000IndependenceMi→Q→G14 32 0.2016 12.1749
+GaussianMi→H0 30 0.7300 0.9809
+α= 0.005, β= 0.01Independenceπ †I 14 9 0.3779 1.6237
+GaussianG→H0 5 0.8705 0.9123
+ℓB = 100Independenceπ I 14 9 0.3779 2.3010
+Gaussianπ V 0 3 1.0070 1.2579
+In the principal setting, the Gaussian-based selection reduces the number of misses from 14
+to zero and total cost by39.6%, while increasing false blocks from nine to 30. Its operating cost
+is higher than that of the independence-selected policy. Relative to Sonnet alone, which has zero
+misses, two false blocks, and(ˆK, ˆJ) = (1.2840, 1.3007), the selected cascade reduces total cost
+28
+by24.6%and invokes Sonnet on 585 of 1,196 evaluation actions rather than on every action.
+Figure S1 of the Supplementary Material compares the effects of security-miss and false-block
+consequences using the same loss decomposition. WhenℓM = 10, the Gaussian model selects
+Ministral alone, whereas independence adds Gemma. The former has two additional observed
+misses, two fewer false blocks, and lower operating and total costs. AsℓM increases to100
+and1000, the Gaussian-selected policy invokes Sonnet after a Ministral ALLOW, recording
+zero evaluation misses. AtℓM = 1000, the independence-based selection has 14 misses and
+total cost12.1749, compared with0.9809under Gaussian-based selection. When false blocks
+instead receive a high consequence,ℓB = 100, the Gaussian model selects πV and records
+three false blocks, compared with 30 at the principal setting. Its operating cost increases from
+0.7300to1 .0070. These results show how the selected policy balances both error consequences
+against safeguard invocation cost. Under the stricter security requirement(α,β ) = (0.005, 0.01),
+independence again selectsπI, whose evaluation miss and false-block rates,14/598 = 0.02341and
+9/598 = 0.01505, exceed both specified limits. In contrast, the Gaussian model selectsG→H ,
+which satisfies both requirements on the evaluation sample, albeit at a higher operating cost.
+Why independence-based selection fails.The 14 misses ofπI all occur whenQ, G, and
+Mi simultaneously return ALLOW, the pattern thatπI allows automatically. The same event
+produces the 14 misses ofMi→Q→G , the independence selection whenℓM = 1000. Similarly,
+all 16 evaluation misses ofπQ,Mi, which the independence model selects in eight of the nine
+cost–mixture settings withω = 0.10(Section S3.3 of the Supplementary Material), occur when
+Q and Mi both return ALLOW. The miss probabilities of these policies are therefore governed
+by joint-ALLOW probabilities, which Figure 4 compares with the predictions of the two fitted
+models.
+Q, Mi Q, G, Mi
+0.0%
+0.5%
+1.0%
+1.5%
+2.0%
+2.5%
+3.0%Joint ALLOW probability0.37%
+0.10%
+1.53% 1.45%
+2.68%
+2.34%
+Unauthorized actions
+Q, Mi Q, G, Mi
+0.0%
+1.0%
+2.0%
+3.0%
+4.0%
+5.0%
+6.0%At least one BLOCK probability
+4.33% 4.61%
+3.92% 4.07%
+5.18% 5.35%
+Authorized actions
+Independence Copula Evaluation
+Figure 4: Fitted and evaluation probabilities of the error events of independence-selected policies.
+Left: joint ALLOW on unauthorized actions. Right: at least one BLOCK on authorized actions.
+For unauthorized actions, independence predicts0.0010for {Q,G,Mi} and0.0037for {Q,Mi},
+fewer than one expected miss in 598 actions, and underestimates the observed proportions,
+14/598 = 0.0234and16 /598 = 0.0268, by factors of about25and7. This explains why the
+independence model regards these policies as safe, and why it selectsπI even under the limit
+α = 0.005. The Gaussian predictions,0.0145and0 .0153, are much closer, although both remain
+below the evaluation proportions. For authorized actions, at least one BLOCK by{Q,G,Mi}
+29
+is the false-block event ofMi→Q→G , which occurs for 32 of 598 actions (0.0535); the
+corresponding event for{Q,Mi} occurs for 31 (0.0518). Independence predicts0.0462and0 .0433,
+and the Gaussian model0.0407and0 .0392. Again both models underpredict these proportions
+The selected policies also differ in how predictably they respond to misspecified dependence.
+The Gaussian-selected policiesMi→H and G→H block when the first-stage safeguard blocks
+and refer its ALLOW decisions to Sonnet, so their final-decision rule isDj∨H for j∈{Mi,G} ,
+which is submodular. By Theorem 3.2(a), at fixed margins a supermodular increase in dependence
+raises their miss probability and lowers their false-block probability, so the direction of their
+sensitivity is known in advance. The rules ofπI andπV are neither supermodular nor submodular;
+for πV,∆ QGGπ = 1when Sonnet allows, whereas∆QHGπ =−1when Gemma blocks. By the
+same result, the direction of their response is not determined.
+5.3 Sensitivity analysis
+We examine whether the benefits of dependence-aware safeguard design persist under different
+operating conditions, and how the proposed algorithms balance security risk, service disruption,
+and invocation costs. The four safeguards, their class probability distributions, and the admissible
+policy classes are held fixed. For each setting, DAPOA selects the optimal policy under both the
+Gaussian and the independence models, using the same fitted distributions, and both selections
+are evaluated on the held-out sample. We consider four groups of settings:
+• Miss consequences and risk requirements.The three miss-consequence settings ℓM ∈
+{10, 100, 1000} under( α,β ) = (0.05, 0.10)are reported in the preceding subsection. We
+additionally examine the risk limits(α,β )∈{ (0.01, 0.10), (0.005, 0.01), (0.02, 0.003)} with
+ℓM = 100. Throughout,ℓB = 10, ω = 0.50, and invocation costs remain at their baseline
+values.
+• Operating budgets.For minimum-miss design, we imposeK≤b with b∈{ 0.25, 0.50, 1.00}
+and β = 0.10; there is no separate constraint onM. Baseline costs andω = 0.50are
+retained.
+• Invocation costs and unauthorized-action mixture.We multiply local costs by sL ∈
+{0.5, 1, 2} and Sonnet’s cost bysH ∈{ 0.5, 1, 2}, and setω∈{ 0.01, 0.10, 0.50}. All 27
+settings minimizeJ with( α,β ) = (0.05, 0.10)and( ℓM,ℓB) = (100, 10). The original cost
+normalization and loss units are not changed.
+• False-block consequences.We setℓB∈{ 1, 100}, holding all other inputs at their principal
+values.
+The principal setting belongs to both the first and third groups, giving6 + 3 + 27 + 2− 1 = 37
+distinct settings. Because the miss-consequence comparison was presented above, we focus here
+on the alternative risk limits and the remaining sensitivity groups.
+Miss consequences and risk requirements.Figure 5 compares both evaluation error
+rates with their corresponding limits, alongside operating and total costs, under the three
+30
+alternative risk requirements. At the intermediate security limit(α,β ) = (0 .01, 0.10), the
+Independence and Gaussian models retain their principal selections,πI and Mi→H , respectively.
+The independence-selected policy has an evaluation miss rate of14/598 = 0.02341, exceeding
+α = 0.01, whereas the Gaussian-selected policy satisfies both evaluation limits. Under the stricter
+security limit(0.005, 0.01), the Gaussian selection changes toG→H , recording zero misses and
+five false blocks. Its operating cost rises to0.8705, while its total cost is lower than that of the
+independence-selected policy (0.9123versus1.6237).
+0% 1% 2% 3%
+Intermediate
+Strict security
+Strict service
+2.34%
+2.34%
+2.34%
+0.00%
+0.00%
+0.00%
+Miss rate
+0% 5% 10%
+1.51%
+1.51%
+1.51%
+5.02%
+0.84%
+0.50%
+False-block rate
+0.0 0.5 1.0
+0.3779
+0.3779
+0.3779
+0.7300
+0.8705
+0.9768
+Operating cost
+0.0 0.5 1.0 1.5 2.0
+1.6237
+1.6237
+1.6237
+0.9809
+0.9123
+1.0019
+Total cost
+Independence Copula Corresponding limit α or β
+Figure 5: Evaluation miss rates, false-block rates, operating costs, and total costs under three
+alternative risk requirements. Markers show the corresponding miss limitsα and false-block
+limitsβ. All settings use baseline costs,ω= 0.50, and(ℓ M,ℓB) = (100,10).
+Under the strict service limit(α,β ) = (0.02, 0.003), the Gaussian model selects flexible
+verification: Gemma and Ministral are invoked first, both BLOCK decisions cause an immediate
+BLOCK, and every other first-stage pattern is referred to Sonnet. This policy has zero evaluation
+misses, three false blocks, and(ˆK, ˆJ) = (0.9768, 1.0019). The Independence-based selectionπI
+has 14 misses, nine false blocks, and(ˆK, ˆJ) = (0.3779, 1.6237). Relative to the Gaussian model’s
+own optimized baseline, Sonnet alone, flexible verification reduces total cost from1.3007to
+1.0019and Sonnet invocations from 1,196 to 718, with one additional false block. However, its
+evaluation false-block rate3/598 = 0.00502exceeds β = 0.003; Sonnet alone also exceeds this
+limit with2/598 = 0.00334. Thus, neither selected policy satisfies the strict service requirement
+on evaluation.
+Operating budgets.For b = 0.25and0 .50, both models select Mi→Q→G , with 14
+evaluation misses, 32 false blocks, and operating cost0.2016. At b = 1.00, the Gaussian
+model selects Mi→G→H and the Independence model selectsMi→Q→G→H . Both
+policies record zero misses and 32 false blocks, but their operating costs are0.7766and0 .8243,
+respectively. The Gaussian-based selection avoids a Qwen invocation without changing the
+observed final decisions, saving approximately0.0477per action.
+Invocation costs and unauthorized-action mixture.Figure 6 reports the evaluation
+total-cost difference between the Independence and Gaussian selections for the 27 cost–mixture
+settings (see Section S3.3 of the Supplementary Material). Atω = 0.01, both models select
+the same flag-to-review cascade in all nine cells: Ministral ALLOW decisions are accepted
+31
+immediately, while its BLOCK decisions are referred to Sonnet. Atω = 0.10, the Gaussian
+model selects selective verification in five cells, flag-to-review cascades in three, and Ministral
+alone in one. Its total cost is lower than the Independence selection in four cells, higher in one,
+and equal in four.
+0.5 1 2
+Sonnet cost multiplier sH
+0.5
+1
+2
+Local cost multiplier sL 0.000 0.000 0.000
+0.000 0.000 0.000
+0.000 0.000 0.000
+ω = 0.01
+0.5 1 2
+Sonnet cost multiplier sH
+0.000 0.000 +0.033
++0.099 0.000 0.000
++0.199 +0.139 -0.036
+ω = 0.10
+0.5 1 2
+Sonnet cost multiplier sH
++0.819 +0.541 -0.151
++0.921 +0.643 -0.108
+-0.136 +0.758 -0.058
+ω = 0.50
+−0.5
+0.0
+0.5
+̂JInd − ̂JCopula
+Figure 6: Evaluation total-cost differenceˆJIndependence− ˆJGaussian across all cost–mixture settings.
+Positive values favor Gaussian-based policy selection.
+Atω = 0.50, the models differ in all nine cells. Gaussian-based selection has lower evaluation
+total cost in five cells and higher total cost in four. For example, at(sL,sH) = (2, 0.5), both
+selected cascades have zero misses, but the Gaussian selection has 30 false blocks rather than
+five; its lower operating cost is offset by the larger false-block loss. These comparisons show that
+accounting for dependence can change the preferred architecture without guaranteeing lower
+realized cost in every operating setting.
+The additional routing flexibility also improves on the optimized baseline in selected cost–
+mixture settings. At(ω,sL,sH) = (0.10, 0.5, 2), the Gaussian-selected verification policy invokes
+Qwen and Ministral, allows when neither blocks, blocks when both block, and refers disagreement
+to Sonnet. It has 16 evaluation misses and seven false blocks, satisfying the specified evaluation
+limits, and reduces total cost from0.7868for the optimized baseline to0.6010, a23.6%decrease.
+Across all 37 settings, the Gaussian-selected full-class policy differs from its baseline selection in
+eight settings, with lower evaluation total cost in five and higher cost in three.
+False-block consequences.At ℓB = 1, the Gaussian and Independence models selectMi→H
+and Mi→Q→G , with evaluation total costs0.7551and1 .3989, respectively. AtℓB = 100, the
+Gaussian model selectsπV, with zero misses, three false blocks, operating cost1.0070, and total
+cost1.2579(see the bottom row of Figure S1 in the Supplementary Material). The Independence
+model selectsπI, with 14 misses, nine false blocks, operating cost0.3779, and total cost2.3010.
+Relative to the Gaussian model’s optimized baselineG→H , flexible verification reduces false
+blocks from five to three, increases operating cost from0.8705to1 .0070, and reduces total
+cost from1.2886to1 .2579. Thus, routing flexibility can improve the balance between service
+disruption and invocation cost when false blocks carry high consequences.
+Across the 37 settings, the Gaussian model yields lower or equal evaluation total cost in
+32 settings, and higher cost in five. These results show that dependence can change risk
+assessment and policy selection; realized benefits depend on the operating requirements and the
+32
+security–service cost tradeoff.
+6 Discussion and conclusions
+This paper develops a dependence-aware framework for assessing risk and optimizing the
+design of multi-component AI safeguard systems. We consider two practical architectures:
+sequential layered screening and selective verification. By modeling the dependence among
+safeguard decisions, the proposed framework accounts for common security misses and false
+blocks that cannot be adequately characterized by individual safeguard performance alone. We
+further develop two exact optimization algorithms for selecting safeguard subsets, execution
+orders, reviewers, and verification policies under specified risk and cost requirements. To
+facilitate practical implementation, we develop DAPOA, an integrated statistical modeling and
+optimization package, which is publicly available.
+Ourtheoreticalanalysisdemonstratesthatdependencecansubstantiallyaffectsystemriskand
+operating costs. For sequential layered screening, the lower-orthant dependence order provides
+stochastic comparisons of security misses, false blocks, and safeguard invocation costs. For
+selective verification, a policy’s error probabilities respond monotonically to every supermodular
+increase in dependence if and only if its final-decision rule is supermodular or submodular.
+Flag-to-review cascades with two or more first-stage safeguards are not among them: their
+referral probabilities and operating costs cannot increase under supermodular ordering, but the
+direction of their error probabilities is undetermined. For a fixed first stage and reviewer, the
+optimal routing map is a two-threshold rule in the first-stage likelihood ratio, and a reviewer is
+worth invoking only when its cost is below certain threshold. The numerical experiments further
+demonstrate the consequences of ignoring dependence. In six of the eight dependence scenarios,
+policies selected under the independence model violate the specified security-miss limit when
+evaluated under the dependent distribution. These findings show why joint safeguard decisions
+must be considered when assessing risk and selecting a safeguard policy.
+The empirical study provides further evidence using actual LLM safeguard decisions. It
+evaluates the policy choices made using both fitted class distributions on held-out actions. Under
+the principal operating setting, the Gaussian-based selection records zero security misses among
+598 unauthorized actions, compared with 14 for independence-based selection, while false blocks
+increase from nine to 30 among 598 authorized actions. Operating cost increases from0.3779to
+0.7300, and evaluation total cost decreases from1.6237to0 .9809, a reduction of39.6%. Across
+the 37 operating settings, dependence modeling changes the selected policy in 22 settings and
+yields lower evaluation total cost in 17 settings, higher cost in five, and equal cost in 15. Selective
+verification provides additional gains over the optimized baseline in some operating settings.
+For example, at(ω,sL,sH) = (0.10, 0.5, 2), flexible routing reduces evaluation total cost from
+0.7868to0 .6010, a23.6%decrease. These results demonstrate how dependence information and
+routing flexibility affect the security service cost tradeoff.
+Several limitations warrant consideration. First, the empirical study evaluates actual LLM
+safeguard decisions on benchmark-derived agent actions rather than observations from live
+33
+deployments. The controlled setting provides well-defined authorization labels and complete
+safeguard decisions, allowing alternative policies to be evaluated consistently on identical
+actions. Further validation under production operating conditions would help establish the
+generalizability of these findings. Second, invocation costs are normalized from observed token
+usage under specified pricing assumptions, while the consequences of security misses and false
+blocks are represented by assumed loss parameters. Obtaining reliable estimates of these costs
+is challenging, as they depend on the operating environment and the potentially substantial
+downstream consequences of safeguard errors. Nevertheless, the proposed framework can
+directly incorporate deployment-specific cost estimates when such information becomes available.
+Third, the current framework assumes that the dependence structure remains fixed during
+policy optimization. Extending the methodology to accommodate time-varying dependence and
+adaptive attacks would be valuable, particularly when safeguard performance changes with the
+operating environment.
+Overall, our findings highlight the importance of dependence modeling in the risk assessment
+and optimal design of AI safeguard systems. By integrating statistical dependence modeling
+with risk-constrained optimization, this work provides a foundation for systematic safeguard
+design beyond individual component performance. The operational decisions include which
+safeguards to include in a policy, their invocation order, and which first-stage outcomes justify
+additional review. Further work can extend this formulation to larger candidate pools, changing
+operating mixtures, and adaptive safeguard policies.
+References
+Agnetis, A., Hermans, B., Leus, R., & Rostami, S. (2022). Time-critical testing and search problems.
+European Journal of Operational Research, 296(2), 440–452.
+Anthropic (2026).Pricing. Claude Platform documentation. Price basis audited 7 October 2026; accessed
+8 October 2026.
+Argyris, N., Østerdal, L. P., & Hussain, M. A. (2025). Value-driven multidimensional welfare analysis: A
+dominance approach with application to comparisons of European populations.European Journal of
+Operational Research, 324(1), 200–220.
+Barres, V., Dong, H., Ray, S., Si, X., & Narasimhan, K. R. (2026).τ 2-Bench: Evaluating conversational
+agents in a dual-control environment.Proceedings of the 43rd International Conference on Machine
+Learning, volume 306 ofProceedings of Machine Learning Research, 6736–6782.
+Chennabasappa, S., Nikolaidis, C., Song, D., Molnar, D., Ding, S., Wan, S., Whitman, S., Deason, L.,
+Doucette, N., Montilla, A., Gampa, A., de Paola, B., Gabi, D., Crnkovich, J., Testud, J.-C., He, K.,
+Chaturvedi, R., Zhou, W., & Saxe, J. (2025).LlamaFirewall: An open source guardrail system for
+building secure AI agents. arXiv:2505.03574.
+Cunningham, H., Wei, J., Wang, Z., Persic, A., Peng, A., Abderrachid, J., Agarwal, R., Chen, B., Cohen,
+A., Dau, A., Dimitriev, A., Gilson, R., Howard, L., Hua, Y., Kaplan, J., Leike, J., Lin, M., Liu, C.,
+Mikulik, V., Mittapalli, R., O’Hara, C., Pan, J., Saxena, N., Silverstein, A., Song, Y., Yu, X., Zhou,
+G., Perez, E., & Sharma, M. (2026).Constitutional Classifiers++: Efficient production-grade defenses
+against universal jailbreaks.
+Dacorogna, M., Debbabi, N., & Kratz, M. (2023). Building up cyber resilience by better grasping cyber
+34
+risk via a new algorithm for modelling heavy-tailed data.European Journal of Operational Research,
+311(2), 708–729.
+Debenedetti, E., Zhang, J., Balunovic, M., Beurer-Kellner, L., Fischer, M., & Tramèr, F. (2024).
+AgentDojo: A dynamic environment to evaluate prompt injection attacks and defenses for LLM agents.
+Advances in Neural Information Processing Systems, volume 37, 82895–82920.
+Eling, M. & Wirfs, J. (2019). What are the actual costs of cyber risk events?European Journal of
+Operational Research, 272(3), 1109–1119.
+Greshake, K., Abdelnabi, S., Mishra, S., Endres, C., Holz, T., & Fritz, M. (2023). Not what you’ve
+signed up for: Compromising real-world LLM-integrated applications with indirect prompt injection.
+Proceedings of the 16th ACM Workshop on Artificial Intelligence and Security, 79–90.
+Inan, H., Upasani, K., Chi, J., Rungta, R., Iyer, K., Mao, Y., Tontchev, M., Hu, Q., Fuller, B., Testuggine,
+D., & Khabsa, M. (2023).Llama Guard: LLM-based input-output safeguard for human-AI conversations.
+arXiv:2312.06674.
+Joe, H. (2014).Dependence Modeling with Copulas. Chapman and Hall/CRC.
+Kim, E. M., Garg, A., Peng, K., & Garg, N. (2025). Correlated errors in large language models.Proceedings
+of the 42nd International Conference on Machine Learning, volume 267 ofProceedings of Machine
+Learning Research, 30038–30066.
+Kim, S. & Weber, S. (2022). Simulation methods for robust risk assessment and the distorted mix
+approach.European Journal of Operational Research, 298(1), 380–398.
+Lei, L., Peng, Y., Fu, M. C., & Hu, J.-Q. (2023). Copula sensitivity analysis for portfolio credit derivatives.
+European Journal of Operational Research, 308(1), 455–466.
+Li, Y., Xu, M., & Zhao, P. (2026). Dependence-aware modeling of multi-tenant attacks in cloud systems.
+Reliability Engineering & System Safety, 266(Part B), 111750.
+McKenzie, I. R., Hollinsworth, O. J., Tseng, T., Davies, X., Casper, S., Tucker, A. D., Kirk, R., &
+Gleave, A. (2026). STACK: Adversarial attacks on LLM safeguard pipelines.Proceedings of the AAAI
+Conference on Artificial Intelligence, volume 40.
+Navarro, J. & Fernández-Martínez, P. (2021). Redundancy in systems with heterogeneous dependent
+components.European Journal of Operational Research, 290(2), 766–778.
+Paul, J. A. & Zhang, M. (2021). Decision support model for cybersecurity risk planning: A two-stage
+stochastic programming framework featuring firms, government, and attacker.European Journal of
+Operational Research, 291(1), 349–364.
+Rahimi, Z., Down, D. G., Li, N., & Arnold, D. M. (2026). Ordering policies for multi-item inventory
+systems with correlated demands.European Journal of Operational Research, 333(2), 381–397.
+Rebedea, T., Dinu, R., Sreedhar, M. N., Parisien, C., & Cohen, J. (2023). NeMo Guardrails: A toolkit for
+controllable and safe LLM applications with programmable rails.Proceedings of the 2023 Conference
+on Empirical Methods in Natural Language Processing: System Demonstrations, 431–445.
+Rostami, S., Creemers, S., Wei, W., & Leus, R. (2019). Sequential testing of n-out-of-n systems:
+Precedence theorems and exact methods.European Journal of Operational Research, 274(3), 876–885.
+Rostami, S. & Rostami, A. (2026). Sequential testing in sparse precedence networks.European Journal
+of Operational Research, 335(2), 383–392.
+Shaked, M. & Shanthikumar, J. G. (2007).Stochastic Orders. Springer.
+Wu, S. (2024). A copula-based approach to modelling the failure process of items under two-dimensional
+warranty and applications.European Journal of Operational Research, 314(3), 854–866.
+35

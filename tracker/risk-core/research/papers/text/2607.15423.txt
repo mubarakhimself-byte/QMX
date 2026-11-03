@@ -1,0 +1,454 @@
+arXiv 2607.15423  https://arxiv.org/abs/2607.15423
+
+Sequential Control of False Positives in Online Change Point
+Detection
+MELISSA LYNNE MARTIN1, THEODORE D. SATTERTHW AITE2,3,4, IAN J.
+BARNETT1
+1Department of Biostatistics, Epidemiology, and Informatics, University of Pennsylvania,
+Philadelphia, PA, USA;2Department of Psychiatry, University of Pennsylvania,
+Philadelphia, PA, USA;3Penn Lifespan Informatics and Neuroimaging Center
+(PennLINC), University of Pennsylvania, Philadelphia, PA, USA;4Penn-Children ’s
+Hospital of Philadelphia Lifespan Brain Institute, University of Pennsylvania, Philadelphia,
+PA, USA
+martin30@pennmedicine.upenn.edu
+Abstract
+Online change point detection is the process of identifying distributional changes in time-
+ordered data in real time. In applications such as mobile health (mHealth), repeated testing
+is often performed as new data arrive, creating a multiple testing problem. Traditional ap-
+proaches for controlling the family-wise error rate (FWER) are not well suited to this setting
+because the tests are highly dependent and the number of tests is not fixed in advance. In this
+work, we introduce a sequential family-wise error rate (sFWER), defined as the probability of
+at least one false positive within a moving monitoring window. We propose a simulation-based
+calibration procedure to estimate monitoring thresholds that control the sFWER at a desired
+level. Through simulation studies, we demonstrate that the proposed procedure achieves the
+desired error control, while commonly used alternatives are either overly conservative or fail to
+adequately control false alarms. Finally, we illustrate the proposed approach using passively
+collected smartphone data from a cohort of adolescents and young adults with affective insta-
+bility.
+1 Introduction
+Real-time monitoring involves assessing data streams where the data arrive sequentially over time.
+This is especially useful in applications where changes in data streams need to be identified in
+real-time soon after the change onset. One application area where this is used is in mobile health
+(mHealth), which uses smartphones and wearable devices to collect behavioral or health data over
+time. In psychiatric populations, mHealth can be used as a supplemental tool when outpatient
+psychotherapy and psychiatric medication management are insufficient for mitigating the risk of
+an adverse event (Torous et al., 2015, 2016, Mohr et al., 2017, Onnela and Rauch, 2016). In these
+settings, a key goal is to detect changes in a patient’s behavior as early as possible so a meaningful
+intervention can be deployed if necessary, motivating the use of online change point detection.
+Online change point detection is the process of finding distributional changes in time-ordered
+data in real-time (Aminikhanghahi and Cook, 2017). In practice, this requires performing sequential
+hypothesis tests over time as data accumulates. This creates a multiple testing problem, since
+1
+arXiv:2607.15423v1  [stat.ME]  16 Jul 2026
+we repeatedly test for a change point as new data arrive. Repeated testing over time creates
+a practical challenge in online change point detection. In many applications, investigators must
+balance sensitivity to true changes against the risk of false alarms. This is especially important in
+mHealth settings, where false alarms may lead to unnecessary follow-up or contribute to alert fatigue
+among individuals responsible for monitoring incoming alerts (Hravnak et al., 2018, Chaparro et al.,
+2020). Therefore, it is important to understand and control the probability of falsely detecting a
+change point during a clinically meaningful monitoring period.
+A common goal in multiple testing is to control the probability of at least one false alarm, where
+a false alarm corresponds to a Type I error. In the change point detection setting, this means de-
+tecting a change point when there truly is no change point. This probability is commonly referred
+to as the family-wise error rate (FWER). However, the online change point detection setting differs
+from standard multiple testing problems because the tests are highly dependent. Specifically, the
+test statistics are computed using overlapping windows of data, which yields strong correlation of
+test statistics over time and makes error control more challenging. Another challenge in sequential
+testing is that the number of tests is not fixed. FWER is typically controlled over a set number of
+tests, but in our setting we continue testing until a change is detected. Therefore, traditional mul-
+tiple testing corrections are not directly applicable, motivating the need for alternative approaches
+to control false positives in online monitoring settings.
+There are many existing methods for controlling FWER in multiple testing, though they are not
+directly applicable for control of sequential, repeated testing settings. The Bonferroni correction is
+a widely used approach for controlling the FWER by adjusting significance thresholds according
+to the number of tests performed (Bonferroni, 1936), but it can be overly conservative when the
+tests are correlated. The ˇSid´ ak correction (ˇSid´ ak, 1967) is slightly less conservative, but is still too
+conservative to use when testing highly correlated hypothesis tests in a sequential testing setting.
+Several approaches have been proposed for controlling Type I error in sequential testing settings.
+In the clinical trials literature, group sequential methods allow interim analyses to be conducted
+while maintaining control of the overall Type I error rate (Pocock, 1977, O’Brien and Fleming,
+1979). Alpha-spending approaches further extend these ideas by allowing greater flexibility in
+the timing of interim analyses while preserving error control (Lan and DeMets, 1983). However,
+these methods are typically designed for settings with a finite number of planned analyses and
+a prespecified monitoring schedule. In contrast, online change point detection involves continual
+monitoring and repeated testing until a change is detected. These characteristics make existing
+sequential testing procedures difficult to apply directly and motivate the development of methods
+tailored to online monitoring settings.
+In this work, we introduce a sequential family-wise error rate (sFWER), defined as the probabil-
+ity of at least one false alarm within a moving monitoring window. We then develop a simulation-
+based procedure for calibrating monitoring thresholds to control this error rate in online change
+point detection. Through simulation studies, we show that the proposed method achieves the de-
+sired error control, while standard approaches are either overly conservative or fail to adequately
+control false alarms. Finally, we apply the procedure to smartphone-based mHealth data to illus-
+trate its use in practice.
+2 Methods
+2.1 Sequential testing problem
+Consider an online change point detection setting where we letrbe the number of run-in days
+before daily sequential testing begins. On each dayt > r, test statisticS t is computed and the null
+2
+hypothesisH 0t, corresponding to no change point detected on dayt, is tested. Consider a moving
+time window of length ∆ over which a practitioner wants to control the probability of a false alarm,
+where a false alarm corresponds to rejectingH 0t. For example, a practitioner might want to control
+the probability of having at least one false alarm over a ∆ = 30-day period.
+In traditional multiple testing settings, the family-wise error rate (FWER) is defined as the
+probability of at least one false alarm over a fixed set of tests. In the change point detection
+context, controlling the FWER means controlling the probability of at least one false positive
+across all monitoring days. However, in online change point detection, testing is sequential and
+ongoing until a change is detected, so the number of tests is itself random. To quantify false alarm
+rates in this setting, we define a sequential family-wise error rate (sFWER) as the probability of at
+least one false positive within a moving monitoring window. This differs from the classical FWER,
+which is defined over a fixed number of tests, by focusing on false positives occurring within a
+clinically meaningful monitoring period.
+We assume that smaller values of test statisticS t provide stronger evidence against the global
+null hypothesis of no change point. Then to control sFWER at levelα ∆, we seek a cutoffcsuch
+that for anyt≥r,
+P r
+
+
+t+∆[
+j=t+1
+{Sj ≤c}
+
+ ≤α ∆ (1)
+Note that we require this bound to hold for any window of length ∆ after the run-in period,
+rather than only the first ∆ monitor days. This definition ensures that, at any point during
+monitoring, the probability of at least one false alarm in the next ∆ days is controlled. This
+inequality is equivalent to
+P r
+
+min
+t+1≤j≤t+∆
+Sj > c
+
+≥1−α ∆ (2)
+The primary challenge in this setting is that the joint distribution of the sequential test statistics
+St, and therefore the distribution of min t+1≤j≤t+∆ Sj, is non-trivial. This is because the statistics
+are highly temporally dependent due to the overlapping data used across monitoring days. As a
+result, deriving an analytic cutoffcthat satisfies the above condition is generally intractable.
+2.2 Proposed calibration procedure
+We propose a simulation-based method for calibrating the test statistic cutoffc. Our approach
+is similar in spirit to resampling-based max-statistic methods for FWER control (e.g., Westfall
+et al., 1993), but it is tailored to our online monitoring setting, where test statistics are computed
+sequentially and are inherently dependent.
+Our goal is to estimate a cutoffcsuch that the probability of at least one false alarm within a
+monitoring window of length ∆ is controlled at the levelα ∆. From the formulation in the previous
+section, this reduces to understanding the distribution of
+M= min
+t+1≤j≤t+∆
+Sj (3)
+which represents the minimum test statistic over this window. Since this distribution is not
+available in closed form, we approximate it using simulations under the global null hypothesis of
+no change point. Specifically, we generateBdatasets of lengthr+ ∆ under the null hypothesis.
+For each dataset, we compute the sequence of monitoring statistics{S r+1, . . . , Sr+∆}, and then
+3
+compute the minimum over this window. This yields an empirical distribution of the window
+minimum under the null. We define the cutoffcas the empiricalα ∆ quantile of this distribution.
+In practice, during monitoring, we rejectH 0t and declare a change point at daytifS t ≤c.
+By construction, this procedure controls the probability of at least one false alarm within any
+monitoring window of length ∆ at approximatelyα ∆.
+2.3 VC* test statistic for online change point detection
+In this paper we use VC*, a variance component score test for online multivariate change point
+detection (Martin et al., 2026). On each monitoring dayt, we consider candidate change point
+locationsk∈ {t−db, . . . , t−1}, where db is the number of days back over which we search for a
+change point on each monitor day. For each candidate dayk, we compute test statisticQ k based on
+a variance component score test for a change in the mean and/or covariance structure of the data.
+We convert eachQ k to a p-valuep k using a permutation-based approach, wherep k represents the
+probability of observing a test statistic at least as extreme asQ k under the null hypothesis. We
+then define the monitoring statistic at daytto be
+St = mint−db≤k≤t−1 pk (4)
+This definition places the candidate statistics on a common scale across candidate days and moni-
+toring days. Smaller values ofS t indicate stronger evidence against the null hypothesis of no change
+point.
+SinceS t is defined as the minimum p-value across candidate change point days, we do not expect
+the selected candidate day to be uniformly distributed, even under the null hypothesis of no change
+point. Candidate change point days near the edges of the search window are less correlated with
+the remaining candidate days than those in the middle, which makes them more likely to attain
+the minimum p-value by chance alone. As a result, the selected candidate day exhibits a U-shaped
+distribution under the null. This behavior is driven by the dependence structure induced by the
+overlapping data used to compute the candidate test statistics. An illustration of this phenomenon
+is provided in Supplementary Section S1.
+3 Simulations
+We conduct simulation studies to evaluate the operating characteristics of the proposed monitoring
+procedure. We first explore the effect of the number of run-in days before change point detection
+begins on the resulting calibrated cutoff. We then investigate control of the sFWER under the null
+and the ability to detect true change points under alternative scenarios.
+3.1 Effect of run-in length on the calibrated cutoff
+We first assess whether the calibrated cutoff generated from the proposed procedure is sensitive
+to the length of the run-in periodr. This is important as the run-in length determines how much
+baseline data is needed before online change point detection begins.
+We generate data under the global null hypothesis of no change point. Specifically, fort=
+1, ..., Twe generateYt ∼N p(0, Ip) where all observations are generated independently over time.
+We consider both univariate and multivariate settings withp∈ {1,10}features. We evaluate run-
+in lengthsr∈ {30,60,100}, monitoring window lengths ∆∈ {7,14}, and target sFWER levels
+α∆ ∈ {0.2,0.1}. For each setting, we generateB= 1000 null datasets of lengthT=r+ ∆,
+4
+where the firstrobservations correspond to the run-in period and the remaining ∆ observations
+correspond to the monitoring window. We fix db = 7 in all settings.
+At each monitoring day, we compute the VC* test statistic described in Section 2.3 using
+permutation-based p-values across the previous db = 7 candidate change point days. For each
+simulated data setb∈ {1, . . . , B}, we compute the sequence of test statisticsS(b)r+1, ..., S(b)r+∆ and
+record the minimum test statistic over the monitoring window,
+M (b) = min
+r+1≤t≤r+∆
+S(b)t
+The calibrated cutoffcis defined as the empiricalα ∆ quantile of the simulated distribution of
+{M (1), . . . , M(B)}. We additionally use bootstrap resampling to assess the variability of the esti-
+mated cutoff.
+Figure 1 shows the estimated cutoffs across run-in lengths for each setting. Overall, the es-
+timated cutoffs are relatively stable across values ofr, with substantial overlap in the bootstrap
+variability bands. The cutoffs are also similar between the univariate (p= 1) and multivariate
+(p= 10) settings.
+As expected, the calibrated cutoff depends on both ∆ andα ∆. For a fixed value ofα ∆, the
+cutoff is smaller when ∆ = 14 than when ∆ = 7. This reflects the fact that as ∆ increases, there
+are more opportunities to observe an extreme minimum p-value over a longer monitoring window
+length. Similarly, for a fixed value of ∆, the cutoff is smaller whenα ∆ = 0.1 than whenα ∆ = 0.2,
+which is consistent with a more stringent rejection threshold.
+Since the proposed monitoring procedure rejects the null hypothesis whenS t ≤c, these results
+suggest that changing the run-in length would not substantially change the resulting sFWER or
+power. Moreover, since larger values ofrrequire additional baseline observations to be collected
+before monitoring can begin, we use the smaller run-in length ofr= 30 in the remaining simulation
+studies.
+3.2 sFWER and power simulations
+Next we conduct simulations to evaluate the sFWER and power of the proposed procedure and
+compare its performance with competing methods.
+We consider monitoring windows of length ∆∈ {7,14}and both univariate and multivariate
+settings withp∈ {1,10}features. We evaluate performance at target sFWER levelsα ∆ ∈ {0.1,0.2}.
+Monitoring began after a run-in period of lengthr= 30, with db = 7 candidate change point days
+evaluated at each monitoring time.
+For each monitoring dayt > r, we compute the statisticSt as described in Section 2.3. Specifi-
+cally, for each candidate change point day in the previous db = 7 days, we compute a permutation-
+based VC* p-value using 5000 resamples based only on data observed up to timet, and defineS t
+as the minimum of these p-values.
+For each combination of ∆ andα ∆, we used the calibrated cutoff obtained from the run-in
+length study in Section 3.1. Specifically, we used the cutoff corresponding tor= 30, as the
+previous simulations suggested that the calibrated cutoff is not sensitive to the choice of run-in
+length. To evaluate sFWER, we generate an additionalB= 1000 null datasets of lengthr+ ∆
+and record whether at least one false alarm occurred during the monitoring window, i.e., whether
+M≤c. The estimated sFWER is computed as the proportion of simulated datasets with at least
+one rejection.
+To assess detection performance under the alternative, we generateB= 1000 datasets with a
+true mean shift of magnitudeτ∈ {0.5,1.0,1.5}occurring immediately after the run-in period (i.e.,
+5
+dayr+ 1) and estimate the probability of detecting at least one change point during the monitoring
+window.
+We compare the proposed procedure with three alternative approaches for controlling Type
+I error. The unadjusted procedure applies a fixed threshold ofα= 0.05 at each monitoring day.
+Bonferroni and ˇSid´ ak corrections are traditionally used to control the FWER across a fixed number
+of tests. To adapt these procedures to our sequential monitoring setting, we use ∆, the length of
+the monitoring window, in place of the number of tests when computing the Bonferroni and ˇSid´ ak
+thresholds. This results in per-day significance thresholds ofα ∆/∆ and 1−(1−α ∆)1/∆, respectively.
+Table 1 summarizes rejection rates across all simulation settings. Under the null settings (τ= 0),
+the proposed procedure achieves rejection rates close to the target sFWER levels across both uni-
+variate and multivariate settings. Since the cutoff is estimated from a finite number of simulations,
+the observed sFWER is not expected to equal the target level exactly and may fall slightly above
+or below the target due to Monte Carlo variability. In contrast, the unadjusted procedure becomes
+increasingly liberal as the monitoring window increases, particularly for ∆ = 14, where rejection
+rates substantially exceed the target level. Bonferroni and ˇSid´ ak corrections, on the other hand,
+tend to be overly conservative, with rejection rates that often fall below the desired level.
+Under the alternative (τ >0), the proposed method maintains substantially higher detection
+rates than Bonferroni and ˇSid´ ak across all settings, while still preserving the desired error control.
+As expected, detection rates increase with larger signal magnitudes (i.e., asτincreases). Compared
+with the unadjusted procedure, the proposed method achieves similar detection performance in
+many settings while avoiding the inflated false alarm rates seen under the null. The Bonferroni
+and ˇSid´ ak corrections are conservative which leads to lower power when there is truly a change
+point. Overall, these results suggest that the proposed calibration approach provides a better
+balance between controlling false alarms and maintaining sensitivity to true changes than standard
+multiple testing corrections. These patterns are consistent across both univariate (p= 1) and
+multivariate (p= 10) settings.
+4 Real data application
+We apply the proposed monitoring procedure to passively collected smartphone data from a cohort
+of adolescents and young adults enrolled in a study investigating affective instability in youth (Xia
+et al., 2022). We follow the same preprocessing steps described in Martin et al., 2026, summarized
+here.
+4.1 Participants and data acquisition
+A total of 41 adolescents and young adults were enrolled in a study investigating affective instability
+in youth (Xia et al., 2022). Descriptive statistics summarizing participant diagnoses are provided
+in Xia et al. (2022).
+Smartphone sensor and social data were acquired through the Beiwe platform [Torous et al.,
+2016]. Once the Beiwe application was installed on participants’ smartphones, Global Positioning
+System (GPS) and social data were passively collected and summarized into daily features. In this
+paper, we focus on continuous mobility-based features derived from GPS data. Computation of
+these daily summary features is described in the Supplement of Barnett and Onnela, 2020.
+6
+4.2 Data processing and analysis
+Following the preprocessing steps described in Martin et al., 2026, we consider segments of sensor
+data spanning at least 14 days with no more than three consecutive days of missingness. Partic-
+ipants could contribute more than one eligible segment, which were analyzed separately. Missing
+observations were imputed using the na.interp() function in R. Mobility features were then trans-
+formed and adjusted for day-of-week effects, and the resulting residuals were used as input to the
+change point detection procedure. Depending on data availability, segments contained either 11 or
+13 mobility features.
+For each data segment, we mimic an online implementation of change point detection using
+VC*. We begin with a run-in period ofr= 14 days, which is used to estimate the patient’s baseline
+behavior. At each monitoring dayt > r, we compute the VC* test statistic for each candidate
+change point dayk∈ {t−db, . . . , t−1}using only data observed up to timet. We set db = 7 and
+use a regularization parameter of 0.1 when estimating the covariance matrix. For each candidate
+day, we obtain a permutation-based p-value using 5000 resamples. We then define the monitoring
+statistic as
+St = mint−db≤k≤t−1 pk,
+wherep k is the p-value corresponding to candidate change point dayk.
+To estimate a common test statistic cutoff across subjects, we first compute a correlation matrix
+for each subject using all available data. We then combine these subject-level correlation matrices
+into a sample-wide correlation matrix using a weighted average, where weights are proportional
+to the number of observed days contributed by each subject. Simulation results (see Supplement
+Section S2) suggest that the cutoff is relatively insensitive to the underlying correlation structure.
+Therefore, we use the pooled correlation matrix to generate data under the null and estimate a
+cutoff to control the sFWER atα ∆ = 0.2 over a monitoring window of length ∆ = 7. Because
+some segments contained 11 mobility features while others contained 13, cutoffs were calibrated
+separately for each feature dimension and applied accordingly during monitoring.
+After the run-in period, monitoring proceeds sequentially. At eacht > r, we test whether a
+change point has occurred within the previous db = 7 days. Monitoring continues until a change
+point is detected, at which point the procedure is reset and a new run-in period ofr= 14 days is
+initiated. We apply the proposed monitoring procedure using the calibrated cutoff corresponding
+toα ∆ = 0.2 and ∆ = 7.
+4.3 Results
+Figure 2 displays the change points detected by the proposed procedure for each participant. After
+excluding one participant with insufficient follow-up, the analysis included 43 sensor-data segments
+from 40 participants. Of these, 31 segments included all 13 mobility features, while the remaining
+12 segments included 11 of the 13 mobility features.
+VC* identified 86 change points across 34 of the 40 participants included in the analysis. Because
+monitoring was restarted after each detected change point, participants could contribute multiple
+change points during follow-up. Change points were identified across participants with varying
+lengths of follow-up and occurred throughout the monitoring period.
+Overall, these results demonstrate the practical implementation of the proposed calibration
+procedure in a real-world smartphone monitoring setting.
+7
+5 Discussion
+In this work, we propose a simulation-based procedure for controlling false positives in online
+change point detection. In many monitoring settings, testing is performed sequentially over time
+using statistics that are highly dependent due to overlapping data. Standard multiple testing
+corrections, such as Bonferroni or ˇSid´ ak, do not account for this dependence structure and can be
+overly conservative in practice. Our approach directly targets control of a sequential family-wise
+error rate over a moving window of monitoring days, which aligns more closely with how online
+monitoring procedures are used in practice.
+Simulation results show that the proposed procedure controlled the sFWER at the target level
+across a range of settings. In contrast, the unadjusted procedure produced inflated false alarm
+rates, while Bonferroni and ˇSid´ ak corrections were more conservative than the proposed approach.
+These findings suggest that accounting for the dependence induced by repeated testing can improve
+error control without requiring overly stringent thresholds.
+Although this work was motivated by mHealth applications, the proposed framework is not
+specific to smartphone data. Similar multiple testing challenges arise whenever monitoring is per-
+formed repeatedly over time and decisions must be made sequentially. As a result, the proposed
+calibration procedure may also be useful in other settings involving online monitoring.
+There are several limitations to this work. First, the proposed procedure relies on simulations,
+which can be computationally intensive. A large number of simulations may be needed to obtain
+stable cutoff estimates, particularly when estimating more extreme quantiles of the monitoring
+statistic. In practice the computational cost in a daily online setting is likely negligible, but for
+more frequent testing intervals computation could become a concern.
+Second, the proposed calibration procedure assumes that the data are stable under the null
+hypothesis of no change point. This assumption may not hold in practice, particularly in settings
+where changes may occur gradually over time rather than through a single abrupt shift correspond-
+ing to a change point. Future work could investigate the robustness of the proposed calibration
+procedure to gradual changes in the data over time.
+Finally, the mHealth study presented here was intended primarily to illustrate how the proposed
+procedure may be implemented using passively collected smartphone data. Since the procedure
+was applied retrospectively and there is no gold standard for identifying true behavioral changes,
+it is not possible to determine whether detected change points correspond to clinically meaningful
+events. Future work could evaluate the proposed procedure prospectively in a true online setting
+and investigate the relationship between detected change points and clinical outcomes.
+Funding
+This work was funded in part by the A.E. Foundation and the Penn-CHOP Lifespan Brain Institute.
+Supplementary Material
+Supplementary material is available in the supplementary appendix accompanying this preprint.
+Conflict of Interest
+None declared.
+8
+References
+Samaneh Aminikhanghahi and Diane J. Cook. A survey of methods for time series change point
+detection.Knowledge and Information Systems, 51(2):339–367, May 2017. ISSN 0219-3116. doi:
+10.1007/s10115-016-0987-z. URLhttps://doi.org/10.1007/s10115-016-0987-z.
+I. Barnett and J. P. Onnela. Inferring mobility measures from GPS traces with missing data.
+Biostatistics, 21(2):e98–e112, 2020. ISSN 1465-4644, 1468-4357. doi: 10.1093/biostatistics/
+kxy059. URLhttps://academic.oup.com/biostatistics/article/21/2/e98/5145908.
+C. Bonferroni. Teoria statistica delle classi e calcolo delle probabilita.Pubblicazioni del R Istituto
+Superiore di Scienze Economiche e Commericiali di Firenze, 8:3–62, 1936. URLhttps://cir.
+nii.ac.jp/crid/1570009749360424576.
+Juan D. Chaparro, Cory Hussain, Jennifer A. Lee, Jessica Hehmeyer, Manjusri Nguyen, and Jeffrey
+Hoffman. Reducing Interruptive Alert Burden Using Quality Improvement Methodology.Applied
+Clinical Informatics, 11(1):46–58, January 2020. ISSN 1869-0327. doi: 10.1055/s-0039-3402757.
+URLhttp://www.thieme-connect.de/DOI/DOI?10.1055/s-0039-3402757.
+Marilyn Hravnak, Tiffany Pellathy, Lujie Chen, Artur Dubrawski, Anthony Wertz, Gilles Cler-
+mont, and Michael R. Pinsky. A Call to AlArms: Current State and Future Directions in
+the Battle Against Alarm Fatigue.Journal of electrocardiology, 51(6 Suppl):S44–S48, 2018.
+ISSN 0022-0736. doi: 10.1016/j.jelectrocard.2018.07.024. URLhttps://pmc.ncbi.nlm.nih.
+gov/articles/PMC6263784/.
+K. K. Gordon Lan and David L. DeMets. Discrete Sequential Boundaries for Clinical Trials.
+Biometrika, 70(3):659–663, 1983. ISSN 0006-3444. doi: 10.2307/2336502. URLhttps://www.
+jstor.org/stable/2336502.
+Melissa Lynne Martin, Juliette Brook, Sage Rush, Theodore D. Satterthwaite, and Ian J. Barnett.
+Variance component score test for multivariate change point detection with applications to mobile
+health, January 2026. URLhttp://arxiv.org/abs/2601.22147. arXiv:2601.22147 [stat].
+D. C. Mohr, M. Zhang, and S. M. Schueller. Personal Sensing: Understanding Mental
+Health Using Ubiquitous Sensors and Machine Learning.Annual Review of Clinical Psy-
+chology, 13(Volume 13, 2017):23–47, 2017. ISSN 1548-5943, 1548-5951. doi: 10.1146/
+annurev-clinpsy-032816-044949. URLhttps://www.annualreviews.org/content/journals/
+10.1146/annurev-clinpsy-032816-044949.
+Peter C. O’Brien and Thomas R. Fleming. A Multiple Testing Procedure for Clinical Trials.
+Biometrics, 35(3):549–556, 1979. ISSN 0006-341X. doi: 10.2307/2530245. URLhttps://www.
+jstor.org/stable/2530245.
+J. P. Onnela and S. L. Rauch. Harnessing Smartphone-Based Digital Phenotyping to Enhance
+Behavioral and Mental Health.Neuropsychopharmacology, 41(7):1691–1696, 2016. ISSN 1740-
+634X. doi: 10.1038/npp.2016.7. URLhttps://www.nature.com/articles/npp20167.
+S. J. Pocock. Group sequential methods in the design and analysis of clinical trials.Biometrika,
+64(2):191–199, August 1977. ISSN 0006-3444. doi: 10.1093/biomet/64.2.191. URLhttps:
+//doi.org/10.1093/biomet/64.2.191.
+9
+J. Torous, P. Staples, and J. P. Onnela. Realizing the Potential of Mobile Mental Health: New
+Methods for New Data in Psychiatry.Current Psychiatry Reports, 17(8):61, 2015. ISSN 1535-
+1645. doi: 10.1007/s11920-015-0602-0. URLhttps://doi.org/10.1007/s11920-015-0602-0.
+J. Torous, M. V. Kiang, J. Lorme, and J. P. Onnela. New Tools for New Research in Psychiatry:
+A Scalable and Customizable Platform to Empower Data Driven Smartphone Research.JMIR
+Mental Health, 3(2):e5165, 2016. doi: 10.2196/mental.5165. URLhttps://mental.jmir.org/
+2016/2/e16. Company: JMIR Mental Health Distributor: JMIR Mental Health Institution:
+JMIR Mental Health Label: JMIR Mental Health.
+P. H. Westfall, S. S. Young, and S. Paul Wright. On Adjusting P-Values for Multiplicity.Biometrics,
+49(3):941–945, 1993. ISSN 0006-341X. doi: 10.2307/2532216. URLhttps://www.jstor.org/
+stable/2532216.
+C. H. Xia, I. Barnett, Tinashe M. Tapera, A. Adebimpe, J. T. Baker, D. S. Bassett, M. A. Brotman,
+M. E. Calkins, Z. Cui, E. Leibenluft, S. Linguiti, D. M. Lydon-Staley, M. L. Martin, T. M. Moore,
+K. Murtha, K. Piiwaa, A. Pines, D. R. Roalf, S. Rush-Goebel, D. H. Wolf, L. H. Ungar, and
+T. D. Satterthwaite. Mobile footprinting: linking individual distinctiveness in mobility patterns
+to mood, sleep, and brain functional connectivity.Neuropsychopharmacology, 47(9):1662–1671,
+2022. ISSN 1740-634X. doi: 10.1038/s41386-022-01351-z. URLhttps://www.nature.com/
+articles/s41386-022-01351-z.
+Zbynˇ ekˇSid´ ak. Rectangular Confidence Regions for the Means of Multivariate Normal Distributions.
+Journal of the American Statistical Association, 62(318):626–633, June 1967. ISSN 0162-1459,
+1537-274X. doi: 10.1080/01621459.1967.10482935. URLhttp://www.tandfonline.com/doi/
+abs/10.1080/01621459.1967.10482935.
+10
+Table 1: Estimated rejection rates across simulation settings. Whenτ= 0, values correspond to
+Type I error; whenτ >0, values correspond to the empirical probability of detecting at least one
+change point within the monitoring window.
+α∆ ∆ Method τ= 0 τ= 0.5 τ= 1.0 τ= 1.5
+p= 1p= 10 p= 1p= 10 p= 1p= 10 p= 1p= 10
+0.2
+7
+Proposed 0.20 0.23 0.57 0.69 0.66 0.85 0.69 0.92
+Unadjusted 0.18 0.18 0.38 0.50 0.49 0.71 0.54 0.81
+Bonferroni 0.09 0.09 0.31 0.40 0.40 0.62 0.46 0.74
+ˇSid´ ak 0.10 0.10 0.31 0.43 0.41 0.64 0.47 0.76
+14
+Proposed 0.22 0.20 0.48 0.56 0.57 0.76 0.63 0.84
+Unadjusted 0.31 0.26 0.55 0.63 0.64 0.81 0.68 0.89
+Bonferroni 0.11 0.10 0.35 0.39 0.45 0.61 0.52 0.72
+ˇSid´ ak 0.12 0.10 0.37 0.39 0.47 0.62 0.53 0.73
+0.1
+7
+Proposed 0.08 0.10 0.43 0.55 0.52 0.74 0.58 0.83
+Unadjusted 0.18 0.18 0.38 0.50 0.49 0.71 0.54 0.81
+Bonferroni 0.04 0.05 0.22 0.29 0.33 0.52 0.38 0.65
+ˇSid´ ak 0.04 0.05 0.22 0.29 0.33 0.52 0.38 0.65
+14
+Proposed 0.11 0.11 0.35 0.40 0.45 0.63 0.51 0.83
+Unadjusted 0.31 0.26 0.55 0.63 0.64 0.81 0.68 0.89
+Bonferroni 0.06 0.06 0.27 0.28 0.37 0.49 0.44 0.62
+ˇSid´ ak 0.06 0.06 0.27 0.28 0.37 0.49 0.44 0.62
+11
+Figure 1: Estimated calibrated cutoffs across run-in lengths. Points show the estimated cutoff, and
+error bars show the variability in the estimated cutoff across bootstrap samples. Separate panels
+correspond to combinations of monitoring window length ∆ and target sFWER levelα ∆.
+12
+Figure 2: Detected change points for each participant using the proposed monitoring procedure.
+Black points indicate days on which smartphone sensor data were observed. Red markers indicate
+detected change points. Monitoring was restarted following each detected change point.
+13

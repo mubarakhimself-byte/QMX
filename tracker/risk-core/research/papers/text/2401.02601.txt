@@ -1,0 +1,709 @@
+arXiv 2401.02601  https://arxiv.org/abs/2401.02601
+
+arXiv:2401.02601v1  [q-fin.PM]  5 Jan 2024
+Constrained Max Drawdown: a Fast and Robust
+Portfolio Optimization Approach
+Albert Dorador
+Department of Statistics
+Uinversity of Wisconsin - Madison
+albert.dorador@wisc.edu
+Abstract
+We propose an alternative linearization to the classical Ma rkowitz quadratic port-
+folio optimization model, based on maximum drawdown. This m odel, which min-
+imizes maximum portfolio drawdown, is particularly appeal ing during times of ﬁ-
+nancial distress, like during the COVID-19 pandemic. In add ition, we will present
+a Mixed-Integer Linear Programming variation of our new mod el that, based on
+our out-of-sample results and sensitivity analysis, deliv ers a more proﬁtable and
+robust solution with a 200 times faster solving time compare d to the standard
+Markowitz quadratic formulation.
+1 Introduction
+Portfolio optimization is the process of ﬁnding the best pos sible portfolio of ﬁnancial assets i.e. the
+best way to allocate a budget among different possible such a ssets, according to some objective. The
+objective typically maximizes factors such as expected ret urn, and minimizes costs like volatility
+(often informally referred to as ‘ﬁnancial risk’).
+The above optimization problem (maximizing expected retur n with minimum risk) is the backbone
+of Modern portfolio theory, which was introduced by Markowi tz (1952) and further elaborated later
+by Markowitz (1959), earning the author the Nobel Prize in Ec onomics in 1990.
+The world’s fascination by Markowitz ideas still continues today and many different variations of
+his model have been proposed over the last few decades trying to correct some of its drawbacks.
+In a recent paper (Dai and Wang, 2019), the authors study one o f the main drawbacks that the
+Markowitz model has: the sensitivity of optimal solutions t o changes in the model parameters. In
+this project we will study this issue as well, and we will prop ose a simple way to improve the
+robustness of our solution.
+Another aspect that used to be a signiﬁcant drawback of the or iginal Markowitz model was the
+quadratic nature of the model: a quadratic program may be con siderably harder to solve than a
+Linear one, and a few decades ago the computational constrai nt was a factor that limited the model’s
+applicability in practice. Konno and Y amazaki (1991) studythis issue and propose a way to linearize
+the problem while providing a comparable performance. Henc e, at least since the 1990’s, portfolio
+optimization is no longer (exclusively) a quadratic optimi zation problem, but linear.
+In the present work, we propose an alternative linearizatio n to the classical Markowitz quadratic
+portfolio optimization model, based on maximum drawdown, which we call ‘Max Drawdown’ (MD).
+This model, which minimizes maximum portfolio drawdown, is particularly appealing during times
+of ﬁnancial distress, like during the COVID-19 pandemic.
+The rest of the paper is organized as follows: section 2 revie ws both the Markowitz model (along
+with two simple variations) as well as the mean absolute devi ation model (Konno and Y amazaki,
+Preprint. Under review.
+1991), and it introduces the MD model. Section 3 implements t he models introduced in section 2
+(minus Konno and Y amazaki (1991)) and presents in-sample and out-of-sample results. In section 4
+we analyze the results presented in the previous section, in cluding a sensitivity analysis. Section 5
+concludes.
+2 Mathematical models
+In all deterministic portfolio optimization models the gen eral assumption is that parameter values
+are correctly observed (i.e. sample values correspond to tr ue population values) and are ﬁxed, at
+least to a relevant extent and for sufﬁciently long. These as sumptions are of course naive. However,
+improving on these assumptions would require much more adva nced tools. Moreover, it is not
+clear how much it would be gained by doing that since, at the co re, portfolio optimization is about
+choosing the assets that will statistically perform best jo intly, but this inevitably has a component of
+‘forecasting the future’ which, in ﬁnance, is an impossible task in abstract, and some assumptions
+must be made (e.g. the distribution of returns stays constan t during the investment horizon, or at
+most it changes according to a known model).
+Having said that, there is certainly room for improvement on this front, and some relaxation of
+the assumptions, particularly in the form of using stochast ic programming, is likely to lead to an
+improvement in out-of-sample performance.
+2.1 Model 1: Classical Markowitz model
+Below we review the Nobel prize - winning Markowitz model (see Markowitz (1952) and Markowitz
+(1959)).
+min
+x∈Rn
+n∑
+i=1
+n∑
+j=1
+σi,jxixj
+subject to:
+n∑
+i=1
+rixi ≥ ρ (1)
+n∑
+i=1
+xi = 1 (2)
+0 ≤ xi ≤ 1 i = 1, . . . , n (3)
+Where the decision variable xi is the proportion of the funds allocated to asset i, σi,j is the (daily)
+covariance between asset i and asset j, ri is the expected return of asset i (computed via the Method
+of Moments i.e. the arithmetic mean over the sample period), and ρ is a minimum (expected) return
+that is required per trading day.
+The objective function seeks to minimize the standard devia tion of the portfolio by considering the
+variance of each asset as well as its covariance with respect to the other assets in the sample.
+Constraint (1) ensures that the optimal asset allocation ac hieves a minimum acceptable expected
+return.
+Constraint (2) enforces that exactly 100% of the funds are al located to some combination of assets.
+Constraint (3) is a set of n box constraints that ensures each asset is assigned a non-ne gative propor-
+tion of the funds, up to a maximum of 100%.
+Therefore, this model has a quadratic objective function (s ince the decision variables are squared)
+and a set of linear constraints, so it is a QP .
+Since the covariance matrix is, by deﬁnition, positive semi deﬁnite, then: this is a convex quadratic
+program, the feasible set is a polyhedron, the solution lies either on the boundary or the interior
+of the feasible set, and it is relatively easy to solve (compa red to a quadratic program with a non
+positive deﬁnite parameter matrix in the objective functio n).
+In that direction, it is worth pointing out that Slater’s con ditions are satisﬁed:
+Let xT Σx be the matrix form of the objective, where Σ is the covariance matrix.
+2
+Note that the program is indeed convex: xT Σx is convex since Σ is positive semi-deﬁnite, and all
+constraints are afﬁne, and therefore convex (and concave to o)
+Further note the program is strictly feasible: let xi = 1 , for a given stock i with an expected return
+strictly above ρ (there must exist at least 1 such stock, otherwise the progra m is unfeasible); then the
+inequality constraint is satisﬁed strictly, and the equali ty constraint is also satisﬁed
+Therefore, strong duality holds and, since we know a ﬁnite p∗ exists (since this is a convex quadratic
+program), then we are guaranteed a ﬁnite d∗ exists too and p∗ = d∗ (where p∗ and d∗ are the optimal
+objective values of the Primal and the Dual, respectively).
+In our implementation this model has about 400 continuous va riables and 400 constraints (including
+box constraints).
+2.2 Model 2: Reverse Markowitz model
+This is the most basic variation of the classical Markowitz m odel, which is not as popular as the
+original Markowitz, neither in academia nor industry. One p ossible reason is that it is much more
+arbitrary to set a maximum standard deviation than a minimum return (for which you have clear
+minimum acceptable thresholds like bond yields of maturiti es similar to one’s sample horizon). Fur-
+thermore, like in our particular case, the data collected do es not allow us to require a very low
+daily portfolio standard deviation (otherwise the optimiz ation problem is unfeasible i.e. the feasible
+region is empty).
+max
+x∈Rn
+n∑
+i=1
+rixi
+subject to:
+n∑
+i=1
+n∑
+j=1
+σi,j xixj ≤ σ0 (1)
+n∑
+i=1
+xi = 1 (2)
+0 ≤ xi ≤ 1 i = 1, . . . , n (3)
+Where the decision variable xi is the proportion of the funds allocated to asset i, σi,j is the covariance
+between asset i and asset j, ri is the expected daily return of asset i (computed via the Method of
+Moments i.e. the arithmetic mean over the sample period), an d σ0 is a maximum acceptable daily
+standard deviation over the time horizon of the sample perio d.
+The objective function seeks to maximize the expected retur n of the portfolio.
+Constraint (1) ensures that the standard deviation of the op timal asset allocation does not go beyond
+a given threshold.
+Constraint (2) enforces that exactly 100% of the funds are al located to some combination of assets.
+Constraint (3) is a set of n box constraints that ensures each asset is assigned a non-ne gative propor-
+tion of the funds, up to a maximum of 100%.
+Therefore, this model has a linear objective function and a s et of quadratic and linear constraints.
+Note it cannot be considered a linear program because even if the objective is linear, not all con-
+straints are. This is in fact a Quadratically Constrained Qu adratic Program (QCQP).
+In our implementation this model has, again, about 400 conti nuous variables and 400 constraints
+(including box constraints).
+2.3 Model 3: Simultaneous mean-variance optimization
+In both Model 1 and Model 2 one’s preferences are heavily cons trained by the random data one
+collects, in the sense that one cannot require a minimum retu rn higher than any return observed in
+the sample collected, and likewise one cannot require a maxi mum variance lower than any variance
+observed in the sample collected.
+3
+By optimizing both the expected return and the standard devi ation simultaneously we overcome the
+issue above, in the sense that we will not have an unfeasible p roblem due to ’unrealistic market
+demands’.
+However, this comes at the cost of introducing arbitrarines s in the form of the penalty parameter λ,
+which balances how much we care about each of the two objectiv es.
+In any case, as we will see in a later section, we will present a simple heuristic that attempts to
+remove part of this arbitrariness.
+min
+x∈Rn
+−
+n∑
+i=1
+rixi + λ
+n∑
+i=1
+n∑
+j=1
+σi,j xixj
+subject to:
+n∑
+i=1
+xi = 1 (1)
+0 ≤ xi ≤ 1 i = 1, . . . , n (2)
+Where the decision variable xi is the proportion of the funds allocated to asset i, σi,j is the (daily)
+covariance between asset i and asset j, ri is the expected daily return of asset i (computed via the
+Method of Moments i.e. the arithmetic mean over the sample pe riod).
+The objective function seeks to minimize the negative of the expected return (i.e. equivalent to
+maximizing the expected return) while also minimizing λ times the variance of the portfolio.
+Constraint (1) enforces that exactly 100% of the funds are al located to some combination of assets.
+Constraint (2) is a set of n box constraints that ensures each asset is assigned a non-ne gative propor-
+tion of the funds, up to a maximum of 100%.
+Therefore, this model has a quadratic objective function an d a set of linear constraints, so it is a QP .
+Finally, it is worth mentioning that a variation of the above three models introducing L1 regulariza-
+tion was considered. However, it was eventually discarded s ince, by construction, it had no effect
+irrespective of the size of the penalty parameter µ > 0. We provide a simple proof next.
+L1 regularization introduces an extra term in the objective function, which, in case of a minimization
+problem, is µ ∑ni=1 ui, with |xi| ≤ ui for all i ∈ { 1, . . . , n}. But then, since xi ≥ 0 for alli ∈ { 1, . . . , n}, the previous epigraph condition simpliﬁes to xi ≤ ui for all i ∈ { 1, . . . , n}, which
+implies ∑ni=1 xi ≤ ∑ni=1 ui. But we require ∑ni=1 xi = 1 so 1 ≤ ∑ni=1 ui. Finally, since ∑ni=1 ui
+is penalized in the objective by µ > 0, and there are no additional constraints on ui, we then have∑n
+i=1 ui = 1 at the optimum, irrespective of the particular (positive) v alue of µ.
+In our implementation this model has, again, about 400 conti nuous variables and 400 constraints
+(including box constraints).
+2.4 Model 4: Mean Absolute Deviation (Konno and Yamazaki 199 1)
+The authors propose in their 1991 paper [4] a way to turn portfolio optimization into a linear program
+based on the so-called ‘epigraph trick’. Their key idea is to substitute the standard deviation for the
+mean absolute deviation, which is a very related concept, as we show next:
+(Sample) Mean absolute deviation: 1T ∑Tt=1 |∑ni=1(rit − ri)xi|
+(Sample) Standard deviation:
+√
+1
+T
+∑T
+t=1[∑ni=1(rit − ri)xi]2
+where ri = ∑Tt=1 xi
+The above two expressions would actually be equal if the squa re root was placed in the innermost
+sum (recall that
+√
+f (x)2 = |f (x)|). In fact, Konno and Y amazaki prove that the two resulting
+optimization problems are equivalent if the returns are mul tivariate normally distributed.
+Original program (non linear):
+4
+min
+x∈Rn
+1
+T
+T∑
+t=1
+⏐⏐⏐⏐⏐ n∑i=1(rit − ri)xi⏐⏐⏐⏐⏐
+subject to:
+n∑
+i=1
+rixi ≥ ρ (1)
+n∑
+i=1
+xi = 1 (2)
+0 ≤ xi ≤ 1 i = 1, . . . , n (3)
+Linear program using epigraph trick:
+min
+x∈Rn,y∈RT
+1
+n
+T∑
+t=1
+yt
+subject to: yt ≥
+n∑
+i=1
+(rit − ri)xi t = 1, . . . , T (1)
+yt ≥ −
+n∑
+i=1
+(rit − ri)xi t = 1, . . . , T (2)
+n∑
+i=1
+rixi ≥ ρ (3)
+n∑
+i=1
+xi = 1 (4)
+0 ≤ xi ≤ 1 i = 1, . . . , n (5)
+We see the epigraph variable yt replacing the mean absolute deviation in the objective func tion, as
+well as the two sets of T epigraph constraints. The rest of the constraints are ident ical to Models 1,
+2 and 3.
+As the authors discuss, this linearized model has several ad vantages over the usual quadratic one,
+and here we highlight the ones we believe are most important, in order of importance:
+First, the number of functional constraints remains consta nt at 2T + 2 regardless of the number of
+stocks included in the model, so it allows one to update the op timal portfolio in real time even if the
+universe of stocks under consideration is thousands of stoc ks (which is a very standard number in
+modern capital markets).
+Second, an optimal solution contains at most 2T + 2 non-zero components if short-selling is allowed
+(non-negativity constraint is dropped). In contrast, an optimal portfolio derived from L2 risk (instead
+of L1 like in this case), may contain as many as n assets with non-zero allocation. This is in general
+not desirable due to ﬁxed costs (transaction fees) and incre ased portfolio management difﬁculty
+(more companies and exposures to monitor). Note that contro lling for how many stocks have non-
+zero allocations via a lower bound on the decision variable ( that is activated only if the stock is
+selected) would turn the problem into a Mixed Integer Progra m, which is in theory even harder to
+solve than a QP . We will explore this option in Model 6 and we’l l see in practice this is not the case.
+Third, there’s no need anymore to calculate a covariance mat rix, so it is easier and faster to update
+ones’ optimal portfolio when new stocks are added into the un iverse under consideration, or when
+new data on individual stock returns becomes available. How ever, related to the second point above,
+this model may favor stock concentration (i.e. the opposite of stock diversiﬁcation) since it does not
+use covariance information. This may not be desirable.
+Overall, the authors report that the computational complex ity of solving a L1-based model is O(n)
+while that of a traditional L2-based model is O(n2), where n is the number of assets under consid-
+eration, and so the time savings for large n can be very signiﬁcant. Or, for a ﬁxed solving time, the
+5
+LP can consider a much larger universe of stocks, providing a much better optimal solution (at least
+in theory). As a side note, I believe their linear-time claim is based on empirical evidence since, for
+example, the complexity of a very common LP algorithm like th e Simplex method is exponential in
+the worst case, but it has been observed to perform linearly i n most cases.
+But, in addition to the above advantages, we would like to add two key advantages that an LP has
+over a QP in any setting, not just in the case of portfolio opti mization.
+First, the optimal solution of an LP , if it exists, is always at a vertex of the polyhedral feasible region,
+so the optimum of any LP can always be found by checking a ﬁnite number of points (which is the
+essence of the Simplex method). On the other hand, in a QP the o ptimum may be reached in the
+interior of the feasible region, and hence there is absolute ly no guarantee that it can be found by
+checking a ﬁnite number of points, and hence other, more soph isticated methods must be used.
+Second, the objective function of an LP is by deﬁnition always convex (and concave), whereas this is
+not always the case in a QP (the coefﬁcient matrix may not be po sitive semi-deﬁnite), in which case
+the problem becomes much harder to solve. In portfolio optim ization, though, this second aspect
+will never be an issue since the covariance matrix is by deﬁni tion positive semi-deﬁnite. But still, it
+is worth pointing this general advantage of LP compared to QP .
+If we were to implement this model, it would have about 450 con tinuous variables and 520 con-
+straints (including box constraints).
+Next we present our proposed linearization of the portfolio optimization problem.
+2.5 Model 5: Maximum Drawdown portfolio optimization
+We propose a new way to optimize a portfolio that relies on lin ear programming. The idea is simple:
+ﬁnd a portfolio of stocks that minimizes the maximum drawdow n of the portfolio (subject to a
+minimum expected return). Chekhlov et al. (2004) consider a similar approach but they opt for
+maximizing expected return subject to a maximum drawdown al lowed. We instead opt for the
+opposite formulation, which we ﬁnd perhaps more intuitive ( similar to how the classical Markowitz
+framework might be considered more intuitive than the ‘reve rse’ Markowitz).
+The ‘maximum drawdown’ of an asset over a time period is deﬁne d as the largest drop in price of the
+asset in any given period. In our case, the optimal portfolio will combine stocks such that the worst
+overall performance of the portfolio in any given trading da y is as good (‘less bad’) as possible.
+This is a reasonable goal to pursue in building a portfolio, a nd it has several advantages over the
+traditional mean-variance portfolio optimization. Most n otably, the fact that we consider a downside
+risk metric instead of a general risk metric like the standar d deviation, which also penalizes desirable
+outcomes like presence of returns above the mean return.
+Hence, we wish to maximize the minimum portfolio return over a sample time period (equivalent to
+minimizing the maximum portfolio negative return).
+We use the epigraph trick as means of linearization. To preve nt a trivial solution allocating 100%
+of the funds to the one stock with the minimum maximum drawdow n (largest minimum return in
+any given trading day of the sample period), we impose a ceili ng of 50% of the funds on any given
+allocation, so there will be at least 2 stocks in the optimal p ortfolio (and note that it is not necessarily
+the case that they will be the 2 stocks with largest minimum re turn, since those may happen on the
+same day and hence add up to a larger maximum portfolio drawdo wn than the optimal achievable).
+Note that by setting the ceiling to 50% we avoid a trivial solution while also avoiding the arbitrariness
+of imposing a minimum number of k > 1 stocks in our optimal portfolio. Finally, note that we
+don’t really lose anything by requiring at least 2 stocks in t he optimal portfolio, since basic domain
+knowledge tells us that some degree of diversiﬁcation is alw ays good, and with 1 stock you have
+none.
+Original program (non-linear):
+Deﬁne rt = ∑ni=1 rit xi , that is, the weighted average return on day t of a portfolio using weightsx.
+6
+max min
+x∈Rn t=1,...,T rt
+subject to:
+n∑
+i=1
+rixi ≥ ρ (1)
+n∑
+i=1
+xi = 1 (2)
+0 ≤ xi ≤ 0.5 i = 1, . . . , n (3)
+Linear program using epigraph trick:
+max
+x∈Rn,y∈R y
+subject to: y ≤ rt t = 1, . . . , T (1)
+n∑
+i=1
+rixi ≥ ρ (2)
+n∑
+i=1
+xi = 1 (3)
+0 ≤ xi ≤ 0.5 i = 1, . . . , n (4)
+The epigraph trick can be interpreted as follows: ﬁnd the lar gest possible value of the single variable
+y such that, for each and every day, y is below (or equal to) the portfolio return given by the weigh ts
+vector x. Therefore this achieves the goal of ﬁnding the budget alloc ation x that maximizes the
+minimum portfolio return on any given day. The rest of constr aints are the same as in the previous
+models.
+Note our LP has just T +2 constraints, so it’s even simpler than Model 4. But even more importantly,
+the number of constraints is independent of the number of sto cks under consideration, so it scales
+very well to larger sets of stocks.
+In addition, our LP has n + 1 variables, instead of n + T in Model 4, and just 1 variable more than
+the standard QP .
+Finally, we write this LP in standard form. By writing it in st andard form, this program does not
+really gain anything (in fact, it becomes somewhat harder to read) but it may be interesting to show
+one example of an LP that uses the epigraph trick and is in stan dard form.
+max
+x∈Rn,y∈R y
+subject to: y − rt ≤ 0 t = 1, . . . , T (1)
+−
+n∑
+i=1
+rixi ≤ −ρ (2)
+n∑
+i=1
+xi ≤ 1 (3 .1)
+−
+n∑
+i=1
+xi ≤ −1 (3 .2)
+0 ≤ xi ≤ 0.5 i = 1, . . . , n (4)
+In our implementation this model has about 400 continuous va riables and 450 constraints (including
+box constraints).
+7
+2.6 Model 6: Maximum Drawdown portfolio optimization with m inimum allocation
+constraint
+In this variation of Model 5 we impose a minimum allocation si ze, which in turn implies a max-
+imum number of positive allocations. This is a potentially m ore reﬁned formulation since having
+many small allocations is not desirable in practice, as we ha ve already discussed in subsection 2.4.
+However, this variation is, in theory, much harder to solve, so it may not be worth it depending on
+the problem structure, the number of stocks ( n) and sample time periods ( T ) under consideration.
+Let M = 0 .5 be a ‘big M’ parameter. Note 0.5 is the smallest (i.e. ’best’) M can be because
+xi could be as large as 0.5 (but not more, since 0.5 is the (least) upper bound on any allocation
+by construction). In fact, by choosing M this way we obtain the tightest LP relaxation possible;
+this way the feasible region we work with is as close as possib le to the convex hull using available
+information from the problem.
+We want to model for all i ∈ { 1, . . . , n} xi > 0 ⇒ xi ≥ 5%. This way we also ensure that at most
+20 stocks (out of about 400) will be picked.
+Let zi i = 1, . . . , nbe a binary variable that is 1 if and only if xi > 0.
+Note that if we impose xi ≥ 0.05zi then when zi = 1 indeed xi ≥ 0.05, and when zi = 0 then
+xi ≥ 0... but the problem is that if we don’t do anything else the sol ver will dodge this (attempted)
+logical constraint by just setting zi = 0 for all i. We can ﬁx this by also requiring xi ≤ M zi
+where M = 0.5 is a ’big M’ parameter. With this additional constraint, the solver cannot dodge our
+previous constraint by setting all zi = 0 because that would imply 0 ≤ xi ≤ 0 for all i, which is not
+even a feasible solution since we require ∑ni=1 xi = 1.
+MILP using epigraph trick and logical constraints:
+max
+x∈Rn,y∈R,z∈{0,1}n
+y
+subject to: y ≤ rt t = 1, . . . , T (1)
+n∑
+i=1
+rixi ≥ ρ (2)
+n∑
+i=1
+xi = 1 (3)
+xi ≥ 0.05zi i = 1, . . . , n (4)
+xi ≤ M zi i = 1, . . . , n (5)
+0 ≤ xi ≤ 0.5 i = 1, . . . , n (6)
+As it can be seen, implementing a very minor reﬁnement like th e one in Model 6 required turning
+an LP into a MILP and increased the number of variables from n + 1 to 2n + 1, and the number
+of constraints from T + 2 to T + 2 + 2 n, which means the number of functional constraints is no
+longer independent of the number of stocks.
+But more fundamentally, this problem seems similar to the fa mous Subset sum problem (a special
+case of the even more famous Knapsack problem (Mathews, 1896)), consisting of ﬁnding a subset of
+numbers in a set that sum to a given constant, in this case 1, wh ich is NP-complete. Our problem at
+hand is at least as hard, since in our case the candidates to ad d up are not given ex-ante, which means
+that there are 2n total possible combinations and checking all of them by brut e force would would
+take thousands of times the current age of the universe for n = 100 . In our case we have n = 393 .
+However, as we will see, the particular structure of our prob lem and the use of a sophisticated MIP
+solver like Gurobi will in fact produce a solution in less tim e than our LP in Model 5.
+In our implementation this model has about 400 continuous va riables, 400 binary variables, and
+1250 constraints (including box constraints).
+8
+3 Data and model deployment
+Since our proposed MD models minimize the maximum portfolio loss in any given trading day, it
+stands to reason that it may be particularly useful in times o f ﬁnancial distress.
+Therefore, we use early COVID-19-era market data on about 400 US stocks from the S& P 500 index,
+publicly available on Y ahoo Finance and automatically down loaded through an in-house Python
+script. Average return vector and covariance matrix are the n computed from these data.
+We consider a 50-50 train/test split for our data. Concretel y, we use February 1 – May 1, 2020 data
+to train and May 2 – August 1, 2020 to test.
+As mentioned earlier, we need a heuristic to choose the tunin g parameter λ. Cross-validation is
+tricky in a time-series context. Instead, we consider the fo llowing approach.
+We observe that in our universe of optimal portfolios for 100 different values of λ (equally spaced
+from 10−3 to 104), the minimum portfolio standard deviation is about 0.5930 % daily, and the max-
+imum expected portfolio daily return is 1.3398%. We want to ﬁ nd the value of the parameter λ
+that yields an optimal portfolio with minimum Euclidean nor m from the point (0.5930,1.3398). The
+in-sample optimal value of λ is found to be approximately 0.08.
+The rationale behind this heuristic is that the top left corner is the ideal situation (high expected return
+and low risk), and in our universe of optimal portfolios for d ifferent values of the top left corner is
+given by the two coordinates we have just mentioned. This is, hence, a natural heuristic to objectively
+choose the (in-sample) ‘best’ Pareto optimal portfolio, i. e. a way to objectively choose the ‘best’
+balance between the goal of maximizing expected return and m inimizing standard deviation. As a
+reminder, a Pareto optimal portfolio is a portfolio in which it is not possible to increase the portfolio
+expected return without also increasing the portfolio stan dard deviation, and vice versa (it is not
+possible to reduce the portfolio standard deviation withou t also reducing the portfolio expected
+return). Any portfolio to the left of the Pareto curve (also c alled ‘Efﬁcient frontier’ in this context)
+is unfeasible, and any portfolio to the right of the Pareto cu rve is inefﬁcient i.e. it is possible to
+improve one of the two metrics without worsening the other.
+3.1 In-sample results
+Table 1 below shows the in-sample results from solving the po rtfolio optimization models that we
+have considered in the present work. The quantities in the ﬁr st three columns below are daily ﬁgures.
+Table 1: In-sample performance of portfolio optimization m odels surveyed
+Model Exp. Return Std. Deviation Max Drawdown # Stocks Time ( s)
+Markowitz 0.18% 0.6% -2.0% 16 0.02
+Markowitz (reverse) 0.59% 1.0% -3.2% 13 0.02
+Simultaneous optimization 0.70% 1.4% -4.8% 12 0.02
+MD 0.22% 0.8% -0.9% 9 0.003
+MD (constrained) 0.23% 0.8% -0.9% 5 0.0001
+3.2 Out-of-sample results
+Table 2 below shows the out-of-sample analogs of the results in Table 1.
+Table 2: Out-of-sample performance of portfolio optimizat ion models surveyed
+Model 3-Month Return Daily Return Std. Deviation Max Drawdo wn
+Markowitz 5.7% 0.09% 1.7% -6.1%
+Markowitz (reverse) 5.3% 0.08% 1.7% -7.2%
+Simultaneous optimization 5.2% 0.08% 2.1% -8.6%
+MD 9.4% 0.15% 2.3% -3.3%
+MD (constrained) 8.5% 0.13% 2.0% -3.3%
+9
+4 Results analysis
+4.1 In-sample solution comparison
+The in-sample results show that the price to pay (in terms of e xpected return or standard deviation)
+in order to minimize the maximum drawdown is arguably not ver y high: those models with higher
+expected return also have higher standard deviation (and vi ce versa), while always having much
+larger maximum drawdown (as it’s not optimized for).
+In addition, the MD models are much faster. Concretely, our M ILP variation is the fastest, by far:
+200 times faster than the QPs, and 25 times faster than the unc onstrained MD (LP). This is due to
+the fact that Gurobi is a highly optimized solver for MIP and i s able to take advantage of the the
+particular structure of our portfolio optimization proble m. According to Gurobi, their sophisticated
+MIP algorithm (a combination of Branch-and-Bound and Cutti ng plane method, i.e. the fancier
+Branch-and-cut) ﬁrst does some heavy preprocessing to redu ce the problem dimension, and then
+solves a linear programming relaxation of the problem via Si mplex iterations; it seems plausible
+that by requiring a minimum of a 5% allocation if a stock is cho sen, this might already discard
+many ‘bad’ stocks based on the objective in the preprocessin g stage, which greatly reduces the
+combinatorial complexity of the MILP . Further investigation suggests that after adding just 2 cuts to
+the original LP relaxation and solving that instance, Gurob i managed to recover an integer feasible
+solution (and hence solving the entire original MILP) witho ut even needing to do any branching.
+4.2 Out-of-sample solution comparison
+In this subsection we analyze the results obtained by each mo del trained with data from February
+1 to May 1 of 2020 (three months), and tested on the subsequent three months (May 2 - August 1).
+This way we can compare the portfolio optimization solution out of sample.
+The idea is to simulate what would have happened if we had opti mized our portfolio according to
+each of the 4 models above on May 1 with data from the previous t hree months, and then we had
+checked on August 1 how well each portfolio did. The reason wh y we wait until August 1 to check
+is because we optimize our portfolio with 3-month data so it’ s only natural the investment horizon
+should also be 3 months (with the implicit and naive assumpti on that history repeats itself at least to
+some relevant extent).
+As previously reported in Table 2, our proposed models yield ed substantially higher out-of-sample
+returns than any other model surveyed. Of course, these resu lts should be considered preliminary
+and hence taken with a grain of salt, since a similar experime nt should be repeated multiple times to
+gather enough evidence to conclude which model is likely the ‘best’.
+Unsurprisingly, we notice that the out-of-sample performa nce (Table 2) is signiﬁcantly worse than
+the in-sample performance (Table 1), which cautions the rea der against overly optimistic expecta-
+tions when trying to use the past to gain an edge into the futur e.
+4.3 Sensitivity analysis
+4.3.1 Right hand side (RHS) of primal constraints
+In general, in all models considered, the only RHS that is in o ur opinion potentially interesting to
+check is the RHS of the constraint ∑ni=1 xi = 1 , and it can be interpreted as the value of havingaccess to 1 unit more of budget e.g. through borrowing (shado w price of this constraint). However, a
+more careful analysis reveals that, since we work with stock returns and not absolute monetary gains,
+it is in fact pointless to ask how valuable it would be to have a n additional unit of budget. Here’s
+why: stock returns are invariant to budget size (only the dif ferent proportions of the budget invested
+matter), and the standard deviation of the portfolio in fact increases as the budget increases, which
+after more careful thought seems obvious because if you have more budget you can, well, lose more
+budget.
+The same argument applies to Model 5, since the maximum drawd own is, at the end of the day, a
+return, and so invariant to budget size.
+10
+For Model 6 no such sensitivity analysis is possible since th ere’s no well-deﬁned concept of ‘dual’
+in MIP .
+4.3.2 Primal objective coefﬁcients
+The primal objective coefﬁcients of Models 4, 5 and 6 are not i nteresting since they are just auxiliary
+variables used in the epigraph trick.
+On the other hand, it may be interesting to see how sensitive t he solution (vector of budget allo-
+cations) is to changes in the vector of expected returns and/ or (careful) changes in the covariance
+matrix, for now restricting attention to when they appear in the objective. Thus, these changes leave
+the original primal feasible region unchanged, so the origi nal optimal solution is still feasible. For
+ease of exposition, let’s focus on Model 2 (maximize expecte d return subject to a maximum allow-
+able variance). In this new scenario, the dot product of the o riginal optimal solution vector and the
+new vector of expected returns is a lower bound to the new maxi mization problem. To obtain an
+upper bound, though, we would need to ﬁnd a feasible point of t he (new) Dual (by Weak Duality in
+convex programs). However, ﬁnding the Dual is not trivial si nce the Primal is a quadratically con-
+strained quadratic program and the Lagrangian is a function of x, λ, ν where x is an n-dimensional
+vector, which suggests the use of more sophisticated method s (e.g. matrix differentiation). Even if
+that was not an issue, the resulting Dual objective is very me ssy, as the reader can verify below (in
+un-simpliﬁed form):
+−r − νe
+2λ Σ−1r + −r − νe2 ( −r − νe2λ )T − λσ0 + ν −r − νe2λ Σ−1e − ν
+Note e is an n-dimensional vector of ones, and Σ is the covariance matrix. Also note Σ−1 exists
+since the covariance matrix of risky assets is positive deﬁn ite, so has nonzero (positive) determinant.
+At this point we still need to ﬁnd a feasible dual point. Note t hat even if we manage to somehow
+ﬁnd one by inspection, the upper bound that it would provide t o the new primal may be arbitrarily
+bad.
+However, we can still obtain valuable insight by adding a sma ll perturbation to the data on stock
+returns, which will then automatically add some perturbati on to the covariance matrix (and will do
+so preserving its deﬁning properties since we are not pertur bing the covariance matrix directly ’by
+hand’). Then we can see how the optimal budget allocation of M odels 1, 2, 5 and 6 change.
+Note that if we go this route we are no longer restricted to mak ing changes in the coefﬁcients of the
+primal objective or primal RHS (dual objective coefﬁcients ), but also in the coefﬁcients of the left
+hand side (LHS) of the primal constraints.
+We have performed this empirical sensitivity analysis in th e last portion of the previous section and
+here we discuss the results.
+We have modeled the random perturbation of the return of stoc k s at time t, ps,t that we mentioned
+previously, as follows:
+ps,t = N (0, σs)/c
+where N (0, σs)/c denotes a Normal distribution centered at 0 and with standard deviation σs, di-
+vided by a positive constant c, which in our case is 103 to suit the scale of our daily returns.
+Observe that the size of the random perturbation depends on t he standard deviation of each stock,
+which is a more realistic model assumption compared to a ﬁxed random shock applied to all stocks
+(or completely arbitrary perturbations) since more volati le stocks should have bigger price ﬂuctua-
+tions across time.
+We have decided to measure the change in covariance matrix by computing the average absolute
+pairwise difference between the original and perturbed cov ariance matrices. This is similar to the
+Frobenius norm of the difference matrix, but has a more strai ghtforward interpretation: average
+absolute change in each element of the covariance matrix is 0.11755%2. Considering that the aver-
+age size of an element in the original covariance matrix is 4.2113%2, the size of the perturbation
+represents roughly a 2.8% change in each covariance element , on average.
+11
+There are several different ways to capture the change in all ocation, and in the code section above
+the reader can glance at various metrics printed. However, w e believe that the most meaningful
+metric is to see the percentage by which the new allocation di ffers from the original one, restricting
+the comparison to the positive original allocations (becau se if the original allocation is 0 and now
+is positive, the change would be something like ‘ +∞%’ which is not very meaningful and would
+completely dilute all other ﬁnite changes). Then we take the average of the absolute value of those
+percentage differences.
+Table 3 below shows that the average absolute allocation cha nge in each model is between 38% and
+40% for the Markowitz models, 47% for the linear Maximum Drawdown model, and only 3.7% for
+the MILP Maximum Drawdown model. With the exception of the la st model, and considering that
+on average each covariance element was changed by 2.8% only, the sensitivity analysis performed
+reveals the fragility of the optimal solution to a small chan ge in the parameter values.
+Table 3: Average absolute change in allocation after random perturbation
+Model Avg abs change in allocation
+Markowitz 38.1%
+Markowitz (reverse) 39.8%
+Simultaneous optimization 42.3%
+MD 47.1%
+MD (constrained) 3.7%
+The difference in robustness is striking. The explanation i s as follows: the ’pure’ Maximum Draw-
+down model is inherintly less robust than a Markowitz model s ince it has an extreme metric (the
+minimum observed return) as the optimization objective. Ho wever, the Maximum Drawdown model
+becomes more robust once we disallow small allocations (bel ow 5% in our case), and so it is ex-
+pected that at least the choice of (fewer) stocks is more simi lar to the original model, and so we have
+a better chance of avoiding −100% changes (stocks dropped). In general, each stock selected i n the
+original model should be ’more strongly selected’ than in th e ’pure’ version of the model, since it
+is selected knowing that at least we will allocate 5%. Intuitively, we are reducing overﬁtting, and
+hence increasing the robustness of the model.
+Therefore, it seems that a simple way to increase the robustn ess of any given portfolio optimization
+model is to require a minimum allocation for each selected st ock (at the expense of turning the
+portfolio optimization model into a MILP , but it seems this i s not necessarily an issue for problems
+with a size and structure similar to ours, especially with to day’s solvers and computational power).
+Naturally, the previous claim would require a deeper analys is to be more conclusive, but it seems
+at least a reasonable conjecture in light of the evidence we h ave and the intuitive connection with
+overﬁtting.
+There is no denying that our attempt at increasing the robust ness of the optimal solutions by re-
+quiring a minimum allocation is less sophisticated than the one Dai and Wang (2019) and other
+authors before them discuss, which is based on modeling para meter uncertainty, venturing into the
+realm of stochastic programming. This is certainly a possib le extension to this work. Another way
+Dai and Wang (2019) try to improve the robustness of the solut ion is by promoting sparsity through
+L1 regularization. This is interesting, because we have prove d earlier that L1 regularization has
+no effect in portfolio optimization. The answer to this appa rent contradiction is thatDai and Wang
+(2019) allow short-selling, i.e. they do not impose xi ≥ 0 for all i, while we do, and we used this
+fact quite crucially in our proof.
+4.4 Analysis of Model 6’s (constrained MD) optimal solution
+Due to its improved robustness while providing comparable r isk-adjusted performance, Model 6
+(MILP formulation of the MD model) is our model of choice, at l east for a portfolio optimization
+problem of a similar size to this one (about 400 stocks). Thus , we will focus our solution analysis
+on the optimal solution this model has found.
+According to our proposed model, the three stocks with large st allocation should be CLX (40.34%),
+KR (28.92%), and TIF (20.73%). But what do those tickers mean ? The ﬁrst one will make a lot
+12
+of sense to the reader: Clorox. Clorox is a major producer of c leaning products, especially those
+containing bleach and other strong disinfectants. Needles s to say, it seems reasonable that such a
+stock is picked during a pandemic. Models 1 (12.77%) and 2 (4. 8%) also pick this stock, but with
+less emphasis.
+The second one is Kroger, the largest supermarket in the US by revenue. There are three main
+reasons why, in the time-frame of our training data (Februar y-May 2020) it makes sense to have
+a signiﬁcant allocation on this stock. First, with restaura nts being closed or operating at reduced
+capacity due to the pandemic, supermarkets have seen a rise in demand. Second, Kroger in particular
+has been able to beneﬁt more than other supermarkets thanks t o their investments made in their
+online sales service since 2017, which allowed Kroger to abs orbe the surge in demand, with digital
+sales climbing 92% in the three months before May 23. Moreove r, according to Y ahoo Finance,
+Kroger’s reputation surged in those times for their COVID-1 9 response and racial equity support.
+Finally, TIF is the ticker for the luxury jewelry company Tif fany & Co., which admittedly seems an
+odd pick considering the time-frame of our training data. Ho wever, there are two reasons that may
+explain this, and both of them are completely unrelated to th e pandemic. First, the plans of French
+multinational LVMH (sometimes informally called Louis Vui tton) to acquire Tiffany - plans which
+were approved by Tiffany’s stockholders in February. Secon d, Tiffany signiﬁcantly improved their
+internal cost structure over the preceding three years, mak ing the company more proﬁtable.
+5 Discussion
+The aim of this paper is to analyze different portfolio optimization models and propose a faster, more
+robust model with a comparable ratio of portfolio expected r eturn to risk (as measured by standard
+deviation and maximum drawdown). We hope these ﬁndings will be helpful in further research on
+this topic.
+To that end, we reviewed the classical Markowitz model toget her with two well-known variations,
+while providing some additional analysis on those QP models e.g. conﬁrmed Strong Duality holds
+by verifying Slater’s conditions, proved that L1 regularization has no effect in portfolio optimization
+(in the case short-selling is not allowed), and devised a heu ristic to more objectively choose the λ
+parameter when simultaneously optimizing mean and varianc e.
+Then we introduced a fourth model (Konno and Y amazaki, 1991) that is one of the ﬁrst examples of
+an LP formulation of portfolio optimization, and discussed its similarities and (theoretical) advan-
+tages compared to the classical QP formulations. This model relies on the so-called ‘epigraph trick’
+to turn a non-linear objective (due to the presence of an abso lute value) into an LP .
+We followed this discussion by presenting a new model that pr ovides an alternative linearization of
+the classical QP formulation. The model is ﬁrst presented as a maximin problem (hence non-linear),
+and then it is turned into an LP by again using the epigraph tri ck. We observe a solution speed-up by
+nearly a factor of 10 compared to the classical QPs, while pro viding similar (if not better) in-sample
+and out-of-sample performance. The advantages of using a do wnside risk measure in the model
+were brieﬂy discussed.
+We then proposed a variation of this new model, which turns th e LP into a MILP by restricting
+minimum allocations to 5% if any budget is allocated to a give n stock. In theory, this formulation
+has worse optimization properties as it should be much harde r to solve (MIPs are in general NP-
+complete). However, due to the particular structure of the p roblem (including choosing the best
+possible ’big-M’ value) and the use of a highly optimized MIP solver, in practice this variation
+is about 25 times faster than the LP formulation, and thus 200 times faster than the QPs, while
+providing a level of performance on par with the other models on most metrics. One exception is
+in terms of robustness: the MILP formulation seems to be much more robust, at least based on how
+much the optimal solution changes when the parameter values change. We argue this is due to the
+minimum allocation restriction, which helps reduce overﬁt ting. The other models, on the other hand,
+are shown to be quite sensitive to perturbations in paramete r values, speciﬁcally to changes in the
+covariance matrix.
+The MILP formulation being the most convincing one, we analy zed its optimal solution in depth,
+arguing why its top three stock choices seem reasonable duri ng COVID-19 times.
+13
+A natural extension to this project is considering a multi-p eriod model using Machine Learning
+and/or stochastic programming. In a multi-period model, th e goal is to optimize the expected return
+and standard deviation of a portfolio considering more than one period. In our case, one possibility is
+to forecast to some extent the returns of the stocks under con sideration for some future periods (pos-
+sibly with the help of Machine Learning techniques), and opt imize the current portfolio accordingly.
+Another, related possibility is instead of trying to predic t the future with sophisticated machinery
+(pun intended), ’just’ make (educated) assumptions on the d istribution of returns, and then make use
+of stochastic programming to capture the inherent non-dete rministic nature of the future parameter
+values (scenario modeling). It is unclear, though, how much there is to be gained from increasing
+the sophistication of the optimization approach by several orders of magnitude in either of the two
+ways we have just outlined. But it is clearly interesting and potentially useful to ﬁnd out.
+Finally, the results shown by the MILP formulation in terms o f increased speed and robustness
+while providing a comparable (if not better) in-sample rati o risk-reward seem promising, but further
+research is necessary to conﬁrm them. A ﬁrst step in that dire ction would be to repeat, multiple
+times, the entire empirical analysis conducted in this proj ect (in sample and out of sample) for
+different stocks (also different number of stocks) and time s (both in horizon length and economic
+cycle).
+References
+A. Chekhlov, S. Uryasev, and M. Zabarankin. Portfolio optim ization with drawdown constraints.
+Supply chain and ﬁnance , page 209–228, 2004.
+Z. Dai and F. Wang. Sparse and robust mean–variance portfoli o optimization problems. Physica A:
+Statistical Mechanics and its Applications , 523:1371–1378, 2019.
+H. Konno and H. Y amazaki. Mean-absolute deviation portfoli o optimization model and its applica-
+tions to tokyo stock market. Management Science, 37(5):519–531, 1991.
+H. Markowitz. Portfolio selection. The Journal of Finance , 7(1):77–91, 1952.
+H. Markowitz. Portfolio selection: Efﬁcient diversiﬁcation of investme nts. John Wiley & Sons,
+1959.
+G.B. Mathews. On the partition of numbers. Proceedings of the London Mathematical Society , 28:
+486–490, 1896.
+14

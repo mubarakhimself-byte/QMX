@@ -1,0 +1,2572 @@
+arXiv 2502.06096  https://arxiv.org/abs/2502.06096
+
+Post-detection inference for
+sequential changepoint localization
+Aytijhya Saha1 and Aaditya Ramdas2
+1Massachusetts Institute of Technology.aytijhya@mit.edu
+2Carnegie Mellon University.aramdas@cmu.edu
+Abstract
+This paper addresses a fundamental but largely unexplored challenge in
+sequential changepoint analysis: conducting inference following a detected change.
+We develop a very general framework to construct confidence sets for the unknown
+changepoint using only the data observed up to a data-dependent stopping time
+at which an arbitrary sequential detection algorithm declares a change. Our
+framework is nonparametric, making no assumption on the composite post-change
+class, the observation space, or the sequential detection procedure used, and is
+nonasymptotically valid. We also extend it to handle composite pre-change
+classes under a suitable assumption, and also derive confidence sets for the change
+magnitude in parametric settings. We provide theoretical guarantees on the width
+of the confidence intervals. Extensive simulations demonstrate that the produced
+sets have reasonable size, and slightly conservative coverage. In summary, we
+present the first general method for sequential changepoint localization, which is
+theoretically sound and broadly applicable in practice.
+1 Introduction
+Consider the following general problem of sequential change analysis in an arbitrary
+space X (which could be the Euclidean space Rd, or images, or anything else). A
+sequence of X -valued observationsX= X1, X2,· · ·arrives sequentially, such that for
+some unknown timeT∈N∪ {∞}(the changepoint),
+X1, X2,· · ·, XT−1 ∼F 0 andX T , XT+1 ,· · · ∼F1,(1)
+1
+arXiv:2502.06096v7  [stat.ML]  26 Sep 2026
+for some F0 in a pre-change class P0 and F1 in a post-change class P1, where P0 and
+P1 denote some non-intersecting classes of probability distributions. Initially, we shall
+assume all observations to be independent, although our methodology later extends to
+handling dependent data as well.
+Suppose the user has already decided to use a sequential changepoint detection algorithm
+A for this task, which is a mapping from the data sequenceXto a stopping time 1
+τ = A(X) at which it raises an alarm that a change may have previously occurred.
+When A raises an alarm at time τ , we do not know if it is a false alarm, and if it is not,
+then we only know that there has been some possible change before τ , but not when
+that change occurred.
+Our aim here is to construct confidence sets for the unknown changepoint T after
+stopping at τ , assuming only black-box access to A (and ideally no further assumptions
+or restrictions). By “black-box”, we mean that we can run A on any input data
+sequences we like, but we do not require any further insight into its inner workings.
+The fact that we do not require knowledge of internal details of A is a particularly
+important feature; it implies that our changepoint localization method can wrap around
+any existing workflow for changepointdetection— it could be employed both with
+simple classical statistical algorithms (like CUSUM), and also with complex modern
+pipelines in the information technology industry that may involve heuristic machine
+learning algorithms (to deal with complex data types).
+For instance, rapid shifts in public sentiment often occur on online platforms: a product
+failure may trigger a sudden surge of negative reviews, or a major event may abruptly
+alter the tone of social-media discussions. Detecting when such a shift occurs is vital
+for understanding emerging issues, tracing public reactions to events, or monitoring
+product reputation in real time. To illustrate the relevance of our methodology in such
+settings, we conduct an experiment using the Stanford Sentiment Treebank (SST-2)
+dataset [34], simulating a stream of text reviews whose sentiment abruptly transitions
+from predominantly positive to predominantly negative. Accurately localizing the
+changepoint is important: it can help investigate why the change may have occurred.
+1While sequential change detection methods are commonly described solely by stopping times, we
+describe them by algorithms A because our method will feed in simulated (synthetically generated)
+data sequencesX ′ intoA; we find it easier to describe our methodology when makingAexplicit.
+2
+As an initial goal, one may hope to obtain a setC ⊆ {1, . . . , τ}such that
+PF0,T,F 1(T∈ C)≥1−α,(2)
+where PF0,T,F 1 is the data distribution in (1), i.e. having the true changepoint at T . But
+this goal is harder to achieve than may initally appear; we elaborate below.
+There are two classes of algorithms A in the literature: (i) algorithms with probability
+of false alarm (PF A) bounded by δ <1; we call these “bounded PF A” for short, and (ii)
+algorithms with PF A equal to one, but have a bounded average run length to false alarm
+(ARL2F A, or just ARL for short); we call these “bounded ARL”. Since algorithms with
+bounded ARL have PF A equal to one, false detections occur with a nontrivial frequency.
+But the flipside is that bounded ARL algorithms typically have smaller detection delay
+than bounded PF A algorithms. Typically, detection delays of bounded ARL algorithms
+can be bounded by quantities independent of the changepoint T , but this guarantee is
+impossible to achieve with bounded PF A algorithms. In this paper, we remain agnostic
+to the choice ofA.
+For algorithms with a bounded ARL, we prove that no set C can satisfy guarantee (2)
+(for algorithms with bounded PF A, we show how to achieve (2) in the Supplementary
+Section F). This impossibility result (which we prove formally later) intuitively holds
+because it is meaningless to ask for coverage if the algorithm stopped before the
+changepoint; indeed, on the event {τ < T}, we have no information to rule out the
+possibility that T = ∞, and thus the only way to cover T is to output the set of all
+natural numbersN. Thus, an arguably more sensible goal is to have
+PF0,T,F 1(T∈ C |τ≥T)≥1−α,(3)
+meaning that C only needs to cover if algorithm A only stops after the true changepoint
+T . This definition has been considered by, for example, [ 6] and [ 45, 42], who achieved
+it (in a certain asymptotic sense) in much more restricted settings than the current
+investigation.
+The aforesaid impossibility result no longer applies to the new goal (3). It is important
+to note that we do not prescribe which A to use in which situation, but simply enable
+post-hoc inference on T for any user-chosen A. One can view our techniques as providing
+a wrapper to convert A from producing only a stopping time τ to also producing a
+3
+confidence set for T As we survey below, there is a rich literature on designing change
+detectionalgorithms A, but a substantial paucity of inference methodology forlocalizing
+the change after detection; our focus is on the latter goal, assuming the user has chosen
+a suitable algorithmAfor detection.
+While inference for T is intrinsically interesting and important, a side benefit of
+confidence sets for T is that one can use these to derive post-hoc confidence sets
+for unknown parameters of F0 and F1. To clarify, suppose Pi = {Fθ}θ∈Θi; i = 0 , 1.
+Our method that delivers (3) also delivers confidence sets C′ ⊆ Θ0 × Θ1 such that
+Pθ0,T,θ 1((θ0, θ1) ∈ C′ |τ≥T ) ≥ 1−α,∀θ 0 ∈ Θ0, θ1 ∈ Θ1, where Pθ0,T,θ 1 is the distribution
+of the sequence X1, . . . , XT−1 ∼F θ0, XT , XT+1 , . . .∼Fθ1. We stress that our confidence
+sets do not rely on asymptotics and are valid in finite samples.
+1.1 Related work
+Prior work on post-detection confidence sets for T .The problem of constructing
+confidence sets for the changepoint after stopping has been largely overlooked in the
+literature. This gap is significant because in most real-world applications, data arrives
+sequentially, and it can be essential to make timely inferences about the changepoint
+immediately upon detecting a change.
+We are aware of only two directly related works: [ 6] and [ 42, Chapter 3]. They also
+chose to aim for the guarantee (3) like us. Both [ 6, 42] provide asymptotically valid
+inference after the CUSUM procedure [ 21] declares a change for known F0 and F1
+in an exponential family; the former only constructs a lower confidence bound for T
+while the latter also provides a confidence set for T . Their approaches have notable
+methodological and theoretical limitations: (i) they are tailored specifically to the
+CUSUM procedure, (ii) they assume that the pre- and post-change distributions are
+both known and they belong to an exponential family, (iii) they only provide asymptotic
+coverage guarantees (valid when both T→ ∞ and ARL → ∞). These constraints
+limit practical applicability, and their confidence set exhibits undercoverage in our
+experiments.
+In sharp contrast, our proposed confidence sets for T are very general: We make no
+assumptions on the detection procedure A, and our framework acts as a versatile wrapper
+that can be layered on top of any sequential change detection algorithm. It is not
+restricted to exponential families — it works for any known F0 and any nonparametric
+4
+post-change class P1 on any general space (e.g., Rd) and offers non-asymptotic coverage
+guarantees. It also extends to composite pre-change classes under some assumptions.
+Thus, our framework is thefirst nonparametric, theoretically sound, and widely applicable
+practical toolfor sequential change localization tasks. We summarize the comparison in
+Table 1.
+Table 1: Comparison of existing methods and our proposed approach
+Pre-, Post- Existing Methods [6, 42] Our Proposed Method
+change distributions Assumptions Guarantee Assumptions Guarantee
+Known, KnownA= CUSUM.F 0, F1 Asymptotic No assumption Nonasymptotic
+(F0, F1)∈exponential family (T, ARL→ ∞) (anyA, F0, F1) (Theorem 6)
+Known, Unknown No existing work No assumption Nonasymptotic
+(F0,P 1) (anyA, F0,P 1) (Theorem 2)
+Unknown, Unknown No existing work Assumption 1 Nonasymptotic
+(P0,P 1) onA,P 0 (anyP 1) (Theorem 4)
+Literature on sequential changedetection.In sequential change detection, the
+goal is todetect that a change has occurredas soon as possible, but not to provide
+inferential tools forwhen the change occurred. This methodology has proved crucial
+in many applications, such as quality control, cybersecurity, medical diagnostics, and
+so on. Classical methods such as Shewhart control charts [ 30], the CUSUM procedure
+[21], and the Shiryaev-Roberts approach [ 32, 25] assume known pre- and post-change
+distributions. To address scenarios with unknown post-change distributions, generalized
+likelihood ratio (GLR) procedures [ 20, 33] were developed. Comprehensive reviews
+of these methods are provided by [ 36]. More recently, kernel-based techniques [ 10],
+e-detectors [31], etc., have emerged to handle nonparametric settings. All these methods
+focus on the quickest change detection, with average run length (ARL) control. In
+contrast, another strand of the literature emphasizes controlling the false alarm rate
+instead of ARL, often at the cost of a longer detection delay [3, 17, 1]. These approaches
+typically rely on an initial historical period of data to calibrate the detection thresholds.
+Offline vs. online changelocalization.As far as we are aware, most existing
+approaches to changepoint localization focus on offline settings, where a fixed amount
+of data is available at once, and they do not generalize to analysis at data-dependent
+stopping times. Classical works, e.g., [ 11] study the asymptotic behavior of the MLE
+for the changepoint and construct likelihood-ratio-based confidence sets. [ 4] proposed
+some nonparametric estimators. [ 41] developed likelihood ratio-based confidence sets
+5
+for exponential family distributions, while [ 7] used bootstrap-based tests for each
+candidate time to construct nonparametric confidence sets with asymptotic coverage.
+Recently, [37] studies optimal rates for both changepoint detection and localization.
+[16] constructs confidence sets by evaluating a local test statistic. To re-emphasize, all
+these methods are for the offline setting. In the sequential setting, [ 35, 8, 43, 2] develop
+point estimators for T ; but very few works construct confidence sets [ 6, 42], whose
+drawbacks were discussed earlier.
+Inference on θ0, θ1 after stopping.As with the problem of post-detection inference
+on the changepoint T , there is limited literature on valid estimation or inference for the
+pre- and post-change parameters θ0 and θ1 post-stopping. [ 45] constructs asymptotic
+bias-corrected point estimates and confidence intervals for the post-change mean after
+a mean change is detected by a CUSUM procedure. [ 44] generalizes these results for
+the case when there is a possible change in the variance as well. These methods are
+also discussed in [ 42]. However, these approaches share several limitations with the
+existing post-detection changepoint inference methods, as mentioned earlier: they rely
+on asymptotics, assume specific parametric forms, and apply only to the CUSUM
+procedure.
+1.2 Contributions and paper outline
+• We propose a general framework for constructing a confidence set for the change-
+point based on inverting tests obtained using a universal threshold, assuming
+all observations to be independent. We show that it provides 1 −α conditional
+coverage for known pre-change and arbitrary (nonparametric) post-change classes
+underno additional assumptionin Theorem 2. We also extend it for composite
+pre-change under a suitable assumption in Theorem 4.
+• We propose an alternative method of constructing the tests using adaptive thresh-
+olds (which is often tighter than the universal threshold), assuming pre- and
+post-change distributions to be known, in Algorithm 1. We extend this framework
+to handle parametric pre- and/or post-change classes in Algorithms 2 and 3.
+These adaptive methods allow the observations to be dependent. We establish
+corresponding coverage guarantees in Theorems 6 to 8.
+• As a byproduct of our methods, we derive confidence sets for the unknown pre-
+and post-change parameters and show their coverage guarantees in Theorem 9.
+6
+In short, we present the first nonparametric, theoretically grounded, and widely appli-
+cable post-detection confidence sets that are agnostic to the detection method.
+The rest of the paper is organized as follows. In Section 2, we establish some fundamen-
+tal results showing the impossibility of unconditional coverage and linking conditional
+confidence sets to hypothesis tests. Section 3 develops a general framework for construct-
+ing a confidence set for T based on inverting tests obtained using a universal threshold.
+In Section 4, we introduce a simulation-based approach for constructing confidence
+sets using an adaptive threshold in the parametric setting and study their conditional
+coverage probabilities. In Section 5, we derive confidence sets for the changepoint, as
+well as the pre- and post-change parameters. Section 6 presents an extensive simulation
+studies that validate our theoretical findings and demonstrate the practical efficacy of
+our approach 2. This article is concluded in Section 7. All the mathematical proofs,
+implementation details of some algorithms in the paper, and additional experiments
+are presented in the Supplementary Material.
+2 Some Fundamental Results
+In this section, we highlight some key observations that shape our methodology of
+post-detection inference for the change-point T . We begin by clarifying some notational
+conventions that will be used throughout the paper.
+Notation.For t∈N , let PF0,t,F1 denote joint distribution of the sequence {Xn}n when
+X1, . . . , Xt−1 ∼F 0 and Xt, Xt+1, . . .∼F1. 3 As a corner case, let PF0,∞ be the joint
+distribution when X1, X2, . . .∼F0. In parametric settings, we write Pθ0,t,θ1 and Pθ0,∞
+as shorthand forP Fθ0 ,t,Fθ1 andP Fθ0 ,∞ respectively.
+It is impossible for any set C∗ ⊆ {1,· · ·, τ}, to produce an unconditional coverage
+guarantee at a predetermined level 1 −α , if the detection algorithm has finite ARL
+(i.e., τ is finite almost surely even if there is no change). The intuitive reason is that if
+τ is finite almost surely, it is possibly a false detection, i.e., τ < T, in which case the
+2Codes are available at https://github.com/Aytijhya/Seq-changepoint-localization
+3To understand the key ideas in the paper, it will suffice for the reader to focus on the case when
+all Xi’s are all independent, and F0 and F1 denote the pre- and post-change marginal distributions.
+However, our framework in Section 4 can actually handle dependent data. Under dependence, F0
+and F1 denotes the joint distributions of X1, . . . , Xt−1 and Xt, Xt+1, . . .respectively, and is in fact
+ambivalent to whether Xt is drawn independently of X1, . . . , Xt−1 or conditional on it, so we do not
+emphasize the distinction in our notation.
+7
+set{1,· · ·, τ}itself does not coverT. The next proposition formalizes this fact.
+Proposition 1.If, for some α∈ (0, 1), a confidence set C∗ that is a subset of {1,· · ·, τ}
+satisfies PF0,T,F 1(T∈ C∗) ≥ 1 −α , ∀T∈N , then PF0,∞(τ = ∞) ≥ 1 −α (meaning that
+the PF A of the algorithm is at mostαand thus the ARL is infinite).
+The proposition says that for any algorithm with finite ARL, it is impossible to construct
+a 1 −α confidence set that is only a subset of {1, . . . , τ}. Thus, for post-detection
+inference, the usual notion of coverage is not an appropriate one. Instead, we focus
+on conditional coverage (3), a more reasonable criterion, which was also considered in
+prior work [ 6, 42]. The key idea behind our methodology is that for each candidate
+t∈ {1,· · ·, τ}, we test whether t is the true changepoint from some pre-change class
+P0 to some post-change classP 1:
+H0,t :X 1, . . . , Xt−1 ∼F 0 andX t, Xt+1,· · · ∼F1,for someF i ∈ Pi;i= 0,1.(4)
+Let ϕ(t)α∗ = 1(H0,t is rejected) denote some test for the nullH0,t such that PF0,t,F1(ϕ(t)α∗(X1,· · ·, Xτ ) =
+1)≤α ∗,∀F 0 ∈ P0, F1 ∈ P1 and form the confidence set by inverting these tests:
+C:={t∈N:t≤τ, H 0,t is not rejected}.(5)
+In classical statistics, inverting level- α tests yields 1 −α confidence sets. However,
+this relationship does not directly hold for us since we test the hypotheses up to a
+data-dependent timeτ, and we are consideringconditionalcoverage.
+Proposition 2.Let τ be a stopping time and C ⊆ {1, . . . , τ}be a confidence set
+satisfying(7). Then, the test defined byϕ (t)(X1,· · ·, Xτ ) =1(t /∈ C, t≤τ)satisfies
+PF0,t,F1(ϕ(t)(X1,· · ·, Xτ ) = 1)≤α·P F0,∞(τ≥t),∀t∈N, F 0 ∈ P0, F1 ∈ P1.(6)
+Conversely, given any test ϕ(t) for H0,t using data up to τ satisfying (6), the inverted
+confidence setC={t∈N, t≤τ:ϕ (t)(X1,· · ·, Xτ ) = 0}satisfies
+PF0,T,F 1(T∈ C |τ≥T)≥1−α,∀T∈N, F 0 ∈ P0, F1 ∈ P1.(7)
+The above result establishes a duality between tests and a post-detection confidence
+set. Next, we construct the latter by inverting tests based on the above.
+8
+3 A general framework for nonparametric post-
+change
+Let P0 and P1 denote the pre- and post-change classes respectively, P0 ∩ P1 = ∅. Our
+goal is to construct post-detection confidence sets for the changepoint T by inverting
+tests forH 0,t, as formalized in Proposition 2.
+To motivate the general construction, we begin with the simplest case when both
+pre- and post-change distributions F0 and F1 (with densities f0 and f1) are known.
+Then, the likelihood of the data X1,· · ·, XT−1
+i.i.d
+∼F 0, XT ,· · ·, Xn
+i.i.d
+∼F 1 is given
+byLnT := QT−1i=1 f0(Xi) Qni=T f1(Xi), and the likelihood ratio under H0,t against H0,n can
+be written as Qt−1j=i f1(Xi)f0(Xi) . Now, a prototypical likelihood-ratio-based test statistic is the
+following:
+Mt =
+
+
+
+max
+(
+max
+1≤j≤t−1
+t−1Y
+i=j
+f1(Xi)
+f0(Xi) ,maxt≤j≤τ
+jY
+i=t
+f0(Xi)
+f1(Xi)
+)
+,ift≤τ <∞
+−∞,ift > τorτ=∞.
+(8)
+One natural way to extend this test statistic for the general nonparametric setting is
+to replace the likelihood ratio by e-processes [ 22, 9], which have emerged as a central
+tool in anytime-valid inference. While e-processes have been used for sequential testing
+[39, 23, 26], estimation [ 40], and change detection [ 31], we employ them for the first
+time for changepoint localization. For t∈N , we use two different types of e-processes:
+• Forward t-delay e-process under P1 (against P0).This is a stochastic
+process {R(t)n }n≥t adapted to the forward filtration {F (t)n }n=t,t+1,···, where F (t)n :=
+σ(Xt, Xt+1, . . . , Xn), such that for all stopping times κ with respect to {F (t)n }n≥t,
+supF1∈P1 EF1[R(t)κ ] ≤ 1. Ideally, this process should have power against P0, i.e.,
+R(t)n should grow to infinity (asn→ ∞) underP 1.
+• Backward t-delay e-process under P0 (against P1).This is a stochas-
+tic process {S(t)n }n<t adapted to the backward filtration {G(t)n }n=t−1,t−2,···, where
+G(t)n := σ(Xn, Xn+1,· · ·, Xt−1), such that for all stopping times κ with respect to
+{G(t)n }n<t, supF0∈P0 EF0[S(t)κ ] ≤ 1. Ideally, this process should have power against
+P1, i.e.,S (t)n should grow to infinity (asn→ ∞) underP 0.
+Such powered e-processes for P1 against P0 (and vice versa) exist if the total variation
+9
+distance between the two convex hulls of P0 and P1 is positive (see e.g., Section 3.4 of
+[24]). The likelihood ratio process is the simplest example of an e-process. There is a
+substantial literature on constructing e-processes in both parametric (e.g., [ 39]) and
+nonparametric settings (e.g., [ 40]). For readers less familiar with these developments,
+we refer to Chapters 6 and 7 of the recent textbook [24].
+With the above ingredients in place, we construct a test statistic for H0,t by comparing
+it against a competing hypothesis H0,T . Suppose t < T. Then under H0,t (which is
+false), the segment Xt, . . . , XT−1 follows a post-change distribution from P1 (because
+under H0,t, the change occurred at t), whereas under H0,T (which is true), it follows a
+pre-change distribution from P0. Outside this segment Xt, . . . , XT−1 , both hypotheses
+agree on the distribution of the observations, and hence those are non-informative
+for testing between H0,t and H0,T . Therefore, we use a forward e-process R(t)T−1 that
+accumulates evidence in favor of P1 against P0 over this segment. Similarly, if t > T,
+we use a backward e-process S(t)T to accumulate evidence for P0 against P1, using the
+segment XT , . . . , Xt−1 . Since the true T is unknown, we consider the maximum over
+all valid choices of T for both the e-processes, i.e., max
+t≤n≤τ
+R(t)n and max1≤n≤t−1 S(t)n . We define
+the final test statistic as the maximum of these two quantities:
+Mt =
+
+
+
+max
+
+max
+t≤n≤τ
+R(t)n ,max1≤n≤t−1 S(t)n
+
+,ift≤τ <∞
+−∞,ift > τorτ=∞.
+(9)
+Although, Mt is not an e-variable underH0,t (nor are its constant multiples), thresholding
+Mt
+2 at 1α yields a level-αtest forH 0,t — a nontrivial fact shown below.
+Theorem 1.P F0,t,F1[Mt ≥2/α]≤α,for anyt∈N, F 0 ∈ P0,andF 1 ∈ P1.
+While this bound may be conservative, it is remarkably universal: it holds without
+any assumptions on the distribution classes P0, P1, or on the detection method A.
+For constructing a valid confidence set, Proposition 2 implies that we require tests of
+level α·P F0,∞(τ≥t ), whose value is of course not known to us. To circumvent this
+issue, we first assume that the pre-change distribution F0 is known. This is a common
+assumption in sequential changepoint literature.
+10
+3.1 Confidence set forTwith known pre-change distribution
+Let rt be an unbiased estimator of PF0,∞[τ≥t ], that is independent of the data. Then,
+define the confidence set as
+C=
+
+t∈N:t≤τ, M t < 2αrt
+
+.(10)
+One natural approach to estimatePF0,∞[τ≥t ] is via Monte Carlo simulation. Fix N∈N
+and for each j = 1, . . . , N, simulate a sequence of i.i.d. data points Z (j)1 , Z(j)2 , . . .i.i.d.∼F 0
+until either the detection algorithm triggers or the sample size reaches τ —whichever
+occurs first. Let τj := min{τ,A ({Z (j)n }n)} denote the stopping time for the j-th
+simulated sequence. Then rt = 1N PNj=1 1(τj ≥t ) is a natural unbiased estimator of
+PF0,∞[τ≥t ] ,but it can equal zero with positive probability. To avoid this, we fix
+some r≥ 2 and for each t, one might define Nt to be a random index until τj ≥t
+happens exactly r many times. Then rt = r−1Nt−1 is an unbiased estimator, which is
+strictly positive. Alternatively, one may use an asymptotically unbiased estimator with
+N , such as, rt = 1N+1
+
+1 + PNj=1 1(τj ≥t) , which guarantees strict positivity but only
+provides asymptotic 1 −α coverage guarantee as N→ ∞. The next theorem proves
+the validity of the above confidence set.
+Theorem 2.Suppose that the pre-change distribution is known, i.e., P0 = F0. Then,
+for any α∈ (0, 1), T, N∈N, post-change class P1, and change detection method A
+with stopping time τ satisfying PF0,∞(τ≥T ) ̸= 0, the confidence set C defined in (10),
+constructed using any data-independent unbiased estimator rt of PF0,∞[τ≥t ], satisfies
+PF0,T,F 1(T∈ C |τ≥T)≥1−α,∀F 1 ∈ P1.
+Now we analyze the size of the confidence set (10) for known pre-change F0 and
+post-change F1, with rt =
+1+PNj=1 1(τj ≥t)
+N+1 , Mt as defined in (8). We provide a bound
+on the expected size of the confidence set as N→ ∞, where N is the number of
+simulations used to calculate rt. Define, pt = PF ∗0 ,∞[τ≥t ]. Note that rt →p t as
+N→ ∞. Define ρ0(s) = EF0
+
+f1(Xi)
+f0(Xi)
+s
+and ρ1(s) = EF1
+
+f0(Xi)
+f1(Xi)
+s
+. These two quantities
+measure closeness between F0 and F1, and thus the problem hardness. Note that for
+s = 1/2, this coincides with Bhattacharyya distance. At s = 0, 1, ρ0 and ρ1 take value
+1. Since for s∈ (0, 1), h(x) = xs is a strictly concave function and since F1 ̸= F0,
+f1(X)
+f0(X) is not almost everywhere constant, we get a strict inequality using Jensen’s:
+ρ0(s) = EF0
+h
+f1(X)
+f0(X)
+si
+<
+
+EF0
+h
+f1(X)
+f0(X)
+is
+= 1. Similarly, for s∈ (0, 1), ρ1(s) < 1. We
+11
+now define s0 = arg mins∈[0,1] ρ0(s) and s1 = arg mins∈[0,1] ρ1(s), and note that the
+preceding facts imply that 0 < s0 < 1 and 0 < s1 < 1. Our length bound will depend
+on the expected detection delay, ∆ F0,T,F 1 := EF0,T,F 1(|τ−T| |τ≥T ). For typical
+detection algorithms, this quantity often scales like the logarithm of the average run
+length divided by the KL divergence between F1, F0. Finally, we call the stopping time
+τassensitiveif
+PF0,T,F 1[τ≤t]≥P F0,∞[τ≤t],(11)
+for all t and T . Equivalently, τ under a change is stochastically smaller than τ under
+no change. We can expect all practically used detection algorithms to be sensitive, as
+they should stop later when a change is absent than when it is present.
+Theorem 3.In the setting described above, for any change detection method with
+stopping timeτsatisfyingp T ̸= 0, the size ofCcan be bounded as:
+lim sup
+N→∞
+EF0,T,F 1(|C| |τ≥T)≤ 2s0
+αs0ps0+1T · ρ0(s0)−ρ 0(s0)T−11−ρ 0(s0) + 1 + ∆F0,T,F 1.(12)
+Additionally, if τ is sensitive in the sense of (11), the last term in (12) can be improved
+toΨ F0,T,F 1 := min
+n
+∆F0,T,F 1, 1pT
+  2
+α
+s1
+× ρ1(s1)s11−ρ1(s1)s1 + ρ1(s1)1−ρ1(s1) o.
+Remark1.Suppose F1 = N (µ1, σ2) vs F0 = N (µ0, σ2) and we are using a CUSUM
+detector with the likelihood ratio (which satisfies the assumption) with average run
+length A. Consider the asymptotic regime when A→ ∞, and T = CA, for some
+constant C >0. Using the property of the CUSUM detector that τEF0,∞(τ) d→exp (1) as
+A→ ∞, we have pT = PF0,∞(τ≥T ) = PF0,∞(τ≥CA T ) →exp (−C). Also, for the
+Gaussian distribution, it is easy to verify that ρ0(s) = ρ1(s) = exp (−s(1−s)K) , where
+K= (µ1−µ0)22σ2 ands 0 =s 1 = 1/2. Substituting, we get
+lim sup
+T,A→∞,T=CA
+lim sup
+N→∞
+EF0,T,F 1 (|C| |τ≥T)≤
+r
+2
+α
+"
+exp( 3C2 − K4 )
+1−exp
+ 
+− K4  + exp
+ 
+C− K8 
+1−exp
+ 
+− K8 
+#
++ 1 + exp(C− K4 )1−exp  − K4  .
+To simplify further, consider the difficult regime of smallK, where
+ 
+exp
+  K
+4
+
+−1
+
+≈K/ 4,
+and
+ 
+exp
+  K
+8
+
+−1
+
+≈K/ 8, and take C = 13 log( 2α ), so that the above expression is
+bounded by, ignoring constants, K −1[ 1α + 1α5/6 + + 1α1/3 ]. The fact that the bound grows
+with C = T /Ais empirically verified in Supplementary Section G.1. This behavior is
+12
+not a limitation of our methodology; rather, it reflects a fundamental difficulty of the
+problem: pt decays as C increases, and hence, by our duality result (Proposition 2),
+the tests corresponding toanyconfidence set will have smaller levels αpt, leading to
+reduced power and, consequently, wider confidence sets.
+3.2 An extension to composite pre-change
+To extend our method to composite pre-change classes P0, we require the following
+assumption on the change detection method andP 0:
+Assumption 1.∃P ∗0 ∈ P0 such that inf P0∈P0 PP0,∞(τ≥t)≥P P ∗0 ,∞(τ≥t),∀t∈N.
+We justify this assumption by appealing to Huber’s notion of “least favorable distribution
+pair” [14] in terms of risk, where the riskRfor a hypothesis testϕbetweenP 0 vs.P 1
+is defined as
+R(P0, ϕ) =C0P0(ϕacceptsP 1), R(P 1, ϕ) =C1P1(ϕacceptsP 0).(13)
+The formal definition of a least favorable distribution pair is given below.
+Definition 1.A pair ( P ∗0 , P∗1 ) ∈ P0 × P1 is calledleast favorable distribution (LFD)
+pairin terms of risk R for testing P0 vs. P1, if for every likelihood ratio test ϕ between
+P ∗0 andP ∗1 ,R(P ∗j , ϕ)≥R(P j, ϕ),for allP j ∈ Pj, j= 0,1.
+The following proposition establishes that the existence of an LFD pair is sufficient for
+our assumption to hold.
+Proposition 3.( P ∗0 , P∗1 )is a least favourable distribution pair in terms of risk for
+testing P0 vs. P1, then Assumption 1 holds with F ∗ = P ∗, and τ being the stopping
+time of a CUSUM/SR change detector with the likelihood ratio ofP ∗1 toP ∗0 .
+LFD pairs are known to exist for various parametric and nonparametric models, e.g.,
+the monotone likelihood ratio (MLR) families, and Huber’s robust models (including
+ϵ neighborhood model, total variation model, and more generally with 2-alternating
+capacities [15]).
+Suppose we have estimators r∗t of PF ∗0 ,∞[τ≥t ], for each t (which can be constructed
+using simulations from F ∗0 as described in Section 3.1). Now, we analogously define the
+13
+confidence set as
+C=
+
+t∈N:t≤τ, M t < 2αr∗t
+
+.(14)
+The next theorem proves the validity of the above confidence set.
+Theorem 4.Suppose that the pre-change class P0 and change detection method A
+with stopping time τ satisfy Assumption 1 and PF0,∞(τ≥T ) ̸= 0,∀F 0 ∈ P0. Then, for
+any α∈ (0, 1), T, N∈N , post-change class P1, the confidence set C defined in (14),
+constructed using any data-independent unbiased estimator r∗t of PF ∗0 ,∞[τ≥t ], satisfies
+PF0,T,F 1(T∈ C |τ≥T)≥1−α,∀F 0 ∈ P0, F1 ∈ P1.
+We now analyze the size of the confidence set, generalizing Theorem 3 to the case
+where an LFD pair ( F ∗0 , F∗1 ) exists for P0 vs P1. We consider the confidence set
+in (14) with r∗t = 1+PNj=1 1(τ ∗j ≥t)N+1 , Mt as defined in (9) using R(t)n = Qni=t f ∗0 (Xi)f ∗1 (Xi) , and
+S(t)n = Qt−1i=n f ∗1 (Xi)f ∗0 (Xi) . We redefine pt, ρ0 and ρ1 in terms of the LFD pair: pt = PF ∗0 ,∞(τ≥t ),
+ρ0(s) = EF ∗0
+
+f ∗1 (Xi)
+f ∗0 (Xi)
+s
+and s0 = arg mins∈(0,1) ρ0(s) and ρ1(s) = EF1
+
+f ∗0 (Xi)
+f ∗1 (Xi)
+s
+and
+s1 = arg mins∈(0,1) ρ1(s). Finally, we call the stopping time τ well-behavedif it satisfies
+PF0,∞(τ≥t)≥P F ∗0 ,∞(τ≥t),∀t∈N,∀F 0 ∈ P0; (15a)
+PF ∗0 ,T,F ∗1 [τ≤t]≥P F ∗0 ,∞[τ≤t],∀t, T∈Nand (15b)
+PF0,T,F 1[τ≤t]≥P F ∗0 ,T,F ∗1 [τ≤t],∀t, T∈N,and∀(F 0, F1)∈ P0 × P1.(15c)
+Note that (15b) is analogous to (11), while (15c) requires that the stopping time τ
+under change from F ∗0 to F ∗1 is stochastically larger than τ under change from F0
+to F1, for any ( F0, F1) ∈ P0 × P1. To justify that (15c) is sensible, we note that the
+LFD pair ( F ∗0 , F∗1 ) is the closest pair within P0 × P1 (according to various metrics or
+divergences such as Kullback-Leibler), i.e., it renders the change detection problem
+most difficult. Therefore, it is reasonable to assume that τ under change from F ∗0 to
+F ∗1 is stochastically largest. (15a) can be justified similarly because F ∗0 is the “closest”
+element of the pre-change class to the post-change class.
+Theorem 5.In the setting described above, for any change detection method with stop
+timeτthat is well-behaved in the sense of(15a)andp T ̸= 0,
+lim sup
+N→∞
+sup
+F0∈P0
+F1∈P1
+EF0,T,F 1(|C| |τ≥T)≤ 2s0
+αs0ps0+1T
+1−ρ 0(s0)T−1
+1−ρ 0(s0) + 1 + ∆P0,T,P 1,(16)
+14
+where∆ P0,T,P 1 := sup
+F0∈P0,F1∈P1
+∆F0,T,F 1. Additionally, if the stopping time τ is well-
+behaved in the sense of (15b) and (15c) as well, the last term in (16) can be improved
+to
+min
+ 1
+pT
+ 2
+α
+s1
+× ρ1(s1)s1
+1−ρ 1(s1)s1 + ρ1(s1)1−ρ 1(s1)  ,∆ P0,T,P 1 .
+Next, we explore how, in parametric settings, one can obtain adaptive thresholds
+via simulation. Although such adaptive thresholds can sometimes be tighter, our
+simulations indicate that the resulting confidence sets from the universal threshold are
+not significantly wider, and are useful for their simplicity and generality.
+4 A simulation-based approach for parametric pre-
+and post-change settings
+In this section, we introduce an alternative approach that, while restricted to the
+parametric setting, allows observations to be dependent, and often yields tighter
+confidence sets than the method proposed in the previous section, as shown by our
+simulations later. We begin with the most basic case, where the pre- and post-change
+distributions are known, and then extend it to more general parametric settings.
+4.1 Known pre- and post-change distributions
+We develop a simulation-based scheme to approximate the exact α-th quantile of the
+distribution of the test statistic Mt. Here, Mt need not be of the form (9), it can be any
+test statistic based on X1,· · ·, Xτ . Assuming known pre- and post-change distributions,
+we draw B many independent streams of data under H0,t. For the j-th sequence,
+denoted as {X jn}n, we simulate data points until a change is detected at τ ′j = A({X jn}n)
+or until a fixed time L, whichever happens first. Then, we compute a test statistic
+M jt,L, based on X j1,· · ·, Xjτ ′j ∧L (details are described in Supplementary Section B). Our
+confidence set is the collection of allt∈ {1,· · ·, τ}, for which we fail to rejectH0,t:
+C1 =
+
+t∈N:t≤τ, M t ≤Quantile(1−αr t;M t, M1t,L,· · ·, MBt,L)	 ,(17)
+wherer t is any unbiased estimator ofP θ0,∞(τ≥t); see Algorithm 1.
+Theorem 6.For any fixed α∈ (0, 1), B, N, T∈N , L∈N∪ {∞} , and change
+15
+Algorithm 1CI for known pre-changeF 0 and post-changeF 1
+Require:α,N,B,A, and data{X n}n until a change is detected atτusingA
+Ensure:A confidence setCfor the changepointT
+1:C ←∅
+2:fori= 1 toNdo
+3:Draw{Z in}n ∼F 0, untilAdetects atτ i, or untilτ, whichever happens first
+4:end for
+5:fort= 1 toτdo
+6:Compute test statisticM t (e.g. (8)) based onτandX 1, . . . , Xτ
+7:forj= 1 toBdo
+8: Simulate X j1, . . . , Xjt−1 ∼F 0; X jt , Xjt+1, . . .∼F1, until A detects a change at
+τ ′j, or timeL, whichever happens first
+9:SubroutineL: ComputeM jt,L based onτ ′j andX j1, . . . , Xjmin(τ ′j ,L)
+10:end for
+11:ifM t ≤Quantile
+
+1− αN × PNi=1 I(τi ≥t);M t, M1t,L, . . . , MBt,L then
+12:C ← C ∪ {t}
+13:end if
+14:end for
+detection algorithm A with PF0,∞(τ≥T ) ̸= 0, the confidence set C1 defined in (17),
+constructed using any data-independent unbiased estimator rt of PF0,∞[τ≥t ], satisfies
+PF0,T,F 1(T∈ C1 |τ≥T)≥1−α.
+Remark2.Notably, this method allows arbitrary (known) dependence among observa-
+tions and is valid for any choice of B, N, L, test statistic Mt, and detection algorithm
+A, which can function as an entirely black-box or heuristic method. The only necessity
+is a stopping rule that can be applied to generated data sequences.
+4.2 Adaptive confidence set for known pre-change distribution
+and parametric post-change class
+We now assume that the post-change distribution follows some parametric composite
+modelP 1 ={F θ :θ∈Θ 1}and the pre-change distribution,F θ0(θ0 /∈Θ1) is known.
+Since the post-change parameter is unknown, for each t, we estimate it based on
+Xt,· · ·, Xτ . However, the sample size used for the estimate might be too small to have
+a reliable estimate. To address this issue, we would use interval estimates instead of
+point estimates, allowing us to achieve a predetermined control over the error. Notably,
+conventional confidence intervals are invalid here, since τ is random. Therefore, we rely
+16
+on confidence sequences [ 5, 13]. A confidence sequence having coverage 1 −c is defined
+as a sequence of confidence sets {CS(X1,· · ·, Xn; 1 −c )}n∈N, satisfying the uniform
+guarantee:
+P(∀n∈N, θ∈CS(X 1,· · ·, Xn; 1−c))≥1−c.(18)
+We construct S ′τ−t+1 = CS(Xt,· · ·, Xτ ; 1 −βr t), which have 1 −β×P θ0,∞(τ≥t )
+coverage, wherer t is any unbiased estimator ofP θ0,∞(τ≥t).
+Fix B∈N . For each j = 1,· · ·, B, suppose we have a sequence {X jn(θ0, t, θ)}n ∼P θ0,t,θ.
+Note that for a fixed t and θ, the sequences must be independent across j. However,
+for any fixed j, the i.i.d. sequences {X jn(θ0, θ)}n are allowed to be dependent across
+different values of t and θ∈ S′τ−t+1 . A specific method for generating these sequences is
+detailed in Section C of the Supplementary. We draw the data until a change is detected
+at τ θj,t using A or until a fixed time L, whichever occurs first. Then, we compute the
+same test statistics truncated at L, based on τ θj,t and X j1(θ0, t, θ),· · ·, Xjτ θj,t∧L(θ0, t, θ),
+which is denoted asM jt,L(θ). ForL <∞,
+M jt,L(θ) :=
+
+
+
+−∞,ift > τ θj,t,
+M
+(τ θj,t)
+t (X j1(θ0, t, θ),· · ·, Xjτ θj,t(θ0, t, θ)),ift≤τ θj,t ≤L
+∞,ift≤τ θj,t andτ θj,t > L.
+And for L = ∞, define M jt,∞ := Mt(X j1(θ0, t, θ),· · ·, Xjτ θj,t(θ0, t, θ)),ift≤τ θj,t <∞ and
+equal to −∞,ift > τ θj,t orτ θj,t = ∞. Our confidence set is the collection of all t before
+τ, for which we fail to rejectH 0,t at levelα×P θ0,∞(τ≥t):
+C1 =
+(
+t∈N:t≤τ, M t ≤sup
+θ∈S ′τ−t+1
+Quantile
+ 
+1−αr t;M t,{M jt,L(θ)}Bj=1
+)
+.(19)
+Algorithm 2 summarizes the method. Note that, even when S ′τ−t+1 is an infinite set,
+the threshold supθ∈S ′τ−t+1 Quantile(1 −ˆαt; Mt,{M jt,L(θ)}Bj=1) can be approximated by
+discretizing S ′τ−t+1 into a grid and evaluating the quantile for values of θ on this grid,
+taking their maximum. While this approach is conceptually straightforward, it is
+computationally intensive. Moreover, in many cases, we can derive a suitable upper
+bound of this threshold, which is computationally, statistically efficient and does not
+require any approximation. Details are provided in Section C of the Supplementary,
+along with a concrete example of the Gaussian mean change problems.
+17
+Algorithm 2CI for known pre-change (F θ0) and parametric post-change
+Require:α, β, N, B, L, CS(data; coverage), A, and data {Xn}n until a change is
+detected atτusingA
+Ensure:Confidence setsCfor changepointT
+1:fori= 1,· · ·, Ndo
+2:Draw{X in}n iid∼F θ0, untilAdetects atτ i or untilτ, whichever happens first.
+3:end for
+4:C=∅
+5:fort= 1,· · ·, τdo
+6:Compute some test statisticsM t based onX 1,· · ·, Xτ
+7:Computer t = PNi=1 I(τi ≥t)/N
+8:Find a confidence sequence forθ 1:S ′τ−t+1 = CS(Xt,· · ·, Xτ ; 1−βr t)
+9:forj= 1,· · ·, Bdo
+10:Subroutine 2 :
+11:forθ∈ S ′τ−t+1 (Xt,· · ·, Xτ )do
+12: Get {X jn(θ0, t, θ)}n following Pθ0,t,θ (independently for all j), until its
+detection timeτ θj,t usingAor until timeL, whichever happens first.
+13:ComputeM jt,L(θ) based onτ θj,t, andX j1(θ0, t, θ),· · ·, Xjτ θj,t∧L(θ0, t, θ)
+14:end for
+15:end for
+16:Subroutine 3 :
+17: ifthere exists θ∈ S′τ−t+1 such that Mt ≤Quantile (1 −αr t; Mt,{M jt,L(θ)}Bj=1)
+then
+18:C=C ∪ {t}
+19:end if
+20:end for
+Theorem 7.Let C1 be the confidence set for changepoint T∈N as defined in (19),
+constructed using any data-independent unbiased estimator rt of Pθ0,∞[τ≥t ], for some
+α, β∈ (0, 1), N, B∈N , L∈N∪ {∞}. Then for any given detection algorithm A with
+Pθ0,∞(τ≥T)̸= 0and anyθ 1 ∈Θ 1,P θ0,T,θ 1(T∈ C1 |τ≥T)≥1−α−β.
+4.3 Adaptive confidence set for parametric pre- and post-
+change classes
+We now assume that both pre- and post-change distributions follow some parametric
+composite models:P 0 ={F θ :θ∈Θ 0}andP 1 ={F θ :θ∈Θ 1}, Θ0 ∩Θ 1 =∅.
+Since both pre- and post-change parameters are unknown, for each t, we estimate them
+based on X1,· · ·, Xt−1 and Xt,· · ·, Xτ respectively. Instead of point estimates, we rely
+18
+on interval estimates to achieve a predetermined control over the error. Suppose that
+we have some confidence interval (CI) procedure CI(X1,· · ·, Xn; 1 −c ) that constructs
+CI using {Xi}ni=1 for θ0 with coverage 1 −c and a confidence sequence (CS) procedure
+{CS(X1,· · ·, Xn; 1 −c )}n, that constructs CS using {Xi}ni=1 for θ1 having coverage
+1−c.
+We construct St−1 = CI(X1,· · ·, Xt−1; 1 −γr ∗t ) and S ′τ−t+1 = CS(Xt,· · ·, Xτ ; 1 −βr ∗t ),
+wherer ∗t is computed under Assumption 1.
+For each j = 1,· · ·, B, for some fixed B∈N , suppose we have sequences {X jn(θ, t, θ′)}n
+having joint distribution as Pθ,t,θ′. Note that the sequences must be independent
+as j varies. However, for any fixed j, the i.i.d. sequences {X jn(θ, t, θ′)}n can be
+dependent across t and θ∈ St−1, θ∈ S′τ−t+1 . A specific method for generating these
+sequences is detailed in Section D of the Supplementary. We draw the data until a
+change is detected at the stopping time τ j,tθ,θ′ using A or until time L, whichever occurs
+first. Then, we compute the same test statistics truncated at L, based on τ j,tθ,θ′ and
+X j1(θ, t, θ′),· · ·, Xjτ j,tθ,θ′ ∧L(θ, t, θ′), which is denoted asM jt,L(θ, θ′).
+Similar to (19), the adaptive confidence set is defined as
+C1 =
+(
+t∈N:t≤τ, M t ≤sup
+(θ,θ′)∈S(t)
+Quantile(1−αr ∗t ;M t,{M jt,L(θ, θ′)}Bj=1)
+)
+(20)
+whereS (t) = St−1 ×S ′τ−t+1 . Algorithm 3 contains an overview. If the detection algorithm
+controls PF A, a simpler algorithm can be used, which avoids Assumption 1 and provides
+coverage guarantees, as elaborated in Section F of the Supplementary.
+As before, one can always adopt a grid-based approach, which is conceptually straight-
+forward, but it is computationally intensive; corresponding experimental results are
+reported in Section F of the Supplementary. Additionally, in many cases, we can derive
+a suitable upper bound of this threshold, which is computationally efficient and exact,
+but that can be a bit more conservative. We provide the details in Section D of the
+Supplementary, along with a concrete example.
+Theorem 8.Let C1 be the confidence sets for changepoint T∈N defined in (20),
+constructed using any data-independent unbiased estimator r∗t of Pθ∗0 ,∞[τ≥t ], for some
+α, β, γ∈(0, 1), N, B∈N , L∈N∪ {∞} . For any θ0 ∈ Θ0, θ1 ∈ Θ1, and any change
+detection algorithm A satisfying Assumption 1 and having Pθ0,∞(τ≥T ) ̸= 0, the
+19
+Algorithm 3CI for parametric pre-change and post-change
+Require:α, β, γ, θ∗0, N, B, L, A, CI(data; coverage), CS(data; coverage), and data
+{Xn}n until a change is detected atτusingA
+Ensure:A confidence setCfor changepointT
+1:C ←∅
+2:fori= 1 toNdo
+3:Draw{X in}n iid∼F θ∗0 , untilAdetects atτ ∗i or untilτ, whichever happens first.
+4:end for
+5:fort= 1 toτdo
+6:Compute some test statisticsM t based onX 1,· · ·, Xτ
+7:Computer ∗t = PNi=1 I(τ ∗i ≥t)/N
+8:Find a confidence interval forθ 0:S t−1 = CI(X1,· · ·, Xt−1; 1−γr ∗t )
+9:Find a confidence sequence forθ 1:S ′τ−t+1 = CS(Xt,· · ·, Xτ ; 1−βr ∗t )
+10:forj= 1 toBdo
+11:Subroutine 1:
+12:foreach (θ, θ ′)∈ St−1 × S′τ−t+1 do
+13: Simulate {X jn(θ, t, θ′)}n following Pθ,t,θ′ (independently for all j) until its
+detection timeτ j,tθ,θ′ usingAor until timeL, whichever happens first
+14:ComputeM jt,L(θ, θ′) based onτ j,tθ,θ′,X j1(θ, t, θ′),· · ·, Xjτ j,tθ,θ′ ∧L(θ, t, θ′)
+15:end for
+16:end for
+17:Subroutine 2:
+18:ifM t ≤sup (θ,θ′)∈St−1×S′τ−t+1 Quantile(1−αr ∗t ;M t,{M jt,L(θ, θ′)}Bj=1)then
+19:C ← C ∪ {t}
+20:end if
+21:end for
+following guarantee holds:P θ0,T,θ 1(T∈ C1 |τ≥T)≥1−α−β−γ.
+Remark3.As a special case, when pre- and post-change parameters are known, i.e.,
+Θi = {θi} are singleton sets, i = 0, 1, we have S = {θ0},S ′ = {θ1} with β = 0. So, in
+this case, Algorithms 2 and 3 reduces to our algorithm designed for the known pre- and
+post-change setting, and similarly, Theorems 7 and 8 reduces to Theorem 6.
+5 Confidence set for pre- and post-change parame-
+ters
+Beyond localizing the changepoint, another natural inferential goal is to estimate the
+pre- and post-change parameters, assuming that the pre- and post-change distributions
+20
+follow some parametric composite models: Pi = {Fθ : θ∈ Θi}; i = 0, 1. While our
+primary focus is on constructing a confidence set C for the changepoint T , we now
+outline how one can derive confidence sets forθ 0 andθ 1 usingC.
+The key idea is as follows: once a valid confidence setC ⊆ {1,· · ·, τ}for T is constructed,
+this implicitly identifies a subset of data that is likely to have been generated under the
+pre- and post-change regimes.
+For estimating the post-change parameter, one natural idea might be to consider the
+samples starting from maxC till the detection time τ . But since both starting and
+ending times are random here, this strategy does not yield valid coverage guarantees.
+Instead, we fix each t∈ Cand construct a confidence sequence based on Xt,· · ·, Xτ
+for θ1, denoted as CS(Xt,· · ·, Xτ ; 1 −η 1r∗t ) (recall the definition in (18)), for some
+η1 ∈ (0, 1), whose value is less than the target non-coverage, α′. Finally, the union of
+these CS acrosst∈ C, yields the post-detection confidence interval forθ 1:
+∪t∈C CS(Xt,· · ·, Xτ ; 1−η 1r∗t ).(21)
+There is a natural tension between how quickly A detects a change from θ0 and the
+tightness of inference on θ1 — if A stops very quickly, we will have very few data points
+with which to estimate θ1, leading to wider intervals. This is not a drawback of our
+methodology, but an inherent limitation of any post-detection inference method.
+Analogously, for the pre-change parameter θ0, we fix each t∈ Cand construct a confi-
+dence interval for θ0 based on the data X1, . . . , Xt−1, denoted as CI(X1,· · ·, Xt−1; 1 −
+η0r∗t ), for some η0 ∈ (0, 1), chosen to be smaller than the target (conditional) non-
+coverage level,α ′′. The final confidence set forθ 0 is∪ t∈C CI(X1,· · ·, Xt−1; 1−η 0r∗t ).
+Next, we formalize its coverage guarantee, which is nonasymptotic and agnostic to the
+detection algorithm, unlike existing methods.
+Theorem 9.Let C be a confidence set, e.g., (14) or (20), such that for any θ0 ∈ Θ0, θ1 ∈
+Θ1, T∈N , change detection algorithm A satisfying Assumption 1 and Pθ0,∞(τ≥T ) ̸= 0,
+we have:P θ0,T,θ 1(T∈ C |τ≥T)≥1−α. Then, for anyT∈N,
+Pθ0,T,θ 1 (θ0 ∈ ∪t∈C CI(X1,· · ·, Xt−1; 1−η 0r∗t )|τ≥T)≥1−α−η 0,and
+Pθ0,T,θ 1 (θ1 ∈ ∪t∈C CS(Xt,· · ·, Xτ ; 1−η 1r∗t )|τ≥T)≥1−α−η 1.
+21
+6 Experiments
+We validate our methods across various simulation and real-data settings, demonstrating
+their practicality.
+Known pre- and post-change (Setting I):Here, we draw X1,· · ·, XT−1
+iid
+∼N (0, 1)
+and XT , XT+1 ,· · ·
+iid
+∼N (1, 1), with T being the only unknown parameter. We employ
+the CUSUM detector, τ = inf
+n
+n∈N: max 1≤j≤n
+Qn
+i=j
+f1(Xi)
+f0(Xi) ≥A
+o
+, with A = 1000.
+After detection, we construct both the proposed confidence sets (universal (10) and
+adaptive (17)), with B = 100, N= 50, α = 0.1. Fig. 1 visualizes the confidence sets
+(17) across 5 runs. Table 2 has the (conditional on the event τ≥T ) average size and
+coverages of the confidence sets and delay of detection, i.e,τ−T, across 500 runs.
+(a)Data till change is detected,T= 100
+ (b)Data till change is detected,T= 500
+Figure 1: Setting I. The first T− 1 observations are drawn from N (0, 1) and the
+rest from N (1, 1). The confidence sets (adaptive (17)) are shown in red points, with
+B=N= 100,α= 0.1, L=∞. Results of 5 independent simulations are shown.
+Table 2: Setting I: Known pre- and post-change.
+TA Conditional Coverage Conditional Size Delay
+Universal Adaptive Universal Adaptive (Conditional)
+100 1000 0.948 0.906 12.4129.694 12.803
+500 1000 0.942 0.908 12.1769.278 13.227
+Known pre- and parametric post-change (Setting II):We perform experiments
+with F0 = N (0, 1) (known pre-change), post-change class P1 = {N (θ, 1) : θ∈ Θ1}, ;
+we vary Θ1 and T . The post-change samples are drawn from N (1, 1) (unknown). For
+detection, we use the CUSUM detector with A = 1000, a discrete weight distribution
+taking values θ1 = θ, θ2 = θ + d, θ3 = θ + 2d,· · ·, θ10 = θ + 9d, d = 0.2, θ = 0.75, when
+22
+P1 = {N (µ, 1) : µ > θ}, with exponentially decaying weights wi = e− i−12 −e − i2 ,fori =
+1,· · ·,9,andw 10 = e−9/2, which appeared to us to be a sensible discretized mixture
+over P1. After detection, we construct both the proposed confidence sets for T (universal
+(10) with α = 0.075 and adaptive (19)4 with α = 0.1, β= 0.025) with target conditional
+coverage 0.925. For implementing (10) , we use R(t)n = Qni=t fθ0 (Xi)fθ∗1 (Xi) , where θ∗1 is the
+closest element of Θ 0 from Θ1, and S(t)n = Rθ∈Θ1 Qt−1i=n fθ(Xi)fθ0 (Xi) w(θ)dθ, with w being the
+same weight mentioned above. In Table 3, we report the results averaged across 500
+runs. Fig. 2(a) shows the confidence sets (10) across 5 random runs.
+Table 3: Known pre-change but unknown post-change. The pre-change parameter
+θ0 = 0 is known, the true (unknown) post-change parameter is θ1 = 1, while the
+algorithm only knowsθ 1 ∈Θ 1, which we mention in the second column. (Setting II)
+TΘ 1 Conditional Coverage Conditional Size Delay
+Universal Adaptive Universal Adaptive (Conditional)
+100 [0.75,∞) 0.972 0.966 16.870 14.824 13.878
+100 [0.9,∞) 0.976 0.972 12.860 11.552 12.212
+500 [0.75,∞) 0.969 0.968 16.168 14.266 13.638
+500 [0.9,∞) 0.972 0.971 14.734 12.602 12.814
+Composite parametric pre- and post-change (Setting III):Here, we draw
+X1,· · ·, XT−1
+iid
+∼N (0, 1) and XT , XT+1 ,· · ·
+iid
+∼N (1, 1). Now we conduct experiments for
+pre-change class P0 = {N (θ, 1) : θ∈ Θ0}, post-change class P1 = {N (θ, 1) : θ∈ Θ1};
+we vary Θ0,Θ 1 andT. For detection, we employ a weighted CUSUM-type detector
+τwcs-ripr = inf
+(
+n∈N: max
+1≤j≤n
+Z
+θ∈Θ1
+nY
+i=j
+fθ(Xi)
+fθ∗0 (Xi) dW(θ)≥A
+)
+,(22)
+with A = 1000, θ∗0 is the “closest” element of Θ 0 from Θ 1, and for the post-change
+parameter, the same discrete weight distribution as in setting II is considered. We define
+ˆθ0,1:j to be the MLE of θ0 ∈ Θ0 based on data X1,· · ·, Xj. After detection, we construct
+both the proposed confidence sets (universal (14) with α = 0.1 and adaptive (20) with
+α = 0.05, β= γ = 0.025) for T , with N = B = 100, both having target conditional
+coverage 0.9. For implementing (14), we use R(t)n = Rθ∈Θ0 Qni=t fθ(Xi)fθ∗1 (Xi) w′(θ)dθ, with w′(θ)being the discrete distribution taking values θ1 = θ, θ2 = θ−d, θ3 = θ− 2d,· · ·, θ10 =
+θ− 9d, d = 0.2, when P1 = {N (µ, 1) : µ > θ}, with exponentially decaying weights wi =
+4Implementation details of the adaptive method in Setting II (and Setting III) are the same as
+discussed in Section C.1 (and Section D.1) of the Supplementary.
+23
+e− i−12 −e − i2 ,fori = 1 ,· · ·,9,andw 10 = e−9/2 and S(t)n = Rθ∈Θ1 Qt−1i=n fθ(Xi)fθ∗0 (Xi) w(θ)dθ,
+with w(θ) being the same as mentioned in Setting II. θ∗i is the closest element of Θ i
+from the other space. Fig. 2(b) visualizes the confidence sets (14) across 5 random runs.
+Table 4 reports the results averaged across 500 runs.
+(a)Setting II.F 0 =N(0,1),P 1 ={N(µ,1) :µ≥0.9}
+ (b)Setting III. P0 = {N (µ, 1) : µ≤ 0.1}, P1 = {N (µ, 1) :
+µ >0.9}
+Figure 2: First T− 1 samples are drawn from N (0, 1) and the remaining samples from
+N (1, 1), T= 100. Confidence sets (universal (14)) are shown in red points. N = 100,
+α= 0.1. Results of 5 random simulations are shown.
+Table 4: Confidence interval for T (Setting III): unknown pre- and post-change. The
+true (unknown) values of the parameters are θ0 = 0, θ1 = 1, while the algorithm only
+knowsθ i ∈Θ i, i= 0,1, which are mentioned in the second and third columns.
+TΘ 0 Θ1 Conditional Coverage Conditional Size Delay
+Universal Adaptive Universal Adaptive (Conditional)
+100 (∞,0.25] [0.75,∞) 0.984 0.982 23.683 23.827 22.810
+100 (∞,0.1] [0.9,∞) 0.968 0.978 15.552 15.294 15.282
+500 (∞,0.25] [0.75,∞) 0.982 0.976 23.825 24.482 24.060
+500 (∞,0.1] [0.9,∞) 0.970 0.942 16.860 16.956 15.576
+Composite parametric pre- and nonparametric post-change (Setting IV):Here,
+we consider the true (unknown) pre- and post-change distributions to be N(1, 1) and
+U[−1.2, 0.8] respectively. Let the pre-change class be P0 = {N(θ,1) :θ≥µ 1}, µ1 = 0.75
+and the post-change class be the set of all SubGaussians with a nonpositive mean:
+P1 =
+n
+F∈ M:E F [eλX]≤e − λ22 ,∀λ∈[0,∞) o, M is the set of all probability measures
+on (R,B(R)). We use an e-detector [31],
+τ ′e = inf
+(
+n∈N: max
+1≤t≤n
+nY
+i=t
+e(νi−µ1)Xi−ν2i /2+µ21/2 ≥A
+)
+,
+24
+with A = 1000, νi = min{0, 1i−1 Pi−1j=1 Xj}. This P0 and τ ′e satisfies Assumption 1 with
+P ∗0 = N(µ1, 1). After detection, we construct the confidence sets (14). The forward
+t-delay e-process we use is{R(t)n }n≥t = Qni=t eλiXi−λ2i /2, where λi = max{µ1, 1i−t Pi−1j=t Xi}
+and the backward e-processes is constructed similarly:{S(t)n }n<t = Qti=n e(ηi−µ1)Xi−η2i /2+µ21/2,
+where ηi = min{0, 1t−i Ptj=i+1 Xj} (see, e.g., Ch. 6.7.5 of [ 24]). Table 5 contains the
+results across 500 runs and Fig. 3 visualizes across 5 runs.
+(a)Setting IV. First T− 1 samples are drawn from N (1, 1)
+and the remaining samples are fromU(−1.2,0.8).
+(b)Setting V. First T− 1 samples are drawn from (1 −ϵ ) ×
+N (0, 1) + ϵ×Cauchy (−1, 10) and the remaining samples are
+from (1−ϵ)×N(1,1) +ϵ×Cauchy(−1,10),ϵ= 0.01.
+Figure 3: The confidence set (14) is marked in red points. Results of 5 independent
+simulations are shown.
+Table 5: Setting IV: Parametric pre-change, nonparametric post-change.
+T Coverage(Conditional) Coverage(Marginal) Size(Conditional) Delay(Conditional)
+100 0.984 0.982 23.859 9.959
+500 0.992 0.930 25.381 9.606
+Huber-robust (nonparametric) pre- and post-change (Setting V):
+We perform experiments for the robust Gaussian mean-change problem under the
+ϵ contamination model, with the true changepoint at T = 100 , 500. The pre- and
+post-change classes are ϵ neighbourhoods around N (µ0, 1) and N (µ1, 1), respectively:
+Pi = {(1 −ϵ )N (µi, 1) + ϵF : F∈ M}; i = 0, 1. In our experiment, µ0 = 0, µ1 = 1
+and ϵ = 0 .01, 0.001. The true (unknown) pre- and post-change distributions are
+(1 −ϵ ) ×N (0, 1) + ϵ×Cauchy (−1, 10) and (1 −ϵ ) ×N (1, 1) + ϵ×Cauchy (−1, 10)
+respectively. We use Huber’s LFD (which are also log-optimal e-values [27]) to construct
+25
+a CUSUM-style change-detector as below:
+τ= inf
+(
+t∈N: max
+1≤j≤t
+tY
+i=j
+π(Xi)≥A
+)
+,(23)
+where π(x) = min{max{ f1(x)f0(x) , c′}, c′′} for constants c′′ > c′ ≥ 0 as mentioned in [ 14, 27].
+We set the threshold at A = 1000. After detection, we construct our universal confidence
+sets (14) for T , with R(t)n = 1/ Qni=t π(Xi), for n≥t S (t)n = Qt−1i=n π(Xi), for n < tand
+α = 0.1. We report the results averaged across 500 independent runs in Table 6, and
+Fig. 3 visualizes the results across 5 runs.
+Table 6: Setting V: Huber-robust (nonparametric) pre- and post-change
+Tϵ Conditional coverage Conditional size Conditional delay
+100 0.01 0.939 13.298 14.140
+500 0.01 0.948 13.634 13.943
+100 0.001 0.944 12.274 12.638
+500 0.001 0.958 11.927 12.496
+Comparison with [ 42]:We now compare our method with Ch. 3.5 of [ 42] on the
+Gaussian mean-change, having the (unknown) changepoint at T = 100 or 500. We
+recall that, unlike our general nonasymptotic guarantees for any A, Wu’s method only
+has asymptotic approximate guarantees in specific parametric settings, and only for
+CUSUM procedure [21], τ ′cusum := inf{n∈N:T n ≥d}, where Tn = max{0, Tn−1 + Xn}
+and d is the threshold. We used d = 8.59 and 7 .56 for N (−0.25, 1) vs. N (0.25, 1) and
+N (−0.3, 1) vs. N (0.3, 1) respectively. We implement Wu’s confidence set of the form
+Vc ∪ [Ls,ˆν), where ˆν= max{k < τ: Tk = 0}, Vc = {k≥ˆν : Tk ≤c} , and Lk denote the
+k-th last zero point of Tn counted backward starting from L0 := ˆν, with their proposed
+approximations (for the case when θ1 = −θ0) s = log(α) × (1/(
+√
+2θ1) + 0.088) and
+c = −log (1 − √1−α )/(2θ1) − 0.583 with α = 0.1. Table 7 reports the results (for
+target conditional coverage 0.9) averaged across 500 runs.
+The results show that [ 42] (which is only asymptotically valid and relies on approx-
+imations) exhibits noticeable undercoverage, while the sizes for both methods are
+comparable. However, our method (17) achieves the target conditional coverage.
+Sentiment change in language data:We consider the Stanford Sentiment Treebank
+(SST-2) dataset of movie reviews labeled with a binary sentiment [ 34]. We want to
+localize the change from > 60% positive reviews to < 40% positive reviews. In our
+26
+Table 7: Comparison of the confidence sets forTwith [42] (Setting I)
+F0 F1 T Conditional Coverage Conditional Size Marginal Coverage
+Ours Wu (2007) Ours Wu (2007) Ours Wu (2007)
+N(−0.25,1)N(0.25,1) 100 0.916 0.838 34.595 39.706 0.864 0.792
+N(−0.3,1)N(0.3,1) 100 0.896 0.774 23.827 26.678 0.828 0.736
+N(−0.25,1)N(0.25,1) 500 0.902 0.841 34.382 38.195 0.546 0.578
+N(−0.3,1)N(0.3,1) 500 0.906 0.796 23.188 27.343 0.512 0.442
+Figure 4: The confidence set (14) is marked in red points. The true changepoint T = 500
+is marked with the black line. Texts are plotted from time t = 470 upto detection time,
+τ= 534.
+experimental setup, the true changepoint is at 500; the pre-change data are i.i.d. draws
+of 75% positive reviews, and the post-change data are i.i.d. draws of 25% negative
+reviews (these are all unknown to our algorithm). We construct a change detection
+method using a pre-trained DistilBERT-base model fine-tuned on the uncased SST-2
+[28], which is a binary sentiment classifier that maps each review to either 0 (negative) or
+1 (positive), thereby producing a sequence of Bernoulli observations. After obtaining the
+binary sequence, we construct the test statistic (9) using the likelihood ratio process for
+Bern(0.4) against Bern(0.6) (forward) and for Bern(0.6) against Bern(0.4) (backward).
+Note that given the change detector (and as a byproduct, the sequence of Bernoulli),
+it is simple to compute (9) in O(T ) time per t. So, the confidence set (14) takes total
+O(T 2) time. Fig. 4 provides a visualization.
+Remark4.In Settings I, II, and III, both of our proposed methods — universal
+(Section 3) and adaptive (Section 4) — are applicable. For nonparametric settings
+27
+(IV and V), the only valid method currently known is the universal method. Prior
+works are valid (asymptotically) only for Setting I. As shown in Table 2 for known
+pre-distributions (Settings I and II), the adaptive method consistently outperforms the
+universal method, which tends to be conservative. Also, our adaptive method is the
+only method we know that remains valid under dependence (see experimental results
+in Supplementary Section G.2). However, for setting III, the universal and adaptive
+methods perform similarly. Moreover, the universal method is also significantly more
+efficient — it runs in O(T 2) time (assuming Mt can be computed in O(T ) time), while
+the adaptive method incurs a higher computational cost of O(T 3B) (assuming A runs
+in O(T ) time and Mt can be computed in O(T ) time). See Supplement Sections E, F,
+and G for further experiments, involving confidence intervals for pre- and post-change
+parameters, settings with dependent data, settings with detection algorithms controlling
+PF A, etc.
+7 Conclusion
+We developed a general framework for constructing confidence sets for the unknown
+changepoint T after a sequential detector signals a change at a data-dependent stopping
+time. It applies to any general nonparametric post-change class when the pre-change
+distribution is known, and we further extend it to settings with a composite pre-
+change class under a suitable assumption. For the parametric setting, we proposed
+an alternative simulation-based method that empirically yields tighter confidence sets
+when both pre- and post-change distributions are known and can handle dependent
+data as well. However, we note that our primary (universal) method is nonparametric,
+computationally more efficient, and simpler to implement. Crucially, all our methods
+are agnostic to the detection algorithm used and provide non-asymptotic (conditional)
+coverage guarantees, whereas prior works are tailored for exponential family distributions
+with the CUSUM procedure and provide only asymptotic (conditional) coverage. By
+bridging a longstanding gap in the literature, our work offers the first nonparametric,
+theoretically principled, and broadly applicable method for post-detection inference.
+A particularly fruitful direction for future work is to extend this framework to the
+distribution-free setting.
+28
+Acknowledgement
+Part of this work was carried out while AS was a student at the Indian Statistical
+Institute. The authors thank the Editor, the Associate Editor, and the reviewers for
+their careful reading of an earlier version of the article and for their helpful comments.
+The authors also thank Swapnaneel Bhattacharyya for identifying and helping eliminate
+an inconsistency in an earlier version of the article. AR acknowledges support from
+NSF DMS-1916320.
+References
+[1] Alexander Aue and Claudia Kirch. The state of cumulative sum sequential change-
+point testing 70 years after Page.Biometrika, 111(2):367–391, 2024.
+[2] Boris Brodsky. Sequential detection and estimation of change-points.Sequential
+Analysis, 29(2):217–233, 2010.
+[3] Chia-Shang James Chu, Maxwell Stinchcombe, and Halbert White. Monitoring
+structural change.Econometrica: Journal of the Econometric Society, pages
+1045–1065, 1996.
+[4] B. S. Darkhovskh. A nonparametric method for the a posteriori detection of
+the “disorder” time of a sequence of independent random variables.Theory of
+Probability & Its Applications, 21(1):178–183, 1976.
+[5] Donald A Darling and Herbert Robbins. Confidence sequences for mean, variance,
+and median.Proceedings of the National Academy of Sciences, 58(1):66–68, 1967.
+[6] Keyue Ding. A lower confidence bound for the change point after a sequential
+CUSUM test.J. Statist. Planng Inf., 115(1):311–326, 2003.
+[7] L Dumbgen. The asymptotic behavior of some nonparametric change-point esti-
+mators.The Annals of Statistics, 1991.
+[8] Edit Gombay. Sequential change-point detection and estimation.Sequential
+Analysis, 22(3):203–222, 2003.
+[9] Peter Gr¨ unwald, Rianne de Heide, and Wouter Koolen. Safe testing.J. R. Statist.
+Soc. B, 86(5):1091–1128, 03 2024.
+29
+[10] Zaid Harchaoui, Eric Moulines, and Francis Bach. Kernel change-point analysis.
+Neural Information Proc. Systems, 21, 2008.
+[11] David V. Hinkley. Inference about the change-point in a sequence of random
+variables.Biometrika, 57(1):1–17, 1970.
+[12] Steven R Howard, Aaditya Ramdas, Jon McAuliffe, and Jasjeet Sekhon. Time-
+uniform Chernoff bounds via nonnegative supermartingales.Probability Surveys,
+2020.
+[13] Steven R Howard, Aaditya Ramdas, Jon McAuliffe, and Jasjeet Sekhon. Time-
+uniform, nonparametric, nonasymptotic confidence sequences.The Annals of
+Statistics, 49(2):1055–1080, 2021.
+[14] Peter J Huber. A robust version of the probability ratio test.The Annals of
+Mathematical Statistics, pages 1753–1758, 1965.
+[15] Peter J Huber and Volker Strassen. Minimax tests and the Neyman-Pearson lemma
+for capacities.The Annals of Statistics, pages 251–263, 1973.
+[16] Jayoon Jang and Guenther Walther. Fast and optimal changepoint detection and
+localization using Bonferroni triplets.arXiv preprint arXiv:2410.14866, 2024.
+[17] Claudia Kirch and Christina Stoehr. Sequential change point tests based on
+U-statistics.Scandinavian Journal of Statistics, 49(3):1184–1214, 2022.
+[18] Tyron Lardy, Peter Gr¨ unwald, and Peter Harremo¨ es. Reverse information pro-
+jections and optimal e-statistics.IEEE Transactions on Information Theory,
+70(11):7616–7631, 2024.
+[19] Martin Larsson, Aaditya Ramdas, and Johannes Ruf. The numeraire e-variable
+and reverse information projection.Annals of Stat., 2025.
+[20] Gary Lorden. Procedures for reacting to a change in distribution.The Annals of
+Mathematical Statistics, 1971.
+[21] Ewan S Page. Continuous inspection schemes.Biometrika, 41(1/2):100–115, 1954.
+[22] Aaditya Ramdas, Peter Gr¨ unwald, Vladimir Vovk, and Glenn Shafer. Game-
+theoretic statistics and safe anytime-valid inference.Statistical Science, 2023.
+30
+[23] Aaditya Ramdas, Johannes Ruf, Martin Larsson, and Wouter M Koolen. Testing
+exchangeability: Fork-convexity, supermartingales and e-processes.International
+Journal of Approximate Reasoning, 141:83–109, 2022.
+[24] Aaditya Ramdas and Ruodu Wang. Hypothesis testing with e-values.Foundations
+and Trends in Statistics, 1(1), 2025.
+[25] SW Roberts. A comparison of some control chart procedures.Technometrics,
+8(3):411–430, 1966.
+[26] Aytijhya Saha and Aaditya Ramdas. Testing exchangeability by pairwise betting. In
+International Conference on Artificial Intelligence and Statistics, pages 4915–4923.
+PMLR, 2024.
+[27] Aytijhya Saha and Aaditya Ramdas. Huber-robust likelihood ratio tests for
+composite nulls and alternatives.IEEE Transactions on Information Theory,
+72(1):501–520, 2026.
+[28] Victor Sanh, Lysandre Debut, Julien Chaumond, and Thomas Wolf. DistilBERT,
+a distilled version of BERT: smaller, faster, cheaper and lighter.arXiv preprint
+arXiv:1910.01108, 2019.
+[29] Moshe Shaked and J George Shanthikumar.Stochastic orders. Springer, 2007.
+[30] Walter A Shewhart. The application of statistics as an aid in maintaining quality
+of a manufactured product.Journal of the American Statistical Association,
+20(152):546–548, 1925.
+[31] Jaehyeok Shin, Aaditya Ramdas, and Alessandro Rinaldo. E-detectors: A non-
+parametric framework for sequential change detection.The New England Journal
+of Statistics in Data Science, 2(2):229–260, 2023.
+[32] Albert N Shiryaev. On optimum methods in quickest detection problems.Theory
+of Probability & Its Applications, 8(1), 1963.
+[33] David Siegmund and ES Venkatraman. Using the generalized likelihood ratio
+statistic for sequential detection of a change-point.The Annals of Statistics, pages
+255–271, 1995.
+[34] Richard Socher, Alex Perelygin, Jean Wu, Jason Chuang, Christopher D Manning,
+31
+Andrew Y Ng, and Christopher Potts. Recursive deep models for semantic com-
+positionality over a sentiment treebank. InProceedings of the 2013 conference on
+empirical methods in natural language processing, pages 1631–1642, 2013.
+[35] M.S Srivastava and Yanhong Wu. Quasi-stationary biases of change point and
+change magnitude estimation after sequential CUSUM test.Sequential Analysis,
+18(3-4):203–216, 1999.
+[36] A. Tartakovsky, I. Nikiforov, and M. Basseville.Sequential Analysis: Hypothesis
+Testing and Changepoint Detection. CRC Press, 2014.
+[37] Nicolas Verzelen, Magalie Fromont, Matthieu Lerasle, and Patricia Reynaud-
+Bouret. Optimal change-point detection and localization.The Annals of Statistics,
+51(4):1586–1610, 2023.
+[38] Jean Ville. Etude critique de la notion de collectif.Bull. Amer. Math. Soc,
+45(11):824, 1939.
+[39] Larry Wasserman, Aaditya Ramdas, and Sivaraman Balakrishnan. Universal
+Inference.Proceedings of the National Academy of Sciences, 117(29):16880–16890,
+2020.
+[40] Ian Waudby-Smith and Aaditya Ramdas. Estimating means of bounded random
+variables by betting.Journal of the Royal Statistical Society Series B (Methodology),
+with discussion, 2023.
+[41] K. J. Worsley. Confidence regions and tests for a change-point in a sequence of
+exponential family random variables.Biometrika, 73(1):91–104, 1986.
+[42] Y. Wu.Inference for Change Point and Post Change Means After a CUSUM Test.
+Lecture Notes in Statistics. Springer New York, 2007.
+[43] Yanhong Wu. Bias of estimator of change point detected by a CUSUM procedure.
+Annals of the Institute of Statistical Mathematics, 56(1):127–142, 2004.
+[44] Yanhong Wu. Inference for change-point and post-change mean with possible
+change in variance.Sequential Analysis, 24(3):279–302, 2005.
+[45] Yanhong Wu. Inference for post-change mean by a CUSUM procedure.J. Statist.
+Planng Inf., 136(10):3625–3646, 2006.
+32
+Supplementary Material
+Outline of the Supplementary Material
+Omitted proofs can be found in Section A. We provide the implementation details of
+Algorithm 1 in Section B and of Algorithms 2 and 3 in Sections C and D respectively,
+along with two concrete examples in both sections. Experimental results for the
+confidence intervals for pre- and post-change parameters are in Section E. Simpler
+algorithms for PF A-controlling change detectors are presented in Section F, along with
+their implementations in simulation experiments. Additional experiments with varying
+T vs. ARL and scenarios with dependent (Markov) pre- and post-change data are
+presented in Section G.
+A Omitted proofs
+In this section, we provide the mathematical details that were omitted in the main
+paper.
+Proof of Proposition 1. Assume that PT (T∈ C∗) ≥ 1 −α for some C∗ ⊆ {1,· · ·, τ}.
+Now we observe that
+P∞(τ≥T) =P T (τ≥T)≥P T (T∈ C∗)≥1−α.
+Therefore, P∞(τ = ∞) = 1 −P ∞(∪∞n=1[τ < n]) = 1 −lim n→∞ P∞(τ < n) =
+limn→∞ P∞(τ≥n)≥1−α.
+Proof of Proposition 2. First note the fact that PF0,T,F 1(τ < T) = PF0,∞(τ < T), since
+the event [τ < T] =∪T−1i=1 [τ=i] does not depend on{X i :i≥T}.
+Let C ⊆ {1, . . . , τ}be a confidence set satisfying PF0,t,F1(t∈ C |τ≥t) ≥ 1 −α , for all
+t∈N . Since τ is a stopping time, [ τ < t] = ∪t−1i=1[τ = i] does not depend on {Xi : i≥t} .
+This impliesP F0,∞(τ≥t) =P F0,t,F1(τ≥t).Therefore,
+33
+PF0,t,F1(ϕ(t)(X1,· · ·, Xτ ) = 1) =P F0,t,F1(t /∈ C, t≤τ)
+=P F0,t,F1(t /∈ C |τ≥t)PF0,t,F1(τ≥t)
+≤αP F0,∞(τ≥t),∀F 0 ∈ P0, F1 ∈ P1.
+For the converse part, ϕ(t) satisfies PF0,t,F1(ϕ(t)(X1,· · ·, Xτ ) = 1) ≤α·P F0,∞(τ≥
+t),∀F 0 ∈ P0, F1 ∈ P1. So,C={t∈N, t≤τ:ϕ (t)(X1,· · ·, Xτ ) = 0}satisfies
+PF0,T,F 1(ϕ(T) (X1,· · ·, Xτ ) = 0)
+=P F0,T,F 1(ϕ(T) (X1,· · ·, Xτ ) = 0, τ≥T) +P F0,T,F 1(ϕ(T) (X1,· · ·, Xτ ) = 0, τ < T)
+≤P F0,T,F 1(T∈ {t∈N, t≤τ:ϕ (t)(X1,· · ·, Xτ ) = 0}) +P F0,∞(τ < T)
+=P F0,T,F 1(T∈ C) +PF0,∞(τ < T).
+Therefore,P F0,T,F 1(T∈ C)≥1−α·P F0,∞(τ≥T)−P F0,∞(τ < T), which implies
+PF0,T,F 1(T∈ C |τ≥T) = PF0,T,F 1(T∈ C, τ≥T)PF0,T,F 1(τ≥T) = PF0,T,F 1(T∈ C)PF0,∞(τ≥T) ≥1−α.
+This completes the proof.
+Lemma 1(Ville’s inequality [ 38]).If {Rn}n∈N is an e-process for P with respect to a
+filtration{F n}n∈N, then
+P(∃n∈N:R n ≥1/α)≤α,∀P∈ P.(S1)
+For a short proof, see [12][Lemma 1].
+Proof of Theorem 1. Note that by definition of Mt, we have PF0,t,F1[Mt ≥ 2/α, t=
+ˆT≤τ <∞ ] = 0, PF0,t,F1[Mt ≥ 2/α, t > τ] = 0 and PF0,t,F1[Mt > 2/α, τ= ∞] = 0.
+Therefore, the only cases where Mt > 2/α might occur are t < ˆT≤τ <∞ or
+ˆT < t≤τ <∞. Hence, for anyt∈N,
+PF0,t,F1[Mt ≥2/α]
+=P F0,t,F1
+
+max{max
+t≤n≤τ
+R(t)n ,max1≤n≤t−1 S(t)n } ≥2/α, t≤τ <∞
+
+34
+≤P F0,t,F1
+
+max
+t≤n≤τ
+R(t)n ≥2/α, t≤τ <∞
+
++P F0,t,F1
+
+max
+1≤n≤t−1
+S(t)n ≥2/α, t≤τ <∞
+
+.
+Now, from Ville’s inequality (Lemma 1) on the e-processes{R (t)n }n≥t,
+PF1
+ 
+∃n≥t, R (t)n ≥2/α  ≤α/2.
+Therefore,
+PF0,t,F1
+
+max
+t≤n≤τ
+R(t)n ≥2/α, t≤τ <∞
+
+≤P F0,t,F1
+ 
+∪∞n=t R(t)n ≥2/α 
+=P F0,t,F1
+ 
+∃n≥t, R (t)n ≥2/α  ≤α/2.
+Similarly, for the e-processes {S(t)n }n<t, we get PF0,t,F1
+h
+S(t)(t−1)∧ ˆT ≥2/α i ≤α/ 2. There-
+fore, from the above steps, we finally have
+PF0,t,F1[Mt ≥2/α]≤α/2 +α/2 =α.
+This completes the proof.
+Proof of Theorem 2.Observe that
+PF0,T,F 1(MT <2/(αr T ))
+=P F0,T,F 1(T∈ {t∈N:M t <2/(αr t)})
+≤P F0,T,F 1(T∈ {t∈N:M t <2/(αr t)}, τ≥T) +P F0,T,F 1(τ < T)
+=P F0,T,F 1(T∈ {t∈N:t≤τ, M t < 2αrt } |τ≥T)P F0,T,F 1(τ≥T) +P F0,T,F 1(τ < T)
+=P F0,T,F 1(T∈ C |τ≥T)P F0,∞(τ≥T) + 1−P F0,∞(τ≥T),
+where we twice used the fact that PF0,T,F 1(τ < T) = PF0,∞(τ < T), which holds because
+τ is a stopping time and so the event [ τ < T] = ∪T−1i=1 [τ = i] does not depend on
+{Xi :i≥T}.
+From Theorem 1, we have PF0,t,F1[Mt ≥ 2αrt |r t] ≤αr t, since rt and Mt are independent
+of each other. Now, since rt is an unbiased estimator of PF0,∞[τ≥t ], PF0,t,F1[Mt ≥
+35
+2
+αrt ] =E[P F0,t,F1[Mt ≥ 2αrt |r t]]≤E[αr t] =αP F0,∞[τ≥t],∀t∈N.So, we obtain
+PF0,T,F 1(T∈ C |τ≥T)≥1− PF0,T,F 1(MT >2/(αr T ))PF0,∞(τ≥T) ≥1−α.
+This completes the proof.
+Proof of Theorem 3. We first decompose the length of the confidence set into contri-
+butions from the pre- and post-change regions, and then control each contribution
+separately.
+Decomposition of the confidence set.Wheneverτ≥T > t,
+Mt ≥
+T−1Y
+i=t
+f0(Xi)
+f1(Xi) .
+Similarly, wheneverT < t≤τ,
+Mt ≥
+t−1Y
+i=T
+f1(Xi)
+f0(Xi) .
+Therefore, the following holds almost surely:
+|C| ×1(τ≥T)
+≤
+T−1X
+t=1
+1
+ T−1Y
+i=t
+f0(Xi)
+f1(Xi) ≤2/(αr t)
+!
++ 1 +
+τX
+t=T+1
+1
+ t−1Y
+i=T
+f1(Xi)
+f0(Xi) ≤2/(αr t)
+!
+=
+T−1X
+t=1
+1
+ T−1Y
+i=t
+f0(Xi)
+f1(Xi) ≤2/(αr t)
+!
++ 1 +
+∞X
+t=T+1
+1
+ t−1Y
+i=T
+f1(Xi)
+f0(Xi) ≤2/(αr t), t≤τ
+!
+.
+Also, the following holds almost surely:
+|C| ×1(τ≥T)≤
+T−1X
+t=1
+1
+ T−1Y
+i=t
+f0(Xi)
+f1(Xi) ≤2/(αr t)
+!
++ 1 +|τ−T|.(S2)
+36
+So, taking the conditional expectation on both sides and combining both bounds, we
+get
+EF0,T,F 1(|C| |τ≥T)≤1 +
+T−1X
+t=1
+PF0,T,F 1
+ T−1Y
+i=t
+f0(Xi)
+f1(Xi) ≤2/(αr t)|τ≥T
+!
++ min
+( ∞X
+t=T+1
+PF0,T,F 1
+ t−1Y
+i=T
+f1(Xi)
+f0(Xi) ≤2/(αr t), t≤τ|τ≥T
+!
+,∆ F0,T,F 1
+)
+.(S3)
+Controlling the Pre-Change Tail.Fix some s∈ (0, 1). Then, using Markov’s
+equality,
+PF0,T,F 1
+ T−1Y
+i=t
+f0(Xi)
+f1(Xi) ≤2/(αr t)
+!
+≤P F0,T,F 1
+ T−1Y
+i=t
+f0(Xi)
+f1(Xi) ≤2/(αr T )
+!
+[Sincer t ≤r T ]
+=E
+ 
+PF0,T,F 1
+ T−1Y
+i=t
+ f1(Xi)
+f0(Xi)
+s
+≥(αr T )s/2s |r T
+!!
+≤E
+  2
+αrT
+s
+EF0,T,F 1
+ T−1Y
+i=t
+ f1(Xi)
+f0(Xi)
+s!!
+=E
+  2
+αrT
+s 
+EF0
+ f1(Xi)
+f0(Xi)
+sT−t !
+=E
+ 2
+αrT
+s
+ρ0(s)T−t .
+This holds for all s∈ (0, 1) and hence for s = s0. As noted earlier, ρ0(s0) < 1. So, we
+have
+T−1X
+t=1
+PF0,T,F 1
+ T−1Y
+i=t
+f0(Xi)
+f1(Xi) ≤2/(αr t)|τ≥T
+!
+≤ 1pT
+T−1X
+t=1
+PF0,T,F 1
+ T−1Y
+i=t
+f0(Xi)
+f1(Xi) ≤2/(αr t)
+!
+≤E
+ 2
+αrT
+s 1
+pT
+T−1X
+t=1
+ρ0(s)T−t
+→ 2s
+αsps+1T × ρ0(s)−ρ 0(s)T−11−ρ 0(s) ,
+37
+as N→ ∞.To justify the convergence, we note that
+
+2
+αrT
+s
+is uniformly integrable as
+a sequence in N∈N (follows from Lemma 2), and by the strong law of large numbers,
+2
+αrT
+s
+→
+
+2
+αpT
+s
+almost surely. Since the above holds for any s∈ (0, 1), it also holds
+fors=s 0.
+Deriving the first bound.So, taking the conditional expectation on both sides of
+(S2), we get
+EF0,T,F 1(|C| |τ≥T)≤1 +
+T−1X
+t=1
+PF0,T,F 1
+ T−1Y
+i=t
+f0(Xi)
+f1(Xi) ≤2/(αr t)|τ≥T
+!
++ ∆F0,T,F 1.
+Therefore, it follows from the above calculation that
+lim sup
+N→∞
+EF0,T,F 1(|C| |τ≥T)≤ 2s0
+αs0ps0+1T × ρ0(s0)−ρ 0(s0)T−11−ρ 0(s0) + 1 + ∆F0,T,F 1.(S4)
+Controlling the “Post-Change” T ail whenτ is sensitive.Similarly, for t≥T +1,
+we have
+PF0,T,F 1
+ t−1Y
+i=T
+f1(Xi)
+f0(Xi) ≤2/(αr t), t≤τ
+!
+≤P F0,T,F 1
+ t−1Y
+i=T
+f1(Xi)
+f0(Xi) ≤2/(αr τ )
+!
+≤P F0,T,F 1
+ t−1Y
+i=T
+f1(Xi)
+f0(Xi) ≤2/(αr τ ), rτ > ρ1(s)t−T
+!
++P F0,T,F 1[rτ ≤ρ 1(s)t−T ]
+≤P F0,T,F 1
+ t−1Y
+i=T
+ f0(Xi)
+f1(Xi)
+s
+≥(αρ 1(s)t−T )s/2s
+!
++P F0,T,F 1[rτ ≤ρ 1(s)t−T ]
+≤
+ 2
+αρ1(s)t−T
+s
+EF1
+ t−1Y
+i=T
+ f0(Xi)
+f1(Xi)
+s!
++P F0,T,F 1[rτ ≤ρ 1(s)t−T ]
+≤
+ 2
+αρ1(s)t−T
+s
+ρ1(s)t−T +ρ 1(s)t−T .
+The last step follows from the assumption that τ is sensible (recall that if τ is sensitive,
+then τj is stochastically larger than τ ) and from Lemma 3. Also, as we noted before,
+38
+ρ1(s1)<1.Therefore,
+∞X
+t=T+1
+PF0,T,F 1
+ t−1Y
+i=T
+f1(Xi)
+f0(Xi) ≤2/(αr t), τ≥t|τ≥T
+!
+≤ 1pT
+∞X
+t=T+1
+PF0,T,F 1
+ t−1Y
+i=T
+f1(Xi)
+f0(Xi) ≤2/(αr t), τ≥t
+!
+≤ 1pT
+∞X
+t=T+1
+ 2
+α
+s
+ρ1(s)s(t−T) +ρ 1(s)t−T
+
+≤ 1pT
+ 2
+α
+s
+× ρ1(s)s
+1−ρ 1(s)s + ρ1(s)1−ρ 1(s)  .
+Since the above holds for anys∈(0,1), it also holds fors=s 1.
+Deriving the final bound.Finally, it follows from (S3) and the above calculations
+that
+lim sup
+N→∞
+EF0,T,F 1(|C| |τ≥T)≤ 2s0
+αs0ps0+1T × ρ0(s0)−ρ 0(s0)T−11−ρ 0(s0) + 1
++ min
+ 1
+pT
+ 2
+α
+s1
+× ρ1(s1)s1
+1−ρ 1(s1)s1 + ρ1(s1)1−ρ 1(s1)  ,∆ F0,T,F 1 .(S5)
+This completes the proof.
+Proof of Proposition 3. We only prove the case when τ is the CUSUM type stopping
+timeτ wcs-ripr defined as
+τcs = inf
+(
+n∈N: max
+1≤j≤n
+nY
+i=j
+p∗1(Xi)
+p∗0(Xi) ≥A
+)
+.
+Proofs for the other case, whenτis the SR-type stopping time, follow analogously.
+PP,∞[τcs ≥t] =P P,∞
+"
+max
+1≤k≤t−1
+max
+1≤j≤k
+kY
+i=j
+p∗1(Xi)
+p∗0(Xi) < A
+#
+.
+Since (P ∗0 , P∗1 ) is an LFD pair for testingP 0 vs.P 1, for anyP 0 ∈ P0,we have
+R(P0, ϕ)≤R(P ∗0 , ϕ)
+=⇒C 0P0(ϕacceptsH 1)≤C 0P ∗0 (ϕacceptsH 1) for every LRTϕbetweenP ∗0 andP ∗1
+39
+=⇒P 0
+ p∗1(X)
+p∗0(X) > η
+
+≤P ∗0
+ p∗1(X)
+p∗0(X) > η
+
+,for allη
+which is same as
+p∗1(X)
+p∗0(X) ⪯st
+p∗1(X ′)
+p∗0(X ′) ,
+where X∼P and X ′ ∼P ∗. By Theorem 1.A.2 of [ 29], the stochastic ordering implies
+that there exist a random variable Z and functions ψ1 and ψ2 such that ψ1(z) ≤ψ 2(z)
+for allzand p∗1(X)p∗0(X) d=ψ 1(Z) and p∗1(X ′)p∗0(X ′) d=ψ 2(Z). Therefore,
+PP,∞[τcs ≥t] =P
+"
+max
+1≤k≤t−1
+max
+1≤j≤k
+kY
+i=j
+ψ1(Zi)dW(θ 1)< A
+#
+≥P
+"
+max
+1≤k≤t−1
+max
+1≤j≤k
+kY
+i=j
+ψ2(Zi)dW(θ 1)< A
+#
+=P P ∗,∞[τcs ≥t].
+This completes the proof.
+Proof of Theorem 4. Since rt is an unbiased estimator of PF ∗0 ,∞[τ≥t ] and is indepen-
+dent of data, we have∀t∈N,
+PF0,t,F1[Mt ≥ 2/(αr∗t )] = E[PF0,t,F1[Mt ≥ 2/(αr∗t ) |r ∗t ]] ≤E [αr∗t ] = αPF ∗0 ,∞[τ≥t ] ≤
+αPF0,∞[τ≥t],∀F 0 ∈ P0.
+The last steps follow from Assumption 1. The rest of the proof is the same as in the
+proof of Theorem 2.
+Proof of Theorem 5. It follows from the definition of the least favorable distribution
+that
+PF0,T,F 1
+ T−1Y
+i=t
+f ∗0 (Xi)
+f ∗1 (Xi) ≤2/(αr t)
+!
+≤P F ∗0 ,T,F ∗1
+ T−1Y
+i=t
+f ∗0 (Xi)
+f ∗1 (Xi) ≤2/(αr t)
+!
+.
+Therefore, for anyt≤T−1, using the above inequality and the assumption (15a) we
+get
+PF0,T,F 1
+ T−1Y
+i=t
+f ∗0 (Xi)
+f ∗1 (Xi) ≤2/(αr t)|τ≥T
+!
+40
+≤ 1PF0,∞(τ≥T) PF0,T,F 1
+ T−1Y
+i=t
+f ∗0 (Xi)
+f ∗1 (Xi) ≤2/(αr t)
+!
+≤ 1PF ∗0 ,∞(τ≥T) PF ∗0 ,T,F ∗1
+ T−1Y
+i=t
+f ∗0 (Xi)
+f ∗1 (Xi) ≤2/(αr t)
+!
+.
+Similarly, for anyt≥T+ 1,
+PF0,T,F 1
+ t−1Y
+i=T
+f ∗1 (Xi)
+f ∗0 (Xi) ≤2/(αr t), τ≥t|τ≥T
+!
+≤ 1PF0,∞(τ≥T) PF0,T,F 1
+ t−1Y
+i=T
+f ∗1 (Xi)
+f ∗0 (Xi) ≤2/(αr τ )
+!
+≤ 1PF0,∞(τ≥T)
+"
+PF0,T,F 1
+ t−1Y
+i=T
+f ∗1 (Xi)
+f ∗0 (Xi) ≤2/(αη)
+!
++P F0,T,F 1(rτ ≤η)
+#
+≤ 1PF ∗0 ,∞(τ≥T)
+"
+PF ∗0 ,T,F ∗1
+ t−1Y
+i=T
+f ∗1 (Xi)
+f ∗0 (Xi) ≤2/(αη)
+!
++P F ∗0 ,T,F ∗1 (rτ ≤η)
+#
+.
+In the last step above, we used the inequality PF0,∞(τ≥T ) ≥P F ∗0 ,∞(τ≥T ), which fol-
+lows from (15a), and PF0,T,F 1
+Qt−1
+i=T
+f ∗1 (Xi)
+f ∗0 (Xi) ≤2/(αη)
+
+≤P F ∗0 ,T,F ∗1
+Qt−1
+i=T
+f ∗1 (Xi)
+f ∗0 (Xi) ≤2/(αη)
+
+follows from the fact that (F ∗0 , F∗1 ) is an LFD pair, and PF0,T,F 1(rτ ≤η ) ≤P F ∗0 ,T,F ∗1 (rτ ≤
+η) follows from (15c).
+The remaining calculations are the same as those done in the proof of the previous
+theorem, withf i replaced byf ∗i .
+Proof of Theorem 6. First note the fact that PF0,T,F 1(τ < T) = PF0,∞(τ < T), since the
+event [τ < T] =∪T−1i=1 [τ=i] does not depend on{X i :i≥T}.
+DefiningC t,L = Quantile(1−ˆαt;M t, M1t,L,· · ·, MBt,L), and ˆαt =αr t. Now,
+PF0,T,F 1(MT ≤C T,L )
+=P F0,T,F 1(T∈ {t∈N:M t ≤C t,L})
+=P F0,T,F 1(T∈ {t∈N:M t ≤C t,L}, τ≥T) +P F0,T,F 1(T∈ {t∈N:M t ≤C t,L}, τ < T)
+≤P F0,T,F 1(T∈ {t∈N:t≤τ, M t ≤C t,L} |τ≥T)P F0,T,F 1(τ≥T) +P F0,T,F 1(τ < T)
+=P F0,T,F 1(T∈ C |τ≥T)P F0,∞(τ≥T) + 1−P F0,∞(τ≥T),
+where we twice invoked PF0,T,F 1(τ < T) = PF0,∞(τ < T) as explained earlier. So, we
+41
+obtain
+PF0,T,F 1(T∈ C |τ≥T)≥1− PT (MT > CT,L )P∞(τ≥T) .(S6)
+First, observe that Mt, M1t,∞,· · ·, MBt,∞ are i.i.d. under H0,t. Hence, Mt ≤Quantile (1 −
+c; Mt, M1t,∞,· · ·, MBt,∞) ⇐ ⇒Mt is one among the ⌈(1 −c )(B + 1)⌉ smallest of the
+collection{M t, M1t,∞,· · ·, MBt,∞}. So, for any fixedc∈(0,1),
+PF0,t,F1(Mt ≤Quantile(1−c;M t, M1t,∞,· · ·, MBt,∞))≥ ⌈(1−c)(B+ 1)⌉B+ 1 ≥1−cfor allt.
+Since ˆαt is independent ofM t, it follows that
+PF0,t,F1(Mt ≤C t,∞ |ˆαt)≥ ⌈(1−ˆαt)(B+ 1)⌉B+ 1 ≥1−ˆα t,almost surely for allt.
+Therefore, we have
+PF0,t,F1(Mt ≤C t,∞) =E t(Pt(Mt ≤C t,∞ |ˆαt))≥E t(1−ˆαt) = 1−αP F0,t,F1(τ≥t).
+As noted earlier, PF0,t,F1(τ≥t ) = PF0,∞(τ≥t ) and hence, PF0,t,F1(Mt ≤C t,∞) ≥
+1 −αP F0,∞(τ≥t ). Also, for all L∈N , it follows from the definitions that M jt,L ≥M jt,∞.
+Therefore,C t,L ≥C t,∞. Thus, for allt,
+PF0,t,F1(Mt > Ct,L)≤P F0,t,F1(Mt > Ct,∞)≤αP F0,∞(τ≥t).(S7)
+Therefore, combining (S6) and (S7), we obtainP F0,T,F 1(T∈ C |τ≥T)≥1−α.
+Proof of Theorem 7. First, observe that Mt,{M jt,∞(θ1)}Bj=1 are i.i.d. under Pθ0,t,θ1. So,
+Mt ≤Quantile (1 −α ; Mt,{M jt,∞(θ1)}Bj=1) ⇐ ⇒Mt is one among the ⌈(1 −α )(B + 1)⌉
+smallest ofM t,{M jt,∞(θ1)}Bj=1}. Hence, for any fixedc∈(0,1),
+Pθ0,t,θ1(Mt ≤Quantile(1−c;M t,{M jt,∞(θ1)}Bj=1))≥ ⌈(1−c)(B+ 1)⌉B+ 1 ≥1−c,for allt.
+(S8)
+Define, C αt,L = supθ∈S ′τ−t+1 Quantile(1 −α ; Mt,{M jt,L(θ)}Bj=1). Note that θ1 ∈ S′τ−t+1
+imply that C αt,L ≥C αt,∞ ≥Quantile (1 −α ; Mt,{M jt,∞(θ1)}Bj=1}), for all t∈N, α∈ (0, 1).
+For allt, withr t = PNi=1 I(τi ≥t)/N, sincer t is independent to{X n}n, we have
+Pθ0,t,θ1(θ1 ∈ S′τ−t+1 ) =E(P θ0,t,θ1(θ1 ∈CS(X t,· · ·, Xτ ; 1−βr t)|r t))
+42
+≥E(1−βr t) = 1−βP θ0,∞(τ≥t).
+Then, we have
+Pθ0,t,θ1(Mt > Cαrtt,L )
+≤P θ0,t,θ1(Mt > Cαrtt,L , θ1 ∈ S′τ−t+1 ) +P θ0,t,θ1(θ1 /∈ S′τ−t+1 )
+≤P θ0,t,θ1(Mt >Quantile(1−αr t;M t,{M jt,∞(θ1)}Bj=1)) +βP θ0,∞(τ≥t)
+≤E
+ 
+Pθ0,t,θ1
+ 
+Mt >Quantile(1−αr t;M t,{M jt,∞(θ1)}Bj=1)|r t +βP θ0,∞(τ≥t)
+≤E(αr t) +βP θ0,∞(τ≥t)
+= (α+β)×P θ0,∞(τ≥t).
+We also have that
+Pθ0,T,θ 1(T∈ {t≥1 :M t ≤C αt,L}, τ < T)≤Pθ0,T,θ 1(τ < T) =Pθ0,∞(τ < T),
+the last equality holds because the event [τ < T] does not dependX i fori≥T. Now,
+Pθ0,T,θ 1(MT ≤C αrtT,L )
+=P θ0,T,θ 1(T∈ {t≥1 :M t ≤C αrtt,L })
+≤P θ0,T,θ 1(T∈ {t≥1 :M t ≤C αrtt,L } |τ≥T)P θ0,T,θ 1(τ≥T) +P θ0,T,θ 1(τ < T)
+=P θ0,T,θ 1(T∈ C1 |τ≥T)P θ0,∞(τ≥T) + 1−P θ0,∞(τ≥T).
+Since Pθ0,T,θ 1(MT ≤C αrtT,L ) ≥ 1 − (α + β) ×P θ0,∞(τ≥T ), we obtain Pθ0,T,θ 1(T∈ C1 |
+τ≥T)≥1−α−βfrom the above inequality.
+Proof of Theorem 8.First, observe thatM t,{M jt,∞(θ0, θ1)}Bj=1 are i.i.d. underP θ0,t,θ1.
+So, Mt ≤Quantile (1 −α ; Mt,{M jt,∞(θ0, θ1)}Bj=1) ⇐ ⇒Mt is one among the ⌈(1 −
+α)(B+ 1)⌉smallest ofM t,{M jt,∞(θ0, θ1)}Bj=1}. Hence, for any fixedc∈(0,1),
+Pθ0,t,θ1(Mt ≤Quantile(1−c;M t,{M jt,∞(θ0, θ1)}Bj=1))≥ ⌈(1−c)(B+ 1)⌉B+ 1 ≥1−c,for allt.
+(S9)
+Define, C αt,L = Quantile(1 −α ; Mt,{max θ∈St−1,θ′∈S′τ−t+1 M jt,L(θ, θ′)}Bj=1). Note that θ0 ∈
+St−1 and θ1 ∈ S′τ−t+1 imply that C αt,L ≥C αt,∞ ≥Quantile (1 −α ; Mt,{M jt,∞(θ0, θ1)}Bj=1}),
+for anyα∈(0,1).By Assumption 4.1, we have thatP θ0,∞(τ≥t)≥P θ∗0 ,∞(τ≥t).
+43
+Also, for allt, withr ∗t = PNi=1 I(τi ≥t)/N, sincer ∗t is independent to{X n}n,
+Pθ0,t,θ1(θ1 ∈ S′τ−t+1 ) =E(P θ0,t,θ1(θ1 ∈CS(X t,· · ·, Xτ ; 1−βr ∗t )|r ∗t ))
+≥E(1−βr ∗t ) = 1−βP θ∗0 ,∞(τ≥t).
+And similarly,
+Pθ0,t,θ1(θ0 ∈ St−1) =E(P θ0,t,θ1(θ1 ∈CI(X 1,· · ·, Xt−1; 1−γr ∗t )|r ∗t ))
+≥E(1−γr ∗t ) = 1−γP θ∗0 ,∞(τ≥t).
+Then, we have
+Pθ0,t,θ1(Mt > C
+αr∗t
+t,L )
+≤P θ0,t,θ1(Mt > C
+αr∗t
+t,L , θ0 ∈ St−1, θ1 ∈ S′τ−t+1 ) +P θ0,t,θ1(θ0 /∈ St−1)) +P θ0,t,θ1(θ1 /∈ S′τ−t+1 )
+≤P θ0,t,θ1(Mt >Quantile(1−αr ∗t ;M t,{M jt,∞(θ0, θ1)}Bj=1)) + (β+γ)P θ∗0 ,∞(τ≥t)
+≤E
+ 
+Pθ0,t,θ1
+ 
+Mt >Quantile(1−αr ∗t ;M t,{M jt,∞(θ0, θ1)}Bj=1)|r ∗t  + (β+γ)P θ0,∞(τ≥t)
+≤E(αr ∗t ) + (β+γ)×P θ0,∞(τ≥t)
+=α×P θ∗0 ,∞(τ≥t) + (β+γ)×P θ0,∞(τ≥t)
+≤(α+β+γ)×P θ0,∞(τ≥t).
+We also have that
+Pθ0,T,θ 1(T∈ {t≥1 :M t ≤C
+αr∗t
+t,L }, τ < T)≤Pθ0,T,θ 1(τ < T) =Pθ0,∞(τ < T),
+the last equality holds because the event [τ < T] does not dependX i fori≥T. Now,
+Pθ0,T,θ 1(MT ≤C
+αr∗t
+t,L )
+=P θ0,T,θ 1(T∈ {t≥1 :M t ≤C
+αr∗t
+t,L })
+=P θ0,T,θ 1(T∈ {t≥1 :M t ≤C
+αr∗t
+t,L } |τ≥T)P θ0,T,θ 1(τ≥T) +P θ0,T,θ 1(τ < T)
+≤P θ0,T,θ 1(T∈ C1 |τ≥T)P θ0,∞(τ≥T) + 1−P θ0,∞(τ≥T).
+Since Pθ0,T,θ 1(MT ≤C t,L) ≥ 1 − (α + β + γ) ×P θ0,∞(τ≥T ), we obtain Pθ0,T,θ 1(T∈ C1 |
+τ≥T)≥1−α−β−γfrom the above inequality.
+Proof of Theorem 9. First note that Pθ0,T,θ 1 (θ1 /∈CS(XT ,· · ·, Xτ ; 1−η 1r∗T )|r ∗T )≤η 1r∗T
+44
+and Pθ0,T,θ 1 (θ0 /∈CI(X1,· · ·, XT−1 ; 1−η 0r∗T )|r ∗T )≤η 0r∗T , because r∗T is independent
+ofX i’s. Now,
+Pθ0,T,θ 1 (θ1 /∈ ∪t∈C CS(Xt,· · ·, Xτ ; 1−η 1r∗t )|τ≥T)
+≤P θ0,T,θ 1 (θ1 /∈ ∪t∈C CS(Xt,· · ·, Xτ ; 1−η 1r∗t ), T∈ C |τ≥T) +Pθ0,T,θ 1 (T /∈ C |τ≥T)
+≤P θ0,T,θ 1 (θ1 /∈CS(XT ,· · ·, Xτ ; 1−η 1r∗T )|τ≥T) +α
+≤P θ0,T,θ 1 (θ1 /∈CS(XT ,· · ·, Xτ ; 1−η 1r∗T ))/P θ0,∞(τ≥T) +α
+=E(P θ0,T,θ 1 (θ1 /∈CS(XT ,· · ·, Xτ ; 1−η 1r∗T )|r ∗T ))/Pθ0,∞(τ≥T) +α
+≤E(η 1r∗T )/Pθ0,∞(τ≥T) +α
+=α+η 1Pθ∗0 ,∞(τ≥T)/P θ0,∞(τ≥T)
+≤α+η 1,
+where the last inequality follows from Assumption 1. Similarly,
+Pθ0,T,θ 1 (θ1 /∈ ∪t∈C CI(X1,· · ·, Xt−1; 1−η 0r∗t )|τ≥T)
+≤P θ0,T,θ 1 (θ1 /∈ ∪t∈C CI(X1,· · ·, Xt−1; 1−η 0r∗t ), T∈ C |τ≥T) +Pθ0,T,θ 1 (T /∈ C |τ≥T)
+≤P θ0,T,θ 1 (θ1 /∈CI(X1,· · ·, XT−1 ; 1−η 0r∗T )|τ≥T) +α
+≤P θ0,T,θ 1 (θ1 /∈CI(X1,· · ·, XT−1 ; 1−η 0r∗T ))/P θ0,∞(τ≥T) +α
+=E(P θ0,T,θ 1 (θ1 /∈CI(X1,· · ·, XT−1 ; 1−η 0r∗T )|r ∗T ))/Pθ0,∞(τ≥T) +α
+≤E(η 0rT )/Pθ0,∞(τ≥T) +α
+≤α+η 0.
+This completes the proof.
+A.1 Auxilary Lemmas
+Lemma 2.Define, rT = 1+PNi=1 1(τ≥T)N+1 . Then, for fixed s∈ (0, 1), {r−sT }N≥1 is uniformly
+integrable.
+Proof. A sufficient condition is to show that a higher moment is bounded:supN E[|r−sT |1+δ] <
+∞ for some δ > 0. Take δ = 1s − 1, and we need to show supN E[r−1T ] <∞ . Now,
+consider the variable r−1T = N+1KN +1 , KN = PNj=1 1(τj ≥T ) ∼ Binomial(N, pT ). We have
+45
+E
+h
+1
+KN +1
+i
+= 1(N+1)p T PN+1j=1  N+1j pjT (1−p T )(N+1)−j = 1−(1−pT )N+1(N+1)p T , and
+E[r−1T ] = (N+ 1)E
+ 1
+KN + 1
+
+= 1−(1−p T )N+1
+pT
+≤ 1pT .
+This bound 1pT is a constant that does not depend on N . Hence, r−st is uniformly
+integrable.
+Lemma 3.Suppose, τ1,· · ·, τN are i.i.d. random variables. Define, rt = 1+PNi=1 1(τi≥t)N+1 ,
+for t∈N. If each τj is stochastically larger than a random variable τ , then rτ is a
+p-value.
+Proof. Suppose τN+1 is independent and identically distributed (i.i.d.) with τ1,· · ·, τN .
+By Theorem 1.A.2 of [ 29], τN+1 is stochastically larger than τ implies that there exist
+a random variable Z and functions ψ1 and ψ2 such that ψ1(z) ≤ψ 2(z) for all z and
+τ
+d
+=ψ 1(Z) andτ N+1
+d
+=ψ 2(Z). By direct calculation,
+P[rτ ≤(1 +k)/(N+ 1)] =P[
+NX
+j=1
+1(τj ≥τ)≤k] =P[
+NX
+j=1
+1(τj ≥ψ 1(Z))≤k]
+≤P[
+NX
+j=1
+1(τj ≥ψ 2(Z))≤k]
+=P[
+NX
+j=1
+1(τj ≥τ N+1 )≤k]≤ 1 +kN+ 1 ,
+for allk= 0,1,· · ·, N.Therefore,rτ is a p-value.
+B Subtleties regarding Subroutine L in Algorithm 1
+The problem with L = ∞ is that the stopping time may never be reached for some
+sampled sequence. One can set L = ∞ if A is known to satisfy PT (τ <∞) = 1, for all
+T∈N (if there is a change, A stops almost surely). This is a very mild assumption
+because any reasonable change detector should eventually raise an alarm if there is a
+change; indeed, for example, this holds for all algorithms with finite ARL. If A is not
+known to satisfy this condition, one can simply pick L <∞ (The value of L does not
+need to be a fixed constant; it can be set adaptively depending on the observed data
+sequence, for instance, one can choose L to be 2 τ .) If L <∞ and the jth sequence
+46
+stopped because A raised an alarm at or before L, then we define M jt,L as usual. If A
+had not stopped by time L, we then define M jt,L = ∞ to ensure a lower bound on the
+original test statistic (if we could compute it). ForL <∞,
+M jt,L :=
+
+
+
+−∞,ift > τ ′j,
+M
+(τ ′j )
+t (X j1,· · ·, Xjτ ′j ),ift≤τ ′j ≤L,
+∞,ift≤τ ′j andτ ′j > L.
+(S10)
+We still need a definition of M jt,∞ in the case that L = ∞ and τj = ∞. We define
+M jt,∞ :=M (τ ′j )t (X j1,· · ·, Xjτ ′j ),ift≤τ ′j <∞,andM jt,∞ :=−∞,ift > τ ′j orτ ′j =∞.
+C Computationally and statistically efficient sub-
+routines in Algorithm 2
+For computational and statistical efficiency, we generate sequences from all t∈
+{1,· · ·, τ}and θ∈ S′τ−t+1 simultaneously using a single shared source of random-
+ness. To achieve this, we assume that we have a fixed element θ′′ ∈ Θ in the parameter
+space and a function G, such that X∼F θ′′ implies G(X, θ) ∼F θ,∀θ∈ Θ. Therefore,
+for each j = 1,· · ·, B, we generate only one data sequence {X jn}n i.i.d.∼F θ′′, and then
+for each t∈ {1,· · ·, τ}and θ∈ S′τ−t+1 , we obtain sequences {Y tn(X jn, θ)}n (having joint
+distribution Pθ0,t,θ) by applying the function G(., θ0) to X j1,· · ·, Xjt−1 and G(., θ) to
+X jt , Xjt+1,· · ·, i.e.,
+Y tn(x, θ) :=
+
+
+
+G(x, θ0),ifn < t
+G(x, θ),otherwise.
+(S11)
+Let us provide a few examples of the function G. If the distributions in the parametric
+family are continuous, the inverse distribution function F −1θ exists, and it is easy to
+verify that G(x, θ) = F −1θ (Fθ′t(x)) works. In the case of a location family, a simple
+transformation is G(x, θ) = x + θ−θ ′′ and similarly, for scale family, we have G(x, θ) =
+x×θ/θ ′′.
+Let us now fix t∈ {1,· · ·, τ}and consider the test statistic Mt of the form in (9),
+with some R(t)n = R(t)n ({Xn}n) and S(t)n = S(t)n ({Xn}n). Computing the detection time
+τ θj,t for each θ∈ S′τ−t+1 , and finding whether there existsθ∈ S ′τ−t+1 such that Mt ≤
+Quantile(1 −ˆαt; Mt,{M jt,L(θ)}Bj=1) are both computationally infeasible, unless S ′τ−t+1 is
+47
+a finite set. However, it is often straightforward to compute tj1 = supθ∈S ′τ−t+1 τ θj,t. Also,
+we can often derive a suitable upper bound on the threshold, which is computationally
+and statistically efficient. We consider the following upper bound:
+V jt,L :=
+
+
+
+max
+(
+max
+t≤n≤tj1
+sup
+θ∈S ′τ−t+1
+R(t)n  {Y tn(X jn, θ)}n ,max1≤n≤t−1 supθ∈S ′τ−t+1 S(t)n  {Y tn(X jn, θ)}n
+)
+,
+ift≤t j1 ≤L;
+−∞,ift > t j1;
+∞,ift≤t j1 andt j1 > L.
+(S12)
+We consider the following confidence set:
+C′1 ={t∈ {1,· · ·, τ}:Mt ≤Quantile(1−ˆα t;M t, V1t,L,· · ·, VBt,L}and (S13)
+We observe thatC ′1 ⊇ C1, whereC 1 is the set produced by Algorithm 2, since
+Quantile(1−ˆαt;M t, V1t,L,· · ·, VBt,L} ≥Quantile(1−ˆαt;M t,{sup
+θ∈S ′τ−t+1
+M jt,L(θ)}Bj=1)
+≥sup
+θ∈S ′τ−t+1
+Quantile(1−ˆαt;M t,{M jt,L(θ)}Bj=1).
+Thus, we obtain the following coverage guarantee as an immediate corollary of Theo-
+rem 7.
+Corollary 1. C′1 defined in (S13) satisfies the same coverage guarantees as C1 in
+Theorem 7.
+Next, we present a concrete example of the Gaussian mean shift problem to clarify our
+method.
+C.1 A concrete example: Gaussian mean shift problem
+Let the pre-change distribution F0 be N (θ0, 1) and the post-change model be P1 =
+{N(θ,1) :θ∈Θ 1}, with Θ 1 ={θ:θ≥θ 1}such thatθ 1 > θ0.
+In this setting, we have the following example of a 1 −β confidence sequence [ 13] for θ1
+S ′τ−t+1 =
+
+¯Xt:τ − sτ−t+1 (β)√τ−t+ 1 , ¯Xt:τ + sτ−t+1 (β)√τ−t+ 1  ∩Θ 1,(S14)
+48
+where ¯Xt:τ = 1τ−t+1 Pτi=t Xi ands n(β) = plog log(2n) + 0.72 log(10.4/β).
+We fix t∈ {1,· · ·, τ}. Note that we can consider θ′′ = θ0 and G(x, θ) = x + θ−θ 0.
+Therefore, only need to generate {X jn}n∈N iid∼N (θ0, 1) for j = 1,· · ·, B. For θ∈ S′τ−t+1 ,
+Y tn(X jn, θ) :=
+
+
+
+ϵjn +θ 0,ifn < t,
+ϵjn +θ,otherwise, (S15)
+where ϵjn := X jn −θ 0 ∼N (0, 1). We consider the test statistic Mt, as defined in (9), with
+R(t)n = Qni=t fθ0 (Xi)fθ1 (Xi) , and S(t)n = Rθ∈Θ1 Qt−1i=n fθ(Xi)fθ0 (Xi) w(θ)dθ, with w≥ 0 being some weight
+function such that
+R
+θ∈Θ1 w(θ)dθ = 1. Let, τ θj is the detection time for the sequence
+{Y tn(X jn, θ)}n and M jt,∞(θ) = Mt(Y t1 (X j1, θ),· · ·, Ytτ θj (X jτ θj , θ)). Suppose, we can find
+tj1 ∈N , such that tj1 = supθ∈S ′τ−t+1 τ θj (these are easy to compute for specific detection
+algorithms, such as CUSUM or SR type detectors, as we explain in Remark 5) and they
+are finite. So, we can haveL=∞. Note that, here we have
+sup
+θ∈S ′τ−t+1
+R(t)n  {Y tn(X jn, θ)}n = exp
+ 
+(θ0 −θ 1)
+nX
+i=t
+(ϵjn +θ ′t,min) + n−t+ 12 (θ21 −θ 20)
+!
+,
+and
+sup
+θ′∈S′τ−t+1
+S(t)n  {Y tn(X jn, θ′)}n = Z
+θ∈Θ1
+exp
+ 
+(θ−θ 0)
+t−1X
+i=n
+(ϵjn +θ ′t,min) + t−n2 (θ20 −θ 2)
+!
+w(θ)dθ,
+whereθ ′t,min = infS ′τ−t+1 . And hence,V jt,∞ in (S12) can be computed easily.
+Remark5.For weighted CUSUM or SR detectors, finding tj1 is often straightforward.
+For some weightw(θ) such that
+R
+θ∈Θ1 w(θ) = 1, these are defined as
+τwcusum = inf
+(
+n∈N: max
+1≤j≤n
+Z
+θ∈Θ1
+nY
+i=j
+fθ(Xi)
+fθ0(Xi) w(θ)≥A
+)
+(S16)
+andτ wsr = inf
+(
+n∈N:
+nX
+j=1
+Z
+θ∈Θ1
+nY
+i=j
+fθ(Xi)
+fθ0(Xi) w(θ)≥A
+)
+.(S17)
+For example, consider P1 = {N (θ, 1) : θ≥θ 1}, for some θ1 ≥θ 0. Observe that
+for all θ∈ Θ1, Qni=j fθ(Xi)fθ0 (Xi) = exp{ 12 (θ−θ 0) × Pni=j(2Xi −θ 0 −θ )} increases as Xi’s
+increases and hence, both τwcusum and τwsr decreases as Xi’s increases. Therefore,
+49
+tj1 = supθ∈S ′τ−t+1 τ θj = τ infS ′τ−t+1j . Similarly, for P1 = {N (θ, 1) : θ≤θ 1}, for some θ1 ≤θ 0,
+we have tj1 = τ supS ′τ−t+1j . One can check that similar results extend to other parametric
+families, such as the Gaussian/Laplace/exponential scale change problems with weighted
+CUSUM and SR detectors, as well as the PF A-controlling change detectors.
+The Gaussian mean shift example we provided serves as a concrete and illustrative case
+to clarify the methodology. It is worth noting that C ′, as defined in (S13), is practically
+implementable as long as the following relatively weak conditions are met:
+1. The coupling function G is available (which is always the case when distributions
+are continuous).
+2. We can construct a confidence sequence for the parameter of interest (which
+is always achievable as long as one can construct a confidence interval for the
+parameter).
+3. The quantitiest 1j are computable (either exactly or numerically).
+For instance, one can easily verify that this approach applies to Gaussian, Laplace, or
+exponential scale change problems.
+D Computationally and statistically efficient sub-
+routines in Algorithm 3
+As in Section C, we assume that we have a fixed element θ′′ in the parameter space and
+a function G, such that X∼F θ′′ implies G(X, θ) ∼F θ,∀θ∈ Θ0 ∪ Θ1. Therefore, for
+each j = 1,· · ·, B, we generate data sequence X j1, Xj2 · · ·iid∼F θ′′ only once. Then, for
+each t∈ {1,· · ·, τ}and (θ×θ ′) ∈ St−1 × S′τ−t+1 , we obtain sequences {Y tn(X jn, θ, θ′)}n
+having joint distribution Pθ,t,θ′, by applying the function G(., θ) to X j1,· · ·, Xjt−1 and
+G(., θ′) toX jt , Xjt+1,· · ·, i.e.,
+Y tn(x, θ, θ′) :=
+
+
+
+G(x, θ),ifn < t
+G(x, θ′),otherwise. (S18)
+Let us now fix t∈ {1,· · ·, τ}and consider the test statistic Mt of the form in (9), with
+some R(t)n = R(t)n ({Xn}n) and S(t)n = S(t)n ({Xn}n).. Computing the detection time τ jθ,θ′
+50
+for each (θ, θ′) ∈ St−1 × S′τ−t+1 , and finding whether there exists (θ, θ′) ∈ St−1 × S′τ−t+1
+such that Mt ≤Quantile (1−ˆαt; Mt,{M jt (θ, θ′)}Bj=1) are both computationally infeasible,
+unlessS t−1 andS ′τ−t+1 are a finite sets.
+However, it is often straightforward to compute tj1 = sup
+(θ,θ′)∈St−1×S′τ−t+1
+τ jθ,θ′. Also, we
+can often derive a suitable upper bound on the threshold, which does not require
+any approximation and is computationally and statistically efficient. E.g., we can
+bound it by Quantile(1 −ˆαt; Mt,{sup (θ,θ′)∈St−1×S′τ−t+1 M jt,L(θ, θ′)}Bj=1). Again, we bound
+sup(θ,θ′)∈St−1×S′τ−t+1 M jt,L(θ, θ′) byU jt,L, where
+U jt,L =
+
+
+
+max
+
+max
+t≤n≤tj1
+sup
+(θ,θ′)∈St−1×S′τ−t+1
+R(t)n  {Y tn(X jn, θ, θ′)}n
++ max
+1≤n≤t−1
+sup
+(θ,θ′)∈St−1×S′τ−t+1
+S(t)n  {Y tn(X jn, θ, θ′)}n ,ift≤t j1 ≤L;
+−∞,ift > t j1;
+∞,ift≤t j1 andt j1 > L.
+(S19)
+We consider the following confidence set:
+C′′1 ={t∈ {2,· · ·, τ}:Mt ≤Quantile(1−ˆα t;M t, U1t,L,· · ·, UBt,L)}and (S20)
+Observe thatC ′′1 ⊇ C1, whereC 1 is the set produced by Algorithm 3, since
+Quantile(1−ˆαt;M t,{U jt,L}Bj=1)} ≥Quantile(1−ˆαt;M t,{sup
+(θ,θ′)∈St−1×S′τ−t+1
+M jt,L(θ, θ′)}Bj=1)
+≥sup
+(θ,θ′)∈St−1×S′τ−t+1
+Quantile(1−ˆαt;M t,{M jt,L(θ, θ′)}Bj=1).
+Thus, we obtain the following coverage guarantee as an immediate corollary of Theo-
+rem 8.
+Corollary 2. C′′1 defined in (S20) satisfies the same coverage guarantees as C1 in
+Theorem 8.
+In the next subsection, we present a concrete example of the Gaussian mean shift
+problem to clarify our method.
+51
+D.1 A concrete example: Gaussian mean shift problem
+We consider the most common changepoint model, where pre-change and post-change
+models are Pi = {N (θ, 1) : θ∈ Θi}, for i = 0 , 1, with Θ 0 = {θ : θ≤θ 0} and
+Θ1 = {θ : θ≥θ 1}, for some θ1 > θ0. Then, we have the following 1 −γ confidence
+interval forθ 0 for eacht≥2:
+St−1 =
+
+¯X1:t−1 − qγ/2√t−1 , ¯X1:t−1 + qγ/2√t−1  ∩Θ 0,(S21)
+and the 1−βconfidence sequence forθ 1, as defined in (S14).
+We fix t∈ {2,· · ·, τ}. Note that we can consider θ′′ = 0 and G(x, θ) = x + θ. Therefore,
+only need to generate {ϵjn}n∈N iid∼N (0, 1) for j = 1,· · ·, B. For θ∈ St−1, θ′ ∈ S′τ−t+1 ,
+define
+Y t,jn (θ, θ′) =
+
+
+
+θ+ϵ jn,ifn < t
+θ′ +ϵ jn,otherwise. (S22)
+We consider the test statisticMt, as defined in (9), with R(t)n = Rθ∈Θ0 Qni=t fθ(Xi)fθ1 (Xi) w′(θ)dθ,
+and S(t)n = Rθ∈Θ1 Qt−1i=n fθ(Xi)fθ0 (Xi) w(θ)dθ, with w, w′ ≥ 0 being some weight functions such
+that
+R
+θ∈Θ1 w(θ)dθ = 1 and
+R
+θ∈Θ0 w′(θ)dθ = 1. Note that tj1 is easy to compute for some
+CUSUM/SR type detection algorithms (see Remark 6) and they are finite. So, we can
+have L = ∞. Note that, here the term sup(θ,θ′)∈St−1×S′τ−t+1 R(t)n ({Y t,jn (θ, θ′)}n) simplifies
+to Z
+θ∈Θ0
+exp
+ 
+(θ−θ 1)
+nX
+i=t
+(ϵjn +θ ′t,min) + n−t+ 12 (θ21 −θ 2)
+!
+w′(θ)dθ,
+and the term sup (θ,θ′)∈St−1×S′τ−t+1 S(t)n ({Y t,jn (θ, θ′)}n) simplifies to
+Z
+θ∈Θ1
+exp
+ 
+(θ−θ 0)
+t−1X
+i=n
+(ϵjn +θ ′t,min) + t−n2 (θ20 −θ 2)
+!
+w(θ)dθ,
+whereθ ′t,min = infS ′τ−t+1 . And hence,U jt,∞ in (S19) can be computed easily.
+Remark6.For weighted CUSUM or SR detectors, finding tj1 is often straightforward. So,
+for some weight w(θ) such that
+R
+θ∈Θ1 w(θ) = 1, the weighted CUSUM or SR detectors
+(with the Reverse Information Projection (RIPr) [ 19, 9, 18] being the representative of
+52
+the pre-change class) are defined as
+τwcs-ripr = inf
+(
+n∈N: max
+1≤j≤n
+Z
+θ∈Θ1
+nY
+i=j
+fθ(Xi)
+f ∗θ (Xi) w(θ)≥A
+)
+,(S23)
+τwsr-ripr = inf
+(
+n∈N:
+nX
+j=1
+Z
+θ∈Θ1
+nY
+i=j
+fθ(Xi)
+f ∗θ (Xi) w(θ)≥A
+)
+,(S24)
+where f ∗θ is the RIPr of fθ on P0. For example, consider P0 = {N (θ, 1) : θ≤a},P 1 =
+{N (θ, 1) : θ≥b} , for some b≥a . Observe that for all θ∈ Θ1, f∗θ = fa, andQn
+i=j
+fθ(Xi)
+f ∗θ (Xi) = exp{ 12 (θ−a ) × Pni=j(2Xi −a−θ )} increses as Xi’s increases and hence,
+bothτ wcusum andτ wsr decreases asX i’s increases. Therefore,
+tj1 = sup
+(θ,θ′)∈St−1×S′τ−t+1
+τ jθ,θ′ =τ jinfS t−1,infS ′τ−t+1 .
+Similarly, one can check that for P0 = {N (θ, 1) : θ≥a},P 1 = {N (θ, 1) : θ≤b} , for
+b≤a,
+tj1 = sup
+(θ,θ′)∈St−1×S′τ−t+1
+τ jθ,θ′ =τ jsupS t−1,supS ′τ−t+1 .
+The Gaussian example we provided serves as a concrete and illustrative case to clarify
+the methodology. Note that C′′ in (S20) is computable if similar conditions as listed
+in Section C.1 are met. For instance, one can check that these conditions hold for
+analogous Laplace and exponential scale distributions.
+E Experiments for confidence intervals for pre/post
+change parameters
+E.1 Known pre-change but unknown post-change
+Table 8 contains conditional and marginal (empirical) coverages, (conditional) average of
+the sizes and of the confidence intervals (i.e., the upper and lower boundaries) (defined
+in (21)) for θ1 across 500 independent runs with α = β = η = 0.05. The data generation
+and change detection procedure remain the same as in the experiment described in
+Setting II of Section 6. Across all settings, the observed conditional coverage consistently
+exceeds the theoretical lower bound of 0 .85, indicating that our method is reliable but
+53
+conservative.
+Table 8: Confidence interval for θ1: known pre-change but unknown post-change. The
+pre-change parameter θ0 = 0 is known, the true (unknown) post-change parameter
+is θ1 = 1, while the algorithm only knows θ1 ∈ Θ1, which we mention in the second
+column of the table. (Setting II)
+T Θ 1 Conditional coverage Marginal coverage Conditional Length Conditional CI
+100 [0.75,∞) 0.98 0.98 1.37 [0.76, 2.13]
+100 [0.9,∞) 0.98 0.96 1.23 [0.90, 2.16]
+500 [0.75,∞) 0.99 0.93 1.48 [0.75, 2.23]
+500 [0.9,∞) 0.98 0.91 1.31 [0.90, 2.21]
+E.2 Unknown pre- and post-change
+Table 9 contains conditional and marginal (empirical) coverages, (conditional) average
+of the sizes and of the confidence intervals (i.e., the upper and lower boundaries), and
+(21)), for θ0 and θ1 across 500 independent runs with α = β = η0 = η1 = 0 .05. he
+data generation and change detection procedure remain the same as in the experiment
+described in Setting III of Section 6. Across all settings, the observed conditional
+coverage consistently exceeds the theoretical lower bound of 0.80.
+Table 9: Confidence intervals for θ0, θ1 with target conditional coverages 0 .85(Setting
+III): unknown pre- and post-change. The true (unknown) values of the parameters
+are θ0 = 0 and θ1 = 1, while the algorithm only knows θi ∈ Θi, i= 0, 1, which are
+mentioned in the second and third columns of the table.
+T Θ0 Θ1
+Cond. coverage Marg. coverage Cond. length Cond. CI
+θ0 θ1 θ0 θ1 θ0 θ1 θ0 θ1
+100 (∞,0.25] [0.75,∞) 1.00 0.99 1.00 0.99 0.55 1.19 [-0.32, 0.23] [0.76, 1.95]
+100 (∞,0.1] [0.9,∞) 0.98 0.99 0.98 0.98 0.61 1.16 [-0.51, 0.10] [0.90, 2.06]
+500 (∞,0.25] [0.75,∞) 0.99 0.99 0.93 0.93 0.21 1.22 [-0.10, 0.11] [0.75, 1.97]
+500 (∞,0.1] [0.9,∞) 0.99 0.99 0.94 0.94 0.19 1.24 [-0.09, 0.10] [0.90, 2.14]
+E.3 Comparison with Wu [45]
+Next, we compare our confidence interval for the post-change parameter with that
+proposed by [ 45] and discussed in [ 42]. We implement Wu’s interval as discussed in
+Chapter 4.3 of [ 42] (or Section 3 of [ 45]), replacing θ by ˆθ in the bias and variance
+terms, which is given by ˆθ− 4
+5
+√
+dˆθ(τ−ˆν) ±z α/2
+√
+1−13/(16dˆθ)√
+τ−ˆν , where ˆθ = Tττ−ˆν, τ = τ ′CUSUM,
+54
+and zα′/2 is the α′/2 quantile of the standard normal distribution. We use CUSUM
+[21] (the same change detector as in the second last experiment of Section 6), with
+d = 10 for both methods. For our method, we assume the post-change space to be
+Θ1 = [0,∞ ) with α = β = η = 0.05. We report the average size and the conditional
+and unconditional coverage rates of both methods across 500 independent runs in
+Table 10, with a target conditional coverage of α′ = 0.85. The results show that the
+existing method [ 45], which is based on asymptotic approximations, undercovers θ1
+(both conditionally and marginally). At the same time, our finite-sample confidence
+intervals are conservative — achieving higher-than-nominal (conditional) coverage at
+the expense of larger (conditional) length.
+Table 10: Comparison of the confidence sets for θ1 (target conditional coverage 0 .85)
+with Wu [45] (Setting II)
+F0 F1 T Conditional Length Conditional Coverage Marginal Coverage
+Ours Wu (2006) Ours Wu (2006) Ours Wu (2006)
+N(−0.25,1)N(0.25,1) 100 1.46 0.47 0.99 0.77 0.98 0.74
+N(−0.3,1)N(0.3,1) 100 1.43 0.51 0.98 0.76 0.98 0.75
+N(−0.25,1)N(0.25,1) 500 1.48 0.49 0.99 0.78 0.91 0.64
+N(−0.3,1)N(0.3,1) 500 1.49 0.51 0.99 0.79 0.91 0.71
+F Simpler confidence sets for detection algorithms
+controlling PF A
+In this section, we shall discuss how one can construct simpler confidence sets when
+the change detection algorithm A controls the probability of false alarm (PF A) at level
+δ∈ (0, 1). Importantly, this method allows us to avoid Assumption 1, and our results
+hold in the fully nonparametric case with arbitrary pre- and post-change classes, P0
+andP 1, respectively.
+We consider the test statistic Mt introduced in (9), and define the following confidence
+set forT:
+C=
+
+t∈N:t≤τ, M t < 2α  ,(S25)
+which is a simplified version of Equation (14), obtained by directly replacing αr∗t with
+α. This avoids the need to compute r∗t (and hence τ ∗1 ,· · ·, τ∗N ), making the method
+easier to implement and free of Assumption 1.
+55
+We now investigate the coverage properties of the above confidence set.
+Theorem 10.Let C be the confidence set as defined in (S25), for some α∈ (0, 1). If
+Acontrols PF A at levelδ∈(0,1), then for anyF 0 ∈ P0 andF 1 ∈ P1,
+PF0,T,F 1(T∈ C)≥1−α−δ, andP F0,T,F 1(T∈ C |τ≥T)≥1− α1−δ ,
+where the latter guarantee holds ifP F0,∞(τ≥T)̸= 0,for allF 0 ∈ P0.
+Proof.From Theorem 1, we haveP F0,t,F1[Mt ≥ 2α ]≤α. Hence,
+PF0,T,F 1(MT <2/α)
+=P F0,T,F 1(T∈ {t∈N:M t <2/α})
+≤P F0,T,F 1(T∈ {t∈N:M t <2/α}, τ≥T) +P F0,T,F 1(τ < T)
+=P F0,T,F 1(T∈ {t∈N:t≤τ, M t <2/α}) +P F0,∞(τ < T)
+≤P F0,T,F 1(T∈ C) +δ,
+where the last inequality follows from the fact that the PF A is less than or equal to δ.
+Thus, we obtain
+PF0,T,F 1(T∈ C)≥1−α−δ.
+And
+PF0,T,F 1(T∈ C |τ≥T) = PF0,T,F 1(T∈ C)PF0,T,F 1(τ≥T) = PF0,T,F 1(T∈ C)PF0,∞(τ≥T) ≥1− α1−δ ,
+completing the proof.
+A similar simplification can be applied to the adaptive confidence sets introduced in
+Section 4 for the parametric setting. By replacing the αr∗t term with α in Equations (17),
+(19) and (20), we obtain
+C1 =
+
+t∈N:t≤τ, M t ≤Quantile(1−α;M t,{M jt,L}Bj=1)	 ,(S26)
+for known pre- and post-change setting. Similarly, for the known pre-change and
+56
+composite post-change setting,
+C1 =
+(
+t∈N:t≤τ, M t ≤sup
+θ∈Sτ−t+1
+Quantile(1−α;M t,{M jt,L(θ)}Bj=1)
+)
+,(S27)
+And finally,
+C1 =
+(
+t∈N:t≤τ, M t ≤sup
+(θ,θ′)∈S(t)
+Quantile(1−α;M t,{M jt,L(θ, θ′)}Bj=1)
+)
+(S28)
+for composite pre- and post-change setting.
+For detection algorithms with PF A ≤δ, δ∈ (0, 1), these simpler forms retain the
+coverage guarantees — both conditional and unconditional — similar to what we have
+shown in the theorem above.
+In the next subsection, we present the experimental results with the bounded PF A
+algorithms, along with some other experiments.
+F.1 Experiments with detection algorithms that control PF A
+F.1.1 Known pre- and post-change (Setting A, PF A≤0.001)
+We perform experiments for both Gaussian and Poisson mean-change scenarios having
+the true changepoint atT= 100,500, using a likelihood ratio detector defined as
+τ= inf
+(
+t∈N:
+tY
+i=1
+f1(Xi)
+f0(Xi) ≥A
+)
+,(S29)
+with thresholds at A = 1000. Note that Qti=1 f1(Xi)f0(Xi) is a non-negative martingale under
+T = ∞ and hence, by Ville’s inequality [38], the PF A of this detector is at most 1/A, i.e.,
+0.001 here. After detection, we construct both the proposed confidence sets (universal
+(S25) and adaptive (S26)), with B = 100, α = 0.1. We report the average size and the
+conditional and unconditional coverage rates across 500 independent runs in Table 11.
+We also report the average delay (given no false detection) in the table.
+57
+Table 11: Known pre- and post-change distributions (Setting A, PF A≤0.001)
+T F 0 F1 Conditional Coverage Conditional Size Delay
+Universal Adaptive Universal Adaptive (Conditional)
+100N(0,1)N(1,1) 0.95 0.94 12.65 9.86 110.91
+100 Pois(1) Pois(2) 0.95 0.95 14.22 11.85 94.33
+500N(0,1)N(1,1) 0.97 0.97 12.83 9.76 514.12
+500 Pois(1) Pois(2) 0.96 0.96 14.79 12.13 417.44
+F.1.2 Known pre- and unknown post-change (Setting B, PF A≤0.001)
+We perform experiments for Gaussian mean-change scenarios having the true changepoint
+atT= 100,500, using a mixture likelihood ratio detector defined as
+τ= inf
+(
+t∈N:
+Z
+θ∈Θ1
+tY
+i=1
+fθ(Xi)
+fθ0(Xi) dW(θ)≥A
+)
+(S30)
+with thresholds at A = 1000. The weights are chosen just as described in Section 6.
+Similarly, the PF A of this detector is at most 1/A, i.e., 0 .001 here. After detection, we
+construct our universal confidence sets (S25) for T , with α = 0.1. The test statistic is
+the same as mentioned in Setting II of Section 6. We report the average size and the
+conditional and unconditional coverage rates across 500 independent runs in Table 12.
+We also report the average delay (given no false detection) in the table.
+Table 12: Known pre-change but unknown post-change (Setting B, PF A≤0.001)
+T Compositepost-change Conditionalcoverage Unconditionalcoverage Size(Conditional) Delay(Conditional)
+100{N(µ,1) :µ >0.75} 0.96 0.95 16.38 118.76
+100{N(µ,1) :µ >0.9} 0.96 0.96 13.11 115.64
+500{N(µ,1) :µ >0.75} 0.97 0.97 16.92 530.83
+500{N(µ,1) :µ >0.9} 0.96 0.96 14.85 528.92
+F.1.3 Composite pre- and post-change (Setting C)
+We generate pre-change data from N (0, 1) and post-change data from N (0, 1), having a
+true changepoint at T = 100 or 500 — these are all unknown to the algorithm. We
+assume access to a historic/training data {Y1,· · ·, Ym}, m = 200. We detect change
+58
+using the following change detector, as in Sections 2 and 3 of [1]:
+τ= min
+(
+k∈N: 1ˆσm√m w(m, k)
+ kXj=1 (Xj − ¯Ym) > A) ,(S31)
+where ¯Ym = 1m Pmi=1 Yi is the sample mean of the training data,ˆσm = q 1m−1 Pmi=1(Yi − ¯Ym)2
+is the estimated standard deviation from the training data, w(m, k) =
+ 
+1 + km −1 and
+A is the threshold, which we vary in our experiment. After detection, we construct
+our universal confidence sets (S25) for T , with α = 0.1, P0 = {N (µ, 1) : µ≤ 0.25} and
+P1 = {N (µ, 1) : µ >0.75}. The test statistic is the same as mentioned in Setting III of
+Section 6. We report the average size and coverage rates across 500 independent runs
+in Table 13. We also report the average delay (given no false detection).
+Table 13: Composite pre- and post-change (Setting C)
+T A Conditionalcoverage Marginalcoverage Size(Conditional) Delay(Conditional)
+100 2 0.97 0.97 23.54 50.64
+100 3 0.97 0.97 21.82 82.95
+500 2 0.97 0.97 21.37 122.84
+500 3 0.98 0.98 23.22 193.59
+F.2 Comparison of experimental results with ARL and PF A
+controlling detection algorithms
+As expected, algorithms that control PF A exhibit a significantly higher average detection
+delay compared to those controlling ARL. This delay arises because stricter false
+alarm constraints force the detection algorithm to accumulate stronger evidence before
+signaling a change. In terms of inference, we observe that PF A-controlling algorithms
+often tend to yield slightly lower conditional coverage probabilities with confidence sets
+of comparable sizes. Also, conditional and unconditional coverage rates are identical
+when PF A-controlling detection algorithms are employed, due to the very low probability
+of false detections, while the ARL controlling algorithms lead to lower unconditional
+conditional coverage rates for larger T , ie.e., T = 500, supporting our theory. Overall,
+the major differences between these two types lie in detection delay and unconditional
+coverage properties. We do not observe significant differences in the size and conditional
+coverage properties of the confidence sets, nor in the absolute deviation of the point
+59
+estimates, across these two types of detection algorithms.
+G Some additional experimental results
+G.1 Experiments varyingTand ARL
+We have seen in the derivation of the asymptotic length bound that it increases with
+the ratio T /AT . Now, we experimentally validate the fact by conducting the same
+experiment as in Setting I (known pre- and post-change) in Section 6 with varying T
+thresholds A of the CUSUM detector (larger threshold means large ARL). Average (of
+500 independent runs) size and coverage of the confidence sets using Equation (10) are
+reported in Table 14. The results show a clear pattern: as the ratio T /Aincreases, the
+resulting confidence sets become wider, reflecting growing conservativeness.
+Table 14: Setting I: Known pre- and post-change. Average (of 500 independent runs)
+size and coverage of the confidence sets using Equation (10) with F0 = N (0, 1), F1 =
+N (1, 1), N= 100, α = 0.1, the average detection delay (given a true detection) with
+thresholdA, while varyingTandA.
+TA Conditionalcoverage Marginalcoverage Size ConditionalDelay
+50 100 0.978 0.91 14.382 9.33
+1000 100 0.989 0.21 18.283 9.14
+2000 100 0.992 0.07 19.627 8.35
+500 1000 0.925 0.97 12.618 13.22
+10000 1000 0.947 0.27 18.254 13.25
+20000 1000 1 0.07 22.113 13.22
+G.2 Experiments with dependent pre- and post-change data
+For the sake of illustration, we now demonstrate our methodology works with dependent
+data. Specifically, we consider the pre-change and post-change distributions to be
+Markov(p0, q0) and Markov(p1, q1), respectively, with parameters p0 = 0.75, p1 = 0.25,
+and q0 = q1 = 0.5. The first data point is drawn from Bern(0.5). The changepoint T is
+set to either 100 or 500. (Here, Markov( p, q) denotes the two-state Markov chain where
+p is the probability of transitioning from state 0 to state 1, and q is the probability of
+transitioning from state 1 to state 1.)
+60
+We use the likelihood ratio-based CUSUM detector:
+τ= inf
+(
+n∈N: max
+1≤j≤n
+ p1
+p0
+n10(j:n)  1−p 1
+1−p 0
+n11(j:n)
+≥A
+)
+,(S32)
+where n11(j : n) denotes the number of transitions from 1 to 1 and n10(j : n) denotes
+the number of transitions from 0 to 1 withinX j,· · ·, Xn, andA= 1000.
+After detection, we compute the adaptive confidence sets (17) with the test statistic
+in (9) with R(t)n = 12
+
+p0
+p1
+n10(t:n)  1−p0
+1−p1
+n11(t:n)
+, S(t)n = 12
+
+p1
+p0
+n10(n:t−1)  1−p1
+1−p0
+n11(n:t−1)
+,
+B = N = 100 and α = 0.1. Note that {S(t)n }n<t is not a valid e-process in the backward
+filtration. In contrast to our universal method, the adaptive procedure in Algorithm 1
+(or Equation (17)) accommodates arbitrary test statistics and does not rely on e-process
+structure; consequently, it remains applicable in settings with dependent data. Table 15
+contains the results averaged across 100 random runs.
+Table 15: Known pre- and post-change with dependency
+T Conditional coverage Size Conditional delay
+100 0.918 23.245 31.929
+500 0.907 23.698 34.625
+Remark7.We emphasize again that the universal approach described in Section 3 cannot
+handle dependent data, but the adaptive method in Section 4 can. To elaborate, our
+test statistic in Section 3 requires constructing non-trivial e-processes in both forward
+(usual) and backward (nonstandard) filtrations; in settings with general dependence,
+constructing the latter is generally infeasible.
+61

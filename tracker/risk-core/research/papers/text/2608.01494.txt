@@ -1,0 +1,1363 @@
+arXiv 2608.01494  https://arxiv.org/abs/2608.01494
+
+Conformal Kelly: When Marginal Coverage Transfers
+and the Economics Do Not∗
+Robert Jacob Ryan
+Independent Researcher, Athens, Greece
+ORCID: 0009-0000-9458-9095
+October 2026
+Abstract
+We size portfolio positions from conformal prediction intervals, reading the interval half-width as the
+scale in a capped fractional-Kelly rule (Conformal Kelly), and evaluate the rule under a pre-registered
+protocol. Its development record is an autonomous LLM-agent search over roughly 200 configurations
+on a single six-year window (2016–2021) of eight US-listed ETFs. All later data was sealed before
+the search began, and two final configurations, nine comparison books, ten metrics, a written growth
+prediction and the mapping from outcomes to conclusions were registered before unsealing.
+On the sealed 2022–2024 window, realized conformal coverage was 0.745 against a 0.750 target,
+but the two configurations’ annualised net log growth was 8.5% and 7.0% (28.5% and 25.8% in
+development),belowanunleveredequal-weightbook(9.5%),theleveragedpassivebooks(15.6–16.8%)
+and a registered hindsight four-equity book (10.8%, at a 46% drawdown). Both configurations ranked
+last of eleven entries on Sharpe and Calmar, and the drawdown control failed its registered criterion.
+A post-hoc split, outside the registered protocol, shows the passing coverage averaging 0.592 in 2022
+and 0.842 afterwards, with the entire loss in the under-covered year. The split does not show that
+under-coverage caused the loss: the leverage cap bound on every 2022 trading day, so narrow intervals
+could not enlarge the book, and a long-equity book in an equity bear market is the simpler account.
+But the registered acceptance test passed a sixteen-point conditional failure, which motivates, without
+establishing, conditional coverage as an endpoint for rules that read interval width as a scale.
+On the development window, a slow, unweighted, per-asset conformal quantile out-grew every
+locallyadaptivealternativewetested(adaptiveconformalinference,recency-weightedandasymmetric
+intervals, pooled and Mondrian calibration) and a plug-in standard deviation by 2.1 percentage points
+a year at matched leverage. That evidence is exploratory and cap-conditional: it was measured under a
+gross-leverage cap binding on 97.7% of days, and dependence-aware block-bootstrap intervals include
+zero for 11 of the 13 contrasts we could re-derive.
+1 Introduction
+Two literatures have grown up next to each other without meeting. Conformal prediction turns a
+point forecaster into an interval forecaster with a finite-sample, distribution-freemarginalcoverage
+∗Extended version of the paper of the same title to appear in the Proceedings of the 7th ACM International Conference on AI
+inFinance(ICAIF’26),Milan,Italy,November14–17,2026. Version1ofthispreprint(August2026)wastitledConformal Kelly:
+Conformal Prediction Intervals as the Scale in Fractional Kelly Position Sizing;Section1.1listswhatchanged. Version2(October
+2026) was titledWhen Marginal Coverage Transfers and the Economics Do Not: A Pre-Registered Study of Conformal Interval
+Widths as Position-Sizing Scales; version 3 adopts the conference title and updates the affiliation; the content is unchanged.
+1
+arXiv:2608.01494v3  [q-fin.PM]  18 Oct 2026
+guarantee (Vovk et al., 2005); the Kelly criterion turns a belief about a return distribution into the bet size
+that maximises expected log wealth (Kelly, 1956). The first produces something close to what the second
+needs: a calibrated statement of how wrong a forecast tends to be. The match is inexact, because Kelly
+consumes a full return distribution while an interval supplies a single scale (Section 3). To our knowledge,
+no prior workempirically studiesconformal intervals as the scale input to Kelly sizing (Section 2).
+Kelly needs ascale: a𝜎 such that𝑓★≈𝜇/𝜎 2 is the right fraction of wealth to commit. Reading𝜎 off
+a conformal half-width, the rule we callConformal Kelly, is trivial to write down, and it changes what a
+good interval is. A forecaster wants an interval sharply adapted to local conditions; a sizing rule may not,
+because a noisy𝜎 enters the sizing map nonlinearly and its estimation variance is charged to compounded
+wealth. And a marginal guarantee constrains how often an interval fails on average, not when it fails.
+This paper reports a negative result obtained under a pre-registered protocol, and it orders its claims
+by the strength of the evidence behind them. The empirical base is one universe of eight exchange-traded
+funds (ETFs), one six-year development window and one 2.7-year sealed window; every general statement
+below should be read against that single experiment.
+(i)Confirmatory: apre-registrationprotocolforagenticsearch,anditsoutcome.Theconfiguration
+space was searched by an autonomous LLM agent against an immutable evaluation harness (Section 9,
+Appendix A), a large multiple-comparisons exposure (Bailey and López de Prado, 2014; Bailey et al.,
+2017) that we report rather than omit. The mitigation is structural: a window sealed before the search
+began, and a registration, committed before unsealing, that fixed the two final configurations by commit
+hash, ten metrics, nine comparison books including the one most likely to beat ours, a sample-size caveat,
+a written prediction, and the mapping from outcomes to conclusions. Under that mapping the outcome is
+a partial refutation: coverage transferred, growth did not, the registered risk-adjusted defence failed, and
+so did the drawdown dial’s registered criterion (Section 10).
+(ii) Post hoc: a conditional-coverage diagnostic.Splitting the sealed window at the year boundary
+shows realized coverage of 0.592 in 2022 and 0.842 in 2023–24: the passing marginal figure averages
+two large errors of opposite sign, and the under-covered year holds the entire loss. The split was not
+registered, so the paper’s most informative observation lies outside its confirmatory protocol; we state that
+tension wherever the observation is used and do not resolve it. Nor does the split identify a mechanism.
+The leverage cap bound on every trading day of 2022, and a common cause—a volatility regime that
+outran a deliberately slow estimator while equities fell—fits the data at least as well as a causal link
+(Section 11). What the split does show is that the registration’s own acceptance test passed a window
+containing a sixteen-point conditional failure. That marginal validity does not imply conditional validity
+is known (Vovk, 2012; Barber et al., 2021); one documented instance of the gap in a sizing rule motivates,
+but does not establish, conditional coverage as a registered endpoint for rules that read an interval width as
+a scale.
+(iii)Exploratoryandcap-conditional: evidenceonconformalscaleestimation.Onthedevelopment
+window, under a gross-leverage cap that bound on 97.7% of days, every device we tested that made the
+interval adapt faster lost growth, and the conformal quantile out-grew a plug-in standard deviation by 2.1
+percentage points (pp) a year at matched leverage (Sections 5 and 6). A drawdown control built from the
+same intervals cut development-window drawdown at better Sharpe, surviving a constant-leverage control
+and a timing placebo (Section 7). The direction of the scale evidence is consistent across devices, but the
+entries were selected from a searched grid, block-bootstrap intervals include zero for 11 of the 13 contrasts
+we could re-derive, and off the cap the ordering is untested (Section 12).
+2
+1.1 What changed from version 1
+This version reorganizes the paper around its registered out-of-sample result and retitles it; version 1
+led with development-window performance. It adds (a) a post-hoc split of the sealed window by year,
+with a check of its mechanism against the paper’s own leverage-cap fact (Section 11); (b) moving-block-
+bootstrapintervals,computedafterunsealingonre-derivedseriesofconfigurationsscoredbeforeit,forthe
+development contrasts and for sealed-window coverage and comparisons (Appendix B), which leave most
+development contrasts within noise; and (c) an attribution of the fall in growth from development to the
+sealed window (Section 10.4). Claims about the development window are restated with that uncertainty,
+and mechanisms that were not measured are labelled as candidates. Two descriptions are corrected: the
+primary and secondary variants differ on 13 trading days at the end of the sample, not on “the final 21
+rows”; and the statement that the conformal machinery transferred through 2022 holds only for coverage
+pooledoverthewholewindow. Nodevelopment-windownumberandnoregisteredsealed-windownumber
+has changed.
+2 Related work
+Conformalprediction.Thesplit-conformalconstructionanditsfinite-samplemarginalcoverageguarantee
+areduetoVovketal.(2005). Financialseriesviolateexchangeability,andthefield’sstandardresponsesare
+theoneswetestandrejectonthedevelopmentwindow(Section6): adaptiveconformalinference(Gibbsand
+Candès,2021),whichupdates 𝛼onlinefromrealizedcoverageerrors;non-exchangeable,recency-weighted
+conformal prediction (Barber et al., 2023), which downweights stale calibration points; and asymmetric
+intervals in the spirit of conformalized quantile regression (CQR; Romano et al., 2019). EnbPI (Xu
+and Xie, 2021), the ensemble-bootstrap construction for dependent series, is related but not tested here.
+Mondrian conformal prediction (Vovk et al., 2003) supplies the within-taxonomy pooling of Section 6.
+Conformal predictive systems (Vovk et al., 2019) and their decision-theoretic use (Vovk and Bendtsen,
+2018)—expected-utility maximisation over a predictive distribution, which under log utilityisKelly—are
+the theoretically correct version of what we do. We implement the decision rule (expected-log-utility
+maximisation over the empirical calibration-residual distribution) rather than a full conformal predictive
+system, and it loses, for two measurable reasons (Section 6.3). Exact conditional coverage cannot be
+guaranteed distribution-free (Vovk, 2012; Barber et al., 2021); recent methods guarantee coverage over
+prespecified subgroups or classes of covariate shift (Gibbs et al., 2025), the natural tool for the conditional
+endpoint that Section 11 proposes. Noguer i Alonso (2024b) surveys conformal prediction in finance.
+Growth-optimal betting.Kelly (1956) and the fractional- and drawdown-constrained Kelly literature
+(MacLean et al., 1992; Grossman and Zhou, 1993; Browne, 1997; MacLean et al., 2010, 2011) supply the
+sizing map and the reason to use afractionof full Kelly: its drawdown behaviour is intolerable and its
+sensitivity to estimation error in𝜇 and𝜎 severe. Our object is orthogonal: not a new sizing map, but an
+estimator for its denominator.
+The intersection.Three strands come close, on different axes. Kato (2024) is the closestselection
+work: he conformalises per-portfolio return forecasts and applies a two-stage screen—keep the top𝑚
+candidatesbytheinterval’slowerbound,thentaketheargmaxoftheupperbound—overafinitecandidate
+setof weight vectors, on three-asset universes of monthly returns. Both endpoints are used, but only as a
+ranking statistic over a discrete menu: no continuous allocation, no leverage decision, no growth objective.
+He selects; we size.On theallocationaxis, Noguer i Alonso (2024a) integrates conformal intervals into
+mean–variance optimisation, and Jia and Han (2026) derive a value-at-risk from the conformal lower
+bound and optimise continuous weights against a VaR-constrained objective by projected gradient descent:
+continuous weights, but risk-based rather than growth-optimal objectives, and no leverage multiplier. On
+3
+theKellyaxis,SunandBoyd(2018)optimiseKellyagainstanambiguitysetoverthereturndistribution,the
+naturalhomeforaconformalconstruction, thoughtheydo notbuildone; andthe ARTEMISpreprint (Ray,
+2026) proposes, in an optional and never-evaluated appendix module, approximating a Kelly objective’s
+covariance from conformal intervals, with no portfolio results reported. The words “Kelly”, “bet sizing”
+and “position sizing” do not appear in Kato (2024). Our decision variable is a continuous fraction of
+wealth, our objective isE[log𝑊] , and our central object is the intervalwidth, evaluated end to end
+under costs and a sealed out-of-sample protocol. To pre-empt a keyword collision: Vovk’s Bayes–Kelly
+work (Vovk, 2024) uses Kelly betting inside conformaltesting, not investment sizing. Our literature search
+covered arXiv, SSRN and the major ML and finance proceedings through August 2026.
+Backtest overfitting.The deflated Sharpe ratio (Bailey and López de Prado, 2014) corrects one
+statistic for a known number of trials, and the probability of backtest overfitting (Bailey et al., 2017)
+assesses a selection procedure. A registration is complementary: it protects theinterpretation—which
+comparators may be dropped, which outcomes promoted (Section 10).
+Autonomous research loops.The development methodology is the fixed-harness agentic pattern
+of Karpathy’sautoresearch (Karpathy, 2026): an immutableprepare.pydefining data, splits, costs
+and the metric; a mutabletrain.py that is the agent’s entire action space; and a keep-or-revert loop on a
+held-out score. The academic analogues areThe AI Scientist(Lu et al., 2024) andMLE-bench(Chan et al.,
+2024). We are not aware of an earlier quantitative-finance study that discloses an agentic search in its
+method section rather than omitting it, though we have not surveyed for this systematically (Section 9).
+3 Method
+Fix an asset universe{1,...,𝐴} and let𝑟𝑖,𝑡 be the simple daily return of asset𝑖. Write𝑅(𝐻)𝑖,𝑡 = ˝𝐻𝑠=1𝑟𝑖,𝑡+𝑠
+for the forward𝐻-day arithmetic return sum; it differs from the compounded simple return at second order
+(Section 8), and nothing below is a true cumulative return.
+Conventions.We take the risk-free rate as zero throughout:ˆ𝜇is a total-return forecast, Sharpe is
+computed on raw rather than excess returns, and financing enters only as the ex-post overlay of Section 8.
+That is benign on the development window, where 2016–2021 short rates sat near zero, and materially
+flattering on the sealed window, where 2022–2024 cash paid 4–5% (Section 12).
+Forecast.For each asset independently, an expanding-window ridge regression (𝜆ridge =10 , refit
+every 21 trading days, first prediction after 750 days) maps four unstandardised features—momentum over
+21, 63 and 252 days and an exponentially weighted 20-day volatility—to𝑅(𝐻) , with training truncated at
+fit_end = i - H + 1 so every label has landed by the prediction date. The forecaster is deliberately
+weak: heavy ridge shrinkage toward the intercept makes much of its output a slowly varying drift estimate,
+andadrift-onlyforecast(pureintercept,zerofeatures)alreadyreaches0.2326,82%ofthefinaldevelopment
+result.The point forecast is not where this paper’s contribution lives.
+Horizon ensemble.The forecast is computed at𝐻∈{12,16,21,27,34} , each component rescaled
+by 21/𝐻 to a common 21-day reference and combined byconformal inverse-variance model averaging:
+componentℎ gets weight1/𝑞2ℎ,𝑞ℎ being the causal conformal half-width of that component’s residual
+against the common target. The conformal object is thus used twice, as a model-averaging weight and as
+the sizing denominator.
+Conformal interval.The nonconformity score is the plain absolute residual𝑠𝑖,𝑡 =|𝑅 (21)𝑖,𝑡 −ˆ𝜇𝑖,𝑡|. At
+date𝑡 the conformal quantile is the(1−𝛼) empirical quantile of the last𝑊=500 scoreslandedby 𝑡
+(their outcome is observed), over the window[𝑡−𝐻−𝑊+1, 𝑡−𝐻+1) , so no score whose outcome is
+still in the future can enter. We use𝛼=0.25 , taking the plain(1−𝛼) empirical quantile rather than the
+finite-sample conformal index⌈(𝑛+1)(1−𝛼)⌉/𝑛 : at𝑊=500 the two differ by less than one rank in five
+4
+hundred, and since exchangeability fails for overlapping financial returns in any case, coverage in this
+paper is a measured quantity, not an inherited guarantee. The rolling quantile is then geometrically shrunk
+toward anexpandinganchor,
+𝑞eff𝑖,𝑡 =  𝑞roll𝑖,𝑡 1−𝜆 𝑞anchor𝑖,𝑡 𝜆, 𝜆=0.3,(1)
+where𝑞anchor is the(1−𝛼) quantile ofalllanded scores to date, recomputed every 21 rows and held stale
+in between so it is never early. It is the slowest updating scheme we field short of freezing outright (a fully
+frozen estimator, Section 5.1, updates less and loses in point estimate), and exists to test the slow-scale
+ideawithoutthewindow-lengthartifact( min_train+𝑊 pushesthefirstusabledateintothedevelopment
+window once𝑊exceeds about 600).
+Thisisaheuristicscaleestimatorbuiltfromconformalquantiles,notasplit-conformalpredictor.
+The geometric shrinkage, the rolling window, and the conformal-derived ensemble weights each break
+the exchangeability argument, as do the forecaster’s periodic refits. We report realized coverage as an
+empiricalpropertyandclaimnofinite-sampleguaranteefor 𝑞eff. ThesizingmapislikewiseKelly-inspired
+rather than Kelly-optimal: under fat tails𝑞eff/𝑧 is a robust scale proxy, not a standard-deviation estimate
+(the Gaussian constant fixes units only), covariance is ignored (Section 6), and the caps of Section 4 bind
+almost always, making the rule a capped inverse-scale-squared sizing rather than textbook multi-asset
+Kelly.
+Sizing.Read a volatility off the interval,ˆ𝜎𝑖,𝑡 =𝑞 eff𝑖,𝑡/𝑧1−𝛼/2 with the fixed constant𝑧1−𝛼/2 =1.2816 ,
+and apply fractional Kelly,
+𝑓𝑖,𝑡 =𝜅· ˆ𝜇𝑖,𝑡
+ˆ𝜎2𝑖,𝑡, 𝜅=0.15,(2)
+winsorised at±0.75 per asset. Under the harness’s gross cap the scale𝜅 is nearly inert (Section 4); it is the
+ratiosˆ𝜇𝑖/ˆ𝜎2𝑖 that matter.
+A disclosed inconsistency.Gaussian consistency at𝛼=0.25 would require𝑧1−𝛼/2 =Φ−1(0.875)=
+1.1503; the frozen configurations carry𝑧1−𝛼/2 =1.2816=Φ −1(0.90), left over from an earlier𝛼=0.20 .
+Since𝑧 enters only through the overall scale, which the gross cap makes inert, the mismatch is equivalent
+to a 24% change in𝜅 (the ratio enters squared:(1.2816/1.1503) 2 =1.24 ) and is bounded rather than
+measured: the per-asset clip precedes gross renormalisation, so the rescaling is not exactly uniform, but
+the𝜅 sweep is flat across changes larger than 24%, and the registration forbids a post-unsealing sensitivity
+rerun. We record rather than correct it, because correcting it would change the frozen configurations.
+Book construction.The traded book is the equal average of the target books formed on each of the
+last𝐾=5 days—staggered overlapping portfolios in the sense of Jegadeesh and Titman (1993)—rather
+than an exponential decay (Section 6.2).
+The drawdown dial (Config B only).Let𝑑𝑡 be the trailing 21-daypooledrate oflower-interval
+breaks, with each miscoverage indicator shifted by𝐻to its landing date. Multiply the whole book by
+𝑚𝑡 =clip
+
+1−𝛽 𝑑𝑡−𝛼/2𝛼/2 ,0.25,1 , 𝛽=1.(3)
+At 𝛽=1 this has no free sensitivity parameter: the multiplier is one minus the fractional excess of
+downside miscoverage over the𝛼/2 reference. That reference is a convention, not a guarantee—the
+symmetric interval controls total miscoverage𝛼 and promises nothing about its downside share—so the
+dial is an empirical indicator against a historical norm; the guaranteed version would calibrate a separate
+one-sided lower bound, which the search did not build. The dial never touches the interval, so conformal
+coverage is identical with and without it (0.7483 in both configurations on the development window).
+5
+Table 1:Labels used in this paper.
+label meaning
+TRAIN 2006-05 to 2015-12-31; used only to fit the forecaster
+DEV 2016-01-01 to 2021-12-31 (1,511 trading days), the only window the search ever
+scored
+sealed window 2022-01-01 to 2024-09-20 (683 trading days), opened once, after registration; the
+code calls it the lockbox
+leg one of three sequential sessions of the agent’s search; an ablation is run against the
+best configuration of the leg in progress, itsbase
+Config A the configuration with the highest DEV growth over all legs (git tagbest-leg3)
+Config B Config A plus the drawdown dial of Section 3 (tagpaper-config-drawdown)
+primary, secondary the configurations exactly as frozen; and a pre-declared variant that also forecasts
+before a label has landed (predict_tail), and so trades 13 more days at the end of
+the sample
+B1–B9 the nine registered comparison books (Tables 2 and 13)
+growth annualised net log growth,252×the mean oflog(1+𝑟 𝑡), net of 5bps per unit of
+turnover
+pp percentage points of growth per year
+gross ˝𝑖|𝑤𝑖|;pre-capbefore andpost-capafter the harness caps it at 2.0
+coverage share of valid asset-days whose realized 21-day return falls inside the interval;
+nominal 0.75
+Calmar; Ulcer index annualised arithmetic return over maximum drawdown; root-mean-square
+drawdown
+4 Data and evaluation protocol
+Universe and data.Eight liquid US-listed ETFs—SPY, QQQ, DIA, MDY (equity), GLD, SLV, USO,
+DBC (commodity)—daily adjusted closes from a frozen Kaggle snapshot (malik1641, 2024), common
+sample 2006-05 to 2024-09-20.
+Splits, fixed before any experiment.TRAIN to 2015-12-31 (includes 2008);DEV 2016-01-01 to
+2021-12-31, 1,511 trading days, the only window the search ever scored, spanning the 2018 fourth-quarter
+selloff and the 2020 crash;the sealed window, 2022-01-01 onward, opened once, after registration (the
+code calls it the lockbox). Table 1 collects the labels used throughout.
+Harness. prepare.py is immutable and byte-identical to the scaffold commit (blob SHAf7ee2730
+86f044e4d3f2fadaeca7ebc47adc4037). It applies, in order: a±0.75 per-asset clip; renormalisation
+to gross≤2.0 ; aone-day implementation lag; and 5bps per unit of turnover. The metric is annualised
+net log-wealth growth on DEV, wherenet means net of transaction costs only: financing costs on gross
+exposure above 1.0 sit outside the harness by design and are quantified separately (Sections 8 and 10.5), so
+no headline number in this paper is financing-inclusive. The metric is the Kelly objective itself, which
+penalises over-betting without an added risk term. Throughout, Sharpe and Calmar use the arithmetic
+annualised net return252 ¯𝑟against a zero risk-free rate, while growth is252 log(1+𝑟) ; the two differ by
+the variance drag𝜎2/2. The harness floors Calmar’s denominator at 0.05, which never binds here.
+The structural fact that conditions every result.At the frozen configuration,pre-capgross leverage
+averages 4.28 and exceeds the 2.0 cap on97.7% of DEV daysfor Config A, the undialled book (the dial
+lowers Config B to 3.61 and 81.1%), with unconstrained Kelly-optimal gross estimated at roughly3.6×
+the cap. The book therefore sits on the monotonically increasing part of the growth-versus-exposure curve,
+pinned at maximum gross essentially always. Three consequences follow:
+6
+Table 2:Development window: comparison books under the harness, and the two frozen configurations. The
+registered labels B1–B9 are those of the pre-registration (Section 10).
+book growth Sharpe max dd Calmar ann. vol gross
+B1 SPY buy & hold, as the harness expresses it 0.1226 0.976 26.1% 0.505 13.5% 0.750
+SPY buy & hold, uncapped (outside the harness) 0.1594 0.976 33.7% 0.521 18.0% 1.000
+B2 equal weight, gross 1 0.1189 0.841 32.5% 0.403 15.6% 1.000
+B3 vol-target risk parity 10% 0.1063 1.078 18.1% 0.616 10.4% 1.013
+B4 equal weight2×0.2125 0.841 56.5% 0.465 31.2% 2.000
+B5 inverse-vol risk parity2×0.2225 0.971 52.4% 0.494 26.7% 2.000
+B6 vol-target risk parity 30% 0.2074 1.047 38.8% 0.600 22.2% 1.917
+B74 equity ETFs @ 0.5 (post hoc) 0.29340.963 60.9% 0.605 38.2% 2.000
+B8 4 commodity ETFs @ 0.5 (post-hoc control) 0.0892 0.430 68.7% 0.228 36.5% 2.000
+B9 equity, QQQ at the per-asset cap (post hoc) 0.3119 1.007 59.4% 0.653 38.5% 2.000
+Config A, metric-best0.2845 1.336 27.7% 1.12723.4% 1.960
+Config B, drawdown dial 0.25841.386 20.3% 1.37620.1% 1.833
+1.𝜅 , 𝑧1−𝛼/2, and any uniform rescaling ofˆ𝜎are inert under the cap:the interval sets the book’s
+composition, not its size. They change only how many assets pin at the per-asset cap.𝛼 is not pure
+scale, since it reshapes the cross-section, but it is empirically flat to within 1.3pp once leverage is
+controlled (Section 8).
+2. Tilting the cross-section toward low-volatility assets should lose: below the Kelly optimum, more
+portfolio volatility at the same Sharpe is more growth. This is our leading explanation for why the
+literature’s most-recommended device, the volatility-scaled nonconformity score, fails here.
+3. Comparison books must be restated at gross 2.0. The bars shipped inprepare.py are at gross 1.0,
+and comparing a2×-levered strategy with a1×-levered benchmark is not a comparison.
+Comparison books, restated at the real cap(all mechanical, all scored by the identical harness), in
+Table 2.
+Note on the shipped SPY bar.The ±0.75 per-asset clip silently reduces theSPY = 1.0 bar to a
+0.75-notionalposition,asits13.5%realizedvolatilityconfirms,sothequoted“SPYbuy&hold=0.1226”
+is 0.75× SPY. True unlevered SPY on DEV compounds at 0.1594 at 18.0% volatility and Sharpe 0.98; the
+harness cannot express a 1.0-notional single-name book at all. We use the honest figure throughout, and
+flag it because it inflates every “beats SPY” statement in the development notes by about 3.7pp.
+5 Development-window results
+Both frozen configurations were replayed from their git tags through the harness by the diagnostics script
+and reproduce their recorded metric to six decimal places (Table 3).
+Status and uncertainty.Every comparison in Sections 5 to 8 is exploratory: the grids were searched,
+and the winning entries are selected values rather than pre-specified hypotheses. All are paired contrasts
+on one return path. Version 1 noted that paired standard errors are far smaller than the marginal one
+but reported no intervals. After unsealing, we re-derived each contrasted arm’s daily series from the
+experiment ledger—each reproduces its recorded metric—and computed circular moving-block bootstrap
+intervals for the paired growth differences (63-day blocks, three forecast horizons; 10,000 resamples; 21-
+and 126-day blocks agree qualitatively; Appendix B). No configuration is scored for the first time. Paired
+7
+Table 3:Headline, DEV 2016–2021.
+Config A Config B
+annualised net log growth0.28450.2584
+Sharpe 1.3361.386
+maximum drawdown 27.68%20.26%
+Calmar 1.1271.376
+annualised volatility 23.36% 20.12%
+annualised turnover (DEV window) 14.1×15.1×
+mean post-cap gross 1.960 1.833
+Ulcer index0.06730.0698
+realized coverage / nominal 0.7483 / 0.7500 0.7483 / 0.7500
+fraction of asset-day cells with a non-zero position 0.980 0.980
+Turnover is the DEV-window mean of daily˝𝑖|Δ𝑤𝑖|, annualised. The development records carried 5.7×/6.0×,
+a full-sample average diluted by the low-activity pre-2016 years; the window figures reconcile with the cost
+step of Section 8 (14.1×5 bps≈0.71 pp). By block bootstrap, Config A’s growth has a standard error of 0.082
+(95% interval[0.136,0.454] ), against the analytic 0.095 quoted in Section 8.1; Config A minus Config B is
++2.6pp[−0.6,+6.4].
+Table 4:Per-year net log growth, DEV.
+year Config A Config B SPY bar B7
+2016 +0.154 +0.149 +0.087 +0.243
+2017 +0.353 +0.353 +0.148 +0.435
+2018−0.032−0.045−0.032−0.133
+2019 +0.306 +0.226 +0.205 +0.510
+2020 +0.667 +0.610 +0.136 +0.268
+2021 +0.256 +0.256 +0.191 +0.436
+Table 5:Per-asset decomposition, Config A, DEV: annu-
+alised arithmetic net contribution, mean post-cap position,
+and per-asset coverage (nominal 0.75).
+asset contribution position coverage
+SPY +0.0585 +0.322 0.726
+QQQ +0.0836 +0.334 0.690
+DIA +0.0568 +0.308 0.737
+MDY +0.0383 +0.265 0.729
+GLD +0.0242 +0.269 0.779
+SLV +0.0021 +0.114 0.781
+USO +0.0406−0.039 0.781
+DBC +0.0080−0.003 0.764
+total +0.3120+1.571 0.748
+standard errors are indeed small against the marginal one (about 1.4pp for the headline𝜎 contrast, against
+8.2pp for Config A’s growth itself), but not small enough: of the 13 development contrasts we could
+re-derive, 11 have 95% intervals that include zero. The intervals are not adjusted for the search, so if
+anything they flatter the contrasts. Quantities quoted without an interval were not re-derived. Only the
+sealed window (Section 10) carries confirmatory weight.
+Config B’s Ulcer index isworsethan Config A’s despite its far smaller maximum drawdown: the dial
+truncates the drawdown tail without reducing typical drawdown.
+Developmentgrowthwaspositiveinfiveofsixyears(Table4); 2018isthelossyear, sharedwithevery
+comparator. The second half is much stronger than the first (0.41 against 0.16 for Config A), driven by
+2020, the single largest concentration risk in the result. Contributions in Table 5 are arithmetic and sum to
++0.3120; the headline log growth 0.2845 is this less the variance drag𝜎2/2=0.2336 2/2≈0.0273 . All
+eight assets contribute positively and the largest (QQQ) is 27% of the total. USO earns+0.0406 from a
+mean position of−0.039, fromtimingratherthanastatictilt, whichwasthecleanestdevelopment-window
+evidence that the sizing rule does something; on the sealed window USO was the one asset that lost
+(−0.036,Section10.5). Per-assetcoveragespans0.690–0.781;with21-dayoverlappingtargetstheeffective
+8
+100
+2 × 100
+3 × 100
+4 × 100
+6 × 100
+wealth (log scale, DEV start = 1)
+DEV 2016--2021: wealth and drawdown, Config A and Config B
+Config A
+Config B
+SPY (harness-capped 0.75×)
+SPY (true, unlevered 1.0×)
+4 equity ETFs @ 0.5 (post-hoc bar)
+2016 2017 2018 2019 2020 2021 2022
+-60%
+-40%
+-20%
+0%
+drawdown
+Figure 1:DEV wealth (log scale) and drawdown for Config A and Config B, against the harness-capped SPY bar
+(0.75×), true unlevered SPY, and the post-hoc four-equity book B7.
+sample is𝑛≈70 per asset, so one standard error is about 0.052 and QQQ at 0.690 is 1.2 standard errors
+below nominal: not significant, but stated rather than buried.
+5.1 What estimates𝜎
+Atmatchedleverage,windowandcausality,Table6changesonlythefunctionalofthecalibrationresiduals
+in the Kelly denominator, and Figure 2 plots the gains with their intervals.
+Leverage matching is exact in the leg-2 block (post-cap gross 1.957–1.959) but only approximate
+in leg 3, where the standard-deviation row runs 1.9% lower (1.922 against 1.960). A gross-matched
+replay (the Kelly fraction re-solved to restore post-cap gross of about 1.958) scores the standard deviation
+at 0.2593–0.2609 and the mean absolute deviation at 0.2742: the ordering is unchanged, but the leg-3
+conformal-versus-sdgapnarrowsfrom3.5toroughly2.2pp,andtheexactlymatchedleg-2figureof2.1pp
+is the headline.
+Tworeadings,bothhedgedbytheintervals. First,inbothablationconfigurationsthegrowthorderingis
+exactly the estimators’tail-sensitivityordering: the standard deviation’s influence function is quadratic in
+theresidual,themeanabsolutedeviation’sislinear,andthequantile’sisbounded. Acandidatemechanism,
+not measured directly: the conformal quantile systematicallyunderstates𝜎 for the fat-tailed assets (USO,
+SLV), so the book keeps more weight on them, which pays only because the gross cap holds the portfolio
+below its Kelly optimum. The headline 2.1pp has a 95% interval of[−0.5,+5.0] ; of the contrasts in
+Table 6, only mean absolute deviation over standard deviation excludes zero.
+Second: a𝜎 estimatedonceon pre-2016 residuals and held for six years (0.2669) still beats arolling
+9
+Table 6:𝜎-source ablation, DEV.Δ: growth difference against the residual standard deviation of the same block, in
+pp, with a 95% block-bootstrap interval. Every row was measured with the 2.0 gross cap binding almost always
+(post-cap gross 1.92–1.96); off the cap the ordering is untested.
+𝜎estimator growth Sharpe gross sourceΔvs sd
+rolling conformal quantile𝑞0.75(|𝑒|)/𝑧0.2821 1.341.960 leg-3 base+3.5[−0.8,+9.3]
+rolling mean absolute deviation 0.2693 1.27 1.952 leg-3 base+2.2[+0.1,+4.8]
+conformal quantilefrozen on TRAIN0.2669 1.21 1.961 leg-3 base+1.9[−4.3,+9.5]
+rolling residual standard deviation 0.2476 1.19 1.922 leg-3 base —
+rolling conformal quantile, matched pre-cap gross0.27741.32 1.959 leg-2 base+2.1[−0.5,+5.0]
+1.2533×mean absolute deviation 0.2713 1.30 1.958 leg-2 base+1.5(not re-derived)
+residual standard deviation 0.2566 1.24 1.957 leg-2 base —
+rolling conformal
+quantile
+mean absolute
+deviation
+conformal quantile
+FROZEN on TRAIN
+−5.0
+−2.5
+0.0
+2.5
+5.0
+7.5
+10.0
+12.5
+growth gain over rolling residual sd
+(pp/yr, DEV)
++3.5
+[-0.8, +9.3]
++2.2
+[+0.1, +4.8]
++1.9
+[-4.3, +9.5]
++2.1
+[-0.5, +5.0]
++1.5
+(not
+re-derived)
+not run
+in leg 2
+σ-source ablation: paired growth gains with 95% block-bootstrap intervals
+(63-day blocks; exploratory; gross cap binding on almost every day)
+leg 3 base, matched post-cap gross
+leg 2 base, matched pre-cap gross 4.25
+Figure 2:The 𝜎-source ablation as growth gains over the rolling residual standard deviation, both ablation
+configurations as paired bars, with 95% moving-block-bootstrap intervals (63-day blocks).
+residual standard deviation (0.2476) in point estimate, with a wide interval. Decomposing the 3.5pp gap,
+theupdatingaxis is worth+1.5pp[−2.0,+5.1] (rolling versus frozen conformal); the remaining+1.9pp
+mixes the functional change with the loss of updating and is not separately identified without a frozen-sd
+cell, which we do not have. That is the honest bound on what the conformal machinery is responsible for:
+on this window, the functional of the residuals mattered more than updating it, and slower was never worse
+in point estimate.
+5.2 How much of the conformal cross-section to keep
+Two dials bracket the answer from opposite sides; neither was re-derived, so the values are point estimates.
+Flattening𝜎’s cross-section costs 6.6pp.Replacing each asset’s𝜎 by the day’s cross-sectional
+geometric mean at matched gross, with𝜃 interpolating (Table 7a), loses monotonically. The exponent in
+𝑓∼𝜇/𝜎 𝛾 has an interior optimum (Table 7b): the sweep peaks at𝛾≈2 –2.5, a plateau containing the
+textbook inverse-variance exponent; the argmax (2.5) is 0.1pp above𝛾=2and we read nothing into it.
+But the raw Kelly ratios must be winsorised.At matched gross (clip at𝑐, renormalise to 2.0),
+10
+Table7:Development-windowsweepsatmatchedgross(pointestimates). (a)cross-sectionalshrinkageof 𝜎 toward
+the daily geometric mean (𝜃=1 keeps the full cross-section); (b) the exponent𝛾 in 𝑓∼𝜇/𝜎 𝛾; (c) the per-asset
+winsorisation level𝑐.
+(a)𝜃0 0.25 0.5 0.75 1
+growth 0.2113 0.2287 0.2527 0.2705 0.2773
+(b)𝛾0.5 1 1.5 2 2.5 3
+growth 0.2305 0.2518 0.2701 0.2773 0.2781 0.2722
+(c) clip𝑐0.26 0.30 0.35 0.45 0.55 0.65
+growth 0.2322 0.2394 0.2474 0.2601 0.2701 0.2772
+clip𝑐0.75 0.901.20 2.0 5.0 50
+growth0.2809 0.28190.2747 0.2477 0.2413 0.2413
+Table 8:Design steps of the search, in the order adopted (point estimates).
+changeΔgrowth note
+daily→21-day forecast horizon +7.5pp0.173→0.248; Sharpe0.86→1.22; turnover
+37.7→17.9
+position smoothing, EWMA(4) +1.0pp turnover17.9→9.2
+calibration window250→500days +0.4pp
+𝜅:0.25→0.15+0.7pp pure cap-saturation geometry
+horizon ensemble{12,16,21,27,34}+0.7pp broad plateau, not a spike
+staggered books,𝐾=5, replacing EWMA +0.5pp turnover7.7→7.0
+conformal inverse-variance ensemble weights≈0turnover6.96→5.59
+anchor shrinkage𝜆=0.3+0.24pp max dd0.2813→0.2768; coverage
+0.7559→0.7483
+the sweep is unimodal, with an interior optimum at𝑐≈0.75 –0.90 and a flat right tail once the clip
+ceases to bind (Table 7c). Discarding the Kelly magnitude entirely (sign-only, 0.2009 at Sharpe 1.02)
+and keeping it entirely (0.2413 at Sharpe 1.07) areboth4–8pp worse than winsorising it.The harness’s
+exogenous MAX_PER_ASSET = 0.75 happens to sit essentially at the optimum, which is luck, not
+design.Counter-intuitively, “fixing” the clip by water-filling—renormalise first so unpinned assets keep
+their exact Kelly ratios—is a 4.0pp disaster (0.2821→0.2417 , Sharpe 1.337→1.066 , maximum
+drawdown 0.281→0.371 ), while clip-then-renormalise is metric-neutral (0.2808). On these point
+estimates the per-asset cap is not a nuisance constraint here but a cross-sectional robustification.
+5.3 What each design choice contributed
+The horizon change dominates by an order of magnitude (Table 8): at a one-day horizon the drift is buried
+in noise and the ridge produces a near-market-neutral book that throws away the equity risk premium,
+while at a monthly horizon the drift dominates and the bets become long-biased, with an interior optimum
+at 21 (ℎ=42→0.238 ,ℎ=10→0.222 ). Everything after the first two rows is small, and the last≈1 pp
+is documented tuning expected to shrink out of sample, as the registration predicted.
+11
+Table 9:Devices tested and rejected on DEV.Δ: growth against the base configuration of the leg in which the
+device was tested, with a 95% block-bootstrap interval where the arm was re-derived (pp/yr).
+device result reference
+volatility-scaled nonconformity score−5.3pp atℎ=1;−3.3pp atℎ=21standard in financial
+conformal work
+adaptive conformal inference, step
+𝛾∈[0.001,0.05]
+monotonically worse;−1.6
+[−5.1,+1.6]at𝛾=0.005; 0.128 at
+𝛾=0.05
+Gibbs and Candès (2021)
+recency-weighted conformal, decay
+𝜌∈[0.98,0.999]
+monotone toward𝜌=1;−1.4
+[−4.3,+1.5]at𝜌=0.99
+Barber et al. (2023)
+asymmetric two-sided intervals with a
+downside-only𝜎
+−1.6[−3.6,+0.2]CQR-flavoured
+pooled calibration across all eight assets
+(leg-1 construction)
+−4.2
+pooled calibration across all eight assets
+(leg-2 code path)
+−2.5[−6.6,+0.7]; 0.2573
+Mondrian calibration within asset class−2.4[−6.8,+1.1]; 0.2584 Vovk et al. (2003)
+sizing on the𝐻𝑠-day holding-period
+residual
+monotone in𝐻𝑠;−0.7[−2.0,+0.5]
+at𝐻 𝑠 =5;−1.5at𝐻 𝑠 =1
+6 What does not work on the development window
+The search’s second and third legs tested nine structural hypotheses and rejected eight. The rejections
+share a sign and, we conjecture, a mechanism; the intervals below say how much weight each can bear.
+6.1 Locally adaptive conformal prediction
+Every one of the first four devices in Table 9 makes the interval adapt faster, and every one loses growth in
+point estimate; none of those losses is individually distinguishable from zero. Our candidate explanation
+is that the sizing map integrates the interval and so charges thevarianceof𝑞 rather than rewarding
+its local sharpness. We measured that mechanism directly only for the holding-period device, which
+calibrates and sizes on the𝐻𝑠-day residual the staggered book is actually exposed to, instead of the 21-day
+forecast residual. There the estimator’s smoothness is analytically transparent: an overlapping 21-day
+residual is itself a 21-day moving average of daily shocks, so its trailing quantile is smoother, with the
+standard deviation of daily log-changes in𝑞 at 0.00343 for𝐻𝑠 =21 against 0.00391 at𝐻𝑠 =5 and lag-1
+autocorrelation 0.53 against 0.36, and growth is monotone in𝐻𝑠. For the other devices the mechanism is
+conjectured, not measured. The pooled rows fail for a different reason, taken up below.
+One correction to the development notes: what fails isfastadaptivity, not cross-sectional adaptivity—
+Section 5.2 shows that flattening the cross-section of𝜎 costs 6.6pp. On this evidence it is the speed of
+the scale estimator, not its cross-sectional content, that should be slow. Mondrian calibration sharpens
+this: pooling within asset class (0.2584) recovers only 0.1pp over all-asset pooling through the identical
+code path (0.2573), so the original diagnosis (“score shapes differ across assets”) was wrong. The−4.2pp
+figure is a different leg-1 construction and is not the right comparator. Pooling fails, we think, because it
+replaces each asset’s own quantile with (its trailing mean absolute deviation)× (a shape factor shared
+across the cell), discarding the per-asset tail behaviour that Section 5.1 suggests matters.
+12
+6.2 Holding-period structure
+Staggered overlapping books beat every equal-memory EWMA (𝐾=3/4/5→0.2809/0.2814/0.2820
+againstEWMAspan 4/8/13/21→0.2774/0.2714/0.2667/0.2617 ),soitistheflatkernel,notthelength,
+that helps. Butlong staggering fails badly(𝐾=21→0.2545,𝐾=63→0.2383): the 21-day forecast
+decays with a roughly one-week half-life, so “hold the book for the forecast horizon” is wrong here. The
+mismatchisrealandisnotfixedbymatchingthecalibratedobjecttothetradedone(thelastrowofTable9,
+which loses).
+6.3 The conformal predictive decision rule
+Solving 𝑓★=arg max 𝑓 E[log(1+𝑓𝑅)] over the empirical calibration-residual distribution{ˆ𝜇𝑡+𝑒𝑖}—
+Vovk and Bendtsen’s expected-utility maximisation, which under log utilityisKelly—loses in every
+variantwecouldconstruct. Whatweimplementisthatdecisionruleratherthanafullconformalpredictive
+system, so the comparison is against the practical version of the idea, not its most refined form. Raw, it
+scores0.1525 at Sharpe 0.74; the best variant (mean-recentred) reaches 0.2411, still−3.6pp[−6.7,−0.4]
+against its base of 0.2774, the one device whose loss excludes zero. Two measured problems:
+1. The predictive distribution’s location is dominated by forecast bias.The trailing 500-day mean
+residual is thesame order as the point forecast itself(SPY: mean |ˆ𝜇|=0.0071 against|mean
+residual|=0.0048 ; USO: 0.0192 against 0.0216). Recentring swamps everything else: raw 0.1525,
+mean-recentred 0.2411, median-recentred 0.0581 at a 59% maximum drawdown.
+2. Even recentred, empirical-predictive-distribution Kelly charges the realized left tail, which
+shrinks fat-tailed assets exactly as inverse-volatility tilting does (the first row of Table 9, reached by
+another route).
+A companion result sharpens the point: conformal probability-of-profit sizing,𝑓=(2𝑝−1)/𝜎 with
+𝑝=𝑃 CPD(𝑅 >0) , the most tail-robust member of the family, scores 0.234–0.246 with maximum
+drawdown blowing out to 0.40–0.53. Robustness appears to help in the denominator and hurt in the
+numerator: passing the forecast through the calibration distribution destroys itsmagnitude, and Kelly
+needs magnitude.
+6.4 Correlation
+Conformalising the realizedportfolioresidual and solving one Kelly leverage for the whole book merely
+traces the leverage curve and converges back to the per-asset answer once the cap binds (portfolio
+𝜅=0.05→1.0 : 0.098/0.170/0.228/0.271/0.276/0.264/0.249). Multivariate Kelly𝑤=Σ −1𝜇 is far worse
+(0.023–0.179 across shrinkage 0–0.9) at turnover 11–20×: Markowitz instability plus a hedged book that
+discards the equity premium.Correlation is the biggest theoretical hole in the per-asset formulation
+and is empirically inert here: under a binding gross cap only thedirectionsurvives. That is a limitation
+of the study design, not evidence about the method off the cap.
+6.5 Two apparent gains that did not survive their own controls
+Shrinkage drift estimators.Grand-mean pooling of the drift at weight 0.10–0.30 appears to gain
+(0.2854–0.2874, a broad plateau), but the control kills it: afixed constantin place of the data-driven
+grand mean does as well or better (0.2854–0.2904 for𝑐=0.002...0.020 ). It is a hand-tuned long tilt
+with no data in it.Not adopted, and reported, because it is exactly the kind of finding that would not
+survive a sealed window and usually goes unreported.
+13
+Table 10:The drawdown dial on DEV: frontier over𝛽 at window𝑀=21 . Turnover is the full-sample average
+carried by the development records (Section 5).
+𝛽growth Sharpe max dd Ulcer Calmar turnover post-cap gross
+0 (Config A) 0.2845 1.336 0.2768 0.0673 1.127 5.69 1.960
+0.25 0.2595 1.311 0.2583 0.0710 1.096 5.98 1.915
+0.50 0.2551 1.335 0.2313 0.0768 1.196 6.06 1.872
+0.75 0.2503 1.337 0.2207 0.0718 1.228 6.07 1.843
+1.00 (Config B) 0.2584 1.386 0.20260.06981.3766.03 1.833
+1.25 0.2576 1.386 0.2034 0.0700 1.366 6.17 1.823
+1.50 0.2563 1.382 0.1991 0.0687 1.388 6.26 1.816
+2.00 0.2556 1.385 0.1994 0.0693 1.382 6.15 1.802
+3.00 0.2586 1.411 0.1896 0.0633 1.467 6.27 1.787
+Epistemic model disagreement.Adding𝑤·disp 2 to the denominator (disp is the dispersion of the
+five horizon components) is monotone in𝑤 with no interior optimum, and its control—disp replaced
+by its own causal expanding per-asset mean, same cross-sectional tilt, zero timing—does just as well.
+The diagnostic:mean ensemble disagreement is 0.6–2.5% of the mean conformal half-width(SPY
+0.00053against0.0365;USO0.00297against0.1187),soepistemicuncertaintyisabout1.5%ofpredictive
+uncertainty and the Kelly denominator is essentially purely aleatoric.Not adopted, despite+0.1pp.
+7 The drawdown dial and its two controls
+Trailingconformalmiscoverageisanempiricalregimeindicator—a“thepredictivedistributionhasshifted”
+signalcalibratedagainstitsownhistoryratherthanbyanydistribution-freeguarantee(Section3)—andthe
+leading hypothesis was that de-levering on it should raise growth.It does not.Across 40+ configurations
+spanning window 21–252 and sensitivity 0.5–2, every variant loses growth, monotonically in how much
+gross it cuts, and the leverage-matched version (𝜅 re-solved to restore post-cap gross 1.960) still loses
+0.8–2.5pp. Not a leverage tax, then: thetimingis bad, and measurably so—trailing miscoverage peaks
+aftera shock, during the rebound, so it sells the bottom (2018 Q4, 2020 Q1).
+The same statistic reduced drawdown. Table 10 gives the frontier over𝛽 at𝑀=21 on Config A;
+coverage is 0.7483 at every point, since the dial never touches the interval.
+This is a step, not a smooth efficient frontier.Growth drops about 2.5pp the moment the dial is
+switched on at all and is then flat in𝛽 (0.250–0.259 across𝛽∈[0.25,3] ), while maximum drawdown
+falls from 27.7% to 19.0%, monotonically to within the noise of the last three grid points, and Sharpe
+risesfrom 1.34 to 1.41: a fixed entry toll, then drawdown almost for free (Figure 3).𝛽=1 is reported as
+the parameter-free point, and it dominates𝛽=0.5 on every axis. The window𝑀 is second-order and
+noisy (at𝛽=1 ,𝑀=10/15/21/31/42→ growth 0.249/0.257/0.258/0.252/0.254, maximum drawdown
+0.230/0.198/0.203/0.240/0.233). By block bootstrap, the dial’s growth cost on DEV, Config A minus
+Config B, is+2.6pp[−0.6,+6.4].
+Which statistic matters, at𝑀=21 ,𝛽=1 : one-sideddownsidemiscoverage 0.2584 / max dd 0.203;
+net-directional 0.2573 / 0.201; two-sided pooled 0.2355 / 0.236; intervalwidth0.2785 / 0.2768 (barely
+acts). Only the signed, one-sided break rate carried usable risk information on DEV.
+Control 1: constant leverage at matched gross.Reaching the dial’s realized gross of 1.83 requires
+a constant multiplier of 0.45, giving growth 0.2611, Sharpe 1.273 andmaximum drawdown 0.2768,
+completely unchanged: the gross cap absorbs any uniform shrink until the cut is very deep. At equal
+14
+20% 23% 25% 28%
+max drawdown (DEV)
+0.250
+0.255
+0.260
+0.265
+0.270
+0.275
+0.280
+0.285ann. net log growth (DEV)maxdd range of the
+40 timing placebos
+0
+0.25
+0.5
+0.75
+1
+1.251.5
+2
+3
+constant-leverage control
+(matched gross 1.83)
+(a) growth vs. drawdown
+0 2
+β
+0.24
+0.25
+0.26
+0.27
+0.28
+0.29ann. net log growth
+(b) a step, then flat
+0 2
+β
+18%
+20%
+22%
+24%
+26%
+28%max drawdown
+(c) drawdown down, Sharpe up
+1.28
+1.30
+1.32
+1.34
+1.36
+1.38
+1.40
+1.42
+1.44
+Sharpe
+Conformal drawdown dial: DEV frontier over the downside-miscoverage weight β
+(recorded leg-3 sweep, M = 21; conformal coverage is 0.7483 at every point)
+Figure 3:Growth–drawdown frontier over the downside-miscoverage weight𝛽 on DEV, with the constant-leverage
+control and the placebo range.
+growth and equal realized leverage the conformal dial buys−7.4pp of drawdown and+0.11 of Sharpe, so
+on DEV the timing, not the average de-levering, is doing the work.
+Control2: circular-shiftplacebo.Circularlyshiftingthedial’sownmultiplierseries40wayspreserves
+the marginal distribution of cuts and destroys the timing. The realized maximum drawdown of 0.2026
+is beaten by0 of 40(null median 0.2768, minimum 0.2234), rank-based𝑝=(0+1)/(40+1)=0.024 ;
+Sharpe is beaten by 3 of 40,𝑝=4/41=0.098 (Phipson and Smyth, 2010). Because the dial, its window
+and this statistic were selected on DEV before this test was run, and the circular-shift null assumes
+shift-invariance of the sequence, these are exploratory placebo ranks rather than confirmatory significance.
+Two results cut the other way and are reported: the realized growth of 0.2584 is beaten by31 of the 40
+shifts(rank-based 𝑝=0.78 ), so the timingcostsgrowth relative to random cutting of the same size, and
+theUlcer index does not improve(0.0698 against a placebo mean of 0.0622). The dial truncates the
+drawdowntail;itdoesnotreducetypicaldrawdownanditdoesnotimprovegrowth. Onthesealedwindow
+it failed its registered criterion (Section 10.3).
+A structural corollary: the identical statistic appliedper assetrather than pooled scores 0.2361 at
+maximum drawdown 0.317 and turnover 9.2, plausibly because a rolling mean of𝑀 binary indicators
+(about 2.6 expected breaks in 21 days) is nearly pure noise. The regime statistic must be pooled across
+assets while the scale statistic stays per asset: the two conformal objects want opposite aggregation.
+8 Robustness and the honesty ledger
+Cost sensitivity.At 0, 5, 10, 20 and 50bps per unit of turnover, Config A scores 0.2916, 0.2845, 0.2775,
+0.2634 and 0.2212 (Sharpe 1.366, 1.336, 1.305, 1.245 and 1.064) and Config B 0.2660, 0.2584, 0.2508,
+0.2357 and 0.1904. On the development window the result is not a cost-model artifact: it survives a
+10× cost increase on eight of the most liquid ETFs listed. The window turnover behind these numbers
+is 14.1×/yr (Config A) and 15.1×/yr (Config B), which reconciles with the 0.71pp step above; the 5.7×
+carried by the development records is a full-sample average diluted by the low-activity pre-2016 years.
+Sealed-window turnover was 16.0×, and the10×-cost claim does not carry over there (Section 10.5).
+15
+Table 11:Gross-matched𝛼sweep on DEV (point estimates).
+𝛼0.05 0.10 0.15 0.20 0.25 0.30 0.35 0.40 0.45
+growth .2676 .2727 .2735 .2756 .2773 .2775 .2804 .2798 .2767
+Financing.The harness charges nothing for the roughly 0.98 units of borrowed exposure carried
+daily. Charging 1/2/4% a year on gross above 1.0 costs Config A 0.98/1.96/3.91pp of growth (0.2845→
+0.2747/0.2650/0.2454) and Config B 0.85/1.70/3.41pp; the comparison againstleveragedpassive books
+is untouched, since those books borrow the same amount (paper/financing_overlay.md).
+Placebo lag.Anextraimplementation lag decays the metric gracefully—+1d 0.2793,+2d 0.2729,
++3d 0.2637,+5d 0.2381,+10d 0.2279—rather than collapsing: the signature of a slow signal, not a
+look-ahead bug.
+𝛼 is flat once leverage is controlled.Re-solving𝜅 at each𝛼 to hold pre-cap gross at 4.25, Sharpe is
+1.30–1.33 throughout and only𝛼≤0.10 degrades growth materially (Table 11). The shallow maximum at
+𝛼=0.35(+0.3pp) wasnotadopted: it buys noise at the cost of a much weaker nominal level.
+Exchangeability.The 21-day overlap makes consecutive nonconformity scores strongly dependent,
+the standard objection to the guarantee here. Restricting calibration to non-overlapping residuals (stride
+=𝐻=21 ,𝑛≈23 ) costs 1.3pp but leaves realized coverage essentially unchanged (0.738 against 0.756
+at nominal 0.75). The overlap therefore does not visibly breakmarginalcoverage on DEV, and the
+overlapping estimator wins, plausibly because its variance reduction beats its effective-sample-size loss.
+We do not claim the finite-sample guarantee holds; Section 11 shows how little marginal coverage says
+about coverage in a given regime.
+Causality.Re-verified line by line after each restructure: the forward target isrolling(h).sum()
+.shift(-h) (an arithmetic sum of daily returns rather than a compounded return, a second-order
+difference identical across every compared configuration); training truncated to labels landed by the
+prediction row; conformal window[𝑡−ℎ−𝑊+1, 𝑡−ℎ+1) ; the expanding anchor at row𝑡 reads
+sr[:t-h+1], recomputed every 21 rows and held stale; regime indicators shifted by𝐻 to their landing
+dates. During the development legs no data after 2021-12-31 was ever loaded andFINAL_EVAL was
+never set; the single unsealing reported in Section 10 happened only after the loop was closed and the
+registration committed.
+A known artifact, disclosed.Both frozen configurations carry predict_tail=False, which
+suppresses a forecast wherever a horizon component’s label has not yet landed and so blanks the end of
+the processed sample—visible as gross leverage dropping to zero in December 2021 in Figure 4. The
+causally correctpredict_tail=Truescores 0.2789 at coverage 0.7487, with 98.9% of asset-day cells
+carrying a non-zero position, under the DEV truncation: itcosts0.6pp there because late December 2021
+was adverse. With the truncation removed the two variants are identical on DEV (0.2813; Section 10) and
+differ only at the end of the sample, where the secondary trades 13 more days. The registration commits to
+reporting both variants on the sealed window.
+8.1 The open threat: a post-hoc four-equity book beats us on development growth
+Four equity ETFs held at 0.5 each—gross 2.0, no forecasting, no conformal prediction, no rebalancing
+beyond drift—compounds at0.2934 on DEV, beating Config A’s 0.2845.We state that without
+qualification.
+The book’s case.It requires nothing: no model, no calibration, no forecast, no dial. If the apparatus of
+Section 3 cannot beat four index funds at2×, the natural reading is that it is a complicated way of being
+16
+2016 2017 2018 2019 2020 2021 2022
+0.0
+0.5
+1.0
+1.5
+2.0post-cap gross leverage
+harness gross cap = 2.0
+Realized post-cap gross leverage on DEV (Config A dashed and drawn on top:
+it is pinned at the cap and would otherwise be hidden; no offset applied)
+Config A (mean 1.960, 98% of days at the cap)
+Config B (mean 1.833, 81% of days at the cap)
+Figure 4:Realized post-cap gross leverage on DEV; Config A dashed and drawn on top, pinned at the cap on 98%
+of days. Under the cap the interval sets the book’s composition, not its size.
+long equities under a leverage cap, and the decomposition partly supports that. The four equity ETFs
+supply+0.237 of Config A’s+0.312 total arithmetic contribution, and Config A’s mean equity position is
++1.23of its+1.57net exposure.This strategy is substantially a long-equity book.
+Why it is not a fair comparator.First, it ispost hoc: which four of the eight assets to hold was chosen
+after seeing DEV. The identical rule on the other block—four commodity ETFs at 0.5—scores0.0892 at a
+68.7% drawdown, and the strongest hindsight equity book available under the caps (QQQ at the cap, the
+rest sharing the remainder) reaches0.3119. The book is not a strategy but a readout of what hindsight
+asset selection is worth here, at least 20pp of annual growth. Second, on DEVits risk is in a different
+regime: maximum drawdown60.9%against 27.7% and 20.3%; Sharpe 0.963 against 1.336 and 1.386;
+Calmar 0.605 against 1.127 and 1.376; volatility 38.2% against 23.4% and 20.1%; worst year−0.133
+against−0.032. A 61% drawdown at2× on borrowed money would in practice mean margin calls and
+forced deleveraging well before the trough, so the book’s paper growth assumes a survivability it does not
+demonstrate. (The development notes estimated this book’s drawdown at “∼35%”; the recomputed figure
+is 60.9%. The estimate was wrong in our favour and we correct it.)
+What we do not claim.Not that we beat the post-hoc book on DEV growth, and not that 0.2845
+against 0.2934 is meaningful in either direction: over six years at 23% volatility one standard error on
+annualised growth is about 0.095 analytically (0.082 by block bootstrap), and the paired difference is
+−0.9pp[−17.7,+22.2] . Version 1 argued that the risk-adjusted separation was large, was not a post-hoc
+selection, and was the comparison that matters when the objective is compounded wealth under a real
+leverage constraint. The registration committed us to reporting this book on the sealed window regardless
+(B7), and there the risk-adjusted defence failed (Section 10.3).
+9 The agentic search process, disclosed
+The configuration space was searched by an autonomous LLM agent across three relay sessions (“legs”)
+against an immutable harness. Approximately200 configurations were scored on DEV;results.tsv
+records 47 rows—33 keep/discard experiment decisions(18 keeps, 15 discards), 2 paper-configuration
+rows, 10 ablation blocks and 2 robustness blocks—with the rest scratch sweeps inside an experiment.
+17
+Roughly 25 structurally distinct hypotheses were tested; legs 2 and 3 rejected eight of nine between them.
+The same workflow extended to this manuscript: the text was drafted with LLM assistance, then reviewed,
+verified line by line against the committed experimental record, and edited by the author, who takes sole
+responsibility for every claim in it.
+Wedisclosethisforthreereasons, anditisastrengthratherthanaconfessiononlybecauseofthethird.
+First, it is a multiple-comparisons exposure.Two hundred configurations on 1,511 days of a single
+universe is a large search. The dominant gain (+7.5pp from the forecast horizon) is mechanistic; the final
+≈1 pp is tuning and should be expected to shrink out of sample (Section 5.3), as the registration predicted.
+The bootstrap intervals of Appendix B are not adjusted for this search.
+Second, the search produced akindof result a smaller one would not.The value is not the+11pp
+of accumulated metric but the rejected structural hypotheses, each with a controlled ablation. Testing
+conformal predictive systems, portfolio-level conformalisation, Mondrian calibration, holding-period
+residuals, per-asset regime dials, epistemic disagreement terms, drift shrinkage and water-filled clipping,
+each with its own control, is roughly a person-month of work. The negative results are a large part of the
+paper.
+Third, and only because of this: the sealed window.An agentic search is only as credible as the
+evaluation it cannot see. Before unsealing,paper/prereg.mdfixed the two commit SHAs, the metrics,
+the nine comparison books including the adversarial one, the sample-size caveat, the mapping from
+outcomes to conclusions, a written prediction that Config A would land materially below 0.2845, and a
+commitment to report both configurations and bothpredict_tail variants. A large disclosed search
+plus a small sealed pre-registered test is a stronger epistemic position than an undisclosed human search of
+the same size, which is the field’s status quo.
+A limitation of the registration itself: the project repository is private, so the registration and its
+ordering relative to the unsealing are verifiable through the committed history, which we can provide
+on request, rather than through a public archive or timestamp. Readers should weight the registration
+accordingly.
+10 Pre-registration and the sealed-window result
+10.1 The registration
+Beforeunsealing, paper/prereg.mdfixed: (1)thetwoconfigurationsbygittagandcommitSHA,neither
+modifiable; (2) the one permitted code change—removing the research-timeDEV_END truncation so the
+walk-forward can proceed—with the runner printing an auditablegit diff against each tag; (3) ten
+metrics, plus six registered diagnostics (per-year growth, per-asset contribution and coverage, the monthly
+distribution, cost sensitivity and the financing overlay); (4) the nine comparison books B1–B9 of Table 13,
+including B7, the post-hoc four-equity book that beat Config A on DEV, registered so that the paper could
+neither quietly drop it nor claim credit for a narrow win, and B8 and B9, the same kind of hindsight object;
+(5) a sample-size caveat: at 23% volatility over about 2.7 years one standard error on annualised growth is
+roughly 0.234/
+√
+2.72≈0.14 , so the window cannot distinguish a growth rate of 0.28 from one of 0.14, or
+from one of 0.42; (6) the mapping from outcomes to conclusions, under which coverage within±0.05 of
+nominal and Config A growth positive and above the unlevered books B1–B3 would confirm the central
+claim, coverage holding while Config A underperformed the leveraged books B4–B6 would be a partial
+refutation, Config B’s drawdown strictly below Config A’s at Sharpe no worse would confirm the dial, and
+a B7 win would be reported in the abstract; and (7) a written prediction that Config A’s growth would land
+materially below its DEV value while coverage transferred.
+18
+Table 12:Sealed window, 2022-01-01 to 2024-09-20 (683 trading days): both configurations and both pre-declared
+variants, as registered.
+A primary B primary A secondary B secondary
+annualised net log growth+0.0847+0.0701 +0.1147 +0.0968
+Sharpe 0.453 0.422 0.565 0.537
+maximum drawdown 36.6% 31.7% 36.6% 31.7%
+Calmar 0.327 0.303 0.410 0.389
+annualised volatility 26.4% 22.8% 26.6% 22.9%
+annualised turnover 16.0×17.6×16.2×17.8×
+mean gross leverage 1.91 1.72 1.95 1.75
+realized coverage/ nominal 0.750.7450 0.7450 0.7485 0.7485
+𝑛coverage cells 5,192 5,192 5,296 5,296
+fraction of asset-day cells with a non-zero position 0.958 0.958 0.977 0.977
+Ulcer index 0.162 0.159 0.161 0.158
+Seven commitments bound the aftermath:one run, executed once and committed verbatim;no
+re-tuning—no CFGchange, no new configuration scored, no variant introduced and no new experiment on
+anywindowafterunsealing;bothconfigurationsreportedunconditionally,intheabstractandtheresults
+table;all nine books reported; the DEV sections frozen before unsealing; negative results published;
+and every number traceable to the single run’s output. The registration explicitly did not permit a second
+universe or snapshot, re-estimation on sealed data, reporting only the better configuration or variant,
+adding a comparison book after the fact,splitting the window and reporting a favourable sub-period,
+or any sanity check against sealed data before the official run.
+One amendment was registered before unsealing (paper/prereg_amendment.md): the DEV_END
+truncation interacts with predict_tail=False, so the full-sample artifacts the sealed run scores
+correspond to DEV growth 0.2813 (A) and 0.2552 (B) rather than the tagged 0.2845 and 0.2584, and
+the primary and secondary variants are identical on DEV. The registered protocol was executed once, on
+2026-07-30 (paper/lockbox_run.py; verbatim output committed aspaper/lockbox_results.txt,
+with the auditable one-line diffs against both tags printed in it).
+10.2 Results
+Table 12 reports both configurations and both pre-declared variants, Table 13 the nine registered books
+from the same run, and Figure 5 the wealth paths of both configurations against the registered books B1
+and B4.
+10.3 Interpretation, per the registered mapping
+1. Coverage is consistent with nominal: the calibration half of the registered criterion.Coverage of
+0.7450 (primary) and 0.7485 (secondary) deviates from nominal by 0.005. Version 1 estimated, by a
+rough effective-sample argument, a standard error of 0.03–0.05; a moving-block bootstrap gives 0.042
+(63-day blocks; 0.029 and 0.052 at 21 and 126 days). The registered±0.05 band is therefore about
+one standard error wide: coverage is consistent with nominal, not established to high precision. And
+coverage transferredpooled over the window; Section 11 shows that it did not transfer through 2022
+itself.
+2. The growthclaim takes the pre-declared partial refutation.Config A primary (+0.0847) ispositive
+19
+Table 13:The nine registered comparison books on the sealed window, scored in the same single run.
+book growth Sharpe max dd Calmar ann. vol gross
+B1 SPY buy & hold (harness-capped at 0.75) +0.0630 0.54 18.7% 0.39 13.5% 0.75
+B2 equal weight, gross 1 +0.0950 0.71 18.8% 0.56 14.9% 1.00
+B3 vol-target risk parity 10% +0.0865 0.90 12.3% 0.74 10.2% 0.83
+B4 equal weight2×+0.1679 0.71 35.3% 0.60 29.7% 2.00
+B5 inverse-vol risk parity2×+0.1576 0.71 35.3% 0.55 27.3% 2.00
+B6 vol-target risk parity 30% +0.1557 0.75 32.6% 0.57 24.9% 1.90
+B74 equity ETFs @ 0.5 (the threat) +0.10790.48 46.2% 0.38 37.0% 2.00
+B8 4 commodity ETFs @ 0.5 (control)+0.17230.64 42.8% 0.58 38.7% 2.00
+B9 equity, QQQ at the per-asset cap +0.1082 0.47 48.4% 0.38 38.6% 2.00
+and beats B1 (+0.0630) but neither B2 (+0.0950) nor B3 (+0.0865), and sits well below the naive
+leveragedbooksB4–B6( +0.156 to+0.168). Theregisteredconfirmationcriterionforthecentralclaim
+is therefore not met. In the registered language:the conformal interval is well calibrated but the sizing
+map does not beat naive leverage out of sampleon this window. The secondary variant (+0.1147)
+beats B1–B3 but remains below B4–B6; per the registration it cannot be promoted to primary. The
+3.0pp gap between the variants is mechanical: the two books are identical except at the end of the
+sample, where the primary’s label-availability rule leaves no position held over the last 29 trading days
+(from 12 August 2024) and the secondary over the last 16, a difference of 13 trading days, recorded as a
+fraction of asset-day cells with a non-zero position of 0.958 against 0.977. Those days were positive
+for the book, and annualising over a 2.7-year window amplifies them; the swing sits well inside the
+registered one-standard-error band of±0.14(±0.16at the realized volatility of 26.4%) and should be
+read as sampling noise around one result, not as two strategies. Paired against the books, the window
+cannot settle signs: Config A minus B4 is−8.3pp[−30.0,+10.8] , minus B2−1.0pp[−22.9,+19.0] ,
+minus B7−2.3pp[−16.4,+12.0](Appendix B).
+3. The drawdown dial is not confirmed under its strict criterion.It reduced maximum drawdown
+(31.7% against 36.6%) and the Ulcer index, but Sharpe fell (0.42 against 0.45), failing the pre-declared
+“Sharpenoworse”condition. TheDEVplaceboevidence(rank-based 𝑝≈0.024 )stands,butthesealed
+window did not reproduce the Sharpe-neutral reduction.
+4. B7 and the selection lesson.B7 again beat Config A primary on growth (+0.1079 against+0.0847),
+reported here and in the abstract as registered. But its mirror control B8, the identical rule on the
+other asset class, scored+0.1723 with a 42.8% drawdown, the best growth of any book. On DEV, B7
+won and B8 lost (+0.2934 against+0.0892); on the sealed window they swapped. That reversal is the
+registered evidence that hindsight asset-class books are regime lottery tickets, not a benchmark the
+method should be required to beat—while noting that the method beat neither of them on growth here.
+5. The registered prediction held.Growth shrank materially from the full-sample DEV anchor
+(0.2813→0.0847 , about 30% of the development value). The registered marginal standard error
+(±0.14) overstates the uncertainty of highly correlated book-against-book differences, which is why we
+now report paired intervals; they confirm that the window cannot sign most comparisons (item 2).
+6. The registered risk-adjusted defence also failed.On the sealed window both configurations rank
+last of the eleven entries in Tables 12 and 13 on both Sharpe (0.45 and 0.42 against 0.47–0.90) and
+Calmar (0.33 and 0.30 against 0.38–0.74), and Config A’s maximum drawdown (36.6%) and Ulcer
+index (0.162) are worse than every passive book B1–B6. The DEV separation on which Section 8.1
+20
+0.5
+0.7
+1
+1.4
+2
+wealth (log scale, sealed-window start = 1)
+Config A/B are flat over the last 29 trading days (from 2024-08-12): the primary variant leaves
+the end of the sample untraded (frac_days_traded 0.9575, as recorded)
+Sealed window 2022-01-01 -- 2024-09-20 (683 trading days): wealth and drawdown
+single pre-registered evaluation; only the registered books B1 and B4 are shown
+Config A  (growth +0.0847, maxdd 36.6%)
+Config B  (growth +0.0701, maxdd 31.7%)
+B1: SPY, harness-capped 0.75×  (growth +0.0630, maxdd 18.7%)
+B4: equal weight 2×  (growth +0.1679, maxdd 35.3%)
+2022-01 2022-05 2022-09 2023-01 2023-05 2023-09 2024-01 2024-05 2024-09
+-30%
+-20%
+-10%
+0%
+drawdown
+Figure 5:Sealed-window wealth (log scale) and drawdown, Config A and Config B (primary variant), with the
+registered books B1 (SPY, harness-capped0.75×) and B4 (equal weight2×).
+rests did not transfer; we report that as a failure of the registered defence, not only of the growth claim.
+7. Areportingerrorwecaught,andwhatremainsofit.ThedevelopmentrecordscarriedDEVturnover
+as 5.7×, a full-sample average; the DEV-window value is 14.1× (Config A) and 15.1× (Config B),
+which reconciles with the cost sensitivity of Section 8. Sealed-window turnover of 16.0×is therefore
+a 13% rise, not the tripling an earlier draft reported. The cost half survives: at 50bps Config A
+returns+1.3%/yr and Config B is negative, so the development window’s claim of surviving a10×
+cost increase does not transfer.
+10.4 How much of the fall is the environment?
+Inverting𝑔=𝐿𝑚− 12𝐿2𝑠2 at𝐿=0.75 on the harness-capped SPY book B1 implies an arithmetic SPY
+mean of 0.176 on DEV and 0.096 on the sealed window, a factor of 0.55 (the DEV value returns uncapped
+SPY’s0.1594, asitshould). ScalingConfigA’sDEVequitycontribution( +0.237 ofits+0.312 arithmetic
+total, Table 5) by that factor, setting its commodity contribution to zero (the realized sealed-window figure
+is+0.015, against+0.075 on DEV), and charging the higher variance drag (volatility23.4%→26.4% )
+predicts+0.095 against the realized+0.085. Most of the fall from the development value is therefore
+environmental. This is arithmetic on committed numbers; no configuration is scored and nothing is re-run.
+It does not explain the shortfall against the passive books, which faced the same environment; Section 11
+takes up the year in which that shortfall arose.
+21
+Table 14:Sealed-window per-year net log
+growth(raw,notannualised),primaryvariants.
+year Config A Config B
+2022−0.288−0.273
+2023 +0.368 +0.314
+2024 (to Sep 20) +0.149 +0.149
+Table 15:Sealed-window cost sensitivity and financing overlay
+(annualised net log growth).
+cost (bps) 0 5 10 20 50
+Config A +0.093 +0.085 +0.077 +0.061 +0.013
+Config B +0.079 +0.070 +0.061 +0.044−0.009
+financing 0% 1% 2% 4%
+Config A +0.085 +0.075 +0.066 +0.047
+Config B +0.070 +0.062 +0.055 +0.039
+10.5 Decomposition, costs and financing
+These are the registered diagnostics, computed by a companion script that reuses the validated harness
+replica, because the DEV diagnostics script is hard-wired to the development window; the script and its
+verbatim output are committed.
+The sealed window is one bad year followed by two good ones (Table 14): neither configuration was
+stopped out, and the 2022 loss sits inside the maximum drawdown already reported.Per asset(Config A:
+annualised net contribution / mean|position| / coverage), every asset contributed positively except USO
+(−0.036), with GLD the largest (+0.033); coverage spans 0.698 (QQQ) to 0.834 (USO) against nominal
+0.75—the energy contracts were over-covered, the equity sleeve slightly under.Monthly distribution
+(𝑛=33 ): Config A mean+0.97%, standard deviation 7.5%, minimum−13.0%, maximum+16.5%, 48%
+positive months, skew about zero; Config B is tighter (standard deviation 7.0%, minimum−11.5%, 55%
+positive, positive skew), so the dial did reshape the distribution even though its Sharpe criterion failed. At
+a favourable large-account financing rate of about 4% (typical retail margin runs far higher), Config A’s
+sealed-window growth is about+4.7%/yr, below every unlevered passive book (Table 15). The strategy as
+configured is not investable, and we do not recommend trading it.
+11 The coverage split: a post-hoc diagnostic
+Status.Figure 6 and Table 16 split the sealed window at the year boundary. Nothing is re-scored: the split
+re-aggregates the committed per-cell series of the same frozen artifact, which reproduce Table 12 before
+they are split (paper/coverage_split.py). The split is post hoc twice over: the split point was chosen
+after seeing the trailing-coverage figure, and the registration explicitly forbadereporting a favourable
+sub-period. We report it because it is unfavourable; both halves are stated, neither is promoted, and no
+registered number changes. That leaves a tension we do not resolve: the most informative observation
+in the paper sits outside its confirmatory protocol. We treat it as a hypothesis generated by the sealed
+window, for a registered follow-up to test.
+What it shows.The marginal 0.745 is not the coverage of a well-calibrated window. It averages
+a 2022 in which realized coverage ran 0.592, nearly sixteen points below nominal and far outside the
+registered band, and a 2023–24 in which it ran 0.842, nine points above. The gap of 0.25 is large against
+block-bootstrapstandarderrorsof0.033and0.022forthehalves(anintervalforthegapof [+0.17,+0.33] ),
+though two caveats apply: no interval here accounts for the choice of split point, and with 63-day blocks
+a 251-day half holds only four blocks, so its standard error is itself rough (21- and 126-day blocks give
+0.038 and 0.030 for 2022). And the under-covered year holds the entire loss:−0.288 of net log growth in
+2022 against+0.517 over the remaining 432 days, or−28.9%/yr and+30.2%/yr annualised. Both rates
+are stated because neither is a rate: each covers a single sub-year regime, each is a post-hoc slice, and the
+22
+0.40
+0.60
+0.80
+1.00realized coverage2022: coverage 0.592 (under) 2023-01-01 to 2024-09-20: coverage 0.842 (over)
+post-hoc split point
+pre-registered ±0.05 band
+nominal 0.75
+pooled realized coverage, trailing 63 days
+whole-window marginal 0.7450 (5,192 valid cells)
+2022-04 2022-07 2022-10 2023-01 2023-04 2023-07 2023-10 2024-01 2024-04 2024-07
+0.6
+0.8
+1
+1.2
+1.4wealth (log, start = 1)
+Config A primary flat from 2024-08-12: the end of the sample is untraded in this variant, as registered
+Config A drawdown against its high-water mark
+B7: four equity ETFs at 0.5, gross 2.0 (growth +0.108/yr, max dd 46.2%)
+Config A primary (growth +0.085/yr, max dd 36.6%)
+Figure 6:The sealed window on one time axis.Top:trailing 63-day realized conformal coverage, pooled across the
+eight assets, against the nominal 0.75 and the pre-registered±0.05 band; the whole-window marginal coverage is
+0.7450 over 5,192 valid cells.Bottom:wealth of Config A (primary) on a log scale, shaded against its high-water
+mark, with the registered four-equity book B7. The under-covered stretch and the drawdown occupy the same
+months, and B7 falls with Config A.
+registered figure for this window is the+8.5%/yr of Table 12.
+What it does not show.The tempting reading is “intervals too narrow, so positions too large”. It does
+not survive the structural fact of Section 4. The gross cap bound on all 251 trading days of 2022 (average
+pre-cap gross 4.50; Table 16), so the book held its maximum exposure throughout and narrow intervals
+could not make it larger. Even a uniform widening sufficient to restore nominal coverage—a factor of
+about 1.39 if 2022’s residuals were roughly Gaussian, since coverage 0.592 corresponds to a half-width of
+0.83 standard deviations against the 1.15 that 0.75 requires—would have divided raw Kelly weights by
+about 1.94 and left average pre-cap gross above 2.3 (the per-asset clip makes that a lower bound), still over
+thecap. Underthecaptheintervalsetscomposition,andthebook’snetequityweightin2022( +1.32 ofits
+2.0 gross) sat between its DEV level (+1.25) and its 2023–24 level (+1.35). A common cause fits at least
+as well. Table 17 shows what happened to the assets themselves: equity volatility nearly doubled in 2022
+whileequitiesfell,soadeliberatelyslowquantileunder-coveredandapersistentlylong-equitybooklost,in
+step with B7 (Figure 6); when volatility fell back in 2023–24, the same slow quantile over-covered. Finer
+composition effects are not ruled out—over the whole window the registered per-asset diagnostics show
+the equity intervals slightly under-covering and the energy intervals over-covering (Section 10.5)—but
+separating them from the common cause requires scoring a recalibrated book, which the registration
+forbids.
+What survives.Marginal coverage, which the registration called its sharpest test, passed a window
+containing a sixteen-point conditional failure. Here the binding cap kept that failure away from the book’s
+size;withoutacap,ascaleunderstatedbyafactorofabout1.4wouldhavemeantpositionsnearlytwicetoo
+large for a year. That marginal validity does not constrain conditional validity is a theorem (Vovk, 2012;
+23
+Table 16:The sealed window split at the year boundary (Config A, primary). Coverage with a 95% block-bootstrap
+interval (63-day blocks, each half resampled within itself) that ignores the post-hoc choice of split point; growth is
+net log growth over the subperiod, raw and annualised; cap: share of traded days on which pre-cap gross exceeded
+2.0; equity: mean net weight of the four equity ETFs in the held book.
+subperiod coverage cells growth ann. cap pre-cap equity
+20220.592[0.53,0.65]2,008−0.288−28.9% 100% 4.50 +1.32
+2023-01-01 to 2024-09-200.842[0.80,0.88]3,184+0.517+30.2% 99.5% 3.72 +1.35
+whole window 0.745[0.66,0.82]5,192 +0.230 +8.5% 99.7% 4.02 +1.34
+DEV, same artifact 99.9% 4.38 +1.25
+Table 17:The environment, from prices alone: annualised realized volatility and arithmetic mean daily return
+(annualised) of SPY, the equal-weight four equity ETFs, and the equal-weight eight ETFs.
+SPY equity, 4 ETFs all 8 ETFs
+period vol mean vol mean vol mean
+DEV 2016–2021 18.0% +17.6% 19.1% +18.4% 15.6% +13.1%
+2021 13.0% +26.1% 13.9% +23.8% 13.3% +21.7%
+2022 24.2%−17.2% 24.8%−17.0% 19.0%−0.7%
+2023-01-01 to 2024-09-20 12.9% +25.2% 13.5% +23.8% 11.8% +17.2%
+Barber et al., 2021); that it can hide an error of this size in an interval used as a scale is one observation.
+Together they motivate, and do not establish, registering conditional coverage—by period, by volatility
+regime and by interval-width quantile, for which methods with group-conditional guarantees exist (Gibbs
+et al., 2025)—as an endpoint for any rule that reads interval width as a scale.
+One reading reconciles the two windows.Under a binding cap only the cross-section of widths
+matters, so a slow estimator’s lag inlevel—the source of 2022’s under-coverage—costs little, while its
+lower variance in theratioshelps. That is consistent with the development-window pattern (slower was
+never worse in point estimate) and with the sealed window (a large level error that did not reach the book’s
+size). If it is right, slow estimators should look worse off the cap, in exactly the regime shifts where their
+lag is largest; that is the first test of the follow-up registration (Section 12).
+12 Limitations
+1. The development-window evidence is cap-conditional and untested off the cap.Every row of
+Tables6and9—includingthe2.1pp/yrtheconformalquantiletakesfromtheplug-instandarddeviation,
+and with it the tail-sensitivity ordering—was measured with the gross cap binding on 97.7% of days
+at the harness’sMAX_GROSS = 2.0 . That is not a side condition: Section 4 derives the candidate
+mechanism from it. Below the Kelly optimum, an estimator that understates𝜎 on the fat-tailed assets
+keeps weight on them, and the book is rewarded for it only because the cap holds it on the rising
+part of the growth-versus-exposure curve. With the cap slack—at gross 1.0, or at 3.0 and 4.5, above
+the pre-cap average of 4.28, where the book would sit near or past its own Kelly peak—that reward
+weakens and, past the peak, reverses sign. The inertness of𝜅, the empirical flatness of𝛼, the failure of
+inverse-volatility tilting, the irrelevance of correlation and the impotence of constant de-levering all
+follow from the same fact. Whether the ordering compresses, survives or inverts is unknown, and it
+cannot be resolved here: the registration forbids scoring any new configuration on any window after
+24
+unsealing, and a gross sweep is a new configuration on every window it touches. Until a registered
+gross-cap sweep is run, the design evidence should be read as conditional on a binding cap of 2.0.
+2. Evidentiary status.The paper’s most informative observation was not registered (Section 11). Its
+developmentcomparisonsareexploratory, selectedfromasearchofroughly200configurations, and11
+of the 13 we could re-derive have bootstrap intervals that include zero; those intervals are not adjusted
+for the search. Disclosure and the sealed window mitigate the search; they do not cure it.
+3. One universe, one snapshot, one development window, one 2.7-year sealed window.External
+validityisuntested;aseconduniversewasforbiddenbythefrozenharnessandisahigh-valuefollow-up.
+4. The per-asset cap sits at its own optimum by luck.Section 5.2’s winsorisation dial optimises at
+𝑐≈0.75 –0.90 and the harness fixes𝑐=0.75 exogenously; at 0.30 or 2.0 the development headline
+would be 4–8pp worse.
+5. 2020 is a large fraction of the development result.Config A’s 2020 growth is+0.667 against
+a six-year mean of 0.285; the second half of DEV is2.6× the first; monthly returns are strongly
+right-skewed (skew+1.49, excess kurtosis+7.65) with a single+36.5% month.
+6. Correlation is ignored.Empirically inert under the binding cap (Section 6.4), but the per-asset
+formulation has no covariance term.
+7. Coverage is checked, not guaranteed.Overlapping 21-day targets break exchangeability, and three
+features of the construction each break the argument on their own: the geometric shrinkage toward
+the expanding anchor, the rolling calibration window, and the conformal-derived ensemble weights.
+Marginal coverage is undamaged on both windows (0.7483 and 0.7450), and the non-overlapping
+version behaves the same on DEV, but per-asset coverage spans 0.690–0.781 on DEV, and coverage by
+year spans 0.592–0.842 on the sealed window.
+8. No live trading claim.The harness charges 5bps of turnover and nothing else; the financing overlay
+adds a borrowing estimate; neither addresses market impact, borrow availability, margin-facility
+withdrawal risk or execution. We are not recommending that this be traded.
+9. A zero risk-free rate is assumed throughout.Sharpe and Calmar are computed on raw rather than
+excessreturns,andfinancingentersonlyasanex-postoverlay. ThatisclosetoharmlessonDEV,where
+short rates were near zero, but it flatters every sealed-window risk-adjusted number, since cash paid
+4–5% over 2022–2024.
+10. The registered risk-adjusted defence did not survive the sealed window.Section 8.1 defends the
+method on risk-adjusted rather than growth grounds, and that defence rests on DEV separation that did
+not transfer (Section 10.3, item 6).
+The follow-up registration, in order: (1) a gross-cap sweep—slack, binding, and above the pre-cap
+average; (2) conditional-coverage endpoints by period, volatility regime and width quantile, with𝑞2-
+versus-realized-variance diagnostics and a recalibrated-width control book that separates composition
+fromcommoncause;(3)aseconduniverse;(4)risk-matchedratherthangross-matched 𝜎comparisons;(5)
+the specification with𝑧 corrected; (6) constant-scale and shuffled-width control books; and (7) validation
+of the price series against an independent vendor—all with the bootstrap design of Appendix B fixed in
+advance.
+25
+13 Conclusion
+In one pre-registered eight-ETF experiment, marginal calibration transferred out of sample and the
+economic value of the sizing rule did not: the capped Kelly-inspired rule earned less than the passive
+benchmarks and ranked last among them on Sharpe and Calmar, while its slowly varying conformal
+quantile held near-nominalmarginalcoverage. A post-hoc split shows that the marginal figure averaged a
+sixteen-point under-coverage in 2022 with a later over-coverage. The under-covered year held the entire
+loss, but the binding cap rules out the simple oversizing story, and a regime that moved both coverage and
+equity returns explains the co-location at least as well. The lesson we draw is narrower than a causal one:
+an acceptance test on marginal coverage can pass an interval-as-scale rule through a large conditional
+failure, so conditional coverage should be registered alongside it, a recommendation this experiment
+motivates rather than establishes.
+The development-window evidence runs against the usual advice for conformal prediction on time
+series: slow, unweighted, per-asset, tail-robust quantiles out-grew every locally adaptive alternative tested,
+including the methods designed for non-exchangeability, and a plug-in standard deviation by 2.1pp/yr at
+matched leverage; the same intervals, read as a pooled downside break rate, cut development drawdown at
+better Sharpe and survived a constant-leverage control and a timing placebo. That evidence is exploratory,
+mostly within bootstrap noise contrast by contrast, and measured only under a binding gross cap of 2.0; on
+the sealed window the drawdown control failed its registered criterion. The candidate explanation—a
+scale estimator consumed by a nonlinear sizing map is charged for its own estimation variance, while
+under a binding cap its lag in level costs little—is a hypothesis for the follow-up registration, not a finding
+of this one.
+A Experiment ledger and reproduction
+The full record isresults.tsv (47 rows) andNOTES.md, both committed on branchautoresearch/
+jul30 of the project repository, which—along with the frozen data snapshot, the pre-registration, the
+verbatim sealed-window output and every post-registration script—is available from the author on request.
+With the repository in hand:
+git checkout best-leg3 # or paper-config-drawdown
+uv run python train.py # ~7 s
+uv run python paper/diagnostics.py # replays both tags
+paper/diagnostics.py loads each configuration from its git tag rather than the working tree, re-
+implements the harness’s position transform, andaborts unless that re-implementation reproduces
+prepare.evaluate_positions exactly. It assertsDEV_END == 2021-12-31 before doing anything
+and never touches sealed data. A do-not-re-run list of every device tested and rejected closes each leg’s
+section inNOTES.md; Sections 6 and 8 report the substantive entries.
+B Post-registration analyses
+Everycomputationmadeafterthesingleregisteredrunislistedhere,withwhatitmayandmaynotchange.
+None scores a configuration for the first time, none setsFINAL_EVAL, and each asserts that the series it
+uses reproduce the officially recorded numbers before reporting anything.
+•paper/lockbox_diagnostics.py : the registered diagnostics (per-year, per-asset, monthly, costs,
+financing; registration items 11–16).
+26
+Table 18:Development window: paired growth differences (pp/yr) with 95% moving-block-bootstrap intervals at
+three block lengths.
+contrast diff𝐿=21𝐿=63𝐿=126
+Config A−Config B+2.6[−1.8,+7.5] [−0.6,+6.4] [−0.2,+5.8]
+𝜎, leg 2: conformal−sd (matched)+2.1[−0.4,+4.7] [−0.5,+5.0] [−0.4,+4.6]
+𝜎, leg 3: conformal−sd+3.5[−0.1,+7.6] [−0.8,+9.3] [−0.9,+9.6]
+𝜎, leg 3: conformal−mean abs. dev.+1.3[−1.1,+4.0] [−1.5,+4.8] [−1.4,+5.0]
+𝜎, leg 3: mean abs. dev.−sd+2.2[+0.5,+4.1] [+0.1,+4.8] [+0.1,+4.9]
+𝜎, leg 3: rolling−frozen conformal+1.5[−1.9,+4.9] [−2.0,+5.1] [−2.2,+5.2]
+𝜎, leg 3: frozen conformal−rolling sd+1.9[−3.3,+7.5] [−4.3,+9.5] [−5.1,+10.7]
+adaptive conformal inference−base−1.6[−4.9,+1.6] [−5.1,+1.6] [−4.6,+0.9]
+recency-weighted−base−1.4[−4.2,+1.4] [−4.3,+1.5] [−3.7,+1.1]
+asymmetric CQR-style−base−1.6[−3.9,+0.5] [−3.6,+0.2] [−3.6,+0.2]
+Mondrian (asset class)−base−2.4[−6.2,+0.8] [−6.8,+1.1] [−6.9,+1.3]
+pooled (all eight)−base−2.5[−5.6,+0.2] [−6.6,+0.7] [−6.8,+0.7]
+holding-period residual,𝐻𝑠 =5−base−0.7[−2.2,+0.7] [−2.0,+0.5] [−1.9,+0.3]
+conformal predictive decision rule−base−3.6[−7.1,−0.2] [−6.7,−0.4] [−6.2,−1.0]
+Config A−B4 (equal weight2×)+7.2[−13.4,+30.9] [−12.3,+35.2] [−10.7,+34.3]
+Config A−B5 (inverse-vol2×)+6.2[−10.2,+25.7] [−9.6,+28.9] [−8.3,+28.3]
+Config A−B7 (4 equity @ 0.5)−0.9[−18.4,+21.0] [−17.7,+22.2] [−16.4,+20.9]
+•paper/lockbox_figures.py : the sealed-window wealth figure (Figure 5); only registered books are
+drawn.
+•paper/coverage_split.py : theyearsplitofSection11. Posthoc,andintensionwiththeregistration’s
+prohibition on sub-period reporting; reported because it is unfavourable.
+•paper/icaif-camera-ready/make_figure.py: Figure 6.
+•paper/postreg_uncertainty.py : the block-bootstrap intervals of this paper, the gross-cap and
+equity-weight statistics of Table 16, and the price-only environment of Table 17. For the development
+contrasts it re-derives, from git, the daily series of 18 arms scored before unsealing and recorded in
+results.tsv, and asserts each against its ledger value (to10−6 for six-decimal entries, to5×10 −5 for
+four-decimal ones); the only configuration values it sets select ablation arms whose results the ledger
+already records. It also reproduces the paper’s “pre-cap gross 4.28, cap binding on 97.7% of DEV days”
+from the tagged artifact.
+•The growth attribution of Section 10.4 is arithmetic on committed numbers.
+Bootstrap design.Circular moving-block bootstrap; for paired growth differences the statistic is
+252×the mean daily difference inlog(1+𝑟) , which equals the difference in reported growth exactly; for
+coverage, days are resampled in blocks with all eight assets of a day kept together, and the statistic is
+the pooled ratio of covered to valid cells. 10,000 resamples, fixed seed, common resampled days across
+development contrasts, 95% percentile intervals; block lengths of 21, 63 and 126 trading days, with 63
+(three forecast horizons) as the headline.
+27
+Table 19:Sealed window (Config A primary): realized coverage and paired growth differences against each
+registered book, with 95% moving-block-bootstrap intervals. Coverage intervals for the halves ignore the post-hoc
+choice of split point.
+quantity value𝐿=21𝐿=63𝐿=126
+coverage, whole window 0.7450[0.69,0.80] [0.66,0.82] [0.64,0.84]
+coverage, 2022 0.5916[0.52,0.67] [0.53,0.65] [0.54,0.65]
+coverage, 2023-01-01 to 2024-09-20 0.8417[0.80,0.89] [0.80,0.88] [0.81,0.87]
+coverage gap, later minus 2022+0.251[+0.16,+0.34] [+0.17,+0.33] [+0.19,+0.32]
+growth, Config A−Config B (pp)+1.5[−5.5,+8.6] [−4.1,+6.9] [−4.1,+7.2]
+growth, Config A−B1 (pp)+2.2[−15.6,+20.8] [−15.0,+17.8] [−16.2,+19.1]
+growth, Config A−B2 (pp)−1.0[−21.2,+19.7] [−22.9,+19.0] [−25.5,+19.4]
+growth, Config A−B3 (pp)−0.2[−22.4,+22.4] [−22.0,+19.9] [−25.6,+20.8]
+growth, Config A−B4 (pp)−8.3[−28.1,+10.7] [−30.0,+10.8] [−31.0,+9.0]
+growth, Config A−B5 (pp)−7.3[−25.4,+10.0] [−28.0,+9.8] [−29.5,+8.6]
+growth, Config A−B6 (pp)−7.1[−24.9,+10.1] [−28.0,+10.0] [−29.9,+9.3]
+growth, Config A−B7 (pp)−2.3[−18.8,+14.8] [−16.4,+12.0] [−12.5,+8.7]
+growth, Config A−B8 (pp)−8.8[−52.3,+33.8] [−54.4,+33.6] [−56.2,+26.6]
+growth, Config A−B9 (pp)−2.3[−20.3,+16.4] [−18.1,+14.1] [−15.4,+11.7]
+C Additional development-window figures
+-20% -10% 0% 10% 20% 30% 40%
+monthly net return
+0
+2
+4
+6
+8
+10
+12
+14
+16months
+Config A (metric-best (growth))
+mean +2.61%, sd 6.87%, min -11.93%
+-20% -10% 0% 10% 20% 30% 40%
+monthly net return
+Config B (drawdown dial, β = 1)
+mean +2.34%, sd 5.81%, min -11.93%
+DEV monthly net return distribution (n = 72)
+Figure 7:DEV monthly net return distributions, Config A and Config B (𝑛=72).
+28
+2016 2017 2018 2019 2020 2021
+0%
+20%
+40%
+60%
+80%ann. net log growth
+Per-year DEV net log growth (all series scored by the same harness: 1-day lag, caps, 5 bps)
+Config A
+Config B
+SPY (harness-capped 0.75×)
+4 equity ETFs @ 0.5 (2×, post-hoc)
+Figure 8:Per-year DEV net log growth: Config A, Config B, harness-capped SPY, and the post-hoc four-equity
+book B7, all scored by the same harness.
+SPY QQQ DIA MDY GLD SLV USO DBC
+0.00
+0.02
+0.04
+0.06
+0.08
+0.10ann. net contribution
+equity ETFs commodity ETFs
+Per-asset annualised net contribution to DEV growth
+Config A
+Config B
+Figure 9:Per-asset annualised net contribution to DEV growth, Config A and Config B.
+29
+References
+D. H. Bailey and M. López de Prado. The deflated Sharpe ratio: correcting for selection bias, backtest
+overfitting, and non-normality.The Journal of Portfolio Management, 40(5):94–107, 2014.
+D. H. Bailey, J. M. Borwein, M. López de Prado, and Q. J. Zhu. The probability of backtest overfitting.
+Journal of Computational Finance, 20(4), 2017. doi: 10.21314/JCF.2016.322.
+R. F. Barber, E. J. Candès, A. Ramdas, and R. J. Tibshirani. The limits of distribution-free conditional
+predictive inference.Information and Inference: A Journal of the IMA, 10(2):455–482, 2021. doi:
+10.1093/imaiai/iaaa017.
+R. F. Barber, E. J. Candès, A. Ramdas, and R. J. Tibshirani. Conformal prediction beyond exchangeability.
+The Annals of Statistics, 51(2):816–845, 2023. doi: 10.1214/23-AOS2276.
+S. Browne. Survival and growth with a liability: optimal portfolio strategies in continuous time.
+Mathematics of Operations Research, 22(2):468–493, 1997.
+J. S. Chan et al. MLE-bench: evaluating machine learning agents on machine learning engineering.
+arXiv:2410.07095 (ICLR 2025), 2024.
+I. Gibbs and E. Candès. Adaptive conformal inference under distribution shift. InAdvances in Neural
+Information Processing Systems 34, 2021.
+I. Gibbs, J. J. Cherian, and E. J. Candès. Conformal prediction with conditional guarantees.Journal
+of the Royal Statistical Society Series B: Statistical Methodology, 87(4):1100–1126, 2025. doi:
+10.1093/jrsssb/qkaf008.
+S. J. Grossman and Z. Zhou. Optimal investment strategies for controlling drawdowns.Mathematical
+Finance, 3(3):241–276, 1993.
+N. Jegadeesh and S. Titman. Returns to buying winners and selling losers: implications for stock market
+efficiency.The Journal of Finance, 48(1):65–91, 1993.
+Y. Jia and B. Han. Portfolio selection with adaptive conformal prediction. InTrends and Applications
+in Knowledge Discovery and Data Mining: PAKDD 2026 Workshops and Doctoral Consortium,
+volume 16603 ofLecture Notes in Computer Science, pages 312–323, Singapore, 2026. Springer. doi:
+10.1007/978-981-92-2014-4_25.
+A. Karpathy. autoresearch: AI agents running research on single-GPU nanochat training automatically.
+GitHub repository, MIT licence, 2026. URLhttps://github.com/karpathy/autoresearch.
+M. Kato. Conformal predictive portfolio selection. arXiv:2410.16333, 2024.
+J. L. Kelly, Jr. A new interpretation of information rate.Bell System Technical Journal, 35(4):917–926,
+1956.
+C. Lu, C. Lu, R. T. Lange, J. Foerster, J. Clune, and D. Ha. The AI Scientist: towards fully automated
+open-ended scientific discovery. arXiv:2408.06292, 2024.
+L. C. MacLean, W. T. Ziemba, and G. Blazenko. Growth versus security in dynamic investment analysis.
+Management Science, 38(11):1562–1585, 1992.
+30
+L. C. MacLean, E. O. Thorp, and W. T. Ziemba. Long-term capital growth: the good and bad properties
+of the Kelly and fractional Kelly capital growth criteria.Quantitative Finance, 10(7):681–687, 2010.
+L. C. MacLean, E. O. Thorp, and W. T. Ziemba, editors.The Kelly Capital Growth Investment Criterion:
+Theory and Practice. World Scientific, 2011.
+malik1641. Stocks and ETFs prices [data set; snapshot 2024-09-25; prices sourced from
+Yahoo Finance]. Kaggle, 2024. URL https://www.kaggle.com/datasets/malik1641/
+stocks-and-etfs-prices.
+M. Noguer i Alonso. Conformal portfolio optimization. SSRN working paper 5011129, 2024a.
+M. Noguer i Alonso. Conformal prediction in finance. SSRN working paper 4939336, 2024b.
+B. Phipson and G. K. Smyth. Permutation p-values should never be zero: calculating exact p-values when
+permutations are randomly drawn.Statistical Applications in Genetics and Molecular Biology, 9(1):
+Article 39, 2010.
+R. D. Ray. ARTEMIS: a neuro symbolic framework for economically constrained market dynamics.
+arXiv:2603.18107, 2026.
+Y. Romano, E. Patterson, and E. J. Candès. Conformalized quantile regression. InAdvances in Neural
+Information Processing Systems 32, 2019.
+Q. Sun and S. Boyd. Distributional robust Kelly gambling: optimal strategy under uncertainty in the
+long-run. arXiv:1812.10371, 2018.
+V. Vovk. Conditional validity of inductive conformal predictors. InProceedings of the Asian Conference
+on Machine Learning, volume 25 ofPMLR, pages 475–490, 2012.
+V. Vovk. An optimality property of the Bayes–Kelly algorithm. arXiv:2402.03035, 2024.
+V.VovkandC.Bendtsen. Conformalpredictivedecisionmaking. InProceedings of the Seventh Workshop
+on Conformal and Probabilistic Prediction and Applications, volume 91 ofPMLR, pages 52–62, 2018.
+V. Vovk, D. Lindsay, I. Nouretdinov, and A. Gammerman. Mondrian confidence machine. On-line
+compression modelling project working paper, Royal Holloway, University of London, 2003.
+V. Vovk, A. Gammerman, and G. Shafer.Algorithmic Learning in a Random World. Springer, 2005.
+Second edition 2022.
+V. Vovk, J. Shen, V. Manokhin, and M. Xie. Nonparametric predictive distributions based on conformal
+prediction.Machine Learning, 108(3):445–474, 2019.
+C. Xu and Y. Xie. Conformal prediction interval for dynamic time-series. InProceedings of the 38th
+International Conference on Machine Learning, volume 139 ofPMLR, pages 11559–11569, 2021.
+31

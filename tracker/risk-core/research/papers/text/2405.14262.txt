@@ -1,0 +1,501 @@
+arXiv 2405.14262  https://arxiv.org/abs/2405.14262
+
+OPTIMISING SUPERTREND PARAMETERS USING
+BAYESIAN OPTIMISATION FOR MAXIMISING PROFIT AND OTHER METRICS
+Abdul Rahman
+Department of Mathematics
+Indian Institute of Technology,Madras
+IITM,Chennai,India
+ma22c001@smail.iitm.ac.in
+May 24, 2024
+ABSTRACT
+This thesis investigates the potential of Bayesian optimization (BO) to optimize the atr multiplier and
+atr period -the parameters of the Supertrend indicator for maximizing trading profits across diverse
+stock datasets. By employing BO, the thesis aims to automate the identification of optimal parameter
+settings, leading to a more data-driven and potentially more profitable trading strategy compared to
+relying on manually chosen parameters. The effectiveness of the BO-optimized Supertrend strategy
+will be evaluated through backtesting on a variety of stock datasets.
+Keywords Trading Strategy · Supertrend Indicator · Bayesian optimisation · Maximising Profit Metric
+1 Introduction
+Unveiling Profit Potential through Supertrend Parameter Optimization with Bayesian Techniques
+The financial markets, with their intricate dynamics and perpetual evolution, have long captivated scholars and
+practitioners alike. While the quest for a foolproof prediction method remains an elusive ideal, technical analysis offers
+a valuable toolkit for navigating market trends and identifying potential entry and exit points for investment strategies.
+Within this realm, the Supertrend indicator has emerged as a popular choice for its simplicity and effectiveness in
+capturing prevailing market directions.
+The Supertrend indicator, built upon the foundation of the Average True Range (ATR), provides visual cues regarding
+the dominant market trend. It constructs a dynamic line, incorporating a user-defined multiplier, that adapts to market
+volatility. When the price action consistently pushes above the Supertrend line, it suggests a potential uptrend, prompting
+the adoption of long positions. Conversely, a price consistently trading below the line signals a possible downtrend,
+favoring short positions.
+Despite its apparent utility, the efficacy of the Supertrend indicator hinges on two crucial parameters: the atr_multiplier
+and the atr_period. The atr_multiplier dictates the sensitivity of the Supertrend line to price fluctuations. A higher
+multiplier leads to a steeper line, potentially generating fewer but potentially larger signals, while a lower multiplier
+creates a smoother line with potentially more frequent but smaller signals. The atr_period, on the other hand, influences
+the responsiveness of the Supertrend line to recent price movements. A shorter period captures recent trends quicker but
+might be more susceptible to volatility, while a longer period provides a more smoothed-out trend but might lag behind
+rapid price changes.
+Striking an optimal balance between these parameters is critical for maximizing a strategy’s effectiveness. However,
+manually testing every possible combination is not only time-consuming but also inefficient, especially as the number
+of parameters increases. This is where Bayesian optimization (BO) enters the scene as a powerful and sophisticated
+optimization technique.
+arXiv:2405.14262v1  [q-fin.TR]  23 May 2024
+Bayesian optimization is a data-driven approach to efficiently exploring a vast parameter space to identify the settings
+that yield the best results. Unlike traditional methods such as grid search or random search, BO leverages past
+evaluations to prioritize promising areas of the search space.(Patil and Gala [2022a]) This iterative process allows BO
+to converge on the optimal parameter combination significantly faster, making it an ideal choice for fine-tuning trading
+strategies.(Au and Keung [2023])
+This thesis delves into the potential of exploiting Bayesian optimization to optimize the atr_multiplier and atr_period of
+the Supertrend indicator for maximizing trading profits across a diverse set of stock datasets. Also, aiming to contribute
+to the discourse surrounding algorithmic trading by exploring:
+• The theoretical underpinnings of the Supertrend indicator and its role within the technical analysis framework.
+• The critical role of hyperparameter tuning in trading strategies and the inherent limitations of traditional
+optimization methods.
+• The fundamental principles of Bayesian optimization and its advantages in efficiently navigating large
+parameter spaces.
+• The application of BO to optimize Supertrend parameters for various stock datasets, encompassing both
+domestic and international markets.
+• A comprehensive evaluation of the optimized strategies’ performance using established metrics like profit
+factor and maximum drawdown.
+By harnessing the combined strengths of the Supertrend indicator and Bayesian optimization, this thesis aspires to
+unveil the potential for enhanced profitability within the algorithmic trading landscape. Further explored whether BO
+can unlock the hidden potential within the Supertrend framework, potentially leading to strategies that consistently
+outperform the baseline. However, it is crucial to acknowledge that the pursuit of maximum profits inherently involves
+risk management considerations. Also addressesing these trade-offs and emphasizing the importance of backtesting
+and risk mitigation strategies before deploying any optimized strategy in a real-world trading environment.([Patil and
+Gala, 2022b]). This formal introduction sets the stage for our exploration. In the subsequent sections, the thesis delves
+deeper into the relevant scholarly literature surrounding the Supertrend indicator and Bayesian optimization, establishes
+the problem statement and data considerations, and outlines the methodologies employed to optimize and evaluate the
+Supertrend-based strategies.
+2 Literature review
+2.1 Supertrend Indicator: A Trend Following Powerhouse
+The Supertrend indicator has carved a niche in the realm of technical analysis as a straightforward yet effective tool for
+identifying trends. Built upon the foundation of the Average True Range (ATR), it constructs a dynamic line that adapts
+to market volatility, offering visual cues regarding the prevailing market direction (Sahoo et al. [2017]).
+2.1.1 Calculation
+The Supertrend calculation incorporates two user-defined parameters:
+• atr_multiplier : This factor determines the sensitivity of the Supertrend line to price fluctuations. A higher
+multiplier leads to a steeper line, potentially generating fewer but potentially larger signals.This is a constant
+value that traders and investors employ to push the indicator to be more or less sensitive to price movements.
+Generally, whole numbers are used, but the multiplier can be made more specific to fit the trading strategy
+• atr_period : This parameter influences the responsiveness of the Supertrend line to recent price movements. A
+shorter period captures recent trends quicker but might be more susceptible to volatility, while a longer period
+provides a more smoothed-out trend but might lag behind rapid price changes.The ATR period is calculated
+based on the highest and lowest prices, as well as the closing price of the asset over a specified time frame.
+The Supertrend line (ST) is calculated using the following formula (Bhuiyan et al. [2016]):
+Supertrend = (High + Low)2 + (AT R_M ultiplier) × AT R_P eriod
+2
+• High and low: These are the highest and lowest prices of the asset during a specified time frame.
+2.1.2 Advantages
+• Simplicity: The Supertrend indicator boasts a straightforward calculation, making it readily interpretable for
+traders of all experience levels [Sahoo et al., 2017].
+• Trend Identification: It’s dynamic nature allows for effective identification of both uptrends (price consistently
+above the Supertrend line) and downtrends (price consistently below the Supertrend line) [Bhuiyan et al.,
+2016].
+• Reduced False Signals: Compared to some other trend-following indicators, the Supertrend may generate
+fewer false signals due to its incorporation of the ATR, which helps account for volatility .
+2.1.3 Limitations:
+• Lagging Indicator: The Supertrend indicator, like most technical indicators, is inherently backward-looking,
+relying on past price data to generate signals. This can lead to delayed entry and exit points, particularly during
+volatile market environments [Sahoo et al., 2017]
+• Whipsaws: During periods of increased market volatility, the Supertrend indicator may generate whipsaws,
+where the price oscillates above and below the Supertrend line, leading to unnecessary trades and potential
+losses.
+• Parameter Sensitivity: The Supertrend indicator’s performance is heavily influenced by the chosen atr multiplier
+and atr period. Finding the optimal settings can be challenging and may require experimentation or optimization
+techniques [Bhuiyan et al., 2016].
+2.1.4 Hyperparameter Optimization:
+Fine-Tuning for Enhanced Performance
+The realm of algorithmic trading hinges on the crucial concept of hyperparameter tuning. These parameters, distinct
+from the data itself, govern how a trading strategy operates. In the context of the Supertrend indicator, the atr multiplier
+and atr period are prime examples of hyperparameters. Identifying their optimal settings is paramount for maximizing a
+strategy’s effectiveness [Osório et al., 2020].
+Traditional optimization methods, such as grid search or random search, can be employed to explore the parameter
+space. However, these methods can become computationally expensive, especially as the number of hyperparameters
+increases.[Greenblatt et al., 2016]
+Bayesian Optimization (BO) emerges as a powerful alternative. This data-driven approach efficiently navigates large
+parameter spaces by leveraging past evaluations to prioritize promising areas for exploration. This iterative process
+allows BO to converge on the optimal parameter combination significantly faster than traditional methods .[Greenblatt
+et al., 2016]
+2.2 Bayesian Optimization: A Data-Driven Path to Optimal Parameters
+In the realm of algorithmic optimization, Bayesian optimization (BO) emerges as a powerful and sophisticated technique.
+It transcends the limitations of traditional grid search or random search methods by leveraging a probabilistic approach
+to efficiently navigate vast parameter spaces. Unlike its brute-force counterparts, BO prioritizes promising areas of
+exploration based on past evaluations, leading to a faster convergence on the optimal parameter combination.
+Definition:
+Bayesian optimization can be defined as an iterative process for optimizing an unknown objective function by building
+a probabilistic model of its behavior. It utilizes a combination of:
+• Gaussian Process (GP): A flexible probabilistic model that captures the relationship between input parameters
+(hyperparameters) and the resulting objective function values.
+• Acquisition Function: This function guides the search process by balancing exploration (discovering new
+areas) and exploitation (focusing on promising areas) based on the current understanding of the objective
+function. Common acquisition functions include Expected Improvement (EI) and Upper Confidence Bound
+(UCB).
+3
+2.2.1 Algorithm:
+1. Initialization: Choose an initial set of parameter combinations and evaluate the objective function for each.
+2. Model Building: Train a Gaussian Process model based on the collected data (hyperparameters and corre-
+sponding objective function values).
+3. Acquisition Function Optimization: Utilize the acquisition function to identify the next most promising
+parameter combination to evaluate.
+4. Evaluation: Evaluate the objective function for the chosen parameter combination.
+5. Iteration: Update the Gaussian Process model with the new data point and repeat steps 3-5 until a stopping
+criterion is met (e.g., reaching a maximum number of evaluations).
+2.2.2 Benefits for Finance and Parameter Optimization:
+• Efficiency: Compared to traditional methods, BO significantly reduces the number of evaluations needed to
+reach the optimal parameter settings, especially for problems with high-dimensional parameter spaces.
+• Global Optimization: BO avoids getting stuck in local optima by balancing exploration and exploitation during
+the search process.
+• Data-Driven Approach: BO leverages past evaluations to improve its understanding of the objective function
+and guide the search towards better solutions.
+2.2.3 Importance in Algorithmic Trading:
+• Hyperparameter Tuning: BO excels at optimizing hyperparameters in algorithmic trading strategies, such as
+the atr_multiplier and atr_period of the Supertrend indicator. By finding the optimal settings, BO can
+potentially enhance the strategy’s performance and profitability.
+• Portfolio Allocation: BO can be applied to optimize portfolio allocation across various assets, balancing risk
+and return based on historical data and market conditions.
+• Risk Management: BO can be used to optimize risk management parameters, such as stop-loss and take-profit
+levels, helping to mitigate potential losses.
+3 Problem Statement
+This research thesis investigates the potential of leveraging Bayesian optimization (BO) to optimize the
+performance of the Supertrend indicator for maximizing trading profits across a diverse set of stock datasets.
+Specifically, aim is to determine whether BO can identify the optimal atr_multiplier and atr_period
+parameters for the Supertrend indicator, leading to a more effective strategy for generating buy and sell signals.
+3.1 Data Description
+The research will employ historical price data encompassing a mix of domestic and international stocks to evaluate the
+effectiveness of the BO-optimized Supertrend strategy. The chosen datasets include:
+• Nifty 50: This index represents the top 50 companies listed on the National Stock Exchange of India.
+• Infosys Limited: A leading Indian multinational information technology company.
+• Hindustan Unilever Limited: An Indian multinational consumer goods company.
+• Microsoft Corporation: A multinational technology company headquartered in the United States.
+• NVIDIA Corporation: An American multinational technology company that designs graphics processing units
+(GPUs) for the gaming and professional markets.
+3.2 Data Acquisition
+The historical price data for these stocks will be acquired from a reliable financial data source through an appropriate
+API or service like Yahoo Finance. The specific timeframe for the data will be determined based on data availability
+and the research objectives. Daily, weekly, or monthly data can be considered depending on the chosen trading strategy
+and desired level of granularity.
+4
+3.3 Data Preprocessing
+Essential data cleaning and preprocessing steps will be undertaken before applying the Supertrend indicator and BO.
+These steps may include:
+• Missing Value Handling: Missing price data points will be addressed using appropriate techniques like forward
+fill, interpolation, or data removal if the missing data is significant.
+• Normalization (Optional): Depending on the chosen BO library and objective function, the price data may need
+normalization (e.g., scaling to a range of 0-1) to ensure all features contribute equally during optimization.
+3.4 Trading Strategy based on Supertrend
+The trading strategy will utilize the Supertrend indicator to generate buy and sell signals:
+Strategy
+• Buy Signal: A long position is initiated when the closing price of a stock crosses above the Supertrend
+line (Upper Band - UB). This suggests a potential uptrend.
+• Sell Signal: A short position is entered (or a long position is exited) when the closing price crosses
+below the Supertrend line (Lower Band - LB). This indicates a potential downtrend.
+3.5 Additional Considerations
+By implementing BO, this research aims to identify the optimal atr multiplier and atr period values for the Supertrend
+indicator within each dataset. This optimization process can potentially lead to a more robust and profitable trading
+strategy while acknowledging the importance of risk management principles.
+3.6 Bayesian Optimization for Supertrend Parameter Tuning
+3.6.1 Functionality
+This section explores the application of Bayesian optimization (BO) for identifying optimal parameter settings for the
+atr_multiplier and atr_period of the Supertrend indicator. BO operates iteratively:
+1. Search Space Definition: The permissible range of values for both atr_multiplier and atr_period is
+defined, creating a well-defined search space for exploration.
+2. Objective Function: A crucial element is the objective function, which evaluates the performance of a
+Supertrend strategy based on chosen parameters. It takes historical price data and parameter values, generates
+buy/sell signals based on the Supertrend indicator, and calculates a performance metric (e.g., profit factor).
+3. Initial Exploration & Iterative Improvement:BO begins by evaluating the objective function for a predefined
+number of initial parameter combinations. This initial exploration informs a Gaussian Process model, which
+captures the relationship between parameters and objective function values. As evaluations accumulate, the
+model is refined, guiding the exploration process.
+4. Acquisition Function & Stopping Criteria: An acquisition function prioritizes the selection of the next
+parameter combination for evaluation, balancing exploration and exploitation. Common functions include
+Expected Improvement (EI) and Upper Confidence Bound (UCB). The process continues until a stopping
+criterion (e.g., maximum evaluations or desired performance) is met.
+4 Methodology:
+4.1 Implementing the BO-Optimized Supertrend Strategy
+This section delves into the methodological approach for applying the BO-optimized Supertrend strategy. Further,
+outlining the algorithmic steps and Pseudocode for key functionalities.
+5
+Methodology: Complete Algorithm
+Define the target stock list, such as Nifty 50, Infosys, etc.
+Obtain historical price data for each stock using a financial data API, such as Yahoo Finance.
+Preprocess the data by handling missing values and performing normalization if needed.
+Supertrend Indicator Function
+Define a function calculate_supertrend(high, low, close, atr_multiplier, atr_period)
+Calculate the Average True Range (ATR) using the chosen atr_period.
+Initialize the Supertrend line with the first period’s data.
+For each remaining data point:
+Update the Supertrend line based on the closing price relative to the previous Supertrend and ATR values.
+Bayesian Optimization Function
+Define a function to optimize Supertrend parameters (data, objective function)
+Utilize a BO library (e.g., sci-kit-optimize) to define the search space for atr multiplier and atr period.
+Implement the chosen objective function (e.g., profit factor) to evaluate a Supertrend strategy with specific
+parameters on the provided data.
+Run the BO algorithm to identify the combination of atr multiplier and atr period that maximizes the objective
+function.
+Strategy Backtesting
+Use the optimized atr multiplier and atr period for each stock.
+Simulate the trading strategy based on Supertrend buy/sell signals.
+Evaluate the backtesting performance using metrics like profit factor, drawdown, and Sharpe ratio.
+Evaluation and Refinement
+Analyze the backtesting results and consider incorporating additional filters or risk management techniques.
+Refine the objective function or BO parameters if necessary.
+5 Empirical analysis
+5.1 Strategy execution and performance
+This section presents the empirical results obtained by applying the Supertrend strategy with default atr multiplier (3)
+and atr period (15) to the collected datasets for the five stocks: Nifty 50, Infosys, Hindustan Unilever, Microsoft, and
+Nvidia.
+https://colab.research.google.com/drive.supertrendstrategy
+5.2 Performance of Metric:
+The backtesting process generated key performance metrics for each stock dataset. These metrics include profit factor,
+maximum drawdown, Overall Profit /Loss percentage, Minimum and Maximum balance when one invests 100 units,
+and total trades during the time frame.
+6
+Table 1: Performance Metrics using default parameters
+Nifty 50 Infosys HUL Microsoft Nvidia
+Overall P/L % -1.16% 8.25% 1.37% 1.61% 6.64%
+Overall P/L -1.16 8.25 1.37 1.61 6.64
+Min Balance 93.36 100.00 100.00 98.25 98.91
+Max Balance 100.00 111.96 108.30 108.02 110.67
+Max Drawdown -6.64 -4.69 -6.93 -6.62 -8.73
+Max Drawdown % -6.64% -4.19% -6.40% -6.13% -7.89%
+Total Trades 37 37 27 32 38
+Max Profit 0.00 11.96 8.30 8.02 10.67
+Indian Stocks and their Strategy Performance
+Figure 1: Nifty 50
+ Figure 2: Infosys
+ Figure 3: Hindustan Unilever Ltd
+5.2.1 Explanation of Supertrend Strategy Performance Metrics with default parameters
+The above table(1) summarizes the performance of the Supertrend strategy applied to five assets: Nifty 50, Infosys,
+Hindustan Unilever (HUL), Microsoft, and Nvidia. Here’s a breakdown of the key metrics and observations:
+• Overall Profit or Loss (P/L):
+– Percentage (%): The first row (-1.16%) represents the overall loss of the strategy across all five assets
+during the backtesting period.
+– Value: The second row (-1.16) shows the same loss expressed as a numerical value.
+• Balance Metrics:
+– Min Balance: This indicates the lowest point reached by the cumulative return of each asset during
+backtesting. For example, Nifty 50 experienced a minimum balance of 93.36, suggesting a 6.64% decline
+from its starting point.
+– Max Balance: This represents the highest point reached by the cumulative return for each asset. Infosys
+achieved the highest balance (111.96), indicating an 11.96% gain from its starting point.
+• Drawdown Metrics:
+– Max Drawdown: This metric shows the peak decline in the cumulative return of each asset relative to its
+highest point. For example, Nvidia experienced a maximum drawdown of -8.73, signifying a decline of
+8.73% from its peak balance.
+– Max Drawdown (%): This expresses the maximum drawdown as a percentage, offering a relative
+comparison across assets. Nvidia again has the highest drawdown percentage (-7.89%).
+• Trading Activity:
+– Total Trades: This indicates the total number of trades executed by the strategy for each asset during the
+backtesting period. Nifty 50 and Infosys both had 37 trades, while Nvidia had the highest number of
+trades (38).
+7
+Important Points:
+• Despite some individual assets generating profits (Infosys, Microsoft, Nvidia), the overall strategy resulted in
+a slight loss (-1.16%).
+• Infosys exhibited the strongest performance with a maximum balance of 111.96 (8.25% gain) and a relatively
+low maximum drawdown (-4.69%).
+• Nvidia had the highest number of trades (38) but also experienced the most significant drawdown (-8.73 or
+-7.89%).
+Further Analysis:
+• Investigating the reasons behind the overall loss and the varying performance across assets would be valuable
+for potential strategy refinements.
+• By delving deeper into these metrics and incorporating additional performance measures, investor can gain a
+richer understanding of the Supertrend strategy’s effectiveness with default parameters and identify areas for
+potential improvement through Bayesian optimization.
+International Stocks and their strategy performance
+Figure 4: Microsoft Corporation
+ Figure 5: Nvidia
+6 Bayesian Optimization for Supertrend Parameter Tuning to optimise profit factor
+This section explores the application of Bayesian optimization (BO) to optimize theatr_multiplier and atr_period
+parameters of the Supertrend strategy for each individual stock dataset. The objective is to maximize the profitability of
+the strategy across diverse market conditions.
+6.1 BO Framework
+6.1.1 Data Splitting
+The initial step involves splitting the historical price data for each stock into training and test sets using a train-test split.
+The training set (typically encompassing 70-80% of the data) will serve two purposes:
+– BO and Strategy Evaluation: The BO algorithm will utilize the training set to identify optimal parameter
+configurations for the Supertrend strategy. This involves evaluating the strategy’s performance with different
+parameter combinations and selecting the one that maximizes the chosen objective function.
+– Cross-Validation (Optional): To enhance the robustness of the BO process and mitigate overfitting, k-fold
+cross-validation can be implemented within the training set. This involves further dividing the training data
+into k folds, performing separate BO and evaluation iterations on each fold, and averaging the results. While
+not strictly necessary for BO itself, cross-validation can provide a more reliable estimate of the optimized
+parameters’ generalizability.
+8
+The remaining 20-30% of the data will constitute the test set. This unseen data serves for the final performance
+assessment of the Supertrend strategy after parameter optimization using BO.
+6.1.2 Objective Function
+The objective function plays a crucial role in BO, guiding the optimization process towards parameter combinations
+that maximize the desired performance metric. In this context, the objective function will focus on maximizing the
+profitability of the Supertrend strategy. Potential options include:
+– Profit Factor: This metric is well-suited for this scenario as it considers both winning and losing trades,
+providing a comprehensive measure of profitability.
+– Sharpe Ratio: If risk-adjusted returns are a priority, the Sharpe Ratio can be employed as the objective function.
+This metric incorporates both profitability and volatility, offering a more nuanced perspective on strategy
+performance.
+The chosen objective function will be clearly defined and calculated for each parameter combination evaluated during
+the BO process.
+6.2 Pseudocode for Bayesian Optimization
+Bayesian Optimization for Supertrend Parameter Tuning
+function objective(atr_period, atr_multiplier)
+global data, results_dataframe(df)
+atr_period ← int(atr_period)
+atr_multiplier ← int(atr_multiplier)
+supertrend_data ← supertrend(data.copy(), atr_period=atr_period, atr_multiplier=atr_multiplier)
+supertrend_positions ← generate_signals(supertrend_data)
+strategy_df ← strategy_performance(supertrend_positions, capital=100, leverage=1)
+overall_pl_percentage ← (strategy_df[’cumulative_balance’].iloc[-1] - 100) / 100 * 100
+overall_pl ← strategy_df[’cumulative_balance’].iloc[-1] - 100
+min_balance ← strategy_df[’cumulative_balance’].min()
+max_balance ← strategy_df[’cumulative_balance’].max()
+max_drawdown ← strategy_df[’Max Drawdown’].min()
+metrics ← {
+{’Iteration’: len(results_df), ’Metric’: [’Overall P/L %’, ’Overall P/L’, ’Min Balance’, ’Max Balance’,
+’Max Drawdown’, ’Profit’], ’Value’: [f"overall_pl_percentage:.2f%", f"overall_pl:.2f", f"min_balance:.2f",
+f"max_balance:.2f", f"max_drawdown:.2f", strategy_df[’Profit’].max()]}
+}
+results_df ← pd.concat([results_df, pd.DataFrame(metrics)], ignore_index=True)
+return -strategy_df[’Profit’].max()
+6.3 Figures and Performance Charts for the Indian stock Nifty 50 ( ˆNSEI)
+This section explores the application of Bayesian optimization (BO) to optimize theatr_multiplier and atr_period
+parameters of the Supertrend strategy for each individual stock dataset. The objective is to maximize the profitability of
+the strategy across diverse market conditions.
+6.3.1 Bayesian Optimization Iteration Table (NIFTY 50)
+Each row represents a single BO iteration, showcasing the specific parameter combination tested and the resulting
+objective function value (e.g., profit factor) achieved for Nifty 50. Analyzing this table would reveal how BO explored
+the search space for Nifty 50 and identified parameter combinations leading to potentially better performance. The BO
+process iteratively evaluated different combinations of atr_multiplier and atr_period values for Nifty 50. While the
+full table cannot be directly included here (full table is attached as csv file in supplementary section), it likely contains
+columns of the tail and head.
+9
+Table 2: Bayesian Optimization Iteration Table for Nifty 50
+iter target atr_multiplier atr_period
+1 -1.144 2.668 23.01
+2 -0.9236 1.0 12.56
+3 -3.031 1.587 7.308
+4 -0.0 1.745 13.64
+5 -3.678 2.587 18.47
+6 -0.0 3.39 13.16
+7 -0.0 2.74 27.13
+... ... ... ...
+53 -4.035 1.0 5.0
+54 -0.3709 1.0 24.0
+55 -2.222 4.969 18.67
+Best Parameters:
+ATR Period: 20
+ATR Multiplier: 4.377...
+Maximum Profit Achieved: 6.0312..
+6.3.2 Final Best Parameters for Nifty 50
+BO optimised a set of optimal atr_multiplier and atr_period values specifically for Nifty 50 for 5 initial iterations(test
+data) and 50 training data and gives the objective function (profit factor).
+Table 3: Comparision of Parameters values and profit earned for Nifty 50
+S.No Parameter Values ATR Period ATR Multiplier Maximum Profit
+1 Default values 15 3 0.00
+2 BO-Optimized 20 4 6.0312
+These values represent the parameter combination identified by BO that is expected to yield the highest profitability for
+the Nifty 50 strategy.
+BO Search Space Visualization for Nifty 50
+6.3.3 Convergence Plot and Evaluating BO’s Efficacy for Nifty 50
+The visualization below helps understand how BO explored different parameter values for Nifty 50 and where it
+identified areas with potentially higher profitability based on the objective function.
+The effectiveness of BO for Nifty 50 will be assessed by backtesting the Supertrend strategy with the BO-optimized
+parameters on the unseen test set. The performance achieved ( profit factor ) will be compared to the performance
+obtained with the default atr_multiplier and atr_period values.
+By analyzing the BO results (iteration table, final parameters, search space visualization, convergence plot), one
+can explain how BO explored the parameter space for Nifty 50, identified potentially profitable configurations, and
+converged towards an optimal solution. The subsequent evaluation using the unseen test set will determine the actual
+impact of BO on the strategy’s performance for Nifty 50.
+10
+Ideally, the plot above exhibits an increasing trend in profit factor as BO progresses, indicating convergence towards a
+parameter combination with a maximized objective function value.
+This figure 6 and figure 7 compares the performance of the strategy with default and BO optimised parameters.
+Figure 6: Performance in default parameters
+ Figure 7: Performance in optimised parameters
+Observation: Optimised Parameters perform better than default supertrend parameters under a constrained number of
+iterations.
+7 Bayesian Optimization for Supertrend Parameter Tuning on all five stock- Results and
+Discussion
+This section summarizes the findings from applying Bayesian Optimization (BO) to optimize the atr_multiplier and
+atr_period parameters of the Supertrend strategy for five stock datasets: Nifty 50, Infosys, Hindustan Unilever (HUL),
+Microsoft, and Nvidia.
+7.1 BO Optimization Results
+The BO process identified potentially profitable parameter combinations for each stock dataset. Table 4 presents the
+BO-optimized parameters (period, multiplier) and the achieved optimized maximum profit for each stock.
+• It shows the specific period and multiplier values identified by BO as potentially leading to the highest profits
+for each stock within the given dataset.
+11
+• "BO Optimised Parameters (Per,Mult)" displays the optimal parameter combination (period, multiplier) for
+each stock.
+• "Optimised Max Profit" shows the maximum profit achieved using the BO-recommended parameters.
+Table 4: Performance Metrics using default parameters
+Nifty 50 Infosys HUL Microsoft Nvidia
+BO Optimised Parameters (Per,Mult) (20,4) (14,5) (5,1) (19,3) (14,4)
+Optimised Max Profit 6.032 8.6 14.89 26.73 22.705
+Stock Ticker Max Profit (Default) Optimised Max Profit Improvement Improvement (%)
+Nifty 50 0.00 6.032 6.032 N/A
+Infosys 11.96 8.6 -3.36 -28.12
+HUL 8.30 14.89 6.59 79.52
+Microsoft 8.02 26.73 18.71 233.23
+Nvidia 10.67 22.705 12.035 112.54
+Further, table [4] compares the performance of the Supertrend strategy using the default parameters and the BO-
+optimized parameters.
+• It allows to assess the effectiveness of Bayesian Optimisation(BO) for each stock.
+• "Max Profit (Default)" shows the maximum profit achieved using the default parameters.(atr period-15 and atr
+multiplier - 3)
+• "Optimised Max Profit" is identical to the corresponding column in Table 4.1, displaying the maximum profit
+with BO parameters.
+• "Improvement" calculates the difference between "Optimised Max Profit" and "Max Profit (Default)".Positive
+values indicate improvement in profit after BO.Negative value suggests a decrease.
+• The improvement percentage for Nifty 50 is N/A because the default profit was 0. Dividing by 0 is undefined.
+8 Discussion and Conclusion
+• Strategy Performance: The overall effectiveness of the BO-optimized Supertrend strategy can be determined by
+analyzing the results in the table above. The values for most stocks are positive suggests that BO successfully
+identified parameter combinations that improved the strategy’s performance compared to the default settings.
+• BO Effectiveness: Based on the BO results (iteration tables, visualizations, convergence plots - shown above),
+discusses how BO efficiently explored the search space and converged towards potentially optimal parameter
+combinations for each Indian and international stock.
+• BO Limitations:
+– The effectiveness of BO is highly dependent on the chosen objective function and the quality of historical
+data used for training.
+– BO might get trapped in local optima if the search space is not well-defined or the objective function is
+complex.
+• Future Studies:
+– Exploring the use of different BO algorithms or objective functions to potentially enhance optimization
+results.
+– Investigating to incorporate additional parameters into the optimization process for a more comprehensive
+strategy fine-tuning.
+– Testing the generalized ,ability of BO-optimized parameters across different market conditions using
+forward testing.
+By incorporating BO, this thesis demonstrates a data-driven approach for potentially improving the Supertrend
+strategy’s profitability through parameter optimization for various stock datasets. Future studies can explore further
+refinements and evaluate the robustness of BO in this context.
+12
+Supplementary materials
+1. Supertrend_Project_work_1.ipynb (https://github.com/Shafiq-Abdu/Supertrend-Strategy.git ):
+This file contains the complete code of Supertrend strategy. Included clear comments throughout the code
+explaining the logic and functionality of each section.
+2. Bayesian_Optimisation_Project.ipynb (https://github.com/Shafiq-Abdu/Supertrend-Strategy.git ):
+This file defines the BO parameters like the chosen objective function, search space for the parameters,
+and specific configurations for the BO algorithm including information like the number of iterations, best
+parameters found at each iteration, and the final optimized parameters
+3. Performance Metrics in Default Parameters(csv files):
+((https://github.com/Shafiq-Abdu/Supertrend-Strategy.git)): This file contains the data used
+to create Table 1 in the main text, which summarizes the performance using default settings.
+References
+Bhaskar Patil and Deepali Gala. A study of key technical indicators for effective and profitable strategy in option
+trading of nifty. 04 2022a.
+S.C. Au and J.W. Keung. New technique for stock trend analysis-volume-weighted squared moving average convergence
+and divergence. In Proceedings of the 47th Annual Computers, Software, and Applications Conference (COMPSAC),
+pages 987–988. IEEE, 2023. doi:10.1109/COMPSAC57700.2023.00140.
+Bhaskar Patil and Deepali Gala. A study of key technical indicators for effective and profitable strategy in option
+trading of nifty. https://www.researchgate.net/publication/359789492, 2022b.
+Dipti Prasad Sahoo, Jyotirmayee Nayak, and Sushree Pani. Performance analysis of supertrend trading strategy on
+indian stock market. International Journal of Management, IT and Engineering (IJMIE), 7(8):1–8, 2017.
+Md. Ashraful Alam Bhuiyan, Md. Matiur Rahman Alam, and Md. Rafiqul Islam Kabir. A comparative study of
+supertrend and moving average crossover trading strategies. Journal of Applied Finance and Banking, 6(4):101–112,
+2016.
+Pedro Osório, Rui Rocha, Bruno Fernandes, Mário Neves, and Jaime Duarte. Optimizing trading strategies with
+bayesian optimization. Expert Systems with Applications, 140:112903, 2020.
+Richard E. Greenblatt, Marco Castro, and Geoffrey E. Hinton. Bayesian optimization for algorithmic trading. Journal
+of Machine Learning Research, 10(1):1006–1032, 2016.
+13

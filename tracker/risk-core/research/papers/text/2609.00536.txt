@@ -1,0 +1,1569 @@
+arXiv 2609.00536  https://arxiv.org/abs/2609.00536
+
+Anytime-Valid Distribution Shift Detection via Predictive Rank
+Martingales
+Qi Kuang Yin Xia ∗
+Department of Statistics and Data Science, Fudan University, Shanghai, China
+Abstract
+Many sequential distribution shift detectors update a growing reference set with incoming obser-
+vations. After a change, this update contaminates the reference set with post-change observations
+and can weaken subsequent evidence. Keeping the calibration sample fixed mitigates this contami-
+nation, but repeated reuse induces dependence among fixed-reference ranks, so arguments based
+on independent conformal p-values do not apply. We derive the exact conditional null distribution
+of the next rank given the preceding ranks and use it to construct a predictive rank martingale
+(PRM). Thresholding a PRM gives distribution-free, finite-sample anytime marginal type I error
+control. To target specific departures, we apply a pre-specified feature to each rank, center the
+resulting payoff under the predictive null law, and use Online Newton Step (ONS) to adapt the bet.
+Order and dispersion features target directional and center-versus-tail changes, respectively. For any
+Lipschitz feature with nonzero induced contrast under the alternative, we establish a finite-window
+detection guarantee and show that the test is consistent as the initial calibration size increases.
+At a fixed calibration size, however, we derive a power ceiling for every distribution-free detection
+procedure. Across synthetic and real data, our PRM methods achieve better detection performance
+than conditional conformal test martingale (CCTM).
+1 Introduction
+Distribution shift monitoring asks whether an online data stream has departed from the distribution
+represented by historical data. A monitoring procedure should detect such changes quickly while
+controlling false alarms. We seek a sequential procedure for which the probability of ever raising a
+false alarm is at mostα.
+Conformal test martingales (CTMs) provide anytime-valid tests of exchangeability by betting on
+sequential conformal p-values (Vovk et al., 2003). In the classical online construction, each incoming
+observation is added to the reference sample used for subsequent observations. For distribution shift
+monitoring, this expanding reference creates a vulnerability: after a change, post-change observations
+enter the comparison sample and can make later observations appear less unusual. The effect is
+especially pronounced for early changes, when post-change observations quickly form a substantial
+fraction of the reference sample.
+Keeping the historical calibration sample fixed mitigates this contamination. However, repeated
+calibration reuse induces dependence across the resulting ranks. The classical martingale argument
+based on independent conformal p-values therefore no longer applies. CCTM addresses this problem by
+betting on the empirical cumulative distribution function (ECDF) of the fixed calibration sample and
+using a uniform Dvoretzky–Kiefer–Wolfowitz (DKW) confidence band to account for ECDF estimation
+error (Shaer et al., 2026). Its probably approximately correct (PAC) calibration-conditional guarantee,
+∗Address for correspondence: Yin Xia, Department of Statistics and Data Science, Fudan University, 220 Handan
+Road, Shanghai, 200433, China. Email: xiayin@fudan.edu.cn.
+1
+arXiv:2609.00536v1  [stat.ME]  1 Sep 2026
+however, does not by itself imply marginal type I error control at the same nominal level, and its
+confidence band can discount the betting signal.
+Our key observation is that this dependence has an exact sequential structure: under the null, the
+next fixed-reference rank has a closed-form predictive distribution conditional on the rank history. We
+use this law to construct a PRM, and thresholding this PRM provides distribution-free, finite-sample
+anytime marginal type I error control. The construction follows the test-by-betting principle, which
+interprets accumulated wealth as evidence against the null (Shafer, 2021).
+The predictive law ensures validity, but detecting a particular shift requires a suitable betting
+strategy. We therefore use a feature h to score locations on the reference quantile scale and target
+shifts of interest without specifying a parametric alternative. The choice of h affects power but not
+validity: every pre-specified h retains the same anytime false-alarm guarantee. We construct Order
+PRM for directional changes, Dispersion PRM for center-versus-tail changes, and a portfolio PRM that
+combines their evidence. ONS (Hazan et al., 2007) adapts the direction and magnitude of each bet.
+1.1 Our Contributions
+Our contributions are:
+• We derive the exact sequential predictive null law of fixed-reference ranks and use it to construct a
+PRM with distribution-free, finite-sample anytime type I error control.
+• We construct Order PRM and Dispersion PRM by combining rank features with ONS betting.
+They target directional and center-versus-tail changes, respectively, and a PRM portfolio covers
+several pre-specified features while keeping the probability of any false alarm at mostα.
+• We provide a power analysis of PRMs. We establish a finite-window detection guarantee and show
+that the test is consistent as the initial calibration size increases. At a fixed calibration size, we
+also derive a power ceiling that applies to every distribution-free detection procedure.
+• Empirically, Order PRM reaches 80% detection earlier than CCTM in all synthetic settings from
+Shaer et al. (2026), and the PRM portfolio remains close to Order PRM in these settings. Dispersion
+PRM and the portfolio detect symmetric shifts for which CCTM has near-zero power within the
+studied horizon.
+1.2 Related Work
+Our setting is related to classical placement-based two-sample tests, including partially sequential
+procedures that compare a fixed first sample with sequentially arriving observations (Wolfe, 1977;
+Orban and Wolfe, 1980, 1982). These studies motivate our use of features on the reference quantile
+scale, but their procedures use pre-specified sampling rules or finite horizons. We instead embed
+placement scores in an e-process that remains valid under arbitrary stopping.
+Turning to anytime-valid methods, CTMs are constructed by betting on sequential conformal
+p-values computed using a reference set that grows with the online stream (Vovk et al., 2003, 2005;
+Fedorova et al., 2012; Volkhonskiy et al., 2017; Vovk et al., 2021). Our construction follows the same test-
+by-betting principle but addresses the dependence induced by repeatedly comparing online observations
+with a fixed calibration sample. Other anytime-valid approaches include safe e-processes for binary
+observations (Ramdas et al., 2022), pairwise betting (Saha and Ramdas, 2024), and prediction-based
+betting for sequential two-sample and independence testing (Podkopaev and Ramdas, 2023), but use
+different observation schemes or alternative structures.
+Calibration reuse has also been studied in offline conformal multiple testing. Bates et al. (2023)
+used positive regression dependence among conformal p-values to establish false discovery rate con-
+2
+trol (Benjamini and Hochberg, 1995; Benjamini and Yekutieli, 2001). Their goal is simultaneous testing,
+whereas we characterize the sequential conditional law for anytime-valid monitoring.
+CCTM is the closest existing method for fixed-reference monitoring (Shaer et al., 2026). It handles
+calibration uncertainty through a uniform DKW band, whereas we model the dependence induced by
+calibration reuse through its exact sequential predictive law. This yields a nonnegative martingale
+and finite-sample anytime marginal type I error control; Appendix B discusses how this guarantee
+differs from CCTM’s PAC calibration-conditional statement. Sequential conditioning is essential, since
+multiplying marginally valid e-values need not produce an e-process (Vovk et al., 2025).
+2 Predictive Rank Martingale Construction
+We first derive the predictive null law of fixed-reference ranks and use it to construct a general family
+of PRMs. We then introduce features that target different departures, convert a chosen feature into
+a betting process, and use ONS to adapt the betting coefficient. Finally, we combine the processes
+corresponding to several features in a portfolio.
+2.1 Problem setup
+Let D0 = (Y1, . . . , Yn) be the fixed calibration observations and let X1, X2, . . .be the online observations.
+For clarity, we present the method for scalar observations. High-dimensional observations can be
+reduced to scalar scores according to a rule fixed before observing the calibration and monitoring data.
+Under the null, the calibration and online observations are independent and identically distributed
+(i.i.d.):
+H0(P) :Y 1, . . . , Yn, X1, X2, . . .i.i.d.∼P,
+wherePis unknown. We seek a stopping timeτsatisfying
+sup
+P
+PH0(P) (τ <∞)≤α,
+where the probability is taken jointly overD 0 and the online stream.
+For continuous observations, define the rank of Xt among the fixed calibration observations as
+Rt = 1 + Pni=1 1{Yi ≤X t} ∈ {1, . . . , n+ 1}. For distributions with atoms, we break ties using
+independent Wi, W′t ∼Unif (0, 1). We compare ( Yi, Wi) and ( Xt, W′t ) lexicographically and define
+Rt from the resulting order. Let Gt = σ(R1, . . . , Rt). Reusing the same calibration sample induces
+dependence across the ranks. This dependence nevertheless admits an exact sequential characterization,
+which we state next.
+2.2 Predictive rank law and martingale construction
+Define Nt−1,j = Pt−1s=1 1{Rs = j}. Before observing Rt, a bettor may use past ranks to choose an
+Gt−1-measurable distribution qt over the next rank. The next theorem gives the exact null predictive
+distribution and shows that comparingq t with this distribution yields a PRM.
+Theorem 2.1.For every distributionP, underH 0(P), for everyt≥1,
+P(Rt =j| Gt−1) =π t,j := 1 +N t−1,jn+t , j= 1, . . . , n+ 1.(1)
+Letq t = (qt,1, . . . , qt,n+1)be anyG t−1-measurable probability vector, and define
+Et = qt,Rt
+πt,Rt
+, M t =
+tY
+s=1
+Es, M 0 = 1.
+3
+UnderH 0(P),(M t)t≥0 is a nonnegative martingale, so by Ville’s inequality (Ville, 1939),
+sup
+P
+PH0(P)
+
+sup
+t≥0
+Mt ≥ 1α  ≤α.
+The predictive law in (1) coincides with that of a standard P´ olya urn (Blackwell and MacQueen,
+1973). It characterizes the dependence induced by repeated reuse of the fixed calibration sample: each
+Rt is computed against the same D0. Since qt is a probability vector, EH0(P) (Et | Gt−1) = 1, so the
+martingale property follows immediately. Therefore, the stopping rule τ = inf{t≥ 1 : Mt ≥ 1/α}
+satisfies supP PH0(P) (τ <∞) ≤α , giving finite-sample anytime type I error control. The allocation of
+qt across ranks affects power but not this guarantee.
+To choose qt, write the factor as Et = 1 + λtZt, where Zt is bounded and conditionally mean zero
+under the null. This centering preserves validity, while a nonzero mean under a shift provides signal.
+The predictable coefficient λt controls the direction and magnitude of the bet and is constrained so
+thatE t ≥0. We next constructZ t from a feature contrast.
+2.3 Features and targeted alternatives
+To construct Zt, we use a pre-specified function h : [0, 1] →R to score whether an observation lies
+in the lower tail, center, or upper tail of the calibration distribution. Different choices of h weight
+these regions differently and therefore target different departures. We choose h before observing the
+calibration and monitoring data. We callha feature if
+Z 1
+0
+h(u)du= 0,sup
+u∈[0,1]
+h(u)−inf
+u∈[0,1]
+h(u)≤1.
+As shown below, adding a constant to h does not change the resulting procedure, so the first condition is
+imposed only for notational convenience. The second condition ensures that the martingale constructed
+below is nonnegative. Any function bounded on [0 , 1] can be shifted and rescaled to satisfy both
+conditions.
+Suppose that the calibration observations follow a continuous distribution P , while an online
+observationXfollowsQ. The population signal targeted byhis the contrast:
+∆h(P, Q) =EX∼Q h{FP (X)}.
+Under the null Q = P , FP (X) ∼Unif (0, 1), and hence ∆ h(P, P) =
+R 1
+0 h(u) du = 0. Positive and
+negative values of ∆ h(P, Q) indicate excess alternative mass in regions where h is respectively large or
+small. Its magnitude is the population signal available to that feature. ∆ h(P, Q) = 0 need not imply
+P=Q; it only means that the chosen feature has no population signal for that departure.
+We first consider the order feature
+hord(u) =u− 12 , u∈[0,1].
+It is the classical Mann–Whitney placement score (Orban and Wolfe, 1980, 1982) and also coincides
+with the linear reference-quantile score underlying CCTM (Shaer et al., 2026). It assigns negative
+values to lower reference ranks and positive values to upper reference ranks, with larger magnitude
+farther from the midpoint.
+For the order feature, the contrast has the pairwise interpretation ∆ ord(P, Q) = EQFP (X) − 1/2 =
+P(Y≤X ) − 1/2, where Y∼P is independent of X. It measures whether observations tend to rank
+above or below reference observations. A rightward shift gives ∆ ord > 0, whereas a leftward shift gives
+∆ord <0. The order feature therefore targets location and stochastic order changes.
+4
+However, the order feature has no population signal for some common shifts. Its lower and upper
+rank scores can cancel when the change is symmetric. For example, under the Gaussian scale shift
+P = N (0, 1) and Q = N (0, σ2), we have ∆ ord(σ) = 0 for every σ >0. To detect such changes, we use
+a score related to the classical Ansari–Bradley dispersion score (Ansari and Bradley, 1960):
+hdisp(u) =|2u−1| − 12 , u∈[0,1].
+We call hdisp the dispersion feature in our PRM construction. The term |2u− 1| measures distance
+from the reference median on the rank scale. Subtracting 1/2 gives zero mean.
+For this feature, the dispersion contrast is ∆ disp(P, Q) = EQ|2FP (X) − 1| −1/2. This contrast
+compares mass in the reference tails with mass near the reference center. Moving probability mass
+toward the tails gives ∆ disp > 0, whereas concentrating mass near the reference median gives ∆ disp < 0.
+The two tails reinforce rather than cancel, so the feature targets scale and other center-versus-tail
+changes.
+For the Gaussian scale shift above, ∆ disp(σ) = 2 arctan(σ)/π− 1/2. This contrast is nonzero for
+every σ̸ = 1: it is positive for scale expansion and negative for scale contraction. Having defined the
+featureh, we next construct its betting payoffZ t.
+2.4 Predictively centered feature betting
+The contrast ∆ h(P, Q) is defined in terms of h{FP (X)}, but FP is unknown. For each Xt, the fixed-
+reference rank gives the empirical placement ( Rt − 1)/n = bFn(Xt), so we use h{(Rt − 1)/n} instead.
+Under the null, Equation (1) gives its conditional mean. Subtracting this mean defines the betting
+payoff:
+Zt =h
+ Rt −1
+n
+
+−
+n+1X
+j=1
+πt,jh
+ j−1
+n
+
+.
+By (1), EH0(P) (Zt | Gt−1) = 0. Replacing h by h + c leaves Zt, and hence the resulting PRM, unchanged
+because the constant cancels between the observed score and its conditional expectation. Since the
+values of h lie in an interval of width at most one, |Zt| ≤1. Under an alternative, the drift of Zt is
+linked to ∆ h(P, Q). Specifically, whenPis continuous andhis Lipschitz,
+EP n⊗Q∞Zt = n+ 1n+t {∆h(P, Q) +on(1)},
+where on(1) → 0 and does not depend on t. Thus, for any fixed t, the expectation approaches ∆ h(P, Q)
+as n→ ∞. Lemma A.1 establishes this relation. Since Zt is bounded and conditionally centered under
+the null, this yields the following feature-based specialization of Theorem 2.1.
+Proposition 2.2.For anyG t−1-measurableλ t ∈[−1,1], define
+Et = 1 +λ tZt, M t =
+tY
+s=1
+Es, M 0 = 1.
+UnderH 0(P),(M t)t≥0 is a nonnegative martingale and hence an e-process.
+As a special case of Theorem 2.1, the stopping rule τh = inf{t≥ 1 : Mt ≥ 1/α} satisfies
+supP PH0(P) (τh <∞)≤α, so every pre-specified feature retains anytime type I error control.
+The corresponding probability vector in Theorem 2.1 is
+qt,j =π t,j
+"
+1 +λ t
+(
+h
+ j−1
+n
+
+−
+n+1X
+ℓ=1
+πt,ℓh
+ ℓ−1
+n
+)#
+.
+5
+The range condition ensures qt,j ≥ 0, while predictive centering gives Pn+1j=1 qt,j = 1. Under an
+alternative, Zt estimates the feature contrast ∆ h(P, Q), while λt controls the direction and size of the
+bet. When λt and Zt have the same sign, Et > 1 and the wealth increases. We therefore adapt λt from
+past observations to favor positive values of λtZt and thereby accumulate wealth under an alternative.
+The next subsection uses ONS to perform this adaptation.
+2.5 Adaptive betting with ONS
+The sign and size of the feature signal are unknown, so we choose λt from past data. Proposition 2.2
+permits any Gt−1-measurable λt ∈ [−1, 1]. We use ONS (Hazan et al., 2007) to make the cumulative
+log wealth logM T = PTt=1 log(1 +λ tZt) large.
+For stable ONS updates, we restrict the betting coefficient to a predictable interval that keeps every
+betting factorE t = 1 +λ tZt uniformly away from zero. Writeh j =h{(j−1)/n}and define
+Bt = max1≤j≤n+1
+hj − n+1Xℓ=1 πt,ℓhℓ , b t = (min{1,3/(4B t)}, B t >0,1, B t = 0, .
+Here Bt is the largest possible value of |Zt|. The feature range condition gives Bt ≤ 1, so 3 /4 ≤b t ≤ 1.
+Initialize λ1 = 0. After observing Zt, let gt = Zt/(1 + λtZt), compute bt+1 from the updated counts,
+and update
+λt+1 = Π[−bt+1,bt+1]
+ 
+λt + (9/2)gt
+1 + Pts=1 g2s
+!
+.(2)
+Here Π denotes projection onto the subscripted interval. Since |Zt| ≤Bt, this choice guarantees
+1 + λtZt ≥ 14 . Thus every betting factor is uniformly bounded away from zero. The quantity gt is
+the derivative of log(1 + λZt) at λt. Its sign determines whether the next coefficient λt+1 increases
+or decreases, while the cumulative squared gradients scale the step size. The update uses only ranks
+through time t, so λt is Gt−1-measurable. Moreover, λt ∈ [−1, 1]. The resulting process therefore
+remains valid, with PH0(P) (supt≥1 Mt ≥ 1/α) ≤α . The next proposition quantifies the log wealth lost
+by adaptingλ t online relative to a fixed coefficient selected after observing the full path.
+Proposition 2.3.LetM T be generated by(2), and defineb T = min1≤t≤T bt. Then, for every path,
+logM T ≥sup
+|u|≤bT
+TX
+t=1
+log(1 +uZ t)−O(logT).
+Thus ONS incurs only logarithmic regret relative to the best fixed coefficient that remains feasible
+throughout the observed path.
+Algorithm 1 summarizes the PRM with ONS betting.
+Algorithm 1PRM with ONS Betting
+1:InitializeM 0 =A 0 = 1,λ 1 = 0, andN 0,j = 0 forj= 1, . . . , n+ 1.
+2:fort= 1,2, . . .do
+3:Computeπ t,j = (1 +N t−1,j)/(n+t) and the projection radiusb t.
+4:RankX t againstD 0 to obtainR t, and setZ t =h((R t −1)/n)− Pn+1j=1 πt,jh((j−1)/n).
+5:UpdateM t =M t−1(1 +λ tZt).
+6:IfM t ≥1/α, setτ h =t, reject, and stop.
+7:Setg t =Z t/(1 +λ tZt) andA t =A t−1 +g 2t .
+8:UpdateN t,j =N t−1,j +1{R t =j}forj= 1, . . . , n+ 1.
+9:FromN t, computeπ t+1 andb t+1, then updateλ t+1 by (2).
+10:end for
+6
+2.6 PRM portfolios
+Write Mh,t for the wealth process constructed using feature h. In particular, the order and dispersion
+features yieldM ord,t andM disp,t, which we callOrder PRMandDispersion PRM, respectively.
+Accordingly, we may choose h1, . . . , hm, run their PRMs in parallel, and form the weighted average
+M mixt =
+mX
+ℓ=1
+ωℓMhℓ,t, ω ℓ ≥0,
+mX
+ℓ=1
+ωℓ = 1.
+As a convex combination of nonnegative martingales, M mixt is also a nonnegative martingale and retains
+the same anytime type I error guarantee. It also satisfies M mixt ≥ω ℓMhℓ,t for every ℓ. If ωℓ > 0 and
+∆hℓ(P, Q) ̸= 0 for at least one ℓ, the portfolio retains detection ability. Relative to component ℓ, the
+mixture loses at most log(1/ω ℓ) in log wealth.
+For the order and dispersion features, equal weights give thePRM portfolio M ODt = 12 Mord,t +1
+2 Mdisp,t. It satisfies logM ODt ≥max k∈{ord,disp} logM k,t −log 2. Additional features can be included
+when other types of shift are plausible.
+3 Detection Guarantees and Fixed-Calibration Limits
+The false alarm guarantee in Theorem 2.1 holds for every calibration size and every monitoring
+horizon. We next study the detection ability of PRMs with ONS betting. We first establish a finite-
+window guarantee for any Lipschitz feature with nonzero induced contrast under the alternative. The
+result applies to both the order and dispersion features and also yields consistency as the initial
+calibration size increases. We close with limits of distribution-free procedures under marginal and
+calibration-conditional type I error control.
+3.1 Detection guarantees
+Throughout this subsection,Pis continuous, whereasQmay be arbitrary.
+Theorem 3.1.Let h : [0 , 1] →R be a Lipschitz feature with Lipschitz constant Lh, and write
+∆h = ∆h(P, Q). Let τh be the stopping time produced by Algorithm 1 with feature h, and suppose that
+∆h ̸= 0. For β∈ (0, 1], define rh,β = |∆h|−2 log{e/(αβ|∆h|)}. There is a universal constant C >0
+such that, ifn≥ ⌈Cmax{1, L2h}rh,β⌉, then
+PP n⊗Q∞(τh ≤ ⌈Crh,β⌉)≥1−β.
+The theorem bounds the number of online observations needed for detection. Under its calibration-
+size condition, with probability at least 1−β,
+τh =O
+
+|∆h|−2 log eαβ|∆h|  .
+For delayed changes, Appendix A.11 bounds the delay τh −ν after ν null observations. Let
+rν,h,β = |∆h|−2 log{e(ν + 1)/(αβ|∆h|)}. Under the corresponding calibration-size condition, with
+probability at least 1−α−β, the procedure does not stop before the change and
+τh −ν=O
+ 
+rν,h,β + √νrν,h,β .
+In particular, settingν= 0 recovers the immediate-change bound.
+Moreover, Theorem 3.1 implies consistency as n→ ∞: the detection probability tends to one. For
+eachn, the calibration sample remains fixed throughout monitoring.
+7
+Proposition 3.2.Let h be a Lipschitz feature. For each n, let M (n)h,t and τ (n)h denote the e-process and
+stopping time based on a calibration sample of size n. If∆ h ̸= 0, then, for every deterministic sequence
+Tn → ∞,
+PP n⊗Q∞(τ (n)h ≤T n)− →1.
+In particular,P P n⊗Q∞(τ (n)h <∞)− →1.
+Proposition 3.2 treats one feature. The next corollary extends the result to a finite portfolio when
+at least one positively weighted feature has a nonzero contrast.
+Corollary 3.3.Fix a finite collection of Lipschitz features h1, . . . , hm and deterministic weights
+ω1, . . . , ωm such that ωℓ ≥ 0and Pmℓ=1 ωℓ = 1. Define M (n)mix,t = Pmℓ=1 ωℓM (n)hℓ,t and τ (n)mix = inf{t≥ 1 :
+M (n)mix,t ≥ 1/α}. If, for some ℓ, ωℓ > 0and∆ hℓ(P, Q) ̸= 0, then, for every deterministic sequence
+Tn → ∞,
+PP n⊗Q∞(τ (n)mix ≤T n)− →1.
+The PRM portfolio is the special case with the order and dispersion features assigned equal
+weights. It has asymptotic power one whenever either contrast is nonzero. Appendix A.11 extends
+Proposition 3.2 and Corollary 3.3 to delayed changes.
+3.2 Limits of fixed calibration
+The positive results in Section 3.1 use marginal validity, whereas Shaer et al. (2026) give a PAC
+calibration-conditional guarantee. We first show that requiring calibration-conditional validity for
+every null distribution rules out nontrivial power. We then show that, even under the marginal validity
+requirement, a fixed calibration size limits attainable power.
+Theorem 3.4.Suppose a sequential procedure satisfies calibration-conditional validity at level α for
+every distributionPon a standard Borel space:
+PH0(P) (τ <∞ |D0)≤α P n-almost surely.
+Then, for every fixed calibration sampleD 0 and every stream distributionQ,
+PX1,X2,...∼Q∞
+ 
+τ <∞ |D0
+
+≤α.
+Thus calibration-conditional validity leaves no distribution-free power beyond level α. Our method
+requires only marginal validity and therefore avoids this impossibility. However, distribution-free
+marginal validity still entails an information limit.
+Theorem 3.5.Let a sequential test satisfy supR PH0(R)(τ <∞) ≤α . Let TV denote total variation
+distance. Then, for anyP, Q,
+PP n⊗Q∞(τ <∞)≤β α(P n, Qn)≤α+ TV(P n, Qn),
+whereβ α(P n, Qn) := sup0≤φ≤1:E Qn φ≤α EP nφ.
+To interpret the bound, compare the alternative D0 ∼P n, X1:∞ ∼Q ∞ with the null under which
+both the calibration sample and stream follow Q. The stream has the same law in both experiments;
+only the calibration sample differs. An infinite stream can reveal Q, but it supplies no additional
+observations from P . Power is therefore bounded by the best level- α test of Qn against P n based on
+the calibration sample alone.
+8
+Remark3.6.The TV bound can be vacuous when α + TV(P n, Qn) ≥ 1. Yet even for a basic Gaussian
+location shift, no procedure with distribution-free type I error control can attain power one. Specifically,
+forP=N(0,1) andQ=N(µ,1), every distribution-free procedure satisfies
+PP n⊗Q∞(τ <∞)≤Φ  √n|µ| −Φ−1(1−α)  <1.
+At a fixed calibration size, unlimited monitoring does not in general yield power one.
+4 Synthetic Experiments
+We compare five procedures. Order PRM uses Algorithm 1 with h(u) = u− 1/2, and Dispersion PRM
+uses the same algorithm with h(u) = |2u− 1| −1/2. The PRM portfolio is the equal-weight average of
+these two martingales. CCTM and Standard CTM are from Shaer et al. (2026). Appendix C.1 gives
+implementation details for these two methods.
+We conduct two synthetic studies. The first reruns the nine settings considered by Shaer et al.
+(2026), covering immediate, delayed, and gradual location shifts. The second considers symmetric
+shifts with zero order contrast, as discussed in Section 2.3. All experiments use α = 0.05; Figure 4 in
+Appendix C reports the type I error results.
+4.1 Gaussian location shifts
+We rerun the nine Gaussian settings considered by Shaer et al. (2026). In every setting, the calibration
+set consists of n = 1000 i.i.d. observations from N (0, 1). The immediate settings use Xt ∼ N(d, 1)
+from t = 1, with d∈ {1, 1.5, 2}. The delayed settings use Xt ∼ N(0, 1) for t < t0 and Xt ∼ N(2, 1)
+for t≥t 0, where t0 ∈ {200, 600, 4000}. The gradual settings use Xt ∼ N(λt, 1), t = 1, . . . ,100, with
+λ∈ {0.015, 0.03, 0.05}. We compare Order PRM, the PRM portfolio, CCTM, and Standard CTM over
+1000 repetitions. Figure 1 shows one setting from each regime; Appendix C.3 reports all nine.
+0 10 20 30 40 50
+Observations after change
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Post-change detection probability
+t0.8 Order/CCTM/Std.: 24/30/37
+a Immediate: d = 1
+0 50 100 150
+Observations after change
+t0.8 Order/CCTM/Std.: 113/147/167
+b Delayed: t0 = 4000
+0 20 40 60 80 100
+Observations after change
+t0.8 Order/CCTM/Std.: 68/77/76
+c Gradual: λ = 0.015
+Order PRM PRM portfolio CCTM Standard CTM
+Figure 1: Detection under immediate, delayed, and gradual location shifts from Shaer et al. (2026).
+Across all nine settings, Order PRM reaches 80% detection probability earlier than both CCTM and
+Standard CTM. Relative to CCTM, it requires 10 .2%–23.1% fewer observations; relative to Standard
+CTM, it requires 10.5%–42.1% fewer. The PRM portfolio remains close to Order PRM despite splitting
+its initial wealth.
+9
+4.2 Symmetric shifts with zero order contrast
+We next consider three alternatives with zero order contrast. In each repetition, the calibration set
+contains n = 1000 i.i.d. observations from N (0, 1), and the online observations are i.i.d. from the
+alternative starting att= 1. The alternatives areN(0,1.5 2),Laplace(0,1/ √2), andt 3/√3.
+100 101 102 103
+Online observations (log scale)
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Detection probability
+a Gaussian scale: σ = 1.5
+100 101 102 103
+Online observations (log scale)
+b Shape: unit-variance Laplace
+100 101 102 103
+Online observations (log scale)
+c Tails: unit-variance t3
+Order PRM Dispersion PRM PRM portfolio CCTM Standard CTM
+Figure 2: Detection under three symmetric alternatives with zero order contrast.
+At T = 1000, Order PRM, CCTM, and Standard CTM have near-zero detection probability across
+all alternatives, whereas Dispersion PRM and PRM portfolio achieve near-one detection probability.
+Thus a feature with nonzero contrast recovers detection ability when the order contrast is zero.
+5 Real Data: CIF AR-10-C
+Finally, we evaluate Order PRM, the PRM portfolio, CCTM, and Standard CTM using CIF AR-10
+and CIF AR-10-C (Krizhevsky, 2009; Hendrycks and Dietterich, 2019). CIF AR-10-C is constructed by
+applying 15 corruption types, each at five severity levels, to the CIF AR-10 images. For each image,
+we use the Shannon entropy of the softmax probabilities produced by a publicly available ResNet-20
+pretrained on CIF AR-10 (He et al., 2016) as the scalar monitoring score. For each n∈ {20, 30, 50}, we
+use n clean images for calibration and a disjoint 5 ,000-image corrupted stream. We consider all 15
+severity-5 corruptions and 10 random index splits, yielding 150 trials per calibration size. Results for
+severity levels 1–4 are reported in Appendix C.5.
+1 10 100 1000 5000
+Online observations
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0Detection probability
+a n = 20
+1 10 100 1000 5000
+Online observations
+b n = 30
+1 10 100 1000 5000
+Online observations
+c n = 50
+Order PRM PRM portfolio CCTM Standard CTM
+Figure 3: Detection of CIF AR-10-C corruptions at severity 5 forn= 20,30,50.
+Order PRM reaches 80% detection after 28, 23, and 20 observations for n = 20, 30, 50, respectively.
+10
+The PRM portfolio requires 40, 28, and 26 observations, and Standard CTM requires 176, 61, and
+40. CCTM does not reach 80% detection within T = 5,000 for n = 20, and requires 3 ,757 and 94
+observations for n = 30 and 50. Order PRM and the portfolio reach 80% detection earlier than both
+baselines for all three calibration sizes.
+6 Conclusion
+We derive the exact predictive law of fixed-reference ranks and use it to construct PRMs with anytime
+type I error control. Pre-specified features target different shifts, while ONS adapts the bet. For
+Lipschitz features with nonzero contrast, we prove finite-window detection guarantees and consistency
+as the initial calibration size increases. Empirically, Order PRM detects Gaussian shifts and CIF AR-
+10-C earlier than CCTM, while Dispersion PRM detects symmetric shifts on which Order PRM
+and CCTM have near-zero power. These gains coexist with fundamental limits: distribution-free
+calibration-conditional validity permits only trivial power, and a fixed calibration size limits marginally
+valid procedures.
+References
+Abdur Rahman Ansari and Ralph A Bradley. Rank-sum tests for dispersions.The annals of mathematical statistics,
+pages 1174–1189, 1960.
+Stephen Bates, Emmanuel Cand` es, Lihua Lei, Yaniv Romano, and Matteo Sesia. Testing for outliers with conformal
+p-values.The Annals of Statistics, 51(1):149 – 178, 2023. doi: 10.1214/22-AOS2244. URL https://doi.org/10.1214/
+22-AOS2244.
+Yoav Benjamini and Yosef Hochberg. Controlling the false discovery rate: a practical and powerful approach to multiple
+testing.Journal of the Royal statistical society: series B (Methodological), 57(1):289–300, 1995.
+Yoav Benjamini and Daniel Yekutieli. The control of the false discovery rate in multiple testing under dependency.Annals
+of statistics, pages 1165–1188, 2001.
+David Blackwell and James B MacQueen. Ferguson distributions via p´ olya urn schemes.The annals of statistics, 1(2):
+353–355, 1973.
+Valentina Fedorova, Alex Gammerman, Ilia Nouretdinov, and Vladimir Vovk. Plug-in martingales for testing exchange-
+ability on-line.arXiv preprint arXiv:1204.3251, 2012.
+Elad Hazan, Amit Agarwal, and Satyen Kale. Logarithmic regret algorithms for online convex optimization.Machine
+Learning, 69(2):169–192, 2007.
+Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. InProceedings
+of the IEEE conference on computer vision and pattern recognition, pages 770–778, 2016.
+Dan Hendrycks and Thomas Dietterich. Benchmarking neural network robustness to common corruptions and perturbations.
+arXiv preprint arXiv:1903.12261, 2019.
+Alex Krizhevsky. Learning multiple layers of features from tiny images. 2009. URL https://api.semanticscholar.org/
+CorpusID:18268744.
+John Orban and Douglas A Wolfe. Distribution-free partially sequential piacment procedures.Communications in
+Statistics-Theory and Methods, 9(9):883–904, 1980.
+John Orban and Douglas A Wolfe. A class of distribution-free two-sample tests based on placements.Journal of the
+American Statistical Association, 77(379):666–672, 1982.
+Aleksandr Podkopaev and Aaditya Ramdas. Sequential predictive two-sample and independence testing.Advances in
+neural information processing systems, 36:53275–53307, 2023.
+Aaditya Ramdas, Johannes Ruf, Martin Larsson, and Wouter M Koolen. Testing exchangeability: Fork-convexity,
+supermartingales and e-processes.International Journal of Approximate Reasoning, 141:83–109, 2022.
+Aytijhya Saha and Aaditya Ramdas. Testing exchangeability by pairwise betting. InInternational Conference on Artificial
+Intelligence and Statistics, pages 4915–4923. PMLR, 2024.
+Shalev Shaer, Yarin Bar, Drew Prinster, and Yaniv Romano. Testing for distribution shifts with conditional conformal
+test martingales. InForty-third International Conference on Machine Learning, 2026. URL https://openreview.net/
+forum?id=B8sTBdGvqG.
+11
+Glenn Shafer. Testing by betting: A strategy for statistical and scientific communication.Journal of the Royal Statistical
+Society Series A: Statistics in Society, 184(2):407–431, 04 2021. ISSN 0964-1998. doi: 10.1111/rssa.12647. URL
+https://doi.org/10.1111/rssa.12647.
+Jean Ville.Etude critique de la notion de collectif, volume 3. Gauthier-Villars Paris, 1939.
+Denis Volkhonskiy, Evgeny Burnaev, Ilia Nouretdinov, Alexander Gammerman, and Vladimir Vovk. Inductive conformal
+martingales for change-point detection. InConformal and Probabilistic Prediction and Applications, pages 132–153.
+PMLR, 2017.
+Vladimir Vovk, Ilia Nouretdinov, and Alexander Gammerman. Testing exchangeability on-line. InProceedings of the 20th
+international conference on machine learning (ICML-03), pages 768–775, 2003.
+Vladimir Vovk, Alexander Gammerman, and Glenn Shafer.Algorithmic learning in a random world. Springer, 2005.
+Vladimir Vovk, Ivan Petej, Ilia Nouretdinov, Ernst Ahlberg, Lars Carlsson, and Alex Gammerman. Retrain or not retrain:
+Conformal test martingales for change-point detection. InConformal and Probabilistic Prediction and Applications,
+pages 191–210. PMLR, 2021.
+Vladimir Vovk, Ilia Nouretdinov, and Alex Gammerman. Conformal e-testing.Pattern Recognition, 168:111841, 2025.
+Douglas A Wolfe. On a class of partially sequential two-sample test procedures.Journal of the American Statistical
+Association, 72(357):202–205, 1977.
+12
+The appendix is organized as follows. Appendix A proves the theorems, propositions, and corollaries
+stated in the main text and extends the detection guarantees to delayed changes. Appendix B examines
+the CCTM type I error guarantee and gives continuous and discrete counterexamples. Appendix C
+provides the baseline implementations, simulation settings, and CIF AR-10-C protocol.
+A Proofs of Main-Text Results
+A.1 Proof of Theorem 2.1
+Proof. The substantive part of the theorem is the predictive rank law (1). Once this law is established,
+the martingale property and the anytime bound follow by standard arguments.
+Suppose first thatPis continuous, and defineU i =F P (Yi) andV t =F P (Xt). UnderH 0(P),
+U1, . . . , Un, V1, V2, . . .i.i.d.∼Unif(0,1).
+Since a monotone transformation preserves ranks, the rank of Xt among Y1, . . . , Yn equals the rank
+of Vt among U1, . . . , Un. Let U(1) <· · ·< U(n) be the order statistics of the calibration uniforms,
+and set U(0) = 0 and U(n+1) = 1. These points partition [0 , 1] into n + 1 intervals with lengths
+Wj =U (j) −U (j−1),j= 1, . . . , n+ 1. Up to events of probability zero,
+Rt =j⇐ ⇒V t ∈
+ 
+U(j−1), U(j)
+
+.
+Thus, conditional on W = (W1, . . . , Wn+1), we have P(Rt = j|W ) = Wj. The ranks are conditionally
+independent because V1, V2, . . .are independent, and hence Rt |W i.i.d.∼Categorical (W1, . . . , Wn+1).
+LetN t−1,j = Pt−1s=1 1{Rs =j}. The conditional likelihood of the observed rank history is
+P(R1, . . . , Rt−1 |W) =
+n+1Y
+j=1
+W Nt−1,jj .
+The spacings of uniform order statistics satisfy ( W1, . . . , Wn+1) ∼Dirichlet (1, . . . ,1). Dirichlet
+conjugacy therefore gives
+W| Gt−1 ∼Dirichlet (1 +N t−1,1, . . . ,1 +Nt−1,n+1),
+and hence E(Wj | Gt−1) = (1 + Nt−1,j)/ Pn+1ℓ=1 (1 + Nt−1,ℓ) = (1 + Nt−1,j)/(n + t). Finally, the tower
+property yields
+P(Rt =j| Gt−1) =E[P(R t =j|W,G t−1)| Gt−1]
+=E(W j | Gt−1)
+= 1 +N t−1,j
+n+t ,
+which proves (1). For atomic P , the same argument applies to the lexicographically ordered pairs used
+for tie breaking.
+Sinceq t isG t−1-measurable,
+E[Et | Gt−1] =
+n+1X
+j=1
+qt,j
+πt,j
+πt,j = 1.
+ThusM t = Qts=1 Es is a nonnegative martingale withM 0 = 1. Ville’s inequality gives
+P
+
+sup
+t≥0
+Mt ≥1/α
+
+≤α.
+13
+A.2 Proof of Proposition 2.2
+Proof.The range condition gives|Z t| ≤1, soEt = 1 +λ tZt ≥0. Predictive centering gives
+E(Et | Gt−1) = 1 +λ tE(Zt | Gt−1) = 1.
+Thus (Mt)t≥0 is a nonnegative martingale and hence an e-process.
+A.3 Proof of Proposition 2.3
+Proof. Write gt = Zt/(1 + λtZt) and At = 1 + Pts=1 g2s . The predictable domain gives |λtZt| ≤3/4.
+Hence 1 +λ tZt ≥1/4,
+|gt| ≤4, A t ≤1 + 16t.
+Fixusuch that|u| ≤b t. Since|Z t| ≤Bt, we also have|uZ t| ≤3/4. Therefore
+1 +uZ t
+1 +λ tZt
+= 1 +x t, x t =g t(u−λ t).
+The preceding bounds implyx t ∈[−6/7,6]. On this interval, log(1 +x)≤x−x 2/9. Consequently,
+log(1 +uZ t)−log(1 +λ tZt)≤g t(u−λ t)− 19 g2t (u−λ t)2.(3)
+If|u| ≤bt+1 as well, projection in (2) does not increase the distance tou, and
+(λt+1 −u) 2 ≤
+
+λt + 9gt2At −u 2
+= (λt −u) 2 + 9gtAt (λt −u) + 81g2t4A2t .
+Rearranging this inequality gives
+gt(u−λ t)≤ 19 At(λt −u) 2 −A t(λt+1 −u) 2	 + 9g2t4At .
+Substituting this bound into (3) and usingA t =A t−1 +g 2t gives
+log(1 +uZ t)−log(1 +λ tZt)
+≤ 19 (At −g 2t )(λt −u) 2 −A t(λt+1 −u) 2	 + 9g2t4At
+= 19 At−1(λt −u) 2 −A t(λt+1 −u) 2	 + 9g2t4At .
+Fix T≥ 1, let bT = min1≤t≤T bt, and take |u| ≤bT . For t = 1, . . . , T−1, we have |u| ≤bt and
+|u| ≤bt+1, so the preceding inequality telescopes to
+T−1X
+t=1
+{log(1 +uZ t)−log(1 +λ tZt)}
+≤ 19 A0(λ1 −u) 2 −A T−1 (λT −u) 2	 + 94 T−1Xt=1 g2tAt
+≤ 19 + 94 log(1 + 16T).
+14
+Indeed,A 0 = 1,λ 1 = 0, and|u| ≤1, so the initial quadratic term is at most 1/9, while
+T−1X
+t=1
+g2t
+At
+≤logA T−1 ≤log(1 + 16T).
+ForT= 1, both sums above are empty and the same bound holds.
+It remains to control the final factor. Both u and λT belong to [ −bT , bT ], so |uZT | ≤3/4 and
+|λT ZT | ≤3/4. Consequently,
+log(1 +uZ T )−log(1 +λ T ZT )≤log 7.
+Combining these bounds and maximizing over|u| ≤b T gives
+sup
+|u|≤bT
+TX
+t=1
+{log(1 +uZ t)−log(1 +λ tZt)} ≤log 7 +19 + 94 log(1 + 16T).
+This proves Proposition 2.3.
+For the deterministic consequence used below, fix u∈ [−3/4, 3/4]. Since bt ≥ 3/4 for every t, this
+comparator belongs to both [ −bt, bt] and [ −bt+1, bt+1] at every step. The preceding one-step inequality
+therefore telescopes throught=T. Usingu 2 ≤9/16 and
+TX
+t=1
+g2t
+At
+=
+TX
+t=1
+At −A t−1
+At
+≤
+TX
+t=1
+log At
+At−1
+= logA T
+gives
+sup
+u∈[−3/4,3/4]
+TX
+t=1
+{log(1 +uZ t)−log(1 +λ tZt)} ≤116 + 94 logA T
+≤ 116 + 94 log(1 + 16T).
+(4)
+Since PTt=1 log(1 + λtZt) = logM T , this is the deterministic explicit bound used in the power proofs
+below.
+A.4 Proof of Theorem 3.1
+We first establish two auxiliary lemmas. The first relates the realized feature contrast to ∆ h(P, Q),
+and the second gives the finite-window bound used to prove the theorem.
+Write Zh,t for the payoff Zt constructed from feature h. For finite n, define the realized feature
+contrast
+dh,n(D0) :=E Q
+
+h
+ Rt −1
+n
+D0 − 1n+ 1 n+1Xj=1 h j−1n  .
+Under the i.i.d. alternative, this contrast does not depend ont.
+Lemma A.1.Let P be continuous, let Q be arbitrary, let D0 ∼P n, and let h be L-Lipschitz with zero
+uniform mean. Then
+dh,n(D0) P n− − →∆h(P, Q),
+and, for everyx >0,
+PP n
+
+|dh,n(D0)−∆ h(P, Q)|> Lx+ Ln+ 1  ≤2e −2nx2.(5)
+Moreover, for everyt≥1,
+EQ(Zh,t |D 0) = n+ 1n+t dh,n(D0).
+15
+Proof.Abbreviateg n(j) =h{(j−1)/n}, and put
+¯hn = 1n+ 1 n+1Xj=1 gn(j), m h,n(D0) =E Q{gn(Rt)|D 0}, d h,n(D0) =m h,n(D0)− ¯hn.
+Theπ t-weighted feature mean can be written as
+n+1X
+j=1
+πt,jgn(j) = (n+ 1) ¯hn + Ps<t gn(Rs)n+t .
+Conditional on D0, the ranks are i.i.d. under Q. Taking expectation in the preceding display and
+subtracting fromm h,n(D0) gives
+EQ(Zh,t |D 0) = n+ 1n+t dh,n(D0).
+SincePis continuous, (R t −1)/n= bFn(Xt) almost surely underP n ⊗Q. Hence
+|mh,n(D0)−∆ h(P, Q)| ≤L∥bFn −F P ∥∞.
+To control the grid mean, let U∼Unif (0, 1) and set Un = k/n when U∈ [k/(n + 1), (k + 1)/(n + 1)).
+ThenU n is uniform on{0,1/n, . . . ,1}and|Un −U| ≤1/(n+ 1). SinceEh(U) = 0,
+|¯hn|=|Eh(U n)−Eh(U)| ≤ Ln+ 1 .
+The DKW inequality proves (5), which also givesd h,n(D0) P n− − →∆h(P, Q).
+Finally, boundedness of dh,n(D0) upgrades convergence in probability to convergence of expectations.
+Averaging the conditional identity overD 0 gives the relation stated in the main text:
+EP n⊗Q∞Zh,t = n+ 1n+t ED0dh,n(D0) = n+ 1n+t {∆h(P, Q) +on(1)}.
+The remainder does not depend ontbecaused h,n(D0) does not.
+Lemma A.2.Let P be continuous, let Q be arbitrary, and let h be an L-Lipschitz feature. Write
+∆ = ∆h(P, Q),δ=|∆|, and
+rT = 116 + 94 log(1 + 16T).
+Suppose thatδ >0. If
+n+ 1≥ 8Lδ ,1≤T≤n, T δ 2 ≥128 log 1α +r T  ,
+then
+PP n⊗Q∞(τh > T)≤2 exp
+
+− nδ2
+32L2
+
++ exp
+
+− T δ2
+2048
+
+.(6)
+Proof.The concentration bound in Lemma A.1, withx=δ/(8L), gives
+PP n
+
+|dh,n(D0)−∆|> δ4  ≤2 exp − nδ232L2  ,
+16
+where n + 1 ≥ 8L/δ controls the deterministic grid error. Work on the complementary event, and write
+s= sign(∆). Thens d h,n(D0)≥3δ/4.
+Take the fixed comparator u = sθ, where θ = δ/8. Since h has zero uniform mean and range
+width at most one, δ≤ 1. Hence |θZh,t| ≤1/8, and log(1 + x) ≥x−x 2 applies. Conditional on D0,
+Lemma A.1 gives
+EQ(Zh,t |D 0) = n+ 1n+t dh,n(D0).
+SinceT≤n, we have PTt=1(n+ 1)/(n+t)≥T /2. The range condition therefore yields
+EQ
+" TX
+t=1
+log(1 +sθZ h,t)
+ D0# ≥ 3θδT8 −θ 2T
+= T δ2
+32 .
+(7)
+The sign s has already been combined with the drift. Thus the linear term is 3 θδT /8, including
+when ∆<0.
+Conditional on D0, the ranks are independent. Replacing Rj while holding the other ranks fixed
+changes Zh,j by at most one and each Zh,t, t > j, by at most 1 /(n + t). Each comparator log factor is
+2θ-Lipschitz as a function ofZ h,t, so the total change in the comparator log wealth is at most
+2θ
+
+
+1 +
+TX
+t=j+1
+1
+n+t
+
+
+ ≤4θ.
+McDiarmid’s inequality and (7) imply
+PQ
+ TX
+t=1
+log(1 +sθZ h,t)< 3T δ2128  D0! ≤exp − T δ22048  .
+The explicit regret bound in (4) gives, outside this lower-tail event,
+logM h,T ≥ 3T δ2128 −r T ≥log 1α .
+Henceτ h ≤T, and averaging overD 0 proves (6).
+We now prove Theorem 3.1.
+Proof.Write
+δ=|∆ h|, L=L h, K= max{1, L 2}, ℓ β = log eαβδ .
+The feature normalization givesδ≤1. Henceℓ β ≥1 + log(1/β), andr h,β =δ −2ℓβ.
+Let
+T=
+
+Cδ −2ℓβ , r T = 116 + 94 log(1 + 16T).
+For C≥ 1, we have T≤ 2Cδ −2ℓβ. Since log(1/δ) ≤ℓ β and logℓ β ≤ℓ β, there is a universal constant c0
+such that
+rT ≤c 0(1 + logC)ℓ β.
+Choose a universalClarge enough that
+C≥128{1 +c 0(1 + logC)}andC≥2048.
+17
+Then
+T δ2 ≥Cℓ β ≥128
+
+log 1α +r T
+
+.
+Now suppose that n≥ ⌈CKδ−2ℓβ⌉. Since K≥ 1, we have T≤n . Moreover, K≥L , while δ≤ 1
+andℓ β ≥1, so
+n+ 1≥CKδ −2ℓβ ≥ 8Lδ .
+Lemma A.2 therefore gives
+PP n⊗Q∞(τh > T)≤2 exp
+
+− nδ2
+32L2
+
++ exp
+
+− T δ2
+2048
+
+≤2 exp
+
+− Cℓβ
+32
+
++ exp
+
+− Cℓβ
+2048
+
+≤β.
+ThusP P n⊗Q∞(τh ≤T)≥1−β.
+A.5 Proof of Proposition 3.2
+Proof.Fix anyη∈(0,1). Applying Theorem 3.1 withβ=η, define
+Tη =
+
+C|∆ h|−2 log
+ e
+αη|∆h|
+
+.
+For fixed η, this horizon does not depend on n. For all sufficiently large n, the theorem’s calibration-size
+condition holds, and therefore
+PP n⊗Q∞(τ (n)h ≤T η)≥1−η.
+Moreover, sinceT n → ∞, we haveTn ≥T η for all sufficiently largen. Consequently,
+PP n⊗Q∞(τ (n)h ≤T n)≥P P n⊗Q∞(τ (n)h ≤T η)≥1−η.
+Thus,
+lim inf
+n→∞
+PP n⊗Q∞(τ (n)h ≤T n)≥1−η.
+Letting η↓ 0 shows that the limit inferior is at least one. Since the probability is at most one, it
+converges to one.
+A.6 Proof of Corollary 3.3
+Proof. Choose ℓ as in the corollary. Since M (n)mix,t ≥ω ℓM (n)hℓ,t, a crossing by component ℓ at 1/(αωℓ)forces the mixture to cross 1/α. Proposition 3.2, applied toh ℓ at levelαω ℓ, therefore gives
+PP n⊗Q∞
+
+τ (n)mix ≤T n − →1.
+18
+A.7 Proof of Theorem 3.4
+Proof. Fix D0 = d = ( d1, . . . , dn) and a stream distribution Q. Let U∼ν collect the auxiliary
+randomization independently of the data, and let Gd be the empirical distribution of d1, . . . , dn. For
+ε∈(0,1), define
+Pε = (1−ε)Q+εG d.
+Each coordinate of d is an atom of Gd, so D0 = d has positive probability under P nε . Calibration-
+conditional validity forP ε therefore gives
+PX1:∞∼P ∞ε , U∼ν
+ 
+τ(d, X1:∞, U)<∞
+
+≤α.
+ForT≥1, let
+AT (d) ={(x 1:T , u) : the procedure stops by timeTafter history (d, x 1:T )}.
+The preceding bound implies
+(P Tε ⊗ν)(A T (d))≤α.
+As ε↓ 0, P Tε ⊗ν→Q T ⊗ν in total variation, so ( QT ⊗ν )(AT (d)) ≤α . Since AT (d) increases to the
+event of eventual rejection, continuity from below gives
+PQ∞, U∼ν
+ 
+τ(d, X1:∞, U)<∞
+
+= lim
+T→∞
+(QT ⊗ν)(A T (d))≤α.
+BecausedandQwere arbitrary, this is the claimed bound for every fixed calibration sample.
+A.8 Proof of Theorem 3.5
+Proof.LetUcontain any auxiliary randomness and define the test function
+φ(d) =P X1:∞∼Q∞,U {τ(d, X1:∞, U)<∞}.
+WhenD 0 ∼Q n, iterated expectation and validity at the null distributionQgive
+EQnφ=E D0∼Qn [PX1:∞∼Q∞,U {τ(D 0, X1:∞, U)<∞}]
+=P D0∼Qn, X1:∞∼Q∞,U (τ <∞)≤α.
+Thus φ is feasible in the definition of βα(P n, Qn). For the target experiment D0 ∼P n and X1:∞ ∼Q ∞,
+EP nφ=E D0∼P n [PX1:∞∼Q∞,U {τ(D 0, X1:∞, U)<∞}]
+=P D0∼P n, X1:∞∼Q∞,U (τ <∞).
+The definition ofβ α(P n, Qn) therefore implies
+PP n⊗Q∞(τ <∞)≤β α(P n, Qn).
+For every feasible testψ, the definition of total variation gives
+EP nψ−E Qnψ≤TV(P n, Qn).
+SinceE Qnψ≤α, it follows that
+EP nψ≤α+ TV(P n, Qn).
+Taking the supremum over all feasibleψyields
+βα(P n, Qn)≤α+ TV(P n, Qn).
+Combining the two inequalities gives
+PD0∼P n, X1:∞∼Q∞(τ <∞)≤β α(P n, Qn)≤α+ TV(P n, Qn).
+19
+A.9 Proof of Remark 3.6
+Proof. By Theorem 3.5, it remains to evaluate βα(P n, Qn). For P = N (0, 1), Q = N (µ, 1), and µ >0,
+log dP n
+dQn (y1:n) =−µ
+nX
+i=1
+yi + nµ22 .
+The level-αNeyman–Pearson test therefore rejects when
+Y≤µ− Φ−1(1−α)√n .
+Thusβ α(P n, Qn) = Φ{√nµ−Φ −1(1−α)}. Forµ <0, the same expression holds with|µ|. Hence
+PP n⊗Q∞(τ <∞)≤Φ  √n|µ| −Φ−1(1−α)  <1.
+A.10 Proof of the Gaussian dispersion formula
+For P = N (0, 1) and Q = N (0, σ2), with σ >0, write X = σZ , where Z∼ N(0, 1). Symmetry and
+Φ(−x) = 1−Φ(x) giveEΦ(σZ) = 1/2, hence ∆ ord = 0. Also,
+E|2Φ(σZ)−1|= 2
+Z ∞
+0
+{2Φ(σz)−1}ϕ(z)dz
+= 2π arctan(σ).
+The last identity follows from rotational symmetry of two independent standard Gaussians. Thus
+∆disp(σ) = 2 arctan(σ)/π− 1/2. Since ∆ disp(1) = 0 and ∆ ′disp(σ) = 2/{π(1 + σ2)}> 0, the contrast is
+zero only atσ= 1.
+The same sign interpretation holds for a common symmetric location scale family. Let P and Q
+be the laws of m + σP Z and m + σQZ, where σP , σQ > 0 and Z has a continuous, strictly increasing
+distribution functionGsymmetric about zero. Withr=σ Q/σP ,F P (X) =G(rZ) forX∼Q, and
+|2G(rZ)−1|= 2G(r|Z|)−1
+is strictly increasing in r almost surely. Because its expectation is 1 /2 at r = 1, ∆disp is positive when
+σQ > σP and negative when σQ < σP . Without this common form, its sign need not represent a scale
+ordering.
+A.11 Delayed change results
+We extend the immediate-change result to a shift after ν null observations and bound the subsequent
+detection delay.
+Theorem A.3.Let P be continuous, Q be arbitrary, and h : [0, 1] →R be a Lipschitz feature with
+constant Lh and∆ h = ∆h(P, Q) ̸= 0. For an integer ν≥ 0, suppose that D0 ∼P n, that X1, . . . , Xν
+are i.i.d. fromP, and thatX ν+1, Xν+2, . . .are i.i.d. fromQ, with all observations independent.
+There exist universal constants C0, C1 > 0with the following property. For every β∈ (0, 1), define
+Th,β(ν) :=
+&
+C1
+"
+1
+|∆h|2 log
+ e(ν+ 1)
+αβ|∆h|
+
++
+s
+ν
+|∆h|2 log
+ e(ν+ 1)
+αβ|∆h|
+#’
+.
+20
+Letτ h be the stopping time produced by Algorithm 1 with featureh. Suppose that
+n≥
+
+C0 max{1, L2h}|∆h|−2 log{e(ν+ 1)/(αβ|∆ h|)} .
+Then
+PP n+ν ⊗Q∞ {τh ≤ν+T h,β(ν)} ≥1−β,
+PP n+ν ⊗Q∞ {ν < τh ≤ν+T h,β(ν)} ≥1−α−β.
+Corollary A.4.Under the setting of Theorem A.3, takeh=h ord. For everyβ∈(0,1), if
+n≥
+
+C0|∆ord|−2 log
+ e(ν+ 1)
+αβ|∆ord|
+
+,
+then
+PP n+ν ⊗Q∞ {τord ≤ν+T hord,β(ν)} ≥1−β,
+PP n+ν ⊗Q∞ {ν < τord ≤ν+T hord,β(ν)} ≥1−α−β.
+Proposition A.5.Let P be continuous, let Q be arbitrary, fix an integer ν≥ 0, and let h be a Lipschitz
+feature with∆ h(P, Q) ̸= 0. For each n, let M (n)h,t and τ (n)h denote the e-process and stopping time based
+on a calibration sample of sizen. Then, for every deterministic sequenceT n → ∞,
+PP n+ν ⊗Q∞
+n
+τ (n)h ≤ν+T no − →1
+and
+PP n+ν ⊗Q∞
+n
+τ (n)h ≤ν+T n
+ τ (n)h > νo − →1.
+Moreover,
+lim inf
+n→∞
+PP n+ν ⊗Q∞
+n
+ν < τ(n)h ≤ν+T no ≥1−α.
+In particular,P P n+ν ⊗Q∞(τ (n)h <∞)→1.
+Corollary A.6.Let P be continuous, let Q be arbitrary, and fix an integer ν≥ 0. Fix the features
+and weights in Corollary 3.3, and let M (n)mix,t and τ (n)mix be defined there. If, for some ℓ, ωℓ > 0and
+∆hℓ(P, Q)̸= 0, then, for every deterministic sequenceT n → ∞,
+PP n+ν ⊗Q∞
+n
+τ (n)mix ≤ν+T no − →1
+and
+PP n+ν ⊗Q∞
+n
+τ (n)mix ≤ν+T n
+ τ (n)mix > νo − →1.
+Moreover,
+lim inf
+n→∞
+PP n+ν ⊗Q∞
+n
+ν < τ(n)mix ≤ν+T no ≥1−α.
+21
+A.12 Proof of Theorem A.3
+Proof.LetP ν =P P n+ν ⊗Q∞. Throughout the proof, abbreviate
+∆ = ∆h(P, Q), δ=|∆|, L=L h, K= max{1, L 2}.
+The feature normalization gives δ≤min{ 1, L}and Lδ≤K ; in particular, L > 0. For the proof,
+continue the ONS recursion after its first crossing; this leaves τh unchanged. Fix a deterministic integer
+T≥1, and put
+¯vn = 1n+ 1 n+1Xj=1 h  j−1n  , V t =h  Rt −1n  .
+Conditional onD 0, define
+mP =E P (Vt |D 0), m Q =E Q(Vt |D 0),
+and
+dP =m P −¯vn, d Q =m Q −¯vn.
+The quantity dQ is precisely the realized contrast dh,n(D0) in Lemma A.1, while dP is the same quantity
+withQ=P.
+Let
+Hν :=σ(D 0, R1, . . . , Rν), D:=n+ν+ 1,
+and define the realized signal at the change point by
+dν :=m Q − (n+ 1)¯vn + Pνs=1 VsD .
+Writing
+Sν :=
+νX
+s=1
+(Vs −m P ),
+whereS 0 = 0, gives the exact decomposition
+dν =d Q − νdP +S νD .(8)
+Assume for the moment that
+n+ 1≥ 32Lδ .(9)
+Lemma A.1, applied withx=δ/(32L) first toQand then toP, gives
+PP n
+
+|dQ −∆|> δ16  ≤2 exp − nδ2512L2  ,
+PP n
+
+|dP |> δ16  ≤2 exp − nδ2512L2  .
+Conditional on D0, the variables V1, . . . , Vν are independent, have common mean mP , and lie in an
+interval of width at most one. Hence, forν≥1, Hoeffding’s inequality gives
+Pν
+
+|Sν|> Dδ8  D0 ≤2 exp − D2δ232ν  .
+Forν= 0,S 0 = 0, so no Hoeffding bound is needed.
+22
+Define theH ν-measurable event
+Eν :=
+
+|dQ −∆| ≤ δ16  ∩ |dP | ≤δ16  ∩ |Sν| ≤Dδ8  .
+OnE ν, (8) yields
+|dν −∆| ≤ δ16 + νD δ16 + δ8 ≤ δ4 .
+Therefore, withs= sign(∆),
+sdν ≥ 3δ4 onE ν.(10)
+A union bound andD 2/ν≥4(n+ 1) forν≥1, together withK= max{1, L 2}, give
+Pν(E cν)≤6 exp
+
+− nδ2
+512K
+
+.
+Conditional on Hν, the post-change ranks are i.i.d. and Eν(Vν+m | Hν) = mQ. Thus, for every
+m≥1,
+Eν (Zh,ν+m | Hν) =m Q − (n+ 1)¯vn + Pνs=1 Vs + (m−1)m QD+m−1
+= DD+m−1 dν.(11)
+To account for the bets placed before the change, we need a suffix regret bound for the current
+ONS state. Write
+gt = Zh,t1 +λ tZh,t , A t = 1 + tXj=1 g2j .
+The predictable domain gives|λ tZh,t| ≤3/4, so
+|gt| ≤4, A t ≤1 + 16t.
+Retaining the endpoint terms in the proof of Proposition 2.3 gives, for everyu∈[−3/4,3/4],
+log(1 +uZ h,t)−log(1 +λ tZh,t)≤ 19 At−1(λt −u) 2 −A t(λt+1 −u) 2	 + 94 g2tAt . (12)
+Foru∈[−3/4,3/4], write
+Lν,T (u) :=
+TX
+m=1
+log{1 +uZ h,ν+m}.
+Summing (12) fromt=ν+ 1 tot=ν+T, and using
+ν+TX
+t=ν+1
+g2t
+At
+≤log
+ Aν+T
+Aν
+
+,
+gives
+logM h,ν+T −logM h,ν ≥L ν,T (u)− Aν9 (λν+1 −u) 2
+− 94 log  Aν+TAν  . (13)
+23
+Applying (12) fromt= 1 tot=νwith comparatoru= 0, and usingλ 1 = 0, yields
+−logM h,ν ≤ −Aν9 λ2ν+1 + 94 logA ν.
+Consequently,
+Aν
+9 λ2ν+1 ≤logM h,ν + 94 logA ν.(14)
+Combining (13) and (14), then using 2 λν+1u−u 2 ≥ −λ2ν+1 − 2u2, At ≤ 1 + 16t, and (14) again, gives
+the following pathwise bound on{τ h > ν}, whereM h,ν <1/α:
+logM h,ν+T ≥L ν,T (u)−log 1α − 92 log{1 + 16(ν+T)}
+− 2(1 + 16ν)9 u2, (15)
+Suppose now that
+T≤D=n+ν+ 1.(16)
+Put
+θ:= δT16(ν+T+ 1) .
+Because δ≤ 1, we have θ≤ 1/16. Hence log(1 + x) ≥x−x 2 applies to x = sθZh,ν+m. On Eν, (10)
+and (11) imply
+Eν {Lν,T (sθ)| Hν} ≥θsdν
+TX
+m=1
+D
+D+m−1 −θ 2T
+≥ 3θδT8 −θ 2T.
+The last inequality uses PTm=1 D/(D+m−1)≥T /2, which follows fromT≤D. Since
+T+ 2(1 + 16ν)9 ≤4(ν+T+ 1),
+the choice ofθgives
+Eν {Lν,T (sθ)| Hν} −2(1 + 16ν)9 θ2
+≥ δ2T 2
+128(ν+T+ 1) onE ν.
+(17)
+Conditional on Hν, regard Lν,T (sθ) as a function of the independent post-change ranks. Replacing
+Rν+j changes its own innovation by at most one and each later innovation Zh,ν+m by at most
+1/(D+m−1). Since
+sup
+|z|≤1
+ ddz log(1 +sθz)  ≤ θ1−θ <2θ,
+changingR ν+j changesL ν,T (sθ) by at most
+2θ
+
+
+1 +
+TX
+m=j+1
+1
+D+m−1
+
+
+ ≤4θ,
+24
+where the last inequality again uses T≤D . The sum of squared bounded differences is at most 16 T θ2.
+McDiarmid’s inequality and (17) therefore give, onE ν,
+Pν
+ 
+Lν,T (sθ)− 2(1 + 16ν)9 θ2 < δ2T 2256(ν+T+ 1)  Hν! ≤exp − T δ22048  .(18)
+Suppose also that
+δ2T 2
+256(ν+T+ 1) ≥2 log 1α + 92 log{1 + 16(ν+T)}.(19)
+If τh > ν+ T , then (15) applies. On Eν and the complement of the lower-tail event in (18), (15) and
+(19) imply logM h,ν+T ≥log(1/α), a contradiction. Hence, whenever (9), (16), and (19) hold,
+Pν(τh > ν+T)≤6 exp
+
+− nδ2
+512K
+
++ exp
+
+− T δ2
+2048
+
+.(20)
+We now verify the grid, window, and crossing conditions forT=T h,β(ν). Put
+ℓ= log
+ e(ν+ 1)
+αβδ
+
+, r= ℓδ2 .
+Thenℓ≥1 andr≥1. BecauseLδ≤K, the calibration-size condition implies (9) wheneverC 0 ≥32.
+Let
+T=
+
+C1{r+ √νr} .
+For now, letC 1 ≥1 and suppose that
+C0 ≥C 1 + 1 + C214 .
+Sincen≥C 0Kr≥C 0r, writingT≤C 1{r+
+p
+(ν+ 1)r}+ 1 gives
+n+ν+ 1−T≥r
+(
+ν+ 1
+r −C 1
+r
+ν+ 1
+r +C 0 −C 1 −1
+)
+≥0.
+ThusT≤n+ν+ 1 =D, proving (16).
+Next, letT 0 =C 1{r+ √νr}. Sincet7→t 2/(ν+ 1 +t) is increasing,
+T 2
+ν+ 1 +T ≥ T 20ν+ 1 +T 0 .
+Becauser≥1,
+ν+ 1 +T 0 ≤(C 1 + 1)(√ν+ √r)2.
+Hence
+T 20
+ν+ 1 +T 0
+≥ C21
+1 +C 1
+r≥ C1
+2 r.
+Therefore,
+δ2T 2
+256(ν+ 1 +T) ≥ C1512 ℓ.(21)
+On the other hand, using
+p
+(ν+ 1)r≤(ν+ 1 +r)/2 andr≥1,
+1 + 16(ν+T)≤24C 1(ν+r+ 2)
+25
+forC 1 ≥1. Furthermore,
+log(ν+ 1)≤ℓ,logr= logℓ+ 2 log 1δ ≤3ℓ.
+It follows that
+log{1 + 16(ν+T)} ≤ {6 + log(24C1)}ℓ.(22)
+ChooseC 1 ≥2048 large enough that
+C1
+512 ≥2 + 92 {6 + log(24C1)}.
+Then choose
+C0 ≥max
+
+1536, C1 + 1 + C214  .
+Combining (21) and (22), and using log(1/α) ≤ℓ , proves (19). The calibration condition and the
+definition ofTnow give
+6 exp
+
+− nδ2
+512K
+
+≤6e −3ℓ,exp
+
+− T δ2
+2048
+
+≤e −ℓ.
+Becauseℓ≥log(e/β),
+6e−3ℓ +e −ℓ ≤  6e−3 +e −1 β < β.
+It follows from (20) that
+Pν {τh > ν+T h,β(ν)} ≤β,
+which proves the first conclusion of the theorem.
+Under Pν, the joint law of ( D0, X1, . . . , Xν) is the same as under H0(P ). The anytime-validity
+result in Proposition 2.2 therefore gives
+Pν(τh ≤ν) =P H0(P) (τh ≤ν)≤α.
+Combining this bound with the first conclusion gives
+Pν {ν < τh ≤ν+T h,β(ν)} ≥1−α−β,
+which proves the second conclusion.
+A.13 Proof of Corollary A.4
+Proof. The order feature has Lipschitz constant one, so the result follows directly from Theorem A.3.
+A.14 Proof of Proposition A.5
+Proof. Fix η∈ (0, 1). The horizon Th,η(ν) in Theorem A.3 does not depend on n. For all sufficiently
+large n, the calibration-size condition holds, and Tn ≥T h,η(ν). The first conclusion of the theorem
+therefore gives
+lim inf
+n→∞
+PP n+ν ⊗Q∞
+n
+τ (n)h ≤ν+T no ≥1−η.
+Sinceηis arbitrary, the claimed unconditional convergence follows.
+For the conditional statement, apply the theorem with β = η(1 −α ). The observations up to time
+νhave the null law, so anytime validity gives
+PP n+ν ⊗Q∞
+n
+τ (n)h > νo ≥1−α.
+26
+For all sufficiently largen,
+PP n+ν ⊗Q∞
+n
+τ (n)h > ν+T n
+ τ (n)h > νo ≤ β1−α =η.
+This proves the conditional convergence. Finally,
+PP n+ν ⊗Q∞
+n
+ν < τ(n)h ≤ν+T no =P P n+ν ⊗Q∞ nτ (n)h > νo −P P n+ν ⊗Q∞ nτ (n)h > ν+T no .
+The second term tends to zero, so the displayed identity and anytime validity give the claimed lower
+bound. The eventual rejection claim follows from the first convergence proved above.
+A.15 Proof of Corollary A.6
+Proof.Chooseℓsatisfying the conditions in the corollary, and define
+eτ(n)ℓ = inf
+
+t≥1 :M (n)hℓ,t ≥ 1αωℓ
+
+.
+SinceM (n)mix,t ≥ω ℓM (n)hℓ,t, we haveτ (n)mix ≤eτ(n)ℓ . Applying Proposition A.5 toh ℓ at levelαω ℓ gives
+PP n+ν ⊗Q∞
+n
+τ (n)mix > ν+T no − →0.
+Because the mixture is an e-process and the observations through timeνhave the null law,
+PP n+ν ⊗Q∞
+n
+τ (n)mix > νo ≥1−α.
+Hence
+PP n+ν ⊗Q∞
+n
+τ (n)mix > ν+T n
+ τ (n)mix > νo ≤ PP n+ν ⊗Q∞{τ (n)mix > ν+T n}1−α − →0.
+The final claim follows from
+PP n+ν ⊗Q∞
+n
+ν < τ(n)mix ≤ν+T no =P P n+ν ⊗Q∞ nτ (n)mix > νo −P P n+ν ⊗Q∞ nτ (n)mix > ν+T no .
+B From CCTM’s PAC Guarantee to Marginal Type I Error
+This section explains why the CCTM calibration-conditional guarantee does not imply marginal type I
+error control at the same nominal level and gives continuous and discrete counterexamples.
+B.1 From the conditional statement to a marginal bound
+Theorem 3.1 of Shaer et al. (2026) displays the statement
+PD0
+
+PH0
+
+∃t≥1 :S t ≥ 1α  Ft−1, D0 ≤α  ≥1−δ,
+where Ft−1 = σ( bF0(X1), . . . ,bF0(Xt−1)). This notation is not formally well defined because the crossing
+event ranges over all t, whereas the conditioning field Ft−1 changes with t. The intended statement
+should instead be written as
+PD0
+
+PH0(P)
+
+sup
+t≥1
+St ≥ 1a  D0 ≤a  ≥1−δ.
+27
+The conditional crossing probability is at most a for a set of calibration samples with probability at
+least 1−δ, and at most one otherwise. Hence
+PH0(P) (τ <∞)≤a(1−δ) +δ.
+Using this bound, marginal level α requires δ < αand a≤ (α−δ )/(1 −δ ). The synthetic experiments
+of Shaer et al. (2026) use α = 0.05 and δ = 0.1. With a = 0.05, the bound is 0 .145, and no nonnegative
+choice ofamakes it at most 0.05.
+B.2 A continuous-null example
+The preceding conversion shows that the internal conditional level need not equal the marginal type I
+error. This difference can lead to an actual violation of the nominal level.
+Proposition B.1.Consider CCTM under the continuous nullP= Unif(0,1). At
+n= 5, δ= 0.9, k= 10 −6, α= 0.01,
+its infinite-horizon null rejection probability is at least
+0.0122385070> α.
+This example shows that CCTM does not control marginal type I error for all allowed parameter
+choices, even under a continuous null.
+Proof. Let W = (W0, . . . , Wn) be the spacings made by the ordered calibration sample on [0 , 1]. Under
+the continuous uniform null, W∼Dirichlet (1, . . . ,1). Conditional on W , the fixed ECDF value
+bF0(Xt) =j/nhas probabilityW j, independently overt.
+Put
+ϵ=
+r
+log(2/δ)
+2n ,C={1/2 +
+p
+1 +k 2 ϵ}−1.
+For the two fixed ONS comparatorsη=±1/2, define
+b±j = 1 +C
+"
+± 12  jn − 12  − r 14 +k 2 ϵ# , ℓ ±j = logb ±j .
+The conditional long-run log growth of comparator ±1/2 is L±(W ) = Pnj=0 Wjℓ±j . If L±(W ) > 0, the
+conditional strong law makes that comparator’s log wealth grow linearly. The pathwise O(logT ) ONS
+regret bound then makes the analyzed CCTM wealth cross every fixed threshold almost surely.
+For distinct coefficients c0, . . . , cn and a vector uniform on the simplex, direct integration of the
+simplex slice gives
+P
+
+
+nX
+j=0
+cjWj > x
+
+ = X
+j:cj >x
+(cj −x) nQ
+r̸=j (cj −c r) .
+One derivation writes Wj = Ej/ Pr Er for independent unit-rate exponentials and uses partial fractions
+for the resulting signed weighted sum. At n = 5, δ = 0.9, and k = 10−6, substitution of cj = ℓ+j and
+x= 0 gives
+P{L+(W)>0}= 0.0061192535.
+Symmetry gives the same probability for L−(W ) > 0. These two events are disjoint: for every j,
+b+j b−j < 1, so L+(W ) + L−(W ) < 0. Consequently the unconditional probability of a positive-growth
+comparator, and hence the infinite-horizon null rejection probability, is at least
+2(0.0061192535) = 0.0122385070>0.01.
+28
+B.3 A discrete-null example
+CCTM computes
+bF0(x) = 1n nXi=1 1{Yi ≤x}.
+Under a continuous null, bF0(Xt) is marginally uniform on {0, 1/n, . . . ,1}. This property can fail in the
+presence of ties. We tested the null
+Yi ∼Bernoulli(1/2), X t ∼Bernoulli(1/2),
+with n = 1000, T = 200, α = 0.05, δ = 0.1, and 5000 repetitions. There is no distribution shift. Table 1
+reports the results. CCTM rejects in every run, while Order PRM remains below the nominal level.
+Table 1: Tie counterexample under a Bernoulli null.
+Method False-alarm probability Standard error
+Order PRM 0.0344 0.0026
+CCTM 1.0000 0.0000
+The released CCTM implementation exhibits severe empirical type I error inflation under this null.
+Together with Proposition B.1, this gives counterexamples under both continuous and discrete nulls.
+C Experimental Details
+This section specifies the two baselines, the type I error simulation, and the synthetic and CIF AR-10-C
+protocols.
+C.1 CCTM and Standard CTM
+Algorithm 2 combines Algorithms 1 and 2 of Shaer et al. (2026).
+29
+Algorithm 2CCTM
+Require: Fixed reference set D0 = {X 0i }ni=1, stream X1, . . . , XT , test level α, confidence bound level
+δ, and smoothing parameterk >0
+Ensure:Rejection timeτ CCTM ∈ {1, . . . , T} ∪ {∞}
+1:Estimate bF0(x) =n −1 Pni=1 1{X 0i ≤x}.
+2:Setϵ(x) =ϵ n =
+p
+log(2/δ)/(2n), and setC={0.5 +
+√
+1 +k 2 maxˆp∈[0,1]ϵ(ˆp)}−1.
+3:InitializeS 0 = 1,η 1 = 0,a 0 = 1, andτ CCTM =∞.
+4:fort= 1, . . . , Tdo
+5:Setbp t = bF0(Xt) and evaluateϵ(bpt).
+6:Setg t =C{η t(bpt −0.5)−
+p
+η2t +k 2ϵ(bpt)}.
+7:UpdateS t =S t−1(1 +g t).
+8:ifS t ≥1/αthen
+9:Setτ CCTM =tand returnτ CCTM.
+10:end if
+11:Setg ′t =C{bpt −0.5−η tϵ(bpt)/pη2t +k 2}.
+12:Setz t =g ′t/(1 +g t) anda t =a t−1 +z 2t .
+13:Setη t+1 = max{−1/2,min(η t + 4zt/at,1/2)}.
+14:end for
+15:Returnτ CCTM =∞.
+Our simulations use the implementation released with that paper. Relative to Algorithm 2, the
+released code uses (0 .5 + (1 +k)ϵn)−1 in place of C, replaces the ONS coefficient 4 by 2 /{2 −log (3)},
+and applies the clipping rule in Section 3.4 of Shaer et al. (2026). We use D = 0.5 and k = 10−6, with
+δ=C= 0.1 in the synthetic experiments andδ=C= 0.05 in the CIF AR-10-C experiment.
+Algorithm 3 gives the Standard CTM. Its randomized conformal p-value is from Section 2.2 of
+Shaer et al. (2026), and its ONS update is from the released implementation.
+Algorithm 3Standard CTM
+Require: Reference set D0 = {X 0i }ni=1, stream X1, . . . , XT , test level α, betting bound D, and clipping
+thresholdC
+Ensure:Rejection timeτ CTM ∈ {1, . . . , T} ∪ {∞}
+1:InitializeD 0 =D 0,S 0 = 1,η 1 = 0,a 0 = 1, andτ CTM =∞.
+2:fort= 1, . . . , Tdo
+3: Draw Ut ∼Unif (0, 1) independently and set pt = {PZ∈Dt−1 1{Z < Xt} + Ut[1 +PZ∈Dt−1 1{Z =
+Xt}]}/(n+t).
+4:SetD t =D t−1 ∪ {Xt}andeη t =η t1{|ηt| ≥C}.
+5:UpdateS t =S t−1{1 +eηt(pt −0.5)}.
+6:ifS t ≥1/αthen
+7:Setτ CTM =tand returnτ CTM.
+8:end if
+9:Setv t = 2(pt −0.5),z t =v t/(1 +η tvt), anda t =a t−1 +z 2t .
+10:Setη t+1 = Π[−D,D]{ηt + [2/{2−log(3)}]z t/at}.
+11:end for
+12:Returnτ CTM =∞.
+We useD= 0.5 andC= 0.1 for Standard CTM.
+30
+C.2 Type I error simulation
+Under the null, the calibration observations and the entire online stream are i.i.d. from N (0, 1), so
+no change occurs. We use α = 0.05, monitor 20000 online observations, and estimate the rejection
+probability from 10000 repetitions forn∈ {10,500,1000, . . . ,5000}.
+10 1000 2000 3000 4000 5000
+Calibration size n
+0.00
+0.01
+0.02
+0.03
+0.04
+0.05
+0.06
+Null rejection probability by T = 20,000
+Order PRM
+Dispersion PRM
+PRM portfolio
+CCTM
+Standard CTM
+Nominal level α = 0.05
+Figure 4: Null rejection probabilities across calibration sizes.
+In this Gaussian null experiment, none of the five estimated rejection probabilities exceeds the
+nominal level (0.05). The PRMs are closer to the nominal level than CCTM and Standard CTM.
+C.3 Complete results for the Gaussian location experiments
+Table 2 reports the complete results for the nine Gaussian settings described in the main text. Within
+each repetition, all four methods receive the same calibration sample and online stream. For delayed
+changes, t0.8 is computed from the post-change detection curve conditional on no alarm by the change
+point.
+Table 2: Time to 80% detection probability in the nine Gaussian settings of Shaer et al. (2026). Smaller
+is better. Reduction is measured relative to CCTM.
+Setting Order PRM Portfolio CCTM Standard CTM Reduction
+Immediate,d= 12427 30 3720.0%
+Immediate,d= 1.51517 17 2411.8%
+Immediate,d= 21112 13 1915.4%
+Delayed,t 0 = 20027 2734 3820.6%
+Delayed,t 0 = 600 434255 6121.8%
+Delayed,t 0 = 4000 113111147 16723.1%
+Gradual,λ= 0.0156871 77 7611.7%
+Gradual,λ= 0.034446 49 5210.2%
+Gradual,λ= 0.053335 37 4010.8%
+31
+C.4 CIF AR-10-C protocol
+The image experiment uses a publicly available ResNet-20 model pretrained on CIF AR-10. For each
+image, we use the Shannon entropy of its softmax probabilities as the scalar monitoring score. We use
+all 15 main corruptions at severity 5. We randomly permute the 10,000 test-image indices. The first 50
+indices provide the largest clean calibration sample, and the next 5000 indices provide the corrupted
+stream. The same indices are used across methods.
+All four methods receive the same entropy-score stream in every trial.
+C.5 Additional CIF AR-10-C severity levels
+Figures 5–8 report the detection curves at severity levels 1–4. All other settings are unchanged.
+1 10 100 1000 5000
+Online observations
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0Detection probability
+a n = 20
+1 10 100 1000 5000
+Online observations
+b n = 30
+1 10 100 1000 5000
+Online observations
+c n = 50
+Order PRM PRM portfolio CCTM Standard CTM
+Figure 5: Detection of CIF AR-10-C corruptions at severity 1 forn= 20,30,50.
+1 10 100 1000 5000
+Online observations
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0Detection probability
+a n = 20
+1 10 100 1000 5000
+Online observations
+b n = 30
+1 10 100 1000 5000
+Online observations
+c n = 50
+Order PRM PRM portfolio CCTM Standard CTM
+Figure 6: Detection of CIF AR-10-C corruptions at severity 2 forn= 20,30,50.
+32
+1 10 100 1000 5000
+Online observations
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0Detection probability
+a n = 20
+1 10 100 1000 5000
+Online observations
+b n = 30
+1 10 100 1000 5000
+Online observations
+c n = 50
+Order PRM PRM portfolio CCTM Standard CTM
+Figure 7: Detection of CIF AR-10-C corruptions at severity 3 forn= 20,30,50.
+1 10 100 1000 5000
+Online observations
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0Detection probability
+a n = 20
+1 10 100 1000 5000
+Online observations
+b n = 30
+1 10 100 1000 5000
+Online observations
+c n = 50
+Order PRM PRM portfolio CCTM Standard CTM
+Figure 8: Detection of CIF AR-10-C corruptions at severity 4 forn= 20,30,50.
+33

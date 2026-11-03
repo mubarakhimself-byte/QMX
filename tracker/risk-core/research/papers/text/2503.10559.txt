@@ -1,0 +1,866 @@
+arXiv 2503.10559  https://arxiv.org/abs/2503.10559
+
+Towards Safe Path Tracking Using the Simplex Architecture
+Georg Jäger 1, Nils-Jonathan Friedrich 1, Hauke Petersen 2, Benjamin Noack 2
+Abstract— Robot navigation in complex environments ne-
+cessitates controllers that prioritize safety while remaining
+performant and adaptable. Traditional controllers like Regu-
+lated Pure Pursuit, Dynamic Window Approach, and Model-
+Predictive Path Integral, while reliable, struggle to adapt to
+dynamic conditions. Reinforcement Learning offers adaptability
+but state-wise safety guarantees remain challenging and often
+absent in practice. To address this, we propose a path tracking
+controller leveraging the Simplex architecture. It combines
+a Reinforcement Learning controller for adaptiveness and
+performance with a high-assurance controller providing safety
+and stability. Our main goal is to provide a safe testbed for the
+design and evaluation of path-planning algorithms, including
+machine-learning-based planners. Our contribution is twofold.
+We firstly discuss general stability and safety considerations for
+designing controllers using the Simplex architecture. Secondly,
+we present a Simplex-based path tracking controller. Our
+simulation results, supported by preliminary in-field tests,
+demonstrate the controller’s effectiveness in maintaining safety
+while achieving comparable performance to state-of-the-art
+methods.
+I. INTRODUCTION
+Fig. 1: Autonomous mobile robot demonstrating parcel delivery on
+a sidewalk of 2m width.
+Autonomous mobile robots will revolutionize applications,
+e.g., in parcel delivery cf. Fig. 1, agriculture, healthcare, etc.
+[1]. A central prerequisite for that is safe and effective navi-
+gation, which requires robots to follow a (pre-)planned path.
+This task is typically addressed by path tracking algorithms
+which are constantly challenged by complex trajectories. The
+Pure Pursuit (PP) algorithm [2] formulates a geometric ap-
+proach to follow a path by steering towards a lookahead point
+This work was partially funded by the German Federal Ministry for
+Digital and Transport within the mFUND program (grant no. 19FS2025A -
+Project Ready for Smart City Robots).
+1Georg Jäger and Nils-Jonathan Friedrich are with the Faculty
+of Mathematics and Computer Science, TU Bergakademie
+Freiberg, 09599 Freiberg, Germany{georg.jaeger,
+nils-jonathan.friedrich}@informatik.tu-freiberg.de
+2Hauke Petersen and Benjamin Noack are with the Faculty of Computer
+Science, Otto-von-Guericke University Magdeburg, 39106 Magdeburg, Ger-
+many{hauke.petersen, benjamin.noack}@ovgu.de
+on the path. Although proven to be stable [2], it’s assumption
+of constant velocity and curvature raised the question for
+adaptivity, which led to the Adaptive Pure Pursuit (APP) and
+Regulated Pure Pursuit (RPP) algorithms [3].
+In a similar vein, PID controllers have been extended to
+track velocity and provide steering control [4] using fuzzy
+logic. The predictiveStanleycontroller has been extended
+using fuzzy logic to provide adaptivity regarding its pre-
+diction horizon [5]. Model Predictive Path Integral (MPPI)
+[6] employs an optimization-based approach to adaptively
+compute control commands while considering the robot’s
+dynamics and constraints. However, static, risk-neutral tra-
+jectory sampling limits its adaptivity and is extended to
+use uncertainty for efficient trajectory sampling in [7]. [8],
+similarly, provides adaptivity to the underlying model of
+the system dynamics by firstly adapting the tire cornering
+stiffness and the road friction coefficient, and secondly, using
+Model Predictive Control (MPC) to compute control com-
+mands. Reinforcement Learning (RL) offers an alternative
+and has proven its performance and adaptability for path
+tracking [9], [10], [11] as well as in other complex, dynamic
+application scenarios [12]. However, theblack-boxnature of
+Artificial Neural Network (ANN) commonly used in (deep)RL
+contradicts the a central motivation and need for adaptivity in
+path tracking: safety and stability guarantees. Although this
+challenge is most pronounced in forANN-based controllers,
+it also applies to other adaptive controllers, where increasing
+complexity increases the difficulty to provide guarantees (e.g.
+consider optimization-based model-predictive controllers).
+Hybrid architectures, such as the Simplex architecture
+[13], aim to bridge this gap by enforcing a safety envelope
+around an uncertifiedRLcontroller, with the safety guar-
+antees of traditional controllers. TheRLcontroller operates
+under normal conditions, while a high-assurance fallback
+controller (e.g., Dynamic Window Approach Version B
+(DWB),MPPI, orRPP) ensures safety when needed. In this way,
+safety is guaranteed, independently of the high-performance
+controller’s degree of optimality.
+Despite their potential, hybrid architectures seem to be
+underexplored in path tracking and autonomous navigation,
+most notably in Robot Operating System Version 2 (ROS2).
+To address this gap, we make two contributions. Firstly, we
+discuss design considerations for ensuring safety and stability
+in controllers using the Simplex architecture (cf. Section III).
+Secondly, we present a Simplex-based path tracking con-
+troller (cf. Section IV) as a safety-wrapper for deploying
+complex, adaptive controllers. We evaluate the controller
+usingRLas the high-performance controller andRPPas
+the high-assurance controller in simulations (cf. Section V),
+arXiv:2503.10559v2  [cs.RO]  11 Feb 2026
+demonstrating its effectiveness in maintaining safety while
+achieving comparable performance to state-of-the-art meth-
+ods, as well as in a real-world deployment. In the next
+section, however, we start by discussing the limitations of
+existing path tracking controllers inROS2and approaches for
+introducing adaptiveness throughRL(cf. Section II).
+II. STATE OF THEART ONPATHTRACKING
+CONTROLLERS INROS2
+ROS2path tracking controllers can be classified as geomet-
+ric, reactive, or model-predictive [14]. This section reviews
+RPP,DWB, andMPPIas commonly-used examples of these
+categories. We focus on their applicability to open, dynamic
+environments, and discuss their limitations in adaptability,
+performance, and applicability. AsRLaddresses these prop-
+erties, we also discuss its potential in path tracking (cf. Sec-
+tion II-D) before concluding the section with a discussion
+(cf. Section II-E).
+A. Regulated Pure Pursuit (RPP)
+RPP[3] is a geometric controller derived fromPPalgorithm
+that identifies alookahead pointat distanceLahead on the
+path to calculate curvature and angular velocity. This basic
+algorithm is asymptotically stable for specific lookahead
+distances [2]. It’s proof extends to the extensions introduced
+by theRPPversion, which adjust the lookahead distance
+based on path curvature and adjust the velocity based on
+obstacle proximity to enhance performance.
+B. Dynamic Window Approach Version B (DWB)
+DWB[15] is a reactive controller that samples linear and
+angular velocities within adynamic windowof feasible
+motions to generate circular, collision-free trajectories. Each
+is scored by goal proximity, obstacle distance, and current
+velocity, with the lowest-cost control applied. Although
+this integrates feasibility and safety, its fixed cost function
+requires careful tuning and may fail in dynamic scenarios
+[14]. Moreover, while controller stability can emerge from
+configuring sampling and cost design, neither stability nor
+safety can be guaranteed.
+C. Model Predictive Path Integral (MPPI)
+MPPI[6], a model-predictive controller and a specialization
+of reactive controllers, optimizes a cost function online
+by sampling a search space. Extensions toMPPIintroduce
+constraints during sampling to provide safety guaratees [16].
+However, adaptivity remains limited by static, risk-neutral
+sampling, motivating uncertainty-based extensions [7].
+D.RLin Path Tracking
+RLenables agents, that is, training-based controllers to
+learn from interactions with their environment, adjusting
+their actions based on rewards and penalties they receive.
+By maximizing cumulative rewards over time,RLagents
+can learn optimal control policies without requiring explicit
+programming or supervision. Learning can be done online,
+where the agent learns while interacting with the environ-
+ment, or offline, where the agent learns from a dataset
+of past interactions. Thus, even in complex and dynamic
+environments,RL-based controllers can learn optimal control
+policies that adapt to changing conditions [12].
+Recent studies have explored various ways to applyRL
+to path tracking. These include using a path-integral based
+RLapproach to learn optimal parameters for a path fol-
+lowing controller offline and tune them online with real-
+time system states, leading to improved performance and
+adaptability [17]. A hierarchical approach has also been
+proposed by [10], where a high-level controller plans a
+path based on a global map and a low-level controller
+usesRLto track the path while avoiding obstacles in lo-
+cal, unknown environments. Q-learning has been combined
+with PID control to improve tracking accuracy and reduce
+computational complexity in [11]. Another approach is pro-
+posed by [18]. They developed an integrated kinematic and
+dynamic tracking control algorithm based onRLthat does not
+require knowledge of the robot’s dynamic model, leading to
+improved robustness and adaptability [18]. Furthermore, their
+approach is the only one of the listed that provides guarantees
+on the stability of the closed-loop system. As such, whileRL
+approaches show potential in handling complex path tracking
+situations and despite emerging approaches in safeRL[19],
+RLin general still falls short in providing guarantees on
+safety or stability.
+E. Discussion
+Comparing traditional controllers readily implemented,
+e.g., inROS2, with recentRLapproaches, highlights the
+divergence between adaptability and safety. Fundamental
+methods such asRPPandMPPIprovide stability guarantees
+with acceptable but, at times, limited performance. This
+raises the question of adaptivity to increase performance in
+complex, dynamic environments, which commonly comes at
+the cost of safety and stability guarantees – even consid-
+ering extensions of these foundational methods. The situa-
+tion is aggrevated byRL-based controllers, which promise
+adaptability and performance in complex scenarios but lack
+guarantees on safety or stability due to their black-box nature
+and learning-based design. Thus, the need for adaptivity in
+path tracking produces controllers that cannot be deployed
+in safety-critical applications. However, is there a way to
+combine the strengths of both traditional andRL-based
+controllers, ensuring safety while leveraging adaptability and
+performance?
+III. THESIMPLEXARCHITECTURE
+Hybrid architectures combine different controllers to ex-
+ploit their individual characteristics. In this section, we
+examing how the Simplex architecture [13] can be used
+to combine the adaptability of high-performance controllers
+(e.g.,RL-based) with the safety guarantees of traditional
+controllers. We first introduce its structure and components
+(cf. Section III-A), then formulate our contribution: design
+considerations for stability and safety guarantees in the
+Simplex architecture (cf. Section III-B).
+PlantP
+Decision
+D
+High-Perf.C p(x)
+High-Ass.C a(x)Sensor
+up
+ua
+uy
+x
+x
+Fig. 2: The Simplex architecture [13] combines a high-performance,
+adaptive controller with a high-assurance, fallback controller that is
+switched to if the decision module detects unsafe actions.
+A. Components of the Simplex Architecture
+The Simplex Architecture proposed by [13] combines
+controllers to achieve safety while leveraging the perfor-
+mance advantages of less verifiable controllers. For that,
+the architecture consists of three main components: a high-
+performance controllerC p(x), a high-assurance controller
+Ca(x), and a decision moduleD(withx∈ X ⊆R n being
+the state of the system) as illustrated in Fig. 2. Together, they
+realize a separation of concerns. The high-performance con-
+troller is designed for optimal performance, may be complex
+and adaptive, and is not required to provide guarantees. The
+high-assurance controller is designed to stabilize the system
+and guarantee safety, potentially at the cost of performance.
+The decision module acts as a switching mechanism be-
+tween the two controllers, monitoring the system’s state and
+the actions proposed by the high-performance controller. It
+can perform two actions: (1) switch to the high-assurance
+controller if the high-performance controller’s actions may
+lead to unsafe behavior, and (2) switch back to the high-per-
+formance controller if the system is safe and stable. Thus,
+while the high-assurance controller and decision module are
+concerned with safety and stability, the high-performance
+controller focuses on performance and adaptability.
+B. Design Considerations for Stability and Safety
+The separation of concerns in the Simplex architecture
+provides a framework to achieve safety and stability but
+requires careful design of the high-assurance controller and
+the decision module. For that, the difference between safety
+and stability needs to be clarified. Stability refers to the
+system’s ability to return to a stable state after a disturbance,
+while safety refers to the system’s ability to minimize the
+risk of hazardous events by preventing entering associated
+states (from which it still might be able to stabilize). Thus,
+while stability is a necessary condition for safety, it is not
+sufficient. For instance, a robot may stably follow a path
+but still collide with an obstacle due to unsafe oscillations.
+In this line, we discuss design considerations for the
+high-assurance controller to provide stability guarantees and
+the decision module to implement a strategy for switching
+between the high-performance and high-assurance controller
+to maintain system safety. We first discuss stability as a basis
+of safety in Section III-B.1 to derive stability guarantees
+for the high-assurance controller. Then, we integrate safety
+constraints to derive a strategy for the decision module
+to switch to the high-assurance controller when needed in
+Section III-B.2. Finally, we discuss the concept of dwell
+time [20], [21] in Section III-B.3 to derive a strategy for
+safely switching back to the high-performance controller.
+1) Stability Considerations:A necessary condition for
+safety is stability. As the high-performance controllerC p(x)
+does not provide stability guarantees and may even destabi-
+lize the system, the high-assurance controllerC a(x)needs to
+ensure stability. Moreover, the assumptions and limitations
+tied to these guarantees (e.g., as arising through linearization)
+need to be explicitly known by the decision module since it
+can only rely on the high-assurance controller to stabilize
+the system when the assumptions hold. In other words,
+the decision module needs to switch to the high-assurance
+controller before control actions of the high-performance
+controllerC p(x)drive the system to states where the stability
+guarantees ofC a(x)are no longer valid. Thus, stability
+for the Simplex architecture serves two purposes: ensuring
+the high-assurance controller can stabilize the system and
+providing a criterion for the decision module to switch to
+the high-assurance controller.
+A concept applicable here is the Region of Attraction
+(RoA), defining the regionX A|C ⊆ Xwithin the state space
+where a controllerC(x)guarantees system stabilization. The
+RoAcan be determined through stability analysis methods
+like Lyapunov functions [22], incremental stability [23], or
+reachability analysis [24]. These approaches are suitable for
+non-linear systems as is the case for path tracking.
+Lyapunov functions are scalar functions that decrease
+along system trajectories that converge towards an equilib-
+rium point, providing a measure of the system’s energy [22].
+Thus, a system is stable if it minimizes the Lyapunov
+function. Its region of attraction is then defined as the level
+set of the Lyapunov function. However, finding a Lyapunov
+function for an arbitrary system can be challenging and leads
+to conservative approximations of the actualRoA[22].
+Incremental stability focuses on the convergence of any
+two system trajectories, providing a measure of stability even
+without a specific equilibrium point [23]. Assuming that a set
+of statesX I can be found for which the system’s trajectories
+start and end inX I while converging over time, the set is
+said to be forward invariant and can be interpreted as aRoA
+(XI =X A|C). However, defining this forward invariant set
+explicitly is challenging for complex systems but needed for
+deriving a switching strategy for the decision module.
+Reachability analysis aims to determine (all) possible
+system states that can be reached from a given initial state,
+providing a comprehensive view of the system’s behavior and
+directly resulting in aRoA[24]. Approaches for calculating
+reachable sets can be hybridization-based, Taylor-model-
+based, constraint-solving-based, or simulation-based [25].
+[24] propose set propagation techniques, which allow for the
+analysis of hybrid systems.
+With these methods, stability of high-assurance controllers
+can be analyzed and theirRoAdetermined. This region
+provides stability guarantees and serves as a basis for design-
+ing the decision module’s condition to switch to the high-
+assurance controller.
+2) Integrating Safety Constraints:While stability is a
+necessary condition for safety, it is not sufficient. Safety
+requires minimizing risks beyond stability, such as avoiding
+collisions or staying within specified boundaries.
+The approach of Control Barrier Function (CBF) offers a
+powerful mechanism to encode safety requirements during
+controller synthesis or verification [26]. They are positive-
+definite functions defined on the system’s state space, typ-
+ically decreasing towards the desired equilibrium point.
+Safety requirements are mapped to a constant threshold value
+that theCBFmust not exceed. This approach enables handling
+safety as inequality constraints during controller synthesis,
+effectively combining safety and stability considerations
+within the region of attraction.
+Alternatively, barrier states, that is, states to be avoided by
+the system, can be defined [27]. This method utilizesCBFs
+as new state variables embedded within the system’s state
+space. While this allows applying standard stability analysis
+methods without explicitly considering safety constraints, it
+can increase system complexity and potentially render the
+system uncontrollable.
+For defining the switching condition of the decision mod-
+ule, however, controller synthesis is not required. Thus, an
+intuitive approach is to restrict the region of attraction of the
+high-assurance controller based on the safety requirements,
+that is,X S|C =X A|C \ {x|s(x)>0∀x∈ X,∀s∈ S},
+whereSis the set of safety constraints. By additionally
+requiring convexity of the set and ensuring invariance, the
+regionX S|C represents the safe operating space under both
+stability and safety constraints. The decision module can then
+monitor the system state relative to the boundary ofX S|C and
+switch to the high-assurance controller when the system is
+about to enter a statex ′Cp /∈ XS|C , wherex ′Cp is the one-step
+predicted state based on the high-performance controller’s
+actions and the overall control period.
+3) Dwell Time and Stability of Switching Systems:With
+the switch from high-performance to high-assurance con-
+troller being defined, the question arises when to switch back
+to the high-performance controller. For that, the decision
+module needs to ensure that the system is stabilized under
+the high-assurance controller before switching back.
+A concept that arose from the stability analysis of switched
+systems is the (average) dwell time, denoted asT d [20],
+[21]. It represents the minimum duration a system needs to
+stabilize under a given controller before switching to another
+to avoid oscillations between controllers that could lead to
+instability (despite individual controllers being stable). The
+concept of average dwell time is a generalization of dwell
+time that allows for some switches to occur more quickly
+than the minimum dwell time, as long as the average time
+between switches is sufficiently long.
+Since the Simplex architecture constitutes a switching
+system, the average dwell time can be used to determine
+when it is safe to switch back to the high-performance
+controller. It constitutes a simplistic yet effective approach
+to ensure stability. With that, the decision module’s function
+can be defined as 1:
+D(x) =
+(
+Cp(x)ifx ′Cp ∈ XS|C andt≥t HA +T d
+Ca(x)otherwise (1)
+wheret HA is the time when the system switched to the high-
+assurance controller. This ensures that the system is stabi-
+lized under the high-assurance controller before switching
+back to the high-performance controller.
+IV. SIMPLEX-BASEDPATHTRACKINGCONTROLLER
+With the last section’s discussion, we now apply the
+Simplex architecture to design a path tracking controller
+for a differential drive mobile robot. We start with the
+system definition (Section IV-A), then define the controllers
+(cf. Section IV-B), and finally describe a procedure to derive
+a safe switching strategy based on the region of attraction
+of the high-assurance controller and the safety requirements
+(cf. Section IV-C).
+A. System Definition
+For the path tracking problem, we consider a differential
+drive mobile robot with nonlinear kinematics:
+
+
+˙x
+˙y
+˙θ
+
+ =
+
+
+cos(θ) 0
+sin(θ) 0
+0 1
+
+
+v
+ω
+
+(2)
+where(x, y)represents the robot’s position in the 2D plane,
+θis its orientation, andvandωare the linear and angular
+velocities given as control actions by the controllerC(x),
+which we want to design using the Simplex architecture.
+The path tracking problem requires guiding the robot along
+a given pathP={p 0, . . . , pm}withp j ∈R 2, defined
+as a sequence of waypointsp j in the 2D plane. For that,
+C(x)is limited to the maximal velocityv∈[0, v max]with
+vmax = 1 m/secand angular velocityω∈[−ω max, ωmax]
+withω max = 0.5 rad/secoriginating from the robot’s phys-
+ical constraints. Additionally,C(x)must adhere to safety
+requirementsSduring path tracking. Motivated by the real-
+world example of a delivery scenario (cf. Fig. 1) where the
+robot has to drive on a sidewalk with a width of approx.
+2 m, we set the safety margin to1 mwhich results inS=
+{sP (x) =d P (x)≤1 m}, whered P (x)denotes the robot’s
+distance to the path.
+B. Definition of Controllers
+Given the system definition and the control task, we can
+define the controllers to be used in the Simplex architecture.
+We describe theRL-based, high-performance controller next
+and detail the high-assurance controller afterward.
+1Note that we simplify notation by omitting the time, i.e.,x=x(t),
+u=u(t), etc.
+−1.00 −0.75 −0.50 −0.25 0.00 0.25 0.50 0.75 1.00
+Distance dP,0 in [m]
+−1.5
+−1.0
+−0.5
+0.0
+0.5
+1.0
+1.5
+Angle Θ0 in [rad]
+XS|CP P
+Non-Converged
+xCp
+0.0
+0.6
+1.2
+1.8
+2.4
+3.0
+3.6
+4.2
+(a) Contour plot of maximal deviation from the path for different starting positions under
+CP P.
+0 2 4
+x
+0
+2
+4y
+P
+CP P
+(b) Single simulation of reachability analysis
+with a starting stated P,0 = 0.5 m,Θ 0 =
+0.0792 rad,r p = 0.8.
+Fig. 3: Results of reachability analysis.
+1) High-Performance Controller:Since no guarantees on
+safety or stability are required for the high-performance
+controller, any controller can be used. Here, we implement
+anRL-based high-performance controller using the Twin
+Delayed Deep Deterministic Policy Gradient with Behavioral
+Cloning (TD3+BC) algorithm [28]. It is an offlineRLalgo-
+rithm, enabling us to leverage existing data generated in a
+simulated environment and eliminating the need for extensive
+real-world training. Specifically, the behavior cloning com-
+ponent allows us to incorporate expert knowledge from ex-
+isting controllers, further enhancing the learning process. We
+exploited this by deploying theMPPI,RPP,DWBcontrollers
+for various waypoint following tasks using Gazebo and
+ROS2[29] to generate a dataset covering diverse scenarios. By
+applyingTD3+BC, we trained a high-performance controller
+CRL(x). Additionally, we trained a suboptimal controllerˆCRL(x)by prematurely terminating the training process to
+induce unsafe control actions, which we use for evaluating
+the Simplex architecture’s ability to prevent safety violations.
+2) High-Assurance Controller:For the high-assurance
+controller, which is required to provide stability guarantees,
+we exploit the results of [2] and implementC P P(x)using
+the pure pursuit algorithm. We configure the controller with
+a lookahead distance ofL= 1.0 mand a constrained linear
+velocity ofv max,P P = 0.5 m/secto ensure adherence to
+the safety requirements inS. Following our discussion in
+Section III-B, we approximate theRoAofC P P(x)using
+simulation-based reachability analysis. We solve the kine-
+matic model using Runge-Kutta 4/5 with a step size of
+0.05 secforT= 15 sec, for 11907 different initial states.
+These states vary in initial distance to the path (d P,0 ∈
+[−1.0 m,1.0 m]with step size0.1 m), initial orientation
+relative to the path (Θ 0 ∈[−1.5708 rad,1.5708 rad]with
+step size0.05 rad), and the robot’s relative position between
+the first two waypoints (r p ∈[0 m,0.4 m]with step size
+0.05 m). We generate 100 different, random paths with
+50 waypoints each, resulting in 1190700 simulations. The
+system is considered stabilized if the robot converges to the
+path with a distance ofd P ≤0.1 mfor at leastτ= 1.5 sec.
+For each simulation, we recorded the maximum distance to
+the pathmax(d P )and the convergence timeT c.
+Fig. 3a shows the maximum deviationmax(d P )over all
+simulations as a contour plot depending ond P,0 andΘ 0
+as obtained from the reachability analysis. Red dots denote
+initial states resulting in non-converging simulations, i.e.,
+whereC P P(x)could not stabilize the robot. The orange line
+indicates the level set whered P = 1.0 mconstituting our
+safety requirement. As non-converging states can be found
+within this level set, however, theRoAX A|CP P is limited
+by them. The simulation associated with the non-converging
+state closest toX A|CP P is shown in Fig. 3b, where theC P P
+limitation of having a fixed lookahead distance ofL= 1.0 m
+is visible. The robot’s initial distance to the path paired with
+its randomness in curvature and the fixed lookahead distance
+can lead to oscillating behavior violating our convergence
+criteria. Although oscillations are decreasing, the controller’s
+RoAis restricted by them.
+Nevertheless, the results reinforce the stability guarantees
+reported by [2], which assume closeness to the path. This
+analysis provides the basis for the decision module to derive
+the switching strategy, which we discuss in the next section.
+C. Decision Module
+Following the discussion in Section III-B and specifically
+Eq. (1), we need to define two switches for the decision mod-
+ule. The first switch is from the high-performance controller
+to the high-assurance controller when the system’s safety is
+in danger. The second switch is back to the high-performance
+controller when the system is safe and stabilized again.
+For the first switch, we consider theRoAX A|CP P of the
+previous subsection, which has to be intersected with the
+safety requirementsSstating that the robot cannot diverge
+more than1.0 mfrom the path. For that, we consider the
+maximum deviation recorded during the simulation for each
+state inX A|CP P, which ismax XA|CP P(dP ) = 0.681 m.This is caused by the already discussed non-converging state
+at(d P,0 = 0.5 m,Θ 0 = 0.0792 rad)that limits theRoA.
+However, since this means that the maximal deviation that
+might be encountered when switched to the high-assurance
+controller for stabilizing the system is well within the safety
+requirement,X A|CP P =X S|CP P in our case. Thus, both sets
+are indicated by the yellow area/line in Fig. 3a.
+At this point, we simplify the formulation of the decision
+module. According to Eq. (1), the decision module switches
+depending on the predicted statex ′Cp. To avoid implementing
+an online simulation, we instead further restrictX S|CP P.
+Given the maximal deviation from the path encountered
+during simulations of states in theRoAismax XA|CP P(dP ) =0.681 mand given the robot’s maximal velocityv max =
+1 m/sec, the robot can move at most0.05 mwithin one
+control period. We use this to restrict the maximal deviation
+from the pathmax XA|CP P(dP ) = 0.681 m−0.05 m =0.631 mand formX ′S|CP Pas aRoA. Now, we can usex Cp /∈
+X ′S|CP P as a condition for the decision module to switch tothe high-assurance controller. Since we know that the robot
+can move at most0.05 mwithin one control period, the robot
+will still be inX ′S|CP P when triggering the switch while not
+being inX ′S|CP Panymore. An example (blue point) is shownin Fig. 3a where the decision module activated the high-
+assurance controller while the system remained within the
+originalX S|CP P. This is further discussed in the evaluation
+section, together with Fig. 5.
+For the second switch, we consider the dwell time of the
+high-assurance controller, cf. Section III-B.3. For each state
+inX ′S|CP P, we recorded the time needed to converge to thepathT c. Assuming the worst-case again, the maximum time
+needed to converge to the path ismax Tc∈X ′S|CP P(Tc) =Td = 12.45 sec. Using the parametersT d andX ′S|CP P
+together withC P P(x)andC RL(x), the decision module as
+defined by Eq. (1) is parameterized and thereby constitutes
+our Simplex architecture for path tracking, which we denote
+asC S(x)for simplicity. Note, for evaluation purposes, we
+constructed the Simplex controller using the suboptimal
+controller ˆCRL(x)as well and denote the resulting Simplex
+controller as ˆCS(x).
+V. EVALUATION
+We evaluate the designed and parameterized Simplex
+controllersC S and ˆCS in this section by means of extended
+simulation and comparison to other controllers, including
+MPPI,RPP, andDWB. We present our simulation setup in the
+next subsection before discussing the results and comparing
+the Simplex controller to other controllers.
+A. ROS2 Simulation Setup
+To evaluate the controllers, we use the Gazebo2 simulation
+environment where we modeled the Clearpath Husky robot 3
+as shown in Fig. 1. For implementing the controllers, we use
+theROS2navigation stack and the existing implementations of
+theMPPI,RPP, andDWBcontrollers and leverage the plugin-
+based structure to implement our own controllers (C P P,ˆCRL,C RL, ˆCS,C S).
+2https://gazebosim.org/home, Accessed: 2025-09-08
+3https://clearpathrobotics.com/
+husky-a300-unmanned-ground-vehicle-robot/, Accessed:
+2025-09-08
+(a) Unsafe ˆCRL controller failing safety requirement.
+(b) ˆCS maintains safety through high-assurance controller.
+Fig. 4: Comparing ˆCRL and ˆCS controllers onP square track.
+(a) ˆCS xin high-performance mode att= 69 sec.
+(b) ˆCS xin high-assurance mode att= 70 sec.
+Fig. 5: Switch from high-performance (cf. Fig. 5a) to high-
+assurance mode (cf. Fig. 5b) in the Simplex controller due to
+relative angle (Θ0 =−0.52 rad) between robot and path. The state
+xCp is visualized as a blue point in Fig. 3a.
+For defining the path to be followed by the robot, we
+consider two different tracks: a squared trackP square and a
+curved trackP cos. The squared track is motivated by the
+delivery scenario in urban environments with sharp turns
+at intersections, cf. Fig. 4. The track is70 mlong in total,
+with each straight segment being10 m(sideways) and7.5 m
+(downwards) long. Additionally, we considered a curved
+track given as a cosine function (cf. Fig. 5) for assessing
+the controllers’ performance capabilities in a simplified en-
+vironment. Each controller was simulated on each track for
+N= 30times, resulting in a total ofN= 480simulations.
+B. Results
+This section discusses the simulation results. First we
+exemplarily analyze the Simplex controller’s safety assurance
+through cf. Fig. 4 and cf. Fig. 5 and then compare it to other
+state-of-the-art path tracking algorithms in Table I.
+1) Safety Assurance:To analyze the safety assurance
+achieved through the Simplex controller, we simulated the
+ˆCRL(x)controller in isolation and embedded in ˆCS(x)on
+the squared trackP square. Figure 4 shows the exemplary
+simulations visualized using RViz2 4. The green line repre-
+sents the planned pathP square and the blue line the robot’s
+actual trajectory.
+In Fig. 4a, ˆCRL(x)is failing to maintain a safe distance
+to the path, a maximal deviation ofmax(d P ) = 2.753 mis
+4https://github.com/ros2/rviz, Accessed: 2025-09-08
+TABLE I: Comparing path tracking controllers. Best/worst values
+are highlighted in green/red. State-of-the-art controllers are sepa-
+rated from controllers implemented for this work by an additional
+horizontal line.
+Controller Track dP in[m] max(d P )inm vin[ms −1]
+CM P P I Pcos 0.083 0.242 0.561Psquare 0.173 0.481 0.512
+CRP P Pcos 0.110 0.337 0.995Psquare 0.271 0.734 0.949
+CDW B Pcos 0.021 0.059 0.209Psquare 0.038 0.221 0.188
+CP P Pcos 0.067 0.202 0.498Psquare 0.164 0.539 0.490
+CRL Pcos 0.059 0.227 0.544Psquare 0.305 1.375 0.730
+ˆCRL Pcos 0.838 2.875 0.784Psquare 1.092 2.753 0.805
+CS Pcos 0.058 0.192 0.543Psquare 0.182 0.708 0.492
+ˆCS Pcos 0.165 0.589 0.589Psquare 0.198 0.936 0.500
+reached over all our simulations, cf. Table I. Especially the
+sharp turns are challenging for the controller. In Fig. 4b, the
+decision module detects thatx /∈ X′S|CP Pand switches to the
+high-assurance controllerC P P(x). The mode is indicated in
+the figure through theASSURANCElabel.
+A similar situation is observed for Fig. 5 where we dis-
+play the switching from high-performance to high-assurance
+mode in the Simplex controller due to the relative angle (Θ 0)
+between robot and path. Being in high-performance mode
+on the (almost) straight segment of the track (cf. Fig. 5a),
+ˆCRL oscillates and causes the robot to cross the path such
+that the relative angle between robot and path exceeds the
+threshold, that is,x Cp /∈ X′S|CP P (cf. Fig. 3a). Thus, in thenext step, the Simplex controller switches to high-assurance
+mode (cf. Fig. 5b) to ensure safety.
+2) Comparison to Other Controllers:To further support
+the safety assurance provided by the Simplex controller, we
+compare its performance to other controllers. For that, Table I
+shows the average tracking error dP, the maximal distance
+to the pathmax(d P ), and the average velocity ( v) of the
+robot for the different controllers and tracks.
+Table I shows thatDWBhas the lowest tracking error
+and lowestmax(d P )value, but its average velocity is lim-
+ited. This is caused by misconfiguration of the controller
+and underlines the challenge of finding suitable parameters.
+MPPIachieves the lowest tracking error and distance to the
+path while maintaining acceptable velocity.RPP, however,
+balances tracking error and velocity best.
+The pure pursuit controllerC P P achieves similar perfor-
+mance toMPPI, but with a constrained velocity of0.5 m/sec
+to ensure safety. Given its design, the results ofRPPindicate
+that better results could be achieved byC P P(x)as well.
+TheRL-based high-performance controllersC RL(x)andˆCRL(x)show the necessity for the Simplex architecture.
+The prematurely terminated training of ˆCRL(x)results in
+a significantly increased value ofmax(d P )compared to
+CRL(x), which matches the observations in the simulation,
+cf. Fig. 4a. On the other hand, the fully trainedC RL(x)
+shows an increased average velocity for the squared track
+compared to the cosine track and thereby underlines the
+potential of complex controllers. Nevertheless, evenC RL(x)
+has a value ofmax(d P )>1.0 mfor the squared track, which
+underlines the necessity for the Simplex architecture.
+The Simplex controllers (C S(x)and ˆCS(x)) reduce
+max(dP )to less than0.9 mas planned and thereby maintain
+the safety requirement.C S(x)achieves the minimal average
+tracking error (excludingDWB) forP cos while having a
+similar velocity toMPPI. Furthermore, we can observe that
+the average velocity of0.543 m/sec(almost) matches the one
+ofC RL(x), meaning that the decision module did not need
+to switch to the high-assurance controller. In contrast, for
+Psquare, the decision module switches to the high-assurance
+controller to maintain safety, as shown in Fig. 4b, which
+underlines the correct operation of the Simplex architecture
+once again. However, one needs to note that themax(d P )
+value of0.936 mfor ˆCS(x)on the squared track is above
+0.681 m, which was given by the conservative approximation
+ofX S|CP P, cf. Section IV-C. This is caused by the sharp
+turns in the track, creating worst-case scenarios not covered
+by the reachability analysis. While this does not violate the
+safety requirement, it underlines the necessity for in-depth
+analysis of the reachability set to guarantee safety.
+The results, however, show limitations of the Simplex
+architecture as well. While it enables the safe deployment of
+(suboptimal)RLcontrollers, the performance, when measured
+as the average velocity, is reduced. One reason for this is the
+conservative approximation ofX ′S|CP P, in turn caused by theconservative convergence criteria of the reachability analysis.
+A greater convex hull would allow for keeping the high-
+performance controller active for a longer time and thereby
+increase the overall performance of the Simplex controller.
+This is also caused by the employed pure pursuit algorithm,
+whose simplicity enables safety guarantees but limits itsRoA
+and in turn the setX ′S|CP Pas well. Furthermore, it causes anincreased dwell time ofT d = 12.45 sec, causing the Simplex
+controller to remain in high-assurance mode for an extended
+period of time. Using average dwell time [21] could reduce
+switching intervals and enhance high-performance controller
+utilization, but demands stricter monitoring to ensure safe
+transitions from high-assurance to high-performance mode.
+We finalized our evaluation by deploying the Simplex
+controller ˆCS on the Clearpath Husky robot in a real-world
+scenario. A recording is available athttps://youtu.
+be/Fvf_wx9YJYo.
+VI. CONCLUSIONS
+We presented the need for adaptivity in path tracking
+controllers for increasing their performance and highlighted
+the gap of deploying them safely. While safety and sta-
+bility guarantees are provided by traditional controllers,
+these properties are challenged by increased complexity and,
+recently,RL-based controllers. To bridge this gap, we built
+on the Simplex architecture [13] to propose a path tracking
+controller that combines a high-performance controller with
+a high-assurance controller to ensure safety at all times.
+With that, our contribution is twofold. Firstly, we described
+a design procedure for Simplex-based controllers, including
+a discussion on deriving safe switching strategies for the
+decision module based on theRoAof the high-assurance
+controller and the overall safety requirements. Secondly, we
+applied the procedure to a differential drive robot’s path
+tracking problem and evaluated the controller in simulation
+before real-world implementation.
+Despite showing safety, restrictive switching conditions
+caused by conservative approximations of the high-assurance
+controller’sRoAand similarly conservative usage of dwell
+time reduced the performance of the Simplex controller and
+highlight the architecture’s limitation: The performance gains
+possible have to be within the limits of the high-assurance
+controller’s ability to ensure safety.
+VII. FUTUREWORK
+The highlighted limitations of the Simplex controller
+suggest several directions for future work. For improving
+performance, less conservative approaches to designing the
+decision module and its switching conditions have to be
+researched. This includes more accurate approximations of
+the high-assurance controller’sRoAbut also evaluating the
+use of average dwell time to enable the Simplex controller
+to switch more frequently.
+Beyond that, architectural improvements could be made
+by using not only a single high-assurance controller but a
+set of controllers that can be switched between based on
+the current situation. This can be used to not only separate
+concerns between performance and safety but also between
+environmental and contextual situations, effectively creating
+a more versatile and adaptable controller.
+REFERENCES
+[1] M. Cognominal, K. Patronymic, and A. Wa ´nkowicz, “Evolving field
+of autonomous mobile robotics: technological advances and applica-
+tions,”Fusion of Multidisciplinary Research, An International Journal,
+vol. 2, no. 2, pp. 189–200, 2021.
+[2] A. Ollero and G. Heredia, “Stability analysis of mobile robot path
+tracking,” inProceedings 1995 IEEE/RSJ International Conference
+on Intelligent Robots and Systems. Human Robot Interaction and
+Cooperative Robots, vol. 3, 1995, pp. 461–466 vol.3.
+[3] S. Macenski, S. Singh, F. Martín, and J. Ginés, “Regulated pure pursuit
+for robot path tracking,”Autonomous Robots, vol. 47, no. 6, pp. 685–
+694, 2023.
+[4] T. A. Mai, T. S. Dang, D. T. Duong, V . C. Le, and S. Banerjee, “A
+combined backstepping and adaptive fuzzy pid approach for trajectory
+tracking of autonomous mobile robots,”Journal of the Brazilian
+Society of Mechanical Sciences and Engineering, vol. 43, p. 156, 2021.
+[5] A. Abdelmoniem, A. Ali, Y . Taher, M. Abdelaziz, and S. A.
+Maged, “Fuzzy predictive stanley lateral controller with adaptive
+prediction horizon,”Measurement and Control, vol. 56, no. 9-10,
+pp. 1510–1522, 2023. [Online]. Available: https://doi.org/10.1177/
+00202940231165257
+[6] G. Williams, P. Drews, B. Goldfain, J. M. Rehg, and E. A. Theodorou,
+“Aggressive driving with model predictive path integral control,” in
+2016 IEEE International Conference on Robotics and Automation
+(ICRA), 2016, pp. 1433–1440.
+[7] I. S. Mohamed, J. Xu, G. S. Sukhatme, and L. Liu, “Toward efficient
+mppi trajectory generation with unscented guidance: U-mppi control
+strategy,”IEEE Transactions on Robotics, vol. 41, pp. 1172–1192,
+2025.
+[8] F. Lin, Y . Chen, Y . Zhao, and S. Wang, “Path tracking of au-
+tonomous vehicle based on adaptive model predictive control,”In-
+ternational Journal of Advanced Robotic Systems, vol. 16, no. 5, p.
+1729881419880089, 2019.
+[9] Y . Cao, K. Ni, T. Kawaguchi, and S. Hashimoto, “Path following for
+autonomous mobile robots with deep reinforcement learning,”Sensors,
+vol. 24, no. 2, 2024.
+[10] R. Chai, H. Niu, J. Carrasco, F. Arvin, H. Yin, and B. Lennox,
+“Design and experimental validation of deep reinforcement learning-
+based fast trajectory planning and control for mobile robot in unknown
+environment,”IEEE Transactions on Neural Networks and Learning
+Systems, vol. 35, no. 4, pp. 5778–5792, 2024.
+[11] S. Wang, X. Yin, P. Li, M. Zhang, and X. Wang, “Trajectory tracking
+control for mobile robots using reinforcement learning and pid,”
+Iranian Journal of Science and Technology, Transactions of Electrical
+Engineering, vol. 44, pp. 1059–1068, 2020.
+[12] B. Singh, R. Kumar, and V . P. Singh, “Reinforcement learning in
+robotic applications: a comprehensive survey,”Artificial Intelligence
+Review, vol. 55, no. 2, pp. 945–990, 2022.
+[13] L. Shaet al., “Using simplicity to control complexity,”IEEE Software,
+vol. 18, no. 4, pp. 20–28, 2001.
+[14] S. Macenski, T. Moore, D. V . Lu, A. Merzlyakov, and M. Ferguson,
+“From the desks of ros maintainers: A survey of modern & capable
+mobile robotics algorithms in the robot operating system 2,”Robotics
+and Autonomous Systems, vol. 168, p. 104493, 2023.
+[15] D. Fox, W. Burgard, and S. Thrun, “The dynamic window approach to
+collision avoidance,”IEEE Robotics & Automation Magazine, vol. 4,
+no. 1, pp. 23–33, 1997.
+[16] J. Borquez, L. Raus, Y . U. Ciftci, and S. Bansal, “Dualguard mppi:
+Safe and performant optimal control by combining sampling-based
+mpc and hamilton-jacobi reachability,”IEEE Robotics and Automation
+Letters, vol. 10, no. 7, pp. 6944–6951, 2025.
+[17] W. Zhu, X. Guo, Y . Fang, and X. Zhang, “A path-integral-based rein-
+forcement learning algorithm for path following of an autoassembly
+mobile robot,”IEEE Transactions on Neural Networks and Learning
+Systems, vol. 31, no. 11, pp. 4487–4499, 2020.
+[18] N. T. Luy, N. T. Thanh, and H. M. Tri, “Reinforcement learning-based
+intelligent tracking control for wheeled mobile robot,”Transactions of
+the Institute of Measurement and Control, vol. 36, no. 7, pp. 868–877,
+2014.
+[19] J. Garcıa and F. Fernández, “A comprehensive survey on safe rein-
+forcement learning,”Journal of Machine Learning Research, vol. 16,
+no. 1, pp. 1437–1480, 2015.
+[20] M. Cao and A. Morse, “Dwell-time switching,”Systems & Control
+Letters, vol. 59, no. 1, pp. 57–65, 2010.
+[21] W. Xiang, “Necessary and sufficient conditions for stability of discrete-
+time switched linear systems with ranged dwell time,”IEEE Control
+Systems Letters, vol. 6, pp. 728–733, 2022.
+[22] D. Liberzon and A. Morse, “Basic problems in stability and design of
+switched systems,”IEEE Control Systems Magazine, vol. 19, no. 5,
+pp. 59–70, 1999.
+[23] M. di Bernardo and D. Fiore, “Switching control for incremental
+stabilization of nonlinear systems via contraction theory,” in2016
+European Control Conference (ECC), 2016, pp. 2054–2059.
+[24] M. Althoff, G. Frehse, and A. Girard, “Set propagation techniques
+for reachability analysis,”Annual Review of Control, Robotics, and
+Autonomous Systems, vol. 4, no. V olume 4, 2021, pp. 369–395, 2021.
+[25] D. Li, S. Bak, and S. Bogomolov, “Reachability analysis of nonlinear
+systems using hybridization and dynamics scaling,” inFormal Model-
+ing and Analysis of Timed Systems, N. Bertrand and N. Jansen, Eds.
+Cham: Springer International Publishing, 2020, pp. 265–282.
+[26] S. Wang and S. Wen, “Safe control against uncertainty: A compre-
+hensive review of control barrier function strategies,”IEEE Systems,
+Man, and Cybernetics Magazine, vol. 11, no. 1, pp. 34–47, 2025.
+[27] H. Almubarak, N. Sadegh, and E. A. Theodorou, “Safety embedded
+control of nonlinear systems via barrier states,”IEEE Control Systems
+Letters, vol. 6, pp. 1328–1333, 2022.
+[28] S. Fujimoto and S. S. Gu, “A minimalist approach to offline rein-
+forcement learning,” inThirty-Fifth Conference on Neural Information
+Processing Systems, 2021.
+[29] S. Macenski, T. Foote, B. Gerkey, C. Lalancette, and W. Woodall,
+“Robot operating system 2: Design, architecture, and uses in the wild,”
+Science Robotics, vol. 7, no. 66, p. eabm6074, 2022.

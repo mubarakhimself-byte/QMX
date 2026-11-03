@@ -1,0 +1,1925 @@
+arXiv 2606.15359  https://arxiv.org/abs/2606.15359
+
+DiRecT: Safe Diffusion-Based Planning via
+Receding-Horizon Denoising
+Paolo Giaretta
+MIT
+pgiarett@mit.edu
+Zeyang Li
+MIT
+zeyang@mit.edu
+Navid Azizan
+MIT
+azizan@mit.edu
+Abstract
+Diffusion models have emerged as powerful tools for planning and control by learn-
+ing multimodal distributions over actions and trajectories. Yet reliable inference-
+time safety enforcement remains a key barrier to their deployment in safety-critical
+tasks. Existing approaches typically project each denoising iterate onto the fea-
+sible set, even though constraints are defined only on the final clean trajectory.
+Enforcing feasibility on noisy intermediate samples can therefore overconstrain
+the sampling dynamics, substantially degrading sample quality. To address this
+limitation, we introduce DiRecT (Diffusion-based planning viaReceding-horizon
+denoising withTerminal constraints), a training-free algorithm for constrained
+sampling from diffusion models via stochastic optimal control (SOC). DiRecT en-
+forces constraints only on the final clean sample, avoiding unnecessary restrictions
+on the intermediate denoising dynamics. Inspired by model predictive control,
+we derive a principled receding-horizon surrogate for the otherwise intractable
+constrained SOC formulation, yielding an efficient algorithm that cleanly sep-
+arates stochastic denoising from constraint satisfaction, progressively steering
+samples toward feasible final trajectories without distorting the learned diffusion
+dynamics. Furthermore, DiRecT is highly flexible: it can leverage off-the-shelf or
+domain-specific optimizers, incorporate priors over environment dynamics, and
+optimize additional soft rewards. Extensive experiments on safe planning bench-
+marks demonstrate that DiRecT substantially improves deployment safety and
+task performance over existing diffusion-based planning baselines. Our code is
+available athttps://github.com/azizanlab/DiRecT.
+1 Introduction
+Safe and reliable planning remains a central challenge, requiring algorithms that can satisfy con-
+straints while adapting to diverse environments, objectives, and constraint types. Classical planning
+methods [25, 32, 33, 36, 51, 57] have achieved strong results in many structured settings, but they face
+important limitations. Search-based methods can become computationally prohibitive in large-scale
+multi-agent problems [70], while optimization-based methods are often local and sensitive to initial-
+ization [51, 57]. These limitations have driven growing interest indata-drivengenerative planners,
+which learn reusable priors from offline data and can model diverse, high-dimensional behaviors.
+Building on their success in image generation [17], diffusion models [28, 60, 62] have emerged as a
+powerful framework for planning and control, capable of capturing complex, multimodal state-action
+distributions [29] while supporting flexible inference-time guidance [1].
+Despite these advances, deploying diffusion-based planners in real-world safety-critical tasks remains
+challenging. For instance, a generated trajectory must avoid collisions with obstacles, as even a
+single violation can lead to catastrophic failure. Since diffusion models rely on high-dimensional
+stochastic denoising dynamics, typically parameterized by large neural networks, they may generate
+Correspondence to Zeyang Li (zeyang@mit.edu).
+arXiv:2606.15359v1  [cs.LG]  13 Jun 2026
+unsafe plans even when trained on feasible trajectories. This challenge is further amplified when
+trajectories must satisfy novel constraints that are not captured by the dataset. These limitations have
+motivated growing interest intest-timemechanisms for constraining diffusion planners. Inspired
+by guidance techniques in image generation [ 15, 17, 27], early approaches steer samples during
+denoising by encoding constraint satisfaction as asoftguidance signal [ 45]. However, soft guidance
+can only encourage feasibility and does not guarantee hard constraint satisfaction. More recent work
+has therefore focused on enforcing hard constraints directly on sampled trajectories, with the goal
+of providing stronger guarantees for safety-critical planning. Particularly, most hard-constrained
+diffusion samplers enforce feasibility through projections or constraint-driven updates along the
+denoising trajectory [14, 39, 43, 69, 71]. This creates a mismatch: planning constraints are defined
+on the final clean trajectory, while intermediate denoising iterates are noisy and need not themselves
+be feasible. Imposing constraints throughout sampling can therefore overconstrain the learned reverse
+dynamics, significantly degrading sample quality. Moreover, projection-based formulations do not
+naturally provide a unified mechanism for handling hard constraints together with additional soft
+rewards or costs.
+To address these limitations, we introduce DiRecT (Diffusion-based planning viaReceding-horizon
+denoising withTerminal constraints), atraining-freealgorithm for constrained sampling in diffusion-
+based planning. We formulate inference-time constraint enforcement through the lens of stochastic
+optimal control (SOC) [ 31], where the learned reverse diffusion process serves as the nominal
+stochastic dynamics and control inputs steer the sampler toward feasibility of the final clean trajec-
+tory. Crucially, constraints are imposed only on this terminal clean sample, avoiding unnecessary
+restrictions on noisy intermediate denoising iterates.
+Solving the resulting terminally constrained SOC problem is computationally intractable. We
+therefore exploit the structure of diffusion models, together with ideas from model predictive control
+(MPC) [52], to derive a principled and scalable receding-horizon surrogate. At each denoising step,
+DiRecT predicts the final clean trajectory implied by the current noisy iterate, solves a constrained
+optimization problem over this prediction, and converts the resulting refinement into a controlled
+update of the current noisy iterate.
+The contributions of this paper are:
+• We identify a key limitation of prior constrained diffusion samplers: enforcing feasibility on
+noisy intermediate denoising iterates can overconstrain the sampling dynamics and degrade
+sample quality. In contrast, we formulate training-free constrained diffusion planning as
+a terminally constrained SOC problem that enforces feasibility only on the final clean
+trajectory while staying close to the learned diffusion dynamics.
+• We present DiRecT, a training-free constrained diffusion sampler that reduces the intractable
+constrained SOC problem to a sequence of tractable clean-trajectory optimization sub-
+problems. By refining predicted clean trajectories and translating these refinements into
+controlled updates of the noisy iterates, DiRecT steers samples toward constraint satisfaction
+without distorting the learned denoising process.
+• We show that DiRecT is highly flexible, supporting off-the-shelf and domain-specific
+optimizers, equality and inequality constraints, environment-specific dynamics priors, and
+additional soft rewards or costs at inference time.
+• We evaluate DiRecT across diverse robotic planning applications, including maze navigation
+in Maze2D, robotic manipulation in D3IL, multi-robot motion planning (MRMP), and di-
+verse contact-rich manipulation in PushT. Across these tasks, DiRecT consistently improves
+constraint satisfaction and task success over existing diffusion-based planning baselines.
+2 Related Work
+This section situates our work within the broader literature. First, we review constrained sampling
+techniques for diffusion-based planners, emphasizing the key limitation that motivates our method.
+Second, we discuss prior work that also explores connections between diffusion models and stochastic
+optimal control, clarifying how our constrained sampling perspective differs from these approaches.
+Finally, we mention a parallel but complementary line of work on training-based methods for planning
+with diffusion models. Due to space constraints, the details are deferred to Appendix A.
+2
+3 Background
+Diffusion models.We employ the continuous-time formulation and define diffusion models as a pair
+of Itô processes: aforwardprocess that gradually corrupts samples drawn from the data distribution
+p0 through the stochastic differential equation (SDE) dXt =f t(Xt)dt+g t(Xt)dWt, X0 ∼p 0, t∈
+[0,1] , and abackwardprocess that generates samples starting from the simple prior distribution
+p1 ≈ N(0, Id)by time reversal of the forward SDE [3]:
+dXt =
+
+ft(Xt)−g 2t (Xt)∇Xt logp t(Xt) dt+g t(Xt)d ¯Wt, X 1 ∼p 1,(1)
+where (1) is integrated backward in time, Wt and ¯Wt denote the forward and backward Wiener
+processes, and st(xt) =∇ xt logp t(xt) is the score function of the marginal distributionpt. Moreover,
+we restrict our focus to the common case of Gaussian-affine schedules, for which the conditional
+distribution of the forward noising process has the closed-form solutionqt(xt|x0) =N
+ 
+αtx0, σ2t Id,
+where the noise-schedule coefficients {αt, σt}t∈[0,1] are related to the SDE drift and diffusion
+functions by f(x, t) = ˙αtαt x, g 2(t) = ddt σ2t −2 ˙αtαt σ2t . Following denoising score matching [62, 67],
+the score function st(xt) is approximated by a neural network sθt (xt) trained to minimize the
+conditional score-matching (CSM) loss:
+LCSM(θ) =E t,x0,ε
+"
+λ(t)
+sθt (αtx0 +σ tε) + εσt 2# ,(2)
+wheret∼ U[0,1],x 0 ∼p 0,ε∼ N(0, Id), andλ(t)is a time-dependent weighting.
+Sampling and Tweedie’s formula.Sampling from a diffusion model is achieved by numerically
+simulating the reverse dynamics (1) using the learned score function. Common stochastic samplers
+include DDPM [28], Euler–Maruyama [35], and higher-order solvers [ 42]. Despite our focus on
+stochasticdynamics, few-stepdeterministicsamplers are commonly obtained by numerical integration
+of the probability-flow ODE [62], which shares the same marginal distributions as (1). Examples
+include DDIM [61] and ODE-based solvers [41]. A one-step instantiation of these samplers yields an
+approximation of the posterior conditional mean of the forward process, which is related to the score
+function through Tweedie’s formula [54]:
+E[X0 |X t]≈ˆxθ0(xt, t) =xt +σ 2t sθt (xt)αt .(3)
+Therefore, we uses θt andˆxθ0 interchangeably when convenient, assuming they are related by (3).
+Diffusion planners.Following diffusion-based planning formulations [13, 29], we treat the clean
+sample as a finite-horizon plan rather than a single configuration. Let H∈N be the prediction
+horizon and let H={0, . . . , H}. We denote plans as τ= (τ 0, . . . ,τH )∈ DH+1, where each
+element τk ∈ D ⊆RD may encode a state, an action, or a state-action pair depending on the
+planner parameterization. A diffusion planner learns a distribution over such plans and generates τ
+by denoising a Gaussian prior sample. In closed-loop deployment, the planner executes only the first
+M≤Helements before re-planning, and the concatenation of executed prefixes forms the rollout.
+4 Method
+We now formalize hard-constrained sampling for diffusion models and derive DiRecT. The derivation
+is similar in spirit to the test-time guidance framework for flow-matching models developed in [38],
+while differing in the diffusion-model setting and the resulting algorithmic form. Due to space
+limitations, we defer the full derivation of the algorithm to Appendix C. Given a pretrained score
+model, a constraint set S ⊆Rd, and a cost function C:R d →R , we seek to sample denoised plans
+τ from the model that are: (i)safe( τ∈ S), (ii)minimizethe cost C, and (iii) remainproximalto
+the learned data distribution. We now expand on the problem setting and show how safe planning
+can naturally be framed as solving a stochastic optimal control problem with terminal constraints.
+We then derive a receding-horizon surrogate formulation that leads to a tractable algorithm. In this
+section, we use a general diffusion-centric notation and denote denoised plans asX 0.
+3
+Safe planning with diffusion models and stochastic optimal control.Denote by ˜f θt (Xt) the
+reverse drift ft(Xt)−g(t) 2sθt (Xt), so that the sampling dynamics of the trained model are dXt =˜f θt (Xt)dt+g(t)d ¯Wt, X1 ∼p 1. Let u:R d ×[0,1]→R d be a control drift that steers the generative
+process toward low-cost feasible samples through the controlled SDE:
+dX ut = h ˜f θt (X ut ) +g(t)u t(X ut )i dt+g(t)d ¯Wt, X1 ∼p 1 (4)
+Our three requirements for a safe, performant, and proximal planner naturally fit within a terminally
+constrained stochastic optimal control perspective [8], which aims to find the optimal control that
+solves Problem 1:
+Problem 1(Stochastic optimal control problem with terminal constraints).Given reference dynamics,
+constraint setS, terminal costC, and cost weightλ, solve for the optimal control driftu ⋆:
+min
+u
+E
+
+λ C(Xu0 ) + 12 Z 10 ∥ut(X ut )∥22 dt
+s.t.dX ut = h ˜f θt (X ut ) +g(t)u t(X ut )i dt+g(t)d ¯Wt, X 1 ∼p 1
+X u0 ∈ SP u-a.s.
+(5)
+where Pu denotes the path measure induced by(4). Notably, Problem 1 enforces constraint satisfaction
+only at the terminal state. Intermediate latents may therefore deviate significantly from the feasible
+set if doing so reduces control energy and keeps the process closer to the pretrained dynamics. In
+principle, the optimal controller can be obtained by solving the Hamilton–Jacobi–Bellman (HJB) [5]
+equation. However, exact solutions are rarely possible for the rich, high-dimensional dynamics
+induced by the backward SDE. See Appendix B for an overview of SOC, the HJB equation, and their
+relation to KL control.
+Receding-horizon surrogate formulation.We briefly summarize the main steps used to transform
+the continuous-time SOC problem into a tractable receding-horizon surrogate. We first discretize the
+reverse dynamics in (1). Let N∈N denote the number of discretization steps, and let 0 =t 0 < t1 <
+· · ·< tN = 1be the sampling grid. We write the uncontrolled reverse update fromt i tot i−1 as
+Xi−1 = Φθi (Xi, εi), ε i ∼ N(0, Id), i= 1, . . . , N,(6)
+where Φθi :R d ×R d →R d denotes the i-th denoising transition of the chosen sampler. This covers
+standard sampling schemes such as DDPM [28] as well as deterministic or higher-order solvers.
+To control generation, we perturb each uncontrolled transition by an Euler discretization of the control
+input over[t i−1, ti], yielding thediscrete-timeversion of the stochastic optimal control problem
+min
+{Xi}Ni=0,{ui}Ni=1
+E
+"
+λC(X 0) + 12
+NX
+i=1
+∥ui(Xi)∥22∆ti
+#
+s.t.X 0 ∈ S, Xi−1 = Φθi (Xi, εi) +g iui(Xi)∆ti, ε i ∼ N(0, Id), i= 1, . . . , N,
+(7)
+Although discretization yields a finite-horizon control problem, the discrete SOC optimization
+remains computationally prohibitive for most diffusion-based applications. The decision variables are
+feedback controls over Rd, while the objective requires an expectation over all controlled stochastic
+trajectories. In addition, terminal constraints and costs couple all optimization variables with multi-
+step nonconvex neural dynamics, distorting the optimization landscape to the point that, even for a
+single noise realization, off-the-shelf solvers may struggle to find feasible solutions.
+To tackle these limitations, we simplify the SOC formulation by introducing two additional approxi-
+mations. First, we adopt a model predictive control (MPC) perspective, replacing the full-horizon
+problem with a sequence of one-step subproblems. To do so, we exploit the structure of diffusion
+models and use Tweedie’s formula to construct proxy estimates of the terminal cost-to-go and terminal
+feasibility condition:
+E[C(X 0)|X i]≈C
+ 
+ˆxθ0(Xi, ti) ,ˆx θ0(Xi, ti)∈ S, i= 0, . . . , N−1.(8)
+Second, to avoid repeatedly solving constrained optimization problems through the neural denoising
+map, we approximately invert Tweedie’s formula by a fixed-point argument. This allows us to replace
+the latent displacementX i − ¯Xi with a scaled difference between predicted clean samples:
+Xi − ¯Xi ≈α ti
+ 
+ˆxθ0(Xi, ti)−ˆxθ0( ¯Xi, ti) .(9)
+4
+Algorithm 1:DiRecT: Safe diffusion-based planning
+Input:Learned score matching models θt (·), costC(·), cost weightλ >0, feasible setS, discretization
+stepsN, time grid0 =t 0 < t1 < . . . < tN = 1, sampling scheme{Φ θi }Ni=1, differentiable affine
+scheduler(α t, σt).
+Output:Safe planX ⋆0 .
+1X ⋆N ∼ N(0, Id);// Sample prior
+2fori=N, . . . ,1do
+3∆t i ←t i −t i−1;// Time step
+4ε i ∼ N(0, Id);// Reverse noise
+5g i ←
+
+d
+dt σ2t −2 ˙αtαt σ2t
+1/2 
+t=ti
+;// Diffusion coefficient
+6 ¯X εii−1 ←Φ θi (X ⋆i , εi);// Uncontrolled denoising proposal
+7 ˜X0|i−1 ←ˆxθ0( ¯X εii−1, ti−1);// Tweedie clean-sample estimate
+8Solve the constrained subproblem;
+9 ˆX ⋆0|i−1 ∈arg min
+ˆX0|i−1∈S
+λC( ˆX0|i−1) + α2ti−1
+2g2i ∆ti ∥ ˆX0|i−1 − ˜X0|i−1∥22; (10)
+ifi >1then
+10X ⋆i−1 ← ¯X εii−1 +α ti−1 ( ˆX ⋆0|i−1 − ˜X0|i−1);// Latent correction
+11else
+12X ⋆0 ← ˆX ⋆0|0;// Return feasible terminal sample
+13returnX ⋆0
+Together, these approximations move the one-step constrained optimization from the latent space to
+the data domain, where the cost and constraint are evaluated directly on the predicted clean sample.
+We provide the full derivation from Problem 1 to the final algorithm in Appendix C, including all
+assumptions and approximations. We summarize the complete sampling procedure in Algorithm 1.
+Although several approximations are introduced to reduce the general stochastic optimal control prob-
+lem to a tractable form, terminal constraint satisfaction is not relaxed, as formalized in Proposition 1.
+Proposition 1(Sample feasibility).Suppose that the final subproblem in Algorithm 1 admits a
+feasible solution ˆX ⋆0|0 ∈ S. Then the final sample returned by the recursion satisfies the terminal
+constraint.
+Proof. By construction, the final step of Algorithm 1 returns X ⋆0 = ˆX ⋆0|0. Since the final subproblem
+imposes ˆX ⋆0|0 ∈ S, it follows immediately that the final sample satisfies the constraint X ⋆0 ∈ S.
+5 Experiments
+We seek to evaluate DiRecT to answer the following questions: (i)Can our method enforce test-
+time constraints, while retaining task performance?(ii)How does DiRecT compare with existing
+methods in terms of safety, task success, and computational overhead?(iii)How flexible is our
+method in handling equality and inequality constraints, high-dimensional nonconvex constraint sets,
+and soft rewards or costs?To answer these questions, we test our method on maze navigation in
+Maze2D [23], robotic manipulation in D3IL [ 30], multi-robot motion planning [ 58], and diverse
+contact-rich manipulation in PushT [13, 43]. Detailed settings on the experimental setup are provided
+in Appendix D and additional results and ablations in Appendix E.
+5.1 Safe maze navigation
+First, we test our method on safe maze navigation for the D4RL Maze2D-large environment [23].
+In this task, a small ball traverses a planar maze toward a target position, while avoiding additional
+test-timeobstacles as depicted in Figure 1. We train a continuous-time diffusion model to sample
+state-action pairs over the prediction horizon H, where each state s∈R 4 includes position and
+5
+(a)
+ (b)
+ (c)
+ (d)
+Figure 1: Visualization of DiRecT for maze navigation and robotic manipulation with test-time hard
+constraints. In Maze2D-broad (1a) and Maze2D-narrow (1b), the robot has to navigate inside a maze
+toward the bottom-right corner while avoiding the obstacles represented in red. In D3IL-avoiding,
+a robotic arm moves toward the green target line, while avoiding six pillars (1c). We constrain the
+problem during inference with additional obstacles, represented in blue (1d).
+Table 1: Results on the safe navigation in Maze2D. Mean values over 100 i.i.d. samples and reported
+alongside their standard deviation. Boldface indicates the best score.
+Env Method SR↑Violations↓Score↑Time (s)↓
+Maze2D Broad
+Diffuser [29] 0.00045.92±11.861.601±0.0250.316±0.078
+Gradient Guidance [15] 0.04025.52±10.181.587±0.1643.637±0.076
+Projected Diffusion [14] 0.22042.00±47.281.119±0.70846.398±11.096
+Augmented Lagrangian [71] 0.08072.92±92.75−0.010±0.1455.676±0.566
+SafeDiffuser-RoS [69] 0.04066.26±41.721.186±0.533148.967±3.831
+DiRecT (Ours) 0.9700.45±3.811.500±0.41917.657±0.629
+Maze2D Narrow
+Diffuser [29] 0.000103.94±21.881.601±0.0250.321±0.086
+Gradient Guidance [15] 0.00051.30±19.221.619±0.00293.608±0.023
+Projected Diffusion [14] 0.78037.29±129.880.163±0.459112.918±19.517
+Augmented Lagrangian [71] 0.000217.51±159.430.156±0.4496.022±0.122
+SafeDiffuser-RoS [69] 0.000278.87±209.870.735±0.681509.850±19.929
+DiRecT (Ours) 0.9400.23±1.041.624±0.02798.093±5.047
+velocity of the ball and actions a∈R 2 represent force inputs. During inference, we sampleone
+trajectory from the model conditioned on endpoint states and execute actions by tracking with
+a proportional-derivative (PD) controller. Although the sampledplannedtrajectory may satisfy
+test-time constraints, therollouttrajectory can deviate from the plan and become infeasible due to
+mismatch between learned and environment dynamics. To improve rollout fidelity [9, 55], we impose
+additionalequalityconstraints in the form of linearized dynamics fitted from the training data (see
+Appendix D.1).
+Baselines.We compare against five baselines to represent different classes of constrained planners:
+Diffuser[ 29] (unguided reference),Gradient Guidance[ 15] (soft constraining with posterior
+sampling),Projected Diffusion[ 14] (per-step projection),Augmented Lagrangian[ 71] (early-stage
+Lagrangian constraint relaxation), andSafeDiffuser-RoS[ 69] (CBF-based guidance). We adapt
+existing methods to include dynamic constraints and employ IPOPT [68] as anoff-the-shelfsolver.
+Additional results are provided in Appendix E.1.
+Evaluation.We test all methods over two progressively challenging variants [ 13, 29, 71], which
+we denote as broad (Fig. 1a) and narrow (Fig. 1b). For each variant, we evaluate 100 independent
+trials to measure how well each method adapts to additional prior environment knowledge in the
+form of dynamic constraints for safe navigation. We report in Table 1 four evaluation metrics:Safety
+Rate(SR), the fraction of collision-free rollouts;Violations, the mean number of steps the ball spends
+inside obstacles; D4RL normalizedScore, which reflects task completion performance; and sampling
+Time. DiRecT is the only method that achieves high safety and near-zero violations while retaining
+strong performance.
+6
+Table 2: Results on constrained manipulation in D3IL avoiding. Mean values are computed over
+100 i.i.d. trials and reported with standard deviations where applicable. Boldface indicates the best
+score.
+Env Method SR↑Task Success↑Steps (Safe)↓Time (s)↓
+D3IL Avoiding
+Unconstrained Diffuser [29] 0.060 0.96070.30±11.830.224±0.002
+Gradient Guidance [15] 0.880 0.98062.58±7.056.615±0.540
+Projected Diffusion [14] 0.770 0.97063.77±6.881.367±0.057
+Augmented Lagrangian [71] 0.220 0.84063.45±7.224.152±0.018
+SafeDiffuser-RoS [69] 0.370 0.82063.19±11.5618.890±0.877
+DiRecT (Ours) 1.000 1.00062.86±6.900.688±0.061
+5.2 Safe robotic manipulation
+We next evaluate the reliability and performance of our method for closed-loop robotic manipulation
+on the D3IL avoiding environment [30]. In this task, a robotic manipulator moves toward a target
+region while its end-effector avoids six pillars (Fig. 1c). We train a continuous-time diffusion model
+on the D3IL demonstration dataset, consisting of expert state-action trajectories, where the robot
+state s∈R 4 is composed of the current and desired positions, and the action a∈R 2 represents the
+end-effector velocity. At test time, the end-effector must reach the target region while avoiding the
+environment pillars andadditionalplanar and circular constraints (Fig. 1d). Rollouts are performed
+in a receding-horizon fashion, in which we execute M < Hactions before re-planning. Similarly to
+the maze navigation task, we test the ability of our method to exploit additional environment priors in
+the form of linearized dynamic constraints.
+Baselines.We compare against the same baselines as in the Maze2D setting. Additional results and
+baselines are presented in Appendix E.2.
+Evaluation.We test each method over 100 i.i.d. rollouts and compute the following metrics:Safety
+Rate(SR), the fraction of trials satisfying both environment and test-time constraints;Task Success
+(TS), the proportion of trajectories that reach the end goal in the allowed number of steps; average
+Stepstaken to reach the target for safe rollouts; samplingTime. Results in Table 2 show that our
+method is the only one to maintain performance and safety forallinitializations.
+5.3 Safe multi-robot motion planning
+We test DiRecT on the coupled diffusion generation benchmark of [43], which is based on the multi-
+robot motion planning (MRMP) environment introduced by [58]. Given starting locations for each
+robot, the goal is to simultaneously sample trajectories for all robots from a diffusion model trained on
+single-agent examples, while avoidinginter-robotandobstaclecollisions, satisfying inference-time
+velocityconstraints, and exhibiting target environment-specific behaviors (Figure 2). Given the
+high-dimensional and nonconvex nature of the MRMP problem, we test the robustness of different
+methods by scaling the number of agents up to twenty, while imposing velocity limits as in [ 43].
+Figure 2: Highways with 8
+agents. Desired motion is
+counterclockwise around the
+central obstacle.
+Baselines.We compare our method with the following references:
+Diffuser[ 29] (unconstrained reference),MMD-CBS[ 58] (tree-
+search collision search without velocity constraints),PCD-LBand
+PCD-SHD[ 43] (soft guidance for collision avoidance and projec-
+tion for velocity feasibility). For fast and parallelizable projection
+of trajectories onto the nonconvex feasible set, we develop a custom
+domain-specificoptimizer that is amenable to just-in-time compi-
+lation and GPU parallelization in JAX [11] (see Appendix D.3.1).
+To show that the interplay between the generative process and pro-
+jection optimization is integral to the success and reliability of the
+algorithm, we implementFinal Projection, in which samples are
+generated unconditionally and then projectedpost-samplingonto the
+feasible set.
+7
+4 6 8 10 12 14 16 18 20
+Number of Agents
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0Success Rate
+4 6 8 10 12 14 16 18 20
+Number of Agents
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0Constraint Safety
+4 6 8 10 12 14 16 18 20
+Number of Agents
+0.75
+0.80
+0.85
+0.90
+0.95
+1.00Data Adherence
+Diffuser
+MMD-CBS
+PCD-LB
+PCD-SHD
+Final-projection
+DiRecT
+(a)Emptywith agent velocities limited to0.675.
+4 6 8 10 12 14 16 18 20
+Number of Agents
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0Success Rate
+4 6 8 10 12 14 16 18 20
+Number of Agents
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0Constraint Safety
+4 6 8 10 12 14 16 18 20
+Number of Agents
+0.970
+0.975
+0.980
+0.985
+0.990
+0.995Data Adherence
+Diffuser
+MMD-CBS
+PCD-LB
+PCD-SHD
+Final-projection
+DiRecT
+(b)Highwayswith agent velocities limited to0.647.
+4 6 8 10 12 14 16 18 20
+Number of Agents
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0Success Rate
+4 6 8 10 12 14 16 18 20
+Number of Agents
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0Constraint Safety
+4 6 8 10 12 14 16 18 20
+Number of Agents
+0.775
+0.800
+0.825
+0.850
+0.875
+0.900
+0.925
+0.950Data Adherence
+Diffuser
+MMD-CBS
+PCD-LB
+PCD-SHD
+Final-projection
+DiRecT
+(c)Conveyorwith agent velocities limited to1.21.
+4 6 8 10 12 14 16 18 20
+Number of Agents
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0Success Rate
+4 6 8 10 12 14 16 18 20
+Number of Agents
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0Constraint Safety
+4 6 8 10 12 14 16 18 20
+Number of Agents
+0.65
+0.70
+0.75
+0.80
+0.85
+0.90
+0.95
+1.00Data Adherence
+Diffuser
+MMD-CBS
+PCD-LB
+PCD-SHD
+Final-projection
+DiRecT
+(d)Drop-Regionwith agent velocities limited to0.928.
+Figure 3: Performance comparison for N∈ {4,8,12,16,20} agents on the four MMD environ-
+ments [58]. We impose obstacle and inter-robot constraints and restrict agent velocities. Our method
+outperforms all other baselines in terms of safety, while maintaining adherence to the expected motion
+pattern.
+Evaluation.We assess each method over 100 starting configurations, generating 128 candidate
+trajectories for each initialization as in [43]. We report the following metrics:Success Rate, which is
+the fraction of trials with at least one collision-free trajectory among the generated candidate trajec-
+tories;Constraint Safety, which is the proportion ofallsamples satisfying collision and kinematic
+constraints, andData Adherence, which measures environment-specific task success. As shown in
+Figure 3, DiRecT outperforms all other baselines in terms of safety, especially when scaling to twenty
+agents. Note that the relatively lower data adherence on Conveyor is not representative of a relative
+lack of performance, as all other baselines mostly generate infeasible samples. We provide additional
+experimentation details in Appendix D.3 and extensive sweep results in Appendix E.3.
+5.4 Safe and diverse contact-rich manipulation
+Finally, we show that DiRecT can effectively incorporate and optimize oversoftcosts while satisfying
+test-time constraints. We base our evaluation on simultaneous coupled trajectory generation on
+PushT [22]. In the single-agent setting, the objective is to push a T-shaped block from a randomized
+starting position until it overlaps with a target pose (Figure 4). Following [ 43], we consider the
+simultaneous generation of a pair of distinct trajectories while imposinghardconstraints on the
+maximum velocity andsoftcoupling costs to encourage non-intersecting, diverse trajectories.
+8
+Table 3: Results on generation of safe and diverse contact-rich manipulation inPushT, with a velocity
+limit of 8.4. Best overall value(s) in boldface; underlining denotes best among constrained samplers.
+Method DTW↑DFD↑CS↑TC↑Time (s)↓
+Diffusion Policy [13]3.26±1.2800.477±0.1670.6549±0.0980.928±0.1940.136±0.015
+CD-LB [43]4.242±1.2920.610±0.1660.592±0.1360.907±0.2090.138±0.006
+CD-DPP [43]3.871±1.1690.560±0.1500.632±0.1340.921±0.2070.142±0.010
+PCD-LB [43]3.928±1.2380.557±0.1591.000±0.000 0.890±0.2260.490±0.008
+PCD-DPP [43]3.530±1.2360.503±0.1601.000±0.000 0.898±0.2240.492±0.008
+DiRecT-LB4.046±1.1390.581±0.1461.000±0.000 0.924±0.190 0.373±0.008
+DiRecT-DPP4.226±1.126 0.609±0.142 1.000±0.000 0.913±0.2070.372±0.008
+Baselines.We compare against vanillaDiffusion Policy[ 13], Projected Coupled Diffusion variants
+with Determinantal Point Process (DPP) and Log-barrier (LB) losses, both without velocity projection
+(CD-DPP,CD-LB[ 43]) and with velocity projection (PCD-DPP,PCD-LB[ 43]). To demonstrate
+that our method can improve diversity with the same computational overhead, we incorporate DPP
+and LB costs into (10), and solve the resulting optimization with one step of Projected Gradient
+Descent [37], thereby requiring one projection and one gradient computation per sampling step
+(see Appendix D.4). We denote the two variants of our method asDiRecT-DPPandDiRecT-LB.
+Figure 4: Coupled generation
+on PushT. Two agents push
+gray blocks onto a green target
+pose while avoiding intersect-
+ing trajectories.
+Evaluation.We follow the same experimental procedure, gener-
+ating 100 pairsof trajectories over 50 random initializations for
+the block and agent positions and report the following metrics:Dy-
+namic Time Warping(DTW) [6, 46] andDiscrete Fréchet Distance
+(DFD) [2] to evaluate diversity;Task Completionscore (TC) [13, 22],
+measuring successful overlap of the blocks onto the respective tar-
+gets;Constraint Satisfactionrate (CS) [ 43] as the fraction of samples
+satisfying velocity limits; and samplingTime. As summarized in
+Table 3, our formulation improves both diversity and task success
+relative to other constrained baselines, highlighting the importance
+of performing bothsoftandhardguidance near the data manifold.
+As observed by [43], diversity objectives conflict with task comple-
+tion, leading to Pareto-optimal solutions as a function of guidance
+strength. In Appendix E.4, we show that DiRecT dominates PCD in
+terms of Pareto optimality.
+6 Conclusion
+In this paper, we introduced DiRecT, a training-free algorithm for constrained sampling in safe
+diffusion-based planning. By formulating constrained sampling as a terminally constrained stochastic
+optimal control problem and deriving a scalable receding-horizon surrogate, DiRecT separates
+stochastic denoising from trajectory-level constraint satisfaction. This design avoids overconstraining
+noisy intermediate iterates while retaining the flexibility to incorporate domain-specific optimizers,
+dynamics priors, and additional soft objectives. Experiments across diverse robotic planning domains
+demonstrate that DiRecT improves both constraint satisfaction and task success, highlighting its
+potential for reliable deployment in safety-critical planning tasks.
+Limitations and future work.Our method enforces hard constraints for pretrained diffusion
+planners in atraining-freemanner, making it broadly applicable to existing models without retraining.
+This flexibility, however, comes with additional inference-time computation. A natural direction
+for future work is to combine terminal constraint control with model fine-tuning, reducing runtime
+overhead and improving adaptability to test-time constraints.
+9
+References
+[1] Anurag Ajay, Yilun Du, Abhi Gupta, Joshua Tenenbaum, Tommi Jaakkola, and Pulkit Agrawal.
+Is conditional generative modeling all you need for decision-making? InInternational Confer-
+ence on Learning Representations, 2023.
+[2] Helmut Alt and Michael Godau. Computing the fréchet distance between two polygonal curves.
+International Journal of Computational Geometry & Applications, 5(01n02):75–91, 1995.
+[3] Brian D.O. Anderson. Reverse-time diffusion equation models.Stochastic Processes and
+their Applications, 12(3):313–326, 1982. ISSN 0304-4149. doi: https://doi.org/10.1016/
+0304-4149(82)90051-5. URL https://www.sciencedirect.com/science/article/
+pii/0304414982900515.
+[4] Joel A E Andersson, Joris Gillis, Greg Horn, James B Rawlings, and Moritz Diehl. CasADi – A
+software framework for nonlinear optimization and optimal control.Mathematical Programming
+Computation, 11(1):1–36, 2019. doi: 10.1007/s12532-018-0139-4.
+[5] Richard Bellman. The theory of dynamic programming. Paper P-550, RAND Corporation,
+Santa Monica, CA, 1954. URLhttps://www.rand.org/pubs/papers/P550.html.
+[6] Donald J Berndt and James Clifford. Using dynamic time warping to find patterns in time series.
+InProceedings of the 3rd international conference on knowledge discovery and data mining,
+pages 359–370, 1994.
+[7] Dimitri P. Bertsekas and John N. Tsitsiklis.Neuro-Dynamic Programming. Athena Scientific,
+1996.
+[8] Bruno Bouchard, Romuald Elie, and Cyril Imbert. Optimal control under stochastic target
+constraints.SIAM Journal on Control and Optimization, 48(5):3501–3531, 2010.
+[9] Jean-Baptiste Bouvier, Kanghyun Ryu, Kartik Nagpal, Qiayuan Liao, Koushil Sreenath, and
+Negar Mehr. Ddat: Diffusion policies enforcing dynamically admissible robot trajectories. In
+Robotics: Science and Systems (RSS), 2025.
+[10] Stephen Boyd, Neal Parikh, Eric Chu, Borja Peleato, and Jonathan Eckstein. Distributed opti-
+mization and statistical learning via the alternating direction method of multipliers.Foundations
+and Trends in Machine Learning, 3(1):1–122, 2011.
+[11] James Bradbury, Roy Frostig, Peter Hawkins, Matthew James Johnson, Yash Katariya, Chris
+Leary, Dougal Maclaurin, George Necula, Adam Paszke, Jake VanderPlas, Skye Wanderman-
+Milne, and Qiao Zhang. JAX: composable transformations of Python+NumPy programs, 2018.
+URLhttp://github.com/jax-ml/jax.
+[12] Luiz F Chamon, Mohammad R Karimi, and Anna Korba. Constrained sampling with primal-dual
+langevin monte carlo.Advances in Neural Information Processing Systems, 37:29285–29323,
+2024.
+[13] Cheng Chi, Zhenjia Xu, Siyuan Feng, Eric Cousineau, Yilun Du, Benjamin Burchfiel, Russ
+Tedrake, and Shuran Song. Diffusion policy: Visuomotor policy learning via action diffusion.
+The International Journal of Robotics Research, 44(10-11):1684–1704, 2025.
+[14] Jacob K Christopher, Stephen Baek, and Ferdinando Fioretto. Constrained synthesis with
+projected diffusion models.Advances in Neural Information Processing Systems, 37:89307–
+89333, 2024.
+[15] Hyungjin Chung, Jeongsol Kim, Michael T. Mccann, Marc L. Klasky, and Jong Chul Ye.
+Diffusion posterior sampling for general noisy inverse problems. InInternational Conference
+on Learning Representations, 2023.
+[16] Xiaobing Dai, Zewen Yang, Dian Yu, Fangzhou Liu, Hamid Sadeghian, Sami Haddadin, and
+Sandra Hirche. Safeflow: Safe robot motion planning with flow matching via control barrier
+functions, 2025. URLhttps://arxiv.org/abs/2504.08661.
+10
+[17] Prafulla Dhariwal and Alexander Nichol. Diffusion models beat gans on image synthesis. In
+Advances in Neural Information Processing Systems, volume 34, pages 8780–8794, 2021.
+[18] Carles Domingo-Enrich, Michal Drozdzal, Brian Karrer, and Ricky TQ Chen. Adjoint matching:
+Fine-tuning flow and diffusion generative models with memoryless stochastic optimal control.
+arXiv preprint arXiv:2409.08861, 2024.
+[19] Chenyou Fan, Chenjia Bai, Zhao Shan, Haoran He, Yang Zhang, and Zhen Wang. Task-
+agnostic pre-training and task-guided fine-tuning for versatile diffusion planner.arXiv preprint
+arXiv:2409.19949, 2024.
+[20] Zeyu Feng, Hao Luan, Pranav Goyal, and Harold Soh. Ltldog: Satisfying temporally-extended
+symbolic constraints for safe diffusion-based planning.IEEE Robotics and Automation Letters,
+9(10):8571–8578, 2024. doi: 10.1109/LRA.2024.3443501.
+[21] Wendell H Fleming and Raymond W Rishel.Deterministic and stochastic optimal control.
+Springer Science & Business Media, 2012.
+[22] Pete Florence, Corey Lynch, Andy Zeng, Oscar A Ramirez, Ayzaan Wahid, Laura Downs,
+Adrian Wong, Johnny Lee, Igor Mordatch, and Jonathan Tompson. Implicit behavioral cloning.
+In5th Annual Conference on Robot Learning, 2021. URL https://openreview.net/
+forum?id=rif3a5NAxU6.
+[23] Justin Fu, Aviral Kumar, Ofir Nachum, George Tucker, and Sergey Levine. D4rl: Datasets for
+deep data-driven reinforcement learning, 2020.
+[24] Jiequn Han, Arnulf Jentzen, and Weinan E. Solving high-dimensional partial differential
+equations using deep learning.Proceedings of the National Academy of Sciences, 115(34):
+8505–8510, 2018.
+[25] Peter E. Hart, Nils J. Nilsson, and Bertram Raphael. A formal basis for the heuristic determi-
+nation of minimum cost paths.IEEE Transactions on Systems Science and Cybernetics, 4(2):
+100–107, 1968. doi: 10.1109/TSSC.1968.300136.
+[26] U. G. Haussmann and J. P. Lepeltier. On the existence of optimal controls.SIAM Journal on
+Control and Optimization, 28(4):851–902, 1990. doi: 10.1137/0328049.
+[27] Jonathan Ho and Tim Salimans. Classifier-free diffusion guidance. InNeurIPS 2021 Workshop
+on Deep Generative Models and Downstream Applications, 2021. URLhttps://openreview.
+net/forum?id=qw8AKxfYbI.
+[28] Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. In
+Advances in Neural Information Processing Systems, volume 33, pages 6840–6851, 2020.
+[29] Michael Janner, Yilun Du, Joshua B. Tenenbaum, and Sergey Levine. Planning with diffusion
+for flexible behavior synthesis. InProceedings of the 39th International Conference on Machine
+Learning, volume 162 ofProceedings of Machine Learning Research, pages 9902–9915, 2022.
+[30] Xiaogang Jia, Denis Blessing, Xinkai Jiang, Moritz Reuss, Atalay Donat, Rudolf Lioutikov,
+and Gerhard Neumann. Towards diverse behaviors: A benchmark for imitation learning with
+human demonstrations. InThe Twelfth International Conference on Learning Representations,
+2024. URLhttps://openreview.net/forum?id=6pPYRXKPpw.
+[31] Hilbert J. Kappen. Path integrals and symmetry breaking for optimal control theory.Journal of
+Statistical Mechanics: Theory and Experiment, 2005(11):P11011, 2005.
+[32] Sertac Karaman and Emilio Frazzoli. Sampling-based algorithms for optimal motion
+planning.The International Journal of Robotics Research, 30(7):846–894, 2011. doi:
+10.1177/0278364911406761.
+[33] L.E. Kavraki, P. Svestka, J.-C. Latombe, and M.H. Overmars. Probabilistic roadmaps for
+path planning in high-dimensional configuration spaces.IEEE Transactions on Robotics and
+Automation, 12(4):566–580, 1996. doi: 10.1109/70.508439.
+11
+[34] Diederik P Kingma and Jimmy Ba. Adam: A method for stochastic optimization.arXiv preprint
+arXiv:1412.6980, 2014.
+[35] Peter E. Kloeden and Eckhard Platen.Numerical Solution of Stochastic Differential Equations.
+Springer, 1992.
+[36] Steven LaValle. Rapidly-exploring random trees: A new tool for path planning.Research
+Report 9811, 1998.
+[37] Evgeny S. Levitin and Boris T. Polyak. Constrained minimization methods.USSR Computa-
+tional Mathematics and Mathematical Physics, 6(5):1–50, 1966.
+[38] Zeyang Li, Kaveh Alim, and Navid Azizan. Hardflow: Hard-constrained sampling for flow-
+matching models via trajectory optimization.arXiv preprint arXiv:2511.08425, 2025.
+[39] Jinhao Liang, Jacob K Christopher, Sven Koenig, and Ferdinando Fioretto. Simultaneous
+multi-robot motion planning with projected diffusion models. InForty-second International
+Conference on Machine Learning, 2025. URL https://openreview.net/forum?id=
+Sp7jclUwkV.
+[40] Zhixuan Liang, Yao Mu, Mingyu Ding, Fei Ni, Masayoshi Tomizuka, and Ping Luo. Adaptdif-
+fuser: Diffusion models as adaptive self-evolving planners.arXiv preprint arXiv:2302.01877,
+2023.
+[41] Cheng Lu, Yuhao Zhou, Fan Bao, Jianfei Chen, Chongxuan Li, and Jun Zhu. DPM-Solver: A
+fast ode solver for diffusion probabilistic model sampling in around 10 steps. InAdvances in
+Neural Information Processing Systems, 2022.
+[42] Cheng Lu, Yuhao Zhou, Fan Bao, Jianfei Chen, Chongxuan Li, and Jun Zhu. Dpm-solver++:
+Fast solver for guided sampling of diffusion probabilistic models.Machine Intelligence Re-
+search, 22(4):730–751, 2025.
+[43] Hao Luan, Yi Xian Goh, See-Kiong Ng, and Chun Kai Ling. Projected coupled diffusion for
+test-time constrained joint generation. InThe Fourteenth International Conference on Learning
+Representations, 2026. URLhttps://openreview.net/forum?id=1FEm5JLpvg.
+[44] Yuanqi Mao, Michael Szmuk, Xiangru Xu, and Behçet Açıkme¸ se. Successive convexification:
+A superlinearly convergent algorithm for non-convex optimal control problems.arXiv preprint
+arXiv:1804.06539, 2018.
+[45] Kazuki Mizuta and Karen Leung. Cobl-diffusion: Diffusion-based conditional robot planning
+in dynamic environments using control barrier and lyapunov functions. In2024 IEEE/RSJ
+International Conference on Intelligent Robots and Systems (IROS), pages 13801–13808. IEEE,
+2024.
+[46] Meinard Müller.Information retrieval for music and motion. Springer, 2007.
+[47] Alexander Quinn Nichol and Prafulla Dhariwal. Improved denoising diffusion probabilistic
+models. InProceedings of the 38th International Conference on Machine Learning, pages
+8162–8171. PMLR, 2021.
+[48] Kushagra Pandey, Farrin Marouf Sofian, Felix Draxler, Theofanis Karaletsos, and Stephan
+Mandt. Variational control for guidance in diffusion models. InForty-second Interna-
+tional Conference on Machine Learning, 2025. URL https://openreview.net/forum?
+id=Z0ffRRtOim.
+[49] Adam Paszke, Sam Gross, Soumith Chintala, Gregory Chanan, Edward Yang, Zachary DeVito,
+Zeming Lin, Alban Desmaison, Luca Antiga, and Adam Lerer. Automatic differentiation in
+pytorch. InNIPS-W, 2017.
+[50] Thomas Power, Rana Soltani-Zarrin, Soshi Iba, and Dmitry Berenson. Sampling constrained
+trajectories using composable diffusion models. InIROS 2023 Workshop on Differentiable
+Probabilistic Robotics: Emerging Perspectives on Robot Learning, 2023. URL https://
+openreview.net/forum?id=UAylEpIMNE.
+12
+[51] Nathan Ratliff, Matt Zucker, J. Andrew Bagnell, and Siddhartha Srinivasa. Chomp: Gradient
+optimization techniques for efficient motion planning. In2009 IEEE International Conference
+on Robotics and Automation, pages 489–494, 2009. doi: 10.1109/ROBOT.2009.5152817.
+[52] James B. Rawlings, David Q. Mayne, and Moritz M. Diehl.Model Predictive Control: Theory,
+Computation, and Design. Nob Hill Publishing, 2017.
+[53] Allen Z Ren, Justin Lidard, Lars L Ankile, Anthony Simeonov, Pulkit Agrawal, Anirudha
+Majumdar, Benjamin Burchfiel, Hongkai Dai, and Max Simchowitz. Diffusion policy policy
+optimization.arXiv preprint arXiv:2409.00588, 2024.
+[54] Herbert Robbins. An empirical bayes approach to statistics.Breakthroughs in Statistics, pages
+388–394, 1992.
+[55] Ralf Römer, Alexander von Rohr, and Angela Schoellig. Diffusion predictive control with
+constraints. InProceedings of the 7th Annual Learning for Dynamics & Control Conference,
+pages 791–803. PMLR, 2025.
+[56] Litu Rout, Yujia Chen, Nataniel Ruiz, Abhishek Kumar, Constantine Caramanis, Sanjay Shakkot-
+tai, and Wen-Sheng Chu. RB-modulation: Training-free stylization using reference-based
+modulation. InThe Thirteenth International Conference on Learning Representations, 2025.
+URLhttps://openreview.net/forum?id=bnINPG5A32.
+[57] John Schulman, Yan Duan, Jonathan Ho, Alex Lee, Ibrahim Awwal, Henry Bradlow, Jia Pan,
+Sachin Patil, Ken Goldberg, and Pieter Abbeel. Motion planning with sequential convex
+optimization and convex collision checking.The International Journal of Robotics Research,
+33(9):1251–1270, 2014.
+[58] Yorai Shaoul, Itamar Mishani, Shivam Vats, Jiaoyang Li, and Maxim Likhachev. Multi-robot
+motion planning with diffusion models. InThe Thirteenth International Conference on Learning
+Representations, 2025. URLhttps://openreview.net/forum?id=AUCYptvAf3.
+[59] Justin Sirignano and Konstantinos Spiliopoulos. DGM: A deep learning algorithm for solving
+partial differential equations.Journal of Computational Physics, 375:1339–1364, 2018.
+[60] Jascha Sohl-Dickstein, Eric A. Weiss, Niru Maheswaranathan, and Surya Ganguli. Deep
+unsupervised learning using nonequilibrium thermodynamics. InProceedings of the 32nd
+International Conference on Machine Learning, volume 37 ofProceedings of Machine Learning
+Research, pages 2256–2265, 2015.
+[61] Jiaming Song, Chenlin Meng, and Stefano Ermon. Denoising diffusion implicit models. In
+International Conference on Learning Representations, 2021. URL https://openreview.
+net/forum?id=St1giarCHLP.
+[62] Yang Song, Jascha Sohl-Dickstein, Diederik P. Kingma, Abhishek Kumar, Stefano Ermon,
+and Ben Poole. Score-based generative modeling through stochastic differential equations. In
+International Conference on Learning Representations, 2021.
+[63] Richard S. Sutton and Andrew G. Barto.Reinforcement Learning: An Introduction. MIT Press,
+2 edition, 2018.
+[64] Evangelos A. Theodorou and Emanuel Todorov. Relative entropy and free energy dualities:
+Connections to path integral and KL control. InProceedings of the IEEE Conference on
+Decision and Control (CDC), pages 1466–1473. IEEE, 2012.
+[65] Francisco Vargas, Will Sussman Grathwohl, and Arnaud Doucet. Denoising diffusion samplers.
+InThe Eleventh International Conference on Learning Representations, 2023. URL https:
+//openreview.net/forum?id=8pvnfTAbu1f.
+[66] Francisco Vargas, Shreyas Padhy, Denis Blessing, and Nikolas Nüsken. Transport meets varia-
+tional inference: Controlled monte carlo diffusions. InThe Twelfth International Conference on
+Learning Representations, 2024. URL https://openreview.net/forum?id=PP1rudnxiW.
+13
+[67] Pascal Vincent. A connection between score matching and denoising autoencoders.Neural
+Computation, 23(7):1661–1674, 2011.
+[68] Andreas Wächter and Lorenz T. Biegler. On the implementation of an interior-point filter
+line-search algorithm for large-scale nonlinear programming.Mathematical Programming, 106
+(1):25–57, 2006. doi: 10.1007/s10107-004-0559-y.
+[69] Wei Xiao, Tsun-Hsuan Wang, Chuang Gan, Ramin Hasani, Mathias Lechner, and Daniela Rus.
+Safediffuser: Safe planning with diffusion probabilistic models. InThe Thirteenth International
+Conference on Learning Representations, 2025. URL https://openreview.net/forum?
+id=ig2wk7kK9J.
+[70] Jingjin Yu. Intractability of optimal multi-robot path planning on planar graphs.IEEE Robotics
+and Automation Letters, 1(1):33–40, 2016. doi: 10.1109/LRA.2015.2503143.
+[71] Jichen Zhang, Liqun Zhao, Antonis Papachristodoulou, and Jack Umenberger. Constrained
+diffusers for safe planning and control, 2025. URLhttps://arxiv.org/abs/2506.12544.
+14
+Appendix
+A Related Work 16
+B Stochastic optimal control and constrained sampling 17
+C Algorithm derivation 19
+D Implementation details 21
+D.1 Safe maze navigation . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 22
+D.2 Safe robotic manipulation . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 23
+D.3 Safe multi-robot motion planning . . . . . . . . . . . . . . . . . . . . . . . . . . . 23
+D.4 Safe and diverse contact-rich manipulation . . . . . . . . . . . . . . . . . . . . . . 28
+E Additional results 29
+E.1 Safe maze navigation . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 29
+E.2 Safe robotic manipulation . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 30
+E.3 Safe multi-robot motion planning . . . . . . . . . . . . . . . . . . . . . . . . . . . 31
+E.4 Safe and diverse contact-rich manipulation . . . . . . . . . . . . . . . . . . . . . . 33
+F Visualizations 34
+15
+A Related Work
+Safe diffusion-based planning.Existing approaches to diffusion-based planning with test-time
+constraint enforcement can largely be understood through the lens of projection, differing primarily
+inwhenprojection is applied and how strongly it restricts the denoising process. A simple strategy is
+post-samplingprojection, where an unconstrained diffusion model first generates a trajectory and
+feasibility is enforced only afterward. This direction was explored by Power et al. [50]. While
+conceptually straightforward, post-sampling projection can move samples substantially away from
+the pretrained diffusion distribution, as observed by Christopher et al. [14]. Most subsequent
+methods instead perform projectionduringsampling. For example, Christopher et al. [14] formulate
+constrained sampling as a maximum-likelihood problem in which all intermediate latents are required
+to lie in the feasible set, and sample using projected stochastic Langevin dynamics. Building on
+this per-step projection perspective, Luan et al. [43] extend projected diffusion models to multi-
+robot motion planning with coupled trajectory generation and additional soft costs, while Liang
+et al. [39] introduce a customized Lagrangian-based projector that relaxes nonconvex collision
+constraints. Recognizing that enforcing constraints throughout the entire denoising process can be
+overly restrictive, more recent methods relax early-stage sampling and tighten constraint enforcement
+near the end of generation. Zhang et al. [71] propose a Lagrangian formulation for safe planning,
+where constraint strictness is progressively increased through primal-dual or augmented-Lagrangian
+updates. In a related direction, SafeDiffuser [69] views denoising as a controlled dynamical system
+and incorporates control barrier functions (CBFs) into the sampling process. This allows constraint
+violations during early denoising while enforcing terminal feasibility through the CBF condition.
+However, balancing early-stage relaxation with reliable terminal feasibility can require careful
+parameter tuning; moreover, even relaxed variants still impose restrictions along the denoising
+trajectory. Overall, most existing methods share a common feature: constraint satisfaction is enforced
+through projections or constraint-driven updates along the denoising path. In contrast, our method
+adopts a stochastic optimal control perspective that imposes hard constraints only on the terminal
+clean sample, rather than requiring feasibility of noisy intermediate iterates. It instead steers the
+sampling process toward feasibility of the final trajectory, reducing unnecessary restrictions on the
+learned diffusion dynamics. Moreover, beyond hard constraints, practical planning problems often
+involve soft costs or rewards. While projection-based approaches can incorporate such objectives in
+specific implementations, they do not naturally provide a unified framework for jointly handling hard
+feasibility and soft optimality. Our stochastic optimal control formulation addresses both within a
+single inference-time procedure, enabling efficient and flexible constrained sampling.
+Diffusion models and stochastic optimal control.A growing body of work has connected diffusion
+sampling with stochastic optimal control (SOC), viewing the reverse diffusion process as a controlled
+stochastic dynamics whose drift can be modified while penalizing deviations from a reference
+process. One line of work uses this perspective for sampling from unnormalized target densities,
+where a reference diffusion process is controlled to match a desired distribution; representative
+examples include path-integral sampling [ 31], denoising diffusion samplers [ 65], and controlled
+Monte Carlo diffusions [66]. Another line of work applies SOC to reward optimization in generative
+models, either through training-based reward fine-tuning, such as Adjoint Matching [18], or through
+training-free guidance toward soft objectives, such as RB-Modulation [56] and variational diffusion
+guidance [48]. These methods demonstrate the usefulness of the SOC viewpoint for controlling
+diffusion samplers, but they primarily target distributional sampling or soft reward optimization.
+They do not directly address hard-constrained planning, where the final trajectory must satisfy
+feasibility constraints while remaining faithful to the learned diffusion dynamics. Extending SOC-
+based diffusion control to this setting is nontrivial, and existing reward-guidance methods do not
+yield an efficient constrained sampler. In contrast, our work develops a tractable surrogate tailored
+to terminally constrained sampling for diffusion-based planning, enabling efficient inference-time
+enforcement of hard constraints while also accommodating additional soft costs or rewards.
+Training-based diffusion planners.A parallel and complementary line of work adapts diffusion-
+based planners through additional training or fine-tuning. For example, AdaptDiffuser [40] improves
+diffusion planners via self-evolution, using reward-guided synthetic trajectories to update the model.
+SODP [19] pretrains a task-agnostic diffusion planner on diverse suboptimal data and then fine-tunes
+it with task-specific rewards. DPPO [ 53] further adapts diffusion policies for continuous control
+and robot learning using policy-gradient reinforcement learning. These methods improve planning
+16
+performance by modifying model parameters, whereas our work enforces hard constraints at inference
+time without retraining, making it orthogonal to training-based adaptation.
+B Stochastic optimal control and constrained sampling
+We expand on Section 4 and present the connection between stochastic optimal control and safe
+planning withtest-timeconstraints. We recall central ideas from optimal control literature [ 21] and
+motivate grounding constrained planning in this line of work.
+Stochastic Optimal Control.For simplicity and coherence with the literature, we consider a
+forward-timeItô process between 0≤t≤1 , transporting probability mass from prior distribution
+p0 toward pbase. The diffusion-centric formulation in (5) is equivalent up to time reversal. We
+parametrize the SDE by a given reference drift f:R d ×[0,1]→R d and diffusion coefficient
+g: [0,1]→R:
+dXt =f t(Xt)dt+g(t)dW t, X 0 ∼p 0, t∈[0,1](11)
+where (Wt)t≥0 denotes a standard Wiener process. To control generation, we introduce an additive
+control drift u:R d ×[0,1]→ U producing actions in the admissible set of control inputs U. As
+optimization objectives, let C:R d →R denote the terminal cost, and ℓ:R d × U ×[0,1]→Rbe
+the running cost. Stochastic optimal control formulates the minimization problem of the expected
+cost functionalJover the path measureP u induced by the controlled dynamics:
+min
+u∈A
+J(u) =E
+
+C(X u1 ) +
+Z 1
+0
+ℓ(X ut , ut(X ut ), t)dt
+
+s.t.dX ut = [ft(X ut ) +g(t)u t(X ut )]dt+g(t)dW t,
+X u0 ∼p 0, t∈[0,1].
+(12)
+where A is the admissible class of progressively measurable controls satisfying ut(X ut )∈ Uand
+EX u∼Pu
+hR 1
+0 ∥ut(X ut )∥2dti <∞ . Under standard coercivity, convexity, and continuity assumptions
+on the data that ensure existence of optimal controls for controlled Itô diffusions [26], we denote by
+u⋆ ∈arg min u∈A J(u)an optimal solution of (12).
+Solving the SOC and the Hamilton–Jacobi–Bellman equation.Solving (12) as-isis generally
+intractable due to the stochastic dynamics and the expectation over all realizable paths. We present a
+classical dynamic programming formulation that transforms the functional minimization problem
+into a partial differential equation (PDE). First, for a given admissible control, define thecost-to-go
+J:A ×R d ×[0,1]→Rby
+J(u;x, t) =EPut,x
+Z 1
+t
+ℓ(X us , us(X us ), s)ds+C(X u1 )
+
+,(13)
+where Put,x denotes the path measure induced by the controlled dynamics initialized at X ut =x . The
+cost-to-go coincides with the expected future cost incurred by applying u from state x at time t. We
+then define thevalue function V:R d ×[0,1]→R as the infimum of this cost over all admissible
+controls:
+V(x, t) = inf
+u∈A
+J(u;x, t).(14)
+The SOC and value formulations are related as taking expectations over the initial distribution yields:
+J(u) =E X0∼p0 [J(u;X 0,0)],(15)
+J(u ⋆) =E X0∼p0 [V(X 0,0)].(16)
+A solution to the stochastic optimal control problem can be achieved by computing the value
+function, which, under regularity conditions, satisfies the Hamilton–Jacobi–Bellman (HJB) [5] partial
+differential equation (Theorem 1).
+17
+Theorem 1(Hamilton–Jacobi–Bellman equation [ 21]).Assume the standard conditions for the
+dynamic programming principle hold, and suppose that the value function satisfies V∈C 1,2(Rd ×
+[0,1]). Define the stochastic Hamiltonian
+H(x, p, M, u, t) :=ℓ(x, u, t) + (ft(x) +g(t)u) ⊤ p+ 12 g(t)2 tr(M).(17)
+ThenVsolves the Hamilton–Jacobi–Bellman equation
+−∂tV(x, t) = minu∈U H
+ 
+x,∇ xV(x, t),∇2xV(x, t), u, t , V(x,1) =C(x).(18)
+Moreover, whenever the minimum is attained, an optimal feedback control satisfies
+u⋆(x, t)∈arg min
+u∈U
+H
+ 
+x,∇ xV(x, t),∇2xV(x, t), u, t .(19)
+Proof. The result follows from Bellman’s dynamic programming principle [5]. Applying the principle
+over [t, t+ ∆t], expanding the value function with Itô’s formula, taking expectations, and sending
+∆t→0 leads to the differential HJB formulation. The terminal condition follows from the definition
+of the cost-to-go. See Fleming and Rishel [21].
+In practice, solving the HJB PDE exactly is rarely tractable beyond low-dimensional systems,
+because grid-based dynamic programming suffers from the curse of dimensionality; since our focus
+is ontraining-freeguidance rather than learning value functions, we refer the reader to training-
+based approaches to HJB equations and stochastic optimal control, including approximate dynamic
+programming, reinforcement learning, and neural PDE methods [7, 24, 59, 63].
+Relation to KL control.We now specialize the stochastic optimal control formulation by choosing
+the quadratic running cost
+ℓ(x, u, t) =12 ∥u∥2 .(20)
+This choice gives the control objective a path-space relative-entropy interpretation, connecting
+stochastic optimal control to Schrödinger Bridge problems, path-integral control, and KL-control as
+outlined in the following theorem:
+Theorem 2(Path-space KL representation).Let {X 0t }t∈[0,1] be the reference stochastic interpolant
+dX 0t =f t(X 0t )dt+g(t)dW t, X 00 ∼p 0,(21)
+with induced path measure P0. Let Pu be the path measure induced by the controlled stochastic
+interpolant
+dX ut = [ft(X ut ) +g(t)u t(X ut )]dt+g(t)dW t, X u0 ∼p 0.(22)
+Then, for progressively measurable controls satisfying the standard Girsanov integrability condition,
+the SOC objective with ℓ(x, u, t) =12 ∥u∥2 is equivalent to the KL-regularized path-space objective
+inf
+u∈A
+
+KL
+ 
+Pu ∥P 0 +E Pu [C(X u1 )]	 .(23)
+Proof. By Girsanov’s theorem, the controlled drift perturbation g(t)ut induces an absolutely continu-
+ous change of path measure whose Radon–Nikodym derivative yields
+KL
+ 
+Pu ∥P 0 =E Pu
+Z 1
+0
+1
+2 ∥ut(X ut )∥2 dt
+
+.
+Substituting this identity into the SOC objective with ℓ(x, u, t) =12 ∥u∥2 yields (23). See Theodorouand Todorov [64] for the corresponding relative-entropy derivation in path-integral and KL-control
+stochastic optimal control.
+Theorem 2 shows that the quadratic-control SOC objective selects a guided sampler that reduces
+terminal cost while remaining close to the reference stochastic interpolant in path-space KL. This
+principle of remaining maximally close to the reference sampler, and hence avoiding unnecessary
+over-constraint of the latent dynamics, offers a useful lens for safe planning with pretrained diffusion
+models. Although the full stochastic optimal control problem is generally intractable, we emphasize
+that this distributional viewpoint provides a principled idealization from which reliable and efficient
+training-free surrogate approximations may be derived.
+18
+Constrained sampling.As noted in prior work on constrained sampling [ 12, 71], the stochastic
+optimal control formulation naturally generalizes to planning withhardconstraints. In particular, let
+S ⊆Rd denote a feasible set and define the extended-valued indicator
+ιS (x) =
+0, x∈ S,
++∞, x /∈ S. (24)
+Then hard-constrained sampling can be written by choosing the terminal cost C ′(x) =C(x) +ι S (x),
+yielding the constrained SOC problem
+min
+u∈A
+E
+Z 1
+0
+1
+2 ∥ut(X ut )∥2 dt+C ′(X u1 )
+
+s.t.dX ut = [ft(X ut ) +g(t)u t(X ut )]dt+g(t)dW t, X u0 ∼p 0.
+(25)
+Now letC ′(x) =C(x) +ι S (x). Since
+E[C ′(X1)] =E[C(X 1)] +E[ι S (X1)],
+any finite-cost solution must satisfy X1 ∈ Salmost surely. Therefore, the extended-valued terminal
+cost is equivalently represented as an explicit terminal constraint, yielding
+min
+u∈A
+EPu
+
+C(X 1) +
+Z 1
+0
+1
+2 ∥ut(Xt)∥2 dt
+
+s.t. dX ut = [ft(X ut ) +g(t)u t(X ut )]dt+g(t)dW t, X u0 ∼p 0
+X1 ∈ SP u-a.s.
+(26)
+C Algorithm derivation
+In this section, we provide the full derivation of the algorithm, highlighting all the approximations
+employed to reach a computationally tractable formulation. For a self-contained derivation, we start
+by repeating the terminally constrained stochastic optimal control problem.
+Problem 1(Continuous-time stochastic optimal control problem with terminal constraints).Given
+reference dynamics, constraint setS, terminal cost C, and cost weight λ, solve for the optimal control
+driftu ⋆:
+min
+u
+E
+
+λ C(Xu0 ) + 12 Z 10 ∥ut(X ut )∥22 dt
+s.t.dX ut = h ˜f θt (X ut ) +g(t)u t(X ut )i dt+g(t)d ¯Wt, X 1 ∼p 1
+X u0 ∈ SP u-a.s.
+(27)
+where the reverse drift is given by the learned score function ˜ftθ(Xt) =f t(Xt)−g(t) 2sθt (Xt).
+For the numerical integration of the reverse-time dynamics, let N∈N denote the number of
+discretization steps, and let 0 =t 0 < t1 < ... < tN−1 < tN = 1 be the time grid used for
+sampling from the diffusion model. Since diffusion sampling proceeds backward in time, we define
+the uncontrolled reverse update fromt i tot i−1 by
+Xi−1 = Φθi (Xi, εi), i= 1, . . . , N,
+where Φθi :R d ×R d →R d is the i-th denoising transition map, and εi ∼ N(0, Id) are independent
+across i. The maps Φθi are left abstract in order to accommodate different numerical sampling
+schemes. Moreover, as is commonly done to reduce discretization-induced noise in the final sample,
+we assume that the last denoising step is deterministic and returns the model’s data prediction without
+injecting additional noise. That is,
+X0 = Φθ1(X1) = ˆxθ0(X1, t1).
+For the SOC surrogate, we approximate the controlled dynamics by applying an Euler discretization
+to the control input over each interval[t i−1, ti]. This yields
+X ui−1 = Φθi (X ui , εi) +g iui(X ui )∆ti, i= 1, . . . , N,(28)
+19
+where gi =g(t i), ∆ti =t i −t i−1, and εi ∼ N(0, Id). After discretizing the control energy, we
+obtain the discrete-time formulation of the terminally constrained stochastic optimal control problem,
+stated in Problem 2.
+Problem 2(Discrete-time stochastic optimal control problem with terminal constraints).Given
+reference drift ˜f θt , constraint setS, and cost weightλ, solve for the control functions{u ⋆i }Ni=1:
+min
+{ui}Ni=1
+E
+"
+λ C(Xu0 ) + 12
+NX
+i=1
+∥ui(X ui )∥22 ∆ti
+#
+s.t.X ui−1 = Φθi (X ui , εi) +g i ui(X ui ) ∆ti, ε i ∼ N(0, Id),∀i,1≤i≤N,
+X u0 ∈ SP ud-a.s.
+(29)
+whereP ud is the probability measure over state tuples induced by the controlled dynamics.
+Although the preceding discretization yields a finite-horizon control problem, the optimization
+problem remains largely intractable in its full generality. First, the control variables are defined
+over the full state space Rd, while the objective involves an expectation over all realizations of
+the controlled stochastic dynamics. Moreover, terminal costs and hard terminal constraints induce
+temporal coupling across the full reverse process: the effect of an early control perturbation on the
+terminal state is mediated by a long composition of neural-network denoising maps.
+Rearranging the controlled dynamics, we can express the control action at each step in terms of the
+deviation from the uncontrolled denoising update.1 Namely,
+ui = Xi−1 − ¯X εii−1gi∆ti , ¯X εii−1 := Φθi (Xi, εi), i= 1, . . . , N.(30)
+Second, motivated by model predictive control [52], we replace the full-horizon optimization by a
+one-step look-ahead surrogate. Specifically, at step i, the transition from Xi to Xi−1 is evaluated
+using the original denoising update, while the cost-to-go over the remaining reverse process is
+approximated using the model’s predicted clean sample. This yields the proxy
+E[C(X 0)|X i−1]≈C(E[X 0 |X i−1])≈C
+ 
+ˆxθ0(Xi−1, ti−1) , i= 1, . . . , N.(31)
+The total discrete-time SOC cost-to-go from step i is therefore approximated by retaining only the
+one-step control effort and replacing the remaining terminal cost by the Tweedie-based prediction.
+Namely, we use the surrogate
+E
+"
+λC(X 0) + 12
+iX
+k=1
+∥uk(Xk)∥22∆tk
+ Xi# ≈λC  ˆxθ0(Xi−1, ti−1) + 12g2i ∆ti Xi−1 − ¯X εii−122 .
+(32)
+Similarly, we enforce constraint satisfaction on the predicted clean sample ˆxθ0(Xi−1, ti−1) as a proxy
+for terminal feasibility, thereby replacing the full joint optimization over all control variables with a
+sequence of one-step subproblems. At each denoising step, we first compute ¯X εii−1 = Φθi (Xi, εi),
+withε i ∼ N(0, Id), and correct the uncontrolled estimate by solving:
+X ⋆i−1 ∈arg min
+Xi−1
+λC( ˆX0|i−1) + 12g2i ∆ti ∥Xi−1 − ¯X εii−1∥22
+s.t. ˆX0|i−1 ∈ S, ˆX0|i−1 = ˆxθ0(Xi−1, ti−1).
+(33)
+Each one-step subproblem still contains a nontrivial coupling between the optimization variableXi−1
+and the predicted clean sample ˆX0|i−1 := ˆxθ0(Xi−1, ti−1). This coupling enters both the terminal
+cost and the feasibility constraint ˆX0|i−1 ∈ S. Therefore, even when C and S have simple structure
+in the data domain, their pullback through the neural denoising mapˆxθ0(·, ti−1)may define a highly
+nonlinear and nonconvex optimization problem in the latent variable Xi−1. For diffusion policies
+with tentatively millions of parameters, repeatedly embedding neural-network evaluations within the
+1We also simplify the notation and suppress the superscriptuand writeX i instead ofX ui for controlled states.
+20
+subproblem can introduce substantial computational overhead and may limit the practicality of direct
+latent-space optimization with generic off-the-shelf solvers. To phrase the optimization in the data
+domain, we approximate the latent displacement Xi−1 − ¯X εii−1 through the corresponding difference
+between predicted clean samples. The key step is to approximately invert Tweedie’s formula by a
+fixed-point scheme. Rearranging (3) at timet i−1 gives
+Xi−1 =α ti−1 ˆxθ0(Xi−1, ti−1)−σ 2ti−1 sθti−1 (Xi−1).(34)
+Now fix y= ˆx θ0(Xi−1, ti−1). Inverting Tweedie’s estimate for this prescribed clean prediction
+amounts to findingX i−1 such that
+Xi−1 =F θti−1 (Xi−1;y), F θti−1 (x;y) :=α ti−1 y−σ 2ti−1 sθti−1 (x).(35)
+Assuming F θti−1 (·;y) is a contraction, the Banach fixed-point theorem guarantees a unique fixed
+point, which can be obtained by repeated application ofF θti−1 (·;y):
+X ⋆ti−1 (y) = limk→∞
+
+F θti−1 (·;y) (k) (X (0)).(36)
+In practice, we initialize the fixed-point inversion at the uncontrolled proposal ¯X εii−1, which provides
+a natural estimate of the latent state before control is applied. Applying one fixed-point iteration gives
+Xi−1 ≈F θti−1 ( ¯X εii−1;y) =α ti−1 y−σ 2ti−1 sθti−1 ( ¯X εii−1).(37)
+Combining this approximation with (34) applied to ¯X εii−1 yields
+Xi−1 − ¯X εii−1 ≈α ti−1  y−ˆxθ0( ¯X εii−1, ti−1)
+=α ti−1
+ 
+ˆxθ0(Xi−1, ti−1)−ˆxθ0( ¯X εii−1, ti−1) . (38)
+Thus, the latent displacement can be approximated by a scaled discrepancy between Tweedie clean-
+sample predictions. This provides a gradient-free correction direction in latent space and allows the
+control penalty to be expressed in the data domain. Substituting (38) into the one-step surrogate
+yields the final receding-horizon formulation in Problem 3, where the constrained optimization is
+carried out in the data domain rather than through repeated neural-network evaluations inside the
+solver.
+Problem 3(DiRecT: receding-horizon formulation).Given a sampling scheme {Φθi }Ni=1, constraint
+set S, cost weight λ, and initial sample X ⋆N ∼p prior, solve the following recursion for i=N, . . . ,1:
+
+
+¯X εii−1 = Φθi (X ⋆i , εi), ε i ∼ N(0, Id),
+˜X0|i−1 = ˆxθ0( ¯X εii−1, ti−1),
+ˆX ⋆0|i−1 ∈arg min
+ˆX0|i−1
+λ C(ˆX0|i−1) + α2ti−1
+2g2i ∆ti ∥ ˆX0|i−1 − ˜X0|i−1∥22 s.t. ˆX0|i−1 ∈ S,
+X ⋆i−1 =
+( ¯X εii−1 +α ti−1 ( ˆX ⋆0|i−1 − ˜X0|i−1), i >1,
+ˆX ⋆0|0, i= 1.
+(39)
+Although several approximations are introduced to reduce the general stochastic optimal control prob-
+lem to a tractable form, terminal constraint satisfaction is not relaxed, as formalized in Proposition 1.
+Remark 1(Terminal convention).At the final denoising step, we return the optimized data-domain
+prediction ˆX ⋆0|0 directly, rather than applying the latent correction formula. This convention ensures
+exact terminal feasibility whenever the final subproblem is solved feasibly. It is also convenient in
+practical implementations, since common noise schedules, such as cosine schedules [47], need not
+satisfyα t0 = 1exactly.
+D Implementation details
+Hardware.All Maze2D and D3IL experiments were performed on a compute node equipped with
+two Intel(R) Xeon(R) Gold 5218 @ 2.30GHz CPUs and six NVIDIA Quadro RTX 8000 48GB,MRMP
+21
+on a node with two Intel Xeon E5-2670 v2 @ 2.50 GHz CPUs and one NVIDIA Tesla V100-SXM2
+32 GB GPU, and PushT on a machine equipped with two AMD EPYC 75F3 32-Core Processor
+CPUs and four NVIDIA A100 GPUs. All computations for training, model evaluation, and gradient
+calculation were performed on a single GPU, whereas environment rollouts and IPOPT optimizations
+were performed on a CPU.
+Software.All experiments are based on PyTorch [ 49] for automatic differentiation and JAX [11]
+for our custom multi-agent path-finding optimizer. Moreover, MRMP and PushT are based on PRO-
+JECTEDCOUPLEDDIFFUSION[ 43] 2 (MIT), which are themselves extensions of DIFFUSION
+POLICY[ 13] 3(MIT), MMD [ 58] 4(MIT), and LTLDOG [ 20] 5(MIT). We use CASADI[ 4] (GNU
+LGPL v3.0) and IPOPT [68] (EPL-2.0) foroff-the-shelfoptimization.
+D.1 Safe maze navigation
+Training.We train acontinuous-timediffusion model with a standard temporal UNet ar-
+chitecture [ 30] and horizon H= 384 . The model outputs the state-action pair trajectory
+(s0, a0, s1, a1, . . . , sH−1 , aH−1 )∈R 6H conditioned on given start and end states. We employ data-
+prediction parametrization and a cosine noise schedule with offsets= 0.008 [47]. We train the model
+with Adam [34] for 500,000 steps with a batch size of 256 on the D4RL maze2d-large-v1 [23] 6
+dataset (CC BY 4.0), scaled by min-max normalization. We use a learning rate of 0.001 with a cosine
+annealing schedule for the first 10,000 steps. We save checkpoints using an exponential moving
+average of the model weights with decay0.995.
+Environment details.We introduce obstacles as ellipses and super-ellipses centered in (cx, cy),
+semi-axes(r x, ry), and orderp:
+ x−c xrx p +  y−c yry p ≥1(40)
+For both Broad and Narrow variants, we follow the obstacle placement in [69]. To enforce dynamics
+constraints we fit by ordinary least-squares regression the normalized transitions from the training
+data for a total of 3,993,503 across 1,062 episodes. For simplicity, although equivalent, we separate
+the state and action coefficients with the following functional form s′ =A·s+B·a+c , where
+each transition is defined by the tuple (s, a, s′). When enforcing dynamic constraints, we impose
+the fitted dynamics asstrictequality constraints over the planning horizon. Although the per-step
+least squares residuals are contained, open-loop execution over the full horizon remains impractical.
+In this regime, predicted and executed trajectories may diverge, hindering proper evaluation of the
+planner. To mitigate this issue, we perform policy rollout by tracking the generated trajectory with a
+proportional-derivative (PD) controller with constantsP= 5, D= 1.
+Evaluation.We evaluate each method over 100 i.i.d. generated samples conditioned on the same
+fixed endpoints. For each sample, we execute a rollout up to 800 environment steps, at which the
+episode is terminated. For all methods we denoise with a DDPM sampler [ 28] on a uniform time
+discretization. We follow standard practice and perform the last denoising iteration by returning the
+model prediction. To encourage shorter paths, when applicable, the cost function C(x) is chosen to
+be the squared path length of the generated trajectory. We now briefly describe the implementation
+details of each method, as well as their adaptation to include equality dynamic constraints:
+• Diffuser[ 29]. We employ 32 denoising iterations as an unguided reference for the base
+pretrained model. No obstacles or dynamic constraints are imposed.
+• Gradient Guidance[ 15]. We employ 32 denoising iterations and guide the noisy latent xt
+by computing the gradient of the cost function using posterior sampling as ∇C ′(ˆx0,θ(xt)),
+where constraint violations are added as a penalty term in the cost function C ′(x) =
+C(x) +C penalty(x). To impose dynamic constraints, we penalize the squared residuals of
+2https://github.com/EdmundLuan/pcd
+3https://github.com/real-stanford/diffusion_policy
+4https://github.com/yoraish/mmd
+5https://github.com/clear-nus/ltldog
+6https://github.com/Farama-Foundation/D4RL
+22
+each predicted transition along the prediction horizon by adding them as an additional cost
+penalty.
+• Projection[ 14]. We employ 32 denoising steps and project the second half of the generated
+latents onto the feasible set. Dynamic constraints are introduced directly in the optimization
+process, which is solved with IPOPT.
+• Augmented Lagrangian[ 71]. We adapt the original implementation to the continuous-time
+case by scaling hyperparameters to generate equivalent guided transitions. We use 256
+sampling steps with an additional 200 iterations for the last denoising step. We use the
+original implementation for handling dynamic equality constraints.
+• SafeDiffuser-RoS[ 69]. We adapt the original implementation to the continuous-time case
+by scaling hyperparameters to generate equivalent guided transitions with 256 sampling
+steps. We introduce dynamic constraints directly into the quadratic program. The resulting
+optimization problem is solved with IPOPT.
+• DiRecT. We employ 32 denoising steps and optimize over the second half of the generative
+process. We incorporate dynamic constraints directly into the receding-horizon subproblem,
+which is solved with IPOPT.
+D.2 Safe robotic manipulation
+We train acontinuous-timediffusion model with a temporal UNet architecture [ 30] and horizon
+H= 16 . The model outputs the state-action pair trajectory (s0, a0, s1, a1, . . . , sH−1 , aH−1 )∈R 6H
+over the entire prediction horizon. We employ data-prediction parametrization and a cosine noise
+schedule with offset s= 0.008 [47]. We train the model with Adam [34] for 500,000 steps with a
+batch size of 32 on the D3IL avoiding dataset [30] 7 (MIT), scaled by min-max normalization. We
+use a learning rate of 2×10 −4 with a cosine annealing schedule for the first 100,000 steps. We save
+checkpoints using an exponential moving average of the model weights with decay0.995.
+Environment details.The base D3IL avoiding task presents six circular pillars that must be
+avoided by the end-effector. The unguided diffusion policy learns to dodge these obstacles directly
+from human demonstrations. To assess performance overunseenconstraints, we restrict planning
+by increasing the radius of the first pillar and limiting side-movements by two planar regions.
+Dynamics constraints are imposed by least-squares fitting of the 7209 training transitions across 96
+demonstrations, with the same procedure for Maze2D (see Appendix D.1).
+Evaluation.We evaluate each method over 100 i.i.d. generated samples conditioned on a fixed
+initial position and with zero starting velocity. For each sample, we execute a rollout up to 100
+environment steps with a planning horizon H= 16 and execution horizon M= 4 . We terminate
+the episode when the end-effector collides with a pillar, while we continue rollouts for violations
+oftest-timeconstraints. All other implementation details follow the procedure for Maze2D (see
+Appendix D.1).
+D.3 Safe multi-robot motion planning
+Problem setup.In this task, multiple agents’ trajectories in a common environment are generated
+in a collision-free and velocity-constrained manner. We test our method on the four environments
+from the MMD [58] benchmark. A diffusion model is trained for each environment on single-agent
+trajectories showing a specific motion pattern. In the unconstrained setting, the objective is to generate
+trajectories τ∈R H×2 conditioned on given start and target endpoints (b, e)∈R 2×2 presenting the
+desired motion behaviors for each MMD environment (Figure 5):
+•Empty is the simplest map, where demonstrations consist of straight-line motions and robots
+are penalized for deviating from a direct path.
+•Highways contains a central block that induces a warehouse-like traffic pattern, where
+agents are expected to movecounterclockwisearound the obstacle.
+•Conveyor consists of two narrow corridors. Agents are rewarded for moving leftward in
+the top corridor and rightward in the bottom corridor.
+7https://github.com/ALRhub/d3il
+23
+(a)Empty
+ (b)Highways
+ (c)Conveyor
+ (d)Drop-Region
+Figure 5: Four major MMD environments with feasible optimized solutions. Robots navigate
+toward their goal positions while avoiding inter-robot and obstacle collisions and satisfying velocity
+constraints. Each environment exhibits a characteristic motion pattern that should be preserved.
+•Drop-Region features an obstacle-free central space and four drop-off regions. Agents
+are rewarded for pausing near the midpoint of any of the four square regions, emulating
+package-delivery tasks.
+Following the coupled trajectory-generation setup in [43], we seek to generate Na agent trajectories
+simultaneously. The generated trajectories must avoid inter-robot and robot-obstacle collisions,
+satisfytest-timevelocity restrictions, and exhibit the desired MMD motion pattern.
+Let [K] denote {1, ..., K}for any natural number K∈N . We denote a generated sample of
+trajectories by τ= (τ 1, ...,τNa )∈R Na×H×2, where τ ji is the j-th predicted step for the i-th agent.
+Given an optimization objective J:R Na×H×2 →R and starting locations {bi}i∈[Na] for each robot,
+the general MRMP problem is formulated as [39, 58]
+min
+τ∈R Na ×H×2
+J(τ)(41a)
+s.t.
+τ k+1i −τ ki 2 ≤v max∆t,∀i∈[N a],∀k∈[H−1],(41b)τ 1i −b i2 ≤v max∆t,∀i∈[N a],(41c)τ ki −τ kj 2 ≥2δ,∀i̸=j,∀k∈[H],(41d)
+d(τ ki ,O)≥δ,∀i∈[N a],∀k∈[H].(41e)
+where δ is the robot radius, vmax is the test-time maximum allowable velocity, ∆t is the environment
+time increment between consecutive generated steps, andd(·,O) :R 2 →Ris the distance function
+to the obstacle set. Let ΩV , ΩCR, and ΩCO denote the feasible sets associated with the velocity,
+inter-robot collision-avoidance, and robot-obstacle collision-avoidance constraints, respectively. We
+define the feasible set of Problem 41 as Ω = Ω V ∩Ω CR ∩Ω CO . The data adherence objective is
+implicitly specified by the single-agent diffusion policy. In this setting, Problem 41 can be naturally
+interpreted as constrained sampling from a pretrained diffusion model applied to the concatenation
+of all agent trajectories. More explicitly, given a diffusion model trained for a single agent, we can
+generateN a independent trajectories by sampling from the product distribution
+τ∼p ⋆0(τ) =
+NaY
+i=1
+p0(τi).
+Therefore, the corresponding concatenated denoiser ˆx⋆0,θ(τ) = LNai=1 ˆx0,θ(τi) is equivalent to a
+pretrained diffusion model that interpolates between the prior N(0,I Na×H×2 ) and the product
+distribution p⋆0. To imposetest-timeconstraints within our framework, we define aprojectionoperator
+onto the feasible set Ω. This differs from the coupled diffusion framework of [43] where only velocity
+limits are enforced exactly: rather than relying on soft collision penalties, we impose the nonconvex
+collision-avoidance constraints as hard constraints in the constrained optimization problem.
+Evaluation details.We use the pretrained checkpoints provided by [ 43], which are trained with
+a Diffusion Policy [13] backbone on the four MMD environments. For each environment, we
+24
+impose a maximum allowable agent velocity, computed from forward differences of trajectory
+positions. For all methods, we generate samples using 100 DDPM [28] denoising steps, applying
+guidance during the second half of the denoising process. We evaluate each method over 100
+randomly selected initial configurations. For each configuration, we generate a batch of128 candidate
+trajectories in parallel. Following [43], we defineSuccess Rateas the fraction of trials for which at
+least one trajectory in the generated batch is collision-free. In contrast,Constraint Safetymeasures
+the average feasibility rate overallgenerated trajectories in terms of both collision and kinematic
+constraints.
+D.3.1 Custom MRMP optimizer
+Problem setup.We explicitly state the projection problem solved by the MRMP optimizer. Let
+X∈R Na×H×2 denote the optimized trajectory tuple, with X ki ∈R 2 denoting the position of agent i
+at waypoint k. Let ˆX∈R Na×H×2 denote the Tweedie clean-trajectory estimate produced by the
+diffusion model. The proximal safe trajectory is computed as the solution of
+X ⋆ = arg min
+X∈R Na ×H×2
+1
+2
+X− ˆX2
+F
++ λsm
+2
+NaX
+i=1
+H−1X
+k=1
+X k+1i −X ki 22 .(42a)
+s.t.
+X 1i −b i2 ≤v max∆t,∀i∈[N a],(42b)X k+1i −X ki 2 ≤v max∆t,∀i∈[N a],∀k∈[H−1],(42c)X ki −X kj 2 ≥2δ,∀i̸=j,∀k∈[H],(42d)
+d(X ki ,O)≥δ,∀i∈[N a],∀k∈[H].(42e)
+The first term keeps the projected tuple close to the diffusion model’s Tweedie estimate ˆX, while
+the smoothness term with strength λsm optionally encourages straight-line trajectories. The
+constraints enforce initial-state consistency, inference-time velocity limits, inter-robot separation, and
+robot-obstacle clearance. Thus, the optimizer defines a (proximal) projection X ⋆ = ΠΩ( ˆX) onto the
+feasible setΩ = Ω V ∩Ω CR ∩Ω CO.
+Different approaches are possible for solving this problem. A first possibility is to employ
+an off-the-shelf nonlinear solver such as IPOPT. However, general-purpose nonlinear solvers are
+typically designed around CPU-based sparse linear algebra and do not provide a plug-and-play
+GPU implementation suitable for extensive sweeps and batched inference. An alternative is to
+relax the nonconvex collision constraints and optimize the resulting objective with Lagrangian or
+augmented-Lagrangian methods [ 39]. However, since the collision constraints enter the objective
+through nonlinear penalty or multiplier terms, the resulting optimization can remain nonconvex
+and still requires a general-purpose CPU-based nonlinear solver. Inspired by the ADMM projector
+in [43], given the convexity of the velocity constraints and the spatially local structure of the collision
+constraints, we derive a custom optimizer by combining successive convexification of the active
+collision constraints with an ADMM splitting of the resulting convex subproblem [ 10, 44]. The
+complete derivation is as follows.
+Successive convexification.The nonconvexity of (42) arises from the inter-robot and robot-obstacle
+collision constraints. We handle these constraints with an outer successive-convexification loop. Let
+X (m) denote the current trajectory at SCP iteration m. For each active inter-robot constraint, define
+rk,(m)ij =X k,(m)i −X k,(m)j , n k,(m)ij = rk,(m)ijrk,(m)ij 2 .
+Using the first-order lower approximation of the norm, we replace
+X ki −X kj 2 ≥2δwith 
+nk,(m)ij ⊤(X ki −X kj )≥2δ.
+For robot-obstacle constraints, let dℓ(p) denote the signed distance from point p to obstacle primitive
+Oℓ. For each active constraint dℓ(X ki )−δ≥0 , we use the first-order approximation around X k,(m)i :
+dℓ(X k,(m)i )−δ+∇d ℓ(X k,(m)i )⊤ X ki −X k,(m)i  ≥0.
+25
+For all MMD environments, obstacles decompose into rectangular and circular primitives, so both
+signed distances and their gradients can be computed exactly. At SCP iteration m, we compute the
+next trajectory X (m+1) by solving the following convexified, slack-penalized projection problem:
+(X (m+1), s(m+1))∈arg min
+X,s
+1
+2
+X− ˆX2
+F
++ λsm
+2
+NaX
+i=1
+H−1X
+k=1
+X k+1i −X ki 22
++ τm
+2
+X−X (m)2
+F
++µ m1⊤s.
+(43a)
+s.t.
+X 1i −b i2 ≤v max∆t,∀i∈[N a],(43b)X k+1i −X ki 2 ≤v max∆t, i∈[N a], k∈[H−1],
+(43c)
+ 
+nk,(m)ij ⊤(X ki −X kj ) +s kij ≥2δ,∀(i, j, k)∈ A (m)RR ,(43d) 
+nk,(m)iℓ ⊤X ki +s kiℓ ≥  nk,(m)iℓ ⊤X k,(m)i −  dℓ(X k,(m)i )−δ ,∀(i, ℓ, k)∈ A(m)O ,(43e)
+s≥0.(43f)
+Here A(m)RR and A(m)O denote the active inter-robot and robot-obstacle constraints at the linearization
+point X (m). The slack variables s≥0 keep the convexified subproblem feasible, while theℓ1 penalty
+1⊤s=∥s∥ 1 encourages sparse violations. We use monotone schedules µm+1 = min{γµµm, µmax}and τm+1 = min{γ τ τm, τmax}, with γµ, γτ >1 . Increasing µm progressively enforces collision
+satisfaction, while increasingτ m regularizes each SCP step around its linearization point.
+ADMM splitting.To solve (43), we introduce auxiliary variables V, C, Z∈R Na×H×2. The
+variable V is used to impose velocity feasibility, Z stores the corresponding velocity increments, and
+C isolates the linearized collision constraints. For notational convenience, set V 0i =b i and define the
+anchored first-difference operator
+(DbV) ki =V ki −V k−1i , i∈[N a], k∈[H].
+Thus, (DbV) 1i =V 1i −b i encodes the initial velocity constraint, while the remaining entries encode
+consecutive displacements. The velocity constraint is equivalently written as DbV=Z, Z∈ K Z
+with
+KZ ={Z:
+Z ki 2 ≤v max∆t, i∈[N a], k∈[H]}.
+Let G(m) denote the matrix collecting the active linearized collision constraints at SCP iteration m,
+and let h(m) denote the corresponding vector of right-hand sides. The slack variable s has the same
+dimension as h(m) and keeps the active collision constraints feasible. We write these constraints
+compactly as(C, s)∈ K(m)C , where
+K(m)C ={(C, s) :G (m)C+s≥h (m), s≥0}.
+LetI K denote the indicator function of a setK, equal to0onKand+∞otherwise. Define
+fm(X) = 12 X− ˆX2F + λsm2 NaXi=1 H−1Xk=1 X k+1i −X ki 22 + τm2 X−X (m)2F .
+The SCP subproblem can then be written in ADMM form as
+min
+X,V,C,Z,s
+fm(X) +µ m1⊤s+I KZ (Z) +I K(m)C (C, s)
+s.t.X=V, X=C, D bV=Z, s≥0.
+(44)
+26
+Using scaled dual variablesUXV , UXC , and UZ with penalties ρXV , ρXC , ρZ >0 , the corresponding
+scaled augmented Lagrangian formulation of (44) is:
+Lρ =f m(X) +µ m1⊤s+I KZ (Z) +I K(m)C (C, s)
++ ρXV
+2 ∥X−V+U XV ∥2F − ρXV2 ∥UXV ∥2F
++ ρXC
+2 ∥X−C+U XC ∥2F − ρXC2 ∥UXC ∥2F
++ ρZ
+2 ∥DbV−Z+U Z∥2F − ρZ2 ∥UZ∥2F .
+(45)
+ADMM then alternates between the following updates at inner iteration q of SCP iteration m. For
+the linear solves, write the anchored difference as DbV=AV−B , where A is the first-difference
+matrix with (AV) 1i =V 1i and (AV) ki =V ki −V k−1i for k≥2 , while B1i =b i and Bki = 0 for
+k≥2.
+•X -update.The X-update minimizes the scaled augmented Lagrangian with respect to X
+while keeping the remaining variables fixed:
+X q+1 = arg min
+X
+n
+fm(X) + ρXV2 ∥X−V q +U qXV ∥2F + ρXC2 ∥X−C q +U qXC ∥2F o .
+This is an unconstrained quadratic program. Setting its gradient to zero gives the linear
+system
+
+(1+τm+ρXV +ρXC )I+λ smD⊤DX q+1 = ˆX+τ mX (m)+ρXV (V q−U qXV )+ρXC (C q−U qXC ),
+whereDis the unanchored first-difference operator appearing in the smoothness term.
+•V-update.TheV-update collects the terms involving the velocity split:
+V q+1 = arg min
+V
+n ρXV
+2
+X q+1 −V+U qXV 2F + ρZ2 ∥DbV−Z q +U qZ∥2F o .
+This is also an unconstrained quadratic program. Using DbV=AV−B , its optimality
+condition yields
+ 
+ρXV I+ρ ZA⊤AV q+1 =ρ XV (X q+1 +U qXV ) +ρ ZA⊤(Z q −U qZ +B).
+•Z -update.The Z-update enforces the velocity bound by projecting the current anchored
+displacement estimate ontoK Z:
+Z q+1 = ΠKZ  DbV q+1 +U qZ.
+This projection has a closed-form solution as it is appliedrow-wise. For νki = (DbV q+1)ki +
+(U qZ)ki ,
+Z k,q+1i =
+
+
+
+(vmax∆t) νkiνki 2 , νki 2 > vmax∆t,
+νki ,otherwise,
+i∈[N a], k∈[H].
+•C, s-update.The collision update projects onto the linearized collision constraints while
+penalizing slack:
+(C q+1, sq+1) = arg min
+(C,s)∈K(m)C
+n ρXC
+2
+C−(X q+1 +U qXC )2F +µ m1⊤so .
+This is a convex quadratic program with linear inequality constraints. Rather than calling a
+generic QP solver, we solve its box-constrained dual. Let Qq =X q+1 +U qXC . The dual
+problem is
+λ⋆ = arg max
+0≤λ≤µm
+
+− 12ρXC (G(m))⊤λ22 +λ ⊤ h(m) −G (m)Qq .
+We solve this dual by projected gradient ascent onλ. The primal variables are then recovered
+as
+C q+1 =Q q + 1ρXC (G(m))⊤λ⋆, s q+1 = max{0, h(m) −G (m)C q+1}.
+27
+• Dual updates.Finally, the scaled dual variables are updated by accumulating the primal
+residuals of the three splitting constraints:
+U q+1XV =U qXV +X q+1 −V q+1, U q+1XC =U qXC +X q+1 −C q+1,
+U q+1Z =U qZ +D bV q+1 −Z q+1.
+The X- and V -updates require solving linear systems with matrices of the form αI+βD ⊤D or
+αI+βA ⊤A, which are tridiagonal along the time dimension. Their factorizations can therefore be
+cached and reused across ADMM iterations within each SCP iteration. We implement the projector
+in JAX [11], using just-in-time compilation and GPU parallelism for batched inference.
+For simplicity in implementation, we use fixed iteration budgets for all nested loops:Kcvx successive-
+convexification iterations, KADMM ADMM iterations, and KQP projected-gradient steps for the local
+collision QP. Developing principled termination criteria for these loops is an interesting direction for
+future work and could further reduce inference-time computational overhead. We summarize the full
+procedure in Algorithm 2 and default parameters in Table 4.
+D.4 Safe and diverse contact-rich manipulation
+Training.We employ a diffusion model with noise-prediction parametrization on the augmented
+expert demonstrations dataset using default parameters in [20].
+Evaluation.We follow the same setup as in [ 43] and generate 100 pairs of trajectories for each of
+50 random starting configurations. We constrain each agent by imposingtest-timevelocity limits
+corresponding to the 90% quantile in the original work. Sampling is performed with a planning
+horizon ofH p = 16, execution horizonH a = 8, and for a maximum of360environment steps.
+Cost functions.For clarity of exposition, we repeat the definition of the cost functions used to
+encourage non-intersecting trajectories during coupled sampling.
+Determinantal Point Process (DPP)[20]. Given a generated pair (X, Y)∈R H×2×2, the DPP cost
+directly penalizes high cosine similarity between the flattened trajectories( ¯X, ¯Y)∈R 2H×2:
+cDPP(X, Y) = log
+ 
+cos∠( ¯X, ¯Y) +ε  (46)
+whereε >1regulates cost sharpness.
+Log-Barrier (LB). Given a trajectory tuple (X, Y)∈R H×2×2, log-barrier cost discourages proximity
+of trajectories, as measured by the Euclidean distance:
+cLB(X, Y) =−
+HX
+i=1
+log(∥Xi −Y i∥+α)(47)
+whereα >0is an offset parameter.
+Projected Gradient Descent.For the PCD-DPP and PCD-LB baselines, we use one gradient
+iteration per denoising step with guidance strengths of γDP P= 0.2 and γLB = 0.02 respectively.
+For DiRecT-DPP and DiRecT-LB we introduce diversity costs directly in the optimization problem
+(33) scaled by an appropriate weight λc >0 . For a comparison under similar computational budgets,
+the optimization problem is not solved to convergence, instead we employ one iteration of projected
+gradient descent [ 37]. Given a pair of denoised estimates ( ¯X, ¯Y) , the optimized pair (X ⋆, Y⋆)
+becomes8:
+X ⋆ = ΠK
+
+¯X−λ c∇X cDPP/LB(X, Y) ¯X, ¯Y  ,
+Y ⋆ = ΠK
+
+¯Y−λ c∇Y cDPP/LB(X, Y) ¯X, ¯Y  . (48)
+Here, ΠK is the same ADMM-based projector as the PCD baselines over the set K of velocity-
+restricted trajectories. We sweep multiple weights for λc and choose λc = 0.005 for DiRecT-LB and
+λc = 0.05for DiRecT-DPP. Additional details are provided in Appendix E.4.
+8We include the step size for the gradient update in λc, instead of defining an additional hyperparameter. Moreover, the
+gradient of the quadratic regularization from Tweedie’s estimate vanishes at( ¯X, ¯Y).
+28
+Algorithm 2:Batched SCP–ADMM Projection for MRMP
+Input:Tweedie reference ˆX, startsb, obstacle primitivesO, robot radiusδ, step boundd max =v max∆t;
+iterationsK cvx, KADMM, KQP; penaltiesρ XV , ρXC , ρZ; schedulesµ m, τm; dual step sizeα
+Output:Projected trajectoryX
+1Pre-computeD,A, andBsuch thatD bV=AV−B, withB 1i =b i andB ki = 0fork≥2;
+2X← ˆX,V←X,C←X;// Initialize from diffusion estimate
+3Z←Π KZ (AV−B),U XV , UXC , UZ ←0;// Initialize velocity split and duals
+4SCP convexification;
+5form= 0, . . . , Kcvx −1do
+6X lin ←X;
+7Select active constraintsA (m)RR ,A (m)O atX lin;
+8Build the linearized collision constraintsG (m)C+s≥h (m),s≥0;
+9H X ←(1 +τ m +ρ XV +ρ XC )I+λ smD⊤D;//X-update system
+10H V ←ρ XV I+ρ Z A⊤A;//V-update system
+11Cache factorizations ofH X andH V ;// Tridiagonal along time
+12C←X,s←0,U XC ←0;
+13ADMM splitting;
+14forq= 0, . . . , K ADMM −1do
+15X, V, Zupdates;
+16R X ← ˆX+τ mXlin +ρ XV (V−U XV ) +ρ XC (C−U XC );
+17X←SOLVEBATCH(H X X=R X );// Batched linear solve on GPU
+18R V ←ρ XV (X+U XV ) +ρ Z A⊤(Z−U Z +B);
+19V←SOLVEBATCH(H V V=R V );// Batched linear solve on GPU
+20W←AV−B+U Z;
+21Z ki ←min
+(
+1, dmaxW ki 2 +ε min
+)
+W ki , i∈[N a], k∈[H];// Project onto velocity
+balls
+22Local collision-QP dual;
+23Q←X+U XC ,λ←0;
+24forr= 0, . . . , K QP −1do
+25g λ ← −ρ−1XC G(m)(G(m))⊤λ+  h(m) −G (m)Q;// Dual gradient
+26λ←clip(λ+αg λ,0, µ m);// Box-constrained dual step
+27C, srecovery and dual updates;
+28C←Q+ρ −1XC (G(m))⊤λ;
+29s←max{0, h (m) −G (m)C};
+30U XV ←U XV +X−V;// Position–velocity residual
+31U XC ←U XC +X−C;// Position–collision residual
+32U Z ←U Z +AV−B−Z;// Velocity-projection residual
+33returnX
+Table 4: Main hyperparameters used by the batched SCP–ADMM MRMP optimizer.
+SymbolK cvx KADMM KQP ρXV ρXC ρZ µinit µmax γµ τinit τmax γτ
+Value5 50 100 1.0 1.0 1.0 1.0 1000.0 2.0 0.1 10.0 1.5
+E Additional results
+E.1 Safe maze navigation
+We report in Table 5 a detailed comparison of our method against additional baselines, with a focus
+on the difference betweengeneratedandrolloutsafety. We consider these additional methods for
+comparison:Classifier Guidance[ 17] which employs gradient guidance throughsoftviolation
+costs without posterior sampling,Primal-Dual[ 71] as an additional Lagrangian-based method,
+and the two additional SafeDiffuser variationsSafeDiffuser-ReS, andSafeDiffuser-TVS[ 69]
+29
+Table 5: Results on the Maze2D constrained navigation task. Mean values are computed over 100
+i.i.d. samples and reported alongside their standard deviation. Gray columns report metrics evaluated
+on the planned trajectories before execution. Best value(s) in boldface.
+Env Method SR↑Viol.↓Score↑Time (s)↓Gen. SR↑Gen. Viol.↓Gen. AS↓Gen. CS↓
+Maze2D Broad
+Diffuser [29]0.000 45.920±11.8631.601±0.0250.316±0.0780.000±0.00049.040±17.4260.057±0.0050.636±0.077
+Classifier Guidance [17]0.030 37.480±13.2601.587±0.1640.654±0.0930.040±0.19735.760±19.4820.055±0.0050.619±0.077
+Gradient Guidance [15]0.040 25.520±10.1781.587±0.1643.637±0.0760.040±0.19710.220±7.8820.056±0.0050.636±0.073
+Projected Diffusion [14]0.220 42.000±47.2821.119±0.70846.398±11.0961.000±0.0000.000±0.0000.002±0.0000.011±0.004
+Primal-Dual [71]0.170 26.610±31.7340.267±0.4175.957±0.0831.000±0.0000.000±0.00021.299±0.2191.861±0.015
+Augmented Lagrangian [71]0.080 72.920±92.751−0.010±0.1455.676±0.5660.000±0.00091.010±55.0792.152±0.9741.407±0.452
+SafeDiffuser-RoS [69]0.040 66.260±41.7201.186±0.533148.967±3.8311.000±0.0000.000±0.0000.008±0.0070.010±0.004
+SafeDiffuser-ReS [69]0.520 9.690±11.9480.907±0.815486.568±61.0731.000±0.0000.000±0.0000.003±0.0030.015±0.006
+SafeDiffuser-TVS [69]0.040 62.240±38.4601.219±0.561128.758±2.9881.000±0.0000.000±0.0000.005±0.0040.010±0.004
+DiRecT (Ours)0.970 0.450±3.8061.500±0.41917.657±0.6291.000±0.0000.000±0.0000.002±0.0000.008±0.002
+Maze2D Narrow
+Diffuser [29]0.000 103.940±21.8811.601±0.0250.321±0.0860.000±0.000101.230±24.5510.057±0.0050.636±0.077
+Classifier Guidance [17]0.000 85.280±24.2241.608±0.0220.695±0.0790.000±0.00076.120±26.5270.056±0.0050.629±0.077
+Gradient Guidance [15]0.000 51.300±19.2211.619±0.0293.608±0.0230.000±0.00023.390±14.1230.056±0.0050.647±0.072
+Projected Diffusion [14]0.780 37.290±129.8760.163±0.459112.918±19.5170.420±0.49617.630±30.6800.018±0.0390.033±0.077
+Primal-Dual [71]0.000 55.970±49.4780.268±0.4185.154±0.4640.910±0.2880.110±0.37321.306±0.2261.861±0.014
+Augmented Lagrangian [71]0.000 217.510±159.4310.156±0.4496.022±0.1220.000±0.000197.520±45.7395.516±1.3011.765±0.040
+SafeDiffuser-RoS [69]0.000 278.870±209.8700.735±0.681509.850±19.9290.000±0.000136.250±39.0290.419±0.1680.350±0.148
+SafeDiffuser-ReS [69]0.370 79.090±161.3951.155±0.7641423.534±41.3190.760±0.4296.320±16.5780.031±0.0840.078±0.164
+SafeDiffuser-TVS [69]0.000 315.040±223.0000.729±0.694384.860±9.6810.000±0.00035.460±12.9620.059±0.0260.038±0.011
+DiRecT (Ours)0.940 0.230±1.0381.624±0.02798.093±5.0471.000±0.0000.000±0.0000.002±0.0000.010±0.006
+for CBF-based constraining. We also report additional metrics on thegeneratedtrajectory: (i)
+Safety Rate, measuring the fraction of samples that correctly avoid obstacles; (ii) meanViola-
+tions, measuring the number of steps the predicted trajectory remains infeasible; (iii)Acceler-
+ation Smoothness(AS), quantifying the change in velocity across the trajectory, and computed
+as the magnitude of the second-order position differences averaged across all planned transi-
+tions: AS= (H−2) −1 PH−2i=1 ∥si+1 −2s i +s i−1∥; (iv)Curvature Smoothness(CS), measur-ing the mean curvature of the generated trajectory. Following [ 16], we define the turning angle
+θi = cos−1(wTi wi+1/(∥wi∥ ∥wi+1∥)), w i =s i+1 −s i, i= 0, ..., H−3, and compute the metric
+as the average across the planned horizonCS= (H−2) −1 PH−3i=0 (1−cosθ i).
+In both variants DiRecT outperforms all other baselines in terms ofrolloutsafety. Even though
+Projected Diffusion, Primal-Dual and the three SafeDiffuser variations generate safe trajectories at
+planning time on the broad instance of the problem, their rollout performance remains limited. This
+can be explained by noting that these methods find feasible solutions to the optimization problem
+by departing substantially from the data distribution. As shown in Figures 7–8, prior methods in
+highly constrained dynamic settings often produce trajectories that depart from the learned maze
+structure and pass through maze walls. In contrast, our method performs optimization near the data
+manifold, thereby remaining proximal to the data distribution. In the narrow setting, we observe that
+IPOPT struggles to find feasible solutions within the allowed 200 iterations, sometimes leading to
+infeasible generated solutions for projection-based methods. Moreover, primal-dual methods and
+some SafeDiffuser variants exhibit instabilities on certain samples under dynamic constraints.
+E.2 Safe robotic manipulation
+We compare the same extended baselines as in Table 5 and report safety and success rates of these
+additional policies in Table 6. Our method is the only one to obtain perfect task success rate.
+For the primal-dual implementation, we tuned the reference hyperparameters to the best of our
+ability, including the dual-ascent learning rate. Nevertheless, in the highly constrained setting with
+dynamics constraints, the method exhibited increasing instability, occasionally producing trajectories
+that triggered errors in the MuJoCo simulator during execution.
+30
+Table 6: Results on the D3IL avoiding constrained manipulation task. Mean values are computed
+over 100 i.i.d. trials and reported with standard deviations where applicable. Best value in boldface.
+Method SR↑Task↑Steps (Safe)↓Time (s)↓
+Diffuser [29]0.060 0.960 70.30±11.830.224±0.002
+Classifier Guidance [17]0.000 0.000–0.627±0.030
+Gradient Guidance [15]0.880 0.980 62.58±7.056.615±0.540
+Projected Diffusion [14]0.770 0.970 63.77±6.881.367±0.057
+Primal-Dual [71] – – – –
+Augmented Lagrangian [71]0.220 0.840 63.45±7.224.152±0.018
+SafeDiffuser-RoS [69]0.370 0.820 63.19±11.5618.890±0.877
+SafeDiffuser-ReS [69]0.220 0.860 62.09±9.6212.949±0.839
+SafeDiffuser-TVS [69]0.300 0.85060.57±8.4913.278±0.488
+DiRecT (Ours)1.000 1.00062.86±6.900.688±0.061
+E.3 Safe multi-robot motion planning
+We present sweep results for each of the three velocity limitations and number of agents in Ta-
+bles 7, 8, 9, 10. We report computational times as well as the mean number of collisions. DiRecT
+consistently improvesSuccessandConstraint safety. On Empty and Highways, our method matches
+thedata adherenceof the pretrained model for all velocity limitations. We note that on Conveyor
+and Drop-Region comparing data adherence between DiRecT and the PCD variants is not straight-
+forward for N∈ {12,16,20}, as the latter are not capable of generating feasible trajectories, thereby
+showcasing high task success while neglecting safety.
+Table 7: MRMP results on Empty. SR: success rate (%), CS: constraint safety (%), Coll: mean
+collisions, DA: data adherence, Time: computation time (s). Standard deviations are over different
+initializations and boldface represents best among the methods actively enforcing constraints.
+# Ag. Method Low (v max=0.675) Medium (v max=0.692) High (v max=0.703)
+SR↑CS↑Coll↓DA↑Time (s)↓SR↑CS↑Coll↓DA↑Time (s)↓SR↑CS↑Coll↓DA↑Time (s)↓
+4
+Diffuser 65.0 61.7±47.41.15±1.740.997±0.0181.0±0.465.0 61.7±47.41.15±1.740.997±0.0181.0±0.465.0 61.7±47.41.15±1.740.997±0.0181.0±0.4
+MMD-CBS 100.0 100.0 0.00 – 5.5±0.7100.0 100.0 0.00 – 5.5±0.7100.0 100.0 0.00 – 5.5±0.7
+PCD-LB 85.0 81.4±34.50.41±0.900.739±0.1023.0±1.575.0 73.3±44.00.60±1.080.984±0.0522.0 87.0 82.6±33.50.39±0.850.736±0.1022.8±1.3
+PCD-SHD 90.0 86.4±31.80.27±0.680.994±0.0202.0±0.393.0 87.2±30.80.22±0.530.994±0.0201.9 95.0 90.0±25.10.16±0.420.994±0.0202.0±0.1
+Final Proj. 89.0 84.7±35.10.26±0.800.997±0.0172.9±0.497.0 94.8±20.10.14±0.680.998±0.0152.3 97.0 96.1±18.10.11±0.570.998±0.0173.7±2.3
+DiRecT (Ours)98.0 98.0±14.00.05±0.350.998±0.01631.1±0.998.0 98.0±14.00.05±0.340.998±0.01519.899.0 98.2±12.60.04±0.310.998±0.01629.4±11.9
+8
+Diffuser 15.0 9.4±28.26.20±4.440.996±0.0150.9±0.415.0 9.4±28.26.20±4.440.996±0.0150.9±0.415.0 9.4±28.26.20±4.440.996±0.0150.9±0.4
+MMD-CBS 100.0 100.0 0.00 – 13.3±0.2100.0 100.0 0.00 – 13.3±0.2100.0 100.0 0.00 – 13.3±0.2
+PCD-LB 40.5 22.1±36.73.35±2.850.744±0.0736.0±2.025.0 19.7±38.13.91±3.550.977±0.0414.1 40.5 23.4±37.83.06±2.580.743±0.0745.3±2.0
+PCD-SHD 74.0 58.9±44.21.15±1.640.985±0.0223.9±0.277.0 66.3±41.80.89±1.360.986±0.0223.6 82.0 68.8±40.70.74±1.120.986±0.0222.8±0.2
+Final Proj. 45.0 31.6±43.22.11±2.570.995±0.0162.7±0.373.0 57.7±45.01.22±2.060.995±0.0152.1 79.0 66.1±43.30.93±1.690.995±0.0153.3±1.6
+DiRecT (Ours)95.0 94.0±22.80.13±0.550.995±0.01526.5±7.496.0 93.1±24.10.13±0.520.996±0.01523.997.0 94.3±22.20.12±0.530.995±0.01529.8±12.1
+12
+Diffuser 1.0 1.0±9.914.52±7.730.998±0.0061.0±0.21.0 1.0±9.914.52±7.730.998±0.0061.0±0.21.0 1.0±9.914.52±7.730.998±0.0061.0±0.2
+MMD-CBS 100.0 100.0 0.00 – 56.9±2.4100.0 100.0 0.00 – 56.9±2.4100.0 100.0 0.00 – 56.9±2.4
+PCD-LB 3.0 1.3±9.311.43±5.650.748±0.0506.2±2.62.0 2.0±14.011.04±6.400.987±0.0223.7 2.5 1.3±9.410.78±5.360.748±0.0505.1±1.9
+PCD-SHD 34.0 18.8±31.92.97±2.660.984±0.0133.8±0.748.0 27.8±35.72.25±2.100.984±0.0133.9 62.0 32.6±37.61.90±1.790.984±0.0133.5±0.2
+Final Proj. 25.0 15.7±33.84.80±4.400.997±0.0064.4±1.051.0 32.9±44.02.98±3.650.997±0.0063.6 62.0 48.9±46.02.18±3.090.997±0.0064.4±0.9
+DiRecT (Ours)95.5 90.5±27.70.24±0.780.997±0.00742.6±2.895.0 87.0±30.40.30±0.830.997±0.00737.095.5 87.3±29.70.29±0.760.997±0.00739.5±1.4
+16
+Diffuser 0.0 0.0±0.026.17±9.980.998±0.0061.4±0.40.0 0.0±0.026.17±9.980.998±0.0061.4±0.40.0 0.0±0.026.17±9.980.998±0.0061.4±0.4
+MMD-CBS 100.0 100.0 0.00 – 48.0±3.3100.0 100.0 0.00 – 48.0±3.3100.0 100.0 0.00 – 48.0±3.3
+PCD-LB 0.0 0.0±0.030.57±9.830.740±0.0448.7±3.80.0 0.0±0.021.22±8.610.986±0.0235.4 0.0 0.0±0.029.78±9.750.740±0.0446.7±2.0
+PCD-SHD 19.0 7.0±19.06.18±3.710.979±0.0186.7±0.929.0 10.4±23.94.85±3.130.979±0.0175.2 29.0 12.4±25.14.12±2.760.979±0.0174.9±0.3
+Final Proj. 5.0 2.6±11.99.16±5.090.995±0.0076.4±1.122.0 12.1±28.65.66±4.070.995±0.0075.7 36.5 20.1±35.24.23±3.510.995±0.0075.7±0.3
+DiRecT (Ours)90.0 80.4±35.40.57±1.300.995±0.00758.2±3.793.0 78.7±37.40.54±1.160.996±0.00759.193.0 81.8±34.50.42±0.950.996±0.00760.9±0.9
+20
+Diffuser 0.0 0.0±0.040.39±14.130.998±0.0061.7±0.40.0 0.0±0.040.39±14.130.998±0.0061.7±0.40.0 0.0±0.040.39±14.130.998±0.0061.7±0.4
+MMD-CBS 33.3 46.7 14.67 – 69.2±8.533.3 46.7 14.67 – 69.2±8.533.3 46.7 14.67 – 69.2±8.5
+PCD-LB 0.0 0.0±0.034.43±12.760.988±0.0188.7 0.0 0.0±0.033.09±12.230.988±0.0188.0 0.0 0.0±0.032.03±11.730.988±0.0187.6
+PCD-SHD 7.0 2.7±12.59.07±4.940.973±0.0187.1 11.0 4.1±16.37.20±4.100.973±0.0188.1 19.0 5.5±18.46.07±3.450.973±0.0188.0
+Final Proj. 1.0 0.0±0.413.54±7.950.995±0.0079.3±2.813.0 4.7±16.58.24±6.380.995±0.0078.1 23.0 11.3±25.56.37±5.590.995±0.0078.1±0.2
+DiRecT (Ours)90.0 76.1±39.00.82±1.880.996±0.00780.787.0 77.5±37.50.76±1.710.996±0.00787.290.0 80.9±35.30.62±1.480.996±0.00789.6
+31
+Table 8: MRMP results on Highways. SR: success rate (%), CS: constraint safety (%), Coll: mean
+collisions, DA: data adherence, Time: computation time (s). Standard deviations are over different
+initializations and boldface represents best among the methods actively enforcing constraints.
+# Ag. Method Low (v max=0.647) Medium (v max=0.781) High (v max=0.878)
+SR↑CS↑Coll↓DA↑Time (s)↓SR↑CS↑Coll↓DA↑Time (s)↓SR↑CS↑Coll↓DA↑Time (s)↓
+4
+Diffuser 54.0 16.2±30.58.91±7.890.994±0.0340.5±0.254.0 16.2±30.58.91±7.890.994±0.0340.5±0.254.0 16.2±30.58.91±7.890.994±0.0340.5±0.2
+MMD-CBS 100.0 100.0 0.00 – 5.2±0.6100.0 100.0 0.00 – 5.2±0.6100.0 100.0 0.00 – 5.2±0.6
+PCD-LB 94.0 60.4±38.80.82±1.200.977±0.0661.9 98.0 69.6±32.30.82±1.120.980±0.0621.9 48.5 34.2±15.80.44±0.590.938±0.0851.8±0.1
+PCD-SHD 96.0 78.1±31.90.07±0.200.978±0.0641.8100.093.6±9.60.03±0.040.980±0.0602.0100.094.9±8.30.02±0.050.981±0.0581.8±0.0
+Final Proj. 99.0 76.7±30.40.72±1.520.994±0.0342.5100.099.5±3.80.01±0.080.994±0.0342.5100.0 100.0±0.00.00±0.000.994±0.0344.4±2.5
+DiRecT (Ours)100.0 100.0±0.00.00±0.000.993±0.03528.5100.0 100.0±0.00.00±0.000.993±0.03528.6100.0 100.0±0.00.00±0.000.993±0.03549.2±27.6
+8
+Diffuser 2.0 0.1±0.939.77±18.430.992±0.0250.5±0.22.0 0.1±0.939.77±18.430.992±0.0250.5±0.22.0 0.1±0.939.77±18.430.992±0.0250.5±0.2
+MMD-CBS 100.0 100.0 0.00 – 42.7±2.0100.0 100.0 0.00 – 42.7±2.0100.0 100.0 0.00 – 42.7±2.0
+PCD-LB 63.0 11.1±18.65.12±3.420.972±0.0472.5 72.0 12.3±20.56.16±3.280.975±0.0432.5 27.0 3.3±5.93.83±2.000.949±0.0562.5±0.4
+PCD-SHD 91.0 38.5±34.30.37±0.470.973±0.0452.4100.064.3±26.50.23±0.290.976±0.0412.4100.069.2±23.00.15±0.170.977±0.0402.3±0.1
+Final Proj. 88.0 30.9±32.14.22±4.100.992±0.0253.5100.098.1±5.60.07±0.270.992±0.0253.5100.099.8±1.10.01±0.070.992±0.0254.9±1.9
+DiRecT (Ours)100.0 100.0±0.10.00±0.010.991±0.02640.4100.0 100.0±0.00.00±0.000.992±0.02640.3100.0 100.0±0.00.00±0.000.992±0.02654.3±19.9
+12
+Diffuser 0.0 0.0±0.091.38±23.060.991±0.0220.6±0.30.0 0.0±0.091.38±23.060.991±0.0220.6±0.30.0 0.0±0.091.38±23.060.991±0.0220.6±0.3
+MMD-CBS 33.3 63.9 3.67 – 59.5±2.433.3 63.9 3.67 – 59.5±2.433.3 63.9 3.67 – 59.5±2.4
+PCD-LB 9.0 0.5±3.119.54±8.230.971±0.0443.6 1.0 0.0±0.125.21±8.560.974±0.0412.8 0.0 0.0±0.017.40±5.680.952±0.0442.9±0.4
+PCD-SHD 78.0 11.9±19.21.05±0.900.972±0.0423.1 99.0 26.1±21.20.63±0.510.975±0.0392.9100.030.3±20.30.44±0.330.976±0.0382.6±0.1
+Final Proj. 55.0 7.5±15.711.73±6.720.991±0.0225.4100.092.4±10.70.31±0.510.991±0.0225.4100.099.7±0.60.01±0.020.991±0.0225.8±0.6
+DiRecT (Ours)100.0 99.7±1.40.01±0.030.990±0.02365.0100.0 100.0±0.00.00±0.000.990±0.02364.7100.0 100.0±0.00.00±0.000.990±0.02365.8±2.0
+16
+Diffuser 0.0 0.0±0.0165.86±31.120.995±0.0140.8±0.30.0 0.0±0.0165.86±31.120.995±0.0140.8±0.30.0 0.0±0.0165.86±31.120.995±0.0140.8±0.3
+MMD-CBS 0.0 6.2 27.00 – 72.4±4.10.0 6.2 27.00 – 72.4±4.10.0 6.2 27.00 – 72.4±4.1
+PCD-LB 1.0 0.1±0.645.62±12.480.973±0.0333.8 0.0 0.0±0.056.59±12.290.976±0.0313.7 0.0 0.0±0.043.82±9.830.956±0.0393.8±0.7
+PCD-SHD 41.0 3.9±10.02.16±1.430.975±0.0313.8 80.0 8.6±12.31.49±1.010.978±0.0293.6 87.0 9.1±11.51.06±0.660.979±0.0283.4±0.1
+Final Proj. 19.0 2.0±9.227.99±14.180.994±0.0147.7100.074.5±23.21.34±1.960.994±0.0147.8100.098.7±4.00.04±0.140.994±0.0148.2±0.6
+DiRecT (Ours)100.0 97.7±7.70.07±0.320.994±0.01593.6100.0 99.9±1.20.00±0.040.994±0.01593.8100.0 100.0±0.00.00±0.000.994±0.01594.4±1.7
+20
+Diffuser 0.0 0.0±0.0272.99±46.770.992±0.0170.8±0.30.0 0.0±0.0272.99±46.770.992±0.0170.8±0.30.0 0.0±0.0272.99±46.770.992±0.0170.8±0.3
+MMD-CBS 0.0 0.0 35.00 – 73.8±5.20.0 0.0 35.00 – 73.8±5.20.0 0.0 35.00 – 73.8±5.2
+PCD-LB 0.0 0.0±0.085.17±18.690.973±0.0325.2 0.0 0.0±0.0105.16±19.390.976±0.0304.3 0.0 0.0±0.0120.10±19.240.978±0.0283.8
+PCD-SHD 11.0 0.2±0.74.07±1.960.974±0.0304.8 39.0 1.0±2.32.63±1.220.977±0.0284.2 43.0 1.2±2.51.94±0.850.978±0.0273.8
+Final Proj. 1.0 0.0±0.252.60±22.600.992±0.01810.4100.049.9±30.64.15±4.450.992±0.01810.4100.096.1±5.80.14±0.250.992±0.01810.8±0.6
+DiRecT (Ours)100.0 95.2±8.10.17±0.370.992±0.018126.8100.0 100.0±0.10.00±0.000.992±0.018126.8100.0 100.0±0.00.00±0.000.992±0.018128.9
+Table 9: MRMP results on Conveyor. SR: success rate (%), CS: constraint safety (%), Coll: mean
+collisions, DA: data adherence, Time: computation time (s). Standard deviations are over different
+initializations and boldface represents best among the methods actively enforcing constraints.
+# Ag. Method Low (v max=1.21) Medium (v max=1.46) High (v max=1.76)
+SR↑CS↑Coll↓DA↑Time (s)↓SR↑CS↑Coll↓DA↑Time (s)↓SR↑CS↑Coll↓DA↑Time (s)↓
+4
+Diffuser 1.0 0.0±0.18.78±4.230.960±0.0391.1±0.31.0 0.0±0.18.78±4.230.960±0.0391.1±0.31.0 0.0±0.18.78±4.230.960±0.0391.1±0.3
+MMD-CBS 100.0 100.0 0.00 – 6.9±0.8100.0 100.0 0.00 – 6.9±0.8100.0 100.0 0.00 – 6.9±0.8
+PCD-LB100.024.9±14.10.94±0.420.896±0.0772.0100.039.6±15.10.91±0.390.968±0.0321.9100.041.8±15.30.96±0.420.986±0.0221.8
+PCD-SHD100.028.6±15.90.09±0.080.902±0.0692.1100.042.0±17.50.04±0.050.964±0.0301.9100.044.7±17.00.01±0.020.980±0.0211.8
+Final Proj.100.082.7±15.90.15±0.190.864±0.0655.8100.094.3±12.30.00±0.010.953±0.0323.6100.094.5±12.50.00±0.000.980±0.0195.2
+DiRecT (Ours)100.0 96.6±10.50.00±0.000.835±0.07250.5100.0 96.9±10.30.00±0.000.937±0.04327.7100.0 96.9±10.20.00±0.000.981±0.01761.2
+8
+Diffuser 0.0 0.0±0.041.62±9.140.960±0.0251.2±0.30.0 0.0±0.041.62±9.140.960±0.0251.2±0.30.0 0.0±0.041.62±9.140.960±0.0251.2±0.3
+MMD-CBS 100.0 100.0 0.00 – 22.3±2.3100.0 100.0 0.00 – 22.3±2.3100.0 100.0 0.00 – 22.3±2.3
+PCD-LB 36.0 0.7±1.47.87±2.000.895±0.0522.4 48.0 1.1±2.07.87±1.940.969±0.0262.7 43.0 0.7±1.28.32±1.950.988±0.0142.3
+PCD-SHD 75.0 1.8±2.70.39±0.130.859±0.0502.4 89.0 3.8±4.00.15±0.060.940±0.0302.6 94.0 4.8±4.20.04±0.020.964±0.0182.3
+Final Proj.100.050.8±16.80.96±0.700.845±0.0496.2100.087.0±16.50.02±0.020.949±0.0234.2100.088.5±17.10.00±0.010.976±0.0126.4
+DiRecT (Ours)100.0 92.7±13.40.01±0.010.820±0.05366.0100.0 93.9±13.40.00±0.000.933±0.03135.3100.0 93.8±13.50.00±0.000.976±0.01367.7
+12
+Diffuser 0.0 0.0±0.099.55±11.980.961±0.0231.2±0.40.0 0.0±0.099.55±11.980.961±0.0231.2±0.40.0 0.0±0.099.55±11.980.961±0.0231.2±0.4
+MMD-CBS 0.0 79.2 1.33 – 50.0±7.90.0 79.2 1.33 – 50.0±7.90.0 79.2 1.33 – 50.0±7.9
+PCD-LB 0.0 0.0±0.027.50±4.010.896±0.0383.1 0.0 0.0±0.028.07±3.590.973±0.0173.3 0.0 0.0±0.029.75±3.570.988±0.0122.8
+PCD-SHD 1.0 0.0±0.10.86±0.200.829±0.0393.1 9.0 0.1±0.30.34±0.100.922±0.0233.4 10.0 0.1±0.20.09±0.040.952±0.0172.8
+Final Proj.100.024.7±10.02.65±1.130.837±0.0346.5100.082.1±13.90.09±0.070.944±0.0165.3100.087.1±15.40.00±0.010.972±0.0116.6
+DiRecT (Ours)100.0 89.9±11.60.04±0.040.823±0.03566.7100.0 93.0±11.80.00±0.010.931±0.02153.5100.0 93.3±12.00.00±0.000.973±0.01367.3
+16
+Diffuser 0.0 0.0±0.0181.11±19.590.962±0.0191.6±0.20.0 0.0±0.0181.11±19.590.962±0.0191.6±0.20.0 0.0±0.0181.11±19.590.962±0.0191.6±0.2
+MMD-CBS 0.0 6.2 17.33 – 63.2±2.30.0 6.2 17.33 – 63.2±2.30.0 6.2 17.33 – 63.2±2.3
+PCD-LB 0.0 0.0±0.064.74±8.280.902±0.0363.9 0.0 0.0±0.065.15±7.610.976±0.0144.3 0.0 0.0±0.068.06±7.300.988±0.0103.6
+PCD-SHD 0.0 0.0±0.01.58±0.290.809±0.0354.0 0.0 0.0±0.00.64±0.130.910±0.0244.4 1.0 0.0±0.10.17±0.060.943±0.0173.6
+Final Proj. 98.0 8.4±5.95.49±2.230.822±0.0356.5100.067.9±18.80.26±0.180.937±0.0179.8100.079.8±20.70.01±0.020.967±0.0126.8
+DiRecT (Ours)100.0 81.4±16.00.08±0.060.820±0.03068.9100.0 87.2±17.20.00±0.010.927±0.02099.1100.0 87.3±17.30.00±0.000.970±0.01169.2
+20
+Diffuser 0.0 0.0±0.0293.67±20.600.961±0.0161.8±0.10.0 0.0±0.0293.67±20.600.961±0.0161.8±0.10.0 0.0±0.0293.67±20.600.961±0.0161.8±0.1
+MMD-CBS 0.0 0.0 35.83 – 66.2±5.70.0 0.0 35.83 – 66.2±5.70.0 0.0 35.83 – 66.2±5.7
+PCD-LB 0.0 0.0±0.0121.49±10.180.896±0.0314.4 0.0 0.0±0.0121.45±9.390.973±0.0135.5 0.0 0.0±0.0125.76±8.990.987±0.0094.2
+PCD-SHD 0.0 0.0±0.02.74±0.420.778±0.0324.5 0.0 0.0±0.01.16±0.180.886±0.0245.5 0.0 0.0±0.00.30±0.080.926±0.0184.2
+Final Proj. 65.0 1.2±1.311.43±3.990.806±0.0339.1100.050.9±15.80.74±0.500.927±0.01712.5100.075.0±19.80.04±0.060.960±0.0119.2
+DiRecT (Ours)100.0 72.4±16.20.25±0.180.815±0.02897.8100.0 86.5±17.00.01±0.020.921±0.020125.4100.0 87.3±17.30.00±0.000.965±0.01098.1
+32
+Table 10: MRMP results on Drop-Region. SR: success rate (%), CS: constraint safety (%), Coll:
+mean collisions, DA: data adherence, Time: computation time (s). Standard deviations are over
+different initializations and boldface represents best among the methods actively enforcing constraints.
+# Ag. Method Low (v max=0.928) Medium (v max=1.13) High (v max=1.34)
+SR↑CS↑Coll↓DA↑Time (s)↓SR↑CS↑Coll↓DA↑Time (s)↓SR↑CS↑Coll↓DA↑Time (s)↓
+4
+Diffuser 40.0 1.1±1.817.17±3.750.991±0.0070.6±0.440.0 1.1±1.817.17±3.750.991±0.0070.6±0.440.0 1.1±1.817.17±3.750.991±0.0070.6±0.4
+MMD-CBS 100.0 100.0 0.00 – 9.2±1.0100.0 100.0 0.00 – 9.2±1.0100.0 100.0 0.00 – 9.2±1.0
+PCD-LB100.038.6±10.22.74±0.850.980±0.0171.9100.036.6±9.82.89±0.860.986±0.0131.9100.036.1±9.02.92±0.800.987±0.0101.8
+PCD-SHD100.088.0±6.20.05±0.030.965±0.0181.9100.088.0±5.10.04±0.030.965±0.0171.7100.086.9±5.20.02±0.020.965±0.0161.7
+Final Proj.100.084.6±11.90.35±0.390.980±0.0152.2100.098.4±2.10.03±0.050.989±0.0072.1100.099.8±0.50.00±0.010.990±0.0075.9
+DiRecT (Ours)100.0 100.0±0.00.00±0.000.971±0.02125.4100.0 100.0±0.00.00±0.000.985±0.01124.2100.0 100.0±0.00.00±0.000.989±0.00864.0
+8
+Diffuser 0.0 0.0±0.082.64±9.510.991±0.0050.6±0.40.0 0.0±0.082.64±9.510.991±0.0050.6±0.40.0 0.0±0.082.64±9.510.991±0.0050.6±0.4
+MMD-CBS 100.0 100.0 0.00 – 55.5±1.9100.0 100.0 0.00 – 55.5±1.9100.0 100.0 0.00 – 55.5±1.9
+PCD-LB 11.0 0.1±0.329.94±3.910.981±0.0143.5 7.0 0.1±0.231.40±3.800.988±0.0092.3 2.0 0.0±0.132.13±3.910.989±0.0082.1
+PCD-SHD100.026.3±7.10.45±0.120.883±0.0213.7100.024.6±6.50.34±0.090.883±0.0202.3100.023.1±6.10.18±0.050.880±0.0212.1
+Final Proj.100.059.7±16.61.76±1.100.971±0.0122.6100.094.6±4.10.14±0.150.983±0.0072.6100.097.9±1.50.02±0.020.985±0.0075.3
+DiRecT (Ours)100.0 100.0±0.10.00±0.010.965±0.01529.2100.0 100.0±0.10.00±0.000.982±0.00928.9100.0 100.0±0.20.00±0.000.986±0.00765.6
+12
+Diffuser 0.0 0.0±0.0194.40±14.290.991±0.0040.7±0.50.0 0.0±0.0194.40±14.290.991±0.0040.7±0.50.0 0.0±0.0194.40±14.290.991±0.0040.7±0.5
+MMD-CBS 0.0 8.3 12.00 – 67.8±1.00.0 8.3 12.00 – 67.8±1.00.0 8.3 12.00 – 67.8±1.0
+PCD-LB 0.0 0.0±0.094.96±9.000.982±0.0103.0 0.0 0.0±0.098.91±8.580.989±0.0062.7 0.0 0.0±0.0100.86±8.580.990±0.0052.6
+PCD-SHD 71.0 1.1±1.01.45±0.190.787±0.0254.5 60.0 0.8±0.91.08±0.180.787±0.0232.8 50.0 0.6±0.80.59±0.090.782±0.0232.7
+Final Proj.100.033.4±14.34.80±2.240.952±0.0124.1100.083.6±5.60.45±0.280.968±0.0084.1100.089.6±2.80.12±0.040.973±0.0078.2
+DiRecT (Ours)100.0 99.9±0.20.00±0.010.955±0.01647.7100.0 99.8±0.30.00±0.010.975±0.00847.4100.0 99.6±0.60.00±0.010.981±0.00667.0
+16
+Diffuser 0.0 0.0±0.0352.68±19.380.991±0.0030.8±0.50.0 0.0±0.0352.68±19.380.991±0.0030.8±0.50.0 0.0±0.0352.68±19.380.991±0.0030.8±0.5
+MMD-CBS 0.0 12.5 34.00 – 77.2±3.70.0 12.5 34.00 – 77.2±3.70.0 12.5 34.00 – 77.2±3.7
+PCD-LB 0.0 0.0±0.0196.78±13.860.983±0.0084.1 0.0 0.0±0.0204.24±12.630.989±0.0053.5 0.0 0.0±0.0208.07±12.000.991±0.0043.3
+PCD-SHD 1.0 0.0±0.13.12±0.360.710±0.0245.4 1.0 0.0±0.12.24±0.250.709±0.0213.5 0.0 0.0±0.01.27±0.130.703±0.0213.3
+Final Proj.100.014.9±8.89.88±3.380.919±0.0116.0100.061.8±7.41.25±0.530.940±0.0096.0100.070.6±5.30.42±0.100.950±0.0086.8
+DiRecT (Ours)100.0 99.5±0.70.01±0.020.938±0.01271.2100.0 99.1±0.90.01±0.010.961±0.00870.9100.0 98.4±1.10.02±0.010.971±0.00672.5
+20
+Diffuser 0.0 0.0±0.0568.27±23.790.992±0.0031.0±0.50.0 0.0±0.0568.27±23.790.992±0.0031.0±0.50.0 0.0±0.0568.27±23.790.992±0.0031.0±0.5
+MMD-CBS 0.0 0.0 48.00 – 99.0±23.30.0 0.0 48.00 – 99.0±23.30.0 0.0 48.00 – 99.0±23.3
+PCD-LB 0.0 0.0±0.0342.21±16.540.982±0.0074.1 0.0 0.0±0.0355.78±15.430.989±0.0044.0 0.0 0.0±0.0361.93±15.700.990±0.0033.8
+PCD-SHD 0.0 0.0±0.05.38±0.590.646±0.0156.7 0.0 0.0±0.03.82±0.350.646±0.0154.0 0.0 0.0±0.02.20±0.200.639±0.0143.8
+Final Proj. 88.0 3.1±2.619.12±4.730.866±0.0178.4100.032.1±5.22.92±0.690.892±0.0148.3100.042.0±5.11.14±0.180.908±0.0138.4
+DiRecT (Ours)100.0 97.7±1.30.06±0.040.899±0.018100.5100.0 96.3±1.60.06±0.030.933±0.01099.7100.0 94.1±2.40.06±0.030.947±0.009103.5
+E.4 Safe and diverse contact-rich manipulation
+As outlined in the ablation studies of [ 43], task success and trajectory diversity (DTW, DFD) are
+conflicting objectives in the PushT task. Therefore, there exists a Pareto-optimality front that can be
+traced by varying coupling strength. We sweep the coupling strength coefficient for gradient guidance
+in PCD and the step size of the Projected Gradient Descent updateλc for DiRecT. Figure 6 shows that
+Pareto fronts obtained with our method dominate those derived from PCD for both DPP and LB cost
+functions. Furthermore, DiRecT improves over the baselines while requiring onlyhalfthe projection
+and gradient evaluations, as we start guidance in the second half of denoising. This highlights the
+importance of optimizing near the data distribution where constraints and costs are more naturally
+defined.
+(a)TCvsDTW. Top-right is better.
+ (b)TCvsDFD. Top-right is better.
+Figure 6: Pareto fronts for the PCD and DiRecT variants, obtained by sweeping the gradient coupling
+strength γ for PCD and the cost weight λc for DiRecT. Fronts are drawn as lines connecting Pareto-
+optimal points for each method, while dominated points are shaded.
+33
+F Visualizations
+Figure 7: Comparison ofplannedandexecutedtrajectories for safe navigation in Maze2D-broad.
+Each row corresponds to a planning method.
+34
+Figure 8: Comparison ofplannedandexecutedtrajectories for safe navigation in Maze2D-narrow.
+Each row corresponds to a planning method.
+35
+Figure 9: Comparison of environment rollouts for different sampling schemes for safe manipulation
+in D3ILavoiding.
+36
+Diffuser
+4 agents
+ 8 agents
+ 12 agents
+ 16 agents
+ 20 agents
+MMD-CBS
+PCD-LB
+PCD-SHDFinal Proj.DiRecT (Ours)
+Figure 10: Visualizations of trajectories produced by different algorithms for the Empty MMD
+environment. Velocity is limited to 80% of the maximum action. Robots are rewarded for moving in
+a straight line, while avoiding collisions (red crosses) and velocity violations (blue stars).
+37
+Diffuser
+4 agents
+ 8 agents
+ 12 agents
+ 16 agents
+ 20 agents
+MMD-CBS
+PCD-LB
+PCD-SHD
+Final Proj.DiRecT (Ours)
+Figure 11: Visualizations of trajectories produced by different algorithms for the Highways MMD
+environment. Velocity is limited to 75% of the maximum action. Robots are rewarded for moving
+counterclockwisearound the central obstacle, while avoiding collisions (red crosses) and velocity
+violations (blue stars).
+38
+Diffuser
+4 agents
+ 8 agents
+ 12 agents
+ 16 agents
+ 20 agents
+MMD-CBS
+PCD-LB
+PCD-SHD
+Final Proj.
+DiRecT (Ours)
+Figure 12: Visualizations of trajectories produced by different algorithms for the Conveyor MMD
+environment. Velocity is limited to 85% of the maximum action. Robots are rewarded for moving
+leftwardin the top corridor andrightwardin the bottom one, while avoiding collisions (red crosses)
+and velocity violations (blue stars).
+39
+Diffuser
+4 agents
+ 8 agents
+ 12 agents
+ 16 agents
+ 20 agents
+MMD-CBS
+PCD-LB
+PCD-SHD
+Final Proj.DiRecT (Ours)
+Figure 13: Visualizations of trajectories produced by different algorithms for the Drop-Region
+MMD environment. Velocity is limited to 85% of the maximum action. Robots are rewarded for
+stoppingat the drop-off regions, while avoiding collisions (red crosses) and velocity violations (blue
+stars).
+40
+Figure 14: Visual comparison of different methods on coupled PushT generation with velocity
+constraints. Each column corresponds to the first sample of different initializations with red crosses
+to denote constraint violations. Only the first 64 executed steps are depicted to avoid clutter.
+41

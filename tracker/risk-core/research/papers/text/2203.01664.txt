@@ -1,0 +1,2389 @@
+arXiv 2203.01664  https://arxiv.org/abs/2203.01664
+
+Tail-GAN:
+Learning to Simulate Tail Risk Scenarios ∗
+Rama Cont 1, Mihai Cucuringu 2, Renyuan Xu 3, and Chao Zhang 4
+1Mathematical Institute, University of Oxford, UK.
+2Department of Mathematics, University of California Los Angeles, US.
+3Department of Finance and Risk Engineering, New York University, US.
+4FinTech Thrust, Hong Kong University of Science and Technology (Guangzhou), CN.
+This Version: May 11, 2025
+Abstract
+The estimation of loss distributions for dynamic portfolios requires the simulation of scenarios rep-
+resenting realistic joint dynamics of their components. We propose a novel data-driven approach for
+simulating realistic, high-dimensional multi-asset scenarios, focusing on accurately representing tail risk
+for a class of static and dynamic trading strategies. We exploit the joint elicitability property of Value-
+at-Risk (VaR) and Expected Shortfall (ES) to design a Generative Adversarial Network (GAN) that
+learns to simulate price scenarios preserving these tail risk features. We demonstrate the performance of
+our algorithm on synthetic and market data sets through detailed numerical experiments. In contrast to
+previously proposed data-driven scenario generators, our proposed method correctly captures tail risk
+for a broad class of trading strategies and demonstrates strong generalization capabilities. In addition,
+combining our method with principal component analysis of the input data enhances its scalability
+to large-dimensional multi-asset time series, setting our framework apart from the univariate settings
+commonly considered in the literature.
+Keywords: Scenario simulation, Generative models, Generative adversarial networks (GAN), Time series,
+Universal approximation, Expected shortfall, Value at risk, Risk measures, Elicitability.
+Contents
+1 Data-driven simulation of financial scenarios 2
+1.1 Contributions . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 3
+1.2 Related literature . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 4
+1.3 Outline . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 4
+2 Tail risk measures and score functions 4
+2.1 Tail risk measures . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 4
+2.2 Score functions for tail risk measures . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 6
+3 Learning to generate tail scenarios 7
+3.1 Discriminating probability measure using loss quantiles of trading strategies . . . . . . . . . 7
+3.2 Training the discriminator: minimizing the score function . . . . . . . . . . . . . . . . . . . 8
+3.3 Design of the generator and universal approximation . . . . . . . . . . . . . . . . . . . . . . 9
+3.4 Loss function: from bi-level to max-min game . . . . . . . . . . . . . . . . . . . . . . . . . . 11
+∗An earlier version of this paper circulated under the title “Tail-GAN: Nonparametric Scenario Generation for Tail Risk
+Estimation”. First draft: March 2022.
+1
+arXiv:2203.01664v4  [q-fin.RM]  16 May 2025
+4 Numerical experiments: methodology and performance evaluation 12
+4.1 Methodology . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 12
+4.2 Performance evaluation criteria . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 14
+5 Numerical experiments with synthetic data 16
+5.1 Synthetic multi-asset scenarios . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16
+5.2 Multiple risk levels . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 19
+5.3 Generalization error . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 19
+5.4 Scalability . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 22
+6 Application to simulation of intraday market scenarios 23
+7 Conclusion 27
+A Equivalence between bi-level optimization and max-min game 30
+B Technical proofs 31
+B.1 Proof of Proposition 2.2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 31
+B.2 Proof of Theorem 3.4 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 32
+B.3 Proof of Theorem 3.7 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 33
+B.4 Proof of Theorem A.1 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 34
+C Implementation details 35
+C.1 Setup of parameters in the synthetic data set . . . . . . . . . . . . . . . . . . . . . . . . . . 35
+C.2 Setup of the configuration . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 36
+C.3 Differentiable neural sorting . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 37
+C.4 Construction of eigenportfolios . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 37
+D Additional numerical experiments 38
+1 Data-driven simulation of financial scenarios
+Scenariosimulationisextensivelyusedinfinanceforevaluatingthelossdistributionofportfoliosandtrading
+strategies, oftenwithafocusontheestimationofriskmeasuressuchasValue-at-RiskandExpectedShortfall
+(Glasserman [2003]). The estimation of such risk measures for static and dynamic portfolios involves the
+simulation of scenarios representing realistic joint dynamics of their components. This requires both a
+realistic representation of the temporal dynamics of individual assets (temporal dependence), as well as an
+adequate representation of their co-movements (cross-asset dependence). The use of scenario simulation for
+risk estimation has increased in light of the Basel Committee’s Fundamental Review of the Trading Book
+(FRTB), an international standard that regulates the amount of capital banks ought to hold against market
+risk exposures (see Bank for International Settlements [2019]). FRTB particularly revisits and emphasizes
+the use of Value-at-Risk vs Expected Shortfall as a measure of risk under stress, thus ensuring that banks
+appropriately capture tail risk events.
+A common approach in scenario simulation is to use parametric models in the literature. The specifi-
+cation and estimation of such parametric models pose challenges in situations in which one is interested in
+heterogeneous portfolios or intraday dynamics. As a result of these issues, and along with the scalability
+constraints inherent in nonlinear models, many applications in finance have focused on Gaussian factor
+models for scenario generation, even though they fail to capture many stylized features of market data.
+Overthepastdecade, withtheevolutionofdeeplearningtechniques, generative modelsbasedonmachine
+learning techniques ave emerged as an efficient alternative to parametric models for simulating patterns
+extractedfromcomplex, high-dimensionaldatasets. Inparticular, GenerativeAdversarialNetworks(GANs)
+(Goodfellow et al. [2014]) have been successfully used for generating images (Goodfellow et al. [2014],
+Radford et al. [2015]), audio (van den Oord et al. [2016]) and text (Fedus et al. [2018], Zhang et al. [2017]),
+2
+as well as the simulation of financial market scenarios Takahashi et al. [2019], Wiese et al. [2020], Yoon
+et al. [2019], Vuletić et al. [2023], Vuletić and Cont [2024].
+Most generative models for financial time series have been based on a Conditional-GAN (CGAN) ar-
+chitecture [Mirza and Osindero 2014, Fu et al. 2020, Koshiyama et al. 2020, Liao et al. 2024, Li et al. 2020,
+Vuletić et al. 2023, Vuletić and Cont 2024, Wiese et al. 2020], with the notable exception of Buehler et al.
+[2021], who employed a Variational Autoencoder (VAE). Furthermore, except for Vuletić and Cont [2024],
+Yoon et al. [2019], these studies primarily focus on generating univariate time series.
+When scenarios are intended for use in risk management applications, a relevant criterion is whether
+they correctly capture the risk of portfolios or commonly used trading strategies. The frameworks discussed
+above typically use divergence measures such as cross-entropy (Goodfellow et al. [2014], Chen et al. [2016])
+or Wasserstein distance (Arjovsky et al. [2017]) to measure the similarity of the generated data to the input
+data. Such global divergence measures are in fact not exactly computable but are approximated using the
+data sample; they are thus dominated by typical sample values, and may fail to account for “tail” events,
+which occur with a small probability in the training sample. As a consequence, such training criteria may
+lead to poor performance if one is primarily interested intail propertiesof the distribution.
+A related concern with the use of data-driven market generators for risk management ismodel validation.
+Unlike generative models for images, which may be validated by visual inspection, validation of scenario
+generatorsrequiresaquantitativeapproachandneedstobeaddressedinasystematicmanner. Inparticular,
+it is not clear whether scenarios simulated by such black-box market generators are realistic enough to be
+useful for applications in risk management.
+1.1 Contributions
+To address these challenges, we propose a novel training methodology for scenario generators based on a
+training objective which directly relates to the performance in targeted use cases. To achieve this goal, we
+design an objective function for the scenario generator which ensures that the output scenarios accurately
+represent the tail risk of a broad class of benchmark strategies.
+Generally speaking, the goal of a dynamic scenario generator is to sample from an unknown distribution
+on a space of scenariosp = (pt, t∈ T) ∈ Ω representing price trajectories for a set of financial assets on
+discrete time setT. The main use of these scenarios is to compute and analyze the profit and loss (PnL) of
+various trading strategies along each trajectory. Each –dynamic or static– trading strategyφk (1 ≤ k ≤ K)
+thus defines a map
+Πk : Ω 7→ R
+p = (pt, t∈ T) 7→ Πk(p) = X
+T
+φk(ti, p).(pti+1 − pti) (1)
+whose value Πk(p) represents the terminal PnL of the trading strategyφk in scenario p. A probability
+measure P on the set Ω of market scenarios thus induces aone-dimensional distribution for the (scalar)
+random variableΠk(p). We therefore observe that each trading strategyφk projectsthe (high-dimensional)
+probability measure P into a one-dimensional distribution, whose properties are easier to learn from data.
+Asetoftradingstrategies {φk}k=1,··· ,K thusallowsto“project” thehigh-dimensionalprobabilitymeasure
+P onto K scalar random variables{Πk(p)}k=1,··· ,K. The associated (one-dimensional) distributions serve
+as tractablefeaturesof P, which the algorithm attempts to learn.
+Our idea is to start with a set of user-defined benchmark trading strategies{φk}k=1,··· ,K and to guide
+the training of the scenario generator to learn the properties of the associated loss distributions. Focusing
+on a finite set of trading strategies leads to a dimension reduction, reducing the task to learningK one-
+dimensional distributions.
+We then exploit the joint elicitability property of Value-at-Risk (VaR) and Expected Shortfall (ES) to
+design a training criterion sensitive to tail risk measures of these loss distributions. This results in a GAN
+architecturewhichiscapableoflearningtosimulatepricescenarioswhichpreservetailriskcharacteristicsfor
+the set of benchmark trading strategies. We study various theoretical properties of the proposed algorithm,
+and assess its performance through detailed numerical experiments on synthetic data and market data.
+3
+Theoretical contributions. On the theoretical side, we establish a universal approximation resultin
+the distributional sense: given any target loss distribution and any (spectral) risk measure, there exists a
+generator network of sufficient size whose output distribution approximates the target distribution with a
+given accuracy as quantified by the risk measure. The proof relies on a semi-discrete optimal transport
+technique, which may be interesting in its own right.
+Empirical performance. Our extensive numerical experiments, using both synthetic and market data,
+show that Tail-GAN provides accurate tail risk estimates and is able to capture key univariate and
+multivariate statistical properties of financial time series, such as heavy tails, autocorrelation, and cross-
+asset dependence patterns. We show that, by including dynamic trading strategies in the training set of
+benchmark portfolios, Tail-GAN provides more realistic outputs and a better representation of tail risks
+than classical GAN methods previously applied to financial time series. Last but not least, we illustrate that
+combining Tail-GANwith Principal Component Analysis (PCA) enables the design of scenario generators
+scalable to a large number of assets.
+1.2 Related literature
+The use of GANs with bespoke loss functions for simulation of financial time series has also been explored
+in Vuletić et al. [2023], Liao et al. [2024], Vuletić and Cont [2024]. However, these methods are not focused
+on tail scenarios.
+The idea of incorporatingquantile properties into the simulation model has been explored in Ostrovski
+et al. [2018], which introduced an autoregressive implicit quantile network (AIQN). The goal therein is to
+train a generator via supervised learning so that the quantile divergence between the empirical distributions
+of the training data and the generated data is minimized. However, the quantile divergence adopted in
+AIQN is anaverage performanceacross all quantiles, which provides no guarantees for the tail risks. In
+addition, the generator trained with supervised learning may suffer from accuracy issues and the lack of
+generalization power (see Section 5.3 for a detailed discussion).
+Bhatia et al. [2020] employed GANs conditioned on the statistics of extreme events to generate samples
+using Extreme Value Theory (EVT). In contrast, our approach is fully non-parametric and does not rely
+on the parametrization of tail probabilities.
+1.3 Outline
+Section 2 introduces the concept of a tail-sensitivescore function, which is then utilized in Section 3 to
+formulate a training criterion for adversarial training of a generative model, referred to asTail-GAN.
+Section 4 outlines the methodology for model validation and comparison, which is subsequently applied
+in Section 5 to assess the performance ofTail-GAN on synthetic data. Finally, Section 6 evaluates the
+performance of Tail-GAN on intraday financial data.
+2 Tail risk measures and score functions
+Our goal is to design a training approach for learning a distribution which is sensitive to the tail(s) of the
+distribution. This can be achieved by using a tail-sensitive loss function. To this end, we exploit recent
+results on theelicitability of risk measures (Acerbi and Szekely [2014], Fissler et al. [2015], Gneiting [2011])
+to design a score function related to tail risk measures used in financial risk management.
+We define these tail risk measures and the associated score functions in Section 2.1 and discuss some of
+their properties in Section 2.2.
+2.1 Tail risk measures
+Tail risk refers to the risk of large portfolio losses.Value at Risk (VaR)and Expected Shortfall (ES)are
+commonly used statistics for measuring the tail risk of portfolios.
+Consider a random variableX : Ω 7→ R, representing the PnL of a trading strategy over time index
+set T, such as those defined in (10), whereΩ represents the set of market scenarios andX(ω) the PnL of
+4
+the strategy in market scenarioω ∈ Ω. Given a probability measure P specified on the set Ω of market
+scenarios, we denote byPX ∈ P(R) the (one-dimensional) distribution ofX under P.
+The Value-at-Risk (VaR) of the portfolio at the terminal time for a confidence level0 < α <1 is then
+defined as theα-quantile of PX:
+VaRα(X, P) := P−1X (α) = inf{x ∈ R : PX (x) ≥ α}.
+Expected Shortfall (ES) is an alternative risk measure which is sensitive to the tail of the loss distribution:
+ESα(X, P) := 1α Z α0 VaRβ(X, P)dβ.
+Note that VaR and ES only depend onPX and one could also write e.g. VaRα(PX ),ESα(PX ). We will
+consider such tail risk measures under different probabilistic models, each represented by a probability
+measure P on the spaceΩ of market scenarios, and the notation above emphasizes the dependence onP.
+VaR, ES are examples ofstatisticalrisk measures which may be represented as a functionalρ : P(R) → R
+of the loss distribution (Cont et al. [2013], Kusuoka [2001]). We will use the notation:ρ(X, P) := ρ(PX ).
+Elicitability and score functions. VaR, ES, and more generally, most risk measures considered in
+financial applications are examples of “statistical functionals” i.e. maps
+T : F 7→R defined on a setF ⊂ P(R) of probability distributions.
+A statistical functional iselicitable if there exists a score function whose minimization over a samples
+yields a consistent estimator in the large sample limit [Gneiting 2011]. More specifically: a statistical
+functional T : F 7→Rd is elicitable if there is a score functionS : Rd × R 7→ R such that
+T (µ) = arg min
+x∈Rd
+Z
+S(x, y)µ(dy), (2)
+This means that by taking an IID sampleY1, ..., Yn ∼ µ from µ and minimizing
+ˆxn = arg min
+x∈Rd
+nX
+i=1
+S(x, Yi)
+we get a consistent estimator ofT (µ): ˆxn → T (µ).
+S is called a strictly consistent score for T if the minimizer in (2) is unique. Examples of elicitable
+statistical functionals include the meanT (µ) =
+R
+x µ(dx) with S(x, y) = (x − y)2, and the medianT (µ) =
+inf{x ∈ R : µ(X ≤ x) ≥ 0.5} with S(x, y) = |x − y|. It was first shown by Weber [2006] that ES is not
+elicitable, whereas VaRα is elicitable whenever the α-quantile is unique. However, it turns out that the
+pair (VaRα(µ),ESα(µ)) is jointly elicitable. In particular, the following result in Fissler and Ziegel [2016,
+Theorem 5.2] gives a family of strictly consistent score functions for(VaRα(µ),ESα(µ)):
+Proposition 2.1. Fissler and Ziegel [2016, Theorem 5.2]Assume
+R
+|x|µ(dx) < ∞. If H2 : R → R is
+strictly convex andH1 : R → R is such that
+v 7→ Rα(v, e) := 1α vH ′2(e) + H1(v), (3)
+is strictly increasing for eache ∈ R, then the score function
+Sα(v, e, x) = ( 1 {x≤v} − α)(H1(v) − H1(x))
++ 1α H ′2(e)1 {x≤v}(v − x) + H ′2(e)(e − v) − H2(e), (4)
+is strictly consistent for(VaRα(µ), ESα(µ)), i.e.
+(VaRα(µ), ESα(µ)) = arg min(v,e)∈R2
+Z
+Sα(v, e, x)µ(dx). (5)
+5
+2.2 Score functions for tail risk measures
+The computation of the estimator (5) involves the optimization of
+sα(v, e) :=
+Z
+Sα(v, e, x)µ(dx), (6)
+for a given one-dimensional distributionµ. While any choice ofH1, H2 satisfying the conditions of Proposi-
+tion2.1theoreticallyleadstoconsistentestimatorsin(5), differentchoicesof H1 and H2 leadtooptimization
+problems with different landscapes, with some being easier to optimize than others. We use a specific form
+of the score function, proposed by Acerbi and Szekely [2014],which has been adopted by practitioners for
+backtesting purposes:
+Sα(v, e, x) = Wα2 (1 {x≤v} − α)(x2 − v2) + 1 {x≤v}e(v − x) + αe  e2 − v , with ESα(µ)VaRα(µ) ≥ Wα ≥ 1. (7)
+This choice is special case of (4), whereH1 and H2 are given by
+H1(v) = − Wα2 v2, H2(e) = α2 e2, with ESα(µ)VaRα(µ) ≥ Wα ≥ 1.
+Then (7) satisfies the conditions in Proposition 2.1 on{(v, e) ∈ R2 | Wα v ≤ e ≤ v ≤ 0}.
+e
+2.5
+2.0
+1.5
+1.0
+0.5
+0.0
+v
+2.5
+2.0
+1.5
+1.0
+0.5
+0.0
+S
+0.0
+0.2
+0.4
+0.6
+0.8
+(a) sα(v, e).
+2.5
+ 2.0
+ 1.5
+ 1.0
+ 0.5
+ 0.0
+0.075
+0.100
+0.125
+0.150
+0.175
+0.200
+0.225
+v = -1.20
+v = -1.00
+v = -0.80
+v = -0.50 (b) sα(v, e) as a function ofe with given
+value of v.
+2.5
+ 2.0
+ 1.5
+ 1.0
+ 0.5
+ 0.0
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8 e = -1.20
+e = -1.00
+e = -0.80
+e = -0.50
+(c) sα(v, e) as a function ofv with given
+value of e.
+Figure 1: Landscape ofsα(v, e) based on (7) withα = 0.05 for the uniform distribution on[−1, 1].
+The following proposition shows that the score function (7) leads to an optimization problem with
+desirable properties, as shown in Figure 1:
+Proposition 2.2. (1) Assume VaRα(µ) < 0, for α <1/2. Then the scoresα(v, e) based on(7) is strictly
+consistent for (VaRα(µ), ESα(µ)) and its Hessian is positive semi-definite on the region
+B = {(v, e) | v ≤ VaRα(µ), and Wαv ≤ e ≤ v ≤ 0 } .
+(2) If there existδα ∈ (0, 1), εα ∈
+ 
+0, 12 − α, zα ∈  0, 12 − α, and Wα > 1√α such that
+µ(dx)
+dx ≥ δα for x ∈ [VaRα(µ), VaRα+εα(µ)] and ES α(µ) ≥ WαVarα(µ) + zα, (8)
+then the Hessian ofsα(v, e) is positive semi-definite on the region
+eB = {(v, e) | v ≤ VaRα+βα(µ), and Wαv + zα ≤ e ≤ v ≤ 0 } where βα = min
+
+εα, zαδα2 Wα
+
+.
+The proof is given in Appendix B.1.
+6
+Example 2.3 (Example for condition (8)). Condition (8) holds when X has a strictly positive density
+under measure µ. Take an example where X follows the standard normal distribution. Denote f (x) =
+1√
+2π exp
+
+− x22  as the density function, andF (y) = R y−∞ f (x)dx as the cumulative density function forX.
+Then we have VaRα(µ) = F −1(α) and ESα(µ) = − f (F −1(α))α . Setting α = 0 .05 and εα = 0 .05, we have
+VaR0.05(µ) ≈ −1.64 and ES0.05(µ) ≈ −2.06 by direct calculation. Then we can setδα = f (F −1(0.05)) ≈
+0.103, Wα = 5 and zα = 14. Hence (8) holds for βα = min{εα, zαδα2Wα } ≈0.0025.
+Proposition 2.2 implies thatsα(v, e) has a well-behaved optimization landscape on regionsB and eB if
+the corresponding conditions are satisfied. In particular, the minimizer ofsα(v, e), i.e., (VaRα(µ),ESα(µ)),
+is on the boundary of regionB. eB contains an open ball with center(VaRα(µ),ESα(µ)).
+In summary, sα(v, e) has a positive semi-definite Hessian in a neighborhood of the minimum, which
+leads to desirable properties for convergence. Other choices forH1 and H2 exist, but may have undesirable
+properties (Fissler and Ziegel [2016], Fissler et al. [2015]) as the following example shows.
+Example 2.4. Let X be uniformly distributed on[−1, 1] and α = 0.05. When H2(x) = exp(x),
+P(X ≤ v)v − E(X) + (e − v)α = 14 v2 +  12 − 0.05 v + 14 + 0.05e,
+which yields
+∂2sα
+∂e2 = exp(e)α  14 (v + 0.9)2 + 0.0475 + α + 0.05e .
+Letting v = −0.9, we arrive at∂2sα∂e2 |v=−0.9 < 0 for all e <−1.95, so sα is not convex.
+These results supports the choice of (7), as proposed by Acerbi and Szekely [2014].
+3 Learning to generate tail scenarios
+We now introduce the Tail-GAN algorithm, a data-driven algorithm for simulating multivariate price
+scenarios which preserves the tail risk features of a set of benchmark trading strategies.
+3.1 Discriminating probability measure using loss quantiles of trading strategies
+Let Ω ⊂ R+M ×T be a set of market scenarios p = ( pt, t∈ T) = ( pti,m)i=1,··· ,T,m=1,··· ,M representing
+price trajectories for M financial assets. Here T = {ti = i∆, i= 1 , · · ·, T} represents the (discrete) set
+of possible trading times over the risk horizonTh = ∆ × T. Any trading strategyis then described by a
+(non-anticipative) map
+φ : T × Ω 7→ RM
+(t, p) 7→ φ(t, p) (9)
+whose value φ(t, p) represents the vector of portfolio holdings of the strategy at timet in scenario p ∈ Ω.
+The value of such a portfolio att is Vt(φ) = pt.φ(t, p). We considerself-financing trading strategies, any
+profit/loss only arises from the accumulation of capital gains, so the total profit over the horizon in scenario
+p ∈ Ω is given by
+Π(φ) = VtT (φ) − V0(φ) =
+X
+T
+φ(ti, p).(pti+1 − pti).
+Any specification of probability measureP on the setΩ of market scenarios then induces a distribution for
+the (one-dimensional) random variableΠ(φ).
+Let S(Ω) be the set of all (continuous and bounded) self-financing strategies. The starting point of our
+approach is to note that any probability measure onΩ is uniquely determined by the (one-dimensional)
+distributions of the variables{Π(φ), φ ∈ S(Ω)}:
+7
+Proposition: Let P1 and P2 be probability measures on Ω. If for any self-financing trading strategy
+φ ∈ S(Ω), Π(φ) has the same distribution underP1 and P2, then P1 = P2:
+ 
+∀φ ∈ S(Ω), Law(Π(φ), P1) = Law(Π(φ), P2)  ⇒ P1 = P2.
+Note that for this statement to hold it is not sufficient to consider only static portfolios i.e. buy-and-hold
+strategies. This would only entail equality for the terminal distributions atTh. It is thus imperative to
+include dynamic trading strategies.
+As a one-dimensional distribution is determined by its quantiles, this means a probability measureP
+on Ω is uniquely determined by knowledge of loss quantiles for all self-financing strategies: denoting by
+Qα(X, P) the quantile of a random variableX at level α ∈ [0, 1] under P,
+ 
+∀φ ∈ S(Ω), ∀α ∈ [0, 1], Q α(Π(φ), P1) = Qα(Π(φ), P2)  ⇒ P1 = P2.
+This means thatloss quantiles of self-financing strategies discriminate between probability mea-
+sures on Ω. One can thus learn a probability measure on the high-dimensional spaceΩ ⊂ R+M ×T by
+learning/matching quantiles of theone-dimensional loss distributions for various trading strategies. These
+loss quantiles may therefore be considered asfeatureswhich, furthermore, have a straightforward financial
+interpretation. Moreover, the quantile levels forα close to 0 or 1 reflect by definition the level of tail risk
+of a strategy.
+We therefore propose a learning approach based on such loss quantiles as features. We consider a set
+{φk}k=1,··· ,K of self-financing trading strategies, which we callbenchmarkstrategies. These may be specified
+by the end-user, based on the type of trading strategies they are interested in analyzing. These may be
+static or dynamic (time- and scenario-dependent) strategies; furthermore this set may be augmented by
+other trading strategies. For comparability, each strategy is allocated the same initial capital. Each trading
+strategy φk thus defines a map
+Πk : Ω 7→ R
+p = (pt, t ∈ T) 7→ Πk(p) = X
+T
+φk(ti, p).(pti+1 − pti) (10)
+whose valueΠk(p) represents the profit of the strategyφk in scenariop over the horizonTh = ∆ × T. Each
+trading strategy φk thus “projects” the (high-dimensional) probability measureP onto a one-dimensional
+distribution. The trading strategies{φk}k=1,··· ,K thus “project” the high-dimensional probability measure
+P onto K scalar random variables {Πk(p)}k=1,··· ,K. We use the quantiles of these variables as tractable
+featuresof P, which the algorithm attempts to learn.
+The benchmark strategies considered in this framework include both static portfolios and dynamic
+trading strategies, capturing properties of the price scenarios from different perspectives. Static portfolios
+explore the correlation structure among the assets, while dynamic trading strategies, such as mean-reversion
+and trend-following strategies probe temporal properties such as mean-reversion or the presence of trends.
+Such benchmark strategies may also be used to assess the adequacy of a scenario generator for risk
+computations: a scenario generator is considered to be adequate if VaR or ES estimates for the benchmark
+strategies based on its output scenarios meet a predefined accuracy threshold.
+This sets the stage for using these loss quantiles as elements of a financially interpretable adversarial
+training approach for a generative model.
+We adopt an adversarial training approach, structured as an iterative max–min game between a gen-
+erator and a discriminator. The generator simulates price scenarios, while the discriminator evaluates the
+quality of the simulated samples usingtail risk measures, namely VaR and ES. To train the generator and
+the discriminator, we use a tail-sensitive objective function that leverages the elicitability of VaR and ES,
+and guarantees the consistency of the estimator. Building on this foundation, we now provide details on
+the design of the discriminator and the generator.
+3.2 Training the discriminator: minimizing the score function
+Ideally, the discriminatorD takes strategy PnL distributions as inputs, and outputs two values for each of
+the K strategies, aiming to provide the correct(VaRα, ESα), by minimizing the score function (4). However,
+8
+it is impossible to access the true distribution ofp, denoted as Pr, in practice. Therefore we consider a
+sample-based version of the discriminator, which is easy to train in practice. To this end, we consider PnL
+samples {pi}ni=1 with a fixed sizen as the input of the discriminator. Mathematically, we write
+D∗ ∈ arg min
+D
+1
+K
+KX
+k=1
+1
+n
+nX
+i=1
+
+Sα
+
+
+VaR and ES prediction from D
+z }| {
+D( Π k(pj), j∈ [n]| {z }
+strategy PnL samples
+) ; pi
+
+
+
+ . (11)
+In (11), we search the discriminatorD over all Lipschitz functions parameterized by the neural network
+architecture. Specifically, the discriminator adopts a neural network architecture with˜L layers, and the
+input dimension is ˜n1 := n and the output dimension is˜n ˜L := 2. Note that the α-VaR of a distribution
+can be approximated by the⌊αn⌋th smallest value in a sample of sizen from this distribution, which is
+permutation-invariant to the ordering of the samples. Since the discriminator’s goal is to predict theα-VaR
+and α-ES, incorporating a sorting function into the architecture design can potentially enhance the stability
+of the discriminator. We denote this (differentiable) neural sorting function aseΓ (Grover et al. [2019]), with
+details deferred to Appendix C.3.
+In summary, the discriminator is given by
+D(xk; δ) = fW ˜L · σ  fW ˜L−1 . . . σ( fW1eΓ(xk) + eb1) . . .+ eb ˜L−1 + eb ˜L, (12)
+where δ = ( fW, eb)representalltheparametersintheneuralnetwork. Herewehave fW = ( fW1, fW2, . . . ,fW ˜L)
+and eb = (eb1, eb2, . . . ,eb ˜L) with fWl ∈ Rnl×nl−1, ebl ∈ Rnl×1 for l = 1, 2, . . . ,˜L. In the neural network liter-
+ature, the fWl’s are often called theweight matrices, the ebl’s are calledbias vectors. The outputs of the
+discriminator are two values for each of theK strategies, (hopefully) representing theα-VaR andα-ES. The
+operator σ(·) takes a vector of any dimension as input, and applies a function component-wise.σ(·) is re-
+ferred to as theactivation function. Specifically, for anyq ∈ Z+ and any vectoru = (u1, u2, . . . , uq)⊤ ∈ Rq,
+we have thatσ(u) = (σ(u1), σ(u2), . . . , σ(uq))⊤. Several popular choices for the activation function include
+ReLU with σ(u) = max(u, 0), Leaky ReLU withσ(u) = a1 max(u, 0) − a2 max(−u, 0) and a1, a2 > 0, and
+smooth functions such asσ(·) = tanh(·). We sometimes use the abbreviationDδ or D instead of D(·; δ) for
+notation simplicity.
+Accordingly, we defineD as a class of discriminators
+D( ˜L, ˜n1, . . . ,˜n ˜L) =
+n
+D : Rn → R2
+ D takes the form in (12) with˜L layers and ˜nl as the
+width of each layer, ∥ fWl∥∞, ∥ebl∥∞ < ∞ for l = 1, 2, . . . ,˜L
+o
+, (13)
+where ∥ · ∥∞ denotes the max-norm.
+3.3 Design of the generator and universal approximation
+For the generator, we use a neural network withL ∈ Z+ layers. Denoting bynl the width of thel-th layer,
+the functional form of the generator is given by
+G(z; γ) = WL · σ (WL−1 . . . σ(W1z + b1) . . .+ bL−1) + bL, (14)
+in which γ := ( W, b) represents the parameters in the neural network, withW = ( W1, W2, . . . ,WL)
+and b = (b1, b2, . . . ,bL). Here Wl ∈ Rnl×nl−1 and bl ∈ Rnl×1 for l = 1, 2, . . . , L, where n0 = Nz is the
+dimension of the input variable.
+We defineG as a class of generators that satisfy given regularity conditions:
+G(L, n1, n2, . . . , nL) =
+n
+G : RNz → RM ×T
+ G takes the form in (14) withL layers and nl as the
+width of each layer, ∥Wl∥∞, ∥bl∥∞ < ∞ for l = 1, 2, . . . , L
+o
+. (15)
+To ease the notation, we may use the abbreviationGγ(·) or drop the dependency ofG(· ; γ) on the neural
+network parametersγ and conveniently writeG(·). We further denotePG as the distribution of price series
+generated by G.
+9
+Universal approximation property of the generator. We first demonstrate the universal approx-
+imation power of the generator under the VaR and ES criteria, and then we provide a similar result for
+more general risk measures that satisfy certain Hölder regularity property.
+We assume that the portfolio values are Lipschitz-continuous with respect to price paths:
+Assumption 3.1(Lipschitz continuity of portfolio values). For k = 1, 2, · · ·, K,
+∃ℓk > 0, |Πk(p) − Πk(q)| ≤ℓk∥p − q∥, ∀p.q ∈ Ω.
+Recall Pr and Pz are respectively the target distribution and the distribution of the input noise.
+Assumption 3.2(Noise Distribution and Target Distribution). Pr and Pz are probability measures onΩ
+(i.e. Nz = M × T) satisfying the following conditions:
+• Pz ∈ P2(Ω) has a density.
+• Pr has a bounded moment of orderβ >1:
+R
+∥x∥βPr(dx) < ∞.
+Assumption3.3. The random variablesΠk(X) have continuous densitiesfk under Pr with fk(VaRα(Πk, Pr) >
+0.
+Theorem 3.4(Universal Approximation under VaR and ES Criteria). Under Assumptions 3.1-3.2-3.3, for
+any ε >0
+• there exists a fully connected feed-forward neural networkG1, with length L = O(log(ε−2)), width
+N = O(ε−2 log 2) and ReLU activation, such that
+VaRαΠk, P∇G1 − VaRαΠk, Pr < ε;
+• there exists a fully connected feed-forward neural networkG2, with length L = O(log(ε− ββ−1 )), width
+N = O(ε− ββ−1 log 2) and ReLU activation, such that
+ESα Πk, P∇G2 − ESαΠk, Pr < ε.
+Theorem 3.4 implies that the gradient of a feed-forward neural network with fully connected layers of
+equal-width neural network is capable of generating scenarios which reproduce the tail risk properties (VaR
+and ES) for the benchmark strategies with arbitrary accuracy. This justifies the use of this simple network
+architecture for Tail-GAN. The size of the network, namely the width and the length, depends on the
+tolerance of the errorε and further depends onβ in the case of ES.
+The proof (given in Appendix B.2) consists in using the theory of (semi-discrete) optimal transport
+to build a transport map of the formΦ = ∇ψ which pushes the source distributionPz to the empirical
+distribution P(n)r . The potential ψ has an explicit form in terms of the maximum of finitely many affine
+functions. Such an explicit structure enables the representation ofψ with a finite deep neural network [Lu
+and Lu 2020].
+We now provide a universal approximation result for more general law-invariant risk measuresρ :
+P(R) → R. To start, denote by
+Wp(µ, ν) = infξ∈C(µ,ν)
+h
+E(X,Y )∼ξ∥X − Y ∥p
+i1/p
+,
+the Wasserstein distance of orderp ∈ [1, ∞) between two probability measuresµ and ν on Rd, whereC(µ, ν)
+denotes the collection of all distributions onRd × Rd with marginal distributionsµ and ν.
+Assumption 3.5(Hölder continuity ofρ).
+∃L >0, ∃κ ∈ (0, 1],
+ρ(µ) − ρ(ν)) ≤ L W1µ, ν κ, ∀µ, ν∈ P(R) (16)
+10
+Remark 3.6. The optimized certainty equivalent (Ben-Tal and Teboulle [2007]), spectral risk measures
+(Acerbi [2002]), and utility-based shortfall (Föllmer and Schied [2002]) satisfy this assumption.
+Theorem 3.7 (Universal Approximation in risk metric). Under Assumptions 3.1, 3.2 and 3.5, for anyε
+there exists a fully connected feed-forward neural networkG3 under ReLU activation, with length L and
+width N specified below, such that
+ ρΠk, P∇G3 − ρΠk, Pr  < ε.
+More specifically,
+(1) L = O(log(ε− βκ(β−1) )) and N = O(ε− βκ(β−1) log 2) when M = T = 1 and 1 < β≤ 2;
+(2) L = O(log(ε− 2κ )) and N = O(ε− 2κ log 2) when M = T = 1 and β ≥ 2;
+(3) L = O(log(ε− M ×Tκ )) and N = O(ε− M ×Tκ log 2) when M × T ≥ 2 and 1M ×T + 1β < 1;
+(4) L = O(log(ε− βκ(β−1) )) and N = O(ε− βκ(β−1) log 2) when M × T ≥ 2 and 1M ×T + 1β ≥ 1.
+As suggested in Theorem 3.7, the depth of the neural network depends onβ, M × T, andκ. M = T = 1
+corresponds to the simulation of a single price value of a single asset, which is not much of an interesting
+case. When M × T ≥ 2 and β > M ×TM ×T −1, the complexity of the neural network, characterized byM ×Tκ ,
+depends on the ratio between the dimension of the price scenarioM × T and the Lipschitz exponentκ.
+When Pr is heavy-tailed in the sense that1 < β < M ×TM ×T −1, the complexity of the network is determined
+by β(β−1)κ. The proof of Theorem 3.7 is deferred to Appendix B.3.
+3.4 Loss function: from bi-level to max-min game
+We now design a loss function to jointly train the generator and the discriminator. The goal of the generator
+is to generate samples such that the (optimal) discriminatorD∗ cannot tell the difference compared to the
+target distribution. Mathematically,
+G∗ ∈ arg min
+G∈G
+Sα
+
+D∗ Πk(qi); i ∈ [n], Πk(pj), with qi ∼ PG, pj ∼ Pr, i, j= 1, 2, . . . , n (17)
+where D∗ is the solution to (13). The coupled optimization problem (17), subject to (13), constitutes a
+bi-level optimization framework, where the problem forG serves as the upper level and the problem forD
+as the lower level. However, bi-level optimization is often challenging to train in practice. To address this,
+we propose the following max-min game formulation.
+max
+D∈D
+min
+G∈G
+1
+Kn
+KX
+k=1
+nX
+j=1
+h
+Sα
+
+D
+ 
+Πk(qi); i ∈ [n], Πk(pj) − λ SαD(Πk(pi); i ∈ [n]), Πk(pj)i(18)
+where pi, pj ∼ Pr and qi ∼ PG (i, j= 1, 2, . . . , n). The discriminator D takes n PnL samples as the input
+and aims to provide the VaR and ES values of the sample distribution as the output. The score function
+Sα is defined in (7).
+Theorem 3.8(Equivalence of the formulations). Under mild conditions, the bi-level optimization problem
+(17) subject to(13) is equivalent to the max-min game(18) for any λ >0.
+A detailed statement may be found in Theorem A.1 in Appendix A along with its proof in Appendix
+B.4.
+The max-min structure of (18) encourages the exploration of the generator to simulate scenarios that are
+not exactly the same as what is observed in the input price scenarios, but are equivalent under the criterion
+11
+Figure 2: Architecture ofTail-GAN. The (blue) thick arrows represent calculations with learnable param-
+eters, and the (black) thin arrows represent calculations with fixed parameters.
+of the score function, hence improving generalization. We refer the readers to Section 5.3 for a comparison
+between Tail-GAN and supervised learning methods and a demonstration of the generalization power of
+Tail-GAN.
+Compared to the binary entropy [Goodfellow et al. 2014] or Wasserstein distance [Arjovsky et al. 2017]
+used as loss functions in previous GAN algorithms, the objective function (18) is more sensitive to tail
+risk and leads to an output which better approximates theα-ES and α-VaR values. The architecture of
+Tail-GAN is depicted in Figure 2.
+4 Numerical experiments: methodology and performance evaluation
+Before we proceed with the numerical experiments on both synthetic data sets and real financial data
+sets, we first describe the methodologies, performance evaluation criterion, and several baseline models for
+comparison.
+4.1 Methodology
+Algorithm 1 provides a detailed description of the training procedure ofTail-GAN, which allows us to
+train the generator with different benchmark trading strategies.
+We train Tail-GAN using a range ofstatic and dynamictrading strategies across multiple assets.
+Static trading strategy refers to a buy-and-hold portfolio. Dynamic trading strategies have scenario- and
+time-dependence portfolios. We consider two types of dynamic strategies: mean-reversion strategies and
+trend-following strategies.
+We compareTail-GAN with four benchmark models:
+(1) Tail-GAN-Raw: Tail-GAN trained (only) with static buy-and-hold strategies onindividual asset.
+(2) Tail-GAN-Static: Tail-GAN trained (only) with static multi-asset portfolios.
+(3) Historical Simulation Method (HSM): Using VaR and ES computed from historical data as the pre-
+diction for VaR and ES of future data.
+(4) Wasserstein GAN (WGAN): trained on asset return data with Wasserstein distance as the loss func-
+tion. We refer to Arjovsky et al. [2017] for more details on WGAN.
+12
+Algorithm 1 Tail-GAN.
+Input:
+• Price scenarios p1, . . . ,pN ∈ Ω.
+• Scenario-based P&L computation for trading strategies:Π = (Π1, . . . ,ΠK) : Ω → RK.
+• Hyperparameters: learning rate lD for discriminator and lG for generator; number of training epochs;
+batch size NB; dual parameterλ.
+1: for number of epochsdo
+2: for j = 1 → ⌊N/NB⌋ do
+3: Generate NB IID noise samples{zi, i∈ [NB]} ∼Pz.
+4: Sample a batchBj ⊂ {1, . . . , N} of size NB from the input data{pi, i= 1, . . . , N}.
+5: Compute the loss of the discriminator on the batchBj
+LD(δ) = 1K NB KXk=1 Xn∈BjhSα Dδ(Πk(Gγ(zi)), i∈ [NB]), Πk(pn)
+− λSα
+ 
+Dδ(Πk(pi), i∈ Bj), Πk(pn)i.
+6: Update the discriminator
+δ ← δ + lD∇LD(δ).
+7: Generate NB IID noise samples{˜zi, i∈ [NB]} ∼Pz.
+8: Compute the loss of the generator
+LG(γ) = 1K NB KXk=1 Xn∈Bj Sα Dδ(Πk(Gγ(˜zi)), i∈ [NB]), Πk(pn).
+9: Update the generator
+γ ← γ − lG∇LG(γ).
+10: end for
+11: end for
+12: γ∗ = γ, δ ∗ = δ.
+Outputs:
+• δ∗: trained discriminator weights; γ∗: trained generator weights.
+• Simulated scenarios: Gγ∗(zi) where zi ∼ Pz IID.
+13
+Tail-GAN-Raw is trained with the returns of single assets, similarly to previous GAN-based generators
+such as Quant-GAN (Wiese et al. [2020])or Koshiyama et al. [2020], Liao et al. [2024], Takahashi et al. [2019],
+Li et al. [2020]).Tail-GAN-Static is trained with the PnLs of multi-asset portfolios which is more flexible
+than Tail-GAN-Raw by allowing different capital allocations among different assets. This could potentially
+capture the correlation patterns among different assets. In addition to the static portfolios,Tail-GAN
+also includes dynamic strategies to capture temporal dependence information in financial time series.
+4.2 Performance evaluation criteria
+We introduce the following criteria to compare the scenarios simulated usingTail-GANwith other simu-
+lation models: (1) tail behavior comparison; (2) structural characterizations such as correlation and auto-
+correlation; and (3) model verification via (statistical) hypothesis testing such as the Score-based Test and
+Coverage Test. The first two evaluation criteria are applied throughout the numerical analysis for both
+synthetic and real financial data, while the hypothesis tests are only for synthetic data as they require the
+knowledge of “oracle” estimates of the true data generating process.
+Tail behavior. To evaluate the accuracy of VaR (ES) estimates for the trading strategies computed under
+the generated scenarios, we compute, for any strategyk (1 ≤ k ≤ K), the relative error of VaR is defined
+as
+VaRαΠk,P(N)G −VaRα(Πk,Pr)
+|VaRα(Πk,Pr)| , where VaRα
+ 
+Πk, Pr is the trueα-VaR for strategyk and VaRα Πk, P(N)G 
+the empirical estimate usingN generated samples. Similarly, for the estimatesESα
+
+Πk, P(N)G , we define
+the relative error as
+ESαΠk,P(N)G −ESα(Πk,Pr)
+|ESα(Πk,Pr)| .
+We then use the following average relative error for VaR and ES as the overall measure of model
+performance:
+RE(N) = 12K KXk=1
+
+
+VaRα Πk, P(N)G  − VaRα  Πk, Pr
+|VaRα (Πk, Pr)| +
+ESα Πk, P(N)G  − ESα  Πk, Pr
+|ESα (Πk, Pr)|
+
+ .
+A useful benchmark to compare the above relative error with is thesampling error, when using a finite a
+sample of same size from the true distribution:
+SE(N) = 12K KXk=1
+
+
+VaRα Πk, P(N)r  − VaRα  Πk, Pr
+|VaRα (Πk, Pr)| +
+ESα Πk, P(N)r  − ESα  Πk, Pr
+|ESα (Πk, Pr)|
+
+ ,
+where VaRα
+
+Πk, P(N)r  and ESα Πk, P(N)r  are the “oracle” estimates for VaR and ES of strategyk using
+a sample of sizeN from the true probability distribution.
+Clearly SE(N) is a lower bound for accuracy and one cannot do better than havingRE(N) of the same
+order or magnitude asSE(N). we note that most studies on generative models for time series e.g. (Wiese
+et al. [2020]) fail to use such benchmarks.
+We also use rank-frequency distribution to visualize the tail behaviors of the simulated data versus
+the market data. Rank-frequency distribution is a discrete form of the quantile function, i.e., the inverse
+cumulative distribution, giving the size of the element at a given rank. By comparing the rank-frequency
+distribution of the market data and simulated data of different strategies, we gain an understanding of how
+good the simulated data is in terms of the risk measures of different strategies.
+Temporal and cross-asset dependence.To test whetherTail-GANis capable of capturing structural
+properties, such as temporal and cross-asset dependence, we calculate of the output price scenarios for each
+generator : (1) the sum of the absolute difference between thecorrelation coefficients of the input price
+scenario and those of generated price scenario, and (2) the sum of the absolute difference between the
+autocorrelation coefficients (up to 10 lags) of the input price scenario and those of the generated price
+scenario.
+14
+Hypothesis testing for synthetic data.Given the benchmark strategies and a scenario generator, we
+are interested in examining how accurate risk measures for benchmark strategies estimated from simulated
+scenarios are compared to “oracle” estimates given knowledge of the data generating process. Here, the
+generator may representTail-GAN, Tail-GAN-Raw, Tail-GAN-Static, HSM, or WGAN.
+We explore two methods, the Score-based Test and the Coverage Test, to verify the relationship between
+the generator and the data. We first introduce theScore-based Testto verify the hypothesis
+H0 : Ep∼Pr
+h
+Sα
+ 
+VaRα
+
+Πk, PG
+
+, ESα
+
+Πk, PG
+
+, Πk(p)i
+= Ep∼Pr
+h
+Sα
+ 
+VaRα
+
+Πk, Pr
+
+, ESα
+
+Πk, Pr
+
+, Πk(p)i ,
+where PG is the distribution of the output time series from the generatorG. By making use of the joint
+elicitability property of VaR and ES, Fissler et al. [2015] proposed the following test statistic:
+T k = ¯SkG − ¯Sk0
+ˆσk , where
+¯SkG = 1N NXi=1 Sα VaRα Πk, PG , ESα Πk, PG , Πk(pi),
+¯Sk0 = 1N NXi=1 Sα VaRα Πk, Pr , ESα Πk, Pr , Πk(pi),
+ˆσk =
+r
+ˆσ2G + ˆσ20
+N .
+Here {pi}Ni=1 represents the observations from Pr and {Πk(pi)}Ni=1 represents the PnL observations of
+strategy k under Pr. PG denotes the distribution of generated data from generatorG. VaRα
+ 
+Πk, PG
+and ESα
+ 
+Πk, PG represent the estimates of VaR and ES for PnLs of strategyk evaluated under PG.
+VaRα
+ 
+Πk, Pr and ESα  Πk, Pr represent the ground-truth estimates of VaR and ES for PnLs of strategy
+k evaluated under Pr. Furthermore, ˆσ2G and ˆσ20 are the empirical variances of
+Sα
+ 
+VaRα
+ 
+Πk, PG , ESα  Πk, PG , Πk(p) and Sα VaRα  Πk, Pr , ESα  Πk, Pr , Πk(p), respectively. Un-
+der H0, the test statistic T k has expected value equal to zero, and the asymptotic normality of the test
+statistic T k can be similarly proved as in Diebold and Mariano [2002].
+We also examine theCoverage Test(Kupiec [1995]) which measures generator performance based on
+the exceedance rate of estimated quantile levels. Kupiec [1995] proposed the following test statistic:
+LR = −2 ln
+
+ (1 − α)N−Ck(N)αCk(N)
+1 − Ck(N)N N−Ck(N)  Ck(N)N Ck(N)
+
+ ,
+where Ck(N) = PNi=1 1 {Πk(pi)<VaRα(Πk,PG)} represents the number of exceedances observed acrossN sce-
+narios. Under the null hypothesis
+H0 : P
+
+Πk(p) < VaRα
+
+Πk, PG
+
+= α.
+where Πk(p) represents the PnL of strategyk, we haveLR ∼ χ21.
+In-sample test vs out-of-sample test.Throughout the experiments, both in-sample tests and out-of-
+sample tests are used to evaluate the trained generators. In particular, the in-sample tests are performed on
+the training data, whereas the out-of-sample tests are performed on the testing data. For eachTail-GAN
+variant, the in-sample test uses the same set of strategies as in its loss function. For example, the in-sample
+test for Tail-GAN-Raw is performed with buy-and-hold strategies on individual assets. Out-of-sample
+tests use different trading strategies, not necessarily seen in the training phase.
+15
+5 Numerical experiments with synthetic data
+We test the performance ofTail-GAN on a synthetic data set, for which we can compare to benchmarks
+computed using the exact loss distribution. We divide the entire data set into two disjoint subsets, i.e.
+the training set and the test set, with no overlap in time periods. The training set is used to learn
+the model parameters, and the testing data is used to evaluate the out-of-sample (OOS) performance of
+different models. In this examination, 50,000 samples are used for training and 10,000 samples are used for
+performance evaluation.
+The main takeaway from our comparison against benchmark simulation models is that the consistent
+tail-riskbehaviorisdifficulttoattainby onlytrainingonpricesequences, withoutincorporatingthedynamic
+trading strategies in the loss function, as we propose to do in our pipeline. As a consequence, if the user is
+indeed interested in including dynamic trading strategies in the portfolio, training a generator on raw asset
+returns, as suggested by Wiese et al. [2020], will be insufficient.
+5.1 Synthetic multi-asset scenarios
+We now test the method on a simulated data set, consisting of five correlated return series with different
+temporal patterns and tail behaviors. More specifically we simulate a 5-dimensional vector series X(t)
+whose components are respectively given by:
+• X1(t) ∼ N (0, 1) IID
+• X2(t) is an AR(1) process AR(1) with autocorrelationϕ1 > 0,
+• X3(t) is an AR(1) process with autocorrelationϕ2 < 0,
+• X4(t) is a GARCH(1, 1) process with Student-t(ν1) noise and
+• X5(t) is a GARCH(1, 1) process with Student-t(ν2) noise.
+Details are provided in Appendix C.1. We examine the performance with one quantile valueα = 0.05. The
+architecture of the network configuration is summarized in Table 11 in Appendix C.2. Experiments with
+other quantile levels or multiple quantile levels are demonstrated in Section 5.2.
+Figure 3 reports the convergence of in-sample errors1, and Table 1 summarizes the out-of-sample errors
+of Tail-GAN-Raw, Tail-GAN-Static, Tail-GAN and WGAN.
+Performance accuracy. We draw the following observations from Figure 3 and Table 1.
+• For the evaluation criterionRE(1000) (see Figure 3), all three generators,Tail-GAN-Raw, Tail-
+GAN-Static andTail-GAN, converge within 2000 epochs with errors smaller than 10%. This implies
+that all three generators are able to capture the static information contained in the market data.
+• For the evaluation criterion RE(1000), with both static portfolios and dynamic strategies on out-
+of-sample tests (see Table 1), onlyTail-GAN converges to an error 4.6%, whereas the other two
+generators fail to capture the dynamic information in the market data.
+• Compared to Tail-GAN-Raw and Tail-GAN-Static, Tail-GAN has the lowest training variance
+across multiple experiments (see standard deviations in Table 1). This implies thatTail-GAN has
+the most stable performance.
+• Compared to Tail-GAN, WGAN yields less competitive out-of-sample performance in terms of gen-
+erating scenarios that have consistent tail risks of static portfolios and dynamic strategies. Indeed,
+the objective function of WGAN is not very sensitive to the tail of the distribution, which does not
+guarantee the accuracy of tail risk measures for dynamic strategies.
+1The in-sample error of WGAN is not reported in Figure 3 because WGAN uses a different training metric.
+16
+500 1000 1500 2000 2500 3000
+Epochs
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8In-Sample Error
+Tail-GAN-Raw
+Tail-GAN-Static
+Tail-GAN
+Figure 3: Training performance: relative errorRE(1000) with 1000 samples. Grey horizontal line: average
+simulation error SE(1000). Dotted line: average simulation error plus one standard deviation. Each
+experiment is repeated five times with different random seeds. The performance is visualized with mean
+(solid lines) and standard deviation (shaded areas).
+SE(1000) HSM Tail-GAN-Raw Tail-GAN-Static Tail-GAN WGAN
+Out of sample 3.0 3.4 83.3 86.7 4.6 21.3
+Error (%) (2.2) (2.6) (3.0) (2.5) (1.6) (2.2)
+Table 1: Mean and standard deviation (in parentheses) of relative errors for out-of-sample tests. Each
+experiment is repeated five times with different random seeds.
+Figure 4 shows the empirical quantile function of the strategy PnLs evaluated with price scenarios
+sampled from Tail-GAN-Raw, Tail-GAN-Static, Tail-GAN, and WGAN. The testing strategies are,
+from left to right (in Figure 4), static single-asset portfolio (buy-and-hold strategy), single-asset mean-
+reversion strategy and single-asset trend-following strategy. We only demonstrate here the performance of
+the AR(1) model, and the results for other assets are provided in Figure 16 in Appendix D.2 We compare
+the rank-frequency distribution of PnLs evaluated with input price scenarios (in blue), threeTail-GAN
+generators (in orange, red and green, resp.), and WGAN (in purple). Based on the results depicted in
+Figure 4, we conclude that
+• All three variants of Tail-GAN are able to capture the tail properties of the static single-asset
+portfolio at quantile levels above 1%, as shown in the first column of Figure 4.
+• For dynamic strategies, onlyTail-GAN is able to generate accurate tail statistics, as shown in the
+second and third columns of Figure 4.
+• Tail-GAN-Raw and Tail-GAN-Static underestimate the risk of the mean-reversion strategy at
+α = 5% quantile level, and overestimate the risk of the trend-following strategy atα = 5% quantile
+level, as illustrated in the second and third columns of Figure 4.
+• WGAN fails to generate scenarios that retain consistent risk measures for heavy tailed models such
+as GARCH(1,1) witht(5) noise.
+Learning the temporal and correlation patterns. Figures 5 and 6 show the correlation and auto-
+correlation patterns of market data (Figures 5(a) and 6(a)) and simulated data from Tail-GAN-Raw
+2We observe from Figure 16 that for other input scenarios such Gaussian, AR(1), and GARCH(1,1), WGAN is able to
+generate scenarios that match the tail risk characteristics of benchmark trading strategies.
+17
+10 4
+ 10 3
+ 10 2
+ 10 1
+ 100
+ (log scale)
+-2.0
+2.0
+AR(1) with 1 = 0.5
+-quantile (log scale)
+Static buy-and-hold
+10 4
+ 10 3
+ 10 2
+ 10 1
+ 100
+ (log scale)
+0.0
+1.0
+10.0
+Mean-reversion
+10 4
+ 10 3
+ 10 2
+ 10 1
+ 100
+ (log scale)
+-10.0
+-1.0
+0.0
+1.0
+Trend-following
+Market Data
+Tail-GAN-Raw
+Tail-GAN-Static
+Tail-GAN
+WGAN
+Figure 4: Tail behavior via the empirical rank-frequency distribution of the strategy PnL (based on AR(1)
+with autocorrelation 0.5). The columns represent the strategy types.
+(Figures 5(b) and 6(b)), Tail-GAN-Static (Figures 5(c) and 6(c)),Tail-GAN (Figures 5(d) and 6(d)),
+and WGAN (Figures 5(e) and 6(e)).
+0.00 (0.00)
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+(a) Market data.
+4.24 (0.74)
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0 (b) Tail-GAN-Raw.
+2.95 (1.09)
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0 (c) Tail-GAN-Static.
+1.00 (0.31)
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0 (d) Tail-GAN.
+6.11 (0.27)
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0 (e) WGAN.
+Figure 5: Correlations of the price increments from different trained GAN models: (1)Tail-GAN-Raw,
+(2) Tail-GAN-Static, (3) Tail-GAN, and (4) WGAN. The numbers at the top of each plot denote the
+mean and standard deviation (in parentheses) of the sum of the absolute element-wise difference between
+the correlation matrices, computed with 10,000 training samples and 10,000 generated samples.
+0 2 4 6 8 10
+Lags
+0.2
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0 0.00 (0.00)
+Gaussian
+AR(1) with 1 = 0.5
+AR(1) with 1 = 0.12
+GARCH(1,1) with t(5)
+GARCH(1,1) with t(10)
+(a) Market Data.
+0 2 4 6 8 10
+Lags
+0.2
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0 2.92 (0.37)
+Gaussian
+AR(1) with 1 = 0.5
+AR(1) with 1 = 0.12
+GARCH(1,1) with t(5)
+GARCH(1,1) with t(10) (b) Tail-GAN-Raw.
+0 2 4 6 8 10
+Lags
+0.2
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0 2.94 (0.34)
+Gaussian
+AR(1) with 1 = 0.5
+AR(1) with 1 = 0.12
+GARCH(1,1) with t(5)
+GARCH(1,1) with t(10) (c) Tail-GAN-Static.
+0 2 4 6 8 10
+Lags
+0.2
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0 2.73 (0.42)
+Gaussian
+AR(1) with 1 = 0.5
+AR(1) with 1 = 0.12
+GARCH(1,1) with t(5)
+GARCH(1,1) with t(10) (d) Tail-GAN.
+0 2 4 6 8 10
+Lags
+0.2
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0 2.41 (0.39)
+Gaussian
+AR(1) with 1 = 0.5
+AR(1) with 2 = 0.12
+GARCH(1,1) with t(5)
+GARCH(1,1) with t(10) (e) WGAN.
+Figure 6: Auto-correlations of the price increments from different trained GAN models: (1)Tail-GAN-
+Raw, (2) Tail-GAN-Static, (3) Tail-GAN, and (4) WGAN. The numbers at the top of each plot denote
+the mean and standard deviation (in parentheses) of the sum of the absolute difference between the auto-
+correlation coefficients computed with 10,000 training samples and 10,000 generated samples.
+Figures 5 and 6 demonstrate that the auto-correlation and cross-correlations returns are best reproduced
+by Tail-GAN, trained on multi-asset dynamic portfolios. On the contrary,Tail-GAN-Raw and WGAN,
+trained on raw returns, have the lowest accuracy in this respect. This illustrates the importance of training
+the algorithm on benchmark strategies instead of only raw returns.
+Statisticalsignificance. Table2summarizesthestatisticaltestresultsforHistoricalSimulationMethod,
+Tail-GAN-Raw, Tail-GAN-Static, Tail-GAN, and WGAN. Table 2 suggests thatTail-GAN achieves
+the lowest average rejection rate of the null hypothesis described in Section 4.2. In other words, scenarios
+generated by Tail-GAN yield more accurate VaR and ES values for benchmark strategies compared to
+those of other generators.
+18
+HSM Tail-GAN-Raw Tail-GAN-Static Tail-GAN WGAN
+Coverage Test (%) 17.9 53.6 22.9 17.1 44.9
+Score-based Test (%) 0.00 21.3 15.4 0.00 11.4
+Table 2: Average rejection rate of the null hypothesis in two tests across strategies. We use sample size
+1, 000 and repeat the above experiment 100 times on testing data.
+5.2 Multiple risk levels
+VaR and ES are special cases ofspectral risk measures[Kusuoka 2001], defined as a weighted average of
+quantiles:
+ρϕ(X, P) =
+Z
+[0,1]
+VaRα(X, P) ϕ(dα), (19)
+where the spectrum ϕ is a probability measure on[0, 1]. Theorem 5.2 in Fissler and Ziegel [2016] shows
+that, if ϕ has finite support{α1, ..., αM } then (VaRαi, ...,VaRαM , ρϕ) are jointly elicitable. This enables us
+to train Tail-GAN with multiple quantile levels{αm}Mm=1 simultaneously. The theoretical developments
+in Section 3 generalize to this case.
+To verify thatTail-GAN is effective for not only one particular risk level, we evaluate the previously
+trained model Tail-GAN(5%) at some different quantile levels. HereTail-GAN(a%) represents Tail-
+GAN model trained at risk level a. As shown in the second column of Table 3, the performance of
+Tail-GAN(5%) is comparable to the baseline estimate SE(1000). We also train the model at a different
+level 10% (see ColumnTail-GAN(10%)). We observe thatTail-GAN(10%) is slightly worse thanTail-
+GAN(5%) in terms of generating scenarios to match the tail risks at levels 1% and 5%, but better in
+10%. Furthermore, we investigate the performance of Tail-GAN trained with multiple risk levels. In
+particular, the model Tail-GAN(1%&5%) is trained with the spectral risk measure defined in (19). The
+results suggest that, in general, including multiple levels can further improve the simulation accuracy.
+OOS Error SE(1000) Tail-GAN(5%) Tail-GAN(10%) Tail-GAN(1%&5%)
+α = 1% 4.3 6.4 7.0 5.9(3.0) (2.7) (3.1) (2.6)
+α = 5% 3.0 4.6 4.8 4.2(2.2) (1.6) (1.6) (1.8)
+α = 10% 2.9 3.7 3.5 3.5(2.1) (1.5) (1.5) (1.7)
+Table 3: Mean and standard deviation (in parentheses) of relative errors for various risk levels. The
+columns represent the models trained for certain risks. The rows represent the out-of-sample performance
+for different risk levels.
+5.3 Generalization error
+If the training and test errors closely follow one another, it is said that a learning algorithm has good
+generalization performance, see Arora et al. [2017]. Generalization error quantifies the ability of machine
+learning models to capture certain inherent properties from the data or the ground-truth model. In general,
+machine learning models with a good generalization performance are meant to learn “underlying rules”
+associated with the data generation process, rather than only memorizing the training data, so that they
+are able to extrapolate learned rules from the training data to new unseen data. Thereby, the generalization
+error of a generatorG can be measured as the difference between the empirical divergence of the training
+data d(P(n)r , P(n)G ) and the ground-truth divergenced(Pr, PG).
+19
+To quantify the generalization capability, we use the notion of generalization proposed in Arora et al.
+[2017]. For a fixed sample sizen, the generalization error ofPG is defined as
+d(P(n)r , P(n)G ) − d(Pr, PG) , (20)
+where P(n)r is the empirical distribution ofPr with n samples, i.e., the distribution of the training data, and
+P(n)G is the empirical distribution ofPG with n samples drawn after the generatorG is trained. A small
+generalization error under definition (20) implies that GANs with good generalization property should have
+consistent performances with the empirical distributions (i.e.,P(n)r and P(n)G ) and with the true distributions
+(i.e., Pr and PG). We consider two choices for the divergence function:dq based on quantile divergence,
+and ds based on our score function we use. The quantile divergence between two distributionsP and Q is
+defined as Ostrovski et al. [2018]
+q(P, Q) :=
+Z 1
+0
+"Z F −1Q (τ )
+F −1P (τ ) (FP (x) − τ ) dx
+#
+dτ,
+where FP (resp. FQ) is the CDF ofP (resp. Q). Motivated by this definition, we define thelocal divergence,
+which focuses on the tails of loss distributions for the benchmark strategies:
+dq(Pr, PG) := 1K KXk=1 Z α0
+
+
+Z F −1Πk ,PG (τ )
+F −1Πk ,Pr (τ )
+ 
+FΠk,Pr (x) − τ
+
+dx
+
+ dτ, (21)
+where FΠk,Pr (resp. FΠk,PG) is the CDF ofΠk(p) with p ∼ Pr (resp. Πk(q) with q ∼ PG). Recall that the
+score function used in (28) can also be constructed as a “divergence” between two distributions in terms of
+their respective VaR and ES values
+ds (Pr, PG) := 1K KXk=1 Ep∼Pr
+"
+Sα
+ 
+VaRα
+
+Πk, PG
+
+, ESα
+
+Πk, PG
+
+, Πk(p)
+− Sα
+ 
+VaRα
+
+Πk, Pr
+
+, ESα
+
+Πk, Pr
+
+, Πk(p)
+#
+.
+(22)
+Comparison with supervised learning To illustrate the generalization capabilities ofTail-GAN, we
+compare it with a supervised learning benchmark using the same loss function.
+Given the optimization problem (26)-(27), a natural idea is to evaluate the generator using empirical
+VaR and ES estimates from the output scenarios. To this end, we consider the following optimization
+min
+G∈G
+1
+Kn
+KX
+k=1
+nX
+j=1
+Sα
+
+VaRα
+ 
+Πk, P(n)G ,ESα Πk, P(n)G , Πk(pj), (23)
+where P(n)G is the empirical measure ofn samples drawn fromPG, and pj are samples under the measure
+Pr (j = 1 , 2, . . . , n). The optimization problem (23) is a supervised learning problem. Compared with
+Tail-GAN, this setting has several disadvantages. The first issue is the bottleneck in statistical accuracy.
+When using P(n)r as the guidance for supervised learning, as indicated in (23), it is not possible for theα-
+VaR andα-ES values of the simulated price scenariosPG to improve on the sampling error of the empirical
+α-VaR andα-ES values estimated with then samples. In particular, ES is very sensitive to tail events, and
+the empirical estimate of ES may not be stable even with 10,000 samples. The second issue concerns the
+limited ability in generalization. A generator constructed via supervised learning tends to mimic the exact
+patterns in the input financial scenariosP(n)r , instead of generating new scenarios that are equally realistic
+compared to the input financial scenarios under the evaluation of the score function.
+To compare Tail-GAN with a generator trained by supervised learning according to (23), we use the
+sorting procedure in Section C.3 and use
+
+xk(⌊αn⌋), 1⌊αn⌋ P⌊αn⌋i=1 xk(i) to estimate the values ofα -VaR and
+20
+α -ES, where xk(n) ≥ . . .≥ xk(2) ≥ xk(1) are the PnL sorted from xk via the differentiable neural sorting
+architecture. We train the generator on synthetic / real price scenarios, with both multi-asset portfolio and
+dynamic strategies. The setting is similar toTail-GAN (described in Table 11), except that there is no
+discriminator.
+Figure 7 reports the convergence of in-sample errors, and Table 4 summarizes the out-of-sample errors
+of supervised learning and Tail-GAN. From Table 4, we observe that the relative error ofTail-GAN
+is 4.6%, which is a 30% reduction compared to the relative error of around 7.2% for supervised learning.
+Compared to (23), the advantage of using neural networks to learn the VaR and ES values, as designed
+in Tail-GAN, is that it memorizes information in previous iterations during the training procedure, and
+therefore the statistical bottleneck withn samples can be overcome when the number of iterations increases.
+Therefore, we conclude thatTail-GAN outperforms supervised learning in terms of simulation accuracy,
+demonstrating the importance of the discriminator.
+500 1000 1500 2000 2500 3000
+Epochs
+0.000
+0.025
+0.050
+0.075
+0.100
+0.125
+0.150
+0.175
+0.200In-Sample Error
+GOM
+Tail-GAN
+Figure 7: Training performance of supervised learning and Tail-GAN, as a function of the number of
+iterations in training. Grey horizontal line: average simulation error SE(1000). Dotted line: average
+simulation error plus one standard deviation. Each experiment is repeated five times with different random
+seeds. The performance is visualized with mean (solid lines) and standard deviation (shaded areas).
+Tail-GAN Supervised learning
+Out of sample error (%) 4.6 7.2
+(1.6) (0.2)
+Table 4: Mean and standard deviation (in parentheses) of relative errors for out-of-sample tests. Each
+experiment is repeated five times with different random seeds.
+Table 5 provides the generalization errors, under bothdq and ds, for Tail-GANand supervised learn-
+ing. We observe that under both criteria, the generalization error of supervised learning is twice that of
+Tail-GAN, implying thatTail-GAN has better generalization power, in addition to higher performance
+accuracy.
+21
+Error metric Tail-GAN Supervised learning
+dq
+0.214 0.581
+(0.178) (0.420)
+ds
+0.017 0.032
+(0.014) (0.026)
+Table 5: Mean (in percentage) and standard deviation (in parentheses) of generalization errors under both
+divergence functions (see their mathematical formulations in (21) and (22)). Results are averaged over 10
+repeated experiments (synthetic data sets).
+5.4 Scalability
+In practice many applications require simulation of scenarios for a large number of assets. We show that
+using eigenportfolios Avellaneda and Lee [2010], defined as L1-normalized principal components of the
+sample correlation matrix of returns, in the training phase is an effective way of extracting information
+on cross-asset dependence for high-dimensional data sets. The resulting eigenportfolios are uncorrelated
+by construction and their loss distributions provide a set of useful features for training, whose sizescales
+linearlywith the dimension of the data set. This idea mqkesTail-GANscalable to high-dimnensional data
+sets.
+We train Tail-GAN with eigenportfolios of 20 assets, and compare its performance withTail-GAN
+trained on 50 randomly generated portfolios.Tail-GAN with the eigenportfolios shows dominating per-
+formance, which is also comparable to simulation error (with the same number of samples). The detailed
+steps of the eigenportfolio construction are deferred to Appendix C.4.
+Data. To showcase the scalability ofTail-GAN, we simulate the price scenarios of 20 financial assets
+for a given correlation matrixρ, with different temporal patterns and tail behaviors in return distributions.
+Among these 20 financial assets, five of them have IID Gaussian returns, another five follow AR(1) models,
+another five follow GARCH(1, 1) with Gaussian noise, and the rest follow GARCH(1, 1) with heavy-tailed
+noise. Other settings are the same as in Section 5.1.
+Results. Figure 8 shows the percentage of explained variance of the principal components. We observe
+that the first principal component accounts for more than 23% of the total variation across the 20 asset
+returns.
+1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20
+Eigenvalue Order
+0.00
+0.05
+0.10
+0.15
+0.20
+0.25Explained Variance Ratio
+Figure 8: Explained variance ratios of eigenvalues.
+To identify and demonstrate the advantages of the eigenportfolios, we compare the following twoTail-
+GAN architectures
+22
+(1) Tail-GAN(Rand): GAN trained with 50 multi-asset portfolios and dynamic strategies,
+(2) Tail-GAN(Eig): GAN trained with 20 multi-asset eigenportfolios and dynamic strategies.
+The weights of static portfolios inTail-GAN(Rand) are randomly generated such that the absolute values
+of the weights sum up to one. The out-of-sample test consists ofK = 90 strategies, including 50 convex
+combinations of eigenportfolios (with weights randomly generated), 20 mean-reversion strategies, and 20
+trend-following strategies.
+Performance accuracy. Figure 9 reports the convergence of in-sample errors. Table 6 summarizes the
+out-of-sample errors and shows thatTail-GAN(Eig) achieves better performance thanTail-GAN(Rand)
+with fewer number of portfolios.
+Figure 9: Training performance on 50 random portfolios vs 20 eigenportfolios as described in Section 5.4:
+mean of relative error RE(1000) and standard deviation (shaded areas). Grey horizontal line: average
+simulation error. Dotted line: average simulation error plus one standard deviation. Each experiment is
+repeated five times with different random seeds. The performance is reported with mean (solid lines) and
+standard deviation (shaded areas).
+HSM Tail-GAN(Rand) Tail-GAN(Eig)
+OOS Error (%) 3.5 10.4 6.9
+(2.3) (1.8) (1.5)
+Table 6: Mean and standard deviation (in parentheses) for relative errors in out-of-sample tests. Each
+experiment is repeated five times with different random seeds.
+6 Application to simulation of intraday market scenarios
+We train Tail-GAN on intraday high-frequency Nasdaq ITCH data for the following five stocks: AAPL,
+AMZN, GOOG, JPM, QQQ from the LOBSTER3 database for the time interval 10:00AM-3:30PM, from
+2019-11-01 to 2019-12-06.
+The mid-prices (average of the best bid and ask prices) of these assets are sampled at a∆ = 9-second
+frequency, withT = 100 for each price series representing a financial scenario during a 15-minute interval.
+We sample the 15-minute paths every one minute, leading to an overlap of 14 minutes between two adjacent
+3https://lobsterdata.com/
+23
+paths4. The architecture and configurations are the same as those reported in Table 11 in Appendix C.2,
+except that the training period here is from 2019-11-01 to 2019-11-30, and the testing period is the first
+week of 2019-12. Thus, the size of the training data isN = 6300. Table 7 reports the 5%-VaR and 5%-ES
+values of several strategies calculated with the market data of AAPL, AMZN, GOOG, JPM, and QQQ.
+Static buy-and-hold Mean-reversion Trend-following
+VaR ES VaR ES VaR ES
+AAPL -0.351 -0.548 -0.295 -0.479 -0.316 -0.485
+AMZN -0.460 -0.720 -0.398 -0.639 -0.399 -0.628
+GOOG -0.316 -0.481 -0.272 -0.426 -0.273 -0.419
+JPM -0.331 -0.480 -0.275 -0.419 -0.290 -0.427
+QQQ -0.254 -0.384 -0.202 -0.321 -0.210 -0.328
+Table 7: Empirical VaR and ES values for trading strategies evaluated on the training data.
+Performance accuracy. Figure 10 reports the convergence of in-sample errors and Table 8 summarizes
+the out-of-sample errors.
+5000 10000 15000 20000 25000 30000
+Epochs
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8In-Sample Error
+Tail-GAN-Raw
+Tail-GAN-Static
+Tail-GAN
+Figure 10: Training performance: relative errorRE(1000) with 1000 samples. Grey horizontal line: average
+simulation error SE(1000). Dotted line: average simulation error plus one standard deviation. Each
+experiment is repeated 5 times with different random seeds. The performance is visualized with mean
+(solid lines) and standard deviation (shaded areas).
+“Oracle” HSM Tail-GAN-Raw Tail-GAN-Static Tail-GAN WGAN
+Out of sample 2.4 10.4 112.8 75.8 10.1 26.9
+Error (%) (1.6) (3.6) (7.8) (8.0) (1.1) (1.7)
+Table 8: Mean and standard deviation (in parentheses) for relative errors in out-of-sample tests. “Oracle”
+represents the sampling error of the testing data. Each experiment is repeated five times with different
+random seeds.
+We draw the following conclusions from the results of Figure 10 and Table 8.
+• For the evaluation criterionRE(1000) based on in-sample data (see Figure 10), all three GAN gener-
+ators, Tail-GAN-Raw, Tail-GAN-Static and Tail-GAN, converge within 20,000 epochs and reach
+in-sample errors smaller than 5%.
+4Tail-GANare also trained on market data with no time overlap and the conclusions are similar.
+24
+• For the evaluation criterionRE(1000), with both static portfolios and dynamic strategies based on
+out-of-sample data (Table 8), onlyTail-GANconverges to an error of 10.1%, whereas the other two
+Tail-GAN variants fail to capture the temporal information in the input price scenarios.
+• The HSM method comes close with an error of 10.4% and WGAN reaches an error of 26.9%. As
+expected, all methods attain higher errors than the sampling error of the testing data (denoted by
+“oracle” in Table 8).
+10 3
+ 10 2
+ 10 1
+ 100
+ (log scale)
+-1.0
+0.0
+AAPL
+-quantile (log scale)
+Static buy-and-hold
+10 3
+ 10 2
+ 10 1
+ 100
+ (log scale)
+-1.0
+0.0
+1.0
+Mean-reversion
+10 3
+ 10 2
+ 10 1
+ 100
+ (log scale)
+-10.0
+-1.0
+0.0
+1.0
+Trend-following
+Market Data
+Tail-GAN-Raw
+Tail-GAN-Static
+Tail-GAN
+WGAN
+Figure11: Tailbehaviorviatheempiricalrank-frequencydistributionofthestrategyPnL(basedonAAPL).
+The columns represent the strategy types.
+To study the tail behavior of the intraday scenarios, we implement the same rank-frequency analysis as
+in Section 5.1. For the AAPL stock, we draw the following conclusions from Figure 11.
+• All three Tail-GANgenerators are able to capture the tail properties of static single-asset portfolio
+for quantile levels above 1%.
+• For the PnL distribution of the dynamic strategies, onlyTail-GANis able to generate scenarios with
+comparable (tail) PnL distribution. That is, only scenarios sampled fromTail-GAN can correctly
+describe the risks of the trend-following and the mean-reversion strategies.
+• Tail-GAN-Raw andTail-GAN-Static underestimate the risk of loss from the mean-reversion strat-
+egy at theα = 5% quantile level, and overestimate the risk of loss from the trend-following strategy
+at the α = 5% quantile level.
+• While WGAN can effectively generate scenarios that align with the bulk of PnL distributions (e.g.
+above 10%-quantile), it fails to accurately capture the tails, usually resulting in underestimation of
+risks.
+Note that some of the blue curves corresponding to the market data (almost) coincide with the red curves
+corresponding to Tail-GAN, indicating a promising performance ofTail-GANto capture the tail risk of
+various trading strategies. See Figure 17 in Appendix D for the results for other assets.
+Learning temporal and cross-correlation patterns. Figures 12 and 13 present the in-sample cor-
+relation and auto-correlation patterns of the market data (Figures 12(a) and 13(a)), and simulated data
+from Tail-GAN-Raw (Figures 12(b) and 13(b)),Tail-GAN-Static (Figures 12(c) and 13(c)),Tail-GAN
+(Figures 12(d) and 13(d)) and WGAN (Figures 12(e) and 13(e)).
+AsshowninFigures12and13, Tail-GANtrainedondynamicstrategieslearnstheinformationoncross-
+asset correlations more accurately thanTail-GAN-Raw and WGAN, which are trained on raw returns.
+25
+0.00 (0.00)
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+(a) Market data.
+13.26 (2.37)
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0 (b) Tail-GAN-Raw.
+1.57 (0.87)
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0 (c) Tail-GAN-Static.
+1.13 (0.78)
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0 (d) Tail-GAN.
+7.54 (0.80)
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0 (e) WGAN.
+Figure 12: Cross-asset correlations of the price increments in the market data and from different trained
+GAN models (1) Tail-GAN-Raw, (2) Tail-GAN-Static, (3) Tail-GAN, and (4) WGAN. Numbers on
+the top: mean and standard deviation (in parentheses) of the sum of the absolute difference between the
+correlation coefficients computed with all training samples and 1,000 generated samples.
+0 2 4 6 8 10
+Lags
+0.2
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0 0.00 (0.00)
+AAPL
+AMZN
+GOOG
+JPM
+QQQ
+(a) Market data.
+0 2 4 6 8 10
+Lags
+0.2
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0 2.51 (0.30)
+AAPL
+AMZN
+GOOG
+JPM
+QQQ (b) Tail-GAN-Raw.
+0 2 4 6 8 10
+Lags
+0.2
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0 2.13 (0.21)
+AAPL
+AMZN
+GOOG
+JPM
+QQQ (c) Tail-GAN-Static.
+0 2 4 6 8 10
+Lags
+0.2
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0 2.33 (0.50)
+AAPL
+AMZN
+GOOG
+JPM
+QQQ (d) Tail-GAN.
+0 2 4 6 8 10
+Lags
+0.2
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0 1.86 (0.18)
+AAPL
+AMZN
+GOOG
+JPM
+QQQ (e) WGAN.
+Figure 13: Auto-correlations of the price increments from different trained GAN models: (1)Tail-GAN-
+Raw, (2) Tail-GAN-Static, (3) Tail-GAN, and (4) WGAN. Numbers on the top: mean and standard
+deviation (in parentheses) of the sum of the absolute element-wise difference between auto-correlation
+coefficients computed with all training samples and 1,000 generated samples.
+5000 10000 15000 20000 25000 30000
+Epochs
+10 1
+100
+In-Sample Error
+Tail-GAN(Rand)
+Tail-GAN(Eig)
+Figure 14: Training performance on 50 random portfolios vs 20 eigenportfolios, as in Section 5.4: mean of
+relative error RE(1000) and standard deviation (shaded areas). Grey horizontal line: average simulation
+error. Dotted line: average simulation error plus one standard deviation. Each experiment is repeated 5
+times with different random seeds.
+26
+Scalability. To test the scalability property ofTail-GAN on realistic scenarios, we conduct a similar
+experiment as in Section 5.4. The stocks considered here include the top 20 stocks in the S&P500 index.
+The training period is between 2019-11-01 and 2019-11-30.
+Using eigenportfolios improves the convergence of in-sample errors, shown in Figure 14, and decreases
+out-of-sample errors, reported in Table 9, with fewer training portfolios.
+“Oracle” HSM Tail-GAN(Rand) Tail-GAN(Eig)
+Out of sample 2.2 25.9 31.0 25.6
+Error (%) (1.7) (5.1) (1.0) (1.0)
+Table 9: Mean and standard deviation (in parentheses) for relative errors in out-of-sample tests. “Oracle”
+represents the sampling error of the testing data. Each experiment is repeated five times with different
+random seeds.
+The codes associated with the experiments can be found at: https://github.com/chaozhang-ox/
+Tail-GAN.
+7 Conclusion
+We have introduced a novel data-driven methodology for the accurate simulation of “tail risk” scenarios
+for high-dimensional multi-asset portfolios. Through detailed numerical experiments, we have illustrated
+the adequate performance of the algorithms compared to other generative models; in particular, we have
+demonstrated thatTail-GANcorrectly captures the tail risks for a broad class of trading strategies in and
+out of sample.
+Our proposed framework lends itself to various generalizations which are worthy of exploring. One
+important extension is to use data other than price histories as inputs; for example, joint information from
+prices and the limit order book (Cont et al. [2023]) may be used to enable the generation of high-frequency
+financial scenarios which lead to realistic profit/loss distributions for commonly used high-frequency trading
+strategies.
+References
+Carlo Acerbi. Spectral measures of risk: A coherent representation of subjective risk aversion.Journal of Banking
+& Finance, 26(7):1505–1518, 2002.
+Carlo Acerbi and Balazs Szekely. Back-testing expected shortfall.Risk, 27(11):76–81, 2014.
+Luigi Ambrosio, Luis A Caffarelli, Yann Brenier, Giuseppe Buttazzo, Cedric Villani, Sandro Salsa, Luigi Ambro-
+sio, and Aldo Pratelli. Existence and stability results in the l 1 theory of optimal transportation.Optimal
+Transportation and Applications: Lectures given at the CIME Summer School, held in Martina Franca, Italy,
+September 2-8, 2001, pages 123–160, 2003.
+Martin Arjovsky, Soumith Chintala, and Léon Bottou. Wasserstein generative adversarial networks. InInternational
+conference on machine learning, pages 214–223. PMLR, 2017.
+Sanjeev Arora, Rong Ge, Yingyu Liang, Tengyu Ma, and Yi Zhang. Generalization and equilibrium in generative
+adversarial nets (gans). InInternational Conference on Machine Learning, pages 224–232. PMLR, 2017.
+Marco Avellaneda and Jeong-Hyun Lee. Statistical arbitrage in the US equities market.Quantitative Finance, 10
+(7):761–782, 2010.
+Bank for International Settlements. Minimum capital requirements for market risk.
+https://www.bis.org/bcbs/publ/d457.pdf, 2019.
+Aharon Ben-Tal and Marc Teboulle. An old-new concept of convex risk measures: the optimized certainty equivalent.
+Mathematical Finance, 17(3):449–476, 2007.
+Siddharth Bhatia, Arjit Jain, and Bryan Hooi. ExGAN: Adversarial Generation of Extreme Samples.arXiv preprint
+arXiv:2009.08454, 2020.
+Hans Buehler, Blanka Horvath, Terry Lyons, Imanol Perez Arribas, and Ben Wood. Generating financial markets
+with signatures. RISK, 2021.
+27
+Xi Chen, Yan Duan, Rein Houthooft, John Schulman, Ilya Sutskever, and Pieter Abbeel. Infogan: Interpretable
+representation learning by information maximizing generative adversarial nets.Advances in Neural Information
+Processing Systems, 29, 2016.
+Rama Cont, Romain Deguest, and Xue Dong He. Loss-based risk measures.Statistics and Risk Modeling, 30(2):
+133–167, 2013. URL https://doi.org/10.1524/strm.2013.1132.
+Rama Cont, Mihai Cucuringu, Jonathan Kochems, and Felix Prenzel. Limit order book simulation with generative
+adversarial networks.Available at SSRN 4512356, 2023.
+Francis X Diebold and Robert S Mariano. Comparing predictive accuracy.Journal of Business & Economic Statistics,
+20(1):134–144, 2002.
+William Fedus, Ian Goodfellow, and Andrew M Dai. MaskGAN: Better text generation via filling in the_.arXiv
+preprint arXiv:1801.07736, 2018.
+Tobias Fissler and Johanna F Ziegel. Higher order elicitability and Osband’s principle.Annals of Statistics, 44(4):
+1680–1707, 2016.
+Tobias Fissler, Johanna F Ziegel, and Tilmann Gneiting. Expected shortfall is jointly elicitable with value at risk-
+implications for backtesting.RISK, December 2015.
+Hans Föllmer and Alexander Schied. Convex measures of risk and trading constraints.Finance and Stochastics, 6
+(4):429–447, 2002.
+RaoFu, JieChen, ShutianZeng, YipingZhuang, andAgusSudjianto. Timeseriessimulationbyconditionalgenerative
+adversarial net. International Journal of Neural Networks and Advanced Applications, 7:25–38, 2020.
+Paul Glasserman. Monte Carlo methods in financial engineering. Springer, 2003.
+Tilmann Gneiting. Making and evaluating point forecasts.Journal of the American Statistical Association, 106(494):
+746–762, 2011.
+Ian Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley, Sherjil Ozair, Aaron Courville,
+and Yoshua Bengio. Generative adversarial nets. Advances in Neural Information Processing Systems, 27:
+2672–2680, 2014.
+Aditya Grover, Eric Wang, Aaron Zweig, and Stefano Ermon. Stochastic optimization of sorting networks
+via continuous relaxations. In International Conference on Learning Representations, 2019. URL https:
+//openreview.net/forum?id=H1eSS3CcKX.
+Ravi Kumar Kolla, LA Prashanth, Sanjay P Bhat, and Krishna Jagannathan. Concentration bounds for empirical
+conditional value-at-risk: The unbounded case.Operations Res. Lett., 47(1):16–20, 2019.
+Adriano Koshiyama, Nick Firoozye, and Philip Treleaven. Generative adversarial networks for financial trading
+strategies fine-tuning and combination.Quantitative Finance, pages 1–17, 2020.
+Paul Kupiec. Techniques for verifying the accuracy of risk measurement models.Journal of Derivatives, 3(2), 1995.
+Shigeo Kusuoka. On law invariant coherent risk measures. InAdvances in Mathematical Economics, pages 83–95.
+Springer, 2001.
+Jing Lei. Convergence and concentration of empirical measures under wasserstein distance in unbounded functional
+spaces. Bernoulli, 26(1):767–798, 2020.
+Junyi Li, Xintong Wang, Yaoyang Lin, Arunesh Sinha, and Michael Wellman. Generating realistic stock market
+order streams. AAAI Conference on Artificial Intelligence, 34(01):727–734, 2020.
+Shujian Liao, Hao Ni, Marc Sabate-Vidales, Lukasz Szpruch, Magnus Wiese, and Baoren Xiao. Sig-Wasserstein
+GANs for conditional time series generation.Mathematical Finance, 34(2):622–670, 2024. doi: https://doi.org/
+10.1111/mafi.12423. URL https://onlinelibrary.wiley.com/doi/abs/10.1111/mafi.12423.
+Yulong Lu and Jianfeng Lu. A universal approximation theorem of deep neural networks for expressing probability
+distributions. Advances in Neural Information Processing Systems, 33:3094–3105, 2020.
+Mehdi Mirza and Simon Osindero. Conditional generative adversarial nets.arXiv:1411.1784, 2014.
+Wlodzimierz Ogryczak and Arie Tamir. Minimizing the sum of the k largest functions in linear time.Information
+Processing Letters, 85(3):117–122, 2003.
+Georg Ostrovski, Will Dabney, and Rémi Munos. Autoregressive quantile networks for generative modeling. In
+International Conference on Machine Learning, pages 3936–3945. PMLR, 2018.
+LA Prashanth, Krishna Jagannathan, and Ravi Kumar Kolla. Concentration bounds for cvar estimation: The cases of
+light-tailed and heavy-tailed distributions. InInternational Conference on Machine Learning, pages 5577–5586,
+2020.
+Alec Radford, Luke Metz, and Soumith Chintala. Unsupervised representation learning with deep convolutional
+generative adversarial networks.arXiv preprint arXiv:1511.06434, 2015.
+28
+Robert J Serfling.Approximation theorems of mathematical statistics. John Wiley & Sons, 2009.
+Shuntaro Takahashi, Yu Chen, and Kumiko Tanaka-Ishii. Modeling financial time-series with generative adversarial
+networks. Physica A: Statistical Mechanics and its Applications, 527:121261, 2019.
+Aäron van den Oord, Sander Dieleman, Heiga Zen, Karen Simonyan, Oriol Vinyals, Alex Graves, Nal Kalchbrenner,
+Andrew Senior, and Koray Kavukcuoglu. Wavenet: A generative model for raw audio. In9th ISCA Workshop
+on Speech Synthesis Workshop (SSW 9), page 125, 2016.
+Milena Vuletić and Rama Cont.VolGAN: a generative model for arbitrage-free implied volatility surfaces.Applied
+Mathematical Finance, to appear, 2024.
+Milena Vuletić, Felix Prenzel, and Mihai Cucuringu. Fin-gan: Forecasting and classifying financial time series via
+generative adversarial networks.Available at SSRN 4328302, 2023.
+Stefan Weber. Distribution-invariant risk measures, information, and dynamic consistency.Mathematical Finance,
+16(2):419–441, 2006.
+Magnus Wiese, Robert Knobloch, Ralf Korn, and Peter Kretschmer. Quant GANs: Deep generation of financial time
+series. Quantitative Finance, pages 1–22, 2020.
+Jinsung Yoon, Daniel Jarrett, and Mihaela van der Schaar. Time-series generative adversarial networks.Advances
+in Neural Information Processing Systems, 32:5508–5518, 2019.
+Yizhe Zhang, Zhe Gan, Kai Fan, Zhi Chen, Ricardo Henao, Dinghan Shen, and Lawrence Carin. Adversarial feature
+matching for text generation.arXiv preprint arXiv:1706.03850, 2017.
+29
+For better clarity in explaining the theoretical results, we introduce the pushforward mapping. Given
+measurable spaces (X1, Σ1) and (X2, Σ2), a measurable mapping Φ : X1 → X2 and a measure µ : Σ 1 →
+[0, +∞], the pushforward ofµ is defined to be the measureΦ#µ given by, for anyB ∈ Σ2,
+Φ#µ(B) = µ
+
+Φ−1(B). (24)
+For example,Πk#Pr denotes the distribution ofΠk(p) under Pr.
+A Equivalence between bi-level optimization and max-min game
+Here, we provide the details underlying Theorem 3.8, which establishes the equivalence between the bi-level
+optimization problem and the corresponding max-min game.
+To start, ideally, the discriminatorD takes strategy PnL distributions as inputs, and outputs two values
+for each of theK strategies, aiming to provide the correct(VaRα, ESα). Mathematically, this amounts to
+D
+∗
+∈ arg min
+D
+1
+K
+KX
+k=1
+Ep∼Pr
+
+Sα
+
+
+VaR and ES prediction from D
+z }| {
+D( Π k#Pr| {z }
+strategy PnL distribution
+) ;p
+
+
+
+ . (25)
+Bi-level optimization problem. We first start with a theoretical version of the objective function to
+introduce some insights and then provide the practical sample-based version for training. Given two classes
+of functions G := {G : RNz → Ω} and D := {D : P(R) → R2}, our goal is to find a generatorG∗ ∈ G and
+a discriminator D
+∗
+∈ D via the following bi-level (or constrained) optimization problem
+G
+∗
+∈ arg min
+G∈G
+1
+K
+KX
+k=1
+Ep∼Pr
+h
+Sα
+
+D
+∗ Πk#PG, Πk(p)i , (26)
+where PG ∈ P(Ω) is the distribution of the samples fromG and
+D
+∗
+∈ arg min
+D∈D
+1
+K
+KX
+k=1
+Ep∼Pr
+h
+Sα
+
+D
+ 
+Πk#Pr, Πk(p)i . (27)
+In the bi-level optimization problem (26)-(27), the discriminatorD
+∗
+aims to map the PnL distribution to
+the associated α-VaR andα-ES values. Given the definition of the score function and the joint elicitability
+property of VaR and ES, we haveD
+∗
+(·) := (VaRα, ESα)(·) according to (5). Assume D
+∗
+solves (27), the
+generator G
+∗
+∈ G in (26) aims to map the noise input to a price scenario that hasconsistent VaR and ES
+values of the strategy PnLs applied toPr.
+From bi-level optimization to max-min game.In practice, constrained optimization problems are
+difficult to solve, and one can instead relax the constraint by applying the Lagrangian relaxation method
+with a dual parameterλ >0, leading to a max-min game between two neural networksD and G,
+max
+D∈D0
+min
+G∈G
+1
+K
+KX
+k=1
+"
+Ep∼Pr
+h
+Sα
+
+D
+ 
+Πk#PG, Πk(p)i − λ Ep∼Pr hSαD(Πk#Pr), Πk(p)i #, (28)
+where
+D0 :=
+n
+D : P(R) → R2 and ∃µ ∈ P(Ω) with a finite first moment s.t.
+D(Πk#µ) = (VaRα(Πk, Pr), ESα(Πk, Pr)), k= 1, 2, · · ·, Ko (29)
+is a smaller set of discriminators such thatD0 ⊆ D. The set (29) of discriminators may be described as the
+set of mapsD : P(R) → R2 which can match the target VaR and ES values at least forsome probability
+measure µ on market scenarios. This is a feasibility constraint, which can be viewed as a “non-degeneracy”
+or expressibility requirement on the mapD and excludes trivial cases such as constant maps etc.
+30
+Theorem A.1 (Equivalence of the Formulations). Set Nz = M × T. Assume that Pz has a finite first
+moment and is absolutely continuous with respect to the Lebesgue measure. Then the max-min game(28)
+with D0 is equivalent to the bi-level optimization problem(26)-(27) for any λ >0.
+The proof of Theorem A.1 is deferred to Appendix B.4.
+B Technical proofs
+B.1 Proof of Proposition 2.2
+Proof of Proposition 2.2.First we check the elicitability condition forH1(v) and H2(e) on region B. When
+H2(e) = α2 e2, we haveH ′2(e) = α eand H ′′2 (e) = α. For any(v, e) ∈ B, this amounts to
+∂Rα(v, e)
+∂v = e − Wαv ≥ 0,
+where Rα(v, e) is defined in (3).
+Recall the score functionSα(v, e, x) defined in (7), andsα(v, e) defined in (6). Then
+sα(v, e) = −(µ(X ≤ v) − α) Wα2 v2 + Wα2 Z v−∞ x2µ(dx) + µ(X ≤ v)v e
+−e
+Z v
+−∞
+xµ(dx) + αe
+ e
+2 − v
+
++const.
+Therefore,
+∂sα
+∂v (v, e) =
+
+µ(X ≤ v) − α
+
+(−Wαv + e) ,
+∂sα
+∂e (v, e) = µ(X ≤ v)v −
+Z v
+−∞
+xµ(dx) + α(e − v).
+And hence
+∂2sα
+∂v 2 (v, e) = µ(dv)dv (−Wαv + e) − Wα(µ(X ≤ v) − α),
+∂2sα
+∂e2 (v, e) = α, ∂2sα∂e∂v (v, e) = µ(X ≤ v) − α.
+Since µ(X∈dv)dv ≥ 0 and −Wαv + e >0 hold on regionB, we have
+∂2sα
+∂v 2 (v, e) ≥ −Wα(µ(X ≤ v) − α), on B.
+Therefore ∂2sα∂v 2 (v, e) ≥ 0 holds since v ≤ VaRα(µ) on region B. Next when (v, e) ∈ B,
+∂2sα
+∂v 2
+∂2sα
+∂e2 −
+ ∂2sα
+∂v∂e
+2
+= α µ(X ∈ dv)dv (−Wαv + e) − αWα(µ(X ≤ v) − α) − (µ(X ≤ v) − α)2
+≥ (α − µ(X ≤ v))(αWα − α + µ(X ≤ v)) (30)
+≥ (α − µ(X ≤ v))µ(X ≤ v) ≥ 0. (31)
+Note that (30) holds since−Wαv + e ≥ 0, and (31) holds sinceWα ≥ 1 and µ(X ≤ v) ≤ α on B. Therefore
+∇2 sα is positive semi-definite on the regionB.
+In addition, when condition (8) holds, we show thatsα(v, e) is positive semi-definite oneB.
+Denote eB1 = eB ∩(v, e) ∈ R2 | v ≤ VaRα(µ)	 and eB2 = eB ∩ {(v, e) ∈ R2|v > VaRα(µ)}. Then
+eB1 ∪ eB2 = eB and eB1 ∩ eB2 = ∅. The positive semi-definite property for∇2sα on eB1 follows a similar proof
+as above.
+31
+We only need to show that∇2sα is positive semi-definite oneB2. In this case, we have
+∂2sα
+∂v 2 (v, e) = µ(dv)dv   − Wαv + e − Wα(µ(X ≤ v) − α)
+≥ δα zα − Wα(µ(X ≤ v) − α) ≥ 0, (32)
+which holds since δα zαWα + α ≥ βα + α ≥ µ(X ≤ v) on eB. In addition,
+∂2sα
+∂v 2
+∂2sα
+∂e2 −
+ ∂2sα
+∂v∂e
+2
+= α µ(dv)dv (−Wαv + e) − αWα(µ(X ≤ v) − α) − (µ(X ≤ v) − α)2
+≥ αδα zα + (µ(X ≤ v) − α)(−αWα + α − µ(X ≤ v)) (33)
+≥ αδα zα − βα(αWα + βα) ≥ 0. (34)
+Here (33) holds sinceµ(dv)dv ≥ δα and zα ≥ (−Wαv + e). (34) holds sinceµ(X ≤ v) ∈ (α, α+ βα] on eB2. To
+show (34), it suffices to show
+αδα zα − δα zα2Wα
+
+αWα + δα zα2Wα
+
+≥ 0, (35)
+since βα ≤ δα zα2Wα . Finally, (35) holds sinceWα > 1√α, δα ∈ (0, 1), and zα ∈  0, 12 − α. ■
+B.2 Proof of Theorem 3.4
+Proof of Theorem 3.4.Step 1.Consider the optimal transport problem in the semi-discrete setting: the
+source measurePz is continuous and the target measurePn is discrete. Under Assumption 3.2, we can write
+Pz(dx) = m(x)dx for some probability densitym. Pn is discrete and we can writePn = Pni=1 νiδyi for
+some {yi}ni=1 ⊂ Ω, νj ≥ 0 and Pnj=1 νj = 1. In this semi-discrete setting, the Monge’s problem is defined
+as
+inf
+Φ
+Z 1
+2 ∥x − Φ(x)∥2m(x)dx s.t.
+Z
+Φ−1(yj )
+dPz = νj, j = 1, 2, · · ·, n. (36)
+In this case, the transport map assigns each pointx ∈ Ω to one of theseyj. Moreover, by taking advantage
+of the discreteness of the measureν, one sees that the dual Kantorovich problem in the semi-discrete case
+is maximizing the following functional:
+F (ψ) = F (ψ1, · · ·, ψn) =
+Z
+inf
+j
+ 1
+2 ∥x − yj∥2 − ψj
+
+m(x)dx +
+nX
+j=1
+ψjνj. (37)
+The optimal Monge transport for (36) may be characterized by the maximizer of F. To see this, let
+us introduce the concept of power diagram. Given a finite set of points {yj}nj=1 ⊂ Ω and the scalars
+ψ = {ψj}nj=1, the power diagrams associated to the scalarsψ and the points{yj}nj=1 are the sets:
+Sj =
+
+x ∈ Ω
+ 12 ∥x − yj∥2 − ψj ≤ 12 ∥x − yk∥2 − ψk, ∀k ̸= j .
+By grouping the points according to the power diagramsSj, we have from (37) that
+F (ψ) =
+nX
+j=1
+h Z
+Sj
+ 1
+2 ∥x − yj∥2 − ψj
+
+m(x)dx + ψjνj
+i
+. (38)
+According to Theorem 4.2 in Lu and Lu [2020], the optimal transport planΦ to solve the semi-discrete
+Monge’s problem is given by
+Φ(x) = ∇ ¯ψ(x),
+32
+where ¯ψ(x) = max j{x · yj + mj} for some mj ∈ R. Specifically, Φ(x) = yj if x ∈ Sj(x). Here ψ =
+(ψ1, · · ·, ψn) is an maximizer ofF defined in (37) and{Sj}nj=1 denotes the power diagrams associated to
+{yj}nj=1 and ψ.
+Proposition 4.1 in Lu and Lu [2020] guarantees that there exists a feed-forward neural networkG(·; γ)
+with L = ⌈log n⌉fully connected layers of equal widthN = 2L and ReLU activation such that¯ψ(·) = G(·; γ).
+Step 2.Denote P(n)r (·) := 1n Pni=1 1{· = pi} as an empirical measure to approximatePr ∈ P(Ω) using
+n i.i.d. samples {pi}ni=1. Let {Πk(p[i])}ni=1 be the order statistics of{Πk(pi)}ni=1, i.e., Πk(p[1]) ≤ · · · ≤
+Πk(p[n]).
+Let ˆvkn,α and ˆekn,α denote the estimates of VaR and ES at levelα using the n samples above. These
+quantities are defined as follows (Serfling [2009]):
+ˆvkn,α = Π k(p[⌈αn⌉]), and
+ˆekn,α = 1n(1 − α) nXi=1 Πk(pi)1{Πk(pi) ≤ ˆvkn,α}.
+We first prove the result under the VaR criteria. According to Kolla et al. [2019, Proposition 2], with
+probability at least 12 it holds that
+ˆvkn,α − VaRα(Πk, Pr) ≤ r log(4)2nc , (39)
+where c = c(δk, ηk) is a constant that depends onδk and ηk, which are specified in AssumptionA3. Setting
+the RHS of (39) as ε, we have n = O(ε−2). Under this choice of n, we have ˆvkn,α − VaR(Πk, Pr) < ε
+holds with probability at least12. This implies that there must exist an empirical measureP(n)∗r such that
+the corresponding ˆvkn,α satisfies ˆvkn,α − VaR(Πk, Pr) < ε. P(n)∗r will be the target (empirical) measure we
+input in Step 1. Therefore setting n = O(ε−2) leads to the fact that L = ⌈log n⌉ = O(log(ε−2)) and
+N = 2 L = O(ε−2 log 2), which concludes the main result for the universal approximation under the VaR
+criteria.
+We next prove the result under the ES criteria. Under Assumptions 3.1 and 3.2, we have
+EPr
+h
+|Πk(p)|β
+i
+≤ (ℓk)βEPr
+h
+∥p∥β
+i
+< ∞. (40)
+Take n > 16 log(8)(ηkδk(1−α))2. Under (40) and AssumptionA3, with probability 12 it holds that
+ˆekn,α − ES(Πk, Pr) ≤
+
+5
+
+EPr [∥Πk(p)∥β]1/β − VaR(Πk, Pr)
+(1 − α)
+ 1
+n
+1− 1β p
+log(6) + 4ηk(1 − α)
+r
+log(8)
+n ,
+where ηk and δk are as defined inA3. The result in (41) is a slight modification of Prashanth et al. [2020,
+Theorem 4.1]. Setting the RHS of (41) as ε, we have n = O(ε− ββ−1 ). Under this choice of n, we haveˆekn,α − ES(Πk, Pr) < εholds with probability at least12. This implies that there must exist an empirical
+measure P(n)∗r such that ˆekn,α − ES(Πk, Pr) < εholds. P(n)∗r will be the target (empirical) measure we
+input in Step 1. Note that in this case,L = ⌈log n⌉ = O(log(ε− ββ−1 )) and N = 2L = O(ε− ββ−1 log 2), which
+concludes the main result for the universal approximation under the ES criterion. ■
+B.3 Proof of Theorem 3.7
+Proof of Theorem 3.7. Step 1 is the same as Theorem 3.4. It is sufficient to prove the corresponding Step
+2.
+Step 2.Denote P(n)r (·) := 1n Pni=1 1{· = pi} as an empirical measure to approximatePr ∈ P(Ω) using n
+i.i.d. samples {pi}ni=1. Denote Mβ := EPr [∥p∥β] < ∞. From Lei [2020, Theorem 3.1] we have
+EW1(µn, µ) ≤ cβMβn− 1(2β)∨(M ×T ) ∧(1− 1β )(log n)ζβ,M ×T , (41)
+33
+where cβ is a constant depending only onβ (not M × T)
+ζβ,M ×T =
+
+
+
+2 if M × T = β = 2,
+1 if “M × T ̸= 2 and β = M ×TM ×T −1 ∧ 2” or “β > M× T = 2”,
+0 otherwise.
+By Kantorovich duality, we have
+W1
+
+Πk#Pr, Πk#P(n)r
+
+= 1ℓ sup∥f ∥L≤ℓ Ep∼Pr hf (Πk(p))i − Eq∼P(n)r hf (Πk(q))i (42)
+≤ 1ℓ sup∥g∥L≤ℓℓk Ep∼Pr hg(p)i − Eq∼P(n)r hg(q)i (43)
+≤ ℓkW1
+
+Pr, P(n)r
+
+(44)
+where ∥ · ∥L is the Lipschitz norm. (43) holds sincef (Πk(·)) is ℓℓk-Lipschitz when f is ℓ-Lipschitz and Πk
+is ℓk-Lipschitz. (44) holds by Kantorovich duality.
+Taking expectation on (16) and applying (41) and (44), we have
+E
+ρ(Πk, Pr) − ρ(Πk, P(n)r ) ≤ LEW1Πk#Pr, Πk#P(n)r κ (45)
+≤ L
+
+E
+h
+W1
+
+Πk#Pr, Πk#P(n)r
+i κ
+(46)
+≤ L
+
+ℓkcβMβn− 12∨M ×T ∧(1− 1β )(log n)ζβ,M ×T κ, (47)
+where (46) holds by Jensen’s inequality sinceκ ∈ (0, 1].
+(45) implies that there must exist an empirical measureP(n)∗r such that ρ(Πk, Pr) − ρ(Πk, P(n)r ) < ε
+holds. This P(n)∗r will be the target (empirical) measure we input in Step 1.
+It is easy to check that
+• 12∨(M ×T ) ∧ (1 − 1β ) = 1 − 1β when M = T = 1 and 1 < β≤ 2;
+• 12∨(M ×T ) ∧ (1 − 1β ) = 12 when M = T = 1 and β ≥ 2;
+• 12∨(M ×T ) ∧ (1 − 1β ) = 1M ×T when M × T ≥ 2 and 1M ×T + 1β < 1;
+• 12∨(M ×T ) ∧ (1 − 1β ) = 1 − 1β when M × T ≥ 2 and 1M ×T + 1β ≥ 1.
+This concludes the universal approximation result under risk measures that are Hölder continuous. ■
+B.4 Proof of Theorem A.1
+Proof of Theorem A.1.For anyD ∈ D0, there existsµ := µ(D) ∈ P(Ω) with finite first moment such that
+D(Πk#µ) = VaRα(Πk, Pr), ESα(Πk, Pr), ∀k = 1, 2, · · ·, K. (48)
+Denote Σ(D)asthesetofallsuch µ ∈ P(Ω)withfinitefirstmomentthatsatisfies(48). Thengiventhatboth
+µ ∈ Σ(D)and Pz have finite first moments and thatPz is absolutely continuous with respect to the Lebesgue
+measure, we could find a mappingG ∈ G such thatG#Pz ∈ Σ(D) so thatEp∼Pr
+h
+Sα
+
+D
+ 
+Πk#PG, Πk(p)i
+is minimized (Theorem 7.1 in Ambrosio et al. [2003]). That is,
+min
+G∈G
+1
+K
+KX
+k=1
+Ep∼Pr
+h
+Sα
+
+D
+ 
+Πk#PG, Πk(p)i = 1K KXk=1 Ep∼Pr h SαVaRα(Πk, Pr), ESα(Πk, Pr), Πk(p)i .
+34
+In this case, for the maximization problem ofD over D0,
+(28) = max
+D∈D0
+1
+K
+KX
+k=1
+"
+Ep∼Pr
+h
+Sα
+
+VaRα(Πk, Pr), ESα(Πk, Pr), Πk(p)i − λ Ep∼Pr hSαD(Πk#Pr), Πk(p)i #
+= −λ min
+D∈D0
+1
+K
+KX
+k=1
+Ep∼Pr
+h
+Sα
+
+D(Πk#Pr), Πk(p)i .
+By the definition ofD0, we have
+min
+D∈D0
+1
+K
+KX
+k=1
+Ep∼Pr
+h
+Sα
+
+D(Πk#Pr), Πk(p)i
+= 1K KXk=1 Ep∼Pr hSαVaRα(Πk, Pr), ESα(Πk, Pr), Πk(p)i
+= min
+D∈D
+1
+K
+KX
+k=1
+Ep∼Pr
+h
+Sα
+
+D(Πk#Pr), Πk(p)i ,
+which is equivalent to (27). Denote this minimizer asD
+∗
+, plugging this into the optimization problem for
+G in the max-min game leads to the upper-level optimization problem (26). ■
+C Implementation details
+C.1 Setup of parameters in the synthetic data set
+Mathematically, for any given time t ∈ [0, T], we first sample ut = ( u1,t, . . . , u5,t)⊤ ∼ N(0, Σ) with
+covariance matrix Σ ∈ R5×5, v1,t ∼ χ2(ν1) and v2,t ∼ χ2(ν2). Here v1,t, v2,t are independent of ut.
+We then calculate the price increments according to the following equations
+∆p1,t = u1,t, ∆p2,t = ϕ1∆p2,t−1 + u2,t, ∆p3,t = ϕ2∆p3,t−1 + u3,t,
+∆p4,t = ε4,t = σ4,tη1,t, ∆p5,t = ε5,t = σ5,tη2,t,
+where σ24,t = γ4 + κ4ε24,t−1 + β4σ24,t−1, η1,t = u4,t√v1,t/ν1 , and σ25,t = γ5 + κ5ε25,t−1 + β5σ25,t−1, η2,t = u5,t√v2,t/ν2.
+We set T = 100 as the number of observations over one trading day. We first generate a correlation
+matrix ρ with elements uniformly sampled from[0, 1]. We then sample the annualized standard deviationss
+with values between0.3 and 0.5, and setΣij = si255×T sj255×T ρij (i, j= 1, 2, . . . ,5); ϕ1 = 0.5 and ϕ2 = −0.15;
+ν1 = 5 and ν2 = 10; κ4 and κ5 are sampled uniformly from [0.08, 0.12];β4 and β5 are sampled uniformly
+from [0.825, 0.875]; and finallyγ4 and γ5 are sampled uniformly from [0.03, 0.07]. We choose one quantile
+α = 0.05 for this experiment.
+Table 10 reports the 5%-VaR and 5%-ES values of several strategies calculated with the synthetic
+financial scenarios designed above.
+Static buy-and-hold Mean-reversion Trend-following
+VaR ES VaR ES VaR ES
+Gaussian -0.489 -0.615 -0.432 -0.553 -0.409 -0.515
+AR(1) with ϕ1 = 0.5 -0.876 -1.100 -0.850 -1.066 -0.671 -0.829
+AR(1) with ϕ2 = −0.12 -0.461 -0.581 -0.399 -0.513 -0.387 -0.488
+GARCH(1,1) with t(5) -0.480 -0.603 -0.420 -0.535 -0.400 -0.501
+GARCH(1,1) with t(10) -0.403 -0.507 -0.354 -0.453 -0.328 -0.410
+Table 10: Empirical VaR and ES values for trading strategies evaluated on the training data.
+35
+C.2 Setup of the configuration
+Configuration Values
+Discriminator
+Architecture Fully-connected layers
+Activation Leaky ReLU
+Number of neurons in each layer (1000, 256, 128, 2)
+Learning rate 10−7
+Dual parameter (λ) 1
+Batch normalization No
+Generator
+Architecture Fully-connected layers
+Activation Leaky ReLU
+Number of neurons in each layer (1000, 128, 256, 512, 1024,5 × 100)
+Learning rate 10−6
+Batch normalization Yes
+Strategies
+Static portfolio with single asset 5
+Static portfolio with multiple assets 50
+Mean-reversion strategies 5
+Trend-following strategies 5
+Additional parameters
+Size of training data (N) 50,000
+Number of PnL samples (NB) 1,000
+Noise dimension (Nz) 1,000
+Noise distribution t(5)
+H1, H2 H1(v) = −5v2, H2(e) = α2 e2
+Table 11: Network architecture configuration.
+Discussion on the configuration.
+• Choice ofλ: Theorem A.1 suggests thatTail-GANis effective as long asλ >0. In our experiments,
+we setλ = 1 and also tested values of 2, 10, and 100 to address the issue of hyper-parameter selection.
+We observed thatλ = 2 and λ = 10 resulted in a similar performance toλ = 1, while larger values
+such as λ = 100 led to a worse performance similar to that of the supervised learning method. This
+may be due to the fact that largerλ values could potentially harm the model’s generalization power
+in practical settings.
+• Choice of Sα (H1 and H2): Proposition 2.2 demonstrates that choosingH1 and H2 as quadratic
+functions (as proposed in Acerbi and Szekely [2014]) results in a positive semi-definite score function
+in a neighborhood region around the global minimum. This evidence supports selecting quadratic
+functions for H1 and H2.
+• Neural network architecture:Theorem 3.4 implies that a feed-forward neural network with fully
+connected layers of equal width and ReLU activation is capable of generating financial scenarios that
+are arbitrarily close to the scenarios sampled from the true distributionPr under VaR and ES criteria.
+This sheds light on using a simple network architecture such as multi-layer perceptron (MLP) in the
+training of Tail-GAN.
+While a more sophisticated neural network architecture may improve practical performance, our
+focus is not to compare different architectures, but rather to demonstrate the benefits of incorporating
+the essential component of tail risks of trading strategies into ourTail-GANframework. Therefore,
+we choose to use a simple MLP, the same architecture used in Wasserstein GAN (Arjovsky et al.
+[2017]).
+36
+C.3 Differentiable neural sorting
+Discriminator of Tail-GAN 
+VaR & ES
+ 
+PnLs
+ 
+Neural Sorting
+Ranked PnLs
+...
+Neural Network
+Figure 15: Architecture of theTail-GAN discriminator.
+The architecture of theTail-GAN Discriminator has two key ingredients, as depicted in Figure 15. For
+the first ingredient, a differentiable sorting algorithm proposed by Grover et al. [2019] is employed to rank
+the PnLs. The second part adopts a standard neural network architecture, taking the ranked PnLs as the
+input, and providing the estimatedα-VaR andα-ES values as the output.
+We follow the design in Grover et al. [2019] to include the differentiable sorting architecture, so that the
+input of the discriminator will be the ranked PnL’s (sorted in decreasing order). This design, based on the
+idea of using thesoft-max operator to approximate thearg-max operator, enables back-propagation of
+the gradient of the sorting function during the network training process.
+Denote xk = ( xk1, xk2, . . . , xkn)⊤ as a real-valued vector of lengthn, representing the PnL samples of
+strategy k. Let B(xk) denote the matrix of absolute pairwise differences of the elements ofxk, such that
+Bi,j(xk) = |xki − xkj |. We then define the following permutation matrixΓ(xk) following Grover et al. [2019],
+Ogryczak and Tamir [2003]
+Γi,j(xk) =
+(
+1, if j = arg max((n + 1 − 2i) − B(xk)1),
+0, otherwise,
+where 1 is the all-ones vector. Then,Γ(xk)xk provides a ranked vector ofxk (Ogryczak and Tamir [2003,
+Lemma 1] and Grover et al. [2019, Corollary 3]). However, thearg-max operator is non-differentiable
+which prohibits the direct usage of the permutation matrix for gradient computation. Instead, Grover et al.
+[2019] propose to replace thearg-maxoperator withsoft-max, in order to obtain a continuous relaxation
+bΓτ with a temperature parameterτ >0. In particular, the(i, j)-th element ofbΓτ (xk) is given by
+bΓτi,j(xk) = exp
+  
+(n + 1 − 2i) − B(xk)j1/τ Pn
+l=1 exp
+  
+(n + 1 − 2i) − B(xk)l1/τ  ,
+in whichB(xk)l is thel-th row of matrixB(xk). This relaxation is continuous everywhere and differentiable
+almost everywhere with respect to the elements ofxk. In addition, Grover et al. [2019, Theorem 4] shows
+that bΓτi,j(xk) converges toΓi,j(xk) almost surely whenxk1, . . . , xkn are sampled IID from a distribution which
+is absolutely continuous with respect to the Lebesgue measure inR.
+Finally we could set in (12):
+eΓ(x) = bΓτ (x)x.
+C.4 Construction of eigenportfolios
+We construct eigenportfolios from the principal components of the sample correlation matrixˆρ of returns,
+ranked in decreasing order of eigenvalues: ˆρ = QΛQ−1 where Q is the orthogonal matrix with thei-th
+column being the eigenvectorqi ∈ RM of ˆρ, and Λ is the diagonal matrix whose diagonal elements are the
+corresponding eigenvalues, such thatΛ1,1 ≥ Λ2,2 ≥ · · · ≥ΛM,M ≥ 0.
+37
+Eigenportfolios are constructed from the principal components as follows. Denoteh = diag(σ1, . . . , σM ),
+where σi is the empirical standard deviation of asseti. For the i-th eigenvector qi, we consider its corre-
+sponding eigenportfolio
+(h−1qi)T p
+∥h−1qi∥1 ,
+where p ∈ Ω is the price scenario, and ∥h−1qi∥1 is used to normalize the portfolio weights so that the
+absolute weights sum to unity.
+D Additional numerical experiments
+38
+-1.1
+0.9
+Gaussian
+-quantile (log scale)
+Static buy-and-hold
+0.0
+1.0
+10.0
+Mean-reversion
+-10.0
+-1.0
+0.0
+1.0
+10.0
+Trend-following
+-2.0
+2.0
+AR(1) with 1 = 0.5
+-quantile (log scale)
+0.0
+1.0
+10.0
+-10.0
+-1.0
+0.0
+1.0
+-1.1
+1.3
+AR(1) with 2 = 0.12
+-quantile (log scale)
+0.0
+1.0
+10.0
+-10.0
+-1.0
+0.0
+1.0
+10.0
+-1.2
+1.2
+GARCH(1,1) with t(5)
+-quantile (log scale)
+0.0
+1.0
+10.0
+-10.0
+-1.0
+0.0
+1.0
+10.0
+10 4
+ 10 3
+ 10 2
+ 10 1
+ 100
+ (log scale)
+-1.0
+1.0
+GARCH(1,1) with t(10)
+-quantile (log scale)
+10 4
+ 10 3
+ 10 2
+ 10 1
+ 100
+ (log scale)
+0.0
+1.0
+10.0
+10 4
+ 10 3
+ 10 2
+ 10 1
+ 100
+ (log scale)
+-10.0
+-1.0
+0.0
+1.0
+10.0
+Market Data
+Tail-GAN-Raw
+Tail-GAN-Static
+Tail-GAN
+WGAN
+Figure 16: Tail behavior via the empirical rank-frequency distribution of the strategy PnL. The rows index
+the various models used for generating the synthetic data, while the columns index the strategy types.
+39
+-1.0
+0.0
+AAPL
+-quantile (log scale)
+Static buy-and-hold
+-1.0
+0.0
+1.0
+Mean-reversion
+-10.0
+-1.0
+0.0
+1.0
+Trend-following
+-1.0
+0.0
+AMZN
+-quantile (log scale)
+-1.0
+0.0
+1.0
+10.0
+-10.0
+-1.0
+0.0
+1.0
+-1.7
+1.4
+GOOG
+-quantile (log scale)
+0.0
+1.0
+10.0
+-10.0
+-1.0
+0.0
+1.0
+-1.0
+0.0
+JPM
+-quantile (log scale)
+0.0
+1.0
+10.0
+-1.0
+0.0
+1.0
+10 3
+ 10 2
+ 10 1
+ 100
+ (log scale)
+-1.9
+0.8
+QQQ
+-quantile (log scale)
+10 3
+ 10 2
+ 10 1
+ 100
+ (log scale)
+0.0
+1.0
+10.0
+10 3
+ 10 2
+ 10 1
+ 100
+ (log scale)
+-1.0
+0.0
+1.0
+Market Data
+Tail-GAN-Raw
+Tail-GAN-Static
+Tail-GAN
+WGAN
+Figure 17: Tail behavior via the empirical rank-frequency distribution of the strategy PnL. The rows index
+various stocks, while the columns index the strategy types.
+40

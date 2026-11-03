@@ -1,0 +1,743 @@
+arXiv 2110.14771  https://arxiv.org/abs/2110.14771
+
+ABIDES-Gym: Gym Environments for Multi-Agent Discrete
+Event Simulation and Application to Financial Markets
+Selim Amrouni∗
+Aymeric Moulin∗
+selim.amrouni@jpmorgan.com
+aymeric.moulin@jpmorgan.com
+J.P. Morgan AI Research
+New York, New York, USA
+Jared Vann
+J.P. Morgan AI Engineering
+New York, New York, USA
+jared.vann@jpmorgan.com
+Svitlana Vyetrenko
+J.P. Morgan AI Research
+New York, New York, USA
+svitlana.vyetrenko@jpmorgan.com
+Tucker Balch
+J.P. Morgan AI Research
+New York, New York, USA
+tucker.balch@jpmorgan.com
+Manuela Veloso
+J.P. Morgan AI Research
+New York, New York, USA
+manuela.veloso@jpmorgan.com
+ABSTRACT
+Model-free Reinforcement Learning (RL) requires the ability to sam-
+ple trajectories by taking actions in the original problem environ-
+ment or a simulated version of it. Breakthroughs in the field of RL
+have been largely facilitated by the development of dedicated open
+source simulators with easy to use frameworks such as OpenAI
+Gym and its Atari environments. In this paper we propose to use
+the OpenAI Gym framework on discrete event time based Discrete
+Event Multi-Agent Simulation (DEMAS). We introduce a general
+technique to wrap a DEMAS simulator into the Gym framework.
+We expose the technique in detail and implement it using the simu-
+lator ABIDES as a base. We apply this work by specifically using
+the markets extension of ABIDES, ABIDES-Markets, and develop
+two benchmark financial markets OpenAI Gym environments for
+training daily investor and execution agents.1 As a result, these two
+environments describe classic financial problems with a complex
+interactive market behavior response to the experimental agent’s
+action.
+ACM Reference Format:
+Selim Amrouni, Aymeric Moulin, Jared Vann, Svitlana Vyetrenko, Tucker
+Balch, and Manuela Veloso. 2021. ABIDES-Gym: Gym Environments for
+Multi-Agent Discrete Event Simulation and Application to Financial Markets.
+In Proceedings of ICAIF’21. ACM, New York, NY, USA, 9 pages. https://doi.
+org/10.1145/1122445.1122456
+∗Both authors contributed equally to this research.
+1ABIDES source code is open-sourced on https://github.com/jpmorganchase/abides-
+jpmc-public and available upon request. Please reach out to Selim Amrouni and
+Aymeric Moulin.
+Permission to make digital or hard copies of all or part of this work for personal or
+classroom use is granted without fee provided that copies are not made or distributed
+for profit or commercial advantage and that copies bear this notice and the full citation
+on the first page. Copyrights for components of this work owned by others than ACM
+must be honored. Abstracting with credit is permitted. To copy otherwise, or republish,
+to post on servers or to redistribute to lists, requires prior specific permission and/or a
+fee. Request permissions from permissions@acm.org.
+ICAIF’21, November 03–05, 2021, London, UK
+© 2021 Association for Computing Machinery.
+ACM ISBN 978-1-4503-XXXX-X/18/06. . . $15.00
+https://doi.org/10.1145/1122445.1122456
+1 INTRODUCTION
+Reinforcement learning (RL) [22] is a field of machine learning that
+consists in maximizing the objective of an agent. The environment
+the agent evolves in is modeled by a markov decision process (MDP).
+The objective is typically defined as a cumulative numerical reward
+formulation. It is maximized by optimizing the policy used by the
+agent to choose the actions it takes.
+The world is considered to be divided into two distinct parts:
+the experimental agent and the rest of the world called the envi-
+ronment. Interactions between the agent and the environment are
+summarized in: (1) the experimental agent taking actions, (2) the
+environment evolving to a new state based solely on the previous
+state and the action taken by the experimental agent. At each step
+the agent receives a numerical reward based on the state and the
+action taken to reach that state.
+There are two classic types of methods to approach RL problems:
+model-based methods [11] and model-free methods [ 22]. Model-
+based RL assumes that a model of the state action transition distri-
+bution and reward distribution are known. Model-free RL assumes
+these models are unknown but that instead the agent can interact
+with the environment and collect samples.
+Model-free approaches to RL require the ability for the exper-
+imental agent to interact with the MDP environment to gather
+information about state-action transitions and resulting rewards.
+This can be done by directly interacting with a real-world system;
+however, the cost and risk associated with this interaction has been
+proven to be challenging in most cases. The largest success stories
+of RL happened with problems where the original target environ-
+ment is numerical and cheap to run by nature or the environment
+can be simulated as such (as developed in [6]).
+If an environment is straightforward to model, the reward and
+new state arising from a state-action pair can be simulated directly.
+However it is not always the case, there are systems where it is
+non-trivial to directly model the state and action transition steps.
+Some of them are by nature multi-agent systems. In that case, the
+easiest way to model the transition from a state observed by an
+agent to the next state some time in the future after it took an action
+is to simulate the actions taken by all the agents in the system.
+arXiv:2110.14771v1  [cs.MA]  27 Oct 2021
+ICAIF’21, November 03–05, 2021, London, UK Amrouni and Moulin, et al.
+Discrete Event Multi-Agent Simulation (DEMAS) has been a
+topic of interest for a long time [7, 8]. There are two main types of
+DEMAS:
+• Time step based simulation: the simulator advances time by
+increments already determined before starting the simula-
+tion, typically of fixed size.
+• Event time based simulation: the simulator advances time as
+it processes events from the queue. Time jumps to the next
+event time.
+In the case of event time based simulation, most of the research
+has focused on simulating the entire system and its agents and
+observing the evolution of the different variable of the system.
+In this paper, we propose a framework for wrapping an event
+time based DEMAS simulator into an OpenAI Gym framework. It
+enables using a multi-agent discrete event simulator as a straight-
+forward environment for RL research. The framework abstracts
+away the details of the simulator to only present the MDP of the
+agent of interest.
+To the best of our knowledge, in the context of event time based
+DEMAS, there has not been any work published where one agent
+is considered separately with its own MDP and the other agents
+considered together as the rest of world background that drives the
+state action transitions and rewards.
+For practical purposes we detail the framework mechanism by
+applying it to ABIDES [5] - a multipurpose multi-agent based dis-
+crete event simulator. We illustrate the benefits for RL research
+by using ABIDES-markets, the markets simulation extension of
+ABIDES, as a base simulator to build two financial markets trading
+OpenAI Gym environments and train RL agents in them.
+2 ABIDES: AGENT BASED INTERACTIVE
+DISCRETE EVENT SIMULATOR
+In this section we present the details of the original implementa-
+tion and use of ABIDES. We introduce the core simulator and its
+extension to equity markets simulation through ABIDES-Markets.
+2.1 ABIDES-Core
+ABIDES is a DEMAS simulator where agents exclusively interact
+through a messaging system. Agents only have access to their own
+state and information about the rest of the world from messages
+they receive. An optional latency model is applied to the messaging
+system.
+2.1.1 Kernel.
+The kernel (see figure 1) drives and coordinates the entire simula-
+tion. It is composed of a priority message queue used for handling
+messages between agents. It takes as input a start time, an end time,
+a list of agents, a latency model and a pseudo-random seed.
+It first sets the clock to the start time, executes the
+kernelInitialize method for all agents. Then, it calls the
+KernelStarting method for all agents (this effectively has the
+same purpose as the kernelInitialize method but has the guar-
+antee that all agents have already been instantiated when it runs).
+Agents start sending messages in the initialisation stage. The
+kernel starts "processing" messages based on reception simulation
+time (messages are not opened, just routed to the recipient). Mes-
+sages can be: (1) a general data request message by an agent from
+another or (2) a wakeup message sent by an agent to itself to be
+awaken later. An agent is only active when it receives a message
+(general or wakeup). An agent that is active and taking actions
+will likely result in more messages sent and added to the queue.
+The kernel will keep processing the message queue until either the
+queue is empty or simulation time reaches the end time.
+Once the end time has been reached, the kernel calls
+kernelStopping on all agents then it calls kernelTerminating
+on all agents. These functions are used to clean and format the data
+and logs agents have collected throughout the simulation.
+2.1.2 Agents.
+An agent is an object with the following methods:
+kernelInitialize, kernelStarting, receiveMessage,
+kernelStopping, kernelTerminate and wakeUp.
+Apart from these requirements, agent functioning is flexible. The
+agent can perform any computations and communicate with the
+rest of the world by sending messages routed through the kernel.
+2.2 ABIDES-Markets
+ABIDES-Markets extends ABIDES-Core. It implements a market
+with a single exchange and several market participants. The ex-
+change is an agent in the simulation and market participants as
+other agents.
+This way, by construction of ABIDES-core, market participants
+and the exchange only communicate via messages. Typical mes-
+sages like orders but also market data rely on the messaging system.
+(Market data is based on either a direct single request or a recurring
+subscription)
+This work on ABIDES-Markets has focused on representing the
+NASDAQ equity exchange and its regular hours continuous trading
+session [19]. The exchange receives trading instructions similar to
+the OUCH protocol [20]. Orders are matched based on price/time
+priority model.
+The implementation of interactions with the exchange is facili-
+tated by parent object classes FinancialAgent and TradingAgent.
+The basic background agent inherit from them. They include value
+agents, momentum agents and others ([5] gives a description of the
+agents ).
+3 ABIDES-GYM
+In this section we introduce the Gym wrapping. We expose the
+details of the two-layer wrapping on ABIDES: ABIDES-Gym-Core
+and ABIDES-Gym sub-environment.
+3.1 Motivation
+As described in section 2, ABIDES is a flexible tool that facilitates
+DEMAS. However in its original version, ABIDES presents draw-
+backs that possibly make it difficult to use for some applications.
+Creating an experimental agent and adding it to an existing config-
+uration requires a deep understanding of ABIDES. Additionally, the
+framework is unconventional and makes it hard to leverage popu-
+lar RL tools. Figure 2 illustrates the above point: the experimental
+agent is part of the simulation like the others. For this reason the
+simulation returns nothing until it is done. The full experimental
+agent behavior has to be put in the agent code, inside the simulator.
+ABIDES-Gym ICAIF’21, November 03–05, 2021, London, UK
+Figure 1: ABIDES-Core kernel mechanism.
+There is no direct access to the MDP of the RL problem from outside
+of ABIDES.
+3.2 Approach
+To address the aforementioned difficulties and make ABIDES eas-
+ily usable for RL we introduce ABIDES-Gym, a novel way to use
+ABIDES through the OpenAI Gym environment framework. In
+other words to run ABIDES while leaving the learning algorithm
+and the MDP formulation outside of the simulator. To the best of our
+knowledge, it is the first instance of a DEMAS simulator allowing
+interaction through an openAI Gym framework.
+Figure 2 shows that ABIDES-Gym allows using ABIDES as a
+black box. From the learning algorithm’s perspective, the entire
+interaction with ABIDES-Gym can be summarized into: (1) drawing
+an initial state by calling𝑒𝑛𝑣.𝑟𝑒𝑠𝑒𝑡(), (2) calling𝑒𝑛𝑣.𝑠𝑡𝑒𝑝(𝑎) to take
+an action 𝑎 and obtain the next state, action, reward and done
+variables. The sample code listing 1 shows a short example of the
+training loop for a learning algorithm.
+import gym ; import ABIDES_gym
+env = gym.make( 'markets-daily_investor-v0')
+env.seed(0)
+state, done = env.reset(), False
+agent = MyAgentStrategy(params)
+while not done:
+action = agent.choose_action(state)
+new_state, reward, done, info = env.step(action)
+agent.update_policy(new_state,state,reward,action)
+state = new_state
+Listing 1: Use of Abide-Gym with Open AI Gym APIs
+3.3 Key idea: interruptible simulation kernel
+Most DEMAS simulators, including ABIDES, run in one single
+uninterruptible block. To be able to interact with ABIDES in the
+Open AI Gym framework we need to be able to start the simulation,
+pause at specified points in time, return a state and then resume
+the simulation again.
+We propose a new kernel version in which initialization, running
+and termination phases are broken down into 3 separate methods.
+The kernel is initialized using the initialization method (effectively
+calling the kernelInitializing and kernelStarting methods).
+Then the kernel is run using runner method until either the mes-
+sage queue is empty or an agent sends an interruption instruction
+to the kernel. When runner finishes, it returns a state from a speci-
+fied agent. Additionally, we add to the runner method the option
+to send an action for an agent to execute as first event when simu-
+lation resumes. This new kernel can be used in the original mode
+or in the new Gym mode:
+• Original mode. To run ABIDES in the original mode: we
+successively run the initialization, runner and termination
+methods. Running a configuration with agents that never
+send interruptions, the runner method runs until the end of
+the simulation.
+• New Gym mode. To run ABIDES in the new Gym mode: we
+introduce a "placeholder" agent we call Gym agent. At every
+wake-up call this agent receives, it sends an interruption
+instruction and its current raw state to the kernel. The kernel
+pauses the simulation and returns the raw state passed by the
+Gym agent (the raw state contains all the information passed
+from the Gym agent to outside of the simulator). The "pause"
+gives back control to the main user script/thread. The user
+can use the raw state to perform any computation it wants
+to select the next action 𝑎. Using runner with action𝑎 as
+input, the user takes its action and resumes the simulation
+until the next interruption or the queue is empty.
+ICAIF’21, November 03–05, 2021, London, UK Amrouni and Moulin, et al.
+Figure 2: Reinforcement learning framework in ABIDES-Gym vs. regular ABIDES.
+3.4 ABIDES-Gym-Core environment:
+Wrapping ABIDES in OpenAI Gym
+framework
+With the new kernel described in the subsection 3.3, ABIDES-Gym
+wraps ABIDES in an OpenAI Gym framework:
+• env.reset(): instantiating the kernel with the configura-
+tion, starting simulation using kernel runner method, wait-
+ing for the Gym agent to interrupt and send its state, return
+this state.
+• env.step(a): calling runner method on the kernel previ-
+ously obtained with env.reset() and feeding it action𝑎.
+This wrapping is independent of the nature of the simulation
+performed with ABIDES. We structure this into an abstract Gym
+environment ABIDES-Gym-Core.
+3.5 ABIDES-Gym sub-environments: Fully
+defining a Markov Decision Process
+ABIDES-Gym-Core abstract environment enforces the gym frame-
+work mechanisms. It leaves the MDP undefined. The notions of
+time steps, state, reward are left undefined. ABIDES-Gym sub-
+environments, inheriting from ABIDES-Gym-Core, specify these
+notions as follows:
+• Time-steps: Gym agent is given a process to follow for its
+wake-up times (Can be deterministic or stochastic).
+• State: function is defined to compute actual state of the MDP
+from the raw state returned by the gym agent.
+• Reward: function is defined to compute it from the raw state.
+An additional function is defined to update reward at the
+end of an episode if needed.
+3.6 More details on ABIDES-Gym-Markets
+ABIDES-Gym-Markets inherits from ABIDES-Gym-Core and con-
+stitutes a middle abstract layer between ABIDES-Gym-Core and
+environments dedicated to financial markets. In addition to the
+general wrapping defined by ABIDES-Gym-Core, ABIDES-Gym-
+Markets handles the market data subscriptions with the exchange,
+tracking of orders sent, order API and others. In practice we achieve
+these functionalities by introducing a Gym agent that is more spe-
+cific to markets simulation.
+4 ABIDES-GYM APPLICATION TO FINANCE:
+INTRODUCING TWO MARKET
+ENVIRONMENTS
+In this section we focus on using the ABIDES-Gym approach for
+ABIDES-Markets simulations and introduce two market environ-
+ments to address classic problems.
+4.1 Daily Investor Environment
+This environment presents an example of the classic problem where
+an investor tries to make money buying and selling a stock through-
+out a single day. The investor starts the day with cash but no posi-
+tion then repeatedly buy and sell the stock in order to maximize
+ABIDES-Gym ICAIF’21, November 03–05, 2021, London, UK
+Figure 3: ABIDES-Gym kernel mechanism when running in Gym mode. RL training loop on the left. Describes communica-
+tions inside between agents an kernel inside ABIDES as well as communications between the RL loop and the simulation. In
+the figure time is represented by reading the events from top to bottom following the RL training loop on the left
+marked to market value at the end of the day (i.e. cash plus holdings
+valued at the market price).
+4.1.1 Time steps.
+As described in subsection 3.5, we introduce a notion of time step
+by considering the experimental agent’s MDP. Here we make the
+experimental agent wake up every minute starting at 09:35.
+4.1.2 State space.
+The experimental agent perceives the market through the state
+representation:
+𝑠(𝑡) =(ℎ𝑜𝑙𝑑𝑖𝑛𝑔𝑠𝑡,𝑖𝑚𝑏𝑎𝑙𝑎𝑛𝑐𝑒𝑡,𝑠𝑝𝑟𝑒𝑎𝑑 𝑡,𝑑𝑖𝑟𝑒𝑐𝑡𝑖𝑜𝑛𝐹𝑒𝑎𝑡𝑢𝑟𝑒 𝑡,𝑅𝑘𝑡)
+where:
+• ℎ𝑜𝑙𝑑𝑖𝑛𝑔𝑠𝑡 : number of shares of the stock held by the experi-
+ment agent at time step𝑡
+• 𝑖𝑚𝑏𝑎𝑙𝑎𝑛𝑐𝑒𝑡 = 𝑏𝑖𝑑𝑠 𝑣𝑜𝑙𝑢𝑚𝑒𝑏𝑖𝑑𝑠 𝑣𝑜𝑙𝑢𝑚𝑒+𝑎𝑠𝑘𝑠 𝑣𝑜𝑙𝑢𝑚𝑒 using the first 3 levels
+of the order book. Value is respectively set to 0, 1, 0.5 for no
+bids, no asks and empty book.
+• 𝑠𝑝𝑟𝑒𝑎𝑑𝑡 =𝑏𝑒𝑠𝑡𝐴𝑠𝑘𝑡−𝑏𝑒𝑠𝑡𝐵𝑖𝑑𝑡
+• 𝑑𝑖𝑟𝑒𝑐𝑡𝑖𝑜𝑛𝐹𝑒𝑎𝑡𝑢𝑟𝑒 𝑡 =𝑚𝑖𝑑𝑃𝑟𝑖𝑐𝑒𝑡−𝑙𝑎𝑠𝑡𝑇𝑟𝑎𝑛𝑠𝑎𝑐𝑡𝑖𝑜𝑛𝑃𝑟𝑖𝑐𝑒 𝑡
+• 𝑅𝑘𝑡 =(𝑟𝑡,...,𝑟 𝑡−𝑘+1) series of mid price differences, where
+𝑟𝑡−𝑖 =𝑚𝑖𝑑𝑡−𝑖−𝑚𝑖𝑑𝑡−𝑖−1. It is set to 0 when undefined. By
+default𝑘 = 3
+4.1.3 Action space.
+The environment allows for 3 simple actions: "BUY", "HOLD" and
+"SELL". The "BUY" and "SELL" actions correspond to market or-
+ders of a constant size, which is defined at the instantiation of the
+environment. It is is defaulted to 100.
+4.1.4 Reward.
+We define the step reward as: 𝑟𝑒𝑤𝑎𝑟𝑑𝑡 = 𝑚𝑎𝑟𝑘𝑒𝑑𝑇𝑜𝑀𝑎𝑟𝑘𝑒𝑡 𝑡−
+𝑚𝑎𝑟𝑘𝑒𝑡𝑇𝑜𝑀𝑎𝑟𝑘𝑒𝑡 𝑡−1 where𝑚𝑎𝑟𝑘𝑒𝑡𝑇𝑜𝑀𝑎𝑟𝑘𝑒𝑡 𝑡 =𝑐𝑎𝑠ℎ𝑡+ℎ𝑜𝑙𝑑𝑖𝑛𝑔𝑠𝑡·
+𝑙𝑎𝑠𝑡𝑇𝑟𝑎𝑛𝑠𝑎𝑐𝑡𝑖𝑜𝑛 𝑡 and𝑙𝑎𝑠𝑡𝑇𝑟𝑎𝑛𝑠𝑎𝑐𝑡𝑖𝑜𝑛 𝑡 the price at which the last
+transaction in the market was executed before time step𝑡.
+ICAIF’21, November 03–05, 2021, London, UK Amrouni and Moulin, et al.
+4.2 Algorithmic Execution Environment
+This environment presents an example of the algorithmic order
+execution problem. The agent has either an initial inventory of
+the stocks it tries to trade out of or no initial inventory and tries
+to acquire a target number of shares. The goal is to realize this
+task while minimizing transaction cost from spreads and market
+impact. It does so by splitting the parent order into several smaller
+child orders. In [21], the problem of designing optimal execution
+strategies using RL in an environment with static historical market
+data was considered.
+4.2.1 Definitions.
+The environment has the following parameters and variables:
+• 𝑝𝑎𝑟𝑒𝑛𝑡𝑂𝑟𝑑𝑒𝑟𝑆𝑖𝑧𝑒 : Total size the agent has to execute (either
+buy or sell). It is defaulted to 20000.
+• 𝑑𝑖𝑟𝑒𝑐𝑡𝑖𝑜𝑛 : direction of the 𝑝𝑎𝑟𝑒𝑛𝑡𝑂𝑟𝑑𝑒𝑟 (buy or sell). It is
+defaulted to buy.
+• 𝑡𝑖𝑚𝑒𝑊𝑖𝑛𝑑𝑜𝑤 : Time length the agent is given to proceed with
+𝑝𝑎𝑟𝑒𝑛𝑡𝑂𝑟𝑑𝑒𝑟𝑆𝑖𝑧𝑒 execution. It is defaulted to 4 hours.
+• 𝑐ℎ𝑖𝑙𝑑𝑂𝑟𝑑𝑒𝑟𝑆𝑖𝑧𝑒 the size of the buy or sell orders the agent
+places in the market. It is defaulted to 50.
+• 𝑠𝑡𝑎𝑟𝑡𝑖𝑛𝑔𝑇𝑖𝑚𝑒 time of the first action step for the agent
+• 𝑒𝑛𝑡𝑟𝑦𝑃𝑟𝑖𝑐𝑒 is the𝑚𝑖𝑑𝑃𝑟𝑖𝑐𝑒𝑡 for𝑡 =𝑠𝑡𝑎𝑟𝑡𝑖𝑛𝑔𝑇𝑖𝑚𝑒
+• 𝑛𝑒𝑎𝑟𝑇𝑜𝑢𝑐ℎ𝑡 is the highest𝑏𝑖𝑑𝑃𝑟𝑖𝑐𝑒 if𝑑𝑖𝑟𝑒𝑐𝑡𝑖𝑜𝑛 =𝑏𝑢𝑦 else is
+the lowest𝑎𝑠𝑘𝑃𝑟𝑖𝑐𝑒
+• 𝑝𝑒𝑛𝑎𝑙𝑡𝑦 : it is a constant penalty per non-executed share at
+the end of the𝑡𝑖𝑚𝑒𝑊𝑖𝑛𝑑𝑜𝑤 . It is defaulted to 100 per share.
+4.2.2 Time steps.
+We use the same notion of time steps as described in 4.1.1. Here the
+agent wakes up every ten seconds starting at 09:35 (𝑠𝑡𝑎𝑟𝑡𝑖𝑛𝑔𝑇𝑖𝑚𝑒 ).
+4.2.3 State Space.
+The experimental agent perceives the market through the state
+representation:
+𝑠(𝑡) =(ℎ𝑜𝑙𝑑𝑖𝑛𝑔𝑠𝑃𝑐𝑡𝑡,𝑡𝑖𝑚𝑒𝑃𝑐𝑡 𝑡,
+𝑑𝑖𝑓𝑓𝑒𝑟𝑒𝑛𝑐𝑒𝑃𝑐𝑡 𝑡,𝑖𝑚𝑏𝑎𝑙𝑎𝑛𝑐𝑒 5𝑡,𝑖𝑚𝑏𝑎𝑙𝑎𝑛𝑐𝑒𝐴𝑙𝑙 𝑡,
+𝑝𝑟𝑖𝑐𝑒𝐼𝑚𝑝𝑎𝑐𝑡 𝑡,𝑠𝑝𝑟𝑒𝑎𝑑 𝑡,𝑑𝑖𝑟𝑒𝑐𝑡𝑖𝑜𝑛𝐹𝑒𝑎𝑡𝑢𝑟𝑒 𝑡,𝑅𝑘𝑡)
+where:
+• ℎ𝑜𝑙𝑑𝑖𝑛𝑔𝑠𝑃𝑐𝑡𝑡 = ℎ𝑜𝑙𝑑𝑖𝑛𝑔𝑠 𝑡𝑝𝑎𝑟𝑒𝑛𝑡𝑂𝑟𝑑𝑒𝑟𝑆𝑖𝑧𝑒 : the execution advancement
+• 𝑡𝑖𝑚𝑒𝑃𝑐𝑡𝑡 = 𝑡−𝑠𝑡𝑎𝑟𝑡𝑖𝑛𝑔𝑇𝑖𝑚𝑒𝑡𝑖𝑚𝑒𝑊𝑖𝑛𝑑𝑜𝑤 : the time advancement
+• 𝑑𝑖𝑓𝑓𝑒𝑟𝑒𝑛𝑐𝑒𝑃𝑐𝑡 𝑡 =ℎ𝑜𝑙𝑑𝑖𝑛𝑔𝑠𝑃𝑐𝑡𝑡−𝑡𝑖𝑚𝑒𝑃𝑐𝑡𝑡
+• 𝑝𝑟𝑖𝑐𝑒𝐼𝑚𝑝𝑎𝑐𝑡 𝑡 =𝑚𝑖𝑑𝑃𝑟𝑖𝑐𝑒𝑡−𝑒𝑛𝑡𝑟𝑦𝑃𝑟𝑖𝑐𝑒
+• 𝑖𝑚𝑏𝑎𝑙𝑎𝑛𝑐𝑒 5𝑡 and𝑖𝑚𝑏𝑎𝑙𝑎𝑛𝑐𝑒𝐴𝑙𝑙𝑡 are defined such as in 4.1.2
+but taking the first 5 levels and all levels of the Order Book.
+• 𝑠𝑝𝑟𝑒𝑎𝑑𝑡 ,𝑑𝑖𝑟𝑒𝑐𝑡𝑖𝑜𝑛𝐹𝑒𝑎𝑡𝑢𝑟𝑒 𝑡 ,𝑅𝑘𝑡 defined in 4.1.2 with𝑘 = 3
+4.2.4 Action space.
+The environment allows for three simple actions: "MARKET OR-
+DER", "DO NOTHING" and "LIMIT ORDER". They are defined as
+follow:
+• "MARKET ORDER": the agent places a market order of size
+𝑐ℎ𝑖𝑙𝑑𝑂𝑟𝑑𝑒𝑟𝑆𝑖𝑧𝑒 in the direction 𝑑𝑖𝑟𝑒𝑐𝑡𝑖𝑜𝑛 . (Instruction to
+buy or sell immediately at the current best available price)
+• "LIMIT ORDER": the agent places a limit order of size
+𝑐ℎ𝑖𝑙𝑑𝑂𝑟𝑑𝑒𝑟𝑆𝑖𝑧𝑒 in the direction𝑑𝑖𝑟𝑒𝑐𝑡𝑖𝑜𝑛 at the price level
+𝑛𝑒𝑎𝑟𝑇𝑜𝑢𝑐ℎ𝑡 . (Buy or sell only at a specified price or better,
+does not guarantee execution)
+from ABIDES_gym.envs.markets_daily_investor_environment_v0 \
+import SubGymMarketsDailyInvestorEnv_v0
+import ray ; from ray import tune
+ray.init()
+tune.run(
+"DQN",
+name="dqn_training",
+stop={ "training_iteration": 200}, #train 200k steps
+checkpoint_freq = 40, #snapshot model every 40k steps
+config={
+# Environment Specification
+"env": SubGymMarketsDailyInvestorEnv_v0, #env used
+"env_config": { 'ORDER_FIXED_SIZE':100,
+# 1min wakeup frequency
+'TIMESTEP_DURATION':{'seconds':1*60}},
+"seed": tune.grid_search([1,2,3]), #3 seeds
+# Learning algorithm specification
+"hiddens":[50, 20],
+"gamma": 1, #no discounting},
+)
+Listing 2: Use of Tune APIs
+• "DO NOTHING": no action is taken.
+Before sending a "MARKET ORDER" or a "LIMIT ORDER", the
+agent will cancel any living order still in the Order Book.
+4.2.5 Reward.
+We define the step reward as:𝑟𝑒𝑤𝑎𝑟𝑑𝑡 = 𝑃𝑁𝐿 𝑡𝑝𝑎𝑟𝑒𝑛𝑡𝑂𝑟𝑑𝑒𝑟𝑆𝑖𝑧𝑒
+with:
+𝑃𝑁𝐿𝑡 =
+∑︁
+𝑜∈𝑂𝑡
+𝑛𝑢𝑚𝑠𝑖𝑑𝑒·(𝑒𝑛𝑡𝑟𝑦𝑃𝑟𝑖𝑐𝑒 −𝑓𝑖𝑙𝑙𝑃𝑟𝑖𝑐𝑒 𝑜)∗ 𝑞𝑢𝑎𝑛𝑡𝑖𝑡𝑦𝑜
+where𝑛𝑢𝑚𝑠𝑖𝑑𝑒 = 1 if direction is buy else𝑛𝑢𝑚𝑠𝑖𝑑𝑒 = 0 and𝑂𝑡 is
+the set of orders executed between step𝑡− 1 and𝑡
+We also define an episode update reward that is computed at the
+end of the episode. Denoting𝑂𝑒𝑝𝑖𝑠𝑜𝑑𝑒 the set of all orders executed
+in the episode, it is defined as:
+• 0 if ˝𝑜∈𝑂𝑒𝑝𝑖𝑠𝑜𝑑𝑒 𝑞𝑢𝑎𝑛𝑡𝑖𝑡𝑦𝑜 =𝑝𝑎𝑟𝑒𝑛𝑡𝑂𝑟𝑑𝑒𝑟𝑆𝑖𝑧𝑒
+• else|𝑝𝑒𝑛𝑎𝑙𝑡𝑦×(𝑝𝑎𝑟𝑒𝑛𝑡𝑂𝑟𝑑𝑒𝑟𝑆𝑖𝑧𝑒 − ˝𝑜∈𝑂𝑒𝑝𝑖𝑠𝑜𝑑𝑒 𝑞𝑢𝑎𝑛𝑡𝑖𝑡𝑦𝑜)|
+5 EXPERIMENTAL EXAMPLE: TRAINING A
+REINFORCEMENT LEARNING AGENT IN
+OUR ENVIRONMENTS
+To illustrate the ease of use and that agents are able to learn in the
+environment, we train a learning agent using the suite of tools built
+on the top of Ray [18].
+RL training loops for Gym environments are very similar and
+there are widely used standard models. Tune [13] enables us to only
+input our environment, its parameters and the name of the standard
+RL algorithm (implemented in RLlib [12]) we want to train on it.
+The Listing 2 illustrates an example for training a Deep Q-Learning
+(DQN)[17] algorithm.
+5.1 Daily Investor environment
+5.1.1 Setup.
+• Objective function: non-discounted sum of rewards
+• Algorithm: Deep Q-Learning.
+ABIDES-Gym ICAIF’21, November 03–05, 2021, London, UK
+• Architecture: 1 fully connected feed forward neural network
+with 2 layers composed of 50 and 20 neurons.
+• Learning rate schedule: linear decrease from 1· 10−3 to 0 in
+90k steps.
+• Exploration rate:𝜖-Greedy search from 1 to 0.02 in 10k steps.
+5.1.2 Results.
+Figure 4 shows the average reward throughout training for different
+initial environment seeds (1, 2 and 3). For all of these different global
+initial seeds the agent is able to learn a profitable strategy.
+5.2 Execution environment
+5.2.1 Setup.
+Same setup as in 5.1.1 except for the learning rate fixed at 1· 10−4.
+5.2.2 Results.
+Figure 5 shows the average reward throughout training for different
+initial environment seeds (1, 2 and 3). For the execution problem,
+achieving a reward close to 0 means executing at a low cost. The
+agent indeed learns to execute the parent order while minimizing
+the cost of execution. At the moment there are positive spikes
+explained by the rare unrealistic behaviors of the synthetic market.
+6 RELATED WORK
+We now briefly discuss related work on simulation approaches, Re-
+inforcement Learning, OpenAI Gym Environment and applications
+to trading environment.
+6.1 DEMAS simulators
+DEMAS enables modeling the behavior and evolution of complex
+systems. It is sometimes easier to generate samples or estimate sta-
+tistics from a distribution by reproducing the components’ behavior
+rather than trying to directly express the distribution or directly
+produce a sample. Multiple open-source simulators exist, however
+none of them has become a de-facto standard. Many of them contain
+specifics of the domain they arose from. For example, the Swarm
+simulator [16] is well suited to describe biological systems. It has
+the notion of swarm, group of agents and their schedule, which can
+in turn be connected to build a configuration. For this paper we
+choose to use ABIDES [5] as a base because of its message based
+0 20000 40000 60000 80000 100000 120000
+Steps
+0
+2
+4
+6
+8
+10
+12Reward
+Training average reward
+Global intial seed:
+1
+2
+3
+Figure 4: Daily Investor env: training of a DQN agent (aver-
+age reward per 1000 with 5-point moving average)
+0 25000 50000 75000 100000 125000 150000 175000 200000
+Steps
+2.0
+1.5
+1.0
+0.5
+0.0
+0.5
+Reward
+Training average reward
+Global intial seed:
+1
+2
+3
+Figure 5: Daily Execution env: training of a DQN agent (av-
+erage reward per 1000 with 5-point moving average)
+kernel that enables precise control of information dissemination
+between agents. This makes ABIDES particularly well suited for
+the simulation of financial markets.
+Even though the above described simulators enable modeling
+complex systems they are not specifically designed for RL. Many
+different MDPs can be formulated depending on the part of the
+whole system chosen as experimental agent and the considered task
+and reward formulation. Thus, they often lack the ability to interact
+with the simulator via an easy API to train one or more experimental
+RL agents with the rest of the system as a MDP background.
+6.2 Multi-agent RL
+As we deal with RL in multi-agent scenarios it is important to
+mention Multi-Agent RL (MARL). MARL is a sub-field of RL where
+several learning agents are considered at once interacting with each
+other. On the one hand MARL could be considered as a more general
+instance of the problem we introduce in this paper as all agents (or
+at least most) are learning agents in MARL. On the other hand, so
+far the problem formulations that have been used for MARL can
+be quite restrictive for the nature of agent interaction as described
+below. Classic MARL problem formulations used:
+• Partially Observable Stochastic Games (POSGs) [14]: This
+formulation is widely used. All agents "take steps" simulta-
+neously by taking an action and observing the next state
+and reward. It is inherently time-step based – one needs
+to consider all time-steps and provide many null actions if
+the game is not fully simultaneous by nature. Additionally,
+environments modeling these type of games are typically
+designed to have all the players be learning agents and have
+no notion of a "rest of the world" background.
+• Extensive Form Games (EFGs) [2, 9]: These games are rep-
+resented by a decision tree and are typically used to model
+inherently sequential games like chess. Agents play sequen-
+tially and a "nature" agent can be added in order to model
+randomness in the game. This modelling is flexible but still
+typically imposes constraints on agents’ turns to play. E.g.
+2 indiscernible nodes of the game from observation should
+have the player play after them. [10] Introduces OpenSpiel
+ICAIF’21, November 03–05, 2021, London, UK Amrouni and Moulin, et al.
+a tool to create and use existing game implementations, in-
+cluding EFGs. While it seems like one of the most flexible
+open source tools for multi-agent RL, it is geared towards
+simpler theoretical games and not adapted to the purpose
+developed in our work.
+Overall MARL is concerned with learning optimal policies for a
+group of agents interacting with each other in a game, potentially
+including a nature agent.
+6.3 OpenAI Gym environments
+OpenAI Gym [4] introduced one of the most widely used frame-
+works and family of environments for RL. Its success can be ex-
+plained by the simplicity of use of Gym environments and how
+clearly they define the MDP to solve.
+Among others, many environments based on classic Atari arcade
+games have been developed, open sourced and constitute reference
+benchmarks for the field.
+6.3.1 Single agent.
+Most of the environments are single agent. The problem consists in
+controlling the actions of a single agent evolving in the environment
+and maximize its rewards. E.g. CartPole-v1, need to keep a pole
+standing by controlling its base.
+6.3.2 Multi-agent.
+Some "multi-agent" environments are provided. They are MARL
+environments as described in 6.2. They allow controlling several
+learning agents interacting with each other. E.g. PongDuel-v0 where
+2 agents play Atari style pong.
+OpenAI and third parties provide ready to use environments, the
+Gym concept provides a framework for how to present the environ-
+ment to the user. However, Gym does not provide constraints on
+how to design the algorithm producing the environment transitions.
+6.4 OpenAI Gym trading environments
+RL environments for trading are a good illustration of the tran-
+sition modelling issue. The only registered OpenAI Gym trading
+environment is [ 1]. It provides the typical Gym ease of use but
+the transitions of the MDP are generated by replaying historical
+market data snapshots. While replaying historical market data to
+assess an investment strategy is classic, it is done under the as-
+sumption that trades entered by the experimental agent does not
+impact future prices. This assumption would make the use of RL
+unnecessary since the experimental agent’s actions have no impact
+on the environment.
+6.5 Financial markets dynamics modeling
+using multi-agent simulation
+DEMAS has been used to model markets dynamics. Earlier work
+like [15] focused on reproducing time scaling laws for returns. In
+recent contributions, [5, 23] study the impact of a perturbation agent
+placing extra orders into a multi-agent background simulation and
+compare the differences in observed prices. In [3, 23] the benefits
+of DEMAS market simulation against market replay are developed
+by proposing experimental evidence using ABIDES.
+CONCLUSION
+Our contributions are three fold: (1) Provide a general framework to
+wrap a DEMAS in a Gym environment. (2) Develop the framework
+in details and implementing it on ABIDES simulator. (3) Introduce
+two financial markets environments: DailyInvestorEnv and Exe-
+cutionEnv as benchmarks for supporting research on interactive
+financial markets RL problems. Figure 6 illustrates the dependencies
+between ABIDES, ABIDES-Gym and Open AI Gym.
+In this work, we introduced a technique to wrap a DEMAS
+simulator into the OpenAI Gym environment framework. We
+explicitly used this technique on the multi-purpose DEMAS
+simulator ABIDES to create ABIDES-Gym. We used ABIDES-Gym
+and ABIDES’s markets extension ABIDES-Markets to build
+the more specific ABIDES-Gym-Markets, an abstract Gym
+environment constituting a base for creating financial markets
+Gym environment based on ABIDES-Markets. Based on it we
+introduced two new environments for training an investor and an
+execution agent. In addition, by leveraging open-source RL tools,
+we demonstrated that an RL agent could easily be trained using
+ABIDES-Gym-Markets.
+7 ACKNOWLEDGMENTS
+We would like to thank Yousef El-Laham and Vineeth Ravi for
+there contributions.
+Disclaimer:
+This paper was prepared for informational purposes by the Ar-
+tificial Intelligence Research group of JPMorgan Chase & Co ˙and
+its affiliates (“JP Morgan”), and is not a product of the Research
+Department of JP Morgan. JP Morgan makes no representation and
+warranty whatsoever and disclaims all liability, for the complete-
+ness, accuracy or reliability of the information contained herein.
+This document is not intended as investment research or investment
+advice, or a recommendation, offer or solicitation for the purchase
+or sale of any security, financial instrument, financial product or
+service, or to be used in any way for evaluating the merits of par-
+ticipating in any transaction, and shall not constitute a solicitation
+under any jurisdiction or to any person, if such solicitation under
+such jurisdiction or to such person would be unlawful.
+Figure 6: Dependency Diagram
+ABIDES-Gym ICAIF’21, November 03–05, 2021, London, UK
+REFERENCES
+[1] AminHP. [n.d.]. github repo: gym-anytrading. https://github.com/AminHP/gym-
+anytrading
+[2] Robert Aumann and S. Hart (Eds.). 1992.Handbook of Game Theory with Economic
+Applications (1 ed.). Vol. 1. Elsevier. https://EconPapers.repec.org/RePEc:eee:
+gamhes:1
+[3] Tucker Hybinette Balch, Mahmoud Mahfouz, Joshua Lockhart, Maria Hybinette,
+and David Byrd. 2019. How to Evaluate Trading Strategies: Single Agent Market
+Replay or Multiple Agent Interactive Simulation? arXiv:1906.12010 [q-fin.TR]
+[4] Greg Brockman, Vicki Cheung, Ludwig Pettersson, Jonas Schneider, John
+Schulman, Jie Tang, and Wojciech Zaremba. 2016. OpenAI Gym.
+arXiv:1606.01540 [cs.LG]
+[5] David Byrd, Maria Hybinette, and Tucker Hybinette Balch. 2019.
+ABIDES: Towards High-Fidelity Market Simulation for AI Research.
+arXiv:1904.12066 [cs.MA]
+[6] Gabriel Dulac-Arnold, Daniel J. Mankowitz, and Todd Hester. 2019. Chal-
+lenges of Real-World Reinforcement Learning. CoRR abs/1904.12901 (2019).
+arXiv:1904.12901 http://arxiv.org/abs/1904.12901
+[7] Daniele Gianni. 2008. Bringing Discrete Event Simulation Concepts into Multi-
+agent Systems. In Tenth International Conference on Computer Modeling and
+Simulation (uksim 2008). 186–191. https://doi.org/10.1109/UKSIM.2008.139
+[8] Alfred Hartmann and Herb Schwetman. 1998. Discrete-Event Simula-
+tion of Computer and Communication Systems . John Wiley & Sons,
+Ltd, Chapter 20, 659–676. https://doi.org/10.1002/9780470172445.ch20
+arXiv:https://onlinelibrary.wiley.com/doi/pdf/10.1002/9780470172445.ch20
+[9] Harold William Kuhn. 1953.Contributions to the Theory of Games (AM-28), Volume
+II. Princeton University Press. https://doi.org/doi:10.1515/9781400881970
+[10] Marc Lanctot, Edward Lockhart, Jean-Baptiste Lespiau, Vinicius Zambaldi,
+Satyaki Upadhyay, Julien Pérolat, Sriram Srinivasan, Finbarr Timbers, Karl Tuyls,
+Shayegan Omidshafiei, Daniel Hennes, Dustin Morrill, Paul Muller, Timo Ewalds,
+Ryan Faulkner, János Kramár, Bart De Vylder, Brennan Saeta, James Bradbury,
+David Ding, Sebastian Borgeaud, Matthew Lai, Julian Schrittwieser, Thomas An-
+thony, Edward Hughes, Ivo Danihelka, and Jonah Ryan-Davis. 2019. OpenSpiel:
+A Framework for Reinforcement Learning in Games. CoRR abs/1908.09453 (2019).
+arXiv:1908.09453 [cs.LG] http://arxiv.org/abs/1908.09453
+[11] Sergey Levine and Vladlen Koltun. 2013. Guided Policy Search. In Proceedings of
+the 30th International Conference on Machine Learning (Proceedings of Machine
+Learning Research, Vol. 28), Sanjoy Dasgupta and David McAllester (Eds.). PMLR,
+Atlanta, Georgia, USA, 1–9. http://proceedings.mlr.press/v28/levine13.html
+[12] Eric Liang, Richard Liaw, Robert Nishihara, Philipp Moritz, Roy Fox, Ken Gold-
+berg, Joseph Gonzalez, Michael Jordan, and Ion Stoica. 2018. RLlib: Abstrac-
+tions for Distributed Reinforcement Learning. In Proceedings of the 35th In-
+ternational Conference on Machine Learning (Proceedings of Machine Learning
+Research, Vol. 80) , Jennifer Dy and Andreas Krause (Eds.). PMLR, 3053–3062.
+http://proceedings.mlr.press/v80/liang18b.html
+[13] Richard Liaw, Eric Liang, Robert Nishihara, Philipp Moritz, Joseph E Gonzalez,
+and Ion Stoica. 2018. Tune: A Research Platform for Distributed Model Selection
+and Training. arXiv preprint arXiv:1807.05118 (2018).
+[14] Michael L. Littman. 1994. Markov Games as a Framework for Multi-Agent
+Reinforcement Learning. In In Proceedings of the Eleventh International Conference
+on Machine Learning. Morgan Kaufmann, 157–163.
+[15] Thomas Lux and Michele Marchesi. 1998. Scaling and Criticality in a Stochastic
+Multi-Agent Model of a Financial Market. Nature 397 (08 1998). https://doi.org/
+10.1038/17290
+[16] Nelson Minar, Roger Burkhart, Chris Langton, and et al. 1996. The Swarm
+Simulation System: A Toolkit for Building Multi-Agent Simulations . Technical
+Report.
+[17] Volodymyr Mnih, Koray Kavukcuoglu, David Silver, Alex Graves, Ioannis
+Antonoglou, Daan Wierstra, and Martin Riedmiller. 2013. Playing Atari with
+Deep Reinforcement Learning. (2013). http://arxiv.org/abs/1312.5602 cite
+arxiv:1312.5602Comment: NIPS Deep Learning Workshop 2013.
+[18] Philipp Moritz, Robert Nishihara, Stephanie Wang, Alexey Tumanov, Richard
+Liaw, Eric Liang, Melih Elibol, Zongheng Yang, William Paul, Michael I. Jordan,
+and Ion Stoica. 2018. Ray: A Distributed Framework for Emerging AI Applications.
+arXiv:1712.05889 [cs.DC]
+[19] NASDAQ. [n.d.]. The Nasdaq Stock Market (Nasdaq). https://www.nasdaqtrader.
+com/trader.aspx?id=tradingusequities
+[20] NASDAQ. 2021. O*U*C*H Version 4.2. http://www.nasdaqtrader.com/content/
+technicalsupport/specifications/TradingProducts/OUCH4.2.pdf
+[21] Yuriy Nevmyvaka, Yi Feng, and Michael Kearns. 2006. Reinforcement learning
+for optimized trade execution. ICML 2006 - Proceedings of the 23rd International
+Conference on Machine Learning 2006, 673–680. https://doi.org/10.1145/1143844.
+1143929
+[22] Richard S Sutton and Andrew G Barto. 2018. Reinforcement learning: An intro-
+duction. MIT press.
+[23] Svitlana Vyetrenko, David Byrd, Nick Petosa, Mahmoud Mahfouz, Danial Der-
+vovic, Manuela Veloso, and Tucker Hybinette Balch. 2019. Get Real: Realism
+Metrics for Robust Limit Order Book Market Simulations. arXiv:1912.04941 [q-
+fin.TR]

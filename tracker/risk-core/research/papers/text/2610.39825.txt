@@ -1,0 +1,819 @@
+arXiv 2610.39825  https://arxiv.org/abs/2610.39825
+
+AegisFlow: Training-Free Non-Myopic Path-Safe
+Guided Flow Matching
+Kunpeng Liu
+Department of Automation and BNRist
+Tsinghua University
+Beijing, China
+liukp22@mails.tsinghua.edu.cn
+Boshi Zhang
+Department of Automation and BNRist
+Tsinghua University
+Beijing, China
+zbs22@mails.tsinghua.edu.cn
+Keyou You∗
+Department of Automation and BNRist
+Tsinghua University
+Beijing, China
+youky@tsinghua.edu.cn
+Abstract
+Pretrained generative models, such as diffusion and flow matching models, have
+demonstrated exceptional capabilities in synthesizing high-quality data. How-
+ever, steering their generative trajectories to satisfy strict constraints—such as
+identity preservation in image editing or obstacle avoidance in robotics—remains
+fundamentally challenging. While recent training-free guidance methods enforce
+path-safety, they rely heavily on min-norm controllers that only account for im-
+mediate constraint satisfaction. These myopic approaches often yield suboptimal
+trajectories that hover dangerously close to the boundary, severely restricting the
+model’s ability to optimize toward its target. In this paper, we propose AegisFlow,
+a training-free, non-myopic path-safe guidance framework that recasts guided
+generation as a safety-critical optimal control problem with global scope. By
+integrating a time-varying barrier function directly into the global cost functional,
+AegisFlow naturally enforces constraints along the entire generative path. To com-
+pute the global optimal control, we derive a tractable, mathematically grounded
+approximation of the Hamilton-Jacobi-Bellman (HJB) equation. Comprehensive
+experiments demonstrate that AegisFlow outperforms state-of-the-art methods
+across text-guided image manipulation and robotic planning, establishing a signifi-
+cantly better trade-off between target alignment and constraint satisfaction. Code
+is available athttps://github.com/LiuKunpeng03/AegisFlow.
+1 Introduction
+Generative models such as diffusion [ 25, 53] and flow matching [ 34] have exhibited remarkable
+capabilities in synthesizing high-quality data across various domains, including images [ 45, 16]
+and planning [ 8, 14]. Guided generation, e.g., image editing [ 38, 24], takes advantage of the
+expressiveness of pretrained generative models and steers the generative trajectory towards a target.
+Reward-guided methods [52, 36, 56], which leverage a predefined reward function to optimize the
+trajectory at inference time, have attracted significant attention due to theirtraining-freenature and
+flexibility in handling various objectives.
+∗Corresponding author
+Preprint.
+arXiv:2610.39825v1  [cs.AI]  29 Oct 2026
+t = 0.00 t = 0.25 t = 0.50 t = 0.75 t = 1.00
+VanillaGuidanceAegis
+ Correction
+Figure 1:Toy Example. Vanillarepresents the original flow which is trained to fit into the contour of
+a cat.Guidancestands for the case where the flow is guided towards two eyes of the cat. Although
+the guidance successfully steers the trajectory, many trajectories collide with the red yarn ball which
+serves as the obstacle.Correctionmeans min-norm controller is applied to the former case. While
+all trajectories are safe, the quality is significantly degraded.Aegissuccessfully guides most of the
+trajectories towards the target while maintaining a safe distance from the obstacle.
+Besides objective guidance, constraint satisfaction is increasingly accounted for in guided generation.
+For example, fake or harmful content should be strictly prohibited from generation [ 51, 33], and
+generated trajectories for robotics should obey physical law and avoid obstacles [27, 8]. Previous
+methods deal with constraints by either soft guidance [60, 9] or projection [10, 54, 61]. The former
+admits no hard guarantees on constraint satisfaction, while the latter might hinder the generation
+quality. Recent works [57, 58, 20] extend the desired constraint on the output to the entire generative
+trajectory, and enforcepath-safetyby imposing control to the pretrained flow model. These methods
+are able to achieve better constraint satisfaction while maintaining generation quality. However,
+they apply amyopicmin-norm controller, which only considers the immediate effect of the control
+input without accounting for the long-term effect on the trajectory. As a result, these methods often
+find suboptimal solutions that hover dangerously close to safety boundaries, severely limiting the
+aggressiveness with which a model can optimize toward its target. See Figure 1 for an illustration.
+To overcome the fundamental limitations of myopic controllers, we propose AegisFlow, atraining-
+free, non-myopic path-safeguidance method for flow matching models. AegisFlow recasts guided
+generation as a safety-critical optimal control problem with a global scope. Instead of relying on per-
+step corrections, we integrate a time-varying barrier function directly into the global cost functional.
+This formulation penalizes the trajectory for approaching the boundary of the safe set, ensuring
+the entire generated path remains within a safe tube. AegisFlow seeks to find the global optimal
+control via estimating the solution to the Hamilton-Jacobi-Bellman (HJB) equation associated with
+the cost functional, which inherently accounts for the long-term effects of control inputs on both
+target alignment and safety constraints. Since the barrier function drives the cost to infinity near
+safety boundaries, any finite-cost solution natively guarantees constraint satisfaction, allowing us to
+bypass the ad-hoc projections or per-step barrier functions required by prior methods.
+We extensively evaluate AegisFlow across diverse and challenging domains, spanning from high-
+dimensional text-guided image manipulation (CelebA-HQ) to physical planning (Maze2D and D3IL
+2
+robotic manipulation). In image editing, AegisFlow proactively maintains a larger safety margin for
+identity preservation, enabling stronger textual alignment (higher CLIP scores) and better identity
+retention than myopic baselines. In continuous control tasks, AegisFlow achieves higher success
+rates, smoother trajectories, and fewer safety violations compared to current state-of-the-art safe
+diffusion methods.
+In summary, our main contributions are as follows:
+• Overcoming of Myopic Limitations:We identify the suboptimality of min-norm controllers
+in guided flow matching and propose AegisFlow, a globally aware, training-free optimal
+control framework.
+• Tractable HJB Approximation:We formulate a barrier-inclusive cost functional and derive
+a tractable, mathematically grounded approximation for the optimal safe control using the
+Hamilton-Jacobi-Bellman (HJB) equation.
+• Comprehensive Empirical Validations:We demonstrate superior performance across both
+high-dimensional image manipulation and safety-critical continuous control tasks, establish-
+ing a significantly better trade-off between target alignment and constraint satisfaction.
+2 Related Works
+Training-free image manipulation.There are various training-free methods for image manipu-
+lation based on pretrained diffusion models. The mainstream approach starts with image-to-noise
+inversion and then applies certain guidance to the generative trajectory [36, 50, 7, 26, 5, 56]. Some
+works directly optimize over the original image [31, 41, 59]. Recently, Kulikov et al.[32] also explore
+inversion-free methods. In this paper, we will mainly focus on the first approach. However, we think
+there is no fundamental barrier to applying our method to the other approaches, and we leave it for
+future work.
+Flow matching under control theory.Prior works have formulated the training [ 15, 65, 66],
+sampling [63, 6, 55, 23], and test-time editing [36, 56, 48, 49, 21] of flow matching models as optimal
+control problems. Some of them use Pontryagin’s Maximum Principle (PMP) [ 15, 36, 56], while
+others adopt the Hamilton-Jacobi-Bellman (HJB) approach [ 65, 49, 21]. They aim to optimize a
+certain cost, while the behavior of the trajectory is controlled by a regularizer and admits no hard
+guarantees. Several recent works explore the use of per-step projection [10, 47, 61, 54, 37], control
+barrier functions (CBFs) with min-norm controller (MNC) [57, 62, 58, 20] to enforce hard constraints
+along the entire trajectory. However, the myopic nature of per-step projection and MNCs remains
+to be addressed. Mizuta and Leung [40] try to encode the CBF constraint into the reward function.
+But they do so by including the increment of the term inside the supremum in (19) (in Appendix A)
+between two timesteps as part of the reward, which is still essentially myopic and cannot find globally
+optimal solutions. Mishra and Manchester [39] explore the use of an emerging barrier function to
+enforce safety constraints in the diffusion process, but their method is mainly a heuristic one. In
+constrast, our method estimates the optimal control from the HJB equation with a cost functional that
+includes the barrier function, which attempts to find a globally optimal solution that minimizes the
+cost functional while ensuring the trajectory stays within a safe set.
+3 Preliminaries and Problem Formulation
+Flow Matching.Flow matching [ 34, 35, 1] formulates the diffusion models from a perspective of
+ordinary differential equations (ODEs). Given a data distribution π1 and a noise distribution π0, flow
+matching learns a time-dependent vector field f(x, t)that transports π0 to π1 along the trajectories
+defined by the ODE:
+˙x=f(x, t), x(t 0)∼π 0.(1)
+Indeed, once a sample x0 is drawn from π0, a unique trajectory xt is determined by the ODE under
+necessary regularity conditions. Therefore f induces a map Φft1→t2 such that Φft1→t2 (x(t1)) =x(t 2),
+which further results in a pushforward measure Φft0→tf (π0). The flow matching objective is to learn
+3
+Unsafe Sett0
+tf
+(a) Myopic Control
+Unsafe Sett0 tf
+(b) AegisFlow
+Time Progression
+State Space
+Cost  
+(c) Barrier Cost Landscape
+Figure 2:Conceptual comparison between myopic control and AegisFlow. (a) Myopic Control:
+A greedy controller driven purely by local target attraction and rigid boundary constraints. It gets
+trapped sliding jaggedly along the edge of the Unsafe Set and fails to reach the target state.(b)
+AegisFlow: By explicitly modeling the global cost field, the proposed trajectory is smooth and
+globally optimal. It proactively avoids the obstacle with an anticipated safety margin and successfully
+converges to the target.(c) Barrier Cost Landscape: The cost functional used by AegisFlow
+combines a barrier function to enforce constraints and a reward of the target, balancing constraint
+satisfaction and target guidance.
+a vector field f such that Φft0→tf (π0) =π 1. In practice, flow matching generally minimizes the
+regression objective:
+Et,x(t0),x(tf )(∥f(x(t), t)−u t(x(t)|x(t0), x(tf ))∥22),
+where ut is the velocity field of the reference trajectory, which can be defined in various ways, e.g.
+linear interpolant [1].
+Guided Generation and Optimal Control.The primary goal of guided generation is to steer the
+generative trajectory towards a target while satisfying some constraints, e.g. identity preservation or
+obstacle avoidance. In the scope of control theory, the problem can be formulated as follows. Given a
+pretrained flow matching model with vector field f, we consider the following controlled dynamics:
+˙x=f(x, t) +u,(2)
+where u is the control input to be chosen. Reward-guided methods prove to be effective in steering
+the flow towards the target. Specifically, they select the control input u that minimizes a certain cost
+functional,
+J(u) :=
+Z tf
+t0
+L(x(t), u(t), t)dt+ Ψ(x(tf )),s.t.x(t 0) =x 0,(3)
+where L is the running cost and Ψ is the terminal cost. For example, Wang et al. [56] set L(x, u, t) =
+∥u∥22 and Ψ(·) =−CLIP(·,prompt) in (3) in the text-guided image manipulation task to encourage
+prompt adherence.
+Finding the optimal control u⋆ that minimizes the cost functional (3) is a classical problem in control
+theory, which can be solved by the Hamilton-Jacobi-Bellman (HJB) equation. To begin with, let us
+make the dependence of the cost functionalJon the initial statex 0 and timet 0 explicit, namely
+J(u, x0, t0) :=
+Z tf
+t0
+L(x(t), u(t), t)dt+ Ψ(x(tf )),s.t.x(t 0) =x 0.(4)
+Denote the value function of the optimal control problem as
+V(x, t) := min
+u
+J(u, x, t).(5)
+HJB states that under necessary regularity conditions,Vsatisfies the following PDE:
+−∂tV(x, t) = minu [L(x, u, t) +∇xV(x, t)·(f(x, t) +u)],s.t.V(x, t f ) = Ψ(x),(6)
+and the optimal controlu ⋆ satisfies
+u⋆(x, t)∈arg min
+u
+[L(x, u, t) +∇xV(x, t)·(f(x, t) +u)].(7)
+4
+Algorithm 1AegisFlow
+1: Input: xt0 ∼ρ 0, schedules {λt, βt}, barrier function B, reference flow f, terminal loss Ψ, timestep grid
+{t0, . . . , tN }, maximum iterationM, learning rateη, weight decayν
+2:fork= 0, . . . , M−1do
+3: Solve the controlled dynamics (2) with the current control ukn to obtain the trajectory {xn =
+x(tn)}n=0,1,...,N−1
+4:s n ←
+R 1
+tn λ−1τ dτ
+5:g safe,n ← ∇xB(xn, tn)
+6:g tar,n ← ∇x(Ψ◦Φ f+u ktn→1)(xn)
+7:g n ←λ −1tn gtar,n +s nβtn gsafe,n
+8:u k+1n ←νu kn −ηg n
+9:end for
+10:returnx tN
+Conversely, if a function ˆV satisfies (6) and a control ˆusatisfies (7) with V replaced by ˆV , then it
+must be the case that ˆVis the value function andˆuis an optimal control.
+Constraint satisfaction is also increasingly considered in guided generation. It requires the generated
+sample to satisfy certain constraints, i.e., x(tf )∈ Cfor some constraint set C. Traditional approaches
+utilize soft guidance or projection to enforce constraints, which offer no hard guarantees or suffer
+from performance degradation. For example, Gao et al. [21] set Ψ to be the distance to the admissible
+set and utilize HJB to estimate the optimal control. To alleviate performance deterioration caused by
+post hoc projection, recent works extend the constraints to the entire trajectory [57, 58, 20], i.e., they
+demand x(t)∈ Ct for all t∈[t 0, tf ] where Ct is a time-varying safe set with Ctf ⊆ C. They enforce
+suchpath-safetyby CBFs and MNCs. However, MNCs only consider the immediate effect of the
+control input and such myopic nature often leads to suboptimal solutions. Details about CBFs and
+MNCs are deferred to Appendix A.
+In summary, the core problem we seek to address is as follows:How can we find the optimal control
+that minimizes the cost functional while satisfying the given constraints?Formally speaking, we aim
+to solve the following optimization problem:
+min
+u
+J(u, x0, t0) :=
+Z tf
+t0
+L(x(t), u(t), t)dt+ Ψ(x(tf )),
+s.t.˙x=f(x, t) +u, x(t 0) =x 0, x(t)∈ C t,∀t∈[t 0, tf ].
+(8)
+4 Methodology
+4.1 AegisFlow: Non-Myopic Path-Safe Guided Flow Matching
+We have recast guided generation as a safety-critical optimal control problem (8). To enhance the
+long-term awareness of the safe control, we consider the following cost functional:
+J(u, x0, t0) :=
+Z tf
+t0
+h λt
+2 ∥u(t)∥22 +β tB(x(t), t)idt+ Ψ(x(t f )),s.t.x(t 0) =x 0,(9)
+whereB(·, t) : Int(Ct)→R ≥0 is a barrier function that satisfies
+lim
+x→∂Ct
+B(x, t) = +∞,∀t∈[t 0, tf ].
+Note that the safety constraints are implicitly enforced by the barrier function in the cost functional,
+which allows us to directly apply the HJB approach to estimate the optimal control. Intuitively,
+the barrier function B penalizes the trajectory for getting too close to the boundary of the safe set,
+which encourages the trajectory to stay within Ct. See Figure 2 for an illustration. Indeed, if the
+cost functional (9) is finite, then the trajectory must satisfy x(t)∈Int(C t) for all t∈[t 0, tf ]. By
+adjusting the weight βt, we can control the trade-off between editability and safety and λt can be
+used to control the smoothness of the control input. Path-safety is formally justified in Proposition 2
+below. Such cost functional is considered in [11], where kernel method is used to approximate the
+5
+old sad smile angry curly hair
+Original
+OC-Flow
++ MNC
+AegisFlow
+Figure 3:Visualization of text-guided image manipulation on CelebA-HQ.The row "+ MNC"
+shows the results when MNC is applied on OC-Flow.
+value function and optimal control. In contrast, we seek to directly estimate the optimal control from
+the HJB equation (6) with the cost functional (9).
+Recall that the value function V is defined as (5) with J given by (9). We are able to derive the more
+explicit form of the HJB equation.
+Proposition 1.AssumeVis smooth andλ t >0. ThenVsatisfies
+−∂tV− ∇xV·f+ 12λt ∥∇xV∥ 22 −β tB(x, t) = 0, V(x, tf ) = Ψ(x),(10)
+and the optimal control is given by
+u⋆(x, t) =−λ−1t ∇xV(x, t).(11)
+Proof.See Appendix B.1.
+Proposition 2.Assume V is smooth, Ct varies not too rapidly, B(x, t)blows up fast enough as
+x→∂C t, and u⋆ is given by (11). Suppose x(t0)∈Int(C t0 ), then the trajectory of the controlled
+system(2)under the controlu ⋆ satisfiesx(t)∈Int(C t)for allt∈[t 0, tf ].
+Proof.See Appendix B.2.
+Remark 1.Proposition 2 establishes the path-safety of the optimal control to the cost functional (9)
+under certain regularities. It does not automatically guarantee the path-safety of the approximated
+control derived from the HJB approximation in the next section, and of the output of Algorithm 1.
+In practice, one may set a safe guard (e.g., an MNC) that intervenes when necessary to ensure
+path-safety.
+4.2 Tractable HJB Approximation
+In light of Proposition 1, it suffices to calculate the gradient of the value function ∇xV in order to
+obtain the optimal control. However, solving the HJB equation (10) is generally intractable. Instead,
+we seek to directly estimate the optimal control without explicitly solving for V . Let us start by
+characterizing∇ xVfurther.
+Following Gao et al. [21], we introduce the following change of variables:
+s(t) :=
+Z tf
+t
+λ−1τ dτ, bV(y, s(t)) :=V(Φ ftf →t(y), t), y:= Φ ft→tf (x),
+Gt(y) :=∇ xΦft→tf (Φftf →t(y))∇xΦft→tf (Φftf →t(y))⊤,Γ t(y) :=λ tβtB(Φftf →t(y), t),
+(12)
+where Φft1→t2 is the flow map induced by the vector field f as defined in the preliminaries. Then wehave the following result.
+Proposition 3.Under Eq.(12), Eq.(10)transforms to a forced Hamilton-Jacobi equation
+∂s bV(y, s) +12 ∇y bV(y, s)⊤Gt(y)∇y bV(y, s) = Γt(y), bV(y,0) = Ψ(y).(13)
+Moreover,
+∇xV(x, t) =∇xΦft→tf (x)⊤∇y bV(y, s(t)).(14)
+6
+Proof.See Appendix B.3.
+The expression (13) is still difficult to solve exactly in high dimension. Suppose Γt(y)≡Γ and
+Gt ≡Gare constant, then (13) admits an explicit solution given by the Hopf-Lax formula [17]:
+bV(y, s) =sΓ + inf
+z
+n
+Ψ(z) + 12s ∥y−z∥ 2G−1
+o
+.
+Since PDE is locally well-approximated, we have
+bV(y, s)≈sΓ t(y) + infz
+n
+Ψ(z) + 12s ∥y−z∥ 2G−1t
+o
+=:sΓ t(y) +U.
+If the infimum is attained at a unique point y+(y) for all y, then U is differentiable and its gradient is
+given by the Moreau-Yosida identity [44]:
+∇yU= 1s G−1t (y−y +(y)).
+Consequently, by (11) and (14), the optimal control can be approximated by
+u⋆(x, t)≈ −λ−1t ∇xΦft→tf (x)⊤
+
+s∇yΓt(y) + 1s G−1t (y−y +(y))
+=−sβ t∇xB(x, t)−λ−1t ∇xΦft→tf (x)⊤ 1s G−1t (y−y +(y)). (15)
+If we adopt the first-order approximation Ψ(z)≈Ψ(y) +∇Ψ(y)·(z−y) and assume Gt ≈I , then
+the optimal control can be approximated by
+u⋆(x, t)≈ −sβt∇xB(x, t)−λ−1t ∇xΨ(y).(16)
+Gao et al. [21] deal with a similar problem without considering path-safety. The introduction of the
+barrier function term turns an unforced HJB equation into a forced one, which enhance the difficulty
+to obtain the approximation. We summarize the procedure of AegisFlow in Algorithm 1.
+Remark 2.In Algorithm 1, we implement a heuristic substitution that replaces the nominal flow
+Φf in (16) with the iteratively updated controlled flow Φf+u k. This modification ensures that the
+terminal loss landscape is evaluated exactly along the controlled trajectory. As k increases and
+uk converges toward the optimal control, exploitingΦf+u k substantially reduces the compounding
+linearization error that would otherwise arise from tracking solely along the unperturbed flowΦ f .
+5 Experiments
+5.1 Text-Guided Image Manipulation with Identity Preservation
+Dataset and Evaluation.We conduct experiments on the celebrity face dataset CelebA-HQ [ 29]
+with text guidance {old, smile, sad, angry, curly hair} . Following the same setup as
+in [36], the alignment between the generated image and text prompt is evaluated by the CLIP
+model [43]. As in [30], we measure the perceptual similarity between the source and generated image
+by LPIPS [64] and identity similarity by ID, which is computed using ArcFace [12]. Implementation
+details are deferred to Appendix C.1.
+Main Results.We benchmark AegisFlow against state-of-the-art methods on CelebA-HQ (Figure 3).
+The results are summarized in Table 1 and Figure 4. Our method achieves the best CLIP and LPIPS
+score, indicating that it improves text alignment while preserving subject identity better than prior
+methods. We also compare against the myopic safety baseline, i.e. applying the plug-and-play MNC
+to OC-Flow. While MNC attains the highest ID, it underperforms AegisFlow on both CLIP and
+LPIPS.
+To better understand AegisFlow, we record the value of the function h(x, t)at each timestep, as
+shown in Figure 4. It can be seen that AegisFlow acts the most proactively to maintain a large
+margin from the boundary of the safe set. Although MNC and AegisFlow both renders safety for the
+most part of the trajectory, AegisFlow achieves better performance by maintaining a larger safety
+margin and thus allowing more aggressive optimization towards the target prompt. Comparisons on
+computational efficiency are deferred to Appendix D.1.
+7
+Table 1:Comparison of AegisFlow with state-of-the-art methods on CelebA-HQ.The best results
+are inbold. We also include the results of directly applying MNC for reference.
+Method CLIP↑LPIPS↓ID↑
+CG + RF [13] 0.292 0.346 0.643
+CG + LDM [13] 0.298 0.383 0.513
+DiffusionCLIP [30] 0.285 0.398 0.659
+StyleCLIP + e4e [42] 0.267 0.359 0.704
+FlowGrad + RF [36] 0.299 0.302 0.737
+OC-Flow [56] 0.302 0.207 0.732
+OC-Flow [56] + MNC 0.304 0.1930.920
+AegisFlow (Ours) 0.309 0.1880.901
+a. b.
+Figure 4:Quantitative Analysis on CelebA-HQ. a.The value of the function h(x, t)at each
+timestep. The solid lines represent the mean value for the three methods and the shallow bands
+represent the range of variation. The x-axis is emphasized by a dash line since the forward invariance
+of Ct requires h(x, t)≥0 for all t.b.AegisFlow achieves a more favorable balance between
+text alignment (CLIP) and structure preservation (LPIPS). Connected markers represents different
+hyperparameter settings (See Appendix D.2).
+5.2 Maze Navigation with Safety Constraints
+Dataset and Evaluation.We evaluate AegisFlow on a 2D maze navigation task with safety
+constraints. The experiment is conducted on maze_large_v1 of the Maze2D environment from
+D4RL [19]. Following Xiao et al. [57], Yang et al. [58], we introduce two obstacle-based safety
+constraints given by the following functions:
+BS1: ( x−x 0
+a )2 + (y−y 0b )2 ≥1,BS2: ( x−x 0a )4 + (y−y 0b )4 ≥1.
+The minimum value of the above functions along the planned trajectory is recorded to evaluate the
+safety performance. We also report the D4RL normalized score, the average curvature κ and the
+average accelerationaof the trajectory. Implementation details are deferred to Appendix C.2.
+Main Results.The results are summarized in Table 2. AegisFlow achieves the strongest safety
+margins (highest BS1/BS2) and the best generation quality among all methods, indicating safer and
+smoother plans. Compared with SafeFlowMatcher (which adopts MNC), AegisFlow improves both
+safety metrics and reduces trajectory curvature and acceleration. Figure 5 shows that AegisFlow
+maintains a larger safety buffer early in the rollout, which aligns with its non-myopic formulation.
+Comparisons on computational efficiency are deferred to Appendix D.1.
+8
+t = 0.00 t = 0.25 t = 0.50 t = 0.75 t = 1.00
+SafeFlowMatcherAegisFlow
+Figure 5:Visualization of path generation process in Maze2D.Red circles represent the obstacles.
+AegisFlow behaves more proactively to maintain a large margin from the boundary of the safe set in
+the early stages of generation.
+Table 2:Comparison of AegisFlow with state-of-the-art methods on Maze2D.The best results
+are inbold. BS1 and BS2 being positive ( ≥0 ) indicates the trajectory is safe with respect to the
+corresponding constraint.a±bmeansais the mean andbis the standard deviation over 100 trials.
+Method BS1↑BS2↑Score↑κ↓a↓
+Diffuser [27] -0.825 -0.784 1.572±0.288 77.04±4.30 86.68±3.81
+FlowMatcher -0.324 -0.904 1.632±0.003 73.51±1.02 88.45±0.60
+ROS-SafeDiffuser [57] 0.010 0.010 1.435±0.502 75.15±6.67 422.87±86.70
+RES-SafeDiffuser [57] 0.010 0.010 1.442±0.451 80.30±13.06 398.17±1060.86
+TVS-SafeDiffuser [57] -0.003 -0.003 1.506±0.405 78.72±7.80 124.51±34.22
+SafeFlowMatcher [58] 0.020 0.041 1.632±0.003 51.97±2.55 65.71±2.45
+AegisFlow (Ours) 0.049 0.071 1.635±0.003 44.72±2.10 50.29±6.17
+Table 3:Comparison of AegisFlow with state-of-the-art methods on Avoiding.The best results
+are inbold.a±bmeansais the mean andbis the standard deviation over 100 trials.
+Method Timesteps↓Goal↑Safe↑Violation↓
+Diffuser [27] 76.7±12.71.000.07 17.8±12.1
+Flowmatcher 64.2±9.41.000.22 14.8±11.5
+DOM [22] 79.1±13.91.000.96 0.1±0.5
+Model-free [46] 76.1±12.1 0.99 0.07 18.0±12.0
+DPCC-C [47] 69.0±12.91.00 0.98 0.0±0.3
+AegisFlow (Ours) 62.6±2.0 1.00 0.980.1±0.5
+5.3 Robotic Manipulation with Safety Constraints
+Dataset and Evaluation.We implement AegisFlow on a robotic manipulation task with novel
+test-time constraints. The experiment is conducted on the Avoiding environment from D3IL [28].
+The task is to control a robot manipulator to reach the target region while avoiding collision with
+obstacles. We also introduce the same novel test-time constraints as in Römer et al. [47]. We
+report the success rate of reaching the target (goal), of reaching the target while satisfying the safety
+constraints (safe), the number of timesteps the manipulator takes to reach the target (timesteps), and
+the number of timesteps the manipulator violates the safety constraints (violation). Implementation
+details are deferred to Appendix C.3.
+9
+a. b. c.
+Figure 6:Qualitative Results for Robotic Manipulation. a.Visualization of the robotic manipu-
+lation task. The object is to reach the green line while avoiding collision with the red obstacles.b.
+Generated trajectories by Flowmatcher.c.Generated trajectories by AegisFlow. The novel test-time
+constraints are that the robot should not enter the blue regions.
+Main Results.Table 3 shows that AegisFlow maintains the best goal success and safety rate while
+achieving the fewest timesteps. Compared with DPCC-C, AegisFlow maintains the same safety level
+with faster task completion. Relative to unsafe baselines, AegisFlow substantially reduces violations
+while preserving goal success. Figure 6 visualizes that AegisFlow respects the novel constraints by
+steering trajectories away from forbidden regions.
+6 Conclusion
+In this paper, we presented AegisFlow, a training-free guidance framework that addresses the
+limitations of myopic controllers in path-safe guided flow matching. By casting guided generation as
+a safety-critical optimal control problem, AegisFlow integrates constraints into the cost functional.
+A tractable HJB approximation is derived to obtain the optimal control. Comprehensive empirical
+evaluations across diverse domains demonstrate the effectiveness of AegisFlow. Future works may
+improve HJB approximation, enhance computational efficiency, and extend this control-theoretic
+framework to broader settings and more complex modalities.
+7 Acknowledgements
+This work was supported by National Natural Science Foundation of China (62325305), and the
+BNRist project (No. BNR2024TD03003).
+References
+[1] Michael Albergo, Nicholas M Boffi, and Eric Vanden-Eijnden. Stochastic interpolants: A
+unifying framework for flows and diffusions.Journal of Machine Learning Research, 26(209):
+1–80, 2025.
+[2] Aaron D Ames, Kevin Galloway, Koushil Sreenath, and Jessy W Grizzle. Rapidly exponentially
+stabilizing control lyapunov functions and hybrid zero dynamics.IEEE Transactions on
+Automatic Control, 59(4):876–891, 2014.
+[3] Aaron D Ames, Xiangru Xu, Jessy W Grizzle, and Paulo Tabuada. Control barrier function
+based quadratic programs for safety critical systems.IEEE Transactions on Automatic Control,
+62(8):3861–3876, 2016.
+[4] Aaron D Ames, Samuel Coogan, Magnus Egerstedt, Gennaro Notomista, Koushil Sreenath, and
+Paulo Tabuada. Control barrier functions: Theory and applications. In2019 18th European
+control conference (ECC), pages 3420–3431. IEEE, 2019.
+[5] Heli Ben-Hamu, Omri Puny, Itai Gat, Brian Karrer, Uriel Singer, and Yaron Lipman. D-flow:
+Differentiating through flows for controlled generation. InInternational Conference on Machine
+Learning, 2024.
+10
+[6] Julius Berner, Lorenz Richter, and Karen Ullrich. An optimal control perspective on diffusion-
+based generative modeling.Transactions on Machine Learning Research, 2024.
+[7] Manuel Brack, Felix Friedrich, Katharia Kornmeier, Linoy Tsaban, Patrick Schramowski,
+Kristian Kersting, and Apolinário Passos. Ledits++: Limitless image editing using text-to-
+image models. InProceedings of the IEEE/CVF conference on computer vision and pattern
+recognition, pages 8861–8870, 2024.
+[8] Joao Carvalho, An T Le, Mark Baierl, Dorothea Koert, and Jan Peters. Motion planning
+diffusion: Learning and planning of robot motions with diffusion models. In2023 IEEE/RSJ
+International Conference on Intelligent Robots and Systems (IROS), pages 1916–1923. IEEE,
+2023.
+[9] Chang Chen, Fei Deng, Kenji Kawaguchi, Caglar Gulcehre, and Sungjin Ahn. Simple hier-
+archical planning with diffusion. InInternational Conference on Learning Representations,
+2024.
+[10] Jacob K Christopher, Stephen Baek, and Ferdinando Fioretto. Constrained synthesis with
+projected diffusion models.Advances in Neural Information Processing Systems, 37:89307–
+89333, 2024.
+[11] Max H Cohen and Calin Belta. Approximate optimal control for safety-critical systems with
+control barrier functions. In2020 59th IEEE conference on decision and control (CDC), pages
+2062–2067. IEEE, 2020.
+[12] Jiankang Deng, Jia Guo, Niannan Xue, and Stefanos Zafeiriou. Arcface: Additive angular
+margin loss for deep face recognition. InProceedings of the IEEE/CVF conference on computer
+vision and pattern recognition, pages 4690–4699, 2019.
+[13] Prafulla Dhariwal and Alexander Nichol. Diffusion models beat gans on image synthesis.
+Advances in neural information processing systems, 34:8780–8794, 2021.
+[14] Haoran Ding, Noémie Jaquier, Jan Peters, and Leonel Rozo. Fast and robust visuomotor
+riemannian flow matching policy.IEEE Transactions on robotics, 2025.
+[15] Carles Domingo-Enrich, Michal Drozdzal, Brian Karrer, and Ricky TQ Chen. Adjoint matching:
+Fine-tuning flow and diffusion generative models with memoryless stochastic optimal control.
+InInternational Conference on Learning Representations, 2025.
+[16] Patrick Esser, Sumith Kulal, Andreas Blattmann, Rahim Entezari, Jonas Müller, Harry Saini,
+Yam Levi, Dominik Lorenz, Axel Sauer, Frederic Boesel, et al. Scaling rectified flow trans-
+formers for high-resolution image synthesis. InInternational Conference on Machine Learning,
+2024.
+[17] Lawrence C Evans.Partial differential equations, volume 19. American mathematical society,
+2022.
+[18] Randy Freeman and Petar V Kokotovic.Robust nonlinear control design: state-space and
+Lyapunov techniques. Springer Science & Business Media, 2008.
+[19] Justin Fu, Aviral Kumar, Ofir Nachum, George Tucker, and Sergey Levine. D4rl: Datasets for
+deep data-driven reinforcement learning.arXiv preprint arXiv:2004.07219, 2020.
+[20] Darshan Gadginmath, Ahmed Allibhoy, and Fabio Pasqualetti. Provably safe generative
+sampling with constricting barrier functions.Transactions on Machine Learning Research,
+2026.
+[21] Weiguo Gao, Ming Li, and Qianxiao Li. Terminally constrained flow-based generative models
+from an optimal control perspective.arXiv preprint arXiv:2601.09474, 2026.
+[22] Giorgio Giannone, Akash Srivastava, Ole Winther, and Faez Ahmed. Aligning optimization
+trajectories with diffusion models for constrained design generation.Advances in neural
+information processing systems, 36:51830–51861, 2023.
+11
+[23] Aaron Havens, Benjamin Kurt Miller, Bing Yan, Carles Domingo-Enrich, Anuroop Sriram,
+Brandon Wood, Daniel Levine, Bin Hu, Brandon Amos, Brian Karrer, et al. Adjoint sampling:
+Highly scalable diffusion samplers via adjoint matching. InInternational Conference on
+Machine Learning, 2025.
+[24] Amir Hertz, Kfir Aberman, and Daniel Cohen-Or. Delta denoising score. InProceedings of the
+IEEE/CVF International Conference on Computer Vision, pages 2328–2337, 2023.
+[25] Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models.Advances
+in neural information processing systems, 33:6840–6851, 2020.
+[26] Inbar Huberman-Spiegelglas, Vladimir Kulikov, and Tomer Michaeli. An edit friendly ddpm
+noise space: Inversion and manipulations. InProceedings of the IEEE/CVF conference on
+computer vision and pattern recognition, pages 12469–12478, 2024.
+[27] Michael Janner, Yilun Du, Joshua B Tenenbaum, and Sergey Levine. Planning with diffusion
+for flexible behavior synthesis. InInternational Conference on Machine Learning, 2022.
+[28] Xiaogang Jia, Denis Blessing, Xinkai Jiang, Moritz Reuss, Atalay Donat, Rudolf Lioutikov,
+and Gerhard Neumann. Towards diverse behaviors: A benchmark for imitation learning with
+human demonstrations. InInternational Conference on Learning Representations, 2024.
+[29] Tero Karras, Timo Aila, Samuli Laine, and Jaakko Lehtinen. Progressive growing of gans for im-
+proved quality, stability, and variation. InInternational Conference on Learning Representations,
+2018.
+[30] Gwanghyun Kim, Taesung Kwon, and Jong Chul Ye. Diffusionclip: Text-guided diffusion
+models for robust image manipulation. InProceedings of the IEEE/CVF conference on computer
+vision and pattern recognition, pages 2426–2435, 2022.
+[31] Juil Koo, Chanho Park, and Minhyuk Sung. Posterior distillation sampling. InProceedings of
+the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages 13352–13361,
+2024.
+[32] Vladimir Kulikov, Matan Kleiner, Inbar Huberman-Spiegelglas, and Tomer Michaeli. Flowedit:
+Inversion-free text-based editing using pre-trained flow models. InProceedings of the IEEE/CVF
+International Conference on Computer Vision, pages 19721–19730, 2025.
+[33] Zhiwen Li, Die Chen, Mingyuan Fan, Cen Chen, Yaliang Li, Yanhao Wang, and Wenmeng
+Zhou. Responsible diffusion models via constraining text embeddings within safe regions. In
+Proceedings of the ACM on Web Conference 2025, pages 1588–1601, 2025.
+[34] Yaron Lipman, Ricky TQ Chen, Heli Ben-Hamu, Maximilian Nickel, and Matt Le. Flow
+matching for generative modeling. InInternational Conference on Learning Representations,
+2023.
+[35] Xingchao Liu, Chengyue Gong, and Qiang Liu. Flow straight and fast: Learning to generate
+and transfer data with rectified flow. InInternational Conference on Learning Representations,
+2023.
+[36] Xingchao Liu, Lemeng Wu, Shujian Zhang, Chengyue Gong, Wei Ping, and Qiang Liu. Flow-
+grad: Controlling the output of generative odes with gradients. InProceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition, pages 24335–24344, 2023.
+[37] Hao Luan, Yi Xian Goh, See-Kiong Ng, and Chun Kai Ling. Projected coupled diffusion for
+test-time constrained joint generation. InInternational Conference on Learning Representations,
+2026.
+[38] Chenlin Meng, Yutong He, Yang Song, Jiaming Song, Jiajun Wu, Jun-Yan Zhu, and Stefano
+Ermon. Sdedit: Guided image synthesis and editing with stochastic differential equations. In
+International Conference on Learning Representations, 2022.
+[39] Raghav Mishra and Ian R Manchester. Eb-mbd: Emerging-barrier model-based diffusion for safe
+trajectory optimization in highly constrained environments.arXiv preprint arXiv:2510.07700,
+2025.
+12
+[40] Kazuki Mizuta and Karen Leung. Cobl-diffusion: Diffusion-based conditional robot planning
+in dynamic environments using control barrier and lyapunov functions. In2024 IEEE/RSJ
+International Conference on Intelligent Robots and Systems (IROS), pages 13801–13808. IEEE,
+2024.
+[41] Hyelin Nam, Gihyun Kwon, Geon Yeong Park, and Jong Chul Ye. Contrastive denoising score
+for text-guided latent diffusion image editing. InProceedings of the IEEE/CVF conference on
+computer vision and pattern recognition, pages 9192–9201, 2024.
+[42] Or Patashnik, Zongze Wu, Eli Shechtman, Daniel Cohen-Or, and Dani Lischinski. Styleclip:
+Text-driven manipulation of stylegan imagery. InProceedings of the IEEE/CVF international
+conference on computer vision, pages 2085–2094, 2021.
+[43] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal,
+Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual
+models from natural language supervision. InInternational conference on machine learning,
+pages 8748–8763, 2021.
+[44] R Tyrrell Rockafellar and Roger JB Wets.Variational analysis. Springer, 1998.
+[45] Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Björn Ommer. High-
+resolution image synthesis with latent diffusion models. InProceedings of the IEEE/CVF
+conference on computer vision and pattern recognition, pages 10684–10695, 2022.
+[46] Ralf Römer, Lukas Brunke, Martin Schuck, and Angela P Schoellig. Safe offline reinforcement
+learning using trajectory-level diffusion models. InICRA 2024 Workshop Back to the Future:
+Robot Learning Going Probabilistic, 2024.
+[47] Ralf Römer, Alexander von Rohr, and Angela P Schoellig. Diffusion predictive control with
+constraints.arXiv preprint arXiv:2412.09342, 2024.
+[48] Litu Rout, Yujia Chen, Nataniel Ruiz, Constantine Caramanis, Sanjay Shakkottai, and Wen-
+Sheng Chu. Semantic image inversion and editing using rectified stochastic differential equa-
+tions. InInternational Conference on Learning Representations, 2025.
+[49] Litu Rout, Yujia Chen, Nataniel Ruiz, Abhishek Kumar, Constantine Caramanis, Sanjay Shakkot-
+tai, and Wen-Sheng Chu. Rb-modulation: Training-free stylization using reference-based
+modulation. InInternational Conference on Learning Representations, 2025.
+[50] Dvir Samuel, Barak Meiri, Haggai Maron, Yoad Tewel, Nir Darshan, Shai Avidan, Gal Chechik,
+and Rami Ben-Ari. Lightning-fast image inversion and editing for text-to-image diffusion
+models. InInternational Conference on Learning Representations, 2025.
+[51] Patrick Schramowski, Manuel Brack, Björn Deiseroth, and Kristian Kersting. Safe latent
+diffusion: Mitigating inappropriate degeneration in diffusion models. InProceedings of the
+IEEE/CVF conference on computer vision and pattern recognition, pages 22522–22531, 2023.
+[52] Jiaming Song, Qinsheng Zhang, Hongxu Yin, Morteza Mardani, Ming-Yu Liu, Jan Kautz,
+Yongxin Chen, and Arash Vahdat. Loss-guided diffusion models for plug-and-play controllable
+generation. InInternational Conference on Machine Learning, pages 32483–32498. PMLR,
+2023.
+[53] Yang Song, Jascha Sohl-Dickstein, Diederik P Kingma, Abhishek Kumar, Stefano Ermon, and
+Ben Poole. Score-based generative modeling through stochastic differential equations. In
+International Conference on Learning Representations, 2021.
+[54] Utkarsh Utkarsh, Pengfei Cai, Alan Edelman, Rafael Gomez-Bombarelli, and Christopher
+Rackauckas. Physics-constrained flow matching: Sampling generative models with hard
+constraints.Advances in Neural Information Processing Systems, 38:160217–160252, 2026.
+[55] Francisco Vargas, Will Grathwohl, and Arnaud Doucet. Denoising diffusion samplers. In
+International Conference on Learning Representations, 2023.
+13
+[56] Luran Wang, Chaoran Cheng, Yizhen Liao, Yanru Qu, and Ge Liu. Training free guided flow
+matching with optimal control. InInternational Conference on Learning Representations, 2025.
+[57] Wei Xiao, Tsun-Hsuan Wang, Chuang Gan, Ramin Hasani, Mathias Lechner, and Daniela Rus.
+Safediffuser: Safe planning with diffusion probabilistic models. InInternational Conference on
+Learning Representations, 2023.
+[58] Jeongyong Yang, Seunghwan Jang, and SooJean Han. Safeflowmatcher: Safe and fast planning
+using flow matching with control barrier functions.International Conference on Learning
+Representations, 2026.
+[59] Xiaofeng Yang, Cheng Chen, Fayao Liu, Guosheng Lin, et al. Text-to-image rectified flow as
+plug-and-play priors. InInternational Conference on Learning Representations, volume 2025,
+pages 13896–13920, 2025.
+[60] Hui Yuan, Kaixuan Huang, Chengzhuo Ni, Minshuo Chen, and Mengdi Wang. Reward-directed
+conditional diffusion: Provable distribution estimation and reward improvement.Advances in
+Neural Information Processing Systems, 36:60599–60635, 2023.
+[61] Stefano Zampini, Jacob K Christopher, Luca Oneto, Davide Anguita, and Ferdinando Fioretto.
+Training-free constrained generation with stable diffusion models.Advances in Neural Informa-
+tion Processing Systems, 38:27285–27316, 2026.
+[62] Jichen Zhang, Liqun Zhao, Antonis Papachristodoulou, and Jack Umenberger. Constrained
+diffusers for safe planning and control.Advances in Neural Information Processing Systems,
+38:34965–34998, 2026.
+[63] Qinsheng Zhang and Yongxin Chen. Path integral sampler: a stochastic control approach for
+sampling. InInternational Conference on Learning Representations, 2022.
+[64] Richard Zhang, Phillip Isola, Alexei A Efros, Eli Shechtman, and Oliver Wang. The unrea-
+sonable effectiveness of deep features as a perceptual metric. InProceedings of the IEEE
+conference on computer vision and pattern recognition, pages 586–595, 2018.
+[65] Hanyang Zhao, Haoxian Chen, Ji Zhang, David D Yao, and Wenpin Tang. Score as action: Fine-
+tuning diffusion generative models by continuous-time reinforcement learning. InInternational
+Conference on Machine Learning, 2025.
+[66] Kaizhen Zhu, Mokai Pan, Yuexin Ma, Yanwei Fu, Jingyi Yu, Jingya Wang, and Ye Shi. Unidb:
+A unified diffusion bridge framework via stochastic optimal control. InInternational Conference
+on Machine Learning, 2025.
+14
+A Background on Control Barrier Functions
+A.1 Control Barrier Functions
+Control Barrier Functions (CBFs) [ 3, 4] are a powerful tool to enforce hard safety constraints in
+control theory. Specifically, given a control system
+˙x=f(x) +g(x)u,(17)
+we want to ensure that the statex(t)remains within a safe set
+C:={x∈R n :h(x)≥0}(18)
+for all t∈[t 0, tf ]. If so, we say that the set C isforward invariant. We also allow C to be time-varying,
+i.e. Ct :={x∈R n :h(x, t)≥0} , and in this case we say Ct isforward invariantif x(t)∈ Ct for
+all t∈[t 0, tf ]. The intuition of CBFs is to ensure that when evaluated along the trajectories of the
+system, the gradient of h is nonnegative whenever h(x) = 0, which prevents the system from leaving
+the safe set. We shall introduce the formal definition of CBFs as follows.
+Definition 1(Extended Class K∞ Function).A function α:R→R is an extended class K∞
+function if it is strictly increasing and withα(0) = 0.
+Definition 2(Control Barrier Function).Let C ⊂ D ⊂Rn be with the form of (18) and h:D →R
+be a continuously differentiable function, then h is a control barrier function (CBF) if there exists an
+extended classK ∞ functionαsuch that for the control system(17), we have
+sup
+u∈U
+[∇h(x)·(f(x) +g(x)u) +α(h(x))]≥0(19)
+for allx∈ D. For a CBFh, define the set of safe controls atxas
+KCBF(x) :={u∈U:∇h(x)·(f(x) +g(x)u) +α(h(x))≥0}.
+Theorem 1(Ames et al. [3]).Let C ⊂ D ⊂Rn be with the form of (18) and h:D →R
+be a continuously differentiable function. If h is a CBF and ∇h(x)̸= 0,∀x∈∂C , then any
+Lipschitz continuous controller u(x)∈K CBF(x) renders the set C forward invariant. Moreover,C is
+asymptotically stable, i.e. ifh(x(t))<0for somet, thenh(x(t))→0ast→ ∞.
+The result above can be easily generalized to time-varying safe sets by introducing an auxiliary state
+to represent time.
+A.2 Min-norm Controller
+Min-norm controller [18, 2] is a widely used method to render forward invariance in control theory.
+Given a dynamical system and a nominal control unom, by imposing an additive safe control usafe, we
+seek to ensure thatC t under
+˙x=f(x, t) +unom(t) +u safe(t)
+is forward invariant.
+It is desired that usafe can be as small as possible in order to preserve the editability of the original
+nominal control, which naturally leads to the following optimization problem at each timestep:
+min
+usafe(t),ξ
+1
+2 ∥usafe∥22 +ρ tξ
+s.t.a t ·u safe(t) +b t +ξ≥0, ξ≥0.
+(20)
+where we introduce the slack variable ξ to relax the CBF constraint for the sake of stability and
+robustness, and we denote for brevity
+at :=∇ xh(x, t), bt :=∇ xh(x, t)·(f(x, t) +unom(t)) +∂ th(x, t) +α(h(x, t)).
+Min-norm controller imposes the safe controlu safe(t)by solving the optimization problem (20).
+15
+B Proof of the Theoretical Results
+B.1 Proof of Proposition 1
+Proof.Substitute the cost functional (9) and the dynamics (2) into the HJB equation (6), we have
+−∂tV= minu∈U
+ λt
+2 ∥u∥22 +β tB+∇V·(f+u)
+
+, V(t f , x) = Ψ(x).
+The term inside the minimization is a quadratic function ofu, which allows us to derive the explicit
+form of the value function and the optimal control.
+−∂tV=∇ xV·f+β tB− 12λt ∥∇xV∥ 22,
+u⋆(x, t) =−λ−1t ∇xV(x, t),
+which completes the proof.
+B.2 Proof of Proposition 2
+Proof. Suppose Ct is not forward invariant. Let ¯t:= inf{t∈[t 0, tf ] :x(t)/∈ Ct} be the first time
+the trajectory leaves the safe set. Since x(t0)∈Int(C t0 ), we have ¯t > t0 and h(x(¯t), ¯t) = 0. Taking
+derivative ofValong the trajectory gives
+d
+dt V(x(t), t) =∇xV·(f+u ⋆) +∂ tV≤ −βtB(x(t), t),
+where the inequality follows from (10) and (11). Since βt ≥0 and B(x(t), t)≥0 for all t∈[t 0, ¯t),
+we have ddt V(x(t), t)≤0 . On the other hand, since Ct varies not too rapidly and B(x, t)blows up
+fast enough as x→∂C t, we have V(x(t), t)→ ∞as t→ ¯t. This contradicts the fact that V is
+non-increasing along the trajectory.
+Remark 3.For example, suppose B(x, t)≥ ch(x,t)2 for some c >0 and d(t) := dist(x(t), ∂Ct) is
+L-Lipschitz. Suppose
+R ¯t
+t0 B(x(t), t)dt <∞, then it follows that d−1 ∈L 2([t0, ¯t]). On the other
+hand, ˙x=f+u ⋆ ∈L 2. Thus, x is absolutely continuous and hence d is absolutely continuous.
+Moreover,| ˙d| ≤ ∥˙x∥+L∈L2. By the Cauchy-Schwarz inequality, it follows that | ˙d|/d∈L 1([t0, ¯t]),
+which implies that logd is absolutely continuous. However, since d(t)→0 as t→ ¯t, it follows that
+logd(t)→ −∞ast→ ¯t, absurd.
+B.3 Proof of Proposition 3
+Proof. Eq. (14) can be derived by the chain rule and the definition of the flow map. Then it follows
+that
+∥∇xV(x, t)∥22 =∇ y bV(y, s)⊤Gt(y)∇y bV(y, s).
+Notice thatΦ ft→tf (x(t)) =x(t f ) =const., taking the time derivative on both sides gives
+∇xΦft→tf (x(t))·f+∂ tΦft→tf (x(t)) = 0.
+Taking the time derivative on both sides of bV(Φ ft→tf (x), s(t)) =V(x, t), we have
+∂tV(x, t) =∂s bV(y, s(t))·s ′(t) +∇ y bV(y, s(t))·∂ tΦft→tf (x)
+=−λ −1t ∂s bV(y, s(t))− ∇y bV(y, s(t))· ∇xΦft→tf (x)·f.
+Substituting the above identities into (10) gives (13), which completes the proof.
+16
+C Implementation Details
+C.1 Text-Guided Image Manipulation with Identity Preservation
+Following [36, 56], we adopt the pretrained Rectified Flow (RF) [ 35] as the generative prior. To
+ensure identity preservation, we define the safe set asC t :={x:h(x, t)≥0}, with
+h(x, t) :=ϵt −[dist(x, xsrc)]2,
+where dist(·,·) is the ArcFace distance, xsrc is the source image, and ϵt is a time-varying margin.
+Based on the dataset statistics, we set
+ϵt :=ϵ 1 + ϵ0 −ϵ 11 + exp(κϵ(t−τ 0)) ,
+with ϵ0 = 2.5, ϵ1 = 0.2, κϵ = 10, τ0 = 0.55. Note that ϵ0 is set to be larger than the maximum
+ArcFace distance between any image and its inversion to ensure the condition of Proposition 2 is
+satisfied, i.e.x 0 ∈Int(C 0). The barrier function is set to be
+B(x, t) :=σ(−κ Bh(x, t))h(x, t) ,
+where σ(·) is the sigmoid function, κB = 5, and δ= 0.15 . With such a barrier function, Proposition 2
+guarantees the ArcFace similarity between the generated image and the source image would be larger
+than1−
+ϵtf +δ
+2 ≈0.825, which is aligned with the empirical results in Table 1.
+The terminal loss is defined as Ψ(x) :=−0.7·CLIP(x, c) , where c is the target text prompt. The
+schedules are set to be λt ≡0.6 and βt ≡0.1 . Following Wang et al. [56], we set M= 15 , η= 2.5
+andν= 0.995.
+For the min-norm controller, we adopt the same safe set with ρt = 1 for all t. The K∞ function α is
+set to be α(r) =γ·r with γ= 0.5 . The experiments are conducted on 4 NVIDIA GeForce RTX
+4090 GPUs with 24GB memory.
+C.2 Maze Navigation with Safety Constraints
+We train a flow matching model to be the generative prior. The training strategy is summarized in
+Table 4. The barrier function is set to beB(τ, t) :=Px∈τ (h1(x)−t+δ) −1 + 2(h2(x)−t+δ) −1,where h1 and h2 are the two functions defined inBS1andBS2, respectively, and δ= 0.05 . Note
+that the term corresponding toBS2is weighted more heavily because it is harder to satisfy [ 57].
+Since score is computed via interaction with the environment and thus is non-differentiable, we
+set the terminal loss to be a linear combination of the curvature and acceleration, i.e. Ψ(τ) :=
+0.01(λκκ(τ) +λ aa(τ)), where τ is the planned trajectory, λκ = 0.6 and λa = 0.4. The schedule is
+set to be λt ≡2 , βt ≡0.01 , M= 15 , η= 0.05 and ν= 0.995 . The experiments are conducted on 4
+NVIDIA GeForce RTX 4090 GPUs with 24GB memory.
+Table 4:Training strategy for the flow matching model in maze navigation.
+U-Net channels(1,4,8)×32
+Loss typeL2
+Training steps 1M
+Steps per epoch 5K
+Batch size 64
+Learning rate 2e-4
+EMA decay 0.995
+Diffusion steps 256
+Planning horizon 384
+C.3 Robotic Manipulation with Safety Constraints
+We train a flow matching model to be the generative prior. The barrier function is set to beB(τ, t) :=P
+x∈τ
+
+(h1(x)−t+δ) −1 + (h2(x)−t+δ) −1, where h1 and h2 are the two functions corresponding
+17
+Table 5:Computational efficiency comparisons. a±b means a is the mean and b is the standard
+deviation over 1000 trials (CelebA-HQ) or 100 trials (Maze2D).
+Dataset Method Computation Time (s)
+CelebA-HQ
+OC-Flow 421.02±25.56
+OC-Flow + MNC 518.26±25.54
+AegisFlow 433.81±25.57
+Maze2D
+SafeDiffuser 4.78±0.42
+SafeFlowmatcher 4.21±0.39
+AegisFlow 44.15±1.96
+Table 6:Detailed metrics comparisons for text-guided image manipulation on CelebA-HQ.
+Method Hyperparameters CLIP↑LPIPS↓ID↑
+FlowGrad + RF 0.299 0.302 0.737+ LDM 0.294 0.298 0.743
+OC-Flow
+α= 0.60.295 0.119 0.822
+α= 0.70.302 0.207 0.732
+α= 0.80.306 0.192 0.722
+α= 0.90.310 0.244 0.662
+OC-Flow + MNC
+α= 0.70.299 0.152 0.937
+α= 0.80.304 0.193 0.920
+α= 0.90.309 0.242 0.901
+AegisFlow
+λ= 1.00.299 0.152 0.903
+λ= 0.80.303 0.167 0.901
+λ= 0.60.309 0.188 0.901
+λ= 0.50.312 0.205 0.902
+λ= 0.40.316 0.224 0.903
+to the halfspace and circular constraints, respectively, andδ= 0.05. Sincetimestepsis computed
+via interation with the environment and thus is non-differentiable, we set the terminal loss to be the
+curvature of the path, i.e. Ψ(τ) := 0.1κ(τ) , where τ is the planned trajectory. The schedule is set
+to be λt ≡1.5 , βt ≡0.5 , M= 7 , η= 0.2 and ν= 0.995 . The experiments are conducted on 4
+NVIDIA GeForce RTX 4090 GPUs with 24GB memory.
+D Additional Experimental Results
+D.1 Computational Efficiency Comparisons
+We compare the computational efficiency of AegisFlow with the baselines. The results are shown
+in Table 5. For the image manipulation task, AegisFlow takes slightly more time than OC-Flow,
+and is more efficient than OC-Flow + MNC. For the maze navigation task, AegisFlow is slower
+than SafeDiffuser and SafeFlowmatcher, which is expected since AegisFlow attempts to estimate the
+solution to the forced HJB equation, while SafeDiffuser and SafeFlowmatcher only solve a simple
+quadratic program at each timestep in one go. Indeed, they mainly consider constraint satisfaction in
+a myopic manner, while AegisFlow seeks to find a globally optimal solution that balances constraint
+satisfaction and task performance.
+The experiment is conducted on 2 NVIDIA RTX 6000D GPUs with 84GB memory.
+D.2 Metrics Comparisons for Text-Guided Image Manipulation
+The detailed metrics comparisons for text-guided image manipulation on CelebA-HQ are shown in
+Table 6.
+18

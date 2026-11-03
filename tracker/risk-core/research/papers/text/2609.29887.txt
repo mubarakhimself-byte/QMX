@@ -1,0 +1,1391 @@
+arXiv 2609.29887  https://arxiv.org/abs/2609.29887
+
+COST-S ENSITIVE ONLINE WINDOW SIZE SELECTION
+FOR PORTFOLIO MANAGEMENT
+Yi-Chen Liu∗ and Chung-Han Hsieh †
+ABSTRACT
+This paper investigates cost-sensitive online window size selection for portfo-
+lio management under changing market conditions. Speciﬁca lly, we propose
+a two-level framework that constructs portfolios using can didate window sizes
+and dynamically aggregates them through online learning. B y treating candidate
+window sizes as “experts,” we dynamically update their aggr egation weights us-
+ing turnover-inclusive losses. Moreover, we derive ﬁnite- horizon cost-sensitive
+tracking-regret bounds that account for turnover of the agg regated portfolio, with
+static regret as a special case. Under bounded losses and cos t rates, suitably tuned
+Fixed Share achieves asymptotically no tracking regret for sublinear switching
+budgets, with Hedge covering the static case.
+Keywords— Online Learning, Optimal Sliding Window, Fixed Share Algor ithm, Portfolio Optimization, Fi-
+nancial Optimization Algorithm
+1 I NTRODUCTION
+A fundamental issue in ﬁnancial forecasting is how much hist orical information to retain. Long windows can
+smooth short-term noise and capture persistent patterns, w hereas short windows can respond more rapidly to
+recent information. This trade-off is particularly important in rolling portfolio management, where the choice of
+estimation window directly affects portfolio decisions. W hen portfolios constructed from different estimation
+windows are combined online, changing their aggregation we ights can induce turnover even if the individual
+portfolios remain unchanged. Hence, each window expert’s t ransaction costs do not, by themselves, account
+for the cost of the aggregate portfolio. This raises the ques tion of how to track changing expert performance
+while controlling regret that includes the turnover of the a ggregate portfolio.
+In particular, ﬁnancial time-series forecasting often inv olves complex and time-varying dynamics, making the
+choice of estimation window especially consequential; see , e.g., Peters (1994) Historically, window sizes
+in ﬁnancial applications were often chosen empirically or b ased on forecasting performance. For example,
+Molodtsova & Papell (2009) used a ﬁxed 10-year rolling window for monthly exchange-ra te forecasting, and
+Stock & Watson (2007) used quarterly units to predict inﬂation. Pesaran & Timmermann (2007) proposed a
+forecaster that weighted averages with different window si zes to mitigate model uncertainty, a concept detailed
+in Pesaran & Pick (2011) and ﬁnalized with optimal weighting in Pesaran et al. (2013). Rossi & Inoue (2012)
+generally discussed the topic and provided a statistically robust window selection method. Inoue et al. (2017)
+identiﬁed the solution for window size that is asymptotical ly equivalent to minimizing Mean Squared Forecast
+Error (MSFE), which is theoretically unsolvable. However, these approaches do not formulate window-size
+selection as a sequential learning problem that adapts to ev olving markets with performance guarantees.
+Dynamic window selection has also been considered in ﬁnanci al prediction and portfolio problems. A common
+approach is to evaluate several candidate windows and selec t the best-performing one. For example, Jeon &
+McCurdy (2017) dynamically weighted different sub-window sizes via prob ability distributions to predict cor-
+relations between ﬁnancial instruments, although the resu lting computational burden limits frequent updating.
+Rajabi et al. (2022) used multi-layer perceptrons to determine dynamic window s for Bitcoin prediction, but fo-
+cused on very short time horizons. Thus, a general framework for online window-size adaptation with rigorous
+performance guarantees remains lacking.
+Parallel to this literature, online portfolio selection ha s developed extensively since the Universal Portfolio of
+Cover (1991), itself motivated by Kelly’s growth-optimal betting fram ework Kelly (1956). Follow-the-Winner
+methods favor assets or portfolios that have performed well historically. Examples include Exponential Gradi-
+ent (EG) Helmbold et al. (1998), the Aggregating Algorithm V ovk & Watkins(1998), and V ariable Rebalanced
+∗Interdisciplinary Program of Management and Technology, N ational Tsing Hua University
+†Department of Quantitative Finance, National Tsing Hua Uni versity, Taiwan. (ch.hsieh@mx.nthu.edu.tw)
+1
+arXiv:2609.29887v2  [math.OC]  28 Sep 2026
+Portfolios (VRP) Gaivoronski & Stella (2000). By contrast, Follow-the-Loser methods exploit mean reve rsion,
+including Passive Aggressive Mean Reversion (PAMR) Li et al. (2012), Conﬁdence Weighted Mean Reversion
+(CWMR) Li et al. (2013), and OLMAR Li & Hoi (2014).
+However, how to choose the window size, an important parameter for time series prediction, is less emphasized
+in online portfolio selection. Gaivoronski & Stella (2000) points out the need to consider sliding window size.
+Gaivoronski & Stella (2003) studies adaptive portfolio selection with transaction co sts. Li & Hoi (2012) pro-
+pose a window-size-sensitive model OLMAR for trading the po rtfolio. However, that work does not establish
+a tracking-regret bound that accounts for turnover of the ag gregated portfolio.
+We formulate window-size adaptation as the online aggregat ion of sliding-window portfolio experts within the
+prediction-with-expert-advice framework Cesa-Bianchi & Lugosi (2006). Each candidate window generates
+a portfolio, and the algorithm combines these portfolios us ing weights updated from the experts’ turnover-
+inclusive losses. We employ Fixed Share Herbster & Warmuth (1998) to track changing expert performance,
+with Hedge Littlestone & Warmuth (1994) as the static-regret baseline.
+Our main contribution is a ﬁnite-horizon tracking-regret b ound that accounts for turnover of the deployed
+aggregate portfolio. The comparator is the best expert sequ ence under a prescribed switching budget, with each
+selected expert evaluated by its own turnover-inclusive lo ss. The resulting bound makes the dependence on the
+transaction-cost rate and switching budget explicit, yiel ds a cost-dependent learning-rate choice, and recovers
+the static-regret bound for Hedge as a special case.
+2 P ROBLEM FORMULATION
+Consider a portfolio M := {1, . . . , m} with m ≥ 2 assets, including a risk-free asset. Let Si(t) > 0 denote
+the adjusted closing price of asset i ∈ M at time t ≥ 1. For asset i ∈ M, its return at time t is denoted by
+yi(t) := Si(t + 1) − Si(t)Si(t) .
+Let y(t) := [ y1(t), . . . , ym(t)]⊤ ∈ Rm be the return vector for m assets at time t ≥ 1.
+2.1 S LIDING -W INDOW EXPERT AND COST-S ENSITIVE MEAN -VARIANCE MODEL
+We extend online window-size selection within the expert-a dvice framework Cesa-Bianchi & Lugosi (2006);
+Orabona (2026) to account for turnover induced by both expert portfolio up dates and changes in aggregation
+weights. Let N be a ﬁnite set of n ≥ 2 candidate window sizes, where each j ∈ N satisﬁes j ≥ 2 and is
+treated as an expert. For expert j ∈ N , consider Markowitz’s Mean-V ariance (MV) optimization problem with
+turnover costs to obtain the advice wj(t) ∈ W ; the weight vector optimizes the last j-days of data prior to
+time t; see Markowitz (1952); Luenberger (2013). Given an initial history of max N returns, deﬁne the rolling
+estimators for expert j ∈ N by
+ˆµj(t) := 1j
+t−1∑
+s=t−j
+y(s) ∈ Rm,
+ˆΣj (t) := 1j − 1
+t−1∑
+s=t−j
+(
+y(s) −ˆµj(t)
+)(
+y(s) −ˆµj(t)
+)⊤
+∈ Sm+ .
+Here Sm+ denotes the set of real symmetric positive semideﬁnite m × m matrices.
+Problem 2.1 (Cost-Sensitive Mean-V ariance Optimization). Let wj (t − 1) ∈ W denote the portfolio weights
+held by expert j immediately before rebalancing at time t, with wj(0) := w0 for a prescribed initial portfolio
+w0 ∈ W , and let c(t) ≥ 0 be the proportional transaction cost rate. The cost-sensitive mean-variance model
+for expert j can be written as
+max
+w∈W
+ˆµj (t)⊤w − 12 w⊤ˆΣj (t)w − c(t)‖w − wj (t − 1)‖1, j ∈ N (1)
+where W :=
+{
+w ∈ Rm+ : w⊤1 = 1} . Here 1 denotes the all-ones vector of the appropriate dimension.
+Let wj(t), the optimal advice solving the problem for j-day data at time t, be the advice for expert j. Note that
+Problem 2.1 is a concave program, which can be solved efﬁciently by a stan dard solver such as CVXPY; see
+Diamond & Boyd (2016).
+After obtaining the expert advice, we assign an aggregation weight vector in the simplex:
+q(t) ∈ ∆n :=
+{
+q ∈ Rn+ :∑
+j∈N
+qj = 1
+}
+⊆ Rn
+2
+and form the aggregateportfolio
+ˆw(t) :=
+∑
+j∈N
+qj(t)wj(t).
+Thus, the method dynamically aggregates the window experts rather than necessarily selecting a single window.
+Here wj (t) and ˆw(t) are portfolio weight vectors over assets, whereas q(t) is the aggregation weight vector
+over window experts.
+2.2 T RACKING REGRET
+Consider a sequential decision-making framework over a discrete time horizon t = 1, 2, . . .. Let ℓ : W × Y →
+R be a loss function, assumed to be convex in its ﬁrst argument. At each time t, the algorithm ﬁrst selects a
+decision ˆw(t) ∈ W . After the decision is made, the market outcome y(t) ∈ Y ⊆ Rm is revealed, and the
+algorithm incurs the prediction loss ℓ(ˆw(t), y(t)).
+Recall that each j ∈ N indexes the expert associated with a j-day sliding window; at each time t, this expert
+provides advice wj (t) ∈ W . For a ﬁnite horizon T ≥ 1, deﬁne the set of all expert sequences over T periods as
+N T := N × · · · × N/bracehtipupleft /bracehtipdownright/bracehtipdownleft /bracehtipupright
+T times
+.
+Write j := (j1, . . . , jT ) ∈ N T for an arbitrary comparator sequence of experts, where jt is the expert selected
+by the comparator at time t. For an expert sequence j = (j1, . . . , jT ) ∈ N T , deﬁne its number of switches by
+ST (j) :=
+T −1∑
+t=1
+1{jt⁄=jt+1},
+where 1A denotes the indicator function, equal to 1 if the event A occurs and 0 otherwise. For a switching
+budget K ∈ { 0, 1, . . . , T − 1}, deﬁne JT,K :=
+{
+j ∈ N T : ST (j) ≤ K} , which represents the comparator
+class, consisting of all expert sequences that switch at most K times over the horizon T . The switching budget
+K is prescribed for each horizon T and may depend on T . We use K in ﬁnite-horizon statements and write
+K(T ) when considering the limit T → ∞ . In asymptotic statements, “ﬁxed K” means that the budget is
+independent of T .
+Deﬁnition 2.2. For a given horizon T ≥ 1 and a switching budget K ∈ {0, 1, . . . , T − 1}, the tracking regret
+with switching budget K is deﬁned as
+Rtrack(T, K ) :=
+T∑
+t=1
+ℓ(ˆw(t), y(t)) − min
+j∈JT ,K
+T∑
+t=1
+ℓ(wjt (t), y(t)).
+Each sequence j ∈ J T,K partitions {1, . . . , T} into at most K + 1 consecutive blocks, within each of which
+the comparator follows one ﬁxed expert. The minimization ov er JT,K selects the best such expert sequence in
+hindsight; see Cesa-Bianchi & Lugosi (2006).
+Remark 2.3 (Static Regret as a Special Case) . When K = 0 , the comparator must follow one ﬁxed expert
+throughout the horizon; i.e., JT,0 = {j = (j, j, . . . , j) ∈ N T : j ∈ N }. Hence, static regret is the special case
+Rstatic(T ) := Rtrack(T, 0) =
+T∑
+t=1
+ℓ(ˆw(t), y(t)) − min
+j∈N
+T∑
+t=1
+ℓ(wj(t), y(t)).
+2.3 R EGRET MINIMIZATION PROBLEM
+Our goal is to dynamically aggregate window-size experts an d control the cost-sensitive tracking regret relative
+to the best expert sequence under a prescribed switching bud get. We explicitly account for the turnover of the
+aggregated portfolio in the regret criterion. Assume furth er that a ≤ ℓ(w, y) ≤ b for all (w, y) ∈ W × Y ,
+where a < b are ﬁxed ﬁnite constants. Let c(t) ≥ 0 denote the transaction cost rate . We now formalize our
+main problem.
+Problem 2.4 (Cost-Sensitive Regret Minimization). Deﬁne the cost-sensitive loss of expert j at time t as their
+prediction loss plus their incurred transaction cost:
+˜ℓj (t) := ℓ(wj(t), y(t)) + c(t)‖wj (t) − wj (t − 1)‖1.
+Given a time horizon T ≥ 1 and a switching budget K ∈ { 0, . . . , T − 1}, our goal is to select q(t) ∈ ∆n
+before y(t) is revealed and establish a worst-case upper bound on the res ulting cost-sensitive tracking regret:
+Rctrack(T, K ) :=
+T∑
+t=1
+[ℓ(ˆw(t), y(t)) + c(t)‖ˆw(t) −ˆw(t − 1)‖1] − minj∈JT ,K
+T∑
+t=1
+˜ℓjt (t),
+whereˆw(0) = w0 and JT,K consists of all expert sequences that switch at most K times over the horizon T .
+3
+Hannan Consistency for Cost-Sensitive Tracking Regret. Beyond ﬁnite-horizon regret bounds, we
+seek asymptotic no regret. We formalize this objective thro ugh a cost-sensitive tracking analog of Hannan
+consistency Hannan (1957).
+Deﬁnition 2.5 (Cost-Sensitive Hannan Consistency). Given a prescribed switching-budget sequence K(T ) ∈
+{0, 1, . . . , T − 1}, we say that an algorithm is Hannan consistent for cost-sensitive tracking regret with re-
+spect to {JT,K (T )}T ≥1 if, for every outcome sequence {y(t)}t≥1 ⊆ Y and every transaction-cost sequence
+{c(t)}t≥1 ⊆ [0, 1],
+lim sup
+T →∞
+Rctrack(T, K (T ))
+T ≤ 0.
+Remark 2.6 (Role of the Switching Budget) . The switching budget restricts the comparator sequences, n ot the
+evolution of market returns. For asymptotic analysis, we co nsider prescribed budgets satisfying
+K(T ) = o(T ). (2)
+No-regret guarantees for these budgets depend on the loss as sumptions and the algorithm’s parameter choices.
+3 T HEORETICAL RESULTS
+3.1 C OST-S ENSITIVE REGRET BOUNDS
+Using the cost-sensitive expert losses deﬁned in Problem 2.4, we establish the following regret decomposition
+for any aggregation rule. For notational convenience, set q(0) := q(1).
+Theorem 3.1 (Cost-Sensitive Tracking Regret Bound) . F or any time horizon T ≥ 1, let c(t) ≥ 0 be a trans-
+action cost rate at time t. Consider any algorithm A that generates aggregation weights q(t) ∈ ∆n. F or any
+minimizing benchmark sequence of experts in JT,K , the cost-sensitive tracking regret Rctrack(T, K ) satisﬁes
+Rctrack(T, K ) ≤
+T∑
+t=1
+[(∑
+j∈N
+qj (t)˜ℓj(t)
+)
+− ˜ℓjt (t)
+]
+/bracehtipupleft /bracehtipdownright/bracehtipdownleft /bracehtipupright
+Expert-loss regret bound
++
+T∑
+t=1
+c(t)‖q(t) − q(t − 1)‖1
+/bracehtipupleft /bracehtipdownright/bracehtipdownleft /bracehtipupright
+Additional turnover cost regret bound
+. (3)
+The coefﬁcient 1 of the additional turnover cost bound is sharp; i.e., it cann ot be reduced uniformly over all
+admissible expert portfolios and aggregation rules.
+Proof. Let ˆw(t) =∑j∈N qj (t)wj(t) denote the aggregate portfolio. Deﬁne the combined loss of e xpert j at
+time t as their prediction loss plus their incurred transaction co st at step t:
+˜ℓj(t) = ℓ(wj(t), y(t)) + c(t)‖wj(t) − wj(t − 1)‖1.
+Because the original loss is bounded in [a, b] and the maximum l1 distance between any two vectors on the
+probability simplex is 2, the combined loss at time t lies in the interval ˜ℓj (t) ∈ [a, b+ 2c(t)]. The cost-sensitive
+tracking regret against a minimizing benchmark sequence of optimal experts j1, . . . , jT with at most K shifts
+is deﬁned as:
+Rctrack(T, K ) =
+T∑
+t=1
+[ℓ(ˆw(t), y(t)) + c(t)‖ˆw(t) −ˆw(t − 1)‖1] −
+T∑
+t=1
+˜ℓjt (t). (4)
+Since the loss function ℓ is convex in its ﬁrst argument, Jensen’s inequality guarant ees that:
+ℓ(ˆw(t), y(t)) = ℓ
+(∑
+j∈N
+qj (t)wj(t), y(t)
+)
+≤
+∑
+j∈N
+qj (t)ℓ(wj(t), y(t)). (5)
+On the other hand, observe that c(t)‖ˆw(t) −ˆw(t − 1)‖1 in (4) can be written as
+c(t)‖ˆw(t) −ˆw(t − 1)‖1 = c(t)
+‖‖‖‖‖∑j∈N qj (t)wj(t) −∑j∈N qj (t − 1)wj(t − 1)‖‖‖‖‖1 .
+4
+By adding/subtracting∑ qj(t)wj(t − 1) yields:
+c(t)‖ˆw(t) −ˆw(t − 1)‖1
+= c(t)
+‖‖‖‖‖∑j∈N qj (t)wj(t) −∑ qj (t)wj(t − 1) +∑ qj (t)wj(t − 1) −∑j∈N qj(t − 1)wj (t − 1)‖‖‖‖‖1
+= c(t)
+‖‖‖‖‖∑j∈N qj (t) (wj (t) − wj(t − 1)) +∑j∈N (qj (t) − qj (t − 1)) wj (t − 1)‖‖‖‖‖1
+≤ c(t)
+∑
+j∈N
+qj (t)‖wj(t) − wj(t − 1)‖1 + c(t)
+∑
+j∈N
+|qj (t) − qj (t − 1)|‖wj (t − 1)‖1.
+= c(t)
+∑
+j∈N
+qj (t)‖wj(t) − wj(t − 1)‖1 + c(t)‖q(t) − q(t − 1)‖1, (6)
+where the second-to-last inequality follows from the trian gle inequality and qj(t) ∈ [0, 1].
+Because each expert’s portfolio wj (t − 1) ∈ W , which lies on the probability simplex, its l1-norm is exactly 1.
+Therefore, combining the ( 5) and the ( 6) allows us to reconstruct the expected combined loss ˜ℓj (t):
+ℓ(ˆw(t), y(t)) + c(t)‖ˆw(t) −ˆw(t − 1)‖1 ≤
+∑
+j∈N
+qj (t)˜ℓj(t) + c(t)‖q(t) − q(t − 1)‖1. (7)
+After substituting ( 7) into ( 4) and rearranging, the statement is proved.
+To establish sharpness, consider two assets and two experts , relabeled as 1 and 2 for this example, with T = 2,
+ℓ ≡ 0, and c(1) = 0 < c(2). Let the two experts hold e1 and e2, respectively, at both periods; i.e., w1(t) = e1
+and w2(t) = e2 for all t = 1, 2. Take q(1) = (1 , 0) and q(2) = (0 , 1) Thenˆw(1) =∑2j=1 qj (1)wj(1) = e1
+andˆw(2) =∑2j=1 qj(2)wj (2) = e2. Hence, for j = 1, 2,
+˜ℓj(1) = 0 + c(1)‖ej − w0‖1 = 0 and ˜ℓj (2) = 0 + c(2)‖ej − ej‖1 = 0. (8)
+Hence, any admissible benchmark sequence has zero cumulati ve expert loss: minj∈J2,K
+∑2
+t=1
+˜ℓjt (t) = 0 .
+The corresponding cost-sensitive tracking regret
+Rctrack(2, K) = c(1)‖ˆw(1) −ˆw(0)‖1
+/bracehtipupleft /bracehtipdownright/bracehtipdownleft /bracehtipupright
+=0
++c(2)‖ˆw(2) −ˆw(1)‖1 − 0
+= 0 + c(2)‖e2 − e1‖1
+= 2c(2),
+On the other hand, applying the setting above to the derived r egret bound (3) yields
+2∑
+t=1
+( 2∑
+j=1
+qj (t)˜ℓj(t) − ˜ℓjt (t)
+)
++
+2∑
+t=1
+c(t)‖q(t) − q(t − 1)‖1
+=
+(
+˜ℓ1(1) − ˜ℓj1 (1)
+)
++
+(
+˜ℓ2(2) − ˜ℓj2 (2)
+)
++ c(2)‖q(2) − q(1)‖1
+= 0 + 0 + 2 c(2)
+where the last equality holds by ( 8). We see hence that the cost-sensitive tracking regret atta ins the derived
+bound, which completes the proof.
+3.2 F IXED SHARE FOR WINDOW SELECTION
+We now specialize the aggregation rule to the Fixed Share alg orithm Herbster & Warmuth (1998), with aggre-
+gation weights updated from the turnover-inclusive expert losses ˜ℓj(t). Initialize qj (1) = 1 /n for every j ∈ N .
+After observing y(t), the algorithm updates the aggregation weights for stage t + 1 in two steps:
+Step 1: Exponential weighting. For expert j at time t, compute the intermediate weight qexpj (t) using the rule:
+qexpj (t) = qj (t)e−η ˜ℓj (t)∑
+k∈N qk(t)e−η ˜ℓk(t) , (9)
+where η > 0 is the learning rate. 1
+1The learning rate η controls the trade-off between exploiting historically st rong experts and adapting to
+changes in expert performance. A higher η means faster adaptation. Conversely, a smaller η leads to more
+stable weights that change slowly.
+5
+Step 2: Sharing. For a mixing parameter α ∈ [0, 1], retain a (1 − α) fraction of the intermediate weight and
+redistribute the remaining α fraction across all n experts uniformly:
+qj (t + 1) := (1 − α)qexpj (t) + αn ∑k∈N qexpk (t)
+= (1 − α)qexpj (t) + αn , (10)
+where the last equality follows from ∑k∈N qexpk (t) = 1 .
+Remark 3.2. The Hedge Algorithm Littlestone & Warmuth (1994) is the special case of Fixed Share with α =
+0, for which qj (t + 1) = qexpj (t), exactly the ( 9). Hedge competes with the best ﬁxed expert in hindsight. For
+α > 0, the mixing step in Fixed Share guarantees qj (t + 1) ≥ α/n, ensuring a positive weight for every expert.
+3.3 F IXED SHARE REGRET BOUNDS
+To apply Theorem 3.1 to Fixed Share, we ﬁrst bound the variation of its aggregatio n weights.
+Lemma 3.3 (One-Step Weight V ariation). Let q(t) = ( qj (t))j∈N be generated by (9) and (10) with learning
+rate η > 0 and parameter α ∈ [0, 1]. Then, for every t ≥ 2, we have
+‖q(t) − q(t − 1)‖1 ≤ η
+(
+max
+j∈N
+˜ℓj(t − 1) − minj∈N ˜ℓj(t − 1)
+)
++ 2α
+(
+1 − 1n) .
+Proof. The proof is given in Appendix A.
+Combining Theorem 3.1 and Lemma 3.3 with the standard Fixed Share regret bound for the losses ˜ℓj(t) yields
+the following result.
+Corollary 3.4 (Cost-Sensitive Tracking Regret Bound for Fixed Share) . Assume Theorem 3.1 holds. Consider
+the Fixed Share algorithm with mixing parameter α ∈ [0, 1), the cost-sensitive tracking regret Rctrack(T, K )
+satisﬁes
+Rctrack(T, K ) ≤ C(K, α, n, T)η + η8
+T∑
+t=1
+(b − a + 2c(t))2
++ η
+T∑
+t=2
+c(t)(b − a + 2c(t − 1)) + 2α
+(
+1 − 1n) T∑t=1 c(t),
+where the term C(K, α, n, T) is given by
+C(K, α, n, T) :=
+
+
+
+log n if α = 0 and K = 0
+∞ if α = 0 and K > 0
+(K + 1) log n + K log 1α + (T − K − 1) log 11−α otherwise.
+Proof. The proof is given in Appendix A.
+3.4 P ARAMETER SELECTION AND ASYMPTOTIC NO-R EGRET
+We can further optimize the cost-sensitive tracking regretbounds obtained in Corollary 3.4 when the transaction
+costs c(t) are known for the entire horizon T .
+Proposition 3.5 (Optimal Regret Bound) . Assume the conditions of Corollary 3.4 hold, with T ≥ 2 and
+K ∈ { 0, . . . , T − 2}. Deﬁne AT := 18∑Tt=1(b − a + 2 c(t))2 +∑Tt=2 c(t)(b − a + 2 c(t − 1)) , and
+CT := ∑Tt=1 c(t). Let H(x) = −x log x − (1 − x) log(1 − x) be the binary entropy function deﬁned for
+x ∈ [0, 1] with the convention 0 log 0 := 0 . The cost-sensitive tracking regret Rctrack(T, K ) is optimally
+bounded as follows:
+Case 1: F or CT = 0 . With the optimal mixing parameter α∗ = KT −1 ∈ [0, 1) and the optimal learning rate η
+is chosen as:
+η∗ = 1b − a
+√
+8
+T
+(
+(K + 1) log n + (T − 1)H
+( K
+T − 1
+))
+,
+6
+the resulting bound is
+Rctrack(T, K ) ≤ (b − a)
+√
+T
+2
+(
+(K + 1) log n + (T − 1)H
+( K
+T − 1
+))
+.
+Case 2: F orCT > 0 and K = 0. With α∗ = 0 and η∗ =√ log nAT , the bound is
+Rctrack(T, 0) ≤ 2√AT log n.
+Case 3: F orCT > 0 and K ≥ 1. Let α∗ ∈(0, KT −1) be the unique solution to the equation
+K − (T − 1)α
+α(1 − α) = 2
+(
+1 − 1n) CT√ C(K, α, n, T)AT .
+F orη∗ =√ C(K,α∗,n,T )AT , the bound is
+Rctrack(T, K ) ≤ 2√AT · C(K, α∗, n, T) + 2(1 − 1n) α∗CT .
+Proof. The proof is given in Appendix A.
+Remark 3.6 (Cost-Sensitive Static Regret Bound) . Setting K = 0 and α = 0 in Corollary 3.4 and Proposi-
+tion 3.5 yields the cost-sensitive static regret for the Hedge algor ithm and its optimal learning rate.
+Corollary 3.7 (Asymptotic Cost-Sensitive No-Regret) . Assume the conditions of Corollary 3.4, with n, a, b
+ﬁxed and c(t) ∈ [0, 1] for all t. Let K = K(T ) ∈ {0, . . . , T − 1} satisfy K(T ) = o(T ). F or each sufﬁciently
+large T , choose the parameters as in Proposition 3.5. Then the cost-sensitive tracking regret satisﬁes
+lim sup
+T →∞
+Rctrack(T, K (T ))
+T ≤ 0.
+Proof. The proof is given in Appendix A.
+4 S IMULATION RESULTS
+We ﬁrst examine adaptation to a prescribed regime shift in a s ynthetic market, then summarize results on
+historical stock data. Additional synthetic experiments, comparisons with online portfolio selection algorithms,
+and the full empirical studies appear in Appendix B.
+4.1 S YNTHETIC DATA
+The Setup. To illustrate our two-level framework, we ﬁrst construct a s ynthetic environment that includes a
+prescribed regime shift. We simulate daily prices for an art iﬁcial market of 32 stocks ( SYN 1 to SYN 32) over
+2,000 business days, beginning January 1, 2020. For this por tfolio setting, we deﬁne our reference expert set as
+N = {5, 10, 21, 63}. The transaction cost rate is set to c = 0.001 (10 bps).
+Data Generating Process. Let µ ∈ R32 be the baseline daily expected return, α ∈ (0, 1) control the ratio of
+signal, and ǫ(t) is s noise vector where ǫ(t) ∼ N (0, σ2). Let y(t) ∈ R32 denote the return vector of the stocks
+at time t, which is deﬁned as:
+y(t) = µ + α
+(
+1
+jt
+jt∑
+k=1
+y(t − k) − µ
+)
++ ǫ(t)
+where jt ∈ N represents the target window size. This construction induc es a controlled change in the horizon
+that governs the conditional mean, allowing us to examine ho w the proposed cost-sensitive online aggregation
+framework responds to a known regime shift. In our setup, the market undergoes a sharp regime shift precisely
+halfway through the dataset: for the ﬁrst 1,000 days, the ret urns are driven by a jt = 63 , and jt = 5 for the
+remaining days.
+We then execute the Hedge and Fixed Share algorithm. Setting the cost-sensitive loss function to negative PnL,
+Proﬁt and Loss, with rate c ≥ 0:
+ℓ(fj(t), y(t)) = −fj(t)⊤y(t) + c‖fj (t) − fj(t − 1)‖1.
+Since the number of experts n, the time horizon T , and the transaction cost rate c are given, all the parameters
+needed can be optimized.
+7
+Performance Evaluation. Figure 1 shows the cost-sensitive tracking regret deﬁned in Problem 2.4. Fig-
+ure 2 shows the aggregation weights qj (t), with the thickness of each colored band representing the we ight
+assigned to one window-size expert. In this experiment, Fix ed Share reallocates its weights to the newly domi-
+nant expert faster than Hedge.
+2020 2021 2022 2023 2024 2025 2026 2027 2028
+Date
+0
+20
+40
+60
+80
+100
+120Regret
+Hedge Fixed Share Optimal Expert Switch Theoretical Bound
+Figure 1: Cost-Sensitive Tracking Regret for Hedge and Fixe d Share with Negative PnL Loss
+2021 2022 2023 2024 2025 2026 2027
+Date
+0.00
+0.25
+0.50
+0.75
+1.00
+Weight on Expert
+Window Size (Expert)
+5
+10
+21
+63
+Optimal Expert Switch
+(a) Hedge
+2021 2022 2023 2024 2025 2026 2027
+Date
+0.00
+0.25
+0.50
+0.75
+1.00
+Weight on Expert
+Window Size (Expert)
+5
+10
+21
+63
+Optimal Expert Switch
+(b) Fixed Share
+Figure 2: Evolution of the aggregation weights qj(t) assigned to the four window-size experts j ∈
+{5, 10, 21, 63} under (a) Hedge and (b) Fixed Share.
+4.2 E MPIRICAL SUMMARY
+We also evaluate the framework on stock universes drawn from the DJIA and S&P 500, using N =
+{5, 10, 21, 30, 41, 50, 63, 126} and c = 0 .001. Table 1 summarizes cumulative returns and drawdowns. In
+the DJIA sample, UP and EG achieve higher cumulative returns and smaller drawdown magnitude. In the S&P
+500 sample, Hedge and Fixed Share achieve higher cumulative returns than the listed baselines, but have larger
+drawdown magnitudes than UP and EG. These results illustrate differing return–drawdown trade-offs across the
+two samples. The account-value deﬁnition, comparison prot ocol, and full results are provided in Appendix B.
+Note that
+5 C ONCLUDING REMARKS
+We use Hedge and Fixed Share to dynamically aggregate window -size experts for portfolio selection while
+accounting for turnover costs. We derive a cost-sensitive t racking-regret bound for Fixed Share, with the static-
+regret bound for Hedge recovered as a special case. The bound explicitly characterizes the dependence on the
+transaction-cost rate and guides the choice of the learning rate.
+This paper focuses on tracking regret for expert sequences r elative to expert sequences under a prescribed
+switching budget. A complementary extension would be to emb ed the proposed cost-sensitive learner in a
+strongly adaptive meta-algorithm Daniely et al. (2015), seeking regret guarantees uniformly over all subinter-
+vals. Such an extension requires a separate treatment of int erval-speciﬁc parameterization and transaction costs
+and is left for future research.
+8
+Table 1: Summary of the empirical studies with transaction c ost rate c = 0.001. DJIA: 2021/03/04–
+2024/02/25; S&P 500: 2020/01/02–2026/08/01. Cumulative r eturn and maximum drawdown
+(MDD) are reported in percent; MDD is signed, so values close r to zero indicate smaller draw-
+downs.
+DJIA S&P 500
+Algorithm Return MDD Return MDD
+Hedge 21.1950 -23.5123 567.2010 -56.9601
+Fixed Share 17.7014 -23.0759 461.4739 -58.5937
+UP 48.7250 -20.2783 205.3887 -38.3346
+EG 48.2584 -20.2783 205.7900 -38.2862
+PAMR -88.2441 -88.9822 -52.0775 -84.5912
+CWMR -88.5860 -89.3036 205.5993 -59.5749
+OLMAR -38.9035 -61.0332 -44.0283 -81.6301
+AI U SE STATEMENT
+Generative AI tools (ChatGPT 5.6 sol and Gemini 3.8 Flash) we re used to assist with language editing and
+presentation, and to provide feedback on mathematical deri vations and proofs. The authors reviewed and
+independently veriﬁed all AI-assisted content. The author s take full responsibility for the ﬁnal content of this
+work.
+REFERENCES
+Nicolo Cesa-Bianchi and G´ abor Lugosi.Prediction, Learning, and Games. Cambridge University Press, 2006.
+Thomas M Cover. Universal portfolios. Mathematical Finance, 1(1):1–29, 1991.
+Amit Daniely, Alon Gonen, and Shai Shalev-Shwartz. Strongl y adaptive online learning. In Francis Bach and
+David Blei (eds.), Proceedings of the 32nd International Conference on Machin e Learning , volume 37 of
+Proceedings of Machine Learning Research, pp. 1405–1411, Lille, France, 07–09 Jul 2015. PMLR.
+Steven Diamond and Stephen Boyd. CVXPY: A Python-Embedded M odeling Language for Convex Optimiza-
+tion. Journal of Machine Learning Research, 17(83):1–5, 2016.
+Alexei A Gaivoronski and Fabio Stella. Stochastic Nonstati onary Optimization for Finding Universal Portfo-
+lios. Annals of Operations Research, 100(1):165–188, 2000.
+Alexei A Gaivoronski and Fabio Stella. On-line Portfolio Se lection Using Stochastic Programming. Journal of
+Economic Dynamics and Control , 27(6):1013–1043, 2003.
+James Hannan. Approximation to Bayes Risk in Repeated Play. Contributions to the Theory of Games , 3(2):
+97–139, 1957.
+David P Helmbold, Robert E Schapire, Y oram Singer, and Manfr ed K Warmuth. On-Line Portfolio Selection
+using Multiplicative Updates. Mathematical Finance, 8(4):325–347, 1998.
+Mark Herbster and Manfred K Warmuth. Tracking the Best Exper t. Machine Learning, 32(2):151–178, 1998.
+Atsushi Inoue, Lu Jin, and Barbara Rossi. Rolling window sel ection for out-of-sample forecasting with time-
+varying parameters. Journal of econometrics, 196(1):55–67, 2017.
+Y oontae Jeon and Thomas H McCurdy. Time-V arying Window Length for Correlation Forecasts. Econometrics,
+5(4):54, 2017.
+John L Kelly. A New Interpretation of Information Rate. The Bell System Technical Journal , 35(4):917–926,
+1956.
+Bin Li and Steven C. H. Hoi. On-Line Portfolio Selection with Moving Average Reversion.
+In Proceedings of the International Conference on Machine Lea rning (ICML) , 2012. URL
+https://icml.cc/2012/papers/168.pdf.
+Bin Li and Steven C. H. Hoi. Online Portfolio Selection: A sur vey. ACM Computing Surveys, 46(3), January
+2014. ISSN 0360-0300. doi: 10.1145/2512962.
+Bin Li, Peilin Zhao, Steven CH Hoi, and Vivekanand Gopalkris hnan. PAMR: Passive Aggressive Mean Rever-
+sion Strategy for Portfolio Selection. Machine Learning, 87(2):221–258, 2012.
+9
+Bin Li, Steven CH Hoi, Peilin Zhao, and Vivekanand Gopalkris hnan. Conﬁdence weighted mean reversion
+strategy for online portfolio selection. ACM Transactions on Knowledge Discovery from Data (TKDD) , 7
+(1):1–38, 2013.
+N. Littlestone and M.K. Warmuth. The Weighted Majority Algo rithm. Information and Computation , 108(2):
+212–261, 1994. ISSN 0890-5401. doi: https://doi.org/10.1 006/inco.1994.1009.
+David G Luenberger. Investment Science. Oxford University Press, 2013.
+Harry Markowitz. Portfolio selection. The Journal of Finance, 7(1):77–91, 1952.
+Tanya Molodtsova and David H Papell. Out-of-Sample Exchang e Rate Predictability with Taylor Rule Funda-
+mentals. Journal of International Economics , 77(2):167–180, 2009.
+Francesco Orabona. Online Learning: A Modern Introduction Using Convex Optimization. arXiv preprint
+arXiv:1912.13213, 2026.
+M. Hashem Pesaran and Andreas Pick. Forecast Combination Across Estimation Windows. Journal of Business
+& Economic Statistics, 29(2):307–318, 2011. doi: 10.1198/jbes.2010.09018.
+M Hashem Pesaran and Allan Timmermann. Selection of estimat ion window in the presence of breaks. Journal
+of Econometrics, 137(1):134–161, 2007.
+M Hashem Pesaran, Andreas Pick, and Mikhail Pranovich. Opti mal forecasts in the presence of structural
+breaks. Journal of Econometrics, 177(2):134–152, 2013.
+Edgar E Peters. Fractal Market Analysis: Applying Chaos Theory to Investme nt and Economics . John Wiley
+& Sons, 1994.
+Shahab Rajabi, Pardis Roozkhosh, and Nasser Motahari Farim ani. MLP-Based Learnable Window Size for
+Bitcoin Price Prediction. Applied Soft Computing, 129:109584, 2022.
+Barbara Rossi and Atsushi Inoue. Out-of-Sample Forecast Te sts Robust to the Choice of Window Size. Journal
+of Business & Economic Statistics , 30(3):432–453, 2012.
+James H Stock and Mark W Watson. Why has us inﬂation become har der to forecast? Journal of Money, Credit
+and Banking, 39:3–33, 2007.
+V olodya V ovk and Chris Watkins. Universal Portfolio Selection. In Proceedings of the Eleventh Annual Con-
+ference on Computational Learning Theory , pp. 12–23, 1998.
+10
+A T ECHNICAL PROOFS
+Proof of Lemma 3.3. By adding and subtracting the intermediate weight vector qexp(t − 1) and applying the
+triangle inequality, the total variation can be decomposed into the variation from the loss update and the varia-
+tion from the sharing step:
+‖q(t) − q(t − 1)‖1 = ‖q(t) − qexp(t − 1) + qexp(t − 1) − q(t − 1)‖1
+≤ ‖qexp(t − 1) − q(t − 1)‖1
+/bracehtipupleft /bracehtipdownright/bracehtipdownleft /bracehtipupright
+Loss Update V ariation
++ ‖q(t) − qexp(t − 1)‖1
+/bracehtipupleft /bracehtipdownright/bracehtipdownleft /bracehtipupright
+Sharing V ariation
+. (11)
+To bound the Loss Update V ariation, deﬁne an auxiliary continuous function ˜qj(s) parameterized by s ∈ [0, η]
+that interpolates the weights during the exponential updat e:
+˜qj (s) := qj (t − 1)e−s˜ℓj (t−1)
+Z(s) , (12)
+where Z(s) = ∑k∈N qk(t − 1)e−s˜ℓk (t−1). Note that ˜qj (0) = qj (t − 1), ˜qj (η) = qexpj (t − 1) and∑
+j∈N ˜qj(s) = 1 .
+For each expert j, by the Fundamental Theorem of Calculus, the absolute chang e is bounded by the integral of
+the absolute derivative:
+|qexpj (t − 1) − qj (t − 1)| =
+⏐⏐⏐⏐∫ η
+0
+d
+ds ˜qj (s) ds
+⏐⏐⏐⏐ ≤∫ η
+0
+⏐⏐⏐⏐ dds ˜qj (s)⏐⏐⏐⏐ ds. (13)
+Using the logarithmic derivative identity, dds log ˜qj (s) = 1˜qj (s) ( dds ˜qj(s)), then:
+1
+˜qj (s)
+( d
+ds ˜qj (s)
+)
+= dds log ˜qj (s)
+= −˜ℓj(t − 1) − dds log Z(s). (14)
+where the last equality follows from differentiating ( 12).
+Evaluating the derivative of the log-partition function log Z(s) yields the negative expected loss under the
+interpolated weights {˜qj (s)}j∈N ; i.e.,
+d
+ds log Z(s) = 1Z(s) ∑k∈N qk(t − 1)(−˜ℓk(t − 1))e−s˜ℓk(t−1)
+= −
+∑
+k∈N
+˜qk(s)˜ℓk(t − 1). (15)
+Substituting (15) back to ( 14) and isolating the derivative gives:
+d
+ds ˜qj (s) = ˜qj (s)
+(∑
+k∈N
+˜qk(s)˜ℓk(t − 1) − ˜ℓj(t − 1)
+)
+. (16)
+Applying (16) to ( 13) yields
+|qexpj (t − 1) − qj (t − 1)| ≤
+∫ η
+0
+⏐⏐⏐⏐⏐˜qj (s)(∑k∈N ˜qk(s)˜ℓk(t − 1) − ˜ℓj(t − 1))⏐⏐⏐⏐⏐ ds
+≤
+∫ η
+0
+˜qj (s)
+⏐⏐⏐⏐⏐∑
+k∈N
+˜qk(s)˜ℓk(t − 1) − ˜ℓj (t − 1)
+⏐⏐⏐⏐⏐ ds. (17)
+Summing up over all n experts yields:
+‖qexp(t − 1) − q(t − 1)‖1 ≤∑
+j∈N
+∫ η
+0
+˜qj(s)
+(⏐⏐⏐⏐⏐∑
+k∈N
+˜qk(s)˜ℓk(t − 1) − ˜ℓj (t − 1)
+⏐⏐⏐⏐⏐) ds
+=
+∫ η
+0
+∑
+j∈N
+˜qj(s)
+(⏐⏐⏐⏐⏐∑k∈N ˜qk(s)˜ℓk(t − 1) − ˜ℓj (t − 1)⏐⏐⏐⏐⏐) ds
+≤
+∫ η
+0
+∑
+j∈N
+˜qj(s)
+(
+max
+k∈N
+˜ℓk(t − 1) − mink∈N ˜ℓk(t − 1)
+)
+ds
+= η
+(
+max
+k∈N
+˜ℓk(t − 1) − mink∈N ˜ℓk(t − 1)
+)
+11
+where the last inequality follows because both ∑k∈N ˜qk(s)˜ℓk(t − 1) and ˜ℓj(t − 1) lie in the interval
+[mink∈N ˜ℓk(t − 1), maxk∈N ˜ℓk(t − 1)], and the last equality uses ∑j∈N ˜qj (s) = 1 .
+Next, we bound the Sharing V ariation term in ( 11) by substituting the update step qj(t) = (1 − α)qexpj (t −
+1) + αn :
+‖q(t) − qexp(t − 1)‖1 =‖‖‖(1 − α)qexp(t − 1) + αn 1 − qexp(t − 1)‖‖‖1
+=
+‖‖‖ αn 1 − αqexp(t − 1)‖‖‖1
+= α
+‖‖‖‖ 1n 1 − qexp(t − 1)‖‖‖‖1
+≤ 2α
+(
+1 − 1n) ,
+where the last inequality follows from the convexity of the ℓ1-norm and the fact that ‖ 1n 1 − ej‖1 = 2(1 − 1n )for every j ∈ N . Here ej ∈ ∆n assigns unit mass to expert j and zero mass to every other expert. The bound
+is sharp over the probability simplex, with equality at its v ertices.
+Combining the bounds for both components yields the ﬁnal res ult:
+‖q(t) − q(t − 1)‖1 ≤ η
+(
+max
+j∈N
+˜ℓj(t − 1) − minj∈N ˜ℓj(t − 1)
+)
++ 2α
+(
+1 − 1n) ,
+which completes the proof.
+Proof of Corollary 3.4. Recall Theorem 3.1, for the cost-sensitive tracking regret we have
+Rctrack(T, K ) ≤
+T∑
+t=1
+[(∑
+j∈N
+qj (t)˜ℓj(t)
+)
+− ˜ℓjt (t)
+]
+/bracehtipupleft /bracehtipdownright/bracehtipdownleft /bracehtipupright
+Expert-loss regret bound
++
+T∑
+t=1
+c(t)‖q(t) − q(t − 1)‖1
+/bracehtipupleft /bracehtipdownright/bracehtipdownleft /bracehtipupright
+Additional turnover cost regret bound
+.
+For the Regret Bound for A, evaluated on losses in [a, b + 2c(t)], by Cesa-Bianchi & Lugosi (2006), standard
+analysis for the Fixed Share algorithm bounds the regret by:
+Expert-loss regret bound ≤ C(K, α, n, T)η + η8
+T∑
+t=1
+(b − a + 2c(t))2.
+For the Regret Bound for Transaction Cost, using q(0) = q(1) and Lemma 3.3, we obtain
+Additional Turnover cost regret bound =
+T∑
+t=1
+c(t)‖q(t) − q(t − 1)‖1
+= 0 +
+T∑
+t=2
+c(t)‖q(t) − q(t − 1)‖1
+≤
+T∑
+t=2
+c(t)
+[
+η
+(
+max
+j∈N
+˜ℓj(t − 1) − minj∈N ˜ℓj(t − 1)
+)
++ 2α
+(
+1 − 1n)]
+≤ η
+T∑
+t=2
+c(t)(b − a + 2c(t − 1)) + 2α
+(
+1 − 1n) T∑t=1 c(t).
+The last inequality follows from ˜ℓj(t − 1) ∈ [a, b + 2c(t − 1)] and c(t) ≥ 0.
+Combining both components yields the ﬁnal regret bound.
+Proof of Proposition 3.5. By Corollary 3.4, the regret boundcan be expressed as a joint function of η and α:
+R(η, α) = C(K, α, n, T)η + ηAT + 2α(1 − 1n) CT .
+For CT = 0 . Since there are no transaction costs, the setting reduces t o the standard Fixed Share algorithm;
+see Herbster & Warmuth (1998), Cesa-Bianchi & Lugosi (2006).
+12
+For K = 0, if α > 0, the derivative with respect to α is
+∂R
+∂α = 1η( (T − 1)α − Kα(1 − α) ) + 2(1 − 1n) CT ,
+which is strictly positive for all α ∈ (0, 1) with T > 1 and η > 0. The regret function R is strictly increasing
+in α. Therefore, it cannot have a minimum where the derivative is zero; the minimum must lie on the boundary
+constraint, i.e., α = 0 . With K = 0 and α = 0 , the complexity term simpliﬁes to C(0, 0, n, T ) = log n. The
+regret bound reduces to a function of η alone:
+R(η, 0) = log nη + ηAT .
+Taking the derivative with respect to η and setting it to zero yields η∗ = √ log nAT . Substituting η∗ back into
+R(η, 0) gives the minimized bound Rctrack(T, 0) ≤ 2√AT log n.
+For the rest of the cases, K > 0, α ∈ (0, 1) and η > 0, we optimize R(η, α) sequentially. For any ﬁxed
+α ∈ (0, 1), the ﬁrst and second partial derivatives with respect to η are:
+∂R
+∂η = − C(K, α, n, T)η2 + AT , ∂2R∂η 2 = 2C(K, α, n, T)η3 .
+Since C(K, α, n, T) > 0 and η > 0, the second partial derivative is strictly positive. Thus, R(η, α) is strictly
+convex in η, and setting ∂R∂η = 0 yields the unique conditional minimum:
+η∗(α) =
+√
+C(K, α, n, T)
+AT
+.
+Substituting η∗(α) back into the objective function yields the proﬁle function g(α) depending solely on α:
+g(α) := R(η∗(α), α)
+= C(K, α, n, T)√
+C(K, α, n, T)/AT
++ AT
+√
+C(K, α, n, T)
+AT
++ 2α
+(
+1 − 1n) CT
+= 2
+√
+AT · C(K, α, n, T) + 2α
+(
+1 − 1n) CT .
+To ﬁnd the minimum of g(α), we compute its ﬁrst derivative:
+g′(α) =
+√
+AT
+C(K, α, n, T)
+(
+− Kα + T − K − 11 − α ) + 2(1 − 1n) CT .
+Setting g′(α) = 0 yields the stationarity condition:
+K − (T − 1)α
+α(1 − α) = 2CT
+(
+1 − 1n)√ C(K, α, n, T)AT .
+To establish that the root α∗ is the unique global minimum, we prove that g(α) is strictly convex on the domain
+α ∈
+(
+0, KT −1
+)
+. Since g(α) is the sum of a linear term and 2
+√
+AT · C(K, α, n, T), it sufﬁces to show that
+√
+C
+is strictly convex. The second derivative of
+√
+C is strictly positive if and only if 2CC ′′ > (C′)2.
+The domain constraint α < KT −1 . By subtracting αK at the both sides of α(T − 1) < K , we algebraically
+rearranges to K(1 − α) > (T − K − 1)α, which implies
+K
+α > T − 1 − K1 − α > 0. (18)
+The derivatives of C with respect to α can be expressed as C′ = − Kα + T −1−K1−α . Because ( 18), we have
+(C′)2 < ( Kα )2 = K 2α2 .
+Furthermore, since T −1−K(1−α)2 > 0, we know
+C′′ = Kα2 + T − 1 − K(1 − α)2 > Kα2 . (19)
+13
+By deﬁnition, since other term are always positive in α ∈ (0, KT −1 ), we have
+C(α) > (K + 1) log n. (20)
+Combining (19) and ( 20) yields:
+2CC ′′ > 2K(K + 1) log nα2 .
+For any n ≥ 2, we have log n ≥ log 2 > 0.5, which guarantees the coefﬁcient 2(K + 1) log n > K + 1 > K ,
+yields
+2CC ′′ > K 2
+α2 > (C′)2.
+Thus,
+√
+C and g are strictly convex on (0, α0), where α0 := K/(T − 1). Moreover,
+lim
+α↓0
+g′(α) = −∞, g ′(α0) = 2
+(
+1 − 1n) CT > 0.
+By continuity and strict monotonicity of g′ on (0, α0), there exists a unique root α∗ ∈ (0, α0). For α ∈ [α0, 1),
+we have C′(α) ≥ 0, and hence g′(α) > 0. Therefore, α∗ is the unique global minimizer of g on (0, 1).
+Evaluating g(α∗) completes the proof.
+Proof of Corollary 3.7. Since c(t) ∈ [0, 1], we have AT = O(T ) and CT ≤ T . For sufﬁciently large T , the
+choice ¯α = K/(T − 1) belongs to [0, 1). By the deﬁnition of C, using its ﬁrst case when K = 0 and its last
+case when K > 0, we obtain
+BT := C(K, ¯α, n, T) = ( K + 1) log n + (T − 1)H
+( K
+T − 1
+)
+,
+where H(0) = 0 . Since K = o(T ) and H(x) → 0 as x → 0, we have BT = o(T ). The optimized upper
+bound is no larger than the bound obtained at ¯α and ¯η =
+√
+BT /AT . Hence,
+Rctrack(T, K )
+T ≤ 2
+√
+AT
+T
+BT
+T + 2
+(
+1 − 1n) KT − 1 CTT .
+Both terms on the right converge to zero.
+14
+B A DDITIONAL EXPERIMENTS
+This appendix provides the evaluation details and addition al experiments supporting Section 4.
+B.1 A CCOUNT -VALUE EVALUATION
+After making decision ˆw(t) ∈ W at time t, the trader’s account value evolves according to
+V (t + 1) = V (t) + V (t)
+(ˆw(t)⊤y(t)) − c‖ˆw(t) −ˆw(t − 1)‖1V (t)
+= V (t)
+(
+1 +ˆw(t)⊤y(t) − c ‖ˆw(t) −ˆw(t − 1)‖1)
+where V (1) > 0 andˆw(0) = w0. For this evaluation, we assume 1 +ˆw(t)⊤y(t) − c‖ˆw(t) −ˆw(t − 1)‖1 > 0
+at every trading period. This condition ensures positive ac count values.
+B.2 A DDITIONAL SYNTHETIC EXPERIMENTS
+We vary the synthetic setup in Section 4. Figure 3 illustrates the effects of altering the timing of the regime
+shift, while Figure 4 expands the expert set to N = {5, 10, 21, 30, 41, 50, 63, 126}.
+2021 2022 2023 2024 2025 2026 2027
+Date
+0.00
+0.25
+0.50
+0.75
+1.00
+Weight on Expert
+Window Size (Expert)
+5
+10
+21
+63
+Optimal Expert Switch
+(a) Hedge
+2021 2022 2023 2024 2025 2026 2027
+Date
+0.00
+0.25
+0.50
+0.75
+1.00
+Weight on Expert
+Window Size (Expert)
+5
+10
+21
+63
+Optimal Expert Switch
+(b) Fixed Share
+Figure 3: Evolution of the aggregation weights qj(t) on four Window Sizes for different switching
+timing.
+2021 2022 2023 2024 2025 2026 2027
+Date
+0.00
+0.25
+0.50
+0.75
+1.00
+Weight on Expert
+Window Size (Expert)
+5
+10
+21
+30
+41
+50
+63
+126
+Optimal Expert Switch
+(a) Hedge
+2021 2022 2023 2024 2025 2026 2027
+Date
+0.00
+0.25
+0.50
+0.75
+1.00
+Weight on Expert
+Window Size (Expert)
+5
+10
+21
+30
+41
+50
+63
+126
+Optimal Expert Switch
+(b) Fixed Share
+Figure 4: Evolution of the aggregation weights qj(t) on eight window sizes.
+15
+B.3 C OMPARISON WITH ONLINE PORTFOLIO SELECTION ALGORITHMS
+Besides the two-level framework we set, we compare our work w ith some standard online portfolio selection
+benchmarks, including UP ( Cover (1991)), EG ( Helmbold et al. (1998)), PAMR ( Li et al. (2012)), CWMR
+(Li et al. (2013)) and OLMAR ( Li & Hoi (2014). For these comparators, we initialize their parameters to
+the theoretically optimal values prescribed in their respe ctive foundational papers. Note that these standard
+conﬁgurations were originally derived under frictionless assumptions. We evaluate them under these standard
+conﬁgurations not to claim they are fully optimized for our s peciﬁc setting, but to illustrate the structural
+necessity of incorporating cost-sensitive directly into t he ﬁnancial optimization process.
+Additionally, Figure 5 compares our two-level framework against several benchmar k algorithms commonly
+used in online portfolio selection. For this comparison, we deﬁne Rstock(T, K ) as the tracking regret against
+the best stock sequence with at most K switches.
+Consider the portfolio M = {1, 2, . . . , m} with m ≥ 2. We treat each asset i ∈ M as an expert. Write
+i := ( i1, . . . , iT ) ∈ M T for an arbitrary comparator sequence of experts, where it is the expert selected by
+the comparator at time t. For the switching budget K, deﬁne
+IT,K :=
+{
+i ∈ M T : ST (i) ≤ K,}
+where ST (i) counts the switches in i. For a given horizon T ≥ 1 and a switching budget K ∈ {0, 1, . . . , T−1},
+the tracking regret Rstock against stock sequence is deﬁned as
+Rstock(T, K ) :=
+T∑
+t=1
+ℓ(ˆw(t), y(t)) − min
+i∈IT ,K
+T∑
+t=1
+ℓ(wit (t), y(t)).
+The minimization over IT,K selects the best such expert sequence in hindsight.
+Consistent with existing literature, the “experts’ advice ” is formulated as a buy-and-hold strategy for individ-
+ual stocks, and the loss function is the negative logarithmi c return. Under this conﬁguration, our two-level
+framework achieves a lower Rstock than the compared algorithms in this synthetic experiment. Negative re-
+gret indicates that our framework incurs lower cumulative l oss than the best stock sequence with at most K
+switches.
+2020 2021 2022 2023 2024 2025 2026 2027 2028
+Date
+−200
+−100
+0
+100
+200
+300
+400
+500
+Regret
+Hedge
+Fixed Share
+UP
+EG
+PAMR
+OLMAR
+CWMR
+Optimal Expert Switch
+Figure 5: Rstock for Hedge, Fixed Share, and Comparators with Negative Log Re turn Loss
+16
+B.4 E MPIRICAL STUDIES : D OW JONES 30
+This section presents an empirical study that uses historic al data to validate our proposed framework.
+The Setup. For the portfolio setting, we use the Dow Jones Industrial Average and invest directly in its
+constituent stocks to benchmark performance against the DJI index itself. We choose the reference expert
+set N = {5, 10, 21, 30, 41, 50, 63, 126}. Because the DJI periodically updates its components, we isolate a
+period free of any asset additions or removals to simplify ou r historical data. From 2021/03/04 to 2024/02/25,
+we construct the portfolio using the 30 exact components of t he DJI index over that period. The portfolio
+additionally includes BIL, a 1–3 Month Treasury Bill ETF. The asset tickers are listed i n Appendix C. We set
+the transaction cost rate c = 0 .001 (10 bps) for turnover trades. Since α∗ and η∗ depend on the switching
+times, we choose a prescribed switching budget K(T ) satisfying ( 2). For any constant ε > 0, if sufﬁciently
+large time horizon T satisﬁes log(T )
+(
+log(log(T ))
+)1+ε
+> 1, we deﬁne the switching budget K(T ) as:
+K(T ) =
+⌊
+T
+log(T )
+(
+log(log(T ))
+)1+ε
+⌋
+.
+Since it follows that:
+lim
+T →∞
+T
+log(T )(log(log(T )))1+ε
+T
+log(T ) log(log(T ))
+= lim
+T →∞
+1(
+log(log(T ))
+)ε = 0.
+In the following studies, we use this K(T ) as our switching budget K estimator.
+Performance Evaluation. Figure 6 presents the performance of Cost-Sensitive Regret evaluat ed on the
+Dow Jones Industrial Average (DJIA). As depicted in Figure 7, the weight distribution remains largely uniform,
+with the proportion assigned to j = 126 being marginally higher than that of the others. Figure 8 conﬁrms
+that the Rstock of our proposed method remains consistently lower than that of the comparative algorithms.
+Furthermore, Table 2 and Figure 9 illustrate the trading performance of our method relative t o the baselines.
+Figure 9 demonstrates that our two-level framework progressively a ccumulates a higher account value, even
+when subjected to these transaction cost penalties.
+40
+60
+80
+≈ ≈
+Hedge Fixed Share Optimal Expert Switch Theoretical Bound
+2022 2023 2024
+Date
+0
+2
+4
+6
+8
+10≈ ≈
+Regret
+Figure 6: Cost-Sensitive Tracking Regret for Hedge and Fixe d Share with Negative PnL Loss
+(2021/03/04-2024/02/25).
+Table 2: Trading Performance Metric for different Window Si zes (2021/03/04-2024/02/25).
+5-day 10-day 21-day 30-day 41-day
+Cumulative Return(%) 98.3533 23.8690 1.2471 45.2568 56.75 85
+Sample Mean of Return(%) 0.1068 0.0426 0.0141 0.0646 0.0734
+Sample Standard Deviation 0.0175 0.0167 0.0158 0.0172 0.01 64
+Annualized Sharpe Ratio 0.8862 0.3170 0.0487 0.5119 0.6226
+Maximum Drawdown(%) -28.9273 -29.1735 -33.2589 -29.5701 - 23.8111
+17
+2022 2023 2024
+Date
+0.00
+0.25
+0.50
+0.75
+1.00
+Weight on Expert
+Window Size (Expert)
+5
+10
+21
+30
+41
+50
+63
+126
+Optimal Expert Switch
+(a) Hedge
+2022 2023 2024
+Date
+0.00
+0.25
+0.50
+0.75
+1.00
+Weight on Expert
+Window Size (Expert)
+5
+10
+21
+30
+41
+50
+63
+126
+Optimal Expert Switch
+(b) Fixed Share
+Figure 7: Evolution of the aggregation weights qj(t) assigned to window-size experts (2021/03/04-
+2024/02/25).
+2022 2023 2024
+Date
+0
+2
+4
+6
+8
+10Regret
+Hedge
+Fixed Share
+UP
+EG
+PAMR
+OLMAR
+CWMR
+Optimal Expert Switch
+Figure 8: Rstock for Hedge, Fixed Share, and Comparators with Negative Log Re turn Loss
+(2021/03/04-2024/02/25).
+2022 2023 2024
+Date
+0.2
+0.4
+0.6
+0.8
+1.0
+1.2
+1.4
+Account Value
+Hedge
+Fixed Share
+UP
+EG
+PAMR
+CWMR
+OLMAR
+Benchmark (^DJI)
+Figure 9: Account V alue for Hedge, Fixed Share and benchmark DJI(2021/03/04-2024/02/25).
+18
+Table 2: Trading performance metrics (continued): longer- window experts, Hedge, and Fixed Share.
+50-day 63-day 126-day Hedge Fixed Share
+Cumulative Return(%) 52.7662 9.4500 38.8086 21.1950 17.70 14
+Sample Mean of Return(%) 0.0719 0.0274 0.0589 0.0338 0.0301
+Sample Standard Deviation 0.0174 0.0174 0.0173 0.0127 0.01 29
+Annualized Sharpe Ratio 0.5705 0.1651 0.4551 0.3060 0.2568
+Maximum Drawdown(%) -29.8611 -37.9590 -28.2687 -23.5123 - 23.0759
+Table 2: Trading performance metrics (continued): online p ortfolio selection baselines.
+UP EG PAMR CWMR OLMAR
+Cumulative Return(%) 48.7250 48.2584 -88.2441 -88.5860 -3 8.9035
+Sample Mean of Return(%) 0.0497 0.0493 -0.2262 -0.2296 -0.0 365
+Sample Standard Deviation 0.0093 0.0092 0.0190 0.0190 0.02 00
+Annualized Sharpe Ratio 0.7165 0.7109 -1.9556 -1.9840 -0.3 535
+Maximum Drawdown(%) -20.2748 -20.2783 -88.9822 -89.3036 - 61.0332
+19
+B.5 E MPIRICAL STUDIES : S&P 500
+The Setup. Keep the expert setting N and the transaction cost rate as above. For the portfolio set ting, we
+use the S&P 500 (Ticker: GSPC) and invest directly in its constituent stocks to benchmark performance against
+the GSPC index itself. Because the GSPC periodically updates its components, from 2020/01/02 to 20 26/08/01,
+we remove all the changed stocks and construct our portfolio using the 481 components of the GSPC during
+that window (Tickers are listed in Appendix C.) and the risk-free asset BIL, which represents the 1-3 Month
+T-Bill ETF.
+Performance Evaluation. Figure 10 displays the performance of the Cost-Sensitive Regret eval uated on
+the S&P 500 index. Consistent with previous observations, F igure 11 shows a generally uniform weight alloca-
+tion, with the proportion for j = 126 remaining slightly elevated. Figure 12 indicates that our method continues
+to yield a marginally lower Rstock compared to the baseline algorithms, while Figure 13 demonstrates that our
+method achieves a higher overall account value, and Table 3 concludes the ﬁnancial performance.
+It is important to note that these empirical studies are inte nded solely to demonstrate the practical application of
+our framework over a restricted timeframe, utilizing Hedge and Fixed Share as illustrative examples to account
+for window sizes and transaction costs. The primary objecti ve is to underscore the necessity of incorporating
+such considerations, rather than to assert any predictive c apability regarding the future performance of speciﬁc
+ﬁnancial instruments.
+300
+400
+500
+≈ ≈
+Hedge Fixed Share Optimal Expert Switch Theoretical Bound
+2020 2021 2022 2023 2024 2025 2026
+Date
+0
+10
+20
+30
+40
+50≈ ≈
+Regret
+Figure 10: Cost-Sensitive Tracking Regret of Expert for Hed ge and Fixed Share with Negative PnL
+Loss (2020/01/02-2026/08/01).
+2021 2022 2023 2024 2025 2026
+Date
+0.00
+0.25
+0.50
+0.75
+1.00
+Weight on Expert
+Window Size (Expert)
+5
+10
+21
+30
+41
+50
+63
+126
+Optimal Expert Switch
+(a) Hedge
+2021 2022 2023 2024 2025 2026
+Date
+0.00
+0.25
+0.50
+0.75
+1.00
+Weight on Expert
+Window Size (Expert)
+5
+10
+21
+30
+41
+50
+63
+126
+Optimal Expert Switch
+(b) Fixed Share
+Figure 11: Evolution of the aggregation weights qj(t) assigned to window-size experts (2020/01/02-
+2026/08/01).
+20
+2020 2021 2022 2023 2024 2025 2026
+Date
+0
+10
+20
+30
+40
+50Regret
+Hedge
+Fixed Share
+UP
+EG
+PAMR
+OLMAR
+CWMR
+Optimal Expert Switch
+Figure 12: Rstock for Hedge, Fixed Share, and Comparators with Negative Log Re turn Loss
+(2020/01/02-2026/08/01).
+2020 2021 2022 2023 2024 2025 2026
+Date
+0
+2
+4
+6
+8
+10Account Value
+Hedge
+Fixed Share
+UP
+EG
+PAMR
+CWMR
+OLMAR
+Benchmark (^GSPC)
+Figure 13: Account V alue for Hedge, Fixed Share and benchmar k GSPC(2020/01/02-2026/08/01).
+Table 3: Trading Performance Metric for different Window Si zes (2020/01/02-2026/08/01).
+5-day 10-day 21-day 30-day 41-day
+Cumulative Return(%) 256.0875 638.5071 361.6039 261.9927 1046.4484
+Sample Mean of Return(%) 0.1840 0.2311 0.2013 0.1857 0.2545
+Sample Standard Deviation 0.0468 0.0476 0.0473 0.0469 0.04 64
+Annualized Sharpe Ratio 0.5875 0.7352 0.6400 0.5924 0.8333
+Maximum Drawdown(%) -62.5065 -63.2920 -74.2220 -76.1463 - 67.7831
+21
+Table 3: Trading performance metrics (continued): longer- window experts, Hedge, and Fixed Share.
+50-day 63-day 126-day Hedge Fixed Share
+Cumulative Return(%) 385.4326 297.5403 1912.9062 567.201 0 461.4739
+Sample Mean of Return(%) 0.1995 0.1823 0.2784 0.1806 0.1728
+Sample Standard Deviation 0.0460 0.0445 0.0441 0.0364 0.03 72
+Annualized Sharpe Ratio 0.6512 0.6117 0.9642 0.7400 0.6918
+Maximum Drawdown(%) -78.5995 -67.4449 -60.4583 -56.9601 - 58.5937
+Table 3: Trading performance metrics (continued): online p ortfolio selection baselines.
+UP EG PAMR CWMR OLMAR
+Cumulative Return(%) 205.3887 205.7900 -52.0775 205.5993 -44.0283
+Sample Mean of Return(%) 0.0712 0.0712 0.0094 0.0827 0.0826
+Sample Standard Deviation 0.0129 0.0129 0.0321 0.0199 0.05 01
+Annualized Sharpe Ratio 0.7456 0.7468 -0.0051 0.5775 0.229 0
+Maximum Drawdown(%) -38.3346 -38.2862 -84.5912 -59.5749 - 81.6301
+22
+C A SSETS USED IN THE EMPIRICAL STUDIES
+Dow Jones 30. The tickers of the Dow Jones 30 stocks considered in Section B.4 are listed below: WBA,
+CRM, HON, AMGN, DOW, AAPL, GS, V, NKE, UNH, TRV, CSCO, CVX, VZ, MSFT, HD,
+INTC, JNJ, WMT, CAT, JPM, DIS, BA, KO, MCD, AXP, IBM, MRK, MMM, PG and the
+risk-free asset BIL, which represents the 1-3 Month T-Bill ETF.
+S&P 500. The tickers of the S&P 500 stocks considered in Section B.5 are listed below:
+A, AAPL, ABBV, ABT, ACGL, ACN, ADBE, ADI, ADM, ADP, ADSK, AEE, AEP, AES,
+AFL, AIG, AIZ, AJG, AKAM, ALB, ALGN, ALL, ALLE, AMAT, AMCR, AM D, AME,
+AMGN, AMP, AMT, AMZN, ANET, AON, AOS, APA, APD, APH, APO, APTV , ARE,
+ARES, ATO, AVGO, AVY, AWK, AXON, AXP, AZO, BA, BAC, BALL, BAX, BBY, BDX,
+BEN, BF-B, BG, BIIB, BKNG, BKR, BLDR, BLK, BMY, BNY, BR, BRK-B , BRO, BSX,
+BWA, BX, BXP, C, CAG, CAH, CARR, CAT, CB, CBOE, CBRE, CCI, CCL, CDNS,
+CDW, CE, CEG, CF, CFG, CHD, CHRW, CHTR, CI, CINF, CL, CLX, CMA, CMCSA,
+CME, CMG, CMI, CMS, CNC, CNP, COF, COO, COP, COR, COST, CPB, CP RT, CPT,
+CRWD, CSCO, CSGP, CSX, CTAS, CTC, CTRA, CTSH, CTVA, CVS, CVX, CZR, D,
+DAL, DD, DE, DFS, DG, DGX, DHI, DHR, DIS, DOC, DOV, DOW, DPZ, DR I, DTE,
+DUK, DVA, DVN, DXCM, EA, EBAY, ECL, ED, EFX, EG, EIX, EL, ELV, E MN, EMR,
+ENPH, EOG, EPAM, EQT, ERIE, ES, ESS, ETN, ETR, EVRG, EW, EXC, E XPD, EXPE,
+EXR, F, FANG, FAST, FCX, FDS, FDX, FE, FFIV, FI, FICO, FIS, FIT B, FLT,
+FMC, FOX, FOXA, FRT, FSLR, FTNT, GE, GEHC, GEV, GILD, GIS, GL, GLW, GM,
+GNRC, GOOG, GOOGL, GPC, GPN, GRMN, GS, GWW, HAL, HAS, HBAN, HC A, HD, HES,
+HIG, HII, HLT, HOLX, HON, HPE, HPQ, HRL, HSIC, HST, HSY, HUBB, HUM, HWM,
+IBM, ICE, IDXX, IEX, IFF, ILMN, INCY, INTC, INTU, INVU, IP, IP G, IQV,
+IR, IRM, ISRG, IT, ITW, IVZ, J, JBHT, JCI, JKHY, JNJ, JNPR, JPM , K, KDP,
+KEY, KEYS, KHC, KIM, KLAC, KMB, KMI, KMX, KO, KR, KKV, L, LDOS, LEN, LH,
+LHX, LIN, LKQ, LLY, LMT, LNT, LOW, LRCX, LUV, LVS, LYB, LYV, MA , MAA,
+MAR, MAS, MCD, MCHP, MCK, MCO, MDLZ, MDT, MET, META, MGM, MHK, MKC, MKTX,
+MLM, MMC, MMM, MNST, MO, MOH, MOS, MPC, MPWR, MRK, MRO, MS, MSC I, MSFT,
+MSI, MTB, MTCH, MTD, MU, NCLH, NDAQ, NDSN, NEE, NEM, NFLX, NI, NKE, NOC,
+NOW, NRG, NSC, NTAP, NTRS, NUE, NVDA, NVR, NWS, NWSA, NXPI, O, ODFL, OKE,
+OMC, ON, OKE, ORCL, ORLY, OTIS, OXY, PANW, PARA, PAYC, PAYX, P CAR, PCG,
+PEAK, PEG, PEP, PFE, PFG, PG, PGR, PH, PHM, PKG, PLD, PM, PNC, P NR, PNW,
+PODD, POOL, PPG, PPL, PRU, PSA, PTC, PTEN, PWR, PXD, PYPL, QCO M, QRVO,
+RCL, REG, REGN, RF, RHI, RJF, RL, RMD, ROK, ROL, ROP, ROST, RSG , RTX,
+RVTY, SBUX, SCHW, SHW, SJM, SLB, SMCI, SNA, SNPS, SO, SPG, SPG I, SRE,
+STE, STLD, STT, STX, STZ, SWK, SWKS, SYF, SYK, SYY, T, TAP, TAR E, TDG,
+TDY, TECH, TEL, TER, TFC, TFX, TGT, TJX, TMO, TMUS, TPR, TRMB, TROW, TRV,
+TSCO, TSLA, TSN, TT, TTWO, TXN, TXT, TYL, UAL, UBER, UDR, UHS, ULTA, UNH,
+UNP, UPS, URI, USB, V, VLO, VLTO, VMC, VRSK, VRSN, VRTX, VTR, V Z, WAB,
+WAT, WBA, WBD, WDC, WEC, WELL, WFC, WHR, WM, WMB, WMT, WRB, WST , WTW, WY,
+WYNN, XEL, XOM, XYL, XYZ, YUM, ZBH, ZBRA, ZTS ) and the risk-free asset BIL, which
+represents the 1-3 Month T-Bill ETF.
+23

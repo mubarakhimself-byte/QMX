@@ -1,0 +1,1142 @@
+arXiv 2609.23272  https://arxiv.org/abs/2609.23272
+
+On Control of Drawdown: Robust Invariance and Optimality
+Chung-Han Hsieha
+aDepartment of Quantitative Finance, National Tsing Hua University, Hsinchu, Taiwan 30013
+Abstract
+Mitigatingdrawdown, the decline in wealth from its running peak, presents a canonical problem in path-dependent risk control.
+In this paper, we develop a finite-horizon control framework that enforces a prescribed maximum percentage drawdown limit
+in multi-asset stochastic systems. Our first result is an exact robust-invariance theorem characterizing every control action
+that preserves a prescribed drawdown limit against all supported returns. We show that every robustly safe control admits
+adrawdown-modulatedform: the product of the current drawdowncushionand a feasiblenormalized direction. This yields a
+complete parameterization of robustly drawdown-safe policies. Additionally, under stagewise-independent returns, we show that
+optimizing over all robustly safe causal policies reduces to a one-dimensional Bellman recursion and yields an optimal robustly
+safe state-feedback policy. Finally, we characterize the linear time-invariant (LTI) gains satisfying a prescribed drawdown limit
+and prove that optimal drawdown modulation achieves no lower expected return under the same limit. Strict expected-return
+improvement holds for horizons of at least two stages whenever the LTI policy has positive expected one-stage net return.
+Key words:Stochastic Systems; Robust Control in Quantitative Finance; Robustness; Drawdown Control.
+1 Introduction
+Drawdownis the decline of wealth from its running
+maximum and is therefore inherently path dependent.
+We study finite-horizon control of maximum percentage
+drawdown in a multi-asset stochastic system. Our ob-
+jective is to characterize and optimize control policies
+that enforce a prescribed drawdown limit against every
+supported return path.
+A natural benchmark is the linear feedback law
+u(k) =KV(k), under which the risky-asset expo-
+sures are fixed fractions of current account value. This
+proportional-to-wealth structure is closely related to
+the fixed-weight strategies arising in classical mean–
+variance Markowitz (1952); Malekpour and Barmish
+(2012) and Kelly betting formulations; see Kelly Jr
+(2011); MacLean et al. (2011); Hsieh et al. (2016). It
+is also central to the control-based investment models
+studied in Calafiore (2008); Barmish and Primbs (2015);
+Hsieh (2023a); Barmish et al. (2024).
+⋆ This paper is partially supported by National Science and
+Technology Council with grant: NSTC115-2628-E-007-005-.
+Email address:ch.hsieh@mx.nthu.edu.tw(Chung-Han
+Hsieh ).
+1.1 Drawdown Safety and Related Work
+In classical mean–variance analysis, the return–risk
+pair consists of expected return and return variance;
+see Markowitz (1952); Luenberger (2013). Although
+tractable and widely used, variance treats favorable
+and unfavorable deviations symmetrically and does not
+directly measure losses relative to a running wealth
+maximum; see Konno and Yamazaki (1991); Hsieh and
+Barmish (2017b). Thus, drawdown-based risk mea-
+sures and constraints have received considerable atten-
+tion; see Magdon-Ismail et al. (2004); Chekhlov et al.
+(2004, 2005); Grossman and Zhou (1993); Cvitani´ c and
+Karatzas (1994); Nystrup et al. (2019); Calafiore (2013).
+Here, we study a discrete-time stochastic control prob-
+lem under a prescribed drawdown limit that must hold
+along every supported return path. We characterize all
+control actions that preserve the drawdown limit and
+optimize expected terminal wealth over the resulting
+class of robustly safe causal policies.
+Our drawdown-modulated control class has acushion-
+basedstructure: its exposure is proportional to the
+amount by which current account value exceeds a floor
+linked to the running maximum. The cushion form itself
+has continuous-time antecedents. For example, Gross-
+man and Zhou (1993) show that the optimal risky expo-
+sure is proportional to wealth above a floor linked to its
+running maximum. More general continuous-time con-
+Preprint submitted to Automatica 22 September 2026
+arXiv:2609.23272v1  [math.OC]  20 Sep 2026
+structions for drawdown-constrained wealth processes
+can be found in Cherny and Ob l´ oj (2013); Kardaras
+et al. (2017).
+However, these continuous-time results do not trans-
+fer directly to discrete time. In particular, Klass and
+Nowicki (2005) show that the Grossman–Zhou policy
+loses its optimality in discrete time, while Hern´ andez-
+Bustos and Hern´ andez-Hern´ andez (2023) characterize
+the optimal long-run growth rate under a drawdown
+constraint through dynamic programming. These con-
+structions share the same high-level cushion principle,
+but not the discrete-time robust control characterization
+underlying drawdown modulation. In contrast to these
+asymptotic results, we consider a finite-horizon setting.
+Our robust-safety analysis is distribution-free and guar-
+antees the prescribed drawdown limit along every sup-
+ported return path, and hence with probability one.
+Our approach connects closely to set-invariance meth-
+ods for constrained control; see Blanchini (1999); Blan-
+chini and Miani (2015). Recent approaches to robust
+constrained control include implicit invariant-set repre-
+sentations Anevlavis et al. (2024) and inner–outer set
+constructions Comelli et al. (2024). Control barrier func-
+tions likewise enforce state constraints through restric-
+tions on control inputs Ames et al. (2017); Agrawal and
+Sreenath (2017). Here, we exploit the drawdown struc-
+ture to characterize all robustly safe actions and, fac-
+torize the entire safe-action set by the current cushion.
+This exact parameterization yields robust invariance to
+finite-horizon optimal policy synthesis.
+1.2 Contributions
+We establish a necessary and sufficient condition for
+robust drawdown invariance. We prove an exact safe-
+action factorization that parameterizes every robustly
+safe control as the product of current cushion and a nor-
+malized safe action.
+Under stagewise-independent returns, this factorization
+reduces finite-horizon expected-wealth maximization
+over all robustly safe policies to a one-dimensional
+Bellman recursion. We prove the optimal-value iden-
+tity and the existence of a measurable optimal state-
+feedback policy.
+Under a prescribed drawdown limit, we prove that op-
+timal drawdown modulation achieves no lower expected
+return than any feasible LTI policy. An explicit suffi-
+cient condition for strict expected-return improvement
+is also established.
+Notation.We writeR + := [0,∞). All vectors are re-
+garded as column vectors, andz ⊤ denotes the trans-
+pose of a vectorz. Forz∈R m, the notation|z|denotes
+the vector of component-wise absolute values. Inequal-
+ities between vectors, as well as the operators min{·,·}
+and max{·,·}when applied to vectors, are understood
+component-wise. The zero and one vectors are denoted
+by0and1, respectively, whenever its dimension is clear
+from context. For any nonempty compact setX ⊂R m,
+define its support function Beck (2017) by
+σX (z) := sup
+x∈X
+z⊤x.
+2 Preliminaries
+Fix a horizonN≥1. Fork= 0,1,2, . . . , N, we letV(k)
+be the corresponding account value withV(0) =V 0 >0.
+Definition 2.1(Percentage Drawdown).For each stage
+k= 0,1,2, . . . , N, define therunning maximum account
+valuebyV max(k) := max 0≤i≤k V(i).Thepercentage
+drawdown at stagekis
+d(k) := Vmax(k)−V(k)Vmax(k)
+and themaximum percentage drawdownover the horizon
+is given by
+d⋆ := max
+0≤k≤N
+d(k)
+SinceV max(k)≥V 0 >0, these drawdown quanti-
+ties are well defined. Moreover,V max(k)≥V(k) im-
+plies thatd(k)≥0 and henced ⋆ ≥0. The upper
+boundd(k)≤1 requiresV(k)≥0.
+Remark2.2 (Other Drawdown Metrics).The analysis
+in this paper concerns the percentage drawdown, which
+measures loss relative to the running maximum account
+value. An alternative ismaximum absolute drawdown,
+which measures the largest peak-to-trough loss in mon-
+etary units; see Magdon-Ismail et al. (2004).
+2.1 Return Model and Support Information
+For each stagek= 0,1, . . . , N−1, let
+X(k) := [X 1(k)· · ·Xm(k)]⊤ ∈R m
+denote the random vector of asset returns during stagek,
+whereX i(k) is the random return of asseti. For eachk,
+assume that a known nonempty compact setX k ⊂R m
+satisfiesP(X(k)∈ X k) = 1.No temporal independence
+assumption{X(k)} N−1k=0 is imposed at this stage; addi-tional distributional assumptions will be introduced only
+for the results that require them.
+An important special case is the box-support model.
+GivenX min(k), Xmax(k)∈R m satisfyingX min(k)≤
+2
+Xmax(k) componentwise, define
+Xk = [Xmin(k), Xmax(k)]
+:={x∈R m :x i ∈[X min,i(k), Xmax,i(k)], i= 1, . . . , m}.
+When the support set is time invariant, we writeXk =X
+for allk.
+2.2 Account Dynamics and Admissible Policies
+LetF 0 be the trivialσ-algebra and, fork= 1, . . . , N,
+defineF k :=σ
+ 
+X(0), . . . , X(k−1)
+
+,which represents
+the information availablebeforethe stage-kreturn is
+observed. The controlu(k)∈R m is required to beF k-
+measurable; that is, the stage-kinvestment may depend
+on past returnsX(0), . . . , X(k−1) but not onX(k).
+Beginning fromV(0) =V 0 >0, the account value
+evolves according to
+V(k+ 1) =V(k) +u(k) ⊤X(k)−ε ⊤|u(k)|,
+whereε∈R m+ is the vector of per-period proportional
+cost rates, so thatε ⊤|u(k)|represents a reduced-form
+proxy for execution costs, including bid–ask spreads
+and fees.
+Causal Policy.Acausal policyis a sequenceπ:=
+{πk}N−1k=0 of measurable decision rulesπ k :X 0 × · · · ×Xk−1 →R m that generate the actual control actions
+according to
+uπ(0) :=π 0,
+uπ(k) :=π k X(0), . . . , X(k−1), k= 1, . . . , N−1.
+Definition 2.3(Admissible Causal Policy).A causal
+policyπ={π k}N−1k=0 isadmissibleif, for eachk=0, . . . , N−1 and every state reachable underπ,
+V(k) +u π(k)⊤x−ε ⊤|uπ(k)| ≥0 for allx∈ X k.
+Here, a reachable state is one generated fromV(0) =V 0
+underπalong some return history withx(j)∈ X j. We
+denote the class of all admissible causal policies by Π.
+2.3 Policy Performance
+For eachπ∈Π, letV π(k) denote the controlled account
+value byπ, and letd π(k) denote the corresponding per-
+centage drawdown. Along any sample path{V π(k)}Nk=0,
+we define the pathwise overall return and maximum per-
+centage drawdown by
+Rπ := Vπ(N)−V 0V0 , d ⋆π := max0≤k≤N dπ(k),
+respectively. In what follows, we restrict attention to
+policiesπ∈Π for whichR π is integrable.
+3 Robust Drawdown-Safe Control
+3.1 Robust Drawdown Invariance
+Fix a prescribed drawdown limitdmax ∈[0,1). Using the
+augmented state (V(k), Vmax(k)), define thedrawdown-
+safe set
+Sdmax :=
+
+(v, w)∈R 2+ :w >0,(1−d max)w≤v≤w 	 .
+(1)
+For eachk= 0,1, . . . , N, sinceVmax(k)>0, the draw-
+down constraintd(k)≤d max is equivalent to
+(V(k), Vmax(k))∈ Sdmax .
+For any state inS dmax , define thedrawdown modula-
+torby
+M(k) := dmax −d(k)1−d(k) .
+Definition 3.1(Robust Drawdown Safety).We call a
+causal policyπrobustly drawdown-safe(or simplyro-
+bustly safe) if, for every stagek= 0, . . . , N−1 and ev-
+ery current state (V(k), V max(k))∈ Sdmax , the control
+prescribed byπyields
+(V(k+ 1), Vmax(k+ 1))∈ Sdmax for everyx∈ Xk.
+In this case, we say thatSdmax isrobustly invariantunder
+policyπ.
+The following theorem gives an exact support-function
+characterization of robust invariance ofS dmax .
+Theorem 3.2(Robust Drawdown Invariance).Fix a
+prescribed drawdown limitd max ∈[0,1)and a stagek∈
+{0, . . . , N−1}. Suppose that(V(k), Vmax(k))∈ Sdmax .
+For a given control actionu(k), the successor state(V(k+
+1), Vmax(k+ 1))remains inS dmax for everyx∈ Xk if and
+only if
+σXk
+ 
+−u(k)
+
++ε ⊤|u(k)| ≤M(k)V(k).(2)
+Consequently, a causal policyπis robustly drawdown-safe
+if and only if(2)holds at every stagek= 0, . . . , N−1
+and every state inS dmax .
+Proof.Fix a state (v, w) := (V(k), V max(k))∈ S dmax
+and a controlu:=u(k). For a realizationx∈ X k, define
+the successor state (v +, w+) satisfying
+v+ :=v+u ⊤x−ε ⊤|u|,(3)
+w+ := max{w, v+}.(4)
+3
+The successor state (v +, w+) belongs toS dmax if and
+only ifw + >0 and (1−d max)w+ ≤v + ≤w +.By the
+definitionw + = max{w, v+}in (4), we havew+ ≥w >0
+andv + ≤w +. Hence, (v +, w+)∈ Sdmax if and only if
+v+ ≥(1−d max)w+.(5)
+We claim that this condition is equivalent to
+v+ ≥(1−d max)w.(6)
+To establish this, we observe that sincew + ≥wand
+1−d max ≥0, Inequality (5) immediately implies (6).
+Conversely, suppose that (6) holds. Ifv + ≤w, by (4),
+thenw + =wand hence (5) follows immediately. On the
+other hand, ifv + > w, by (4) again, we havew + =v +.
+Since 1−d max ∈(0,1], we have
+v+ =w + ≥(1−d max)w+.
+Hence, (5) holds. Therefore, (5) and (6) are equivalent.
+Therefore, using (3) in (6), robust one-step invariance is
+equivalent to
+v+u ⊤x−ε ⊤|u| ≥(1−dmax)wfor everyx∈ X k.
+Rearranging and taking the worst case overX k gives
+sup
+x∈Xk
+(−u⊤x) +ε ⊤|u| ≤v−(1−d max)w.(7)
+The left-hand side isσ Xk (−u) +ε ⊤|u|.
+Finally, sincev= (1−d(k))w,the right-hand side of (7)
+satisfies
+v−(1−d max)w=
+ 
+dmax −d(k)
+
+w
+= dmax −d(k)1−d(k) v=M(k)v.
+This proves the one-step equivalence. Applying the one-
+step equivalence at every stage and every state inS dmax
+proves the necessary and sufficient condition for robust
+invariance underπ.
+Corollary 3.3(Box-Support Representation).Sup-
+pose that the stage-ksupport set is the boxX k =
+[Xmin(k), Xmax(k)]⊆R m.Writing
+u+(k) := max{u(k),0}, u −(k) := min{u(k),0}
+componentwise, the robust drawdown-invariance condi-
+tion(2)becomes
+−Xmin(k)⊤u+(k)−Xmax(k)⊤u−(k)+ε⊤|u(k)| ≤M(k)V(k).
+Proof.For each component,
+sup
+xi∈[Xmin,i(k),Xmax,i(k)]
+{−ui(k)xi}
+=
+(
+−Xmin,i(k)ui(k), u i(k)≥0,
+−Xmax,i(k)ui(k), u i(k)<0.
+Summing overi= 1, . . . , myields
+σXk
+ 
+−u(k)
+
+=−X min(k)⊤u+(k)−X max(k)⊤u−(k).
+The result follows from Theorem 3.2. Under the cost-
+free, time-invariant box-support assumptions of Hsieh
+and Barmish (2017a), this resulting inequality reduces
+to the condition in the Generalized Drawdown Modula-
+tion Lemma.
+Corollary 3.4(Drawdown Guarantee and Survivabil-
+ity).SupposeX(k)∈ X k with probability one for ev-
+eryk= 0, . . . , N−1and letπ={π k}N−1k=0 be a ro-bustly safe causal policy with induced account-value pro-
+cess{V(k)} Nk=0. ThenP  d⋆ ≤d max = 1.Moreover, on
+the same probability-one event,
+V(k)≥(1−d max)Vmax(k)>0, k= 0, . . . , N.
+In particular,P(V(k)>0for allk= 0, . . . , N) = 1.
+Proof.Define an event Ω X := TN−1k=0 {X(k)∈ Xk}.Note that
+P(ΩcX ) =P  ∪N−1k=0 {X(k)/∈ Xk}
+≤
+N−1X
+k=0
+P(X(k)/∈ Xk) = 0,
+where the last equality follows from the assumed hy-
+pothesis thatX(k)∈ X k with probability one for every
+k= 0, . . . , N−1; hence, we haveP(ΩX ) = 1. On the
+event ΩX , the assumed robust invariance ofS dmax under
+policyπ, together with (V 0, V0)∈ Sdmax , implies
+ 
+V(k), Vmax(k)
+
+∈ Sdmax , k= 0, . . . , N.
+The drawdown guarantee and wealth lower bound
+then follow directly from the definition ofS dmax and
+Vmax(k)≥V 0. Indeed, for everyω∈Ω X and ev-
+eryk= 0, . . . , N,
+V(k;ω)≥(1−d max)Vmax(k;ω)≥(1−d max)V0 >0.
+Hence, Ω X ⊆ {V(k)>0 for allk= 0, . . . , N},and the
+claim follows fromP(Ω X ) = 1.
+4
+3.2 Exact Safe-Action Factorization
+The robust drawdown-invariance condition in Theo-
+rem 3.2 admits anexact safe-action factorization.In
+particular, for each stagek, define thesupport-risk
+functionh k :R m →Rby
+hk(u) :=σ Xk (−u) +ε ⊤|u|.
+Accordingly, Theorem 3.2 states that, whenever 
+V(k), Vmax(k)
+
+∈ Sdmax , a control actionu(k) keeps
+the successor state inS dmax for everyx∈ Xk if and only
+ifh k
+ 
+u(k)
+
+≤C(k),where
+C(k) :=M(k)V(k) =V(k)−(1−d max)Vmax(k) (8)
+is thedrawdown cushion. We also define thenormalized
+safe-action set
+Γk :={γ∈R m :h k(γ)≤1}.(9)
+Forc≥0, we writecΓ k :={cγ:γ∈Γ k}for the scalar
+multiple of Γk.
+Lemma 3.5(Normalized Safe-Action Geometry).For
+each stagek, the support-risk functionh k is continu-
+ous and positively homogeneous. Ifh k(u)>0for every
+u∈R m \ {0},then the normalized safe-action setΓ k
+is compact.
+Proof.SinceX k is compact, its support functionσ Xk is
+continuous; henceh k is also continuous. Moreover, for
+everyα≥0, observe that
+hk(αu) =σ Xk (−αu) +ε ⊤|αu|
+=α(σ Xk (−u) +ε ⊤|u|) =αh k(u),
+soh k is positively homogeneous.
+Sinceh k is continuous and strictly positive on the com-
+pact unit sphere, the minimum ofh k exists, and we de-
+fineη k := min u:∥u∥2=1 hk(u)>0. By positive homo-
+geneity ofh k, for everyu̸=0,
+hk(u) =h k
+ u
+∥u∥2
+∥u∥2
+
+=∥u∥ 2 hk
+ u
+∥u∥2
+
+≥η k∥u∥2.
+This bound also holds atu=0becauseh k(0) = 0. Thus,
+we have
+hk(u)≥η k∥u∥2 for everyu∈R m.
+Therefore, everyγ∈Γ k ⊆R m satisfiesη k∥γ∥2 ≤
+hk(γ)≤1, which implies∥γ∥ 2 ≤1/η k; i.e., Γ k is
+bounded. It is also closed by continuity ofh k, and
+hence Γk is compact.
+Remark3.6 (Role of the Strict-Positivity Condition).
+Since
+hk(u) =σ Xk (−u) +ε ⊤|u|=−minx∈Xk u⊤x−ε ⊤|u|,
+the conditionh k(u)>0 for everyu̸=0in Lemma 3.5
+means that every nonzero control actionuincurs a
+strictly negative net payoff for at least one supported
+return. In particular, it rules out arobust-arbitrage di-
+rectionwhose net payoff is strictly positive for every
+supported return.
+Theorem 3.7(Exact Safe-Action Factorization).Fix
+a stagek∈ {0, . . . , N−1}and suppose thathk(u)>0
+for everyu∈R m \ {0}.Whenever V(k), Vmax(k) ∈
+Sdmax ,a control actionu(k)keeps the successor state 
+V(k+ 1), Vmax(k+ 1)
+
+inS dmax for everyx∈ Xk if and
+only if
+u(k)∈C(k)Γ k.
+Equivalently, there exists someγ(k)∈Γ k such that
+u(k) =C(k)γ(k) =M(k)V(k)γ(k).
+Proof.By Lemma 3.5,h k is positively homogeneous.
+Suppose that
+ 
+V(k), Vmax(k)
+
+∈ Sdmax , which implies
+that (1−d max)Vmax(k)≤V(k). By the definition of the
+cushion,C(k)≥0. Moreover, according to Theorem 3.2,
+a control actionu(k) keeps the successor state inS dmax
+for everyx∈ Xk if and only if
+hk
+ 
+u(k)
+
+≤C(k).(10)
+We now consider two cases:
+Case 1.IfC(k)>0, suppose thath k
+ 
+u(k)
+
+≤C(k),and
+defineγ(k) :=u(k)/C(k). We first showu(k)∈C(k)Γ k.
+Positive homogeneity ofh k gives
+hk(γ(k)) =h k
+ u(k)
+C(k)
+
+= 1C(k) hk(u(k))≤1,
+where the last inequality holds by (10). Hence,γ(k)∈Γ k
+andu(k) =C(k)γ(k). Conversely, ifu(k) =C(k)γ(k)
+for someγ(k)∈Γ k, then
+hk
+ 
+u(k)
+
+=C(k)h k(γ(k))≤C(k).
+Hence the stated factorization holds whenC(k)>0.
+Case 2.IfC(k) = 0, the assumed strict positivity ofh k
+away fromu=0implies
+{u∈R m :h k(u)≤0}={0}= 0Γ k.(11)
+5
+Therefore,h k
+ 
+u(k)
+
+≤C(k) if and only ifu(k)∈C(k)Γ k
+also holds whenC(k) = 0. Combining the two cases
+proves the result.
+Remark3.8 (Drawdown Modulation with Constantγ).
+We now specialize the safe-action factorization to
+drawdown-modulated policies with constantγ, which
+is considered in Hsieh and Barmish (2017a); Hsieh
+(2023b). Indeed, define
+Γ :=
+N−1\
+k=0
+Γk (12)
+and fix anyγ∈Γ. Letπ γ,dmax denote the correspond-
+ing drawdown-modulated policy with constantγ, whose
+induced control satisfies
+u(k) =C(k)γ k= 0, . . . , N−1,(13)
+whereC(k) =M(k)V(k) defined in (8). Whenever
+the current state belongs toS dmax , we haveC(k)≥0.
+Sinceγ∈Γ⊆Γ k, (9) givesh k(γ)≤1. Together
+withC(k)≥0 and positive homogeneity ofh k,
+this yieldsh k
+ 
+u(k)
+
+=C(k)h k(γ)≤C(k).Hence, The-
+orem 3.2 implies that the policyπ γ,dmax is robustly
+drawdown-safe.
+4 Optimal Robust Drawdown-Safe Control
+4.1 Robust Drawdown-Safe Control Problem
+To exclude nonzero actions with nonnegative net payoff
+for every supported return inX k, we assume throughout
+this section thath k(u)>0 for everyu∈R m \ {0}and
+everyk= 0, . . . , N−1.We now state the optimal robust
+drawdown-safe control problem:
+Problem 4.1(Optimal Robust Drawdown-Safe Con-
+trol).For a fixed drawdown limitd max ∈[0,1), consider
+sup
+π∈Π
+E[Vπ(N)]
+s.t.πis robustly drawdown-safe,
+where robust drawdown safety is defined in Defini-
+tion 3.1.
+Remark4.2.SinceV 0 is fixed andE[R π] = E[Vπ(N)]V0 −1,
+maximizingE[V π(N)] is equivalent to maximizingE[Rπ].
+The account dynamics and the robust-safety constraint
+are positively homogeneous. Indeed, for anyα >0, if 
+V(k), Vmax(k), u(k)
+
+is replaced by
+  eV(k), eVmax(k),eu(k) :=  αV(k), αVmax(k), αu(k),
+then, for the same return realization,
+eV(k+ 1) =αV(k+ 1), eVmax(k+ 1) =αV max(k+ 1).
+Consequently, the percentage drawdown is unchanged
+by this common scaling. We therefore separate the
+wealth scale from the account’s relative position within
+the drawdown-safe set. SinceV max(k)≥V 0 >0, define
+thenormalized state
+z(k) := V(k)Vmax(k) .
+For every policyπfeasible for Problem 4.1 and every
+return path inX 0 × · · · × XN−1 , we havez(k)∈[1−
+dmax,1],fork= 0, . . . , N,withz(0) = 1.Moreover, the
+drawdown cushion (8) satisfies
+C(k) =V max(k) [z(k)−(1−d max)].
+By Theorem 3.7, every robustly safe actionu(k) can be
+written as
+u(k) =C(k)γ(k) =V max(k) [z(k)−(1−d max)]γ(k),
+for someγ(k)∈Γ k, where Γ k is the normalized safe-
+action set defined in (9).
+4.2 Reduced Bellman Recursion and Optimality
+Below, for the optimality analysis, we additionally as-
+sume that fork= 0,1, . . . , N−1, returnX(k) is in-
+dependent ofF k and has a stage-dependent distribu-
+tion supported onX k. Forz∈[1−d max,1], γ∈Γ k,
+andx∈ Xk,define the successor account value and the
+running maximum, both normalized by the current run-
+ning maximum, as
+bv+(z, γ, x) :=z+ [z−(1−d max)]  γ⊤x−ε ⊤|γ| ;
+bw+(z, γ, x) := max1,bv+(z, γ, x)	 ,
+respectively. The successor normalized state is then
+z+(z, γ, x) :=bv+(z, γ, x)bw+(z, γ, x).
+These quantities give the normalized state transition
+V(k+ 1) =V max(k)bv+ z(k), γ(k), X(k),
+Vmax(k+ 1) =V max(k)bw+ z(k), γ(k), X(k),
+z(k+ 1) = V(k+ 1)Vmax(k+ 1) =z + z(k), γ(k), X(k).
+Notably, robust safety guaranteesz +(z, γ, x)∈[1−
+dmax,1].
+6
+Reduced Bellman Recursion.FixN≥1. Forz∈[1−
+dmax,1],setJ N (z) :=z,and, fork=N−1, . . . ,0,
+defineJ k recursively by
+Jk(z) := sup
+γ∈Γk
+E
+h
+bw+ z, γ, X(k)Jk+1 z+ z, γ, X(k)i.
+(14)
+At this point, the functions{J k}Nk=0 are defined by
+the backward recursion. Theorem 4.4 below shows that
+wJk(v/w) equals the optimal expected terminal account
+value from any stage-kstate (v, w).
+Lemma 4.3(Regularity and Pointwise Attainment).
+For everyk= 0, . . . , N, the recursively defined func-
+tionJ k is continuous on[1−d max,1]. Moreover, for ev-
+eryk= 0, . . . , N−1and everyz∈[1−d max,1], the
+supremum in(14)is attained.
+Proof.We proceed by backward induction. Note that
+the terminal functionJ N (z) =zis continuous. Suppose
+thatJ k+1 is continuous, and define an auxiliary function
+Qk(z, γ) :=E
+
+bw+(z, γ, X(k))Jk+1 z+ z, γ, X(k) .
+The integrand is continuous and bounded on the com-
+pact set [1−d max,1]×Γ k × Xk where Γk compactness
+follows from the assumption in Lemma 3.5. Hence, by
+the dominated convergence theorem,Q k is jointly con-
+tinuous on [1−d max,1]×Γ k. Since Γ k is nonempty,
+compact, and independent ofz, Berge’s maximum the-
+orem (Aliprantis and Border, 2006, Theorem 17.31) im-
+plies that
+Jk(z) = maxγ∈Γk Qk(z, γ)
+is continuous and that the maximum is attained for ev-
+eryz. Backward induction completes the proof.
+Fork= 0, . . . , N, let Πsafek denote the robustly safe
+causal policy sequences over stagesk, . . . , N−1, and
+letE v,wk [·] denote expectation for the process initializedat stagekfrom (V(k), V max(k)) = (v, w).We have the
+following optimality result for the Bellman recursion.
+Theorem 4.4(Optimality of the Bellman Recursion).
+For everyk= 0, . . . , Nand(v, w)∈ Sdmax , we have the
+optimal-value identity
+sup
+π∈Πsafek
+Ev,wk [Vπ(N)] =wJ k
+ v
+w
+
+.(15)
+Moreover, for eachk= 0, . . . , N−1, there exists a Borel-
+measurable functionγ ⋆k : [1−d max,1]→Γ k that attains
+the maximum in(14)for everyz∈[1−d max,1]. The
+resulting feedback law
+uπ⋆ (k) =V max(k) [z(k)−(1−d max)]γ ⋆k z(k)
+defines a causal policyπ ⋆ that rendersS dmax robustly
+invariant and attains the supremum in the optimal-value
+identity. In particular,
+E[Vπ⋆ (N)] =V 0J0(1),E[R π⋆ ] =J 0(1)−1.
+Proof.Under the standing assumption that returnX(k)
+is stage-wise independent ofF k for everyk= 0, . . . , N−
+1, the continuation problem at stagekdepends on past
+returns only through the current state (v, w). We prove
+the optimal-value identity (15) by backward induction.
+Indeed, at terminal stagek=N, no decisions remain,
+and the terminal account value is
+v=w vw =wJ N  vw  .
+Thus, the assertion holds at the terminal stage.
+Now suppose that the optimal-value identity (15) holds
+at stagek+ 1, and consider a stage-kstate (v, w).
+Writez=v/w.By exact safe-action factorization Theo-
+rem 3.7, every robustly safe actionucan be factorized as
+u=Cγwithγ∈Γ k,
+whereC=w[z−(1−d max)]. If the stage-kreturn
+isx∈ X k, the successor account value and running
+maximum are
+v+ =wbv+(z, γ, x), w + =wbw+(z, γ, x),
+and hence v+w+ =z +(z, γ, x).By the induction hypothe-sis, we have
+sup
+π∈Πsafek+1
+Ev+,w+k+1 [Vπ(N)] =w +Jk+1
+ v+
+w+
+
+=wbw+(z, γ, x)Jk+1 z+(z, γ, x) .
+For the chosenγ∈Γ k, the preceding identity holds for
+everyx∈ X k. Evaluating the right-hand side atx=
+X(k) and taking expectation gives the expected termi-
+nal account value under optimal subsequent controls;
+i.e.,wE
+
+bw+ z, γ, X(k)Jk+1 z+ z, γ, X(k) .Taking
+the supremum overγ∈Γ k gives
+wsup
+γ∈Γk
+E
+
+bw+ z, γ, X(k)Jk+1 z+ z, γ, X(k)
+=wJ k(z) =wJ k
+ v
+w
+
+,
+where the first equality follows from (14). Thus, the as-
+sertion holds at stagek, and backward induction proves
+the claimed optimal-value representation.
+It remains to show that this supremum is attained by
+a causal robustly safe policy. The proof of Lemma 4.3
+7
+shows that the Bellman objective in (14) is continuous
+in (z, γ). Since Γk is compact, the measurable maximum
+theorem (Aliprantis and Border, 2006, Theorem 18.19)
+provides, for everyk= 0, . . . , N−1, a Borel-measurable
+maximizing selectorγ ⋆k : [1−d max,1]→Γ k.Since
+bothC(k) andz(k) areF k-measurable, the feedback
+lawu π⋆ (k) =C(k)γ ⋆k(z(k)) is alsoF k-measurable. Thus,
+the maximizing selectorsγ ⋆k define a causal policyπ ⋆.
+Moreover, sinceγ ⋆k(z(k))∈Γ k andC(k) =V max(k)[z(k)−
+(1−d max)],positive homogeneity gives
+hk
+ 
+uπ⋆ (k) =C(k)h k(γ⋆k(z(k)))≤C(k).
+Theorem 3.2 therefore implies thatπ ⋆ rendersS dmax ro-
+bustly invariant.
+Becauseγ ⋆k attains the Bellman maximum at every stage
+and state, backward induction yields, for everyk=
+0, . . . , Nand (v, w)∈ Sdmax ,
+Ev,wk [Vπ⋆ (N)] =wJ k
+ v
+w
+
+= sup
+π∈Πsafek
+Ev,wk [Vπ(N)].
+At the initial state, (V(0), V max(0)) = (V 0, V0) and
+z(0) = 1,and consequentlyE[V π⋆ (N)] =V 0J0(1).
+Thus,π ⋆ is globally optimal for Problem 4.1. Finally,
+E[Rπ⋆ ] = E[Vπ⋆ (N)]−V 0V0 =J 0(1)−1.
+5 Comparison with L TI Policies
+This section compares the drawdown-modulated and
+LTI policies under a prescribed drawdown limit. We first
+characterize the LTI gains satisfying this limit over the
+horizon, then establish conditions for strict improvement
+by the optimal drawdown-modulated policy.
+5.1 Drawdown Guarantee for LTI Benchmark
+As a benchmark, we consider constant-gain linear time-
+invariant (LTI) feedback policies within the admissi-
+ble causal policy class Π. Throughout this section, we
+assume that the return-support information is time-
+invariantX(k)∈ Xalmost surely, whereX ⊂R m is
+nonempty and compact. We further assume the following
+conditional-mean condition: for stagek= 0, . . . , N−1,
+E[X(k)| Fk] =µalmost surely,(16)
+for someµ∈R m.
+For each feedback gain vectorK= [K1 · · ·Km]⊤ ∈R m,
+letπ K :={π Kk }N−1k=0 denote the corresponding policy,whose induced control satisfies
+uK(k) =π Kk  X(0), . . . , X(k−1) :=KV K(k).
+The corresponding admissible feedback gain set is
+K:=
+
+K∈R m :σ X (−K) +ε ⊤|K| ≤1	 .(17)
+This set is closed and convex, irrespective of whetherX
+is convex. 1 Hence, everyK∈ Kinduces an admissible
+causal policy, and the LTI benchmark class is
+ΠLTI :=
+
+πK :K∈ K	 ⊆Π.
+Beginning fromV K(0) =V 0 >0, the LTI account value
+satisfies
+VK(k+ 1) =V K(k) +K ⊤X(k)V K(k)−ε ⊤|KV K(k)|
+=
+ 
+1 +K ⊤X(k)−ε ⊤|K|VK(k).(18)
+For eachK∈ K, writeR K :=R πK ,andd ⋆K :=d ⋆πK .SinceV K(k) isF k-measurable, the conditional-mean as-
+sumption gives
+E[VK(k+ 1)| Fk]
+=V K(k)
+ 
+1 +K ⊤E[X(k)| Fk]−ε ⊤|K|
+= (1 +K ⊤µ−ε ⊤|K|)V K(k).
+Taking expectations and iterating fromV K(0) =V 0
+yieldsE[V K(N)] =V 0(1 +K ⊤µ−ε ⊤|K|) N .Therefore,
+E[RK] = (1 +K ⊤µ−ε ⊤|K|) N −1.
+To compare policies under a common prescribed draw-
+down limit, we next characterize the LTI gains that sat-
+isfy this limit over the horizon.
+Proposition 5.1(LTI Drawdown Guarantee).Fix
+dmax ∈[0,1)andK∈ K. Starting fromV K(0) =V 0 >0,
+the LTI policyπ K satisfiesd ⋆K ≤d max for every return
+path inX N if and only if
+hk(K)≤1−(1−d max)1/N.(19)
+whereh k(K) =σ X (−K) +ε ⊤|K|is independent ofk.
+Proof.LetK∈ Kand note that
+inf
+x∈X
+ 
+1 +K ⊤x−ε ⊤|K| = 1−σ X (−K)−ε ⊤|K| ≥0,
+1 Indeed, the support functionσ X is convex and lower semi-
+continuous, and hence so is the mappingK7→σ X (−K) +
+ε⊤|K|. Therefore,Kis a closed convex sublevel set; see Beck
+(2017).
+8
+where nonnegativity follows fromK∈ Kdefined in (17).
+For necessity, compactness ofXimplies that the mini-
+mum is attained at somex ⋆ ∈ X. Along the constant
+return pathx(k) =x ⋆,k= 0, . . . , N−1, the account
+value satisfies
+VK(N) = (1−σ X (−K)−ε ⊤|K|) N V0.(20)
+Using the prescribed drawdown boundd ⋆K ≤d max im-
+pliesd(k)≤d max for allk; i.e.,V(k)≥(1−d max)Vmax(k)
+for allk, which also holds atk=N. Hence, applying
+(20) on the left-hand side gives
+(1−σ X (−K)−ε ⊤|K|) N V0 ≥(1−d max)Vmax(N)
+≥(1−d max)V0,
+where the last inequality holds by the fact that the run-
+ning maximum is at leastV 0. Cancelling outV 0 >0 on
+both sides and taking theNth root gives
+(1−σ X (−K)−ε ⊤|K|)≥(1−d max)1/N,
+which is equivalent to (19).
+Conversely, suppose (19) holds. The LTI account dy-
+namics (18) gives
+VK(k+ 1) =
+ 
+1 +K ⊤X(k)−ε ⊤|K|VK(k)
+≥
+ 
+1−σ X (−K)−ε ⊤|K|VK(k)
+≥(1−d max)1/NVK(k),
+where the last inequality uses (19). Thus, the one-stage
+relative loss cannot exceed 1−(1−d max)1/N.
+Fix any return path inX N and anyk∈ {0, . . . , N}.
+Choosei ∗ ∈ {0, . . . , k}such thatVK(i∗) =V max(k).
+Iterating the account dynamics fromi ∗ tokgives
+VK(k)≥(1−d max)(k−i∗)/NVK(i∗)
+≥(1−d max)VK(i∗) (21)
+= (1−d max)Vmax(k),(22)
+where the last inequality (21) uses 0≤ k−i∗N ≤1. Conse-quently, (22) implies that the drawdown at stageksat-
+isfies
+dK(k) = 1− VK(k)Vmax(k) ≤d max.
+Since the return path and stagekwere arbitrary,d ⋆K ≤
+dmax along every return path inX N .
+For a prescribed drawdown limitd max ∈[0,1), Proposi-
+tion 5.1 gives the following LTI benchmark optimization
+problem:
+max
+K∈K
+{E[RK] :Ksatisfies (19)},(23)
+whereE[R K] = (1 +K ⊤µ−ε ⊤|K|) N −1.
+Remark5.2 (LTI Class as a Special Case of Draw-
+down Modulation).Under the time-invariant support
+assumption, Γ =K. Extending the modulator by the
+conventionM(k) = 1 whend max = 1, the drawdown-
+modulated law reduces tou(k) =γV(k).Thus every
+admissible LTI policy is recovered by settingγ:=K;
+see also Hsieh and Barmish (2017a,b).
+5.2 Outperformance of Drawdown Modulation
+Under a prescribed drawdown limitd max, the following
+theorem indicates that optimal drawdown-modulated
+policy achieves no lower expected return than any LTI
+policy satisfying that limit.
+Theorem 5.3(Weak and Strict Improvement over
+LTI Policies).AssumeN≥2and that, for each
+k= 0, . . . , N−1,X(k)is independent ofF k, and
+hk(u)>0for everyu̸=0. Fixd max ∈[0,1)and
+K∈ Ksatisfying(19). For this drawdown limit, letJ 0
+denote the stage-0Bellman value function and letπ ⋆
+be an optimal drawdown-modulated policy provided by
+Theorem 4.4. Then, we have
+E[Rπ⋆ ] =J 0(1)−1≥E[R K].(24)
+The inequality is strict wheneverK ⊤µ−ε ⊤|K|>0.
+Proof.Fixd max ∈[0,1) andK∈ Ksatisfying (19).
+Proposition 5.1 indicates that the LTI policyπ K satis-
+fies the prescribed drawdown limit along every return
+path inX N , which implies that the LTI control ac-
+tionu K(k) =KV K(k) is robustly safe at every state
+reachable underπ K at each stagek= 0, . . . , N−1.
+We now use the drawdown-modulation characterization
+to construct a robustly safe policy with the same perfor-
+mance as the LTI policy above. Specifically, for any cur-
+rent state (V(k), Vmax(k))∈ Sdmax , consider the control
+action
+eu(k) :=M(k)V(k)eγ(k),
+where
+eγ(k) :=
+K/M(k), M(k)>0 andK/M(k)∈Γ,
+0,otherwise.
+This state-feedback rule defines a causal policyeπ. Since
+the support setXis time invariant, it follows that Γk = Γ
+for everyk. Thuseγ(k)∈Γ k, and Theorem 3.7 implies
+thateπrendersS dmax robustly invariant.
+Now consider any state reachable underπ K at a
+stagek < N. IfM(k)>0, the Factorization Theo-
+rem 3.7 therefore givesK/M(k)∈Γ. IfM(k) = 0, the
+same theorem impliesKV K(k) =0. Henceeπreproduces
+9
+the LTI action at every such state. Starting from the
+same initial account value, induction yields
+V˜π(k) =V K(k), k= 0, . . . , N,
+along every return path inX N . Bellman optimality in
+Theorem 4.4 therefore gives
+J0(1)−1 =E[R π⋆ ]≥E[R ˜π] =E[R K].
+To prove strictness of (24), suppose additionally that
+K ⊤µ−ε ⊤|K|>0, which impliesK̸=0. Since the
+support set is time invariant,hk(K) is independent ofk.
+The assumptionh k(K)>0 and (19) imply
+0< hk(K)<1,
+ 
+1−h k(K)
+N
+≥1−d max.
+Define a policy ¯πto coincide witheπthrough stageN−2,
+and set its control action at stageN−1 as
+u¯π(N−1) := Khk(K) C(N−1),
+whereC(N−1) =M(N−1)V(N−1) is the cushion
+under ¯π. Sincehk(K)>0 andh k(·) is positively homo-
+geneous, we haveh k
+
+K
+hk(K)
+
+= 1. Thus,K/h k(K)∈Γ,
+and the modified policy ¯πis robustly safe.
+Writev:=V K(N−1),andw:= max 0≤j≤N−1 VK(j).By
+Theorem 3.2, the robust safety of the LTI actionu=Kv
+at (v, w) gives
+hk(Kv)≤C=v−(1−d max)w.(25)
+Sinceh k(Kv) =vh k(K) by positive homogeneity, (25)
+becomes
+ 
+1−h k(K)
+
+v≥(1−d max)w.
+Moreover, by assumed conditionK ⊤µ−ε ⊤|K|>0, we
+have
+E[VK(1)] =V 0(1 +K ⊤µ−ε ⊤|K|)> V0,
+soP(V K(1)> V0)>0. On this event, a time attainingw
+lies in{1, . . . , N−1}. Since every LTI wealth multiplier
+is at least 1−h k(K),
+v≥
+ 
+1−h k(K)
+N−2
+w,
+and
+ 
+1−h k(K)
+
+v≥
+ 
+1−h k(K)
+N−1
+w >(1−d max)w.
+The policies ¯πandπ K have the same wealth history
+through stageN−1. Hence,
+V¯π(N−1) =V K(N−1) =v, C(N−1) =v−(1−d max)w.
+SincevandC(N−1) are nonnegative andF N−1 -
+measurable, the account dynamics and conditional
+mean assumption (16) give
+E[V¯π(N)| FN−1 ] =v+ C(N−1)hk(K)  K ⊤µ−ε ⊤|K| ,
+E[VK(N)| FN−1 ] =v+v
+ 
+K ⊤µ−ε ⊤|K| .
+Subtracting these identities and invoking the tower prop-
+erty of expectations yields
+E[V¯π(N)−V K(N)]
+=
+ 
+K ⊤µ−ε ⊤|K| E C(N−1)hk(K) −v 
+=
+ 
+K ⊤µ−ε ⊤|K| E v−(1−d max)whk(K) −v 
+= K ⊤µ−ε ⊤|K|hk(K) E 1−h k(K)v−(1−d max)w
+>0.
+The last inequality follows because the prefactor is pos-
+itive, while the bracketed term is nonnegative on every
+supported path and, as shown above, strictly positive on
+the event{V K(1)> V0}, which has positive probability.
+Optimality ofπ ⋆ proves the strict inequality.
+6 Numerical Illustration
+This section provides an numerical illustrations for the
+LTI benchmark with a drawdown-modulated policy
+computed from the reduced Bellman recursion under a
+common prescribed drawdown limitd max.
+6.1 Calibration and Setup
+We begin by constructing a joint empirical return dis-
+tribution from daily adjusted closing prices ofSPYand
+TLTobtained from Yahoo Finance, from January 2015
+through July 2026. Each of the 2,910 observed daily joint
+return vectors is assigned equal probability, and their set
+defines the supportX. Simulation paths are generated
+by sampling joint return vectors independently across
+stages from this empirical distribution.
+We takeV 0 = 1, horizons ofN∈ {21,63,252}trading
+days, and cost ratesε= 5×10 −51, corresponding to 0.5
+basis points per asset and stage. Note that the origin lies
+in the interior of the convex hull ofX, implyingh k(u)>
+0 for everyu̸=0. Hence, the normalized safe-action set
+Γk is compact by Lemma 3.5. For each horizon and each
+10
+prescribed drawdown limitd max ∈ {0,0.05, . . . ,0.60},
+we compute both LTI and drawdown-modulated poli-
+cies.
+LTI Benchmark.The LTI feedback gainKsolves (23),
+which is equivalent to maximizeK ⊤µ−ε ⊤|K|subject
+to (19), whereµis the empirical mean return. This can be
+solved by linear programming, and its expected terminal
+return is computed asE[RK] =
+ 
+1+K ⊤µ−ε ⊤|K|N −1.
+Drawdown-Modulated Policy.Ford max >0, we numeri-
+cally approximate the Bellman recursion (14), using fea-
+sible normalized actions in Γk. The expected return is es-
+timated from 300,000 independently simulated paths of
+lengthN. Atd max = 0, both policies prescribeu(k) =0,
+soV(k) =V 0 throughout the horizon.
+6.2 Performance under a Pathwise Drawdown Limit
+Figure 1 shows higher estimated expected returns for
+the proposed drawdown-modulated policy than for the
+optimized LTI benchmark at every positive evaluated
+drawdown limit. ForN= 21 andN= 63, the numer-
+ically computed optimal drawdown modulated policy
+uses an approximately constantγacross stages and
+states; the observed improvement in these panels is
+therefore already attained by drawdown modulation
+with constantγ.
+7 Conclusion
+This paper developed a finite-horizon robust-control
+framework for maximum percentage drawdown in
+discrete-time stochastic systems. By expressing the
+drawdown constraint as robust invariance of an aug-
+mented wealth state, we obtained an exact support-
+function characterization of robustly safe control ac-
+tions. The safe-action set admits an exact cushion-based
+factorization that parameterizes all robustly safe con-
+trols. Under stagewise-independent returns, homogene-
+ity reduces optimal robust drawdown-safe control to a
+one-dimensional Bellman recursion and yields a glob-
+ally optimal state-feedback policy. Comparison with the
+LTI benchmark further shows that optimal drawdown
+modulated policy achieves no lower expected return
+than any LTI policy satisfying the same prescribed
+drawdown limit, with strict improvement under explicit
+sufficient conditions.
+References
+Agrawal, A. and Sreenath, K. (2017). Discrete Con-
+trol Barrier Functions for Safety-Critical Control of
+Discrete Systems with Application to Bipedal Robot
+Navigation. InProceedings of Robotics: Science and
+Systems.
+Aliprantis, C. D. and Border, K. C. (2006).Infinite Di-
+mensional Analysis: A Hitchhiker’s Guide. Springer-
+Verlag, 3rd edition.
+Ames, A. D., Xu, X., Grizzle, J. W., and Tabuada, P.
+(2017). Control Barrier Function Based Quadratic
+Programs for Safety Critical Systems.IEEE Transac-
+tions on Automatic Control, 62(8):3861–3876.
+Anevlavis, T., Liu, Z., Ozay, N., and Tabuada, P. (2024).
+Controlled Invariant Sets: Implicit Closed-Form Rep-
+resentations and Applications.IEEE Transactions on
+Automatic Control, 69(7):4506–4521.
+Barmish, B. R., Formentin, S., Hsieh, C.-H.,
+Proskurnikov, A. V., and Warnick, S. (2024). A Jump
+Start to Stock Trading Research for the Uninitiated
+Control Scientist: A Tutorial. InProceedings of the
+IEEE Conference on Decision and Control (CDC),
+pages 7441–7457.
+Barmish, B. R. and Primbs, J. A. (2015). On a New
+Paradigm for Stock Trading via a Model-Free Feed-
+back Controller.IEEE Transactions on Automatic
+Control, 61(3):662–676.
+Beck, A. (2017).First-Order Methods in Optimization.
+SIAM, Philadelphia, PA.
+Blanchini, F. (1999). Set Invariance in Control.Auto-
+matica, 35(11):1747–1767.
+Blanchini, F. and Miani, S. (2015).Set-Theoretic Meth-
+ods in Control. Birkh¨ auser, Cham, 2nd edition.
+Calafiore, G. C. (2008). Multi-Period Portfolio Opti-
+mization with Linear Control Policies.Automatica,
+44(10):2463–2473.
+Calafiore, G. C. (2013). Direct Data-Driven Portfolio
+Optimization with Guaranteed Shortfall Probability.
+Automatica, 49(2):370–380.
+Chekhlov, A., Uryasev, S., and Zabarankin, M. (2004).
+Portfolio Optimization with Drawdown Constraints.
+InSupply Chain and Finance, pages 209–228. World
+Scientific.
+Chekhlov, A., Uryasev, S., and Zabarankin, M. (2005).
+Drawdown Measure in Portfolio Optimization.Inter-
+national Journal of Theoretical and Applied Finance,
+8(1):13–58.
+Cherny, V. and Ob l´ oj, J. (2013). Portfolio Optimisation
+under Non-Linear Drawdown Constraints in a Semi-
+martingale Financial Model.Finance and Stochastics,
+17(4):771–800.
+Comelli, R., Olaru, S., and Kofman, E. (2024). Inner–
+Outer Approximation of Robust Control Invariant
+Sets.Automatica, 159:111350.
+Cvitani´ c, J. and Karatzas, I. (1994). On Portfolio Opti-
+mization under “Drawdown” Constraints.IMA Vol-
+umes in Mathematics and its Applications, 65:35–46.
+Grossman, S. J. and Zhou, Z. (1993). Optimal Invest-
+ment Strategies for Controlling Drawdowns.Mathe-
+matical Finance, 3(3):241–276.
+Hern´ andez-Bustos, D. and Hern´ andez-Hern´ andez, D.
+(2023). Portfolio Management under Drawdown Con-
+straint in Discrete-Time Financial Markets.Journal
+of Applied Probability, 60(1).
+Hsieh, C.-H. (2023a). On Asymptotic Log-Optimal Port-
+11
+0 10 20 30 40 50
+dmax (%)
+0
+1
+2
+3
+4
+5E[Rπ] (%)
+(a) N = 21
+0 10 20 30 40 50
+dmax (%)
+0.0
+2.5
+5.0
+7.5
+10.0
+12.5
+15.0
+E[Rπ] (%)
+(b) N = 63
+0 10 20 30 40 50
+dmax (%)
+0
+10
+20
+30
+40
+50
+60E[Rπ] (%)
+(c) N = 252
+Optimal LTI Optimal drawdown modulation
+Fig. 1. Expected terminal return under a prescribed drawdown limitd max for (a)N= 21, (b)N= 63, and (c)N= 252
+trading days.
+folio Optimization.Automatica, 151:110901.
+Hsieh, C.-H. (2023b). On Data-Driven Drawdown Con-
+trol with Restart Mechanism in Trading.IF AC-
+PapersOnLine, 56(2).
+Hsieh, C.-H. and Barmish, B. R. (2017a). On Drawdown-
+Modulated Feedback Control in Stock Trading.IF AC-
+PapersOnLine, 50(1):952–958.
+Hsieh, C.-H. and Barmish, B. R. (2017b). On In-
+efficiency of Markowitz-Style Investment Strategies
+When Drawdown is Important. InProceedings of the
+IEEE Conference on Decision and Control (CDC),
+pages 3075–3080.
+Hsieh, C.-H., Barmish, B. R., and Gubner, J. A. (2016).
+Kelly Betting Can be Too Conservative. InProceed-
+ings of the IEEE Conference on Decision and Control
+(CDC), pages 3695–3701.
+Kardaras, C., Ob l´ oj, J., and Platen, E. (2017).
+The Num´ eraire Property and Long-Term Growth
+Optimality for Drawdown-Constrained Investments.
+Mathematical Finance, 27(1):68–95.
+Kelly Jr, J. L. (2011). A New Interpretation of Informa-
+tion Rate. InThe Kelly Capital Growth Investment
+Criterion: Theory and Practice, pages 25–34. World
+Scientific.
+Klass, M. J. and Nowicki, K. (2005). The Grossman
+and Zhou Investment Strategy Is Not Always Opti-
+mal.Statistics & Probability Letters, 74(3):245–252.
+Konno, H. and Yamazaki, H. (1991). Mean-Absolute
+Deviation Portfolio Optimization Model and its Ap-
+plications to Tokyo Stock Market.Management Sci-
+ence, 37(5):519–531.
+Luenberger, D. G. (2013).Investment Science. Oxford
+University Press, New York, NY, 2nd edition.
+MacLean, L. C., Thorp, E. O., and Ziemba, W. T. (2011).
+The Kelly Capital Growth Investment Criterion: The-
+ory and Practice, volume 3. World Scientific.
+Magdon-Ismail, M., Atiya, A. F., Pratap, A., and Abu-
+Mostafa, Y. S. (2004). On the Maximum Drawdown
+of a Brownian Motion.Journal of Applied Probability,
+41(1):147–161.
+Malekpour, S. and Barmish, B. R. (2012). How Useful
+are Mean-Variance Considerations in Stock Trading
+via Feedback Control? InProccedings of the IEEE
+Conference on Decision and Control (CDC), pages
+2110–2115.
+Markowitz, H. M. (1952). Portfolio Selection.The Jour-
+nal of Finance, 7:77–91.
+Nystrup, P., Boyd, S., Lindstr¨ om, E., and Madsen,
+H. (2019). Multi-Period Portfolio Selection with
+Drawdown Control.Annals of Operations Research,
+282(1):245–271.
+12

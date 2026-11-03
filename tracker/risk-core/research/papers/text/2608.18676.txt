@@ -1,0 +1,1815 @@
+arXiv 2608.18676  https://arxiv.org/abs/2608.18676
+
+LONG-RUN RISK-SENSITIVE POR TFOLIO OPTIMISA TION
+WITH PROPOR TIONAL TRANSACTION COSTS AND LOG
+L´EVY ASSET PRICES
+DAMIAN JELITO† AND  LUKASZ STETTNER∗
+Abstract.We study a long-run risk-sensitive portfolio problem with propor-
+tional transaction costs in a continuous-time market whose log-prices are given
+as a L´ evy process, and rebalancing is possible only at random moments of in-
+vestment opportunities. Using a Schauder fixed-point argument, we solve the
+ergodic Bellman equation without any mixing assumptions. Under additional
+full-support and growth conditions, the solution to the Bellman equation is
+unique, with the unique continuous maximiser. We also prove vanishing risk-
+aversion asymptotics towards the risk-neutral (Kelly) problem and convergence
+of a dyadic-time-grid approximation of the random intervention moments. Nu-
+merical examples illustrate the results.
+Keywords:risk-sensitive portfolio optimisation; proportional transaction costs;
+Kelly criterion; ergodic Bellman equation; L´ evy process
+MSC2020 subject classifications:91G10, 93E20, 49L20, 90C40
+1.Introduction
+In this paper, we consider a long-run risk-sensitive portfolio optimisation prob-
+lem with proportional transaction costs, in which the portfolio composition can be
+modified only at some externally given random moments of investment opportuni-
+ties. More specifically, denoting byW(t−) a controlled portfolio value at timet
+(before transactions), we aim to find an investment strategy which maximises
+lim inf
+n→∞
+1
+E[τn] µγ [ln (W(τn−)/W(0−))],(1.1)
+whereτ n is the (random) time of thenth portfolio change. Also,µ γ is the risk-
+sensitive optimality functional (also referred to as the entropic utility function)
+given, for a sufficiently integrable random variableZand a risk-aversion parameter
+γ≤0, as
+µγ[Z] :=
+(
+1
+γ lnE[exp (γZ)], γ <0,
+E[Z], γ= 0. (1.2)
+In this functional,γ= 0 corresponds to the risk-neutral preferences whileγ <0
+reflects the risk-averse behaviour of a decision maker. It should be noted that,
+forγ= 0, maximisation of (1.1) corresponds to the maximisation of the expected
+logarithmic rate of return (per unit time) and could be linked to the celebrated
+† Jagiellonian University, Institute of Mathematics, Krak ´ow, Poland
+∗Institute of Mathematics Polish Academy of Sciences, W arsaw, Poland
+E-mail addresses:damian.jelito@uj.edu.pl, stettner@impan.pl.
+†Corresponding author.
+1
+arXiv:2608.18676v1  [math.OC]  19 Aug 2026
+2 LONG-RUN RISK-SENSITIVE PORTFOLIO OPTIMISATION
+Kelly criterion; see MacLean et al. (2011) for an overview. Also, it can be shown
+that forγ <0 close to 0, one hasµ γ[Z]≈E[Z] + γ2 Var[Z], which highlights that
+the maximisation ofµ γ could be linked to the maximisation of the expectation with
+a penalty term related to the variance of the results; this explains why the risk-
+sensitive framework is often seen as a time-consistent counterpart of the classical
+mean-variance approach of Markowitz (1952), see Bielecki and Pliska (2003) for a
+detailed discussion of the economic properties of the criterion (1.1). Let us also
+recall that the entropic utility is essentially the unique family of cash-additive and
+time-consistent certainty equivalents, see Kupper and Schachermayer (2009), and
+that it constitutes an acceptability index in the sense of Cherny and Madan (2009);
+we refer to F¨ ollmer and Schied (2016) for a general treatment of the underlying
+risk-measurement framework.
+The market model considered here has two features that jointly determine the
+mathematical structure of the problem. First, the asset prices evolve incontinuous
+time: we assume that the process lnS(t),t≥0, has stationary and independent
+increments, which covers, in particular, the exponential L´ evy dynamics, see Apple-
+baum (2009). Second, the investor isnotallowed to trade continuously. Instead,
+the portfolio can be rebalanced only at the momentsτ 0 = 0< τ 1 < τ2 < . . .of
+an exogenously given sequence of investment opportunities, with the waiting times
+ηi :=τ i −τ i−1 satisfyingP[η i >0] = 1 andE[η i]<∞. This reflects a number
+of practically relevant frictions: illiquidity, limited access to the market, execution
+delays, or simply the fact that trading decisions are made at discrete (and possi-
+bly irregular) inspection times. Together with the proportional transaction costs
+paid at each rebalancing, this makes the problem a long-run impulse-type control
+problem for the portfolio weight process.
+Risk-sensitive portfolio optimisation has been extensively studied in the litera-
+ture; we refer to Davis and Lleo (2014) and Prigent (2007) for a general overview.
+In the continuous-time frictionless setting, the seminal contributions are due to Bi-
+elecki and Pliska (1999) and Fleming and Sheu (2000), and further developments,
+including problems with factors and with jumps, can be found e.g. in Nagai (2003,
+2006); Pitera and Stettner (2016); Bo et al. (2022). On the abstract level, the crite-
+rion (1.1) belongs to the class of ergodic (average cost per unit time) risk-sensitive
+control problems; see Biswas and Borkar (2023) for a recent survey and Di Masi
+and Stettner (1999, 2007); Ja´ skiewicz (2007); Borkar and Meyn (2002); Guasoni
+and Robertson (2012); B¨ auerle and Rieder (2014) for a selection of general results
+in the Markov decision process framework; see also the monograph B¨ auerle and
+Rieder (2011). On the technical side, three approaches dominate the literature: the
+vanishing discountapproach, see e.g. Cavazos-Cadena and Hern´ andez-Hern´ andez
+(2009, 2017); thespan-contractionapproach, see e.g. Pitera and Stettner (2016);
+Shen et al. (2013), which typically relies on a uniform ergodicity or minorisation
+condition of Doeblin type, cf. Hairer and Mattingly (2011); andKrein–Rutman-
+type or Collatz–Wielandt-type arguments applied to the multiplicative form of the
+Bellman equation, see Bonsall (1962) and Arapostathis et al. (2016). Each of these
+techniques requires some form of ergodic behaviour of the controlled process, an
+assumption that is restrictive in the transaction cost setting, where the controlled
+weight process may be pushed towards the boundary of the simplex.
+Portfolio problems with proportional transaction costs are, by now, classical,
+but the combination with the risk-sensitive long-run criterion is considerably less
+LONG-RUN RISK-SENSITIVE PORTFOLIO OPTIMISATION 3
+explored. In the continuous-time setting we refer to Bielecki and Pliska (2000)
+and Stettner (2011), while Korn (1999) discusses the impulse control formulation
+of financial problems with fixed and proportional costs. The long-run impulse
+control framework with random intervention times, which is close in spirit to the
+present setting, has been studied in Palczewski and Stettner (2017); Jelito et al.
+(2020); Pitera and Stettner (2021); Stettner (2022); Jelito and Stettner (2023);
+see also Jelito et al. (2021); Jelito and Stettner (2022) for the related risk-sensitive
+stopping problems. The closest reference to this paper is, however, the discrete-time
+study of Pitera and Stettner (2023), which we now discuss in more detail.
+In Pitera and Stettner (2023), the authors consider a discrete-time market with
+i.i.d. log-returns, proportional transaction costs, and no short selling, and they
+solve the associated risk-sensitive Bellman equation under the minimal integrabil-
+ity condition requiring finite mean and finite entropy of the log-returns. For the
+risk-seeking caseγ >0, the Bellman equation is solved directly via the vanishing
+discount approach. For the risk-averse caseγ <0, which is the focus of the present
+paper, the vanishing discount argument yields only arecursive(iterated) family
+of Bellman equations, and in order to solve a single ergodic Bellman equation the
+authors additionally invoke a span-contraction argument, which requires an extra
+ergodicity (mixing) assumption on the returns as well as an auxiliary diversifica-
+tion constraint that is subsequently relaxed. The present paper complements and
+extends Pitera and Stettner (2023) in the following four directions.
+(1)Continuous time and random intervention moments.We work with
+a continuous-time price process with stationary independent increments and
+allow the portfolio to be rebalanced only at random moments (τn) of investment
+opportunities. This is a genuine generalisation of the discrete-time framework
+of Pitera and Stettner (2023), which corresponds toη i ≡1; in particular,
+it covers exponential L´ evy dynamics observed at renewal-type or externally
+driven inspection times. The resulting Bellman equation (2.10) is stated at the
+(subordinated) growth vectorR(η 1) and its normalisation is expressed per unit
+of time.
+(2)No ergodicity condition.We show in Theorem 3.10 that the ergodic Bellman
+equation admits a solution under the increments condition (A1), the waiting
+time condition (A2), and the integrability condition (A3) alone. In particular,
+no mixing, minorisation, or full-support assumption is required, no auxiliary
+diversification constraint is introduced, and no recursive scheme is needed: the
+Bellman equation is solved directly. Moreover, the solution produced is regular,
+in the sense that its span seminorm and its Lipschitz constant are bounded
+by explicit constants depending only on the transaction cost rates, and it is
+structurally distinguished: the associated positively homogeneous lift on the
+cone of capital vectors is concave, equivalently,e¯vγ is concave on the simplex. To
+the best of our knowledge, this concavity property is new even in the discrete-
+time i.i.d. setting of Pitera and Stettner (2023).
+(3)Uniqueness of the maximiser and the solution to the Bellman equa-
+tion.We prove in Theorem 3.14 that, for a solution with a concave lift, the
+supremum on the right-hand side of the Bellman equation is attained atexactly
+onepoint, for every value of the pre-rebalancing weights, and that the resulting
+map is continuous. Consequently, for a fixed solution to the Bellman equation,
+the optimal rebalancing is unambiguously defined and the optimal stationary
+4 LONG-RUN RISK-SENSITIVE PORTFOLIO OPTIMISATION
+strategy from Theorem 2.2 requires no measurable selection argument. This
+is where the full-support condition (A4) enters; let us stress that, in contrast
+to Pitera and Stettner (2023), where an ergodicity-type condition is needed
+for theexistenceof a solution, here the non-degeneracy of the returns is used
+only for theuniqueness of the maximiser. Also, it should be noted that the
+uniqueness is not a simple conclusion of the concavity of the related Bellman
+equation. In fact, as shown in Example 3.2, part of the equation responsible for
+transaction costs need not to be concave, and the additional change-of-geometry
+argument is needed. Finally, using the full-support and growth conditions (A4)
+and (A5), in Theorem 3.17, we show that the solution to the Bellman equation
+is also unique. The argument here uses the observation that, under the growth
+condition, every asset is present in the optimal portfolio.
+(4)V anishing risk-aversion asymptotics and discrete time grid approx-
+imation.We show that the optimal value of the risk-sensitive problem con-
+verges, asγ→0, to the optimal value of the risk-neutral (Kelly-type) problem,
+and that the corresponding risk-neutral strategy is asymptotically optimal for
+the risk-sensitive criterion; see Theorem 4.1, Corollary 4.2, Theorem 4.4, and
+Theorem 4.5. This justifies approximating a complex risk-averse problem by
+a simpler risk-neutral one when the risk-aversion parameter is small. Further-
+more, in Theorem 5.1 we show that the optimal value obtained when the inter-
+vention times are restricted to a dyadic time grid converges, as the mesh tends
+to zero, to the optimal value of the original problem. This is important from
+the numerical perspective, as it requires simulating the controlled trajectory
+only at finitely many grid points.
+The paper is organised as follows. In Section 2 we introduce the market model,
+state the standing assumptions, formulate the associated Bellman equation, and
+prove the verification theorem which links its solutions to the optimal value and to
+the optimal strategy of the underlying control problem. Section 3 contains the main
+results of the paper: in Section 3.1 we develop the capital coordinates and study the
+self-financing cone, in Section 3.2 we collect the properties of the entropic utility
+and of the one-period reward functional, in Section 3.3 we prove the existence of a
+solution with a concave lift, in Section 3.4 we show the uniqueness and the continuity
+of the maximiser, and in Section 3.5 we prove the uniqueness of the solution to the
+Bellman equation. Section 4 is devoted to the vanishing risk-aversion asymptotics,
+while in Section 5 we discuss the discrete time grid approximation. Finally, in
+Section 6 we present exemplary setting where all the assumptions are satisfied and
+illustrate the theoretical results with numerical examples.
+2.Preliminaries
+In this section, we give more details on the problem formulation. We start
+by introducing some notation. ByN,N ∗, andR + we denote the sets of non-
+negative integers, positive integers, and non-negative reals, respectively. Next, we
+write0and1ford-dimensional vectors of zeroes and ones, respectively. We write
+Rd+ for the non-negative orthant and setK:=R d+ \ {0}. Also, for any vectors
+x, y∈R d,d∈N ∗, by⟨x, y⟩ ∈R,x·y∈R d, and∥x∥ 1 := Pdi=1 |xi| ∈R +
+we denote their (standard) scalar product, component-wise product, andℓ 1-norm,
+respectively. Next, for a setA⊂R d, byB b(A) andC b(A), we denote the families
+LONG-RUN RISK-SENSITIVE PORTFOLIO OPTIMISATION 5
+of bounded measurable real-valued functions onAand continuous bounded real-
+valued functions onA, respectively. We equip these spaces with the supremum
+norm∥f∥ A := supx∈A |f(x)|. Finally, forf∈ B b(A), we define the span seminorm
+spanA f:= sup x∈A f(x)−inf x∈A f(x). In the following, we often omit the subscript
+Awhen the domain is clear.
+Let (Ω,F,(F t)t≥0,P) be a continuous-time filtered probability space. We con-
+sider a market withd∈N ∗ assets and byS(t) := (S 1(t), . . . , Sd(t)) we denote the
+vector of their prices at timet≥0; we assume that the prices are always positive.
+Also, byr(t 1, t2) := (ln S1(t2)S1(t1) , . . . ,lnSd(t2)Sd(t1) ), and
+R(t1, t2) :=e r(t1,t2) :=
+ S1(t2)
+S1(t1) , . . . ,Sd(t2)Sd(t1)  ,0≤t 1 ≤t 2 <∞,(2.1)
+we denote the corresponding vectors of the logarithmic rate of returns and growth
+rates for the time interval [t 1, t2], respectively. In this paper, we assume that the
+increments of the process lnS(t),t≥0, are stationary and independent. Also, for
+brevity, we setR(t) :=R(0, t) andr(t) := lnR(t),t≥0.
+Next, byN(t) := (N 1(t), . . . , Nd(t)),t≥0, we denote the number of units
+of assets held in a portfolio at timetafter the rebalancing is executed; we assume
+that short-selling is not allowed. With this terminology, we define the total portfolio
+value at timetbefore and after the rebalancing by
+W(t−) :=⟨N(t−), S(t)⟩,andW(t) :=⟨N(t), S(t)⟩,(2.2)
+respectively. With each transaction, we associate proportional transaction costs.
+More specifically, we assume that an investor updating the portfolio pays the pro-
+portional cost given as
+p(x) :=⟨c,[x] +⟩+⟨h,[x] −⟩=
+dX
+i=1
+max(cixi,−h ixi),(2.3)
+wherex= (x 1, . . . , xd)∈R d reflects the changes of capital invested in each of
+dassets, [x] + and [x] − denotes the component-wise positive and negative part of
+x, whilec:= (c 1, . . . , cd) andh:= (h 1, . . . , hd) are the proportional commissions
+satisfyingc i, hi ∈[0,1) for anyi= 1, . . . , d. Thus, we assume the following self-
+financing condition
+W(t) =W(t−)−p((N(t)−N(t−))·S(t)), t≥0.(2.4)
+In the following, instead of choosing directly the number of unitsN, we will
+control the fractions of capital invested in each asset. To do this, we define the
+families of admissible portfolio weights and strictly positive portfolio weights by
+S:={π= (π 1, . . . , πd)∈R d :⟨π,1⟩= 1, π i ≥0, i= 1, . . . , d}
+S0 :={π= (π 1, . . . , πd)∈ S:π i >0, i= 1, . . . , d}.
+Also, we define the vectors of asset weights before and after the rebalancing given
+by
+π(t−) := N(t−)·S(t)W(t−) andπ(t) := N(t)·S(t)W(t) ,(2.5)
+6 LONG-RUN RISK-SENSITIVE PORTFOLIO OPTIMISATION
+respectively. Then, by the positive homogeneity ofp, we get
+p((N(t)−N(t−))·S(t)) =W(t−)p
+ N(t)·S(t)
+W(t)
+W(t)
+W(t−) − N(t−)·S(t)W(t−) 
+=W(t−)p
+
+π(t) W(t)W(t−) −π(t−)  .
+Thus, we note that the self-financing condition (2.4) is equivalent to
+W(t) =W(t−)−W(t−)p
+
+π(t) W(t)W(t−) −π(t−)  , t≥0.(2.6)
+In the following, we will extensively use the observation that the ratioW(t)/W(t−)
+could be determined directly from the portfolio weights before and after rebalancing.
+More specifically, using Lemma 2.1 in Pitera and Stettner (2023) we may find a
+continuous maps:S × S →[¯s,1] with some ¯s∈(0,1] such that
+W(t)/W(t−) =s(π(t−), π(t)), t≥0.(2.7)
+Also, for any 0≤t 1 ≤t 2, assuming that there are no transactions in the time
+interval (t1, t2], we have
+π(t2) := N(t 2)·S(t 2)⟨N(t 2), S(t2)⟩ = N(t 1)·S(t 2)⟨N(t 1), S(t2)⟩
+=
+N(t 1)·S(t1)
+⟨N(t 1),S(t1)⟩ ·R(t 1, t2)
+⟨ N(t 1)⟨N(t 1),S(t1)⟩ , R(t1, t2)⟩ = π(t1)·R(t 1, t2)⟨π(t1), R(t1, t2)⟩ =G(π(t 1), R(t1, t2)),
+whereG(x, y) := x·y⟨x,y⟩ ,x, y∈R d.
+In this paper, we assume that a decision maker can change the portfolio compo-
+sition only at some externally given random moments of investment opportunities
+(yet, there is no obligation for such a change). More specifically, we assume that
+we are given a sequence of independent (and independent of the price process),
+identically distributed random variables (η i)∞i=1 with values in (0,∞). Then, we
+define recursively
+τ0 := 0, τ n+1 =τ n +η n+1, n∈N.
+With this notation, the portfolio composition could be changed only atτ n,n∈N.
+In the following, for anyπ∈ S, byA(π) we denote the family of admissible (i.e.,
+satisfying the self-financing and the intervention time conditions) portfolio weight
+strategiesΠ= (π(t)) withπ(0−) =π.
+Now, we reformulate the functional (1.1) using the structure defined above. Re-
+calling (2.7), for anyγ≤0,π∈ Sand Π∈ A(π), the functional from (1.1) could
+be identified with
+J γ(Π, π) := lim inf
+n→∞
+1
+E[τn] µγ
+"n−1X
+i=0
+ln W(τ −i+1)W(τ −i ) #
+= lim inf
+n→∞
+1
+E[τn] µγ
+"n−1X
+i=0
+ln W(τ i)W(τ −i ) + ln W(τ −i+1)W(τ i) #
+= lim inf
+n→∞
+1
+E[τn] µγ
+"n−1X
+i=0
+ 
+lns(π(τ −i ), π(τi)) + ln⟨π(τi), R(τi, τi+1)⟩
+#
+.
+(2.8)
+LONG-RUN RISK-SENSITIVE PORTFOLIO OPTIMISATION 7
+In the following, we will maximise this functional overΠ∈ A(π).
+To obtain a solution to the problem, we assume the following conditions
+(A1) (Increments). The process lnS(t),t∈[0,∞), is right-continuous and has
+stationary independent increments.
+(A2) (Waiting times) For anyi∈N ∗, we haveP[η i >0] = 1 andE[η i]<∞.
+(A3) (Integrability). For anyγ <0, we have
+E
+h
+eγmin i=1,...,d ri(η1)
+i
+<∞,andE
+h
+max
+i=1,...,d
+ri(η1)
+i
+<∞.
+(A4) (Full support). For anyπ∈ S 0,t >0, and any non-empty open setC⊂ S
+we haveP[G(π, R(t))∈C]>0.
+Let us now provide some comments on these conditions. Assumption (A1) en-
+sures that the controlled process is Markovian between the interventions. It is
+satisfied e.g. for the exponentiated L´ evy processes. Next, Assumption (A2) is a
+mild condition stating that there are no immediate investment opportunities and
+the expected waiting time is finite. It should be noted that we do not impose any
+additional distributional assumptions on the waiting times and, in particular, we
+can setη i ≡1. Next, Assumption (A3) ensures the integrability of the suitable
+log-returns. Finally, Assumption (A4) reflects the non-degeneracy of the problem,
+where the (uncontrolled) weight process could explore the whole state space. It is
+satisfied e.g. forR(t) following a multivariate log-normal distribution. It should
+be noted that Assumption (A4) is used only in selected results, most notably The-
+orem 3.14. In particular, the existence of a solution to the underlying Bellman
+equation can be proved without (A4); see Theorem 3.10 for details.
+Before we proceed, we show a technical result which facilitates a step-wise com-
+putation of certain expressions related to the optimality functional.
+Lemma 2.1.For anyπ∈ Sand0≤t≤s≤u <∞, we have
+ln⟨π, R(t, u)⟩= ln⟨π, R(t, s)⟩+ ln⟨G(π, R(t, s)), R(s, u)⟩.(2.9)
+Proof.By a direct computation, we have
+⟨G(π, R(t, s)), R(s, u)⟩=
+ π·R(t, s)
+⟨π, R(t, s)⟩, R(s, u)
+
+= ⟨π, R(t, s)·R(s, u)⟩⟨π, R(t, s)⟩ = ⟨π, R(t, u)⟩⟨π, R(t, s)⟩.
+Taking the logarithms and rearranging terms, we conclude the proof.□
+To solve the problem linked to (2.8), for anyγ≤0, we will show the existence of
+a pair ¯vγ ∈ Cb(S) and ¯λγ ∈Rsuch that the following Bellman equation is satisfied
+¯vγ(π) = sup
+π′∈S
+ 
+lns(π, π′)− ¯λγE[η1] +µ γ [ln⟨π′, R(η1)⟩+ ¯vγ(G(π′, R(η1)))] , π∈ S.
+(2.10)
+Note that, forγ <0, this equation could be equivalently expressed as
+vγ(π) = inf
+π′∈S
+
+γlns(π, π′)−λ γE[η1] + lnE heγln⟨π ′,R(η1)⟩+vγ (G(π′,R(η1)))i , π∈ S,
+(2.11)
+where we setv γ :=γ¯vγ andλ γ :=γ ¯λγ. Forγ= 0, Equation (2.10) reads
+¯v0(π) = sup
+π′∈S
+ 
+lns(π, π′)− ¯λ0E[η1] +E ln⟨π′, R(η1)⟩+ ¯v0(G(π′, R(η1))) , π∈ S.
+(2.12)
+8 LONG-RUN RISK-SENSITIVE PORTFOLIO OPTIMISATION
+Now, we link a solution to (2.10) with the optimal values of the underlying
+control problems. Also, we show that the strategies given by the maximisers of the
+right-hand side of the associated Bellman equations are optimal.
+Theorem 2.2(Verification theorem).Assume(A1),(A2), and(A3). Also, let
+γ≤0and let(¯v γ, ¯λγ)∈ Cb(S)×Rbe a solution to(2.10). Next, let ˆΠ:= (ˆπ(t))t≥0
+be a strategy given, for anyn∈N, by
+ˆπ(τn) := arg max
+π′∈S
+ 
+lns(ˆπ(τ−n ), π′)− ¯λγE[η1] +µ γ [ln⟨π′, R(η1)⟩+ ¯vγ(G(π′, R(η1)))] ,
+ˆπ(t) :=G(ˆπ(τn), R(τn, t)), t∈[τ n, τn+1).(2.13)
+Then, we get
+sup
+Π∈A(π)
+J γ(Π, π) =Jγ( ˆΠ, π) =¯λγ, π∈ S.
+Proof.The argument is standard, so we provide only an outline. Iterating (2.10)
+and using Assumption (A1) and (A2) combined with Lemma 2.1, for anyπ∈ S,
+Π∈ A(π), andn∈N,n≥1, we get
+¯vγ(π) +n ¯λγE[η1]
+≥µ γ
+ n−1X
+i=0
+ 
+lns(π(τ −i ), π(τi)) + ln⟨π(τi), R(τi, τi+1)⟩
++ ¯vγ(G(π(τn−1), R(τn−1, τn)))
+
+.
+Thus, dividing both sides bynE[η 1], using the fact that ¯vγ is bounded andE[τ n] =
+nE[η1], and lettingn→ ∞, we obtain
+¯λγ ≥J γ(Π, π).
+Using a similar argument applied to the maximiser strategy given by (2.13), we
+obtain
+¯λγ =J γ( ˆΠ, π),
+which concludes the proof.□
+3.Solution to the Bellman equation
+In this section, we show the existence of a solution to the Bellman equation (2.10)
+and study the maximisers on its right-hand side. The argument is based on a fixed-
+point theorem of Schauder type applied to a suitable compact convex family of func-
+tions onS. In contrast to a Krein–Rutman-type approach or a span-contraction
+argument, no auxiliary diversification constraint is needed. Also, the solution ob-
+tained is shown to have a concave exponential lift, which is the key structural
+property used in Section 3.4 to prove that the optimal rebalancing is unique.
+Throughout this section we assume (A1), (A2), and (A3); the full-support con-
+dition (A4) is usedonlyin Section 3.4 and is invoked explicitly there. In particular,
+neither the existence of a solution nor any of the bounds below depend on (A4).
+LONG-RUN RISK-SENSITIVE PORTFOLIO OPTIMISATION 9
+3.1.Capital coordinates and the self-financing cone.Recalling (2.3), we note
+thatpis convex, positively homogeneous, non-negative, and satisfies
+|p(x)−p(x ′)| ≤¯c∥x−x′∥1, x, x′ ∈R d,(3.1)
+where ¯c:= max i=1,...,d max(ci, hi)∈[0,1). Let us recall the mapsintroduced in
+Section 2 to measure the capital reduction stemming from portfolio change, see
+Equation (2.7) for details. Now, we collect the properties ofsused in the sequel.
+In particular, we amend Lemma 2.1 in Pitera and Stettner (2023) by a semi-explicit
+representation ofs; cf. Equation (3.2). Throughout, we set
+¯s:= 1−¯c1 + ¯c∈(0,1].
+Lemma 3.1.LetB:= Qdi=1[−hi, ci]. The following statements hold:
+(i) For allπ, π ′ ∈ S, we have
+s(π, π′) = min
+a∈B
+1 +⟨a, π⟩
+1 +⟨a, π′⟩ = mina∈Qdi=1{−hi,ci}
+1 +⟨a, π⟩
+1 +⟨a, π′⟩ .(3.2)
+(ii) For anyπ, π ′ ∈ Swe haves(π, π′)∈[¯s,1].
+(iii) For anyπ 1, π2, π′1, π′2 ∈ Swe have
+|s(π1, π′1)−s(π 2, π′2)| ≤ ¯c1−¯c (∥π1 −π 2∥1 +∥π ′1 −π ′2∥1).
+Proof.(i) SinceBis a box and the maximum over an interval of a linear function
+is attained at an endpoint, for anyx∈R d, we have
+max
+a∈B
+⟨a, x⟩=
+dX
+i=1
+max(cixi,−h ixi) =p(x).(3.3)
+Next, recall that by Lemma 2.1 in Pitera and Stettner (2023), the values(π, π ′) is
+given as a unique solution to
+F(s(π, π′), π, π′) = 1 (3.4)
+whereF(w, π, π′) =w+p(wπ ′ −π),w >0,π, π ′ ∈ S. Combining this with (3.3),
+forw >0,π, π ′ ∈ S, we obtain
+F(w, π, π′) =w+ max
+a∈B
+
+a, wπ′ −π  = max
+a∈B
+n
+w
+ 
+1 +⟨a, π′⟩ − ⟨a, π⟩o.
+As|⟨a, π⟩|,|⟨a, π′⟩| ≤¯c, the quantity 1 +⟨a, π′⟩lies in the interval [1−¯c,1 + ¯c]⊂
+(0,∞) for anya∈B, so
+F(w, π, π′)≤1⇐ ⇒w≤ 1 +⟨a, π⟩1 +⟨a, π′⟩ ∀a∈B.
+Alsow7→F(w, π, π ′) is continuous, strictly increasing, withF(0, π, π′) =⟨h, π⟩<
+1; hence (3.4) has a unique root, equal to the middle expression in (3.2). The vertex
+form follows because a linear-fractional function attains its extrema over a polytope
+at a vertex.
+(ii) The numerators in (3.2) are bounded from below by 1−¯c, the denominators
+are bounded from above by 1+¯c, sos(π, π′)≥¯s; takinga= 0∈Bgivess(π, π ′)≤1.
+10 LONG-RUN RISK-SENSITIVE PORTFOLIO OPTIMISATION
+(iii) Writew k :=s(π k, π′k)∈(0,1],k= 1,2, and recall from (3.4) thatw k +
+p(wkπ′k −π k) = 1. Subtracting these identities and using (3.1) as well as∥π ′1∥1 = 1,
+we get
+|w1 −w 2|=|p(w 2π′2 −π 2)−p(w 1π′1 −π 1)|
+≤¯c∥w2π′2 −w 1π′1 −(π 2 −π 1)∥1
+= ¯c∥w2(π′2 −π ′1) + (w2 −w 1)π′1 −(π 2 −π 1)∥1
+≤¯c∥π′2 −π ′1∥1 + ¯c|w2 −w 1|+ ¯c∥π2 −π 1∥1,
+and the claim follows by rearranging the terms.□
+In the following, we show that the maximiser in (2.10) is unique. A natural
+approach would build on the concavity of the map under the supremum sign; in
+particular, we would need to show that the mapsis concave. However, as we
+demonstrate in the following example, this is not true.
+Example 3.2.Taked= 2 andc=h= (0.5,0.5), sop(z) = 0.5(|z 1|+|z 2|).
+Parametrisingπ= (u,1−u),π ′ = (t,1−t),u, t∈[0,1], we conclude that (3.2)
+collapses to
+s((u,1−u),(t,1−t)) = min
+ u+ 0.5
+t+ 0.5 , 1.5−u1.5−t  .
+In particular, forπ= ( 12 , 12 ) andt≥ 12 , the first branch is active ands π,(t,1−t)  =2
+2t+1 , which isstrictly convexint. Concretely, withπ ′1 = ( 35 , 25 ),π ′2 = (1,0) and
+their midpointπ ′m = ( 45 , 15 ), we haves(π, π′1) = 1011 ,s(π, π′m) = 1013 ,s(π, π′2) = 23 .
+Hence
+1
+2 s(π, π′1) + 12 s(π, π′2) = 2633 ≈0.7879> 1013 ≈0.7692 =s(π, π ′m),
+so concavity fails.
+Recall that in (2.8) we introduced the weights-based representation of the prob-
+lem. In the following, to overcome the issue with the lack of concavity stated
+in Example 3.2, we also use capital-based representation. More specifically, for
+x, y∈R d+ we define thecost-to-reachfunctional
+Θ(x, y) :=⟨y,1⟩+p(y−x),(3.5)
+so that, in view of (2.4), the rebalancing fromxtoyis self-financing if and only if
+Θ(x, y) =⟨x,1⟩. Accordingly, we introduce theself-financing frontier, thebudget
+set, and thebudget conegiven by
+Σ(x) :={y∈R d+ : Θ(x, y) =⟨x,1⟩},K(x) :={y∈R d+ : Θ(x, y)≤ ⟨x,1⟩},
+Γ :={(x, y) :x∈R d+, y∈ K(x)},(3.6)
+respectively. The setK(x) is thefree-disposal relaxationof Σ(x), in which the
+investor is allowed to discard capital; it will be shown in Lemma 3.6(ii) that this
+relaxation is inactive at the optimum.
+Let us relate this notation to the mapsanalysed in Lemma 3.1. Forπ, π ′ ∈ S,
+the self-financing condition (2.6) withw:=W(t)/W(t−) readsw+p(wπ ′ −π) = 1,
+that is,
+Θ(π, s(π, π′)π′) = 1 =⟨π,1⟩,(3.7)
+so thats(π, π′) is exactly the unique scalarw >0 for whichwπ ′ lies on the frontier
+Σ(π).
+LONG-RUN RISK-SENSITIVE PORTFOLIO OPTIMISATION 11
+Now, we discuss the properties of budget sets.
+Lemma 3.3.The following statements hold:
+(i) The mapΘis jointly convex and jointly positively homogeneous onR d+ ×
+Rd+. In particular,Γis a closed convex cone, the setK(x)is convex and
+compact,K(αx) =αK(x)forα >0, andy k ∈ K(xk),k= 1,2, implies
+ty1 + (1−t)y 2 ∈ K(tx1 + (1−t)x 2)fort∈[0,1].
+(ii) For anyx, y∈Kthere exists exactly oneα(x, y)>0such thatα(x, y)y∈
+Σ(x). Moreover, the mapβ→Θ(x, βy)is strictly increasing on[0,∞),
+and for anyβ >0,
+βy∈ K(x)⇐ ⇒β≤α(x, y), βy∈Σ(x)⇐ ⇒β=α(x, y).
+(iii) We havex∈Σ(x)and¯s⟨x,1⟩ ≤ ⟨y,1⟩ ≤ ⟨x,1⟩for anyy∈Σ(x).
+(iv) For anyπ∈ S, the mapι π :S →Σ(π)given byι π(π′) :=s(π, π ′)π′ is a
+homeomorphism ofSontoΣ(π), with the inverse given byΣ(π)∋y→
+y/⟨y,1⟩ ∈ S.
+Proof.(i) OnR d+ ×R d+ we may write
+Θ(x, y)− ⟨x,1⟩=⟨y,1⟩ − ⟨x,1⟩+p(y−x),
+which is a linear function of (x, y) plus a convex function precomposed with a linear
+map, hence convex; it is also positively homogeneous. Thus Γ is the 0-sublevel set of
+a convex positively homogeneous function on the convex coneR d+ ×R d+, i.e. a closed
+convex cone. Compactness ofK(x) follows fromp≥0, which forces⟨y,1⟩ ≤ ⟨x,1⟩
+fory∈ K(x). The remaining properties follow from homogeneity and compactness
+of Θ by a straightforward verification.
+(ii) Letg(β) := Θ(x, βy) =β⟨y,1⟩+p(βy−x) forβ≥0. For 0≤β 1 < β2,
+by (3.1) we getp(β 2y−x)−p(β 1y−x)≥ −¯c(β2 −β 1)⟨y,1⟩, hence
+g(β2)−g(β 1)≥(1−¯c)(β 2 −β 1)⟨y,1⟩>0.
+Thusgis (strictly) increasing andg(β)→ ∞asβ→ ∞. Sinceg(0) =p(−x) =
+⟨h, x⟩ ≤¯c⟨x,1⟩<⟨x,1⟩, the continuous strictly increasing mapgattains the level
+⟨x,1⟩at exactly one point, which we denote byα(x, y)>0. Also,g(β)≤ ⟨x,1⟩if
+and only ifβ≤α(x, y), which gives the stated characterisation.
+(iii) We have Θ(x, x) =⟨x,1⟩hencex∈Σ(x). Next, fory∈Σ(x), fromp≥0 we
+get⟨y,1⟩ ≤ ⟨x,1⟩, while (3.1) and the triangle inequality givep(y−x)≤¯c∥y−x∥1 ≤
+¯c(⟨y,1⟩+⟨x,1⟩). Thus⟨x,1⟩ ≤ ⟨y,1⟩+ ¯c(⟨y,1⟩+⟨x,1⟩), i.e.⟨y,1⟩ ≥¯s⟨x,1⟩.
+(iv) Ify=ι π(π′), theny∈Σ(π) by (3.7), and⟨y,1⟩=s(π, π ′)>0, so that
+y/⟨y,1⟩=π ′. Conversely, ify∈Σ(π), theny̸=0, since Θ(π,0) =⟨h, π⟩<1 =
+⟨π,1⟩; thus, settingσ:=⟨y,1⟩>0 andπ ′ :=y/σ∈ S, we get Θ(π, σπ ′) = 1, so
+thatσ=s(π, π ′) by (3.7) and (ii), i.e.y=ι π(π′). The continuity ofι π and of its
+inverse follows from Lemma 3.1 (i) and (ii).□
+3.2.The entropic utility and the reward functional.We now record the
+properties of the entropic utilityµ γ used in the sequel: for anyγ≤0,t∈[0,1],
+12 LONG-RUN RISK-SENSITIVE PORTFOLIO OPTIMISATION
+and sufficiently integrableZ, Z1, Z2, anda∈R, we have
+Z1 ≤Z 2 Pa.s.=⇒µ γ[Z1]≤µ γ[Z2],
+µγ[Z+a] =µ γ[Z] +a,
+|µγ[Z1]−µ γ[Z2]| ≤ ∥Z1 −Z 2∥,
+µγ[tZ1 + (1−t)Z 2]≥tµ γ[Z1] + (1−t)µ γ[Z2].(3.8)
+Note that these properties state monotonicity, cash-additivity, Lipschitz property,
+and concavity of the entropic utility, respectively. The first three properties follow
+directly from the definition. For the fourth one, use the H¨ older inequality or Exam-
+ple 4.13 in F¨ ollmer and Schied (2016). Also, note that directly from the properties
+of expectation we get that ifZ 1 ≤Z 2 a.s. andµ γ[Z1] =µ γ[Z2]∈R, thenZ 1 =Z 2
+a.s.
+In the following, we use also an exponentiated version ofµ γ.
+Lemma 3.4.Letγ≤0. Then, on the family of random variablesZsuch that
+µγ[Z]<∞, the mapZ→e µγ [lnZ] is positively homogeneous and superadditive, i.e.
+eµγ [ln(Z1+Z2)] ≥e µγ [lnZ 1] +e µγ [lnZ 2]; (3.9)
+in particular, it is concave.
+Proof.Forγ <0 we havee µγ [lnZ] = (E[Z γ])1/γ, so the positive homogeneity is
+clear. For the superadditivity, setS:=Z 1 +Z 2 and note that, with the conjugate
+exponentsγ <0 andq:=γ/(γ−1)∈(0,1), the reverse H¨ older inequality gives
+E[ZkSγ−1]≥(E[Z γk ])1/γ (E[Sγ])(γ−1)/γ , k= 1,2.
+Summing overk= 1,2 and usingZ 1Sγ−1 +Z 2Sγ−1 =S γ, we obtain (E[S γ])1/γ ≥
+(E[Z γ1 ])1/γ + (E[Z γ2 ])1/γ, which is the claim. Superadditivity combined with the
+positive homogeneity gives the concavity.
+Forγ= 0, we havee µγ [lnZ] =e E[lnZ] , so the claim is the integral version of
+Mahler’s inequality (see e.g. (Hardy et al., 1934, Theorem 11)). Nevertheless, for
+completeness, we provide a proof. Let
+a:=e E[lnZ 1] ∈(0,∞), b:=e E[lnZ 2] ∈(0,∞), λ:= aa+b ∈(0,1).
+Then 1−λ=b/(a+b), and henceλ/a= (1−λ)/b= 1/(a+b), which yields the
+pointwise identity
+Z1 +Z 2
+a+b =λ Z1a + (1−λ) Z2b on Ω.(3.10)
+Applying to the right-hand side of (3.10) the weighted arithmetic–geometric mean
+inequalityλx+ (1−λ)y≥x λy1−λ,x, y >0, we get
+Z1 +Z 2
+a+b ≥
+ Z1
+a
+λ  Z2
+b
+1−λ
+P-a.s. (3.11)
+Taking logarithms in (3.11) and then expectations of both sides, we obtain
+E
+
+ln(Z1 +Z 2)
+
+−ln(a+b)≥λ
+ 
+E[lnZ 1]−lna
+
++ (1−λ)
+ 
+E[lnZ 2]−lnb
+
+= 0,
+where the last equality follows fromE[lnZ 1] = lnaandE[lnZ 2] = lnb. Conse-
+quentlyE[ln(Z 1 +Z 2)]≥ln(a+b), and exponentiating gives (3.9) forγ= 0.□
+LONG-RUN RISK-SENSITIVE PORTFOLIO OPTIMISATION 13
+Now, we state a technical result which is a version of the Feller property for the
+underlying controlled process; it also shows that the right-hand side of (2.10) is
+well defined.
+Lemma 3.5.Letγ≤0and assume(A3). Then, for anyv∈ C b(S), the map
+S ∋π′ →Ψ v(π′) :=µ γ [ln⟨π′, R(η1)⟩+v(G(π ′, R(η1)))]∈R(3.12)
+is well defined, bounded, and continuous.
+Proof.Fixπ ′ ∈ S. SinceRi(η1) =e ri(η1) and⟨π ′,1⟩= 1, we get
+emini=1,...,d ri(η1) =⟨π ′, emini=1,...,d ri(η1)⟩ ≤ ⟨π′, R(η1)⟩ ≤emaxi=1,...,d ri(η1),
+so that, writingZ π′ := ln⟨π′, R(η1)⟩+v(G(π ′, R(η1))), we obtain
+min
+i=1,...,d
+ri(η1)− ∥v∥ ≤Zπ′ ≤maxi=1,...,d ri(η1) +∥v∥.(3.13)
+Forγ <0, we gete γZπ′ ≤e |γ|∥v∥ eγmin i=1,...,d ri(η1), which is integrable by Assump-
+tion (A3); consequently 0<E[e γZπ′ ]<∞and Ψ v(π′) = 1γ lnE[e γZπ′ ] is a finite real
+number. Forγ= 0, Assumption (A3) givesE|Z π′|<∞, so that Ψ v(π′) =E[Z π′]
+is finite. In both cases, the envelopes in (3.13) do not depend onπ ′, which, by the
+dominated convergence theorem combined with the continuity ofπ ′ →Z π′, shows
+the continuity of Ψ v.□
+Next, forv∈ Cb(S) we define itspositively homogeneous liftW v by
+Wv(x) :=⟨x,1⟩e v(x/⟨x,1⟩), x∈K,W v(0) := 0.(3.14)
+Note thatW v is continuous onR d+, positively homogeneous, restricts toe v onS,
+and satisfies
+e−∥v∥⟨x,1⟩ ≤ Wv(x)≤e ∥v∥⟨x,1⟩, x∈R d+.(3.15)
+The quantityW v(x) should be understood as the wealth-scaled exponential of the
+value function; it is not to be confused with the wealth processWfrom (2.2).
+Finally, for a continuous positively homogeneousW:R d+ →[0,∞) which is positive
+onK, we define theone-period reward
+ΦW (y) :=e µγ [lnW(y·R(η 1))], y∈K,Φ W (0) = 0,(3.16)
+i.e. the exponentiated post-growth value of the post-transaction positiony. Also,
+note that with the map Ψ v from Lemma 3.5, we have Ψ v = ln ΦWv ,v∈ Cb(S).
+Now, we provide several properties of the map Φ W .
+Lemma 3.6.Letγ≤0and assume(A3). Also, letW:R d+ →[0,∞)be con-
+tinuous, positively homogeneous, positive onK, and such thatc 1⟨y,1⟩ ≤ W(y)≤
+c2⟨y,1⟩,y∈R d+, for some0< c 1 ≤c 2 <∞. Then, the following statements hold:
+(i) The mapΦ W is finite, continuous, and positively homogeneous onR d+, with
+ΦW (y)>0fory̸=0.
+(ii) For anyx∈K, the supremumsup y∈K(x) ΦW (y)is attained, it is equal to
+sup
+y∈Σ(x)
+ΦW (y), and every maximiser overK(x)belongs toΣ(x).
+(iii) IfW=W v for somev∈ Cb(S), then, for anyπ, π ′ ∈ S,
+ln ΦWv (ιπ(π′)) = lns(π, π′) + Ψv(π′).(3.17)
+(iv) If, in addition, the mapWis concave onR d+, then so isΦ W .
+14 LONG-RUN RISK-SENSITIVE PORTFOLIO OPTIMISATION
+Proof.(i) The positive homogeneity follows from the positive homogeneity ofW
+and the cash-additivity in (3.8). Next, from the assumed bounds onWand the
+monotonicity in (3.8), we get
+c1eµγ [ln⟨y,R(η1)⟩] ≤Φ W (y)≤c 2eµγ [ln⟨y,R(η1)⟩], y∈R d+.(3.18)
+Fory∈K, applying Lemma 3.5 withv≡0 to the weight vectory/⟨y,1⟩and
+using the cash-additivity, we get thatµ γ[ln⟨y, R(η1)⟩] is finite and continuous in
+y; together with (3.18) this gives the finiteness, positivity, and continuity of Φ W
+onK. Finally, Φ W (y)≤c 2⟨y,1⟩e µγ [maxi=1,...,d ri(η1)] →0 asy→0, which shows
+the continuity at0; here the exponent is finite, sinceµ γ[Z]≤E[Z] forγ≤0 and
+E[maxi=1,...,d ri(η1)]<∞by Assumption (A3).
+(ii) The setK(x) is compact by Lemma 3.3(i) and Φ W is continuous, so the
+supremum is attained. Lety∈ K(x)\Σ(x) withy̸=0and letα:=α(x, y) be as in
+Lemma 3.3(ii). By the characterisation stated there, a multipleβybelongs toK(x)
+if and only ifβ≤α; applying this withβ= 1 and usingy∈ K(x), we getα≥1,
+whiley /∈Σ(x) excludesα= 1. Thusα >1 and, by the positive homogeneity and
+positivity of Φ W ,
+ΦW (αy) =αΦ W (y)>Φ W (y).
+Also, by definition ofα, we haveαy∈Σ(x)⊂ K(x), so thatyis not a maximiser.
+Finally,y=0is dominated by any point of Σ(x). This shows that all maximisers
+overK(x) belong to Σ(x) and that the two suprema coincide.
+(iii) Settingy:=ι π(π′) =s(π, π′)π′, we get⟨y, R(η1)⟩=s(π, π ′)⟨π′, R(η1)⟩and
+G(y, R(η1)) =G(π ′, R(η1)), so that
+lnW v(y·R(η 1)) = lns(π, π′) + ln⟨π′, R(η1)⟩+v(G(π ′, R(η1))).
+Applyingµ γ and using the cash-additivity in (3.8) to pull out the constant lns(π, π′),
+we get (3.17).
+(iv) Lety 1, y2 ∈R d+,t∈[0,1], andy t :=ty 1 + (1−t)y 2. Since the map
+y→y·R(η 1) is linear, the concavity ofWgives, pointwise,
+W(y t ·R(η 1))≥tW(y 1 ·R(η 1)) + (1−t)W(y 2 ·R(η 1)).
+The mapZ→e µγ [lnZ] is monotone by (3.8) and concave by Lemma 3.4. Applying
+it to both sides of the above inequality, we get ΦW (yt)≥tΦ W (y1) + (1−t) ΦW (y2),
+which concludes the proof.□
+3.3.Existence of a solution with a concave lift.Forv∈ C b(S) we define the
+Bellman operatorTby
+Tv(π) := sup
+π′∈S
+(lns(π, π′) + Ψv(π′)), π∈ S,(3.19)
+where Ψ v is given by (3.12). With this notation, a pair (¯v γ, ¯λγ)∈ Cb(S)×Ris a
+solution to (2.10) if and only if
+T¯vγ = ¯vγ + ¯λγE[η1].(3.20)
+Moreover, combining Lemma 3.3(iv) with Lemma 3.6(ii),(iii), we get that the lift
+ofTvis the maximal reward over the budget set, i.e. for anyπ∈ S,
+eTv(π) = sup
+y∈Σ(π)
+ΦWv (y) = sup
+y∈K(π)
+ΦWv (y).(3.21)
+Indeed, by Lemma 3.3(iv) we may parametrise Σ(π) byπ ′ ∈ Sthroughy=ι π(π′),
+and then (3.17) identifies the corresponding objectives.
+LONG-RUN RISK-SENSITIVE PORTFOLIO OPTIMISATION 15
+We say thatv∈ Cb(S) has aconcave liftif the mapW v given by (3.14) is concave
+onR d+. The next two results are the core of the argument: the first one shows that
+Tpreserves the concavity of the lift, while the second one shows thatTregularises
+uniformly inv.
+Lemma 3.7.Letγ≤0and assume(A3). Ifv∈ C b(S)has a concave lift, then so
+doesTv.
+Proof.First, we note that, by (3.15) and Lemma 3.6(iv), the map Φ Wv is concave.
+Next, recall that by Lemma 3.3(i) and Lemma 3.6(i), we haveK(αx) =αK(x) and
+the map ΦWv is positively homogeneous. Thus, the mapK∋x→sup y∈K(x) ΦWv (y)
+is also positively homogeneous. Consequently, using (3.14) and (3.21), for any
+x∈K, we obtain
+WTv (x) =⟨x,1⟩e Tv(x/⟨x,1⟩) =⟨x,1⟩sup
+y∈K(x/⟨x,1⟩)
+ΦWv (y) = sup
+y∈K(x)
+ΦWv (y).
+Next, letx 1, x2 ∈K,t∈[0,1], andε >0, chooseε-optimal ˆy k ∈ K(xk),k= 1,2,
+and note that, by Lemma 3.3(i), we havetˆy1 + (1−t)ˆy2 ∈ K(tx1 + (1−t)x 2). Thus,
+using the concavity of Φ Wv , we get
+WTv (tx1 + (1−t)x 2)≥Φ Wv (tˆy1 + (1−t)ˆy2)
+≥tΦ Wv (ˆy1) + (1−t) Φ Wv (ˆy2)
+≥tW Tv (x1) + (1−t)W Tv (x2)−2ε.
+Lettingε↓0, we conclude the proof.□
+Lemma 3.8.Letγ≤0and assume(A3). Then, for anyv∈ C b(S), we have
+Tv∈ Cb(S)and, for anyπ, π ′′ ∈ S,
+|Tv(π)− Tv(π ′′)| ≤sup
+π′∈S
+|lns(π, π′)−lns(π ′′, π′)|.(3.22)
+Also, withL:= ¯c(1−¯c)¯sand anyπ, π′′ ∈ S, we get the bounds
+spanS Tv≤ln 1¯s,|Tv(π)− Tv(π ′′)| ≤L∥π−π ′′∥1,(3.23)
+Moreover, the operatorTis monotone, cash-additive, and non-expansive, i.e.∥Tv 1−
+Tv 2∥ ≤ ∥v1 −v 2∥forv 1, v2 ∈ Cb(S).
+Proof.Note that (3.22) follows directly from (3.19) and the fact that an absolute
+difference of suprema is bounded from above by the supremum of absolute differ-
+ences. Hence, by Lemma 3.1, the mapTvis finite and continuous, i.e.Tv∈ C b(S).
+To get (3.23), note that by Lemma 3.1(ii) we have lns∈[ln ¯s,0], which combined
+with (3.22) gives the first bound. For the second one, using Lemma 3.1(ii),(iii) and
+the mean value theorem applied to the logarithm, we get
+|lns(π, π′)−lns(π ′′, π′)| ≤1¯s|s(π, π′)−s(π ′′, π′)| ≤L∥π−π ′′∥1.
+Finally, the monotonicity, cash-additivity, and non-expansiveness ofTfollow from
+the corresponding properties ofµ γ listed in (3.8).□
+Now, let us fix someπ 0 ∈ Sand define
+V:={v∈ C b(S) :W v is concave, v(π0) = 0,
+spanS v≤ln 1¯s,|v(π)−v(π ′′)| ≤L∥π−π ′′∥1	 .(3.24)
+16 LONG-RUN RISK-SENSITIVE PORTFOLIO OPTIMISATION
+Lemma 3.9.The setVis a non-empty, convex, and compact subset ofC b(S)
+equipped with the supremum norm.
+Proof.Non-emptiness follows by noting thatv≡0 belongs toV, asW 0(·) =⟨·,1⟩
+is concave.
+For the convexity, letv 1, v2 ∈ Vandt∈[0,1]. The normalisationv→v(π 0)
+is linear, while the span seminorm and the Lipschitz property constitute convex
+constraints. For the concavity of the lift, we note that, directly from (3.14), we
+have
+Wtv1+(1−t)v2 = (Wv1 )t(Wv2 )1−t,
+since⟨x,1⟩=⟨x,1⟩ t⟨x,1⟩ 1−t. As the map (u 1, u2)→u t1u1−t2 is concave and non-
+decreasing on [0,∞) 2, its composition with the concave mapsW v1 ,W v2 is concave,
+i.e.tv 1 + (1−t)v 2 ∈ V.
+For the compactness, note that anyv∈ Vsatisfies∥v∥ ≤ln 1¯s, due tov(π 0) = 0
+and the span bound, and is Lipschitz with the constantL. Thus, the familyVis
+uniformly bounded and equicontinuous, so it is relatively compact by the Arzel` a-
+Ascoli theorem. Also,Vis closed under the uniform convergence: this is clear for
+the three explicit constraints, while the concavity of the lift is preserved, since the
+uniform convergencev n →vimplies the pointwise convergenceW vn → Wv and the
+pointwise limits of concave maps are concave.□
+We are now ready to prove the main existence result of this section.
+Theorem 3.10.Letγ≤0. Also, assume(A1),(A2), and(A3). Then, there
+exists a solution(¯v γ, ¯λγ)∈ Cb(S)×Rto(2.10)such that
+(i) the liftW ¯vγ is concave and positively homogeneous onR d+;
+(ii) after the normalisationmax S ¯vγ = 0, we have¯s⟨x,1⟩ ≤ W¯vγ (x)≤ ⟨x,1⟩,
+x∈R d+;
+(iii)¯vγ is Lipschitz with the constantLandspan S ¯vγ ≤ln 1¯s;
+(iv) ¯λγ = 1E[η1] (T¯vγ)(π0).
+Proof.Let us define the normalised operator bTv:=Tv−(Tv)(π 0),v∈ Cb(S), and
+recall the setVgiven by (3.24).
+First, we show that bTmapsVinto itself. Indeed, letv∈ V. Then, by Lemma 3.7,
+the liftW Tv is concave; also, subtracting a constant fromTvmultiplies its lift by
+a positive constant, so the lift of bTvis concave as well. Next, the normalisation
+bTv(π 0) = 0 holds by the construction, while the two remaining constraints follow
+from (3.23), as the span seminorm and the Lipschitz constant are not changed by
+subtracting a constant.
+Second, the operator bTis continuous with respect to the supremum norm. In-
+deed, using the non-expansiveness ofTstated in Lemma 3.8, for anyv 1, v2 ∈ Cb(S)
+we get
+∥ bTv 1 − bTv 2∥ ≤ ∥Tv1 − Tv2∥+|(Tv 1 − Tv2)(π0)| ≤2∥v1 −v 2∥.
+Combining this with Lemma 3.9 and using the Schauder fixed point theorem
+(see, e.g., Theorem 3.2 in Bonsall (1962) or Theorem 2.A in Zeidler (1986)), we
+may find ¯vγ ∈ Vsuch that bT¯vγ = ¯vγ, i.e.
+T¯vγ = ¯vγ + (T¯vγ)(π0).
+LONG-RUN RISK-SENSITIVE PORTFOLIO OPTIMISATION 17
+Thus, setting ¯λγ := 1E[η1] (T¯vγ)(π0), which is well defined since 0<E[η 1]<∞by
+Assumption (A2), we recover (3.20), i.e. the pair (¯v γ, ¯λγ) is a solution to (2.10).
+Properties (i), (iii), and (iv) follow from ¯v γ ∈ Vand the definition of ¯λγ. Finally,
+(ii) follows from (3.15) combined with (iii) and the normalisation max S ¯vγ = 0.□
+3.4.Uniqueness of the maximiser.In this section, we show that, for a fixed
+solution to the Bellman equation (2.10), the supremum on the right-hand side
+is attained at exactly one point and that the corresponding maximiser depends
+continuously on the current portfolio position. This justifies referring totheoptimal
+rebalancing in the strategy (2.13) and shows that no measurable selection argument
+is needed in the verification theorem.
+Throughout this section we fix a solution (¯vγ, ¯λγ)∈ Cb(S)×Rto (2.10) such that
+the liftW:=W ¯vγ is concave; by Theorem 3.10 at least one such solution exists. In
+particular, by (3.15) there are constants 0< c 1 ≤c 2 <∞such that
+c1⟨x,1⟩ ≤ W(x)≤c2⟨x,1⟩, x∈R d+.(3.25)
+We also write Φ := ΦW and Ψ := ln Φ, and, for a fixedπ∈ S, we define the sets of
+maximisers in the weight and the capital coordinates by
+bΠ(π) := arg max
+π′∈S
+(lns(π, π′) + Ψ¯vγ (π′)), bX(π) := arg max
+y∈K(π)
+Ψ(y),(3.26)
+respectively. Note that, by (3.8), the set bΠ(π) coincides with the set of maximisers
+on the right-hand side of (2.10), since the two expressions differ by the constant
+−¯λγE[η1].
+We start by showing that the two sets in (3.26) are in a one-to-one correspon-
+dence.
+Lemma 3.11.Letγ≤0and assume(A3). Then, for anyπ∈ S, the mapι π from
+Lemma 3.3(iv) restricted to bΠ(π)is a bijection onto bX(π), with the inverse given
+byy→y/⟨y,1⟩. In particular, the set bΠ(π)is a singleton if and only if bX(π)is a
+singleton.
+Proof.LetJ π(π′) := lns(π, π ′) + Ψ ¯vγ (π′),π ′ ∈ S. We combine three facts.
+First, by Lemma 3.3(iv), the mapι π is a bijection fromSonto Σ(π). Second,
+by Lemma 3.6(iii), for anyπ ′ ∈ Swe have
+Ψ(ιπ(π′)) = ln ΦW (ιπ(π′)) = lns(π, π′) + Ψ¯vγ (π′) =J π(π′),
+i.e. the mapι π transports the objectiveJ π onSonto the objective Ψ restricted to
+Σ(π), without any distortion. Third, by Lemma 3.6(ii), we have
+bX(π) = arg max
+y∈K(π)
+Ψ(y) = arg max
+y∈Σ(π)
+Ψ(y).
+Combining these facts, we get thatπ ′ maximisesJ π overSif and only ifι π(π′)
+maximises Ψ over Σ(π), i.e. if and only ifι π(π′)∈ bX(π). Sinceι π is a bijection
+fromSonto Σ(π), its restriction to bΠ(π) is a bijection onto bX(π).□
+Lemma 3.12.Letγ≤0and assume(A3). Then, for anyπ∈ S, the set bX(π)is
+non-empty, compact, convex, and contained inΣ(π). Moreover,⟨y,1⟩ ≥¯sfor any
+y∈ bX(π).
+18 LONG-RUN RISK-SENSITIVE PORTFOLIO OPTIMISATION
+Proof.Non-emptiness, compactness, and the inclusion bX(π)⊂Σ(π) follow from
+Lemma 3.6(ii), while the bound⟨y,1⟩ ≥¯sis a consequence of Lemma 3.3(iii). For
+the convexity, we note that Φ = Φ W is concave, by Lemma 3.6(iv), andK(π) is
+convex, by Lemma 3.3(i). Thus, the set of maximisers of the concave map Φ over
+the convex setK(π) is convex, and so is bX(π) = arg maxK(π) ln Φ, since ln is strictly
+increasing.□
+The following result is the key step of the argument: any two optimal rebalanc-
+ings lead to the same wealth in (almost) every state of the world. Let us stress that
+no assumption on the support of the growth rates is required here.
+Proposition 3.13.Letγ≤0and assume(A3). Then, for anyπ∈ Sandy 1, y2 ∈
+bX(π), we have
+W(y 1 ·R(η 1)) =W(y 2 ·R(η 1)),P-a.s.
+Proof.Lety m := 12 (y1 +y 2) and note that, by Lemma 3.12, we havey m ∈ bX(π).
+Also, set
+Wk :=W(y k ·R(η 1)) andZ k := lnW k, k∈ {1,2, m},
+and denote byMthe common value Ψ(y 1) = Ψ(y 2) = Ψ(y m) = maxK(π) Ψ. Also,
+recalling (3.14) and (3.16), we getµ γ[Zk] = Ψ(yk) =M, fork∈ {1,2, m}. Straight-
+forward verification shows that, under (A3), we have thatMis finite.
+Next, since the mapy→y·R(η 1) is linear andWis concave, we get, pointwise,
+Wm ≥ 12 (W1 +W 2)≥ pW1W2,(3.27)
+where the second inequality is the inequality between the arithmetic and the geo-
+metric means. Taking the logarithms, we obtain
+Zm ≥ 12 (Z1 +Z 2),P-a.s. (3.28)
+Also, using the concavity ofµ γ, see (3.8), and then the monotonicity ofµγ combined
+with (3.28), we get
+M= 12 µγ[Z1] + 12 µγ[Z2]≤µ γ  12 (Z1 +Z 2) ≤µ γ[Zm] =M.
+Consequently, both inequalities above are in fact equalities. In particular, us-
+ing (3.28) andµ γ  12 (Z1 +Z 2) =µ γ[Zm], we get
+Zm = 12 (Z1 +Z 2),P-a.s.,
+i.e.W m = √W1W2 a.s. In fact, recalling (3.27), we have
+p
+W1W2 = 12 (W1 +W 2),P-a.s.,
+and the equality in the inequality between the arithmetic and the geometric means
+forcesW 1 =W 2 a.s., which concludes the proof.□
+We are now ready to state the main result of this section.
+Theorem 3.14.Letγ≤0and assume(A3)and(A4). Then, for a fixed solution
+(¯vγ, ¯λγ)∈ Cb(S)×Rto(2.10)with concave lift and anyπ∈ S, the supremum on
+the right-hand side of(2.10)is attained at exactly one pointˆπ(π)∈ S. Moreover,
+the mapS ∋π→ˆπ(π)∈ Sis continuous.
+LONG-RUN RISK-SENSITIVE PORTFOLIO OPTIMISATION 19
+Proof.Let us fixπ∈ S, takey 1, y2 ∈ bX(π), and define
+φ(x) :=W(y 1 ·x)− W(y2 ·x), x∈R d+.
+Note thatφis continuous and, by the positive homogeneity ofW, positively homo-
+geneous. Also, by Proposition 3.13, we haveφ(R(η 1)) = 0 a.s.
+Now, we transferφto the simplexS. More specifically, sinceφis positively
+homogeneous and⟨x,1⟩>0 forx∈K, we may writeφ(x) =⟨x,1⟩g(x/⟨x,1⟩),
+whereg:=φ| S ∈ Cb(S). Thus, forx∈Kwe haveφ(x) = 0 if and only if
+g(x/⟨x,1⟩) = 0. In particular, denoting the (random) direction of the growth rates
+by
+R:=R(η 1)/⟨R(η1),1⟩ ∈ S,
+the propertyφ(R(η 1)) = 0 a.s. is equivalent tog(R) = 0 a.s.
+Let us fix someπ ◦ ∈ S0 and consider the mapm:S → Sgiven bym(u) := π◦·u⟨π◦,u⟩ .
+Since all the coordinates ofπ ◦ are strictly positive, the mapmis a homeomorphism
+ofS, with the inverse given bym −1(w) = w/π◦⟨w/π◦,1⟩ , where the division is understood
+componentwise. Also, by a direct computation,
+G(π◦, R(η1)) = π◦ ·R(η 1)⟨π◦, R(η1)⟩ = π◦ · R⟨π◦,R⟩ =m(R),i.e.R=m −1(G(π◦, R(η1))).
+By Assumption (A4), the random variableG(π ◦, R(η1)) with positive probability
+takes values in any non-empty open subset ofS; sincem −1 is a homeomorphism,
+the same is true forR.
+Now, we show thatg≡0. For the contradiction, suppose thatg(u 0)̸= 0 for
+someu 0 ∈ S. Then, by the continuity ofg, there is a relatively open setV⊂ S
+containingu 0 such thatg̸= 0 onV. On the other hand, we haveP[R ∈V]>0,
+which contradictsg(R) = 0 a.s. Thus,g≡0 onS, which combined with the
+continuity ofφ, showsφ≡0 onR d+, i.e.
+W(y 1 ·x) =W(y 2 ·x), x∈R d+.(3.29)
+Let us fixi∈ {1, . . . , d}and apply (3.29) withx:=e i, theith vector of the
+canonical basis; this is admissible, since (3.29) holds on the whole orthant, including
+its vertices. Using the positive homogeneity ofW, we getW(y k ·e i) =W(y ki ei) =
+yki W(e i),k= 1,2, so that
+y1i W(e i) =y 2i W(e i),whereW(e i)≥c 1 >0,
+by (3.25). Hence,y 1i =y 2i and, asiwas arbitrary,y 1 =y 2. This shows that bX(π)
+is a singleton and, by Lemma 3.11, so is bΠ(π); we denote its unique element by
+ˆπ(π).
+It remains to show the continuity of ˆπ. Letπ n →πinSand suppose that
+ˆπ(πn)̸→ˆπ(π). Then, by the compactness ofS, we may find a subsequence (π nk )
+and ˜π̸= ˆπ(π) such that ˆπ(πnk )→˜πask→ ∞. Recalling thatJ π(π′) = lns(π, π′)+
+Ψ¯vγ (π′) is jointly continuous in (π, π′), by Lemma 3.1 and Lemma 3.5, and passing
+to the limit in the inequalityJ πnk (ˆπ(πnk ))≥J πnk (π′),π ′ ∈ S, we getJ π(˜π)≥
+Jπ(π′) for anyπ ′ ∈ S. Thus, ˜πis a maximiser atπ, which contradicts the uniqueness
+shown above.□
+Remark3.15.It should be noted that some support condition is necessary for
+the uniqueness of the maximiser. Indeed, ford= 3, ifR 1(η1) =R 2(η1) a.s. and
+c1 =h 1 =c 2 =h 2 = 0, assets 1 and 2 are indistinguishable and freely exchangeable,
+20 LONG-RUN RISK-SENSITIVE PORTFOLIO OPTIMISATION
+and bX(π) contains a segment. Consequently, by Lemma 3.11, maximisers are not
+unique.
+3.5.Uniqueness of a solution to the Bellman equation.Based on Theo-
+rem 2.2 we know that the constant ¯λγ from Equation (2.10) is uniquely determined
+as the optimal value of the underlying control problem. Also, in Theorem 3.14, we
+showed that, under the full support condition, the maximiser for a fixed solution
+to the Bellman equation is unique. In this section, we finally show that a function
+solving (2.10) is unique up to an additive constant.
+Before we proceed, let us state an additional condition used in this section. In
+principle, the assumption will ensure that all the assets are present in the optimal
+portfolio rebalancing.
+(A5) (Growth) For anyγ≤0,i∈ {1, . . . , d}, and everyπ′ ∈ Swithπ ′i = 0, we
+have
+E
+
+Ri(η1)⟨π ′, R(η1)⟩γ−1
+E[⟨π′, R(η1)⟩γ] >¯s (γ−1) (1 +C),(3.30)
+whereC:= 2Λ/¯sand Λ := ¯c1−¯c is the Lipschitz constant ofs(π,·) from
+Lemma 3.1(iii)).
+It should be noted that, forγ= 0, Assumption (A5) states that the ratio of the
+one-period growth of theith assetR i(η1) to thei-free portfolio growth⟨π ′, R(η1)⟩
+is on average bounded from below by a sufficiently big constant. Forγ <0, the
+assumption accounts for the non-linearity of the entropic utility.
+Now, we state a technical result showing that, under (A5), all the assets are used
+in the Bellman equation-induced optimal rebalancing. Note that, in the proposition,
+we use the existence of a solution to the Bellman equation with the concave lift,
+which is guaranteed by Theorem 3.10.
+Proposition 3.16.Letγ≤0, assume(A3)and(A5), and let(¯v γ, ¯λγ)∈ Cb(S)×R
+solve the Bellman equation(2.10)with concave liftW ¯vγ . Then, for everyπ∈ S,
+every maximiserπ γ(π)of the right-hand side of(2.10)lies in the interiorS 0.
+Proof.Fixπ∈ Sand set
+Φ(π′) := lns(π, π′) +µ γ lnW ¯vγ (π′ ·R(η 1)), π ′ ∈ S.
+By (3.14) and Lemma 3.5, the map Φ is continuous, attains its supremum on the
+compact setS, and the maximisers of Φ correspond to the maximisers at the right-
+hand side of (2.10). Thus, it suffices to show that no boundary point maximises
+Φ. To do this, letπ ◦ ∈∂Ssatisfyπ ◦i = 0 for somei, and forε∈(0,1) put
+π′ε := (1−ε)π ◦ +εe i, wheree i is theith vertex ofS. Writex:=π ◦ ·R(η 1), so
+xi = 0 and⟨x,1⟩=⟨π ◦, R(η1)⟩. Also, setY:=R i(η1)/⟨π◦, R(η1)⟩ ≥0. In the
+following, we show that for a sufficiently smallε, we have Φ(π ′ε)>Φ(π ◦), which
+shows that no boundary point is optimal.
+First, we establish a lower bound for lnW ¯vγ
+ 
+π′ε ·R(η 1) −lnW ¯vγ (x). Since
+π′ε ·R(η 1) = (1−ε)x+ε  ei ·R(η 1) = (1−ε)x+ε R i(η1)e i is a convex combination
+ofxandR i(η1)ei, the concavity ofW ¯vγ (see Theorem 3.10(i)) gives
+W¯vγ
+ 
+π′ε ·R(η 1) ≥(1−ε)W ¯vγ (x) +εW ¯vγ  Ri(η1)ei,(3.31)
+LONG-RUN RISK-SENSITIVE PORTFOLIO OPTIMISATION 21
+and the 1-homogeneity ofW ¯vγ turns the last term intoεR i(η1)W¯vγ (ei). Using the
+facts thatW ¯vγ (x) =⟨π ◦, R(η1)⟩e ¯vγ (G(π◦,R(η1))) >0 andW ¯vγ (ei) =e ¯v(ei), we get
+W¯vγ (ei)
+W¯vγ (x) = e ¯vγ (ei)−¯vγ (G(π◦,R(η1)))⟨π◦, R(η1)⟩ ≥ e−span(¯vγ )⟨π◦, R(η1)⟩ = κ⟨π◦, R(η1)⟩ ,
+whereκ:=e −span(¯vγ ) >0. Thus, from (3.31), we obtainW ¯vγ (π′ε ·R(η 1))/W¯vγ (x)≥
+(1−ε) +εκY=:L ε >0. Taking logarithms, we get
+lnW ¯vγ
+ 
+π′ε ·R(η 1) −lnW ¯vγ (x)≥lnL ε.(3.32)
+Second, we provide a lower bound forµ γ[lnW ¯vγ
+ 
+π′ε ·R(η 1)]−µ γ[lnW ¯vγ (x)].
+The argument is based on the change-of-measure technique. More specifically, let
+U:= lnW ¯vγ (x), soe γU = (W¯vγ (x))γ. Also, note that, for anyγ≤0, we have
+0< eγU = (W¯vγ (x))γ ≤e −γ∥¯vγ ∥⟨π◦, R(η1)⟩γ ≤e −γ∥¯vγ ∥eγmin j rj (η1)
+and, by (A3), the upper bound is integrable. Thus, we may setD:=E[(W ¯vγ (x))γ]
+and define a probability measure bPby dbPdP :=W ¯vγ (x)γ/D; note that bP=Pforγ= 0.
+Next, forγ <0 and any sufficiently integrableZ, we setµ γbP[Z] := 1γ lnE bPeγZ  andnote that
+µγ[U+Z] = 1γ lnE[e γU eγZ ] = 1γ ln(E[eγU ]E bP[eγZ ]) =µ γ[U] +µ γbP[Z].(3.33)
+In fact, the identity is also true forγ= 0 withµ 0bP[Z] :=E[Z] by the additivityof the expectation. Thus, for anyγ≤0, using the monotonicity of the entropic
+utility, inequality (3.32), and the identity (3.33) withZ= lnL ε, we obtain
+∆ε :=µ γ lnW ¯vγ (π′ε ·R(η 1)) −µ γ[lnW ¯vγ (x)]
+=µ γ lnW ¯vγ (π′ε ·R(η 1))−U+U  −µ γ[U]
+≥µ γ lnL ε +U  −µ γ[U] =µ γbP lnL ε.(3.34)
+Third, we provide a lower bound for ∆εε with smallε >0. To do this, for any
+K >0 define a bounded random variableW K :=κ(Y∧K)−1. AsY≥Y∧Kand
+µγbP is monotone, for anyK >0, we get
+µγbP[lnL ε] =µ γbP[ln((1−ε) +εκY)]≥µ γbP[ln(1 +εW K)] =:g K(ε).
+Also, the mapε→g K(ε) is differentiable at 0 and, by direct computation, we get
+gK(0) = 0 andg ′K(0) =E bP[WK] =κE bP[Y∧K]−1. Hence lim inf ε↓0 ∆ε/ε≥g ′K(0)
+for everyK. Since the left-hand side is independent ofK, taking the supremum
+overK >0 and using monotone convergence, we obtainE bP[Y∧K]↑E bP[Y], hence
+lim inf
+ε↓0
+∆ε
+ε ≥κE bP[Y]−1.(3.35)
+Fourth, we provide a lower bound forκE bP[Y] under (A5). Recalling that
+W¯vγ (x) =⟨π ◦, R(η1)⟩e ¯vγ (G(π◦,R(η1))), for anyγ≤0, we obtain
+eγsup ¯vγ ⟨π◦, R(η1)⟩γ ≤ W¯vγ (x)γ ≤e γinf ¯vγ ⟨π◦, R(η1)⟩γ.
+22 LONG-RUN RISK-SENSITIVE PORTFOLIO OPTIMISATION
+Using these inequalities and the fact that⟨π ◦, R(η1)⟩γY=R i(η1)⟨π◦, R(η1)⟩γ−1,
+and settingρ:= E[Ri(η1)⟨π◦,R(η1)⟩γ−1 ]E[⟨π◦,R(η1)⟩γ ] , we get
+EbP[Y] = E[Y(W ¯vγ (x))γ]E[(W¯vγ (x))γ] = E[Ri(η1)⟨π◦, R(η1)⟩−1 (W¯vγ (x))γ]E[(W¯vγ (x))γ]
+≥ eγsup ¯v
+eγinf ¯v
+E[Ri(η1)⟨π◦, R(η1)⟩γ−1]
+E[⟨π◦, R(η1)⟩γ] =e γspan ¯vγ ρ.
+Multiplying byκ=e −span ¯vγ and recalling that by Lemma 3.8 we have span ¯vγ ≤
+ln(1/¯s) so thate(γ−1) span ¯vγ ≥¯s(1−γ)), we obtain
+κE bP[Y]≥e (γ−1) span ¯vγ ρ≥¯s (1−γ) ρ.
+By Assumption (A5), we haveρ >¯s(γ−1)(1 +C), and therefore
+κE bP[Y]>¯s (1−γ) ¯s(γ−1) (1 +C) = 1 +C.(3.36)
+Finally, we show that Φ(π′ε)>Φ(π ◦) for a sufficiently smallε >0. By Lemma 3.1,
+the maps(π,·) is Lipschitz with constant Λ, ands≥¯s >0, so lns(π,·) is Lipschitz
+with constant Λ/¯s. Also, since∥π ′ε −π ◦∥1 =ε∥e i −π ◦∥1 ≤2ε, we have
+lns(π, π′ε)−lns(π, π ◦)
+ε ≥ −2Λ¯s =−C.
+Combining this with Φ(π′ε)−Φ(π◦) = (lns(π, π′ε)−lns(π, π◦))+∆ε, (3.35), and (3.36),
+we obtain
+lim inf
+ε↓0
+Φ(π′ε)−Φ(π ◦)
+ε ≥
+ 
+κE bP[Y]−1
+
+−C >0.
+In particular Φ(π′ε)>Φ(π ◦) for all sufficiently smallε >0, soπ ◦ is not a maximiser
+of Φ. Asπ ◦ was an arbitrary boundary point, every maximiser of Φ lies inS 0.□
+As we show now, Assumption (A4) and Assumption (A5) guarantee that the
+solution to the Bellman equation is unique up to a constant.
+Theorem 3.17.Assume(A2),(A3),(A4), and(A5). Also, letγ≤0and let
+¯vγ1 ∈ Cb(S)and¯v γ2 ∈ Cb(S)be solutions to(2.10)with concave lifts and the same
+constant ¯λγ. Then, there exists a constantD∈Rsuch that¯v γ1 ≡¯vγ2 +D.
+Proof.Let us fix some ¯π∈ Sand define
+¯vγ3 (π) := ¯vγ1 (π)−¯vγ1 (¯π) and ¯v γ4 (π) := ¯vγ2 (π)−¯vγ2 (¯π), π∈ S.
+Then, ¯vγ3 and ¯vγ4 are also solutions to (2.10). We show that ¯v γ3 ≡¯vγ4 which means
+that ¯vγ1 and ¯vγ2 differ by a constant.
+For the contradiction, suppose that ¯vγ3 ̸≡¯vγ4 . Then, possibly after swapping the
+roles of ¯vγ3 and ¯vγ4 , we may assume that there exists ˆπ∈ Ssuch that
+B:= inf
+π∈S
+(¯vγ3 (π)−¯vγ4 (π)) = ¯vγ3 (ˆπ)−¯vγ4 (ˆπ)<0.
+Hence, we have ¯vγ3 (π)−¯vγ4 (π)≥B,π∈ Sand the setD:={π∈ S: ¯v γ3 (π)−¯vγ4 (π)>
+B}is open and non-empty as ¯π∈ D. Also, let ˜π∈ Sbe the maximiser for
+¯vγ4 (ˆπ). Using Assumption (A5) and Proposition 3.16, we have ˜π∈ S0. Then, using
+Assumption (A4) we haveP[G(˜π, R(η1))∈ D]>0. Thus, we obtain
+¯vγ3 (ˆπ)≥lns(ˆπ,˜π)−¯λγE[η1] +µ γ [ln⟨˜π, R(η1)⟩+ ¯vγ3 (G(˜π, R(η1)))]
+>lns(ˆπ,˜π)− ¯λγE[η1] +µ γ [ln⟨˜π, R(η1)⟩+ ¯vγ4 (G(˜π, R(η1)))] +B= ¯vγ4 (ˆπ) +B.
+LONG-RUN RISK-SENSITIVE PORTFOLIO OPTIMISATION 23
+Thus, we get the contradiction as
+¯vγ3 (ˆπ)−¯vγ4 (ˆπ)> B= ¯vγ3 (ˆπ)−¯vγ4 (ˆπ).
+Then, ¯vγ3 ≡¯vγ4 which concludes the proof.□
+Remark3.18.Assumption (A5) is used in the proof of Theorem 3.17 only to show
+that the maximiser in (2.10) is in the interior ofS. Alternatively, one can assume
+that if a particular asset is not used in an optimal strategy, then it is removed from
+the model.
+4.V anishing risk-aversion asymptotics
+In this section, we show that the optimal value of the risk-sensitive portfolio
+optimisation problem converges to the optimal value of the risk-neutral problem as
+γ→0. This shows that a complex risk-sensitive problem could be approximated
+by its simpler risk-neutral version forγclose to 0.
+First, note that in Theorem 3.10, for anyγ <0, we showed the existence of
+a solution (¯vγ, ¯λγ)∈ Cb(S)×Rto (2.10). Also, from Theorem 2.2, we get that
+the constant ¯λγ is the optimal value of the portfolio optimisation problem linked
+to (2.8). Thus, using the fact that the entropic utility measure is increasing with
+respect toγ, we may define
+¯λ0 := lim
+γ→0
+¯λγ.(4.1)
+In the following theorem, based on (¯v γ, ¯λγ), we find a map ¯v0 such that the pair
+(¯v0, ¯λ0) is a solution to (2.10) withγ= 0.
+Theorem 4.1.Assume(A1),(A2), and(A3). Also, let ¯λ0 be given by(4.1).
+Then, there exists¯v0 ∈ Cb(S)such that(¯v 0, ¯λ0)is a solution to(2.10)withγ= 0.
+Proof.First, let us recall Theorem 3.10 and, for anyγ <0, denote by (¯v γ, ¯λγ)∈
+Cb(S)×Ra solution to (2.10). Next, for a fixed ¯π∈ S, let us define
+ˆvγ(π) := ¯vγ(π)−¯vγ(¯π), π∈ S.
+Then, by a direct calculation, we note that (ˆvγ, ¯λγ) is also a solution to (2.10).
+Now, using Lemma 3.8, we get that the family of functions (ˆvγ)γ<0 is uniformly
+bounded and equicontinuous. Thus, using the Arzel` a-Ascoli, we may choose a
+sequence of functions (ˆvγk ) withγ k ↑0 such that ˆvγk converges uniformly to some
+¯v0 ∈ Cb(S). Now, we show that (¯v0, ¯λ0) is a solution to (2.10) withγ= 0. Noting
+that
+ˆvγk (π)+¯λγk E[η1] = sup
+π′∈S
+µγk [lns(π, π′) + ln⟨π′, R(η1)⟩+ ˆvγk (G(π′, R(η1)))], π∈ S,
+and using the fact that the left-hand side converges to ¯v 0(π) + ¯λ0E[η1] ask→ ∞,
+it is enough to show that for anyπ∈ S, we have
+Dk :=
+ supπ′∈S µγk [lns(π, π′) + ln⟨π′, R(η1)⟩+ ˆvγk (G(π′, R(η1)))]
+−sup
+π′∈S
+µ0 lns(π, π′) + ln⟨π′, R(η1)⟩+ ¯v0(G(π′, R(η1))) →0, k→ ∞.
+24 LONG-RUN RISK-SENSITIVE PORTFOLIO OPTIMISATION
+Note that we have
+Dk ≤sup
+π′∈S
+|µγk [ln⟨π′, R(η1)⟩+ ˆvγk (G(π′, R(η1)))]
+−µ0 ln⟨π′, R(η1)⟩+ ¯v0(G(π′, R(η1))) .
+Thus, to conclude the proof, it is enough to show
+lim
+k→∞
+sup
+π′∈S
+|µγk [ln⟨π′, R(η1)⟩+ ˆvγk (G(π′, R(η1)))]
+−µ γk ln⟨π′, R(η1)⟩+ ¯v0(G(π′, R(η1))) |= 0 (4.2)
+as well as
+lim
+k→∞
+sup
+π′∈S
+|µγk ln⟨π′, R(η1)⟩+ ¯v0(G(π′, R(η1)))
+−E
+
+ln⟨π′, R(η1)⟩+ ¯v0(G(π′, R(η1))) |= 0.(4.3)
+To see (4.2), it is enough to use (3.8) to get
+lim
+k→∞
+sup
+π′∈S
+|µγk [ln⟨π′, R(η1)⟩+ ˆvγk (G(π′, R(η1)))]
+−µ γk ln⟨π′, R(η1)⟩+ ¯v0(G(π′, R(η1))) | ≤limk→∞ ∥ˆvγk −¯v0∥= 0.
+Next, to get (4.3), we recall thatµ γ[·] converges increasingly toE[·] asγ↑0. Also,
+using Lemma 3.5, we get that the maps
+H k :S ∋π′ →µ γk ln⟨π′, R(η1)⟩+ ¯v0(G(π′, R(η1))) ,
+H 0 :S ∋π′ →E ln⟨π′, R(η1)⟩+ ¯v0(G(π′, R(η1)))
+are continuous. Thus, using Dini’s theorem, we conclude thatH k converges toH 0
+uniformly with respect toπ ′ ∈ S. This shows (4.3) and concludes the proof.□
+Combining Theorem 4.1 with Theorem 2.2, we can see that the optimal value of
+the underlying risk-sensitive optimisation problem converges to the optimal value
+of the risk-neutral problems as the risk-aversion coefficient converges to 0.
+Corollary 4.2.Under the assumptions of Theorem 4.1, we have
+sup
+Π∈A(π)
+J 0(Π, π) =¯λ0 = lim
+γ→0
+¯λγ = lim
+γ→0
+sup
+Π∈A(π)
+J γ(Π, π).
+If we additionally assume (A4) and (A5), we can show that ¯v0 is a uniform limit
+of ¯vγ.
+Corollary 4.3.Assume(A1),(A2),(A3),(A4), and(A5). Also for anyγ≤0,
+let(¯vγ, ¯λγ)∈ Cb(S)×Rbe the solutions to(2.10)with concave lifts and such that
+¯vγ(¯π) = 0for a fixed¯π∈ S. Then, we have
+lim
+γ↑0
+∥¯vγ −¯v0∥= 0.
+Proof.First, note that by Theorem 3.17, the maps ¯v γ are uniquely defined. Also,
+from the proof of Theorem 4.1 we conclude that from the sequence ¯v γk we may
+choose a uniformly convergent subsequence to ¯v 0. As the limit is also uniquely
+defined, the convergence is uniform along the original sequence, which concludes
+the proof.□
+LONG-RUN RISK-SENSITIVE PORTFOLIO OPTIMISATION 25
+Now, we show that a strategy which is optimal for the risk-neutral problem is
+also almost optimal for the risk-sensitive problem. Note that the argument does
+not use (A4) nor (A5).
+Theorem 4.4.Assume(A1),(A2), and(A3). Let ˆΠ0 = (ˆπ0(t))t≥0 be an optimal
+strategy forJ 0 induced by the Bellman equation(2.10)withγ= 0. Then, we have
+lim
+γ↑0
+sup
+π∈S
+|J γ( ˆΠ0, π)−sup
+Π∈A(π)
+J γ(Π, π)|= 0.(4.4)
+Proof.Recall that by Theorem 2.2, for anyπ∈ S, we have sup Π∈A(π) J γ(Π, π) =
+¯λγ, where ¯λγ is from Equation (2.10). Also, using Theorem 4.1 and Theorem 2.2,
+we get
+lim
+γ↑0
+¯λγ = ¯λ0 = sup
+Π∈A(π)
+J 0(Π, π) =J0( ˆΠ0, π).
+Thus, noting that
+sup
+π∈S
+|J γ( ˆΠ0, π)−sup
+Π∈A(π)
+J γ(Π, π)|= sup
+π∈S
+|J γ( ˆΠ0, π)−¯λγ|
+≤sup
+π∈S
+|J γ( ˆΠ0, π)−¯λ0|+| ¯λγ − ¯λ0|,
+to conclude the proof, it is enough to show
+lim
+γ↑0
+sup
+π∈S
+|J γ( ˆΠ0, π)−¯λ0|= 0.(4.5)
+We start by noting that, by Lemma 3.5, for anyγ <0, the maps
+S ∋π→E
+
+ln⟨π′, R(η1)⟩+ ¯v0(G(π′, R(η1))) ,
+S ∋π→µγ ln⟨π′, R(η1)⟩+ ¯v0(G(π′, R(η1)))
+are continuous. Also, sinceµ γ[·] converges increasingly toE[·] asγ↑0, by Dini’s
+theorem, for anyγ <0, there existsd γ ∈Rsuch that
+sup
+π′∈S
+E ln⟨π′, R(η1)⟩+ ¯v0(G(π′, R(η1)))
+−µγ ln⟨π′, R(η1)⟩+ ¯v0(G(π′, R(η1))) ≤d γ,(4.6)
+and limγ↑0 dγ = 0. Next, using Equation (2.10) withγ= 0, for anyπ=π(0−)∈ S,
+we obtain
+¯v0(π(0−)) + ¯λ0E[η1] = lns(π(0−),ˆπ0(0))
++E
+
+ln⟨ˆπ0(0), R(η1)⟩+ ¯v0(G(ˆπ0(0), R(η1)))
+≤lns(π(0−),ˆπ 0(0))
++µ γ ln⟨ˆπ0(0), R(η1)⟩+ ¯v0(G(ˆπ0(0), R(η1))) +d γ.(4.7)
+26 LONG-RUN RISK-SENSITIVE PORTFOLIO OPTIMISATION
+Also, recalling thatπ(τ −1 ) =G(ˆπ0(0), R(η1)) and using Equation (2.10) again, by
+the law of total expectation for the entropic utility measure, we get
+µγ ln⟨ˆπ0(0), R(τ1)⟩+ ¯v0(π(τ −1 )) + ¯λ0E[η1]
+=µ γ ln⟨ˆπ0(0), R(τ1)⟩
++E
+
+lns(π(τ −1 ),ˆπ0(τ1)) + ln⟨ˆπ0(τ1), R(τ1)⟩+ ¯v0(G(ˆπ0(τ1), R(τ1)))|π(τ1−)
+≤µ γ ln⟨ˆπ0(0), R(τ1)⟩+ lns(π(τ −1 ),ˆπ0(τ1))
++µγ ln⟨ˆπ0(τ1), R(τ1)⟩+ ¯v0(G(ˆπ0(τ1), R(τ1)))|π(τ −1 ) +d γ
+=µ γ ln⟨ˆπ0(0), R(τ1)⟩+ lns(π(τ 1−),ˆπ0(τ1))
++ ln⟨ˆπ0(τ1), R(τ1, τ2)⟩+ ¯v0(G(ˆπ0(τ1), R(τ1, τ2))) +d γ
+=µ γ ln⟨ˆπ0(0), R(τ1)⟩+ lns(π(τ 1−),ˆπ0(τ1))
++ ln⟨ˆπ0(τ1), R(τ1, τ2)⟩+ ¯v0(π(τ2−)) +d γ.
+Consequently, using (4.7), we have
+¯v0(π(0−)) + 2¯λ0E[η1]
+≤µ γ
+" 1X
+i=0
+ 
+lns(π(τ −i ),ˆπ0(τi)) + ln⟨π(τi), R(τi, τi+1)⟩ + ¯v0(π(τ2−))
+#
++ 2dγ.
+Repeating this argument, for anyn≥2, we obtain
+¯v0(π(0−)) +n ¯λ0E[η1]
+≤µ γ
+"n−1X
+i=0
+ 
+lns(π(τ −i ),ˆπ0(τi)) + ln⟨ˆπ0(τi), R(τi, τi+1)⟩ + ¯v0(π(τ −n ))
+#
++ 2ndγ.
+Thus, dividing both sides bynE[η 1] =E[τ n] and using the fact that ¯v0 is bounded,
+we get
+¯λ0 ≤J γ( ˆΠ0, π) + 2dγ.
+Consequently, we obtain
+¯λ0 −2d γ ≤J γ( ˆΠ0, π)≤ ¯λ0.
+This combined with (4.5) and lim γ↑0 dγ = 0, concludes the proof.□
+Now, we complement the convergence of optimal values with the convergence of
+optimal strategies. To get the result, we need to amplify Assumption (A3) to the
+following condition.
+(A3′) (Integrability). For anyγ <0, we have
+E
+h
+eγmin i=1,...,d ri(η1)
+i
+<∞,andE
+h
+( max
+i=1,...,d
+ri(η1))2
+i
+<∞.
+It should be noted that Assumption (A3 ′) simply adds square integrability of
+max
+i=1,...,d
+ri(η1).
+Theorem 4.5.Assume(A1),(A2),(A3 ′),(A4), and(A5). Also, letπ∈ Sand,
+for anyγ≤0, letπ γ =π γ(π)be the maximiser in(2.10). Then, we haveπ γ →π 0
+asγ↑0.
+LONG-RUN RISK-SENSITIVE PORTFOLIO OPTIMISATION 27
+Proof.First, note that by Theorem 3.17 and Theorem 3.14, for anyγ≤0, the
+solutions to the Bellman equations are unique (up to a constant) and admit unique
+maximisers. Letγ k ↑0 be any sequence such thatπ γk →¯πask→ ∞for some
+¯π∈ S; such a sequence exists by the compactness ofS. Since the maximiser for
+γ= 0 is unique, see Theorem 3.14, it is enough to show that ¯π=π 0, i.e. that
+¯v0(π) + ¯λ0E[η1] = lns(π,¯π) +E ln⟨¯π, R(η1)⟩+ ¯v0(G(¯π, R(η1))) .(4.8)
+Indeed, then ¯πis a maximiser in (2.10) forγ= 0, hence ¯π=π 0 by uniqueness; and,
+as every convergent subsequence of (π γk ) has the same limitπ 0 andSis compact,
+this yieldsπ γ →π 0 asγ↑0.
+By definition, we have
+¯vγk (π) + ¯λγk E[η1] = lns(π, πγk ) +µγk [ln⟨πγk , R(η1)⟩+ ¯vγk (G(πγk , R(η1)))].(4.9)
+From the proof of Theorem 4.1, by passing to a subsequence if needed, it can be
+assumed that ¯vγk converges uniformly to ¯v0 ask→ ∞. Also, using Corollary 4.2
+and the continuity ofs, we have ¯λγk → ¯λ0 and lns(π, πγk )→lns(π,¯π) ask→ ∞.
+Next, to ease the notation, for anyγ <0,π ′ ∈ S, andh∈ Cb(S), we set
+F γ(π′, h) :=µγ [ln⟨π′, R(η1)⟩+h(G(π ′, R(η1)))],
+F 0(π′, h) :=E[ln⟨π′, R(η1)⟩+h(G(π ′, R(η1)))].
+Thus, in view of (4.9), to prove (4.8) it is enough to show
+|F γk (πγk ,¯vγk )−F 0(¯π,¯v0)| →0, k→ ∞.(4.10)
+Now, we have
+|F γk (πγk ,¯vγk )−F 0(¯π,¯v0)| ≤ |Fγk (πγk ,¯vγk )−F γk (πγk ,¯v0)|
++|F γk (πγk ,¯v0)−F γk (¯π,¯v0)|(4.11)
++|F γk (¯π,¯v0)−F 0(¯π,¯v0)|,
+and we show that each of the three terms on the right-hand side tends to 0 as
+k→ ∞. For transparency, we split remaining argument into three steps: (1) proof
+that|F γk (πγk ,¯vγk )−F γk (πγk ,¯v0)| →0 ask→ ∞; (2) proof that|F γk (πγk ,¯v0)−
+F γk (¯π,¯v0)| →0 ask→ ∞; (3) proof that|F γk (¯π,¯v0)−F 0(¯π,¯v0)| →0 ask→ ∞.
+Step 1.We show that|F γk (πγk ,¯vγk )−F γk (πγk ,¯v0)| →0 ask→ ∞. Recalling
+that ¯vγk converges uniformly to ¯v0 and using the translation invariance and the
+monotonicity ofµ γk , see (3.8), we obtain
+|F γk (πγk ,¯vγk )−F γk (πγk ,¯v0)| ≤ ∥¯vγk −¯v0∥ →0, k→ ∞,
+which concludes the proof of this step.
+Step 2.We show that|F γk (πγk ,¯v0)−F γk (¯π,¯v0)| →0 ask→ ∞. Before
+proceeding, let us record an integrability bound used repeatedly. SinceR i(η1) =
+eri(η1), for anyπ ′ ∈ Swe have⟨π ′, R(η1)⟩ ∈[emini ri(η1), emaxi ri(η1)], so that, for
+anyh∈ Cb(S) with∥h∥ ≤ln 1¯s, we obtain
+|ln⟨π′, R(η1)⟩+h(G(π ′, R(η1)))| ≤H, H:=|min i ri(η1)|+|maxi ri(η1)|+ ln 1¯s.
+(4.12)
+Also, by Assumption (A3′) and Cauchy inequality, we haveE[H]<∞and, for any
+γ <0, we get
+E
+h
+H eγmin i ri(η1)
+i
+<∞.(4.13)
+28 LONG-RUN RISK-SENSITIVE PORTFOLIO OPTIMISATION
+Now, for anyk∈N, let us define
+Xk := ln⟨πγk , R(η1)⟩+ ¯v0(G(πγk , R(η1))),
+Y:= ln⟨¯π, R(η1)⟩+ ¯v0(G(¯π, R(η1))),
+∆k :=X k −Y,
+so that the second term in (4.11) equals|µ γk [Xk]−µ γk [Y]|. In the following, we
+use two properties of ∆ k. First, sinceπ γk →¯πand, for each fixedR∈(0,∞) d, the
+mapsπ ′ →ln⟨π ′, R⟩andπ ′ →¯v0(G(π′, R)) are continuous, we have
+∆k →0,P-a.s., k→ ∞.(4.14)
+Second, by (4.12) applied withh= ¯v 0, bothX k andYare bounded in absolute
+value by the integrable random variableH; in particular,
+Xk ≥ −H, Y≥ −H,|∆ k| ≤2H.(4.15)
+Next, using the robust representation of the entropic utility, forγ <0 and any
+random variableUwithE[e γU ]<∞, we have
+µγ[U] = 1γ lnE eγU  = infQ≪P
+
+EQ[U]− 1γ H(Q|P)  ,(4.16)
+whereH(Q|P) denotes the relative entropy ofQwith respect toP, and the infimum
+is attained at the measureQγU given by dQγUdP := eγUE[eγU ] ; see, e.g., (F¨ ollmer and Schied,
+2016, Example 4.34) or (Bartl, 2019, Lemma A.1) for details. Thus, usingQ γkY as
+a (sub-optimal) test measure in the representation (4.16) ofµ γk [Xk], we obtain
+µγk [Xk]−µ γk [Y]≤E QγkY [Xk]−E QγkY [Y] =E QγkY [∆k]≤E QγkY [|∆k|].
+By symmetry, interchanging the roles ofX k andY, we also getµ γk [Y]−µ γk [Xk]≤
+EQγkXk [|∆k|], which implies
+|µγk [Xk]−µ γk [Y]| ≤max
+ 
+E
+
+|∆k|e γkY 
+E[eγkY ] , E
+
+|∆k|e γkXk
+
+E[eγkXk ]
+!
+.(4.17)
+It remains to show that both ratios in (4.17) tend to 0. We show the argument
+only for the one involvingY; the argument forX k is analogous. Fixγ ∗ <0 with
+γk ∈[γ ∗,0) for allk(possible asγ k ↑0). UsingY≥min i ri(η1)−ln 1¯sandγ k <0,
+we get the pointwise bounde γkY ≤¯sγ∗ eγ∗ mini ri(η1) ∨1. Thus, we get by (4.15),
+|∆k|e γkY ≤2H 1 + ¯sγ∗ eγ∗ mini ri(η1) =: ¯H,
+and, by (4.13), we haveE[ ¯H]<∞. Since|∆ k| →0P-a.s. by (4.14) andγ k ↑0 gives
+eγkY →1P-a.s., the dominated convergence theorem yieldsE[|∆ k|e γkY ]→0. Also,
+we obtainE[e γkY ]→1 by the same argument. Hence, we have E[|∆k|e γk Y ]E[eγk Y ] →0 as
+k→ ∞, which concludes the proof of this step.
+Step 3.We show that|F γk (¯π,¯v0)−F 0(¯π,¯v0)| →0 ask→ ∞. In fact, this
+follows directly from the fact thatµ γk [Z]→E[Z], where we setZ:= ln⟨¯π, R(η 1)⟩+
+¯v0(G(¯π, R(η1))). This concludes the proof.□
+Remark4.6.In fact, in the proof of Theorem 4.5, we only need Assumption (A5) to
+be satisfied forγ= 0. Indeed, the key element is the uniqueness (up to a constant)
+of a map ¯v0 solving (4.8) which is guaranteed by Theorem 3.17 withγ= 0.
+LONG-RUN RISK-SENSITIVE PORTFOLIO OPTIMISATION 29
+5.Discrete time grid approximation
+In this section, we discuss how to approximate the optimal value of (2.8) with
+the help of intervention times restricted to the discrete time grid. This problem
+is important from a numerical perspective, as it requires the simulation of the
+controlled process trajectory only in the fixed set of grid points.
+We start by introducing the auxiliary notation. Let us recall the sequence of
+waiting timesη i from Section 2 and, for anym∈N, let us define
+ηmi :=
+∞X
+j=0
+j+ 1
+2m 1{ j2m <ηi≤ j+12m }; (5.1)
+note thatη mi is simply a non-anticipative approximation ofη i with values restricted
+to the time-grid{ k2m :k∈N 0}. Next, we define recursively
+τ m0 := 0, τ mn+1 =τ mn +η mn+1, n∈N.
+Also, byA m(π), we denote the family of self-financing portfolio weights Π =
+(π(t))t≥0 with the intervention times given by (τ mn )n∈N. Next, we use the nota-
+tion
+J γm(Π, π) := lim infn→∞ 1E[τ mn ] µγ
+"n−1X
+i=0
+ln W(τ m−i+1 )W(τ m−i ) # , m∈N, π∈ S,Π∈ Am(π).
+(5.2)
+In the following theorem, we show that the optimal value ofJ γm converges to the
+optimal value ofJ γ asm→ ∞. Effectively, this means that the portfolio opti-
+misation problem with arbitrary intervention times could be approximated with
+optimal portfolio value with intervention times on a discrete time grid. To obtain
+the result, we use a stronger version of Assumption (A3) given as
+(A3′′) (Integrability). For anyγ <0 there existsh >0 such that
+E
+h
+eγmin i=1,...,d inf t∈[0,h] ri(η1+t)
+i
+<∞,andE
+h
+max
+i=1,...,d
+sup
+t∈[0,h]
+ri(η1 +t)
+i
+<∞.
+Theorem 5.1.Letγ <0, and letJ γ andJ γm be given by(2.8)and(5.2), respec-
+tively. Also, assume(A1),(A2), and(A3 ′′). Then, for anyπ∈ S, we have
+lim
+m→∞
+sup
+Π∈Am(π)
+J γm(Π, π) = sup
+Π∈A(π)
+J γ(Π, π).(5.3)
+Proof.First, note that from Theorem 3.10 applied to the waiting times (η mi ), for
+a sufficiently bigmthere exists a solution (¯v γm, ¯λγm)∈ Cb(S)×Rsuch that, for any
+π∈ S, we have
+¯vγm(π) = sup
+π′∈S
+ 
+lns(π, π′)− ¯λγmE[ηm1 ] +µ γ [ln⟨π′, R(ηm1 )⟩+ ¯vγm(G(π′, R(ηm1 )))] .
+(5.4)
+Also, using the argument from Theorem 2.2, we have
+sup
+Π∈Am(π)
+J γm(Π, π) =¯λγm, π∈ S.
+Next, let ¯λγmk be subsequence of ¯λγm which converges to some ˆλγ ask→ ∞. As we
+show later, ˆλγ is equal to supΠ∈A(π) J γ(Π, π). Then, as the subsequence was chosen
+30 LONG-RUN RISK-SENSITIVE PORTFOLIO OPTIMISATION
+arbitrarily, we get (5.3). In fact, to conclude the proof, we find a map ˆv γ ∈ Cb(S)
+such that the following equation is satisfied
+ˆvγ(π) = sup
+π′∈S
+
+lns(π, π′)− ˆλγE[η1] +µ γ [ln⟨π′, R(η1)⟩+ ˆvγ(G(π′, R(η1)))] , π∈ S.
+(5.5)
+Then, using Theorem 2.2, we get ˆλγ = supΠ∈A(π) J γ(Π, π).
+Let ˆvγmk (π) := ¯vγmk (π)−¯vγmk (¯π) for some fixed ¯π∈ S. Then, using Lemma 3.8 we
+get that the family of functions (ˆvγmk )k∈N is uniformly bounded and equicontinous.
+Thus, by the Arzel´ a-Ascoli theorem, we may find a map ˆvγ ∈ Cb(S) such that ˆvγmk
+converges uniformly along some subsequence (for brevity, denoted bym k) to some
+ˆvγ ∈ Cb(S) ask→ ∞.
+Now, we show that (5.5) is satisfied. By straightforward calculation, for any
+π∈ Sandk∈N, we have
+ˆvγmk (π)+¯λγmk E[ηmk1 ] = supπ′∈S  lns(π, π′) +µ γ ln⟨π′, R(ηmk1 )⟩+ ˆvγmk (G(π′, R(ηmk1 ))) .
+(5.6)
+Also, by the construction, we obtain
+lim
+k→∞
+ 
+ˆvγmk (π) + ¯λγmk E[ηmk1 ] = ˆvγ(π) + ¯λγE[η1].
+Thus, setting
+∆k := sup
+π′∈S
+µγ ln⟨π′, R(ηmk1 )⟩+ ˆvγmk (G(π′, R(ηm1 )))
+−µγ [ln⟨π′, R(η1)⟩+ ˆvγ(G(π′, R(η1)))]|
+and noting that
+ supπ′∈S  lns(π, π′) +µ γ ln⟨π′, R(ηmk1 )⟩+ ˆvγmk (G(π′, R(ηmk1 )))
+−sup
+π′∈S
+(lns(π, π′) +µ γ [ln⟨π′, R(η1)⟩+ ˆvγ(G(π′, R(η1)))])
+ ≤∆ k,
+it is enough to show ∆ k →0 ask→ ∞. For the contradiction, suppose that there
+exists a subsequence (for brevity denoted by ∆k) and somea >0 such that ∆ k →a
+ask→ ∞. Also, note that using the fact that ˆvγmk ∈ Cb(S) and ˆvγ ∈ Cb(S), for any
+k∈N, using Lemma 3.5, we may findπ ′k ∈ Ssuch that
+∆k =
+µγ ln⟨π′k, R(ηmk1 )⟩+ ˆvγmk (G(π′k, R(ηmk1 )))
+−µγ [ln⟨π′k, R(η1)⟩+ ˆvγ(G(π′k, R(η1)))]|.(5.7)
+Next, using the compactness ofS, we can find a further subsequence of (π ′k) (for
+brevity still denoted by (π ′k)) and someπ ′ ∈ Ssuch thatπ ′k →π ′ ask→ ∞.
+Moreover, using the right-continuity of paths for R(t), we obtainP-a.s. ask→ ∞
+ln⟨π′k, R(ηmk1 )⟩ →ln⟨π′, R(η1)⟩and ln⟨π ′k, R(η1)⟩ →ln⟨π′, R(η1)⟩.
+LONG-RUN RISK-SENSITIVE PORTFOLIO OPTIMISATION 31
+Similarly, we haveG(π ′k, R(ηmk1 ))→G(π ′, R(η1)) ask→ ∞. Then, using the
+inequality
+ˆvγmk (G(π′k, R(ηmk1 )))−ˆvγ(G(π′, R(η1)))
+≤
+ˆvγmk (G(π′k, R(ηmk1 )))−ˆvγ(G(π′k, R(ηmk1 )))
++|ˆvγ(G(π′k, R(ηmk1 )))−ˆvγ(G(π′, R(η1)))|,
+the continuity of ˆvγ and the fact that ˆv γmk converges uniformly to ˆvγ, we obtain
+ˆvγmk (G(π′k, R(ηmk1 )))→ˆv γ(G(π′, R(η1))) ask→ ∞. Using a similar argument we
+can show ˆvγ(G(π′k, R(η1)))→ˆv γ(G(π′, R(η1))) ask→ ∞. Thus, using Assump-
+tion (A3′′), from (5.7), we obtain ∆ k →0 ask→ ∞. This is a contradiction since
+it was assumed that ∆ k →a >0. The proof is complete.□
+6.Examples
+In this section, we present a series of examples illustrating our results. First,
+we discuss exemplary settings where all the main assumptions used in this paper
+could be explicitly verified. Then, we present numerical simulations confirming the
+convergence results from Section 4 and Section 5.
+We start by exhibiting concrete market models for which assumptions (A1)–(A5)
+hold.
+Example 6.1(Heavy positive tails).Letη i ≡1 and let the one-period log-returns
+r(1) = (r1(1), . . . , rd(1)) have independent components, each with a density positive
+onR, and such that light left tail (i.e.E[e θ(ri(1))− ]<∞for everyθ >0, as for a
+Gaussian or exponentially tempered left tail) and a heavy right tail satisfying
+E
+
+(ri(1))+ <∞andE eri(1) =∞,(6.1)
+for instanceP[r i(1)> t]∼t −2 ast→ ∞. Then (A1) and (A2) hold trivially. Next,
+note that for anyγ≤0, by the light left tail condition, we have
+E[eγr1(1)] =E[1 {r1(1)>0}eγr1(1) + 1{r1(1)≤0}eγr1(1)]≤1 +E[e |γ|(r1(1))− ]<∞.
+Thus, using the facts that
+E[eγmin i=1,...,d ri(1)] =E[ max
+i=1,...,d
+eγri(1)]≤
+dX
+i=1
+E[eγri(1)]<∞,
+E[ max
+i=1,...,d
+ri(1)]≤
+dX
+i=1
+E[(ri(1))+]<∞,
+we get (A3). Moreover, the components have full support onR d, so (A4) holds.
+Finally, for anyiand anyπ ′ ∈ Swithπ′i = 0, the independence of the components
+yields
+E
+
+Ri(1)⟨π ′, R(1)⟩γ−1 =E[R i(1)]E ⟨π′, R(1)⟩γ−1 =∞,
+becauseE[R i(1)] =E[e ri(1)] =∞by (6.1), while, recallingγ≤0, we have
+E[⟨π′, R(1)⟩γ−1]≤π ′γ−1j E[e(γ−1)rj (1)]<∞
+for anyjwithπ ′j >0, again by the light left tails. Since the right-hand side of (3.30)
+is finite, the resulting infinite numerator at the left-hand side (its denominator be-
+ing finite by (A3)) makes (A5) hold for everyγ≤0. Consequently, all assump-
+tions (A1)–(A5) are satisfied. The same conclusion holds for an exponential-L´ evy
+32 LONG-RUN RISK-SENSITIVE PORTFOLIO OPTIMISATION
+model whose L´ evy measure has a heavy positive tail,
+R
+x>1 ex νi(dx) =∞together
+with
+R
+x>1 x νi(dx)<∞, and a Brownian or exponentially tempered negative part.
+Example 6.2(Log-normal returns).Let lnSbe a multivariate Brownian mo-
+tion with drift and letη i ≡1. Then, (A1) and (A2) hold trivially. Also, as the
+Gaussian log-returns have all exponential moments andR(η 1) has full support, we
+have (A3) and (A4). It remains to verify the growth condition (A5). Here, the
+ratio from (3.30) could be bounded explicitly, as we show in the exemplary setting.
+More specifically, following Remark 4.6, we focus onγ= 0 and for simplicity we set
+d= 2. Then, for a boundary pointπ ′, the ratio in (3.30) is a ratio of log-normal
+moments. Thus, writingr 1(η1)−r 2(η1)∼ N(µ∆, σ2∆), condition (A5) at the two
+verticesπ ′ = (0,1) andπ ′ = (1,0) reads
+e µ∆+σ2∆/2 >¯s−1(1 +C) ande −µ∆+σ2∆/2 >¯s−1(1 +C),
+or equivalentlyσ 2∆ >2 ln  ¯s−1(1 +C)  + 2|µ∆|. In Example 6.3 we provide an
+explicit set of parameters, where this inequality is satisfied.
+Now, we numerically verify the convergence results stated in the paper, i.e.
+Theorem 4.1, Theorem 4.5, and Theorem 5.1.
+Example 6.3.In this example, we illustrate the vanishing gamma asymptotics
+results from Section 4. To do this, we consider a two-asset portfolio with determin-
+istic investment opportunities arrivalsη i ≡1. Logarithmic returns for the periods
+[i, i+ 1] are i.i.d. and normally distributed with
+ r1(i, i+ 1)
+r2(i, i+ 1))
+
+∼ N2 (µ,Σ) withµ:=
+0.15
+0.12
+
+,Σ :=
+ 0.05−0.03
+−0.03 0.04
+
+,
+and proportional transaction costsc:=h:= [0.0005,0.0005]. It should be noted
+that the first asset has both a higher expected value and a higher variance of the
+log-returns. Thus, the risk-averse investor in the optimal strategy needs to balance
+return maximisation with risk control.
+First, let us use Example 6.2 to verify the model assumptions. In fact, us-
+ing the notation from this example, we haveµ ∆ = 0.03,σ 2∆ = 0.15, and ¯c:=
+maxi=1,...,d max(ci, hi) = 0.0005, so ¯s −1(1 +C)≈1.002 and 2 ln  ¯s−1(1 +C)  +
+2|µ∆| ≈0.064. Thus, the bound is met with room to spare. In fact, a direct com-
+putation shows that (A5) holds throughout the rangeγ∈[−2,0] used in Figure 1,
+the two vertices ratios in (3.30) ranging over [1.05,1.28] against a threshold of at
+most 1.004.
+Using value iteration with 15 iterations on a discretized grid of portfolio weights,
+we compute the optimal ergodic portfolio strategies for risk-sensitive criterion (1.1)
+withγ∈ {−2,−1.5,−1,−0.5,−0.25,−0.1,−0.01,0}. As seen in the left panel of
+Figure 1, the value of the problem increases monotonically to the optimal value of
+the risk-neutral problem asγincreases to 0. Additionally, we evaluate the ergodic
+value of the risk-neutral strategy when applied to the functional corresponding to
+differentγ. As proved in Theorem 4.4, the difference between the optimal value and
+the value corresponding to the risk-neutral strategy converges to 0 asγconverges
+to 0, confirming that the risk-neutral strategy is almost optimal for the risk-averse
+problem whenγis close to 0. This is additionally justified in the right panel of
+Figure 1, where we present the optimal strategy from Theorem 2.2 for variousγ.
+Note that, on the plot, it is enough to show only the first coordinates of the pre-
+rebalancing and post-rebalancing weights, as the problem is two-dimensional and
+LONG-RUN RISK-SENSITIVE PORTFOLIO OPTIMISATION 33
+
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+*DPPD
+
+
+
+
+
+6KDUHRIULVNQHXWUDOHUJRGLFYDOXH
+(UJRGLFYDOXHYVJDPPD
+2SWLPDOVWUDWHJ\
+5LVNQHXWUDOVWUDWHJ\
+     
+&XUUHQWILUVWZHLJKW
+
+
+
+
+
+1H[WILUVWZHLJKW
+2SWLPDOVWUDWHJ\IRUGLIIHUHQWJDPPDYDOXHV
+JDPPD 
+JDPPD 
+JDPPD 
+JDPPD 
+JDPPD 
+JDPPD 
+JDPPD 
+JDPPD 
+Figure 1.Optimal values and optimal strategies in Example 6.3.
+The left panel shows the ratios of optimal values (blue dots) and
+values corresponding to the risk-neutral strategy (orange dots) of
+the underlying problems (for variousγ) to the optimal value of the
+risk-neutral problem. The right panel shows the optimal strategies
+for differentγ. On the X axis, there is the first coordinateπ 1 of
+the pre-rebalancing weights (π 1,1−π 1) while on theYaxis there
+is the first coordinateπ ′1 of the optimal after-rebalancing weights
+(π′1,1−π ′1).
+the coordinates sum up to 1. As expected, the optimal strategies exhibit increasing
+conservatism whenγbecomes more negative, with a smaller proportion of capital
+invested in the first asset. Whenγconverges to 0, the optimal strategies converge
+to each other, as shown in Theorem 4.5.
+Example 6.4.In this example, we validate the convergence of discretised problem
+from Section 5. More specifically, we assume thatη i are i.i.d. exponential random
+variables with the rate parameterλ= 1. Also, for variousm, we consider the
+discretised waiting timesη mi given by (5.1); note that in this setting (η mi )∞i=1 are
+i.i.d. with geometric distribution onN ∗ and the probability of success 1−e −λ2−m .
+Next, we setd= 2 and assume that the price process follows the bivariate Black-
+Scholes dynamics, or, equivalently, the log-returns satisfy
+ r1(t)
+r2(t))
+
+=µt+ Σ 1/2Wt,
+whereµand Σ are as in Example 6.3, and (W t) is the standard bivariate Brownian
+motion; note that this is simply a continuous-time version of the model studied in
+Example 6.3. Finally, we setγ=−2.
+Using value iteration with 35 iterations on a discretized grid of portfolio weights,
+we compute the optimal value of the problem stated in (5.2) form∈ {1,2, . . . ,10}.
+As seen in the left panel of Figure 2, the optimal value of the problem quickly
+converges, with relative error smaller than 0.001 form= 7 (mesh grid 2−7 = 1/128).
+This is in line with Theorem 5.1, which shows that the discretised problem converges
+to its continuous-time version. Also, the right panel of Figure 2 shows the expected
+value of the waiting timesE[η mi ] againstm. Visible convergence is aligned with the
+fact thatE[η mi ]→E[η i] = 1/λasm→ ∞.
+34 LONG-RUN RISK-SENSITIVE PORTFOLIO OPTIMISATION
+     
+UHILQHP HQWOHYHOmP HVK2 m
+
+
+
+
+
+
+6KDUHRIRSWLPDOYDOXHDWILQHVWJULG
+2SWLPDOYDOXHYVJULGUHILQHPHQW
+TXDGUDWXUH
+     
+UHILQHP HQWOHYHOmP HVK2 m
+
+
+
+
+
+
+[ m]
+([SHFWHGZDLWLQJWLPHYVJULGUHILQHPHQW
+Figure 2.Optimal values and expected waiting times in Exam-
+ple 6.4. The left panel shows the ratios of optimal values cor-
+responding to differentmto the optimal value corresponding to
+m= 10. The right panel shows the expected value of the waiting
+timeE[η mi ] for differentm.
+Declaration of generative AI use
+During the preparation of this work, the authors used large language model assis-
+tants to support proof idea generation, proofreading, and code writing for numerical
+examples. All AI-assisted output was used under supervision: the authors verified
+every derivation and numerical result and edited the text as needed. The authors
+take full responsibility for the content of the publication.
+Funding
+Damian Jelito and  Lukasz Stettner acknowledge research support by Polish Na-
+tional Science Centre grant no. 2024/53/B/ST1/00703.
+References
+Applebaum, D. (2009),L´ evy Processes and Stochastic Calculus, Cambridge Studies
+in Advanced Mathematics, 2 edn, Cambridge University Press.
+Arapostathis, A., Biswas, A. and Kumar, K. S. (2016), ‘Risk-sensitive control
+and an abstract Collatz–Wielandt formula’,Journal of Theoretical Probability
+29(4), 1458–1484.
+Bartl, D. (2019), ‘Exponential utility maximization under model uncertainty for
+unbounded endowments’,The Annals of Applied Probability29(1), 577–612.
+B¨ auerle, N. and Rieder, U. (2011),Markov decision processes with applications to
+finance, Springer.
+B¨ auerle, N. and Rieder, U. (2014), ‘More risk-sensitive Markov decision processes’,
+Mathematics of Operations Research39(1), 105–120.
+Bielecki, T. R. and Pliska, S. R. (1999), ‘Risk-sensitive dynamic asset management’,
+Applied Mathematics & Optimization39(3), 337–360.
+Bielecki, T. R. and Pliska, S. R. (2000), ‘Risk sensitive asset management with
+transaction costs’,Finance and Stochastics4, 1–33.
+Bielecki, T. R. and Pliska, S. R. (2003), ‘Economic properties of the risk sensitive
+criterion for portfolio management’,Review of Accounting and Finance2, 3–17.
+LONG-RUN RISK-SENSITIVE PORTFOLIO OPTIMISATION 35
+Biswas, A. and Borkar, V. (2023), ‘Ergodic risk-sensitive control – a survey’,Annual
+Reviews in Control55.
+Bo, L., Liao, H. and Yu, X. (2022), ‘Risk-sensitive credit portfolio optimization
+under partial information and contagion risk’,The Annals of Applied Probability
+32(4), 2355–2399.
+Bonsall, F. (1962),Lectures On Some Fixed Point Theorems Of Functional Analy-
+sis, Tata Institute of Fundamental Research.
+Borkar, V. S. and Meyn, S. P. (2002), ‘Risk-sensitive optimal control for Markov
+decision processes with monotone cost’,Mathematics of Operations Research
+27(1), 192–209.
+Cavazos-Cadena, R. and Hern´ andez-Hern´ andez, D. (2009), ‘Necessary and sufficient
+conditions for a solution to the risk-sensitive Poisson equation on a finite state
+space’,Systems & Control Letters58, 254–258.
+Cavazos-Cadena, R. and Hern´ andez-Hern´ andez, D. (2017), ‘Vanishing discount ap-
+proximations in controlled Markov chains with risk-sensitive average criterion’,
+Advances in Applied Probability50(1), 204–230.
+Cherny, A. S. and Madan, D. B. (2009), ‘New measures for performance evaluation’,
+The Review of Financial Studies22(7), 2571–2606.
+Davis, M. and Lleo, S. (2014),Risk-sensitive Investment Management, Vol. 19,
+World Scientific.
+Di Masi, G. B. and Stettner,  L. (1999), ‘Risk-sensitive control of discrete-time
+Markov processes with infinite horizon’,SIAM Journal on Control and Opti-
+mization38(1), 61–78.
+Di Masi, G. B. and Stettner,  L. (2007), ‘Infinite horizon risk sensitive control of
+discrete time Markov processes under minorization property’,SIAM Journal on
+Control and Optimization46(1), 231–252.
+Fleming, W. H. and Sheu, S. J. (2000), ‘Risk-sensitive control and an optimal
+investment model’,Mathematical Finance10(2), 197–213.
+F¨ ollmer, H. and Schied, A. (2016),Stochastic finance. An introduction in discrete
+time, de Gruyter Studies in Mathematics, 4 edn, Walter de Gruyter & Co., Berlin.
+Guasoni, P. and Robertson, S. (2012), ‘Portfolios and risk premia for the long run’,
+The Annals of Applied Probability22(1).
+Hairer, M. and Mattingly, J. C. (2011), Yet another look at Harris’ ergodic theo-
+rem for Markov chains,in‘Seminar on Stochastic Analysis, Random Fields and
+Applications VI’, Springer, pp. 109–117.
+Hardy, G. H., Littlewood, J. E. and Polya, G. (1934),Inequalities, Cambridge
+University Press.
+Ja´ skiewicz, A. (2007), ‘Average optimality for risk-sensitive control with general
+state space’,The Annals of Applied Probability17(2), 654–675.
+Jelito, D., Pitera, M. and Stettner,  L. (2020), ‘Long-run risk sensitive impulse
+control’,SIAM Journal on Control and Optimization58(4), 2446–2468.
+Jelito, D., Pitera, M. and Stettner,  L. (2021), ‘Risk sensitive optimal stopping’,
+Stochastic Processes and their Applications136, 125–144.
+Jelito, D. and Stettner,  L. (2022), ‘Risk-sensitive optimal stopping with unbounded
+terminal cost function’,Electronic Journal of Probability27, 1–30.
+Jelito, D. and Stettner,  L. (2023), ‘Asymptotics of impulse control problem with
+multiplicative reward’,Applied Mathematics & Optimization88.
+36 LONG-RUN RISK-SENSITIVE PORTFOLIO OPTIMISATION
+Korn, R. (1999), ‘Some applications of impulse control in mathematical finance’,
+Mathematical Methods of Operations Research50, 493–518.
+Kupper, M. and Schachermayer, W. (2009), ‘Representation results for law invari-
+ant time consistent functions’,Mathematics and Financial Economics2(3), 189–
+210.
+MacLean, L. C., Thorp, E. O. and Ziemba, W. T. (2011),The Kelly Capital Growth
+Investment Criterion, World Scientific.
+Markowitz, H. (1952), ‘Portfolio selection’,The Journal of Finance7(1), 77–91.
+Nagai, H. (2003), ‘Optimal strategies for risk-sensitive portfolio optimization prob-
+lems for general factor models’,SIAM Journal on Control and Optimization
+41(6), 1779–1800.
+Nagai, H. (2006), ‘Risk-sensitive quasi-variational inequalities for optimal invest-
+ment with general transaction costs’,Asymptotic Analysis48(3), 243–265.
+Palczewski, J. and Stettner,  L. (2017), ‘Impulse control maximizing average cost
+per unit time: A nonuniformly ergodic case’,SIAM Journal on Control and
+Optimization55(2), 936–960.
+Pitera, M. and Stettner,  L. (2016), ‘Long run risk sensitive portfolio with general
+factors’,Mathematical Methods of Operations Research83(2), 265–293.
+Pitera, M. and Stettner,  L. (2021), ‘Long-run risk sensitive dyadic impulse control’,
+Applied Mathematics & Optimization84(1), 19–47.
+Pitera, M. and Stettner, L. (2023), ‘Discrete-time risk sensitive portfolio optimiza-
+tion with proportional transaction costs’,Mathematical Finance33(4), 1287–
+1313.
+Prigent, J.-L. (2007),Portfolio optimization and performance analysis, CRC Press.
+Shen, Y., Stannat, W. and Obermayer, K. (2013), ‘Risk-sensitive Markov control
+processes’,SIAM Journal on Control and Optimization51(5), 3652–3672.
+Stettner,  L. (2011), Asymptotics of HARA utility from terminal wealth under pro-
+portional transaction costs with decision lag or execution delay and obligatory
+diversification,inG. Di Nunno and B. Øksendal, eds, ‘Advanced Mathematical
+Methods for Finance’, Springer Berlin Heidelberg, Berlin, Heidelberg, pp. 509–
+536.
+Stettner,  L. (2022), ‘On an approximation of average cost per unit time im-
+pulse control of Markov processes’,SIAM Journal on Control and Optimization
+60(4), 2115–2131.
+Zeidler, E. (1986),Nonlinear functional analysis and its applications. I: Fixed-Point
+Theorems, Springer-Verlag.

@@ -1,0 +1,1775 @@
+arXiv 1902.01265  https://arxiv.org/abs/1902.01265
+
+Surprised by the Hot Hand Fallacy?
+A Truth in the Law of Small Numbers
+Joshua B. Miller and Adam Sanjurjo ∗†‡
+October 17, 2018
+Published: Econometrica, Vol. 86, No. 6 (November 2018), 2019-2047 [link]
+Abstract
+We prove that a subtle but substantial bias exists in a common measure of the conditional
+dependence of present outcomes on streaks of past outcomes in sequential data. The magnitude
+of this streak selection bias generally decreases as the sequence gets longer, but increases in
+streak length, and remains substantial for a range of sequence lengths often used in empirical
+work. We observe that the canonical study in the inﬂuential hot hand fallacy literature, along
+with replications, are vulnerable to the bias. Upon correcting for the bias we ﬁnd that the
+long-standing conclusions of the canonical study are reversed.
+JEL Classiﬁcation Numbers: C12; C14; C18;C19; C91; D03; G02.
+Keywords: Law of Small Numbers; Alternation Bias; Negative Recency Bias; Gambler’s Fal-
+lacy; Hot Hand Fallacy; Hot Hand Eﬀect; Sequential Decision Making; Sequential Data; Selection
+Bias; Finite Sample Bias; Small Sample Bias.
+∗Department of Economics (F AE), University of Alicante. Financial support from the Department of Decision Sciences at
+Bocconi University, and the Spanish Ministries of Education and Science and Economics and Competitiveness (ECO2015-65820-
+P) and Generalitat Valenciana (Research Projects Gruposo3/086 and PROMETEO/2013/037) is gratefully acknowledged.
+†Both authors contributed equally, with names listed in alphabetical order.
+‡This draft has beneﬁtted from helpful comments and suggestions from the editor and anonymous reviewers, as
+well as Jason Abaluck, Jose Apesteguia, David Arathorn, Jeremy Arkes, Maya Bar-Hillel, Phil Birnbaum, Daniel
+Benjamin, Marco Bonetti, Colin Camerer, Juan Carrillo, Gary Charness, Ben Cohen, Vincent Crawford, Martin
+Dufwenberg, Jordan Ellenberg, Florian Ederer, Jonah Gabry, Andrew Gelman, Ben Gillen, Tom Gilovich, Maria
+Glymour, Uri Gneezy, Daniel Goldstein, Daniel Houser, Richard Jagacinski, Daniel Kahan, Daniel Kahneman, Erik
+Kimbrough, Dan Levin, Elliot Ludvig, Mark Machina, Daniel Martin, Filippo Massari, Guy Molyneux, Gidi Nave,
+Muriel Niederle, Christopher Olivola, Andreas Ortmann, Ryan Oprea, Carlos Oyarzun, Judea Pearl, David Rahman,
+Justin Rao, Alan Reifman, Pedro Rey-Biel, Yosef Rinott, Aldo Rustichini, Ricardo Serrano-Padial, Bill Sandholm,
+Vernon Smith, Lones Smith, Connan Snider, Joel Sobel, Charlie Sprenger, Daniel Stone, Sigrid Suetens, Dmitry
+Taubinsky, Richard Thaler, Michael J. Wiener, Nat Wilcox, and Bart Wilson. We would also like to thank seminar
+participants at Caltech, City U. London, Chapman U., Claremont Graduate School, Columbia U., Drexel U., George
+Mason U., New York University, NHH Norway, Max Planck Institute for Human Development (ABC), Microsoft
+Research, U. of Minnesota, Naval Postgraduate School, the Ohio State U., Santa Clara U., Stanford U., Tilburg U.,
+U. de Alicante, U. del Pa´ ıs Vasco, U. of Amsterdam, UC Berkeley, UC Irvine, U. of Pittsburg, UC Santa Cruz, UC
+San Diego, U. New South Wales, U. Southern California, U. of Queensland, U. of Wellington, U. of Wisconsin, U. of
+Zurich, Washington State U., WZB Social Science Center, as well as conference participants at Gary’s Conference,
+IMEBE Rome 2016, M-BEES Maastricht 2015, SITE Stanford U. 2016, 11th World Congress of The Econometric
+Society, The 30th Annual Congress of the European Economic Association, and the 14th TIBER Symposium on
+Psychology and Economics. All mistakes and omissions remain our own.
+1
+arXiv:1902.01265v1  [econ.GN]  4 Feb 2019
+1 Introduction
+Jack the researcher takes a coin from his pocket and decides to ﬂip it, say, one hundred times. As
+he is curious about what outcome typically follows a heads, whenever he ﬂips a heads he commits
+to writing down the outcome of the next ﬂip on the scrap of paper next to him. Upon completing
+the one hundred ﬂips, Jack of course expects the proportion of heads written on the scrap of paper
+to be one-half. Shockingly, Jack is wrong. For a fair coin, the expected proportion of heads is
+smaller than one-half.
+We prove that for any ﬁnite sequence of binary data, in which each outcome of “success” or
+“failure” is determined by an i.i.d. random variable, the proportion of successes among the outcomes
+that immediately follow a streak of consecutive successes is expected to be strictly less than the
+underlying (conditional) probability of success. 1 While the magnitude of this streak selection bias
+generally decreases as the sequence gets longer, it increases in streak length, and remains substantial
+for a range of sequence lengths often used in empirical work.
+We observe that the canonical study in the inﬂuential hot hand fallacy literature,2 Gilovich,
+Vallone, and Tversky (1985), along with replications, have mistakenly employed a biased selection
+procedure that is analogous to Jack’s. 3 Upon conducting a de-biased analysis we ﬁnd that the
+long-standing conclusions of the canonical study are reversed.
+To illustrate how the selection procedure that Jack uses in the opening example leads to a bias,
+consider the simplest case in which he decides to ﬂip the coin three times, rather than 100. In
+this case there are only 2 3 = 8 possibilities for the single three-ﬂip sequence that Jack will observe.
+Column one of Table 1 lists these, with the respective ﬂips that Jack would record (write down)
+underlined for each possible sequence. Column two gives the respective proportion of heads on
+recorded ﬂips for each possible sequence. As Jack is equally likely to encounter each sequence, one
+can see that the expected proportion is strictly less than 1 /2, and in this case is 5/12. 4 Notice
+that because the sequence (rather than the ﬂip) is the primitive outcome, the weight that the
+(conditional) expectation places on each sequence’s associated proportion is independent of the
+number of recorded ﬂips. 5
+In Section 2 we prove the existence of the streak selection bias for the general case, then quantify
+it with a formula that we provide. In the case of streaks of lengthk = 1 (as in the examples discussed
+1The expectation is conditional on the appearance of at least one streak of k consecutive heads within the ﬁrst n− 1
+trials, where n≥ 3 and 1≤k<n − 1.
+2The hot hand fallacy has been given considerable weight as a candidate explanation for various puzzles and behavioral
+anomalies identiﬁed in the domains of ﬁnancial markets, sports wagering, casino gambling, and lotteries (Arkes 2011;
+Avery and Chevalier 1999; Barberis and Thaler 2003; Brown and Sauer 1993; Camerer 1989; Croson and Sundali
+2005; De Bondt 1993; De Long, Shleifer, Summers, and Waldmann 1991; Durham, Hertzel, and Martin 2005; Galbo-
+Jørgensen, Suetens, and Tyran 2016; Guryan and Kearney 2008; Kahneman and Riepe 1998; Lee and Smith 2002; Loh
+and Warachka 2012; Malkiel 2011; Narayanan and Manchanda 2012; Paul and Weinbach 2005; Rabin and Vayanos
+2010; Sinkey and Logan 2013; Smith, Levere, and Kurtzman 2009; Sundali and Croson 2006; Xu and Harvey 2014;
+2
+Table 1: Column one lists the eight sequences that are possible for three ﬂips of a fair coin. The proportion
+of heads on the ﬂips that immediately follow one or more heads is reported in Column two, for each sequence
+that has at least one such ﬂip. The (conditional) expectation of the proportion, which is simply its arithmetic
+average across the six equally likely sequences for which it is deﬁned, is reported in the bottom row.
+Three ﬂip Proportion of Hs
+sequence on recorded ﬂips
+TTT -
+TTH -
+THT 0
+HTT 0
+THH 1
+HTH 0
+HHT 12
+HHH 1
+Expectation: 512
+above) the formula admits a simple representation, and the bias is tightly related to a form of ﬁnite
+sample bias that shows up in autoregressive coeﬃcient estimators (Shaman and Stine 1988; Yule
+1926).6 By contrast, for the more general case of k > 1 the streak selection bias is typically of
+larger magnitude, and the formula does not appear to admit a simple representation. 7 In this case
+we provide a formula for the bias that is numerically tractable for sequence lengths commonly used
+in the literature that we discuss.
+The bias has important implications for the analysis of streak eﬀects in the hot hand fallacy
+literature. The fallacy refers to the conclusion of the seminal work of Gilovich, Vallone, and
+Tversky (1985; henceforth GVT), in which the authors found that despite the near ubiquitous
+belief among basketball fans and experts that there is momentum in shooting performance (“hot
+Yuan, Sun, and Siu 2014).
+3For an extensive survey of the hot hand fallacy literature see (Miller and Sanjurjo 2017a).
+4The expectation is conditional on Jack having at least one ﬂip to record.
+5By contrast, if Jack were instead to observe multiple sequences generated from the same coin, then he could weight
+each proportion according to its number of recorded ﬂips when taking the average proportion across sequences. This
+would result in a relatively smaller bias that vanishes in the limit (see Appendix A.2).
+6In the context of time series regression this bias is known as the Hurwicz bias (Hurwicz 1950), which is exacerbated
+when one introduces ﬁxed eﬀects into a time series model with few time periods (Nerlove 1967, 1971; Nickell 1981).
+In Web Appendix F.1, we use a sampling-without-replacement argument to show that in the case of k = 1 the streak
+selection bias, along with ﬁnite sample bias for autocorrelation (and time series), are essentially equivalent to: (i)
+a form of selection bias known in the statistics literature as Berkson’s bias, or Berkson’s paradox (Berkson 1946;
+Roberts, Spitzer, Delmore, and Sackett 1978), and (ii) several classic conditional probability puzzles.
+7In Web Appendix D we show that the bias can be decomposed into two factors: a form of sampling-without-
+replacement, and a stronger bias driven by the overlapping nature of the selection procedure. In Web Appendix F.2
+we show how the bias due to the overlapping nature of the selection procedure is related to the overlapping words
+paradox (Guibas and Odlyzko 1981).
+3
+hand” or “streak” shooting) the conclusion from their statistical analyses was that momentum did
+not exist.8 The result has long been considered a surprising and stark exhibit of irrational behavior,
+as professional players and coaches have consistently rejected the conclusion, and its implications
+for their decision making. Indeed, in the years since the seminal paper was published a consensus
+has emerged that the hot hand is a “myth,” and the associated belief a “massive and widespread
+cognitive illusion” (Kahneman 2011; Thaler and Sunstein 2008).
+We ﬁnd that GVT’s critical test of hot hand shooting is vulnerable to the bias for the following
+simple reason: just as it is (surprisingly) incorrect to expect a fair coin ﬂipped 100 times to yield
+heads half of the time on those ﬂips that immediately follow three consecutive heads, it is incorrect
+to expect a consistent 50 percent (Bernoulli i.i.d.) shooter who has taken 100 shots to make half
+of the shots that immediately follow a streak of three hits. Thus, after ﬁrst replicating the original
+results using GVT’s: (i) raw data, (ii) biased measures, and (iii) statistical tests, we perform a
+bias correction to GVT’s measures, then repeat their statistical tests. We also run some additional
+(unbiased) tests as robustness checks. In contrast with GVT’s results, the bias-corrected re-analysis
+reveals signiﬁcant evidence of streak shooting, with large eﬀect sizes.
+In a brief discussion of the related literature in Section 3, we ﬁrst observe that the two repli-
+cations of GVT (Avugos, Bar-Eli, Ritov, and Sher 2013a; Koehler and Conley 2003) are similarly
+vulnerable to the bias. We illustrate how the results of Avugos et al. (2013a), a close replication
+of GVT, similarly reverse when the bias is corrected for. Miller and Sanjurjo (2015b) show that
+the results of Koehler and Conley (2003), which has been referred to as “an ideal situation in
+which to study the hot hand” (Thaler and Sunstein 2008), reverse when an unbiased (and more
+powered) analysis is performed. These results in turn agree with the unbiased analyses performed
+on all remaining extant controlled shooting datasets in Miller and Sanjurjo (2014). Conservative
+estimates of hot hand eﬀect sizes are consistently moderate to large across studies.
+It follows from these results that the hot hand is not a myth, and that the associated belief
+is not a cognitive illusion. In addition, because researchers have: (i) accepted the null hypothesis
+that players have a ﬁxed probability of success, and (ii) treated the mere belief in the hot hand as
+a cognitive illusion, the hot hand fallacy itself can be viewed as a fallacy. 9
+Finally, because the bias is subtle and (initially) surprising, even for people well-versed in
+probability and statistics, those unaware of it may be susceptible to being misled, or exploited. 10
+8In particular, they observed that basketball shooting is “analogous to coin tossing” and “adequately described by
+a simple binomial model.” From this, they concluded that the belief in the hot hand was both “erroneous” and “a
+powerful and widely shared cognitive illusion” (Gilovich et al. 1985, pp.312–313)
+9While our evidence reveals that belief in the hot hand is not a fallacy, it remains possible that those who believe in
+the hot hand hold beliefs that are too strong (or too weak), or cannot accurately detect the hot hand when it occurs.
+In Section 3.5 we brieﬂy discuss existing evidence on beliefs.
+10In informal conversations with researchers, and surveys of students, we have found a near-universal belief that the
+sample proportion should be equal to the underlying probability, in expectation. The conviction with which these
+beliefs are often held is notable, and reminiscent of the arguments that surrounded the classic Monty Hall problem
+4
+On the most basic level, it is possible that a na¨ ıve observer could be convinced that negative
+sequential dependence exists in an i.i.d. random process if sample size information (i.e. the number
+of ﬂips that Jack records) is obscured.11 More subtly, the bias can be leveraged to manipulate people
+into believing that the outcomes of an unpredictable process can be predicted at rates better than
+chance.12 Lastly, the bias can be applied in a straightforward way to construct gambling games
+that appear actuarially fair, but are not. 13
+2 The Streak Selection Bias
+Let X ={Xi}ni=1 be a sequence of binary random variables, with Xi = 1 a “success” and Xi = 0
+a “failure.” A natural procedure for estimating the probability of success on trial t, conditional
+on trial t immediately following k consecutive successes, is to ﬁrst select the subset of trials that
+immediately follow k consecutive successes Ik(X) :={i :∏i−1j=i−kXj = 1}⊆{ k + 1,...,n }, then
+calculate the proportion of successes on these trials. 14 The following theorem establishes that when
+{Xi}ni=1 is a sequence of i.i.d random variables, with probability of successp and ﬁxed lengthn, this
+procedure yields a biased estimator of the conditional probability, P(Xt = 1| ∏t−1j=t−kXj = 1)≡p.
+Theorem 1 Let X ={Xi}ni=1, n≥ 3, be a sequence of independent Bernoulli trials, each with
+probability of success 0 < p <1. Let ˆPk(X) be the proportion of successes on the subset of trials
+Ik(X) that immediately follow k consecutive successes, i.e. ˆPk(X) := ∑i∈Ik(X)Xi/|Ik(X)|. ˆPk
+is a biased estimator of P(Xt = 1 | ∏t−1j=t−kXj = 1)≡ p for all k such that 1≤ k≤ n− 2. In
+particular,
+E
+[
+ˆPk(X)
+⏐⏐⏐ Ik(X)⁄=∅]<p (1)
+Outline of Proof: In the proof contained in Appendix A we begin by showing that the conditional
+expectation E[ ˆPk(X)|Ik(X)⁄=∅] is equal to the conditional probability P(Xτ = 1|Ik(X)⁄=∅),
+(Friedman 1998; Nalebuﬀ 1987; Selvin 1975; Vos Savant 1990). See Miller and Sanjurjo (2015a) for more details on
+the connection between the selection bias, the Monty Hall problem, and other conditional probability puzzles.
+11In particular, Miller and Sanjurjo (2016) show that the bias introduced here, in conjunction with a quasi-Bayesian
+model of decision making under sample size neglect (Benjamin, Rabin, and Raymond 2014; Griﬃn and Tversky 1992;
+Kahneman and Tversky 1972), provides a novel structural candidate explanation for the persistence of gambler’s
+fallacy beliefs.
+12For example, suppose that a predictor observes successive realizations from a binary (or binarized) i.i.d. random
+process (e.g. daily stock price movements), and is evaluated according to the success rate of her predictions over, say,
+three months. If the predictor is given the freedom of when to predict, then she can exceed chance in her expected
+success rate simply by predicting a reversal whenever there is a streak of consecutive outcomes of the same kind.
+13A simple example is to sell the following lottery ticket for $5. A fair coin will be ﬂipped 4 times. For each ﬂip the
+outcome will be recorded if and only if the previous ﬂip is a heads. If the proportion of recorded heads is strictly
+greater than one-half then the ticket pays $10; if the proportion is strictly less than one-half then the ticket pays $0;
+if the proportion is exactly equal to one-half, or if no ﬂip is immediately preceded by a heads, then a new sequence
+of 4 ﬂips is generated. While, intuitively, it seems that the expected value of the lottery must be $5, it is instead $4.
+14In fact, this procedure yields the maximum likelihood estimate for P(Xt = 1| ∏t−1j=t−kXj = 1).
+5
+where τ is a trial drawn (uniformly) at random from the set of selected trials Ik(X). Next,
+we show that for all eligible trials t∈ Ik(X) we have that P(Xt = 1|τ = t,Ik(X)⁄=∅)≤ p,
+with the inequality strict for t < n, which implies that P(Xτ = 1|Ik(X)⁄=∅) < p. The strict
+inequality for t < nfollows from an application of Bayes’ rule. In particular, we observe that
+P(Xt = 1|τ = t,Ik(X)⁄=∅) = P(Xt = 1|τ = t,∏t−1i=t−kXi = 1)∝ P(τ = t|Xt = 1,∏t−1i=t−kXi =
+1)× P(Xt = 1|∏t−1i=t−kXt = 1) = P(τ = t|Xt = 1,∏t−1i=t−kXt = 1) ×p, and then argue that
+P(τ =t|Xt = 1,∏t−1i=t−kXi = 1)< P(τ =t|Xt = 0,∏t−1i=t−kXi = 1) fort<n , which guarantees that
+the likelihood ratio (updating factor) is less than one, and yieldsP(Xt = 1|τ =t,∏t−1i=t−kXi = 1)<p
+for t < n. The intuition for why τ = t is more likely when Xt = 0 is the following: because the
+streak of ones (∏t−1i=t−kXi = 1) is interrupted by Xt = 0, the next k trials are necessarily excluded
+from the set Ik(X). This means that when Xt = 0 there are, on average, fewer eligible trials in
+Ik(X) from which to draw (relative to when Xt = 1), which implies that any single trial is more
+likely to be drawn.
+In Web Appendix D we show that the downward bias can be decomposed into two factors: (i)
+sampling-without-replacement: the restriction that the ﬁnite number of available successes places on
+the procedure for selecting trials into Ik(X), and (ii) streak overlap: the additional, and stronger,
+restriction that the arrangement of successes and failures in the sequence places on the procedure
+for selecting trials into Ik(X).
+Though ˆPk(X) is biased, it is straightforward to show that it is a consistent estimator of
+P(Xt = 1| ∏t−1j=t−kXj = 1).15,16
+2.1 Quantifying the bias.
+In Web Appendix E.2 we provide a formula that can be used to calculate E[ ˆPk(X)|Ik(X)⁄=∅ ].
+For the special case of k = 1 a closed form exists, which we provide in Appendix A.3. There does
+not appear to be a simple representation for k> 1.
+Figure 1 contains a plot of E[ ˆPk(X)|Ik(X)⁄=∅ ], as a function of the number of trials in the
+sequence n, and for diﬀerent values of k and p. The dotted lines in the ﬁgure represent the true
+probability of success for p = 0.25, 0.50, and 0.75, respectively. The ﬁve solid lines immediately
+below each dotted line represent the respective expected proportions for each value ofk = 1, 2,..., 5.
+Observe that while the bias does generally decrease as n increases, it can remain substantial even
+15See Appendix A.2 for a proof.
+16It is possible to devise alternative estimators of the conditional probability that are unbiased. To illustrate, if the
+researcher were instead to control the number of selected trials by repeating the experiment until he generates exactly
+m trials that immediately followk consecutive successes, then the proportion would be unbiased. Alternatively, if the
+researcher were to eliminate the overlapping nature of the measure, there would be no bias, even though the number
+of selected trials would still be random. In particular, for a sequence of n trials, one can take each run of successes,
+and if it is of even length 2𝓁, divide it into blocks of two trials; if it is of odd length 2 𝓁− 1 include the right adjacent
+tails and divide it into blocks of two trials. In each case, the run of successes contributes 𝓁 observations.
+6
+0 10 20 30 40 50 60 70 80 90 100
+n
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8Expected Proportion
+k = 1
+k = 2
+k = 3
+k = 4
+k = 5
+p = .75
+p = .5
+p = .25
+Figure 1: The expected value of the proportion of successes on trials that immediately follow k consecutive
+successes, ˆPk(X), as a function of the total number of trials n, for diﬀerent values of k and probabilities of
+successp, using the formula provided in Web Appendix E.
+for long sequences. For example, in the case of n = 100, p = 0.5, and k = 5, the magnitude of the
+bias is .35−.50 =−0.15, and in the case of n = 100, p = 0.25, and k = 3, the magnitude of the
+bias is .16−.25 =−0.09.17
+3 Application to the Hot Hand Fallacy
+This account explains both the formation and maintenance of the erroneous belief in
+the hot hand: if random sequences are perceived as streak shooting, then no amount
+of exposure to such sequences will convince the player, the coach, or the fan that the
+sequences are in fact random. (Gilovich, Vallone, and Tversky [GVT] 1985)
+17The non-monotonicity in n of the curves presented in Figure 1 arises because for any streak length k there is no
+bias when n = k + 1 (because there are only two feasible sequences, which are equally likely), or in the limit (see
+Appendix A.2).
+7
+In their seminal paper GVT ﬁnd no evidence of hot hand shooting in their analysis of basketball
+shooting data, despite the near-unanimous belief in the hot hand among players, coaches, and fans.
+As a result, they conclude that belief in the hot hand is a “powerful and widely shared cognitive
+illusion.” (p. 313).
+3.1 GVT’s analysis
+Empirical approach
+GVT’s “Analysis of Conditional Probabilities” is their main test of hot hand shooting, and provides
+their only measure of the magnitude of the hot hand eﬀect. The goal of their analysis is to determine
+whether a player’s hit probability is higher following a streak of hits than it is following a streak
+of misses.18 To this end, GVT reported each player i’s shooting percentage conditional on having:
+(1) hit the last k shots, ˆPi(hit|k hits), and (2) missed the last k shots, ˆPi(hit|k misses), for streak
+lengths k = 1, 2, 3 (Table 4, p. 307). 19 After informally comparing these shooting percentages for
+individual players, GVT performed a paired t-test of whetherE[ ˆPi(hit|khits )− ˆPi(hit|kmisses )] =
+0, for k = 1, 2, 3.20,21
+In the remainder of this section, we focus our discussion on streaks of length three (or more), as
+in, e.g. Koehler and Conley (2003); Rao (2009b), given that: (i) shorter streak lengths exacerbate
+attenuation bias due to measurement error (see Footnote 21 and Appendix B), and (ii) people
+typically perceive streaks as beginning with the third successive event (Carlson and Shu 2007). In
+any case, robustness checks using diﬀerent streak lengths yield similar results (see Footnotes 29
+and 33 in Section 3.3).
+18GVT explicitly treat hot hand and streak shooting as synonymous (Gilovich et al. 1985, pp. 296-297). Miller and
+Sanjurjo (2014) provide an analysis that distinguishes between hot hand and cold hand shooting, and ﬁnd hot hand
+shooting across all extant controlled shooting datasets, but little in the way of cold hand shooting. Thus, in the
+present analysis we use the terms streakiness and hot hand shooting interchangeably.
+19We abuse our notation from Section 2 here in order to facilitate comparison with GVT’s analysis: we useˆPi(hit|khits )
+for both the random variable ˆPk(X) and its realization ˆPk(x). Similarly, we use ˆPi(hit|k misses) for the proportion
+of successes on trials that immediately follow k consecutive failures.
+20Under the null hypothesis the diﬀerence between each i’s pair of shooting percentages is drawn from a normal
+distribution with mean zero.
+21While GVT’s analysis of conditional probabilities provides their only measure of the magnitude of the hot hand, they
+also analyze the number of runs, serial correlation, and variation of shooting percentage in 4-shot windows. Miller
+and Sanjurjo (2014) show that the runs and serial correlation tests, along with the conditional probability test for
+k = 1, all amount to roughly the same test, and moreover, that they are not suﬃciently powered to identify hot
+hand shooting. The reason why is due to measurement error: the act of hitting a single shot is only a weak signal
+of a change in a player’s underlying probability of success, which leads to an attenuation bias in the estimate of the
+increase in the probability of success associated with entering the hot state (see Appendix B and Stone (2012)’s work
+on measurement error when estimating autocorrelation in ability). The test of variation in 4-shot windows is even
+less powered than the aforementioned tests (Miller and Sanjurjo 2014; Wardrop 1999).
+8
+Data
+GVT analyze shot sequences from basketball players in three contexts: NBA ﬁeld goal data, NBA
+free-throw data, and a controlled shooting experiment with NCAA collegiate players. The shooting
+experiment was GVT’s controlled test of hot hand shooting, designed for the purpose of “eliminating
+the eﬀects of shot selection and defensive pressure” (p. 34), which makes it central to their main
+conclusions. Thus, we focus on this data below when discussing the relevance of the bias to GVT’s
+results.22,23
+In GVT’s controlled shooting experiment 26 players from the Cornell University Mens’ (14)
+and Womens’ (12) basketball teams participated in an incentivized shooting task. Each player shot
+100 times at a distance from which the experimenters determined he/she would make around 50
+percent of the shots. Following each shot the player had to change positions along two symmetric
+arcs—one facing the basket from the left, and the other from the right.
+Results
+In Columns 4 and 5 of Table 2 we use the raw data from GVT to reproduce the shooting percentages,
+ˆPi(hit|3 hits) and ˆPi(hit|3 misses), for each of the 26 players (these are identical to Columns 2
+and 8 of Table 4 in GVT). As indicated in GVT, players on average hit .49 when on a hit streak,
+versus .45 when on a miss streak. GVT’s paired t-test ﬁnds the diﬀerence to be statistically
+indistinguishable from zero, and we replicate this result ( p =.49).
+3.2 The bias in GVT’s analysis
+While GVT’s null hypothesis thatE[ ˆPi(hit|khits )− ˆPi(hit|kmisses )] = 0 seems intuitively correct
+for a consistent shooter with a ﬁxed probability of success pi (i.i.d. Bernoulli), Theorem 1 reveals a
+22From the statistical point of view, the in-game ﬁeld goal data that GVT analyze (Study 2: 76ers, 1980-81 season: 9
+players, 48 home games) is not ideal for the study of hot hand shooting for reasons that are unrelated to the bias. The
+most notable concern with in-game ﬁeld goal data is that the opposing team has incentive to make costly strategic
+adjustments to mitigate the impact of the “hot” player (Dixit and Nalebuﬀ 1991, p. 17). This concern has been
+emphasized by researchers in the hot hand literature (Aharoni and Sarig 2011; Green and Zwiebel 2017), and is not
+merely theoretical, as it has a strong empirical basis. While GVT observed that a shooter’s ﬁeld goal percentage is
+lower after consecutive successes, subsequent studies have shown that with even partial controls for defensive pressure
+(and shot location), this eﬀect is eliminated (Bocskocsky, Ezekowitz, and Stein 2014; Rao 2009a). Further, evidence
+of speciﬁc forms of strategic adjustment has been documented (Aharoni and Sarig 2011; Bocskocsky et al. 2014). See
+Miller and Sanjurjo (2014) for further details.
+23The in-game free throw data that GVT analyze (Study 3: Celtics, 1980-81, 1981-82 seasons: 9 players), while arguably
+controlled, is not ideal for the study of hot hand shooting for a number of reasons: (i) hitting the ﬁrst shot in a
+pair of isolated shots is not typically regarded by fans and players as hot hand shooting (Koehler and Conley 2003),
+presumably due to the high prior probability of success (≈.75), (ii) hitting a single shot is a weak signal of a player’s
+underlying state, which can lead to severe measurement error (Arkes 2013; Stone 2012), (iii) it is vulnerable to an
+omitted variable bias, as free throw pairs are relatively rare, and shots must be aggregated across games and seasons
+in order to have suﬃcient sample size (Miller and Sanjurjo 2014). In any event, subsequent studies of free throw
+data have found evidence that is inconsistent with the conclusions that GVT drew from the Celtics’ data (Aharoni
+and Sarig 2011; Arkes 2010; Goldman and Rao 2012; Miller and Sanjurjo 2014; Wardrop 1995; Yaari and Eisenmann
+2011).
+9
+Table 2: Columns 4 and 5 reproduce the shooting percentages and number of shots that appear in Table 4,
+Columns 2 and 8, from Gilovich et al. (1985) (note: 3 hits (misses) includes streaks of 3, 4, 5, etc.). Column
+6 reports the diﬀerence between the proportions (using the raw data), and column 7 adjusts for the bias (mean
+correction), based on each player’s shooting percentage (probability in this case) and number of shots.
+ˆD3 := ˆP (hit|3 hits)− ˆP (hit|3 misses)
+Player # shots ˆP (hit) ˆP (hit|3 hits) ˆP (hit|3 misses) GVT est. bias adj.
+Males
+1 100 .54 .50 (12) .44 (9) .06 .14
+2 100 .35 .00 (3) .43 (28) −.43 −.33
+3 100 .60 .60 (25) .67 (6) −.07 .02
+4 90 .40 .33 (3) .47 (15) −.13 −.03
+5 100 .42 .33 (6) .75 (12) −.42 −.33
+6 100 .57 .65 (23) .25 (12) .40 .48
+7 75 .56 .65 (17) .29 (7) .36 .47
+8 50 .50 .57 (7) .50 (6) .07 .24
+9 100 .54 .83 (30) .35 (20) .48 .56
+10 100 .60 .57 (21) .57 (7) .00 .09
+11 100 .58 .62 (21) .57 (7) .05 .14
+12 100 .44 .43 (7) .41 (17) .02 .10
+13 100 .61 .50 (18) .40 (5) .10 .19
+14 100 .59 .60 (20) .50 (6) .10 .19
+Females
+1 100 .48 .33 (9) .67 (9) −.33 −.25
+2 100 .34 .40 (5) .43 (28) −.03 .07
+3 100 .39 .50 (8) .36 (25) .14 .23
+4 100 .32 .33 (3) .27 (30) .07 .17
+5 100 .36 .20 (5) .22 (27) −.02 .08
+6 100 .46 .29 (7) .54 (11) −.26 −.18
+7 100 .41 .62 (13) .32 (25) .30 .39
+8 100 .53 .73 (15) .67 (9) .07 .15
+9 100 .45 .50 (8) .46 (13) .04 .12
+10 100 .46 .71 (14) .32 (19) .40 .48
+11 100 .53 .39 (13) .50 (10) −.12 −.04
+12 100 .25 .− (0) .32 (37) . .
+Average .47 .49 .45 .03 .13
+10
+ﬂaw in this reasoning. In particular, we have established that ˆPi(hit|k hits) is expected to be less
+than pi, and ˆPi(hit|k misses) greater than pi (by symmetry). In fact, in Appendix A.4 we show
+that the diﬀerence ˆPi(hit|k hits)− ˆPi(hit|k misses) is not only expected to be negative, but that
+its magnitude is more than double the bias in either of the respective proportions. 24
+Under GVT’s design target of each player taking n = 100 shots and making half ( p = .5) of
+them, we use the results from Section 2 and Appendix A.4 to ﬁnd that the expected diﬀerence (and
+the strength of the bias) is -8 percentage points. 25 Therefore, the diﬀerence between the average
+proportion of +4 percentage points observed by GVT is actually +12 percentage points higher
+than the diﬀerence that would be expected from a Bernoulli i.i.d. shooter. Thus, the bias has long
+disguised evidence in GVT’s data that may well indicate hot hand shooting.
+3.3 A bias-corrected statistical analysis of GVT
+A straightforward way to adjust for the bias in GVT’s analysis is simply to shift the diﬀerence
+for each shooter by the amount of the corresponding bias, then repeat their paired t-test. While
+this test yields a statistically signiﬁcant result ( p < .05), the paired t-test limits statistical power
+because it reduces each player’s performance to a single number, ignoring the number of shots that
+the player attempted in each category, i.e. “3 hits” and “3 misses.” In addition, adjusting for the
+bias based on the assumption that p =.5 assumes that GVT’s design target was met precisely.
+As a result, for each player we again compute the bias under the null hypothesis that trials
+are i.i.d. Bernoulli (i.e. “consistent” shooting) but now with a probability of success equal to the
+player’s observed shooting percentage (Column 3 of Table 2), and using the number of shots taken
+in each category to inform our standard errors. With this approach the average diﬀerence goes from
++3 to a considerable +13 percentage points ( p<. 01, S.E. = 4.7pp).26,27 To put the magnitude of
++13 percentage points into perspective, the diﬀerence between the median three point shooter and
+the top three point shooter in the 2015-2016 NBA season was 12 percentage points. 28 Further, this
+is a conservative estimate because in practice the data generating processes (i.e. shooters) clearly
+24That the diﬀerence is expected to be negative does not follow immediately from Theorem 1, as the set of sequences for
+which the diﬀerence is well-deﬁned is a strict subset of the set corresponding to either of the respective proportions.
+Nevertheless, the reasoning of the proof is similar. See Theorem 3 of Appendix A.4.
+25See Figure 4 in Appendix A.4 for the bias in the diﬀerence as n,p and k vary.
+26The standard error is computed based on the assumption of independence across the 2600 trials, and normality. In
+particular, deﬁning player i’s diﬀerence ˆDik := ˆPi(hit|k hits)− ˆPi(hit|k misses), the variance satisﬁes ˆVar ( ˆDik) =
+ˆVar ( ˆPi(hit|k hits)) +ˆVar ( ˆPi(hit|k misses)) for each playeri. Simulations reveal that the associated (1−α)× 100%
+conﬁdence intervals with radiuszα/2×ˆVar ( ¯Dk)1/2 (where the mean diﬀerence is given by ¯Dk := (1/n)∑ni=1 ˆDik) have
+the appropriate coverage—i.e. (1−α/2)×100% of the time the true diﬀerence is greater than ¯Dk−zα/2×ˆVar ( ¯Dk)1/2,
+for both Bernoulli trials and the positive feedback model discussed in Section B.
+27For an alternative approach that involves pooling shots across players, and yields similar results, see Appendix C.
+28ESPN, “NBA Player 3-Point Shooting Statistics - 2015-16.” http://www.espn.com/nba/statistics/player/ /stat/3-
+points [accessed September 24, 2016].
+11
+-100
+-50
+0
+50
+100
+Bias-corrected difference
+(percentage points)
+0 5 10 15 20 25
+Shooter
++/- S.E. 95% CI
+Figure 2: The bias-corrected diﬀerence ˆDi3 = ˆP i(hit|3 hits)− ˆP i(hit|3 misses) for each player, under the
+assumption that his/her probability of success is equal to his/her overall shooting percentage.
+diﬀer from i.i.d. Bernoulli trials, and the bias becomes much larger under various models of hot
+hand shooting because of measurement error (see Appendix B).
+GVT also informally discussed the heterogeneity across players, and asserted that most players
+shot relatively better when on a streak of misses than when on a streak of hits. By contrast, Fig-
+ure 2 shows that once the bias correction is made to the diﬀerences 19 of the 25 players directionally
+exhibit hot hand shooting, which is itself signiﬁcant ( p < .01, binomial test). 29 Further, as indi-
+cated by the conﬁdence intervals, t-tests reveal that 5 of the players exhibit statistically signiﬁcant
+evidence of hot hand shooting ( p < .05, t-test), which, for a set of 25 independent tests, is itself
+signiﬁcant (p<. 01, binomial test).
+29Repeating the tests for longer (k = 4) or shorter (k = 2) streak lengths yields similar results that are consistent with
+the attenuation bias in estimated eﬀect sizes discussed in Footnote 21. In particular, If we instead deﬁne a streak
+as beginning with 4 consecutive hits, which is a stronger signal of hot hand shooting, then the average bias-adjusted
+diﬀerence in proportions is 10 percentage points ( p = .07, S.E. = 6.9, one-sided test), and four players exhibit
+statistically signiﬁcant hot hand shooting ( p<. 05), which is itself signiﬁcant (p<. 01, binomial test). On the other
+hand, if we deﬁne a streak as beginning with 2 consecutive hits, which is a weaker signal of hot hand shooting, then
+the average bias-adjusted diﬀerence in proportions is 5 .4 percentage points (p < .05, S.E. = 3, one-sided test), and
+four players exhibit statistically signiﬁcant hot hand shooting ( p<. 05), which is itself signiﬁcant (p<. 01, binomial
+test).
+12
+0 .02 .04 .06 .08
+Fraction of sequences
+-100 -50 0 50 100
+Difference (percentage points)
+Figure 3: The histogram and kernel density plot of the (exact) discrete probability distribution of
+ˆP i(ahit|k hits)− ˆP i(hit|k misses), for a single player i with n = 100 and n1 = 50 , using a variant of
+the formula for the distribution provided in Web Appendix E.2 (see supplementary materials). 31
+Non-parametric robustness test
+As a robustness check we perform permutation tests, which are (by construction) invulnerable to
+the bias. The null hypothesis for a permutation test is that a player is a consistent shooter, i.e. has
+an i.i.d. ﬁxed (unknown) probability of success. The ﬁrst step to test for streak shooting in player
+i is to observe his/her shot sequence and compute the diﬀerence in proportions, ˆPi(hit|k hits)−
+ˆPi(hit|k misses). The second step is to compute this diﬀerence for each unique rearrangement of
+the observed sequence; each of these permutations is equally likely because player i’s probability of
+success is ﬁxed under the null hypothesis. 30 The set of unique diﬀerences computed in the second
+step, along with their associated relative frequencies, constitutes the exact sampling distribution
+of the diﬀerence under the null hypothesis (conditional on the observed number of hits). This
+distribution can then be used for statistical testing (See Appendix C.2 for details). The distribution
+is negative-skewed, and can be represented by histograms such as the one shown in Figure 3, which
+provides the exact distribution for a player who has hit 50 out of 100 shots.
+Results of the permutation tests agree with those of the bias-corrected tests reported above. In
+particular, the average diﬀerence across shooters indicates hot hand shooting with a similar level of
+30Thus, the permutation procedure directly implements GVT’s idea of comparing a “player’s performance. . . to a
+sequence of hits and misses generated by tossing a coin” (Gilovich et al. 1985, p. 296)
+31Uses a bin width of 4 percentage points. The values for the diﬀerence are grouped based on the ﬁrst 6 decimal digits
+of precision. For this precision, the more than 10 29 distinguishable sequences take on 19,048 distinct values. In the
+computation of the expected value in Figures 1 and 4, each diﬀerence is instead represented with the highest ﬂoating
+point precision available.
+13
+signiﬁcance (p < .01).32 Also as before, 5 individual players exhibit signiﬁcant hot hand shooting
+(p<. 01, binomial test). 33
+3.4 The hot hand (and bias) in other controlled and semi-controlled studies
+A close replication of GVT’s controlled shooting experiment is found in Avugos et al. (2013a), a
+study that mimics GVT’s design and analysis, but with olympian rather than collegiate players,
+and fewer shots (n = 40) per player. From the authors’ Table 1 (p. 6), one can derive the average
+ˆp(hit|3hits) and ˆp(hit|3misses) across players, which are roughly .52 and .54, respectively, yielding
+an average diﬀerence in shooting percentages of -2 percentage points. 34 However, Figure 4 in
+Appendix A.4 shows that the strength of the bias for n = 40 shots and p =.5 (the design target) is
+-.20. Thus, once the bias is corrected for in this small sample the average diﬀerence across shooters
+becomes roughly +18 percentage points. 35
+Koehler and Conley (2003) test for the hot hand in the NBA three point shooting contest,
+which has been described as an ideal setting in which to study the hot hand (Thaler and Sunstein
+2008). The authors ﬁnd no evidence of hot hand shooting in their analysis of four years of data.
+However, as in GVT and Avugos et al. (2013a), the conditional probability tests that the authors
+conduct are vulnerable to the bias. By contrast, Miller and Sanjurjo (2015b) collect 28 years of
+data, which yields 33 players that have taken at least 100 shots; using this dataset, we ﬁnd that the
+average bias-corrected diﬀerence across players is +8 percentage points ( p < .01).36 Further, 8 of
+the 33 players exhibit signiﬁcant hot hand shooting (p<. 05), which itself is statistically signiﬁcant
+(p<. 001, binomial test).
+The only other controlled shooting studies that we are aware of are Jagacinski, Newell, and Isaac
+(1979) and Miller and Sanjurjo (2014). 37,38 Both studies have few shooters (6 and 8, respectively)
+but many shots across multiple shooting sessions for each player (540 and 900+ shots, respectively).
+32The procedure in this pooled test involves stratifying the permutations by player. In particular, we conduct a test of
+the average of the standardized diﬀerence, where for each player the diﬀerence is standardized by shifting its mean
+and scaling its variance under H0. In this case H0: P(success on trial t for player i) =pi for all t,i .
+33As in Footnote 29, the results of the permutation test are robust to varying streak length k.
+34We could not analyze the raw data because the authors declined to provide it to us. The data that represents a
+close replication of GVT is from the betting game phase. Using Table 1, we have ˆ p(hit|3 hits) = (.56 +.52)/2 and
+ˆp(hit|3 misses) = (.54 +.49)/2, which is the average of the shooting percentage of Group A in Phase 1 with that of
+Group B from Phase 2.
+35The authors also had another treatment, in which they had shooters rate, before each shot, from 0-100% on a certainty
+scale whether they would hit the next shot. If we repeat the analysis on the data from this treatment then the average
+ˆp(hit|3 hits) and ˆp(hit|3 misses) across players are roughly .56 and .65, respectively, yielding an average diﬀerence
+of -9 percentage points, and a bias-adjusted diﬀerence of +11 percentage points.
+36Miller and Sanjurjo (2015b) also implement the unbiased permutation test procedure of Section 3.3.
+37The one exception is a controlled shooting study that involved a single shooter Wardrop (1999). After personal
+communication with the shooter, who conducted the study herself (recording her own shots), we viewed it as not
+having suﬃcient control to warrant analysis.
+38We thank Tom Gilovich for bringing the study of Jagacinski et al. to our attention. It had gone uncited in the hot
+hand literature until Miller and Sanjurjo (2014).
+14
+The bias-adjusted average diﬀerence in the studies are +7 and +4 percentage points, respectively.
+In addition, Miller and Sanjurjo (2014) ﬁnd substantial and persistent evidence of hot hand shooting
+in individual players.39
+Thus, once the bias is accounted for, conservative estimates of hot hand eﬀect sizes across all
+extant controlled and semi-controlled shooting studies are consistently moderate to large. 40
+3.5 Belief in the Hot Hand
+The results of our reanalysis of GVT’s data lead us to a conclusion that is the opposite of theirs:
+belief in the hot hand is not a cognitive illusion. Nevertheless, it remains possible, perhaps even
+likely, that professional players and coaches sometimes infer the presence of a hot hand when it
+does not exist. Similarly, even when in the presence of the hot hand, players may overestimate its
+inﬂuence and respond too strongly to it. By contrast, a hot hand might also go undetected, or
+be underestimated (Stone and Arkes 2017). These questions are important because understanding
+the extent to which decision makers’ beliefs and behavior do not correspond to the actual degree
+of hot hand shooting could have considerable implications for decision-making more generally.
+While GVT’s main conclusion was of a binary nature, i.e. based on the question of whether
+belief in the hot hand is either fallacious or not, they explored hot hand beliefs via a survey of
+player and coach beliefs, and an incentivized betting task with the Cornell players. In the survey
+they ﬁnd that the near universal beliefs in the hot hand do not accord with the lack of hot hand
+shooting evidence that resulted from their analysis of the shooting data, and in the betting task
+they found that players were incapable of predicting upcoming shot outcomes successfully, which
+suggests that even if there were a hot hand, it could not be detected successfully.
+However, in light of the results presented in the present paper subjects’ responses in GVT’s un-
+incentivized survey are actually qualitatively consistent with the evidence presented above.41 More
+substantively, GVT’s statistical analysis of betting data has recently been shown to be consider-
+ably underpowered, as the authors conduct many separate individual bettor level tests rather than
+pooling the data across bettors (Miller and Sanjurjo 2017b). In addition, GVT misinterpret their
+39See Avugos, K¨ oppen, Czienskowski, Raab, and Bar-Eli (2013b) for a meta-analysis of the hot hand, which includes
+sports besides basketball. Tversky and Gilovich (1989) argue that evidence for the hot hand in other sports is not
+relevant to their main conclusion because so long as the hot hand does not exist in basketball, then the perception of
+the hot hand by fans, players and coaches must necessarily be a cognitive illusion (see also Alter and Oppenheimer
+[2006]).
+40The magnitudes of all estimated eﬀect sizes are conservative for two reasons: (i) if a player’s probability of success
+is not driven merely by feedback from previous shots, but also by other time-varying player (and environment)
+speciﬁc factors, then the act of hitting consecutive shots will serve as only a noisy proxy of the hot state, resulting
+in measurement error, and an attenuation bias in the estimate (see Appendix B), and (ii) if the eﬀect of consecutive
+successes on subsequent success is heterogenous in magnitude (and sign) across players, then an average measure will
+underestimate how strong the eﬀect can be in certain players.
+41See Appendix B of Miller and Sanjurjo (2017b) for details.
+15
+measures of bettors’ ability to predict. In light of these limitations, Miller and Sanjurjo (2017b)
+reanalyze GVT’s betting data, and ﬁnd that players on average shoot around +7 percentage points
+higher when bettors have predicted that the shot will be a hit, rather than a miss ( p<. 001). This
+increase is comparable in magnitude to an NBA shooter going from slightly above average to elite
+in three point percentage. 42
+Miller and Sanjurjo (2014) present complementary evidence on beliefs, in which semi-professional
+players rank their teammates’ respective increases in shooting percentage when on a streak of three
+hits (relative to their base rates) in a shooting experiment that the rankers do not observe. Play-
+ers’ rankings are found to be highly correlated with their teammates’ actual increases in shooting
+percentage in this out-of-sample test, yielding an average correlation of -0.60 ( p < .0001; where 1
+is the rank of the shooter with the perceived largest percentage point increase).
+In sum, while it remains possible that professional players’ and coaches’ hot hand beliefs are
+poorly calibrated, this claim is not clearly supported by the existing body of evidence.
+4 Conclusion
+We prove the existence of, and quantify, a novel form of selection bias that counter-intuitively arises
+in some particularly simple analyses of sequential data. A key implication of the bias is that the
+empirical approach of the canonical hot hand fallacy paper, and its replications, are incorrect. Upon
+correcting for the bias we ﬁnd that the data that had previously been interpreted as demonstrating
+that belief in the hot hand is a fallacy, instead provides substantial evidence that it is not a fallacy
+to believe in the hot hand.
+References
+Aharoni, G. and O. H. Sarig (2011): “Hot hands and equilibrium,” Applied Economics, 44,
+2309–2320.
+Alter, A. L. and D. M. Oppenheimer (2006): “From a ﬁxation on sports to an exploration
+of mechanism: The past, present, and future of hot hand research,” Thinking & Reasoning , 12,
+431–444.
+Arkes, J. (2010): “Revisiting the Hot Hand Theory with Free Throw Data in a Multivariate
+Framework,” Journal of Quantitative Analysis in Sports , 6.
+——— (2011): “Do Gamblers Correctly Price Momentum in NBA Betting Markets?” Journal of
+Prediction Markets, 5, 31–50.
+42ESPN, “NBA Player 3-Point Shooting Statistics - 2015-16.” http://www.espn.com/nba/statistics/player/ /stat/3-
+points [accessed September 24, 2016].
+16
+——— (2013): “Misses in ‘Hot Hand’ Research,” Journal of Sports Economics , 14, 401–410.
+Avery, C. and J. Chevalier (1999): “Identifying Investor Sentiment from Price Paths: The
+Case of Football Betting,” Journal of Business , 72, 493–521.
+Avugos, S., M. Bar-Eli, I. Ritov, and E. Sher(2013a): “The elusive reality of eﬃcacy perfor-
+mance cycles in basketball shooting: analysis of players’ performance under invariant conditions,”
+International Journal of Sport and Exercise Psychology , 11, 184–202.
+Avugos, S., J. K ¨oppen, U. Czienskowski, M. Raab, and M. Bar-Eli (2013b): “The “hot
+hand” reconsidered: A meta-analytic approach,” Psychology of Sport and Exercise , 14, 21–27.
+Bai, D. S. (1975): “Eﬃcient Estimation of Transition Probabilities in a Markov Chain,” The
+Annals of Statistics , 3, 1305–1317.
+Barberis, N. and R. Thaler (2003): “A survey of behavioral ﬁnance,” Handbook of the Eco-
+nomics of Finance , 1, 1053–1128.
+Benjamin, D. J., M. Rabin, and C. Raymond (2014): “A Model of Non-Belief in the Law of
+Large Numbers,” Working Paper.
+Berkson, J. (1946): “Limitations of the application of fourfold table analysis to hospital data,”
+Biometrics Bulletin , 47–53.
+Bocskocsky, A., J. Ezekowitz, and C. Stein (2014): “The Hot Hand: A New Approach to
+an Old ‘Fallacy’,” 8th Annual Mit Sloan Sports Analytics Conference.
+Brown, W. A. and R. D. Sauer (1993): “Does the Basketball Market Believe in the Hot Hand?
+Comment,” American Economic Review, 83, 1377–1386.
+Camerer, C. F. (1989): “Does the Basketball Market Believe in the ’Hot Hand,’?” American
+Economic Review, 79, 1257–1261.
+Carlson, K. A. and S. B. Shu (2007): “The rule of three: how the third event signals the
+emergence of a streak,” Organizational Behavior and Human Decision Processes , 104, 113–121.
+Croson, R. and J. Sundali (2005): “The Gamblers Fallacy and the Hot Hand: Empirical Data
+from Casinos,” Journal of Risk and Uncertainty , 30, 195–209.
+De Bondt, W. P. (1993): “Betting on trends: Intuitive forecasts of ﬁnancial risk and return,”
+International Journal of Forecasting, 9, 355–371.
+De Long, J. B., A. Shleifer, L. H. Summers, and R. J. Waldmann (1991): “The Survival
+of Noise Traders In Financial-markets,” Journal of Business , 64, 1–19.
+Dixit, A. K. and B. J. Nalebuff (1991): Thinking Strategically: The Competitive Edge in
+Business, Politics, and Everyday Life , W.W. Norton & Company.
+Durham, G. R., M. G. Hertzel, and J. S. Martin (2005): “The Market Impact of Trends
+and Sequences in Performance: New Evidence,” Journal of Finance , 60, 2551–2569.
+17
+Friedman, D. (1998): “Monty Hall’s Three Doors: Construction and Deconstruction of a Choice
+Anomaly,” American Economic Review, 88, 933–946.
+Galbo-Jørgensen, C. B., S. Suetens, and J.-R. Tyran (2016): “Predicting Lotto Numbers
+A natural experiment on the gamblers fallacy and the hot hand fallacy,” Journal of the European
+Economic Association, 14, working Paper.
+Gilovich, T., R. Vallone, and A. Tversky (1985): “The Hot Hand in Basketball: On the
+Misperception of Random Sequences,” Cognitive Psychology, 17, 295–314.
+Goldman, M. and J. M. Rao (2012): “Eﬀort vs. Concentration: The Asymmetric Impact of
+Pressure on NBA Performance,” 6th Annual Mit Sloan Sports Analytics Conference.
+Green, B. S. and J. Zwiebel(2017): “The Hot Hand Fallacy: Cognitive Mistakes or Equilibrium
+Adjustments?” Management Science, working Paper.
+Griffin, D. and A. Tversky (1992): “The weighing of evidence and the determinants of conﬁ-
+dence,” Cognitive Psychology, 24, 411–435.
+Guibas, L. J. and A. M. Odlyzko(1981): “String overlaps, pattern matching, and nontransitive
+games,” Journal of Combinatorial Theory, Series A , 30, 183–208.
+Guryan, J. and M. S. Kearney (2008): “Gambling at Lucky Stores: Empirical Evidence from
+State Lottery Sales,” American Economic Review, 98, 458–473.
+Hurwicz, L. (1950): “Least squares bias in time series,” Statistical inference in dynamic economic
+models, 10, 365–383.
+Imbens, G. W. and M. Kolesar (2016): “Robust Standard Errors in Small Samples: Some
+Practical Advice,” Working Paper, March.
+Jagacinski, R. J., K. M. Newell, and P. D. Isaac (1979): “Predicting the Success of a
+Basketball Shot at Various Stages of Execution,” Journal of Sport Psychology , 1, 301–310.
+Kahneman, D. (2011): Thinking, Fast and Slow , Farrar, Straus and Giroux.
+Kahneman, D. and M. W. Riepe (1998): “Aspects of Investor Psychology: Beliefs, preferences,
+and biases investment advisors should know about,” Journal of Portfolio Management , 24, 1–21.
+Kahneman, D. and A. Tversky (1972): “Subjective Probability: A Judgement of Representa-
+tiveness,” Cognitive Psychology, 3, 430–454.
+Koehler, J. J. and C. A. Conley (2003): “The “hot hand” myth in professional basketball,”
+Journal of Sport and Exercise Psychology , 25, 253–259.
+Konold, C. (1995): “Confessions of a coin ﬂipper and would-be instructor,” The American Statis-
+tician, 49, 203–209.
+Lancaster, T. (2000): “The incidental parameter problem since 1948,” Journal of Econometrics,
+95, 391–413.
+18
+Lee, M. and G. Smith (2002): “Regression to the mean and football wagers,” Journal of Behav-
+ioral Decision Making, 15, 329–342.
+Loh, R. K. and M. Warachka (2012): “Streaks in Earnings Surprises and the Cross-Section of
+Stock Returns,” Management Science, 58, 1305–1321.
+Malkiel, B. G. (2011): A random walk down Wall Street: the time-tested strategy for sucessful
+investing, New York: W. W. Norton & Company.
+Miller, J. B. and A. Sanjurjo (2014): “A Cold Shower for the Hot Hand Fallacy,” Working
+Paper. Available at SSRN: https://ssrn.com/abstract=2450479.
+——— (2015a): “A Bridge from Monty Hall to the (Anti-)Hot Hand: Restricted
+Choice, Selection Bias, and Empirical Practice,” Working Paper. Available at SSRN:
+https://ssrn.com/abstract=2709837.
+——— (2015b): “Is the Belief in the Hot Hand a Fallacy in the NBA Three Point Shootout?”
+Working Paper. Available at SSRN: https://ssrn.com/abstract=2611987.
+——— (2016): “Selection Bias, Sample-size Neglect, and the Persistence of Gambler’s Fallacy
+Beliefs,” Working Paper.
+——— (2017a): “The Hot Hand, and the Hot Hand Fallacy: A Critical Survey of the Literature,”
+Working Paper. Available at SSRN: XXto be updatedXX.
+——— (2017b): “A Visible Hand? Betting on the hot hand in Gilovich, Vallone, and Tversky
+(1985),” Working Paper. Available at SSRN: https://ssrn.com/abstract=3032826.
+Nalebuff, B. (1987): “Puzzles: Choose a curtain, duel-ity, two point conversions, and more,”
+Journal of Economic Perspectives , 157–163.
+Narayanan, S. and P. Manchanda (2012): “An empirical analysis of individual level casino
+gambling behavior,” Quantitative Marketing and Economics , 10, 27–62.
+Nerlove, M. (1967): “Experimental Evidence On The Estimation Of Dynamic Economic Rela-
+tions From A Time Series Of Cross-Section,” The Economic Studies Quarterly (Tokyo. 1950) ,
+18, 42–74.
+——— (1971): “Further Evidence on the Estimation of Dynamic Economic Relations from a Time
+Series of Cross Sections,” Econometrica, 39, 359–382.
+Neyman, J. and E. L. Scott (1948): “Consistent Estimates Based on Partially Consistent
+Observations,” Econometrica, 16, 1–32.
+Nickell, S. (1981): “Biases in Dynamic Models with Fixed Eﬀects,” Econometrica, 49, 1417–1426.
+Nickerson, R. S. (2007): “Penney Ante: Counterintuitive Probabilities in Coin Tossing,” The
+UMAPJournal.
+Paul, R. J. and A. P. Weinbach (2005): “Bettor Misperceptions in the NBA: The Overbetting
+of Large Favorites and the ‘Hot Hand’,” Journal of Sports Economics , 6, 390–400.
+19
+Rabin, M. (2002): “Inference by Believers in the Law of Small Numbers,” Quarterly Journal of
+Economics, 117, 775–816.
+Rabin, M. and D. Vayanos (2010): “The Gamblers and Hot-Hand Fallacies: Theory and Appli-
+cations,” Review of Economic Studies , 77, 730–778.
+Rao, J. M. (2009a): “Experts’ Perceptions of Autocorrelation: The Hot Hand Fallacy Among
+Professional Basketball Players,” Working Paper.
+——— (2009b): “When the Gambler’s Fallacy becomes the Hot Hand Fallacy: An Experiment
+with Experts and Novices,” Working Paper.
+Rinott, Y. and M. Bar-Hillel (2015): “Comments on a ’Hot Hand’ Paper by Miller and San-
+jurjo,” Federmann Center For The Study Of Rationality, The Hebrew University Of Jerusalem.
+Discussion Paper # 688 (August 11).
+Roberts, R. S., W. O. Spitzer, T. Delmore, and D. L. Sackett (1978): “An empirical
+demonstration of Berkson’s bias,” Journal of Chronic Diseases , 31, 119–128.
+Selvin, S. (1975): “A Problem in Probability (letter to the editor),” The American Statistician ,
+29, 67.
+Shaman, P. and R. A. Stine (1988): “The bias of autoregressive coeﬃcient estimators,” Journal
+of the American Statistical Association , 83, 842–848.
+Sinkey, M. and T. Logan (2013): “Does the Hot Hand Drive the Market?” Eastern Economic
+Journal, Advance online publication, doi:10.1057/eej.2013.33.
+Smith, G., M. Levere, and R. Kurtzman (2009): “Poker Player Behavior After Big Wins and
+Big Losses,” Management Science, 55, 1547–1555.
+Stone, D. F. (2012): “Measurement error and the hot hand,” The American Statistician , 66,
+61–66, working paper.
+Stone, D. F. and J. Arkes (2017): “March Madness? Underreaction to Hot and Cold Hands in
+NCAA Basketball,” Working Paper, –.
+Sundali, J. and R. Croson (2006): “Biases in casino betting: The hot and the gamblers fallacy,”
+Judgement and Decision Making , 1, 1–12.
+Thaler, R. H. and C. R. Sunstein (2008): Nudge: Improving Decisions About Health, Wealth,
+and Happiness, Yale University Press.
+Tversky, A. and T. Gilovich (1989): “The cold facts about the “hot hand” in basketball,”
+Chance, 2, 16–21.
+Vos Savant, M. (1990): “Ask Marilyn,” Parade Magazine, 15.
+Wardrop, R. L. (1995): “Simpson’s Paradox and the Hot Hand in Basketball,” The American
+Statistician, 49, 24–28.
+20
+——— (1999): “Statistical Tests for the Hot-Hand in Basketball in a Controlled Setting,” Unpub-
+lished manuscript, 1, 1–20.
+White, H. (1999): Asymptotic Theory for Econometricians , Academic Press: London.
+Xu, J. and N. Harvey (2014): “Carry on winning: The gambler’s fallacy creates hot hand eﬀects
+in online gambling,” Cognition, 131, 173 – 180.
+Yaari, G. and S. Eisenmann (2011): “The Hot (Invisible?) Hand: Can Time Sequence Patterns
+of Success/Failure in Sports Be Modeled as Repeated Random Independent Trials?” PLoS One,
+6, 1–10.
+Yuan, J., G.-Z. Sun, and R. Siu (2014): “The Lure of Illusory Luck: How Much Are People
+Willing to Pay for Random Shocks,”Journal of Economic Behavior & Organization, forthcoming.
+Yule, G. U. (1926): “Why do we Sometimes get Nonsense-Correlations between Time-Series?–A
+Study in Sampling and the Nature of Time-Series,” Journal of the Royal Statistical Society , 89,
+1–63.
+21
+A Appendix: Section 2 Proofs
+A.1 Proof of Theorem 1 (Section 2)
+Deﬁne F :={x∈{ 0, 1}n :Ik(x)⁄=∅} to be the sample space of sequences for which ˆPk(X) is well
+deﬁned. The probability distribution over F is given by P(A|F ) := P(A∩F )/P(F ) forA⊆{ 0, 1}n,
+where P(X = x) =p
+∑n
+i=1xi(1−p)n−∑ni=1xi.
+Let the random variable Xτ represent the outcome of the randomly “drawn” trial τ, which is
+selected as a result of the two-stage procedure that: (i) draws a sequence x at random from F ,
+according to the distribution P(X = x|F ), and (ii) draws a trial τ at random from{k + 1,...,n },
+according to the distribution P(τ =t|X = x). Let τ be a uniform draw from the trials in sequence
+X that immediately follow k consecutive successes, i.e. for x∈ F , P(τ = t|X = x) = 1/|Ik(x)|
+for t∈ Ik(x), and P(τ = t|X = x) = 0 for t∈ Ik(x)C∩{k + 1,...,n }.43 It follows that the
+unconditional probability distribution of τ over all trials that can possibly follow k consecutive
+successes is given by P(τ = t|F ) = ∑x∈F P(τ = t|X = x,F )P(X = x|F ), for t∈{ k + 1,...,n }.
+The probability that this randomly drawn trial is a success, P(Xτ = 1|F ), must be equal to the
+expected proportion, E[ ˆPk(X)|F ].44
+Note that P(Xτ = 1|F ) = ∑nt=k+1 P(Xt = 1|τ = t,F )P(τ = t|F ), and P(τ = t|F ) > 0 for
+t∈{ k + 1,...,n }. Below, we demonstrate that P(Xt = 1|τ = t,F ) < p when t < n, and that
+P(Xt = 1|τ =n,F ) =p, which, taken together, guarantee that P(Xτ = 1|F )<p .
+First we observe that P(Xt = 1|τ = t,F ) = P(Xt = 1|τ = t,Ft), where Ft :={x∈{ 0, 1}n :∏t−1
+i=t−kxi = 1}. Bayes Rule then yields:
+P(Xt = 1|τ =t,Ft)
+P(Xt = 0|τ =t,Ft) = P (τ =t|Xt = 1,Ft )P (τ =t|Xt = 0,Ft ) P(Xt = 1|Ft)P(Xt = 0|Ft)
+= P (τ =t|Xt = 1,Ft )P (τ =t|Xt = 0,Ft ) p1−p.
+Therefore, for the case of t∈{ k + 1,...,n − 1}, in order to show that P(Xt = 1|τ = t,F ) =
+P(Xt = 1|τ = t,Ft) < pit suﬃces to show that P(τ = t|Xt = 1,Ft) < P(τ = t|Xt = 0,Ft), which
+follows below:
+43For x∈FC no trial is drawn, which we can represent as P(τ = 1|X = x) = 1 (for example).
+44The identity follows by the law of total probability, with the key observation that ˆPk(x) = ∑t∈Ik(x)xt· 1|Ik(x)| =∑n
+t=k+1 P(Xt = 1|τ =t, X = x,F )P(τ =t|X = x,F ).
+22
+P(τ =t|Xt = 0,Ft) =
+∑
+x∈Ft:xt=0
+P(τ =t|Xt = 0, X = x,Ft)P(X = x|Xt = 0,Ft)
+=
+∑
+x∈Ft:xt=0
+P(τ =t|Xt = 0, X−t = x−t,Ft)P(X−t = x−t|Xt = 0,Ft) (2)
+>
+∑
+x∈Ft:xt=0
+P(τ =t|Xt = 1, X−t = x−t,Ft)P(X−t = x−t|Xt = 1,Ft) (3)
+=
+∑
+x∈Ft:xt=1
+P(τ =t|Xt = 1, X = x,Ft)P(X = x|Xt = 1,Ft)
+=P(τ =t|Xt = 1,Ft)
+where in (2), given x, we deﬁne x−t := (x1,...,x t−1,xt+1,...,x n). To obtain the inequality in (3)
+we observe that: (i) P(X−t = x−t|Xt = 0,Ft) = P(X−t = x−t|Xt = 1,Ft) because X is a sequence
+of i.i.d. Bernoulli trials, and (ii) P(τ =t|Xt = 1, X−t = x−t,Ft)< P(τ =t|Xt = 0, X−t = x−t,Ft)
+because τ is drawn at random (uniformly) from the set Ik(x), which contains at least one more
+element (trial t + 1) if xt = 1 rather than xt = 0.
+For the case oft =n we follow the above steps until (3), at which point an equality now emerges
+asXn = 1 no longer yields an additional trial from which to draw, because trial n is terminal. This
+implies that P(τ =n|Xn = 1,Fn) = P(τ =n|Xn = 0,Fn).
+Taking these two facts together: (i) P(Xt = 1|τ = t,F ) < p, for k + 1 ≤ t < n, and (ii)
+P(Xn = 1|τ =n,F ) =p, it immediately follows that P(Xτ = 1|F )<p .45
+■
+A.2 Asymptotic Unbiasedness
+Proof that the proportion is asymptotically unbiased
+To demonstrate that ˆPk(X) is a consistent estimator of P(Xt = 1|∏t−1j=t−kXj = 1), ﬁrst deﬁne
+Yk,i :=∏ij=i−k+1Xj fori≥k. With this, ˆPk(X) =∑ni=k+1Yk+1,i/∑n−1i=k Yk,i. Note that each of the
+respective sequences{Yk,i},{Yk+1,i} are asymptotically uncorrelated (k ﬁxed). Therefore, their time
+averages converge to their respective means almost surely, i.e. 1/(n−k)∑n−1i=k Yk,i a.s.−→E[Yk,i] =pk,
+and 1/(n−k)∑ni=k+1Yk+1,i a.s.−→E[Yk+1,i] =pk+1.46 The continuous mapping theorem implies that
+ˆPk(X) a.s.−→p = P(Xt = 1| ∏t−1j=t−kXj = 1), which in turn implies consistency.
+45Note that the proof does not require that the Bernoulli trials be identically distributed. Instead, we could allow
+the probability distribution to vary, with P(Xi = 1) = pi for i = 1,...,n , in which case our result would be that
+P(Xτ = 1|F )<E [pτ|F ].
+46See Deﬁnition 3.55 and Theorem 3.57 from White (1999).
+23
+Proof that weighted proportions are asymptotically unbiased
+In order to prove the assertion made in Footnote 5 that the weighted average proportion over
+multiple realized sequences is a consistent estimator of P(Xt = 1|∏t−1j=t−kXj = 1), we ﬁrst deﬁne
+Yk,i := ∏ij=i−k+1Xj for i≥ k, just as we did in the previous proof. Then, we note that: (i)
+the number of trials that follow k consecutive successes in the weighted proportion taken over T
+sequences is given by ∑Tt=1Zk,t, where Zk,t =∑nt−1i=n(t−1)+kYk,i, and (ii) the number of successes
+on these trials is given by ∑Tt=1Zk+1,t, where Zk+1,t = ∑nti=n(t−1)+k+1Yk+1,i. Because Zk,t are
+i.i.d. with E[Zk,t] = (n−k)pk, it follows that 1 /T∑Tt=1Zk,t a.s.−→E[Zk,t] = (n−k)pk; similarly,
+1/T∑Tt=1Zk+1,t a.s.−→E[Zk+1,t] = (n−k)pk+1. Then, the continuous mapping theorem yields the
+desired consistency of the weighted proportion (after sequence T ), i.e. ∑Tt=1Zk+1,t/∑Tt=1Zk,t a.s.−→
+p = P(Xt = 1| ∏t−1j=t−kXj = 1).
+A.3 Formula for the expected proportion (special case of k = 1)
+The following lemma shows that the expected proportion ˆP1(X), conditional on a known number
+of successes N1(X) =n1, satisﬁes the sampling-without-replacement formula, which for any given
+trial is less than the probability of success P(Xi|N1(X) =n1) = n1n .
+Lemma 1 Letn> 1. Then
+E
+[
+ˆP1(X)
+⏐⏐⏐ I1(X)⁄=∅, N1(X) =n1 ] = n1− 1n− 1 (4)
+for 0≤n1≤n.
+Proof: As in the proof of Theorem 1, let τ be drawn at random from I1(X), which is non-empty
+when N1(X) = n1 ≥ 2 (the result is trivial when n1 = 1). In order to ease notation we let
+probability P(·) represent the conditional probability P(·|N1(X) = n1), which is deﬁned over the
+subsets of{x∈{ 0, 1}n :N1(x) =n1}.
+E[ ˆP1(X)|N1(X) =n1,I 1(X)⁄=∅] = P(Xτ = 1) (5)
+= P(Xτ = 1|τ <n)P(τ <n) + P(Xn = 1|τ =n)P(τ =n)
+=
+n−1∑
+t=2
+P(Xt = 1|τ =t) 1n− 1 + P(Xn = 1|τ =n) 1n− 1 (6)
+= n− 1n− 2(n1n − 1n− 1)n− 2n− 1 + n1n 1n− 1 (7)
+= n1− 1n− 1
+24
+In (5), equality follows by an argument analogous to that provided in the proof of Theorem 1. In
+(6), equality follows from the fact that P(τ = t) = 1/(n− 1) for all t∈{ 2, 3,...,n }.47 In (7),
+equality follows from using an application of Bayes rule to derive P(Xt = 1|τ =t), which satiﬁes:
+P(Xt = 1|τ =t) =
+
+
+
+n−1
+n−2
+(
+n1
+n − 1n−1
+)
+for t = 2,...,n − 1
+n1
+n for t =n
+(8)
+In particular,
+P(Xt = 1|τ =t) = P(τ =t|Xt−1 = 1,Xt = 1)P(Xt−1 = 1|Xt = 1)P(Xt = 1)P(τ =t)
+= P(τ =t|Xt−1 = 1,Xt = 1)n1(n1− 1)n (9)
+where for all t, P(Xt−1 = 1|Xt = 1) = ( n1− 1)/(n− 1), which is the likelihood that relates to
+sampling-without-replacement. For t<n , P(τ =t|Xt−1 = 1,Xt = 1), which is the likelihood that
+relates to the arrangement of successes and failures, satisﬁes:
+P(τ =t|Xt−1 = 1,Xt = 1) =E
+[ 1
+M
+⏐⏐⏐⏐ Xt−1 = 1,Xt = 1]
+=
+∑
+x∈{0,1}
+E
+[ 1
+M
+⏐⏐⏐⏐ Xt−1 = 1,Xt = 1,Xn =x] P(Xn =x|Xt−1 = 1,Xt = 1)
+= 1n1 n0n− 2 + 1n1− 1n1− 2n− 2
+= 1n− 2(n0n1 + n1− 2n1− 1)
+where M :=|I1(X)|, i.e. M =n1−Xn. In the case that t =n, clearly P(τ =n|Xn−1 = 1,Xn =
+1) = 1n1−1.
+■
+Formulae for expected value of the proportion
+The conditional expectation in Lemma 1 can be combined with P(N1(X) = n1|I1(X)⁄=∅) to
+express the expected proportion in terms of just n and p.48
+47Note that P(τ = t) = ∑x:N1(x)=n1 P(τ = t|X = x)P(X = x) = ∑x:N1(x)=n1,xt−1=1 1n1−xn 1( nn1) =
+1
+( nn1)
+[(n−2
+n1−1
+) 1
+n1 +
+(n−2
+n1−2
+) 1
+n1−1
+]
+= 1n−1.
+48In a comment written about this paper, Rinott and Bar-Hillel (2015) provide an alternative proof for this theorem.
+25
+Theorem 2 Letn> 2 and 0<p< 1. Then
+E
+[
+ˆP1(X)
+⏐⏐⏐ I1(X)⁄=∅] =
+[
+p− 1−(1−p)nn ] nn−1
+1− (1−p)n−1 <p (10)
+Proof: We ﬁrst observe that in light of Lemma 1, Equation 10 can be written as follows:
+E
+[
+ˆP1(X)
+⏐⏐⏐ I1(X)⁄=∅] =E[E[ ˆP1(X)⏐⏐⏐ I1(X)⁄=∅, N1(X) =n1]]
+=E
+[N1(x)− 1
+n− 1
+⏐⏐⏐⏐I1(X)⁄=∅]
+The expected value can then be computed using the binomial distribution, which yields:
+E
+[N1(x)− 1
+n− 1
+⏐⏐⏐⏐I1(X)⁄=∅] =C n∑
+n1=1
+pn1(1−p)n−n1
+[(n
+n1
+)
+−U(n,n 1)
+]
+· n1− 1n− 1
+=
+∑n
+n1=2
+(n
+n1
+)
+pn1(1−p)n−n1n1−1n−1
+1− (1−p)n−p(1−p)n−1
+=
+1
+n−1
+[(
+np−np(1−p)n−1)−(1− (1−p)n−np(1−p)n−1)]
+1− (1−p)n−p(1−p)n−1
+=
+[
+p− 1−(1−p)nn ] nn−1
+1− (1−p)n−1
+whereU(n,n 1) is the number of sequences with n1 successes for which the proportion is undeﬁned,
+and C is the constant that normalizes the total probability to 1. The second line follows because
+U1(n,n 1) = 0 for n1> 1, U1(n, 0) =U1(n, 1) = 1, and C = 1/[1− (1−p)n−p(1−p)n−1].
+Finally, by letting q := 1−p it is straightforward to show that the bias in ˆP1(X) is negative:
+E
+[
+ˆP1(X)−p
+⏐⏐⏐ I1(X)⁄=∅] =
+[
+p− 1−qnn ] nn−1
+1−qn−1 −p
+= (n− 1)(qn−1−qn)− (q−qn)(n− 1)(1−qn−1)
+< 0
+The inequality follows from f(x) = qx being strictly decreasing and convex, which implies that
+q−qn> (n− 1)(qn−1−qn).
+■
+26
+A.4 Expected diﬀerence in proportions
+Let Dk be the diﬀerence in the probability of success when comparing trials that immediately
+follow k consecutive successes with trials that immediately follow k consecutive failures. That is,
+Dk := P(Xt = 1| ∏t−1j=t−kXj = 1)− P(Xt = 1| ∏t−1j=t−k(1−Xj) = 1). An estimator of Dk that
+is used in the hot hand fallacy literature (see Section 3) is ˆDk(x) := ˆPk(x)− [1− ˆQk(X)], where
+ˆQk(X) is the proportion of failures on the subset of trials that immediately follow k consecutive
+failures, Jk(X) :={j :∏j−1i=j−k(1−Xi) = 1}⊆{ k + 1,...,n }.
+A.4.1 Proof of the bias in the diﬀerence
+We extend the proof of Theorem 1 to show that ˆDk(X) is a biased estimator of Dk. Recall that
+Ik(X) is the subset of trials that immediately follow k consecutive successes, i.e. Ik(X) := {i :∏i−1
+j=i−kXj = 1}⊆{ k + 1,...,n }. Analogously, let Jk(X) be the subset of trials that immediately
+followk consecutive failures, i.e. Jk(X) :={j :∏j−1i=j−k(1−Xi) = 1}⊆{ k + 1,...,n }.
+Theorem 3 Let X ={Xi}ni=1, n≥ 3, be a sequence of independent Bernoulli trials, each with
+probability of success 0 < p <1. Let ˆPk(X) be the proportion of successes on the subset of trials
+Ik(X) that immediately follow k consecutive successes, and ˆQk(X) be the proportion of failures on
+the subset of trials Jk(X) that immediately follow k consecutive failures. ˆDk(x) := ˆPk(x)− [1−
+ˆQk(X)] is a biased estimator of Dk := P(Xt = 1| ∏t−1j=t−kXj = 1)− P(Xt = 1| ∏t−1j=t−k(1−Xj) =
+1)≡ 0 for all k such that 1≤k<n/ 2. In particular,
+E[ ˆDk(X)| Ik(X)⁄=∅,Jk(X)⁄=∅ ]< 0 (11)
+Proof: Following the notation used in the proof of Theorem 1, let F :={x∈{ 0, 1}n :Ik(x)⁄=∅}
+and G :={x∈{ 0, 1}n :Jk(x)⁄=∅}. We will show the following:
+E[ ˆDk(x)|F,G ] =E[ ˆPk(X)|F,G ] +E[ ˆQk(X)|F,G ]− 1
+= P(Xτ = 1|F,G ) + P(Xσ = 0|F,G )− 1 (12)
+<p + (1−p)− 1 (13)
+= 0 (14)
+where in (12), as in the proof of Theorem 1, τ is a random draw from Ik(x) and σ is an analogous
+random draw from Jk(x). In particular, we will demonstrate that the inequality in (13) holds by
+showing that P(Xτ = 1|F,G )<p , which, by symmetry, implies that P(Xσ = 0|F,G )< 1−p.
+27
+To show that P(Xτ = 1|F,G )<p we use an approach similar to that presented in the proof of
+Theorem 1. In particular, note that P(Xτ = 1|F,G ) =∑nt=k+1 P(Xt = 1|τ =t,F,G )P(τ =t|F,G ),
+and P(τ =t|F,G )> 0 for t∈{k + 1,...,n }. In what follows, we demonstrate that P(Xt = 1|τ =
+t,F,G ) < pwhen t < n, and that P(Xt = 1|τ = n,F,G ) = p, which, taken together, guarantee
+that P(Xτ = 1|F,G )<p .
+First we observe that P(Xt = 1|τ =t,F,G ) = P(Xt = 1|τ =t,Ft,G ), whereFt :={x∈{ 0, 1}n :∏t−1
+i=t−kxi = 1}. Bayes Rule then yields:
+P(Xt = 1|τ =t,Ft,G )
+P(Xt = 0|τ =t,Ft,G ) = P (τ =t,G|Xt = 1,Ft )P (τ =t,G|Xt = 0,Ft ) P(Xt = 1|Ft)P(Xt = 0|Ft)
+= P (τ =t,G|Xt = 1,Ft )P (τ =t,G|Xt = 0,Ft ) p1−p.
+Therefore, for the case of t∈{ k + 1,...,n − 1}, in order to show that P(Xt = 1|τ = t,F,G ) =
+P(Xt = 1|τ =t,Ft,G )<p it suﬃces to show that P(τ =t,G|Xt = 1,Ft)< P(τ =t,G|Xt = 0,Ft),
+28
+which follows below:
+P(τ =t,G|Xt = 0,Ft) =
+∑
+x∈Ft∩G:xt=0
+P(τ =t, X = x|Xt = 0,Ft)
+=
+∑
+x∈Ft∩G:xt=0
+(1,x−t)∈Ft∩G
+P(τ =t, X = x|Xt = 0,Ft) (15)
++
+∑
+x∈Ft∩G:xt=0
+(1,x−t)/∈Ft∩G
+P(τ =t, X = x|Xt = 0,Ft)
+≥
+∑
+x∈Ft∩G:xt=0
+(1,x−t)∈Ft∩G
+P(τ =t, X = x|Xt = 0,Ft)
+=
+∑
+x∈Ft∩G:xt=0
+(1,x−t)∈Ft∩G
+P(τ =t|X = x,Xt = 0,Ft)P(X = x|Xt = 0,Ft)
+=
+∑
+x∈Ft∩G:xt=0
+(1,x−t)∈Ft∩G
+P(τ =t|Xt = 0, X−t = x−t,Ft)P(X−t = x−t|Xt = 0,Ft)
+>
+∑
+x∈Ft∩G:xt=0
+(1,x−t)∈Ft∩G
+P(τ =t|Xt = 1, X−t = x−t,Ft)P(X−t = x−t|Xt = 1,Ft)
+(16)
+=
+∑
+x∈Ft∩G:xt=1
+(1,x−t)∈Ft∩G
+P(τ =t|X = x,Xt = 1,Ft)P(X = x|Xt = 1,Ft)
+=
+∑
+x∈Ft∩G:xt=1
+P(τ =t, X = x|Xt = 1,Ft)
+=P(τ =t,G|Xt = 1,Ft)
+where in (15), givenx, we deﬁne x−t := (x1,...,x t−1,xt+1,...,x n), and (b, x−t) := (x1,...,x t−1,b,x t+1,...,x n).49
+The inequality in (16) follows for the same reason as the inequality in line (3) of Theorem 1. In
+particular, P(X−t = x−t|Xt = 0,Ft) = P(X−t = x−t|Xt = 1,Ft) because X is a sequence of i.i.d.
+Bernoulli trials, and P(τ =t|Xt = 1, X−t = x−t,Ft)< P(τ =t|Xt = 0, X−t = x−t,Ft) because τ
+is drawn at random (uniformly) from the set Ik(x), which contains at least one more element (trial
+t + 1) if xt = 1 rather than xt = 0.
+49Note that the second sum will have no terms for t≥n−k.
+29
+For the case of t = n we follow the above steps until (16), at which point an equality now
+emerges, as Xn = 1 no longer yields an additional trial from which to draw, because trial n is
+terminal. This implies that P(τ =n|Xn = 1,Fn,G ) = P(τ =n|Xn = 0,Fn,G ).
+Taking these two facts together: (i) P(Xt = 1|τ = t,F,G ) < p, for k + 1≤ t < n, and (ii)
+P(Xn = 1|τ =n,F,G ) =p, it immediately follows that P(Xτ = 1|F,G )<p .
+■
+A.4.2 Formula for the expected diﬀerence in proportions (special case of k = 1)
+In the case of k = 1 the expected diﬀerence in proportions admits a simple representation that is
+independent of p.
+Theorem 4 Let ˆD1(X) := ˆP1(X)− (1− ˆQ1(X)). If n> 2 and 0<p< 1 then
+E
+[
+ˆD1(X)
+⏐⏐⏐ I1(X)⁄=∅,J 1(X)⁄=∅] =− 1n− 1
+Proof: The method of proof is to ﬁrst show that if n> 2 and 1≤n1≤n− 1 then:
+E
+[
+ˆD1(X)
+⏐⏐⏐ N1(X) =n1,I 1(X)⁄=∅,J 1(X)⁄=∅] =− 1n− 1
+which leaves us just one step from the desired result.
+First, consider the case that 1 < n1 < n− 1. In this case ˆD1(x) := ˆP1(x)− (1− ˆQ1(x)) is
+deﬁned for all sequences. Therefore, by the linearity of the expectation, and applying Lemma 1 to
+ˆQ1(X) (by symmetry), we have:
+E[ ˆD1(X)|N1(X) =n1] =E[ ˆP1(X)|N1(X) =n1]−E(1− ˆQ1(X)|N1(X) =n1]
+=n1− 1n− 1 −(1− n0− 1n− 1)
+=− 1n− 1
+Ifn1 = 1 then ˆD1 is deﬁned for all sequences that do not have a 1 in the ﬁnal position; there aren−1
+such sequences. The sequence with the 1 in the ﬁrst position yields ˆD1 = 0, while the other n− 2
+sequences yield ˆD1 =−1/(n− 2). Therefore, E
+[
+ˆD1(X)
+⏐⏐⏐ N1(X) = 1,I 1(X)⁄=∅,J 1(X)⁄=∅] =
+−1/(n− 1).
+Now consider the case ofn1 =n−1. The argument for this case is analogous, with ˆD1 undeﬁned
+for the sequence with the zero in the last position, equal to 0 for the sequence with the zero in the
+ﬁrst position, and equal to −1/(n− 2) for all other sequences.
+Finally, that the conditional expectation is independent ofN1(x) implies thatE[D1(X)|I1(X)⁄=
+30
+0 20 40 60 80 100
+n
+-0.5
+-0.45
+-0.4
+-0.35
+-0.3
+-0.25
+-0.2
+-0.15
+-0.1
+-0.05
+0
+E[ ˆDk]
+0 < p < 1
+p = .5
+p = .25, .75
+p = .5
+p = .25, .75k = 1 k = 2 k = 3
+Figure 4: For the expected diﬀerence in the proportion of successes, as a function of n, three values of k,
+and various probabilities of success p, using the formula provided in Web Appendix E.2.
+∅,J 1(X)⁄=∅ ] is independent of p, yielding the result.
+■
+A.4.3 Quantifying the bias for the diﬀerence
+Figure 4 contains a plot ofE[ ˆDk(X)|Ik(X)⁄=∅,Jk(X)⁄=∅ ] as a function of the number of trials
+n, and for k = 1, 2, and 3. Because the bias is dependent on p whenk> 1, the diﬀerence is plotted
+for various values of p. These expected diﬀerences are obtained from the formula provided in Web
+Appendix E.2. The magnitude of the bias is simply the absolute value of the expected diﬀerence.
+As with the bias in the proportion (see Figure 1), the bias in the diﬀerence is substantial even when
+n is relatively large.
+31
+B Appendix: Size of the bias when the DGP is hot hand/streak
+shooting
+In Section 3.3 the correction to GVT’s estimate of the hot hand eﬀect (and test statistic) is based on
+the magnitude of the bias under the assumption that the shooter has a ﬁxed probability of success
+(Bernoulli process). However, if the underlying data generating process (DGP) instead represents
+hot hand or streak shooting, then the size of the bias changes. While many DGPs can produce
+hot hand shooting, arguably the most natural are those discussed in Gilovich et al. (1985), as they
+reﬂect lay conceptions of the hot hand and streak shooting. While GVT take no particular stance
+on which lay deﬁnition is most appropriate, they do identify hot hand and streak shooting with:
+(i) “non-stationarity” (the zone, ﬂow, in the groove, in rhythm), and (ii) “positive association”
+(success breeds success). We label (i) as a regime shift model, and interpret it as capturing the
+idea that a player’s probability of success may increase due to some factor that is unrelated to
+previous outcomes, so unobservable to the econometrician. This can be modeled naturally as a
+hidden markov chain over the player’s (hidden) ability state. We label (ii) as a positive feedback
+model, because it can be interpreted as capturing the idea that positive feedback from a player’s
+previous shot outcomes can aﬀect his/her subsequent probability of success. This can be modeled
+naturally as an autoregressive process, or equivalently as a markov chain over shot outcomes. 50
+In Figure 5 we plot the bias in the estimator of the diﬀerence in probability of success when
+on a hit streak rather than miss streak, ˆD3, for three alternative DGPs, each of which admits the
+Bernoulli process as a special case.51 The ﬁrst panel corresponds to the “regime shift” DGP in which
+the diﬀerence in the probability of success between the “hot” state and the “normal” state is given
+byd (where d = 0 represents Bernoulli shooting), 52 the second panel corresponds to the “positive
+feedback” DGP in which hitting (missing) 3 shots in a row increases (decreases) the probability of
+success byd/2, and the third panel corresponds to the “positive feedback (for hits)” DGP in which
+positive feedback operates for hits only, making the probability of success increase by d whenever
+50A positive feedback model need not be stationary.
+51Each point is the output of a simulation with 10,000 repetitions of 100 trials from the DGP.
+52In particular, let Q be the hidden markov chain over the “normal” state ( n) and the “hot” state ( h), where the
+probability of success in the normal state is given by pn, and the probability of success in the hot state is given by
+ph, with the shift in probability of success given by d :=ph−pn
+Q :=
+( qnn qnh
+qhn qhh
+)
+Where qnn represents the probability of staying in the “normal” state, and qnh represents the probability of transi-
+tioning from the “normal” to the “hot” state, etc. Letting π = (πn,πh) be the stationary distribution, we ﬁnd that
+the magnitude of the bias is not very sensitive to variation in the stationary distribution and transition probabilities
+within a plausible range (i.e. πh∈ [.05,. 2] and qhh∈ (.8,. 98)), while it varies greatly with the diﬀerence in probabil-
+itiesd and the overall expected shooting percentage p =pn +πhd. In the graph, for each d andp (FG%), we average
+across values for the stationary distribution (πh) and transition probability (qhh).
+32
+40 45 50 55 60
+FG%
+-0.4
+-0.3
+-0.2
+-0.1
+0
+Bias
+Regime Shift
+40 45 50 55 60
+FG%
+-0.4
+-0.3
+-0.2
+-0.1
+0
+Pos. Feedback
+40 45 50 55 60
+FG%
+-0.4
+-0.3
+-0.2
+-0.1
+0
+Pos. Feedback (hits)
+d=0
+d=.1
+d=.2
+d=.3
+d=.4
+Figure 5: The bias for three types of hot hand and streak shooting data generating processes (DGPs), where
+FG % is the expected overall ﬁeld goal percentage from the DGP, and d represents the change in the player’s
+underlying probability of success. When d = 0 each model reduces to a Bernoulli process. Therefore the black
+line represents the bias in a Bernoulli proccess ( n = 100 trials, k = 3).
+3 hits in a row occurs. Within each panel of the ﬁgure, the bias, which is the expected diﬀerence
+between ˆD3, the estimator of the shift in the probability of success, and d, the true shift in the
+probability of success, is depicted as a function of the expected overall shooting percentages (from
+40 percent to 60 percent), for four true shifts in the underlying probability ( d∈{.1,. 2,. 3,. 4}).53
+Observe that when the true DGP is a player with a hot hand, the bias is typically more severe,
+or far more severe, than the bias associated with a Bernoulli DGP. In particular, the bias in the
+“regime shift” model is particularly severe, which arises from two sources: (i) the bias discussed
+in Section 2, and (ii) an attenuation bias, due to measurement error, as hitting 3 shots in a row
+is an imperfect proxy for the “hot state.” 54 The bias in the positive feedback DGP is uniformly
+below the bias for a Bernoulli shooter. For the DGP in which positive feedback operates only for
+hits, the bias is stronger than that of Bernoulli shooters for expected shooting percentages below
+50 percent (as in GVTs data), and slightly less strong for shooting percentage above 50 percent.
+As the true DGP is likely some combination of a regime shift and positive feedback, it is reasonable
+to conclude that the empirical approach in Section 3.3 should be expected to (greatly) understate
+the true magnitude of any underlying hot hand.
+The intuition for why the introduction of regime shift elements increases the strength of the
+bias so considerably is that if a player’s probability of success is not driven merely by feedback
+from previous shots, but also by other time-varying player (and environment) speciﬁc factors, then
+the act of hitting consecutive shots will serve as only a noisy proxy of the hot state, resulting in
+measurement error, and an attenuation bias in the estimate. This type of measurement error is
+53Results are similar if the DGP instead has negative feedback, i.e. d∈{−.1,−.2,−.3,−.4}.
+54In practice observers may have more information than the econometrician (e.g. shooting mechanics, perceived conﬁ-
+dence, or lack thereof, etc.), so may be subject to less measurement error.
+33
+similar to what Stone (2012) uncovered in the relationship between autocorrelation in outcomes
+and autocorrelation in ability when considering a DGP that contains autocorrelation in ability.
+34
+C Appendix: Additional analyses, and details for Section 3
+C.1 An alternative (pooled) analysis of shooting data
+An alternative approach to testing for streak shooting across players is to pool all shots from the
+“3 hits” and “3 misses” categories (discarding the rest), then use a linear probability model to
+estimate the eﬀect of a shot falling in the “3-hits” category. If the implementation of GVT’s design
+met the goal of placing each player in a position in which his or her probability of success is .5,
+then this approach would be analogous to re-weighting the under-weighted coin ﬂips in Table 1 of
+Section 1. With 2515 shots, the bias is minimal and the estimate in this case is +17 percentage
+points (p<. 01, S.E. = 3.7). Because GVT’s design goal is diﬃcult to implement in practice, this
+approach will introduce an upward bias, due to aggregation, if the probability of success varies across
+players. Adding ﬁxed eﬀects in a regression will control for this aggregation bias, but strengthens
+the selection bias related to streaks. 55 As a result, a bias correction is necessary. In this case, the
+estimated eﬀect is +13.9 percentage points (p<. 01, S.E. = 5.8), which has larger standard errors
+because the heteroscedasticity under the assumption of diﬀerent player probabilities necessitates
+the use of robust variants (in this case, Bell and McCaﬀrey standard errors, see Imbens and Kolesar
+[2016]). The magnitude of the estimated eﬀect has a diﬀerent interpretation than the one given for
+the estimate of the average diﬀerence across players; it should be thought of as the hot hand eﬀect
+for the average shot rather than the average player. This interpretation arises because pooling shots
+across players generates an unbalanced panel, which results in the estimate placing greater weight
+on the players that have taken more shots. As such, in the extreme it is even possible that the
+majority of players exhibit a tendency to have fewer streaks than expected by chance, yet, because
+they have generated relatively few observations, their data becomes diluted by many observations
+from a single streak shooter.
+C.2 Details on the hypothesis testing with the permutation test procedure
+Let X ∈ {0, 1}n be a sequence of shot outcomes from some player, i. The null hypothesis is
+that the shots are i.i.d. with P(Xt = 1) = pi. This implies that conditional on the number of
+hits,N1(X) =n1, each rearrangement is equally likely. Considering only sequences for which both
+ˆPi(hit|khits ) and ˆPi(hit|kmisses ) are deﬁned, the hot hand hypothesis predicts that the diﬀerence
+ˆPi(hit|khits )− ˆPi(hit|kmisses ) will be signiﬁcantly larger than what one would expect by chance.
+Let ˆDk(X) be this diﬀerence for sequence X. For an observed sequence x, with N1(x) =n1 hits,
+to test the null hypothesis at the α level, one simply checks if ˆDk(x)≥ cα,n1, where the critical
+55In this panel regression framework, the bias from introducing ﬁxed-eﬀects is an example of an incidental parameter
+problem of Neyman and Scott (1948), and is essentially equivalent to that discussed in Nerlove (1971) and Nick-
+ell (1981), and itself is closely related to the bias in estimates of autocorrelation in time series mentioned in the
+Introduction.
+35
+value cα,n1 is deﬁned as the smallest c such that P(Dk(X)≥ c| H0, N1(X) = n1)≤ α, and
+the distribution P(Dk(X)≥ c| H0, N1(X) = n1) is generated using the formula provided in
+Web Appendix E.2. For the quantity P(Dk(X)≥ c| H0, N1(X) = n1) it may be the case that
+for some c∗, it is strictly greater than α for c≤ c∗, and equal to 0 for c > c∗. In this case,
+for any sequence with N1(X) = n1 one cannot reject H0 at an α level of signiﬁcance. From the
+ex ante perspective, a test of the hot hand at the α level of signiﬁcance consists of a family of
+such critical values{cα,n1}. It follows immediately that P(reject|H0)≤ α because P(reject|H0) =∑n
+n1=1 P(Dk(X)≥ cα,n1|H0, N1(X) = n1)P(N1(X) = n1|H0)≤ α. Lastly, for any arbitrary test
+statistic T (X), the fact that the distribution of X is exchangeable conditional on N1(X) = n1
+means that P(T (X)≥ c| H0, N1(X) = n1) can be approximated to appropriate precision with
+Monte-Carlo permutations of the sequence x.
+36
+D Web Appendix: Streak Selection Bias and a Quantitative Com-
+parison to Sampling without Replacement
+We show how the downward bias in the estimator ˆPk(X) is driven by two sources of selection bias.
+One is related to sampling-without-replacement, and the other to the overlapping nature of streaks.
+Recall from the proof of Theorem 1 that E
+[
+ˆPk(X)
+⏐⏐⏐Ik(X)⁄=∅] = P(Xτ = 1|Ik(X)⁄=∅),
+whereτ is drawn (uniformly) at random fromIk(X). Because any sequence X∈{ 0, 1}n, such that
+Ik(X)⁄=∅, that a researcher encounters will contain a certain number of successes N1(X) = n1
+and failures n0 :=n−n1, for n1 =k,...,n we can write P(Xτ = 1|Ik(X)⁄=∅) =∑nn1=k P(Xτ =
+1|N1(X) =n1,Ik(X)⁄=∅)P(N1(X) =n1|Ik(X)⁄=∅). To explore the nature of the downward bias
+we discuss why P(Xτ = 1|N1(X) = n1,Ik(X)) < P(Xt = 1|N1(X) = n1) = n1/n, i.e. why the
+probability that a randomly drawn trial from Ik(X) is less than the overall proportion of successes
+in the sequence ˆp = n1/n, i.e. the prior probability that a trial is a success when it is drawn
+(uniformly) at random from 1,...,n under the knowledge that N1(X) =n1.56
+Suppose that the researcher were to know the overall proportion of successes ˆ p = n1/n in the
+sequence. Now, consider the following two ways of learning that trial t immediately follows k
+consecutive successes: (i) a trial τN, drawn uniformly at random from {k + 1,...,n } is revealed to
+be trial τN = t, and preceded by k consecutive successes, or (ii) a trial τI, drawn (uniformly) at
+random from Ik(X) ={i :∏t−1i=t−kXi = 1}⊆{ k + 1,...,n } is revealed to be trial τI =t. In each
+case, the prior probability of success is P(Xt = 1) = n1/n, which can be equivalently represented
+with the odds ratio P(Xt = 1)/P(Xt = 0) = n1/n0, indicates the n1/n0 : 1 prior odds in favor of
+Xt = 1 (relative to Xt = 0).
+In the ﬁrst case the probability distribution for τN is given by P(τN = t) = 1/(n−k) for all
+t∈{ k + 1,...,n }, and is independent of X. Upon ﬁnding out that τN = t one then learns that∏t−1
+t−kXi = 1. As a result, the posterior odds can be represented by a sampling-without-replacement
+formula, via Bayes rule:
+56Note that P(N1(X) = n1|Ik(X)⁄=∅) > P(N1(X) = n1) because the exclusion of sequences without a streak of k
+successes in the ﬁrst n− 1 trials biases upwards the number of successes. We do not consider this upward bias here
+as Theorem 1 shows that the downward biases predominate.
+37
+P(Xt = 1|τN =t)
+P(Xt = 0|τN =t) = P(Xt = 1,∏t−1t−kXi = 1|τN =t)P(Xt = 0,∏t−1t−kXi = 1|τN =t)
+= P(τN =t|Xt = 1,∏t−1t−kXi = 1)
+P(τN =t|Xt = 0,∏t−1t−kXi = 1)
+P(∏t−1t−kXi = 1|Xt = 1)
+P(∏t−1t−kXi = 1|Xt = 0) P(Xt = 1)P(Xt = 0)
+= P(∏t−1t−kXi = 1|Xt = 1)
+P(∏t−1t−kXi = 1|Xt = 0) P(Xt = 1)P(Xt = 0)
+=
+n1−1
+n−1 ×···× n1−kn−k
+n1
+n−1×···× n1−k+1n−k
+n1
+n0
+= n1−kn1 n1n0
+= n1−kn0
+Observe that the prior odds in favor of success are attenuated by the likelihood ratio n1−kn1 of
+producing k consecutive successes given either hypothetical state of the world: Xt = 1 or Xt = 0,
+respectively. That this is a sampling-without-replacement eﬀect can be made most transparent by
+re-expressing the posterior odds as n1−kn−k/ n0n−k.57,58
+In the second case, the probability that τI =t is drawn from Ik(X) is completely determined
+by M :=|Ik(X)|, and equal to 1 /M. Upon learning that τI =t one can infer the following three
+things: (i) Ik(X)⁄=∅, i.e. M ≥ 1, which is informative if n1≤ (k− 1)(n−n1) +k, (ii) t is a
+member of Ik(X), and (iii) ∏t−1t−kXi = 1, as in sampling-without-replacement. As a result, the
+57The numerator is the probability of drawing a 1 at random from an urn containing n1 1’s and n0 0’s, once k 1’s (and
+no 0’s) have been removed from the urn. The denominator is the probability of drawing a 0 from the same urn.
+58This eﬀect calls to mind the key behavioral assumption made in Rabin (2002), that believers in the law of small
+numbers view outcomes from an i.i.d. process as if they were instead generated by random draws without replacement.
+38
+posterior odds can be determined via Bayes Rule in the following way:
+P(Xt = 1|τI =t)
+P(Xt = 0|τI =t) = P(Xt = 1,∏t−1t−kXi = 1,M ≥ 1|τI =t)P(Xt = 0,∏t−1t−kXi = 1,M ≥ 1|τI =t)
+= P(τI =t|Xt = 1,∏t−1t−kXi = 1,M ≥ 1)
+P(τI =t|Xt = 0,∏t−1t−kXi = 1,M ≥ 1)
+P(Xt = 1,∏t−1t−kXi = 1,M ≥ 1)
+P(Xt = 0,∏t−1t−kXi = 1,M ≥ 1)
+= P(τI =t|Xt = 1,∏t−1t−kXi = 1)
+P(τI =t|Xt = 0,∏t−1t−kXi = 1)
+P(∏t−1t−kXi = 1|Xt = 1)
+P(∏t−1t−kXi = 1|Xt = 0) P(Xt = 1)P(Xt = 0) (17)
+=
+E
+[ 1
+M
+⏐⏐ ∏t−1t−kXi = 1,Xt = 1]
+E
+[ 1
+M
+⏐⏐ ∏t−1t−kXi = 1,Xt = 0] P(∏t−1t−kXi = 1|Xt = 1)P(∏t−1t−kXi = 1|Xt = 0) P(Xt = 1)P(Xt = 0)
+=
+E
+[ 1
+M
+⏐⏐ ∏t−1t−kXi = 1,Xt = 1]
+E
+[ 1
+M
+⏐⏐ ∏t−1t−kXi = 1,Xt = 0]n1−kn1 n1n0 (18)
+For ﬁrst term in (17) the event M ≥ 1 is dropped from the conditional argument because it is
+implied by the event ∏t−1t−kXi = 1, and the term P(M≥1|Xt=1,∏t−1t−kXi=1)P(M≥1|Xt=0,∏t−1t−kXi=1) does not appear because it
+is equal to 1.
+Equation 18 gives the posterior odds P(Xt=1|τI =t)P(Xt=0|τI =t) in favor of observing Xt = 1 (relative to
+Xt = 0), for a representative trial τ =t drawn at random fromIk(X). Observe that the prior odds
+ratio n1/n0 is multiplied by two separate updating factors, which we now discuss.
+The ﬁrst updating factor n1−kn1 is clearly strictly less than one and reﬂects the restriction that
+the ﬁnite number of available successes places on the procedure for selecting trials into Ik(X).
+In particular, it can be thought of as the information provided upon learning that k of the n1
+successes are no longer available, which leads to a sampling-without-replacement eﬀect on the prior
+oddsn1/n0. Clearly, the attenuation in the odds due to this factor increases in the streak length k.
+The second updating factor
+E [ 1M | ∏t−1t−kXi=1,Xt=1]
+E [ 1M | ∏t−1t−kXi=1,Xt=0] < 1, for t < n, reﬂects an additional re-striction that the arrangement of successes and failures in the sequence places on the procedure for
+selecting trials into Ik(X). It can be thought of as the additional information provided by learning
+that the k successes, which are no longer available, are consecutive and immediately precede t. To
+see why the odds are further attenuated in this case, we begin with the random variable M, which
+is deﬁned as the number of trials in Ik(X). The probability of any particular trial t∈Ik(X) being
+selected at random is 1/M. Now, because the expectation in the numerator conditions on Xt = 1,
+this means that 1/M is expected to be smaller in the numerator than in the denominator, where
+the expectation instead conditions on Xt = 0. The reason why is that for a sequence in which
+Xt = 1 the streak of 1’s continues on, meaning that trial t + 1 must also be in Ik(X), and trials
+t + 2 through t +k each may also be in Ik(X). By contrast, for a sequence in which Xt = 0 the
+39
+streak of 1’s ends, meaning that trials t + 1 throught +k cannot possibly be in Ik(X), which leads
+the corresponding 1/M to be smaller in expectation. 59 This last argument provides intuition for
+why the attenuation of the odds due to this factor increases in k.
+Interestingly, for the special case ofk = 1,
+E [ 1M | xt−1=1,xt=1]
+E [ 1M | xt−1=1,xt=0] = 1− 1(n−1)(n1−1) < 1 whent<n ,
+and
+E [ 1M | xn−1=1,xn=1]
+E [ 1M | xn−1=1,xn=0] = n1n1−1 > 1 when t =n.60 These contrasting eﬀects combine to yield thefamiliar sampling-without-replacement formula:
+E
+[
+ˆP1(X)
+⏐⏐⏐ I1(X)⁄=∅, N1(X) =n1] = n1− 1n− 1 (19)
+as demonstrated in Lemma 1, in Appendix A.3. On the other hand, when k > 1 the bias is
+substantially stronger than sampling-without-replacement (see Figure 6), though the formula does
+not appear to admit a simple representation. For further discussion on the relationship between
+the bias, sampling-without-replacement, and the overlapping words paradox (Guibas and Odlyzko
+1981) see Web Appendix F.
+A quantitative comparison with sampling-without-replacement
+For the general case, in which ˆp =n1/n is unknown, juxtaposing the bias with sampling-without-
+replacement puts the magnitude of the bias into context. Let the probability of success be given by
+p = P(Xt = 1). In Figure 6, the expected empirical probability that a randomly drawn trial inIk(X)
+is a success, which is the expected proportion, E[ ˆPk(X)| Ik(X)⁄=∅], is plotted along with the
+expected value of the probability that a randomly drawn trial t∈{ 1,...,n }\Tk is a success, given
+that the k success trials Tk⊆{ 1,...,n } have already been drawn from the sequence (sampling-
+without-replacement), E
+[
+N1(X)−k
+n−k
+⏐⏐⏐N1(X)≥k]. The plot is generated using the combinatorial
+results discussed in Section 2.1. Note that in the case of k = 1, the bias is identical to sampling-
+without-replacement, as shown in Equation 19. 61 Observe that for k> 1, and n not too small, the
+59This is under the assumption that t≤ n−k. In general, the event Xt = 0 excludes the next min {k,n−t} trials
+from t + 1 to min{t +k,n} from being selected, while the event Xt = 1 leads trial t + 1 to be selected, and does not
+exclude the next min{k,n−t}− 1 trials from being selected.
+60The likelihood ratios can be derived following the proof of Lemma 1 in Appendix A.3. In particular, for the equivalent
+likelihood ratio,
+P(τ =t|xt−1=1,xt=1)
+P(τ =t|xt−1=1,xt=0), the approach used to derive the numerator can also be used to show that the
+denominator is equal to 1n−2
+(
+n0−1
+n1 + n1−1n1−1
+)
+. Further, in the case of t =n, it is clear that P(τ =n|xn−1 = 1,xn =
+0) = 1n1 . Each likelihood ratio then follows from dividing and collecting terms.61This appears to contradict equation 18, i.e. that the bias in the procedure used to select the subset of trials I1k(X),
+is stronger than sampling-without-replacement for t < n, whereas it is non-existent (thus weaker) for t = n. This
+disparity is due to the second updating factor, which relates to the arrangement. It turns out that for k = 1, the
+determining aspect of the arrangement that inﬂuences this updating factor is whether or not the ﬁnal trial is a success,
+as this determines the number of successes in the ﬁrst n− 1 trials, where M =n1−Xn. If one were to instead ﬁx M
+rather than n1, then sampling-without-replacement relative to the number of successes in the ﬁrst n− 1 trials would
+be an accurate description of the mechanism behind the bias, and it induces a negative dependence between any two
+trials within the ﬁrst n− 1 trials of the sequence. Therefore, it is sampling-without-replacement with respect to M
+that determines the bias when k = 1.
+40
+0 10 20 30 40 50 60 70 80 90 100
+n
+0.1
+0.15
+0.2
+0.25
+0.3
+0.35
+0.4
+0.45
+0.5
+Expected value
+k = 1
+k = 2
+k = 3
+k = 4
+k = 5
+E
+[
+N1(X)−k
+n−k
+⏐⏐⏐ N1(X) ≥ k]
+E
+[
+ˆPk(X)|Ik(X) ⁄= ∅
+]
+Figure 6: The dotted lines correspond to the bias from sampling-without-replacement. It is the expected
+probability of a success, given that k successes are ﬁrst removed from the sequence (assuming p =.5). The
+solid lines correspond to the expected proportion from Figure 1.
+bias in the expected proportion is considerably larger than the corresponding bias from sampling-
+without-replacement.
+41
+E Web Appendix: The Formula Used to Generate the Sampling
+Distribution and Calculate Expectations
+We describe the formula used to build the exact sampling distribution of the proportion, and
+diﬀerence in proportions, from which we calculate expectations and plot histograms.
+E.1 Proportion
+Given n trials and streaks of length k, we observe that the proportion of successes on the trials
+that immediately follow k consecutive success ˆPk(x) can be represented simply as the the number
+of successes on trials that immediately follow a streak of k consecutive successes divided by the
+total number of trials—i.e. failures and success—that immediately follow a streak of k consecutive
+successes. In particular, for a sequence x∈{ 0, 1}n of successes and failures, we have:
+ˆPk(x) = M 1(x)M 0(x) +M 1(x)
+where M 0(x) := |{i∈{ k + 1,...,n } : (1−xi)∏i−1j=i−kxj = 1}| is the number of failures that
+immediately follow k consecutive successes (suppressing the k to ease notation). Similarly, the
+number of successes that immediately follow k consecutive successes is deﬁned as M 1(x) :={i∈
+{k + 1,...,n } :xi
+∏i−1
+j=i−kxj = 1}. Finally, the expected value of ˆPk(x) is uniquely determined by
+the joint distribution of counts P( (M 0(X),M 1(X)) = (m0,m 1) ).
+The algorithm described below (recursively) constructs the exact joint distribution of counts, by
+associating each unique count realization, which we call a key, with its corresponding probability.62
+In general, for a sequence of length n and a streak of length k this joint distribution can be repre-
+sented as a dictionary of (key:probability) pairs D := (m :pD(m))m∈Dc, where m := (m0,m 1) is
+a unique pair, Dc corresponds to the set of count realizations with non-zero probability, i.e.
+Dc :={m∈ N2| pD(m)> 0}
+and pD(m) := P( (M 0(X),M 1(X)) = (m0,m 1) ).
+Table 3 reports the distribution over the sample space of sequences, and the corresponding
+dictionary, for the simple case ofn = 3 andk = 1. From the dictionary one can derive the sampling
+62This algorithm, which builds upon an algorithm suggested by Michael J. Wiener, replaces an exact formula based on
+the joint distribution of runs of various lengths that we derived in a previous working paper version of this manuscript.
+The previous formula, while numerically tractable, was less eﬃcient.
+42
+Table 3: In the table to the left column one lists the sample space of eight possible sequence realizations
+from three trials. Column two lists the number of (failures, successes) that immediately follow a success. The
+third column lists the probability with which the sequence occurs, where p is the probability of success and q
+is the probability of failure. In the table to the right the joint distribution is represented as a dictionary of
+count-probability pairs. Each unique count m = (m0,m 1) has a unique associated probability equal to the
+sum of the probabilities of all sequences with the same associated count (see the table on the left).
+Sample Space of sequences
+sequence probability count
+000 q3 (0, 0)
+001 q2p (0, 0)
+010 q2p (1, 0)
+100 q2p (1, 0)
+011 qp2 (0, 1)
+101 qp2 (1, 0)
+110 qp2 (1, 1)
+111 p3 (0, 2)
+Dictionary
+count probability
+m : pD(m)
+(0, 0) : q2
+(1, 0) : ( q +q2)p
+(0, 1) : qp2
+(1, 1) : qp2
+(0, 2) : p3
+distribution of the proportion and directly compute the expected proportion:
+E[ ˆPk(x)|Ik(x)⁄=∅] = ∑
+m∈D∗c
+m1
+m0 +m1p∗D(m)
+where D∗c =Dc\{ (0, 0)} and p∗D(m) :=pD(m)/∑m′∈D∗cpD(m′)
+Let D(𝓁,r ) be the dictionary that represents the count-probability pairs for the remaining r
+trials of a sequence that has 𝓁≤ k consecutive successes immediately preceding the current trial.
+For example, if k = 2 then D(0, 0) = D(1, 0) = D(2, 0) = ((0, 0) : 1), as when zero trials remain
+in the sequence the only count possible is (0,0), which occurs with probability 1. Also note that
+D(1, 1) = ((0, 0) : 1), D(2, 1) = ((1, 0) :q, (0, 1) :p), and D(2, 2) = ((1, 0) :q, (1, 1) :pq, (0, 2) :p2),
+as a trial can only be counted as a fail or success if it is immediately preceded by 𝓁 = k = 2
+consecutive successes. The key observation is that given the initial condition D(𝓁, 0) = ((0, 0) : 1)
+for 0≤𝓁≤k, the dictionaries D(𝓁,r ) can be deﬁned recursively for r> 0 and 0≤𝓁≤k, and take
+the following form:
+D(𝓁,r ) =
+
+
+
+D(0,r− 1)(0,0):q⨄D(𝓁 + 1,r− 1)(0,0):p, if 𝓁<k
+D(0,r− 1)(1,0):q⨄D(k,r− 1)(0,1):p, if 𝓁 =k
+where: (i) the operation Dm′:p′ := (m + m′ :pD(m)×p′)m∈Dc increments each count m with the
+addition of m′, and scales its corresponding probability pD(m) by the probability p′ of the incre-
+43
+ment, and (ii) given the dictionaries A andB, the operation A⨄B := (m : (pA +pB)(m))m∈Ac∪Bc
+deﬁnes the union of two dictionaries as the union of their counts, where the corresponding probabil-
+ities for a key that appears in both dictionaries are summed together (we assume that pA(m) = 0
+for m /∈Ac; also forB). If a trial is immediately preceded by 𝓁<k consecutive successes, then with
+probability q (p) the next trial to its right will be immediately preceded by 0 ( 𝓁 + 1) consecutive
+successes; regardless of the outcome of the trial, m′ = (0, 0) additional failures and successes will
+be counted as immediately preceded by k successes and r− 1 trials will remain. If, on the other
+hand, a trial is immediately preceded by 𝓁 =k consecutive successes (and there is at least one trial
+remaining, i.e. r >0), then with probability q (p) the next trial to its right will be immediately
+preceded by 0 (k) consecutive successes and we will count m′ = (1, 0) ((0, 1)) additional failures
+and successes; regardless of the outcome of the trial, r− 1 trials will remain.
+The algorithm that follows describes the complete recursive procedure.
+Algorithm 1: Recursive formula that builds the collection of dictionaries D. Of interest are
+the dictionaries D(0,n ) for n = k + 1,...,N which correspond to the joint distribution of
+the total number of (successes, failures) that immediately follow k consecutive successes in n
+trials.
+1 Function Count Distribution(N, k, p):
+/* For the definition of D(𝓁,r ), Am′:p′ and A⨄B below, see text. */
+2 q← 1−p
+3 for n = 0,...,N do
+4 L← min{k,n}
+5 for 𝓁 =L,..., 0 do
+6 r←n−𝓁
+7 if r = 0 then
+8 D(𝓁,r )← ((0, 0) : 1)
+9 else if r> 0 then
+10 if 𝓁<k then
+11 D(𝓁,r )←D(0,r− 1)(0,0):q⨄D(𝓁 + 1,r− 1)(0,0):p
+12 else if 𝓁 =k then
+13 D(𝓁,r )←D(0,r− 1)(1,0):q⨄D(k,r− 1)(0,1):p
+14 end
+15 end
+16 return D
+44
+E.2 Diﬀerence in Proportions
+The diﬀerence in proportions can be computed from a dictionary D := (m :pD(m))m∈Dc, where
+Dc corresponds to the set of count realizations with non-zero probability i.e.
+Dc :={m∈ N4| pD(m)> 0}
+and pD(m) := P( (M 00 (X),M 10 (X),M 01 (X),M 11 (X)) = (m00,m 10,m 01,m 11) ). The variables M 01 (X)
+and M 11 (X) yield the total number of failures and successes (respectively) on those trials that
+immediately follow a streak of k successes, whereas M 00 (X) and M 10 (X) yield the total number of
+failures and successes (respectively) on those trials that immediately follow a streak of k failures.
+LetD(𝓁0,𝓁 1,r ) be the dictionary that represents the count-probability pairs for the remaining r
+trials of a sequence in which there are 𝓁0≤k consecutive failures and 𝓁1≤k consecutive successes
+on the immediately preceding trials (so that 𝓁0𝓁1 = 0). These dictionaries can be constructed
+recursively in a way similar to that shown in Web Appendix E.1:
+D(𝓁0,𝓁 1,r ) =
+
+
+
+D(𝓁0 + 1, 0,r− 1)(0,0,0,0):q⨄D(0,𝓁 1 + 1,r− 1)(0,0,0,0):p, if max{𝓁0,𝓁 1}<k
+D(k, 0,r− 1)(1,0,0,0):q⨄D(0, 1,r− 1)(0,1,0,0):p, if 𝓁0 =k
+D(1, 0,r− 1)(0,0,1,0):q⨄D(0,k,r − 1)(0,0,0,1):p, if 𝓁1 =k
+See supplementary materials for the corresponding code.
+45
+F Web Appendix: The relationship between the streak selection
+bias and known biases and paradoxes
+F.1 Sampling-without-replacement and the bias for streaks of length k = 1.
+A brief inspection of Table 1 in Section 1 reveals how the dependence between the ﬁrstn−1 ﬂips in
+the sequence arises. In particular, when the coin is ﬂipped three times, the number of Hs in the ﬁrst
+2 ﬂips determines the number of observations of ﬂips that immediately follow an H. Because TT
+must be excluded, the ﬁrst two ﬂips will consist of one of three equally likely sequences: HT, TH or
+HH. For the two sequences with a single H—HT and TH—if a researcher were to ﬁnd an H within
+the ﬁrst two ﬂips of the sequence and then select the adjacent ﬂip for inspection, the probability
+of heads on the adjacent ﬂip would be 0, which is strictly less than the overall proportion of heads
+in the sequence. This can be thought of as a sampling-without-replacement eﬀect. More generally,
+across the three sequences, HT, TH, and HH, the expected probability of the adjacent ﬂip being a
+heads is (0 + 0 + 1)/3 = 1/3. This probability reveals the (negative) sequential dependence that
+exists between the ﬁrst two ﬂips of the sequence. Further, the same negative dependence holds
+for any two ﬂips in the ﬁrst n− 1 ﬂips of a sequence of length n, regardless of their positions .
+Thus, when k = 1 it is neither time’s arrow nor the arrangement of ﬂips within the sequence that
+determines the bias.
+This same sampling-without-replacement feature also underlies a classic form of selection bias
+known as Berkson’s bias (aka Berkson’s paradox). Berkson (1946) presented a hypothetical study of
+the relationship between two diseases that, while not associated in the general population, become
+negatively associated in the population of hospitalized patients. The cause of the bias is subtle:
+patients are hospitalized only if they have at least one of the two particular diseases. To illustrate,
+assume that someone from the general population has a given disease (Y=“Yes”) or does not
+(N=“No”), with equal chances. Just as in the coin ﬂip example, anyone with neither disease (NN)
+is excluded, while a patient within the hospital population must have one of the three equally likely
+proﬁles: YN, NY, or YY. Thus, just as with the coin ﬂips, the probability of a patient having
+another disease, given that he already has one disease, is 1 /3.
+The same sampling-without replacement feature again arises in several classic conditional prob-
+ability paradoxes. For example, in the Monty Hall problem the game show host inspects two
+doors, which can together be represented as one of three equally likely sequences GC, CG, or GG
+(G=“Goat,” C=“Car”), then opens one of the G doors from the realized sequence. Thus, the host
+eﬀectively samples G without replacement (Nalebuﬀ 1987; Selvin 1975; Vos Savant 1990). 63
+63The same structure also appears in what is known as the boy-or-girl paradox (Miller and Sanjurjo 2015a). A slight
+modiﬁcation of the Monty-Hall problem makes it identical to the coin ﬂip bias presented in Table 1 (see Miller and
+Sanjurjo [2015a]).
+46
+Sampling-without-replacement also underlies a well-known ﬁnite sample bias that arises in stan-
+dard estimates of autocorrelation in time series data (Shaman and Stine 1988; Yule 1926). This
+interpretation of ﬁnite sample bias, which does not appear to have been previously noted, allows
+one to see how this bias is closely related to those above. To illustrate, let x be a randomly
+generated sequence consisting of n trials, each of which is an i.i.d. draw from some continuous
+distribution with ﬁnite mean and variance. For a researcher to compute the autocorrelation she
+must ﬁrst determine its sample mean ¯ x and variance ˆσ2(x), then calculate the autocorrelation
+ˆρt,t+1(x) = ˆcovt,t+1(x)/ˆσ2(x), where ˆcovt,t+1(x) is the autocovariance. 64 The total sum of values
+n¯x in a sequence serves as the analogue to the number of Hs (or Gs/Ys) in a sequence in the
+examples given above. Given n¯x, the autocovariance can be represented as the expected outcome
+from a procedure in which one draws (at random) one of the n trial outcomes xi, and then takes
+the product of its diﬀerence from the mean ( xi− ¯x), and another trial outcome j’s diﬀerence from
+the mean. Because the outcome’s value xi is essentially drawn from n¯x, without replacement,
+the available sum total ( n¯x−xi) is averaged across the remaining n− 1 outcomes, which im-
+plies that the expected value of another outcome j’s (j⁄=i) diﬀerence from the mean is given by
+E[xj|xi, ¯x]− ¯x = (n¯x−xi)/(n− 1)− ¯x = (¯x−xi)/(n− 1). Therefore, given xi− ¯x, the expected
+value of the product ( xi− ¯x)(xj− ¯x) must equal (xi− ¯x)(¯x−xi)/(n− 1) =−(xi− ¯x)2/(n− 1),
+which is independent of j. Because xi and j were selected at random, this implies that the ex-
+pected autocorrelation, given ¯x and ˆσ2(x), is equal to −1/(n− 1) for all ¯x and ˆσ2(x). This result
+accords with known results on the O(1/n) bias in discrete-time autoregressive processes (Shaman
+and Stine 1988; Yule 1926), and happens to be identical to the result in Theorem 4 for the expected
+diﬀerence in proportions (see Appendix A.3). In the context of time series regression this bias is
+known as the Hurwicz bias (Hurwicz 1950), which is exacerbated when one introduces ﬁxed eﬀects
+into a time series model with a small number of time periods (Nerlove 1967, 1971; Nickell 1981).65,66
+64The autocovariance is given by ˆcovt,t+1(x) := 1n−1∑n−1i=1 (xi− ¯x)(xi+1− ¯x).65The bias that is exacerbated by the introduction of of exogenous variables is commonly known as the “Nickell bias,”
+which was ﬁrst explored by simulation by Nerlove (1967, 1971). It is an example of what is known as the incidental
+parameter problem (Lancaster 2000; Neyman and Scott 1948).
+66In a comment on this paper, Rinott and Bar-Hillel (2015) assert that the work of Bai (1975) (and references therein)
+demonstrate that the bias in the proportion of successes on the trials that immediately follow a streak of k or more
+successes follows directly from known results on the ﬁnite sample bias of Maximum Likelihood estimators of transition
+probabilities in Markov chains, as independent Bernoulli trials can be represented by a Markov chain with each state
+deﬁned by the sequence of outcomes in the previous k trials. While it is true that the MLE of the corresponding
+transition matrix is biased, and correct to note the relationship in this sense, the cited theorems do not indicate the
+direction of the bias, and in any event do not directly apply in the present case because they require that transition
+probabilities in diﬀerent rows of the transition matrix not be functions of each other, and not be equal to zero, a
+requirement which does not hold in the corresponding transition matrix. Instead, an unbiased estimator of each
+transition probability will exist, and will be a function of the overall proportion.
+47
+F.2 Pattern overlap and the bias for streaks of length k > 1.
+In Figure 6 of Web Appendix D we compare the magnitude of the bias in the (conditional) expected
+proportion to the pure sampling-without-replacement bias, in a sequence of length n. As can be
+seen, the magnitude of the bias in the expected proportion is nearly identical to that of sampling-
+without-replacement for k = 1. However, for the bias in the expected proportion, the relatively
+stronger sampling-without-replacement eﬀect that operates within the ﬁrst n− 1 terms of the
+sequence is balanced by the absence of bias for the ﬁnal term.67 On the other hand, fork> 1 the bias
+in the expected proportion is considerably stronger than the pure sampling-without-replacement
+bias. One intuition for this is provided in the discussion of the updating factor in Section D. Here
+we discuss another intuition, which has to do with the overlapping nature of the selection criterion
+when k > 1, which is related to what is known as the overlapping words paradox (Guibas and
+Odlyzko 1981).
+For simplicity, assume that a sequence is generated by n = 5 ﬂips of a fair coin. For the simple
+case in which streaks have lengthk = 1, the number of ﬂips that immediately follow a heads is equal
+to the number of instances of H in the ﬁrst n− 1 = 4 ﬂips. For any given number of Hs in the ﬁrst
+four ﬂips, say three, if one were to sample an H from the sequence and then examine an adjacent
+ﬂip (within the ﬁrst four ﬂips), then because any H could have been sampled, across all sequences
+with three Hs in the ﬁrst four ﬂips, any H appearing within the ﬁrst four ﬂips is given equal weight
+regardless of the sequence in which it appears. The exchangeability of outcomes across equally
+weighted sequences with an H in the sampled position (and three Hs overall) therefore implies
+that for any other ﬂip in the ﬁrst four ﬂips of the sequence, the probability of an H is equal to
+3−1
+4−1 = 23, regardless of whether or not it is an adjacent ﬂip. On the other hand, for the case of
+streaks of length k = 2, the number of opportunities to observe a ﬂip that immediately follows two
+consecutive heads is equal to the number of instances of HH in the ﬁrst 4 ﬂips. Because the pattern
+HH can overlap with itself, whereas the pattern H cannot, then for a sequence with three Hs, if
+one were to sample an HH from the sequence and examine an adjacent ﬂip within the ﬁrst 4 ﬂips,
+it is not the case that any two of the Hs from the sequence can be sampled. For example, in the
+sequence HHTH only the ﬁrst two Hs can be sampled. Because the sequences HHTH and HTHH
+each generate just one opportunity to sample, this implies that the single instance of HH within
+each of these sequences is weighted twice as much as any of the two (overlapping) instances of HH
+within the two sequences HHHT and THHH that each allow two opportunities to sample, despite
+the fact that each sequence has three heads in the ﬁrst four ﬂips. This implies that, unlike in the
+case of k = 1, when sampling an instance of HH from a sequence with three heads in the ﬁrst four
+ﬂips, the remaining outcomes H and T are no longer exchangeable, as the arrangements HHTH
+67The reason for this is provided in the alternative proof of Lemma 1 in Appendix A.3
+48
+and HTHH, in which every adjacent ﬂip within the ﬁrst four ﬂips is a tails, must be given greater
+weight than the arrangements HHHT and THHH, in which half of the adjacent ﬂips are heads.
+This consequence of pattern overlap is closely related to the overlapping words paradox, which
+states that for a sequence (string) of ﬁnite length n, the probability that a pattern (word) appears,
+e.g. HTTHH , depends not only on the length of the pattern relative to the length of the sequence,
+but also on how the pattern overlaps with itself (Guibas and Odlyzko 1981). 68 For example, while
+the expected number of (potentially overlapping) occurrences of a particular two ﬂip pattern—
+TT, HT,TH or HH—in a sequence of four ﬂips of a fair coin does not depend on the pattern,
+it’s probability of occurrence does. 69 The pattern HH can overlap with itself, so can have up to
+three occurrences in a single sequence (HHHH), whereas the pattern HT cannot overlap with itself,
+so can have at most two occurrences (HTHT). Because the expected number of occurrences of
+each pattern must be equal, this implies that the pattern HT is distributed across more sequences,
+meaning that any given sequence is more likely to contain this pattern. 70
+68For a simpler treatment which studies a manifestation of the paradox in the non-transitive game known as “Penney’s”
+game, see Konold (1995) and Nickerson (2007).
+69That all ﬁxed length patterns are equally likely ex-ante is straightforward to demonstrate. For a given pat-
+tern of heads and tails of length 𝓁, ( y1,...,y 𝓁), the expected number of occurrences of this pattern satisﬁes
+E[∑ni=𝓁 1[(Xi−𝓁+1,...,Xi)=(y1,...,y𝓁)]] =∑ni=𝓁E[1[(Xi−𝓁+1,...,Xi)=(y1,...,y𝓁)]] =∑ni=𝓁 1/2𝓁 = (n−𝓁 + 1)/2𝓁.70Note that the proportion of heads on ﬂips that immediately follow two consecutive heads can be written as the
+number of (overlapping) HHH instances in n ﬂips, divided by the number of (overlapping) HH instances in the ﬁrst
+n− 1 ﬂips.
+49

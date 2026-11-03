@@ -1,0 +1,3592 @@
+arXiv 2606.20683  https://arxiv.org/abs/2606.20683
+
+1
+From Question Answering to Task Completion: A
+Survey on Agent System and Harness Design
+Jianyuan Guo, Zhiwei Hao, Chengcheng Wang, Cheng Fan, Tingzhang Luo, Hongguang Li, Ying Gao,
+Hefei Mei, Jiankun Peng, Rongjian Xu, Minjing Dong, Han Wu, Mengyu Zheng, Kai Han, Shiqi Wang,
+Chang Xu and Yunhe Wang
+Abstract—LLM-based agents mark a shift from passive question answering to active task completion: they perceive environments,
+invoke tools, maintain state, and act over extended horizons. As agent systems have evolved from prompt engineering to workflows
+and context engineering, harness engineering, and agent-native training with co-evolution, a central question has become increasingly
+important: where does the bottleneck in agent performance reside—in the foundation model, in the execution harness, or in the coupling
+between them? This survey examines LLM-based agents through a model–harness lens. We first clarify the functional definition of
+agents and the implementation view of an LLM-based agent as a foundation model coupled with an execution harness. We then analyze
+the limits of model-centric scaling, trace four paradigms of agent engineering, and decompose the execution harness into six coupled
+runtime responsibilities: observation, context, control, action, state, and verification/governance. Using this decomposition, we map task
+properties and domain pressures to harness configurations, review benchmark and evaluation practices, and synthesize model–harness
+evidence on how runtime design affects long-horizon task completion, efficiency, and reliability. Finally, we identify open challenges
+in value-aware evaluation, safety, harness generalization, and model–harness co-evolution. Rather than treating agents as models
+with auxiliary tools, this survey argues that agent quality—including success, efficiency, safety, and generalization—emerges from the
+interaction between model capability, runtime infrastructure, task structure, and evaluation design. A collection of papers discussed in
+this survey is provided in https://github.com/ggjy/Awesome-Agent-Engineering.
+Index Terms—LLM-based Agents, Harness Engineering, Prompt Engineering, Model-Harness Co-Evolution, Evaluation Benchmarks
+✦
+1 INTRODUCTION
+“Nothing is particularly hard if you divide it into small
+jobs.”— Henry Ford
+L
+ARGElanguage model (LLM)-based agents—
+autonomous systems that perceive environments,
+reason over goals, and execute multi-step actions—mark
+a transition from passive question answering [1], [2] to
+active task completion [3], [4]. Unlike early chat interfaces
+that optimized single-turn response quality, modern
+agent systems operate as closed loops that invoke tools,
+update state, and verify outcomes over extended horizons.
+Prominent examples span multiple domains: coding
+agents such as Devin [5], Claude Code [6], and Codex [7]
+independently diagnose and resolve software engineering
+tasks across entire repositories; general-purpose agents
+like Manus [8] orchestrate multi-step workflows from
+research to data analysis; open-source platforms including
+AutoGPT [9], OpenHands [10], and OpenClaw [11] provide
+extensible frameworks for building custom agent pipelines.
+This landscape illustrates a broader shift from con-
+versational competence to operational competence, and it
+•J. Guo, Z. Hao, C. Fan, T. Luo, H. Li, Y. Gao, H. Mei, J. Peng, R. Xu, M.
+Dong and S. Wang are with the Department of Computer Science, City
+University of Hong Kong, HKSAR, China. Email:{jianyguo, zhiwei.hao,
+minjdong, shiqwang}@cityu.edu.hk.
+•C. Wang and C. Xu are with the School of Computer Science, University
+of Sydney. Email: cwan0785@uni.sydney.edu.au, c.xu@sydney.edu.au.
+•H. Wu is with the Peking University. Email: han.wu@pku.edu.cn.
+•M. Zheng, K. Han and Y. Wang are with the TokenRhythm Technologies.
+Email:{mengyu.zheng, kai.han, yunhe.wang}@tokenrhythm.ai.
+•Correspondence author: Chang Xu and Yunhe Wang.
+changes where the performance bottleneck lies. For ques-
+tion answering (QA), incremental improvements in model
+capability—i.e., larger parameters, more training data, or
+better alignment—often yield direct and predictable gains.
+Yet traditional benchmarks that measure such capability,
+including MMLU [12], GPQA [13], and HumanEval [14],
+have become increasingly saturated at the frontier, with con-
+tamination risks further complicating interpretation; harder
+evaluations such as Humanity’s Last Exam [15] have been
+proposed to restore discriminative power. More critically,
+when evaluation shifts from closed-form QA to inter-
+active, multi-step task completion, even frontier models
+reveal substantial reliability gaps—SWE-bench [16], We-
+bArena [17], OSWorld [18], TheAgentCompany [19], and
+Terminal-Bench [20] all demonstrate that agentic tasks re-
+tain significant headroom. This divergence between static
+benchmarks (nearing saturation) and agentic benchmarks
+(far from solved) raises a natural question: if model scaling
+alone does not close the gap on agentic tasks, what does?
+1.1 Harness Design as a Performance Lever
+A growing body of work suggests that agent performance is
+increasingly limited not only by the model’s raw reasoning
+power, but also by the design of itsexecution harness: the run-
+time infrastructure that shapes what the model perceives,
+how it acts, and whether its errors are detected and recov-
+ered. The idea that interface design matters was first demon-
+strated empirically by SWE-agent [21], which showed that
+redesigning the agent–computer interface (ACI) can sub-
+stantially improve SWE-bench performance under a fixed
+arXiv:2606.20683v1  [cs.AI]  14 Jun 2026
+2
+What is an 
+Agent?
+Model + 
+Harness
+Cognitive 
+Engine
+Runtime 
+Substrate
+Infrastructure
+Resource 
+Boundary
+Measurement 
+Boundary
+Prompt 
+Engineering
+Context 
+Engineering
+Harness 
+Engineering
+Agent-Native 
+Training
+Observation
+Context
+Control Loop
+Action
+State
+V erification & 
+Governance
+Cross-Layer 
+Interaction
+Task Taxonomy
+Design 
+Dimensions
+Domain 
+Adaptation
+Task-to-Harness 
+Mapping
+Benchmarks
+Beyond Task 
+Success
+Harness 
+Effects
+Benchmark 
+Insights
+V erify, Recover 
+& Adapt
+Generalization vs. 
+Specification
+V alue-A ware 
+Optimization
+Background & 
+DefinitionsIntroduction Limits of Model Scaling Paradigmshifts Harness Anatomy Task Landscape Evaluation & Analysis Future Directions Conclusion
+Agent Systems
+&
+Harness Design
+Sec 1 Sec 2 Sec 3 Sec 4 Sec 5 Sec 6 Sec 7 Sec 8 Sec 9
+Fig. 1:A diagram that summarizes the structure of this survey.
+base model. The broader concept was subsequently crystal-
+lized under the termharness engineeringby Hashimoto [22]
+and OpenAI [7], who framed an agent asmodel plus harness
+and identified observation shaping, action-space design, ex-
+ecution sandboxing, context management, and verification
+loops as its core components. More recently, NLAH [23]
+formalizes harness logic as an editable, portable natural-
+language artifact, and Meta-Harness [24] treats harness con-
+figuration as an optimizable search space.
+Following this line of work, we adopt the harness-centric
+perspective as a unifying lens: we systematically examine
+how the design of the runtime infrastructure, rather than
+model capability alone, determines agent reliability, effi-
+ciency, and generalization across diverse tasks. We further
+argue that this perspective is nowextending beyond single-
+model scaffolds: recent systems [25] treat the harness as a
+compositional runtime over multiple models, and increas-
+ingly as a learnable object whose routing, orchestration, and
+verification policies can themselves be optimized.
+1.2 Four Paradigms of Agent Engineering
+We organize the recent literature through an evolutionary
+lens of four paradigms. Each emerged to address limitations
+exposed by its predecessor; each foregrounds a different
+performance lever.
+Phase 1: Prompt Engineering optimizes the single-turn in-
+struction sent to the model. Techniques such as few-
+shot exemplars [1], chain-of-thought reasoning [26], self-
+consistency [27], and tree-of-thought search [28] can clar-
+ify tasks, constrain output format, and elicit the model’s
+latent capabilities. Yet prompting fundamentally addresses
+anexpressionproblem: how to ask. It does not solve the
+informationproblem: prompting alone cannotsupply miss-
+ing knowledge, manage dynamically evolving state, or
+maintain coherence across long action sequences.
+Phase 2: Workflows and Context Engineering shifts the unit
+of optimization from a single prompt to the information
+lifecycle surrounding multi-step execution. Its core dis-
+cipline is curatingwhatinformation enters the model’s
+context window,when, andin what form[29], encompass-
+ing retrieval-augmented generation [30], long-term mem-
+ory management [31], tool and API definitions [32], [33],
+and progressive skill disclosure [34], [35]. The evaluation
+criterion changes accordingly: the question is no longer
+only whether a single answer is correct, but whether the
+assembled context enables the model to complete multi-step
+tasks. However, context engineering remains fundamentally
+feedforward: it optimizes the input to each reasoning step
+butprovides no structural mechanism to detect drift,
+verify intermediate outcomes, or recover from errors.
+Phase 3: Harness Engineering closes the loop. Beyond as-
+sembling the right context, the harness introduces feedback-
+driven execution: the model acts, observes environment
+responses, and reasons over observations to decide its next
+step [36]. More broadly, harness engineering treats the entire
+runtime infrastructure as the primary design object [7],
+[22], governing execution sandboxing, state checkpointing,
+verification loops, error recovery, and sub-agent coordina-
+tion [23], [24]. The governing question shifts fromwhat to
+show the modeltohow to keep the whole system on track:prevent
+drift, maintain stable execution, and recover from errors.
+Within this phase, a further shift is already visible. Early
+harness design typically wraps afixedfoundation model
+with hand-crafted or searched runtime policies. More recent
+systems move toward amulti-model harness: the runtime
+routes, delegates, and composes heterogeneous models for
+planning, tool use, verification, coding, and domain-specific
+subtasks [37]–[39]. At the same time, the harness itself is be-
+cominglearnable: harness modules, orchestration logic, and
+runtime policies can be edited, searched, or optimized as
+first-class artifacts [23], [24], [40]. This changes what counts
+as an agent system. A single prompt wrapped around one
+model can still function as a lightweight agent, but reliable
+long-horizon task completion increasingly depends ona
+compositional, optimizable runtime over multiple models,
+not on prompt craft alone.
+Phase 4: Agent-Native Training and Co-Evolution builds
+on the learnable multi-model harness view above. Its
+first direction isinternalization: agentic behaviors such
+as planning, tool use, verification, and recovery are
+increasingly trained into model parameters through
+interactive environments [41]–[44]. Its second direction is
+co-evolution: over deployment, the model, harness, and
+3
+TABLE 1:Comparison between our work and representative prior surveys. “Broad” denotes coverage of the general LLM-based
+agent landscape rather than a specific subfield; “Eval.” denotes explicit coverage of benchmarks and the evaluation of methods;
+“App.” denotes substantial discussion of application domains and use cases; and “Industry” denotes the extent to which a survey
+incorporates practitioner reports, production systems, or industrial engineering evidence as part of its main analysis.
+Survey Time Organizing lens Primary focus Broad Eval. App. Industry
+Wanget al. [47] 2023.08 Module-basedagent construction How to construct an autonomous LLM agent throughcore modules,e.g., profile, memory, planning, and action. ✓ ✗ ✓No
+Xiet al. [4] 2023.09 Brain–perception–action framework Agents as intelligent systems, from single-agent arch. tomulti-agent society and human–agent interaction. ✓ ✗ ✓ No
+Luoet al. [3] 2025.03 Build–collaborate–evolve taxonomy Taxonomy of agents spanning methodological founda-tions, collaboration, applications, and evaluation. ✓ ✓ ✓Limited
+Guoet al. [48] 2024.02 Communicationand collaboration Overall progress, communication patterns, and openchallenges in LLM-based multi-agent systems. ✗ ✗ ✓ No
+Liet al. [49] 2024.10 Workflow-basedtaxonomy How multi-agent systems are structured through work-flow, infrastructure, core functional modules. ✗ ✗ ✗Limited
+Liet al. [50] 2025.01 Collaborationmechanism Collaboration in multi-agent systems, categorized by ac-tors, structures, strategies and coordination protocols. ✗ ✗ ✓ No
+Shenet al. [51] 2025.03 Evaluation-basedtaxonomy Benchmarks, metrics, and methodological issues in eval-uating LLM-agents. ✗ ✓ ✗Limited
+Guet al. [52] 2025.07 Domain-focusedtaxonomy GUI/computer-use agents: benchmarks, architectures,and training methods. ✗ ✓ ✓ Limited
+Maet al. [53] 2024.05 Embodied-agenttaxonomy Vision-language-action models for embodied AI.✗ ✓ ✓No
+Zhanget al. [54] 2025.03 Safety-orientedtaxonomy Threats, safety risks, evaluation, and countermeasuresfor trustworthy LLM-based agents. ✗ ✓ ✓ Limited
+Menget al. [55] 2026.04 Execution harnesstaxonomy Six-component tuple for harness definition, historicaltracing, and cross-cutting harness challenges. ✓ ✗ ✗Strong
+Liet al. [56] 2026.04 Seven-layerharness taxonomy ETCLOVG, a seven-layer taxonomy and practitionerprinciples from deployed agent stacks. ✓ ✗ ✓ Strong
+Ninget al. [57] 2026.05 Code-as-harnesslayers Code as executable harness substrate: interface andmulti-agent scaling across application domains. ✗ ✓ ✓Limited
+Ours 2026.06 Engineeringparadigm shifts How agent engineering evolved from prompt optimiza-tion to runtime system design and future directions. ✓ ✓ ✓ Strong
+improvement loop may all be updated from execution
+traces that indicate what to keep, change, or undo [40],
+[44]–[46]. This does not eliminate the harness; it shifts the
+design question toward how much of agent behavior is
+learned in models, how much stays in the runtime, and
+how the full stack improves safely over time, opening a
+path towardself-evolving agent systems.
+These four phases form a conceptual evolutionary lens
+rather than a strict temporal partition; all four coexist in
+practice today. Our goal is not to introduce another compo-
+nent taxonomy, but to use this progression and benchmark
+evidence (Sec. 7) to analyze how the dominant performance
+bottleneck moves across stages, and why harness design has
+become a central object of agent engineering.
+1.3 Relation to Prior Surveys
+Recent surveys have documented the rapid rise of
+LLM-based agents, but most organize the field through
+taxonomy-oriented lenses. Tab. 1 compares our survey
+with representative prior work. General-purpose surveys
+summarize agent architectures and components such as
+memory, planning, action, perception, applications, safety,
+and evaluation [3], [4], [47]. Multi-agent surveys focus
+on communication, coordination, collaboration structures,
+and workflow organization [48]–[50]. Other surveys ex-
+amine narrower but important slices, including evaluation
+methodology [51], GUI/computer-use agents [52], embod-
+ied systems [53], and trustworthy agents [54]. Since early
+2026, several works have narrowed the lens specifically to
+agent harnesses. Menget al. [55] formalize the harness as a
+six-component tuple. Liet al. [56] further propose the seven-
+layer ETCLOVG taxonomy and map a large open-source
+corpus onto it to expose ecosystem coverage and production
+design principles. Ninget al. [?] organize the field from a
+code-centric perspective, treating executable programs as
+the substrate for reasoning, action, state, and verification.
+These surveys provide valuable harness taxonomies, cata-
+logs, or substrate-specific roadmaps.
+Relative to recent harness-focused surveys, our contri-
+bution is not primarily another layer taxonomy or project
+catalog. We instead ask how the dominant engineer-
+ing bottleneck migrates across prompt optimization, con-
+text/workflow organization, compositional and learnable
+runtimes, and agent-native co-evolution, and how that mi-
+gration should be evaluated empirically. Accordingly, we
+connect harness anatomy to task pressure profiles (Sec. 6),
+benchmark evidence (Sec. 7), and value-aware deployment
+objectives (Sec. 8), rather than centering the analysis on
+taxonomy completeness or repository coding alone.
+Our survey makes three distinctions explicit. First, it is
+evolution-first: we organize the literature around engineering
+paradigm shifts rather than a static component taxonomy.
+Second, it isharness-centric: we treat the execution harness
+as a first-class technical object that governs observation,
+context, control, action, state, verification, recovery, and
+efficiency. Third, it connectsacademic evidence with industrial
+practice, using benchmark results, open-source systems, en-
+gineering reports, and controlled model–harness analyses to
+examine how runtime design choices affect agent reliability,
+cost, and latency.
+In short, our goal is not only to catalog LLM-based
+agents, but to explain why harness engineering emerged as
+a central systems concern and how it may extend toward
+future agent-native training and co-evolution.
+4
+1.4 Scope Boundaries
+This survey covers LLM-based agent systems from 2020 to
+2026, including prompting methods, workflow frameworks,
+harness and runtime design, multi-model orchestration,
+agent-native training, model–harness co-evolution, domain
+deployments, and evaluation methodology. We focus on
+systems in which one or more LLMs serve as cognitive
+engines within an execution harness, and synthesize pub-
+lished papers, public engineering reports, benchmarks, and
+controlled model–harness comparisons. We prioritize high-
+impact and verifiable sources that directly inform agent
+system design, efficiency, or evaluation. Adjacent traditions
+such as neuro-symbolic planning, classical embodied con-
+trol, and non-LLM systems are treated as complementary
+work rather than surveyed in depth, because they rely on
+different assumptions, architectures, and evaluation criteria.
+1.5 Contributions and Survey Structure
+The main contributions of this survey are:
+•We provide an evolution-first synthesis of agent engineer-
+ing, tracing shifts from prompt engineering to context en-
+gineering, harness engineering, and agent-native training.
+•We analyze the limits of model-centric scaling for long-
+horizon task completion and argue that agent perfor-
+mance is a property of the model–harness pairing.
+•We formalize the execution harness as a runtime design
+object and decompose it into six coupled responsibilities.
+•We map task properties, domain adaptations, and eval-
+uation practices to harness pressure profiles rather than
+treating agent components as an independent checklist.
+•We synthesize benchmark and empirical evidence to mo-
+tivate value-aware evaluation beyond task success.
+The remainder of this survey is organized as follows.
+Sec. 2 defines agents and harnesses and reviews core in-
+frastructure. Sec. 3 analyzes the limits of model-centric
+scaling. Sec. 4 presents the four-paradigm evolution of
+agent engineering. Sec. 5 decomposes the execution harness
+into six runtime components. Sec. 6 maps task pressures
+and domain adaptations to harness configurations. Sec. 7
+reviews benchmarks, evaluation methodology, and model–
+harness evidence. Sec. 8 discusses open challenges and
+future directions, and Sec. 9 concludes. Fig. 1 summarizes
+the overall structure of this survey.
+2 BACKGROUND ANDDEFINITIONS
+Two abstraction levels are often conflated in the agent
+literature. At the functional level, an agent is a goal-directed
+closed-loop system: it perceives an external environment,
+maintains task state, reasons and decides, executes actions,
+and adapts from feedback. At the implementation level, an
+LLM-based agent is not the foundation model alone, but a
+coupled system consisting of a foundation model and an
+execution harness. The model supplies flexible language
+understanding, reasoning, planning, and action proposal;
+the harness supplies the runtime machinery that exposes
+observations, constructs context, executes actions, persists
+state, and verifies or recovers from failures. This distinction
+reconciles classical agent definitions with recent harness-
+centered accounts of LLM agents: the former definewhat
+Agent
+Perception
+ Reasoning & Decision
+Goal
+State
+actionsobservations feedback / outcomes
+Feedback
+External Environment
+Action
+Fig. 2:Functional view of an agent: a goal-directed closed-loop
+system that receives observations from external environments,
+maintains state, reasons and acts on the environment, and
+adapts from feedback or outcomes. This view defineswhatan
+agent must do, independent of any particular implementation.
+an agent must do, whereas the latter specifyhowthose
+functions are realized in deployed systems.
+2.1 Functional View: What Is an Agent?
+The notion of an agent predates LLMs. Wooldridge and
+Jennings [58] characterize an intelligent agent as a system
+situated in an environment, able to perceive that environ-
+ment and act upon it in pursuit of goals [59]–[61]. For this
+survey, the defining property is not whether the system is
+implemented by symbolic rules, reinforcement learning, or a
+language model, but whether it sustains a goal-conditioned
+loop with its environment. We therefore use a functional def-
+inition: an agent is a system that organizes five operations
+around a task objective:perception,state maintenance,rea-
+soning and decision-making,action, andfeedback adap-
+tation. The goal and environment condition a particular
+run, but they are not themselves internal components of the
+agent. As illustrated in Fig. 2, the agent receives observa-
+tions, updates internal or external state, chooses the next
+action through reasoning and decision-making, acts on the
+environment, and incorporates feedback or outcomes into
+subsequent behavior. This closed-loop property separates
+agents from single-shot model calls, static retrieval systems,
+and fixed automation scripts that do not revise behavior as
+observations change.
+2.2 Implementation View: Model Plus Harness
+In LLM-based agents, the functional loop is implemented
+by more than an inference call to a model. The foundation
+model is necessary because it provides the general-purpose
+cognitive capabilities that make open-ended task comple-
+tion possible. It is not sufficient, however, because the model
+does not by itself define what observations are available,
+which actions are permitted, where long-term state is stored,
+how execution is validated, or how failures are recovered.
+Following recent industrial and academic discussions of
+harness engineering [7], [22], we write LLM-based agent as:
+ALLM =⟨M,H⟩=⟨M,I obs,C,L,I act,S,V⟩,(1)
+whereMdenotes the model layer of the agent. In the
+simplest case,Mis a single foundation model. In deployed
+multi-model systems,M={M 1, . . . ,Mk}denotes a set
+of backbone models with heterogeneous capabilities, costs,
+5
+External Entry Channels / Observation Sources
+User goals, task instructions, interaction events, and raw environment signals
+Multi-agent
+coordination
+Debate / discussion
+Hierarchical delegation
+Peer collaboration
+Competitive checking
+Specialized sub-agents
+Foundation Model /
+LLM Core
+Agent configuration
+Mode selection
+Autonomy level
+Task workspace
+3. Control Loop
+Session
+manager
+5. State and Artifact Store
+State
+checkpoints
+Audit
+logs
+Execution
+traces Plans Scratchpads Filediffs Generatedartifacts Long-termmemory
+6. Verification and
+Governance
+Tests
+Environment / External World
+File system
+ Browser
+Repository
+ APIs
+ Operating system
+ Databases
+Web services
+ External APPs
+Linters
+Verifier models
+Sandbox execution
+Assertions
+Budget control
+Permission gates
+Safety constraints
+Rollback
+Retry
+Safe termination
+Audit trace
+Human approval
+CIL
+ Web / GUI
+ Chat / app
+IDE / desktop
+API / service
+ External  events
+Execution Harness
+1Perception
+2 State
+3Reasoning& Decision
+5 Feedback
+4 Action
+observation shaping
+ representation
+ filtering
+ refresh
+1. Observation Interface
+4. Action Interface
+Tool 
+management
+File 
+operations
+Web / browser 
+operations
+API
+calls
+MCP / external 
+connectors
+Function 
+calling
+Shell / code 
+execution
+2. Context Management
+Prompt
+construction
+System
+instructions
+Retrieved 
+documents
+Memory 
+selection Summarization Skill / tooldescriptions Currenttask state
+Context 
+compression
+(Sec 5.1)
+(Sec 5.2)
+(Sec 5.3)
+(Sec 5.4)
+(Sec 5.5)
+(Sec 5.6)
+Fig. 3:Implementation view of an LLM-based agent as a foundation model coupled with an execution harness. The harness
+mediates closed-loop interaction between the model and the external world through six runtime components: observation
+interface, context manager, control loop, action interface, state and artifact store, and verification and governance layer. The
+section labels inside the figure indicate where each component is analyzed in detail.
+and context limits [37]–[39].Hdenotes the execution har-
+ness surroundingM. The second equality expands the
+harness into six runtime components used throughout this
+survey. This expression is an implementation-oriented de-
+composition, not a replacement for the functional definition
+above. When|M|= 1, the agent reduces to the familiar
+single-backbone setting; when|M|>1, the harness must
+additionally decidewhichmodel acts at each step [25]. The
+model layer and harness jointly instantiate the functional
+loop: the active model reasons over a supplied context and
+proposes next steps, while the harness determines what it
+sees, what it can do, how execution state persists, and how
+errors are detected, constrained, or repaired.
+2.3 LLM as the Cognitive Engine
+LLMs became viable cognitive engines for agents because
+they combine capabilities that previously required separate
+modules or task-specific policies.
+Reasoning and planning.Prompting methods such as
+chain-of-thought [26], Tree of Thoughts [28], [62], self-
+consistency [27], and Reflexion [63] show that sufficiently
+capable models can support task decomposition, branching
+search, self-critique, and multi-step inference. These abilities
+make the model a plausible decision engine for tasks whose
+solution cannot be enumerated in advance.
+In-context adaptation.The same frozen model can adapt
+its behavior through instructions, examples, retrieved doc-
+uments, tool descriptions, and intermediate artifacts. This
+6
+reduces the need to train a separate policy for each environ-
+ment, while making the quality, ordering, and compression
+of the supplied context a primary determinant of behavior.
+Action proposal and tool use.When models can emit
+structured tool calls [32], [33], they are no longer limited
+to internal text generation. They can propose calls to code
+execution, retrieval systems, browsers, APIs, and external
+software. Yet a proposal is not an executed action: reliability
+depends on the harness to validate, dispatch, observe, and,
+when necessary, reject or repair the proposed action.
+These strengths also expose the model’s limitations.
+LLMs remain vulnerable to hallucination, finite context
+windows, weak persistent memory, prompt sensitivity, and
+limited intrinsic ability to verify long-horizon outcomes. The
+harness is therefore not an optional engineering wrapper;
+it is the runtime layer that turns model capability into
+sustained, inspectable interaction with an environment.
+2.4 Harness as the Runtime Substrate
+Following [7], [22], [64], we useharnessto denote the run-
+time infrastructure that surrounds the model and realizes
+closed-loop agent execution. The harness is broader than
+an individual tool, memory module, prompt template, or
+workflow script. It is the coordinating layer that decides
+which observations reach the model, how context is assem-
+bled, how the agent loop advances, how actions are exe-
+cuted, how state and artifacts persist, and how failures are
+detected, governed, and recovered. This runtime substrate
+can be formalized as:
+H=⟨I obs,C,L,I act,S,V⟩.(2)
+The six components are:
+•Observation interfaceI obs: transforms raw environment
+signals into model-usable observations, including termi-
+nal output, file diffs, screenshots, DOM states, API re-
+sponses, logs, retrieved passages, and event streams.
+•Context managerC: determines what information enters
+the model context, when it enters, and in what form,
+covering prompt construction, system instructions, re-
+trieval, memory selection, compression, summarization,
+tool descriptions, and current task state.
+•Control loopL: orchestrates the observe-reason-act-
+feedback cycle, including step scheduling, stopping cri-
+teria, retries, reflection, delegation, handoffs, and multi-
+agent coordination. In multi-model settings,Laddition-
+ally implements model routing and role assignment.
+•Action interfaceI act: maps model outputs to executable
+operations, such as function calls, MCP tools, shell or code
+execution, browser actions, file operations, API calls, and
+sub-agent invocations.
+•State and artifact storeS: persists execution state and
+products, including conversation history, plans, scratch-
+pads, checkpoints, logs, traces, diffs, memory records,
+generated files, and task artifacts.
+•Verification and governance layerV: checks, constrains,
+and repairs execution through tests, assertions, veri-
+fier models, sandbox policies, permission gates, rollback,
+retry, budget control, safety constraints, and audit traces.
+Fig. 3 visualizes this implementation view. The figure
+should be read as an execution architecture rather than a
+static checklist: observations, context, control, actions, state,
+and verification form a coupled runtime around the model,
+and their interaction determines whether model capability
+becomes reliable task completion.
+This decomposition differs from earlier component tax-
+onomies because it is operational rather than purely func-
+tional. For example, memory appears in the functional loop
+as state, but in a deployed system it may be realized through
+context selection, artifact storage, retrieval indices, session
+managers, or checkpointing policies. Similarly, action is not
+merely an abstract action space; it is mediated by schemas,
+permissions, sandboxes, execution APIs, and side-effect
+controls. By separating these runtime responsibilities from
+the model itself, the decomposition explains why harness
+changes can improve agent performance even when the
+underlying model is unchanged [21], [23], [24].
+2.5 Key Infrastructure Primitives
+Several infrastructure primitives recur across modern LLM-
+based agents. They should not be treated as concepts par-
+allel to the harness. Rather, they instantiate specific harness
+responsibilities in deployed systems and make perception,
+action, communication, and governance concrete.
+Tool and function calling.Structured tool invocation
+converts model outputs from free-form suggestions into
+machine-executable calls [32], [33]. Tool schemas are primar-
+ily part of the action interfaceI act, while tool descriptions,
+arguments, and returned results also shape the context
+managerCand observation interfaceI obs.
+Model Context Protocol (MCP).MCP [65] standardizes how
+LLM applications expose tools, data sources, and contex-
+tual resources to agents. In our notation, MCP primarily
+strengthens the boundary between the context manager and
+action interface by reducing connector fragmentation and
+making tool and data access more modular.
+Agent-to-Agent communication.The Agent2Agent (A2A)
+protocol [66] targets interoperability among agents built by
+different vendors or frameworks. It is most relevant to the
+control loopLand action interfaceI act, especially when
+delegation, negotiation, debate, or multi-agent collaboration
+becomes part of the execution process.
+Sandboxed execution and approval.When agents can write
+files, execute code, browse the web, or call APIs, isolation
+becomes both a safety mechanism and a reproducibility
+primitive. Sandboxes constrain filesystem access, network
+egress, process execution, and resource usage, while ap-
+proval policies determine when human authorization is
+required before an action is dispatched. These mechanisms
+belong primarily to the verification and governance layerV.
+Agent SDKs and tracing.Frameworks such as the OpenAI
+Agents SDK [39] expose reusable abstractions for tools,
+handoffs, tracing, and loops. They package common harness
+patterns into developer-facing interfaces, making runtime
+behavior more reusable, inspectable, and debuggable.
+Tab. 2 summarizes how the conceptual operations in the
+functional agent loop are realized by the implementation
+components defined above. The mapping is many-to-many
+rather than one-to-one: perception depends not only on the
+observation interface, but also on the context manager that
+7
+TABLE 2:Mapping from conceptual agent operations to har-
+ness realizations.
+Functional
+operation
+Harness
+components Typical mechanisms
+Perception Iobs,C Logs, DOMs, screenshots,retrieval, summaries
+State Main-
+tenance S,C Memory, checkpoints, artifacts,conversation history
+Reasoning,
+Decision M,C,L Prompted reasoning, plans,tool-choice context
+ActionI act,V Function calls, shell commands,APIs, approval gates
+Feedback
+Adaptation V,L,S Tests, reflection, retries,rollback, trace updates
+TABLE 3:Representative types of LLM-based agents.
+Type Examples Environment Challenge
+Coding Claude Code,Codex Repository,terminal Long-horizonreliability
+Web /
+GUI
+Operator, Visu-
+alWebArena
+Browser,
+desktop
+Grounding, safe
+interaction
+Research Deep Research,Elicit Web,literature Synthesis,citation fidelity
+Embodied Voyager Real world Sim-to-realtransfer, safety
+Domain-
+specific
+ChemCrow,
+Agent Hospital
+Specialized
+tools
+Compliance,
+domain expertise
+selects and formats observations for the model; feedback
+involves verification, control-loop decisions, and state up-
+dates. This many-to-many mapping bridges the conceptual
+view in Fig. 2 and the implementation view in Fig. 3.
+With these definitions in place, common application
+labels can be read as specializations of the same model-
+harness architecture. Coding, web/GUI, research, embod-
+ied, and domain-specific agents all rely on the same six
+runtime components, but they stress different parts of the
+harness because their observation channels, action spaces,
+feedback signals, and safety constraints differ. Representa-
+tive examples are summarized in Tab. 3.
+3 THELIMITS OFMODEL-CENTRICSCALING
+Once an LLM-based agent is viewed as a model coupled
+with an execution harness, the role of foundation-model
+scaling can be stated more precisely. Scaling remains one
+of the main reasons why LLMs can serve as the cognitive
+engine of modern agents. Scaling laws first showed that
+language-modeling loss improves predictably with model
+size, data, and compute [67], while Chinchilla-style results
+refined this picture by emphasizing compute-optimal allo-
+cation between model parameters and training tokens [68].
+The empirical impact is broad: larger and better-trained
+models have improved reasoning and problem solving [69],
+code generation [70], [71], mathematical reasoning [72], [73],
+and multimodal understanding [74], [75]. These gains make
+stronger foundation models indispensable to agent systems,
+but they don’t make model size a complete account of agent
+performance. Long-horizon task completion is a trajectory-
+level property: an agent must repeatedly observe, construct
+context, choose actions, preserve state, interpret feedback,
+and recover from errors. The relevant question is therefore
+2024-01 2024-07 2025-01 2025-07 2026-01
+0.6
+0.7
+0.8
+0.9
+1.0
+MMLU-Pro Score
+GPT-5.4
+Sonnet 4.6
+Gemini 3.1 Pro
+2024-01 2024-07 2025-01 2025-07 2026-01
+Release Date
+0.4
+0.6
+0.8
+1.0
+GPQA Diamond Score
+GPT-5.4
+Sonnet 4.6
+Gemini 3.1 Pro
+GPT (OpenAI) Claude (Anthropic) Gemini (Google)
+Fig. 4:Evolution of frontier-model performance on MMLU-
+Pro and GPQA Diamond. Recent GPT, Claude, and Gemini
+releases increasingly occupy a narrow high-score range on both
+benchmarks, making later improvements less discriminative
+than earlier model-generation jumps.
+where model-centric explanation stops and runtime design
+begins. Two boundaries are especially important: aresource-
+performance boundaryand ameasurement boundary.
+3.1 Resource-Performance Boundary
+The first limit concerns how much additional capability is
+obtained for additional resources. Increasing model capacity
+continues to improve frontier performance, but the gains
+are increasingly costly, uneven across capabilities, and con-
+strained by inference latency and deployment complexity.
+LLaMA3.1 [76] provides a representative example: moving
+from the 70B model to the 405B model increased train-
+ing compute from 7.0M to 30.84M H100 GPU hours, but
+yielded modest gains on several representative benchmarks,
+including 2.6 points on MMLU [12], 2.6 points on MBPP
+EvalPlus [77], and 1.7 points on GSM8K [78]. The larger
+model also remained far from near-perfect performance
+on harder reasoning benchmarks such as MATH [79] and
+MMLU-Pro [80]. Similar uneven returns are also visible in
+Qwen3 [81], where gains from a much larger base model
+vary substantially across benchmarks.
+Closed-source frontier models show the same pattern at
+the high-performance end. MMLU-Pro [80], [82] and GPQA
+Diamond [13], [83] remain challenging, but recent GPT,
+Claude, and Gemini releases increasingly cluster within a
+narrow score range, as shown in Fig. 4. This does not mean
+that scaling has stopped working. Rather, once models enter
+a high-accuracy regime on common evaluations, additional
+8
+scale often yields smaller and more capability-specific im-
+provements while imposing higher cost, latency, and op-
+erational burden. For agents, this trade-off is amplified: a
+deployed agent invokes the model repeatedly across an
+execution trajectory, so per-call cost and latency accumulate,
+and small errors can compound over many steps.
+3.2 Measurement Boundary
+The second limit concerns how scaling-driven progress is
+measured. Model-centric progress has often been validated
+through aggregate gains on static benchmarks. This was
+informative when benchmarks clearly separated model gen-
+erations, but it becomes less discriminative when frontier
+systems cluster near the upper range of same metrics. The
+compression in Fig. 4 illustrates the problem: small score dif-
+ferences on saturated benchmarks are difficult to interpret as
+meaningful differences in real-world agent capability.
+The deeper issue is structural. Many traditional bench-
+marks are static, short-horizon, and self-contained: the input
+is fixed, the output is evaluated once, and the environment
+does not change in response to the model’s actions. Agent
+tasks have a different form, they require long-context un-
+derstanding, multi-step reasoning, environment interaction,
+tool use, adaptation to underspecified goals, and robustness
+to intermediate errors [84]–[91]. Recent evaluations make
+this mismatch explicit. For example, SWE-bench [16], Big-
+CodeBench [92] and LiveClowBench [93] show that coding
+capability depends on repository-level context, executable
+environments, and realistic modification constraints, while
+MultiChallenge [94] shows that dialogue evaluation must
+capture inferential memory, revision, and consistency across
+turns. Together, these limits shift the central question from
+whether stronger models matter to how model competence
+is converted into dependable execution. Agent evaluation
+must therefore consider task duration, step count, environ-
+mental uncertainty, tool-use complexity, state persistence,
+and recovery demand. For example, a recent time-horizon
+study [95] evaluates agents by the duration of human tasks
+they can complete at a fixed success probability, rather
+than by single-shot accuracy alone. This framing makes
+long-horizon reliability central: progress depends not only
+on model competence, but also on the runtime that turns
+competence into sustained action, including what the model
+observes, how context is constructed, which actions are
+available, where state is preserved, and how errors are de-
+tected or repaired. This helps explain why agent engineering
+has moved from eliciting isolated model responses toward
+designing the surrounding execution environment.
+4 PARADIGMSHIFTS INAGENTENGINEERING
+The limits of model-centric scaling in Sec. 3 raise a more
+precise question for agent systems: where is reliable agen-
+tic behavior actually produced? Early LLM-based systems
+placed much of this burden on prompting, assuming that
+latent model capabilities could be elicited by effective in-
+structions. As tasks required external knowledge, tool use,
+memory, and intermediate artifacts, the focus shifted to
+agentic workflows and context engineering. When these
+workflows became longer, more stateful, and more failure-
+prone, the bottleneck moved from organizing information
+Phase3:Harness Engineering                       current frontier3
+Designingcompositionalruntime
+•environments
+•multi-model routing / co-op
+•verification & recovery
+•sub-agent orchestration
+Perception Reasoning& Decision Action
+Feedback
+Phase4:Agent-Native Training & Co-Evolution     future4
+Emerging: Internalizing capabilities
+•interactive / harness-aware
+•model-harness co-evolution
+•self-improving stacks
+•…
+Act
+(with tools)
+Observe
+(outcomes)
+Evaluate
+(reward)
+Update
+(model)
+Self-Improvement
+Loop
+Phase1:PromptEngineering1
+You are a helpful assistant.
+···
+Optimizingtheinstruction
+•few-shot exemplars
+•chain-of-thought
+•self-consistency
+•output constraints
+Phase2:Context Engineering2
+Curatingtheinformationecosystem
+•RAG
+•memory
+•tool definitions
+•skill disclosure
+Documents
+KnowledgeDB
+Livesignals
+Context
+C
+···
+Fig. 5:Four paradigms of agent engineering. The main locus
+of effort shifts from eliciting model behavior, to organizing
+context, stabilizing execution, composing and learning multi-
+model runtimes, and training or co-evolving agentic behavior.
+for the model to controlling execution around the model,
+elevating the harness from an implementation detail to
+a first-class design object. More recently, verification and
+recovery have also become training targets, suggesting that
+some agentic behaviors may be internalized rather than ex-
+ternally scaffolded. These phases coexist in present systems,
+but together they reveal a migration of bottlenecks from
+prompt elicitation, to context and workflow organization, to
+harness-level execution control, to compositional and learn-
+able multi-model runtimes, and finally toward agent-native
+training and model–harness co-evolution. Fig. 5 summarizes
+this migration as a change in the locus of engineering effort,
+not as a claim that later paradigms replace earlier ones.
+4.1 Phase 1: Prompt Engineering
+Phase 1 treated the prompt as the main interface through
+which latent model capabilities could be elicited and con-
+trolled. This view was established by in-context learn-
+ing and then extended through zero-shot and few-shot
+prompting, chain-of-thought prompting, self-consistency,
+tree-style reasoning, self-refinement, ReAct-style reasoning-
+action traces, and automatic prompt optimization [1], [26]–
+[28], [36], [96]–[98]. These methods made prompting a prac-
+tical mechanism for task specification, reasoning elicitation,
+output-format control, and behavioral steering. More recent
+agent-oriented reasoning work broadens this phase from
+single-chain elicitation toward structured reasoning and
+planning. In software tasks, multi-agent optimization and
+question-driven self-QA extend prompting toward collabo-
+rative design reasoning [99], [100]. Self-evolving and graph-
+structured multi-agent methods further explore reasoning
+as an adaptive collaboration process rather than a linear
+trace alone [101], [102]. Other work makes reasoning traces
+operational for failure management [103], introduces re-
+flection, branching, and rollback into web-agent reasoning
+[104], and uses reasoning gates to decide when web agents
+should continue or be constrained [105]. Heterogeneous-
+model assembly and intent-level skill abstraction also con-
+nect prompt-level reasoning with planning and computer-
+use skill organization [38], [106], while agentic software-
+architecture studies frame this progression as a shift from
+prompt-response interaction to goal-directed systems [107].
+They are therefore essential to early agent systems, but their
+limitation is equally important for this survey’s argument.
+Prompt engineering primarily addresses anexpression and
+elicitationproblem: it improves how a task is posed to
+the model and how the model’s existing capabilities are
+9
+invoked. It does not reliably provide knowledge absent
+from the model, maintain dynamically changing task state,
+validate external actions, or recover from failures over long
+execution trajectories. This motivates the next shift, from
+asking how to phrase the instruction to asking what infor-
+mation environment should surround each model call.
+4.2 Phase 2: Workflows and Context Engineering
+Phase 2 shifted the engineering focus from prompt design
+to agentic workflow orchestration and context manage-
+ment. This shift addressed two limitations left by prompt-
+ing: the model may lack task-relevant knowledge, and
+the information needed during execution may change as
+the environment responds. Agentic workflows respond by
+sequencing model calls, retrieval, tool use, memory ac-
+cess, intermediate artifacts, and branching logic around
+the model [108]–[112]. Recent systems make this workflow
+view concrete in software and tool-use settings. SGAgent
+decomposes repository-level repair into suggestion-guided
+multi-agent collaboration [113], while studies of agentic
+coding-tool configuration show that performance depends
+not only on the base model, but also on workflow and tool
+settings [114]. Tool-use-oriented work further synthesizes
+tool-use trajectories through multi-agent role-playing [115]
+and studies extended tool-integrated reasoning as a way
+to scale agentic workflows beyond isolated tool calls [116].
+Within these workflows, context engineering provides the
+central technical perspective: context is no longer a static
+prompt string, but a dynamically assembled runtime object.
+Formally, instead of assumingC=prompt, context is treated
+as:
+C=A(c 1, c2, . . . , cn),(3)
+whereAdenotes a high-level assembly function that com-
+bines contextual componentsc i, including instructions, re-
+trieved knowledge, tool descriptions and outputs, memory
+records, task state, intermediate artifacts, and the current
+query, into the final contextC. Under this view [117], the
+engineering problem changes from optimizing the wording
+of a prompt to optimizing the functions that retrieve, select,
+compress, format, and refresh information during execution:
+F ∗ = arg max
+F
+Eτ∼T [Reward(Pθ(Y|C F (τ)), Y ∗τ )],(4)
+whereFdenotes the set of context-construction functions,
+CF (τ)is the context produced for task instanceτ, andY ∗τ
+denotes the desired or reference outcome. The objective is to
+maximize expected task quality under the constructed con-
+text, rather than to optimize a single instruction in isolation.
+Agentic workflows therefore reframed the core engineer-
+ing question from how to write better instructions to how
+to construct, organize, and update the information and tool-
+use environment available during execution. This develop-
+ment can be read through three closely related directions.
+The first focused on external information access. Retrieval-
+based methods such as RAG [30], [118] introduced a prac-
+tical mechanism for exposing non-parametric knowledge
+to the model, while retrieval-augmented architectures such
+as Fusion-in-Decoder [119], RETRO [120], and Atlas [121]
+further strengthened this paradigm. Later systems such as
+RAPTOR [122], GraphRAG [123], and HippoRAG [124] ex-
+tended retrieval from flat passage lookup to richer pipelines
+based on hierarchical summarization, graph construction,
+and relation-aware memory organization.
+The second direction focused on systematic context man-
+agement. Here the question is not only what to retrieve, but
+also when to inject information, how to compress it, how to
+refresh it, and how to preserve task-relevant state over long-
+horizon execution. This shift is reflected in methods such
+as ACON [125], which formulates context compression as
+an optimization problem, ARC [126], which treats context
+as a dynamically managed internal state updated through
+reflection, and ContextBudget [127], which makes compres-
+sion decisions under explicit context-window constraints.
+Related work further examines context maintenance in soft-
+ware and long-horizon settings, including CAT [128], which
+elevates context maintenance into a callable tool within the
+agent loop, and Compressing Code Context for LLM-based
+Issue Resolution [129], which studies how to distill and
+preserve task-relevant code context under limited budgets.
+The third direction treated context itself as an explicit
+object of evaluation and optimization. Benchmarks such as
+ContextBench [130], SWE Context Bench [131], LoCoBench-
+Agent [132], and AgentLongBench [133] made context re-
+trieval, retention, and utilization measurable research tar-
+gets. More recent work such as ACE [134] and MCE [135]
+further treats contexts, and even context-engineering strate-
+gies, as adaptive optimization targets. Accordingly, Phase
+2 can be read as a progression from external information
+access, to systematic context management, and finally to ex-
+plicit context evaluation and adaptive context optimization.
+Yet even well-engineered workflows and context do not
+by themselves guarantee reliable agency. They arrange in-
+formation, tools, and intermediate steps around the model,
+but they do not fully specify how the overall process
+should remain stable, verifiable, and recoverable. As tasks
+became increasingly tool-augmented, stateful, and failure-
+prone, the bottleneck shifted from managing the informa-
+tion and workflow environment to designing the execution
+environment itself. Context did not disappear; it became one
+core component within a broader execution layer that must
+also manage action, state persistence, and verification.
+4.3 Phase 3: Harness Engineering
+This phase begins when the central bottleneck is no longer
+only how a workflow assembles information and tool calls,
+but how the agent is controlled across a multi-step execu-
+tion trajectory. Agentic workflows improve what enters the
+context window and which tools are invoked, but many
+long-horizon failures are not caused by missing information
+alone. They are execution failures: the agent loses track of
+progress, misuses tools, drifts from the original objective,
+repeats unproductive steps, or fails to recover after an error.
+Harness engineering emerges from this execution-level
+bottleneck. As defined in Sec. 2.4, the harness is the struc-
+tured runtime layer that organizes and stabilizes agent exe-
+cution. It determines what the agent observes, what actions
+it may take, what state is carried forward, how control
+advances, and how failures are detected, constrained, or
+repaired. Workflow and context design remain important,
+10
+but they become components within a broader execution
+layer that also manages observation, action, persistent state,
+verification, and governance.
+Evidence that harness design matters.The case for harness
+design is no longer based only on engineering intuition or
+isolated examples. SWE-agent [21] showed that redesign-
+ing the agent-computer interface alone can substantially
+improve coding-agent performance under a fixed model.
+NLAH framed harness modules as portable and inspectable
+artifacts, and reported controlled ablations indicating that
+their contributions are measurable and additive [23]. Meta-
+Harness went one step further by treating harness optimiza-
+tion itself as a search problem, showing that automatically
+improved harnesses can outperform hand-designed base-
+lines on Terminal-Bench [20], [24]. Recent works extend this
+evidence from coding-agent interfaces to runtime orches-
+tration and formal control mechanisms [136]–[138]. Other
+systems treat memory, protocol interoperability, contextual
+problem enhancement, and enterprise context lifecycles as
+harness-level design objects [139]–[144]. These results sug-
+gest that harness design has become a first-class optimiza-
+tion surface rather than a secondary implementation detail.
+More experimental results can be found in Sec. 7.
+Industrial and ecosystem perspectives.The same tran-
+sition is visible in industrial systems. Anthropic’s public
+guidance emphasizes minimal, legible tools and disciplined
+runtime behavior [6], [64], [145]. OpenAI’s guidance empha-
+sizes environment design, structured artifacts, and reusable
+agent infrastructure [7], [39], [146]. Microsoft’s Magentic-
+One highlights multi-agent orchestration for complex web
+and file tasks [37], while open-source systems [10], [25],e.g.,
+OpenHands, expose harness itself as inspectable code.
+At the ecosystem level, recent protocol-centered bench-
+marks reinforce the same shift by evaluating whether agents
+can invoke real services under realistic tool-routing con-
+ditions. MCPWorld [147], MCP-Atlas [148], MCPAgent-
+Bench [149], and OSWorld-MCP [150] move the discussion
+from abstract protocol design to measurable runtime behav-
+ior. Together, these systems and benchmarks suggest that
+harness engineering is becoming not only an engineering
+practice, but also a shared layer of infrastructure, evaluation,
+and design philosophy.
+Design principles.Across papers and systems, several
+high-level principles recur:
+•Legibility:the runtime should expose the right state at
+the right level of abstraction.
+•Mechanical enforcement:constraints that matter for
+safety, correctness, or reproducibility should be enforced
+by the runtime when possible, rather than delegated en-
+tirely to prompt obedience.
+•Verification in the loop:long-horizon autonomy without
+intermediate checks is structurally brittle.
+•Explicit artifacts:plans, logs, diffs, summaries, and other
+intermediate products should exist as inspectable objects
+that can be reused, audited, or handed off.
+These principles make the harness concrete rather than
+metaphorical. It must expose observations, assemble con-
+text, organize control, mediate actions, persist state, and
+enforce verification and governance as a coupled runtime
+system. Sec. 5 therefore turns the phase-level argument into
+an anatomy of the six harness components.
+Multi-model harnesses.Many recent systems no longer
+treat one model as the sole cognitive engine for every
+step. Instead, the harness composes heterogeneous models
+for planning, coding, tool use, verification, retrieval, and
+domain-specific subtasks [10], [37]–[39], [108]. This changes
+the control loop from “one model iterates until done” to
+“the runtime decides which model acts next, with what con-
+text, and under what constraints.” Representative patterns
+include planner–executor–verifier decomposition, specialist
+routing, debate or committee-style validation, and handoffs
+among sub-agents [37], [113], [115], [151]. From the harness-
+anatomy view in Sec. 5, multi-model design [65], [66], [147],
+[150]. primarily stresses the control loopL, but it also
+reshapes the context managerC, action interfaceI act, and
+verification layerVbecause different models may observe,
+act, and judge under different scopes and permissions.
+Learnable harnesses.In parallel, the harness itself is becom-
+ing an optimizable object. NLAH [23] treats harness logic as
+editable and portable runtime artifacts; Meta-Harness [24]
+searches over harness configurations; and Agentic Har-
+ness Engineering (AHE) [40] evolves harness components
+from observability-driven feedback while holding the base
+model fixed. These systems differ in mechanism—manual
+editing, search, or trace-driven adaptation—but they share
+one implication: runtime policies for routing, tool exposure,
+memory use, and verification can be improved as directly as
+prompts once were.
+Together, multi-model composition and learnable run-
+time policies mark a qualitative shift in what counts as an
+agent system. A lightweight prompt-driven loop can still be-
+have like an agent on short horizons, but dependable long-
+horizon task completion increasingly requires designing a
+compositional runtime over multiple models, with explicit
+orchestration, verification, and adaptation policies.
+4.4 Phase 4: Agent-Native Training and Co-Evolution
+Phase 4 begins once the harness is viewed not only as a
+hand-stabilized runtime, but as a compositional and increas-
+ingly learnable system over one or more models (Sec. 4.3).
+The central question is therefore twofold: which agentic
+behaviors should beinternalizedinto model parameters, and
+how should the model and harnessco-evolveover deploy-
+ment without sacrificing safety or inspectability.
+Internalization through Interactive Training.The first di-
+rection internalizes agentic behavior into the model itself.
+Rather than relying solely on prompts, workflows, or run-
+time orchestration, models are increasingly trained to plan,
+use tools, verify intermediate states, and recover from errors
+in interactive environments [42], [152]–[156].
+Recent work reflects two closely related tendencies. The
+first strengthens reasoning-to-action behavior through rein-
+forcement learning. Examples include DeepSeekMath [73],
+DeepSeek-R1 [43], and DAPO [157], which treat multi-
+step reasoning, action selection, and verification as train-
+able behaviors rather than purely prompt-induced ones.
+The second reduces train-test mismatch by training agents
+in environments closer to deployment. Examples include
+ProRL [158], WebRL [41], ComputerRL [42], Environment
+Tuning [159], daVinci-Dev [160], and Kimi-Dev [161]. To-
+gether, these lines suggest that behaviors first imple-
+mented externally—planning, tool invocation, reflection,
+11
+and recovery—may gradually become partially learned in-
+side the model. Internalization shifts the division of labor
+rather than removing the harness: more short-horizon be-
+havior may move into model parameters, while the runtime
+still supplies environment access, state, and safety control.
+Co-Evolution and Self-Improvement.The second direction
+extends agent engineering from one-time training to ongo-
+ing improvement of the full stack. Here the model, harness,
+and update policy may all change over deployment, using
+execution feedback to decide which changes to keep, revise,
+or roll back [40], [44]–[46], [162]. The goal is not only to move
+behavior into parameters, but to improvehowthe combined
+system learns from experience.
+Several recent lines make this distinction concrete.
+Experience-driven systems such as EvolveR [44] and Agen-
+tEvolver [45] treat interaction trajectories as reusable learn-
+ing signals through self-questioning, navigation, and at-
+tribution. Continual Harness [162] and reward-free self-
+evolution [163] explore online adaptation without relying
+on dense external rewards at inference time. Harness-side
+adaptation, exemplified by AHE [40], shows that runtime
+components can evolve even when the base model remains
+fixed. More ambitiously, recursive self-improvement sys-
+tems such as SICA [164], Darwin G ¨odel Machine [46], and
+Hyperagents [165] suggest that the improvement mecha-
+nism itself may become modifiable over time.
+We separate three layers that are often conflated under
+“self-evolve”.Multi-model harnessesdefinewhoperforms
+each runtime role.Learnable harnessesdefinehowruntime
+policies are optimized.Co-evolutiondefineswhen and howthe
+model, harness, and improvement loop are jointly updated
+from deployment experience. These layers are complemen-
+tary rather than interchangeable: compositional runtimes
+create the structure in which specialization and delegation
+become possible; learnable harnesses make runtime adap-
+tation explicit; co-evolution governs long-horizon improve-
+ment under verification, safety and cost constraints.
+5 ANATOMY OF THEEXECUTIONHARNESS
+Harness engineering shifts the optimization target from
+isolated prompts or workflows to the runtime that stabilizes
+agent execution. Following the formalization in Sec. 2.4,
+this runtime can be decomposed into six components:H=
+⟨Iobs,C,L,I act,S,V⟩. The decomposition is not intended as
+a software package diagram. Rather, it identifies the runtime
+responsibilities that repeatedly determine whether model
+capability becomes reliable task completion: what the model
+observes, what enters context, how execution advances,
+which actions are available, what state persists, and how
+the run is checked or constrained.
+5.1 Observation Interface
+The observation interfaceI obs determines which environ-
+ment signals are exposed to the model and how those
+signals are rendered. It converts external state, such as
+terminal output, file diffs, screenshots, web DOMs, API
+responses, event streams, and logs, into observations that
+can be consumed by the current model call. Its design space
+includes three recurring questions: which state is relevant,
+at what abstraction level it should be represented, and
+when the observation should be refreshed. These choices
+matter because many long-horizon failures are not failures
+of reasoning alone. They are also failures of legibility: the
+needed state is absent, buried in noise, stale, or represented
+at a level that does not support the next decision.
+Representative systems make this point concrete. SWE-
+agent showed that redesigning the agent-computer interface
+can substantially improve coding-agent performance under
+a fixed base model [21]. In web and desktop settings, bench-
+marks such as WebArena and OSWorld likewise reveal that
+success depends on whether visually and structurally com-
+plex interface state is converted into a form the model can
+actually use [17], [18]. The general principle is therefore not
+to expose all available state, but to expose decision-relevant
+state in a faithful and usable representation. The dominant
+trade-off is richness versus tractability: rich observations
+improve grounding, but increase context cost and distrac-
+tors; compressed observations are easier to process, but may
+discard task-critical evidence. An open problem is to design
+observation interfaces that remain faithful and decision-
+useful under partial observability, multimodal state, and
+long trajectories.
+5.2 Context Manager
+Context management first emerged as a central concern
+in agentic workflows. Within the harness, it becomes one
+runtime component among observation, control, action, per-
+sistence, and verification. The context managerCdetermines
+which available information enters the current model call
+and in what form. It selects, compresses, orders, and re-
+freshes observations, tool outputs, retrieved evidence, mem-
+ory records, summaries, instructions, and task artifacts be-
+fore they become the working context for the next step [142],
+[166]–[168]. Its main design choices concern inclusion, repre-
+sentation, refresh policy, and the amount of shared state ex-
+posed to active agents or sub-agents. As context engineering
+suggests, long-horizon performance depends less on simply
+increasing prompt length than on maintaining coherent task
+state over time [29], [144], [169]–[171].
+Several implementation patterns recur. Retrieval-based
+systems bring in external documents or stored state on de-
+mand. Memory-oriented systems such as MemGPT separate
+the active context from a larger external memory [31]. In-
+dustrial harnesses increasingly externalize task state into ex-
+plicit artifacts and selectively resurface those artifacts, rather
+than relying on a single ever-growing dialogue trace [146].
+The dominant trade-off is fidelity versus manageability: raw
+histories preserve detail but scale poorly, whereas sum-
+maries and retrieved context are cheaper but can omit or
+distort important state. Thus, the crucial distinction is not
+between long and short prompts, but between monolithic
+and managed context. A key open problem is how to pre-
+serve summary faithfulness and state integrity while keep-
+ing context cost bounded, especially when context repair
+must interact with verification and recovery in long-horizon
+settings [172].
+5.3 Control Loop
+The control loopLorganizes execution across steps, tools,
+and possible handoffs. It turns observation, reasoning, ac-
+12
+tion, and feedback into a runnable process. This component
+determines whether the agent follows a simple perceive-act
+cycle, a ReAct-style loop, a plan-execute-verify routine, or
+a hierarchical and multi-agent workflow [38], [108], [136]–
+[138]. The main design questions are how control is divided
+between the model and the runtime, when plans are created
+or revised, when delegation is introduced, whether coordi-
+nation is sequential or parallel, and when execution should
+stop. Long-horizon success depends not only on the model’s
+reasoning quality, but also on whether the runtime keeps
+execution stable under uncertainty.
+Existing systems occupy different points in this space.
+Some retain lightweight iterative loops, while others impose
+explicit planner-executor-verifier decomposition or multi-
+agent coordination. Recent harness-oriented work makes
+orchestration itself an optimization target: NLAH treats
+harness logic as an editable artifact, and Meta-Harness treats
+harness configuration as a searchable design space [23], [24].
+This layer is therefore not merely about adding steps. It
+is about choosing how much structure to impose on the
+trajectory. The dominant trade-off is adaptability versus
+stability: freer loops can respond to unexpected states, but
+are more prone to drift, repeated failure, and coordination
+overhead; stronger orchestration improves reliability, but
+can reduce efficiency or overconstrain exploration. A stand-
+ing challenge is to design control policies that remain robust
+across horizons and domains without making delegation,
+verification, and recovery prohibitively expensive.
+5.4 Action Interface
+The action interfaceI act maps model outputs to executable
+operations. It defines what the agent can do, how actions are
+specified, which permissions apply, and how action results
+are returned as subsequent observations. Recent tool-use
+studies further show that action-interface quality is a major
+source of agent reliability. Diagnostic work on tool invoca-
+tion failures identifies cases where agents fail not because
+a tool is absent, but because the tool is poorly selected,
+invoked, or integrated into the execution trajectory [173].
+ET-Agent studies behavior calibration for tool-integrated
+reasoning [174], and ToolTok represents tools as tokens to
+improve efficiency and generalization in GUI agents [175].
+From a harness perspective, this layer shapes the agent’s
+effective action space. Its design space spans tool granularity
+(low-level environments versus high-level APIs), tool speci-
+fication (free-form commands versus structured schemas),
+routing and interoperability (local tools versus protocol-
+based ecosystems such as MCP), and governance (permis-
+sions, side-effect control, and invocation constraints). Ex-
+isting work shows that performance depends not only on
+whether tools exist, but on how the action interface makes
+them usable, composable, and governable.
+Representative implementations range from terminals
+and browsers to structured callable APIs. SWE-agent is
+a canonical example of observation-action co-design: re-
+designing the agent-computer interface changes both what
+the model sees and how it acts, producing gains under
+a fixed base model [21]. Protocol-oriented infrastructures
+such as MCP move tool access toward a standardized inter-
+face layer across heterogeneous services [65], while bench-
+marks such as MCPWorld and OSWorld-MCP test whether
+agents can invoke such services reliably in realistic environ-
+ments [147], [150]. The dominant trade-off is flexibility ver-
+sus controllability: low-level tools are general but difficult to
+use robustly, whereas high-level tools improve reliability but
+may narrow behavior too aggressively. An open question is
+how to design action abstractions that remain expressive
+and governable when tool use is coupled with verification,
+sandboxing, and recovery over long horizons.
+5.5 State and Artifact Store
+The state and artifact storeSpersists execution state across
+steps, sessions, and subtasks. It provides continuity beyond
+the active context window by storing task progress, traces,
+plans, checkpoints, diffs, generated files, memory records,
+and other reusable artifacts. Its design space includes the
+granularity of stored state, the scope of persistence, the
+storage form, and the update policy. Long-horizon agents
+often fail not because no state is stored, but because the
+wrong state is preserved, the right state cannot be retrieved,
+or stale state is treated as current.
+Several strategies recur in the literature. Some sys-
+tems rely on session-level histories and checkpoint stores.
+Memory-oriented approaches, such as MemGPT, introduce
+explicit long-term memory beyond the current context [31].
+Artifact-centered harnesses track state through logs, diffs,
+checkpoints, and inspectable runtime objects [146]. What
+these approaches share is a move from transient interaction
+traces toward reusable system state. The dominant trade-
+off is completeness versus usability: richer state improves
+continuity, auditability, and handoff, but increases retrieval
+burden, noise, and the risk of stale memory. The practical
+challenge is not to store more, but to decide what deserves
+persistence, what should be compressed, and what should
+be discarded. An important open problem is how to main-
+tain state fidelity while supporting rollback, delegation,
+and memory reuse without accumulating drift or obsolete
+information [172].
+5.6 Verification and Governance
+The verification and governance layerVchecks, constrains,
+and repairs execution during runtime. Verification includes
+tests, assertions, verifier models, judge signals, and other
+mechanisms for estimating whether execution is progress-
+ing correctly. Governance includes approval gates, sand-
+boxing, budget control, rollback, retry, escalation, and safe
+termination. This view is reflected in recent multi-agent
+governance works. For example, AI Committee uses mul-
+tiple agents for validation and remediation of web-sourced
+data [151], while act-or-refuse learning studies when agents
+should proceed, abstain, or stop during safe multi-step tool
+use [176]. These examples show that governance is not only
+a deployment constraint, but also an explicit decision layer
+within agent execution. These two roles are tightly coupled:
+verification produces evidence about the run, while gover-
+nance determines what the harness is allowed or required
+to do with that evidence. Reliable agents therefore depend
+not only on strong reasoning and rich tools, but also on
+whether checks and constraints are mechanically enforced
+rather than left entirely to prompt obedience.
+13
+Representative systems make this dual role clear. In cod-
+ing agents, tests, linters, and assertions provide relatively
+strong verification signals, while rollback and sandboxed
+execution contain side effects [16], [20]. In web, desktop,
+and other open-ended environments, governance becomes
+more central because actions may be partially irreversible
+and clean oracles are often unavailable [17], [18]. The dom-
+inant trade-off is autonomy versus robustness: looser con-
+straints permit broader exploration, but increase the risk of
+harmful actions and unrecoverable drift; tighter governance
+improves safety and recoverability, but can slow execution
+or block useful behavior. An open problem is to design
+verification and governance mechanisms that are selective
+and cost-aware, so the harness can distinguish recoverable
+local errors from deeper task-level collapse without over-
+triggering interruption or rollback.
+5.7 Cross-Layer Interactions in the Harness
+Although the six components are analytically separable,
+they do not operate independently. Design choices in one
+component often reshape the burden on others. The ob-
+servation interfaceI obs and context managerCare tightly
+coupled: richer observations can improve grounding, but
+they also increase the cost of selection, compression, and for-
+matting before information enters the active context [125].
+The action interfaceI act interacts directly with verification
+and governanceV: more expressive actions expand capa-
+bility, but require stronger permission control, sandboxing,
+rollback, and auditing. The state and artifact storeSfeeds
+back into context and verification because persistent plans,
+logs, checkpoints, and artifacts determine both what can be
+resurfaced to the model and what evidence is available for
+judging progress [31], [172].
+Harness design is therefore a coupled systems problem
+rather than the independent optimization of six modules.
+Improving one layer can shift risk elsewhere: stronger
+compression can reduce cost while weakening downstream
+verification; richer actions can improve task coverage while
+increasing governance pressure; more persistent state can
+improve continuity while also introducing stale or conflict-
+ing evidence. This coupling makes task structure part of
+harness design itself. Different domains, horizons, oracle
+strengths, and autonomy requirements place different pres-
+sure profiles overI obs,C,L,I act,S, andV. The same
+anatomy therefore becomes a way to read the task land-
+scape: tasks differ by which runtime responsibilities they
+stress and which configuration choices become decisive.
+6 TASKLANDSCAPE ANDHARNESSCONFIGURA-
+TION
+Task structure determines which parts of the execution har-
+ness become performance-critical. Seen through the harness
+anatomy, a task is not merely an application label but a pres-
+sure profile over observation, context, control, action, state,
+and governance. Long horizons, partial observability, weak
+feedback, irreversible actions, and autonomy requirements
+shift pressure toward different configuration choices, in-
+cluding context selections, action abstractions, verifier loops,
+checkpoints, permission gates, and escalation rules. The
+TABLE 4:Harness-aware task complexity levels and their
+primary bottlenecks.
+Level Description Examples Bottleneck
+L1 Single-step Search, translate,calculate Context Mgr.; Verif.& Gov.
+L2 Multi-step Form filling,code generation Act. Interface; StateStore; Verif. & Gov.
+L3 Long-horizon Repo-scalecoding, research Context Mgr.; StateStore; Ctrl. Loop
+L4 Open-ended Monitoring, autoexploration Verif. & Gov.; Ctrl.Loop
+central question is therefore which runtime responsibility
+becomes the limiting factor under a given task condition.
+6.1 A Harness-Aware Task Taxonomy
+Agent tasks differ not only by application label, but by struc-
+tural properties that determine which harness components
+limit performance, reliability, cost, or safety. We use three
+dimensions to characterize these pressures:task horizon,
+environment type, and autonomy level.Together, they
+identify the primary bottleneck: the component or small set
+of components where failures most often concentrate.
+Complexity and task horizon.Tab. 4 summarizes four
+coarse levels. The most consequential transition is usually
+from L2 to L3. Single-step and short multi-step tasks can
+often be handled with local reasoning, lightweight action
+access, and local checks. Long-horizon tasks create sustained
+pressure on the Context Manager, State and Artifact Store,
+and Control Loop because plans, intermediate artifacts,
+failed attempts, and partial results must survive beyond one
+prompt window. At L4, open-ended monitoring or explo-
+ration additionally requires budget control, stopping crite-
+ria, and escalation policies, shifting the bottleneck toward
+explicit Verification and Governance rather than generation
+quality alone.
+Environment type.Environment type determines what the
+harness must observe and which actions it can expose [177]–
+[183]. Terminals and repositories stress the Action Interface,
+Observation Interface, and Verification and Governance
+components because commands, diffs, logs, and tests can
+often be wrapped as structured actions, observations, and
+verifier signals. Browser and desktop environments add
+visual or DOM grounding, session state, and persistent
+side effects, increasing pressure on observation construction,
+action abstraction, and permission boundaries. Knowledge
+environments, including web search, literature retrieval,
+and structured databases, shift the bottleneck toward the
+Context Manager and State and Artifact Store because the
+main challenge is managing evidence quality, provenance,
+and synthesis. Physical environments introduce real-time
+constraints and irreversibility, making the Control Loop and
+Verification and Governance more central than in purely
+digital settings. Social environments add norms, negotia-
+tion, and strategic responses, which raises the value of richer
+observation design and conservative escalation.
+Autonomy level.Autonomy cuts across domains. Human-
+in-the-loop settings can route high-risk decisions through
+approval gates. Semi-autonomous systems delegate rou-
+tine actions but escalate when uncertainty rises. Fully au-
+14
+tonomous systems must absorb more of that burden inside
+the harness through verification, rollback, logging, and fail-
+safe termination. Autonomy is best understood as a multi-
+plier on harness requirements: the more independently the
+system is expected to act, the more the Observation Inter-
+face and Verification and Governance move from optional
+guardrails to primary bottlenecks.
+Taken together, these dimensions define a pressure pro-
+file over the six harness components. Task horizon mostly
+stresses context, state, and control; environment type mostly
+stresses observation, action, and safety boundaries; auton-
+omy mostly stresses verification, logging, and recovery. This
+view turns task taxonomy into harness configuration: the
+key question is not simply which application domain a task
+belongs to, but which runtime responsibilities become bot-
+tlenecks under its structural pressures. The next subsection
+uses representative domains as case studies to illustrate this
+bottleneck migration in concrete settings.
+6.2 Harness Adaptation by Domain
+The following domains should be read asinstantiationsof
+the pressure-profile view above, not as a separate domain-
+only taxonomy. Each domain combines horizon, environ-
+ment, oracle strength, irreversibility, and autonomy in a
+different way, thereby shifting the primary harness bottle-
+neck. Software engineering is verification-dominant; web
+and GUI interaction is grounding-dominant; scientific dis-
+covery is synthesis-dominant; medical assistance is safety-
+dominant; and embodied agents are control-dominant.
+These cases show how the same harness anatomy leads to
+different configuration priorities once task pressures change.
+Tab. 5 later abstracts these examples into reusable configu-
+ration rules.
+Software engineering (verification-dominant).Software en-
+gineering places the primary bottleneck on Verification
+and Governance [184]–[187]. Builds, unit tests, linters, and
+execution logs provide mechanical feedback signals that
+most other domains lack [16]. These strong oracles enable
+closed-loop generate-test-repair cycles, where verifier out-
+put becomes the next iteration’s evidence. Systems such as
+Claude Code, SWE-agent, and OpenHands further show
+that redesigning the Action Interface, including file and
+command interfaces, diff views, and patch inspection, can
+yield measurable gains at fixed model capability [6], [10],
+[21]. The State and Artifact Store is equally consequential:
+expressive action access must be paired with checkpoints,
+patch artifacts, safe rollback, and bounded side effects. As
+tasks scale from snippet-level generation (L2) to repo-scale
+issue resolution (L3-L4), the Context Manager and State
+and Artifact Store join the bottleneck set for tracking plans,
+failed hypotheses, and intermediate artifacts across long
+trajectories [188]–[191].
+•Configuration implication.Verification-dominant set-
+tings turn runtime quality into a closed-loop optimization
+problem; the harness response is verifier loops, generate-
+test-repair cycles, and reversible execution.
+Web and GUI interaction (grounding-dominant).Web and
+GUI agents shift the primary bottleneck from verification to
+grounding: the core difficulty is constructing observations
+the model can use and actions it can execute safely [17], [18],
+[150], [192]–[196]. The Observation Interface must render
+screenshots, DOM state, interaction history, and session
+information into usable signals. The Action Interface must
+decide whether actions are exposed as brittle low-level
+selectors or as structured browser and desktop operations.
+The Context Manager then selects and compresses these
+signals for the current step. Because many web goals lack a
+single mechanical oracle, verification is structurally weaker
+than in coding. Navigation mistakes, form submissions,
+and account actions can produce persistent side effects, so
+Verification and Governance remains part of the bottleneck
+rather than a secondary concern. As tasks move from short
+form filling (L2) through multi-page workflows (L3) to long-
+lived monitoring (L4), the grounding burden compounds.
+•Configuration implication.Grounding-dominant settings
+require co-design of observation and action interfaces;
+performance hinges on whether the harness exposes the
+right state in a form that also supports safe, robust action.
+Scientific discovery and research (synthesis-dominant).Sci-
+entific agents shift the primary bottleneck to synthesis:
+the central runtime problem is trustworthy integration of
+evidence over long horizons [197]–[202]. The most stressed
+components are the Context Manager, State and Artifact
+Store, and Verification and Governance. Verification serves
+a different function here than in coding: rather than closing
+a test-based repair loop, it must assess provenance, source
+quality, and reasoning coherence. Tool-rich systems such as
+ChemCrow and BioDiscoveryAgent show that the Action
+Interface can expand capability, but without provenance
+tracking long-horizon reasoning can degrade into plausible
+but unsupported narrative. Research tasks are predomi-
+nantly L3-L4: literature surveys, hypothesis generation, and
+experimental design require the harness to externalize evi-
+dence, intermediate claims, and artifacts more aggressively
+than in coding or web settings.
+•Configuration implication.Synthesis-dominant settings
+lack closed-loop verification; provenance tracking, in-
+termediate review stages, and artifact-centered memory
+must substitute for end-state oracles.
+Medical applications (safety-dominant).Medical agents
+inherit the synthesis demands of research settings but add
+a qualitatively different constraint: the primary bottleneck
+shifts to safety [203]–[206]. Verification and Governance
+moves to the top of the harness stack, with the Observation
+Interface and Context Manager close behind [207]. Patient
+history, guidelines, and recent findings must be surfaced
+accurately; consequential actions must be permission-gated;
+and uncertainty must trigger conservative escalation rather
+than confident continuation. The objective is not maxi-
+mal autonomy, but bounded and inspectable assistance. In
+this regime, Verification and Governance is a performance-
+critical harness component rather than a compliance add-on.
+•Configuration implication.Safety-dominant settings op-
+timize controlled delegation: approval gates, auditability,
+and conservative recovery are core harness components,
+not external overhead.
+Embodied settings (control-dominant).Embodied agents
+shift the primary bottleneck to real-time control, elevating
+the Control Loop above other harness components [34],
+15
+TABLE 5:Mapping task properties to harness failure pressures and configuration responses.
+Task property Failure pressure Harness response Critical components
+Long horizon State drift Checkpoints, summaries, artifacts C,S,L
+Partial observability Indirect state Structured observations, grounding, abstractionI obs,C,I act
+Strong oracle Checkable outcomes Verifier loops, repair cycles V,L
+Weak or delayed oracle Uncertain success Provenance tracking, review, approvalV,C,S
+Irreversible actions Persistent side effects Sandbox, gates, rollback V,I act
+High autonomy or low latency Limited human correction Logging, budgets, controllersV,L,I obs
+[208]–[211]. High-level language reasoning is too slow for
+continuous interaction, so the harness typically becomes lay-
+ered: deliberative planning at the top, reactive control below,
+and persistent skill or state representations connecting the
+two. The State and Artifact Store maintains goals, subgoals,
+maps, or reusable behaviors. Verification and Governance
+is critical because physical actions are often irreversible. The
+Action Interface exposes actuators, simulators, or perception
+modules rather than conventional software APIs. Embodied
+tasks span L3-L4 almost exclusively, making long-horizon
+state externalization a baseline requirement.
+•Configuration implication.Control-dominant settings
+push part of the stack below the language loop, moti-
+vating tighter integration between harness design, lower-
+level controllers, and training-time adaptation.
+Cross-domain synthesis.The five domains trace a single
+analytic thread: the primary bottleneck migrates across har-
+ness components as domain constraints change. It moves
+from Verification and Governance in coding, through Ob-
+servation Interface and Action Interface in web/GUI, to
+Context Manager and State and Artifact Store in research,
+Verification and Governance in medicine, and Control Loop
+in embodied settings. This migration pattern shows that do-
+main labels alone are insufficient descriptors. What matters
+for harness configuration is which component absorbs the
+failure budget.
+6.3 From Task Properties to Harness Configurations
+The domain case studies above illustrate bottleneck mi-
+gration, but the reusable lesson lies below the domain
+level. Across domains, similar task properties induce sim-
+ilar harness responses: long horizons require externalized
+state, partial observability requires structured observation,
+strong oracles enable verifier loops, weak or delayed oracles
+require provenance and review, irreversible actions require
+governance, and high autonomy requires logging, budgets,
+and recovery. Tab. 5 summarizes these domain-independent
+configuration rules.
+Verifier strength determines where configuration effort
+concentrates.Where strong automatic oracles exist, as in
+verification-dominant software engineering, the harness can
+invest heavily in closed-loop optimization through veri-
+fier loops and repair cycles. Where oracles are weak or
+delayed, as in synthesis-dominant research and safety-
+dominant medicine, the bottleneck migrates upstream to-
+ward provenance management, intermediate review, and
+conservative stopping criteria. Domains should therefore
+not be compared only by task success rates; they should also
+be compared by the quality and latency of feedback signals
+available to the harness.
+Irreversibility and autonomy make constraints central.In
+read-mostly or reversible digital settings, recovery can often
+be handled through retries and checkpoints. In grounding-
+dominant web interaction, safety-dominant medical assis-
+tance, and control-dominant physical settings, actions can
+have persistent side effects. Verification and Governance
+therefore becomes part of the primary bottleneck rather
+than a peripheral add-on. Higher autonomy magnifies this
+pattern because the harness must absorb responsibilities
+that a human operator would otherwise carry.
+Long-horizon performance depends on externalized state
+across all domains.Whether the task is repo-scale coding
+(L3), literature synthesis (L3-L4), or embodied exploration
+(L4), one prompt window is rarely the right unit of memory.
+Durable artifacts, summaries, checkpoints, plans, and logs
+keep trajectories coherent over time. The configuration con-
+sequence is that the Context Manager and State and Artifact
+Store must be designed jointly: summaries decide what is
+visible now, whereas artifacts and checkpoints decide what
+remains recoverable later.
+Task pressure should be reported together with evaluation
+results.The mapping in Tab. 5 also constrains benchmark
+interpretation. Benchmarks are most informative when they
+stress the harness components that match the primary bot-
+tleneck of a target deployment setting. Benchmark reports
+should therefore describe not only the model, but also
+the task pressures and harness configuration under which
+results are obtained.
+7 EVALUATION ANDEMPIRICALANALYSIS
+Evaluation makes the model–harness interaction directly
+observable. Benchmark scores should therefore be inter-
+preted as outcomes of amodel–harness pairing: the same
+model may behave differently under different context poli-
+cies, tool interfaces, control loops, verification procedures,
+and retry budgets. This section uses representative bench-
+marks to test this view across three interaction regimes:
+software-engineering tasks with strong test oracles, termi-
+nal tasks with command-line execution and environment
+manipulation, and web tasks with browser grounding and
+stateful interaction. Across these regimes, we try to answer
+three questions:how much performance is explained by stronger
+backbone models, how much variation remains after conditioning
+on the model, and how runtime cost, latency, timeout behavior,
+and trace availability change the interpretation of task success.
+7.1 Benchmark Landscape and Evaluation Work
+Existing evaluation work can be organized as a pipeline that
+turns an agent run into interpretable evidence: benchmarks
+16
+TABLE 6:Representative benchmarks for LLM-based agents.
+Benchmark Focus Environment Primary metric
+AgentBench [223] General Interactive envs Task completion
+SWE-bench [16] Coding Real GitHub issues Resolution rate
+WebArena [17] Web Realistic websites Task success
+VisualWebArena [192] Multimodal web Visual web tasks Task success
+OSWorld [18] Desktop Real OS Multi-app success
+Terminal-Bench [20] Terminal/Coding Command-line Task success
+MCPWorld [147] API+GUI Hybrid tool envs Task success/tool use
+OS-Harm [212] Safety Desktop computer Harmful action rate
+LoCoMo [172] Long-term mem. Multi-session chat QA/consistency
+MMAU [224] General Cross-domain Capability scores
+MLE-Bench [225] ML engineering Kaggle-like tasks Performance tier
+MCPAgentBench [149] MCP tool use MCP sandbox Task Compl./eff.
+MCP-Atlas [148] MCP tool use Real MCP servers Pass rate
+GAIA [226] General assistant Web/files/tools Answer accuracy
+Claw-SWE-Bench [227] Agent harnesses Real GitHub issues Resolution rate/cost
+TheAgentCompany [19] Enterprise-style Simulated company Task success
+specify the task, execution infrastructures standardize the
+run, judgment methods score and diagnose the outcome,
+and continuous evaluation practices feed these signals back
+into system improvement.
+Benchmarks as task specifications.Tab. 6 summarizes
+representative benchmarks for LLM-based agents. Beyond
+application domains, these benchmarks stress different har-
+ness capabilities: SWE-bench [16] tests repository nav-
+igation, code editing, and hidden-test verification; We-
+bArena [17], VisualWebArena [192], and OSWorld [18] test
+web/GUI grounding, state tracking, multimodal percep-
+tion, and safe interface control; Terminal-Bench [20] tests
+command-line execution and environment manipulation;
+and LoCoMo [172] and OS-Harm [212] test memory persis-
+tence and harmful-action control. Together, they mark a shift
+toward ecologically realistic evaluation, where browsers,
+terminals, and operating systems reveal long-horizon fail-
+ures that closed-form datasets often miss.
+Execution and trace infrastructure.For coding and terminal
+agents, systems such as SWE-agent [21], OpenHands [10],
+Repo2Run [213], R2E-Gym [214], and HAL [215] use con-
+trolled environments, sandboxed execution, standardized
+rollouts, and trace collection to make evaluation repro-
+ducible and diagnosable. This infra helps distinguish har-
+ness behavior from artifacts of dependency drift, invalid
+graders, changed tool interfaces, or inconsistent resets. Rep-
+resentative harness designs are summarized in Tab. 10.
+Judgment and attribution methods.Executable tests and
+state-based checkers provide strong oracles for coding and
+terminal tasks, whereas open-ended outputs often require
+LLM-as-judge or human-audit protocols. G-Eval [216], MT-
+Bench [217], and surveys of LLM-as-a-judge [218] show
+the promise and risks of model-based evaluators, including
+bias, inconsistency, and evaluator drift. For harness engi-
+neering, judgment matters most when it attributes failures
+to model reasoning, context construction, tool exposure,
+execution control, safety constraints, or the evaluator itself.
+Continuous evaluation practices.Frameworks such as
+LangChain’s agent evaluation tooling [219], DeepEval [220],
+RAGAS [221], and lm-evaluation-harness [222] support re-
+curring tests, trace inspection, judge-based metrics, and
+monitoring-style evaluation. Their role is not merely to
+report a leaderboard score, but to make evaluation reusable
+during prompt changes, tool updates, context-policy revi-
+sions, and deployment monitoring.
+7.2 Evaluation Dimensions Beyond Task Success
+Most public agent leaderboards still rank systems by a sin-
+gle outcome-centric score. SWE-bench [16] reports the per-
+centage of resolved issues [228], while Terminal-Bench [20]
+primarily report task-level completion scores [229]. How-
+ever, recent evaluation studies [21], [23], [24] increasingly ar-
+gue that accuracy alone is insufficient for agent assessment.
+For example, Sayaset al. [230] calls for cost-controlled and
+reproducible evaluation. CLEAR [231] explicitly evaluates
+cost, latency, efficacy and assurance. ReliabilityBench [232]
+studies consistency, robustness, and fault tolerance under
+production-like stress. Procedure-aware evaluation [233]
+shows that apparent task completion can hide unsafe or
+invalid trajectories. Because an agent run couples model rea-
+soning, harness design, environment setup, tool interfaces,
+and evaluator logic, a failure may originate from any part of
+this chain. Task success remains the primary outcome met-
+ric, butmeaningful harness comparison requires a richer
+reading of results along several additional dimensions:
+•Task success:whether the final objective is completed.
+•Reliability:whether performance remains stable across
+stochastic runs, retries, and environment variations.
+•Efficiency:token usage, API cost, and compute cost.
+•Latency:wall-clock time or number of interactions.
+•Safety:whether actions remain within allowed bound-
+aries and avoid harmful side effects.
+•Process quality:whether the trajectory is inspectable,
+recoverable, and evidence-backed.
+These dimensions explain why similar final scores can
+hide substantial harness differences. One harness may trade
+long trajectories, repeated retries, and heavy context ac-
+cumulation for higher success, while another may deliver
+slightly lower success at much lower cost and latency. From
+a deployment perspective, the key is not raw success alone,
+but useful task completion under resource constraints.
+In the following empirical analyses, we focus on the di-
+mensions that are most consistently available across public
+reports and leaderboard logs: task success, runtime, timeout
+behavior, and token usage when available. Monetary cost
+is discussed only cautiously because public cost fields are
+sparse and often depend on harness-specific accounting,
+cache handling, and model-price assumptions.
+7.3 Harness Effects on SWE-bench Verified
+SWE-bench Verified [16] comprises 500 human-validated
+GitHub issues drawn from twelve Python repositories, each
+paired with a hidden test suite that provides a deterministic
+pass/fail oracle. Evaluations run inside sandboxed Docker
+containers with pinned dependencies, so observed differ-
+ences reflect system capabilities rather than environmen-
+tal artifacts. By filtering out ambiguous specifications and
+broken tests from the original 2,294-instance SWE-bench,
+the Verified split offers a cleaner signal for cross-system
+comparison. Solving an instance requires localizing the
+defect, editing source files, and passing hidden regression
+tests; because different harnesses partition these stages in
+distinct ways, the benchmark is well suited for studying
+how scaffold design affects measured performance.
+17
+TABLE 7:Model–harness results on SWE-bench Verified. Re-
+solved rates are percentages, resolved counts are out of 500
+instances; cost is USD per instance when reported; vendor rows
+are proprietary references.
+Primary model Harness / scaffold Res. (%)/ solved Cost($)
+GPT-4o
+SWE-agent 23.2 / 116 -
+AutoCodeRover-v2 38.4 / 192 -
+Agentless 38.8 / 194 -
+Claude 3.5 Sonnet
+SWE-agent (20240620) 33.6 / 168 -
+SWE-agent + tools 49.0 / 245 -
+Agentless 50.8 / 254 1.19
+AutoCodeRover 51.8 / 259 4.50
+OpenHands + CodeAct 2.1 53.0 / 265 0.78
+PatchPilot 53.6 / 268 0.99
+Claude 3.7 Sonnet
+mini-SWE-agent 52.8 / 264 -
+SWE-agent + tools 63.2 / 316 -
+Vendor scaffold63.7/ - -
+Claude Sonnet 4
+mini-SWE-agent 64.9 / 325 -
+OpenHands + CodeAct 2.1 70.4 / 352 -
+SWE-agent + tools 72.4 / 362 -
+Vendor scaffold72.7/ - -
+Claude Opus 4 / 4.5
+SWE-agent + tools 73.2 / 366 -
+mini-SWE-agent 76.8 / 384 -
+OpenHands + CodeAct 2.1 77.6 / 388 -
+Vendor scaffold80.9/ - -
+o3 / o4-mini PatchPilot v1.1 64.6 / 323 -
+OpenAI GPT-5 family
+OpenHands + CodeAct 2.1 71.8 / 359 -
+mini-SWE-agent 72.8 / 364 -
+Vendor scaffold80.0/ - -
+GPT-5.3 Codex mini-SWE-agent 78.0 / 390 -
+GPT-5.4 mini-SWE-agent 78.2 / 391 -
+GPT-5.5 mini-SWE-agent 82.6 / 413 -
+Gemini 3 Pro mini-SWE-agent 74.2 / 371 -Vendor scaffold76.2/ - -
+Gemini 3.1 Pro Preview mini-SWE-agent 78.8 / 394 -
+DeepSeek V3 / V3.2 Agentless 42.0 / 210 -mini-SWE-agent 70.0 / 350 -
+Claude Opus 4.6 Thinking mini-SWE-agent 78.2 / 391 -
+Claude Opus 4.7 mini-SWE-agent 82.0 / 410 -
+Notes.Claude 3.5 Sonnet entries refer to the 2024-10-22 snapshot where specified;
+Claude Sonnet 4 and Opus 4 source-card entries use the 2025-05-14 generation.
+Some rows differ in inference policy, including extended-thinking or high-
+reasoning settings. Vendor rows use closed-source scaffolds.
+Tab. 7 compares SWE-bench Verified results across sev-
+eral model–harness pairings, including open-source scaf-
+folds, source-reported agent harnesses, lightweight mini-
+SWE-agent runs, and closed-source vendor reports. The
+table should be read as a compact synthesis of public ev-
+idence rather than a fully controlled factorial experiment.
+Model snapshots, reasoning settings, retry budgets, and
+proprietary scaffold details are not always aligned across
+sources, so the strongest comparisons are those within
+the same row family or under the same reported evalua-
+tion setting. Vendor-reported scores are included as upper-
+envelope references, but they should not be interpreted
+as controlled ablations against open-source harnesses. For
+example, Opus 4.5 with mini-SWE-agent is reported with
+extended thinking, whereas the same source reports 74.4%
+under medium reasoning and 67.6% for Opus 4; the OpenAI
+mini-SWE-agent row follows a GPT-5-2 extended-thinking
+style leaderboard setting, whereas GPT-5 (2025-08-07) under
+medium reasoning is reported at 65.0%, and the vendor
+80.0% reference is a GPT-5.2 result reported in a Claude
+system card [228], [234]. Similarly, DeepSeek rows distin-
+guish V3 from V3.2 high-reasoning settings, and Gemini
+rows distinguish Gemini 3 Pro from later Gemini 3.1 Pro
+reports, including an 80.6% Gemini 3.1 Pro result under
+its own reported configuration [235]. These boundaries do
+not invalidate the table, but they mean the strongest claims
+should use within-row-family comparisons and treat vendor
+or reasoning-policy changes as upper-envelope evidence
+rather than controlled ablations.
+The compared harnesses span a broad spectrum of
+scaffold complexity. Agentless [236] removes the interac-
+tive agent loop and uses a fixed localize–repair–validate
+pipeline. SWE-agent + tools [21], [237] exposes shell and
+editing tools through a bash-oriented repair loop, while
+mini-SWE-agent [238] reduces this design to a minimal
+scaffold that leaves most orchestration to the model. Open-
+Hands + CodeAct 2.1 [10] provides a richer software-
+engineering runtime with file editing, web browsing, and
+IPython execution. AutoCodeRover [239] and PatchPi-
+lot [240] represent more structured repair workflows, using
+repository search, localization, reproduction, validation, and
+refinement to constrain the repair process. Vendor scaf-
+fold lists the best vendor-reported scores on proprietary
+scaffolds [234], [241]–[244] as an upper-envelope reference.
+Together, these systems provide a useful, though not per-
+fectly controlled, view of how scaffold design interacts with
+backbone model capability on repository-level coding tasks.
+Specifically,model capability and harness design both
+contribute to measured performance.Within a single har-
+ness, backbone upgrades drive large gains: SWE-agent +
+tools improves from 49.0% with Claude 3.5 Sonnet to 73.2%
+with Opus 4, a 24% increase [237], [245]; mini-SWE-agent
+shows a comparable trajectory from 52.8% (Claude 3.7 Son-
+net) to 76.8% (Opus 4.5) [228]. Within a single model,
+harness choice also produces a consistent effect. For GPT-
+4o, source-reported harnesses range from 23.2% with SWE-
+agent to 38.8% with Agentless. For Claude 3.5 Sonnet, they
+range from 33.6% with SWE-agent to 53.6% with PatchPilot,
+with SWE-agent + tools, Agentless, AutoCodeRover, and
+OpenHands + CodeAct 2.1 occupying the middle of the
+range. For Claude Opus 4/4.5, the spread is narrower but
+still visible: 73.2% with SWE-agent + tools, 76.8% with mini-
+SWE-agent, and 77.6% with OpenHands + CodeAct 2.1.
+These ranges show that the same backbone can gain or lose
+tens of resolved instances depending on the scaffold.
+Scaffold complexity does not predict effectiveness.
+Under Opus 4.5, mini-SWE-agent (roughly 100 lines of
+Python) reaches 76.8%, only slightly below the far richer
+OpenHands + CodeAct 2.1 sandbox at 77.6% [228], [245].
+These results suggest that scaffold effectiveness depends
+more on interface design than on feature count: a minimal
+scaffold with well-chosen primitives can extract nearly the
+same performance as a full-featured agent framework.
+Vendor-reported scores, which reflect proprietary scaf-
+fold optimization, consistently exceed the best open-source
+results. OpenHands with Opus 4.5 at 77.6% [245] trails
+the corresponding vendor score of 80.9% [234] by about
+3%; for Gemini 3 Pro, the gap narrows to 2% (74.2%
+vs.76.2%) [238], [244]. For GPT-5 variants the margin is larger
+(72.8%vs.80.0%), though differences in model version and
+inference configuration complicate this comparison [228],
+[234]. Across same-generation Claude and Gemini mod-
+els, this 2-4% advantage is attributable to scaffold-level
+decisions such as prompt design, candidate selection, and
+compute scaling, not to differences in model capability.
+18
+7.4 Harness Effects on Terminal-Bench 2.0
+Terminal-Bench provides a complementary perspective to
+SWE-bench because the agent must operate through an
+interactive command-line environment rather than only
+submit a final patch [20]. Each task specifies a natural-
+language instruction, a sandboxed terminal workspace, an
+executable test script, and a reference solution, so success is
+defined by whether the agent transforms the environment
+into a passing state. Tasks commonly require file inspection,
+tool installation or invocation, command execution, log in-
+terpretation, artifact editing, and explicit termination deci-
+sions. The benchmark is therefore well suited for studying
+execution harnesses, since terminal interaction jointly exer-
+cises observation design, context management, control-loop
+policy, action exposure, state persistence, and verification.
+Our analysis uses the official Terminal-Bench 2.0 leader-
+board and public submission logs as data sources [229],
+[246]. Official submissions evaluateterminal-bench@2.0
+with five trials per task (-k 5), use each task’s bench-
+mark environment and default constraints, and must
+not override timeouts or CPU, memory, and storage
+limits [246]. Leaderboard-integrity rules further penalize
+reward-hacking trajectories, such as retrieving task solu-
+tions from the internet, which reduces the risk that reported
+scores reflect benchmark leakage rather than terminal task
+completion [247]. For the performance analysis, we use
+entries for which the backbone model and harness are iden-
+tifiable, excluding entries whose model field is a mixture or
+“Multiple” so that each plotted point has a clear model iden-
+tity. The resulting evidence is not a randomized ablation,
+since public submissions may differ in prompts, versions,
+budgets, and implementation details. It is nevertheless in-
+formative as an observational comparison: the same model
+appears under several harnesses, and the same harness
+often appears with several models. For resource analysis, we
+use the official HuggingFace public-submission repository
+as the primary source and align submissions to the currently
+visible leaderboard by strict metadata matching. The public
+repository contains 75 submissions with metadata and logs,
+covering 32,604 trial records. Among these, 48 submis-
+sions strictly match a currently visible leaderboard entry.
+Reward, agent-runtime, and full-runtime fields have high
+coverage (97.2%, 98.1%, and 100.0%, respectively), whereas
+input/output token fields cover 45.0% of trial records and
+dollar-cost fields cover only 15.2%. Accordingly, runtime
+and timeout statistics are the main resource-efficiency ev-
+idence, while token statistics are used as supplementary
+evidence and monetary cost is not used for cross-harness
+claims. These counts define the evidence boundary rather
+than a separate result table: 27 public submissions are ex-
+cluded from the complete resource table because 24 are not
+visible or name-mismatched on the current leaderboard and
+3 are ambiguous matches. A looser visible-entry check finds
+55 matches among 142 visible leaderboard entries (38.7%)
+across 51 unique submissions, but it is used only as a cov-
+erage sanity check. The row-level comparisons below use
+the strict 48-row subset. Tab. 8 extracts representative same-
+model rows from this subset for the main-text comparison.
+Fig. 6 first indicates thatbackbone capability remains
+a major determinant of success.Within a fixed harness,
+TABLE 8:Terminal-Bench 2.0 representative resource statistics
+for leaderboard-visible submissions. Input/Output report me-
+dian token counts in thousands per trial, Agent reports median
+runtime in minutes, and TO reports timeout rate.
+Model Harness Score(%) Trials Input(K) Output(K) Agent(min) TO(%)
+GPT-5.3 Codex
+SageAgent 78.4 445 - - 5.7 12.1
+Mux 74.6 445 238.7 5.7 5.5 8.1
+Terminus 2 64.7 445 58.4 20.5 8.9 20.7
+Claude Opus 4.6
+Meta-Harness 76.4 445 755.0 15.8 6.3 7.9
+Terminus-KIRA 74.7 445 618.6 16.9 9.6 18.2
+Mux 66.5 445 213.0 10.1 5.9 10.3
+Terminus 2 62.9 445 79.4 8.4 5.3 18.2
+Gemini 3.1 Pro TongAgents 80.2 445 - - 11.1 21.1Terminus-KIRA 74.8 445 257.5 22.1 6.5 9.7
+stronger model generations often improve resolved rates
+by more than 10%. For example, under Terminus 2, GPT-
+5 improves from 35.2% to 54.0% with GPT-5.2 and to 64.7%
+with GPT-5.3-Codex. Under Codex CLI, the sequence from
+GPT-5 to GPT-5.2 and GPT-5.5 rises from 49.6% to 62.9% and
+82.2%. The same pattern appears for Anthropic and Google
+models: newer Opus, Gemini, and Codex-specialized mod-
+els generally occupy higher regions of the plot than earlier
+or smaller models. Thus, the benchmark does not support a
+harness-only interpretation; terminal agents still need strong
+planning, coding, debugging, and tool-use priors from the
+foundation model.
+At the same time, conditioning on the model reveals
+large harness-induced spreads. GPT-5.3-Codex ranges from
+64.7% with Terminus 2 to 78.4% with SageAgent, a 13.7%
+difference. Claude Opus 4.6 ranges from 58.0% with Claude
+Code to 76.4% with Meta-Harness, an 18.4% difference.
+Gemini 3.1 Pro ranges from 59.4% with Gemini CLI to 80.2%
+with TongAgents, a 20.8% difference. Even GPT-5, before the
+later Codex-specialized variants, ranges from 33.9% with
+Mini-SWE-Agent to 49.6% with Codex CLI. These gaps
+are substantially larger than the standard errors reported
+for most relevant leaderboard entries, and they correspond
+to different harness choices around terminal affordances,
+context packaging, command execution, stopping criteria,
+and recovery.
+Fig. 7 aggregates this fixed-model view. Among the 20
+models that have at least three observed harness results, the
+median within-model range is 13.6% and 14 of the 20 models
+vary by at least 10% across harnesses. The largest spreads
+exceed 20%, as seen for Claude Haiku 4.5, GPT-5.1-Codex,
+and Gemini 3.1 Pro. This distribution shows that leader-
+board accuracy cannot be attributed to the model alone.
+A model’s measured terminal competence also depends on
+whether the harness exposes an effective command inter-
+face, preserves relevant execution state, routes observations
+back into context at an appropriate granularity, and uses
+verification signals for termination, retry, or repair.
+Tab. 8 shows that accuracy differences are accompa-
+nied by distinct operational profiles. For GPT-5.3-Codex,
+SageAgent reaches the highest single-backbone score in
+Fig. 6 with a median agent time of 5.7 minutes and a
+12.1% timeout rate, whereas Terminus 2 takes 8.9 minutes
+and times out on 20.7% of trials. Mux uses a heavier me-
+dian input context than Terminus 2 (238.7K versus 58.4K
+19
+T erminus 2Codex CLIOpenHandsMini-SWE-Agent
+Droid Mux Crux
+Claude CodeGemini CLIspoox-o-mLetta Code
+Goose Capy
+T ongAgentsSageAgentCodeBrain-1.5T erminus-KIRAMAYA-V2IndusAGICoding Agentlittle-coder
+vix
+NexAU-AHEWOZCODEMeta-Harness
+Codelia
+Simple Codex
+Harness
+0%
+20%
+40%
+60%
+80%
+Terminal-Bench 2.0 accuracy (%)
+GPT-5.3-Codex
+Cl. Opus 4.6
+Gem. 3 Pro
+Cl. Sonnet 4.5
+GPT-5-Mini Cl. Haiku 4.5
+GPT-5-Nano
+GPT-5.2
+GPT-5 Cl. Opus 4.1
+Gem. 2.5 Pro
+Gem. 2.5 Flash
+GPT-5.5
+Gem. 3.1 Pro
+GPT-5.1-CoCdle.xOpus 4.5
+GPT-5-Codex
+Cl. Opus 4.7
+Gem. 3 Flash
+GLM 4.7
+MM M2.1
+GPT-OSS-120B
+GPT-OSS-20B
+OpenAI
+Anthropic
+Google
+xAI
+Other
+GPT-5.5
+GPT-5.3-Codex
+GPT-5.2
+GPT-5.1-Codex
+GPT-5-Codex
+GPT-5
+GPT-5-Mini
+GPT-OSS-120B
+GPT-5-Nano
+GPT-OSS-20B
+Cl. Opus 4.7
+Cl. Opus 4.6
+Cl. Opus 4.5
+Cl. Sonnet 4.5
+Cl. Opus 4.1
+Cl. Haiku 4.5
+Gem. 3.1 Pro
+Gem. 3 Pro
+Gem. 3 Flash
+Gem. 2.5 Pro
+Gem. 2.5 Flash
+Grok 4
+Grok Code Fast 1
+GLM 4.7
+MM M2.1
+Kimi K2 Inst.
+Qwen 3 Coder 480B
+Fig. 6:Terminal-Bench 2.0 accuracy across model–harness pairings. Each point is a single-backbone leaderboard entry, and dashed
+lines connect results that use the same model under different harnesses.
+GPT-5.3-Codex
+(n=9)GPT-5-Mini(n=5)GPT-5-Nano(n=5) GPT-5.5(n=4) GPT-5.2(n=4) GPT-5(n=4)
+GPT-5.1-Codex
+(n=3)
+GPT-5-Codex
+(n=3)
+Claude Opus 4.6
+(n=9)
+Claude Opus 4.5
+(n=8)
+Claude Sonnet
+4.5
+(n=6)Claude Haiku
+4.5
+(n=5)
+Claude Opus 4.1
+(n=4)
+Gemini 3 Pro
+(n=7)
+Gemini 2.5 Pro
+(n=4)Gemini 2.5Flash(n=4)Gemini 3.1 Pro(n=3)Gemini 3 Flash(n=3) Grok 4(n=3)Qwen 3 Coder480B(n=3)
+Model (number of observed harness results)
+0%
+20%
+40%
+60%
+80%
+Terminal-Bench 2.0 accuracy (%)
+OpenAI
+Anthropic
+Google
+xAI
+Other
+Fig. 7:Within-model variation on Terminal-Bench 2.0. For each model with at least three observed harness results, the box and
+points summarize accuracy across harnesses.
+tokens) but reports shorter median agent time (5.5 versus
+8.9 minutes) and a lower timeout rate (8.1% versus 20.7%).
+For Claude Opus 4.6, Meta-Harness uses a much larger
+median input context than Terminus 2 (755.0K versus 79.4K
+tokens) while reducing timeout rate from 18.2% to 7.9%.
+These examples show that the measured system behavior
+includes not only whether a task is solved, but also how
+much context is consumed, how long execution takes, and
+how often the harness fails to terminate successfully.
+Taken together, Terminal-Bench results separate two ef-
+fects without treating either as sufficient on its own. Model
+upgrades lift whole harness families, but harness choices
+can still shift the same model’s score by more than 10%
+through terminal-state presentation, context management,
+command execution, and verifier feedback. Resource statis-
+tics add a deployment-facing caveat: higher accuracy may
+require longer trajectories, heavier context, or more robust
+timeout handling, and these costs are part of the practical
+capability being measured. On Terminal-Bench, reliable ter-
+minal task completion therefore depends on the fit between
+the model’s interactive skills and the harness’s runtime
+design under fixed benchmark constraints.
+7.5 Harness Effects on WebArena
+WebArena [17] is one of the most widely used reproducible
+benchmarks for web agents. It evaluates agents in self-
+hosted websites that cover realistic domains such as shop-
+ping, discussion forums, GitLab-style software collabora-
+tion, content management, maps, and knowledge resources.
+Unlike open-ended browsing benchmarks that often require
+human or LLM-based judgement, WebArena uses program-
+matic success checks over website state and task-specific
+20
+TABLE 9:WebArena task-success evidence by backbone. Scores
+are percentages; Span reports the high–low difference in per-
+centage points for each backbone.
+Backbone Model only Harness low Harness high Span
+GPT-3.5 8.9 22.0 29.1 20.2
+GPT-4 14.9 20.2 33.0 18.1
+GPT-4o 13.1 19.2 54.6 41.5
+GPT-4 Turbo 16.5 33.3 45.7 29.2
+GPT-4o-mini - 13.6 13.6 -
+GPT-5 - 71.2 71.2 -
+DeepSeek R1-Llama 8B 8.5 43.6 43.6 35.1
+DeepSeek V3.2 - 74.3 74.3 -
+Gemini 3 Pro - 51.2 71.6 20.4
+Gemini 3.1 Flash-L - 42.3 42.3 -
+Claude Sonnet 3.5 - 36.2 52.1 15.9
+Qwen3.5 family - 3.1 41.5 38.4
+Llama 3-70B 7.6 10.1 10.1 2.5
+Llama 3.1-70B - 18.4 18.4 -
+Llama 3.2-1B 2.4 24.1 24.1 21.7
+Llama 3.1-8B 5.6 48.5 48.5 42.9
+answers. This makes it useful for studying what a web-
+agent harness contributes beyond a model-only baseline:
+browser agents must convert textual goals and visual or
+DOM observations into navigation, search, form filling, state
+tracking, and recovery actions, while the evaluator supplies
+a relatively concrete task-success signal.
+Tab. 9 summarizes sparse WebArena results as
+backbone-level evidence slices, including both model-only
+references and harnessed agent systems. Rows containing
+the same backbone under multiple settings provide the
+strongest evidence for harness effects. Because most public
+WebArena reports describe complete agent systems rather
+than controlled factorial ablations, differences in prompts,
+browser actions, observation formats, retry policies, search
+budgets, training data, and implementation details should
+be treated as part of the reported system configuration [17],
+[248], [249].
+The clearest harness effects come from backbones that
+have both model-only and harnessed results. GPT-4o ranges
+from 13.1% in the model-only baseline to 54.6% with Web-
+Operator, a 41.5% span; even among named harnesses alone,
+it ranges from 19.2% with LM-TS to 54.6% with WebOper-
+ator [250], [251]. GPT-4 improves from 14.9% to 33.0% with
+SteP , GPT-4-Turbo from 16.5% to 45.7% with AgentOccam,
+and GPT-3.5 from 8.9% to 29.1% under the stronger WebPilot
+entry [252]–[254]. The same phenomenon appears for open-
+weight or distilled models: DeepSeek-R1-Distill-Llama-8B
+moves from 8.5% to 43.6% with AgentSymbiotic, Llama-
+3.2-1B from 2.4% to 24.1%, and Llama-3.1-8B from 5.6%
+to 48.5% [255]. These gaps are too large to be explained
+by task noise alone; they reflect how observation design,
+search, workflow memory, action grounding, and stopping
+policies transform a language model into an effective web
+actor. Futhermore, WebTactix with DeepSeek V3.2 reaches
+74.3%, corresponding to 594 solved tasks out of 812 in its
+public report [256]. OpAgent reaches 71.6% with Gemini
+3 Pro, and ColorBrowserAgent reaches 71.2% with GPT-
+5 [257], [258], showing that recent web-agent systems can
+exceed the 70% level on WebArena, but they combine strong
+backbones with specialized runtime structure, grounding,
+search, and adaptive memory; they should therefore be
+treated as model–harness system results.
+Fixed-harness comparisons show the complementary
+role of model capability. BrowserGym [249] provides the
+broadest same-harness slice: scores range from 51.2% for
+Gemini 3 Pro to 42.3% for Gemini 3.1 Flash-L, 41.5% for
+Qwen3.5-27B, 36.2% for Claude 3.5 Sonnet, 31.4% for GPT-
+4o, 23.5% for GPT-4, 18.4% for Llama-3.1-70B, and 13.6%
+for GPT-4o-mini [249]. Within Qwen3.5, performance falls
+monotonically from 27B to 9B, 4B, and 2B, indicating that
+stronger backbones generally improve planning, instruction
+following, and state tracking under a common browser
+interface. Yet model size does not fully determine out-
+comes: GPT-4o under BrowserGym trails Gemini 3.1 Flash-
+L and Qwen3.5-27B, while AgentSymbiotic with Llama-3.1-
+8B exceeds several larger-model BrowserGym results. The
+same backbone can be under-expressed by one harness and
+amplified by another.
+Overall, WebArena reinforces the model–harness view
+from a web-interaction setting. In coding benchmarks, the
+harness shapes how tests, edits, and repository context are
+exposed; in WebArena, it shapes how a model sees the page,
+chooses browser actions, recovers from navigation errors,
+and verifies that a website state has changed as intended.
+Programmatic scoring reduces evaluator drift compared
+with LLM-as-judge protocols, but it does not remove all
+measurement risk: brittle checkers, ambiguous instructions,
+and environment leakage can still distort results. For high-
+confidence claims, audited variants such as WebArena Veri-
+fied [259] are preferable when available because they retain
+the reproducible WebArena environment while repairing
+evaluator and instruction artifacts. Consequently, browser-
+agent success is best reported as a conditional property of a
+complete model–harness system, together with its observa-
+tion mode, action interface, search or retry budget, memory
+policy, and source artifacts.
+7.6 Benchmark Insights
+Several lessons emerge from comparing harness behavior
+across benchmarks.
+Harness design should match the benchmark oracle.When
+benchmark provides strong automatic feedback, as in cod-
+ing tasks with tests, effective harnesses exploit verifier loops,
+patch refinement, and rollback. Terminal-Bench reinforces
+the same principle in command-line environments: use-
+ful harnesses turn command output, files, and completion
+checks into actionable feedback for termination, retry, and
+repair. When the oracle is weak or delayed, as in research or
+workplace tasks, the harness must rely more on provenance
+tracking, intermediate review, and conservative stopping.
+Autonomy and complexity are not monotonic goods.Fully
+open-ended loops explore broadly but can accumulate con-
+text, drift, and cost. When objectives are narrow and suc-
+cess is mechanically checkable, structured pipelines such as
+localization–repair–validation can outperform more agentic
+loops, and compact scaffolds can match richer runtimes.
+The key design question is not how much autonomy the
+harness exposes, but which degrees of freedom help the
+model exploit the benchmark’s feedback structure.
+Model–harness compatibility matters.A strong model may
+perform poorly under a harness that exposes the wrong
+action space or overloads the context window. Conversely,
+a lightweight scaffold can be effective when it matches
+21
+the model’s preferred interaction pattern and the bench-
+mark’s feedback structure. On Terminal-Bench 2.0, the same
+model can vary by double-digit accuracy across harnesses;
+on WebArena, the gap between model-only baselines and
+browser-agent scaffolds can exceed 40% for GPT-4o. These
+differences make compatibility an empirical property of the
+model–harness pair rather than an implementation detail.
+Scores are conditional on runtime configuration.Tool
+privileges, context policy, retry budget, sandbox restrictions,
+and completion criteria all shape measured performance.
+The Terminal-Bench public logs further show that run-
+time and timeout profiles vary substantially even among
+leaderboard-visible submissions. Thus, a benchmark score is
+interpretable only together with the runtime configuration
+that produced it. Reports should include at least model
+version, harness identity, tool privileges, retry and timeout
+policy, execution environment, token or API usage when
+available, and trace or verifier metadata.
+Toward value-aware evaluation.The empirical results sup-
+port a shift from score-centric ranking to value-aware agent
+evaluation. Stronger models raise the ceiling, but harness
+design determines how much of that capability becomes
+reliable, efficient, and auditable task completion. Future
+evaluation should therefore measure not only task success,
+but also resource use, latency, timeout behavior, recovery
+quality, safety constraints, and trace auditability. This obser-
+vation motivates the value-aware objectives in Sec. 8, where
+success is evaluated jointly with cost, latency, risk, reliability,
+and process quality.
+8 OUTLOOK ANDFUTUREDIRECTIONS
+Future agent progress will require more than stronger foun-
+dation models or richer benchmarks. We highlight three
+coupled directions: value-aware evaluation that accounts for
+success, cost, latency and safety; agent-native training that
+moves beyond planning and tool use toward verification
+and recovery; and harness design that adapts foundation
+models to task-specific tools, contexts, and constraints. To-
+gether, they connect near-term harness engineering with
+longer-term efforts to internalize reliable interaction, adap-
+tation, and self-improvement into agent models.
+8.1 From Score to Value-Aware Agent Optimization
+Current agent leaderboards [228], [229] are largely score-
+centric: systems are ranked by task success, while API cost,
+latency, safety, and trace quality are secondary or miss-
+ing. This is useful for frontier comparison but incomplete
+for deployment, where cost-controlled, reliability-oriented,
+procedure-aware, and enterprise evaluation all point toward
+multi-dimensional agent quality [25], [230]–[233], [260].
+A natural way to express this shift is to move from raw
+task success to value-aware agent optimization. Letτ∼ D
+denote a task instance, and letz= Run(τ;M,H, ω)denote
+the execution trace produced by modelMand harness
+Hunder stochasticityω. For a tracez, letS(z)∈ {0,1}
+indicate task success,C(z)execution cost,L(z)latency, and
+R(z)safety or compliance risk. Cost may include token/API
+usage, tool calls, compute, or infrastructure; latency may be
+wall-clock time or interaction steps; risk may come from
+policy violations, safety checkers, or human audits. Let
+V(τ)≥0denote task utility, such as user value, scientific
+value, priority, or risk-adjusted importance. The success
+probability of a model–harness pair can then be estimated
+from repeated runs as
+Psucc(τ;M,H) =E ω[S(Run(τ;M,H, ω))].(5)
+LetQ proc(z)∈[0,1]summarize process quality, including
+trace inspectability, verifier use, recovery behavior, prove-
+nance quality, and policy compliance. LetRel k(τ;M,H)
+denote repeated-run reliability estimated fromkruns, for
+example through consistency, pass@k, or stress-test relia-
+bility. Instead of maximizing success alone, value-aware
+optimization can be written as
+max
+M,H
+Eτ∼D
+
+V(τ)P succ(τ;M,H) ¯Qproc(τ;M,H) 
+s.t.E τ,ω [C(z)]≤B C,Quantile p(L(z))≤B L,
+Eτ,ω [R(z)]≤ϵ,E τ [Relk(τ;M,H)]≥ρ.
+(6)
+where ¯Qproc(τ;M,H) =E ω[Qproc(z)]. This is not a uni-
+versal leaderboard score; it makes the deployment target
+explicit by coupling task value with cost, latency, risk, and
+reliability constraints. The trade-off is task-dependent: high-
+value or high-risk tasks may justify stronger verification,
+while routine high-frequency tasks favor cheaper models,
+shorter trajectories, and stricter stopping policies.
+Let ˜C(z) =C(z)/B C, ˜L(z) =L(z)/B L, and ˜R(z) =
+R(z)/ϵbe normalized cost, latency, and risk. A complemen-
+tary value-density objective is
+VDα,β,γ =E τ,ω
+
+V(τ)S(z)Q proc(z)D(z) −1 ,
+D(z) = (1 + ˜C(z)) α(1 + ˜L(z))β(1 + ˜R(z))γ. (7)
+whereα,β, andγcontrol the penalties on cost, latency, and
+risk. This is a family of deployment-specific utilities rather
+than a fixed metric. Different deployments can instantiate
+it differently: high-value tasks may tolerate stronger ver-
+ification, high-frequency workflows may penalize latency
+and cost, and safety-critical settings may replace soft risk
+penalties with hard constraints. The same traces also sup-
+port simpler reports, such as cost per effective success or
+latency per successful task, which distinguish systems with
+similar success rates but different runtime profiles.
+From this perspective, harness engineering is a resource-
+allocation problem. The harness chooses models, context,
+memory access, tools, retries, verifiers, stopping rules, and
+human escalation. Model routing, context compression,
+cache reuse, verifier selection, recovery policy, and early
+stopping determine useful progress per unit cost, rather
+than being mere implementation details. Future benchmarks
+should therefore report success together with token/API
+cost, tool calls, retries, 95th-percentile (P95) latency, recovery
+behavior, policy violations, and trace auditability.
+8.2 Learning to Verify, Recover, and Adapt
+The value-aware view also suggests a path for agent learn-
+ing. Execution traces are not only evaluation records; they
+contain outcomes, cost, tool calls, verifier signals, recovery
+attempts, policy violations, and feedback. Future agents
+should learn not only to plan and act, but also to verify
+22
+intermediate states, diagnose failures, recover from local
+errors, and adapt across tasks.
+A useful abstraction is a constrained self-evolution loop.
+Letθ t denote the model parameters andϕ t denote the
+harness configuration at iterationt. Running the agent on
+tasks fromDproduces tracesZ t, from which the system
+extracts an evidence setE t containing outcomes, failure
+modes, verifier results, cost profiles, and safety events. An
+update operatorUmay then change the model, the harness,
+or both:
+(θt+1, ϕt+1) = VerifyRetain(U(θt, ϕt,E t)).(8)
+HereVerifyRetainkeeps an update only if it passes held-
+out tasks, regression tests, process checks, and safety con-
+straints; otherwise it is rejected or rolled back. The expres-
+sion is not a fixed algorithm; it makes the control structure
+explicit: reliable self-evolution must couple experience ex-
+traction, credit assignment, modification, and validation.
+Existing agent-native training mostly advances the
+model side of this loop. Interactive RL and environment-
+based training reduce train–test mismatch in web,
+computer-use, and software-engineering agents [41], [42],
+[160], [161]. Self-evolving systems further treat interac-
+tion experience as a reusable learning signal for self-
+questioning, attribution, online adaptation, and reward-free
+exploration [44], [45], [162], [163]. Together, these works
+suggest that verification, recovery, and adaptation should
+become trainable behaviors, not only prompt-induced rou-
+tines.
+Parameter updates alone cannot absorb all runtime bot-
+tlenecks. Many failures arise from harness choices: ob-
+servation format, action granularity, memory retrieval, or
+verifier timing. Agentic Harness Engineering (AHE) makes
+this harness-side path concrete by freezing the base model
+and evolving coding-agent harness components through
+observability-driven feedback [40]. Its key lesson is that self-
+evolution must be observable and falsifiable: components
+should be explicit and revertible, traces should be distilled
+into evidence, and proposed changes should make predic-
+tions that later outcomes can check.
+The long-term direction is co-evolution of models and
+harnesses. Optimized harnesses produce better traces for
+training; trained models internalize recurring verification
+and recovery patterns; the resulting model changes which
+harness structure is optimal. This introduces risks such as
+benchmark overfitting, incorrect failure attribution, stale
+memory, and unsafe runtime modification. Agent-native
+training therefore does not eliminate the harness; it turns
+the harness into a training environment, evidence pipeline,
+verifier, and governance layer, with held-out evaluation,
+ablations, audit logs, rollback, and human approval for
+high-impact changes.
+8.3 Harness Generalization Versus Specialization
+The previous two directions raise a systems question:
+should a harness be reusable across tasks or specialized for
+one environment? The answer depends on which harness
+layer is being considered. Tracing, sandboxing, permission
+control, artifact storage, budget management, model rout-
+ing, and basic tool protocols can form a reusable substrate.
+Observation shaping, action abstraction, memory policy,
+verifier design, and recovery strategy are more often tied
+to the task pressure profile.
+This distinction explains why realistic benchmarks are
+both specialized and compositional. Software-engineering
+benchmarks stress verification and reversible execution [16];
+web and GUI benchmarks stress grounding, session state,
+and safe action selection [17], [18]; workplace and cross-
+service benchmarks stress coordination across heteroge-
+neous tools and failure modes [19], [93]. These settings place
+their primary bottlenecks on different harness layers, as
+discussed in Sec. 6. A generic harness improves reuse and
+lowers engineering cost, but may provide weak inductive
+bias for the target bottleneck; a specialized harness can
+improve peak performance, but may reduce transferability
+and overfit to a benchmark-specific surface.
+A practical direction is layered design: a general sub-
+strate plus domain-specific adapters. The substrate pro-
+vides logging, isolation, permission control, persistence,
+cost accounting, standardized tool access, and auditability.
+Adapters define observations, actions, verifiers, memory
+policies, and retry, rollback, stopping, or escalation rules.
+Protocols such as MCP and A2A reduce connector fragmen-
+tation and improve interoperability [65], [66], but protocol
+standardization is not the same as harness generalization.
+The harness must still decide what to expose, which actions
+to allow, how to verify outcomes and recover from failure.
+Future evaluations should test whether harness im-
+provements transfer across task distributions, model fam-
+ilies, and adapter choices, not only whether they raise
+one benchmark score. Useful evidence includes same-
+model different-harness comparisons, component ablations,
+adapter replacement tests, held-out tasks, cross-domain
+transfer, and runtime profiles. For self-evolving harnesses,
+this separates benchmark-specific tuning from reusable
+gains in tracing, memory compression, tool abstraction,
+verifier selection, or recovery policy [40]. The long-term goal
+is modular and pressure-aware harness design: reusable
+substrates provide stability, observability, and governance,
+while domain adapters inject task-specific observation, ac-
+tion, verification, and recovery biases.
+9 CONCLUSION
+This survey argued that the development of LLM-based
+agents is best understood as an evolution across four
+paradigms: prompt engineering, agentic workflows, harness
+engineering, and agent-native training. The key systems in-
+sight is that agent performance is increasingly governed by
+the interaction between model and runtime rather than by
+model capability in isolation. The harness perspective helps
+explain why similar base models can behave so differently
+once deployed in different environments. It also clarifies
+why recent progress has depended so heavily on context
+management, verification, tool design, orchestration, and
+recovery. At the same time, the rise of RL for agentic
+behavior suggests that some of this external scaffolding will
+gradually be internalized into model parameters.
+The field is still early. Reliability remains below deploy-
+ment needs in many realistic settings, evaluation is still only
+partially aligned with real use, and the boundary between
+23
+TABLE 10:Representative harness designs behind agent benchmark performance. The table is not exhaustive; it highlights
+harness families that explain the empirical patterns in Sec. 7.
+Harness Control style Key design Strength Typical limitation
+SWE-agent [21] ReAct-style loop LM interacts with shell/editor tools and
+iteratively inspects, edits, and tests code.
+Simple and general; strong
+baseline for real GitHub issues.
+Can be unstable and token-
+expensive on long debugging
+trajectories.
+mini-SWE-agent [238] Minimal tool loop Roughly 100-line scaffold exposing
+compact shell/edit actions and leaving
+most orchestration to the model.
+High transparency; strong
+controlled comparisons across
+frontier backbones.
+Relies on the model to manage
+planning, context, and recovery.
+Agentless [236] Fixed pipeline Staged localization, repair generation, and
+patch selection without a fully autonomous
+interaction loop.
+Stable, cheaper, and easier to
+reproduce.
+Less adaptive when the
+issue requires exploratory
+debugging.
+AutoCodeRover [239] Search-guided repair Repository-aware code search, AST-
+level localization, patch generation, and
+validation.
+Strong at locating relevant
+files/functions before editing.
+Depends heavily on localization
+quality and repo search signals.
+OpenHands + Code-
+Act 2.1 [10]
+General runtime
+agent Full software-engineering runtime withshell, file editing, browser/tools, and
+iterative execution.
+Flexible for broad coding tasks
+and long interactions.
+Higher orchestration cost and
+larger action space.
+PatchPilot [240] Structured repairworkflow Reproduction, localization, generation,validation, and refinement are organized as
+a controlled pipeline.
+Good cost-performance trade-
+off; validation-focused.
+Less open-ended than fully
+interactive agents.
+Codex / Claude Code [6], [7] Managed codingagent Proprietary coding runtime tightly couplesmodel, code execution, editing, and task
+management.
+High end-to-end coding
+performance with productized
+recovery and state management.
+System details are less
+transparent than open-source
+harnesses.
+Meta-Harness [24] Search-optimizedharness Treats prompts, tools, and runtime policiesas a searchable harness design space. Directly optimizes the harnessrather than only the model. Adds search cost and canoverfit to benchmark-specific
+feedback.
+SageAgent / OpenSage [229],
+[261]
+Generated agent
+scaffold Uses a self-programming agent-generationengine to produce and refine executable
+agent scaffolds.
+Strong Terminal-Bench results
+with relatively low observed
+runtime.
+Public leaderboard evidence
+is observational rather than a
+controlled ablation.
+Terminus 2 [229], [246] Reference terminalharness Terminal-Bench native scaffold with shellexecution, task state, verifier feedback, and
+benchmark constraints.
+Useful anchor for cross-model
+and cross-harness terminal
+comparisons.
+Can expose high timeout rates
+on difficult interactive tasks.
+Terminus-KIRA [229], [262] Terminal-nativeagent Tool-calling, terminal interaction, com-pletion checks, and verification-oriented
+execution.
+Strong for terminal-bench style
+tasks requiring environment
+manipulation.
+Performance depends on robust
+task completion detection.
+Mux [229], [246] Lightweight terminalharness Minimal terminal-oriented scaffold forexecuting and verifying tasks. Simple and relatively transpar-ent. Weaker planning and recoverycompared with richer runtimes.
+TongAgents [229], [246] Terminal agentsystem Submission-level terminal harnesscombining command execution, state
+tracking, and completion control.
+Strong observed Gemini 3.1 Pro
+Terminal-Bench result.
+Design details are less
+documented than paper-backed
+harnesses.
+model design and system design is still being renegotiated.
+But the direction is clear: agent engineering has moved
+beyond prompt craft and into the study of full systems.
+Understanding that shift is essential for both building better
+agents and evaluating their progress responsibly.
+REFERENCES
+[1] T. B. Brown, B. Mann, N. Ryder, M. Subbiah, J. Kaplan, P . Dhari-
+wal, and et al., “Language models are few-shot learners,” in
+Advances in Neural Information Processing Systems, 2020.
+[2] L. Ouyang, J. Wu, X. Jiang, D. Almeida, C. Wainwrightet al.,
+“Training language models to follow instructions with human
+feedback,”Advances in neural information processing systems, 2022.
+[3] J. Luo, W. Zhang, Y. Yuan, Y. Zhao, J. Yang, Y. Gu, B. Wuet al.,
+“Large language model agent: A survey on methodology, appli-
+cations and challenges,”arXiv preprint arXiv:2503.21460, 2025.
+[4] Z. Xi, W. Chen, X. Guo, W. He, Y. Ding, B. Hong, M. Zhang,
+J. Wanget al., “The rise and potential of large language model
+based agents: A survey,”Science China Information Sciences, 2025.
+[5] Cognition Labs, “Introducing devin, the first AI software engi-
+neer,” https://www.cognition.ai/blog/introducing-devin, 2024.
+[6] Anthropic, “How claude code works,”
+https://docs.claude.com/en/docs/claude-code/how-claude-
+code-works, 2025.
+[7] OpenAI, “Harness engineering: Leveraging codex in an agent-
+first world,” https://openai.com/index/harness-engineering/,
+2026.
+[8] M. Shen, Y. Li, L. Chen, Z. Fan, Y. Li, and Q. Yang, “From mind
+to machine: The rise of manus ai as a fully autonomous digital
+agent,”arXiv preprint arXiv:2505.02024, 2025.
+[9] T. B. Richards, “AutoGPT,” https://github.com/
+Significant-Gravitas/AutoGPT, 2023.
+[10] X. Wang, B. Li, Y. Song, F. F. Xu, X. Tang, M. Zhuge, J. Pan,
+Y. Song, B. Li, J. Singhet al., “Openhands: An open platform
+for ai software developers as generalist agents,” inInternational
+Conference on Learning Representations, 2025.
+[11] OpenClaw Team, “OpenClaw: Personal AI assistant,” https://
+github.com/openclaw/openclaw, 2025.
+[12] D. Hendrycks, C. Burns, S. Basart, A. Zou, M. Mazeika, D. Song,
+and J. Steinhardt, “Measuring massive multitask language un-
+derstanding,”arXiv preprint arXiv:2009.03300, 2020.
+[13] D. Rein, B. L. Hou, A. C. Stickland, J. Petty, R. Y. Pang, J. Dirani
+et al., “Gpqa: A graduate-level google-proof q&a benchmark,” in
+First conference on language modeling, 2024.
+[14] M. Chen, J. Tworek, H. Jun, Q. Yuan, H. P . D. O. Pinto, J. Kaplan,
+H. Edwards, Y. Burdaet al., “Evaluating large language models
+trained on code,”arXiv preprint arXiv:2107.03374, 2021.
+[15] L. Phan, A. Gatti, Z. Han, N. Li, J. Hu, H. Zhanget al., “Human-
+ity’s last exam,”arXiv preprint arXiv:2501.14249, 2025.
+[16] C. E. Jimenez, J. Yang, A. Wettig, S. Yao, K. Pei, O. Press,
+and K. Narasimhan, “Swe-bench: Can language models resolve
+real-world github issues?” inInternational Conference on Learning
+Representations, 2024.
+[17] S. Zhou, F. F. Xu, H. Zhu, X. Zhou, R. Lo, A. Sridhar, X. Cheng,
+T. Ou, Y. Bisk, D. Friedet al., “Webarena: A realistic web environ-
+ment for building autonomous agents,” inInternational Conference
+on Learning Representations, 2024.
+[18] T. Xie, D. Zhang, J. Chen, X. Li, S. Zhao, R. Cao, T. J. Hua,
+Z. Cheng, D. Shin, F. Leiet al., “Osworld: Benchmarking mul-
+timodal agents for open-ended tasks in real computer environ-
+ments,”Advances in Neural Information Processing Systems, 2024.
+[19] F. F. Xu, Y. Song, B. Li, Y. Tang, K. Jain, M. Baoet al., “Theagent-
+company: benchmarking llm agents on consequential real world
+tasks,”Advances in Neural Information Processing Systems, 2026.
+[20] M. A. Merrill, A. G. Shaw, N. Carlini, B. Li, H. Raj, I. Bercovich,
+L. Shi, J. Y. Shin, T. Walshe, E. K. Buchananet al., “Terminal-
+bench: Benchmarking agents on hard, realistic tasks in command
+line interfaces,”arXiv preprint arXiv:2601.11868, 2026.
+24
+[21] J. Yang, C. E. Jimenez, A. Wettig, K. Lieret, S. Yao, K. Narasimhan,
+and O. Press, “Swe-agent: Agent-computer interfaces enable
+automated software engineering,”Advances in Neural Information
+Processing Systems, 2024.
+[22] M. Hashimoto, “My AI adoption journey,” https://mitchellh.
+com/writing/my-ai-adoption-journey, 2026.
+[23] L. Pan, L. Zou, S. Guo, J. Ni, and H.-T. Zheng, “Natural-language
+agent harnesses,”arXiv preprint arXiv:2603.25723, 2026.
+[24] Y. Lee, R. Nair, Q. Zhang, K. Lee, O. Khattab, and C. Finn,
+“Meta-harness: End-to-end optimization of model harnesses,”
+arXiv preprint arXiv:2603.28052, 2026.
+[25] OpenSquilla Team, “Opensquilla: Token-efficient ai agent with
+same budget, higher intelligence density,” https://github.com/
+opensquilla/opensquilla, 2026, apache-2.0 License.
+[26] J. Wei, X. Wang, D. Schuurmans, M. Bosma, F. Xia, E. Chi, Q. V . Le,
+D. Zhouet al., “Chain-of-thought prompting elicits reasoning in
+large language models,”Advances in neural information processing
+systems, 2022.
+[27] X. Wang, J. Wei, D. Schuurmans, Q. Le, E. Chi, S. Narang,
+A. Chowdhery, and D. Zhou, “Self-consistency improves chain
+of thought reasoning in language models,”arXiv preprint
+arXiv:2203.11171, 2022.
+[28] S. Yao, D. Yu, J. Zhao, I. Shafran, T. Griffiths, Y. Cao, and
+K. Narasimhan, “Tree of thoughts: Deliberate problem solving
+with large language models,”Advances in neural information pro-
+cessing systems, 2023.
+[29] Anthropic, “Effective context engineering for AI
+agents,” https://www.anthropic.com/engineering/
+effective-context-engineering-for-ai-agents, 2025.
+[30] P . Lewis, E. Perez, A. Piktus, F. Petroni, V . Karpukhin, N. Goyal,
+H. K ¨uttler, M. Lewis, W.-t. Yih, T. Rockt ¨aschelet al., “Retrieval-
+augmented generation for knowledge-intensive nlp tasks,”Ad-
+vances in neural information processing systems, 2020.
+[31] C. Packer, V . Fang, S. Patil, K. Lin, S. Wooders, and J. Gonzalez,
+“Memgpt: towards llms as operating systems.” 2023.
+[32] T. Schick, J. Dwivedi-Yu, R. Dess `ı, R. Raileanu, M. Lomeli,
+E. Hambro, L. Zettlemoyer, N. Cancedda, and T. Scialom, “Tool-
+former: Language models can teach themselves to use tools,”
+Advances in neural information processing systems, 2023.
+[33] S. G. Patil, T. Zhang, X. Wang, and J. E. Gonzalez, “Gorilla:
+Large language model connected with massive apis,”Advances
+in Neural Information Processing Systems, 2024.
+[34] G. Wang, Y. Xie, Y. Jiang, A. Mandlekar, C. Xiao, Y. Zhu, L. Fan,
+and A. Anandkumar, “Voyager: An open-ended embodied agent
+with large language models,”arXiv preprint arXiv:2305.16291,
+2023.
+[35] R. Xu and Y. Yan, “Agent skills for large language models:
+Architecture, acquisition, security, and the path forward,”arXiv
+preprint arXiv:2602.12430, 2026.
+[36] S. Yao, J. Zhao, D. Yu, N. Du, I. Shafran, K. Narasimhan, and
+Y. Cao, “React: Synergizing reasoning and acting in language
+models,”arXiv preprint arXiv:2210.03629, 2022.
+[37] A. Fourney, G. Bansal, H. Mozannar, C. Tan, E. Salinas, F. Niedt-
+ner, G. Proebsting, G. Bassman, J. Gerrits, J. Alberet al.,
+“Magentic-one: A generalist multi-agent system for solving com-
+plex tasks,”arXiv preprint arXiv:2411.04468, 2024.
+[38] W. Zhu, Z. Tang, and K. Yue, “Symphony: Synergistic multi-agent
+planning with heterogeneous language model assembly,”arXiv
+preprint arXiv:2601.22623, 2026.
+[39] OpenAI, “Openai agents sdk,” https://github.com/openai/
+openai-agents-python, 2025.
+[40] J. Lin, S. Liu, C. Pan, L. Lin, S. Dou, X. Huang, H. Yan, Z. Han,
+and T. Gui, “Agentic harness engineering: Observability-driven
+automatic evolution of coding-agent harnesses,”arXiv preprint
+arXiv:2604.25850, 2026.
+[41] Z. Qi, X. Liu, I. L. Iong, H. Lai, X. Sun, J. Sun, X. Yang, Y. Yang,
+S. Yao, W. Xuet al., “Webrl: Training llm web agents via self-
+evolving online curriculum reinforcement learning,” inInterna-
+tional Conference on Learning Representations, vol. 2025, 2025.
+[42] H. Lai, X. Liu, Y. Zhao, H. Xu, H. Zhang, B. Jing, Y. Ren, S. Yao,
+Y. Dong, and J. Tang, “Computerrl: Scaling end-to-end online
+reinforcement learning for computer use agents,”arXiv preprint
+arXiv:2508.14040, 2025.
+[43] D. Guo, D. Yang, H. Zhang, J. Song, P . Wang, Q. Zhuet al.,
+“Deepseek-r1: Incentivizing reasoning capability in llms via re-
+inforcement learning,”arXiv preprint arXiv:2501.12948, 2025.
+[44] R. Wu, X. Wang, J. Mei, P . Cai, D. Fuet al., “Evolver: Self-evolving
+llm agents through an experience-driven lifecycle,”arXiv preprint
+arXiv:2510.16079, 2025.
+[45] Y. Zhai, S. Tao, C. Chen, A. Zou, Z. Chen, Q. Fu, S. Mai, L. Yu,
+J. Deng, Z. Caoet al., “Agentevolver: Towards efficient self-
+evolving agent system,”arXiv preprint arXiv:2511.10395, 2025.
+[46] J. Zhang, S. Hu, C. Lu, R. Lange, and J. Clune, “Darwin godel
+machine: Open-ended evolution of self-improving agents,”arXiv
+preprint arXiv:2505.22954, 2025.
+[47] L. Wang, C. Ma, X. Feng, Z. Zhang, H. Yang, J. Zhang, Z. Chen,
+J. Tang, X. Chen, Y. Linet al., “A survey on large language model
+based autonomous agents,”Frontiers of Computer Science, 2024.
+[48] T. Guo, X. Chen, Y. Wang, R. Chang, S. Pei, N. V . Chawla,
+O. Wiest, and X. Zhang, “Large language model based multi-
+agents: A survey of progress and challenges,”arXiv preprint
+arXiv:2402.01680, 2024.
+[49] X. Li, S. Wang, S. Zeng, Y. Wu, and Y. Yang, “A survey on
+llm-based multi-agent systems: workflow, infrastructure, and
+challenges,”Vicinagearth, 2024.
+[50] K.-T. Tran, D. Dao, M.-D. Nguyen, Q.-V . Pham, B. O’Sullivan, and
+H. D. Nguyen, “Multi-agent collaboration mechanisms: A survey
+of llms,”arXiv preprint arXiv:2501.06322, 2025.
+[51] A. Yehudai, L. Eden, A. Li, G. Uziel, Y. Zhao, R. Bar-Haim,
+A. Cohan, and M. Shmueli-Scheuer, “Survey on evaluation of
+llm-based agents,”arXiv preprint arXiv:2503.16416, 2025.
+[52] D. Nguyen, J. Chen, Y. Wang, G. Wu, N. Park, Z. Hu, H. Lyu,
+J. Wu, R. Aponte, Y. Xiaet al., “Gui agents: A survey,” inFindings
+of the Association for Computational Linguistics: ACL 2025, 2025.
+[53] Y. Ma, Z. Song, Y. Zhuang, J. Hao, and I. King, “A survey on
+vision–language–action models for embodied ai,”IEEE Transac-
+tions on Neural Networks and Learning Systems, 2026.
+[54] M. Yu, F. Meng, X. Zhou, S. Wang, J. Mao, L. Pan, T. Chen,
+K. Wanget al., “A survey on trustworthy llm agents: Threats
+and countermeasures,” inProceedings of the 31st ACM SIGKDD
+Conference on Knowledge Discovery and Data Mining V . 2, 2025.
+[55] Q. Meng, Y. Wang, L. Chen, Q. Wang, C. Lu, W. Wu, Y. Gao,
+Y. Wu, and Y. Hu, “Agent harness for large language model
+agents: A survey,” 2026.
+[56] J. Li, X. Xiao, Y. Zhang, C. Liu, L. Zhao, X. Liao, Y. Ji, J. Wang,
+J. Gu, Y. Geet al., “Agent harness engineering: A survey,”
+OpenReview preprint, 2026.
+[57] X. Ning, K. Tieu, D. Fu, T. Wei, Z. Li, Y. Bei, J. Zou, M. Ai,
+Z. Liu, T.-W. Liet al., “Code as agent harness,”arXiv preprint
+arXiv:2605.18747, 2026.
+[58] M. Wooldridge and N. R. Jennings, “Intelligent agents: Theory
+and practice,”The knowledge engineering review, 1995.
+[59] J. S. Park, J. O’Brien, C. J. Cai, M. R. Morris, P . Liang, and M. S.
+Bernstein, “Generative agents: Interactive simulacra of human
+behavior,” inProceedings of the 36th annual acm symposium on user
+interface software and technology, 2023.
+[60] Q. Wu, G. Bansal, J. Zhang, Y. Wu, B. Li, E. Zhu, L. Jiang,
+X. Zhang, S. Zhang, J. Liuet al., “Autogen: Enabling next-gen llm
+applications via multi-agent conversations,” inFirst conference on
+language modeling, 2024.
+[61] S. Hong, M. Zhuge, J. Chen, X. Zheng, Y. Cheng, J. Wang,
+C. Zhang, S. Yau, Z. Lin, L. Zhouet al., “Metagpt: Meta program-
+ming for a multi-agent collaborative framework,” inInternational
+Conference on Learning Representations, 2024.
+[62] J. Long, “Large language model guided tree-of-thought,”arXiv
+preprint arXiv:2305.08291, 2023.
+[63] N. Shinn, F. Cassano, A. Gopinath, K. Narasimhan, and S. Yao,
+“Reflexion: Language agents with verbal reinforcement learn-
+ing,”Advances in neural information processing systems, 2023.
+[64] Anthropic, “Effective harnesses for long-running agents,”
+https://www.anthropic.com/engineering/effective-harnesses-
+for-long-running-agents, 2025.
+[65] Anthropic, “Model context protocol,” https://
+modelcontextprotocol.io/introduction, 2025.
+[66] G. Cloud, “Agent2agent (a2a,” https://github.com/a2aproject/
+A2A, 2025.
+[67] J. Kaplan, S. McCandlish, T. Henighan, T. B. Brown, B. Chess,
+R. Child, S. Gray, A. Radford, J. Wu, and D. Amodei,
+“Scaling laws for neural language models,”arXiv preprint
+arXiv:2001.08361, 2020.
+[68] J. Hoffmann, S. Borgeaud, A. Mensch, E. Buchatskayaet al.,
+“Training compute-optimal large language models,”arXiv
+preprint arXiv:2203.15556, 2022.
+25
+[69] A. Chowdhery, S. Narang, J. Devlin, M. Bosma, G. Mishra,
+A. Roberts, P . Barhamet al., “Palm: Scaling language modeling
+with pathways,”Journal of machine learning research, 2023.
+[70] E. Nijkamp, B. Pang, H. Hayashi, L. Tu, H. Wang, Y. Zhou,
+S. Savarese, and C. Xiong, “Codegen: An open large language
+model for code with multi-turn program synthesis,”arXiv
+preprint arXiv:2203.13474, 2022.
+[71] Y. Li, D. Choi, J. Chung, N. Kushman, J. Schrittwieser, R. Leblond,
+T. Eccles, J. Keeling, F. Gimeno, A. Dal Lagoet al., “Competition-
+level code generation with alphacode,”Science, 2022.
+[72] A. Lewkowycz, A. Andreassen, D. Dohan, E. Dyer,
+H. Michalewski, V . Ramasesh, A. Slone, C. Anil, I. Schlag
+et al., “Solving quantitative reasoning problems with language
+models,”Advances in neural information processing systems, 2022.
+[73] Z. Shao, P . Wang, Q. Zhu, R. Xu, J. Song, X. Bi, H. Zhang,
+M. Zhang, Y. Li, Y. Wuet al., “Deepseekmath: Pushing the limits
+of mathematical reasoning in open language models,”arXiv
+preprint arXiv:2402.03300, 2024.
+[74] J.-B. Alayrac, J. Donahue, P . Luc, A. Miech, I. Barr, Y. Hasson,
+K. Lenc, A. Mensch, K. Millican, M. Reynoldset al., “Flamingo: a
+visual language model for few-shot learning,”Advances in neural
+information processing systems, 2022.
+[75] X. Chen, J. Djolonga, P . Padlewski, B. Mustafa, S. Changpinyo,
+J. Wu, C. R. Ruiz, S. Goodmanet al., “On scaling up a multilingual
+vision and language model,” inProceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition, 2024.
+[76] A. Grattafiori, A. Dubey, A. Jauhri, A. Pandeyet al., “The llama 3
+herd of models,”arXiv preprint arXiv:2407.21783, 2024.
+[77] J. Liu, C. S. Xia, Y. Wang, and L. Zhang, “Is your code generated
+by chatgpt really correct? rigorous evaluation of large language
+models for code generation,”Advances in neural information pro-
+cessing systems, vol. 36, pp. 21 558–21 572, 2023.
+[78] K. Cobbe, V . Kosaraju, M. Bavarian, M. Chen, H. Jun, L. Kaiser,
+M. Plappert, J. Tworek, J. Hilton, R. Nakanoet al., “Train-
+ing verifiers to solve math word problems,”arXiv preprint
+arXiv:2110.14168, 2021.
+[79] D. Hendrycks, C. Burns, S. Kadavath, A. Arora, S. Basart, E. Tang,
+D. Song, and J. Steinhardt, “Measuring mathematical problem
+solving with the math dataset,”arXiv preprint arXiv:2103.03874,
+2021.
+[80] Y. Wang, X. Ma, G. Zhang, Y. Ni, A. Chandraet al., “Mmlu-pro: A
+more robust and challenging multi-task language understanding
+benchmark,”Advances in Neural Information Processing Systems,
+2024.
+[81] A. Yang, A. Li, B. Yang, B. Zhang, B. Hui, B. Zhenget al., “Qwen3
+technical report,”arXiv preprint arXiv:2505.09388, 2025.
+[82] TIGER-Lab, “Mmlu-pro leaderboard,” https://huggingface.co/
+spaces/TIGER-Lab/MMLU-Pro, 2026.
+[83] Epoch AI, “Gpqa diamond,” https://epoch.ai/benchmarks/
+gpqa-diamond?view=graph&tab=leaderboard, 2026.
+[84] Z. Zhang, H. Zhang, H. Fei, Z. Bao, Y. Chen, Z. Lei, Z. Liu, Y. Sun,
+M. Xiao, Z. Yeet al., “Swe-agi: Benchmarking specification-driven
+software construction with moonbit in the era of autonomous
+agents,”arXiv preprint arXiv:2602.09447, 2026.
+[85] S. Tang, R. Chen, and T. Lan, “Agent alpha: Tree search unifying
+generation, exploration and evaluation for computer-use agents,”
+arXiv preprint arXiv:2602.02995, 2026.
+[86] Q. Zhou, J. Zhang, H. Wang, R. Hao, J. Wang, M. Han, Y. Yang,
+S. Wu, F. Pan, L. Fanet al., “Featurebench: Benchmarking agen-
+tic coding for complex feature development,”arXiv preprint
+arXiv:2602.10975, 2026.
+[87] K. Xu, Y. Kordi, T. Nayak, A. Asija, Y. Wang, K. Sanders, A. Byerly,
+J. Zhang, B. Van Durme, and D. Khashabi, “Turkingbench: A
+challenge benchmark for web agents,” inProceedings of the 2025
+Conference of the Nations of the Americas Chapter of the Association
+for Computational Linguistics: Human Language Technologies, 2025.
+[88] Y. Song, K. Thai, C. M. Pham, Y. Chang, M. Nadaf, and M. Iyyer,
+“Bearcubs: A benchmark for computer-using web agents,”arXiv
+preprint arXiv:2503.07919, 2025.
+[89] H. Jia, Y. Qian, H. Tong, X. Wu, L. Chen, and F. Wei, “To-
+wards adaptive ml benchmarks: Web-agent-driven construction,
+domain expansion, and metric optimization,”arXiv preprint
+arXiv:2509.09321, 2025.
+[90] S. Yoa, S. Yoon, S. Yoon, D. Kim, Y. S. Sim, J. Lee, and W. Lim,
+“From static benchmarks to dynamic protocol: Agent-centric text
+anomaly detection for evaluating llm reasoning,”arXiv preprint
+arXiv:2602.23729, 2026.
+[91] Y. Wang, G. Yu, H. Huang, Z. Wang, Y. Huang, P . Chen, and
+M. R. Lyu, “Cloud-opsbench: A reproducible benchmark for
+agentic root cause analysis in cloud systems,”arXiv preprint
+arXiv:2603.00468, 2026.
+[92] T. Y. Zhuo, M. C. Vu, J. Chim, H. Huet al., “Bigcodebench:
+Benchmarking code generation with diverse function calls and
+complex instructions,” inInternational Conference on Learning Rep-
+resentations, 2025.
+[93] X. Long, L. Du, Y. Xu, F. Liu, H. Wang, N. Ding, Z. Li, J. Guo, and
+Y. Tang, “Liveclawbench: Benchmarking llm agents on complex,
+real-world assistant tasks,”arXiv preprint arXiv:2604.13072, 2026.
+[94] K. Deshpande, V . Sirdeshmukh, J. B. Mols, L. Jin, E.-Y.
+Hernandez-Cardona, D. Lee, J. Kritz, W. E. Primack, S. Yue,
+and C. Xing, “Multichallenge: A realistic multi-turn conversation
+evaluation benchmark challenging to frontier llms,” inFindings
+of the Association for Computational Linguistics: ACL 2025, 2025.
+[95] T. Kwa, B. West, J. Becker, A. Deng, K. Garcia, M. Hasin, S. Jawhar,
+M. Kinniment, N. Rush, S. Von Arxet al., “Measuring ai ability to
+complete long tasks,”arXiv preprint arXiv:2503.14499, 2025.
+[96] T. Kojima, S. S. Gu, M. Reid, Y. Matsuo, and Y. Iwasawa, “Large
+language models are zero-shot reasoners,”Advances in neural
+information processing systems, 2022.
+[97] A. Madaan, N. Tandon, P . Gupta, S. Hallinan, L. Gao, S. Wiegr-
+effeet al., “Self-refine: Iterative refinement with self-feedback,”
+Advances in neural information processing systems, 2023.
+[98] P . Sahoo, A. K. Singh, S. Saha, V . Jain, S. Mondal, and
+A. Chadha, “A systematic survey of prompt engineering in large
+language models: Techniques and applications,”arXiv preprint
+arXiv:2402.07927, 2024.
+[99] H. Peng, P . V . Patil, A. Z. Qiu, G. K. Thiruvathukal, and
+J. C. Davis, “Beyond local code optimization: Multi-agent
+reasoning for software system optimization,”arXiv preprint
+arXiv:2603.14703, 2026.
+[100] Y.-K. Liu and Y.-C. Tsai, “Quality-driven agentic reasoning for
+llm-assisted software design: Questions-of-thoughts (qot) as a
+time-series self-qa chain,”arXiv preprint arXiv:2603.11082, 2026.
+[101] Y. Peng, X. Zhu, C. Wei, N. Zeng, L. Wang, Y. T. He, and F. R.
+Yu, “Sage: Multi-agent self-evolution for llm reasoning,”arXiv
+preprint arXiv:2603.15255, 2026.
+[102] G. Hao, Y. Dai, X. Qin, and S. Yu, “Brain-inspired graph multi-
+agent systems for llm reasoning,”arXiv preprint arXiv:2603.15371,
+2026.
+[103] L. Zhang, T. Jia, M. Wang, W. Hong, C. Duan, M. He, R. Wang,
+X. Peng, M. Wang, G. Zhanget al., “Efficient failure management
+for multi-agent systems with reasoning trace representation,”
+arXiv preprint arXiv:2603.21522, 2026.
+[104] M. Hu, T. Fang, J. Zhang, J. Ma, Z. Zhang, J. Zhou, H. Zhang,
+H. Mi, D. Yu, and I. King, “Webcot: Enhancing web agent reason-
+ing by reconstructing chain-of-thought in reflection, branching,
+and rollback,”arXiv preprint arXiv:2505.20013, 2025.
+[105] A. Kumar, J. Roh, A. Naseh, A. Houmansadr, and E. Bagdasarian,
+“Throttling web agents using reasoning gates,”arXiv preprint
+arXiv:2509.01619, 2025.
+[106] S. Lee, S. Yoon, S. Lee, Y. Chun, D. Park, D. Kim, and J. Y.
+Sim, “Intentcua: Learning intent-level representations for skill
+abstraction and multi-agent planning in computer-use agents,”
+arXiv preprint arXiv:2602.17049, 2026.
+[107] M. Alenezi, “From prompt-response to goal-directed systems:
+The evolution of agentic ai software architecture,”arXiv preprint
+arXiv:2602.10479, 2026.
+[108] S. Agashe, K. Wong, V . Tu, J. Yang, A. Li, and X. E. Wang, “Agent
+s2: A compositional generalist-specialist framework for computer
+use agents,”arXiv preprint arXiv:2504.00906, 2025.
+[109] Y. Chen, L. Yan, Z. Yang, E. Zhang, J. Zhao, S. Wang, D. Yin, and
+J. Mao, “Beyond monolithic architectures: A multi-agent search
+and knowledge optimization framework for agentic search,”
+arXiv preprint arXiv:2601.04703, 2026.
+[110] W. Chen, Z. Peng, X. Yin, C. Ni, C. Ying, B. Xie, and Y. Luo,
+“Solagent: A specialized multi-agent framework for solidity code
+generation,”arXiv preprint arXiv:2601.23009, 2026.
+[111] J. Huang, W. Ye, W. Sun, J. Zhang, M. Zhang, and Y. Liu, “Trace-
+coder: A trace-driven multi-agent framework for automated de-
+bugging of llm-generated code,”arXiv preprint arXiv:2602.06875,
+2026.
+[112] M.-C. Chen, Y.-H. Kao, P .-H. Huang, S.-C. Ho, H.-Y. Tsou,
+I. Wu, E.-M. Huang, Y.-K. Hung, W.-P . Hsin, C. Liang
+et al., “Siliconmind-v1: Multi-agent distillation and debug-
+26
+reasoning workflows for verilog code generation,”arXiv preprint
+arXiv:2603.08719, 2026.
+[113] Q. Zhang, C. Gao, Y. Han, Y. Shang, C. Fang, Z. Chen, and L. Xiao,
+“Sgagent: Suggestion-guided llm-based multi-agent framework
+for repository-level software repair,”ACM Transactions on Soft-
+ware Engineering and Methodology, 2026.
+[114] M. Galster, S. Mohsenimofidi, J. L. Lulla, M. A. Abubakar,
+C. Treude, and S. Baltes, “Configuring agentic ai coding tools:
+An exploratory study,”arXiv preprint arXiv:2602.14690, 2026.
+[115] Y. Li, W. Zhang, Z. Huang, M. Yang, J. Wu, S. Guo, H. Hu,
+L. Sun, J. Yang, M. Tanget al., “Close the loop: Synthesizing
+infinite tool-use data via multi-agent role-playing,”arXiv preprint
+arXiv:2512.23611, 2025.
+[116] X. Zhang, Q. He, Z. Zheng, Z. Zhang, X. He, and D. Li, “Aster:
+Agentic scaling with tool-integrated extended reasoning,”arXiv
+preprint arXiv:2602.01204, 2026.
+[117] L. Mei, J. Yao, Y. Ge, Y. Wang, B. Bi, Y. Cai, J. Liu, M. Li, Z.-Z.
+Li, D. Zhanget al., “A survey of context engineering for large
+language models,”arXiv preprint arXiv:2507.13334, 2025.
+[118] Y. Gao, Y. Xiong, X. Gao, K. Jia, J. Pan, Y. Bi, Y. Dai,
+J. Sun, H. Wang, H. Wanget al., “Retrieval-augmented gen-
+eration for large language models: A survey,”arXiv preprint
+arXiv:2312.10997, 2023.
+[119] G. Izacard and E. Grave, “Leveraging passage retrieval with
+generative models for open domain question answering,” in
+Proceedings of the 16th conference of the european chapter of the
+association for computational linguistics: main volume, 2021.
+[120] S. Borgeaud, A. Mensch, J. Hoffmann, T. Cai, E. Rutherford,
+K. Millican, G. B. Van Den Driessche, J.-B. Lespiauet al., “Im-
+proving language models by retrieving from trillions of tokens,”
+inInternational conference on machine learning. PMLR, 2022.
+[121] G. Izacard, P . Lewis, M. Lomeli, L. Hosseini, F. Petroni, T. Schick
+et al., “Atlas: Few-shot learning with retrieval augmented lan-
+guage models,”Journal of Machine Learning Research, 2023.
+[122] P . Sarthi, S. Abdullah, A. Tuli, S. Khanna, A. Goldie, and
+C. Manning, “Raptor: Recursive abstractive processing for tree-
+organized retrieval,” inInternational Conference on Learning Repre-
+sentations, 2024.
+[123] D. Edge, H. Trinh, N. Cheng, J. Bradley, A. Chao, A. Mody, S. Tru-
+itt, D. Metropolitansky, R. O. Ness, and J. Larson, “From local to
+global: A graph rag approach to query-focused summarization,”
+arXiv preprint arXiv:2404.16130, 2024.
+[124] B. J. Guti ´errez, Y. Shu, Y. Gu, M. Yasunaga, and Y. Su, “Hipporag:
+Neurobiologically inspired long-term memory for large language
+models,”Advances in neural information processing systems, 2024.
+[125] M. Kang, W.-N. Chen, D. Han, H. A. Inan, L. Wutschitz, and Y. o.
+Chen, “Acon: Optimizing context compression for long-horizon
+llm agents,”arXiv preprint arXiv:2510.00615, 2025.
+[126] Y. Yao, S. Huang, E. Dai, Z. Tan, Z. Duan, S. Jia, Y. Jiang,
+and T. Yang, “Arc: Active and reflection-driven context manage-
+ment for long-horizon information seeking agents,”arXiv preprint
+arXiv:2601.12030, 2026.
+[127] Y. Wu, Y. Zheng, T. Xu, Z. Zhang, Y. Yu, J. Zhu, C. Ma, B. Lin,
+B. Dong, H. Zhuet al., “Contextbudget: Budget-aware con-
+text management for long-horizon search agents,”arXiv preprint
+arXiv:2604.01664, 2026.
+[128] S. Liu, J. Yang, B. Jiang, Y. Li, J. Guo, X. Liu, and B. Dai, “Context
+as a tool: Context management for long-horizon swe-agents,”
+arXiv preprint arXiv:2512.22087, 2025.
+[129] H. Jia, E. T. Barr, and S. Mechtaev, “Compressing code context for
+llm-based issue resolution,”arXiv preprint arXiv:2603.28119, 2026.
+[130] H. Li, L. Zhu, B. Zhang, R. Feng, J. Wang, Y. Pan, E. T. Barr,
+F. Sarroet al., “Contextbench: A benchmark for context retrieval
+in coding agents,”arXiv preprint arXiv:2602.05892, 2026.
+[131] J. Zhu, J. Wu, M. Hu, S. Zhu, J. Pan, W. Shen, Y. Yang, F. Liu,
+J. Hao, Y. Jinet al., “Swe context bench: A benchmark for context
+learning in coding,”arXiv preprint arXiv:2602.08316, 2026.
+[132] J. Qiu, Z. Liu, Z. Liu, R. Murthy, J. Zhang, H. Chen, S. Wang,
+M. Zhu, L. Yang, J. Tanet al., “Locobench-agent: An interactive
+benchmark for llm agents in long-context software engineering,”
+arXiv preprint arXiv:2511.13998, 2025.
+[133] S. Fang, Y. Wang, X. Liu, J. Lu, C. Tan, X. Chen, Y. Zheng,
+X. Huang, and X. Qiu, “Agentlongbench: A controllable long
+benchmark for long-contexts agents via environment rollouts,”
+arXiv preprint arXiv:2601.20730, 2026.
+[134] Q. Zhang, C. Hu, S. Upasani, B. Ma, F. Hong, V . Kamanuru,
+J. Rainton, C. Wu, M. Ji, H. Liet al., “Agentic context engineering:
+Evolving contexts for self-improving language models,”arXiv
+preprint arXiv:2510.04618, 2025.
+[135] H. Ye, X. He, V . Arak, H. Dong, and G. Song, “Meta con-
+text engineering via agentic skill evolution,”arXiv preprint
+arXiv:2601.21557, 2026.
+[136] A. Shen and A. Shen, “Dova: Deliberation-first multi-agent or-
+chestration for autonomous research automation,”arXiv preprint
+arXiv:2603.13327, 2026.
+[137] B. Liu, G. Zhao, and H. Xu, “Utility-guided agent orchestration
+for efficient llm tool use,”arXiv preprint arXiv:2603.19896, 2026.
+[138] A. Sulc, “Differentiable modal logic for multi-agent diagnosis, or-
+chestration and communication,”arXiv preprint arXiv:2602.12083,
+2026.
+[139] M. Lin, Z. Zhang, H. Lu, H. Liu, X. Tang, Q. He, X. Zhang,
+and S. Wang, “Memma: Coordinating the memory cycle through
+multi-agent reasoning and in-situ self-evolution,”arXiv preprint
+arXiv:2603.18718, 2026.
+[140] K. Shen, J. Zhang, C. Sun, W. Zeng, and Y. Yue, “Structurally
+aligned subtask-level memory for software engineering agents,”
+arXiv preprint arXiv:2602.21611, 2026.
+[141] A. Steiner, R. Peeters, and C. Bizer, “Mcp vs rag vs nlweb vs
+html: A comparison of the effectiveness and efficiency of different
+agent interfaces to the web,” inProceedings of the ACM Web
+Conference 2026, 2026.
+[142] M. Suri, X. Li, M. Shojaie, S. Han, C.-C. Hsu, S. Garg, A. A.
+Deshmukh, and V . Kumar, “Codescout: Contextual problem
+statement enhancement for software agents,”arXiv preprint
+arXiv:2603.05744, 2026.
+[143] S. Prakash, “Ldp: An identity-aware protocol for multi-agent llm
+systems,”arXiv preprint arXiv:2603.08852, 2026.
+[144] V . V . Vishnyakova, “Context engineering: From prompts to cor-
+porate multi-agent architecture,”arXiv preprint arXiv:2603.09619,
+2026.
+[145] Anthropic, “Building effective agents,”
+https://www.anthropic.com/engineering/building-effective-
+agents, 2024.
+[146] OpenAI, “A practical guide to building agents,”
+https://openai.com/business/guides-and-resources/
+a-practical-guide-to-building-ai-agents, 2025.
+[147] Y. Yan, S. Wang, J. Du, Y. Yang, Y. Shan, Q. Qiu, X. Jia, X. Wang,
+X. Yuan, X. Hanet al., “Mcpworld: A unified benchmarking
+testbed for api, gui, and hybrid computer use agents,”arXiv
+preprint arXiv:2506.07672, 2025.
+[148] C. Bandi, B. Hertzberg, G. Booet al., “Mcp-atlas: A large-scale
+benchmark for tool-use competency with real mcp servers,”arXiv
+preprint arXiv:2602.00933, 2026.
+[149] W. Liu, Z. Liu, E. Dai, W. Yu, L. Yu, T. Yang, J. Han, and H. Gao,
+“Mcpagentbench: A real-world task benchmark for evaluating
+llm agent mcp tool use,”arXiv preprint arXiv:2512.24565, 2025.
+[150] H. Jia, J. Liao, X. Zhang, H. Xu, T. Xie, C. Jiang, M. Yan,
+S. Liu, W. Ye, and F. Huang, “Osworld-mcp: Benchmarking
+mcp tool invocation in computer-use agents,”arXiv preprint
+arXiv:2510.24563, 2025.
+[151] S. Vallabhaneni, T. Berkane, and M. S. Majumder, “The ai com-
+mittee: A multi-agent framework for automated validation and
+remediation of web-sourced data,” inProceedings of the 19th Con-
+ference of the European Chapter of the Association for Computational
+Linguistics (Volume 3: System Demonstrations), 2026.
+[152] Z. Wei, W. Yao, Y. Liu, W. Zhang, Q. Lu, L. Qiu, C. Yu, P . Xu
+et al., “Webagent-r1: Training web agents via end-to-end multi-
+turn reinforcement learning,” inProceedings of the 2025 Conference
+on Empirical Methods in Natural Language Processing, 2025.
+[153] Y. Zhuang, D. Jin, J. Chen, W. Shi, H. Wang, and C. Zhang,
+“Workforceagent-r1: Incentivizing reasoning capability in llm-
+based web agents via reinforcement learning,” inFindings of the
+Association for Computational Linguistics: EACL 2026, 2026.
+[154] Z. Chen, Z. Zhao, Z. Han, M. Liu, X. Ye, Y. Li, H. Min, J. Ren,
+X. Zhang, and G. Cao, “Tgpo: Tree-guided preference optimiza-
+tion for robust web agent reinforcement learning,” inICASSP
+2026-2026 IEEE International Conference on Acoustics, Speech and
+Signal Processing (ICASSP). IEEE, 2026, pp. 2476–2480.
+[155] W. Zhou, X. Xiong, Y. Tian, L. Yue, X. Wu, W. Li, C. Zhao,
+H. Dong, M. Tang, J. Wanget al., “Esearch-r1: Learning cost-aware
+mllm agents for interactive embodied search via reinforcement
+learning,”arXiv preprint arXiv:2512.18571, 2025.
+27
+[156] H. Ding, P . Liu, J. Wang, Z. Ji, M. Cao, R. Zhang, L. Ai, E. Yang,
+T. Shi, and L. Yu, “Dynaweb: Model-based reinforcement learn-
+ing of web agents,”arXiv preprint arXiv:2601.22149, 2026.
+[157] Q. Yu, Z. Zhang, R. Zhu, Y. Yuan, X. Zuo, Y. Yue, W. Dai, T. Fan
+et al., “Dapo: An open-source llm reinforcement learning system
+at scale,”Advances in Neural Information Processing Systems, 2026.
+[158] H. Zhang, M. Liu, S. Zhang, S. Han, J. Hu, Z. Jin, Y. Zhang, S. Diao
+et al., “Prorl agent: Rollout-as-a-service for rl training of multi-
+turn llm agents,”arXiv preprint arXiv:2603.18815, 2026.
+[159] S. Lu, Z. Wang, H. Zhang, Q. Wu, L. Gan, C. Zhuang, J. Gu, and
+T. Lin, “Don’t just fine-tune the agent, tune the environment,”
+arXiv preprint arXiv:2510.10197, 2025.
+[160] J. Zeng, D. Fu, T. Mi, Y. Zhuang, Y. Huang, X. Li, L. Ye, M. Xie,
+Q. Hua, Z. Huanget al., “davinci-dev: Agent-native mid-training
+for software engineering,”arXiv preprint arXiv:2601.18418, 2026.
+[161] Z. Yang, S. Wang, K. Fu, W. He, W. Xiong, Y. Liu, Y. Miao, B. Gao,
+Y. Wang, Y. Maet al., “Kimi-dev: Agentless training as skill prior
+for swe-agents,”arXiv preprint arXiv:2509.23045, 2025.
+[162] S. Karten, J. Zhang, T. Upaa Jr, R. Feng, W. Liet al., “Contin-
+ual harness: Online adaptation for self-improving foundation
+agents,”arXiv preprint arXiv:2605.09998, 2026.
+[163] Q. Zhang, D. Ma, T. Fang, J. Li, J. Tang, N. Chen, H. Mi,
+and Y. Wang, “Training llm agents for spontaneous, reward-free
+self-evolution via world knowledge exploration,”arXiv preprint
+arXiv:2604.18131, 2026.
+[164] M. Robeyns, M. Szummer, and L. Aitchison, “A self-improving
+coding agent,”arXiv preprint arXiv:2504.15228, 2025.
+[165] J. Zhang, B. Zhao, W. Yang, J. Foerster, J. Clune, M. Jiang,
+S. Devlin, and T. Shavrina, “Hyperagents,”arXiv preprint
+arXiv:2603.19461, 2026.
+[166] P . A. F. Enabe, “Profile-then-reason: Bounded semantic com-
+plexity for tool-augmented language agents,”arXiv preprint
+arXiv:2604.04131, 2026.
+[167] Y. Shen, K. Li, W. Zhou, and S. Hu, “Mem2actbench: A bench-
+mark for evaluating long-term memory utilization in task-
+oriented autonomous agents,”arXiv preprint arXiv:2601.19935,
+2026.
+[168] P . Du, “Memory for autonomous llm agents: Mechanisms, eval-
+uation, and emerging frontiers,”arXiv preprint arXiv:2603.07670,
+2026.
+[169] S. Wang, B. Liu, Z. Gao, L. Ma, X. Wang, Y. Xie, and X. Tan,
+“Explore with long-term memory: A benchmark and multimodal
+llm-based reinforcement learning framework for embodied ex-
+ploration,”arXiv preprint arXiv:2601.10744, 2026.
+[170] W. Zhang, X. Wei, W.-C. Huang, Z. Hui, C. Wang, M. Gong, and
+P . S. Yu, “Memorycd: Benchmarking long-context user memory
+of llm agents for lifelong cross-domain personalization,”arXiv
+preprint arXiv:2603.25973, 2026.
+[171] Z. Yang, S. Tian, K. Hu, S. Liu, H.-N. Nguyen, Y. Zhang, Z. Guo,
+M. Yuet al., “Hippocamp: Benchmarking contextual agents on
+personal computers,”arXiv preprint arXiv:2604.01221, 2026.
+[172] A. Maharana, D.-H. Lee, S. Tulyakov, M. Bansal, F. Barbieri,
+and Y. Fang, “Evaluating very long-term conversational memory
+of llm agents,” inProceedings of the 62nd Annual Meeting of the
+Association for Computational Linguistics, 2024.
+[173] D. Huang, G. Malwe, and Z. Wang, “When agents fail to act:
+A diagnostic framework for tool invocation reliability in multi-
+agent llm systems,”arXiv preprint arXiv:2601.16280, 2026.
+[174] Y. Chen, G. Dong, and Z. Dou, “Et-agent: Incentivizing effective
+tool-integrated reasoning agent via behavior calibration,”arXiv
+preprint arXiv:2601.06860, 2026.
+[175] X. Wang, G. Zhang, J. Li, J. Tu, C. Li, and M. Li, “Tooltok: Tool
+tokenization for efficient and generalizable gui agents,”arXiv
+preprint arXiv:2602.02548, 2026.
+[176] A. Agarwal, G. Siyan, Y. Pandya, J. Singh, A. Nambi, and
+A. Awadallah, “Learning when to act or refuse: Guarding agentic
+reasoning models for safe multi-step tool use,”arXiv preprint
+arXiv:2603.03205, 2026.
+[177] J. Zhu, Y. Tian, B. Li, K. Wu, Z. Liang, J. Li, X. Zhang, L. Guo,
+F. Chen, Y. Liuet al., “Finmcp-bench: Benchmarking llm agents
+for real-world financial tool use under the model context proto-
+col,” inICASSP 2026-2026 IEEE International Conference on Acous-
+tics, Speech and Signal Processing (ICASSP). IEEE, 2026.
+[178] M. A. Ferrag, A. Lakas, and M. Debbah, “Agentdrive: An
+open benchmark dataset for agentic ai reasoning with llm-
+generated scenarios in autonomous systems,”arXiv preprint
+arXiv:2601.16964, 2026.
+[179] M. Fu, J. Yu, K. El-Refai, E. Kou, H. Xue, H. Huang, W. Xiao,
+G. Wang, F.-F. Li, G. Shiet al., “Cap-x: A framework for bench-
+marking and improving coding agents for robot manipulation,”
+arXiv preprint arXiv:2603.22435, 2026.
+[180] J. Ai, Y. Feng, F. Zhang, J. Sun, Z. Liet al., “Prosoftarena: Bench-
+marking hierarchical capabilities of multi-modal agents in pro-
+fessional software environments,” inProceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition, 2026.
+[181] J. Yang, H. Guo, L. Ji, J. Zhou, R. Zheng, Z. Lei, S. Zhang, Z. Xi
+et al., “Abc-bench: Benchmarking agentic backend coding in real-
+world development,”arXiv preprint arXiv:2601.11077, 2026.
+[182] S. K. R. Malay, S. Nayak, J. S. Nair, S. Davasam, A. Tiwari,
+S. T. Madhusudhan, S. K. Nemala, S. Sunkara, and S. Rajeswar,
+“Enterpriseops-gym: Environments and evaluations for stateful
+agentic planning and tool use in enterprise settings,”arXiv
+preprint arXiv:2603.13594, 2026.
+[183] A. Das and D. Patel, “Phmforge: A scenario-driven agentic bench-
+mark for industrial asset lifecycle maintenance,”arXiv e-prints,
+pp. arXiv–2604, 2026.
+[184] Y. Ding and L. Zhang, “Swe-replay: Efficient test-time scaling
+for software engineering agents,”arXiv preprint arXiv:2601.22129,
+2026.
+[185] R. Hutter and M. Pradel, “Agentstepper: Interactive debugging
+of software development agents,”arXiv preprint arXiv:2602.06593,
+2026.
+[186] R. Nanda, C. Maddila, S. Jha, E. M. Khan, M. Paltenghi, and
+S. Chandra, “Wink: Recovering from misbehaviors in coding
+agents,”arXiv preprint arXiv:2602.17037, 2026.
+[187] A. Joshi, “Xai for coding agent failures: Transforming raw
+execution traces into actionable insights,”arXiv preprint
+arXiv:2603.05941, 2026.
+[188] C. Guo, J. Wu, S. He, Y. Chen, Z. Kuang, S. Fan, B. Chen, S. Bao,
+J. Liu, H. Wuet al., “Menvagent: Scalable polyglot environment
+construction for verifiable software engineering,”arXiv preprint
+arXiv:2601.22859, 2026.
+[189] C. Pohle, “Agentictyper: Automated typing of legacy software
+projects using agentic ai,”arXiv preprint arXiv:2602.21251, 2026.
+[190] P . T. J. Kon, A. Pradeep, A. Chen, A. P . Ellis, W. Hunt, Z. Wang
+et al., “Swe-prot ´eg´e: Learning to selectively collaborate with an
+expert unlocks small language models as software engineering
+agents,”arXiv preprint arXiv:2602.22124, 2026.
+[191] S. Shaji, F. Huppertz, A. Mitrevski, and S. Houben, “From lan-
+guage to action: Can llm-based agents be used for embodied
+robot cognition?”arXiv preprint arXiv:2603.03148, 2026.
+[192] J. Y. Koh, R. Lo, L. Jang, V . Duvvur, M. Lim, P .-Y. Huang, G. Neu-
+big, S. Zhou, R. Salakhutdinov, and D. Fried, “Visualwebarena:
+Evaluating multimodal agents on realistic visual web tasks,”
+inProceedings of the 62nd Annual Meeting of the Association for
+Computational Linguistics (Volume 1: Long Papers), 2024.
+[193] L. Song, Y. Dai, V . Prabhu, J. Zhang, T. Shi, L. Liet al., “Coact-1:
+Computer-using multi-agent system with coding actions,” inThe
+Fourteenth International Conference on Learning Representations.
+[194] S. Hu, M. Ouyang, D. Gao, and M. Z. Shou, “The dawn of gui
+agent: A preliminary case study with claude 3.5 computer use,”
+arXiv preprint arXiv:2411.10323, 2024.
+[195] Y. Xu, D. Lu, Z. Shen, J. Wang, Z. Wang, Y. Mao, C. Xiong,
+and T. Yu, “Agenttrek: Agent trajectory synthesis via guiding
+replay with web tutorials,” inInternational Conference on Learning
+Representations, 2025.
+[196] Y. He, J. Jin, and P . Liu, “Efficient agent training for computer
+use,”arXiv preprint arXiv:2505.13909, 2025.
+[197] A. M. Bran, S. Cox, O. Schilter, C. Baldassari, A. D. White, and
+P . Schwaller, “Chemcrow: Augmenting large-language models
+with chemistry tools,”arXiv preprint arXiv:2304.05376, 2023.
+[198] Y. Roohani, A. Lee, Q. Huang, J. Vora, Z. Steinhart, K. Huang,
+A. Marson, P . Liang, and J. Leskovec, “Biodiscoveryagent: An
+ai agent for designing genetic perturbation experiments,” in
+International Conference on Learning Representations, 2025.
+[199] F. Liu, J. Xu, X. Cui, X. Wang, Z. Guo, J. Wang, S. M. Mousavi,
+X. Gu, H. Chen, B. Feiet al., “Trace: A multi-agent system for
+autonomous physical reasoning for seismology,”arXiv preprint
+arXiv:2603.21152, 2026.
+[200] J. Yu, W. Yu, P . Xiao, and F. Xing, “Agent-driven corpus linguis-
+tics: A framework for autonomous linguistic discovery,”arXiv
+preprint arXiv:2604.07189, 2026.
+[201] K. Ai, H. Miao, K. Tang, N. Gorski, J. Sun, G. Liu, H. I. Ingolfsson,
+D. Lenz, H. Guo, H. Yuet al., “Scivisagentbench: A benchmark
+28
+for evaluating scientific data analysis and visualization agents,”
+arXiv preprint arXiv:2603.29139, 2026.
+[202] Y. Lyu, X. Zhang, X. Yi, Y. Zhao, S. Guo, W. Hu, J. Piotrowski,
+J. Kaliski, J. Urbani, Z. Menget al., “Evoscientist: Towards multi-
+agent evolving ai scientists for end-to-end scientific discovery,”
+arXiv preprint arXiv:2603.08127, 2026.
+[203] Z. You, X. Chen, A. Vashishtha, S. Du, G. Erion-Barner, H. Mei,
+H. Peng, and Y. Guo, “Improving clinical diagnosis with counter-
+factual multi-agent reasoning,”arXiv preprint arXiv:2603.27820,
+2026.
+[204] C. Liu, C. Ma, Y. Tao, B. Hu, and M. Yang, “Ccd-cbt: Multi-agent
+therapeutic interaction for cbt guided by cognitive conceptual-
+ization diagram,”arXiv preprint arXiv:2604.06551, 2026.
+[205] L. Du, Y. Li, Y. Long, and S. Chen, “Eft-cot: A multi-agent
+chain-of-thought framework for emotion-focused therapy,”arXiv
+preprint arXiv:2601.17842, 2026.
+[206] S. Chen, P . Moreira, Y. Xiao, S. Schmidgall, J. Warner, H. Aerts,
+T. Hartvigsen, J. Gallifant, and D. S. Bitterman, “Medbrowsec-
+omp: Benchmarking medical deep research and computer use,”
+arXiv preprint arXiv:2505.14963, 2025.
+[207] J. Li, Y. Lai, W. Li, J. Ren, M. Zhang, X. Kang, S. Wang, P . Li
+et al., “Agent hospital: A simulacrum of hospital with evolvable
+medical agents,”arXiv preprint arXiv:2405.02957, 2024.
+[208] Y. Wang, Y. Xiang, K. Li, X. Zhang, B. Ye, Z. Fan, F. Wei, and
+T. Yang, “Can a robot walk the robotic dog: Triple-zero collabo-
+rative navigation for heterogeneous multi-agent systems,”arXiv
+preprint arXiv:2603.21723, 2026.
+[209] L. Wang, Z. Ying, X. Yang, Q. Zou, Z. Yin, T. Li, J. Yang, Y. Yang,
+A. Liu, and X. Liu, “Robosafe: Safeguarding embodied agents via
+executable safety logic,”arXiv preprint arXiv:2512.21220, 2025.
+[210] J. Liu, P . Zhao, Z. Kong, X. Shen, P . Dong, F. Yang, L. Cui, H. Tang,
+G. Yuan, W. Niuet al., “When should a robot think? resource-
+aware reasoning via reinforcement learning for embodied robotic
+decision-making,”arXiv preprint arXiv:2603.16673, 2026.
+[211] Z. Zhang, J. Zhang, H. Liu, Q. Lv, J. Yang, K. Cai, and K. Wang,
+“Agriworld: A world tools protocol framework for verifiable
+agricultural reasoning with code-executing llm agents,”arXiv
+preprint arXiv:2602.15325, 2026.
+[212] T. Kuntz, A. Duzan, H. Zhao, F. Croce, Z. Kolter, N. Flammarion,
+and M. Andriushchenko, “Os-harm: A benchmark for measuring
+safety of computer use agents,”Advances in Neural Information
+Processing Systems, vol. 38, 2026.
+[213] R. Hu, C. Peng, J. Xu, and C. Gao, “Repo2run: Automated
+building executable environment for code repository at scale,”
+Advances in Neural Information Processing Systems, 2026.
+[214] N. Jain, J. Singh, M. Shetty, L. Zheng, K. Sen, and I. Stoica, “R2e-
+gym: Procedural environments and hybrid verifiers for scaling
+open-weights swe agents,”arXiv preprint arXiv:2504.07164, 2025.
+[215] S. Kapoor, B. Stroebl, P . Kirgiset al., “Holistic agent leaderboard:
+The missing infrastructure for ai agent evaluation,”arXiv preprint
+arXiv:2510.11977, 2025.
+[216] Y. Liu, D. Iter, Y. Xu, S. Wang, R. Xu, and C. Zhu, “G-eval:
+Nlg evaluation using gpt-4 with better human alignment,” in
+Proceedings of the 2023 conference on empirical methods in natural
+language processing, 2023.
+[217] L. Zheng, W.-L. Chiang, Y. Sheng, S. Zhuang, Z. Wu, Y. Zhuang,
+Z. Lin, Z. Li, D. Li, E. Xinget al., “Judging llm-as-a-judge
+with mt-bench and chatbot arena,”Advances in neural information
+processing systems, 2023.
+[218] J. Gu, X. Jiang, Z. Shi, H. Tanet al., “A survey on llm-as-a-judge,”
+The Innovation, 2024.
+[219] V . Trivedy, M. Daugherty, E. Yurtsev, and H. Chase, “How we
+build evals for deep agents,” https://www.langchain.com/blog/
+how-we-build-evals-for-deep-agents, 2026.
+[220] Confident AI, “DeepEval: The LLM evaluation framework,”
+https://github.com/confident-ai/deepeval, 2025.
+[221] S. Es, J. James, L. E. Anke, and S. Schockaert, “Ragas: Automated
+evaluation of retrieval augmented generation,” inProceedings
+of the 18th conference of the european chapter of the association for
+computational linguistics: system demonstrations, 2024.
+[222] L. Gao, J. Tow, S. Biderman, S. Blacket al., “A framework for
+few-shot language model evaluation,”Zenodo, 2021.
+[223] X. Liu, H. Yu, H. Zhang, Y. Xu, X. Lei, H. Lai, Y. Gu, H. Ding,
+K. Men, K. Yanget al., “Agentbench: Evaluating llms as agents,”
+inInternational Conference on Learning Representations, 2024.
+[224] G. Yin, H. Bai, S. Ma, F. Nan, Y. Sun, Z. Xu, S. Ma, J. Lu,
+X. Kong, A. Zhanget al., “Mmau: A holistic benchmark of agent
+capabilities across diverse domains,” inFindings of the Association
+for Computational Linguistics: NAACL 2025, 2025.
+[225] J. S. Chan, N. Chowdhury, O. Jaffe, J. Aung, D. Sherburn, E. Mays,
+G. Starace, K. Liuet al., “Mle-bench: Evaluating machine learning
+agents on machine learning engineering,” inInternational Confer-
+ence on Learning Representations, 2025.
+[226] G. Mialon, C. Fourrier, T. Wolf, Y. LeCun, and T. Scialom, “Gaia:
+a benchmark for general ai assistants,” inInternational Conference
+on Learning Representations, 2024.
+[227] M. Zheng, K. Han, B. Li, H. Xu, Y. Tian, W. Heet al., “Claw-
+swe-bench: A benchmark for evaluating openclaw-style agent
+harnesses on coding tasks,”arXiv preprint arXiv:2606.12344, 2026.
+[228] SWE-bench Team, “SWE-bench leaderboards,” https://www.
+swebench.com/, 2026.
+[229] Terminal-Bench Team, “Terminal-Bench leaderboard,” https://
+www.tbench.ai/leaderboard/terminal-bench/2.0, 2026.
+[230] S. Kapoor, B. Stroebl, Z. S. Siegel, N. Nadgir, and A. Narayanan,
+“Ai agents that matter,”arXiv preprint arXiv:2407.01502, 2024.
+[231] S. Mehta, “Beyond accuracy: A multi-dimensional framework
+for evaluating enterprise agentic ai systems,”arXiv preprint
+arXiv:2511.14136, 2025.
+[232] A. Gupta, “Reliabilitybench: Evaluating llm agent reliabil-
+ity under production-like stress conditions,”arXiv preprint
+arXiv:2601.06112, 2026.
+[233] H. Cao, I. Driouich, and E. Thomas, “Beyond task completion:
+Revealing corrupt success in llm agents through procedure-
+aware evaluation,”arXiv preprint arXiv:2603.03116, 2026.
+[234] Anthropic, “Claude Sonnet 4.6 system card,” https://www.
+anthropic.com/claude-sonnet-4-6-system-card, 2026.
+[235] Google DeepMind, “Gemini 3.1 Pro model card,” https://
+deepmind.google/models/model-cards/gemini-3-1-pro/, 2026.
+[236] C. S. Xia, Y. Deng, S. Dunn, and L. Zhang, “Demystifying llm-
+based software engineering agents,”Proceedings of the ACM on
+Software Engineering, 2025.
+[237] A. Engineering, “Raising the bar on SWE-bench verified with
+claude 3.5 sonnet,” https://www.anthropic.com/engineering/
+swe-bench-sonnet, 2025.
+[238] J. Yang, C. E. Jimenez, O. Press, and K. Narasimhan, “mini-SWE-
+agent,” https://github.com/SWE-agent/mini-swe-agent, 2025.
+[239] Y. Zhang, H. Ruan, Z. Fan, and A. Roychoudhury, “Au-
+toCodeRover: Autonomous program improvement,” inProceed-
+ings of the 33rd ACM SIGSOFT International Symposium on Software
+Testing and Analysis, 2024.
+[240] H. Li, Y. Tang, S. Wang, and W. Guo, “Patchpilot: A stable and
+cost-efficient agentic patching framework,”arXiv e-prints, pp.
+arXiv–2502, 2025.
+[241] Anthropic, “Claude 3.7 Sonnet,” https://www.anthropic.com/
+news/claude-3-7-sonnet, Feb. 2025.
+[242] Anthropic, “Introducing Claude 4,” https://www.anthropic.
+com/news/claude-4, May 2025.
+[243] OpenAI, “Introducing GPT-5,” https://openai.com/index/
+introducing-gpt-5/, 2025.
+[244] Google DeepMind, “Gemini 3: Our most capable model,” https:
+//blog.google/products/gemini/gemini-3, Nov. 2025.
+[245] SWE-bench Team, “SWE-bench experiments repository,” https:
+//github.com/swe-bench/experiments, 2024.
+[246] Terminal-Bench Team, “Terminal-Bench 2.0 leaderboard sub-
+missions,” https://huggingface.co/datasets/harborframework/
+terminal-bench-2-leaderboard, 2026.
+[247] Terminal-Bench Team, “Terminal-Bench leaderboard
+integrity update,” https://www.tbench.ai/news/
+leaderboard-integrity-update, 2026.
+[248] Steel.dev, “WebArena Leaderboard 2026: Latest Browser
+Agent Scores,” https://leaderboard.steel.dev/leaderboards/
+webarena/, 2026.
+[249] T. Le Sellier De Chezelles, M. Gasse, A. Drouin, M. Caccia,
+L. Boisvert, M. Thakkaret al., “The browsergym ecosystem for
+web agent research,”arXiv preprint arXiv:2412.05467, 2025.
+[250] J. Y. Koh, S. McAleer, D. Fried, and R. Salakhutdinov, “Tree search
+for language model agents,”arXiv preprint arXiv:2407.01476, 2024.
+[251] M. L. Dihan, T. Hashem, M. E. Ali, and M. R. Parvez, “Webop-
+erator: Action-aware tree search for autonomous agents in web
+environment,”arXiv preprint arXiv:2512.12692, 2025.
+[252] P . Sodhi, S. R. K. Branavan, Y. Artzi, and R. McDonald,
+“Step: Stacked llm policies for web actions,”arXiv preprint
+arXiv:2310.03720, 2023.
+29
+[253] K. Yang, Y. Liu, S. Chaudhary, R. Fakoor, P . Chaudhari,
+G. Karypis, and H. Rangwala, “Agentoccam: A simple yet
+strong baseline for llm-based web agents,”arXiv preprint
+arXiv:2410.13825, 2024.
+[254] Y. Zhang, Z. Ma, Y. Ma, Z. Han, Y. Wu, and V . Tresp,
+“Webpilot: A versatile and autonomous multi-agent system for
+web task execution with strategic exploration,”arXiv preprint
+arXiv:2408.15978, 2024.
+[255] R. Zhang, M. Qiu, Z. Tan, M. Zhang, V . Lu, J. Peng, K. Xu, L. Z.
+Agudelo, P . Qian, and T. Chen, “Symbiotic cooperation for web
+agents: Harnessing complementary strengths of large and small
+llms,”arXiv preprint arXiv:2502.07942, 2025.
+[256] WebTactix, “Webtactix: Semantic tree-guided parallel multi-agent
+planning for web task,” https://paper-submission-anoymous.
+github.io/webtactix introduction/, 2026, project page.
+[257] Y. Guo, W. Yang, S. Yang, Z. Liu, C. Chen, Y. Wei, Y. Hu, Y. Huang,
+G. Hao, D. Yuan, J. Wang, X. Chen, H. Yu, L. Lei, and P . Di,
+“Opagent: Operator agent for web navigation,”arXiv preprint
+arXiv:2602.13559, 2026.
+[258] J. Wang, J. Zhou, W. Zhang, T. Wang, W. Liu, Z. Zhang, X. Lou,
+W. Zhang, H. Deng, and J. Wang, “Colorbrowseragent: Complex
+long-horizon browser agent with adaptive knowledge evolu-
+tion,”arXiv preprint arXiv:2601.07262, 2026.
+[259] M. Thakkar, N. Chapados, C. Palet al., “Webarena verified:
+Reliable evaluation for web agents,” inWorkshop on Scaling
+Environments for Agents.
+[260] J. Liu, C. Qian, Z. Su, Q. Zong, S. Huang, B. He, and Y. R. Fung,
+“Costbench: Evaluating multi-turn cost-optimal planning and
+adaptation in dynamic environments for llm tool-use agents,”
+arXiv preprint arXiv:2511.02734, 2025.
+[261] H. Li, Z. Wang, Q. Dai, Y. Nie, J. Peng, R. Liu, J. Zhang, K. Zhu,
+J. He, L. Wanget al., “OpenSage: Self-programming agent gener-
+ation engine,”arXiv preprint arXiv:2602.16891, 2026.
+[262] KRAFTON AI and Ludo Robotics, “Terminus-KIRA: Boosting
+frontier model performance on Terminal-Bench with minimal
+harness,” https://github.com/krafton-ai/kira, 2026.

@@ -1,0 +1,461 @@
+arXiv 1701.02814  https://arxiv.org/abs/1701.02814
+
+arXiv:1701.02814v2  [math.OC]  2 Aug 2017
+Kelly betting on horse races with uncertainty
+in probability estimates
+Michael R. Metel
+Laboratoire de Recherche en Informatique, Universit´ e Paris-Sud, Orsay, France
+metel@ lri. fr
+August 3, 2017
+Abstract
+We investigate the problem of gambling with uncertainty in o utcome probabilities.
+Stochastic optimization models are proposed for optimal in vesting on events with mu-
+tually exclusive outcomes when probabilities are estimate d using multinomial logistic
+regression. Special attention is given to the case of there b eing two outcomes, and
+the general case of many outcomes. An empirical study using s imulated data was
+conducted where the loss of return from probability estimat ion error is observed, and
+superior returns are achieved taking it into consideration .
+1 Introduction
+The Kelly (1956) criterion is a powerful tool for decision making in the world of gambling
+and investing, answering the question of how much to wager by maxim izing the asymptotic
+exponential rate of return. One limitation is that exact knowledge o f outcome probabilities
+and payouts is assumed, which in general is not available for opportu nities which have the
+1
+potential for proﬁtability, such as in sports betting and the stock market. Replacing the
+actual values with estimates leads to overbetting (MacLean et al., 1 992), resulting in higher
+risk with lower returns. We might assume unbiased errors will cancel out over time, but
+when using the Kelly criterion, outcomes with overestimated values w ill consistently look
+more favourable than in reality, with larger wagers placed on them th an should be. The
+most popular way to mitigate this problem is through the use of a frac tional Kelly strategy,
+which wagers a ﬁxed fraction of the amount prescribed by the Kelly c riterion, which has
+been shown to possess favourable risk-return properties by Mac Lean et al. (1992). This can
+be seen as a conservative strategy, where given an estimated upp er bound of possible over
+betting, we correct by dividing all wagers by this amount. This techn ique has been en-
+dorsed and successfully used in practice by people such as Benter ( 1994) and Thorp (2006),
+with betting half the Kelly amount being popular amongst gamblers (Po undstone, 2005).
+More recently, research has been done which directly considers th e inherent uncertainty in
+probability estimates. Baker and McHale (2013) derived a shrinkage factor for two outcome
+gambling settings, which gives the optimal fraction of the Kelly amoun t to wager.
+In this paper we develop methodologies for Kelly style betting on even ts with many possible
+outcomes taking into account the uncertainty in probability estimat es. For clarity we present
+our work using the example of horse race betting, though the ideas can be applied more
+broadly in domains beyond sports betting, and should be of interest to people concerned with
+decision making under uncertainty in general. A signiﬁcant amount of academic research
+has been done on horse racing, see (Hausch et al., 1981), largely du e to the fact that it
+can be seen as a microcosm of ﬁnancial exchanges, with ﬁndings in th is arena having wider
+implications in ﬁnance, economics, and decision theory.
+2
+2 Optimal investment problem
+We are interested in the following problem, which we will describe in the s etting of optimal
+wagering on a horse race.
+max
+n∑
+h=1
+πh log(xhOh + w −
+n∑
+i=1
+xi) (P)
+s.t.
+n∑
+h=1
+xh ≤ w
+xh ≥ 0 h = 1, ..., n
+The objective is to maximize the Kelly criterion, which is equivalent to ma ximizing the ex-
+pected logarithm of wealth. There are n horses in the race, and the probability of horse h
+winning is πh. xh is the amount we will wager on horse h, Oh is the decimal payout odds for
+horse h, which we assume are ﬁxed, and w is our current wealth. The constraints ensure our
+wagers are sound. Exact optimal solutions can be found for this pr oblem using the algorithm
+devised by Smoczynski and Tomkins (2010).
+3 Outcome probability estimation
+The most popular method of estimating horse racing win probabilities is by multinomial
+logistic regression, which was ﬁrst proposed by Bolton and Chapman (1986). We create a
+linear predictor function to value each horse h, β′vh, where vh is the vector of factor values
+and β′ is the transposed vector of regression coeﬃcients. Each horse is then assigned winning
+probabilities πh = eβ′vh∑n
+i=1 eβ′vi . Given R historical races, the log-likelihood function is
+ln L(β) =
+R∑
+r=1
+β′vwr − ln
+nr∑
+i=1
+eβ′vir ,
+3
+where wr denotes the index of the winning horse in race r and nr is the number of horses.
+This function is concave (Boyd and Vandenberghe, 2004, p. 72), s o we can ﬁnd a maxi-
+mum likelihood estimate ˆβ using standard unconstrained optimization algorithms. The jth
+component of the score function, or the gradient of ln L(β) is
+∂ ln L(β)
+∂βj
+=
+R∑
+r=1
+vwrj −
+∑nr
+i=1 virj eβ′vir
+∑nr
+i=1 eβ′vir .
+The jk cell of the curvature, or the negative Hessian is
+−∂2 ln L(β)
+∂βj∂βk
+=
+R∑
+r=1
+(∑nri=1 virj virk eβ′vir )(∑nri=1 eβ′vir ) − (∑nri=1 virkeβ′vir )(∑nri=1 virj eβ′vir )
+(∑nri=1 eβ′vir )2 .
+The observed Fisher information, I( ˆβ), is the curvature at ˆβ. The maximum likelihood esti-
+mate ˆβ is consistent and asymptotically normal with covariance I −1( ˆβ) (McFadden, 1974).
+There are too many potential factors contributing to the outcom e of a horse race to believe we
+have the actual model of outcome probabilities, so we must conside r model misspeciﬁcation.
+The variance of the score terms is V ( ˆβ) = ∑Rr=1 ∂ ln Lr( ˆβ)∂β ∂ ln Lr( ˆβ)∂β ′, where ∂ ln Lr(β)∂β is the
+gradient of the log-likelihood function of the rth race. We can then calculate the sandwich
+estimate of the covariance matrix of ˆβ as Σ = I( ˆβ)−1V ( ˆβ)I( ˆβ)−1, which is robust to our
+misspeciﬁcation, and model our parameters as β ∼ N( ˆβ, Σ). Let πsh = eE(vh)∑ni=1 eE(vi) = e ˆβ′vh∑ni=1 e ˆβ′vi ,
+which is the maximum likelihood probability estimate typically used after c ompleting a
+regression analysis. We denote (P) with πh = πsh as (S) and call this the standard model,
+which will be used to compare other models to.
+4
+4 Optimization models considering uncertainty in prob-
+ability estimates
+We now attempt to move beyond the standard model (S) by conside ring the uncertainty of
+our probability estimates using diﬀerent techniques from stochast ic optimization. A natural
+approach would be to maximize the expected value of our objective,
+E
+n∑
+h=1
+πh(β) log(xhOh + w −
+n∑
+i=1
+xi),
+resulting in (P) with probabilites E(πh) = E eβ′vh∑n
+i=1 eβ′vi . As random variables our win proba-
+bilities, πh = eβ′vh∑n
+i=1 eβ′vi , follow a logistic-normal distribution (Atchison and Shen, 1980) for
+which E(πh), to the best of our knowledge, is not representable in a simple form . E(πh) can
+be estimated using Monte Carlo integration by generating N random samples of β and tak-
+ing our expected win probabilites as πmch = 1N∑Ni=1 e(βi)′vh∑n
+j=1 e(βi)′vj . We denote this formulation
+as (Emc).
+We can also ﬁnd a lower bound using the normal moment generating fu nction,
+E
+( 1
+πh
+)
+= E
+( n∑
+i=1
+eβ′(vi−vh)
+)
+=
+∑n
+i=1 e
+ˆβ′vi+ 12 (vi−vh)′Σ(vi−vh)
+e ˆβ′vh ,
+and from Jensen’s inequality, E(πh) ≥ 1E( 1πh ), giving us the lower bound
+Elb(πh) = e ˆβ′vh∑n
+i=1 e
+ˆβ′vi+ 12 (vi−vh)′Σ(vi−vh)
+for each outcome probability. Using these lower bounds gives us a co nservative estimate of
+outcomes. The sum of probabilities Elb(πh) will in general not equal 1, so when betting on
+an outcome h, this formulation underweights the event of h not occurring. To overcome
+5
+this we have the following formulation which contains an extra outcom e with probability
+1 −∑ni=1 Elb(πi) where all money wagered is lost.
+max
+n∑
+h=1
+Elb(πh) log(xhOh + w −
+n∑
+i=1
+xi) +
+(
+1 −
+n∑
+h=1
+Elb(πh)
+)
+log(w −
+n∑
+i=1
+xi) (Elb)
+s.t.
+n∑
+h=1
+xh ≤ w
+xh ≥ 0 h = 1, ..., n
+As we want to limit overbetting from probability estimation error, we c an add solution
+robustness to probability estimation. The optimization problem is rew ritten so that the
+uncertainty is in the constraints and then we ensure a minimal objec tive value holds for a
+given probability through the use of a chance constraint.
+max t (CC)
+s.t. P(t ≤
+n∑
+h=1
+πh log(xhOh + w −
+n∑
+i=1
+xi)) ≥ 1 − α
+n∑
+h=1
+xh ≤ w
+xh ≥ 0 h = 1, ..., n
+where α < 0.5. When using (S), we are only optimizing over a point estimate of π. As-
+suming this estimate diﬀers from the actual value of π, we could very well be placing a
+wager with actual expected log wealth lower than our current log( w). With this chance
+constraint we can ensure that our solution generates a positive ex pected return over a high
+proportion of possible values of π. Further, we can choose a solution x which will gener-
+ate the highest return over (1 −α)% of potential values of π, avoiding large misplaced wagers.
+6
+In the case where there are only two outcomes, we can achieve the exact solution by solving
+the following optimization program.
+max t (CC2)
+s.t. t ≤ πH1 log(x1(O1 − 1) + w − x2) + πL2 log(x2(O2 − 1) + w − x1)
+t ≤ πL1 log(x1(O1 − 1) + w − x2) + πH2 log(x2(O2 − 1) + w − x1)
+x1 + x2 ≤ w
+x1, x2 ≥ 0
+where
+πH1 = eΦ−1(1−α)σ+ ˆβ′v1
+eΦ−1(1−α)σ+ ˆβ′ v1 + e ˆβ′v2 , πL2 = e ˆβ′v2eΦ−1(1−α)σ+ ˆβ′v1 + e ˆβ′v2
+πL1 = e
+ˆβ′v1
+e ˆβ′v1 + eΦ−1(1−α)σ+ ˆβ′v2 , πH2 = eΦ−1(1−α)σ+ ˆβ′v2e ˆβ′v1 + eΦ−1(1−α)σ+ ˆβ′ v2
+and σ2 = ( v1 − v2)′Σ(v1 − v2). Intuitively, our probabilities π1 and π2 are reweighted de-
+pending on which outcome is more favourable, where the ﬁrst const raint puts more weight
+on outcome one, which will be tight when outcome two is more favoura ble, and the second
+constraint puts more weight on outcome two, for when one is more f avourable. A derivation
+of this program can be found in the appendix in the subsection Derivation of (CC2) .
+We now focus on the case of more than two outcomes. The following o ptimization problem is
+an approximation of CC, where we have taken S iid samples πs of the outcome probabilities
+and want to satisfy the chance constraint over this empirical distr ibution by ensuring the
+constraint t ≤ ∑nh=1 πsh log(xhOh + w −∑ni=1 xi) is not satisﬁed over no more than Sα
+samples. M is chosen suﬃciently large so as not to restrict the value of t. The convergence
+of the optimal objective value and solution set of this approximation to (CC) in the limit is
+established in (Shapiro et al., 2009, p. 211).
+7
+max t (CCN)
+s.t. t ≤
+n∑
+h=1
+πsh log(xhOh + w −
+n∑
+i=1
+xi) + zsM s = 1, ..., S
+S∑
+s=1
+zs ≤ Sα
+n∑
+h=1
+xh ≤ w
+xh ≥ 0 h = 1, ..., n
+zs ∈ {0, 1} s = 1, ..., S
+This problem is quite challenging, and is only practical for very small sa mple choices of S.
+We use a simple heuristic to ﬁnd the Sα worst constraints, setting their binary values to 1,
+and then proceed to solve the now convex problem with decision varia bles xh and t. We ﬁrst
+solve (CCN) with α = 0, or for zs = 0 ∀s ∈ S, sort t −∑nh=1 πsh log(xhOh + w −∑ni=1 xi)
+in descending order, set zs = 1 for the ﬁrst Sα corresponding constraints, and then resolve
+(CCN) with ﬁxed zs.
+We consider a ﬁnal model, combining the previous two, where we are m aximizing the expec-
+tation of log wealth subject to a chance constraint which ensures o ur solution does not have
+a negative true expected return with high probability.
+8
+max E
+n∑
+h=1
+πh log(xhOh + w −
+n∑
+i=1
+xi) (ECC)
+s.t. P(log(w) ≤
+n∑
+h=1
+πh log(xhOh + w −
+n∑
+i=1
+xi)) ≥ 1 − α
+n∑
+h=1
+xh ≤ w
+xh ≥ 0 h = 1, ..., n
+The implementation uses the objective of (P) with probabilities πmch and the constraint set
+of either (CC2) or (CCN), with t replaced with log( w). We label these formulations (ECC2)
+and (ECCN) respectively.
+5 Empirical model comparison
+We seek to compare the performance of standard Kelly betting, fr actional Kelly betting and
+Kelly betting considering the uncertainty in probability estimates, us ing simulated data to
+allow for accurate testing of the diﬀerent methodologies. We simulat ed the distribution of
+β by taking ˆβ as a standard normal random vector of size m = 10. For each component ˆβi,
+a corresponding standard deviation σi was simulated between [0 , σ′i], where σ′i = −|βi|Φ−1(0.025) .
+This implies that the p-value of βi is not greater than 0 .05 if the data were the result of a
+regression analysis. Σ was then taken as a diagonal matrix consistin g of σ2. The true values
+of β, βt, corresponding to the true outcome probabilities were simulated by taking a random
+sample from the distribution of β. We generated an m × n matrix F of standard uniform
+random variables representing the m factor values of the n horses. We then calculated the
+true outcome probabilities as
+πth = eβt′Fh∑n
+i=1 eβt′Fi
+9
+In order to limit the variation of the empirical testing, we compared m odels not based on their
+ﬁnal simulated wealth, but by their expected exponential return o ver the true probability
+distribution πt. Given our optimal solution x∗ using any technique in race i, the expected
+exponential return is calculated as
+E log
+( wi
+wi−1
+)
+=
+n∑
+h=1
+πth log
+(x∗hOh + wi−1 −∑ni=1 x∗i
+wi−1
+)
+We can then calculate the expected return over the entire sample o f size T as
+E log
+(wT
+w0
+)
+=
+T∑
+i=1
+E log
+( wi
+wi−1
+)
+This should reduce the variance in the result, as our performance s tatistic does not depend
+on the outcomes of the races. To further limit variance, we use a ﬁx ed, identical payout odd
+for each outcome.
+Four experiments were conducted, each consisting of 2500 trials, with details in Table 1.
+Experiment n O h
+(E1) 2 1.1
+(E2) 2 1.2
+(E3) 10 2
+(E4) 30 4
+Table 1: Experiment details
+All chance constraints were tested using α = 0 .4, 0 .25, and 0 .1. πmch was estimated using
+1, 000, 000 samples when n = 2, and 2 , 000, 000 when n = 10 and n = 30. The chance con-
+straints were estimated using 1 , 000 samples for n = 10 and 2 , 000 samples for n = 30. All
+experiments were done on a Windows 10 Home 64-bit, Intel Core i5-7 200U 2.5GHz processor
+with 8 GB of RAM, in Matlab R2017a using fmincon.
+10
+Result data is presented in Table 2 for all experiments. (T) is the bes t that could be achieved
+in the experiment, using the true probabilities πth in (P). (F) is using a 50% fractional Kelly
+strategy of (S). (CCx) stands for (CC2) or (CCN) depending on t he experiment, and likewise
+for (ECCx). The numbers under each experiment name are the tot al expected return for
+each model, with the ﬁnal column being the sum over all experiments. We see in total, (Elb),
+(Emc), and (CCx) and (ECCx) with α = 0 .4 outperformed (P), with (Emc) and (ECCx)
+with α = 0 .4 outperforming (S) in all experiments, and (ECCx) with α = 0 .4 performing
+best overall. Though the best result was achieved using a chance co nstraint, we can see that
+in general its use as a risk measure against uncertainty in probability estimation is overly
+aggressive for smaller values of α, dampening long term growth.
+Model (E1) (E2) (E3) (E4) Sum
+(T) 3.051 16.861 4.385 3.166 27.463
+(S) 1.583 12.214 2.383 1.954 18.134
+(F) 1.210 8.754 1.788 1.515 13.268
+(Elb) 1.852 12.179 2.353 1.823 18.206
+(Emc) 1.820 12.297 2.390 1.964 18.471
+(CCx) α = 0.40 1.786 12.288 2.345 1.834 18.253
+(CCx) α = 0.25 1.694 11.371 1.964 1.426 16.454
+(CCx) α = 0.10 1.080 9.027 1.206 0.846 12.158
+(ECCx) α = 0.40 1.825 12.288 2.390 1.980 18.484
+(ECCx) α = 0.25 1.834 11.983 2.319 1.728 17.863
+(ECCx) α = 0.10 1.433 10.355 1.647 1.164 14.599
+Table 2: Expected total returns
+11
+6 Conclusion and future research
+We have investigated diﬀerent stochastic optimization models for Ke lly style betting on
+mutually exclusive outcomes considering probability estimation uncer tainty stemming from
+multinomial logistic regression. An empirical study using simulated dat a was conducted to
+compare performance. The large diﬀerence in long term growth whe n using the true prob-
+ability outcomes versus relying on estimates in our experiments displa y the signiﬁcance of
+probability estimation error in decision making, and the challenges for those attempting to
+maximize return in speculative markets. Improvements in long term g rowth have been found,
+ﬁrst by considering the uncertainty in outcome probabilities when ca lculating the expected
+log wealth, and with a mild use of a chance constraint, which will likely nee d to be calibrated
+in each application to ﬁnd the proper balance of preventing losses fr om uncertainty without
+overly dampening the potential to capture positive returns.
+The presentation of the material in this paper has focused on the a pplication of betting on
+horse racing, but the ideas are applicable to a general investment s etting. New research
+adapting the methods presented to more general return setting s beyond multinomial logistic
+regression uncertainty and mutual exclusive events would be inter esting, with applications
+such as investing in a portfolio of stocks following geometric Brownian motions considering
+parameter uncertainty.
+Acknowledgements
+The author thanks the anonymous referees for their valuable com ments. This work was
+supported by the Digiteo Chair C&O program.
+12
+References
+J Atchison and SM Shen. Logistic-normal distributions: Some prope rties and uses.
+Biometrika, 67(2):261–272, 1980.
+RD Baker and IG McHale. Optimal Betting Under Parameter Uncerta inty: Improving the
+Kelly Criterion. Decision Analysis, 10(3):189–199, 2013.
+W Benter. Computer Based Horse Race Handicapping and Wagering S ystems: A Report. In
+DB Hausch, VSY Lo, and WT Ziemba, editors, Eﬃciency of Racetrack Betting Markets ,
+pages 183–198. World Scientiﬁc, 1994.
+RN Bolton and RG Chapman. Searching for Positive Returns at the Tr ack: A Multinomial
+Logic Model for Handicapping Horse Races. Management Science, 32(8):1040–1060, 1986.
+ISSN 0025-1909.
+S Boyd and L Vandenberghe. Convex Optimization . Cambridge University Press, 2004.
+DB Hausch, WT Ziemba, and M Rubinstein. Eﬃciency of the Market for Racetrack Betting.
+Management Science , 27(12):1435–1452, 1981.
+JL Kelly. A New Interpretation of Information Rate. Information Theory, IRE Transactions
+on, 2(3):185–189, 1956.
+LC MacLean, WT Ziemba, and G Blazenko. Growth Versus Security in D ynamic Investment
+Analysis. Management Science , 38(11):1562–1585, 1992.
+D McFadden. Conditional Logit Analysis of Qualitative Choice Behavior . In Zarembka P,
+editor, Frontiers in Econometrics , pages 105–142. Academic Press, New York, 1974.
+W Poundstone. Fortune’s Formula: The Untold Story of the Scientiﬁc Bettin g System that
+Beat the Casinos and Wall Street . Hill and Wang, 2005.
+13
+A Shapiro, D Dentcheva, and A Ruszczy´ nski. Lectures on stochastic programming: modeling
+and theory. SIAM, 2009.
+P Smoczynski and D Tomkins. An explicit solution to the problem of opt imizing the allo-
+cations of a bettor’s wealth when wagering on horse races. Mathematical Scientist , 35(1):
+10–17, 2010.
+EO Thorp. The Kelly Criterion in Blackjack, Sports Betting, and the S tock Market. In
+SA Zenios and WT Ziemba, editors, Handbook of Asset and Liability Management, Volume
+I, pages 385–428. Elsevier, 2006.
+Appendix
+Derivation of (CC2)
+We need to ﬁnd an equivalent deterministic constraint for the chanc e constraint P(t ≤
+π1 log(x1(O1 − 1) + w − x2) + π2 log(x2(O2 − 1) + w − x1)) ≥ 1 − α. For simplicity, let
+W1 = x1(O1 − 1) + w − x2 and W2 = x2(O2 − 1) + w − x1, then the chance constraint can
+be written as
+P(t ≤ π1 log(W1) + (1 − π1) log(W2)) ≥ 1 − α. (1)
+Given that π1 ∈ (0, 1), the only time t ≥ max(log(W1), log(W2)) is feasible in (1) and (CC2)
+is when t = log( W1) = log( W2), with all other instances being infeasible in both. The case
+where t ≤ min(log(W1), log(W2)) is always feasible in (1) and (CC2). We now consider the
+case where log( W2) < t < log(W1). Rearranging and taking π1 = eβ′v1eβ′v1 +eβ′v2 , the chance
+14
+constraint equals
+P(t − log(W2) ≤ π1(log(W1) − log(W2)) ≥ 1 − α
+P(eβ′(v2−v1) ≤ log(W1) − log(W2)t − log(W2) − 1) ≥ 1 − α
+P(β′(v2 − v1) ≤ log
+( log(W1) − t
+t − log(W2)
+)
+) ≥ 1 − α
+log
+(log(W1) − t
+t − log(W2)
+)
+≥ Φ−1(1 − α)σ + µ
+where µ = ˆβ′(v2 − v1) and σ2 = (v1 − v2)′Σ(v1 − v2). Rearranging,
+1
+1 + eΦ−1(1−α)σ+µ log(W1) + eΦ−1(1−α)σ+µ21 + eΦ−1(1−α)σ+µ log(W2) ≥ t
+e
+ˆβ′v1
+e ˆβ′v1 + eΦ−1(1−α)σ+ ˆβ′ v2 log(W1) + eΦ−1(1−α)σ+ ˆβ′v2e ˆβ′v1 + eΦ−1(1−α)σ+ ˆβ′v2 log(W2) ≥ t
+which is the second constraint in (CC2). In the case where log( W1) < t < log(W2), we
+will get the same result, but with the probability shifted towards out come 1, or the ﬁrst
+constraint in (CC2). Finally, we must show that the correct constr aint will be active. When
+log(W2) < t < log(W1),
+(πH1 − πL1 ) log(W2) ≤ (πH1 − πL1 ) log(W1)
+πL1 (log(W1) − log(W2)) ≤ πH1 (log(W1) − log(W2))
+πL1 log(W1) − (1 − πH2 ) log(W2) ≤ πH1 log(W1) − (1 − πL2 ) log(W2)
+πL1 log(W1) + πH2 log(W2) ≤ πH1 log(W1) + πL2 log(W2),
+and so the right hand side of the second constraint is not greater t han the right hand
+side of the ﬁrst constraint in (CC2), implying the second constraint will be active. We can
+similarly show in the case when log( W1) < t < log(W2) the opposite holds, that πH1 log(W1)+
+15
+πL2 log(W2) ≤ πL1 log(W1)+ πH2 log(W2), implying the ﬁrst constraint will be active as desired.
+16

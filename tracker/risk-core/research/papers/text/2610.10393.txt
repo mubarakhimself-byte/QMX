@@ -1,0 +1,2285 @@
+arXiv 2610.10393  https://arxiv.org/abs/2610.10393
+
+Safe Meta-Policy Design with Risk Control
+Wenbin Zhou1, Michael Lingzhi Li 2, and Shixiang Zhu 1
+1Heinz College of Information Systems and Public Policy, Carnegie Mellon University
+2Technology and Operations Management, Harvard Business School
+Abstract
+Models can be retrained as new data arrive, but deploying every new version risks replacing a good policy with a
+worse one. We study how to plan policy updates (i.e., meta-policy) before future candidates are trained, balancing
+the benefits of improvement against the risk of performance regression. Our offline meta-policy maximizes expected
+cumulative value subject to a budget on the expected number of updates that perform worse than the policies
+they replace. We estimate the value and risk of possible switches from historical learning trajectories, represent
+an update schedule as a path in a directed acyclic graph, and select a schedule using dynamic programming. A
+leading-order analysis identifies the signal-to-noise ratio of policy improvement as a key driver of update frequency,
+waiting times, and risk allocation: clearer improvements support earlier, more frequent updates, while noisier
+improvements call for longer waits or greater risk expenditure. Their asymptotic rates also reveal a diminishing
+marginal cost of achieving greater safety over time. Experiments on synthetic and clinical trial data illustrate the
+performance–risk tradeoff and compare our method with alternative baselines.
+1 Introduction
+Machine learning systems are often retrained as new data
+become available, but a newly trained model need not be
+better than the one currently deployed. Organizations
+must therefore decide both how to learn from additional
+data and when to put the resulting models into use.
+These decisions arise in applications such as treatment
+recommendations, clinical decision support, lending, and
+pricing, where model updates change the decisions made
+for users (Qian and Murphy, 2011; Zhao et al., 2012;
+Athey and Wager, 2021).
+Choosing when to update involves a clear tradeoff. Al-
+though additional data may improve performance in ex-
+pectation, sampling variability can produce a candidate
+whose performance is lower than that of the deployed
+model (Pirotta et al., 2013). As illustrated in Figure 1,
+frequent updates deliver improvements sooner but create
+more opportunities for performance regression. Waiting
+reduces this exposure at the cost of delaying useful im-
+provements. The challenge is to choose a deployment
+schedule that balances these gains and risks (Zhou et al.,
+2026; Zhou and Zhu, 2026).
+In many applications, this deployment process must
+be specified before the performance of future candidate
+models is known. For example, the U.S. Food and Drug
+Administration’s guidance on Predetermined Change
+Control Plans allows manufacturers of AI-enabled medi-
+cal devices to specify how anticipated modifications will
+be developed and evaluated before implementation (U.S.
+Food and Drug Administration, 2025). Motivated by
+such settings, we study an offline planning problem in
+which models are trained sequentially and their deploy-
+ment times are chosen in advance. We call this schedule
+ameta-policyand define an update asunsafeif it low-
+ers average policy value in the target population. Our
+goal is to maximize expected cumulative deployed value
+subject to a budget on the expected number of unsafe
+updates.
+Each update changes the deployed policy and therefore
+the risk of later updates. Deploying a candidate makes
+it the benchmark for the next replacement, whereas skip-
+ping it leaves the current policy in place. We therefore
+optimize the deployment schedule as a whole. When
+candidate values improve in expectation, we show that
+an optimal schedule deploys the newest available can-
+didate whenever it updates. This result allows us to
+represent a schedule as a path through candidate train-
+ing times. Each edge records the expected value earned
+while a policy remains deployed and the risk of replacing
+it at the next update. We estimate these quantities from
+historical learning trajectories and use dynamic program-
+ming to select the path with the highest expected value
+subject to the safety budget (Beasley and Christofides,
+1989).
+We also study how the learning dynamics determine
+the optimal schedule. Under a time-inhomogeneous Itô
+diffusion model for policy value (Itô, 1951), we derive a
+leading-order continuous approximation in which update
+intervals are inversely proportional to the squared local
+signal-to-noise ratio (SNR) of policy improvement: More
+reliable improvements support more frequent updates,
+while noisier improvements require longer waits. For a
+horizon ofT periods and safety budgetϵ, the analysis
+1
+arXiv:2610.10393v1  [stat.ML]  7 Oct 2026
+20 40 60
+Policy checkpoint t
+0.0
+0.2
+0.4
+0.6
+0.8
+Normalized policy value V (π) Long period: delayed gains ( h = 24)
+π1
+π25
+π49
+69% of expected gain captured
+0 unsafe updates
+20 40 60
+Policy checkpoint t
+Medium period: balanced ( h = 12)
+π1
+π13
+π25 π37
+π49
+86% of expected gain captured
+1 unsafe update
+20 40 60
+Policy checkpoint t
+Short period: more exposure ( h = 6)
+π1 π7
+π13
+π19
+π25
+π31 π37 π43 π49
+π55
+93% of expected gain captured
+4 unsafe updates
+Realized candidate process V (πt) Currently deployed policy Unsafe update
+Figure 1:The core tradeoff in deciding how often to update a policy. Updating slowly (left) leaves an outdated policy in
+place and loses value, while updating quickly (right) tracks improvements closely but risks deploying a policy worse than the
+one it replaces (a safety violation).
+yields regret of orderlog(T/ϵ)/T and an update count
+of orderT/log (T/ϵ), with risk allocated adaptively ac-
+cording to the local learning dynamics. These rates
+reveal a favorable scaling law: as the horizon grows,
+the meta-policy can deploy an increasing number of pol-
+icy updates while the average value lost from delayed
+deployment still vanishes. At the same time, stricter
+safety requirements enter only throughlog(1/ϵ), so mul-
+tiplicative reductions in the allowable risk lead to only
+additive increases in waiting time and a correspondingly
+mild loss in deployed value. In sum, these results show
+that substantial gains in safety can be achieved without
+sacrificing responsiveness at the same rate.
+Experiments in synthetic learning environments and
+on International Stroke Trial data (International Stroke
+Trial Collaborative Group, 1997; Sandercock et al.,
+2011) illustrate these tradeoffs. The proposed sched-
+ules achieve higher value under the estimated safety
+budget than periodic updating and alternatives that
+restrict update timing or risk allocation. The gains are
+most pronounced when the rate and variability of policy
+improvement change over time, making a fixed update
+interval less effective.
+Related WorkSafe policy improvement seeks to re-
+place a baseline policy only when the available evi-
+dence supports non-inferiority or improvement. Early
+approaches certify a learned candidate using held-out
+data or construct conservative updates from policy-
+improvementbounds(Thomasetal.,2015;Larocheetal.,
+2019), while conservative bandit methods maintain per-
+formance relative to a default policy during learning
+(Wu et al., 2016). Recent work has strengthened this
+perspective by optimizing lower-tail performance guar-
+antees (Zhao et al., 2024b), calibrating multiple tests
+over candidate threshold policies (Cho et al., 2025), re-
+stricting deviations to well-supported decision points
+(Sharma et al., 2025), and conformally regulating devia-
+tions from a safe reference policy (Prinster et al., 2026).
+While these methods primarily construct or certify an
+individual policy relative to a baseline, our framework
+takes a sequence of data-dependent candidate policies as
+given and jointly selects their deployment times, thereby
+extending safe policy improvement from a single-update
+decision to a sequential deployment problem.
+Acomplementaryliteraturestudiessequentiallearning
+when changing the deployed policy is costly or when only
+a limited number of data-collection batches is available.
+Low-switching reinforcement-learning algorithms control
+regret while limiting policy changes (Bai et al., 2019),
+and deployment-efficient methods minimize the number
+of distinct policies required to learn a high-performing
+policy (Matsushima et al., 2021; Huang et al., 2022). Re-
+cent work extends these guarantees to broad sequential-
+decision classes and batch-learning constraints (Xiong
+et al., 2024), generalized linear contextual bandits with
+update budgets (Sawarni et al., 2024), reinforcement
+learning with general function approximation (Zhao
+et al., 2024a), and reward-free exploration with near-
+optimal deployment complexity (Zhang et al., 2025).
+Whereas this literature generally minimizes regret or
+sample complexity under an exogenous switching or de-
+ployment constraint, our meta-policy makes the number
+and timing of updates endogenous and explicitly weighs
+cumulative value against the probability that each de-
+ployed candidate performs worse than its incumbent,
+giving rise to a distinct set of structural properties.
+Our computational formulation is related to the
+resource-constrained shortest-path problem, for which
+classical work developed exact dynamic programs and ap-
+proximation schemes (Handler and Zang, 1980; Beasley
+and Christofides, 1989; Hassin, 1992; Lorenz and Raz,
+2001). Recent advances include multiphase dynamic pro-
+gramming for acyclic networks (Himmich et al., 2024),
+enhanced bidirectional heuristic search (Ahmadi et al.,
+2025b), and faster label-setting methods that accom-
+modate multiple or signed resource quantities (Ahmadi
+et al., 2025a). Our theoretical analysis is also connected
+2
+to continuous-time approximations of stochastic-gradient
+algorithms, including stochastic modified equations and
+local diffusion models (Li et al., 2017; Mandt et al., 2017);
+recent refinements study stochastic modified flows and
+the weak accuracy of alternative stochastic differential
+equation approximations (Gess et al., 2024; Ankirchner
+and Perko, 2024). Unlike generic path solvers or dif-
+fusion analyses of parameter iterates, our contribution
+derives a problem-specific graph whose edges encode
+estimated deployment value and unsafe-update risk, and
+thentransportsthelearningdynamicstothepolicy-value
+process to characterize the optimal number, timing, and
+risk allocation of policy updates.
+2 Problem Setup
+We consider sequential policy learning over a finite hori-
+zon ofT≥ 2periods, indexed by T ={1,...,T} . In
+period t, the decision-maker observes(Xt,At,Yt), where
+Xt∈X denotes pre-treatment covariates,At∈{ 0, 1} is
+the assigned treatment, andYt∈R is the observed out-
+come. Under the potential outcomes framework (Rubin,
+1974), letYt(0)and Yt(1)denote the outcomes under the
+two treatments, with consistency requiringYt =Yt(At).
+We impose the following assumption on the underlying
+population (Jia et al., 2024).
+Assumption 1.The covariates and potential outcomes
+are drawn i.i.d. fromP,i.e.,
+{(Xt,Yt(0),Yt(1))}Tt=1 i.i.d.∼ P.
+This assumption concerns the covariates and potential
+outcomes; treatment assignments need not be indepen-
+dent across periods.
+A policy is a mappingπ:X→{0,1}, with value
+V(π) =E P[Y(1)1{π(X) = 1}+Y(0)1{π(X) = 0}].
+At each periodt, the decision-maker trains a candidate
+policy πt using the observations accumulated through
+that period,Dt ={(Xτ,Aτ,Yτ)}tτ=1. For a learned pol-
+icy,V (πt)evaluates its population performance condi-
+tional on the realized training data.
+Candidate training and deployment are governed sep-
+arately. Ameta-policy m specifies which candidate is
+deployed in each period: the deployed policy at timet
+is πm(t). We consider schedules fixed in advance, with
+feasible class
+M={m:T →T:m(t)≤tfor allt∈T}.
+The restriction m(t)≤t ensures that a candidate is
+trained before it is deployed. We assume anoffline
+setting in which deployment decisions do not affect the
+data-generating process used to train future candidates.
+Figure 2 illustrates an example of meta-policy.
+\(t=5\)
+(sink node)
+\(t=4\)\(t=3\)\(t=2\)\(t=1\)
+\(\pi_1 \to \pi_2 \to \pi_4 \to T\)
+Time \(t\)
+\(m(t)\)
+\(1\) \(2\) \(3\) \(4\)
+\(1\)
+\(2\)
+\(3\)
+\(4\)
+Proposition 1
+Figure 2:A deployment schedule and its path represen-
+tation forT = 4.Left: The meta-policy updates at times
+2and4, retaining π2 at time3.Right: The corresponding
+path1 → 2→ 4→ 5deploys π1,π 2,π 4, with node5 =T + 1
+serving as the terminal sink.
+An update isunsafeif the newly deployed policy has
+lower population value than its incumbent. Given a
+safety budgetϵ> 0, we choose a meta-policy to maxi-
+mize expected average deployed value while bounding
+the expected number of unsafe updates:
+max
+m∈M
+E
+[
+1
+T
+T∑
+t=1
+V(πm(t))
+]
+s.t.E
+[ T∑
+t=2
+1
+{
+V(πm(t))<V(π m(t−1))
+}
+]
+≤ϵ.
+(1)
+Here, the outer expectation is over the training data
+DT, which generates the candidate-policy sequence.
+Appendix A discusses extensions beyond the binary-
+treatment causal setting.
+3 Proposed Algorithm
+We reformulate problem(1) as a resource-constrained
+path problem and develop a dynamic programming algo-
+rithm using data-driven estimates of policy values and
+update risks.
+3.1 Path Selection Reformulation
+The reformulation relies on the following assumption
+that candidate-policy values improve in expectation, mo-
+tivated by policy-improvement methods (Pirotta et al.,
+2013; Schulman et al., 2015).
+Assumption 2(Policy improvement).For all t′,t∈T
+witht′ <t,E[V(π t′)]≤E[V(π t)].
+Assumption 2 allows individual candidates to perform
+worse than their predecessors; it requires only that their
+expected values be nondecreasing. It therefore permits
+unsafe updates, unlike pathwise monotonicity.
+The following result shows that an optimal schedule
+can be chosen to deploy the newest candidate whenever
+an update occurs.
+3
+Lemma 1(Newest-policy reduction).Under Assump-
+tion 2, problem(1)admits an optimizerm ⋆ satisfying
+m⋆(t)∈{m ⋆(t−1),t}, t∈T \{1}.
+By Lemma 1, an optimal meta-policy can be specified
+entirely by its update times: once these times are chosen,
+the deployed candidate at each update is determined.
+Write1 = t0 < t1 <···< t K ≤T for the initial
+deployment and subsequent updates, and settK+1 =T +
+1to mark the end of the horizon. The schedule deploys
+πtk during periods tk,...,t k+1− 1, for k = 0,...,K .
+Thus, each consecutive pair(tk,tk+1)specifies a holding
+interval and, except for the final pair, the update that
+follows it.
+This interval representation provides a natural connec-
+tion to path optimization. Represent each candidate’s
+training time by a vertex and each possible holding in-
+terval by a directed edge. A deployment schedule then
+corresponds to the patht0→t 1→···→t K→T + 1,
+as illustrated by Figure 2. Assigning each edge its contri-
+bution to expected deployed value and its unsafe-update
+probability makes both the objective and the safety con-
+straint additive along the path. Formally, construct a
+directed acyclic graphG= (V,E)with
+V={1,...,T+ 1},E={(i,j) : 1≤i<j≤T+ 1}.
+Forj≤T , an edge(i,j )represents deploying πi during
+periods i,...,j− 1and switching toπj at timej. The
+terminal edge(i,T + 1)represents retaining πi through
+period T, with no further update. LetPij denote the
+directed paths fromi to j, including the empty path
+wheni=j:
+Pij :=
+{
+(v0,...,v K) :K≥1,
+v0 =i, vK =j,(v ℓ−1,vℓ)∈E,∀ℓ
+}
+.
+(2)
+Each edge receives a reward equal to its contribution
+to expected average deployed value and a safety cost
+equal to its unsafe-update probability.
+Proposition 1(Path selection problem).Define Pij as
+in (2). Under Assumption 2, problem(1) is equivalent
+to
+max
+p∈P1,T+1
+∑
+(i,j)∈p
+Rij s.t.
+∑
+(i,j)∈p
+Sij≤ϵ.(3)
+where R∈R (T+1)×(T+1) and S∈R (T+1)×(T+1) denote
+the reward and safety cost matrices,
+Rij := j−iT ·E[V(π i)],
+Sij :=
+{
+P(V(π j)<V(π i)),ifj≤T
+0,ifj=T+ 1.
+Thus, an optimal schedule corresponds to a maximum-
+reward source–sink path subject to an additive safety
+budget. This is the maximization form of the resource-
+constrained shortest-path problem (Handler and Zang,
+1980; Beasley and Christofides, 1989). The safety costs
+add by linearity of expectation, without requiring inde-
+pendence between unsafe-update events.
+3.2 Dynamic Programming Solution
+We solve the path selection problem using plug-in edge
+estimates and a discretized safety budget. The resulting
+dynamic program is exact for the estimated, gridded
+problem. Algorithm 1 provides the pseudocode.
+Step 1: Estimating Reward and CostWe esti-
+mate the edge rewards and safety costs usingN offline
+trajectories,
+D(n) ={(X (n)t ,A (n)t ,Y (n)t )}Tt=1, n= 1,...,N.
+For each trajectoryn, we trainπ(n)i on the firsti obser-
+vations using the same learning procedure that generates
+the candidate policies, and denote its estimated popu-
+lation value byˆV (n)i . The choice of policy-learning and
+value-estimation methods depends on how the data are
+collected (Dudík et al., 2014; Zhan et al., 2024; Jia et al.,
+2024). Averaging across trajectories gives
+ˆRij = j−iNT
+N∑
+n=1
+ˆV (n)i ,
+ˆSij =
+
+
+
+1
+N
+N∑
+n=1
+1
+{
+ˆV (n)j < ˆV (n)i
+}
+, j≤T,
+0, j=T+ 1.
+(4)
+Estimation error can cause a schedule that satisfies the
+empirical safety budget to violate the population con-
+straint. Population risk control therefore requires ac-
+counting for uncertainty in the estimated safety costs.
+Step 2: Dynamic ProgrammingTo solve the esti-
+mated path problem, we first discretize the safety budget
+into units of size∆> 0. We round the available budget
+down and each edge cost up:
+B∆ =
+⌊ ϵ
+∆
+⌋
+, ~Sij =
+⌈ˆSij
+∆
+⌉
+.(5)
+This guarantees that any path using at mostB∆ budget
+units satisfies the estimated safety constraint:
+∑
+(i,j)∈p
+ˆSij≤∆ ∑
+(i,j)∈p
+~Sij≤∆B ∆≤ϵ.
+A smaller∆reduces the error introduced by rounding
+but increases the computational cost.
+For each node j and budget b∈ {0,...,B ∆}, let
+F (j,b )denote the largest estimated reward achievable
+4
+Algorithm 1Safe Meta-Policy Optimization
+Require: Offline trajectoriesD; time horizonT; safety
+budgetϵ; grid width∆>0.
+1: Construct the update DAGG = (V,E )with source
+1and destinationT+ 1as in (3).
+2: Estimate ˆR and ˆS according to(4). For each termi-
+nal edge(i,T+ 1), set ˆSi,T+1←0.
+3:ComputeB ∆ and ~Sij according to (5).
+4: Initialize F (1,b )← 0for all b∈{ 0,...,B ∆} and
+F(j,b)←−∞for allj̸= 1andb∈{0,...,B ∆}.
+5:foreach vertexj̸= 1in topological orderdo
+6:forb= 0,...,B ∆ do
+7:F (j,b )←max
+(i,j)∈E, ~Sij≤b
+{
+F
+(
+i,b− ~Sij
+)
++ˆRij
+}
+.
+8:Store max predecessor whenF(j,b)>−∞.
+9:end for
+10:end for
+11: Recover optimal pathˆp⋆ by backtracking from(T +
+1,B ∆)through the stored predecessors.
+12:returnThe meta-policy corresponding toˆp ⋆.
+by a path from node1to nodej using at mostb budget
+units. InitializeF (1,b ) = 0for all b, and set the value of
+any infeasible state to−∞. A path reachingj through
+edge( i,j )earns reward ˆRij and leaves at mostb− ~Sij
+budget units for the preceding path. Forj = 2,...,T +1,
+maximizing over predecessor nodes gives the Bellman
+recursion
+F(j,b) = max
+(i,j)∈E
+~Sij≤b
+{
+F
+(
+i,b− ~Sij
+)
++ˆRij
+}
+.(6)
+Because every edge connects an earlier node to a later
+one, weevaluatethesestatesinincreasingorderof j. The
+optimal value of the discretized problem isF (T +1,B ∆).
+Recordingtheselectedpredecessorateachstateallowsus
+to recover the optimal path and its deployment schedule
+by backtracking from(T+ 1,B ∆).
+Given the edge estimates, the algorithm requires
+O(T 2(B∆ + 1))time and O(T 2 +T (B∆ + 1))mem-
+ory, including storage for edge estimates, state values,
+and predecessors. Appendix B.3 provides further discus-
+sion of grid-width selection, approximation error, and an
+extension that accounts for uncertainty in the estimated
+safety costs.
+4 Theoretical Analysis
+This section characterizes and interprets the optimal
+update frequency, safety-risk allocation, and resulting
+deployment regret. All technical proofs are deferred to
+Appendix C.
+Throughout our analysis, we assume that the policy
+valueV (πt)as a time-inhomogeneous Itô diffusion (Itô,
+1951), with deterministic driftµ(·)and volatilityσ(·).
+Assumption 3(Itô diffusion).Let µ(·) : [0, 1]→R +
+and σ(·) : [0 , 1]→R + be two deterministic smooth
+functions, andV 0 be a constant. We assume that
+V(πt) =V 0 + 1T ∫ t0 µ(τT) dτ+ 1T ∫ t0 σ(τT) dWτ,
+where{W τ}τ≥0 is a standard Brownian motion.
+This assumption is inspired by diffusion-type ap-
+proximation, which has been used in the literature to
+study stochastic-gradient learning dynamics (Li et al.,
+2019) and, more specifically, policy-gradient learning in
+stochastic bandits (Lattimore, 2026). It can be derived
+from more primitive assumptions withπt itself, which
+we further discuss in Appendix C.1.
+Assumption 3 allows us to derive a continuous-time
+leading-order approximation to the original problem
+asymptotically. We introduce a horizon-dependent
+waiting-time functionhT : [0, 1]→R + as the contin-
+uum analogue of the discrete holding intervalstk+1−tk.
+Starting fromt0 = 0, the associated continuous schedule
+is generated recursively by
+tk+1 =t k +hT (uk), u k :=t k/T,(7)
+for as long as the proposed next update satisfiestk+1 <
+T. Once the next proposed update would reach or exceed
+T, no further update is made, and the currently deployed
+policy is retained until the terminal timeT. The update
+intervalhT (u)is used in the approximated optimization
+problem as its decision variable.
+Lemma 2(Leading-order approximation).Under As-
+sumption 3, asT→∞ , Problem(1) admits the following
+continuous leading-order approximation:
+min
+hT (·)
+∫ 1
+0
+µ(u)hT (u)du
+s.t.
+∫ 1
+0
+Φ
+(
+−µ(u)
+√
+hT (u)/σ(u)
+)
+hT (u) du≤ ϵT.
+(8)
+The objective of(8) is derived by replacing the orig-
+inal objective of maximizing cumulative reward with
+minimizing regret, where regret is measured relative to
+the always-update baseline,
+R⋆T (ϵ) :=E
+[
+1
+T
+T∑
+t=1
+{
+V(πt)−V(π m⋆(t))}
+]
+.(9)
+The integrand in the constraint can be interpreted as
+a local risk-expenditure rate, where the numerator is
+the probability that an update is harmful, and1/hT (u)
+captures the local update frequency. The constraint
+encourages frequent updates when learning is fast and
+stable, and longer waits when learning is slow or noisy.
+5
+Theorem 1(Update interval).Define the following
+constants and functions,
+LT = log
+(T
+ϵ
+)
+, I(u) = µ(u)2
+2σ(u)2.
+Under the same assumptions as Lemma 2, there is
+h⋆T (u) = 1I(u)[LT− 32 logLT +O(1)].
+Theorem 1 characterizes how the optimal update in-
+terval adapts to the local learning dynamics. SinceI(u)
+represents the squared local signal-to-noise ratio (SNR)
+and the leading term scales asLT/I(u), updates should
+occur more frequently when expected improvement is
+strong relative to its variability, and less frequently when
+learning is noisy. The logarithmic correction− 32 logLT
+reflects the sharp-tail behavior governing unsafe-update
+risk.
+Importantly, Theorem 1 reveals a favorable diminish-
+ing marginal cost of additional safety. Imposing stricter
+safety budgets increases the waiting time between up-
+dates only logarithmically throughLT = log(T/ϵ). This
+implies that when the safety budget is relatively large,
+tightening the budget can initially require noticeable
+increases in the update interval; but as the safety re-
+quirement becomes increasingly stringent, further multi-
+plicative reductions inϵ translate into only additive in-
+creases inLT. Consequently, a substantial improvement
+in deployment safety can be achieved without a propor-
+tionally large reduction in update frequency, encouraging
+practitioners in high-risk settings to adopt conservative
+update schedules without sacrificing responsiveness at
+the same rate.
+Corollary 1(Risk per-update).Under the same as-
+sumptions and notations as in Theorem 1, let
+A(u) = µ(u)I(u), B= ∫ 10 A(u)du.
+Then, there is
+P
+{
+V(πtk+1)<V(π tk)
+}
+= Θ
+(ϵLT
+TB
+µ(uk)
+I(uk)2
+)
+,
+whereu k :=t k/Tdenotes the normalized update times.
+Corollary 1 shows that the optimal schedule allocates
+the safety budget unevenly across updates according to
+the local learning dynamics, with the per-update risk
+scales withµ(u)/I(u)2. Moreover, because the overall
+scale isϵLT/T, the risk associated with each individual
+updatevanishesasthelearninghorizongrows, evenwhile
+the number of updates increases. Hence, the optimal
+policy achieves global safety not by imposing a uniform
+risk level on every update, but by adaptively distributing
+risk across the trajectory.
+Corollary 2(Regret and number of updates).LetR⋆T (ϵ)
+be defined in(9) and K⋆T be the total number of updates
+generated according to(7). Under the same assumptions
+and notations of Theorem 1, there is
+R⋆T (ϵ) = B2T [LT− 32 logLT] +O(T−1),
+K⋆T∼ TLT
+∫ 1
+0
+I(u)du.
+Corollary 2 characterizes the aggregate cost and adap-
+tivity of the optimal deployment schedule. In particular,
+the optimal regret vanishes at the rateLT/T, while the
+number of updates grows on the order ofT/LT, showing
+that the system can accommodate an increasing number
+of policy updates over a longer learning horizon while
+incurring vanishing average deployment regret. The
+second-order terms further reveal that this tradeoff de-
+pends on the entire learning trajectory throughI(u):
+periods in which learning is more informative contribute
+differently to both cumulative regret and the total num-
+ber of deployments. Together, these results quantify
+how the locally adaptive update rule translates into a
+global balance between responsiveness and the cost of
+holding outdated policies.
+5 Numerical Experiments
+This section presents three sets of numerical experiments
+that compare the proposed meta-policy with update
+rules commonly adopted in practice and validate our
+theoretical analysis in Section 4.
+Experiment setting.We evaluate our framework
+on both synthetic and real-data policy-learning envi-
+ronments. For the synthetic study, we consider three
+learning regimes with low, medium, and high value-
+process signal-to-noise ratios by varying the learning
+rate and outcome-noise level. We generate 400 inde-
+pendent trajectories of 300 sequential observations and
+retain a candidate policy every five observations, yield-
+ing T = 60deployment checkpoints, five-dimensional
+covariates, randomized binary treatment, and hetero-
+geneous treatment effects, and train an online plug-in
+CATE policy learner. For the real-data study, we use
+the randomized International Stroke Trial data (Sander-
+cock et al., 2011), constructing500bootstrap sequential
+learning trajectories with nested training sets and eval-
+uating learned policies on a fixed20%held-out sample
+using an AIPW value estimator (Robins et al., 1994).
+Across these settings, we compare our proposed algo-
+rithm against (i)periodicupdating at the best feasible
+constant interval, (ii)equal risk, which splitsϵ evenly
+across updates, and (iii)earliest safe, which deploys
+the first policy whose estimated safety cost falls below
+a tuned threshold. Further experimental details are
+provided in Appendix D.
+6
+1 2 3
+Drift µ
+0.5
+1.0
+1.5
+Volatility σ
+Number of updates K
+1
+2
+4
+8
+12
+1 2 3
+Drift µ
+Volatility σ
+Mean per-update risk ¯p
+0.05
+0.1
+0.2
+0.3
+1 2 3
+Drift µ
+Volatility σ
+Mean pre-update interval ¯h
+0.100.20
+0.40
+0.60
+0.80
+1 2 3
+Drift µ
+Volatility σ
+Expected deployed value J
+0.25 0.50
+0.75
+1.00
+1.25
+0
+5
+10
+15
+20
+K
+0.0
+0.1
+0.2
+0.3
+¯p
+0.2
+0.4
+0.6
+0.8
+1.0
+¯h
+0.25
+0.50
+0.75
+1.00
+1.25
+1.50
+J
+Figure 3:Phase diagrams of the schedules returned by Algorithm 1 on homogeneous value processes with constant driftµ
+and volatilityσ (T = 512, ϵ = 0.35,∆ = 1 × 10−3). From left to right, the panels report the number of updatesK, the mean
+per-update risk ¯p, the mean normalized pre-update interval preceding an update¯h, and the expected deployed valueJ. Each
+cell is evaluated under the population rewards and safety costs and averaged over three simulated datasets. White-labeled
+contours show the leading-order theoretical predictions established in Section 4.
+10□2 10□1 100 101
+Safety budget ϵ
+0.00
+0.25
+0.50
+0.75
+1.00
+Normalized objective
+Low SNR
+10□2 10□1 100 101
+Safety budget ϵ
+0.00
+0.25
+0.50
+0.75
+1.00
+Normalized objective
+Med SNR
+10□2 10□1 100 101
+Safety budget ϵ
+0.00
+0.25
+0.50
+0.75
+1.00
+Normalized objective
+High SNR
+10□2 10□1 100 101
+Safety budget ϵ
+0.00
+0.25
+0.50
+0.75
+1.00
+Normalized objective
+Real Data
+Ours Periodic Equal risk Earliest safe
+Figure 4:Safety–value Pareto frontiers of the proposed meta-policy (Ours) and three baseline update rules, in three synthetic
+settings with low, medium, and high value-process SNR and on the International Stroke Trial (IST) data. The horizontal
+axis is the safety budgetϵ (log scale). The vertical axis is the objective of(1), normalized so that0and1correspond to
+never updating and to updating every period. All methods use the same estimated rewards and safety costs.
+10□2 10□1 100 101
+Safety budget ϵ
+0.00
+0.25
+0.50
+0.75
+1.00
+Normalized update time
+Low SNR
+10□2 10□1 100 101
+Safety budget ϵ
+0.00
+0.25
+0.50
+0.75
+1.00
+Normalized update time
+Med SNR
+10□2 10□1 100 101
+Safety budget ϵ
+0.00
+0.25
+0.50
+0.75
+1.00
+Normalized update time
+High SNR
+10□2 10□1 100 101
+Safety budget ϵ
+0.00
+0.25
+0.50
+0.75
+1.00
+Normalized update time
+Real Data
+Figure 5:Update times in the optimal schedule selected by the proposed meta-policy as the safety budgetϵvaries, in the
+same four settings as Figure 4. Each black dot indicates a scheduled normalized update time. The left dashed lines mark the
+smallest budget that admits one update.
+Exp 1: Validating the optimality system.Fig-
+ure 3 uses simulated homogeneous value processes with
+constant driftµ and volatilityσ over a50× 50grid of
+(µ,σ ), runs Algorithm 1 on the estimated rewards and
+safety costs, and overlays their theoretical asymptotic
+rates as white contours. It can be observed that a higher
+SNR yields more updates, each spending less risk, and
+admits shorter waits. On the other hand, in the low
+SNR regime, there might not even exist an update that
+fits within the budget. The empirical and theoretical
+surfaces are closely aligned (Pearson correlations of0.99,
+0.99, and0.98for K, ¯p, and¯h). The experiment suggests
+that the theoretical structure characterized in Section 4
+aligns well with the exact schedules numerically com-
+puted by Algorithm 1.
+Exp 2: Safety–value frontier.Figure 4 plots the
+obtained objective value of cumulative reward across
+different specifications of the safety budgetϵ. It can be
+seen that our method weakly dominates every baseline at
+every budget, and its frontier exhibits the diminishing
+returns predicted by Corollary 2. The gap is largest
+against periodic updating, reaching0.39in the high-
+SNR setting, where our method captures82%of the
+always-update gain atϵ = 0.01versus53%for periodic
+updating; the adaptive baselines trail by up to0.06
+7
+(equal risk) and0.23(earliest safe). These gains arise
+because our method jointly chooses when to update
+and how much risk to spend on each update, rather
+than fixing either in advance. This result shows that
+the proposed meta-policy attains a higher safety–value
+frontier than commonly used update rules in all four
+settings, renderingitsuperiorindecision-makingsettings
+with safety constraints.
+Exp 3: Structure of optimal schedules.Figure 5
+illustrates how the optimal schedule reorganizes as the
+safety budget grows, where each column shows the nor-
+malized update times selected under a givenϵ. Three
+observations can be made: (i)The schedule is not nested
+in ϵ: as the budget grows, existing updates shift ear-
+lier, and new ones are inserted, producing the curved
+branches in the medium- and high-SNR panels. This
+agrees with Corollary 1, where allocating more risk to an
+update shortens its waiting time. (ii)Update placement
+depends on the SNR: under high SNR, the first update
+occurs early (t/T≈ 0.2), and most updates fall in the
+first half of the horizon, where value improves fastest,
+whereas under low SNR the first update is deferred to
+t/T∈ [0.39, 0.75]. (iii)The intervals are nonuniform:
+on IST, updates concentrate at a few recurring times.
+Hence, the optimal meta-policy adapts both the timing
+and the risk of each update to local learning dynamics,
+which neither periodic nor equal-risk rules can replicate
+by construction.
+6 Conclusion
+We studied how to schedule the deployment of sequen-
+tially learned policies when each update may both im-
+prove or worsen performance. We formulated the prob-
+lem as maximizing cumulative value under a budget on
+unsafe updates, reformulated it as a resource-constrained
+shortest-path problem, and developed an offline dynamic-
+programming solution using historical learning trajecto-
+ries. Our asymptotic analysis characterizes the optimal
+update spacing, per-update risk, regret, and number
+of updates in terms of the local signal-to-noise ratio,
+revealing that stricter safety can be achieved with only
+a logarithmic increase in waiting time. Experiments
+on synthetic environments and real clinical data sup-
+port these structural insights and demonstrate improved
+safety–value tradeoffs over benchmark update rules. Our
+results provide a principled way to coordinate when
+learned policies should be deployed to safely maximize
+performance gain.
+Our framework also leaves several directions for future
+work. First, the structural analysis adopts a reduced-
+form diffusion model for the evolution of policy value.
+Extending the theory to broader learning dynamics,
+including non-Gaussian update risks derived directly
+from specific learning algorithms, would clarify the gen-
+erality of the resulting scheduling laws. Second, the
+implemented scheduler relies on estimated rewards and
+unsafe-update probabilities, so translating empirical fea-
+sibility into finite-sample population guarantees requires
+additional uncertainty quantification. Finally, our safety
+criterion controls the frequency of harmful updates but
+not their magnitude. Incorporating severity-sensitive or
+tail-risk notions of deterioration would provide a richer
+notion of deployment safety.
+References
+Saman Ahmadi, Andrea Raith, and Mahdi Jalili. A fast
+and simple algorithm for the resource constrained short-
+est path problem. In33rd Annual European Sympo-
+sium on Algorithms, volume 351 ofLeibniz International
+Proceedings in Informatics, pages 97:1–97:15. Schloss
+Dagstuhl–Leibniz-Zentrum für Informatik, 2025a. doi:
+10.4230/LIPIcs.ESA.2025.97.
+Saman Ahmadi, Andrea Raith, Guido Tack, and Mahdi Jalili.
+Resource constrained pathfinding with enhanced bidirec-
+tional A* search.Proceedings of the AAAI Conference
+on Artificial Intelligence, 39(25):26878–26885, 2025b. doi:
+10.1609/aaai.v39i25.34892.
+Stefan Ankirchner and Stefan Perko. A comparison of
+continuous-time approximations to stochastic gradient de-
+scent.Journal of Machine Learning Research, 25(13):1–55,
+2024.
+Susan Athey and Stefan Wager. Policy learning with obser-
+vational data.Econometrica, 89(1):133–161, 2021. doi:
+10.3982/ECTA15732.
+Yu Bai, Tengyang Xie, Nan Jiang, and Yu-Xiang Wang.
+Provably efficient q-learning with low switching cost. In
+Advances in Neural Information Processing Systems, vol-
+ume 32, 2019.
+John E. Beasley and Nicos Christofides. An algorithm for
+the resource constrained shortest path problem.Networks,
+19(4):379–394, 1989.
+Brian M. Cho, Ana-Roxana Pop, Kyra Gan, Sam Corbett-
+Davies, Israel Nir, Ariel Evnine, and Nathan Kallus. CSPI-
+MT: Calibrated safe policy improvement with multiple
+testing for threshold policies. InProceedings of the 31st
+ACM SIGKDD Conference on Knowledge Discovery and
+Data Mining, pages 165–176. Association for Computing
+Machinery, 2025. doi: 10.1145/3690624.3709176.
+Miroslav Dudík, Dumitru Erhan, John Langford, and Lihong
+Li. Doubly robust policy evaluation and optimization.
+Statistical Science, 29(4):485–511, 2014. doi: 10.1214/14
+-STS500.
+Benjamin Gess, Sebastian Kassing, and Vitalii Konarovskyi.
+Stochastic modified flows, mean-field limits and dynam-
+ics of stochastic gradient descent.Journal of Machine
+Learning Research, 25(30):1–27, 2024.
+Gabriel Y. Handler and Israel Zang. A dual algorithm for
+the constrained shortest path problem.Networks, 10(4):
+293–309, 1980. doi: 10.1002/net.3230100403.
+8
+Refael Hassin. Approximation schemes for the restricted
+shortest path problem.Mathematics of Operations Re-
+search, 17(1):36–42, 1992. doi: 10.1287/moor.17.1.36.
+Ilyas Himmich, Issmail El Hallaoui, and François Soumis.
+A multiphase dynamic programming algorithm for the
+shortest path problem with resource constraints.European
+Journal of Operational Research, 315(2):470–483, 2024.
+doi: 10.1016/j.ejor.2023.11.047.
+Jiawei Huang, Jinglin Chen, Li Zhao, Tao Qin, Nan Jiang,
+and Tie-Yan Liu. Towards deployment-efficient reinforce-
+ment learning: Lower bound and optimality. InInterna-
+tional Conference on Learning Representations, 2022.
+International Stroke Trial Collaborative Group. The Inter-
+national Stroke Trial (IST): a randomised trial of aspirin,
+subcutaneous heparin, both, or neither among 19435 pa-
+tients with acute ischaemic stroke.The Lancet, 349(9065):
+1569–1581, 1997.
+Kiyosi Itô. On stochastic differential equations.Memoirs
+of the American Mathematical Society, 4:1–51, 1951. doi:
+10.1090/memo/0004.
+Zeyang Jia, Kosuke Imai, and Michael Lingzhi Li. Cram-
+ming contextual bandits for on-policy statistical evaluation.
+arXiv preprint arXiv:2403.07031, 2024.
+Romain Laroche, Paul Trichelair, and Rémi Tachet des
+Combes. Safe policy improvement with baseline bootstrap-
+ping. InProceedings of the 36th International Conference
+on Machine Learning, volume 97 ofProceedings of Machine
+Learning Research, pages 3652–3661. PMLR, 2019.
+Tor Lattimore. A diffusion analysis of policy gradient for
+stochastic bandits, 2026.
+Qianxiao Li, Cheng Tai, and Weinan E. Stochastic modified
+equations and adaptive stochastic gradient algorithms.
+InProceedings of the 34th International Conference on
+Machine Learning, volume 70 ofProceedings of Machine
+Learning Research, pages 2101–2110. PMLR, 2017.
+Qianxiao Li, Cheng Tai, and Weinan E. Stochastic modified
+equations and dynamics of stochastic gradient algorithms i:
+Mathematical foundations.Journal of Machine Learning
+Research, 20(40):1–47, 2019.
+Dean H. Lorenz and Danny Raz. A simple efficient approxi-
+mation scheme for the restricted shortest path problem.
+Operations Research Letters, 28(5):213–219, 2001. doi:
+10.1016/S0167-6377(01)00069-4.
+Stephan Mandt, Matthew D. Hoffman, and David M. Blei.
+Stochastic gradient descent as approximate bayesian in-
+ference.Journal of Machine Learning Research, 18(134):
+1–35, 2017.
+Tatsuya Matsushima, Hiroki Furuta, Yutaka Matsuo, Ofir
+Nachum, and Shixiang Gu. Deployment-efficient rein-
+forcement learning via model-based offline optimization.
+InInternational Conference on Learning Representations,
+2021.
+Matteo Pirotta, Marcello Restelli, Alessio Pecorino, and
+Daniele Calandriello. Safe policy iteration. InProceedings
+of the 30th International Conference on Machine Learning,
+volume 28 ofProceedings of Machine Learning Research,
+pages 307–315. PMLR, 2013.
+Drew Prinster, Clara Fannjiang, Ji Won Park, Kyunghyun
+Cho, Anqi Liu, Suchi Saria, and Samuel Stanton. Con-
+formal policy control.arXiv preprint arXiv:2603.02196,
+2026. doi: 10.48550/arXiv.2603.02196.
+Min Qian and Susan A. Murphy. Performance guarantees for
+individualized treatment rules.The Annals of Statistics,
+39(2):1180–1210, 2011. doi: 10.1214/10-AOS864.
+James M Robins, Andrea Rotnitzky, and Lue Ping Zhao.
+Estimation of regression coefficients when some regres-
+sors are not always observed.Journal of the American
+statistical Association, 89(427):846–866, 1994.
+Donald B Rubin. Estimating causal effects of treatments
+in randomized and nonrandomized studies.Journal of
+educational Psychology, 66(5):688, 1974.
+Peter A. G. Sandercock, Maciej Niewada, and Anna
+Członkowska. The International Stroke Trial database.
+Trials, 12:101, 2011.
+Ayush Sawarni, Nirjhar Das, Siddharth Barman, and Gaurav
+Sinha. Generalized linear bandits with limited adaptivity.
+InAdvances in Neural Information Processing Systems,
+volume 37, pages 8329–8369, 2024.
+John Schulman, Sergey Levine, Pieter Abbeel, Michael I. Jor-
+dan, and Philipp Moritz. Trust region policy optimization.
+InProceedings of the 32nd International Conference on
+Machine Learning, volume 37 ofProceedings of Machine
+Learning Research, pages 1889–1897. PMLR, 2015.
+Abhishek Sharma, Leo Benac, Sonali Parbhoo, and Finale
+Doshi-Velez. Decision-point guided safe policy improve-
+ment. InProceedings of the 28th International Conference
+on Artificial Intelligence and Statistics, volume 258 ofPro-
+ceedings of Machine Learning Research, pages 2935–2943.
+PMLR, 2025.
+Philip S. Thomas, Georgios Theocharous, and Mohammad
+Ghavamzadeh. High confidence policy improvement. In
+Proceedings of the 32nd International Conference on Ma-
+chine Learning, volume 37 ofProceedings of Machine
+Learning Research, pages 2380–2388. PMLR, 2015.
+U.S. Food and Drug Administration. Marketing submission
+recommendations for a predetermined change control plan
+for artificial intelligence-enabled device software functions.
+Guidance for industry and food and drug administration
+staff, U.S. Food and Drug Administration, August 2025.
+Document issued on August 18, 2025; originally issued on
+December 4, 2024. Accessed: 2026-04-07.
+Yifan Wu, Roshan Shariff, Tor Lattimore, and Csaba
+Szepesvári. Conservative bandits. InProceedings of the
+33rd International Conference on Machine Learning, vol-
+ume48ofProceedings of Machine Learning Research, pages
+1254–1262. PMLR, 2016.
+Nuoya Xiong, Zhaoran Wang, and Zhuoran Yang. A general
+framework for sequential decision-making under adaptivity
+constraints. InProceedings of the 41st International Con-
+ference on Machine Learning, volume 235 ofProceedings
+of Machine Learning Research, pages 54792–54830. PMLR,
+2024.
+Ruohan Zhan, Zhimei Ren, Susan Athey, and Zhengyuan
+Zhou. Policy learning with adaptively collected data.Man-
+9
+agement Science, 70(8):5270–5297, 2024. doi: 10.1287/mn
+sc.2023.4921.
+Zihan Zhang, Yuxin Chen, Jason D. Lee, Simon S. Du,
+Lin F. Yang, and Ruosong Wang. Deployment efficient
+reward-free exploration with linear function approximation.
+InAdvances in Neural Information Processing Systems,
+volume 38, 2025. doi: 10.52202/085713-0853.
+Heyang Zhao, Jiafan He, and Quanquan Gu. A nearly opti-
+mal and low-switching algorithm for reinforcement learn-
+ing with general function approximation. InAdvances in
+Neural Information Processing Systems, volume 37, pages
+94684–94735, 2024a. doi: 10.52202/079017-3002.
+Weiye Zhao, Feihan Li, Yifan Sun, Rui Chen, Tianhao Wei,
+and Changliu Liu. Absolute policy optimization: Enhanc-
+ing lower probability bound of performance with high
+confidence. InProceedings of the 41st International Con-
+ference on Machine Learning, volume 235 ofProceedings
+of Machine Learning Research, pages 60866–60905. PMLR,
+2024b.
+Yingqi Zhao, Donglin Zeng, A. John Rush, and Michael R.
+Kosorok. Estimating individualized treatment rules us-
+ing outcome weighted learning.Journal of the American
+Statistical Association, 107(499):1106–1118, 2012. doi:
+10.1080/01621459.2012.695674.
+Wenbin Zhou and Shixiang Zhu. Calibrating decision robust-
+ness via inverse conformal risk control. InProceedings of
+the 43rd International Conference on Machine Learning,
+2026.
+Wenbin Zhou, Agni Orfanoudaki, and Shixiang Zhu. Con-
+formalized decision risk assessment. InInternational Con-
+ference on Learning Representations, volume 2026, pages
+10581–10610, 2026.
+10
+Appendices
+A Discussion: Problem setting extension
+We use binary treatment assignment to introduce the deployment problem, but the scheduling formulation does
+not depend on a causal model. More generally, let a learning procedure produce candidatesf1,...,f T from an
+exogenous training stream, and letV (f)be an integrable scalar measure of population performance, with larger
+values preferred. For example, for prediction, we can takeV (f) =−E[ℓ(f;Z)]; for a decision rule, we can use
+its expected utility. We define an unsafe update byV (fj)< V(fi)and retain the objective and expected-count
+constraint in(1). We also assume that the schedule changes which candidate is deployed, not the distribution of the
+training sequence. As in the main paper, we choose the schedule before observing the future training trajectory
+(i.e., an offline setting).
+Under the same mean-improvement condition as Assumption 2, the newest-candidate reduction, path representa-
+tion, and dynamic program apply after replacingπi byfi. The asymptotic analysis likewise uses only the induced
+scalar value process and its stated regularity and tail conditions. We therefore obtain the same conclusions for
+another learning task when that task satisfies those conditions; the existence of a scalar performance criterion alone
+does not imply the diffusion assumption. For the statistical results below, we additionally require the independent
+historical trajectories and bounded values specified there. A positive affine change of the performance scale preserves
+every unsafe-update event and simply rescales rewards.
+B Additional details for Section 3
+We writeRij and Sij for the entries of the reward and safety matrices,Vi =V (πi),νi = E[Vi], andpij = P(Vj <V i)
+for1≤i<j≤T. We setp i,T+1 = 0. A newest-policy schedule has times
+1 =t 0 <t 1 <···<t K≤T <t K+1 =T+ 1, h k =t k+1−tk (0≤k≤K).
+There areK actual updates andK + 1holding intervals. In particular, the last edge contributes reward but no
+update risk. We denote the population objective and risk of a pathPbyJT (P)andS T (P), respectively.
+B.1 Proof of Lemma 1
+Proof. The deterministic meta-policy class is finite, and its no-update member is feasible, so a maximizer exists. We
+show how to transform any feasible meta-policy into a newest-policy schedule without decreasing its objective or
+increasing its risk.
+First, remove backward switches. Suppose a schedule switches from candidatei to candidatej <i, and its next
+switch, if any, is fromj to ℓ. We delete the switch toj and retaini until that next switch. On the intervening
+periods, the expected value weakly increases becauseνi≥ν j. For every realized candidate-value vector,
+1{V ℓ <V i}≤1{V j <V i}+1{V ℓ <V j}.(B.1)
+Indeed, if both events on the right fail, thenVℓ≥V j≥V i. Thus the new direct transition has risk no larger than
+the sum of the two removed risks. If there is no later switch, deleting the last switch removes a nonnegative risk.
+A resulting transition fromi to itself is a hold and has zero risk. Each operation removes at least one switch, so
+repetition terminates with a schedule whose deployed candidate indices are strictly increasing.
+Write these indices as1 = j0 < j1 <···< j K, and letsk≥j k be their original deployment times. We now
+advance the deployment of candidatejk to timejk, processing the switches in increasing order. The preceding
+switch has already been advanced tojk−1 < jk, and the next switch remains later thansk≥j k, so this change
+preserves the order and availability constraints. It replaces the preceding, lower-index candidate byjk on additional
+periods, weakly increasing expected value. The ordered pairs of candidates compared at actual switches do not
+change, so neither does the total risk. The final schedule either retains its incumbent or deploys the candidate
+trained at the current time. Applying this transformation to a maximizer proves the claim.
+11
+B.2 Proof of Proposition 1
+Proof. Given a newest-policy schedule, form the pathP = ((t0,t 1),..., (tK,tK+1))from1to T + 1. On the edge
+(tk,tk+1), we deployπtk for exactlyhk periods. Therefore
+JT (P) = 1T
+K∑
+k=0
+hkνtk =
+∑
+(i,j)∈P
+Rij, S T (P) =
+K−1∑
+k=0
+ptk,tk+1 =
+∑
+(i,j)∈P
+Sij.(B.2)
+The second equality follows from linearity of expectation applied to the unsafe-update indicators.
+Conversely, every source–sink path in the time-ordered graph has strictly increasing vertices and defines a valid
+newest-policy schedule by retaining its current vertex’s candidate until the next vertex. The terminal edge retains
+the last candidate through periodT. The two identities in(B.2) again hold. Thus paths and newest-policy schedules
+have the same rewards and risks, and Lemma 1 establishes equivalence with(1). The direct path(1,T +1)represents
+no updates. For a zero-length subpath, we usePii ={∅}, with zero reward and zero resource consumption.
+B.3 Correctness and complexity of the dynamic program
+Proposition B.1(Exact solution of the rounded empirical problem).WithB∆ =⌊ϵ/∆⌋ and cij =⌈ˆSij/∆⌉, where
+ci,T+1 = 0, Algorithm 1 maximizes the estimated objective over paths satisfying∑(i,j)∈P cij≤B ∆. Given the edge
+estimates, its time and memory requirements are
+O
+(
+T 2(B∆ + 1)), O (T 2 +T(B ∆ + 1)),
+respectively, when the edge matrices and backtracking information are stored.
+Proof. We prove by induction inj that F (j,b )is the largest estimated reward of a path from1toj with rounded
+cost at mostb. The initializationF (1,b ) = 0gives the assertion at the source. A path reachingj >1has a unique
+last edge(i,j ), wherei < j. Removing that edge leaves a path with available budgetb−c ij. By the induction
+hypothesis, its reward is at mostF (i,b−c ij). Conversely, a path attaining a finite predecessor state followed by
+(i,j )is a valid path toj with the prescribed budget. Taking the maximum over predecessors gives the Bellman
+recursion in the main paper. Induction proves the state interpretation, and backtracking from(T + 1,B ∆)recovers
+an optimizer.
+There are(T + 1)(B∆ + 1)states, with at most T predecessor comparisons per state. The state values and
+predecessor pointers requireO(T (B∆ + 1))memory, and the edge matrices requireO(T 2)memory. Forming all
+pairwise empirical risks fromN value trajectories separately costsO(NT 2)time. The source–sink edge has zero
+cost, so the rounded problem remains feasible even whenB∆ = 0.
+B.4 Choosing the budget resolution
+LetM T, ¯K be the newest-policy schedules with at most¯Kactual updates, and define
+J⋆T, ¯K(b) = max{JT (P) :P∈M T, ¯K, ST (P)≤b}, b≥0.(B.3)
+Without a count restriction, we take ¯K = T− 1. With a restriction, we append a count coordinate to the
+dynamic-programming state and increase it only whenj≤T . Writeˆνi =N−1∑nˆV (n)i , so thatˆRij = (j−i )ˆνi/T.
+Proposition B.2(Estimation and gridding error).Suppose, on an eventA, that
+max
+i
+|ˆνi−νi|≤r,max i<j≤T|ˆSij−pij|≤s.
+Let ˆP∆ solve the rounded empirical problem withinMT, ¯K, and put
+g∆ =ϵ−∆⌊ϵ/∆⌋, b ∆ = ¯K(s+ ∆) +g ∆.
+OnA, we haveS T (ˆP∆)≤ϵ+ ¯Ks. Ifb ∆≤ϵ, then
+J⋆T, ¯K(ϵ−b ∆)−r≤ ˆJT (ˆP∆)≤J ⋆T, ¯K(ϵ+ ¯Ks) +r,(B.4)
+JT (ˆP∆)≥J ⋆T, ¯K(ϵ−b ∆)−2r.(B.5)
+In particular, forωϵ(b) =J ⋆T, ¯K(ϵ)−J ⋆T, ¯K(ϵ−b),
+J⋆T, ¯K(ϵ)−J T (ˆP∆)≤2r+ω ϵ(b∆).(B.6)
+12
+Proof. For every schedule, its holding fractions are nonnegative and sum to one. Hence, simultaneously over all
+paths,
+|ˆJT (P)−J T (P)|≤ ∑
+(i,j)∈P
+j−i
+T |ˆνi−νi|≤r.(B.7)
+There is no factor¯Kin this reward bound. Rounded feasibility implies
+ST (ˆP∆)≤ ∑
+e∈ˆP∆
+ˆSe + ¯Ks≤∆B ∆ + ¯Ks≤ϵ+ ¯Ks.
+For a comparatorPwithS T (P)≤ϵ−b ∆, upward rounding on its actual transitions gives
+∆
+∑
+e∈P
+ce≤S T (P) + ¯Ks+ ¯K∆≤ϵ−g ∆ = ∆B∆.
+The terminal edge contributes no rounding error. Thus every such population comparator is feasible for the rounded
+empirical problem. Empirical optimality and(B.7) give the left inequality in(B.4) and (B.5). The risk bound for
+the selected path gives the right inequality. Subtracting (B.5) from the population frontier atϵproves (B.6).
+To derive an explicit dependence onN and T, suppose the historical value vectors are independent copies of the
+future value vector, their coordinates lie in[0, 1], and their population values are observed without evaluation error.
+WithM=T(T−1)/2andδ∈(0,1), the bounded-mean inequality proved below and a union bound give
+r=s=
+√
+log(2(T+M)/δ)
+2N ,P(A)≥1−δ.(B.8)
+Consequently the direct reward error isO(
+√
+log(T/δ)/N), whereas the safety-budget displacement is
+O
+(
+¯K
+√
+log(T/δ)
+N + ¯K∆ + ∆
+)
+.
+With no count cap, ¯K = T− 1. No assumption about independence of edges within one trajectory is needed.
+For estimated population values, we use the evaluation result in Proposition B.4 rather than interpreting noisy
+comparisons as observed true signs.
+A budget displacement cannot generally be replaced by a uniform Lipschitz error in the objective. For example,
+let T = 2, V1 = 1/2, and letV2 equal1with probability1 −p and0with probability p, where0 <p< 1/2. The
+frontier jumps from1/2to3 /4−p/ 2at budget p. At ϵ = p, any grid for whichp/∆is not an integer excludes
+the update, even along a sequence∆↓ 0. Thus(B.6), rather than an unconditionalO(∆)value-loss claim, is the
+appropriate guarantee. If an optimizer has safety slack at leastb∆, the modulus is zero; a Lipschitz frontier bound,
+when separately available on the relevant interval, gives the corresponding linear bound.
+A theoretical resolution criterion.For an allocated gridding toleranceκ >0in risk units, we can choose
+∆≤κ/ ( ¯K + 1), because ¯K∆ +g∆≤ ( ¯K + 1)∆. We should not make the grid substantially finer than the statistical
+accuracy unless a near-binding comparator makes that worthwhile. In the plug-in bound(B.8), balancing ¯K∆
+against ¯Ks suggests∆of order s or smaller. For the uncertainty-aware bound below, the analogous balance
+is∆of order
+√
+ϵaN/ ¯K +aN when ¯K≥ 1. Smaller∆improves the budget approximation but increases the
+dynamic-programming cost throughB∆≍ϵ/∆.
+An empirical refinement procedure.We can begin with∆ = ϵ/B for a modest positive integerB, then double
+B until the selected reward and schedule stabilize at a prespecified tolerance or the computational limit is reached.
+These nested grids have no residualg∆, and every previously feasible path remains feasible after refinement because
+⌈2x⌉≤ 2⌈x⌉. We record both the rounded and unrounded resource consumption at each refinement. Numerical
+stability is an empirical stopping rule, not a population-safety certificate; independent evaluation or the simultaneous
+bounds below provide that certificate. Whenϵ = 0, we instead retain only edges with exactly zero chosen risk cost
+and solve the resulting acyclic path problem.
+13
+B.5 An exact labeling alternative
+We can solve the unrounded path problem by propagating nondominated labels. Letaij≥ 0be the chosen edge
+resource, either a population risk, an empirical risk, or a conservative upper confidence cost, withai,T+1 = 0. A
+label at nodej stores its cumulative resources, cumulative rewardr, and a predecessor pointer. At the same node,
+(s,r )dominates( s′,r′)when s≤s ′ and r≥r ′, with at least one strict inequality. We retain only one representative
+when both coordinates agree.
+Algorithm 2Exact nondominated-label algorithm
+Require:Edge rewards ˆRij, nonnegative resourcesaij, budgetϵ.
+1:SetL 1 ={(0,0,null)}andL j =∅forj >1.
+2:forj= 2,...,T+ 1do
+3:Form labels(s+a ij,r+ ˆRij,pointer)from everyi<jand every(s,r,·)∈L i.
+4:Discard labels with resource greater thanϵ.
+5:Sort the remaining labels by increasing resource and discard dominated labels; store the survivors inLj.
+6:end for
+7:Return the highest-reward label inLT+1 and recover its path by backtracking.
+Proposition B.3(Exactness of labeling).Algorithm 2 returns an exact maximizer of the unrounded problem for
+its chosen edge quantities. IfAj labels are generated at nodej before pruning andLj survive, an implementation
+using sorting requires
+O
+
+T 2 +
+T+1∑
+j=2
+Aj log(Aj + 1)
+
+
+time andO(T 2 +∑jLj)persistent storage, in addition to temporary storage for the labels being processed. The
+numbers of labels can be exponential in the size of a general resource-constrained acyclic path instance.
+Proof. Any suffix from a node adds the same resource and reward to two labels at that node. Extending the
+dominating label therefore yields no larger resource and no smaller reward. Discarding a dominated prefix cannot
+remove the sole representative of a better feasible complete path. Nonnegative resources likewise justify discarding an
+over-budget prefix. Induction over the node order now shows that every feasible prefix is represented or dominated
+by a retained label. At the sink, selecting the largest reward is therefore exact.
+Generating the incoming labels costsO(Aj)operations. After sorting by resource, we keep a label only when its
+reward exceeds the best reward at a no-larger resource; equal-resource ties are resolved by retaining the largest
+reward. This costsO(Aj log(Aj + 1))time. The stated storage follows from the retained labels and their pointers.
+To see the worst-case obstruction, consider a chain of binary-choice gadgets with resource and reward increments
+both equal to2−k for taking choicek, and zero for skipping it. Under a sufficiently large budget, every subset
+generates a different pair(s,s ). None dominates another, so there are exponentially many nondominated labels.
+Labeling avoids budget rounding and can be attractive when pruning leaves a small frontier. In contrast, the grid
+dynamic program bounds the resource dimension in advance and has the predictable pseudo-polynomial cost in
+Proposition B.1; this worst-case computational distinction motivates our main-paper choice. Exactness here refers
+to the specified real edge quantities, so floating-point tolerances must not be used to prune labels whose dominance
+is unresolved. With an update-count cap, we compare labels only at equal node and count, or include count in the
+dominance relation.
+B.6 An uncertainty-aware extension
+The plug-in costs in Algorithm 1 can underestimate population risk. We can instead assign an upper confidence
+cost to each actual edge and apply exactly the same path solver. The companions establish this construction for a
+fixed number of independent historical trajectories. We obtain ananytime-validversion by allocating the failure
+probability across sample sizes. Here “anytime” refers to the number of historical trajectories used to plan the
+schedule, not to adapting deployment decisions to the realized future training stream.
+Assumption B.1(Historical trajectories for certification).The vectors( V (n)1 ,...,V (n)T ), n≥ 1, are independent
+and identically distributed copies of the future candidate-value vector and are independent of that future vector.
+Every coordinate lies in[0,1]. Dependence between coordinates within a vector is unrestricted.
+14
+This bounded-value assumption is used only for the statistical guarantees, separately from the Gaussian value
+model used for the structural asymptotics. Note that independent resamples of a single observed dataset are not,
+merely by being generated separately, independent population trajectories satisfying Assumption B.1.
+Lemma B.1(Concentration and an empirical upper confidence cost).For N independent[0 , 1]variables with
+common meanv and average ¯X, andN independent Bernoulli variables with meanp and average ¯B, we have, for
+ℓ>0anda=ℓ/N,
+P
+(
+| ¯X−v|>
+√
+ℓ
+2N
+)
+≤2e−ℓ,P
+(
+| ¯B−p|> √2pa+ 2a3)≤2e−ℓ.(B.9)
+The functionUa(x) = min{1,x +
+√
+2ax + 4a} is nondecreasing on[0, 1]. Whenever|x−p|≤ √2pa + 2a/3, it satisfies
+p≤U a(x)≤p+ 2
+√
+2pa+ 7a.(B.10)
+Proof. For a variableX∈ [0, 1], the second derivative ofk(λ) = logE [eλX]is its variance under exponential tilting,
+which is at most1/4. Integrating twice giveslogE [eλ(X−v)]≤λ 2/8. Independence and exponential Markov bounds,
+optimized over positive and negativeλ, give the first inequality in (B.9).
+For a Bernoulli variableB, we have
+logE[eλ(B−p)]≤p(e λ−1−λ)≤ pλ2
+2(1−|λ|/3) ,|λ|<3.
+The last bound follows by expanding the exponential and usingk!≥ 2· 3k−2 fork≥ 2; the negative-argument bound
+follows as well. Forp>0, optimization withλ=t/(p+t/3)yields
+P(| ¯B−p|>t)≤2 exp
+(
+− Nt2
+2(p+t/3)
+)
+.
+Att =√2pa + 2a/3, direct expansion givest2≥ 2a(p +t/3), proving the second inequality. Ifp = 0, the assertion is
+immediate.
+The mapUa is nondecreasing. Solvingp−x≤ √2pa+ 2a/3as a quadratic inequality in√pgives
+p≤
+(√
+a/2 +
+√
+x+ 7a/6
+)2
+=x+ 5a3 +
+√
+2ax+ 7a2
+3 ≤x+
+√
+2ax+ 4a.
+Clipping at one preserves the lower bound. Also,x≤p+√2pa+ 2a/3≤( √p+√a)2, and hence
+Ua(x)−p≤(x−p) +
+√
+2ax+ 4a≤2
+√
+2pa+ (2/3 +
+√
+2 + 4)a≤2
+√
+2pa+ 7a.
+This proves (B.10).
+At historical sample sizeN, letˆνi,N andˆpij,N be the empirical value means and strict-failure frequencies. For a
+total failure probabilityδ∈(0,1), define
+δN = δN(N+ 1) , ℓ N = log 2(M+T)δN , a N = ℓNN , r N =
+√
+ℓN
+2N, U ij,N =U aN (ˆpij,N),(B.11)
+with Ui,T+1,N = 0. We roundUij,N upward instead of roundingˆpij,N, use the same estimated rewards, and solve
+the path problem at budgetϵ. Denote the resulting schedule byˆPN.
+Theorem B.1(Anytime population safety and oracle performance).Under Assumption B.1, define
+bN = 2
+√
+2 ¯KϵaN + 7 ¯KaN + ¯K∆ +g ∆.(B.12)
+With probability at least1−δ, simultaneously for every integerN≥1,
+ST (ˆPN)≤ϵ, J T (ˆPN)≥J ⋆T, ¯K(ϵ−b N)−2r N wheneverb N≤ϵ.(B.13)
+The no-update schedule is feasible for every historical dataset. The same guarantees apply at any almost surely finite,
+data-dependent stopping sample size. Including the randomness of the historical data and the independent future
+trajectory, the probability of at least one unsafe future update is at mostϵ+δ.
+15
+Proof. At sample sizeN, apply Lemma B.1 to allT candidate coordinates and allM actual edge indicators. A
+union bound with(B.11) gives failure probability at mostδN. Since∑N≥1δN =δ, a second union bound gives an
+eventA∞ of probability at least1−δon which, for everyN,
+max
+i
+|ˆνi,N−νi|≤r N, p e≤U e,N≤p e + 2
+√
+2peaN + 7aN (ean actual edge).(B.14)
+The estimates at different sample sizes need not be independent.
+On this event, every rounded-feasible path satisfies
+ST (P)≤
+∑
+e∈P
+Ue,N≤∆
+∑
+e∈P
+⌈Ue,N/∆⌉≤∆B ∆≤ϵ.
+This is simultaneous over paths and therefore holds forˆPN. For a comparator with at most¯K updates and true risk
+S, Cauchy–Schwarz gives
+∑
+e∈P
+Ue,N≤S+ 2 √2aN ∑
+e∈P, eactual
+√pe + 7 ¯KaN≤S+ 2 √2 ¯KSaN + 7 ¯KaN.(B.15)
+IfS≤ϵ−b N, substitutingS≤ϵ in the square root and adding at most¯K∆for rounding proves empirical feasibility
+of the comparator. The terminal edge has zero cost throughout. The uniform reward bound(B.7), withr =rN,
+then gives
+JT (ˆPN)≥ ˆJT (ˆPN)−r N≥ ˆJT (P⋆)−r N≥J T (P⋆)−2r N,
+where P⋆ optimizes the reduced-budget population problem. This proves the oracle inequality. All statements
+hold on the same event for allN, so evaluating them at a stopping sample size introduces no additional failure
+probability.
+Conditional on historical data inA∞, the selected schedule is fixed relative to the future trajectory. The union
+bound for its unsafe events gives a conditional probability at mostST (ˆPN)≤ϵ . On the complementary event, we
+bound this probability by one. Averaging yields at mostϵ +δ. The direct terminal edge proves feasibility on every
+dataset.
+For a prespecifiedN, we can replaceδN by δ and recover the fixed-sample confidence construction in the
+companions. The anytime version adds only the logarithmic sample-size term inℓN. Its certification cost scales as
+O
+
+
+√
+¯Kϵlog(TN/δ)
+N +
+¯Klog(TN/δ)
+N + ¯K∆ + ∆
+
+,
+while the reward error remains independent of the number of updates outside the logarithm. These costs certify
+population risk; numerical gridding alone does not.
+Proposition B.4(Certification with estimated population values).Fix N. Suppose Assumption B.1 holds for the
+true values, and evaluation estimates~V (n)i satisfy an event
+Aη =
+{
+max
+n≤N,i≤T
+|~V (n)i −V (n)i |≤η
+}
+,P(A η)≥1−δ eval,(B.16)
+for a specified deterministicη≥0. Use the conservative labels
+C(n)ij =1{ ~V (n)j −~V (n)i ≤2η}
+in the empirical upper confidence costs. In this proposition set
+ℓN = log 2(2M+T)δstat , a N =ℓ N/N, r N =√ℓN/(2N), ζ T (η) = maxi<j≤T P(0≤V j−Vi≤4η).
+With
+bN,η = ¯KζT (η) + 2
+√
+2 ¯K{ϵ+ ¯KζT (η)}aN + 7 ¯KaN + ¯K∆ +g ∆,
+the selected schedule satisfies, with probability at least1−δstat−δ eval,
+ST (ˆP)≤ϵ, J T (ˆP)≥J ⋆T, ¯K(ϵ−b N,η)−2(r N +η)ifb N,η≤ϵ.
+No independence between the evaluation errors is required beyond(B.16).
+16
+Proof. For each actual edge, define the true labelsB(n)ij =1{V (n)j −V (n)i < 0} and D(n)ij =1{V (n)j −V (n)i ≤ 4η}.
+OnA η, the deterministic inequalities
+B(n)ij ≤C (n)ij ≤D (n)ij (B.17)
+hold. Their true means satisfypij≤p +ij≤p ij +ζT (η). Apply Lemma B.1 to the2M collections of trueB and D
+labels and theT true value coordinates. These collections are independent across historical replications even when
+the estimated labels share evaluation data. A union bound produces an event of probability at least1−δstat.
+On its intersection withAη, monotonicity ofUaN and (B.17) give
+pe≤U aN ( ¯Be)≤U aN ( ¯Ce)≤U aN ( ¯De)≤p +e + 2
+√
+2p+eaN + 7aN.
+Thus the implemented costs upper-bound every population risk. For a comparator of true riskS, summing the
+upper bounds yields ∑
+e∈P
+UaN ( ¯Ce)≤S+ ¯KζT (η) + 2
+√
+2 ¯K{S+ ¯KζT (η)}aN + 7 ¯KaN.
+The definition ofbN,η and upward rounding therefore make every comparator at budgetϵ−b N,η empirically
+feasible. Each estimated empirical value mean is withinrN +η of its population mean, so the reward comparison in
+Theorem B.1 gives the oracle bound. A union bound over the two events completes the proof.
+For example, if every candidate is evaluated by averaging a score in[0, 1]on the same independent validation
+sample of size nval, conditioning on all trained candidates and applying Lemma B.1 gives (B.16) with η =√
+log(2NT/δ eval)/(2nval). An unbounded or weighted policy-value estimator requires its own valid simultaneous
+evaluation bound. A margin conditionP(|Vj−Vi|≤x )≤C Txα implies ζT (η)≤C T (4η)α; it controls conservatism,
+not the validity of the safety assertion itself. Time-uniform evaluation can be incorporated by allocating both
+statistical and evaluation failure probabilities acrossNin the same way as (B.11).
+We include this uncertainty-aware construction as an extension rather than replacing the plug-in algorithm studied
+in the main paper. Developing tighter time-uniform costs, adaptive allocation of historical simulation effort across
+edges, and sharper guarantees for the resulting resource-constrained path problem would require further analysis.
+Those questions are especially relevant to uncertainty-aware RCSPP methods and fall outside the present paper’s
+deployment-scheduling contribution.
+C Proofs for Section 4
+We derive the continuum objective and constraint, solve the allocation pointwise, and then connect its value to the
+original integer problem. The proofs retain theO(1)spacing correction, theΘ(·)per-update risk, the O(T−1)regret
+remainder, and the leading update count stated in the main paper.
+C.1 Discussion on Assumption 3
+We impose the structured value-process assumption to keep the main analysis separate from the details of a particular
+learner. Throughout the proofs, we interpret its smoothness and positivity requirements as
+µ,σ∈C 1([0,1]),0<µ −≤µ(u)≤µ + <∞,0<σ −≤σ(u)≤σ + <∞,(C.1)
+with bounded first derivatives and constants independent ofT. Strictly positive continuous functions on the compact
+interval have these positive lower bounds. This excludes a vanishing-drift or degenerate-volatility regime from the
+theorem being proved.
+We can obtain the assumed process from primitive constructions, and we give two explicit sufficient constructions.
+Gaussian innovations with an affine performance map.Letv(θ) =v0 +a⊤θ for a fixed nonzero vectora,
+and consider
+θt+1 =θ t + 1T{bT,t +HT,tξt+1}, ξ t+1 iid∼N d(0,Id),(C.2)
+whereb T,t andH T,t are deterministic. Suppose their projections satisfy
+a⊤bT,t =
+∫ t+1
+t
+µ(s/T) ds,∥H ⊤T,ta∥2 =
+∫ t+1
+t
+σ(s/T) 2 ds.
+17
+The value increments are then independent Gaussian variables with exactly the means and variances of the stochastic
+integrals in Assumption 3. Their joint law is the integer skeleton of that process; a Brownian interpolation supplies
+a representation on an enlarged probability space. We can also express(C.2) as stochastic-gradient descent with
+step1/Ton the sample lossℓ T,t(θ;ξ) =−θ ⊤(bT,t +HT,tξ).
+Gradient-type diffusions with deterministic projected coefficients.Let ¯g(u,θ )and C(u,θ )be a sample
+gradient’s mean and covariance, and suppose the parameter process is the well-defined, nonexplosive diffusion
+dΘτ =− γT ¯g(τ/T,Θτ) dτ+ γTC(τ/T,Θ τ)1/2 dBτ.(C.3)
+Local Lipschitz coefficients with suitable growth bounds give standard sufficient existence conditions. Letv∈C 2,
+takev(Θ 0) =V 0, and impose, on the reachable parameter set,
+−γ∇v(θ)⊤¯g(u,θ) +γ2
+2T tr{C(u,θ)∇ 2v(θ)}=µ(u),(C.4)
+γ2∇v(θ)⊤C(u,θ)∇v(θ) =σ(u) 2.
+Itô’s formula gives driftµ(τ/T)/Tforv(Θ τ). Its martingale part equalsT−1σ(τ/T) dWτ, where
+Wt =
+∫ t
+0
+γ∇v(Θτ)⊤C(τ/T,Θ τ)1/2
+σ(τ/T) dBτ.
+The integrand has squared norm one by(C.4), so this continuous martingale has quadratic variationt and is a
+standard Brownian motion. Integration proves Assumption 3 for the diffusion learner. The projection identities,
+jointly with differentiability, remove the random state from the scalar drift and volatility.
+C.2 Proof of Lemma 2
+Notation and asymptotic regime.We index the integer periods by0,...,T− 1in these proofs, relabeling
+the original candidatei as i− 1. Let VT (s)denote the corresponding continuous Gaussian value process, so
+VT (i− 1) =V (πi)at the original integer checkpoints. Its coefficients are initiallyµ(u + 1/T )and σ(u + 1/T ). We
+extend the positiveC1 functions in (C.1) across the final auxiliary interval when necessary and suppress this shift
+in the calculations. The shifted coefficients differ uniformly byO(T−1); the resulting changes inBand∫ 10 I(u) du
+are O(T−1). They therefore change the displayed scaled regret byO(LT/T ) =o(1)and do not change any leading
+count or risk order below.
+A schedule has times0 = t0 < t1 <···< t K < T = tK+1, withK actual updates andK + 1holds. Write
+hk =tk+1−tk and uk =tk/T. Onlyk = 0,...,K− 1contribute update risk; the last interval is a terminal hold.
+For a fixed budget, takeϵT =ϵ>0. More generally, all the estimates below are uniform in the regime
+T−a0≤ϵ T≤¯ϵ, L=L T = log(T/ϵT )≍logT,0<a 0 <∞,0<¯ϵ<∞.(C.5)
+The coefficient functions and their positive bounds are fixed asT grows. Constants in theO(·)andΘ( ·)terms may
+depend on those bounds and the budget regime, but not on a particular update.
+For an integer scheduleP, the exact regret and risk are
+RT (P) = 1T
+K∑
+k=0
+hk−1∑
+j=0
+E
+[
+VT (tk +j)−V T (tk)
+]
+, S T (P) =
+K−1∑
+k=0
+P
+{
+VT (tk+1)<V T (tk)
+}
+.(C.6)
+These are the quantities in the main problem after relabeling. To pass from sums to integrals, define the step
+functions
+τT (u) =u k, H T (u) =h k, u∈[u k,uk+1).(C.7)
+HereH T records a given partition, whereashT will be the positive real-valued allocation optimized in (8).
+Set
+Q(x) = Φ(−
+√
+2x), f(x) = Q(x)x , I(u) = µ(u)22σ(u)2, A(u) = µ(u)I(u), B= ∫ 10 A(u) du.(C.8)
+18
+The local probability and risk rate are
+q(u,h) =Q(I(u)h), r(u,h) = q(u,h)h =I(u)f(I(u)h).(C.9)
+For a budgetb>0, let
+F cT (b) = infhT (·)>0
+{∫ 1
+0
+µ(u)hT (u) du:
+∫ 1
+0
+r(u,hT (u)) du≤ bT},(C.10)
+where the infimum is over positive measurable functions with finite displayed integrals. We first establish the
+estimates needed for the objective and constraint.
+Lemma C.1(Normal-tail estimates).Let c0 = (2√π)−1. The functionsQ and f are strictly decreasing and strictly
+convex on(0,∞). Asx→∞,
+Q(x) =c 0e−xx−1/2{1 +O(x−1)},(C.11)
+f(x) =c 0e−xx−3/2{1 +O(x−1)},−f ′(x) =c 0e−xx−3/2{1 +O(x−1)}.
+Consequentlyf(x)/(−f′(x))→ 1and f′′(x)/(−f′(x))→ 1. Moreover,−f′ decreases continuously from+∞ to zero.
+Proof.For the standard normal densityϕ, integration by parts gives
+1−Φ(z) = ϕ(z)z −∫ ∞z ϕ(y)y2 dy, zϕ(z)1 +z 2≤1−Φ(z)≤ ϕ(z)z .
+Substitutingz=
+√
+2xproves the expansion forQ. Direct differentiation yields
+Q′(x) =−c 0e−xx−1/2, Q ′′(x) =c 0e−x
+(
+x−1/2 + 12x−3/2
+)
+,
+f′(x) = Q′(x)x − Q(x)x2 <0, f ′′(x) = Q′′(x)x − 2Q′(x)x2 + 2Q(x)x3 >0.
+These identities prove the remaining expansions and ratios. SinceQ(x)→ 1/2as x↓ 0, we have−f′(x)→∞ there;
+(C.11) gives its limit zero at infinity. Strict convexity gives the asserted monotonicity.
+Lemma C.2(Local interval probabilities).For an interval[s,s+h]⊆[0,T], define
+Ms,h =
+∫ s+h
+s
+µ(v/T) dv, Q vars,h =
+∫ s+h
+s
+σ(v/T) 2 dv,I s,h = M2s,h2Qvars,h.
+Its exact unsafe-update probability isqT (s,h) =Q(I s,h). Uniformly in admissibles,h,
+Ms,h =µ(s/T)h+O(h 2/T), Q vars,h =σ(s/T) 2h+O(h 2/T),I s,h =I(s/T)h+O(h 2/T).(C.12)
+Also,
+Is,h≤
+∫ s+h
+s
+I(v/T) dv≤hmax
+v∈[s,s+h]
+I(v/T).(C.13)
+For fixed0<a<d<∞andaL≤h≤dL,
+qT (s,h) =q(s/T,h){1 +O(L 2/T)}.(C.14)
+Proof. Under Assumption 3, the interval increment is Gaussian with meanMs,h/T and varianceQvars,h/T 2, proving
+the exact probability formula. Bounded first derivatives give the first two expansions in(C.12). SinceQvars,h≥σ 2−h,
+division gives the exponent expansion. Cauchy–Schwarz gives
+M2s,h≤
+(∫ s+h
+s
+σ(v/T) 2 dv
+)(∫ s+h
+s
+µ(v/T) 2
+σ(v/T) 2 dv
+)
+,
+which proves(C.13). Finally, onh≍L , the two exponent arguments differ byO(L2/T ) =o(1)and both tend to
+infinity. By Lemma C.1,|(logQ )′| is bounded on these arguments. Applying the mean value theorem tologQ
+proves (C.14).
+19
+Lemma C.3(A competitive schedule and its mesh bound).There is a feasible integer schedule with regretO(L/T ).
+Every integer schedule satisfyingRT (P)≤C 1L/T, for a fixedC1, obeys
+K∑
+k=0
+h2k =O(TL),max k hk =O(√TL),max k hk/T−→0.(C.15)
+Proof. LetImin = minu∈[0,1]I(u)> 0and take full integer holds of length⌈L/Imin⌉, followed by a terminal remainder.
+By Lemma C.2, the exponent of every actual update is at leastL−O (L2/T ). The normal-tail upper bound gives
+probability at mostCL−1/2e−L per update. There are at most CT/L updates, so their total risk is at most
+CϵT/L3/2≤ϵ T for sufficiently largeT. Bounded drift and holding lengthsO(L)give regretO(L/T).
+For any integer schedule, positivity of the drift givesE[VT (s+j)−V T (s)]≥µ −j/T. Hence
+RT (P)≥ µ−2T 2
+K∑
+k=0
+hk(hk−1).
+Since∑khk =T, the assumed regret bound yields∑kh2k =O(TL ). The maximum is at most the square root of
+this sum, which proves the remaining statements.
+(I) Objective.Maximizing expected deployed value is equivalent to minimizing(C.6), because the always-update
+benchmark is independent of the schedule. Within a hold starting attk, we have
+E[VT (tk +j)−V T (tk)] = 1T ∫ tk+jtk µ(v/T) dv= µ(uk)jT +O(j 2/T 2).
+Summing first within each hold and then across holds gives
+RT (P) = 1T 2
+K∑
+k=0
+
+
+µ(uk)
+hk−1∑
+j=0
+j+O(h 3k/T)
+
+
+ (C.16)
+= 12T 2
+K∑
+k=0
+µ(uk)hk(hk−1) +O
+(∑
+kh3k
+T 3
+)
+.
+For a schedule in Lemma C.3,
+∑
+kh3k
+T 2 ≤ maxkhkT 2 ∑k h2k =O(L 3/2/√T) =o(1), 1T ∑k µ(uk)hk≤µ +.
+Using the step functions in (C.7), we obtain
+2TRT (P) = 1T
+K∑
+k=0
+µ(uk)h2k +O(1)(C.17)
+=
+∫ 1
+0
+µ(τT (u))HT (u) du+O(1) =
+∫ 1
+0
+µ(u)HT (u) du+O(1).
+The last equality follows from
+⏐⏐⏐⏐∫ 1
+0
+{
+µ(τT (u))−µ(u)
+}
+HT (u) du
+⏐⏐⏐⏐≤ CT 2∑k h3k =o(1).
+Thus the integral objective represents2T times regret up to a bounded error, uniformly over this class of schedules.
+(II) Constraint.For this local calculation, suppose every risk-bearing hold satisfiesaL≤h k≤dL for fixed
+positivea,d. By Lemma C.2,
+ST (P)
+T = 1T
+K−1∑
+k=0
+q(uk,hk){1 +O(L 2/T)}(C.18)
+=
+{K−1∑
+k=0
+hk
+T r(uk,hk)
+}
+{1 +O(L 2/T)}.
+20
+On[ uk,uk+1), the argumentsI(u)hk and I(uk)hk differ byO(h2k/T ). The logarithmic derivative bound used above
+therefore givesr(u,h k) =r(u k,hk){1 +O(L 2/T)}. Consequently,
+ST (P)
+T =
+{∫ uK
+0
+r(u,HT (u)) du
+}
+{1 +O(L 2/T)}.(C.19)
+The integral stops atuK because the terminal hold has no update risk. In the construction below, we upper-bound
+this integral by the risk integral of a smooth allocation over[0,1]; no update is added at the terminal endpoint.
+(III) Leading-order form.Replacing the partition-dependent step function by a positive allocationhT gives
+(C.10), which is (8) atb=ϵT. The substitutionx(u) =I(u)h T (u)makes the two integrands
+µ(u)hT (u) =A(u)x(u), r(u,h T (u)) =I(u)f(x(u)).
+The resulting optimization is
+F cT (b) = infx(·)>0
+{∫ 1
+0
+A(u)x(u) du:
+∫ 1
+0
+I(u)f(x(u)) du≤ bT}.(C.20)
+We solve this functional problem directly in the next subsection. The lower and upper bounds in Section C.5 then
+establish the precise optimized comparison
+2TR⋆T (ϵT ) =F cT (ϵT ) +O(1).(C.21)
+That comparison completes Lemma 2: its lower bound applies to arbitrary feasible integer schedules, and its upper
+bound constructs a feasible integer schedule.
+C.3 Proof of Theorem 1
+Proof. We solve(C.20) for b∈ [ϵT/2,ϵT ]and then take b =ϵT. This argument concerns the functional problem
+itself and does not use the optimized comparison (C.21).
+(I) Pointwise minimization.The Lagrangian is
+L(x,λ) =
+∫ 1
+0
+{
+A(u)x(u) +λI(u)f(x(u))
+}
+du−λ bT.
+For a fixedλ> 0, the integrand contains no terms coupling different values ofu, so we minimize it separately at
+eachu. By Lemma C.1, it is strictly convex inx and diverges asx↓ 0or x↑∞ . Its unique minimizerxλ(u)satisfies
+A(u) +λI(u)f′(xλ(u)) = 0⇐⇒ −f ′(xλ(u)) = µ(u)λI(u)2.(C.22)
+(II) Binding constraint.Since −f′ is a strictly decreasing bijection from(0,∞ )onto(0 ,∞ ), the solutionxλ(u)
+is continuous inu, strictly increasing inλ, and tends uniformly to zero or infinity asλ tends to zero or infinity,
+respectively. The coefficient ratios are bounded above and away from zero. It follows that
+∫ 1
+0 I(u)f(xλ(u)) du
+decreases continuously from infinity to zero. There is therefore a uniqueλb >0such that
+∫ 1
+0
+I(u)f(xλb(u)) du= bT.(C.23)
+Writexb =x λb. For every feasiblex, pointwise optimality gives
+A(u)x(u) +λbI(u)f(x(u))≥A(u)x b(u) +λbI(u)f(xb(u)).
+Integrating this inequality and using feasibility and(C.23) yields
+∫ 1
+0 Ax≥
+∫ 1
+0 Axb. Strict convexity gives uniqueness
+up to null sets. Thushb =x b/Iis the continuous representative of the optimizer of (C.10).
+21
+(III) Multiplier and waiting-time rates.As b/T→ 0, the binding equation forcesλb→∞ , and hence
+xb(u)→∞uniformly. Substituting (C.22) into (C.23) gives
+b
+T =
+∫ 1
+0
+I(u)
+[
+−f′(xb(u))] f(xb(u))−f′(xb(u)) du(C.24)
+= 1λb
+∫ 1
+0
+A(u) f(xb(u))−f′(xb(u)) du= Bλb{1 +o(1)}.
+Consequentlyλb∼BT/b and logλb =Lb +O(1), whereLb = log(T/b) =L +O(1). Taking logarithms in(C.22)
+and applying (C.11) yields
+xb(u) + 32 logxb(u) = logλb + log(c0I(u)2µ(u) ) +O(xb(u)−1) =L b +O(1).(C.25)
+The error is uniform inu. First, this identity givesxb(u) = Lb +O(logLb): for largexb, it boundsxb above by
+Lb +C, and substitution into its logarithm gives the corresponding lower bound. Therefore
+logxb(u) = logLb +O(logL b/Lb).
+Substituting this back into (C.25) proves
+xb(u) =L b− 32 logLb +O(1), h b(u) = 1I(u)[Lb− 32 logLb +O(1)].(C.26)
+Takingb=ϵ T proves Theorem 1. In particular,hb≍Luniformly, and integration gives
+F cT (b) =
+∫ 1
+0
+A(u)xb(u) du=B
+[
+Lb− 32 logLb
+]
++O(1).(C.27)
+For later use, differentiate the logarithm of (C.22):
+− f′′(xb(u))−f′(xb(u))x′b(u) = µ′(u)µ(u)−2 I′(u)I(u) .
+By Lemma C.1 and the coefficient bounds,x′b =O(1)andh ′b =O(L), uniformly forb∈[ϵ T/2,ϵT ].
+C.4 Proof of Corollary 1
+Proof. Consider a full interval generated byhb, forb∈ [ϵT/2,ϵT ]. Its length ishb(uk)for the continuous construction,
+or⌈hb(uk)⌉ for its integer realization. We first evaluate the local probability before rounding. By(C.22) and (C.24),
+q(u,hb(u)) =Q(x b(u)) =x b(u)f(xb(u))(C.28)
+= xb(u)µ(u)λbI(u)2 f(xb(u))−f′(xb(u)) = Θ(ϵTLTB µ(u)I(u)2).
+Herex b≍L,λ b≍TB/b,b≍ϵ T, and the ratiof/(−f′)is bounded above and away from zero for largeT.
+Write an integer length asj =hb(u) +d with0 ≤d< 1. Its local exponent changes fromxb(u)to xb(u) +I(u)d.
+The normal-tail formula gives
+Q(xb(u) +I(u)d)
+Q(xb(u)) =e−I(u)d
+( xb(u)
+xb(u) +I(u)d
+)1/2
+{1 +O(L−1)}.
+This ratio is bounded above and away from zero uniformly inu,d. Since both full interval lengths are of orderL,
+(C.14) then proves
+P
+{
+VT (tk+1)<V T (tk)
+}
+= Θ
+(ϵTL
+TB
+µ(uk)
+I(uk)2
+)
+, k= 0,...,K−1.(C.29)
+Reversing the index shift gives the main paper’s policy-value notation for integer updates. The feasible integer
+schedule used in the regret bound below is the rounded construction withb =ϵT/2, so it satisfies the same risk
+order.
+22
+C.5 Proof of Corollary 2
+Proof. Let zL =L− 32 logL and D =∫ 10 I(u) du. We first match a lower bound over feasible integer schedules with
+a feasible construction. We then establish the leading count for an optimal integer schedule.
+(I) Lower bound by weighted Jensen’s inequality.By Lemma C.3, we only need to consider schedules with
+regret at mostC1L/T, for a sufficiently large fixedC1. For each risk-bearing hold, define
+µ−k = minv∈[tk,tk+1]µ(v/T), I +k = maxv∈[tk,tk+1]I(v/T), x k =I +khk, w k = hkT µ−kI+k .
+PutW T =∑k<Kwk andZ T =∑k<Kwkxk. Coefficient smoothness and the mesh bound imply
+WT =B+O
+(∑
+kh2k
+T 2 + hKT ) =B+O (√L/T).(C.30)
+Indeed, µ−k/I+k differs fromA(u)by at mostChk/T within its interval, and the omitted terminal interval has width
+hK/T. In particular,WT is positive and bounded away from zero for largeT.
+The exact Gaussian exponent bound(C.13) givesqT (tk,hk)≥Q (xk). LetI− = minI > 0and d0 =I2−/µ+. Then
+ST (P)≥
+∑
+k<K
+Q(xk) =T
+∑
+k<K
+hk
+T I+kf(xk)(C.31)
+=T
+∑
+k<K
+wk
+(I+k )2
+µ−k f(xk)≥d 0TWTf
+(ZT
+WT
+)
+.
+The last inequality uses convexity off and Jensen’s inequality with weightswk/WT. For a feasible schedule, it
+follows that
+f
+(ZT
+WT
+)
+≤ ϵT
+d0TWT
+.
+Let yT solve f(yT ) = ϵT/(d0TWT ). The solution is unique becausef decreases from infinity to zero. SinceWT
+stays between fixed positive bounds, (C.11) gives
+yT + 32 logyT =L+O(1), y T =L− 32 logL+O(1).
+Monotonicity offtherefore yieldsZ T≥W T{zL +O(1)}=Bz L +O(1); here (C.30) gives(WT−B)L=o(1).
+Within an integer hold, the mean increment is at leastµ−kj/T. Including the terminal cost, which is nonnegative,
+we obtain
+2TRT (P)≥ 1T ∑k<Kµ−khk(hk−1)≥Z T−µ +.
+Consequently,
+2TR⋆T (ϵT )≥B
+[
+L− 32 logL]−O(1).(C.32)
+Schedules outside the competitive class have a larger regret than this bound for sufficiently largeC1.
+(II) A feasible integer upper bound.Takeb =ϵT/2and use the continuum optimizerhb from Section C.3.
+Starting att 0 = 0, propose the integer length
+jk =⌈h b(tk/T)⌉, t k+1 =t k +jk whent k +jk <T.(C.33)
+When the proposed endpoint is at leastT, retain the incumbent toT. Thus every full hold has lengthΘ(L), and
+the terminal hold is at mostCL. Denote this schedule byˆPT and its step function byHT.
+We verify feasibility directly. Sinceh′b =O(L)and every hold has widthO(L/T )in normalized time, on each full
+interval
+HT (u) =⌈h b(uk)⌉≥h b(u)−CL 2/T.
+23
+The rater(u,h)decreases inh, and forh≍Lits logarithmic derivative inhis bounded:
+∂
+∂h logr(u,h) =I(u) Q′(I(u)h)Q(I(u)h) − 1h =O(1).
+It follows thatr(u,HT (u))≤r (u,hb(u)){1 +O(L2/T )} on the full intervals. Using(C.19) and the binding budget
+ofh b gives
+ST (ˆPT )≤T{1 +O(L 2/T)}
+∫ uK
+0
+r(u,hb(u)) du≤b{1 +O(L 2/T)}≤ϵ T (C.34)
+for sufficiently largeT. The fixed half-budget leaves room for both the local approximation and rounding errors.
+For the objective, every hold, including the terminal remainder, satisfies
+HT (u)≤h b(u) + 1 +CL 2/T.
+The schedule has regretO(L/T)because its holds areO(L), so (C.17) applies. Hence
+2TRT (ˆPT ) =
+∫ 1
+0
+µ(u)HT (u) du+O(1)(C.35)
+≤F cT (ϵT/2) +O(1) =B
+[
+L− 32 logL] +O(1).
+The last equality uses (C.27) andlog(T/b) =L+ log 2. Combining (C.32) and (C.35) proves
+R⋆T (ϵT ) = B2T [LT− 32 logLT] +O(T−1).(C.36)
+Together with (C.27) at b = ϵT, this also proves(C.21) and completes the optimized continuum reduction in
+Lemma 2. The constructed schedule satisfies0≤R T (ˆPT )−R⋆T (ϵT ) =O(T−1)and, on every risk-bearing interval,
+I(uk)hk =L− 32 logL+O(1).
+(III) Counting the constructed schedule.For a full hold of(C.33), (C.26) gives hk = L{1 +o(1)}/I(uk)
+uniformly. Therefore
+L
+TK(ˆPT ) = ∑k<K hkT Lhk = ∑k<K hkT I(uk){1 +o(1)}−→ ∫ 10 I(u) du=D.
+The last step is a Riemann sum, since the mesh isO(L/T )and the terminal interval has vanishing normalized
+length.
+(IV) Counting an optimal schedule.LetP⋆T be any optimal integer schedule. The upper bound and Lemma C.3
+give its mesh bound. By (C.17) and (C.36),
+1
+TL
+K⋆T∑
+k=0
+µ(uk)h2k−→B.(C.37)
+Fix δ∈ (0, 1)and call a risk-bearing interval short ifI(uk)hk≤ (1−δ )L. Such an interval has length at mostCL.
+By (C.12), its exact Gaussian exponent is at most(1−δ )L +O(L2/T ). The normal-tail lower bound therefore gives
+risk at leastcL−1/2e−(1−δ)L. Feasibility bounds the numberNshort of these intervals by
+Nshort≤Cϵ T
+√
+Le (1−δ)L =CT√Le−δL =o(T/L).(C.38)
+Their total calendar fraction iso(1)because each is at mostCL. The terminal fraction is alsoo(1)by (C.15).
+LetG δ contain the remaining risk-bearing intervals and putzk =I(u k)hk/L. Thenz k >1−δonG δ, and
+∑
+k∈Gδ
+hk
+T A(uk)−→B,
+∑
+k∈Gδ
+hk
+T I(uk)−→D.
+24
+Both statements follow from the mesh bound, smoothness, and the negligible calendar fractions just removed. Using
+nonnegativity of the omitted costs in (C.37), we get
+∑
+k∈Gδ
+hk
+T A(uk)
+{
+zk−(1−δ)
+}
+≤δB+o(1).(C.39)
+Forη >0, letWlong be the calendar fraction of intervals inGδ with zk > 1 +η. Since A− := minA > 0, (C.39)
+implies
+lim sup
+T→∞
+Wlong≤ δBA−(η+δ) .
+We can now bound the count from both sides. Fromzk >1−δand (C.38),
+lim sup
+T→∞
+LK⋆T
+T = lim supT→∞
+∑
+k∈Gδ
+hk
+T
+I(uk)
+zk
+≤ D1−δ .
+For the lower bound, retain onlyk∈Gδ withz k≤1 +ηand useI + := maxI:
+lim inf
+T→∞
+LK⋆T
+T ≥ 11 +η {D− I+δBA−(η+δ) }.
+Lettingδ↓0and thenη↓0makes the two bounds equal toD. Thus
+K⋆T∼ TLT
+∫ 1
+0
+I(u) du,(C.40)
+which proves the count assertion in Corollary 2 for an optimal integer schedule, not just for the upper-bound
+construction.
+D Experimental Details
+We describe the data generation, policy learning, value evaluation, and scheduling procedures implemented in the
+experiment scripts. The synthetic and clinical learning experiments supply estimated candidate-value trajectories to
+the same scheduling routines. The homogeneous Gaussian experiment instead specifies the candidate-value process
+directly, which also permits evaluation of a selected schedule using analytic population rewards and risks.
+D.1 Synthetic learning environments
+Observations and treatment effects.For each of the low-, medium-, and high-SNR settings in Figures 4 and 5,
+we generateN = 400learning trajectories, each containing300observations. We use r for the observation index
+and t for the policy checkpoint: a candidate is retained after every five observations, givingT = 60candidates at
+sample sizes5,10,...,300. For each trajectory and observation, the five covariates are independent and uniformly
+distributed on[−1, 1], treatment is assigned independently with probability1/2, and the standardized outcome
+innovation is Gaussian:
+Xrj
+i.i.d.
+∼Unif(−1,1), j= 1,...,5, A r∼Bernoulli(1/2), ξ r∼N(0,1).(D.1)
+Writingsfor the SNR setting, we define
+m(x) = 0.50x3 + 0.25x4−0.25x 5, τ ⋆(x) =√3/2 (x1 +x 2),
+Ys,r(a) =m(X r) + (a−1/2)τ ⋆(Xr) +σY,sξr, Y s,r =Y s,r(Ar). (D.2)
+Thus, all three settings share the same conditional treatment effect and the same optimal treatment ruleπ⋆(x) =
+1{τ⋆(x)≥ 0}. The generator uses seed20260922and common draws ofXr, Ar, andξr across settings. Trajectories
+are generated independently within each setting, while corresponding trajectories across settings are paired through
+these common random numbers. Both potential outcomes use the same innovation within an observation; only the
+observed outcome enters policy training.
+25
+Sequential policy learner.Let ϕ(x) = (1,x⊤)⊤∈R 6. We fit the outcome modelˆmr(x,a ) = β⊤r ϕ(x) + (a−
+1/2)γ⊤r ϕ(x)by a single stochastic-gradient update after each observation, starting fromβ0 = γ0 = 0. With
+λsyn = 10−4, the implemented updates are
+er =Y s,r−β⊤r−1ϕ(Xr)−(A r−1/2)γ⊤r−1ϕ(Xr),
+ηs,r =η 0,s(1 +r/100)−0.6,
+βr = (1−η s,rλsyn)βr−1 +ηs,rerϕ(Xr),
+γr = (1−η s,rλsyn)γr−1 +ηs,rer(Ar−1/2)ϕ(Xr).
+(D.3)
+Both updates use the residual computed before updating either coefficient vector, and the penalty applies to all their
+coordinates, including the intercepts. The retained policy at checkpointt is πs,t(x) =1{γ⊤5tϕ(x)≥ 0}. The first
+retained candidate processed five observations. These checkpoints group five successive one-observation updates.
+The settings are configured as
+Setting Initial learning rateη 0,s Outcome-noise scaleσY,s
+Low SNR0.030 7.0
+Medium SNR0.150 2.5
+High SNR0.200 0.25
+Candidate-value evaluation.We draw a common bank ofM = 8192evaluation covariates independently of the
+training observations, using the same covariate distribution. The bank is reused for every checkpoint, trajectory,
+and SNR setting. Since the treatment effect is known in this experiment, we evaluate the policy-dependent outcome
+contrast directly and normalize it by the corresponding contrast of the oracle policy:
+ˆV (n)s,t = M−1∑Mℓ=1[π(n)s,t (Xevℓ )−1/2 ]τ⋆(Xevℓ )M−1∑Mℓ=1[π⋆(Xevℓ )−1/2 ]τ⋆(Xevℓ ) .(D.4)
+The omitted prognostic term is common to every policy and therefore cancels in value differences. No evaluation
+outcomes or additional outcome noise are generated for this calculation. The resulting values are finite-bank
+estimates of a normalized population contrast, not exact population integrals. This policy-value normalization
+precedes, and differs from, the never-update versus always-update normalization of the scheduling objective described
+below.
+The generator also summarizes the first25checkpoint increments. It averages their across-trajectory means
+and divides by the square root of the average across-trajectory sample variances. The saved empirical SNRs are
+approximately0.0496,0.1145, and0.2816for the low, medium, and high settings, respectively.
+Homogeneous Gaussian experiment.The phase-diagram script associated with Figure 3 is configured with
+T = 512, safety budgetϵ = 0.35, and risk-grid width∆ = 0.001. It uses50equally spaced drift values in[0.5, 3.0]
+and50equally spaced volatility values in[0 .25, 1.5]. At every parameter pair, the experiment uses three data
+replications, each containing4000independent trajectories. With candidates indexed here as1,...,T , the simulated
+process is
+V (b,n)1 = 0.15, V (b,n)t+1 =V (b,n)t + µT + σTZ(b,n)t , t= 1,...,T−1,(D.5)
+where theZ(b,n)t are independent standard normal variables. The innovation generator uses seed20260921and
+reuses the same innovation bank across all parameter pairs. It storesT innovation rows per trajectory; only the first
+T− 1rows are needed because the terminal node has no policy value. In particular, the per-step noise standard
+deviation in (D.5) isσ/T, notσ/
+√
+T.
+For each replication, the script estimates edge rewards and strict unsafe-update frequencies from its4000value
+trajectories and solves the conservatively gridded dynamic program. It then evaluates that selected path using the
+analytic population matrices
+Rij = j−iT (0.15 +µ(i−1)T ),S ij = Φ(−µ√j−iσ ) (j≤T),S i,T+1 = 0.(D.6)
+The displayed heatmaps average the three replication-specific path summaries. For a path withK > 0actual
+updates, the summaries are
+¯p= 1K
+K−1∑
+k=0
+Stk,tk+1, ¯h= 1KT
+K−1∑
+k=0
+(tk+1−tk), J=
+K∑
+k=0
+Rtk,tk+1.(D.7)
+26
+The initial and terminal nodes are excluded fromK, and the terminal hold is excluded from both pre-update
+averages. If the selected path makes no updates, the display convention isK = 0, ¯p= 0, and ¯h = 1. Thus, the
+plotted interval is a fraction of the horizon, whereashT in the theory is measured in periods. The script also records
+total population risk, unrounded empirical risk, the coefficient of variation of pre-update intervals, and the indicator
+that population risk exceedsϵ. An oracle gridded schedule is computed separately from the population matrices.
+The exact unrounded oracle-label solver is optional and is not enabled in the default run.
+Theoretical contours and correlations.The default contours use the leading homogeneous formulas, with
+I=µ 2/(2σ2)andL= log(T/ϵ):
+href =L/I, K ref =TI/L, p ref =ϵL/(TI),
+¯href =L/(TI), J ref =J AU− µL2TI , J AU = 0.15 +µ(T−1)2T . (D.8)
+The default does not include thelogL correction. A reference cell is masked ifhref < 5, href/T > 0.15, or its
+reference regret is negative; it is not clipped to an integer spacing or update count. The configured contour levels are
+10, 20, 40, 60for K,0 .005, 0.01, 0.02, 0.04for ¯p,0 .01, 0.02, 0.04, 0.08for ¯h, and0.35, 0.45, 0.55, 0.65for J, retaining
+only levels inside the finite range of the corresponding reference surface. For each quantity and solver, Pearson
+correlation is computed after flattening the cells on which both the reference and the solver summary are finite.
+The three replications are averaged before this comparison, rather than being treated as separate grid cells.
+Introductory illustration.Figure 1 is constructed from the medium-SNR value bank. It selects the trajectory
+minimizing the mean squared distance to the ensemble mean after dividing each checkpoint’s deviation by its
+across-trajectory sample standard deviation, with a denominator floor of10−12. In the saved bank this is trajectory
+361, using zero-based trajectory identifiers. The three schedules update every24,12, and6checkpoints. Unsafe
+markers compare successive deployed values strictly on the selected realized trajectory, whereas the displayed fractions
+of expected gain captured use the across-trajectory mean value sequence and the never-update/always-update
+normalization. Those fractions are clipped to[0,1]for this illustration only.
+D.2 International Stroke Trial analysis
+Population, treatment, and outcome.We use the corrected version-2 IST fileIST_corrected.csv. Its19,435
+records yield19,285analysis records after removing150observations with missing or unknown six-month outcome
+codes:97with OCCODE= 0and53with OCCODE= 9. Treatment is the randomized aspirin assignment,A = 1for
+RXASP=Y and A = 0for RXASP=N, with known propensity1/2. We defineY = 1for OCCODE∈{ 3, 4}, corresponding
+to being alive and independent at six months, andY = 0for codes1or2, corresponding to death or dependence.
+The retained sample contains9639aspirin-assigned and9646non-aspirin-assigned patients, with7160positive
+outcomes. We do not restrict this sample by a post-randomization final diagnosis. Concurrent randomized heparin
+assignment, treatment adherence, post-randomization outcomes, identifiers, geographic variables, and dates are not
+included among the policy covariates.
+Covariates and preprocessing.The cleaning script produces35numeric covariates with the following encodings.
+Binary Y/N fields are coded as1/0; missing values in the binary clinical fields are filled with zero, with separate
+missingness indicators for atrial fibrillation, prior heparin, and prior aspirin.
+Source fields Encoding Count
+AGE,RDELAY,RSBP Age, delay to randomization, and systolic blood pressure in
+their original units
+3
+SEXIndicator for female sex 1
+RSLEEP,RATRIAL,RCT,RVISINF,
+RHEP24,RASP3
+Six binary clinical indicators and three missingness indicators 9
+RCONSC Drowsy and unconscious indicators; fully alert is the reference 2
+RDEF1–RDEF8 Present and cannot-assess indicators for each deficit; absent is
+the reference
+16
+STYPE Indicators for PACS, TACS, POCS, and OTH; LACS is the reference 4
+27
+The cleaner checks that the resulting model fields are numeric and complete, and rejects missing continuous
+measurements rather than imputing them. It creates a reproducibly shuffled stream using seed20260922. This
+ordering is a simulation device, not a clinical arrival-time ordering.
+We split the retained records into15,428development records and3857evaluation records using a20%evaluation
+fraction, split seed20260921, and joint treatment–outcome strata encoded by2A +Y. Every covariate is centered
+and scaled using the development mean and population-standard-deviation convention, and the same transformation
+is applied to evaluation covariates. Coordinates with development standard deviation at most10−10 would be
+removed; none is removed for the supplied split. The transformation is fixed before constructing learning trajectories,
+rather than recomputed at each checkpoint.
+Bootstrap learning trajectories and checkpoints.Using random-number seed20260922, we drawN = 500
+bootstrap streams with replacement from the development pool. Each stream contains15,250sampled records.
+Along a stream, we fit policies on nested prefixes of sizes
+nt = 4000 + 250(t−1), t= 1,...,46.(D.9)
+Consequently, the clinical scheduling horizon isT = 46policy checkpoints, not60patient observations. All15 ,428
+development records remain eligible for sampling;15,250is the largest fitted bootstrap sample size. Bootstrap
+streams can share patient records, and a record can appear more than once within a stream. Every fitted policy is
+evaluated on the same held-out evaluation sample. The separate disjoint length-60trajectory file written by the
+cleaner is not used by the frontier or schedule-diagram scripts; those scripts loadist_safe_policy_stream.csv
+and construct the bootstrap streams just described.
+Ridge outcome model and treatment rule.For standardized covariates x∈R 35, define z(x,a ) =
+(1,x⊤,a,ax⊤)⊤∈R 72. At checkpointtof trajectoryn, we use the ridge estimate
+ˆb(n)t =
+( nt∑
+r=1
+zrz⊤r + 5P
+)−1 nt∑
+r=1
+zrYr, P= diag(0,1,...,1).(D.10)
+The cross-products are updated cumulatively as each block of250observations arrives. The penalty is applied to the
+unnormalized sum-of-squares problem and does not penalize the overall intercept. For evaluation, the arm-specific
+predictions are clipped to[0,1]before defining the policy:
+ˆm(n)t,a (x) = min{1,max{0,z(x,a)⊤ˆb(n)t }}, π (n)t (x) =1{ˆm(n)t,1 (x)>ˆm(n)t,0 (x)}.(D.11)
+Thus ties between the clipped predictions assign no aspirin. The fitted outcome model supplies both the treatment
+rule and the nuisance predictions for evaluation; a separate outcome learner is not fitted for the evaluation score.
+Held-out value estimates.For each fitted candidate, we compute its augmented inverse-propensity-weighted
+value on the common evaluation sampleE:
+ˆV (n)t = 1|E|∑ℓ∈E
+[
+ˆm(n)t,π(n)t (Xℓ)(Xℓ) + 1{Aℓ =π (n)t (Xℓ)}pπ(n)t (Xℓ) {Yℓ−ˆm(n)t,Aℓ(Xℓ)}], p 0 =p 1 = 1/2.(D.12)
+The final score and its average are not clipped. Neither policy fitting nor covariate standardization uses evaluation
+outcomes. However, the resulting value estimates are subsequently used both to select schedules and to report their
+frontier values; this experiment does not use another independent evaluation sample for the selected meta-policy.
+D.3 Baselines, budgets, and reporting
+Shared scheduling inputs.Within each setting, let ˆV (n)i denote the saved or estimated value of candidatei in
+trajectory n. The frontier and schedule-diagram scripts use the direct meanˆνi =N−1∑nˆV (n)i and the empirical
+matrices
+ˆRij = j−iT ˆνi, ˆSij = 1N
+N∑
+n=1
+1
+{
+ˆV (n)j < ˆV (n)i
+}
+(j≤T), ˆSi,T+1 = 0.(D.13)
+28
+The implementation uses zero-based learned-policy nodes0,...,T− 1and a separate sink T, equivalent to the
+paper’s nodes1,...,T and sinkT + 1. In particular, the final learned candidate can contribute reward for its last
+deployment period. All methods use the same mean values and edge risks. A tie in estimated candidate values is
+not counted towards an unsafe update.
+The common risk-grid width is∆ = 0 .001. Write Cij = ∆⌈ˆSij/∆⌉ for the rounded resource in risk units,
+with terminal resource zero. The proposed method applies Algorithm 1 using these upward-rounded costs and a
+downward-rounded budget. Its implementation accumulates(j−i )ˆνi, rather than(j−i )ˆνi/T; this common factor
+of T does not change the selected schedule or the normalized objective. It computes the frontier up to the rounded
+cost ϵAU =∑T−1i=1 Ci,i+1 of updating at every checkpoint, then reuses the retained terminal labels at the plotted
+budgets.
+Baseline definitions.Theperiodicbaseline enumerates every integer period h∈{ 1,...,T} , deploys candidates
+1, 1 +h, 1 + 2h,... while their indices do not exceedT, and then holds the final incumbent through the terminal node.
+It retains nondominated candidates with total rounded resource at mostϵAU, including the no-update schedule, and
+selects the highest-value feasible candidate at each plotted budget.
+Theequal-riskbaseline allows nonperiodic timing, but requires a common risk allowance for all actual updates.
+For a pathPwithK >0updates, its required budget is
+ϵeq(P) =Kmax(i,j)∈P,j≤T Cij.(D.14)
+Thus feasibility atϵ is equivalent to requiring every actual transition to cost at mostϵ/K. A dynamic program
+enumerates update countsK = 1,...,T− 1and tracks the largest edge resource and cumulative value, with
+dominance pruning within each count layer. The no-update path is included separately.
+Theearliest-safebaseline sweeps a threshold over zero and every distinct finite rounded resource of an actual
+transition. For each threshold, it starts at the initial candidate and repeatedly selects the earliest later candidate
+whose edge resource does not exceed the threshold; if none exists, it retains the incumbent to the terminal node.
+Duplicate paths are removed. The method then selects the highest-value generated path whose total additive
+rounded resource fits the plotted budget. The threshold is therefore tuned over the complete finite set at which the
+greedy path can change, not over an externally chosen coarse threshold grid.
+In the frontier routines, a Bellman predecessor is replaced only when its value improves by more than10−12, so
+tied candidates retain the first predecessor encountered in increasing node order. The separate heatmap dynamic
+program uses10−13 for this comparison. Frontier pruning sorts by increasing resource and decreasing value, and
+selection among tied feasible frontier values favors smaller resource.
+Safety-budget grids.For each of the four frontier panels, letϵfirst be the smallest rounded resource among the
+proposed method’s retained nondominated labels that contain an actual update. This is a landmark of the retained
+frontier. Across panels, the common axis endpoints are
+ϵmin = max
+{
+0.92 min
+s
+ϵfirst,s,∆/10
+}
+, ϵ max = max
+{
+1.08 max
+s
+ϵAU,s,1.01ϵ min
+}
+,(D.15)
+where infinite first-update landmarks are omitted. For the saved outputs, the first-update landmarks for low SNR,
+medium SNR, high SNR, and IST are0.203,0 .030,0, and0 .432, respectively; their always-update costs are27.536,
+27.559,24 .928, and22.492. These give the common range[10−4, 29.76372]. The frontier plot uses241budget points,
+and the schedule diagram uses90points over the same range. Both are equally spaced after a base-10symmetric-log
+transformation with linear thresholdϵmin; since all displayed budgets are at or above that threshold, they are
+logarithmically spaced on the positive range. The schedule-diagram subsampling factor is one, so all90points are
+retained.
+Objective normalization and update coordinates.For a scheduleP, let ˆJT (P ) =∑(i,j)∈P ˆRij. The plotted
+objective is
+~JT (P) = ˆJT (P)−ˆν1
+T−1∑Ti=1ˆνi−ˆν1,(D.16)
+which maps never updating to zero and updating at every checkpoint to one. The frontier script does not clip
+this quantity to one: selectively retaining candidates can outperform the always-update comparator under the
+unprojected empirical means. The schedule diagram plots each selected interior node at its zero-based checkpoint
+29
+index divided byT; in the paper’s one-based notation, candidatei is displayed at(i− 1)/T. The first candidate is
+treated as available at the start of the scheduling horizon, after its initial training observations have been collected.
+The two vertical landmarks in each schedule panel areϵfirst andϵ AU.
+Replication and uncertainty.The synthetic frontier panels each use one bank of400learning trajectories, and
+the IST panel uses one bank of500bootstrap learning trajectories with the fixed evaluation split above. Schedule
+selection and frontier reporting use the same estimated matrices; there is no additional independent trajectory bank
+for evaluating the selected schedules in these plots. The homogeneous experiment differs in that it evaluates selected
+paths using the population matrices in(D.6). The frontier script defaults to zero outer bootstrap replications and
+therefore reports curves without uncertainty bands. Its optional outer bootstrap resamples whole columns of a
+value-trajectory matrix with replacement, re-estimates the matrices, and re-solves every method. When enabled, the
+displayed band is the original normalized curve plus or minus one sample standard deviation across those bootstrap
+curves, not a confidence interval; the outer-bootstrap random-number seed is20260923.
+30

@@ -1,0 +1,723 @@
+arXiv 2110.13287  https://arxiv.org/abs/2110.13287
+
+Towards Realistic Market Simulations: a Generative Adversarial
+Networks Approach
+Andrea Coletta
+Matteo Prata
+Michele Conti
+Emanuele Mercanti
+Novella Bartolini
+Sapienza University of Rome
+Rome, Italy
+Aymeric Moulin
+Svitlana Vyetrenko
+Tucker Balch
+J.P. Morgan AI Research
+New York, USA
+ABSTRACT
+Simulated environments are increasingly used by trading firms and
+investment banks to evaluate trading strategies before approach-
+ing real markets. Backtesting, a widely used approach, consists of
+simulating experimental strategies while replaying historical mar-
+ket scenarios. Unfortunately, this approach does not capture the
+market response to the experimental agents’ actions. In contrast,
+multi-agent simulation presents a natural bottom-up approach to
+emulating agent interaction in financial markets. It allows to set
+up pools of traders with diverse strategies to mimic the financial
+market trader population, and test the performance of new exper-
+imental strategies. Since individual agent-level historical data is
+typically proprietary and not available for public use, it is difficult
+to calibrate multiple market agents to obtain the realism required
+for testing trading strategies. To addresses this challenge we pro-
+pose a synthetic market generator based on Conditional Generative
+Adversarial Networks (CGANs) trained on real aggregate-level his-
+torical data. A CGAN-based "world" agent can generate meaningful
+orders in response to an experimental agent. We integrate our syn-
+thetic market generator into ABIDES, an open source simulator of
+financial markets. By means of extensive simulations we show that
+our proposal outperforms previous work in terms of stylized facts
+reflecting market responsiveness and realism.
+ACM Reference Format:
+Andrea Coletta, Matteo Prata, Michele Conti, Emanuele Mercanti, Novella
+Bartolini, Aymeric Moulin, Svitlana Vyetrenko, and Tucker Balch. 2021.
+Towards Realistic Market Simulations: a Generative Adversarial Networks
+Approach. In Proceedings of ACM Conference (ICAIF’21). ACM, New York,
+NY, USA, 8 pages. https://doi.org/10.1145/nnnnnnn.nnnnnnn
+1 INTRODUCTION
+The standard approach in the evaluation of trading strategies be-
+fore their adoption in real markets, is to simulate their performance
+under a wide range of existing historical scenarios — a technique
+Permission to make digital or hard copies of all or part of this work for personal or
+classroom use is granted without fee provided that copies are not made or distributed
+for profit or commercial advantage and that copies bear this notice and the full citation
+on the first page. Copyrights for components of this work owned by others than ACM
+must be honored. Abstracting with credit is permitted. To copy otherwise, or republish,
+to post on servers or to redistribute to lists, requires prior specific permission and/or a
+fee. Request permissions from permissions@acm.org.
+ICAIF’21, November 3-5, 2021, London, UK
+© 2021 Association for Computing Machinery.
+ACM ISBN 978-x-xxxx-xxxx-x/YY/MM. . . $15.00
+https://doi.org/10.1145/nnnnnnn.nnnnnnn
+known as backtesting. Despite its common use in trading appli-
+cations due to its simplicity, the backtesting approach does not
+allow to simulate market response to experimental agents’ actions,
+which makes it unreliable for simulating the execution of trading
+strategies.
+Interactive Agent-Based Simulators (IABS) address the limita-
+tions of the backtesting approach by modeling the interplay of
+individual traders, the agents, of a market system. They are a fun-
+damental tool in financial research for studying and testing trad-
+ing strategies, while also providing market behavior explainability
+[20, 24]. An agent-based simulation allows to study the market
+response to the experimental agents and enables “what if” studies
+on how their strategy would perform [ 3]. IABS are increasingly
+being used for training of machine learning based trading strate-
+gies [5, 17, 26], and deepen the study of real market phenomena
+[4, 31, 33]. While most market simulators are used for internal
+purposes within trading firms, robust simulators for high-fidelity
+market simulation environments are becoming available also for
+the research community. One example in this direction is ABIDES
+(Agent-Based Interactive Discrete Event Simulation) [7].
+Modeling a realistic market behavior is a major challenge, com-
+mon to all the described works. To obtain realistic simulations, these
+approaches rely on pools of hand-crafted experimental agents to
+mimic the complexity of a real market. Along this line of research,
+previous works [6, 12, 23] analyzed traders’ behaviors through mar-
+ket data-sets and described a series of trading strategies. However,
+a real stock market includes thousands of participants adopting di-
+verse proprietary trading strategies. Historical data typically lacks
+complete details of trader population and of the adopted strategies.
+Therefore, it is often impossible to exactly understand the traders’
+behaviors, and to precisely mimic them through simulated agents.
+This inevitably leads to poorly realistic simulations, and as a result
+“what if” studies may give inaccurate results [30].
+To the best of our knowledge, we are first to propose a GAN-
+based framework that is able to learn an abstract representation of
+the market that can also react to the observed market state. The
+proposed framework leverages a Conditional Generative Adver-
+sarial Network (CGAN) [13, 21] trained on real historical data, to
+capture the market’s behavior as a whole arising from the activity
+of different participants. The CGAN is trained to generate limit
+orders conditioned by the currently observed market situation. A
+world agent impersonated by a pre-trained CGAN that is placed
+in a simulation environment, produces orders to be processed by
+arXiv:2110.13287v1  [cs.AI]  25 Oct 2021
+ICAIF’21, November 3-5, 2021, London, UK Coletta et al.
+the exchange. This agent represents the whole ensemble of trading
+agents of the particular symbol on which it was trained. Such sim-
+ulation test-bed allows to evaluate any experimental agent, while
+guaranteeing realism of the produced market trend and market
+responsiveness to the experimental agent’s activity. We show that
+the market traces generated by the proposed CGAN-based agent
+preserve the statistical properties of historical data, and at the same
+time expose a reactive behavior against experimental agents.
+Here we summarize the original contributions of this paper:
+• We propose a framework able to automatically learn and
+reproduce the market behavior, allowingrealistic and reactive
+simulations.
+• We propose a CGAN architecture able to generate synthetic
+market data, in terms of limit orders, as a function of the
+features observed from the current market situation, thus
+guaranteeing both market realism and reactivity to experi-
+mental agents.
+• We analyze the realism of generated orders and study the re-
+activity of the simulation framework to experimental agents
+by comparing simulations conducted with and without them.
+• We compare our CGAN based simulations against a state of
+the art IABS [30], showing that our architecture outperforms
+existing approaches, exhibiting more realistic properties in
+terms of stylized facts of a Limit Order Book (LOB) [8, 9].
+2 RELATED WORK
+IABSs are increasingly gaining attention by the research commu-
+nity, with several works studying simulators and solutions to closely
+mimic real markets [7, 11, 17, 23, 30].
+Farmer et al. [11] study market simulations showing how zero
+intelligence (ZI) agents, which place random orders, are able to
+reproduce market dynamics (i.e., spread and price) and react to the
+arrival of new orders. Palit et al. [23] deepen the study of ZI agents
+in market simulations, showing that they can also reproduce fat
+tails and long range dependencies.
+In a recent work [30], S. Vyetrenko et al. survey metrics to assess
+robust and realistic market simulations. The authors study two
+different agent configurations showing how IABS configurations
+that still rely on common sense hand-crafted rules may produce un-
+realistic market scenarios. In the experimental section, we compare
+our framework against their agent configurations and evaluate the
+related realism metrics.
+Other approaches to achieve realistic simulations focus on auto-
+matic learning strategies. An action conditional stochastic forward
+model (otherwise known as a world model) was previously used
+to learn market response to trading from historical data [ 15, 32].
+The model is implemented via a Convolutional Neural Network
+(CNN) autoencoder followed by Mixture-Density Recurrent Net-
+work (RNN-MDN), and is subsequently used for reinforcement
+learning trading agent training, but is not tested for simulated
+realism.
+Other works in the literature focus on producing synthetic finan-
+cial time-series, retaining statistical properties of historical data,
+[2, 10, 18, 27, 34]. For example, Junyi Li et al. [18] propose an ap-
+proach to generate realistic and high-fidelity stock market order
+streams, based on GANs. The proposed Stock-GAN model employs
+a Conditional Wasserstein GAN to capture the history dependence
+Figure 1: An example of order book.
+of orders. The goal of this study is to generate synthetic data that
+does not include features that may link back to the originator of
+the order in the training data-set, for anonymity reasons.
+However, none of these works address the issue of responsiveness
+and reactivity to experimental agents.
+3 BACKGROUND
+In this section we briefly review some important pillars that are
+useful for the reader to approach this paper.
+Orders and Limit Order Book . In financial markets, traders
+can participate in the auction mechanism by placing orders to buy
+[bid] or sell [ask] shares of the financial assets of choice. There are
+two major types of orders: (1) market orders, which are executed
+immediately at the best available price, i.e. highest buy (lowest sell)
+price in case of a sell (buy) market order; (2) limit orders, which,
+unlike the market orders, include the specification of a desired
+target price. A sell (buy) limit order will be executed only when is
+matched to a buy (sell) order whose price is greater than (lower
+than) or equal to the target price. The exchange matching engine is
+responsible for matching the incoming buy and sell orders issued
+by the trading agents. Figure 1 shows the LOB of a financial asset,
+which is an electronic record of the orders issued by the traders.
+LOBs are maintained at financial exchanges, such as NASDAQ
+and NYSE, and act as an indicator of the supply and demand of a
+particular asset in time. They are organized by price levels and are
+continuously updated as new orders are placed.
+Stylized Facts of financial markets . From the analysis of the
+market and LOB evolution over time, several metrics (e.g., spread,
+mid-price, relative return) and other statistical properties (e.g., ab-
+sence of autocorrelation or fat-tailed distribution of asset relative
+returns) can be derived. These statistical properties capture the
+market behavior over different time periods, and are often referred
+to as stylized facts [8, 9].
+One can calculate stylized facts for the time-series produced by
+agent interactions for real and simulated markets, and use them
+as metrics of simulation realism [ 30]. In our work, we consider
+a set of the most commonly used stylized facts to evaluate how
+our CGAN-based "world" agent is able to reproduce characteristic
+features of a real market. We study the following stylized facts:
+• Absence of Autocorrelation . The linear autocorrelation
+of the return𝐶(𝜏) = corr(𝑟(𝑡, Δ𝑡),𝑟(𝑡+𝜏, Δ𝑡)) rapidly decays
+to zero in few minutes and becomes insignificant for periods
+longer than 20 minutes.
+Towards Realistic Market Simulations: a Generative Adversarial Networks Approach ICAIF’21, November 3-5, 2021, London, UK
+Figure 2: CGAN-Based Simulation Framework.
+ Figure 3: IABS Simulation Framework.
+• Volatility Clustering. High-volatility events tend to cluster
+in time, showing a positive autocorrelation over several days
+of trading.
+• Volume/Volatility correlation. The trading volume is pos-
+itively correlated with volatility.
+• Heavy tails and aggregation normality . The asset re-
+turns follow a normal distribution with fat tails. Notice that,
+fat tails disappear when the time period Δ𝑡 use to compute
+the returns increases.
+Generative Adversarial Networks (GANs) . GANs [13] are a
+powerful subclass of generative models and were successfully ap-
+plied to image generation and editing, semi-supervised learning,
+and domain adaptation.
+With GANs, we have a two-player game between the generator
+𝐺, learning how to generate samples resembling real data, and a
+discriminator (or critic)𝐷, learning to discriminate between real and
+generated data. Both players aim to minimize their own cost, and the
+solution to the game is the Nash equilibrium where neither player
+can improve its cost unilaterally [ 19]. In this paper, we consider
+a generator𝐺 to learn how to produce new orders, matching real
+orders statistical properties. In the GAN framework the model
+learns a deterministic transformation 𝐺 of a simple distribution
+𝑝𝑧, with the goal of matching the real data distribution 𝑝𝑑. On
+the other hand, 𝑝𝑧 is the distribution of the generated data, that
+is implicitly defined as ˜𝑥 =𝐺(𝑧), where𝑧∼N( 0, 1) is the input
+noise to the generator, sampled from a normal distribution. Random
+noise as input to 𝐺 ensures variance of the generated data. The
+transformation𝐷 is trained to maximize the probability of assigning
+the correct label to both training examples 𝑥 ∼ 𝑝𝑑 and ˜𝑥 ∼ 𝑝𝑧,
+while at the same time𝐺 is trained to minimize the probability of
+𝐷 assigning the correct label.
+The novelty of our work is the design of a synthetic market order
+generator whose behavior reacts to the activity of experimental
+agents, resembling realistic markets. To this end, while in its most
+basic form a GAN generator takes random noise as its input to
+transform noise into a meaningful output, we consider a Condi-
+tional Generative Adversarial Network (CGAN) [1] which takes as
+input also several features that characterize the emulated market
+behavior.
+This translates into a joint two-player minimax game that can
+be described by the following dynamic:
+min
+𝐺
+max
+𝐷
+E𝑥∼𝑝𝑑[log(𝐷(𝑥|𝑦))]− E𝑧∼N( 0, 1)[log(𝐷(𝐺(𝑧|𝑦)))], (1)
+where𝑦 is some extra information that conditions the players’
+behavior. The minimax game derives from the cross-entropy be-
+tween the real and generated distributions. Thus log(𝐷(𝑥|𝑦)) and
+log(𝐷(𝐺(𝑧|𝑦))) reflect the likelihood that the discriminator cor-
+rectly classifies real data 𝑥 given𝑦, or generated data 𝐺(𝑧|𝑦) re-
+spectively. The generator𝐺 cannot directly affect the log(𝐷(𝑥|𝑦))
+term, thus for him minimizing the loss is equivalent to maximizing
+log(𝐷(𝐺(𝑧|𝑦))) as it is a negative additive quantity.
+4 CGAN-BASED SIMULATION FRAMEWORK
+The proposed simulation framework, represented in Figure 2, in-
+cludes four main components:
+(1) The electronic market exchange, which handles incoming
+orders.
+(2) One or more experimental agents, which operate the trad-
+ing strategy under investigation.
+(3) The CGAN-based "world" agent, which is responsible for
+emulating the market behavior, by generating new orders as
+a function of the current market state.
+(4) The historical data, which is used to train the CGAN agent
+and to initialize the simulation.
+In contrast to IABS simulations where experimental agents in-
+teract with multiple diverse market participants via an exchange
+to mimic a real market (Figure 3), we consider a unique CGAN-
+based agent, acting as the whole trader population (Figure 2). In
+fact, while market behavior is typically modeled through multiple
+heterogeneous agents in IABS simulations, these approaches fail in
+guaranteeing the necessary realism and responsiveness [30].
+The lack of knowledge about traders and their strategy in his-
+torical data, motivates poorly realistic simulations.
+In our simulation framework, a CGAN-based agent is trained on
+historical data to emulate the behavior resulting from the whole
+set of traders. It analyzes the order book entries and mimics the
+market behavior by producing new limit orders depending on the
+current market state. Thus, the experimental agents interact with
+the CGAN-based agent through the exchange, enabling the test
+and the study of their strategy against a responsive and realistic
+market.
+4.1 Electronic Market Exchange Simulator
+The electronic market exchange handles the LOB of a set of securi-
+ties, applying a price-then-FIFO matching rule for the trading orders
+issued by the agents. For our simulations we use ABIDES [7]. It is
+ICAIF’21, November 3-5, 2021, London, UK Coletta et al.
+an open-source simulator that provides a selection of background
+agent types (such as market markers, fundamental value investors,
+momentum traders, etc.), a NASDAQ-like exchange agent which
+lists any number of securities for trade using a LOB with price-then-
+FIFO matching rules, and a simulation kernel which manages the
+advancement of time and handles all inter-agent communications.
+4.2 Experimental Agents
+An experimental agent is an entity of a financial IABS, representing
+a financial trader adopting a specific trading strategy. It owns a
+portfolio, pending orders and initial cash. Experimental agents are
+implemented to evaluate the performance of their trading strategy,
+taking into account agent actions’ impact in the estimated prof-
+itability, or to pursue “what if” studies.
+Any trading strategy can be implemented inside an experimental
+agent introduced in the simulation, including machine learning
+based ones [17].
+For instance, in our experimental analysis in Section 5, we use
+an experimental agent which injects orders so as to reach a given
+cumulative volume within a predefined interval of time. We refer
+to this agent with the name of Percentage of Volume (POV) experi-
+mental agent [30]. We use this agent in our simulations to evaluate
+the responsiveness of our CGAN-based "world" agent.
+4.3 CGAN-based World Agent
+The core component of our framework is the CGAN-based "world"
+agent, which mimics the market behavior. To this end, our CGAN
+architecture takes as input a set of features, representing the cur-
+rent market condition, and generates the next order to feed into
+the exchange. The new order is processed by the exchange and
+the simulation advances, generating a new market state, and a sub-
+sequent new order from the CGAN. Thus, while common GAN
+models output data from input random noise, the proposed CGAN,
+in addition, is fed with some meaningful features to condition the
+data generation. We consider a similar architecture of Junyi et al.
+[18], based on the conditional WGAN [1, 21], adapted to cope with
+our task and to react in a simulated environment.
+Output data. The output of the proposed CGAN-based "world"
+agent is what CGAN generator𝐺 generates, that is a single order ˜𝑥.
+Formally the output is a 4-tuple ˜𝑥 = (price, volume, direction, time) ,
+where: direction∈{− 1, 1} represents sell and buy orders respec-
+tively; and time is the interarrival time between two consecutive
+orders, more precisely it is the offset w.r.t. the previous order. After
+this time, the order is placed into the exchange, and the CGAN is
+triggered to generate another order.
+Input data. The input of the proposed CGAN-based experimen-
+tal agent is made of a vector𝑦 responsible for the conditional nature
+of the method and random noise vector𝑧 to provide diversity to
+generated traces.
+In more details, a vector 𝑦 is used to condition the generator
+output. At time 𝑡 the𝑖-th element of the vector with 𝑖∈ [1,𝑁],
+represents a series of 10 features linked to a trading order issued
+at time𝑡−𝑖. Specifically,𝑦∈ R10·𝑁 . The features are the 4-tuple
+mentioned in the previous paragraph representing the order details,
+that is (price, volume, direction, time), concatenated to the 6-tuple
+Figure 4: CGAN Architecture.
+made of the following features (best-bid price, best-bid volume, best-
+ask price, best-ask volume, mid-price, time-period) . As shown in [18],
+most of the sent orders are strongly driven by the current mid-price
+and order book state, making these features particularly adequate
+to influence future orders. In order to avoid instabilities in the train-
+ing process of the CGAN, we normalize𝑦 with a min-max scaler,
+between -1 and 1. As for thesize, time, best-bid volume, and best-ask
+volume they are pre-processed with a box-cox transformation [25]
+in order to reduce anomalies and normally distribute the data.
+Finally, features vector𝑧 constitutes part of the input. This vector
+is made of𝑁𝑓 noise features sampled from a normal distribution.
+Notice that the concatenation between noise and historical infor-
+mation of the market is necessary. The latter maintain fidelity of
+the generated data with respect to the historical data: our agent
+has to issue seemingly real orders, and this can be done only if it
+has up-to-date knowledge of the market state. Instead, the noise
+guarantees significant variance in the generated new orders. Noise
+samples vary at varying simulation seeds, allowing the generation
+of diverse market behaviors. In the experiments, we considered
+𝑁 = 50 and𝑁𝑓 = 50.
+CGAN Architecture. We want our model to generate realistic
+orders providing responsiveness conditional on the current market
+state. To do so, we use a CGAN [21]. Input noise from the prior and
+extra information𝑦 (i.e., features about current market situation)
+Towards Realistic Market Simulations: a Generative Adversarial Networks Approach ICAIF’21, November 3-5, 2021, London, UK
+are combined and fed into both the generator and the discrimina-
+tor. State of the art Wasserstein Generative Adversarial Network
+with Gradient Penalty (WGAN-GP) is adopted. In order to address
+training instabilities due to exploding and vanishing gradients, we
+introduce additional terms and constraints in the loss function as
+suggested in [14]. In fact, loss function is constructed using the
+Kantorovich-Rubinstein duality [29], and considering as discrim-
+inator a 1-Lipschitz function (i.e. a function which norm of the
+gradients is upper-bounded by 1). Thus the used loss is:
+min
+𝐺
+max
+𝐷
+E𝑥∼𝑝𝑑[𝐷(𝑥|𝑦)]− E𝑧∼N( 0, 1)[𝐷(𝐺(𝑧|𝑦))]+
+𝜆E
+𝑧∼N( 0, 1)
+[(∥∇𝐷(𝐺(𝑧|𝑦))∥ 2− 1)2] (2)
+where the weight𝜆 is set to 10 as in [14].
+Figure 4 shows the architecture of the CGAN. The generator𝐺
+is responsible for producing a trading order ˜𝑥𝑛+1∼𝐺(𝑧|𝑦) which
+at best resembles characteristics of a real order. The input of the
+generator is, the normally distributed noise 𝑧∼N( 0, 1) and the
+historical data vector𝑦 introduced in the previous section. Before
+going through the generator, historical data vector𝑦 is fed into a
+Long Short-Term Memory (LSTM) [16] to capture the long-term
+dependencies among historical traces features and producing a com-
+pact encoding. The output of the LSTM is concatenated with the
+normally distributed noise and passed through a series of convolu-
+tional layers. CNNs are highly popular due to their ability to detect
+patterns that are invariant for some transformation, depending on
+the used filter. We believe that these layers allow to extract relevant
+information from the LSTM output, which has condensed the his-
+tory and features of the current market scenario. The discriminator
+𝐷 takes as input data coming either from the generator or from the
+data-set made of real orders. It outputs a real number representing
+the distance between the input order and a real order.
+4.4 Historical Data
+The role of historical data in our proposed simulation framework is
+twofold. First, our CGAN model needs order book data and order
+messages for the training. The training is carried out in an unsu-
+pervised fashion; the CGAN extracts sequences of historical orders,
+trying to generate a plausible next order. The training can be either
+performed on a single stock during a very tight time window (e.g.,
+one/two days), or on multiple stocks and periods (e.g., one month).
+In the former way, the trained network can be leveraged to repro-
+duce very specific trends of a certain stock, while in the latter the
+trained CGAN can be used to emulate more general market trends.
+In case of a single stock testing, the historical data is also used
+to initialize the simulation. If we want to simulate a particular
+symbol and day, we want to condition the CGAN-based agent with
+real data at the beginning of the trading day. The input data let
+the framework evaluate the market features, and feed them in the
+CGAN to generate coherent orders for that day. The historical data
+is only needed to start the simulation, as the CGAN-based agent
+needs the input market condition (i.e., features y) to generate new
+orders. However, if we want to simulate a scenario that is not linked
+to any symbol nor day, it suffices to launch a run with experimental
+agents that have the most diverse logic, to produce preliminary
+data in the exchange, which are then fed into the CGAN to start
+the generative process.
+Notice that, considering the input features, an order book with
+at least 1-level is needed, along with all the orders submitted to the
+exchange. However, as our goal is to mimic the collective traders’
+behavior (not per trader), no sensitive market data are required.
+In our experiments we use data from LOBSTER [28], an online
+limit order book data tool that provides high-quality limit order
+book data, which are reconstructed from NASDAQ traded stocks. It
+is worth noting that LOBSTER data has a specific format that doesn’t
+provide the full picture. We use a 20-level data-set. It is constituted
+of: (1) the order book snapshot history (price and quantity for each
+level) for the first 20 levels on each side (there is a new snapshot
+every time a price of quantity changes in these levels); (2) the
+stream of messages (add order, cancellation etc) related to the levels
+displayed in the order book. Liquidity coming from orders placed
+beyond 20th level is accounted for in the order book when that
+price level becomes one of the 20 first, but the message that created
+it is not represented in the data-set. It is a necessary approximation
+for us in order to make computations tractable.
+5 EXPERIMENTS
+In this section we evaluate our framework under three main aspects.
+First, we study our CGAN model performance in terms of training
+convergence and statistical similarity of the generated orders to his-
+torical ones. Then, we evaluate the main novelty of our framework
+which is the ability to react to an experimental agent. In particular,
+we show how the CGAN-based "world" agent reacts to the burst of
+orders issued by a POV experimental agent. Finally, we evaluate
+the realism of our CGAN-based simulations against a state of the
+art approach. In particular we consider the work of S. Vyetrenko et
+al. [30] which proposes pools of hand-crafted experimental agents
+to mimic the complexity of a real market, and studies statistical
+properties of the resulting synthetic traces.
+We implement our framework extending ABIDES [7], an open-
+source multi-agent simulator. We trained the model on order book
+entries from AAPL and TSLA on 2 trading days. Each training
+process lasts 4 days, running for 200 epochs on a NVIDIA V100
+GPU [22]. The datasets are obtained from the LOBSTER archive
+[28]. Being a conditional model, for the first minutes of simulation,
+the CGAN "world" agent is fed with historical data coming from
+the training set alone.
+5.1 CGAN Model Performance
+To evaluate the performance of our CGAN model we compare the
+generated synthetic orders against the real training data, by looking
+at their statistical properties. In particular, we consider the order
+distributions over the price, volume, direction and inter-arrival time.
+In fact, in order to assess the goodness of a generative model, it is
+usual to compare the statistics of real and synthetic data, as the loss
+value alone is not a good indicator of convergence [14].
+Figure 5 shows the distributions of several useful features for
+the synthetic and real traces. Specifically, the columns from left to
+right, plot the volume (i.e., number of shares), theprice, the direction
+(i.e., buy or sell order), and the interarrival time distribution of the
+orders. The real data refers to TSLA stock on the 2nd and 3rd of
+May 2019. All the order features are normalized as in Section 4.3.
+ICAIF’21, November 3-5, 2021, London, UK Coletta et al.
+Figure 5: Comparison of CGAN syntethic and real TSLA orders - Stylized Facts during the training process, at beginning (top),
+half (middle) and when it achieves reasonable convergence (bottom).
+The x-axis shows both the normalized form between[−1, 1] and
+the unnormalized value.
+The first row shows the distributions at the beginning of the
+training process (epoch number 3), in which the CGAN is clearly un-
+able to generate realistic orders, mostly producing random output.
+The second row shows an intermediate advancement of the training
+process (epoch number 50). The CGAN learns to mimic the distri-
+butions more accurately, especially for direction and inter-arrival
+time. Finally, the third row shows a much more stable CGAN agent,
+achieved after 120 training epochs. The agent generates orders re-
+sembling real ones: direction, inter-arrival, price distributions show
+a pattern that is close to real. Orders volumes are discretionary for
+the traders, thus it is intrinsically hard to match the real distribution.
+Figure 6 shows the CGAN "world" agent ability to replicate
+trends observed during training, by generating orders that lead to
+Figure 6: Comparison of multiple CGAN synthetic traces
+(thin colored lines) and real TSLA real trace (fat red line).
+a price pattern that is close to that of the training data. The CGAN
+was trained on a single stock with a tight time window (i.e., two
+days). The generated trends allow pursuing studies on the specific
+historical scenarios. The chart shows the training data (solid red
+line) and 5 generated traces (colored lines), which are conditioned,
+at the beginning of the generation process with the historical data.
+5.2 Market Impact Experiment
+We demonstrated that our CGAN model is able to generate orders
+and time-series with properties resembling those of real historical
+traces. An additional novelty of our framework is the ability to
+represent all the market participants as a whole and respond to
+the strategy of an experimental agent, thus allowing interactive
+simulations. In particular, our CGAN-based "world" agent is trained
+to generate trading limit orders conditioned by the currently ob-
+served market situation. Therefore, as the orders submitted by any
+experimental agent alter the market and the order book, they also
+condition the CGAN agent and the evolution of the simulation (as
+shown in Figure 2).
+In order to evaluate the reactivity of our framework to the activity
+of an experimental agent, we craft an experiment in which a POV
+agent submits a burst of buy orders [3, 30]. A𝜆-POV strategy is
+defined by a percentage level 𝜆 ∈ (0, 1], a wake up period Δ𝑡,
+a direction, and a target quantity of shares 𝜏. The agent wakes
+up every Δ𝑡 time units, observes the transacted volume in the
+market since its last wake up 𝑉𝑡 , and issues buy or sell orders
+of a number of shares equal to 𝜆𝑉𝑡 , it does so until 𝜏 shares are
+transacted. In our experiments we consider three different𝜆-POV
+agent configurations, with 𝜆 ∈ [0.01, 0.1, 0.25], and a wake up
+period Δ𝑡 = 1 min. We allow the agent to place only buy orders
+Towards Realistic Market Simulations: a Generative Adversarial Networks Approach ICAIF’21, November 3-5, 2021, London, UK
+Figure 7: Comparison of a generated time-series with (or-
+ange) and without (blue) a0.25-POV execution agent, placing
+order from 10:30 AM to 11:00 AM.
+between 10:30 and 11:00, and we set 𝜏 equal to the mean daily
+volume. Thus, the POV agent will trade around 30 times, and it will
+stop after 11:00 or when it reaches𝜏 transacted shares.
+Figure 8 shows the impact of POV orders on the stock price, in
+our CGAN-based framework (right) and in a classic market replay
+(left) [3] at varying 𝜆. The plots show the normalized mid-price
+difference, between the simulations with and without POV agent.
+The thick blue line represents the median mid-price difference,
+while the blue shaded regions indicate the 50% and 90% quantiles.
+Results are averaged over 50 runs. It is interesting to notice the
+substantial deviation of the mid-price during and subsequent to the
+POV agent activity (from 10:30) with the CGAN-based approach
+w.r.t. the market replay. In the market replay scenario, the small
+deviations are due to new orders in the historical order book being
+replayed, and rapidly vanish. We conclude that our framework can
+adapt and react to new orders, showing new unobserved behavior.
+We believe that this is the first step towards reactive IABS [ 3],
+without the explicit need of hand-crafted pools of experimental
+agents.
+Figure 7 shows the mid-price traces resulting from a single mar-
+ket impact experiment. The orange and blue lines are the synthetic
+data generated by our framework with and without a 0.25-POV
+agent, respectively. It is interesting to notice that in the scenario
+with the POV agent, the mid-price exhibits a substantial deviation
+w.r.t. the mid-price in the scenario without the POV agent, also
+showing a common mean reversion trend to its average levels.
+5.3 Realism through Stylized Facts
+Finally, to assess the realism of generated simulations, we train
+and compare our framework against TSLA historical data, and two
+state of the art IABS configurations proposed in the work [30]. The
+first IABS configuration includes 5000 noise and 100 value agents;
+whereas the second configuration comprises 5000 noise, 100 value,
+1 market maker, and 25 momentum agents. Both the configurations
+use historical data to compute the fundamental value of the traded
+stock. 1
+1We refer to the work in [30] for further details on the configurations and description
+of the agent strategies.
+Figure 8: Market replay (left) and CGAN-Based simulation
+(right) with and without a 𝜆-POV execution agent. POV
+agent places orders between 10:30 AM and 11:00 AM with
+𝜆∈ [0.01, 0.1, 0.25], respectively on top, middle and bottom
+row. POV wake us frequency = 1 minute. The x-axes are trun-
+cated and y-axes expanded for clarity.
+Figure 9 shows the comparison between the three simulation
+approaches and historical data, in terms of stylized facts (see section
+3). The upper left chart shows the one-minute log-returns distribu-
+tions. Almost all the simulations show the aggregation normality
+property, but CGAN-based framework (green) is the most similar to
+historical data. The upper right chart shows thevolatility clustering,
+as a function of time lag. Also here the CGAN-based framework
+(green) is the most similar to historical data, showing a slight decay
+in the correlation as time lag increases. The Volume/volatility corre-
+lation is instead shown in the bottom left chart, in which both the
+simulations fall short to capture the historical trend. However, the
+CGAN framework shows the most promising performance, with a
+similar trend to the historical data, but shifted to the left. Finally,
+the bottom right chart shows the absence of auto-correlation in
+which almost all the simulations capture the historical trend, but
+our framework is still the closest to the real data.
+In summary, our CGAN-based framework outperforms the state-
+of-art configurations, with more realistic stylized facts, close to
+historical data.
+6 CONCLUSION
+In this paper, we provided a novel framework for synthetic market
+order generation in agent-based simulations. The purpose of our
+framework is to provide realistic market scenarios to be used for
+testing trading strategies, while still ensuring a reactive behavior
+ICAIF’21, November 3-5, 2021, London, UK Coletta et al.
+Figure 9: Market Stylized facts (TSLA) - historical data
+against simulations.
+to the activity of the experimental agents. Our framework learns
+the market behavior from historical data-sets, and models all the
+market participants as a whole, that is a single agent reproducing
+the entire market behavior and allowing realistic and reactive sim-
+ulations. In particular, we propose a CGAN to generate synthetic
+market orders as a function of the current market state. Integrated
+in a simulator, our CGAN-based "world" agent can generate mean-
+ingful orders in response to an experimental agent. By means of
+extensive simulations we show that our framework outperforms
+previous IABS approaches based on hand-crafted market config-
+urations, showing better market realism. We also show that our
+approach ensures a responsive behavior of the simulated market to
+the activity of experimental agents.
+DISCLAIMER
+This paper was prepared for informational purposes by the Arti-
+ficial Intelligence Research group of JPMorgan Chase & Co. and
+its affiliates (“JP Morgan”), and is not a product of the Research
+Department of JP Morgan. JP Morgan makes no representation and
+warranty whatsoever and disclaims all liability, for the complete-
+ness, accuracy or reliability of the information contained herein.
+This document is not intended as investment research or investment
+advice, or a recommendation, offer or solicitation for the purchase
+or sale of any security, financial instrument, financial product or
+service, or to be used in any way for evaluating the merits of par-
+ticipating in any transaction, and shall not constitute a solicitation
+under any jurisdiction or to any person, if such solicitation under
+such jurisdiction or to such person would be unlawful.
+ACKNOWLEDGMENTS
+This research was funded in part by JPMorgan Chase Co.
+REFERENCES
+[1] M. Arjovsky, S. Chintala, and L. Bottou. Wasserstein gan, 2017.
+[2] S. Assefa. Generating synthetic data in finance: opportunities, challenges and
+pitfalls. Challenges and Pitfalls (June 23, 2020) , 2020.
+[3] T. H. Balch, M. Mahfouz, J. Lockhart, M. Hybinette, and D. Byrd. How to evalu-
+ate trading strategies: Single agent market replay or multiple agent interactive
+simulation? arXiv preprint arXiv:1906.12010, 2019.
+[4] D. Borrajo, M. Veloso, and S. Shah. Simulating and classifying behavior in
+adversarial environments based on action-state traces: An application to money
+laundering. In ACM International Conference on AI in Finance (ICAIF-2020) , 2020.
+[5] H. Buehler, L. Gonon, J. Teichmann, and B. Wood. Deep hedging. Quantitative
+Finance, 19(8):1271–1291, 2019.
+[6] D. Byrd. Explaining agent-based financial market simulation. arXiv preprint
+arXiv:1909.11650, 2019.
+[7] D. Byrd, M. Hybinette, and T. H. Balch. Abides: Towards high-fidelity multi-
+agent market simulation. In Proceedings of the 2020 ACM SIGSIM Conference on
+Principles of Advanced Discrete Simulation , pages 11–22, 2020.
+[8] A. Chakraborti, I. M. Toke, M. Patriarca, and F. Abergel. Econophysics review: I.
+empirical facts. Quantitative Finance, 11(7):991–1012, 2011.
+[9] R. Cont. Empirical properties of asset returns: stylized facts and statistical issues.
+Quantitative finance, 1(2):223, 2001.
+[10] D. Efimov, D. Xu, L. Kong, A. Nefedov, and A. Anandakrishnan. Using generative
+adversarial networks to synthesize artificial financial datasets. arXiv preprint
+arXiv:2002.02271, 2020.
+[11] J. D. Farmer, P. Patelli, and I. I. Zovko. The predictive power of zero intelligence
+in financial markets. Proceedings of the National Academy of Sciences, 102(6):2254–
+2259, 2005.
+[12] D. K. Gode and S. Sunder. Allocative efficiency of markets with zero-intelligence
+traders: Market as a partial substitute for individual rationality.Journal of political
+economy, 101(1):119–137, 1993.
+[13] I. Goodfellow, J. Pouget-Abadie, M. Mirza, B. Xu, D. Warde-Farley, S. Ozair,
+A. Courville, and Y. Bengio. Generative adversarial nets. In Advances in Neural
+Information Processing Systems, volume 27, 2014.
+[14] I. Gulrajani, F. Ahmed, M. Arjovsky, V. Dumoulin, and A. Courville. Improved
+training of wasserstein gans. arXiv preprint arXiv:1704.00028, 2017.
+[15] D. Ha and J. Schmidhuber. World models, 2018.
+[16] S. Hochreiter and J. Schmidhuber. Long short-term memory. Neural computation,
+9(8):1735–1780, 1997.
+[17] M. Karpe, J. Fang, Z. Ma, and C. Wang. Multi-agent reinforcement learning in a
+realistic limit order book market simulation. arXiv preprint arXiv:2006.05574.
+[18] J. Li, X. Wang, Y. Lin, A. Sinha, and M. Wellman. Generating realistic stock market
+order streams. In Proceedings of the AAAI Conference on Artificial Intelligence ,
+volume 34, pages 727–734, 2020.
+[19] M. Lucic, K. Kurach, M. Michalski, S. Gelly, and O. Bousquet. Are gans created
+equal? a large-scale study. In Advances in Neural Information Processing Systems ,
+volume 31, 2018.
+[20] C. Macal and M. North. Tutorial on agent-based modelling and simulation.
+Journal of Simulation, 4(3):151–162, 2010.
+[21] M. Mirza and S. Osindero. Conditional generative adversarial nets, 2014.
+[22] NVIDIA. Gpu nvidia tesla v100.
+[23] I. Palit, S. Phelps, and W. L. Ng. Can a zero-intelligence plus model explain the
+stylized facts of financial time series data? In Proceedings of the 11th International
+Conference on Autonomous Agents and Multiagent Systems-Volume 2 , pages 653–
+660, 2012.
+[24] J. Paulin, A. Calinescu, and M. Wooldridge. Agent-based modeling for complex
+financial systems. IEEE Intelligent Systems, 33(2):74–82, 2018.
+[25] R. M. Sakia. The box-cox transformation technique: a review. Journal of the
+Royal Statistical Society: Series D (The Statistician) , 41(2):169–178, 1992.
+[26] T. Spooner, J. Fearnley, R. Savani, and A. Koukorinis. Market making via reinforce-
+ment learning. In Proceedings of the 17th International Conference on Autonomous
+Agents and MultiAgent Systems , pages 434–442, 2018.
+[27] S. Takahashi, Y. Chen, and K. Tanaka-Ishii. Modeling financial time-series with
+generative adversarial networks. Physica A: Statistical Mechanics and its Applica-
+tions, 527:121261, 2019.
+[28] G. The Efficient Reconstructor at Humboldt Universität zu Berlin. Lobster: Limit
+order book system.
+[29] C. Villani. Optimal transport, old and new. notes for the 2005 saint-flour summer
+school. Grundlehren der mathematischen Wissenschaften [Fundamental Principles
+of Mathematical Sciences]. Springer , 2008.
+[30] S. Vyetrenko, D. Byrd, N. Petosa, M. Mahfouz, D. Dervovic, M. Veloso, and T. H.
+Balch. Get real: Realism metrics for robust limit order book market simulations.
+In ACM International Conference on AI in Finance (ICAIF-2020) , 2020.
+[31] X. Wang and M. P. Wellman. Market manipulation: An adversarial learning
+framework for detection and evasion. In 29th International Joint Conference on
+Artificial Intelligence, 2020.
+[32] H. Wei, Y. Wang, L. Mangu, and K. Decker. Model-based reinforcement learning
+for predictions and control for limit order books, 2019.
+[33] I. Yagi, M. Hoshino, and T. Mizuta. Analysis of the impact of maker-taker fees on
+the stock market using agent-based simulation. In ACM International Conference
+on AI in Finance (ICAIF-2020) , 2020.
+[34] J. Yoon, D. Jarrett, and M. van der Schaar. Time-series generative adversarial
+networks. In H. Wallach, H. Larochelle, A. Beygelzimer, F. d'Alché-Buc, E. Fox, and
+R. Garnett, editors, Advances in Neural Information Processing Systems, volume 32.
+Curran Associates, Inc., 2019.

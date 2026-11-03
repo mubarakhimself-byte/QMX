@@ -1,0 +1,1188 @@
+arXiv 2610.03646  https://arxiv.org/abs/2610.03646
+
+When May a Bandit Leave Its Anchor?
+E-Process-Authorized Thompson Sampling under
+Non-stationarity
+Mayand Gulati1 Kerong Wang1 WeiChen Au2
+1UC Santa Barbara 2Purdue University
+Abstract
+Stationarity rewards memory, but after change the same history can mislead. We
+ask when forgetting should be permitted. E-process-authorized Thompson sam-
+pling (e-ATS) gives each arm full-history and discounted Beta states. An anytime-
+valid e-process first authorizes the discounted state, then a reversible relevance
+score controls its influence. Before authorization, e-ATS exactly follows optimistic
+Thompson sampling (OTS). Under a Beta–Bernoulli prior-predictive stationary
+model, e-ATS’s probability of ever departing from OTS is at most the chosenαE,
+without fitted thresholds. Relative to e-ATS, removing authorization increased mean
+normalized dynamic pseudo-regret by 38.4% on the registered suite but reduced it
+by 7.5% on the literature-derived replay suite. Therefore, evidence controls when
+adaptation begins, not whether it always helps.
+1 When should a bandit stop trusting its history?
+In a non-stationary bandit, history can become misleading. Existing methods discount or window
+past observations, adapt their forgetting rate, or restart learning on a schedule [1, 4, 5, 10, 13, 16].
+Detector-based methods instead wait for evidence of change [2, 3, 9]. We ask whether such evidence
+can also control the probability that a policy leaves a trusted stationary anchor.
+E-processes provide the statistical tool. Under a declared null model, an e-process crosses 1/δ with
+probability at most δ, without fixing a stopping time or horizon [6, 15, 19, 20]. E-detectors combine
+e-processes started at different times to monitor changes at unknown times [ 17]. Mixtures over
+geometrically spaced candidate change locations are also established [14, Section 4.4]. We use the
+resulting e-process threshold crossing to authorize departure. Our anchor is the Bernoulli form of
+Optimistic Bayesian Sampling [11, 18], which we call optimistic Thompson sampling (OTS). It uses
+each arm’s full-history Beta posterior. In e-ATS, the discounted posterior cannot affect an action
+before authorization, so the crossing bound also bounds departure from the anchor. Our contribution
+is a controller that translates statistical authorization into prior-predictive control of departure from
+OTS, sufficient evidence conditions under adaptive sampling, and an empirical evaluation of e-ATS,
+including authorization’s environment-dependent cost. When the anchor is trusted under the declared
+model, limiting unnecessary departures is valuable. Conservative bandits constrain reward relative to
+a baseline [21]. We constrain departure from the anchor’s trajectory.
+Setup.There are K arms and T rounds. At round t, the policy selects At. If this is arm k’s nth pull,
+its reward is Yt =X k,n ∈ {0,1}, and Nk(t) counts its pulls through round t. Our stationary model is
+Pk
+iid
+∼Beta(1,1), X k,n |P k
+ind
+∼Bernoulli(P k).(1)
+Each arm draws one probability and keeps it forever. The guarantee averages over these draws and
+does not hold separately for every fixed set of arm probabilities.
+Preprint.
+arXiv:2610.03646v1  [cs.LG]  2 Oct 2026
+2 From evidence to action
+We use this stationary model to decide when the policy may supplement its full-history anchor with
+short-memory estimates. Each arm maintains two Beta states initialized at Beta(1,1) : a full-history
+posterior that retains every reward from that arm, and a discounted short-memory pseudo-posterior.
+Each round, the short-memory counts above the prior are multiplied by γS = 0.995 before the
+played arm incorporates its reward, giving an effective memory of about 200 rounds. Evidence grants
+arm-specific authorization for the short-memory state to affect action selection, relevance measures
+continuing disagreement, and a decision weight determines its influence.
+Has the arm produced evidence against stationarity?To decide whether arm k can use its
+short-memory posterior, we construct an arm-specific e-process that compares the declared stationary
+model with models allowing for exactly one change at an unknown time.
+The change time is unknown, so we consider several candidate change-points. Candidate j places a
+possible change-point at arm-local pull sj. The candidate models the rewards through sj −1 using
+one constant Bernoulli probability and models the rewards from pull sj onward using a second
+constant probability. The two probabilities may differ. For a contiguous block of arm-local rewards
+Xk,a:b = (Xk,a, . . . , Xk,b), let Sa:b = Pbℓ=a Xk,ℓ and Fa:b =b−a+ 1−S a:b be the block’s numberof successes and failures. Under a Beta(1,1) prior, the Beta–Bernoulli marginal likelihood of the
+block is m(Xk,a:b) = B(1 +S a:b,1 +F a:b). The evidence for a split at change-point sj, relative to a
+stationary model over allnpulls, is
+L(j)k,n = m(Xk,1:sj −1)m(X k,sj :n)m(Xk,1:n) .(2)
+Every pull of an arm could be a change-point, although this would require tracking n−1 candidates
+after n pulls. Instead, we use the geometric grid s1 = 2 and sj+1 =⌈1.25s j⌉. If a change occurs
+at pull s, the most recent grid point sj ≤s lies less than 20 percent earlier. So, every possible
+change-point has a nearby candidate while only O(logn) candidates must be tracked rather than
+O(n).
+Since we do not know which candidate is closest to the actual change-point, we assign candidate
+j the fixed weight πj = 1/[j(j+ 1)] so Pj πj = 1, and let J(n) = #{j:s j ≤n} . Unreached
+candidates haveL (j)k,n = 1, and their weights sum to1/(J(n) + 1). Therefore,
+Ek,n =
+J(n)X
+j=1
+πj L(j)k,n + 1J(n) + 1 .(3)
+The arm-specific evidence process Ek,n starts at one and is a nonnegative martingale under (1).
+Arm k becomes authorized when Ek,n reaches K/αE, setting the authorization latch to C Ek,t =
+1{maxn≤Nk(t) Ek,n ≥K/α E}. The maximum keepsC Ek,t at one after its first crossing.
+Do recent rewards still disagree with the long-history model?The authorization latch records
+whether the arm’s evidence process has ever crossed its threshold. Since the latch is permanent, it
+does not indicate whether recent rewards still disagree with the long-history posterior’s predictions.
+Therefore, we maintain a relevance score for the newly arriving rewards.
+Before observing arm k’s nth reward, we record the long-history posterior’s prediction. After observ-
+ing the reward, we compute its residual from the long-history posterior’s prediction and update an
+exponentially weighted average with a memory of approximately
+√
+T arm-local pulls. We normalize
+the magnitude of this average by a corresponding scale, giving the relevance score rk,n ∈[0,1] .
+Values of relevance near zero mean little sustained disagreement, while larger values indicate per-
+sistent recent disagreement with the long-history model. Appendix A gives the exact update and
+normalization.
+2
+How strongly should the short-memory posterior influence the choice?At round t, authorization
+and current relevance form the gate
+gk,t =C Ek,t−1 ·r k,Nk(t−1), R k,t = nSk,tnSk,t +ρ , w k,t =g νk,t +ζ(1−g νk,t)gk,tRk,t,(4)
+Here, nSk,t is the amount of data retained by the short-memory posterior, ρ sets the retained-data scale,
+ν controls how strongly the weight responds to the gate, and ζ controls how retained data further
+increase the short-memory posterior’s influence. Appendix A gives their fixed values. For each arm,
+the decision weight wk,t is used to combine the two posterior draws and the two posterior means.
+The arm’s selection score is the larger of these two weighted combinations, and the policy selects the
+arm with the largest score.
+Thus, authorization determines whether adaptation is permitted, relevance gauges whether recent
+disagreement persists, and the decision weight determines how strongly the policy adapts. Before
+any arm is authorized, gk,t =w k,t = 0 for every arm, so no short-memory draw is used and e-ATS
+exactly reproduces OTS under the same long-posterior draws and tie-breaking. Appendix A gives the
+complete algorithm and update order.
+3 When the policy can depart from its anchor
+We first show that under the declared stationary model, e-ATS is unlikely to receive permission to
+depart from OTS. We then give sufficient conditions for an arm’s evidence to cross the authorization
+threshold when its rewards change.
+Let τauth be the first round where C Ek,t−1 = 1 for at least one arm, and let τdep be the first round
+where e-ATS and OTS select different arms. We couple the policies by starting them from identical
+states and giving them the same arm-specific reward sequences, policy-randomness stream, and
+tie-breaking rule.
+Theorem 1(Controlled departure).Pathwise, τdep ≥τ auth, and before τauth the two policies have
+identical actions, observed rewards, and long-posterior states. Under(1),
+P(τdep ≤T)≤P(τ auth ≤T)≤α E.(5)
+Why does the guarantee hold?For each candidate change-point, L(j)k,n is a likelihood-ratio martin-
+gale under the prior-predictive stationary model. Their fixed weighted average, Ek,n, is therefore also
+a nonnegative martingale starting at one. Adaptive arm selection does not invalidate this property
+because an arm is selected before its next reward is revealed. Ville’s inequality bounds each arm’s
+crossing probability by αE/K, and a union bound over the K arms bounds the probability of any
+authorization byα E.
+Before authorization, every gate and decision weight is zero, so the coupled policies have the same
+trajectory. A departure therefore requires an earlier e-process crossing, turning the preceding statistic
+bound into (5). The resulting thresholdK/α E requires no horizon-specific fitting.
+The departure bound averages over the Beta(1,1) probabilities drawn in (1). It does not hold
+separately for every fixed set of reward probabilities, and it certifies permission to depart rather than
+the regret or behavior afterward. Appendix B gives the formal filtration and coupling argument.
+When is the evidence sufficient for authorization?Here, we ask when an actual change can
+produce enough evidence to authorize adaptation. After n pulls, candidate change-point sj divides
+the arm’s rewards into segments of lengths n0 =s j −1 and n1 =n−s j + 1. Let bp0 and bp1 be their
+empirical means andbpthe pooled mean. Define
+Ij,n =n 0 kl(bp0∥bp) +n1 kl(bp1∥bp),
+where kl is the Kullback–Leibler divergence between Bernoulli distributions. Ij,n is the gain in
+maximized log likelihood from fitting separate reward probabilities before and after sj, instead of
+one probability to allnrewards.
+Appendix C proves
+logE k,n ≥I j,n −log((n 0 + 1)(n1 + 1))−log(j(j+ 1)).
+3
+The two penalties come from averaging the segment probabilities and weighting candidate j by
+1/[j(j+ 1)] . Theorem 3 in Appendix C gives a sufficient condition for authorization across all
+candidates and completed observation counts of one arm, even when earlier rewards determine when
+that arm is pulled. Theorem 4 gives a sharper sufficient condition when the change occurs at a fixed
+candidate and both segment lengths are chosen before seeing the rewards. Because e-ATS does not
+force exploration, neither theorem guarantees that a changed arm will be sampled enough to satisfy
+the stated condition or authorized within a fixed number of rounds.
+4 Experiments
+We report mean normalized dynamic pseudo-regret ¯RT =T −1 PTt=1(maxk µk,t −µ At,t), whereµk,t is arm k’s mean reward. Lower is better. The registered suite contains 16,380 non-stationary
+environments across nine mechanisms and 20 choices ofK and T , plus 1,820 stationary environments.
+The primary comparator, the open ramp, removes the authorization latch and lets relevance act
+immediately. Before evaluation, we chose e-ATS’s regret minus the open ramp’s regret as the primary
+contrast and required it to be below −0.0002. The replay suite compares e-ATS with 16 baselines
+across 4,500 matched runs on 606 mean trajectories from nine literature-derived environment families.
+We compare policies only within a suite. Appendix D gives the full design and results.
+In these stationary experiments, e-ATS almost never leaves its anchor.Across 1,820 stationary
+environments, only one arm was authorized in total. Mean regret was 0.01157 for e-ATS and OTS,
+versus0.02937for the open ramp.
+Table 1: Mean normalized dynamic pseudo-regret. Lower is better, and the columns use different
+evaluation suites.
+Policy Registered (16,380) Replay (4,500)
+OTS 0.0494 0.2157
+Open ramp 0.0540 0.1414
+e-ATS 0.0390 0.1530
+Certified GLR 0.0418 0.1750
+Practical GLR 0.0392 0.1529
+Authorization reduced regret on the registered suite and increased it on replay.Using the open
+ramp as the denominator, e-ATS’s regret is27.7% lower on the registered suite and 8.2% higher on
+the replay suite. On the raw scale, subtracting the open ramp’s regret from e-ATS’s gives−0.01497
+with a 95% interval of [−0.01533,−0.01461] on the registered suite and +0.01154 with an interval
+of[0.01089,0.01218]on the replay suite. Appendix D examines the reversal.
+The practical GLR is close, but its guarantee is different.We evaluate two alternatives that
+replace only e-process authorization with generalized likelihood-ratio (GLR) rules [2]. The certified
+GLR is valid for every fixed stationary Bernoulli mean, beyond our prior-predictive null. The practical
+GLR has no finite-sample guarantee. On the registered and replay suites, regret differences relative to
+e-ATS are +0.0028,+0.0221 for the certified GLR and +0.0002,−0.00006 for the practical GLR.
+Tuning the GLR separately for 20 geometries gives 0.0387 regret versus e-ATS’s 0.0390 on the
+registered suite, without an analytic guarantee. Appendix D.1 gives details.
+5 What this establishes
+Under the declared model, the probability of departure is at most αE, and expected normalized
+pseudo-regret differs from the anchor’s by at mostαE. The policy forces no exploration and has mean
+rank 9.72 among 17 replay methods. Future work should develop authorization that is restartable and
+valid for fixed means, together with non-stationary regret guarantees.
+4
+References
+[1] Omar Besbes, Yonatan Gur, and Assaf Zeevi. Optimal exploration–exploitation in a multi-armed-
+bandit problem with non-stationary rewards. InAdvances in Neural Information Processing
+Systems, volume 27, 2014.
+[2] Lilian Besson, Emilie Kaufmann, Odalric-Ambrym Maillard, and Julien Seznec. Efficient
+change-point detection for tackling piecewise-stationary bandits.Journal of Machine Learning
+Research, 23(77):1–40, 2022.
+[3] Yang Cao, Zheng Wen, Branislav Kveton, and Yao Xie. Nearly optimal adaptive procedure
+with change detection for piecewise-stationary bandit. InProceedings of the Twenty-Second
+International Conference on Artificial Intelligence and Statistics, volume 89 ofProceedings of
+Machine Learning Research, pages 418–427, 2019.
+[4] Marco Fiandri, Alberto Maria Metelli, and Francesco Trovò. Sliding-window thompson sam-
+pling for non-stationary settings.arXiv preprint arXiv:2409.05181, 2024.
+[5] Aurélien Garivier and Eric Moulines. On upper-confidence bound policies for switching bandit
+problems. InAlgorithmic Learning Theory, volume 6925 ofLecture Notes in Computer Science,
+pages 174–188. Springer, 2011. doi: 10.1007/978-3-642-24412-4_16.
+[6] Peter Grünwald, Rianne de Heide, and Wouter M. Koolen. Safe testing.Journal of the
+Royal Statistical Society Series B: Statistical Methodology, 86(5):1091–1128, 2024. doi:
+10.1093/jrsssb/qkae011.
+[7] Neha Gupta, Ole-Christoffer Granmo, and Ashok K. Agrawala. Thompson sampling for
+dynamic multi-armed bandits. In2011 10th International Conference on Machine Learning
+and Applications and Workshops, volume 1, pages 484–489. IEEE, 2011. doi: 10.1109/ICMLA.
+2011.144.
+[8] Steven R. Howard, Aaditya Ramdas, Jon McAuliffe, and Jasjeet Sekhon. Time-uniform
+Chernoff bounds via nonnegative supermartingales.Probability Surveys, 17:257–317, 2020.
+doi: 10.1214/18-PS321.
+[9] Fang Liu, Joohyun Lee, and Ness Shroff. A change-detection based framework for piecewise-
+stationary multi-armed bandit problem.Proceedings of the AAAI Conference on Artificial
+Intelligence, 32(1), 2018. doi: 10.1609/aaai.v32i1.11746.
+[10] Xue Lu, Niall Adams, and Nikolas Kantas. On adaptive estimation for dynamic bernoulli
+bandits.Foundations of Data Science, 1(2):197–225, 2019. doi: 10.3934/fods.2019009.
+[11] Benedict C. May, Nathan Korda, Anthony Lee, and David S. Leslie. Optimistic bayesian
+sampling in contextual-bandit problems.Journal of Machine Learning Research, 13(67):
+2069–2106, 2012.
+[12] Joseph Mellor and Jonathan Shapiro. Thompson sampling in switching environments with
+bayesian online change point detection. InProceedings of the 16th International Conference on
+Artificial Intelligence and Statistics, volume 31 ofProceedings of Machine Learning Research,
+pages 442–450, 2013.
+[13] Vishnu Raj and Sheetal Kalyani. Taming non-stationary bandits: A bayesian approach.arXiv
+preprint arXiv:1707.09727, 2017.
+[14] Aaditya Ramdas, Johannes Ruf, Martin Larsson, and Wouter M. Koolen. Testing exchangeabil-
+ity: Fork-convexity, supermartingales and e-processes.International Journal of Approximate
+Reasoning, 141:83–109, 2022. doi: 10.1016/j.ijar.2021.06.017.
+[15] Aaditya Ramdas, Peter Grünwald, Vladimir V ovk, and Glenn Shafer. Game-theoretic statistics
+and safe anytime-valid inference.Statistical Science, 38(4):576–601, 2023. doi: 10.1214/
+23-STS894.
+[16] Yoan Russac, Claire Vernade, and Olivier Cappé. Weighted linear bandits for non-stationary
+environments. InAdvances in Neural Information Processing Systems, volume 32, 2019.
+5
+[17] Jaehyeok Shin, Aaditya Ramdas, and Alessandro Rinaldo. E-detectors: A nonparametric
+framework for sequential change detection.The New England Journal of Statistics in Data
+Science, 2(2):229–260, 2024. doi: 10.51387/23-NEJSDS51.
+[18] William R. Thompson. On the likelihood that one unknown probability exceeds another in view
+of the evidence of two samples.Biometrika, 25(3/4):285–294, 1933.
+[19] Jean Ville.Étude critique de la notion de collectif. Gauthier-Villars, Paris, 1939.
+[20] Vladimir V ovk and Ruodu Wang. E-values: Calibration, combination, and applications.The
+Annals of Statistics, 49(3):1736–1754, 2021. doi: 10.1214/20-AOS2020.
+[21] Yifan Wu, Roshan Shariff, Tor Lattimore, and Csaba Szepesvári. Conservative bandits. InPro-
+ceedings of the 33rd International Conference on Machine Learning, volume 48 ofProceedings
+of Machine Learning Research, pages 1254–1262, 2016.
+6
+A Complete algorithm and update order
+In Section 2 we explained how evidence is converted into an action. This appendix provides the exact
+calculations and their order. At the start of round t, every policy state depends only on observations
+completed through round t−1 . The policy first scores the arms, then selects one arm and observes
+its reward, and finally updates its evidence and posterior states.
+How is recent disagreement updated?Suppose arm k is selected for the nth time and reward
+Xk,n is observed. Before updating either posterior with the new Xk,n, let bµLk,n be the mean of its
+long-history posterior. We compare the reward with this prediction and update the following:
+Mk,n =λ DMk,n−1 + (1−λ D)(Xk,n −bµLk,n),
+Qk,n =λ 2DQk,n−1 + (1−λ D)2, s Mk,n =
+s
+Qk,n
+2 log Kπ 2n23κM .(6)
+Here,
+λD = min{0.999,max{0,1−T −1/2}}.
+Here, Mk,n is an exponentially weighted average of the differences between observed rewards and
+the long-history posterior’s predictions. The measure Qk,n tracks the sum of the squared weights
+used in the average. Qk,n therefore accounts for how much reward noise remains after averaging
+and is used to form the normalization scale sMk,n. To clarify, Qk,n is not an empirical estimate of the
+residual variance. The base value λD = 1−T −1/2 makes it so that approximately the most recent√
+T observations of the arm contribute significantly to Mk,n. The minimum and maximum in the
+definition of λD restrict it to [0,0.999] for extremely short or long horizons. For the normalization
+scale sMk,n, the constant κM controls how the average prediction error is converted into relevance.
+A smaller value produces a larger sMk,n and therefore less relevance for the same value of Mk,n. A
+larger value has the opposite effect. Empirically, we setκM = 0.05 because the relevance mechanism
+inherits its prediction-error scale from an earlier version of the controller. In that construction, 0.05
+was divided across the K arms and all arm-local pull counts when determining how large a prediction
+error should be considered unusual. We have retained this scale without retuning it on the primary
+evaluation for e-ATS. The current policy uses it only to normalizer k,n.
+The relevance score is
+rk,n =1{|M k,n|> εM }min{1,|M k,n|/sMk,n}, ε M = 10−12.(7)
+Here, taking the absolute value of Mk,n allows the score to respond to reward probabilities that move
+either up or down. The cap keeps rk,n ∈[0,1] . The constant εM is used to guard against numerical
+degeneracy.
+How is an arm scored before the next reward?At the beginning of round t, arm k has long-history
+and short-memory posterior states
+Beta(αLk,t, βLk,t)andBeta(α Sk,t, βSk,t).
+Their posterior means are denoted by bµLk,t and bµSk,t. The amount of data retained above the short-
+memory posterior’s initial(1,1)state is
+nSk,t = max{αSk,t +β Sk,t −2,0}.
+Here, the maximum inn Sk,t protects against numerical roundoff.
+Equation (4) uses the current authorization latch, relevance, and retained data to compute gk,t, Rk,t,
+and wk,t. The term gνk,t gives the short-memory posterior positive influence whenever the gate is
+positive. The second term further increases the short-memory posterior’s influence as the retained-data
+factor Rk,t grows. Thus, Rk,t scales this additional contribution rather than acting as a separate gate.
+When gk,t = 0, the decision weight wk,t is zero. On the other hand, when gk,t = 1, the decision
+weightw k,t is one.
+The policy always draws
+Z Lk,t ∼Beta(α Lk,t, βLk,t).
+7
+It draws Z Sk,t ∼Beta(α Sk,t, βSk,t) only when wk,t >0 . The superscripts S and L denote the short-
+memory and long-history posteriors, respectively. The arm’s score is
+Uk,t =
+
+
+
+max{Z Lk,t,bµLk,t}, w k,t = 0,
+max
+n
+(1−w k,t)Z Lk,t +w k,tZ Sk,t,(1−w k,t)bµLk,t +w k,t bµSk,t
+o
+, w k,t >0.
+(8)
+The maximum in Uk,t preserves the optimistic clipping used by OTS. For any arm with wk,t = 0,
+the score reduces to max{Z Lk,t,bµLk,t}, which is exactly the score used by OTS. Before any arm is
+authorized, this holds for every arm, so e-ATS and OTS select the same action when given the same
+long-posterior draws. This also explicitly follows from the coupling in Theorem 1.
+How does one round proceed?Algorithm 1 gives the complete sequence of decisions and updates.
+At the beginning of each round, the policy computes every arm’s score using only rewards observed
+in earlier rounds. It then selects an arm and observes its reward. For the selected arm, the policy
+computes the prediction error using the long-history posterior mean recorded before that reward was
+observed. The policy then updates the relevance score and e-process, discounts the short-memory
+posteriors, and finally adds the new reward to the selected arm’s long- and short-memory posteriors.
+Algorithm 1E-process-authorized Thompson sampling (e-ATS)
+Require:ArmsK, horizonT,α E = 0.05,κ M = 0.05,γ S = 0.995,ν= 0.3, andζ= 0.8
+1:Setλ D = min{0.999,max{0,1−T −1/2}}
+2:Setρ= max{4,16
+p
+(T /5000)(4/K)}
+3:Sets 1 = 2,s j+1 =⌈1.25s j⌉, andπ j = 1/[j(j+ 1)]
+4:fork= 1, . . . , Kdo
+5:Set(α Lk , βLk ) = (αSk , βSk ) = (1,1)
+6:SetE k,0 = 1,C Ek = 0, andM k =Q k =r k =N k = 0
+7:end for
+8:fort= 1, . . . , Tdo
+9:fork= 1, . . . , Kdo
+10:Computebµ Lk,t,bµSk,t, andn Sk,t
+11:Computeg k,t,R k,t, andw k,t from Equation (4)
+12:DrawZ Lk,t
+13:ifw k,t >0then
+14:DrawZ Sk,t
+15:end if
+16:ComputeU k,t from Equation (8)
+17:end for
+18:SelectA t = arg maxk Uk,t using the fixed tie rule
+19:Observe rewardY t
+20:Setk=A t,n=N k + 1, andX k,n =Y t
+21:Recordbµ Lk,n ←bµLk,t
+22:UpdateM k,n,Q k,n, andr k,n from Equations (6)–(7)
+23:UpdateE k,n from Equations (2)–(3)
+24:ifE k,n ≥K/α E then
+25:SetC Ek ←1
+26:end if
+27:forℓ= 1, . . . , Kdo
+28:α Sℓ ←1 +γ S(αSℓ −1)
+29:β Sℓ ←1 +γ S(βSℓ −1)
+30:end for
+31:α Sk ←α Sk +Y t andβ Sk ←β Sk + 1−Y t
+32:α Lk ←α Lk +Y t andβ Lk ←β Lk + 1−Y t
+33:SetN k ←n
+34:end for
+8
+Since the candidate change-points lie on a geometric grid, each arm tracks only O(logT) candidates.
+This gives O(KlogT) total stored state and O(K+ log(1 +N At (t))) computation per round, where
+NAt (t)is the number of times the selected armA t has been pulled through roundt.
+Which parts of the algorithm are required for the guarantee?The controlled-departure guar-
+antee depends on the prior-predictive likelihood ratios, fixed nonnegative candidate weights, the
+weight reserved for candidates not yet reached, and the authorization threshold K/αE. The remain-
+ing constants affect how the short-memory posterior is used after authorization. They can change
+the policy’s empirical behavior, but not the e-process crossing bound. The fixed values and the
+formulas that depend on K and T were specified before the primary evaluation in Section 4. The
+same prespecified configuration was used across all registered environments and geometries, without
+environment-specific retuning after outcomes were observed. Appendix D describes the freeze and
+the separation between development and evaluation data. The primary evaluation therefore assesses
+one fixed policy specification rather than selecting the best configuration from the evaluation results.
+These constants are not claimed to be optimal.
+The experiments use the known horizon T to set λD and ρ. Experiments with an unknown horizon
+were not evaluated. Using a nominal horizon to setλD and ρ does not change the controlled-departure
+guarantee because neither constant enters the e-process or its authorization threshold. The nominal
+horizon may change behavior after authorization, and that alternative was not evaluated here. Only
+αE is an error probability.
+Algorithm 1 is the fixed specification evaluated in Section 4. Before authorization, e-ATS follows
+OTS exactly, while afterward the permanent latch permits adaptation and the relevance score controls
+how strongly the short-memory posterior affects arm selection.
+B Proof of controlled departure
+Theorem 1 combines a statistical result with an algorithmic one. We first show that each arm’s
+evidence remains a martingale when the policy chooses arms. We then bound the probability that
+any arm becomes authorized. Finally, we show that e-ATS’s trajectory cannot depart from OTS’s
+trajectory before such an authorization.
+Why is the arm-specific evidence a martingale?For armk, let
+Hk,n =σ(X k,1, . . . , Xk,n)
+contain its first n observed rewards. Under the prior-predictive stationary model in Equation (1),
+m(Xk,1:n) is the probability assigned to this reward sequence by one unknown Bernoulli probability.
+As described in Section 2, candidate change-point sj marks a possible boundary between two periods
+in arm k’s reward sequence. Rewards before sj use one constant Bernoulli probability, while rewards
+from sj onward use a second probability that may differ. Considering several candidate change-points
+allows the evidence process to look for departures from stationarity without knowing when a change
+occurred. The numerator of Equation (2) assigns independent Beta(1,1) priors to the probabilities
+before and afters j.
+For arm k after its first n rewards have been observed, L(j)k,n is the likelihood ratio comparing change-
+point candidate j, which places a change at arm-local pull sj, with the stationary model over those
+same n rewards. Before pull sj, the proposed change has not occurred, so the two models assign the
+same probability andL (j)k,n = 1. Under the stationary model,
+E
+h
+L(j)k,n | Hk,n−1
+i
+=L (j)k,n−1.
+Therefore, each candidate’s evidence is a nonnegative martingale starting at one.
+Candidates whose proposed change-points have not yet been reached remain at one. Equation (3) can
+consequently be written as
+Ek,n =
+X
+j≥1
+πjL(j)k,n.
+9
+Here, πj = 1/[j(j+ 1)] is the weight assigned to candidate j and determines how much candidate
+change-point sj contributes to Ek,n. The sequence (πj)j≥1 is nonnegative and sums to one. Since
+every term is nonnegative, conditional monotone convergence gives
+E[Ek,n | Hk,n−1] =
+X
+j≥1
+πjE
+h
+L(j)k,n | Hk,n−1
+i
+=E k,n−1.
+Hence, Ek,n is also a nonnegative martingale starting at one. The final term 1/(J(n) + 1) in
+Equation (3) is exactly the combined weight of the candidate change-points not yet reached.
+Why does adaptive arm selection preserve this property?Fix an arm k. Let At denote the arm
+selected by the policy in calendar round t. So, the evidence for arm k is updated in that round only
+whenA t =k.
+Let Ut denote all posterior samples drawn while the policy scores the arms in round t. This includes
+one long-history posterior sample for every arm and a short-memory posterior sample for each arm
+with wk,t >0 . Conditional on Ft−1, these samples are generated using fresh policy randomness and
+reveal no information about any arm’s next unrevealed reward.
+Define
+Ft−1 =σ(U 1, A1, Y1, . . . , Ut−1, At−1, Yt−1),
+where F0 represents the empty history before round one. Therefore, Ft−1 contains everything
+revealed through the end of round t−1 . After the samples in Ut are drawn and arm At is selected,
+but before its reward is observed, the available information is
+Gt =F t−1 ∨σ(U t, At).
+The selected arm then produces reward
+Yt =X At,NAt (t),
+where NAt (t) is the number of times that arm has been pulled through round t. After this reward is
+observed, the available information is
+Ft =G t ∨σ(Y t).
+Therefore,A t is selected using only information available beforeY t is revealed.
+For each arm, define its calendar-time evidence by
+eEk,t =E k,Nk(t).
+Its update can therefore be written as
+eEk,t = eEk,t−1 +1{A t =k}  Ek,Nk(t−1)+1 −E k,Nk(t−1) .
+If arm k is not selected, its evidence does not change. On the other hand, if it is selected, the next
+reward has the prior-predictive distribution determined by that arm’s observed history. The histories
+of the other arms and the independent policy randomness reveal no additional information about this
+unseen reward. Therefore,
+E
+h
+eEk,t | Gt
+i
+= eEk,t−1.
+Taking the conditional expectation again givenFt−1 shows that eEk,t remains a nonnegative martingale
+in calendar time.
+Ville’s inequality now gives, for each arm,
+P
+
+max
+t≤T
+eEk,t ≥K/α E
+
+≤ αE
+K .
+A union bound over theKarms then gives
+P
+
+max
+k≤K
+max
+t≤T
+eEk,t ≥K/α E
+
+≤
+KX
+k=1
+αE
+K =α E.
+10
+Why can departure occur only after authorization?This final step is pathwise and does not
+require the stationary model. We couple e-ATS and OTS from identical initial states using the same
+arm-specific reward sequences, policy-randomness stream, and tie-breaking rule.
+Before τauth, every authorization latch is zero. Equation (4) then gives gk,t =w k,t = 0 for every
+arm. By Equation (8), e-ATS draws no short-memory samples and computes exactly the same scores
+as OTS. The two policies therefore select the same arm, observe the same reward, and make the same
+long-posterior update. Repeating this argument across rounds gives identical actions, rewards, and
+long-posterior states through every round beforeτ auth.
+At round τauth, the authorization latch is active, yet the policies need not differ in their trajectories. It
+may be that the relevance score is still zero, or the modified scores have the same maximizing arm.
+Hence, pathwise,
+τdep ≥τ auth.
+An authorization latch can become active only after an arm’s evidence has crossed K/αE on a
+completed update. Taking all this together,
+{τdep ≤T} ⊆ {τauth ≤T} ⊆
+
+max
+k≤K
+max
+t≤T
+eEk,t ≥K/α E
+
+.
+Combining this pathwise inclusion with the preceding probability bound gives
+P(τdep ≤T)≤P(τ auth ≤T)≤α E,
+which proves Theorem 1.
+What does the departure bound transfer?Let H eT and H aT denote the coupled histories of e-ATS
+and OTS, including their actions, observed rewards, and shared latent means. Let L(HT )∈[0,1] be
+any measurable function of a policy trajectory, such as normalized dynamic pseudo-regret. Applying
+the same function to the coupled e-ATS and OTS trajectories gives
+|E0L(H eT )−E 0L(H aT )| ≤P0(τdep ≤T)≤α E.
+This includes normalized dynamic pseudo-regret under the declared model. To clarify, this bound may
+be loose and provides no guarantee after conditioning on departure or outside the declared model.
+C Evidence strength and authorization
+For each arm k∈ {1, . . . , K}, Section 2 defines the candidate-specific evidence L(j)k,n and the arm-
+specific e-process Ek,n after n pulls. This appendix answers three questions. How much evidence
+does one candidate provide? How many observations can be sufficient for authorization after a
+change? Does the authorization latch materially affect the controller? All observation counts in this
+section are local to one arm.
+How much evidence does one candidate provide?Recall that j indexes the candidate change-
+points. Candidate j models the rewards through arm-local pull sj −1 using one constant Bernoulli
+success probability and the rewards from pull sj onward using a second probability that may be
+different from the first. So,sj places the proposed change between pullssj −1 and sj. For a candidate
+withs j ≤n, let
+n0 =s j −1, n 1 =n−n 0
+be the segment lengths, and let S0 and S1 be their success counts. Their empirical means and pooled
+mean are
+bp0 = S0n0 ,bp 1 = S1n1 ,bp= S0 +S 1n .
+Define
+Ij,n =n 0 kl(bp0∥bp) +n1 kl(bp1∥bp),
+where
+kl(p∥q) =plog pq + (1−p) log 1−p1−q
+11
+is the Kullback–Leibler divergence between Bernoulli distributions, with the usual boundary conven-
+tions. The quantity Ij,n is the gain in maximized log likelihood from fitting one Bernoulli success
+probability to rewards Xk,1:sj −1 and another probability to rewards Xk,sj :n. This is instead of fitting
+one common probability to allnobserved rewards.
+Before stating the result, recall that
+πj = 1j(j+ 1)
+is the weight assigned to candidate change-point j. The user-chosen level αE determines the autho-
+rization thresholdK/α E.
+For the capacity statement, fix candidatejand let
+ℓ=s j −1
+be the number of rewards observed before its proposed change-point. Suppose theseℓ rewards contain
+S successes and ℓ−S failures. As the arm continues to be sampled, suppose the empirical success
+rate of its rewards from pull sj onward converges to θ1 ∈(0,1) . Thus, θ1 is the limiting success rate
+after the candidate change-point. We will continue to useBfor the beta function.
+Theorem 2(Evidence lower bound and candidate capacity).For every candidates j ≤n,
+logE k,n ≥I j,n −log((n 0 + 1)(n1 + 1))−log(j(j+ 1)).(9)
+For the fixed candidate described above, if the arm continues to be sampled, then
+L(j)k,ℓ+m − →B(S+ 1, ℓ−S+ 1)θS1 (1−θ 1)ℓ−S asm→ ∞.(10)
+We call the limiting weighted evidence of candidatej, scaled byα E, its capacity:
+Capj =α Eπj
+B(S+ 1, ℓ−S+ 1)
+θS1 (1−θ 1)ℓ−S .
+IfCap j > K, candidatejeventually authorizes the arm.
+In Equation (10), the powers S and ℓ−S are the numbers of successes and failures observed before
+the proposed change. As a consequence, θS1 (1−θ 1)ℓ−S is the likelihood that a Bernoulli model
+with success probability θ1 assigns to the observed pre-change sequence with S successes and ℓ−S
+failures. The quantity Capj includes the candidate weight πj and the authorization level αE. So,
+the condition Capj > K is equivalent to the limiting contribution of candidate j exceeding the
+authorization thresholdK/α E.
+Why does the bound hold?For a consecutive block of h≥1 binary rewards from one arm, let
+s be the number of successes and let bp=s/h be the empirical success rate. The likelihood of the
+observed block is maximized atbp, giving
+bps(1−bp)h−s.
+Under a Beta(1,1) prior, averaging the same likelihood over the unknown success probability gives
+B(s+ 1, h−s+ 1) =
+Z 1
+0
+ps(1−p) h−s dp.
+We call the difference between these two log likelihoods the redundancy:
+red(h, s) = log bps(1−bp)h−s
+B(s+ 1, h−s+ 1) .(11)
+Redundancy is the cost of averaging over the unknown success probability rather than fitting that
+probability after observing the block. The endpoint cases s= 0 and s=h are interpreted by
+continuity, using0 0 = 1. Since
+exp{red(h, s)}= (h+ 1) Pr
+bp
+{Bin(h,bp) =s},
+12
+we get
+0≤red(h, s)≤log(h+ 1).(12)
+WritingS=S 0 +S 1, direct substitution into Equation (2) gives
+logL (j)k,n =I j,n −red(n 0, S0)−red(n 1, S1) + red(n, S).(13)
+SinceE k,n ≥π jL(j)k,n andπ j = 1/[j(j+ 1)], Equation (12) gives Equation (9).
+We next prove the limiting value in Equation(10). After the fixed prefix of ℓ rewards, let Rm be the
+number of successes among the nextmrewards. Then
+L(j)k,ℓ+m = B(S+ 1, ℓ−S+ 1) B(Rm + 1, m−Rm + 1)B(S+R m + 1, ℓ−S+m−R m + 1).
+The beta function satisfies
+B(a, b) =Γ(a)Γ(b)Γ(a+b) ,
+where Γ is the gamma function and Γ(q+ 1) =q! for every nonnegative integer q. If Rm/m→θ 1,
+substituting this identity into the preceding expression and applying the asymptotic relation
+Γ(x+a)
+Γ(x+b) ∼x a−b asx→ ∞
+gives Equation (10). When Capj > K, the limiting value of πjL(j)k,ℓ+m exceeds K/αE, which forces
+authorization.
+So, a fixed candidate has a finite evidence capacity determined by the rewards before its proposed
+change-point and the limiting success rate afterward. The condition Capj > Kguarantees eventual
+authorization when the arm continues to be sampled. The converse does not hold because several
+candidates may combine to cross the threshold, and a candidate may cross temporarily before settling
+below it.
+How does capacity change with more observations before the proposed split?Consider a
+sequence of experiments indexed by j, where experiment j’s change occurs after ℓj =s j −1
+observations. Suppose its prefix contains Sj successes, Sj/ℓj →θ 0, and its post-change empirical
+mean converges toθ 1, whereθ 0, θ1 ∈(0,1). From Equation (11),
+log Capj =ℓ j kl(Sj/ℓj∥θ1)−red(ℓ j, Sj) + logα E −log(j(j+ 1)).
+Since 0≤red(ℓ j, Sj)≤log(ℓ j + 1) and the grid grows geometrically, log(j(j+ 1))/ℓ j →0 .
+Therefore,
+1
+ℓj
+log Capj − →kl(θ0∥θ1).
+When θ0 ̸=θ 1, capacity therefore grows exponentially with prefix length at rate kl(θ0∥θ1). This
+characterizes the candidate’s eventual evidence strength after continued sampling. Before convergence,
+its evidence may temporarily exceed this limit.
+Does the condition still hold when sampling depends on earlier rewards?The policy may use
+earlier rewards to decide when to pull an arm. We therefore need a condition that remains valid when
+the observation times depend on those earlier rewards. The idea is the same as in Section 3 where a
+difference between the two segments of one arm’s observed reward sequence must be large enough to
+overcome sampling noise and the evidence penalties.
+Fix an arm k and an allowed failure probability ξ∈(0,1) before observing the rewards. As in
+Appendix B, Gt records all past arm selections, observed rewards and policy randomization, together
+with the current randomization and selected arm At, before reward Yt is observed. Once reward Yt is
+observed,F t contains all information inG t as well as rewardY t. On rounds whenA t =k, let
+µk,t =P(Y t = 1| Gt).
+So, µk,t is the reward’s conditional success probability given the information available before it is
+observed. The policy does not need to know its value. For arm k’s ith observed reward, let µi denote
+this probability immediately before that reward is observed.
+13
+Let n be the number of rewards observed from arm k. Candidate j divides its observations into
+the same two segments used above, with n0 =s j −1 observations before the candidate and
+n1 =n−s j + 1 observations from the candidate onward. To clarify, these are counts of observed
+rewards, not calendar rounds. Define the difference between the two segments’ average conditional
+success probabilities by
+Dj,n =
+ 1n0 n0Xi=1 µi − 1n1 nXi=n0+1 µi .
+This is a difference in the reward means under the assumed model, rather than the empirical difference
+calculated from the rewards.
+To allow for sampling noise in both segments, let the margin be
+aj,n =
+s
+log(4j(j+ 1)/ξ)
+2n0
++
+s
+log(4j(j+ 1)n 1(n1 + 1)/ξ)
+2n1
+.
+The first term bounds the error in the first segment’s empirical mean, while the second term does the
+same for the second segment. The factor j(j+ 1) accounts for checking every candidate location.
+The additional factor n1(n1 + 1) accounts for checking each candidate again as more rewards are
+collected. Therefore, one event of probability at least 1−ξ controls both errors for every completed
+split. On the event where both sampling errors satisfy their bounds, the absolute difference between
+the two empirical reward means is at leastmax{D j,n −a j,n,0}.
+Theorem 3(Sufficient evidence under adaptive sampling).For the fixed arm k, let Nk(t) count
+the rewards observed from that arm through round t. Under the conditional reward law above,
+with probability at least 1−ξ , simultaneously for every candidate j and every observation count
+sj ≤n≤N k(T), the condition
+2 n0n1
+n0 +n 1
+(Dj,n −a j,n)2+ ≥log(K/α E) + log(j(j+ 1))
++ log(n0 + 1) + log(n1 + 1)
+(14)
+implies Ek,n ≥K/α E. Consequently, arm k is authorized by the end of the round in which its nth
+reward is observed. The probability includes both the rewards and the policy’s randomization.
+Proof. First, we bound sampling noise for a block of observations even when the policy chooses
+when to collect them. Fix integers u≥0 and h≥1 . The block consists of arm k’s next h rewards
+after its firstuobservations, namely observationsu+ 1, . . . , u+h. Let
+It =1{A t =k, u≤N k(t−1)< u+h}
+indicate whether round t contributes a reward to this block. This is determined before Yt is observed.
+Write
+Zt =
+tX
+r=1
+Ir(Yr −µ k,r), V t =
+tX
+r=1
+Ir
+for the block’s accumulated deviation from its conditional means and its number of observations
+through round t. For these sums, set µk,r = 0 when Ar ̸=k ; those rounds have Ir = 0 and contribute
+nothing. Once the block is complete,V t =hand both sums stop changing.
+For any fixedλ∈R, conditional Hoeffding’s lemma gives
+E
+
+exp{λIt(Yt −µ k,t)−λ 2It/8} | Gt ≤1.
+So, a selected reward lies in [0,1] and has conditional mean µk,t. When It = 0, the exponential
+equals one. It follows, by taking conditional expectation again givenF t−1, that
+Mt(λ) = exp{λZt −λ 2Vt/8}
+is a nonnegative supermartingale starting at one. This is the standard argument for bounded observa-
+tions [8].
+If the block completes with Zt ≥ha for some fixed a >0 , then Mt(4a)≥exp(2ha 2). Ville’s
+inequality bounds the probability of this event by exp(−2ha2). Using λ=−4a gives the same
+bound forZ t ≤ −ha. Therefore,
+P(∃t≤T:V t =h,|Z t| ≥ha)≤2 exp(−2ha2).(15)
+14
+This bounds the joint event that the block completes and its average deviation is large. If the policy
+never finishes the block, the event does not occur.
+Apply this bound to each candidate’s first segment with u= 0 and h=n 0, using the first term of
+aj,n as a. The failure probability is at most ξ/[2j(j+ 1)] . For its second segment, take u=n 0 and
+h=n 1, using the second term as a. The failure probability is at most ξ/[2j(j+ 1)n 1(n1 + 1)]. For
+a fixed candidate, the first segment always contains the same observations. So, its failure probability
+is counted only once in the union bound, even as additional observations extend the second segment.
+Since Pj≥1 1/[j(j+ 1)] = 1 , and the same identity holds when summing over n1 ≥1 , a union
+bound gives total failure probability at most
+X
+j≥1
+ξ
+2j(j+ 1) +
+X
+j≥1
+X
+n1≥1
+ξ
+2j(j+ 1)n 1(n1 + 1) =ξ.
+With probability at least 1−ξ , both empirical means satisfy their stated error bounds at every
+completed split. We now show that whenever all these bounds hold, the proposed condition implies
+authorization. Writing these empirical means asbp0 andbp1, the triangle inequality gives
+|bp0 −bp1| ≥(Dj,n −a j,n)+.
+Letbp= (n0 bp0 +n 1 bp1)/(n0 +n 1)be their pooled mean. Pinsker’s inequality then gives us
+Ij,n =n 0 kl(bp0∥bp) +n1 kl(bp1∥bp)
+≥2n 0(bp0 −bp)2 + 2n1(bp1 −bp)2
+= 2 n0n1
+n0 +n 1
+(bp0 −bp1)2
+≥2 n0n1
+n0 +n 1
+(Dj,n −a j,n)2+.
+Finally, Equation (9) yields
+logE k,n ≥I j,n −log(n 0 + 1)−log(n 1 + 1)−log(j(j+ 1)).
+If Equation (14) holds, the preceding inequalities give
+logE k,n ≥log(K/α E),and thereforeE k,n ≥K/α E.
+By the definition of the authorization latch, arm k is therefore authorized by the end of the round in
+which itsnth reward is observed.
+The union bound shows that, with probability at least 1−ξ , all the sampling-error bounds used above
+hold together for every candidate and every observation count completed by roundT . Whenever these
+bounds hold, Equation (14) implies authorization for every candidate and completed observation
+count that satisfies it. This proves the simultaneous guarantee.
+What does this condition guarantee?The theorem gives a condition under which one arm’s
+observed rewards are enough for authorization. For the theorem, only the means in Dj,n are used
+for the analysis. The policy computes its evidence directly from the observed rewards. Since e-ATS
+may not pull the arm enough, the theorem does not guarantee authorization or bound the number of
+rounds needed for authorization.
+With probability at least 1−ξ , every candidate split and completed observation count of the fixed
+arm that satisfies the sufficient condition also satisfies Ek,n ≥K/α E, implying authorization. To
+give the same guarantee across all arms, we would divide ξ among them. To clarify, the separate
+parameter αE bounds the probability of leaving the anchor under the stationary model in Theorem 1.
+Theorem 3 is stated in arm-local observation time. We next connect it to a change that occurs at a
+calendar round and falls between candidate locations on the geometric grid.
+Suppose arm k’s conditional mean changes from fixed θ0 to fixed θ1 after calendar round τ. By then,
+the arm has been observed ℓ=N k(τ)≥1 times. Let q=s j −1≤ℓ be the largest preceding
+candidate and write d=ℓ−q . After m post-change observations, the candidate’s two segments have
+lengthsn 0 =qandn 1 =d+m, withn=q+d+m. Therefore,
+Dj,n = md+m |θ1 −θ 0|.
+15
+The d pre-change observations in the second segment dilute the visible change by the factor m/(d+
+m). The actual change occurs between arm-local observations ℓ and ℓ+ 1 . Since sj =q+ 1 is the
+last grid point at or before this change, the next grid point satisfies sj+1 > ℓ+ 1. Using the grid
+recurrences j+1 =⌈1.25s j⌉,
+sj+1 =⌈1.25(q+ 1)⌉> ℓ+ 1
+implies
+1.25(q+ 1)> ℓ+ 1,and hence5q >4ℓ−1.
+Sinceqandℓare integers,5q≥4ℓ. Therefore,
+q≥ 4ℓ5 , d=ℓ−q≤ j q4 k .
+So, at most q/4 pre-change observations fall in the candidate’s second segment. Because Theorem 3
+holds simultaneously over all completed observation counts, the random value ofℓ created by adaptive
+sampling does not require conditioning.
+The resulting certificate is rather conservative. For K= 4 , αE =ξ= 0.05 , and a change of size 0.5,
+the preceding candidate first satisfies (14) after m= 479 post-change observations when ℓ= 1000
+and after m= 755 when ℓ= 300 . When ℓ= 100 , it never holds because its left side is at most
+13.3864, below the right side’s minimum of 16.7283. These are thresholds for a sufficient condition,
+but not observed detection delays. Note that authorization may occur even when the condition fails,
+and the policy may not collect enough observations for the condition to apply.
+When can we use a sharper condition?When the candidate and both segment lengths are fixed
+before observing rewards, and the change occurs at that candidate, we need to control sampling error
+for only two fixed segments. This therefore yields a sharper sufficient condition.
+Theorem 4(Finite-sample authorization after an aligned change).Fix candidate j and an integer
+m≥1 before observing the rewards, and letℓ=s j −1 . Suppose Xk,1, . . . , Xk,ℓ+m are independent,
+with the first ℓ rewards distributed as Bernoulli(θ0) and the next m as Bernoulli(θ1). For ξ∈(0,1) ,
+define
+aℓ =
+r
+log(4/ξ)
+2ℓ , a m =
+r
+log(4/ξ)
+2m ,∆ =|θ 1 −θ 0|.
+If
+2 ℓmℓ+m (∆−a ℓ −a m)2+ ≥log(K/α E) + log(j(j+ 1)) + log(ℓ+ 1) + log(m+ 1),(16)
+where(x) + = max{x,0}, then
+Pr
+θ0→θ1
+{Ek,ℓ+m ≥K/α E} ≥1−ξ.
+Under the same condition, for any policy that chooses which arm to pull using only past observations
+and its own randomization, and eacht≤T,
+Pr
+θ0→θ1
+
+Nk(t)≥ℓ+m, C Ek,t = 0	 ≤ξ.
+Why does the condition work?The sufficient condition in Theorem 4, stated in Equation (16),
+works through three steps. It first shows that the change remains visible despite sampling noise, then
+converts the observed difference into evidence, and finally shows that this evidence is large enough to
+cross the authorization threshold. First, let bp0 and bp1 be the empirical success rates before and after
+the change. Hoeffding’s inequality bounds how far each empirical rate can be from its true probability.
+Applying it to both segments and taking a union bound gives, with probability at least1−ξ,
+|bp0 −θ 0| ≤aℓ,|bp 1 −θ 1| ≤am.
+Since the true probabilities differ by∆, these two bounds imply
+|bp1 −bp0| ≥(∆−aℓ −a m)+.
+Second, this observed difference must produce enough evidence against a common reward probability.
+Pinsker’s inequality converts the difference between the two empirical rates into a lower bound
+Ij,ℓ+m ≥2 ℓmℓ+m |bp1 −bp0|2.
+16
+As the final step, the evidence must remain above the authorization threshold after the candidate and
+averaging costs are subtracted. Equations (16) and (9) give
+logE k,ℓ+m ≥log(K/α E),
+so Ek,ℓ+m ≥K/α E. Since the preceding sampling bounds hold with probability at least 1−ξ , we
+get
+Pr
+θ0→θ1
+{Ek,ℓ+m ≥K/α E} ≥1−ξ.
+To obtain the allocation rule, note that, pathwise,
+
+Nk(t)≥ℓ+m, C Ek,t = 0	 ⊆ {Ek,ℓ+m < K/αE}.
+Therefore, if the arm has completed observation ℓ+m and its evidence crossed at that update, the
+permanent latch cannot still be at zero. The event on the right depends only on the fixed first ℓ+m
+entries of the arm’s reward sequence. Its probability is at most ξ, regardless of when the allocation
+rule reveals those entries. To clarify, this is not a bound conditional on the observed pull count. This
+proves Theorem 4.
+Does the authorization latch affect the controller?To isolate the latch’s role, compare e-ATS
+with a version that sets C Ek,t = 1 for every arm and round while leaving the rest of the controller
+unchanged. Recall that rk,n measures recent disagreement with the long-history model, while wk,t
+determines how strongly the short-memory posterior influences the arm’s score.
+Proposition 5(Authorization changes the controller).Let A1 be the arm selected in round one. For
+T≥2 , its first reward produces rA1,1 >0 , whether that reward is zero or one. The comparison
+without authorization therefore has wA1,2 >0 . In e-ATS, no arm can yet be authorized, so wk,2 = 0
+for every arm and the round-two scoring rule is exactly that of OTS.
+More generally, consider an authorized arm k in round t and let n=N k(t−1) . Holding its
+normalization scale sMk,n and retained-data factor Rk,t fixed, the decision weight wk,t increases
+strictly with the magnitude of its averaged prediction error,|Mk,n|, whenever
+εM <|M k,n|< sMk,n.
+Why does the difference appear after one reward?Let d= 1−λ D be the weight placed on
+the newest prediction error. The cap λD ≤0.999 ensures that d≥10 −3. Before its first reward, the
+selected arm A1 has a long-history posterior mean of 1/2. Either possible reward therefore produces
+an error of magnitude1/2, giving
+|MA1,1|= d2 , Q A1,1 =d 2, r A1,1 = 1p2 log(Kπ2/(3κM )) >0.
+As defined in Appendix A, κM = 0.05 is the fixed normalization constant used in sMk,n. It determines
+how the averaged prediction error is converted into relevance.
+The first candidate change-point is s1 = 2, so no candidate has been reached after only one pull of
+the arm. Its evidence therefore remains EA1,1 = 1< K/α E, and the authorization latch remains
+zero. In the comparison without authorization, the latch is instead fixed at one. Sincer A1,1 >0, the
+round-two gate satisfies gA1,2 =r A1,1 >0 , which in turn gives wA1,2 >0 . In e-ATS, the gate and
+decision weight remain zero.
+We next prove the monotonicity claim. Recall that g=C Er is the arm’s gate. As defined in
+Appendix A, the quantity gν is a transformation of the same gate used in the decision weight. Since
+ν= 0.3<1, it magnifies values between zero and one while preserving the endpoints.
+For fixedR∈[0,1], letc=ζRand write the decision weight as
+ω(g) =g ν +cg(1−g ν).
+Since0≤c≤ζ= 0.8<1, forg∈(0,1],
+ω′(g) =νg ν−1(1−cg) +c(1−g ν)>0.
+For an authorized arm, C E = 1 and hence g=r . Before relevance reaches its cap, r=|M|/s M .
+So, when sM and R are held fixed, the decision weight increases strictly with |M|. This proves
+17
+that authorization changes the controller. It need not change the selected arm on every trajectory or
+improve regret universally.
+Together, these results characterize how much evidence a candidate can provide, when that evidence
+is sufficient for authorization, and how the latch changes the controller. The authorization conditions
+presented only concern information from the observations collected from an arm. Theorem 3 allows
+their timing to depend on earlier rewards, while Theorem 4 gives a sharper bound under its fixed-
+prefix, aligned-change assumptions. Neither result guarantees that a changed arm will be sampled
+enough to obtain authorization by a specified calendar round.
+D Experimental design and additional results
+Section 4 reports the main empirical findings. This appendix explains how the environments change
+across geometries, gives the complete gate comparison, and reports the comparison with baselines
+from the literature.
+We use two suites because they answer different questions. The registered suite was designed to
+measure the contribution of authorization across a broad range of arm counts and horizons. The
+registered suite follows a protocol fixed before the primary evaluation. The replay suite was assembled
+from non-stationary bandit families used in our earlier baseline study and is used to compare e-ATS
+with established methods. We later repeated the gate comparison on the replay suite to test whether
+the registered result transferred to that different population.
+Table 2: Roles of the two experimental suites. The suites use different environment generators, so
+regret levels should not be compared across rows.
+Suite Primary purpose Geometries Evaluation groups
+Registered Contribution of authorization
+across scale
+K∈ {4,8,16,32,64}and
+B=T /K∈
+{250,625,1250,2500}
+16,380
+non-stationary and
+1,820 stationary
+Replay Comparison with baselines from
+the literature and a locked gate
+transfer
+(K, T) = (4,2500)and
+(32,20000), both with
+B= 625
+4,500 non-stationary
+For arm k at round t, let µk,t be its Bernoulli reward probability and let At be the selected arm. We
+measure normalized dynamic pseudo-regret,
+¯RT = 1T
+TX
+t=1
+
+max
+k
+µk,t −µ At,t
+
+.
+A mean trajectory is the complete table of Bernoulli reward probabilities {µk,t} for every arm and
+round. A potential-reward table contains the corresponding binary reward that each arm would
+produce if selected in each round. A policy observes only the entry for the arm it actually selects.
+A geometry specifies the number of arms K and horizon T , with B=T /K denoting the nominal
+rounds available per arm. The initial policy seed initializes the random-number stream used for
+posterior sampling.
+An experimental group fixes one mean trajectory, one potential-reward table, one geometry, and one
+initial policy seed. The compared policies share these inputs, so their regret difference forms a paired
+contrast. For gate comparisons, we report
+∆(c) = ¯RT (c)− ¯RT (e-ATS).
+Positive values favor e-ATS, while negative values favor comparatorc. Lower regret is always better.
+D.1 What does authorization contribute?
+How is the registered suite constructed?The suite crosses nine non-stationary mechanisms with
+20 geometries. Stationarity forms a tenth mechanism used for the stationary comparison. Table 3
+18
+Table 3: Non-stationary mechanisms in the registered suite.
+Mechanism Mean-trajectory construction
+Isolated incumbent decrease The leading arm drops once past an unchanged comparison arm
+Isolated challenger increase A trailing arm rises once past an unchanged comparison arm
+Sparse sustained shock A small subset of arms drops once and remains lower for the rest of the horizon
+Random breakpoints Two to five breakpoints change one arm at a time, alternating direction
+Global switching Across two to six equal segments, the arm means are cyclically reassigned
+Rapid dense switching Every arm changes at each of many closely spaced breakpoints
+Abrupt change and drift All arms drift smoothly, and a subset also undergoes one abrupt decrease
+Asynchronous per-arm switching Arms change once at different times, with shifts alternating in direction
+Gradual drift All arm means vary smoothly along sinusoidal paths
+Figure 1: One frozen registered-suite environment for each non-stationary mechanism at K= 4 ,
+B= 625 , and T= 2,500 . Blue, coral, green, and purple identify arms 1–4 across panels using the
+palette of Figure 3. The dashed black line is the instantaneous oracle mean. Within this atlas, color
+identifies arm number only and does not encode an arm’s role.
+19
+summarizes the nine non-stationary mechanisms, while Figure 1 shows one frozen four-arm example
+from each.
+Each mechanism and geometry contains 91 randomly generated environments and 27 fixed stress
+environments. The stress environments use prespecified boundary settings of the generator parameters
+rather than randomly sampled settings. The primary regret analysis uses the random environments,
+giving9×20×91 = 16,380non-stationary groups and1×20×91 = 1,820stationary groups.
+The fixed environments form a separate census of 5,400 groups and are not used for the primary mean
+or confidence interval. The pooled contrast across their 4,860 non-stationary groups was instead used
+as a predeclared breadth check. Development, validation, and evaluation used disjoint environments
+and potential-reward tables.
+How does an environment change with K and T ?The K= 4 environments illustrate each
+mechanism but are not copied into the larger geometries. At every K, the generator creates a new
+K-arm mean trajectory from a deterministic evaluation seed. The horizon is T=KB , so increasing
+K at fixed B increases the total horizon while retaining the same nominal number of rounds per arm.
+For mechanisms with discrete changes, the round at which each reward probability changes is
+specified as a fraction of T . At larger geometries, the generator creates new trajectories under
+the same mechanism rules. Discrete changes are located relative to the horizon through t/T , and
+mechanisms designed to change one arm continue to affect only one arm.
+Does authorization help on the registered suite?Removing only the authorization latch gives
+the open-ramp policy, gk,t =r k,Nk(t−1). The short-memory posterior is then eligible to influence
+decisions as soon as its relevance becomes positive.
+We chose this comparison to isolate the contribution of authorization. The two policies are otherwise
+identical, but the open ramp allows the relevance score to act without first requiring an e-process
+crossing. We fixed this comparison and its margin before examining the evaluation results. The
+margin was cleared only if the lower one-sided 95% confidence bound for ∆(open ramp) exceeded
+0.0002. We formed this bound by resampling environments within each mechanism and geometry
+and recomputing the paired regret difference.
+Across the 16,380 random non-stationary groups, mean regret was 0.0390 for e-ATS and 0.0540 for
+the open ramp. The paired contrast was
+∆(open ramp) = 0.01497,95% CI = [0.01461,0.01533],
+which clears the predeclared margin. All nine mechanism means favored e-ATS, with contrasts from
+0.00164 to 0.02460. All four rounds-per-arm means also favored e-ATS, with contrasts from0.01282
+to0.01658. The fixed stress census had the same pooled ordering.
+The result changes with arm count. The left panel of Figure 3 shows that the open ramp was lower at
+K= 4 , while e-ATS was lower at everyK≥8 . The registered contrast increased from −0.00289
+at K= 4 to 0.03860 at K= 64 . Authorization therefore helped on average and in four of the five
+arm-count rows, but not in every registered geometry.
+What happens when the arms are stationary?Only the registered suite contains stationary regret
+experiments. In these environments, every arm’s reward probability remains fixed throughout the
+horizon, although its binary rewards still vary. Across the 1,820 random stationary groups, mean regret
+was 0.0115697 for e-ATS and 0.0115673 for OTS. Both round to 0.01157. During these experiments,
+e-ATS authorized exactly one arm. The open ramp had mean regret0.02937, about two and a half
+times that of either policy.
+Separate from both experimental suites, we also examined how often any arm crossed the authorization
+threshold under the prior-predictive null of Theorem 1. We used three (K, T)settings: (4,2500) ,
+(32,20000) , and (8,50000) , each with 4,000 runs. In every run, each arm’s reward probability was
+drawn independently from Beta(1,1) and then fixed. At least one arm crossed the authorization
+threshold in4of the4,000runs at(K, T) = (4,2500),1of the4,000runs at(32,20000), and4of
+the4,000runs at(8,50000).
+Since the arm probabilities were redrawn for every run, these rates average over the Beta(1,1) prior.
+20
+How often does the permanent latch activate?By the end of the registered non-stationary runs,
+the mean fraction of authorized arms was9.97%. The fraction was 5.77% in gradual drift and 11.93%
+in mixed abrupt change and drift. On the replay suite, the overall fraction was 38.27%, including
+15.38%in random drift and14.42%in the mixed family.
+Each fraction counts every arm that was authorized at least once before the run ended. Since
+authorization is never withdrawn, an arm remains counted even if its later rewards again agree
+with the stationary model. The fractions therefore describe whether authorization ever occurred, not
+whether the evidence remained current at the time when the run ended.
+How do alternative authorization rules compare?We next ask whether the policy’s behavior
+depends on how authorization is granted. We replace the e-process crossing with two generalized
+likelihood-ratio (GLR) rules and leave the rest of the policy unchanged. All three policies use the
+same candidate change-points, relevance score, decision weight, posterior updates, potential-reward
+table, and initial policy seed. Thus, only the rule used to turn on the authorization latch changes.
+For candidatej, the Bernoulli GLR statistic is
+Gj,n =n 0 kl(bp0∥bp) +n1 kl(bp1∥bp).
+Here, n0 =s j −1 and n1 =n−n 0 are the numbers of arm-local pulls before and after the candidate
+change-point. The corresponding success rates are bp0 and bp1, while bpis the success rate over all n
+pulls. The Bernoulli Kullback–Leibler divergenceklis defined in Appendix C.
+We consider two GLR authorization rules. First, the certified GLR authorizes when the maximum
+over the geometric grid crosses
+bcert(n, δ) = 2T
+ log(3n3/2/δ)
+2
+
++ 6 log(1 + logn), δ=α E/K.
+Here, δ assigns an equal share of αE to each arm. The function T is defined in Equation (3) of Besson
+et al. [2]. The complete expression for bcert is their threshold β(n, δ)from Lemma 2, Equation (4).
+The certified boundary was proved for a detector that checks every possible split after each pull. Our
+implementation checks only the smaller geometric grid, so using the same boundary remains valid
+and is potentially more conservative.
+The guarantee also holds for any fixed stationary Bernoulli probability. That is, the probability of
+crossing is controlled separately for every possible stationary arm mean. Theorem 1, by contrast,
+averages over arm means drawn from the Beta(1,1) prior. The certified GLR therefore covers a
+broader stationary model than the e-process guarantee in this paper.
+Second, the practical GLR uses
+bprac(n, δ) = log(n3/2/δ).
+It is also specified without any calibration, although it has no claimed finite-sample false-authorization
+guarantee. To clarify, neither GLR threshold was fitted to these evaluation outcomes.
+Table 4: Gate comparison on both non-stationary suites. Each difference is the comparator’s regret
+minus e-ATS’s regret, so positive values favor e-ATS. Lower regret is better.
+Registered Replay
+Policy Regret Difference Regret Difference
+OTS 0.0494+0.010460.2157+0.06277
+Open ramp 0.0540+0.014970.1414−0.01154
+e-ATS 0.0390 reference 0.1530 reference
+Certified GLR 0.0418+0.002820.1750+0.02209
+Practical GLR 0.0392+0.000170.1529−0.00006
+The certified GLR was more conservative and had higher regret than e-ATS on both suites. The
+practical GLR was close to e-ATS on both. On the registered suite, its regret was higher by 0.00017,
+with interval [0.00009,0.00026] . On the replay suite, its regret was lower by 0.00006, with interval
+21
+[−0.00052,0.00040] . Relative to e-ATS, the practical GLR had0.44% higher regret on the registered
+suite and 0.04% lower regret on the replay suite. These small pooled differences do not imply cellwise
+equivalence. The practical GLR was lower in 13 of the 18 replay cells.
+An earlier sensitivity allowed the GLR to use a separately calibrated threshold in each of the 20
+geometries. For each geometry, we chose the threshold so that the GLR crossed as often as e-
+ATS on the stationary calibration runs. Across 5,460 calibration runs, e-ATS never crossed in 17
+geometries. In those geometries, matching zero crossings only required placing the GLR threshold
+above the largest statistic observed during calibration. On 1,820 held-out stationary runs, the fitted
+GLR authorized seven times and e-ATS once. Across the non-stationary suite, its regret was0.0387,
+compared with 0.0390 for e-ATS, a reduction of 0.66%. The fitted GLR’s regret minus e-ATS’s
+was −0.00026, with a 95% interval [−0.00034,−0.00017] . This count-matching sensitivity gave the
+GLR geometry-specific Monte Carlo calibration but no analytic anytime-valid guarantee.
+Does the registered result transfer to the replay suite?No. On the replay suite, the open ramp
+was lower in 15 of 18 cells, eight of nine families, and 3,204 of 4,500 groups. Its mean regret
+advantage was 0.01154, with interval [0.01089,0.01218] . The two negative replay suite points in the
+left panel of Figure 3, in orange, show that the open ramp was lower at both evaluated arm counts.
+We added the replay gate comparison to ask whether the registered result carried to the environments
+used for the baseline comparison. It did not. On the registered suite, e-ATS beat the open ramp, while
+the open ramp beat e-ATS on the replay suite. The practical GLR remained close to e-ATS on both
+suites, whereas the certified GLR had higher regret. Authorization therefore matters, but its effect on
+regret depends on the environments being studied. The comparison only estimates authorization’s
+overall effect on regret. It cannot determine whether the difference comes from delayed adaptation,
+short-memory forgetting, or subsequent action choices. Note that these experiments also do not
+establish any authorization rule as universally best.
+D.2 How does e-ATS compare with established baselines?
+How is the replay suite constructed?The replay suite evaluates nine non-stationary families
+at two geometries, (K, T) = (4,2500) and (32,20000) . Both have B=T /K= 625 , the same
+nominal number of rounds per arm, giving a total of 18 family–geometry combinations. Within each
+combination, every policy is evaluated on the same 250 experimental settings, yielding a total of
+4,500 matched comparisons.
+Periods and segment lengths are multiplied by K/4 when moving from K= 4 to K= 32 . Switching
+hazards are multiplied by 4/K, and diffusion increments are divided by
+p
+K/4. These changes keep
+the amount of non-stationarity relative to the rounds available per arm approximately comparable.
+The larger geometry is a newly generated environment, not an eightfold repetition of the four-arm
+trajectory.
+Table 5 summarizes how the replay families are constructed, while Figure 2 shows one frozen
+four-arm example from each family.
+Each slow-sine, fast-sine, and abrupt-cycle geometry holds one mean trajectory fixed across 250
+reward simulations. For each of the other six families and their geometries, we generate 50 different
+mean trajectories. We then simulate rewards five times from each trajectory, again giving 250 policy
+comparisons for that family and geometry. This separates differences across mean trajectories from
+randomness in the rewards generated from the same trajectory.
+The original replay analysis calculated each interval from 50,000 repeated draws. Within every
+combination of environment family and geometry, each draw selected 50 groups of five policy
+comparisons with replacement. In the twelve settings with random trajectories, each group contained
+one mean trajectory and its five reward repetitions. In the six settings with a fixed trajectory, each
+group contained five repetitions of that trajectory.
+After examining the results, we recalculated the primary regret difference defined as e-ATS minus
+the open ramp. Each new draw selected 250 individual policy comparisons with replacement in
+the fixed-trajectory settings. In the random-trajectory settings, each new draw selected 50 mean
+trajectories with replacement and retained all five reward repetitions for each trajectory. The corrected
+interval was [0.010886,0.012184] , compared with the original interval [0.010899,0.012181] . The
+22
+Table 5: Families in the replay suite.
+Family Mean-trajectory construction
+Slow sine Smooth arm-specific sinusoidal means with periods 1,000 and 8,000
+Fast sine The same construction with periods 100 and 800
+Abrupt cycle Staggered arm-specific level changes in cycles of length 250 and 2,000
+Global switching All arm means change together with per-round hazard0.08/K
+Per-arm switching Each arm changes independently with per-round hazard0.08/K
+Local shocks Oracle-changing shocks affect a subset of arms
+Random breakpoints Each arm has 4–16 breakpoints and jumps of at least0.10
+Random drift Independent stochastic drift with time-varying sinusoidal amplitude
+Mixed regime Groups of arms are stable, drifting, transiently bursty, or switching
+Figure 2: One frozen environment from each replay family at K= 4 and T= 2,500 . Blue, coral,
+teal, and plum identify arms 1–4 across panels using the palette of Figure 3. The dashed charcoal
+line is the instantaneous oracle mean. The examples use the frozen visualization seed 1,840,201 and
+illustrate the family constructions, not their empirical frequency. The fast-sine panel shows rounds
+0–1,250 so that its shorter period remains visible. Every other panel shows the full 2,500-round
+horizon.
+23
+estimated difference did not change. The main text reports the corrected primary interval. The GLR
+intervals use the original calculation. The correction therefore does not change the replay-suite finding
+that the open ramp has lower regret than e-ATS.
+Which methods are included?The comparison contains e-ATS and local implementations of 16
+baselines from the literature. These are TS and OTS [11, 18], dTS and dOTS [13], Dynamic TS [7],
+AFF-TS [10], REXP3 [1], SW-UCB and D-UCB [5], M-UCB [3], CUSUM-UCB [9], GLR-klUCB
+[2], Global-CTS [12], a one-hot implementation of D-LinUCB [16], and Beta-SWTS and γ-SWGTS
+[4].
+We implemented each baseline ourselves, following its source algorithm and recommended settings
+as faithfully as possible. These are careful implementations rather than runs of the original authors’
+code. No method was tuned on the replay results, and e-ATS used one fixed configuration across all
+18 family–geometry combinations. Since the methods were developed at different times, we do not
+claim that each received the same amount of tuning.
+Within each of the 18 family–geometry combinations, the displayed methods are ranked by mean
+regret, with lower regret receiving a better rank. We report each method’s mean regret and mean rank
+separately at the two geometries and across all 18 combinations. Each family receives equal weight
+within a geometry, and every combination receives equal weight in the overall mean.
+Table 6: Replay performance at each geometry and across all 18 family–geometry combinations.
+Regret and rank are means, lower values are better, and ranks are recomputed among the 17 displayed
+methods.
+K= 4,T= 2,500K= 32,T= 20,000Overall
+Method Regret Rank Regret Rank Regret Rank
+GLR-klUCB 0.1070 3.56 0.1027 2.56 0.1048 3.06
+SW-UCB 0.0991 4.56 0.1006 3.00 0.0999 3.78
+M-UCB 0.0969 4.11 0.1140 5.22 0.1055 4.67
+D-UCB 0.0965 3.89 0.1259 7.56 0.1112 5.72
+Global-CTS 0.1142 5.78 0.1194 5.89 0.1168 5.83
+dOTS 0.1203 6.33 0.1453 8.56 0.1328 7.44
+Dynamic TS 0.1377 8.78 0.1280 7.11 0.1329 7.94
+CUSUM-UCB 0.1496 9.89 0.1218 6.11 0.1357 8.00
+Beta-SWTS 0.1303 9.44 0.1349 7.44 0.1326 8.44
+D-LinUCB one-hot 0.1003 5.22 0.1964 12.00 0.1484 8.61
+dTS 0.1344 9.22 0.1521 10.11 0.1432 9.67
+e-ATS 0.1782 12.56 0.1277 6.89 0.1530 9.72
+AFF-TS 0.1524 11.00 0.1492 9.89 0.1508 10.44
+γ-SWGTS 0.1835 13.33 0.2445 15.00 0.2140 14.17
+OTS 0.2136 14.44 0.2178 14.00 0.2157 14.22
+TS 0.2204 15.33 0.2235 14.78 0.2220 15.06
+REXP3 0.2250 15.56 0.3117 16.89 0.2684 16.22
+Across all 18 combinations, e-ATS had mean regret 0.1530 and mean rank 9.72 of 17. At K= 4 its
+mean regret was 0.1782 and its mean rank was 12.56, while at K= 32 they were 0.1277 and 6.89.
+It improved on OTS in 17 of 18 combinations, reducing overall mean regret from 0.2157 to 0.1530.
+This is a meaningful improvement over the protected anchor, but the overall ranking remains in the
+middle of the comparison rather than at the top.
+24
+Figure 3: Authorization effects and replay-suite ranks. Left: the open ramp’s regret minus e-ATS’s
+regret by arm count. Positive values favor e-ATS, while negative values favor the open ramp. Lines
+connect descriptive arm-count means within a suite. Right: e-ATS’s ranks among the 17 displayed
+methods in each replay family. Circles show (K, T) = (4,2500) and squares show (K, T) =
+(32,20000) . The colored connectors highlight mixed regime and random drift, where e-ATS ranked
+first and second at the larger geometry. Lower rank is better.
+Table 6 shows that the mean rank was 12.56 at(K, T) = (4,2500)and 6.89 at (K, T) = (32,20000).
+At the larger geometry, e-ATS ranked better in all nine families, including first in the mixed family
+and second in random drift. These are the strongest combinations for e-ATS and suggest that selective
+adaptation may be useful when different arms evolve in different ways.
+In our experiments, the geometries differ in arm count, total horizon, and generator scaling. The rank
+change cannot be attributed to any one of those differences. The gate transfer also shows that the
+open ramp outperformed e-ATS on this same replay population. The first- and second-place cells do
+not establish that the e-process gate caused those rankings.
+Overall, authorization changes regret, but whether it helps depends on the environments being studied.
+On the registered suite, authorization reduced regret relative to opening the short-memory channel
+immediately, except at K= 4 . On the replay suite, the open ramp performed better, while e-ATS still
+improved substantially over OTS and performed especially well in two K= 32 cells. The practical
+GLR closely matched e-ATS. The certified GLR had higher regret and provided the stronger fixed-
+mean guarantee, while the fitted GLR slightly outperformed e-ATS after receiving geometry-specific
+calibration. In these suites, e-ATS differed little in regret from the untuned practical detector while
+retaining its prior-predictive guarantee.
+25

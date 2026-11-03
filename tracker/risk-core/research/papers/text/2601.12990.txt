@@ -1,0 +1,448 @@
+arXiv 2601.12990  https://arxiv.org/abs/2601.12990
+
+BEYOND VISUAL REALISM: TOW ARD RELIABLE FINANCIAL TIME SERIES
+GENERA TION
+Fan Zhang1, Jiabin Luo2, Zheng Zhang1, Shuanghong Huang3, Zhipeng Liu4, Yu Chen1
+1The University of Tokyo, Tokyo, Japan, (zhang-fan@g.ecc.u-tokyo.ac.jp)
+2Peking University, Beijing, China
+3Agency for Science, Technology and Research (A*STAR), Singapore
+4Northeastern University, Shenyang, China
+ABSTRACT
+Generative models for financial time series often create data
+that look realistic and even reproduce stylized facts such as
+fat tails or volatility clustering. However, these apparent
+successes break down under trading backtests: models like
+GANs or WGAN-GP frequently collapse, yielding extreme
+and unrealistic results that make the synthetic data unus-
+able in practice. We identify the root cause in the neglect
+of financial asymmetry and rare tail events, which strongly
+affect market risk but are often overlooked by objectives
+focusing on distribution matching. To address this, we in-
+troduce theStylized Facts Alignment GAN (SFAG), which
+converts key stylized facts into differentiable structural con-
+straints and jointly optimizes them with adversarial loss. This
+multi-constraint design ensures that generated series remain
+aligned with market dynamics not only in plots but also in
+backtesting. Experiments on the Shanghai Composite In-
+dex (2004–2024) show that while baseline GANs produce
+unstable and implausible trading outcomes, SFAG generates
+synthetic data that preserve stylized facts and support robust
+momentum strategy performance. Our results highlight that
+structure-preserving objectives are essential to bridge the gap
+between superficial realism and practical usability in financial
+generative modeling.
+Index Terms— Financial time series, generative ad-
+versarial networks, stylized facts, backtesting stability,
+volatility clustering
+1. INTRODUCTION
+Financial markets produce massive amounts of data that
+are central to risk management, portfolio optimization, and
+algorithmic trading [1, 2]. Synthetic financial data are in-
+creasingly valuable for stress testing, scenario analysis, and
+privacy-preserving machine learning.
+Yet generating realistic series remains challenging. Un-
+like images or text, returns exhibit persistentstylized facts:
+heavy tails [3], volatility clustering [4], long memory [5],
+leverage effects [6, 7], and cross-scale correlations [8].
+Existing generative models often reproduce marginal dis-
+tributions but fail to preserve these deeper structures. In par-
+ticular, they overlook the strongasymmetryof financial re-
+turns: long bull markets can be erased by a few sharp crashes,
+and rare tail events dominate risk. Distribution-matching ob-
+jectives neglect such imbalances, leading to series that appear
+realistic in plots but collapse under trading evaluation. This
+gap highlights the need for generative models that move be-
+yond superficial realism and explicitly preserve the structural
+properties that matter in financial practice.
+To address this gap, we propose theStylized Facts Align-
+ment GAN (SFAG), a novel framework that embeds domain
+knowledge into the training process. SFAG augments the ad-
+versarial objective withstructural consistency lossesdesigned
+to explicitly preserve stylized facts: (i) fat-tailed return dis-
+tributions, (ii) volatility clustering, (iii) leverage effects, and
+(iv) coarse-to-fine volatility correlations. Unlike prior mod-
+els, SFAG ensures that generated data remain both statisti-
+cally consistent with real markets and practically usable in
+trading strategy evaluation.
+We validate SFAG through experiments on the Shang-
+hai Composite Index. Results show that SFAG outperforms
+baselines not only in stylized-fact alignment but also in mo-
+mentum strategy backtests, where competing models exhibit
+extreme instability. Our contributions are threefold: (i) we
+introduce a structure-preserving generative framework that
+enforces stylized facts through differentiable loss functions,
+(ii) we propose a comprehensive evaluation protocol for
+structural consistency beyond marginal distributions, includ-
+ing econometric tests and multi-scale volatility analysis, and
+(iii) we demonstrate that SFAG bridges the gap betweenvi-
+sual realismandfinancial usability, producing synthetic data
+that are both realistic and reliable for backtesting.
+2. RELA TED WORK
+Beyond classical econometric models and early GAN-based
+approaches, several other families of generative models have
+been explored for financial time series. Autoregressive neural
+arXiv:2601.12990v1  [q-fin.ST]  19 Jan 2026
+models such as RNNs and Temporal Convolutional Networks
+(TCNs) have been applied to capture sequential dependencies
+[9], though they often suffer from error accumulation and lim-
+ited long-horizon fidelity. More recently, Transformer-based
+architectures have demonstrated strong capabilities in mod-
+eling long-range temporal dependencies and scaling to large
+datasets, as shown by models like GPT-TST [10], Temporal
+Fusion Transformer [11], and FEDformer [12], and Time-
+Former [13]. However, these methods primarily optimize pre-
+diction accuracy and rarely incorporate domain-specific con-
+straints, which limits their ability to reproduce the structural
+properties required for realistic financial simulation.
+In parallel, a growing body of work has explored diffusion
+and score-based models for time series generation. TimeGrad
+[14] and score-based SDEs [15] offer training stability and
+high coverage of data distributions, yet they remain compu-
+tationally expensive and lack mechanisms to enforce stylized
+facts or risk-sensitive behavior. Recent studies have also be-
+gun to consider structure-aware or risk-aware objectives, for
+example by constraining tail risk, volatility-of-volatility, or
+regime persistence during training. These approaches high-
+light a shift from purely distribution-matching criteria toward
+incorporating financial domain knowledge.
+Furthermore, related research outside the financial do-
+main has shown that domain-constrained generative models
+[16] can substantially improve realism in other complex time
+series tasks such as climate modeling, traffic forecasting,
+and energy systems simulation. These successes suggest that
+embedding domain priors and structural invariants can be a
+general principle for improving the reliability of generative
+models on non-stationary and high-volatility data, an insight
+that motivates our proposed SFAG.
+Unlike prior work that only validates stylized facts in
+post-hoc analysis [17], our contribution is to embed them
+directly into the training objective [18]. The proposed SFAG
+augments adversarial learning with domain-informed con-
+straints that enforce fat tails, volatility clustering, leverage
+effects, and cross-scale volatility correlations. This approach
+transforms stylized facts from diagnostic tools into differen-
+tiable objectives, ensuring that generated data remain not only
+statistically consistent with real markets but also practically
+reliable in backtesting.
+3. METHOD
+We introduce theStylized Facts Alignment GAN (SFAG), a
+structure-preserving framework for financial time series gen-
+eration. Rather than optimizing for visual or marginal distri-
+butional similarity, SFAG explicitly enforces alignment with
+financial stylized facts through a multi-constraint objective.
+Architecture overview.SFAG builds upon a standard
+adversarial architecture with generatorG θ and discriminator
+Dϕ, and augments it with a domain-informed alignment mod-
+ule. Latent noisez∼ N(0, I)is mapped to a synthetic return
+series ˆr=G θ(z), whileD ϕ distinguishes ˆrfrom real returns
+r. We adopt a WGAN-GP [19] loss for training stability:
+Ladv =E[D ϕ(ˆr)]−E[D ϕ(r)] +λ gp Lgp.
+Stylized-fact alignment losses.Financial realism can-
+not be captured by marginal distribution matching alone.
+SFAG encodes domain knowledge into four differentiable
+constraints that together capture heavy tails, volatility mem-
+ory, return–volatility asymmetry, and cross-scale dependen-
+cies.Fat tails.We estimate the generalized Pareto tail index
+ξon positive and negative return tails and minimize their gap:
+LGPD =|ξ(r)−ξ( ˆr)|.
+Volatility clustering.We compute the autocorrelation function
+(ACF) of squared returns up to lagKand align them via mean
+squared error:
+LACF = 1K
+KX
+k=1
+ 
+ρk(r2)−ρ k(ˆr2)2.
+Leverage effect.We measure the correlation between past re-
+turns and future realized volatility, enforcing negative depen-
+dence:
+LLev =
+ρ(rt, σt+1)−ρ( ˆrt,ˆσt+1).
+Coarse-to-fine volatility correlation.We construct cross-scale
+realized volatility vectors using rolling windows{w1, . . . , wM },
+and minimize the Frobenius norm between their correlation
+matrices:
+LCFVC =∥Corr(Σ(r))−Corr(Σ( ˆr))∥F .
+Multi-constraint optimization.Unlike prior work that
+validatesstylized facts post-hoc, SFAGoptimizes them jointly
+during training. The generator minimizes:
+LSFAG =L adv +λ 1LGPD +λ 2LACF +λ 3LLev +λ 4LCFVC.
+This formulation treats stylized facts asstructural invari-
+ants, turning them into first-class optimization objectives.
+Importantly, the alignment module is model-agnostic: while
+demonstrated with a GAN backbone, it can be applied to dif-
+fusion or transformer-based generators without modification.
+Training procedure.We train SFAG for 50,000 genera-
+tor iterations using the Adam optimizer (withβ 1 = 0.5and
+β2 = 0.9) and a learning rate of2×10 −4. We set the gradi-
+ent penalty weight toλ gp = 10, and update the discriminator
+five times for every generator step following the WGAN-GP
+setting. Stylized-fact losses are gradually annealed during the
+first 20% of training to stabilize early dynamics, and training
+continues until convergence on stylized-fact gap metrics.
+4. EXPERIMENTS
+Setup.We use daily Shanghai Composite Index (SSE) returns
+from 2004–2024 (∼5000 observations). Each sample has a
+sequence length of 2520, latent dimension of 100, and batch
+size of 24. Models are trained for 50,000 generator iterations
+using the Adam optimizer (β 1=0.5, β2=0.9) with a learning
+rate of2×10 −4, and gradient penalty weightλ gp = 10. The
+discriminator is updated 5 times per generator step following
+the WGAN-GP setting.
+All experiments are implemented in PyTorch and run on
+a single NVIDIA A100 GPU with 80GB memory.
+4.1. Stylized Facts Preservation
+We first provide a visual comparison of six well-documented
+stylized facts between real data and synthetic series. These
+stylized facts include: (i) unpredictability (low linear auto-
+correlation), (ii) volatility clustering, (iii) heavy tails, (iv)
+leverage effects, (v) cross-scale volatility correlation, and
+(vi) gain/loss asymmetry. Figure 1 illustrates that SFAG-
+generated data exhibit close qualitative similarity to real
+market data, suggesting that our model captures the essential
+structural properties observed in financial time series.
+Observation.Visual inspection indicates that SFAG cap-
+tures the six fundamental stylized facts of financial markets
+with high fidelity. However, purely qualitative checks can be
+misleading: baseline GANs often appear visually consistent
+while failing to preserve structural statistics in a quantitative
+sense. We therefore proceed to a gap-based analysis to rigor-
+ously assess stylized-fact alignment.
+4.2. Stylized-Fact Alignment
+While visual inspection suggests that SFAG captures essential
+market characteristics, a rigorous evaluation requires quanti-
+tative analysis of structural properties. Unlike generic dis-
+tributional distances [20] (e.g., MMD or Wasserstein) that
+only compare marginal shapes, stylized facts probe the tem-
+poral dynamics and risk structure of financial markets, which
+are crucial for practical usability. We therefore evaluate four
+canonical stylized facts on both real and synthetic data.
+(i) Heavy tails.We estimate the tail indexξof the Gen-
+eralized Pareto Distribution (GPD) on returns exceeding the
+95th percentile threshold, using the Peak-Over-Threshold
+method. A smaller gap inξindicates that the generated data
+reproduce the same frequency and magnitude of rare extreme
+events as real markets, a critical property for risk modeling
+and stress testing.
+(ii) Volatility clustering.We compute the autocorrelation
+function (ACF) of absolute returnsρ k(|rt|)for lagsk= 1to
+20. This measures the persistence of volatility shocks: real
+markets exhibit slowly decaying correlations, while models
+that fail to capture clustering show near-zero or oscillatory
+(a) Real Data Stylized Facts.
+(b) SFAG Generated Data Stylized Facts.
+Fig. 1. Visual comparison of six stylized facts between real
+and generated data. SFAG successfully preserves key prop-
+erties such as unpredictability, volatility clustering, fat tails,
+leverage effects, coarse-fine correlations, and gain/loss asym-
+metry.
+patterns. Preserving this long memory is essential for model-
+ing risk horizons.
+(iii) Leverage effect.We calculate the contemporaneous
+correlation between past returnsr t and future realized volatil-
+ityσ t+1 (standard deviation of returns over the next 20 days).
+Real markets typically show negative correlations, reflecting
+the risk-aversion response where price drops trigger higher
+volatility. Failure to reproduce this asymmetry leads to unre-
+alistic risk dynamics in downstream tasks.
+(iv) Cross-scale volatility correlations (CFVC).We con-
+struct realized volatility vectors using rolling windows of 5,
+20, 60, and 120 days, and compute their pairwise correlation
+matrices. We then report the Frobenius norm gap between the
+real and synthetic matrices, which reflects whether the model
+reproduces the hierarchical structure of market fluctuations
+across different time scales.
+We train each model five times with different random
+seeds and report the average absolute gap to real data on each
+statistic. Lower values indicate stronger alignment with real
+market structure and better preservation of stylized facts.
+Table 1. Stylized-fact gaps (absolute differences). Lower val-
+ues indicate better preservation.
+Model GPD Tail ACF Leverage CFVC
+Standard GAN 0.2615 0.1431 32.4617 0.0863
+WGAN-GP 0.0776 0.1053 33.7440 0.1021
+SFAG (ours) 0.0146 0.0982 32.7516 0.0436
+Findings.As shown in Table 1, SFAG achieves the small-
+est gaps onGPD TailandCFVC, reducing errors by over
+80% and 50% respectively compared with WGAN-GP. This
+indicates that SFAG can closely reproduce the heavy-tailed
+nature of market returns and the hierarchical dependence
+structure of volatility across time scales, both of which are
+essential for realistic risk modeling. By contrast, Standard
+GAN exhibits a large tail index gap (0.2615), suggesting that
+it underestimates the probability of extreme events, while
+both baselines fail to capture multi-scale volatility interac-
+tions, reflected by their higher CFVC errors.
+SFAG also yields competitive results onACFandLever-
+age, consistently outperforming Standard GAN. Although the
+leverage gap remains large across all models (around 32–33),
+SFAG slightly narrows it while maintaining a lower ACF gap,
+indicating that it preserves volatility persistence without am-
+plifying noise. These results suggest that conventional GANs,
+which optimize only for distributional similarity, tend to pro-
+duce visually plausible but structurally fragile series, whereas
+SFAG’s structure-preserving objectives enable it to recover
+deeper temporal dependencies and asymmetries.
+Overall, Table 1 demonstrates that explicitly embedding
+stylized-fact consistency into the training objective leads to
+synthetic series that not only resemble real data in appear-
+ance, but also replicate the underlying statistical regularities
+that govern real financial markets.
+4.3. Strategy Backtesting
+We further evaluate practical usability by backtesting a sim-
+ple momentum strategy on synthetic price series generated by
+each model. The strategy goes long if the past 60-day return
+is positive and short otherwise, rebalanced daily, with trans-
+action cost 5 bps and no leverage. We retrain all models and
+generate 10 synthetic paths for each, then evaluate the strategy
+on both real and synthetic SSE returns (2004–2024). Table 2
+reports the average results across 10 synthetic runs.
+Key Findings.The backtesting results highlight a stark
+contrast between SFAG and conventional GAN-based mod-
+els. Standard GAN and WGAN-GP frequently collapse
+during strategy evaluation, producing extreme and implausi-
+ble outcomes such as annualized returns exceeding 2000%
+and volatility approaching 1000%. In sharp contrast, SFAG
+consistently generates synthetic series that yield realistic and
+stable performance: the momentum strategy achieves an an-
+Table 2. Momentum strategy performance. SFAG tracks real-
+data behavior, while Standard GAN and WGAN-GP collapse
+into unrealistic regimes.
+Metric Real Data Standard GAN WGAN-GP SFAG (Ours)
+Annualized Return 33.10% 2467.24% 2152.07%27.80%
+Annualized V olatility 15.20% 991.83% 995.06%9.37%
+Sharpe Ratio 2.18 2.49 2.162.97
+Maximum Drawdown 9.50% 109.87% 148.11%4.37%
+VaR (95%) -1.10% -78.03% -85.79%-0.91%
+CVaR (95%) -2.23% -141.79% -144.62%-0.92%
+nualized return of 27.8% and volatility of 9.37%, closely
+aligned with the real data benchmark. Moreover, SFAG
+attains a Sharpe ratio of 2.97, surpassing the real market
+level (2.18), indicating that its higher risk-adjusted perfor-
+mance stems from enhanced robustness rather than spurious
+instability. These findings demonstrate that merely produc-
+ing visually plausible return patterns is insufficient. Only
+by enforcing structure-preserving constraints can generative
+models achieve financial realism and backtest validity.
+5. CONCLUSION
+We introduced theStylized Facts Alignment GAN (SFAG),
+a structure-preserving framework that elevates stylized facts
+from post-hoc diagnostics to differentiable training objec-
+tives. By jointly optimizing adversarial realism and structural
+alignment, SFAG generates financial time series that not only
+reproduce statistical regularities but also remain robust in
+trading backtests. On the Shanghai Composite Index (2004–
+2024), SFAG consistently outperforms GAN and WGAN-GP,
+showing that explicit structure-preserving objectives are crit-
+ical to bridge the gap between apparent realism and financial
+usability.
+More broadly, this work suggests a new perspective:
+realism in finance should not be defined only by distribu-
+tional similarity or visual plausibility, but by whether syn-
+thetic data behave plausibly under trading evaluation. Prior
+studies largely overlooked this criterion, leading to unstable
+outcomes. By embedding domain knowledge directly into
+training, SFAG highlights a principled path toward synthetic
+data that are both scientifically faithful and practically useful.
+Future work.This work opens several directions: (i) ex-
+tending evaluation beyond a single equity index to multi-asset
+and cross-market settings, including FX, rates, and commodi-
+ties, (ii) incorporating richer stylized facts such as tail asym-
+metry, volatility-of-volatility, and regime persistence, and (iii)
+exploring backbone-agnostic alignment, applying SFAG prin-
+ciples to diffusion and transformer-based generators for scal-
+able and flexible financial simulation.
+6. REFERENCES
+[1] Rama Cont, “Empirical properties of asset returns: styl-
+ized facts and statistical issues,”Quantitative finance,
+vol. 1, no. 2, pp. 223, 2001.
+[2] Magnus Wiese, Robert Knobloch, Ralf Korn, and Peter
+Kretschmer, “Quant gans: deep generation of financial
+time series,”Quantitative Finance, vol. 20, no. 9, pp.
+1419–1440, 2020.
+[3] Benoit Mandelbrot, “The variation of certain specula-
+tive prices,”The Journal of Business, vol. 36, no. 4, pp.
+394–419, 1963.
+[4] Robert F. Engle, “Autoregressive conditional het-
+eroscedasticity with estimates of the variance of united
+kingdom inflation,”Econometrica, vol. 50, no. 4, pp.
+987–1007, 1982.
+[5] Zhuanxin Ding, Clive WJ Granger, and Robert F Engle,
+“A long memory property of stock market returns and a
+new model,”Journal of empirical finance, vol. 1, no. 1,
+pp. 83–106, 1993.
+[6] Fischer Black, “Studies of stock price volatility
+changes,” inProceedings of the 1976 Meeting of the
+Business and Economic Statistics Section, 1976, pp.
+177–181.
+[7] Jean-Philippe Bouchaud, Andrew Matacz, and Marc
+Potters, “Leverage effect in financial markets: The re-
+tarded volatility model,”Physical review letters, vol. 87,
+no. 22, pp. 228701, 2001.
+[8] Laurent Calvet and Adlai Fisher, “Multifractality in as-
+set returns: theory and evidence,”Review of Economics
+and Statistics, vol. 84, no. 3, pp. 381–406, 2002.
+[9] Shaojie Bai, J Zico Kolter, and Vladlen Koltun, “An
+empirical evaluation of generic convolutional and recur-
+rent networks for sequence modeling,” inProceedings
+of the 35th International Conference on Machine Learn-
+ing (ICML), 2018, pp. 481–490.
+[10] Yan Li, Hongliang Bai, Xiaoyang Song, Yu Cheng, and
+Xinyu Zhang, “Gpt-tst: Generative pre-trained trans-
+former for time series forecasting,”Expert Systems with
+Applications, vol. 230, pp. 120675, 2023.
+[11] Bryan Lim, Sercan O Arik, Nicolas Loeff, and Tomas
+Pfister, “Temporal fusion transformers for interpretable
+multi-horizon time series forecasting,” inProceedings
+of the 28th ACM SIGKDD Conference on Knowledge
+Discovery and Data Mining (KDD), 2021, pp. 2967–
+2975.
+[12] Haixu Zhou, Shanghang Zhang, Jieqi Peng, Shuai
+Zhang, Jianxin Li, Hui Xiong, and Wancai Zhang, “Fed-
+former: Frequency enhanced decomposed transformer
+for long-term series forecasting,”Proceedings of the
+39th International Conference on Machine Learning
+(ICML), pp. 27268–27286, 2022.
+[13] Zhipeng Liu, Peibo Duan, Xuan Tang, Baixin Li, Yong-
+sheng Huang, Mingyang Geng, Changsheng Zhang, Bin
+Zhang, and Binwu Wang, “Timeformer: Transformer
+with attention modulation empowered by temporal char-
+acteristics for time series forecasting,”Expert Systems
+with Applications, p. 131040, 2025.
+[14] Kashif Rasul, Calvin Seward, Ingmar Schuster, and
+Roland V ollgraf, “Autoregressive denoising diffusion
+models for multivariate probabilistic time series fore-
+casting,” inProceedings of the 38th International Con-
+ference on Machine Learning (ICML), 2021, pp. 8857–
+8868.
+[15] Yang Song, Jascha Sohl-Dickstein, Diederik P. Kingma,
+Abhishek Kumar, Stefano Ermon, and Ben Poole,
+“Score-based generative modeling through stochastic
+differential equations,” in9th International Conference
+on Learning Representations (ICLR), 2021.
+[16] Lars Ericson, Xuejun Zhu, Xusi Han, Rao Fu, Shuang
+Li, Steve Guo, and Ping Hu, “Deep generative model-
+ing for financial time series with application in var: A
+comparative review,”arXiv preprint arXiv:2401.10370,
+2024.
+[17] Matteo Rizzato, Julien Wallart, Christophe Geissler,
+Nicolas Morizet, and Noureddine Boumlaik, “Gener-
+ative adversarial networks applied to synthetic financial
+scenarios generation,”Physica A: Statistical Mechanics
+and its Applications, vol. 623, pp. 128899, 2023.
+[18] David Dechant, Eliot Jan Etienne Schwander, Lucas
+Van Drooge, Charles Moussa, Diego Garlaschelli, Ve-
+dran Dunjko, and Jordi Tura Brugu ´es, “Quantum gen-
+erative modeling for financial time series with temporal
+correlations,”Machine Learning: Science and Technol-
+ogy, 2026.
+[19] Ishaan Gulrajani, Faruk Ahmed, Martin Arjovsky, Vin-
+cent Dumoulin, and Aaron Courville, “Improved train-
+ing of wasserstein gans,” inProceedings of the 31st In-
+ternational Conference on Neural Information Process-
+ing Systems (NIPS), 2017, p. 5769–5779.
+[20] Jian Shen, Yanru Qu, Weinan Zhang, and Yong Yu,
+“Wasserstein distance guided representation learning for
+domain adaptation,” inProceedings of the Thirty-
+Second AAAI Conference on Artificial Intelligence,
+2018, pp. 4058–4065.

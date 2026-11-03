@@ -1,0 +1,1431 @@
+arXiv 2607.01641  https://arxiv.org/abs/2607.01641
+
+When Agents Do Not Stop: Uncovering Infinite
+Agentic Loops in LLM Agents
+Xinyi Hou, Shenao Wang, Yanjie Zhao, and Haoyu Wang ∗
+Huazhong University of Science and Technology, Wuhan, China
+xinyihou@hust.edu.cn, shenaowang@hust.edu.cn, yanjie zhao@hust.edu.cn, haoyuwang@hust.edu.cn
+Abstract—LLM agents increasingly rely on iterative execution
+to solve tasks through planning, tool use, state updates, and agent
+collaboration. While this design enables flexible automation, it
+also creates a new class of failures: an agent may repeatedly
+execute model calls, tools, workflow transitions, or agent handoffs
+when the feedback path is not effectively bounded. We call this
+problemInfinite Agentic Loops(IALs). IALs are not ordinary
+programming loops; they arise from the interaction between agent
+logic, framework semantics, runtime observations, and termination
+mechanisms. Such failures can amplify a single request into long
+running model and tool execution, causing cost exhaustion, model
+denial of service, context growth, and repeated external side effects.
+We propose IAL-SCAN, a static analysis tool for detecting IAL
+failures in real-world LLM agent projects. IAL-SCANabstracts
+heterogeneous agent code into a framework independent Agent IR,
+builds an Agentic Loop Dependence Graph (ALDG) to recover
+explicit and framework induced feedback paths, and checks
+whether these paths can repeatedly reach costly or state growing
+operations without an effective bound. We evaluate IAL-SCAN
+on 6,549 LLM agent repositories. It reports 74 potential findings,
+among which manual review confirms 68 IAL failures across 47
+projects, achieving 91.9% precision.
+I. INTRODUCTION
+Large language model (LLM) applications are rapidly
+evolving from chat-style applications [7], [41] into autonomous
+agents that operate through iterative perceive, reason, and
+act loops. One of the most representative agent paradigms
+is ReAct, in which agents iteratively reason and act based
+on external observations [ 37]. This paradigm has been widely
+adopted in modern agent frameworks such as AutoGen [ 35],
+LangGraph [11], LangChain [10], CrewAI [2], and the OpenAI
+Agents SDK [24]. Across these systems, iterative execution has
+become a core feature, enabling agents to repeatedly reason,
+act, observe, and decide what to do next.
+However, this iterative execution model also exposes LLM
+agents to a structural failure mode known asInfinite Agen-
+tic Loops(IALs). We define an IAL as an execution fail-
+ure in which an agentic feedback path repeatedly triggers
+LLM calls, tool invocations, agent executions, or workflow
+transitions without an effective termination condition. Such
+paths can arise from explicit loops, recursive calls, workflow
+cycles, retry or repair logic, tool reentry, or multi-agent
+delegation. Modern agent frameworks have explicitly sup-
+ported iterative termination mechanisms, including LangChain’s
+max_iterations [10], LangGraph’s recursion limits [ 11],
+∗Haoyu Wang is the corresponding author (haoyuwang@hust.edu.cn).
+[13], the OpenAI Agents SDK’s maximum turn limit [ 24], [25],
+and CrewAI’s max_iter [2]. However, these mechanisms
+do not eliminate IAL risks in practice. Developers may omit
+them, misuse them, configure them with ineffective bounds,
+or place them outside the actual feedback path. Moreover,
+some termination conditions are semantically fragile because
+continuation may still be controlled by model outputs, tool
+observations, external state, exceptions, or delegation decisions.
+Recent blogs and community issues further show that IAL
+failures occur in real deployments [ 28], [4], [14]. As a result,
+IALs remain a practical risk in real agent programs, even when
+frameworks provide loop-control mechanisms.
+Despite this risk, existing approaches do not adequately
+detect IALs before deployment. General static analysis tools
+such as CodeQL and Semgrep can find many source-level
+vulnerability patterns [ 6], [30], but they do not model agent
+execution semantics such as framework API edges, tool
+dispatch, handoffs, and agent reentry. Recent agent analyses
+study workflow topology, tool effects, privileges, information
+flow, and audit evidence [36], [39], [1], [15], [40], [5]. However,
+IAL detection requires checking whether a repeated agentic
+feedback path can keep reaching costly or state-growing actions,
+and whether an effective bound covers that path. This gap
+motivates a dedicated analysis for IAL failures.
+Detecting IALs statically is challenging for three reasons.
+(1) Agent behavior is often encoded through framework
+interfaces rather than direct source-level calls. The same
+execution concepts, such as model invocation and tool dispatch,
+may appear through different APIs and configuration fields
+across frameworks. A detector therefore needs a common
+representation of framework-induced agent semantics instead
+of relying on syntactic loops or framework-specific API names.
+(2) An IAL is usually formed by a feedback path that spans
+multiple program and framework elements. The repeated path
+may connect model calls, routing predicates, tool branches,
+message or state updates, retry handlers, and agent handoffs, so
+the analysis must reconstruct control, call, and state relations
+across wrapper code and framework logic. (3) Detecting IALs
+requires reasoning about bound coverage rather than merely
+checking whether a limit or exit condition exists. Loops are
+common and often legitimate in agent applications, but they
+become unsafe when a feedback path can repeatedly trigger
+costly or state-growing operations without an effective bound
+that constrains the controller and covers the repeated path.
+arXiv:2607.01641v1  [cs.SE]  2 Jul 2026
+To address these challenges, we present IAL-SCAN, a
+static analyzer for detecting IAL failures in downstream LLM
+agent projects. IAL-SCANfirst abstracts source code and
+framework behavior into a framework-independent Agent IR,
+which captures the execution elements needed to reason about
+agent loops. It then constructs an Agentic Loop Dependence
+Graph (ALDG) to recover both explicit loops and framework-
+induced feedback paths, such as workflow transitions, tool
+dispatch, retries, and agent reentry. Based on the ALDG, IAL-
+SCANchecks whether a reachable feedback path can repeatedly
+trigger costly or state-growing actions, how its continuation
+is controlled, and whether the path is covered by an effective
+bound. This paper makes the following contributions:
+• Definition of IALs.We defineInfinite Agentic Loops
+(IALs) as a structural execution failure where an agentic
+feedback path repeatedly triggers model, tool, agent, or
+workflow execution without an effective stopping bound.
+We distinguish IALs from legitimate agent iteration and
+characterize their causes and security impacts.
+• IAL Detection.We design and implement IAL-SCAN,
+a static analyzer for IAL failures in downstream LLM
+agent projects. IAL-SCANsupports eight mainstream
+agent frameworks and identifies feedback paths through
+Agent IR and ALDG-based analysis.
+• Real-world Findings.We evaluate IAL-SCANon 6,549
+real-world LLM agent repositories. It reports 74 potential
+findings, of which 68 are confirmed IAL failures across
+47 agent projects, yielding a precision of 91.9%.
+II. BACKGROUND ANDRELATEDWORK
+A. LLM Agents and Execution Loops
+LLM agents extend conventional LLM applications from
+direct text generation to systems that plan, call tools, ob-
+serve results, update state, and decide subsequent actions.
+This execution model is reflected in ReAct-style reasoning
+and acting [ 38], tool-use methods such as Toolformer [ 29],
+feedback-based agents such as Reflexion [ 31], and multi-agent
+systems such as AutoGen [ 35]. Recent surveys also identify
+planning, memory, tool use, and action as core components of
+LLM agent systems [33], [16], [34]. These capabilities are often
+implemented through agent frameworks such as LangChain [ 9],
+LangGraph [ 12], OpenAI Agents SDK [ 23], AutoGen [ 21],
+and CrewAI [3]. Figure 1 illustrates this execution loop. Given
+a user task, the agent repeatedly reasons, calls tools, observes
+results, and updates state until the task completes or an
+execution bound is reached. Such bounds include maximum
+turns, timeouts, retry limits, budgets, and recursion limits. If
+no effective bound covers the feedback path, the same loop can
+degrade into an infinite agentic loop that repeatedly triggers
+model calls, tool calls, state updates, or agent transitions.
+Mainstream frameworks already expose such bounds, con-
+firming that loop control is a practical concern. LangChain
+provides max_iterations and warns that disabling it
+may cause infinite loops [ 8]. The OpenAI Agents SDK uses
+max_turns and raises MaxTurnsExceeded when the limit
+Plana3-daytriptoTokyounder$1,200.
+AgentExecutionLoop (normal)
+Reason&Plan
+ToolCall:search_flights()
+ToolResult:FlightOptions
+ToolCall:search_hotels()
+ToolResult:HotelOptions
+UpdateState&Decide
+TaskCompleted
+Itinerary 
+generated
+BoundedStop
+Stopdue
+tolimits
+Stopping
+condition
+met?
+Bound
+reached
+Noeffectivebound
+InfiniteAgenticLoop (failure)
+Reason
+&Plan
+Tool
+Call
+Tool
+Result
+Update
+State
+Repeatswithoutaneffectivebound
+ExecutionBounds
+Maxturns|Timeout|
+Retrylimit|Budget
+Ye s
+Fig. 1: Execution loop of an LLM agent.
+is exceeded [ 27], [ 26]. AutoGen, LangGraph, and CrewAI
+similarly provide termination conditions, recursion limits, or
+iteration caps [ 20], [11], [2]. These mechanisms show that the
+key issue is not the presence of a loop, but whether an effective
+bound covers its feedback path.
+B. Static Analysis for LLM Agents
+Recent studies have begun to analyze LLM agent systems
+before or during deployment. AgentProof verifies structural
+properties of extracted workflow graphs [ 36]. Agent Audit
+combines dataflow analysis, credential detection, configuration
+parsing, and privilege checks for Python agent applications [39].
+Other work studies tool effects and information flow: Adam
+et al. statically summarize tool effects and check sandbox
+usage [1]; AgentRaft builds cross tool function call graphs for
+data over exposure detection [19]; AgentSCOPE models privacy
+risks through workflow information flows [ 22]; and Agent-
+BOM proposes a unified graph representation for agent security
+auditing [ 15]. These approaches show the need for agent
+aware analysis, but they target properties different from IALs,
+such as workflow topology, policy satisfaction, tool effects,
+sandboxing, privacy leakage, capability bindings, or runtime
+audit evidence. LLM assisted static analysis systems, including
+IRIS, QLCoder, and Argus, further show that LLMs can help
+infer specifications, synthesize static queries, or orchestrate
+vulnerability analysis [ 17], [32], [18]. However, existing work
+does not specifically check whether an agentic feedback path
+can repeatedly trigger costly or state changing actions without
+an effective bound. Our work addresses this gap by combining
+framework aware feedback path recovery with bound coverage
+analysis for IAL detection.
+III. PROBLEMSTATEMENT
+A. Definition of Infinite Agentic Loop Failures
+We define anInfinite Agentic Loop(IAL)failure as a
+structural execution failure where an agentic feedback path
+repeatedly triggers costly or state-growing actions without an
+effective stopping bound. An IAL is not merely a loop; it
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+@wrapper_bisheng_model_limit_check
+def_generate(self, messages, stop=None, run_manager=None, 
+**kwargs):
+messages, kwargs = self.parse_kwargs(messages, kwargs)
+ifself.server_info.type == 
+LLMServerType.MOONSHOT.value:
+return self.moonshot_generate(messages, stop, 
+run_manager, **kwargs)
+returnself.llm._generate(messages, stop, run_manager, 
+**kwargs)
+# Continue until tool callstop.
+defmoonshot_generate(self, messages, stop=None, 
+run_manager=None, **kwargs):
+result = None
+finish_reason = None
+while finish_reason is None or finish_reason == 
+"tool_calls":
+Outer loop
+Outer wrapper
+Tool-call loop: LLM call (L13) → model-controlled continuation (L15) → $web_searchbranch (L17) → append to message history (L18–24) → repeat (L12)
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+result = self.llm._generate(messages, stop, run_manager, 
+**kwargs)
+result_message = result.generations[0].message
+finish_reason = 
+result.generations[0].generation_info.get("finish_reason")
+fortool_call inresult_message.tool_calls:
+tool_call_name = tool_call["name"]
+if tool_call_name == "$web_search":
+messages.append(result_message)
+messages.append(ToolMessage(
+tool_call_id=tool_call["id"],
+name=tool_call_name,
+content=json.dumps(tool_call["args"], 
+ensure_ascii=False),
+))
+else:
+break
+returnresult
+LLMcall
+Model-controlled continuation
+Toolcall
+Stategrowth
+Fig. 2: A motivating example of an IAL failure indataelement/bisheng.
+TABLE I: Representative interfaces for common agent loop behavior.
+Program Role Motivating Example (Figure 2) Other Framework Forms IAL Signal
+Model call self.llm._generate(...) AgentExecutor.invoke(...);Runner.run(...) Costly invocation
+Continuation control finish_reason == "tool_calls" tools_condition;termination_condition Model output controls loop
+Tool dispatch result_message.tool_calls;$web_search ToolNode(...);@tool;tools=[...] Feedback through tool call
+State update messages.append(...);ToolMessage(...) chat_history;memory;workflow state Output reused as input
+Bound Nomax_tool_callsor timeout max_iterations;max_turns;recursion_limit Missing bound coverage
+arises when model outputs, tool results, external observations,
+or delegation decisions can keep the path active, while no
+strong bound covers it.
+B. Threat Model
+Assumptions.We consider deployed LLM agents that interact
+with users, call LLMs and tools, access external services,
+update state, and may perform side-effecting actions such as
+file writes, database updates, code execution, or ticket creation.
+We assume the agent code, framework configuration, and tool
+definitions are fixed before deployment, and that the underlying
+frameworks and trusted tool implementations are not malicious.
+However, execution safeguards such as iteration limits, retry
+caps, timeouts, recursion limits, human approval checks, or
+policy gates may be missing, ineffective, disabled, or only
+partially applied to the repeated feedback path.
+Attacker Capabilities.An attacker or untrusted user can
+interact with the agent through normal inputs, such as prompts,
+task requests, documents, URLs, issue reports, tickets, workflow
+parameters, or API calls. The attacker may craft inputs that
+influence model outputs, tool arguments, retrieved content,
+external observations, or error conditions, causing the agent
+to repeat tool calls, retries, polling, sub-agent invocations, or
+workflow transitions. The attacker cannot modify the source
+code, framework configuration, deployment environment, or
+trusted tool implementation.
+Scope.We focus on IAL failures that are structurally visible in
+source code. We include both core agent feedback loops and
+toolchain loops that can block, reenter, or amplify agent exe-
+cution. We exclude high-volume network DoS, infrastructure-
+level resource exhaustion, prompt sponge attacks, malicious
+framework modifications, and purely semantic no-progress
+behavior that cannot be inferred statically.
+C. Motivating Example
+Figure 2 shows an IAL failure example. The code implements
+a custom model wrapper compatible with the LangChain
+BaseChatModel interface and dispatches Moonshot requests
+to moonshot_generate. The repeated behavior is there-
+fore hidden inside a model wrapper rather than exposed
+as a standalone agent graph. In moonshot_generate,
+the outer loop continues while finish_reason is
+None or ‘‘tool_calls’’. Each iteration invokes the
+model through self.llm._generate(...) and reads
+finish_reason from the returned message. When the
+model returns a $web_search tool call, the code appends
+both the model message and a ToolMessage to messages.
+The next iteration sends the enlarged message history back
+to the model. This forms a feedback path from model
+output to state update and then back to the next model call.
+Although the loop may exit when the model stops producing
+‘‘tool_calls’’, the exit is controlled by model output
+and is not a deterministic bound. The implementation does not
+enforce a local max_tool_calls, max_iterations, or
+timeout over this feedback path. The inner break only exits
+the tool iteration, not the outer loop. This agent may repeatedly
+invoke the model while growing the message history, increasing
+latency, token usage, API cost, and worker occupation.
+D. Challenges in Detecting IAL Failures
+IAL detection requires reasoning beyond syntactic loops. In
+real agent applications, repeated execution may be encoded
+§4.1	Agent IRConstruction §4.2ALDGConstruction §4.3IALFailure Detection
+ProjectArtifacts
+AgentIRSchema
+ALDG
+Agent
+Projects
+Build
+Sourcefiles
+Configs / Metadata
+Custom wrappers
+Extract
+AgentFrameworks
+FrameworkSpecs
+APIpatterns
+Execution rules
+Boundrules
+Derive
+ExecutionUnit| Controller | Invocation|
+StateUpdate| Bound | ExitRecord
+Program Fact Extraction
+FrameworkBehaviorModeling
+Project
+index
+<kind, loc, scope, guard, target, attrs>
+Guide
+Projection rules
+Node Construction
+Edge Construction
+Loop Property Annotation
+AST
+analysis
+Source
+facts
+RETRY
+ENTRY
+LLM_CALL LOOP
+TOOL_CALL STATE_APPEND
+EXIT
+LOOP_BACK
+AgentIR
+IALFindings
+U0: ExecutionUnit[BASIC_BLOCK]
+C0/X2: Controller [LOOP|RETRY]
+X0/X1: Invocation [LLM_CALL | TOOL_CALL]
+S0: StateUpdate[STATE_APPEND]
+T0: ExitRecord[CONDITIONAL_FALSE]
+APImatching
+Object binding
+Execution
+relations
+SCC-Based Candidate Discovery
+Controller&BoundVerification
+BASIC_BLOCK
+AgentIRfacts 12nodekinds
+Recordrelations 10edgekinds
+Scope/Control/Invocation/StateUpdate
+Structural/Branch/Dispatch/Feedback
+FeedbackEv/ CostEv/ 
+GrowthEv/ ExitEv/ BoundEv
+IALFailureIdentification
+Skip non-target loopsNotreported
+Eligible candidate?
+Effectively bounded?
+No
+Yes
+Yes
+No
+Execution 
+subgraph
+SCC
+extraction
+Evidence
+Witness: LOOP → LLM_CALL → TOOL_CALL 
+→ STATE_APPEND → LOOP
+Evidence: high_cost, state_growth
+Bound: missing_bound
+Impact: API cost+availability 
+degradation
+Infercontroller Verifybound+
+Candidates LLM-assistedconfirmation
+Fig. 3: Overview of IAL-SCANpipeline.
+through framework APIs, indirect runtime dispatch, state up-
+dates, and configuration values. We summarize three challenges.
+1) Agent Behavior Encoded by Frameworks:Agent behavior
+is often expressed through framework interfaces rather
+than direct calls. As shown in Table I, model execution,
+continuation control, tool dispatch, state update, and stopping
+mechanisms may appear through different APIs across agent
+frameworks. For example, similar behavior may be encoded
+by AgentExecutor.invoke(...), ToolNode(...),
+tools_condition, Runner.run(...), delegation
+APIs, or group chat termination logic. A detector must map
+these framework forms to common execution concepts, instead
+of relying on one API name or one syntactic pattern.
+2) Feedback Path Reconstruction:An IAL failure is usually
+not explained by one statement. In Figure 2, the relevant
+path connects the model call, continuation guard, tool branch,
+message update, and repeated execution. A static analysis must
+preserve control, call, and state relations across wrapper code
+and framework logic, while retaining guard dependencies such
+as model status values, tool call fields, and routing predicates.
+3) Bound Coverage Reasoning:Loops are common in agent
+applications, but they become problematic when a repeated
+path can reach costly or state-growing operations without an
+effective bound. As illustrated by the missing bound in Figure 2
+and the representative bound forms in Table I, detection must
+check whether a bound constrains the controller or a scope that
+covers the feedback path, rather than merely checking whether
+a limit or exit condition appears near the loop.
+IV. DESIGN OFIAL-SCAN
+In this section, we present IAL-SCAN. To address the chal-
+lenges above, IAL-SCANfirst builds a framework-independent
+Agent IR, then constructs anAgentic Loop Dependence Graph
+(ALDG), and finally detects feedback paths that may repeatedly
+trigger costly or state-growing actions without an effective
+stopping mechanism. Figure 3 summarizes the pipeline.
+A. Agent IR Construction
+IAL-SCANfirst builds Agent IR, an intermediate represen-
+tation independent of any specific agent framework.
+1) Agent IR Schema:Agent IR represents an agent project
+as typed facts and local relations. It abstracts over different
+encodings of agent execution in source code and framework
+APIs: repeated execution may appear as an explicit loop, a
+workflow transition, a framework handoff, or a tool dispatch.
+As summarized in Listing 1, the fact sets capture the main
+program elements, while the relation facts record how these
+elements are connected through source code and frame-
+work APIs.ExecutionUnitfacts define execution scopes;
+Controller facts capture loops, routers, retry logic, and
+termination predicates; Invocation facts represent model
+calls, tool calls, agent runs, workflow runs, and subprocesses;
+and StateUpdate facts record state changes that may persist
+across iterations. Bound and ExitRecord facts capture
+potential stopping mechanisms. Local relations connect these
+facts through ownership, calls, updates, guard dependencies,
+exits, bounds, workflow transitions, tool dispatches, and aliases.
+Listing 1: Core Schema in Agent IR.
+AgentIR:
+facts:
+execution_units:set[ExecutionUnit]
+controllers:set[Controller]
+invocations:set[Invocation]
+state_updates:set[StateUpdate]
+bounds:set[Bound]
+exits:set[ExitRecord]
+common fields:
+id, kind, location, attrs
+relations:
+owns(unit, fact)
+calls(invocation, callee)
+updates(state_update, target)
+guards(controller, variable)
+exits(exit_record, controller)
+constrains(bound, target)
+transitions(source, target)
+dispatches(invocation, target)
+aliases(name, target)
+Listing 2: Excerpt of Agent IR facts for the motivating example.
+ExecutionUnit:
+U0: FUNCTION; label=moonshot_generate;
+framework=custom_python
+Controller:
+C0:LOOP; owner=U0;
+condition=finish_reason isNone
+or finish_reason == "tool_calls";
+guard_deps={finish_reason,
+result_message.tool_calls};
+guard_source=model_or_tool_output
+Invocation:
+X0:LLM_CALL; owner=U0; callee=self.llm._generate;
+attrs={high_cost=true}
+StateUpdate:
+S0:STATE_APPEND; owner=U0; target=messages;
+attrs={state_growth=true}
+ExitRecord:
+T0:CONDITIONAL_FALSE; owner=C0; target=return;
+condition=finish_reason != "tool_calls"
+2) Program Fact Extraction:For each agent project, IAL-
+SCANbuilds a project index and parses Python files into ASTs.
+The index records modules, imports, framework usage, decora-
+tors, local factories, custom runtime classes, and project-defined
+agent callables. It also performs lightweight name and attribute
+resolution for import aliases, local assignments, object fields,
+and factory returns. This resolution helps identify candidate call
+targets and state objects without whole-program points-to analy-
+sis. The AST pass extracts local control and data facts, including
+loops, recursive calls, call expressions, state updates, condi-
+tional exits, and try/except retry paths. Each source fact
+has the form ⟨kind,loc,scope,guard,target,attrs⟩, where
+scope records the enclosing function, class, agent, or work-
+flow, guard stores the relevant condition, and target records
+the resolved callee, updated object, bounded variable, or
+exception type. The extracted facts are translated into Agent
+IR: loops become Controller facts, runtime calls be-
+come Invocation facts, loop-carried updates become
+StateUpdate facts, caps and budgets become Bound facts,
+and local exits become ExitRecord facts. In Figure 2,
+self.llm._generate(...) becomes an LLM_CALL,
+messages.append(...) becomes a STATE_APPEND,
+and finish_reason and tool_calls become guard
+dependencies of the surrounding controller.
+3) Framework Behavior Modeling:Explicit source con-
+structs do not expose all execution behavior in agent programs.
+A tool may be registered in one place and invoked later by
+a dispatcher; a workflow edge may execute a node without a
+direct call; and a handoff or delegation may transfer control to
+another agent. Using the resolution results from the previous
+step, IAL-SCANmodels such framework behavior as Agent IR
+facts and relations. The models handle construction, invocation,
+and configuration. Construction models identify framework
+objects and bindings, including agents, tools, workflows,
+graph nodes, and runtime scopes. Invocation models derive
+implicit execution relations, such as tool dispatch, workflow
+Notations.
+•G A = (VA, EA, α): ALDG with vertices, edges, and attributes.
+•r: an Agent IR fact;v r: the ALDG vertex created forr.
+•C , Icost, Sgrow, and Uscope: controllers, costly invocations, growing
+state updates, and scope facts.
+•T V : ALDG node kinds;K E: ALDG edge kinds.
+•r i
+κ,∆
+− − − →rj: Agent IR relations imply an ALDG edge of kind κ, with
+attributes∆.
+•body(c) , cycle(c): facts and edges in the body and feedback component
+of controllerc.
+Construction Rules.
+1)Node Construction.
+r∈ C ∪ Icost ∪ Sgrow ∪ Uscope
+⇒v r ∈V A,kind(v r)∈ TV , α(vr)←fields(r)∪attrs(r).
+2)Edge Construction.
+ri
+κ,∆
+− − − →rj , κ∈ KE ⇒(v ri , vrj , κ)∈EA, α(vri , vrj )←∆.
+3)Loop Summary Construction.
+Feedback(c) ={kind(e)|e∈cycle(c), e.feedback}
+∪ {guardsource(c)},
+Cost(c) ={kind(i)|i∈body(c), i.high cost},
+Growth(c) =∃s∈body(c) :s.state growth,
+Exit(c) ={x|x.owner =c∨x.target =c},
+Bound(c) ={b|bconstrainscor its owner scope}.
+Fig. 4: Construction rules from Agent IR to ALDG.
+transitions, handoffs, delegation, and agent reentry through
+Agent.as_tool(...). Configuration models attach limits
+such as max_turns, max_iterations, max_retry, and
+recursion_limit to the corresponding runtime scope or
+repeated path. For example, LangGraph nodes and conditional
+edges become workflow scopes, routing controllers, and tran-
+sition relations; OpenAI Agents SDK Runner.run(...),
+handoffs, and Agent.as_tool(...) become invocations
+and reentry relations; and CrewAI delegation becomes agent
+execution with a delegation relation. If a target cannot be
+resolved statically, IAL-SCANpreserves it as an unresolved
+attribute rather than creating a precise transfer relation. Listing 2
+shows an excerpt of the Agent IR facts for Figure 2. The excerpt
+includes the enclosing execution unit, loop controller, model
+call, state update, and local exit condition.
+B. Agentic Loop Dependence Graph (ALDG) Construction
+Given Agent IR, IAL-SCANconstructs an Agentic Loop
+Dependence Graph (ALDG), a directed attributed graph for
+reasoning about feedback paths in agent execution. ALDG
+keeps the facts needed to connect controllers, runtime actions,
+state updates, exits, and bounds. Figure 4 summarizes the
+construction rules.
+1) ALDG Node Construction:IAL-SCANderives ALDG
+nodes from Agent IR facts that are relevant to loop behavior.
+As defined in Figure 4, the retained fact sets are controllers
+C, costly invocations Icost, growing state updates Sgrow,
+and execution scopes Uscope. These facts are mapped to 12
+node kinds in TV , covering scope, controller, invocation,
+and state nodes. They correspond to the main questions
+used in later analysis: where repetition is controlled, which
+N1:LOOP
+while finish_reasonis None 
+or finish_reason== 'tool_calls'
+role:workflow controller_hint:MIXED
+semantic_kind=execution_loop
+N0:BASIC_BLOCK
+moonshot_generate(...)
+N2:LLM_CALL
+self.1lm._generate(...)
+high_cost:yes
+N3:Loop 
+for result_message.tool_calls
+guard: iterator_exhaustion
+N5:STATE_APPEND
+messages.append(result_message)
+role:state
+N6:STATE_APPEND
+messages.append(ToolMessage(...))
+finish_reason
+!= 
+'tool_calls'
+LOOPBACK/
+Feedback
+expanded messages 
+reused next 
+iteration
+Exit
+returnresult
+Iterator Done
+no more 
+tool_calls
+Legend
+Function
+Loop
+LLMCall
+State
+Update
+Exit/
+Decision
+ControlFlow
+Feedback
+（LoopBack）
+CONDITIONAL
+_FALSE
+role:workflow
+CONDITIONAL
+_FALSE
+LOOPBACK
+(next tool_call)
+role:model
+state_growth:yes
+role:state state_growth:yes
+Fig. 5: ALDG for the motivating example in Figure 2.
+actions may consume resources, which state may grow across
+iterations, and which scope owns the behavior. For each
+retained factr, IAL-SCANcreates a nodev r, assigns a node
+kind from TV , and copies the source location and analysis
+attributes of r to the node. Guard variables, configuration
+values, and aliases are kept as node attributes when they help
+interpret the corresponding node. Figure 5 shows the ALDG
+for the motivating example: self.llm._generate(...)
+and messages.append(...) become LLM_CALL and
+STATE_APPEND nodes, while finish_reason and
+tool_calls are stored as guard attributes of the surrounding
+LOOPnode.
+2) ALDG Edge Construction:IAL-SCANderives typed
+ALDG edges from Agent IR relations among retained nodes.
+Since auxiliary IR elements such as guards, aliases, configu-
+ration entries, and intermediate statements may not appear as
+nodes, edge construction preserves reachability through these
+elements and assigns each derived relation an edge kind in KE.
+We define 10 edge kinds in KE, grouped as execution, exit,
+framework, and feedback edges. For two retained Agent IR facts
+ri and rj, a derived relation ri
+κ,∆
+− − →rj, where κ∈ KE, yields
+an ALDG edge (vri , vrj , κ). The attributes ∆ record source
+locations, guard conditions, resolved targets, and framework
+bindings. Source structure gives CONTROL_FLOW edges, while
+resolved calls give CALL edges. Framework relations give
+WORKFLOW_TRANSITION and TOOL_DISPATCH edges af-
+ter matching tool registrations, graph nodes, routing functions,
+and runtime scopes. Loop back, recursion, agent reentry, and
+exception retry become feedback edges, and exits become
+CONDITIONAL_TRUE or CONDITIONAL_FALSE edges. In
+Figure 5, the wrapper scope reaches the loop, model call, and
+state update through execution edges. The outer loop has a
+LOOP_BACK edge and a CONDITIONAL_FALSE edge to the
+Algorithm 1IAL failure detection over ALDG
+Require:ALDGG A = (VA, EA, α), cycle edge kindsK cycle
+Ensure:IAL findingsF
+1:F ← ∅
+2:G cycle ←(V A,{e∈E A |kind(e)∈ Kcycle})
+3:L ← {L∈SCC(Gcycle)| |L|>1∨SelfLoop(L)}
+4:for allL∈ Ldo
+5:Π L ←COLLECTPROPERTIES(L, G A)
+6:Θ L ←COLLECTTOPOLOGY(L, G A)
+7:if¬ELIGIBLECANDIDATE(L,Π L,Θ L)then
+8:continue
+9:end if
+10:c L ←SELECTCONTROLLER(L,Π L)
+11:β L ←CHECKBOUNDCOVERAGE(L, c L,Π L,Θ L)
+12:ifISCOVERED(β L)then
+13:continue
+14:end if
+15:F L ←BUILDFINDING(L, c L, βL,Π L,Θ L)
+16:ifREPORTABLE(F L)then
+17:F ← F ∪ {F L}
+18:end if
+19:end for
+20:returnF
+exit node. This exit is retained but not counted as a bound
+because it depends on model output.
+3) Loop Property Annotation:For each controller node
+c, IAL-SCANannotates the node with loop properties com-
+puted from its reachable body and incident ALDG edges.
+These properties record whether the controlled region reaches
+costly actions, updates state carried across iterations, ex-
+poses local exits, or has candidate bounds in a match-
+ing scope. They are stored as controller attributes, includ-
+ing body_cost_kinds, state_growth, exit_kinds,
+guard_source, and bound_sources. Edge attributes
+preserve relation information such as edge role, guard condition,
+feedback kind, and source locations. These loop properties are
+not final IAL decisions; they provide graph-level inputs to the
+failure checker. In the ALDG example shown in Figure 5, the
+outer loop has a visible CONDITIONAL_FALSE exit, but the
+exit depends on the model-produced finish_reason. IAL-
+SCANtherefore records it as a model-dependent exit rather
+than a deterministic bound. Candidate bounds are recorded
+in the same way, while effective bound coverage is checked
+during failure detection.
+C. Infinite Agentic Loop (IAL) Failure Detection
+IAL-SCANdetects IAL failures over the ALDG by checking
+whether an execution feedback path can repeatedly reach
+agentic actions, costly invocations, or growing state without
+an effective stopping mechanism, as shown in 1.
+1) SCC-Based Candidate Discovery:IAL-SCANfirst de-
+rives a cycle-relevant subgraph from the ALDG. The subgraph
+keeps edges that may participate in repeated execution, includ-
+ing control flow, calls, framework transitions, tool dispatch, and
+feedback edges. Exit edges and bound attributes are excluded
+from SCC construction, because they describe possible stopping
+conditions rather than repeated execution itself. IAL-SCAN
+then computes strongly connected components and retains
+nontrivial SCCs, including singleton SCCs with explicit self-
+loop edges. Each retained SCC is treated as a candidate
+feedback region. IAL-SCANcomputes a property set ΠL
+and a topology set ΘL for the candidate. ΠL records entry
+reachability, feedback edges, costly invocations, state growth,
+local exits, and guard dependencies. ΘL records workflow
+structure, such as routing cycles, missing exit transitions,
+dynamic dispatch, and unreachable exits. A candidate is kept
+only if it is reachable from an agent entry point and contains a
+feedback path that reaches agentic actions, costly invocations,
+or growing state. Cycles that correspond to bounded iteration
+patterns, stream consumers, parsers, pagination loops, lifecycle
+loops, or test scaffolding are filtered before bound verification.
+2) Controller and Bound Verification:For each candidate
+L, IAL-SCANselects the continuation controller cL using con-
+troller nodes, guard dependencies, exit predicates, and feedback
+edge kinds. The controller is classified as deterministic, model
+controlled, tool controlled, external state controlled, exception
+controlled, or mixed. This classification matters because a
+visible exit does not necessarily stop the feedback path when
+continuation depends on model output, tool results, exceptions,
+or remote state. IAL-SCANthen checks whether an effective
+bound covers the candidate feedback path. As summarized in
+Listing 3, each candidate is assigned a bound status. A bound
+records its kind, value, source, strength, and target, but it is
+effective only when it constrains the repeated path itself. The
+check verifies whether a bound applies to the controller, its
+runtime scope, or the feedback path it controls. For example,
+an inner turn cap on a nested agent call does not cover an
+outer evaluator feedback cycle unless it dominates the outer
+feedback path.
+Listing 3: Bound coverage status for candidate feedback paths.
+BoundStatus:
+Covered:
+verified_bound | framework_default_bound
+| config_dependent_bound
+UncoveredOrWeak:
+missing_bound | weak_bound | disabled_bound
+| ineffective_bound | bypassed_bound
+Lines 12–14 skip candidates whose feedback paths are covered
+by an effective bound. The remaining candidates are treated
+as unbounded or ineffectively bounded feedback paths.
+3) IAL Failure Identification:IAL-SCANreports a candidate
+as an IAL failure only when it satisfies three conditions: it
+contains an agentic feedback path, the path reaches costly
+or state-growing operations, and the repeated execution is
+not covered by an effective bound. Confidence increases with
+model-controlled continuation, repeated tool or agent execution,
+state growth, and the absence of a reachable deterministic exit.
+It decreases for non-target cycles such as stream consumers,
+lifecycle loops, pagination or parser loops, context-pruning
+loops, non-production polling, and test or example code. For
+ambiguous candidates, IAL-SCANapplies an optional LLM-
+assisted pruning pass. For each candidate L, it constructs
+a bounded slice SL containing the feedback witness, con-
+troller condition, guard definitions, candidate bounds, relevant
+call chain, and source snippets. The LLM acts only as a
+negative filter over SL: it may suggest pruning predicates
+such as strong_finite_bound, non_agentic_loop,
+test_only_code, or deterministic_exit. A predi-
+cate is accepted only if it is supported by the slice and does
+not contradict the static properties ofL.
+V. EVALUATION
+In this section, we evaluate IAL-SCANwith the following
+research questions (RQs):
+RQ1 [Real-world Findings]What IAL failures does IAL-
+SCANidentify in real-world LLM agent repositories, and
+what are their characteristics?
+RQ2 [Effectiveness]Which analysis components are necessary
+for finding IAL failures, and how does IAL-SCAN
+compare with LLM and coding-agent baselines?
+RQ3 [Stability]How stable are the static candidate generation
+stage and the LLM-assisted pruning stage across repeated
+runs and model choices?
+A. Experimental Setup
+Implementation.We implement IAL-SCANin Python. It con-
+structs Agent IR, builds an ALDG, and checks feedback cycles
+for reachability, continuation control, bound coverage, resource
+consumption, and state carried across repeated executions. The
+LLM-assisted pruning stage uses GPT-5.5 as the default model.
+IAL-SCANcurrently supports the analysis of downstream agent
+projects built with eight frameworks: LangChain, LangGraph,
+CrewAI, AutoGen, LlamaIndex, the OpenAI Agents SDK,
+Google ADK, and Semantic Kernel.
+Running environment.All experiments are conducted on a
+single Ubuntu 24.04.3 LTS server with two AMD EPYC 9554
+processors, 256 logical CPU cores, and six NVIDIA A100
+GPUs with 80 GB memory each.
+Dataset.Our evaluation uses a corpus of 6,549 Python LLM
+agent repositories with at least one GitHub star, collected from
+GitHub metadata and cloned snapshots. We identify candidates
+by searching dependency declarations, imports, API uses, and
+orchestration patterns for eight agent frameworks, and then
+filter them using repository metadata and source code evidence.
+Each retained repository must be a downstream application
+or product, rather than a framework implementation, tutorial,
+or isolated example, and must contain concrete agent logic
+such as agent or workflow construction, runtime invocation,
+tool registration, or orchestration. The corpus contains 246,748
+Python files and 33.41M lines of Python code.
+Manual review protocol.Manual review is used for confirming
+real-world findings in RQ1 and identifying missed cases in
+RQ2. The first two authors independently inspect each case
+and label it as a confirmed IAL failure, a false positive, or a
+missed case of IAL-SCAN. A case is confirmed as an IAL
+failure if it contains a repeated feedback path involving model,
+tool, agent, or workflow execution, its continuation depends on
+runtime outputs, and no strong bound covers the repeated path.
+Disagreements are resolved through discussion, with another
+author consulted when needed.
+TABLE II: Distribution of 68 confirmed IAL failures.
+Category #Count Ratio #Proj.
+Framework
+LangGraph 23 33.8% 16
+AutoGen AgentChat 22 32.4% 15
+LlamaIndex 6 8.8% 2
+LangChain AgentExecutor 5 7.4% 3
+CrewAI 4 5.9% 4
+OpenAI Agents SDK 4 5.9% 3
+Google ADK 3 4.4% 3
+Semantic Kernel 1 1.5% 1
+Failure Pattern
+Retry feedback without bound 17 25.0% 10
+Tool-call iteration without bound 16 23.5% 11
+Multi-agent chat without turn bound 14 20.6% 13
+Workflow loop without effective bound 9 13.2% 8
+Message reentry without bound 7 10.3% 2
+Runner, delegation, or evaluator feedback 5 7.4% 4
+Impact
+API cost exhaustion 65 95.6% 44
+Model denial of service 65 95.6% 44
+Context window exhaustion 19 27.9% 14
+External tool rate-limit exhaustion 5 7.4% 5
+Root Cause
+Missing strong bound 68 100.0% 47
+Tool-controlled retry 28 41.2% 18
+Model-controlled termination 26 38.2% 19
+Missing exit 23 33.8% 17
+Workflow cycle without verified bound 21 30.9% 15
+State growth amplifier 19 27.9% 14
+Agent tool reentry 17 25.0% 11
+B. RQ1: Real-world Findings
+1) Overall Result:On the real-world corpus of 6,549
+LLM agent projects, IAL-SCANreports 74 potential findings.
+Manual review confirms 68 IAL failures and 6 false positives,
+yielding an end-to-end precision of 91.9%. During independent
+labeling, the first two authors agreed on 94.6% of the 74
+potential findings; the remaining cases were resolved through
+discussion. These failures affect 47 agent projects and cover
+all eight modeled framework families. As shown in Table II,
+LangGraph and AutoGen contribute 45 of the 68 confirmed
+findings (66.2%) across 31 projects. Both frameworks encode
+feedback through APIs rather than visible loop syntax. For
+LangGraph, IAL-SCANmodels APIs such as add_edge,
+add_conditional_edges, and tools_condition to
+capture LLM–tool feedback paths. For AutoGen, it models
+GroupChat, initiate_chat, and termination predicates
+such as max_turns and is_termination_msg to cap-
+ture agent-to-agent feedback paths. The remaining 23 findings
+span the other six frameworks, suggesting that IAL failures are
+not specific to one framework or loop idiom. Retry feedback
+without bounds, tool-call iteration without bounds, and multi-
+agent chat without turn bounds account for 47 findings (69.1%).
+These failures often arise when parser errors, validator failures,
+repeated tool requests, or generated agent messages redirect
+execution to model, tool, or agent actions. The dominant
+impacts are API cost exhaustion and model denial of service,
+each appearing in 95.6% findings. Another 19 findings may
+exhaust the context window due to message or workflow state
+growth. All 68 failures share the same root issue: the repeated
+path is not covered by a strong bound. This gap commonly
+def__call__(self, state):
+input= state["messages"][-1].content
+success = False
+whilenotsuccess:
+whilenotsuccess:
+try:
+plan = self.llm.invoke({
+"messages": [("user", state["messages"][-1].content)]
+})
+success = True
+exceptOutputParserException:
+pass
+steps = []
+forstep inplan.steps:
+ifself.plan_checker({"context": step, "question": input}):
+steps.append(step)
+iflen(steps) == 0:
+success = False
+return{"input": input, "plan": steps}
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+Fig. 6: Retry loop missing bound.
+appears in tool-controlled retries, model-dependent termination,
+and workflow or agent reentry without verified limits.
+2) Case Study:We further examine two confirmed findings
+to illustrate different IAL patterns. Figure 6 shows a retry
+loop in 2456868764/LiteRAG. The planner uses nested
+while not success loops to repeatedly request a plan
+from the LLM. The costly call appears at lines 8–10, where
+self.llm.invoke(...) is executed until parsing suc-
+ceeds. However, parser failures are swallowed at lines 12–13,
+and rejected plans reset success to False at lines 20–21.
+This sends execution back to the same LLM call. Since no
+retry cap, timeout, or token budget covers this feedback path,
+malformed or repeatedly rejected model outputs can cause
+repeated model invocations, leading to API cost exhaustion
+and model service occupation.
+For the second case, Figure 7 shows code snippet from
+NVIDIA-AI-Blueprints/ai-virtual-assistant,
+illustrating a tool call iteration failure. The assistant enters an
+unbounded while True loop at line 2, binds tools to the
+LLM at line 5, and invokes or streams the model at lines 9–13.
+The continuation check at lines 15–18 depends on whether
+the model returns tool calls or usable text. If the output is
+empty or malformed, the code appends a corrective prompt
+to state["messages"] at lines 19–21 and retries. This
+creates a feedback path from model output to message state
+growth and then back to another model call. Without a retry
+cap, tool call budget, timeout, or context size guard, the loop
+can amplify API cost, occupy model service capacity, and
+increase context window pressure.
+C. RQ2: Effectiveness
+1) Ablation Study:Applying the full configuration of IAL-
+SCANto the full corpus yields 340 static candidates across 264
+projects. These candidates are then processed by LLM-assisted
+pruning and manual review, producing the end-to-end RQ1
+result: 74 potential findings, 68 of which are true positives. We
+use these 264 projects as the evaluation subset for RQ2 and
+RQ3, as they cover the complete static candidate set generated
+by the full configuration and allow comparisons on the same
+set of relevant projects.
+asyncdef__call__(self, state, config):
+whileTrue:
+llm = get_llm(**config.get('configurable', {}).get(
+"llm_settings", default_llm_kwargs))
+runnable = self.prompt | llm.bind_tools(self.tools)
+last_message = state["messages"][-1]
+ifisinstance(last_message, ToolMessage) andis_target_tool(last_
+message.name):
+messages = []
+asyncformessage in
+runnable.with_config(tags=["should_stream"]).astream(state):
+messages.append(message.content)
+result = AIMessage(content="".join(messages))
+else:
+result = runnable.invoke(state)
+ifnotresult.tool_calls and(
+notresult.content
+orisinstance(result.content, list) andnotresult.content[0]
+.get("text")
+):
+state = {**state, "messages": state["messages"] + [
+("user", "Respond with a real output.")
+]}
+else:
+break
+return{"messages": result}
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+Fig. 7: Tool call iteration missing bound.
+For the ablation study, we disable one component at a
+time. The four static analysis variants regenerate candidates
+after removing framework modeling, the agentic gate, bound
+coverage, or benign-loop filtering, and then apply the same
+LLM-assisted pruning stage. In contrast,w/o LLM Pruning
+keeps the full static analysis stage and reports all static
+candidates directly. The results in Table III show that each
+component has a distinct role. WithoutLLM Pruning, IAL-
+SCANretains all 68 true positives but reports all 340 static
+candidates, producing 272 false positives. This confirms that the
+static stage favors recall and needs pruning to reduce manual
+review effort.Framework Modelingimproves precision by
+capturing framework specific feedback semantics; disabling it
+increases static candidates from 340 to 910 and alerts from 74
+to 276, while reducing TP coverage from 68 to 61. TheAgentic
+Gatemainly controls cost: removing it causes the largest
+candidate increase, from 340 to 1,453, and raises token usage
+from 4.2K to 40.4K.Bound Coverageaffects both precision and
+recall, as removing it lowers TP coverage to 60 and increases
+false positives to 10.Benign Loop Filteringsuppresses safe
+loop contexts, reducing alerts from 103 to 74 and token usage
+from 16.3K to 4.2K. Overall, the full configuration achieves
+the best balance, covering all 68 true positives with only 6
+false positives, 4.2K tokens, and 31.2s per project.
+TABLE III: Results of the ablation study.
+Variant #Static Cand. #Alerts #TP #FP Avg. Tok. Avg. T
+Full IAL-SCAN340 74 68 6 4.2K31.2s
+w/o Framework Modeling910 276 61 215 22.3K 92.3s
+w/o Agentic Gate1,453 87 62 25 40.4K 110.3s
+w/o Bound Coverage365 70 60 10 4.3K 38.1s
+w/o Benign Loop Filtering696 103 62 41 16.3K 66.3s
+w/o LLM Pruning340 340 68272 0 3.8s
+Note.The evaluation subset contains 264 agent projects.Avg. Tok.andAvg. Tdenote
+the average token usage and analysis time per project.
+2) Baseline Comparison:There is no existing tool dedicated
+to detecting IAL failures. We therefore compare IAL-SCAN
+with two LLM-based baselines: a general coding agent and a
+pure LLM API analysis. This comparison examines whether
+IAL detection can be replaced by a coding agent or direct
+LLM prompting, given the broad use of LLMs in vulnerability
+detection and risk analysis. All three methods use gpt-5.5
+as the base model and a 180s timeout per project. The coding
+agent baseline uses Codex with no internet access and a prompt
+that asks it to analyze the entire repository. The pure LLM
+API baseline uses the same core detection prompt but analyzes
+Python files one by one. We include the complete prompts in
+our artifacts. To control cost and time, we limit each project
+to at most 80 Python files and each file to at most 3,000
+characters. In the 264 project evaluation subset, this baseline
+reads 12,958 of 34,634 Python files, including 9,233 files read
+in full. Table IV shows that general LLM baselines are not a
+substitute for IAL-SCAN. The pure LLM API baseline covers
+only 23 of the 68 confirmed failures and produces 183 alerts.
+Although it fully reads only about one quarter of all Python
+files, its token usage is already more than four times that of
+IAL-SCAN. The coding agent baseline has higher recall than
+the pure LLM API baseline, covering 50 confirmed failures,
+but it produces many extra alerts, and reaches the timeout or
+error limit in 75 projects. It also incurs much higher cost, with
+141.86K tokens and 116.0s per project on average. Due to
+cost constraints, we bound the analysis time and input size for
+the LLM baselines. Even so, the results show that IAL-SCAN
+achieves higher coverage and precision, lower token usage, and
+shorter analysis time.
+TABLE IV: Comparison with LLM-based baselines.
+Method #Alerts #TP Cov. #Missed #Timeout Avg. Tok. Avg. T
+IAL-SCAN 74 68 0 0 4.2K 31.2s
+Coding assistant 140 50 18 75 141.9K 116.0s
+Pure LLM API 183 23 45 1 18.1K 34.4s
+Note.Results are measured on the evaluation subset of 264 agent projects. The coding
+assistant baseline uses Codex. All methods use gpt-5.5 as the base model and a
+180s timeout per project. #TP Cov. denotes the number of confirmed IAL failures
+covered by each method.
+3) FP & FN:For the 6 false positives from the real-world
+detection in RQ1, we inspected each case in detail. Each
+case contains a real agentic feedback path, but manual review
+found an effective bound covering the path. These bounds
+are difficult to resolve statically because they are indirect or
+framework dependent: two workflows use max_steps or
+fallback counters outside the loop body, one OpenAI Agents
+supervisor relies on the default max_iterations=3, one
+LangGraph tool loop is capped by max_tool_calls=2, one
+QA workflow combines a retry budget with asyncio timeouts,
+and one AutoGen classification flow is a bounded two turn
+exchange. These cases show that most false positives come from
+subtle bound configurations rather than spurious loop matches.
+IAL-SCANconservatively retains them to avoid missing IAL
+failures with similar feedback structures.
+To estimate false negatives, we reviewed baseline alerts not
+reported by IAL-SCAN. The two baselines produced 250 raw
+extra alerts. After removing two alerts already matched to
+IAL-SCANfindings and deduplicating overlapping alerts at
+the same source location, 239 unique baseline-only locations
+remained. Two authors independently labeled them with 92.1%
+agreement, and all disagreements were resolved with a third
+author. This process confirmed 7 false negatives of IAL-SCAN.
+These false negatives mainly involve LangGraph workflow or
+tool cycles with unrecognized bounds, handwritten tool call
+loops, framework-adjacent orchestration loops, and multi-agent
+conversations missing effective turn or termination bounds.
+Most other baseline-only alerts are not IAL failures, such
+as tutorials, examples, human-driven REPLs, UI or service
+lifecycle loops, bounded workflows, or reports without enough
+evidence of an autonomous agent feedback path.
+D. RQ3: Stability
+1) End-to-end Repeatability:We repeat the end-to-end
+analysis three times on the evaluation subset using the same
+static configuration and default LLM-assisted pruning. As
+shown in Table V, the static stage is fully repeatable: all
+runs produce the same 340 static candidates. The variation
+comes from LLM pruning, which reports 74, 73, and 70 alerts
+and covers 68, 64, and 60 true positives, respectively. Token
+cost remains stable at 4.2K tokens per project, while average
+time ranges from 31.2s to 39.3s. These results show that static
+candidate discovery is deterministic, whereas LLM pruning
+introduces limited but visible variability. We therefore use the
+LLM only as a pruning aid, and base the RQ1 result on manual
+review of the 74 potential findings from the default run.
+TABLE V: Results of end-to-end repeatability experiments.
+Run #Static Cand. #Alerts #TP Cov. Avg. Tok. Avg. T
+Run 1 340 74 68 4.2K 31.2s
+Run 2 340 73 64 4.2K 39.3s
+Run 3 340 70 60 4.2K 38.6s
+2) LLM Sensitivity:We evaluate LLM sensitivity to clarify
+the role of the LLM-assisted pruning stage. The input is fixed
+to the same 340 static candidates, so this experiment only
+measures how different models filter the same static evidence,
+rather than how candidates are discovered. As shown in
+Table VI, pruning behavior varies noticeably across models. The
+default setting, gpt-5.5, reduces 340 candidates to 74 alerts
+while covering all 68 confirmed true positives from RQ1. In
+contrast, gpt-5.4-mini and gemini-2.5-flash keep
+more alerts, 136 and 131 respectively, but cover fewer true
+positives. This shows that retaining more candidates does
+not necessarily improve coverage; the model must correctly
+interpret whether the feedback path is feasible and effectively
+bounded. deepseek-v4-pro reports a similar number of
+alerts to the default model, but covers fewer true positives with
+higher token and time cost.
+TABLE VI: LLM-assisted pruning sensitivity.
+Run #Alerts #TP Cov. Avg. Tok. Avg. T
+Default Model
+gpt-5.574 68 4.2K 31.2s
+Model Variants
+gpt-5.4-mini136 41 3.8K 7.4s
+deepseek-v4-pro78 54 6.2K 48.2s
+gemini-2.5-flash131 47 7.0K 17.8s
+VI. DISCUSSION
+A. Implications
+Our findings suggest that IAL prevention should be con-
+sidered in both framework design and application practice.
+For framework developers, bounds should be enforced at the
+runtime scope where feedback is created, rather than exposed
+only as optional local parameters. When graph transitions, tool
+dispatch, conversation management, or handoffs can reenter
+model or agent execution, the framework should provide default
+budgets, propagate them across the feedback path, and report
+uncovered cycles during compilation or runtime. Frameworks
+should also expose guards for state growth, since repeated
+message or workflow updates can enlarge the context even
+before execution limits are reached. For framework users,
+normal agent iteration should be deployed with explicit stopping
+rules. Developers should not rely on the model to eventually
+stop producing tool calls, valid plans, or termination messages.
+Each agent run should set turn or step limits, retry and repair
+paths should have caps and timeouts, and message history or
+workflow state should have size limits.
+B. Limitations
+IAL-SCANhas several limitations. First, as a static analyzer,
+it over-approximates possible agent-specific dependencies rather
+than predicting a single execution trace and may report false
+positives. Second, the current implementation of IAL-SCAN
+focuses on Python applications built with eight agent frame-
+works, so unsupported languages, frameworks, or incomplete
+framework models may lead to false negatives. Third, IAL-
+SCANhas limited support for highly customized user-defined
+semantics, such as project-specific schedulers, external-state-
+based stopping logic, or semantic checks over natural-language
+outputs, which may cause imprecision in bound reasoning.
+Fourth, IAL-SCANuses LLM-assisted pruning only as an
+optional negative filter, but LLM judgments may still be
+incomplete or unstable for ambiguous cases.
+VII. CONCLUSION
+In this paper, we studied IALs, a structural execution failure
+in which agentic feedback paths repeatedly trigger model, tool,
+agent, or workflow execution without an effective termination
+condition. To detect such failures before deployment, we pre-
+sented IAL-SCAN, a static analyzer that normalizes source code
+and framework behavior into Agent IR, constructs an ALDG,
+and identifies feedback paths that can repeatedly reach costly
+or state-growing actions without effective bound coverage. Our
+evaluation on 6,549 real-world repositories demonstrates that
+IAL-SCANcan uncover practical IAL failures across diverse
+agent projects with high precision. These results highlight the
+need for agent-aware static analysis to make iterative agent
+execution safer and more controllable.
+ACKNOWLEDGEMENTS
+We used ChatGPT and Codex to assist with language polish-
+ing and code refinement. All ideas, approaches, experimental
+designs, and results are the authors’ own work.
+REFERENCES
+[1] J. Adam, Y . Lu, D. Raghavan, M. Schwarzkopf, and N. Vasilakis,
+“Towards practically-secure tools for AI agents,” inProceedings of the
+Sixth European Workshop on Machine Learning and Systems, EuroMLSys
+2026, Edinburgh, Scotland, UK, April 27-30, 2026. ACM, 2026, pp.
+215–224. [Online]. Available: https://doi.org/10.1145/3805621.3807645
+[2] CrewAI, “CrewAI Documentation: Customizing agents,” https://docs.
+crewai.com/en/learn/customizing-agents, 2026.
+[3] ——, “crewAIInc/crewAI: Framework for orchestrating role-playing
+autonomous AI agents,” https://github.com/crewAIInc/crewAI, 2026.
+[4] CrewAI GitHub Community, “allow delegation=True leading to infinite
+loop,” https://github.com/crewAIInc/crewAI/issues/330, 2024.
+[5] E. Debenedetti, J. Zhang, M. Balunovi ´c, L. Beurer-Kellner, M. Fischer,
+and F. Tram `er, “AgentDojo: A dynamic environment to evaluate
+prompt injection attacks and defenses for LLM agents,” inAdvances
+in Neural Information Processing Systems 37: Annual Conference on
+Neural Information Processing Systems 2024, NeurIPS 2024, Vancouver,
+BC, Canada, December 10 - 15, 2024, A. Globersons, L. Mackey,
+D. Belgrave, A. Fan, U. Paquet, J. M. Tomczak, and C. Zhang,
+Eds., 2024. [Online]. Available: http://papers.nips.cc/paper files/paper/
+2024/hash/97091a5177d8dc64b1da8bf3e1f6fb54-Abstract-Datasets
+and Benchmarks Track.html
+[6] GitHub, “CodeQL: Semantic code analysis engine,” https://codeql.github.
+com/, 2026.
+[7] X. Hou, Y . Zhao, and H. Wang, “On the (In)Security of LLM app
+stores,” inIEEE Symposium on Security and Privacy, SP 2025, San
+Francisco, CA, USA, May 12-15, 2025, M. Blanton, W. Enck, and
+C. Nita-Rotaru, Eds. IEEE, 2025, pp. 317–335. [Online]. Available:
+https://doi.org/10.1109/SP61157.2025.00117
+[8] LangChain, “AgentExecutor reference,” https://reference.langchain.com/
+python/langchain-classic/agents/agent/AgentExecutor, 2026.
+[9] ——, “LangChain: Observe, evaluate, and deploy reliable AI agents,”
+https://www.langchain.com/, 2026.
+[10] ——, “LangChain Reference: AgentExecutor max iterations,”
+https://reference.langchain.com/python/langchain-classic/agents/agent/
+AgentExecutor/max iterations, 2026.
+[11] ——, “LangGraph Documentation: GRAPH RECURSION LIMIT,”
+https://docs.langchain.com/oss/python/langgraph/errors/GRAPH
+RECURSION LIMIT, 2026.
+[12] ——, “LangGraph overview,” https://docs.langchain.com/oss/python/
+langgraph/overview, 2026.
+[13] ——, “LangGraph Reference: GraphRecursionError,” https://reference.
+langchain.com/python/langgraph/errors/GraphRecursionError, 2026.
+[14] LangGraph GitHub Community, “Agent infinite looping until recursion
+limit error is hit,” https://github.com/langchain-ai/langgraph/issues/6731,
+2026.
+[15] C. Li, L. Zhang, J. Zhai, S. Feng, X. Yang, H. Wang, S. Dou, Y . Ji,
+Y . Hu, Y . Wu, Y . Liu, and D. Zou, “Towards security-auditable LLM
+agents: A unified graph representation,”CoRR, vol. abs/2605.06812,
+2026. [Online]. Available: https://doi.org/10.48550/arXiv.2605.06812
+[16] Y . Li, H. Wen, W. Wang, X. Li, Y . Yuan, G. Liu, J. Liu, W. Xu,
+X. Wang, Y . Sun, R. Kong, Y . Wang, H. Geng, J. Luan, X. Jin, Z. Ye,
+G. Xiong, F. Zhang, X. Li, M. Xu, Z. Li, P. Li, Y . Liu, Y . Zhang, and
+Y . Liu, “Personal LLM agents: Insights and survey about the capability,
+efficiency and security,”CoRR, vol. abs/2401.05459, 2024. [Online].
+Available: https://doi.org/10.48550/arXiv.2401.05459
+[17] Z. Li, S. Dutta, and M. Naik, “IRIS: LLM-Assisted static analysis
+for detecting security vulnerabilities,” inThe Thirteenth International
+Conference on Learning Representations, ICLR 2025, Singapore,
+April 24-28, 2025. OpenReview.net, 2025. [Online]. Available:
+https://openreview.net/forum?id=9LdJDU7E91
+[18] Z. Liang, Q. Xie, J. He, B. Xue, W. Wang, Y . Cai, F. Luo,
+B. Zhang, H. Hu, and K. Wu, “Argus: Reorchestrating static analysis
+via a multi-agent ensemble for full-chain security vulnerability
+detection,”CoRR, vol. abs/2604.06633, 2026. [Online]. Available:
+https://doi.org/10.48550/arXiv.2604.06633
+[19] Y . Lin, J. Wu, Y . Nan, X. Wang, X. Zhang, and Z. Zheng,
+“AgentRaft: Automated detection of data over-exposure in LLM
+agents,”CoRR, vol. abs/2603.07557, 2026. [Online]. Available:
+https://doi.org/10.48550/arXiv.2603.07557
+[20] Microsoft, “Termination conditions in AutoGen AgentChat,” https:
+//microsoft.github.io/autogen/stable/user-guide/agentchat-user-guide/
+tutorial/termination.html, 2026.
+[21] Microsoft AutoGen, “AutoGen update,” https://github.com/microsoft/
+autogen/discussions/7066, 2025.
+[22] I. C. Ngong, K. Murugesan, S. Kadhe, J. D. Weisz, A. Dhurandhar,
+and K. N. Ramamurthy, “AgentSCOPE: Evaluating contextual privacy
+across agentic workflows,”CoRR, vol. abs/2603.04902, 2026. [Online].
+Available: https://doi.org/10.48550/arXiv.2603.04902
+[23] OpenAI, “OpenAI agents SDK for python,” https://github.com/openai/
+openai-agents-python, 2026.
+[24] ——, “OpenAI Agents SDK: Runner reference,” https://openai.github.io/
+openai-agents-python/ref/run/, 2026.
+[25] ——, “OpenAI Agents SDK: Running agents,” https://openai.github.io/
+openai-agents-python/running agents/, 2026.
+[26] ——, “Runner reference: OpenAI agents SDK,” https://openai.github.io/
+openai-agents-python/ref/run/, 2026.
+[27] ——, “Running agents: The agent loop,” https://developers.openai.com/
+api/docs/guides/agents/running-agents, 2026.
+[28] Reddit r/LangChain Community, “Detecting infinite loops in LangGraph
+multi-agent systems,” https://www.reddit.com/r/LangChain/comments/
+1r2mdz1/detecting infinite loops in langgraph multiagent/, 2026.
+[29] T. Schick, J. Dwivedi-Yu, R. Dess `ı, R. Raileanu, M. Lomeli,
+E. Hambro, L. Zettlemoyer, N. Cancedda, and T. Scialom, “Toolformer:
+Language models can teach themselves to use tools,” inAdvances
+in Neural Information Processing Systems 36: Annual Conference on
+Neural Information Processing Systems 2023, NeurIPS 2023, New
+Orleans, LA, USA, December 10 - 16, 2023, A. Oh, T. Naumann,
+A. Globerson, K. Saenko, M. Hardt, and S. Levine, Eds., 2023.
+[Online]. Available: http://papers.nips.cc/paper files/paper/2023/hash/
+d842425e4bf79ba039352da0f658a906-Abstract-Conference.html
+[30] Semgrep, “Semgrep: Lightweight static analysis for many languages,”
+https://github.com/semgrep/semgrep, 2026.
+[31] N. Shinn, F. Cassano, A. Gopinath, K. Narasimhan, and S. Yao,
+“Reflexion: language agents with verbal reinforcement learning,” in
+Advances in Neural Information Processing Systems 36: Annual
+Conference on Neural Information Processing Systems 2023, NeurIPS
+2023, New Orleans, LA, USA, December 10 - 16, 2023, A. Oh,
+T. Naumann, A. Globerson, K. Saenko, M. Hardt, and S. Levine, Eds.,
+2023. [Online]. Available: http://papers.nips.cc/paper files/paper/2023/
+hash/1b44b878bb782e6954cd888628510e90-Abstract-Conference.html
+[32] C. Wang, Z. Li, S. Dutta, and M. Naik, “QLCoder: A query synthesizer
+for static analysis of security vulnerabilities,”CoRR, vol. abs/2511.08462,
+2025. [Online]. Available: https://doi.org/10.48550/arXiv.2511.08462
+[33] L. Wang, C. Ma, X. Feng, Z. Zhang, H. Yang, J. Zhang, Z. Chen,
+J. Tang, X. Chen, Y . Lin, W. X. Zhao, Z. Wei, and J. Wen, “A
+survey on large language model based autonomous agents,”Frontiers
+Comput. Sci., vol. 18, no. 6, p. 186345, 2024. [Online]. Available:
+https://doi.org/10.1007/s11704-024-40231-1
+[34] Y . Wang, Y . Pan, Z. Su, Y . Deng, Q. Zhao, L. Du, T. H. Luan, J. Kang,
+and D. Niyato, “Large model-based agents: State-of-the-art, cooperation
+paradigms, security and privacy, and future trends,”IEEE Commun.
+Surv. Tutorials, vol. 28, pp. 1906–1949, 2026. [Online]. Available:
+https://doi.org/10.1109/COMST.2025.3576176
+[35] Q. Wu, G. Bansal, J. Zhang, Y . Wu, B. Li, E. Zhu, L. Jiang,
+X. Zhang, S. Zhang, J. Liu, A. H. Awadallah, R. W. White, D. Burger,
+and C. Wang, “AutoGen: Enabling next-gen LLM applications via
+multi-agent conversation,”arXiv preprint arXiv:2308.08155, 2023.
+[Online]. Available: https://arxiv.org/abs/2308.08155
+[36] M. Xavier, V . M. A, M. Jolly, and M. Xavier, “Agentproof: Static
+verification of agent workflow graphs,”CoRR, vol. abs/2603.20356,
+2026. [Online]. Available: https://doi.org/10.48550/arXiv.2603.20356
+[37] S. Yao, J. Zhao, D. Yu, N. Du, I. Shafran, K. R. Narasimhan, and
+Y . Cao, “ReAct: Synergizing reasoning and acting in language models,”
+inThe Eleventh International Conference on Learning Representations,
+ICLR 2023, Kigali, Rwanda, May 1-5, 2023. OpenReview.net, 2023.
+[Online]. Available: https://openreview.net/forum?id=WE vluYUL-X
+[38] ——, “ReAct: Synergizing reasoning and acting in language models,”
+inThe Eleventh International Conference on Learning Representations,
+ICLR 2023, Kigali, Rwanda, May 1-5, 2023. OpenReview.net, 2023.
+[Online]. Available: https://openreview.net/forum?id=WE vluYUL-X
+[39] H. Zhang, Y . Nian, and Y . Zhao, “Agent audit: A security analysis
+system for LLM agent applications,”CoRR, vol. abs/2603.22853, 2026.
+[Online]. Available: https://doi.org/10.48550/arXiv.2603.22853
+[40] H. Zhang, J. Huang, K. Mei, Y . Yao, Z. Wang, C. Zhan, H. Wang,
+and Y . Zhang, “Agent security bench (ASB): formalizing and
+benchmarking attacks and defenses in LLM-based agents,” inThe
+Thirteenth International Conference on Learning Representations, ICLR
+2025, Singapore, April 24-28, 2025. OpenReview.net, 2025. [Online].
+Available: https://openreview.net/forum?id=V4y0CpX4hK
+[41] Y . Zhao, X. Hou, S. Wang, and H. Wang, “LLM app store analysis:
+A vision and roadmap,”CoRR, vol. abs/2404.12737, 2024. [Online].
+Available: https://doi.org/10.48550/arXiv.2404.12737

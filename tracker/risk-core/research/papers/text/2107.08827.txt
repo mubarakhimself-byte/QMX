@@ -1,0 +1,1029 @@
+arXiv 2107.08827  https://arxiv.org/abs/2107.08827
+
+arXiv:2107.08827v1  [q-fin.PM]  15 Jul 2021
+Optimal sports betting strategies in practice:
+an experimental review
+Matej Uhr´ın, Gustav ˇSourek, Ond ˇrej Hub ´aˇcek, Filip ˇZelezn´y
+Department of Computer Science
+Czech Technical University in Prague
+Abstract
+We investigate the most popular approaches to the problem of sports betting investment based on
+modern portfolio theory and the Kelly criterion. We deﬁne th e problem setting, the formal investment
+strategies, and review their common modiﬁcations used in pr actice. The underlying purpose of the
+reviewed modiﬁcations is to mitigate the additional risk st emming from the unrealistic mathematical
+assumptions of the formal strategies. We test the resulting methods using a uniﬁed evaluation protocol
+for three sports: horse racing, basketball and soccer. The r esults show the practical necessity of the
+additional risk-control methods and demonstrate their ind ividual beneﬁts. Particularly, an adaptive
+variant of the popular “fractional Kelly” method is a very su itable choice across a wide range of settings.
+sports betting, betting strategies, risk management, bank roll management
+1 Introduction
+Sports betting systems generally consist of two essential compon ents – (i) predictive models, generating
+probabilistic estimates for the given match outcomes, and (ii) bankr oll management strategies, optimizing
+the expected progression of wealth in time. In this work, we focus s olely on the latter.
+While much of the available research on betting systems is centred ar ound the predictive modelling part,
+often completely neglecting the need for betting portfolio optimizat ion, we show that, given a predictive
+model, the betting strategy has a major inﬂuence on the ﬁnal meas ures of proﬁt. Consequently, a worse
+model with a better strategy can easily outperform a better mode l with a worse strategy.
+Lacking a deeper understanding of the investment part of the pro blem, practitioners often resort to trivial
+practices such as various forms of ﬂat betting. We show that thes e are inferior to the formal strategies, not
+just theoretically but also from a practical perspective. There ar e two basic streams of research in the
+formal approaches, stemming from information theory and econo mics, respectively. The ﬁrst, and the most
+widespread, is the Kelly criterion (Kelly Jr, 1956), also known as the g eometric mean policy, maximizing
+the expected long-term growth of wealth. The second is the appro ach of Markowitz’s Modern portfolio
+theory (Markowitz, 1952), balancing the criteria of expected pro ﬁt and proﬁt variance as a measure of risk.
+While mathematically sound, the formal strategies are based on unr ealistic assumptions. The most limit-
+ing assumption in their application to sports betting is the knowledge o f true probabilities of individual match
+outcomes. Other complications of the problem include the multiplicity o f outcomes and parallel matches.
+We investigate the existing modiﬁcations of the formal strategies p roposed to address the problems occurring
+in practice and evaluate them experimentally in 3 diﬀerent sports dom ains - horse racing, basketball, and
+football.
+The paper is structured as follows. In Section 2 we deﬁne the conce pt of a betting strategy and the
+dimensions of the underlying optimization problem. In Section 3 we rev iew the related work touching
+diﬀerent facets of risk and bankroll management in betting. In Sec tion 4 we formally introduce the two core
+strategies of Kelly and Markowitz. The modiﬁcations of the core str ategies proposed to manage the extra
+risk occurring in practice are then introduced in Section 5. Finally, we experimentally evaluate the strategies
+in practical scenarios in Section 6 and conclude the paper in Section 7 .
+1
+2 Problem Deﬁnition
+In its core, sports betting is a simple stochastic game where the play er p repeatedly allocates a distribution
+of fractions (fi ∈ [0, 1], ∑i fi ≤ 1) of her current bankroll W ∈ R at time t ∈ N over possible stochastic
+results ri ∈ R of a match, coming from a distribution Pr(ri) over the domain R of the random variable R,
+describing all the possible outcomes of the given match at time step t. Each of the possible match outcomes
+ri is then associated with so-called odds (oi ∈ R≥1) by the bookmaker b : ri ↦→ oi. Should a particular
+outcome i be realized ( R = ri), a payoﬀ oi · fi · W from the associated odds and fraction is to be received
+by the player p. In the opposite case, the player loses the allocated portion fi · W of her bankroll to the
+bookmaker b. Each of the particular betting outcomes ri is thus binary 1 in nature, and the potential net
+proﬁt wi from allocation on the i-th outcome is thus
+wi =
+{ oi · fi · W − fi · W with prob. Pr(ri) (if R = ri is realized)
+−fi · W with prob. 1 − Pr(ri) (if R ⁄= ri) (2.1)
+giving an expectation
+EPr [wi] = Pr(ri) · (oifiW − fiW ) + (1 − Pr(ri)) · (−fiW ) (2.2)
+Clearly, the proﬁts of the bettor and bookmaker are directly oppo site and, assuming a closed system of
+bettors and bookmakers, this is a zero-sum game. The goal of bot h the player p and the bookmaker b is
+to maximize their long-term proﬁts Wt→∞ as measured by their respective utilities (Section 4). Given the
+stochastic nature of the game, the natural desideratum of the p layer is to allocate the fractions f = f1, . . . , fn
+so as to target a high total expectation of proﬁt W
+EPr [W] = EPr
+[ ∑
+i
+wi
+]
+=
+∑
+i
+EPr [wi] (2.3)
+Note that, in this work, we assume the two players to take on the as ymmetric roles of market maker b
+and market taker p, where the bookmaker b always starts by laying out the odds o = [ o1, . . . , on] for the
+possible match results r = [ r1, . . . , rn] ﬁrst, consequently to which the player p reacts with his best policy
+for allocation p : ri ↦→ fi of her current wealth Wt. In contrast to e.g. the, less common, betting exchange
+setting, in this work we assume solely the strategies for the role of t he market taker p, which is the most
+common setup for bettors in practice.
+2.1 Betting Strategy
+A player’s betting strategy for a game with n outcomes is a function g mapping a set of probabilistic estimates
+ˆp = ˆpi, . . . , ˆpn and bookmaker’s odds o = o1, . . . , on onto a set of fractions f = f1, . . . , fn of the current
+wealth Wt to be waged over the game outcomes r = r1, . . . , rn
+g : ( ˆp, o) ↦→ f (2.4)
+Typically, the estimated distribution vector ˆp comes from a probabilistic model Pp of the player and is
+similar to, yet most likely diﬀerent from, the (unknown) true probab ility distribution Pp = ˆPr, P p ⁄= Pr
+(Section 2.3). The vector of the waged fractions f is then often referred to as the portfolio over individual
+“assets” i (Section 4.2)
+f =
+[f1, . . . , fn] (2.5)
+where fi indicates the portion of wealth Wt allocated to i-th outcome.
+1Note this concerns an individual ri and not |R|, i.e. a match can have many possible outcomes ri, but each ri has a binary
+realization, resulting exclusively in either win or loss of the bet associated with it.
+2
+2.2 Fixed Odds
+We further assume a so-called ﬁxed-odds betting setup which, as o pposed to e.g. parimutuel setting (Hausch et al.,
+2008), always oﬀers known odds distribution o in advance of the game for the player’s strategy g to calculate
+with. In its most basic form, we can demonstrate the given setting o n a simple coin-tossing game as follows.
+Example 2.1 Assume a fair coin-tossing game with two, equally probable, outco mes R = {Heads, T ails}
+Pr(ri)
+ri∈R
+=
+{
+0.5 for the coin falling r1 = Heads
+0.5 for the coin falling r2 = Tails (2.6)
+The odds by the bookmaker b could then be set up e.g. as follows
+b(ri)
+ri∈R
+=
+{
+o1 = 1.9 for the coin falling r1 = Heads
+o2 = 1.9 for the coin falling r2 = Tails (2.7)
+Let the bettor allocate a ﬁxed wager, such as $1, on the r1 = Heads. She then receives an extra w1 =
+(1.9 − 1) ∗ 1 proﬁt if the associated outcome r1 = Heads is realized, or losses the placed wager $1 otherwise.
+It is easy to see that this particular game is generally disadvantageo us for the bettor, and there exist no
+strategy for her to make long-term proﬁts, since the expected p roﬁt for each outcome of the game is simply
+negative:
+E[w1] = E[w2] = 0 .5 · 1.9 · 1 + 0.5 · (−1) = −0.05 (2.8)
+This follows directly from the fact that the odds are unbiased and subfair. This means that the distribution of
+their inverse values Pb : ri ↦→ 1oi is proportional to the true probability distribution over the game ou tcomes,but it does not form a probability distribution as the values do not sum up to 1:
+∑
+i
+Pb(ri) = 1o1 + 1o2 ≈ 1.05 (2.9)
+Out of the three settings (Cover and Thomas, 2012): fair, subfair, superfair , the subfair odds are typically
+the only setting for a bookmaker to be able to generate proﬁts. We will further limit ourselves to this setting
+as it is the only valid setup working in practice. The value of
+margin =
+∑K
+j=1
+1
+oj − 1∑K
+j=1
+1
+oj
+(2.10)
+is then called the bookmaker’s margin 2 (also known as “vigorish”, “house edge”, “cut” etc.), and repres ents
+the negative expected value of the game given the probabilities Pb implied from the odds are unbiased
+estimates of the true outcome probabilities Pr. Note that this is a typical game setting operated in the
+gambling industry, such as in various casino games, where there is no space for long-term proﬁtable strategies.
+However, we note that the situation in sports betting is principally diﬀ erent.
+2.3 Biased Estimates
+In Example 2.1 with a fair coin, both the bookmaker and bettor knew t he true outcome probability distribu-
+tion (i.e. Pr(r1 = H) = 0 .5; Pr(r2 = T ) = 0 .5). This setting is very elegant from mathematical perspective,
+since one can calculate exact expected values of proﬁts and conse quently derive optimal betting strategies
+(Section 4). Such mathematically optimal strategies can be theore tically applied in artiﬁcial environments
+with handcrafted generators of randomness (e.g. the casinos). However, in the context of sports betting,
+and other practical settings such as stock market investing, this is generally impossible. In this experimental
+review, we thus focus on the scenarios, where the probability estim ates of both the bookmaker Pb and the
+player Pp are biased w.r.t. the real outcome probability distribution Pr. Let us consider an extension of the
+coin-tossing game from Example 2.1 to demonstrate properties of s uch a setting.
+2Often wrongly calculated as simply the remainder over 1 as ∑Kj=1 1oj − 1
+3
+Pr
+[pr1 , . . . ,prn ]
+Pb
+[pb1 , . . . ,pbn ]
+Pp
+[pp1, . . . ,ppn ]
+D|Pr,Pb| D|Pr,Pp|
+D|Pb, Pp|
+Figure 1: A typical sports betting setting for a game with n outcomes, displaying bookmaker’s probabilistic
+estimates Pb and player’s estimates Pp, both distanced from the true distribution Pr and from each other.
+Example 2.2 Consider a biased coin-tossing game where the coin bias is unknown to both the bookmaker
+and the player. Let us set-up the bias such that
+Pr(ri)
+ri∈R
+=
+{
+0.6 for r1 = H
+0.4 for r2 = T (2.11)
+Let us further assume that the player p has a probabilistic model of the game, producing biased estimates
+Pp = ˆPr as
+Pp(ri)
+ri∈R
+=
+{
+0.55 for r1 = H
+0.45 for r2 = T (2.12)
+Finally, assume the bookmaker is also biased with his estimates Pb = ˆPr, Pb ⁄= Pp, according to which he
+sets up the odds distribution o, lowered by a margin 3 m = 0.05
+Pb(ri)
+ri∈R
+=
+{ 0.65 for r1 = H
+0.35 for r2 = T b(ri)ri∈R =
+{ 1
+0.65 · (1 − 0.05) ≈ 1.46 for r1 = H1
+0.35 · (1 − 0.05) ≈ 2.71 for r2 = T (2.13)
+Note that while the odds are still subfair, the bookmaker’s bias w.r.t. Pr now creates space for exploitation,
+since the true expected values are no longer purely negative.
+EPr [w1] = Pr(r1) · b(r1) − 1 ≈ −0.124 for R = r1 = H
+EPr [w2] = Pr(r2) · b(r2) − 1 ≈ 0.084 for R = r2 = T (2.14)
+i.e. the punter could make long-term proﬁts if betting appropriate a mounts on the r2 = T outcome. However,
+not knowing the true probabilities Pr, the player’s calculation of expected values will now be biased, too
+EPp [w1] = Pp(r1) · b(r1) − 1 ≈ −0.197
+EPp [w2] = Pp(r2) · b(r2) − 1 ≈ 0.22 (2.15)
+nevertheless, despite the expected values calculated by the punt er w.r.t. her Pp estimate being wrong, in
+this particular setting, she correctly identiﬁed the positive expect ed value in the r2 = T outcome and could
+theoretically make a proﬁt with an appropriate strategy modiﬁcatio n (Section 5).
+Generally, Pp = ˆPr and Pb = ˆPr
+′
+are going to be somewhat biased w.r.t. Pr as well as w.r.t. each
+other (i.e. Pp ⁄= Pb, as long as the player does not simply copy from the bookmaker). Th e individual
+biases can be captured by statistical measures, such as the Kullba ckLeibler, or better yet JensenShannon,
+divergences (Cover and Thomas, 2012), and the probabilistic sett ing of each game for a particular match
+can then be understood as a triplet of probability distributions over the outcomes, as depicted in Figure 2.3.
+3In practice, the distribution of margin would not be simply u niform as in the example, but the bookmaker typically applie s
+more sophisticated distortion of the odds to secure even hig her statistical advantage.
+4
+2.4 Multiplicity of Outcomes
+So far we have assumed a binary coin-tossing game of two possible ou tcomes. Let us now generalize into
+an n outcome game, such as throwing a die. This represents most real s ituations in sports betting, such
+as the R = {W in, Draw, Loss} outcomes in soccer, or betting on the winner of a horse race with n horses
+(Section 6.1). Moreover, one can potentially assume that the individ ual game outcomes are no longer
+exclusive, such as betting on the ﬁrst j horses, or “over” j goals in soccer for multiple diﬀerent values of j.
+To make the game representation more compact in such situations, a generic matrix O representation
+has been proposed (Busseti et al., 2016), where the columns of O represent the possible outcome assets, and
+rows represent the possible game results, i.e. joint realizations of a ll the outcomes. Each individual element
+in O then represents particular odds for each outcome realization.
+Additionally, we include an artiﬁcial risk-free “cash” asset c, which allows the player to put money aside
+safely. This also allows to model situations where leaving money aside c an cost a small fraction of wealth
+in every turn (caused e.g. by inﬂation), or possibility to increase the wealth by some interest rate (e.g. in a
+savings account).
+The betting strategy g (Section 2.1) can now thus always allocate the full amount of curren t wealth W
+among n available outcome assets, n − 1 of which are risky, stochastic assets, and 1 being the added risk- free
+cash asset as
+g : (pk, Onk ) ↦→ f n where ∑
+i
+fi = 1 (2.16)
+where k is the number of possible worlds, i.e. there are k possible joint outcome realizations, in our proba-
+bilistic game. Odds for each outcome asset in each of the k world realizations with the respective probabilities
+p = p1, p2, ..., pk can thus be fully speciﬁed in the columns oi as
+O =
+[o1 o2 ... on−1 c] , where oi =
+
+
+oi,1
+oi,2
+...
+oi,n
+
+ , c =
+
+
+1
+1
+...
+1
+
+ (2.17)
+Example 2.3 Consider a football game, where we assume 3 outcomes as R = {W, D, L}, forming the 3
+asset vectors ow, od, ol, where the bookmaker sets the odds to ow, od, ol, respectively. The odds matrix O,
+including the constant cash asset c, then looks as follows.
+O =
+[
+ow od ol c
+]
+where ow =
+
+
+ow
+0
+0
+
+ , od =
+
+
+0
+od
+0
+
+ , ol =
+
+
+0
+0
+ol
+
+ , c =
+
+
+1
+1
+1
+
+ (2.18)
+To simplify notation in further sections, we will also deﬁne a modiﬁed od ds matrix ρ corresponding to
+excess odds, i.e. removing the return amount of the placed wager it self, resulting in net proﬁt W (Section 2),
+as
+ρ = O − 1 (2.19)
+Note that in the example scenario the outcomes were exclusive, and the “one-hot” risky asset vectors
+reﬂect their exclusive nature, which considerably simpliﬁes the comp utation of optimal strategies (Section 4).
+In this review, we generally assume individual matches with exclusive o utcomes4 but varying outcome mul-
+tiplicities (Section 6.1) to experimentally assess the properties of th e strategies w.r.t. this dimension of the
+problem.
+2.4.1 Parallel Games
+To further complicate the game, approaching the real betting set ting even more closely, we can consider
+multiple dice being thrown in parallel, each associated with a particular s et of outcomes and odds. Naturally,
+this reﬂects the reality of multiple games being open for betting at th e same time. In popular sports, such
+as soccer, it is not uncommon to have dozens of games available on th e market simultaneously.
+4Note that the exclusiveness of outcomes does not hold in the f urther scenarios with parallel games.
+5
+While we can surely consider each of the games separately, such a sim pliﬁcation can lead to sub-optimal
+results. Although calculating with the true parallel nature of the op portunities can be computationally
+demanding for some of the strategies (Section 4.3.1), it should allow t o alleviate the risk by diversifying over
+a wider portfolio at each time step of the wealth progression. In this review, we consider both the sequential
+and parallel scenarios to emulate realistic scenarios and evaluate th e respective advantages (Section 6).
+2.5 Betting Dynamics
+The betting dynamic represents the investment behaviour of the b ettor w.r.t. her bankroll W in time t,
+which has a major impact on the progression of wealth. There are tw o basic cases of bankroll management
+to be considered – (i) additive and (ii) multiplicative (Peters and Gell-Ma nn, 2016; Peters, 2011 a).
+2.5.1 Additive dynamic
+Additive dynamic corresponds to a simple ﬁxed unit-based investmen t, where the bettor’s wagers are decou-
+pled from her current bankroll Wt. To illustrate the setting, we can imagine that the bettor receives a ﬁxed
+unit (e.g. $1) amount of money from an external source at regular time interv als δt (such as a salary), which
+she repeatedly invests into the stochastic game of betting, and ac cumulates (additively) the prospective
+returns wt · 1 from the unit investment in the, separately held, bankroll Wt. Her wealth progression in time
+t can hence be seen as
+Wt = wt · 1 + Wt−δt (2.20)
+2.5.2 Multiplicative dynamic
+In the multiplicative scenario, the bettor continuously reinvests the current wealth Wt accumulated from
+the previous betting investments, without any external source o f proﬁt. Hence her progression of wealth in
+time t can be seen as
+Wt = wt · Wt−δt (2.21)
+The multiplicative dynamics plays an important role in the Kelly criterion ( Section 4.3), where the mathemat-
+ical optimality of the strategy is derived exactly from a repeated pla y of the same game in the multiplicative
+setting.
+As the comparison of the two approaches appears problematic, du e to the external source of proﬁt in the
+additive scenario, we will further consider only the multiplicative reinv estment setting, which is also more
+realistic and sound for an independent evaluation.
+3 Related works
+The two most notable approaches to allocation of wealth across pre sented stochastic assets, i.e. match
+outcomes in sports betting, were introduced by (i) Markowitz (195 2), with his revolutionary concept of
+balancing return and risk of a portfolio, and by (ii) Kelly Jr (1956), wit h a criterion to maximize the long-
+term growth in a scenario where the same game is being played repeat edly.
+Following the Kelly criterion, the process of betting is closely connect ed to information theory (Kelly Jr,
+1956). Bell and Cover (1988), discuss a game-theoretical optima lity of Kelly portfolios and a generalization
+of the Kelly strategy to maximize the proportion of wealth relative to the total wealth among population
+is discussed in (Lo et al., 2018). Additional mathematical propertie s were also explored in (Latane, 2011)
+and (Breiman et al., 1961; Thorp, 2008). From the economical pers pective, Kelly’s approach is often ex-
+plained through the use of a logarithmic utility function, which was fam ously ﬁrst introduced by Daniel
+Bernoulli in (Bernoulli, 2011), where he pointed out that people do n ot make their decisions according to the
+absolute payoﬀ, but w.r.t. the logarithm thereof. In (Luenberger , 2011) the authors suggest that assuming
+long-term goals, the logarithmic utility function is the only sensible cho ice for a utility function. While not
+necessarily incorrect, the phenomenological explanation of the ch oice of logarithmic utility function seems
+somewhat arbitrary, however.
+In (Peters, 2011 b) a diﬀerent view on the Kelly criterion was proposed, where the auth or criticized the
+established evaluation of betting using the expected value of a port folio, as it is based on the unrealistic
+6
+idea of “simultaneous” evaluation of the, often exclusive, outcome s. Instead of measuring the mean of a
+statistical ensemble of possible outcomes, the author proposed t o focus on what happens to a single player
+as the same game is repeated in time, following the notion of ergodicity in dynamic systems (Peters, 2019).
+The logarithmic transformation then emerges as the correct ergo dic transformation of dynamics of the game
+in the classical reinvestment setting (Peters and Gell-Mann, 2016) , providing a well-founded explanation
+for the observed phenomenon. Given the mathematically elegant ye t somewhat unrealistic setting, the
+Kelly strategy has also been often criticised in many works (Samuelso n, 1971, 2011; MacLean et al., 2010;
+Samuelson, 1975).
+3.1 Extensions of the formal strategies
+The strategies of Markowitz and Kelly have been re-explored by res earchers in a number of diﬀerent ap-
+plication scenarios and many useful modiﬁcations have been propos ed since. Generally, the Markowitz’s
+approach has traditionally dominated the world of quantitative ﬁnan ce, while the Kelly’s approach has been
+more prominent in the sports betting industry. In (Smoczynski an d Tomkins, 2010), a closed form solution
+for the use of the Kelly strategy when betting on horse racing was e xplored. Another practical extension for
+betting on multiple simultaneous games was discussed in a number of wo rks (Whitrow, 2007; Grant et al.,
+2008; Buchen and Grant, 2012), where various approximations fo r large bet aggregations were proposed.
+Modiﬁcation of the Kelly strategy for betting exchanges is discusse d in (Noon et al., 2013), where ad-
+justments for both back and lay bets are presented. Additionally, the eﬀect of commission and maximum
+bet constraint on resulting growth rate is discussed. The Kelly prob lem is examined for spread betting
+in (Chapman, 2007) and in (Haigh, 2000), where several counterin tuitive eﬀects are discussed when using
+the Kelly strategy for spread betting. Markowitz’s modern portfo lio theory for soccer spread betting is then
+discussed in (Fitt, 2009)
+Another important stream of research are works investigating ex tensions of the Kelly strategy towards
+the realistic setting of parameter uncertainty, such as (Baker an d McHale, 2013). A practical method to ad-
+dress the problem are so-called fractional Kelly strategies, the pr operties of which have been investigated in
+great detail in the works of (MacLean, Thorp, Zhao and Ziemba, 20 11) and (MacLean et al., 1992).Peterson
+(2017), presents a decoupled Kelly strategy combined with an addit ional risk measure. Kan and Zhou
+(2007), introduced an optimal portfolio choice under parameter u ncertainty for the modern portfolio theory
+(MPT). Interesting modiﬁcations with similar aims are Bayesian exten sions of the Kelly strategy proposed in
+(Browne and Whitt, 1996; Balka et al., 2017; Chu et al., 2018). Similar ly, approaches based on probabilistic
+risk constraints for limiting the probability of a “drawdown” were disc ussed in (Busseti et al., 2016) and
+(Mulvey et al., 2011). Finally, limiting the worst-case probabilistic scen ario using the framework of distri-
+butionally robust optimization was explored in (Sun and Boyd, 2018) a nd in (Blanchet et al., 2018) for the
+Markowitz’s strategy, respectively.
+3.2 Predictive modelling
+Since we consider predictive sports modelling a separate problem, we only brieﬂy review some papers on the
+topic, with an extra focus on models related to those used for expe riments in this paper.
+A traditional stream of research in predictive sports analytics are score-based models based on various
+explicit statistical assumptions. A football prediction model introd uced by Maher (1982), builds a statistical
+model on the assumption that in a football match the goals are Poiss on-distributed and those of the home
+team are independent of those of the away team. The author also in troduced the notion of teams’ attacking
+and defensive strengths and how to use them for forecasting of t he match results. In (Dixon and Coles, 1997),
+the Maher’s model is further extended and it is shown to make a proﬁ t when combined with a simple betting
+strategy. The authors also used exponential time weighting to disc ount the eﬀects of past results, while
+in (Maher, 1982) the strength of the team is considered to be time- invariant. In (Rue and Salvesen, 2000),
+the authors used a Brownian motion to bind together the strength parameters of the teams in consecutive
+rounds. The model is then used for betting with a variant of the MPT strategy. Egidi et al. (2018), presents
+a hierarchical Bayesian Poisson model with the scoring rates of the teams being represented by convex
+combinations of parameters estimated from historical data and be tting odds. In (Groll and Abedieh, 2013)
+7
+the authors analyze the explanatory power of bookmakers’ odds using pairwise generalized linear mixed
+Poisson model.
+Another modern approach for match outcome predictions are non -parametric and feature-based ma-
+chine learning models. Haghighat et al. (2013), provides a review of m achine learning techniques used in
+outcome predictions of sports events while pointing out some commo n problems and misconceptions. In
+the horse racing domain, a popular logit-based model, combining both “fundamental features” and “odds-
+derived” features into a single prediction system, was presented b y Benter (2008). This model was also
+a strong inspiration for the horse racing model evaluated in this pap er. In the domain of soccer, a recent
+review (Hubacek, Sourek and Zelezny, 2019) discusses a diversity of the common approaches. Notable exam-
+ples include models from the 2017 Soccer Prediction Challenge (Dubitz ky et al., 2019). The winning model
+from the challenge utilized a boosted tree learner based on an ensem ble of score-derived features and simpler
+ranking and statistical models (Hubacek, Sourek and Zelezny, 201 9b). This model was also directly used for
+the soccer betting experiments reported in this paper. In predict ive basketball modelling, it is common to
+use detailed box-score statistics that are available for the high exp osure leagues. Based on diverse features,
+Miljkovi´ c et al. (2010), evaluated their model on the NBA, while Iva nkovi´ c et al. (2010) used a neural net-
+work to predict match outcomes in the League of Serbia. An advanc ed convolutional neural architecture was
+then learned over a, so far biggest, set of basketball games in (Hu bacek, Sourek and Zelezny, 2019 a). We
+again directly utilize this basketball model in this paper.
+4 Betting Strategies
+In the existing literature, the betting strategies range from simple informal techniques, such as ﬂat betting,
+to the formal approaches, represented mainly by the Markowitz’s Modern portfolio theory (Markowitz, 1952)
+and the Kelly criterion (Kelly Jr, 1956), coming from an economical an d information-theoretic views of the
+problem, respectively.
+4.1 Informal Strategies
+In sports betting practice, most of the focus among punters is be ing put on the search for outcomes with
+positive expected value (“value bets”), and the importance of the subsequent investment strategy has often
+been neglected. Consequently, rather than formal strategies, one can encounter simplistic heuristics such
+as (Hubacek, 2017):
+• Bet a ﬁxed fraction on favourable odds.
+• Bet a ﬁxed fraction on the opportunity with maximal expected value .
+• Bet a fraction equal to the absolute discrepancy between player’s and bookmaker’s estimates.
+• Bet a fraction equal to the relative discrepancy between player’s a nd bookmaker’s estimates.
+• Bet a fraction equal to the estimated probability of winning.
+Lacking any formal foundation, these approaches have been sho wn generally inferior to the formal strate-
+gies, both theoretically and in practice (Hubacek, 2017). For comp leteness, we chose to re-validate the reports
+by selecting the previously best performing informal strategies of (i) betting fraction w.r.t. the maximal dis-
+crepancy (“AbsDisc”) and (ii) betting optimal fraction on the maxim al expected value (“MaxEvFrac”) in
+our experiments (Section 2).
+4.2 Modern Portfolio Theory
+Modern Portfolio Theory (MPT) is a standard economic view of the pr oblem based on the idea of the expected
+value of the proﬁt, possibly transformed by a utility function reﬂec ting the user’s particular preferences. The
+general idea behind MPT is that a portfolio f 1, i.e. a vector of assets f = f1, . . . , fn, is superior to f 2, if
+its corresponding expected proﬁt (Section 2) is at least as great
+E[ρ · f 1] ≥ E[ρ · f 2] (4.1)
+8
+and a given risk measure risk : Rn → R of the portfolio, w.r.t. the given odds, is no greater
+risk(f 1|ρ) ≤ risk(f 2|ρ) (4.2)
+This creates a partial ordering on the set of all possible portfolios. Taking the portfolios that no other
+portfolio is superior to gives us a set of “eﬃcient portfolios” Θ (Mark owitz, 1952). In simple terms, we trade
+oﬀ the expected prof it − risk by maximizing the following
+maximize
+f ∈Rn
+(E[ρ · f ] − γ · risk(f |ρ)) (4.3)
+where γ is a hyperparameter reﬂecting the user’s preference for risk.
+In the most common setup, the risk of a portfolio f is measured through the expected total variance
+of its proﬁt V ar[ρ · f ] = f T Σf , based on the given covariance matrix Σnn of net proﬁt of the individual
+assets. Note that in the case of independent outcomes (Section 2 .4), this reduces to a diagonal matrix with
+the variance of each binary asset’s proﬁt, corresponding to the r esult ri, following from the given odds oi
+and the underlying Bernoulli distribution as Σ( i, i) = ˆPr(ri) · (1 − ˆPr(ri)) · ρ2i,i. MPT can generally thus be
+expressed as the following maximization problem
+maximize
+f ∈Rn
+E[ρ · f ] − γ · f T Σf
+subject to
+n∑
+i=1
+fi = 1, f i ≥ 0
+(4.4)
+Apart from the variance V ar[w] of the potential net returns w = ρ · f , diﬀerent risk measures have
+been proposed (Markowitz, 1952), such as standard deviation σ(w) =
+√
+V ar[w] and coeﬃcient of variation
+CV (w) = σ(w)E[w] . Generally, there is no agreed-upon measure of risk and the choice is thus left to the user.
+The MPT approach is often criticized for the disputable choice of risk , which can be perceived as a formal
+weakness of the approach (Peters and Gell-Mann, 2016), since in m any domains the risk is not easy to deﬁne.
+Moreover, the direct maximization of expected proﬁt can be mislead ing in games, where the distribution of
+potential proﬁts is highly skewed, i.e. where the mean proﬁt is very d iﬀerent from the median. This situation
+naturally occurs in the multiplicative dynamics setting, where maximiza tion of expected value may lead to
+undesirable outcomes (Peters and Gell-Mann, 2016).
+4.2.1 Maximum Sharpe Strategy
+Apart from the choice of the risk measure, the inherent degree of freedom in MPT is how to select a particular
+portfolio from the eﬃcient frontier Θ (based on the choice of γ). Perhaps the most popular way to avoid the
+dilemma is to select a spot in the pareto-front with the highest expec ted proﬁts w.r.t. the risk. For the risk
+measure of σ(w), this is known as the “Sharpe ratio”, generally deﬁned as
+E[w] − rf
+σ(w) (4.5)
+where E[w] is the expected return of the portfolio, σ(w) is the standard deviation of the return, and rf is
+a “risk-free rate”. Since there is no risk-free investment in sport s betting, we can neglect it and reformulate
+the optimization problem as
+maximize
+f ∈Rn
+E[ρ · f ]√
+f T Σf
+subject to
+n∑
+i=1
+fi = 1, fi ≥ 0
+(4.6)
+the solution of which we will further refer to as the “MSharpe” stra tegy.
+The variance-based choices of risk have been often criticized as th ey penalize excess losses as well as
+excess returns, which is obviously undesirable. Moreover, the calc ulation of the MaxSharpe solution is also
+quite sensitive to errors in the probabilistic estimates, and can ofte n be biased towards extreme solutions,
+requiring some additional form of control 5. Nevertheless, it remains a very popular investment practice,
+which we include in our experiments.
+5E.g. a strategy with no wagers placed would have zero varianc e resulting into an inﬁnite Sharpe ratio.
+9
+4.3 Kelly Criterion
+The Kelly criterion (Kelly Jr, 1956; Thorp, 2008) is based on the idea o f expected multiplicative growth in
+the reinvestment setting (Section 2.5.2), so that a portfolio f is chosen such that the long-term value of
+the resulting, continuously reinvested, wealth Wt is maximal (in an inﬁnite horizon of t). Note that in this
+scenario we assume that the same portfolio is going to be presented at each time step. For its multiplicative
+nature, it is also known as the geometric mean policy, emphasizing the contrast to the arithmetic mean
+approaches based on the expected value.
+The two can, however, be looked at similarly with the use of a logarithm ic “utility function”, transforming
+the geometric into the arithmetic mean, and the multiplicative into the additive setting, respectively. The
+problem can then be again expressed by the standard means of max imizing the expected value as
+maximize
+f ∈Rn
+E[log(O · f )]
+subject to
+n∑
+i=1
+fi = 1, f i ≥ 0
+Note that, in contrast to MPT, there is no explicit term for risk here , as the notion of risk is inherently
+encompassed in the growth-based view of the wealth progression, i.e. the long-term value of a portfolio that
+is too risky will be smaller than that of a portfolio with the right risk bala nce (and similarly for portfolios
+that are too conservative).
+The calculated portfolio is then provably optimal, i.e. it accumulates mo re wealth than any other portfolio
+chosen by any other strategy in the limit of t. However, this strong result only holds given, considerably
+unrealistic, assumptions (Kelly Jr, 1956; Thorp, 2008; Peters and Gell-Mann, 2016). Similarly to MPT, we
+assume to know the true probability distribution of game outcomes, and additionally we assume that:
+1. we are repeatedly presented with the same games.
+2. we play for an inﬁnite amount of time.
+Despite the fact that these conditions are impossible to meet in prac tice, the Kelly strategy is very popular,
+and its various modiﬁcations (Section 5) are prevalent among betto rs in practice.
+4.3.1 Quadratic Approximation
+Exact numerical calculation of the Kelly strategy is often time-cons uming, especially when numerous runs
+through a large dataset of games is necessary. A practical appro ach to this issue has been proposed (Busseti et al.,
+2016) based on a quadratic approximation of the Kelly’s logarithmic ut ility using the Taylor series expansion.
+Let us ﬁrst recall the following.
+log(1 + x) = x − x2
+2 + . . . (4.7)
+Next, following (Busseti et al., 2016), we make an assumption for t he Taylor approximation that our net
+proﬁts are not too far from zero ρ · f ≈ 0 and express the logarithmic part of the Kelly criterion as
+follows (Busseti et al., 2016).
+log(O · f ) = log(1 + ρ · f ) (4.8)
+allowing us to proceed with the Taylor expansion as
+log(1 + ρ · f ) = ρ · f − (ρ · f )2
+2 + ... (4.9)
+Now taking only the ﬁrst two terms from the series we transform th e expectation of logarithm into a new
+problem deﬁnition as follows
+maximize
+f ∈Rn
+E[ρ · f − (ρ · f )2
+2 ]
+subject to
+n∑
+i=1
+fi = 1.0, f i ≥ 0
+(4.10)
+10
+We will further refer to this strategy as the “Quadratic Kelly”. Not e that, interestingly, the problem can
+now be rewritten to
+maximize
+f ∈Rn
+E[ρ · f ] − 12 E[f T (ρ · ρT )f ] (4.11)
+corresponding to the original MPT formulation from Equation 4.4 for the particular user choice of γ =
+1
+2 . It follows from the fact that the geometric mean is approximately t he arithmetic mean minus 12 of
+variance (Markowitz, 1952), providing further insight into the con nection of the two popular strategies of
+Kelly and Markowitz, respectively.
+5 Risk Management Practices
+The core issue with the mathematical strategies is that their calcula tions are carried out as if the true
+probability distribution over the outcomes was known. Moreover, t hey are often sensitive to even the slightest
+error in the estimates. Here we review simple remedies that have bee n proposed on top of the original
+strategies to manage the extra risk stemming from the underlying e rrors, as well as more sophisticated
+techniques incorporating the uncertainty of estimates directly int o computation of the strategies.
+5.1 Maximum bet limit
+Constraining the maximal wager to a ﬁxed value m is probably the most trivial risk-avoiding technique one
+can encounter, which is probably also why it is the most prevalent one in practice. Moreover, the maximum
+bet limit often comes from the side of the bookmaker, too, constra ining the risk he undertakes w.r.t. each
+bettor. We thus include this empirical method in our portfolio to see if saturating the invested amount by
+a ﬁxed threshold might actually improve the overall wealth progress ion of the existing strategies if properly
+tuned.
+5.2 Fractional Approaches
+Fractioning is an example of a simple heuristic that is nevertheless ver y eﬃcient in practice. The main idea
+behind any “fractional approach” is to bet only a fraction ω of the calculated portfolio and leave the rest of
+1 − ω in the cash asset for security. We deﬁne such a trade-oﬀ index ω for a portfolio as
+fω = ωf1..n−1 + (1 − ω)fn (5.1)
+where f1..n−1 corresponds to the risky part of the portfolio with stochastic ass ets and fn is the cash asset,
+as introduced in Section 2.4.
+The fractional approach is mostly used with the Kelly strategy (Mac Lean, Ziemba and Blazenko, 2011;
+Thorp, 2011), where for ω = 0 .5 it is famously referred to as “half-kelly” by practitioners. Nevert heless,
+the choice of ω should depend on the actual distributions and preferences for ris k. The same idea of taking
+only a fraction of the calculated portfolio can generally be applied to a ny strategy, including MPT, and it is
+overall useful whenever our estimates are erroneous.
+5.3 Drawdown Constraint
+A drawdown represents a more involved technique that actually mod iﬁes the original optimization problem.
+The idea of drawdown is to incorporate a special probabilistic constr aint into the Kelly strategy so as to
+push the solution away from the more risky region near the ruin boun dary. The choice of the boundary is
+then left to the user’s preference as an input parameter into the o ptimization problem. The probabilistic
+boundary is expressed as the following constraint
+P (W mint < α) ≤ β (5.2)
+expressing that the probability of our wealth falling below α can be at most β.
+11
+For the Kelly criterion, following the calculations from (Busseti et al., 2016), the constraint is approxi-
+mately satisﬁed if the following condition holds
+E[(O · f )−λ] ≤ 1 where λ = log(β)/ log(α) (5.3)
+Which we can reformat as
+log(
+n∑
+i=1
+pi · (oi · fi)−λ) ≤ log(1) (5.4)
+which can be further simpliﬁed (Busseti et al., 2016) into the followin g constraint
+log(
+n∑
+i=1
+exp(log(pi · (oi · fi)−λ))) ≤ 0 (5.5)
+which we can ﬁnally use in a convex optimization program.
+5.4 Distributionally Robust Optimization
+Distributionally robust optimization (DRO) can be understood as a st ochastic game between a player and
+nature, where nature picks a distribution Pr from some predeﬁned ambiguity set of distributions Π so as to
+inﬂict maximum damage to the player’s utility. This ﬁts quite naturally th e setting of sports betting against
+a ﬁxed-odds bookmaker, where, given the opposing utilities of both , the bookmaker (nature) sets up the
+odds so as to minimize player’s chances for proﬁt. Generally, DRO is a p aradigm for decision making under
+uncertainty where:
+1. The uncertain problem inputs are governed by a distribution that is itself subject to uncertainty.
+2. The distribution is then assumed to belong to an ambiguity set Π.
+3. The ambiguity set contains all distributions that are compatible wit h the player’s prior information.
+Being aware of the uncertainty in her own estimates Pp = ˆPr, the player now modiﬁes the optimization
+problem to account for the worst possible scenario within the given a mbiguity set Π.
+maximize
+f ∈Rn
+min
+p∈Π
+n∑
+i=1
+pi · log(Oi · f )
+subject to
+n∑
+i=1
+fi = 1, f i ≥ 0
+The ambiguity set Π can be deﬁned in a number of ways. In (Sun and Boyd, 2018), multiple deﬁnitions
+are explored in connection to the Kelly strategy, such as Polyhedra l, Ellipsoidal, or Divergence based. In this
+review, we further narrow our focus to the polyhedral ambiguity s et, referred to as the “box” uncertainty
+set, which can be deﬁned as
+Π = {pi | | pi − Pp(ri)| ≤ η · Pp(ri),
+n∑
+i=1
+pi = 1, pi ≥ 0} (5.6)
+i.e. constraining each probability pi to diﬀer by up to a factor of η from the nominal player’s estimate Pp(ri)
+of the probability of result R = ri.
+6 Experiments
+The main purpose of this review is to assess the performance of the individual strategies (Section 4) and
+their risk modiﬁcations (Section 5) in various realistic settings (Sect ion 2) on real data. We recall the used
+strategies, describe the datasets, evaluation protocol, and disc uss the conducted experiments with their
+results.
+12
+The strategies for the experiments were chosen with the aim to rep resent the diverse portfolio of ap-
+proaches occurring in practice, with the goal to provide an unbiase d statistical assessment of their per-
+formance limits. The particular strategies chosen with their respec tive hyper-parameters are speciﬁed in
+Table 1.
+Strategy Description Hyperparameters
+AbsDisc absolute discrepancy bet (Section 4.1) None
+MaxEvFrac max. EV outcome with fractioning (Section 4.1) ω ∈ [0, 1]
+Kelly original Kelly strategy (Section 4.3) None
+MSharpe original max. Sharpe ratio (Section 4.2.1) None
+KellyFrac Kelly strategy with fractioning (Section 5.2) ω ∈ [0, 1]
+MSharpeFrac max. Sharpe with fractioning ω ∈ [0, 1]
+KellyFracMax Kelly with fractioning and limiting (Section 5.1) ω ∈ [0, 1], m ∈ [0, 1].
+MSharpeFracMax max. Sharpe with fractioning and limiting ω ∈ [0, 1], m ∈ [0, 1].
+KellyDrawdown Kelly with the drawdown constraint (Section 5.3) α, β ∈ [0, 1]
+KellyRobust Kelly with distributionally robust optimization η ∈ [0, 1].
+Table 1: Evaluated strategies and their hyperparameters
+6.1 Datasets
+We collected 3 datasets of diﬀerent properties from 3 diﬀerent spo rts - horse racing, basketball, and football,
+each containing a signiﬁcant number of “matches” (races and game s) for statistical evaluation. Each of the
+datasets is further accompanied with realistic models’ predictions t uned speciﬁcally for each domain. Since
+our focus here is purely on the betting strategies, we do not elabor ate on the models in details beyond their
+predictive performances, which naturally inﬂuence the performan ce of the strategies, too. For each of the
+datasets, we present the following key properties.
+• size - Dataset size (i.e. the number of matches).
+• accb - Accuracy of the bookmaker b.
+• accp - Accuracy of the player p (i.e. the predictive model).
+• n - Number of possible match outcomes ( n = |R|).
+• odds - Range of the oﬀered odds.
+• margin - Average margin present in the odds.
+• AKL - Kullback-Leibler advantage of the player.
+The AKL is a statistical measure of the diﬀerence of the predictive perform ances (cross-entropy) of the
+player and the bookmaker, respectively. The metric was chosen as it plays a key role in the performance
+of the original Kelly strategy, where the growth of proﬁt can be pr oved directly proportional to the KL
+advantage (Cover and Thomas, 2012).
+6.1.1 Horse Racing
+The data for horse racing were collected from the Korean horse ra cing market (KRA) and provide 2700
+races. The target market of the dataset is the “win pool”, repres enting betting for the horse winning the
+race. The schedule and participation of individual horses in the race s varies considerably. Moreover, there
+is a varying total number of horses, and thus outcomes n, in each race, creating an interesting challenge for
+the strategies. We thus assume each race as a completely independ ent investment opportunity and optimize
+13
+size accp accb n odds margin AKL
+2700 0.512 0.503 ∈ [6, 16] ∈ [1.0, 931.3] 0.2 ≈ 0.0022
+Table 2: Horse racing dataset properties
+the strategies accordingly. The model used was a form of condition al logistic regression over various features
+of the horses (Section 3.2). The particular dataset properties ar e speciﬁed in Table 2.
+The speciﬁcs of the horse racing dataset come mainly from the fact that it actually originates from a
+parimutuel market, meaning that the wagers are put into a shared pool from which a certain portion is
+removed as a proﬁt for the house (margin). Nevertheless, we con vert it into the discussed ﬁxed-odds setting
+by assuming the last available state of the money pool to get the pos sible payoﬀs/odds (Hausch et al., 2008).
+As a result, the “bookmaker’s” estimate in this case is hence made up entirely from public opinion, and is
+noticeably less accurate. This provides space for statistical mode ls to gain predictive KL-advantage on the
+one hand, however, on the other hand, the margin is also considera bly higher.
+6.1.2 Basketball
+Next domain we selected is basketball, where we collected box score d ata from matches in the US National
+Basketball Association (NBA). The dataset consists of 16000 gam es ranging from the year 2000 to 2015. The
+NBA league has a regular schedule of the matches, where each team plays repeatedly with every other team
+in so-called “rounds”. To emulate the market setting in a realistic fas hion, we assume rounds as groups of
+10 scheduled matches to repeatedly appear on the market in paralle l (Section 2.4.1). The target market here
+was the “money-line”, i.e. betting on the winner of each match. The s peciﬁcs of the data then comes from
+the fact that there are only 2 outcomes in the game, directly corre sponding to the most basic coin-tossing
+setup of the problem (Section 2). The model used was a convolution al neural network based on detailed
+statistics of the individual players and teams (Hubacek, Sourek an d Zelezny, 2019 a). The odds then come
+from the closing line of the Pinnacle 6 bookmaker. Notice that in this case the model is not as accurate as
+the bookmaker, and is thus in a general KL-disadvantage. The par ticular dataset properties are speciﬁed in
+Table 3.
+size accp accb n margin odds AKL
+16000 0.68 0.7 2 0.038 ∈ [1.01, 41] ≈ −0.0146
+Table 3: Basketball dataset properties
+6.1.3 F ootball
+The football dataset consists of 32000 matches collected from va rious leagues all over the world. The schedule
+in each football league is similar in spirit to that of the NBA, and so we ag ain assume the market setting with
+10 parallel games (Section 2.4.1). The target market was again mone y-line betting. The outcomes in football
+include a draw, resulting in a moderate n = 3 setting. Interestingly, the original dataset (Dubitzky et al.,
+2019) contained merely the historical results of the matches, and the model has thus been built purely from
+score-derived features. Particularly, the model was a form of gr adient-boosted trees learner, winning the
+2017’s Soccer prediction challenge (Dubitzky et al., 2019). The odds were again provided by Pinnacle but,
+this time, we took the more favourable opening line. Despite varying o ver diﬀerent leagues, the overall
+margin is slightly lower than in basketball, and the model in a slightly lower , yet still considerable, KL
+disadvantage. The particular dataset properties are speciﬁed in T able 4.
+6https://www.pinnacle.com/
+14
+size accp accb n margin odds AKL
+32000 0.523 0.537 3 0.03 ∈ [1.03, 66] ≈ −0.013
+Table 4: Football dataset properties
+6.2 Evaluation Protocol
+The models providing the probabilistic estimates were trained following the natural order of the matches in
+time, so that all of their estimates are actual future predictions, i.e. out-of-sample test outputs for matches
+unseen in the training phase.
+For the actual optimization problems of the individual strategies, w e have chosen to work with the cvxpy
+(Diamond and Boyd, 2016) as the main optimization framework. For e ach strategy, we ﬁrst solved the given
+problem using the Embedded Conic Solver (ECOS) (Domahidi et al., 201 3), and should a numerical problem
+arise, we proceed with solving the problem using the Splitting Conic Solv er (SCS) (O’Donoghue et al., 2016).
+While many of the chosen strategies (Table 1) contain hyperparame ters to be set, we additionally tuned
+each for the best possible performance via grid-search, too. The individual hyperparameter ranges for the
+grid-search can be found in Table 1. To provide an unbiased estimate of their actual performance in practice,
+we also followed a strict evaluation protocol for each of the strate gies. This means that we have (i) split each
+dataset into training and testing subsets, (ii) found the best hype rparameter setting on the training subset,
+and (iii) evaluated the ﬁxed setting on the test subset.
+To make the output proﬁt measures (Section 6.2.2) more robust, b oth the training and testing is evaluated
+by generating 1000 separate “runs” through each subset, wher e the sequence of games is randomly reshuf-
+ﬂed and 10% of games are randomly removed each time (the split betw een train and test always remains
+respected). We hence evaluate properties of each strategy on 1 000 separate wealth investment trajectories
+through previously unseen games.
+6.2.1 Hyperparameter Selection
+To choose the best possible strategy setting on the train set, we lo oked for hyperparameters with the following
+criteria
+maximize median(Wf )
+subject to Q5 > 0.9
+i.e. we always chose a strategy that reached the maximum median ﬁna l wealth, given that no more than 5%
+of the wealth trajectories did not fall below 90% of the ﬁnal wealth. Hyperparameter settings that did not
+meet the required criterion were simply removed from consideration . While the presented hyperparameter
+selection criteria might seem somewhat arbitrary and could be argue d, our aim was to follow the natural
+desiderata of wealth progression for bettors in practice. That is t o mainly prevent the occurrence of ruin
+(“survival ﬁrst”), and then maximize the potential proﬁts for th e typical (median) bettor.
+6.2.2 Evaluation Metrics
+For the actual ﬁnal evaluation of the strategies on the test set, we chose a range of diverse metrics to provide
+more insights into the properties of the individual strategies and ga me settings. The metrics are as follows
+• median(Wf ) - median ﬁnal wealth position.
+• mean(Wf ) - mean ﬁnal wealth position.
+• min(Wi) - lowest wealth position.
+• max(Wi) - maximal wealth position.
+• sigma(Wf ) - standard deviation of the ﬁnal wealth positions.
+• ruin % - ruin percentage of wealth trajectories
+15
+for which we deﬁne a ruin situation as falling below 0 .01% of the initial bank W0 at least once during the entire
+investment period. Note that as opposed to the original deﬁnition o f ruin in the Kelly strategy (Kelly Jr,
+1956), we have chosen a small non-zero threshold, since in practice there is a low amount of money eﬀectively
+causing the inability to place a minimal bet, which is a constraint often p resent in the market.
+6.3 Results
+Finally, we present performances (Section 6.2.2) of the individual st rategies (Section 6) over each of the
+datasets (Section 6.1). Apart from the evaluation metrics in the ﬁn al state of wealth progression Wf , we
+present the summarized wealth progression trajectories for a se lected “best” strategy with maximal median
+ﬁnal wealth for each of the datasets, to demonstrate the overa ll bankroll dynamics. The evaluation metrics for
+horse racing, basketball, and football datasets are presented in Table 5, Table 6, and Table 7, respectively.
+The wealth progression trajectories for the best strategies are then displayed in Figure 2, Figure 3 and
+Figure 4, respectively.
+strategy median(Wf ) mean(Wf ) min(Wi) max(Wi) sigma(Wf ) ruin %
+AbsDisc 0.0019 0.03 4e-08 27.1 0.04 85.2
+MaxEvFrac 0.86 2.13 2e-09 711 4.7 36.1
+Kelly 4.11 15.6 7e-05 2167.8 59.8 0.6
+MSharpe 3.92 17.8 9e-06 2231.1 48.3 12.1
+KellyFrac 3.39 14.2 0.003 213.2 32.1 0
+MSharpeFrac 3.28 16.9 8e-05 253.3 26.5 0.2
+KellyFracMax 3.49 13.8 0.0057 168.1 29.3 0
+MSharpeFracMax 3.41 15.2 0.0065 194.3 25.4 0
+KellyDrawdown 3.3 13.7 0.009 112.4 22.4 0
+KellyRobust 2.97 4.1 0.08 77.3 7.2 0
+Table 5: Final wealth statistics of the strategies in the horse racing scenario (Section 6.1.1).
+0 100 200 300 400 500 600 700 800 900 1000 1100 1215
+Races
+0
+10
+20
+30
+40Wealth
+Figure 2: Wealth progression of the KellyFracMax strategy in the ho rse racing scenario (Section 6.1.1).
+16
+strategy median(Wf ) mean(Wf ) min(Wi) max(Wi) sigma(Wf ) ruin %
+Kelly 9.1e-6 1.8e-05 1.9e-20 3312.2 1.7e-05 100
+MSharpe 1.3e-06 5.1e-05 4.1e-21 2911 9.7e-06 100
+KellyFrac 2.4 2.7 0.11 24.1 1.34 0
+MSharpeFrac 1.24 1.97 0.002 19.6 0.85 0
+KellyFracMax 2.3 2.5 0.13 20.9 1.27 0
+MSharpeFracMax 1.2 1.7 0.008 12.1 0.56 0
+KellyDrawdown 2.21 2.9 0.14 29.1 1.3 0
+KellyRobust 1.39 1.46 0.23 10.9 0.45 0
+Table 6: Final wealth statistics of the strategies in the basketball s cenario (Section 6.1.2).
+0 1000 2000 3000 4000 5000 6000 7200
+Games
+0
+1
+2
+3
+4
+5Wealth
+Figure 3: Wealth progression of the KellyFrac strategy in the baske tball scenario (Section 6.1.2).
+strategy median(Wf ) mean(Wf ) min(Wi) max(Wi) sigma(Wf ) ruin %
+Kelly 2.3e-09 5.2e-08 1.6e-21 5844.2 2.7e-07 100
+MSharpe 1.8e-10 3.0e-07 5.9e-27 2617 4.2e-07 100
+KellyFrac 10.05 11.8 0.03 182 9.7 0
+MSharpeFrac 9.9 13.6 0.016 211 9.1 0
+KellyFracMax 10.03 11.2 0.007 144 9.2 0
+MSharpeFracMax 10.1 13.1 0.005 193 8.7 0
+KellyDrawdown 10.25 12.4 0.09 122 9.3 0
+KellyRobust 6.2 7.3 0.28 27.7 5.6 0
+Table 7: Final wealth statistics of the strategies in the football sce nario (Section 6.1.3).
+Firstly, the results of our experiments conﬁrm that the, regularly used, informal betting strategies (Sec-
+tion 4.1) are clearly inferior to all the formal strategies, in agreeme nt with the previous reports (Hubacek, Sourek and Zelezny,
+2019a). Moreover, they often lead to ruin even in a situation with statistic al model advantage, as reported
+17
+0 1000 2000 3000 4000 5000 6000 7000 8000 9000 10000 11000 12000 13000 14400
+Matches
+0
+10
+20
+30
+40Wealth
+Figure 4: Wealth progression of the KellyDrawdown strategy in the f ootball scenario (Section 6.1.3).
+for the horse racing dataset in Table 2, for which we decided not to in clude them further.
+As expected, the formal strategies based on Modern Portfolio Th eory (MPT) (Section 4.4) and Kelly
+Criterion (Section 4.3) performed reasonably in the setting with a st atistical advantage AKL of having a
+more precise model. However, since they are based on unrealistic ma thematical assumptions, their actual risk
+proﬁle might be unexpected in practice. Using any of the proposed p ractices for additional risk management
+(Section 5) generally led to a considerably lower volatility while keeping t he wealth progression of a typical
+(both mean and median) bettor reasonably high. Also, following the m athematical properties of the pure
+form of both the strategies, they both lead to a certain ruin in scen arios without statistical AKL advantage
+of the model, which is exhibited in practice, too (Table 3, Table 4).
+On the other hand, a smart strategy modiﬁcation can generate pr oﬁts even in the statistically disadvanta-
+geous scenarios, as measured by the AKL . Naturally, this does not hold universally and particular properties
+of the underlying models must be considered, too, since there are s urely disadvantageous scenarios where no
+strategy can make proﬁts by any means (Example 2.1).
+The insights from the experiments regarding the discord between t he approaches of MPT and Kelly
+roughly follow the intuitions behind the individual strategies. That is t hat the strategies based on the Kelly
+criterion (Section 4.3) result in a generally higher median ﬁnal wealth, while strategies based on the MPT
+(Section 4.2) result in a generally higher mean ﬁnal wealth, corresponding to the underlying expected value-
+based motivation. Interestingly, in the football dataset (Table 4) the mean ﬁnal wealth performance of MPT
+is slightly lower than that of the Kelly-based strategies. However, w e should note that the hyperparameter
+selection criteria (Section 6.2.1) can also be considered slightly biased in favour of the Kelly approaches.
+From a practical perspective, the drawdown modiﬁcation of the Ke lly criterion (Section 5.3) seemed to
+perform very similarly to the, much less sophisticated, fractional a pproach (Section 5.2), further supporting
+its popular use in practice. While the distributionally robust modiﬁcatio n of Kelly (Section 5.4) achieved
+generally lowest ﬁnal wealth scores, it was also the overall most sta ble strategy with the highest minimal
+ﬁnal wealth. This is in complete accordance with its pessimistic underly ing setting optimizing for the worst
+case scenario, which might be appealing to highly risk-averse bettor s.
+18
+7 Conclusions
+In this experimental review, we investigated the two most prominen t streams of betting investment strategies
+based on the views of the Modern Portfolio Theory and the Kelly crite rion, together with a number of their
+popular modiﬁcations aimed at additional risk management in practice , where their original underlying
+mathematical assumptions do not hold. We tested the strategies o n 3 large datasets from 3 diﬀerent sports
+domains of horse racing, basketball, and football, following a strictly uniﬁed evaluation protocol to provide
+unbiased estimates of the performance of each method while tuning their hyperparameters.
+The results of our experiments suggest the superiority of the for mal mathematical approaches over the
+informal heuristics, which are often used in practice, however, th e experiments also revealed their weaknesses
+stemming from the unrealistic mathematical assumptions, particula rly the knowledge of the true probability
+distribution over the match outcomes. Consequently, when used in their plain original form, the formal
+strategies, i.e. the maximum Sharpe and Kelly, proved infeasible in almo st all practical scenarios with un-
+certain probability estimates. Particularly, the theoretically optima l strategies often led to ruin instead of
+maximal proﬁt, calling for the need of the additional risk managemen t practices. The results of the subse-
+quent modiﬁcations of the optimal strategies then suggested tha t reasonable trade-oﬀs in wealth progression
+can be found in actual betting practice with the appropriate techn iques, even in scenarios with worse model
+predictions than that of the bookmaker.
+Based on the experiments, we conclude that, for common practica l purposes, the most suitable option out
+of the strategies reviewed seems to be the fractional Kelly, given t hat the fraction hyperparameter has been
+properly tuned to reﬂect the amount of uncertainty in each partic ular problem setting. The approach achieved
+the best, or close to the best, performance as evaluated by the c hosen metrics in most of our experiments
+while being comparatively simpler than the other strategies. Our ﬁnd ings thus further support its common
+use in betting practice. The other common practice of setting a max imum bet limit was inconclusive as it
+improved the overall results in some domains (Table 5) while decreasin g the proﬁts in others (Table 6). The
+distributionally robust Kelly strategy then proved to be the safest in all of the experiments, and can thus
+be suggested to extremely risk-averse practitioners. The secon d safest strategy was then to incorporate the
+drawdown constraint, which also proved quite eﬃcient in trading of t he security for proﬁt.
+Acknowledgments
+The authors acknowledge support by Czech Science Foundation gr ant. no 20-29260S.
+References
+Baker, R. D. and McHale, I. G. (2013), ‘Optimal betting under para meter uncertainty: Improving the Kelly
+criterion’, Decision Analysis 10(3), 189–199.
+Balka, J., Desmond, A. et al. (2017), Kelly Investing with Iteratively Updated Estimates of the Probability
+of Success, PhD thesis.
+Bell, R. and Cover, T. M. (1988), ‘Game-theoretic optimal portfolio s’, Management Science 34(6), 724–733.
+Benter, W. (2008), Computer based horse race handicapping and wagering systems: a report, in ‘Eﬃciency
+of racetrack betting markets’, World Scientiﬁc, pp. 183–198.
+Bernoulli, D. (2011), Exposition of a new theory on the measuremen t of risk, in ‘The Kelly Capital Growth
+Investment Criterion: Theory and Practice’, World Scientiﬁc, pp. 1 1–24.
+Blanchet, J., Chen, L. and Zhou, X. Y. (2018), ‘Distributionally robu st mean-variance portfolio selection
+with wasserstein distances’, arXiv preprint arXiv:1802.04885 .
+Breiman, L. et al. (1961), Optimal gambling systems for favorable games .
+Browne, S. and Whitt, W. (1996), ‘Portfolio choice and the bayesian Kelly criterion’, Advances in Applied
+Probability 28(4), 1145–1176.
+19
+Buchen, P. W. and Grant, A. (2012), ‘A comparison of simultaneous betting strategies.’, Journal of Gam-
+bling Business & Economics 6(2).
+Busseti, E., Ryu, E. K. and Boyd, S. (2016), ‘Risk-constrained Kelly gambling’, arXiv preprint
+arXiv:1603.06183 .
+Chapman, S. (2007), ‘The Kelly criterion for spread bets’, IMA journal of applied mathematics 72(1), 43–51.
+Chu, D., Wu, Y. and Swartz, T. B. (2018), ‘Modiﬁed Kelly criteria’, Journal of Quantitative Analysis in
+Sports 14(1), 1–11.
+Cover, T. M. and Thomas, J. A. (2012), Elements of Information Theory , John Wiley & Sons.
+Diamond, S. and Boyd, S. (2016), ‘CVXPY: A Python-embedded mod eling language for convex optimiza-
+tion’, The Journal of Machine Learning Research 17.1 (2016): 2909- 2913
+Dixon, M. J. and Coles, S. G. (1997), ‘Modelling association football s cores and ineﬃciencies in the football
+betting market’, Journal of the Royal Statistical Society: Series C (Applied Statistics) 46(2), 265–280.
+Domahidi, A., Chu, E. and Boyd, S. (2013), Ecos: An socp solver for embedded systems, in ‘Control
+Conference (ECC), 2013 European’, IEEE, pp. 3071–3076.
+Dubitzky, W., Lopes, P., Davis, J. and Berrar, D. (2019), ‘The open international soccer database for
+machine learning’, Machine Learning 108(1), 9–28.
+Egidi, L., Pauli, F. and Torelli, N. (2018), ‘Combining historical data and bookmakers’ odds in modelling
+football scores’, Statistical Modelling 18(5-6), 436–459.
+Fitt, A. D. (2009), ‘Markowitz portfolio theory for soccer spread betting’, IMA Journal of Management
+Mathematics 20(2), 167–184.
+Grant, A., Johnstone, D. and Kwon, O. K. (2008), ‘Optimal betting strategies for simultaneous games’,
+Decision Analysis 5(1), 10–18.
+Groll, A. and Abedieh, J. (2013), ‘Spain retains its title and sets a new record–generalized linear mixed
+models on european football championships’, Journal of Quantitative Analysis in Sports 9(1), 51–66.
+Haghighat, M., Rastegari, H. and Nourafza, N. (2013), ‘A review of data mining techniques for result
+prediction in sports’, Advances in Computer Science: an International Journal 2(5), 7–12.
+Haigh, J. (2000), ‘The Kelly criterion and bet comparisons in spread b etting’, Journal of the Royal Statistical
+Society: Series D (The Statistician) 49(4), 531–539.
+Hausch, D. B., Lo, V. S. and Ziemba, W. T. (2008), Eﬃciency of racetrack betting markets , Vol. 2, World
+Scientiﬁc.
+Hubacek, O. (2017), Exploiting betting market ineﬃciencies with mac hine learning, Master’s thesis, Czech
+Technical University, Faculty of Electrical Engineering.
+Hubacek, O., Sourek, G. and Zelezny, F. (2019), ‘Score-based so ccer match outcome modeling–an experi-
+mental review’, MathSport International .
+Hubacek, O., Sourek, G. and Zelezny, F. (2019 a), ‘Exploiting sports-betting market using machine learning’,
+International Journal of Forecasting 35(2), 783–796.
+Hubacek, O., Sourek, G. and Zelezny, F. (2019 b), ‘Learning to predict soccer results from relational data
+with gradient boosted trees’, Machine Learning 108(1), 29–47.
+Ivankovi´ c, Z., Rackovi´ c, M., Markoski, B., Radosav, D. and Ivkovi´ c, M. (2010), Analysis of basketball games
+using neural networks, in ‘Computational Intelligence and Informatics (CINTI), 2010 11th I nternational
+Symposium on’, IEEE, pp. 251–256.
+20
+Kan, R. and Zhou, G. (2007), ‘Optimal portfolio choice with paramet er uncertainty’, Journal of Financial
+and Quantitative Analysis pp. 621–656.
+Kelly Jr, J. L. (1956), ‘A new interpretation of information rate’, The Bell System Technical Journal .
+Latane, H. A. (2011), Criteria for choice among risky ventures, in ‘The Kelly capital growth investment
+criterion: theory and practice’, World Scientiﬁc, pp. 35–46.
+Lo, A. W., Orr, H. A. and Zhang, R. (2018), ‘The growth of relative w ealth and the Kelly criterion’, Journal
+of Bioeconomics 20(1), 49–67.
+Luenberger, D. G. (2011), A preference foundation for log mean –variance criteria in portfolio choice prob-
+lems, in ‘The Kelly Capital Growth Investment Criterion: Theory and Practic e’, World Scientiﬁc, pp. 599–
+618.
+MacLean, L. C., Thorp, E. O., Zhao, Y. and Ziemba, W. T. (2011), Me dium Term Simulations of The
+Full Kelly and Fractional Kelly Investment Strategies, in ‘The Kelly Capital Growth Investment Criterion:
+Theory and Practice’, World Scientiﬁc, pp. 543–561.
+MacLean, L. C., Thorp, E. O. and Ziemba, W. T. (2010), ‘Good and ba d properties of the Kelly criterion’,
+Risk 20(2), 1.
+MacLean, L. C., Ziemba, W. T. and Blazenko, G. (1992), ‘Growth ver sus security in dynamic investment
+analysis’, Management Science 38(11), 1562–1585.
+MacLean, L., Ziemba, W. T. and Blazenko, G. (2011), Growth versu s security in dynamic investment
+analysis, in ‘The Kelly Capital Growth Investment Criterion: Theory and Practic e’, World Scientiﬁc,
+pp. 331–354.
+Maher, M. J. (1982), ‘Modelling association football scores’, Statistica Neerlandica 36(3), 109–118.
+Markowitz, H. (1952), ‘Portfolio selection’, The Journal of Finance 7(1), 77–91.
+Miljkovi´ c, D., Gaji´ c, L., Kovaˇ cevi´ c, A. and Konjovi´ c, Z. (2010), The use of data mining for basketball
+matches outcomes prediction, in ‘Intelligent Systems and Informatics (SISY), 2010 8th Internatio nal Sym-
+posium on’, IEEE, pp. 309–312.
+Mulvey, J. M., Bilgili, M. and Vural, T. M. (2011), A dynamic portfolio of in vestment strategies: applying
+capital growth with drawdown penalties, in ‘The Kelly Capital Growth Investment Criterion: Theory and
+Practice’, World Scientiﬁc, pp. 735–751.
+Noon, E., Knottenbelt, W. J. and Kuhn, D. (2013), ‘Kelly’s fractiona l staking updated for betting ex-
+changes’, IMA Journal of Management Mathematics 24(3), 283–299.
+O’Donoghue, B., Chu, E., Parikh, N. and Boyd, S. (2016), ‘SCS: Splitt ing conic solver, version 1.2.6’.
+Peters, O. (2011 a), ‘Optimal leverage from non-ergodicity’, Quantitative Finance 11(11), 1593–1602.
+Peters, O. (2011 b), ‘The time resolution of the st petersburg paradox’, Philosophical Transactions of the
+Royal Society A: Mathematical, Physical and Engineering Sc iences 369(1956), 4913–4931.
+Peters, O. (2019), ‘The ergodicity problem in economics’, Nature Physics 15(12), 1216–1221.
+Peters, O. and Gell-Mann, M. (2016), ‘Evaluating gambles using dyna mics’, Chaos: An Interdisciplinary
+Journal of Nonlinear Science 26(2), 023103.
+Peterson, Z. (2017), ‘Kelly’s criterion in portfolio optimization: A dec oupled problem’, arXiv:1710.00431.
+Rue, H. and Salvesen, O. (2000), ‘Prediction and retrospective an alysis of soccer matches in a league’,
+Journal of the Royal Statistical Society: Series D (The Stat istician) 49(3), 399–418.
+21
+Samuelson, P. A. (1971), ‘The “fallacy” of maximizing the geometric m ean in long sequences of investing
+or gambling’, Proceedings of the National Academy of sciences 68(10), 2493–2496.
+Samuelson, P. A. (1975), Lifetime portfolio selection by dynamic sto chastic programming, in ‘Stochastic
+Optimization Models in Finance’, Elsevier, pp. 517–524.
+Samuelson, P. A. (2011), Why we should not make mean log of wealth b ig though years to act are long, in
+‘The Kelly Capital Growth Investment Criterion: Theory and Practic e’, World Scientiﬁc, pp. 491–493.
+Smoczynski, P. and Tomkins, D. (2010), ‘An explicit solution to the pr oblem of optimizing the allocations
+of a bettor’s wealth when wagering on horse races’, Mathematical Scientist 35(1).
+Sun, Q. and Boyd, S. (2018), ‘Distributional Robust Kelly Gambling’, arXiv preprint arXiv:1812.10371 .
+Thorp, E. O. (2008), The Kelly criterion in blackjack sports betting , and the stock market, in ‘Handbook
+of asset and liability management’, Elsevier, pp. 385–428.
+Thorp, E. O. (2011), Understanding the Kelly criterion, in ‘The Kelly Capital Growth Investment Criterion:
+Theory and Practice’, World Scientiﬁc, pp. 509–523.
+Whitrow, C. (2007), ‘Algorithms for optimal allocation of bets on man y simultaneous events’, Journal of
+the Royal Statistical Society: Series C (Applied Statistic s) 56(5), 607–623.
+22

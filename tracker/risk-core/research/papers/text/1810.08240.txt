@@ -1,0 +1,2842 @@
+arXiv 1810.08240  https://arxiv.org/abs/1810.08240
+
+Time-uniform, nonparametric, nonasymptotic conﬁdence sequences
+Steven R. Howard1 Aaditya Ramdas2,3 Jon McAuliﬀe1,4 Jasjeet Sekhon1,5
+Departments of Statistics 1 and Political Science 5, UC Berkeley
+Departments of Statistics and Data Science 2 and Machine Learning 3, Carnegie Mellon
+The Voleon Group4
+{stevehoward,jonmcauliffe,sekhon}@berkeley.edu, aramdas@stat.cmu.edu
+August 9, 2022
+Abstract
+A conﬁdence sequence is a sequence of conﬁdence intervals that is uniformly valid over an unbounded
+time horizon. Our work develops conﬁdence sequences whose widths go to zero, with nonasymptotic cov-
+erage guarantees under nonparametric conditions. We draw connections between the Cram´ er-Chernoﬀ
+method for exponential concentration, the law of the iterated logarithm (LIL), and the sequential
+probability ratio test—our conﬁdence sequences are time-uniform extensions of the ﬁrst; provide tight,
+nonasymptotic characterizations of the second; and generalize the third to nonparametric settings, in-
+cluding sub-Gaussian and Bernstein conditions, self-normalized processes, and matrix martingales. We
+illustrate the generality of our proof techniques by deriving an empirical-Bernstein bound growing at a
+LIL rate, as well as a novel upper LIL for the maximum eigenvalue of a sum of random matrices. Finally,
+we apply our methods to covariance matrix estimation and to estimation of sample average treatment
+eﬀect under the Neyman-Rubin potential outcomes model.
+1 Introduction
+It has become standard practice for organizations with online presence to run large-scale randomized ex-
+periments, or “A/B tests”, to improve product performance and user experience. Such experiments are
+inherently sequential: visitors arrive in a stream and outcomes are typically observed quickly relative to
+the duration of the test. Results are often monitored continuously using inferential methods that assume a
+ﬁxed sample, despite the known problem that such monitoring inﬂates Type I error substantially (Armitage
+et al., 1969; Berman et al., 2018). Furthermore, most A/B tests are run with little formal planning and
+ﬂuid decision-making, compared to clinical trials or industrial quality control, the traditional applications of
+sequential analysis.
+This paper presents methods for deriving conﬁdence sequences as a ﬂexible tool for inference in sequential
+experiments (Darling and Robbins, 1967a; Lai, 1984; Jennison and Turnbull, 1989). Forα∈ (0, 1), a (1−α)-
+conﬁdence sequence is a sequence of conﬁdence sets (CIt)∞t=1, typically intervals CIt = (Lt,Ut)⊆ R, satisfying
+a uniform coverage guarantee: after observing the tth unit, we calculate an updated conﬁdence set CI t for
+the unknown quantity of interest θt, with the uniform coverage property
+P(∀t≥ 1 :θt∈ CIt)≥ 1−α. (1)
+With only a uniform lower bound ( Lt), i.e., if Ut≡∞ , we have a lower conﬁdence sequence. Likewise, if
+Lt≡−∞ we have an upper conﬁdence sequence given by (Ut). Theorems 1 to 3 and Lemma 2 are our key
+tools for constructing conﬁdence sequences. All build upon the general framework for uniform exponential
+concentration introduced in Howard et al. (2020), which means our techniques apply in diverse settings:
+scalar, matrix, and Banach-space-valued observations, with possibly unbounded support; self-normalized
+bounds applicable to observations satisfying weak moment or symmetry conditions; and continuous-time
+scalar martingales. Our methods allow for ﬂexible control of the “shape” of the conﬁdence sequence, that
+is, how the sequence of intervals shrinks in width over time. As a simple example, given a sequence of i.i.d.
+1
+arXiv:1810.08240v9  [math.ST]  6 Aug 2022
+Empirical mean
+−1.0
+−0.5
+0.0
+0.5
+1.0
+101 102 103 104 105
+Number of samples, t
+Confidence bounds
+0.0
+0.2
+0.4
+0.6
+101 102 103 104 105
+Number of samples, t
+Cumulative miscoverage prob.
+ 
+Pointwise CLT       Pointwise Hoeffding       Linear boundary       Curved boundary
+Figure 1: Left panel shows 95% pointwise conﬁdence intervals and uniform conﬁdence sequences for the mean of a
+Rademacher random variable, using one simulation of 100,000 i.i.d. draws. Right panel shows cumulative chance of
+miscoverage based on 10,000 replications; ﬂat grey line shows the nominal target level 0.05. The CLT intervals are
+asymptotically pointwise valid (these are similar to the exact binomial conﬁdence intervals, which are nonasymp-
+totically pointwise valid). The pointwise Hoeﬀding intervals are nonasymptotically pointwise valid. The conﬁdence
+sequence based on a linear boundary, as in Lemma 1, is valid uniformly over time and nonasymptotically, but does
+not shrink to zero width. Finally, the conﬁdence sequence based on a curved boundary is valid uniformly and
+nonasymptotically, while also shrinking towards zero width; here we use the two-sided normal mixture boundary,
+(14), qualitatively similar to the stitched bound (2).
+observations (Xt)∞t=1 from a 1-sub-Gaussian distribution whose meanµ we would like to estimate, Theorem 1
+yields the following (1−α)-conﬁdence sequence for µ, a special case of the more general bound (10):
+∑t
+i=1Xi
+t ± 1.7
+√
+log log(2t) + 0.72 log(10.4/α)
+t . (2)
+TheO(
+√
+t−1 log logt) asymptotic rate of this bound matches the lower bound implied by the law of the
+iterated logarithm (LIL), and nonasymptotic bounds of this form are called ﬁnite LIL bounds (Jamieson
+et al., 2014).
+We develop conﬁdence sequences that possess the following properties:
+(P1) Nonasymptotic and nonparametric : our conﬁdence sequences oﬀer coverage guarantees for all
+sample sizes, without exact distributional assumptions or asymptotic approximations.
+(P2) Unbounded sample size: our methods do not require a ﬁnal sample size to be chosen ahead of time.
+They may be tuned for a planned sample size but always permit additional sampling.
+(P3) Arbitrary stopping rules : we make no assumptions on the stopping rule used by an experimenter
+to decide when to end the experiment, or when to act on certain inferences.
+(P4) Asymptotically zero width: the interval widths of our conﬁdence sequences shrink towards zero at
+a 1/
+√
+t rate, ignoring log factors, just as with pointwise conﬁdence intervals.
+These properties give us strong guarantees and broad applicability. An experimenter may always choose to
+gather more samples, and may stop at any time according to any rule—the resulting inferential guarantees
+hold under the stated assumptions without any approximations. Of course, this ﬂexibility comes with a cost:
+our intervals are wider than those that rely on asymptotics or make stronger assumptions, for example, a
+known stopping rule. Typical, ﬁxed-sample conﬁdence intervals derived from the central limit theorem do
+not satisfy any of (P1)-(P3), and accommodating any one property necessitates wider intervals; we illustrate
+this in Figure 1. It is perhaps surprising that these four properties come at a numerical cost of less than
+doubling the ﬁxed-sample, asymptotic interval width—the discrete mixture bound illustrated in Figure 9
+stays within a factor of two of the ﬁxed-sample CLT bounds over ﬁve orders of magnitude in time.
+2
+1.1 Related work
+The idea of a conﬁdence sequence goes back at least to Darling and Robbins (1967 a). They are called
+repeated conﬁdence intervals by Jennison and Turnbull (1984, 1989) (with a focus on ﬁnite time horizons)
+and always-valid conﬁdence intervals by Johari et al. (2015). They are sometimes labeled anytime conﬁdence
+intervals in the machine learning literature (Jamieson and Jain, 2018).
+Prior work on sequential inference is often phrased in terms of a sequential hypothesis test, deﬁned as a
+stopping rule and an accept/reject decision variable, or in terms of an always-valid p-value (Johari et al.,
+2015). In Section 6 we discuss the duality between conﬁdence sequences, sequential hypothesis tests, and
+always-validp-values. We show in Lemma 3 that deﬁnition (1) is equivalent to requiring P(θτ∈ CIτ)≥ 1−α
+for all stopping times τ, or even for all random times τ, not necessarily stopping times. Hence the choice of
+deﬁnition (1) over related deﬁnitions in the literature is one of convenience.
+Recent interest in conﬁdence sequences has come from the literature on best-arm identiﬁcation with ﬁxed
+conﬁdence for multi-armed bandit problems. Garivier (2013), Jamieson et al. (2014), Kaufmann et al.
+(2016), and Zhao et al. (2016) present methods satisfying properties (P1)-(P4) for independent, sub-Gaussian
+observations. Our results are sharper and more general, and our Bernstein conﬁdence sequence scales with
+the true variance in nonparametric settings. Conﬁdence sequences are a key ingredient in best-arm selection
+algorithms (Jamieson and Nowak, 2014) and related methods for sequential testing with multiple comparisons
+(Yang et al., 2017; Malek et al., 2017; Jamieson and Jain, 2018). Our results improve and generalize such
+methods.
+Maurer and Pontil (2009) and Audibert et al. (2009) prove empirical-Bernstein bounds for ﬁxed times or ﬁnite
+time horizons. Our empirical-Bernstein bound holds uniformly over inﬁnite time. Balsubramani (2014) takes
+a diﬀerent approach to deriving conﬁdence sequences satisfying properties (P1)-(P4) by lower bounding a
+mixture martingale. This work was extended in Balsubramani and Ramdas (2016) to an empirical-Bernstein
+bound, the only inﬁnite-horizon, empirical-Bernstein conﬁdence sequence we are aware of in prior work. Our
+result removes a multiplicative pre-factor and yields sharper bounds. We emphasize that our proof technique
+is quite diﬀerent from all three of these existing empirical-Bernstein bounds; see Appendix A.8.
+The simplest conﬁdence sequence satisfying properties (P1)-(P3) follows by inverting a suitably formulated
+sequential probability ratio test (SPRT, (Wald, 1945)), such as in Section 3.6 of Howard et al. (2020). Wald
+worked in a parametric setting, though it is known that the normal SPRT depends only on sub-Gaussianity
+(e.g., Robbins (1970)). The resulting conﬁdence sequence does not shrink towards zero width as t→∞
+(property P4), a problem which stems from the choice of a single point alternative λ. Numerous extensions
+have been developed to remedy this defect, and our work is most closely tied to two approaches. First, in the
+method of mixtures, one replaces the likelihood ratio with a mixture
+∫∏
+i[fλ(Xi)/f0(Xi)] dF (λ), which is
+still a martingale (Ville, 1939; Wald, 1945; Darling and Robbins, 1968; Robbins and Siegmund, 1969, 1970;
+Robbins, 1970; Lai, 1976 b; de la Pe˜ na et al., 2007; Balsubramani, 2014; Bercu et al., 2015; Kaufmann and
+Koolen, 2018). Second, epoch-based analyses choose a sequence of point alternatives λ1,λ 2,... approaching
+the null value, with corresponding error probabilities α1,α 2,... approaching zero so that a union bound
+yields the desired error control (Darling and Robbins, 1967b; Robbins and Siegmund, 1968; Kaufmann et al.,
+2016).
+The literature on self-normalized bounds makes extensive use of the method of mixtures, sometimes called
+pseudo-maximization (de la Pe˜ na et al., 2004, 2007; de la Pe˜ na, Klass and Lai, 2009; de la Pe˜ na, Lai and
+Shao, 2009; Garivier, 2013); these works introduced the idea of using a mixture to bound a quantity with
+a random intrinsic time Vt. These results are mostly given for ﬁxed samples or ﬁnite time horizon, though
+de la Pe˜ na et al. (2004, Eq. 4.20) includes an inﬁnite-horizon curve-crossing bound. Lai (1976 b) treats
+conﬁdence sequences for the parameter of an exponential family using mixture techniques similar to those of
+Section 3.2. Like most work on the method of mixtures, Lai’s work focused on the parametric setting (which
+we discuss in Section 4.4), while we focus on the application of mixture bounds to nonparametric settings.
+Johari et al. (2017) adopt the mixture approach for a commercial A/B testing platform, where properties
+(P2) and (P3) are critical to provide an “oﬀ-the-shelf” solution for a variety of clients. Their application
+relies on asymptotics which lack rigorous justiﬁcation. In Section 4.2 we give nonasymptotic justiﬁcation
+for a similar conﬁdence sequence under a ﬁnite-sample randomization inference model, and in Section 5 we
+demonstrate how our methods control Type I error in situations where asymptotics fail.
+3
+1.2 Outline
+We organize our results using the sub-Gaussian, sub-gamma, sub-Bernoulli, sub-Poisson and sub-exponential
+settings deﬁned in Section 2.
+1. The stitching method gives new closed-form sub-Gaussian or sub-gamma boundaries (Theorem 1).
+Our sub-gamma treatment extends prior sub-Gaussian work to cover any martingale whose increments
+have ﬁnite moment-generating function in a neighborhood of zero; see Proposition 1. Our proof is
+transparent and ﬂexible, accommodating a variety of boundary shapes, including those growing at
+the rateO(√t log logt) with a focus on tight constants, though we do not recommend this bound in
+practice unless closed-form simplicity is vital.
+2. Conjugate mixtures give one- and two-sided boundaries for the sub-Bernoulli, sub-Gaussian, sub-
+Poisson and sub-exponential cases (Section 3.2) which avoid approximations made for analytical con-
+venience. The sub-Gaussian boundaries are unimprovable without further assumptions (Section 3.6).
+These boundaries include a common tuning parameter which is critical in practice and we discuss why
+theirO(√t logt) growth rate may be preferable to the slower O(√t log logt) rate (Section 3.5).
+3. Discrete mixtures facilitate numerical computation of boundaries with a great deal of ﬂexibility, at the
+cost of slightly more involved computations (Theorem 2). Like conjugate mixture boundaries, these
+boundaries avoid unnecessary approximations and are unimprovable in the sub-Gaussian case.
+4. Finally, for sub-Gaussian processes, the inverted stitching method (Theorem 3) gives numerical upper
+bounds on the crossing probability of any increasing, strictly concave boundary over a limited time
+range. We show that any such boundary yields a uniform upper tail inequality over a ﬁnite horizon,
+and compute its crossing probability.
+Building on this foundation, we present a a state-of-the-art empirical-Bernstein bound (Theorem 4) for any
+sequence of bounded observations using a new self-normalization proof technique. We illustrate our methods
+with two novel applications: the nonasymptotic, sequential estimation of average treatment eﬀect in the
+Neyman-Rubin potential outcomes model (Section 4.2), and the derivation of uniform matrix bounds and
+covariance matrix conﬁdence sequences (Corollary 3 and Section 4.3). We give simulation results in Section 5.
+Section 6 discusses the relationship of our work to existing concepts of sequential testing. Proofs of main
+results are in Appendix A, with others deferred to Appendix C.
+2 Preliminaries: linear boundaries
+Given a sequence of real-valued observations ( Xt)∞t=1, suppose we wish to estimate the average conditional
+expectationµt :=t−1∑ti=1 Ei−1Xi at each timet using the sample mean ¯Xt :=t−1∑ti=1Xi; here we assume
+an underlying ﬁltration (Ft)∞t=1 to which (Xt) is adapted, and Et denotes expectation conditional onFt. Let
+St :=∑ti=1(Xi− Ei−1Xi), the zero-mean deviation of our sample sum from its estimand at time t. Given
+α∈ (0, 1), suppose we can construct a uniform upper tail bound uα : R≥0→ R≥0 satisfying
+P
+(
+∃t≥ 1 :St≥uα(Vt)
+)
+≤α (3)
+for some adapted, real-valued intrinsic time process (Vt)∞t=1, an appropriate time scale to measure the
+(squared) deviations of (St). This uniform upper bound on the centered sum ( St) yields a lower conﬁdence
+sequence for (µt) with radius t−1uα(Vt): P(∀t≥ 1 : ¯Xt−t−1uα(Vt)≤µt)≥ 1−α.
+Note that an assumption on the upper tail of (St) yields a lower conﬁdence sequence for (µt); a corresponding
+assumption on the lower tail of (St) yields an upper conﬁdence sequence for ( µt). In this paper we formally
+focus on upper tail bounds, from which lower tail bounds can be derived by examining (−St) in place of (St).
+In general, the left and right tails of (St) may behave diﬀerently and require diﬀerent sets of assumptions, so
+that our upper and lower conﬁdence sequences may have diﬀerent forms. Regardless, we can always combine
+upper and lower conﬁdence sequences using a union bound to obtain a two-sided conﬁdence sequence (1).
+When the (Xt) are independent with common mean µ, the resulting conﬁdence sequence estimates µ, but
+the setup requires neither independence nor a common mean. In general, the estimand µt may be changing
+4
+at each time t; Section 4.2 gives an application to causal inference in which this changing estimand is useful.
+In principle, µt may also be random, although none of our applications involve random µt.
+To construct uniform boundaries uα satisfying inequality (3), we build upon the following general condition
+(Howard et al., 2020, Deﬁnition 1):
+Deﬁnition 1 (Sub-ψ condition). Let (St)∞t=0, (Vt)∞t=0 be real-valued processes adapted to an underlying
+ﬁltration (Ft)∞t=0 with S0 =V0 = 0 and Vt≥ 0 for all t. For a function ψ : [0,λ max)→ R and a scalar
+l0 ∈ [1,∞), we say ( St) is l0-sub-ψ with variance process (Vt) if, for each λ∈ [0,λ max), there exists a
+supermartingale (Lt(λ))∞t=0 w.r.t. (Ft) such that EL0(λ)≤l0 and
+exp{λSt−ψ(λ)Vt}≤ Lt(λ) a.s. for all t. (4)
+For givenψ and l0, let Sl0ψ be the class of pairs of l0-sub-ψ processes (St,Vt):
+Sl0ψ :={(St,Vt) : (St) is l0-sub-ψ with variance process (Vt)}. (5)
+When stating that a process is sub- ψ, we typically omit l0 from our terminology for simplicity. In scalar
+cases, we always have l0 = 1, while in matrix cases l0 =d, the dimension of the (square) matrices.
+Where does Deﬁnition 1 come from? The jumping-oﬀ point is the martingale method for concentration
+inequalities ((Hoeﬀding, 1963; Azuma, 1967; McDiarmid, 1998); (Raginsky et al., 2013, section 2.2)), itself
+based on the classical Cram´ er-Chernoﬀ method ((Cram´ er, 1938; Chernoﬀ, 1952); (Boucheron et al., 2013, sec-
+tion 2.2)). The martingale method starts oﬀ with an assumption of the form Et−1eλ(Xt−Et−1Xt)≤eψ(λ)σ2t for
+allt≥ 1,λ∈ R. Then, denoting St :=∑ti=1(Xi−Ei−1Xi) andVt :=∑ti=1σ2i , the process exp{λSt−ψ(λ)Vt}
+is a supermartingale for each λ∈ R. Unlike the martingale method assumption, Deﬁnition 1 allows the ex-
+ponential process to be upper bounded by a supermartingale, and it permits ( Vt) to be adapted rather than
+predictable. We also restrict our attention to λ≥ 0 to derive one-sided bounds.
+Intuitively, the process exp{λSt−ψ(λ)Vt} measures how quickly St has grown relative to intrinsic time Vt,
+and the free parameter λ determines the relative emphasis placed on the tails of the distribution of St, i.e.,
+on the higher moments. Larger values of λ exaggerate larger movements inSt, andψ captures how much we
+must correspondingly exaggerateVt. ψ is related to the heavy-tailedness ofSt and the reader may think of it
+as a cumulant-generating function (CGF, the logarithm of the moment-generating function). For example,
+suppose (Xt) is a sequence of i.i.d., zero-mean random variables with CGF ψ(λ) := log EeλX1 which is ﬁnite
+for all λ∈ [0,λ max). Then, setting Vt := t, we see that Lt(λ) := exp{λSt−ψ(λ)Vt} is itself a martingale,
+for all λ∈ [0,λ max). Indeed, in all scalar cases we consider, Lt(λ) is just equal to exp {λSt−ψ(λ)Vt}. See
+Appendix Tables 3 and 4, drawn from Howard et al. (2020), for a catalog of suﬃcient conditions for a process
+to be sub-ψ using the ﬁve ψ functions deﬁned below. We use many of these conditions in what follows.
+We organize our uniform boundaries according to the ψ function used in Deﬁnition 1. First recall the
+Cram´ er-Chernoﬀ bound: if (Xt) are independent zero-mean with bounded CGF log EeλXt ≤ ψ(λ) for all
+t≥ 1 and λ∈ R, then writing St = ∑ti=1Xi, we have P(St≥ x)≤ e−tψ⋆(x/t) for any x > 0, where ψ⋆
+denotes the Legendre-Fenchel transform of ψ. Equivalently, writing zα(t) := tψ⋆−1(t−1 logα−1), we have
+P(St≥ zα(t))≤ α for any ﬁxed t and α∈ (0, 1). In other words, the function zα gives a high-probability
+upper bound at any ﬁxed time t for any sum of independent random variables with CGF bounded by
+ψ. When we extend this concept to boundaries holding uniformly over time, there is no longer a unique,
+minimized boundary, and the following deﬁnition captures the class of valid boundaries.
+Deﬁnition 2. Givenψ : [0,λ max)→ R andl0≥ 1, a functionu : R→ R is called anl0-sub-ψ uniform bound-
+ary with crossing probability α if
+sup
+(St,Vt)∈Sl0ψ
+P(∃t≥ 1 :St≥u(Vt))≤α. (6)
+Althoughu does depend on the constant l0 in Deﬁnition 1, for simplicity we typically omit this dependence
+from our notation, writing simply that u is a sub-ψ uniform boundary.
+Five particular ψ functions play important roles in our development; below, we take 1 /0 =∞ in the upper
+bounds on λ:
+5
+• ψB,g,h(λ) := 1gh log(gehλ+he−gλg+h ) on 0≤λ< ∞, the scaled CGF of a centered random variable (r.v.)
+supported on two points, −g and h, for some g,h > 0, for example a centered Bernoulli r.v. when
+g +h = 1.
+• ψN(λ) :=λ2/2 on 0≤λ< ∞, the CGF of a standard Gaussian r.v.
+• ψP,c(λ) := c−2(ecλ−cλ− 1) on 0 ≤ λ <∞ for some scale parameter c∈ R, which is the CGF of a
+centered unit-rate Poisson r.v. when c = 1. By taking the limit, we deﬁne ψP,0 =ψN.
+• ψE,c(λ) :=c−2(− log(1−cλ)−cλ) on 0≤λ <1/(c∨ 0) for some scale c∈ R, which is the CGF of a
+centered unit-rate exponential r.v. when c = 1. By taking the limit, we deﬁne ψE,0 =ψN.
+• ψG,c(λ) := λ2/(2(1−cλ)) on 0 ≤ λ <1/(c∨ 0) (taking 1/0 =∞) for some scale parameter c∈ R,
+which we refer to as the sub-gamma case following Boucheron et al. (2013). This is not the CGF of a
+gamma r.v. but is a convenient upper bound which also includes the sub-Gaussian case at c = 0 and
+permits analytically tractable results below.
+Sub-Bernoulli
+Sub-Gaussian
+Sub-Poisson Sub-gamma
+Sub-exponential
+c< 0
+c< 0
+c< 0
+Figure 2: Relations among sub- ψ boundaries: each arrow indicates that a sub- ψ boundary at the source node can
+also serve as a sub-ψ boundary at the destination node, with appropriate modiﬁcations to their parameters. Details
+are in Proposition 11.
+One may freely scale ψ by any positive constant and divide Vt by the same constant so that Deﬁnition 1
+remains satisﬁed; by convention, we scale all ψ functions above so that ψ′′(0+) = 1. When we speak of a
+sub-gamma process (or uniform boundary) with scale parameter c, we mean a sub-ψG,c process (or uniform
+boundary), and likewise for other cases. We often writeψB,ψP , etc., dropping the range and scale parameters
+from our notation. As we summarize in Figure 2 and detail in Proposition 11, certain general implications
+hold among sub-ψ boundaries. In particular, any sub-Gaussian boundary can also serve as a sub-Bernoulli
+boundary; any sub-Poisson boundary serves as a sub-Gaussian or sub-Bernoulli boundary; and, importantly,
+any sub-gamma or sub-exponential boundary can serve as a sub- ψ boundary in any of the other four cases.
+Indeed, a sub-gamma or sub-exponential boundary applies to many cases of practical interest, as detailed
+below.
+Proposition 1. Supposeψ is twice-diﬀerentiable andψ(0) =ψ′(0+) = 0. Suppose, for each c> 0,uc(v) is a
+sub-gamma or sub-exponential uniform boundary with crossing probability α for scale c. Then v↦→uk1(k2v)
+is a sub-ψ uniform boundary for some constants k1,k 2 > 0 depending only on ψ.
+Proposition 1 restates Howard et al. (2020, Proposition 1), which shows that any process ( St) which is
+sub-ψ is also sub-gamma and sub-exponential, if ψ satisﬁes the conditions of Proposition 1. Note that these
+conditions are satisﬁed for any mean-zero random variable if the CGF exists in a neighborhood of zero, so
+the conditions are quite weak (Jorgensen, 1997, Theorem 2.3).
+Example 1 (Conﬁdence sequence for the variance of a Gaussian distribution with unknown mean). Suppose
+X1,X 2,... are i.i.d. draws from a N (µ,σ 2) distribution and we wish to sequentially estimate σ2 when µ is
+also unknown. Let St :=σ−2∑t+1i=1(Xi− ¯Xt+1)2−t for t = 1, 2,... , where ¯Xt :=t−1∑ti=1Xi is the sample
+mean. This St is a centered and scaled sample variance, and as in Darling and Robbins (1967 a), we use
+the fact that St is a cumulative sum of independent, centered Chi-squared random variables each with one
+degree of freedom (see Appendix H for details). Such a centered Chi-squared distribution has variance two
+and CGF equal to 2ψE,2.
+Thus (St) is 1-sub-exponential with variance process Vt = 2t and scale parameter c = 2. We may uniformly
+bound the upper deviations of St using any sub-exponential uniform boundary, for example the gamma-
+exponential mixture boundary of Proposition 9. Or, we can use Proposition 11 to deduce that ( St) is
+6
+sub-gamma with scale c = 2 (and the same variance process) and use the closed-form stitched boundary of
+Theorem 1.
+The above constructions yield lower conﬁdence sequences for the variance. To obtain an upper conﬁdence
+sequence, we use the fact that (−St) is 1-sub-exponential with scale parameter c =−2. Now Proposition 11
+implies that (−St) is sub-gamma with scale c =−1, so the stitched boundary again applies, while Proposi-
+tion 11 implies that (−St) is also sub-Gaussian, so we may alternatively use the normal mixture boundary
+of Proposition 6. Since ψG,−1 is uniformly smaller than ψN, the above analysis yields tighter bounds than
+the sub-Gaussian approach of Darling and Robbins (1967 a).
+The simplest uniform boundaries are linear with positive intercept and slope. This is formalized in Howard
+et al. (2020), partially restated below.
+Lemma 1 ((Howard et al., 2020), Theorem 1) . For any λ∈ [0,λ max) and α∈ (0, 1),
+u(v) := log(l0/α)λ + ψ(λ)λ ·v (7)
+is a sub-ψ uniform boundary with crossing probability α.
+While Lemma 1 provides a versatile building block, the O(Vt) growth of u(Vt) may be undesirable. Indeed,
+from a concentration point of view, the typical deviations of St tend to be only O(√Vt), so the bound will
+rapidly become loose for large t. From a conﬁdence sequence point of view, recall that the conﬁdence radius
+for the mean is given by u(Vt)/t. Typically, Vt = Θ(t) a.s. as t→∞ , so the conﬁdence radius will be
+asymptotically zero width if and only if u(v) =o(v). In other words, we cannot achieve arbitrary estimation
+precision with arbitrarily large samples unless the uniform boundary is sublinear. We address this problem
+in Section 3, building upon Lemma 1 to construct curved sub-ψ uniform boundaries.
+3 Curved uniform boundaries
+We present our four methods for computing curved uniform boundaries in Sections 3.1 to 3.4. In Section 3.5,
+we discuss how to tune boundaries, a necessity for good performance in practice, and we describe the
+unimprovability of sub-Gaussian mixture bounds in Section 3.6.
+3.1 Closed-form boundaries via stitching
+Our analytical “stitched” bound is useful in the sub-Gaussian case or, more generally, the sub-gamma case
+with scale c. We require three user-chosen parameters:
+• a scalar η >1 determines the geometric spacing of intrinsic time,
+• a scalar m >0 which gives the intrinsic time at which the uniform boundary starts to be nontrivial,
+and
+• an increasing function h : R≥0→ R>0 such that∑∞k=0 1/h(k)≤ 1, which determines the shape of the
+boundary’s growth after time m.
+Recalling the scale parameter c for the ψG function above and the constant l0 in Deﬁnition 1, we deﬁne the
+stitching functionSα as
+Sα(v) :=
+√
+k21v𝓁(v) +k22c2𝓁2(v) +k2c𝓁(v), where
+
+
+
+𝓁(v) := logh(logη( vm)) + log(l0α ),
+k1 := (η1/4 +η−1/4)/√2,
+k2 := (√η + 1)/2,
+(8)
+and deﬁne the stitched boundary as u(v) =Sα(v∨m). NoteSα(v)≤k1
+√
+v𝓁(v)+ 2ck2𝓁(v) whenc> 0, while
+Sα(v)≤ k1
+√
+v𝓁(v) when c≤ 0, with equality in the sub-Gaussian case ( c = 0). These simpler expressions
+may sometimes be preferable. For notational simplicity we suppress the dependence of Sα on h, η, l0, and
+c; we will discuss speciﬁc choices as necessary. In the examples we consider, 𝓁(v) grows as O(logv) or
+O(log logv) as v↑∞ , so the ﬁrst term, k1
+√
+Vt𝓁(Vt), dominates for suﬃciently large Vt, speciﬁcally when
+Vt/𝓁(Vt)≫ 2c2√η.
+7
+Final boundary
+Linear uniform
+Chernoff bounds
+0
+η0 η1 η2
+V t
+Boundary for S t
+Figure 3: Illustration of Theorem 1, stitching together linear boundaries to construct a curved boundary. We break
+time into geometrically-spaced epochs ηk≤Vt < ηk+1, construct a linear uniform bound using Lemma 1 optimized
+for each epoch, and take a union bound over all crossing events. The ﬁnal boundary is a smooth analytical upper
+bound to the piecewise linear bound.
+Theorem 1 (Stitched boundary) . For any c≥ 0,α∈ (0, 1),η >1,m> 0, and h : R≥0→ R≥0 increasing
+such that ∑∞k=0 1/h(k)≤ 1, the function v↦→S α(v∨m) is a sub-gamma uniform boundary with crossing
+probabilityα. Further, for any sub- ψG process (St) with variance process (Vt) and any v0≥m,
+P (∃t≥ 1 :Vt≥v0 and St≥S α(Vt))≤
+∞∑
+k=⌊logη(v0/m)⌋
+α
+h(k). (9)
+The ﬁrst sentence above says that the probability of St crossingSα(Vt∨m) at least once is at most α, while
+the second says that, even if it does happen to cross once or more, the probability of further crossings decays to
+zero beyond larger and larger intrinsic timesv0. Note that (9) implies P (suptVt =∞ and St≥S α(Vt) inﬁnitely often) =
+0. The proof of Theorem 1, given with discussion in Appendix A.1, follows by taking a union bound over
+a carefully chosen family of linear boundaries, one for each of a sequence of geometrically-spaced epochs;
+see Figure 3. The high-level proof technique is standard, often referred to as “peeling” in the bandit lit-
+erature, and closely related to chaining elsewhere in probability theory. Our proof generalizes beyond the
+sub-Gaussian case and involves careful parameter choices in order to achieve tight constants. In brief, within
+each epoch, there are many possible linear boundaries, and we have found that optimizing the linear bound-
+ary for the geometric mean of the epoch endpoints strikes a good balance between tight constants and
+analytical simplicity in the ﬁnal boundary. Appendix G gives a detailed comparison of constants arising
+from our bound with similar bounds from the literature.
+The boundary shape is determined by choosing the function h and setting the nominal crossing probabil-
+ity in the kth epoch to equal α/h(k). Then Theorem 1 gives a curved boundary which grows at a rate
+O
+(√
+Vt logh(logηVt)
+)
+as Vt↑∞ . The more slowly h(k) grows as k↑∞ , the more slowly the resulting
+boundary will grow as Vt↑∞ . A simple choice is exponential growth, h(k) =ηsk/(1−η−s) for some s> 1,
+yieldingSα(v) =O(√v logv). A more interesting example is h(k) = (k + 1)sζ(s) for some s> 1, where ζ(s)
+is the Riemann zeta function. Then, when l0 = 1, Theorem 1 yields the polynomial stitched boundary : for
+c≥ 0,
+Sα(v) =k1
+√
+v
+(
+s log log
+(ηv
+m
+)
++ log ζ(s)α logsη) +ck2(s log log(ηvm) + log ζ(s)α logsη), (10)
+where the second term is neglected in the sub-Gaussian case since c = 0. This is a “ﬁnite LIL bound”,
+so-called because Sα(v)∼
+√
+sk21v log logv, matching the form of the law of the iterated logarithm (Stout,
+1970). We can bring sk21 arbitrarily close to 2 by choosing η and s suﬃciently close to one, at the cost of
+inﬂating the additive term log( ζ(s)/(logsη)). Brieﬂy, increasing η increases the size of each epoch in the
+aforementioned peeling argument, which reduces the looseness of the union bound over epochs. But the
+larger we make the epochs, the further each linear boundary deviates from the ideal curved shape at the
+ends of the epochs, which inﬂates our ﬁnal boundary. The choice of s involves a similar tradeoﬀ: increasing
+s causes us to exhaust more of our total error probability budget on earlier epochs, decreasing the constant
+8
+term (which matters most for early times), at the cost of a union bound over smaller error probabilities
+in later epochs, which shows up as an increase in the leading constant. We discuss parameter tuning in
+more practical terms in Section 3.5. For example, take η = 2,s = 1.4,m = 1; if St is a sum of independent,
+zero-mean, 1-sub-Gaussian observations, we obtain
+P
+(
+∃t≥ 1 :St≥ 1.7
+√
+t
+(
+log log(2t) + 0.72 log
+(5.2
+α
+)))
+≤α. (11)
+Figure 9 in Appendix G compares a sub-Gaussian stitched boundary to a numerically-computed discrete
+mixture bound with a mixture distribution roughly corresponding to h(k)∝ (k + 1)1.4, as described in
+Appendix A.6. This discrete mixture boundary acts as a lower bound (see Section 3.6) and shows that not
+too much is lost by the approximations involved in the stitching construction. Figure 10 compare the same
+stitched boundary to related bounds from the literature; our bound shows slightly improved constants over
+the best known bounds.
+Although our stitching construction begins with a sub-gamma assumption, it applies to other sub- ψ cases,
+including sub-Bernoulli, sub-Poisson and sub-exponential cases; see Figure 2 and Proposition 1. Further, our
+stitched bounds apply equally well in continuous-time settings to Brownian motion, continuous martingales,
+martingales with bounded jumps, and martingales whose jumps satisfy a Bernstein condition; see Corollary 8.
+While our focus is on nonasymptotic results, Theorem 1 makes it easy to obtain the following general upper
+asymptotic LIL, proved in Appendix A.2:
+Corollary 1. Suppose (St) is sub-ψ with variance process (Vt) and ψ(λ)∼λ2/2 as λ↓ 0. Then
+lim sup
+t→∞
+St√2Vt log logVt≤ 1 on {supt Vt =∞}. (12)
+3.2 Conjugate mixture boundaries
+For appropriate choice of mixing distributionF , the integral
+∫
+exp{λSt−ψ(λ)Vt} dF (λ) will be analytically
+tractable. Since, under Deﬁnition 1, this mixture process is upper bounded by a mixture supermartingale∫
+Lt(λ) dF (λ), such mixtures yield closed-form or eﬃciently computable curved boundaries, which we call
+conjugate mixture boundaries. This approach is known as the method of mixtures, one of the most widely-
+studied techniques for constructing uniform bounds (Ville, 1939; Wald, 1945; Darling and Robbins, 1968;
+Robbins, 1970; Robbins and Siegmund, 1969, 1970; Lai, 1976 b; Kaufmann and Koolen, 2018). Unlike the
+stitched bound of Theorem 1, which involves a small amount of looseness in the analytical approximations,
+mixture boundaries involve no such approximations and, in the sub-Gaussian case, are unimprovable in
+the sense described in Section 3.6. We restate the following standard idea behind the method of mixtures
+using our deﬁnitions, with a proof in Appendix A.3. The proof details a technical condition on product
+measurability which we require of Lt.
+Lemma 2. For any probability distribution F on [0,λ max) and α∈ (0, 1),
+Mα(v) := sup
+{
+s∈ R :
+∫
+exp{λs−ψ(λ)v} dF (λ)
+| {z }
+=:m(s,v)
+< l0
+α
+}
+(13)
+is a sub-ψ uniform boundary with crossing probabilityα, so long as the supermartingale (Lt) of Deﬁnition 1 is
+product measurable when the underlying probability space is augmented with the independent random variable
+λ.
+For each of our conjugate mixture bounds, we compute m(s,v ) in closed-form. The boundary u(v) can then
+be computed by numerically solving the equation m(s,v ) =l0/α in s, as we show in Appendix D. When an
+identical sub-ψ condition applies to (−St) as well as (St), we may apply a uniform boundary to both tails
+and take a union bound, obtaining a two-sided conﬁdence sequence. However, mixing overλ∈ R rather than
+λ∈ R≥0 yields a two-sided bound directly, so in some cases we present two-sided variants along with their
+one-sided counterparts. We give details for the following conjugate mixture boundaries in Appendix A.3:
+9
+• one-, two-sided normal mixture boundaries (sub-Gaussian case);
+• one-, two-sided beta-binomial mixture boundaries (sub-Bernoulli case);
+• one-sided gamma-Poisson mixture boundary (sub-Poisson case); and
+• one-sided gamma-exponential mixture boundary (sub-exponential case).
+The two-sided normal mixture boundary has a closed form expression:
+u(v) :=
+√
+(v +ρ) log
+(l20(v +ρ)
+α2ρ
+)
+. (14)
+The one-sided normal mixture boundary has a similar, closed-form upper bound, making these especially
+convenient. It is clear from (14) that the normal mixture boundary grows as O(√v logv) asymptotically,
+and this rate is shared by all of our conjugate mixture boundaries. Indeed, Proposition 2 below, proved in
+Appendix A.4, shows that such a rate holds for any mixture boundary as given by (13) whenever the mixing
+distribution is continuous with positive density at and around the origin, a property which holds for all
+mixture distributions used in our conjugate mixture boundaries, subject to regularity conditions on ψ which
+hold for the CGF of any nontrivial, mean-zero r.v. and speciﬁcally for the ﬁve ψ functions in Section 2.
+Proposition 2. Assume (i) ψ is nondecreasing, ψ(0) = ψ′(0+) = 0 , ψ′′(0+) = c > 0, and ψ has three
+continuous derivatives on a neighborhood including the origin; and (ii) F has density f (w.r.t. Lebesgue)
+which is continuous and positive on a neighborhood including the origin. Then
+Mα(v) =
+√
+v
+[
+c log
+( cl20v
+2πα2f2(0)
+)
++o(1)
+]
+as v→∞. (15)
+Note that f need not place mass on all of [0 ,λ max), only near the origin, for the asymptotic rate to hold.
+Proposition 2 shows how the asymptotic behavior of any such mixture bound depends only on the behavior
+of ψ and f near the origin, a result reminiscent of the central limit theorem. Analogous, related results for
+the sub-Gaussian special case using ψ(λ) = λ2/2 can be found in Robbins and Siegmund (1970, Section 4)
+and Lai (1976a, Theorem 2), in some cases under weaker assumptions on F .
+In contrast to previous derivations of conjugate mixture boundaries in the literature, all of our conjugate
+mixture boundaries include a common tuning parameter ρ> 0 which controls the sample size for which the
+boundary is optimized. Such tuning is critical in practice, as we explain in Section 3.5, but has been ignored in
+much prior work. Additionally, with the exception of the sub-Gaussian case, most prior work on the method
+of mixtures has focused on parametric settings. We instead emphasize the applicability of these bounds to
+nonparametric settings. For example, when the observations are bounded, one may construct a conﬁdence
+sequence making use of empirical-Bernstein estimates (Theorem 4) based on our gamma-exponential mixture
+(Proposition 9). See Appendix J for other conditions in which mixture bounds yield nonparametric uniform
+boundaries.
+3.3 Numerical bounds using discrete mixtures
+In applications, one may not need an explicit closed-form expression so long as the bound can be easily
+computed numerically. Our discrete mixture method is an eﬃcient technique for numerical computation of
+curved boundaries for processes satisfying Deﬁnition 1. It permits arbitrary mixture densities, thus producing
+boundaries growing at the rateO(√v log logv). Recall that the shape of the stitched bound was determined
+by the user-speciﬁed function h. For the discrete mixture bound, one instead speciﬁes a probability density
+f over ﬁnite support (0,λ] for some λ∈ (0,λ max). We ﬁrst discretize f using a series of support points λk,
+geometrically spaced according to successive powers of some η >1, and an associated set of weights wk:
+λk := ληk+1/2 and wk := λ(η− 1)f(λk
+√η)
+ηk+1 for k = 0, 1, 2,.... (16)
+10
+Theorem 2 (Discrete mixture bound) . Fix ψ : [0,λ max)→ R, α ∈ (0, 1), λ∈ (0,λ max), and a probability
+density f on (0,λ] that is nonincreasing and positive. For supports λk and weights wk deﬁned in (16),
+DMα(v) := sup
+{
+s∈ R :
+∞∑
+k=0
+wk exp{λks−ψ(λk)v}< l0α
+}
+, (17)
+is a sub-ψ uniform boundary with crossing probability α.
+We suppress the dependence of DM α on f, l0, λ and η for notational simplicity. Though Theorem 2 is a
+straightforward consequence of the method of mixtures, our choice of discretization (16) makes it eﬀective,
+broadly applicable, and easy to implement. See Appendix A.5 for the proof of this result. Figure 9 includes
+an example bound, demonstrating a slight advantage over stitching. Appendix A.6 describes a connection
+between the stitching and discrete mixture methods, including a correspondence between the alpha-spending
+function h and the mixture density f. Finally, we note that the method can be applied even when f is not
+monotone; one must simply choose the discretization (16) more carefully, using known properties of f.
+3.4 Inverted stitching for arbitrary boundaries
+In the method of mixtures, we choose a mixing distribution F and the machinery yields a boundary Mα.
+Likewise, in the stitching construction of Theorem 1, we choose an error decay function h and obtain a
+boundarySα. Here, we invert the procedure: we choose a boundary function g(v) and numerically compute
+an upper bound on its St-upcrossing probability using a stitching-like construction.
+Theorem 3. For any nonnegative, strictly concave function g : R → R and vmax > 1, the function
+u(v) :=
+{
+g(1∨v), v ≤vmax,
+∞, otherwise (18)
+is a sub-Gaussian uniform boundary with crossing probability at most
+l0 infη>1
+⌈logηvmax⌉∑
+k=0
+exp
+{
+−2(g(ηk+1)−g(ηk))(ηg(ηk)−g(ηk+1))ηk(η− 1)2 }. (19)
+The proof is in Appendix A.7. For simplicity we restrict to the sub-Gaussian case; examination of the
+proof will show that the method applies in other sub- ψ cases as well, since we simply apply Lemma 1 to
+appropriately chosen lines, but more involved numerical calculations will be necessary, as the closed-form
+(19) no longer applies. A similar idea was considered by Darling and Robbins (1968), using a mixture integral
+approximation instead of an epoch-based construction to derive closed-form bounds. Theorem 3 requires
+numerical summation but yields tighter bounds with fewer assumptions. As an example, Theorem 3 with
+η = 2.99 shows that
+P
+(
+∃t : 1≤Vt≤ 1020 and St≥ 1.7√Vt(log log(eVt) + 3.46))≤ 0.025. (20)
+This boundary is illustrated in Figure 9.
+3.5 Tuning boundaries in practice
+All uniform boundaries involve a tradeoﬀ of tightness at diﬀerent intrinsic times: making a bound tighter
+for some range of times requires making it looser at other times. Roughly speaking, the choice of a uniform
+boundary involves choosing both what time the bound should be optimized for (e.g., should the bound
+be tightest around 100 observations or around 100,000 observations?) as well as how quickly the bound
+degrades as we move away from the optimized-for time (e.g., if we optimize for 100 samples, will the bound
+be twice as wide when we reach 1,000 samples, or will it stay within a factor of two until we reach 1,000,000
+samples?). A boundary which decays more slowly will necessarily not be as tight around the optimized-for
+time. In brief, linear boundaries decay the most quickly, conjugate mixture boundaries decay substantially
+more slowly, and polynomial stitched boundaries decay even more slowly; we feel that mixture boundaries
+strike a good balance in practice.
+11
+Polynomial stitching, c = 1, m = 100
+Polynomial stitching, c = 0, m = 100
+Discrete mixture LIL, m = 50
+Gamma mixture, c = 1, m = 300
+Normal mixture, m = 300
+Gamma mixture, c = 1, m = 5,000
+Normal mixture, m = 5,000
+0
+2
+4
+6
+101 102 103 104
+v                                                                      
+u(v) v
+Figure 4: Comparison of normalized uniform boundaries u(v)/√v optimized for diﬀerent intrinsic times. Normal
+mixture uses Appendix Proposition 6, while gamma mixture uses Appendix Proposition 9. Polynomial stitched
+boundary is given in (10), with η = 2 and s = 1.4. Discrete mixture applies Theorem 2 to the density f(λ) =
+0.4· 10≤λ≤0.38/[λ log1.4(0.38e/λ)] with η = 1.1, and λmax = 0.38; see Appendix A.6 for motivation. All boundaries
+use α = 0.025.
+Here, we explain how to optimize uniform boundaries for a particular time and discuss the above tradeoﬀ
+in more detail. Let W−1(x) be the lower branch of the Lambert W function, the most negative real-valued
+solution in z to zez = x. Consider the unitless process St/√Vt, and the corresponding uniform boundary
+v↦→u(v)/√v. Since all of our uniform boundaries u(v) have positive intercept atv = 0, and all grow at least
+at the rate√v log logv asv→∞ , the normalized boundary u(v)/√v diverges asv→ 0 andv→∞ . For the
+two-sided normal mixture (14), there is a unique time m at which u(v)/√v is minimized; m is proportional
+to tuning parameter ρ as follows:
+Proposition 3. Letu(v) be the two-sided normal mixture boundary (14) with parameter ρ> 0.
+(a) For ﬁxed ρ> 0, the function v↦→u(v)/√v is uniquely minimized at v =m with m given by
+m
+ρ =−W−1
+(
+−α2
+el20
+)
+− 1. (21)
+(b) For ﬁxed m> 0, the choice of ρ which minimizes the boundary value u(m) is also determined by (21).
+The above result is proved in Appendix C.1; it is a matter of elementary calculus, but addresses a question
+that has received little attention in the literature. Figure 4 includes the normalized versions of two normal
+mixture boundaries optimized for diﬀerent times, m = 300 and m = 5,000. Optimizing for the range of
+values of Vt most relevant in a particular application will yield the tightest conﬁdence sequences. However,
+as the ﬁgure shows, one need not have a very precise range of times, so long as one uses a conservatively
+low value form, because u(v)/√v grows slowly after timem. Indeed, for the normal mixture boundary with
+α = 0.05 and l0 = 1, we have u(m)/√m≈ 3.0 and u(100m)/√100m≈ 3.6, so that the penalty for being oﬀ
+by two orders of magnitude is modest.
+The one-sided normal mixture boundary of Appendix Proposition 6 with crossing probability α is nearly
+identical to the two-sided normal mixture boundary with crossing probability 2 α, so one may choose ρ as
+in Proposition 3 with α doubled. For the gamma-exponential mixture and other non-sub-Gaussian uniform
+boundaries, Proposition 3 provides a good approximation in practice. Figure 4 includes gamma-exponential
+mixture boundaries with the same ρ values as each corresponding normal mixture boundary. Though the
+normalized gamma-exponential mixture boundary with m = 300 clearly reaches its minimum at v >m, this
+choice of ρ seems reasonable. Discrete mixtures can be similarly tuned by adjusting the precision of the
+mixing distribution, but require additional considerations (Appendix E).
+Comparing the sub-Gaussian stitched boundary, discrete mixture boundary, and normal mixture boundary
+optimized for m = 300 in Figure 4 illustrates another important point for practice: although the normal
+12
+mixture bound grows more quickly than the others as v→∞ , it remains smaller over about three orders
+of magnitude. This makes it preferable for many real-world applications, as the longest feasible duration of
+an experiment is rarely more than two orders of magnitude larger than the earliest possible stopping time.
+For example, many online experiments run for at least one week to account for weekly seasonality eﬀects,
+and very few such experiments last longer than 100 weeks. As both the normal mixture and the discrete
+mixture are unimprovable in general (Section 3.6), the diﬀerence is attributable to the choice of mixture, or
+alternatively, to the fact that the normal mixture trades tightness around the optimized-for time in exchange
+for looseness at much later times. The lesson is that the O(v log logv) rate, while asymptotically optimal in
+certain settings and useful for theory and some applications, may not be preferable in all real-world scenarios.
+3.6 Unimprovability of uniform boundaries
+Deﬁnition 2 of a sub-ψ boundary u involves only an upper bound on the u-crossing probability of any sub-
+ψ process (St). One may reasonably ask for corresponding lower bounds on the u-crossing probability to
+quantify how tight this boundary is. In the ideal case, we might desire a boundary u such that the true
+u-crossing probability of some process ( St) is equal to the upper bound. In nonparametric settings, we
+cannot achieve this goal for every sub- ψ process. However, we might still ask that there exists some sub-ψ
+process for which the true u-crossing probability is arbitrarily close to the upper bound, so that the upper
+bound on crossing probability is unimprovable in general. That is, we might ask that the inequality on the
+supremum in Deﬁnition 2 holds with equality.
+The fact we wish to point out, known in various forms, is that in the scalar, sub-Gaussian case, exact
+mixture bounds are unimprovable in the above sense. It is in this sense that the discrete mixture bound
+in Figure 9 provides a lower bound, showing that the sub-Gaussian polynomial stitched bound cannot be
+improved by much. The following result shows that, for any exact, sub-Gaussian mixture boundary Mα, as
+deﬁned in Lemma 2 for ψ =ψN, there exists a sub-Gaussian process whose true Mα-crossing probability is
+arbitrarily close to α. The result is similar to Theorem 2 of Robbins and Siegmund (1970), which gives a
+more general invariance principle, but requires conditions on the boundary that appear diﬃcult to verify for
+arbitrary mixture boundaries Mα. Recall that S1ψN is the class of pairs of processes ( St,Vt) such that (St)
+is 1-sub-Gaussian with variance process (Vt).
+Proposition 4. For any exact, 1-sub-Gaussian mixture boundary Mα,
+sup
+(St,Vt)∈S1ψN
+P(∃t≥ 1 :St≥M α(Vt)) =α. (22)
+We prove Proposition 4 in Appendix C.2. In general, for eachα there is an inﬁnite variety of boundaries that
+are unimprovable in the above sense, diﬀering in when they are loose and tight. These diﬀerent boundaries
+will yield conﬁdence sequences which are loose or tight at diﬀerent sample sizes, or, equivalently, are eﬃcient
+for detecting diﬀerent eﬀect sizes. Such a boundary cannot be tightened everywhere without increasing the
+crossing probability.
+4 Applications
+After presenting an empirical-Bernstein conﬁdence sequence for bounded observations, we apply our uniform
+boundaries to causal eﬀect estimation and matrix martingales. We also consider estimation for a general,
+one-parameter exponential family.
+4.1 An empirical-Bernstein conﬁdence sequence
+The following novel result is proved in Appendix A.8 using a self-normalization argument, which leads to its
+attractive simplicity. Recall the estimand µt :=t−1∑ti=1 Ei−1Xi, the average conditional expectation.
+13
+Theorem 4. SupposeXt∈ [a,b ] a.s. for all t. Let (ˆXt) be any [a,b ]-valued predictable sequence, and let u
+be any sub-exponential uniform boundary with crossing probability α for scale c =b−a. Then
+P
+
+∀t≥ 1 :⏐⏐ ¯Xt−µt⏐⏐< u
+(∑t
+i=1(Xi− ˆXi)2
+)
+t
+
+≥ 1− 2α. (23)
+This is an empirical-Bernstein bound because it uses the sum of observed squared deviations to estimate
+the true variance, much like a classical t-test. Hence the conﬁdence radius scales with the true standard
+deviation for suﬃciently large samples, regardless of the support diameterb−a, and with no prior knowledge
+of the true variance. Note also that this bound does not require that observations share a common mean.
+The conﬁdence statement (23) holds for any sequence of predictions ( ˆXi), but predictions closer to the
+conditional expectations, ˆXi≈ Ei−1Xi, will yield smaller conﬁdence intervals on average. A simple choice
+is the mean, ˆXt = (t− 1)−1∑t−1i=1Xi, which will be eﬀective when the samples are i.i.d., for example. But
+the predictions (ˆXi) can also make use of trends, seasonality, stratiﬁcation or regression (in the presence of
+covariates), machine learning algorithms, or any other information that may aid with prediction.
+For an explicit example, assume Xi∈ [0, 1] and deﬁne the empirical variance as ˆVt :=∑ti=1(Xi− ¯Xi−1)2.
+Invoking Theorem 4 with the polynomial stitched bound (10) using c = 1, η = 2, m = 1, and h(k)∝ k1.4,
+we have the following 95%-conﬁdence sequence for µt:
+¯Xt± 1.7
+√
+(ˆVt∨ 1)(log log(2(ˆVt∨ 1)) + 3.8) + 3.4 log log(2(ˆVt∨ 1)) + 13
+t . (24)
+When a closed form is not required, the gamma-exponential mixture (Proposition 9) may yield tighter bounds
+than stitching; simulations in Section 5 demonstrate the use of Theorem 4 with this mixture.
+4.2 Estimating ATE in the Neyman-Rubin model
+As one illustration of Theorem 4, we consider the sequential estimation of average treatment eﬀect under
+the Neyman-Rubin potential outcomes model (Neyman, 1923/1990; Rubin, 1974; Imbens and Rubin, 2015).
+We imagine a sequence of experimental units, each with real-valued potential outcomes under control and
+treatment denoted by {Yt(0),Yt(1)}t∈N, respectively. These potential outcomes are ﬁxed, but we observe
+only one outcome for each unit in the experiment. We assign a randomized treatment to each unit, denoted
+by the {0, 1}-valued random variable Zt∈F t, observing Y obst := Yt(Zt). Here treatment is assigned by
+ﬂipping a coin for each subject, with a bias possibly depending on previous observations. This treatment
+assignment is the only source of randomness. Speciﬁcally, let Pt :=Et−1Zt and suppose 0 <P t < 1 a.s. for
+all t; then we permit Pt to vary between individuals and to depend on past outcomes. This accommodates
+Efron’s biased coin design Efron (1971) and related covariate balancing methods.
+At each step t, having treated and observed units 1 ,...,t , we wish to draw inference about the estimand
+ATEt :=t−1∑ti=1[Yi(1)−Yi(0)]. In particular, we seek a conﬁdence sequence for (ATE t)∞t=1. To construct
+our estimator, we may utilize any predictions ˆYt(0) and ˆYt(1) for each unit’s potential outcomes; these
+random variables must be Ft−1-measurable, for each t. We then employ the inverse probability weighting
+estimator
+Xt := ˆYt(1)−ˆYt(0) +
+( Zt−Pt
+Pt(1−Pt)
+)
+(Y obst −ˆYt(Zt)), (25)
+which is (conditionally) unbiased for the individual treatment eﬀect Yt(1)−Yt(0). As with Theorem 4,
+better predictions will lead to shorter conﬁdence intervals, but the coverage guarantee holds for any choice
+of predictions, and a reasonable choice would be the average of past observed outcomes. See Aronow and
+Middleton (2013) for a similar strategy for ﬁxed-sample estimation.
+We assume bounded potential outcomes; for simplicity we assume Yt(k)∈ [0, 1] for all t≥ 1,k = 0, 1, and
+we assume predictions are likewise bounded. We further assume that treatment probabilities are uniformly
+bounded away from zero and one. Then, an empirical-Bernstein conﬁdence sequence for ATE t follows from
+Theorem 4, where we use ˆXt = ˆYt(1)−ˆYt(0) so that
+Vt :=
+t∑
+i=1
+(Xi− ˆXi)2 =
+t∑
+i=1
+( Zi−Pi
+Pi(1−Pi)
+)2
+(Y obsi −ˆYi(Zi))2. (26)
+14
+0.0
+0.1
+0.2
+0.3
+102 103 104 105
+t (log scale)
+UCB for ATEt
+0
+1
+2
+3
+102 103 104 105
+t (log scale)
+Ratio of UCB radius to CLT
+Figure 5: Upper half of 95% empirical-Bernstein conﬁdence sequence for ATE t under Bernoulli randomization based
+on one simulated sequence of i.i.d. observations, Pt≡ 0.5, Yi(0)∼ Ber(0.5), Yi(1) = ξi∨Yi(0) where ξi∼ Ber(0.2).
+Grey line shows estimand ATE t. Dotted line shows ﬁxed-sample conﬁdence bounds based on diﬀerence-in-means
+estimator and normal approximation; these bounds fail to cover the true ATE t at many times. Our bound uses
+ˆYt(k) =∑t−1i=1Y obsi 1Zi=k/∑t−1i=1 1Zi=k, α = 0.05 and a gamma-exponential mixture bound with ρ = 12.6, chosen to
+optimize for intrinsic time Vt = 100.
+Corollary 2. Suppose Pt∈ [pmin, 1−pmin] a.s., Yt(k)∈ [0, 1] and ˆYt(k)∈ [0, 1] for all t≥ 1,k = 0, 1. Let
+u be any sub-exponential uniform boundary with scale 2/pmin and crossing probability α. Then
+P
+(
+∀t≥ 1 :
+⏐⏐ ¯Xt− ATEt⏐⏐< u(Vt)t )≥ 1− 2α. (27)
+Foru, one may choose the gamma-exponential mixture boundary (Proposition 9) or the stitched boundary
+(10) with c = 2pmin . Figure 5 illustrates our strategy on simulated data. Over the range t = 100 tot =100,000 displayed, our bound is about twice as wide as the ﬁxed-sample CLT bound, with the ratio
+growing at a slow O(√logt) rate thereafter. Of course the ﬁxed-sample CLT bound provides no uniform
+coverage guarantee.
+4.3 Matrix iterated logarithm bounds
+Our second application is the construction of iterated logarithm bounds for random matrix sums and their
+use in sequential covariance matrix estimation. The curved uniform bounds given in Section 3 may be
+applied to matrix martingales by taking ( St) to be the maximum eigenvalue process of the martingale and
+(Vt) the maximum eigenvalue of the corresponding matrix variance process. Howard et al. (2020, Section 2)
+give suﬃcient conditions for Deﬁnition 1 to hold in this matrix case. Then Theorem 1 yields a novel matrix
+ﬁnite LIL; here we give an example for bounded increments. We denote the space of symmetric, real-valued,
+d×d matrices by Sd; γmax(·) denotes the maximum eigenvalue; 𝓁η,s(v) = s log log(ηv/m) + log dζ (s)α logsη ; and
+k1(η),k 2(η) are deﬁned in (8).
+Corollary 3. Suppose (Yt)∞t=1 is a Sd-valued matrix martingale such that γmax(Yt−Yt−1)≤b a.s. for all
+t. Let Vt :=γmax(∑ti=1 Et−1(Yt−Yt−1)2) and St :=γmax(Yt). Then for any η >1,s> 1,m> 0,α∈ (0, 1),
+we have
+P
+(
+∃t≥ 1 :St≥k1(η)
+√
+(Vt∨m)𝓁η,s(Vt∨m) +bk2(η)3 𝓁η,s(Vt∨m))≤α. (28)
+The result follows using the polynomial stitched boundary after invoking Fact 1(c) and Lemma 2 of Howard
+et al. (2020) (cf. (Tropp, 2011)), which show that (St) is sub-gamma with variance process (Vt), scalec =b/3,
+and l0 =d. Beyond bounded increments, the same bound holds for any sub-gamma process. As evidenced
+by Proposition 1, this is a very general condition.
+Taking η and s arbitrarily close to one and using the ﬁnal result of Theorem 1, we obtain the following
+asymptotic matrix upper LIL, proved in Appendix A.9. Here we denote the martingale increments by
+∆Yt :=Yt−Yt−1.
+15
+Corollary 4. Let (Yt)∞t=1 be a Sd-valued, square-integrable martingale, and deﬁneVt =γmax
+(∑t
+i=1 Ei−1∆Y 2t
+)
+.
+Then
+lim sup
+t→∞
+γmax (Yt)√2Vt log logVt≤ 1 a.s. on {supt Vt =∞} (29)
+whenever either (1) the increments (∆Yt) are i.i.d., or (2) the increments (∆Yt) satisfy a Bernstein condition
+on higher moments: for some c> 0, for all t and all k> 2, Et−1(∆Yt)k≼ (k!/2)ck−2Et−1∆Y 2t .
+The Bernstein condition holds if the increments are uniformly bounded,γmax(∆Yt)≤c for somec> 0. Also,
+in the i.i.d. case,P(Vt→∞ ) = 1 and then (29) states that lim supt→∞γmax (Yt)/
+√
+2γmax(E∆Y 21 )t log logt≤ 1,
+a.s. on {suptVt =∞}. When d = 1, this recovers the classical upper LIL, showing that Corollary 4 cannot
+be improved uniformly, but we are not aware of an appropriate lower bound for the general matrix case.
+We now consider the nonasymptotic sequential estimation of a covariance matrix based on bounded vector
+observations (Rudelson, 1999; Vershynin, 2012; Gittens and Tropp, 2011; Tropp, 2015; Koltchinskii and
+Lounici, 2017). In particular, we observe a sequence of independent, mean zero, Rd-valued random vectors
+xt with common covariance matrix Σ = ExtxTt . We wish to estimate Σ using an operator-norm conﬁdence
+ball centered at the empirical covariance matrix ˆΣt := t−1∑ti=1xixTi . For ﬁxed-sample estimation, when
+‖xi‖2≤
+√
+b a.s. for all i∈ [t], the analysis of Tropp (2015, section 1.6.3) implies
+P
+(
+‖ˆΣt− Σ‖op≥
+√
+2b‖Σ‖op log(2d/α)
+t + 4b log(2d/α)3t
+)
+≤α. (30)
+We use a sub-Poisson uniform boundary to obtain a uniform analogue:
+Corollary 5. Let (xt)∞t=1 be a sequence of Rd-valued, independent random vectors with Ext = 0,‖xt‖2≤√b
+a.s. and ExtxTt = Σ for all t. If u is a sub-Poisson uniform boundary with crossing probability α and scale
+2b, then
+P
+(
+∃t≥ 1 :‖ˆΣt− Σ‖op≥ 1tu (bt‖Σ‖op))≤α. (31)
+For example, using the polynomial stitched bound with scale c = 2b/3 and m =b‖Σ‖op, Corollary 5 gives a
+(1−α)-conﬁdence sequence for Σ with operator norm radius O(
+√
+t−1 log logt). This bound has the closed
+form
+P
+(
+∃t≥ 1 :‖ˆΣt− Σ‖op≥k1
+√
+b‖Σ‖op𝓁(t)
+t + 4bk2𝓁(t)3t
+)
+≤α, (32)
+where 𝓁(t) =s log log(ηt) + log dζ (s)α logsη , and k1,k 2 are deﬁned in (8).
+In other words, with high probability, we have for all t≥ 1 that
+‖ˆΣt− Σ‖op ≲
+√
+b log(d logt)
+t + b log(d logt)t . (33)
+Compared to the ﬁxed-sample result (30), we obtain uniform control by adding a factor of log log t. We are
+not aware of other results like these for sequential covariance matrix estimation. Figure 6 illustrates the
+conﬁdence sequence of Corollary 5 on simulated data using a discrete mixture boundary with the mixture
+densityfLILs deﬁned in (85).
+4.4 One-parameter exponential families
+Suppose (Xt) are i.i.d. from an exponential family in mean parametrization, with suﬃcient statistic T (X)
+having mean in some set Ω. For each µ∈ Ω, we write the density as fµ(x) =h(x) exp{θ(µ)T (x)−A(θ(µ))}
+where A′(θ(µ)) = µ. Let ψµ be the cumulant-generating function of T (X1)−µ when ET (X1) = µ, that
+is, ψµ(λ) :=A(λ +θ(µ))−A(θ(µ))−λµ, with ψµ(λ) :=∞ if the RHS does not exist. Writing St(µ) :=∑t
+i=1T (Xi)−tµ, the process exp {λSt(µ)−tψµ(λ)} is the likelihood ratio testing H0 : θ = θ(µ) against
+H1 :θ =θ(µ) +λ, and if we use a method-of-mixtures uniform boundary, the resulting conﬁdence sequence
+will be dual to a family of mixture sequential probability ratio tests, as discussed in Section 6. To obtain a two-
+sided conﬁdence sequence, we use the “reversed” CGF ˜ψµ(λ) = ψµ(−λ). We summarize these observations
+as follows; see Lai (1976 b, Theorem 1) for a related result.
+16
+True Σ
+Confidence set
+First coordinate
+Second coordinate
+t = 200
+True Σ
+Confidence set
+First coordinate
+Second coordinate
+t = 500
+True Σ
+Confidence set
+First coordinate
+Second coordinate
+t = 2,000
+Figure 6: The matrix conﬁdence sequence of Corollary 5 based on one simulated sequence. Observations are drawn
+i.i.d. taking values±(
+√
+2
+√
+2)T ,±(1/√2 − 1/√2)T each with probability 1/4, with covariance matrix Σ = 14 ( 5 33 5 ),
+which is represented by the ellipse xT Σ−1x = 1. Conﬁdence ball with level α = 0.05 is represented by shaded
+area between ellipses corresponding to elements of the conﬁdence ball with minimal and maximal trace. Conﬁdence
+sequence from Corollary 5 uses b = 4 and a discrete mixture boundary with ψ =ψG usingc = 2b/3, mixture density
+f LIL1.4 from (85) with s = 1.4 matching (11), η = 1.1 and λ = 0.262 chosen as described in Appendix E.
+0.00
+0.05
+0.10
+0.15
+0.20
+101 102 103 104 105
+False positive rate
+0.03
+0.10
+0.30
+1.00
+101 102 103 104 105
+Number of samples
+CI width
+Bernoulli(0.5)
+ 
+0.00
+0.05
+0.10
+0.15
+0.20
+101 102 103 104 105
+0.01
+0.10
+1.00
+101 102 103 104 105
+Number of samples
+Bernoulli(0.01)
+ 
+0.00
+0.05
+0.10
+101 102 103 104 105
+0.1
+1.0
+10.0
+101 102 103 104 105
+Number of samples
+Three point
+ 
+Beta-Binomial     Pointwise Bernoulli     Hoeffding     
+Naive SN     Empirical Bernstein
+Figure 7: Summary of 1,000 simulations, each with 100,000 i.i.d. observations from the indicated distribution. Top
+panels show the proportion of replications in which the 95%-conﬁdence sequence has excluded the true mean by
+time t. Bottom panels show the mean conﬁdence interval width. The “three point” distribution takes values −1.408
+and 1 with probability 0 .495 each, and takes value 20 with probability 0 .01. “Hoeﬀding” uses a normal mixture
+boundary (14), while“Beta-Binomial” uses the beta-binomial mixture (Proposition 7). “Pointwise Bernoulli” uses a
+nonasymptotic bound based on the Bernoulli KL-divergence which is valid pointwise but not uniformly. “Empirical
+Bernstein” uses the strategy given in Theorem 4 with a gamma-exponential mixture boundary, Proposition 9. “Naive
+SN” uses a normal mixture boundary with an empirical variance estimate, which does not guarantee coverage. In all
+cases, ρ is chosen to optimize for a sample size of t = 500.
+Corollary 6. Suppose, for each µ∈ Ω, uµ is a sub-ψµ uniform bound with crossing probability α1, and ˜uµ
+is a sub- ˜ψµ uniform bound with crossing probability α2. Deﬁning
+CIt :={µ∈ Ω :−˜uµ(t)<S t(µ)<u µ(t)}, (34)
+we have P(∀t≥ 1 : ET (X1)∈ CIt)≥ 1−α1−α2.
+17
+5 Simulations
+In1 Figure 7 we illustrate the error control of some of our conﬁdence sequences for estimating the mean of
+an i.i.d. sequence of observations (Xi) with bounded support [a,b ]. We compare four strategies:
+1. The Hoeﬀding strategy exploits the fact that bounded observations are sub-Gaussian (Hoeﬀding, 1963;
+cf. Howard et al., 2020, Lemma 3(c)). We use a two-sided normal mixture boundary (14) with variance
+process Vt = (b−a)2t/4.
+2. The beta-binomial strategy uses the stronger condition that bounded observations are sub-Bernoulli
+(Hoeﬀding, 1963; cf. Howard et al., 2020, Fact 1(b)), accounting for the true mean as well as the
+boundedness, but possibly failing to take account of the true variance. For hypothesized true mean µ,
+this strategy uses the beta-binomial mixture boundary given in Proposition 7, with parameters g(µ) =
+µ−a and h(µ) = b−µ, and variance process Vt(µ) = g(µ)h(µ)t. The conﬁdence set for the mean is
+{µ∈ [a,b ] :−fg(µ),h(µ)(Vt(µ))≤∑ti=1Xi−tµ≤fh(µ),g(µ)(Vt(mu))}. This is more eﬃciently computed
+using the mixture supermartingale m(St,Vt) of (57), as {µ∈ [a,b ] :m(∑ti=1Xi−tµ,Vt(µ))< 1/α}.
+3. The pointwise Bernoulli strategy uses the same sub-Bernoulli condition as the beta-binomial strategy,
+but relies on a ﬁxed-sample Cram´ er-Chernoﬀ bound which is valid pointwise but not uniformly over
+time. Speciﬁcally, we reject mean µ if Vtψ⋆B(St/Vt) ≥ logα−1, where St is the sum of centered
+observations as usual, Vt = (µ− a)(b− µ)t, and we set g =µ−a,h =b−µ in ψB, with ψ⋆B its
+Legendre-Fenchel transform.
+4. The empirical-Bernstein strategy uses an empirical estimate of variance, thus achieving a conﬁdence
+width scaling with the true variance in all three cases. Here we use Theorem 4 with a gamma-
+exponential mixture boundary (Proposition 9). For predictions, we use the mean of past observations:
+ˆXt = (t− 1)−1∑t−1i=1Xi.
+5. The naive self-normalized (“Naive SN”) strategy plugs the empirical variance estimate, the sum of
+squared prediction errors from Theorem 4, into the two-sided normal mixture (14). It ignores the facts
+that the observations are not sub-Gaussian with respect to their true variance and that the variance
+is estimated. This strategy is similar to that of Johari et al. (2017) and does not guarantee coverage.
+Though it will sometimes control false positives, coverage rates can easily be inﬂated for asymmetric,
+heavy-tailed distributions, as we illustrate.
+We present three cases of bounded distributions. The ﬁrst case is the easiest, with Ber(0 .5) observations.
+Here the sub-Gaussian variance parameter based on the boundedness of the observations is equal to the true
+variance, so the Hoeﬀding strategy performs well. The empirical-Bernstein strategy is only a little wider, and
+all four successfully control false positives. The story changes with the more diﬃcult Ber(0 .01) distribution,
+however. The Hoeﬀding boundary is far too wide, since it fails to make use of information about the true
+variance. The beta-binomial bound uses information about variance provided by the ﬁrst moment to achieve
+the correct scaling. The naive self-normalized strategy, on the other hand, yields conﬁdence intervals that
+are too small and fail to control false positive rate. The empirical-Bernstein strategy, though only slightly
+wider than the naive bound for large sample sizes, gives just enough extra width to control the false positive
+rate and is nearly as narrow as the beta-binomial bound. The ﬁnal, three-point distribution takes values
+−1.408 and 1 with probability 0.495 each, and takes value 20 with probability 0.01. Here the beta-binomial
+strategy yields conﬁdence intervals that are too wide. In this most diﬃcult case, only the empirical-Bernstein
+strategy yields tight intervals while controlling false positive rates.
+6 Implications for sequential hypothesis testing
+We have organized our presentation around conﬁdence sequences and closely related uniform concentration
+bounds due to our belief that they oﬀer a useful “user interface” for sequential inference. However, our
+methods also yield always-valid p-values (Johari et al., 2015) for sequential tests. Indeed, a slew of related
+1The repository https://github.com/gostevehoward/cspaper contains code to reproduce all simulations and plots in this
+paper. Uniform boundaries themselves are implemented in R and Python packages at https://github.com/gostevehoward/
+confseq.
+18
+deﬁnitions from the literature are equivalent or “dual” to one another. Here we brieﬂy discuss these connec-
+tions. The following result, proved in Appendix C.4, gives equivalent formulations of common deﬁnitions in
+sequential testing.
+Lemma 3. Let (At)∞t=1 be an adapted sequence of events in some ﬁltered probability space and let A∞ :=
+lim supt→∞At. The following are equivalent:
+(a) P (⋃∞t=1At)≤α.
+(b) P(AT )≤α for all random (not necessarily stopping) times T .
+(c) P(Aτ)≤α for all stopping times τ, possibly inﬁnite.
+Our deﬁnition of conﬁdence sequences (1), based on Darling and Robbins (1967a) and Lai (1984), diﬀers from
+that Johari et al. (2015), who require that P(θτ∈ CIτ)≥ 1−α for all stopping times τ. They allow τ =∞
+by deﬁning CI∞ := lim inft→∞ CIt. By taking At :={θt /∈ CIt} in Lemma 3, we see that the distinction
+is immaterial, and furthermore that we could equivalently deﬁne conﬁdence sequences in terms of arbitrary
+random times, not necessarily stopping times. This generalizes Proposition 1 of Zhao et al. (2016).
+Always-validp-values and tests of power one As an alternative to conﬁdence sequences, Johari et al.
+(2015) deﬁne an always-validp-value process for some null hypothesisH0 as an adapted, [0, 1]-valued sequence
+(pt)∞t=1 satisfying P0(pτ≤α)≤α for all stopping times τ, where P0 denotes probability under the null H0.
+TakingAt :={pt≤α} in Lemma 3 shows that we may replace this deﬁnition with an equivalent one over all
+random times, not necessarily stopping times, or with the uniform condition P0(∃t∈ N : pt≤ α)≤ α. By
+analogy to the usual dual construction between ﬁxed-sample p-values and conﬁdence intervals, one can see
+that conﬁdence sequences are dual to always-valid p-values, and both are dual to sequential tests, as deﬁned
+by a stopping time and a binary random variable indicating rejection (Johari et al., 2015, Proposition 5). In
+particular, for the null H0 :θ =θ⋆, if (CIt) is a (1−α)-conﬁdence sequence for θ, it is clear that a test which
+stops and rejects the null as soon asθ⋆ /∈ CIt controls type I error: P0(reject H0) = P0(∃t∈ N :θ⋆ /∈ CIt)≤α.
+Typically, then, a conﬁdence sequence based on any of the curved uniform bounds in this paper, with radius
+u(v) = o(v), will yield a test of power one (Darling and Robbins, 1967 b; Robbins, 1970). In particular, for
+a conﬁdence sequence with limits ¯Xt±u(Vt), it is suﬃcient that ¯Xt a.s.→ θ and lim supt→∞Vt/t <∞ a.s.,
+conditions that usually hold. These conditions imply that the radius of the conﬁdence sequence, u(Vt)/t,
+approaches zero, while the center ¯Xt is eventually bounded away from θ⋆ whenever θ⁄= θ⋆, so that the
+conﬁdence sequence eventually excludes θ⋆ with probability one.
+In the one-parameter exponential family case considered in Section 4.4, as noted above, the exponential
+process exp{λSt(µ)−tψµ(t)} is exactly the likelihood ratio for testing H0 : θ = θ(µ) against H1 : θ =
+θ(µ) + λ. From the deﬁnitions (34) and (2) we see that, when using a mixture uniform boundary, a
+sequential test which rejects as soon as the conﬁdence sequence of Corollary 6 excludes µ⋆ can be seen
+as equivalently rejecting as soon as either of the mixture likelihood ratios
+∫
+exp{λSt−ψµ⋆(λ)t} dF (λ) or∫
+exp{−λSt−ψµ⋆(−λ)t} dF (λ) exceeds 2/α. Thus a sequential hypothesis test built upon a mixture-based
+conﬁdence sequence is equivalent to a mixture sequential probability ratio test (Robbins, 1970) in the para-
+metric setting. As discussed in Appendix A.6, stitching can be viewed as an approximation to certain
+mixture bounds, so that hypothesis tests based on stitched bounds are also approximations to mixture
+SPRTs. Importantly, our conﬁdence sequences are natural nonparametric generalizations of the mixture
+SPRT, recovering various mixture SPRTs in the parametric settings.
+Pros and cons of the running intersection Our deﬁnition (1) of a conﬁdence sequence allows for
+the parameter θt to vary with t. It is common in the literature on sequential testing to assume a single,
+stationary parameter,θt≡θ, but this assumption has a troublesome consequence in the context of conﬁdence
+sequences. If the conﬁdence sequence (CI t) satisﬁes P(∀t : θ∈ CIt)≥ 1−α, then the running intersection
+~CIt :=∩s≤tCIt is also uniformly valid for θ, is never larger and may be much smaller. This was observed
+by Darling and Robbins (1967 b), and is used in the implementation of Johari et al. (2017), for example. (In
+the language of sequential testing, if ( pt)∞t=1 is an always-valid p-value process, then so is (min s≤tps)∞t=1.)
+However, the intersected intervals ~CIt may become empty at some point. This is particularly likely if
+the underlying parameter is drifting over time, contrary to the assumption of stationarity or identically-
+distributed observations, and such a drift would be the likely interpretation of this event in practice. In this
+19
+non-stationary case, the non-intersected sequence is the more sensible one to use. The solution of Johari
+et al. (2017) is to “reset” the experiment, discarding data accumulated up to that point, on the rationale
+that such an event indicates that previous data are no longer relevant to estimation of the current parameter
+of interest. However, this means that our conﬁdence sequence can go from a very high precision estimate
+at some time t to knowing almost nothing at time t + 1, which is diﬃcult for an experimenter to interpret
+and could lead to misleading inference just before the reset. Jennison and Turnbull (1989) make a case for
+the non-intersected intervals on slightly diﬀerent grounds, arguing that estimation at time t ought to be
+a function of the suﬃcient statistic at that time. Shifting to the potential outcomes model in Section 4.2
+neatly avoids this issue: because the estimand is changing at each time, the non-intersected intervals are the
+only reasonable choice for estimating ATEt and no conceptual diﬃculty remains.
+7 Summary and future work
+We have discussed four techniques for deriving curved uniform boundaries, each improving upon past work,
+with careful attention paid to constants and to practical issues. By building upon the general framework
+of Howard et al. (2020), we have emphasized the nonparametric applicability of our boundaries. A leading
+example of the utility of this approach is the general empirical-Bernstein bound, with an application to
+sequential causal inference, and we have also shown how our framework immediately yields novel results for
+matrix martingales.
+7.1 Other related work
+We introduced the method of mixtures and the epoch-based analyses in Section 1.1. Two other methods of
+extending the SPRT deserve mention, though they are distinct from our approaches. First, the approach
+of Robbins and Siegmund (1972, 1974) examines ∏ifˆλi−1(Xi)/f0(Xi) where ˆλi−1 is a “nonanticipating”
+estimate based on X1,...,X i−1. This is similar to a generalized likelihood ratio but modiﬁed to retain the
+martingale property (cf. Wald (Wald, 1947, section 10.5), (Lorden and Pollak, 2005)). Second, the sequential
+generalized likelihood ratio approach examines sup λ
+∏
+ifλ(Xi)/f0(Xi), which is not a martingale under the
+null (Siegmund and Gregory, 1980; Lai, 1997; Kulldorﬀ et al., 2011).
+The concept of test (super)martingales expounded by Shafer et al. (2011) is related to our methods for con-
+ducting inference based on Ville’s inequality applied to nonnegative supermartingales. Their main example
+is the Beta mixture for i.i.d. Bernoulli observations, an example which originated with Ville (1939) and
+discussed by Robbins (1970) and Lai (1976b). A recent “safe testing” framework of Gr¨ unwald et al. (2019) is
+also tightly related. In terms of these frameworks, our work can be viewed as constructing “safe conﬁdence
+intervals” (and thus safe tests) using nonparametric test supermartingales.
+A very diﬀerent approach is that of group sequential methods (Pocock, 1977; O’Brien and Fleming, 1979; Lan
+and DeMets, 1983; Jennison and Turnbull, 2000). These methods rely on either exact discrete distributions
+or asymptotics to assume exact normality of group increments, either of which permits computation of
+sequential boundaries via numerical integration. The resulting conﬁdence sequences are tighter than ours,
+but lack nonasymptotic guarantees or closed-form results and do not support continuous monitoring.
+A related problem is that of terminal conﬁdence intervals, in which one assumes a rigid stopping rule and
+wishes to construct a conﬁdence interval upon termination. Siegmund (1978) gave an analytical treatment of
+the problem; numerical methods are also available for group sequential tests (Jennison and Turnbull, 2000,
+section 8.5). However, the idea of a rigid stopping rule is often restrictive.
+7.2 Future work
+We discuss in Appendix I how our work may be extended to martingales in smooth Banach spaces and
+real-valued, continuous-time martingales. It may be fruitful to explore applications in those areas.
+Our consideration of optimality has been limited to the discussion in Section 3.6. It would be valuable to
+further explore various optimality properties for nonasymptotic uniform bounds. For example, it is standard
+in sequential testing to compute the expected sample size to reject a null under parametric alternatives.
+Though we target less restrictive assumptions, it may be instructive to compute bounds in special cases.
+20
+Second, a natural counterpoint to our uniform concentration bounds would be a set of uniform anticon-
+centration bounds. This would yield a nonasymptotic extension of the “lim inf” half of the classical LIL.
+Balsubramani (2014, Theorem 3) gives one such interesting result. Last, in practice, one will rarely require
+updated inference after every observation, and may be content to take observations in groups. Further, one
+may be satisﬁed with a ﬁnite time horizon Garivier and Leonardi (2011). This is the domain in which group-
+sequential methods shine, but SPRT-based methods can be made competitive by estimating the “overshoot”
+of the stopped supermartingale (Lai and Siegmund, 1977, 1979; Siegmund, 1985; Whitehead and Stratton,
+1983). It would be interesting to understand whether such improvements work out in nonparametric settings.
+Acknowledgments
+Howard thanks ONR Grant N00014-15-1-2367. Sekhon thanks ONR grants N00014-17-1-2176 and N00014-
+15-1-2367. Ramdas thanks NSF grant DMS1916320. We thank Boyan Duan and Ian Waudby-Smith as well
+as the referees/AE for useful suggestions.
+References
+Armitage, P., McPherson, C. K. and Rowe, B. C. (1969), ‘Repeated signiﬁcance tests on accumulating data’,
+Journal of the Royal Stat. Society, Series A 132(2), 235–244.
+Aronow, P. M. and Middleton, J. A. (2013), ‘A class of unbiased estimators of the average treatment eﬀect
+in randomized experiments’, Journal of Causal Inference 1(1), 135–154.
+Audibert, J.-Y., Munos, R. and Szepesv´ ari, C. (2009), ‘Exploration–exploitation tradeoﬀ using variance
+estimates in multi-armed bandits’, Theoretical Computer Science 410(19), 1876–1902.
+Azuma, K. (1967), ‘Weighted sums of certain dependent random variables.’, Tohoku Mathematical Journal
+19(3), 357–367.
+Balsubramani, A. (2014), ‘Sharp Finite-Time Iterated-Logarithm Martingale Concentration’,
+arXiv:1405.2639 .
+Balsubramani, A. and Ramdas, A. (2016), Sequential Nonparametric Testing with the Law of the Iterated
+Logarithm, in ‘Proceedings of the Thirty-Second Conference on Uncertainty in Artiﬁcial Intelligence’,
+UAI’16, AUAI Press, pp. 42–51.
+Bercu, B., Delyon, B. and Rio, E. (2015), Concentration Inequalities for Sums and Martingales , Springer
+International Publishing, Cham.
+Bercu, B. and Touati, A. (2008), ‘Exponential inequalities for self-normalized martingales with applications’,
+The Annals of Applied Probability 18(5), 1848–1869.
+Berman, R., Pekelis, L., Scott, A. and Van den Bulte, C. (2018), p-hacking and false discovery in A/B
+testing, Technical Report 3204791, SSRN.
+Boucheron, S., Lugosi, G. and Massart, P. (2013), Concentration inequalities: a nonasymptotic theory of
+independence, 1st edn, Oxford University Press, Oxford.
+Chernoﬀ, H. (1952), ‘A measure of asymptotic eﬃciency for tests of a hypothesis based on the sum of
+observations’, The Annals of Mathematical Statistics 23(4), 493–507.
+Cram´ er, H. (1938), ‘Sur un nouveau th´ eor` eme-limite de la th´ eorie des probabilit´ es’,Actualit´ es Scientiﬁques
+736.
+Darling, D. A. and Robbins, H. (1967a), ‘Conﬁdence Sequences for Mean, Variance, and Median’,Proceedings
+of the National Academy of Sciences 58(1), 66–68.
+Darling, D. A. and Robbins, H. (1967 b), ‘Iterated Logarithm Inequalities’, Proceedings of the National
+Academy of Sciences 57(5), 1188–1192.
+21
+Darling, D. A. and Robbins, H. (1968), ‘Some Further Remarks on Inequalities for Sample Sums’,Proceedings
+of the National Academy of Sciences 60(4), 1175–1182.
+de la Pe˜ na, V. H. (1999), ‘A General Class of Exponential Inequalities for Martingales and Ratios’, The
+Annals of Probability 27(1), 537–564.
+de la Pe˜ na, V. H., Klass, M. J. and Lai, T. L. (2004), ‘Self-normalized processes: exponential inequalities,
+moment bounds and iterated logarithm laws’, The Annals of Probability 32(3), 1902–1933.
+de la Pe˜ na, V. H., Klass, M. J. and Lai, T. L. (2007), ‘Pseudo-maximization and self-normalized processes’,
+Probability Surveys 4, 172–192.
+de la Pe˜ na, V. H., Klass, M. J. and Lai, T. L. (2009), ‘Theory and applications of multivariate self-normalized
+processes’, Stochastic Processes and their Applications 119(12), 4210–4227.
+de la Pe˜ na, V. H., Lai, T. L. and Shao, Q.-M. (2009), Self-normalized processes: limit theory and statistical
+applications, Springer, Berlin.
+Delyon, B. (2009), ‘Exponential inequalities for sums of weakly dependent variables’, Electronic Journal of
+Probability 14, 752–779.
+Durrett, R. (2017), Probability: Theory and Examples , 5a edn.
+Efron, B. (1971), ‘Forcing a sequential experiment to be balanced’, Biometrika 58(3), 403–417.
+Fan, X., Grama, I. and Liu, Q. (2015), ‘Exponential inequalities for martingales with applications’,Electronic
+Journal of Probability 20(1), 1–22.
+Freedman, D. A. (1975), ‘On Tail Probabilities for Martingales’, The Annals of Probability 3(1), 100–118.
+Fulks, W. (1951), ‘A Generalization of Laplace’s Method’, Proceedings of the American Mathematical Society
+2(4), 613–622.
+Garivier, A. (2013), Informational conﬁdence bounds for self-normalized averages and applications, in ‘2013
+IEEE Information Theory Workshop (ITW)’, IEEE, pp. 1–5.
+Garivier, A. and Leonardi, F. (2011), ‘Context tree selection: A unifying view’, Stochastic Processes and
+their Applications 121(11), 2488–2506.
+Gittens, A. and Tropp, J. A. (2011), ‘Tail bounds for all eigenvalues of a sum of random matrices’, ACM
+Report 2014-02, Caltech .
+Gr¨ unwald, P., de Heide, R. and Koolen, W. (2019), ‘Safe testing’,arXiv:1906.07801 .
+Hoeﬀding, W. (1963), ‘Probability Inequalities for Sums of Bounded Random Variables’, Journal of the
+American Statistical Association 58(301), 13–30.
+Howard, S. R., Ramdas, A., McAuliﬀe, J. and Sekhon, J. (2020), ‘Time-uniform Chernoﬀ bounds via non-
+negative supermartingales’, Probability Surveys 17, 257–317.
+Imbens, G. W. and Rubin, D. B. (2015), Causal Inference for Statistics, Social, and Biomedical Sciences:
+An Introduction, 1 edn, Cambridge University Press.
+Jamieson, K. and Jain, L. (2018), A bandit approach to multiple testing with false discovery control, in
+‘Proceedings of the 32nd International Conference on Neural Information Processing Systems’, pp. 3664–
+3674.
+Jamieson, K., Malloy, M., Nowak, R. and Bubeck, S. (2014), lil’ UCB: An Optimal Exploration Algorithm for
+Multi-Armed Bandits, in ‘Proceedings of The 27th Conference on Learning Theory’, Vol. 35, pp. 423–439.
+Jamieson, K. and Nowak, R. (2014), Best-arm identiﬁcation algorithms for multi-armed bandits in the ﬁxed
+conﬁdence setting, in ‘48th Annual Conference on Information Sciences and Systems (CISS)’, pp. 1–6.
+Jennison, C. and Turnbull, B. W. (1984), ‘Repeated conﬁdence intervals for group sequential clinical trials’,
+Controlled Clinical Trials 5(1), 33–45.
+22
+Jennison, C. and Turnbull, B. W. (1989), ‘Interim Analyses: The Repeated Conﬁdence Interval Approach’,
+Journal of the Royal Statistical Society, Series B 51(3), 305–361.
+Jennison, C. and Turnbull, B. W. (2000), Group sequential methods with applications to clinical trials ,
+Chapman & Hall/CRC, Boca Raton.
+Johari, R., Koomen, P., Pekelis, L. and Walsh, D. (2017), Peeking at A/B Tests: Why it matters, and what
+to do about it, ACM Press, pp. 1517–1525.
+Johari, R., Pekelis, L. and Walsh, D. J. (2015), ‘Always valid inference: Bringing sequential analysis to A/B
+testing’, arXiv preprint arXiv:1512.04922 .
+Jorgensen, B. (1997), The Theory of Dispersion Models , CRC Press.
+Kaufmann, E., Capp´ e, O. and Garivier, A. (2016), ‘On the complexity of best-arm identiﬁcation in multi-
+armed bandit models’, The Journal of Machine Learning Research 17(1), 1–42.
+Kaufmann, E. and Koolen, W. (2018), ‘Mixture martingales revisited with applications to sequential tests
+and conﬁdence intervals’, arXiv:1811.11419 .
+Koltchinskii, V. and Lounici, K. (2017), ‘Concentration inequalities and moment bounds for sample covari-
+ance operators’, Bernoulli 23(1), 110–133.
+Kulldorﬀ, M., Davis, R. L., Kolczak †, M., Lewis, E., Lieu, T. and Platt, R. (2011), ‘A Maximized Sequential
+Probability Ratio Test for Drug and Vaccine Safety Surveillance’, Sequential Analysis 30(1), 58–78.
+Lai, T. L. (1976 a), ‘Boundary Crossing Probabilities for Sample Sums and Conﬁdence Sequences’, The
+Annals of Probability 4(2), 299–312.
+Lai, T. L. (1976 b), ‘On Conﬁdence Sequences’, The Annals of Statistics 4(2), 265–280.
+Lai, T. L. (1984), ‘Incorporating scientiﬁc, ethical and economic considerations into the design of clinical
+trials in the pharmaceutical industry: a sequential approach’, Communications in Statistics - Theory and
+Methods 13(19), 2355–2368.
+Lai, T. L. (1997), ‘On optimal stopping problems in sequential hypothesis testing’, Statistica Sinica 7(1), 33–
+51.
+Lai, T. L. and Siegmund, D. (1977), ‘A Nonlinear Renewal Theory with Applications to Sequential Analysis
+I’, The Annals of Statistics 5(5), 946–954.
+Lai, T. L. and Siegmund, D. (1979), ‘A Nonlinear Renewal Theory with Applications to Sequential Analysis
+II’, The Annals of Statistics 7(1), 60–76.
+Lan, K. K. G. and DeMets, D. L. (1983), ‘Discrete Sequential Boundaries for Clinical Trials’, Biometrika
+70(3), 659–663.
+Lorden, G. and Pollak, M. (2005), ‘Nonanticipating estimation applied to sequential analysis and changepoint
+detection’, The Annals of Statistics 33(3), 1422–1454.
+Malek, A., Katariya, S., Chow, Y. and Ghavamzadeh, M. (2017), Sequential multiple hypothesis testing with
+Type I error control, in ‘Artiﬁcial Intelligence and Statistics’, pp. 1468–1476.
+Maurer, A. and Pontil, M. (2009), Empirical Bernstein bounds and sample variance penalization, in ‘Pro-
+ceedings of the Conference on Learning Theory’.
+McDiarmid, C. (1998), Concentration, in M. Habib, C. McDiarmid, J. Ramirez-Alfonsin and B. Reed, eds,
+‘Probabilistic Methods for Algorithmic Discrete Mathematics’, Springer, New York, pp. 195–248.
+Morters, P. and Peres, Y. (2010), Brownian Motion, Cambridge University Press, Cambridge.
+Neyman, J. (1923/1990), ‘On the Application of Probability Theory to Agricultural Experiments, Essay on
+Principles, Section 9’, Statistical Science 5(4), 465–480.
+O’Brien, P. C. and Fleming, T. R. (1979), ‘A Multiple Testing Procedure for Clinical Trials’, Biometrics
+35(3), 549–556.
+23
+Pinelis, I. (1992), An Approach to Inequalities for the Distributions of Inﬁnite-Dimensional Martingales,
+in ‘Probability in Banach Spaces, 8: Proceedings of the Eighth International Conference’, Birkh¨ auser,
+Boston, MA, pp. 128–134.
+Pinelis, I. (1994), ‘Optimum Bounds for the Distributions of Martingales in Banach Spaces’, The Annals of
+Probability 22(4), 1679–1706.
+Pocock, S. J. (1977), ‘Group Sequential Methods in the Design and Analysis of Clinical Trials’, Biometrika
+64(2), 191–199.
+Raginsky, M., Sason, I. et al. (2013), ‘Concentration of measure inequalities in information theory, communi-
+cations, and coding’, Foundations and Trends in Communications and Information Theory 10(1-2), 1–246.
+Robbins, H. (1970), ‘Statistical Methods Related to the Law of the Iterated Logarithm’, The Annals of
+Mathematical Statistics 41(5), 1397–1409.
+Robbins, H. and Siegmund, D. (1968), Iterated logarithm inequalities and related statistical procedures, in
+‘Mathematics of the Decision Sciences, Part II’, American Mathematical Society, Providence, pp. 267–279.
+Robbins, H. and Siegmund, D. (1969), ‘Probability Distributions Related to the Law of the Iterated Loga-
+rithm’, Proc. of the National Academy of Sciences 62(1), 11–13.
+Robbins, H. and Siegmund, D. (1970), ‘Boundary crossing probabilities for the Wiener process and sample
+sums’, The Annals of Mathematical Statistics 41(5), 1410–1429.
+Robbins, H. and Siegmund, D. (1972), A class of stopping rules for testing parametric hypotheses, The
+Regents of the University of California.
+Robbins, H. and Siegmund, D. (1974), ‘The Expected Sample Size of Some Tests of Power One’, The Annals
+of Statistics 2(3), 415–436.
+Rubin, D. B. (1974), ‘Estimating causal eﬀects of treatments in randomized and nonrandomized studies.’,
+Journal of educational Psychology 66(5), 688.
+Rudelson, M. (1999), ‘Random Vectors in the Isotropic Position’, Journal of Functional Analysis 164(1), 60–
+72.
+Shafer, G., Shen, A., Vereshchagin, N. and Vovk, V. (2011), ‘Test Martingales, Bayes Factors and p-Values’,
+Statistical Science 26(1), 84–101.
+Siegmund, D. (1978), ‘Estimation Following Sequential Tests’, Biometrika 65(2), 341.
+Siegmund, D. (1985), Sequential Analysis, Springer New York, New York, NY.
+Siegmund, D. and Gregory, P. (1980), ‘A Sequential Clinical Trial for Testing p1 = p2’, The Annals of
+Statistics 8(6), 1219–1228.
+Stout, W. F. (1970), ‘The Hartman-Wintner Law of the Iterated Logarithm for Martingales’, Annals of
+Mathematical Statistics 41(6), 2158–2160.
+Tropp, J. A. (2011), ‘Freedman’s inequality for matrix martingales’, Electronic Communications in Proba-
+bility 16, 262–270.
+Tropp, J. A. (2012), ‘User-friendly tail bounds for sums of random matrices’, Foundations of Computational
+Mathematics 12(4), 389–434.
+Tropp, J. A. (2015), ‘An Introduction to Matrix Concentration Inequalities’, Foundations and Trends in
+Machine Learning 8(1-2), 1–230.
+van de Geer, S. (1995), ‘Exponential Inequalities for Martingales, with Application to Maximum Likelihood
+Estimation for Counting Processes’, The Annals of Statistics 23(5), 1779–1801.
+Vershynin, R. (2012), Introduction to the non-asymptotic analysis of random matrices, in ‘Compressed
+Sensing: Theory and Applications’, Cambridge University Press.
+24
+Ville, J. (1939), ´Etude Critique de la Notion de Collectif. , Gauthier-Villars, Paris.
+Wald, A. (1945), ‘Sequential Tests of Statistical Hypotheses’, Annals of Mathematical Statistics 16(2), 117–
+186.
+Wald, A. (1947), Sequential Analysis, John Wiley & Sons, New York.
+Whitehead, J. and Stratton, I. (1983), ‘Group Sequential Clinical Trials with Triangular Continuation Re-
+gions’, Biometrics 39(1), 227–236.
+Widder, D. V. (1942), Laplace Transform, Princeton University Press, Princeton.
+Yang, F., Ramdas, A., Jamieson, K. G. and Wainwright, M. J. (2017), A framework for Multi-
+A(rmed)/B(andit) testing with online FDR control, in ‘31st Conference on Neural Information Processing
+Systems’.
+Zhao, S., Zhou, E., Sabharwal, A. and Ermon, S. (2016), Adaptive concentration inequalities for sequential
+decision problems, in ‘30th Conference on Neural Information Processing Systems’.
+A Proofs of main results
+In this section we give proofs of our main results along with selected discussion of and intuition for proof
+techniques.
+A.1 Proof of Theorem 1
+The idea behind Theorem 1 is to divide intrinsic time into geometrically spaced epochs, ηk≤Vt <η k+1 for
+some η > 1. We construct a linear boundary within each epoch using Lemma 1 and take a union bound
+over crossing events of the diﬀerent boundaries. The resulting, piecewise-linear boundary may then be upper
+bounded by a smooth, concave function. Figure 3 illustrates the construction.
+As discussed in Section 3.1, the function h determines the nominal crossing probability α/h(k) allocated to
+the kth epoch, and we have mentioned the choices h(k) =ηsk/(1−η−s) and h(k) = (k + 1)sζ(s). One may
+substitute a series converging yet more slowly; for example, h(k)∝ (k + 2) logs(k + 2) for s> 1 yields
+logh(logηVt) = log logη(η2Vt) +s log log logη(η2Vt) + log
+(log1−s(3/2)
+s− 1
+)
+, (35)
+matching related analysis in Darling and Robbins (1967 b), Robbins and Siegmund (1969), Robbins (1970),
+and Balsubramani (2014). In practice, the bound (35) appears to behave like bound (10) with worse con-
+stants. However, the fact that the stitching approach can recover key theoretical results like these gives some
+indication of its power.
+Proof of Theorem 1. We prove the result in the casem = 1 for simplicity. The general result may be obtained
+by considering St/√m in place of St, Vt/m in place of Vt, and c/√m in place of c. See Appendix F for
+details.
+We ﬁrst compute ψ−1G (u) by taking the positive solution to the quadratic equation given by ψG(λ) = u,
+yielding
+ψ−1G (u) =−cu±√c2u2 + 2u = 2c +√c2 + 2/u, (36)
+where we have used the identity√1 +x− 1 = x√1+x+1. Let
+K(u) :=
+√
+2u
+ψ−1G (u) =
+√
+1 +c2u2 +c√u2. (37)
+25
+K(u) will appear below. Now we start from the line-crossing inequality of Lemma 1: reparametrizing
+r = logα−1, we have for any r> 0,λ> 0
+P
+(
+∃t≥ 1 :St≥ r +ψG(λ)Vtλ| {z }
+gλ,r(Vt)
+)
+≤l0e−r. (38)
+We divide intrinsic time into epochs ηk≤ Vt < ηk+1 for each k = 0, 1,... , and we will construct a linear
+boundary over each epoch by carefully choosing values for λk and rk and using the probability bound (38).
+We choose λk so that the “standardized” boundary takes equal values at both endpoints of the epoch:
+gλk,rk(ηk)/ηk/2 = gλk,rk(ηk+1)/η(k+1)/2. This equation is solved by λk = ψ−1G (rk/ηk+1/2), which yields,
+after some algebra,
+gλk,rk(v) =K
+( rk
+ηk+1/2
+)[√ηk+1/2
+v +
+√ v
+ηk+1/2
+]√rkv
+2 (39)
+Our goal, after choosing rk below, is to upper bound this expression by a function of v alone, independent of
+k. Noting that the term in square brackets in (39) reaches its maximum over the kth epoch at the endpoints,
+v =ηk and v =ηk+1, and substituting the expression (37) for K(u), we have
+gλk,rk(v)≤
+(√
+1 + c2rk
+2ηk+1/2 +c
+√ rk
+2ηk+1/2
+)
+η1/4 +η−1/4
+√
+2
+√rkv, for all ηk≤v <ηk+1. (40)
+The inequality ηk+1/2≥v/√η yields
+gλk,rk(v)≤ η1/4 +η−1/4√2 (√rkv +√ηc2r2k2 +cη1/4rk√2 ) (41)
+=
+√
+k21rkv +k22c2r2k +ck2rk, for all ηk≤v <ηk+1, (42)
+using the deﬁnition (8) of k1 and k2. Now let rk = log(l0h(k)/α), which we choose to ensure total error
+probability will be bounded by α via a union bound. Note that h is nondecreasing and k≤ logηVt over the
+epoch, so that rk≤𝓁(v) over the epoch, recalling the deﬁnition (8) of 𝓁(v). We conclude
+gλk,rk(v)≤
+√
+k21v𝓁(v) +k22c2𝓁2(v) +ck2𝓁(v) =Sα(v), (43)
+for all ηk≤v <ηk+1. This ﬁnal expression no longer depends on k, showing that the ﬁnal boundary Sα(v)
+majorizes the corresponding linear boundary gλk,rk(v) over each epoch ηk ≤ v < ηk+1 for k = 0, 1,... .
+Hence
+Sα(v)≥ mink≥0gλk,rk(v) for all v≥ 1. (44)
+But the ﬁrst linear boundary gλ0,t0(v) passes throughSα(1) and has positive slope, which implies
+Sα(1∨v)≥ mink≥0gλk,rk(v) for all v >0. (45)
+Now taking a union bound over the probability bounds given by (38) for k = 0, 1,... , we have
+P
+(
+∃t≥ 1 :St≥ mink≥0gλk,rk(Vt)
+)
+≤l0
+∞∑
+k=0
+e−rk =α
+∞∑
+k=0
+1
+h(k)≤α. (46)
+Combining (46) with (45) proves that v ↦→ Sα(1∨v) is a sub-gamma uniform boundary with crossing
+probabilityα.
+For the second statement (9), we simply restrict the union bound to epochs k≥⌊ logηVt⌋, which restricts
+the sum in (46) accordingly.
+26
+We have given a stitched bound which is constant for v < m, but inspection of the proof shows that one
+may improve the bound to be linear with positive slope on v < m, by extending the linear bound over the
+ﬁrst epoch to cover all v >0. This seems of limited utility for theoretical work, and we recommend other
+bounds over the stitched bound for practice, so we do not pursue this point further.
+The idea of taking a union bound over geometrically spaced epochs is standard in the proof of the classical
+law of the iterated logarithm (Durrett, 2017, Theorem 8.5.1). The idea has been extended to ﬁnite-time
+bounds by Darling and Robbins (1967 b), Jamieson et al. (2014), Kaufmann et al. (2016), and Zhao et al.
+(2016), usually when the observations are independent and sub-Gaussian; the technique is sometimes called
+“peeling”. Of course, Theorem 1 generalizes these constructions much beyond the independent sub-Gaussian
+case, but it also achieves tighter constants for the sub-Gaussian setting. Here, we brieﬂy discuss how the
+improved constants arise.
+Both Jamieson et al. (2014) and Zhao et al. (2016) construct a constant boundary rather than a linear
+increasing boundary over each epoch. They apply Doob’s maximal inequality for submartingales (Durrett,
+2017, Theorem 4.4.2), as in Hoeﬀding (1963, eq. 2.17), to obtain boundaries similar to that of Freedman
+(1975). As illustrated in Howard et al. (2020, Figure 2), the linear bounds from Lemma 1 are stronger than
+corresponding Freedman-style bounds, and the additional ﬂexibility yields tighter constants.
+Both Darling and Robbins (1967 b) and Kaufmann et al. (2016) use linear boundaries within each epoch
+analogous to those of Lemma 1. Both methods share a great deal in common with ours, and Darling and
+Robbins give consideration to general cumulant-generating functions. Recall from Lemma 1 that such linear
+boundaries may be chosen to optimize for some ﬁxed time Vt =m. Our method chooses the linear boundary
+within each epoch to be optimal at the geometric center of the epoch, i.e., at Vt =ηk+1/2, so that at both
+epoch endpoints the boundary will be equally “loose”, that is, equal multiples of √Vt. Darling and Robbins
+choose the boundaries to be tangent at the start of the epoch, hence their boundary is looser than ours at
+the end of the epoch. Kaufmann et al. choose the boundary as we do, but appear to incur more looseness
+in the subsequent inequalities used to construct a smooth upper bound.
+A.2 Proof of Corollary 1
+Fix any ϵ> 0 and choose a> 0 small enough that ψ(λ)≤ (1 +ϵ)λ2/2 for all λ∈ (0,a ). Using the fact that
+ψG,c(λ)≥λ2/2 for c≥ 0, we haveψ(λ)≤ (1 +ϵ)ψG,1/a(λ) for all λ∈ (0,a ), so that (St) is sub-gamma with
+scale c = 1/a and variance process ((1 +ϵ)Vt). Now Theorem 1 shows that
+P
+(
+sup
+t
+Vt =∞ and St≥u((1 +ϵ)Vt) inﬁnitely often
+)
+= 0, (47)
+where we may choose u(v)∼
+√
+2(1 +ϵ)v log logv (see (10) and discussion thereafter), so that u((1 +ϵ)v)∼√
+2(1 +ϵ)2v log logv. It follows that
+lim sup
+t→∞
+St√
+2(1 +ϵ)2Vt log logVt≤ 1 on
+{
+sup
+t
+Vt =∞
+}
+. (48)
+As ϵ> 0 was arbitrary, we are done.
+A.3 Conjugate mixture proofs
+Proof of Lemma 2. Assume (St) is sub- ψ with variance process ( Vt), so that, for each λ∈ [0,λ max), we
+have exp{λSt−ψ(λ)Vt}≤ Lt(λ) where (Lt(λ))∞t=0 is a nonnegative supermartingale. We will show that
+Mt :=∫ Lt(λ) dF (λ) is a supermartingale with respect to (Ft).
+Formally, for this proof, we augment the underlying probability space with the random variable λ having
+distribution F over the Borel σ-ﬁeld on R, independent of everything else. For each t, we require Lt to be
+a random variable on this product space, i.e., it must be product measurable. Now Deﬁnition 1 stipulates
+that Lt∈σ(λ,Ft) and E (Lt| λ,Ft−1)≤Lt−1 for each t≥ 1, and additionally, E (L0| λ)≤l0 a.s. In other
+words, (Lt) is a supermartingale with respect to the ﬁltration given by Gt := σ(λ,Ft) on this augmented
+space. Finally, we have Mt = E (Lt|F t). These facts follow directly from the deﬁnition and properties of
+conditional expectation.
+27
+We claim that (Mt) is a supermartingale with respect to (Ft) on this augmented space. Indeed,
+E (Mt|F t−1) = E ( E (Lt|F t)|F t−1) = E ( E (Lt| λ,Ft−1)|F t−1)≤ E (Lt−1|F t−1) (49)
+by the supermartingale property, and this last expression is equal toMt−1. Furthermore, EM0 = EE (L0| λ)≤
+l0 since E (L0| λ)≤l0 a.s., hence E|Mt| = EMt≤l0 for all t.
+Now Deﬁnition 1 and Ville’s maximal inequality for nonnegative supermartingales (Durrett, 2017, exercise
+4.8.2) yield
+P
+(
+∃t≥ 1 :
+∫
+exp{λSt−ψ(λ)Vt} dF (λ)≥ l0α)≤ P(∃t≥ 1 :Mt≥ l0α)≤α. (50)
+In other words, P(∃t≥ 1 :St≥M α(Vt))≤α by the deﬁnition ofMα, which is the desired conclusion.
+In the sub-Gaussian case, the following boundary is well-known (Robbins, 1970, example 2).
+Proposition 5 (Two-sided normal mixture). Suppose both (St) and (−St) are sub-Gaussian with variance
+process (Vt). Fix α∈ (0, 1) and ρ> 0, and deﬁne
+u(v) :=
+√
+(v +ρ) log
+(l20(v +ρ)
+α2ρ
+)
+. (51)
+Then P(∀t≥ 1 :|St|<u (Vt))≥ 1−α.
+We have included the bound in Figures 4 and 9; although its O(√Vt logVt) rate of growth is worse than
+the ﬁnite LIL discrete mixture bound, it can achieve tighter control over about three orders of magnitude of
+intrinsic time. This makes the normal mixture preferable in many practical situations when a sub-Gaussian
+assumption applies. When only a one-sided sub-Gaussian assumption holds, the normal mixture still yields
+a sub-Gaussian uniform boundary.
+Proposition 6 (One-sided normal mixture). For any α∈ (0, 1) and ρ> 0, the boundary
+NMα(v) = sup
+{
+s∈ R :
+√ 4ρ
+v +ρ exp
+{ s2
+2(v +ρ)
+}
+Φ
+( s√v +ρ)< l0α}. (52)
+is a sub-Gaussian uniform boundary with crossing probability α. Furthermore, we have the following closed-
+form upper bound:
+NMα(v)≤~NMα(v) :=
+√
+2(v +ρ) log
+(l0
+2α
+√v +ρ
+ρ + 1
+)
+. (53)
+The boundary NM α is easily evaluated to high precision by numerical root-ﬁnding, and the closed-form
+approximation is excellent: numerical calculations indicate that ~NM0.025(v)/NM0.025(v) < 1.007 uniformly
+when ρ = 1, for example.
+Proof of Proposition 6. To obtain the explicit upper bound ~NMα in (53) from the exact boundary (52), we
+use the inequality 1− Φ(x)≤e−x2/2 forx> 0, which follows from a standard Cram´ er-Chernoﬀ bound. This
+implies
+√ 4ρ
+v +ρ exp
+{ s2
+2(v +ρ)
+}
+Φ
+( s√v +ρ)≥√ 4ρv +ρ[exp{ s22(v +ρ)}− 1], for s> 0. (54)
+We set the RHS equal to l0/α and solve to conclude
+NMα(v)≤
+√
+2(v +ρ) log
+(l0
+2α
+√v +ρ
+ρ + 1
+)
+=~NMα(v), (55)
+so long as NMα(v)> 0. But we are guaranteed that NM α(v)> 0, because the LHS of the inequality in (52)
+is increasing in s on s≥ 0 and no larger than one when s = 0, while the RHS l0/α≥ 1.
+The fact that NMα is a sub-Gaussian uniform boundary follows directly from Lemma 2, and therefore ~NMα
+is as well.
+28
+When a sub-Bernoulli condition holds, as with bounded observations, the following beta-binomial boundary is
+tighter than the normal mixture. Simpler versions of this boundary have long been studied for i.i.d. Bernoulli
+sampling (Ville, 1939; Robbins, 1970; Lai, 1976b; Shafer et al., 2011). Below, Bx(a,b ) =
+∫x
+0 pa−1(1−p)b−1 dp
+denotes the incomplete Beta function, whose implementation is available in statistical software packages; B1
+is the ordinary Beta function.
+Proposition 7 (Two-sided beta-binomial mixture). Suppose (St) is sub-Bernoulli with variance process (Vt)
+and range parametersg,h , while (−St) is sub-Bernoulli with variance process (Vt) and range parametersh,g .
+Fix any ρ>gh , let r =ρ−gh, and deﬁne
+fg,h(v) := sup
+{
+s∈
+[
+0,r +vg ) :mg,h(s,v )< l0α}, (56)
+where mg,h(s,v ) := (g +h)v/gh[
+gv/h+shv/g−s]1/(g+h)·
+B1
+(
+r+v−gs
+g(g+h), r+v+hsh(g+h)
+)
+B1
+(
+r
+g(g+h), rh(g+h)
+) . (57)
+Then P(∀t≥ 1 :−fg,h(Vt)<S t <f h,g(Vt))≥ 1−α.
+As with the normal mixture, we have a one-sided variant as well.
+Proposition 8 (One-sided beta-binomial mixture). Fix any g,h> 0,α∈ (0, 1), and ρ>gh . Let r =ρ−gh
+and deﬁne
+fg,h(v) := sup
+{
+s∈
+[
+0,r +vg ) :mg,h(s,v )< l0α}, (58)
+where mg,h(s,v ) := (g +h)v/gh[
+gv/h+shv/g−s]1/(g+h)·
+Bh/(g+h)
+(
+r+v−gs
+g(g+h), r+v+hsh(g+h)
+)
+Bh/(g+h)
+(
+r
+g(g+h), rh(g+h)
+) . (59)
+Then fg,h is a sub-Bernoulli uniform boundary with crossing probability α and range parameters g,h .
+In the sub-Bernoulli case, we ﬁrst rewrite the exponential process exp {λSt−ψB(λ)Vt} in terms of the
+transformed parameter p = [1 + ( h/g)e−λ]−1. This is motivated by the transform from the canonical
+parameter to the mean parameter of a Bernoulli family, but keep in mind that we make no parametric
+assumption here, these are merely analytical manipulations. Then a truncated Beta distribution on p∈
+[g/(g +h), 1] yields the one-sided beta-binomial uniform boundary, while an untruncated mixture yields the
+two-sided boundary.
+Proof of Propositions 7 and 8. For simplicity of notation, we will assume here that the problem has been
+scaled so that g + h = 1, e.g., by replacing Xt with Xt/(g + h). Using the sub-Bernoulli ψ function
+ψB(λ) = 1gh log(gehλ +he−gλ), the exponential integrand in our mixture is
+exp
+{
+λs− vgh log(gehλ +he−gλ)} = pv/h+s(1−p)v/g−sgv/h+shv/g−s , (60)
+after substituting the one-to-one transformation
+p =p(λ) := gehλ
+gehλ +he−gλ, so that λ = log
+( ph
+(1−p)g
+)
+, (61)
+followed by some algebra. We wish to integrate against a Beta mixture density on p with parameters r/h
+andr/g, which has mean p =g, corresponding to λ = 0. For Proposition 8, we must also truncate to λ≥ 0,
+i.e., to p≥g. The appropriately normalized mixture integral is then
+1
+gv/h+shv/g−s·
+∫ 1
+g pv/h+s+r/h−1(1−p)v/g−s+r/g−1 dp∫ 1
+g pr/h−1(1−p)r/g−1 dp = 1gv/h+shv/g−s· Bh
+(
+r+v
+g −s, r+vh +s)
+Bh
+(
+r
+g, rh
+) , (62)
+29
+using the fact that Bx(a,b ) =
+∫x
+0 pa−1(1−p)b−1 dp = ∫ 11−xpb−1(1−p)a−1 dp. This gives the closed-form
+mixture (59). (To obtain the formula for general g +h⁄= 1, substitute g/(g +h) for g, h/(g +h) or h,
+s/(g +h) for s, v/(g +h)2 for v, and r/(g +h)2 for r.)
+The proof of Proposition 7 is nearly identical, but we integrate over the full Beta mixture rather than
+truncating.
+To verify that our choice of r ensures that λ has approximate precision ρ under the full (not truncated)
+mixture distribution, we use the delta method to calculate the approximate variance of λ for large r based
+on the variance of p under the full Beta mixture:
+Varλ≈
+[( 1
+p(1−p)
+)2]
+p=g
+· ghr
+gh + 1 = 1r +gh. (63)
+Setting this equal to 1/ρ yields r =ρ−gh as desired.
+When tails are heavier than Gaussian, the normal mixture boundary is not applicable. However, the fol-
+lowing sub-exponential mixture boundary, based on a gamma mixing density, is universally applicable,
+as described in Proposition 1. Like the normal mixture, the gamma-exponential mixture is unimprov-
+able as described in Section 3.6. Below we make use of the regularized lower incomplete gamma function
+γ(a,x ) := (∫x0 ua−1e−u du)/Γ(a), available in standard statistical software packages.
+Proposition 9 (Gamma-exponential mixture). Fix c> 0,ρ> 0 and deﬁne
+GEα(v) := sup
+{
+s≥ 0 :m(s,v )< l0
+α
+}
+, (64)
+where m(s,v ) :=
+( ρ
+c2
+) ρ
+c2
+Γ
+( ρ
+c2
+)
+γ
+( ρ
+c2, ρc2) Γ
+(v+ρ
+c2
+)
+γ
+(v+ρ
+c2 , cs+v+ρc2 )(cs+v+ρ
+c2
+)v+ρ
+c2
+exp
+{cs +v
+c2
+}
+. (65)
+Then GEα is a sub-exponential uniform boundary with crossing probability α for scale c.
+The gamma-exponential mixture is the result of evaluating the mixture integral in (13) with mixing density
+dF
+dλ = 1γ(ρ/c2,ρ/c 2) (ρ/c)ρ/c2Γ(ρ/c2) (c−1−λ)ρ/c2−1e−ρ(c−1−λ)/c. (66)
+This is a gamma distribution with shapeρ/c2 and scaleρ/c applied to the transformed parameteru =c−1−λ,
+truncated to the support [0 ,c−1]. The distribution has mean zero and variance equal to 1 /ρ, making it
+comparable to the normal mixture distribution used above. As ρ→∞ , the gamma mixture distribution
+converges to a normal distribution and concentrates aboutλ = 0, the regime in whichψE(λ)∼ψN(λ), which
+gives some intuition for why the gamma-exponential mixture recovers the normal mixture when ρ≫c2.
+Proof of Proposition 9. We need only show that
+m(s,v ) =
+∫ 1/c
+0
+exp{λs−ψE(λ)v}f(λ) dλ, (67)
+where f(λ) = 1γ(ρ/c2,ρ/c 2) (ρ/c)ρ/c2Γ(ρ/c2) (c−1−λ)ρ/c2−1e−ρ(c−1−λ)/c. (68)
+Then the fact that GMα is a sub-exponential uniform boundary follows as a special case of Lemma 2.
+Proving (67) is an exercise in calculus. Substituting the deﬁnition of ψE and removing common terms, it
+suﬃces to show that
+c−ρ/c2 Γ
+(v+ρ
+c2
+)
+γ
+(v+ρ
+c2 , cs+v+ρc2 )(cs+v+ρ
+c2
+)v+ρ
+c2
+e(cs+v)/c2 =∫ 1/c
+0
+(1−cλ)v/c2eλ(s+v/c)(c−1−λ)ρ/c2−1e−ρ(c−1−λ)/c dλ. (69)
+30
+After change of variables u =
+(cs+v+ρ
+c
+)
+(c−1−λ), the right-hand side is equal to
+(cs +v +ρ
+c
+)−v+ρc2
+cv/c2e(cs+v)/c2
+∫ (cs+v+ρ)/c2
+0
+u(v+ρ)/c2−1e−u du. (70)
+Now the deﬁnition of the regularized lower incomplete gamma function and a bit of algebra ﬁnishes the
+argument.
+A similar mixture boundary holds in the sub-Poisson case, making use of the regularized upper incomplete
+gamma function ¯γ(a,x ) := (∫∞x ua−1e−u du)/Γ(a).
+Proposition 10 (Gamma-Poisson mixture). Fix c> 0,ρ> 0 and deﬁne
+GPα(v) := sup
+{
+s≥ 0 :m(s,v )< l0
+α
+}
+, (71)
+where m(s,v ) :=
+( ρ
+c2
+)ρ/c2
+Γ
+( ρ
+c2
+)
+¯γ
+( ρ
+c2, ρc2) Γ
+(cs+v+ρ
+c2
+)
+¯γ
+(cs+v+ρ
+c2 , v+ρc2 )(v+ρ
+c2
+)(cs+v+ρ)/c2 exp
+{v
+c2
+}
+. (72)
+Then GPα is a sub-Poisson uniform boundary with crossing probability α for scale c.
+Proof of Proposition 10. The proof follows the same contours as that of Proposition 8. Using the sub-Poisson
+ψ function ψP (λ) =c−2(ecλ−cλ− 1), the exponential integrand in our mixture is
+exp
+{
+λs−v
+(ecλ−cλ− 1
+c2
+)}
+=θ(cs+v)/c2e(1−θ)v/c2, (73)
+after substituting the one-to-one transformation θ =θ(λ) :=ecλ, so that λ =c−1 logθ. We integrate against
+a gamma mixing distribution on θ with shape and scale parameters both equal to β := ρ/c2, truncated to
+θ≥ 1, so that λ≥ 0:
+ev/c2
+∫∞
+1 θ(cs+v+ρ)/c2−1e−(v+ρ)θ/c2 dθ∫∞
+1 θρ/c2−1e−ρθ/c2 dθ =
+( ρ
+c2
+)ρ/c2
+Γ
+( ρ
+c2
+) · Γ
+(cs+v+ρ
+c2
+)
+(v+ρ
+c2
+)(cs+v+ρ)/c2· ¯γ
+(cs+v+ρ
+c2 , v+ρc2 )
+¯γ
+( ρ
+c2, ρc2) exp
+{v
+c2
+}
+. (74)
+This yields the closed-form mixture (72). To verify that our choice of β ensures that λ has approximate
+precision ρ under the full (not truncated) mixture distribution, we use the delta method to calculate the
+approximate variance of λ for large β based on the variance of θ under the full gamma mixture:
+Varλ≈
+[ 1
+c2θ2
+]
+θ=1
+· 1β = 1ρ. (75)
+A.4 Proof of Proposition 2
+Under the conditions of Proposition 2, we have
+m(s,v ) =
+∫ λmax
+0
+exp{λs−ψ(λ)v}f(λ) dλ. (76)
+Note that m(s,v ) is nondecreasing in s and nonincreasing in v (since ψ≥ 0 by our assumptions on ψ).
+Choose δ∈ (0,λ max) so that ψ has three continuous derivatives and f is continuous and positive on [0 ,δ );
+such a value ofδ must exist by conditions (i) and (ii). Before proving Proposition 2, we state several lemmas.
+Lemma 4. Under the conditions of Proposition 2, for any b ∈ (0,ψ′(δ)), we have m(bv,v ) < ∞ and
+m(bv,v )→∞ as v→∞ .
+31
+Proof. Observe
+m(bv,v ) =
+∫ λmax
+0
+exp{v[λb−ψ(λ)]}f(λ) dλ. (77)
+Note ddλ [λb−ψ(λ)] =b−ψ′(λ)< 0 for allλ≥δ by our condition onb. Hence the integrand exp{v[λb−ψ(λ)]}
+is decreasing on λ≥δ and bounded above by evδb on λ≤δ (since ψ≥ 0). The integrand is therefore uni-
+formly bounded on [0,λ max), so that m(bv,v )<∞.
+Now Laplace’s asymptotic approximation (Widder, 1942, Chapter VII.2, Theorem 2b) yields
+∫ δ
+0
+exp{v [λb−ψ(λ)]}f(λ) dλ∼ Cevψ⋆(b)√v , as v→∞, (78)
+where C > 0 is a constant not depending on v. (The condition b < ψ′(δ) ensures that the maximizer of
+λb−ψ(λ) lies within [0,δ ).) Since the LHS of (78) lower bounds m(bv,v ) while the RHS diverges as v→∞ ,
+we must have m(bv,v )→∞ as v→∞ .
+Lemma 5. Under the conditions of Proposition 2, m(Mα(v),v ) =l0/α for all v suﬃciently large.
+Proof. LetC(v) := [0,ψ′(δ)v) for v >0. Lemma 4 shows that m(s,v ) <∞ for all s∈C (v). Since m(s,v )
+is nondecreasing in s, we may apply dominated convergence to ﬁnd that s↦→ m(s,v ) is continuous at all
+s∈C (v). Condition (i) of Proposition 2 implies ψ≥ 0, so thatm(0,v )≤ 1≤l0/α for allv. Finally, Lemma 4
+shows that sups∈C(v)m(s,v )→∞ as v→∞ . Hence, for v suﬃciently large, there exists s∈C (v) such that
+m(s,v )>l 0/α.
+We have argued that, for any suﬃciently large v, m(0,v )≤ l0/α < m(¯s,v ) <∞ for some ¯s < ψ′(δ)v, and
+m(·,v ) is continuous on [0, ¯s]. The conclusion follows from the deﬁnition (13) of Mα.
+Lemma 6. Under the conditions of Proposition 2, limv→∞Mα(v) =∞.
+Proof. Suppose for the sake of contradiction that there exists a >0 such that Mα(v)≤a for all v. Then,
+sincem(s,v ) is nondecreasing ins,m(Mα(v),v )≤m(a,v ) for allv. But for suﬃciently large v, we can write
+a = bv for some b < ψ′(δ), so that Lemma 4 implies m(a,v ) <∞ for suﬃciently large v. Since condition
+(i) of Proposition 2 implies ψ≥ 0, we have m(s,v ) is decreasing in v, and dominated convergence yields
+m(a,v )→ 0 as v→∞ . But this implies m(Mα(v),v )→ 0, contradicting Lemma 5.
+We have shown that lim supv→∞Mα(v) =∞. But since m(s,v ) is nondecreasing in s and nonincreasing in
+v, Lemma 5 implies Mα(v) must be nondecreasing in v. It follows that lim v→∞Mα(v) =∞.
+Lemma 7. Under the conditions of Proposition 2, Mα(v) =o(v).
+Proof. Suppose for the sake of contradiction that Mα(v)≥bv for all v suﬃciently large, for some 0 < b <
+ψ′(δ). Then (again using the fact thatm(s,v ) is nondecreasing ins) limv→∞m(Mα(v),v )≥ limv→∞m(bv,v ) =
+∞ by Lemma 4, contradicting Lemma 5.
+Proof of Proposition 2. We invoke Theorem 4 of Fulks (1951), setting Fulks’h equal to our v, Fulks’k equal
+to ourMα(v), Fulks’φ equal to our ψ, Fulks’ψ equal to the identity function, Fulks’ f equal to our f, and
+Fulks’b equal to our λmax. Fulks’ assumptions (A1)-(A4) now read as follows.
+(A1) requires ψ(0) = ψ′(0+) = 0, ψ′′(0+)> 0, ψ has three continuous derivatives in a neighborhood of the
+origin, and ψ is positive and nondecreasing on (0,λ max).
+(A2) requires conditions on the identity function which are trivially satisﬁed.
+(A3) requires f to be integrable and to be continuous and positive at the origin.
+(A4) requires Mα(v)→∞ as v→∞ andMα(v) =o(v).
+32
+●●●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●●●●●●●●●●●●●●●●●●●●
+f(λ)
+exp(λs − ψ(λ)v)
+w5
+exp(λ5s − ψ(λ5)v)
+0
+0 λ0λ1λ2λ3λ4λ5λ6λ7λ8λ9… λmax
+λ
+Figure 8: Illustration of Theorem 2. Mixture density f(λ) is discretized on a grid ( λk)∞k=0 which gets ﬁner as
+λ↓ 0. Resulting discrete mixture weights are represented by areas within green bars. Integrand exp {λs−ψ(λ)v} is
+evaluated at grid points λk, illustrated by purple points. Multiplying one integrand evaluation exp {λks−ψ(λk)v}
+by the corresponding weight wk gives one term of the sum (17).
+(A1) and (A3) are satisﬁed by conditions (i) and (ii) of Proposition 2. (A4) is satisﬁed by Lemmas 6 and 7.
+For Fulks’ Theorem 4, it remains to verify that √v = o(Mα(v)). But if this were not true, then we could
+apply Theorem 1 or Theorem 2 of Fulks (1951) to conclude that m(Mα(v),v )→ 0 as v→∞ , contradicting
+Lemma 5. So Fulks’ Theorem 4 yields
+m(Mα(v),v )∼f(0)
+√
+2π
+cv exp
+{M2α(v)
+2cv
+}
+. (79)
+Using Lemma 5 to set m(Mα(v),v ) =l0/α, we may write
+f(0)
+√
+2π
+cv exp
+{M2α(v)
+2cv
+}
+= l0eo(1)
+α , (80)
+which can be rearranged into the desired conclusion.
+We have proved the result for one-sided bounds, but a nearly-identical argument applies to two-sided bounds
+such as Proposition 7.
+A.5 Proof of Theorem 2
+Recall the discrete mixture support points and weights,
+λk := ληk+1/2 and wk := λ(η− 1)f(λk
+√η)
+ηk+1 for k = 0, 1, 2,.... (81)
+Figure 8 illustrates the construction. To see heuristically why the exponentially-spaced grid λk =O(η−k)
+makes sense, observe that the integrand exp
+{
+λs−λ2v/2} is a scaled normal density in λ with mean s/v
+and standard deviation 1/√v. In the regime relevant to our curved boundaries, s is of order √v, ignoring
+logarithmic factors. Hence the integrand at time v has both center and spread of order 1/√v, so as v→∞ ,
+the relevant scale of the integrand shrinks. With the grid λk =O(η−k) we haveλk−λk+1 =O(λk), ensuring
+that the resolution of the grid around the peak of the integrand matches the scale of the integrand asv→∞ .
+The discrete mixture bound is a valid mixture boundary in its own right, based on a discrete mixing distri-
+bution, but we may wish to know how well it approximates the continuous-mixture boundary from which it
+is derived. To illustrate the accuracy of the discrete mixture construction, we compare it to the one-sided
+normal mixture bound, Proposition 6. By using the same half-normal mixing density in Theorem 2 and
+setting η = 1.05, λ = 100, we may evaluate a corresponding discrete mixture bound DM α. With ρ = 14.3,
+33
+α = 0.05 and l0 = 1, numerical calculations indicate that DM α(v)/NMα(v)≤ 1.004 for 1 ≤ v ≤ 106,
+suggesting that Theorem 2 gives an excellent conservative approximation to the corresponding continuous
+mixture boundary over a large practical range. Of course, when a closed form is available as in Proposition 6,
+one should use it in practice. But an exact closed form integral is rarely available as it is in Proposition 6,
+and substantial looseness often accompanies closed-form approximations which provably maintain crossing
+probability guarantees. In such cases, unless a closed form is required, Theorem 2 is preferable. See ﬁgure 10
+for an example; in this ﬁgure, the bounds of Balsubramani (2014) and Darling and Robbins (1968) involve
+closed-form mixture integral approximations.
+Proof of Theorem 2. Becausef is nonincreasing, f(λ)≥f(λk
+√η) on the interval [λk/√η,λk√η], which has
+widthλmax(η−1)/ηk+1 =wk/f(λk√η). Hence ∑∞k=0wk≤∫∞0 f(λ) dλ = 1. Let G be a discrete distribution
+which places mass wk/∑∞j=0wj at the point λk. By Lemma 2, we know the mixture bound Mα applied to
+the discrete mixture distribution G yields a sub-ψ uniform boundary with crossing probability α. But
+∞∑
+k=0
+wk exp{λks−ψ(λk)v}≤
+∫
+exp{λs−ψ(λ)v} dG(λ), (82)
+so DMα ≥ Mα. That is, our discrete mixture approximation DM α is a conservative overestimate of a
+corresponding exact mixture boundary Mα, and can only have a lower crossing probability. So the discrete
+mixture bound DMα satisﬁes the desired probability inequality P(∃t :St≥ DMα(Vt))≤α.
+A.6 Stitching as a discrete mixture approximation
+Suppose we wish to analytically approximate the discrete mixture boundary DM α of Theorem 2 in the
+sub-Gaussian case ψ =ψN. Clearly the sum is lower bounded by the maximum summand, which gives
+DMα(v)≤ sup
+{
+s∈ R : sup
+k≥0
+[wk exp{λks−ψN(λk)v}]< l0α} (83)
+= min
+k≥0
+{log(l0/wkα)
+λk
++ λk
+2 v
+}
+. (84)
+The last expression is the pointwise minimum of a collection of linear boundaries of the form presented in
+Lemma 1, each chosen with a diﬀerent λk, and with nominal crossing rates wkα so that a union bound
+over crossing events yields total crossing probability ∑kwkα≤ α. This is very similar to the stitching
+construction, with a slightly diﬀerent choice of the sequence λk.
+By equating wk from Theorem 2 with 1 /h(k) from Theorem 1, this observation allows us to view a
+stitched bound with function h(k) as an approximation to a mixture bound with mixture density f(λ) =
+Θ(1/λh(logλ−1)) as λ↓ 0. For exponential stitching, this yields f(λ) = Θ(1)—densities approaching a
+nonzero constant asλ↓ 0, including the half-normal distribution, correspond to exponential stitched bound-
+aries growing at a rate √Vt logVt. For polynomial stitching, we have the corresponding mixture density
+fLILs (λ) := (s− 1)ss−110≤λ≤exp(−s)λ logsλ−1 , (85)
+matching the density from Balsubramani (2014, Lemma 12) (we truncate at λ =e−s to ensure the density is
+nonincreasing). The “slower” function h(k)∝k logsk corresponds to f(λ) = Θ(1/λ(logλ−1)(log logλ−1)s),
+the density from example 3 of Robbins (1970).
+A.7 Proof of Theorem 3
+The proof follows a straightforward idea. We break time into epochs ηk≤ Vt < ηk+1. Within each epoch
+we consider the linear boundary passing through the points ( ηk,g (ηk)) and (ηk+1,g (ηk+1)). This line lies
+below g(Vt) throughout the epoch, and its crossing probability is determined by its slope and intercept as
+in Lemma 1. Taking a union bound over epochs yields the result.
+We need the following lemma concerning g:
+34
+Lemma 8. Ifg is nonnegative and strictly concave on R≥0, then g(v) is nondecreasing andg(v)/v is strictly
+decreasing onv >0.
+Proof. If s < 0 is a supergradient of g at some point t, then g(t +u) < g(t) + su < 0 for suﬃciently
+large u, contradicting the non-negativity of g. So g is nondecreasing. Now ﬁx 0 < x < yand let s be any
+supergradient ofg atx. From nonnegativity and concavity we have 0≤g(0)≤g(x)−xs, so thats≤g(x)/x.
+Strict concavity then implies g(y)<g (x) +s(y−x)≤g(x)y/x.
+Proof of Theorem 3. Fix any η >1. On ηk≤ v < ηk+1 we lower bound g(v) by the line ak +bkv passing
+through the points (ηk,g (ηk)) and (ηk+1,g (ηk+1)). This line has intercept and slope
+ak = ηg(ηk)−g(ηk+1)η− 1 , (86)
+bk = g(ηk+1)−g(ηk)ηk(η− 1) . (87)
+Note ak > 0 and bk≥ 0 by Lemma 8. We bound the upcrossing probability of this linear boundary using
+Lemma 1:
+P(∃t≥ 1 :St≥ak +bkVt)≤l0e−2akbk =l0 exp
+{
+−2(g(ηk+1)−g(ηk))(ηg(ηk)−g(ηk+1))ηk(η− 1)2 }. (88)
+The conclusion follows from a union bound over epochs and from the arbitrary choice of η.
+Inspection of the proof reveals that the crossing probability bound (19) is valid not only for the boundary
+u given in (18), but also for a similar boundary which is ﬁnite and linear for all v <1 and v > vmax. This
+follows by extending the linear boundaries over the ﬁrst and last epochs.
+A.8 Proof of Theorem 4
+For the proof, we take a = 0,b = 1 without loss of generality. Write Yt := Xt− Et−1Xt and δt :=
+ˆXt− Et−1Xt. Then Yt−δt =Xt− ˆXt∈ [−1, 1]. We will show that exp
+{
+λ∑ti=1Yi−ψE(λ)∑ti=1(Yi−δi)2}
+is a supermartingale for each λ∈ [0, 1), where we take c = 1 in ψE.
+The proof of Lemma 4.1 in Fan et al. (2015) shows that exp
+{
+λξ−ψE(λ)ξ2}≤ 1 +λξ for all λ∈ [0, 1) and
+ξ≥− 1. Applied to ξ =y−δ, we have
+exp
+{
+λy−ψE(λ)(y−δ)2}≤eλδ(1 +λ(y−δ)). (89)
+Since Yt−δt≥− 1, Et−1Yt = 0, and δt is predictable, the above inequality implies
+Et−1 exp
+{
+λYt−ψE(λ)(Yt−δt)2}≤eλδt(1−λδt)≤ 1, (90)
+using 1−x≤e−x in the ﬁnal step.
+This shows thatSt =∑ti=1Yi =∑ti=1Xi−tµt is sub-exponential with variance processVt =∑ti=1(Yi−δi)2 =∑t
+i=1(Xi− ˆXi)2 and scale c = 1. It follows that P(∃t : St≥ u(Vt))≤ α. A similar argument applied with
+−Xt in place of Xt shows that P(∃t :−St≥u(Vt))≤α, and a union bound ﬁnishes the proof.
+We remark that the proofs of Maurer and Pontil (2009, Theorem 11), Audibert et al. (2009, Theorem 1), and
+Balsubramani and Ramdas (2016) follow very diﬀerent arguments. All three proofs involve a Bennett-type
+concentration bound for the sample mean with a radius depending on the true variance, combined via a
+union bound with a concentration bound for the sample variance. Audibert et al. (2009) and Balsubramani
+and Ramdas (2016) achieve the latter bound using another Bennett/Bernstein-type inequality and the in-
+equality EX4≤ EX2 for|X|≤ 1, while Maurer and Pontil (2009) use a self-bounding property to achieve a
+concentration inequality for the sample variance directly (Maurer and Pontil, 2009, Theorem 7).
+In contrast, our argument avoids the union bound over the sample mean and sample variance bounds. We
+achieve this by constructing an exponential supermartingale which directly relates the deviations ofSt to the
+“online” empirical variance Vt. In terms of proof technique, our method owes much more to the literature
+on self-normalized bounds (de la Pe˜ na, 1999, de la Pe˜ na et al., 2004, Bercu and Touati, 2008, Delyon, 2009
+and especially Fan et al., 2015) than to the literature on empirical-Bernstein bounds.
+35
+A.9 Proof of Corollary 4
+For case (1), Lemma 3(f) and Lemma 2 of Howard et al. (2020) (cf. Delyon, 2009) show that St =γmax(Yt)
+is sub-Gaussian with variance process ~Vt =γmax
+(∑t
+i=1
+∆Y 2i +2E∆Y 2i
+3
+)
+. Invoking Corollary 1, we have
+lim sup
+t→∞
+St√
+2~Vt log log~Vt
+≤ 1 a.s. on
+{
+sup
+t
+~Vt =∞
+}
+. (91)
+Applying the strong law of large numbers elementwise, we have t−1∑ti=1 ∆Y 2i +2E∆Y 2i3 a.s.→ EY 21 as t→∞ ,
+and the continuity of the maximum eigenvalue map over the set of positive semideﬁnite matrices ensures
+that t−1~Vt a.s.→ γmax(EY 21 ) = t−1Vt. Hence, so long as EY 21 > 0 we conclude that, with probability one,
+supt~Vt =∞ and
+√
+~Vt log log~Vt∼ √γmax(EY 21 )t log logt, completing the proof for case (1). (If EY 21 = 0
+then the event{suptVt =∞} is empty and the result is vacuous.)
+In case (2), Fact 1(d) and Lemma 2 of Howard et al. (2020) (cf. Tropp, 2012) show that ( St) deﬁned
+as above is sub-gamma with variance process ( Vt) and scale c. The conclusion now follows directly from
+Corollary 1.
+A.10 Proof of Corollary 5
+The argument is adapted from Tropp (2015). Let Xi :=xixTi − Σ. The triangle inequality implies ‖Xi‖op≤
+‖xixTi‖op +‖Σ‖op ≤ 2b. Hence, by Fact 1(c) and Lemma 2 of Howard et al. (2020) (cf. Tropp, 2012),
+St =γmax
+(∑t
+i=1Xi
+)
+is sub-Poisson with scale c = 2b and variance process
+Vt =γmax
+( t∑
+i=1
+EX2i
+)
+(92)
+=γmax
+( t∑
+i=1
+[
+E[(xixTi )2]− Σ2]
+)
+(93)
+≤
+t∑
+i=1
+γmax
+(
+E[(xixTi )2]). (94)
+In the ﬁnal step, we neglect the negative semideﬁnite term−Σ2 and use the fact that the maximum eigenvalue
+of a sum of positive semideﬁnite matrices is bounded by the sum of the maximum eigenvalues. We continue
+by using‖xixTi‖ =‖xi‖22≤b and the fact the expectation respects the semideﬁnite order to obtain
+Vt≤
+t∑
+i=1
+γmax
+(
+E‖xi‖22xixTi) (95)
+≤tb‖Σ‖op. (96)
+Plugging this upper bound on Vt into the discrete mixture bound of Theorem 2 gives the result.
+B Implications among sub- ψ boundaries
+Together with Table 1, the following proposition formalizes the relationships illustrated in Figure 2, restating
+Proposition 2 of Howard et al. (2020) in the language of uniform boundaries. The ﬁrst row of Table 1 uses
+the function
+ϕ(g,h ) :=
+{
+h2−g2
+2 log(h/g), g <h
+gh, g ≥h.
+(97)
+36
+ψ1 ψ2 a Restriction
+(1) ψN ψB,g,h ϕ(g,h)gh anyg,h> 0
+(2) ψN ψB,g,h (g+h)24gh anyg,h> 0
+(3) ψP,c ψB,g,g+c 1 any g >−c
+(5) ψG,c ψP,3c 1
+(6) ψE,c ψG,2c/3 1
+(7) ψG,c ψE,c 1 c≥ 0
+(8) ψG,c ψE,2c 1 c< 0
+(9) ψP,c ψG,c/2 1 c< 0
+(10) ψN ψP,c 1 any c< 0
+(11) ψB,g,h ψP,−g 1
+Table 1: For each row, ifu is a sub-ψ1 uniform boundary, subject to the given restriction, then v↦→u(av) is a sub-ψ2
+uniform boundary. ϕ(g,h ) is deﬁned in (97). See Proposition 11 for details.
+Proposition 11. For each row in Table 1, if u is a sub- ψ1 uniform boundary, and the given restrictions
+are satisﬁed, then v↦→ u(av) is a sub- ψ2 uniform boundary for the given constant a. Furthermore, when
+we allow only transformations of the form v↦→u(av), these capture all possible implications among the ﬁve
+sub-ψ boundary types deﬁned above, and the given constants are the best possible (in the case of row (2), the
+constant (g +h)2/4gh is the best possible of the form k/gh wherek depends only on the total range g +h).
+A reader who is familiar with Howard et al. (2020) will note that the arrows in Figure 2 are reversed with
+respect to Figure 4 in their paper. Indeed, since any sub-Bernoulli process is also sub-Gaussian, it follows
+that any sub-Gaussian uniform boundary is also a sub-Bernoulli uniform boundary, and so on.
+C Additional proofs
+C.1 Proof of Proposition 3
+Let k := (l0/α)2. For part (a), we will set the derivative of the squared objective u2(v)/v to zero:
+d
+dv
+[(
+1 +ρv)(log(k(v +ρ)ρ ))] =− ρv2 log(k(v +ρρ ) + 1v = 0. (98)
+−
+(v +ρ
+ρ
+)
+exp
+{
+−v +ρρ } =− 1ek. (99)
+We solve this equation using the lower branch W−1 since we know−(v +ρ)/ρ≤− 1:
+v +ρ
+ρ =−W−1
+(
+− 1ek), (100)
+which is equivalent to (21).
+For part (b), we optimize the squared boundary u2(v):
+d
+dρ
+[
+(v +ρ) log
+(k(v +ρ)
+ρ
+)]
+= log
+(k(v +ρ)
+ρ
+)
+− vρ = 0. (101)
+which is equivalent to (98).
+C.2 Proof of Proposition 4
+First, Robbins and Siegmund (1970, Theorem 1) show that, for B(t) a standard Brownian motion,
+P(∃t∈ (0,∞) :B(t)≥M α(t)) =α. (102)
+37
+Let (Xt)∞t=1 be any i.i.d. sequence of mean-zero random variables with unit variance and EeλX1 ≤ eλ2/2,
+for example standard normal or Rademacher random variables. For each m∈ N, let S(m)t :=∑ti=1Xi/√m
+and V (m)t :=t/m, noting that (S(m)t ) is sub-Gaussian with variance process (V (m)t ). Our proof rests upon a
+standard application of Donsker’s theorem, detailed below, which shows that, for any T∈ N,
+lim
+m→∞
+P
+(
+∃t∈ [mT ] :S(m)t ≥M α(V (m)t )) = P(∃t∈ (0,T ] :B(t)≥M α(t)). (103)
+To obtain the desired conclusion from (103), we write, for any m∈ N and T∈ N,
+P
+(
+∃t∈ N :S(m)t ≥M α(V (m)t ))≥ P(∃t∈ [mT ] :S(m)t ≥M α(V (m)t )). (104)
+Takem→∞ and use (103) to ﬁnd, for any T∈ N,
+lim inf
+m→∞
+P
+(
+∃t∈ N :S(m)t ≥M α(V (m)t ))≥ P (∃t∈ (0,T ] :B(t)≥M α(t)). (105)
+Now take T→∞ to obtain
+lim inf
+m→∞
+P
+(
+∃t∈ N :S(m)t ≥M α(V (m)t ))≥ P (∃t∈ (0,∞) :B(t)≥M α(t)) =α, (106)
+by (102). But for each m∈ N, S(m)t is sub-Gaussian with variance process V (m)t , so that
+P
+(
+∃t∈ N :S(m)t ≥M α(V (m)t ))≤α. (107)
+Together, (106) and (107) yield
+lim
+m→∞
+P
+(
+∃t∈ N :S(m)t ≥M α(V (m)t )) =α. (108)
+Since (S(m)t ,V (m)t )∈ S1ψN for each m, the conclusion follows.
+To prove (103), we will use the fact thatMα : R≥0→ R≥0 is continuous, increasing and concave, as proved in
+Lemma 9 below. For each t∈ R>0 letS(mt) be equal to Smt formt∈ N and a linear interpolation otherwise
+(withS(0) = 0). Let C[0,T ] denote the space of continuous, real-valued functions on [0,T ] equipped with the
+sup-norm, and let P0 denote the probability measure for standard Brownian motion. We ﬁrst use a corollary
+of Donsker’s theorem: for any ϕ :C[0,T ]→ R continuous P0-a.s., we have (Durrett, 2017, Theorems 8.1.5,
+8.1.11)
+ϕ
+(S(m·)√m ) d→ϕ(B(·)) as m→∞. (109)
+We let ϕ(f) := supt∈[0,T][f(t)−M α(t)], so that by compactness of [0 ,T ] and continuity of f andMα,
+ϕ(f)≥ 0 if and only if f(t)≥M α(t) for some t∈ [0,T ]. Now ϕ(S(m·)/√m) d→ ϕ(B(·)), and note that
+ϕ(B(·)) has a continuous distribution: the distribution when Mα(t)≡ 0 is well-known by the reﬂection
+principle, and the measure for the Brownian motion with drift B(t)−Mα(t) +Mα(0) is equivalent to the
+measure for B(t) by the Cameron-Martin theorem (Morters and Peres, 2010, Theorem 1.38). Hence
+P
+(
+∃t∈ [0,T ] : S(mt)√m ≥M α(t))→ P (∃t∈ [0,T ] :B(t)≥M α(t)). (110)
+But becauseMα(t) is concave, the linear interpolation ofS(·) cannot add any new upcrossings beyond those
+in (St):
+P
+(
+∃t∈ [0,T ] : S(mt)√m ≥M α(t)) = P(∃x∈ [mT ] : Sx√m≥M α(x/m)) (111)
+= P
+(
+∃t∈ [mT ] :S(m)t ≥M α(V (m)t )). (112)
+Combining (112) with (110) yields (103), completing the proof.
+Lemma 9. The functionMα : R≥0→ R≥0 is continuous, increasing and concave.
+38
+Proof. Continuity ofMα(v) is clear from the continuity of exp{λs−ψ(λ)v} in s and v, which also implies
+∫
+exp{λMα(v)−ψ(λ)v} dF (λ) = l0α (113)
+for all v >0. That is, the left-hand side is constant in v, hence has derivative with respect to v equal to
+zero. We may exchange the derivative and integral by Theorem A.5.1 of Durrett (2017), noting that the
+integrand is positive and continuously diﬀerentiable in v and F is a probability measure. This yields
+M′α(v) = A(v)B(v) > 0, (114)
+where A(v) :=
+∫
+ψ(λ)eλMα(v)−ψ(λ)v dF (λ) (115)
+and B(v) :=
+∫
+λeλMα(v)−ψ(λ)v dF (λ). (116)
+Both A(v)> 0 and B(v)> 0 since the integrands are positive, which shows that Mα is increasing. Diﬀer-
+entiating again yields, after some algebra,
+B2(v)M′′α(v) =
+∫ (
+−[λA(v)−ψ(λ)B(v)]2
+B(v)
+)
+eλMα(v)−ψ(λ)v dF (λ)≤ 0, (117)
+since the integrand is now nonpositive, showing that Mα is concave.
+C.3 Proof of Corollary 6
+Write µ⋆ := ET (X1).We have noted in the discussion preceding the result that the exponential process
+exp{λSt(µ)−tψµ(λ)} is the likelihood ratio testing H0 : θ = θ(µ) against H1 : θ = θ(µ) +λ. It is well-
+known that the likelihood ratio is a martingale under the null. Hence ( St(µ⋆)) is sub-ψµ⋆ with variance
+process Vt = t, and it follows immediately that P(∃t : St(µ⋆)≥ uµ⋆(t))≤ α1. Apply the same argument
+with−Xt in place of Xt to conclude that P(∃t :−St(µ⋆)≥ ˜uµ⋆(t))≤ α2. A union bound completes the
+argument.
+C.4 Proof of Lemma 3
+The implication (a)⇒ (b) follows from
+AT =
+[∞⋃
+t=1
+At∩{T =t}
+]
+∪ [A∞∩{T =∞}]⊆
+∞⋃
+t=1
+At. (118)
+It is clear that (b)⇒ (c). For (c)⇒ (a), take τ = inf{t∈ N :At occurs}, so that Aτ =⋃∞t=1At.
+D Computing conjugate mixture bounds by root-ﬁnding
+In this section we demonstrate that our conjugate mixture boundaries, which involve the supremum Mα(v)
+deﬁned in (13), can be computed via root-ﬁnding. We assume that ψ is CGF-like, a property which holds
+for all of the ψ functions in Section 2:
+Deﬁnition 3 (Howard et al., 2020, Deﬁnition 2) . A real-valued function ψ with domain [0 ,λ max) is
+called CGF-like if it is strictly convex and twice continuously diﬀerentiable with ψ(0) = ψ′(0+) = 0 and
+supλ∈[0,λmax)ψ(λ) =∞. For such a function, we write
+¯b := sup
+λ∈[0,λmax)
+ψ′(λ)∈ (0,∞]. (119)
+39
+Lemma 2 implies that, with probability at least 1 −α, m(St,Vt)<l 0/α for all t, where
+m(s,v ) =
+∫
+exp{λs−ψ(λ)v} dF (λ). (120)
+We are interested in the set A(v) :={s∈ R : m(s,v ) < l0/α} for ﬁxed v≥ 0. It is clear that m(0,v )≤
+1< l0/α whenever l0≥ 1 (which holds in all cases we consider), since ψ≥ 0, v≥ 0 and F is a probability
+distribution. So 0 ∈A(v) always. We show below that, in addition, A(v) is always an interval.
+For one-sided boundaries,F is supported onλ≥ 0, and so long asF is not a point mass at zero (which would
+be an uninteresting mixture), m(s,v ) is strictly increasing in s wheneverm(s,v )<∞. Hence m(s,v ) =l0/α
+for at most one value of s⋆(v)> 0, in which case A(v) = (−∞,s⋆(v)).
+It is possible that m(s,v )<l 0/α for all s where the integral converges. To examine this case, we ﬁx v >0,
+which is the interesting case in practice, and make two observations:
+• Whenever s <¯bv, we have m(s,v ) <∞. Indeed, in this case, exp {λs−ψ(λ)v}→ 0 as λ→∞ , and
+as the integrand is continuous in λ, it must be uniformly bounded. It follows immediately that we can
+havem(s,v ) =∞ only when ¯b< ∞.
+• Whenever ¯b< ∞, we haveSt≤ ¯bVt a.s., a consequence of Theorem 1(a) of Howard et al. (2020), which
+shows that P(∃t :St≥a + ¯bVt) = 0 for all a >0. (To verify this fact, note we must have λmax =∞
+when ¯b< ∞ in order for the CGF-like condition sup λ∈[0,λmax)ψ(λ) =∞ to hold.)
+Hence, when ¯b =∞ we need not worry aboutm(s,v ) =∞. When ¯b< ∞, it suﬃces to checkm(¯bv,v ), which
+may be inﬁnite. If m(¯bv,v )≥l0/α, then we search for a root of m(s,v ) =l0/α in the interval s∈ [0,¯bv]. If
+m(¯bv,v )< l0/α, it suﬃces to take Mα(v) = ¯bv +ϵ for any ϵ >0. In practice, it seems more reasonable to
+take the upper bound ¯bv and use a closed conﬁdence set instead of an open one.
+For two-sided boundaries, whenF has support on both λ> 0 and λ< 0, in general we require the technical
+condition
+∫
+|λ|k exp{λs−ψ(λ)v} dF (λ)<∞, for k = 1, 2. (121)
+This ensures that we may diﬀerentiate m(s,v ) twice with respect to s, exchanging the derivative and the
+integral both times (Durrett, 2017, Theorem A.5.3). Hence, whenever condition (121) holds,
+d2
+ds2 m(s,v ) =
+∫
+λ2 exp{λs−ψ(λ)v} dF (λ)≥ 0, (122)
+so that m(s,v ) is convex in s for each v≥ 0. As m(0,v ) < l0/α, we conclude that m(s,v ) = l0/α for at
+most one value s⋆(v)> 0 and one value s⋆(v)< 0, and A(v) = (s⋆(v),s⋆(v)). A similar discussion as above
+applies when ¯b< ∞ and we may have m(s,v ) =∞ for some values of s.
+As Proposition 5 yields a closed-form result, only Proposition 7 requires that we verify condition (121). From
+the proof of Proposition 7 in Appendix A.3, it suﬃces to show that
+∫ 1
+0
+⏐⏐⏐⏐log( p1−p)⏐⏐⏐⏐kpa(1−p)b dp< ∞ (123)
+for some a,b> 0 and k = 1, 2. This follows from the fact that the integrand is continuous on p∈ (0, 1) and
+approaches zero as p→ 0 and p→ 1, so it is bounded.
+E Tuning discrete mixture implementation
+In Section 3.5 we have discussed the choice of mixing precision in order to tune a mixture bound for a
+particular range of sample sizes. For discrete mixtures, the value λ must also be chosen, and this depends
+on the minimum relevant value of Vt: making λ larger will make the resulting bound tighter over smaller
+values of Vt at the cost of a looser bound for larger values of Vt. In practice, for ψ = ψG, setting λ =
+40
+[c +
+√
+m/2 logα−1]−1 will ensure the bound is tight for Vt≥m. Furthermore, when evaluating DM α(v) in
+practice, the sum can be truncated after kmax =⌈logη(λ[c +
+√
+5v/ logα−1])⌉ terms. The remainder of this
+section explains these choices.
+We wish to understand what range of values of λ our discrete mixture must cover to ensure we get a tight
+bound for all Vt∈ [m,v max]. At Vt =m the value ofλ which yields the optimal linear bound from Lemma 1
+is found by optimizing
+logα−1
+λ + ψ(λ)λ ·m, (124)
+yielding the ﬁrst-order condition
+λψ′(λ)−ψ(λ) = logα−1
+m . (125)
+Forψ =ψG, this becomes
+λ2
+2(1−cλ)2 = logα−1m , (126)
+which is solved by
+λ⋆(m) = 1
+c +
+√
+m/2 logα−1. (127)
+Large values of λ are necessary to achieve tight bounds for small Vt. Hence, to ensure good performance
+at Vt = m we choose λ = [c +
+√
+m/2 logα−1]−1. Similarly, to ensure the sum safely covers Vt = v we
+ensure λkmax ≤ [c +
+√
+10v/2 logα−1]−1 (using an arbitrary “fudge factor” of ten), which yields kmax =
+⌈logη(λmax[c +
+√
+5v/ logα−1])⌉.
+We note that η must also be chosen, but the only tradeoﬀ here is computational. Smaller values of η lead
+to more accurate approximations of the discrete mixture to the target continuous mixture, but require more
+terms to be summed. We have found η = 1.1 to provide excellent approximations in the examples we have
+examined.
+F Intrinsic time, change of units and minimum time conditions
+In this section we point out that a bound expressed in terms of intrinsic time yields an inﬁnite family of
+related bounds via scaling, and that “minimum time” conditions in such bounds (such asm∨Vt in Theorem 1)
+can be freely scaled as well. Suppose we have a uniform bound of the form
+P (∃t≥ 1 :St≥uc(m∨Vt))≤α, (128)
+where intrinsic time Vt has the same units as S2t , as usual, and c is some parameter with the same units as
+St. Then, ﬁxing any γ >0 and applying the bound (128) to the scaled observations Xt/√γ, which amounts
+to a change of units, we have
+α≥ P
+(
+∃t≥ 1 : St√γ≥uc/√γ
+(
+m∨ Vt
+γ
+))
+(129)
+= P (∃t≥ 1 :St≥hc(γm∨Vt)), where hc(v) :=√γuc/√γ
+(v
+γ
+)
+. (130)
+By changing units we have obtained a new bound on St with diﬀerent minimum time γm and a diﬀerent
+shape. For example, applying this change of units to the stitched boundary (8) with m = 1 yields the family
+of bounds
+P
+(
+∃t≥ 1 :St≥k1
+√
+(γ∨Vt)𝓁
+(γ∨Vt
+γ
+)
++ck2𝓁
+(γ∨Vt
+γ
+))
+≤α (131)
+41
+Hoeffding bound
+CLT bound
+Polynomial stitching (ours)
+Inverted stitching (ours)
+Discrete mixture (ours)
+Normal mixture
+0
+0 105
+V t                                                            
+Boundary
+Figure 9: Pointwise and uniform bounds for independent 1-sub-Gaussian observations, α = 0.025. All tuning param-
+eters are chosen to optimize roughly for time Vt = 10 4. The dotted lines show the Hoeﬀding bound √2Vt logα−1,
+which is nonasymptotically pointwise valid, and the CLT bound z1−α
+√Vt, which is asymptotically pointwise valid.
+Polynomial stitching uses Theorem 1 with η = 2.04, m = 10 4, and h(k) = (k + 1)1.4ζ(1.4). The inverted stitching
+boundary is 1 .7
+√
+(Vt∨ 104)(log(1 + log((Vt∨ 104)/104) + 3.5), using Theorem 3 with η = 2.99, vmax = 10 20, and
+error rate 0.82α to account for ﬁnite horizon and ensure a fair comparison. Discrete mixture applies Theorem 2
+to the density f(λ) = 0 .4· 10≤λ≤λmax/[λ log1.4(λmaxe/λ)] with η = 1.1 and λmax = 0.044; see Appendix A.6 for
+motivation. The normal mixture bound (53) uses ρ = 1260.
+for anyγ >0, with the deﬁnition of 𝓁 unchanged from (8). Note only the argument of 𝓁 has been scaled. We
+started with a single bound (8) expressed in terms of Vt and ended up with a family of bounds on the same
+processSt, one for each value ofγ. Indeed, the tuning parameter m in Theorem 1 is obtained by exactly this
+argument. The eﬀect is more clear if we let c = 0 and examine the upper bound on the normalized process
+St/√Vt: then for any γ >0, with probability at least 1−α,
+St√Vt≤
+
+
+
+k1
+√
+𝓁
+(
+Vt
+γ
+)
+, when Vt≥γ,
+k1
+√
+γ𝓁(1)
+Vt , when Vt <γ.
+(132)
+Now the right-hand depends on Vt only through Vt/γ, so that the eﬀect of changing γ is simply to multi-
+plicatively shift the bound backwards or forwards in time without changing the bounded process.
+G Detailed comparison of ﬁnite LIL bounds
+Figures 9 and 10 compare our ﬁnite LIL bounds to several existing bounds. Below we restate the original
+results from the various papers giving ﬁnite LIL bounds included in Figure 10. In table 2, for ease of
+comparison, we write all bounds in the form
+P(∃t≥ 1 :St≥A
+√
+t(log logBt +C), (133)
+valid for independent 1-sub-Gaussian observations. When the original bound holds only for t≥ n instead
+of t≥ 1, we apply a change of units argument to replace log log Bt with log logBnt and t≥ n with t≥ 1,
+so that all bounds are comparable (see Appendix F). When bounds are expressed in terms of intrinsic time
+Vt (Balsubramani, 2014), this is formally justiﬁed. When they are expressed in terms of nominal time
+(Darling and Robbins, 1967 b, 1968) this is only a heuristic argument, but we conjecture that proofs of
+such bounds could be generalized to justify this scaling. When observations are i.i.d. from an inﬁnitely
+divisible distribution, the change is formally justiﬁed by replacing each observation Xi with a sum of n i.i.d.
+“pseudo-observations”Zi such that∑ni=1Zi∼X1.
+• Jamieson and Nowak (2014), Lemma 1: for i.i.d. sub-Gaussian observations with variance parameter
+σ2,
+P
+(
+∃t≥ 1 :St≥ (1 +√ϵ)
+√
+2σ2(1 +ϵ)t log
+(log((1 +ϵ)t)
+δ
+))
+≤ 1− 2 +ϵϵ ( δlog(1 +ϵ))1+ϵ. (134)
+42
+Jamieson et al. (2013)
+Balsubramani (2014)
+Zhao et al. (2016)
+Darling & Robbins (1967b)
+Kaufmann et al. (2016)
+Darling & Robbins (1968)
+Polynomial stitching (ours)
+Inverted stitching (ours)
+Discrete mixture (ours)
+0
+2,000
+0 105
+V t                                                            
+Boundary
+Figure 10: Finite LIL bounds for independent 1-sub-Gaussian observations, α = 0.025. The dotted lines show the
+Hoeﬀding bound
+√
+2Vt logα−1, which is nonasymptotically pointwise valid, and the CLT bound z1−α√Vt, which is
+asymptotically pointwise valid. Polynomial stitching uses Theorem 1 with η = 2.04 and h(k) = (k + 1)1.4ζ(1.4).
+The inverted stitching boundary is 1 .7
+√
+Vt(log(1 + logVt) + 3.5), using Theorem 3 with η = 2.99, vmax = 10 20,
+and error rate 0 .82α to account for ﬁnite horizon. Discrete mixture applies Theorem 2 to the density f(λ) =
+0.4· 10≤λ≤4/[λ log1.4(4e/λ)] with η = 1.1, and λmax = 4; see Appendix A.6 for motivation. The normal mixture
+bound (53) uses ρ = 0.129. See Appendix G for details.
+• Zhao et al. (2016), Theorem 1: for sub-Gaussian observations with variance parameter 1 /4,
+P
+(
+∃t≥ 1 :St≥
+√
+at log(logct + 1) +bt
+)
+≤ζ(2a/c)e−2b/c. (135)
+• Kaufmann et al. (2016), Lemma 7: for independent sub-Gaussian observations with variance parameter
+σ2,
+P
+(
+∃t≥ 1 :St≥
+√
+2σ2t(x +η log log(et))
+)
+≤√eζ(η(1− 12x))( √x2√2 + 1)ηe−x (136)
+• Balsubramani (2014), Theorem 4: for |Xt|≤ ct a.s. and Vt =∑ti=1c2i ,
+P
+(
+∃t≥ 1 :Vt≥ 173 log
+( 2
+α
+)
+:St≥
+√
+3Vt(2 log log(3Vt/2St) + logα−1)
+)
+≤α. (137)
+Though the bound is stated for bounded observations, the proof holds for any observations sub-
+Gaussian with variance parameters (c2t ), as noted in section 5.2 of Balsubramani (2014). Balsubramani
+suggests removing the initial time condition by imposing a constant bound over t ≤ 173 log(2/α)
+(section 5.3). We instead remove the condition by a change of units, as discussed in Appendix F.
+• Darling and Robbins (1967 b), eq. 22: for i.i.d. observations sub-Gaussian with variance parameter 1,
+P
+(
+∃t≥ηj :St≥ 1 +η2√η√t(2c log logt− 2c log logη + 2 loga))≤ 1a(c− 1)(j− 1/2)c−1. (138)
+Darling and Robbins consider results for a general bound ϕ(λ) on the moment-generating function of
+the observations. The result involves the term h(vt) where the function h(λ) := 1/2 +λ−2 logϕ(λ) and
+vt is unspeciﬁed but bounded.
+• Darling and Robbins (1968), eq. 2.2 and the example that follows: for i.i.d. observations sub-Gaussian
+with variance parameter 1,
+P
+(
+∃t≥ 3 :St≥A
+√
+t(log logt +C)
+)
+≤
+∫ ∞
+m
+A√log logt +C
+t exp
+{
+−A2(log logt +C)2 } dt. (139)
+43
+Darling and Robbins give a closed-form upper bound for the right-hand side of (139). We instead eval-
+uate it numerically, using readily-available implementations of the upper incomplete gamma function:
+∫ ∞
+m
+A√log logt +C
+t exp
+{
+−A2(log logt +C)2 } dt
+=
+√
+2πAe−C
+(A− 2)3/2 P
+(
+G≥ A2− 22 (log logm +C)), (140)
+where G∼ Γ(3/2, 1).
+• Polynomial stitching as in (10) with c = 0.
+• Inverted stitching with g(v) = A
+√
+v(log log(ev) +C) as in (20). We set vmax = 10 20 which covers
+42 epochs with η = 2.994. To make for a fair comparison with polynomial stitching, observe that
+in 42 epochs with s = 1.4, polynomial stitching “spends” ∑42k=1k−1.4/ζ(1.4)≈ 0.820 of its crossing
+probabilityα, so we run inverted stitching with α = 0.820· 0.025.
+• Normal mixture as in (53) with ρ≈ 0.13:
+u(v)≈
+√
+2(v + 0.13) log
+(
+20
+√
+1 + v0.13 + 1). (141)
+This is not a LIL boundary, so is not included in Table 2.
+Source and parameter settings A B C
+Jamieson and Nowak (2014) (1 + √ϵ)√2(1 +ϵ) 1 + ϵ 11+ϵ log( 2+ϵαϵ log1+ϵ(1+ϵ))
+ϵ = 0.033 (1.7) (1.033) (10.966)
+Balsubramani (2014)
+√
+6 8652 log( 2δ) (logα−1)/2
+(2.45) (1137) (1.844)
+Zhao et al. (2016) 2 √a c c2a log( ζ(2a/c)α log2a/cc)
+a = 0.7225,c = 1.1 (1.7) (1.1) (6.173)
+Darling and Robbins (1967 b) (1 + η)
+√
+c
+2η ηj 1c log( 1α(c−1)(j−1/2)c−1 logcη)
+j = 1,c = 1.4,η = 1.429 (1.7) (1.429) (4.518)
+Kaufmann et al. (2016) √2η e x (α,η )/η
+η = 1.3 (1.7) (2.718) (4.427)
+Darling and Robbins (1968) A 3 C(α,A )
+A = 1.7 (1 .7) (3) (3 .945)
+Polynomial stitching (10) ( η1/4 +η−1/4)√s2 η 1s log ζ(s)α logsη
+s = 1.4,η = 2.041 (1.7) (2.041) (3.782)
+Inverted stitching (Theorem 3) A e C (α,A,η )
+η = 2.994, nominal error rate 0.82α (1.7) (2.718) (3.454)
+Table 2: Comparison of parameters A,B,C for ﬁnite LIL boundaries expressed in the form
+P(∃t≥ 1 :St≥A
+√
+t(log logBt +C))≤α for sums of independent 1-sub-Gaussian observations, with α = 0.025.
+Functionsx(α,η ) and C(α,... ) are given by numerical root-ﬁnding to set the corresponding error bound equal to
+α.
+44
+H Details of Example 1
+WriteXt =µ +σZt for t = 1, 2,... where Z1,Z 2,... are i.i.d.N (0, 1) random variables. Substituting into
+the deﬁnition of St, we ﬁnd
+St =
+t+1∑
+i=1
+(
+Zi− ¯Zt+1)2−t, (142)
+where ¯Zt :=t−1∑ti=1Zi. Evidently the distribution of St depends on neither µ norσ2. Furthermore, direct
+calculation shows that the increments of (St) may be written as
+∆St =St−St−1 = tt + 1(Zt+1− ¯Zt)2− 1 (143)
+=:Y 2t − 1, (144)
+where we deﬁne Yt :=
+√
+t/(t + 1)(Zt+1− ¯Zt) for t = 1, 2,... (and take S0 = 0 by convention). Noting
+that Zt+1 ∼N (0, 1) is independent of ¯Zt ∼N (0,t−1), we see that Yt ∼N (0, 1) for each t. Finally, a
+straightforward calculation shows that EYiYj = 0 for all i⁄= j, so that Y1,Y 2,... are i.i.d. It follows that
+∆S1, ∆S2,... are i.i.d. centered Chi-squared random variables each with one degree of freedom. The CGF
+of this distribution is
+log Eeλ∆S1 =−log(1− 2λ)2 −λ, for all λ< 12. (145)
+which is equal to 2ψE(λ) with scale c = 2. As the increments of ( St) are i.i.d., it suﬃces for Deﬁnition 1 to
+have log Eeλ∆St≤ψ(λ)∆Vt, and we have shown this holds with equality.
+We have shown that ( St) is sub-exponential with scale c = 2 and variance process Vt = 2t. Recall that
+Deﬁnition 1 depends only on λ≥ 0. However, since (145) holds for all λ <1/2 and not just 0 ≤ λ <1/2,
+replacing ∆St with−∆St shows that (−St) is sub-exponential with scale c =−2.
+I Extension to smooth Banach spaces and continuous-time pro-
+cesses
+Though we have focused on discrete-time processes taking values in R orSd, our uniform boundaries also
+apply to discrete-time martingales in general smooth Banach spaces and to real-valued, continuous-time
+martingales. In this section we brieﬂy review concepts from Howard et al. (2020, Sections 3.4-3.5) to highlight
+the possibilities. First, let ( Yt)t∈N be a martingale taking values in a separate Banach space ( X,‖·‖). Our
+uniform boundaries apply to any function Ψ : X→ R satisfying the following property:
+Deﬁnition 4 ((Pinelis, 1994)). A function Ψ : X →R is called (2,D )-smooth for some D > 0 if, for all
+x,v∈X , we have (a) Ψ(0) = 0, (b)|Ψ(x+v)−Ψ(x)|≤‖ v‖, and (c) Ψ2(x+v)−2Ψ2(x)+Ψ2(x−v)≤ 2D2‖v‖2.
+For example, the norm induced by the inner product in any Hilbert space is (2, 1)-smooth, and the Schatten
+p-norm is (2,√p− 1)-smooth for p≥ 2.
+Corollary 7. Let (Yt)t∈N be a martingale taking values in a separable Banach space (X,‖·‖), and Ψ :X→ R
+is (2,D )-smooth; denote D⋆ := 1∨D.
+(a) Suppose ‖∆Yt‖≤ ct a.s. for all t for constants (ct). Then, for any sub-Gaussian boundary f with
+crossing probabilityα and l0 = 2, we have
+P
+(
+∃t≥ 1 : Ψ(Yt)≥f
+(
+D2⋆
+t∑
+i=1
+c2i
+))
+≤α. (146)
+(b) Suppose ‖∆Yt‖ ≤c a.s. for all t for c> 0. Then, for any sub-Poisson boundary f with crossing
+probabilityα, l0 = 2, and scale c, we have
+P
+(
+∃t≥ 1 : Ψ(Yt)≥f
+(
+D2⋆
+t∑
+i=1
+Ei−1‖Xi‖2
+))
+≤α. (147)
+45
+The result follows directly from the proof of Corollary 10 in Howard et al. (2020), which shows thatSt = Ψ(Yt)
+is sub-Gaussian or sub-Poisson with appropriate variance process (Vt) for each case, building upon the work
+of Pinelis (1992, 1994). For example, let ( Yt) be a martingale taking values in any Hilbert space, with ‖·‖
+the induced norm, and suppose ‖∆Yt‖≤ 1 a.s. for all t. Then Corollary 7(a) with a normal mixture bound
+yields
+P
+(
+∃t≥ 1 :‖Yt‖≥
+√
+(t +ρ) log
+(4(t +ρ)
+α2ρ
+))
+≤α. (148)
+Next, let (St)t∈R≥0 be a continuous-time, real-valued process. Replacing discrete-time processes in Deﬁni-
+tion 1 with continuous-time processes, and invoking the continuous-time version of Ville’s inequality, our
+stitched, mixture and inverted stitching results extend straightforwardly to continuous time. Below we give
+two examples which follow from Fact 2 of Howard et al. (2020). Here ⟨S⟩t denotes the predictable quadratic
+variation of (St).
+Corollary 8. Let (St)t∈R≥0 be a real-valued process.
+(a) If (St) is a locally square-integrable martingale with a.s. continuous paths, and f is a sub-Gaussian
+stitched, mixture or inverted stitching uniform boundary, then P(∃t∈ (0,∞) :St≥f(⟨S⟩t))≤e−2ab.
+(b) If (St) is a local martingale with ∆St≤ c for all t, and f is a sub-Poisson mixture bound for scale c
+or a sub-gamma stitched bound for scale c/3, then P(∃t∈ (0,∞) :St≥f(⟨S⟩t))≤α.
+For example, if (St) is a standard Brownian motion, then Corollary 8(a) with a polynomial stitched boundary
+yields, for any η >1,s> 1,
+P
+(
+∃t∈ (0,∞) :St≥ η1/4 +η−1/4√2 √(1∨t)(s log log(η(1∨t)) + log ζ(s)α logsη))≤α.
+J Suﬃcient conditions for Deﬁnition 1
+Table 3 oﬀers a summary of suﬃcient conditions for Deﬁnition 1 to hold when ( St) is a scalar process, while
+Table 4 gives conditions for matrix-valued processes. See Howard et al. (2020, Section 2) for details.
+46
+Condition on St ψ V t
+Discrete time, St =∑ti=1Xi, one-sided
+Bernoulli II Xt≤h, Et−1X2t ≤gh ψ B ght
+Bennett Xt≤c ψ P
+∑t
+i=1 Ei−1X2i
+Bernstein Et−1(Xt)k≤ k!2ck−2Et−1X2t ψG ∑ti=1 Ei−1X2i
+∗Heavy on left Et−1Ta(Xt)≤ 0 for all a> 0 ψN ∑ti=1X2i
+Bounded below Xt≥−c ψ E
+∑t
+i=1X2i
+Discrete time, St =∑ti=1Xi, two-sided
+Parametric Xt
+iid
+∼ F log EeλX1 t
+Bernoulli I −g≤Xt≤h ψ B ght
+Hoeﬀding-KS −gt≤Xt≤ht ψN
+∑t
+i=1ϕ(gi,hi)
+Hoeﬀding I −gt≤Xt≤ht ψN
+∑t
+i=1
+(
+gi+hi
+2
+)2
+∗Symmetric Xt∼−Xt|F t−1 ψN ∑ti=1X2i
+Self-normalized I Et−1X2t <∞ ψN 13∑ti=1(X2i + 2Ei−1X2i)
+Self-normalized II Et−1X2t <∞ ψN 12∑ti=1((Xi)2+ + Ei−1(Xi)2−)
+Cubic self-normalized Et−1|Xt|3 <∞ ψG ∑ti=1(X2i + Ei−1|Xi|3)
+Continuous time, one-sided
+Bennett ∆ St≤c ψ P ⟨S⟩t
+Bernstein Wm,t≤ m!2 cm−2Vt ψG Vt
+Continuous time, two-sided
+L´ evy EeλS1 <∞ log EeλS1 t
+Continuous paths ∆ St≡ 0 ψN ⟨S⟩t
+Table 3: Summary of suﬃcient conditions a real-valued, discrete- or continuous-time process ( St) to be sub-ψ with
+the given variance process. We assume ( St) is a martingale in every case except the starred ones ( ∗), when the ﬁrst
+moment E|Xt| need not exist. See Howard et al. (2020, Section 2) for details. One-sided conditions yield a bound
+on right-tail deviations only, while two-sided conditions yield bounds on both tails. For continuous-time cases, ∆ St
+denotes the jumps of ( St) and ⟨S⟩t denotes the predictable quadratic variation. For the heavy on left case, the
+truncation function is deﬁned as Ta(y) := (y∧a)∨−a for a >0 (Bercu and Touati, 2008). The function ϕ used in
+the Hoeﬀding-KS case is deﬁned in (97). The process Wm,t in the continuous-time Bernstein case is deﬁned in Fact
+2(c) of Howard et al. (2020) (cf. van de Geer (1995)).
+47
+Condition on Yt =∑ti=1Xt ψ Z t
+One-sided
+Bernoulli II Xt≼hId, Et−1X2t ≼ghId ψB ghtId
+Bennett Xt≼cId ψP
+∑t
+i=1 Ei−1X2i
+Bernstein Et−1(Xt)k≼ k!2ck−2Et−1X2t ψG ∑ti=1 Ei−1X2i
+Bounded below Xt≽−cId ψE
+∑t
+i=1X2i
+Two-sided
+Bernoulli I −gId≼Xt≼hId ψB ghtId
+Hoeﬀding-KS −GtId≼Xt≼HtId ψN
+∑t
+i=1ϕ(Gi,Hi)Id
+Hoeﬀding I −GtId≼Xt≼HtId ψN
+∑t
+i=1
+(Gi+Hi
+2
+)2
+Id
+Hoeﬀding II X2t ≼A2t ψN ∑ti=1A2i
+∗Symmetric Xt∼−Xt|F t−1 ψN ∑ti=1X2i
+Self-normalized I Et−1X2t <∞ ψN 13∑ti=1(X2i + 2Ei−1X2i)
+Self-normalized II Et−1X2t <∞ ψN 12∑ti=1((Xi)2+ + Ei−1(Xi)2−)
+Cubic self-normalized Et−1|Xt|3 <∞ ψG ∑ti=1(X2i + Ei−1|Xi|3)
+Table 4: Summary of suﬃcient conditions for Deﬁnition 1 when Yt =∑ti=1Xi withXt∈H d, the space of Hermitian,
+d×d matrices, taking St =γmax(Yt) andVt =γmax(Zt). We assume EXt = 0 and hence (Yt) is a martingale in every
+case except the symmetric∗ case, when the ﬁrst moment E|Xt| need not exist. See Howard et al. (2020, Section 2) for
+details. One-sided conditions yield a bound on right-tail deviations only, while two-sided conditions yields bounds on
+both tails. The function ϕ used in the Hoeﬀding-KS case is deﬁned in (97).
+48

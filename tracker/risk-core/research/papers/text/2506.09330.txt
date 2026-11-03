@@ -1,0 +1,910 @@
+arXiv 2506.09330  https://arxiv.org/abs/2506.09330
+
+arXiv:2506.09330v1  [econ.GN]  11 Jun 2025
+TrendFolios®: A Portfolio Construction Framework for Utilizing
+Momentum and Trend-Following In a Multi-Asset Portfolio
+Joseph Lu1, Randall R. Rojas 2, Fiona C. Yeung 3, Patrick D. Convery2
+1Conscious Capital Advisors, LLC.
+2Department of Economics
+University of California, Los Angeles
+Los Angeles, CA 90095
+3Walmart Labs
+ABSTRACT
+We design a portfolio construction framework and implement an active in-
+vestment strategy utilizing momentum and trend-following signals across mul-
+tiple asset classes and asset class risk factors. We quantify the performance of
+this strategy to demonstrate its ability to create excess returns above industry
+standard benchmarks, as well as manage volatility and drawdown risks over a
+22+ year period.
+1. Introduction
+Conscious Capital Advisors is an investment advisory firm that combines rigorous
+research with proprietary analytics to construct and manage portfolios with the aim of
+delivering superior risk-adjusted returns and long-term value for our clients. Our firm
+approach merges deep manager research expertise with innovative technologies, enabling
+efficient implementation; reducing both implicit and explicit costs. This paper examines
+one of our most basic algorithms, allowing readers to evaluate our investment philosophy
+and potential for generating long-term excess returns.
+TrendFolios®, like other momentum or trend-following approaches, aims to buy or
+hold assets with rising price trends and sell or not hold assets with price trends that are
+falling within its investment portfolio. These types of strategies analyze historical prices
+and returns across multiple timeframes to generate technical studies-such as moving aver-
+ages, volatility measures, trading ranges, and price spreads-which are then converted into
+indicators or trading signals. Notably, momentum or trend-following strategies typically
+– 2 –
+do not incorporate underlying economic theories or traditional valuation methods derived
+from corporate fundamentals. Liquidity and trading volume are also often critical factors
+in momentum and trend-following strategies, as they must be sufficient to accommodate
+time-sensitive execution when trading signals occur. Holding periods can range from min-
+utes to weeks, with stop-loss orders often employed for drawdown management during
+volatile market environments.
+Successful implementation of such strategies requires precise calibration of multiple
+variables: trend identification methodology, entry-exit point identification, position sizing,
+risk management, trade implementation, among others. The complexity of optimizing
+these interdependent variables has led to a large variety of approaches within these types
+of strategies on the market. TrendFolios® sets forth a robust, streamlined methodology for
+addressing these challenges and demonstrates its effectiveness through empirical evidence.
+2. Literature Review
+Momentum and trend-following strategies have a well-documented history of perfor-
+mance across market cycles, with extensive academic research validating their effectiveness
+in delivering excess returns while managing volatility and limiting drawdowns. Early work
+by Jegadeesh & Titman (1993) established the “momentum effect,” showing that “mo-
+mentum investing strategies provide abnormal returns in different stock markets,” with
+profitability that was “not due to their systematic risk or to delayed stock price reactions
+to common factors.” Carhart (1997) also famously observed that “mutual funds with high
+returns last year have higher-than-average expected returns next year, but not in years
+thereafter.”
+Since these seminal publishings, general consensus has concluded that the momentum
+effect has its long-term effectiveness rooted in the fundamental aspects of slow-changing
+human behavior. Antonacci (2015) explains that “the most common explanations for
+both momentum and trend-following profits have to do with behavioral factors, such as
+anchoring, herding, and the disposition effect.” This behavioral basis is further supported
+by Chen et. al. (2014), who identify that “anchoring bias” and the “disposition ef-
+fect”’ are “important factors explaining the momentum effect.” Multiple literature reviews
+(Du (2010); Sondergaard & Ole (2010); Dhankar & Maheshwari (2016)) confirm that
+risk adjustments (i.e. beta, size, book-to-market) “do not appear to explain momentum”
+suggesting a non-rational, behavioral component.
+The historical outperformance of momentum and trend-following strategies is well-
+– 3 –
+documented in academic literature. Lemperiere (2014) established “the existence of
+anomalous excess returns based on trend-following strategies across four asset classes (com-
+modities, currencies, stocks, bonds) and over very long time scales.” They used for their
+studies “...both futures time series, that exist since 1960, and spot time series that allow
+us to go back to 1800 on commodities and indices.” The excess returns were statistically
+significant and “very stable, both across time and asset classes”. Similarly, Hurst et. al.
+(2017) constructed a “...time-series momentum strategy all the way back to 1880 using
+historical data from a number of sources”. They found that “time-series momentum has
+been consistently profitable throughout the past 137 years.”, and Asness et al. (2013),
+demonstrated “evidence on the return premia to value and momentum strategies globally
+across asset classes”. Antonacci (2015) analyzed absolute momentum for stocks, bonds,
+and real assets and determined that “absolute momentum can effectively identify regime
+change and add significant value as ... trend following overlay.” He concluded that “trend
+determination through absolute momentum can help one navigate downside risk, take ad-
+vantage of regime persistence, and achieve higher risk-adjusted returns.”
+However, the post-2008 era has introduced new challenges. While Faber (2006)
+demonstrated a trend-following methodology that “improved risk-adjusted returns across
+five asset classes while achieving relatively lower volatility and drawdown,” and Moskowitz
+et. al. (2011) identified “significant time series momentum in equity, currency, commod-
+ity, and bond futures,” suggesting that a “diversified portfolio of time series momentum
+strategies across all asset classes delivers substantial abnormal returns,” the landscape has
+shifted. Lo (2016) argues that increased central bank intervention has fundamentally
+altered market dynamics, creating what he terms “adaptive markets” where traditional
+strategies must evolve. We hypothesize that drastic monetary and fiscal policies since the
+Global Financial Crisis of 2008 have effectively crowded out traditional active manage-
+ment approaches. In addition, the evolution of technology has also compressed trading
+timeframes and increased the speed of trend analysis. Chincarini (2012) documents how
+technological advancement has enabled shorter-term strategies to effectively counter-trade
+longer-term momentum positions, requiring new approaches to traditional momentum im-
+plementation.
+Despite this recent shift, industry research indicates that momentum and trend-
+following strategies remain valuable tools for institutional investors and registered invest-
+ment advisors alike, primarily due to their transparency, instinctual promise of safety,
+and ease of interpretability. In response to this continued demand, we have created
+TrendFolios®, a portfolio construction framework built on established research demon-
+strating the simplicity and effectiveness of combining trend-following and momentum trad-
+– 4 –
+ing signals with inverse volatility weighting.
+Plessis (2016) studied a basic directional momentum strategy which relies on the
+idea that “an asset with a higher than average return will continue to have a higher re-
+turn in the next period.” They then implemented a risk management approach using a
+volatility weighting methodology which reduced positions when volatility was high, and
+increased investment when volatility was low. They found for “empirical results for mo-
+mentum strategies applied to US industry portfolios” such volatility weighting is “relevant
+for the improvement in Sharpe ratios”. This finding was reinforced by Shimizu & Shio-
+hama (2020), whose inverse volatility weighting methodology significantly outperformed
+market capitalization weighted portfolios across multiple markets. Clare (2012) demon-
+strated for commodity futures, that when combined with proper diversification, momentum
+and trend-following strategies can “lead to portfolios which offer attractive risk adjusted
+returns” and that “robust alpha survives after accounting for a wide variety of systemic
+risk”. According to the paper, “the marginal impact of applying trend-following methods
+far outweighs momentum and risk parity adjustments in terms of risk-adjusted returns and
+limiting downside risk. Overall, this emphasizes the importance of trend-following as an
+investment strategy in the commodity futures context.” Clare et al. (2013) also studied
+the performance of the 1,000 largest US stocks from 1968 through 2011 using a variety of
+indexing approaches (relative to a market cap weighted index approach) and determined
+that there are a wide variety of alternative indexing approaches that outperform a standard
+market cap weighting, which included an inverse volatility scheme. This verifies that this
+weighting approach is applicable in asset classes outside of commodities.
+We implement the empirical insights provided by these authors into TrendFolios ®.
+Built upon this foundation of academic research, TrendFolios® delivers a sophisticated yet
+accessible investment solution for institutional investors and registered investment advisors
+alike.
+3. Methodology
+TrendFolios® integrates momentum investing, trend-following methodologies, and in-
+verse volatility weighting with periodic rebalancing. The process employs a fully quantita-
+tive, rules-based approach for portfolio construction and implementation. This framework
+allows for customized security selection based on investor preferences.
+To demonstrate the effectiveness of our framework, we have constructed sample asset
+class strategies that utilize factor exchange traded funds (“ETFs”) or ETFs representing
+– 5 –
+alternative investment categories. These strategies aim to generate excess returns over
+benchmarks by capturing trending risk factors (or categories) in equities, fixed income,
+and alternatives while maintaining the volatility management and downside protection
+inherent in momentum and trend-following approaches. We evaluate this methodology
+using historical data, specifically prices of U.S. securities from 1997 through 2024.
+3.1. Security Selection and Data Sources
+Table 1 presents the ETFs selected for the equity, fixed income, and alternative in-
+vestment strategies, along with their asset class subset description, and associated asset
+class risk factors. Details of the asset class risk factors are discussed in Appendix A. Asset
+class risk factors or categories used in the strategy are as follows:
+1. Equity Factors
+• Valuation
+• Market capitalization
+• Geographic exposure
+2. Fixed Income Factors:
+• Inflation protection
+• Duration
+• Credit quality
+• Currency exposure
+3. “Alternative Investment” Factors:
+• Private capital
+• Real estate
+• Various Commodity Exposures
+Our analysis utilizes in-sample returns data for the ETFs, which range from De-
+cember 23, 1997 through December 27, 2023. As we accumulate additional returns data
+post-publication, we will be able to evaluate the out-of-sample performance of the model.
+Our analysis utilizes only ETF data that were available for trading during each historical
+– 6 –
+period, rather than index data. The model’s universe expands as new ETFs are introduced,
+creating a realistic representation of implementable strategies over time. This conserva-
+tive approach likely understates potential performance, as a broader opportunity set would
+have provided additional investment breadth for return generation.
+List of ETFs included in our Portfolio.
+ETF Proxy Asset Class Asset Class Subset Description Risk Factors
+IWD Equity Large U.S. Growth Stocks Growth
+IWF Equity Large U.S. Value Stocks Value
+IWN Equity Small U.S. Growth Stocks Capitalization, Growth
+IWO Equity Small U.S. Value Stocks Capitalization, Value
+EF A Equity Large Non-U.S. “Developed Market” Stocks Domicile
+SCZ Equity Small Non-U.S. “Developed Market” Stocks Domicile, Capitalization
+EEM Equity Non-U.S. ”Emerging Market” Stocks Domicile
+TIP Fixed Income U.S. Inflation-Protected Bonds Inflation
+SHY Fixed Income U.S. Short Duration Bonds Short Duration
+TLT Fixed Income U.S. Long Duration Bonds Long Duration
+LQD Fixed Income U.S. Investment Grade Credit IG Credit Spreads
+HYG Fixed Income U.S. High Yield Credit HY Credit Spreads
+BWX Fixed Income Non-U.S. “Developed Market” Bonds Developed Market Currencies
+EMB Fixed Income Non-U.S. “Emerging Market” Bonds Emerging Market Currencies
+BIZD Alternative Private Equity Private Capital
+BKLN Alternative Private Credit Private Capital
+R WR Alternative Real Estate Real Estate
+USO Alternative Energy Commodities Commodity
+DBA Alternative Agricultural Commodities Commodity
+DBB Alternative Industrial Metal Commodities Commodity
+GLD Alternative Precious Metal Commodities Commodity
+Table 1: List of ETFs included in our Portfolio.
+3.2. T rading Signal Generation
+The trading signal employs two primary components:
+1. Momentum Signal: Utilizes a line-based approach, reflects quantitative momentum
+approaches
+2. Trend-Following Signal: Utilizes a curved-based approach, reflects technical trend-
+– 7 –
+following approaches
+Our trading algorithm diversifies across two existing methodologies inspired by Faber
+(2006) and Moskowitz et. al. (2011), and is based on a temporal integration of relative
+volatility (or tracking error), spreads and relative return signals derived from price ratios,
+each consisting of different calendar-based time frames, ranging from daily to annual. These
+signals are assigned to two ranking logics that capture the relative price momentum action
+and trend dynamics. In the final step, the momentum and trend-following signals are fused
+via a “majority of vote” algorithm, which then triggers inclusion (or exclusion if it does
+not meet our strict performance criteria) of the asset in the portfolio.
+As part of the inputs used, relative returns are computed for various frequencies to
+capture short-term and long-term dynamics. Therefore, for a given frequency ν (e.g., 1
+day, 5 days, and so on), we compute them according to:
+Rt = Pt − Pt−1Pt−1 × 100% (1)
+where:
+• Rt is the relative return at time t
+• Pt is the adjusted closing price ratio at time t
+• Pt−1 is the adjusted closing price ratio at time t − 1
+• ν represents the time frequency (e.g., daily, weekly, monthly)
+The next metric computed is a compounded relative return, CRt, computed according to:
+CRt = CRt−1
+
+1 + Rνt
+100
+
+(2)
+where:
+• CRt is the compounded relative return at time t
+• CRt−1 is the compounded relative return at time t − 1
+– 8 –
+• Rνt is the relative return for frequency ν at time t
+which is then used to to compute the series of daily normalized returns, Rν=1t given by
+R1t = CRt − CRt−1CRt−1 × 100% (3)
+For ν ≥ 5, the normalized returns are computed according to:
+Rν≥5t =
+
+1 + R1t
+100
+ 
+1 + R1t−1
+100
+
+· · ·
+
+1 + R1t−ν+1
+100
+
+− 1 (4)
+for different frequencies. The current frequencies align to calendar based metrics.
+Similar to our normalized returns metrics, we compute respective volatility metrics
+for each of the returns frequencies according to
+σνt =
+s Pn
+i=0(Rνt−i − Rν)
+n − 1 (5)
+where:
+• σνt is the relative volatility at time t for frequency ν
+• Rνt−1 is the relative return at time t − 1 for frequency ν
+• R
+ν
+is the mean relative return for frequency ν
+• n is the number of periods in the calculation window
+The spread signals, Sνt are computed based on the daily relative returns R1t as follows:
+Sνt = R1t − RνRν + σνt100 (6)
+where:
+– 9 –
+• Sνt is the spread at time t for frequency ν
+• R1t is the daily relative return at time t
+• R
+ν
+is the mean relative return for frequency ν
+• σνt is the relative volatility at time t for frequency ν
+We then take all the calculation results for each item in our investment universe, and
+then assign a 1 if the investment meets the portfolio inclusion criterion, and a 0 otherwise.
+Across observation timeframes, this is represented as a binary matrix. The results from this
+step are integrated in both momentum and trend-following signals. A combination logic
+is used with the momentum and trend-following signals to finalize the inclusion/exclusion
+decision on each investment.
+3.3. Portfolio Construction and T rade Implementation
+After identifying all the positions that meet the inclusion criteria, we construct a
+portfolio with its components weighted using a standard inverse volatility method, but
+substitute standard deviation for tracking error (TE). Tracking error is the amount of
+volatility an asset has relative to a benchmark. The tracking error quantifies how closely
+the portfolio follows its benchmark by measuring the standard deviation of the difference
+between portfolio and benchmark returns:
+T E=
+vuut 1
+n − 1
+nX
+i=1
+[(Rp,i − Rb,i) − (Rp − Rb)]2 (7)
+where:
+• Rp,i is the portfolio return at time i
+• Rb,i is the benchmark return at time i
+• Rp is the mean portfolio return over the period
+• Rb is the mean benchmark return over the period
+– 10 –
+• n is the number of periods
+Portfolio allocations are then determined using an inverse risk weighting approach -
+meaning we allocate more capital to less volatile factors and less capital to more volatile
+ones, as indicated by tracking error. For each asset i, the weight wi is calculated as:
+ωi =
+1
+T EiPn
+j=1(1/T Ej) (8)
+where:
+• is the relative volatility of asset i
+• n is the total number of selected assets
+With this weighting scheme, we construct a portfolio in which each asset in the port-
+folio contributes approximately the same amount of relative risk to the overall portfolio,
+and the overall tracking error of the portfolio can be lowered. Every two weeks, we analyze
+each risk factor’s attractiveness relative to its benchmark, and then the portfolio is then
+methodically traded to reflect these new weightings every two weeks, ensuring our risk
+management remains structured and disciplined.
+4. T rendF olios® Asset Class Strategy Results
+We evaluate the effectiveness of the TrendFolios ® portfolio construction framework
+by comparing performance created by each asset class strategy against established industry
+standard benchmarks. For the performance of the equity strategy, we use the S&P 500
+index as our benchmark. For both fixed income and alternative investment strategies,
+the Bloomberg U.S. Aggregate Bond Index serves as the benchmark. The decision to
+benchmark alternatives against the bond index reflects the idea that most “alternative”
+investments generally serve as some form of fixed income substitute in portfolio allocation.
+We also construct a moderate balanced portfolio that integrates all three asset class
+strategies, allocating 60% to equities, 30% to fixed income, and 10% to alternatives. A
+static 10% allocation to alternatives is taken from the fixed income allocation, representing
+again, alternatives as a fixed income substitute. We evaluate this strategy against the
+– 11 –
+traditional 60/40 portfolio (60% S&P 500 Index, 40% Bloomberg U.S. Aggregate Bond
+Index), which remains a standard allocation for U.S. investors with a moderate risk profile.
+To provide comprehensive context for capital allocators, we present both gross-of-
+fee and hypothetical net-of-fee performance metrics, enabling a clear assessment of the
+strategy’s economic value proposition. The current fee assumption is 0.55% of assets under
+management and is deducted monthly.
+4.1. T rendF olios® Fixed Income Strategy
+The TrendFolios® Fixed Income Strategy applies momentum and trend-following sig-
+nals to a diversified universe of fixed income ETFs representing key risk factors includ-
+ing inflation protection, duration, credit quality, and currency exposures. The strategy
+utilizes a quantitative, rules-based approach that combines line-based momentum signals
+with curved-based trend-following indicators to identify attractive fixed income segments.
+Portfolio construction employs inverse volatility weighting, allocating more capital to less
+volatile fixed income factors and less capital to more volatile ones. The strategy conducts
+analysis every two weeks to determine each risk factor’s attractiveness relative to its bench-
+mark, with methodical portfolio rebalancing to reflect these new weightings, maintaining
+structured and disciplined risk management.
+– 12 –
+Rolling Annualized Excess Returns of theT rendF olios® Fixed Income
+Strategy
+Fig. 1.— 1-Year (blue), 3-Year (red), and 5-Year (yellow) rolling annual excess returns
+from the TrendFolios® Fixed Income Strategy backtest performance.
+– 13 –
+Growth of a Dollar ( $) in the T rendF olios® Fixed Income Strategy
+Fig. 2.— The TrendFolios ® Fixed Income Strategy (blue) backtest performance against
+the Bloomberg U.S. Aggregate Bond Index (red).
+– 14 –
+T rendF olios® Fixed Income Strategy Annualized Performance
+Annualized as of 12/26/2023 1-Y ear 3-Y ear 5-Y ear 10-Y ear Since Inception
+Composite Net Return (%) 12.09 0.73 10.22 5.22 5.79
+Composite Gross Return (%) 12.70 1.28 10.82 5.79 6.38
+Index Return (%) 2.08 -5.74 -1.37 -0.69 -0.10
+Excess Return (net) 10.01 6.46 11.59 5.90 5.89
+Excess Return (gross) 10.62 7.02 12.19 6.48 6.48
+Composite Standard Deviation 18.59 17.41 19.03 15.82 17.49
+Index Standard Deviation 9.22 7.36 6.37 4.96 4.51
+Composite Sharpe Ratio 0.65 0.04 0.54 0.33 0.33
+Index Sharpe Ratio 0.23 -0.78 -0.22 -0.14 -0.02
+Tracking Error 15.11 14.25 17.37 15.08 17.45
+Information Ratio 0.66 0.45 0.67 0.39 0.34
+Table 2: Quantitative performance metrics for the TrendFolios ® Fixed Income Strategy
+compared to the baseline performance.
+– 15 –
+T rendF olios® Fixed Income Strategy Calendar Y ear Performance
+Calendar Y ear Strategy Strategy Benchmark Excess Return Excess Return
+(Gross) (Net) (Gross) (Net)
+2023 12.70% 12.09% 2.08% 10.62% 10.01%
+2022 -16.35% -16.82% -15.04% -1.30% -1.77%
+2021 10.21% 9.61% -3.42% 13.63% 13.03%
+2020 34.27% 33.55% 5.41% 28.87% 28.15%
+2019 19.81% 19.16% 5.71% 14.09% 13.44%
+2018 -11.16% -11.65% -2.78% -8.38% -8.87%
+2017 18.88% 18.23% 0.93% 17.94% 17.30%
+2016 1.55% 1.00% 0.00% 1.55% 1.00%
+2015 -2.03% -2.57% -1.83% -0.20% -0.73%
+2014 0.00% -0.55% 3.81% -3.81% -4.36%
+2013 30.46% 29.76% -4.55% 35.01% 34.31%
+2012 15.27% 14.64% 0.92% 14.35% 13.72%
+2011 -9.03% -9.53% 4.81% -13.84% -14.34%
+2010 18.03% 17.39% 1.96% 16.07% 15.43%
+2009 37.08% 36.34% -0.97% 38.05% 37.32%
+2008 -46.71% -47.02% 3.00% -49.71% -50.02%
+2007 5.03% 4.46% 1.01% 4.02% 3.45%
+2006 19.55% 18.90% -1.00% 20.55% 19.90%
+2005 9.92% 9.32% -0.99% 10.91% 10.31%
+2004 16.35% 15.72% 0.00% 16.35% 15.72%
+Table 3: Calendar Year Performance Metrics for the TrendFolios® Fixed Income Strategy
+compared to the baseline performance.
+– 16 –
+4.2. T rendF olios® Equity Strategy
+The TrendFolios® Equity Strategy implements momentum and trend-following method-
+ology across equity ETFs representing various risk factors including valuation (growth vs.
+value), market capitalization (large vs. small), and geographic exposure (U.S., developed
+international, and emerging markets). This systematic approach uses a proprietary algo-
+rithm that combines quantitative momentum signals with technical trend-following indi-
+cators to determine portfolio inclusion or exclusion. The strategy employs tracking error
+measurements rather than standard deviation for its inverse volatility weighting scheme,
+allocating more capital to factors with lower tracking error and less capital to those with
+higher tracking error. This construction method aims to ensure each equity factor con-
+tributes approximately equal relative risk to the overall portfolio while capturing trending
+risk factors within the equity universe.
+– 17 –
+Rolling Annualized Excess Returns of the T rendF olios® Equity Strategy
+Fig. 3.— 1-Year (blue), 3-Year (red), and 5-Year (yellow) rolling annual excess returns
+from the TrendFolios® Equity Strategy backtest performance.
+– 18 –
+Growth of a Dollar ( $) in the T rendF olios® Equity Strategy
+Fig. 4.— The TrendFolios® Equity Strategy (blue) backtest performance against the S&P
+500 Index (red).
+– 19 –
+T rendF olios® Equity Strategy Annualized Performance
+Annualized (as of 12/26/2023) 1-Y ear 3-Y ear 5-Y ear 10-Y ear Since Inception
+Composite Net Return (%) 21.58 2.67 12.77 8.81 7.43
+Composite Gross Return (%) 22.24 3.24 13.39 9.41 8.02
+Index Return (%) 24.37 8.35 13.74 9.91 5.75
+Excess Return (net) −2.80 −5.67 −0.96 −1.10 1.67
+Excess Return (gross) −2.14 −5.11 −0.35 −0.50 2.26
+Composite Standard Deviation 16.41 17.94 19.39 15.88 16.36
+Index Standard Deviation 14.67 17.71 18.64 15.32 15.42
+Composite Sharpe Ratio 1.32 0.15 0.66 0.55 0.45
+Index Sharpe Ratio 1.66 0.47 0.74 0.65 0.37
+Tracking Error 6.08 7.76 7.18 5.96 6.26
+Information Ratio -0.46 -0.73 -0.13 -0.18 0.27
+Table 4: Quantitative performance metrics for the TrendFolios® Equity Strategy compared
+to the baseline performance.
+– 20 –
+T rendF olios® Equity Strategy Calendar Y ear Performance
+Calendar Y ear Strategy Strategy Benchmark Excess Return Excess Return
+(Gross) (Net) (Gross) (Net)
+2023 22.24% 21.58% 24.37% -2.14% -2.80%
+2022 -23.20% -23.63% -19.49% -3.71% -4.14%
+2021 17.21% 16.58% 27.01% -9.80% -10.44%
+2020 34.65% 33.93% 16.13% 18.52% 17.80%
+2019 26.51% 25.83% 28.85% -2.34% -3.02%
+2018 -4.29% -4.82% -6.36% 2.07% 1.54%
+2017 18.34% 17.70% 19.42% -1.08% -1.72%
+2016 9.80% 9.20% 9.62% 0.17% -0.42%
+2015 -2.25% -2.78% -0.84% -1.40% -1.94%
+2014 7.87% 7.28% 11.23% -3.36% -3.95%
+2013 27.42% 26.74% 29.74% -2.32% -3.00%
+2012 15.30% 14.68% 13.43% 1.88% 1.25%
+2011 -5.64% -6.16% -0.26% -5.38% -5.90%
+2010 19.63% 18.98% 12.79% 6.83% 6.18%
+2009 35.29% 34.56% 23.35% 11.94% 11.21%
+2008 -37.26% -37.62% -38.32% 1.06% 0.70%
+2007 3.47% 2.91% 3.27% 0.21% -0.36%
+2006 20.09% 19.44% 13.81% 6.28% 5.63%
+2005 8.08% 7.49% 3.05% 5.03% 4.44%
+2004 12.22% 11.61% 8.63% 3.59% 2.98%
+2003 34.47% 33.75% 26.09% 8.38% 7.66%
+2002 -18.25% -18.70% -22.79% 4.54% 4.08%
+2001 2.76% 2.20% -12.83% 15.59% 15.02%
+Table 5: Calendar Year Performance Metrics for the TrendFolios ® Equity Strategy com-
+pared to the baseline performance.
+– 21 –
+4.3. T rendF olios® Alternatives Strategy
+The TrendFolios® Alternatives Strategy applies the momentum and trend-following
+framework to alternative investment ETFs spanning multiple categories including private
+capital (both private equity and private credit), real estate, and various commodity expo-
+sures (energy, agricultural, industrial metals, and precious metals). The strategy serves as a
+fixed income substitute in portfolio allocation, utilizing the same dual-signal approach that
+combines momentum indicators with trend-following signals through a “majority of vote”
+algorithm. Like the other TrendFolios ® strategies, it employs inverse volatility weighting
+for portfolio construction, but specifically targets alternative investments that historically
+could not be accessed through publicly traded exchanges. The strategy conducts bi-weekly
+analysis of each alternative category’s attractiveness relative to fixed income benchmarks,
+methodically adjusting allocations to reflect these assessments.
+Rolling Annualized Excess Returns of theT rendF olios® Alternatives Strategy
+Fig. 5.— 1-Year (blue), 3-Year (red), and 5-Year (yellow) rolling annual excess returns
+from the TrendFolios® Alternatives Strategy backtest performance.
+– 22 –
+Growth of a Dollar ( $) in the T rendF olios® Alternatives Strategy
+Fig. 6.— The TrendFolios® Alternatives Strategy (blue) backtest performance against the
+Bloomberg U.S. Aggregate Bond Index (red).
+– 23 –
+T rendF olios® Alternatives Strategy Annualized Performance
+Annualized (as of 12/26/2023) 1-Y ear 3-Y ear 5-Y ear 10-Y ear Since Inception
+Composite Net Return (%) 7.22 5.53 4.45 −0.73 4.61
+Composite Gross Return (%) 7.81 6.11 5.02 -0.18 5.19
+Index Return (%) 2.08 -5.74 -1.37 -0.69 -0.10
+Excess Return (net) 5.14 11.27 5.82 -0.04 4.71
+Excess Return (gross) 15.73 11.85 6.39 0.51 5.29
+Composite Standard Deviation 10.08 9.59 10.32 11.00 15.80
+Index Standard Deviation 9.22 7.36 6.37 4.96 4.51
+Composite Sharpe Ratio 0.72 0.58 0.43 -0.07 0.29
+Index Sharpe Ratio 0.23 -0.78 -0.22 -0.14 -0.02
+Tracking Error 13.49 13.20 13.06 12.83 16.54
+Information Ratio 1.17 0.90 0.53 0.04 0.28
+Table 6: Quantitative performance metrics for theTrendFolios® Alternatives Strategy com-
+pared to the baseline performance.
+– 24 –
+T rendF olios® Alternatives Strategy Calendar Y ear Performance
+Calendar Y ear Strategy Strategy Benchmark Excess Return Excess Return
+(Gross) (Net) (Gross) (Net)
+2023 18.45% 17.81% 2.08% 16.37% 15.73%
+2022 -15.27% -15.74% -15.04% -0.23% -0.70%
+2021 21.15% 20.49% -3.42% 24.56% 23.91%
+2020 12.38% 11.77% 5.41% 6.97% 6.36%
+2019 -1.46% -2.00% 5.71% -7.18% -7.72%
+2018 -13.50% -13.98% -2.78% -10.72% -11.20%
+2017 5.33% 4.76% 0.93% 4.40% 3.82%
+2016 -14.12% -14.60% 0.00% -14.12% -14.60%
+2015 -9.03% -9.53% -1.83% -7.19% -7.70%
+2014 8.27% 7.68% 3.81% 4.46% 3.87%
+2013 1.14% 0.59% -4.55% 5.69% 5.13%
+2012 6.91% 6.33% 0.92% 5.99% 5.41%
+2011 -2.38% -2.92% 4.81% -7.19% -7.73%
+2010 2.44% 1.88% 1.96% 0.48% -0.08%
+2009 37.43% 36.69% -0.97% 38.40% 37.67%
+2008 -21.83% -22.28% 3.00% -24.83% -25.28%
+2007 29.38% 28.68% 1.01% 28.37% 27.67%
+2006 15.69% 15.06% -1.00% 16.69% 16.06%
+2005 23.39% 22.72% -0.99% 24.38% 23.71%
+2004 24.00% 23.33% 0.00% 24.00% 23.33%
+Table 7: Calendar Year Performance Metrics for the TrendFolios ® Alternatives Strategy
+compared to the baseline performance.
+– 25 –
+4.4. T rendF olios® Moderate Portfolio Strategy
+The TrendFolios® Moderate Portfolio Strategy integrates the three individual Trend-
+Folios® strategies into a balanced portfolio framework, allocating 60% to the Equity Strat-
+egy, 30% to the Fixed Income Strategy, and 10% to the Alternatives Strategy. This com-
+bined approach maintains the core momentum and trend-following methodology across
+multiple asset classes while providing a complete portfolio solution for investors with mod-
+erate risk tolerance. The 10% allocation to alternatives comes from the fixed income
+portion, representing alternatives as a fixed income substitute. The integrated strategy
+preserves the individual components’ disciplined portfolio construction methods, including
+quantitative trading signals, trend identification, and inverse volatility weighting. This
+unified framework allows for consistent application of momentum principles across diverse
+market segments within a single portfolio structure.
+Rolling Annualized Excess Returns of theT rendF olios® Moderate Portfolio
+Strategy
+Fig. 7.— 1-Year (blue), 3-Year (red), and 5-Year (yellow) rolling annual excess returns
+from the TrendFolios® Moderate Portfolio Strategy backtest performance.
+– 26 –
+Growth of a Dollar ( $) in the T rendF olios® Moderate Portfolio
+Fig. 8.— The TrendFolios ® Moderate PortfolioStrategy (blue) backtest performance
+against the Bloomberg U.S. Aggregate Bond Index (red).
+– 27 –
+T rendF olios® Moderate Portfolio Strategy Annualized Performance
+Annualized (as of 12/26/2023) 1-Y ear 3-Y ear 5-Y ear 10-Y ear Since Inception
+Composite Net Return (%) 17.35 2.55 11.35 6.89 7.35
+Composite Gross Return (%) 17.98 3.11 11.95 7.48 7.94
+Index Return (%) 15.05 2.72 7.80 5.81 4.80
+Excess Return (net) 2.29 -0.17 3.54 1.08 2.55
+Excess Return (gross) 2.93 0.40 4.15 1.66 3.14
+Composite Standard Deviation 15.62 16.07 17.60 14.53 15.36
+Index Standard Deviation 12.11 12.89 12.64 10.08 9.50
+Composite Sharpe Ratio 1.11 0.16 0.64 0.47 0.48
+Index Sharpe Ratio 1.24 0.21 0.62 0.58 0.51
+Tracking Error 7.76 7.09 7.77 6.61 7.74
+Information Ratio 0.44 -0.01 0.47 0.17 0.33
+Table 8: Quantitative performance metrics for theTrendFolios® Moderate Portfolio Strat-
+egy compared to the baseline performance.
+– 28 –
+T rendF olios® Moderate Portfolio Strategy Calendar Y ear Performance
+Calendar Y ear Strategy Strategy Benchmark Excess Return Excess Return
+(Gross) (Net) (Gross) (Net)
+2023 19.13% 18.49% 15.05% 4.08% 3.43%
+2022 -20.18% -20.63% -17.42% -2.76% -3.20%
+2021 15.56% 14.94% 14.07% 1.49% 0.86%
+2020 32.39% 31.68% 12.53% 19.86% 19.15%
+2019 21.61% 20.95% 19.38% 2.22% 1.57%
+2018 -7.28% -7.80% -4.65% -2.63% -3.14%
+2017 17.22% 16.58% 11.70% 5.52% 4.89%
+2016 4.81% 4.23% 5.85% -1.04% -1.61%
+2015 -2.72% -3.25% -1.01% -1.71% -2.25%
+2014 5.59% 5.01% 8.30% -2.71% -3.29%
+2013 25.50% 24.82% 14.93% 10.57% 9.89%
+2012 14.49% 13.87% 8.40% 6.08% 5.46%
+2011 -6.06% -6.58% 2.10% -8.16% -8.68%
+2010 17.50% 16.87% 8.91% 8.60% 7.96%
+2009 36.58% 35.85% 13.54% 23.04% 22.31%
+2008 -38.38% -38.73% -23.70% -14.68% -15.03%
+2007 6.40% 5.82% 2.51% 3.89% 3.31%
+2006 19.53% 18.88% 7.69% 11.84% 11.20%
+2005 10.19% 9.59% 1.51% 8.68% 8.08%
+2004 14.76% 14.13% 5.18% 9.57% 8.95%
+Table 9: Calendar Year Performance Metrics for the TrendFolios ® Moderate Portfolio
+Strategy compared to the baseline performance.
+– 29 –
+5. Performance Results Discussion
+The TrendFolios® framework demonstrates varied performance across asset classes
+from 1997 through 2023. The fixed income strategy delivered the most consistent outper-
+formance, generating substantial excess returns of 6.48% annually since inception over the
+Bloomberg U.S. Aggregate Bond Index, with particularly strong results during the post-
+2016 period. This strategy maintained positive rolling 5-year excess returns throughout
+most of the evaluation period, with only a brief interruption during the 2008 financial crisis.
+The equity strategy showed mixed results, producing excess returns of 2.26% annu-
+ally since inception versus the S&P 500 Index. While underperforming in the post-Global
+Financial Crisis period, it demonstrated downside protection during market stress events
+including the 2020 pandemic. The performance differential with the benchmark became
+more pronounced after 2020, suggesting improved effectiveness in recent market environ-
+ments.
+The alternatives strategy functioned effectively as a fixed income substitute, generating
+5.29% excess annual returns since inception compared to the Bloomberg U.S. Aggregate
+Bond Index. Its success stems from a diverse investment universe with varying correlation
+profiles, enabling dynamic tactical allocation across equity, fixed income, and commodity
+risk factors.
+When combined into a moderate balanced portfolio (60% equity, 30% fixed income,
+10% alternatives), the approach delivered 3.14% annual excess returns since inception
+versus a traditional 60/40 portfolio. Risk-adjusted metrics show information ratios ranging
+from 0.28 to 0.34 across strategies, indicating consistent generation of excess returns relative
+to the tracking error assumed. The methodology’s inverse volatility weighting approach
+appears particularly effective in the fixed income space, with metrics showing controlled
+volatility relative to return generation.
+The framework’s performance across various market regimes validates the ongoing
+relevance of momentum and trend-following strategies, even amid unprecedented central
+bank intervention and technological advancement in market analysis.
+6. Conclusion
+TrendFolios® is an elegant solution for institutional investors and registered invest-
+ment advisors to capitalize on the enduring value of systematic trend-following and mo-
+– 30 –
+mentum strategies. By combining established academic principles with practical imple-
+mentation considerations, we have developed a framework that delivers meaningful results
+across multiple asset classes. The strategy’s effectiveness is particularly evident in fixed
+income markets, where it has generated consistent excess returns through various market
+environments.
+Our research validates the ongoing relevance of trend-following approaches, even in
+an era of unprecedented market intervention and technological advancement. While equity
+markets have presented unique challenges post-GFC, our multi-factor approach has proven
+robust, with particularly strong results in fixed income and alternatives. The framework’s
+ability to adapt across different market regimes demonstrates the fundamental strength
+of combining momentum signals with sophisticated risk management techniques. The
+alternatives component of TrendFolios ® has proven especially valuable, functioning as
+an effective fixed income substitute while providing dynamic tactical allocation benefits.
+This success highlights the advantages of our systematic approach to capturing diverse risk
+premia across asset classes. The strategy’s transparent, rules-based methodology offers
+institutional investors a practical solution for implementing academic insights in portfolio
+management.
+Looking forward, we have identified multiple avenues for enhancing TrendFolios ®
+effectiveness. These developments including parameter optimization, increased data fre-
+quency, advanced risk modeling, and universe expansion-build upon our proven foundation
+while maintaining the strategy’s core benefits of transparency and efficiency. As markets
+continue to evolve, we believe our systematic approach to capturing trend and momentum
+effects, combined with sophisticated risk management, positions TrendFolios ® to deliver
+continued value for investors seeking robust, research-driven portfolio solutions.
+7. F uture Research and Development Roadmap
+While impressive results have been generated from applying our TrendFolios® frame-
+work on factor ETFs, we view the base algorithm as a foundation for continued innovation
+from our firm. We seek to continue our research with a focus in several key areas that we
+believe will greatly enhance the existing framework?s effectiveness and broaden its appli-
+cation:
+1. Parameter Optimization- The current model employs standardized calendar-based
+evaluation periods across all asset classes. We seek to develop asset-specific param-
+– 31 –
+eters that recognize the unique behavioral characteristics of each market segment,
+implementing adaptive time frame selection to improve signal quality and market
+regime identification
+2. Increased Data F requency-Our current analysis utilizes only daily data, and we
+have the capacity to conduct analysis at intraday frequencies. We seek to expand our
+study to intraday analysis and develop the technological infrastructure necessary to
+capture shorter-term inefficiencies with more frequent trading.
+3. Enhanced Drawdown Management- Stop-loss mechanisms are a common down-
+side protection strategy among systematic traders that has not been implemented in
+the current framework. We seek to explore various stop-loss mechanisms and dynamic
+risk controls to enhance risk management.
+4. Increased Algorithm Sophistication- Building on our current trading signals,
+we will incorporate more advanced algorithms in this area, which could utilize new
+artificial intelligence developments, as well as novel forecasting methodologies. These
+enhancements would aim to improve pattern recognition and adapt more effectively
+to evolving market conditions.
+5. Enhanced Risk F orecasting- Our inverse volatility approach can be enhanced
+through correlation forecasting and more dynamic risk parity implementation. This
+evolution might enable more responsive asset allocation while optimizing implemen-
+tation efficiency.
+6. Signal F usion- Consider weighting the frequency moments rather than using the
+current straight majority of vote algorithm when fusing signals.
+7. Investment Universe Expansion- We seek to significantly broaden our invest-
+ment opportunity set, evaluating additional risk factors, fundamental indices, and
+additional alternative assets such as digital assets (cryptocurrencies), to capture di-
+verse sources of return while maintaining liquidity and transparency.
+We believe TrendFolios® provides us with a strong start to demonstrate Conscious
+Capital Advisors’ capacity for innovation in systematic investment management. Through
+ongoing research and development, we aim to enhance the model?s effectiveness across mul-
+tiple dimensions, and aim to create a powerful investment solution to meet the investment
+challenges of the modern age.
+– 32 –
+REFERENCES
+Antonacci, G. “Absolute Momentum: a Simple Rule-based Strategy and Universal Trend
+Following Overlay”, The Social Science Research Network (SSRN), June 2015.
+Asness, C. S., Moskowitz, T. J., Pedersen, L. H. “Value and Momentum Everywhere”, The
+Journal of Finance, Vol. LXVIII, No. 3, June 2013
+Carhart, M. M. “On Persistence in Mutual Fund Performance”, The Journal of Finance,
+Vol. LII, No. 1, March, 1997.
+Chen, R., H. Chen, and Z. Zheng “Behavioral Finance Interpretation of Momentum Effect”,
+Systems Engineering - Theory & Practice, Vol. 34, No. 3, March, 2014.
+Chincarini, L. B. “The Crisis of Crowding: Quant Copycats, Ugly Models, and the New
+Crash Normal”, Wiley Publishers, 2012.
+Clare, A. N., J. Seaton, P. N. Smith, and S. Thomas “Trend Following, Risk Parity and
+Momentum in Commodity Futures”, Department of Economics and Related Studies,
+University of York, No. 12/28, 2012.
+Clare, A., N. Motson and S. Thomas “An evaluation of alternative equity indices Part 1:
+Heuristic and Optimised Weighting Schemes”, Cass Consulting, March, 2013a.
+Clare, A., N. Motson and S. Thomas “An evaluation of alternative equity indices Part 2:
+Fundamelta Weighting Schemes”, Cass Consulting, March, 2013b.
+Dhankar, R. S. and S. Maheshwari “Behavioural Finance: A new Paradigm to Explain
+Momentum Effect”, The Social Science Research Network (SSRN), May 27, 2016.
+Du, D. “Momentum and Behavior in Finance”,Northern Arizona University working paper,
+December, 2010.
+Faber, M. “A Quantitative Approach to Tactical Asset Allocation”, Cambria Capital,
+Working Paper, 2006
+Gratton, P. “Introduction to Momentum Trading’, Investopedia, Fall 2024.
+Hurst, B, Y. H. Ooi, L. H. Pederson. “A Century of Evidence on Trend-following Investing”,
+The Journal of Portfolio Management, Fall 2017.
+Jegadeesh, N., & Titman, S ‘Returns to buying winners and selling losers: implications for
+stock market efficiency”, Journal of Finance 48, pp 65-91, 1993.
+– 33 –
+Lemperiere, Y., C. Deremble, P Seager, M. Potters, J. P. Bouchaud. “Two Centuries of
+Trend Following”, Fund Management, 23 rue de l’Universite, 75007 Paris, France,
+2014. https://arxiv.org/abs/1404.3274v1
+Lo, A. W. 2016 “Adaptive Markets: Financial Evolution at the Speed of Thought”, Prince-
+ton University Press, 2016
+Moskowitz, T. J., Y. H. Ooi, and L. H. Pedersen ‘Time Series Momentum”, Journal of
+Financial Economics, December, 2011.
+J. Plessis, Hallerback, W. G. “Volatility Weighting Applied to Momentum Strategies’, The
+Social Science Research Network (SSRN), Fall 2016.
+Shimizu, H., T. Shiohama. “Constructing inverse factor volatility portfolios: A risk-based
+asset allocation for factor investing’, International Review of Financial Analysis,
+Vol 68, March, 2020.
+Sondergaard, M. A. & R. Ole. “The Momentum Effect on Stock Markets - a Literature
+Review and an Empirical Study,’, Masters Thesis for the Copenhagen Business
+School - Institute of Accounting and Auditing, 2010.
+A. Asset Class Definitions
+Asset ClassAn asset class is a group of investments that exhibit similar characteristics,
+behave similarly in the marketplace, and are subject to the same laws and regulations.
+Key characteristics of an asset classes include:
+• Assets within the class should be relatively homogeneous
+• Assets within the class should be diversifying
+• Asset classes should be mutually exclusive
+• The asset class should be large enough to be able to absorb a significant fraction of
+investors’ investable wealth
+This preprint was prepared with the AAS LATEX macros v5.0.
+– 34 –
+• The asset class should have the potential to earn positive real returns over time
+Types of Asset Classes include:
+Equities
+Equities represent partial ownership in companies, offering investors a way to partic-
+ipate in corporate growth and value creation over time. This ownership stake provides a
+claim on a company’s earnings and assets, but by legal structure, equity investors are the
+lowest on the priority list to receive assets in the case of a bankruptcy, after creditors.
+Key characteristics of equities include:
+• Represent residual claims on company assets and cash flows
+• Have unlimited upside potential but limited downside (to zero)
+• Generally provide higher expected returns than fixed income over long periods
+• Typically demonstrate higher volatility than fixed income
+• May provide partial inflation protection through earnings growth
+• Can provide income through dividend payments
+• Have indefinite life unless company is liquidated or acquired
+• Highest long-term returns historically
+• Higher volatility
+• Suitable only for those with a long-term horizon
+• Factors include capitalization, valuation and domicile
+Private equity is a type of equity investment but with differing legal risk which makes it
+a different asset class. Limited Partnership (LP) agreements expose investors to additional
+liabilities.
+Non-U.S. equity is a type of equity which includes legal risk due to a philosophical
+difference about the role of capital or enterprise in society. This legal risk can differ from
+country to country or culture to culture.
+Key Equity Risk F actors:
+– 35 –
+• Market Capitalization captures the size effect through free-float market value, with
+smaller companies historically delivering higher risk-adjusted returns versus large
+caps over a long investment horizon.
+• Valuation measures relative cheapness through metrics like P/E, P/B, and EV/EBITDA,
+identifying potential mispricings and mean reversion opportunities
+• Domicile factors reflect country-specific risks including political environment, regu-
+latory frameworks, and market accessibility, particularly relevant when comparing
+developed vs emerging markets
+Fixed Income
+Fixed income securities are debt instruments that provide regular income payments
+and return of principal at maturity. They represent lending and crediting an entity in
+search of capital, be it a commercial or government interest. Fixed income investors have
+priority over equity investors in a bankruptcy situation, and thus legally have a reduction
+of risk.
+Key characteristics include:
+• Contractual claims on issuer payments
+• Generally lower risk than equities due to priority in capital structure
+• Provide regular, predictable income streams
+• Have finite life (maturity date)
+• Returns primarily from interest payments rather than capital appreciation
+• Generally more sensitive to interest rate changes and credit risk
+• Limited upside potential compared to equities
+• Lower returns but more stable
+• Lower volatility
+• Generally liquid but varies by issue
+• Investment horizon varies based on maturity
+– 36 –
+• Factors include duration, credit spread and currency.
+Private credit is a type of fixed income investment with different legal risk which makes
+it a different asset class
+Non-U.S. fixed income is a type of fixed income which includes legal risk due to a
+philosophical difference about the role of capital in society. Legal risk can differ from
+country to country or culture to culture. Also, because of interest rate parity, non-U.S.
+fixed income risk can exist and is manifested as currency risk.
+Fixed Income Risk F actors:
+• Duration quantifies interest rate sensitivity, measuring price changes for given yield
+moves. Longer duration typically commands higher term premium but increases rate
+risk
+• Credit spreadcaptures excess yield over risk-free rates, compensating for default risk
+and reflecting corporate or sovereign issuer fundamentals. Spread changes drive re-
+turns beyond rate movements
+• Currency exposure impacts returns through exchange rate fluctuations and interest
+rate differentials between countries. Can be actively managed or hedged in portfolios
+depending on investment viewpoints and risk tolerance
+Alternatives
+“Alternative” investments are broad category investment offerings that historically
+could not be accessed through publicly traded exchanges, such as traditional stocks and
+bonds.
+Key characteristics of alternatives include:
+• Wide variation in return potential
+• Wide variation in risk profile
+• Often illiquid
+• Often longer term investment horizon
+– 37 –
+Major categories of alternatives include:
+Real Estate
+Represents ownership of land, and control of physical space. Considered a raw ma-
+terial. Human occupancy is what creates value. Subject to heavy legal and jurisdictional
+factors.
+Key characteristics include:
+• Provides potential for both income and capital appreciation
+• Often demonstrates low correlation with traditional assets
+• Can provide inflation protection through rent increases
+• Typically less liquid than traditional securities
+Commodities
+Commodities are traded on futures exchanges, which is another jurisdiction than stocks
+and contains different participants. ETFs and other legal changes are making this space
+more accessible. Commodities involve the ownership of raw materials and physical goods
+such as metals, oil, natural gas, and agricultural products traded in futures markets. In-
+stead of providing capital to entrepreneurs, the investment is in the natural resources
+provided by the earth and prices are determined by supply and demand.
+Key characteristics include:
+• Wide variation in return potential
+• Wide variation in risk profile
+• Often illiquid
+• Often longer term investment horizon
+• Generally low correlation with traditional assets
+• Can be accessed through futures contracts or physical ownership
+• Typically no income generation, returns purely from price changes
+– 38 –
+Digital Assets
+Represents another legal risk, as there is no well established jurisdiction.
+Key characteristics include:
+Private Capital and Hedge F unds
+Private capital is agreement between two parties, it has lower government oversight
+than public capital and thus, enforcement potential in cases of bankruptcy.
+Key characteristics include:
+• Potentially higher returns but with increased risk
+• Longer investment horizons
+• Limited liquidity
+• Requires significant due diligence
+Hedge F unds
+Ownership of proprietary investment or trading process. Hedge funds are essentially
+actively managed liquid portfolios deploying sophisticated strategies on tradable assets.
+Key characteristics include:
+• Aim for absolute returns regardless of market direction
+• Often use leverage and derivatives
+• May have low correlation with traditional assets
+• Usually very liquid, liquid alts
+• Generally higher fees than traditional investments
+• Manifestation of the human, of alpha
+Glossary of Performance Metrics
+Information Ratio: The information ratio (IR) measures portfolio returns beyond the
+returns of a benchmark, usually an index, compared to the volatility of those returns. The
+benchmark is typically an index representing the market or a particular sector or industry.
+– 39 –
+• The IR is often used to measure a portfolio manager’s level of skill and ability to
+generate excess returns relative to a benchmark, but it also attempts to identify con-
+sistency of performance by incorporating a tracking error (TE) or standard deviation
+component into the calculation.
+• The IR goes beyond simple return metrics, offering a nuanced view of how consistently
+a portfolio outperforms its benchmark while accounting for how much risk is taken.
+This makes it a key tool for evaluating active investment strategies.
+Tracking Error: Identifies the level of consistency in which a portfolio ”tracks” the
+performance of an index. A lower tracking error indicates more consistent performance
+and less volatility relative to the benchmark, while a higher tracking error suggests greater
+variability and potential costs due to performance fluctuations.
+Annualized Return: Represents the geometric mean of returns over multiple periods,
+converted to a yearly rate, showing how much an investment has grown on average per
+year.
+Standard Deviation: Measures the dispersion of returns around their mean, indicating
+how volatile or risky an investment is - higher values suggest greater volatility and greater
+potential risk.
+Excess Return: Is the difference between an investment’s actual return and its bench-
+mark return (like a market index), showing how much a portfolio outperformed or under-
+performed its reference point.
+Tracking Error:Quantifies how closely a portfolio follows its benchmark by measuring
+the standard deviation of the difference between the portfolio and benchmark returns over
+time.
+Sharpe Ratio: Measures how much excess return you receive for the additional volatil-
+ity of holding an asset that could generate returns higher than a risk-free rate. A higher
+Sharpe ratio indicates better risk-adjusted performance. We modify our Sharpe Ratio by
+ignoring the risk free rate, essentially making a pure return to risk metric.
+Information Ratio: Measures a portfolio manager’s consistency in generating excess
+returns by dividing the average excess return by the tracking error, indicating skill in
+outperforming the benchmark.
+Sortino Ratio: Only considers downside volatility, making it particularly useful for
+evaluating investments where upside volatility is not considered a risk. Like our modified
+– 40 –
+Sharpe ratio, we modify the Sortino Ratio by not considering the risk free rate to create a
+pure return to risk ratio.
+Calmar Ratio: Divides the average annual compound rate of return by the maximum
+drawdown risk, helping investors evaluate the relationship between return and worst-case
+risk over a specified time period.

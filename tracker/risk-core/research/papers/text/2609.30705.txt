@@ -1,0 +1,1326 @@
+arXiv 2609.30705  https://arxiv.org/abs/2609.30705
+
+The Price of Thought: Does Test-Time Reasoning Pay in LLM
+Trading?
+Jiayi Chen, Guiling Wang
+jc2693@njit.edu, guiling.wang@njit.edu
+Department of Computer Science
+New Jersey Institute of Technology
+Newark, New Jersey, USA
+Abstract
+While inference-time reasoning in large language models (LLMs)
+promises better decision making, its higher computational cost
+may not yield better economic outcomes. Yet reasoning controls
+are rarely evaluated as economic interventions, where changes
+in model outputs must translate into better portfolios after trad-
+ing costs. We conduct a controlled study of representative LLMs
+from the DeepSeek, GPT, and Gemini families. We vary reason-
+ing effort while holding information available at each formation
+date, prompts, output formats, and portfolio construction fixed.
+Our evaluation covers a full year of U.S. equities under three in-
+put conditions: numerical, identifiable news, and masked news. It
+includes more than 800,000 asset predictions and repeated model
+generations. Across all three model families, additional reasoning
+does not produce a reliable improvement in net portfolio returns.
+For DeepSeek, where we examine the full progression from no
+reasoning to maximum reasoning, performance is nonmonotonic.
+Repeated generations also produce unstable treatment effects and
+portfolio selections, even when overall scores remain similar. These
+findings show that additional reasoning can change financial deci-
+sions without reliably improving their economic value, motivating
+validation for each task before deployment.
+Keywords
+large language models, test-time compute, reasoning, financial de-
+cision making, algorithmic trading, backtesting
+1 Introduction
+More reasoning is not necessarily better judgment. A large lan-
+guage model (LLM) can produce a longer, more elaborate analysis
+and still make the same trade or a worse one. This tension arises
+withinference-time reasoning: extra internal computation requested
+after a model has been trained, without changing its weights or
+task input. On benchmarks with verifiable answers, allocating more
+test-time compute, the token budget spent on this extra processing,
+can improve accuracy by extending a reasoning trajectory, sam-
+pling more candidates, or invoking averifierthat checks candidate
+answers [21, 26, 30, 31]. Trading provides a harder test. Correctness
+is revealed only later, through noisy prices and after costs, so the
+relevant question is not whether a response appears more thought-
+ful, but whether paying for more reasoning improves the resulting
+decision.
+Between the request for more reasoning and the realized invest-
+ment outcome lies a sequence of transformations:
+Reasoning effort→stock scores→holdings→net returns
+Astock scoreis the model’s numerical assessment of a stock’s ex-
+pected return relative to the other candidates. Each link in the
+sequence can weaken or reverse the apparent benefit of extra com-
+putation. A large score change may leave the selected portfolio
+unchanged, while a small change near a selection boundary may
+replace alongposition, which profits when its price rises, or ashort
+position, which profits when its price falls. Any gross improvement
+can then disappear after transaction costs. The effect may also fail
+to repeat because each model call produces astochastic generation,
+meaning one sampled output from an otherwise identical request.
+More reasoning can therefore change scores and holdings without
+creating stable economic value.
+Existing financial LLM studies show that language models can
+extract information from news, answer financial questions, and
+participate in trading systems that use tools or multiple agents
+[6, 19, 35, 43–45]. These studies establish that systems built around
+LLMs can trade, but they often change models, prompts, tools,
+memories, and decision procedures together. They therefore do
+not isolate what is purchased by increasing reasoning inside an
+otherwise fixed trader. Research on test-time compute offers limited
+guidance because it focuses on mathematics, coding, and other tasks
+with immediate correctness signals [10, 17, 26]. Together, these lit-
+eratures leave a narrower economic question unanswered:when
+the model, information, prompt, required output, and trading mech-
+anism are held fixed, does buying more reasoning improve portfolio
+outcomes?
+We answer this question with a controlled intervention on rea-
+soning effort. Within each model family, the reasoning level changes
+while the information available on each decision date, the prompt,
+the required output, the candidate stocks, and the portfolio rules
+remain fixed. Figure 1 shows this design as two reasoning paths
+entering the same scoring, portfolio, cost, and paired evaluation
+pipeline. Our result is cautionary: added reasoning changes scores,
+selected assets, failure patterns, and operating cost, but it does not
+produce a reproducible improvement in return after costs in this
+setting.
+The study follows three predetermined model families over 241
+formation datesin 2024, where a formation date is a trading day on
+which new holdings are selected. The commonlow versus baseline
+comparisonraises reasoning from the baseline level to low. The
+baseline is none for DeepSeek and GPT and minimal for Gemini,
+whose interface cannot guarantee that reasoning is fully disabled.
+DeepSeek additionally provides a curve across none, low, high, and
+maximum reasoning. Each model ranks the same 100 liquid U.S.
+equities under three information conditions:numericalfeatures
+with identifiers removed;identifiable news, which retains company
+arXiv:2609.30705v1  [cs.AI]  25 Sep 2026
+Jiayi Chen and Guiling Wang
+Figure 1: Controlled evaluation pipeline. Within each backbone, reasoning level varies while information available by each
+formation date, prompts, output schema (required fields, types, and ranges), candidate assets, and portfolio rules remain fixed.
+The information conditions are numerical inputs, identifiable news with identifying details retained, and masked news with
+identifying details removed. Repeated calls on frozen formation dates assess the stability of scores, portfolios, and treatment
+effects.
+identity; andmasked news, in which company names and other iden-
+tifying details are removed. The scores enter the same equal weight,
+market neutralportfolio, which buys the 10 highest ranked stocks,
+shorts the 10 lowest ranked stocks, and balances the two sides to
+remove broad market direction. Each selection remains active for
+five days, creating overlappingformation cohorts, or batches of po-
+sitions opened on different dates. Trading incurs 10 basis points
+(bps) whenever capital is bought or sold; one bp is 0.01 percentage
+points.
+This controlled design also determines how the evidence must
+be analyzed. Although the experiment contains 808,800 asset pre-
+dictions, the predictions and model tasks within a date are not
+independent economic observations. Primary inference instead
+uses 241 paired daily portfolio return differences indexed byreturn
+date, a trading day on which active portfolios earn returns. We
+apply a Newey–West correction with five lags, a heteroskedasticity
+and autocorrelation consistent (HAC) method that adjusts uncer-
+tainty for changing return variance and serial dependence [22]. A
+predeclaredeconomic thresholdof0 .25bps/day defines the smallest
+gain considered worthwhile. Invalid tasks receive a neutral score
+of 0 but remain in the comparison under anintention-to-treatrule.
+To test whether an apparent effect survives another model call,
+we also conductfrozen audits: on 48 fixed formation dates, each
+backbone receives the same numerical or news task three times
+under unchanged rules.
+The results reveal a consistent difference between behavioral
+change and economic improvement. None of the nine annual low
+versus baseline tests establishes a material return benefit, although
+the generally wide intervals do not show that every effect equals
+zero. Repeated generations expose a sharper deployment risk. In
+DeepSeek’s three generation audit with masked news, low reason-
+ing reduces return by9.016bps/day relative to none (95% confidence
+interval [CI],−16.248to−1.784). DeepSeek’s response across four
+reasoning levels is also nonmonotonic, so a favorable adjacent step
+does not imply that maximum reasoning outperforms no reasoning.
+GPT and Gemini each change sign across three generations in at
+least one news condition. Reasoning further changesoutput struc-
+ture reliability, whether a response follows the required fields and
+format, in different directions across models. Improved reliability
+therefore does not by itself imply improved return.
+The practical conclusion is asymmetric. Added reasoning has a
+certain token, monetary, and latency cost, while its economic bene-
+fit remains unresolved in nine annual tests and is harmful in one
+replicated audit. Baseline reasoning is therefore the conservative
+default unless the target task shows reproducible incremental value.
+This conclusion is limited to the tested models, inputs, historical
+year, and portfolio mechanism. It does not imply that reasoning
+never helps financial decisions, that the estimated effects are statis-
+tically equivalent to zero, or that the evaluated baseline portfolios
+are prospectively profitable. Within that scope, this paper makes
+three contributions.
+(1) A controlled economic test of reasoning.We isolate
+reasoning effort within each backbone while holding the
+surrounding financial workflow fixed, estimating the mar-
+ginal value of inference-time compute rather than differences
+among complete agent systems.
+(2) Evidence across the decision chain.We connect struc-
+tured scores to selected portfolios and returns after costs,
+then repeat generations to identify reasoning effects that
+appear favorable once but do not reproduce.
+(3) Accounting for deployment.We jointly report return ef-
+fects, portfolio stability, invalid outputs, token use, and infer-
+ence cost, revealing when behavioral or reliability changes
+fail to create economic value.
+2 Related Work
+2.1 Financial Language Models and Return
+Prediction
+Financial natural language processing (NLP) progressed fromen-
+codersadapted to finance, which turn financial text into numeri-
+cal representations for sentiment and communications [3, 40], to
+The Price of Thought: Does Test-Time Reasoning Pay in LLM Trading?
+generative models and instruction tuning frameworks for finance
+[33, 38]. Evaluation resources have expanded accordingly. FinQA
+targets numerical reasoning over reports [ 8]; PIXIU and FinBen
+cover broad financial understanding and decision tasks [ 36, 37];
+and FinTradeBench combines fundamental information with trad-
+ing signals [1]. These works establish that finance requires both
+domain knowledge and quantitative reasoning, but benchmark ac-
+curacy does not itself show that additional inference-time reasoning
+improves a portfolio.
+A second line of research asks whether representations learned
+by language models predict returns. Lopez-Lira and Tang find that
+ChatGPT labels of news headlines forecast subsequent stock move-
+ments [19]. Chen, Kelly, and Xiu use embeddings from LLMs to
+form signals that compare expected returns across stocks on the
+same date [6]. These studies motivate our numerical and news con-
+ditions, but they also sharpen the distinction that guides our exper-
+iment. Representation quality concerns the information encoded
+by a model; our target quantity, orestimand, is the incremental
+value of spending more compute while holding the representation,
+prompt, and data fixed.
+2.2 LLM Trading Agents and Financial
+Benchmarks
+Recent systems embed LLMs in richer trading loops. FinMem intro-
+duces layered memory and character design [43]; FinAgent com-
+bines multimodal inputs and tools [45]; FinCon uses a hierarchy
+of managers and analysts with conceptual verbal reinforcement
+[44]; and FinRobot provides a general platform for financial agents
+[39]. TradingAgents organizes specialized agents into a simulated
+trading firm [35]. These systems demonstrate breadth, but their
+components interact: changing reflection, memory, tools, or agent
+roles changes more than the reasoning level.
+Benchmark work increasingly focuses on decision realism. IN-
+VESTORBENCH spans financial products and agent tasks [ 15].
+StockBench evaluates sequential decisions while checkingcontami-
+nation, meaning possible exposure to evaluation information during
+training [7]. From Knowing to Doing masks identifiers to separate
+memorized market history from decision competence [46], while
+Profit Mirage testsleakage(future or evaluation information en-
+tering the task) and performance after the model’s training data
+cutoff [16]. Agentic Trading synthesizes audit concerns for financial
+agents [34]. We adopt opaque identifiers and masked news for the
+same reason, while acknowledging that masking cannot prove that
+historical events were absent from pretraining.
+Several recent studies move closer to our question by testing rea-
+soning in financial decisions. Sodha compares direct and thinking
+LLMs in cross-sectional stock ranking and finds no net portfolio
+advantage for the thinking model after costs [27]. Cheng et al. vary
+reasoning intensity and market speed in a simulator for tender
+selection and real time execution, exposing a tradeoff between de-
+cision quality and latency [ 9]. Sitjar toggles a chain-of-thought
+scaffold within the decision process for a trader of the S&P 500
+exchange-traded fund (SPY) and finds no main improvement in
+trading performance orcalibration, the agreement between stated
+confidence and observed outcomes [25]. These studies show why
+a controlled reasoning comparison is needed, so we do not claim
+to be the first to make one. Our contribution is a within backbone
+design across three model families, common numerical, identifiable
+news, and masked news tasks, a four level reasoning curve for
+one backbone, explicit transaction costs, and repeated generation
+evidence at the score, portfolio, and return levels.
+2.3 Test-Time Compute and Adaptive Reasoning
+Chain-of-thought promptingasks a model to produce intermediate
+reasoning steps and can improve tasks with multiple steps [ 31].
+Self-consistencysamples several such paths and aggregates their
+answers [30], while Tree of Thoughts explicitly searches among
+intermediate possibilities [41]. Process supervision and stepwise
+verification score intermediate steps to select better trajectories
+[17]. More recent work studies scaling directly at inference. Snell et
+al. show that test-time compute can substitute for parameter scale
+when allocation and verification are effective [26]; s1 demonstrates
+simple budget forcing [21]; and DeepSeek-R1 exemplifies models
+trained for extended reasoning [10].
+The gains are not free or necessarily monotonic. Think or Not?
+documents diminishing information gain in long traces and pro-
+posesadaptive stopping, ending reasoning when extra steps add
+little information [42]. Adaptive Model and Strategy Routing lets a
+system choose a model and reasoning strategy under a budget [24],
+and a recent survey organizes controllable and adaptive methods
+for test-time compute [2]. These approaches usually optimize accu-
+racy against a verifier. We instead treat realized portfolio return as
+the downstream outcome and test the more basic premise that a
+provider’s reasoning control has incremental economic value in a
+noisy decision pipeline with delayed feedback.
+2.4 Evaluation Under Financial Noise
+Financial evidence requires stronger controls than a static accuracy
+benchmark. News can move markets [29], and machine learning
+can extract nonlinear return signals [11], but those relationships
+arenonstationary: they can change over time.Data snooping, or
+repeatedly searching historical data until a favorable result appears,
+can invalidate conventional tests [18]. Searches across many rules
+therefore require corrections within families to control false dis-
+coveries across the full set [ 28, 32], and the superior predictive
+ability test addresses comparison against many alternatives [12]. A
+backtestis a simulation on historical data; selecting among many
+backtests raises the probability of overfitting and motivates the
+deflated Sharpe ratio, which discounts performance for selection
+and returns that are not normally distributed [4, 5]. The large set
+of published return predictors raises the same problem of multiple
+testing [13], while combining many candidate signals can itself
+induce severe overfitting [23]. Decay in anomalies after publication
+reinforces the need for evidence on unseen data and in future de-
+ployment [20]. These concerns determine the controls used in our
+evaluation.
+Accordingly, our paired design avoids treating the 100 asset
+predictions on a date as independent economic observations. We
+estimate effects on daily portfolio returns with HAC inference [22],
+disclose all tested contrasts between backbones and information
+conditions, adjust the three primary tests within each model fam-
+ily, and retain failed outputs under an intention-to-treat rule. The
+Jiayi Chen and Guiling Wang
+resulting claim is deliberately narrow: we estimate the marginal
+economic value of reasoning effort inside a frozen financial decision
+pipeline rather than comparing complete agents or asserting that
+reasoning has no value in finance.
+3 Experimental Design
+3.1 Research Question and Estimand
+Anestimandis the population quantity an experiment is designed
+to measure. For backbone 𝑏, information condition 𝑎, reasoning
+level𝑟, and portfolio return date𝑡, let𝑅net𝑏,𝑎,𝑟,𝑡 denote the net return
+of the frozen portfolio implementation. The common low versus
+baseline estimand is
+Δ𝑏,𝑎 =E
+h
+𝑅net𝑏,𝑎,low,𝑡−𝑅 net𝑏,𝑎,base,𝑡
+i
+,(1)
+where base is none for DeepSeek and GPT and minimal for Gemini.
+Positive values favor low reasoning. The primary inferential ob-
+servations are daily portfolio return differences indexed by return
+date. Asset predictions and model tasks within a formation date are
+inputs to a single portfolio, not independent return observations.
+We predefine the economic threshold𝜖= 0.25bps/day as the
+smallest improvement considered worthwhile. Using a two-sided
+95% CI[𝐿,𝑈] and a one-sided 95% upper bound𝑈.95, we classify a
+contrast as: material benefit if 𝐿>𝜖 ; harm if𝑈< 0; no material
+benefit if𝑈.95 <𝜖 ; and inconclusive otherwise. This asymmetric
+rule reflects the deployment question: added reasoning has known
+compute cost and must demonstrate sufficient incremental value.
+An inconclusive result is notequivalence, which would require
+ruling out effects outside prespecified small bounds.
+3.2 Market Sample and Information Timing
+The experiment uses liquid common equities listed in the United
+States.Information timingmeans that each decision uses only infor-
+mation available by its formation date. The initial snapshot, dated
+December 29, 2023, contains 120 eligible names, of which 100 are
+active on each evaluated formation date. There are 241 formation
+dates from January 10 through December 23, 2024. Each formation
+date’scross-section, meaning the 100 stocks compared on that date,
+is deterministically split into four model tasks of 25 assets each.
+Assets useopaque identifiers, random codes that reveal no company
+name, and no future return enters an inference packet or repair
+decision.
+These dated decisions become overlapping portfolio observa-
+tions. Aformation cohortis the portfolio opened on one formation
+date. It enters at that session’s open, earns open-to-close return on
+that date, and then close-to-close return on the next four sessions.
+Areturn dateis a trading day on which active formation cohorts
+earn portfolio returns. After the first four formation dates are re-
+moved, the realized path contains 241 return dates, from January
+17 through December 30.
+The frozen stochastic audit applies the same timing logic to 48
+clustered formation dates selected without reference to their even-
+tual returns. Because formation cohorts are held for five days and
+overlap, the audit portfolio path contains 68 return dates. Repeated
+generations are averaged or compared within return date; they
+never multiply the number of market observations.
+3.3 Backbones and Reasoning Levels
+Table 1 gives the final analyzed panel. All three backbones use nu-
+merical, identifiable news, and masked news inputs, but the avail-
+able reasoning controls differ. DeepSeek tests none, low, high, and
+maximum reasoning. GPT tests none versus low. Gemini tests mini-
+mal versus low because Gemini 3.x could not guarantee a condition
+with reasoning fully disabled. Only DeepSeek therefore supports
+a claim about the response across four reasoning levels; GPT and
+Gemini replicate the common low versus baseline comparison.
+The three evaluated backbones were DeepSeek-Flash, GPT-5.6
+Luna, and Gemini 3.1 Flash-Lite. We refer to them as DeepSeek,
+GPT, and Gemini except where the exact model name is needed.
+All were predetermined for the study. Before each backbone was
+evaluated, its exact reasoning contrast, inputs, prompts, output
+contract, failure policy, portfolio mapping, and analysis plan were
+frozen. Each backbone therefore supplies a separately controlled
+intervention within one model rather than an exercise in model
+selection.
+3.4 Information Conditions
+Thenumericalcondition supplies 16 dailycross-sectional rank fea-
+tures. Each raw measure is ranked across the broader fixed research
+panel available on that date, scaled to[−1, 1], and then retained for
+the 100 active candidate stocks. The measures are return lagged
+one day; momentum from past returns over 5, 21, 63, 126, and 252
+days; volatility over 5, 21, and 63 days; downside volatility over 21
+days; a volume ratio over 21 days; log dollar volume over 21 days;
+Amihud illiquidityover 21 days, the amount of price movement per
+dollar traded; previous intraday return; previous trading range; and
+log previous close. For each feature the packet includes its current
+value, mean over 5 days, mean over 20 days, and change over 20
+days.
+The news conditions provide article information available by
+each formation date.Identifiable newsretains identifying details.
+Masked newsremoves direct company, ticker, date, and event iden-
+tifiers while preserving the text structure relevant to the task. This
+manipulation reduces obvious historical recognition but cannot
+guarantee that a model has no latent memory of an event.
+3.5 Prompt, Output Contract, and Integrity
+Controls
+Every model receives the same substantive instruction: estimate rel-
+ative return over the next five trading sessions, score the strongest
+candidate near+1and the weakest near−1, and return every opaque
+asset identifier exactly once. The outputschemais the set of re-
+quired fields, types, and ranges that a machine can check. It contains
+scorein [−1, 1],confidence,materiality, anduncertaintyin [0, 1],
+plus anabstainflag that lets the model decline to score an asset.
+Prompts, asset packets, candidate order, schema, output allowance,
+and downstream mapping are frozen within each paired compari-
+son.
+Responses undergo schema and identifier validation. Retries
+and repairs under deterministic rules areoutcome blind, meaning
+they are made without viewing subsequent returns; raw attempts,
+usage, and repair records are retained. When a task remains invalid,
+all 25 rows are assigned a neutral score of 0 and kept under the
+The Price of Thought: Does Test-Time Reasoning Pay in LLM Trading?
+Table 1: Experimental design. Each primary study uses 241 formation dates, meaning trading days when new holdings are
+selected. Each audit generation is produced by a repeated call on the frozen audit formation dates.
+Backbone Baseline reasoning Additional levels Information conditions Formation dates Audit generations
+DeepSeek-Flash none low, high, maximum numerical; identifiable news; masked
+news
+241 3 per condition
+GPT-5.6 Luna none low numerical; identifiable news; masked
+news
+241 3 per condition
+Gemini 3.1 Flash-Lite minimal low numerical; identifiable news; masked
+news
+241 3 per condition
+primary intention-to-treat rule. DeepSeek ended with complete
+task coverage after 17 deterministic contract repairs, affecting 15 of
+404,400 asset rows by neutral imputation. Across the three primary
+information conditions, GPT retained 57 invalid tasks (0.99%) and
+Gemini retained 136 (2.35%). Analyses that remove incomplete dates
+or match omitted task chunks are reported as robustness checks,
+not replacements for the frozen primary analysis.
+4 Portfolio Evaluation and Statistical Inference
+4.1 Mapping Scores to Portfolios
+The portfolio mapping converts each model output into one compa-
+rable trading signal. For asset𝑖 on formation date𝑑, the downstream
+signal is
+𝑠𝑖,𝑑 =
+(
+0,if abstaining or imputed to0,
+𝑞𝑖,𝑑
+ 0.5+0.5𝑐 𝑖,𝑑,otherwise. (2)
+Here,𝑞 is the model score and𝑐 is model reported confidence. The
+model reportedmaterialityanduncertaintyfields are preserved for
+diagnostics but do not alter position size.
+We then rank𝑠 𝑖,𝑑 across the 100 names on each formation date,
+short the bottom 10, and buy the top 10. Positions receive equal
+weights within each side. Thusgross exposureis 2 (one dollar long
+plus one dollar short per dollar of capital) andnet exposureis 0 (long
+and short dollar amounts cancel). If abstentions leave fewer than
+20 eligible assets, the frozen fallback ranks all neutralized signals
+and breaks ties deterministically by asset identifier.
+Each formation cohort is held for five sessions. The implemented
+daily portfolio is the simple average of active cohorts, so formation
+decisions overlap in calendar time. All reasoning levels use the
+identical simulator and candidate universe.
+4.2 Trading and Inference Costs
+The primary assumption for trading costs is 10 bps one way, with
+5, 20, and 50 bps sensitivity analyses. For a portfolio with capital𝐴,
+incremental inference expense𝐶can be expressed as
+inference cost (bps)=10,000𝐶/𝐴.(3)
+We keep provider inference dollars separate from market returns
+because the same research workload can support different capital
+levels. Deployment conclusions use the direction and uncertainty of
+the effect after trading costs first, then ask whether any supported
+gain could cover inference expense.
+4.3 Paired Inference
+For every comparison between a backbone and information condi-
+tion, we align the two portfolio paths by return date and compute
+𝐷𝑡 =𝑅 netlow,𝑡−𝑅 netbase,𝑡. The mean andstandard error, an estimate of
+sampling variability, use a Newey–West estimator with five lags
+to account for changing variance and the serial dependence in-
+duced by overlapping formation cohorts [22]. For the comparable
+annual low versus baseline results, all three backbones have three
+information conditions. Their two-sided𝑝-values, which give the
+probability under an assumption of zero effect of obtaining a result
+at least this extreme, are adjusted with theHolm method, a stepwise
+correction that controls false positives across the three tests within
+each backbone. This harmonized reporting layer does not replace
+DeepSeek’s predeclared sequential procedure: none to low, low to
+maximum when the first comparison is unresolved, and the total
+effect from none to maximum. The collected high level is analyzed
+as part of a secondary curve across four reasoning levels.
+As supplementary uncertainty checks, we add twobootstraps,
+which estimate variability by repeatedly resampling the observed
+data. They do not replace the primary HAC inference. A paired
+moving block bootstrap[ 14] resamples 50,000 sequences of con-
+secutive return dates. Its main block of five sessions matches the
+holding horizon, while blocks of 10 and 20 sessions test sensitivity.
+Apairs bootstrap over formation cohortsinstead resamples each
+cohort’s complete contribution to gross returns over five sessions
+together with its paired difference in transaction costs. The cohort
+contributions reconcile exactly to the observed sum of net returns.
+Confidence intervals use the 2.5th and 97.5th percentiles of the
+resampled effects, and two-sided tests center the resampled dif-
+ferences at zero. The moving block result is the stronger check of
+dependence over calendar time because the cohort bootstrap treats
+formation cohorts as interchangeable even though nearby cohorts
+can share shocks on the same return date.
+Together, these procedures produce the point estimates, two-
+sided CIs, one-sided economic bounds, and decisions reported in
+the paper. A conventionalnull hypothesis testbegins from a default
+assumption of zero effect; merely failing to reject that assumption
+is not treated as evidence that reasoning has no effect.
+We next ask whether an annual estimate is concentrated in one
+part of the year. As an exploratory diagnostic, we partition each
+saved primary daily effect series by return date into calendar halves
+(January–June and July–December) and quarters. We recompute
+HAC intervals with five lags within each subgroup and use HAC
+regressions forheterogeneity tests, which ask whether the effect
+Jiayi Chen and Guiling Wang
+−10 −8 −6 −4 −2 0 2 4 6 8 10 12 14 16 18 20
+Gemini masked
+Gemini identifiable
+Gemini numerical
+GPT masked
+GPT identifiable
+GPT numerical
+DeepSeek masked
+DeepSeek identifiable
+DeepSeek numerical
++0.25economic threshold
+Effect of low relative to baseline reasoning on net return (bps/day)
+Figure 2: Primary low versus baseline return effects across 241 return dates. Circles denote numerical inputs, squares denote
+identifiable news, and diamonds denote masked news. Horizontal bars are two-sided 95% HAC CIs, which account for changing
+variance and serial dependence. The solid line is zero and the dashed line is the +0.25bps/day economic threshold. No interval
+establishes a material benefit.
+differs across halves or quarters. We adjust the resulting 18 tests
+with the Holm method. We also remove each quarter in turn and
+measure its share of the sum of absolute quarterly contributions.
+These partitions use no new model calls, do not change the annual
+estimands, and are not treated as independent replications.
+4.4 Evaluation Across Stochastic Generations
+On the frozen audit formation dates we assess three layers of repro-
+ducibility: (i)Spearman rank agreement, which measures whether
+assets keep a similar ordering; (ii)Jaccard overlap, the fraction of
+names shared by the selected long and short sets; and (iii) the differ-
+ence between low and baseline reasoning for each generation. For
+every information condition, each backbone has the primary gener-
+ation restricted to the audit dates plus two additional generations.
+For GPT and Gemini we also form a portfolio fromensemble scores
+by averaging the three signals before ranking, alongside the average
+within each return date of the three return effects. Because ranking
+and selection of the sets with the highest and lowest ranks are
+nonlinear, the ensemble score effect need not equal the arithmetic
+mean of the three return effects.
+5 Results
+5.1 RQ1: Does Low Reasoning Improve Annual
+Performance?
+Figure 2 and Table 2 report the nine comparable annual low versus
+baseline effects. None satisfies the rule for material benefit. Six point
+estimates are positive and three are negative, but every 95% CI in-
+cludes zero and the+0.25bps/day economic threshold. DeepSeek’s
+numerical point estimate is the largest at+6.159bps/day, yet its
+interval ranges from−7.243to+19.560. The identifiable news es-
+timates are+0.378for DeepSeek, −0.626for GPT, and−0.142for
+Gemini, and all three intervals likewise admit gains and losses.
+Holm adjustment across the three information conditions within
+each backbone does not change any decision. The annual evidence
+therefore supportsno reliable benefit detected, not the stronger claim
+of a zero effect.
+These paired effects describe the value of additional reasoning,
+not the absolute attractiveness of either portfolio. Appendix Table 7
+reports the underlying paths: 13 of the 18 portfolios at the baseline
+and low reasoning levels have negative mean net return. The posi-
+tive annualized returns are confined to Gemini identifiable news
+at both levels and Gemini masked news at minimal reasoning; the
+largest is2.16%. Acompounded annualized returnis the equivalent
+annual growth rate. ASharpe ratiodivides mean return by return
+volatility, andmaximum drawdownis the largest portfolio loss from
+a peak to a trough.
+The conclusion also depends on the frozen portfolio construction.
+Appendix Table 8 varies the number of selected names. Across
+36 exploratory combinations of backbone, information condition,
+and width, 35 do not establish material benefit. The exception is
+DeepSeek masked news with 20 names per side (+5.769bps/day;
+HAC 95% CI[0.597, 10.942]), which also has a positive interval from
+a moving block bootstrap with five sessions per block. However, no
+HAC or moving block𝑝-value survives Holm correction across the
+36 cells. The exception does not alter the frozen primary estimand
+based on 10 long and 10 short names, but it bounds the conclusion
+to that tested construction.
+5.2 RQ2: Does More Reasoning Consistently
+Improve Returns?
+Only DeepSeek tests a curve across four reasoning levels. Figure 3a
+is a signed matrix of point estimates averaged across generations
+for portfolios formed on the audit sample of 48 formation dates, rel-
+ative to none. The printed values make the nonmonotonic patterns
+The Price of Thought: Does Test-Time Reasoning Pay in LLM Trading?
+Table 2: Primary low versus baseline results at a one way trading cost of 10 bps. Adjusted 𝑝-values use the Holm method across
+the three information conditions separately within each backbone.
+Backbone Information Estimate 95% CI𝑝Adjusted𝑝Decision
+DeepSeek numerical+6.159[−7.243,19.560].368 1.000 inconclusive
+DeepSeek identifiable news+0.378[−9.033,9.790].937 1.000 inconclusive
+DeepSeek masked news+1.449[−6.768,9.666].730 1.000 inconclusive
+GPT numerical+3.540[−2.531,9.611].253 .759 inconclusive
+GPT identifiable news−0.626[−5.905,4.653].816 1.000 inconclusive
+GPT masked news+0.040[−4.297,4.378].986 1.000 inconclusive
+Gemini numerical+0.758[−6.233,7.749].832 1.000 inconclusive
+Gemini identifiable news−0.142[−8.128,7.844].972 1.000 inconclusive
+Gemini masked news−1.123[−8.418,6.173].763 1.000 inconclusive
+explicit without implying a smooth response between provider lev-
+els. For numerical inputs, the effect declines from none through low,
+high, and maximum. For identifiable news, low reasoning drops
+sharply, high changes little, and maximum recovers part of the
+loss but not all of it. Masked news remains below none at every
+positive reasoning level. These are descriptive level estimates; con-
+fidence intervals are attached to the predeclared contrasts rather
+than invented for cumulative points.
+The confirmatory chain is consistent with the visual result. Low
+minus none is −0.529bps/day for numerical inputs, −8.525for
+identifiable news, and−9.016for masked news. The CI for masked
+news,[−16.248,− 1.784], establishes harm. Maximum minus none
+remains inconclusive for numerical and identifiable news and is
+classified as no material benefit for masked news. The only decisive
+adjacent secondary contrast is maximum minus high for identifiable
+news,+4.639bps/day (95% CI[+0.376,+ 8.903]). Because maximum
+still fails to beat none, a favorable local step does not justify the
+claim that more reasoning is better.
+5.3 RQ3: Are Reasoning Effects Stable Across
+Generations?
+Figure 3b begins with masked news, where the contrast between
+reproducible harm and unstable direction is clearest. It shows low
+versus baseline estimates as three unconnected generation markers
+for each backbone, together with the average within each return
+date and its 95% HAC interval. DeepSeek’s three individual audit
+generations are all negative (−7.490,−9.327, and−10.231bps/day),
+producing the harm result after aggregation within each return
+date. GPT instead changes sign across+5.800,−6.665, and−2.371
+bps/day. Its average across three generations within each return
+date is−1.079bps/day (95% CI [−5.173, 3.015]), while its ensemble
+score portfolio is likewise inconclusive at−0.957bps/day (95% CI
+[−6.814,4.900]).
+Gemini also changes sign: its first two generations are positive
+(+1.777and+7.918bps/day), whereas the third is−0.630bps/day.
+The average within each return date is +3.022bps/day (95% CI
+[−3.377, 9.421]), and the ensemble score portfolio remains incon-
+clusive at+1.609bps/day (95% CI[−6.545, 9.764]). Thus the stability
+result is not that all generations are negative. It is that a favorable
+isolated generation does not establish reproducible economic value.
+The third generations retain one of 384 GPT tasks and 13 of 384
+Gemini tasks as neutral after invalid outputs; none is selectively
+rerun. These audits do not replace the primary estimates from 241
+return dates or add independent market observations.
+The other information conditions preserve the deployment con-
+cern without reproducing the same directions. For identifiable news,
+GPT’s generation effects are+0.082,−0.649, and−3.881bps/day.
+Their average within each return date is −1.483bps/day, with a
+95% CI from−5.940to+2.974, while the score ensemble is−3.604
+bps/day, with a CI from−8.699to +1.491. Gemini changes sign
+across−0.688,+1.476, and+8.870bps/day. Its average within each
+return date is+3.219bps/day, with a CI from−7.032to+13.470, and
+its ensemble is+3.882bps/day, with a CI from−6.561to+14.325.
+None establishes a reliable benefit. Appendix Table 10 shows that
+similar overall scores still yield incomplete agreement in the se-
+lected portfolio tails.
+Numerical inputs complete the same three generation design.
+GPT’s effects are−3.972,−0.927, and−1.112bps/day. Their average
+within each return date is−2.004bps/day (95% CI [−6.386, 2.379]),
+and the score ensemble is−3.866bps/day (95% CI [−9.870, 2.138]).
+Gemini’s generation effects are+2.750,+0.788, and+2.290bps/day.
+Their average within each return date is+1.943bps/day (95% CI
+[−6.161, 10.047]), while the score ensemble is−0.222bps/day (95%
+CI[−8.158, 7.714]). This sign reversal after score averaging illus-
+trates that stable looking scores do not guarantee a stable selected
+portfolio. None of the numerical audit summaries establishes a reli-
+able benefit. The two added GPT generations retain six of 768 tasks
+as neutral after invalid outputs; both added Gemini generations
+have complete valid coverage.
+5.4 Robustness Across Resampling and
+Calendar Periods
+We first test whether the conclusions depend on the primary HAC
+calculation. The resampling checks preserve the headline deci-
+sions (Appendix Table 6). All nine low versus baseline contrasts
+across 241 return dates remain inconclusive under both the moving
+block bootstrap with five sessions per block and the bootstrap over
+formation cohorts. For identifiable news, the moving block inter-
+vals are[−9.099, 9.287] for DeepSeek,[−6.020, 4.586] for GPT, and
+[−7.690, 8.497] bps/day for Gemini. Changing the block length to
+10 or 20 sessions does not produce a decision of material benefit. In
+the DeepSeek audit of three generations using masked news, the
+moving block interval is[−17.929,− 3.477] and the interval from
+Jiayi Chen and Guiling Wang
+None Low High Maximum
+Numerical
+Identifiable news
+Masked news
+0.00 -0.53 -3.37 -4.88
+0.00 -8.53 -8.69 -4.05
+0.00 -9.02 -7.73 -8.25
+a DeepSeek return effect by reasoning level
+−15 −10 −5 0 5 10
+Masked news return effect: low minus baseline (bps/day)
+DeepSeek
+GPT
+Gemini
+-9.02
+-1.08
++3.02
+b Repeated call return effects
+Call 1 Call 2 Call 3 Average + 95% CI
+−10 −5 0
+Effect relative to none (bps/day)
+Figure 3: Reasoning levels and repeated call stability. (a) DeepSeek effects averaged across generations for portfolios formed on
+48 audit formation dates, relative to none; cells are descriptive because intervals for cumulative levels were not computed. (b)
+Three unconnected generation markers per backbone; diamonds and bars show the average within each return date and the
+95% HAC CI adjusted for serial dependence. Repeated calls are not independent market samples.
+the formation cohort bootstrap is[−15.482,− 2.281] bps/day, so the
+harm classification survives both checks.
+We then test whether the annual directions are confined to one
+part of 2024 (Appendix Table 11). Only GPT numerical keeps the
+same sign in both halves of the year. DeepSeek numerical changes
+from−10.027bps/day in the first half to +20.687in the second
+(raw HAC heterogeneity 𝑝=. 014), while Gemini masked news
+ranges from+12.083in Q3 to−17.974in Q4 (raw test of equality
+across quarters𝑝=.045). Neither result survives Holm correction
+across the 18 exploratory heterogeneity tests by half and quarter.
+Seven of nine annual directions also flip when at least one quarter
+is omitted, although the largest absolute quarter contribution is
+at most 64.5%. The annual findings are therefore not reducible
+to one isolated quarter, but neither are they temporally uniform.
+This analysis strengthens the conclusion that reasoning effects
+vary across market episodes within 2024; it does not substitute for
+another year.
+6 Operational Reliability and Compute
+Economics
+6.1 Output Structure Reliability
+Reasoning affects task validity differently across backbones. Fisher’s
+exact test, which compares two failure proportions, is used as a
+diagnostic. GPT low reasoning increases numerical failures from
+4 to 14 of 964 tasks (0.41% to 1.45%; 𝑝=. 030), while failures for
+masked news are similar (8 versus 9). For identifiable news, GPT
+failures fall from 17 to 5 (𝑝=. 016), and Gemini failures fall from
+54 to 14 (𝑝<. 000001). Gemini low reasoning also reduces failures
+for masked news from 44 to 20 of 964 tasks (4.56% to 2.07%; 𝑝=
+.0032), but neither reliability improvement produces a return benefit.
+DeepSeek has no final invalid tasks after rare outcome blind repairs.
+Reliability is therefore a separate deployment dimension, not a
+proxy for investment performance; Table 3 retains the primary
+rates of invalid tasks.
+6.2 Tokens, Dollars, and the Deployment
+Decision
+Because reliability and return can diverge, deployment also requires
+a separate accounting of compute. Table 3 reports compute, cost,
+and reliability for all evaluated tasks within each backbone. These
+are backbone totals rather than efficiency comparisons at a matched
+workload. DeepSeek dominates compute because it evaluates four
+reasoning levels across all three information conditions. Its evalua-
+tion uses 269.0 million reported reasoning tokens. GPT uses 0.37
+million reasoning tokens, while Gemini uses 7.93 million, illustrat-
+ing that nominal level labels are not comparable measures of actual
+compute across providers.
+For GPT’s primary evaluation, low reasoning costs an additional
+$0.375 for numerical inputs and $0.092 for masked news, while
+identifiable news costs $0.281 less because the low level produces
+fewer output tokens in this run. These provider charges are modest
+relative to the return intervals, but a low dollar cost does not turn
+an unsupported return gain into evidence of benefit. Latency also
+depends on the provider and delivery mode and is not used as a
+comparable headline metric.
+7 Discussion
+7.1 Reasoning Is Not a Monotonic Economic
+Control
+The results distinguish behavioral responsiveness from economic
+usefulness. Reasoning effort clearly changes outputs: token use
+rises, rankings move, portfolio constituents change, and rates of
+invalid outputs sometimes shift. Yet those changes do not form a
+stable monotonic relationship with returns after costs. DeepSeek
+provides the strongest demonstration. An adjacent increase from
+high to maximum helps identifiable news on the audit sample, but
+maximum still fails to outperform none. Treating reasoning as a
+conventional scalarhyperparameter, or a tunable numerical setting
+for which more is often presumed better, is therefore misleading in
+this setting.
+The Price of Thought: Does Test-Time Reasoning Pay in LLM Trading?
+Table 3: Compute, cost, and reliability for all evaluated tasks within each backbone. Token counts are reported by providers
+and should not be compared as identical units of cognition. Invalid primary tasks is the share of primary tasks still unresolved
+after the frozen validation and repair policy. NA denotes not aggregated; token columns are not aggregated across providers,
+and total cost is summed before row values are rounded.
+Backbone Tasks Prompt tokens Completion tokens Reasoning tokens Cost (USD) Invalid tasks
+DeepSeek-Flash 16,176 801,697,928 288,221,145 268,969,372 297.52 0.00%
+GPT-5.6 Luna 8,088 360,029,538 11,992,166 371,323 41.98 0.99%
+Gemini 3.1 Flash-Lite 8,088 507,532,598 17,670,460 7,928,611 75.56 2.35%
+Total 32,352 NA NA NA 415.05 NA
+This pattern is compatible with several mechanisms, none of
+which our experiment proves. Longer traces may assign too much
+weight to weak narrative evidence, revise a useful first judgment, in-
+crease confidence without increasing information, or simply create
+another stochastic route through an underdetermined task. Con-
+versely, reasoning may improve local extraction or schema compli-
+ance while leaving the economically relevant rank order unchanged.
+A causal mechanism study would require randomized interventions
+on trace content or a task with intermediate labels, not inspection
+of provider summaries alone.
+7.2 What the Negative Result Does and Does
+Not Mean
+The most defensible statement is that additional low reasoning did
+not deliver a reliable improvement in this frozen 2024 pipeline. It is
+stronger than saying that nine conventional𝑝-values exceed 0.05
+because it incorporates transaction costs, an economic threshold,
+repeated generations, and operational failures. It is weaker than
+equivalence, which requires formal evidence that effects lie within
+small prespecified bounds, because most CIs still include economi-
+cally meaningful gains and losses. The study also does not establish
+that the baseline trading strategies are profitable, that reasoning
+cannot help other financial tasks, or that the evaluated provider
+controls correspond to the same quantity of compute.
+7.3 Implication for Governed Deployment
+In an institutional process for model risk, increasing reasoning
+effort should be treated as a configuration change that requires
+downstream validation, not as a capability upgrade that is bene-
+ficial by default. Approval evidence should match the deployed
+decision rule and include action stability, failures, costs, and per-
+formance across repeated generations. Under that standard, an
+isolated favorable generation or an unresolved positive point esti-
+mate is insufficient to promote a more expensive reasoning level.
+The conservative default in this study is therefore a governance
+decision under uncertainty, not a claim that baseline reasoning is
+intrinsically superior.
+8 Limitations
+The first limitation is temporal and model scope. Evidence comes
+from one 2024 backtest of U.S. equities and the provider interfaces
+observed at execution. The analysis by calendar period spans dis-
+tinct episodes within the year and shows that no contrast is wholly
+driven by one quarter, but the frequent sign changes reinforce the
+need for replication across years or in a prospective study. Masking
+reduces cues to recognizable events but cannot rule out latent histor-
+ical knowledge, and future provider updates may change behavior.
+Reasoning level support is also asymmetric: only DeepSeek exposes
+the four tested levels, so provider labels should not be interpreted
+as equal units of compute.
+The second limitation is precision and portfolio dependence.
+Most primary intervals admit economically meaningful gains and
+losses; the 80% minimum detectable effects are 6.200–19.156 bps/day
+versus the 0.25 bps/day economic threshold (Appendix Table 9).
+The result is therefore a conservative deployment decision, not
+an equivalence claim. It is also tied to the frozen rule that selects
+10 long and 10 short names: one of 36 exploratory width cells is
+positive before, but not after, correction across the family.
+The final limitation concerns deployment and mechanism. The
+simulator models fixed transaction costs and overlapping holdings
+but not nonlinearmarket impact(prices moving because of the
+strategy’s own trades), borrow availability for short sales, capacity,
+latency, or uncertainty in live orders. The experiment estimates
+the total effect of requesting more reasoning; it does not identify
+the hidden computation causing a score or trade change. These
+omissions lead directly to the next validation step: prospective
+shadow trading, which runs the strategy on live inputs without
+placing orders, is required before any claim about live deployment.
+9 Conclusion
+We evaluate inference-time reasoning as an economic intervention
+in a frozen LLM system for ranking equities. Across DeepSeek, GPT,
+and Gemini, none of nine low versus baseline tests across 241 return
+dates establishes a material improvement in net portfolio return.
+DeepSeek’s replicated result with masked news shows harm, its
+curve across four reasoning levels is nonmonotonic, and repeated
+generations reveal sign instability across the news conditions. Rea-
+soning can also improve or degrade output reliability without im-
+proving returns. In this setting, extra thought changes decisions
+but does not reliably pay for itself. For the primary implementation
+with 10 long and 10 short names, baseline reasoning is therefore
+the appropriate default until a prospective study of the target task
+demonstrates reproducible incremental value. The exploratory ex-
+ception for portfolio width shows why that recommendation should
+not be transferred unchanged to a different portfolio rule.
+Jiayi Chen and Guiling Wang
+References
+[1] Yogesh Agrawal, Aniruddha Dutta, Md Mahadi Hasan, Santu Karmaker, and
+Aritra Dutta. 2026. FinTradeBench: A Financial Reasoning Benchmark for LLMs.
+arXiv preprint arXiv:2603.19225(2026). doi:10.48550/arXiv.2603.19225
+[2] Mohammad Ali Alomrani, Yingxue Zhang, Derek Li, Qianyi Sun, Soumyasundar
+Pal, Zhanguang Zhang, Yaochen Hu, et al . 2025. Reasoning on a Budget: A
+Survey of Adaptive and Controllable Test-Time Compute in LLMs.arXiv preprint
+arXiv:2507.02076(2025). doi:10.48550/arXiv.2507.02076
+[3] Dogu Araci. 2019. FinBERT: Financial Sentiment Analysis with Pre-trained
+Language Models.arXiv preprint arXiv:1908.10063(2019). doi:10.48550/arXiv.
+1908.10063
+[4] David H. Bailey, Jonathan M. Borwein, Marcos Lopez de Prado, and Qiji Jim Zhu.
+2016. The Probability of Backtest Overfitting.The Journal of Computational
+Finance20, 4 (2016), 39–69. doi:10.21314/JCF.2016.322
+[5] David H. Bailey and Marcos Lopez de Prado. 2014. The Deflated Sharpe Ratio:
+Correcting for Selection Bias, Backtest Overfitting, and Non-Normality.The
+Journal of Portfolio Management40, 5 (2014), 94–107. doi:10.3905/jpm.2014.40.5.
+094
+[6] Yifei Chen, Bryan T. Kelly, and Dacheng Xiu. 2022. Expected Returns and Large
+Language Models.SSRN Electronic Journal(2022). doi:10.2139/ssrn.4416687
+[7] Yanxu Chen, Zijun Yao, Yantao Liu, Amy Xin, Jin Ye, Jianing Yu, Lei Hou, and
+Juanzi Li. 2025. StockBench: Can LLM Agents Trade Stocks Profitably in Real-
+World Markets?arXiv preprint arXiv:2510.02209(2025). doi:10.48550/arXiv.2510.
+02209
+[8] Zhiyu Chen, Wenhu Chen, Charese Smiley, Sameena Shah, Iana Borova, Dylan
+Langdon, Reema Moussa, Matt Beane, Ting-Hao Huang, Bryan Routledge, and
+William Yang Wang. 2021. FinQA: A Dataset of Numerical Reasoning over
+Financial Data. InProceedings of EMNLP. https://arxiv.org/abs/2109.00122
+[9] Ing-Haw Cheng, Maurice Granger, Justin Shi, and Vasily Strela. 2026. Agents
+Are Not Algorithms: The Tradeoffs of Decision-Time Reasoning in AI Trading.
+SSRN Electronic Journal(2026). doi:10.2139/ssrn.6713620
+[10] DeepSeek-AI. 2025. DeepSeek-R1: Incentivizing Reasoning Capability in LLMs
+via Reinforcement Learning.arXiv preprint arXiv:2501.12948(2025). doi:10.48550/
+arXiv.2501.12948
+[11] Shihao Gu, Bryan Kelly, and Dacheng Xiu. 2020. Empirical Asset Pricing via
+Machine Learning.The Review of Financial Studies33, 5 (2020), 2223–2273.
+doi:10.1093/rfs/hhaa009
+[12] Peter R. Hansen. 2005. A Test for Superior Predictive Ability.Journal of Business
+& Economic Statistics23, 4 (2005), 365–380. doi:10.1198/073500105000000063
+[13] Campbell R. Harvey, Yan Liu, and Heqing Zhu. 2016. ... and the Cross-Section of
+Expected Returns.The Review of Financial Studies29, 1 (2016), 5–68. doi:10.1093/
+rfs/hhv059
+[14] Hans R. Kunsch. 1989. The Jackknife and the Bootstrap for General Stationary
+Observations.The Annals of Statistics17, 3 (1989), 1217–1241. doi:10.1214/aos/
+1176347265
+[15] Haohang Li, Yupeng Cao, Yangyang Yu, Shashidhar Reddy Javaji, Zhiyang Deng,
+Yueru He, et al. 2025. INVESTORBENCH: A Benchmark for Financial Decision-
+Making Tasks with LLM-based Agent. InProceedings of the 63rd Annual Meeting
+of the Association for Computational Linguistics. https://arxiv.org/abs/2412.18174
+[16] Xiangyu Li, Yawen Zeng, Xiaofen Xing, Jin Xu, and Xiangmin Xu. 2025. Profit
+Mirage: Revisiting Information Leakage in LLM-based Financial Agents.arXiv
+preprint arXiv:2510.07920(2025). doi:10.48550/arXiv.2510.07920
+[17] Hunter Lightman, Vineet Kosaraju, Yura Burda, Harri Edwards, Bowen Baker,
+Teddy Lee, Jan Leike, John Schulman, Ilya Sutskever, and Karl Cobbe. 2023. Let’s
+Verify Step by Step.arXiv preprint arXiv:2305.20050(2023). doi:10.48550/arXiv.
+2305.20050
+[18] Andrew W. Lo and A. Craig MacKinlay. 1990. Data-Snooping Biases in Tests
+of Financial Asset Pricing Models.The Review of Financial Studies3, 3 (1990),
+431–467. doi:10.1093/rfs/3.3.431
+[19] Alejandro Lopez-Lira and Yuehua Tang. 2023. Can ChatGPT Forecast Stock Price
+Movements? Return Predictability and Large Language Models.arXiv preprint
+arXiv:2304.07619(2023). doi:10.48550/arXiv.2304.07619
+[20] R. David McLean and Jeffrey Pontiff. 2016. Does Academic Research Destroy
+Stock Return Predictability?The Journal of Finance71, 1 (2016), 5–32. doi:10.
+1111/jofi.12365
+[21] Niklas Muennighoff, Zitong Yang, Weijia Shi, Xiang Lisa Li, Li Fei-Fei, Hannaneh
+Hajishirzi, Luke Zettlemoyer, Percy Liang, Emmanuel Candes, and Tatsunori
+Hashimoto. 2025. s1: Simple Test-Time Scaling.arXiv preprint arXiv:2501.19393
+(2025). doi:10.48550/arXiv.2501.19393
+[22] Whitney K. Newey and Kenneth D. West. 1987. A Simple, Positive Semi-definite,
+Heteroskedasticity and Autocorrelation Consistent Covariance Matrix.Econo-
+metrica55, 3 (1987), 703–708. doi:10.2307/1913610
+[23] Robert Novy-Marx. 2015.Backtesting Strategies Based on Multiple Signals. Tech-
+nical Report 21329. National Bureau of Economic Research. doi:10.3386/w21329
+[24] Zhihong Pan, Kai Zhang, Yuze Zhao, and Yupeng Han. 2026. Adaptive Model
+and Strategy Routing for Cost-Efficient LLM Services. InProceedings of the ACM
+Web Conference. 5568–5578. doi:10.1145/3774904.3792556
+[25] Theo Nicolas Sitjar. 2026. Reasoning Into Confidence: A Controlled Single-Trader
+Ablation of In-Decision Chain-of-Thought on LLM Trading Performance and
+Calibration.SSRN Electronic Journal(2026). doi:10.2139/ssrn.6946379
+[26] Charlie Snell, Jaehoon Lee, Kelvin Xu, and Aviral Kumar. 2025. Scaling LLM
+Test-Time Compute Optimally Can Be More Effective than Scaling Parameters
+for Reasoning. InInternational Conference on Learning Representations. https:
+//arxiv.org/abs/2408.03314
+[27] Rakeshkumar H. Sodha. 2025. When Reasoning Fails: Evaluating “Thinking”
+LLMs for Stock Prediction.arXiv preprint arXiv:2511.08608(2025). doi:10.48550/
+arXiv.2511.08608
+[28] Ryan Sullivan, Allan Timmermann, and Halbert White. 1999. Data-Snooping,
+Technical Trading Rule Performance, and the Bootstrap.The Journal of Finance
+54, 5 (1999), 1647–1691. doi:10.1111/0022-1082.00163
+[29] Paul C. Tetlock. 2007. Giving Content to Investor Sentiment: The Role of Media
+in the Stock Market.The Journal of Finance62, 3 (2007), 1139–1168. doi:10.1111/j.
+1540-6261.2007.01232.x
+[30] Xuezhi Wang, Jason Wei, Dale Schuurmans, Quoc Le, Ed Chi, Sharan Narang,
+Aakanksha Chowdhery, and Denny Zhou. 2023. Self-Consistency Improves
+Chain of Thought Reasoning in Language Models. InInternational Conference on
+Learning Representations. https://arxiv.org/abs/2203.11171
+[31] Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Brian Ichter, Fei
+Xia, Ed Chi, Quoc Le, and Denny Zhou. 2022. Chain-of-Thought Prompting
+Elicits Reasoning in Large Language Models. InAdvances in Neural Information
+Processing Systems, Vol. 35. 24824–24837. https://arxiv.org/abs/2201.11903
+[32] Halbert White. 2000. A Reality Check for Data Snooping.Econometrica68, 5
+(2000), 1097–1126. doi:10.1111/1468-0262.00152
+[33] Shijie Wu, Ozan Irsoy, Steven Lu, Vadim Dabravolski, Mark Dredze, Sebas-
+tian Gehrmann, Prabhanjan Kambadur, David Rosenberg, and Gideon Mann.
+2023. BloombergGPT: A Large Language Model for Finance.arXiv preprint
+arXiv:2303.17564(2023). doi:10.48550/arXiv.2303.17564
+[34] Yihan Xia, Panpan You, Taotao Wang, Fang Liu, Han Qi, Xiaoxiao Wu, and Shengli
+Zhang. 2026. Agentic Trading: When LLM Agents Meet Financial Markets.arXiv
+preprint arXiv:2605.19337(2026). doi:10.48550/arXiv.2605.19337
+[35] Yijia Xiao, Edward Sun, Di Luo, and Wei Wang. 2024. TradingAgents: Multi-
+Agents LLM Financial Trading Framework.arXiv preprint arXiv:2412.20138(2024).
+doi:10.48550/arXiv.2412.20138
+[36] Qianqian Xie, Weiguang Han, Zhengyu Chen, Ruoyu Xiang, Xiao Zhang, et al.
+2024. FinBen: A Holistic Financial Benchmark for Large Language Models. In
+Advances in Neural Information Processing Systems, Vol. 37. https://arxiv.org/abs/
+2402.12659
+[37] Qianqian Xie, Weiguang Han, Xiao Zhang, Yanzhao Lai, Min Peng, Alejandro
+Lopez-Lira, and Jimin Huang. 2023. PIXIU: A Large Language Model, Instruction
+Data and Evaluation Benchmark for Finance.arXiv preprint arXiv:2306.05443
+(2023). doi:10.48550/arXiv.2306.05443
+[38] Hongyang Yang, Xiao-Yang Liu, and Christina Dan Wang. 2023. FinGPT: Open-
+Source Financial Large Language Models.arXiv preprint arXiv:2306.06031(2023).
+doi:10.48550/arXiv.2306.06031
+[39] Hongyang Yang, Boyu Zhang, Neng Wang, Cheng Guo, Xiaoli Zhang, Likun Lin,
+Junlin Wang, Tianyu Zhou, Mao Guan, Runjia Zhang, and Christina Dan Wang.
+2024. FinRobot: An Open-Source AI Agent Platform for Financial Applications
+Using Large Language Models.arXiv preprint arXiv:2405.14767(2024). doi:10.
+48550/arXiv.2405.14767
+[40] Yi Yang, Mark Christopher Siy Uy, and Allen Huang. 2020. FinBERT: A Pretrained
+Language Model for Financial Communications.arXiv preprint arXiv:2006.08097
+(2020). doi:10.48550/arXiv.2006.08097
+[41] Shunyu Yao, Dian Yu, Jeffrey Zhao, Izhak Shafran, Thomas L. Griffiths, Yuan
+Cao, and Karthik Narasimhan. 2023. Tree of Thoughts: Deliberate Problem Solv-
+ing with Large Language Models. InAdvances in Neural Information Processing
+Systems, Vol. 36. https://arxiv.org/abs/2305.10601
+[42] Xixian Yong, Xiao Zhou, Yingying Zhang, Jinlin Li, Yefeng Zheng, and Xian Wu.
+2025. Think or Not? Exploring Thinking Efficiency in Large Reasoning Models
+via an Information-Theoretic Lens. InAdvances in Neural Information Processing
+Systems, Vol. 38. doi:10.52202/085713-0098
+[43] Yangyang Yu, Haohang Li, Zhi Chen, Yuechen Jiang, Yang Li, Denghui Zhang,
+Rong Liu, Jordan W. Suchow, and Khaldoun Khashanah. 2023. FinMem: A
+Performance-Enhanced LLM Trading Agent with Layered Memory and Character
+Design.arXiv preprint arXiv:2311.13743(2023). doi:10.48550/arXiv.2311.13743
+[44] Yangyang Yu, Zhiyuan Yao, Haohang Li, Zhiyang Deng, Yuechen Jiang, Yupeng
+Cao, Zhi Chen, et al. 2024. FinCon: A Synthesized LLM Multi-Agent System with
+Conceptual Verbal Reinforcement for Enhanced Financial Decision Making. In
+Advances in Neural Information Processing Systems. https://arxiv.org/abs/2407.
+06567
+[45] Wentao Zhang, Lingxuan Zhao, Haochong Xia, Shuo Sun, Jiaze Sun, Molei
+Qin, et al. 2024. A Multimodal Foundation Agent for Financial Trading: Tool-
+Augmented, Diversified, and Generalist.arXiv preprint arXiv:2402.18485(2024).
+doi:10.48550/arXiv.2402.18485
+[46] Taojie Zhu, Wentao Zhao, Rui Sun, Beidi Luan, Jiacheng Lu, Sinuo Wang, et al.
+2026. From Knowing to Doing: A Memory-Controlled Benchmark for LLM
+Trading Agents on Stock Markets.arXiv preprint arXiv:2605.28359(2026). doi:10.
+48550/arXiv.2605.28359
+The Price of Thought: Does Test-Time Reasoning Pay in LLM Trading?
+A Prompt and Structured Output Contract
+The system instruction casts the model as a conservative cross-
+sectional equity forecaster, treats supplied article text as untrusted
+data, restricts the response to the supplied inputs, and requires
+exactly one structured text object in JavaScript Object Notation
+(JSON). The user prompt asks for relative return over the next five
+trading sessions. It instructs the model to favor persistent evidence
+across horizons and penalize reversal, unstable volatility, illiquidity,
+contradiction, and uncertainty. In news tasks it distinguishes new
+material information about the target from repetition, commentary,
+price narration, legal advertising, and noise.
+Each of the 25 expected opaque identifiers must appear exactly
+once in:
+{"items":[
+{"asset":"A0123456789",
+"score":0.0,
+"confidence":0.0,
+"materiality":0.0,
+"uncertainty":0.0,
+"abstain":false}
+]}
+The exact prompts are stored as compressed immutable artifacts
+with hashes. Schema syntax differs by provider, but the fields and
+bounds are common.
+A.1 Reasoning Intervention Settings
+Table 4: Provider controls defining the reasoning interven-
+tion. Prompt, inputs, schema, candidate order, and output
+limit remain fixed within each backbone.
+Backbone Baseline Added reasoning Provider control Output limit
+DeepSeek none low, high, maximumthinking;reasoning_effort65,536
+GPT none lowreasoning.effort45,000
+Gemini minimal lowthinkingLevel8,192
+DeepSeek disables thinking for none and enables it with the re-
+quested effort otherwise; GPT varies reasoning.effort; Gemini
+varies thinkingLevel. No condition receives an additional reason-
+ing instruction. Provider labels and output limits are not directly
+comparable quantities of computation. Reasoning summaries or
+traces are retained for auditing but are not treated as faithful records
+of hidden computation.
+A.2 Numerical Data Provenance and Volume
+The numerical condition is derived from the Center for Research
+in Security Prices (CRSP) daily stock files accessed through WRDS.
+The source fields include daily prices, returns, trading volume, open-
+ing prices, high and low price fields, share codes, exchange codes,
+and delisting records. Dated security name intervals restrict the
+sample to ordinary common shares listed on the NYSE, AMEX,
+or Nasdaq. Reported returns are combined with delisting returns.
+Under the frozen cleaning rule, when a delisting code from 500
+to 599 has no reported delisting return, the return is set to−30%;
+these codes indicate a delisting related to poor performance. Other
+missing delisting returns remain missing. All model features end at
+the preceding trading session’s close.
+Raw CRSP files from 2020 through 2024 support the required
+histories. The resulting feature construction panel fixes 1,000 liq-
+uid securities using information ending December 30, 2022, and
+contains 974,641 security and date rows over 1,005 trading dates
+from January 4, 2021, through December 31, 2024. Feature ranks
+are computed within this broader panel before values are retained
+for the 100 active candidates. Across the 241 formation dates in the
+experiment, the models receive 24,100 stock and date numerical
+records. Each record contains 16 ranked features and four sum-
+maries per feature, for 64 values per stock and 1,542,400 values
+in the unique 2024 numerical input panel. The same records are
+reused across reasoning levels and model families, so repeated calls
+do not create additional market observations.
+A.3 News Data Provenance and Volume
+The news conditions use the licensed EOD Historical Data (EODHD)
+news feed. Articles were linked to the active CRSP security universe
+through unambiguous provider ticker mappings. For each forma-
+tion date, an article was eligible only if its provider timestamp fell
+from 4:00 p.m. Eastern Time on the preceding trading session up
+to, but not including, 9:00 a.m. Eastern Time on the formation date.
+Duplicate query returns were normalized to stable article identi-
+fiers, and the three most recent eligible articles for each stock and
+formation date were retained. Each model received the publisher,
+title, elapsed hours before the decision, and full article text, subject
+to fixed context limits of 9,000 characters per article and 18,000
+characters per stock. Identifiable and masked news used the same
+articles. Masking replaced issuer names, tickers, explicit calendar
+dates and years, and the publisher label while otherwise preserving
+the supplied content.
+Across 241 formation dates and 100 stocks per date, 16,916 of
+24,100 stock and date combinations (70.2%) contained at least one
+eligible article, while 7,184 (29.8%) contained none. The retained
+packets contained 38,097 article references linked to stocks, repre-
+senting 29,444 unique provider article identifiers and 13 publisher
+labels. Among the 16,916 nonempty packets, 4,623 contained one
+article, 3,405 contained two, and 8,888 contained three. A source
+article linked to more than one stock is counted once among unique
+identifiers but once for each stock among the 38,097 references.
+B Complete DeepSeek Confirmatory Chain
+Table 5: DeepSeek audit across three generations, bps/day.
+Return date remains the market sampling dimension.
+Condition Low–none Maximum–low Maximum–none
+Numerical−0.529[−16.954,15.896] −4.346[−8.979,0.286] −4.875[−20.319,10.569]
+Identifiable news−8.525[−18.208,1.158] +4.472[−1.595,10.538] −4.053[−12.949,4.843]
+Masked news−9.016[−16.248,−1.784] +0.770[−4.812,6.352] −8.246[−17.641,1.149]
+The secondary adjacent contrasts (point estimates in bps/day)
+are: numerical, low–none−0.529, high–low−2.839, maximum–
+high−1.507; identifiable news,−8.525,−0.167,+4.639; and masked
+news,−9.016,+1.289,−0.519. Only maximum–high for identifiable
+news has a two-sided 95% CI entirely above zero.
+Jiayi Chen and Guiling Wang
+C Sensitivity to Failure Handling
+GPT’s 57 invalid primary tasks and Gemini’s 136 invalid primary
+tasks remain imputed as neutral in the intention-to-treat estimate.
+Two frozen sensitivity analyses test this choice. Thecomplete date
+analysisremoves every formation date containing any failure. The
+matched chunk analysisremoves the same chunk of 25 assets from
+both reasoning levels whenever either level fails. For both GPT and
+Gemini, all three information conditions remain inconclusive under
+both analyses. Thus failure handling is operationally important but
+does not determine the headline return conclusion.
+DeepSeek’s deterministic repair procedure affected 17 of 16,176
+tasks. Across the backbone evaluation, 15 omitted asset rows were
+imputed as neutral and seven asset identifier errors with an edit dis-
+tance of one were corrected when the intended match was unique.
+Repairs were completed without reading outcomes, and the raw
+attempts and amendments are retained.
+D Bootstrap Robustness
+Table 6: Paired bootstrap intervals at a one way cost of 10 bps.
+MBB-5 is the moving-block bootstrap with five sessions per
+block; cohort resamples complete formation contributions.
+Each uses 50,000 deterministic resamples.
+Contrast MBB-5 95% CI Cohort 95% CI
+DeepSeek numerical[−7.264,20.328] [−2.958,15.670]
+DeepSeek identifiable news[−9.099,9.287] [−7.140,7.849]
+DeepSeek masked news[−6.635,9.764] [−5.783,8.715]
+GPT numerical[−1.832,10.338] [−2.104,9.436]
+GPT identifiable news[−6.020,4.586] [−6.269,5.015]
+GPT masked news[−4.093,4.667] [−4.767,4.919]
+Gemini numerical[−6.933,7.330] [−6.635,8.097]
+Gemini identifiable news[−7.690,8.497] [−9.419,9.555]
+Gemini masked news[−8.423,6.766] [−8.127,5.940]
+DeepSeek masked news, audit generations 1–3[−17.929,−3.477] [−15.482,−2.281]
+These supplementary checks do not replace the primary HAC
+analysis. All nine annual contrasts remain inconclusive, and the
+audit contrast remains harmful. Moving-block sensitivities at 10
+and 20 sessions also leave every annual contrast inconclusive and
+the audit harmful. Draws in a machine readable format, cluster
+contributions, exact centered bootstrap𝑝-values, and deterministic
+seeds are retained in the robustness artifact.
+E Sensitivity to Transaction Costs
+The portfolio simulator replays every condition at one way costs of
+5, 10, 20, and 50 bps. GPT’s low versus baseline effects remain in-
+conclusive at every cost. Its numerical estimate ranges from+3.530
+bps/day at 5 bps cost to+3.619at 50 bps; its identifiable news es-
+timate ranges from−0.647to−0.460; and its estimate for masked
+news ranges from+0.004to+0.332. Gemini likewise remains incon-
+clusive: numerical effects range from+0.721to+0.762, identifiable
+news ranges from−0.060to −0.803, and masked news ranges from
+−1.574to−1.066. The small changes occur because reasoning levels
+induce different turnover. Full confidence intervals and portfolio
+paths are provided in evaluation files that machines can read.
+F Absolute Performance and Sensitivity to
+Portfolio Width
+Table 7 supplies economic context for the paired effects. Each cell
+reports baseline/low reasoning; Gemini’s baseline is minimal. Net is
+mean return after trading costs, the Sharpe ratio scales mean return
+by return volatility, maximum drawdown (MDD) is the largest
+loss from a peak to a trough, and turnover is the average fraction
+of capital traded in one direction. Absolute levels are descriptive
+historical backtests and do not establish prospective profitability.
+Table 7: Absolute portfolio context at a one way cost of 10
+bps. Each pair is baseline/low reasoning; metrics are defined
+immediately above.
+Backbone Information Net Sharpe MDD Turnover
+DeepSeek numerical−6.376/−0.217−0.80/−0.14−32.03%/−20.52% 30.83%/24.48%
+DeepSeek identifiable news−4.386/−4.008−0.59/−0.52−27.80%/−24.46% 31.19%/27.77%
+DeepSeek masked news−5.412/−3.963−0.69/−0.50−26.68%/−28.48% 30.79%/27.88%
+GPT numerical−3.506/+0.033−0.46/−0.12−27.44%/−23.58% 26.22%/26.02%
+GPT identifiable news−1.487/−2.113−0.27/−0.33−24.94%/−29.53% 27.28%/26.86%
+GPT masked news−3.483/−3.442−0.47/−0.46−25.96%/−26.36% 27.61%/26.88%
+Gemini numerical−4.962/−4.204−0.57/−0.50−32.17%/−34.38% 26.56%/26.65%
+Gemini identifiable news+1.417/+1.275+0.04/+0.03−24.84%/−23.46% 27.93%/29.59%
+Gemini masked news+2.122/+0.999+0.08/−0.00−30.15%/−21.77% 28.38%/29.51%
+Table 8 reuses the frozen scores while varying only the number
+of selected names per side. The result for 10 long and 10 short
+names remains primary. One of 36 exploratory cells meets the
+unadjusted rule for material benefit: DeepSeek masked news at 20
+names per side. Its HAC 95% CI is[0.597, 10.942] bps/day and its
+interval from a moving-block bootstrap with five sessions per block
+is[0.690, 11.223]. Across the family of 36 cells, however, no HAC
+or moving-block𝑝-value survives Holm adjustment; both adjusted
+𝑝-values for this cell equal 1.000. The sweep therefore demonstrates
+sensitivity to portfolio width rather than a confirmatory reasoning
+benefit.
+Table 8: Sensitivity to portfolio width: net return for low
+relative to baseline reasoning (bps/day) at a one way cost of
+10 bps. Columns give names selected per side. An asterisk
+marks the sole unadjusted cell with material benefit.
+Backbone Information 5 10 (primary) 15 20
+DeepSeek numerical+5.489+6.159+9.239+5.315
+DeepSeek identifiable news−5.362+0.378+2.399+3.909
+DeepSeek masked news+1.233+1.449+6.206+5.769 ∗
+GPT numerical−6.748+3.540+2.891+0.409
+GPT identifiable news−4.980−0.626−3.883−0.708
+GPT masked news−2.507+0.040+0.631+2.887
+Gemini numerical+12.474+0.758−0.468+0.118
+Gemini identifiable news−4.739−0.142+1.386+1.617
+Gemini masked news+0.315−1.123+0.016−0.756
+G Precision and Detectable Effects
+Table 9 reports a design diagnostic based on the observed paired
+HAC standard error. Theminimum detectable effect(MDE) is the
+smallest true effect that a design of this precision would detect with
+a chosen probability; the two-sided 80% MDE is (𝑧.975+𝑧 .80)cSE.
+This calculation summarizes the precision of the realized design
+under its estimated dependence structure; it is not an equivalence
+test and does not convert an inconclusive contrast into a zero effect.
+The Price of Thought: Does Test-Time Reasoning Pay in LLM Trading?
+Table 9: HAC precision diagnostics for the nine primary low
+versus baseline contrasts, in bps/day; MDE is minimum de-
+tectable effect.
+Backbone Information HAC SE 95% radius 80% MDE
+DeepSeek numerical 6.838 13.402 19.156
+DeepSeek identifiable news 4.802 9.411 13.452
+DeepSeek masked news 4.192 8.217 11.745
+GPT numerical 3.097 6.071 8.678
+GPT identifiable news 2.693 5.279 7.545
+GPT masked news 2.213 4.337 6.200
+Gemini numerical 3.567 6.991 9.993
+Gemini identifiable news 4.074 7.986 11.415
+Gemini masked news 3.722 7.295 10.428
+H Agreement Across Repeated Generations
+Spearman rank correlation( 𝜌) measures how similarly two genera-
+tions order all assets.Tail Jaccardis the fraction of names shared by
+their combined selected long and short sets.Identical tailsrecords
+whether both selected sets match exactly.
+Table 10: Mean pairwise generation agreement across the
+three generation pairs.
+Backbone Information Level Score𝜌Tail Jaccard Identical tails
+GPT numerical none .946 .642 .000
+GPT numerical low .946 .657 .000
+GPT identifiable news none .899 .591 .000
+GPT identifiable news low .911 .589 .000
+GPT masked news none .905 .567 .000
+GPT masked news low .915 .583 .000
+Gemini numerical minimal .858 .515 .000
+Gemini numerical low .741 .359 .000
+Gemini identifiable news minimal .811 .479 .000
+Gemini identifiable news low .692 .363 .000
+Gemini masked news minimal .816 .461 .000
+Gemini masked news low .669 .355 .000
+Each pairwise agreement calculation contains 4,800 asset rows
+per level and information condition. No audited GPT or Gemini
+formation date reproduces the exact same tails in any generation
+pair.
+I Analysis by Calendar Period
+Table 11 partitions the nine primary daily effects of low relative to
+baseline using predefined calendar boundaries. Values are descrip-
+tive subgroup means in bps/day; the annual estimates and inference
+remain primary.
+Table 11: Effects by calendar period in 2024, in bps/day. H1 is
+January–June, H2 is July–December, and Q1–Q4 are calendar
+quarters, assigned by portfolio return date.
+Contrast H1 H2 Q1 Q2 Q3 Q4
+DeepSeek numerical−10.027+20.687−14.004−6.807+21.440+19.922
+DeepSeek identifiable news+1.290−0.440−8.325+9.073−3.715+2.886
+DeepSeek masked news−3.121+5.550+1.628−6.965+8.364+2.693
+GPT numerical+4.138+3.002+10.946−1.373+6.866−0.922
+GPT identifiable news+2.791−3.692+2.837+2.753−9.938+2.653
+GPT masked news+1.581−1.342+2.623+0.737+0.157−2.866
+Gemini numerical+2.935−1.197+6.603−0.034−2.617+0.246
+Gemini identifiable news−6.085+5.192−7.416−5.008+7.228+3.125
+Gemini masked news+0.776−2.827−3.361+4.125+12.083−17.974
+DeepSeek numerical has a raw heterogeneity 𝑝=. 014for H2
+minus H1, and Gemini masked news has a raw𝑝=. 045for equal-
+ity across quarters; their values after Holm adjustment across the
+family of 18 tests are.246and .757. No heterogeneity test survives
+the family correction. The largest quarter accounts for 34.2%–64.5%
+of each contrast’s sum of absolute quarterly contributions, so no
+annual estimate is wholly produced by one quarter. However, only
+GPT numerical retains the same sign in both halves, and seven an-
+nual directions flip when the estimate is recomputed after omitting
+at least one quarter. These diagnostics show temporal breadth and
+instability within 2024, not independent evidence across market
+years.
+J Protocol Integrity and Claim Boundaries
+Table 12 summarizes the fixed study status. All three backbones and
+low versus baseline contrasts were predetermined, and each back-
+bone evaluation froze its inputs, prompts, schema, failure policy,
+portfolio mapping, and estimand before outcome evaluation.
+Table 12: Protocol status of the three completed backbone
+evaluations. Operational amendments did not change rea-
+soning levels or return analysis.
+Backbone Reasoning contrast Formation dates Operational note
+DeepSeek-Flash none to low 241 no amendment that changed treatment
+GPT-5.6 Luna none to low 241 delivery amendment only; outcomes unseen
+Gemini 3.1 Flash-Lite minimal to low 241 transport/concurrency only; outcomes unseen
+Additional disclosures are required for interpretation:
+• GPT’s primary evaluation used 3,120 Batch tasks and 736
+synchronous Responses tasks under a frozen delivery amend-
+ment made without viewing outcomes.Delivery modemeans
+how requests were sent to the provider; because it changes
+with calendar time, it is not a causal treatment.
+• Every backbone has three generations for every informa-
+tion condition on the same audit sample of 48 formation
+dates. The repeated calls measure output and portfolio stabil-
+ity without changing the primary annual estimands or the
+number of return dates.
+• Gemini 3.1 Flash-Lite passed the frozen admission gate for
+identifier fidelity, a check that it reproduces each opaque
+asset code exactly, before backbone evaluation.
+• Gemini amendments to state labels, response files, concur-
+rency (the number of simultaneous requests), and orches-
+tration (request scheduling) altered transport only. Prompts,
+tasks, reasoning levels, failure handling, budgets, and the
+evaluator were unchanged.
+Artifact availability and responsible use.The authors retain
+complete evaluation records and plan to release the evaluation code,
+prompts, result summaries, evaluator hashes, and artifact manifest
+in a public GitHub repository. Licensed market and news data, to-
+gether with provider outputs restricted by applicable terms, will not
+be redistributed. This retrospective simulation placed no live trades
+and recruited no human participants. It is not investment advice or
+evidence of prospective profitability. Any public release will pre-
+serve the historical backtest label, documented claim boundaries,
+and applicable licensing restrictions.

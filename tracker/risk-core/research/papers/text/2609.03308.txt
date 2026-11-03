@@ -1,0 +1,1523 @@
+arXiv 2609.03308  https://arxiv.org/abs/2609.03308
+
+1
+Risk and Anomaly Identification
+for Distribution Network Optimal Operation
+Based on Reinforcement Learning
+and Uncertainty Quantification
+Ziqi Zhang,Member, IEEE
+Abstract—Reliable operation of modern distribution networks
+requires timely identification of operational risks and anomalous
+events under pervasive uncertainty. In practice, operators must
+identify risks that are inherent in stochastic yet in-distribution
+conditions, and anomalies that correspond to out-of-distribution
+behaviors such as unusual load patterns, extreme weather or
+cyber-physical attacks. This paper addresses this joint risk and
+anomaly identification problem for optimal distribution network
+operation and proposes a deep reinforcement learning framework
+that is explicitly uncertainty aware. We integrate distributional
+and Bayesian deep reinforcement learning to realize a second-
+order uncertainty quantification scheme that decomposes total
+uncertainty into aleatoric and epistemic components, which
+are respectively used to characterize inherent risk and out-of-
+distribution anomalies. The resulting epistemic estimates drive
+both exploration during training and out-of-distribution detec-
+tion with fallback control during deployment, whereas aleatoric
+estimates are used to characterize intrinsic operational risk.
+Simulation results demonstrate the performance of our DRL
+agent and the effectiveness of the uncertainty quantification.
+Index Terms—Anomaly detection, deep reinforcement learning,
+distribution network operation, energy management systems,
+uncertainty quantification.
+I. INTRODUCTION
+M
+ODERN distribution network (DN) operation is in-
+creasingly shaped by renewable energy sources (RES)
+such as solar photovoltaics (PV), distributed energy storage
+systems (ESS) and distributed diesel generators (DGs). These
+factors make operation stochastic, high-dimensional, and time-
+coupled. Model-free deep reinforcement learning (DRL) [1]
+gives real-time policy for nonlinear DNs. However, despite
+DRL’s advantages, vanilla DRL techniques face trustworthi-
+ness issues when applied to real-world DNs, namely lacking
+the ability of uncertainty quantification (UQ). In the realm of
+UQ, uncertainties are generally classified into two categories:
+(1) epistemic uncertainty (EU) arising from a lack of knowl-
+edge or information about the current situation; (2) aleatoric
+uncertainty (AU) inherent to the environment and cannot be
+reduced by gathering more information. The combination of
+the two is termed as total uncertainty.
+For a DRL agent, high EU may be caused by out-of-
+distribution (OOD) scenarios, where the operational environ-
+ment deviates significantly from training data, contrasting to
+Z. Zhang is with the College of Automation Engineering, Nanjing Uni-
+versity of Aeronautics and Astronautics, Nanjing 211100, China (E-mail:
+1124562662@qq.com ).
+in-distribution (InD) scenarios where the operational environ-
+ment remains close to training data. Such distributional shifts
+may arise from various DN anomalies, encompassing: (1)
+atypical load profiles, such as variable charging patterns of
+electric vehicles, air conditioning demand surge due to heat-
+waves and cold snaps, or spikes because of unplanned public
+events, all of which introduce complex and non-stationary
+patterns that are challenging to detect; (2) unexpected RES be-
+haviors, such as storm-induced damage, inverter malfunctions,
+or irregular cloud shading over PV systems, where spatio-
+temporal dynamics of cloud movements create a combinatorial
+explosion of non-uniform shading patterns on distributed PV
+arrays [2]; (3) the deterioration of infrastructures, such as slow
+degradation of transformer insulation, corrosion of conductors
+and connectors, and increased impedance in aging cables,
+which collectively result in small but cumulative shifts in the
+whole system’s physical parameters, often indistinguishable
+from random noises.
+In these OOD scenarios with conditions not seen during
+training, DRL agents based on neural networks (NNs) might
+fail to generalize robustly [3]. This can result in confident yet
+suboptimal or unsafe actions, such as improper voltage reg-
+ulation, excessive reactive power compensation or inefficient
+diesel generator dispatch. These actions can lead to inefficient
+energy management, branch overloading, violation of nodal
+voltage limits, severe load imbalances, potentially causing
+increased operational costs, widespread power outages, or even
+physical damage to critical grid components.
+The situation can be exacerbated by limited availability of
+the training data, especially in DNs due to privacy concerns
+(e.g., smart meters and electric vehicles’ privacy) or infras-
+tructure constraints (e.g., sparse monitoring devices). What
+is worse, the combination of the time-series data and the
+large number of DN buses contributes to the high dimen-
+sionality of the scenario, bringing the curse-of-dimensionality
+phenomenon that most points tend to have similar distances
+among them [4]. Such phenomenon, along with the complex
+interpolation and extrapolation of NNs, may render traditional
+OOD detection approaches such as those based on metrics
+or density estimation [5] less effective. A related challenge
+to the OOD problem is the presence of adversarial examples
+[6]. These examples are much closer to the training data
+distribution, with their differences from certain training sam-
+ples often resembling small perturbations. Despite these subtle
+arXiv:2609.03308v1  [cs.LG]  3 Sep 2026
+2
+differences, adversarial examples can still lead to incorrect
+classifications by neural networks [6], [7]. In the context of
+power systems, such perturbations can be deliberately injected
+by malicious attackers into grid cyber-physical system through
+false data injection attacks (FDIA) [8], [9], which can evade
+conventional anomaly detection in the SCADA system. The
+difficulties mentioned necessitate the quest for advanced EU
+estimation methods.
+In the realm of DN, AU represents the irreducible stochas-
+ticity of the grid, including fluctuations in RES [10], electricity
+prices or load behaviors, that cannot be reduced through
+further data collection. AU-aware methods model a whole
+distribution of returns, not just the scalar expectation [11].
+Effectively capturing such inherent stochasticity is helpful
+because it enables the system to avoid high-risk actions that
+might otherwise appear optimal based on expected returns but
+could lead to detrimental worst-case outcomes.
+By juxtaposing the characteristics of AU and EU, it becomes
+evident that the two types of uncertainty require distinct han-
+dling strategies. However, most previous methods concentrate
+on reducing the probability of constraint violations [12], [13],
+or mainly estimate the combined total uncertainty without dif-
+ferentiating between its sources. Existing studies address only
+part of the uncertainty-aware control problem. Constrained
+and safe DRL methods improve feasibility in DN operation,
+but mainly under in-distribution stochasticity and without
+identifying when the learned controller becomes epistemically
+unreliable [14], [15]. Risk-sensitive and distributional RL
+methods capture return variability and tail risk, yet they do
+not explicitly distinguish irreducible environmental random-
+ness from model uncertainty [16], [17]. Bayesian DRL and
+probabilistic OPF approaches introduce predictive uncertainty
+into decision making, but generally treat uncertainty as an
+aggregated quantity rather than decomposing it into AU and
+EU with different operational roles [18], [19]. Bayesian UQ
+has also been used for power-system forecasting and risk
+assessment, but mostly in offline prediction or assessment
+settings rather than in closed-loop DRL control with OOD-
+triggered fallback [20], [21].
+The lack of UQ in naive DRL poses a barrier to its
+deployment in real-world safety-critical DN operations. To
+close the gaps mentioned, we aim to develop an uncertainty-
+aware framework to handle OOD cases and manage risks,
+subsuming previous distributional DRL and Bayesian DRL
+methods as submodules. The main contributions are summa-
+rized as follows:
+(1) We formulate risk and anomaly identification in
+distribution-network operation as areturn-law uncer-
+tainty quantificationproblem. Previous methods consider
+only a single type of uncertainty, whereas our approach
+allows the total uncertainty to be further split into AU and
+EU. Specifically, we adopt a second-order UQ method to
+distinctly characterize risks and anomalies.
+(2) We develop a critic-side return-space instantiation of
+distance-based second-order UQ, beyond the origi-
+nal finite-label categorical instantiation. By using one-
+dimensional quantile representations and the Wasserstein
+barycenter, we convert the original distance-based defini-
+tions into tractable forms for critic-side AU and EU. We
+establish the equivalence of these forms to the original
+definitions and prove the Monte Carlo consistency of their
+empirical estimators.
+(3) We propose an epistemic-reliability gated deployment
+scheme that turns critic-side EU into an online fallback
+indicator. When the actor’s action becomes epistemically
+unreliable, control is switched from fast DRL inference to
+a conservative MISOCP-based OPF controller. Thus, EU
+is not used as a passive anomaly score, but as an opera-
+tional switching signal that couples data-driven control in
+familiar regimes with optimization-based recovery under
+distribution shift.
+The rest of this paper is organized as follows. Section II
+rigorously formulates the DN operation problem. Section III
+proposes the main framework. Section IV conducts numeri-
+cal simulations to demonstrate effectiveness of the proposed
+method. Section V presents the conclusions, and the Appendix
+provides detailed proofs.
+II. OPTIMALDN OPERATIONFORMULATION
+We first cast the DN operation problem into a constrained
+Markov decision process (CMDP), then specify the physical
+model and operational constraints of the DN.
+A. Preliminaries on CMDP
+We consider a discounted constrained Markov decision
+process (CMDP)⟨S,A, P, R, C, γ⟩, whereSis the state space,
+Ais the action space,P:S × A × S →[0,1]is the
+transition kernel,R:S × A →Ris the reward function,
+C:S ×A →Rm is a vector of constraint costs, andγ∈[0,1)
+is the discount factor. A stationary policyπ:S →∆(A)maps
+each state to a distributionπ(· |s)over actions (in practice we
+often use deterministic policies, written asa t =π(s t)). For
+an initial states 0, the discounted return and constraint returns
+of policyπare
+J πR(s0) =E π
+" ∞X
+t=0
+γtR(st, at)
+#
+,(1)
+J πCi (s0) =E π
+" ∞X
+t=0
+γtCi(st, at)
+#
+, i= 1, . . . , m.(2)
+The CMDP objective is
+max
+π
+J πR(s0),(3)
+s.t.J πCi (s0)≤d i, i= 1, . . . , m.(4)
+We employ Lagrangian relaxation to address the constrained
+optimization. Instead of maintaining separate multipliers for
+each constraint, we aggregate all operational limits into a
+unified scalar costC(s, a)associated with a single multi-
+plierλ≥0, and formulate the Lagrangian objective as:
+L(π, λ) =J πR(s0)−λ  J πC(s0)−d ,whereJ πC(s0)denotes
+the expected discounted cumulative aggregated cost andd
+is the tolerance limit. This yields the saddle point problem:
+maxπ minλ≥0 L(π, λ),which we solve by primal–dual up-
+dates. At iterationk, given policyπ k, we update the Lagrange
+3
+multiplier (LM) by projected gradient ascent on the dual:
+λk+1 = Π R+ (λk +η λ
+ 
+J πkC (s0)−d ),whereη λ >0is a
+stepsize andΠ R+ (x) = max{0, x}enforcesλ≥0. For a
+fixedλ, this is equivalent to solving an unconstrained MDP
+with the Lagrangian reward:
+Rλ(s, a) =R(s, a)−λC(s, a).(5)
+The corresponding state–action value function is
+Qπλ(s, a) =Eπ
+" ∞X
+t=0
+γtRλ(st, at)  s0 =s, a0 =a # ,(6)
+satisfying the Bellman equation:
+Qπλ(s, a) =Rλ(s, a) +γEs′∼P(·|s,a) Qπλ(s′, π(s′)).(7)
+Instead of the scalar valueQ πλ(s, a), distributional reinforce-
+ment learning models the full return distribution. LetZ π(s, a)
+denote a random variable with the same distribution as the
+discounted return underR λ starting from(s, a). It satisfies
+the distributional Bellman equation:
+Z π(s, a) d=R λ(s, a) +γ Zπ(s′, a′),(8)
+where
+d
+=denotes equality in distribution,s ′ ∼P(· |s, a)and
+a′ ∼π(· |s′).
+B. Physical model and operational constraints
+We instantiate the CMDP tuple by a radial DN model
+that determines the state and action spaces, the transition
+kernel, the operating cost, and the operational constraints. The
+physical model specifies how the state evolves under control
+actions, the economic objective defines the reward, and the
+engineering limits induce the CMDP constraints in (1)–(4).
+1) States and actions:Consider a radial DN with bus set
+N, line setL, distributed generators (DGs)G, energy storage
+systems (ESSs)E ESS, and shunt capacitor banks (SCBs)C,
+operated in discrete timet= 0,1, . . .with step length∆t.
+All power quantities are defined positive when injected into
+the DN, and reactive powerQ >0(resp.Q <0) denotes
+inductive (resp. capacitive) injection. The states t ∈ Scollects
+bus voltage magnitudesV i,t and anglesθ i,t fori∈ N,
+DG outputs, ESS states of charge (SOC), tap positions of
+on-load tap changers (OLTCs), SCB statuses, and relevant
+exogenous information such as load and renewable forecasts.
+The actiona t ∈ Aaggregates DG active and reactive set-
+points{P DGi,t , QDGi,t }i∈G, ESS charging and discharging powers
+{P chk,t, Pdisk,t }k∈E ESS, SCB switching commands and OLTC tap
+positions.
+2) Operating cost and CMDP reward:The economic ob-
+jective is encoded directly in the CMDP stage reward. For
+each state–action pair(s t, at), the reward is defined as the
+negative total operating cost, including energy purchase from
+the upstream grid, local generation costs, and network losses,
+R(st, at) =−
+
+P gridt Pt + X
+i∈G
+ 
+ai(P DGi,t )2 +b iP DGi,t +c i
++α loss
+X
+(i,j)∈L
+P lossij,t
+
+,(9)
+whereP t is the electricity price,a i, bi, ci are DG cost coef-
+ficients,P lossij,t is the active loss on line(i, j), andα loss >0
+converts losses into monetary units.
+3) Operational constraints:Operational security limits and
+device ratings are modeled as inequality constraints that define
+the feasible set of(s t, at). These inequalities are encoded in
+the CMDP through the constraint functionsC i and bounds
+di in (2)–(4). V oltage magnitude limits and line thermal
+limits are enforced asV mini ≤V i,t ≤V maxi , i∈ N,
+|Iij,t| ≤I maxij ,(i, j)∈ L,whereV mini , Vmaxi andI maxij
+are voltage and current limits. Each ESSk∈ E ESS with
+rated energyE ESSk satisfies the SOC dynamicsSOC k,t+1 =
+SOCk,t + ∆tEESSk
+
+ηchk P chk,t − 1ηdisk P disk,t
+
+,together with SOC and
+power boundsSOC mink ≤SOC k,t ≤SOC maxk ,0≤P chk,t ≤
+P ch,maxk ,0≤P disk,t ≤P dis,maxk ,whereη chk , ηdisk ∈(0,1]are
+charging and discharging efficiencies. Device-level constraints
+for each DGi∈ Gare0≤P DGi,t ≤P DG,maxi ,  P DGi,t 2 + 
+QDGi,t 2 ≤ SDG,maxi 2 ,cosϕ mini ≤ P DGi,tq(P DGi,t )2+(QDGi,t )2 ≤
+cosϕ maxi ,whereP DG,maxi ,S DG,maxi andcosϕ mini ,cosϕ maxi
+denote the corresponding ratings. Each SCBc∈ Chasn maxc
+identical steps. Letn c,t ∈ {0, . . . , nmaxc }be the number of
+energized steps andQ stepc the reactive power per step. Then
+QSCBc,t =n c,t Qstepc ,0≤n c,t ≤n maxc .OLTC tap positions are
+likewise restricted to discrete sets.
+4) Network constraints and AC power flow:LetG ij +jB ij
+be the(i, j)th admittance matrix entry andN i the set of buses
+connected to busi. The nodal injections satisfy the AC power
+flow equationsP inji,t =V i,t Pj∈Ni Vj,t hGij cos(θi,t −θ j,t) +
+Bij sin(θi,t −θ j,t)
+i
+, Qinji,t =V i,t Pj∈Ni Vj,thGij sin(θi,t −
+θj,t)−B ij cos(θi,t −θ j,t)
+i
+.For each non-slack busi,P inji,t =
+P DGi,t +P disi,t −P chi,t −P loadi,t , Qinji,t =Q DGi,t +QSCBi,t −Qloadi,t ,while
+the slack bus injection includes the imported powerP gridt . For
+notational compactness, bus-indexed device variables such as
+P DGi,t , QDGi,t , Pchi,t , Pdisi,t , QSCBi,t are understood as the aggregated
+injections of all corresponding devices connected to busiat
+timet, and are defined to be zero if busihosts no such device.
+5) Scalar constraint cost:The operational limits of DGs,
+ESSs, SCBs, and OLTCs are handled by feasible ac-
+tion parameterization, action clipping, and device operating
+bounds. Accordingly, the scalar constraint costC(s t, at)used
+in the primal–dual update is constructed from the resid-
+ual network-security terms evaluated after the AC power-
+flow calculation, including voltage violations, line or trans-
+former overloading, and power-flow non-convergence. Let
+Vi,t denote the voltage magnitude at busi, and letℓ e,t
+denote the loading percentage of line or transformere.
+The aggregate voltage violation is defined asν V (st, at) =P
+i∈N
+ 
+[V mini −V i,t]+ + [Vi,t −V maxi ]+, and the aggre-
+gate thermal-loading violation is defined asν L(st, at) =P
+e∈L∪T [ℓe,t −100] +. Here,ν V is measured in p.u., whereas
+νL is measured in percentage points. To combine these residual
+terms into a scalar constraint cost, normalization is absorbed
+into the penalty coefficients. The resulting constraint cost is
+C(s t, at) =w V νV (st, at) +w LνL(st, at) +w pf Ipf,t, where
+4
+wV ,w L, andw pf are penalty weights, andI pf,t ∈ {0,1}
+indicates whether the AC power flow fails to converge.
+III. UNCERTAINTY-AWAREDRL FRAMEWORK
+A. Framework Overview
+Building on the CMDP formulation in Section II, we
+construct an uncertainty-aware DRL framework with three
+components: a distributional actor–critic backbone, a second-
+order UQ module, and an uncertainty-aware training and de-
+ployment scheme. The backbone is a deterministic actor–critic
+architecture with an implicit quantile network (IQN)-based
+critic [22] that approximates the return distribution under the
+Lagrangian rewardR λ, so that both performance and CMDP
+constraints are handled in a unified way.
+To quantify uncertainty, the critic produces multiple
+stochastic approximations of the return distribution for each
+state–action pair, using Monte Carlo dropout [23] or deep
+ensembles [24]. These predictive distributions are aggregated
+to obtain total predictive uncertainty and then processed by
+a distance-based second-order scheme to decompose it into
+aleatoric and epistemic components. The resulting AU captures
+irreducible stochasticity from RES, loads, and prices, while EU
+reflects model uncertainty due to limited data or distributional
+shift, including OOD conditions and cyber-physical attacks.
+During training, EU serves as a curiosity signal to encourage
+exploration of unseen scenarios, while AU quantifies the
+inherent environmental risk. During deployment, EU functions
+as a reliability indicator: if the EU associated with the actor’s
+action exceeds a threshold, the actor is treated as epistemi-
+cally unreliable and control is handed over to a conservative
+mathematical programming-based fallback strategy.
+The overall procedure is shown in Algorithm 1.
+B. Distributional Actor–Critic Backbone
+We adopt a distributional actor–critic architecture as the
+decision-making backbone. It operates on the Lagrangian
+MDP induced by the CMDP in Section II, with scalar con-
+straint costC(s, a)and Lagrangian rewardR λ(s, a)defined
+in (5). The policy is parameterized by a deterministic actor
+πϕ :S → A, and the value function is represented by a
+distributional critic that approximates the return distribution
+Z π in (8). The critic follows the IQN formulation [22]. Given
+a state–action pair(s, a)and a sampled quantile fraction
+τ∈(0,1), the criticZ ψ(s, a, τ)outputs an approximation
+of the corresponding quantile of the discounted return under
+Rλ. Let(s t, at, rλt , st+1)be a transition sampled from the
+replay buffer, wherer λt =R λ(st, at), and letτ, τ ′ ∼ U(0,1)
+be independent quantile samples. The distributional Bellman
+target is
+ˆzt =r λt +γ Z¯ψ st+1, π¯ϕ(st+1), τ′,(10)
+where ¯ψand ¯ϕdenote target-network parameters. The critic
+is trained by minimizing the expected quantile Huber loss
+Lcrit =E
+h
+ρκτ ˆzt −Z ψ(st, at, τ)i,(11)
+Algorithm 1Lagrangian Distributional Actor–Critic With
+Second-Order UQ and Fallback
+1:Input:replay bufferD, discount factorγ, LM stepsize
+ηλ, toleranced, ensemble sizeM, dropout samplesK,
+missed-detection toleranceϵ miss.
+2:Initialize actorπ ϕ, target actorπ ¯ϕ, Bayesian distribu-
+tional critics{Z ψm }Mm=1, target critics{Z ¯ψm}Mm=1, and
+Lagrange multiplierλ≥0.
+3:foreach training episodedo
+4:Observe initial states 0.
+5:fort= 0,1, . . . , T−1do
+6:Construct the candidate action setA cand(st).
+7:For eacha∈ A cand(st), estimate the critic mean
+return andEU crit(st, a)using (29)–(31).
+8:Select the exploratory actiona t according to (33).
+9:Executea t, observes t+1,R(s t, at), andC(s t, at).
+10:Computer λt by (5) and store the transition inD.
+11:Sample a mini-batchBfromD.
+12:Update the Bayesian distributional critics by mini-
+mizing (19).
+13:Update the actor by maximizing (14).
+14:Update the Lagrange multiplier.
+15:Update target networks.
+16:end for
+17:end for
+18:Offline threshold calibration:
+19:ConstructD cal ⊂ Dhold.
+20:FormD critcal by retaining states with∆C(s)> η C or
+∆R(s)> ηR.
+21:ComputeEU crit(s, πϕ(s))for alls∈ D critcal .
+22:Selectτ fb by the calibration rule in (36).
+23:Online deployment:
+24:foreach deployment states t do
+25:Computea actor =π ϕ(st)andEU crit(st, aactor).
+26:Select the final control action by the fallback rule in
+(37).
+27:end for
+whereκ >0is the Huber threshold and
+ρκτ (u) = τ−1 {u<0}Lκ(u),(12)
+Lκ(u) =
+( 1
+2 u2,|u| ≤κ,
+κ
+ 
+|u| −12 κ,|u|> κ, (13)
+is the standard smoothed asymmetric quantile regression loss.
+The actor is updated by maximizing the expected Lagrangian
+return estimated by the distributional critic,
+Jact(ϕ) =E s∼D
+h
+Eτ
+
+Zψ
+ 
+s, πϕ(s), τ
+i
+,(14)
+whereDis the state distribution induced by the replay buffer.
+The policy parametersϕare updated by gradient ascent on
+Jact(ϕ), while the Lagrange multiplierλis updated online
+using stochastic gradient ascent on the dual objective based
+on sampled constraint costsC(s t, at). Even without the UQ
+introduced below, this backbone already yields a standard
+constrained distributional RL scheme for DN operation under
+the CMDP model in Section II.
+5
+C. Bayesian Distributional Critic
+Starting from the deterministic distributional actor–critic
+backbone in Section III, we now endow the distributional
+critic with Bayesian structure. We treat the critic networks as
+approximate Bayesian neural networks and obtain stochastic
+predictions via a combination of Monte Carlo dropout [23]
+and deep ensembles [24]. Monte Carlo dropout perturbs a
+single network and yields an essentially unimodal approximate
+posterior around one mode, whereas deep ensembles maintain
+multiple independently trained networks and thus approximate
+a multi-modal posterior over value and policy functions. More
+specifically, we maintain an ensemble ofMIQN-based distri-
+butional critics{Z ψm}Mm=1 with parametersψ m. Each critic
+approximates the quantile function of the Lagrangian return
+distribution under the current policy. Given a state–action pair
+(s, a), a quantile fractionτ∈(0,1), and a dropout maskξ m,k,
+the stochastic critic output is
+zm,k(s, a, τ) =Zψm
+ 
+s, a, τ;ξm,k
+
+,
+m= 1, . . . , M, k= 1, . . . , K,(15)
+where dropout masksξ m,k are sampled i.i.d. as in [23].
+For fixed(s, a)and critic memberm, the mappingτ7→
+zm,k(s, a, τ)defines a stochastic approximation of the return
+quantile function under thek-th dropout realization.
+Each critic member is trained with the IQN loss (11),
+using the actor actiona(s t+1)as input to the target network.
+Specifically, for a transition(s t, at, rλt , st+1)in the replay
+buffer, the Bellman target for criticmunder dropout mask
+ξm,k is
+ˆzt,m,k =r λt +γ Z¯ψm st+1,¯a(st+1), τ′;ξ m,k,(16)
+where ¯ψm denotes the target parameters of criticmandτ ′ ∼
+U(0,1). The critic loss for membermon a mini-batchBis
+L(m)crit =E (st,at,rλt ,st+1)∈BEτ,τ ′Ek
+h
+ρκτ ˆzt,m,k−
+Zψm(st, at, τ;ξm,k)
+i
+,
+(17)
+where the expectations overτ, τ ′ are with respect to the uni-
+form distribution on(0,1), and the expectation overkaverages
+over dropout realizations. To prevent ensemble collapse and
+encourage meaningful epistemic spread, we use a repulsive
+diversity regularizer based on their mean return estimates
+µm(s, a) =Eτ [Zψm (s, a, τ)]:
+Ldiv =E (s,a)∈B
+"
+2
+M(M−1)
+X
+m<m′
+ 
+µm(s, a)−µm′(s, a)2
+#
+,
+(18)
+LBayes = 1M
+MX
+m=1
+L(m)crit −β div Ldiv.(19)
+The Bayesian critic module therefore producesB=M K
+stochastic return quantile functions, which are flattened into
+the return-law samples{P b}Bb=1 used in Section III-D2.
+D. Distance-based Second-order UQ
+1) General distance-based second-order UQ framework:
+We adopt the distance-based second-order UQ framework of
+[25]. LetYbe an outcome space equipped with its Borel
+σ-algebra. A first-order predictive distribution is a probabil-
+ity measurep∈ P(Y). Higher-order uncertainty about the
+predictive distribution itself is modeled by asecond-order
+distributionQ∈ O(Y) :=P(P(Y)), namely a distribution
+overp∈ P(Y). To compare second-order distributions, we
+first equip the first-order spaceP(Y)with a metricd 1 :
+P(Y)× P(Y)→[0,∞). Givend 1, we measure distances
+on the second-order spaceO(Y)by the Wasserstein–pmetric
+induced byd 1, withp≥1: forQ, Q ′ ∈ O(Y),
+Wp(Q, Q′) = infγ∈Γ(Q,Q′)
+ Z
+P(Y)×P(Y)
+dp1(p,˜p) dγ(p,˜p)
+!1/p
+,
+(20)
+whereΓ(Q, Q′)is the set of all couplings betweenQandQ ′.
+Intuitively,W p(Q, Q′)is the minimal transport cost needed to
+move mass fromQtoQ ′ when transporting one unit of mass
+frompto˜pcostsd 1(p,˜p). The distance-based construction
+in [25] quantifies total, aleatoric, and epistemic uncertainty
+by measuring the distance of a givenQ∈ O(Y)to three
+canonicalreference families. Crucially, these families are cho-
+sen to representleast-uncertainstates for the corresponding
+uncertainty type.
+Reference family for total uncertainty:Total certainty
+corresponds to knowing both the outcome and the predictive
+distribution exactly. This is represented by second-order Dirac
+masses at first-order Dirac measures:
+Stot =
+
+δδy :y∈Y
+	
+⊂ O(Y),(21)
+whereδ y ∈ P(Y)is the Dirac measure aty, andδ δy ∈ O(Y)
+is the Dirac mass atδ y. Elements ofS tot carry neither first-
+order nor second-order uncertainty.
+Reference family for aleatoric uncertainty (zero-aleatoric
+states):To isolate aleatoric uncertainty, [25] uses as reference
+the set of second-order distributions supported ondeterministic
+predictors (first-order Dirac measures). Concretely, for any
+m∈ P(Y), define
+δm =
+Z
+Y
+δδy dm(y),(22)
+and set
+Sal =
+n
+δm :m∈ P(Y)
+o
+⊂ O(Y).(23)
+EveryQ ′ ∈ Sal assigns probability one to first-order Dirac
+measures, hence it hasno aleatoric (first-order)uncertainty.
+Measuring the distance of a generalQtoS al therefore
+quantifies how farQis from having deterministic first-order
+predictors.
+Reference family for epistemic uncertainty (zero-
+epistemic states):To remove epistemic uncertainty, the ref-
+erence family is the set of second-order Dirac measures on
+arbitrary first-order distributions:
+Sep =
+
+δp :p∈ P(Y)
+	
+⊂ O(Y).(24)
+6
+An elementδ p fixes the predictive distributionpand thus elim-
+inates second-order randomness, meaning it hasno epistemic
+(second-order)uncertainty, whilepitself may remain diffuse.
+Given these reference families, the distance-based indices
+are defined as
+Utot(Q) = infQ′∈Stot Wp
+ 
+Q, Q′,(25)
+Ual(Q) = infQ′∈Sal Wp
+ 
+Q, Q′,(26)
+Uep(Q) = infQ′∈Sep Wp
+ 
+Q, Q′.(27)
+Thus,U tot(Q)measures the distance to complete certainty,
+Ual(Q)measures the distance to the family of zero-aleatoric
+reference states, andU ep(Q)measures the distance to the
+family of zero-epistemic reference states. For suitable choices
+ofd 1, these indices satisfy the axioms proposed in [25],
+including invariance and a consistent separation of first-order
+(aleatoric) and second-order (epistemic) effects.
+2) Return-based second-order UQ for the critic:We now
+instantiate the distance-based framework of Section III-D1 on
+the one-dimensional return space and use it to quantify second-
+order uncertainty for the critic.
+Outcome space and metrics on return laws:LetY⊂R
+denote the return space, and letP(Y)be the corresponding
+space of return laws. We useW 2 for the 2-Wasserstein distance
+between return laws, induced by the squared Euclidean cost
+onY; the induced second-order construction is detailed in
+Appendix A. In the one-dimensional setting, the squared first-
+order 2-Wasserstein distance onP(Y)admits the quantile
+representation
+ 
+W2(p,˜p)
+2
+=
+Z 1
+0
+
+Qp(τ)−Q ˜p(τ)
+2
+dτ,(28)
+whereQ p andQ ˜pare the quantile functions ofp,˜p∈ P(Y),
+see Lemma 2 in Appendix A. The IQN critic provides direct
+access to approximate quantiles, which makes (28) convenient
+for numerical evaluation. In what follows, we work with the
+squared first-order Wasserstein costW 22 ; since the mapping
+r7→r 2 is monotone on[0,∞), this corresponds to a monotone
+transformation of the indices in (25)–(27) without changing
+their ordering. Detailed derivations are given in Appendix A.
+Second-order UQ for the distributional critic:For each
+state–action pair(s, a), the Bayesian distributional critic (with
+ensembles and Monte Carlo dropout) yieldsBstochastic
+predictive return laws. For compactness, we writeP b :=
+p(b)crit(·|s, a),b= 1, . . . , B, andP⋆ :=p ⋆crit(·|s, a), omitting
+the dependence on(s, a)when no ambiguity arises. Here,B
+is the total number of stochastic forward passes. These draws
+induce the empirical second-order measure
+bQB(s, a) =1B
+BX
+b=1
+δPb ,(29)
+which summarizes higher-order uncertainty over return distri-
+butions at(s, a). For interpretation, we may view{P b}Bb=1 as
+i.i.d. samples from an underlying population lawQ crit(s, a).
+We choose the ground metric onP(Y)asd 1 =W 2. Under this
+choice, critic epistemic uncertainty corresponds to the Fr ´echet
+dispersion of bQB(s, a)in(P(Y), W2). Let
+P⋆ ∈arg min
+p∈P(Y)
+1
+B
+BX
+b=1
+ 
+W2(Pb, p)
+2
+.(30)
+be a Wasserstein barycenter of theBreturn laws. In one
+dimension it has a closed form via quantile averaging: if
+F −1b (τ|s, a)is the generalized quantile ofP b, thenF −1⋆ (τ|
+s, a) = 1B PBb=1 F −1b (τ|s, a)for allτ∈(0,1); see
+Lemma 3 in Appendix A. We then define the critic epistemic
+and aleatoric indices as
+EUcrit(s, a) :=1B
+BX
+b=1
+ 
+W2(Pb, P⋆)
+2
+,(31)
+AUcrit(s, a) :=1B
+BX
+b=1
+VarY∼P b (Y),(32)
+whereEU crit measures disagreement across stochastic return
+laws around their barycenter, andAU crit averages the in-
+trinsic variance within each return law. Appendix A shows
+that (30)–(32) match the general distance-based definitions
+of Section III-D1 under the chosen metrics, and Appendix B
+establishes almost-sure consistency of the Monte Carlo esti-
+mators in (31)–(32).
+E. Uncertainty-aware Exploration
+We now describe how EU is used during training. At
+each training states t, we form a finite feasible candidate
+action setA cand(st)by assigning admissible discrete choices
+to individual discrete devices and sampling bounded local
+perturbations around the actor output for continuous controls.
+The unperturbed actor action is also included inA cand(st).
+For each candidate actiona∈ A cand(st), we evaluate both
+the critic mean return and the critic-side epistemic uncertainty.
+The exploratory behavior action is selected according to the
+upper confidence rule
+aexplt ∈arg max
+a∈Acand(st)
+Eτ
+
+Zψ(st, a, τ)
+
++α explEUcrit(st, a),
+(33)
+whereα expl >0controls the relative strength of the epistemic
+bonus. To balance exploitation and uncertainty-driven explo-
+ration,α expl is adapted according to the running magnitudes of
+the two terms in (33). Specifically, during training we maintain
+exponential moving estimates of the absolute critic-return term
+and the raw EU term over sampled candidate actions, and
+updateα expl so that the averaged bonusα explEUcrit(st, a)
+occupies a prescribed fraction of the critic-return magnitude.
+This target fraction is gradually reduced as training proceeds,
+encouraging broader exploration in the early stage and more
+exploitation-oriented behavior after the critic ensemble be-
+comes better calibrated. The epistemic term therefore acts
+as an intrinsic bonus [26] that directs exploration toward
+insufficiently learned state-action regions.
+7
+F . Uncertainty-guided fallback control
+To safeguard deployment under distributional shift, we
+equip the agent with an uncertainty-guided fallback mecha-
+nism. The fallback controller is a single-step mixed-integer
+second-order cone programming (MISOCP)-based optimal
+power flow, which solves a convex relaxation of the one-period
+DN operation problem with the same network and device
+constraints as in Section II, e.g. based on the branch-flow
+model and its convexification [27]. The DG constraints are
+handled by keeping the capability limit as a second-order cone
+and rewriting the power-factor bound into linear inequalities
+−κiP DGi,t ≤Q DGi,t ≤κ iP DGi,t , whereκ i = tan(ϕ maxi )(and
+similarly for the lower bound viaϕ mini when asymmetric limits
+are imposed). Given the current states, this MISOCP returns a
+feasible actiona MISOCP(s)that minimizes the instantaneous
+operating cost while enforcing the modeled single-step con-
+straints. It serves as a conservative yet reliable baseline when
+the RL policy is deemed epistemically unreliable.
+Offline calibration of epistemic thresholds:We calibrate
+the epistemic threshold on a separate hold-out setD hold that
+is not used for training the deployed policy. On this hold-out
+environment, we fix a reference optimal policyπ ⋆ and use it
+to define state-wise performance benchmarks. For any states
+and policyπ, letJ πR(s)andJ πC(s)denote the discounted return
+and aggregated constraint return starting froms, as in (1)–(2),
+withs 0 =sandCthe scalar constraint cost in Section II. For
+the deployed policyπand the reference policyπ ⋆, we define
+the long-horizon constraint and reward gaps as
+∆C(s) = max(0, JπC(s)−J ⋆C(s)),(34)
+∆R(s) = max(0, J⋆R(s)−J πR(s)).(35)
+Thus,∆C(s)>0means that the deployed policy incurs
+higher cumulative constraint cost than the reference policy,
+while∆R(s)>0means that it obtains lower cumulative
+reward. Givenη C, ηR ≥0, letD critcal collect the hold-out
+calibration states with∆C(s)> η C or∆R(s)> η R.
+This set is separate from the training data and the final
+evaluation episodes. For eachs∈ D critcal , we computee s =
+EUcrit(s, πϕ(s)). The fallback threshold is chosen as the
+empiricalϵ miss-lower quantile:
+τfb = bQϵmiss
+ 
+{es :s∈ Dcritcal } .(36)
+This rule directly controls the fraction of critical calibration
+states that are covered by fallback.
+Online decision rule:At deployment time, given the
+current states t, the agent first computes the actor action
+aactor =π ϕ(st)and the corresponding epistemic score
+EUcrit(st, aactor). The final control action is selected by
+at =
+(
+aMISOCP(st),EU crit(st, aactor)≥τ fb,
+aactor,EU crit(st, aactor)< τfb.
+(37)
+States withEU crit(st, aactor)≥τ fb are treated as epis-
+temically unreliable and handed over to the MISOCP-based
+fallback controller.
+IV. SIMULATIONRESULTS
+A. Experimental Protocol and OOD Scenario Construction
+1) Test Cases and Network Adaptation:We organize the
+numerical study around two test cases.Test Case Iis based
+on the MV Oberrhein network in pandapower [28], a realistic
+20 kV medium-voltage distribution network supplied by two
+substations. The original static profiles are converted into a
+24-hour operation task by using UCI load curves [29] while
+preserving the original load power factors, and Kaggle PV
+generation curves [30] for renewable injections. The electricity
+price during 8:00–21:00 is set to 1.558 times the off-peak
+price. We add 10 SCBs, each with four 0.12 MV AR steps, and
+10 ESSs, each with 2 MWh capacity and 0.5 MW maximum
+charging/discharging power. Among the 153 static generators
+in the original network, one third are treated as PV units and
+the rest as diesel DGs with a minimum power factor of 0.7.
+Bus voltages are constrained within 0.95–1.05 p.u., and the
+two OLTC transformers are modeled with tap positions from
+−9to9and a 1.5% tap step.Test Case IIis adapted from the
+IEEE European low-voltage network in pandapower [28]. The
+original benchmark is a 0.416 kV radial feeder with 907 buses
+and 905 lines. We convert this benchmark into a balanced
+three-phase operation case by assigning equal per-phase load
+and generation profiles at each active bus. We extend the
+transformer to a controllable tap-changing transformer. We add
+51 PV units. The action space includes 102 dispatchable DGs,
+13 ESSs, 10 SCBs, and 1 OLTC transformer. These devices
+form a 286-dimensional action space.
+To check whether the constraint-compliance behavior of the
+proposed method is sensitive to the scalarization of network-
+security violations, we conduct a penalty-ratio ablation in
+Test Case II. The default setting usesw V :w L = 1 : 1,
+withw V =w L = 103, while power-flow non-convergence is
+treated as a hard failure and assigned a much larger penalty,
+wpf = 106. For the ablation, the voltage/loading penalties are
+kept at the same overall scale and only their relative ratio is
+varied, namelyw V :w L ∈ {0.75 : 1,1 : 1,2 : 1}.
+TABLE I
+SENSITIVITY TO THE RELATIVE VOLTAGE/LOADING PENALTY WEIGHTS.
+wV :w L Reward V oltage viol. Loading viol.
+0.75 : 1−17.24±0.39 (7.1±3.8)×10 −3 3.2±2.8
+1 : 1−17.58±0.33 (4.6±2.7)×10 −3 5.6±4.2
+2 : 1−17.82±0.27 (2.3±1.5)×10 −3 9.1±7.6
+Table I shows the expected tradeoff: largerw V reduces
+voltage violations, whereas relatively larger loading penalties
+reduce thermal violations and yield a slightly higher reward.
+Across all ratios, both violation terms remain small, indicating
+that the safety behavior of the proposed method is not tied to
+a narrowly tuned penalty ratio.
+2) OOD Scenario Construction:The OOD scenarios in-
+clude four complementary families. First, observation-level
+OOD cases perturb the agent input while keeping the physical
+exogenous trajectories unchanged. This family includes ad-
+ditive Gaussian observation noise and FDIA-style adversarial
+8
+sensor manipulation. For Gaussian observation noise, the de-
+ployed policy observes˜ot =o t+ϵt, whereϵ t ∼ N(0, σ2I)and
+σ∈ {0.5,1.0}. For FDIA-style attacks, only measurement-
+related state components are perturbed, including bus voltages,
+device telemetry, branch loading, and grid exchange. The
+attacked observation is written as˜ot =o t +m⊙δ t, wheremis
+a binary mask selecting the measurement-related components
+and∥δ t∥∞ ≤ε. We consider both white-box and black-
+box attack variants. In the white-box case, the attacker has
+access to the learned model and uses projected gradient steps
+against the critic objective, withδ k+1t = Π ∥δ∥∞≤ε(δkt +
+ηatt sign(∇ot Jatt(ot +m⊙δ kt ))), whereJ att is chosen to de-
+crease the critic-estimated return, increase the critic-estimated
+cost, or combine the two objectives. In the black-box case,
+the attacker has no access to the model parameters and only
+queries the deployed agent. The scalar query objective is
+defined asf(˜o t) :=−E τ [Zψ(˜ot, π(˜ot), τ)], and the attack
+direction is estimated by the symmetric finite-difference es-
+timatorˆgt = 1Kq PKqk=1 f(˜ot+ζuk)−f(˜ot−ζuk)2ζ uk, whereu k ∼
+N(0, I),K q is the number of query probes, andζ >0is
+the probing scale. The black-box perturbation is then updated
+byδ k+1t = Π ∥δ∥∞≤ε(δkt +η att sign(m⊙ˆg t)). The default
+FDIA budget isε= 0.1, with projected steps of size0.025.
+Second, synthetic profile-shift scenarios impose structured
+deviations on the daily exogenous trajectories, including load
+surges, PV dropouts, price spikes, low-renewable high-load pe-
+riods, evening net-load ramps, renewable overgeneration, and
+cloud-ramp PV attenuation. These cases emulate operationally
+meaningful stress events with randomized affected windows
+and stress magnitudes. Third, frequency-domain OOD cases
+perturb the spectral components of the load and PV trajectories
+and then reconstruct the time-domain profiles. This changes
+the temporal shape of the exogenous curves while keeping
+their daily scale comparable to the original profiles. Fourth,
+data-driven OOD cases are built from hold-out or external
+real-world datasets that are not used during training, including
+unseen UCI load profiles [29], London smart-meter household
+consumption data [31], hold-out Kaggle PV curves [30],
+and NSRDB irradiance and temperature records [32]. For
+external load scenarios, the London smart-meter readings are
+first aggregated to hourly resolution to match the 24-step
+scheduling horizon. The aggregated profile is converted into a
+unit-mean temporal multiplierr extt =L extt /( 1T PTτ=1 Lextτ ),
+and then applied to the original bus-level nominal active
+loads asP load,exti,t =α dP load,0i rextt , whereP load,0i is the
+nominal active load at busi, andα d rescales the daily
+energy to the same operating range as the in-distribution
+cases. The reactive load is reconstructed using the original
+bus power factor,Q load,exti,t =P load,exti,t tan(arccos(pf 0i )).
+Therefore, the feeder-specific spatial allocation and power-
+factor structure are inherited from the target network, while
+the external data only alter the temporal demand shape. For
+NSRDB-based PV scenarios, the irradiance and temperature
+records are used to construct a bounded PV availability factor
+rather than a detailed inverter model. Specifically,ρ NSRDBt =
+min{1,max{0,(GHI t/1000)[1+βpv(Tt−25)]}}, whereGHI t
+is the hourly global horizontal irradiance,T t is the ambient
+temperature, andβ pv =−0.004 ◦C−1. The PV active power
+at busbis thenP PV,extb,t =P PVb,ratedρNSRDBt . This construction
+preserves the installed PV capacities and the network-side
+operational constraints of the target feeder, while introducing
+real meteorological temporal patterns. Finally, we include
+V AE-generated near-OOD trajectories [33], which are decoded
+from a latent model trained on in-distribution profiles and
+therefore represent milder distribution shifts.
+B. Test Case I: Qualitative Demonstration on the Original
+System
+For Test Case I, the proposed agent usesM= 5Bayesian
+distributional critics,K= 4Monte Carlo dropout samples,
+and dropout rateρ= 0.05. Training usesγ= 0.95, learning
+rate10 −4, buffer size2000, warm-up length1000,α expl =
+0.2, and Lagrange multiplier stepsize10 −3.
+1) AU Evaluation:Fig. 1 shows the AU estimates in
+Test Case I under different environmental noise scales. The
+estimated AU generally increases as the noise scale grows.
+Fig. 1. Estimated AU under different environmental noise scales in Test Case
+I. Solid curves show the mean and shaded areas denote one standard deviation.
+This confirms that the proposed AU estimate is sensitive to irreducible
+environmental stochasticity.
+2) EU Evaluation:Fig. 2 reports the estimated EU in
+Test Case I under different OOD settings. Compared with
+the InD baseline, all OOD cases produce clearly higher EU
+values. Fig. 3 reports the EU response to FDIA-style sensor
+manipulation in Test Case I. As the attack steps increase, EU
+generally rises across the 24-hour horizon, especially under the
+white-box setting. Black-box attacks also produce increasing
+EU in several timesteps, although with a different temporal
+pattern.
+C. Test Case II: Quantitative Benchmark Study
+1) AU Evaluation:To evaluate AU estimation in Test Case
+II, we use the same set of trained critic parameters and change
+only the AU estimation method. Specifically, the evaluation
+uses five independently trained models, each with six ensemble
+members. The proposed AU estimator is compared with an
+IQN-style member estimator, where each ensemble member
+is treated as an independent IQN critic and its return vari-
+ance is used as AU. As shown in Fig. 4, both estimators
+increase monotonically with the environmental noise scale.
+This confirms that the proposed AU can track the increase of
+irreducible environmental stochasticity. Fig. 5 further evaluates
+the estimator variance of AU, rather than the AU magnitude
+itself. For each environmental noise scaleσ au, we first com-
+pute one episode-level AU estimate for each rollout, denoted
+9
+Fig. 2. Estimated EU under different OOD scenarios in Test Case I. The InD
+curve is shown as the reference baseline. Solid curves show the mean and
+shaded areas denote one standard deviation. The increase is mild for near-
+OOD V AE samples and frequency perturbations, but becomes much stronger
+under larger observation noise, real-world LCL load data, NSRDB solar data,
+and their combined shift. This shows that the proposed EU estimate can
+distinguish unfamiliar operating conditions from normal InD operation.
+Fig. 3. EU response to FDIA-style sensor attacks in Test Case I. This
+shows that critic-side EU can serve as a sensitivity indicator for adversarial
+observation shifts. Solid curves denote white-box attacks, dashed curves
+denote black-box attacks, and shaded areas denote one standard deviation.
+by dAUe(σau). We then reportVar e:σe=σau [dAUe(σau)], where
+the variance is taken over all episode-level AU estimates
+collected under the same environmental noise scale. Therefore,
+a smaller value in Fig. 5 indicates lower fluctuation of the
+AU estimator across repeated rollouts, not smaller AU of the
+environment. The proposed AU estimator consistently shows
+a lower estimator variance than the IQN-style baseline. The
+Fig. 4. AU evaluation under different environmental noise scales. Both
+methods successfully track the increase of intrinsic stochasticity.
+Fig. 5. Estimator variance of AU under different environmental noise scales.
+The variance is computed over episode-level AU estimates under the same
+noise scale. The proposed AU estimator shows lower estimator variance than
+the IQN-style baseline.
+advantage comes from coupling ensemble prediction with
+the second-order AU definition. The ensemble members are
+used as Monte Carlo samples of the second-order predic-
+tive distribution. The proposed AU then suppresses member-
+specific fluctuation while retaining sensitivity to environmental
+stochasticity. In contrast, the IQN-style baseline directly uses
+each member’s raw return variance as an AU estimate, making
+it more sensitive to calibration differences, quantile-spread
+fluctuations, and training randomness.
+2) EU Evaluation via Training Performance:We first eval-
+uate whether the proposed EU estimate is useful during train-
+ing. Fig. 6 reports the evaluation reward, raw constraint cost,
+and log-scale constraint cost in Test Case II. The algorithm
+comparison includes TD3 [34], PPO [35], PPO-GAE [35],
+[36], CPO-BDQN [37], [38], Thompson-sampling DQN [39],
+and IQN [22]. Among these learning-based baselines, the
+proposed method achieves the best final reward and the lowest
+long-term constraint cost. This indicates that the performance
+gain is not only from distributional value learning, but also
+from using critic-side EU as an exploration signal. For the
+hyperparameter ablations, we adopt a two-stage protocol. First,
+a full grid search is conducted in a reduced action space.
+This stage is used to select the default settingα expl = 0.3,
+ensemble sizeM= 6, and dropout rateρ= 0.08. After fixing
+this setting, we return to the full action space and conduct
+single-factor sensitivity tests by varying one hyperparameter
+at a time. The exploration-bonus ablation shows that too
+smallα expl gives insufficient epistemic exploration, whereas
+too largeα expl overemphasizes uncertain actions and slows
+exploitation. The intermediate valueα expl = 0.3gives the
+best balance between reward improvement and cost reduction.
+The ensemble-size and dropout-rate ablations show similar
+robustness. Moderate changes aroundM= 6andρ= 0.08
+10
+Fig. 6. EU evaluation via training performance in Test Case II. Each row reports the evaluation reward, raw constraint cost, and log-scale constraint cost. Row
+(a) compares the proposed method with representative baselines. Rows (b)–(d) report full action-space sensitivity tests on the exploration bonus coefficient,
+ensemble size, and dropout rate, respectively. The offline MPC reference in Test Case II remains fully feasible, with zero constraint cost across the evaluated
+episodes, and yields an average reward of−16.53with low variance(3.03×10 −2).
+lead to comparable convergence trends, while the selected set-
+ting gives a favorable tradeoff between final reward, learning
+stability, and constraint-cost suppression.
+To examine EU exploration itself, we map each visited state
+during training to a coarse bin. The number of unique bins
+measures the coverage of distinct reachable operating regions.
+A bin is counted as useful only when the associated transition
+is feasible, with converged AC power flow and without voltage
+or loading violation. The useful ratio is then the fraction
+of useful unique bins among all unique bins. As shown in
+Fig. 7, the proposed UQ exploration achieves both the largest
+number of unique bins and the highest useful ratio. Compared
+with fixed Gaussian exploration noise, the proposed strategy
+produces broader coverage with a higher useful-bin ratio.
+3) EU Evaluation via OOD Detection and Degradation
+Correlation:We next evaluate whether the proposed EU can
+detect OOD states and whether its magnitude is correlated
+with the resulting operational degradation. Table II compares
+the proposed EU score with classical OOD detection baselines.
+For the proposed method, the episode-level EU is directly used
+as the detection score. For the baselines, we train conventional
+feature-space detectors using actor features extracted from the
+Fig. 7. State-space coverage and useful-region ratio under different explo-
+ration strategies in Test Case II. Panel (a) reports the cumulative number of
+unique bins visited during training. Panel (b) reports the ratio of useful unique
+bins to all unique bins. Solid curves show the mean over repeated runs, and
+shaded areas denote one standard deviation. The proposed UQ exploration
+expands the explored operating region while maintaining a higher proportion
+of feasible and useful states.
+raw observation. The compared baselines include KDE, KNN
+(k= 5), GMM (4components), and Mahalanobis-distance de-
+tectors [40]. We report both AUROC and FPR95, where larger
+AUROC and smaller FPR95 indicate better OOD separation.
+As the ensemble size decreases, the detection performance
+degrades mildly but remains competitive with the feature-space
+11
+baselines. We further examine whether the EU score is aligned
+TABLE II
+OODDETECTION PERFORMANCE INTESTCASEII.
+Group Method AUROC FPR95
+Ours Ensemble size 110.9856±0.0031 0.0580±0.0105
+Ours Ensemble size 90.9808±0.0086 0.0586±0.0161
+Ours Ensemble size 70.9709±0.0159 0.0607±0.0277
+Ours Ensemble size 50.9785±0.0066 0.0783±0.0149
+Baseline KDE0.9770±0.0030 0.0594±0.0121
+Baseline KNN0.9761±0.0027 0.0595±0.0119
+Baseline GMM0.9731±0.0027 0.0641±0.0080
+Baseline Mahal.0.9670±0.0058 0.0842±0.0101
+with the severity of operational degradation. We compare
+EU with the episode-level reward gap∆Rand constraint-
+cost gap∆Cdefined in Section III-F. As shown in Fig. 8,
+each point corresponds to one held-out episode. Larger EU is
+generally associated with larger∆Rand∆C. Fig. 9 further
+Fig. 8. EU evaluation via degradation correlation. Each point corresponds to
+one held-out episode. The horizontal axis is episode-level EU. The vertical
+axes report the episode-level reward gap∆Rand constraint-cost gap∆C.
+Larger EU is associated with larger operational degradation, which supports
+its use as an epistemic reliability score for quantifying harmful distribution
+shifts.
+examines how the EU score changes as degradation severity
+increases. Since raw EU magnitudes are model-dependent,
+we convert EU values into within-model relative percentiles
+before pooling the selected models. The resulting distributions
+show a clear upward shift with both reward degradation and
+cost degradation, indicating that larger OOD performance
+deterioration is associated with higher EU.
+Fig. 9. Relative EU distributions across degradation severity bins. Raw EU
+values are normalized to within-model percentiles before pooling selected
+models. Reward and cost degradation are binned into five data-driven severity
+levels. Violin plots show point-level distributions; black markers show medians
+and interquartile ranges; red markers show model means with standard errors.
+Table III evaluates whether each score ranks harmful OOD
+episodes. The actor-feature baselines are unsupervised InD-
+fitted novelty scores: GMM/KDE use feature-density NLL,
+Mahal. uses Mahalanobis distance, and kNN uses nearest-
+neighbor distance. Like our EU score, these baselines are
+computed without degradation labels. For fairness, all scores
+are computed per trained model and converted to within-model
+quantile ranks before reporting Spearman correlations with
+∆R,∆CandP@20for the top-20% degraded episodes.
+TABLE III
+DEGRADATION-RANKING COMPARISON.
+Score Spearman∆RSpearman∆CP@20 ∆RP@20 ∆C
+Ours EU0.61±0.09 0.46±0.12 0.63±0.13 0.58±0.11
+GMM−0.22±0.19 0.04±0.36 0.28±0.16 0.32±0.21
+KDE−0.17±0.21 0.11±0.30 0.28±0.17 0.35±0.19
+Mahal.−0.16±0.21 0.08±0.35 0.29±0.17 0.36±0.20
+kNN−0.17±0.21 0.09±0.34 0.29±0.16 0.36±0.21
+4) Closed-Loop Evaluation With EU-Triggered Fallback:
+Finally, we evaluate the deployment rule in (37). We instantiate
+Dcritcal using critical calibration states selected from the syn-
+thetic profile-shift scenarios described above, including their
+combinations, which perturb daily load, PV , price, and net-
+load trajectories and are disjoint from the held-out deployment
+episodes. A state is included in this calibration set when
+its∆Rand∆Cgap exceeds the acceptable-state tolerance
+by a factor of three. For each deployed model, the fallback
+thresholdτ fb is calibrated from the lowerϵ miss-quantile of the
+critical-state EU scores in this calibration set, following (36).
+The calibration is performed per model because raw EU scales
+are not comparable across independently trained ensembles.
+Fig. 10. Closed-loop fallback ablation overϵ miss. Panel (a) reports fallback
+invocation; panels (b) and (c) report the critical-state∆Cand∆Rgaps
+removed by fallback. Colors indicate ensemble size; black denotes the mean.
+12
+Fig. 11. Empirical safety–intervention tradeoff of EU-triggered fallback. Panels (a) and (b) use a threshold-free evaluation: OOD episodes are ranked by EU,
+and the fallback rate is swept by assigning the highest-EU fraction of episodes to the MISOCP controller while leaving the remaining episodes controlled
+by the RL policy. Panel (a) reports the probability that the resulting episode constraint cost exceeds reference quantiles of the RL-only cost distribution. The
+numbers in parentheses are the corresponding RL-only constraint-cost quantile values; for example,> Q50(1887)means that the deployed controller has
+episode constraint cost larger than the RL-only median cost of 1887. Thus, lower curves indicate that EU-guided fallback preferentially removes episodes
+from the high-cost tail. Panel (b) reports the retained 95th-percentile constraint cost, normalized by the RL-only 95th-percentile cost. Panel (c) reports the
+ϵmiss-based calibration ablation. Colored thin curves denote individual selected models, and black curves denote the model mean.
+Fig. 10 summarizes the fallback-rate/gap-removal tradeoff
+asϵ miss varies. Atϵ miss = 0.10, fallback is invoked for
+75.8%of held-out episodes and removes94.0%of the crit-
+ical constraint-cost gap and90.7%of the reward gap. At
+ϵmiss = 0.20, fallback use drops to61.5%while constraint-
+cost gap removal remains88.0%, showing that EU-triggered
+fallback can reduce closed-loop cost with targeted MISOCP
+handoffs. To avoid relying solely on a fixed severe-OOD
+calibration threshold, we also evaluate a threshold-free safety–
+intervention tradeoff in Fig. 11. OOD episodes are ranked by
+EU, and the fallback rate is swept by assigning the highest-
+EU fraction to the MISOCP controller. Increasing fallback
+coverage consistently reduces both cost exceedance probability
+and the 95th-percentile constraint cost, indicating that EU
+prioritizes episodes with larger empirical safety risk.
+V. CONCLUSION
+We proposed an uncertainty-aware DRL framework for
+safe distribution-network operation by coupling distributional
+RL with UQ. The resulting second-order UQ decomposes
+predictive uncertainty into aleatoric and epistemic OOD uncer-
+tainty, enabling EU-triggered fallback control with improved
+constraint compliance in diverse operating conditions.
+REFERENCES
+[1] X. Chen, G. Qu, Y . Tang, S. Low, and N. Li, “Reinforcement learning
+for selective key applications in power systems: Recent advances and
+future challenges,”IEEE Trans. Smart Grid, vol. 13, no. 4, pp. 2935–
+2958, July 2022.
+[2] K. Lappalainen and S. Valkealahti, “Analysis of shading periods caused
+by moving clouds,”Solar Energy, vol. 135, pp. 188–196, 2016.
+[3] K. Zhou, Z. Liu, Y . Qiao, T. Xiang, and C. C. Loy, “Domain general-
+ization: A survey,”IEEE Trans. Pattern Anal. Mach. Intell., vol. 45, no.
+4, pp. 4396–4415, Apr. 2023.
+[4] D. L. Donoho, “High-dimensional data analysis: The curses and bless-
+ings of dimensionality,”AMS Math. Challenges Lecture, 2000.
+[5] V . Chandola, A. Banerjee, and V . Kumar, “Anomaly detection: A survey,”
+ACM Comput. Surv., vol. 41, no. 3, pp. 1–58, 2009.
+[6] J. Zhang and C. Li, “Adversarial examples: Opportunities and chal-
+lenges,”IEEE Trans. Neural Netw. Learn. Syst., vol. 31, no. 7, pp.
+2578–2593, July 2020.
+[7] J. Tian, B. Wang, Z. Wang, K. Cao, J. Li, and M. Ozay, “Joint adversarial
+example and false data injection attacks for state estimation in power
+systems,”IEEE Trans. Cybern., vol. 52, no. 12, pp. 13699–13713, Dec.
+2022.
+[8] Z. Zhou, G. Liu, W. Guo, and M. Zhou, “Adversarial attacks on
+multiagent deep reinforcement learning models in continuous action
+space,”IEEE Trans. Syst. Man Cybern. Syst., vol. 54, no. 12, pp. 7633–
+7646, Dec. 2024.
+[9] H. Zhang, Z. Chen, C. Yu, D. Yue, X. Xie, and G. P. Hancke, “Event-
+trigger-based resilient distributed energy management against FDI and
+DoS attack of cyber–physical system of smart grid,”IEEE Trans. Syst.
+Man Cybern. Syst., vol. 54, no. 5, pp. 3220–3230, May 2024.
+[10] X. Yang, H. He, J. Li, and Y . Zhang, “Toward optimal risk-averse
+configuration for HESS with CGANs-based PV scenario generation,”
+IEEE Trans. Syst. Man Cybern. Syst., vol. 51, no. 3, pp. 1779–1793,
+Mar. 2021.
+[11] A. Mavor-Parker, K. Young, C. Barry, and L. Griffin, “How to stay cu-
+rious while avoiding noisy TVs using aleatoric uncertainty estimation,”
+inProc. 39th Int. Conf. Mach. Learn. (ICML),Proc. Mach. Learn. Res.,
+vol. 162, pp. 15220–15240, 2022.
+[12] Y . Ding, T. Morstyn, and M. D. McCulloch, “Distributionally robust joint
+chance-constrained optimization for networked microgrids considering
+contingencies and renewable uncertainty,”IEEE Trans. Smart Grid, vol.
+13, no. 3, pp. 2467–2478, May 2022.
+[13] M. Rayati, M. Bozorg, R. Cherkaoui, and M. Carpita, “Distributionally
+robust chance constrained optimization for providing flexibility in an
+active distribution network,”IEEE Trans. Smart Grid, vol. 13, no. 4,
+pp. 2920–2934, July 2022.
+[14] W. Wang, N. Yu, Y . Gao, and J. Shi, “Safe off-policy deep reinforcement
+learning algorithm for V olt-V AR control in power distribution systems,”
+IEEE Trans. Smart Grid, vol. 11, no. 4, pp. 3008–3018, July 2020.
+[15] P. Wu, C. Chen, D. Lai, J. Zhong, and Z. Bie, “Real-time optimal power
+flow method via safe deep reinforcement learning based on primal-dual
+and prior knowledge guidance,”IEEE Trans. Power Syst., vol. 40, no.
+1, pp. 597–611, Jan. 2025.
+[16] J. Xie and W. Sun, “Distributional deep reinforcement learning-based
+emergency frequency control,”IEEE Trans. Power Syst., vol. 37, no. 4,
+pp. 2720–2730, July 2022.
+[17] Z. Wang, F. Teng, Y . Zhou, Q. Guo, and H. Sun, “Uncertainty-aware
+transient stability-constrained preventive redispatch: A distributional
+reinforcement learning approach,”IEEE Trans. Power Syst., vol. 40,
+no. 2, pp. 1295–1308, Mar. 2025.
+[18] T. Zhang, M. Sun, D. Qiu, X. Zhang, G. Strbac, and C. Kang, “A
+Bayesian deep reinforcement learning-based resilient control for multi-
+energy micro-grid,”IEEE Trans. Power Syst., vol. 38, no. 6, pp. 5057–
+5072, Nov. 2023.
+[19] P. Pareek and H. D. Nguyen, “Gaussian process learning-based proba-
+bilistic optimal power flow,”IEEE Trans. Power Syst., vol. 36, no. 1,
+pp. 541–544, Jan. 2021.
+[20] X. Liu, J. Liu, Y . Zhao, T. Ding, X. Liu, and J. Liu, “A Bayesian deep
+learning-based probabilistic risk assessment and early-warning model
+13
+for power systems considering meteorological conditions,”IEEE Trans.
+Ind. Informat., vol. 20, no. 2, pp. 1516–1527, Feb. 2024.
+[21] Y . Yang, W. Li, T. A. Gulliver, and S. Li, “Bayesian deep learning-
+based probabilistic load forecasting in smart grids,”IEEE Trans. Ind.
+Informat., vol. 16, no. 7, pp. 4703–4713, July 2020.
+[22] W. Dabney, G. Ostrovski, D. Silver, and R. Munos, “Implicit quantile
+networks for distributional reinforcement learning,” inProc. 35th Int.
+Conf. Mach. Learn. (ICML),Proc. Mach. Learn. Res., vol. 80, pp. 1096–
+1105, 2018.
+[23] Y . Gal and Z. Ghahramani, “Dropout as a Bayesian approximation:
+Representing model uncertainty in deep learning,” inProc. 33rd Int.
+Conf. Mach. Learn. (ICML),Proc. Mach. Learn. Res., vol. 48, pp. 1050–
+1059, 2016.
+[24] B. Lakshminarayanan, A. Pritzel, and C. Blundell, “Simple and scalable
+predictive uncertainty estimation using deep ensembles,” inAdv. Neural
+Inf. Process. Syst., Long Beach, CA, USA, 2017.
+[25] Y . Sale, V . Bengs, M. Caprio, and E. H ¨ullermeier, “Second-order
+uncertainty quantification: A distance-based approach,” inProc. 41st
+Int. Conf. Mach. Learn. (ICML),Proc. Mach. Learn. Res., vol. 235, pp.
+43060–43076, 2024.
+[26] H. Hu, S. Song, and G. Huang, “Self-attention-based temporary curiosity
+in reinforcement learning exploration,”IEEE Trans. Syst. Man Cybern.
+Syst., vol. 51, no. 9, pp. 5773–5784, Sept. 2021.
+[27] M. Farivar and S. H. Low, “Branch flow model: Relaxations and
+convexification—Part I,”IEEE Trans. Power Syst., vol. 28, no. 3, pp.
+2554–2564, Aug. 2013.
+[28] L. Thurner, A. Scheidler, F. Sch ¨afer, J. Menke, J. Dollichon, F. Meier, S.
+Meinecke, and M. Braun, “pandapower—An Open-Source Python Tool
+for Convenient Modeling, Analysis, and Optimization of Electric Power
+Systems,”IEEE Trans. Power Syst., vol. 33, no. 6, pp. 6510–6521, Nov.
+2018.
+[29] A. Trindade, “Electricity Load Diagrams 2011-2014”, UCI Machine
+Learning Repository, 2015. [Online]. Available: https://doi.org/10.
+24432/C58C86
+[30] A. Kannal, “Solar Power Generation Data,” Kaggle, data set.
+[Online]. Available: https://www.kaggle.com/datasets/anikannal/
+solar-power-generation-data
+[31] UK Power Networks, “Smart meter energy consump-
+tion data in London households,” London Datastore.
+[Online]. Available: https://data.london.gov.uk/dataset/
+smartmeter-energy-consumption-data-in-london-households-vqm0d
+[32] National Renewable Energy Laboratory (NREL), “National Solar Radi-
+ation Database (NSRDB),” data set. [Online]. Available: https://nsrdb.
+nrel.gov
+[33] D. P. Kingma and M. Welling, “Auto-Encoding Variational Bayes,” in
+Proc. Int. Conf. Learn. Representations (ICLR), Banff, AB, Canada, Apr.
+2014.
+[34] S. Fujimoto, H. van Hoof, and D. Meger, “Addressing function approx-
+imation error in actor-critic methods,” inProc. 35th Int. Conf. Mach.
+Learn. (ICML), vol. 80, Jul. 2018, pp. 1587–1596.
+[35] J. Schulman, F. Wolski, P. Dhariwal, A. Radford, and O. Klimov, “Prox-
+imal policy optimization algorithms,”arXivpreprint arXiv:1707.06347,
+2017.
+[36] J. Schulman, P. Moritz, S. Levine, M. I. Jordan, and P. Abbeel, “High-
+dimensional continuous control using generalized advantage estimation,”
+inProc. 4th Int. Conf. Learn. Representations (ICLR), 2016.
+[37] J. Achiam, D. Held, A. Tamar, and P. Abbeel, “Constrained policy
+optimization,” inProc. 34th Int. Conf. Mach. Learn. (ICML), ser.Proc.
+Mach. Learn. Res., vol. 70, 2017, pp. 22–31.
+[38] I. Osband, C. Blundell, A. Pritzel, and B. Van Roy, “Deep exploration
+via bootstrapped DQN,” inAdv. Neural Inf. Process. Syst., vol. 29, 2016,
+pp. 4026–4034.
+[39] I. Osband, B. Van Roy, D. J. Russo, and Z. Wen, “Deep exploration via
+randomized value functions,”J. Mach. Learn. Res., vol. 20, no. 124, pp.
+1–62, 2019.
+[40] L. Ruff, J. R. Kauffmann, R. A. Vandermeulen, G. Montavon, W. Samek,
+M. Kloft, T. G. Dietterich, and K.-R. M ¨uller, “A unifying review of deep
+and shallow anomaly detection,”Proc. IEEE, vol. 109, no. 5, pp. 756–
+795, May 2021.
+[41] G. Peyr ´e and M. Cuturi, “Computational optimal transport: With appli-
+cations to data science,”Found. Trends Mach. Learn., vol. 11, nos. 5–6,
+pp. 355–607, 2019.
+[42] V . M. Panaretos and Y . Zemel,An Invitation to Statistics in Wasserstein
+Space. Cham, Switzerland: Springer, 2020.
+[43] M. Agueh and G. Carlier, “Barycenters in the Wasserstein space,”SIAM
+J. Math. Anal., vol. 43, no. 2, pp. 904–924, 2011.
+[44] T. Le Gouic and J.-M. Loubes, “Existence and consistency of Wasser-
+stein barycenters,”Probab. Theory Relat. Fields, vol. 168, no. 3–4,
+pp. 901–917, Aug. 2017.
+APPENDIXA
+PROOFS FORSECOND-ORDERUQ CONSTRUCTIONS
+We adopt the same setting and notation as in Section III-D2.
+In particular, the return space is one-dimensional. OnP(Y)
+we use the first-order 2-Wasserstein distanceW (1)2 (induced by
+the squared Euclidean cost onY), and onO(Y) =P(P(Y))
+we use the induced second-order 2-Wasserstein distanceW (2)2
+with ground metricd 1 =W (1)2 .
+A. Auxiliary Results on Wasserstein Distance in One Dimen-
+sion
+We first record several standard lemmas on Wasserstein
+distances and barycenters in one dimension [41], [42].
+Lemma 1 (Dirac second-order measures and cou-
+plings):For anyQ∈ O(Y)andp∈ P(Y)such
+thatE P∼Q
+ 
+W (1)2 (P, p)2 <∞,  W (2)2 (Q, δp)2 =
+EP∼Q
+ 
+W (1)2 (P, p)2, whereδ p denotes the Dirac mass at
+pinO(Y). This follows from [25].
+Lemma 2 (Quantile representation ofW (1)2 in one dimen-
+sion [41]):LetY⊂R, and letp,˜p∈ P(Y)with quantile
+functionsQ p, Q˜p : (0,1)→R. Then
+ 
+W (1)2 (p,˜p)2 =R 1
+0
+
+Qp(τ)−Q ˜p(τ)
+2
+dτ.
+Lemma 3 (One-dimensional Wasserstein barycenter [41],
+[43]):Letp 1, . . . , pR ∈ P(Y)with quantile functionsQ pr.
+Considerp ⋆ ∈arg min p∈P(Y) 1R PRr=1 W (1)2 (pr, p)2. Then
+a minimiser exists and any minimiser has quantile function
+Qp⋆ (τ) = 1R PRr=1 Qpr (τ)forτ∈(0,1).
+Lemma 4 (Projection onto Dirac measures and vari-
+ance [42]):Letp∈ P(Y)have finite second mo-
+ment and meanµ(p). Theninf y∈Y
+ 
+W (1)2 (p, δy)2 = 
+W (1)2 (p, δµ(p))2 = VarY∼p (Y), whereδ y is the Dirac mass
+aty.
+B. Return-based Critic
+We now derive the critic indices in Section III-D2 from the
+general distance-based definitions (25)–(27), using the one-
+dimensional results in Section A.
+1) Epistemic component as Wasserstein Fr ´echet vari-
+ance:We start from the epistemic indexU ep(Q)in (27)
+with the choicesd 1 =W (1)2 onP(Y)and the induced
+second-order metricW (2)2 onO(Y). For anyQ∈ O(Y),
+Uep(Q) = inf δp∈Sep W (2)2  Q, δp = inf p∈P(Y) W (2)2  Q, δp.
+By Lemma 1,
+ 
+W (2)2 (Q, δp)2 =E P∼Q  W (1)2 (P, p)2.
+Thus, up to a square root, the epistemic index is given
+by the Fr ´echet functional on(P(Y), W (1)2 ):U 2ep(Q) :=
+inf p∈P(Y) EP∼Q
+ 
+W (1)2 (P, p)2. We useU 2ep(Q)as the basic
+epistemic quantity; it is a monotone function ofU ep(Q)and
+preserves the ordering of epistemic uncertainty levels. Special-
+izingU 2ep(Q)to the empirical law bQB(s, a)in (29) implies
+that any minimizer is aW (1)2 -barycenter of{P b}Bb=1, which
+in one dimension admits the closed-form quantile averaging
+14
+in Lemma 3; hence the resulting empirical Fr ´echet variance
+coincides withEU crit(s, a)in (31).
+2) Aleatoric component as expected intrinsic variance:
+Starting from the aleatoric definition (26) with the reference
+familyS al, we quantify the distance ofQto mixtures of
+Dirac predictors. For the derivations below, we work with
+the squared 2-Wasserstein distance onO(Y). In the one-
+dimensional setting of Section III-D2, this projection admits
+an exact characterization through pointwise projection of each
+first-order drawP∼Qonto Dirac measures. The resulting
+expression reduces the aleatoric index to the expected intrinsic
+variance of the first-order distributions, which leads directly to
+the closed-form estimator used in (32).
+Lemma 5 (Exact expression via projection to Dirac predic-
+tors):LetQ∈ O(Y)be any second-order distribution. Define
+eU 2al(Q) =E P∼Q
+h
+inf y∈Y
+ 
+W (1)2 (P, δy)2i. ThenU 2al(Q) :=
+inf δm∈Sal
+ 
+W (2)2 (Q, δm)2 = eU 2al(Q).
+Proof:We prove the two inequalities.
+Step 1:We show thatU 2al(Q)≤ eU 2al(Q). For
+eachP∈ P(Y)with finite second moment, take
+y⋆(P) :=µ(P), the mean ofP. By Lemma 4,
+y⋆(P)is an optimizer ofinf y∈Y  W (1)2 (P, δy)2, and
+inf y∈Y
+ 
+W (1)2 (P, δy)2 =  W (1)2 (P, δµ(P) )2. Define
+the pushforward measurem:= (y ⋆)#Q∈ P(Y)
+and considerδ m ∈ Sal. DefineT:P(Y)→ P(Y)
+byT(P) :=δ y⋆(P) =δ µ(P) , and construct the
+couplingγ:= (Id, T) #Q∈Γ(Q, δ m). Then, by
+the definition of the second-order distanceW (2)2
+onO(Y)with ground metricW (1)2 onP(Y), 
+W (2)2 (Q, δm)2 ≤ RP(Y)×P(Y)  W (1)2 (P, ˜P) 2 dγ(P, ˜P) =
+EP∼Q
+h 
+W (1)2 (P, T(P))2i. Thus,  W (2)2 (Q, δm)2 ≤
+EP∼Q
+h 
+W (1)2 (P, δµ(P) )2i = eU 2al(Q). Taking the infimum
+overδ m ∈ Sal yieldsU 2al(Q)≤ eU 2al(Q).
+Step 2:We show thatU 2al(Q)≥ eU 2al(Q). Fix any
+m∈ P(Y)and any couplingγ∈Γ(Q, δ m). Since
+δm is supported on Dirac predictorsδ y, we have ˜P=
+δy γ-almost surely for somey∈Y. Hence, forγ-
+almost every(P, ˜P),  W (1)2 (P, ˜P) 2 =  W (1)2 (P, δy)2 ≥
+inf y′∈Y
+ 
+W (1)2 (P, δy′)2. Integrating both sides with re-
+spect toγand using that the first marginal ofγ
+isQ, we obtain
+R
+P(Y)×P(Y)
+ 
+W (1)2 (P, ˜P) 2 dγ(P, ˜P)≥
+EP∼Q
+h
+inf y′∈Y
+ 
+W (1)2 (P, δy′)2i = eU 2al(Q). Taking the
+infimum over all couplingsγ∈Γ(Q, δ m)yields 
+W (2)2 (Q, δm)2 ≥ eU 2al(Q). Finally, taking the infimum over
+δm ∈ Sal givesU 2al(Q)≥ eU 2al(Q).
+Combining Step 1 and Step 2 concludes thatU 2al(Q) =eU 2al(Q).
+Combining Lemma 5 with Lemma 4 yields an explicit
+expression for eU 2al(Q)in terms of intrinsic variances.
+Corollary 1 (Expected intrinsic variance):LetQ∈ O(Y)
+and letP∼Qhave finite second moments almost surely.
+Then eU 2al(Q) =E P∼Q
+h
+VarY∼P (Y)
+i
+.
+We take eU 2al(Q)as the basic aleatoric quantity; by Lemma 5
+it equalsU 2al(Q)and thus is consistent with the distance-
+based interpretation. Applying Corollary 1 to bQB(s, a)in
+(29) givesU 2al  bQB(s, a) = 1B PBb=1 VarY∼P b (Y),which is
+exactlyAU crit(s, a)in (32).
+APPENDIXB
+CONSISTENCY OFSECOND-ORDERUQ ESTIMATORS
+In implementation, each drawP b is obtained by indepen-
+dently sampling an ensemble member and a dropout mask
+(and the IQN quantile fractions), which yields i.i.d. draws
+fromQ crit(s, a). The corresponding empirical second-order
+measure is bQB(s, a)in (29).
+Theorem 1 (Consistency of Monte-Carlo EU/AU estima-
+tors):
+Define the population indices byEU ⋆crit(s, a) :=
+E
+h
+(W (1)2 (P, p⋆))2
+i
+,AU ⋆crit(s, a) :=E[Var Y∼P (Y)].Then,
+asB→ ∞, cEUcrit,B(s, a) almost surely− − − − − − − − →EU⋆crit(s, a),
+dAUcrit,B(s, a) almost surely− − − − − − − − →AU⋆crit(s, a).
+Proof:Let{P b}Bb=1 be i.i.d. fromQ crit(s, a)and letbpB
+be an empirical barycenter as in (30). By the existence and
+strong consistency of empirical Wasserstein barycenters on
+P2(Y)[44], we haveW (1)2 (bpB, p⋆)→0almost surely. For the
+AU part, from (32), dAUcrit,B(s, a) = 1B PBb=1 VarY∼P b (Y).
+SinceP∈ P 2(Y)almost surely,Var Y∼P (Y)<∞almost
+surely and is integrable; thus by the strong law of large
+numbers, dAUcrit,B(s, a)→E[Var Y∼P (Y)] = AU ⋆crit(s, a)
+almost surely. For the EU part, by (31), cEUcrit,B(s, a) =
+1
+B
+PB
+b=1(W (1)2 (Pb,bpB))2. Add and subtract the population
+barycenter:
+cEUcrit,B(s, a)−EU⋆crit(s, a)
+=
+
+1
+B
+BX
+b=1
+(W (1)2 (Pb, p⋆))2 −E[(W (1)2 (P, p⋆))2]
+| {z }
+(I)
++ 1B
+BX
+b=1
+
+(W (1)2 (Pb,bpB))2 −(W (1)2 (Pb, p⋆))2
+
+| {z }
+(II)
+.(38)
+Term(I)→0almost surely by the strong law since
+(W (1)2 (P, p⋆))2 is integrable underP∈ P 2(Y). For(II),
+using|x 2 −y 2| ≤(x+y)|x−y|withx=W (1)2 (Pb,bpB)
+andy=W (1)2 (Pb, p⋆), then the triangle inequality gives
+(W (1)2 (Pb,bpB))2 −(W (1)2 (Pb, p⋆))2
+≤
+ 
+2W (1)2 (Pb, p⋆) +W (1)2 (bpB, p⋆) W (1)2 (bpB, p⋆).(39)
+Averaging (39) overbyields
+|(II)| ≤
+
+2· 1B
+BX
+b=1
+W (1)2 (Pb, p⋆)+W (1)2 (bpB, p⋆) W (1)2 (bpB, p⋆).
+(40)
+Moreover,P∈ P 2(Y)impliesE[W (1)2 (P, p⋆)]<∞, hence
+by the strong law 1B PBb=1 W (1)2 (Pb, p⋆)→E[W (1)2 (P, p⋆)]
+almost surely, whileW (1)2 (bpB, p⋆)→0almost surely. There-
+fore the right-hand side of (40) converges to0almost surely,
+15
+so(II)→0almost surely. Combining(I)and(II)in (38)
+proves cEUcrit,B(s, a)→EU ⋆crit(s, a)almost surely.

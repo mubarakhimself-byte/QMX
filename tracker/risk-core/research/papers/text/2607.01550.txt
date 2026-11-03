@@ -1,0 +1,2029 @@
+arXiv 2607.01550  https://arxiv.org/abs/2607.01550
+
+Is Trend Still Your Friend?
+A Microstructural Account of the Demise of Short-Term Trend-Following
+Jutta G. Kurth 1, 2, Zoltan Eisler 3, Adam Rej 4, and Jean-Philippe Bouchaud 4,1,5
+1Econophysics Lab, Institut Louis Bachelier, 28 Place de la Bourse, 75002 Paris, France
+2LadHyX UMR CNRS 7646, ´Ecole polytechnique, 91128 Palaiseau Cedex, France
+3Imperial College London, Department of Mathematics
+4Capital Fund Management, 23 Rue de l’Universit´ e, 75007 Paris, France
+5Acad´ emie des Sciences, 23 Quai de Conti, 75006 Paris, France
+July 3, 2026
+Abstract
+Systematic trend following has, on average, been profitable for at least two centuries; yet
+since approximately 2009, short-term trends have ceased to deliver reliable returns. Using
+a cross-section of roughly 100 liquid futures contracts spanning 1995–2025, together with
+an industry-representative CTA proxy, we document the break and characterise its depen-
+dence on signal speed and asset class. We evaluate four candidate explanations – capacity
+constraints, market electronification, a regime change in CTA-versus-order-flow interactions,
+and a microstructural mechanism – and find that the first three fail on grounds of timing,
+magnitude, or cross-sectional heterogeneity.
+Our central empirical finding is that the cross-sectional variable distinguishing degraded
+from surviving trends is thevolatility-normalised tick size: post-2008 trend PnL has col-
+lapsed on small-tick contracts across all signal horizons, while remaining essentially intact
+on large-tick contracts. Neither asset class nor liquidity replicates this dichotomy.
+We interpret this result through the lens of a self-fulfilling feedback loop that, in our view,
+lies at the heart of the trend anomaly itself:Trend signals trigger directional trades, whose
+market impact reinforces the very price moves that generated the signal. The profitability and
+the persistence of trend are therefore both sustained by the same impact channel. This loop,
+however, requires that trend followers can actually execute aggressively at reasonable cost.
+We argue that the post-crisis transition to HFT-dominated market making, whose liquidity-
+withdrawal behaviour in the face of predictable directional flow has sharply contrasting
+consequences for sparse (small-tick) and dense (large-tick) limit order books, has broken
+this loop on small-tick contracts. On large-tick contracts, where residual depth remains
+sufficient, the loop continues to operate and trend continues to deliver. A complementary
+price-impact analysis shows that passive execution offers no escape, since it forfeits the
+self-reinforcement channel while incurring adverse opportunity costs.
+Keywords:Trend following, CTA, market microstructure, tick size, high-frequency
+trading, market making, price impact.
+1 Introduction
+Few empirical regularities in finance have proven as persistent and as puzzling as the tendency of
+asset prices to trend. The observation that recent winners outperform recent losers contradicts
+the most basic tenet of the Efficient Market Hypothesis of Fama (1970) – obvious information
+(past trends) is not incorporated into prices. Yet the statistical evidence is overwhelming,
+spanning virtually every liquid market and stretching back at least two centuries, as shown by
+Lemp´ eri` ere et al. (2014); Hurst et al. (2017). Moskowitz et al. (2012) document “time-series
+1
+arXiv:2607.01550v1  [q-fin.TR]  2 Jul 2026
+momentum” across 58 instruments and three and a half decades; market-neutral momentum in
+the stock space is also well known (Jegadeesh and Titman, 1993); further work by Baltas and
+Kosowski (2013), Levine and Pedersen (2016), and others has solidified trend following as one
+of the most robust anomalies ever documented in finance.
+The commercial exploitation of this anomaly through the Commodity Trading Advisor
+(CTA) industry took off in the 1970s and 1980s, and by the 1990s had converged on a fairly
+homogeneous methodology: take positions proportional to the difference between a fast and a
+slow moving average of prices, normalised by volatility, diversified across as many liquid futures
+contracts as possible.
+And yet, since approximately 2008/9, this anomaly appears to have been struggling, at least
+when looking at the performance of the SG CTA Index (the industry-standard benchmark for
+large CTAs) from 2000 to 2025; see Fig. 1. The contrast between the pre- and post-2008/9
+regimes is stark: after nearly a decade of steady gains, performance has been effectively flat or
+negative for the past fifteen years, only saved by two macro-driven punctuations in 2014 and
+during Covid. A clean methodological proxy that we construct below paints the same picture
+with both sharper resolution and more nuance.
+2004 2008 2012 2016 2020 2024
+100
+150
+200
+250
+300SG CTA Index (rebased)
+2014 Covid
+2009
+Figure 1: (Rebased) SG CTA Index, 2000–2025. Data courtesy of Soci´ et´ e G´ en´ erale Prime
+Services & Clearing.
+Several stylised facts can be established and constrain any candidate explanation: (i) the
+break isabrupt, with the character of a structural regime shift rather than gradual alpha decay;
+(ii) it isspeed-dependent, with fast signals (horizons of days to weeks) most affected whereas
+slow ones are approximately intact; (iii) it isasset-class heterogeneous, sparing yields and most
+commodities (in our universe) while strongly depressing equity indices and currencies; and (iv)
+there has beenno recovery, despite material improvements in liquidity and declines in CTA
+participation since 2018.
+The self-fulfilling impact loop.Before turning to the post-2008 break, it is useful to artic-
+ulate what trend, viewed as a market mechanism rather than as a statistical anomaly, actually
+consists of. We adopt throughout this paper the view – developed precisely in the ETF context
+by Van der Beck et al. (2024), and foreshadowed by De Long et al. (1990) – that trend is chiefly
+(but most probably not only, see below) a self-fulfilling feedback loop:
+trend signals trigger directional trades, whose market impact reinforces the very price
+moves that produced the signal, which in turn sustains the signal for the next trader
+to act on.
+The profitability of trend and its very existence are thus two faces of the same coin: both depend
+on aggressive directional flow being absorbable by the market at reasonable cost, so that impact
+translates trade into price and price into renewed signal. Anything that breaks this loop – by
+raising execution costs to the point of disengagement, or by altering the relationship between
+2
+aggressive flow and price – should attack profitability and signal strength simultaneously. This
+is the lens through which we read the post-2008 evidence.
+Other mechanisms exist; the loop is not exclusive.We do not claim that the self-
+fulfilling impact loop is the sole origin of trend. The behavioural-finance literature offers well-
+established alternatives – notably gradual incorporation of public news under underreaction
+(Hong and Stein, 1999; Daniel et al., 1998; Bouchaud et al., 2019), the slow diffusion of infor-
+mation across heterogeneously informed investors (Hong et al., 2000), and staggered accumu-
+lation by participants correctly anticipating a future event – each of which can produce price
+autocorrelation without invoking impact-mediated feedback. These mechanisms are not mutu-
+ally exclusive with the loop; they plausibly coexist, with information-diffusion channels seeding
+trends and the impact loop amplifying them. In fact, we have direct empirical evidence in our
+data that some traders did anticipate large market moves and create trends accordingly, and
+that this channel has itself decayed around approximately the same period – see Appendix D,
+Fig. 18. The empirical observations we report below are therefore most naturally read as evi-
+dence thatboththe impact-loop and the anticipatory-trading components have been weakened
+in the post-2008 period, with the loop component decaying most visibly on small-tick contracts.
+We adopt the loop as our organising lens because it makes the cleanest predictions about the
+cross-section we study, not because we believe it is the only mechanism at work.
+Plan of attack.This paper assesses four candidate explanations: (H1) capacity constraints;
+(H2) the electronification of futures markets; (H3) a structural shift in the interaction between
+CTA trades and aggregate order flow; and (H4) a microstructural mechanism whereby liquidity
+offered to trend followers has dried up. We reject H1–H3 on the grounds of timing, magnitude, or
+cross-sectional heterogeneity. Our central contribution concerns H4: the relevant cross-sectional
+variable separating degraded from surviving trend strategies is thevolatility-normalised tick
+size. Partitioning the futures universe by this variable produces a clean dichotomy that no
+decomposition by asset class or liquidity replicates.
+We propose a mechanism rooted in the post-crisis transition to HFT-dominated market mak-
+ing, whose liquidity-withdrawal behaviour in front of predictable directional flow has markedly
+different consequences for sparse (small-tick) and dense (large-tick) order books. Combined
+with the self-fulfilling loop above, this mechanism predicts – and the data confirm – that the
+small-tick collapse is not merely a story of higher transaction costs eating into PnL, but of
+the impact-mediated reinforcement of trends having been severed on those contracts. A com-
+plementary price-impact analysis shows that passive execution offers no escape: it forfeits the
+self-reinforcement channel while incurring adverse book-impact.
+The paper is organised as follows. Sec. 2 defines the trend signals, portfolios, and CTA
+proxy. Sec. 3 documents the empirical decay across speed and asset class. Sec. 4 assesses H1–
+H3. Sec. 5 establishes tick size as the relevant cross-sectional variable. Sec. 6 develops the
+microstructural mechanism, including the role of price impact and the self-fulfilling loop. Sec. 7
+concludes. Further supplements and details are provided in various appendices.
+2 Trend Portfolios and a CTA Industry Proxy
+We work with a cross-section of approximately 100 of the most liquid futures contracts, sampled
+at daily settlement, spanning four sectors: commodities (CMD), equity indices (IDX), currencies
+(FXR), and government bonds/yields (YLD). The data catalogue is detailed in Appendix A.
+Signal definition.For each contractiand trading dayt, the unnormalised trend signal on
+time scaleτis the difference between a fast and a four-times slower exponentially weighted
+3
+moving average (EWMA) of close prices, ˜sτi (t) =⟨p i(t−1)⟩ τ − ⟨pi(t−1)⟩ 4τ . Normalising by a
+slow estimate of its own dispersion yields the dimensionless signal
+sτi (t) = ˜sτi (t)⟨⟨˜sτi (t)⟩⟩16τ ,(1)
+which is comparable across contracts. Here⟨·⟩ τ refers to the backward-looking EWMA with
+characteristic decay timeτ(in days) and⟨⟨·⟩⟩ τ refers to an exponentially weighted moving
+standard deviation (EWMSTD). We refer to a signal with parameterτas EWM-τ-4τ. As is
+industry practice, signals are clipped at±2 standard deviations:s τi (t)7→clip(s τi (t),−2,2).
+Portfolio construction.Two volatility-scaled portfolios constructed from all contracts are:
+Type 1 (equal-risk):the position is volatility-normalised,
+πτi (t) = sτi (t)σi(t) .(2)
+Type 2 (liquidity-weighted):the position is normalised by its own volatility and by its
+liquidity expressed as a ratio of the aggregate liquidity in the portfolio,
+πτi (t) = sτi (t)l i(t)σi(t)L(t) .(3)
+The volatility is defined asσ i(t) =⟨|p i(t−1)−p i(t−2)|⟩ 16τ ;l i(t) =⟨V w/o impi (t−1)σ i(t)⟩250 is a
+contract’s liquidity, andL(t) = Pi li(t) is the aggregate portfolio liquidity, where Vw/o impi is the
+traded volume in contractiwithout implied trades. On each trading day the position is updated
+with the trade ∆π τi (t) =π τi (t)−π τi (t−1) per product. The volatility normalisation ensures
+that each contract contributes a similar dollar-risk to the overall portfolio, while the liquidity-
+weighting becomes essential when scaling up to (CTA) industry size, since illiquid products
+cannot be scaled up in the same way as very liquid ones owing to differing price-impact costs.
+CT A proxy .To match the risk of the aggregate CTA industry, the liquidity-weighted portfolio
+is rescaled according to industry-wide AUMS CTA(t) from BarclayHedge (2025) at an annualised
+risk ofr a ≈12% (inferred from the SG CTA index):
+πCTA,τi (t) =π τi (t) SCTA(t)$1 ra√252 .(4)
+Computing the resulting daily participation rate PRi =|∆π CTAi |/Vw/o impi across contracts gives
+a cross-sectional median of∼0.9%, broadly consistent with independent estimates by Quantica
+Capital (2022) and Lorenzen et al. (2025): the CTA industry represents less than 1% of the
+exchanged volume on futures. This agreement provides external validation of the proxy in
+Eq. (4).
+3 Empirical Decay of Trend PnL
+Equipped with the trend portfolios and the CTA proxy of Sec. 2, we now document the post-
+2008 performance break empirically. Three features emerge that any viable explanation must
+accommodate: an abrupt aggregate decay from 2008/9 onward, a strong dependence on signal
+speed (with fast trends most affected), and a marked heterogeneity across asset classes. Each
+is the subject of a dedicated subsection below. We present these patterns descriptively here;
+their mechanistic interpretation, and in particular the role of the self-fulfilling impact loop, is
+deferred to Sec. 6.
+4
+3.1 Aggregate cumulative PnL
+Fig. 2 (left) shows the cumulative PnL of a fast trend portfolio (EWM-5-20) from 1950 to 2025.
+Two features stand out: the cumulative PnL is essentially flat from 2009 onward, although
+a weakening may already be detected from approximately 2000. The five-year rolling Sharpe
+ratio (right) collapses from a historical range of 1–2.5 to a level statistically indistinguishable
+from zero post-2010. This was also reported in Lemp´ eri` ere et al. (2014), and more recently by
+Schmidhuber (2021).
+1950 1960 1970 1980 1990 2000 2010 2020
+Year
+0
+200
+400
+600
+800
+1000Cumulative PnL
+2009
+EWM-5-20
+1950 1960 1970 1980 1990 2000 2010 2020
+Year
+0
+1
+2
+3Rolling Sharpe
+Figure 2: Left: cumulative PnL of EWM-5-20, 1950–2025. Right: corresponding 5-year rolling
+annualised Sharpe with bootstrap standard errors.
+3.2 Speed dependence
+Repeating the analysis forτ∈ {5,10,20,50}reveals a striking asymmetry (Table 1 and Fig. 3):
+pre-2009 Sharpes are monotonically decreasing inτ(from 0.84 atτ=5 to 0.70 atτ=50), whereas
+post-2008 the ordering reverses, with the fastest signal collapsing to 0.12 and the slowest still
+delivering 0.40.
+τSharpe 1995–2009 Sharpe 2009–2025
+5 0.84±0.27 0.12±0.24
+10 0.83±0.27 0.22±0.24
+20 0.79±0.27 0.27±0.26
+50 0.70±0.27 0.40±0.26
+Table 1: Sharpe ratios of EWM-τ-4τtrend signals over two sub-periods straddling the perfor-
+mance break. See also Fig. 3.
+3.3 Asset-class heterogeneity
+Fig. 4 disaggregates the cumulative PnL by sector. Trend has effectively vanished for IDX and
+FXR, while YLD and CMD show no appreciable degradation. As we will see in Sec. 5, this
+asset-class heterogeneity is most cleanly understood as a downstream consequence of a deeper
+microstructural variable.
+4 Assessing Capacity, Electronification, and Order Flow
+Having documented the post-2008 break and its qualitative signatures, we now confront three
+of the most natural candidate explanations: capacity constraints (H1), the electronification of
+5
+1950 1960 1970 1980 1990 2000 2010 2020
+Year
+0
+200
+400
+600
+800
+1000Cumulative PnL
+2009
+EWM-5-20
+EWM-10-40
+EWM-20-80
+EWM-50-200
+EWM-5-20 EWM-10-40 EWM-20-80 EWM-50-200
+Signal
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Sharpe
+1995 − 2009
+2009 − 2025
+Figure 3: Left: cumulative PnL of EWM-τ-4τportfolios for a range of fast scalesτ. Right:
+corresponding pre- and post-break Sharpe by signal. See also Table 1.
+1992 1996 2000 2004 2008 2012 2016 2020 2024
+Year
+0
+100
+200
+300
+400Cumulative Average PnL
+YLD
+IDX
+FXR
+CMD
+Figure 4: Cumulative PnL of a fast strategy (EWM-5-20), averaged within each asset class.
+futures markets (H2), and a structural shift in the interaction between CTA trades and aggregate
+order flow (H3). For each, we ask whether the timing, the magnitude, and the cross-sectional
+pattern of the proposed channel match those of the observed PnL decay. We find that none
+does, although H3 will turn out to be a useful diagnostic when revisited at the right level of
+cross-section in Sec. 5.
+4.1 H1: Capacity constraints
+The naive crowding argument – more capital arbitrages the signal away – is not viable for
+trend, since rational speculators in the presence of positive feedback should front-run rather
+than weaken trends (De Long et al., 1990). The relevant version is therefore the execution-
+cost story articulated by Quantica Capital (2025) 1 (see also Volpati et al. (2020)): under the
+1Strictly speaking, Quantica Capital (2025) do not argue that trend has hit capacity industry-wide or that
+capacity constraints explain the post-2008 break. Their analysis is cross-sectional: at large AUM, risk allocation
+must concentrate in the most liquid commodities, eroding the diversification benefit that less liquid markets
+would otherwise contribute (they estimate 17% Sharpe drag at$1B commodity capacity). They explicitly find
+no relationship between per-instrument Sharpe and liquidity after costs. We invoke their work here as the most
+carefully quantified version of the capacity hypothesis available, and as a useful motivator for our subsequent
+microstructural analysis, while acknowledging that capacity-driven erosion of diversification benefits in less liquid
+contracts may well be a genuine secondary effect operating alongside the mechanism we identify.
+6
+square-root impact law, total slippage scales asQ 3/2 (see, e.g., T´ oth et al. (2011); Bouchaud
+et al. (2018)), and beyond some position sizeQnet Sharpe collapses. We find this hypothesis
+problematic on four grounds.
+First, reverse causality.CTA AUM (Fig. 5) grew through the 2000s, plateaued around 2012,
+and peaked in 2022 – several yearsaftertrend PnL went flat. The temporal ordering is the
+opposite of what the capacity story predicts.
+Second, no post-2018 recovery.While CTA AUM stagnated after 2012, futures liquidity rose
+sharply from 2018 onward (see Fig. 5, right), mechanically reducing participation rates. Despite
+this, trend PnL did not recover. Crowding-driven decay typically exhibits a recovery signature
+once excess positions unwind (Mitchell and Pulvino, 2012); trend shows none.
+2000 2004 2008 2012 2016 2020 2024
+Year
+50
+100
+150
+200
+250
+300
+350CTA AUM / $B
+2000 2004 2008 2012 2016 2020 2024
+Year
+0
+1
+2
+3
+4$B
+Daily CTA Risk
+0
+2
+4
+6
+8
+10
+12
+$B
+Daily Liquidity
+Figure 5: Left: estimated CTA industry AUM, 2000–2025 (BarclayHedge, 2025). Right: daily
+dollar risk of the CTA industry atr a = 12% (black, left axis) and aggregate daily liquidity
+(green, right axis).
+Third, the implied drag is too small.A standard square-root impact calculation (Ap-
+pendix B) at a 1% participation rate and∼9% daily turnover yields an annualised Sharpe
+drag of roughly 0.1. This is non-trivial but still too small to explain the observed collapse from
+∼0.7 to∼0, even when allowing for a factor-three error margin due to model uncertainty.
+Fourth (and most telling), sig-
+nal degradation under zero-lag execu-
+tion.Recomputing the PnL with po-
+sitions executed at the same day’s
+close (Fig. 6) – mechanically elimi-
+nating one full day of impact – pro-
+duces equally flat post-2008 returns,
+even without costs. If capacity were
+the cause, removing execution costs
+should restore profitability, which it
+does not. This means the signal itself
+has degraded, rather than the strat-
+egy simply having become too costly
+to trade. As we will see, this fourth
+observation is particularly telling: it
+is the first hint that what has de-
+cayed is not merely the harvest but
+the underlying signal – exactly what
+the self-fulfilling loop framework pre-
+dicts when the loop is broken.
+1950 1960 1970 1980 1990 2000 2010 2020
+Year
+0
+200
+400
+600
+800
+1000Cumulative PnL
+2009
+EWM − 5 − 20
+EWM − 10 − 40
+EWM − 20 − 80
+EWM − 50 − 200
+Figure 6: Cumulative PnL with zero-lag execution: po-
+sitions identified on daytare executed at the day-t
+close. Fast-signal performance (red, rosy) still remains
+flat post-2008.
+7
+4.2 H2: Electronification
+The transition to electronic order
+books on major futures exchanges is
+sometimes invoked as a cause. Three
+observations from Fig. 7, which shows
+the fraction of electronically executed
+futures volume per sector on CME
+(Globex), cast doubt on that story:
+electronification wasgradual, while
+the PnL break is abrupt; its sectoral
+timingdoes not align with the PnL
+break (equities electronified more than
+five years before the break, FX about
+contemporaneously); and its sectoral
+orderingdoes not match the PnL re-
+sponse (interest-rate futures electron-
+ified early but did not degrade). Al-
+though market electronification is a
+necessary precondition for the mech-
+anism we propose below – it concen-
+trates flow into a single visible book –
+it is not by itself the cause.
+1996 1998 2000 2002 2004 2006 2008 2010 2012 2014
+Year
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Volume Fraction Electronically Traded
+Equity
+Interest Rate (IR)
+Foreign Exchange
+Short-term IR
+Metal
+Agriculture
+Figure 7: Progression of the futures volume fraction
+by asset class that is traded electronically on Globex
+versus the total traded CME futures volume, which in-
+cludes pit trading through open outcry. Data courtesy
+of Robert Almgren, Quantitative Brokers.
+4.3 H3: Order-flow interactions
+Following Volpati et al. (2020), we define daily book and trade imbalances on volume-weighted
+5-minute bars:
+I booki,t = 1Vi,t
+X
+s∈t
+V bidi,s −V aski,s
+V bidi,s +V aski,s Vi,s, I tradei,t = 1Vi,t
+X
+s∈t
+V BIVi,s −V SIVi,s
+V BIVi,s +V SIVi,s Vi,s,(5)
+whereV i,s is the volume traded in productiin each of the 5-minute time windows in a trad-
+ing day, andV i,t is the total traded volume of contractiin dayt.V bid/ask is a snapshot of
+the volume at the best bid/ask at the end of each bar window, andV BIV/SIV is the cumula-
+tive buyer/seller-initiated volume per interval. The volume-weighting ensures that the daily
+statistics are dominated by liquid trading hours and not diluted by overnight futures trading.
+The idea is to study the correlation between these flow indicatorsIand the expected change
+of position of trend followers, ∆π CTA, in order to detect possible changes in the way trend
+followers trade and, symmetrically, in the liquidity offered to them.
+Aggregated across all futures markets, the correlation between ∆π CTA and book imbalance
+I book has abruptly changed sign around 2010, especially for short-term trends (5–20 days),
+while showing essentially no change for long-term trends (Fig. 8, left). This is striking because
+it precisely parallels the change in PnL of short trends reported above, and motivates our initial
+working hypothesis. Indeed, Corr(∆π CTA, Ibook) was negative before 2010 and positive after.
+In other words, the order book was thicker on the opposite side of the trend trade before 2010,
+meaning that liquidity was provided to trend followers during that period. Since then, liquidity
+has been more abundant for trades opposing the trend, which may indicate that either liquidity
+providers shy away from trading with trend followers, or that trend followers themselves use
+more limit orders to execute – or both.
+The correlation with trade imbalance, Corr(∆π CTA, Itrade), on the other hand, does not
+show any particular feature around 2010, but does change sign abruptly in 2015, suggesting
+that “anti-trend” (i.e. mean-reversion) trades have become dominant in the recent period,
+striking another blow to trend-following performance.
+8
+2000 2005 2010 2015 2020 2025
+Year
+−0.2
+−0.1
+0.0
+0.1
+0.2
+0.3
+0.4
+Cumulative Corr (∆πCTA, Ibook)
+−1.5%
+4%
+EWM-5-20
+EWM-10-40
+EWM-20-80
+EWM-50-200
+2000 2005 2010 2015 2020 2025
+Year
+−0.6
+−0.4
+−0.2
+0.0
+0.2
+Cumulative Corr (∆πCTA, Itrade)
+−7%
+EWM-5-20
+EWM-10-40
+EWM-20-80
+EWM-50-200
+Figure 8: Annual cumulated correlations of trades ∆π CTA,τ with book imbalances (left) and
+with trade imbalances (right), averaged over the entire portfolios built from different signals
+EWM-τ-4τ. Dashed lines are for guidance.
+Although suggestive, this hypothesis fails the cross-sectional test. Disaggregating by asset
+class, as shown in Fig. 9, reveals decisive mismatches between correlation changes and PnL
+outcomes (see Fig. 4):
+1. Commodities undergo a sharp book-imbalance regime change but exhibitnoPnL degra-
+dation whatsoever; currencies show a similar change in correlation structure and the
+post-2010 PnL is flat.
+2. Yields show essentially no correlation change and equally show no PnL degradation.
+3. Indices show a reverse pattern but a similar trend degradation.
+4. The post-2010 sign is common across YLD, CMD, and FXR but their PnL outcomes differ
+entirely.
+No monotonic mapping exists between the correlation changes and the PnL outcomes at the
+asset-class level. An intra-day volume-clock decomposition (Appendix C) reveals that the first
+20% of daily volume behaves systematically differently from the rest – consistent with morning-
+concentrated CTA execution – but does not resolve the cross-sectional inconsistency.
+H3 is therefore insufficient at the asset-class level of decomposition. The diagnostic itself,
+however, will re-emerge usefully at a different level of cross-section under H4.
+5 Tick Size as a Discriminant Factor
+We now establish the central empirical result of the paper: the relevant cross-sectional variable
+separating degraded from surviving trend strategies is thevolatility-normalised tick size.
+5.1 Tiering procedure
+For each productiand monthm, define the average tick-to-volatility ratio
+¯ρi,m = 1Dm DmXt=1 Ψi(t)σi(t) ,(6)
+where Ψi is the tick size of the contract,σ i is the daily volatility estimator of Sec. 2, andD m is
+the number of trading days in monthm. Each month, products are ranked in ascending order
+9
+2000 2005 2010 2015 2020 2025
+−0.4
+−0.2
+0.0
+0.2
+0.4
+0.6
+Cumulative Corr (∆πCTA, Ibook)
+CMD
+EWM − 5 − 20
+EWM − 10 − 40
+EWM − 20 − 80
+EWM − 50 − 200
+2000 2005 2010 2015 2020 2025
+−0.2
+0.0
+0.2
+0.4
+0.6
+Cumulative Corr (∆πCTA, Itrade)
+CMD
+EWM − 5 − 20
+EWM − 10 − 40
+EWM − 20 − 80
+EWM − 50 − 200
+2000 2005 2010 2015 2020 2025
+−0.7
+−0.6
+−0.5
+−0.4
+−0.3
+Cumulative Corr (∆πCTA, Ibook)
+FXR
+EWM − 5 − 20
+EWM − 10 − 40
+EWM − 20 − 80
+EWM − 50 − 200
+2000 2005 2010 2015 2020 2025
+−2.5
+−2.0
+−1.5
+−1.0
+−0.5
+0.0
+0.5
+Cumulative Corr (∆πCTA, Itrade)
+FXR
+EWM − 5 − 20
+EWM − 10 − 40
+EWM − 20 − 80
+EWM − 50 − 200
+2000 2005 2010 2015 2020 2025
+−0.1
+0.0
+0.1
+0.2
+0.3
+0.4
+Cumulative Corr (∆πCTA, Ibook)
+IDX
+EWM − 5 − 20
+EWM − 10 − 40
+EWM − 20 − 80
+EWM − 50 − 200
+2000 2005 2010 2015 2020 2025
+−0.6
+−0.5
+−0.4
+−0.3
+−0.2
+−0.1
+0.0
+Cumulative Corr (∆πCTA, Itrade)
+IDX
+EWM − 5 − 20
+EWM − 10 − 40
+EWM − 20 − 80
+EWM − 50 − 200
+2000 2005 2010 2015 2020 2025
+Year
+−0.2
+0.0
+0.2
+0.4
+0.6
+0.8
+Cumulative Corr (∆πCTA, Ibook)
+YLD
+EWM − 5 − 20
+EWM − 10 − 40
+EWM − 20 − 80
+EWM − 50 − 200
+2000 2005 2010 2015 2020 2025
+Year
+−0.2
+0.0
+0.2
+0.4
+0.6
+Cumulative Corr (∆πCTA, Itrade)
+YLD
+EWM − 5 − 20
+EWM − 10 − 40
+EWM − 20 − 80
+EWM − 50 − 200
+Figure 9: Same as Fig. 8 but averaged per asset class.
+by ¯ρi,m,
+Ri,m := rankj∈Pm(¯ρj,m)
+
+i
+
+∈ {1,2, . . . , Nm},(7)
+whereP m denotes the set ofN m ≡ |Pm|products, and partitioned into two equal-sized tiers:
+Tieri,m :=
+
+
+
+small tick (ST), ifR i,m ≤ ⌊Nm/2⌋,
+large tick (LT), otherwise.
+(8)
+A product is categorised as small (large) tick if its tick-to-volatility ratio is in the lowest (highest)
+50%. The partition is used causally and recomputed monthly, so that a contract whose volatility
+regime or tick size changes can migrate between tiers. Effectively, however, products rarely
+migrate between tiers in our sample. Note that ST and LT refer to tick size, not to be confused
+with “short trends” or “long trends”.
+10
+5.2 Results
+Fig. 10 shows the cumulative PnL of the equal-risk trend portfolio (Eq. (2), without liquidity
+weighting), causally conditioned on the monthly tick-size tier and disaggregated by signal hori-
+zon. The dichotomy is stark: short-trend PnL hascompletelydegraded for small-tick contracts
+after 2008, uniformly across signal horizons EWM-τ-4τ, while the cumulative PnL of large-tick
+contracts is virtually unaffected by the break and continues to accrue at roughly the pre-2009
+rate, even at the highest frequency. The result is preserved when the tick-size tiering is per-
+formedwithineach asset class rather than across the full universe (Appendix F), suggesting
+that the dependence of fast-trend degradation on volatility-normalised tick size is approximately
+monotonic rather than driven by a single threshold.
+1995 2000 2005 2010 2015 2020 2025
+Year
+0
+2000
+4000
+6000
+8000Cumulative PnL
+Small Tick
+2000 2010 2020
+0
+2500
+5000
+7500
+10000
+High Liquidity
+EWM − 5 − 20
+EWM − 10 − 40
+EWM − 20 − 80
+EWM − 50 − 200
+1995 2000 2005 2010 2015 2020 2025
+Year
+−2000
+0
+2000
+4000
+6000
+8000
+10000
+12000
+14000
+Large Tick
+2000 2010 2020
+0
+2000
+4000
+6000
+8000
+10000
+Low Liquidity
+EWM − 5 − 20
+EWM − 10 − 40
+EWM − 20 − 80
+EWM − 50 − 200
+Figure 10: Cumulative trend PnL conditioned on the monthly tick-size tier. Left: small-tick
+contracts. Right: large-tick contracts. Equal-risk portfolio, no liquidity weighting (Eq. (2)).
+Insets: same, but filtered by equally-sized liquidity tiers instead of tick-size tiers.
+Fig. 11 (top) quantifies the dichotomy. Pre-break Sharpes cluster around 0.8 for ST and 1.4
+for LT for the equal-risk portfolio. Post-break, ST Sharpes collapse to essentially zero (mildly
+negative for the fastest signals), while LT Sharpes remain in the range 1.0–1.2. The relative
+degradation is∼100% for ST and∼0–30% for LT. Fig. 11 (bottom) repeats the analysis for the
+liquidity-weighted portfolio (Eq. (3)), from which qualitatively similar insights may be inferred
+– the finding holds with and without liquidity weighting. Beyond that, the comparison also
+shows that liquidity has a measurable but secondary effect on the PnL outcome.
+Classifying by liquidity does not work.A natural concern is that liquidity might tier the
+cross-section equally well, since liquidity and tick size are negatively correlated (log-log Pearson
+correlation of−0.35±0.08; see Appendix E). It is also anecdotally known that trends still work
+on lower-liquidity products. The result, however, is unambiguously negative: the decomposition
+by liquidity tier (Fig. 10, insets; see also Fig. 20 in Appendix E) does not dichotomise as cleanly.
+Liquidity-tiered PnLs are inconsistent across horizons: not all fast signals on liquid contracts
+have collapsed, and there is no clean ordering between the high- and low-liquidity sub-portfolios.
+Tick size – rather than liquidity, asset class, or electronification – is the cross-sectional variable
+that best explains trend survival.The asset-class heterogeneity documented earlier is, on this
+reading, a downstream symptom of the clustering of IDX and FXR in the small-tick tier and of
+YLD and most CMD in the large-tick tier.
+11
+EWM-5-20 EWM-10-40 EWM-20-80 EWM-50-200
+0.0
+0.5
+1.0
+1.5
+Sharpe
+EWM-5-20 EWM-10-40 EWM-20-80 EWM-50-200
+Signal
+0.0
+0.5
+1.0
+Sharpe
+1996 − 2009, Large Tick
+1996 − 2009, Small Tick
+2009 − 2025, Large Tick
+2009 − 2025, Small Tick
+Figure 11: Sharpe ratios by tick-size tier and signal horizon, pre- and post-break. Top: equal-
+risk portfolio. Bottom: liquidity-weighted portfolio. Errors are bootstrap standard errors.
+Within-contract confirmation.Two further decompositions confirm the framework. First,
+partitioning each contract’s days by volatility (per-contract per-year median, causal) shows that
+trends are generally more profitable in periods of low volatility – theLeBaron effect(LeBaron,
+1992a,b). Interestingly, low-volatility periods on small-tick contracts continue to accrue PnL
+even after the overall PnL break: small-tick products in low-volatility regimes behave similarly
+to large-tick contracts – exactly as expected if the operative variable is Ψ/σrather than Ψ alone.
+Second, partitioning by daily return magnitude shows that the trend break is a phenomenon of
+large-returndays only: the PnL contribution from sub-1σdays is essentially invariant to the
+post-2008 regime change across all horizons and tiers. The signal harvested on small returns has
+not decayed; what has been eliminated is specifically the trend follower’s ability to profit from
+large directional moves on small-tick contracts. Both decompositions are reported in detail in
+Appendix D and impose constraints that the mechanism developed below naturally satisfies.
+6 HFT Liquidity, the Self-Fulfilling Loop, and the Sparse-vs.-
+Dense Asymmetry
+We now turn to the mechanism. The organising idea is the self-fulfilling loop introduced in
+Sec. 1: trend exists, and remains profitable, because trend trades push prices in the direction
+of the signal, sustaining it for the next round of trend followers to act on. The loop has two
+preconditions. First, trend followers must be able to execute aggressively at a cost that does
+not exceed the impact-mediated alpha they thereby create. Second, the relationship between
+aggressive flow and price – the impact function – must remain intact, so that flow continues to
+translate into the price moves the signal needs.
+We argue in this section that both preconditions held until roughly 2010 across the futures
+universe, and that since then both have been compromised on small-tick contracts and largely
+preserved on large-tick ones. The mechanism behind this asymmetry is the post-crisis transition
+to HFT-dominated market making, which operates in both tick-size tiers but has profoundly
+12
+different consequences depending on the geometry of the limit order book (LOB). The empirical
+signature of the broken loop, we will see, is twofold: a rotation of the LOB against trend
+execution (Sec. 6.1), and a flattening of the contemporaneous return-versus-book-imbalance
+relationship that quantifies the cost of providing depth in front of directional flow (Sec. 6.3).
+Together, these two changes are sufficient to explain why both the PnL and the signal itself
+have collapsed on small-tick contracts.
+6.1 Liquidity provision against trend flow has rotated
+We first revisit the order-flow diag-
+nostics of Sec. 4 but disaggregated
+by tick-size tier rather than by as-
+set class. The result is shown in
+Fig. 12. For slow signals, no material
+change in the correlations withI book
+(left) is visible in either tier. For fast
+signals onlarge-tickcontracts, the
+correlation Corr(∆π CTA, Ibook) has
+changed sharply from∼ −3% p.a.
+pre-2010 to∼+4% p.a. thereafter.
+To wit: pre-2010, on a fast trend
+buy day (∆π CTA >0), the nega-
+tive correlation impliesV ask > Vbid
+– there was more resting volume of-
+fered to trend followers than to mean-
+reverters; post-2010, the positive cor-
+relation impliesV ask < Vbid – the liq-
+uidity in the book has rotatedagainst
+the trend follower.
+Forsmall-tickcontracts, the corre-
+lation has been positive throughout,
+but its post-2010 magnitude on fast
+signals has grown materially: the
+small-tick LOB, never abundant in
+liquidity in the direction of trend, has
+become even more shallow.
+2000 2005 2010 2015 2020 2025
+−0.1
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+Cumulative Corr (∆πCTA, Ibook)
+Small Tick
+2000 2005 2010 2015 2020 2025
+−1.0
+−0.8
+−0.6
+−0.4
+−0.2
+0.0
+Cumulative Corr (∆πCTA, Itrade)
+Small Tick
+EWM − 5 − 20
+EWM − 10 − 40
+EWM − 20 − 80
+EWM − 50 − 200
+2000 2005 2010 2015 2020 2025
+Year
+−0.4
+−0.3
+−0.2
+−0.1
+0.0
+0.1
+0.2
+0.3
+Cumulative Corr (∆πCTA, Ibook)
+Large Tick
+2000 2005 2010 2015 2020 2025
+Year
+−0.4
+−0.2
+0.0
+0.2
+0.4
+0.6
+Cumulative Corr (∆πCTA, Itrade)
+Large Tick
+Figure 12: Cumulative annual-average correlation be-
+tween CTA trades (Eq. 4, liquidity-weighted) and book
+imbalance (left) / trade imbalance (right). Top: small-
+tick tier. Bottom: large-tick tier.
+The correlation with trade imbalance in Fig. 12 (right column) also shows a clear regime
+change, but only in 2015. This suggests either a change in the execution strategy of trend
+followers or more market-order execution from mean-reverters; in either case, this change is
+more a consequence than a cause of the demise of short trends from 2010 onwards.
+6.2 The mechanism
+The puzzle to be explained is therefore the following: post-2010, the LOB has rotated against
+fast trend execution acrossbothtick-size tiers, yet the PnL consequences are sharply asymmetric
+– innocuous for large ticks and devastating for small ticks. We propose that the post-2010 break
+results from the combination of two ingredients.
+(i) A change in the liquidity-provision regime.The post-2008 period coincides with the
+substantial completion of the transition from traditional bank-affiliated and proprietary-desk
+market making, operating on inventory horizons of hours to days, to high-frequency-trading
+13
+market making on intraday flat-inventory mandates with extremely tight spread-capture eco-
+nomics (Kirilenko et al., 2017; Menkveld, 2013; Chaboud et al., 2014; Hendershott and Riordan,
+2013). The HFT market-making business model is structurally incompatible with absorbing the
+predictable and persistent directional flow that aggregate CTA trading generates. The empirical
+literature documents that HFTs systematicallywithdrawliquidity in front of large institutional
+orders rather than supply it, and that execution costs for such orders are correspondingly ele-
+vated (Korajczyk and Murphy, 2019; Van Kervel and Menkveld, 2019). Whether the relevant
+change is one ofidentity(a new population of providers, who never absorbed such flow) or
+behaviour(incumbents tightening risk preferences after the 2008 inventory losses; see Adrian
+and Shin 2010) is immaterial for our argument; the evidence is consistent with both, plausibly
+in combination. The correlation changes reported in Fig. 12 (left column) indicate that LOB
+liquidity provision has rotated against trend followers, most probably as a consequence of this
+evolution of market-making practices.
+(ii) Structural differences between small- and large-tick LOBs.Independent of any
+particular generation of market makers, small-tick LOBs are intrinsicallysparse: gaining priority
+requires offering better prices, so expected gains are smaller relative to adverse-selection costs;
+equilibrium posted depth is therefore small, and gaps between filled price levels are common
+(Bouchaud et al., 2018; Dayri and Rosenbaum, 2015). Large-tick LOBs are intrinsicallydense:
+the spread is meaningfully wider than what is needed to compensate for adverse selection, the
+queueing rent at the front of the queue is substantial, and resting volume builds up at multiple
+deep levels.
+Combined consequence: the loop holds on large ticks and breaks on small ticks.
+The HFT-driven rotation of the book operates in both tiers (Fig. 12), but its consequence is
+asymmetric. In a sparse small-tick LOB, withdrawal removes the residual depth that previously
+allowed fast trend execution to proceed at reasonable cost – which is precisely what the self-
+fulfilling loop requires, since the CTA industry’s flow comes in large size. Trend followers would
+have had to “walk the book” to execute, incurring substantial transaction costs; this is the
+short transitory period before they acknowledged that liquidity previously available to them
+had significantly receded. The consequence, in our scenario, is that trend followers structurally
+disengaged from short-horizon trend in those products (Korajczyk and Murphy, 2019). Once
+they did so, the loop broke on its input side: the impact-mediated reinforcement of nascent
+trends disappeared along with the flow that produced it, and the small-ticksignal– not just
+the harvest – decayed. This is exactly the pattern documented in Sec. 4 under zero-lag execution
+and corroborated by the within-contract decompositions of Sec. 5.
+By contrast, on dense large-tick LOBs, residual depth at the best quotes and at deeper
+levels remains sufficient for execution to proceed largely unperturbed compared to the pre-
+2010 period. Trend followers continue to trade aggressively, the impact-mediated reinforcement
+continues to operate, and both the signal and the PnL remain intact. Fig. 13 sketches the
+sparse small-tick and dense large-tick LOBs respectively, and illustrates the asymmetric effect
+of liquidity withdrawal under a buy-trend.
+This account is also consistent with the within-contract decompositions of Sec. 5 and Ap-
+pendix D. The volatility decomposition is mechanically predicted: in low-volatility regimes, Ψ/σ
+rises and small-tick contracts behave microstructurally like larger-tick ones, so the loop contin-
+ues to operate. The return-magnitude decomposition is also mechanically predicted: liquidity
+withdrawal is triggered by the size of detected directional flow, and the adverse-selection cost
+of providing liquidity is small for weak trend signals – hence depth does not recede significantly
+and small-move trend PnLs are mostly unaffected.
+14
+99.7 99.8 99.9 100.0 100.1 100.2 100.3
+Price Level
+0
+200
+400
+600
+800
+1000Volume
+b(t) a(t)
+m(t)
+s(t)
+Buy
+Trend
+Ψ
+Small Tick (Ψ = 0.01) – Sparse Order Book
+90 95 100 105 110
+Price Level
+0
+2000
+4000
+6000
+8000
+10000
+Large Tick (Ψ = 1.00) – Dense Order Book
+Bid (Real Money)
+Bid (Market Maker)
+Ask (Real Money)
+Ask (Market Maker)
+Figure 13: Limit order book sketches for a small-tick (left) and large-tick (right) asset. Dashed
+bars exemplify the liquidity provided by market makers, while solid bars subsume all other
+volume. The units [Ψ] = [price level] are arbitrary (futures) price units and can differ between
+contracts;a(t) andb(t) are the best ask and bid prices, which can move in units of the tick Ψ;
+s(t) =a(t)−b(t) is the spread, andm(t) = a(t)+b(t)2 the mid-price. Note the difference in order
+of magnitude on the y-axes.
+6.3 The role of price impact: the loop, made explicit
+Sec. 6.2 argued that the degradation of not only the trend PnL but also the trendsignalon
+small-tick contracts is a consequence of trend followers’ retreat from those products. This is
+more than a casual claim: it is a direct prediction of the self-fulfilling loop articulated in Sec. 1.
+De Long et al. (1990) showed that trend signals are subject to positive feedback, so that more
+trend trading should reinforce, rather than crowd out, the signal. Van der Beck et al. (2024)
+have recently made this scenario very precise in the ETF context, quantifying the role of price
+impact; see also Patzelt and Bouchaud (2018) and Fig. 14 (right) for microstructural evidence.
+The right panel shows the contemporaneous relationship of normalised five-minute returns to
+the equal-bin trade imbalance: under a buy-trend for which statisticallyV BIV > VSIV and
+henceI trade >0, the return is on average positive, mechanically reinforcing the trend signal.
+This is the loop, observable.
+The implication for our story is straightforward. If trend followers stopped trading aggres-
+sively on small-tick contracts, the positive impact channel that fed back into the signal weakened
+correspondingly: weak nascent trends could no longer be amplified into full-fledged ones, and
+the signal’s autocorrelation – not just its harvest – decayed. On large-tick contracts, where
+aggressive execution remained viable, the loop continued to operate and the signal continued
+to exist.
+Fig. 14 (left) sharpens the picture by showing the relationship between the five-minute
+normalised return and its equal-binbookimbalance. It reveals striking differences between
+small ticks and large ticks, and – more importantly – between small ticks before and from
+2011, while the return-versus-trade-imbalance relation (right panel) is stable over time and
+qualitatively similar across tiers.
+What do the small-tick curves tell us? Before 2011, there is clear adverse selection: liquidity
+imbalance between bid and ask is negatively correlated with the return. Limit orders at the
+bid are likely to be executed at a higher price than the bar’s close, and vice versa, so liquid-
+ity providers face net inventory losses. The average adverse selection reaches a maximum at
+15
+intermediate book imbalances (I book ≈0.1; see Fig. 14 (left, red)). Since 2011, however, this
+effect has nearly entirely disappeared – the correlation is close to zero (dashed red line). This
+observation supports our hypothesis that liquidity providers (in particular HFTs) in small-tick
+futures have become largely immune to adverse selection, or at least considerably more wary of
+it than in the past. The mechanical signature of liquidity withdrawal is precisely this flattening:
+depth that would previously have been “run over” by aggressive trend flow no longer rests long
+enough to appear in the imbalance statistics. The cost has not disappeared; it has migrated
+from the market maker’s inventory to the trend follower’s slippage.
+The correlation is persistently negative for large ticks, which is expected to some extent:
+market-maker profits on large spreads can remain positive even when partly eaten up by adverse
+selection.
+−1.0 −0.5 0.0 0.5 1.0
+5 - min Book Imbalance
+−0.02
+−0.01
+0.00
+0.01
+0.02
+Normalised 5 - min return
+Small Tick, before 2011
+Small Tick, from 2011
+Large Tick, before 2011
+Large Tick, from 2011
+−1.0 −0.5 0.0 0.5 1.0
+5 - min Trade Imbalance
+−0.04
+−0.02
+0.00
+0.02
+0.04
+Normalised 5 - min return
+Small Tick, before 2011
+Small Tick, from 2011
+Large Tick, before 2011
+Large Tick, from 2011
+Figure 14: Normalised 5-minute returns as a function of contemporaneous book imbalance
+(left) and trade imbalance (right), for small-tick (red) and large-tick (maroon) contracts, before
+(solid) and from (dashed) 2011. The x-axis is quantile-binned.
+6.4 Limit orders are no remedy: missed opportunities and a broken loop
+Can fast trend followers circumvent the small-tick constraint by switching from market-order to
+limit-order execution? We believe not, for two distinct but mutually reinforcing reasons, both
+visible in the empirical price-impact relationships of Fig. 14.
+(a) T rend limit orders are penalised by missed opportunities, not adverse selection.
+A trend follower posting a passive bid in order to buy faces the risk of not being executed if
+their prediction is realized, leading to an increased execution price if the decision is not executed
+quickly. The dominant cost of passive execution for a trend follower is therefore not adverse
+selection in the usual sense (being filled by better-informed counterparties before the price moves
+against them); it is the opposite – themissed-opportunity costof failing to be filled while the
+price runs away in the direction of the signal. The very fact that the signal is informative about
+the next move guarantees that the follower’s passive bid will be filled preferentially in the bad
+states of the world (when the price drops through it) and missed in the good ones (when the
+price runs away upward). Limit-order execution therefore does not save costs; it re-labels them,
+replacing visible slippage with invisible opportunity loss. More generally, limit order execution
+is favoured in mean-reverting environments, and detrimental in trend following environments
+(see e.g. Bouchaud et al. (2018), chapter 17).
+(b) Passive execution forfeits the self-fulfilling loop.The deeper problem is that even a
+costlessly executed limit order would not solve the trend follower’s predicament, because passive
+16
+trades do not feed the self-reinforcing impact channel that sustains the signal in the first place.
+The trade-imbalance impact of Fig. 14 (right) is generated byaggressiveflow: it is the buyer-
+initiated volume that pushes prices up, not the resting bid that sits and waits. A trend follower
+who replaces market orders with limit orders ceases to contribute toI trade in the direction of
+the trend, and – by exactly the mechanism formalised in Sec. 6.3 – no longer participates in the
+impact-mediated reinforcement of the very price moves they are trying to exploit. The loop,
+on which trend depends both for its profitability and for its existence, is broken from the trend
+follower’s side.
+Taken together, (a) and (b) leave no execution style that side-steps the post-2008 microstruc-
+tural change on small-tick contracts. Aggressive execution is constrained by the thinness of the
+post-withdrawal small-tick book; passive execution incurs missed-opportunity costs that scale
+with the very informativeness of the signal, and forfeits the impact channel that makes the
+signal worth trading in the first place. This is, in our view, the fundamental reason why the
+small-tick break has proven structural: it is not an artefact of any particular implementation
+choice, but a consequence of the relationship between aggressive flow and price formation on
+which trend itself depends.
+7 Discussion and Conclusion
+The post-2008 decay of trend-following returns has been one of the most discussed – and least
+understood – regularities in the recent history of systematic investing (see e.g. Lemp´ eri` ere et al.
+(2014); Schmidhuber (2021); Quantica Capital (2025)). We have argued that, at root, it is
+neither a flow phenomenon, nor a capacity phenomenon, nor a consequence of electronification
+per se, but a microstructural one. The volatility-normalised tick size cleanly partitions the
+futures universe into a small-tick subset on which fast trend has collapsed and a large-tick
+subset on which it has remained essentially intact. No decomposition by asset class, liquidity,
+or sectoral electronification date reproduces this dichotomy.
+The interpretive frame we propose takes the self-fulfilling impact loop – signal→trade
+→impact→reinforced signal – as the mechanism through which trend exists in the first
+place. Trend followers do not merely harvest a pre-existing anomaly: their aggressive directional
+flow, mediated by impact, sustains the very price patterns they trade on. The loop has two
+preconditions: that aggressive execution be feasible at reasonable cost, and that the relationship
+between aggressive flow and price remain intact. Both held until roughly 2010 across the futures
+universe; since then, both have been compromised on small-tick contracts and preserved on
+large-tick ones.
+The mechanism behind this asymmetry is the post-2008 transition to HFT-dominated mar-
+ket making, which replaced a generation of inventory-tolerant liquidity providers with one whose
+business model is structurally incompatible with absorbing predictable directional flow. The
+resulting liquidity withdrawal in front of CTA orders operates in both tick-size tiers, but its
+consequences are asymmetric. On dense large-tick books, residual depth at the best quotes
+and at deeper levels remains sufficient for execution to proceed largely unperturbed; the loop
+continues to turn, and both the signal and the PnL survive. On sparse small-tick books, with-
+drawal removes the residual depth that previously supported fast trend execution, forcing trend
+followers either to “walk the book” aggressively or to retreat from the contract altogether. As
+they retreated, the loop broke on its input side: the impact-mediated reinforcement of nascent
+trends disappeared along with the flow that produced it. The collapse of the small-tick trend
+signal under zero-lag execution – for which execution costs is not an issue – is the cleanest
+empirical fingerprint of this broken loop. The within-contract decompositions by volatility and
+by return magnitude confirm that the operative variable is Ψ/σrather than Ψ alone, and that
+17
+the break activates precisely on the large directional moves that would, under the old regime,
+have triggered absorption by inventory-tolerant market makers.
+The contemporaneous return-versus-book-imbalance relationship makes the same story vis-
+ible at intraday frequency. Its pre-2011 small-tick negative steepness measures the cost of
+providing depth in front of directional flow – exactly the cost the previous generation of market
+makers were absorbing. Its post-2011 flattening is the mechanical signature of liquidity with-
+drawal: depth that would have been run over no longer rests long enough to appear in the
+imbalance statistics.
+Some practical implications follow. The break is structural; we see no plausible scenario
+in which it reverts absent a corresponding structural change in liquidity provision – whether
+through regulation, the entry of a new class of inventory-tolerant intermediaries, or a re-tariffing
+of market-making rents. Switching from aggressive to passive execution is not an option: passive
+execution incurs opportunity costs and forfeits the self-reinforcement channel that sustains
+the signal. Capacity estimation for trend portfolios should accordingly be carried out at the
+tick-size-tier level rather than at the asset-class level; aggregate participation rates can be
+substantially below historical bounds while still being binding within the small-tick subset.
+Several questions remain open. Direct tests of the mechanism using HFT inventory data
+around large CTA rebalancing events would sharpen the causal claim and quantify the speed
+at which depth is withdrawn and refilled. The possibility of recovering trend in microstructural
+niches – contracts below the HFT participation threshold, venues with different market-maker
+mandates, or markets where tick-size regimes have shifted – is an empirical question we leave
+to future work. So is the symmetric one: whether the same mechanism disadvantages other
+systematic strategies that generate predictable directional institutional flow, and whether, con-
+versely, strategies that trade against such flow have benefited from a complementary tailwind.
+A more fundamental open question concerns the relative weight of the self-fulfilling impact
+loop among the mechanisms that generate trend in the first place. The literature has long
+offered alternatives that do not rely on impact-mediated reinforcement: gradual incorporation
+of public news under behavioural underreaction (Hong and Stein, 1999; Daniel et al., 1998;
+Bouchaud et al., 2019); slow, staggered execution by informed participants who correctly antic-
+ipate a future event and accumulate positions ahead of it; and the gradual diffusion of private
+information through a heterogeneously-informed investor base (Hong et al., 2000). These mech-
+anisms are not mutually exclusive with the loop we emphasise; on the contrary, they plausibly
+coexist, with the loop amplifying trends that have an exogenous origin and the impact channel
+translating slowly arriving information into prices. Our reading of the post-2008 evidence is
+that the impact-loop component has been disproportionately weakened on small-tick contracts
+– which is consistent with the near-total collapse of fast trends there – while the information-
+diffusion component, operating on slower horizons, remains largely intact, consistent with the
+partial survival of slow trends across the universe. Disentangling these contributions quantita-
+tively, ideally by exploiting cross-sectional or cross-venue variation in the strength of the impact
+channel, strikes us as a particularly worthwhile direction for future work. In fact, we do have
+direct empirical evidence some traders did anticipate large market moves and created trends
+accordingly, and that this possibility has decayed around approximately the same period, see
+Fig. 18 of Appendix D.
+Finally, our analysis suggests that the joint design of tick size and market-maker obliga-
+tions has first-order consequences for the persistence of medium-frequency anomalies sustained,
+in part, by self-fulfilling impact loops; this is a topic on which the regulatory and academic
+literature have arguably underweighted the perspective of the directional taker of liquidity.
+18
+Acknowledgements
+We thank Adam A. Majewski for facilitating the access to bar data and for fruitful discussions.
+Further, we are grateful to Soci´ et´ e G´ en´ erale Prime Services & Clearing for providing the SG
+CTA Index data, and to Robert Almgren (Quantitative Brokers) for the electronification data
+and helpful discussions.
+References
+T. Adrian and H. S. Shin. The changing nature of financial intermediation and the financial
+crisis of 2007–2009.Annu. Rev. Econ., 2(1):603–618, 2010.
+N. Baltas and R. Kosowski. Momentum strategies in futures markets and trend-following funds.
+Available at SSRN 1968996, 2013.
+BarclayHedge. CTA Industry Assets Under Management, 2025. URLhttps:
+//ionanalytics.com/barclayhedge/solutions/assets-under-management/
+cta-industry-assets-under-management/. Data accessed on 20.07.2025.
+V. Bogousslavsky. Infrequent rebalancing, return autocorrelation, and seasonality.The Journal
+of Finance, 71(6):2967–3006, 2016.
+J.-P. Bouchaud, J. Bonart, J. Donier, and M. Gould.Trades, quotes and prices: financial
+markets under the microscope. Cambridge University Press, 2018.
+J.-P. Bouchaud, P. Krueger, A. Landier, and D. Thesmar. Sticky expectations and the prof-
+itability anomaly.The Journal of Finance, 74(2):639–674, 2019.
+A. P. Chaboud, B. Chiquoine, E. Hjalmarsson, and C. Vega. Rise of the machines: Algorithmic
+trading in the foreign exchange market.The Journal of Finance, 69(5):2045–2084, 2014.
+K. Daniel, D. Hirshleifer, and A. Subrahmanyam. Investor psychology and security market
+under-and overreactions.The Journal of Finance, 53(6):1839–1885, 1998.
+K. Dayri and M. Rosenbaum. Large tick assets: implicit spread and optimal tick size.Market
+Microstructure and Liquidity, 1(01):1550003, 2015.
+J. B. De Long, A. Shleifer, L. H. Summers, and R. J. Waldmann. Positive feedback investment
+strategies and destabilizing rational speculation.The Journal of Finance, 45(2):379–395,
+1990.
+E. F. Fama. Efficient capital markets.Journal of finance, 25(2):383–417, 1970.
+T. Hendershott and R. Riordan. Algorithmic trading and the market for liquidity.Journal of
+financial and quantitative analysis, 48(4):1001–1024, 2013.
+S. L. Heston, R. A. Korajczyk, and R. Sadka. Intraday patterns in the cross-section of stock
+returns.The Journal of Finance, 65(4):1369–1407, 2010.
+H. Hong and J. C. Stein. A unified theory of underreaction, momentum trading, and overreaction
+in asset markets.The Journal of finance, 54(6):2143–2184, 1999.
+H. Hong, T. Lim, and J. C. Stein. Bad news travels slowly: Size, analyst coverage, and the
+profitability of momentum strategies.The Journal of finance, 55(1):265–295, 2000.
+B. Hurst, Y. H. Ooi, and L. H. Pedersen. A century of evidence on trend-following investing.
+The Journal of Portfolio Management, 44(1):15–29, 2017. doi: 10.3905/jpm.2017.44.1.015.
+19
+N. Jegadeesh and S. Titman. Returns to buying winners and selling losers: Implications for
+stock market efficiency.The Journal of finance, 48(1):65–91, 1993.
+A. Kirilenko, A. S. Kyle, M. Samadi, and T. Tuzun. The flash crash: High-frequency trading
+in an electronic market.The Journal of Finance, 72(3):967–998, 2017.
+R. A. Korajczyk and D. Murphy. High-frequency market making to large institutional trades.
+The Review of Financial Studies, 32(3):1034–1067, 2019.
+B. LeBaron. Some relations between volatility and serial correlations in stock market returns.
+Journal of Business, pages 199–219, 1992a.
+B. D. LeBaron.Persistence of the Dow Jones index on rising volume. University of Wisconsin
+Madison, WI, USA, 1992b.
+Y. Lemp´ eri` ere, C. Deremble, P. Seager, M. Potters, and J.-P. Bouchaud. Two centuries of trend
+following.Journal of Investment Strategies, 3(3):41–61, 2014. doi: 10.21314/JOIS.2014.043.
+A. Levine and L. H. Pedersen. Which trend is your friend?Financial Analysts Journal, 72(3):
+51–66, 2016.
+J. C. Lorenzen, S. M. Kessler, M. Hornbach, A. tentes, K. Qian, and M. Liu. Understanding
+cta positioning and forecasting cta flows.Morgan Stanley Research, 2025.
+A. J. Menkveld. High frequency trading and the new market makers.Journal of financial
+Markets, 16(4):712–740, 2013.
+M. Mitchell and T. Pulvino. Arbitrage crashes and the speed of capital.Journal of Financial
+Economics, 104(3):469–490, 2012.
+T. J. Moskowitz, Y. H. Ooi, and L. H. Pedersen. Time series momentum.Journal of financial
+economics, 104(2):228–250, 2012.
+F. Patzelt and J.-P. Bouchaud. Universal scaling and nonlinearity of aggregate price impact in
+financial markets.Physical Review E, 97(1):012304, 2018.
+Quantica Capital. The footprint of trend-following: Can ctas really move the market?
+Quantica Capital Quarterly Insights, dec 2022. URLhttps://quantica-capital.com/
+publications/pdf/2022Q4_QuanticaQuarterlyInsights.pdf.
+Quantica Capital. When trend-following hits capacity: A case study on commodities.
+Quantica Capital Quarterly Insights, mar 2025. URLhttps://quantica-capital.com/
+publications/pdf/2025Q1_QuanticaQuarterlyInsights.pdf.
+C. Schmidhuber. Trends, reversion, and critical phenomena in financial markets.Physica A:
+Statistical Mechanics and its Applications, 566:125642, 2021.
+Soci´ et´ e G´ en´ erale Prime Services & Clearing. SG Prime Services Indices. URL
+https://wholesale.banking.societegenerale.com/en/prime-services-indices/
+,urldate={2024-08-31}.
+B. T´ oth, Y. Lemperiere, C. Deremble, J. De Lataillade, J. Kockelkoren, and J.-P. Bouchaud.
+Anomalous price impact and the critical nature of liquidity in financial markets.Physical
+Review X, 1(2):021006, 2011.
+P. Van der Beck, J.-P. Bouchaud, and D. Villamaina. Ponzi funds.arXiv preprint
+arXiv:2405.12768, 2024.
+20
+V. Van Kervel and A. J. Menkveld. High-frequency trading around large institutional orders.
+The Journal of Finance, 74(3):1091–1137, 2019.
+V. Volpati, M. Benzaquen, Z. Eisler, I. Mastromatteo, B. T´ oth, and J.-P. Bouchaud. Zooming
+in on equity factor crowding.arXiv preprint arXiv:2001.04185, 2020.
+A Data
+Daily data.All signal construction, portfolio simulation, and tick-size analyses use daily
+settlement prices and (daily reported) ticks for the following 101 futures contracts, spanning
+the four sectors introduced in Sec. 2 (commodities, equity indices, currencies, and government
+bonds/yields):
+10USNOTE, 10YCAN, 2USNOTES, 5USNOTES, AEX, AUD, AUS10YR, AUS3YR, BOBL,
+BRENT0, BUND, BUSDBRL0, BUXL, CAC, CANOLA0, CCRUDE OIL0, CD, CHF,
+CIRON ORE0, COPPER0, CORN0, CPALM OIL0, CPTA0, CRAPESEEDM0, CRAPE-
+SEEDO0, CRUDE0, CSOYBEAN OIL0, CSOYMEAL0, DAX, DJMINI, EUR, EUROSTOXX,
+FCATTLE0, FRA10YR, FTSE, FTSEJSE40, FTSECHINA A50, FTSE TAIW AN, GASOIL0,
+GBP, GILTS, GOLD0, HANGSENG, HEATOIL0, HR W0, HSHARES, IBEX, INSENIFTY,
+ITA10YR, ITA3YR, JGB, JPY, KOR10YR, KOSPI, KR W, KTB3YR, LCATTLE0, LCO-
+COA0, LCOFFEE0, LEANHOGS0, LSUGAR0, MBOVESPA, MIB, MNIKKEI, MSCIEM-
+MINI, MSCIS, MXP, NATGAS0, NATGAS TTF0, NATGAS UK0, NCOCCOA0, NCOF-
+FEE0, NCOTTON0, NFCOJ0, NIKKEI, NIKKEIS, NSDQMINI, NSUGAR0, NZD, PAL-
+LADIUM0, PLATINUM0, PRAPESEED0, PWHEAT0, RBGASOL0, RUSSELLMINI, SCHATZ,
+SIL VER0, SMI, SOYBEANM0, SOYBEANO0, SOYBEANS0, SPI200, SPMID, SPMINI,
+SPTSE60, TBOND, TOPIX, UTBOND, UTNOTE, WHEAT0, WTICRUDE0.
+Intraday bar data.All order-book and order-flow analyses (Sec. 4.3 and Sec. 6) use pro-
+prietary 5-minute bar data from Capital Fund Management (CFM). Bar data are available for
+a smaller subset of contracts and over a shorter history than the daily series. We restrict the
+bar-data universe to contracts for which coverage begins no later than 2004, ensuring at least
+five years of pre-break data. This yields the following 53 contracts:
+10USNOTE, 10YCAN, 2USNOTES, 5USNOTES, AUD, AUS3YR, BOBL, BRENT0, CD,
+CHF, COPPER0, CORN0, CRUDE0, DJMINI, EUR, FCATTLE0, FTSE, GASOIL0, GBP,
+GILTS, GOLD0, HANGSENG, HEATOIL0, HSHARES, JPY, KOSPI, KR W, KTB3YR,
+LCATTLE0, LCOCOA0, LCOFFEE0, LSUGAR0, MIB, MNIKKEI, MSCIS, MXP, NAT-
+GAS0, NCOCCOA0, NCOFFEE0, NCOTTON0, NIKKEI, NSDQMINI, NZD, RBGASOL0,
+RUSSELLMINI, SCHATZ, SIL VER0, SPMINI, SPTSE60, TBOND, TOPIX, WHEAT0,
+WTICRUDE0.
+Each 5-minute bar reports, per contract, the total traded volume, the buyer- and seller-
+initiated volumes (cumulative over the interval), and end-of-interval snapshots of the mid-price
+and of the resting volumes at the best bid and best ask.
+B Capacity Drag Calculation
+In this appendix, it is roughly quantified that the execution-cost drag implied by the square-root
+impact law is rather insufficient to explain the observed PnL collapse.
+Assuming, on any given day, that the CTA industry trades a total quantityQover a time
+interval [0,T], starting from a initial positionq(0) = 0 and finishing with an aggregate position
+Q=q(T) =
+R T
+0 ˙q(t)dt, where ˙qare the trades (here in continuous time), then under the square-
+root impact model as in T´ oth et al. (2011), the total price change due to the CTAs should
+21
+be
+p(T) =p(0) +
+ 1
+Vd
+Z T
+0
+˙q(t) dt
+1/2
+σdY+ noise,(9)
+whereV d is the daily traded volume,σ d is the daily volatility as a percentage of price (and thus
+in units of price: [σ d] = [p] = $), andY≈1 is an empirical constant. The noise process is
+zero-mean.
+The most basic execution schedule, following a constant trading rate, ˙q=const, implies
+˙q=Q/T, such thatq(t) =Q tT . Under this model, the expected price impact reads
+I(t) =E[p(t)−p(0)] =
+ Q
+Vd tT
+1/2
+σdY.(10)
+The associated slippage or the impact-associated cost due to trading the entire position is
+S(Q;T) =E
+
+Z T0 (p(t)−p(0)) ˙q(t)|{z}
+= QT
+dt
+
+ (11)
+=
+Z T
+0
+ Q
+Vd
+t
+T
+1/2
+σdY QT dt= 23 σdY Q3/2V 1/2d ≡S(Q),(12)
+implying a unit trading cost of
+¯S= SQ = 23 σdY
+r
+Q
+Vd
+(13)
+Therefore, the slippage in terms of daily volatility, which is unit-less, is the following for a
+participation rate of 1% = QV
+¯S
+σd
+= 23 Y
+r
+Q
+Vd
+= 23 1√0.01 = 230 .(14)
+The annualised CTA trading cost, assuming 252 trading days, consequently is
+Cann = 230 Rd ·turnover·252 (15)
+with a turnover, ⟨|∆q|⟩⟨|q|⟩ , that is the fraction of the total CTA daily risk that is typically traded
+daily. This figure is around 9% for the EWM-5-20 signal defined in Sec.??.R d is the daily
+CTA risk. With an annualised CTA risk ofR ann =
+√
+252Rd, the reduction in Sharpe ratio
+expected from this simple calculation with a participation rate of 1% is
+∆ Sharpe =− Cann√252Rd =− 230 9%√252≈ −0.1.(16)
+The implied drag on Sharpe is therefore∼0.1 at the observed industry participation rate of
+approximately 1%. This is non-trivial – it is roughly one-eighth of the pre-2009 trend Sharpe –
+but is too small, even when allowing for model uncertainty of a factor of three to four, to explain
+the observed collapse from∼0.7 to∼0, even though the above should be treated rather as an
+order-of-magnitude calculation than a precise estimation.
+22
+C Volume-clock Decomposition
+The cumulative correlations of Sec. 4.3 aggregate over the full trading day and may therefore
+be diluted if the flow they aim to detect is localised intra-day. Industry lore suggests that CTAs
+execute the bulk of their daily volume in the opening hours of the underlying cash markets;
+during that window their trades would be strongly correlated with the prevailing order-flow
+state, while during the remaining hours the correlation would be significantly lower. The daily-
+aggregate correlation then reflects, at best, a weighted average of a concentrated within-window
+signal and a long stretch of noise, mechanically underestimating the intra-day effect.
+To probe any such structure, avolume-clockis constructed. Because liquidity in futures
+is highly concentrated around the open of the underlying cash markets, a time-clock partition
+would assign vastly different volumes – and, therefore, vastly different signal-to-noise ratios – to
+intervals of equal duration. A volume-clock partition, on the contrary, assigns equal numbers of
+trades to each segment, making the corresponding correlations directly comparable across bins.
+Methodology .For each product-day – defined according to the local trading day of the
+underlying cash market – we partition the 5-minute bars into five segments of equal traded
+volume, so that segment 0 contains the first 20% of daily volume, segment 1 the next 20%, and
+so on. Within each segment, the book and trade imbalances of Eq. (5) are recomputed using
+the segment’s own volume as the normalisation rather than the daily one. The cumulative
+correlations between the daily CTA trades ∆π CTA,τ and these segment-imbalances are then
+calculated as in Sec. 4.3, separately for each of the four asset classes and for four signal time
+scalesτ∈ {5,10,20,50}. Figs. 15 and 16 report the results.
+Findings.Two features stand out.
+First, the asset-class heterogeneity persists.For neither imbalance does a single consistent
+picture emerge across CMD, FXR, IDX, and YLD. The volume-clock decomposition does not
+resolve the cross-sectional inconsistency identified in Sec. 4.3; if anything, it reinforces it. This
+is, by itself, an important negative result: even the temporally most localised version of the
+H3 diagnostic fails to map the asset-class pattern of the order-flow regime change onto the
+asset-class pattern of PnL degradation.
+Second, volume bin0is an intra-day outlier systematically.This is the most consistent
+feature across asset classes – though its direction varies – and is most conspicuous in the trade-
+imbalance decomposition (Fig. 15):
+•For CMD, segment 0 reaches the highest cumulative correlation in the pre-2016 regime
+(∼+0.4 for EWM-5-20) and is the only segment that does not change sign afterwards.
+•For FXR, segment 0 stands out from 2009 onwards, with the largest (negative) cumulative
+correlation across signal speeds; segment 0 already turns negative around 2009, while the
+other segments only join from 2016.
+•For IDX, segment 0 is the most negative, reaching∼ −0.7 for EWM-5-20, while other
+segments cluster at less negative or near-zero values.
+•For YLD, segment 0 does not stand out particularly.
+The book-imbalance decomposition (Fig. 16) shows qualitatively the same pattern: segment
+0 is systematically the outlier – most positive for FXR and IDX fast signals, in line with leaders
+for YLD, and clustered with mid-segments for CMD.
+23
+2000 2010 2020
+−0.2
+0.0
+0.2
+0.4
+0.6
+Cumulative Corr (∆πCTA, Itrade)
+CMD
+EWM-5-20
+2000 2010 2020
+−0.2
+0.0
+0.2
+0.4
+EWM-10-40
+2000 2010 2020
+−0.3
+−0.2
+−0.1
+0.0
+0.1
+0.2
+0.3
+EWM-20-80
+2000 2010 2020
+−0.3
+−0.2
+−0.1
+0.0
+0.1
+EWM-50-200
+2000 2010 2020
+−2.0
+−1.5
+−1.0
+−0.5
+0.0
+0.5
+Cumulative Corr (∆πCTA, Itrade)
+FXR
+2000 2010 2020
+−2.5
+−2.0
+−1.5
+−1.0
+−0.5
+0.0
+0.5
+2000 2010 2020
+−2.0
+−1.5
+−1.0
+−0.5
+0.0
+0.5
+2000 2010 2020
+−1.0
+−0.5
+0.0
+0.5
+2000 2010 2020
+−0.6
+−0.4
+−0.2
+0.0
+Cumulative Corr (∆πCTA, Itrade)
+IDX
+2000 2010 2020
+−0.8
+−0.6
+−0.4
+−0.2
+0.0
+2000 2010 2020
+−0.8
+−0.6
+−0.4
+−0.2
+0.0
+0.2
+2000 2010 2020
+−0.5
+−0.4
+−0.3
+−0.2
+−0.1
+0.0
+0.1
+2000 2010 2020
+Year
+−0.1
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5
+Cumulative Corr (∆πCTA, Itrade)
+YLD
+2000 2010 2020
+Year
+−0.1
+0.0
+0.1
+0.2
+0.3
+0.4
+2000 2010 2020
+Year
+−0.15
+−0.10
+−0.05
+0.00
+0.05
+0.10
+0.15
+0.20
+2000 2010 2020
+Year
+−0.3
+−0.2
+−0.1
+0.0
+0.1
+Volume Bin No. : 0 Volume Bin No. : 1 Volume Bin No. : 2 Volume Bin No. : 3 Volume Bin No. : 4
+Figure 15: Cumulative correlations between daily CTA trades and the volume-weightedtrade
+imbalance computed within 20%-of-volume intra-day segments, by asset class (rows: CMD,
+FXR, IDX, YLD) and signal time scale (columns: EWM-τ-4τwithτ∈ {5,10,20,50}). Volume
+bin 0 (blue) contains the first 20% of daily volume.
+Comparison with the daily aggregates.The segment-wise correlations in Figs. 15 and 16
+are broadly comparable in magnitude to the daily-average per-asset-class correlations of Fig. 9.
+The volume-clock decomposition therefore does not reveal an intra-day-localised effect that
+the daily aggregation had been underestimating. What it does reveal is intra-day structure
+– specifically, that the first 20% of daily volume behaves systematically differently from the
+remaining four segments – which is masked in the daily average. In that sense the segmentation
+refines the diagnostic without amplifying it.
+Interpretation.Two readings are consistent with the extremity of segment 0.
+(a) CTA flow is intraday-concentrated.If CTAs execute a disproportionate share of their
+24
+2000 2010 2020
+−0.4
+−0.2
+0.0
+0.2
+0.4
+Cumulative Corr (∆πCTA, Ibook)
+CMD
+EWM-5-20
+2000 2010 2020
+−0.2
+0.0
+0.2
+0.4
+EWM-10-40
+2000 2010 2020
+−0.2
+−0.1
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5
+EWM-20-80
+2000 2010 2020
+−0.1
+0.0
+0.1
+0.2
+0.3
+EWM-50-200
+2000 2010 2020
+−0.6
+−0.4
+−0.2
+0.0
+0.2
+0.4
+Cumulative Corr (∆πCTA, Ibook)
+FXR
+2000 2010 2020
+−0.6
+−0.4
+−0.2
+0.0
+0.2
+2000 2010 2020
+−0.6
+−0.5
+−0.4
+−0.3
+−0.2
+−0.1
+0.0
+2000 2010 2020
+−0.6
+−0.5
+−0.4
+−0.3
+−0.2
+−0.1
+2000 2010 2020
+−0.1
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5
+Cumulative Corr (∆πCTA, Ibook)
+IDX
+2000 2010 2020
+−0.1
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5
+2000 2010 2020
+−0.2
+−0.1
+0.0
+0.1
+0.2
+0.3
+0.4
+2000 2010 2020
+−0.2
+−0.1
+0.0
+0.1
+2000 2010 2020
+Year
+−0.2
+−0.1
+0.0
+0.1
+0.2
+0.3
+0.4
+Cumulative Corr (∆πCTA, Ibook)
+YLD
+2000 2010 2020
+Year
+−0.2
+−0.1
+0.0
+0.1
+0.2
+0.3
+0.4
+2000 2010 2020
+Year
+−0.1
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5
+2000 2010 2020
+Year
+−0.1
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5
+Volume Bin No. : 0 Volume Bin No. : 1 Volume Bin No. : 2 Volume Bin No. : 3 Volume Bin No. : 4
+Figure 16: Same as Fig. 15 but for the volume-weightedbookimbalance.
+daily volume within segment 0 – as industry lore suggests – the correlation of their daily trades
+with the segment-0 imbalance is mechanically larger in magnitude than with segments where
+CTA activity is sparser. The sign of that correlation can in principle be sector-specific because
+the structure of liquidity provision at the open is itself asset-class-specific.
+(b) Segment0is structurally special.The first 20% of daily volume generally subsumes
+the overnight carry-over period and the high-volume opening of the underlying cash market
+– periods of elevated volatility, liquidity fragmentation, and news incorporation. The order-
+flow statistics of segment 0 can therefore differ from those of segments 1–4 for reasons that
+have nothing to do with CTAs: any daily-aggregate flow would correlate differently with the
+segment-0 imbalance than with the others.
+These readings are not mutually exclusive, and the data cannot cleanly attribute the bin-0
+effect to one or the other. A decisive test of (a) would require knowledge of the actual intra-day
+distribution of CTA execution volume, which we do not have. What we can say is that the
+25
+volume-clock result is consistent with the folklore of morning-concentrated CTA execution and
+constitutes – to our knowledge – the first systematic empirical support for it in the academic
+literature on futures (a similar concentration has been previously established for institutional
+equity flow by Heston et al. (2010) and Bogousslavsky (2016)).
+D Within-contract Decompositions
+For the tick size tiering that builds the groundwork in Sec. 5 is volatility-dependent, it is a
+natural concern whether the relationship between tick size and trend PnL goes yet deeper. Even
+within single contracts periods of high and low volatility – impacting the liquidity-tier ranking
+through the denominator – may correspond to different microstructural regimes, and may even
+have different PnL responses. This is was already alluded to in the final subsection of Sec.??but
+is analysed here further. Beyond the volatility-decomposition, a second decomposition of the
+PnL into large- and small-return days is investigated, which will also constraint any mechanism
+attempting to explain trend performance decay.
+D.1 Decomposition by Volatility Regime
+For each contracti, a backward-looking (causal) rolling medianσ medi (t) is computed on the last
+trading year (252 trading days). Based on this median, the trading days are partitioned into
+two similarly sized groups: a high-volatility (σ i(t)> σ medi (t−1)) section and a low-volatility
+section, the complementary case. The cumulative trend PnL is then computed on each sub-
+sample separately. The results for different trend signals are depicted in Fig. 17.
+Several observations strike:
+1. Across all groups, low-volatility days contribute a disproportionate amount to the gains
+In large tick contracts the vast majority of PnL comes from periods of low volatility across
+all signal horizons. For small ticks the same holds true pre-2009, and even after the PnL
+break is less bad in low-volatility regimes.
+This observation is a strong cross-secctionla confirmation of theLeBaron effect(LeBaron,
+1992a,b), which states that many systematic trading rules, including trend, perform better
+in low-volatility regimes. For some cross-sections, especially large ticks, and also small
+ticks, this effect seems to even have strengthened post-break as the distance between the
+low and high volatiltiy curves have widened.
+2. While the all-days PnL and even more so the high-volatility PnL has collapsed are even
+gone negative for small ticks, the low-volatility PnL continues to accrue, even if at a lower
+rate. Therfore, the post-2008 PnL collapse on small tick contracts can be attributed to
+high-volatility days.
+3. Small tick contracts behave qualitatively more like large tick products in periods of low-
+volatility. This observation may be interpreted as a confirmation of the effectiveness of
+the cross-sectional division based on Ψ/σ i (instead ofσ i alone). Low-volatility periods
+correspond to a higher ratio, and on those days the LOBs of usually small tick products
+realtively resemble those of large tick products more closely in the microstructural sense
+and. The small tick trend PnL on those days also resembles the large tick one.
+D.2 Decomposition by Return Magnitude
+The previous decomposition by volatility level hints at when the trend gains are collected. The
+next composition based on return magnitude shows from what kind of price changes trend
+26
+gains are collected from. A productiis classified aslarge-returnwhen its current (volatility-
+normalised) absolute return is lower than the 1σ-threshold calculated causally based on the last
+252 trading days, i.e. when|r i(t)|>1σ anni (t−1) andsmall-returnin the complementary case.
+Fig. 18 reports the result, which is genuinely striking. The small-return-day PnL contri-
+bution is utterlyinvariantto the trend break for all signals and for both tick size tiers. The
+small-return-PnL accrues at a nearly constant rate for the entire observation period 1995-2025,
+with no kink at the 2008/9 PnL break point, no acceleration during the 2008, 2014, or 2020
+directional period, and no downturn after. In stark contrast stands the large-return-PnL that
+is responsible for basically all of the aberrations in the all-day PnL.
+This allows for two important take-aways:
+1. The trend break is a phenomenon of large-return days, not of the underlying signal.
+2. The post-2008 regime shift has selectively eliminated trend followers’ ability to profit
+1995 2000 2005 2010 2015 2020 2025
+0
+1000
+2000
+3000
+4000
+5000Cumulative PnL
+EWM-5-20 - Small Tick
+All
+High Vol
+Low Vol
+1995 2000 2005 2010 2015 2020 2025
+0
+5000
+10000
+15000
+EWM-5-20 - Large Tick
+All
+High Vol
+Low Vol
+1995 2000 2005 2010 2015 2020 2025
+0
+2000
+4000
+6000Cumulative PnL
+EWM-10-40 - Small Tick
+All
+High Vol
+Low Vol
+1995 2000 2005 2010 2015 2020 2025
+0
+5000
+10000
+EWM-10-40 - Large Tick
+All
+High Vol
+Low Vol
+1995 2000 2005 2010 2015 2020 2025
+0
+2000
+4000
+6000
+8000Cumulative PnL
+EWM-20-80 - Small Tick
+All
+High Vol
+Low Vol
+1995 2000 2005 2010 2015 2020 2025
+0
+5000
+10000
+EWM-20-80 - Large Tick
+All
+High Vol
+Low Vol
+1995 2000 2005 2010 2015 2020 2025
+Year
+0
+2000
+4000
+6000
+8000Cumulative PnL
+EWM-50-200 - Small Tick
+All
+High Vol
+Low Vol
+1995 2000 2005 2010 2015 2020 2025
+Year
+0
+2500
+5000
+7500
+10000
+12500
+EWM-50-200 - Large Tick
+All
+High Vol
+Low Vol
+PnL by Tick Size and Volatility Level
+Figure 17: Cumulative trend PnL (non-liquidity-weighted portfolio, Eq. (2)) decomposed into
+contributions from high-volatility and low-volatility days. Rows: signal horizon EWM-τ-4τ.
+Left column: small-tick tier. Right column: large-tick tier. The volatility regime is defined
+per-contract per-year using the median realised volatility, computed causally.
+27
+from large price swings – exactly the moves that previously allowed for the straegy’s
+profitability.
+This imposes a stronger empirical constraint on the explanatory mechanism than the all-
+day PnL would alone: whatever the mechanism, it must selectively impact trend followers
+on large-return days, and must leave the strategy’s performance under small returns un-
+affected.
+Fig. 18 reports exactly that cross-sectional pattern.
+Both decompositions therefore confirm the methodology deployed and consequences drawn:
+the volatility decomposition confirms Ψ i/σi as the relevant microstructural variable, while the
+one by return magnitude highlights how trends stopped being predictive of large returns, thus
+significantly chipping away at the overall trend profitability.
+1995 2000 2005 2010 2015 2020 2025
+0
+1000
+2000
+3000
+4000
+5000Cumulative PnL
+EWM-5-20 - Small Tick
+All
+Large Return
+Small Return
+1995 2000 2005 2010 2015 2020 2025
+0
+5000
+10000
+15000
+EWM-5-20 - Large Tick
+All
+Large Return
+Small Return
+1995 2000 2005 2010 2015 2020 2025
+0
+2000
+4000
+6000Cumulative PnL
+EWM-10-40 - Small Tick
+All
+Large Return
+Small Return
+1995 2000 2005 2010 2015 2020 2025
+0
+5000
+10000
+EWM-10-40 - Large Tick
+All
+Large Return
+Small Return
+1995 2000 2005 2010 2015 2020 2025
+0
+2000
+4000
+6000
+8000Cumulative PnL
+EWM-20-80 - Small Tick
+All
+Large Return
+Small Return
+1995 2000 2005 2010 2015 2020 2025
+0
+5000
+10000
+EWM-20-80 - Large Tick
+All
+Large Return
+Small Return
+1995 2000 2005 2010 2015 2020 2025
+Year
+0
+2000
+4000
+6000
+8000Cumulative PnL
+EWM-50-200 - Small Tick
+All
+Large Return
+Small Return
+1995 2000 2005 2010 2015 2020 2025
+Year
+0
+2500
+5000
+7500
+10000
+12500
+EWM-50-200 - Large Tick
+All
+Large Return
+Small Return
+PnL by Tick Size and Return Magnitude
+Figure 18: Cumulative trend PnL (non-liquidity-weighted portfolio, Eq. (2)) decomposed into
+contributions from high-volatility and low-volatility days. Rows: signal horizon EWM-τ-4τ.
+Left column: small-tick tier. Right column: large-tick tier. The volatility regime is defined
+per-contract per-year using the median realised volatility, computed causally.
+28
+E Liquidity Tier Decomposition
+Fig. 19 graphically confirms the negative correlation between liquidity and tick size, because of
+which a trend analysis based on liquidity instead of tick size was investigated.
+From the figure three aspects may be inferred: First, liquidity and volatility-normalised
+ticksize are anti-correlated with a Pearson-correlation of -(35±8)% in log-log-scale. This
+means that more liquid contracts tend to have smaller volatility-normalised tick sizes. Sec-
+ond, (volatility-normalised) tick size has decreased over the years. Third, overall liquidity has
+increased markedly during the considered time span. The last two observations are known facts.
+Fig. 20 shows decisively that a partition into high and low liquidity products does not explain
+trend degradation as well as (volatility-normalised) tick size in Sec. 5, Fig. 10. One caveat
+is that all 101 contracts in our universe are relatively liquid by construction: less standard,
+lower-liquidity products that sit below the HFT market-makers’ radar may well retain trend
+profitability. Such products, however, tend to fall in the large-tick category, so their inclusion
+would, if anything, reinforce rather than contradict the mechanism proposed in Sec.6.
+10□4 10□3 10□2 10□1
+Volatility-Normalised Tick Size
+105
+106
+107
+108
+109
+Liquidity
+Time Interval
+2000 - 2001
+2002 - 2003
+2004 - 2005
+2006 - 2007
+2008 - 2009
+2010 - 2011
+2012 - 2013
+2014 - 2015
+2016 - 2017
+2018 - 2019
+2020 - 2021
+2022 - 2023
+Figure 19: Liquidity vs. (volatility-normalised) tick size. The points are averaged in 2-year
+intervals. Axes are in log-scale; colours encode the progression in time.
+1995 2000 2005 2010 2015 2020 2025
+Year
+0
+2000
+4000
+6000
+8000
+10000Cumulative PnL
+High Liquidity
+EWM − 5 − 20
+EWM − 10 − 40
+EWM − 20 − 80
+EWM − 50 − 200
+1995 2000 2005 2010 2015 2020 2025
+Year
+0
+2000
+4000
+6000
+8000
+10000
+Low Liquidity
+EWM − 5 − 20
+EWM − 10 − 40
+EWM − 20 − 80
+EWM − 50 − 200
+Figure 20: Cumulative PnL for different trend portfolios (not liquidity-weighted) and separated
+into two equal-sized liquidity tier. Tiering analogous to the procedure in Sec. 5 for the tick size.
+29
+F Within-Asset-Class Tick-Tiered Performance
+The tick size tiering procedure of Sec. 5 is repeatedwithineach of the four asset classes,
+partitioning each sector’s products into the 50% with the smallest and the 50% with the largest
+volatility-normalised tick size. A commodity classified as small-tick under this scheme therefore
+belongs to the lower half of the commodity cross-section, not necessarily to the lower half of the
+full universe.
+Fig.21 collects the results, which corroborate the mechanism proposed in Sec.6 at higher
+resolution. Consistent with Fig.4, commodities and bonds outperform indices and currencies
+overall, which on our reading reflects their concentration in the large tick tier of the global
+universe. Bonds are an almost pure large tick sector: the within-sector tick split is therefore
+largely uninformative, and – as the mechanism predicts – neither sub-group shows appreciable
+degradation. The commodity cross-section is more heterogeneous, and the within-sector split is
+correspondingly more informative: the top row of Fig.21 shows that fast-trend PnL has degraded
+on the smaller tick half of the commodity universe while remaining intact on the larger tick
+half, mirroring the global dichotomy.
+Indices and currencies, conversely, are concentrated in the global small tick tier and have, as
+documented in Sec.6 and Fig.4, lost fast-trend gains almost entirely. Yet even here the within-
+sector tiering carries signal in the expected direction: products classified as small-tickwithin
+IDX or FXR have degraded more than their large tick within-sector counterparts, even though
+both sub-groups sit on the small tick side of the global cross-section.
+Together, these results suggest that the dependence of trend performance on volatility-
+normalised tick size is more gradual than the binary global split of Sec. 5 captures, and that
+tick size operates as a continuous microstructural variable rather than a dichotomous one. A
+finer tiering, or a fully continuous regression of post-break PnL on Ψ/σ, is a natural direction
+for future work.
+30
+1995 2000 2005 2010 2015 2020 2025
+0
+100
+200
+300CMD Average Cumulative PnL
+Small Tick
+EWM □ 5 □ 20
+EWM □ 10 □ 40
+EWM □ 20 □ 80
+EWM □ 50 □ 200
+1995 2000 2005 2010 2015 2020 2025
+0
+100
+200
+300
+400
+Large Tick
+EWM □ 5 □ 20
+EWM □ 10 □ 40
+EWM □ 20 □ 80
+EWM □ 50 □ 200
+1995 2000 2005 2010 2015 2020 2025
+0
+100
+200
+300IDX Average Cumulative PnL
+EWM □ 5 □ 20
+EWM □ 10 □ 40
+EWM □ 20 □ 80
+EWM □ 50 □ 200
+1995 2000 2005 2010 2015 2020 2025
+0
+50
+100
+150
+200 EWM □ 5 □ 20
+EWM □ 10 □ 40
+EWM □ 20 □ 80
+EWM □ 50 □ 200
+1995 2000 2005 2010 2015 2020 2025
+0
+50
+100
+150FXR Average Cumulative PnL
+EWM □ 5 □ 20
+EWM □ 10 □ 40
+EWM □ 20 □ 80
+EWM □ 50 □ 200
+1995 2000 2005 2010 2015 2020 2025
+0
+100
+200
+300
+EWM □ 5 □ 20
+EWM □ 10 □ 40
+EWM □ 20 □ 80
+EWM □ 50 □ 200
+1995 2000 2005 2010 2015 2020 2025
+Year
+0
+100
+200
+300
+400YLD Average Cumulative PnL
+EWM □ 5 □ 20
+EWM □ 10 □ 40
+EWM □ 20 □ 80
+EWM □ 50 □ 200
+1995 2000 2005 2010 2015 2020 2025
+Year
+0
+100
+200
+300 EWM □ 5 □ 20
+EWM □ 10 □ 40
+EWM □ 20 □ 80
+EWM □ 50 □ 200
+Figure 21: Same as Fig. 10 but with the tick-tiering performed per asset class.
+31

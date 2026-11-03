@@ -1,0 +1,470 @@
+arXiv 2609.04712  https://arxiv.org/abs/2609.04712
+
+Convex Modeling of Price Cross-Impact over Time
+Vincent Yinjun-Wang∗ Madeleine Udell†
+Abstract
+Transaction costs can make or break a trading strategy, particularly in relative-value trading
+of commodity and macro markets, where edges are a few basis points. Price impact is a central
+component of transaction cost. Price impact models usually include self-impact (a trade in a
+contractmovesthatcontract’sprice)butomittwowell-documentedeffects: cross-impact(atrade
+in one contract also moves the prices of related contracts) and transient impact (price impact
+decays over time, so an unwind recovers part of the entry cost). A model without these effects
+overprices the impact of relative-value trades, whose correlated legs are built and unwound over
+days, and so forgoes potentially profitable trades. This paper models both effects with a convex
+quadratic cost. In each period, a positive semidefinite matrix built from volatility, volume, and
+correlation forecasts couples trades across contracts. A power-law decay kernel then couples
+tradesacrossperiods. Theresultingcostadmitsnopricemanipulationevenwhenliquidityvaries
+over the planning horizon. The model is demonstrated empirically on calendar spread trading of
+crude oil futures around the commodity index roll.
+∗Stanford MS&E. Email: yinjunw@stanford.edu
+†Stanford MS&E. Email: udell@stanford.edu
+1
+arXiv:2609.04712v1  [math.OC]  4 Sep 2026
+1 Introduction
+Multi-period portfolio construction chooses both what to trade and when to trade it. We take two
+empirical regularities as requirements for a useful transaction cost model. First, trades in related
+contracts1 interact: a relative-value trade is cheaper than the sum of its independently executed legs.
+Second, price impact persists: a later trade in the same direction pays the residual impact of earlier
+tradesasanadditionalcost,whileanunwindrecoverspartoftheentrycost. Theseeffectsareusually
+calledcross-impactandtransient impact. Our model captures both simultaneously.
+Modeling these two impacts is especially useful when liquidity varies predictably over the
+planning horizon. Published roll calendars, scheduled reports, settlement windows, and expiry
+cycles all generate recurring changes in volume and volatility. Relative-value trading in macro and
+commodity markets is the core application. Calendar spread trading of crude oil futures provides a
+running example, which we study empirically in Section 4.
+The index roll.Commodity index exposure (e.g., to the S&P GSCI) is typically implemented
+throughlongpositionsincommodityfutures. Becausefuturescontractsexpire,theindexperiodically
+rollsitspositionsbysellingtheexpiringnearbycontractandbuyingthenextdeferredcontractbefore
+physicaldelivery. Thisscheduled,passiveorderflowcreatestemporarysellingpressureinthenearby
+contract and buying pressure in the deferred contract, narrowing the nearby-minus-deferred calendar
+spread. Once the roll is complete, the spread tends to recover as the price pressure dissipates. From
+2004 to 2011, the WTI nearby-minus-deferred spread fell by roughly 30–40 basis points around the
+roll window and recovered within about two weeks [19]. The index roll schedule is public and fixed
+in advance. For example, S&P GSCI rolls one fifth of its position on each of the fifth through ninth
+business days of the month [26]. The approximate size of the flow can also be inferred from public
+position reports and past roll activity.
+This predictable spread compression creates a speculative trade: build a short spread position
+(short the nearby contract and long the deferred contract) before the roll, then reverse it (long the
+nearby, short the deferred) into the recovery [24]. Recognizing this price dislocation, however, does
+notdeterminehowearlytoenter,howmuchtotradeeachday,orwhentounwind. Intuitively,greater
+liquidity means lower transaction costs, so traders have an incentive to shift their trades toward
+liquid periods. Making these choices by discretion is further complicated by event-driven liquidity
+changes: for example, the EIA’s Weekly Petroleum Status Report, released Wednesdays at 10:30 a.m.
+ET, concentrates liquidity on the release day [30, 5]. Existing multi-period portfolio construction
+frameworks [10] model the price impact cost as separable, contract by contract and period by period,
+which overprices exactly relative-value trades: correlated legs built and unwound over days, where
+the legs’ impacts partially cancel and the entry’s impact is still alive at the exit.
+1We use the term “contract” to refer to tradable assets and derivatives throughout this paper.
+2
+Contributions.We propose a convex quadratic model of transient cross-impact cost. At time
+period t, a positive semidefinite matrixΛt describes self- and cross-impact under that period’s
+liquidity forecast. A power-law decay kernel then couples trades across time periods. We show that
+the resulting impact cost is convex. Convexity simplifies computation, and encodes a no-arbitrage
+condition. A nonconvex impact cost can assign negative expected cost to some round trip (a trade
+that buys and then sells back to zero inventory), and exploiting suchprice manipulationis illegal [18,
+17]. Requiring convexity rules it out of the model. We empirically show the overpricing of existing
+models, and the usefulness of ours, on public data, trading calendar spreads of crude oil futures.
+2 Related work
+Portfolio construction and execution.Multi-period portfolio construction models trade expected
+return against risk and transaction cost over a planning horizon [10, 9]. Their price impact cost is
+modeled as separable, contract by contract and period by period. In Section 4, we empirically study
+how such separable modeling overprices the impact and yields a highly conservative portfolio.
+Limit-order-book and optimal execution models [25, 8, 20] address the complementary problem
+of executing each period-level trade. Our model operates at portfolio construction timescale.
+Cross impact.Price impact across related contracts is often aligned with the factor structure of
+contracts’ returns [4, 11, 22]. Following this observation, we use return correlation as a proxy for
+impact correlation. Many models assume cross-impact proportional to return covariance (the risk
+matrix), Λt =λΣ t [16, 15]. Our construction (Section 3.1) keeps the shared correlation matrix but
+allows the cross-impact and risk matrices different scales.
+Transient impact.Empirical studies find that price impact decays according to a power law, more
+slowly than an exponential [7, 6, 12, 8]. Exponential decay is nonetheless common despite its
+empirical defects, because the impact state is then Markovian and closed-form decision policy can
+be derived [25, 16]. Power-law decay is not Markovian, so we optimize the sequence of all trades
+jointly under the predicted liquidity over the planning horizon.
+Linear and square-root price impact.Empirically,thesingle-contractpriceimpactofametaorder
+of sizeQ(a succession of trades, all executed in the same direction and originating from the same
+market participant) scales as the square root ofQ [21, 3, 28, 23]. In this paper, we do not reproduce
+the square-root law, but model single-contract, single-period impact as linear with power-law decay.
+Nonlinearimpactwithdecaygenerallyadmitsillegalpricemanipulation[17,27],whilelinearimpact
+with a positive definite decay kernel rules it out [2, 1].
+3
+Convexity.For linear price impact and resulting quadratic cost, positive semidefiniteness of the
+full matrix over contracts and times is a sufficient condition for the absence of negative-cost round
+trips, i.e., price manipulation is never beneficial [18, 17]. A collection of positive semidefinite
+single-period matrices does not by itself ensure this property when liquidity changes over time [14].
+3 A multi-period cross-impact model
+In this section, we build the cost of transient cross-impactϕimp in two steps. First, inspired by risk
+matrix, we introduce a cross-impact matrix for each time period, and couple the periods through a
+temporal decay kernel.
+We traden contracts at datesa1 <· · ·< aT. The trade at dateat executes over periodt. The
+vectoru t ∈R n is the signed dollar value traded at datet, and dollar holdings satisfy
+xt =x t−1 +u t, t= 1, . . . , T.
+The dates need not be equally spaced. They can be days, or intraday windows around scheduled
+events such as an index roll or a storage report. Writeu=
+ 
+u1, . . . ,uT
+
+∈R nT.
+3.1 Single-period cross-impact
+We first model price impact of trading a single contracti at a single periodt, under that period’s
+liquidity forecast. Following [10], letvt,i >0 and σt,i >0 denote forecasted dollar volume and
+return volatility for contracti over periodt. A trade moves the price more when the contract is
+volatile, and less when it is heavily traded. We model the self-impact of contractiat datetas
+γt,iut,i,whereγ t,i =ℓ i
+σt,i
+vt,i
+,(1)
+whereℓ i ∈Ris a learnable parameter.
+Tradingonecontractalsomovesthepricesofrelatedcontracts,sowecombinethesingle-contract
+price impact γt,i with a correlation across contracts. DefineΓt =diag(γ t,1, . . . , γt,n), and let
+Ct ∈R n×n be a positive semidefinite matrix with unit diagonal. We model the cross-impact over
+periodtas
+Λt =Γ 1/2t CtΓ1/2t ,
+so that the cost of such cross-impact isu⊤t Λtut. Because Γt is diagonal andCt has unit diagonal,
+the construction ofΛt adds cross-impact without disturbing the self-impact(1): Λt has diagonal
+γt,1, . . . , γt,n. We refer toCt as impact correlation, and use return correlation as its proxy [16, 15].
+4
+The cross-impact matrix and the risk matrix share the same cross-sectional structure, as the risk
+matrix can be decomposed as
+Σ1/2t CtΣ1/2t ,
+where Σ1/2t =diag(σ t,1, . . . , σt,n). In practice,Ct can be further calibrated using limit order book
+data [4, 11, 22].
+3.2 Transient impact
+Cross-impact does not vanish when the period ends. We now couple cross-impact over time. We
+introduce a temporal decay kernel
+k(h) = (1 +h/τ) −β, τ, β >0,
+consistent with the power-law decay found empirically [7, 12]. The kernelk(·) : [0,∞)→[0,1] is
+nonincreasing, withk(0) = 1. At dateat, price impact of a trade at dateas has decayed to a fraction
+k(at −a s)of its initial size. The widthτsets the timescale of the decay: largerτ, slower decay.
+To charge each trade against the decayed impact of earlier trades, we model the impact cost of
+tradesuas
+ϕimp(u) =
+TX
+t=1
+X
+s≤t
+k(at −a s)u⊤t Λ1/2t Λ1/2s us,(2)
+with k(0) = 1. This cost is a convex quadratic. To write the cost more compactly, we collect the
+kernel values inK∈R T×T:
+Kts =
+
+
+
+k(a t −a s), s≤t,
+0, s > t.
+K is lower triangular to enforce causality. The quadratic form is unchanged if we replaceK by
+symmetric matrix
+G= K+K ⊤
+2 .
+The impact cost of tradesuis then
+ϕimp(u) =u ⊤Au,
+where
+B=diag(Λ 1/21 , . . . ,Λ1/2T ),A=B(G⊗I n)B.(3)
+In block form,
+Ats =G tsΛ1/2t Λ1/2s .(4)
+And in particular,Att =Λ t, recovering the single-period model of Section 3.1.
+5
+Our model uses the symmetric couplingΛ1/2t Λ1/2s , which guarantees convexity. In contrast, the
+true, causal cost with time-varying liquidity,GtsΛs, can makeA indefinite and admit negative-cost
+round trips, i.e., illegal price manipulation. Appendix A gives explicit examples. The symmetric
+coupling avoids this failure.
+3.3 Convexity and no price manipulation
+With linear price impact, positive semidefiniteness ofAis sufficient for the absence of negative-cost
+round trips: it gives
+ϕimp(u) =u ⊤Au≥0for everyu,
+so the model admits no price manipulation.
+We now show thatA⪰0 holds for anyΛt ⪰0 constructed in Section 3.1, so the cost(2) is
+convex no matter how liquidity varies over the horizon. The argument has two steps: we write the
+power-lawkernelasamixtureofexponentialkernelswithnonnegativeweights,andeachexponential
+kernel is positive semidefinite because it is the characteristic function of a Cauchy distribution.
+DefineH∈R T×T by
+Hts =k(|a t −a s|), t, s= 1, . . . , T.
+Step 1: the kernel is a nonnegative mixture of exponentials.The substitutionw=r(1 +h/τ) in
+Γ(β) =
+R ∞
+0 wβ−1e−w dwgives R ∞0 rβ−1e−r(1+h/τ) dr= Γ(β)k(h), so that
+Hts = 1Γ(β) Z ∞0 rβ−1e−r e−(r/τ)|a t−as| dr.
+Step 2: each exponential kernel is positive semidefinite.Forc >0, the Cauchy density with scalec
+has characteristic functione−c|h|,
+e−c|h| = 1π Z ∞−∞ cc2 +ω 2 eiωh dω,
+so for everyz∈R T,
+X
+t,s
+ztzs e−c|at−as| = 1π Z ∞−∞ cc2 +ω 2  TXt=1 zteiωat2 dω≥0.
+Combining the two steps, by takingc=r/τ in Step 2 and integrating against the nonnegative weight
+rβ−1e−r/Γ(β)from Step 1, givesH⪰0. ThereforeGis positive semidefinite,
+G= K+K ⊤
+2 = 12 (IT +H)⪰ 12 IT ,
+6
+and by (3) so isA,
+A⪰ 12 diag(Λ1, . . . ,ΛT )⪰0.
+Every uthus costs at least half the sum of its single-period costs, and no round trip has negative cost.
+4 Numerical study
+We evaluate the model by relative-value trading of WTI calendar spreads around the S&P GSCI
+index roll. The study runs on public data. While a better practice of speculative traders would
+certainly require licensed exchange data, the study shows how our careful model of cross-impact and
+transient impact changes the constructed portfolio, compared with existing baselines.
+4.1 WTI index-roll positioning
+Setup.In each month we trade n= 2 contracts: the nearby contract the index is selling and
+the deferred contract it is buying. The S&P GSCI roll window is business days five through nine.
+Trading takes place on the business days of the month, and the position is closed by the business day
+before the nearby contract’s last trading day.
+Let rt ∈R 2 denote the forecast returns of the two contracts over periodt. The trader chooses,
+over the month, how large a spread position to hold and when to build and unwind it, by solving
+maximize
+TX
+t=1
+r⊤t xt −ϕ imp(u)−
+TX
+t=1
+ψt(ut)
+subject tox t =x t−1 +u t,x 0 =x T =0,
+1⊤xt = 0,∥x t∥1 ≤x max,
+CVaRα
+ 
+− ˜r⊤xt ≤r max, t= 1, . . . , T,
+(5)
+with variablesu1, . . . ,uT (dollar trades) andx1, . . . ,xT (dollar holdings). The objective is forecast
+return, minus the impact costϕimp of Section 3, minus a bid/ask transaction costψt(ut) =a ⊤|ut|,
+with a= (1.0,1.5) basispointsforthenearbyanddeferredlegs. Theconstraint 1⊤xt = 0makesthe
+position a calendar spread with equal dollars long and short, andxmax caps its gross notional. The
+last constraint is a daily risk limit, imposed for eacht= 1, . . . , T: ˜ris a one-day return vector drawn
+from the empirical distribution of theN trading days before the month, andCVaRα is the expected
+loss over the worst1−αfraction of those scenarios, so each day’s tail loss is capped atrmax.
+We compare three specifications of impact cost:
+1. baseline: the separable3/2-power costPt,i ℓiσt,i|ut,i|3/2/v1/2t,i of [10], separable across both
+contracts and times, in place ofϕimp;
+7
+2.self-impact:C t =I(no cross-impact) andG=I(no transient impact);
+3.transient cross-impact: the estimatedCt and the kernelG.
+Data.Prices are the daily settlements of the WTI futures contracts published by the U.S. EIA [29].
+The data covers 2004–2011, when the roll effect was economically material.
+The return forecastrt for business dayt of a month is the mean realized return on business dayt
+over all prior months of the sample.
+The dollar volumesvt,i of (1) are licensed exchange data and not public, so we simulate them
+instead. Let v denote the total daily dollar volume of both the nearby and deferred contracts in a
+given month, held constant within the month. We simulatevwith public data as
+v=q |{z}
+contracts/day
+×1,000| {z }
+bbl/contract
+×p 0|{z}
+$/bbl
+,
+where q is the average daily volume of all WTI futures over the prior calendar year andp0 is the
+nearbycontract’ssettlementpriceonthemonth’sfirsttradingday. Weread qfromaCFTCstudy[13].
+The nearby contract’s share ofv is a logistic function of the number of business dayset remaining
+until its last trading day,
+wt = w0
+1 + exp
+ 
+(c−e t)/s
+ ,
+and the deferred contract takes the rest, i.e.vt,1 =w tv and vt,2 = (1−w t)v. The share starts
+near w0 = 0.8 early in the month, and falls to halfc= 7 business days before the last trading day;
+with s= 2 , about half of thewt-migration falls inside the five-day roll window, where 55–62% of
+index-roll activity is documented [19]. The Wednesday inventory report also concentrates liquidity
+on release days. We simulate this by scalingv and σt,i by 1.08 and 1.02 on Wednesdays, estimated
+from past daily volume and return data.
+The volatilities and the impact correlation are estimated by an exponentially weighted moving
+average (EWMA) of daily settlement returns, with decay rateλ= 0.97 . Writing dm for the last
+trading day of monthm−1 , we estimate the contract covariance atdm as Σdm, and the volatility of
+every time periodt in monthm as σt,i = (Σdm)1/2ii . For simplicity, we freeze the estimate within
+each month:(5) is solved once, before the month begins, so the decision making is based on the
+information available atdm.2 For the risk limit, we set the confidence levelα= 0.95 and use each of
+the N= 250 trading days before the month as a scenario to computeCVaRα. We set the tail-loss
+cap rmax to 50 basis points ofxmax: the trader accepts a one-day loss of at most 0.5% of gross
+capacity on the worst 5% of days.
+We set the parameters of temporal decay kernel to(τ, β) = (1,1/2). The normalizer τ= 1
+matches the decision interval, as we consider one decision per day. As we lack available data to
+2Practitioners would re-solve a receding-horizon variant of (5) each day, with daily updated estimates.
+8
+alpha impact cost spread net
+policy predicted simulated (2)
+baseline [10] 0.6 1.0 0.0 0.2 0.4
+self-impact 7.7 6.9 2.7 2.7 2.3
+transient cross-impact 12.9 5.9 5.9 3.9 3.1
+Table 1: Index-roll positioning, monthly averages over 2004–2011, in basis points of the gross limit
+xmax = $1B; the alpha, impact, spread, and net columns are defined in (6).
+learn the impact scalingℓi, we follow the empirics of [10] to setℓi = 1, so that trading one day’s
+volume moves the price by about one day’s volatility.
+Metrics.We report the average of monthly profit and loss, in basis points ofxmax = $1B,
+net =
+TX
+t=1
+rrealizedt ⊤xt
+| {z }
+alpha
+−ϕ imp(u)| {z }
+impact cost by (2)
+−
+TX
+t=1
+a⊤|ut|
+| {z }
+spread
+.(6)
+We report impact cost in two ways in Table 1, as it cannot be measured directly. Simulated impact
+cost is calculated by(2) with the estimatedCt and the kernelG. Predicted impact cost reports each
+model’sownforecastof ϕimp(u)underitscostspecificationfromtheSetupparagraph. Thetransient
+cross-impact model therefore serves two roles: it is the simulator’s cost model and one of the tested
+models. This limitation is standard in impact backtests.
+Results.Figure 1(a) shows the price dislocation: averaged over the 96 months, the nearby-minus-
+deferred calendar spread falls 9 basis points over business days two through four, falls another 32
+over the roll window, and rebounds 65 by day 15, consistent with the documented 30–40 basis point
+compressionandroughlytwo-weekrecovery[19]. Figure1(b)showstheliquidityovertime: volume
+migrates from nearby to deferred contract, with the weekly ripple of the Wednesday inventory report.
+Figure 1(c) shows the trading positions: all short the spread ahead of the roll window, flip long near
+its end, and are flat before the nearby’s liquidity dries up. The models differ in size and timing.
+Figure 1(c) illustrates that the self-impact model and the baseline [10] overprice their impact.
+With estimated correlation0.96, the price impact of the long and short legs partially cancel, but
+neither model captures this netting. The baseline is highly conservative and barely trades, as it
+charges each contract independently at the3/2power, so the spread trade looks expensive and gets
+no netting.
+9
+1 5 9 13 15
+business day of month
+−40
+−20
+0
+20
+cumulative spread return (bp)
+roll window
+(a)
+1 5 9 13
+business day of month
+0
+5,000
+10,000
+15,000
+20,000modeled volume ($M/day)
+nearby
+deferred
+Wednesday
+report
+roll window
+expiry
+(b)
+1 5 9 13 15
+business day of month
+−600
+−400
+−200
+0
+200
+400
+nearby-leg holding ($M)
+transient
+cross-impact
+self-impact
+baseline
+(c)
+Figure 1: Index-roll positioning. (a) Averaged cumulative nearby-minus-deferred spread return by
+business day of month, 2004–2011; the shaded band is the S&P GSCI roll window. (b) Simulated
+daily dollar volumes of the two contracts. (c) Averaged nearby contract holding of all three models.
+5 Conclusion
+We proposed a convex quadratic model of price impact cost in which a positive semidefinite matrix
+couples trades across contracts and a power-law kernel couples trades across dates. We showed
+that the resulting cost admits no price manipulation. We empirically demonstrated our model’s
+usefulness, and the overpricing of existing models, in relative-value trading of crude oil futures.
+Acknowledgements
+We gratefully acknowledge support from the Office of Naval Research under award N000142412306,
+Air Force Office of Scientific Research under award FA9550-26-1-0012, the Alfred P. Sloan
+Foundation, the Stanford Institute for Human-Centered Artificial Intelligence (HAI), and from IBM
+Research as a founding member of Stanford Institute for Human-centered Artificial Intelligence.
+10
+References
+[1] Aurélien Alfonsi, Florian Klöck, and Alexander Schied. “Multivariate Transient Price Impact
+and Matrix-Valued Positive Definite Functions”. In:Mathematics of Operations Research
+41.3 (2016), pp. 914–934.
+[2] Aurélien Alfonsi, Alexander Schied, and Alla Slynko. “Order book resilience, price manipula-
+tion, and the positive portfolio problem”. In:SIAM Journal on Financial Mathematics3.1
+(2012), pp. 511–533.
+[3] Robert Almgren et al. “Direct Estimation of Equity Market Impact”. In:Risk18.7 (2005),
+pp. 58–62.
+[4] Michaël Benzaquen et al. “Dissecting cross-impact on stock markets: an empirical analysis”.
+In:Journal of Statistical Mechanics: Theory and Experiment2017.2 (2017), p. 023406.
+[5] Johan Bjursell, James E. Gentle, and George H. K. Wang. “Inventory Announcements, Jump
+Dynamics, Volatility and Trading Volume in U.S. Energy Futures Markets”. In:Energy
+Economics48 (2015), pp. 336–349.
+[6] Jean-Philippe Bouchaud, J Doyne Farmer, and Fabrizio Lillo. “How markets slowly digest
+changes in supply and demand”. In:Handbook of financial markets: dynamics and evolution.
+Elsevier, 2009, pp. 57–160.
+[7] Jean-Philippe Bouchaud et al. “Fluctuations and response in financial markets: the subtle
+nature of ‘random’ price changes”. In:Quantitative finance4.2 (2003), p. 176.
+[8] Jean-Philippe Bouchaud et al.Trades, Quotes and Prices: Financial Markets under the
+Microscope. Cambridge University Press, 2018.isbn: 9781107156050.
+[9] Stephen Boyd et al. “Markowitz portfolio construction at seventy”. In:arXiv preprint
+arXiv:2401.05080(2024).
+[10] Stephen Boyd et al. “Multi-period trading via convex optimization”. In:Foundations and
+Trends in Optimization3.1 (2017), pp. 1–76.
+[11] Frederic Bucci et al. “Co-impact: crowding effects in institutional trading activity”. In:
+Quantitative Finance20.2 (2020), pp. 193–205.
+[12] Frédéric Bucci et al. “Slow Decay of Impact in Equity Markets: Insights from the ANcerno
+Database”. In:Market Microstructure and Liquidity4.03n04 (2018), p. 1950006.doi:
+10.1142/S2382626619500065. arXiv:1901.05332 [q-fin.TR].
+[13] Commodity Futures Trading Commission.Impact of U.S. Tight Oil on NYMEX WTI Fu-
+tures. Tech. rep.https://www.cftc.gov/sites/default/files/2018- 09/DMO_
+TightOilImpactNYMEX_WTI0818.pdf. CFTC Division of Market Oversight, 2018.
+11
+[14] Antje Fruth, Torsten Schöneborn, and Mikhail Urusov. “Optimal Trade Execution and Price
+Manipulation in Order Books with Time-Varying Liquidity”. In:Mathematical Finance24.4
+(2014), pp. 651–695.
+[15] Nicolae Gârleanu and Lasse Heje Pedersen. “Dynamic portfolio choice with frictions”. In:
+Journal of Economic Theory165 (2016), pp. 487–516.
+[16] Nicolae Gârleanu and Lasse Heje Pedersen. “Dynamic trading with predictable returns and
+transaction costs”. In:The Journal of Finance68.6 (2013), pp. 2309–2340.
+[17] Jim Gatheral. “No-dynamic-arbitrage and market impact”. In:Quantitative Finance10.7
+(2010), pp. 749–759.
+[18] GurHubermanandWernerStanzl.“Pricemanipulationandquasi-arbitrage”.In:Econometrica
+72.4 (2004), pp. 1247–1275.
+[19] Scott H. Irwin, Dwight R. Sanders, and Lei Yan. “The Order Flow Cost of Index Rolling in
+Commodity Futures Markets”. In:Applied Economic Perspectives and Policy45.2 (2023),
+pp. 1025–1050.
+[20] Eduardo Abi Jaber, Eyal Neuman, and Sturmius Tuschmann. “Optimal Portfolio Choice with
+Cross-Impact Propagators”. In:arXiv preprint arXiv:2403.10273(2024).
+[21] Thomas F. Loeb. “Trading Cost: The Critical Link Between Investment Information and
+Results”. In:Financial Analysts Journal39.3 (1983), pp. 39–44.doi:10.2469/faj.v39.
+n3.39.
+[22] Iacopo Mastromatteo et al. “Trading lightly: cross-impact and optimal portfolio execution”.
+In:Risk Magazine(July 2017). arXiv:1702.03838.
+[23] Esteban Moro et al. “Market impact and trading profile of hidden orders in stock markets”. In:
+Physical Review E80.6 (2009), p. 066102.doi:10.1103/PhysRevE.80.066102.
+[24] Yiqun Mou. “Limits to Arbitrage and Commodity Index Investment: Front-Running the
+Goldman Roll”. Working paper, Columbia University. SSRN 1716841. 2011.
+[25] AnnaA.ObizhaevaandJiangWang.“Optimaltradingstrategyandsupply/demanddynamics”.
+In:Journal of Financial Markets16.1 (2013), pp. 1–32.
+[26] S&P Dow Jones Indices.S&P GSCI Methodology.https://www.spglobal.com/spdji/
+en/documents/methodologies/methodology-sp-gsci.pdf. 2026.
+[27] Michael Schneider and Fabrizio Lillo. “Cross-Impact and No-Dynamic-Arbitrage”. In:
+Quantitative Finance19.1 (2019), pp. 137–154.
+[28] Bence Tóth et al. “Anomalous Price Impact and the Critical Nature of Liquidity in Financial
+Markets”.In:PhysicalReviewX1.2(2011),p.021006.doi: 10.1103/PhysRevX.1.021006.
+arXiv:1105.1694 [q-fin.TR].
+12
+[29] U.S. Energy Information Administration.Petroleum and natural gas futures prices: NYMEX
+contracts 1–4, daily settlements.https://www.eia.gov/dnav/pet/pet_pri_fut_s1_d.
+htm; https://www.eia.gov/dnav/ng/ng_pri_fut_s1_d.htm. Accessed August 2026.
+2026.
+[30] U.S. Energy Information Administration.Weekly Petroleum Status Report: Release Schedule.
+https://www.eia.gov/petroleum/supply/weekly/. 2026.
+13
+A Model preserves diagonals but not convexity
+The construction(4) couples time periods through the symmetric matrixAts =G tsΛ1/2t Λ1/2s . Here
+we show that the true, causal matrixGtsΛs fails to be positive semidefinite. The counterexample
+uses n= 1 , T= 2 . Write Λ1 =γ 1, Λ2 =γ 2, and letρ=k(a 2 −a 1)∈(0,1] , so the off-diagonal
+weight isG12 =ρ/2 . A model in which the trade ats displaces prices in proportion to the liquidity
+prevailing atsgives cross termsk(at −a s)x Tt Λsxs fort > s, i.e.,
+M=
+
+
+γ1
+ργ1
+2ργ1
+2 γ2
+
+ ,detM=γ 1γ2 − ρ2γ21
+4 ,
+which is negative wheneverγ2 < ρ2γ1/4: an illiquid period followed closely by a liquid one.
+Also see [14] for price manipulation in propagator models with time-varying liquidity.
+14

@@ -1,0 +1,1608 @@
+arXiv 2505.07078  https://arxiv.org/abs/2505.07078
+
+Can LLM-based Financial Investing Strategies Outperform the
+Market in Long Run?
+Weixian Waylon Li
+AIAI, School of Informatics
+The University of Edinburgh
+Edinburgh, United Kingdom
+waylon.li@ed.ac.uk
+Hyeonjun Kim
+Global Finance Research Center
+Sungkyunkwan University
+Seoul, Republic of Korea
+hjkimfin@gmail.com
+Mihai Cucuringu
+Dept. of Mathematics; Dept. of Statistics & OMI
+University of California, Los Angeles; University of Oxford
+United States; United Kingdom
+mihai@math.ucla.edu
+Tiejun Ma
+AIAI, School of Informatics
+The University of Edinburgh
+Edinburgh, United Kingdom
+tiejun.ma@ed.ac.uk
+Abstract
+Large Language Models (LLMs) have recently been leveraged for as-
+set pricing and stock trading applications, enabling AI agents to gen-
+erate investment decisions from unstructured financial data. How-
+ever, most evaluations of LLM timing-based investing strategies are
+conducted on narrow timeframes and limited stock universes, over-
+stating effectiveness due to survivorship and data-snooping biases.
+We critically assess their generalisability and robustness by propos-
+ing FINSABER1, a backtesting framework evaluating timing-based
+strategies across longer periods and a larger universe of symbols.
+Systematic backtests over two decades and 100+ symbols reveal
+that previously reported LLM advantages deteriorate significantly
+under broader cross-section and over a longer-term evaluation. Our
+market regime analysis further demonstrates that LLM strategies
+are overly conservative in bull markets, underperforming passive
+benchmarks, and overly aggressive in bear markets, incurring heavy
+losses. These findings highlight the need to develop LLM strategies
+that are able to prioritise trend detection and regime-aware risk
+controls over mere scaling of framework complexity.
+CCS Concepts
+•General and reference → Evaluation;Empirical studies;•
+Computing methodologies→Intelligent agents.
+Keywords
+Automated trading, LLM investors, Backtest, Benchmark
+ACM Reference Format:
+Weixian Waylon Li, Hyeonjun Kim, Mihai Cucuringu, and Tiejun Ma. 2026.
+Can LLM-based Financial Investing Strategies Outperform the Market in
+Long Run?. InProceedings of the 32nd ACM SIGKDD Conference on Knowledge
+Discovery and Data Mining V.1 (KDD ’26), August 09–13, 2026, Jeju Island,
+1Data and code available at https://github.com/waylonli/FINSABER.
+This work is licensed under a Creative Commons Attribution 4.0 International License.
+KDD ’26, Jeju Island, Republic of Korea
+©2026 Copyright held by the owner/author(s).
+ACM ISBN 979-8-4007-2258-5/2026/08
+https://doi.org/10.1145/3770854.3785702
+Republic of Korea.ACM, New York, NY, USA, 15 pages. https://doi.org/10.
+1145/3770854.3785702
+1 Introduction
+Large language models (LLMs) are increasingly used in financial
+decision-making, especially for generating investment actions such
+as Buy, Hold, or Sell [11, 18]. These so-called LLMtiming-based
+investing strategiesleverage LLMs’ ability to interpret historical
+and real-time data to autonomously trade. From sentiment-driven
+trading [53] to sophisticated multi-agent systems [51, 54], a growing
+body of work has explored the potential of LLMs as autonomous
+financial agents.
+Backtesting is the standard method for assessing investment
+strategies, simulating them on historical data to evaluate profitabil-
+ity and robustness [7, 33]. However, current LLM investing research
+suffers from fragmented, underdeveloped evaluation practices. Most
+studies assess performance over short periods, on few stock sym-
+bols, and often omit code release, limiting reproducibility. As sum-
+marised in Table 1, several recent methods evaluate over under a
+year, with fewer than ten stocks, and benchmark only against naïve
+baselines like Buy-and-Hold. Such short horizons and narrow stock
+universes lead to three sources of bias:survivorship bias[ 21],
+where delisted or failed stocks are omitted;look-ahead bias[ 7],
+where future information inadvertently influences past decisions;
+anddata-snooping bias[ 1], where strategy performance is in-
+flated through repeated testing on the same data. These biases can
+result in misleading performance assessments and undermine the
+validity of claimed improvements over traditional methods. This
+raises a central question:Can LLM-based investing strategies
+survive longer and broader robustness evaluations?
+While recent efforts such as Wang et al. [44] and Hu et al. [26]
+have addressed benchmarking for deep learning (DL)-based trading
+and LLM-based time-series forecasting, comprehensive evaluation
+of LLM-based investing strategies remains unaddressed. Separately,
+FinBen [48] provides a thorough FinLLM benchmark covering multi-
+ple tasks, including decision-making. However, as a broad FinLLM
+benchmark, FinBen’s backtesting still relies on a limited, hand-
+picked symbol set, which contains the aforementioned biases and
+lacks a professional backtesting pipeline or systematic comparison
+with traditional strategies. To fill this gap, we introduceFINSABER,
+arXiv:2505.07078v6  [q-fin.TR]  26 Jun 2026
+KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea Weixian Waylon Li, Hyeonjun Kim, Mihai Cucuringu, and Tiejun Ma
+Method Eval Period Eval Symbols Code
+MarketSenseAI 1 year 3 months 100✗
+TradingGPT N/A N/A✗
+FinMem 6 months 5✓
+FinAgent 6 months 6✓
+FinRobot N/A N/A✓
+TradExpert 1 year 30✗
+FinCon 8 month 8✗
+TradingAgents 3 months 3✗
+MarketSenseAI 2.0 2 years 100✗
+Table 1: Summary of current LLM-based investing strategies.
+a comprehensive framework for benchmarking LLM timing-based
+investing strategies that supportslonger backtesting periods, a
+broader and more diverse symbol universe, andexplicit bias
+mitigation. Specifically, our main contributions are:
+(1) We propose FINSABER, the first comprehensive evaluation frame-
+work for LLM-based investing strategies that supports 20 years
+of multi-source data, including unstructured inputs such as news
+and filings, expands symbol coverage via unbiased selection, and
+mitigates survivorship, look-ahead, and data-snooping biases.
+(2) We empirically reassess prior claims and show that LLM advan-
+tages reported in recent studies often vanish under broader and
+longer evaluations, indicating that many conclusions are driven
+by selective or fragile setups.
+(3) We conduct regime-specific analysis and reveal that LLM strate-
+gies underperform in bull markets due to excessive conservatism
+and suffer disproportionate losses in bear markets due to inade-
+quate risk control.
+(4) We offer guidance for future LLM strategy design, arguing that
+regime-awareness and adaptive risk management are more criti-
+cal than increasing architectural complexity.
+Altogether, our work provides empirical guidance for LLM-based
+investment research, advocating for the development of strategies
+that are able to adjust to dynamically-changing market conditions.
+2 Related Works
+Recent work using LLMs as investors directly employ LLMs to
+make investing decisions [11]. The most common approach lever-
+ages LLMs’ sentiment analysis capabilities, using either general-
+purpose LLMs (e.g., GPT, LLaMA, Qwen) or fine-tuned financial
+variants like FinGPT [49] to generate sentiment scores for trading
+decisions [31, 38, 46, 53]. However, these approaches stop short
+of forming complete trading strategies, which require not only di-
+rectional forecasts, but also realistic liquidity sizing for mitigating
+impact, development of execution rules for trade timing and risk
+management, and incorporation of trading costs.
+More advanced approaches move beyond sentiment scores by
+summarising and reasoning over multi-source financial text. For
+example, Fatouros et al . [19] introduce a memory module that
+stores summarised financial data, retrieved during trading to guide
+decisions. Similarly, LLMFactor [ 43] learns to extract profitable
+factors from historical news aligned with price movements and
+applies them to future market forecasts.
+A growing body of work incorporates LLM-based agents [24],
+where either one specialised agent or multiple collaborative agents
+are employed to perform financial analysis or predictions. Notable
+examples include FinMem [51], FinAgent [54], FinRobot [50], Trad-
+Expert [12], FinCon [52], TradingAgents [47] and MarketSenseAI
+2.0 [18]. Some models also incorporate reinforcement learning (RL)
+for iterative self-improvement [13, 32].
+3 Definitions of Investing Strategies
+Timing-Based Strategies.Timing-based strategies generate daily
+Buy (+1), Sell (−1), or Hold (0) signals based on market data such
+as prices and technical indicators. The objective is to capture short-
+term price movements through systematic trading rules.
+Selection-Based Strategies.Selection-based strategies identify sub-
+sets of assets expected to outperform based on ranking signals.
+Assets are selected periodically using top-𝑘 or thresholding. These
+strategies focus on cross-sectional alpha.
+4 Biases and Robustness Challenges in
+Backtesting LLM Investors
+Robust evaluation of financial strategies demands carefully de-
+signed backtests. Unlike typical machine learning tasks with large,
+clean datasets, financial data is noisy, nonstationary, and limited
+in scope. As a result, backtests are especially prone to three major
+sources of bias:survivorship bias,look-ahead bias, anddata-
+snooping bias, each of which can inflate perceived performance
+and lead to misleading conclusions [7].
+Survivorship Bias.This occurs when backtests include only cur-
+rently active stocks while ignoring delisted or bankrupt assets. Such
+omissions systematically overstate returns and understate risk [28].
+A common cause is using today’s S&P 500 constituents as the his-
+torical investment universe. This practice introduces what Garcia
+and Gould [21] call “preinclusion bias”, also a form of look-ahead
+bias where future index membership influences past decisions. The
+impact is well-documented: Grinblatt and Titman [23] and Elton
+et al. [16] estimate annual return distortions between 0.1% and
+0.9%, and Brown et al . [5] show that even small distortions can
+misrepresent performance persistence.
+Look-ahead Bias.Look-ahead bias arises when a strategy uses
+information that would not have been known at the time of decision-
+making [7]. This includes selecting features, parameters, or symbols
+based on full-period outcomes, thereby introducing future knowl-
+edge into the backtest.
+Data-snooping Bias.Also known as multiple testing bias, this
+occurs when repeated experimentation on the same dataset leads to
+overfitting. In finance, where sample sizes are small and the signal-
+to-noise ratio is very low, this bias is particularly problematic. Bailey
+et al. [1] showed that evaluating strategies on overlapping data
+inflates false positive rates, and that standard hold-out validation
+techniques often fail to guard against this issue.
+Bias-Mitigation Requires Broader and Longer Evaluation.Address-
+ing these biases requires evaluating strategies across longer periods
+and broader asset universes. For daily trading, at least 3 years of data
+is generally recommended, while weekly and monthly strategies
+Can LLM-based Financial Investing Strategies Outperform the Market in Long Run? KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea
+Timing-based
+Strategy
+Timing-based Strategy
+Rule-based
+Predictor-based
+RL-based
+LLM-based
+FINSABER
+Benchmark 
+Setup
+Selective
+Composite
+Selection-based Strategy
+Rolling Window 
+Test Results
+Multi-source Data Module
+ Stock
+Price
+Financial
+News Filings
+...
+Strategies
+Base
+Module
+Return Metrics
+Risk Metrics
+Risk-Adjusted
+Performance
+Financial
+Metrics
+Random K
+Momentum FactorSelected Four 
+Volatility Effect
+Selection-based
+Strategy
+Test 1
+Test 2
+Test 3
+Training 1
+Training 2
+Training 3
+...2004 2024
+Figure 1: Overview of the FINSABER Backtest Framework. The central pipeline illustrates the backtesting process. The
+framework includes a Strategies Base Module (green), which covers both selection-based and timing-based strategies, and a
+Multi-source Data Module (yellow), integrating diverse financial data inputs.
+benefit from 10 to 20 years or more [1]. Gatev et al. [22] tested pairs
+trading on 40 years of daily data, but Do and Faff[14] extended this
+to 48 years and found profitability declined, highlighting the need
+for long-term evaluation. Likewise, recent deep learning models in
+finance rely on multi-year datasets to ensure robustness [20, 42].
+Stock selection is another critical factor. Many LLM-based in-
+vesting studies selectively use only a small number of well-known
+stocks such as TSLA and AMZN. These are both historical winners,
+which limits generalisability and embeds both survivorship and
+look-ahead bias into the evaluation. Omitting delisted or under-
+performing stocks distorts performance metrics and presents an
+incomplete picture of real-world investing conditions.
+Therefore,backtests must address survivorship bias, look-
+ahead bias, and data-snooping bias explicitly. Broader and
+longer evaluations, using historically accurate stock universes and
+spanning multiple market regimes, are essential for producing reli-
+able, generalisable results that reflect real investing conditions.
+5 FINSABER
+As discussed in §4, existing evaluations of LLM-based investors
+suffer from survivorship bias, look-ahead bias, and data-snooping
+bias. These issues are largely due to limited evaluation periods and
+narrow stock selections. In this study, all subsequent findings and
+analyses are derived from our meticulously constructed backtesting
+framework, FINSABER2, which systematically addresses biases and
+meets the practical needs of LLM-based strategies, including the in-
+tegration of unstructured, multi-source data. FINSABER comprises
+three core modules: (1) a multi-source data module, (2) a modular
+strategies base, and (3) a bias-aware two-step backtesting pipeline.
+Figure 1 illustrates the framework.
+2FinancialINvestingStrategyAssessment withBias mitigation,Expanded time, and
+Range of symbols
+Multi-source Data.LLM-based investing strategies utilise both
+structured and unstructured data such as historical stock prices, fi-
+nancial news, and company filings (10-K, 10-Q), spanning from 2000
+to 2024. To preventlook-ahead bias, all data inputs are aligned
+with each backtest window using only information available prior
+to the start date.Survivorship biasis addressed by explicitly in-
+cluding delisted stocks, and open-source equivalents are provided
+for reproducibility (more detail in Appendix A).
+Strategies Base.We incorporate a comprehensive collection of
+strategies across multiple paradigms to ensure robust benchmark-
+ing. Thetiming-based strategiesinclude open-source LLM investors
+(FinMem [51], FinAgent [54]), traditional rule-based approaches
+(Buy and Hold, Moving Average Crossover, Bollinger Bands [ 3],
+Trend Following [45]), ML/DL forecaster-based methods (ARIMA,
+XGBoost), and RL-based strategies (A2C, PPO, TD3, SAC imple-
+mented via FinRL [36] framework). Selection-based strategies en-
+compass random K selection, Momentum Factor Selection (based
+on past returns), Volatility Effect Selection (selecting low-volatility
+stocks), and the stocks selection agent from the FinCon [52] frame-
+work. This diverse strategy base enables comprehensive perfor-
+mance comparison across different methodological approaches
+while maintaining extensibility for custom implementations. More
+technical details of the strategies are available in Appendix B.
+Two-Step Pipeline for Bias Mitigation.FINSABER applies a two-
+step pipeline. First,selection-based strategiesoperate on regularly
+updated, historically accurate constituent lists, for example, the S&P
+500 including delisted symbols, at each window. This further miti-
+gatessurvivorship biasfrom the stock selection process, ensuring
+the evaluation is not restricted to a limited or selectively surviving
+set of stocks. Subsequently,timing-based strategieswhich covers
+rule-based, ML, RL, and LLM-driven approaches will be used to
+execute daily trading decisions. The modular strategy base is easily
+extensible for custom methods (see Appendix B). To mitigatedata-
+snooping bias, rolling-window evaluations are performed over
+KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea Weixian Waylon Li, Hyeonjun Kim, Mihai Cucuringu, and Tiejun Ma
+Type Strategy TSLA NFLX AMZN MSFT
+SPR↑CR↑MDD↑AV↓SPR↑CR↑MDD↑AV↓SPR↑CR↑MDD↑AV↓SPR↑CR↑MDD↑AV↓
+FinMem Selection (2022-10-06 to 2023-04-10)
+Rule
+Based
+Buy and Hold -0.342 -20.483 -52.729 55.910 1.32643.079-20.184 41.523 -0.460 -13.250 -31.546 35.624 0.974 21.171 -14.192 28.327
+SMA Cross -0.293 -5.540 -18.517 38.602 -1.020 -8.285 -15.942 20.477 -0.420 -4.433 -18.910 27.084 1.515 18.289 -8.746 20.821
+WMA Cross 0.215 3.741 -18.492 42.062 -0.803 -6.004 -14.290 19.826 -0.563 -6.121 -21.030 26.831 1.334 16.576 -8.883 21.503
+ATR Band -0.595 -19.142 -39.599 42.161 0.150 2.992 -12.231 19.314 0.622 11.007 -15.842 23.272 1.036 12.979 -7.70915.005
+Bollinger Bands -0.769 -24.747 -44.655 45.366 -0.558 -4.996 -13.24416.754-0.402 -7.105 -20.615 26.5592.115 31.619 -3.47518.243
+Turn of The Month 0.219 3.639-11.642 31.0420.559 8.383-10.64117.194 -0.037 0.039 -14.89220.722-0.034 0.970 -11.95515.097
+Predictor ARIMA 0.601 15.007 -24.446 41.402 1.159 23.783 -15.043 25.749 -0.225 -4.752 -20.046 26.8992.245 44.777 -7.12122.636XGBoost 0.331 6.213 -35.37437.7290.770 10.134-11.246 14.928 1.955 42.468 -8.81625.135 0.895 12.678 -10.734 16.721
+RL
+A2C -0.201 -15.876 -52.642 56.172 1.262 36.760 -20.436 37.542 -0.093 -3.253 -24.042 30.903 1.166 24.804 -13.437 26.743
+PPO -0.254 -18.223 -52.609 57.301 1.420 40.181 -18.036 35.170 -0.576 -9.485 -22.761 24.169 1.149 25.752 -14.444 28.503
+SAC -0.320 -20.598 -53.614 57.665 1.32542.872-20.121 41.448 -0.440 -13.215 -32.145 36.533 1.004 22.304 -14.522 28.904
+TD3 -0.343 -20.423 -52.592 55.859 1.32542.872-20.121 41.448 -0.440 -13.215 -32.145 36.533 0.973 21.026 -14.099 28.073
+LLM
+FinMem (GPT-4o-mini) 0.927 19.940 -30.144 48.6381.70432.549 -13.018 34.766 0.297 2.800-2.744 10.247-0.554 -7.104 -14.588 25.969
+FinMem (GPT-4o) 0.404 5.312 -36.351 54.434 0.896 16.244 -15.234 38.209 -0.968 -20.091 -31.164 40.896 0.792 12.834 -13.555 33.884
+FinMem (reported)2.679 61.776 -10.80046.8652.01736.449 -15.850 36.434 0.233 4.885 -22.929 42.658 1.440 23.261 -14.989 32.562
+FinAgent (GPT-4o-mini)1.389 29.093-15.711 42.059 0.487 7.484 -14.251 42.6280.883 11.830-14.217 26.810 0.575 7.356 -13.062 26.271
+FinAgent (GPT-4o) 1.203 27.409 -20.260 46.664 1.169 25.744 -14.713 45.163 0.328 4.261 -17.927 29.516 0.364 4.752 -16.490 27.924
+Table 2: Backtest performance over the previously reported period (2022-10-06 to 2023-04-10) where LLM investing strategies
+were shown to be effective. “-” metrics indicate no trading activities were triggered. Top in red and second-best in blue.
+diverse and dynamically changing asset selections and extended
+time horizons. Window size and step are customisable, enabling
+realistic simulation across different market regimes. Together, this
+pipeline ensures broad symbol coverage and prevents overfitting
+to narrow datasets or short evaluation horizons.
+Evaluation Metrics.FINSABER adopts three categories of eval-
+uation metrics:return,risk, andrisk-adjusted performance. Return
+metrics measure profitability, including Annualised Return (AR)
+and Cumulative Return (CR). Risk metrics quantify uncertainty
+and downside exposure, including Annualised Volatility (AV) and
+Maximum Drawdown (MDD). Risk-adjusted metrics assess capital
+efficiency, including the Sharpe Ratio (SPR) and Sortino Ratio (STR).
+High returns alone do not imply strategy quality. Risk-adjusted
+metrics such as SPR and STR are more informative, especially in
+finance where capital efficiency and downside risk are critical [7].
+These metrics are standard in the literature [ 9, 10] and widely
+used in recent LLM-based investing benchmarks [52, 54]. Formal
+definitions and formulas are provided in Appendix C.
+6 Experiments
+Our experiments address methodological flaws in prior LLM-based
+investing evaluations identified in §4, specifically survivorship and
+data-snooping biases from selective stock choices and short evalu-
+ation periods. We demonstrate how these practices inflate results
+and illustrate how FINSABER enables fairer assessments.
+Specifically, our experiments include two parts: (1)Pitfalls of
+selective evaluation: Replicating previously reported results on
+select periods and symbols, then extending this evaluation period
+to demonstrate performance deterioration. (2)Fair and robust
+comparisons: Implementing systematic stock-selection methods to
+explicitly mitigate survivorship and data-snooping biases for fairer
+LLM assessments. We only consider go-long positions, aligning with
+current LLM strategies. Technical details, including hyperparameter
+configurations, are provided in Appendix E.
+6.1 Pitfalls of Selective Evaluation
+Revisiting Reported Claims.We begin by replicating earlier eval-
+uation setups that demonstrated the effectiveness of LLM investing
+strategies on TSLA, NFLX, AMZN, and MSFT during the previously
+reported period (6 October 2022 to 10 April 2023). Additionally, we
+incorporate broader benchmarks, including traditional rule-based,
+ML, and DL methods. Previous studies omit key details such as
+exact risk-free rates and transaction costs. Thus, we set a historical
+average risk-free rate of 0.03 and use Moomoo’s3 standard US com-
+mission fee ($0.0049/share, minimum $0.99/order), comparable to
+HSBC and TradeUp4.
+Table 2 summarises these results. Our analysis indicates that
+LLM investors are not universally superior, even in their
+preferred setups. Specifically,FinMemonly consistently outper-
+forms for TSLA, while traditional benchmarks remain competitive
+or superior for other symbols. These results caution against overly
+optimistic interpretations from selective evaluations.FinAgent, the
+other LLM-based method, leads in annualized return on TSLA but
+is inconsistent elsewhere—comparable toFinMemon MSFT, weaker
+on NFLX, and without a consistent risk-adjusted edge across the
+set. Furthermore,LLM-based strategies exhibit high annual
+volatility and significant maximum drawdowns, indicating
+a high-risk profile. This highlights the necessity of explicit risk
+assessments when evaluating such strategies.
+Further evidence in Appendix D supports the instability of short-
+period evaluations, where even a slight two-month extension of
+the evaluation period results in substantial variation for LLM-based
+strategies.
+Extending the Evaluation Period.To further illustrate the limita-
+tions of short evaluation horizons, We extend the evaluation period
+(2004–2024) using the same four symbols (TSLA, NFLX, AMZN,
+MSFT) to assess LLM performance robustness over the long term.
+3https://www.moomoo.com/ca/support/topic10_122
+4https://www.tradeup.com/pricing/detail
+Can LLM-based Financial Investing Strategies Outperform the Market in Long Run? KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea
+Type Strategy TSLA NFLX
+SPR↑STR↑AR↑MDD↑AV↓SPR↑STR↑AR↑MDD↑AV↓
+Rule
+Based
+Buy and Hold 0.630 0.915 37.767 -50.839 45.2430.622 0.952 23.919-48.119 41.703
+SMA Cross 0.680 1.013 23.681 -23.707 24.680 0.087 0.160 5.514 -28.689 21.836
+WMA Cross 0.664 0.955 21.158 -25.135 24.087 0.004 0.071 1.447 -32.409 23.074
+ATR Band 0.022 0.066 -0.005 -38.536 26.609 0.186 0.377 2.202 -35.603 23.922
+Bollinger Bands 0.193 0.294 4.282 -37.157 26.267 0.075 0.381 0.286 -34.002 23.088
+Trend Following0.815 1.35636.289 -28.113 28.628 0.403 0.646 11.868 -29.179 25.368
+Turn of The Month 0.207 0.353 7.872 -27.902 23.595 0.287 0.487 7.097 -21.646 17.166
+Predictor ARIMA0.6811.003 24.138 -30.450 27.6120.659 1.03519.022 -27.567 25.514XGBoost 0.142 0.370 10.877-22.901 19.5370.202 0.355 4.957 -21.301 17.302
+RL
+A2C 0.172 0.249 3.875 -27.367 22.890 0.171 0.243 4.359 -20.96016.129
+PPO 0.469 0.663 28.189 -46.810 40.156 0.541 0.81419.279-39.615 33.630
+SAC 0.119 0.190 6.654-11.042 9.9020.186 0.285 8.397-9.545 9.216
+TD3 0.417 0.604 23.336 -33.725 30.233 0.291 0.431 10.900 -21.451 19.304
+LLM FinMem 0.6411.069 42.153-34.234 35.030 0.293 0.622 12.566 -27.721 26.876FinAgent 0.546 0.98159.835-36.897 41.579 -0.511 0.459 16.793-20.90321.126
+Type Strategy AMZN MSFT
+SPR↑STR↑AR↑MDD↑AV↓SPR↑STR↑AR↑MDD↑AV↓
+Rule
+Based
+Buy and Hold0.5510.82915.997-36.842 30.8600.461 0.620 11.238-25.463 21.791
+SMA Cross 0.057 0.205 3.896 -22.096 17.520 -0.263 -0.314 0.192 -17.656 11.840
+WMA Cross 0.175 0.300 5.702 -19.309 17.178 -0.363 -0.437 -1.664 -19.075 11.932
+ATR Band 0.4430.9985.452 -19.990 15.130 0.3170.6375.725 -11.893 10.885
+Bollinger Bands 0.019 0.125 0.895 -23.757 15.763 -0.054 -0.029 1.578 -16.101 11.931
+Trend Following0.649 1.111 16.018-19.120 20.130 0.205 0.321 5.438 -17.515 13.419
+Turn of The Month -0.029 -0.009 1.534 -20.422 15.728 -0.263 -0.343 -0.177 -14.308 10.438
+Predictor ARIMA 0.339 0.504 7.523 -20.612 19.115 0.304 0.466 8.207 -15.227 13.819XGBoost -0.587 -0.366 1.200-13.659 11.1060.171 0.322 5.890-10.523 10.335
+RL
+A2C 0.165 0.247 3.925 -14.84111.6540.279 0.380 7.478 -13.447 11.933
+PPO 0.505 0.767 13.831 -29.128 24.3920.3440.463 8.589 -16.697 14.410
+SAC 0.179 0.257 4.438-14.09311.665 0.216 0.288 5.329 -14.866 11.835
+TD3 0.382 0.597 11.738 -21.942 19.149 0.050 0.070 1.405-9.491 6.648
+LLM FinMem 0.188 0.340 5.695 -28.296 24.786 0.203 0.293 4.567 -19.270 17.891FinAgent 0.389 0.622 13.992 -25.082 24.883 0.301 0.51310.760-20.877 19.978
+Table 3: Backtest performance for previously reported LLM-selected symbols over an extended period (2004-01-01 or earliest
+available to 2024-01-01). Top in red and second-best in blue.
+Table 3 summarises these extended period results. Crucially,
+extending the evaluation horizon significantly diminishes the per-
+ceived superiority of LLM investors. Over two decades, traditional
+strategies likeBuy and Holdconsistently rank among the top per-
+formers across most symbols. TSLA is the only case where LLM
+investors (FinMem,FinAgent) clearly lead in AR, while for NFLX,
+AMZN, and MSFT,Buy and Holdor other strategies match or outper-
+form them. This further supports thatpreviously reported LLM
+advantages are likely short-lived, potentially hand-picked,
+and highly sensitive to the evaluation period.
+It is crucial to note that we cannot yet conclude that benchmark
+strategies cannot outperform the market. As mentioned, backtesting
+only on popular stocks may inadvertently introduce survivorship
+bias, as these stocks have gained popularity due to past success dur-
+ing prolonged bull markets. Thus, expanding the range of symbols
+is essential to ensure a more systematic and unbiased evaluation.
+6.2 Fair Comparisons with Composite Approach
+To overcome the aforementioned biases, we introduce theCompos-
+iteevaluation setup within FINSABER. This setup integrates sys-
+tematicselection-based strategiesto expand and diversify the stock
+universe, explicitly addressing survivorship and data-snooping bi-
+ases. Specifically, we use four unbiased stock selection approaches
+from the strategies base (details in Appendix B):Random Five,
+Momentum Factor[ 40],Volatility Effect[ 2], and theFinCon
+Selection Agentin the FinCon [52] framework.
+For each rolling window, the selection strategy identifies a set
+of𝐾 symbols. Eachtiming-based strategyis then applied indepen-
+dently to each selected symbol, generating separate trades and
+performance records. The reported results for each timing strategy
+reflect the average performance across all selected symbols within
+the window, as these models operate on individual stocks and do
+not construct or manage a coordinated portfolio across symbols.
+KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea Weixian Waylon Li, Hyeonjun Kim, Mihai Cucuringu, and Tiejun Ma
+Type Timing Strategy Random 5(91 symbols)Momentum Factor(84 symbols)
+SPR↑STR↑AR↑MDD↑AV↓SPR↑STR↑AR↑MDD↑AV↓
+Rule
+Based
+Buy and Hold0.315 0.456 6.694-35.130 27.4100.3840.694 9.916 -32.596 37.421
+SMA Cross -0.298 -0.290 0.446 -22.292 15.774 -0.251 0.008 2.109 -19.438 20.050
+WMA Cross -0.299 -0.305 0.232 -22.754 15.528 -0.169 0.051 3.674 -18.651 20.330
+ATR Band 0.232 0.425 5.119 -21.535 16.113 0.197 0.595 4.314 -19.407 20.038
+Bollinger Bands 0.129 0.288 3.521 -22.487 16.290 0.114 0.702 1.881 -19.451 21.555
+Trend Following -0.389 -0.198 2.525-8.587 8.2230.119 0.531 6.380 -15.726 18.696
+Turn of The Month 0.015 0.072 2.870 -18.582 13.542 0.056 0.662 3.197 -18.108 18.055
+Predictor ARIMA0.255 0.434 6.928-21.691 17.5040.542 1.043 13.257-18.277 22.892XGBoost -0.055 0.028 3.089 -17.160 13.075 0.0941.5256.131-12.75417.238
+RL
+A2C 0.086 0.122 1.902-9.220 6.8870.105 0.171 2.488 -14.45214.815
+PPO 0.179 0.256 3.282 -18.395 13.783 0.185 0.308 1.939 -23.177 25.527
+SAC 0.097 0.142 1.389 -16.058 12.375 0.195 0.321 5.591-12.23516.144
+TD3 0.173 0.248 3.682 -14.471 11.565 0.186 0.293 3.464 -14.59314.953
+LLM FinMem -0.253 0.114 -0.094 -24.243 21.214 0.025 0.170 3.649 -23.335 28.078FinAgent 0.094 0.323 4.477 -28.059 26.387 0.104 0.53413.950-20.675 30.635
+Type Timing Strategy Volatility Effect(63 symbols)FinCon Selection Agent(80 symbols)
+SPR↑STR↑AR↑MDD↑AV↓SPR↑STR↑AR↑MDD↑AV↓
+Rule
+Based
+Buy and Hold0.703 1.291 7.898-14.146 14.7200.389 0.6716.940 -30.943 41.710
+SMA Cross -0.568 -0.544 0.781 -9.296 8.665 -0.346 -0.351 -4.187 -21.095 20.765
+WMA Cross -0.665 -0.348 1.908 -8.481 8.573 -0.176 -0.129 -1.683 -19.432 21.141
+ATR Band -0.026 0.120 2.798 -8.032 7.951 0.181 0.539 4.469 -18.827 24.820
+Bollinger Bands -0.077 0.029 2.503 -7.618 7.774 0.116 0.333 7.155 -19.145 27.250
+Trend Following 0.230 0.619 5.503 -8.115 9.297 -0.008 0.189 1.358 -19.500 20.400
+Turn of The Month -0.156 -0.095 2.881 -6.889 7.233 0.013 0.141 2.020 -15.871 16.862
+Predictor ARIMA 0.325 0.838 4.898 -9.111 9.8070.532 0.841 10.662-16.018 19.181XGBoost -0.108 -0.055 2.775 -6.676 7.077 0.116 0.3258.057-15.320 18.078
+RL
+A2C 0.421 0.795 4.620-4.428 5.149-0.004 -0.061 0.823 -12.55711.767
+PPO0.514 0.972 5.805-8.757 9.461 0.132 0.147 2.327-9.744 10.257
+SAC 0.402 0.810 3.527-4.821 5.0300.180 0.279 2.661-11.97914.210
+TD3 0.269 0.394 4.610 -5.442 5.992 0.130 0.334 0.695 -14.621 21.693
+LLM FinMem -0.228 0.483 4.061 -10.860 11.641 -0.292 0.135 -1.686 -20.809 24.948FinAgent 0.241 0.527 4.954 -10.268 11.502 -0.076 0.381 5.168 -15.563 22.565
+Table 4: Backtest performance under the Composite setup, using three different selection strategies across historical S&P 500
+constituents (2004–2024), including delisted symbols. Top in red and second-best in blue.
+To mitigate survivorship bias, we use historical constituent lists,
+specifically S&P 500 for US market, at each evaluation period’s start
+and explicitly include delisted symbols. To address data-snooping
+bias, we evaluate a large and diversified symbol universe: 91, 84,
+63, and 80 total distinct symbols forRandom Five,Momentum-
+based,Volatility-based selection, andFinCon Selection Agent
+respectively. These counts reflect all unique symbols encountered
+across rolling windows, where stocks are reselected in each window,
+preventing cherry-picking and short-horizon bias.
+Table 4 summarises these comprehensive evaluations. Results
+obtained through this unbiased and systematic approachfurther
+validate our previous findings from the selected-four evalua-
+tion. Specifically, both theRandom FiveandMomentum-based
+selections reinforce the conclusion that the previously claimed su-
+periority of LLM investors is largely driven by selective evaluation
+setups. For instance, in theRandom Fivesetup,Buy and Hold,ATR
+BandandARIMAoutperformFinMemandFinAgentin terms of risk-
+adjusted metrics. Similarly,ARIMAand simple rule-based strategies
+often perform better than LLM-based methods under theMomen-
+tum-based selection. In theVolatility-based selection, traditional
+methods dominate even more clearly:Buy and Holdachieves the
+highest Sharpe (0.703), Sortino (1.291), and AR (7.898%), whilePPO
+andARIMAagain show strong all-round performance. LLM-based
+methods lag behind, withFinAgentoffering moderate returns but
+lower Sharpe (0.241) and larger drawdowns. Notably, our reported
+LLM performances do not adjust for potential data leakage: given
+the use of pretrained models like GPT-4o, the LLMs may have seen
+parts of the data during training, but they still fail to outperform
+traditional strategies under fair evaluation, casting further doubt
+on their real-world advantage.
+Nevertheless, it is important to acknowledgeLLM-based strate-
+gies still show potential regarding absolute annual returns.
+For instance,FinAgentachieves the highest AR (13.950%) in the
+Momentum-based selection setup. However, the relatively weaker
+performance observed in SPR (0.104) and MMD metrics suggests
+Can LLM-based Financial Investing Strategies Outperform the Market in Long Run? KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea
+a clear need for improved risk management within LLM-driven
+approaches before they can be reliably adopted in practice.
+Moreover, by comparingBuy and Holdwith different selection
+strategies, we clearly identify the relative effectiveness of each se-
+lection strategy:Volatility Effectselection (Sharpe 0.703) outper-
+formsFinCon Selection Agent(0.389) andMomentum Factor
+(0.384), which in turn surpassRandom Five(0.315). RL-based meth-
+ods exhibit the clearest alignment with selection quality. Strategies
+likePPO,SAC, andTD3systematically achieve their best perfor-
+mance under theVolatilityselection and degrade under the other
+three. This suggestsRL methods are more dependent on the
+quality of the stock candidates.Among LLM strategies,FinAgent
+exhibits a greater dependency on selection quality thanFinMem.
+Overall, these results not only confirm our earlier insights but
+also underscore the critical importance of unbiased, systematic
+stock-selection methodologies for accurately assessing the true
+capabilities of LLM-based investing strategies.
+6.3 Statistical Validation and Behavioural
+Diagnostics of LLM Agents
+To validate our findings from the composite backtests and diagnose
+the underlying drivers of LLM agent performance, we conduct a
+unified statistical and behavioural analysis. First, we conduct paired
+t-tests comparingBuy and Hold,FinMem, andFinAgentacross both
+Selected 4(Table 3) andComposite(Table 4) setups. Second,
+we dissect the agents’ behavioural characteristics by examining
+their drawdown profiles, alpha (𝛼) and beta (𝛽) decomposition, and
+trading turnover across the different selection environments. These
+metrics are obtained by regressing the strategy’s excess returns
+against the market’s excess returns based on the Capital Asset
+Pricing Model (CAPM) [ 41]. The model is defined as: 𝑅𝑠−𝑅 𝑓 =
+𝛼+𝛽(𝑅 𝑚−𝑅 𝑓)+𝜖 , where𝑅𝑠 is the return of the strategy,𝑅𝑚 is
+the market return,𝑅𝑓 is the risk-free rate, and𝜖 is the idiosyncratic
+residual. In this model,𝛽 measures the strategy’s systematic risk or
+volatility relative to the market, while𝛼 represents the portion of
+the return not explained by market exposure, often considered a
+measure of strategy-specific skill.
+Setup B&H vs FinMem B&H vs FinAgent FinMem vs FinAgent
+Selective symbols, expanded period (Selected four; Table 3)
+TSLA 0.9370 0.7958 0.7891
+NFLX 0.0580 0.0304 0.1163
+AMZN 0.0178 0.1931 0.3674
+MSFT 0.0009 0.2857 0.5041
+Bias-mitigated (Composite; Table 4)
+Random 5 3.0e-6 7.7e-4 4.0e-3
+Momentum 4.0e-5 0.0117 0.2001
+Volatility Effect 4.0e-6 5.9e-4 3.8e-3
+Table 5: Paired t-test p-values comparingB&H,FinMem, and
+FinAgentunder Selected 4 and Composite setups.
+Table 5 reports t-tests and p-values for the previous results,
+testing the null hypothesis of equal performance distributions. Un-
+der the selective period, statistical significance is inconsistent and
+limited mostly to individual stocks. However, after mitigating bi-
+ases through the composite setup, the p-values drop substantially,
+indicating the market baseline (B&H) significantly outperforms
+both LLM strategies across all robust setups. Notably, whileFinA-
+genttends to outperformFinMemwhen biases are controlled, both
+still underperform simple market baselines. Furthermore, the be-
+havioural analysis in Table 6 reveals that this underperformance is
+rooted in a lack of genuine skill;neither LLM agent generates
+statistically significant alpha, with all measured p-values exceed-
+ing 0.34. This finding robustly supports our main thesis that the
+claimed superiority of these models does not hold under rigorous
+evaluation, aligning with the Efficient Market Hypothesis [37].
+A clear behavioural hierarchy emerges between the two agents.
+FinMemconsistently shows a more pathological trading profile,
+marked by excessive turnover and poor risk management. Its com-
+mission ratio is five to nine times higher thanFinAgent’s across
+both contexts, and its drawdown durations are substantially longer.
+This overtrading leads to persistent value destruction, reflected
+inFinMem’s negative alpha in all scenarios. In contrast,FinAgent
+follows a more restrained, though still unskilled, trading strategy.
+Appendix F provides a comparative analysis with visualisations to
+further highlight the behavioural differences betweenFinMemand
+FinAgentas supplementary evidence.
+These behaviours are directly modulated by the selection strat-
+egy, which acts as a powerful environmental filter. TheMomentum
+selectionstrategy elicits the most engaged market posture from the
+agents, prompting their highest𝛽 values.FinMem’s performance
+improves in this context relative to other environments, but it still
+yields a negative alpha of -1.34%. This is the only scenario where
+FinAgentproduces a large positive alpha of+6.57%. Although this
+result lacks statistical significance (p=0.35), it suggests that the
+LLMs’ primary strength may not be indiscoveringnovel signals but
+rather inexploitingstrong, pre-existing market trends. In contrast,
+theLow Volatilityenvironment takes a risk-averse posture. Here,
+FinMemremains ineffective with a -1.04% alpha and a very low 𝛽
+of 0.20.FinAgentalso becomes highly conservative, with its risk
+profile improving (e.g., its average drawdown duration falls to 38.71
+days) but at the cost of performance, generating a negative alpha.
+In summary, this unified analysis statistically validates the un-
+derperformance of LLM agents and reveals that their behaviour
+is not monolithic. It is highly dependent on the characteristics of
+the asset universe they operate within, reinforcing the need for
+bias-mitigated evaluation frameworks like FINSABER.
+Strategy Avg Max Avg Regular Alpha (%) Beta AlphaDrawdown (Days) Drawdown (Days) p-value
+Momentum Factor
+FinMem 210 80 -1.343 0.518 0.477
+FinAgent 150 59 6.571 0.758 0.345
+Volatility Effect
+FinMem 177 71 -1.036 0.199 0.430
+FinAgent 123 39 -0.196 0.354 0.368
+Table 6: Behavioural analysis of LLM timing strategies, high-
+lighting drawdown duration, alpha (𝛼) and beta (𝛽) decompo-
+sition, and trading turnover (commission ratio).
+KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea Weixian Waylon Li, Hyeonjun Kim, Mihai Cucuringu, and Tiejun Ma
+Buy And Hold
+SMA CrossWMA CrossATR Band
+Bollinger BandsTrend Following
+Turn Of The MonthARIMA PredictorXGBoost Predictor
+RL-A2CRL-DDPGRL-PPORL-PPORL-SACFinMemFinAgent
+Strategy
+Bull
+Sideways
+Bear
+Market Regime
+0.61 -0.56 -0.56 0.06 0.05 0.09 0.07 0.58 -0.04 0.26 0.22 0.30 0.30 0.22 -0.19 0.12
+0.48 -0.36 -0.36 0.16 0.08 -0.01 -0.06 0.34 -0.02 0.22 0.24 0.33 0.33 0.25 -0.10 0.19
+-0.28 0.15 0.02 0.04 -0.20 -0.35 0.12 0.19 0.13 -0.20 -0.00 -0.25 -0.25 -0.04 -0.97 -0.38
+ 0.5
+0.0
+0.5
+Avg Sharpe Ratio
+Figure 2: Average Sharpe ratio by regime for all benchmarking strategies. Green = strong, red = weak.
+7 Market Regime Analysis
+Another key question in evaluating LLM-based investing strate-
+gies is whether they adapt appropriately across varying market
+conditions. Financial markets exhibit time-varying predictability
+and uncertainty across different economic, and political regimes
+[30]. Some strategies may exploit these variations, while others
+may struggle to adapt. Distinct market environments—bull, bear,
+and sideways—present unique challenges and opportunities: bull
+markets reward aggressive positioning and high exposure, bear
+markets require effective risk management, and sideways markets
+test a strategy’s ability to navigate uncertainty in the absence of
+clear trends. By decomposing performance across these regimes, it
+is possible to determine whether strategies are overly conservative
+and miss opportunities during bullish periods, or excessively aggres-
+sive and incur significant losses during downturns. Understanding
+these regime-specific behaviours is essential for interpreting the
+strengths and weaknesses of LLM-based investing strategies [27].
+We label each calendar year based on the annual return of the
+S&P 500: 𝑅𝑦 = 𝑃𝑇−𝑃0𝑃0 , where 𝑃0 and𝑃𝑇 are the adjusted closing
+prices on the first and last trading days of year𝑦. A year is classified
+asbullif 𝑅𝑦≥+ 20%,bearif 𝑅𝑦≤− 20%, andsidewaysotherwise.
+The±20%threshold follows standard industry convention [55].
+To analyse regime-specific performance, we employ our com-
+posite setup using the three selection strategies outlined in §6.2.
+For each timing strategy, we retrieve the SPR within each 1-year
+window from Table 4. These are then averaged per {strategy,regime}
+pair to produce stable performance indicators across market condi-
+tions. Figure 2 illustrates the results, withgreenindicating strong
+SPR andredsignifying the opposite.
+Traditional rule-based and predictor-based methods still set the
+standard.ATR Band,Turn of the MonthandARIMAdeliver positive
+Sharpe in every regime, whileBuy and Hold, our passive yardstick,
+posts 0.61 in bulls, 0.48 in sideways markets and only -0.28 in bears.
+No active strategy surpasses this passive SPR in the bull regime,
+suggesting that many strategies, including the LLM ones, may
+struggle to fully capitalise on strong up-trends.
+RL algorithms sit in the middle.A2CandDDPGpick up part of
+the upside and limit losses;PPOandSACswing with volatility and
+underperformARIMAonce conditions turn.
+LLM strategies perform poorly.FinAgentrecords Sharpe 0.12
+in bulls and -0.38 in bears;FinMemgets -0.19 and -0.97. Both are
+too cautious when risk is rewarded and too aggressive when it is
+penalised.FinAgentis better, halving the bear-market shortfall rela-
+tive toBuy and Holdand keeping a small positive Sharpe in neutral
+conditions, but it still trails rule-based or predictor benchmark.
+These results suggest two directions for future LLM investors.
+First, trend-detection capabilities to ensure that the strategy can at
+least match passive equity beta during upward market phases. Sec-
+ond, incorporating explicit regime-aware risk controls that reduce
+exposure as volatility or drawdown risk increases. Balancing risk-
+taking and risk management, rather than simply increasing model
+size, appears the key to closing the gap with traditional methods.
+8 Findings and Takeaways
+Our investigation via the FINSABER framework offers several novel
+findings that challenge the prevailing narrative on LLM-based in-
+vestors and set a new baseline for future research.
+First, we find thatLLM-derived alpha is likely a methodolog-
+ical artefact of narrow, biased evaluations.The performance
+advantages reported in short-term, selective studies vanish under
+our bias-mitigated backtests, which reveal a consistent and statisti-
+cally significant failure to generate alpha (§6.3). This suggests that
+current LLMs do not overcome the Efficient Market Hypothesis
+[17] in reality, and that prior gains stemmed from survivorship and
+look-ahead biases rather than genuine market inefficiency.
+Second,model complexity does not equate to market com-
+petence.The scaling laws of natural language processing [ 29] do
+not translate effectively to financial markets, which impose intrin-
+sic limits on extractable signals [25]. We show that larger models
+do not reliably outperform smaller ones, and both are consistently
+bettered by simpler models like ARIMA on risk-adjusted metrics
+(Table 4). Without encoded financial logic, architectural complexity
+appears to add noise rather than value.
+Third, we diagnose “how” LLM agents fail, revealing afun-
+damental misalignment with market regimes.Our further
+analysis (§7, Appendix F) shows that agents are pathologically
+miscalibrated: they are too conservative in bull markets and too
+aggressive in bear markets. This behavioural flaw contradicts the
+Adaptive Markets Hypothesis [37], shifting the issue from merely
+Can LLM-based Financial Investing Strategies Outperform the Market in Long Run? KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea
+a lack of profitability to a more profound failure in the agents’
+decision-making policies.
+Synthesising these points, our work establishes that the primary
+barrier to successful LLM investors is not model scale, but alack
+of domain-aware financial logic. The path forward is design-
+ing smarter, more adaptive agents, and FINSABER provides the
+framework to rigorously test such designs, moving the field beyond
+flawed evaluations toward practical and robust financial agents.
+9 Conclusion
+We reassess the robustness of LLMtiming-based investing strategies
+usingFINSABER, a comprehensive framework that mitigates back-
+testing biases and extends both the evaluation horizon and symbol
+universe. Results show that the perceived superiority of LLM-based
+methods deteriorates under more robust and broader long-term
+testing. Regime analysis further reveals that current strategies miss
+upside in bull markets and incur heavy losses in bear markets due
+to poor risk control.
+We identify two priorities for future LLM-based investors: (1)
+enhancing uptrend detection to match passive exposure, and (2)
+including regime-aware risk controls to dynamically adjust aggres-
+sion. Addressing these dimensions rather than increasing frame-
+work complexity is the key to building practical, reliable strategies.
+A remaining limitation is potential data leakage, as some evalu-
+ation data may have been included in the pretraining corpora of
+proprietary LLMs and cannot be fully verified. However, any such
+leakage would bias results in favour of LLMs and therefore does
+not alter our central findings.
+Finally, our cost analysis (Appendix G) shows that large-scale
+LLM backtesting is financially intensive. Future work should pur-
+sue cost-efficient model designs and incorporate API costs into
+performance evaluation.
+Limitations
+There are several limitations to our current study. First, we did
+not individually tune the traditional rule-based strategies for each
+rolling evaluation window. Typically, applying domain-specific mar-
+ket insights to optimise parameters can significantly enhance the
+performance of these methods. However, we argue that our current
+configuration remains valid and effectively demonstrates the com-
+petitive disadvantage faced by LLM strategies. Indeed, tuning the
+parameters of traditional rule-based strategies would likely elevate
+their performance further, reinforcing rather than undermining our
+main conclusions.
+Second, our evaluation has not fully eliminated look-ahead bias.
+Pre-trained LLMs, due to their inherent training corpus, may inad-
+vertently contain stock-related information from historical periods
+overlapping our test sets. Despite this potential data leakage, the ob-
+served underperformance of LLM strategies strengthens our critical
+assessment. Explicitly addressing this look-ahead concern through
+controlled model training or careful exclusion of financial data from
+training corpora will be an important avenue for future research.
+Third, to ensure experiment reproducibility, we restricted our
+analysis to publicly available data, excluding proprietary sources
+such as private newsfeeds, earning transcripts, or expert analyses.
+Nonetheless, the FINSABER framework was deliberately designed
+to be modular and extensible, allowing researchers with access to
+private data to easily integrate additional information sources. Our
+primary goal remains providing a rigorous, long-term evaluation
+pipeline that minimises selective reporting. Researchers lacking pro-
+prietary data can fully replicate our results using openly accessible
+resources.
+Acknowledgements
+We thank the reviewers and the area chair for their useful feedback.
+The authors acknowledge the use of resources provided by the
+Edinburgh Compute and Data Facility5 (ECDF).
+References
+[1] David H. Bailey, Jonathan Michael Borwein, Marcos M. López de Prado, and
+Qiji Jim Zhu. 2015. The Probability of Backtest Overfitting.ERN: Econometric
+Modeling in Financial Economics (Topic)(2015).
+[2] David Blitz and Pim Vliet. 2007. The Volatility Effect: Lower Risk without Lower
+Return.The Journal of Portfolio Management34 (2007).
+[3] J. Bollinger. 2002.Bollinger on Bollinger Bands.
+[4] George Edward Pelham Box and Gwilym Jenkins. 1990.Time Series Analysis,
+Forecasting and Control.
+[5] Stephen J Brown, William Goetzmann, Roger G Ibbotson, and Stephen A Ross.
+1992. Survivorship bias in performance studies.The Review of Financial Studies
+5, 4 (1992), 553–580.
+[6] Mark M. Carhart. 1997. On Persistence in Mutual Fund Performance.The Journal
+of Finance52, 1 (1997), 57–82.
+[7] E.P. Chan. 2021.Quantitative Trading: How to Build Your Own Algorithmic Trading
+Business.
+[8] Tianqi Chen and Carlos Guestrin. 2016. XGBoost: A Scalable Tree Boosting
+System. InProceedings of the 22nd ACM SIGKDD International Conference on
+Knowledge Discovery and Data Mining, San Francisco, CA, USA, August 13-17,
+2016, Balaji Krishnapuram, Mohak Shah, Alexander J. Smola, Charu C. Aggarwal,
+Dou Shen, and Rajeev Rastogi (Eds.). 785–794.
+[9] Rama Cont. 2001. Empirical properties of asset returns: stylized facts and statisti-
+cal issues.Quantitative Finance1, 2 (2001), 223–236.
+[10] Victor DeMiguel, Lorenzo Garlappi, and Raman Uppal. 2007. Optimal Versus
+Naive Diversification: How Inefficient is the 1/N Portfolio Strategy?The Review
+of Financial Studies22, 5 (2007), 1915–1953.
+[11] Han Ding, Yinheng Li, Junhao Wang, and Hang Chen. 2024. Large Language
+Model Agent in Financial Trading: A Survey.
+[12] Qianggang Ding, Haochen Shi, and Bang Liu. 2024. TradExpert: Revolutionizing
+Trading with Mixture of Expert LLMs.
+[13] Yujie Ding, Shuai Jia, Tianyi Ma, Bingcheng Mao, Xiuze Zhou, Liuliu Li, and
+Dongming Han. 2023.Integrating Stock Features and Global Information via
+Large Language Models for Enhanced Stock Return Prediction. Papers 2310.05627.
+arXiv.org.
+[14] Binh Do and Robert Faff. 2010. Does simple pairs trading still work?Financial
+Analysts Journal66, 4 (2010), 83–95.
+[15] Zihan Dong, Xinyu Fan, and Zhiyuan Peng. 2024. FNSPID: A Comprehensive
+Financial News Dataset in Time Series. InProceedings of the 30th ACM SIGKDD
+Conference on Knowledge Discovery and Data Mining, KDD 2024, Barcelona, Spain,
+August 25-29, 2024, Ricardo Baeza-Yates and Francesco Bonchi (Eds.). 4918–4927.
+[16] Edwin J Elton, Martin J Gruber, and Christopher R Blake. 1996. Survivor bias and
+mutual fund performance.The review of financial studies9, 4 (1996), 1097–1120.
+[17] Eugene F Fama. 1970. Efficient capital markets.Journal of Finance25, 2 (1970),
+383–417.
+[18] George Fatouros, Kostas Metaxas, John Soldatos, and Manos Karathanassis. 2025.
+MarketSenseAI 2.0: Enhancing Stock Analysis through LLM Agents.
+[19] Georgios Fatouros, Konstantinos Metaxas, John Soldatos, and Dimosthenis Kyri-
+azis. 2024. Can Large Language Models Beat Wall Street? Unveiling the Potential
+of AI in Stock Selection.
+[20] Fuli Feng, Xiangnan He, Xiang Wang, Cheng Luo, Yiqun Liu, and Tat-Seng Chua.
+2019. Temporal Relational Ranking for Stock Prediction.ACM Trans. Inf. Syst.
+37, 2, Article 27 (2019), 30 pages.
+[21] CB Garcia and FJ Gould. 1993. Survivorship bias.Journal of Portfolio Management
+19, 3 (1993), 52.
+[22] Evan Gatev, William N. Goetzmann, and K. Geert Rouwenhorst. 2006. Pairs
+Trading: Performance of a Relative-Value Arbitrage Rule.The Review of Financial
+Studies19, 3 (2006), 797–827.
+[23] Mark Grinblatt and Sheridan Titman. 1989. Mutual fund performance: An analysis
+of quarterly portfolio holdings.Journal of business(1989), 393–416.
+5http://www.ecdf.ed.ac.uk/
+KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea Weixian Waylon Li, Hyeonjun Kim, Mihai Cucuringu, and Tiejun Ma
+[24] Taicheng Guo, Xiuying Chen, Yaqi Wang, Ruidi Chang, Shichao Pei, Nitesh V.
+Chawla, Olaf Wiest, and Xiangliang Zhang. 2024. Large Language Model Based
+Multi-agents: A Survey of Progress and Challenges. InProceedings of the Thirty-
+Third International Joint Conference on Artificial Intelligence, IJCAI 2024, Jeju,
+South Korea, August 3-9, 2024. 8048–8057.
+[25] Campbell Harvey and Yan Liu. 2013. Backtesting.SSRN Electronic Journal42
+(2013).
+[26] Yifan Hu, Yuante Li, Peiyuan Liu, Yuxia Zhu, Naiqi Li, Tao Dai, Shu tao Xia,
+Dawei Cheng, and Changjun Jiang. 2025. FinTSB: A Comprehensive and Practical
+Benchmark for Financial Time Series Forecasting.
+[27] Eddie Hui and Ka Kwan Kevin Chan. 2018. Optimal trading strategy during bull
+and bear markets for Hong Kong-listed stocks.International Journal of Strategic
+Property Management22 (2018), 381–402.
+[28] Jacques Joubert, Dragan Sestovic, Illya Barziy, Walter Distaso, and Marcos
+Lopez de Prado. 2024. The three types of backtests.A vailable at SSRN(2024).
+[29] Jared Kaplan, Sam McCandlish, Tom Henighan, Tom B. Brown, Benjamin Chess,
+Rewon Child, Scott Gray, Alec Radford, Jeffrey Wu, and Dario Amodei. 2020.
+Scaling Laws for Neural Language Models.
+[30] Jae H Kim, Abul Shamsuddin, and Kian-Ping Lim. 2011. Stock return predictabil-
+ity and the adaptive markets hypothesis: Evidence from century-long US data.
+Journal of Empirical Finance18, 5 (2011), 868–879.
+[31] Kemal Kirtac and Guido Germano. 2024. Sentiment trading with large language
+models.Finance Research Letters62 (2024), 105227.
+[32] Kelvin J. L. Koa, Yunshan Ma, Ritchie Ng, and Tat-Seng Chua. 2024. Learning
+to Generate Explainable Stock Predictions using Self-Reflective Large Language
+Models. InProceedings of the ACM on Web Conference 2024, WWW 2024, Singapore,
+May 13-17, 2024, Tat-Seng Chua, Chong-Wah Ngo, Ravi Kumar, Hady W. Lauw,
+and Roy Ka-Wei Lee (Eds.). 4304–4315.
+[33] Weixian Waylon Li and Tiejun Ma. 2025. Learn to Rank Risky Investors: A Case
+Study of Predicting Retail Traders’ Behaviour and Profitability.ACM Trans. Inf.
+Syst.44, 1, Article 15 (Nov. 2025), 33 pages. doi:10.1145/3768623
+[34] Xiao-Yang Liu, Ziyi Xia, Hongyang Yang, Jiechao Gao, Daochen Zha, Ming Zhu,
+Christina Dan Wang, Zhaoran Wang, and Jian Guo. 2024. Dynamic Datasets and
+Market Environments for Financial Reinforcement Learning.Machine Learning -
+Springer Nature(2024).
+[35] Xiao-Yang Liu, Hongyang Yang, Jiechao Gao, and Christina Dan Wang. 2021.
+FinRL: Deep reinforcement learning framework to automate trading in quantita-
+tive finance.ACM International Conference on AI in Finance (ICAIF)(2021).
+[36] Xiao-Yang Liu, Hongyang Yang, Jiechao Gao, and Christina Dan Wang. 2022.
+FinRL: deep reinforcement learning framework to automate trading in quantita-
+tive finance. InProceedings of the Second ACM International Conference on AI in
+Finance(Virtual Event)(ICAIF ’21). Article 1, 9 pages.
+[37] Andrew Lo. 2004. The Adaptive Markets Hypothesis: Market Efficiency from
+an Evolutionary Perspective.The Journal of Portfolio Management30, 5 (2004),
+15–29.
+[38] Alejandro Lopez-Lira and Yuehua Tang. 2023. Can ChatGPT Forecast Stock Price
+Movements? Return Predictability and Large Language Models.
+[39] John J. McConnell and Wei Xu. 2008. Equity Returns at the Turn of the Month.
+Financial Analysts Journal64, 2 (2008), 49–64.
+[40] C Muller and M Ward and. 2010. Momentum Effects in Country Equity Indices.
+Studies in Economics and Econometrics34, 1 (2010), 111–127.
+[41] William F. Sharpe. 1964. Capital Asset Prices: A Theory of Market Equilibrium
+Under Conditions of Risk.The Journal of Finance19, 3 (1964), 425–442.
+[42] Heyuan Wang, Tengjiao Wang, Shun Li, Jiayi Zheng, Shijie Guan, and Wei
+Chen. 2022. Adaptive Long-Short Pattern Transformer for Stock Investment
+Selection. InProceedings of the Thirty-First International Joint Conference on
+Artificial Intelligence, IJCAI 2022, Vienna, Austria, 23-29 July 2022, Luc De Raedt
+(Ed.). 3970–3977.
+[43] Meiyun Wang, Kiyoshi Izumi, and Hiroki Sakaji. 2024. LLMFactor: Extracting
+Profitable Factors through Prompts for Explainable Stock Movement Prediction.
+[44] Saizhuo Wang, Hao Kong, Jiadong Guo, Fengrui Hua, Yiyan Qi, Wanyun Zhou,
+Jiahao Zheng, Xinyu Wang, Lionel M. Ni, and Jian Guo. 2025. QuantBench:
+Benchmarking AI Methods for Quantitative Investment.
+[45] Cole Wilcox, Eric Crittenden, and Blackstar Funds. 2005. Does Trend Following
+Work on Stocks. InThe Technical Analyst, Vol. 14. 1–19.
+[46] Ruoxu Wu. 2024. Portfolio Performance Based on LLM News Scores and Related
+Economical Analysis.SSRN Electronic Journal(2024).
+[47] Yijia Xiao, Edward Sun, Di Luo, and Wei Wang. 2024. TradingAgents: Multi-
+Agents LLM Financial Trading Framework.ArXiv preprintabs/2412.20138 (2024).
+[48] Qianqian Xie, Weiguang Han, Zhengyu Chen, Ruoyu Xiang, Xiao Zhang, Yueru
+He, Mengxi Xiao, Dong Li, Yongfu Dai, Duanyu Feng, Yijing Xu, Haoqiang
+Kang, Ziyan Kuang, Chenhan Yuan, Kailai Yang, Zheheng Luo, Tianlin Zhang,
+Zhiwei Liu, Guojun Xiong, Zhiyang Deng, Yuechen Jiang, Zhiyuan Yao, Haohang
+Li, Yangyang Yu, Gang Hu, Jiajia Huang, Xiao-Yang Liu, Alejandro Lopez-Lira,
+Benyou Wang, Yanzhao Lai, Hao Wang, Min Peng, Sophia Ananiadou, and Jimin
+Huang. 2024. FinBen: A Holistic Financial Benchmark for Large Language Models.
+InAdvances in Neural Information Processing Systems 38: Annual Conference on
+Neural Information Processing Systems 2024, NeurIPS 2024, Vancouver, BC, Canada,
+December 10 - 15, 2024, Amir Globersons, Lester Mackey, Danielle Belgrave,
+Angela Fan, Ulrich Paquet, Jakub M. Tomczak, and Cheng Zhang (Eds.).
+[49] Hongyang Yang, Xiao-Yang Liu, and Christina Dan Wang. 2023. FinGPT: Open-
+Source Financial Large Language Models.FinLLM Symposium at IJCAI 2023
+(2023).
+[50] Hongyang Yang, Boyu Zhang, Neng Wang, Cheng Guo, Xiaoli Zhang, Likun Lin,
+Junlin Wang, Tianyu Zhou, Mao Guan, Runjia Zhang, and Christina Dan Wang.
+2024. FinRobot: An Open-Source AI Agent Platform for Financial Applications
+using Large Language Models.
+[51] Yangyang Yu, Haohang Li, Zhi Chen, Yuechen Jiang, Yang Li, Denghui Zhang,
+Rong Liu, Jordan W. Suchow, and Khaldoun Khashanah. 2023. FinMem: A
+Performance-Enhanced LLM Trading Agent with Layered Memory and Character
+Design.
+[52] Yangyang Yu, Zhiyuan Yao, Haohang Li, Zhiyang Deng, Yuechen Jiang, Yupeng
+Cao, Zhi Chen, Jordan W. Suchow, Zhenyu Cui, Rong Liu, Zhaozhuo Xu, Denghui
+Zhang, Koduvayur Subbalakshmi, Guojun Xiong, Yueru He, Jimin Huang, Dong
+Li, and Qianqian Xie. 2024. FinCon: A Synthesized LLM Multi-Agent System
+with Conceptual Verbal Reinforcement for Enhanced Financial Decision Making.
+InAdvances in Neural Information Processing Systems 38: Annual Conference on
+Neural Information Processing Systems 2024, NeurIPS 2024, Vancouver, BC, Canada,
+December 10 - 15, 2024, Amir Globersons, Lester Mackey, Danielle Belgrave,
+Angela Fan, Ulrich Paquet, Jakub M. Tomczak, and Cheng Zhang (Eds.).
+[53] Haohan Zhang, Fengrui Hua, Chengjin Xu, Hao Kong, Ruiting Zuo, and Jian Guo.
+2023. Unveiling the Potential of Sentiment: Can Large Language Models Predict
+Chinese Stock Price Movements?
+[54] Wentao Zhang, Lingxuan Zhao, Haochong Xia, Shuo Sun, Jiaze Sun, Molei Qin,
+Xinyi Li, Yuqing Zhao, Yilei Zhao, Xinyu Cai, Longtao Zheng, Xinrun Wang,
+and Bo An. 2024. A Multimodal Foundation Agent for Financial Trading: Tool-
+Augmented, Diversified, and Generalist. InProceedings of the 30th ACM SIGKDD
+Conference on Knowledge Discovery and Data Mining, KDD 2024, Barcelona, Spain,
+August 25-29, 2024, Ricardo Baeza-Yates and Francesco Bonchi (Eds.). 4314–4325.
+[55] Jason Zweig. 2019. Where Did This ‘Bull Market’ Come From, Anyway?The
+Wall Street Journal(2019).
+A Data Collection
+Our multi-source data comprises daily stock prices, daily financial
+news, and 10-Q and 10-K filings.
+Daily Stock Prices.We collect daily price data for over 7,000
+U.S. equities spanning from 2000 to 2024. Additionally, our dataset
+includes delisted symbols that were historically part of the S&P
+500 index, based on the archived constituent list. This inclusion
+enhances the historical completeness of our dataset and mitigates
+survivorship bias within the context of index-based evaluations.
+Financial News.The financial news dataset, initially compiled
+by Dong et al. [15], comprises 15.7 million records pertaining to
+4,775 S&P 500 companies, spanning the years 1999 to 2023. We have
+organised the news by aligning it with the respective companies
+and indexing it by date.
+10K & 10Q Filings.We collect 10-K and 10-Q filings for companies
+included in the Russell 3000 index, sourced from the US Securities
+and Exchange Commission (SEC) EDGAR database. These filings
+are publicly available and accessed via the SEC-API6, which allows
+programmatic retrieval and parsing. We preprocess the HTML doc-
+uments and segment them into standardized sections, such as Risk
+Factors, MD&A, and Financial Statements, to support fine-grained
+analysis. Each filing is indexed by company identifier and filing
+date to enable alignment with other datasets.
+Extensibility.All datasets used in this framework can be seam-
+lessly substituted with proprietary or higher-resolution alternatives
+6https://sec-api.io/
+Can LLM-based Financial Investing Strategies Outperform the Market in Long Run? KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea
+if available. Researchers may incorporate paid datasets such as pre-
+mium financial news (e.g., Alpaca Markets7, Refinitiv8), earnings
+call transcripts, analyst research reports, or other modalities in-
+cluding video or audio. Integration is supported through the imple-
+mentation of a custom dataset class, allowing modular and flexible
+replacement of any data stream within the pipeline.
+B FinSABER Strategies Base
+B.1 Timing-based Strategies
+Open-Source LLM investors.This category includesFinMem[ 51]
+andFinRobot[ 50]. We acknowledge other works, such asFinCon
+[52] and MarketSenseAI [18], but they are not (yet) open-source,
+which prevents us from generating backtesting results.
+Traditional Rule-Based (Indicator-Based) Strategies.We imple-
+ment and cover several well-known traditional rule-based (indicator-
+based) investing strategies, such asBuy and Hold,Simple Moving
+A verage Crossover,Weighted Moving A verage Crossover,ATR Band,
+Bollinger Bands[ 3],Trend Following[ 45], andTurn of the Month
+[39]. These strategies typically rely on one or multiple technical
+indicators or domain-based rules to generate timely buy/sell signals,
+aiming to exploit identifiable market patterns or anomalies.
+It is noteworthy thattraditional strategies are often over-
+looked, with many existing works focusing solely onBuy and
+Hold. However, other established strategies listed above have also
+endured over time and demonstrated their effectiveness.
+ML/DL Forecaster-Based Strategies.In contrast to fixed rules or
+indicator-based triggers, these strategies rely on data-driven models
+(statistical or neural network forecasters) to predict future price
+movements. Specifically, they buy or hold if an uptrend is indicated
+and sell (or go short) otherwise. This can be viewed as a relatively
+naive application of ML/DL forecasters, but it is widely used as a
+benchmark method for such models. Although one could consider
+the forecast output as a type of “indicator”, the reliance on predic-
+tive algorithms capable of uncovering complex patterns sets these
+methods apart from purely rule-based approaches. We include the
+well-known ARIMA [4] and XGBoost [8] in this category and also
+cover forecasters based on LLMs, but these are not LLM investors.
+RL-Based Strategies.We also implement widely used RL algo-
+rithms for financial markets, including Advantage Actor-Critic
+(A2C), Proximal Policy Optimisation (PPO), Twin Delayed Deep
+Deterministic Policy Gradient (TD3), and Soft Actor-Critic (SAC),
+utilising the FinRL framework [34, 36]. Each agent learns investing
+policies by interacting with a simulated trading environment based
+on the OpenAI Gym API, using real historical market data.
+B.2 Selection-based Strategies
+This section details the implementation of the primary selection
+strategies used in our composite backtesting framework. Each selec-
+tor operates on the historical S&P 500 constituents available at the
+start of a given rolling-window period to produce a list of tickers
+for the timing-based strategies.
+7https://alpaca.markets/
+8https://www.lseg.com/en
+Random Five.This strategy serves as a simple baseline for per-
+formance comparison. At the beginning of each evaluation period,
+it selects five stocks at random, without replacement, from the list
+of all available historical S&P 500 constituents for that period.
+Momentum Factor.Following the well-documented momen-
+tum factor [ 40], this strategy selects the stocks with the high-
+est recent price appreciation. For each candidate stock, we cal-
+culate a momentum score based on its historical price data. Specif-
+ically, the score is the percentage return over a “momentum pe-
+riod” (e.g., 100 trading days), but we exclude the most recent “skip
+period” (e.g., 21 trading days) from the calculation. This practice
+is common in momentum strategies to avoid the “short-term re-
+versal” effect [ 6]. The score for a given stock is calculated as:
+Momentum Score=(Price 𝑡−skip_period)/(Price 𝑡−momentum_period)−1.
+𝑡 is the selection date. All candidate stocks are then ranked in de-
+scending order by this score, and the top-𝑘 stocks (e.g.,𝑘= 5) are
+selected.
+Volatility Effect.This strategy is based on the “volatility effect”
+anomaly, where low-volatility stocks have been empirically shown
+to generate higher risk-adjusted returns [ 2]. For each candidate
+stock, we measure its historical volatility over a recent “look-back
+period” (e.g., 21 trading days). The volatility is calculated as the
+standard deviation of its weekly log returns within this period.
+We use weekly returns (ln(𝑃 𝑡/𝑃𝑡−5)) rather than daily returns to
+smooth out daily noise. Candidate stocks are then ranked in ascend-
+ing order by their calculated volatility, and the top-𝑘 stocks with
+the lowest volatility are selected for the portfolio.
+FinCon Selection Agent.Unlike the single-factor methods
+above, theFinCon Selection Agent[ 52] aims to construct adiver-
+sified portfolioby explicitly considering both performance and
+inter-stock correlation. Its selection process is more sophisticated:
+(1) Metric Calculation:For all candidate stocks over a “look-
+back years” period (e.g., 2 years), the agent calculates daily
+returns to derive a full correlation matrix and a suite of
+performance metrics for each stock, including the Sharpe
+ratio.
+(2) Primary Selection:The agent first ranks each stock using
+a combined score that balances risk-adjusted return (Sharpe
+ratio) and its potential for diversification (low average cor-
+relation with all other stocks,𝜌). The score is calculated as:
+Score=Sharpe Ratio×( 1−𝜌) The top-𝑘 stocks based on
+this score form the initial portfolio.
+(3) Diversification Check & Fallback:The agent then as-
+sesses the average correlationwithinthe selected 𝑘-stock
+portfolio. If this internal correlation is above a predefined
+threshold (e.g., 0.7), it indicates poor diversification. In this
+case, the agent discards the initial selection and triggers
+a fallback algorithm. This second algorithm uses a greedy,
+diversification-first approach: it starts with the single stock
+with the highest Sharpe ratio and then iteratively adds the
+available stock that has the lowest average correlation to the
+already-selected members until a𝑘-stock portfolio is formed.
+KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea Weixian Waylon Li, Hyeonjun Kim, Mihai Cucuringu, and Tiejun Ma
+C Evaluation Metrics
+We group evaluation metrics into three categories, each targeting
+a distinct aspect of strategy performance. In the following defini-
+tions,𝑇 represents the total number of trading days, and𝑅𝑡 is the
+portfolio’s return on day𝑡.
+C.1 Return Metrics
+Annualised Return (AR).Measures the geometric average return
+of the portfolio on a yearly basis. It is calculated from the total
+cumulative return𝐶as:
+𝑅annual =(1+𝐶)
+252
+𝑇 −1(1)
+where 252 is the approximate number of trading days in a year.
+Cumulative Return (CR).Measures the total return of the portfo-
+lio over the entire test period. It is calculated as:
+𝐶=
+𝑇Ö
+𝑡=1
+(1+𝑆 𝑡·𝑅 𝑚,𝑡)−1(2)
+where𝑆𝑡 is the position taken by the strategy on day𝑡 (+1 for long,
+0 for neutral) and𝑅 𝑚,𝑡 is the market return of the asset on day𝑡.
+C.2 Risk Metrics
+Annualised Volatility (A V).Measures the standard deviation of
+the portfolio’s returns, scaled to a yearly figure. It is defined as:
+𝜎annual =𝜎 daily×
+√
+252(3)
+where𝜎daily is the standard deviation of the portfolio’s daily returns,
+𝑅𝑡 .
+Maximum Drawdown (MDD).Measures the largest peak-to-trough
+decline in portfolio value, representing the worst-case loss from a
+previous high. It is defined as:
+MDD=max
+𝑡∈[1,𝑇]
+𝑃𝑡−𝑉 𝑡
+𝑃𝑡
+
+(4)
+where𝑉𝑡 is the portfolio value on day𝑡, and𝑃𝑡 is the peak portfolio
+value recorded up to day𝑡(𝑃 𝑡 =max 𝑖∈[1,𝑡] 𝑉𝑖).
+C.3 Risk-adjusted Performance Metrics
+Sharpe Ratio (SPR).Measures the excess return of the portfolio
+per unit of its total volatility. It is calculated as:
+SPR= 𝑅𝑡−𝑅 𝑓 ,daily
+𝜎daily
+×
+√
+252(5)
+Sortino Ratio (STR).Similar to the Sharpe ratio, but it only pe-
+nalises for downside volatility, measuring the excess return per unit
+of downside risk. It is defined as:
+STR= 𝑅𝑡−𝑅 𝑓 ,daily
+𝜎downside
+×
+√
+252(6)
+where𝑅𝑡 is the average daily portfolio return,𝑅𝑓 ,daily is the daily
+risk-free rate (i.e., the annual rate divided by 252), and𝜎downside is
+the standard deviation of only the negative daily returns.
+D Extra Results on Selective Symbols
+Tables 2 and 7 further substantiate our findings by highlighting
+the performance instability ofFinMemandFinAgentwhen extend-
+ing evaluation periods even marginally. Specifically, extending the
+evaluation by just two months beyond the originally reported peri-
+ods [51] results in notable inconsistencies in critical performance
+metrics. It should be noted that the results for the LLM strategies
+are retrieved from Yu et al. [52], while the traditional rule-based
+results presented are based on our implementations.
+For instance,FinMemexhibited a drastic change in cumulative
+returns for MSFT from a reported 23.261% down to -22.036%, and a
+reduction in Sharpe ratios from 1.440 to -1.247. Similarly, for NFLX,
+the Sharpe ratio forFinMemshifted dramatically from a reported
+2.017 to -0.478. These examples underscore the sensitivity of LLM-
+based investing strategies to minor shifts in market conditions and
+reinforce our argument about the necessity of comprehensive and
+temporally robust evaluations to accurately assess the reliability
+and generalisability of these models.
+E Technical Details
+FINSABER Implementation.The backtesting framework and tra-
+ditional rule-based strategies in FINSABER are implemented using
+BackTrader9 and Papers With Backtest10. Reinforcement learning-
+based methods are implemented using FinRL [35]. FINSABER sup-
+ports two operational modes: “LLM” mode and “BT” mode. The
+“LLM” mode is tailored for strategies that leverage multi-modal in-
+puts, including financial news and regulatory filings. In contrast, the
+“BT” mode is built directly on BackTrader, offering robust support
+for traditional rule-based strategies while maintaining a familiar
+interface to facilitate easy migration from standard BackTrader
+workflows.
+Experiment Rolling Windows.We apply a rolling-window evalua-
+tion setup to ensure temporal robustness and reduce data-snooping
+bias. For theSelected 4evaluation, we use a 2-year rolling window
+with a 1-year step, and allow strategies to use up to 3 years of
+prior data for training. For theCompositesetup, we adopt a more
+frequent rebalancing scheme with a 1-year rolling window and a
+1-year step, allowing up to 2 years of prior data. This adjustment re-
+flects the observation that rebalancing every two years may be too
+infrequent to capture changing market dynamics. All experiments
+span the benchmark period from 2004 to 2024.
+Parameters of Strategies.Table 8 summarises the key hyperpa-
+rameters used for each benchmark strategy in our experiments.
+These settings are largely drawn from standard defaults commonly
+used in the public implementations. For traditional rule-based strate-
+gies, optimal parameter selection often requires domain expertise
+or practitioner experience. Our goal is not to optimise each strat-
+egy’s absolute performance, but to provide a fair and consistent
+baseline under a unified evaluation framework. We encourage fu-
+ture researchers to explore parameter optimisation techniques (e.g.,
+grid search, Bayesian tuning) if desired.
+9https://www.backtrader.com/
+10https://paperswithbacktest.com/
+Can LLM-based Financial Investing Strategies Outperform the Market in Long Run? KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea
+TSLA AMZN NIO MSFT
+Type Strategy SPR CR MDD SPR CR MDD SPR CR MDD SPR CR MDD
+FinCon Selection (2022-10-05 to 2023-06-10)
+Buy And Hold 0.247 2.056 -54.508 0.150 2.193 -32.177 -0.858 -51.569 -53.563 1.071 32.629 -14.452
+SMA Cross -0.151 -3.973 -23.1730.599 13.731-18.910 0.810 22.047-17.976 1.641 32.057-8.746
+WMA Cross 1.104 32.058 -18.492 0.513 11.765 -21.030 -0.771 -9.412 -18.732 1.526 30.344 -8.883
+ATR Band -0.554 -22.136 -39.599 0.494 11.007-15.8420.681 24.684 -21.229 0.827 12.979-7.709
+Bollinger Bands -0.249 -12.756 -44.655 -0.381 -7.105 -20.6150.940 25.476 -16.623 1.75931.619-3.475
+Rule
+Based
+Turn of The Month 0.928 27.850-11.6420.123 3.487-14.892 0.874 31.344-17.995 0.407 7.744 -11.955
+FinGPT 0.044 1.549 -42.400 -1.810 -29.811 -29.671 -0.121 -4.959 -37.344 1.315 21.535 -16.503
+FinMem1.552 34.624 -15.674-0.773 -18.011 -36.825 -1.180 -48.437 -64.144 -1.247 -22.036 -29.435
+FinAgent 0.271 11.960 -55.734 -1.493 -24.588 -33.074 0.051 0.933 -19.181 -1.247 -27.534 -39.544LLM
+FinCon1.972 82.871-29.7270.904 24.848-25.889 0.335 17.461 -40.647 1.538 31.625 -15.010
+AAPL GOOG NFLX COIN
+Type Strategy SPR CR MDD SPR CR MDD SPR CR MDD SPR CR MDD
+FinCon Selection (2022-10-05 to 2023-06-10)
+Buy And Hold 0.906 24.558 -19.5080.683 20.884-20.2781.594 77.367-20.421 0.024 -23.761 -54.402
+SMA Cross 1.423 21.054-6.0300.382 8.497 -17.035 -0.855 -8.393 -18.545 0.232 1.286 -35.559
+WMA Cross1.648 25.257-6.114 0.635 13.659 -14.985 -1.009 -9.479 -18.531 0.087 -7.461 -40.883
+ATR Band 0.241 4.522-5.1590.067 2.616 -13.522 0.522 10.739-12.231 0.777 25.169 -22.906
+Bollinger Bands - - - 0.365 7.526 -13.522 -0.182 -0.710 -13.244 -0.705 -24.371 -40.733
+Rule
+Based
+Turn of The Month 0.098 3.337 -12.498 0.343 7.188-13.5190.987 18.942-10.641-0.020 -8.999-33.895
+FinGPT 1.161 20.321 -16.759 0.011 0.242 -26.984 0.472 11.925 -20.201 -1.807 -99.553 -74.967
+FinMem 0.994 12.397 -11.268 0.018 0.311 -21.503 -0.478 -10.306 -27.692 0.017 0.811 -50.390
+FinAgent 1.041 20.757 -19.896 -1.024 -7.440-10.3601.960 61.303 -20.926 -0.106 -5.971 -56.882LLM
+FinCon1.597 27.352-15.2661.052 25.077-17.5302.370 69.239-20.7920.825 57.045-42.679
+Table 7: Backtest performance of traditional rule-based (indicator-based) strategies andFinConover the selective period
+(2022-10-05 to 2023-06-10), as presented in Yu et al . [52], evaluated using four metrics: cumulative return (CR), Sharpe ratio
+(SPR), annual volatility (A V), and maximum drawdown (MDD). The best metrics are highlighted in red, while the second best
+are marked in blue. “-” metrics across the board indicate no trade signals were triggered.
+Strategies Parameters
+SMA Cross short_window=10, long_window=20
+WMA Cross short_window=10, long_window=20
+ATR Band atr_period=14, multiplier=1.5
+Bollinger Band period=20, devfactor=2.0
+Trend Following atr_period=10, period=20
+Turn of the Month before_end_of_month_days=5, after_start_of_month_business_days=3
+ARIMA order=(5,1,0)
+XGBoost num_boost_round=10, n_estimators=1000
+RL-A2C learning_rate=1e-5, ent_coef=0.1, vf_coef=0.5, max_grad_norm=0.5, gae_lambda=0.95, gamma=0.99
+RL-PPO batch_size=64, learning_rate=2.5e-4, ent_coef=0.1, clip_range=0.2, gae_lambda=0.95, gamma=0.99
+RL-SAC learning_rate=2e-2, buffer_size=1000000, batch_size=256, learning_starts=100, ent_coef=0.1, tau=0.005, gamma=0.99, action_noise="normal"
+RL-TD3 learning_rate=3e-2, buffer_size=1000000, tau=0.005, gamma=0.99, policy_delay=2, target_policy_noise=0.5, target_noise_clip=0.5, action_noise="normal"
+FinMem model=gpt-4o-mini, top_k=3, embedding_model=text-embedding-ada-002, chunk_size=5000
+FinAgent model=gpt-4o-mini, trader_preference=aggressive_trader, top_k=5, previous_action_look_back_days=14
+Table 8: Default parameter settings for benchmark strategies.
+F Comparative Drawdown Analysis via
+Underwater Plots
+This appendix provides a visual analysis of strategy risk profiles
+throughunderwater plots. An underwater plot visualises the
+drawdown of a portfolio over time, offering an intuitive way to
+assess the depth, duration, and frequency of its losses.
+The plots are derived by calculating the percentage loss of a port-
+folio’s equity curve from its running maximum value (its previous
+peak). At any given point in time, the drawdown𝐷𝑡 is calculated
+as:𝐷 𝑡 =(Current Value 𝑡−Previous Peak 𝑡)/Previous Peak𝑡 .
+A value of 0% indicates the portfolio is at a new all-time high,
+while a negative value shows how far it is “underwater”. When
+interpreting the plots, two key features should be considered:
+KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea Weixian Waylon Li, Hyeonjun Kim, Mihai Cucuringu, and Tiejun Ma
+2013-01 2013-03 2013-05 2013-07 2013-09 2013-11 2014-01
+Date
+8
+6
+4
+2
+0
+Drawdown (%)
+DOV-2013-2014
+FinMemStrategy
+FinAgentStrategy
+Buy and Hold (SPX)
+2013-01 2013-03 2013-05 2013-07 2013-09 2013-11 2014-01
+Date
+25
+20
+15
+10
+5
+0
+Drawdown (%)
+WHR-2013-2014
+FinMemStrategy
+FinAgentStrategy
+Buy and Hold (SPX)
+2013-01 2013-03 2013-05 2013-07 2013-09 2013-11 2014-01
+Date
+16
+14
+12
+10
+8
+6
+4
+2
+0
+Drawdown (%)
+DXC-2013-2014
+FinMemStrategy
+FinAgentStrategy
+Buy and Hold (SPX)
+2019-01 2019-03 2019-05 2019-07 2019-09 2019-11 2020-01
+Date
+10
+8
+6
+4
+2
+0
+Drawdown (%)
+KO-2019-2020
+FinMemStrategy
+FinAgentStrategy
+Buy and Hold (SPX)
+2019-01 2019-03 2019-05 2019-07 2019-09 2019-11 2020-01
+Date
+50
+40
+30
+20
+10
+0
+Drawdown (%)
+ULTA-2019-2020
+FinMemStrategy
+FinAgentStrategy
+Buy and Hold (SPX)
+2023-01 2023-03 2023-05 2023-07 2023-09 2023-11 2024-01
+Date
+16
+14
+12
+10
+8
+6
+4
+2
+0
+Drawdown (%)
+APA-2023-2024
+FinMemStrategy
+FinAgentStrategy
+Buy and Hold (SPX)
+2008-01 2008-03 2008-05 2008-07 2008-09 2008-11 2009-01
+Date
+50
+40
+30
+20
+10
+0
+Drawdown (%)
+AEE-2008-2009
+FinMemStrategy
+FinAgentStrategy
+Buy and Hold (SPX)
+2008-01 2008-03 2008-05 2008-07 2008-09 2008-11 2009-01
+Date
+80
+60
+40
+20
+0
+Drawdown (%)
+CNX-2008-2009
+FinMemStrategy
+FinAgentStrategy
+Buy and Hold (SPX)
+2008-01 2008-03 2008-05 2008-07 2008-09 2008-11 2009-01
+Date
+70
+60
+50
+40
+30
+20
+10
+0
+Drawdown (%)
+DE-2008-2009
+FinMemStrategy
+FinAgentStrategy
+Buy and Hold (SPX)
+2004-01 2004-03 2004-05 2004-07 2004-09 2004-11 2005-01
+Date
+17.5
+15.0
+12.5
+10.0
+7.5
+5.0
+2.5
+0.0
+Drawdown (%)
+NCR-2004-2005
+FinMemStrategy
+FinAgentStrategy
+Buy and Hold (SPX)
+2009-01 2009-03 2009-05 2009-07 2009-09 2009-11 2010-01
+Date
+30
+25
+20
+15
+10
+5
+0
+Drawdown (%)
+FDO-2009-2010
+FinMemStrategy
+FinAgentStrategy
+Buy and Hold (SPX)
+2012-01 2012-03 2012-05 2012-07 2012-09 2012-11 2013-01
+Date
+20.0
+17.5
+15.0
+12.5
+10.0
+7.5
+5.0
+2.5
+0.0
+Drawdown (%)
+MSFT-2012-2013
+FinMemStrategy
+FinAgentStrategy
+Buy and Hold (SPX)
+2016-01 2016-03 2016-05 2016-07 2016-09 2016-11 2017-01
+Date
+8
+6
+4
+2
+0
+Drawdown (%)
+SYY-2016-2017
+FinMemStrategy
+FinAgentStrategy
+Buy and Hold (SPX)
+2018-01 2018-03 2018-05 2018-07 2018-09 2018-11 2019-01
+Date
+40
+35
+30
+25
+20
+15
+10
+5
+0
+Drawdown (%)
+DLTR-2018-2019
+FinMemStrategy
+FinAgentStrategy
+Buy and Hold (SPX)
+2020-01 2020-03 2020-05 2020-07 2020-09 2020-11 2021-01
+Date
+40
+35
+30
+25
+20
+15
+10
+5
+0
+Drawdown (%)
+PAYX-2020-2021
+FinMemStrategy
+FinAgentStrategy
+Buy and Hold (SPX)
+Figure 3: Comparative underwater plots for the FinMem (blue) and FinAgent (red) strategies against the Buy and Hold (SPX)
+benchmark across individual stocks selected in the Composite setup. The plots are grouped by the market regime of the period
+shown: bull markets (top two rows), bear market (third row), and sideways markets (bottom two rows).
+• Depth:The magnitude of the drawdown, indicated by how
+low the line drops on the y-axis. Deeper drawdowns repre-
+sent larger losses and greater risk.
+• Duration:The length of time the line stays below the 0%
+axis. Longer durations represent slower recoveries and more
+prolonged periods of underperformance for the investor.
+A superior strategy will exhibit shallower and briefer drawdowns
+compared to its benchmark.
+The visual case studies shown in Figure 3 complement the ag-
+gregated quantitative results in the main paper, offering a granular
+perspective on the agents’ behavioural patterns under different
+market conditions.
+Bull Markets.The top two rows of the figure display strategy
+performance during bull market years, revealing a stark diver-
+gence in the agents’ approaches. TheFinAgentstrategy (red) some-
+times exhibits anoverly conservative posture, as seen in KO
+(2019-2020) and APA (2023-2024) . Its drawdowns are shallower
+than the benchmark’s, or it may not trigger any trading activities.
+While this appears safe, it visually confirms the low beta values
+from our quantitative analysis and indicates a missed opportunity
+to capitalise on market gains. However, this risk-averse behaviour
+is fragile; in the case of ULTA (2019-2020) ,FinAgentexperiences
+a catastrophic drawdown, revealing its risk model to be unreliable
+and poorly calibrated.
+In contrast, theFinMemstrategy (blue) consistentlyfails to
+manage single-stock volatility. In most bull-market cases (DOV,
+WHR, DXC), its drawdowns are significantly deeper and more pro-
+longed thanFinAgent’s. This demonstrates an inability to handle
+the inherent risk of the underlying asset, leading to the significant
+underperformance identified in the main paper.
+Bear Markets.The third row, depicting the 2008 Global Finan-
+cial Crisis, provides the most critical insight into the agents’ flaws.
+While a single stock is expected to be more volatile than the in-
+dex during a crash, the LLM strategies, particularlyFinMem,cata-
+strophically amplify this downside risk. For DE, theFinMem
+strategy’s drawdown approaches -75%, a far more severe loss than
+the SPX benchmark’s -50%. Rather than providing any form of risk
+mitigation, the agents appear to make pro-cyclical decisions that
+accelerate losses. TheFinAgentstrategy, true to its more conserva-
+tive nature, often mitigates some of these losses relative toFinMem,
+yet it still fails to generate a positive outcome. For instance, while
+its drawdown for CNX is shallower than FinMem’s, it remains se-
+vere and prolonged. This relative outperformance is insufficient
+and aligns with our market regime analysis (§7), which finds that
+both agents are poorly calibrated for bear markets and ultimately
+succumb to losses [9].
+Sideways Markets.The final two rows illustrate performance
+in sideways, where the primary challenge is managing idiosyn-
+cratic stock risk without a clear market tailwind. Generally (but
+not consistently), theFinAgentstrategy (red) exhibits shallower
+and less severe drawdowns thanFinMem(blue), as seen in cases
+like NCR (2004-2005) , FDO (2009-2010) , and SYY (2016-2017) .
+However,FinAgent’s conservative nature can also lead to periods
+of complete inactivity where no trades are triggered (observed
+before in bull market and bear market), causing it to miss minor
+recovery opportunities that the benchmark captures, as seen inFDO
+(2009-2010).
+In summary, these visual case studies reinforce the quantitative
+conclusions in §6.3 and §7. LLM agents are poorly calibrated to
+distinct market regimes, behaving too timidly in uptrends and too
+recklessly in downturns, ultimately failing to provide the adaptive
+risk management necessary for consistent performance.
+G LLM Strategies Cost Analysis
+To better understand the practical deployment of LLM-based invest-
+ing strategies, we monitor the API costs associated with running
+backtests on theCompositeexperiment withVolatility Effect
+selection as a representative example. The cost for backtestingFinA-
+gentwas $198.24, whileFinMemincurred a significantly lower cost
+Can LLM-based Financial Investing Strategies Outperform the Market in Long Run? KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea
+of $31.79 using GPT-4o mini. This reflects the higher prompt com-
+plexity and more frequent calls involved in FinAgent’s multi-agent
+decision-making process.
+Extrapolating from these numbers, we estimate that completing
+allCompositeexperiments required approximately $700 in LLM
+API costs. TheSelected 4setup likely incurred even greater cost,
+given its larger rolling window size and the increased volume of
+financial news associated with these selectively popular symbols.
+FinAgent was roughly 6 times more expensive than FinMem in
+our tests. Importantly, these figures only account for LLM genera-
+tion costs (i.e., chat/completions endpoints), and do not include
+the cost of generating embeddings (e.g., viatext-embedding-ada-
+00211), which would further increase the total budget.
+This observation raises a practical consideration for future re-
+search: when evaluating LLM-driven strategies, computational cost
+should be factored into the financial metrics, particularly for real-
+world deployment scenarios. Incorporating API usage cost into
+risk-adjusted performance metrics (e.g., Sharpe or Sortino) could
+provide a more holistic picture of strategy efficiency.
+Recommendation.For researchers with limited budget, we rec-
+ommend adopting open-source LLMs (e.g., LLaMA, Qwen, Mistral)
+for benchmarking and prototyping. These models can be deployed
+locally or via cost-effective cloud infrastructure, significantly reduc-
+ing evaluation costs while enabling reproducible experimentation.
+11https://platform.openai.com/docs/models/text-embedding-ada-002

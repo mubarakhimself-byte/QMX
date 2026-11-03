@@ -1,0 +1,2662 @@
+arXiv 2611.00515  https://arxiv.org/abs/2611.00515
+
+AStockArena: Beyond Returns, Can We Entrust Real Capital to the
+Decisions of Financial Agents?
+Zeyu LIU1* LAI Sing Kwong1* Xuanzhi Feng1* HaoYang Shang2*
+Yang LI1 Zihao Fang1 Xuan Liu3
+1The Hong Kong University of Science and Technology 2University of British Columbia
+3University of California San Diego
+*Equal contribution
+Abstract
+Large language models (LLMs) are increas-
+ingly used in dynamic financial trading, yet
+real-time trading benchmarks mainly evalu-
+ate agents by cumulative returns and risk-
+adjusted performance. Such outcome metrics
+cannot show whether trades are faithfully re-
+ported, supported by available evidence, and
+consistent with account states. We introduce
+AStockArena, a real-time decision-auditing
+benchmark for continuous trading in China’s
+A-share market. Under shared market condi-
+tions and execution constraints, we evaluate 13
+open- and closed-source models over 3,198 se-
+quential decisions. AStockArena reconstructs
+the actions actually posted to accounts by
+aligning reports, trade requests, execution re-
+sponses, and account states, and audits them
+with eight checks spanning execution trace-
+ability (O), evidence sufficiency (RK), and fi-
+nancial meta-awareness (B), combining record
+verification with consensus expert annotation.
+Of 1,070 trading points, 72.99% exhibit at
+least one audit gap; model-level rates range
+from 52.2% to 91.2%, with evidence gaps
+most prevalent. Historical trade-filtering re-
+play further shows that portfolio outcomes are
+sensitive to these flagged trades. Decision-
+process auditing thus offers a verifiable com-
+plement to return-based evaluation of financial
+agents.
+1 Introduction
+The reasoning, tool-use, and long-horizon
+decision-making capabilities of large language
+models (LLMs) are moving autonomous agents
+from static tasks into dynamic environments
+(Cheng and Chin, 2024; Song et al., 2026). Unlike
+one-off question-answering tasks such as FinQA
+(Chen et al., 2021, 2022), these environments
+require agents to continuously acquire informa-
+tion, call tools, and act on evolving outcomes.
+Finance is a representative and high-stakes case:
+Trading Process evaluation
+BenchmarkCont. Live Diag. Act. Evid. Acct.
+StockBench (2025)✓— — — — —
+AI-Trader (2025) ✓ ✓ — — — —
+LiveTradeBench (2025)✓ ✓— — — —
+TradeTrap (2025) ✓ — ✓ — — —
+CLQT (2026)✓ ✓ ✓— — —
+AStockArena ✓ ✓ ✓ ✓ ✓ ✓
+Table 1: Trading benchmark capabilities: continuous
+trading, real-time market data, process diagnostics, ac-
+tion verification, evidence auditing, and account audit-
+ing (left to right).
+trading is continuous, and erroneous actions may
+be difficult to reverse (Wu et al., 2023; Lee et al.,
+2024; Nie et al., 2024). Recent benchmarks report
+competitive cumulative returns from LLM trading
+agents, sometimes outperforming buy-and-hold
+(Chen et al., 2025; Fan et al., 2025; Yu et al.,
+2025), but evaluate them mainly through realized
+portfolio performance.
+Portfolio returns alone cannot establish
+whether the underlying trading decisions are
+reliable.An agent may report buying one million
+shares while submitting an order for only one hun-
+dred thousand, provide a plausible rationale with-
+out addressing material evidence, or misjudge its
+positions, cash, or profit and loss. Across succes-
+sive trades, later actions must also remain under-
+standable in light of earlier judgments and new in-
+formation. Even under positive returns, such dis-
+crepancies determine whether decisions can be su-
+pervised and reviewed, yet they cannot be inferred
+from cumulative return or the Sharpe ratio (Kong
+et al., 2026). We therefore ask:How can we as-
+sess the decision-process reliability of financial
+agents beyond their realized returns?
+We introduceAStockArena, a real-time trad-
+1
+arXiv:2611.00515v1  [cs.CL]  31 Oct 2026
+ing benchmark for auditing financial agents’ deci-
+sions.1 Agents trade under shared real-time mar-
+ket snapshots, uniform tools, and consistent exe-
+cution constraints, each maintaining an indepen-
+dent account across successive decisions. Be-
+cause stated intentions and submitted orders can
+diverge from recorded transactions, AStockArena
+first aligns model reports, trade requests, execu-
+tion responses, and adjacent account states to re-
+construct the actions actually posted to accounts.
+On these records it defines eight checks in three
+dimensions:execution traceability (O)compares
+reports and execution records with observed ac-
+count changes;evidence sufficiency (RK)checks
+trading rationales against materials available at de-
+cision time; andfinancial meta-awareness (B)
+checks account-state assessments and the coher-
+ence of successive judgments. The checks com-
+bine structured-record verification with consensus
+expert annotation.
+We evaluate 13 open- and closed-source LLM
+trading agents in a unified A-share sandbox, col-
+lecting 3,198 sequential decisions. Of 1,070 trad-
+ing points with formally annotated trades, 781
+(72.99%) have at least one applicable audit gap;
+model-level joint gap rates range from 52.2% to
+91.2%. Gaps include confirmed failures and cases
+where records cannot support a sufficiently ver-
+ified judgment. Evidence gaps are prominent
+(pooled RK: 66.73%), alongside distinct execu-
+tion and account-assessment gaps. Claude Opus
+4.5 achieves a 10.84% cumulative return with joint
+gaps at 68.3% of annotated trading points, illus-
+trating decision-process issues that returns alone
+cannot reveal.
+Historical trade-filtering replay examines port-
+folio sensitivity to audit-flagged actions. Indi-
+vidual and combined filters replace flagged trades
+with No Trade, preserving retained trades’ original
+timing and target quantities subject to the resulting
+account constraints. Across the 12 actively trading
+models, separate O, RK, and B filters yield mean
+cumulative-return changes of +3.65, +8.86, and
++6.11 percentage points, respectively. These retro-
+spective comparisons complement process audit-
+ing with historical portfolio sensitivity analysis.
+We make three contributions:1)AStockArena,
+a continuous trading benchmark that reconstructs
+executed actions from reports, requests, exe-
+1We will release code, annotations, scripts, and prompts
+for independent review and model evaluation (Appendix E.6).
+cution responses, and account changes;2)an
+eight-check, three-dimensional auditing frame-
+work combining record verification and consen-
+sus semantic annotation; and3)an analysis of
+decision-audit gaps across 13 LLM agents, reveal-
+ing reliability information beyond returns, supple-
+mented by retrospective trade-filtering analysis.
+2 Related Work
+Continuous Trading Evaluation.Financial
+benchmarks cover numerical reasoning (Chen
+et al., 2021; Tang et al., 2025), domain knowl-
+edge and analysis (Shah et al., 2022; Xie et al.,
+2023, 2024; Guo et al., 2025; Liu et al., 2025a;
+Son et al., 2025), and multimodal or multilingual
+financial understanding (Bhatia et al., 2024; Peng
+et al., 2026; Sugiura et al., 2026; Guo et al., 2026).
+Trading agents use memory, reflection, and tools
+to adapt to market information and past experi-
+ence (Zhang et al., 2024; Li et al., 2025b, 2024;
+Ma et al., 2026; Shang et al., 2025). Historical and
+real-time trading benchmarks provide evolving ac-
+count environments and primarily assess portfo-
+lio performance (Li et al., 2025a). Related envi-
+ronments address reinforcement learning, order-
+level market simulation, and economic competi-
+tion (Liu et al., 2022; Li et al., 2025c; Nagy et al.,
+2025; Zheng et al., 2026; Weiss et al., 2024; Liu
+et al., 2026b). We complement these benchmarks
+and environments with trade-level audits of execu-
+tion, evidence, and account facts.
+Trading-Process Verification.Related eval-
+uations examine forecasting consistency, finan-
+cial safety, and deployment-relevant biases (Yang
+et al., 2023; Choi et al., 2026; Liu et al., 2025b,
+2026a). Financial-agent benchmarks use perturba-
+tions and closed-loop audits to assess trading re-
+liability, strategy consistency, and alignment be-
+tween stated and executed actions (Yan et al.,
+2025; Qu and Chen, 2026). General agent evalu-
+ations use traces, tool feedback, and environment
+states to verify action completion and statement–
+outcome consistency (Cao et al., 2026; Ye et al.,
+2026). Runtime governance constrains trade au-
+thorization and execution gating (Tang et al.,
+2026), while provenance mechanisms bind claims,
+evidence, and execution records (Hu et al., 2026;
+Kim et al., 2026). We extend this line of work by
+combining execution verification with separate au-
+dits of cited facts, key-fact coverage, and account
+judgments.
+2
+(a) Continuous trading
+Prices + indicators
+News + announcements
+10:3011:3014:00
+Agent account
+RMB 1M
+ArenaBackbone
+Think
+Trade or hold
+30-step limit
+Tools
+Market data
+News + filings
+Orders
+Act
+Observe
+Final report
+Trading sandbox
+Trading rules
+Aligned records
+Report
+ Request
+ Response
+ Account
+(b) Decision audit
+O  Execution RK  Evidence B  Account
+Records
+Ledger checks
+Evidence Report
+Fact 1
+Fact 2
+Fact 3
+Reason
+Quote
+Buy / Sell
+D  Account facts
+Same-time comparison
+Temp  Trade continuity
+Trade i Trade i+1Same stock
+Prior view New facts
+(c) Filtered replay
+Audit filters
+Recorded trades
+Original
+Replay
+t1 t2
+No Trade
+t3 t4
+No Trade
+t5
+Flagged
+Keep other orders
+Portfolio effects
+CR MDD Sharpe
+Sortino Calmar Exposure
+Next window
+Audit inputs
+≠
+Independent annotations
+Round 1
+Round 2
+Compare Review Consensus
+Disagree
+Agree
+Audit labels
+Pass Gap Undetermined
+Report
+Rpt
+Call
+Resp
+K: Coverage R: Citation
+Report Account
+Observed action    Δq = q+ − q−
+Figure 1: Overview of AStockArena. (a) Continuous trading, record alignment, independent annotation, and
+disagreement review; (b) execution, evidence, and account-fact auditing; (c) replacing flagged trades with No
+Trade and comparing replayed portfolio performance.
+Rationale and Evidence Verification.
+Explanation-faithfulness research examines
+whether explanations reflect decision-relevant
+factors (Jacovi and Goldberg, 2020; Turpin et al.,
+2023); financial argument evaluation examines
+evidence–claim support (Sun et al., 2025). Fi-
+nancial search and retrieval benchmarks assess
+access to supporting information (HU et al.,
+2026; Tang and Yang, 2025; Zhou et al., 2026;
+Zhao et al., 2025), while financial knowledge
+and summarization studies assess factual and
+numerical reliability (Shah et al., 2025; Cao et al.,
+2024). Symbolic references and executable finan-
+cial reasoning enable finer-grained verification
+(Hennigen et al., 2024; Xie et al., 2026). We
+jointly verify decision-time evidence and account
+facts, then use historical trade-filtering replay to
+assess the portfolio effects of flagged trades.
+3 Method
+AStockArena reconstructs executed actions, au-
+dits them along three dimensions, and converts
+consensus labels into trading-point comparisons
+and historical replay (Figure 1).
+3.1 Reconstructing Executed Actions
+Because reports and orders may differ from
+booked outcomes, we establish observed actions
+from account changes and execution records. In
+each decision window, models retrieve materials,
+trade or hold, and submit a structured report. The
+information pool is frozen at the window’s start;
+cash and positions carry forward.
+The system saves reports, requests, execution
+responses, fill details, and account snapshots be-
+fore and after each window (Table E5). With
+𝑞−𝑚,𝑡 ,𝑠 and𝑞 +𝑚,𝑡 ,𝑠 the shares of security𝑠held
+by model𝑚before and after window𝑡, the net
+position change isΔ𝑞 𝑚,𝑡 ,𝑠 =𝑞 +𝑚,𝑡 ,𝑠 −𝑞 −𝑚,𝑡 ,𝑠.
+Fills are aggregated by window and security, and
+shares bought minus shares sold are cross-checked
+against this change. The confirmed change pro-
+vides the observed action for comparing net quan-
+tities in reports, requests, and responses; rejected
+requests are checked against execution responses.
+3.2 Auditing Decision Reliability
+Eight checks audit the verified actions along three
+dimensions: execution traceability (O), evidence
+3
+Metric n A/B GPT-6 Pro vs. consensus GPT-6 Astra vs. consensus
+Agree. %𝜅AC1 Agree. %𝜅AC1 Agree. %𝜅AC1
+R 1375 95.78 0.895 0.947 89.02 0.751 0.859 86.84 0.707 0.830
+K 1375 97.09 0.945 0.961 98.40 0.970 0.978 96.07 0.926 0.947
+D 1375 95.71 0.928 0.946 95.13 0.918 0.939 89.31 0.829 0.865
+Temp 1290 94.50 0.487 0.943 92.56 0.381 0.922 94.26 0.628 0.940
+Mean - 95.77 0.814 0.949 93.78 0.755 0.925 91.62 0.773 0.895
+Table 2: Annotator and model raw-label agreement. n excludes fixed few-shot examples; R/K retain three cate-
+gories and D/Temp four.𝜅/AC1 denote Cohen’s𝜅/Gwet’s AC1. Agreement is a percentage; Mean equally averages
+each statistic across the four metrics (Appendix A.6).
+sufficiency (RK), and financial meta-awareness
+(B) (Table E6).
+Execution traceability (O).The sandbox en-
+forces trading rules; O checks the records. Report
+checks for a valid structured report; Rpt, Call, and
+Resp compare net quantities in report descriptions,
+trade requests, and successful execution responses
+with net position changes, respectively. Rejected
+requests are checked against execution responses.
+Evidence sufficiency (RK).R checks for sub-
+stantive citation fabrication, factual distortion, or
+direct contradiction between cited materials and
+the rationale or actual trade direction. A title mis-
+match alone is not fabrication; insufficient veri-
+fication material yields unable to determine. Di-
+rection checks follow the specific claim: favorable
+news need not contradict a sale, and profit-taking
+or risk-adjustment rationales are checked against
+their evidence.
+K uses an independently established reference
+of key facts. Facts are extracted from archived
+contemporaneous materials without model re-
+ports, trade directions, or subsequent market and
+return data. Favorable, unfavorable, and neutral
+facts share an importance threshold; the list is
+frozen before checking report coverage (Appen-
+dices A.1 and A.5).
+K checks omissions or partial treatment of facts
+affecting the judgment, such as citing revenue
+growth for a purchase while overlooking sub-
+stantial losses in the same material. Industry
+or macroeconomic sources constitute a gap when
+their assessment contradicts the trade and review
+finds them insufficient for the stock-specific de-
+cision. Coverage concerns treatment, not citation
+count: weighing counterevidence, giving an alter-
+native interpretation supported by the materials, or
+explaining why a fact does not warrant changing
+the action counts as addressing it.
+Mapping passes to 0 and confirmed or unable-
+to-determine gaps to 1, the evidence gap of trade
+event𝑒isRK(𝑒)=𝑅(𝑒)∨𝐾(𝑒), counted once per
+trade.
+Financial meta-awareness (B).D compares
+reported positions, costs, profit and loss, and avail-
+able funds with ledger records for the same secu-
+rity, time, and calculation basis. Reports without
+a verifiable account assessment are structurally in-
+applicable to D.
+Temp complements D by checking transitions
+between judgments about the same asset. It pairs
+adjacent nonzero net trades in the same stock by
+the same model, using the earlier judgment to as-
+sess whether new information, market or account
+changes, trading constraints, or the prior rationale
+explain the later decision. Only coherent labels
+pass; partially coherent, incoherent, and unable-
+to-determine cases are gaps. The first trade is inap-
+plicable, and direction reversals alone are not gaps
+(Appendix A.5).
+3.3 Forming Consistent Audit Labels
+Record comparisons and semantic judgments need
+a common labeling basis. O is calculated from
+structured logs and account snapshots. Two au-
+thors with academic backgrounds in finance in-
+dependently annotate R, K, D, and Temp under
+shared criteria by examining reports, contempo-
+raneous materials, and account records. Two ex-
+ternal fintech practitioners with securities research
+and financial analysis experience participate in
+disagreement review to finalize consensus labels
+(Appendix A.1). Table 2 reports pre-consensus
+raw-label agreement: 95.77% on average, with
+mean Cohen’s𝜅of 0.814. Class imbalance and co-
+herent/partially coherent boundary disagreements
+affect Temp’s𝜅(Appendix B.5).
+Consensus also supplies nine trades as fixed
+4
+few-shot examples for R/K/D and three adjacent
+pairs for Temp to guide GPT-6 Pro and GPT-6
+Astra annotation. Both models receive the same
+original materials, labels, and judgment rationales.
+Excluding these examples, mean agreement with
+consensus is 93.78% and 91.62%, respectively
+(Table 2; examples and merged-category results in
+Appendix A.6).
+An audit gap denotes a confirmed defect or in-
+ability to verify an applicable check from archived
+records. Both lack a fully verified basis, so the
+main audit groups them as gaps while retaining
+raw labels; structurally inapplicable checks gener-
+ate no gap. This shared definition supplies inputs
+to comparison and replay, including confirmed-
+error-only replay that retains unable-to-determine
+trades (Section 4.4).
+3.4 Comparing Audit Gaps and Replaying
+Trades
+Because checks assess windows, trades, account
+claims, or trade pairs, we map labels to a common
+comparison unit and to removable actions.
+Trading-point comparisons.Main-text com-
+parisons use windows containing formally anno-
+tated trades, termed annotated trading points. The
+gap rate is𝐺 𝑖 =100𝑑 𝑖/𝑛𝑖, where𝑑 𝑖 counts an-
+notated trading points with at least one applicable
+gap in check𝑖;𝑛 𝑖 is the model’s total annotated
+trading points. O, RK, B, and the eight-check joint
+audit take constituent-gap unions, counting each
+point once with this denominator. Appendix B.1
+reports rates over each check’s applicable records.
+Action-level replay.Actions retain model, win-
+dow, and security identities. Any O gap at a deci-
+sion point flags all its net trades. R/K/D gaps flag
+their corresponding actions; Temp flags the later
+trade in the pair, restricted to formal R/K/D ac-
+tions. Calibration actions remain in point-level au-
+diting (Appendix C.1). RK, B, and combined fil-
+ters take action-level unions of R/K, D/Temp, and
+selected dimensions, respectively, counting each
+action once.
+Flagged actions are replaced with No Trade.
+Retained actions keep their original timing, target
+quantities, and labels, executing subject to updated
+cash and sellable holdings. Results appear in Sec-
+tion 4.4.
+4 Experiments
+4.1 Experimental Setup
+AStockArena constructs a simulated trading envi-
+ronment using 10 STAR Market stocks spanning
+different industries to control the volume of infor-
+mation within each window and support item-by-
+item verification. The evaluation covers 82 trad-
+ing days from March 2 to June 30, 2026. The
+system generates market snapshots each day at
+10:30, 11:30, and 14:00 Beijing time, yielding 246
+decision windows. The 13 models run indepen-
+dently under the same market conditions, produc-
+ing 3,198 decisions.
+Each model manages an independent simulated
+account with initial capital of CNY 1 million and
+no positions. Trading follows cash constraints,
+T+1, a short-selling prohibition, and a single-stock
+position limit of 50% of total account assets, with
+order quantities specified in units of 100 shares.
+Trading costs comprise a 0.03% commission on
+both purchases and sales (minimum CNY 5 per
+trade), plus a 0.05% stamp duty on sales.
+The benchmark uses a shared ReAct agent ar-
+chitecture, allowing at most 30 tool-interaction
+steps per window. All models share prices, techni-
+cal indicators, news, and company announcements
+available up to the current window, with textual
+materials restricted by publication time. The stock
+pool, data sources, and model configurations are
+detailed in Appendix E.
+The simulator uses immediate full execution:
+orders that pass the constraint checks are filled at
+the current market snapshot price, while all other
+orders are rejected. Account states evolve through
+simulated trades, with position changes handled
+on a fixed share-count basis (Appendix C.1).
+The main experiment covers R, K, and D for
+1,384 active trades and Temp for 1,293 adjacent
+trade pairs.
+4.2 Original Investment Performance
+Account performance is measured from daily
+marked-to-market net assets at 14:00 using cu-
+mulative return (CR), Sharpe, Sortino, maximum
+drawdown (MDD), and Calmar. Appendix Ta-
+ble B6b summarizes CR, Sharpe, and Calmar for
+the original accounts and reference benchmarks.
+Model CRs range from -3.59% to 10.84%; equally
+weighted buy-and-hold and the SSE 50 return
+1.66% and -1.87%, respectively, while five techni-
+cal strategies range from -5.50% to 3.90%. Bench-
+5
+Model O RK B Joint
+Claude Opus 4.5 2.4 65.0 8.9 68.3
+GLM 4.7 Flash 20.8 75.5 41.584.9
+DeepSeek V3.2 10.8 72.5 15.8 76.7
+Gemini 3.1 Pro 14.3 76.8 17.083.0
+Claude Haiku 4.5 11.6 76.9 53.1 91.2
+Qwen3 Max 2.3 55.8 16.359.3
+DeepSeek V3.1 0.0 69.6 4.3 69.6
+GLM 4.7 13.3 60.0 30.076.7
+MiniMax M2.1 4.4 60.3 19.1 66.2
+GPT-5.1 N/A N/A N/AN/A
+GPT-5.2 5.6 49.1 0.0 52.2
+Qwen3 235B 25.0 80.0 32.585.0
+Gemini 2.5 Flash 11.9 69.0 17.9 76.2
+Table 3: Dimension and joint audit gap rates at an-
+notated trading points (%, lower is better). Joint de-
+notes a gap in any applicable check. The denominator
+is each model’s points containing formally annotated
+trades; gaps include confirmed failures and unable-to-
+determine labels, counted once per check per point.
+N/A denotes no annotated trades.
+marks use the same trading constraints and costs;
+complete results and strategy parameters appear in
+Appendix B.4 and Appendix E.
+GPT-5.1 makes no active trades and returns
+zero; filtering replay therefore covers the remain-
+ing 12 active models, using each model’s original
+account as its baseline.
+4.3 Decision Auditing
+Tables 3 and 4 report results for the audit di-
+mensions and eight checks, respectively, both us-
+ing decision points containing formally annotated
+trades as the denominator. Of these 1,070 trading
+points, 781 have a gap in at least one check, yield-
+ing a trading-point joint gap rate of 72.99%. All-
+point results and detailed statistics for individual
+trades and adjacent trade pairs appear in Appendix
+B.
+Most active models’ trading-point joint gap
+rates fall between 60% and 90%, with RK exceed-
+ing O and B: evidence omissions and citation con-
+flicts are common. Trading-point joint rates also
+exceed all-point rates; including non-trading win-
+dows lowers the overall proportion and obscures
+defects concentrated in actual trades.
+Complete report retention does not guarantee
+accurate trade descriptions. Qwen3 235B retains
+valid reports at all trading points, yet descriptions
+disagree with account postings at 25.0% of them,
+showing why report presence and action consis-
+tency require separate checks (Table 4).
+R and K flag 714 trading points, with 185 trig-
+gering both (25.9%). Most points exhibit either
+citation problems or key-fact omissions, indicat-
+ing that the two checks cannot substitute for each
+other. Pooling all 1,070 annotated trading points,
+confirmed RK gaps and undetermined-only cases
+account for 63.36% and 3.36%, respectively, giv-
+ing a merged gap rate of 66.73% (Appendix B.1).
+Account assessments also vary: Claude Haiku
+4.5 has a D gap rate of 49.0%, while low rates
+should be read alongside account-claim coverage
+(Appendix B.1). Temp gaps occur at 8.79% of an-
+notated trading points, reflecting explanation con-
+tinuity. Formal pairs contain 70 partially coherent
+and 27 unable-to-determine cases, with no inco-
+herent labels (Appendix B.5).
+4.4 Historical Trade-Filtering Replay
+To assess how audit filtering affects existing trad-
+ing paths, we replace flagged trades with No
+Trade, retain the original timing, target quantities,
+and labels of the other trades, and recompute ac-
+count trajectories. Retained trades execute subject
+to the updated cash balance and sellable holdings.
+We replay O, RK, B, and their combinations sepa-
+rately, with each combined filter formed from the
+union of its flagged-trade sets. Execution and re-
+play rules are detailed in Appendix C.1.
+Let𝑉 0 and𝑉 𝑇 denote initial and final total ac-
+count assets, respectively. Cumulative return is
+defined as:
+CR= 𝑉𝑇
+𝑉0
+−1.(1)
+The return change for model𝑚under filtering con-
+ditionFis defined as:
+ΔCR𝑚,F =100  CR𝑚,F−CR 𝑚,original .(2)
+Here,CRis a decimal andΔCRis in percentage
+points. Table 5 reports equally weighted mean
+changes across 12 active models for individual
+checks, dimensions, and combinations.
+All filters improve mean CR, with the largest
+gains from K and RK: 9.29 and 8.86 percentage
+points, respectively. All-dimension filtering yields
+7.65 percentage points, improving returns for 9
+models. Mean risk-adjusted return metrics also
+improve under RK and joint filtering (Table 5).
+Confirmed-error-only filtering.Retaining
+unable-to-determine trades and removing con-
+firmed gaps yields mean CR gains of 9.13 and 9.39
+6
+Model O: execution RK: evidence B: account / time
+Report Rpt Call Resp R K D Temp
+Claude Opus 4.5 0.0 2.4 2.4 2.4 43.9 43.9 7.3 2.4
+GLM 4.7 Flash 0.0 11.3 17.0 1.9 43.4 58.5 30.2 20.8
+DeepSeek V3.2 0.8 10.0 1.7 0.8 29.2 63.3 8.3 10.8
+Gemini 3.1 Pro 3.6 11.6 10.7 8.0 45.5 57.1 8.0 13.4
+Claude Haiku 4.5 0.0 11.6 11.6 11.6 56.5 43.5 49.0 7.5
+Qwen3 Max 0.0 2.3 2.3 2.3 23.3 41.9 11.6 5.8
+DeepSeek V3.1 0.0 0.0 0.0 0.0 32.6 58.7 0.0 4.3
+GLM 4.7 13.3 13.3 0.0 0.0 26.7 43.3 26.7 10.0
+MiniMax M2.1 0.0 2.9 1.5 0.0 32.4 47.1 13.2 11.8
+GPT-5.1 N/A N/A N/A N/A N/A N/A N/A N/A
+GPT-5.2 0.0 1.2 5.6 5.6 13.7 38.5 0.0 0.0
+Qwen3 235B 0.0 25.0 22.5 17.5 35.0 60.0 15.0 22.5
+Gemini 2.5 Flash 3.6 11.9 8.3 8.3 23.8 58.3 9.5 16.7
+Table 4: Eight-check audit gap rates at annotated trading points (%, lower is better). The denominator matches
+Table 3; multiple gaps in the same check at a point count once.
+FilterΔCRΔSharpeΔSortinoΔCalmar
+R +6.66 (8) +0.22 (8) -0.02 (8) +0.54 (8)
+K +9.29 (10) +0.64 (9) +0.80 (8) +2.29 (9)
+D +4.49 (10) +0.34 (9) +0.36 (9) +0.56 (9)
+Temp +3.45 (9) +0.46 (7) +0.56 (8) +1.04 (8)
+O +3.65 (11) +0.12 (7) -0.06 (7) +0.11 (7)
+RK +8.86 (9) +0.61 (8) +0.82 (7) +2.68 (8)
+B +6.11 (9) +0.44 (8) +0.43 (7) +0.84 (7)
+O+RK +9.01 (9) +0.57 (9) +0.70 (7) +2.12 (9)
+O+B +7.28 (10) +0.38 (8) +0.33 (7) +0.75 (7)
+RK+B +8.25 (9) +0.59 (8) +0.70 (7) +2.05 (8)
+O+RK+B +7.65 (9) +0.52 (8) +0.52 (6) +1.35 (9)
+Table 5: Replay results for filtering.Δis the equally
+weighted mean of filtered minus original results across
+12 active models; parentheses indicate the number of
+models whose metric improves or remains unchanged.
+Filtering definitions appear in Appendix C.
+percentage points for RK and all-dimension filter-
+ing, versus 8.86 and 7.65 under the merged defini-
+tion (Figure 2). Both improve returns for 11 mod-
+els; complete results and removal counts appear in
+Appendix Table C11.
+Buy/sell-matched random-filtering control.
+To compare audit filtering with equal-count ran-
+dom deletion, we sample from each model’s full-
+period trades, match buy/sell removal counts, and
+repeat independently 1,000 times with a fixed seed
+(Figure 3). All four CR gains exceed random
+means and lie within their central 95% ranges.
+RK and joint filtering exceed the means by 3.55
+and 2.75 percentage points; RK’s Sharpe, Sortino,
+and Calmar gains exceed the random 97.5th per-
+O RK B All
+0
+6
+12
+3.65 3.50
+8.86 9.13
+6.11 4.63
+7.65 9.39
+(a) ΔCR (pp)
+O RK B All
+0.0
+0.5
+1.0
+0.12 0.09
+0.61 0.67
+0.44 0.30
+0.52 0.64
+(b) ΔSharpe
+O RK B All
+−1
+0
+1
+-0.06-0.10
+0.82 0.84
+0.43 0.26
+0.52 0.69
+(c) ΔSortino
+O RK B All
+0
+2
+4
+0.11 0.05
+2.68 2.19
+0.84 0.49
+1.35 1.56
+(d) ΔCalmar
+Main filtering Confirmed only
+Figure 2: Main versus confirmed-error-only filtering.
+Mean changes across 12 active models; All denotes
+O+RK+B.
+centiles. Full ranges and multiple-metric adjust-
+ments appear in Appendix C.7.
+At 20 basis points of slippage per side, mean
+CR gains from RK and all-dimension filtering are
+10.17 and 9.21 percentage points, respectively;
+full cost-sensitivity results appear in Appendix
+C.6.
+4.5 Historical Case Reruns
+To observe defects after regenerating decisions,
+we test DeepSeek V3.2, GLM 4.7 Flash, GPT-6
+Astra (max), and GPT-5.6 Sol on ten historical
+snapshots each. Each case is run independently
+after restoring contemporaneous information and
+7
+O RK B All
+0
+4
+8
+Mean ΔCR (pp)
+1.78
+5.32
+4.09
+4.89
+3.65
+8.86
+6.11
+7.65
+Random mean Audit
+Figure 3: Audit versus random filtering (meanΔCR).
+Random bars average 1,000 replays matched by model
+and buy/sell counts; All denotes O+RK+B.
+GPT-6 Sol O RK B Joint
+Trading
+points
+Gap rate (%) 0.00 42.71 0.00 42.71 96
+Replay CR Sharpe Sortino Calmar
+Original 4.85 1.02 1.88 1.94
+RK Filter 38.28 2.86 5.20 12.84
+Change +33.43 +1.84 +3.33 +10.90
+Table 6: Audit and replay results for GPT-6 Sol. Gap
+rates use 96 trading points as the denominator; all-point
+results appear in Appendix D.3. Replay compares the
+original and RK-filtered accounts.
+DeepSeek
+V3.2
+GLM 4.7
+Flash
+GPT-6 Astra
+(max)
+GPT-5.6
+Sol
+0
+25
+50
+75
+100Audit gap rate (%)
+60
+100
+80 80
+10
+66.7
+50
+30
+0
+20
+0
+20
+0
+50
+0
+50
+O RK D Joint (7)
+Figure 4: Audit gap rates for ten reruns under each con-
+figuration (%,↓). Colors denote model and run config-
+uration; hatching denotes metrics. Joint includes O, R,
+K, and D; budgets and audit-guidance conditions ap-
+pear in Appendix D.2.
+the pre-decision account state. Independent snap-
+shots exclude Temp (Figure 4).
+Decision defects remain observable after rerun-
+ning. DeepSeek V3.2 has confirmed gaps in eight
+of ten cases, including all six trading points; GLM
+4.7 Flash has three, comprising two key-fact omis-
+sions and one report-action mismatch. Neither
+GPT model has confirmed execution or account-
+fact gaps, but Astra and Sol have evidence gaps in
+two and five cases, respectively, with the remain-
+der passing the seven-check joint audit. Cases un-
+der different configurations show that execution
+consistency and evidence sufficiency require sep-
+arate checks.
+4.6 Continuous Trading by a New Model
+To examine the audit framework’s applicability to
+new-generation base models, we evaluate GPT-
+6 Sol (with medium reasoning) on the same his-
+torical snapshots. The model generates 96 active
+trades across 246 decision windows; its audit gap
+rates and filtering replay results appear in Table 6.
+New models may have encountered public mar-
+ket information from the evaluation period, limit-
+ing interpretation of historical investment perfor-
+mance. Auditing archived decision-time materi-
+als, account states, and execution records can still
+assess evidence use, account understanding, and
+trade execution.
+No gaps are identified in GPT-6 Sol’s execu-
+tion or account-fact checks, but 41 trades have ev-
+idence audit gaps. RK filtering increases CR by
+33.43 percentage points and also improves risk-
+adjusted returns (Table 6).
+5 Discussion and Conclusion
+Discussion.The new model has no confirmed exe-
+cution or account-fact gaps, yet still omits key ev-
+idence, suggesting a need for error-specific feed-
+back. Reliable execution therefore needs to be ac-
+companied by adequate consideration of decision-
+relevant evidence. AStockArena links execution
+discrepancies, evidence omissions, and account-
+assessment errors to trades and source materials
+as a basis for model correction and training. Fu-
+ture work can test whether revising rationales in
+response to this feedback corrects identified prob-
+lems and how it affects subsequent trading deci-
+sions.
+Conclusion.AStockArena audits continuous fi-
+nancial trading through structured-record verifica-
+tion and consensus semantic annotation, aligning
+reports, execution records, and external evidence
+with account changes to verify actions, rationales,
+and account assessments. Historical trade-filtering
+replay examines the relationship between audit
+gaps and portfolio performance. Together, these
+analyses provide a verifiable basis for evaluating
+and improving subsequent models’ decision pro-
+cesses and building more reliable trading agents.
+8
+Limitations
+This study has not integrated audit feedback into
+a closed-loop trading system or evaluated subse-
+quent model decisions following audit interven-
+tions. Due to running and annotation costs, each
+model follows a single continuous trajectory, and
+variability across repeated runs has not been char-
+acterized. The evaluation covers ten STAR Market
+stocks over a single period. The stock pool is sized
+to control the information load within each deci-
+sion window and reduce the risk of dispersed at-
+tention when analyzing multiple stocks in parallel.
+Execution is immediate at snapshot prices, without
+partial fills, queuing, or latency. For models added
+later, timestamp constraints on tool inputs cannot
+rule out prior exposure to relevant historical infor-
+mation during training, which may affect trading
+rationales and historical investment performance.
+References
+Ron Artstein and Massimo Poesio. 2008. Survey ar-
+ticle: Inter-coder agreement for computational lin-
+guistics.Computational Linguistics, 34(4):555–
+596.
+Gagan Bhatia, El Moatez Billah Nagoudi, Hasan Cavu-
+soglu, and Muhammad Abdul-Mageed. 2024. Fin-
+Tral: A family of GPT-4 level multimodal financial
+large language models. InFindings of the Asso-
+ciation for Computational Linguistics: ACL 2024,
+pages 13064–13087, Bangkok, Thailand. Associa-
+tion for Computational Linguistics.
+Hongliu Cao, Ilias Driouich, and Eoin Thomas. 2026.
+Beyond task completion: Revealing corrupt success
+in llm agents through procedure-aware evaluation.
+Preprint, arXiv:2603.03116.
+Tianyu Cao, Natraj Raman, Danial Dervovic, and
+Chenhao Tan. 2024. Characterizing multimodal
+long-form summarization: A case study on financial
+reports. InFirst Conference on Language Modeling.
+Yanxu Chen, Zijun Yao, Yantao Liu, Amy Xin, Jin Ye,
+Jianing Yu, Lei Hou, and Juanzi Li. 2025. Stock-
+bench: Can llm agents trade stocks profitably in real-
+world markets?Preprint, arXiv:2510.02209.
+Zhiyu Chen, Wenhu Chen, Charese Smiley, Sameena
+Shah, Iana Borova, Dylan Langdon, Reema Moussa,
+Matt Beane, Ting-Hao Huang, Bryan Routledge,
+and William Yang Wang. 2021. FinQA: A dataset of
+numerical reasoning over financial data. InProceed-
+ings of the 2021 Conference on Empirical Methods
+in Natural Language Processing, pages 3697–3711,
+Online and Punta Cana, Dominican Republic. Asso-
+ciation for Computational Linguistics.
+Zhiyu Chen, Shiyang Li, Charese Smiley, Zhiqiang
+Ma, Sameena Shah, and William Yang Wang. 2022.
+ConvFinQA: Exploring the chain of numerical rea-
+soning in conversational finance question answering.
+InProceedings of the 2022 Conference on Empiri-
+cal Methods in Natural Language Processing, pages
+6279–6292, Abu Dhabi, United Arab Emirates. As-
+sociation for Computational Linguistics.
+Junyan Cheng and Peter Chin. 2024. Sociodojo:
+Building lifelong analytical agents with real-world
+text and time series. InInternational Conference
+on Learning Representations, volume 2024, pages
+22153–22187.
+Yubin Choi, Yujin Yang, Subin Kim, Seokil Ham,
+Seungju Cho, Jungmin Son, Youngjun Kwak, and
+Changick Kim. 2026. FinHarmBench: Financial
+jailbreak benchmark and unsupervised safety fine-
+tuning via refusal steering distillation. InProceed-
+ings of the 64th Annual Meeting of the Association
+for Computational Linguistics (V olume 6: Industry
+Track), pages 1714–1726, San Diego, California,
+USA. Association for Computational Linguistics.
+Tianyu Fan, Yuhao Yang, Yangqin Jiang, Yifei Zhang,
+Yuxuan Chen, and Chao Huang. 2025. Ai-trader:
+Benchmarking autonomous agents in real-time fi-
+nancial markets.Preprint, arXiv:2512.10971.
+Xin Guo, Haotian Xia, Zhaowei Liu, Hanyang Cao, Zhi
+Yang, Zhiqiang Liu, Sizhe Wang, Jinyi Niu, Chuqi
+Wang, Yanhui Wang, Xiaolong Liang, Xiaoming
+Huang, Bing Zhu, Zhongyu Wei, Yun Chen, Wein-
+ing Shen, and Liwen Zhang. 2025. FinEval: A Chi-
+nese financial domain knowledge evaluation bench-
+mark for large language models. InProceedings of
+the 2025 Conference of the Nations of the Americas
+Chapter of the Association for Computational Lin-
+guistics: Human Language Technologies (V olume 1:
+Long Papers), pages 6258–6292, Albuquerque, New
+Mexico. Association for Computational Linguistics.
+Xin Guo, Rongjunchen Zhang, Guilong Lu, Xuntao
+Guo, Jia Shuai, Zhi Yang, and Liwen Zhang. 2026.
+BizFinBench.v2: Towards reliable LLMs in finance
+via real-user data and Offline/Online bilingual eval-
+uation. InProceedings of the 43rd International
+Conference on Machine Learning, volume 306 of
+Proceedings of Machine Learning Research, pages
+38642–38676. PMLR.
+Lucas Torroba Hennigen, Zejiang Shen, Aniruddha
+Nrusimha, Bernhard Gapp, David Sontag, and Yoon
+Kim. 2024. Towards verifiable text generation with
+symbolic references. InFirst Conference on Lan-
+guage Modeling.
+LIANG HU, Jianpeng Jiao, Jiashuo Liu, Dongyuan
+Mutu, Yanle Ren, Zhoufutu Wen, Kaiyuan Zhang,
+Xuanliang Zhang, Xiang Gao, Tianci He, FEI HU,
+Yali Liao, Zaiyuan Wang, Jingkai Liu, Sun Daibin,
+Ziqing Zeng, zhiyuan zeng, Chenghao Yang, Qianyu
+Yang, and 7 others. 2026. Finsearchcomp: To-
+wards a realistic, expert-level evaluation of financial
+9
+search and reasoning. InInternational Conference
+on Learning Representations, volume 2026, pages
+46402–46428.
+Miaobo Hu, Shuhao Hu, Xiaobo Guo, Xin Wang,
+Bokun Wang, Yina Sa, Daren Zha, and Jun Xiao.
+2026. Actions with receipts: Jointly binding claims,
+evidence, and execution for replayable tool-agent
+auditing.Preprint, arXiv:2610.00327.
+Alon Jacovi and Yoav Goldberg. 2020. Towards faith-
+fully interpretable NLP systems: How should we de-
+fine and evaluate faithfulness? InProceedings of the
+58th Annual Meeting of the Association for Compu-
+tational Linguistics, pages 4198–4205, Online. As-
+sociation for Computational Linguistics.
+Daehong Kim, Haichao Miao, and Shusen Liu. 2026.
+LEDGER: Claim-to-evidence trace graphs for audit-
+ing LLM agents.Preprint, arXiv:2608.18398.
+Yaxuan Kong, Hoyoung Lee, Yoontae Hwang, Ale-
+jandro Lopez-Lira, Bradford Levy, Dhagash Mehta,
+Qingsong Wen, Chanyeol Choi, Yongjae Lee, and
+Stefan Zohren. 2026. Position: Evaluating LLMs
+in finance requires explicit bias consideration. In
+Proceedings of the 43rd International Conference
+on Machine Learning, volume 306 ofProceed-
+ings of Machine Learning Research, pages 171089–
+171110. PMLR.
+Jean Lee, Nicholas Stevens, Soyeon Caren Han, and
+Minseok Song. 2024. A survey of large lan-
+guage models in finance (FinLLMs).Preprint,
+arXiv:2402.02315.
+Changlun Li, Yao SHI, Chen Wang, Qiqi Duan, Runke
+RUAN, Weijie Huang, Haonan Long, Lijun Huang,
+Nan Tang, and Yuyu Luo. 2025a. Time travel is
+cheating: Going live with deepfund for real-time
+fund investment benchmarking. InAdvances in
+Neural Information Processing Systems, volume 38,
+Main Conference. Curran Associates, Inc.
+Haohang Li, Yupeng Cao, Yangyang Yu, Shashid-
+har Reddy Javaji, Zhiyang Deng, Yueru He, Yuechen
+Jiang, Zining Zhu, K.P. Subbalakshmi, Jimin Huang,
+Lingfei Qian, Xueqing Peng, Jordan W. Suchow,
+and Qianqian Xie. 2025b. INVESTORBENCH: A
+benchmark for financial decision-making tasks with
+LLM-based agent. InProceedings of the 63rd An-
+nual Meeting of the Association for Computational
+Linguistics (V olume 1: Long Papers), pages 2509–
+2525, Vienna, Austria. Association for Computa-
+tional Linguistics.
+Junjie Li, Yang Liu, Weiqing Liu, Shikai Fang, Lewen
+Wang, Chang XU, and Jiang Bian. 2025c. Mars: a
+financial market simulation engine powered by gen-
+erative foundation model. InInternational Con-
+ference on Learning Representations, volume 2025,
+pages 39490–39524.
+Yuan Li, Bingqiao Luo, Qian Wang, Nuo Chen,
+Xu Liu, and Bingsheng He. 2024. CryptoTrade:
+A reflective LLM-based agent to guide zero-shot
+cryptocurrency trading. InProceedings of the
+2024 Conference on Empirical Methods in Natu-
+ral Language Processing, pages 1094–1106, Miami,
+Florida, USA. Association for Computational Lin-
+guistics.
+Nelson F. Liu, Kevin Lin, John Hewitt, Ashwin Paran-
+jape, Michele Bevilacqua, Fabio Petroni, and Percy
+Liang. 2024. Lost in the middle: How language
+models use long contexts.Transactions of the Asso-
+ciation for Computational Linguistics, 12:157–173.
+Shu Liu, Shangqing Zhao, Chenghao Jia, Xinlin
+Zhuang, Zhaoguang Long, Jie Zhou, Aimin Zhou,
+Man Lan, and Yang Chong. 2025a. FinDABench:
+Benchmarking financial data analysis ability of large
+language models. InProceedings of the 31st Inter-
+national Conference on Computational Linguistics,
+pages 710–725, Abu Dhabi, UAE. Association for
+Computational Linguistics.
+Xiao-Yang Liu, Ziyi Xia, Jingyang Rui, Jiechao Gao,
+Hongyang Yang, Ming Zhu, Christina Wang, Zhao-
+ran Wang, and Jian Guo. 2022. Finrl-meta: Market
+environments and benchmarks for data-driven finan-
+cial reinforcement learning. InAdvances in Neural
+Information Processing Systems, volume 35, pages
+1835–1849. Curran Associates, Inc.
+Xuan Liu, Haoyang Shang, and Haojian Jin. 2026a.
+CoBRA: Programming cognitive bias in social
+agents using classic social science experiments. In
+Proceedings of the 2026 CHI Conference on Human
+Factors in Computing Systems.
+Xuan Liu, Haoyang Shang, and Haojian Jin. 2026b.
+Diagon: A programmable testbed for ai-agent cog-
+nitive labor markets.Preprint, arXiv:2604.06688.
+Xuan Liu, Jie Zhang, Haoyang Shang, Song Guo,
+Chengxu Yang, and Quanyan Zhu. 2025b. Explor-
+ing prosocial irrationality for LLM agents: A so-
+cial cognition view. InThe Thirteenth International
+Conference on Learning Representations.
+Yifan Liu, Praveen Venkateswaran, Abdulhamid
+Adebayo, and Dong Wang. 2026c. Auditing
+agent actions through query-conditioned attribution.
+Preprint, arXiv:2609.33676.
+Tianmi Ma, Wenxin Huang, Jiawei Du, Lin Li, Xian
+Zhong, and Joey Tianyi Zhou. 2026. Evolving quan-
+titative reasoning through self-play in digital twin
+markets. InProceedings of the 43rd International
+Conference on Machine Learning, volume 306 of
+Proceedings of Machine Learning Research, pages
+84428–84445. PMLR.
+Peer Nagy, Sascha Yves Frey, Kang Li, Bidipta Sarkar,
+Svitlana Vyetrenko, Stefan Zohren, Ani Calinescu,
+and Jakob Nicolaus Foerster. 2025. LOB-bench:
+Benchmarking generative AI for finance - an ap-
+plication to limit order book data. InProceedings
+of the 42nd International Conference on Machine
+Learning, volume 267 ofProceedings of Machine
+Learning Research, pages 45437–45460. PMLR.
+10
+Yuqi Nie, Yaxuan Kong, Xiaowen Dong, John M. Mul-
+vey, H. Vincent Poor, Qingsong Wen, and Stefan
+Zohren. 2024. A survey of large language models
+for financial applications: Progress, prospects and
+challenges.Preprint, arXiv:2406.11903.
+Xueqing Peng, Lingfei Qian, Yan Wang, Ruoyu Xiang,
+Yueru He, Yang Ren, Mingyang Jiang, Vincent Jim
+Zhang, Yuqing Guo, Jeff Zhao, Huan He, Yi Han,
+Yun Feng, Yuechen Jiang, Yupeng Cao, Haohang
+Li, Yangyang Yu, Xiaoyu Wang, Penglei Gao, and
+28 others. 2026. MultiFinBen: Benchmarking large
+language models for multilingual and multimodal fi-
+nancial application. InProceedings of the 64th An-
+nual Meeting of the Association for Computational
+Linguistics (V olume 1: Long Papers), pages 16934–
+16963, San Diego, California, United States. Asso-
+ciation for Computational Linguistics.
+Bo Qu and Mingguang Chen. 2026. Clqt: A closed-
+loop, cost-aware, strategy-consistent benchmark for
+diagnostic evaluation of llm portfolio-management
+agents.Preprint, arXiv:2606.29771.
+James Rhodes and George Kang. 2026. Proof of exe-
+cution: Runtime verification for governed AI agent
+actions.Preprint, arXiv:2607.05397.
+Agam Shah, Liqin Ye, Sebastian Jaskowski, Wei Xu,
+and Sudheer Chava. 2025. Beyond the reported cut-
+off: Where large language models fall short on fi-
+nancial knowledge. InSecond Conference on Lan-
+guage Modeling.
+Raj Shah, Kunal Chawla, Dheeraj Eidnani, Agam
+Shah, Wendi Du, Sudheer Chava, Natraj Raman,
+Charese Smiley, Jiaao Chen, and Diyi Yang. 2022.
+When FLUE meets FLANG: Benchmarks and large
+pretrained language model for financial domain. In
+Proceedings of the 2022 Conference on Empirical
+Methods in Natural Language Processing, pages
+2322–2335, Abu Dhabi, United Arab Emirates. As-
+sociation for Computational Linguistics.
+HaoYang Shang, Xuan Liu, Zi Liang, Jie Zhang, Haibo
+Hu, and Song Guo. 2025. United minds or isolated
+agents? exploring coordination of LLMs under cog-
+nitive load theory.Transactions on Machine Learn-
+ing Research.
+Guijin Son, Hyunwoo Ko, Hanearl Jung, and Chami
+Hwang. 2025. FINKRX: Establishing best practices
+for Korean financial NLP. InProceedings of the
+63rd Annual Meeting of the Association for Com-
+putational Linguistics (V olume 6: Industry Track),
+pages 1161–1174, Vienna, Austria. Association for
+Computational Linguistics.
+Zifan Song, Kaitao Song, Guosheng Hu, Ding Qi,
+Junyao Gao, Xiaohua Wang, Dongsheng Li, and
+Cairong Zhao. 2026. Trade in minutes! rationality-
+driven agentic system for quantitative financial trad-
+ing. InInternational Conference on Learning Rep-
+resentations.
+Issa Sugiura, Takashi Ishida, Taro Makino, Chieko
+Tazuke, Takanori Nakagawa, Kosuke Nakago, and
+David Ha. 2026. Edinet-bench: Evaluating llms
+on complex financial tasks using japanese financial
+statements. InInternational Conference on Learn-
+ing Representations, volume 2026, pages 8286–
+8303.
+Rui Sun, Zuo Bai, Wentao Zhang, Yuxiang Zhang,
+Li Zhao, Shan Sun, and Zhengwen Qiu. 2025. Fin-
+researchbench: A logic tree based agent-as-a-judge
+evaluation framework for financial research agents.
+InProceedings of the 6th ACM International Con-
+ference on AI in Finance, ICAIF ’25, pages 656–
+664, New York, NY , USA. Association for Comput-
+ing Machinery.
+Rui Tang, Qiangqiang Liu, Yichi Zhang, Youwei Yang,
+Xi Chen, and Chen Dong. 2026. Context is not au-
+thority: Structured runtime governance for financial
+market agents.Preprint, arXiv:2608.09025.
+Yixuan Tang and Yi Yang. 2025. FinMTEB: Finance
+massive text embedding benchmark. InProceed-
+ings of the 2025 Conference on Empirical Methods
+in Natural Language Processing, pages 3620–3638,
+Suzhou, China. Association for Computational Lin-
+guistics.
+Zichen Tang, Haihong E, Ziyan Ma, Haoyang He, Ji-
+acheng Liu, Zhongjun Yang, Zihua Rong, Rongjin
+Li, Kun Ji, Qing Huang, Xinyang Hu, Yang Liu, and
+Qianhe Zheng. 2025. FinanceReasoning: Bench-
+marking financial numerical reasoning more cred-
+ible, comprehensive and challenging. InProceed-
+ings of the 63rd Annual Meeting of the Association
+for Computational Linguistics (V olume 1: Long Pa-
+pers), pages 15721–15749, Vienna, Austria. Associ-
+ation for Computational Linguistics.
+Miles Turpin, Julian Michael, Ethan Perez, and
+Samuel R. Bowman. 2023. Language models don’t
+always say what they think: Unfaithful explanations
+in chain-of-thought prompting. InThirty-seventh
+Conference on Neural Information Processing Sys-
+tems.
+Martin Weiss, Nasim Rahaman, Manuel Wüthrich,
+Yoshua Bengio, Li Erran Li, Bernhard Schölkopf,
+and Chris Pal. 2024. Redesigning information mar-
+kets in the era of language models. InFirst Confer-
+ence on Language Modeling.
+Shijie Wu, Ozan Irsoy, Steven Lu, Vadim Dabravol-
+ski, Mark Dredze, Sebastian Gehrmann, Prabhan-
+jan Kambadur, David Rosenberg, and Gideon Mann.
+2023. BloombergGPT: A large language model for
+finance.Preprint, arXiv:2303.17564.
+Qianqian Xie, Weiguang Han, Zhengyu Chen, Ruoyu
+Xiang, Xiao Zhang, Yueru He, Mengxi Xiao, Dong
+Li, Yongfu Dai, Duanyu Feng, Yijing Xu, Haoqiang
+Kang, Ziyan Kuang, Chenhan Yuan, Kailai Yang,
+Zheheng Luo, Tianlin Zhang, Zhiwei Liu, Guojun
+Xiong, and 15 others. 2024. Finben: A holis-
+tic financial benchmark for large language models.
+11
+InThe Thirty-eight Conference on Neural Informa-
+tion Processing Systems Datasets and Benchmarks
+Track.
+Qianqian Xie, Weiguang Han, Xiao Zhang, Yanzhao
+Lai, Min Peng, Alejandro Lopez-Lira, and Jimin
+Huang. 2023. Pixiu: A comprehensive benchmark,
+instruction dataset and large language model for fi-
+nance. InAdvances in Neural Information Process-
+ing Systems, volume 36, pages 33469–33484. Cur-
+ran Associates, Inc.
+Zhuohan Xie, Daniil Orel, Rushil Thareja, Dhruv Sah-
+nan, Hachem Madmoun, Fan Zhang, Debopriyo
+Banerjee, Georgi Nenkov Georgiev, Xueqing Peng,
+Lingfei Qian, Jimin Huang, Jinyan Su, Aaryamon-
+vikram Singh, Rui Xing, Rania Elbadry, Chen Xu,
+Haonan Li, Fajri Koto, Ivan Koychev, and 6 oth-
+ers. 2026. FinChain: A symbolic benchmark for
+verifiable chain-of-thought financial reasoning. In
+Proceedings of the 64th Annual Meeting of the As-
+sociation for Computational Linguistics (V olume 1:
+Long Papers), pages 14529–14553, San Diego, Cali-
+fornia, United States. Association for Computational
+Linguistics.
+Lewen Yan, Jilin Mei, Tianyi Zhou, Lige Huang, Jie
+Zhang, Dongrui Liu, and Jing Shao. 2025. Trade-
+trap: Are llm-based trading agents truly reliable and
+faithful?Preprint, arXiv:2512.02261.
+Linyi Yang, Yingpeng Ma, and Yue Zhang. 2023. Mea-
+suring consistency in text-based financial forecast-
+ing models. InProceedings of the 61st Annual
+Meeting of the Association for Computational Lin-
+guistics (V olume 1: Long Papers), pages 13751–
+13765, Toronto, Canada. Association for Computa-
+tional Linguistics.
+Bowen Ye, Rang Li, Qibin Yang, Yuanxin Liu, Linli
+Yao, Hanglong Lv, Zhihui Xie, Chenxin An, Lei
+Li, Lingpeng Kong, Qi Liu, Zhifang Sui, and
+Tong Yang. 2026. Claw-eval: Towards trustwor-
+thy evaluation of autonomous agents.Preprint,
+arXiv:2604.06132.
+Haofei Yu, Fenghai Li, and Jiaxuan You. 2025. Live-
+tradebench: Seeking real-world alpha with large lan-
+guage models.Preprint, arXiv:2511.03628.
+Wentao Zhang, Lingxuan Zhao, Haochong Xia, Shuo
+Sun, Jiaze Sun, Molei Qin, Xinyi Li, Yuqing Zhao,
+Yilei Zhao, Xinyu Cai, Longtao Zheng, Xinrun
+Wang, and Bo An. 2024. A multimodal foundation
+agent for financial trading: Tool-augmented, diver-
+sified, and generalist. InProceedings of the 30th
+ACM SIGKDD Conference on Knowledge Discovery
+and Data Mining, pages 4314–4325. Association for
+Computing Machinery.
+Suifeng Zhao, Zhuoran Jin, Sujian Li, and Jun Gao.
+2025. FinRAGBench-V: A benchmark for multi-
+modal RAG with visual citation in the financial do-
+main. InProceedings of the 2025 Conference on
+Empirical Methods in Natural Language Process-
+ing, pages 4215–4249, Suzhou, China. Association
+for Computational Linguistics.
+Yushuo Zheng, Huiyu Duan, Zicheng Zhang, Yucheng
+Zhu, Xiongkuo Min, and Guangtao Zhai. 2026.
+Market-bench: Benchmarking large language mod-
+els on economic and trade competition. InProceed-
+ings of the 64th Annual Meeting of the Association
+for Computational Linguistics (V olume 1: Long Pa-
+pers), pages 39893–39906, San Diego, California,
+United States. Association for Computational Lin-
+guistics.
+Yixi Zhou, Fan Zhang, YU Chen, Haipeng Zhang,
+Preslav Nakov, and Zhuohan Xie. 2026. Fin-
+CARDS: Card-based analyst reranking for finan-
+cial document question answering. InFindings of
+the Association for Computational Linguistics: ACL
+2026, pages 24836–24852, San Diego, California,
+United States. Association for Computational Lin-
+guistics.
+12
+A Annotation and Consensus Formation
+A.1 Annotation and Disagreement
+Resolution
+Annotation and review personnel.Two paper
+authors independently completed the initial anno-
+tations A and B, respectively. We commissioned
+a fintech company serving the securities and fund-
+management sectors to review the annotation re-
+sults and participate in discussions to resolve dis-
+agreements. Its products cover quantitative re-
+search, risk analysis, and financial agents. The in-
+stitution provided two external reviewers for this
+process. Their backgrounds are described below.
+External reviewer 1:Holds a master’s degree
+in finance and has over seven years of profes-
+sional experience as a financial analyst, with a
+background in securities research. Their interdis-
+ciplinary experience spans finance and computer
+science, including financial-agent product devel-
+opment.
+External reviewer 2:Holds a bachelor’s de-
+gree in economics and has over eight years of pro-
+fessional experience, including financial analysis
+and annotation projects. They have also partici-
+pated in the development of financial-agent prod-
+ucts and quantitative factor databases.
+Initial annotator A (Author 1):Holds a bach-
+elor’s degree with a double major in economics
+and finance and a master’s degree in economics.
+Their experience includes large language model
+research, financial data analysis, and economics
+research.
+Initial annotator B (Author 2):Holds a dual
+degree in financial engineering and an MPhil, with
+research experience in AI for Finance.
+Items with matching results in the two indepen-
+dent annotations are retained, while the two exter-
+nal experts and two authors jointly review the re-
+maining items to form final consensus labels. For
+the 59 items with raw-label disagreements in D,
+we retain both annotations and their rationales to
+trace the sources of disagreement. All reported
+rates and primary ablation results use final consen-
+sus labels, while independent annotations A and B
+are used to analyze pre-consensus agreement and
+differences in judgment.
+Key-fact extraction and coverage assessment
+are conducted in two stages. First, annotators use
+only the target security, decision time, and external
+materials saved at that time to identify important
+facts that may affect trading judgments, including
+information that changes trading premises, pro-
+vides important counterevidence, or constrains de-
+cision conditions. Model reports and actual trad-
+ing directions are not provided during extraction,
+reducing the influence of model decisions on fact
+selection. Favorable, unfavorable, and neutral in-
+formation is selected under the same criteria, and
+duplicate reports are merged into a single fact. Af-
+ter the fact list is determined and frozen, model
+reports and trading directions are introduced to
+check whether these facts have been adequately
+addressed. The entire process uses only materi-
+als available at decision time, without referring to
+subsequent market movements or investment re-
+turns.
+Coverage assessment does not require reports to
+restate facts one by one; we examine whether they
+understand and address the implications of those
+facts for trading decisions. For example, a re-
+port may acknowledge unfavorable evidence and
+weigh it, offer an alternative interpretation based
+on other materials, or explain why a fact is insuf-
+ficient to change the trading judgment. For mate-
+rials saved only as titles, assessment is limited to
+information explicitly stated in the titles, retaining
+uncertainty qualifiers such as ’proposed’ and ’ex-
+pected.’
+Therefore, K measures whether a decision ade-
+quately considers relevant information, rather than
+whether the model’s investment view agrees with
+the annotators’. Industry and macroeconomic
+materials are assessed in relation to the target
+stock, report arguments, and actual trading ac-
+tions; the same fact may support different trading
+choices, provided that the report explains its deci-
+sion implications and addresses important coun-
+terevidence. Company cash-flow and balance-
+sheet information constitutes external evidence,
+while cash, holdings, and sellable quantities in the
+model’s account are verified through D and exe-
+cution records, respectively. For disputed items,
+reviewers adjudicate using the original materials
+and shared judgment criteria, retaining the corre-
+sponding rationales.
+R/K and D each cover 1,384 formal trades,
+while Temp covers 1,293 adjacent trade pairs.
+13
+Model R A/B K A/B D A/B Temp A/B
+Claude Opus 4.5 33.5/35.5 40.6/38.7 11.5/7.8 0.0/2.0
+GLM 4.7 Flash 26.4/29.9 48.3/46.0 56.2/56.2 6.3/13.9
+DeepSeek V3.2 20.7/21.8 57.5/52.5 11.2/12.7 6.4/9.2
+Gemini 3.1 Pro 26.4/33.0 45.2/43.1 6.1/6.6 6.2/9.8
+Claude Haiku 4.5 47.5/47.5 39.9/38.3 51.1/39.9 0.0/6.9
+Qwen3 Max 20.2/21.3 45.7/43.6 25.0/20.0 0.0/6.0
+DeepSeek V3.1 29.4/29.4 54.9/52.9 0.0/0.0 2.3/4.7
+GLM 4.7 30.3/24.2 39.4/39.4 34.6/26.9 11.5/11.5
+MiniMax M2.1 26.2/28.6 42.9/38.1 25.5/18.0 5.3/12.0
+GPT-5.1 N/A/N/A N/A/N/A N/A/N/A N/A/N/A
+GPT-5.2 12.6/12.6 38.3/36.0 0.0/0.0 0.0/0.0
+Qwen3 235B 27.1/29.2 56.2/56.2 43.8/37.5 7.5/25.0
+Gemini 2.5 Flash 20.4/21.4 55.1/54.1 17.4/17.0 3.3/15.2
+Table A1: Gap rates from annotations A and B (%). R/K use formal trades, D uses applicable account assessments,
+and Temp uses adjacent trade pairs.
+A.2 Agreement
+Metric Pairs Agreement % Cohen’s𝜅Gwet’s AC1
+R 1384 95.81 0.896 0.930
+K 1384 97.18 0.943 0.944
+D 1384 95.88 0.931 0.941
+Temp 1293 94.43 0.483 0.938
+Table A2: Agreement between annotations A and B. R, K, and Temp map to pass/gap, with unable-to-determine
+cases counted as gaps; D maps to pass/gap/not applicable and includes all 1,384 records to retain applicability
+disagreements. Agreement is the proportion of identical annotations under this mapping; Cohen’s𝜅and Gwet’s
+AC1 correct for chance agreement.
+Agreement on the four raw D labels is 95.74%,
+with𝜅=0.929; merging confirmed errors and
+unable-to-determine cases removes two disagree-
+ments. Among the 1,293 Temp pairs, 1,221 have
+identical raw labels, while 72 differ between co-
+herent and partially coherent (67 labeled coher-
+ent by A and partially coherent by B, and five in
+the reverse direction). Audit-category agreement
+is 94.43%, with𝜅=0.483; four-category raw-label
+agreement is 94.43%, with𝜅=0.490.
+For raw Temp labels, observed agreement is
+𝑝𝑜 =1221/1293=0.9443, and chance agree-
+ment computed from the A/B category proportions
+is𝑝 𝑒 =0.8908, giving𝜅=(𝑝 𝑜−𝑝 𝑒)/(1−𝑝 𝑒)=
+0.490. The prevalence of coherent labels raises
+chance agreement (Artstein and Poesio, 2008);
+A/B also assign 15/77 partially coherent labels, re-
+flecting different judgments at this boundary. Ta-
+ble 2 excludes three fixed examples and uses 1,290
+pairs, hence its slightly different full-category co-
+efficient.
+A.3 Effects of Annotation Differences on
+Filtering Results
+Label set Filter Up/down/
+unchanged
+MeanΔCR Actions removed
+A R 8/4/0 +6.86 372
+A K 10/2/0 +9.12 638
+A RK 9/3/0 +9.13 850
+B R 8/4/0 +6.51 396
+B K 11/1/0 +10.46 605
+B RK 10/2/0 +8.87 843
+Consensus R 8/4/0 +6.66 399
+Consensus K 10/2/0 +9.29 613
+Consensus RK 9/3/0 +8.86 849
+Table A3: Filtering results from annotations A and B and consensus labels. MeanΔCR is in percentage points.
+14
+A.4 Annotation for the New Model
+GPT-6 Sol’s two R/K annotation rounds use the
+same frozen key-fact list. Raw agreement for cita-
+tion risk, external support, and key-fact coverage
+is 98.96%, 95.83%, and 98.96%, respectively; six
+category disagreements are adjudicated before re-
+play. The 96 D labels and 87 Temp labels agree in
+both rounds; both have constant categories, mak-
+ing Cohen’s𝜅undefined.
+A.5 Annotation Inputs and Decision Records
+Each annotation retains the target event, original
+statement, verification basis, category, and brief
+rationale. Materials are linked by decision time,
+and account statements are checked by security,
+pre- or post-trade timing, and calculation conven-
+tion. Report text is supplied as content to be veri-
+fied.
+Annotation stage Input materials Decision record
+Key-fact
+extraction
+Security, decision time, and saved external
+materials
+Fact content, source, importance, and insufficient-material
+status
+R Report citations, trading action,
+corresponding sources, and current context
+Claims requiring verification, original passages providing
+support or contradiction, and citation risk
+K Frozen fact list, report, and trading action Facts addressed, partially addressed, or unaddressed, and
+coverage assessment
+D Report, current price, pre- and post-trade
+accounts, and execution records
+Confirmed error, no confirmed error found, no verifiable
+account assessment, or indeterminate, with calculation
+bases retained
+Temp Adjacent trades by the same model in the
+same security, their reports, current
+materials, and account states
+Coherent, partially coherent, incoherent, or indeterminate,
+with the basis for the change explained
+Table A4: Inputs and outputs of semantic annotation.
+R checks correspondence between cited facts
+and their sources; when titles do not match, read-
+able facts are checked to determine citation risk.
+Insufficient materials are labeled unable to deter-
+mine. K checks whether relevant facts are fully
+addressed: for example, citing revenue growth to
+support buying without addressing a major loss
+in the same material. K is also triggered when
+all citations concern industry or macroeconomic
+information, their assessments oppose the actual
+trade, and review finds them insufficient to support
+the stock-specific decision. D distinguishes daily
+price changes, unrealized position gains, sale pro-
+ceeds, and realized profits before comparing val-
+ues on the same basis. Temp checks whether trade
+changes are explained by the preceding and subse-
+quent reports, applying the same criterion to con-
+tinued and reversed directions.
+A.6 Model Annotation and
+Expert-Consensus Agreement
+After forming consensus, we select nine trades
+as fixed few-shot examples for R, K, and D, and
+three adjacent trade pairs for Temp. Examples
+include original materials, labels, and rationales,
+with the same examples used across groups for
+both models. GPT-6 Pro and GPT-6 Astra in-
+dependently produce labels and rationales from
+reports, decision-time materials, frozen key-fact
+lists, and relevant account records, which are then
+compared with expert consensus.
+After excluding all examples, evaluation in-
+cludes 1,375 records each for R, K, and D, and
+1,290 pairs for Temp. Labels follow the main-
+text audit mapping: unable-to-determine cases
+count as gaps, only coherent Temp labels count as
+passes, while partially coherent and incoherent la-
+bels count as gaps, and D retains a not-applicable
+category. Table A5 reports author A/B agreement
+and agreement of both models with expert consen-
+sus on the same samples. Mean rows equally av-
+erage agreement,𝜅, AC1, and F1 across R, K, D,
+and Temp. Within each metric, macro-F1 averages
+equally over categories occurring in either annota-
+tion, while gap F1 treats gap as the target category.
+15
+Comparison Metric n Agree. %𝜅AC1 Macro-F1 Gap F1
+A/B R 1375 95.78 0.895 0.930 - -
+K 1375 97.24 0.944 0.945 - -
+D 1375 95.85 0.930 0.941 - -
+Temp 1290 94.50 0.480 0.939 - -
+Mean - 95.84 0.812 0.939 - -
+GPT-6 Pro R 1375 92.51 0.823 0.870 0.912 0.877
+K 1375 98.47 0.969 0.970 0.985 0.983
+D 1375 95.42 0.922 0.935 0.926 0.833
+Temp 1290 92.95 0.405 0.920 0.702 0.442
+Mean - 94.84 0.780 0.924 0.881 0.784
+GPT-6 Astra R 1375 90.69 0.783 0.837 0.891 0.850
+K 1375 96.15 0.923 0.923 0.961 0.958
+D 1375 90.18 0.840 0.859 0.856 0.673
+Temp 1290 94.81 0.657 0.939 0.829 0.685
+Mean - 92.96 0.801 0.889 0.884 0.792
+Table A5: Annotator and model agreement under audit-category mapping. A/B compares the two independent
+author annotations before consensus; both models are compared separately with expert consensus. All examples
+are excluded. Agreement is reported as a percentage.
+Under audit-category merging, mean agreement
+is 94.84% for GPT-6 Pro and 92.96% for GPT-6
+Astra. Astra has higher agreement and gap F1 on
+Temp, whereas Pro has higher agreement and gap
+F1 on R, K, and D.
+Metric A % B % Pro % Astra % Pro disagreements Astra disagreements
+R 96.29 99.49 92.51 90.69 103 128
+K 97.82 99.42 98.47 96.15 21 53
+D 96.65 99.20 95.42 90.18 63 135
+Temp 95.04 99.46 92.95 94.81 91 67
+Mean 96.45 99.39 94.84 92.96 278 383
+Table A6: Agreement of independent author annotations and both models with expert consensus. The same sam-
+ples as in Table A5 are used, with examples excluded. Agreement is reported as a percentage, and disagreements
+count records whose model labels differ from expert consensus in audit category. The Mean row equally averages
+agreement across the four metrics and sums disagreements. A and B both contribute to consensus; their agreement
+describes label changes during consensus formation.
+Raw labels retain distinctions such as unable to
+determine, partially coherent, and not applicable.
+Main-text Table 2 reports agreement without cate-
+gory merging, using the same samples and model
+annotations as Table A5 and differing only in cat-
+egory merging.
+16
+Example Check Judgment criterion Labels
+1 R/K/D The repurchase remains a proposal; cash and
+zero-position statements match the ledger
+P/P/P
+2 R/K/D Forecast profit is described as realized earnings; the
+position percentage is verifiable
+G/P/P
+3 R/K/D Turnover is described as confirmed net fund inflows G/P/P
+4 R/K/D Favorable facts do not support the sale direction, and key
+facts are not adequately addressed
+G/G/P
+5 R/K/D The citation is not distorted, but key facts on declining
+installations and exports are omitted
+P/G/P
+6 R/K/D External facts and account assessments are checked
+separately; the latter contain a confirmed error
+P/P/G
+7 R/K/D Profit/loss statements are checked against the cost of the
+same security’s position
+P/P/G
+8 R/K/D Generic risk language does not constitute a verifiable
+account statement
+P/P/N
+9 R/K/D The formal report is missing, retaining an
+insufficient-material status
+U/U/U
+10 Temp New market risk explains the transition from buying to
+selling
+Coherent
+11 Temp Reentry is explained, but the previously stated position
+criterion is not addressed
+Partially coherent
+12 Temp The earlier formal report is missing Unable to determine
+Table A7: Fixed few-shot examples and judgment criteria. Trade labels are listed in R/K/D order. P, G, U, and N
+denote pass, gap, unable to determine, and not applicable, respectively; Temp retains its raw labels.
+B Sample Statistics and Supplementary
+Results
+B.1 Statistical Definitions
+Formal R/K/D consensus labels cover 1,384 trades
+at 1,070 trading points, which define the point-
+level sample in main-text Tables 3 and 4. Tables
+B1 and B1a report formal labels; Table B1b lists
+per-model annotation counts and D account-claim
+coverage.
+Main-text RK statistics pool all 1,070 anno-
+tated trading points: 356 pass, 678 have con-
+firmed gaps, and 36 are undetermined only, ac-
+counting for 33.27%, 63.36%, and 3.36%, respec-
+tively. The latter two categories give 714 gap
+points (66.73%). A point with a confirmed R or
+K gap belongs to the confirmed category even if
+the other check is undetermined, avoiding over-
+lap with the undetermined-only category. These
+pooled counts differ from equally averaging per-
+model percentages.
+Tables 3 and 4 in the main text report results by
+trading point, using each model’s decision points
+with actual trades as the denominator and counting
+repeated gaps at a point once per check. All-point
+results appear in B.6. The detailed statistics below
+retain each check’s original sample unit: Report
+uses scheduled windows; Rpt, Call, and Resp use
+their applicable records; R/K is measured over for-
+mal active trades, D over events involving account
+assessments, and Temp over applicable adjacent
+trade pairs. Detailed gap rates equal (failed +
+unable-to-determine records)/applicable records,
+excluding structurally inapplicable items from the
+denominator. The table below separates assessable
+and unable-to-determine counts.
+17
+Model R K RK D Temp
+Claude Opus 4.5 155/0 149/6 151/4 115/0 148/0
+GLM 4.7 Flash 87/0 85/2 86/1 29/3 74/5
+DeepSeek V3.2 179/0 171/8 172/7 80/0 168/5
+Gemini 3.1 Pro 194/3 190/7 190/7 131/4 186/7
+Claude Haiku 4.5 182/1 176/7 178/5 173/5 174/0
+Qwen3 Max 94/0 89/5 90/4 54/0 84/0
+DeepSeek V3.1 51/0 50/1 50/1 12/0 43/0
+GLM 4.7 32/1 31/2 31/2 25/1 23/3
+MiniMax M2.1 84/0 82/2 82/2 50/0 73/2
+GPT-5.1 0/0 0/0 0/0 0/0 0/0
+GPT-5.2 175/0 166/9 166/9 122/0 166/0
+Qwen3 235B 48/0 48/0 48/0 14/2 37/3
+Gemini 2.5 Flash 96/2 94/4 94/4 45/2 90/2
+Table B1: Assessable/unable-to-determine counts for consensus labels. D records with no account assessment are
+excluded from both counts and reported in Table B1a. Temp counts are trade pairs. Across all models, unable-to-
+determine rates for R, K, RK, D, and Temp are 0.51%, 3.83%, 3.32%, 1.96%, and 2.09%, respectively, using the
+same denominators as their gap rates.
+Model Confirmed error No error found No account
+assessment
+Unable to
+determine
+Claude Opus 4.5 9 106 40 0
+GLM 4.7 Flash 15 14 55 3
+DeepSeek V3.2 10 70 99 0
+Gemini 3.1 Pro 5 126 62 4
+Claude Haiku 4.5 71 102 5 5
+Qwen3 Max 11 43 40 0
+DeepSeek V3.1 0 12 39 0
+GLM 4.7 7 18 7 1
+MiniMax M2.1 9 41 34 0
+GPT-5.1 0 0 0 0
+GPT-5.2 0 122 53 0
+Qwen3 235B 4 10 32 2
+Gemini 2.5 Flash 6 39 51 2
+Table B1a: Complete category counts for D. ’No account assessment’ denotes reports without verifiable account
+statements.
+Model Formal trades Annotated points D coverage (%) Calibration
+(excluded)
+Claude Opus 4.5 155 123 74.19 2
+GLM 4.7 Flash 87 53 36.78 2
+DeepSeek V3.2 179 120 44.69 7
+Gemini 3.1 Pro 197 112 68.53 9
+Claude Haiku 4.5 183 147 97.27 8
+Qwen3 Max 94 86 57.45 0
+DeepSeek V3.1 51 46 23.53 0
+GLM 4.7 33 30 78.79 0
+MiniMax M2.1 84 68 59.52 1
+GPT-5.1 0 0 N/A 0
+GPT-5.2 175 161 69.71 5
+Qwen3 235B 48 40 33.33 1
+Gemini 2.5 Flash 98 84 47.96 5
+Table B1b: Formal annotation scope and account-claim coverage. D coverage divides applicable account assess-
+ments by formal trades; calibration trades do not enter R/K/D gap counts.
+18
+GPT-5.2 has 175 formally annotated trades at
+161 points: 122 contain account assessments and
+53 are inapplicable to D. Expert consensus iden-
+tifies no confirmed errors or unable-to-determine
+cases, so D gaps are zero in both main-text Table 4
+and Table B1a.
+Temp uses an independent cohort of 1,293 la-
+beled pairs; first trades are structurally inapplica-
+ble. Expert unable-to-determine labels count as
+gaps. Appendix B.5 reports the full category dis-
+tribution.
+B.2 R/K Overlap and Call-Weighted
+Comparisons
+Model R K R∩K R only K only R∪K
+Claude Opus 4.5 55 61 23 32 38 93
+GLM 4.7 Flash 26 40 11 15 29 55
+DeepSeek V3.2 37 96 19 18 77 114
+Gemini 3.1 Pro 65 86 26 39 60 125
+Claude Haiku 4.5 91 72 29 62 43 134
+Qwen3 Max 20 41 8 12 33 53
+DeepSeek V3.1 15 27 10 5 17 32
+GLM 4.7 8 13 3 5 10 18
+MiniMax M2.1 25 33 13 12 20 45
+GPT-5.1 0 0 0 0 0 0
+GPT-5.2 22 64 5 17 59 81
+Qwen3 235B 14 27 6 8 21 35
+Gemini 2.5 Flash 21 53 10 11 43 64
+All 399 613 163 236 450 849
+Table B2: Action counts flagged by final consensus labels. The union is deduplicated by actual action.
+Model R K RK
+Claude Opus 4.5 37.0 36.4 58.4
+GLM 4.7 Flash 31.0 42.9 61.6
+DeepSeek V3.2 20.4 52.4 64.4
+Gemini 3.1 Pro 33.9 46.8 66.2
+Claude Haiku 4.5 51.1 39.9 73.4
+Qwen3 Max 23.3 40.7 54.7
+DeepSeek V3.1 29.3 55.4 64.1
+GLM 4.7 25.0 43.3 58.3
+MiniMax M2.1 30.5 42.3 55.9
+GPT-5.1 N/A N/A N/A
+GPT-5.2 12.4 38.0 47.3
+Qwen3 235B 33.8 55.8 75.8
+Gemini 2.5 Flash 20.8 54.8 65.7
+Table B3: Call-weighted R/K gap-rate comparisons (%). Security-level events within each call are counted using
+the corresponding weights; the detailed event-level results weight events equally.
+B.3 Per-Model Joint Eight-Metric Results
+Joint statistics use decision points as the unit, com-
+bining all assessed applicable checks at each point.
+A point fails if any check has a confirmed fail-
+ure; if no check has a confirmed failure but an
+unable-to-determine item exists, the point is un-
+determined; a point passes only when all assessed
+applicable checks pass. Unannotated items are
+excluded from semantic checks. At non-trading
+points, only O’s four checks are assessed. Ta-
+ble B4 covers all decision points and summarizes
+completed assessments at each point; Table B5
+matches the main text and includes only annotated
+trading points. Gap rates combine failures and un-
+determined cases.
+19
+Model Points Pass/fail/
+undetermined
+Joint gap rate % Undetermined %
+Claude Opus 4.5 246 162/82/2 34.15 0.81
+GLM 4.7 Flash 246 189/56/1 23.17 0.41
+DeepSeek V3.2 246 151/90/5 38.62 2.03
+Gemini 3.1 Pro 246 152/91/3 38.21 1.22
+Claude Haiku 4.5 246 97/146/3 60.57 1.22
+Qwen3 Max 246 195/48/3 20.73 1.22
+DeepSeek V3.1 246 214/31/1 13.01 0.41
+GLM 4.7 246 202/44/0 17.89 0.00
+MiniMax M2.1 246 196/48/2 20.33 0.81
+GPT-5.1 246 246/0/0 0.00 0.00
+GPT-5.2 246 161/77/8 34.55 3.25
+Qwen3 235B 246 157/88/1 36.18 0.41
+Gemini 2.5 Flash 246 164/81/1 33.33 0.41
+All 3198 2286/882/30 28.52 0.94
+Table B4: Joint results over all points.
+Model Points Pass/fail/
+undetermined
+Joint gap rate % Undetermined %
+Claude Opus 4.5 123 39/82/2 68.29 1.63
+GLM 4.7 Flash 53 8/44/1 84.91 1.89
+DeepSeek V3.2 120 28/87/5 76.67 4.17
+Gemini 3.1 Pro 112 19/90/3 83.04 2.68
+Claude Haiku 4.5 147 13/131/3 91.16 2.04
+Qwen3 Max 86 35/48/3 59.30 3.49
+DeepSeek V3.1 46 14/31/1 69.57 2.17
+GLM 4.7 30 7/23/0 76.67 0.00
+MiniMax M2.1 68 23/43/2 66.18 2.94
+GPT-5.1 0 0/0/0 N/A N/A
+GPT-5.2 161 77/76/8 52.17 4.97
+Qwen3 235B 40 6/33/1 85.00 2.50
+Gemini 2.5 Flash 84 20/63/1 76.19 1.19
+All 1070 289/751/30 72.99 2.80
+Table B5: Joint results at annotated trading points. The sample scope matches main-text Tables 3 and 4.
+B.4 Complete Original Investment
+Performance
+Model CR% AR% A V% Sharpe Sortino MDD% Calmar
+Claude Opus 4.5 10.84 37.21 18.64 1.79 3.31 -7.98 4.66
+GLM 4.7 Flash 8.48 28.41 14.24 1.83 3.48 -5.83 4.87
+DeepSeek V3.2 7.50 24.88 12.75 1.81 3.97 -3.92 6.34
+Gemini 3.1 Pro 7.38 24.46 23.19 1.06 1.96 -9.56 2.56
+Claude Haiku 4.5 6.00 19.60 18.77 1.05 1.48 -9.08 2.16
+Qwen3 Max 5.46 17.76 14.48 1.20 1.91 -6.41 2.77
+DeepSeek V3.1 4.53 14.57 6.18 2.23 4.12 -2.42 6.03
+GLM 4.7 2.64 8.33 10.96 0.78 1.28 -7.66 1.09
+MiniMax M2.1 1.41 4.39 9.25 0.51 0.85 -4.33 1.01
+GPT-5.1 0.00 0.00 0.00 0.00 0.00 0.00 0.00
+GPT-5.2 -1.43 -4.32 20.95 -0.11 -0.17 -11.63 -0.37
+Qwen3 235B -1.85 -5.57 7.59 -0.72 -0.94 -4.58 -1.22
+Gemini 2.5 Flash -3.59 -10.62 5.39 -2.06 -2.65 -4.06 -2.62
+Table B6: Complete investment performance. GPT-5.1 makes no trades, with zero returns and volatility; its risk
+ratios are recorded as zero by computational convention.
+20
+Type Model / Benchmark CR% MDD% Sharpe
+LLM Claude Opus 4.5 10.84 -7.98 1.79
+GLM 4.7 Flash 8.48 -5.83 1.83
+DeepSeek V3.2 7.50 -3.92 1.81
+Gemini 3.1 Pro 7.38 -9.56 1.06
+Claude Haiku 4.5 6.00 -9.08 1.05
+Qwen3 Max 5.46 -6.41 1.20
+DeepSeek V3.1 4.53 -2.42 2.23
+GLM 4.7 2.64 -7.66 0.78
+MiniMax M2.1 1.41 -4.33 0.51
+GPT-5.1 0.00 0.00 0.00
+GPT-5.2 -1.43 -11.63 -0.11
+Qwen3 235B -1.85 -4.58 -0.72
+Gemini 2.5 Flash -3.59 -4.06 -2.06
+Market Equal-weight buy-and-hold 1.66 -11.92 0.33
+SSE 50 -1.87 -8.34 -0.24
+Strategy RSI 3.25 -2.25 1.45
+MACD -1.85 -6.02 -0.42
+SMA 3.90 -10.77 0.86
+KDJ (closing price) -5.50 -7.96 -1.58
+Mean reversion -0.92 -3.77 -0.25
+Table B6a: Investment performance of models and reference benchmarks. CR and MDD are percentages; an MDD
+closer to zero indicates a smaller drawdown.
+Model / baseline CR (%) Sharpe Calmar
+Claude Opus 4.5 10.84 1.79 4.66
+GLM 4.7 Flash 8.48 1.83 4.87
+DeepSeek V3.2 7.50 1.81 6.34
+Gemini 3.1 Pro 7.38 1.06 2.56
+Claude Haiku 4.5 6.00 1.05 2.16
+Qwen3 Max 5.46 1.20 2.77
+DeepSeek V3.1 4.53 2.23 6.03
+GLM 4.7 2.64 0.78 1.09
+MiniMax M2.1 1.41 0.51 1.01
+GPT-5.1 0.00 0.00 0.00
+GPT-5.2 -1.43 -0.11 -0.37
+Qwen3 235B -1.85 -0.72 -1.22
+Gemini 2.5 Flash -3.59 -2.06 -2.62
+Mean (13 models) 3.64 0.72 2.10
+Equal-weight B&H 1.66 0.33 0.43
+SSE 50 -1.87 -0.24 -0.68
+RSI 3.25 1.45 4.59
+MACD -1.85 -0.42 -0.92
+SMA 3.90 0.86 1.16
+KDJ -5.50 -1.58 -2.00
+Mean reversion -0.92 -0.25 -0.75
+Table B6b: Original account and benchmark performance. CR is reported as a percentage; Mean equally averages
+each metric across all 13 models. Full metrics appear in Appendix B.4.
+21
+B.5 Temp Label Distribution and Boundary
+Cases
+Label Annotator A Annotator B Final consensus
+Coherent 1251 1189 1196
+Partially coherent 15 77 70
+Incoherent 0 0 0
+Insufficient materials;
+indeterminate
+27 27 27
+Semantically unresolved 0 0 0
+Table B7: Temp label distribution for adjacent trade pairs. Each column contains 1,293 formal pairs; only coherent
+labels count as passing, and the other applicable labels count as gaps.
+The final consensus comprises 1,196 coherent,
+70 partially coherent, and 27 unable-to-determine
+pairs. Both partially coherent and unable-to-
+determine cases count as gaps, giving a Temp
+gap rate of 7.50% (97/1,293); unable-to-determine
+cases account for 2.09%.
+A / B Coherent Partially coherent Incoherent Unable to determine
+Coherent 1184 67 0 0
+Partially coherent 5 10 0 0
+Incoherent 0 0 0 0
+Unable to determine 0 0 0 27
+Table B7a: Expert A/B labels for Temp. All 1,293 pairs; rows denote A and columns B.
+All 72 disagreements concern the boundary be-
+tween coherent and partially coherent, with 60 oc-
+curring when the trading direction reverses. Joint
+review classifies 60 as partially coherent and 12
+as coherent. In the original annotations, symmet-
+ric A/B F1 for the partially coherent category is
+only 0.217, reflecting substantial differences be-
+tween the annotators’ judgments at this bound-
+ary. Disagreements mainly concern how to inter-
+pret local problems in trading rationales: missing
+or unsupported core grounds for a transition affect
+the explanation linking adjacent trades; problems
+limited to incidental facts do not lower the coher-
+ence judgment when the main transition grounds
+remain supported.
+B.6 All-Point and Detailed Audit Results
+Of all 3,198 decision points, 912 have a gap
+in at least one assessed check, yielding an all-
+point joint gap rate of 28.52%. Tables B8a and
+B8b summarize the complete decision trajecto-
+ries without counting unannotated items as gaps;
+Table B9 retains statistics by applicable record,
+formally annotated trade event, and labeled adja-
+cent trade pair. Main-text trading-point counts and
+joint gap counts appear in Table B5.
+Model O RK B Joint
+Claude Opus 4.5 1.2 32.5 4.5 34.1
+GLM 4.7 Flash 9.3 16.3 8.9 23.2
+DeepSeek V3.2 6.1 35.4 8.1 38.6
+Gemini 3.1 Pro 6.5 35.0 8.1 38.2
+Claude Haiku 4.5 13.0 45.9 31.7 60.6
+Qwen3 Max 0.8 19.5 5.7 20.7
+DeepSeek V3.1 0.0 13.0 0.8 13.0
+GLM 4.7 10.2 7.3 3.7 17.9
+MiniMax M2.1 3.3 16.7 5.3 20.3
+GPT-5.1 0.0 0.0 0.0 0.0
+GPT-5.2 4.1 32.1 0.0 34.6
+Qwen3 235B 26.4 13.0 5.3 36.2
+Gemini 2.5 Flash 11.4 23.6 6.1 33.3
+Table B8a: Dimensional and joint audit gap rates across all decision points (%,↓). Each model’s 246 decision
+points form the denominator; each point is counted once per check.
+22
+Model Report Rpt Call Resp R K D Temp
+Claude Opus 4.5 0.0 1.2 1.2 1.2 22.0 22.0 3.7 1.2
+GLM 4.7 Flash 0.0 6.5 4.5 0.4 9.3 12.6 6.5 4.5
+DeepSeek V3.2 1.2 5.7 0.8 0.4 14.2 30.9 4.1 5.7
+Gemini 3.1 Pro 1.6 5.3 4.9 3.7 20.7 26.0 3.7 6.5
+Claude Haiku 4.5 0.0 13.0 7.7 7.7 33.7 26.0 29.3 4.5
+Qwen3 Max 0.0 0.8 0.8 0.8 8.1 14.6 4.1 2.0
+DeepSeek V3.1 0.0 0.0 0.0 0.0 6.1 11.0 0.0 0.8
+GLM 4.7 9.8 9.8 0.4 0.0 3.3 5.3 3.3 1.2
+MiniMax M2.1 0.0 2.8 0.4 0.0 8.9 13.0 3.7 3.3
+GPT-5.1 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0
+GPT-5.2 0.0 1.2 4.1 4.1 8.9 25.2 0.0 0.0
+Qwen3 235B 0.0 25.6 5.3 4.1 5.7 9.8 2.4 3.7
+Gemini 2.5 Flash 1.2 11.0 3.7 3.3 8.1 19.9 3.3 5.7
+Table B8b: Gap rates for the eight audit checks across all decision points (%,↓). Each model’s 246 decision points
+form the denominator; each point is counted once per check.
+Model Report Rpt Call Resp R K RK D Temp
+Claude Opus 4.5 0.0 1.2 1.2 1.2 35.5 39.4 60.0 7.8 2.0
+GLM 4.7 Flash 0.0 6.5 4.5 0.4 29.9 46.0 63.2 56.2 13.9
+DeepSeek V3.2 1.2 5.7 0.8 0.4 20.7 53.6 63.7 12.5 8.1
+Gemini 3.1 Pro 1.6 5.3 4.9 3.7 33.0 43.7 63.5 6.7 8.3
+Claude Haiku 4.5 0.0 13.0 7.7 7.7 49.7 39.3 73.2 42.7 6.9
+Qwen3 Max 0.0 0.8 0.8 0.8 21.3 43.6 56.4 20.4 6.0
+DeepSeek V3.1 0.0 0.0 0.0 0.0 29.4 52.9 62.7 0.0 4.7
+GLM 4.7 9.8 9.8 0.4 0.0 24.2 39.4 54.5 30.8 11.5
+MiniMax M2.1 0.0 2.8 0.4 0.0 29.8 39.3 53.6 18.0 10.7
+GPT-5.1 0.0 0.0 0.0 0.0 N/A N/A N/A N/A N/A
+GPT-5.2 0.0 1.2 4.1 4.1 12.6 36.6 46.3 0.0 0.0
+Qwen3 235B 0.0 25.6 5.3 4.1 29.2 56.2 72.9 37.5 22.5
+Gemini 2.5 Flash 1.2 11.0 3.7 3.3 21.4 54.1 65.3 17.0 15.2
+Table B9: Detailed audit gap rates by applicable record, trade event, and trade pair (%,↓). Report uses scheduled
+windows; Rpt, Call, and Resp use their applicable records; R, K, and RK use trade events; D uses events involving
+account assessments; Temp uses adjacent trade pairs. N/A denotes no applicable samples.
+C Historical Replay and Ablation
+Analysis
+C.1 Execution and Valuation
+The main-experiment simulator uses current snap-
+shot prices. Orders that pass the checks execute
+for the full requested quantity; rejected orders do
+not change cash or positions. Execution is imme-
+diate fill or rejection, without pending orders, par-
+tial fills, or cancellation of resting orders. Execu-
+tion auditing aggregates the share quantities in fill
+records and compares them with position changes
+in the same window. Slippage costs are analyzed
+separately in C.6.
+The simulated ledger updates cash and positions
+through fill records and updates sellable quantities
+across trading days; dividends and stock distribu-
+tions are not entered as separate corporate-action
+ledger events.
+All main-experiment replays start with CNY 1
+million and use shared historical prices. Sales pre-
+cede purchases within each window, with same-
+direction trades ordered by security. Retained ac-
+tions keep their original net quantities as targets.
+Purchases are sized to available cash, 100-share
+lots, and fees; sales are sized to existing positions
+and T+1 sellable quantities. Accounts are continu-
+ously marked to market, and positions still open at
+the end are valued at historical prices. Each trade
+incurs a 0.03% commission with a minimum of
+CNY 5, plus a 0.05% stamp duty on sales.
+All filters remove trades with failed or unable-
+to-determine checks. O removes all net trades at a
+decision point when any of its four record checks
+has a gap; RK takes the union of R/K removal sets;
+B removes 164 D gap actions or 93 Temp gap ac-
+tions, with 32 overlapping actions and a union of
+225. A Temp gap is assigned to the later trade in
+the labeled pair. No-account-assessment and first-
+trade cases do not independently trigger removal.
+Of the 1,293 Temp pairs, 1,257 correspond to
+formal R/K/D actions: 1,164 are coherent, 66 par-
+23
+tially coherent, and 27 unable to determine. The
+latter two categories give 93 removals. Another 36
+pairs correspond to calibration actions, including
+four partially coherent pairs counted only in point-
+level audits. Increases and decreases requireΔCR
+above +0.01 or below -0.01 percentage points, re-
+spectively; all other changes are classified as un-
+changed. Main results cover 12 actively trading
+models.
+C.2 Complete Three-Dimensional Ablations
+for Each Model
+Model Original O RK B
+Claude Opus 4.5 10.84 13.68 2.04 14.54
+GLM 4.7 Flash 8.48 3.04 27.53 7.70
+DeepSeek V3.2 7.50 11.52 36.19 20.19
+Gemini 3.1 Pro 7.38 8.26 32.00 5.84
+Claude Haiku 4.5 6.00 7.68 10.67 27.02
+Qwen3 Max 5.46 6.71 4.39 9.08
+DeepSeek V3.1 4.53 4.53 11.59 4.39
+GLM 4.7 2.64 2.66 8.59 5.14
+MiniMax M2.1 1.41 12.42 8.61 8.26
+GPT-5.1 0.00 0.00 0.00 0.00
+GPT-5.2 -1.43 0.96 -3.32 -1.43
+Qwen3 235B -1.85 23.19 13.56 13.79
+Gemini 2.5 Flash -3.59 -3.50 1.89 6.17
+Table C1: Original CR and CR after single-dimension filtering (%). O, RK, and B represent execution traceability,
+evidence sufficiency, and financial meta-awareness, respectively.
+Model O+RK O+B RK+B O+RK+B
+Claude Opus 4.5 2.04 19.03 8.79 8.79
+GLM 4.7 Flash 22.48 -2.45 24.25 17.42
+DeepSeek V3.2 36.23 18.02 37.75 37.80
+Gemini 3.1 Pro 30.48 9.34 19.48 16.12
+Claude Haiku 4.5 17.51 32.59 11.38 12.77
+Qwen3 Max 5.13 8.09 4.76 4.76
+DeepSeek V3.1 11.59 4.39 11.59 11.59
+GLM 4.7 9.16 4.67 7.85 8.42
+MiniMax M2.1 8.79 8.68 8.84 8.69
+GPT-5.1 0.00 0.00 0.00 0.00
+GPT-5.2 -3.50 0.96 -3.32 -3.50
+Qwen3 235B 14.25 24.37 12.03 12.73
+Gemini 2.5 Flash 1.30 7.00 3.02 3.55
+Table C2: CR after pairwise and three-dimensional joint filtering (%). Each cell is an independent replay result.
+Filter Mean CR % Buys/sells removed Sharpe Sortino Calmar
+Original 3.95 0/0 0.78 1.55 2.27
+R 10.60 126/273 1.01 1.53 2.81
+K 13.23 201/412 1.42 2.35 4.56
+D 8.43 41/123 1.12 1.91 2.84
+Temp 7.40 36/57 1.25 2.11 3.31
+O 7.60 58/74 0.90 1.49 2.38
+RK 12.81 286/563 1.39 2.37 4.95
+B 10.06 68/157 1.22 1.98 3.12
+O+RK 12.96 308/585 1.35 2.25 4.39
+O+B 11.22 115/209 1.16 1.88 3.03
+RK+B 12.20 315/593 1.37 2.25 4.33
+O+RK+B 11.59 337/611 1.30 2.07 3.62
+Table C3: Cumulative returns, trade removals, and risk-adjusted returns for submetrics and combinations. CR
+and risk-adjusted return metrics are equally weighted means over 12 active models. Higher Sharpe, Sortino, and
+Calmar values are better.
+24
+R/K construction, filtering analysis, and
+direction-matched random controls use the same
+historical trades, including exploratory analysis on
+that dataset and no separate held-out set. Results
+describe portfolio changes along fixed trading tra-
+jectories.
+C.3 Replay Checks for the New Model
+GPT-6 Sol’s 96 executed trades yield an original
+CR of 4.85%. RK flags 41 trades: 13 purchases
+and 28 sales, including 36 confirmed gaps and five
+unable-to-determine cases. The 28 flagged sales
+make exits a prominent part of the intervention. O,
+D, and Temp have no gaps, so their separate filters
+leave CR unchanged.
+Decision-level RK filtering replaces flagged
+trades with No Trade and replays the others at their
+original times and target quantities under updated
+account constraints. Removing 41 trades prevents
+22 additional orders from executing; 33 trades ex-
+ecute and CR reaches 38.28%. This result reflects
+the new cash and holding path, not the isolated
+payoffs of removed trades. Filtering the 36 con-
+firmed gaps alone raises CR by 23.91 percentage
+points; SH688008 contributes a 28.50-point in-
+crease, exceeding the net portfolio change.
+C.4 Risk-Adjusted Return Calculations and
+Complete Results
+All main-experiment filtering conditions use daily
+14:00 account assets and initial capital of CNY 1
+million to calculate 82 daily returns, with an an-
+nualization factor of 252 and zero risk-free and
+downside target returns. Sharpe is the mean daily
+return divided by the sample standard deviation
+of daily returns, multiplied by
+√
+252; Sortino re-
+places the denominator with the square root of
+the mean squared negative returns over all trad-
+ing days; Calmar is the evaluation period’s annu-
+alized return divided by the absolute daily maxi-
+mum drawdown. Metrics are calculated for each
+model first, then equally averaged over 12 models.
+Ratio increases and decreases use unrounded
+values, with absolute differences no greater than
+10−8 treated as unchanged; return changes in per-
+centage points retain the 0.01 threshold.
+Filter CR% AR% Sharpe Sortino Calmar
+original 3.95 13.26 0.78 1.55 2.27
+R 10.60 39.88 1.01 1.53 2.81
+K 13.23 49.70 1.42 2.35 4.56
+D 8.43 30.76 1.12 1.91 2.84
+Temp 7.40 25.12 1.25 2.11 3.31
+O 7.60 26.81 0.90 1.49 2.38
+RK 12.81 50.25 1.39 2.37 4.95
+B 10.06 36.21 1.22 1.98 3.12
+O+RK 12.96 50.31 1.35 2.25 4.39
+O+B 11.22 42.19 1.16 1.88 3.03
+RK+B 12.20 46.41 1.37 2.25 4.33
+O+RK+B 11.59 43.54 1.30 2.07 3.62
+Table C4: Complete mean financial metrics for each filtering condition. Higher values are better for all metrics.
+Filter Sharpe Sortino Calmar
+original 0/0/12 0/0/12 0/0/12
+R 8/4/0 8/4/0 8/4/0
+K 9/3/0 8/4/0 9/3/0
+D 7/3/2 7/3/2 7/3/2
+Temp 6/5/1 7/4/1 7/4/1
+O 6/5/1 6/5/1 6/5/1
+RK 8/4/0 7/5/0 8/4/0
+B 7/4/1 6/5/1 6/5/1
+O+RK 9/3/0 7/5/0 9/3/0
+O+B 8/4/0 7/5/0 7/5/0
+RK+B 8/4/0 7/5/0 8/4/0
+O+RK+B 8/4/0 6/6/0 9/3/0
+Table C5: Numbers of models with improved risk-adjusted returns. Each cell shows in-
+creased/decreased/unchanged counts, summing to 12.
+25
+Model Original R K
+Sharpe Sortino Calmar Sharpe Sortino Calmar Sharpe Sortino Calmar
+Claude Haiku 4.5 1.05 1.48 2.16 1.49 2.07 3.69 1.23 1.58 2.71
+Claude Opus 4.5 1.79 3.31 4.66 0.60 0.92 0.89 1.51 2.55 3.17
+DeepSeek V3.1 2.23 4.12 6.03 0.21 0.31 0.25 2.40 3.54 9.07
+DeepSeek V3.2 1.81 3.97 6.34 1.38 1.78 3.54 2.39 4.46 7.93
+Gemini 2.5 Flash -2.06 -2.65 -2.62 -0.59 -0.79 -0.95 1.17 1.95 1.95
+Gemini 3.1 Pro 1.06 1.96 2.56 1.17 2.11 2.93 2.12 3.64 9.53
+GPT-5.2 -0.11 -0.17 -0.37 1.29 1.85 2.77 -0.54 -0.77 -0.81
+MiniMax M2.1 0.51 0.85 1.01 -0.02 -0.02 -0.55 0.96 1.25 1.75
+Qwen3 235B -0.72 -0.94 -1.22 1.69 2.31 5.74 1.24 1.65 3.16
+Qwen3 Max 1.20 1.91 2.77 1.33 1.97 3.84 0.38 0.56 0.38
+GLM 4.7 0.78 1.28 1.09 1.65 2.26 5.39 1.77 3.64 4.60
+GLM 4.7 Flash 1.83 3.48 4.87 1.88 3.52 6.21 2.44 4.22 11.27
+Table C6: Per-model risk-adjusted returns. Each filtering condition is replayed independently, retaining original
+results for comparison.
+Model D Temp O
+Sharpe Sortino Calmar Sharpe Sortino Calmar Sharpe Sortino Calmar
+Claude Haiku 4.5 1.25 1.62 2.99 2.47 4.93 8.74 0.91 1.18 1.72
+Claude Opus 4.5 2.14 4.02 6.36 1.79 3.49 5.23 1.98 3.78 5.75
+DeepSeek V3.1 2.23 4.12 6.03 2.17 3.95 5.83 2.23 4.12 6.03
+DeepSeek V3.2 2.55 5.07 7.32 1.54 2.45 5.83 1.54 2.46 4.91
+Gemini 2.5 Flash 0.79 1.02 1.53 0.79 1.03 1.48 -1.97 -2.56 -2.58
+Gemini 3.1 Pro 1.62 2.41 4.28 0.90 1.45 2.15 0.95 1.54 2.28
+GPT-5.2 -0.11 -0.17 -0.37 -0.11 -0.17 -0.37 0.24 0.37 0.16
+MiniMax M2.1 -0.59 -0.86 -0.80 1.01 1.32 2.01 1.06 1.40 2.23
+Qwen3 235B 0.04 0.06 -0.03 1.00 1.30 2.00 1.48 1.97 4.33
+Qwen3 Max 1.03 1.45 1.63 1.32 2.09 3.24 0.91 1.43 1.48
+GLM 4.7 1.16 1.98 2.21 0.94 1.53 1.30 0.82 1.32 1.10
+GLM 4.7 Flash 1.29 2.26 2.87 1.11 1.93 2.34 0.65 0.83 1.20
+Table C6: Per-model risk-adjusted returns (continued).
+Model RK B O+RK
+Sharpe Sortino Calmar Sharpe Sortino Calmar Sharpe Sortino Calmar
+Claude Haiku 4.5 0.91 1.15 1.66 1.60 2.22 5.19 1.17 1.51 2.62
+Claude Opus 4.5 0.36 0.51 0.31 1.86 3.38 5.31 0.36 0.51 0.31
+DeepSeek V3.1 3.39 6.61 11.39 2.17 3.95 5.83 3.39 6.61 11.39
+DeepSeek V3.2 1.97 2.74 7.94 2.27 3.94 7.44 1.96 2.73 7.96
+Gemini 2.5 Flash 0.39 0.59 0.45 0.77 1.00 1.42 0.30 0.45 0.31
+Gemini 3.1 Pro 2.39 4.60 12.08 0.79 1.24 1.73 2.46 4.85 10.81
+GPT-5.2 -0.25 -0.34 -0.52 -0.11 -0.17 -0.37 -0.30 -0.40 -0.55
+MiniMax M2.1 0.75 0.96 1.13 0.73 0.96 1.01 0.76 0.98 1.16
+Qwen3 235B 1.39 1.86 3.88 1.13 1.50 2.47 1.44 1.94 4.13
+Qwen3 Max 0.54 0.74 0.63 1.08 1.54 1.82 0.59 0.82 0.73
+GLM 4.7 2.01 3.84 5.85 1.16 1.98 2.21 2.13 4.18 6.28
+GLM 4.7 Flash 2.86 5.19 14.63 1.21 2.17 3.36 1.95 2.79 7.55
+Table C6: Per-model risk-adjusted returns (continued).
+26
+Model O+B RK+B O+RK+B
+Sharpe Sortino Calmar Sharpe Sortino Calmar Sharpe Sortino Calmar
+Claude Haiku 4.5 1.67 2.31 5.63 0.98 1.27 2.04 1.08 1.40 2.46
+Claude Opus 4.5 2.09 4.03 6.37 0.97 1.45 1.57 0.97 1.45 1.57
+DeepSeek V3.1 2.17 3.95 5.83 3.39 6.61 11.39 3.39 6.61 11.39
+DeepSeek V3.2 1.99 3.33 5.88 2.03 2.83 8.43 2.02 2.82 8.44
+Gemini 2.5 Flash 0.85 1.11 1.64 0.56 0.86 0.74 0.64 0.99 0.89
+Gemini 3.1 Pro 1.04 1.78 2.41 1.79 3.16 5.74 1.65 2.87 4.00
+GPT-5.2 0.24 0.37 0.16 -0.25 -0.34 -0.52 -0.30 -0.40 -0.55
+MiniMax M2.1 0.75 0.99 1.07 0.75 0.99 1.11 0.74 0.98 1.08
+Qwen3 235B 1.52 2.03 4.59 1.29 1.70 3.47 1.35 1.78 3.70
+Qwen3 Max 0.87 1.29 1.40 0.56 0.77 0.67 0.56 0.77 0.67
+GLM 4.7 1.07 1.81 2.00 1.70 3.01 3.99 1.81 3.28 4.30
+GLM 4.7 Flash -0.36 -0.44 -0.68 2.67 4.71 13.28 1.66 2.29 5.47
+Table C6: Per-model risk-adjusted returns (continued).
+Condition CR% Sharpe Sortino Calmar
+Original 4.85 1.02 1.88 1.94
+RK 38.28 2.86 5.20 12.84
+Table C7: Daily return and risk-adjusted metrics for GPT-6 Sol.
+C.5 Confirmed Errors and Random Filtering
+Confirmed-error-only replay retains trades labeled
+unable to determine. O removes 121 trades with
+confirmed record-verification discrepancies; RK
+removes 803 trades with confirmed R or K gaps;
+B removes trades with confirmed D errors or Temp
+non-passes, including partially coherent cases, for
+a union of 190 trades. Combinations take the
+union of removal sets.
+Random filtering samples each model’s formal
+trades over the full March-to-June period, sep-
+arately matching the numbers of purchases and
+sales removed. Sampling is without replacement
+and repeated 1,000 times; remaining trades are re-
+played under the same cash, T+1, lot-size, and
+fee rules. Table C12 reports mean return changes
+across the 12 actively trading models and the ran-
+dom distributions.
+Setting Filter CR% AR% Sharpe Sortino Calmar
+Confirmed errors
+only
+O 7.45 26.28 0.87 1.45 2.33
+Confirmed errors
+only
+RK 13.08 48.78 1.45 2.39 4.47
+Confirmed errors
+only
+B 8.57 31.87 1.08 1.81 2.76
+Confirmed errors
+only
+O + RK + B 13.33 49.75 1.42 2.24 3.84
+Table C8: Selected mean financial metrics for confirmed-error-only filtering. All values are equally weighted
+means over the 12 actively trading models.
+27
+C.6 Slippage Sensitivity
+Holding labels, trading times, and target quanti-
+ties fixed, we set slippage at 0, 5, 10, 20, and
+50 basis points per side. One basis point equals
+0.01%; the purchase execution price is the snap-
+shot price multiplied by1+𝑏/10000, and the sale
+execution price is the snapshot price multiplied by
+1−𝑏/10000, where𝑏denotes slippage in basis
+points per side. Account valuation continues to
+use snapshot prices, while cash, T+1, 100-share
+lot, and fee rules remain unchanged. Each filtered
+account is compared with an unfiltered account
+under the same slippage setting.
+Slippage
+per side
+(bps)
+Unfiltered
+CR
+O CR RK CR B CR Joint CR RKΔCR JointΔCR
+0 3.95 7.60 12.81 10.06 11.59 +8.86 +7.65
+5 3.43 6.95 12.53 9.56 11.48 +9.10 +8.05
+10 2.91 6.62 12.41 9.21 11.40 +9.50 +8.50
+20 1.86 5.61 12.03 8.51 11.07 +10.17 +9.21
+50 -1.41 3.24 10.98 5.98 10.38 +12.39 +11.78
+Table C9: Slippage sensitivity under the main replay setting. CR is the equally weighted mean across 12 actively
+trading models, expressed as a percentage;ΔCR is the difference from the unfiltered account at the same slippage
+level, in percentage points.
+0 5 10 20 50
+Adverse slippage per side (bps)
+−2
+0
+2
+4
+6
+8
+10
+12
+Mean CR (%)
+(a) Portfolio return
+0 5 10 20 50
+Adverse slippage per side (bps)
+0
+2
+4
+6
+8
+10
+12Mean change in CR (pp)
+(b) Screening difference
+No screening O RK B O+RK+B
+Figure C1: Slippage sensitivity. (a) Mean CR across 12 actively trading models; (b) mean CR difference between
+filtered and unfiltered accounts at the same slippage level. The horizontal axis shows slippage in basis points per
+side.
+C.7 Complete Financial Metrics for Random
+Controls
+Random controls use the fixed seed 20261003,
+matching removal counts by model and buy/sell
+direction, and sample without replacement from
+full-period trades for 1,000 repetitions. Audit and
+random filtering both use the replay rules in Ap-
+pendix C.1. Each repetition computes per-model
+changes from the original accounts and then takes
+the equally weighted mean across the 12 actively
+trading models.
+Let𝑘count random changes at least as large
+as the audit change. Monte Carlo reference val-
+ues use(𝑘+1)/1001, with Holm adjustment for
+multiple comparisons. For RK, Sharpe, Sortino,
+and Calmar adjusted reference values are 0.198,
+0.076, and 0.040. These comparisons describe
+random deletions on the same historical trajectory,
+not confidence intervals across runs or market pe-
+riods.
+28
+Filter Metric Audit change Random mean
+change
+Random 95% range Holm ref.
+OΔCR +3.65 +1.78 [-1.37, +5.39] 1.000
+OΔSharpe +0.12 +0.14 [-0.30, +0.57] 1.000
+OΔSortino -0.06 +0.12 [-0.59, +0.95] 1.000
+OΔCalmar +0.11 +0.58 [-0.64, +2.19] 1.000
+RKΔCR +8.86 +5.32 [-0.08, +11.26] 1.000
+RKΔSharpe +0.61 +0.03 [-0.52, +0.52] 0.198
+RKΔSortino +0.82 -0.31 [-1.12, +0.45] 0.076
+RKΔCalmar +2.68 +0.08 [-1.23, +1.70] 0.040
+BΔCR +6.11 +4.09 [+0.12, +8.32] 1.000
+BΔSharpe +0.44 +0.18 [-0.25, +0.56] 1.000
+BΔSortino +0.43 +0.06 [-0.61, +0.92] 1.000
+BΔCalmar +0.84 +0.63 [-0.60, +2.72] 1.000
+O+RK+BΔCR +7.65 +4.89 [-0.89, +11.11] 1.000
+O+RK+BΔSharpe +0.52 +0.02 [-0.61, +0.57] 0.831
+O+RK+BΔSortino +0.52 -0.28 [-1.21, +0.61] 0.713
+O+RK+BΔCalmar +1.35 +0.14 [-1.35, +1.89] 1.000
+Table C10: Return and risk-adjusted metrics for audit filtering and random controls. The random 95% range
+comprises the 2.5th to 97.5th percentiles of the 1,000 replays.ΔCR is in percentage points; other metrics are ratio
+differences. Higher values indicate more favorable changes relative to the original accounts.
+C.8 Summary of Filtering Definitions and
+Random Controls
+Filter Trades Return (pp) Risk-adjusted ratios
+Trades removedΔCRΔSharpeΔSortinoΔCalmar
+O 121 +3.50 (9) +0.09 (6) -0.10 (6) +0.05 (6)
+RK 803+9.13 (11)+0.67 (9) +0.84 (8) +2.19 (8)
+B 190 +4.63 (8) +0.30 (7) +0.26 (7) +0.49 (6)
+O + RK + B 898 +9.39 (11) +0.64 (10) +0.69 (8) +1.56 (9)
+Table C11: Replay results with only confirmed errors filtered out and unable-to-determine trades retained. Com-
+plete financial metrics appear in Table C8.
+Filter Trades
+removed
+AuditΔCR Random meanΔCR Above random Random 95% range
+O 132 +3.65 +1.78 +1.87 [-1.37, +5.39]
+RK 849 +8.86 +5.32 +3.55 [-0.08, +11.26]
+B 225 +6.11 +4.09 +2.02 [+0.12, +8.32]
+O + RK + B 948 +7.65 +4.89 +2.75 [-0.89, +11.11]
+Table C12: Random-filtering controls matched by model and buy/sell direction under the baseline replay rules.
+Audits and random controls use the removal counts and execution settings in Table 5; intervals are the 2.5th to
+97.5th percentiles across 1,000 random controls. Values are in percentage points.
+29
+D Reruns and Joint Gap Statistics
+D.1 Complete Counts for the Three
+Dimensions
+Counts below retain pass, fail, unresolved, not-
+applicable, and unannotated states by decision
+point. Gap rates combine failures and expert
+unable-to-determine labels; unannotated items do
+not enter the check. Unresolved proportions
+among assessed applicable points for O, RK, and
+B are 0.00%, 3.36%, and 3.12%, respectively; pro-
+portions for all-point and annotated-trading-point
+joint audits are 0.94% and 2.80%. D is inapplica-
+ble when no account statement exists.
+Model O RK B Joint
+Claude Opus 4.5 243/3/0/0/0 43/78/2/122/1 107/11/0/128/0 162/82/2/0/0
+GLM 4.7 Flash 223/23/0/0/0 13/40/0/193/0 28/15/7/196/0 189/56/1/0/0
+DeepSeek V3.2 231/15/0/0/0 33/81/6/123/3 99/16/4/127/0 151/90/5/0/0
+Gemini 3.1 Pro 230/16/0/0/0 26/80/6/132/2 91/12/8/135/0 152/91/3/0/0
+Claude Haiku 4.5 214/32/0/0/0 34/110/3/95/4 69/75/3/99/0 97/146/3/0/0
+Qwen3 Max 244/2/0/0/0 38/45/3/160/0 64/14/0/168/0 195/48/3/0/0
+DeepSeek V3.1 246/0/0/0/0 14/31/1/200/0 38/2/0/206/0 214/31/1/0/0
+GLM 4.7 221/25/0/0/0 12/16/2/216/0 17/7/2/220/0 202/44/0/0/0
+MiniMax M2.1 238/8/0/0/0 27/39/2/177/1 51/11/2/182/0 196/48/2/0/0
+GPT-5.1 246/0/0/0/0 0/0/0/246/0 0/0/0/246/0 246/0/0/0/0
+GPT-5.2 236/10/0/0/0 82/71/8/80/5 160/0/0/86/0 161/77/8/0/0
+Qwen3 235B 181/65/0/0/0 8/32/0/206/0 21/10/3/212/0 157/88/1/0/0
+Gemini 2.5 Flash 218/28/0/0/0 26/55/3/158/4 65/12/3/166/0 164/81/1/0/0
+Table D1: Pass/fail/unresolved/not-applicable/unannotated counts. Each cell sums to 246; applicable-check gap
+rates exclude not-applicable and unannotated items. Tables B4 and B5 report all-point and annotated-trading-point
+joint results.
+D.2 Individual Results for Ten-Case Reruns
+The four models are each tested on ten indepen-
+dent historical snapshots, producing 41 net trade
+events in total. Each test restores market infor-
+mation and the pre-trade account state at the cor-
+responding decision time and uses the same sys-
+tem prompt, interaction-step limit, and number of
+overall attempts to maintain consistent experimen-
+tal settings. All outputs are assessed under the
+same O, RK, and D rules. Figure 4 presents the
+audit results for each model under the same exper-
+imental conditions.
+Two rounds of independent blind annotation are
+performed for R/K/D across the 41 net trade events
+in the fixed ten-case sets. Raw agreement between
+the two rounds is as follows:
+Item Agreements/events Raw agreement Cohen’s𝜅Gwet’s AC1
+R 41/41 100.0% 1.000 1.000
+K 40/41 97.6% 0.959 0.965
+D 41/41 100.0% 1.000 1.000
+Table D1b: Annotation agreement for historical snapshot tests.
+Raw agreement includes records both rounds la-
+bel unable to determine; AC1 is calculated using
+each item’s complete label categories.
+Model Report Rpt Call Resp
+DeepSeek V3.2 60.0 60.0 20.0 20.0
+GLM 4.7 Flash 0.0 10.0 0.0 0.0
+GPT-6 Astra(max) 0.0 0.0 0.0 0.0
+GPT-5.6 Sol 0.0 0.0 0.0 0.0
+Table D2: Gap rates for O’s four checks (%,↓). Report uses 10 windows as its denominator; the other checks use
+applicable windows. Complete item states appear in Table D2a.
+30
+Model Report Rpt Call Resp
+DeepSeek V3.2 4/6/0/0 4/0/6/0 8/0/2/0 8/0/2/0
+GLM 4.7 Flash 10/0/0/0 9/1/0/0 10/0/0/0 10/0/0/0
+GPT-6 Astra(max) 10/0/0/0 10/0/0/0 10/0/0/0 10/0/0/0
+GPT-5.6 Sol 10/0/0/0 10/0/0/0 10/0/0/0 10/0/0/0
+Table D2a: Complete counts for O’s four checks. Counts are ordered as pass/confirmed failure/undetermined/not
+applicable.
+The joint seven-check audit comprises Report,
+Rpt, Call, Resp, R, K, and D. O and joint rates use
+each group’s 10 decision points; RK and D use ap-
+plicable points, and gaps combine confirmed fail-
+ures and undetermined cases. D has 5, 2, 10,
+and 10 applicable points, including 4 unable-to-
+determine DeepSeek points. GLM’s D gap rate is
+1/2=50.0% by decision point and 33.3% by trade
+event (Table D3c).
+Model Trading windows Joint passes Confirmed failures Undetermined
+DeepSeek V3.2 6 2 8 0
+GLM 4.7 Flash 3 7 3 0
+GPT-6 Astra(max) 10 8 2 0
+GPT-5.6 Sol 10 5 5 0
+Table D3: Joint seven-check states. A point passes only when all applicable checks pass with no undetermined
+items; any confirmed failure takes precedence and determines joint failure; points without failures but with unde-
+termined items remain undetermined.
+Model O pass/fail/
+undetermined/not
+applicable
+RK pass/fail/
+undetermined/not
+applicable
+D pass/fail/
+undetermined/not
+applicable
+Joint pass/fail/
+undetermined/not
+applicable
+DeepSeek V3.2 4/6/0/0 0/2/4/4 1/0/4/5 2/8/0/0
+GLM 4.7 Flash 9/1/0/0 1/2/0/7 1/1/0/8 7/3/0/0
+GPT-6 Astra(max) 10/0/0/0 8/2/0/0 10/0/0/0 8/2/0/0
+GPT-5.6 Sol 10/0/0/0 5/5/0/0 10/0/0/0 5/5/0/0
+Table D3a: Complete counts for O, RK, D, and the joint seven-check audit. Counts are ordered as pass/confirmed
+failure/undetermined/not applicable; applicable denominators equal totals minus not-applicable cases, including
+undetermined cases.
+Model R K D
+DeepSeek V3.2 1/1/4/4 0/2/4/4 1/0/4/5
+GLM 4.7 Flash 2/0/1/7 1/2/0/7 1/1/0/8
+GPT-6 Astra(max) 10/0/0/0 8/2/0/0 10/0/0/0
+GPT-5.6 Sol 10/0/0/0 5/5/0/0 10/0/0/0
+Table D3b: Decision-point states for R, K, and D. Multi-security events use the joint aggregation rules; no verifiable
+account assessment maps to D not applicable.
+Model Net trade events D pass/error/unable to determine/no
+account assessment
+D gap rate
+%
+DeepSeek V3.2 9 1/0/7/1 87.5
+GLM 4.7 Flash 4 2/1/0/1 33.3
+GPT-6 Astra(max) 18 18/0/0/0 0.0
+GPT-5.6 Sol 10 10/0/0/0 0.0
+Table D3c: Net trade event counts for account facts. D gap rates combine confirmed errors and unable-to-determine
+cases and exclude events with no account assessment.
+31
+DeepSeek V3.2 lacks formal reports in four
+trading windows covering seven net trade events,
+whose R, K, and D records are labeled unable to
+determine. Statistics cover each model’s fixed ten
+historical windows; additional GLM attempts are
+archived separately.
+D.3 Supplementary Results for Continuous
+Trading by the New Model
+The continuous trading experiment uses the origi-
+nal 246 historical snapshots, carrying account cash
+and positions forward across windows.
+RK filtering raises CR from 4.85% to 38.28%,
+Sharpe from 1.02 to 2.86, and Sortino from 1.88
+to 5.20. All-window maximum drawdown magni-
+tude increases from 8.23% to 15.02%; daily finan-
+cial metrics appear in Table C7.
+Model Report Rpt Call Resp
+GPT-6 Sol / medium 0.0 0.0 0.0 0.0
+Table D4: Gap rates for O’s four checks on GPT-6 Sol’s continuous trajectory (%,↓). All denominators are 246.
+Across all 246 points, 205 pass the joint audit,
+36 have confirmed failures, and 5 are unable to de-
+termine, giving a joint gap rate of 16.67%. The
+corresponding trading-point counts are 55, 36, and
+5, giving a trading joint gap rate of 42.71%. Temp
+is not applicable to the first trade, while other ap-
+plicable checks must still pass. Among 87 trades
+for which all eight metrics apply, 48 pass, 34 have
+confirmed failures, and 5 are unable to determine,
+giving a combined gap rate of 44.83%.
+E Securities, Data Sources, and Runtime
+Configurations
+E.1 Stock Pool and Data Sources
+All ten stocks in Table E1 are listed on the Shang-
+hai Stock Exchange’s STAR Market, with ac-
+counts and market prices denominated in CNY .
+Prices and technical indicators use TinySoft mar-
+ket data, while news and announcements are ob-
+tained through Tushare, AkShare, Sina Finance,
+the Shanghai Stock Exchange, and CNINFO, trun-
+cated at each decision time.
+Security code Company Industry Market
+SH688008 Montage Technology Semiconductors SSE STAR Market
+SH688111 Kingsoft Office Software SSE STAR Market
+SH688009 China Railway Signal &
+Communication
+Rail transport SSE STAR Market
+SH688981 SMIC Semiconductors SSE STAR Market
+SH688256 Cambricon Semiconductors SSE STAR Market
+SH688271 United Imaging Healthcare Medical devices SSE STAR Market
+SH688047 Loongson Technology Semiconductors SSE STAR Market
+SH688617 APT Medical Medical devices SSE STAR Market
+SH688303 Daqo New Energy Photovoltaic materials SSE STAR Market
+SH688180 Junshi Biosciences Biopharmaceuticals SSE STAR Market
+Table E1: Stock pool.
+Data Source Contents
+Individual-stock market data TinySoft Prices and hourly market data for the ten
+securities, from which technical
+indicators are calculated
+Financial news Tushare, Sina Finance Financial information from Sina
+Finance, Tonghuashun, East Money,
+Wallstreetcn, Cailian Press, Yicai, JRJ,
+and other outlets
+Stock-specific information and events AkShare Individual-stock news, company
+developments, and financial events
+Company announcements Shanghai Stock Exchange, CNINFO Company announcements and available
+announcement texts
+Table E2: Data sources.
+32
+News retrieval looks back 30 days, returning at
+most 20 items per security, deduplicated by secu-
+rity, publication time, and normalized title; dif-
+ferent models receive the shared snapshot for the
+same window.
+E.2 Model and Interaction Configurations
+The main experiment calls models through an
+OpenAI-compatible interface, using a uniform Re-
+Act workflow with at most 30 interaction steps per
+window and 3 attempts per agent task. Table E3
+lists model identifiers from the actual call records.
+Models use the interface’s default reasoning con-
+figuration.
+Model Model identifier in call records Additional reasoning
+request
+Claude Opus 4.5 anthropic/claude-4.5-opus-20251124 None specified
+GLM 4.7 Flash z-ai/glm-4.7-flash-20260119 None specified
+DeepSeek V3.2 deepseek/deepseek-v3.2 None specified
+Gemini 3.1 Pro google/gemini-3.1-pro-preview-20260219 None specified
+Claude Haiku 4.5 anthropic/claude-4.5-haiku-20251001 None specified
+Qwen3 Max qwen/qwen3-max None specified
+DeepSeek V3.1 deepseek/deepseek-v3.1-terminus None specified
+GLM 4.7 z-ai/glm-4.7; z-ai/glm-4.7-20251222 None specified
+MiniMax M2.1 minimax/minimax-m2.1 None specified
+GPT-5.1 openai/gpt-5.1-20251113 None specified
+GPT-5.2 openai/gpt-5.2-20251211 None specified
+Qwen3 235B qwen/qwen3-235b-a22b-04-28 None specified
+Gemini 2.5 Flash google/gemini-2.5-flash None specified
+Table E3: Main-experiment model identifiers.
+Parameters such as temperature and top_p use
+the interface defaults.
+The uniform prompt asks models to inspect
+candidate stocks, account positions, and trading
+constraints, autonomously choose to buy, sell, or
+not trade, and submit structured reports contain-
+ing material citations, trade descriptions, and deci-
+sion rationales. Tools cover news retrieval, techni-
+cal indicators, hourly market data, current prices,
+account-state queries, purchases, sales, No Trade
+recording, and report submission. Specific bud-
+gets for historical cases and continuous trading by
+the new model appear in Appendices D.2 and D.3.
+E.3 Reference Benchmark Settings
+The equally weighted buy-and-hold portfolio uses
+the same ten stocks; SSE 50 uses a normalized in-
+dex series for the same period as a market refer-
+ence. Five rule-based strategies start from empty
+accounts with CNY 1 million and calculate sig-
+nals on shared snapshots; when a signal is ac-
+tive and the security is not already held, the tar-
+get purchase value is 10% of pre-trade total as-
+sets; when the signal disappears, sellable holdings
+are sold. Strategies apply 100-share purchase lots,
+cash constraints, a short-selling prohibition, T+1,
+a 50% single-stock limit, and the same commis-
+sions and stamp duty as the main experiment.
+Strategy Parameters Buy signal
+RSI 14 periods RSI below 30
+MACD 12/26/9 Histogram value above 0
+SMA 5 and 20 periods 5-period moving average above the
+20-period moving average
+KDJ (closing price) 9 periods K above D and below 80
+Mean reversion 60 periods Closing price more than 3% below the
+rolling mean
+Table E4: Strategy benchmark parameters. Periods are calculated over the shared snapshot sequence.
+33
+The KDJ benchmark constructs signals using
+only snapshot closing prices. All market and strat-
+egy benchmarks cover the same 82 trading days
+and use daily closing account values to calculate
+the financial metrics in Table B6a.
+E.4 Material Language and Saved Content
+News, company announcements, and annotation
+instructions are primarily in Chinese, while model
+reports and tool interfaces contain English struc-
+tured fields. Annotators view the titles, sum-
+maries, or full texts saved in the contemporane-
+ous archives; citation checks and key-fact assess-
+ments retain the corresponding original text for
+reference.
+The key-fact material packets used in the inde-
+pendent second round of annotation primarily con-
+tain news titles and summaries within titles, and
+key facts are extracted only from content explicitly
+stated in these materials. Materials corresponding
+to the current formal trades comprise 872 packets
+and 68,741 records. Publication times are no later
+than the corresponding decision times, and mate-
+rial identifiers cited by key facts can be located in
+the corresponding packets.
+E.5 Verification Records and Audit
+Dimensions
+Record type Record contents Core audit use
+Model reportStructured trade descriptions and
+rationales
+Check whether the report exists and has a valid structure; extract
+descriptions and rationales for subsequent verification
+Trade requestSecurity code, buy/sell direction, and
+requested quantity submitted by the
+model
+Aggregate net trade quantities in requests and compare them with
+net account position changes
+Execution
+response
+Processing status and execution
+records returned by the trading
+interface
+Aggregate net trade quantities recorded in successful responses
+and compare them with net account position changes
+Account
+snapshot
+Position quantities, cash, sellable
+quantities, and other states before
+and after the window
+Verify actual trade effects through net position changes and
+provide a reference for account-fact assessments
+Table E5: Underlying verification records and their audit uses.
+Audit question Audit dimension Associated records
+Was a valid report retained, and do reports,
+requests, and responses match outcomes posted
+to the ledger?
+O: Execution
+traceability
+Model reports, trade requests, execution
+responses, and actual booked trade effects
+Are the materials supporting the current
+decision sufficient to support the stated trading
+claim?
+RK: Evidence
+sufficiency
+Cited materials, trading claims, and verified
+actual trade directions
+Do decision rationales accord with account
+facts, and are successive trades reasonably
+explained?
+B: Financial
+meta-awareness
+Model reports, account facts, and sequential
+trading records
+Table E6: Core questions and associated records in the three-dimensional decision-auditing framework.
+E.6 Open-Source Resources
+We will release four resource groups:evalua-
+tion code, including agents, tool interfaces, and
+account execution logic;expert annotations, in-
+cluding anonymized A/B labels, final consensus,
+rationales, and source references;analysis and re-
+play scriptsto reproduce audits, filtered replay,
+and figures; andprompts, including trading and
+semantic annotation instructions, fixed few-shot
+examples, and exclusion lists. Market data, news,
+and announcements are accessed through the sys-
+tem’s data interfaces; the README will docu-
+ment data sources, environment configuration, and
+execution commands.
+34

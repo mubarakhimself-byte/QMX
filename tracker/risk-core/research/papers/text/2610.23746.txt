@@ -1,0 +1,2504 @@
+arXiv 2610.23746  https://arxiv.org/abs/2610.23746
+
+1
+Anytime-Valid Certification of Robustness Margins
+for Safe Control via E-Values
+Panagiotis S. Trakas ∗, Omid Mirzaeedodangeh ∗, and Lars Lindemann
+Abstract— Robust control uses the error between a known
+model and the true system as a robustness margin. However,
+this error is usually unknown: conservative estimates restrict
+feasibility and performance, while underestimates can result in
+violations of the control property. We estimate this robustness
+margin from online data using e-values, a statistical tool for
+hypothesis testing, in the setting of discrete-time control barrier
+functions (CBFs). Here, we measure the robustness margin as
+the difference between the observed CBF and the model-based
+CBF prediction. We then design a robust CBF controller in
+three steps by: (1) selecting a set of candidate margins, (2)
+obtaining validity certificates for these candidates via sequential
+tests based on e-values, and (3) updating the CBF controller
+with the smallest certified candidate. The deployed tests ac-
+cumulate evidence against the hypothesis that an exceedance
+risk, the probability of the robustness margin exceeding the
+candidate margin, remains at or above a pre-specified failure
+probabilityα. Our tests are anytime valid and thus enable the
+use of certified candidates in the CBF controller, guaranteeing
+that the probability that the exceedance risk of a certified
+margin exceedsαis at most a user-chosen confidenceδ. We
+validate our approach on navigation problems across different
+environments with visualizations in NVIDIA Isaac Sim.
+I. INTRODUCTION
+Learning-based controllers are increasingly deployed in a
+variety of applications, but often lack formal safety guaran-
+tees. This has motivated the use of safety filters via control
+barrier functions (CBFs) [1]. However, their reliability de-
+pend on the availability of an accurate model of the system.
+In the presence of model mismatches, robust CBFs can still
+ensure safety by tightening the CBF safety constraint via a
+robustness margin, which must be larger than the model error
+[2]. Unfortunately, the model error is typically unknown and
+depends on the system’s operating range. Robustness margins
+that are chosen too small may provide insufficient protection,
+whereas unnecessarily large choices lead to conservative or
+infeasible problems. This issue, and hence our contribution,
+is not limited to CBFs and applies to other tools, e.g., robust
+model predictive control and control Lyapunov functions.
+Data-driven estimates of the model error can be obtained
+in practice, but are often heuristic and approximate, resulting
+again in unsafe behavior. Therefore, recent work has studied
+how probabilistic safety guarantees can be obtained using
+Gaussian Processes [3], [4] and conformal prediction [5].
+While Gaussian Processes rely on a well-calibrated model
+assumption, conformal prediction struggles in dealing with
+shifts of the data generating distribution due to the closed-
+loop dependence between controller and data. This issue
+The authors are with the Automatic Control Laboratory,
+ETH Z ¨urich, Switzerland. E-mails:ptrakas@ethz.ch,
+omirzaeedoda@ethz.ch, llindemann@ethz.ch.
+∗Panagiotis S. Trakas and Omid Mirzaeedodangeh contributed equally.
+2Videos from experiments athttps://tinyurl.com/28bendsa
+(all videos) andhttps://tinyurl.com/25qkw34h(Maze robot).
+(a) Navigate with uncertainty
+(b) Certify and adapt robustness margins online
+Reference
+controller
+Robust CBF ﬁlter
+fallback
+safe set
+System
+disturbance
+Nominal model
+Barrier loss
+safe set
+Anytime-valid e-value certiﬁer
+? ?
+deployedtight fallback
+certify
+e-value
+time
+repeated tests for each candidate
+Fig. 1. Overview of the proposed approach. (a) Robot navigation under
+model uncertainty, requiring a robustness marginc t. (b) Closed-loop barrier
+lossesY t provide evidence for selecting valid robustness marginsc t.2
+was addressed in [6]–[8], e.g., via robust conformal pre-
+diction, but only under additional regularity assumptions.
+Importantly, these works require the availability of an offline
+calibration dataset. We argue for departing fromconformal
+predictionin favor ofe-values[9], a statistical tool for
+hypothesis testing whose properties accommodate closed-
+loop distribution shifts without requiring an offline dataset.
+Our proposed method is initialized with a conservative
+yet valid fallback robustness margin, see Fig. 1. We then
+start collecting closed-loop data with the goal to find smaller
+robustness margins. Therefore, at each time step, we compute
+thebarrier loss, which is the amount by which the observed
+CBF falls below its model-based prediction. We then select
+a finite set of candidate margins. For each candidate, we test
+the hypothesis that the exceedance risk, which is the prob-
+ability of the barrier loss exceeding the candidate margin,
+remains at or above a user-chosen error confidence. As we
+need to check this hypothesis at each time step, we require
+anytime-valid tests for which we use sequential tests based
+on e-values, as opposed to often used p-values [10]–[12].
+arXiv:2610.23746v1  [eess.SY]  16 Oct 2026
+2
+A certificate is now issued if sufficient evidence against
+this hypothesis is obtained. Such a certificate tells us that
+the exceedance risk for the corresponding candidate was
+below the pre-specified failure probability at some point in
+the past. To transfer this certificate into a safe control action,
+we have to account for the fact that the exceedance risk may
+increase in the future, which is done by adding an exceedance
+buffer. The CBF controller then selects the smallest certified
+candidate. Our main contributions are as follows:
+1) We develop anytime-valid certificates for robustness
+margins of CBF controllers using online data and
+sequential tests based on e-values. We also derive
+upper bounds for the expected certification time.
+2) We propose a robust CBF controller that transfers cer-
+tified robustness margins into safe control actions. This
+transfer relies on a bound on the increase in exceedance
+risk, which introduces conservatism. Therefore, we
+permit parallel tests for efficient control design.
+3) We compare our method against baseline algorithms
+on unicycle navigation problems in corridor and maze
+environments, visualized in NVIDIA Isaac Sim.
+A. Related Work
+Robust and stochastic safety filters account for model
+uncertainty through error bounds or additional distributional
+information. Predictive safety filters use model-error bounds
+that can be learned from data [13], while adaptive CBFs use
+state-estimation error bounds [14]. Probabilistic CBFs use
+known moments or i.i.d. disturbance samples [15], while
+stochastic CBFs rely on a known disturbance distribution
+[16].An open challenge is to quantify error bounds and to
+certify robustness margins directly from online observations.
+Conformal prediction (CP) is increasingly used in control
+to construct uncertainty bounds from observed prediction
+errors without assuming a parametric error distribution [17].
+Under i.i.d. assumptions, standard CP approaches provide
+marginal coverage, so guarantees averaged over offline cal-
+ibration trajectories and a test trajectory. One of the main
+challenges in control, however, is dealing with non i.i.d. data.
+Online conformal prediction methods adapt uncertainty
+bounds in tube-based MPC [18] or switch thresholds in
+learned safety filters [19]. However, these provide safety
+guarantees that are only valid on average over time. For
+CBF controllers, [6] provides an iterative procedure to deal
+with distribution shifts by updating robustness margins using
+large sets of i.i.d. calibration trajectories. Instead, we use
+anytime-valid tests that require neither known disturbance
+distributions, offline calibration data, nor i.i.d. observations.
+Sequential hypothesis testing methods based on e-values
+have been developed for change detection [20] and risk-
+controlling prediction sets [21]. Conformal e-prediction pro-
+vides anytime-valid coverage for i.i.d. data arriving in
+batches [22]. In robotics, martingale tests detect distribution
+shifts with guarantees on false alerts [23], while multiple
+hypothesis testing can help identify the type of distribution
+shift [24]. Sequential tests can also be used to compare robot
+policies using i.i.d. evaluation trials [25]. Closest to our work
+are [16], [26]–[29], which formulate safety through enforcing
+a martingale condition. However, verifying the validity of
+this martingale condition requires precise knowledge of the
+disturbance distribution and must be performed offline. To
+the best of our knowledge, no one has used anytime-valid
+sequential certification of robustness margins from online
+data to design safe feedback controllers.
+II. PROBLEMFORMULATION
+A. Stochastic System and Nominal Model
+Let(Ω,F,P)be a probability space, whereΩis the
+sample space,Fis the associatedσ-algebra, andPis a prob-
+ability measure. LetEdenote expectation underP. Relations
+between random variables are understood to hold almost
+surely.3 We consider a discrete-time stochastic system:
+xt+1 =f(x t, ut, wt), t∈N 0,(1)
+wherex t : Ω→ X ⊆Rn,u t : Ω→ U ⊆Rm, andw t : Ω→
+W ⊆Rp denote the state, control input, and disturbance,
+respectively. Moreover,x 0 : Ω→ Xis the random initial
+state of (1). The actual transition mapf:X × U × W →
+Xis unknown. Suppose, however, that a nominal one-step
+predictor ˆf:X × U → Xis available, e.g., obtained from
+first principles or via system identification. Define the model
+errore t :=x t+1 − ˆf(x t, ut), so that
+xt+1 = ˆf(x t, ut) +e t.(2)
+At each timet, a causal, possibly randomized controller, such
+as an RL policy, generates a nominal inputu nomt : Ω→
+Rm. The control inputu t is then obtained by passingu nomt
+through a CBF filter, introduced below, which modifies the
+nominal input when necessary to enforce safety constraints.
+The probability space supports the initial state, the dis-
+turbance process{w t}t≥0, and any randomization used to
+generateu nomt . Together with the system dynamics (1) and
+the CBF controller, these random variables induce the state
+and input processes{x t}t≥0 and{u t}t≥0, respectively. Let
+{Ft}t≥0 denote the decision-time filtration, whereF t con-
+tains all information available afteru t is selected, but before
+xt+1 is observed. In particular,F t contains the past states
+and control inputsx 0, u0, . . . , xt−1, ut−1, the current state
+xt, the nominal inputu nomt , and the control inputu t. Thus,
+xt,u nomt , andu t areF t-measurable, whilex t+1 ande t are
+Ft+1-measurable and are not available at timet.
+B. Robust CBF Safety Filter
+Leth:X →Rdefine the safe setC:={x∈ X |h(x)≥
+0}.Our objective is to keep the statex t insideCdespite the
+mismatch between the nominal model ˆfand the systemf.
+Therefore, we utilize robust CBFs for which we letc t ≥0
+be a robustness margin. Consider now a control inputu t
+satisfying the tightened nominal barrier condition
+h
+  ˆf(x t, ut) −c t ≥(1−γ)h(x t), γ∈(0,1].(3)
+3An event holdsP-almost surely if it holds with probability one underP.
+3
+For a given marginc≥0, define the feasible input set
+U(x t, c) :=
+n
+u∈ U:h
+  ˆf(x t, u) −c≥(1−γ)h(x t)o .
+The corresponding CBF safety filter modifies the nominal
+inputu nomt as little as possible:
+ut(c)∈arg min
+u∈U(x t,c)
+∥u−u nomt ∥2 .(4)
+IfU(x t, c)is nonempty, we assume that the minimum is
+attained4 and that a minimizer can be selected. The control
+input isu t :=u t(ct).5 To quantify how the model mismatch
+affects the true barrier condition, define thebarrier loss
+Yt :=
+h
+h
+  ˆf(x t, ut) −h(x t+1)i+ (5)
+where[χ] + := max{χ,0}. Since[χ] + ≥χfor everyχ∈R,
+we know that the following inequality is always satisfied:
+h(xt+1)≥h
+  ˆf(x t, ut) −Y t.(6)
+Using equation (6), we can now present a sufficient condition
+for our goal. Indeed, knowing thatu t ∈ U(xt, c), we have
+Yt ≤c t =⇒h(x t+1)≥(1−γ)h(x t),(7)
+i.e.,Y t ≤c t is sufficient to ensure the “then” part of (7),
+which is the true barrier condition [30]. Hence, ifx 0 ∈ C
+andY t ≤c t for allt∈N 0, thenx t ∈ Cfor allt∈N 0.
+We note that the lossY t becomes observable only afteru t
+is applied andx t+1 is observed. It is henceF t+1-measurable
+and unavailable whenc t andu t are selected. At timet, only
+the previous lossesY 0, . . . , Yt−1 are available.
+C. Problem Statement
+Let us select a CBF-violation probabilityα 0 ∈(0,1). At
+every time step at which a marginc t is deployed and an
+inputu t satisfying (4) is applied, we seek to ensure
+P(h(xt+1)<(1−γ)h(x t)| Ft)≤α 0.
+In words, given all information available at timet, we want
+that the probability that the barrier conditionh(x t+1)≥(1−
+γ)h(xt)is violated does not exceedα 0. By the sufficient
+condition in (7), we can achieve this goal by ensuring
+pt(ct)≤α 0
+wherep t(c)denotes the exceedance risk at timet:
+pt(c) :=P(Y t > c| Ft)(8)
+i.e., the probability that the lossY t exceeds the marginc.
+The difficulty here is circular:c t must be selected before
+Yt is observed, whileY t depends onc t. In particular,c t
+influences the control input in (4) and hence the resulting
+barrier lossY t in (5). Additionally, the exceedance riskp t(ct)
+is unknown. Before sufficient data is available to certify a
+marginc t, we therefore require a pre-validated margin that
+guarantees feasibility and bounds the barrier loss.
+4IfUis polyhedral and the barrier constraint is affine inu, the filter is a
+convex quadratic program with a unique minimizer whenever feasible.
+5The variablesc t andu t need to beF t+1-measurable.
+Assumption 1(Safe Margin).There exists a known margin
+cmax >0such thatU(x t, cmax)̸=∅almost surely for all
+xt ∈ X. Ifc t =c max, then applyingu t =u t(cmax)∈
+U(x t, cmax)ensuresY t ≤c max almost surely for allx t ∈ X.
+Under this assumption, any marginc < c max has the
+property thatU(x t, cmax)⊆ U(xt, c)so that the safety filter
+(4) remains feasible. We restrict the candidate margins to a
+finite ordered grid ofMcandidates
+Γ :={c (1) <· · ·< c(M) } ⊆[0, cmax).
+The deployed marginc t will be selected fromΓ∪ {c max}.
+Problem1.Consider the system in (1) under the safety filter
+in (4) and let Assumption 1 hold. Design a causal rule that,
+at each timet∈N 0, uses the data inF t to select the smallest
+marginc t that satisfiesp t(ct)≤α 0.
+III. E-VALUES ANDSEQUENTIALTESTS
+A. Composite Null Hypotheses and E-Values
+We first review the statistical background used throughout;
+further information is provided in [9]–[12]. A null hypothesis
+H0 is a set of probability measures on(Ω,F)satisfying
+a specific event. It is called simple if it contains a single
+probability measure and composite otherwise. Throughout
+this section,Q∈H 0 denotes a generic probability measure
+satisfying the hypothesisH 0, andE Q denotes expectation
+underQ. This notation is used only in this section, the
+closed-loop probability measure remainsP.
+For example, letZ t ∈ {0,1}indicate whether a specific
+event (e.g.,Y t ≤c t) occurs at timet. Fixα∈(0,1)and
+consider the composite null hypothesis
+H0 :={Q:Q(Z t = 1| Ft)≥α}, t∈N 0.(9)
+This is a composite null hypothesis because many probability
+measures may satisfy the inequalityQ(Z t = 1| Ft)≥α.
+Under any such probability measure, the event indicated by
+Zt = 1occurs with probability at leastα.
+Ane-variableconverts observed data into a nonnegative
+measure of evidence against the null hypothesis. Formally, a
+nonnegative random variableEis an e-variable forH 0 if
+EQ[E]≤1for everyQsatisfyingH 0. (10)
+The realized value ofEafter the data are observed is called
+ane-value. Equation (10) ensures that large e-values cannot
+occur frequently whenH 0 is true, so a larger e-value provides
+stronger evidence againstH 0.
+To make this interpretation precise, fix an error confidence
+levelδ∈(0,1). Markov’s inequality then gives
+Q
+
+E≥ 1δ  ≤δfor everyQsatisfyingH 0.
+Thus, observing an e-value of at least1/δjustifies rejecting
+H0 at levelδ, i.e., with a confidence of1−δ.
+4
+B. Test Supermartingales
+We seek to accumulate evidence as new data becomes
+available. One-step e-variables can be multiplied over time
+to form atest supermartingale, provided theirF t-conditional
+expectation under the null hypothesis are at most one [11].
+This construction allows evidence to be assessed at every
+time, making it suitable for online monitoring systems (1).
+A process(E t)t≥0 is adapted to the filtration(F t)t≥0
+ifE t isF t-measurable, meaning that its value uses only
+the information available at timet. A nonnegative adapted
+process withE 0 = 1is atest supermartingaleforH 0 if, for
+everyQ∈H 0, it is integrable and satisfies
+EQ[Et+1 | Ft]≤E t, t∈N 0.(11)
+Thus, under the null hypothesis, the conditional expected
+value of the evidence cannot increase, although its observed
+value may rise or fall. Taking expectations recursively gives
+EQ[Et]≤1, so eachE t is an e-variable.
+The key advantage is a validity guarantee over all times
+t∈N 0. For anyδ∈(0,1), Ville’s inequality [31] gives
+Q
+
+sup
+t≥0
+Et ≥ 1δ  ≤δ,Q∈H 0.
+Under anyQ∈H 0, the probability that the evidence ever
+reaches1/δis therefore at mostδ. We may checkE t at
+every time step and rejectH 0 at the first timeE t reaches
+the threshold. This property is calledanytime-validity.
+Example 1.LetZ t = 1indicate if a robot ends up closer to
+an obstacle than predicted, andZ t = 0otherwise. For the
+null hypothesis in(9), we define this event to have probability
+at leastαat every timet. Starting fromE 0 = 1, update
+the evidence by multiplying it by a factor determined by
+the latest observation, e.g.E t+1 =E t
+
+1 + 12 (α−Z t) .
+For everyQ∈H 0, the nonnegative update factor satisfies
+EQ
+
+1 + 12 (α−Z t)| Ft = 1 + 12 [α−Q(Z t = 1| Ft)]≤1.
+Thus, each factor is anF t-conditioned e-variable, i.e., their
+product satisfies(11)and forms a test supermartingale [11].
+Forα= 0.1, the evidenceE t is multiplied by1.05without an
+exceedance and by0.55otherwise. Withδ= 0.05, rejection
+occurs atE t ≥20, e.g.,62consecutive non-exceedances give
+E62 = 1.0562 >20. UnderH 0, Ville’s inequality bounds the
+probability of ever reaching this threshold by5%.
+IV. ANYTIME-VALIDROBUSTNESSMARGIN
+CERTIFICATION
+Let us now fixt∈N 0 to be the current time. Our goal is
+to construct an anytime-valid monitor that uses online data to
+find candidate robustness marginsc∈Γwhich have satisfied
+the conditionY s ≤cfor some times≤tin the past.
+A. Simultaneous Margin Certification
+At timet≥1, we use the data(x t−1, ut−1, xt)to compute
+the barrier lossY t−1. For each candidatec∈Γ, we define
+Zt−1(c) :=1 {Yt−1>c}.(12)
+WhileZ t−1(c)records whether the observed loss during the
+current transition exceededc, we recall that the exceedance
+probabilityp t(c)in (8) was defined for the next transition.
+Next, choose the margin insufficiencyα∈(0, α 0]where
+we recall thatα 0 was the CBF-violation probability from
+Section II-C. The differenceα 0 −αallows for an exceedance
+buffer to account for an increase in exceedance risk from
+ps(c)in the past top t(c)now. Additionally, choose the error
+confidenceδ∈(0,1). The parametersαandδhave different
+roles:αdefines margin insufficiency throughp t(c)≥α,
+whereasδbounds the probability of ever falsely certifying
+any candidate. For each candidate, we test the null hypothesis
+H0(c) :={P:P(Y t > c| Ft)≥α}, t∈N 0.(13)
+UnderH 0(c), the candidate remainsα-insufficient through-
+out monitoring. We aim to certify the opposite.
+For this reason, we define the variableE λt (c)that will
+gather evidence against the null hypothesisH 0(c). Initially,
+we setE λ0 (c) = 1and updateE λt (c)as
+Eλt (c) =E λt−1(c) 1 +λ  α−Z t−1(c) , t≥1(14)
+whereλ∈[0,(1−α) −1]is a gain that scales the contribution
+of each observation to the evidence, i.e., largerλincreases
+the factor1+λαwhenZ t−1(c) = 0and decreases the factor
+1−λ(1−α)whenZ t−1(c) = 1. The admissible range ofλ
+ensures nonnegativity ofE λt (c).
+Under the null hypothesisH 0(c), we notice that
+E
+
+1 +λ
+ 
+α−Z t(c)
+  Ft = 1 +λ  α−p t(c) ≤1, (15)
+i.e.,1 +λ
+ 
+α−Z t(c)
+
+is anF t-conditioned e-variable. Their
+product again form a test supermartingale, i.e.,(E λt (c))t≥0
+is a test supermartingale under everyP∈H 0(c). Therefore,
+we can apply Ville’s inequality toE λt (c)by which we get
+P
+
+sup
+t≥0
+Eλt (c)≥ 1δ  ≤δ,P∈H 0.
+Reducing sensitivity.The rate at which evidence accu-
+mulates depends on the gainλ. To reduce sensitivity to a
+particular choice, we select a finite set of gains
+Λ :={λ (1), . . . , λ(L)} ⊂(0,(1−α) −1)
+that we use in parallel for every candidate marginc∈Γ.
+Indeed, we combine the corresponding processes through
+Et(c) := 1|Λ| Xλ∈Λ Eλt (c), E 0(c) = 1.(16)
+By linearity of conditional expectations,(E t(c))t≥0 is again
+a test supermartingale under everyP∈H 0(c). Thus, com-
+bining the gains preserves the same anytime-valid guarantee,
+i.e., we can apply Ville’s inequality toE t(c)and obtain
+P
+
+sup
+t≥0
+Et(c)≥ 1δ  ≤δ,P∈H 0.(17)
+For each candidatec, define its first certification time as
+τ(c) := inf
+
+t≥1 :E t(c)≥ 1δ  .(18)
+5
+If the threshold is never crossed, we setτ(c) = +∞.
+At decision timet, the evidenceE t(c)depends only on
+Y0, . . . , Yt−1. The candidates certified at that time are
+St :={c∈Γ :τ(c)≤t}.
+IfS t =∅, no certificate is available and the controller
+continues to usec max (see Section V for details).
+Simultaneous Guarantees.So far, we tested all candidate
+marginsc∈Γseparately. However, we would ideally like to
+obtain simultaneous guarantees for all candidate margins. A
+naive union bounding argument of (17) would give
+P
+
+sup
+t≥0
+Et(c)≥ 1δ ,∀c∈Γ  ≤M δ,P∈H 0.
+However, this is overly conservative, increasing the error
+confidence fromδtoM δ. We can avoid this by noticing
+thatc ′ ≥c=⇒E t(c′)≥E t(c). Thus, certification ofc
+also certifies every larger candidatec ′; see Lemma 1 in the
+appendix. Since{Y t > c′} ⊆ {Yt > c}forc < c′, we have
+pt(c′)≤p t(c). Hence, ifp t(c′)≥αthroughout monitoring,
+then we havep t(c)≥αover the same period.
+The next theorem uses these two properties to bound the
+probability of any false certification for all candidates byδ.
+Hence, define the event that no candidate is falsely certified:
+G:=
+n
+∀c∈Γ, τ(c)<∞=⇒
+∃s∈ {0, . . . , τ(c)−1}:ps(c)< α
+o
+.
+(19)
+OnG, every certified candidatec(indicated byτ(c)<∞)
+had an exceedance riskp s(c)belowαfor some times∈
+{0, . . . , τ(c)−1}in the past.6
+Theorem 1(Simultaneous Margin Certification).Consider
+the system in(1)under the safety filter in(4). 7 Letα∈(0,1)
+andδ∈(0,1). Given the grid of candidate marginsΓ, the
+set of gainsΛ, and the certification rule(18), then we have
+P(G)≥1−δ.
+Proof.The proof is given in Appendix B-A.
+Theorem 1 ensures that, with probability at least1−δ,
+every certified candidatecsatisfiesp s(c)< αfor somes <
+τ(c). All candidates use the same threshold1/δ, without
+increasing the error confidence or requiring independent or
+stationary observations. OnG, this guarantee concerns past
+observations: it neither identifies the exact certification time
+snor ensuresp τ(c) (c)< α. For this reason, Section V will
+combine certificatesc∈ S t with an exceedance risk buffer
+to compute safe control inputs in the future.
+Remark1.The one-step e-variables in (14) generate a
+test supermartingale. For finitely constrained conditional
+hypotheses such as ours, Clerico [32] shows that every e-
+process (a general anytime-valid evidence process that does
+6The event of incorrectly certified robustness margins isG c := n∃c∈
+Γ, τ(c)<∞and∀s∈ {0, . . . , τ(c)−1}:ps(c)≥α, indicatingcthat
+are certified even though its exceedance riskp s(c)was never belowα.
+7Theorem 1 holds for any sequence of robustness margin{c s}t≥s.
+Indeed, Theorem 1 holds more generally for any control sequence{u s}t≥s.
+not necessarily satisfy (11)) is pointwise bounded from above
+by a test supermartingale. Thus, using test supermartingales
+does not limit the evidence attainable in principle.
+B. Evidence Growth and Certification Time
+To analyze the time needed for certification, we assume
+that the null hypothesis (13) is violated at all times, i.e., that
+pt(c)< αfor all timest≥0. Indeed, we impose the slightly
+stronger condition thatp t(c)remains uniformly belowα. Fix
+c∈Γand assume that there exists¯p(c)∈[0, α)such that:
+pt(c)≤¯p(c),∀t∈N 0,almost surely.(20)
+This assumption is used only for the following result, i.e.,
+all other results in the paper remain valid without it.
+Proposition 1(Evidence growth and certification time).
+Assume that(20)holds. Defineg q(λ) := (1−q) log(1+λα)+
+qlog(1−λ(1−α)). Then, for anyλ∈Λwithg ¯p(c)(λ)>0:
+lim inf
+t→∞
+logE λt (c)
+t ≥g ¯p(c)(λ)a.s.(21)
+and the expected certification time satisfies
+E[τ(c)]≤ log(|Λ|/δ) + log(1 +λα)g ¯p(c)(λ) .(22)
+Proof.See Appendix C-A.
+Equation (21) shows that the evidence grows without
+bound almost surely wheng ¯p(c)(λ)>0. SinceE t(c)
+averages the nonnegative evidence across gains, one such
+gain is enough to ensure certification in finite time almost
+surely. Equation (22) bounds the expected certification time.
+Example 2.We illustrate these results with daily losses of
+synthetic stock data. Here,Y t is the relative drop of the stock
+price during dayt, or zero if the price rises. The daily log
+return, i.e., the logarithm of the ratio of consecutive prices,
+follows a time-varying generalized autoregressive condi-
+tional heteroskedasticity (TV-GARCH) model [33]. Hence,
+the losses are dependent and their conditional distribution
+varies over time. More details about the model and the
+candidate grid are provided in Appendix C-B.
+We setα=δ= 0.05andΛ ={0.2,0.5,0.8}. For
+c= 0.096, the assumption of Proposition 1 is satisfied
+withp t(c)≤¯p(c) = 0.0233< α. Panels (a), (b), and
+(d) in Figure 2 show one realization over 1000 trading
+days. In it,c= 0.096is certified at day 98 without risk
+exceedance, whilec= 0.023is certified at day 725 after
+21 risk exceedances. The exceedance risk ofc= 0.007
+stays aboveα, and this margin is not certified. The smallest
+certified marginminS t takes eight values, from0.06at day
+98 to0.022at day 937. Panel (c) compares fixed-gain tests
+for three margins over 5000 independent trials, showing
+averaged certification times. The black dotted curve is the
+bound(22)forc= 0.096. Finally, note that the exceedance
+risk ofc= 0.023is belowαwhencis certified, but later
+exceedsαagain. Hence, a certificate does not ensure that
+exceedance risk remains low. The next section accounts for
+such exceedance risk increases by restarting tests.
+6
+0.01
+1
+1/δ
+Et(c)
+(a) Evidence
+0 200 400 600 800 1000
+Time t (days)
+0.022
+0.06min St
+(b) Certiﬁed margin
+c = 0.007
+c = 0.023
+c = 0.096
+other c
+0.2 0.5 0.8
+Gain λ
+100
+300
+1000Mean τ (days)
+(c) Certiﬁcation time
+α
+98 500 725
+Time t (days)
+0
+0.2pt(c)
+(d) Conditional risk
+Fig. 2. Sequential certification with time-varying stock losses. One test
+per candidate,α=δ= 0.05;α 0 is not used. (a) Mixture evidence, shown
+above0.001; markers: certification. (b) Smallest certified margin. (c) Mean
+capped certification times±2standard errors over 5000 trials; dotted: bound
+forc= 0.096. (d) Conditional risks; dotted:¯p(0.096); vertical dashed:
+certification times. The legend in (b) applies to all panels.
+V. ROBUSTNESSMARGINS FORSAFECONTROL
+Section IV provides statistical evidence that a candidate’s
+exceedance riskp s(c)was belowαfor some times < t
+in the past. However, the exact timesis unknown. To use a
+certified margin for control, we have to account for a possible
+increase in exceedance risk from timesto the current timet.
+In Section V-A, we develop a method to transfer a certified
+margin to the current timetvia a deployment rule using
+one certificate per candidate. To reduce conservatism in this
+transfer, we also present repeated certification via parallel
+tests in Section V-B. Throughout, we make the following
+assumption to bound the increase in exceedance risk.
+Assumption 2(Bounding exceedance risk).Letc∈Γbe a
+margin,u t :=u t(c)be the control input at timetwhereu t(c)
+follows(4) 8, andσ, τ≥0be times withσ < τ≤t. Then,
+there exist known constantsL x, Lu ≥0and aF t-measurable
+bound∆ t ≥0such that, for anys∈ {σ, . . . , τ−1},
+pt(c)≤p s(c) +d t(c;σ, τ)(23)
+holds almost surely withd t(c;σ, τ)being defined as
+dt(c;σ, τ) := maxσ≤s<τ
+
+Lx∥xt −x s∥
++L u∥ut −u s∥+ ∆ t
+	
+.
+(24)
+We note thatσandτdenote the starting and certifica-
+tion times of a deployed test. The exceedance riskp t(c)
+is bounded via (23), where the state and input terms in
+(24) account for changes in operating conditions, while∆ t
+accounts for additional risk increase. Appendix D provides
+sufficient conditions for obtainingL x andL u from derivative
+bounds onf, ˆf, andhand a bound on the density function
+ofh( ˆf(x t, ut))−h(x t+1). We can obtain∆ t via a bound on
+8Past control inputs{u s}t>s need not be generated under the samec.
+changes in the distribution of the disturbancew t. This bound
+has to be known or estimated from data.
+A. Certificate Transfer and Deployment Guarantee
+In this section, we setσ:= 0andτ=τ(c), resembling
+the setting in Section IV. For each certified candidate, define
+dt(c) :=d t(c; 0, τ(c)). Ifps(c)< αat some times < τ(c),
+deployingcwithd t(c)≤α 0 −αensuresp t(c)< α+dt(c)≤
+α0.We therefore define the deployable set of margins as
+Dt :=
+
+c∈ St :d t(c)≤α 0 −α
+	
+.(25)
+Based on this reasoning, the controlleru t selects the smallest
+deployable margin, usingc max if none qualifies:
+ut :=u t(ct), c t :=
+(
+minD t,D t ̸=∅,
+cmax,D t =∅. (26)
+Certificates are retained, but their eligibility for deployment
+is checked at every decision timetusing the current bound
+dt(c). Finally, define the event that the deployed margin
+satisfies the conditional risk limit at every decision time:
+Gd := pt(ct)≤α 0 for allt∈N 0	.(27)
+Theorem 2(Deployment Guarantee).Consider the system
+in(1)under the safety filter in(26). Letα∈(0,1)and
+δ∈(0,1). If Assumptions 1 and 2 hold, then we have that
+P(Gd)≥1−δ.(28)
+Proof.See Appendix B-B.
+OnG d, (7) givesP(h(x t+1)<(1−γ)h(x t)| Ft)≤
+pt(ct)≤α 0 simultaneously for allt∈N 0. Thus, with
+probability at least1−δ, the conditional exceedance risk of a
+next-step CBF violation remains at mostα 0 along the entire
+closed-loop trajectory. Later, in Corollary 1, we convert this
+guarantee into a joint safety bound forP(∃t:x t /∈ C).
+A single certificate can be conservative as operating con-
+ditions change. We therefore introduce parallel tests next.
+B. Repeated Certification and Parallel Tests
+A certified margincno longer supports deployment when
+dt(c)> α0 −α. Starting new tests in parallel allows the con-
+troller to obtain certificates from more recent observations.
+In particular, for each candidatec∈Γ, letr∈N >0 index
+tests in the order they start, and letσ r andτ r(c)denote the
+starting and certification times of testr, respectively.
+We start new tests for all candidates everyKtime steps,
+which givesσ r = (r−1)KforK∈N >0. Unfinished
+tests continue in parallel. At timet, each unfinished test
+started beforetuses the same newly observed lossY t−1,
+but accumulates evidence from its own starting timeσ r.
+To obtain a guarantee that holds jointly over all tests, we
+assign each test indexrthe error levelδ r := δκ(r+1) ln2(r+1)
+withκ:= P∞n=2 1nln 2 n ≈2.11. The constantκnormalizes
+the allocation so that Pr≥1 δr =δ. The same levelδ r is
+used for every candidatec∈Γ. The common starting times
+σr and gainsΛallow the ordering argument of Theorem 1
+to give a joint error boundδ r overΓfor each test indexr.
+7
+We proceed similarly as before. For eachσ r, we initialize
+Eλ,rσr (c) = 1for everyλ∈Λand define
+Eλ,rt (c) =E λ,rt−1(c)1 +λ(α−Z t−1(c))
+fort > σ r. LetE rt (c)be the uniform mixture of these
+processes, as in (16), and define
+τr(c) := inf
+
+t > σr :E rt (c)≥ 1δr
+
+(29)
+withinf∅=∞. Ifτ r(c)<∞, the test stops and certificate
+(c, r)is stored. Overlapping tests may certify in a different
+order from the one in which they started.
+For each certificate(c, r)withτ r(c)≤t, define its current
+risk-increase bound as
+d(r)t (c) :=d t c;σ r, τr(c).(30)
+The setS t now contains every candidate with at least one
+certificate issued by timet, i.e.,S t :=
+
+c∈Γ :∃r∈
+N>0, τr(c)≤t
+	
+.Next, to obtain the setD t, we replace
+dt(c)byminr:τ r(c)≤t d(r)t (c)in (25), that is:
+Dt :=
+
+c∈ St : minr:τ r(c)≤t d(r)t (c)≤α 0 −α 	.(31)
+Thus, a margin qualifies if at least one of its certificates
+satisfies the deployment condition. The controller selectsc t
+andu t according to (26), withD t defined by (31). We next
+extend the guarantee forG d in (27) to repeated testing.
+Theorem 3(Deployment Guarantee for Repeated Tests).
+Consider the system in(1)under the safety filter in(26),
+withD t as in(31)and certification rule(29). Letα∈(0,1)
+andδ∈(0,1). If Assumptions 1 and 2 hold, then
+P(Gd)≥1−δ.(32)
+Proof.See Appendix B-C.
+Allocating the budgetδacross test starts viaδ r preserves
+the joint deployment guarantee, i.e., with probability at least
+1−δ,p t(ct)≤α 0 holds simultaneously for allt∈N 0.
+Theorem 3 also yields a bound on the probability of the
+system being unsafe over bounded horizons.
+Corollary 1(Finite-horizon safety).Under the conditions of
+Theorem 3, letT∈N >0 andx 0 ∈ C. Further, define
+n0 :=
+
+ log(1/δ)log(1 + maxλ∈Λ λα)
+
+
+Then, it holds that
+P(∃t∈ {0, . . . , T}:xt /∈ C)
+≤1 {T >n0} min
+
+1, δ+ 1−(1−α 0)T−n 0 	 . (33)
+Proof.See Appendix B-D.
+Equation (33) bounds the probability that the statex t
+leaves the setCwithinTsteps, accounting for the initial
+n0 time steps in which the controller necessarily uses the
+safe marginc max. It therefore concerns safety over an entire
+finite horizon, whereas the coverage guarantees of online
+conformal prediction [34], [35] are averaged over time.
+VI. NUMERICALEXAMPLES
+We evaluate the safety controller (26) with repeated cer-
+tification in two robot-navigation scenarios: a corridor with
+cones (Corridor) and a maze with walls and cones (Maze).
+We assess the theoretical guarantees empirically and compare
+safety and navigation performance with existing methods.
+For clarity of presentation we present the Maze results in
+this section, and the Corridor results in Appendix F-C.
+A. Setup
+We model the robot as a second-order unicycle navigating
+a maze with walls and cones. The goal of the robot is to
+reach a goal, using a nominal controlleru nomt , while avoiding
+the obstacles. The barrier function accounts for obstacle
+clearance at a fixed point ahead of the robot and its braking
+distance. The robot model and environment are detailed
+in Appendix F-A. The true system differs from the model
+through an additive disturbancew t, which models a bounded
+position displacement with a time-varying magnitude dis-
+tribution. Its direction is uniformly distributed over[0,2π)
+conditional on its magnitude andF t. To compute the risk-
+increase bounds (30), we use this directional model, a known
+magnitude bound, and a bound on changes in the conditional
+disturbance distribution. The magnitude distribution itself is
+unknown to the controller. We compute the risk-increase
+bounds (30) using the analysis in Appendix D-B. The param-
+eter values and simulation details are given in Appendix F-A.
+The trajectories are simulated in Python, and the trajectories
+are visualized in NVIDIA Isaac Sim. The simulation code,
+data, and supplementary ablation report are available at
+github.com/omidmirza/ecbf-ablation.
+A setting(α 0, α, δ, K)consists of the CBF-violation prob-
+abilityα 0, the margin insufficiencyα, the error confidence
+δ, and the test periodK(measured in control stepst). The
+tests follow Section V-B, with the deployable setD t in (31).
+We compare five settings, S1-S5, with four variants of our
+method at each setting, as described below. The settings and
+results are reported in Table I. Additional parameter sweeps
+are provided in the supplementary ablation report [36].
+B. Methods and Metrics
+a) Method variations:We implement four variants that
+differ only in the risk-increase boundd (r)t (c). We derive these
+bounds using the nominal dynamics, obstacle geometry, and
+a bound on changes in the disturbance distribution. Recall
+that smaller boundsd (r)t (c)make the deployment condition
+d(r)t (c)≤α 0 −αeasier to satisfy. We next summarize
+these four variants, but refer to Appendix D-B for a detailed
+description. Variant V-U uses uniform bounds forL x,L u,
+and∆ t across all candidate marginsc∈Γ. In the remaining
+three variantsL x,L u, or∆ t depend on the candidatec. V-∆
+tightens these bounds for each candidate depending on the
+shape of nearby obstacles, here walls and cones. V-L instead
+tightens the bound on risk changes caused by changes in the
+distance between the predicted nose point of the robot and
+nearby obstacles. V-C combines both refinements and also
+8
+TABLE I
+MAZE RESULTS,α 0 = 0.30. MEANS±SD. EVENT FREQUENCIES IN%
+(95%UPPER CONFIDENCE BOUNDS). bTmis IN S ANDbq+CBF IN%. BOLD:
+BEST VARIANT.
+Methodbm c/cmax↓ bTmis↓bq +CBF↓bm pmax ↓bq dep↓bq cert↓
+Unfiltered —42.2±.155.7±1.6— — —
+c= 0 0.00±.0048.7±.324.9±2.60.67±.13100 (100) —
+cmax 1.00±.0054.4±.30.0±0.0— 0.0 (1.5) —
+ACI0.22±.0449.7±.315.8±1.90.47±.0999.5 (100) —
+QT0.50±.0351.2±.38.0±1.30.34±.0865.5 (71.1) —
+S1:(α 0, α, δ, K) =(0.30, 0.25, 0.20, 50)
+V-U0.97±.0154.4±.30.1±0.30.11±.050.0 (1.5) 0.0 (1.5)
+V-∆ 0.97±.0154.3±.30.2±0.30.11±.050.0 (1.5) 0.0 (1.5)
+V-L0.62±.0551.9±.44.8±1.40.17±.040.0 (1.5) 0.0 (1.5)
+V-C0.52±.0751.3±.57.4±2.30.20±.040.0 (1.5) 0.5 (2.4)
+S2:(α 0, α, δ, K) =(0.30, 0.25, 0.15, 50)
+V-U0.98±.0154.4±.30.1±0.20.10±.050.0 (1.5) 0.0 (1.5)
+V-∆ 0.97±.0154.4±.30.1±0.20.10±.050.0 (1.5) 0.0 (1.5)
+V-L0.64±.0551.9±.44.6±1.40.17±.040.0 (1.5) 0.0 (1.5)
+V-C0.53±.0851.3±.57.3±2.40.19±.040.0 (1.5) 0.0 (1.5)
+S3:(α 0, α, δ, K) =(0.30, 0.20, 0.20, 50)
+V-U0.82±.0453.2±.41.5±0.80.12±.040.0 (1.5) 2.5 (5.2)
+V-∆ 0.82±.0453.2±.41.5±0.80.12±.040.0 (1.5) 2.5 (5.2)
+V-L0.62±.0751.9±.55.0±1.90.15±.040.0 (1.5) 2.0 (4.6)
+V-C0.61±.0851.8±.65.4±2.20.15±.040.0 (1.5) 2.0 (4.6)
+S4:(α 0, α, δ, K) =(0.30, 0.25, 0.025, 100)
+V-U1.00±.0054.4±.30.0±0.00.04±.030.0 (1.5) 0.0 (1.5)
+V-∆ 1.00±.0054.4±.30.0±0.00.04±.030.0 (1.5) 0.0 (1.5)
+V-L0.81±.0453.0±.42.1±1.00.13±.030.0 (1.5) 0.0 (1.5)
+V-C0.60±.0651.7±.55.8±1.90.17±.030.0 (1.5) 0.0 (1.5)
+S5:(α 0, α, δ, K) =(0.30, 0.25, 0.10, 10)
+V-U0.99±.0154.4±.30.0±0.10.07±.050.0 (1.5) 0.0 (1.5)
+V-∆ 0.99±.0154.4±.30.0±0.10.07±.050.0 (1.5) 0.0 (1.5)
+V-L0.66±.0552.1±.44.2±1.20.15±.040.0 (1.5) 0.0 (1.5)
+V-C0.55±.0751.4±.56.8±2.20.18±.030.0 (1.5) 0.0 (1.5)
+Theorem 3
+bounds the effect of disturbance-distribution changes more
+tightly. All variants account for changes in the disturbance
+distribution: V-U, V-∆, and V-L add the full drift bound
+∆t, whereas V-C uses the geometry and candidate margin to
+reduce its contribution to the risk-increase bound.
+b) Baselines:The baselines are unfiltered nominal con-
+trolu nomt , CBF filters with fixed margins0andc max;
+adaptive conformal inference (ACI) [34], as adapted in [19];
+and quantile tracking (QT) [37], as adapted in [18]. ACI
+and QT target an asymptotic average loss-exceedance fre-
+quency ofα 0, i.e., 1T PT−1t=0 Zt(ct)≈α 0 for largeT
+with the exceedance indicatorZ t defined in (12). This
+target allows the exceedance riskp t(ct)to be larger than
+α0 at some time instants. In contrast, Theorem 3 gives
+P(pt(ct)≤α 0,∀t∈N 0)≥1−δ.Thus, with probability at
+least1−δ, the exceedance risk limit holds along the entire
+trajectory. Sinceα 0 >0, this does not rule out individual
+loss exceedances or CBF violations. Implementation details
+are provided in Appendix F-A.
+c) Metrics:For each method, scenario, and setting, we
+simulateN MC = 200trajectories for validation.
+We report the mean mission time bTmis, assigning the
+full simulation horizon to unsuccessful trajectories. We also
+0 3 6 9 q1 (m)
+0
+3
+6
+9q2 (m)
+(a) Yt Yt > ct: 12.21 %
+V-L
+cmax
+Contact
+h=0 at v=0
+5
+10
+ct
+(mm) V-L trajectory V-L mean
+0
+5
+10
+Yt, ct
+(mm)
+5 cm
+10 20 30 40
+Time (s)
+0
+0.3
+ˆpt(ct)
+cmax
+cmax
+α0
+(b)
+(c)
+(d)
+Fig. 3. Maze, S3 with V-L. (a) Paths and clearance boundaries, with an
+enlarged view near an obstacle. (b) Selected margin for one trajectory and
+the mean across trajectories. (c) Loss and margin; crosses markY t > ct. (d)
+Estimated exceedance risk. Panels (b)-(d) show the same example trajectory.
+report the normalized mean robustness marginbmc/cmax and
+mean CBF-violation fractionbq+CBF. For this, we compute the
+average margin and the average fraction of time steps with a
+CBF violation along each trajectory, and then average these
+values across all trajectories resulting inbm c andbq+CBF.
+We also reportbm pmax as the average of the largest ex-
+ceedance riskp t(ct)across all trajectories that use a margin
+belowc max. We approximatep t(ct)through an estimate
+bpt(ct), see Appendix E-A for details. The metricbm pmax
+focuses on certified margins; the fallback hasp t(cmax) = 0.
+Lastly, we reportbq dep as the fraction of trajectories in
+which the deployed margin is such thatp t(ct)> α 0 at
+least once.9 This approximates the complement ofG d, which
+is upper bounded byδfollowing Theorem 3. We also
+reportbqcert as the fraction of trajectories containing a false
+certification, i.e., a candidate that is certified although its
+exceedance risk remained aboveαat all times. Theorem 3
+bounds this false-certification probability byδ. Details and
+additional metrics are provided in Appendix E.
+C. Results
+a) Statistical guarantees:Across all five settings in
+Table I, every certified variant hasbq dep = 0%over200
+trajectories, with a95%upper confidence bound of1.5%.
+False-certification frequencies satisfybq cert ≤2.5%. For
+both events, the upper confidence bounds are below the
+corresponding budgetδ, consistent with Theorem 3. In com-
+parison, ACI and QT havebqdep = 99.5%and65.5%, respec-
+tively. Their objective concerns the exceedance frequency
+averaged over time. Our guarantee instead ensures, with
+probability at least1−δ, thatp t(ct)≤α 0 simultaneously at
+all decision times.
+9When the estimated riskbpt(c)is close toα 0, finite sample errors may
+prevent us from determining whether the true riskp t(c)exceedsα 0. Table I
+conservatively counts these uncertain cases as failures. Parentheses give
+95%upper confidence bounds based on the possible-event counts.
+9
+b) Margin and mission time:V-C achieves the smallest
+mean marginbmc/cmax among the certified variants at every
+setting in Table I. At S1, it reduces the mean margin by
+48%relative toc max and shortens bTmis from54.4to51.3s.
+Its mean margin and mission time are close to those of QT
+(0.52versus0.50and51.3versus51.2s), with a lower CBF-
+violation fractionbq+CBF (7.4%versus8.0%).
+At the same setting, V-U uses a mean margin of0.97c max
+and hasbq+CBF = 0.1%. Thus, the smaller margins enabled by
+the tighter bounds in V-C improve navigation performance
+but allow more realized CBF violations. These violations can
+occur even when the exceedance risk remains within its limit.
+c) Illustrative trajectory:Figure 3 shows V-L at S3.
+Panel (a) compares its paths with those obtained usingc max.
+Panel (b) shows how the selected margin varies, including
+temporary returns toc max. Panel (c) marks the observed
+loss exceedancesY t > ct, which occur at12.21%of the
+steps. Despite these exceedances, the exceedance riskp t(ct),
+measured viabpt(ct), remains belowα 0 = 0.30in panel (d).
+This illustrates the distinction between realized exceedances
+and the exceedance risk bounded by our theory.
+d) Effect of the parameters:Reducingδfrom0.20in
+S1 to0.15in S2 raises the certification threshold and slightly
+increases the mean margins in Table I.
+Changingαhas two competing effects: a smallerαmakes
+certification harder but increases the deployment bufferα 0 −
+α. From S1 to S3,αdecreases from0.25to0.20, with
+all other parameters unchanged. The mean margin increases
+from0.52c max to0.61c max for V-C, but decreases from
+0.97cmax to0.82c max for V-U and V-∆. The resulting trade-
+off therefore depends on the risk-increase bound used.
+Further comparisons ofα,δ, and the test periodK,
+together with additional ablations, are provided in the sup-
+plementary ablation report [36].
+e) Additional results and checks:Appendix G-A exam-
+ines sensitivity to reducing the supplied risk-increase bounds
+d(r)t (c). These reductions improve the overall performance
+but may violate Assumption 2, in which case the guarantees
+no longer apply. Further comparisons, including single and
+parallel tests, are provided in the supplementary ablation
+report [36].
+REFERENCES
+[1] A. D. Ames, X. Xu, J. W. Grizzle, and P. Tabuada, “Control barrier
+function based quadratic programs for safety critical systems,”IEEE
+Trans. Autom. Control, vol. 62, no. 8, pp. 3861–3876, 2017.
+[2] M. Jankovic, “Robust control barrier functions for constrained sta-
+bilization of nonlinear systems,”Automatica, vol. 96, pp. 359–367,
+2018.
+[3] A. Lederer, J. Umlauft, and S. Hirche, “Uniform error bounds for
+Gaussian process regression with application to safe control,” inAdv.
+Neural Inf. Process. Syst., vol. 32, 2019.
+[4] K. P. Wabersich, A. J. Taylor, J. J. Choi, K. Sreenath, C. J. Tom-
+lin, A. D. Ames, and M. N. Zeilinger, “Data-driven safety filters:
+Hamilton–Jacobi reachability, control barrier functions, and predictive
+methods for uncertain systems,”IEEE Control Syst. Mag., vol. 43,
+no. 5, pp. 137–177, 2023.
+[5] T.-W. Hsu and H. Tsukamoto, “Statistical guarantees in data-driven
+nonlinear control: conformal robustness for stability and safety,”IEEE
+Control Syst. Lett., vol. 9, pp. 997–1002, 2025.
+[6] O. Mirzaeedodangeh, E. Shekhtman, N. Matni, and L. Lindemann,
+“Robust conformal CBF and CLF controllers via iterative policy
+updates,” arXiv:2606.15366, 2026.
+[7] S. Wei, M. Ornik, and H. Tsukamoto, “Conformal contraction for
+robust nonlinear control with distribution-free uncertainty quantifica-
+tion,” inProc. IEEE Conf. Decis. Control, 2025, pp. 3502–3507.
+[8] O. Mirzaeedodangeh, E. S. Shekhtman, N. Matni, and L. Lindemann,
+“Safe planning in interactive environments via iterative policy updates
+and adversarially robust conformal prediction,” inProc. Learn. Dyn.
+Control Conf., ser. Proc. Mach. Learn. Res., vol. 331, 2026, pp. 678–
+704.
+[9] A. Ramdas and R. Wang, “Hypothesis testing with e-values,”Found.
+Trends Stat., vol. 1, no. 1–2, pp. 1–390, 2025.
+[10] A. Ramdas, P. Gr ¨unwald, V . V ovk, and G. Shafer, “Game-theoretic
+statistics and safe anytime-valid inference,”Stat. Sci., vol. 38, no. 4,
+pp. 576–601, 2023.
+[11] P. Gr ¨unwald, R. de Heide, and W. Koolen, “Safe testing,”J. R. Stat.
+Soc. Ser. B Stat. Methodol., vol. 86, no. 5, pp. 1091–1128, 2024.
+[12] V . V ovk and R. Wang, “E-values: calibration, combination and appli-
+cations,”Ann. Statist., vol. 49, no. 3, pp. 1736–1754, 2021.
+[13] K. P. Wabersich and M. N. Zeilinger, “A predictive safety filter for
+learning-based control of constrained nonlinear dynamical systems,”
+Automatica, vol. 129, 2021, art. no. 109597.
+[14] E. Das ¸, R. Nanayakkara, X. Tan, R. M. Bena, J. W. Burdick,
+P. Tabuada, and A. D. Ames, “Safe navigation under state uncertainty:
+online adaptation for robust control barrier functions,”IEEE Robot.
+Autom. Lett., vol. 11, no. 3, pp. 3398–3405, 2026.
+[15] P. Mestres, B. Werner, R. K. Cosner, and A. D. Ames, “Probabilis-
+tic control barrier functions: safety in probability for discrete-time
+stochastic systems,” inProc. Am. Control Conf., 2026, pp. 1942–1949.
+[16] R. K. Cosner, P. Culbertson, A. J. Taylor, and A. D. Ames, “Robust
+safety under stochastic uncertainty with discrete-time control barrier
+functions,” inProc. Robot.: Sci. Syst., 2023.
+[17] L. Lindemann, Y . Zhao, X. Yu, G. J. Pappas, and J. V . Deshmukh,
+“Formal verification and control with conformal prediction: practical
+safety guarantees for autonomous systems,”IEEE Control Syst. Mag.,
+vol. 45, no. 6, pp. 72–122, 2025.
+[18] D. M. Cherenson and D. Panagou, “Staggered integral online confor-
+mal prediction for safe dynamics adaptation with multi-step coverage
+guarantees,” arXiv:2604.06058, 2026.
+[19] S. Huriot, I. Tabbara, and H. Sibai, “Safe control using learned safety
+filters and adaptive conformal inference,” inProc. Learn. Dyn. Control
+Conf., ser. Proc. Mach. Learn. Res., vol. 331, 2026, pp. 833–847.
+[20] J. Shin, A. Ramdas, and A. Rinaldo, “E-detectors: a nonparametric
+framework for sequential change detection,”New Engl. J. Stat. Data
+Sci., vol. 2, no. 2, pp. 229–260, 2024.
+[21] Z. Xu, N. Karampatziakis, and P. Mineiro, “Active, anytime-valid risk
+controlling prediction sets,” inAdv. Neural Inf. Process. Syst., vol. 37,
+2024, pp. 60 110–60 132.
+[22] E. Gauthier, F. Bach, and M. I. Jordan, “E-values expand the scope
+of conformal prediction,” arXiv:2503.13050, 2025.
+[23] R. Luo, R. Sinha, Y . Sun, A. Hindy, S. Zhao, S. Savarese, E. Schmer-
+ling, and M. Pavone, “Online distribution shift detection via recency
+prediction,” inProc. IEEE Int. Conf. Robot. Autom., 2024, pp. 16 251–
+16 263.
+[24] A. Hindy, R. Luo, S. Banerjee, J. Kuck, E. Schmerling, and M. Pavone,
+“Diagnostic runtime monitoring with martingales,” arXiv:2407.21748,
+2024.
+[25] D. Snyder, A. Badithela, N. Matni, G. J. Pappas, A. Majumdar,
+M. Itkina, and H. Nishimura, “Beyond binary success: sample-efficient
+and statistically rigorous robot policy comparison,” inProc. Robot.:
+Sci. Syst., 2026.
+[26] P. Jagtap, S. Soudjani, and M. Zamani, “Formal synthesis of stochastic
+systems via control barrier certificates,”IEEE Transactions on Auto-
+matic Control, vol. 66, no. 7, pp. 3097–3110, 2020.
+[27] C. Santoyo, M. Dutreix, and S. Coogan, “A barrier function approach
+to finite-time stochastic system verification and control,”Automatica,
+vol. 125, 2021, art. no. 109439.
+[28] M. Fochesato, H. Wang, A. Papachristodoulou, and P. Goulart, “Syn-
+thesis of safety certificates for discrete-time uncertain systems via
+convex optimization,”arXiv preprint arXiv:2505.08559, 2025.
+[29] R. K. Cosner, P. Culbertson, and A. D. Ames, “Bounding stochastic
+safety: Leveraging freedman’s inequality with discrete-time control
+barrier functions,”IEEE Control Systems Letters, vol. 8, pp. 1937–
+1942, 2024.
+[30] A. Agrawal and K. Sreenath, “Discrete control barrier functions for
+safety-critical control of discrete systems with application to bipedal
+robot navigation,” inProc. Robot.: Sci. Syst., 2017.
+[31] J. Ville, ´Etude critique de la notion de collectif. Paris: Gauthier-
+Villars, 1939.
+10
+[32] E. Clerico, “Sequential testing of conditionally constrained hypothe-
+ses,” arXiv:2606.06769, 2026.
+[33] C. W. S. Chen, R. Gerlach, and E. M. H. Lin, “Bayesian estimation of
+smoothly mixing time-varying parameter GARCH models,”Comput.
+Stat. Data Anal., vol. 76, pp. 194–209, 2014.
+[34] I. Gibbs and E. Cand `es, “Adaptive conformal inference under distri-
+bution shift,” inAdv. Neural Inf. Process. Syst., vol. 34, 2021, pp.
+1660–1672.
+[35] A. Dixit, L. Lindemann, S. X. Wei, M. Cleaveland, G. J. Pappas, and
+J. W. Burdick, “Adaptive conformal prediction for motion planning
+among dynamic agents,” inProc. Learn. Dyn. Control Conf., ser. Proc.
+Mach. Learn. Res., vol. 211, 2023, pp. 300–314.
+[36] P. S. Trakas, O. Mirzaeedodangeh, and L. Lindemann, “Anytime-
+valid certification of robustness margins for safe control
+via e-values: supplementary ablation report,” 2026. [Online].
+Available: https://github.com/omidmirza/ecbf-ablation/blob/main/pdf/
+ablation report.pdf
+[37] A. N. Angelopoulos, E. J. Cand `es, and R. J. Tibshirani, “Conformal
+PID control for time series prediction,” inAdv. Neural Inf. Process.
+Syst., vol. 36, 2023, pp. 23 047–23 074.
+[38] K. Azuma, “Weighted sums of certain dependent random variables,”
+Tohoku Math. J., vol. 19, no. 3, pp. 357–367, 1967.
+[39] G. Shafer, “Testing by betting: a strategy for statistical and scientific
+communication,”J. R. Stat. Soc. Ser. A Stat. Soc., vol. 184, no. 2, pp.
+407–431, 2021.
+[40] Q. Wang, R. Wang, and J. F. Ziegel, “E-backtesting,”Manage. Sci.,
+vol. 72, no. 6, pp. 4952–4973, 2026.
+[41] Y . Fan, Z. Jiao, and R. Wang, “Testing the mean and variance by
+e-processes,”Biometrika, vol. 112, no. 1, 2025, art. no. asae049.
+[42] D. Wang, J. Ding, G. Chu, D. Xu, and T. S. Wirjanto, “Modelling asset
+returns in the presence of price limits with Markov-switching mixture
+of truncated normal GARCH distribution: evidence from China,”Appl.
+Econ., vol. 53, no. 7, pp. 781–804, 2021.
+[43] C. J. Clopper and E. S. Pearson, “The use of confidence or fiducial
+limits illustrated in the case of the binomial,”Biometrika, vol. 26,
+no. 4, pp. 404–413, 1934.
+APPENDIXA
+MONOTONE CERTIFICATION
+Lemma 1.For everyt≥0andc, c ′ ∈Γ:
+c′ ≥c=⇒E t(c′)≥E t(c).
+Consequently, ifc∈ St andc ′ ≥c, thenc ′ ∈ St.
+Proof.Ifc ′ ≥c, thenZ s(c′)≤Z s(c)for everys. Since
+λ≥0:
+1 +λ
+ 
+α−Z s(c′) ≥1 +λ  α−Z s(c) ≥0.
+Both processes start at one, i.e.,E λ0 (c) =E λ0 (c′) = 1,
+and use the same gain, so multiplying these factors yields
+Eλt (c′)≥E λt (c). Averaging over the common setΛgives
+Et(c′)≥E t(c). Ifc∈ St, thenE s(c)≥1/δfor somes≤t.
+HenceE s(c′)≥1/δ, which impliesc ′ ∈ St.
+APPENDIXB
+PROOFS OFMAINTHEORETICALRESULTS
+A. Proof of Theorem 1
+Proof.SetI −1 := Γand, fort≥0, define
+It :={c∈Γ :p s(c)≥α, s= 0, . . . , t}.
+This set contains the candidates that have remainedα-
+insufficient through timet. Sincep s(c)is nonincreasing in
+c, membership ofcwithinI t implies membership of every
+smaller candidate. Hence,I t is an initial segment ofΓ.
+Moreover, we have thatI t ⊆ It−1.
+WheneverI t ̸=∅, defineb t := maxI t, withb −1 =c (M) .
+The variableb t isF t-measurable and satisfiesp t(bt)≥α
+andb t ≤b t−1. Define the auxiliary processB 0 := 1and
+Bt+1 :=
+(
+Et+1(bt),I t ̸=∅,
+0,I t =∅.
+On{I t ̸=∅}, equation (15) and linearity of the conditional
+expectation give
+E[Bt+1 | Ft]≤E t(bt)≤E t(bt−1) =B t.
+The second inequality follows from Lemma 1. On{I t =∅},
+Bt+1 = 0, so the same inequality holds. All update factors
+are bounded, ensuring integrability at each finite time. Thus,
+(Bt)t≥0 is a nonnegative supermartingale withB 0 = 1.
+IfG c occurs, there existsc∈Γwithτ(c)<∞such that
+ps(c)≥αfor everys < τ(c). Settingt=τ(c)−1gives
+c∈ It and hencec≤b t. By monotonicity, att=τ(c)−1:
+Bτ(c) =E τ(c) (bτ(c)−1 )≥E τ(c) (c)≥ 1δ .
+Thus, wheneverG c occurs,B t reaches1/δat some finite
+time. Consequently,G c ⊆ supt≥0 Bt ≥ 1δ 	. Since(B t)t≥0
+is a nonnegative supermartingale withB 0 = 1, Ville’s in-
+equality yieldsP(G c)≤δ, or equivalently,P(G)≥1−δ.
+B. Proof of Theorem 2
+Proof.Consider the eventGdefined in (19) and fix a time
+t∈N 0. IfD t =∅, we have thatc t =c max. In this case,
+Assumption 1 givesp t(ct) = 0almost surely. Otherwise,
+i.e.,D t ̸=∅, the deployment rule selectsc t = minD t and it
+holds that
+τ(c t)≤t, d t(ct)≤α 0 −α, u t =u t(ct).
+OnG, there is an integer0≤s < τ(c t)such thatp s(ct)< α.
+Applying Assumption 2 withσ= 0andτ=τ(c t)gives
+pt(ct)≤p s(ct) +d t(ct)< α+ (α 0 −α) =α 0.
+Since decision times are countable, these bounds hold almost
+surely simultaneously for allt∈N 0 onG. Thus, by (27),
+G ⊆ Gd almost surely.
+Theorem 1 then gives
+P(Gd)≥P(G)≥1−δ
+which proves (28).
+C. Proof of Theorem 3
+Proof.Fixr∈N >0 and recall that all candidatesc∈Γstart
+a testratσ r = (r−1)K. Define the event
+Gr :=
+
+∀c∈Γ :τ r(c)<∞=⇒
+∃s∈N 0 :σ r ≤s < τr(c), ps(c)< α
+	
+.
+Following equation (14), we first define the variable
+Eλ,rt (c) :=
+t−1Y
+s=σr
+
+1 +λ(α−Z s(c))
+
+, t≥σ r
+11
+withE λ,rσr (c) = 1. Further, following equation (16), let
+Ert (c)denote their uniform mixture. These product variables
+Eλ,rt (c)are defined even after certificationτ r(c). They agree
+with the evidence up to and includingτ r(c), so their first
+crossing of1/δ r occurs at the same certification time.
+SinceZ s(c)is nonincreasing incand the admissible
+gains keep every factor nonnegative,E λ,rt (c)andE rt (c)are
+nondecreasing inc(similar to Lemma 1). All candidates
+share the same starting time, gains, and threshold. Applying
+Theorem 1 to the shifted observations(Y σr+s)s≥0, with
+filtration(F σr+s)s≥0 and error levelδ r, therefore gives
+P(Gr)≥1−δ r (35)
+where no independence between tests is required.
+Consider the event Tr≥1 Gr and fix a timet. Following the
+proof of Theorem 2, ifD t =∅, the fallback usec t =c max
+satisfiesp t(ct)≤α 0 by Assumption 1.
+Otherwise, setc=c t. By (26),c t ∈ Dt andu t =u t(c).
+The definition (31) therefore provides an indexr∈N >0 such
+that
+τr(c)≤t, d (r)t (c)≤α 0 −α.
+Sinceτ r(c)<∞, the eventG r provides an integers
+satisfying
+σr ≤s < τr(ct), p s(ct)< α.
+Apply Assumption 2 withσ=σ r andτ=τ r(ct). Using
+(30) gives
+pt(ct)≤p s(ct) +d (r)t (ct)< α+d (r)t (ct)≤α 0.
+Because the candidates, test indices, and decision times
+form countable sets, these implications hold almost surely
+simultaneously. Hence, by (27):
+\
+r≥1
+Gr ⊆ Gd almost surely.
+Finally, a union bound and (35) yield
+P
+ 
+(Gd)c ≤P
+
+ [
+r≥1
+Gcr
+
+ ≤ X
+r≥1
+P(Gcr)≤ X
+r≥1
+δr =δ.
+This proves (32).
+D. Proof of Corollary 1
+Proof.SinceZ t(c)∈ {0,1}, each evidence factor[1 +
+λ(α−Z s(c))]inE λ,rt (c)is at most1 +λ maxα. Aftern
+observations, the mixture evidence of any test is therefore at
+most(1 +λ maxα)n. Sinceδ r ≤δ, certification requires
+(1 +λ maxα)n ≥ 1δr ≥ 1δ ,
+which impliesn≥n 0. Thus, no certificate is available before
+timen 0, andc t =c max fort= 0, . . . , n0 −1.
+The control input satisfies the condition (3). Consequently,
+(7) gives
+xt ∈ C, Yt ≤c t =⇒x t+1 ∈ C.
+Fort < n0, the controller usesc max, soY t ≤c t almost
+surely. Starting fromx 0 ∈ C, the implication above therefore
+givesx t ∈ Cfort= 0, . . . , n0 almost surely.
+Fort≥n 0, an exceedance may occur. Since the state
+remains safe through timen 0, a first exit withinTsteps
+must follow a decisiont∈ {n 0, . . . , T−1}. Consequently,
+almost surely,
+{∃t∈ {0, . . . , T}:xt /∈ C} ⊆
+T−1[
+t=n0
+{Yt > ct}.
+An exceedance need not cause an exit, so this inclusion can
+be strict. ForT≤n 0, the union is empty and the exit
+probability is zero. ForT > n 0, we bound its probability
+below.
+For eacht∈ {n0, . . . , T−1}, define the event
+Vt :={Y t > ct, pt(ct)≤α 0}.
+Sincec t andp t(ct)areF t-measurable,
+P(Vt | Ft) =1 {pt(ct)≤α0}P(Yt > ct | Ft)
+=1 {pt(ct)≤α0}pt(ct)≤α 0.
+Moreover, Tt−1s=n0 V cs isF t-measurable. Therefore,
+P
+ t\
+s=n0
+V cs
+!
+=E
+h
+1Tt−1
+s=n0 V cs P(V ct | Ft)i
+≥(1−α 0)P
+ t−1\
+s=n0
+V cs
+!
+.
+(36)
+Applying (36) successively fort=n 0, . . . , T−1, starting
+from probability one before stepn 0, gives
+P
+ T−1\
+t=n0
+V ct
+!
+≥(1−α 0)T−n 0 .
+No independence between the events is required.
+OnG d, every exceedanceY t > ct belongs toV t. Thus,
+almost surely,
+{∃t∈ {0, . . . , T}:xt /∈ C} ⊆(Gd)c ∪
+T−1[
+t=n0
+Vt.
+Using Theorem 3, we obtain
+P(∃t∈ {0, . . . , T}:xt /∈ C)
+≤P
+ 
+(Gd)c +P
+ T−1[
+t=n0
+Vt
+!
+≤δ+ 1−(1−α 0)T−n 0 .
+Taking the minimum with one and combining this bound
+with the zero exit probability forT≤n 0 yields
+P(∃t∈ {0, . . . , T}:xt /∈ C)
+≤1 {T >n0} min{1, δ+ 1−(1−α 0)T−n 0 },
+which proves (33).
+12
+APPENDIXC
+EVIDENCEGROWTH ANDCERTIFICATIONTIME
+A. Proof of Proposition 1
+Proof.By (14) we have
+E
+
+log Eλt+1(c)Eλt (c)  Ft
+= (1−p t(c)) log(1 +λα)
++p t(c) log(1−λ(1−α))
+≥g ¯p(c)(λ)>0
+where the inequality follows fromp t(c)≤¯p(c)and the fact
+that the conditional expectation decreases withp t(c).
+Since0< λ <(1−α) −1, note that the logarithmic
+increments are bounded:
+log(1−λ(1−α))≤log Eλt+1(c)Eλt (c) ≤log(1 +λα).
+The strong law for uniformly bounded martingale differences
+[38, Cor. 1], together withE λ0 (c) = 1, gives
+logE λt (c)
+t − 1t
+t−1X
+s=0
+E
+
+log Eλs+1(c)Eλs (c)  Fs a.s.− − − →t→∞ 0.
+Since each conditional expectation within the sum is at least
+g ¯p(c)(λ), it follows that (21).
+To boundE[τ(c)], note that, before certification, we have
+Eλt (c)
+|Λ| ≤E t(c)< 1δ , t < τ(c).
+Hence,logE λt (c)<log(|Λ|/δ)beforeτ(c), and its increase
+atτ(c)is at mostlog(1 +λα).
+For an integern≥1, write
+logE λmin{τ(c),n} (c) =
+n−1X
+t=0
+1{τ(c)>t} log Eλt+1(c)Eλt (c) .
+This sum has at mostnbounded terms. Since{τ(c)> t} ∈
+Ft, taking expectations and using the conditional log-growth
+bound yields
+g ¯p(c)(λ)E[min{τ(c), n}]≤E
+h
+logE λmin{τ(c),n} (c)i
+≤log(|Λ|/δ) + log(1 +λα).
+The upper bound includes the largest possible increment
+atτ(c). Sincemin{τ(c), n}increases toτ(c)asn→ ∞,
+monotone convergence yields
+E[τ(c)] = lim
+n→∞
+E[min{τ(c), n}]
+≤ log(|Λ|/δ) + log(1 +λα)g ¯p(c)(λ) .
+This proves (22) and impliesP(τ(c)<∞) = 1.
+B. Gain Selection and Numerical Setup
+a) Growth and gain selection:The quantityg ¯p(c)(λ)
+lower bounds the conditional expected increase inlogE λt (c)
+per observation. This expected log increase is also called the
+conditionale-powerof the one-step e-variable [11], [39].
+Forq∈(0, α), differentiating the growth rate gives
+g′q(λ) = α−q−λα(1−α)(1 +λα)(1−λ(1−α)) .
+The denominator is positive for0< λ <(1−α) −1, and the
+numerator changes sign from positive to negative at
+λ⋆(q) := arg max
+0<λ<(1−α)−1
+gq(λ) = α−qα(1−α) .(37)
+Thus, when0<¯p(c)< α, choosingq= ¯p(c)maximizes
+the growth lower bound in Proposition 1. Maximizing this
+growth bound does not necessarily give the shortest expected
+certification time. In practice, the monitor combines the gains
+inΛ, chosen in advance, without needing to know¯p(c).
+b) Adaptive gains:The gain can alternatively be se-
+lected online using GREE [40], [41], which uses past obser-
+vations to maximize empirical log growth. Any predictable
+gain in(0,(1−α) −1)preserves validity for an individual
+candidate. However, candidate-dependent gains may break
+the evidence ordering used in Theorem 1. A common pre-
+dictable gain for all candidates preserves this ordering and
+the simultaneous guarantee.
+c) Details of Example 2:In Example 2 and Fig. 2,
+one time step is one trading day. LetP t >0be the stock
+price at the start of daytandξ t := log(P t+1/Pt)its log
+return;F t containsξ 0, . . . , ξt−1. The volatilityσ t follows the
+TV-GARCH(1,1)model of [33] with an asymmetric logistic
+transition:
+σ2t =a 0 +a 1ξ2t−1 +b 1σ2t−1
++
+ 
+a⋆0 +a ⋆1ξ2t−1 +b ⋆1σ2t−1 Gt, t≥1,
+where
+Gt :=
+(
+1 + exp{ζ1(t/1000−m 1)}
+−1
+, t≤t c,
+
+1 + exp{−ζ2(t/1000−m 2)}
+−1
+, t > tc,
+witht c := 1000(ζ 1m1 +ζ 2m2)/(ζ1 +ζ 2), which makes
+Gt continuous int. A large return of either sign raises
+the next variance, so large losses occur in clusters. The
+weightG t ∈(0,1)moves the variance from a high-volatility
+regime (G t ≈1) to a low-volatility regime (G t ≈0) near
+t= 1000m 1 and back neart= 1000m 2, at the speeds
+ζ1 andζ 2. Letε t be independent ofF t and Student-t η
+distributed with unit variance, whereηis the number of
+degrees of freedom. GivenF t,ξ t has the distribution of
+σtεt conditioned on[ξ min, ξmax]withξ min := log 0.9and
+ξmax := log 1.1. This truncation models a daily price limit
+of±10%, as in GARCH models of price-limited stocks [42].
+We use the posterior means of the Student-tmodel that
+13
+[33] fits to daily S&P 500 returns:
+a0 = 0.0297×10 −4, a 1 = 0.0480, b 1 = 0.8726,
+a⋆0 = 0.0111×10 −4, a ⋆1 = 0.0382, b ⋆1 = 0.0289,
+m1 = 0.4047, m 2 = 0.7280, η= 10.5233,
+ζ1 = 22.6482, ζ 2 = 46.2823.
+We rename the GARCH parameters to avoid conflicts with
+the notation of the main text and scale the intercepts by10 −4,
+since [33] uses returns in percent. The recursion starts at
+σ20 = a0 +a ⋆0G01−a 1 −b 1 −(a ⋆1 +b ⋆1)G0 ,
+the stationary variance of the model withG t ≡G 0 and
+without a price limit. The model thus combines published
+parameters with a price limit; it is not fitted to a particular
+stock.
+The loss is the relative price drop,
+Yt := [1−exp(ξ t)]+ =
+
+(Pt −P t+1)/Pt
+
++,
+so0≤Y t ≤c max := 0.10. The candidate grid is
+Γ ={0.007,0.010,0.015,0.020,0.022,0.023,
+0.024,0.026,0.028,0.030,0.035,0.040,
+0.050,0.060,0.070,0.080,0.090,0.096}.
+LetF η be the distribution function ofε t. SinceY t > cif
+and only ifξ t <log(1−c), for0< c < c max,
+pt(c) =
+Fη
+
+log(1−c)
+σt
+
+−F η
+
+ξmin
+σt
+
+Fη
+
+ξmax
+σt
+
+−F η
+
+ξmin
+σt
+ .(41)
+The tests use onlyZ t(c) =1 {Yt>c}; (41) serves only to
+evaluate the exceedance risks in Fig. 2.
+Letϕ t be the density ofσ tεt; it is symmetric and nonin-
+creasing on[0,∞). Iflog(1−c)≤ −ξ max, which holds inΓ
+only forc= 0.096, thenϕ t ≤ϕ t(ξmax)on[ξ min,log(1−c)]
+andϕ t ≥ϕ t(ξmax)on[−ξ max, ξmax]. Hence,
+pt(c) =
+R log(1−c)
+ξmin ϕt(z)dzR ξmax
+ξmin ϕt(z)dz
+≤ log(1−c)−ξ min
+2ξmax
+=: ¯p(c).
+Thus,p t(0.096)≤¯p(0.096) = 0.0233< αfor everytand
+every history, and (20) holds forc= 0.096without a bound
+onσ t.
+Panel (c) of Fig. 2 testsc∈ {0.007,0.023,0.096}with
+each fixed gainλ∈ {0.10,0.15, . . . ,0.80}, i.e.,Λ ={λ}.
+The three tests of a trial share the losses of 1000 days, and
+each point averagesmin{τ(c),1000}over the trials. The
+dotted bound (22) therefore uses|Λ|= 1.
+APPENDIXD
+A SUFFICIENTCONSTRUCTION OF THECONDITIONAL
+RISKBOUND
+The following model conditions give sufficient choices of
+Lx, Lu and∆ t for the boundd t(c;σ, τ)in Assumption 2.
+Define the signed barrier shortfall
+ℓ(x, u, w) :=h(ˆf(x, u))−h(f(x, u, w)).(42a)
+Set eYt :=ℓ(x t, ut, wt), soY t = [ eYt]+. Forc≥0,{Y t >
+c}={ℓ(x t, ut, wt)> c}. Letµ t denote the conditional
+distribution ofw t givenF t, and define its total-variation
+distance fromµ s by
+dTV(µt, µs) := sup
+A
+|µt(A)−µ s(A)|,(42b)
+whereAranges over measurable disturbance sets.
+Suppose known constantsK x, Ku, Kp ≥0satisfy
+|ℓ(x, u, w)−ℓ(x′, u′, w)| ≤Kx∥x−x ′∥
++K u∥u−u ′∥ (43)
+for all operating points(x, u),(x ′, u′)and relevant distur-
+bancesw. Also suppose that, almost surely,
+µs({w:a < ℓ(x, u, w)≤b})≤Kp(b−a)(44)
+for everys, operating point(x, u), anda < b. Condition (44)
+holds ifℓ(x, u, ws)has a conditional density bounded by
+Kp, uniformly ins,(x, u), and the observed history. This
+condition is imposed on the signed shortfall, sinceY t = [ eYt]+
+can equal zero with positive probability even when the signed
+shortfall has a continuous density.
+Proposition 2(Model-based conditional risk bound).Sup-
+pose(43)and(44)hold. Let∆ t ≥0be known,F t-
+measurable bounds such that, wheneverc t =c∈Γis
+deployed using a certificate with monitoring period[σ, τ),
+where0≤σ < τ≤t,
+dTV(µt, µs)≤∆ t almost surely
+for every integerσ≤s < τ. Thend t(c;σ, τ)in(24), with
+Lx =K pKx, L u =K pKu,(45)
+satisfies Assumption 2.
+Proof.Fix a decision timetat whichc t =c∈Γis deployed
+using a certificate with monitoring period[σ, τ), sou t =
+ut(c). For any integerσ≤s < τ, set
+εt,s :=K x∥xt −x s∥+K u∥ut(c)−u s∥.
+Condition (43) gives
+{w:ℓ(x t, ut(c), w)> c} ⊆ {w:ℓ(xs, us, w)> c−εt,s}.
+Sincep t(c) =µ t{w:ℓ(x t, ut(c), w)> c}, the total-
+variation and interval bounds give
+pt(c)≤µ s{w:ℓ(x s, us, w)> c−εt,s}+ ∆ t
+=p s(c) +µ s{w:c−ε t,s < ℓ(xs, us, w)≤c}+ ∆ t
+≤p s(c) +K pεt,s + ∆t.
+Substitutingε t,s and usingL x =K pKx,L u =K pKu yields
+max
+σ≤s<τ
+{pt(c)−p s(c)} ≤dt(c;σ, τ).
+This proves (23) for everysin the certificate’s monitoring
+period.
+14
+A. Deterministic bounds for general dynamics
+Consider the general dynamicsf(x, u, w)and signed
+barrier shortfall
+ℓ(x, u, w) =h(ˆf(x, u))−h(f(x, u, w)).
+All bounds below are required uniformly over the relevant
+operating region and disturbance support. Bounds involving
+conditional distributions must also hold uniformly in time
+and almost surely with respect to the observed history.
+SupposehisH-Lipschitz andf, ˆfsatisfy
+∥f(x, u, w)−f(x′, u′, w)∥ ≤ax∥x−x ′∥+a u∥u−u ′∥,
+∥ ˆf(x, u)− ˆf(x ′, u′)∥ ≤ˆax∥x−x ′∥+ ˆau∥u−u ′∥.
+Then (43) holds with
+Kx =H(a x + ˆax), K u =H(a u + ˆau).
+For differentiable models, sufficient values follow from uni-
+form Jacobian bounds on suitable convex regions contain-
+ing the operating points and their predictions. A known
+disturbance-amplitude bound specifies the disturbance set
+over which these bounds are required.
+The interval-probability bound requires additional regu-
+larity. One sufficient construction uses a scalar disturbance
+component. Writew= (v, ζ), wherevtakes values in a
+known intervalI. Suppose the conditional density ofv s,
+givenζ s andF s, is bounded by a known constantM v,
+without specifying that density.
+Assume also that, for every relevant(x, u, ζ), the map
+v7→ℓ(x, u,(v, ζ))is continuously differentiable onIand
+satisfies  ∂ℓ(x, u,(v, ζ))∂v  ≥m ℓ >0,
+wherem ℓ is known. This map is strictly monotone onI.
+Consequently, the set ofvsatisfyinga < ℓ(x, u,(v, ζ))≤b
+has length at most(b−a)/m ℓ. Conditioning onζ s and then
+integrating gives
+µs{w:a < ℓ(x, u, w)≤b} ≤Mvmℓ (b−a).
+Thus, a sufficient choice in (44) is
+Kp = Mvmℓ .
+This construction permits nonlinear dependence on the dis-
+turbance. It requires a disturbance component whose effect
+on the barrier does not vanish over the specified operating
+region.
+Combining these bounds with Proposition 2 yields
+Lx = MvHmℓ (ax + ˆax),
+Lu = MvHmℓ (au + ˆau).
+To allow changing conditional disturbance distributions,
+suppose a known constantL µ ≥0satisfies
+dTV(µk+1, µk)≤L µ (46a)
+almost surely for everyk. The triangle inequality then gives
+dTV(µt, µs)≤min{1, L µ(t−s)}.(46b)
+Hence, for eachσ≤s < τ, one may take the uniform bound
+∆t = min{1, Lµ(t−σ)}.(46c)
+This bound is available before observingY t and allows a
+nonzero increase in conditional risk. Since (23) is required
+for eachsseparately, one may also take the smaller value
+∆t = min{1, Lµ(t−s)}at eachσ≤s < τ. Appendix D-B
+uses this choice.
+For example, a sufficient value ofL µ can be obtained
+when the unknown conditional distributions have densities
+φk supported on a known setWof finite volume and satisfy
+|φk+1(w)−φ k(w)| ≤Bµ, w∈ W,
+with a known constantB µ. Indeed,
+dTV(µk+1, µk) = 12 ZW |φk+1(w)−φ k(w)|dw
+≤ 12 vol(W)Bµ.
+Thus,
+Lµ = 12 vol(W)Bµ
+is sufficient.
+B. Risk-Increase Terms for the Unicycle Examples
+In this subsection we construct the risk-increase bounds
+for the Corridor and Maze in Appendix F-A. Each certified
+variantV∈ {U,∆,L,C}of Section VI-B replaces the bound
+dt defined in (24) by the largest risk-increase term over the
+monitoring period,
+dt(c;σ, τ) =dVt (c;σ, τ),(47)
+the maximum overσ≤s < τin (69), (70), (71) or (72),
+and each risk-increase term isF t-measurable. The proofs of
+Theorems 2 and 3 use Assumption 2 only through (23).
+a) Drift term:The disturbance distribution changes
+withtonly through the weightβ t of the magnitude distribu-
+tionµ At defined in (91) of Appendix F-A, and the supports
+of its componentsU 1 andU 2 overlap only atc max/2. Hence,
+withd TV in (42b),
+dTV(µt, µs) =d TV(µAt , µAs ) =|β t −β s|.
+Sincesinis1-Lipschitz, the parameterL µ ofβ t satisfies
+(46a), so (46b) gives|β t −β s| ≤min{1, Lµ(t−s)}, the
+drift term in (46c) with the choice for eachsstated after it.
+b) Clearance and shortfall:Vector norms are Eu-
+clidean. In the Corridor, cones have centerso j and radiiρ j,
+and walls lie atz 2 = 0andz 2 = 2. The clearance of a disk
+of radiusρ body centered atzis
+ψ(z) := min
+
+min
+j
+(∥z−o j∥ −ρj),
+z2,2−z 2
+	
+−ρ body .
+(49)
+15
+In the Maze, interior walls are closed rectanglesO k. Bound-
+ary walls have pointsz ∂m and inward unit normalsn ∂m, giving
+ψ(z) := min
+
+min
+j
+(∥z−o j∥ −ρj),
+min
+k
+sdist(z,O k),
+min
+m
+(n∂m)⊤(z−z ∂m)	 −ρ body .
+(50)
+Here,sdistis the distance to the obstacle boundary, positive
+outside and negative inside. Distances and affine terms
+with unit normals are1-Lipschitz. Forz /∈ O k andz ′ ∈
+Ok, a point˜z∈∂O k on the segment[z, z ′]gives0≤
+sdist(z,O k)−sdist(z ′,O k)≤ ∥z−˜z∥+∥˜z−z′∥=∥z−z ′∥.
+Each clearance term is1-Lipschitz, so
+|ψ(z)−ψ(z ′)| ≤ ∥z−z′∥.(51)
+With the nose pointqand the nose distanceldefined in
+Appendix F-A, letz(x, u) :=q( ˆf(x, u))be the predicted
+nose point. The disturbance changes position but not heading
+or speed, soq(f(x, u, w)) =z(x, u) +wwith the transition
+fdefined in (90). Thus, the braking term in (89) cancels,
+and the shortfall in (42a) is
+ℓ(x, u, w) =ψ(z(x, u))−ψ(z(x, u) +w).(52)
+Consequently,Y t = [ℓ(x t, ut, wt)]+ ≤ ∥wt∥ ≤cmax, the
+support condition of Assumption 1.
+For a feasible candidatecwith the filtered inputu t(c)
+defined in (4), writez t(c) :=z(x t, ut(c)). At a past times,
+usez s :=z(x s, us), whereu s is the input actually applied.
+c) Exceedance fraction of one feature:Each term in
+the minima ofψbelongs to onefeature: a cone, a wall or a
+rectangleO k. Letψ i be the term of featureiminusρ body,
+so thatψ= min i ψi. Nearz, a feature is eithercircular, with
+ψi(z) =∥z−o∥−Rfor a centeroand aneffective radiusR,
+oraffine(a wall or a rectangle face), withR:=∞. A cone
+hasR=ρ j +ρ body, and a rectangle whose nearest pointo
+tozis a corner hasR=ρ body. For a circular feature with
+clearanceg=ψ i(z)and∥w∥=A, the law of cosines gives
+ψi(z)−ψ i(z+w)> cif and only if the angle betweenw
+ando−zhas cosine larger thanc/A+ (A 2 −c 2)/(2(g+
+R)A). Since the disturbance has a uniform direction given
+its magnitude, the fraction of directions with this property is
+thedirectional exceedance fraction
+PR(g, c, A) :=1π arccos cA + A2 −c 22(g+R)A  (53)
+forc < A≤2(g+R)−c, where the argument lies in[0,1],
+andP R(g, c, A) := 0otherwise. An affine feature gives the
+limitR→ ∞, which does not depend ong. Its value at
+A=c max is thefraction bound ¯P(c),
+P∞(c, A) :=1π arccos cA , ¯P(c) :=P ∞(c, cmax),(54)
+forA > c, andP ∞(c, A) := 0otherwise. Forc∈Γ⊆
+[0, cmax)(Section II-C), ¯P(c)∈(0,1/2]. The argument in
+(53) decreases ing+Rand is at leastc/A, andP ∞(c, A)
+increases withA. HenceP R increases withgandR, and
+0≤P R(g, c, A)≤¯P(c)forA≤c max.
+d) Sensitivity bound:Ifh(x)≥0andu∈ U(x, c), the
+tightened CBF condition (3) and (89) giveψ(z(x, u))≥l.
+Setg min :=land, withRthe set of finite effective radii,
+define
+ϱmin :=g min + minR.(55)
+Both scenarios satisfyc max < ϱmin, withϱ min = 0.675m in
+the Corridor and0.37m in the Maze.
+Forg≥g min,R∈ Randc < A≤c max,
+∂gPR(g, c, A) =
+√
+A2 −c 2
+π(g+R)
+p
+(2(g+R)−c) 2 −A 2 .(56)
+The denominator is positive sinceA+c <2c max <2ϱ min ≤
+2(g+R). This derivative decreases withg+Rand increases
+withA. Therefore,
+Lgeom(c) :=
+p
+c2max −c 2
+πϱmin
+p
+(2ϱmin −c) 2 −c 2max (57)
+bounds the sensitivity to clearance, uniformly overg≥g min,
+A≤c max, andR∈ R ∪ {∞}. HenceL geom(c)is a
+Lipschitz constant ofP R(·, c, A)on[gmin,∞). LetL geom :=
+maxc∈Γ Lgeom(c).
+e) Geometric check and comparison:A geometric
+check ensures that one feature determinesψnear the pre-
+dicted nose pointz t(c). Thenearest featurei z atzis the
+smallest indexithat minimizesψ i(z). If
+min
+i̸=iz
+ψi(z)≥ψ(z) + 2c max,(58)
+thenψ(z+w) =ψ iz (z+w)for every∥w∥ ≤c max, since
+eachψ i is1-Lipschitz. Ifi z is a rectangle[z 1,¯z1]×[z 2,¯z2],
+therectangle conditionrequires the disk{z+w:∥w∥ ≤
+cmax}to lie in one exterior face or corner region, given in
+coordinates in Section 1.1 of [36], so that the feature is affine
+or circular on the disk. Thegeometric checkforcpasses
+at(t, s)ifU(x t, c)̸=∅, (58) and the rectangle condition
+hold atz=z t(c), andψ(z t(c)), ψ(zs)≥g min. Theuniform
+geometric checkpasses at(t, s)if the geometric check for
+everyc ′ ∈Γpasses there.
+If the geometric check forcpasses at(t, s), letg t(c) :=
+ψ(zt(c))andg s :=ψ(z s), and letR t(c)andR s be the
+effective radii of the nearest features atz t(c)andz s, where
+a rectangle atz s is treated as circular withR s =ρ body (jus-
+tified after (60)). SinceP R depends on(g, R)only through
+g+Rand increases with it,P Rt(c)(g, c, A)−PRs (g, c, A)≤0
+ifR t(c)≤R s. Otherwise this difference is the integral
+of (56) over[g+R s, g+R t(c)), an improper integral if
+Rt(c) =∞, which decreases ingand increases inA. For
+g≥g min andA≤c max, it is therefore at most thefeature-
+change term
+ηt,s(c) :=
+
+PRt(c)(gmin, c, cmax)
+−P Rs (gmin, c, cmax)
+
++. (59)
+WithP t(A) :=P Rt(c)(gt(c), c, A)andPs(A) :=P Rs (gs, c,
+A), (52) gives
+pt(c) =
+Z
+Pt dµAt , p s(c)≥
+Z
+Ps dµAs .(60)
+16
+The equality holds because the nearest feature atz t(c)
+determinesψon the disk. The inequality holds because
+ψ≤ψ i with equality atz s for the nearest featureiatz s.
+For a rectangleO k with nearest pointotoz s, moreover,
+ψi(zs) =∥z s −o∥ −ρbody sinceψ(z s)≥g min >0places
+zs outsideO k, andψ i(zs +w)≤ ∥z s +w−o∥ −ρ body
+sinceo∈∂O k givessdist(z s +w,O k)≤ ∥zs +w−o∥. The
+clearance termis
+Gt,s(c) :=L geom(c)[gt(c)−g s]+.
+f) Lipschitz constants of the clearance term:On a
+convex operating region containing the current and past state-
+input pairs, uniform Jacobian boundsK zx on∥∂ xz∥andK zu
+on∥∂ uz∥(induced norms) give
+∥z(x, u)−z(x′, u′)∥ ≤Kzx∥x−x ′∥
++K zu∥u−u ′∥. (62)
+Let¯vbound absolute speed throughout a sampling interval
+of lengthT s. For the Corridor, sufficient constants are
+K zx = p1 + (l+ ¯vTs)2,
+K zu = pT 2s + (lTs + ¯vT2s /2)2, (63)
+and, for the Maze,
+K zx = p1 + (l+ ¯vTs)2 +T 2s + (lTs + ¯vT2s /2)2,
+K zu = pT 4s /4 + (lT2s /2 + ¯vT3s /6)2. (64)
+In the Corridor,¯vfollows from the input limits. In the
+Maze, speed varies linearly between its current and predicted
+next values, both constrained by the limits in Table III.
+The Jacobian bounds behind (63) and (64) are derived in
+Section 1.3 of the supplementary ablation report [36]. The
+bounds also hold for the numerical predictor: its Gauss–
+Legendre quadrature has positive weights and integrates the
+relevant polynomial bounds exactly.
+g) Geometric construction:We construct the risk-
+increase bound directly from the obstacle geometry and
+the conditional uniformity of the disturbance direction. This
+provides an alternative to Proposition 2 and does not require
+its density boundK p.
+The geometric comparison separates changes in clearance
+from changes in the effective radius:
+Pt(A)−P s(A)≤G t,s(c) +η t,s(c).
+The first term bounds the effect of changing clearance while
+holding the effective radius fixed. The second accounts for
+the remaining change in geometry. Define
+Bt,s(c) := min{ ¯P(c), Gt,s(c) +η t,s(c)}.
+SplittingP t(A)−P s(A)atP Rt(c)(gs, c, A)and using the
+sensitivity bound and the feature-change term (57) and (59),
+andP t(A)−P s(A)≤P t(A)≤ ¯P(c), gives
+Pt(A)−P s(A)≤B t,s(c),0≤A≤c max.(66)
+Combining the clearance and predicted-position bounds
+gives
+Gt,s(c)≤L geomx ∥xt −x s∥+L geomu ∥ut(c)−u s∥
+where
+Lgeomx :=L geomK zx, L geomu :=L geomK zu.(67)
+These constants bound only the clearance contribution. The
+feature-change termη t,s(c)is included separately.
+For each past times, distribution changes are bounded by
+dTV(µAt , µAs )≤min{1, L µ(t−s)}.
+We retain this bound inside the maximum over the certifi-
+cate’s monitoring period.
+h) Certificate bounds:When the uniform geometric
+check passes, define theuniform feature-change term
+¯ηt,s := maxc′∈Γ ηt,s(c′).
+For a certificate with monitoring period[σ, τ), V-U uses
+dUt (c;σ, τ) := minn1,maxσ≤s<τ Lgeomx ∥xt −x s∥
++L geomu ∥ut(c)−u s∥+ ¯ηt,s + ∆to. (69)
+V-∆replaces the uniform feature-change term by the
+candidate-specific feature-change term:
+d∆t (c;σ, τ) := minn1,maxσ≤s<τ Lgeomx ∥xt −x s∥
++L geomu ∥ut(c)−u s∥+η t,s(c) + ∆to. (70)
+V-L uses the candidate-specific clearance term directly:
+dLt (c;σ, τ) := minn1,maxσ≤s<τ min{ ¯P(c), Gt,s(c)}
++ ¯ηt,s + ∆t
+o
+.
+(71)
+V-C combines both refinements and bounds the effect of
+distribution changes using ¯P(c):
+dCt (c;σ, τ) := maxσ≤s<τ (1−∆ t)Bt,s(c) + ∆t ¯P(c) .(72)
+V-U and V-L require the uniform geometric check
+throughout the monitoring period. V-∆and V-C require the
+check forc. If a required check fails, the corresponding
+certificate bound is set to1.
+To verify the V-C bound, fixσ≤s < τand letε:=
+dTV(µAt , µAs )≤∆ t. The common part of the magnitude
+distributions has mass1−ε. On this part, the increase is at
+mostB t,s(c)by (66). The remaining current mass contributes
+at mostε ¯P(c). The remaining past mass enters with a
+nonpositive sign, sinceP s ≥0. Thus, whenu t =u t(c),
+(60) gives
+pt(c)−p s(c)≤(1−ε)B t,s(c) +ε ¯P(c)
+≤(1−∆ t)Bt,s(c) + ∆t ¯P(c)
+≤d Ct (c;σ, τ),
+where the second inequality usesB t,s(c)≤ ¯P(c). This holds
+for everysin the monitoring period. The distributions are
+used only in the proof. Computing the bound does not require
+them.
+17
+i) Ordering and validity:For the same history and
+monitoring period[σ, τ), the certificate bounds satisfy
+dCt (c;σ, τ)≤d Lt (c;σ, τ)≤d Ut (c;σ, τ),
+dCt (c;σ, τ)≤d ∆t (c;σ, τ)≤d Ut (c;σ, τ). (73)
+These inequalities follow fromη t,s(c)≤¯η t,s, the state-
+input bound onG t,s(c),∆ t ≤1andB t,s(c)≤ ¯P(c)≤1.
+Maximizing over the same monitoring period preserves the
+ordering. The ordering also holds when checks fail: failure
+of the geometric check forcsets all four bounds to1, while
+failure of only the uniform check sets the V-U and V-L
+bounds to1.
+The geometric comparison and distribution-drift bound
+establish, wheneveru t =u t(c),
+pt(c)≤p s(c) +d Vt (c;σ, τ), σ≤s < τ,
+for every variantV∈ {U,∆,L,C}. Thus, these construc-
+tions satisfy (23). A bound set to1prevents deployment
+using that certificate at the current decision time.
+The ordering compares bounds on the same history, i.e.,
+it does not imply an ordering of margins selected along
+different closed-loop trajectories.
+APPENDIXE
+EMPIRICALMETRICS ANDCHECKS
+We describe how the recorded trajectories from Section VI
+are used to assess the statistical guarantees and measure
+performance over the simulated horizon. Exceedance-risk
+evaluation uses the full simulated disturbance distribution,
+which is not supplied to the controller. Trajectorykexecutes
+Nk ≤Ttransitions, with the decision horizonTof Corol-
+lary 1, and the indexkmarks its recorded quantities, e.g.,
+pk,t(c),c k,t andτ k,r(c).
+A. False-Certification and Deployment Events
+a) Exceedance-risk evaluation:At each recorded deci-
+sion timet, we hold the state, applied inputu t, and observed
+history fixed. We propagate disturbanceswthrough the true
+systemf(x t, ut, w)and integrate the exceedance indicator of
+Section IV-A numerically over the conditional distributionµ t
+ofw t in Appendix D. SinceY t > cholds exactly when the
+signed barrier shortfallℓin (42a) satisfiesℓ(x t, ut, wt)> c,
+this approximates the exceedance riskp t(c)in (8) by the
+estimated exceedance risk
+bpt(c)≈
+Z
+1{ℓ(xt,ut,w)>c} µt(dw) =p t(c)(74)
+with thenumerical risk bounds
+p−t (c)≤p t(c)≤p +t (c).
+The computation ofbp t(c)and of its numerical risk bounds
+is given in the supplementary ablation report [36].
+b) Trajectory events:With the starting timesσ r of the
+tests in Section V-B, the trajectory events are
+Acert,k :={∃c∈Γ, r≥1 :τ k,r(c)≤N k,
+min
+σr≤s<τk,r (c)
+pk,s(c)≥α},
+(76)
+and
+Adep,k :={∃0≤t < N k :p k,t(ck,t)> α0}.(77)
+Thefalse-certification eventA cert,k occurs if a test of tra-
+jectorykcertifies a candidatecwhose exceedance risk stays
+at leastαover the monitoring period, and thedeployment
+eventA dep,k occurs ifp k,t(ck,t)> α0 at some decision. For
+finiteK, the proof of Theorem 3 bounds the probability of
+Acert,k byδ, and the theorem that ofA dep,k. ForK=∞,
+Theorems 1 and 2 bound them by the error levelδ 1 of
+Section V-B. The bounds onA dep,k require Assumptions 1
+and 2.
+c) Event frequencies:An event isconfirmedif it occurs
+with every exceedance risk replaced by its lower bound
+p−k,t, andpossibleif it occurs with the upper boundsp +k,t.
+Since both events are increasing in the exceedance risks,
+a confirmed event occurs for all exceedance risks within
+[p−k,t, p+k,t], and an event that is not possible occurs for none.
+Over theN MC trajectories of a method, scenario and setting,
+thetrajectory frequencyof a trajectory eventAis
+bq(A) := 1NMC
+NMCX
+k=1
+1Ak .(78)
+For (76) and (77), it is thefalse-certification frequencyand
+thedeployment-event frequency. They are denotedbq cert and
+bqdep.
+d) Upper confidence bounds:A trajectory frequency
+estimates the probabilityq(A) :=P(A k)fromN MC inde-
+pendent trajectories. Its95%upper confidence bound q(A)is
+the Clopper–Pearson bound [43] computed from the number
+nA of trajectories with a possible event, so that
+P
+ 
+q(A)≤ q(A)
+
+≥0.95.(79)
+For example, zero possible events in200trajectories gives an
+upper confidence bound of1.5%. An event frequencymeets
+its levelif its upper confidence bound is at most the level of
+the guarantee it checks,δfor finiteKandδ 1 forK=∞.
+B. Performance and Safety Metrics
+LetI goal,k := 1if trajectorykreaches the goal and
+Igoal,k := 0otherwise, and letK + :={k:N k ≥1}. For a
+decision indicatorI k,t ∈ {0,1}and the sampling periodT s
+18
+in Table III, define
+Tmis,k :=T s[Igoal,kNk + (1−I goal,k)T],
+mc,k := 1Nk Xt<Nk ck,t, q +k := 1Nk Xt<Nk Ik,t,
+bTmis := 1NMC
+NMCX
+k=1
+Tmis,k,
+bmc := 1|K+| Xk∈K+ mc,k,
+bq+ := 1|K+| Xk∈K+ q+k .
+(80)
+They give the meanmission time bTmis, in which a trajectory
+that does not reach the goal counts with the horizonT,
+thenormalized mean robustness marginbm c/cmax and the
+decision fractionbq + ofI, the mean fraction of decisions
+withI k,t = 1. The trajectory frequency (78) of{∃t < N k :
+Ik,t = 1}is denotedbq. TheCBF-violation fractionbq +CBF
+and thesafe-set-violation fractionbq +unsafe are the decision
+fractions of a violation of the true barrier condition in (7)
+and of leaving the safe setC,
+ICBF,k,t :=1 {h(xk,t+1)<(1−γ)h(xk,t)},
+Iunsafe,k,t :=1 {h(xk,t+1)<0}. (81)
+The estimated peak exceedance risk and the minimum barrier
+value are
+bpmaxk := max0≤t<Nk, ck,t<cmax bpk,t(ck,t),
+hmink := min0≤t≤Nk h(xk,t), (82)
+withbpmaxk undefined ifc k,t =c max for allt, andh mink <0
+exactly whenx k,t /∈ Cfor somet. Their means over the
+trajectories where they are defined are themean estimated
+peak exceedance riskbmpmax and themean minimum barrier
+valuebmhmin. The secondary metrics are defined in the
+supplementary ablation report [36].
+C. Empirical Checks of the Assumptions and the Tightened
+Condition
+Assumption 1 requires thatU(x t, cmax)is nonempty and
+that the inputu t(cmax)ensures the support conditionY t ≤
+cmax. At every recorded decision, we check both conditions
+and the tightened condition (3) for the applied input, that is,
+ut ∈ U(xt, ct).
+Assumption 2 requires, through (23), that the exceedance
+riskp t(c)exceedsp s(c)by at mostd t(c;σ, τ)at every time
+sof the monitoring period[σ, τ). A decision ischeckedif
+ct < cmax. At a checked decision,c t is certified by the test
+with the supporting test indexr t in (86), with monitoring
+period[σ rt , τrt (ct)). We check (23) for this test with the
+estimated exceedance riskbpin place ofp, through thebound
+excesses
+epw,t := maxσrt ≤s<τrt (ct)[bpt(ct)−bps(ct)−d Vt (ct;s, s+ 1)],
+eA2,t :=bpt(ct)−minσrt ≤s<τrt (ct) bps(ct)−d (rt)t (ct). (83)
+The excesse A2,t is the largest increasebpt(ct)−bps(ct)over
+the monitoring period minus the current risk-increase bound
+d(rt)t (ct)in (30), ande pw,t compares each increase with the
+risk-increase term of the deployed variant at the sames.
+A positive excess means that the bound is exceeded. For
+a bound factorϕ <1in Appendix F-B, both bounds are
+scaled byϕ. The frequenciesbq pw andbqA2 are the trajectory
+frequencies (78) of a positivee pw,t and a positivee A2,t at
+some checked decision.
+D. Scenario-Specific Quantities
+In both scenarios, the barrier uses the clearanceψof
+Appendix D-B, andy k,t denotes the body center.Contact
+is the eventψ(y k,t)≤0for some1≤t≤N k, and it ends
+the trajectory. Sinceψis1-Lipschitz (51) and∥w t∥ ≤cmax,
+the support conditionY t ≤c max holds almost surely.
+APPENDIXF
+SIMULATIONDETAILS
+This appendix specifies the simulations of Section VI.
+Appendix F-A defines the compared methods and the sim-
+ulation models, and Appendix F-B the error allocation and
+the bound factor. Appendix F-C and Appendix F-D report
+the Corridor results and the checks of the guarantees and the
+assumptions. All methods share the initial states and, for each
+Lµ, the disturbance realizations. The supplementary ablation
+report [36] gives further comparisons and the implementation
+details, and the code is in the repository linked in Section VI-
+A.
+A. Compared Methods and Simulation Models
+All filtered methods use the same nominal input, input
+limits and weighted input deviation as the objective of (4),
+and differ only in the robustness marginc t. The certified
+variants use the certificate bounds of Table II, derived in
+Appendix D-B. Table III gives the parameters, and [36] the
+obstacle coordinates. Lengths are in meters, angles in radians
+unless marked in degrees, and times in seconds.
+a) Baselines:Unfiltered nominal control appliesu nomt ,
+and the CBF filters with fixed margins usec t = 0and
+ct =c max in (4). ACI and QT keep an online estimateˆc Mt ,
+M∈ {ACI,QT}, of the(1−α 0)-quantile of the barrier
+lossesY t and deployc t = min{cmax,[ˆcMt ]+}. ACI takes the
+empirical(1−α ACIt )-quantile of the lastN win losses and
+adapts its level, starting fromα ACI0 =α 0, while QT updates
+the estimate directly:
+αACIt+1 =α ACIt +k ACI(α0 −1 {Yt>ˆcACIt }),(84)
+ˆcQTt+1 = ˆcQTt +k QT(1{Yt>ˆcQTt } −α 0).(85)
+Both methods raise their estimate after an exceedanceY t >
+ˆcMt and lower it otherwise, which drives the long-run fraction
+of such exceedances towardα 0. The windowN win, the step
+sizesk ACI, kQT >0, and the initial robustness margins are
+in Table III.
+19
+TABLE II
+TERMS OF THE CERTIFICATE BOUNDSd Vt (c;σ, τ)DEFINED IN(47)OFAPPENDIXD-B. THE DRIFT TERM∆ t IS(46c)TAKEN AT EACHs,AS STATED
+AFTER IT.
+Variant Sensitivity bound Feature-change term Drift term Definition
+V-UL geomx , Lgeomu (uniform)¯η t,s (uniform)∆ t (69)
+V-∆L geomx , Lgeomu (uniform)η t,s(c) ∆ t (70)
+V-LL geom(c) ¯η t,s (uniform)∆ t (71)
+V-CL geom(c)η t,s(c) ∆ t( ¯P(c)−B t,s(c))(72)
+TABLE III
+PARAMETERS OF BOTH SCENARIOS,THE MAIN GRID,AND THE SELECTED SETTINGS.
+Quantity Corridor Maze
+Map; obstacles15×2m;8cones9×9m;6interior walls,13cones
+Start; goal; goal tolerance[0.3,1.1]×[0.5,1.5]m,|θ| ≤15 ◦;
+(14.4,1.0)m;0.25m
+(1.0,0.75±0.08)m,θ= 90 ◦;
+(8.06,8.25)m;0.15m
+Sampling periodT s; decision
+horizonT
+0.1s;700 0.2s;600
+Input bounds|v| ≤0.6m/s,|ω| ≤2rad/s|a| ≤1.5m/s 2,|ν| ≤8rad/s 2
+State bounds; brakinga br –v∈[−0.3,0.8]m/s,|ω| ≤1.5rad/s;
+1.2m/s 2
+Cone radiusρ j; body radiusρ body 0.305m;0.22m same
+Nose distancel0.15m same
+Nominal inputk θ = 2,v c = 0.5m/s look-ahead0.5m,k θ = 2.5,k ω = 4,
+kv = 2,v c = 0.6m/s
+Filter weightw ω = 0.0225w ν = 0.0225
+Decayγ; marginc max; candidatesΓ
+(M= 7)
+0.25;0.02m;c max{0.3, . . . ,0.9}0.25;0.01m; same
+GainsΛ{0.2,0.4,0.6,0.8,1.05}same
+ϱmin in (55);K zx;K zu in (63), (64)0.675m;1.022;0.102 0.37m;1.067;0.0204
+Lgeom(c)in (57) overΓ [3.09,6.69]×10 −3 m−1 [5.13,11.14]×10 −3 m−1
+Lgeomx ;L geomu in (67)6.84×10 −3;6.80×10 −4 1.19×10 −2;2.27×10 −4
+ACIk ACI;N win; initial margin0.02;500;c max 0.005;500;c max
+QTk QT; initial margin0.3c max;c max 0.02c max;c max
+Main grid:α 0;α{0.10,0.15,0.20,0.25,0.30};{0.05,0.10, . . . , α 0 −0.05}(15pairs)
+Main grid:δ;K{0.025,0.05,0.10,0.15,0.20};{10,50,100,200,∞}(375settings)
+Default bound factorϕand budget
+normalizerb(Appendix F-B);L µ in
+(46a)
+1;κ, rounded up to2.11;0.0005
+Selected settings(α 0, α, δ, K)S1(0.30,0.25,0.20,50), S2(0.30,0.25,0.15,50), S3(0.30,0.20,0.20,50),
+S4(0.30,0.25,0.025,100), S5(0.30,0.25,0.10,10)
+b) Supporting test index:Thesupporting test indexof
+the deployed marginc t ∈ Dt is the index of the most recently
+started test whose certificate ofc t has the smallest current
+risk-increase bound,
+rt := max arg min
+r:τr(ct)≤t
+d(r)t (ct),(86)
+withd (r)t in (30), andr t := 0ifD t =∅. Its certificate meets
+the deployment condition in (31), and Appendix E-C checks
+Assumption 2 over its monitoring period.
+c) Dynamics and barrier functions:The robot has body
+centery∈R 2, headingθ, and nose pointq(x) :=y+le(θ)
+withe(θ) := (cosθ,sinθ)and nose distancel >0, andψ
+is the clearance (49) in the Corridor and (50) in the Maze.
+The nominal continuous-time dynamics are
+Corridor:˙y=ve(θ), ˙θ=ω,(87)
+Maze:˙y=ve(θ), ˙θ=ω,˙v=a,˙ω=ν,(88)
+withx= (y, θ),u= (v, ω)in the Corridor andx=
+(y, θ, v, ω),u= (a, ν)in the Maze. With the braking
+decelerationa br >0, the barrier function is
+h(x) :=ψ(q(x))−l−v 2/(2abr)(89)
+20
+in the Maze, and the same without the braking term in the
+Corridor. The nominal one-step predictor ˆf(x, u)in (2) is the
+state reached fromxafter one sampling periodT s (Table III)
+withuheld constant.
+d) Disturbance:The true system adds the planar dis-
+placementw t =A te(Φt)to the nominal prediction,
+f(x, u, w) :=ˆf(x, u) + (w,0n−2),(90)
+withn= 3in the Corridor andn= 5in the Maze. Given
+Ft, the directionΦ t is uniform on[0,2π)and independent
+of the magnitudeA t, which has the distributionµ At ,
+At | Ft ∼(1−β t) U1 +β t U2,
+βt := 12 [1 + sin(2Lµt)], (91)
+whereU 1 andU 2 are the uniform distributions on[0, cmax/2]
+and[c max/2, cmax]. The distributionµ At shifts between small
+and large magnitudes, with|β t+1 −β t| ≤Lµ. The controller
+knows neitherµ At norβ t, and the simulations contain no
+other model error.
+B. Error Allocation and Bound Factor
+a) Error allocation:The budget normalizerb≥κ
+replacesκin the error levels of Section V-B, which become
+δr = δb(r+ 1) ln 2(r+ 1) , Xr≥1 δr = δκb ≤δ.
+Theorem 3 then holds withδreplaced byδκ/b. By default,
+b=κ, rounded up to2.11. ForK=∞, only test1starts,
+atσ 1 = 0, with the error levelδ 1.
+b) Bound factor:The bound factorϕ∈[0,1]multiplies
+dVt (c;σ, τ)in the current risk-increase bound (30). The
+defaultϕ= 1gives the certificate bounds of Appendix D-
+B. Valuesϕ <1shrink these bounds, which then need not
+satisfy Assumption 2, and Appendix G-A and [36] compare
+them.
+C. Corridor Results
+In all certified rows of Table IV, both event frequencies
+meet their levels, with deployment-event frequency0%,
+false-certification frequency at most3.5%, andbm pmax ≤
+0.21. ACI and QT have deployment-event frequency100%,
+withbmpmax at1.91and2.00timesα 0. Relative toc max, S3
+with V-L (Fig. 4) and S1 with V-C reducebmc/cmax by38%
+and50%, respectively. V-C minimizes this mean at every
+setting, as in the Maze. ACI, QT, and S1 with V-C reach the
+goal with mean mission times33.1,33.4, and33.9s. The
+CBF-violation fractionbq+CBF is15.2–17.7%for ACI and QT,
+versus9.7%for S1 with V-C.
+D. Guarantees and Assumptions
+a) Events:In the3000main-grid cells (Table III),
+deployment events occur in5.13%, only atα 0 ≤0.25.
+At finiteK,0.375%of2400cells miss a level: false-
+certification frequency1.0%(upper confidence bound3.2%)
+in the Corridor at(α, δ, K) = (0.15,0.025,10). AtK=∞,
+26.67%of600cells miss a level:20%atδ= 0.025, where
+TABLE IV
+CORRIDOR RESULTS. CONVENTIONS AS INTABLEI. UNFILTERED
+CONTROL HAS CONTACT IN EVERY TRAJECTORY AND DOES NOT REACH
+THE GOAL,SO ITS bTmis IS THE HORIZONT T s = 70S.
+Methodbm c/cmax↓ bTmis↓bq +CBF↓bm pmax ↓bq dep↓bq cert↓
+Unfiltered —70.0±.030.7±13.5— — —
+c= 0 0.00±.0032.4±.828.0±3.00.79±.09100 (100) —
+cmax 1.00±.0035.9±.90.0±0.0— 0.0 (1.5) —
+ACI0.22±.0433.1±.817.7±1.60.57±.10100 (100) —
+QT0.30±.0333.4±.815.2±1.30.60±.11100 (100) —
+S1:(α 0, α, δ, K) =(0.30, 0.25, 0.20, 50)
+V-U0.79±.0335.1±.82.6±0.90.16±.040.0 (1.5) 0.5 (2.4)
+V-∆ 0.79±.0335.1±.82.6±0.90.16±.040.0 (1.5) 0.5 (2.4)
+V-L0.63±.0534.4±.95.9±1.20.18±.040.0 (1.5) 0.0 (1.5)
+V-C0.50±.0633.9±.99.7±2.10.21±.030.0 (1.5) 1.5 (3.9)
+S2:(α 0, α, δ, K) =(0.30, 0.25, 0.15, 50)
+V-U0.81±.0335.1±.82.3±0.80.15±.040.0 (1.5) 0.5 (2.4)
+V-∆ 0.81±.0335.1±.82.3±0.80.15±.040.0 (1.5) 0.5 (2.4)
+V-L0.64±.0534.4±.95.5±1.20.17±.040.0 (1.5) 0.5 (2.4)
+V-C0.52±.0633.9±.99.4±2.00.20±.030.0 (1.5) 0.5 (2.4)
+S3:(α 0, α, δ, K) =(0.30, 0.20, 0.20, 50)
+V-U0.67±.0534.5±.95.0±1.10.14±.040.0 (1.5) 3.5 (6.5)
+V-∆ 0.67±.0534.5±.95.0±1.20.14±.040.0 (1.5) 3.5 (6.5)
+V-L0.62±.0634.3±.96.4±1.60.15±.040.0 (1.5) 3.5 (6.5)
+V-C0.58±.0734.2±.97.4±2.20.17±.040.0 (1.5) 3.5 (6.5)
+S4:(α 0, α, δ, K) =(0.30, 0.25, 0.025, 100)
+V-U0.92±.0235.6±.90.7±0.50.11±.030.0 (1.5) 0.0 (1.5)
+V-∆ 0.92±.0235.6±.90.7±0.50.11±.030.0 (1.5) 0.0 (1.5)
+V-L0.82±.0335.1±.92.5±0.90.14±.030.0 (1.5) 0.0 (1.5)
+V-C0.58±.0534.1±.97.7±1.70.18±.030.0 (1.5) 0.0 (1.5)
+S5:(α 0, α, δ, K) =(0.30, 0.25, 0.10, 10)
+V-U0.77±.0434.9±.92.9±0.80.14±.040.0 (1.5) 0.5 (2.4)
+V-∆ 0.77±.0434.9±.92.9±0.80.14±.040.0 (1.5) 0.5 (2.4)
+V-L0.66±.0534.5±.95.1±1.10.16±.040.0 (1.5) 0.0 (1.5)
+V-C0.53±.0634.0±.98.9±1.90.20±.030.0 (1.5) 0.0 (1.5)
+Theorem 3
+δ1 = 1.23%lies below the1.5%upper confidence bound at
+zero possible events, and6.67%in the Corridor atα= 0.05,
+δ∈ {0.05,0.10}. Section 2.8 of [36] details the events and
+single tests (K=∞).
+b) Assumptions:In all simulations withϕ= 1, here
+and in [36], Assumption 1 and the tightened condition (3)
+hold at every recorded decision, no bound excess (83) is
+positive at a checked decision, and every trajectory reaches
+the goal without contact (Appendix E-D). In some main-grid
+cells, V-U, V-∆and V-L never deploy a margin belowc max,
+so no decision is checked there.
+21
+APPENDIXG
+SIMULATIONFIGURES ANDTABLES
+Figures and tables in this appendix
+Table V: bound factor and distribution-drift bound. Figs. 4–5: trajectories.
+Fig. 6: per-trajectory distributions. Fig. 7: robustness-margin heatmap.
+Fig. 8: parameter sweeps.
+A. Bound Factor and Distribution-Drift Bound
+Table V varies the bound factorϕdefined in Appendix F-B and the distribution-drift boundL µ defined in (46a), for S3
+with V-L in both scenarios. These are the setting and variant used in the trajectory figures. Valuesϕ <1need not satisfy
+Assumption 2 and carry no guarantee. Section 2.7 of the supplementary ablation report [36] gives the full comparison. Its
+Tables 17 and 18 report events and bound-excess checks for S1–S5, and its Section 2.2.3 gives sweeps for all four variants.
+TABLE V
+BOUND FACTORϕAND DISTRIBUTION-DRIFT BOUNDL µ ATS3, V-L. MEANS±SD. DECISION FRACTIONS AND EVENT FREQUENCIES IN%,WITH
+95%UPPER CONFIDENCE BOUNDS IN PARENTHESES FOR EVENTS.N MC = 200PER ROW.
+S3: V-L(α 0, α, δ, K)= (0.30, 0.20, 0.20, 50)N MC = 200
+ϕ bmc/cmax ↓ bq+CBF ↓(%) bqdep ↓(%) bqcert ↓(%)
+Corridor:L µ = 0.0005
+1 0.62±0.06 6.38±1.57 0.0 (1.5) 3.5 (6.5)
+0.75 0.59±0.07 7.15±1.96 0.0 (1.5) 3.5 (6.5)
+0.5 0.58±0.07 7.44±2.16 0.0 (1.5) 3.5 (6.5)
+0.25 0.58±0.07 7.44±2.16 0.0 (1.5) 3.5 (6.5)
+0 0.57±0.08 7.44±2.15 16.0 (20.9) 3.5 (6.5)
+Corridor:L µ = 0.005
+1 1.00±0.00 0.02±0.07 0.0 (1.5) 1.5 (3.9)
+0.75 1.00±0.00 0.08±0.18 0.0 (1.5) 1.5 (3.9)
+0.5 0.97±0.01 0.36±0.43 0.0 (1.5) 1.5 (3.9)
+0.25 0.83±0.03 2.61±0.88 1.5 (3.9) 1.5 (3.9)
+0 0.64±0.09 7.79±3.15 20.0 (25.3) 1.5 (3.9)
+Maze:L µ = 0.0005
+1 0.62±0.07 5.04±1.93 0.0 (1.5) 2.0 (4.6)
+0.75 0.61±0.08 5.36±2.18 0.0 (1.5) 2.0 (4.6)
+0.5 0.61±0.08 5.36±2.18 0.0 (1.5) 2.0 (4.6)
+0.25 0.61±0.08 5.36±2.18 0.0 (1.5) 2.0 (4.6)
+0 0.59±0.08 5.42±2.13 5.5 (9.0) 2.0 (4.6)
+Maze:L µ = 0.005
+1 1.00±0.00 0.00±0.00 0.0 (1.5) 1.0 (3.2)
+0.75 0.99±0.01 0.00±0.03 0.0 (1.5) 1.0 (3.2)
+0.5 0.97±0.01 0.26±0.31 0.0 (1.5) 1.5 (3.9)
+0.25 0.83±0.04 1.84±1.05 1.5 (3.9) 1.5 (3.9)
+0 0.66±0.09 6.07±3.41 12.0 (16.5) 1.5 (3.9)
+22
+B. Trajectories and Estimated Exceedance Risk
+0 3 6 9 12 q1 (m)
+0
+1
+2
+q2 (m)
+(a) V-L
+cmax
+Contact
+h=0
+10
+20
+ct
+(mm)
+(b) V-L trajectory V-L mean cmax
+0
+20
+Yt, ct
+(mm)
+(c)
+ Yt ct Yt > ct: 8.83 % cmax
+10 20 30
+Time (s)
+0
+5
+rt (e)
+25 cm
+0
+0.3
+ˆpt(ct) (d) α0
+Fig. 4. Corridor, S3 with V-L. Panels (a)–(d) as in Fig. 3, and (e) the supporting test indexr t.
+0 3 6 9 q1 (m)
+0
+3
+6
+9q2 (m)
+(a) V-L
+cmax
+Contact
+h=0 at v=0
+Yt
+Yt > ct: 12.21 %
+V-L trajectory
+V-L mean
+5
+10
+ct
+(mm)
+0
+5
+10
+Yt, ct
+(mm)
+10 20 30 40 50
+Time (s)
+0
+2
+4
+rt
+10 cm
+0
+0.3
+ˆpt(ct)
+cmax
+cmax
+α0
+(b)
+(c)
+(d)
+(e)
+Fig. 5. Maze, S3 with V-L. Panels as in Fig. 4. The legend in (a) serves all panels.
+23
+C. Distributions and Robustness-Margin Heatmap
+In Fig. 6, points are trajectories, boxes span the quartiles with the median, and whiskers reach the most extreme values
+within1.5interquartile ranges of the quartiles. Unfiltered control is omitted for scale. Fig. 7 compares the certified variants
+overαandK.
+30
+33
+36
+39Tmis,k (s)
+Mission time
+0
+0.5
+1
+mc,k/cmax
+Robustness margin
+0
+0.1
+1
+10
+100
+q+CBF,k (%)
+CBF violations
+0
+0.1
+1
+10
+100
+q+unsafe,k (%)
+Safe-set violations
+0
+0.5
+1
+ˆpmaxk
+N-A
+Estimated peak exceedance risk
+α0
+−0.05
+0.00
+0.05
+hmink (m)
+Minimum barrier
+48
+51
+54Tmis,k (s)
+Mission time
+0
+0.5
+1
+mc,k/cmax
+Robustness margin
+0
+0.1
+1
+10
+100
+q+CBF,k (%)
+CBF violations
+c=0
+cmax
+ACI
+QT
+V-U
+V-∆
+V-L
+V-C
+Method
+0
+0.1
+1
+10
+100
+q+unsafe,k (%)
+Safe-set violations
+c=0
+cmax
+ACI
+QT
+V-U
+V-∆
+V-L
+V-C
+Method
+0
+0.5
+1
+ˆpmaxk
+N-A
+Estimated peak exceedance risk
+α0
+c=0
+cmax
+ACI
+QT
+V-U
+V-∆
+V-L
+V-C
+Method
+−0.02
+0.00
+0.02
+0.04
+hmink (m)
+Minimum barrier
+CorridorMaze
+Fig. 6. Distributions at S3, Corridor (top) and Maze (bottom). N-A: no smaller-margin deployment. Decision fractions are percentages.
+Fig. 7. Maze,α 0 = 0.30:bmc/cmax overαandKatδ∈ {0.05,0.10}. Cells give mean (top) and SD (bottom). Bold: smallest displayed mean among
+variants, including ties.
+24
+D. Parameter Sweeps
+Fig. 8 varies one parameter at a time around S3. Boxes span the quartiles with the median, whiskers mark the 5th and
+95th percentiles, and markers show the means.
+0.4
+0.6
+0.8mc,k/cmax
+α varies
+α0=0.30, δ=0.20K=50, b=κ
+δ varies
+α0=0.30, α=0.20K=50, b=κ
+K varies
+α0=0.30, α=0.20δ=0.20, b=κ
+b varies
+α0=0.30, α=0.20δ=0.20, K=50
+0
+5
+10
+q+CBF,k (%)
+0.05 0.1 0.15 0.2 0.25
+34
+36
+Tmis,k (s)
+0.025 0.05 0.1 0.15 0.2 10 50 100 200 ∞ κ 2.5 3 4
+0.4
+0.6
+0.8mc,k/cmax
+0
+5
+10
+q+CBF,k (%)
+0.05 0.1 0.15 0.2 0.25
+α
+52
+54
+Tmis,k (s)
+0.025 0.05 0.1 0.15 0.2
+δ
+10 50 100 200 ∞
+K
+κ 2.5 3 4
+b
+CorridorMaze
+QT ▼
+0.30
+ACI ▼
+0.22
+ACI ▲
+17.7
+QT ▲
+15.2
+QT
+33.4
+ACI
+33.1
+QT
+0.50
+ACI ▼
+0.22
+ACI ▲
+15.8
+QT
+8.0
+QT
+51.2
+ACI ▼
+49.7
+V-L V-C QT (α0=0.30) ACI (α0=0.30) value at S3 (bold)
+Fig. 8. One-parameter sweeps around S3, Corridor (top) and Maze (bottom), for V-L and V-C. Right-hand labels: means of QT and ACI, with▲/▼for
+values above/below the axis range.

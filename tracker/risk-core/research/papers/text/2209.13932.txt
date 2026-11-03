@@ -1,0 +1,2276 @@
+arXiv 2209.13932  https://arxiv.org/abs/2209.13932
+
+arXiv:2209.13932v2  [math.OC]  9 Mar 2025
+Eﬃcient and Near-Optimal Online Portfolio Selection
+R´ emi J´ ez´ equel∗† Dmitrii M. Ostrovskii ∗‡ Pierre Gaillard §
+Abstract
+In the problem of online portfolio selection as formulated by Cover (1 991) [12], the trader
+repeatedly distributes her capital overd assets in each ofT >1 rounds, with the goal of maximiz-
+ing the total return. Cover proposed an algorithm, termed Univer sal Portfolios, that performs
+nearly as well as the best (in hindsight) static assignment of a portfolio, with anO(d log(T )) log-
+arithmic regret. Without imposing any restrictions on the market th is guarantee is known to be
+worst-case optimal, and no other algorithm attaining it has been discovered so far. Unfortunately,
+Cover’s algorithm crucially relies on computing certain d-dimensional integral, which must be
+approximated in any implementation; this results in a prohibitive ˜O(d4(T +d)14) per-round run-
+time for the fastest known implementation due to Kalai and Vempala ( 2002) [23]. We propose
+an algorithm for online portfolio selection that admits essentially the s ame regret guarantee as
+Universal Portfolios—up to a constant factor and replacement of log(T ) with log(T +d)—yet
+has a drastically reduced runtime of ˜O(d2(T +d)) per round. The selected portfolio minimizes
+the observed logarithmic loss regularized with the log-determinant o f its Hessian – equivalently,
+the hybrid logarithmic-volumetric barrier of the polytope speciﬁed b y the asset return vectors.
+As such, our work reveals surprising connections of online portfolio selection with two classical
+topics in optimization theory: cutting-plane and interior-point algor ithms.
+1 Introduction
+In the problem of portfolio selection in its most general for m, the goal is to allocate capital over
+a set of assets in such a way as to maximize the aggregate retur n; see e.g. [ 33, 44] and references
+therein. At a high level, one can distinguish two rather diﬀerent approaches to this general problem.
+(a) Markowitz’s mean-variance theory [32] in which the tradeoﬀ between the expected return and
+its variance allows to account for the market uncertainty in a one-time investment scenario.
+(b) The capital growth theory ascending to [24]—see [31] for a modern treatment—which focuses
+on the expected log return of a portfolio and naturally addresses multiple-period inv estment.
+We shall focus here on the online portfolio selection framework introduced by T. Cover [ 12, 14].
+While being close in spirit to the second approach and addres sing the case of multi-period invest-
+ment, Cover’s framework allows to avoid making any stochast ic assumptions about the market.
+∗Equal contribution.
+†Capital Fund Management (CFM), Paris, France. remi.jezequel@inria.fr.
+‡Georgia Insitute of Technology, School of Mathematics & H. M ilton Stewart School of Industrial and Systems
+Engineering (ISyE), Atlanta, USA. ostrov@gatech.edu.
+§INRIA Grenoble–Rhˆ one-Alpes and Universit´ e Grenoble Alpes, Grenoble, France. pierre.gaillard@inria.fr.
+1
+This results, on the one hand, in a robust theory well suited f or dynamic environment and, on the
+other hand, in a plethora of algorithms with great practical performance and strong guarantees [29].
+Cover’s framework can be summarized as follows. Given the un it initial capital Cap0 = 1, in
+each round t ∈ { 1, 2,...,T } the trader chooses an allocation wt ∈ ∆d of her previously earned
+capital Capt−1 overd assets; here ∆d is the standard simplex in Rd andwt[i]—theith entry ofwt—
+is the share of capital invested into asset i ∈ {1, 2,..,d } at this round. Then the returns—the ratios
+of the closing and opening prices in this round—are revealed in the form of xt ∈ Rd+ (hereafter Rd+
+is the nonnegative orthant of Rd, and Rd++ is its interior), and the trader’s capital is updated as
+Capt = Capt−1xt⊤wt.
+By Cover, the performance of a strategy that selected portfo liosw1:T := (w1,...,w T ) for the market
+given byx1:T := (x1,...,x T ) is quantiﬁed by comparing the ﬁnal capital CapT =∏Tt=1x⊤t wt against
+Cap∗T := maxw∈∆d
+T∏
+t=1
+xt⊤w,
+the “idealized” ﬁnal capital attained by the best (in hindsight forx1:T ) “static” strategy constrained
+to select the same portfolio in all rounds. Due to the multipl icative structure of CapT and Cap∗T , it
+is natural to deﬁne the regret of w1:T on market x1:T as the negative logarithm of CapT/Cap∗T , i.e.
+RT (w1:T |x1:T ) :=
+∑
+t∈[T ]
+ℓt(wt) − minw∈∆d
+∑
+t∈[T ]
+ℓt(w) (1)
+where we let [T ] := {1, 2,...,T } forT ∈ N with the convention [0] = ∅, and deﬁne the instantaneous
+(logarithmic) loss ℓt : ∆d → R by
+ℓt(w) := − log(x⊤t w). (2)
+Since the instantaneous losses are convex, this formulatio n falls into the framework of online con-
+vex optimization, with ( 1) matching the standard notion of regret for an online optimi zation algo-
+rithm [20, Sec. 1.1]; thus, we can beneﬁt from an abundance of techniqu es developed by the cor-
+responding community [ 20]. Despite conveniently putting us into the framework of onl ine convex
+optimization, comparison against the class of “static” str ategies, also called constantly rebalanced
+portfolios (CRP), might seem restrictive. Yet, there are at least two ot her arguments in its favor.
+• On the one hand, CRP strategies are known to be optimal in the i .i.d. stochastic setup
+wherext’s, instead of being adversarially chosen in each round, come from a static distribution
+unknown to the trader; see [ 13, Theorem 15.3.1]. Clearly, a uniform upper bound for the
+regret (1), i.e. one valid for any sequence x1:T , also applies in the i.i.d. setup. Such models
+are adequate for markets with moderate observation horizon s; hence, we may expect good
+practical performance for a strategy admitting a uniform regret bound against the best CRP.
+This intuition is veriﬁed by extensive real-data experimen ts reported in [ 28].
+• On the other hand, the regret measured against the best sequence of portfolios can be as
+large as T log(d), i.e. grow linearly with time horizon T . (Indeed: ﬁx w1,...,w T ∈ ∆d and
+consider x1:T with xt = ei(t) where i(t) ∈ Argmin1⩽j⩽dwt[j] and e1,...,e d are the canonical
+basis vectors in Rd. Then − log(CapT ) = − log(∏t⩽Twt[i(t)]) /greaterorequalslant − log[( 1d)T ] = T logd; on
+the other hand,∑t∈[T ] inf w∈∆dℓt(w) /greaterorequalslant∑t∈[T ]ℓt(ei(t)) = 0.) In contrast, the regret measured
+against the best CRP strategy, cf. ( 1), is expected to be sublinear in T for any reasonable
+algorithm (in particular, this turns out to be the case for al l algorithms discussed further on).
+2
+In addition to introducing the framework, in his seminal wor k [12] Cover proposed and studied
+an algorithm for online portfolio selection, termed Universal Portfolios, which consists in selecting
+wt =
+∫
+∆d
+wφt(w)dw (3)
+where φt(w) is the probability density on ∆ d proportional to the capital the trader would have
+earned by the current round t by selecting portfolio w in all the previous rounds—in other words,
+φt(w) ∝ exp
+
+− ∑
+τ ∈[t−1]
+ℓτ(w)
+
+. (4)
+The idea here is to give preference to portfolios for which th e observed cumulative loss is rela-
+tively small without completely discarding portfolios wit h large losses. In fact, the same procedure
+under diﬀerent names (e.g., the method of exponential weight s, exponentially weighted averaging
+forecaster) arises in other contexts: prediction with expe rt advice [ 11], online learning in metric
+spaces [42], and statistical estimation [27, 16, 15, 43, 5, 6]. Cover justiﬁed his algorithm by showing
+that for any market realization x1:T , the regret of portfolio sequence w1:T produced in (3) satisﬁes
+RT (w1:T |x1:T ) = (d − 1) log(T + 1) (5)
+see [12, Thm. 4] or [ 11, Thm. 10.3], and also [ 21, Theorem 7] for a short self-contanted proof with
+an additional constant term. This result justiﬁes the name “ Universal Portfolios:” ( 3) admits a
+strong—nearly independent of T —regret guarantee for any market. Moreover, this regret bound
+turns out to be optimal up to a constant factor: it can be shown that the worst-case overx1:T regret
+for any algorithm is at least d−12 log( πTd ) +εd(T ) where εd(T ) → 0 as T → ∞; see [11, p. 282].
+Unfortunately, Cover’s algorithm has a major drawback: it r elies on integration over ∆d, which
+cannot be performed explicitly; thus, one has to approximate the integral with suﬃcient accuracy to
+obtain a tractable implementation. To obtain such an approximation, one could sample fromφt—a
+log-concave distribution, which can be done via Markov Chai n Monte Carlo type techniques. This
+approach was carried out by Kalai and Vempala in [ 23], resulting in a ~O(T 5(T +d)9d4) per-round
+runtime.1 (Hereafter, ~O(·) hides a polylogarithmic factor in T +d.) Albeit polynomial in d and T ,
+this runtime essentially rules out any practical applicati on scenario. Even though this can likely
+be improved with recent advances in log-concave sampling (s ee e.g. [9, 36, 17, 10, 49]), we are not
+aware of such improvements in the existing literature. Mean while, no algorithm except Universal
+Portfolios is known to admit a regret bound matching ( 5) up to a constant factor. In other words,
+the following problem stands:
+Propose a computationally feasible and near-optimal online portfolio selection algorithm.
+We shall address this problem by presenting such an algorithm, proving that its regret admits a
+bound matching (5) up to a constant factor and replacement of log(T ) with log(T +d), and proposing
+an eﬃcient implementation for it. In the remaining part of th is section, we shall informally state
+our main result, brieﬂy summarize our contributions, discu ss the related work, and outline the
+subsequent sections of the paper. Let us now give an abridged formulation of our main result.
+1In [47] this result is miscited as ~O(T 3(T +d)d2), seemingly due to neglecting that 1δ20 = T (T +d)2d in [23, Thm. 2].
+3
+Theorem 1.1 (cf. Theorem 4.1). There is an algorithm for online portfolio selection which ha s
+an O(d log(T +d)) regret, runs in ~O(d2T +d3) per round, and utilizes O(dT +d2) memory.
+We see that the improvement of runtime compared to the algori thm of Kalai and Vempala [ 23]—
+the only one known so far with a regret guarantee of the same or der—is drastic; in particular, our
+proposed algorithm can be run on a personal computer for d and T in the range of thousands.
+Moreover, in addition to favorable computational guarantees the algorithm is conceptually easy to
+implement: in each round one has to minimize a convex potenti al function with a readily available
+second-order oracle, so one can simply use Newton’s method. In fact, the potential we use belongs to
+the class of self-concordant functions—“canonical” objectives for Newton’s method [ 38]; this allows
+us to implement the algorithm while performing only O(log(T )) Newton steps in each round.
+We shall now brieﬂy summarize the contributions of our paper and outline its organization.
+Contributions and outline of further sections. In Section 2 we present our key contributions.
+• We introduce a new algorithm for online portfolio selection , called VB-FTRL—the acronym
+stands for V olumetric-Barrier enhanced F ollow-The-Regularized-Leader,—and state
+Theorem 2.1 showing that the regret of VB-FTRL admits an O(d log(T +d)) upper bound.
+• We then investigate an intriguing question of how VB-FTRL is related to Cover’s Universal
+Portfolios algorithm. To this end, we ﬁrst pass to a variatio nal formulation of Cover’s update
+by ﬁnding a functional over distributions supported on ∆d which is minimized byφt(·), cf. (4).
+We then show that the update of VB-FTRL corresponds to solving this minimization problem
+approximately, by passing to the class of appropriately truncated Gaussian distributions with
+unknown expectation and covariance, and solving for covari ance with a given expectation.
+Moreover, we quantify the accuracy of this approximation (P ropositions 2.2 and 2.3); this
+result might be of independent interest and ﬁnd use beyond th e context of portfolio selection.
+Section 3 is devoted to analyzing the regret of VB-FTRL and proving Theorem 2.1. Finally, in
+Section 4 we present a procedure implementing VB-FTRL and quantify its time and memory costs.
+1.1 Overview of related work
+Since Cover’s work [12], the online portfolio selection framework has been studie d extensively due
+to its practical usefulness and theoretical challenges. He re we focus on the line of research done
+in the online convex optimization community and concerned w ith designing eﬃcient methods with
+provable regret guarantees; for reader’s convenience we re cap these results in Table 1. For a more
+application-centered perspective and experimental compa rison of algorithms one may refer to [ 29].
+To the best of our knowledge, the authors of [ 22] were the ﬁrst to realize that Cover’s problem
+of competing with the best CRP can be reformulated as online c onvex optimization on the sim-
+plex ∆ d with logarithmic instantaneous losses ℓt(w) = − log(x⊤t w), cf. ( 1). They advocated the
+exponentiated gradient (EG) method [ 26] over the basic online gradient descent [ 51], due to EG
+being better adapted to the simplex type geometry. Unfortun ately, both methods require the loss
+4
+Algorithm Regret Runtime (per round) Sources
+Universal Portfolios d log(T ) d4T 14 [12, 23]
+Online Gradient Descent G2
+√
+T d [51]
+Exponentiated Gradient G∞
+√
+T log(d) d [26, 22]
+Online Newton Step (ONS) G∞d log(T ) d2 [1, 21]
+Soft-Bayes
+√
+dT log(d) d [40]
+Ada-BARRONS d2 log4(T ) d2.5T [30]
+BISONS d2 log2(T ) poly(d) [50]
+AdaMix+DONS d2 log5(T ) d3 [35]
+VB-FTRL d log(T ) d2T our paper
+Table 1: Regret guarantees and per-round runtime for variou s online portfolio selection algorithms.
+Gp is an upper bound on max 1⩽t⩽T ‖∇ℓt(w)‖p whenever such a bound is assumed. For brevity we
+omit a constant factor for the regret and a polylogarithmic factor for the runtime, and assumeT /greaterorequalslantd.
+gradients to be bounded, which is a restrictive assumption. Indeed, letting ‖ · ‖p be ℓp-norm on Rd
+we have that
+‖∇ℓt(w)‖p = ‖xt‖px⊤t w. (6)
+For EG, the assumption is that ‖∇ℓt(w)‖∞ ⩽G∞ for some G∞ < ∞; by (6) this can be enforced
+in either of two ways: (a) by restricting the set of portfolios to {w ∈ ∆d : miniw[i] /greaterorequalslant 1/G∞}, or (b)
+by bounding the dynamic range of asset returns, i.e. requiring that maxi xt[i]mini xt[i] ⩽G∞ for all 1 ⩽t ⩽T .
+Another issue with these methods is that the regret is subopt imal inT , growing as
+√
+T , cf. Table 1.
+The two issues aﬄicting the previous methods were addressed —in isolation—in [40] and [1, 21].
+Namely, the Soft-Bayes algorithm from [ 40] achieves an O(
+√
+dT log(d)) regret without assuming
+boundedness of the loss gradients. Meanwhile, Online Newto n Step (ONS), an algorithm proposed
+in [1, 21], has an O(G∞d log(T )) regret under the same assumption of ℓ∞-bounded loss gradients
+as for EG, which matches the guarantee (5) for Universal Portfolios in the regime of a constantG∞.
+All these algorithms can be implemented in a fully increment al fashion, with per-round runtime
+depending only on d, namely ~O(d) for the ﬁrst-order methods (EG, Soft-Bayes) and O(d2) for
+ONS. Notably, the latter runtime seems to be the best one coul d hope for without sacriﬁcing the
+regret optimality: indeed, it corresponds to the overall ru ntimeO(Td 2) of ﬁtting (batch) ordinary
+least-squares for T /greaterorequalslant d observations in Rd dimensions, and it seems unreasonable to expect the
+class of (self-concordant) logarithmic losses {− log(⟨x, ·⟩) |x ∈ Rd+} over Rd+ to be more tractable,
+in the context of online optimization, than that of quadrati c losses {(⟨x, ·⟩ −y)2 | x ∈ Rd,y ∈ R}
+over Rd.
+The next improvement for regret was achieved in [ 30]. In their Ada-BARRONS algorithm, the
+authors managed to reach a polylogarithmic inT regret without a gradient boundedness assumption.
+This was done by combining ONS with a logarithmic barrier regularizer, a clever strategy of adaptive
+stepsize selection, and the use of self-concordance in the a nalysis. However, the regret remained
+suboptimal, scaling as O(d2 log4(T )). In addition, the per-round runtime deteriorated to ~O(d2.5T ),
+thus becomingT -dependent. Very recently, two competing works [50, 35] achieved aT -independent
+per-round runtime while preserving the ~O(d2) regret guarantee of Ada-BARRONS. In both cases,
+5
+the crucial step was to combine Ada-BARRONS with an appropri ate scheme of adaptive restarts.
+However, none of these algorithms attains a regret better th an ~O(d2). In Appendix E, focusing on
+Ada-BARRONS, we discuss why ~O(d2) could be unimprovable for such “ONS-derived” algorithms.
+Despite all these eﬀorts and a plethora of computationally fe asible algorithms resulting from
+them, Universal Portfolios has remained the only algorithm so far with an optimal O(d log(T ))
+regret. The challenge of providing a practical algorithm wi th a similar regret guarantee is well
+known. The interest to it was reignited in [ 47], where it was conjectured that Follow-The-Leader
+regularized with a logarithmic barrier (LB-FTRL)—an algor ithm coninciding with VB-FTRL with-
+out a volumetric regularizer (i.e. with µ = 0)—is regret-optimal. Since such an algorithm could be
+implemented with ~O(d2T ) per-round runtime via Newton’s method, this would result i n a regret-
+optimal and computationally feasible procedure. Yet, [ 50] recently disproved this conjecture: as
+it turns out, the regret of LB-FTRL can be of order 2 d log(T ) log(log(T )) whenever T >poly(2d).
+In addition to the arguments we give in Section 2, this negative result demonstrates that adding a
+volumetric-barrier regularization term is crucial for obtaining a regret-optimal FTRL-type strategy.
+Connections with cutting-plane and interior point methods. An interesting byproduct of
+our work is shedding new light on the volumetric barrier of a polytope , an object ﬁrst studied by
+P. Vaidya in his seminal work [46] in the context of cutting-plane methods for convex optimiz ation.
+Vaidya’s goal was to supercede the ellipsoid method [45, 25, 37] as the state-of-the-art cutting plane
+method, and he used the volumetric barrier as the key component of his algorithm. Once the general
+theory of interior-point methods (IPM) had been developed b y Nesterov and Nemirovskii [ 39],
+the volumetric barrier was used by K. Anstreicher [ 3] as a self-concordant barrier for a polytope,
+replacing the logarithmic barrier in this role; this result ed in a faster-converging IPM for linear
+programming. Remarkably, in both these scenarios further i mprovements were obtained using the
+“hybrid” volumetric-logarithmic barrier (see [ 46, 3]), which mimics the potential used in VB-FTRL
+(see Section 3) except for a diﬀerent choice of regularization parameterµ (namely, [3] prescribesµ =
+T +d−1
+d−1 ). To our best knowledge, the volumetric and hybrid barriers have never been used in online
+learning. Their emergence in this context, and in such a vita l role, came to us as a suprise and
+challenged us to show that VB-FTRL can be seen as a variational approximation of Universal
+Portfolios with a guaranteed approximation accuracy, as we demonstrate in Section 2.2.
+2 Proposed algorithm and its connection with Universal Port folios
+In this section, we present VB-FTRL and derive it as an approximation of Universal Portfolios [ 12].
+First of all, let us establish the notation and brieﬂy recap t he setup of online portfolio selection.
+Notation. We introduce R := R ∪ {+∞}, i.e. the upper-extended real line, and denote with R+
+(resp. R++) the sets of nonnegative (resp. positive) reals. We denote w ith Rd+ the nonnegative
+orthant in Rd; with ∆ d the standard simplex in Rd and with ri(∆ d) its relative interior. We let ei
+be the ith canonical basis vector in Rd, and x[i] be the ith entry of x. 1d be the vector of all
+ones in Rd, and Id is the d ×d identity matrix; we also write I when the dimension is clear from
+the context. [ n] be the set of the ﬁrst n positive integers; [0] is the empty set. We use standard
+asymptotic notation: given two functions f,g > 0 of the same argument a> 1, notation g =O(f)
+tells that g(a) ⩽ cf(a) for some generic constant c > 0 and all a in the common domain of f
+and g; g = ~O(f) means that g(a) ⩽ cf(a) logc(ea). We let ‖ · ‖ p, p /greaterorequalslant 1, be the ℓp-norm on Rn.
+6
+We let Sn, Sn+, Sn++ be the sets of n × n symmetric, positive-semideﬁnite, and positive-deﬁnite
+matrices, and we use boldfaced capital letters for such matr ices. For M ∈ Sn+ and u,v ∈ Rn, we
+let ‖u‖M :=
+√
+u⊤Mu and ⟨u,v ⟩M := u⊤Mv. We let ‖M ‖ the operator norm of a matrix M.
+We use the “Matlab” matrix notation: [ A1, A2] (resp. [A1; A2]) is the horizontal (resp. vertical)
+concatenation of two matrices A1,A 2 with compatible dimensions.
+Aﬃne reparametrization. The simplex ∆ d ⊂ Rd has empty interior, which prevents us from
+using the machinery of self-concordant functions. To circu mvent this issue, for d> 1 we deﬁne
+∆d−1 := {v ∈ Rd−1+ : 1⊤d−1v ⩽ 1}, (7)
+a “solid” simplex in Rd−1, and note that the aﬃne mapping v ↦→Av +ed with a d × (d − 1) matrix
+A :=
+[ I d−1
+−1⊤d−1
+]
+(8)
+bijectively maps ∆d−1 onto ∆d, and Rd−1 onto the aﬃne span of ∆ d, i.e. onto the hyperplane
+Ad := {w ∈ Rd :w⊤1d = 1}. (9)
+As such, restricting a function f : Rd → R to Ad and reparametrizing results in f 1 : Rd−1 → R,
+f 1(v) :=f(Av +ed), (10)
+with the gradient and Hessian as follows:
+∇f 1(v) =A⊤∇f(Av +ed) and ∇2f 1(v) =A⊤∇2f(Av +ed)A. (11)
+Since A has full column rank, f 1 is strictly convex (on Rd−1) whenever f is strictly convex on Ad.
+Finally, one can easily check that the mapping v ↦→Av +ed of Rd−1 to Ad has the inverse given by
+w ↦→A+(w −ed) (12)
+whereA+ = (A⊤A)−1A⊤,A+ ∈ R(d−1)×d, is the left pseudoinverse ofA, i.e. such thatA+A = I d−1.
+Note that the case d = 1 is trivial: wt ≡ 1 is a unique possible strategy; correspondingly, all our
+subsequent regret bounds are proportional tod−1, and indeed vanish whend = 1. For simplicity, in
+the proofs we use the above aﬃne reparametrization assuming thatd> 1, and omit the case d = 1.
+Summary of the setup. Online portfolio selection is a game between the learner (i.e. the trader)
+and her adversary (the market) played over T /greaterorequalslant 1 rounds according to the following protocol:
+In each round t ∈ [T ]:
+1. The learner selects a new portfolio, i.e. a distribution wt ∈ ∆d.
+2. The adversary observes wt and selects a new vector of asset returns xt ∈ Rd+.
+3. The learner observes xt and suﬀers the loss ℓt(wt) where ℓt(w) := − log(x⊤t w) for w ∈ ∆d.
+7
+Formally, an online portfolio selectionalgorithm or strategyis a sequence of mappings (S0, S1,... ST −1)
+where St−1 maps the history (wτ,x τ)τ ∈[t−1] on ∆d, that iswt = St−1(w1,x 1,...,w t−1,x t−1) fort> 1
+andw1 = S0(∅). Pitting it against an adversary, as per the above protocol , results in two sequences
+w1:T := (w1, ..., wT ), x 1:T := (x1, ..., xT ). (13)
+As previously discussed, we quantify the performance of an a lgorithm that produced a sequence of
+portfolios w1:T for the market realization x1:T , in terms of its regret against the best CRP for x1:T ,
+RT (w1:T |x1:T ) :=
+∑
+t∈[T ]
+ℓt(wt) − minw∈∆d
+∑
+t∈[T ]
+ℓt(w).
+Following [12] and subsequent works, we aim at constructing an algorithm f or which RT (w1:T |x1:T )
+admits an upper bound of the form ( 5) uniformly over all choices of x1,...,x T ∈ Rd+. Note that
+such a bound would imply that at any round t ∈ [T ] the adversary is allowed to know the learner’s
+algorithm—i.e. the whole sequence ( S0,..., ST −1) rather than just the portfolios w1:t selected so far.
+We are now ready to present our proposed algorithm and a regre t guarantee that it admits.
+2.1 Algorithm and main result
+Our algorithm relies on some auxiliary functions. Let λ,µ > 0 be two regularization parameters
+whose values will be speciﬁed a bit later. The logarithmic barrier R : Rd → R of Rd+ is deﬁned by
+R(w) :=
+
+
+
+−
+∑
+i∈[d]
+log(w[i]) if w ∈ Rd++,
++ ∞ otherwise.
+(14)
+Note that,R(w) is proper, lower semicontinuous, and strictly convex. Moreover,R1(v), cf. (7)–(10),
+is a barrier on ∆d−1—in other words, dom(R1) = int(∆d−1), and R1(v) diverges as v approaches
+the boundary of ∆d−1. Now, let Lt(w) be the observed cumulative loss regularized byR(w), namely
+Lt(w) :=
+∑
+τ ∈[t]
+ℓτ(w) + λR(w) (15)
+forλ> 0 to be speciﬁed later; note thatL0(w) =λR(w). Deﬁne the volumetric barrierVt : Rd → R:
+Vt(w) :=
+{ 1
+2 log det(A⊤∇2Lt(w)A) if w ∈ Rd++,
++ ∞ otherwise. (16)
+This function was initially introduced by Vaidya in [ 46] in the context of cutting-plane algorithms,
+and subsequently used by Nesterov and Nemirovskii [ 39] in the context of interior-point methods.
+Geometrically,Vt(w) is the logarithm of the inverse (d−1)-dimensional volume of the Dikin ellipsoid
+{w′ ∈ Ad : ‖w′ −w‖∇2L(w)< 1}
+of Lt (at w) restricted to the aﬃne subspace Ad, cf. ( 10)–(11). (See Appendix A.3 for the back-
+ground on self-concordant functions.) As such, Vt has larger values at points with larger curvature
+of Lt, and vice versa; in particular, V 1t is also a barrier for ∆d−1. On the other hand, Vt does
+8
+not take into account ﬁrst-order information (i.e. ∇Lt(w)), which suggests to use it as a regular-
+izer. In accordance with this suggestion, for µ >0 to be speﬁcied later, we deﬁne the potential
+function Pt : Rd → R by
+Pt(w) :=Lt(w) +µVt(w). (17)
+Our proposed algorithm, called VB-FTRL, amounts to iteratively minimizing this potential, that is :
+wt = argmin
+w∈∆d
+Pt−1(w). (VB-FTRL)
+Correctness of the update ( VB-FTRL)—i.e. that the update wt therein exists and is unique—
+follows from the strict convexity of Vt for all t ∈ [T ]. This fact—following, in a nontrivial fashion,
+from the algebraic structure of Lt—is well known ([ 46, 3]) in the case λ =µ = 1; the general case
+is analogous and addressed in Appendix C. In fact, direct diﬀerentiation allows to obtain explicit
+formulae for the gradient and Hessian of Vt andPt; following [3], one can then show that P 1t (v) is a
+self-concordant function on ∆d−1. (We provide these conceptually straightforward, but tedious cal-
+culations in Appendix C, and give some background on self-concordant functions in Appendix A.3.)
+Such functions are known as the “natural” class of objective s for Newton’s method, for which this
+method admits aﬃne-invariant global convergence guarante es (see [ 38, Chapter 4]). This natu-
+rally leads to an algorithmic implementation of VB-FTRL via Newton’s method; we shall present
+this implementation and discuss its tractability in Sectio n 4. Postponing further discussion of the
+computational matters to Section 4, let us now state and discuss a regret guarantee for VB-FTRL.
+Theorem 2.1 (Regret of VB-FTRL). For any T ∈ N and market realization x1:T , one has that
+RT (w1:T |x1:T ) ⩽ (λ + 2µ)(d − 1) log(T +λd)
+for the sequence w1:T produced by (VB-FTRL) withλ,µ satisfying 1λ(1+ 2µλ)2 ⩽ min{ 14, 5µ8(1+λ)}
+and λ /greaterorequalslant 2e. In particular, with λ = 16 and µ = 7 we guarantee that
+RT (w1:T |x1:T ) ⩽ 30(d − 1) log(T + 16d).
+On the one hand, the regret bound for VB-FTRL matches the bound for Universal Portfolios,
+albeit with a worse constant factor (cf. (5)), and also matches the worst-case lower bound from [11].
+In other words, the regret optimality of Universal Portfolios is preserved in the proposed algorithm.
+On the other hand, the update in VB-FTRL reduces to solving a convex optimization problem,
+and thus can be eﬃciently implemented; as such, we address the challenge put forward in Section 1.
+This is in stark contrast with Universal Portfolios where one has to compute a multivariate integral
+in each round. In fact, the update in Universal Portfolios can be seen as minimizing a certain convex
+functional on the space of probability measures supported on ∆d, which is way more challenging,
+from an algorithmic standpoint, than convex optimization o n ∆ d. In Section 2.2 we discuss this
+point in more detail, and shed light on the connection betwee n VB-FTRL and Universal Portfolios.
+9
+Why the volumetric barrier? Puttingµ = 0 in (VB-FTRL) we recover the logarithmic barrier
+regularized follow-the-leader, the algorithm conjectured to have anO(d log(T )) regret in [47]. As we
+have already observed in Section 1.1, the recent refutation of this conjecture in [ 50] indicates that
+one has to employ some time-dependent regularization to attain the optimal regret with an FTRL-
+type strategy. One may ask, then, why the volumetric barrieris suitable for the task at hand. While
+a full and rigorous answer to this question can hardly be summ arized in one paragraph—after all,
+our whole paper is, essentially, our best attempt at providi ng it—let us give some preliminary
+intuition.
+– First, the regret analysis of LB-FTRL, skectched in [ 47], indicates that the main challenge
+is the accumulation of the terms πt = ‖∇t‖2H −1t , where ∇t = A⊤∇ℓt(wt) and H t =
+A⊤∇2Lt(wt)A (i.e. πt is the observed leverage score of the last observation): ind eed, choos-
+ing λ = O(1) only allows to bound each ˆπt with a constant, so ∑t∈[T ] ˆπt can grow linearly
+with T . As we show in more detail in Section 3 (cf. (38) and the ambient discussion), us-
+ing the volumetric barrier augments the regret decompositi on with negative terms of the
+form µ[Vt−1(wt) −Vt(wt)], where
+2µ[Vt−1(wt) −Vt(wt)] =µ log det
+(
+I d − H t−1/2∇t∇t⊤H t−1/2) =µ log(1 −πt) ⩽ −µπt,
+while also bringing an O(µd log(T )) error. Hence, µ =O(1) results in an O(d log(T )) regret.
+– Second, VB-FTRL can be derived from Universal Portfolios: in a nutshell, one replaces the
+Gibbs distribution ( 4) with its local (truncated) Gaussian approximation at w ∈ ∆d, and
+selects the expectation wt to minimize the Gibbs functional over this class of distribu tions.
+In Section 2.2, we put this brief explanation at a rigorous footing and quantify the accuracy of
+such Gaussian approximation in terms of the Gibbs functional; this is of independent interest.
+2.2 VB-FTRL as an approximation of Universal Portfolios
+In this section, our goal is to show that ( VB-FTRL) naturally arises as an approximation of the
+Universal Portfolios update (3); moreover: informally speaking, the accuracy of this appr oximation
+can be controlled in natural terms. Although arguably quite natural, the argument about to be
+presented is a rather delicate one, and the corresponding accuracy bound depends on some auxiliary
+objects that have to be introduced ﬁrst. For the sake of exposition, we shall split this argument into
+three logical steps that are brieﬂy outlined below, and defe r some technical details to Appendix B.
+1o. We ﬁrst incorporate two parameters ( λ,µ ) into ( 3), so that “vanilla” Cover’s update cor-
+responds to λ = 1,µ = 0. We then establish Proposition 2.1 stating that the generalized
+strategy is optimal for any (constant) λ and µ. Besides, we observe that the corresponding
+distributionφt admits a variational formulation as a minimizer of the Gibbs’ potentialFt−1[·],
+φt ∈ argmin
+φ∈Supp(∆d)
+Ft−1[φ]; (18)
+here Supp(∆d) is the set of distributions supported on ∆ d, andFt−1[·] shall be deﬁned in (23).
+2o. Next we focus on minimization problem ( 18). Using self-concordance [ 38], we show that
+c tr(∇2Lt−1( ˆw) Cov[φ]) −µEnt[φ] ⩽Ft−1[φ] −Lt−1( ˆw) ⩽C tr(∇2Lt−1( ˆw) Cov[φ]) −µEnt[φ]
+(19)
+10
+for any distributionφ with expectation ˆw ∈ ∆d, covariance Cov[φ], diﬀerential entropy Ent[φ],
+and supported on rescaled Dikin ellipsoid Et−1,1/2( ˆw) := {w ∈ Ad : ‖w − ˆw‖∇2Lt−1( ˆw) ⩽ 1/2}.
+It is well known that Et−1,1(w) is contained in ∆ d for any w ∈ ∆d [38]; as such, a natural
+idea is to approximate φt by minimizing the upper bound for Ft−1[φ], as per ( 19), over such
+distributions. This relaxation is indeed reasonable: the c orresponding minimizer ¯φt satisﬁes
+Ft−1[φt] ⩽ minφ ∈ Supp(∆d)Ft−1[φ] +O(µd log(T +λd)). (20)
+That is, Ft−1[·] is minimized up to an error of the order of the desired regret . This result,
+rigorously formulated as Proposition 2.2, is proved via self-concordance machinery and some
+volume estimates, the proof being rather technical; we believe it to be of independent interest.
+3o. We then focus on the relaxation of ( 18) described in step 2o, i.e. replacing Ft−1[φ] with its
+upper bound from ( 19), and imposing the constraint φ ∈ Supp(Et−1,c( ˆw)) for some c ⩽ 1/2.
+We relax this “hard” support constraint into a “soft” covari ance constraint, namely
+φ ∈ Supp(Ad), Cov[φ] ≼c2Lt−1( ˆw)−1.
+As it happens, the minimum is attained on the Ad-marginal of the Gaussian distribution with
+covariance ∇2Lt−1( ˆw)−1 and expectationwt—precisely as in (VB-FTRL). The correspondence
+between (VB-FTRL) and (generalized) Cover’s update is thus speciﬁed. Moreov er, we show
+(see Proposition 2.3) that the truncation of this Gaussian distribution to the appropriate Dikin
+ellipsoid around wt is an approximate minimizer of Ft−1[·] with accuracy O(µd log(ed))—in
+other words, the Gaussian relaxation does not lead to a furth er loss of accuracy beyond ( 20).
+In our view, this result—just as (20)—may ﬁnd uses beyond the context of portfolio selection.
+We are now about to implement these steps. Before doing so, le t us make one remark. One might
+expect that the above approximation result—the one representing (VB-FTRL) update as an approx-
+imation of generalized Universal Portfolios with the “righ t” accuracy of order O(d log(T ))—would
+directly lead to a shorter and/or simpler proof of Theorem 2.1 than the one to be presented in
+Section 3, via some formal reduction to the regret bound for ( λ,µ )-Universal Portfolios in Proposi-
+tion 2.1. However, we were unable to ﬁnd such an alternative proof. The actual proof of Theorem2.1
+in Section 3 has very little to do (if anything at all) with the proofs of Pr opositions 2.2–2.3; in
+particular, the former proof is non-probabilistic and does not use the variational formulation ( 18).
+Step 1 o : (λ,µ )-generalized Universal Portfolios update and its variational formulation.
+Recall that Cover’s original method ( 3)–(4) amounts to playing the expectation over the density
+proportional to exp
+(
+−∑τ ∈[t−1]ℓτ(w)),w ∈ ∆d, at roundt. Now, consider the generalized strategy
+wt = Ew∼φt[w] where φt(w) ∝ exp
+(
+− 1µLt−1(w)), w ∈ ∆d, (21)
+where we introduced two parameters λ /greaterorequalslant 0 and µ /greaterorequalslant 1, so that ( 4) corresponds to λ = 0, µ = 1.
+Here, parameter µ plays the role of temperature: the larger it is, the closer φt is to the uniform
+distribution on ∆d. Meanwhile, λ biasesφt towards the Dirac measure on 1d 1d, the uniform portfolio.
+We ﬁrst observe that the regret optimality of Cover’s algori thm extends to the whole range of λ,µ .
+11
+Proposition 2.1. For any T ∈ N and any market realization x1:T , the sequence of portfolios w1:T
+constructed by (λ,µ )-generalized Universal Portfolios (21) with parameters λ /greaterorequalslant 0,µ /greaterorequalslant 1 satisﬁes:
+RT (w1:T |x1:T ) ⩽µ(d − 1) log(T + 1) +λ(d − 1) log
+(
+4eT +λdλd ) +µ −λ log(d).
+The argument, given in Appendix B, extends the proof of [ 21, Theorem 7] to allow for λ >0.
+The key observation is that exp( − 1µℓt(w)) = (x⊤t w)1/µ is a concave function whenever µ /greaterorequalslant 1. By
+Jensen’s inequality, this leads, through a telescoping arg ument, to the bound as follows:
+∑
+t∈[T ]
+ℓt(w) ⩽ −µ log
+[∫
+∆d
+exp
+(
+− 1µLT (w))dw] +µ log[∫∆d exp(−λµR(w))dw]. (22)
+The right-hand side is then related to minw∈∆d
+∑
+t∈[T ]ℓt(w) through the rescaling technique from [7].
+For what is to follow, it is crucial to make a couple of observa tions. First, φt, as deﬁned in (21),
+is the unique optimal solution to the following optimizatio n problem (see e.g. [ 48, Lemma 4.10]):
+min
+φ ∈ Supp(∆d)
+Ft−1[φ] := Ew∼φ[Lt−1(w)] −µEnt[φ] (23)
+where Supp(∆d) is the set of probability densities supported on ∆d, and Ent[φ] := Ew∼φ[− logφ(w)]
+is the diﬀerential entropy of φ. Moreover, Ft−1[φt] is the (rescaled) negative log-partition function:
+Ft−1[φt] = −µ log
+∫
+∆d
+exp
+(
+− 1µLt−1(w))dw.
+In particular, we recognize the ﬁrst term in the right-hand side of (22) as nothing else butFT [φT +1].
+Step 2 o : restriction to the Dikin ellipsoid. Fix ˆw ∈ ri(∆d), and for r /greaterorequalslant 0 andt ∈ [T ] deﬁne
+Et−1,r( ˆw) :=
+{
+w ∈ Ad : ‖w − ˆw‖∇2Lt−1( ˆw)<r
+}
+, (24)
+the r-Dikin ellipsoid [ 38] of Lt−1(·) at ˆw restricted to hyperplane Ad, cf. ( 9). It can be routinely
+checked (see AppendixA.3) that whenλ /greaterorequalslant 1, the functionL1t−1(v) =Lt−1(Av+ed) on Rd−1, cf. (10),
+is self-concordant with domain int( ∆d−1). By [ 38, Theorems 4.1.5], the “unit” ellipse Et−1, 1( ˆw) is
+contained in ri(∆ d). Moreover, on smaller ellipses one can control the remaind er of the quadratic
+expansion of Lt: from [ 38, Theorems 4.1.6–4.1.8] it follows (see Lemma A.8) that
+1
+5 ‖w − ˆw‖2∇2Lt−1( ˆw) ⩽Lt−1(w) −Lt−1( ˆw) − ∇Lt−1( ˆw)⊤(w − ˆw) ⩽ 45 ‖w − ˆw‖2∇2Lt−1( ˆw)
+for all w ∈ E t−1, 1/2( ˆw).
+(25)
+Hence, any distribution φ with mean Eφ[w] = ˆw ∈ ri(∆d) and supported in Et−1, 1/2( ˆw), satisﬁes
+1
+5tr
+(
+∇2Lt−1( ˆw) Cov[φ]) −µEnt[φ] ⩽Ft−1[φ] −Lt−1( ˆw) ⩽ 45tr(∇2Lt−1( ˆw) Cov[φ]) −µEnt[φ] (26)
+where Cov[φ] is the covariance matrix ofφ. The upper bound suggests us to approximate ( 23) with
+min
+ˆw ∈ ∆d, Eφ[w] = ˆw,
+φ ∈ Supp(Et−1, 1/4( ˆw))
+Lt−1( ˆw) + 45tr(∇2Lt−1( ˆw) Cov[φ]) −µEnt[φ]/bracehtipupleft /bracehtipdownright/bracehtipdownleft /bracehtipupright
+:=F t−1[φ]
+(27)
+12
+—in other words, to focus on distributions supported in a sma ll Dikin ellipsoid around the expec-
+tation. Now: since Et−1, 1/4( ˆw) ⊂ ∆d, any optimal solution φt to (27) is feasible in ( 23); hence (27)
+overestimates (23). Moreover, the following result gives the accuracy of this upper approximation:
+Proposition 2.2. When λ /greaterorequalslant 1, any optimal solution φt to (27) satisﬁes the following inequalities:
+Ft−1[φt] ⩽F t−1[φt] ⩽ minφ ∈ Supp(∆d)Ft−1[φ] + 1 .5µ(d − 1) log(T +λd) + 3.9µ(d + 1) + 0.1.
+The proof of this result is relegated to Appendix B and proceeds in two steps. First, we show that
+Ft−1[φt] ⩽F t−1[φt] ⩽ minˆw ∈ ∆d, Eφ[w] = ˆw,
+φ ∈ Supp(Et−1, 1/2( ˆw))
+Ft−1[φ] + µ(d − 1) log(2).
+Here the ﬁrst inequality is trivial, and the second one follo ws by comparing the covariance and
+entropy for the random variables w ∼ φ and ˆw + 12(w − ˆw). The second step consists in showing
+that (λ,µ )-generalized Universal Portfolios distribution φt, as deﬁned in ( 21), can be truncated to
+the Dikin ellipsoid around its mode at the expense of an O(µ(d − 1) log(T +λd)) increase in Ft−1.
+This is done by expressing Ft−1[φt] as the log-partition function, controlling the integrand via self-
+concordance, and lower-bounding the volume of the Dikin ell ipsoid by arguing that the mode of φt
+cannot be too close to the relative boundary of ∆ d thanks to the logarithmic-barrier regularizer.
+Step 3 o : reduction to the Gaussian distribution. Departing from ( 27), we note that its
+objective F t−1[φ] depends on φ only through the mean, covariance, and diﬀerential entropy o f φ.
+However, the support constraint, namelyφ ∈ Supp(Et−1, 1/4( ˆw)), interferes with higher moments. A
+natural idea is then to replace the “hard” support constrain t with a “soft” covariance one, namely
+φ ∈ Supp(Ad), Cov[φ] ≼ 116 ∇2Lt−1( ˆw)−1. (28)
+This results in a relaxation of (27). Indeed, Ew∼φ[w] = ˆw ∈ ∆d andφ ∈ Supp(Et−1, 1/4( ˆw)) together
+imply that 1⊤d (w − ˆw) = 0 (φ-a.s.), that is φ ∈ Supp(Ad); on the other hand, by Jensen’s inequality
+‖‖‖∇2Lt−1( ˆw)1/2Cov[φ] ∇2Lt−1( ˆw)1/2‖‖‖ ⩽ Ew∼φ[‖w − ˆw‖2∇2Lt−1( ˆw)] ⩽ 116. (29)
+We can now satisfy the support constraint in ( 28) “automatically” by reformulating it as follows:
+w ∼φ is such that w =Av +ed for v ∼φ1 ∈ Supp(Rd−1) (30)
+where the mean ˆv ∈ ∆d−1, covariance, and entropy of φ1 are related to those of φ according to
+ˆw =Aˆv +ed, Cov[φ] =ACov[φ1]A⊤, Ent[φ] = Ent[φ1] − 12 log det(A⊤A)
+where det(A⊤A) =d. The matrix constraint in ( 28) translates to Cov[φ1] ≼ 116(A⊤∇2Lt−1( ˆw)A)−1
+by simple linear algebra. As such, in terms of ˆw, Cov[φ1], and Ent[φ1], the objective in (27) becomes
+F t−1[φ] =Lt−1( ˆw) + 45tr[Cov[φ1]A⊤∇2Lt−1( ˆw)A] −µEnt[φ1]. (31)
+13
+Clearly, N (ˆv, Σ) maximizes Ent[φ1] given the constraints Eφ1[v] = ˆv and Cov[φ1] = Σ, with the
+value Ent[N (ˆv, Σ)] = 12 log det(Σ) +cd wherecd depends only on d. This gives a relaxation of ( 27),
+min
+ˆw ∈ ∆d, 0 ≼ Σ ≼ 116 (A⊤∇2Lt−1( ˆw)A)−1
+Lt−1( ˆw) + 45tr[ΣA⊤∇2Lt−1( ˆw)A] − µ2 log det(Σ), (32)
+that depends on φ only through the mean and covariance. Finally, in Appendix B.4 we show that,
+whenµ> 0.1, the minimum over Σ is attained at ˆΣ = 116(A⊤∇2Lt−1( ˆw)A)−1, and (32) reduces to
+min
+ˆw∈∆d
+Lt−1( ˆw) +µ2 log det(A⊤∇2Lt−1( ˆw)A). (33)
+This is nothing else but ( VB-FTRL). To summarize, ( VB-FTRL) appears after relaxing the “hard”
+support constraint in ( 27), so that the optimum is attained on a Gaussian distribution . Moreover:
+the result below shows that, essentially, this relaxation comes at no extra cost (cf. Proposition 2.2).
+Proposition 2.3. Assume that µ > 0.1. Let φt be optimal in (27), wt be as in (VB-FTRL),
+Σt = 116(A⊤∇2Lt−1(wt)A)−1, and let gtrct be the truncation of N (wt,A ΣtA⊤) to Et−1, 1/2(wt). Then
+Ft−1[gtrct ] ⩽F t−1[φt] + 0.5µ(d − 1) log(350d) + 0.01µ.
+The proof of this result relies on the feasibility of φt in ( 32) and an estimate of the decrease of
+entropy when truncating a Gaussian distribution to its cova riance ellipsoid (see Lemma B.2).
+Finally, by combining Propositions 2.2 and 2.3 we establish a quantitative correspondence be-
+tween (VB-FTRL) and generalized Cover’s update in its variational form (18). Namely, portfolio wt
+computed in (VB-FTRL) generates a distribution—precisely, N (wt, 116A(A⊤∇2Lt−1(wt)−1A)−1A⊤)
+truncated to the Dikin ellipsoid Et−1, 1/2(wt)—that solves (18) up to the accuracy of O(µd log(T )).
+3 Regret analysis for VB-FTRL
+In this section, we start by giving an outline of the proof of T heorem 2.1 and discussing the role of
+volumetric regularization. After that, we are going to pres ent the full proof of the theorem.
+3.1 Overview of the proof and the role of volumetric regulari zation
+Key decomposition. We shall specify the values of λ,µ in the later stages of the proof; for now
+we consider general λ,µ> 0. Let us decompose the regret of the sequence generated in ( VB-FTRL)
+through telescoping:
+RT (w1:T |x1:T ) ⩽
+∑
+t∈[T ]
+[
+ℓt(wt) + minw∈∆dPt−1(w) − minw∈∆dPt(w)
+]
+− min
+w∈∆d
+∑
+t∈[T ]
+ℓt(w) + minw∈∆dPT (w)
+=
+∑
+t∈[T ]
+[
+Pt(wt) +µVt−1(wt) −µVt(wt) −Pt(wt+1)
+]
+− min
+w∈∆d
+∑
+t∈[T ]
+ℓt(w) + minw∈∆dPT (w).
+(34)
+Here the inequality holds since P0(w) =λR(w) /greaterorequalslant 0 on ∆ d, cf. (14). In other words, we have that
+RT (w1:T |x1:T ) ⩽ BiasT +
+∑
+t∈[T ]
+[Misst + Gaint] (35)
+14
+where the three kinds of diﬀerences BiasT, Misst, Gaint are deﬁned as follows:
+Misst :=Pt(wt)−Pt(wt+1), Gaint :=µ[Vt−1(wt)−Vt(wt)], BiasT := minw∈∆dPT (w)− minw∈∆d
+∑
+t∈[T ]
+ℓt(w).
+Here, BiasT is the “bias” term arising since (VB-FTRL) minimizesPt−1(w) instead of∑τ ∈[t−1]ℓτ(w),
+the observed sum of losses—in other words, due to our use of re gularization “per se.” Misst is the
+“lagged” term that arises since we only “follow” the (regula rized) leader, i.e. minimize Pt−1 instead
+of Pt. Finally, Gaint appears due to our use of a time-varying volumetric regularizer. Since Pt−1
+in (VB-FTRL) includes Vt−1 rather than Vt, we expect Gaint to be negative and decrease the regret.
+Big picture. Our proof proceed as follows. On the one hand, we shall bound t he “bias” term as
+BiasT ⩽ (λ + 2µ) (d − 1) log(T +λd) (36)
+under the assumption that λ /greaterorequalslant 2e. This is not too involved, and can be done via a combination of
+standard techniques. Way more interesting is another step, in which we show that the inequalities
+Misst + Gaint ⩽ 0, ∀t ∈ [T ], (37)
+hold whenλ,µ are as in the premise of the theorem. The result then follows by combining (35)–(37).
+V olumetric regularization mechanism. First, concavity of log det(·) on Sn+ implies that
+Gaint ⩽ −µ2πt(wt) with πt(w) :=‖‖‖A⊤∇ℓτ(w)‖‖‖2(A⊤∇2Lt(w)A)−1, (38)
+see Lemma A.4. Under the aﬃne reparametrization in ( 10),πt(wt) becomes the leverage score ofxt
+at wt, cf. (11). On the other hand, Misst is the suboptimality gap of wt in terms of Pt or P 1t :
+Misst =Pt(wt) − minw∈∆dPt(w) =P 1t (vt) − minw∈∆dP 1t (v).
+Now, self-concordance of P 1t allows to bound Misst in terms of the squared Newton decrement:
+Misst ⩽CDecr2t with Decrt =‖‖‖A⊤∇Pt(wt)‖‖‖(A⊤∇2Pt(wt)A)−1, (39)
+for some C >0, once we have shown that Decr2t ⩽c< 1 (see Lemma A.7 or [38, Theorem 4.1.13]).
+Finally, the optimality condition for wt implies that
+A⊤∇Pt(wt) =A⊤∇ℓt(wt) +µA⊤[∇Vt(wt) − ∇Vt−1(wt)].
+Departing from this identity and exploting the algebraic structure of leverage scores, we manage to
+control the contribution of the termµA⊤[∇Vt(wt) − ∇Vt−1(wt)] to Decr2t , asµ increases, by simulta-
+neously increasingλ. More precisely, we show that Decr2t ⩽ 1+λλ (1+ 2µλ)2πt(wt), whileπt(wt) ⩽ 11+λ
+by Lemma C.1. Thus, selecting λ appropriately we can enforce Decr2t ⩽c< 1 for any µ> 0. But
+then, combining the bound on Decr2t with (38)–(39) and selecting µ appropriately, we enforce (37).
+15
+Remark 3.1. In the actual proof, instead of Decrt we focus on the Newton decrement Decrt of
+P 1t (v) =L1t (v) +µ[V 1t (vt) + ∇V 1t (vt)⊤(v −vt)],
+a lower bound for P 1t (v) tight at v =vt. As it turns out, while Decrt is somewhat larger than Decrt,
+focusing on Decrt allows to avoid explicit use of the self-concordance of P 1t , using self-concordance
+of L1t instead. (Of course, we use the diﬀerential properties of Vt, in particular the algebraic struc-
+ture of its derivatives, when bounding Decrt.) The point is that P 1t is only 21-self-concordant (see
+Lemma C.1), rather than 1-self-concordant asL1t , so working with Decrt,P 1t instead of Decrt,P 1t al-
+lows to reduce the constants. Meanwhile, in the proof of Theor em 4.1 on the regret of (VB-FTRL-qN),
+a procedure implementing (VB-FTRL), we have to use self-concordance of P 1t directly because of a
+quasi-Newton method applied to P 1t ; the resulting constant factor is an order of magnitude larg er.
+3.2 Proof of Theorem 2.1
+1o. Our goal in this step is to establish ( 36). Let us further decompose the “bias” term as
+BiasT = VolBiasT + LogBiasT (40)
+where the two terms correspond to the two regularizers VT (w) and R(w) respectively:
+VolBiasT := minw∈∆dPT (w) − minw∈∆dLT (w), LogBiasT := minw∈∆dLT (w) − minw∈∆d
+∑
+t∈[T ]
+ℓt(w).
+Deﬁning w⋆T := argminw∈∆dLT (w) we then observe that
+VolBiasT ⩽PT (w⋆T ) −LT (w⋆T ) =µVT (w⋆T ) ⩽ µ2 (d − 1) log(‖A⊤∇2LT (w⋆T )A‖)
+⩽ µ2 (d − 1) log(d‖∇2LT (w⋆T )‖) (41)
+where in the last step we used that ‖A‖ =
+√
+d. On the other hand, we can estimate ‖∇2LT (w⋆T )‖
+using that the entries of w⋆T cannot be too small. Indeed, according to Lemma A.1 we have that
+w⋆T [i] /greaterorequalslant λT +λd, ∀i ∈ [d] (42)
+—a variation of the well-known result for the logaritmic-ba rrier regularizer (see e.g. [ 30]). But then
+∇2LT (w⋆T ) = ∑
+t∈[T ]
+xtx⊤t
+(x⊤t w⋆T )2 +
+∑
+i∈[d]
+λeie⊤i
+w⋆T [i]2 ≼ (T +λd)2λ2
+(∑
+t∈[T ]
+xtx⊤t
+‖xt‖21 +λ
+∑
+i∈[d]
+eie⊤i
+)
+≼ (T +λd)3
+λ2 Id,
+that is
+‖∇2LT (w⋆T )‖ ⩽ (T +λd)3λ2 . (43)
+Returning to (41) and using that λ /greaterorequalslant 1 to simplify the argument of the logarithm, we ﬁnd that
+VolBiasT ⩽ 2µ(d − 1) log(T +λd). (44)
+16
+Now, in order to bound LogBias take any woT ∈ Argminw∈∆d∑t∈[T ]ℓt(w) and deﬁne woT,α ∈ ∆d by
+woT,α = (1 −α)woT +αd 1d with α = λ(d − 1)T +λ(d − 1).
+On the one hand, we have that
+R(woT,α) ⩽ maxw∈∆dR((1 −α)w + αd 1d) = (d − 1) log(dα) ⩽ (d − 1) log(2T +λdλ )
+where we used that a convex function with a compact domain is m aximized at an extremal points,
+and also that dd−1 ⩽ 2 for d /greaterorequalslant 2. On the other hand, by Lemma A.2 proved in appendix, ∀w ∈ ∆d
+∑
+t∈[T ]
+ℓt
+(
+(1 −α)w + αd 1d) −ℓt(w) ⩽ α1 −αT =λ(d − 1),
+whence∑t∈[T ]ℓt(woT,α) −ℓt(woT ) ⩽λ(d − 1). Combining these two results, we conclude that
+LogBiasT ⩽LT (woT,α)−∑
+t∈[T ]
+ℓt(woT ) ⩽λR(woT,α)+∑
+t∈[T ]
+ℓt(woT,α)−ℓt(woT ) ⩽λ(d−1) log
+(
+2eT +λdλ ).
+(45)
+We arrive at the desired estimate, cf. (36), by plugging (44) and (45) into (40) and using thatλ /greaterorequalslant 2e.
+2o. Next we turn to proving ( 37). To streamline the exposition, we deﬁne x−i =ei for i ∈ [d],
+letτ vary over the extended index set [t]+ := [t] ∪ {−1, ..., −d}, and deﬁne the abridged notation:
+H t(w) :=A⊤∇2Lt(w)A, ∇τ(w) :=A⊤∇ℓτ(w),
+ˆH t := H t(wt), ˆ∇τ := ∇τ(wt). (46)
+Moreover, with a slight abuse of notation we let
+λτ :=λ1{τ <0}, τ ∈ [t]+, (47)
+so that Lt(w) =∑τ ∈[t]+λτℓτ(w) and, as a consequence,
+H t(w) =
+∑
+τ ∈[t]+
+λτ ∇τ(w)∇⊤τ (w), ˆH t = ∑
+τ ∈[t]+
+λτ ˆ∇τ ˆ∇⊤τ. (48)
+Finally, we deﬁne the Gram matrix Π(w) ∈ St+d+ of the extended dataset, with entries given by
+πτ,ν(w) :=
+√
+λτλν
+⟨
+∇τ(w), ∇ν(w)
+⟩
+H t(w)−1, ∀τ,ν ∈ [t]+, (49)
+rows/columns indexed on [t]+, and dependence on t omitted for brevity. Also, let ˆΠ := Π(wt), i.e.
+ˆπτ,ν :=
+√
+λτλν
+⟨ ˆ∇τ, ˆ∇ν⟩ ˆH−1t , ∀τ,ν ∈ [t]+. (50)
+For brevity, we refer to the diagonal entries with a single in dex: πτ(w) := πτ,τ (w) and ˆπτ := ˆπτ,τ .
+When w ∈ ∆d, πτ(w) is the squared leverage score for the reparametrized and √λτ-rescaled losses:
+πτ(Av +ed) =λτ ‖∇ℓ1τ (v)‖2∇2L1t (v)−1.
+17
+In fact, Π(w) is a projection matrix, i.e. Π(w) = Π(w)2; see [46]. We will use a weaker property:
+πτ(w) =
+∑
+ν∈[t]+
+πτ,ν(w)2, ∀τ ∈ [t]+. (51)
+For the paper to be self-contained, this and other propertie s of Π(w) are proved in Appendix C.
+3o. Now, in terms of the notation we have just introduced, for ea ch term Gaint we have:
+Gaint = µ2 log
+
+
+det
+(
+ˆH t − ˆ∇t ˆ∇⊤t)
+det
+( ˆH t)
+
+ ⩽ −µ2 tr[ ˆ∇t ˆ∇⊤t ˆH −1t ] = −µ2 ˆπt. (52)
+Here the inequality relies on the fact that log det(·) is a convex function on Sn+ (see Lemma A.4). As
+such, to verify (37) it suﬃces to show that, for the values of λ,µ as in the premise of the theorem,
+Misst ⩽ µ2 ˆπt. (53)
+To that end, let us deﬁne P t : Rd++ → R as follows:
+P t(w) =Lt(w) +µ
+[
+Vt(wt) + ∇Vt(wt)⊤(w −wt)]. (54)
+From [46] it is known that Vt is convex. (For the paper to be self-contained, we reprove th is result
+in Lemma C.4.) As such, P t(w) ⩽Pt(w) for all w. Since P t(wt) =Pt(wt), we obtain the estimates
+Misst ⩽P t(wt) −P t(wt+1) ⩽P t(wt) − minw∈∆dP t(w). (55)
+Next, let P 1t : Rd−1 → R be the aﬃne reparametrization (cf. ( 10)) of P t restricted to Ad, namely:
+P 1t (v) :=P t(Av +ed). (56)
+Clearly,P 1t has int(∆d−1), cf. (7), as its domain, and v ↦→Av +ed is a bijection from ∆ d to ∆d−1.
+As a result, min w∈∆dP t(w) = minv∈∆d−1P 1t (v); recalling ( 55), this results in
+Misst ⩽P 1t (vt) − minv∈∆d−1P 1t (v). (57)
+FunctionP 1t (·) is standard self-concordant in the sense of [ 38, Section 4.1], or 1-self-concordant in
+terms of our Deﬁnition 1 in Appendix A.3. (The reader may consult Appendix A.3 for the essential
+results on self-concordance.) As such, upper-bounding its Newton decrement
+Decrt :=
+‖‖∇P 1t (vt)‖‖∇2P 1t (vt)−1 (58)
+with some c < 1 would suﬃce for showing that P 1t (vt) − minv∈∆d−1P 1t (v) ⩽ CDecr2t, where C
+depends only on c; in particular, Lemma A.7 shows that c = 0.5 allows for C = 0.8. Therefore, it
+remains to prove that Decrt ⩽ 0.5, while lower-bounding the right-hand side of ( 53) with 0.8 Decr2t .
+4o. Since ∇2P 1t (v) =A⊤∇2P t(Av +ed)A, cf. (11), and ∇2P t(wt) = ∇2Lt(wt), cf. (54), one has
+∇2P 1t (vt) = ˆH t. (59)
+18
+Meanwhile, since vt = argminv∈∆d−1P 1t−1(v) belongs to int( ∆d−1), we get ∇P 1t−1(vt) = 0. Deﬁning
+Dt(w) :=Vt(w) −Vt−1(w) (60)
+we thence arrive at
+∇P 1t (vt) (54)= ∇P 1t (vt) = ∇P 1t (vt) − ∇P 1t−1(vt) =A⊤ [∇Pt(wt) − ∇Pt−1(wt)]
+=A⊤ [∇Lt(wt) − ∇Lt−1(wt) +µ∇Dt(wt)]
+= ˆ∇t +µA⊤∇Dt(wt). (61)
+Plugging (59) and (61) into (58) we conclude that
+Decr2t =‖‖‖ ˆ∇t +µA⊤∇Dt(wt)‖‖‖2ˆH−1t . (62)
+Let us now focus on ∇Dt(wt). Observe that, for any w ∈ Rd++,
+−Dt(w) = 12 log det(Id−1 − ∇t(w)∇t(w)⊤H t(w)−1) = 12 log (1 −πt(w)) (63)
+where we used that ∇t(w)∇t(w)⊤ is rank-one. Whence by the composition formula:
+∇Dt(w) = 12(1 −πt(w)) ∇πt(w). (64)
+Finally, a rather tedious computation allows to diﬀerentiat e πt(w) explicitly (see Lemma C.3):
+1
+2 ∇πt(w) =πt(w)∇ℓt(w) −
+∑
+τ ∈[t]+
+πt,τ (w)2∇ℓτ(w). (65)
+Collecting (62)–(65) we arrive at the following estimate:
+Decr2t ⩽ 1(1 − ˆπt)2
+‖‖‖‖‖‖[1 + (µ − 1)ˆπt] ˆ∇t −µ∑τ ∈[t]+ ˆπ2t,τ ˆ∇τ‖‖‖‖‖‖2ˆH−1t . (66)
+5o. Let ˆαt := 1 + (µ − 1)ˆπt, then developing the square in the right-hand side of ( 66) results in
+Decr2t ⩽ ˆα2t ˆπt + 2µˆαt|ˆE1| +µ2ˆE2(1 − ˆπt)2 (67)
+with ˆE1 and ˆE2 as follows (cf. ( 47)–(50)):
+ˆE1
+
+:= ∑
+τ ∈[t]+
+⟨ ˆ∇t, ˆ∇τ⟩ ˆH −1t ˆπ2t,τ
+
+ = ∑
+τ ∈[t]+
+1√λτ ˆπ3t,τ, (68)
+ˆE2
+
+:= ∑
+τ,ν ∈[t]+
+⟨ ˆ∇τ, ˆ∇ν⟩ ˆH −1t ˆπ2t,τ ˆπ2t,ν
+
+ = ∑
+τ,ν ∈[t]+
+ˆπτ,ν√λτλν ˆπ2t,τ ˆπ2t,ν. (69)
+19
+Now, by Lemma C.1 proved in the appendix, we have the following bounds for the e ntries of ˆΠ:
+|ˆπt,τ | ⩽ 11 +λ ∀τ ∈ [t]; |ˆπt,τ | ⩽ 1√1 +λ ∀τ <0; |ˆπτ,ν |√λτλν ⩽ 1λ ∀τ,ν ∈ [t]+. (70)
+The ﬁrst bound implies that ˆαt ⩽ λ+µ1+λ . Combining the ﬁrst two bounds in ( 70) with (51) we get
+|ˆE1| ⩽ 1λ ∑τ ∈[t]+ ˆπ2t,τ (51)= ˆπtλ. (71)
+Finally, applying the third and then the ﬁrst bound in ( 70), we have that
+ˆE2 ⩽ 1λ
+
+∑
+τ ∈[t]+
+ˆπ2t,τ
+
+
+2
+(51)
+= ˆπ2t
+λ ⩽ ˆπtλ(1 +λ). (72)
+Plugging (71)–(72) and the bound for ˆαt back into (67) leads to
+Decr2t ⩽
+(1 +λ
+λ
+)2[(λ +µ
+1 +λ
+)2
++ 2µ(λ +µ)λ(1 +λ) + µ2λ(1 +λ)] ˆπt ⩽ (1 +λ)(λ + 2µ)2λ3 ˆπt. (73)
+From the ﬁrst bound in ( 70) we get Decr2t ⩽ 1λ(1 + 2µλ)2, thus Decr2t ⩽ min{ 14, 5µ8 ˆπt} under the
+premise of the theorem. By Lemma A.7 and ( 57), this gives Misst ⩽ 0.8 Decr2t ⩽ µ2 ˆπt, cf. ( 53),
+leading to (37). The theorem is proved.
+4 Eﬃcient implementation
+We are now about to present an implementation of ( VB-FTRL) based on a quasi-Newton method
+run from the previous portfolio. Let us ﬁrst explain why this choice is natural in our context.
+First, as we verify in Appendix C, function P 1t , to be minimized in each round of VB-FTRL
+after the reparametrization ( 10), is self-concordant. Such functions were initially propo sed in [ 39]
+as the ones for which Newton’s method has a global convergence guarantee. Moreover, it converges
+quadratically when initialized at a point with a small Newton decrement. On the other hand, when
+proving Theorem 2.1 we have shown (when bounding Decrt) that portfolio wt gives a small Newton
+decrement in terms of P 1t−1. As such, Newton’s method run from ~wt ≈wt[= argminw∈∆dPt−1(w)]
+will produce an accurate approximation~wt+1 ofwt+1 in just a few steps, enforcing that~wt+1 ≈wt+1.
+Furthermore, the convergence guarantees for Newton’s meth od, when run on a self-concordant
+function, are aﬃne-invariant—just as the regret bound established in Theorem 2.1. This would
+not be so if we used, instead, a ﬁrst-order method such as grad ient descent. Given substantial
+eﬀorts spent on obtaining aﬃne-invariant regret guarantees for various algorithms (speciﬁcally, on
+getting rid of the gradient norm parameters G2,G ∞; cf. Table 1 and the accompanying discussion),
+it would be quite unsatisfactory if such a regret bound—even an optimal one—came only at the
+price of a computational guarantee that lacks aﬃne-invaria nce.
+Finally, we have at our disposal a computationally cheap approximate second-order oracle forPt
+(and thus for P 1t as well). Namely, it can be veriﬁed (see Lemma C.4) that the gradient of Vt(w) is
+∇Vt(w) =
+∑
+τ ∈[t]+
+πτ(w) ∇ℓτ (w), (74)
+20
+and the Hessian of Vt satisﬁes the bounds Qt(w) ≼ ∇2Vt(w) ≼ 3Qt(w) with Qt(w) as follows:
+Qt(w) =
+∑
+τ ∈[t]+
+πτ(w) ∇2ℓτ(w). (75)
+Now, the point here is that Qt(w) can be computed in O(d2(T +d)) arithmetic operations (a.o.’s),
+whereas computing ∇2Vt(w) exactly would take O(d2(T +d)2) a.o.’s. (The latter can be seen
+from the explicit representation of ∇2Vt as the sum of ( T +d)2 outer-product terms, cf. ( 121)
+in Appendix C.) On the other hand, it can be shown that a quasi-Newton metho d in which the
+exact Hessian of a self-concordant objective is replaced wi th such an approximation—i.e., the one
+with a constant relative error as is the case for ∇2Vt(w) and Qt(w)—admits strong convergence
+guarantees—namely, local linear convergence in a Dikin ellipsoid of the optimum; see Lemma A.10.
+Conceptual procedure. The above discussion suggests to replace ( VB-FTRL) with the update
+shown in Fig. 4, and referred to as ( VB-FTRL-qN) from now on. In ( VB-FTRL-qN), the next
+portfolio ~wt is obtained by runningS steps of a quasi-Newton method for the minimization problem
+in (VB-FTRL), under the aﬃne reparametrization of ∆ d onto ∆d−1, cf. (10)–(12), starting from the
+previously chosen portfolio ~wt−1, and approximating the Hessian ∇2Pt(w) with ∇2Lt(w)+3µQt(w).
+Input: ~wt−1 ∈ ∆d.
+1. Initialize w(0)t = ~wt−1.
+2. For s = 0, 1,...,S − 1 do:
+M (s)t−1 =A⊤[∇2Lt(w(s)t ) + 3µQt(w(s)t )]A,
+w(s+1)t =w(s)t −A[M (s)t−1]−1A⊤∇Pt(w(s)t ). (VB-FTRL-qN)
+Output: ~wt =w(S)t .
+Figure 1: Conceptual implementation of ( VB-FTRL) via a quasi-Newton method.
+Computational guarantees. Algorithm 1 is a concrete implementation of the update rule
+in (VB-FTRL-qN), with O(dT +d2) overall memory use, and O(d2T +d3) runtime per one Newton
+step. As we are about to see next (in Theorem 4.1), it suﬃces to perform O(log(T +d)) New-
+ton steps to match the regret guarantee of Theorem 2.1 up to a constant factor; thus, the overall
+runtime is ~O(d2T +d3) per round. (More precisely, round t takes O(d2t +d3) a.o.’s, but this
+givesO(d2T +d3) per round on average over T rounds.) The runtime and memory cost estimates
+we have just announced can be veriﬁed by a line-by-line inspe ction of Algorithm 1. Indeed, in each
+roundt we start by translating wt−1 intovt−1 =v(0)t−1 as per (12) to translate the problem on ∆d−1
+a set with nonempty interior; clearly, this can be done in O(d). Next, when given the previous
+iteratev(s)t , we compute the individual loss gradients ∇τ = ∇ℓ1τ (v(s)t ) for each datapointτ ∈ [t −1]+
+(including the “ﬁctional” datapoints {e1,...,e d} corresponding to the logarithmic-barrier term); this
+takesO(dt +d2) a.o.’s in total, and requires O(dt +d2) of storage space. These data are then used
+21
+Algorithm 1 VB-FTRL-qN : Eﬃcient implementation of VB-FTRL via a quasi-Newton method
+Input: λ> 0,µ> 0,S ∈ N
+1: ~w0 := 1d 1d ⊲ ~w0 = argminw∈∆dP0(w)
+2: for t ∈ [T ] do
+3: v(s)t :=A+(~wt−1 −ed) ⊲ map ~wt−1 ∈ ∆d to ∆d−1, cf. (12)
+4: for s ∈ {0,...,S − 1} do
+5: for τ ∈ [t − 1]+ do ⊲ [t − 1]+ = [t − 1] ∪ {−1,..., −d}
+6: λτ :=λ1{τ <0} ⊲ recall that x−j =ej for j ∈ [d]
+7: ∇(s)τ := − 1x⊤τ(Av(s)t +ed)A⊤xτ ⊲ ∇(s)τ = ∇ℓ1τ(v(s)t )
+8: end for
+9: H (s)t−1 := ∑
+τ ∈[t−1]+
+λτ ∇(s)τ [∇(s)τ ]⊤ ⊲ H (s)t−1 = ∇2L1t−1(v(s)t )
+10: Σ(s)t−1 :=[H (s)t−1]−1
+11: for τ ∈ [t − 1]+ do
+12: π(s)τ :=λτ
+‖‖‖∇(s)τ ‖‖‖2Σ(s)t−1
+13: end for
+14: g(s)t−1 := ∑
+τ ∈[t−1]+
+(
+λτ +µπ(s)τ )∇(s)τ ⊲ g(s)t−1 = ∇P 1t−1(v(s)t )
+15: M (s)t−1 := H (s)t−1 + 3µ ∑
+τ ∈[t−1]+
+π(s)τ ∇(s)τ [∇(s)τ ]⊤
+16: v(s+1)t :=v(s)t −[M (s)t−1]−1g(s)t−1 ⊲ quasi-Newton step for P 1t−1(·)
+17: end for
+18: Predict ~wt :=Av(S)t +ed ⊲ map v(S)t ∈ ∆d−1 back to ∆d
+19: Receivext ∈ Rd+
+20: end for
+to compute the Hessian H (s)t−1 = ∇2L1t−1(v(s)t ) as the sum of O(t +d) one-rank matrices of the
+form λ1{τ <0}∇(s)τ [∇(s)τ ]⊤, in O(td2 +d3) a.o.’s and O(d2) additional storage. After that, we com-
+pute the inverse of H (s)t−1 with O(d3) runtime and O(d2) additional storage, and use [ H (s)t−1]−1 to
+compute O(t +d) leverage scores π(s)τ , cf. line 11 of the algorithm, in O(d2) a.o.’s per each π(s)τ .
+Using these, we then compute ∇P 1t−1(v(s)t ), compute and invert M (s)t−1 (cf. line 15) that satisﬁes
+1
+3 M (s)t−1 ≼ ∇2P 1t−1(v(s)t ) ≼ M (s)t−1, (76)
+and perform a matrix-vector multiplication (line 16). This takes O(td2 +d3) time and O(d2) space.
+4.1 Regret guarantee for VB-FTRL-qN
+As we are about to see, performing a logarithmic in T +d number of quasi-Newton steps, instead
+of full minimization as per ( VB-FTRL), suﬃces to match the regret bound of Theorem 2.1. More
+precisely, we have the following result for the regret of VB-FTRL-qN (a.k.a. Algorithm 1).
+22
+Theorem 4.1. For any T ∈ N and market realization x1:T , Algorithm 1 produces~w1:T such that
+RT (~w1:T |x1:T ) ⩽ (λ + 2µ) [(d − 1) log(T +λd) + 1]
+if we choose λ,µ,S satifying the following conditions: λ /greaterorequalslant 2e,
+1
+λ
+(
+1 + 2µλ)2 ⩽ min{ 1556, 5µ8(1 +λ)}, S /greaterorequalslant 9 log(2 max{(T +d + 1)2, 104√1 + 3µ}). (77)
+In particular, choosing λ = 560, µ = 2, and S = 18⌈log(T +d + 164)⌉ + 7 allows to guarantee that
+RT (~w1:T |x1:T ) ⩽ 564d log(T + 560d).
+Proof. As previously noted, Algorithm 1 precisely corresponds to the updates in ( VB-FTRL-qN).
+Let ~w1:T and w1:T be two sequences produced by ( VB-FTRL-qN) and ( VB-FTRL) correspondingly
+on the same x1:T . Let also w0 = 1d 1d, and observe that ~w0 =w0 =w1 is the exact minimizer of P0.
+The following technical result claims, in a nutshell, that ~wt remains very close to wt for all t ∈ [T ].
+Lemma 4.1. Letλ,µ,S be as in the premise of Theorem 4.1. Then for all t ∈ {0} ∪ [T ], one has
+‖~wt −wt‖∇2Lt(wt) ⩽ min
+{
+(T +d + 1)−2, 10−4(1 + 3µ)−1/2
+}
+. (78)
+Deferring the proof of Lemma 4.1 to Appendix D we shall now focus on proving the theorem.
+1o. Mimicking ( 35) we get
+RT (~w1:T |x1:T ) ⩽ BiasT +
+∑
+t∈[T ]
+[
+ℓt(~wt) + minw∈∆dPt−1(w) − minw∈∆dPt(w)
+]
+⩽ BiasT +
+∑
+t∈[T ]
+[
+ℓt(~wt) +Pt−1(~wt) −Pt(wt+1)
+]
+⩽ BiasT +
+∑
+t∈[T ]
+[~Misst + ~Gaint] (79)
+where the term BiasT is the same as in the proof of Theorem 2.1, and the terms summed over t are
+~Misst :=Pt(~wt) −Pt(wt+1), ~Gaint :=µ[Vt−1(~wt) −Vt(~wt)]. (80)
+Since λ /greaterorequalslant 2e, BiasT admits the same bound ( 36) as before. Moreover, for Misst = Pt(wt) −
+Pt(wt+1) and Gaint = µ[Vt−1(wt) −Vt(wt)] we still have that Misst + Gaint ⩽ 0 for all t ∈ [T ],
+simply because these terms, just like ( 36), depend only on w1:T (and not ~w1:T ), and the constraint
+on λ,µ imposed in ( 77) is stronger than its counterpart in Theorem 2.1. Thus, it remains to show
+that∑t∈[T ] ~Errort ⩽λ+2µ for the sum of approximation errors ~Errort := ~Misst−Misst+~Gaint−Gaint.
+2o. Clearly,
+~Errort =Lt(~wt) −Lt(wt) +µ[Vt−1(~wt) −Vt−1(wt)].
+By Lemma 4.1, Lemma A.9, and since L1t (·) and L1t−1(·) are 1-self-concordant, cf. Corollary A.1,
+(1 −ε)2H t(wt) ≼ H t(~wt) ≼ 1(1 −ε)2 H t(wt),
+(1 −ε)2H t−1(wt) ≼ H t−1(~wt) ≼ 1(1 −ε)2 H t−1(wt)
+23
+whereε is the right-hand side of ( 78), and the second line is due to ‖~wt −wt‖∇2Lt−1(wt) ⩽ε. Thus,
+µ[Vt−1(~wt) −Vt−1(wt)] = µ2 log det(H t−1(wt)−1/2H t−1(~wt)H t−1(wt)−1/2) ⩽µ(d − 1) log( 11 −ε)
+⩽ 2µ(d − 1)ε.
+where in the end we used that 11−u ⩽ 1+ 2u foru ∈ [0, 12]. On the other hand, applying Lemma A.8
+to L1t (·) and noting that ‖∇Lt(w)‖∇2Lt(w)−1 ⩽t +d by triangle inequality, we get
+Lt(~wt) −Lt(wt) ⩽ ∇Lt(wt)⊤(~wt −wt) + 0.8 ‖~wt −wt‖2∇2Lt(wt) ⩽ (T +d)ε + 0.8ε2 ⩽ (T +d + 1)ε.
+As such, we have a (very conservative) bound∑t∈[T ] ~Errort ⩽ (λ + 2µ) (T +d + 1)2ε ⩽λ + 2µ.
+Acknowledgments
+Dmitrii M. Ostrovskii acknowledges support by the NationalScience Foundation grant CIF-1908905.
+A Auxiliary results
+A.1 Logarithmic barrier and smoothed portfolios
+Lemma A.1. Letw⋆T = argminw∈∆dLT (w), then
+w⋆T [i] /greaterorequalslant λT +λd, ∀i ∈ [d]. (81)
+Proof. Let 1/w be the vector with entries w[i] = 1/w[i]. The ﬁrst-order optimality conditions read
+(w −w⋆T )⊤
+(
+λ
+w⋆T +
+∑
+t∈[T ]
+xt
+x⊤t w⋆T
+)
+⩽ 0, ∀w ∈ ∆d.
+Rearranging, we conclude that
+λ
+∑
+i∈[d]
+w[i]
+w⋆T [i] +
+∑
+t∈[T ]
+x⊤t w
+x⊤t w⋆T ⩽λd +T.
+The second sum is nonnegative; choosing w =ei fori ∈ [d] violating (81) gives a contradiction.
+Lemma A.2. For all w ∈ ∆d, the smoothed portfolio [w]α := (1 −α)w + αd 1d, α ∈ [0, 1), satisﬁes
+∑
+t∈[T ]
+ℓt([w]α) −ℓt(w) ⩽ α1 −αT.
+In particular, for α = λ(d−1)T +λ(d−1) we have that
+∑
+t∈[T ]
+ℓt([w]α) −ℓt(w) ⩽λ(d − 1).
+24
+Proof. Observe that w − [w]α = α1−α([w]α − 1d 1d). Whence by convexity we get
+∑
+t∈[T ]
+ℓt([w]α) −ℓt(w) ⩽
+∑
+t∈[T ]
+x⊤t (w − [w]α)
+x⊤t [w]α = α1 −α ∑t∈[T ](1 − 1d · 1⊤dxtx⊤t [w]α) ⩽ α1 −αT.
+Lemma A.3. For all w ∈ Rd++ and x ∈ Rd+, function R(·) in (14) satisﬁes ∇2R(w) ≽ 1(x⊤w)2xx⊤.
+Proof. Equivalently, we must prove that, forw,x as in the premise of the lemma, and for anyu ∈ Rd,
+(x⊤w)2∑
+i∈[d]
+u[i]2
+w[i]2 /greaterorequalslant (x⊤u)2.
+Clearly, it suﬃces to consider u ∈ Rd+. Let r ∈ Rd+ have entriesr[i] = u[i]w[i], then we have that
+/radicaltp/radicalvertex/radicalvertex√∑
+i∈[d]
+u[i]2
+w[i]2 x⊤w = ‖r‖2x⊤w /greaterorequalslant ‖r‖∞x⊤w /greaterorequalslant∑i∈[d]r[i]x[i]w[i] =x⊤u.
+A.2 Facts from linear algebra
+Lemma A.4 ([21, Lemma 12]). For any H ≻ H ′ ≽ 0, it holds that log( det(H)det(H−H ′)) /greaterorequalslant tr(H −1H ′).
+In particular, if H ′ is rank-one, i.e. H =uu⊤ for some vector u, then log( det(H)det(H−uu⊤)) /greaterorequalslant ‖u‖2H −1.
+Proof. The result follows by using that log det(·) is concave on the positive-semideﬁnite cone (see [8]):
+log
+( det(H)
+det(H − H ′)
+)
+= log det(H(H − H ′)−1) /greaterorequalslant tr(I − (H − H ′)H −1) = tr(H −1H ′).
+Lemma A.5. Let H ∈ Sn++ and u,v ∈ Rn. Then ∇H(⟨u,v ⟩H −1) = − 12 H −1(uv⊤ +vu⊤)H −1. In
+particular,
+∇H(‖u‖2H −1) = −H −1uu⊤H −1.
+Proof. Fix an arbitrary symmetric matrix M ∈ Rn×n, and consider t ∈ R for which H −tM ≻ 0.
+In terms of the Cholesky factorization H =RR⊤ we have that, as t → 0,
+(H +tM)−1 =R−⊤(I −tR−1MR−⊤)R−1 +o(t) = H −1 −tH −1M H−1 +o(t).
+Whenceu⊤H −1u−u⊤(H+tM)−1u =t tr(M H−1uu⊤H −1)+o(t), and the formula for∇H(‖u‖2H −1)
+is veriﬁed. More generally,
+u⊤H −1v −u⊤(H +tM)−1v =ttr(M H−1vu⊤H −1) +o(t) = t2tr(M H−1(uv⊤ +vu⊤)H −1) +o(t).
+Since H −1(uv⊤ +vu⊤)H −1 is a symmetric matrix, this veriﬁes the formula for ∇H(⟨u,v ⟩H −1).
+25
+A.3 Self-concordant functions
+In this section, we recall the notion of self-concordant fun ctions and the key properties of such
+functions. This class of functions was thoroughly studied i n the seminal work of Nesterov and
+Nemirovski [39] in connection with interior-point methods; earlier, Vaid ya used similar tools in the
+context of cutting-plane methods [ 46]. The results presented next are well known; their proofs ca n
+be found in [ 38, Section 4], see also [ 41, Proposition B.2] for a more concise proof of Lemma A.9.
+Deﬁnition 1. Let f : Rn → R be convex, proper, and three times diﬀerentiable on its do-
+main dom(f) := {z :f(z)< ∞} which is open, has nonempty interior, and does not contain st raight
+lines. Then f is called M-self-concordant if it is a barrier on its domain—i.e. f(z) →z→z0 ∞ for
+anyz0 in the boundary of dom(f)—and the following inequality holds for all z ∈ domf andu ∈ Rn:
+⏐⏐∇3f(z)[u,u,u ]⏐⏐ ⩽ 2M(∇2f(z)[u,u ])3/2. (82)
+The following property of self-concordant functions is wel l-known, see e.g. [ 38, Section 4.1].
+Lemma A.6 ([38, Theorem 4.1.1]) . Let f1 and f2 be M1- and M2-self-concordant, respectively.
+Forλ1,λ 2 > 0, the function λ1f1 +λ2f2 has domain dom(f1) ∩ dom(f2) and is M-self-concordant,
+M = max
+{ M1√λ1, M2√λ2}.
+Lemma A.6 implies self-concordance of the reparametrized logarithm ic-barrier function L1t (·).
+Corollary A.1. Assume λ /greaterorequalslant 1, then the restriction L1t : Rd−1 → R of Lt to Ad as in (9), namely
+L1t (v) =Lt(Av +ed)
+withA deﬁned in (8), is 1-self-concordant according to Deﬁnition 1 with domain int(∆d−1), cf. (7).
+Proof. It is evident that dom(L1t ) = int(∆d−1) where ∆d−1 is the “solid” simplex in Rd−1, cf. (7).
+In particular, dom(L1t ) is open and does not contain straight lines, and L1t → +∞ on its boundary.
+Thus, the requirements on the domain are veriﬁed. On the othe r hand, inequality ( 82) holds
+with M = 1 for each of the functions ℓτ(Av +ed), τ ∈ [d], and with M = 1/
+√
+λ ⩽ 1 for the
+functions −λ log(e⊤i (Av +ed)), i ∈ [d]. Applying Jensen’s inequality as in the proof of Lemma A.6
+(cf. [38, Theorem 4.1.1]) we verify (82) with M = 1 forL1t (·). That is, L1t (·) is 1-self-concordant.
+Following [38, Section 4.1] we now deﬁne a pair of mutually conjugate funct ionsω,ψ on R+ by
+ω(r) :=r − log(1 +r), ψ (r) := −r − log(1 −r). (83)
+Note that ω and ψ are increasing, ω(r) ⩽ 12r2 ⩽ ψ(r), and these bounds are tight at r = 0. In
+fact,ω(r) is a Huber-type function, soω(r) = (1−o(1))r asr → ∞; meanwhile,ψ(r)→+∞ asr ↑ 1.
+More speciﬁcally, it can be veriﬁed that ω(r) /greaterorequalslant 0.3r2 for r ⩽ 1, and ψ(r) ⩽ 0.8r2 for r ⩽ 0.5.
+Lemma A.7 ([38, Theorems 4.1.10–4.1.11, 4.1.13]) . Let f be 1-self-concordant, and some ˆz ∈
+dom(f) satisﬁes ‖∇f(ˆz)‖∇2f (ˆz)−1 < 1. Then f has a unique minimizer z⋆, and
+ω
+(
+‖∇f(z)‖∇2f (z)−1
+)
+⩽f(z) −f(z⋆) ⩽ψ(‖∇f(z)‖∇2f (z)−1)
+where the lower bound holds for all z ∈ dom(f), and the upper bound requires ‖∇f(z)‖∇2f (z)−1 < 1.
+In particular, 0.3 ‖∇f(z)‖2∇2f (z)−1 ⩽f(z) −f(z⋆) ⩽ 0.8 ‖∇f(z)‖2∇2f (z)−1 if ‖∇f(z)‖∇2f (z)−1 ⩽ 0.5.
+26
+Lemma A.8 ([38, Theorems 4.1.5, 4.1.7–4.1.8]) . Letf be 1-self-concordant,z ∈ dom(f), then
+ω
+(
+‖z′ −z‖∇2f (z)) ⩽f(z′) −f(z) − ∇f(z)⊤(z′ −z) ⩽ψ(‖z′ −z‖∇2f (z)).
+Here, the lower bound holds ∀z′ ∈ dom(f) and the upper bound on 1-Dikin ellipsoid Ef,1(z) where
+Ef,r(z) := {z′ ∈ Rn : ‖z′ −z‖∇2f (z)<r }. (84)
+In particular, Ef,1(z) is contained in dom(f). Moreover, for z′ ∈ E f, 12 (z) we have the following:
+0.3 ‖z′ −z‖2∇2f (z) ⩽f(z′) −f(z) − ∇f(z)⊤(z′ −z) ⩽ 0.8 ‖z′ −z‖2∇2f (z).
+Lemma A.9 ([38, Theorem 4.1.6]). Letf be 1-self-concordant and z ∈ dom(f), then we have
+(
+1 − ‖z′ −z‖∇2f (z))2 ∇2f(z) ≼ ∇2f(z′) ≼ 1(1 − ‖z′ −z‖∇2f (z))2 ∇2f(z)
+for all z′ ∈ E f,1(z). In particular, for z′ ∈ E f, 12 (z) we have that 0.25∇2f(z) ≼ ∇2f(z′) ≼ 4∇2f(z).
+A.4 Quasi-Newton method
+Next we focus on a quasi-Newton method in which the actual Hes sian is replaced with an approx-
+imation with a constant relative accuracy. Such a method con verges linearly if initialized in a
+constant-radius Dikin ellipsoid of the minimizer of a self- concordant function. Analogous results
+were obtained in [ 34, Lemma 11], for a modiﬁed notion of self-concordance.
+Lemma A.10 (Linear convergence for a quasi-Newton method) . Let f be 1-self-concordant,z ∈
+dom(f) be such that ‖∇f(z)‖∇2f (z)−1 ⩽ c3 for some c ⩽ 1, and consider z+ :=z − ∼H −1∇f(z) with
+c
+∼
+H ≼ ∇2f(z) ≼ ∼H.
+Then z+ ∈ dom(f), and we have that ‖∇f(z+)‖∇2f (z+)−1 ⩽ (1 − c3)‖∇f(z)‖∇2f (z)−1.
+Proof. Deﬁne H(z′) := ∇2f(z′) for any z′ ∈ dom(f), and J := H(z)1/2 ∼H −1H(z)1/2. Then, by
+the premise of the lemma, cH(z)−1 ≼ ∼H −1≼ H(z)−1, which implies
+cI ≼ J ≼ I and 0 ≼ I − J ≼ (1 − c)I.
+As a result, deﬁning δ(z′) := ‖∇f(z′)‖∇2f (z′)−1 for brevity, we get
+‖z+ −z‖2H(z) = ‖ ∼H −1∇f(z)‖2H(z) = ∇f(z)⊤H(z)−1/2J 2H(z)−1/2∇f(z) ⩽δ(z)2,
+whence (by Lemma A.9) z+ ∈ dom(f) and
+(1 −δ(z))2H(z)−1 ≼ H(z+)−1 ≼ 1(1 −δ(z))2 H(z)−1. (85)
+27
+Now, deﬁne H(z) := ∇2f(z) and zs :=sz+ + (1 −s)z fors ∈ [0, 1]. Since ∇f(z) + ∼H(z+ −z) = 0,
+‖‖∇f(z+)‖‖H(z)−1 =‖‖‖∇f(z+) − ∇f(z) − ∼H(z+ −z)‖‖‖H(z)−1
+=
+‖‖‖‖∫ 10 (H(zs)− ∼H)(z+ −z)ds‖‖‖‖H(z)−1
+⩽
+∫ 1
+0
+‖‖‖(H(zs) − ∼H)(z+ −z)‖‖‖H(z)−1ds
+⩽
+∫ 1
+0
+‖‖(H(zs) − H(z))(z+−z)‖‖H(z)−1ds +‖‖( ∼H − H(z))(z+ −z)‖‖H(z)−1.
+(86)
+For the last term in the right-hand side, we get
+‖‖‖( ∼H − H(z))(z+−z)‖‖‖2
+H(z)−1
+=
+‖‖‖(I − H(z) ∼H −1)∇f(z)‖‖‖2
+H(z)−1
+= ∇f(z)⊤H(z)−1/2(I − J)2H(z)−1/2∇f(z) ⩽ (1 − c)2δ(z)2.
+(87)
+On the other hand, since zs −z =s(z+ −z), similarly to ( 85), we have that
+(1 −sδ(z))2H(z)−1 ≼ H(zs)−1 ≼ 1(1 −sδ(z))2 H(z)−1,
+and since (1 −u)2 ⩽ 1(1−u)2 for u ∈ (0, 1), we get ‖‖H(z)1/2H(zs)−1H(z)1/2 − I‖‖ ⩽ 1(1−sδ(z))2 − 1.
+As a result, since
+‖‖(H(zs) − H(z))(z+−z)‖‖2H(z)−1 = (z+ −z)⊤H(z) 12(H(z) 12 H(zs)−1H(z) 12 − I)2H(z) 12 (z+ −z),
+we get
+‖‖(H(zs) − H(z))(z+−z)‖‖H(z)−1 ⩽( 1(1 −sδ(z))2 − 1)‖‖z+ −z‖‖H(z) ⩽( 1(1 −sδ(z))2 − 1)δ(z)
+and estimate the integral term:
+∫ 1
+0
+‖‖(H(zs) − H(z))(z+−z)‖‖H(z)−1ds ⩽δ(z)∫ 10 ( 1(1 −sδ(z))2 − 1)ds = δ(z)21 −δ(z). (88)
+Finally, combining (85)–(88), and using that δ(z) ⩽ c3, we conclude that
+δ(z+) ⩽ (1 − c) δ(z)1 −δ(z) + δ(z)2(1 −δ(z))2 ⩽(1 − 2c3) δ(z)1 −δ(z) ⩽ 3 − 2c3 − c δ(z) ⩽(1 − c3)δ(z).
+Corollary A.2. Let f be 1-self-concordant and minimized at z⋆, and assume that z0 ∈ dom(f)
+is such that ‖∇f(z0)‖∇2f (z0)−1 ⩽ c3 for some c ⩽ 1. Consider the following sequence for s ∈
+{0} ∪ [S − 1]:
+zs+1 :=zs−
+∼
+H −1s ∇f(zs) where c ∼Hs≼ ∇2f(zs) ≼ ∼Hs.
+Then, for any ε ⩽ 14 , we have the following inequalities if S /greaterorequalslant⌈ 3c log( 1ε)⌉:
+max
+{
+1
+4 ‖zS −z⋆‖2∇2f (z⋆), f (zS) −f(z⋆), ‖∇f(zS)‖2∇2f (zS)−1
+}
+⩽ε2,
+(1 − 2ε)2∇2f(z⋆) ≼ ∇2f(zS) ≼ 1(1 − 2ε)2 ∇2f(z⋆).
+28
+Proof. Using Lemma A.10 sequentially S times, ‖∇f(zS)‖∇2f (zS )−1 ⩽ c3(1 − c3)S ⩽ min{ε, 13 }.
+Then Lemma A.7 gives f(zS) −f(z⋆) ⩽ 0.8ε2. Now, one can verify that ω(r) /greaterorequalslant 0.1r for r /greaterorequalslant 0.5,
+whence by Lemma A.8 ﬁrst ‖zS −z⋆‖∇2f (z⋆) ⩽ max{0.5, 8ε2} ⩽ 0.5, and then ‖zS −z⋆‖2 ⩽ 83ε2.
+B Proofs deferred from Section 2.2
+B.1 Proof of Proposition 2.1
+Functionht(w) =e− 1µ ℓt(w) [= (x⊤t w)1/µ] is concave on ∆d whenµ /greaterorequalslant 1; thus, by Jensen’s inequality,
+ℓt(wt) ⩽ −µ log Ew∼φt
+[
+exp
+(
+− 1µℓt(w))]
+⩽ −µ log
+[∫
+∆d
+exp
+(
+− 1µLt(w))dw] +µ log[∫∆d exp(− 1µLt−1(w))dw].
+Whence via telescoping and ( 15):
+∑
+t∈[T ]
+ℓt(wt) ⩽ −µ log
+[∫
+∆d
+exp
+(
+− 1µLT (w))dw] +µ log[∫∆d exp(−λµR(w))dw]. (89)
+Now, letw⋆T = argminw∈∆dLT (w). Deﬁne the set ∆ ⋆d,T :={ TT +1w⋆T + 1T +1w, ∀w ∈ ∆d}, i.e. a copy
+of ∆d shrinked by the factor of 1T +1 and shifted byw⋆T . Since ht(·) is concave and positive, we have:
+ht(w) /greaterorequalslant TT + 1ht(w⋆T ) ∀w ∈ ∆⋆d,T.
+As such, for all w ∈ ∆⋆d,T we have that
+exp
+(
+− 1µLT (w)) /greaterorequalslant exp(−λµR(w)) ·( TT + 1)T ∏t∈[T ]ht(w⋆T ) /greaterorequalslant 1e exp(−λµR(w)) ∏t∈[T ]ht(w⋆T ).
+After taking the logarithm and noting that ∆ ⋆d,T ⊆ ∆d, this results in
+−µ log
+[∫
+∆d
+exp
+(
+− 1µLT (w))dw] ⩽ −µ log[1e∫∆⋆d,T exp(−λµR(w))dw] +∑t∈[T ]ℓt(w⋆T ).
+Returning to (89), this results in
+RT (w1:T |x1:T ) ⩽
+∑
+t∈[T ]
+ℓt(w⋆T ) − minw∈∆d
+∑
+t∈[T ]
+ℓt(w)
++µ log
+[∫
+∆d
+exp
+(
+−λµR(w))dw] −µ log[1e∫∆⋆d,T exp(−λµR(w))dw]. (90)
+Observing that R(w) /greaterorequalslantR( 1d 1d) =d log(d) on ∆ d allows to estimate the penultimate term in ( 90):
+µ log
+[∫
+∆d
+exp
+(
+−λµR(w))dw] ⩽µ log[Area(∆d)] −λd logd. (91)
+29
+Meanwhile,R(w), as a convex function, is maximized on a vertex of ∆⋆d,T , whence for anyw ∈ ∆∗d,T :
+R(w) ⩽ max
+k∈[d]
+R
+( T
+T + 1w⋆T + 1T + 1ek
+)
+= max
+k∈[d]
+
+
+log
+( T + 1
+Tw ⋆T [k] + 1
+)
++
+∑
+i∈[d]\{k}
+log
+( T + 1
+Tw ⋆T [i]
+)
+
+⩽R(w⋆T ) + (d − 1) log
+(T + 1
+T
+)
+.
+This allows to estimate the last term in ( 90):
+−µ log
+[
+1
+e
+∫
+∆⋆d,T
+exp
+(
+−λµR(w))dw] ⩽λR(w⋆T ) +λ(d − 1) log(T + 1T ) +µ −µ log[Area(∆⋆d,T )]
+⩽λR(w⋆T ) +λ(d − 1) log (2) +µ −µ log[Area(∆d)]
++µ(d − 1) log(T + 1).
+(92)
+Here we used that Area(∆ ⋆d,T ) = 1(T +1)d−1 Area(∆d). Finally, proceeding as in step 1o of the proof
+of Theorem 2.1 we get
+LT (w⋆T ) − minw∈∆d
+∑
+t∈[T ]
+ℓt(w) ⩽λ (d − 1) log
+(
+2eT +λdλ ). (93)
+Combining (90)–(93) yields the result.
+B.2 Proof of Proposition 2.2
+On the one hand, the mere feasibility of φt in surrogate problem ( 27) implies, through ( 26), that
+Ft−1[φt] ⩽F t−1[φt]. (94)
+Now, let us deﬁne (w,φ t) as the optimal solution to the following minimization prob lem:
+min
+ˆw ∈ ∆d, Eφ[w] = ˆw,
+φ ∈ Supp(Et−1, 1/2( ˆw))
+Lt−1( ˆw) + 15tr(∇2Lt−1( ˆw) Cov[φ]) −µEnt[φ]/bracehtipupleft /bracehtipdownright/bracehtipdownleft /bracehtipupright
+:=F t−1[φ]
+. (95)
+Moreover, let ~φt(·) := 2φt(w + 2(· −w)), i.e. ~φt is the distribution of w + 12(w −w) with w ∼ φt.
+Then Ew∼ ~φt[w] =w and also ~φt ∈ Supp(Et−1, 1/4(w))—in other words, (w,~φt) is feasible in ( 27), so
+F t−1[φt] ⩽F t−1[~φt]. (96)
+Now: observe that Cov[~φt] = 14Cov[φt] and Ent[~φt] = Ent[φt] − (d − 1) log(2), whence (26) gives
+F t−1[~φt] ⩽F t−1[φt] +µ(d − 1) log(2). (97)
+Finally, let (wo,φ ot ) be the optimal solution to the optimization problem
+min
+ˆw ∈ ∆d, Eφ[w] = ˆw,
+φ ∈ Supp(Et−1, 1/2( ˆw))
+Ft−1[φ]. (98)
+30
+Since (wo,φ ot ) is also a feasible solution to ( 95), we have that F t−1[φt] ⩽ F t−1[φot] ⩽ Ft−1[φot ]. In
+combination with (94) and (96)–(98) this results in
+Ft−1[φt] ⩽ minˆw ∈ ∆d, Eφ[w] = ˆw,
+φ ∈ Supp(Et−1, 1/2( ˆw))
+Ft−1[φ] + µ(d − 1) log(2). (99)
+Thus, to prove the proposition it suﬃces to bound the minimum in (98) from above in terms of
+the minimum in (23). To this end, recall that φt, as deﬁned in (21), is the optimal solution to ( 23);
+letw⋆ = argminw∈∆dLt−1(w), and let φtrct be the truncation of φt to Et−1, 1/8(w⋆)—in other words,
+φtrct (w) = exp
+(
+− 1µLt−1(w))
+∫
+Et−1, 1/8(w⋆) exp
+(
+− 1µLt−1(w′))dw′, w ∈ E t−1, 1/8(w⋆). (100)
+Clearly,φtrct is supported on Et−1, 1/2( ˆwtrc) where ˆwtrc = Eφtrct [w] is its expectation—in other words,
+the pair ( ˆwtrc,φ trct ) is feasible in ( 98). Indeed, for any w ∈ E t−1, 1/8(w⋆) we have that
+‖w − ˆwtrc‖∇2Lt−1( ˆwtrc) ⩽ 2‖w − ˆwtrc‖∇2Lt−1(w⋆)
+⩽ 2‖w −w⋆‖∇2Lt−1(w⋆) + 2‖ ˆwtrc −w⋆‖∇2Lt−1(w⋆) ⩽ 1/2,
+where we used that function L1t−1(v) is 1-self-concordant whenever λ /greaterorequalslant 1—see Corollary A.1 in
+Appendix A.3 for the proof of this result—and applied Lemma A.9. By ( 99), this implies that
+Ft−1[φt] ⩽Ft−1[φtrct ] +µ(d − 1) log(2). (101)
+As such, it remains to show that replacing φt withφtrct does not lead to a dramatic increase of Ft−1.
+Lemma B.1. Forφt, Ft−1, φtrct as in (21)–(23) and (100), the following holds as long as λ /greaterorequalslant 1:
+Ft−1[φtrct ] ⩽Ft−1[φt] + 1.5µ(d − 1) log (T +λd) + 3.2µ(d + 1) + 0.1.
+This lemma, proved in the next section, gives the desired result via (101), since log(2)< 0.7.
+B.3 Proof of Lemma B.1
+For the sake of generality we shall consider truncation to Et−1,r(w⋆) with arbitrary r ⩽ 1/2, and
+putr = 1/8 post-hoc. By duality between the negative entropy and log-partition function (cf. (23)),
+Ft−1[φt] = −µ log
+∫
+∆d
+exp
+(
+− 1µLt−1(w))dw,
+Ft−1[φtrct ] = −µ log
+∫
+Et−1,r(w⋆)
+exp
+(
+− 1µLt−1(w))dw.
+Here the second integral is larger: Et−1,r(w⋆) ⊆ ∆d by Lemma A.8 and Corollary A.1. Our goal is
+to show the reverse inequality up to the appropriate error te rm. To this end, we ﬁrst note that
+exp
+( 1
+µ
+(
+Ft−1[φtrct ] −Ft−1[φt])) = ∫∆d exp(− 1µ[Lt−1(w) −Lt−1(w⋆)])dw∫
+Et−1,r(w⋆) exp
+(
+− 1µ[Lt−1(w) −Lt−1(w⋆)])dw. (102)
+31
+Since Lt−1(w) /greaterorequalslantLt−1(w⋆), the numerator can be upper-bounded by the surface area of ∆ d:
+∫
+∆d
+exp
+(
+− 1µ[Lt−1(w) −Lt−1(w⋆)])dw ⩽ Area(∆d) = √dVol(∆d−1) = √dΓ(d).
+By the ﬁrst-order optimality conditions⟨∇Lt−1(w⋆),w −w⋆⟩ = 0 forw ∈ ∆d, whence by LemmaA.8
+Lt−1(w) −Lt−1(w⋆) ⩽ 45 ‖w −w⋆‖2∇2Lt−1(w⋆) ∀w ∈ E t−1,r(w⋆),
+where we used that r ⩽ 1/2. As such, we can lower-bound the denominator in ( 102) as follows:
+∫
+Et−1,r(w⋆)
+exp
+(
+− 1µ[Lt−1(w) −Lt−1(w⋆)])dw /greaterorequalslant exp(−4r25µ)rd−1Area(Et−1,1(w⋆)).
+Now, as in Corollary A.1 let L1t−1 : Rd−1 → R be the reparametrized restriction of Lt−1 to Ad.
+Since det(A⊤A) =d, we have that
+Area(Et−1,1(w⋆)) = √dVol(E 1t−1,1(v⋆))
+where v⋆ is such that Av⋆ +ed =w⋆, and ellipsoid E 1t−1,r(v⋆) similarly corresponds to Et−1,r(w⋆):
+E 1t−1,r(v⋆) := {v ∈ Rd−1 : ‖v −v⋆‖∇2L1t−1(v⋆) ⩽r} ⊂ Rd−1.
+Using the expression for the volume of an ellipsoid in Rd−1, we have that
+Vol(E 1t−1,1(v⋆)) = π
+d−1
+2
+Γ( d+12 )√det(∇2L1t−1(v)).
+Moreover, since ∇2L1t−1(v⋆) =A⊤∇2Lt−1(w⋆)A and A⊤A = Id−1 + 1d−11⊤d−1, so that ‖A‖ = √d,
+det(∇2L1t−1(v⋆)) ⩽ ‖∇2L1t−1(v⋆)‖d−1 ⩽ (d ‖∇2Lt−1(w⋆)‖)d−1 ⩽
+(d(t − 1 +λd)3
+λ2
+)d−1
+⩽
+(
+d(t − 1 +λd)3)d−1 ;
+here we bounded ‖∇2Lt−1(w⋆)‖ by using that mini∈[d]w⋆[i] /greaterorequalslant λt−1+λd (cf. Lemma A.1) and invoking
+estimate (43) used in step 1o of the proof of Theorem 2.1. Returning to ( 102) we arrive at
+Ft−1[φtrct ] −Ft−1[φt] ⩽ 32µ(d − 1) log( T +λdr2/3π1/3) +µ log(Γ( d+12 )d d−12Γ(d) ) + 45r2
+⩽ 32µ(d − 1) log(T +λdr ) +µ(d + 1) + 45r2.
+Here in the last step we did a series of simple estimates to bou nd the term depending solely on d.
+The result follows by plugging in r = 1/8.
+32
+B.4 Transition from (32) to (33)
+Recall thatA⊤∇2Lt−1( ˆw)A = ∇2L1t−1(ˆv), cf. (11), and note that the Σ component of the objective
+gradient in (32) is 45 ∇2L1t−1(ˆv) − µ2 Σ−1. The corresponding ﬁrst-order optimality condition reads:
+tr
+[
+(Σ − ˆΣ)
+(
+∇2L1t−1(ˆv) − 5µ8 ˆΣ−1
+)]
+/greaterorequalslant 0 for all 0 ≼ Σ ≼ 116 ∇2L1t−1(ˆv)−1.
+Plugging in ˆΣ = 116 ∇2L1t−1(ˆv)−1 and dividing over 1 − 10µ< 0, the above condition translates into
+tr
+[
+Σ∇2L1t−1(ˆv) − 116 I d−1
+]
+⩽ 0 for all 0 ≼ Σ ≼ 116 ∇2L1t−1(ˆv)−1.
+From the monotonicity of trace with respect to ≼ ordering, it follows that this condition is indeed
+satisﬁed. Plugging ˆΣ into (32) and neglecting the constant terms, we ﬁnally arrive at ( 33).
+B.5 Proof of Proposition 2.3
+1o. Recall that the optimization problem
+min
+ˆw ∈ ∆d, 0 ≼ Σ ≼ 116 (A⊤∇2Lt−1( ˆw)A)−1,
+φ1 : AEv∼φ1 [v] + ed = ˆw, Cov[φ1] = Σ
+Lt−1( ˆw) + 45tr[ΣA⊤∇2Lt−1( ˆw)A] −µEnt[φ1]/bracehtipupleft /bracehtipdownright/bracehtipdownleft /bracehtipupright
+=F t−1[φ]+ µ2 log(d)
+(103)
+is equivalent to (32) in the natural sense: (wt, Σt) ∈ ∆d×Sd−1+ is optimal in (32) whenever N (vt, Σt),
+with vt ∈ ∆d−1 such that Avt +ed = wt, is optimal in ( 103). Now, let ( w,φt) and (wt, Σt) be
+optimal in ( 27) and ( 32) correspondingly, so that N (vt, Σt), with vt ∈ ∆d−1 as above, is optimal
+in (103). Observe that (w,φt) is feasible in ( 103) due to (29). Since the objective in ( 103) amounts
+toF t−1[φ] + µ2 log(d) with φ ∈ Supp(Ad) associated with φ1 via (30), we have, for the distribution
+gt := N (wt,A ΣtA⊤),
+that
+F t−1[gt] ⩽F t−1[φt]. (104)
+2o. Next, let us bound F t−1[gt] from below. From our derivation in Appendix B.4 it follows that
+Σ−1t = 16A⊤∇2Lt−1(wt)A, (105)
+therefore the level sets of gt are precisely the Dikin ellipses Et−1,r(wt) with various r /greaterorequalslant 0, cf ( 24).
+Now, deﬁne gtrct as the truncation of gt to the speciﬁc Dikin ellipse Et−1, 1/2(wt)—in other words,
+gtrct (w) = gt(w)∫
+Et−1, 1/2(wt)gt(w′)dw′, w ∈ E t−1, 1/2(wt). (106)
+Since Egtrct [w] =wt and gtrct ∈ Supp(Et−1, 1/2(wt)), the bounds in ( 26) are valid for φ =gtrct , and so
+Ft−1[gtrct ] ⩽F t−1[gtrct ]. (107)
+33
+3o. Let us now bound F t−1[gtrct ] from above in terms of F t−1[gt]. To this end, we ﬁrst observe that
+Cov[gtrct ] ≼ Cov[gt]. (108)
+Indeed: truncating gt can also be seen as transporting the mass from each ellipseEt−1,s(wt),s> 1/2,
+to Et−1,r(wt) for some r = r(s) ⩽ 1/2. As such, it only remains to control the change of entropy
+because of truncation. The following lemma, proved in the ne xt section, allows us to do so.
+Lemma B.2. Given ˆv ∈ Rn, Σ ∈ Sn++, let g(v) be the density of N (ˆv, Σ). Consider the density
+g(r)(v) = g(v)∫
+‖v′−ˆv‖Σ−1 ⩽r g(v′)dv′, ∀v ∈ Rn : ‖v − ˆv‖Σ−1 ⩽r,
+i.e. the truncation of g to the covariance ellipsoid {v ∈ Rn : ‖v − ˆv‖Σ−1 ⩽r} of radius r> 0. Then
+Ent[g] − Ent[g(r)] ⩽ n2 log(2e(n + 1)r2 ) + r22.
+While this bound becomes vacuous when r → ∞, for our purposes it suﬃces, as in our case r <1.
+Namely, we apply the lemma to N (vt, Σt) in the role of g, so that its truncation to E 1t−1, 1/2(vt),
+cf. (106), corresponds to g(1/8), cf. (105). This results in
+Ent[gt] − Ent[gtrct ] ⩽ d − 12 log (128ed) + 1128,
+where we applied the identity Ent[φ1] = Ent[φ] + 12 log(d) to φ ∈ {gt,g trct }. In view of ( 108) we get
+F t−1[gtrct ] ⩽F t−1[gt] +µ(d − 1)2 log (128ed) + µ128.
+The desired result follows by combining this with ( 107), (104), and Proposition 2.2.
+B.6 Proof of Lemma B.2
+Recall that Ent[g] = 12 log det(Σ) + n2 log(2π) + n2. On the other hand, by rewriting g(r) in the form
+g(r)(v) = 1√
+(2π)nCr(Σ) exp
+(
+−12 ‖v − ˆv‖2Σ−1
+)
+where Cr(Σ) does not depend on ˆv, we estimate Ent[ g(r)] /greaterorequalslant 12 log[Cr(Σ)] + n2 log(2π) and arrive at
+Ent[g(r)] − Ent[g] /greaterorequalslant 12 log[Cr(Σ)] − 12 log det(Σ) − n2. (109)
+Now, observe that, putting ˆv = 0 w.l.o.g.,
+Cr(Σ)1/2 = 1(2π)n/2
+∫
+‖v‖Σ−1 ⩽r
+exp
+(
+−12 ‖v‖2Σ−1
+)
+dv /greaterorequalslant e−r2/2
+(2π)n/2 det(Σ1/2) πn/2rnΓ( n2 + 1)
+where we used the expression πn/2Γ( n2 +1) for the volume of the unit ℓ2-ball in Rn. Whence we arrive at
+1
+2 logCr(Σ) − 12 log det(Σ) /greaterorequalslant −r22 − n2 log(2) +n log(r) − log[Γ(n2 + 1)]
+/greaterorequalslant −r2
+2 − n2 log(2) +n log(r) − n2 log(n + 1),
+and the desired result follows via ( 109).
+34
+C Diﬀerential properties of leverage scores and barrier fun ctions
+In this section, we recall some diﬀerential properties of the Gram matrix Π(w), and barrier func-
+tions Vt(w),P t(w) used in VB-FTRL and in its analysis. These results are adaptations or easy
+corollaries of those in [46, 3]; however, the existing results in these works can only be applied in the
+special case λ = µ = 1, where V 1t (·) and P 1t (·) become, respectively, the volumetric and “hybrid”
+barriers (in the terminology of [ 3]) for the set of linear constraints corresponding to the set of
+vectors {A⊤xτ, τ ∈ [t]+} in the notation deﬁned in ( 46)–(50).2 Formal reduction to this special
+case from λ /greaterorequalslant 1,µ> 0 proved to be elusive. For this reason, and to make the paper s elf-contained,
+here we reprove these results assuming only that λ,µ> 0, and in some cases that λ /greaterorequalslant 1.
+Preliminaries and notation. To streamline the exposition, in this section we ﬁxt ∈ [T ] and use
+the notation deﬁned in (46)–(50), which we are now repeating here for convenience. For anyτ ∈ [t]+:
+H t(w) :=A⊤∇2Lt(w)A, ∇τ(w) :=A⊤∇ℓτ(w),
+ˆH t := H t(wt), ˆ∇τ := ∇τ, (110)
+where [t]∪{−1, ..., −d} is the extended index set (withτ <0 corresponding toxτ :=e−τ). Besides,
+λτ :=λ1{τ <0},
+so that H t(w) =
+∑
+τ ∈[t]+
+λτ ∇τ (w)∇⊤τ (w) and ˆH t = ∑
+τ ∈[t]+
+λτ ˆ∇τ ˆ∇⊤τ. (111)
+We let Π(w) ∈ St+d+ be the Gram matrix with rows and columns indexed over [t]+, and with entries
+πτ,ν(w) :=
+√
+λτλν
+⟨
+∇τ(w), ∇ν(w)
+⟩
+H t(w)−1. (112)
+We also deﬁne ˆΠ := Π(wt), whose entries are thus
+ˆπτ,ν :=
+√
+λτλν
+⟨ ˆ∇τ, ˆ∇ν⟩ ˆH −1t . (113)
+For brevity, we refer to the diagonal entries of both these ma trices with a single index. Note that
+πτ(w) = λτ(x⊤τw)2 ‖A⊤xτ ‖2H t(w)−1. (114)
+C.1 Gram matrix Π (w) and leverage scores
+Lemma C.1. For any t ∈ [T ], τ,ν ∈ [t]+, and w ∈ Rd++, one has the following estimate for πτ,ν :
+|πτ,ν(w)| ⩽
+√
+1
+(1 +λ)1{τ >0}+1{ν>0}. (115)
+2The polyhedron deﬁned by this set of constraints is ∆d−1, same as without xτ ’s for τ ∈ [t]. But functions Lt, Vt, Pt
+do depend on these xτ ’s, so their names adopted in [ 2]—e.g. “volumetric barrier” for Vt—should be used with caution.
+35
+Proof. By ( 112) and Cauchy-Schwarz, |πτ,ν(w)| ⩽
+√
+πτ(w)πν(w) for all τ,ν ∈ [t]+. Clearly,
+for i ∈ [d] one has ∇2Lt(w) ≽ λ∇2ℓ−i(w), whence πτ(w) ⩽ 1 for τ < 0. Similarly, but also
+using Lemma A.3,
+∇2Lt(w) ≽ ∇2ℓτ(w) +λ∇2R(w) ≽ (1 +λ)∇2ℓτ(w), ∀τ ∈ [t].
+As a result, πτ ⩽ 11+λ for τ ∈ [t]. The result follows.
+Lemma C.2 (Generalization of [46, Claim 3]) . Fort ∈ [T ], τ1,τ 2 ∈ [t]+, and w ∈ Rd++, one has:
+πτ1,τ2(w) =
+∑
+ν∈[t]+
+πτ1,ν(w)πν,τ2(w). (116)
+In other words, Π(w) is a projection matrix. In particular, πτ(w) =∑ν∈[t]+πτ,ν(w)2 for τ ∈ [t]+.
+Proof. Using the abridged notation deﬁned in (110), and omitting the dependency on w for brevity,
+πτ1,τ2
+(112)
+=
+√
+λτ1λτ2∇⊤τ1H −1t ∇τ2 =√λτ1λτ2∇⊤τ1 H −1t H tH −1t ∇τ2
+(111)
+=
+√
+λτ1λτ2∇⊤τ1H −1t
+
+∑
+ν∈[t]+
+λν∇ν∇⊤ν
+
+ H −1t ∇τ2
+(112)
+=
+∑
+ν∈[t]+
+πτ1,νπν,τ2.
+Lemma C.3 (Gradient of a leverage score) . Fort ∈ [T ], τ ∈ [t]+, and w ∈ Rd++, it holds that
+1
+2 ∇πτ(w) =πτ(w) ∇ℓτ (w) −
+∑
+ν∈[t]+
+πτ,ν(w)2 ∇ℓν(w). (117)
+Proof. This is a byproduct of an explicit formula for ∇2Vt(w) in the proof of Lemma C.4.
+C.2 Gradient and Hessian of the volumetric barrier
+Following [46] and [3], we shall now derive an explicit formula for the gradient offunctionVt(·) on ∆d,
+cf. (16), estimate its Hessian, and verify the expression for ∇πτ(w) in Lemma C.3, cf. (123)–(124).
+The lower bound on ∇2Vt(w) in (119) shows, in particular, that Vt(·) is strictly convex.
+Lemma C.4 ([46, Lemmas 1–3]). Fort ∈ [T ] and w ∈ Rd++, the gradient of Vt(w), cf. (16), is
+∇Vt(w) =
+∑
+τ ∈[t]+
+πτ(w) ∇ℓτ (w), (118)
+and its Hessian satisﬁes
+Qt(w) ≼ ∇2Vt(w) ≼ 3Qt(w) where Qt(w) = ∑
+τ ∈[t]+
+πτ(w) ∇2ℓτ(w). (119)
+36
+Remark C.1. A weaker form of the upper bound in (119), namely ∇2Vt(w) ≼ 5Qt(w), was ﬁrst
+obtained by Vaidya in [ 46]; later on, [ 2] improved it to ∇2Vt(w) ≼ 3Qt(w). (In both cases, it was
+also assumed that λ = 1 .) For the sake of clarity, here we prove the bound with factor 5. The
+improved bound follows by applying Schur’s product theorem (see e.g. [ 4]) to the Hadamard-product
+representation of the matrix St(w) = 32 Qt(w) − 12 ∇2Vt(w), see (131) in the proof of Lemma C.5.
+Proof. 1o. Note that the entries of H t(w) =A⊤∇2Lt(w)A, for i,j ∈ [d − 1], are given by
+[H t(w)]ij =
+∑
+τ ∈[t]+
+λτ
+(x⊤τw)2
+[
+A⊤xτ]i[A⊤xτ]j.
+As such,
+∇ ([H t(w)]ij) = −
+∑
+τ ∈[t]+
+2λτ
+(x⊤τw)3
+[
+A⊤xτ]i[A⊤xτ]jxτ. (120)
+Using this formula, the composition rule now allows us to verify (118) by computing ∇Vt(w) directly:
+∇Vt(w) = 12 ∑i,j∈[d−1][H t(w)−1]ij ∇ ([H t(w)]ij)
+(120)
+= −
+∑
+τ ∈[t]+
+λτ
+(x⊤τw)3
+( ∑
+i,j∈[d−1]
+[
+A⊤xτ]i[H t(w)−1]ij[A⊤xτ]j
+)
+xτ
+= −
+∑
+τ ∈[t]+
+λτ ‖A⊤xτ ‖2H t(w)−1
+(x⊤τw)3 xτ =
+∑
+τ ∈[t]+
+πτ(w) ∇ℓτ (w).
+2o. Our next goal is to derive the following explicit formula:
+∇2Vt(w) = 3Qt(w) − 2St(w) where St(w) := ∑
+τ,ν ∈[t]+
+πτ,ν(w)2 ∇ℓτ(w) ∇ℓν(w)⊤. (121)
+But before, let us show how ( 119) follows from it. Indeed, recall that πτ(w) = ∑ν∈[t]+πτ,ν(w)2,
+cf. Lemma C.2. Whence from ( 121) and the deﬁnition of Qt(w), cf. (119), we obtain
+∇2Vt(w) − Qt(w) = 2Qt(w) − 2St(w)
+=
+∑
+τ,ν ∈[t]+
+πτ,ν(w)2
+(
+2∇2ℓτ(w) − 2∇ℓτ (w) ∇ℓν(w)⊤
+)
+=
+∑
+τ,ν ∈[t]+
+πτ,ν(w)2
+(
+∇ℓτ(w) − ∇ℓν(w)
+)(
+∇ℓτ(w) − ∇ℓν(w)
+)⊤
+≽ 0,
+the lower bound in ( 119). We obtain the upper bound ∇2Vt(w) ≼ 5Qt(w) in a similar fashion:
+5Qt(w) − ∇2Vt(w) = 2Qt(w) + 2St(w)
+=
+∑
+τ,ν ∈[t]+
+πτ,ν(w)2
+(
+∇ℓτ(w) + ∇ℓν(w)
+)(
+∇ℓτ(w) + ∇ℓν(w)
+)⊤
+≽ 0.
+37
+3o. It remains to verify ( 121). First, direct diﬀerentiation of ( 118) shows that
+∇2Vt(w) = Qt(w) + Rt(w) where Rt(w) := ∑
+τ ∈[t]+
+∇πτ(w)∇ℓτ (w)⊤, (122)
+granted that Rt(w) is symmetric. Thus, to get ( 121) we must show that Rt(w) = 2Qt(w) −2S t(w).
+To this end, observe that, by ( 110), (114), and the product rule,
+∇πτ(w) = λτ(x⊤τw)2 ∇(‖A⊤xτ ‖2H t(w)−1) − 2λτ ‖A⊤xτ ‖2H t(w)−1(x⊤τw)3 xτ
+= λτ
+(x⊤τw)2 ∇
+(
+‖A⊤xτ ‖2H t(w)−1
+)
++ 2πτ(w)∇ℓτ (w). (123)
+Furthermore, by Lemma A.5 and the composition rule,
+∇
+(
+‖A⊤xτ ‖2H t(w)−1
+)
+= −
+∑
+i,j∈[d−1]
+[
+H t(w)−1A⊤xτx⊤τAH t(w)−1
+]
+ij
+∇
+(
+[H t(w)]ij
+)
+(120)
+=
+∑
+ν∈[t]+
+2λν
+(x⊤νw)3
+( ∑
+i,j∈[d−1]
+[
+A⊤xν]i[H t(w)−1A⊤xτx⊤τAH t(w)−1]ij[A⊤xν]j
+)
+xν
+=
+∑
+ν∈[t]+
+2λν
+(x⊤νw)3
+⟨
+A⊤xν,A ⊤xτ
+⟩2
+H t(w)−1
+xν
+= −
+∑
+ν∈[t]+
+2λν
+(x⊤νw)2
+⟨
+A⊤xν,A ⊤xτ
+⟩2
+H t(w)−1
+∇ℓν(w),
+whence
+λτ
+(x⊤τw)2 ∇
+(
+‖A⊤xτ ‖2H t(w)−1
+)
+= −2
+∑
+ν∈[t]+
+λτλν
+⟨
+A⊤∇ℓτ(w),A ⊤∇ℓν(w)⟩2H t(w)−1 ∇ℓν(w)
+= −2
+∑
+ν∈[t]+
+πτ,ν(w)2∇ℓν(w). (124)
+Combining (122)–(124), we verify the identity Rt(w) = 2Qt(w) −2St(w), and hence also (121).
+C.3 Self-concordance of the hybrid barrier
+The following result can be understood as an extension of Corollary A.1 fromLt(·) toPt withµ> 0.
+Proposition C.1. Assume λ /greaterorequalslant 1 and µ> 0, then the restriction P 1t : Rd−1 → R of Pt to Ad, i.e.
+P 1t (v) =Pt(Av +ed),
+cf. (17) and (8)–(10), is 21-self-concordant according to Deﬁnition 1 with domain int(∆d−1), cf. (7).
+Proof. The requirements on the domain are veriﬁed in the same way as in the proof of Corollary A.1.
+Thus, it remains to show that when λ,µ are as in the premise, for any u ∈ Rd andw ∈ ∆d one has
+|∇3Pt(w)[u,u,u ]| ⩽ 42(∇2Pt(w)[u,u ])3/2. (125)
+38
+Indeed, this implies that
+⏐⏐∇3P 1t (v)[u1,u 1,u 1]⏐⏐ ⩽ 42(∇2P 1t (v)[u1,u 1])3/2 for v ∈ ∆d−1,u 1 ∈ Rd−1
+by aﬃne invariance, i.e. since forw =Av+ed andu =Au1 one has ∇2P 1t (v)[u1,u 1] = ∇2Pt(w)[u,u ]
+and ∇3P 1t (v)[u1,u 1,u 1] = ∇3Pt(w)[u,u,u ]. In turn, ( 125) can be derived from the following result.
+Lemma C.5 (Adaptation of [3, Thm. 4.1]). Letw,w ∈ Rd++ be such that δt(w,w) ⩽ 0.1, where
+δt(w,w) = maxτ ∈[t]+
+⏐⏐⏐⏐x⊤τ (w −w)x⊤τw ⏐⏐⏐⏐.
+Then for εt(w,w) = 42δt(w,w)[1−δt(w,w)]4 one has that
+−εt(w,w)∇2Vt(w) ≼ ∇2Vt(w) − ∇2Vt(w) ≼εt(w,w)∇2Vt(w),
+−εt(w,w)∇2Pt(w) ≼ ∇2Pt(w) − ∇2Pt(w) ≼εt(w,w)∇2Pt(w).
+Now, ﬁx u ∈ Rd and note that ∇3Pt(w)[u,u,u ] = limα→0 1α(∇2Pt(w +αu)[u,u ] − ∇2Pt(w)[u,u ]).
+On the other hand, when |α| is small enough we can apply Lemma C.5 tow =w +αu. Indeed:
+δt(w,w +αu) = |α|Mt(u,w ) where Mt(u,w ) := maxτ ∈[t]+
+⏐⏐⏐⏐x⊤τux⊤τw⏐⏐⏐⏐,
+therefore δt(w,w +αu) → 0 when |α| → 0 with ﬁxed u,w . By Lemma C.5 we then conclude that
+|∇3Pt(w)[u,u,u ]| ⩽ limα→0 42δt(w,w +αu)|α| [1 −δt(w,w +αu)]4 ∇2Pt(w)[u,u ] = 42Mt(u,w ) ∇2Pt(w)[u,u ].
+Finally, note that ∇2Pt(w)[u,u ] /greaterorequalslant ∇2Lt(w)[u,u ] /greaterorequalslantMt(u,w )2 min{λ, 1} =Mt(u,w )2 as λ /greaterorequalslant 1.
+Proof of Lemma C.5. Our proof closely follows the one [ 3] while allowing for λ /greaterorequalslant 1 and µ> 0.
+In the remainder of this section, we let δ :=δt(w,w) and also introduce some abbreviated notation:
+ητ :=x⊤τw, ητ :=x⊤τw, π τ :=πτ(w), πτ :=πτ(w), ∇τ := ∇τ(w), ∇τ := ∇τ (w),
+H := H t(w), H := H t(w), Q := Qt(w), Q := Qt(w), S := St(w), S := St(w).
+Lemma C.6. Assuming that δ <1, for any τ ∈ [t]+ the following bounds hold:
+1 −δ ⩽ ητ
+ητ
+⩽ 1 +δ, 1(1 +δ)2 H ≼H ≼ 1(1 −δ)2 H, (126)
+(1 −δ
+1 +δ
+)2
+⩽ πτ
+πτ
+⩽
+(1 +δ
+1 −δ
+)2
+, (1 −δ)2
+(1 +δ)4 Q ≼Q ≼ (1 +δ)2(1 −δ)4 Q. (127)
+Proof. The bounds for η are obvious from the deﬁnition of δ, and immediately imply those for H:
+H =
+∑
+τ ∈[t]+
+λτ
+η2τA⊤xτx⊤τA ≼ 1(1 −δ)2 ∑τ ∈[t]+λτη2τA⊤xτx⊤τA = 1(1 −δ)2 H,
+and similarly for the corresponding lower bound. Furthermo re, (126) implies
+πτ
+πτ
+=
+λτ ‖∇τ ‖2H−1
+λτ ‖∇τ ‖2H −1 =
+‖∇τ ‖2H−1
+‖∇τ ‖2H −1 ⩽ (1 +δ)2 ‖∇τ ‖2H −1‖∇τ ‖2H −1 = (1 +δ)2η2τη2τ ⩽(1 +δ1 −δ)2,
+39
+and similarly for the corresponding lower bound. Finally, f rom the above results we conclude that
+Q =
+∑
+τ ∈[t]+
+πτ
+η2τxτx⊤τ ≼ (1 +δ)2(1 −δ)4 ∑τ ∈[t]+πτη2τxτx⊤τ = (1 +δ)2(1 −δ)4 Q,
+and similarly for the corresponding lower bound.
+1o. Returning to the proof of Lemma C.5, recall that
+∇2Pt(w) − ∇2Pt(w) = ∇2Lt(w) − ∇2Lt(w) +µ[∇2Vt(w) − ∇2Vt(w)],
+and let us consider the two diﬀerences in the right-hand side s eparately. For the ﬁrst diﬀerence we
+observe that ∇2Lt(w) and ∇2Lt(w) satisfy the same relative bounds as H and H in (126), so
+∇2Lt(w) − ∇2Lt(w) ≼
+( 1
+(1 −δ)2 − 1
+)
+∇2Lt(w) ≼ 2δ(1 −δ)4 ∇2Lt(w)
+where we used that 0 ⩽δ ⩽ 1. Similarly,
+∇2Lt(w) − ∇2Lt(w) ≼
+(
+1 − 1(1 +δ)2
+)
+∇2Lt(w) ≼ 3δ(1 −δ)4 ∇2Lt(w).
+Thus, to prove the lemma it suﬃces to show the ﬁrst of the claim ed inequalities, that is
+− 42δ(1 −δ)4 ∇2Vt(w) ≼ ∇2Vt(w) − ∇2Vt(w) ≼ 42δ(1 −δ)4 ∇2Vt(w). (128)
+2o. To this end, we ﬁrst observe that
+∇2Vt(w) − ∇2Vt(w) (121)= 3( Q − Q) + 2(S −S),
+and Lemmas C.6–C.4 already allow us to control the diﬀerence Q − Q, namely:
+Q − Q
+(127)
+≼
+((1 +δ)2
+(1 −δ)4 − 1
+)
+Q = (3δ −δ2)(2 −δ +δ2)(1 −δ)4 Q (a)≼ 6δ(1 −δ)4 Q,
+Q −Q
+(127)
+≼
+(
+1 − (1 −δ)2
+(1 +δ)4
+)
+Q
+(b)
+≼
+((1 +δ)2
+(1 −δ)4 − 1
+)
+Q ≼ 6δ(1 −δ)4 Q.
+(129)
+Here in (a) we used that 0 ⩽ δ < 1, and (b) holds since the function (1+δ)2(1−δ)4 + (1−δ)2(1+δ)4 on [0, 1) is
+minimized at δ = 0. Let us now study the diﬀerence S − S.
+3o. For brevity, we deﬁne Π := Πt(w) and Π := Πt(w). We also deﬁne some auxiliary matrices:
+• matrix X ∈ Rd×(t+d) with xτ in its τ th column;
+• diagonal matrices Λ, D,D, Z ∈ St+d++ with λτ,η τ,ητ, ητητ at τ th diagonal position, respectively.
+40
+As earlier for Πt(w), we use the convention that indexing is over [t]+ in each dimension where the
+size of a matrix ist+d. Finally, let A◦B be the Hadamard (i.e. entrywise) product of two matrices
+with the same dimensions, and let M (2) = M ◦ M. In terms of this matrix notation, we have that
+Q =XD−1 Ψ D−1X ⊤, (130)
+S =XD−1Π(2)D−1X ⊤, (131)
+where Ψ = Diag(Π) is the diagonal matrix with πτ at τ th diagonal position. On the other hand,
+S =X D−1Π(2) D−1X ⊤
+=XD−1Z Π(2)ZD −1X ⊤. (132)
+where in the last step we used that Z =D−1D. In a similar way, Π = D−1Λ1/2X ⊤H −1XΛ1/2D−1
+and Π = D−1Λ1/2X ⊤H−1X Λ1/2D−1= ZD −1Λ1/2X ⊤H−1XΛ1/2D−1Z, whence by (126) we get
+(1 −δ)2ZΠZ ≼ Π ≼ (1 +δ)2ZΠZ. (133)
+Since Z is diagonal, ( ZΠZ)(2) = Z2Π(2)Z2. Moreover: by the Schur product theorem [ 4], for two
+symmetric matrices A, B such that A ≽ B ≽ 0, one has A(2)−B(2) = A◦(A−B)+(A−B)◦B ≽ 0.
+In combination with ( 133), these two facts imply
+(1 −δ)4Z 2Π(2)Z2 ≼ Π(2) ≼ (1 +δ)4Z2Π(2)Z2.
+Whence by (132) we conclude that
+(1 −δ)4XD−1Z 3Π(2)Z3D−1X ⊤≼ S ≼ (1 +δ)4XD−1Z 3Π(2)Z3D−1X ⊤. (134)
+We are now going to use identities ( 130)–(131) and inequality (134) to bound S − S in terms of Q.
+4o. Deﬁning J := Ψ−1/2Π(2)Ψ−1/2 and U :=XD−1Ψ1/2 we rewrite (130), (131), (134):
+Q =UU ⊤, S =U JU ⊤,
+(1 −δ)4U Z 3J Z3U ⊤ ≼ S ≼ (1 +δ)4U Z3JZ 3U ⊤. (135)
+We are now going to bound M 1 := (1 +δ)4Z3JZ 3 − J and M 2 := J − (1 −δ)4Z 3J Z3 from above.
+Since Ψ, Z commute as diagonal matrices, and by similarity, M 1 has the same eigenvalues as
+Ψ−1/2M 1Ψ1/2 = Ψ−1
+(
+(1 +δ)4Z 3Π(2)Z 3 − Π(2)
+)
+.
+The entries of the latter matrix are given by
+[Ψ−1/2M 1Ψ1/2]τ,ν = π2τ,νπτ ((1 +δ)4z3τz3ν − 1) (136)
+wherezτ = ητητ is theτ th diagonal entry of Z. By the Gershgorin circle theorem [19], each eigenvalue
+of the matrix Ψ−1/2M 1Ψ1/2—and hence also of M 1—belongs to at least one of the segments
+[
+[Ψ−1/2M 1Ψ1/2]τ,τ −rτ, [Ψ−1/2M 1Ψ1/2]τ,τ +rτ
+]
+with rτ :=
+∑
+ν⁄=τ
+⏐⏐[Ψ−1/2M 1Ψ1/2]τ,ν⏐⏐, τ ∈ [t]+.
+41
+Whence by (136), (126):
+M 1 ≼ maxτ ∈[t]+
+
+
+
+1
+πτ
+∑
+ν∈[t]+
+π2τ,ν
+
+
+
+((1 +δ)4
+(1 −δ)6 − 1
+)
+I
+(116)
+≼
+((1 +δ)4
+(1 −δ)6 − 1
+)
+I.
+Proceeding with M 2 in a similar fashion as we did with M 1, we get
+M 2 ≼
+(
+1 − (1 −δ)4
+(1 +δ)6
+)
+I ≼
+((1 +δ)4
+(1 −δ)6 − 1
+)
+I.
+(The second step uses that the function (1+δ)4(1−δ)6 + (1−δ)4(1+δ)6 increases on [0, 1).) Finally, observe that
+(1 +δ)4
+(1 −δ)6 − 1 = 4δ(1 +δ)2(1 −δ)6 + (1 +δ)2(1 −δ)4 − 1 ⩽ δ(1 −δ)4(4(1 +δ1 −δ)2 + 6) ⩽ 12δ(1 −δ)4
+where the ﬁrst estimate repeats ( 129.a), and the second uses that ( 1+δ1−δ )2 < 1.5 for 0 ⩽ δ ⩽ 0.1.
+Plugging this estimate into ( 135) results in
+− 12δ(1 −δ)4 Q ≼ S −S ≼ 12δ(1 −δ)4 Q.
+Joining this with (128), (129), and the bound Q ≼ ∇2Vt(w), cf. (119), we get (128), as required.
+Remark C.2. The constant factor 42 in Lemma C.5 can be improved to 30, exactly recovering
+the result in [ 3], through a somewhat more delicate argument following [ 3], where one separately
+bounds Qt(w) − Qt(w) and Rt(w) − Rt(w) for R(w) = ∇2Vt(w) − Qt(w) = 2Qt(w) − 2St(w). Here
+we avoided this, as it would burden the proof with linear alge bra and obscure the high-level picture.
+D Stability lemma for Algorithm 1
+We are now about to prove Lemma4.1 about the stability of approximation of the updates according
+to (VB-FTRL) by those corresponding to ( VB-FTRL-qN). For convenience, let us repeat it here.
+Lemma D.1. Letλ,µ,S be as in the premise of Theorem 4.1. Then for all t ∈ {0} ∪ [T ], one has
+‖~wt −wt‖∇2Lt(wt) ⩽ min
+{
+(T +d + 1)−2, 10−4(1 + 3µ)−1/2
+}
+. (137)
+Proof. Letvt :=A+(wt −ed), ~vt :=A+(~wt −ed), andv(s)t :=A+(w(s)t −ed) for allt ∈ [T ] ands ∈ [S].
+We proceed by induction overt ∈ [T ]. The base is obvious: ~w0 =w0. For the induction step, assume
+that (78) holds for some 0 ⩽t ⩽T − 1. By Proposition C.1 and Lemma A.6,
+√
+21P 1t (·) is a 1-self-
+concordant function minimized at vt+1. On the other hand, since function P 1t (·) deﬁned in ( 54)
+satisﬁes ∇P 1t (vt) = ∇P 1t (vt) and ∇2P 1t (vt) ≼ ∇2P 1t (vt), we estimate Decrt :=‖‖∇P 1t (vt)‖‖∇2P 1t (vt)−1
+in the same way in the proof of Theorem 2.1, except for using a stronger condition on λ,µ in (77):
+√
+21Decr2t ⩽ √21Decr2t (73)⩽ √21λ (1 + 2µλ)2 (77)⩽ √21556 < 1121. (138)
+42
+Since
+√
+21Decr2t is the squared Newton decrement of √21P 1t at vt, by Lemmas A.7–A.8 we get
+ω
+(
+211/4‖wt −wt+1‖∇2Pt(wt+1)
+) (11)
+= ω
+(
+211/4‖vt −vt+1‖∇2P 1t (vt+1)
+)
+⩽ψ
+(
+211/4Decrt
+)
+in terms of ω,ψ deﬁned in (83). By monotonicity of these two functions, using ( 138) we arrive at
+211/4‖wt −wt+1‖∇2Pt(wt+1) ⩽ω−1(ψ( 111))< 0.097,
+and then by Lemma A.9 (very concervatively):
+∇2Pt(wt+1) ≼ 4∇2Pt(wt).
+Now, observe that ∇2Pt(w) ≼ ∇2Lt(w) + 3µQt(w) ≼ (1 + 3µ)∇2Lt(w), the last step being due
+to λ /greaterorequalslant 1 and πτ(wτ) ⩽ 1 by Lemma C.1. Combining this with the previous two inequalities gives
+211/4‖~wt −wt+1‖∇2Pt(wt+1) ⩽ 211/4(‖wt −wt+1‖∇2Pt(wt+1) + 2‖~wt −wt‖∇2Pt(wt))
+< 0.097 + 4.3
+√
+1 + 3µ ‖~wt −wt‖∇2Lt(wt)
+(78)
+< 0.098.
+(In the last step we used the induction hypothesis.) Now, let ~Decrt := ‖‖∇P 1t (~vt)‖‖∇2P 1t (~vt)−1, so
+that 211/4~Decrt is the Newton decrement of √21P 1t at~vt. By Lemmas A.7–A.8 and (11) we get
+211/4~Decrt ⩽ω−1
+(
+ψ
+(
+211/4‖~wt −wt+1‖∇2Pt(wt+1)
+))
+⩽ω−1(ψ(0.098))< 19. (139)
+We are now in the situation of Corollary A.2 with f ≡
+√
+21P 1t , z⋆ = vt+1, z0 = ~vt, zS = ~vt+1,
+and c = 13, cf. (76); in particular, ‖∇f(z0)‖∇2f (z0)−1 < c3 holds by (139). Whence by Corollary A.2:
+211/4‖~wt+1 −wt+1‖∇2Pt(wt+1) (77)⩽ min{(T +d + 1)−2, 10−4(1 + 3µ)−1/2}.
+It remains to combine this result with the observation that, due to Lemma A.3, for any w ∈ ∆d
+∇2Lt+1(w) ≼ ∇2Lt(w) + ∇2R(w) ≼(1 + 1λ)Lt(w) ≼(1 + 1λ) ∇2Pt(w),
+and use that (1 + 1λ) (77)⩽ (1 + 12e)< 21−1/4.
+E Discussion: alleged ~O(d2) bottleneck for ONS-derived algorithms
+Here, we demonstrate why ~O(d2) seems to be the fundamental limit for the regret of “ONS-derived”
+algorithms (e.g. [30, 50, 35]) in online portfolio selection.3 We mainly focus on Ada-BARRONS [30],
+but this disussion seems to be relevant to other algorithms c ombining ONS with log-barrier penal-
+ties.
+3The work [ 18], most recent in this avenue, is no exception. They attain ~O(dL2 + max(L, 1)(d + L√d)) regret for 1-
+exponentially concave and L-Lipschitz losses on a convex domain W contained in the unit ℓ2-ball [ 18, Lem. 6]. When
+applied to portfolios this gives a regret bound of order d2, as in this case L = sup x∈Rd,w∈∆d ‖x‖2|⟨x, w⟩|−1 = √d.
+43
+Following Online Newton Step (ONS) itself [ 21], the algorithms derived from it approximate
+the Hessian of ∑τ ∈[t]ℓτ(w) at w = wt with a constant matrix At :=∑τ ∈[t] ˆ∇τ ˆ∇τ ⊤ where ˆ∇τ :=
+∇ℓτ(wτ). In the case of ONS, the update at round t is
+wt+1 :=wt − 1β (At +εI)−1 ˆ∇t (140)
+where β is the inverse stepsize parameter ( ε > 0 is nonessential, entering the regret under the
+logarithm). The analysis of [ 21] leads to the regret O( 1βd log(T )) against any CRP w ∈ ∆d for
+which
+β /greaterorsimilarαt(w) := minτ ∈[t]
+1
+|⟨ ˆ∇τ,w −wτ ⟩| = minτ ∈[t]
+⟨xτ,w τ ⟩
+|⟨xτ,w τ −w⟩|, for t ∈ [T ]. (141)
+Then, [21] gets an O(G∞d log(T )) regret under the gradient Lipschitzness assumption ˆ∇t ⩽ G∞,
+simply by bounding inf w∈∆dαT (w) /greaterorsimilar 1/G∞. To obtain an aﬃne-invariant bound, [ 30] aug-
+ments (140) with a (time-variable) weighted log-barrier regularizer
+λRt(w) :=
+∑
+j∈[d]
+λt[j] log
+( 1
+w[j]
+)
+with λt[j] :=λ
+(
+d min
+τ ∈[t]
+wτ[j]
+)1/log(T )
+. (142)
+Speciﬁcally, [30, Theorem 1] bounds the regret against any comparator w ∈ ∆ satisfying (141) with
+c1λd log(T ) +c2βd log(T ) − c3log(T )λ∑j∈[d] maxt∈[T ] w[j]wt[j] (143)
+where the ﬁrst term has the same genesis as our LogBiasT , and the second term is the ONS regret.
+As for the ﬁnal (negative) term, its full derivation is rathe r technical (cf. the proof of Lemma 7
+in [30, p. 7]) and we will not reproduce it here; however, let us give some intuition behind it.
+a. Observe that the regret must include∑t∈[T ]λRt−1(wt)−λRt(wt), a counterpart of∑t∈[T ] Gaint
+in the VB-FTRL analysis: indeed, such a term appears in the regret of FTRL wi th any
+time-variable regularizer. For VB-FTRL, Gaint = µVt−1(wt) − µVt(wt) itself is negative,
+as det(H t(w)) increases int. However, this is not the case for the regularizer (142), sinceλt[j]
+decreases in t. Instead, negative terms are obtained by joining ∑t∈[T ]λRt−1(wt) −λRt(wt)
+with other terms.
+b. Namely, exp-concavity (following [ 21]) and the standard telescoping for mirror descent (the
+proof of Lemma 5 in [ 30, p. 13]) allows to “bring over” the comparator and, instead o f
+bounding λRt−1(wt) −λRt(wt), focus on bounding the diﬀerence of the Bregman divergences :
+DλRt(w,w t) −DλRt−1(w,w t−1) =
+∑
+j∈[d]
+(λt[j] −λt−1[j])
+(w[j]
+wt[j] − log
+(w[j]
+wt[j]
+)
+− 1
+)
+.
+Note that Rt and Rt−1 conveniently switched their positions here, and the above d iﬀerence
+is negative (indeed, λt[j] > λt−1[j] and the last factor is clearly positive). Observe also that
+the right-hand side explains the origin of the ratio w[j]/wt[j] in (143): it appears due to the
+gradient term λ⟨∇Rt(wt) − ∇Rt−1(wt),w t −w⟩, along with the fact that log( z)′ = 1/z.
+44
+c. Furthermore, the fact that this ratio is maximized overt ∈ [T ] in (143) has a simple intuitive
+explanation: the algorithm increases the learning rate for stock j (i.e. λt[j] < λt−1[j]) when
+the weight of the stock decreases ( wt[j] < wt−1[j]), which can be interpreted as hedging
+against this decision by more thoroughly exploring a “curio us” stock (cf. ( 142)). This rule
+turns out to be ﬂexible enough for the resulting strategy to successfully ”track” the adversary,
+and beneﬁt from the largest ratio maxt∈[T ] w[j]wt[j] over the trajectory. Inspection of the analysis
+in (142) [30, p. 7] suggests that the negative term in ( 143) cannot be improved with a barrier
+of the form ( 142), even with some other scheme for tuning λt[j].
+d. Finally, Ada-BARRONS [30] is a combination of the scheme described above—i.e. ONS wit h
+a time-variable log-barrier type regularizer ( 143)—with an Armijo-type routine for tuning β.
+This routine allows to ensure that the ONS stepsize condition in (141) is satisﬁed forw =wt+1,
+then also that β ≈αT (w∗T ) for the in-hindsight best CRP w∗T .
+Combining (141) and (143) gives the regret bound for Ada-BARRONS (see also [ 30, p. 4])
+c1λd log(T ) +c2d log(T )
+
+1 + max
+t∈[T ]
+∑
+j∈[d]
+w[j]
+wt[j]
+
+ −c3 λlog(T ) ∑j∈[d] maxt∈[T ] w[j]wt[j].
+To cancel out the second term, one must choose λ =cd log2(T ), and the resulting regret is ~O(d2).
+Geometric view of the ONS stepsize condition (141). It appears that condition ( 141) is
+essential for ONS to admit any nontrivial regret bound, not just techni cal. Indeed, it is equivalent
+to 1
+β maxτ ∈[t] ‖∇ℓτ (w) − ˆ∇τ ‖( ˆ∇τ ˆ∇τ +εI)−1 ≲ 1,
+i.e. thatw is in the O(β)-radius Dikin ellipsoid of each loss ℓτ, centered atwτ. By self-concordance
+and in view of ( 140), the above condition guarantees that At ≈ ∑τ ∈[t] ∇2ℓτ(wt+1) up to a con-
+stant factor – in other words, the quasi-Newton update is don e according to the local geometry
+of ∑τ ∈[t]ℓτ. In the absense of this property, any aﬃne-invariant regret guarantee seems to be
+extremely unlikely.
+References
+[1] Amit Agarwal, Elad Hazan, Satyen Kale, and Robert E. Scha pire. Algorithms for portfolio
+management based on the Newton method. InProceedings of the 23rd International Conference
+on Machine learning , pages 9–16. PMLR, 2006.
+[2] Kurt M. Anstreicher. Large step volumetric potential re duction algorithms for linear program-
+ming. Annals of Operations Research , 62(1):521–538, 1996.
+[3] Kurt M. Anstreicher. Volumetric path following algorit hms for linear programming. Mathe-
+matical Programming, 76(1):245–263, 1997.
+[4] Ravindra B. Bapat and T. E. S. Raghavan. Nonnegative matrices and applications. Cambridge
+University Press, 1997.
+45
+[5] Pierre C. Bellec. Optimal exponential bounds for aggreg ation of density estimators. Bernoulli,
+23(1):219–248, 2017.
+[6] Pierre C. Bellec. Optimal bounds for aggregation of aﬃne estimators. The Annals of Statistics ,
+46(1):30–59, 2018.
+[7] Avrim Blum and Adam Kalai. Universal portfolios with and without transaction costs. Ma-
+chine Learning, 35(3):193–205, 1999.
+[8] Stephen P. Boyd and Lieven Vandenberghe. Convex optimization. Cambridge University Press,
+2004.
+[9] Nicolas Brosse, Alain Durmus, ´Eric Moulines, and Marcelo Pereyra. Sampling from a log-
+concave distribution with compact support with proximal La ngevin Monte Carlo. In Proceed-
+ings of the 30th Conference On Learning Theory , pages 319–342. PMLR, 2017.
+[10] S´ ebastien Bubeck, Ronen Eldan, and Joseph Lehec. Sampling from a log-concave distribution
+with projected Langevin Monte Carlo. Discrete & Computational Geometry , 59(4):757–783,
+2018.
+[11] Nicol` o Cesa-Bianchi and G´ abor Lugosi.Prediction, Learning, and Games . Cambridge Univer-
+sity Press, 2006.
+[12] Thomas M. Cover. Universal portfolios. Mathematical Finance, 1(1):1–29, 1991.
+[13] Thomas M. Cover. Elements of information theory . John Wiley & Sons, 1999.
+[14] Thomas M. Cover and Erik Ordentlich. Universal portfol ios with side information. IEEE
+Transactions on Information Theory , 42(2):348–363, 1996.
+[15] Arnak S. Dalalyan and Joseph Salmon. Sharp oracle inequ alities for aggregation of aﬃne
+estimators. The Annals of Statistics , 40(4):2327–2355, 2012.
+[16] Arnak S. Dalalyan and Alexandre B. Tsybakov. Aggregati on by exponential weighting, sharp
+PAC-Bayesian bounds and sparsity. Machine Learning, 72(1):39–61, 2008.
+[17] Raaz Dwivedi, Yuansi Chen, Martin J. Wainwright, and Bi n Yu. Log-concave sampling:
+Metropolis-Hastings algorithms are fast! In Proceedings of the 31st Conference On Learn-
+ing Theory, pages 793–797. PMLR, 2018.
+[18] Khashayar Gatmiry and Zakaria Mhammedi. Projection-f ree online convex optimization via
+eﬃcient Newton iterations. Advances in Neural Information Processing Systems , 36, 2024.
+[19] Gene H. Golub and Charles F. Van Loan. Matrix computations. JHU Press, 2013.
+[20] Elad Hazan. Introduction to online convex optimizatio n. Foundations and Trends ® in Opti-
+mization, 2(3-4):157–325, 2016.
+[21] Elad Hazan, Amit Agarwal, and Satyen Kale. Logarithmic regret algorithms for online convex
+optimization. Machine Learning, 69(2):169–192, 2007.
+46
+[22] David P. Helmbold, Robert E. Schapire, Yoram Singer, an d Manfred K. Warmuth. On-line
+portfolio selection using multiplicative updates. Mathematical Finance, 8(4):325–347, 1998.
+[23] Adam T. Kalai and Santosh Vempala. Eﬃcient algorithms f or universal portfolios. Journal of
+Machine Learning Research, pages 423–440, 2002.
+[24] John L. Kelly. A new interpretation of information rate . The Bell System Technical Journal ,
+35(4):917–926, 1956.
+[25] Leonid G. Khachiyan. A polynomial algorithm in linear p rogramming. In Doklady Akademii
+Nauk, volume 244, pages 1093–1096. Russian Academy of Sciences, 1979.
+[26] Jyrki Kivinen and Manfred K. Warmuth. Exponentiated gr adient versus gradient descent for
+linear predictors. Information and Computation , 132(1):1–63, 1997.
+[27] Gilbert Leung and Andrew R. Barron. Information theory and mixing least-squares regressions.
+IEEE Transactions on Information Theory , 52(8):3396–3410, 2006.
+[28] Bin Li and Steven C. H. Hoi. Online portfolio selection: A survey. ACM Computing Surveys
+(CSUR), 46(3):1–36, 2014.
+[29] Bin Li and Steven C. H. Hoi. Online portfolio selection: Principles and algorithms . CRC Press,
+2018.
+[30] Haipeng Luo, Chen-Yu Wei, and Kai Zheng. Eﬃcient online portfolio with logarithmic regret.
+In Proceedings of the 33rd international Conference on Neural In formation Processing Systems,
+volume 31, pages 8245–8255, 2018.
+[31] Leonard C. MacLean, Edward O. Thorp, and William T. Ziem ba. The Kelly capital growth
+investment criterion: Theory and practice , volume 3. World Scientiﬁc, 2011.
+[32] Harry M. Markowitz. Portfolio selection. The Journal of Finance , 7(1):77–91, 1952.
+[33] Harry M. Markowitz. Foundations of portfolio theory. The Journal of Finance , 46(2):469–477,
+1991.
+[34] Ulysse Marteau-Ferey, Francis Bach, and Alessandro Ru di. Globally convergent newton meth-
+ods for ill-conditioned generalized self-concordant loss es. Advances in Neural Information
+Processing Systems, 32, 2019.
+[35] Zakaria Mhammedi and Alexander Rakhlin. Damped online Newton step for portfolio selection.
+arXiv preprint arXiv:2202.07574 , 2022.
+[36] Hariharan Narayanan and Alexander Rakhlin. Eﬃcient sa mpling from time-varying log-
+concave distributions. The Journal of Machine Learning Research , 18(1):4017–4045, 2017.
+[37] Arkadii S. Nemirovskii and David B. Yudin. Problem comp lexity and method eﬃciency in
+optimization. 1983.
+[38] Yurii Nesterov. Introductory lectures on convex optimization: A basic cours e, volume 87.
+Springer Science & Business Media, 2003.
+47
+[39] Yurii Nesterov and Arkadii S. Nemirovskii. Interior-point polynomial algorithms in convex
+programming. SIAM, 1994.
+[40] Laurent Orseau, Tor Lattimore, and Shane Legg. Soft-Ba yes: Prod for mixtures of experts
+with log-loss. In International Conference on Algorithmic Learning Theory , pages 372–399.
+PMLR, 2017.
+[41] Dmitrii M. Ostrovskii and Francis Bach. Finite-sample analysis of M-estimators using self-
+concordance. Electronic Journal of Statistics , 15(1):326–391, 2021.
+[42] Quentin Paris. Online learning with exponential weigh ts in metric spaces. arXiv preprint
+arXiv:2103.14389, 2021.
+[43] Philippe Rigollet and Alexandre B. Tsybakov. Sparse es timation by exponential weighting.
+Statistical Science, 27(4):558–575, 2012.
+[44] Mark Rubinstein. Markowitz’s “portfolio selection:” a ﬁfty-year retrospective. The Journal
+of Finance, 57(3):1041–1045, 2002.
+[45] Naum Z. Shor and Nikolay G. Zhurbenko. A minimization me thod using the operation of
+extension of the space in the direction of the diﬀerence of twosuccessive gradients. Cybernetics,
+7(3):450–459, 1971.
+[46] Pravin M. Vaidya. A new algorithm for minimizing convex functions over convex sets. In 30th
+Annual Symposium on Foundations of Computer Science , pages 338–343. IEEE Computer
+Society, 1989.
+[47] Tim Van Erven, Dirk Van der Hoeven, Wojciech Kot/suppress lowski , and Wouter M. Koolen. Open
+problem: Fast and optimal online portfolio selection. In Proceedings of the 33rd Conference
+On Learning Theory , pages 3864–3869. PMLR, 2020.
+[48] Ramon van Handel. Probability in High Dimension: Lecture Notes . Princeton University, 2016.
+[49] Keru Wu, Scott Schmidler, and Yuansi Chen. Minimax mixing time of the Metropolis-adjusted
+Langevin algorithm for log-concave sampling. arXiv preprint arXiv:2109.13055 , 2021.
+[50] Julian Zimmert, Naman Agarwal, and Satyen Kale. Pushin g the eﬃciency-regret Pareto fron-
+tier for online learning of portfolios and quantum states. arXiv preprint arXiv:2202.02765 ,
+2022.
+[51] Martin Zinkevich. Online convex programming and gener alized inﬁnitesimal gradient ascent.
+In Proceedings of the 20th International Conference on Machine L earning, pages 928–936, 2003.
+48

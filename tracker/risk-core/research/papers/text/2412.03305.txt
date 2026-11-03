@@ -1,0 +1,590 @@
+arXiv 2412.03305  https://arxiv.org/abs/2412.03305
+
+Turnover of investment portfolio via covariance matrix of returns ∗.
+A.V. Kuliga, I.N. Shnurnikov
+Sirius University of Science and Technology,
+Olimpiyskiy ave. b.1, Sirius, Krasnodar region, Russia, 354340.
+Abstract
+An investment portfolio consists ofn algorithmic trading strategies, which generate vectors of po-
+sitions in trading assets. Sign opposite trades (buy/sell) cross each other as strategies are combined
+in a portfolio. Then portfolio turnover becomes a non linear function of strategies turnover. It rises
+a problem of effective (quick and precise) portfolio turnover estimation. Kakushadze and Liew (2014)
+shows how to estimate turnover via covariance matrix of returns. We build a mathematical model for
+such estimations; prove a theorem which gives a necessary condition for model applicability; suggest new
+turnover estimations; check numerically the preciseness of turnover estimations for algorithmic strategies
+on USA equity market.
+Key words: algorithmic trading strategies, alphas, covariance matrix of returns, turnover estima-
+tions, crossing of trades.
+1 Introduction
+Ourworkdealswithturnoverofaninvestmentportfolio, whichisbuildof nalgorithmictradingstrategies.
+Worked out model may be applied to various strategies, including hedge funds ones. Algorithmic trading
+in hedge funds is thoroughly discussed in books of Chan [1], Tulchinsky et al. [2]. One may find examples
+of strategies and ideas for their research in the Kakushadze and Serur’s book [3], Kakushadze’s article
+[4] and in the section 3.
+We investigate the following practical problem: how to estimate portfolio turnover while sign opposite
+trades cross, see example 1 below. There are such estimations (Kakushadze and Liew [5], Kakushadze
+[6, 7]) via weights and turnovers of strategies and empirical covariance matrix of their returns. This
+matrix is commonly used e.g. for determining portfolio quadratical risk and for portfolio optimization.
+We built the mathematical model for the turnover estimates and find the necessary condition of their
+correctness.
+The remaining part of the article is organised as following. In the introduction below we discuss
+hedge funds, define crossing of trades, set a task and show its applicability, enumerate known turnover
+estimates and results of the paper. In the section 2 we build the mathematical model for portfolio
+turnover, formulate and prove theoretical results, claim practical estimations for portfolio turnover. In
+the section 3 we describe experiments, define numerical characteristics of trading strategies and «metrics»
+for turnover estimates. We conclude with the section 4 discussing theoretical and practical applications
+of the work.
+1.1 Hedge fund industry and definitions.
+Definition 1. A hedge fund uses complex methods of liquid assets management and risk control for
+achieving good returns/risk values and for protection against market risk.
+∗This work was supported by the grant of the state program of the «Sirius» Federal Territory «Scientific and technological
+development of the «Sirius» Federal Territory» (Agreement №18-03 date 10.09.2024).
+1
+arXiv:2412.03305v1  [q-fin.PM]  4 Dec 2024
+E.g. long and short positions on the equity market hedge each other, as well as assets and options on
+them do. First hedge fund was founded by A. W. Jones in 1949. There are1 about 15000 hedge funds in
+the world, having in common about$4.5 trillions assets under management (AUM). Biggest hedge funds
+allocate tens of billions dollars for algorithmic trading strategies2. One may build algorithmic strategies
+on equity and cryptocurrencies markets, options and futures. As we know, algorithmic trading hedge
+funds have the following divisions.
+• Quantitative researchers, from couples to several hundreds of ones, seek out and test algorithmic
+trading strategies based on market inefficiencies.
+• Portfolio managers build portfolios from strategies, using optimization methods. One may use
+returns/risk ratios (Markowitz type), risk budgeting method and so on3.
+• Head division allocates capital among portfolio managers. Here are used models with transaction
+costs and market impact as well as discretionary decisions.
+• Execution division may use non trivial mathematical modelling for finding better market execution.
+• Other divisions (data collection and processing and so on).
+Definition 2. Algorithmic trading strategy (known in hedge funds and referred to below asalpha) is a
+program, which generates vectors of assets positions to be taken by predefined moments of time.
+Definition 3. Portfolio is a linear combination ofn alphas, the coefficients of which we will callweights.
+Definition 4. Moment turnover of an alpha (or portfolio) isl1 norm of difference of position vectors,
+which are calculated at consecutive time moments. In other words, moment turnover is a sum over all
+assets absolute values of position differences on the asset4. Alpha and portfolio moment turnover is not
+constant in time. Later on we will consider time–averaged moment turnover and refer to it simply as
+turnover.5
+Definition 5. Return of the i–th alpha we will consider as a random variableαi, for which we have
+samples based on historical data, and a new value is added after each time interval.
+These definitions are quite general, enough for our work applications. In practice there are additional
+restrictions on time moments, delay between calculations of positions and their realization, properties of
+position vectors and market execution procedure. E.g. one use dollar neutrality condition, which means
+that sum of positions for all assets is 0. Alpha numerical characteristics may be found in subsection 3.2.
+1.2 Crossing of trades.
+Key ingredient is the following assumption on the alpha execution.Trades of opposite signs (buys/sells)
+ofanassetcrosseachotherwhenalphasarecombinedinaportfolio. Crossingoftradesreducetransaction
+costs, market impact and so on.
+Example 1. Let us take 4 tickers: SBER, VTBR, TCSG and POSI. Let yesterday money (e.g. in
+thousands roubles) positions of alphas 1 and 2 be (0, 500, -200, -300) and (250, -400, 250, -100) corre-
+spondingly, where negative number means short position on an asset. So alpha 1 shorts some papers of
+POSI on 3006 th.r. Let today money positions of alphas be (100, 100, 300, -500) and (200, -300, 300,
+1by January 2024, https://investingintheweb.com/blog/largest-hedge-funds-aum/
+2E.g. Renaissance Technologies, Two Sigma Investments and D. E. Shaw have about$106, $67.4 and $45.7 billions AUM
+correspondingly. Man Group (30.06.2024), Millennium Management and Citadel have about$178.2, $57.6 and $51.5 billions
+AUM correspondingly, but allocate part of it for algorithmic trading strategies.
+3there are plenty of literature devoted to portfolio optimization, let’s refer to [8, 9, 10] only.
+4see subsection 3.2 for turnover formula.
+5in practice alpha (or portfolio) turnover is time–averaged moment turnover, divided by average alpha (or portfolio) capital.
+We assume that alpha capital is constant, portfolio capital is constant as there is no netting. Then we may omit dividing by
+capital for simplification.
+6we neglect the fact that number of papers is integer and we could only approximately achieve required positions
+2
+-200) correspondingly. To achieve today positions alpha 1 needs to buy SBER for 100 th.r., sell VTBR
+for 400 th.r., buy TCSG for 500 th.r. and sell POSI for 200 th.r. Alpha 2 needs to sell SBER for 50 th.r.,
+buy VTBR for 100 th.r., buy TCSG for 50 th.r. and sell POSI for 100 th.r. So daily turnover of alphas
+will be 1200 and 300 th.r. correspondingly. A portfolio is a sum of alphas 1 and 2, weights are equal to
+1. If alphas are executed separately, then total exchange orders will be of 1500 th.r. While execution
+with crossing of trades will be of 1200 th.r., needing to buy SBER for 50 th.r., sell VTBR for 300 th.r.,
+buy TCSG for 550 th.r. sell POSI for 300 th.r. So crossing of trades reduces exchange orders from 1500
+to 1200 th.r. and hence reduce transaction costs and so on.
+Let us note that sign oppositepositions do not reduce each other (reducing of positions is commonly
+called netting). This means that every alpha is provided with some capital and it doesn’t change until
+the next portfolio rebalance.
+1.3 Setting and relevance of the problem.
+Let us point out two facts.
+1. Due to crossing of sign opposite trades portfolio turnover is less7 than linear combination of alpha
+turnovers with the same weights.
+2. Exact calculation of turnover is possible but too long8 for building portfolios via optimization
+methods.
+Practical problem. Find an approximation (estimation) for portfolio turnover in terms of alphas
+weights and turnovers and any other available alpha data.
+E.g. sample covariance matrix of returns was used in articles [5, 6, 7] as additional data. Alpha
+weights usually are the solutions of an optimization problem (e.g. returns maximization for fixed risk).
+Turnover estimations could be applied in hedge funds, where the following conditions hold.
+1. Portfolio is built ofn alphas, which take positions ons assets.
+2. Sign opposite trades of an asset cross each other when corresponding alphas are combined in a
+portfolio.
+3. Portfolio returns take into account transaction costs, market impact and so on, which depend on
+portfolio turnover.
+4. Alpha weights calculation uses portfolio returns (e.g. as optimized function).
+Portfolio turnover estimations are used in [11, 12, 13]. These articles show how to build optimal
+portfolios of huge number of alphas (hundreds of thousands). Sample covariance matrix becomes generate
+because its rank is not more than the number of observations, which is of order thousands usually. So
+one replace the covariance matrix by «similar» non generate one, as in [14] or with risk factors for alphas
+as in [11, 12, 13].
+In [11] one maximizes portfolio Sharpe ratio9 with linear costs and non linear market impact. There
+was built an algorithm, which give an exact solution by finite time.
+In [12] one maximizes portfolio returns under a constraint on the Sharpe ratio. By using a factor
+model for the covariance matrix the original optimization problem was reduced to a finite set of problems
+of finding zeroes of the line defined functions.
+In [13] were obtained alpha risk factors. Optimization of the Sharpe ratio for small deformed sample
+covariance matrix is reduced to the problem of weighted regression with respect to principal components.
+7theoretically «not more than», but always less in practice.
+8for hundreds or thousands of assets for crypto or equity markets correspondingly.
+9formula may be found in subsection 3.2
+3
+1.4 Empirical estimations of portfolio turnover.
+Articles [5, 6, 7] are key to our work, as they investigate the portfolio turnover provided crossing of sign
+opposite trades of different alphas. Let us introduce the following notations.
+• xi and τi — weight and turnover of thei-th alpha, wherei = 1, . . . , n.
+• Ψ — n × n covariance matrix of alpha returns.
+• ψ(p) and V (p) = V (p)1 , . . . , V(p)n  — eigenvalues and orthonormal eigenvectors of the matrixΨ
+correspondingly.
+• ρ = Ψ12 — correlation of two alphas returns.
+Kakushadze and Liew, [5, (4)].Estimation for two alphas portfolio turnover,x1 > 0, x2 > 0:
+T∗ = 1 + ρ2 (τ1x1 + τ2x2) + 1 − ρ2 |τ1x1 − τ2x2|. (1.1)
+Also in [5] a turnover limit forn → ∞was found by multiple using of (1.1). If all alpha weights and
+turnovers and pairwise correlations of returns are equal to each other and are equal to 1n, τ and ρ
+correspondingly, then the portfolio turnover limit is equal toτ ρ.
+Kakushadze, [6, (25)].Turnover estimation forn alphas portfolio.
+T∗ = 1√n nXp=1 ψ(p)  nXi=1 V (p)i τi|xi| . (1.2)
+Let us note, that (1.1) is a special case of the estimation (1.2). Also in [6] approximate formulas [6,
+(31),(33),(34)] were obtained for portfolio turnover provided n → ∞and some conditions on alpha
+weights and turnovers and covariance matrix of returns. In [7] Kakushadze suggests that alpha returns
+contain F risk factors. Then covariance matrix of returns could be approximated using covariance matrix
+of risk factors, relationships between risk factors, alpha returns and specific alpha risks. Then one use
+[6] formulas for approximated matrix to deduce asymptotic estimations for portfolio turnover.
+1.5 New results.
+• We build a mathematical model for portfolio turnover estimations which depend on the covariance
+matrix of alpha returns, see section 2.1.
+• Main theorem 1 is proved.
+• We obtain a correctness condition 1 for applying portfolio turnover estimations, which depend on
+the covariance matrix of alpha returns.
+• New portfolio turnover estimations are proposed, see formulas (2.4).
+• Numerical experiments are carried out to check exactness and compare turnover estimations, see
+section 3.
+2 Portfolio turnover model.
+2.1 Mathematical model.
+Definition 6. Let us call n–dimensional (n ≥ 2) random vector α = ( α1, . . . , αn) on the probability
+space (Ω, F , P) admissible, it the varianceDαi = 1 for all i = 1, . . . , nand non-zero linear combination
+of vector components cannot be equal to a constant almost surely.
+4
+We may assume that the returns ofn alphas form an admissible vector. Indeed, one may achieve
+Dαi = 1 by dividing the position vector of thei-th alpha by√Dαi. For dollar-neutral alphas with delay
+1 the return (holding pnl) is equal to the scalar product of the position vector and the vector of asset
+returns for the previous trading interval, see formula (3.1).
+Linear independence with a constant means that the alpha returns are linear independent and their
+linear combinations cannot yield non-zero risk-free profit (it follows from market no-arbitrage axiom).
+Definition 7. By V (α) we denote the linear space of linear combinationsPni=1 xiαi, where xi ∈ R and
+α = (α1, . . . , αn) is an admissible vector.
+For a fixed set of alphas the spaceV (α) is the space of returns of all possible portfolios. The set
+of numbers (x1, . . . , xn) uniquely determines both the portfolio and the random variable fromV (α).
+Functions on portfolios, such as turnover, can be considered as functions on the spaceV (α).
+Definition 8. A function f : V → R defined on the linear spaceV is called absolutely homogeneous of
+degree 1 iff (λv) = |λ|f (v) for all λ ∈ R and v ∈ V.
+When a portfolio is multiplied by a constantλ, its turnover is multiplied by|λ|. This means that
+turnover is an absolutely homogeneous function onV (α). Let us introduce the following notations.
+• A portfolio P = P(x, A) = Pni=1 xiAi is defined by the set ofn weights x = (x1, . . . , xn) and the
+set of n alphas A = (A1, . . . ,An).
+• Let τ (P) and τ (A) = ( τ (A1), . . . , τ(An)) be the turnovers of the portfolio and the set of alphas
+correspondingly.
+• Let α(A) and C(α(A)) be a random vector of alphas returns and its covariance matrix correspond-
+ingly.
+• Let A be a finite dimensional vector space includingA1, . . . ,An.
+Main assumption of the model.The portfolio turnover is expressed by some function of the alpha
+weights, turnovers and covariance matrix of returns. That is
+τ (P(x, A)) = g(x, C(α(A)), τ(A)) (2.1)
+for all xi ∈ R and Ai ∈ A.
+2.2 Theoretical results.
+The following theorem describes absolutely homogeneous functions of degree 1, for which values of the
+sum depend only on the covariance matrix and the values of the terms. It turns out that all such functions
+f are equal to the standard deviation up to a multiplicative constant. Recall thatC and D denote the
+covariance matrix of several and the variance of one random variable correspondingly.
+Theorem 1. Let α be an admissible random vector and f : V (α) → R be an absolutely homogeneous
+function of degree 1. Then the existence of a function F such that
+f (ξ1 + ξ2) = F (C(ξ1, ξ2), f(ξ1), f(ξ2)) for all ξ1, ξ2 ∈ V (α), (2.2)
+is equivalent to the existence of a constant f0 such that f (ξ) = f0
+p
+D(ξ) for all ξ ∈ V (α).
+Letusapplythemodelassumption(2.1)forweights ¯x = (1, 1, 0, . . . ,0)andalphaset ¯A = (A1, A2, 0, . . . ,0).
+Then for allA1, A2 ∈ A:
+τ (A1 + A2) = g(¯x, C(α( ¯A)), τ( ¯A)) = ¯g(C(α(A1), α(A2)), τ(A1), τ(A2)).
+By theorem 1 there exists a constantf0 such thatτ (Ai) = f0
+p
+D(α(Ai)) for alli = 1, . . . , n.So, we have
+proved the following.
+5
+Statement 1. Model correctness condition. If the turnover of a n alpha portfolio is expressed as
+a function of the covariance matrix, weights and turnovers of alphas, then the ratio of turnover to the
+standard deviation of alpha returns should be the same for all alphas.
+From theorem 1 we also deduce the following.
+Statement 2. Theoretical turnover estimation. Let the model assumption (2.1) be true, τi be the
+turnover of i-th alpha for i = 1, . . . , n, C be the covariance matrix of returns. By κ we denote the ratio
+τi√Cii (it doesn ’t depend on i). Then the turnover of the portfolio with weights x = (x1, . . . , xn)⊤ is equalto
+T∗ = κ
+√
+x⊤Cx. (2.3)
+The formula (2.3) gives a different result compare to Kakushadze and Liew estimation [5, (19)] for
+τi = κ and covariance matrix
+Cij(α) =
+(
+ρ, i ̸= j
+1, i = j for all i, j∈ {1, . . . , n}.
+Indeed, in [5, (19)] estimation isT∗ = κ(ρ+ 1−ρn ), whereas by formula (2.3) estimation isT∗ = κqρ + 1−ρn .
+The difference of the results could be explained by the fact that in [5] the turnover estimation (1.1) used
+many times, while it is incorrect due to the proposition 1.
+Proposition 1. Let α be an admissible random vector and f : V (α) → R be an absolutely homogeneous
+function which is not zero constantly. Then there exist random variables ξ1, ξ2 ∈ V (α) such that
+f (ξ1 + ξ2) ̸= 1 + ρ(ξ1, ξ2)2 (f (ξ1) + f (ξ2)) + 1 − ρ(ξ1, ξ2)2 |f (ξ1) − f (ξ2)|.
+2.3 Practical turnover estimations.
+In practice the ratio of turnoverτi to the standard deviation of returnsstdi = √Cii may differ by several
+times10 among n alphas. Therefore, for κ from the formula (2.3) one can choose some «average» of
+them. In the estimations T∗1 and T∗2 we use the arithmetic and geometric means correspondingly, in
+the estimation T∗3 — the weighted average with weightsx. Let us denote byσ =
+√
+x⊤Cx the standard
+deviation of the portfolio return, where alpha weights arex.
+T∗1 = 1n nXi=1 τistdi σ, T ∗2 =  τ1 · . . .· τnstd1 · . . .· stdn  1n σ,
+T∗3 =
+Pn
+i=1
+xiτi
+stdiPn
+i=1 xi
+σ, T ∗4 =
+Pn
+i=1 τiPn
+i=1 stdi
+σ. (2.4)
+2.4 Proofs.
+Lemma 1. For every admissible random vector α there exists an admissible random vector ¯α such that
+V ( ¯α) = V (α) and the matrix C( ¯α) is identity.
+If α = (α1, . . . , αn)⊤ is a random vector written as a column, andA is an × n matrix, then C(Aα) =
+AC(α)A⊤. Indeed,
+C(Aα) = M(Aα − MAα)((Aα)⊤ − M(Aα)⊤) =
+= MA(α − Mα)(α⊤ − Mα⊤)A⊤ = AC(α)A⊤
+10e.g. for dollar neutral alphas on USA equity market. Another evidence that this ratio isn’t constant may be found in the
+article by Kakushadze and Tulchinsky [15, Fig. 4].
+6
+A symmetric matrix C(α)can be reduced to the principal axes, i.e. find an orthogonal matrixH such
+that C(Hα) = HC (α)H ⊤ = B, where B is a diagonal matrix. Let¯α = B− 12 Hα, then C( ¯α) is a identity
+matrix, ¯α is an admissible random vector andV (α) = V ( ¯α). The non-degeneracy of the matrixB (and
+the existence of B− 12) follows from the fact that the components ofα are linearly independent with a
+constant. □
+The proof of proposition 1.
+By lemma 1 we may assume that the matrixC(α) is identity. We can also assume thatf (α1) ≥ f (α2)
+and f (α1) ̸= 0. Indeed, since f ̸≡ 0 there exists β1 ∈ V (α) such thatf (β1) ̸= 0 and Dβ1 = 1. We extend
+β1 to an admissible random vectorβ = (β1, . . . , βn) with the identity matrixC(β), V (β) = V (α) and
+assume that the vectorα was initially equal to the vectorβ. The inequality f (α1) ≥ f (α2) could be
+achieved by rearranging the components of the vectorα.
+Let us assume the contrary, i.e. that for allξ1, ξ2 ∈ V (α)
+f (ξ1 + ξ2) = 1 + ρ(ξ1, ξ2)2 (f (ξ1) + f (ξ2)) + 1 − ρ(ξ1, ξ2)2 |f (ξ1) − f (ξ2)|. (2.5)
+Let us use (2.5) forξ1 = α1, ξ2 = α2 and for ξ1 = α1, ξ2 = −α2:
+f (α1 + α2) = f (α1) + f (α2)2 + |f (α1) − f (α2)|2 = f (α1 − α2) = max{f (α1), f(α2)}
+Let us use (2.5) forξ1 = α1 + α2, ξ2 = α1 − α2, taking into account thatf (α1 + α2) = f (α1 − α2) and
+ρ(α1 + α2, α1 − α2) = 0:
+f (2α1) = f ((α1 + α2) + (α1 − α2)) = f (α1 + α2) + f (α1 − α2)2 = max{f (α1), f(α2)}
+So, 2f (α1) = f (2α1) = max{f (α1), f(α2)} = f (α1), hence f (α1) = 0, contradiction. □
+The proof of the theorem 1.
+Step 0. From the existence of a constantf0 it easily follows the existence of functionF. Indeed,
+f (ξ1 + ξ2) = f (ξ1)
+s
+C11(ξ1, ξ2) + 2C12(ξ1, ξ2) + C22(ξ1, ξ2)
+C11(ξ1, ξ2) .
+The proof of the other part of the theorem consists of 4 steps. By lemma 1 we may assume that the
+matrix C(α) is identity, whereα = (α1, . . . , αn). Let us introduce the denotation:
+Cφ =
+cos2(φ) 0
+0 sin 2(φ)
+
+Step 1. Let us prove thatf ( α1+α2√2 ) = f ( α1−α2√2 ). Let us apply the formula 2.2 forξ1 = α1√2 , ξ2 = α2√2
+and for ξ1 = α1√2 , ξ2 = − α2√2, taking into account that functionf is absolutely homogeneous:
+f
+ α1 + α2√
+2
+
+= F
+
+C π
+4
+, f (α1)√2 , f (α2)√2  = f  α1 − α2√2  .
+Let us consider a random vector¯α = ( ¯α1, . . . ,¯αn), where
+¯α1 = α1 + α2√2 , ¯α2 = α1 − α2√2 , ¯αi = αi for all i = 3, . . . , n.
+Easy to see that¯α is an admissible vector,V (α) = V ( ¯α) and C( ¯α) = E. Without loss of generality we can
+assume that the vector¯α was chosen as the initial value of the vectorα. Then we havef (α1) = f (α2).
+Step 2. Let us define a functionT : R → R by T (φ) = f (cos(φ)α1 + sin(φ)α2) for all φ ∈ R. Let us
+prove that
+T (φ) = T
+
+φ + π2  for all φ ∈ R. (2.6)
+7
+Let us apply the formula 2.2 forξ1 = cos(φ)α1, ξ2 = sin(φ)α2 and for ξ1 = cos(φ)α2, ξ2 = − sin(φ)α1,
+taking into accountf (α1) = f (α2) and the fact that the functionf is absolutely homogeneously:
+T (φ) = f (cos(φ)α1 + sin(φ)α2) =
+= F (Cφ, | cos(φ)|f (α1), | sin(φ)|f (α2)) =
+= F (Cφ, | cos(φ)|f (α2), | sin(φ)|f (α1)) =
+= f (cos(φ)α2 − sin(φ)α1) = T
+
+φ + π2  .
+Step 3. Let us take an arbitrary numberz ∈ R and prove that
+T (z + φ) = T (z − φ) for all φ ∈ R. (2.7)
+Let us define random variables
+β1 = cos(z)α1 + sin(z)α2, β 2 = − sin(z)α1 + cos(z)α2.
+From (2.6) it follows thatf (β1) = T (z) = T
+ 
+z + π2  = f (β2). Then
+T (z ± φ) = f (cos(z + φ)α1 + sin(z ± φ)α2) = f (cos(φ)β1 ± sin(φ)β2) =
+= F (Cφ, | cos(φ)|f (β1), | sin(φ)|f (β2)).
+Substituting φ = z in (2.7) yieldsT (0) = T (2z). This means that the functionT (z) is constant and on
+the two-dimensional space of linear combinationsα1 and α2 the function f (ξ) is equal tof0
+√Dξ.
+Step 4. Now we are ready to complete the proof of the theorem. Let us prove that for any random
+variables ξ1 ∈ V (α), ξ2 ∈ V (α) it holds that f (ξ1)√Dξ1 = f (ξ2)√Dξ2. Without loss of generality we may assume
+that Dξ1 = Dξ2 = 1 and that ξ1 is linear independent withξ2. Let us define
+γ1 = ξ1 + ξ2pD(ξ1 + ξ2) , γ 2 = ξ1 − ξ2pD(ξ1 − ξ2) .
+Then Dγ1 = D γ2 = 1 and cov(γ1, γ2) = 0 . We extend γ1 and γ2 to an admissible random vector
+γ = (γ1, . . . , γn), such thatV (γ) = V (α) and C(γ) = E. Let us repeat the steps 1 — 3 for the vectorγ
+instead the vectorα. We obtain that on the two dimensional space of linear combinationsγ1 and γ2 the
+function f (ξ) = f0
+√Dξ, i.e. f (ξ1) = f0 = f (ξ2). □
+3 Numerical experiments.
+Aim. We want to check the accuracy of the approximation of portfolio turnover by the estimations (1.1),
+(1.2) and (2.4), depending on the «spread width» of the ratioτstd for alphas.
+Procedure.
+• We start with constructing several alphas and select 3 sets of them with big, medium and small
+«spread width» of the ratio τstd correspondingly.
+• Then we suggest «metrics» for portfolio turnover estimations to measure the accuracy of the real
+turnover approximation.
+• For each pair of alphas from a set we calculate «metrics» for turnover estimations for all two–alphas
+portfolios and average it by all pairs of alphas.
+• We calculate averaged «metrics» for turnover estimations for 100 portfolios consisting of all alphas
+of a set with weights which are proportional to coordinates of Sobol pseudorandom sequence of
+points.
+8
+3.1 Building and examples of alphas.
+We use daily dataopen, high, low, close, volume from Yahoo Finance for approximately 1400 most liquid
+USA stocks. For alpha research we use 2010 — 2014 as in-sample, and use 02.01.2018 – 14.06.2024 for
+testing as out-of-sample. Below are some alpha examples (without operations):
+1. sum(volume,4)√high∗lowsum(close∗volume,4) − 1,
+2.
+
+delay(close,14)
+close − 1
+ 
+volume
+sum(volume,30)
+
+,
+3. correlation (close, volume,20)
+
+1 − delay(close,10)close
+
+,
+4. −rsi(close, 14), where rsi — is the relative strength index.
+Forresearchweusealsoalphaoperations: truncate, decay, cuttingextremesormiddles, neutralization
+and normalization (the latter two are obligatory).
+3.2 Alpha numerical characteristics.
+For the given dataset with daily data let us enumerate days from 1 top in chronological order, i.e. the
+eldest day is 1. Let’s enumerate the stocks with numbers from 1 tos.
+Alpha position vectorat the dayd for d = 1, . . . , pis the following:
+a(d) = (a1(d), . . . , as(d))⊤.
+Return of the i-th stock at the dayd for i = 1, . . . , sand d = 2, . . . , p:
+returni(d) = closei(d)closei(d − 1) − 1.
+Alpha PnL11 at the dayd for d = 2, . . . , p:
+P nL(d) =
+sX
+i=1
+returni(d)ai(d − 1). (3.1)
+Cumulative PnLby the dayk for k = 2, . . . , p:
+cumP nL(k) =
+kX
+d=2
+P nL(d).
+Volatility(sample standard deviation of returns vector):
+stdP nL(k) =
+vuut 1
+k − 2
+kX
+d=2
+
+P nL(d) − 1k − 1 cumP nL(k)2
+Sharpe ratio12 (252 is a number of trading days in a year):
+sharpe =
+√
+252
+p − 1
+cumP nL(p)
+stdP nL(p) .
+11It is holding PnL for delay 1 alphas, see the book [2] for details. These alphas calculate position vectors by the beginning
+of the trading day, so the execution has the whole day to achieve the required positions. This provide the possibility to increase
+the size of investments.
+12For non dollar neutral portfolios Sharpe ratio use the risk-free rateRf: sharpe = √T meanPnl(k)−RfstdPnl(k) .
+9
+Alpha turnover at the dayd for d = 2, . . . , p:
+τ (d) =
+sX
+i=1
+|ai(d) − ai(d − 1)|.
+Kakushadze in [4] and Kakushadze with Tulchinsky in [15] investigated numerical characteristics of
+alphas, which are real traded on USA stock market. Regression analysis shows that the PnL essentially
+depends on the alpha returns volatility, return by share depends on the Sharpe ratio and position holding
+period, while PnL and pairwise correlations weakly depend on the turnover.
+3.3 «Metrics» for turnover estimations.
+Let T∗(d), τ (d) and Tmax(d) be the portfolio turnover estimation, real portfolio turnover (i.e. with
+crossing of trades) and turnover of the portfolio without crossing of trades at the dayd correspondingly.
+Let p be the number of trading days in the testing dataset. Let us define the following «metrics»:
+ρ1(T∗) = 1p
+pX
+d=1
+(T∗(d) − τ (d)), ρ 2(T∗) = 1p
+pX
+d=1
+|T∗(d) − τ (d)|,
+ρ3(T∗) = ρ1(T∗)ρ1(Tmax) , ρ 4(T∗) = ρ2(T∗)ρ1(Tmax) , ρ 5(T∗) =
+pX
+d=1
+|T∗(d) − τ (d)|
+τ (d) . (3.2)
+Note that ρ2 and ρ5 are the absolute and the relative errors correspondingly. Alsoρ1(Tmax) > 0.
+3.4 Experiment results.
+Alpha sets 1 – 3 are developed to produce low pairwise correlations of returns and appropriate returns.
+Alpha can be included in several sets: so sets 1 and 2 have alphas 2, 3, 5, 6, 9, 10 in common, and alpha
+1 is in all three sets. Alpha characteristics from the table 3 (cumulative PnL, Sharpe ratio, standard
+deviation of returns, daily averaged turnover and the ratio of the daily averaged turnover to standard
+deviation of returns) and pairwise correlations from the table 4 are calculated during the testing period
+02.01.2018 – 14.06.2024. Alpha cumulative PnLs are shown on figures 1 — 3. It happens that the ratio
+τ
+stdP nLdiffers up to 7 times, up to 4 times and up to 24% for alphas in 1, 2 and 3 set correspondingly.
+For tables 1 and 2 the mean alpha turnover and covariance matrix of returns for estimationsT∗1 − T∗4
+arecalculatedinrollingwindowof250days. Forestimation TKL covariancematrixofreturnsiscalculated
+using all testing period, then we find its eigenvectors and eigenvalues which are used in the estimation.
+The table 1 is built as follows. Each pair of alphas form a portfolio with weightsx1 = x2 = 12. Then
+we calculate turnover estimations and the real turnover, «metrics», take the absolute value forρ1 and
+ρ3, and average by all pairs of alphas in a set. In turn, the table 2 is built as follows. For every set of
+alphas we take 100 portfolios ofn alphas, so that weights of thek-th portfolio are proportional to the
+coordinates of thek-th point of Sobol pseudorandom sequence inRn, where n = 10 for sets 1 and 2 and
+n = 8 for set 3, alsok = 1, . . . ,100. For each portfolio we calculate turnover estimations and the real
+turnover. Then we take absolute value of «metrics» and average it by 100 portfolios of the corresponding
+set. Estimations T∗1 – T∗4 are the same as in 3.2; estimationTKL is given by 1.1 and 1.2 for tables 1 and
+2 correspondingly; estimationTmax is a turnover without crossing of trades, i.e. is the linear combination
+of alphas turnover.
+The estimation is better, if the «metric» is less. Tables results allow us to make the following
+observations.
+• «Metrics» ρ1 and ρ2 for sets 1 and 2 differ a little. This mean that estimations are typically (for
+most of days) shifted in one direction.
+• For all estimations their absolute errorρ2 and also ρ1 decrease while moving from set 1 to set 3
+through set 2.
+10
+• The relative errorρ5, ρ3 and ρ4 stay approximately the same for estimationTKL and decrease for
+estimations T∗1 − T∗4 while moving from set 1 to set 3.
+• Estimations T∗1 − T∗4 outperform the estimationTKL for the set 3.
+Set 1 Set 2 Set 3
+ρ1 ρ2 ρ3 ρ4 ρ5 ρ1 ρ2 ρ3 ρ4 ρ5 ρ1 ρ2 ρ3 ρ4 ρ5
+TKL 0.023 0.028 0.527 0.597 0.089 0.023 0.027 0.561 0.628 0.108 0.013 0.016 0.528 0.628 0.125
+T∗1 0.039 0.044 0.613 0.720 0.122 0.030 0.034 0.567 0.674 0.138 0.007 0.012 0.278 0.458 0.095
+T∗2 0.058 0.062 1.092 1.150 0.152 0.025 0.029 0.570 0.662 0.112 0.008 0.012 0.309 0.469 0.093
+T∗3 0.039 0.044 0.613 0.720 0.122 0.030 0.034 0.567 0.674 0.138 0.007 0.012 0.278 0.458 0.095
+T∗4 0.029 0.033 0.542 0.603 0.087 0.023 0.027 0.493 0.563 0.102 0.007 0.011 0.280 0.409 0.084
+Tmax 0.067 0.067 1.000 1.000 0.185 0.052 0.052 1.000 1.000 0.211 0.027 0.027 1.000 1.000 0.215
+Table 1: A veraged by all alpha pairs «metrics» of turnover estimations.
+Set 1 Set 2 Set 3
+ρ1 ρ2 ρ3 ρ4 ρ5 ρ1 ρ2 ρ3 ρ4 ρ5 ρ1 ρ2 ρ3 ρ4 ρ5
+TKL 0.112 0.112 0.677 0.677 0.405 0.076 0.076 0.644 0.644 0.401 0.033 0.033 0.604 0.604 0.328
+T∗1 0.054 0.061 0.355 0.394 0.243 0.059 0.059 0.508 0.510 0.326 0.009 0.015 0.157 0.276 0.152
+T∗2 0.036 0.043 0.223 0.269 0.153 0.031 0.034 0.269 0.292 0.189 0.007 0.014 0.118 0.255 0.138
+T∗3 0.052 0.055 0.321 0.336 0.210 0.058 0.058 0.491 0.491 0.314 0.009 0.014 0.154 0.260 0.143
+T∗4 0.040 0.046 0.261 0.297 0.182 0.039 0.041 0.342 0.354 0.228 0.007 0.014 0.132 0.253 0.138
+Tmax 0.161 0.161 1.000 1.000 0.591 0.117 0.117 1.000 1.000 0.624 0.055 0.055 1.000 1.000 0.540
+Table 2: «Metrics» for turnover estimations, a portfolio consists of all alphas of a set.
+4 Conclusions.
+Weinvestigatetheapproximationsofan n-alphaportfolioturnoverviacovariancematrixofalphareturns,
+alpha turnovers and weights, provided crossing of trades of opposite signs. Estimations become more
+precise in the case when the ratios τistdi differ a little for alphas of portfolio. In this case proposedestimations (2.4) seems to be better choice. Else, if ratioτistdi differ significantly, then estimations (1.1)or (1.2) are preferred.
+Practical value of the work.Portfolio managers got an understanding that turnover estimations
+may be more precise and the possibility to achieve it. One need to make the ratios τistdi closer to eachother.
+More precise turnover estimations produce more adequate optimized function for portfolio construc-
+tion via optimization methods, provided accounting transaction costs. This may lead to «better» port-
+folio.
+Theoretical value of the work.The theorem 1 could help to analyse the models of other absolutely
+homogeneous functions of portfolio, which depend on covariance matrix of returns.
+References
+[1] E.P. Chan. Algorithmic trading. Wiley, 2013.
+[2] I. Tulchinsky et al. Finding Alphas: A Quantitative Approach to Building Trading Strategies. New
+York, NY: Wiley, 2020.
+[3] Z. Kakushadze, J.A. Serur. 151 Trading Strategies. Cham, Switzerland: Palgrave Macmillan, an
+imprint of Springer Nature, 1st Edition, XX, 480 pp., 2018.
+11
+[4] Z. Kakushadze. 101 Formulaic Alphas. Wilmott Magazine, 84: 72–80, (2016).
+[5] Z. Kakushadze, J.K.-S. Liew. Is it possible to od on alpha? The Journal of Alternative Investments,
+18(2): 39–49, (2015).
+[6] Z. Kakushadze. Spectral model of turnover reduction. Econometrics, 3(3): 577–589, (2015).
+[7] Z. Kakushadze. Can Turnover Go to Zero? Journal of Derivatives & Hedge Funds, 20(3): 157–176,
+(2014).
+[8] H. Markowitz. Portfolio selection. The Journal of Finance, 7(1): 77–91, (1952).
+[9] Bruder, B. and Roncalli, T. (2012). Managing risk exposures using the risk budgeting approach.
+Available at SSRN 2009778.
+[10] Z. Kakushadze, W. Yu. Notes on Fano Ratio and Portfolio Optimization. Journal of Risk & Control,
+5(1): 1–33, (2018).
+[11] Z. Kakushadze. Combining Alpha Streams with Costs. Journal of Risk, 17(3): 57–78, (2015).
+[12] Z. Kakushadze. Notes on Alpha Stream Optimization. Journal of Investment Strategies, 4(3): 37–81,
+(2015).
+[13] Z. Kakushadze. Factor Models for Alpha Streams. Journal of Investment Strategies, 4(1): 83–109,
+(2014).
+[14] O. Ledoit, M. Wolf. “Honey, I Shrunk the Sample Covariance Matrix.” The Journal of Portfolio
+Management, 30(4): 110–119, (2004).
+[15] Z. Kakushadze, I. Tulchinsky. Performance v. Turnover: A Story by 4,000 Alphas. The Journal of
+Investment Strategies, 5(2): 75–89, (2016).
+12
+Set 1 alpha 1 alpha 2 alpha 3 alpha 4 alpha 5 alpha 6 alpha 7 alpha 8 alpha 9 alpha 10
+cumP nL 0.870 0.530 0.510 0.400 0.330 0.310 0.290 0.220 0.130 0.130
+Sharpe 1.482 1.179 0.932 0.861 0.692 1.344 0.704 0.795 0.369 0.385
+T 0.217 0.571 0.297 0.963 0.176 0.213 0.767 0.735 0.223 0.216
+stdP nL 0.0057 0.0044 0.0054 0.0045 0.0047 0.0023 0.004 0.0027 0.0034 0.0032
+T /stdP nL37.69 130.29 55.42 212.30 37.48 92.87 190.77 276.31 64.96 67.57
+Set 2 alpha 1 alpha 2 alpha 3 alpha 4 alpha 5 alpha 6 alpha 7 alpha 8 alpha 9 alpha 10
+cumP nL 0.870 0.530 0.510 0.400 0.330 0.310 0.240 0.200 0.130 0.130
+Sharpe 1.482 1.179 0.932 0.857 0.692 1.344 0.598 0.816 0.369 0.385
+T 0.217 0.571 0.297 0.355 0.176 0.213 0.430 0.383 0.223 0.216
+stdP nL 0.0057 0.0044 0.0054 0.0046 0.0047 0.0023 0.0039 0.0024 0.0034 0.0032
+T /stdP nL37.69 130.29 55.42 77.20 37.48 92.87 110.16 157.02 64.96 67.57
+Set 3 alpha 1 alpha 2 alpha 3 alpha 4 alpha 5 alpha 6 alpha 7 alpha 8
+cumP nL 0.870 0.510 0.430 0.390 0.210 0.120 0.060 0.030
+Sharpe 1.482 0.911 0.890 0.857 0.920 0.395 0.169 0.153
+T 0.217 0.231 0.209 0.163 0.098 0.119 0.152 0.090
+stdP nL 0.0057 0.0055 0.0048 0.0044 0.0022 0.003 0.0035 0.002
+T /stdP nL37.69 42.20 43.83 36.60 43.94 39.77 42.93 45.35
+Table 3: Alpha characteristics.
+13
+Set 1 alpha 2 alpha 3 alpha 4 alpha 5 alpha 6 alpha 7 alpha 8 alpha 9 alpha 10
+alpha 1 0.27 0.61 0.19 0.24 0.13 0.13 0.10 0.05 0.24
+alpha 2 1.00 0.60 0.65 0.74 0.56 0.65 0.62 0.59 0.46
+alpha 3 1.00 0.38 0.52 0.36 0.35 0.27 0.19 0.51
+alpha 4 1.00 0.32 0.27 0.42 0.59 0.33 0.22
+alpha 5 1.00 0.73 0.55 0.47 0.72 0.46
+alpha 6 1.00 0.49 0.52 0.62 0.34
+alpha 7 1.00 0.52 0.51 0.28
+alpha 8 1.00 0.47 0.2
+alpha 9 1.00 0.05
+Set 2 alpha 2 alpha 3 alpha 4 alpha 5 alpha 6 alpha 7 alpha 8 alpha 9 alpha 10
+alpha 1 0.27 0.61 0.24 0.24 0.13 0.16 0.08 0.05 0.24
+alpha 2 1.00 0.60 0.85 0.74 0.56 0.64 0.66 0.59 0.46
+alpha 3 1.00 0.54 0.52 0.36 0.40 0.28 0.19 0.51
+alpha 4 1.00 0.79 0.61 0.80 0.70 0.68 0.44
+alpha 5 1.00 0.73 0.79 0.68 0.72 0.46
+alpha 6 1.00 0.62 0.71 0.62 0.34
+alpha 7 1.00 0.63 0.64 0.34
+alpha 8 1.00 0.64 0.27
+alpha 9 1.00 0.05
+Set 3 alpha 2 alpha 3 alpha 4 alpha 5 alpha 6 alpha 7 alpha 8
+alpha 1 0.62 0.24 0.33 0.14 0.30 0.06 0.42
+alpha 2 1.00 0.52 0.62 0.28 0.63 0.09 0.40
+alpha 3 1.00 0.90 0.49 0.49 0.56 0.08
+alpha 4 1.00 0.59 0.50 0.67 0.19
+alpha 5 1.00 0.24 0.65 -0.03
+alpha 6 1.00 -0.03 0.03
+alpha 7 1.00 0.10
+Table 4: Pairwise correlations of alpha returns.
+Figure 1: cumulative PnL of alphas in the set 1.
+14
+Figure 2: cumulative PnL of alphas in the set 2.
+Figure 3: cumulative PnL of alphas in the set 3.
+15

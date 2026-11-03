@@ -1,0 +1,983 @@
+arXiv 2504.18958  https://arxiv.org/abs/2504.18958
+
+Modeling Regime Structure and Informational
+Drivers of Stock Market V olatility via the
+Financial Chaos Index
+Masoud Ataei1*
+1Department of Mathematical and Computational Sciences,
+University of Toronto, Ontario, Canada.
+Corresponding author(s). E-mail(s): masoud.ataei@utoronto.ca;
+Abstract
+This paper investigates the structural dynamics of stock market volatility through the
+Financial Chaos Index, a tensor- and eigenvalue-based measure designed to capture real-
+ized volatility via mutual fluctuations among asset prices. Motivated by empirical evidence
+of regime-dependent volatility behavior and perceptual time dilation during financial
+crises, we develop a regime-switching framework based on the Modified Lognormal
+Power-Law distribution. Analysis of the FCIX from January 1990 to December 2023 iden-
+tifies three distinct market regimes, low-chaos, intermediate-chaos, and high-chaos, each
+characterized by differing levels of systemic stress, statistical dispersion and persistence
+characteristics. Building upon the segmented regime structure, we further examine the
+informational forces that shape forward-looking market expectations. Using sentiment-
+based predictors derived from the Equity Market V olatility tracker, we employ an elastic
+net regression model to forecast implied volatility, as proxied by the VIX index. Our find-
+ings indicate that shifts in macroeconomic, financial, policy, and geopolitical uncertainty
+exhibit strong predictive power for volatility dynamics across regimes. Together, these
+results offer a unified empirical perspective on how systemic uncertainty governs both the
+realized evolution of financial markets and the anticipatory behavior embedded in implied
+volatility measures.
+Keywords: Financial Chaos Index, Regime-Switching Models, Modified Lognormal Power-Law
+Distribution, Market V olatility Forecasting, Sentiment-Driven Predictive Analytics
+1
+arXiv:2504.18958v1  [q-fin.ST]  26 Apr 2025
+1 Introduction
+Financial markets evolve through complex dynamics characterized by intermittent episodes
+of elevated volatility, systemic fragility, and abrupt regime shifts. While traditional asset
+pricing models often assume stationary or smoothly varying stochastic processes, empirical
+observations indicate that volatility undergoes sudden transitions triggered by macroeco-
+nomic dislocations, policy shifts, or geopolitical shocks. Capturing the statistical architecture
+of these transitions, and understanding the informational forces that drive them, remains a
+central challenge in the mathematical modeling of financial systems.
+In this study, we investigate the temporal evolution of market volatility through the lens
+of the Financial Chaos Index (FCIX), a tensor- and eigenvalue-based construct designed to
+quantify realized volatility by measuring mutual fluctuations among asset prices [1]. Unlike
+traditional scalar measures of volatility, the FCIX captures higher-order interdependencies
+across asset returns, offering a richer geometric representation of systemic risk in financial
+networks. A longitudinal analysis of the FCIX from January 1990 to December 2023 reveals
+pronounced nonstationarity, characterized by phases of relative stability punctuated by sharp
+surges in volatility aligned with major financial crises and systemic disruptions.
+Given the evident temporal heterogeneity of FCIX realizations, it becomes crucial to iden-
+tify distinct regimes within the volatility process. To formally characterize structural shifts in
+market behavior, we employ retrospective change-point detection methods grounded in non-
+parametric, kernel-based frameworks. These approaches identify statistically homogeneous
+intervals without requiring strong parametric assumptions about the underlying stochastic
+process. Existing methods for regime detection, such as Markov switching models [2] or hid-
+den Markov volatility models [3], often impose restrictive structure on the data-generating
+process. By contrast, the segmentation strategy used in this paper allows for flexible, model-
+free detection of regime boundaries, thereby accommodating the complex, heavy-tailed, and
+high-dimensional nature of financial volatility dynamics; see [4] for further methodological
+details.
+Financial crises are often accompanied by a perceptual dilation of time within markets,
+wherein information dissemination, liquidity adjustments, and volatility responses accelerate
+relative to normal conditions. From the perspective of market participants, short-term events
+acquire amplified significance and exert disproportionate influence over price dynamics.
+Mathematically, this phenomenon suggests that the effective market clock evolves stochasti-
+cally, with random interruptions or accelerations during periods of systemic stress. To capture
+this behavior, we posit that volatility evolves as a multiplicative process subject to random
+stopping times, leading naturally to the Modified Lognormal Power-Law (MLP) distribution
+[5, 6], originally introduced in the context of modeling stellar and substellar mass distribu-
+tions. The MLP framework integrates a lognormal core, reflecting the compounding of small
+shocks during stable periods, with a power-law tail that captures the heavy-tailed behav-
+ior induced by crises. This dual structure provides a principled statistical model for the
+coexistence of routine fluctuations and critical transitions in market behavior.
+Empirical investigations have further established a strong positive correlation between
+FCIX and the VIX index, the latter serving as a canonical measure of implied equity mar-
+ket volatility [1]. Causality analysis indicates a bidirectional relationship between FCIX and
+VIX: realized volatility fluctuations captured by FCIX predict subsequent changes in VIX,
+while anticipatory shifts in VIX forecast future realized market volatility. This entanglement
+2
+underscores that FCIX encapsulates not merely historical asset fluctuations but also elements
+of forward-looking risk perception embedded in market behavior. Consequently, modeling
+the dynamics of FCIX provides insights into both the retrospective evolution of volatility and
+the contemporaneous formation of systemic expectations.
+Building upon the segmented regime structure of the FCIX, we further examine the infor-
+mational forces that drive fluctuations in implied market volatility. It is well-established
+that volatility responds sensitively to the flow of economic news, policy announcements,
+and investor sentiment, with unexpected macroeconomic developments frequently triggering
+volatility spikes, particularly during periods of systemic uncertainty [7–9]. Recent advances
+have also employed machine learning techniques to forecast volatility using macroeconomic
+variables, sentiment indicators, and measures of economic uncertainty [10].
+Motivated by these findings, we employ an elastic net regression model to predict
+forward-looking volatility, as proxied by the VIX index, using sentiment-based predictors
+derived from the Equity Market V olatility (EMV) tracker [11]. By linking thematic categories
+of economic, financial, policy, and geopolitical uncertainty to volatility dynamics across the
+FCIX-inferred regimes, we trace how shifts in market expectations correspond to transitions
+between structural states of disorder. In doing so, we seek to identify not only the dominant
+sources of informational instability under varying market conditions, but also the mechanisms
+through which systemic stress propagates and amplifies. This predictive framework comple-
+ments the regime-based analysis of FCIX by elucidating the specific uncertainty channels that
+underpin regime shifts, offering a unified perspective on both the endogenous evolution and
+exogenous modulation of financial market turbulence.
+The remainder of this paper is organized as follows. Section 2 introduces the construction
+of the FCIX and presents its segmentation from 1990 to 2023 into statistically homoge-
+neous regimes. Section 3 develops the MLP framework to model regime-dependent volatility
+behavior and characterize the stochastic structure of financial turbulence. Section 4 investi-
+gates the informational drivers of implied volatility, employing sentiment-based predictors
+within an elastic net regression framework to trace the role of macroeconomic, policy, and
+geopolitical uncertainty across regimes. Finally, Section 5 summarizes the main findings
+and discusses potential extensions and applications of the proposed modeling approach for
+financial monitoring and systemic risk assessment.
+1.1 Preliminaries
+Throughout the paper, scalar quantities, vectors, and matrices are denoted using lowercase
+lightface (e.g., x), lowercase boldface (e.g., x), and uppercase boldface (e.g., X) letters,
+respectively, where all vectors are presumed to be column vectors unless otherwise stated.
+Boldface calligraphic letters (e.g.,X ) are used to denote tensors, i.e., multidimensional arrays
+generalizing matrices to higher-order structures. We use R≥0 and R>0 to denote the sets of
+nonnegative and strictly positive real numbers, respectively.
+A tensor of order N is an element of the space RI1×I2×···×IN , where In denotes the
+dimensionality along mode n, and the total number of elements is K = QNn=1 In. Analogous
+to matrix rows and columns, a mode-n fiber of a tensor is obtained by fixing all indices except
+the nth, whereas fixing all but two indices yields a two-dimensional slice, similar to a matrix
+3
+cross-section. The Frobenius norm of a tensor X is defined as follows:
+∥X ∥F =
+p
+⟨X , X ⟩ =
+vuut I1X
+i1=1
+I2X
+i2=1
+· · ·
+INX
+iN =1
+x2i1i2...iN . (1)
+An important technique in tensor analysis is the polyadic decomposition, which approx-
+imates a tensor by a sum of rank-one tensors, also referred to as atoms. Specifically, given a
+positive integer R, the approximation is expressed as follows:
+X ≈ bX =
+RX
+r=1
+ar ◦ br ◦ cr, (2)
+where the symbol ” ◦” denotes the vector outer product. If R corresponds to the minimal
+number of terms required to exactly reconstruct the tensor, the decomposition (2) is referred
+to as the canonical polyadic decomposition.
+A tensor X is said to be of rank one if it can be written as the outer product of three
+vectors; i.e.,
+X = a ◦ b ◦ c, (3)
+where a ∈ RI1, b ∈ RI2, and c ∈ RI3.
+The tensor-based approach adopted in this paper incorporates these structures to quan-
+tify systemic volatility by capturing higher-order dependencies across asset returns, thereby
+enriching the classical scalar notions of market risk.
+2 Financial Chaos Index
+The FCIX is a tensor-based measure designed to quantify realized volatility in equity mar-
+kets by capturing the mutual fluctuations among asset prices [1]. Unlike traditional scalar
+measures of volatility, the FCIX is constructed through higher-order tensorial representations,
+allowing for a richer depiction of systemic interdependencies.
+To define the FCIX, consider a collection ofN assets and let r(t) ∈ RN>0 denote the vector
+of rates of return at time t ∈ T, where each entry is computed as
+r(t)i = C (t)i
+C (t−1)i , (4)
+where C (t)i represents the adjusted closing price of asset i at time t. In our empirical anal-
+ysis, we consider N = 811 assets, selected as those that have appeared at any time in the
+S&P 500 index from January 1990 to December 2023 and for which no missing price data
+were observed.1 The time index set T comprises |T |= 8265 daily and |T |= 408 monthly
+observations, respectively.
+1Price data were obtained from the Center for Research in Security Prices (CRSP) via the Wharton Research Data Services
+(WRDS).
+4
+At each time stept, we construct a reciprocal pairwise comparison matrix (RPCM)A(t) ∈
+RN ×N>0 via the relation
+A(t) = r ◦  r−1⊺ , (5)
+where the notation r−1 denotes the element-wise reciprocal of the return vector r(t). Each
+entry A(t)ij thus represents the relative strength of asset i compared to asset j at time t, a
+structure often referred to as an advantage matrix; see, e.g., [12].
+By stacking these matrices across time, we construct a third-order tensorA ∈ RN ×N ×|T |>0 ,
+referred to as the reciprocal pairwise comparison tensor (RPCT), as illustrated schematically
+in Figure 1.
+The core of the FCIX construction lies in approximating the RPCT by a rank-one tensor.
+Specifically, we solve the constrained optimization problem
+min
+˜x,˜y,˜z
+∥A − ˜z ◦ (˜x ◦ ˜y⊺)∥F
+s.t. ˜zt (˜x ◦ ˜y⊺) > 0N , t = 1, . . . ,|T |,
+˜x, ˜y ∈ RN>0, ˜z ∈ R|T |≥0 ,
+(6)
+where 0N is the N × N zero matrix. The constraint ensures that all elements remain positive,
+preserving the multiplicative structure inherent in return ratios.
+Once the rank-one approximation ˜A = ˜z ◦ (˜x ◦ ˜y⊺) is obtained, the FCIX at time t is
+defined via an inconsistency measure based on the dominant eigenvalue of thetth frontal slice
+of ˜A. Specifically,
+FCIX(t) := ψ(t) = λ(t)max − NN − 1 , (7)
+where λ(t)max denotes the largest eigenvalue of the matrix corresponding to the tth slice.
+As demonstrated in [1], there exists an elegant correspondence between the polyadic
+decomposition of RPCTs and the spectral properties of their constituent RPCMs, implying
+that the scaling vector ˜z can be interpreted as a surrogate for the FCIX series, up to a positive
+rescaling.
+Thus, the FCIX encapsulates the degree of mutual inconsistency and dispersion among
+asset returns in a manner that is sensitive to both local fluctuations and higher-order sys-
+temic co-movements. It offers a mathematically rigorous, geometrically interpretable, and
+computationally tractable measure of market volatility.
+A longitudinal inspection of monthly FCIX realizations from January 1990 to December
+2023 reveals substantial temporal heterogeneity, undermining the hypothesis of stationary or
+smoothly evolving market dynamics. As shown in Figure 2, the FCIX exhibits intermittent
+surges and contractions, often coinciding with major financial, economic, and geopolitical
+disruptions. Episodes such as the Dot-com bubble (2000–2002), the Global Financial Crisis
+(2008–2009), and the COVID-19 pandemic (2020) are each marked by pronounced elevations
+in the index, indicating acute systemic stress and structural dislocation.
+The empirical behavior of the FCIX displays a notable asymmetry. Transitions to high-
+volatility regimes are typically abrupt and crisis-driven, while reversions to lower-volatility
+states occur more gradually. This asymmetry reflects well-documented phenomena in finan-
+cial markets, wherein negative information triggers faster market responses than stabilization
+5
+Fig. 1: Schematic illustration of a reciprocal pairwise comparison tensor (RPCT) [1].
+or recovery. The clustering of elevated FCIX values following major crises is consistent with
+volatility persistence and reinforces the view that financial stress tends to propagate over
+extended periods.
+The dynamic behavior of the FCIX motivates a regime-switching interpretation of finan-
+cial market evolution. In traditional asset pricing models, asset returns are often modeled as
+realizations from stochastic processes with constant mean and variance [13, 14]. However, the
+FCIX suggests an alternative perspective, wherein realized volatility transitions among dis-
+crete regimes characterized by distinct statistical properties. These transitions are frequently
+precipitated by fundamental shocks to the macro-financial environment, such as mone-
+tary policy realignments, sovereign debt crises, technological innovations, or geopolitical
+upheavals. Such shocks propagate through liquidity channels, reshape investor expectations,
+and alter perceived risk premia, effects that are subsequently encoded in the time series of the
+FCIX.
+To formally investigate these regime transitions, we apply retrospective change-point
+detection methods to the FCIX time series. The literature on time series segmentation by
+change-point techniques is extensive; e.g., see [4] for the most recent review. Our method-
+ological approach is nonparametric and model-free, operating on a high-dimensional mapping
+of the empirical distribution of the FCIX. Specifically, we implicitly embed the time series
+into a reproducing kernel Hilbert space defined by a suitable kernel function, thereby
+enabling change-point detection without presupposing a particular form for the underlying
+data-generating process. This kernel-based segmentation approach offers several advantages:
+it flexibly captures nonlinear dependencies, accommodates complex data structures, and
+remains robust to heavy-tailed distributions. Detailed theoretical underpinnings for such pro-
+cedures can be found in [1, 15–18]. By incorporating this model-free framework, we segment
+the FCIX into intervals of internal statistical homogeneity, thereby identifying latent regime
+shifts without imposing restrictive distributional assumptions.
+The resulting segmentation is illustrated in Figure 3. Several prominent breakpoints
+emerge from the analysis, including regime transitions associated with the 1997 Asian Finan-
+cial Crisis, the onset of the 2008 Global Financial Crisis, the European Sovereign Debt Crisis
+during the early 2010s, and the COVID-19 pandemic in 2020. These regime shifts are not
+6
+Fig. 2: Monthly FCIX during January 1990-December 2023.
+isolated anomalies but rather reflect profound structural reconfigurations in market dynamics.
+The persistent elevation of FCIX values following these inflection points indicates prolonged
+phases of systemic vulnerability and amplified risk perception.
+The foregoing analysis substantiates the hypothesis that financial markets are intrinsi-
+cally nonstationary systems, whose dynamics evolve in response to continuous informational
+shocks, policy interventions, and macroeconomic shifts. The segmentation of the FCIX into
+statistically distinct regimes, along with the heavy-tailed distributions observed within these
+regimes, supports a regime-switching framework for understanding market behavior. This
+framework has critical implications for risk management and financial stability monitoring.
+Models that ignore the presence of discrete regime shifts risk underestimating systemic vul-
+nerability and tail risks. By contrast, models that incorporate dynamic regime identification,
+such as those incorporating the FCIX, enable more robust forecasting and offer early warning
+signals of evolving financial instability. Such capabilities equip policymakers and financial
+institutions with the tools necessary for preemptive intervention, resilience building, and the
+mitigation of systemic risk in an increasingly complex global financial system.
+3 Regime Analysis
+In this section, we conduct a statistical examination of the regime structure underlying the
+stock market’s dynamic behavior. As a preliminary step, we analyze the empirical distribution
+of FCIX realizations. As illustrated in Figure 4, the histogram exhibits a markedly heavy-
+tailed shape, a hallmark of complex systems operating far from equilibrium. The majority of
+7
+Fig. 3: Stock market segmentation during January 1990-December 2023.
+Fig. 4: Frequency histogram for FCIX during January 1990-December 2023.
+8
+FCIX values are concentrated in the low-to-moderate range, corresponding to periods of rel-
+ative market stability. However, the presence of an elongated right tail reflects the occasional
+but impactful episodes of systemic disruption, such as financial crises, during which the FCIX
+surges dramatically.
+This dual behavior suggests that the FCIX is governed by a hybrid distributional structure.
+The clustering around moderate values is consistent with a lognormal model, which captures
+the compounding effects of numerous small, independent fluctuations. In contrast, the empir-
+ical rarity yet disproportionate magnitude of extreme FCIX spikes aligns more closely with
+power-law behavior, an observation frequently encountered in self-organizing critical sys-
+tems and financial time series exhibiting tail dependence. This coexistence of lognormal bulk
+and power-law tail supports the hypothesis that financial markets alternate between phases of
+constrained stochastic fluctuation and episodic bursts of disorder, underscoring the relevance
+of regime-based modeling.
+To accommodate both the routine dynamics and extreme deviations observed in FCIX
+realizations, we employ the MLP distribution [5, 6]. This model integrates two distinct
+behaviors within a unified statistical framework: lognormality governs the distribution’s core,
+corresponding to low and moderate FCIX values, while a power-law tail emerges at higher
+values, capturing the heavy-tailed behavior associated with systemic crises. The lognormal
+regime reflects the cumulative effect of small, multiplicative shocks prevalent during periods
+of market stability, whereas the power-law tail encodes the disproportionate impact of rare,
+large-scale disruptions such as financial collapses or geopolitical dislocations.
+The transition from lognormal to power-law behavior reflects the latent fragility of
+financial markets, systems which, while appearing stable under normal conditions, remain
+susceptible to endogenous amplification or exogenous shocks capable of precipitating critical
+transitions. In contrast to conventional parametric models that systematically underrepresent
+tail risk, the MLP offers a more expressive and empirically consistent representation of finan-
+cial volatility. Its functional adaptability facilitates more accurate stress testing and scenario
+analysis, particularly in forecasting the likelihood and severity of extreme events. Moreover,
+the MLP’s sensitivity to deviations from its expected structure enables its deployment as
+a diagnostic tool for early warning, offering a quantitative basis for preemptive policy or
+portfolio adjustments aimed at enhancing systemic resilience.
+Let Ψt denote a stochastic process associated with the value of FCIX at time t, with its
+finite realization vector represented as ψ = [ψ1, ψ2, . . . , ψT ]⊺. The MLP distribution arises
+naturally from the temporal evolution of Ψt under the hypothesis that the growth duration of
+its realizations is itself a random variable. Specifically, suppose that an initial quantity ψt0 is
+drawn from a lognormal distribution at time t = t0, parameterized by location µ and shape
+σ. The subsequent growth of Ψt for t > t0 is then governed by a deterministic exponential
+mechanism as follows:
+∂Ψt
+∂t = κΨt, (8)
+where κ >0 denotes the growth rate. This leads to a temporal shift in the lognormal mean,
+such that after a fixed duration ∆t, the distribution remains lognormal with updated location
+parameter µ + κ∆t, while retaining the original dispersion σ.
+To encode uncertainty in the duration of this growth phase, we further model the elapsed
+time ∆t as a continuous random variable governed by an exponential distribution with stop-
+ping rate parameter ζ > 0. That is, the probability density function for the random growth
+9
+duration is given by
+f (t) = ζ exp(−ζt), t ≥ 0. (9)
+Under this formulation, the MLP distribution emerges as a statistical framework wherein
+a lognormal base distribution is convolved with an exponential stopping-time mechanism,
+thereby producing a distribution whose body is governed by multiplicative stochasticity and
+whose tail exhibits power-law scaling. This provides a principled stochastic foundation for
+the hybrid structure observed in empirical FCIX realizations.
+The probability density function associated with the random variable Ψt under the MLP
+model is given by
+g(ψt; µ, σ, ω) =
+ ω
+2
+  1
+ψt
+1+ω
+exp
+
+ωµ + ω2σ2
+2
+
+erfc
+ 1√
+2
+
+ωσ − log ψt − µσ  ,
+(10)
+where ψt > 0, µ ∈ R, σ > 0, and ω = ζ/κ > 0 is the power-law tail index controlling
+the heaviness of the distribution’s upper tail. Here, erfc(·) denotes the complementary error
+function. The corresponding cumulative distribution function is given by
+G(ψt; µ, σ, ω) = 12 erfc − log ψt − µ√2σ  − 12ψωt exp ωµ + ω2σ22  erfc  1√2 ωσ − log ψt − µσ  .
+(11)
+This formulation reveals the hybrid structure of the MLP distribution. In the regime
+ψt → 0, the first term in G(ψt; µ, σ, ω) dominates, and the distribution converges to a
+lognormal form with parameters (µ, σ). This captures the behavior of small-to-moderate
+FCIX values arising from routine market fluctuations. Conversely, in the limit σ → 0, the
+MLP asymptotically approaches a pure power-law form, governed entirely by the tail index
+ω. This characterizes the heavy-tailed regime associated with extreme market disruptions.
+Hence, the MLP family encapsulates both statistical regularity and disorder within a single
+parametrized structure, offering analytical flexibility in modeling the empirical distribution
+of FCIX realizations across regimes.
+The MLP distribution admits closed-form expressions for its first two moments under
+suitable conditions on the tail index parameter ω. The expected value of Ψt is given by
+E[Ψt] = ω exp
+
+2µ + σ2	
+ 
+exp
+
+σ2	
+ω − 2 − ω(ω − 1)2
+!
+, ω > 2, (12)
+while the variance is expressed as
+Var[Ψt] = ωω − 1 exp µ + σ22  , ω > 1. (13)
+These moment conditions imply that the existence of finite variance requiresω >1, while
+a finite mean requires the stricter constraint ω > 2. This demarcation highlights the heavy-
+tailed nature of the MLP distribution: asω approaches its lower bounds, the moments diverge,
+reflecting the increasing contribution of rare but extreme values to the overall distribution.
+10
+Such behavior underscores the necessity of careful tail-index estimation in practical applica-
+tions, particularly in the context of risk quantification and scenario-based forecasting where
+moment stability is critical.
+To model the presence of multiple latent market regimes, we posit that the FCIX real-
+izations arise from a finite mixture of R distinct MLP components. The number of regimes
+R ≥ 1 is unknown a priori and is to be inferred from the data. Let θr = [ µr, σr, ωr, πr]
+denote the parameter vector associated with regime r, where πr represents the regime’s mix-
+ing proportion (i.e., the relative frequency of observations attributed to regime r). The global
+distribution of Ψt is then modeled by the following mixture density
+h(ψt; θ) =
+RX
+r=1
+πr g(ψt; θr) (14a)
+=
+RX
+r=1
+πr
+ ωr
+2
+  1
+ψt
+1+ωr
+exp
+
+ωrµr + ω2r σ2r2  erfc  1√2 ωrσr − log ψt − µrσr  ,
+(14b)
+where g(ψt; θr) denotes the MLP density for the rth regime. The full parameter space is
+captured by the matrix
+θ =
+
+
+µ1 σ1 ω1 π1
+µ2 σ2 ω2 π2
+... ... ... ...
+µR σR ωR πR
+
+ , (15)
+with PRr=1 πr = 1 and πr > 0 for all r.
+The mixture model in (14) represents a flexible model of the empirical FCIX distribution,
+with each regime corresponding to a distinct hypothesis in the model’s alternative component
+specification [19]. Estimation of θ and inference on the true value of R can be performed via
+likelihood-based methods. This mixture framework enables both regime identification and
+the characterization of heterogeneity in market dynamics, offering a data-driven foundation
+for capturing hidden structural shifts in financial volatility.
+To operationalize estimation of the mixture model parameters, we discretize the observed
+realizations of Ψt into L non-overlapping intervals, forming a binned representation of the
+empirical distribution. Let |T |denote the total number of observed FCIX values, which are
+categorized into L bins {Bl}Ll=1. The bin boundaries are defined by a sequence {bl}Ll=1 such
+that
+Bl =
+
+bl − bl − bl−12 , bl + bl+1 − bl2  , l = 2, . . . , L− 1, (16)
+with the boundary cases specified by
+B1 = (0, b1 + b2−b12 ], (17)
+BL = [bL − bL−bL−12 , ∞), (18)
+11
+where b1 = min{ψt} and bL = max{ψt}. The number of bins L is determined via the Rice
+rule, yielding
+L = 2|T |1/3 = 41,
+which provides a heuristic balance between resolution and robustness in histogram-based
+estimation.
+Let ˆpl denote the observed proportion of data falling into bin Bl, and let pl(θ) denote the
+corresponding theoretical probability under the mixture model given by
+pl(θ) = P[Ψt ∈ Bl | θ] (19)
+=
+Z sup(Bl)
+inf(Bl)
+h(ψt; θ) dψt
+=
+RX
+r=1
+πr
+Z sup(Bl)
+inf(Bl)
+g(ψt; θr) dψt (20)
+=
+RX
+r=1
+πr [G(sup(Bl); θr) − G(inf(Bl); θr)] , (21)
+where G(·; θr) is the cumulative distribution function of the MLP density associated with
+regime r.
+Assuming the binned counts follow a multinomial distribution, the likelihood function for
+the vector of observed proportions ˆp = [ˆp1, ˆp2, . . . ,ˆpL]⊺ is given by
+L(θ | ˆp) =
+LY
+l=1
+(pl(θ))|T |ˆpl . (22)
+Taking the logarithm of the multinomial likelihood in (22), the log-likelihood function takes
+the form
+log L(θ | ˆp) = |T |
+LX
+l=1
+ˆpl log pl(θ). (23)
+To facilitate comparison between the empirical proportions ˆpl and their model-based
+counterparts pl(θ), we subtract the empirical entropy term |T |PLl=1 ˆpl log ˆpl, which is con-
+stant with respect to the model parameters, and multiply the resulting expression by a factor
+of 2, yielding
+log L(θ | ˆp) =
+
+
+
+2|T |
+LP
+l=1
+ˆpl log
+ pl(θ)
+ˆpl
+
+, if ˆpl > 0,
+0, if ˆpl = 0.
+(24)
+This expression is equivalent to a scaled version of the Kullback-Leibler divergence between
+the empirical distribution ˆp and the model-implied distribution p(θ). Specifically,
+log L(θ | ˆp) = −2|T |
+LX
+l=1
+DKL (ˆpl ∥ pl(θ)) , (25)
+12
+where DKL(ˆpl ∥ pl) = ˆpl log (ˆpl/pl) for ˆpl > 0.
+When parameter estimates are treated as random variables, the right-hand side of (25)
+approximates a χ2 distribution with L − 4R − 1 degrees of freedom, reflecting the effec-
+tive dimensionality reduction due to estimation of 4R parameters in the MLP mixture model
+(three for distributional shape and one for the mixing proportion per regime). This statisti-
+cal interpretation enables hypothesis testing, model validation, and asymptotic comparison
+among competing mixture configurations.
+To estimate the parameter matrix θ for a fixed number of regimes R, we solve the
+following constrained optimization problem
+maxµ,σ,ω,π log L(θ | ˆp) (26a)
+s.t.
+RX
+r=1
+πr = 1, (26b)
+µr ∈ (−∞, ∞), r = 1, . . . , R, (26c)
+σr ∈ (0, ∞), r = 1, . . . , R, (26d)
+ωr ∈ (0, ∞), r = 1, . . . , R, (26e)
+πr ∈ (0, 1], r = 1, . . . , R, (26f)
+where µ = [µ1, . . . , µR]⊺, σ = [σ1, . . . , σR]⊺, ω = [ω1, . . . , ωR]⊺, and π = [π1, . . . , πR]⊺
+represent the vectors of location, scale, tail index, and mixing proportions, respectively.
+Model adequacy for each hypothesized value of R is evaluated via the divergence-based
+log-likelihood function defined in (25), which, under regularity conditions, asymptotically
+follows a chi-squared distribution. The null hypothesis that the model with R regimes pro-
+vides a satisfactory fit is retained if the corresponding p-value exceeds a chosen significance
+level (e.g., α = 0.05), thereby avoiding overfitting through superfluous components.
+In practice, the true number of regimes is unknown and must be inferred empirically.
+To that end, we conduct goodness-of-fit tests sequentially for each candidate value of R
+by solving the optimization problem (26) and computing the corresponding test statistic.
+Table 1 reports the results of this regime analysis for the FCIX time series from Jan-
+uary 1990 to December 2023. The underlying models were estimated using a trust-region
+Newton-conjugate-gradient algorithm, which offers both numerical stability and convergence
+efficiency for high-dimensional, non-convex likelihood landscapes.
+As shown in Table 1, both the two-regime and three-regime mixture models are statis-
+tically supported at all conventional levels of significance ( α = 0 .01, 0.05, 0.10), while
+alternative models with either fewer or more components, including the one-regime specifi-
+cation corresponding to a random walk, fail the goodness-of-fit test. Among the admissible
+models, the three-regime formulation yields the lowest χ2 value and highest p-value, thereby
+offering the best compromise between model parsimony and explanatory adequacy.
+Accordingly, we select the three-regime MLP mixture as the most appropriate regime-
+delegating paradigm for the distribution of FCIX values. This choice not only provides a
+statistically superior fit but also reinforces the empirical finding that FCIX realizations are het-
+erogeneously distributed across distinct volatility regimes. The rejection of the single-regime
+13
+0.0000 0.0005 0.0010 0.0015 0.0020 0.0025 0.0030 0.0035 0.0040
+Financial Chaos Index
+0.000
+0.005
+0.010
+0.015
+0.020
+Probability Density Function
+HC
+IC
+LC
+Fig. 5: Plots of the probability density functions of market regimes.
+hypothesis implies that the temporal structure of market volatility is not homogeneous, under-
+scoring the existence of clustered phases of distinct systemic dynamics. This segmentation
+further corroborates earlier observations regarding structural shifts and regime persistence in
+the FCIX time series.
+The parameter estimates for the three-regime MLP mixture indicate that the dominant
+regime, accounting for 54.8% of the total mass, corresponds to an intermediate-chaos (IC)
+state, characterized by a mean FCIX level of 0.0006 and a standard deviation of 0.0003. The
+second most prevalent component, representing 35.5% of the distribution, is identified as the
+low-chaos (LC) regime, with a mean of 0.0003 and a standard deviation of 0.0001. Notably,
+both LC and IC regimes exhibit relatively low dispersion, indicating that FCIX values within
+these states evolve in a more predictable and less volatile manner.
+In contrast, the high-chaos (HC) regime, although contributing only 9.7% to the mixture,
+is marked by a significantly elevated mean of0.0012 and a standard deviation of0.0009. This
+regime encapsulates periods of extreme systemic instability, as evidenced by its markedly
+higher variability. The disproportion between its statistical weight and volatility highlights its
+role as a low-frequency but high-impact state in market evolution.
+Figure 5 illustrates the estimated probability density functions associated with each
+inferred regime, further underscoring the multimodal structure of the FCIX distribution and
+the contrast in scale and variability across regimes.
+To infer the prevailing market regime at each point in time, we define a latent random
+variable St representing the state of the financial chaos index FCIX at time t. The support
+of St comprises three distinct regimes: st ∈ {LC, IC, HC}, corresponding to the low-chaos,
+intermediate-chaos, and high-chaos states, respectively.
+14
+Table 1: Results of regime analysis for daily FCIX during January
+1990-December 2023.
+1-regime 2-regime 3-regime 4-regime 5-regime
+µ1 -7.988 -8.414 -8.502 -8.287 -8.405
+µ2 – -7.646 -7.697 -7.949 -7.796
+µ3 – – -7.204 -7.883 -7.446
+µ4 – – – 6.397 -7.057
+µ5 – – – – -6.296
+σ1 0.525 0.306 0.218 0.479 0.091
+σ2 – 0.245 0.308 0.535 0.204
+σ3 – – 0.573 0.519 0.213
+σ4 – – – 0.922 0.295
+σ5 – – – – 0.421
+ω1 3.159 2.662 3.584 2.131 0.091
+ω2 – 2.627 3.837 4.593 0.204
+ω3 – – 3.869 3.644 0.213
+ω4 – – – 2.292 0.295
+ω5 – – – – 0.421
+π1 1.000 0.522 0.355 0.246 0.039
+π2 – 0.478 0.548 0.093 0.206
+π3 – – 0.097 0.651 0.225
+π4 – – – 0.010 0.245
+π5 – – – – 0.285
+χ2 96.743 24.249 18.594 61.310 73.663
+p-value 0.000 0.983 0.995 0.002 0.000
+The probability that a given observation ψt arises from regime st, conditional on the
+observed value and the estimated parameters, is given by
+h(St = st | ψt; θ) = hst (ψt; θst )h(ψt; θ) , (27)
+where hst (ψt; θst ) denotes the regime-specific MLP density, and h(ψt; θ) is the global
+mixture density as defined in (14).
+This posterior formulation enables the classification of each FCIX realization ψt into
+its most likely generating regime, thereby producing a time-indexed sequence of dominant
+regime labels. Such a classification provides a granular view of market phase transitions and
+facilitates the detection of regime persistence, structural shifts, and volatility clustering across
+the observation horizon.
+The temporal dynamics of market regimes can be further analyzed through a discrete-time
+Markov process, represented by a transition probability matrix P. Each entry Pij denotes the
+estimated probability of transitioning from regime i to regime j over a single time increment.
+15
+Letting the rows correspond to the current regime and the columns to the subsequent regime,
+the estimated transition matrix is given by
+P =
+
+
+0.483 0 .493 0 .024
+0.409 0 .565 0 .027
+0.500 0 .470 0 .030
+
+ ,
+where the rows and columns are indexed by the regime states {LC, IC, HC}.
+The transition matrix P offers a compact representation of regime persistence and inter-
+regime mobility within the FCIX framework. Diagonal entries reflect the probability of
+remaining in the same regime across consecutive time steps. Specifically, the low-chaos
+regime exhibits moderate persistence with PLC,LC = 0 .483, while the intermediate-chaos
+regime displays a higher stability level with PIC,IC = 0 .565. This suggests that moderate-
+volatility phases are relatively enduring and often serve as transitional buffers between
+stable and crisis states. In stark contrast, the high-chaos regime is markedly transient, with
+PHC,HC = 0.030, indicating that periods of extreme disorder are typically short-lived. This
+aligns with empirical observations that financial crises, though severe, tend to dissipate once
+institutional or policy-based corrective mechanisms are activated.
+The off-diagonal elements capture transitions between different volatility states. The
+probability of moving from LC to IC is 0.493, nearly equal to the probability of remaining
+in LC, illustrating the frequent oscillation between stability and moderate volatility, likely
+driven by macroeconomic adjustments and shifts in investor sentiment. Similarly, the proba-
+bility of reverting from IC to LC is 0.409, reinforcing the tendency of markets to normalize
+following moderate stress. Transitions from LC and IC to HC occur infrequently (0.024 and
+0.027, respectively), underscoring the rarity of extreme systemic disruptions. However, once
+the system enters the HC regime, the probabilities of transitioning back to LC (0.500) or IC
+(0.470) vastly exceed the probability of persistence, reflecting the market’s inherent resilience
+and mean-reverting tendencies following crises.
+The persistence of the intermediate-chaos regime further emphasizes its role as a stabi-
+lizing intermediary. It operates as a critical zone in which financial systems absorb shocks,
+recalibrate expectations, and potentially redirect trajectories toward stability or systemic
+stress. In contrast, the HC regime’s brief duration underscores its episodic nature, emerging
+abruptly, generating concentrated instability, and then subsiding as structural corrections take
+hold. This dynamic interplay between regime states provides a lens through which to interpret
+the evolution of financial disorder and recovery across temporal horizons.
+While the transition matrix characterizes short-term regime dynamics, understanding the
+long-term behavior of the market requires examining the stationary distribution. The station-
+ary distribution vectorπ represents the asymptotic probabilities of the system residing in each
+regime, independent of the initial state. It satisfies the equilibrium condition
+πP = π, subject to
+3X
+i=1
+πi = 1, (28)
+which ensures that, over an extended horizon, the net flow into and out of each regime remains
+balanced.
+16
+Based on the empirical transition matrix P, the stationary distribution is computed as
+follows:
+π =
+
+
+0.444
+0.530
+0.026
+
+ ,
+indicating that, in the long run, the system spends approximately 44.4% of the time in the LC
+regime, 53.0% in the IC regime, and only 2.6% in the HC regime.
+The dominance of the IC regime in the stationary distribution highlights the market’s
+natural tendency to fluctuate within a moderate volatility zone, shaped by ongoing macroe-
+conomic adjustments and behavioral dynamics. The LC regime also maintains substantial
+long-run probability, reflecting the enduring presence of structurally stable periods in the
+financial system. In contrast, the HC regime has a vanishingly small stationary probability,
+consistent with the view that systemic crises are rare, episodic events. These findings comple-
+ment the transition-based analysis and reinforce the notion that financial markets are largely
+governed by alternating episodes of stability and moderate disorder, punctuated by infrequent
+bursts of acute turbulence.
+4 Forces Driving Market V olatility
+This section investigates the external forces that shape stock market volatility, drawing on
+sentiment indices derived from economic, policy, financial and geopolitical news. V olatil-
+ity measures are generally categorized into realized and implied forms. Realized volatility
+reflects ex post fluctuations in asset prices, and is captured here by the FCIX, which we
+have previously employed to detect structural regime transitions in historical market behavior.
+By contrast, implied volatility is a forward-looking measure derived from options mar-
+kets, embodying investor expectations about future uncertainty. Among such indicators, the
+Chicago Board Options Exchange’s VIX index remains the most prominent and widely
+referenced gauge of anticipated equity market volatility.
+Focusing on implied rather than realized volatility in the present analysis is motivated
+by several considerations. First, implied volatility captures forward-looking risk perceptions,
+making it particularly sensitive to evolving macro-financial conditions. Second, as a derivative
+of option pricing models, the VIX reflects anticipatory concerns over hedging costs, tail risks,
+and the broader confidence environment. Third, substantial empirical evidence supports the
+VIX’s predictive value for future realized volatility, liquidity stresses, and systemic fragility.
+Consequently, it serves not only as an uncertainty barometer but also as a latent indicator of
+financial instability.
+To probe the informational underpinnings of implied volatility fluctuations, we construct
+predictive models for the one-step-ahead monthly value of the VIX, using sentiment-based
+predictors derived from the EMV tracker [11]. The EMV index aggregates article counts from
+major U.S. newspapers, focusing on those containing terms from three semantic domains:
+(i) economic or financial concepts, (ii) equity market references, and (iii) uncertainty-related
+language such as “volatility,” “risk,” or “uncertainty.” The EMV index is scaled to match
+the historical mean of the VIX and demonstrates strong empirical correlation with both
+realized and implied volatility measures, reinforcing its validity as a proxy for news-driven
+uncertainty.
+17
+Beyond the aggregate index, over forty category-specific EMV trackers have been devel-
+oped, offering thematic granularity by quantifying the prevalence of macroeconomic news,
+fiscal and monetary policy debates, financial regulation, national security concerns, and trade
+policy developments. Notably, macroeconomic uncertainty features in 72% of EMV articles,
+commodity markets in 44%, fiscal policy in 35%, and monetary policy in 30% [11]. This
+taxonomy enables a disaggregated exploration of how distinct uncertainty channels influence
+market expectations.
+To estimate the relative importance of these thematic categories in driving implied volatil-
+ity, we employ an elastic net regression framework. This regularized modeling approach
+accommodates multicollinearity among predictors and performs automatic variable selection,
+combining lasso ( ℓ1) and ridge ( ℓ2) penalties to balance sparsity and robustness. Impor-
+tantly, the primary objective extends beyond mere forecasting accuracy to include inferential
+insights: by examining selected covariates and their coefficients across regimes, we aim to
+characterize the dynamic structure of market-relevant uncertainty.
+This investigation is embedded within the broader regime-switching framework estab-
+lished through the FCIX segmentation. By linking sentiment-based predictors to forward-
+looking volatility measures, the analysis traces how diverse forms of uncertainty differentially
+impact market dynamics and investor anticipations across structural phases. In doing so,
+it provides empirical insights into whether regime shifts are predominantly precipitated by
+macroeconomic instability, policy dislocations, or geopolitical shocks. These findings bear
+direct relevance to financial stability surveillance and the development of early-warning
+systems for systemic risk.
+To operationalize this analysis, we estimate a series of elastic net regression models across
+temporally segmented phases of financial market history. Specifically, we leverage the FCIX-
+driven segmentation of the time series into structurally homogeneous intervals, as depicted
+in Figure 3. Each segment corresponds to a distinct historical episode marked by relative
+statistical stationarity and macro-financial coherence. The segmentation is summarized in
+Table 2.
+Table 2: Segmented time periods.
+Segment Index Time Period
+1 1990-01 – 1993-06
+2 1993-07 – 1998-06
+3 1998-07 – 2002-12
+4 2003-01 – 2007-09
+5 2007-10 – 2009-12
+6 2010-01 – 2019-12
+7 2020-01 – 2023-12
+Let Tj ⊂ T denote the set of monthly time indices associated with segment j ∈
+{1, 2, . . . ,7}. For each segment j, we model the one-step-ahead value of the VIX as a linear
+function of category-specific EMV indices, denoted xt = [x1t, . . . , xKt ]⊺ ∈ RK, where each
+xkt measures the scaled frequency of uncertainty-related news in category k at time t.
+18
+Table 3: Performance summary of elastic nets.
+Segment Time Period α R 2 MSE RMSE
+1 1990–1993 0.10 0.709 0.0216 0.1469
+2 1993–1998 0.60 0.638 0.0222 0.1490
+3 1998–2002 0.75 0.691 0.0296 0.1721
+4 2003–2007 0.85 0.696 0.0194 0.1393
+5 2007–2009 0.80 0.917 0.0154 0.1242
+6 2010–2019 0.45 0.702 0.0185 0.1359
+7 2020–2023 0.70 0.854 0.0243 0.1559
+The segment-specific elastic net model is given by
+VIX(j)t+1 = β(j)0 +
+KX
+k=1
+β(j)k xkt + ε(j)t , t ∈ Tj, (29)
+where the coefficients are estimated via the regularized optimization
+bβ(j) = arg min
+β
+
+
+
+1
+|Tj|
+X
+t∈Tj
+ 
+VIXt+1 − β(j)0 −
+KX
+k=1
+βkxkt
+!2
++ λ(j)
+
+α(j)∥β∥1 + 12 (1 − α(j))∥β∥22
+
+ .
+(30)
+Here, λ(j) ≥ 0 controls the overall penalty strength, and α(j) ∈ [0, 1] governs the balance
+between lasso and ridge penalization. Both hyperparameters are tuned via cross-validation
+within each segment to optimize out-of-sample prediction performance.
+This modeling framework allows the structure of information relevance to flexibly evolve
+over time, capturing temporal shifts in the thematic composition of uncertainty. By doing
+so, it sheds light on the differential roles played by macroeconomic, policy, and geopolitical
+drivers in shaping investor expectations under varying market regimes.
+Table 3 summarizes the model diagnostics for each segment, while Table 4 lists the most
+influential EMV predictors per segment, ordered by the magnitude of their coefficients. These
+results are interpreted in connection with the patterns of FCIX shown in Figure 3, with par-
+ticular emphasis on how the number, strength, and nature of explanatory forces evolve across
+regime transitions. It is well-established that implied and realized volatilities are tightly cou-
+pled, particularly during periods of systemic stress [1]. Consequently, patterns observed in
+the predictive structure of implied volatility also offer valuable insights into the informational
+environment governing realized market behavior, as elucidated in the segmentation analysis
+that follows.
+The first segment (1990-1993) marks the aftermath of the early 1990s recession and is
+characterized by relatively low levels of market disorder, as evidenced by subdued FCIX
+realizations. The optimal regularization parameter remains small ( α = 0.10), indicating that
+implied volatility was shaped by a broad and diffuse array of factors. Within this regime,
+sentiment related to disease and labor conditions exerts a significant negative influence, con-
+sistent with a phase of public health normalization and gradual employment recovery. In
+contrast, commodity-related uncertainty contributes positively, reflecting lingering concerns
+19
+Table 4: Dominant drivers of implied volatility (VIX) across regimes.
+Segment Predictor 1 Predictor 2 Predictor 3 Predictor 4 Predictor 5
+1 Disease (-0.63) Labor (-0.61) Commodities (+0.38) Macro News (-0.26) Regulation (-0.16)
+2 Macro News (+0.62) Regulation (-0.48) Policy (-0.47) Monetary (+0.27) Labor (+0.16)
+3 Labor (-0.86) Macro News (-0.47) Fiscal (+0.45) Elections (+0.44) Policy (-0.34)
+4 Macro News (-0.65) Trade (+0.46) Elections (-0.35) Regulation (-0.33) Policy (-0.24)
+5 Policy (-0.84) Macro News (-0.76) Fiscal (+0.56) Trade (+0.55) Labor (+0.41)
+6 Labor (-0.61) Fiscal (-0.42) Policy (+0.35) Macro News (-0.27) Elections (+0.21)
+7 Disease (+1.18) Fiscal (+0.75) Elections (+0.65) Macro News (-0.38) Policy (-0.28)
+over inflationary pressures and global supply chain disruptions that resonated throughout the
+early recovery period.
+The second segment (1993-1998) coincides with a period of strong macroeconomic
+performance, institutional credibility, and stable market expansion. As the regularization
+parameter increases to α = 0 .60, the elastic net model becomes more selective, revealing
+a narrower set of volatility drivers. Positive contributions from macroeconomic news sug-
+gest that steady growth reports reinforced market confidence, while the negative coefficients
+associated with regulation and general policy uncertainty imply that predictable governance
+structures alleviated risk perceptions. This transition signals a regime where implied volatil-
+ity responded less to broad uncertainty and more to salient affirmations of macroeconomic
+strength.
+The third segment (1998-2002) captures the escalation and subsequent collapse of the
+dot-com bubble, a period of heightened asset mispricing and elevated FCIX realizations. The
+sparsity increases further to α = 0 .75, indicating that only a few factors played dominant
+roles in shaping implied volatility. Negative signs on labor and macroeconomic news persist,
+pointing to their continued stabilizing influence. However, fiscal uncertainty and electoral
+dynamics emerge as significant positive contributors, suggesting that volatility perceptions
+became increasingly sensitive to public sector spending debates and political transitions. The
+prominence of electoral uncertainty during this era is particularly notable, as investor senti-
+ment became finely attuned to anticipated policy responses to mounting financial fragility in
+the technology sector.
+During the fourth segment (2003-2007), the market experienced a temporary moderation
+of volatility prior to the global financial crisis. Here, the model achieves its highest degree
+of sparsity ( α = 0 .85), signaling an intense focus on a small subset of volatility drivers.
+Macro news continues to play a moderating role, indicative of sustained market confidence
+in economic fundamentals. Nevertheless, trade, regulation, and election-related uncertain-
+ties begin to exert upward pressure on implied volatility, foreshadowing the geopolitical and
+institutional imbalances that would later unravel dramatically. The modest positive influence
+of trade-related uncertainty may be interpreted as an early reflection of concerns regarding
+global capital imbalances and the sustainability of international economic linkages.
+The fifth segment (2007-2009) encompasses the apex of the global financial crisis, a
+period characterized by systemic financial instability and sharply elevated FCIX levels. The
+model remains sparse ( α = 0 .80) while achieving its highest predictive accuracy ( R2 =
+0.917). A small cadre of explanatory forces dominates this regime: macroeconomic news
+20
+and policy uncertainty act as powerful suppressors of volatility, while fiscal and trade-related
+uncertainties emerge as potent amplifiers. Labor uncertainty, reversing its previous pattern,
+now assumes a positive coefficient, reflecting heightened market sensitivity to widespread
+employment disruptions and labor market dislocations. This shift highlights the reconfigu-
+ration of investor focus toward systemic economic fragility and sovereign response capacity
+during acute stress.
+The sixth segment (2010-2019) represents a prolonged phase of post-crisis normaliza-
+tion, featuring subdued FCIX dynamics and broad-based market recovery. The regularization
+parameter declines to α = 0 .45, signifying a return to a more diversified informational
+environment. Labor and fiscal sentiment remain influential, both contributing negatively to
+implied volatility, consistent with improving employment conditions and fiscal stabilization.
+Nevertheless, policy and electoral uncertainties persist as positive volatility drivers, under-
+scoring the residual influence of political dynamics even during periods of macroeconomic
+resilience and low realized chaos.
+The final segment (2020-2023) encapsulates the unprecedented disruptions associated
+with the COVID-19 pandemic and its aftermath. In this high-chaos regime, the model remains
+relatively sparse (α = 0 .70) with strong explanatory power ( R2 = 0 .854). Disease-related
+uncertainty emerges as the overwhelmingly dominant driver, exhibiting a large positive coef-
+ficient (+1.18), a magnitude unparalleled across all prior segments. Fiscal and electoral
+uncertainties also rank among the strongest volatility amplifiers, reflecting heightened sen-
+sitivity to government stimulus measures and institutional efficacy during the pandemic.
+Traditional macroeconomic news, while retaining a stabilizing role, proves insufficient to
+counterbalance the profound exogenous shocks to public health and political systems.
+Comparing these segments reveals a dynamic reconfiguration of volatility drivers that
+tracks closely with regime shifts detected by FCIX. During tranquil periods, the model favors
+smaller α values, capturing a broad spectrum of modest informational signals. Conversely,
+in periods of systemic stress, such as 2007-2009 and 2020-2023, sparsity increases sharply,
+highlighting the concentration of market volatility around a few decisive concerns, typically
+fiscal interventions, institutional stability, or exogenous health crises. These shifts coincide
+with surges in FCIX, reinforcing the view that heightened realized volatility is associated with
+a narrowing of the informational channels through which investors interpret systemic risks.
+Moreover, a longitudinal analysis across all seven segments reveals a subset of EMV cat-
+egories that exert persistent influence, albeit in regime-dependent ways. Macro news appears
+as the most consistently influential driver, featuring in all segments, though its sign and mag-
+nitude vary in accordance with broader economic conditions. Labor and policy uncertainties
+recur across six segments each, their impacts shifting from stabilizing forces during expan-
+sions to volatility amplifiers during contractions. Fiscal uncertainty features prominently in
+five segments, particularly around major financial and macroeconomic disruptions, while
+electoral uncertainty emerges as an influential but episodic driver, especially during periods of
+governance transition. Disease-related uncertainty, while concentrated within the pandemic
+era, underscores the market’s acute sensitivity to exogenous, low-frequency shocks.
+Overall, this analysis underscores that while certain categories (e.g., disease, com-
+modities) exert episodic influence, others (macro news, policy, labor) represent structural
+determinants of implied volatility. Their effects, however, are highly contingent upon the
+prevailing market regime and economic stress levels, modulating both the dimensionality of
+21
+the informational environment and the nature of volatility transmission mechanisms. This
+interplay between informational sparsity, FCIX dynamics, and volatility regimes offers a
+comprehensive perspective on how financial markets assimilate and react to evolving systemic
+risks.
+5 Conclusion
+This paper has presented a unified empirical and mathematical investigation into the structural
+dynamics of stock market volatility. Utilizing the FCIX, a tensor-based measure of realized
+volatility, we characterized the evolution of financial markets over the period January 1990
+to December 2023 through a regime-switching framework grounded in the MLP distribution.
+Our analysis identified three distinct volatility regimes, low-chaos, intermediate-chaos, and
+high-chaos, each exhibiting differing levels of systemic stress, statistical dispersion, and per-
+sistence characteristics. These findings substantiate the nonstationary and regime-dependent
+nature of financial market behavior, while also capturing the stochastic dilation of perceived
+time during periods of systemic disruption.
+In addition to the segmentation of realized volatility, we explored the informational forces
+that influence forward-looking volatility expectations. Employing sentiment-based predic-
+tors derived from the EMV tracker, we constructed elastic net regression models to forecast
+implied volatility, as proxied by the VIX index. The empirical results highlight that shifts
+in macroeconomic, fiscal, regulatory, and geopolitical uncertainty possess substantial pre-
+dictive power, and that the relevance and influence of these informational categories vary
+systematically across distinct volatility regimes. These patterns suggest that market responses
+to informational shocks are highly regime-sensitive, reinforcing the necessity of modeling
+volatility within a segmented, regime-aware framework.
+Taken together, the findings underscore that stock market volatility emerges from a
+dynamic interplay between endogenous structural shifts, as encoded by regime transitions in
+the FCIX, and exogenous informational shocks, as captured through sentiment-based predic-
+tors. The tensor-based construction of FCIX, combined with nonparametric regime detection
+and sparse predictive inference, provides a robust and flexible framework for diagnosing sys-
+temic fragility, identifying latent market regimes, and forecasting volatility under evolving
+informational conditions.
+Future research directions include the development of real-time regime detection algo-
+rithms capable of operating under streaming data conditions, the integration of network-
+theoretic measures to capture contagion effects within financial systems, and the exploration
+of higher-frequency extensions of the FCIX to study intraday volatility dynamics. Moreover,
+further investigation into the causal pathways linking different categories of uncertainty to
+regime transitions could offer deeper insights into the mechanisms underlying financial mar-
+ket turbulence, with potential applications in systemic risk monitoring, portfolio stress testing,
+and macroprudential policy design.
+22
+References
+[1] Ataei, M., Chen, S., Yang, Z., Peyghami, M.R.: Theory and applications of financial
+chaos index. Physica A: Statistical Mechanics and its Applications 580, 126160 (2021)
+[2] Hamilton, J.D.: A new approach to the economic analysis of nonstationary time series
+and the business cycle. Econometrica: Journal of the Econometric Society, 357–384
+(1989)
+[3] Ryd ´en, T., Ter¨asvirta, T., ˚Asbrink, S.: Stylized facts of daily return series and the hidden
+markov model. Journal of Applied Econometrics 13(3), 217–244 (1998)
+[4] Truong, C., Oudre, L., Vayatis, N.: Selective review of offline change point detection
+methods. Signal Processing 167, 107299 (2020)
+[5] Basu, S., Jones, C.: On the power-law tail in the mass function of protostellar conden-
+sations and stars. Monthly Notices of the Royal Astronomical Society, 347(3), 47–51
+(2004)
+[6] Basu, S., Gil, M., Auddy, S.: The mlp distribution: a modified lognormal power-law
+model for the stellar initial mass function. Monthly Notices of the Royal Astronomical
+Society, 449(3), 2413–2420 (2015)
+[7] Baker, S.R., Bloom, N., Davis, S.J.: Measuring economic policy uncertainty. The
+Quarterly Journal of Economics, 131(4), 1593–1636 (2016)
+[8] Al-Thaqeb, S.A., Algharabali, B.G.: Economic policy uncertainty: A literature review.
+The Journal of Economic Asymmetries 20, 00133 (2019)
+[9] Audrino, F., Sigrist, F., Ballinari, D.: The impact of sentiment and attention measures
+on stock market volatility. International Journal of Forecasting 36(2), 334–357 (2020)
+[10] Bianchi, D., B ¨uchner, M., Tamoni, A.: Bond risk premiums with machine learning. The
+Review of Financial Studies 34(2), 1046–1089 (2021)
+[11] Baker, S.R., Bloom, N., Davis, S.J., Kost, K.J.: Policy news and stock market volatility.
+Working Paper 25720, National Bureau of Economic Research (2019)
+[12] Ataei, M., Chen, S., Yang, Z., Peyghami, M.R.: Time-homogeneous top-k ranking using
+tensor decompositions. Optimization Methods and Software 35(6), 1119–1143 (2020)
+[13] Campbell, J.Y ., Cochrane, J.H.: By force of habit: A consumption-based explanation of
+aggregate stock market behavior. Journal of Political Economy,107(2), 205–251 (1999)
+[14] Campbell, J.Y .: Asset pricing at the millennium. The Journal of Finance, 55(4), 1515–
+1567 (2000)
+[15] Arlot, S., Celisse, A., Harchaoui, Z.: A kernel multiple change-point algorithm via
+23
+model selection. Journal of Machine Learning Research, 20(162), 1–56 (2019)
+[16] Desobry, F., Davy, M., Doncarli, C.: An online kernel change detection algorithm. IEEE
+Transactions on Signal Processing, 53(8), 2961–2974 (2005)
+[17] Harchaoui, Z., Capp ´e, O.: Retrospective mutiple change-point estimation with kernels.
+In: 2007 IEEE/SP 14th Workshop on Statistical Signal Processing, pp. 768–772 (2007).
+IEEE
+[18] Harchaoui, Z., Moulines, E., Bach, F.: Kernel change-point analysis. Advances in Neural
+Information Processing Systems 21 (2008)
+[19] Hamilton, J.D.: Time Series Analysis vol. 2. Princeton University Press, Princeton, NJ,
+??? (1994)
+24

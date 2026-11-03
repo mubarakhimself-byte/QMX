@@ -1,0 +1,848 @@
+arXiv 2609.29530  https://arxiv.org/abs/2609.29530
+
+The Impossible Trinity of Time-Series Validation:
+A Conservation Law among Training Sufficiency,
+Test Coverage, and Temporal Causality
+Jiayu Li∗
+September 2026
+Abstract
+Validating a model on a time series asks for three things at once: each training run
+should use most of the sample (sufficiency), the test sets should together cover most of
+the sample (coverage), and training data should come before test data (causality). We
+prove that the three cannot be had together and price each one. Let α be the smallest
+training fraction over folds, β the fraction of the sample covered by tests, Λ the fraction of
+the sample used as training data from the future of a test point, and δ the distance from a
+test point to the nearest training point in its future. Every scheme on a sample of length T
+satisfies
+α+β≤1 + Λ andα+ min{β, δ/T} ≤1,
+and under β-mixing the leakage bias at a test point is at most 2 M βmix(δ). In words: going
+beyond the causal frontier α + β = 1 requires training on the future; that future data must
+sit within (1 −α )T of a test point; and its harm depends on its distance, not its amount.
+Hence expanding walk-forward is exactly the Pareto frontier of causal validation, k-fold
+cross-validation buys the most future data, and purged k-fold with an embargo pays in
+distance instead, which is cheap when the process forgets quickly but cannot repair the
+part of causality demanded by non-stationarity. On pure noise, shuffled 5-fold reports an
+information coefficient of +0.32, while contiguous 5-fold, using the same amount of future
+data, reports +0.004.
+1 Introduction
+1.1 The problem
+Given a sample of length T from a time series (e.g., feature–label pairs built from stock data),
+we wish to evaluate a learning algorithm, or to tune its hyperparameters. Any evaluation must
+split the sample into one or more training/test pairs. Practitioners hold three requirements for
+such splits, each individually beyond reproach:
+• (P1) Training sufficiency.In each single training run, the training set should be as
+large as possible, ideally approaching the whole sample. Rationale: the deployed model
+will be trained on all T samples; the further the evaluation-time training size is from T ,
+the further the evaluated object is from the deployed object.
+∗Email:lijiayu2027@outlook.com.
+1
+arXiv:2609.29530v1  [cs.LG]  2 Sep 2026
+• (P2) T est coverage.The union of the test sets across runs should cover as much of the
+sample as possible. Rationale: more test points mean lower estimator variance, and more
+covered market regimes mean more robust conclusions.
+•(P3) T emporal causality .Training data should precede test data in time. When this
+is violated, the severity of the violation can be measured as follows:walking from the test
+set toward the future, the smaller the distance to the first training sample encountered, the
+more severe the violation.Rationale: time series carry serial dependence and look-ahead
+information; training on data in the immediate future of a test point effectively feeds the
+test point’s own information to the model.
+The four standard schemes each trade off these demands differently (Table 1). None achieves
+all three. The starting point of this paper is the claim thatthis is not a failure of ingenuity in
+scheme design, but a mathematical law— and that the law has a clean form: one inequality
+among three quantities measured on a common scale, overlaid with a statistical layer whose
+exchange rate is set by the memory of the process.
+Table 1: The folklore trade-off among the four standard validation schemes.
+Scheme P1 sufficiency P2 coverage P3 causality
+Walk-forward (rolling/expanding)✗(early folds starve) partial✓
+k-fold cross-validation✓ ✓✗
+Last-block hold-out✓✗✓
+Purgedk-fold + embargo partial partial partial (balanced)
+1.2 Contributions
+1. Formalization(Section 2). The three demands become computable coordinates of
+a scheme: the worst-fold training fraction α, the coverage β, and, for causality, the
+anti-causal mass Λ (how much future data is used) together with the anti-causal margin
+δ(how close it sits to the tests — exactly the distance of P3).
+2. The main theorem and its combinatorics(Section 3). Every scheme satisfies the
+ledger α + β≤ 1 + Λ, theproximity constraint δ≤ (1 −α )T whenever Λ > 0, hence the
+trinity inequality α + min{β, δ/T} ≤1; and under β-mixing the leakage bias at a test
+point is at most 2 M βmix(δ), which proves that the distance of P3 is the right severity
+statistic and identifies the mixing coefficient as its exchange rate (Theorem 1; Theorem 5
+restates the exchange rate in an arbitrary integral probability metric). Consequently
+strict causality forces α + β≤ 1, expanding walk-forward is exactly this frontier, k-fold
+attains the ledger with equality, and even theaveragetraining fraction of a fully covering
+causal scheme is at most about one half (Theorem 4).
+3. The price of each vertex(Section 4). The sufficiency gap costs a pessimistic learning-
+curve bias (Proposition 6), the coverage gap a variance of orderσ2/(βT ) plus an irreparable
+worst-case regime error (Proposition 7), and the three prices cannot vanish together
+(Corollary 8). The hardness of the trinity is the memory of the process (Section 4.5):
+it vanishes in the i.i.d. limit, an embargo buys causality back under finite memory at a
+sample cost ofO(m(2H+h)/T), and the non-stationary part is not redeemable.
+2
+Section 5 places the standard schemes in these coordinates, discusses tuning, and gives a
+minimal numerical illustration of the volume/severity distinction; Section 6 condenses the
+results into practical guidance. All non-trivial proofs are collected in Appendix A.
+2 Formal framework
+2.1 Data and validation schemes
+Index the sample by time, [ T ] = {1, 2, . . . , T}. Each index t carries a sample Wt = (Xt, Yt): the
+feature Xt is observable at time t, and the label Yt resolvesat time t + H, where H≥ 0 is the
+label horizon(e.g.,Y t is the forward return over the nextHperiods).
+Definition 1(Validation scheme).A validation scheme is a finite collection
+S={(R i, Ei)}mi=1, R i, Ei ⊆[T], R i ∩E i =∅, E i ̸=∅,
+where fold i trains on Ri and evaluates on Ei. The scheme outputs the weighted average of
+fold test losses, ˆL(S) = Pi wi ˆLi withw i ≥0, Pi wi = 1 (typically weighted by|E i|).
+2.2 The three quantities
+Definition 2(Training sufficiency).The worst-fold and average training fractions are
+α(S) = min
+i
+|Ri|
+T ,¯α(S) =
+X
+i
+wi
+|Ri|
+T ,
+the average being taken with the weights wi that define ˆL(S), so that ¯αTis the mean training
+size behind the reported estimate; with equal-length test blocks weighted by |Ei| it is the plain
+average 1m Pi |Ri|/T.
+P1 demands α→ 1. We take the worst fold because an evaluation is only as strong as its
+weakest link; the average version is treated separately in Theorem 4.
+Definition 3(Test coverage).β(S) =
+Si Ei
+T .
+P2 demandsβ→1.
+Definition 4(Causality, anti-causal mass, and margins).Write dist(t, S) = mins∈S |s−t| for
+the distance from an index t to a set S⊆ [T ], with dist(t,∅ ) = +∞. Fold i isstrictly causalif
+maxR i <minE i (all training precedes all testing); the scheme is strictly causal if every fold is.
+For a test point t∈E i of a general fold, split the training set into thepastandfuture training
+setsoft,
+Pi(t) =R i ∩[1, t), F i(t) =R i ∩(t, T],
+so that Ri = Pi(t) ∪F i(t) (as t /∈Ri). Causality is violated at t exactly when Fi(t) ̸= ∅, and
+the violation has two measures, the size ofF i(t) and its distance fromt:
+•theanti-causal mass(volume of the violation):
+Λi = maxt∈Ei
+|Fi(t)|
+T =
+Ri ∩(minE i, T]
+T ,Λ(S) = max i Λi,
+the maximum being attained at the earliest test point becauseF i(t) shrinks astgrows;
+3
+•thepointwise anti-causal margin(distance of the violation):
+δi(t) = dist
+ 
+t, Fi(t)
+
+= min{r−t:r∈R i, r > t} ∈ {1,2, . . .} ∪ {+∞},
+i.e.the distance to the first training point encountered walking from t into the future; the
+fold margin is δi = mint∈Ei δi(t) and the scheme marginδ(S) = mini δi. Symmetrically, the
+past marginis δ−i (t) = dist t, Pi(t), and dist(t, Ri) = min{δ−i (t), δi(t)} is thetwo-sided
+margin.
+Strict causality is equivalent to Λ = 0 and to δ = +∞: both say that Fi(t) = ∅ at every test
+point of every fold. When Ei is a contiguous interval with all training outside it, δi is attained
+at the right end of the interval — the phrasing of P3 (“walking from the test set toward the
+future”); Definition 4 is its pointwise generalization. The two-sided margin dist(t, Ri) is the
+exclusion radius of hv-block cross-validation (Racine, 2000), which Section 5.3 sweeps.
+Remark2.1 (Why two violation measures).Λ and δ are two functionals of one object, the
+future training set Fi(t) of a test point: its cardinality and its distance from t. Λ measureshow
+muchfuture data is used; δ measureshow closeit sits. Theorem 1 shows that the combinatorial
+ledger counts the cardinality, that a non-empty Fi(t) forces a bound on the distance, and that
+statistical harm counts only the distance (converted through the dependence structure of the
+process).
+Remark2.2 (Causality as adaptedness).Let Ft = σ(Ws : s≤t ) be the natural filtration of
+the sample (stated for H = 0; for H >0 every index shifts by H, as in Remark 3.2). Fold i
+is strictly causal exactly when Ri ⊆ [1,minE i − 1], in which case its trained model A(WRi)
+is FminE i−1-measurable, hence Ft−1-measurable at every test point t∈E i: the fold is an
+adaptedpredictor, and its test losses are those of a prequential evaluation in the sense of
+Dawid (1984). Two consequences need no mixing assumption. First, ℓt −E [ℓt | Ft−1] is a
+martingale-difference sequence along each test block, so the causal frontier of Corollary 3 is
+exactly the class of schemes to which martingale concentration and anytime-valid confidence
+sequences (Ramdas et al., 2023) apply directly. Second, an anti-causal fold is a non-adapted
+predictor, and Theorem 1(d) measures its non-adaptedness by the dependence between Ft and
+the future σ-algebra σ(Ws : s≥t + δi(t)): the margin is the lag at which that dependence is
+evaluated.
+2.3 Label horizon and informational order
+When H >0, index order is not information order: the label of sample s resolves only at s + H,
+so at prediction time t theusabletraining samples are {s : s + H≤t} . Even walk-forward
+must therefore keep a gap of H between training set and test block, or it trains on labels not
+yet resolved at prediction time — a look-ahead bias of the same origin as “using future data”.
+Symmetrically, training samples within H beforea test block have label windows [ s, s+ H]
+overlapping the test label windows, again constituting leakage; deleting them is the original
+motivation of purging (L´ opez de Prado, 2018).
+Formally we absorb all of this into the dependence structure of the augmented sample
+process Wt = ( Xt, Yt): even if raw returns are i.i.d., H-period overlapping labels make W
+strongly dependent at lags d < Hand independent at d≥H (Remark 4.3). The combinatorial
+statements are made forH= 0; Remark 3.2 gives theO(mH/T) correction forH >0.
+4
+2.4 The dependence structure of the process
+The statistical part of the main theorem needs one assumption on the data-generating process:
+a uniform bound on the dependence between past and future. Stationarity isnotneeded for it;
+it enters only later, when fold estimates are identified with a learning curve (Assumption B).
+Assumption A.The augmented sample process ( Wt)t∈Z is absolutely regular ( β-mixing) with
+coefficientsβ mix(d)↓0, uniformly in time: for everyaandd≥1,
+ L W≤a, W≥a+d − L(W≤a)⊗ L(W≥a+d)TV ≤β mix(d),
+where W≤a = (Ws)s≤a, W≥a+d = (Ws)s≥a+d, and ∥µ−ν∥ TV = supA |µ(A) −ν (A)|. We set
+βmix(+∞) = 0, so thatβ mix(δi(t)) is defined for causal folds.
+Assumption A is the total-variation case of a more general notion. For a class Ψ of
+measurable functions of two path segments, theintegral probability metricgenerated by Ψ
+(M¨ uller, 1997) isdΨ(P, Q) = supψ∈Ψ |EP ψ−E Qψ|, and the Ψ-dependence coefficientof the
+process is
+βΨ(d) = sup
+a
+dΨ
+
+L
+ 
+W≤a, W≥a+d
+
+,L(W ≤a)⊗ L(W≥a+d)
+
+, β Ψ(+∞) = 0.(1)
+Functions bounded by M give βΨ = 2M βmix; 1-Lipschitz functions for a metric on the path
+space give a Wasserstein-type coefficient of the kind introduced by Dedecker and Prieur (2005)
+and Wu (2005), which decays for processes that are not mixing at all, such as the autoregressions
+with discrete innovations of Andrews (1984); and the loss maps of a fixed algorithm give a
+discrepancyin the sense of Kuznetsov and Mohri (2015, 2020). Theorem 5 states the exchange
+rate at this level of generality; the main theorem uses the total-variation case, which asks
+nothing of the algorithm.
+Throughout, losses are bounded, |ℓ| ≤M. For a fold i and a test point t∈E i, write
+R− = Pi(t) and R+ = Fi(t) for the past and future training sets of Definition 4, so that
+R− ⊆[1, t−δ −i (t)] andR + ⊆[t+δ i(t), T], and write
+ℓt =ℓ
+ 
+A(WR−, WR+), Wt
+
+for the fold model’s loss at t. Twoleak-free referenceswill be compared with ℓt: ˜ℓt is the
+same loss with WR+ replaced by a copy equal in distribution but independent of σ(Ws : s≤t )
+(the anti-causal training data is decoupled from everything the test point can see); ℓ◦t is the
+same loss with ( WR−, Wt, WR+) replaced by three mutually independent copies with the same
+marginal laws (all leakage on both sides is removed).
+3 The main theorem and its combinatorial consequences
+Theorem 1(The impossible trinity).Let S be any validation scheme on[ T ], with α, β,Λ, δas
+in Definitions 2–4.
+(a) (Ledger.) α + β≤ 1 + Λ. Equality holds if and only if the test union is a suffix, Si Ei =
+[p, T], and some fold i testing at p = minE i trains on the entire prefix ( Ri ⊇ [1, p−1]),
+is a worst fold (|R i|=αT), and carries the maximal anti-causal mass (Λ i = Λ).
+5
+(b) (Proximity.) Every fold that uses any future data (Λ i > 0) has δi ≤T− |Ri|. Hence if
+Λ > 0— in particular whenever α + β >1, by (a) — then δ≤ (1 −α )T : some fold trains
+on a point at most(1−α)Tsteps after one of its own test points.
+(c) (Trinity.) Consequently, with the conventionδ/T= +∞for strictly causal schemes,
+α+ min{β, δ/T} ≤1.
+Equality with δ = +∞ is attained at every point( α, β) = (1 −β, β)of the causal frontier
+by the expanding walk-forward schemes of Corollary 3.
+(d) (Exchange rate.) Under Assumption A, for every fold i and test point t∈E i, with
+δ+ =δ i(t)andδ − =δ −i (t),
+ E[ℓt]−E[ ˜ℓt]  ≤2M β mix(δ+),  E[ℓt]−E[ℓ ◦t ]  ≤2M βmix(δ−) +β mix(δ+).
+Averaging over the fold,
+E[ ˆLi] −E [ ˜Li] ≤ 2M|Ei| Pt∈Ei βmix δi(t), and similarly for thetwo-sided reference.
+Parts (a)–(c) carryno statistical assumptions: they are facts about splitting a finite totally
+ordered set, and hold for any data, any model, and any loss. Part (d) is the only place where
+the process enters, and it enters through a single number,β mix(δ).
+The theorem should be read as a price list. Part (a) says that every unit of α + β above
+the causal frontier α + β = 1 must be paid for with at least one unit of anti-causal training
+mass. Part (b) says that the mass so bought cannot be parked far away: it must sit within
+(1 −α )T of a test point, so thatdistance is paid out of sufficiency, one sample per unit of
+margin. Part (c) puts the three coordinates on one scale: sufficiency, coverage and (normalized)
+margin cannot all be close to one — the impossible trinity in one line. Part (d) says that the
+harm of the mass is not its volume but its distance, converted at the mixing coefficient of the
+process. The combination of (b) and (d) is the whole story of purged k-fold: it buys distance
+instead of volume, and distance is cheap exactly when the process forgets quickly.
+The intuition behind (a): on the totally ordered time axis,the earlier a test point sits, the
+longer the suffix it sterilizes as unusable-for-training in its fold. Coverage demands the existence
+of early test points; sufficiency forbids the existence of small training sets; the two compete for
+the same resource — prefix measure — and the only way out is to train on the suffix, which
+is anti-causal. The resemblance to the Mundell–Fleming trilemma (Mundell, 1963) and the
+CAP theorem (Gilbert and Lynch, 2002) is more than rhetorical: all three are conservation
+phenomena in which a total order or consistency constraint locks two resources into a single
+budget.
+3.1 Combinatorial consequences
+Corollary 2(Conservation law).IfSis strictly causal, thenα(S) +β(S)≤1.
+This is Theorem 1(a) with Λ = 0, or (c) with δ = +∞. The equality case of (a) describes
+the frontier: a strictly causal scheme with α + β = 1 has test union ( αT, T] and a fold that
+trains on exactly the prefix [1, αT] and tests atαT+ 1.
+6
+Figure 1: The feasible region of strictly causal schemes, α + β≤ 1 (Theorem 1(c)), and the
+coordinates of the standard schemes. k-fold lies outside the region and must pay Λ ≥α + β− 1
+(Theorem 1(a)); purged k-fold has the same Λ but its effective leakage is pushed to βmix(h) ≈ 0
+by the embargo (Theorem 1(d)), the embargo being deducted from α (Theorem 1(b)). The
+coordinates of the non-causal schemes are schematic ( k = 5; the embargo is exaggerated for
+visibility).
+Corollary 3(Attainability and Pareto frontier).Let α, β≥ 0with α + β≤ 1and αT, βT
+integers, βT≥ 1. Then there is a strictly causal scheme attaining( α′, β)with α′ ≥α ; moreover
+every point of the frontier α + β = 1is attained by the followingexpanding walk-forwardscheme
+with any number1 ≤m≤βT of blocks: partition((1 −β )T, T]into m consecutive test blocks
+E1 <· · ·< Em and set Ri = [1,minE i − 1]. Conversely, every strictly causal scheme is weakly
+dominated in(α, β)by an expanding walk-forward scheme.
+The proof is immediate: the construction has worst fold R1 = [1, (1 −β )T ], so it sits at
+(1−β, β), and by Corollary 2 no strictly causal scheme with coverageβhasα >1−β.
+Corollary 3 upgrades walk-forward from “one scheme among many” tothe entire Pareto
+frontier of strictly causal validation: the initial-window fraction w slides along the frontier,
+tracing (α, β) = (w, 1 −w ). Last-block hold-out is the member m = 1 of the same family: in
+the coordinates ( α, β) alone, a hold-out with test fraction β and a walk-forward with coverage
+β are indistinguishable — both sit at (1 −β, β), because the worst fold of the walk-forward
+is exactly the hold-out. The folklore of Table 1 (“hold-out: sufficient but poor coverage”,
+“walk-forward: covers but starves”) therefore only records that hold-out is customarily run with
+small β and walk-forward with large β. What genuinely separates the two at equal coverage
+is theaveragetraining fraction, the subject of the next theorem: the hold-out has ¯α= 1 −β ,
+7
+whereas anm-block walk-forward with equal blocks has ¯α= 1− m+12m β→1−β/2.
+Theorem 4(Mean-sufficiency version).Let S be strictly causal with pairwise disjoint test sets
+that are intervals of equal lengthb=βT /m, weighted by|E i|(sow i = 1/m). Then
+¯α(S) +m+ 12m β(S)≤1,
+with equality attained by the expanding walk-forward scheme of Corollary 3 with equal blocks.
+In particular, when the test blocks tile the whole sample ( β = 1), ¯α≤m−12m < 12 :even measured
+by average training size, a fully covering causal scheme uses at most half the data.
+At β = 1 the first block has no training data at all ( α = 0): full coverage is the degenerate
+endpoint of causal validation, and the theorem says that averaging over folds does not rescue it.
+Remark3.1 ( k-fold is the extremal buyer).Contiguous-block k-fold cross-validation has α = k−1k ,
+β = 1, Λ = k−1k and attains Theorem 1(a) with equality (the fold testing on the first block
+trains on everything after it): it spends exactly the minimum Λ that its (α, β) requires, not a
+unit more — this is k-fold’s combinatorial optimality. All of its problems live in part (d): the Λ
+it buys consists entirely of violations at margin δ = 1, and by part (b) it could not have pushed
+that margin beyondT /kwithout giving up sufficiency.
+Remark3.2 (Sanitization is deducted from sufficiency).Part (b) is the combinatorial half
+of the purged- k-fold story: any scheme above the causal frontier that wants its anti-causal
+mass at margin ≥h must accept α≤ 1 −h/T , and with k blocks the affordable margin is
+at most about T /k. The label horizon acts in the same way. For H > 0, usable training
+requires s + H≤minE i, so Corollary 2 tightens to α + β≤ 1 −H/T , and in Theorem 1(a) and
+Theorem 4 each train/test boundary loses a sanitization zone of length O(H), a total correction
+of O(mH/T ). Both effects are the quantitative form of the folklore “the finer you slice, the less
+room you have for an embargo and the more sanitization overhead you pay” (Section 4.5(b)).
+4 Statistical consequences: the price of each vertex
+The combinatorial parts answer “which combinations are feasible”; the statistical layer answers
+“what is paid at each unsatisfied vertex”. The target of estimation is thedeployment risk L(T ):
+the expected loss of the model trained on all T samples on a fresh test point, i.e. the learning
+curve of Assumption B evaluated at n = T . The scheme outputs ˆL(S), and we care about its
+bias and variance as an estimator ofL(T).
+4.1 The price of causality: the severity law
+Theorem 1(d) is the price of the causality vertex. Its first inequality isolates the anti-causal
+part of the training set and is the statement about P3; the second removes the leakage on both
+sides and produces a genuinely leak-free reference. The part has three layers of meaning:
+1. The severity measure of P3 is proven correct.The bound depends on the anti-causal
+structureonlythrough δ+, the distance of P3: the coupling grabs all future training data
+in one stroke, so the bound sees only the nearest point, and the exchange rate of that
+distance isβ mix(·).
+8
+2. V olume is harmless; proximity is harmful.The same Λ placed beyond δ+ ≥h does
+harm at most 2 M βmix(h); placed adjacent to the tests it is priced at βmix(1), typically
+orders of magnitude larger. Accordingly define theeffective leakage
+Λeff (S) = maxi
+1
+|Ei|
+X
+t∈Ei
+βmix
+ 
+δi(t)
+
+≤β mix
+ 
+δ(S)
+
+,
+the fold-averaged dependence coefficient at the margins, which is the quantity statistics
+actually needs controlled; Λ is merely its support volume.
+3.The decoupled reference connects to the sufficiency analysis.ℓ ◦t is the loss of a
+model trained on |Ri| samples and evaluated at an independent test point; its expectation
+is the leak-free risk of the fold, which Assumption B below identifies with the learning
+curve L(|Ri|). Leakage bias and learning-curve bias therefore add in the same coordinate
+system, and the two terms of the two-sided bound are exactly the two sanitization moves
+of Remark 4.2.
+The total-variation bound is the worst case over all algorithms and losses. Denominating
+the exchange rate in the metric that matches the algorithm gives a sharper price at no extra
+cost in the proof.
+Theorem 5(Exchange rate in an arbitrary metric).Fix a fold i and a test point t∈E i with
+δ+ = δi(t), and let ψt be the map( W≤t, W≥t+δ+) 7→ℓ t, which exists because( WPi(t), Wt)is a
+function ofW ≤t andW Fi(t) a function ofW ≥t+δ+. Ifψ t ∈Ψ, then
+E[ℓt]−E[ ˜ℓt] ≤β Ψ(δ+).
+In particular: (i)Ψ = {ψ : |ψ| ≤M}recovers the first inequality of Theorem 1(d); (ii) if the
+loss composed with the algorithm is M -Lipschitz in the data for a metric on the path space,
+the bound holds with M times the corresponding Wasserstein coefficient, whether or not the
+process is mixing; (iii) ifΨis the class of loss maps of the algorithm itself, βΨ is the smallest
+exchange rate valid for that algorithm on every fold, and it is small for algorithm–process pairs
+that cannot exploit the leak. The validity of k-fold for autoregressions with uncorrelated errors
+(Bergmeir et al., 2018) is therefore not an exception to Theorem 1(d) but an instance of a small
+βΨ.
+The proof is one line. E[ℓt] = EP ψt with P = L(W≤t, W≥t+δ+), and E[˜ℓt] = EQψt with
+Q = L(W≤t) ⊗ L(W≥t+δ+), because the leak-free reference replaces WR+ by a copy that is
+independent of Ft and equal in law; hence |E[ℓt] −E [˜ℓt]| ≤dΨ(P, Q) ≤β Ψ(δ+) by (1) with a = t,
+d = δ+. The two-sided inequality of Theorem 1(d) generalizes in the same way whenever Ψ is
+closed under fixing one argument, since dΨ is a pseudo-metric and the triangle-inequality step
+of Appendix A.2 goes through verbatim. Theorem 1(d) keeps the total-variation form because
+it is the only case that requires nothing of the algorithm, and because Berbee’s coupling gives
+it a pathwise meaning (the future training data can be replaced by an independent copy on an
+event of probability 1−β mix(δ+)) that the expectation bound alone does not carry.
+Remark4.1 (The exchange rate in bits).Let I(d) = supa I
+ 
+W≤a; W≥a+d
+
+be the mutual
+information (in nats) between the past and the d-separated future. Pinsker’s inequality gives
+βmix(d) ≤
+p
+I(d)/2, so Theorem 1(d) can be restated as |E[ℓt] −E [˜ℓt]| ≤Mp2I(δ +): the harm
+9
+of a violation is bounded by the square root of the information that the future training set
+can carry about the test point. This is the form in which the same coupling appears in the
+information-theoretic generalization bounds of Russo and Zou (2016) and Xu and Raginsky
+(2017), with the margin playing the role of an information budget.
+Remark4.2 (Purging and embargo unified).An embargo lifts δi(t) from 1 to h; purging deletes
+training samples within H of the test block on account of the label horizon, lifting δ−i (t) (and,
+on the future side, adding H to the embargo). They are the same move — “pay distance until
+the decay of the mixing coefficient takes over” — applied to the two sides of the test block, and
+the two-sided bound of Theorem 1(d) prices them additively.
+Remark4.3 (Overlapping labels give memory to i.i.d. returns).If raw returns are i.i.d. and
+Yt = PHj=1 rt+j, then corr(Yt, Yt+d) = (H−d) +H : the dependence of the augmented process decays
+linearly within d < Hand cuts off to zero at d≥H . The illustration of Section 5.3 measures
+exactly this curve.
+Remark4.4 (Symmetry and asymmetry of direction).The two-sided bound of Theorem 1(d)
+treats the past and the future margins identically, and under strict stationarity the leak-free
+reference ℓ◦t means the same thing on both sides: pure statistical leakage istime-symmetric
+— the distant past and the distant future are equally harmless. The genuine asymmetry of
+the causal direction has two sources: (i) information timing — labels resolve in the future
+(Section 2.3); (ii) non-stationarity — see Section 4.5: under distribution drift, an evaluation
+that trains after testing answers “could this model family have fitted that era”, not “could you
+have made that money at the time”.
+4.2 The price of sufficiency: learning-curve bias
+Assumption B.The process is strictly stationary. Let L(n) denote the expected loss on an
+independent test point of the algorithm trained on n samples from the process (the learning
+curve), assumed non-increasing in n and insensitive to the internal arrangement of the training
+sample. The scheme is strictly causal with train/test gaps exceeding the dependence scale, so
+that fold estimates satisfy E[ ˆLi] = L(|Ri|) (by Theorem 1(d), the error in this identification is
+at most 2M βmix(gap), which we neglect).
+Proposition 6(Learning-curve bias).Under Assumption B,
+L(nmax)−L(T)≤E[ ˆL(S)]−L(T)≤L(αT)−L(T),
+where nmax = maxi |Ri|. The bias is non-negative (systematic pessimism), with its upper bound
+controlled by the sufficiency gap α; if L is convex, additionally E[ ˆL] −L (T ) ≥L (¯n) −L (T )with
+¯n=Pi wi|Ri|= ¯αT, and by Theorem 4 a fully covering causal scheme has¯n≲T /2.
+The proposition is immediate: E[ ˆL] = Pi wiL(|Ri|) with αT≤ |Ri| ≤nmax ≤T , mono-
+tonicity gives both bounds, and Jensen’s inequality gives the convex refinement. Pessimistic
+bias sounds “safe”, but it is not neutral formodel comparison and tuning: learning curves of
+different hyperparameters have different slopes (complex models’ L(n) decays more slowly), so
+comparisons made at αT≪T systematically favor simpler models — the statistical consequence
+of the folklore “walk-forward fails P1”.
+10
+Remark4.5 (Learning curves and online-to-batch).Two parts of Assumption B deserve flags.
+Monotonicity of L(n) is a genuine restriction: there are learners whose risk increases with
+the sample size (Loog et al., 2019), the double-descent curves of Belkin et al. (2019) are non-
+monotone at the interpolation threshold, Viering and Loog (2023) review how varied empirical
+learning curves are, and the universal-learning theory of Bousquet et al. (2021) classifies their
+possible asymptotic shapes. Proposition 6 uses only the values of L on [αT, T], so it survives
+non-monotonicity there with min and max of L over that range replacing L(nmax) and L(αT ).
+Second, an expanding walk-forward with βT blocks of length one is an online learner evaluated
+prequentially (Remark 2.2), and Theorem 4 is the combinatorial face of the online-to-batch
+conversion of Cesa-Bianchi et al. (2004): the average iterate has seen about half of the sample,
+which is why ¯α→1−β/2.
+4.3 The price of coverage: variance and regime sampling
+Proposition 7(Price of coverage).(i)Variance: if the test-point losses form a stationary
+sequence with variance σ2 and absolutely summable autocorrelations, with long-run variance
+σ2∞ = σ2 1 + 2Pd≥1 ρ(d) > 0, then the average loss over the test union U (|U| = βT ) satisfies
+Var
+  ˆL ≍ σ2∞
+βT .
+(ii)Regimes (non-stationary worst case): take as target the time-averaged risk θ = 1T Ps∈[T] r(s),
+with r(s)the risk at time s. If two data-generating processes induce the same law for the loss
+record( ℓt)t∈U but their risk profiles differ by∆on the uncovered part[ T ] \U and agree on U ,
+then any estimator that is a function of the loss record on U incurs worst-case error at least
+(1−β)∆
+2 .
+Part (i) is the standard long-run-variance computation for the mean of a stationary sequence
+over a set that is a union of long intervals. Its stationarity hypothesis on the losses is exact for
+a rolling window of fixed length, whose fold models are identically distributed, and approximate
+for expanding windows, whose fold models change slowly with |Ri|. Part (ii) is a two-point
+argument (Appendix A.4). The hypothesis of (ii) is satisfiable: take two processes that coincide
+on the covered period and on all training data, and differ only in the label-noise level (hence
+the risk) on an uncovered period that no fold trains or tests on — for a last-block hold-out with
+H-gap, any change confined to the gap does this. Part (ii) is the deeper face of coverage: the
+harm of low coverage is not merely variance butirreparability in the worst case— a regime you
+never tested may hide a ∆, and no statistical technique conjures information out of unobserved
+intervals. This is why parameters tuned on a late-bull-market hold-out fail in the bear market,
+and it is the motivation for the multi-path coverage of combinatorial purged cross-validation
+(CPCV; L´ opez de Prado, 2018).
+4.4 A statistical impossibility theorem
+Corollary 8(Statistical impossibility).Suppose Assumption B holds with L convex and strictly
+decreasing on[ T /2, T](extended to non-integer arguments by linear interpolation), and the
+test-point losses satisfy the hypotheses of Proposition 7(i), so that Var( ˆL) ≥c σ2∞/(βT )for a
+constant c >0. Then for everystrictly causalscheme with equal-length disjoint test blocks
+11
+weighted by|E i|,
+MSE
+  ˆL;L(T)  ≥ hL (1− β2 )T  −L(T) i2 + c σ2∞βT .
+The first term is non-decreasing and the second decreasing inβ; the conservation law ( ¯α≤1−β/2,
+Theorem 4) chains both to the same β, so no choice of β drives both to zero, and the attainable
+floor minβ{·} strictly exceeds c σ2∞/T , the variance that the infeasible point α = β = 1would
+enjoy. If a non-causal scheme is used to escape this floor, then by Theorem 1(a) it must have
+Λ ≥α + β− 1, and by Theorem 1(d) it imports a leakage bias of magnitude up to2 M Λeff , which
+adds to the learning-curve bias inside the squared term (Theorem 1(d) bounds the size of this
+bias, not its sign; in practice, as in Section 5.3, it is optimistic, so it offsets the pessimistic
+learning-curve bias rather than compounding it).
+This is the full statistical statement of the impossible trinity:the three vertices correspond
+to the three components of the estimation error (leakage bias / learning-curve bias / variance
+and regime term); the conservation law forbids simultaneously eliminating the last two within
+strict causality, and the only way to eliminate the first is to pay anti-causal mass priced by the
+mixing coefficient.
+4.5 The hardness of the trinity is the memory of the process
+Theorem 1(d) writes the price of violating causality as βmix(δ), so the hardness of the trinity is
+set by the memory of the data-generating process. Three regimes:
+(a) The i.i.d. limit: the trinity vanishes.If ( Wt) is i.i.d. and H = 0, then βmix(d) = 0
+for all d≥ 1: anti-causal training does no statistical harm, and k-fold, even shuffled, is fully
+legitimate. The validity of k-fold for purely autoregressive models with uncorrelated errors
+(Bergmeir et al., 2018) is the model-specific form of this limit: there the augmented process
+Wt = (lagged values, Yt) is dependent, and the validity comes from a small algorithm-specific
+exchange rate βΨ (Theorem 5(iii)) rather than from a small βmix.The trinity is not inherent in
+the phrase “time series”; it is created by dependence and non-stationarity.
+(b) Finite memory: causality can be bought back.If βmix(d) ≤Ce −d/τ (exponential
+mixing with memory scale τ ; overlapping labels add a plateau for d < H), then pushing all
+anti-causal training beyond margin h caps the harm at 2 M Ce−h/τ , at the sample cost of a
+sanitization zone of H before and H + h after each test block — O
+ 
+m(2H + h)/T
+
+in total.
+This is the mechanism ofpurgedk-fold + embargo:
+α+β≤1 + Λ| {z }
+(a): Λ must be bought
+while harm≤2M β mix(h)| {z }
+(d): the unit price of Λ is driven to≈0
+It does not “break” the trinity — Λ ≈ k−1k , not one bit less — but exploits finite memory to
+exchange the volume constraint for a severity constraint. The exchange window is bounded by
+two rulers: statistically, h must be several multiples of τ (and the future-side zone must include
+H); combinatorially, the margin is charged to sufficiency (Remark 3.2), so the sanitization
+overhead k(2H + h)/T must stay ≪ 1. When τ or H becomes comparable to T /k, the window
+closes, and purged k-fold degenerates into choosing between “sanitize everything away” and
+“keep the leak”.
+12
+(c) Infinite memory and non-stationarity: not redeemable.With long memory no
+affordable h makes βmix(h) small. Distribution drift is a different failure: it need not raise βmix at
+all (an independent but non-identically distributed process has βmix(d) = 0), and Theorem 1(d)
+still holds under drift; what fails is the meaning of its reference, since a model that has trained
+on the future of a test point has seen the regime it is tested in, which the deployed model never
+will. This regime error, the regime term of Proposition 7(ii) and the directionality issue of
+Remark 4.4 are not quantities of the mixing framework at all:an embargo can redeem only the
+stationary-dependence part of causality; the part demanded by non-stationarity can be paid for
+in full only by walk-forward-type schemes, whose report card answers “re-tuning on a rolling
+basis by this procedure, could you have made the money at the time” — the rehearsal of
+deployment, including a rehearsal ofthe tuning process itself.
+5 The standard schemes, tuning, and a numerical illustration
+5.1 Coordinates
+Table 2 places the standard schemes in the coordinates (α,¯α, β,Λ, δ), with k folds, walk-forward
+initial-window (or rolling-window) fraction w and m blocks, purge width H, embargo width h
+(integer rounding ignored;H dep denotes the dependence scale).
+Table 2: The standard schemes in the coordinates of the trinity.
+Schemeα(worst) ¯α(mean)βΛδEffective leakage Λ eff
+Last-block hold-out (β 0) 1−β 0 − HT 1−β 0 − HT β0 0 +∞0
+Expanding walk-forwardw− HT 1− m+12m (1−w)− HT 1−w0 +∞0
+Rolling walk-forwardw− HT w− HT 1−w0 +∞0
+k-fold (contiguous) k−1k k−1k 1 k−1k 1 low–mid: onlyblock-boundary tests have
+smallδ i(t); mass
+O(kHdep/T)
+k-fold (shuffled) k−1k k−1k 1≈ k−1k 1 high: nearly all tests haveδi(t) =O(1)
+Purgedk-fold + embargo k−1k −O( 2H+hT ) 1≈ k−1k ≥H+h≤β mix(h)≈0 (needsh≳memory)
+Two comparisons in the table are instructive.Expanding vs. rolling walk-forward: identical
+in (α, β), they differ in ¯αby up to (1 −w )/2; the rolling window pays this in learning-curve
+bias (Proposition 6) in exchange for a robustness to drift that the stationary framework cannot
+price.Contiguous vs. shuffled k-fold: their ( α,¯α, β,Λ) are identical up to O(1/T ), but their
+pointwise margin distributions differ completely — the former violates “at close range” only
+at O(k) block boundaries, the latter everywhere. This is the separation of Λ and Λ eff , and
+Section 5.3 makes it visible on the same data with the same model.
+CPCV reads in these coordinates as follows: by generating
+ N
+k
+
+block combinations it
+produces many “backtest paths”, upgrading the single number ˆL to a distribution of ˆL, while
+purging/embargo keep Λ eff controlled — its main improvement is on the deeper meaning of
+coverage (sampling of regimes and paths), at the cost of further reduced sufficiency and more
+computation.
+13
+5.2 The multiplier effect of tuning
+Everything above evaluates afixedalgorithm. Tuning takes a maximum (or minimum) over N
+configurations, which simultaneously amplifies every edge of the trinity:
+• V ariance→ selection bias: even if each configuration’s ˆL is unbiased with variance ς 2,
+the selected best carries an optimistic inflation up to about ς
+√
+2 lnN . Insufficient coverage
+(ς∝ 1/√βT by Proposition 7) enters directly:low coverage × many configurations=
+backtest overfitting, the phenomenon quantified by the probability of backtest overfitting
+(PBO) and the deflated Sharpe ratio (Bailey and L´ opez de Prado, 2014; Bailey et al.,
+2017; White, 2000).
+• Leakage amplified by selection: the bias of Theorem 1(d) is per configuration; taking
+a max preferentially selects the configurationbest at exploiting the leak, pushing the
+realized optimism toward the upper envelope of per-configuration leakage biases.
+• Sufficiency → ranking distortion: as in Section 4.2, learning-curve slopes differ across
+configurations, so the ranking at smallnneed not be the ranking atn=T.
+Tuning must therefore be nested: an inner layer (possibly purged k-fold) selects parameters,
+and an outer, strictly causal segment never touched by any selection confirms; reported metrics
+should be corrected for multiplicity in N . The outer segment is the hold-out of adaptive data
+analysis: Dwork et al. (2015) show that it can be queried repeatedly if answers are released
+through a differentially private mechanism, the selection bias being governed by the information
+the analyst extracts rather than byNalone.
+5.3 A numerical illustration of volume versus severity
+The theorems need no experimental confirmation, but the distinction between the anti-causal
+mass Λ and the effective leakage Λ eff is the paper’s least intuitive point and can be made vivid
+in a setting where the truth is known exactly.
+Design. T = 3000. Returns rt ∼ N(0, 1) i.i.d.; labels Yt = PHj=1 rt+j with H = 20 (forward
+H-period return):pure noise, true predictability exactly zero. Features: four EMAs of returns
+with half-lives 5/10/20/40 — past information only, but serially smooth, so temporal neighbors
+are feature-space neighbors. Model: 1-NN regression (predict the label of the nearest training
+point in feature space). Metric: correlation between prediction and realized label (information
+coefficient, IC). By Remark 4.3 the label-dependence envelope is ρ(d) = (H−d) +H . Results are
+averaged over 8 seeds.
+Severity sweep.Training on {s : |s−t|> g} for each test point t makes the two-sided
+margin dist(t, Ri) of Definition 4 exactly g + 1 at every test point — a direct sweep of the
+severity variable of P3 (this is hv-block cross-validation with a varying block radius):
+g0 2 4 6 8 10 12 14≥16
+reported IC +0.340 +0.134 +0.071 +0.040 +0.023 +0.012 +0.004−0.000≈0
+Spurious skill decays monotonically with distance and reaches statistical zero before g≈H
+(the empirical curve sits below the dependence envelope because the nearest neighbor does not
+always sit at distance exactlyg+ 1; Figure 2).
+Named schemes on the same data(true value 0):
+14
+Figure 2: Spurious information coefficient of a 1-NN model on pure noise as a function of the
+exclusion radius g (distance to the nearest training point minus one), with the label-dependence
+envelope of Remark 4.3.
+Scheme Reported IC (±s.e.)
+Shuffled 5-fold +0.318±0.012
+Contiguous 5-fold +0.004±0.012
+Purged 5-fold (gap =H) +0.000±0.012
+Walk-forward (gap =H) +0.017±0.015
+Last-20% hold-out (gap =H) +0.044±0.028
+The walk-forward is expanding, with the last half of the sample as ten equal test blocks (initial
+window w = 0.5) and an H-gap before each block; the hold-out tests on the last 20% with
+the same gap; purged 5-fold deletes H samples on each side of the test block. Shuffled and
+contiguous 5-fold have the same (α, β,Λ) = (0.8,1,0.8) (up toO(1/T) for the shuffled Λ) and
+differ only in where the anti-causal mass sits: adjacent to every test point in the first case,
+adjacent to O(k) block boundaries in the second. The reported spurious skill differs by two
+orders of magnitude —volume is harmless, proximity is harmful. The hold-out, with the
+smallestβ, shows the largest standard error, the variance price of Proposition 7(i).
+6 Practical guidance
+The paper compressed into an operating card:
+1. Measure memory first, choose the scheme second.Estimate two rulers: the
+label horizon H (known from the label definition) and the dependence scale τ of fea-
+tures/losses (autocorrelation half-life; for financial data, remember volatility clustering).
+All gaps/purges/embargoes should be denominated inH+cτwithc≈2–3.
+15
+2. Stationarity credible, goal is model comparison/tuning→ purged k-fold + embargo
+(or CPCV): it buys α, β≈ 1 at minimal volume Λ and effective leakage ≤β mix(h)
+(Section 4.5(b)). Check that the sanitization overhead k(2H + h)/T≪ 1; otherwise reduce
+k.
+3. Non-stationarity feared, or “expected live performance” to be quoted →
+expanding walk-forward (itisthe causal frontier, Corollary 3); report theper-fold-versus-
+training-sizecurve rather than a single average (the average carries the learning-curve
+bias of Proposition 6; the per-fold curve extrapolates toward L(T )); rehearse the tuning
+process inside the rolling procedure.
+4. Tuning must be nested: inner selection may use item 2; an outer strictly causal
+segment never touched by selection confirms. Deflate the winner of N configurations at
+theς
+√
+2 lnNscale, or use the deflated Sharpe ratio / PBO directly.
+5. Report the coordinates( α,¯α, β,Λ, δ) of your scheme: one line states where your
+backtest stands on the trinity and what it paid. A referee or risk manager needs only the
+ratio ofδtoH+τto decide whether to trust your Λ>0.
+6. Red line: shuffled k-fold is unusable on any data with serial dependence or overlapping
+labels (Section 5.3); for a “too-good backtest”, the first suspect is always a small- δ leak,
+never alpha.
+7 Related work
+V alidation schemes for dependent data.The h-block cross-validation of Burman et al.
+(1994) and the hv-block cross-validation of Racine (2000) first formalized “delete a neighborhood
+of the test point” as the dependent-data correction of cross-validation; the exclusion-radius
+sweep of Section 5.3 is hv-block with a varying radius. Bergmeir and Ben ´ ıtez (2012) and
+Bergmeir et al. (2018) established the validity of k-fold cross-validation for purely autoregressive
+models with uncorrelated errors, the model-specific instance of Section 4.5(a). Tashman (2000)
+codifies the rolling-origin (walk-forward) tradition; Cerqueira et al. (2020) and Arian et al.
+(2024) compare the standard schemes empirically, the latter including CPCV in a synthetic
+controlled environment. L´ opez de Prado (2018) systematized overlapping-label leakage, purged
+k-fold, embargo, and CPCV; Theorem 1(d) is a theorem-ization of the embargo prescription
+(the unit of embargo width is the decay scale of the mixing coefficients, and the pointwise
+margin δi(t) is a sufficient statistic for the bound on the harm), while Theorem 1(b) states what
+the embargo costs in sufficiency. Our contribution is not another scheme but the proof that all
+schemes obey one inequality, together with its Pareto frontier and its violation price list.
+Learning theory for dependent processes.The proof of Theorem 1(d) rests on the
+coupling lemma of Berbee (1979) and the blocking inequality of Yu (1994). The closest
+theoretical neighbour is the work of Kuznetsov and Mohri (2015, 2020), who prove generalization
+bounds for forecasting non-stationary mixing processes via mixing coefficients and a discrepancy
+measure. Their object is the generalization of a trained predictor, ours is the design space
+of validation schemes, and the two are complementary: their discrepancy quantifies the non-
+stationarity that Section 4.5(c) declares non-redeemable, and Theorem 5 shows that the same
+16
+discrepancy is the model-specific exchange rate of the causality vertex. On the multiplier effect
+of tuning (Section 5.2), the Reality Check of White (2000) and the deflated Sharpe ratio and
+probability of backtest overfitting of Bailey and L´ opez de Prado (2014); Bailey et al. (2017)
+quantify the selection inflation that low coverage feeds.
+8 Conclusion
+We proved that the three demands of time-series validation — training sufficiency, test coverage,
+temporal causality — obey a single inequality, α + min{β, δ/T} ≤1, that is independent of
+all statistical assumptions; that its causal face α + β≤ 1 has the walk-forward family as its
+exact Pareto frontier; that the only exit is anti-causal training mass, at a combinatorial price of
+Λ ≥α + β− 1, placed within (1 −α )T of the tests so that distance is paid out of sufficiency;
+and that the statistical harm of that mass is denominated in the distance from the test point
+to the first future training point, converted at the mixing coefficients of the process. The
+deep principle is not complicated:time is totally ordered and information flows along it in
+one direction; any scheme that tries to both “use up the past” and “test all of the past” must
+place some training data in the near future of some test data; and the harm of future data is a
+function of its distance to the test point, at an exchange rate set by the memory of the process.
+The trinity cannot be had whole — but the price of each edge can be written down, measured,
+and minimized. That is what this paper hopes to supply: not one more splitting scheme, but
+the common ledger of all of them.
+Only the combinatorial parts of the paper use the fact that time is a line. When dependence
+lives on a graph — spatial, panel, network or phylogenetic data, for which Roberts et al. (2017)
+survey blocked cross-validation — the margin becomes graph distance from a test node to the
+nearest training node, the mixing coefficient a decay of correlations on the graph, Theorem 5
+applies verbatim, and Theorem 1(b) becomes a vertex-isoperimetric statement: keeping the
+tests at distance δ from the training data sterilizes the δ-neighbourhood of the test set, of size
+2δ on the line, of order δd on a d-dimensional grid, and exponential in δ on an expander. The
+growth rate of the dependence graph is thus the exchange rate between distance and sufficiency,
+and the line is the cheapest case.
+A Proofs
+Proofs that are immediate from the statements (Corollaries 2 and 3, Proposition 6, Proposi-
+tion 7(i)) are indicated in the text and omitted here.
+A.1 Theorem 1(a)–(c)
+(a)LetU= Si Ei andp= minU. FromU⊆[p, T],
+βT≤T−p+ 1,with equality iffU= [p, T].(2)
+Pick a fold i with p∈E i; then p = minE i, and by Definition 4 Λ iT = |Ri ∩ (p, T]| exactly
+(notep /∈Ri). Hence
+ΛT≥Λ iT=|R i| −
+Ri ∩[1, p−1]  ≥αT−(p−1)≥αT−(1−β)T,(3)
+17
+where the three inequalities are equalities iff, respectively, Λ i = Λ; |Ri| = αT and Ri ⊇
+[1, p−1]; and (2) is an equality. This proves α + β≤ 1 + Λ together with the stated equality
+characterization.
+(b)Let fold i have Λi > 0; then t = minE i has a training point after it, so δi(t) <∞ . The
+δi(t) indices t, t+ 1, . . . , t+ δi(t) − 1 all lie in [ T ] and none is in Ri (t /∈Ri by disjointness, the
+others by minimality of δi(t)), so they are δi(t) distinct elements of [T ] \R i, a set of size T− |Ri|.
+Hence δi ≤δ i(t) ≤T− |Ri|. If Λ > 0, some fold qualifies and |Ri| ≥αTgives δ≤δ i ≤ (1 −α )T ;
+finally,α+β >1 forces Λ≥α+β−1>0 by (a).
+(c)If S is strictly causal, Λ = 0 and (a) gives α + β≤ 1, which is the claim since
+min{β, +∞} = β. Otherwise Λ > 0, and (b) gives α + δ/T≤ 1, so α + min{β, δ/T} ≤
+α + δ/T≤ 1. Equality on the causal frontier is attained by the expanding walk-forward
+construction of Corollary 3, whose worst fold isR 1 = [1,(1−β)T].
+A.2 Theorem 1(d)
+Fix fold i and test point t; write A = WR−, B = Wt, C = WR+, so that ℓt = ψ(A, B, C) for
+some measurable ψ with |ψ| ≤M(any internal randomness of the algorithm can be absorbed
+into ψ by conditioning). By the definition of the margins, ( A, B) is σ(Ws : s≤t )-measurable,
+C is σ(Ws : s≥t + δ+)-measurable, A is σ(Ws : s≤t−δ −)-measurable and B is σ(Ws : s≥t )-
+measurable. We use two standard facts. First, for probability measures P, Qand |ψ| ≤M,
+|EP ψ−E Qψ| ≤2M∥P−Q∥ TV. Second, Berbee’s coupling lemma (see Berbee, 1979; Doukhan,
+1994, Ch. 1): for random elements X, Y with ∥L(X, Y)− L(X)⊗ L(Y)∥TV ≤ϵ , there exists
+on an enlarged probability space a copyY ∗ ofYindependent ofXwithP(Y ∗ ̸=Y)≤ϵ.
+Future side.Assumption A with a = t, d = δ+ gives ∥L((A, B), C)− L(A, B)⊗ L(C)∥TV ≤
+βmix(δ+) (trivially so when δ+ = +∞, i.e. R+ = ∅). Berbee’s lemma yields C∗, equal in law to
+C, independent ofσ(W s :s≤t), withP(C ∗ ̸=C)≤β mix(δ+); and ˜ℓt =ψ(A, B, C∗) satisfies
+E[ℓt]−E[ ˜ℓt] ≤E ψ(A, B, C)−ψ(A, B, C∗) ≤2MP(C ∗ ̸=C)≤2M β mix(δ+).
+Both sides.Let P = L(A, B, C) and Q = L(A) ⊗ L(B) ⊗ L(C). By the triangle inequality,
+∥P−Q∥ TV ≤ ∥L(A, B, C)− L(A, B)⊗ L(C)∥TV
++∥L(A, B)⊗ L(C)− L(A)⊗ L(B)⊗ L(C)∥TV .
+The first term is at most βmix(δ+) as above. The second equals ∥L(A, B)− L(A)⊗ L(B)∥TV
+(tensoring with a common factor does not change total variation), which is at most βmix(δ−) by
+Assumption A with a = t−δ −, d = δ−. Since E[ℓt] = EP ψ and E[ℓ◦t ] = EQψ, the first standard
+fact gives |E[ℓt] −E [ℓ◦t ]| ≤2M [βmix(δ−) + βmix(δ+)]. (Cf. the blocking inequality of Yu (1994,
+Lemma 4.1) for three blocks; constants differ with the normalization of total variation.)
+Averaging overt∈E i gives the fold-level inequalities.
+A.3 Theorem 4 (mean sufficiency)
+Let the test sets be disjoint intervals of equal length b = βT /m, sorted by left endpoint as
+E(1), . . . , E(m). For the j-th: the intervals E(j), E(j+1), . . . , E(m) are disjoint and contained in
+[minE (j), T], hence (m−j + 1)b≤T−minE (j) + 1, i.e. minE (j) − 1 ≤T− (m−j + 1)b. Strict
+18
+causality gives|R (j)| ≤minE(j) −1. Summing,
+mX
+j=1
+|R(j)| ≤mT−b
+mX
+j=1
+(m−j+ 1) =mT−b m(m+ 1)2 ,
+and dividing by mT yields ¯α= 1mT Pj |R(j)| ≤1 − m+12m β (recall wi = 1/m). In the construction
+of Corollary 3 with equal blocks, |R(j)| = minE (j) − 1 and the blocks abut and end at T , so
+every inequality is tight.
+A.4 Proposition 7(ii) (regime term)
+Let P0, P1 be the two processes, with risk profiles r0, r1 satisfying r1(s) −r 0(s) = ∆ for s /∈U
+and 0 for s∈U , so that the targets satisfy θ1 −θ 0 = (1 −β )∆. Any estimator ˆθ = ˆθ (ℓt)t∈U 
+has the same distribution underP 0 andP 1, hence
+max
+j∈{0,1}
+EPj
+ˆθ−θ j ≥ 12 EP0ˆθ−θ 0 +E P0ˆθ−θ 1 ≥ |θ1 −θ 0|2 = (1−β)∆2 .
+A.5 Corollary 8 (statistical impossibility)
+By Definition 2, ¯n= Pi wi|Ri| = ¯αT, and with equal-length disjoint test blocks weighted by
+|Ei| Theorem 4 gives ¯n≤(1 − m+12m β)T≤ (1 − β2 )T . With L convex, Proposition 6 gives bias
+≥L (¯n) −L (T ) ≥L
+ 
+(1 − β2 )T  −L (T ) ≥ 0; Proposition 7(i) gives Var( ˆL) ≥cσ 2∞/(βT ). Since
+MSE = bias2 + Var, the displayed bound follows. Monotonicity in β of the two terms is clear.
+For the floor: at β = 1 the first term is [ L(T /2) −L (T )]2 > 0 because L is strictly decreasing
+on [T /2, T], so the sum exceeds cσ2∞/T ; for β <1 the second term alone exceeds cσ2∞/T . Since
+βT is an integer, β ranges over a finite set and the minimum is attained. The third term for
+non-causal schemes follows from Theorem 1(a) combined with Theorem 1(d).
+References
+Andrews, D. W. K. (1984). Non-strong mixing autoregressive processes.Journal of Applied
+Probability, 21(4), 930–934.
+Arian, H., Norouzi Mobarekeh, D., & Seco, L. (2024). Backtest overfitting in the machine
+learning era: A comparison of out-of-sample testing methods in a synthetic controlled
+environment.Knowledge-Based Systems, 305, 112477.
+Bailey, D. H., Borwein, J. M., L´ opez de Prado, M., & Zhu, Q. J. (2017). The probability of
+backtest overfitting.Journal of Computational Finance, 20(4), 39–69.
+Bailey, D. H., & L´ opez de Prado, M. (2014). The deflated Sharpe ratio: Correcting for selection
+bias, backtest overfitting, and non-normality.Journal of Portfolio Management, 40(5), 94–107.
+Belkin, M., Hsu, D., Ma, S., & Mandal, S. (2019). Reconciling modern machine-learning practice
+and the classical bias–variance trade-off.Proceedings of the National Academy of Sciences,
+116(32), 15849–15854.
+19
+Berbee, H. C. P. (1979).Random Walks with Stationary Increments and Renewal Theory.
+Mathematical Centre Tracts 112, Amsterdam.
+Bergmeir, C., & Ben ´ ıtez, J. M. (2012). On the use of cross-validation for time series predictor
+evaluation.Information Sciences, 191, 192–213.
+Bergmeir, C., Hyndman, R. J., & Koo, B. (2018). A note on the validity of cross-validation for
+evaluating autoregressive time series prediction.Computational Statistics & Data Analysis,
+120, 70–83.
+Bousquet, O., Hanneke, S., Moran, S., van Handel, R., & Yehudayoff, A. (2021). A theory of
+universal learning. InProceedings of the 53rd Annual ACM SIGACT Symposium on Theory
+of Computing (STOC), 532–541.
+Burman, P., Chow, E., & Nolan, D. (1994). A cross-validatory method for dependent data.
+Biometrika, 81(2), 351–358.
+Cerqueira, V., Torgo, L., & Mozetiˇ c, I. (2020). Evaluating time series forecasting models: An
+empirical study on performance estimation methods.Machine Learning, 109, 1997–2028.
+Cesa-Bianchi, N., Conconi, A., & Gentile, C. (2004). On the generalization ability of on-line
+learning algorithms.IEEE Transactions on Information Theory, 50(9), 2050–2057.
+Dawid, A. P. (1984). Present position and potential developments: Some personal views.
+Statistical theory: The prequential approach.Journal of the Royal Statistical Society, Series
+A, 147(2), 278–292.
+Dedecker, J., & Prieur, C. (2005). New dependence coefficients. Examples and applications to
+statistics.Probability Theory and Related Fields, 132, 203–236.
+Doukhan, P. (1994).Mixing: Properties and Examples. Lecture Notes in Statistics 85, Springer.
+Dwork, C., Feldman, V., Hardt, M., Pitassi, T., Reingold, O., & Roth, A. (2015). The reusable
+holdout: Preserving validity in adaptive data analysis.Science, 349(6248), 636–638.
+Gilbert, S., & Lynch, N. (2002). Brewer’s conjecture and the feasibility of consistent, available,
+partition-tolerant web services.ACM SIGACT News, 33(2), 51–59.
+Kuznetsov, V., & Mohri, M. (2015). Learning theory and algorithms for forecasting non-
+stationary time series. InAdvances in Neural Information Processing Systems28.
+Kuznetsov, V., & Mohri, M. (2020). Discrepancy-based theory and algorithms for forecasting
+non-stationary time series.Annals of Mathematics and Artificial Intelligence, 88, 367–399.
+L´ opez de Prado, M. (2018).Advances in Financial Machine Learning. Wiley.
+Loog, M., Viering, T., & Mey, A. (2019). Minimizers of the empirical risk and risk monotonicity.
+InAdvances in Neural Information Processing Systems32.
+Mundell, R. A. (1963). Capital mobility and stabilization policy under fixed and flexible
+exchange rates.Canadian Journal of Economics and Political Science, 29(4), 475–485.
+20
+M¨ uller, A. (1997). Integral probability metrics and their generating classes of functions.Advances
+in Applied Probability, 29(2), 429–443.
+Racine, J. (2000). Consistent cross-validatory model-selection for dependent data: hv-block
+cross-validation.Journal of Econometrics, 99(1), 39–61.
+Ramdas, A., Gr¨ unwald, P., Vovk, V., & Shafer, G. (2023). Game-theoretic statistics and safe
+anytime-valid inference.Statistical Science, 38(4), 576–601.
+Roberts, D. R., Bahn, V., Ciuti, S., Boyce, M. S., Elith, J., Guillera-Arroita, G., Hauenstein,
+S., Lahoz-Monfort, J. J., Schr¨ oder, B., Thuiller, W., Warton, D. I., Wintle, B. A., Hartig,
+F., & Dormann, C. F. (2017). Cross-validation strategies for data with temporal, spatial,
+hierarchical, or phylogenetic structure.Ecography, 40(8), 913–929.
+Russo, D., & Zou, J. (2016). Controlling bias in adaptive data analysis using information theory.
+InProceedings of the 19th International Conference on Artificial Intelligence and Statistics
+(AISTATS), PMLR 51, 1232–1240.
+Tashman, L. J. (2000). Out-of-sample tests of forecasting accuracy: An analysis and review.
+International Journal of Forecasting, 16(4), 437–450.
+Viering, T., & Loog, M. (2023). The shape of learning curves: A review.IEEE Transactions on
+Pattern Analysis and Machine Intelligence, 45(6), 7799–7819.
+White, H. (2000). A reality check for data snooping.Econometrica, 68(5), 1097–1126.
+Wu, W. B. (2005). Nonlinear system theory: Another look at dependence.Proceedings of the
+National Academy of Sciences, 102(40), 14150–14154.
+Xu, A., & Raginsky, M. (2017). Information-theoretic analysis of generalization capability of
+learning algorithms. InAdvances in Neural Information Processing Systems30.
+Yu, B. (1994). Rates of convergence for empirical processes of stationary mixing sequences.
+Annals of Probability, 22(1), 94–116.
+21

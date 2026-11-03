@@ -1,0 +1,791 @@
+arXiv 2607.09230  https://arxiv.org/abs/2607.09230
+
+When Does Order Flow Matter? State-Dependent L2
+Liquidity-State Transitions in Crypto Futures
+Joohyoung Jeon
+Korea University
+Seoul, South Korea
+joohyoung@korea.ac.kr
+Abstract
+Building event-conditioned market models requires separating
+macro-event labels from persistent microstructure state. We study
+this distinction in Binance BTCUSDT and ETHUSDT futures from
+2023–2026, combining top-20 L2 order book data, trade-flow records,
+and macro-event windows. We define a supervised discrete L2
+liquidity-state transition task, distinct from latent-regime detection
+and from price-direction prediction, and evaluate models in rolling
+monthly out-of-sample folds with event-clustered validation and
+blocked permutation tests, admitting each feature layer only if it
+improves on the layer below it on the same panel. Within these
+event windows, the first-order predictive signal is the pre-event L2
+liquidity state: a coarse pre-event state baseline strongly predicts
+post-event liquidity regimes, interpretable logit models over contin-
+uous L2 features fail to improve on it, and a shallow nonlinear L2
+model adds a robust further predictive gain of comparable size to
+the state baseline’s own. The macro-event calendar enters only by
+locating the windows and supplying matched non-event controls;
+we use the event timing but not the event’s label content as a com-
+peting predictor, so the comparison is between pre-event state and
+an uninformed within-window baseline, not against the event type.
+Order flow provides further incremental value only when layered
+on top of the L2 state model, not as a replacement. This value is
+not robustly cross-symbol: for ETH it is present across calm, mixed,
+and stressed regimes and largest under stressed pre-event liquidity,
+whereas BTC shows only isolated five-minute passes and no regime
+that clears at both horizons. These findings motivate a state-first
+design principle for market microstructure models. We provide
+a liquidity-state transition baseline and evaluation protocol that
+reinforcement-learning, execution-policy, or LLM-based context
+layers should be required to exceed before their added value is
+credited.
+CCS Concepts
+•Computing methodologies→ Supervised learning by classi-
+fication;•Applied computing → Economics;•Theory of com-
+putation→Sequential decision making.
+Keywords
+market microstructure, limit order book, liquidity state, order flow,
+crypto futures, out-of-sample evaluation
+Table 1: Model comparison. The 1m and 5m columns are
+out-of-sample joint improvements (Section 4); a positive
+value means the model improves on its baseline. Upper panel:
+staged baselines on the held-out event windows, the first row
+coarse state vs. marginal, later rows vs. the coarse state. Lower
+panel: order-flow overlay (augmented vs. L2-only) against
+the flow-shuffle null.
+Comparison 1m 5m Null 95th pct. / interval
+Baselines vs. coarse pre-event state
+Coarse state (vs. marginal)+0.034+0.045—
+Multinomial logit−0.048−0.034below zero
+Ordered logit−0.052−0.047below zero
+Nonlinear L2-shape+0.044+0.060[.041,.046];[.057,.062]
+Order-flow overlay vs. flow-shuffle null
+Pooled+0.010+0.010+0.004/+0.003
+BTC (not established)+0.001+0.003+0.002/+0.002
+ETH (clears null)+0.020+0.016+0.006/+0.003
+The two proper scores agree in sign in every cell; for the baseline panel the ΔNLL and
+ΔBrier components are coarse state+0.046/+0.061and+0.022/+0.028, multinomial
+logit−0.063/−0.044and−0.033/−0.024, ordered logit−0.069/−0.067and
+−0.034/−0.026, and nonlinear L2-shape+0.061/+0.083and+0.028/+0.037at the
+two horizons. Both logit intervals lie entirely below zero. Throughout, point estimates
+and ΔNLL/ΔBrier components are on the held-out event windows while the bootstrap
+intervals and the overlay null are the full-panel cluster-bootstrap; this scope
+difference moves the nonlinear point by at most0.001and leaves every verdict (each
+interval excluding zero; ETH clears, BTC not established) unchanged. The ETH
+increment has a ninety percent event-cluster interval excluding zero ([.020,.023]at
+1m,[.015,.018]at 5m).
+1 Introduction
+Event-conditioned models of financial markets are appealing be-
+cause market dynamics often change around scheduled public-
+information releases, and a model that conditions on those mo-
+ments promises sharper short-horizon predictions. Yet condition-
+ing on an event label is not, by itself, enough. A large literature
+documents that scheduled macroeconomic announcements move
+high-frequency market quality by widening bid-ask spreads, with-
+drawing depth, and reshaping order flow around the release [1, 3, 7].
+These are descriptive event-study effects, rather than direct predic-
+tions of the market’s subsequent microstructure state. The risk for
+an event-conditioned predictor is that the persistent microstruc-
+ture state already presentbeforethe event dominates the short-
+horizon dynamics. We therefore treat scheduled-event windows
+not as causal instruments but as structured sampling contexts in
+which to study a prediction problem, and within those windows
+we ask whether the pre-event state carries the signal; we use the
+arXiv:2607.09230v1  [q-fin.TR]  10 Jul 2026
+Jeon
+event timing to define and match the windows but do not enter the
+event’s label content as a competing predictor.
+The prediction problem we pose differs from most machine-
+learning work on the limit order book (LOB). That lineage, from
+handcrafted-feature classifiers [11] and the FI-2010 benchmark [14]
+through deep architectures [20] and recent forecasting frameworks [5,
+17], almost always predicts apriceoutcome. Our dependent variable
+is not price but the post-eventliquidity stateof the book, a discrete
+calm, mixed, or stressed regime built from relative spread, top-20
+depth, and top-20 imbalance (Section 3, Figure 1), so these mod-
+els are a different line of work rather than baselines we compete
+against. Liquidity regimes themselves are not new, appearing as
+latent states, spread-deviation durations, and early-warning trig-
+gers [8, 15]; the nearest is unsupervised and evaluated mainly in
+simulation on a single asset. Our target is instead a supervised
+one-step pre-event-to-post-event transition over explicit spread,
+depth, and imbalance terciles, evaluated out of sample across two
+assets and rolling months (Section 2).
+Posing the target this way lets us ask a layered question rather
+than report a single model’s score. Each candidate input, including
+coarse pre-event state, richer continuous L2 features, nonlinear L2
+shape, and local order flow, should be admitted only if it adds predic-
+tive valueafterthe previous layer is already in place. We make this
+explicit with a staged evaluation in which every layer is compared
+against the layer below it on the same panel, under rolling-month
+out-of-sample folds, event-clustered resampling, and blocked per-
+mutation tests (Equation 2). This discipline matters because order
+flow is known to be informative for price formation [6, 12], and gen-
+erative point-process models show that its self-excitation is itself
+state-dependent and stronger in disequilibrium book states [ 13].
+Those results concern price impact and tick-level event intensities,
+whereas our question is whether order flow predicts a discrete
+liquidity-state transition. We therefore ask not whether order flow
+matters in general, but whether it still adds incremental value for
+liquidity-state transitions once an L2-state-and-shape baseline has
+been established, and whether any such value is uniform across
+assets and regimes.
+The answers support a state-first reading. The pre-event L2 liq-
+uidity state is the primary predictive object: a coarse pre-event state
+baseline strongly predicts the post-event regime, an interpretable
+continuous-feature logit does not improve over it, and a shallow
+nonlinear L2-shape model adds a robust further predictive gain of
+comparable size to the state baseline’s own. Local order flow adds
+further value only as an overlay on top of the L2-shape model, never
+as a replacement, and that value depends on both liquidity state
+and asset rather than being a universal signal: it is ETH-dominant
+and stress-amplified, while for BTC the corresponding tests do not
+establish an increment (Figure 2).
+Contributions.
+(1) We define an event-window L2 liquidity-state transition
+task for BTCUSDT and ETHUSDT futures, with the target a
+discrete calm, mixed, or stressed regime from spread, depth,
+and imbalance rather than a price-direction label.
+(2) We evaluate a staged sequence on a common panel, from a
+coarse pre-event state baseline through continuous L2 fea-
+tures, nonlinear L2 shape, and an order-flow overlay, under
+rolling-month out-of-sample folds, event-clustered resam-
+pling, and blocked permutation tests, and establish that the
+pre-event L2 state is the first-order predictor within these
+event windows: continuous-feature logits do not improve
+over the coarse state baseline, while a shallow nonlinear
+L2-shape model adds a robust further predictive gain of
+comparable size to the state baseline’s own.
+(3) We show that order-flow additivity is ETH-dominant and
+amplified under pre-event liquidity stress, while for BTC
+no regime clears the corresponding order-flow tests at both
+horizons, so the order-flow contribution is state-dependent
+and asset-dependent rather than robustly cross-symbol.
+This within-asset, regime-conditional test of whether order
+flow adds value once an established L2 baseline is in place
+is the least-occupied of the positions the three lines of prior
+work leave open (Section 2).
+(4) We provide a baseline and an out-of-sample validation-
+and-calibration protocol that future reinforcement-learning,
+execution-policy, or LLM-based context layers must exceed
+before their added value can be credited.
+2 Related Work
+We organize prior work into three lines of research that our task
+touches. These are machine-learning prediction on the limit order
+book, the predictive role of order flow and its state dependence, and
+microstructure studies around scheduled macroeconomic events.
+For each line we state what the closest work establishes and where
+our task remains distinct.
+2.1 Limit-order-book prediction and the
+liquidity-state target
+Machine-learning forecasting on the limit order book is a mature
+line of work, from handcrafted-feature classifiers [11] and the FI-
+2010 benchmark [14] to deep architectures such as DeepLOB [20],
+large-scale price-formation models [ 17], and recent forecasting
+frameworks [5]. Across this lineage the prediction target is almost
+always a price outcome, whereas our dependent variable is a dis-
+crete post-event liquidity state from relative spread, top-20 depth,
+and top-20 imbalance. The nearest supervised liquidity-target work
+forecasts a continuous liquidity-withdrawal index on equity or-
+der data under walk-forward validation [18]; it shares the linear-
+versus-nonlinear out-of-sample comparison but not the discrete
+state target, the crypto setting, or the event windows.
+Liquidity regimes themselves are not new. Survival models of
+bid-ask spread-deviation durations [15] treat liquidity as a regime,
+and recent work detects latent microstructure regimes in the order
+book directly. The closest such work [8] defines a discrete three-
+regime liquidity state — stable, latent build-up, and stress — and
+detects transitions into stress with positive lead time, but as a la-
+tent, generative regime construct evaluated primarily in simulation,
+with a preliminary application to roughly one week of limit-order-
+book data for a single Bitcoin pair. We differentiate from it on four
+explicit axes: our target is a supervised pre-event-to-post-event
+classification rather than latent unsupervised early detection; our
+liquidity state is built from explicit spread, depth, and imbalance
+When Does Order Flow Matter? State-Dependent L2 Liquidity-State Transitions in Crypto Futures
+terciles rather than an inferred latent regime; we evaluate in rolling-
+month out-of-sample folds with event-clustered resampling rather
+than a short preliminary window backed mainly by simulation;
+and we study two assets under scheduled macro-event windows
+rather than a single Bitcoin pair with no macro conditioning. A
+further contrast that motivates our order-flow analysis is that in
+their detector depth erosion, not trade flow, drives the early triggers,
+whereas we test directly whether order flow adds value once the
+L2 state is accounted for. We therefore make no claim to introduce
+liquidity-regime modeling.
+2.2 Order flow and its state dependence
+That order flow carries predictive information for price is a long-
+standing result, from the theory of informed trading [ 12] to the
+order-flow-imbalance account of short-horizon price impact [ 6]
+and its multi-level extension [19]; we treat this as established prior
+knowledge. A separate line shows that the effect of order flow is
+state-dependent. Generative state-dependent point-process models
+couple order-flow excitation to the book state and find it stronger
+in disequilibrium states [ 13]. These generative intensity models,
+estimated on order-by-order message data, are among the nearest
+conceptual neighbours to our finding that ETH order flow matters
+more under stressed pre-event liquidity, but they characterize how
+order-flow intensity is generated rather than testing whether order
+flow still improves prediction once a liquidity-state baseline is al-
+ready in place. Regime-dependent forecasting power of order-flow
+imbalance has likewise been documented in index futures through
+a stochastic price-response model [9], which supports state depen-
+dence but remains a continuous price-dynamics account, whereas
+we test whether order flow adds value for a liquidity-state target
+only after an order-book baseline is established.
+The closest crypto-futures work in setting, rather than in method,
+engineers order-book and trade-flow features on Binance futures
+and reports that the predictive importance of these features is stable
+across several crypto assets [4]. That result targets short-horizon
+return and trading signals, whereas our target is the incremental
+contribution of order flow to a liquidity-state transition once an
+order-book baseline is in place. Because the two studies measure
+different quantities, the two findings are not in conflict: a pattern
+stable for one prediction target need not be stable for another.
+Agent-based detection of collective liquidity-taking behaviour [2]
+likewise targets participant identification on simulated flow rather
+than prediction of the book’s post-event liquidity state.
+2.3 Macro-event windows and microstructure
+A large literature documents that scheduled macroeconomic an-
+nouncements affect high-frequency market quality, widening spreads,
+withdrawing depth, and reshaping order flow around the release [1,
+3, 7], including joint order-flow and macro-news effects on Treasury
+yields [16]. We use this literature only to justify scheduled-event
+windows as contexts in which liquidity is likely to be stressed, and
+make no causal claim that macro events drive liquidity-state transi-
+tions. Even the nearest predictive, macro-conditioned order-book
+work [10] models jumps and price discovery in the Treasury market,
+not a liquidity-state transition. Our task is the specific combination
+none of them occupies: a supervised, out-of-sample post-event L2
+macro-event window
+pre-event L2 state spread / depth-20 / imb-20
+post-event liquidity regime calm / mixed / stressed
+Figure 1: We predict the post-event L2 liquidity-state transi-
+tion, not price direction; both states are built from spread,
+depth, and imbalance with train-fold-only tercile thresholds.
+liquidity-state transition, conditioned on a scheduled macro calen-
+dar. Taken together, the three lines leave an unoccupied position
+whose least-occupied point is a within-asset, regime-conditional
+test of whether order flow adds value once an established L2 base-
+line is in place, which is the position this paper takes.
+3 Data and Prediction Task
+3.1 Data and assets
+We study two perpetual-futures contracts on Binance, BTCUSDT
+and ETHUSDT, from January 2023 through mid-2026, using three
+aligned data sources: a top-20 limit-order-book record sampled once
+per minute, giving per-level bid and ask prices and sizes for the
+twenty best levels on each side; aggregate trade-flow, from which
+we build pre-event trade-flow summaries (signed taker volume
+and imbalances, trade counts, quantity, VWAP, and returns); and
+a calendar of scheduled macroeconomic announcements, which
+defines the event windows around which the task is posed. The
+order-book and trade-flow series are continuous over the full sample
+rather than restricted to event windows, and the macro calendar is
+used only to locate the windows, not as a model input.
+The order-book record is the primary input. We normalize the
+twenty levels per side into a fixed-width representation and derive,
+at each minute, three descriptors of the book: the relative bid-ask
+spread, the total depth across the top twenty levels, and the order-
+book imbalance across those levels. These three descriptors are the
+basis for the liquidity-state definition in Section 3.2. The macro
+calendar is a standard commercial economic-event feed covering
+the major economic regions, and we use only the scheduled release
+timestamps. The modeling universe entering the scored results is
+47,513 windows per horizon, 18,631 of them event windows (BTC
+9,330, ETH 9,301) against 28,882 matched non-event windows, from
+9,773 unique scheduled events across 40 monthly folds spanning
+February 2023 to May 2026; the pre-event state is calm, mixed,
+or stressed in shares of about 0.21, 0.54, and 0.25. The events are
+United-States-dominated (8,953 of the event windows) with Euro
+Area, Japan, the United Kingdom, and China next, and split into
+importance-two-or-three primary releases and importance-one con-
+trols in near-equal numbers; region and importance are carried by
+the calendar but are not model inputs. We make no use of the an-
+nounced figures or of any surprise relative to forecast; the surprise
+is a potentially informative signal that we deliberately set aside,
+because the question is the liquidity-state transition around the
+scheduled event rather than the reaction to the surprise.
+Our resolution is the book at one-minute cadence, sampled to
+twenty levels per side, chosen deliberately for two reasons. First,
+the venue: Binance is the most liquid venue for these contracts
+and so the most representative for post-event liquidity dynamics; it
+Jeon
+does distribute incremental depth feeds, but for a multi-year study
+at scale we use a vendor snapshot archive of the twenty best levels
+each minute rather than reconstructing the book from real-time
+updates. Second, the cadence is matched to the question: the task
+is a transition between liquidity states aggregated over minutes
+around an event, not a sub-second execution problem, and prior
+macro-announcement microstructure studies measure responses
+over windows of seconds to minutes [1, 3, 7, 16]. Being continuous
+over the whole sample, it also supports the event-clustered and
+permutation controls of Section 4 without event-window selection
+bias.
+We are equally explicit about what this cadence does not support,
+so that no claim is read at a resolution it was not tested at. A one-
+minute snapshot cannot recover queue position, own-order fill
+probability, sub-second market-order impact, or a replay-grade
+execution simulator; those require order-by-order data that is a
+different research program (Section 2), and we make no such claim.
+3.2 The liquidity-state definition
+We summarize the book at each minute by a single discrete liquidity
+state with three levels, which we label calm, mixed, and stressed.
+The state is built from the three book descriptors of Section 3 (rela-
+tive spread, top-twenty depth, and top-twenty imbalance) aggre-
+gated over the pre-event window. Each descriptor is first oriented
+so that a higher value is a less liquid book: spread and absolute
+imbalance are taken as is, while depth is negated, since a deep book
+is liquid and a thin book is stressed. A contract-minute is then
+assigned to a level by an equal-weight count of how many of the
+three oriented descriptors fall in their top tercile, capped at two so
+that two or three severe descriptors both map to stressed (Figure 1).
+The state is intentionally coarse. It is a regime label rather than
+a continuous score, because the question we pose is whether the
+regime a contract is in before an event predicts the regime it is in
+afterward.
+Two properties of the construction matter for validity. First, the
+tercile thresholds are estimated per symbol from training-fold data
+only and applied to held-out folds, so no information from the
+evaluation period enters the labels, and the combined state carries
+more predictive content than any single descriptor (joint improve-
+ment over the marginal baseline of 0.048 at the five-minute horizon,
+against 0.033 for the strongest single descriptor). Second, the state
+is defined symmetrically before and after the event window, so the
+same discretization produces both the pre-event and post-event
+state, making the pre-to-post mapping a well-defined transition
+rather than a comparison of two differently constructed quantities.
+3.3 The transition task and leakage controls
+The task is to predict the post-event liquidity state from information
+available before the event. Each window is anchored at the release
+time𝑡: the pre-event vector aggregates the half-open interval[𝑡−
+5 min,𝑡) and the post-event state aggregates[𝑡,𝑡+ℎ) at horizonℎ∈
+{1 min, 5 min}, with same-country releases within sixty seconds
+merged into one window. Formally, for event window𝑖 and horizon
+ℎthe target is
+𝑌𝑖,ℎ =𝑆 post𝑖,ℎ , 𝑆∈{calm,mixed,stressed},(1)
+where the state𝑆 is derived from relative spread, top-20 depth, and
+top-20 imbalance using tercile thresholds estimated on the training
+folds only. We report two horizons, one minute and five minutes
+after the window, and the primary specification uses the five-minute
+state built from the combined descriptor. The prediction is one step
+and discrete, a three-class classification of the post-event regime,
+evaluated out of sample as described in Section 4.
+Three enforced controls keep the task honest: pre-event and
+post-event features are kept strictly separate, so only pre-event
+book information enters the predictor; all transforms and thresh-
+olds, including the tercile cut points, are fit on training folds only,
+ruling out global-threshold leakage across the train-test bound-
+ary; and the unit of resampling is the source event rather than the
+row, so minutes from the same announcement are not treated as
+independent.
+4 Evaluation Protocol
+The prediction task of Section 3 admits many candidate inputs,
+from the coarse pre-event state through richer continuous features,
+nonlinear book shape, and local trade flow. The difficulty is not
+fitting any one of them but deciding which of them genuinely
+adds predictive value rather than apparent value from researcher
+choices. Our evaluation is built around that question. We compare
+a fixed sequence of models in which each layer is admitted only if
+it improves on the layer below it on the same data, under an out-
+of-sample protocol and a set of controls designed so that an added
+feature cannot earn credit unless its contribution survives them.
+This section defines the sequence, the protocol, and the controls.
+The results that fill them appear in Section 5.
+4.1 A staged sequence of models
+We evaluate five models in a fixed order, each adding one kind of
+information to the one before it (Equation 2). The first is a marginal
+baseline conditioning only on symbol and horizon class frequencies,
+with no order-book information. The second is a coarse pre-event
+state baseline conditioning only on the calm, mixed, or stressed
+pre-event liquidity state of Section 3; it is the empirical conditional-
+Markov transition model𝑃(𝑆 post|symbol,horizon,𝑆 pre), fit out of
+sample, so it already carries pre-event-state persistence (stressed-
+to-stressed probability up to 0.456) and a later layer is credited only
+with what it adds beyond that persistence, not over an uninformed
+marginal. It does not condition on time of day; intraday season-
+ality is instead addressed in the order-flow null below. The third
+is a multinomial logit over the continuous L2 features, the same
+information in continuous form, testing whether a linear model
+over those features improves on the coarse state. The fourth is a
+depth-capped gradient-boosted classifier over multi-scale summary
+descriptors of the top-twenty book, the L2-shape model, which
+can capture nonlinear relationships among spread, depth, and im-
+balance that the logit cannot; it is a histogram gradient-boosted
+classifier kept deliberately shallow, with maximum depth three,
+sixty boosting iterations, learning rate 0.05, and𝐿2 regularization
+1.0, so that “shallow nonlinear” is concrete and the comparison
+against the linear logit is one of model class rather than of capacity
+alone. The fifth adds pre-event order-flow features to the L2-shape
+model, giving an order-flow-augmented model whose comparison
+When Does Order Flow Matter? State-Dependent L2 Liquidity-State Transitions in Crypto Futures
+against the L2-shape model alone isolates the incremental value of
+order flow.
+𝑝marg(𝑌);𝑝 state(𝑌|𝑆 pre);𝑝 logit(𝑌|𝑋 L2cont);
+𝑝L2(𝑌|𝑋 L2);𝑝 L2+flow(𝑌|𝑋 L2,𝑋 flow). (2)
+The order is deliberate: each model is the natural baseline for the
+next, and every comparison is made on identical observations, sep-
+arating a genuine increment from a relabelling of already-captured
+signal.
+4.2 The out-of-sample protocol
+Every comparison is made out of sample on a common panel of
+held-out event windows together with matched non-event windows
+from the same months, shifted by a whole number of weeks so
+that time of day and weekday are preserved. The baseline and
+overlay results are reported on the event windows, and the regime
+decomposition of Section 5.3 on the full panel of event and matched
+non-event windows. We use rolling whole-month folds in which a
+model is trained on earlier months and scored on a held-out later
+month, so training data always precede the evaluation month. All
+transforms and thresholds, including the tercile cut points, are fit
+on the training folds only and applied unchanged to the held-out
+month, the leakage control of Section 3 applied to every model in
+the sequence.
+We score predictions by negative log-likelihood (NLL), with
+the Brier score as a secondary proper score, and summarize each
+comparison as the baseline NLL minus the model NLL, so a positive
+value means the model assigns higher likelihood to the realized
+post-event state (Equation 3). Because observations from the same
+scheduled event are not independent, we attach uncertainty with
+a bootstrap that resamples whole events rather than individual
+minutes, using the source event as the cluster unit and five hundred
+resamples, and we report stability across folds so a single-month-
+driven improvement is visible.
+NLL(𝑀)=− 1𝑁 ∑︁𝑖 log𝑝𝑀(𝑌𝑖|𝑋 𝑖),
+Δ(𝑀,𝐵)=NLL(𝐵)−NLL(𝑀),
+(3)
+so that Δ(𝑀,𝐵)> 0means model 𝑀 improves on baseline𝐵. The
+reported improvement is the joint average of this NLL improvement
+and the corresponding Brier improvement.
+4.3 Permutation tests and per-symbol reporting
+A positive out-of-sample improvement is necessary but not suffi-
+cient, because a flexible model can extract a small apparent gain
+from features that carry no genuine signal. To guard against this
+we add a permutation test for the layers whose value we want to
+establish. The test shuffles only the features under examination
+over sixty-four draws within blocks defined by month, symbol, and
+pre-event state, leaving the other features and the labels intact, and
+rescores the model on each shuffle, refitting it where the examined
+features are model inputs. This produces a distribution of improve-
+ments the same model achieves when the examined features carry
+no real information beyond their marginal distribution, and we
+require the observed improvement to exceed the upper tail of that
+distribution before treating it as established. For the order-flow
+layer in particular we shuffle only the trade-flow features and leave
+the order-book features in place, so that the test asks specifically
+whether trade flow adds information beyond the book. We also re-
+peat this flow shuffle with the UTC hour added to the blocks, whose
+hourly cells keep 0.989 of held-out rows permutable, reducing the
+risk that order flow earns credit as an hour-of-day proxy.
+We report every order-flow comparison separately for each sym-
+bol rather than only as a pooled average, and decompose the order-
+flow increment by pre-event liquidity regime. Pooling can let a
+strong result for one asset stand in for both, and a single overall
+number can hide that an effect is concentrated in one regime. Re-
+porting per symbol and per regime makes any such concentration
+explicit, and is why the order-flow findings of Sections 5.2 and 5.3
+can be stated at the asset and regime level rather than as a single
+cross-symbol claim.
+The combination of these elements is itself part of what this paper
+offers: each removes a specific way an added feature could appear
+useful without being so, and we present the protocol as a validation
+and calibration procedure for event-conditioned microstructure
+prediction, against which later reinforcement-learning, execution-
+policy, or context layers should be measured.
+5 Experiment Results
+Sections 5.1 and 5.2 report on the held-out event windows of the
+common panel; Section 5.3 reports the regime decomposition on
+the full held-out panel of event and matched non-event rows. Each
+comparison is summarized by the joint improvement of Section 4,
+the mean of the negative-log-likelihood and Brier improvements
+over its baseline, reported at three decimals, with bootstrap inter-
+vals or flow-shuffle null thresholds where they define the test; the
+two proper scores agree in sign in every cell, with the separate
+components reported in the note to Table 1. The three subsections
+follow the staged sequence of Section 4.
+5.1 Pre-event L2 state and nonlinear L2 shape
+The first question is whether the pre-event liquidity state predicts
+the post-event state at all. It does, and by a wide margin: condition-
+ing on the coarse calm, mixed, or stressed pre-event state improves
+on the marginal baseline by 0.034 at the one-minute horizon and
+0.045 at the five-minute horizon. The improvement holds across the
+panel, with the conditional state baseline beating the marginal one
+on roughly two thirds of the held-out rows. The pre-event liquidity
+state is therefore the first-order predictive object for this transition
+task, which is the empirical content of the state-first reading, and
+everything that follows is measured against this baseline rather
+than against the marginal one. Nor is the state baseline reducible
+to the train-fold-only five-minute realized-volatility tercile we test
+against it: that tercile improves on the marginal model by only 0.008
+and 0.015 at the two horizons, while the liquidity state exceeds it
+by 0.026 and 0.029 (differences on unrounded values), with ninety
+percent event-cluster intervals above zero, so volatility is predictive
+here but does not reproduce the spread, depth, and imbalance state.
+A natural next step is to give a linear model the same information
+in continuous form. We replace the coarse state with the underlying
+Jeon
+continuous L2 features and fit a multinomial logit, and an ordered-
+logit variant that respects the calm-to-stressed ordering. Neither
+improves on the coarse state baseline. The multinomial logit is
+worse by 0.048 at one minute and 0.034 at five minutes, and the
+ordered variant is worse by 0.052 and 0.047 at the two horizons,
+with the shortfall present for both assets at both horizons. Exposing
+the continuous features to a linear model does not recover the
+predictive value already held by the coarse state, so the continuous
+features help only if a model can use them nonlinearly.
+A shallow nonlinear model over the same L2 features closes that
+gap and adds further value. A depth-capped gradient-boosted clas-
+sifier over multi-scale summary descriptors of the top-twenty book
+— aggregate depth and imbalance, best-quote spread, and mid-price
+dynamics summarized over the pre-event windows — improves on
+the coarse state baseline by 0.044 at one minute and 0.060 at five
+minutes, with ninety percent bootstrap intervals that exclude zero
+(Table 1). Both logit intervals lie entirely below zero over the same
+bootstrap, so the shortfall is a stable result and not sampling noise.
+The nonlinear gain is present for each asset separately, improving
+on the coarse state baseline by 0.037 for BTC and 0.052 for ETH
+at one minute and by 0.052 and 0.067 at five minutes, so it is not a
+pooling artifact. We read this as a predictive gain in the nonlinear
+shape of the book, layered on the first-order state baseline rather
+than preceding it, even though its increment is comparable in size
+to the state baseline’s own gain. This model classifies the three-state
+post-event regime with accuracy 0.586 at one minute and 0.554 at
+five minutes, against majority base rates of 0.571 and 0.532; with
+the mixed state covering about 0.55 of the rows, this is a modest
+but consistent edge rather than a class-balance artifact. The accu-
+racy gain is small by construction: what improves is the calibration
+of the predicted state probabilities, the quantity a liquidity-aware
+execution or quoting system actually consumes when it weights
+actions by the probability of each post-event regime.
+Table 1 collects the baseline comparison. This nonlinear L2-shape
+model is the baseline that the order-flow overlay of Section 5.2 must
+exceed before any order-flow value can be credited.
+5.2 The order-flow overlay
+Section 5.1 fixed the bar: the L2-only nonlinear model is the baseline
+any order-flow contribution must clear. We add the local trade-flow
+features of Section 4 to the book and score the augmented model
+against the L2-only model on the same held-out event rows. Per
+symbol𝑠and horizonℎ, the increment is
+Δflow𝑠,ℎ =NLL 𝑀 L2-only𝑠,ℎ −NLL 𝑀 L2+flow𝑠,ℎ ,
+𝑠∈{BTC,ETH},
+(4)
+reported as the joint average of the NLL and Brier improvements,
+so it is what order flow adds once the model already sees these
+summary descriptors of the book.
+Pooled across both assets, the overlay adds a small positive incre-
+ment that clears its null. The order-flow-augmented model improves
+on the L2-only model by 0.010 at both the one-minute and five-
+minute horizons. The bar it must clear is the dedicated flow-shuffle
+null of Section 4. The ninety-fifth percentile of that null is 0.004 at
+one minute and 0.003 at five minutes, and the pooled increment
+calm mixed stressed
+0
+1
+2
+3
+4
+·10−2
+order-flow increment (joint)
+ETH
+1m
+5m
+calm mixed stressed
+0
+1
+2
+3
+4
+·10−2
+BTC
+Figure 2: ETH order-flow additivity is present in every pre-
+event regime and largest under stress; BTC is not established
+(only the five-minute calm cell clears its null). Bars are the
+joint increment over the L2-only model.
+sits above it at both horizons, so order flow carries a real, if modest,
+increment over L2 shape pooled across the panel.
+That pooled reading conceals a sharp split between the two
+assets, and the split is the point. For ETH the overlay is large and
+clears its null by a wide margin, improving on the L2-only model
+by 0.020 at one minute and 0.016 at five minutes, against a per-asset
+flow-shuffle null whose ninety-fifth percentile is 0.006 and 0.003
+at the two horizons, with a ninety percent event-cluster interval
+that excludes zero at both horizons (Table 1). For BTC the same
+overlay is near zero and not separated from its null: the increment
+is 0.001 at one minute, below its null ninety-fifth percentile of 0.002,
+and 0.003 at five minutes against a null of 0.002, too small and
+horizon-specific to support a claim once the regime decomposition
+of Section 5.3 is taken into account. We therefore do not credit
+BTC with an established order-flow contribution: the overlay is an
+ETH-dominant effect, and the pooled increment is carried by ETH.
+Two boundaries follow from this and are kept throughout. First,
+the overlay is additive, not a replacement: the order-flow-only
+model, given trade flow without the book, is worse than the L2-
+only baseline at both horizons, so order flow earns its place only
+as a layer on top of L2 shape. Second, the order-flow result does
+not transfer across assets, and we make no pooled or cross-asset
+order-flow claim that would average the strong ETH effect with the
+absent BTC one. Table 1 reports the overlay pooled and per asset,
+the per-asset rows being the operative ones, and Section 5.3 takes
+the established ETH overlay apart by pre-event liquidity regime.
+5.3 Regime-conditional discovery
+Section 5.2 established the order-flow overlay as an ETH-dominant
+effect and left BTC uncredited. This section asks where in the range
+of pre-event liquidity the ETH effect lives, and whether conditioning
+on stress changes the BTC reading. We split the held-out evalua-
+tion rows by pre-event liquidity regime, the same calm, mixed, or
+stressed tercile used as the coarse state baseline, and measure the
+order-flow increment over the L2-only model within each regime
+against a flow-shuffle null computed on the same rows. For regime
+𝑟the within-regime increment is
+Δflow𝑠,𝑟,ℎ =NLL 𝑀 L2-only𝑠,𝑟,ℎ −NLL 𝑀 L2+flow𝑠,𝑟,ℎ ,
+𝑟∈{calm,mixed,stressed},
+(5)
+again reported as the joint average of the NLL and Brier improve-
+ments. The regime decomposition is reported over the full held-out
+When Does Order Flow Matter? State-Dependent L2 Liquidity-State Transitions in Crypto Futures
+evaluation panel, the event windows together with their matched
+non-event rows, rather than the event windows alone, with the real
+increment and its null sharing the same rows in every regime cell.
+For ETH the order-flow value is present in every regime and
+grows with liquidity stress. The increment rises monotonically from
+calm to mixed to stressed, reaching 0.004, 0.020, and 0.038 at the
+one-minute horizon and 0.004, 0.015, and 0.030 at the five-minute
+horizon. Each of the six cells clears its flow-shuffle null with a ninety
+percent event-cluster interval above zero, and the stressed regime
+is the largest both in the raw increment and in its margin over the
+null at both horizons. The ETH order-flow overlay is therefore not a
+uniform additive term: it is small when liquidity is calm and several
+times larger when liquidity is stressed, so order flow earns its place
+over book shape mainly in the stressed pre-event states, which is
+the central discovery within the order-flow analysis.
+For BTC the regime decomposition does not establish an order-
+flow increment. Only one of the six BTC cells clears its null, the five-
+minute calm regime, while the stressed regime is at or below its null
+at both horizons and the one-minute horizon clears in no regime.
+Because no BTC regime clears at both horizons, the single calm-
+state pass does not amount to a regime-robust effect. The borderline
+pooled BTC reading noted in Section 5.2 resolves here: split by
+regime, it is carried by that lone five-minute calm cell and disappears
+under stress, the opposite of the stress amplification ETH shows, so
+the regime view is what makes the BTC non-establishment definite
+rather than marginal. This adjudication is unchanged when the
+flow shuffle adds the UTC hour to its blocks and under a Benjamini–
+Hochberg correction across the twelve symbol–horizon–regime
+cells at𝑞= 0.05: every ETH cell still clears, and BTC still lacks a
+two-horizon pass.
+Figure 2 shows the two assets side by side across the calm-to-
+stressed axis, and the contrast is the headline order-flow result: the
+contribution over the L2 state and shape baseline is asset-dependent
+and state-dependent, present and stress-amplified for ETH and not
+established for BTC, rather than a single panel-wide effect. This
+conditional, asset-specific reading is the empirical core of the state-
+first conclusion of Section 6.
+6 Discussion and Conclusion
+The results in Section 5 form a single staged, nested model compar-
+ison, and read together they point to one organizing principle for
+this prediction task. The central reading is a state-first one: within
+the event windows the calendar locates, the first-order predictor
+for the post-event liquidity transition is the persistent pre-event
+state, and anything layered on top, including order flow, should
+be credited only with what it adds beyond the state and shape
+baseline. This motivates a design principle: reinforcement-learning,
+execution-policy, or language-model context layers should be added
+only after an event-conditioned market model exceeds a robust L2
+liquidity-state transition baseline of the kind established here. Two
+qualifications bound the reading. We use event timing to define and
+match windows but do not enter the event’s label content – type,
+region, or importance – as a competing predictor, so the claim is
+that pre-event state is first-order within event windows, not that it
+dominates a model given the event label; testing the label attributes
+is future work. And the principle is shown only for the liquidity-
+state target; whether pre-event state is similarly first-order for a
+price-direction target on the same panel is untested.
+The order-flow contribution should be read as conditional rather
+than universal: order flow adds value only when layered on the book,
+not as a replacement (Section 5.2), and the ETH-dominant, stress-
+amplified, BTC-not-established reading of Section 5.3 is regime-
+and asset-conditional rather than panel-wide. We deliberately avoid
+a single panel-wide statement, consistent with a literature in which
+order-flow informativeness is state-dependent and differs across
+assets.
+Several boundaries should be stated plainly. This is a predic-
+tion study of liquidity-state transitions at a one-minute cadence,
+not a trading or execution study, and reports no policy, profit, or
+simulator result. The volatility-tercile, hour-blocked, and multiple-
+testing checks of Section 5 tighten these findings without widening
+their scope. The two-asset scope is a genuine limit and the ETH-
+versus-BTC asymmetry is a two-point observation rather than a
+population statement; extending to additional crypto pairs, venues,
+and asset classes such as equities is needed to determine whether
+it reflects asset-specific microstructure or a broader pattern; we
+leave that, and sub-minute replay-grade data, to future work. The
+order-flow features are local trade-flow summaries rather than a
+full reconstruction of the process, the BTC non-establishment con-
+cerns these tests on this data rather than claiming BTC order flow
+is uninformative, and results are reported on the proper-score scale,
+not translated into basis points, profit, or any macro-event causality
+claim. Code, evaluation contracts, manifests, artifact hashes, and
+non-proprietary derived artifacts will be released upon acceptance;
+licensed raw inputs cannot be redistributed.
+References
+[1] Torben G. Andersen, Tim Bollerslev, Francis X. Diebold, and Clara Vega. 2003.
+Micro Effects of Macro Announcements: Real-Time Price Discovery in For-
+eign Exchange.American Economic Review93, 1 (2003), 38–62. doi:10.1257/
+000282803321455151
+[2] Andrei-Bogdan Balcau, Leandro Sánchez-Betancourt, Stefan Sarkadi, and
+Carmine Ventre. 2024. Detecting Collective Liquidity Taking Distributions.
+InProceedings of the 5th ACM International Conference on AI in Finance (ICAIF
+’24). 504–512. doi:10.1145/3677052.3698643
+[3] Pierluigi Balduzzi, Edwin J. Elton, and T. Clifton Green. 2001. Economic News
+and Bond Prices: Evidence from the U.S. Treasury Market.Journal of Financial
+and Quantitative Analysis36, 4 (2001), 523–543. doi:10.2307/2676223
+[4] Bartosz Bieganowski and Robert Ślepaczuk. 2026. Explainable Patterns in Cryp-
+tocurrency Microstructure.arXiv preprint arXiv:2602.00776(2026). doi:10.48550/
+arXiv.2602.00776
+[5] Antonio Briola, Silvia Bartolucci, and Tomaso Aste. 2024. Deep Limit Order
+Book Forecasting.arXiv preprint arXiv:2403.09267(2024). doi:10.48550/arXiv.
+2403.09267
+[6] Rama Cont, Arseniy Kukanov, and Sasha Stoikov. 2014. The Price Impact of
+Order Book Events.Journal of Financial Econometrics12, 1 (2014), 47–88. doi:10.
+1093/jjfinec/nbt003
+[7] Michael J. Fleming and Eli M. Remolona. 1999. Price Formation and Liquidity
+in the U.S. Treasury Market: The Response to Public Information.Journal of
+Finance54, 5 (1999). doi:10.1111/0022-1082.00172
+[8] Prakul Sunil Hiremath and Vruksha Arun Hiremath. 2026. Early Detec-
+tion of Latent Microstructure Regimes in Limit Order Books.arXiv preprint
+arXiv:2604.20949(2026). doi:10.48550/arXiv.2604.20949
+[9] Chen Hu and Kouxiao Zhang. 2025. Stochastic Price Dynamics in Response to
+Order Flow Imbalance: Evidence from CSI 300 Index Futures.arXiv preprint
+arXiv:2505.17388(2025). doi:10.48550/arXiv.2505.17388
+[10] George J. Jiang, Ingrid Lo, and Adrien Verdelhan. 2011. Information Shocks,
+Liquidity Shocks, Jumps, and Price Discovery: Evidence from the U.S. Treasury
+Market.Journal of Financial and Quantitative Analysis46, 2 (2011), 527–551.
+doi:10.1017/S0022109010000785
+Jeon
+[11] Alec N. Kercheval and Yuan Zhang. 2015. Modelling High-Frequency Limit
+Order Book Dynamics with Support Vector Machines.Quantitative Finance15, 8
+(2015), 1315–1329. doi:10.1080/14697688.2015.1032546
+[12] Albert S. Kyle. 1985. Continuous Auctions and Insider Trading.Econometrica53,
+6 (1985), 1315–1335. doi:10.2307/1913210
+[13] Maxime Morariu-Patrichi and Mikko S. Pakkanen. 2021. State-Dependent
+Hawkes Processes and Their Application to Limit Order Book Modelling.Quan-
+titative Finance22, 3 (2021), 563–583. doi:10.1080/14697688.2021.1983199
+[14] Adamantios Ntakaris, Martin Magris, Juho Kanniainen, Moncef Gabbouj, and
+Alexandros Iosifidis. 2018. Benchmark Dataset for Mid-Price Forecasting of Limit
+Order Book Data with Machine Learning Methods.Journal of Forecasting(2018).
+doi:10.1002/for.2543
+[15] Efstathios Panayi and Gareth Peters. 2014. Survival Models for the Duration of
+Bid-Ask Spread Deviations.arXiv preprint arXiv:1406.5487(2014). doi:10.48550/
+arXiv.1406.5487
+[16] Paolo Pasquariello and Clara Vega. 2007. Informed and Strategic Order Flow in
+the Bond Markets.Review of Financial Studies20, 6 (2007), 1975–2019. doi:10.
+1093/rfs/hhm034
+[17] Justin Sirignano and Rama Cont. 2018. Universal Features of Price Forma-
+tion in Financial Markets: Perspectives from Deep Learning.arXiv preprint
+arXiv:1803.06917(2018). doi:10.48550/arXiv.1803.06917
+[18] Haochuan Wang. 2025. Forecasting Liquidity Withdraw with Machine Learning
+Models.arXiv preprint arXiv:2509.22985(2025). doi:10.48550/arXiv.2509.22985
+[19] Ke Xu, Martin D. Gould, and Sam D. Howison. 2019. Multi-Level Order-Flow
+Imbalance in a Limit Order Book.arXiv preprint arXiv:1907.06230(2019). doi:10.
+48550/arXiv.1907.06230
+[20] Zihao Zhang, Stefan Zohren, and Stephen Roberts. 2019. DeepLOB: Deep Con-
+volutional Neural Networks for Limit Order Books.IEEE Transactions on Signal
+Processing(2019). doi:10.1109/TSP.2019.2907260

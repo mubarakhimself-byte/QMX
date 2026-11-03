@@ -1,0 +1,1551 @@
+arXiv 2606.01650  https://arxiv.org/abs/2606.01650
+
+Post-Selection Estimation of Sharpe Ratios
+Steven E. Pav∗
+June 11, 2026
+Abstract
+We consider the problem of estimating the true Sharpe ratio of an as-
+set selected for having the highest observed in-sample Sharpe ratio among
+many assets. We discuss estimators based on the polyhedral lemma,
+James Stein shrinkage, debiasing the expected maximum Sharpe ratio,
+thresholding and empirical Bayes. We test these estimators in simula-
+tions, computing bias and root mean square error across different values
+of sample size, number of assets, and spread and shape of population
+Sharpe ratios. We also compute rank correlation of the estimators against
+the underlying quantity, simulating how these estimators might be used
+to compare or rank the output of different teams which perform this se-
+lection process. We find that the James Stein estimator provides the best
+performance across many different realistic values of the relevant parame-
+ters, followed by the GMLEB estimator of Jiang and Zhang. These results
+are fairly robust to correlation of asset returns, with some caveats.
+1 Introduction
+From the dawn of computing, quantitative-minded traders have used comput-
+ers to try to analyze and predict market movements. [14, 3] If the quality of
+outcomes was monotonic in computing power invested, however, there would be
+many rich nerds indeed. This seems not to be the case, instead devising and
+backtesting thousands or millions of candidate trading strategies often results
+in disappointing performance out of sample. There is a clear need even still for
+statistical tools to correct for the effects of selecting strategies based on their
+in-sample performance.
+The setup we consider is fairly simple: a quantitative strategist devises and
+backtests some large number of strategies, selects the one with the highest in-
+sample Sharpe ratio, then wishes to estimate or perform inference on the popu-
+lation Sharpe ratio of that strategy. Early inferential approaches to the problem
+relied on corrections for familywise error rate. [2, 4] White proposed the use
+of the bootstrap for his “Reality Check”, which was improved upon by Hansen
+inter alia. [23, 8] Previously we compared several procedures for the inferential
+task, including approaches based on directional alternatives and a conditional
+test based on the “polyhedral lemma” which finds currency in the field of selec-
+tive inference. [17, 21, 15] More recent approaches leverage statistical learning
+theory for the inference problem. [16]
+∗steven@gilgamath.com.
+1
+arXiv:2606.01650v2  [q-fin.PM]  10 Jun 2026
+In this work we consider the estimation problem, namely: conditional on
+selecting an asset or strategy because it has the highest in-sample Sharpe ratio,
+can we compute an estimate of the signal-noise ratio of that asset or strategy
+which is unbiased or has low mean square error? Outside the context of quan-
+titative trading, this problem has considerable history. One approach to the
+problem is viathresholding, where values above a threshold (perhaps chosen
+empirically) are shrunk by a certain amount towards zero. [6, 13, 12] This can
+also be viewed from the viewpoint of Empirical Bayes. [7] Reid et al. introduced
+a maximum likelihood estimator based on the polyhedral lemma, and compared
+it to several other techniques, including the threshold-based methods, as well as
+the James-Stein estimator. [19, 9]
+This note does not seek to introduce new methods for the problem. Rather
+we adapt existing methods to the problem of estimating the signal-noise ratio of
+the asset with maximum Sharpe ratio, and test them on population parameters
+which are likely to be of interest to practitioners, with realistic sample sizes,
+effect sizes and distribution and number of strategies considered. In that regard,
+this paper is quite similar to that of Reid et al., but adapted to the econometrics
+of the Sharpe ratio. [19]
+2 Estimation of the Sharpe ratio
+The Sharpe ratio is the most widely used statistic for evaluating and comparing
+trading strategies. [20, 18] Defined as the sample mean of observed percent
+returns divided by the standard deviation of the same, the Sharpe ratio is exactly
+equal to thet-statistic up to scaling. We wish to perform inference on what some
+would call theex anteSharpe ratio, what we call the signal-noise ratio, which
+uses population mean and standard deviation.
+We assume one has access to, or has constructed,ktrading strategies. Let
+ζi = µiσi
+be the signal-noise ratio of thei th strategy. Collect all of them into thek-vector
+ζ. We backtest or observendays of returns and compute the Sharpe ratio of
+thei th strategy, call it ˆζi, which we collect in the vector ˆζ.
+To simplify the exposition we assume that the indices have been reordered
+after the statistics are observed so that
+ˆζ1 ≤ ˆζ2 ≤. . .≤ˆζk.(1)
+We synchronize the indexing between the population and sample values, so this
+doesnotimply the same ordering holds on theζ i. That isζ k is the signal-noise
+ratio of the strategy which was observed to have the highest Sharpe ratio, but
+it might not be the largest of theζ i. We simply prefer to use indexing like ˆζi
+than ˆζ(i), which is more standard for this problem.
+We suppose that the returns of the strategies are correlated with correlation
+matrixR. When returns are elliptically distributed we showed previously that
+ˆζ≈ N
+
+ζ, 1n R+ κ−14 ζζ ⊤ + κ2 Diag (ζ) (R⊙R) Diag (ζ)  ,(2)
+2
+whereκis the “kurtosis factor”, equal to one third the kurtosis of the marginals.
+[17] When measured on daily returns we expect the signal-noise ratio to be
+not much larger than around 0.16day −1/2, corresponding to around 2.5yr −1/2
+assuming 252 trading days per year. As such quantities quadratic inζtend to
+be very small, and we often can get away with the approximation
+ˆζ≈ N
+
+ζ, 1n R .(3)
+Thus our problem is fairly well approximated by the classical problem of
+estimation with normal noise. In much of our testing we will assume indepen-
+dent returns, whereR=I. A perhaps more accurate model for many strategy
+searches is that ofcompound symmetrywhereR= (1−ρ)I+ρ11 ⊤; this is a
+correlation matrix withρon the off-diagonals. A correlation matrix of this form
+is convenient because it preserves order in this sense: we can transform our way
+back to the independent case while preserving identity of the maximum element.
+[17] That is
+z= √nR−1/2 ˆζ−ζ  ≈ N(0,I),(4)
+whereR −1/2 is the inverse of the (symmetric) square root ofR. Under the
+compound symmetric model,R −1/2 is order preserving: ifa=R −1/2band
+bi ≤b j thena i ≤a j. Thus thek th element of √nR−1/2 ˆζis the largest element
+under our assumed ordering. This is all to say we will focus mostly on theR=I
+case in our exposition.
+Given ˆζwhich is approximatelyζplus a multivariate noise with covariance
+1
+n I, how can we estimateζ k in a way that is unbiased or has small mean square
+error? If all the elements ofζwere the same, say equal toζ 0, we could avail
+ourselves of the result of Bailey et al. on the expected value of the maximum of
+independent Gaussians. [1] In our formulation this can be expressed as
+E
+h
+ˆζk
+i
+≈ζ 0 +n −1/2
+
+(1−γ) Φ −1
+
+1− 1k  +γΦ −1 1− 1ke  ,(5)
+whereγ≈0.5772157 is the Euler-Mascheroni constant. Thus a nearly debiased
+estimate could be had by subtracting the second summand from ˆζk. Of course,
+if all the elements ofζwere equal we would not have to rely on the expected
+value of the extremum, we could just estimateζ 0 via the average (or “grand
+mean”) of the elements of ˆζdefined as
+¯ζ= 1k Xi ˆζi.
+We do not expect either of those estimators to be very good except in cases
+where the variation inζis small compared to the noise in ˆζ, which is essentially
+n−1/2. Note that it is fairly common to collect backtests of length between
+around one and ten years, which corresponds tonvarying from around 250 to
+around 2,500. Thus the standard deviation of noise in ˆζis somewhere around
+0.02 to 0.06.
+When the variation in ˆζis not small relative ton −1/2, we need better es-
+timators. One simple classical approach is via the James-Stein estimator. [9]
+Suppose the elements ofζwere randomly generated with varianceσ 2ζ , then we
+3
+observe ˆζwith variance 1/non top of that. Then the unconditional variance
+of the ˆζi would be their sum,σ 2ζ + 1/n. If you could rescale the elements of
+ˆζtowards the (unknown) mean value of theζby a certain factor, then the
+same ˆζwould have the same variance as the sample. This handwavey expla-
+nation would lead one to the wrong scaling factor, however. The actual James
+Stein estimator, which has lower mean square error than the usual least squares
+estimator (i.e., ˆζitself in this case), has one compute the shrinkage factor
+s=
+
+1− (k−2) 1nˆζ2
+2
+
+
++
+,
+wherex + is the maximum ofxand 0, or the “positive part” operator. One
+would then uses ˆζas a better estimate ofζ, in the least squares sense. For
+our problem that means usings ˆζk as an estimate ofζ k. Rather than shrink to
+zero, we wish our estimator to be equivariant to locational shifts, so instead we
+shrink to the grand mean. This means we compute
+sv =
+
+1− (k−2) 1nˆζ− ¯ζ12
+2
+
+
++
+,
+then use
+ˆζJS = ¯ζ+s v
+
+ˆζk − ¯ζ
+
+to estimateζ k.
+A number of other estimators that we consider can be expressed in a similar
+form. These are based on the idea of “thresholding”. Let
+g(x, t) =df sign (x)|x−t| +
+be the thresholding function. It shrinks anything smaller thantin absolute
+value to zero, while values larger than that threshold are shifted towards zero
+by that amount. Thresholding estimators are completely described by the way
+that they construct the thresholdt. That is, a thresholding estimator ofζ k is
+computed as
+¯ζ+g
+
+ˆζk, t
+
+ˆζ− ¯ζ1, n
+
+,
+for some functiont(·,·).
+The SURE estimator of Donoho and Johnstone uses ast(·,·) a result of Stein
+to estimate the threshold which would give the least squares best estimate of the
+entire vector. [6] For our problem, focused on only one element of the vector,
+this might not be optimal. We envision exploring variants of this estimator in
+future revisions of this paper.
+The Empirical Bayes estimate of Johnstone and Silverman can also be ex-
+pressed as a threshold estimator. [13, 12] It starts from a prior distribution
+on the elements ofζwith a point mass at zero, and some distribution on the
+non-zero elements. The observed data are then integrated, then the posterior
+median is used for the threshold. [19, 7]
+4
+The GMLEB estimator of Jiang and Zhang is another threshold estimator.
+[10] This estimator is considerably harder to describe, and we refer the reader
+to the original paper. We used the GMLEB code from Reid et al. [19]
+Another approach to the problem is via the “polyhedral lemma” of Lee et al.
+[15] Previously we applied this result to the problem of performing inference for
+this very same problem setup. [17] So one very simple estimator would be to
+compute the 0.5 confidence bound using the truncated normal distribution that
+arises from the problem setup. For the simple case ofR=I, this polyhedral
+lemma states that, conditional on ˆζ1 ≤ ˆζ2 ≤. . .≤ˆζk, the random variable
+u=
+Φ
+√n ˆζk −ζ k −Φ √n ˆζk−1 −ζ k
+1−Φ
+√n ˆζk−1 −ζ k
+is uniformly distributed. So the polyhedral median estimator is the value, found
+numerically, such that plugged in for the unknownζ k gives a value of 0.5 foru.
+That is we findζ 0.5 to solve for
+1
+2 =
+Φ
+√n ˆζk −ζ 0.5 −Φ √n ˆζk−1 −ζ 0.5
+1−Φ
+√n ˆζk−1 −ζ 0.5 .
+Reid et al. also start from the polyhedral lemma, but use it to compute a
+maximum likelihood estimator forζ k. [19] The starting point is that, conditional
+on the observed ordering, the variable √n ˆζk −ζ k follows a truncated normal
+distribution and has probability density function:
+f(x;ζ k) = √n 1{√n( ˆζk−1−ζk)≤x}ϕ(x)
+1−Φ
+√n ˆζk−1 −ζ k .
+Given just the single observation ˆζk, we find, numerically, the value ofζ k that
+maximizes this likelihood. That is we compute the MLE as
+argmax
+ζ
+f
+√n ˆζk −ζ  ;ζ  .
+Pace Reid et al. we found this estimator to be quite unstable in our simulations.
+One distinction is that Reid et al. considered the problem of estimating them
+largest elements of a noisy vector in absolute value, which is somewhat different
+from our problem and perhaps less sensitive to small values of ˆζk − ˆζk−1.
+3 Simulations
+We perform a number of Monte Carlo simulations of the strategy backtest-
+select-estimate pipeline we describe above. We evaluate the different estimators
+in two different ways: in one we simply compute the bias and root mean square
+error (RMSE) of the estimator compared toζ k; in the other we simulate using
+one of these estimators to select from several different sources of strategies, and
+compute the correlation of the estimators against theζ k.
+At its heart a single simulation consists of the following:
+5
+1. Either theζis given, or it is generated according to some distribution;
+when randomly generated, we usually control theσ 2ζ .
+2. We then generatendays of independent normally distributed returns for
+kassets with zero mean and unit variance.
+3. To each column we add the value ofζso each column is an-vector with
+signal-noise ratio equal to the corresponding element ofζ.
+4. We compute the Sharpe ratio of each column.
+5. We apply the various estimators to the vector ˆζand record them. We also
+record theζ k.
+We typically perform many simulations for each setting of theζ,nandk.
+Over those many simulations we compute the bias and RMSE of the estimator
+compared to the signal-noise ratio of the strategy selected for having the highest
+Sharpe ratio. We then plot the bias or RMSE versus, say, theσ 2ζ , or versusk
+ornand so on.
+F orms of the population vectorWe consider a number of different layouts
+for the vectorζ. Some of these are random and theζis generated afresh for each
+simulation. In others the vectorζis fixed at one value across many simulations.
+The layouts are:
+•Gaussian: Theζis drawn from a Gaussian distribution with mean zero
+and varianceσ 2ζ .
+•Uniform: Theζis drawn from a continuous uniform distribution with
+mean zero and varianceσ 2ζ . That is, elements ofζare drawn uniformly
+from−
+√
+3σζ to
+√
+3σζ.
+•Bimodal: Theζtakes value±σ ζ with probability 12 .
+•all-good: Theζequalsζ 01for someζ 0. This is a non-random configura-
+tion, constant across all simulations with this layout. We test this layout
+with various values ofζ 0 mainly as a check that our estimators are location
+invariant.
+•one-good: One element ofζisζ 0 while the rest are−ζ 0 for someζ 0.
+This is a non-random configuration. Whenζ 0 is relatively large compared
+ton −1/2 we are likely to select the “good” strategy, but some of our
+estimators are likely to be very biased.
+•two-good: Two elements ofζareζ 0 while the rest are−ζ 0 for someζ 0.
+This is a non-random configuration.
+EstimatorsWe consider the following estimators:
+•Biased: This is ˆζk, the maximal Sharpe ratio of all those observed. We
+include this as a benchmark for the alternative estimators.
+•Grand Mean: This is ¯ζ, the average of all the observed Sharpe ratio values.
+•James-Stein: The James-Stein estimator, shrunk towards the grand mean.
+•GMLEB: The estimator of Jiang and Zhang shrunk to the grand mean.
+•SURE: The estimator of Donoho and Johnstone shrunk to the grand mean.
+•Polyhedral Median: This is the 0.5 confidence bound based on the poly-
+hedral lemma.
+•Polyhedral MLE: The MLE estimator of Reid et al.
+•Expected Max: This is ˆζk minus the expected value of the maximum found
+by Bailey et al.
+6
+•Empirical Bayes: The estimator of Johnstone and Silverman, shrunk to
+the grand mean. We use the code from theEbayesThreshRpackage. [22]
+3.1 Bias and Square Error Results
+First we performed simulations using the Gaussian, Uniform and Bimodal dis-
+tributions forζ. In these we letσ ζ range from 0yr −1/2 to 1yr −1/2. We letk
+take values 10, 100, 1000. We variednto represent between 2 and 8 years at
+252 days per year. For each setting we perform 500 simulations. In Figure 1 we
+plot the bias versusσ ζ, and in Figure 2 we plot the RMSE versusσ ζ, fixingn
+at 4 years, and plotting for the various values ofktested.
+Based on early results of these studies, we removed the Polyhedral Median
+and MLE estimators from the bias and RMSE plots. Both consistently exhibited
+high RMSE, much higher than the other estimators. The issue arises when the
+ˆζk and ˆζk−1 are very close to each other; in this case the truncated normal
+that arises from the polyhedral lemma is very close to its limiting value which
+causes very extreme values of the estimators, see Section B for more details.
+For small numbers of simulations you might not hit such a case, but we did
+when performing 500 simulations. We will consider these two estimators in the
+following subsection, but will see they perform poorly there as well.
+In those plots we see that the Biased estimator is indeed biased, and often
+has the highest RMSE. The Grand Mean is unbiased and efficient whenσ ζ = 0,
+but otherwise negatively biased and has high RMSE. The James Stein estimator
+is, to the resolution of the plot, effectively unbiased for the Gaussian layout and
+has the lowest RMSE in that case as well; whenζis uniform or bimodal, James
+Stein exhibits some positive bias and increased RMSE for largerσ ζ. GMLEB is
+slightly positively biased for uniform and bimodalζ, but appears to have RMSE
+which is flat with respect toζ. The Expected Max estimator exhibits negative
+bias for Gaussianζ, but is better behaved for uniform and bimodal layouts.
+In Figure 3 we plot the bias versusσ ζ, and in Figure 4 we plot the RMSE
+versusσ ζ for these simulations, but fixingk= 100 and varyingnin the different
+facet rows. This shows how error depends on the sample size when the number
+of strategies is fixed. The middle row of Figure 3 should be the same as the
+middle row of Figure 1, and similarly for Figure 4 and Figure 2. One thing to
+observe in these plots is how the estimators respond to varyingn: the Grand
+Mean seems almost unaffected, which makes sense; most of the other estimators
+appear to have less bias for largern, but this is tricky to quantify.
+In Figure 5 we reverse this relationship and plot the RMSE versusnin years
+with lines for selected values ofσ ζ. We can see more clearly here that all of
+the methods seem to improve (have lower RMSE) with increasing sample size
+except for the Grand Mean, and perhaps the James Stein method for bimodal
+layout and largeσ ζ.
+How can we make sense of the various plots above? One way to summarize
+them is via theperformance plotsof Dolan and Mor´ e [5] We collect the simula-
+tions from above, then for a given choice ofn,k,σ ζ and the layout distribution,
+we compute the ratio of the RMSE of an estimator to the minimum RMSE over
+all estimators at that setting of the parameters. We want this ratio to be as close
+to 1.0 as possible. In the performance plot, in Figure 6, we plot the empirical
+CDF of this ratio for each method, with facets for the different layout distribu-
+tions. In a performance plot, you wish to select a method which is “up and to
+7
+Gaussian Uniform Bimodal
+101001000
+0.00 0.25 0.50 0.75 1.00 0.00 0.25 0.50 0.75 1.00 0.00 0.25 0.50 0.75 1.00
+−1
+0
+1
+−1
+0
+1
+−1
+0
+1
+Standard Deviation of Signal noise ratio ( yr−1 2 )
+Bias ( yr−1 2 )
+Method
+James Stein
+GMLEB
+SURE
+Empirical Bayes
+Expected Max
+Grand Mean
+Biased
+Bias of Estimators
+Y axis truncated to show detail. Each point the average of 500 simulations. 
+Figure 1: The empirical biases of the tested estimators are shown versusσ ζ, the
+spread of the signal-noise ratio values. Facet columns show the three different
+random layouts of theζvalues, facet rows show the number of strategies,k. All
+simulations tested undern= 1008.
+the left” in the plot. In our case James Stein clearly dominates in the Gaussian
+layout, is largely tied with Expected Max or slightly better for Uniform layout,
+and somewhat worse than Expected Max and GMLEB for Bimodal layout. A
+number of the methods show high regret in the Bimodal case, including SURE
+and Empirical Bayes.
+We note that it is hard to take these results as conclusive, since we only test
+a handful of different configurations of the relevant parameters, and those might
+not be sampled in a way that is representative of what one expects in reality.
+8
+Gaussian Uniform Bimodal
+101001000
+0.00 0.25 0.50 0.75 1.00 0.00 0.25 0.50 0.75 1.00 0.00 0.25 0.50 0.75 1.00
+1
+2
+3
+1
+2
+3
+1
+2
+3
+Standard Deviation of Signal noise ratio ( yr−1 2 )
+RMSE ( yr−1 2 )
+Method
+James Stein
+GMLEB
+SURE
+Empirical Bayes
+Expected Max
+Grand Mean
+Biased
+RMSE of Estimators
+Y axis in square root space to show detail. Each point the average of 500 simulations. 
+Figure 2: The empirical RMSE values of the tested estimators are shown versus
+σζ, the spread of the signal-noise ratio values. Facet columns show the three dif-
+ferent random layouts of theζvalues, facet rows show the number of strategies,
+k. All simulations tested undern= 1008.
+9
+Gaussian Uniform Bimodal
+248
+0.00 0.25 0.50 0.75 1.00 0.00 0.25 0.50 0.75 1.00 0.00 0.25 0.50 0.75 1.00
+−1
+0
+1
+−1
+0
+1
+−1
+0
+1
+Standard Deviation of Signal noise ratio ( yr−1 2 )
+Bias ( yr−1 2 )
+Method
+James Stein
+GMLEB
+SURE
+Empirical Bayes
+Expected Max
+Grand Mean
+Biased
+Bias of Estimators
+Y axis truncated to show detail. Each point the average of 500 simulations. 
+Figure 3: The empirical biases of the tested estimators are shown versusσ ζ, the
+spread of the signal-noise ratio values. Facet columns show the three different
+random layouts of theζvalues, facet rows show the sample size,n, in years,
+assuming 252 days per year. All simulations tested underk= 100.
+10
+Gaussian Uniform Bimodal
+248
+0.00 0.25 0.50 0.75 1.00 0.00 0.25 0.50 0.75 1.00 0.00 0.25 0.50 0.75 1.00
+0.5
+1.0
+1.5
+2.0
+2.5
+0.5
+1.0
+1.5
+2.0
+2.5
+0.5
+1.0
+1.5
+2.0
+2.5
+Standard Deviation of Signal noise ratio ( yr−1 2 )
+RMSE ( yr−1 2 )
+Method
+James Stein
+GMLEB
+SURE
+Empirical Bayes
+Expected Max
+Grand Mean
+Biased
+RMSE of Estimators
+Y axis in square root space to show detail. Each point the average of 500 simulations. 
+Figure 4: The empirical RMSE values of the tested estimators are shown versus
+σζ, the spread of the signal-noise ratio values. Facet columns show the three
+different random layouts of theζvalues, facet rows show the sample size,n, in
+years, assuming 252 days per year. All simulations tested underk= 100.
+11
+Gaussian Uniform Bimodal
+2 3 5 2 3 5 2 3 5
+0.3
+0.5
+1.0
+Y ears
+RMSE ( yr−1 2 )
+σζ  ( yr−1 2 ) 0.333 0.667 1
+Method
+James Stein
+GMLEB
+SURE
+Empirical Bayes
+Expected Max
+Grand Mean
+Biased
+RMSE of Estimators
+X and Y axes in log space to show detail. Each point the average of 500 simulations. 
+Figure 5: The empirical RMSE values of the tested estimators are shown versus
+n, in years, assuming 252 days per year. Facet columns show the three different
+random layouts of theζvalues. All simulations tested underk= 100. Lines
+are shown for selected values ofσ ζ.
+Gaussian Uniform Bimodal
+1x 2x 5x 10x 20x 50x 100x 1x 2x 5x 10x 20x 50x 100x 1x 2x 5x 10x 20x 50x 100x
+0.00
+0.25
+0.50
+0.75
+1.00
+Regret of RMSE
+Empirical CDF
+Method
+James Stein
+GMLEB
+SURE
+Empirical Bayes
+Expected Max
+Grand Mean
+Biased
+Performance Plot
+X axis in log space to show detail. Each point the average of 500 simulations. 
+Figure 6: Empirical CDFs of the regret of each method are plotted in these
+performance plots. Regret is the ratio of the RMSE of a method to the minimum
+RMSE of all methods for that parameter setting.
+12
+In Figure 7 we plot the bias versusζ 0, and in Figure 8 we plot the RMSE
+versusζ 0, whereζ 0 is the signal-noise ratio of the good strategy, for the all-good,
+one-good, and two-good layouts ofζ. In these we fixnat 4 years, andk= 100.
+For the all-good case we see, as hoped, that the bias and RMSE are essen-
+tially flat with respect toζ 0. This means that our estimators are equivariant
+with respect to location shifts, as desired. We also see that Grand Mean has the
+lowest RMSE, followed by James Stein, then Expected Max. This is somewhat
+surprising as James Stein exhibits some positive bias in the all-good case, as
+seen in Figure 7, yet still exhibits lower RMSE than the less biased Expected
+Max estimator, which must have a larger variance. In the all-good case, the
+James Stein estimator will sometimes shrink all the way to the Grand Mean,
+but sometimes will only shrink part of the way, which explains the observed
+positive bias.
+All-good is an unlikely configuration forζ, but it is the limiting case where
+the variation ofζis small compared ton −1/2. The one-good and two-good cases
+are also somewhat unlikely, especially for largerζ 0. For the one-good layout and
+largeζ 0, the Biased estimator has lowest RMSE and is nearly unbiased, since
+effectively the bad strategies have very little chance of being selected. We can
+see the change in behavior clearly in the bias plots: after some point most of the
+estimators seem to reach an asymptotic value, except for Grand Mean, which
+gets progressively worse withζ 0. The GMLEB appears to have low regret across
+ζ0 for the one-good and two-good cases. If somehow one knew there were very
+few good strategies and a large number of bad ones, GMLEB would be the
+recommended estimator, unless the gap between good and bad were known to
+be very large, in which case the simple Biased estimator is to be used with
+caution.
+13
+all−equal two−good one−good
+0.00 0.25 0.50 0.75 1.00 0.0 0.5 1.0 1.5 2.0 0.0 0.5 1.0 1.5 2.0
+−3
+−2
+−1
+0
+1
+Good Strategy Signal noise ratio ( yr−1 2 )
+Bias ( yr−1 2 )
+Method
+James Stein
+GMLEB
+SURE
+Empirical Bayes
+Expected Max
+Grand Mean
+Biased
+Bias of Estimators
+Y axis truncated to show detail. Each point the average of 500 simulations. 
+Figure 7: The empirical biases of the tested estimators are shown versus the
+signal-noise ratio of the good strategy for the fixed layoutζsimulations. Facet
+columns show the three different layouts of theζvalues. All simulations tested
+undern= 1008, andk= 100.
+14
+all−equal two−good one−good
+0.00 0.25 0.50 0.75 1.00 0.0 0.5 1.0 1.5 2.0 0.0 0.5 1.0 1.5 2.0
+0
+1
+2
+3
+4
+Good Strategy Signal noise ratio ( yr−1 2 )
+RMSE ( yr−1 2 )
+Method
+James Stein
+GMLEB
+SURE
+Empirical Bayes
+Expected Max
+Grand Mean
+Biased
+RMSE of Estimators
+Y axis in square root space to show detail. Each point the average of 500 simulations. 
+Figure 8: The empirical RMSE values of the tested estimators are shown versus
+the signal-noise ratio of the good strategy for the fixed layoutζsimulations.
+Facet columns show the three different layouts of theζvalues. All simulations
+tested undern= 1008, andk= 100.
+15
+3.2 Ranking Results
+The simulations above looked at the quality of estimatorsquaestimators ofζ k.
+We wish to also examine how these estimators can be used to compare two or
+more selected strategies, each found by the process of selecting based on Sharpe
+ratio.
+As an illustration, suppose that former cryptographers Alice and Bob are
+now developing quantitative strategies. Alice isadventurous: she has many
+different ideas and performs many backtests. Bob isboring: he tests a few vari-
+ants on one idea. Both follow our process of generating some ideas, backtesting
+them, then selecting the one with the highest in-sample Sharpe ratio. Depend-
+ing on the mean signal-noise ratio of their idea generating processes, theirσ 2ζ ,
+thenandk, either Alice or Bob might select a better strategy. We wish an
+estimator computed on their respective ˆζvectors to be directionally correct for
+the signal-noise ratio of each of their chosen strategies. That is to say a good
+estimator would be one which is likely to identify the participant with higher
+ζk.
+To measure the association of the estimator and the population valueζ k,
+we perform a number of simulations across different configurations. We then
+compute Kendall’s rank correlation coefficient,τof an estimate against the
+population value. This gives some idea of the agreement of pairwise rankings of
+the two quantities. We also compute Spearman’s rank correlation coefficient,ρ
+of an estimate against the population value. This gives some idea of how likely
+an estimator is to correctly order a bunch of different realizations of Alice and
+Bob.
+To test this use of estimators, we perform a bunch of simulations. We create
+500 “corners”, where we pickσ ζ uniformly from 0yr−1/2 to 1yr−1/2 and we select
+klog uniformly from 10 to 2,500. We cross this withntaking values from 0.5
+to 8 years at 252 days per year, and cross this with the three different layouts,
+Gaussian, Uniform and Bimodal.
+At each setting of the parameters we perform 8 simulations, mostly to take
+advantage of core parallelism. We compute each estimator and theζ k in each
+simulation. This represents a total of 60,000 simulations. We then compute the
+rank correlation coefficients of each estimator to the ground truth, sometimes
+grouping by the layout orn,k,σ ζ.
+In Table 1, we tabulate the rank correlation coefficients for all estimators
+across all layouts,n,k,σ ζ tested, a total of 60,000 simulations. Similarly, in
+Table 2, we tabulate the correlations grouped by layout for the three layouts,
+acrossn,k,σ ζ. Each row is based on 20,000 simulations. We bold the maximum
+value in each column, or each column and group, and methods are given in
+decreasing order of computed Kendall’s correlation coefficient.
+From these simulations, we also plotted the empirical correlation of the es-
+timators toζ k versus the dimensions ofn,kandσ ζ. In Figure 9 we plot the
+correlations againstn, across all layouts and values ofkandσ ζ. The data for
+this plot are tabulated in Table 6 in Section C in the appendix. Points are based
+on 12,000 simulations. In Figure 10 we plot the correlations against ranges of
+k, across all layouts and values ofnandσ ζ; the companion data are in Table 7.
+Points are based on from 10,440 to 14,400 simulations. In Figure 11 we plot
+the correlations against ranges ofσ ζ, across all layouts and values ofnandk;
+the companion data are in Table 8. Points are based on from 14,160 to 15,360
+16
+Estimator Kendall Spearman
+James Stein 0.57 0.76
+GMLEB 0.49 0.66
+SURE 0.46 0.64
+Expected Max 0.45 0.62
+Empirical Bayes 0.42 0.60
+Polyhedral Median 0.16 0.23
+Polyhedral MLE 0.15 0.23
+Biased 0.15 0.21
+Grand Mean 0.02 0.02
+Table 1: Rank correlation coefficients of the various tested estimators versus
+theζ k are shown. Rank correlations are computed across all layouts,σ ζ,nand
+k. Each estimator tested on 60,000 simulations.
+simulations.
+In these plots and tables we see that the James Stein estimator dominates
+the other estimators, for both Kendall’s and Spearman’s correlation coefficients,
+for the overall results and in nearly every subgroup we consider here. The only
+exception to this is the largeσ ζ group in Table 8, where James Stein is bested
+by GMLEB and Expected Max. Looking at the RMSE values for largerσ ζ and
+non-Gaussian layouts in Figure 2, this is not a surprising finding. GMLEB is
+consistently highly ranked in these tables as well, typically taking the second
+place, though sometimes trading off with SURE or, rarely, the Expected Max.
+We note that whenσ ζ is small, all the rank correlation coefficients are fairly
+low, as seen in Figure 11. When the spread in skill is low, selection is heavily
+loaded on luck, and there is not much we can expect from these estimators.
+We would point out, however, that rank correlation coefficients of estimators
+seem to increase inn, as seen in Figure 9. If one is stuck with a process that
+has lowσ ζ, increasing sample size would seem to improve the discriminating
+power of the estimators, as well as increase the probability of picking a good
+strategy. The rank correlation also seems to be generally increasing withk, as
+seen in Figure 10. We had expected, to the contrary, that largerkwould present
+challenges to the estimators. Perhaps this effect is driven by an increased spread
+in achieved signal-noise ratio.
+Another factor evident in comparing Figure 11 to the other plots here is the
+overall lower rank correlation coefficients whenσ ζ is fixed. It would seem a fair
+amount of the discriminating power of these estimators seen in the other plots
+comes from recognizing the overall higher spread in the ˆζvalues.
+17
+Estimator Layout Kendall Spearman
+James Stein Gaussian 0.59 0.78
+GMLEB Gaussian 0.51 0.69
+Expected Max Gaussian 0.50 0.69
+SURE Gaussian 0.49 0.68
+Empirical Bayes Gaussian 0.47 0.65
+Polyhedral Median Gaussian 0.23 0.33
+Polyhedral MLE Gaussian 0.23 0.33
+Biased Gaussian 0.18 0.26
+Grand Mean Gaussian 0.03 0.04
+James Stein Uniform 0.58 0.76
+GMLEB Uniform 0.47 0.64
+SURE Uniform 0.45 0.63
+Expected Max Uniform 0.45 0.62
+Empirical Bayes Uniform 0.41 0.59
+Polyhedral Median Uniform 0.14 0.20
+Polyhedral MLE Uniform 0.14 0.20
+Biased Uniform 0.13 0.18
+Grand Mean Uniform 0.01 0.02
+James Stein Bimodal 0.62 0.8
+GMLEB Bimodal 0.49 0.65
+SURE Bimodal 0.46 0.64
+Expected Max Bimodal 0.40 0.57
+Empirical Bayes Bimodal 0.38 0.55
+Biased Bimodal 0.14 0.20
+Polyhedral Median Bimodal 0.09 0.13
+Polyhedral MLE Bimodal 0.08 0.11
+Grand Mean Bimodal 0.00 0.00
+Table 2: Rank correlation coefficients of the various tested estimators versus the
+ζk are shown. Rank correlations are computed grouped by layout, across allσ ζ,
+nandk. Each estimator tested on 20,000 simulations.
+18
+Kendall Spearman
+300 500 1000 300 500 1000
+0.00
+0.25
+0.50
+0.75
+Number of Days
+Correlation
+Method
+James Stein
+GMLEB
+SURE
+Empirical Bayes
+Expected Max
+Grand Mean
+Biased
+Polyhedral Median
+Polyhedral MLE
+Rank Correlation of Estimators to Selected SNR
+X axis in log space to show detail. Points based on 12,000 simulations. 
+Figure 9: Rank correlation coefficients of the various tested estimators are plot-
+ted versusn, across all layouts and values ofkandσ ζ. Returns are independent.
+Kendall Spearman
+10−30 31−100 101−300 301−900 900+ 10−30 31−100 101−300 301−900 900+
+0.00
+0.25
+0.50
+0.75
+Number of Strategies
+Correlation
+Method
+James Stein
+GMLEB
+SURE
+Empirical Bayes
+Expected Max
+Grand Mean
+Biased
+Polyhedral Median
+Polyhedral MLE
+Rank Correlation of Estimators to Selected SNR
+X axis in log space to show detail. Points based on between 10,440 and 14,400 simulations. 
+Figure 10: Rank correlation coefficients of the various tested estimators are
+plotted versus groups ofk, across all layouts and values ofnandσ ζ. Returns
+are independent.
+19
+Kendall Spearman
+[0,0.25] (0.25,0.5] (0.5,0.75] (0.75,1.0] [0,0.25] (0.25,0.5] (0.5,0.75] (0.75,1.0]
+0.0
+0.2
+0.4
+Spread of Signal Noise Ratio ( yr−1 2 )
+Correlation
+Method
+James Stein
+GMLEB
+SURE
+Empirical Bayes
+Expected Max
+Grand Mean
+Biased
+Polyhedral Median
+Polyhedral MLE
+Rank Correlation of Estimators to Selected SNR
+Points based on between 14,160 and 15,360 simulations. 
+Figure 11: Rank correlation coefficients of the various tested estimators are
+plotted versusσ ζ, across all layouts and values ofnandk. Returns are inde-
+pendent.
+20
+4 Simulations Under Correlated Returns
+In the simulations considered heretofore in this note, the returns of assets were
+independent, that isR=I. We wish to consider how these estimators will
+perform for more general correlation structures. The simplest model, and one
+which is fairly accurate for a lot of quantitative work, is that of equicorrelation or
+compound symmetric structure whereR= (1−ρ)I+ρ11 ⊤. In our simulations
+we treatρas another knob to be controlled. We do not modify the estimators in
+any way to deal with correlation, rather we treat the correlation as a nuisance.
+We note that in the extreme, forρ≈1.0, the errors in ˆζare all perfectly
+aligned, and the ordering of the ˆζwill mirror that ofζ. That is, with high
+probabilityζ k will be the largest element ofζ. In this case there is no selection
+bias from selecting the asset based on the Sharpe ratio, and the Biased estimator
+should come to dominate. We note that the estimators based on the polyhedral
+lemma have no actual dependence on the correlation structure,cf.the additional
+analysis in Section B in the appendix. Thus we expect no real degradation of
+(otherwise poor) performance for the Polyhedral Median and Polyhedral MLE
+estimators.
+Towards this end we perform simulations to estimate the bias and RMSE of
+the various estimators. As above, we perform simulations using three layouts of
+ζ. We fixσ ζ at 0.5yr−1/2,n= 1008,k= 100. We letρvary from 0.05 to 0.95.
+For each setting of the parameters we perform 500 simulations.
+In Figure 12 we plot the bias versusρ; in Figure 13 we plot the RMSE. As
+perhaps expected, asρ→1, the bias of all estimators becomes negative, except
+the Biased estimator which becomes unbiased. All the serious estimators are
+very biased for largeρ, though perhaps GMLEB has the best performance for
+correlated asset returns.
+In terms of RMSE, all estimators show increased RMSE asρ→1, except
+the Biased estimator. Likely much of this is due to the increased bias. The
+Expected Max estimator has some of the worst performance in terms of RMSE
+for highly correlated returns.
+21
+Gaussian Uniform Bimodal
+0.25 0.50 0.75 0.25 0.50 0.75 0.25 0.50 0.75
+−1.0
+−0.5
+0.0
+0.5
+1.0
+ρ
+Bias ( yr−1 2 )
+Method
+James Stein
+GMLEB
+SURE
+Empirical Bayes
+Expected Max
+Grand Mean
+Biased
+Bias of Estimators, Correlated Returns
+Each point the average of 500 simulations. 
+Figure 12: The empirical biases of the tested estimators are shown versusρ, the
+common correlation of asset returns. Facet columns show the three different
+random layouts of theζvalues. We fixn= 1008,k= 100,σ ζ = 0.5yr−1/2.
+Gaussian Uniform Bimodal
+0.25 0.50 0.75 0.25 0.50 0.75 0.25 0.50 0.75
+0.50
+0.75
+1.00
+1.25
+ρ
+RMSE ( yr−1 2 )
+Method
+James Stein
+GMLEB
+SURE
+Empirical Bayes
+Expected Max
+Grand Mean
+Biased
+RMSE of Estimators, Correlated Returns
+Y axis in square root space to show detail. Each point the average of 500 simulations. 
+Figure 13: The empirical RMSE values of the tested estimators are shown
+versusρ, the common correlation of asset returns. Facet columns show the
+three different random layouts of theζvalues. We fixn= 1008,k= 100,
+σζ = 0.5yr−1/2.
+22
+In addition to the error simulations, we also ran ranking simulations, similar
+to those above, but withρas an additional knob. We created 800 corners,
+where we pickσ ζ uniformly from 0yr −1/2 to 1yr−1/2, we selectklog uniformly
+from 10 to 2,500, and we selectρuniformly from 0 to 0.9. We cross this with
+ntaking values from 0.5 to 8 years at 252 days per year, and cross this with
+the three different layouts, Gaussian, Uniform and Bimodal. For each setting
+of the relevant parameters we performed 8 simulations. This represents a total
+of 96,000 simulations.
+We compute all the estimators and theζ k in each simulation. We then
+compute the rank correlation coefficients of each estimator to the ground truth,
+sometimes grouping by relevant dimensions.
+In Table 3 we present the overall correlations over all simulations. While
+James Stein estimator still dominates, and GMLEB and SURE traded places
+in the top three, we see lower overall rank correlations than in theρ= 0 case
+shown in Table 1. That is, correlation of returns has caused degradation of
+performance of almost all the estimators. The only exceptions are the Biased
+and Polyhedral Median estimators, which is not surprising.
+In Table 4 we tabulate the rank correlations grouped by layout of theζ.
+Somewhat surprisingly, James Stein is the top ranked method for Uniform and
+Bimodal distributions, but is in a multi-way tie for second (or perhaps third)
+place for Gaussian returns, losing out to the SURE estimator. It is not clear
+what drives this result, since the James Stein dominates as an efficient estimator
+in the Gaussian case, but less so for Uniform and Bimodal layouts as shown in
+e.g., Figure 2 for uncorrelated returns.
+Estimator Kendall Spearman
+James Stein 0.34 0.48
+SURE 0.33 0.47
+GMLEB 0.32 0.45
+Empirical Bayes 0.31 0.45
+Expected Max 0.30 0.44
+Polyhedral Median 0.21 0.31
+Biased 0.19 0.27
+Polyhedral MLE 0.16 0.23
+Grand Mean 0.01 0.01
+Table 3: Rank correlation coefficients of the various tested estimators versus
+theζ k are shown for correlated returns. Rank correlations are computed across
+all layouts,σ ζ,n,k, andρ. Each estimator tested on 96,000 simulations.
+In Figure 14, we plot the rank correlation coefficients againstnacross all
+values ofk,σ ζ and common correlationρ. We see that all estimators improve
+with increasing sample size, except the Grand Mean, though some methods
+seem to be better suited for larger sample sizes. Compared to Figure 9, we see
+lower rank correlation coefficients overall, and perhaps less distinction between
+the different serious estimators.
+In Figure 15, we plot the rank correlations against cuts ofk. Compared to
+Figure 10, we see lower overall correlations, but also the methods seem to peak
+and rank correlations get worse for largerk. It is not clear what drives this phe-
+nomenon. We see that James Stein estimator dominates for each grouping. For
+23
+Estimator Layout Kendall Spearman
+SURE Gaussian 0.4 0.56
+Empirical Bayes Gaussian 0.38 0.53
+Expected Max Gaussian 0.38 0.53
+James Stein Gaussian 0.38 0.52
+GMLEB Gaussian 0.37 0.52
+Polyhedral Median Gaussian 0.31 0.44
+Polyhedral MLE Gaussian 0.25 0.36
+Biased Gaussian 0.25 0.35
+Grand Mean Gaussian 0.01 0.02
+James Stein Uniform 0.36 0.5
+SURE Uniform 0.33 0.47
+Empirical Bayes Uniform 0.30 0.44
+GMLEB Uniform 0.30 0.44
+Expected Max Uniform 0.29 0.42
+Polyhedral Median Uniform 0.18 0.26
+Biased Uniform 0.16 0.23
+Polyhedral MLE Uniform 0.12 0.17
+Grand Mean Uniform 0.00 0.00
+James Stein Bimodal 0.34 0.48
+GMLEB Bimodal 0.29 0.42
+SURE Bimodal 0.27 0.39
+Empirical Bayes Bimodal 0.26 0.37
+Expected Max Bimodal 0.23 0.33
+Biased Bimodal 0.15 0.22
+Polyhedral Median Bimodal 0.10 0.15
+Polyhedral MLE Bimodal 0.05 0.07
+Grand Mean Bimodal -0.00 -0.00
+Table 4: Rank correlation coefficients of the various tested estimators versus the
+ζk are shown for correlated returns. Rank correlations are computed grouped by
+layout, across allσ ζ,n,k, andρ. Each estimator tested on 32,000 simulations.
+purposes of comparing Bob and Alice when both backtested the same number
+of strategies, the James Stein estimator seems to be uniformly the best choice.
+In Figure 16, we plot the rank correlations against cuts ofσ ζ. Compared to
+Figure 11, we see lower overall correlations,
+In Table 5, we tabulate the rank correlation coefficients for the various meth-
+ods against cuts of the common correlation,ρ. We plot the same in the compan-
+ion plot, Figure 17. Not surprisingly, given the discussion above and the findings
+in the accuracy studies, the Biased estimator and those based on the polyhedral
+lemma show better performance in the highρcase. The other estimators suffer
+from increased correlation. In particular, the James Stein estimator performs
+poorly whenρis fixed on very high values.
+24
+Kendall Spearman
+300 500 1000 300 500 1000
+0.0
+0.2
+0.4
+0.6
+0.8
+Number of Days
+Correlation
+Method
+James Stein
+GMLEB
+SURE
+Empirical Bayes
+Expected Max
+Grand Mean
+Biased
+Polyhedral Median
+Polyhedral MLE
+Rank Correlation of Estimators to Selected SNR, Correlated Returns
+X axis in log space to show detail. Points based on 19,200 simulations. 
+Figure 14: Rank correlation coefficients of the various tested estimators are
+plotted versusnfor correlated returns. Rank correlations are computed grouped
+byn, across all layouts,k,σ ζ, andρ. Rows based on 19,200 simulations.
+Kendall Spearman
+10−30 31−100 101−300 301−900 900+ 10−30 31−100 101−300 301−900 900+
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5
+Number of Strategies
+Correlation
+Method
+James Stein
+GMLEB
+SURE
+Empirical Bayes
+Expected Max
+Grand Mean
+Biased
+Polyhedral Median
+Polyhedral MLE
+Rank Correlation of Estimators to Selected SNR, Correlated Returns
+X axis in log space to show detail. Points based on between 17,520 and 20,280 simulations. 
+Figure 15: Rank correlation coefficients of the various tested estimators are
+plotted versuskfor correlated returns. Rank correlations are computed grouped
+by cuts ofk, across all layouts,n,σ ζ, andρ. Rows based on between 17,520
+and 20,280 simulations.
+25
+Kendall Spearman
+[0,0.25] (0.25,0.5] (0.5,0.75] (0.75,1.0] [0,0.25] (0.25,0.5] (0.5,0.75] (0.75,1.0]
+0.0
+0.1
+0.2
+0.3
+0.4
+Spread of Signal Noise Ratio ( yr−1 2 )
+Correlation
+Method
+James Stein
+GMLEB
+SURE
+Empirical Bayes
+Expected Max
+Grand Mean
+Biased
+Polyhedral Median
+Polyhedral MLE
+Rank Correlation of Estimators to Selected SNR, Correlated Returns
+Points based on between 22,200 and 24,720 simulations. 
+Figure 16: Rank correlation coefficients of the various tested estimators are
+plotted versusσ ζ, called Spread, for correlated returns. Rank correlations are
+computed grouped by cuts ofσ ζ, across all layouts,n,k, andρ. Rows based on
+between 22,200 and 24,720 simulations.
+26
+Estimator Correlation Kendall Spearman
+James Stein [0,0.25] 0.49 0.68
+GMLEB [0,0.25] 0.44 0.60
+SURE [0,0.25] 0.44 0.61
+Expected Max [0,0.25] 0.40 0.56
+Empirical Bayes [0,0.25] 0.40 0.56
+Polyhedral Median [0,0.25] 0.16 0.24
+Polyhedral MLE [0,0.25] 0.16 0.24
+Biased [0,0.25] 0.13 0.19
+Grand Mean [0,0.25] 0.00 0.01
+SURE (0.25,0.5] 0.4 0.57
+James Stein (0.25,0.5] 0.38 0.54
+GMLEB (0.25,0.5] 0.37 0.52
+Empirical Bayes (0.25,0.5] 0.36 0.51
+Expected Max (0.25,0.5] 0.36 0.50
+Biased (0.25,0.5] 0.19 0.28
+Polyhedral Median (0.25,0.5] 0.19 0.28
+Polyhedral MLE (0.25,0.5] 0.17 0.25
+Grand Mean (0.25,0.5] 0.01 0.01
+SURE (0.5,0.75] 0.34 0.48
+Expected Max (0.5,0.75] 0.34 0.48
+Empirical Bayes (0.5,0.75] 0.31 0.44
+James Stein (0.5,0.75] 0.30 0.43
+GMLEB (0.5,0.75] 0.30 0.43
+Biased (0.5,0.75] 0.28 0.40
+Polyhedral Median (0.5,0.75] 0.24 0.35
+Polyhedral MLE (0.5,0.75] 0.19 0.28
+Grand Mean (0.5,0.75] 0.01 0.01
+Biased (0.75,0.9] 0.32 0.46
+Expected Max (0.75,0.9] 0.31 0.44
+Polyhedral Median (0.75,0.9] 0.29 0.41
+SURE (0.75,0.9] 0.25 0.37
+Empirical Bayes (0.75,0.9] 0.23 0.33
+James Stein (0.75,0.9] 0.22 0.32
+GMLEB (0.75,0.9] 0.22 0.32
+Polyhedral MLE (0.75,0.9] 0.21 0.31
+Grand Mean (0.75,0.9] 0.01 0.01
+Table 5: Rank correlation coefficients of the various tested estimators versus the
+ζk are shown. Rank correlations are computed grouped by cuts ofρacross all
+layouts,σ ζ,nandk. Rows based on between 14,160 and 15,360 simulations.
+27
+Kendall Spearman
+[0,0.25] (0.25,0.5] (0.5,0.75] (0.75,0.9] [0,0.25] (0.25,0.5] (0.5,0.75] (0.75,0.9]
+0.0
+0.2
+0.4
+0.6
+ρ
+Correlation
+Method
+James Stein
+GMLEB
+SURE
+Empirical Bayes
+Expected Max
+Grand Mean
+Biased
+Polyhedral Median
+Polyhedral MLE
+Rank Correlation of Estimators to Selected SNR, Correlated Returns
+Points based on between 17,160 and 27,360 simulations. 
+Figure 17: Rank correlation coefficients of the various tested estimators are
+plotted versus common correlation ofR,ρ. Rank correlations are computed
+grouped by cuts ofρ, across all layouts,n,k, andσ ζ. Rows based on between
+17,160 and 27,360 simulations.
+28
+5 Conclusions and Future Work
+Based on the bias, RMSE and correlation studies, we recommend the use of
+the James Stein estimator both as an estimator and for comparing potential
+investment strategies. The James Stein estimator is also recommended for its
+relative simplicity: it can be computed knowing onlyk,n, ˆζk, ¯ζand the empirical
+variance of the ˆζ. If one were somehow certain that there were only a few good
+strategies among all strategies tested, we might recommend GMLEB, but the
+code is a bit more complicated. We cannot recommend the estimators based on
+the polyhedral lemma, nor the Expected Max estimator, due to poor empirical
+performance.
+These results are fairly robust against correlation of asset returns. If one
+needed a general purpose estimator for ranking selected strategies, then James
+Stein should be used if the number of strategieskis always fixed, or ifnis fixed
+and fairly large. If one were certain that returns were highly correlated with
+each other, however, the Biased estimator is recommended as it is effectively
+unbiased!
+We consider this study still preliminary, as there are obvious improvements
+that could be made:
+1. In our analysis we viewed correlation of returns as a nuisance that threat-
+ens the robustness of our findings, when in reality correlation is an unfortu-
+nate fact of life. Some of the methods considered have obvious extensions
+to the case of correlated returns, but a practical estimator would have to
+estimate the common correlation, or any other adjustments required of
+a more generalR. We have not implemented those procedures yet, but
+anticipate doing so in a future revision of this paper.
+2. One can easily imagine some of the estimators could be improved by elim-
+inating irrelevant elements of ˆζ. That is we would seek some way of
+choosing a threshold so that we ignore all tested strategies with Sharpe
+ratio less than ˆζk −δfor someδdepending onn. Perhaps such a thresh-
+old could be chosen using Hansen’s log-log trick. [17, 8] In particular we
+suspect this might improve the less selective estimators like James Stein
+and Expected Max.
+3. Many of the estimators considered here were constructed for the problem
+of reduced MSE estimation of theentire vectorζ, not for the selective case
+of estimatingζ k. Perhaps they can be further tuned to reduce MSE for
+our problem. In particular it seems the SURE estimate could be improved
+perhaps by clever application of Stein’s lemma to the truncated Gaussian
+conditional distribution we get from the polyhedral lemma.
+4. There is likely a way to look at ˆζand route it to one of the estimators
+considered here, or otherwise ensemble a few of the estimators in a way
+that has even better RMSE.
+5. Estimators based on the polyhedral lemma are unstable when ˆζk ≈ ˆζk−1.
+A better approach is needed for selective inference, one which recognizes
+that if ˆζk−1 were just a little bigger we would be considering that strategy
+instead. Such an approach would likely give tighter confidence intervals
+for the inferential problem as well. [17]
+6. We plan to release the code for this paper as open source, after cleaning
+it up. If you have an estimator you think is better, or you think we straw-
+manned your favorite estimator by our choice of testing parameters, by
+29
+all means re-run the code yourself.
+References
+[1] David H Bailey, Jonathan M Borwein, Marcos L´ opez De Prado, and
+Qiji Jim Zhu. Pseudomathematics and financial charlatanism: The ef-
+fects of backtest over fitting on out-of-sample performance.Notices of
+the AMS, 61(5):458–471, 2014. URLhttps://papers.ssrn.com/sol3/
+papers.cfm?abstract_id=2308659.
+[2] Carlo Bonferroni. Teoria statistica delle classi e calcolo delle probabilita.
+Pubblicazioni del R istituto superiore di scienze economiche e commericiali
+di firenze, 8:3–62, 1936.
+[3] Paul H. Cootner, editor.The Random Character of Stock Market Prices.
+MIT Press, 1964. ISBN 9780262030090. URLhttps://books.google.
+com/books?id=gcuMygAACAAJ.
+[4] Xinping Cui, Thorsten Dickhaus, Ying Ding, and Jason C. Hsu, editors.
+Handbook of Multiple Comparisons. Chapman and Hall/CRC, 2022. ISBN
+9781032111551.
+[5] Elizabeth D. Dolan and Jorge J. Mor´ e. Benchmarking optimization soft-
+ware with performance profiles, 2002. URLhttps://arxiv.org/abs/cs/
+0102001.
+[6] David L. Donoho and Iain M. Johnstone. Adapting to unknown smooth-
+ness via wavelet shrinkage.Journal of the American Statistical Associa-
+tion, 90(432):1200–1224, 1995. doi: 10.1080/01621459.1995.10476626. URL
+https://imjohnstone.su.domains/WEBLIST/1995/ausws.pdf.
+[7] Bradley Efron. Tweedie’s formula and selection bias.Journal of the Amer-
+ican Statistical Association, 106(496):1602–1614, 2011. ISSN 01621459.
+doi: 10.1198/jasa.2011.tm11181. URLhttps://pmc.ncbi.nlm.nih.gov/
+articles/PMC3325056/.
+[8] Peter Reinhard Hansen. A test for superior predictive ability.Jour-
+nal of Business and Economic Statistics, 23(4), 2005. doi: 10.1198/
+073500105000000063. URLhttp://pubs.amstat.org/doi/abs/10.1198/
+073500105000000063.
+[9] William James and Charles Stein. Estimation with quadratic loss. In
+Proceedings of the fourth Berkeley symposium on mathematical statistics
+and probability, pages 361–379. University of California Press, 1961.
+[10] Wenhua Jiang and Cun-Hui Zhang. General maximum likelihood empirical
+Bayes estimation of normal means.The Annals of Statistics, 37(4):1647–
+1684, 2009. doi: 10.1214/08-AOS638. URLhttps://doi.org/10.1214/
+08-AOS638.
+[11] Wenhua Jiang and Cun-Hui Zhang. General maximum likelihood empirical
+bayes estimation of normal means, 2009. URLhttps://arxiv.org/abs/
+0908.1709.
+30
+[12] Iain Johnstone and Bernard W. Silverman. EbayesThresh: R programs
+for empirical Bayes thresholding.Journal of Statistical Software, 12(8):
+1–38, 2005. doi: 10.18637/jss.v012.i08. URLhttps://www.jstatsoft.
+org/index.php/jss/article/view/v012i08.
+[13] Iain M. Johnstone and Bernard W. Silverman. Needles and straw
+in haystacks: Empirical Bayes estimates of possibly sparse se-
+quences.The Annals of Statistics, 32(4):1594–1649, 2004. doi:
+10.1214/009053604000000030. URLhttps://projecteuclid.org/
+journals/annals-of-statistics/volume-32/issue-4/Needles-and-
+straw-in-haystacks--Empirical-Bayes-estimates-of/10.1214/
+009053604000000030.pdf.
+[14] Perry J. Kaufman.Commodity Trading Systems and Methods. Wiley, 1978.
+ISBN 9780471035695.
+[15] Jason D. Lee, Dennis L. Sun, Yuekai Sun, and Jonathan E. Taylor. Ex-
+act post-selection inference, with application to the lasso, 2013. URL
+http://arxiv.org/abs/1311.6238. cite arxiv:1311.6238 Comment: Pub-
+lished at http://dx.doi.org/10.1214/15-AOS1371 in the Annals of Statistics
+(http://www.imstat.org/aos/) by the Institute of Mathematical Statistics
+(http://www.imstat.org).
+[16] Giuseppe A. Paleologo.The Elements of Quantitative Investing. John
+Wiley and Sons, 2025. ISBN 9781394265459.
+[17] Steven E. Pav. Conditional inference on the asset with maximum Sharpe ra-
+tio. Privately Published, 2019. URLhttp://arxiv.org/abs/1906.00573.
+[18] Steven E. Pav.The Sharpe Ratio: Statistics and Applications. CRC Press,
+2021. ISBN 978-1032019307.
+[19] Stephen Reid, Jonathan Taylor, and Robert Tibshirani. Post-selection
+point and interval estimation of signal sizes in Gaussian samples.Canadian
+Journal of Statistics, 45(2):128–148, 2017. URLhttps://arxiv.org/abs/
+1405.3340.
+[20] William F. Sharpe. Mutual fund performance.Journal of Business, 39:119,
+1965. doi: 10.1086/294846. URLhttp://dx.doi.org/10.1086/294846.
+[21] Mervyn J. Silvapulle and Pranab Kumar Sen.Constrained statistical infer-
+ence : inequality, order, and shape restrictions. Wiley-Interscience, Hobo-
+ken, N.J., 2005. ISBN 0471208272. URLhttp://books.google.com/
+books?isbn=0471208272.
+[22] Bernard W. Silverman, Ludger Evers, Kan Xu, Peter Carbonetto, and
+Matthew Stephens.EbayesThresh: Empirical Bayes Thresholding and
+Related Methods, 2017. URLhttps://CRAN.R-project.org/package=
+EbayesThresh. R package version 1.4-12.
+[23] Halbert White. A reality check for data snooping.Econometrica, 68:1097–
+1127, 2000. doi: 10.1111/1468-0262.00152. URLhttps://www.ssc.wisc.
+edu/~bhansen/718/White2000.pdf.
+31
+A AI Use Statement
+We attempted to use AI in the preparation of this manuscript:
+•We asked gemini 3.0 for advice naming this paper. This resulted in several
+awful suggestions, which we ignored. Ultimately, gemini suggested the
+“of” in the title, which we felt was better than the original, “on.”
+•We asked gemini 3.0 several times to look over the code for our simulations.
+The LLM failed to find a critical error in an early iteration of our code.
+•We asked gemini 3.0 for help speeding up the GMLEB code. By vectoriz-
+ing the computation, the LLM was able to achieve ballpark 10x speedups
+for large vectors while preserving accuracy compared to the reference im-
+plementation.
+•We asked various LLMs, including ChatGPT 5.2, luxor, minimax-m2.5,
+and trinity-large-preview, for help unearthing relevant references. Some
+of these models fabricated references, including fake DOI.
+•We asked gemini 3.0 to check for grammatical errors and typos. All re-
+maining errors are the author’s fault.
+B Polyhedral Lemma
+Here we quote the polyhedral lemma, and then specialize it to the case of con-
+ditioning on the maximal element of a normally distributed vector.
+Theorem B.1(Leeet al., Theorem 5.2 [15]).Supposey∼ N(µ,Σ). Define
+c=Ση/η ⊤Ση,andz=y−cη ⊤y.LetΦ (x)be the CDF of a standard normal,
+and letF(x;a, b,0,1)be the CDF of a standard normal truncated to[a, b]:
+F(x;a, b,0,1) = df
+Φ (x)−Φ (a)
+Φ (b)−Φ (a) .
+LetF
+ 
+x;a, b, µ, σ2 be the CDF of a general truncated normal, defined by
+F
+ 
+x;a, b, µ, σ2 =F  x−µσ ; a−µσ , b−µσ ,0,1  .
+Then, conditional onAy≤b, the random variable
+F
+ 
+η⊤y;V −,V +,η ⊤µ,η ⊤Ση
+is Uniform on[0,1], whereV − andV + are given by
+V − = max
+j:(Ac)j <0
+bj −(Az) j
+(Ac)j
+,
+V + = min
+j:(Ac)j >0
+bj −(Az) j
+(Ac)j
+.
+In our case we condition on the maximal element ofy. This simplifies the
+result somewhat, especially in the case of independent returns:
+Corollary B.2.Supposey∼ N(µ,Σ), whereΣis diagonal. Conditioning on
+y1 ≤y 2 ≤. . .≤yk then random variable
+F
+ 
+yk;y k−1,∞, µk, σ2k,k
+is uniformly distributed on[0,1],whereσ 2k,k is thek, kelement ofΣ.
+32
+Proof.LetAbe the (k−1)×kmatrix which is mostly zeroes, but with a one
+on the principle diagonal and -1 on the next diagonal up:
+A=
+
+
+1−1 0. . .0 0
+0 1−1. . .0 0
+0 0 1. . .0 0
+... ... ... . . . ... ...
+0 0 0. . .1−1
+
+ ,
+and letbbe thek−1 vector of all zeroes. Then we are conditioning onAy≤b.
+Takeη=e k. ThenΣη=σ 2k,kek,η ⊤Ση=σ 2k,k, andη ⊤µ=µ k. In the
+language of the theorem, we then havec=e k andz=y−y kek. ThenAcand
+Azare lengthk−1 vectors, andAcis very sparse, with just a single non-zero
+element:
+Ac=
+ 0 0 0. . .−1 ⊤,
+Az=
+ y1 −y 2 y2 −y 3 y3 −y 4 . . . yk−1 ⊤.
+Then
+(b−Az)⊘Ac=
+ NA NA NA. . . y k−1 ⊤.
+Then there is only one element ofActhat is negative, and none that are
+positive. This establishes thatV − =y k−1 andV + is the min over an empty set,
+or∞. Plugging these into the theorem, we get the desired result.
+Note that the fact thaty k is the largest element of theyhad very little
+bearing on this derivation, and in fact we could have been merely conditioning
+ony k ≥y k−1. If you modifyAto reflect thaty k is the largest of they i, resulting
+in
+A=
+
+
+1 0 0. . .0−1
+0 1 0. . .0−1
+0 0 1. . .0−1
+... ... ... . . . ... ...
+0 0 0. . .1−1
+
+ ,
+the result is unchanged, assumingy k−1 is the largest of the other elements.
+Now consider how ill-posed the Polyhedral Median estimator is when ˆζk =ˆζk−1 +ϵ. We wish to findζ 0.5 such that
+1
+2 =F
+
+ˆζk; ˆζk−1,∞, µ0.5, n−1
+
+,
+=
+Φ
+√n ˆζk −ζ 0.5 −Φ √n ˆζk−1 −ζ 0.5
+1−Φ
+√n ˆζk−1 −ζ 0.5 ,
+=
+Φ
+√n ˆζk−1 +ϵ−ζ 0.5 −Φ √n ˆζk−1 −ζ 0.5
+1−Φ
+√n ˆζk−1 −ζ 0.5 ,
+≈
+√nϵϕ √n ˆζk−1 +ϵ−ζ 0.5
+1−Φ
+√n ˆζk−1 −ζ 0.5 .
+33
+When √nϵis small, this forces 1−Φ √n ˆζk−1 −ζ 0.5 to be small as well,
+which causes
+
+ˆζk−1 −ζ 0.5
+
+to be large, drivingζ 0.5 → −∞.
+Now consider the case of compound symmetric correlation among asset re-
+turns. The simplified form of the polyhedral lemma is as follows:
+Corollary B.3.Supposey∼ N(µ,Σ), whereΣ=σ 2  (1−ρ)I+ρ11 ⊤ for
+ρ≥0. That is, elements ofyhave common variance and equicorrelation ofρ.
+Conditioning ony 1 ≤y 2 ≤. . .≤yk then random variable
+F
+
+yk; yk−1 −ρy k1−ρ ,∞, µk, σ2
+
+is uniformly distributed on[0,1].
+Proof.LetAbe the (k−1)×kmatrix which is mostly zeroes, but with a one
+on the principle diagonal and -1 on the next diagonal up:
+A=
+
+
+1−1 0. . .0 0
+0 1−1. . .0 0
+0 0 1. . .0 0
+... ... ... . . . ... ...
+0 0 0. . .1−1
+
+ ,
+and letbbe thek−1 vector of all zeroes. Then we are conditioning onAy≤b.
+Takeη=e k. Then
+Ση=σ 2 (ρ1+ (1−ρ)e k),
+η⊤Ση=σ 2, andη ⊤µ=µ k. In the language of the theorem, we then have
+c= (ρ1+ (1−ρ)e k),and
+z=y−y kρ1−y k (1−ρ)e k =
+
+
+y1 −ρy k
+y2 −ρy k
+...
+yk−1 −ρy k
+0
+
+ .
+ThenAcandAzare lengthk−1 vectors which take values:
+Ac=
+ 0 0 0. . . ρ−1 ⊤,
+Az=
+ y1 −y 2 y2 −y 3 y3 −y 4 . . . yk−1 −ρy k ⊤.
+Now there is only one element ofAcwhich is negative, and indeed the only that
+is non-zero, which is the last one. This establishes that
+V − = 0−(y k−1 −ρy k)ρ−1 = yk−1 −ρy k1−ρ .
+BecauseAchas no positive elements,V + =∞. Plugging these into the theorem,
+we get the desired result.
+C Additional Tables and Figures
+C.1 Ranking Results
+34
+Estimator Days Kendall Spearman
+James Stein 126 0.35 0.5
+GMLEB 126 0.28 0.40
+SURE 126 0.26 0.38
+Expected Max 126 0.21 0.32
+Empirical Bayes 126 0.21 0.32
+Biased 126 0.18 0.26
+Polyhedral Median 126 0.08 0.12
+Polyhedral MLE 126 0.07 0.11
+Grand Mean 126 0.02 0.03
+James Stein 252 0.5 0.69
+SURE 252 0.41 0.58
+GMLEB 252 0.40 0.56
+Empirical Bayes 252 0.35 0.51
+Expected Max 252 0.34 0.49
+Biased 252 0.26 0.39
+Polyhedral Median 252 0.12 0.17
+Polyhedral MLE 252 0.10 0.15
+Grand Mean 252 0.02 0.03
+James Stein 504 0.6 0.8
+SURE 504 0.52 0.73
+GMLEB 504 0.52 0.70
+Expected Max 504 0.48 0.67
+Empirical Bayes 504 0.47 0.67
+Biased 504 0.37 0.53
+Polyhedral Median 504 0.18 0.26
+Polyhedral MLE 504 0.16 0.23
+Grand Mean 504 0.01 0.02
+James Stein 1008 0.67 0.87
+GMLEB 1008 0.63 0.81
+SURE 1008 0.61 0.82
+Expected Max 1008 0.61 0.81
+Empirical Bayes 1008 0.57 0.78
+Biased 1008 0.50 0.69
+Polyhedral Median 1008 0.24 0.35
+Polyhedral MLE 1008 0.22 0.31
+Grand Mean 1008 0.01 0.02
+James Stein 2016 0.74 0.91
+GMLEB 2016 0.72 0.89
+Expected Max 2016 0.72 0.90
+SURE 2016 0.69 0.88
+Empirical Bayes 2016 0.67 0.86
+Biased 2016 0.62 0.82
+Polyhedral Median 2016 0.36 0.50
+Polyhedral MLE 2016 0.32 0.45
+Grand Mean 2016 0.02 0.02
+Table 6: Rank correlation coefficients of the various tested estimators versus the
+ζk are shown. Rank correlations are computed grouped bynin days, across all
+layouts,σ ζ, andk. Each estimator tested on 12,000 simulations.
+35
+Estimator Strategies Kendall Spearman
+James Stein 10-30 0.4 0.56
+GMLEB 10-30 0.37 0.53
+Expected Max 10-30 0.36 0.51
+Empirical Bayes 10-30 0.36 0.51
+SURE 10-30 0.35 0.50
+Polyhedral Median 10-30 0.18 0.27
+Polyhedral MLE 10-30 0.18 0.26
+Biased 10-30 0.18 0.25
+Grand Mean 10-30 0.04 0.06
+James Stein 31-100 0.53 0.72
+GMLEB 31-100 0.45 0.62
+SURE 31-100 0.43 0.60
+Expected Max 31-100 0.42 0.59
+Empirical Bayes 31-100 0.41 0.57
+Polyhedral Median 31-100 0.17 0.24
+Polyhedral MLE 31-100 0.16 0.24
+Biased 31-100 0.15 0.22
+Grand Mean 31-100 0.02 0.03
+James Stein 101-300 0.6 0.79
+GMLEB 101-300 0.50 0.67
+SURE 101-300 0.48 0.65
+Expected Max 101-300 0.46 0.63
+Empirical Bayes 101-300 0.43 0.60
+Polyhedral Median 101-300 0.15 0.22
+Polyhedral MLE 101-300 0.15 0.22
+Biased 101-300 0.11 0.15
+Grand Mean 101-300 0.01 0.01
+James Stein 301-900 0.66 0.85
+GMLEB 301-900 0.55 0.71
+SURE 301-900 0.52 0.71
+Expected Max 301-900 0.49 0.66
+Empirical Bayes 301-900 0.46 0.63
+Polyhedral Median 301-900 0.14 0.21
+Polyhedral MLE 301-900 0.14 0.21
+Biased 301-900 0.11 0.16
+Grand Mean 301-900 -0.00 -0.00
+James Stein 900+ 0.69 0.88
+GMLEB 900+ 0.60 0.76
+SURE 900+ 0.57 0.76
+Expected Max 900+ 0.55 0.73
+Empirical Bayes 900+ 0.48 0.66
+Polyhedral Median 900+ 0.15 0.22
+Polyhedral MLE 900+ 0.15 0.22
+Biased 900+ 0.13 0.17
+Grand Mean 900+ -0.01 -0.02
+Table 7: Rank correlation coefficients of the various tested estimators versus
+theζ k are shown. Rank correlations are computed grouped by cuts ofk, across
+all layouts,nandσ ζ. Rows based on between 10,440 and 14,400 simulations.
+36
+Estimator Spread (yr −1/2) Kendall Spearman
+James Stein [0,0.25] 0.12 0.17
+Expected Max [0,0.25] 0.08 0.12
+GMLEB [0,0.25] 0.07 0.11
+Empirical Bayes [0,0.25] 0.06 0.09
+SURE [0,0.25] 0.05 0.07
+Polyhedral MLE [0,0.25] 0.03 0.04
+Polyhedral Median [0,0.25] 0.02 0.03
+Grand Mean [0,0.25] 0.01 0.01
+Biased [0,0.25] -0.06 -0.09
+James Stein (0.25,0.5] 0.28 0.4
+Empirical Bayes (0.25,0.5] 0.23 0.34
+GMLEB (0.25,0.5] 0.23 0.32
+Expected Max (0.25,0.5] 0.21 0.31
+SURE (0.25,0.5] 0.20 0.29
+Polyhedral MLE (0.25,0.5] 0.09 0.13
+Polyhedral Median (0.25,0.5] 0.08 0.11
+Grand Mean (0.25,0.5] 0.02 0.04
+Biased (0.25,0.5] -0.03 -0.05
+James Stein (0.5,0.75] 0.31 0.45
+GMLEB (0.5,0.75] 0.29 0.41
+Expected Max (0.5,0.75] 0.29 0.41
+Empirical Bayes (0.5,0.75] 0.23 0.33
+SURE (0.5,0.75] 0.22 0.32
+Polyhedral MLE (0.5,0.75] 0.12 0.18
+Polyhedral Median (0.5,0.75] 0.11 0.17
+Grand Mean (0.5,0.75] 0.03 0.04
+Biased (0.5,0.75] 0.01 0.01
+GMLEB (0.75,1.0] 0.39 0.53
+Expected Max (0.75,1.0] 0.380.53
+James Stein (0.75,1.0] 0.37 0.52
+SURE (0.75,1.0] 0.26 0.37
+Empirical Bayes (0.75,1.0] 0.26 0.37
+Polyhedral MLE (0.75,1.0] 0.17 0.25
+Polyhedral Median (0.75,1.0] 0.17 0.25
+Biased (0.75,1.0] 0.12 0.16
+Grand Mean (0.75,1.0] 0.03 0.04
+Table 8: Rank correlation coefficients of the various tested estimators versus
+theζ k are shown. Rank correlations are computed grouped by cuts ofσ ζ, called
+Spread, across all layouts,nandk. Rows based on between 14,160 and 15,360
+simulations.
+37

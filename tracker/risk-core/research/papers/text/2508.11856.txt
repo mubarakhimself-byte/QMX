@@ -1,0 +1,1000 @@
+arXiv 2508.11856  https://arxiv.org/abs/2508.11856
+
+Optimal Portfolio Construction - A Reinforcement
+Learning Embedded Bayesian Hierarchical Risk
+Parity (RL-BHRP) Approach
+Shaofeng Kang *
+shaofeng.kang@mail.utoronto.ca
+Zeying Tian †
+zeying.tian@mail.mcgill.ca
+August 19, 2025
+Abstract
+We propose a two-level, learning-based portfolio method (RL-BHRP) that spreads risk
+across sectors and stocks, and adjusts exposures as market conditions change. Using U.S.
+equities from 2012 to mid-2025, we design the model using 2012–2019 data and evaluate it
+out-of-sample from 2020 to 2025 against a sector index built from exchange-traded funds
+and a static risk-balanced portfolio. Over the test window, the adaptive portfolio com-
+pounds wealth by approximately 120%, compared with 101% for the static comparator
+and 91% for the sector benchmark. The average annual growth is roughly 15%, compared
+to 13% and 12%, respectively. Gains are achieved without significant deviations from
+the benchmark and with peak-to-trough losses comparable to those of the alternatives, in-
+dicating that the method adds value while remaining diversified and investable. Weight
+charts show gradual shifts rather than abrupt swings, reflecting disciplined rebalancing and
+the cost-aware design. Overall, the results support risk-balanced, adaptive allocation as a
+practical approach to achieving stronger and more stable long-term performance.
+Keywords: Reinforcement Learning, Bayesian Hierarchical Risk Parity,
+Portfolio Optimization, Asset Allocation
+*University of Toronto
+†McGill University
+arXiv:2508.11856v1  [q-fin.PM]  16 Aug 2025
+1 Introduction
+Modern Portfolio Theory (MPT) provides a mathematical framework for allocating assets to
+maximize returns while maintaining a certain level of risk across asset classes. Since Markowitz
+proposed this mean-variance analysis, institutional and retail investors have sought systematic
+ways to allocate capital across hundreds of securities. Although MPT gained popularity over
+the past decades, its ineffectiveness of estimating expected returns have always been prob-
+lematic to both industry and academia. Traditional optimization relies on point estimates of
+expected returns and covariances, yet these inputs are notoriously noisy. Estimation error
+propagates into extreme, highly leaped weights and poor out-of-sample performance, an ef-
+fect sometimes called ’error maximization’.
+1.1 Risk Based Portfolios
+To solve the problem of a small forecasting error in expected returns leading to a significant
+changes in asset allocations, Maillard et al. [2008] introduced equal weighted risk portfo-
+lio to overcome the ineffectiveness in MPT, where they assign weights computed by solving
+the covariance-matrix–based system that equalizes each asset’s marginal contribution to total
+portfolio variance to achieve optimality. Lopez de Prado [2016] introduced the Hierarchical
+Risk Parity (HRP) framework to reduce errors from inverting ill-conditioned covariance ma-
+trices, and to assign capital by recursively equal-risk splitting at each node rather than at the
+individual-asset level. Consequently, HRP produces more diversified and stable allocations
+that have repeatedly outperformed standard benchmarks in empirical and simulated studies,
+offering practitioners a practical and scalable alternative to classical optimization methods.
+1.2 Bayesian Enhanced Portfolios
+Bayesian-based methods have been studied and implemented in various academic research.
+Cooper et al. [2020] replaces the traditional capitalization prior in Black-Litterman optimiza-
+tion with a Risk Parity (RP) portfolio that equalizes the contribution to total variance. They
+argue that RP could be more efficient than the capital-weighted market portfolio and is feasible
+when market capitalization weights do not exist (e.g., hedge funds, commodities).
+1.3 Deep Reinforcement Learning (DRL)
+Millea and Edalat [2022] deploys a two-tier architecture in which a Proximal Policy Optimiza-
+tion (PPO) agent supervises twelve Hierarchical Risk Parity (HRP) and Hierarchical Equal Risk
+Contribution (HERC) allocators plus a cash action. Each allocator, distinguished by its covari-
+ance look-back window, runs offline; their rolling one-hour returns form the state vector for
+the PPO, converting continuous weight selection into a discrete model-choice problem. This
+structure reframes portfolio construction as a nonstationary multi-armed bandit, sidestepping
+the exploration burden of high-dimensional action spaces. The reward couples absolute port-
+folio growth with an incentive forchoosing cash when all assets decline, codifying disciplined
+risk-off behavior. After a single training pass that begins 700 hours into each market series, the
+learned policy remains fixed over an equally long out-of-sample window, eliminating retraining
+costs. Across cryptocurrency, equity, and FOREX datasets, the hierarchical agent consistently
+outperforms every constituent allocator, a random selection baseline, and equal-weight buy-
+and-hold portfolios in terminal wealth and volatility.
+2
+2 Motivation
+Modern portfolio construction techniques face persistent trade-offs for both institutional and re-
+tail investors. Professional practitioners and academic researchers aim to develop a method that
+can amplify the benefits of each approach while mitigating the drawbacks of trade-offs. Tra-
+ditional mean-variance approaches lack stability in forecasting expected returns. Risk-parity
+frameworks deliver stable, well-diversified allocations, but treat expected returns as noise, leav-
+ing performance on the table when market premia shift. With the recent advancement of DRL,
+reinforcement learning-based DRL allocators can react to regime changes; yet, without explicit
+risk budgets, they often generate concentrated, high-turnover positions that breach institutional
+limits. Existing attempts to merge the two paradigms address only part of the problem. Firstly,
+static Bayesian-risk-parity models, such as Bayesian Risk Parity (BRP), update the mean es-
+timate once and then revert to a standard optimization loop; they do not learn online or en-
+force hierarchy across sectors. Secondly, DRL “switchers” supervise several pre-computed
+HRP/HERC portfolios but can only jump from one static weight vector to another; the RL
+layer never modifies risk budgets or incorporates priors. Thirdly, transaction costs, or the cost
+of rebalancing, are usually omitted or underestimated. This underestimation could lead to fre-
+quent rebalances, making the strategy practically impossible. In our research, we proposed the
+RL-BHRP framework, which unifies Bayesian estimation, risk-parity risk control, and policy-
+gradient learning in a single loop.
+3 Methodology
+We consider a dynamic portfolio optimization problem in the equity market, where an agent
+sequentially allocates capital among tradable assets defined the investor to maximize long-
+term risk-adjusted returns. To incorporate informed views on returns and risks, we impose
+a Bayesian hierarchical prior structure over asset returns and volatilities at the sector level.
+Specifically, assets are grouped into sectors g = 1 , ..., G(e.g. industry sectors). We assume
+each sector has latent parameters governing its expected return and risk, which in turn inform
+the priors for individual stocks in that sector. For example, let µg be the prior mean return for
+sector g and µi for stock i in sector g. A hierarchical model may assume µg ∼ N(µmarket, σ2µ,g)
+and µi ∼ N(µg, σ2µ,i), so that stock-level expectations are shrunk toward a sector-level mean.
+Likewise, covariance estimations can be structured: one may use sector-specific factors or
+shrinkage of individual asset volatilities toward a sector volatility level. Feng and He [2022]
+demonstrated that a multi-level Bayesian prior encourages information sharing across assets
+within a sector, improving estimation robustness, especially for assets with scarce data. Ninsin
+demonstrated that Bayesian hierarchical structures offer a flexible approach to capturing lay-
+ered uncertainty, time-varying covariances, and shared sectoral effects.
+3.1 BHRP Model
+Assume that we work on a filtered probability space (Ω, F , {Ft}t≥0, P). The complete proba-
+bility space (Ω, F, P) is equipped with a continuous right filtration and increases{Ft}t≥0. With
+regard to asset returns, we assume there are N assets, G sectors, and T trading days. For each
+asset i in the index set I, i ∈ {1, . . . , N}, the one period return process {Ri,t+1}t≥0 is Ft+1−
+measureable and adapted, with
+sup
+t,i
+|Ri,t+1| ≤LR < ∞ a.s.
+3
+For each sector j in the index set G = {1, . . . , G}, we have a surjective map from assets to
+sectors
+g : I → G
+assigns each asset to a sector.
+3.1.1 Definition: Tradable Universe Define a subset of assets Iλ ⊆ Isuch that Iλ = {i :
+ADVi ≥ adv, Pi ≥ p, i∈ I}. That is, the 20-day average daily dollar volume exceeds 10
+million USD, and the closing price is greater than 3 USD. The Iλ set is re-screened quarterly,
+and the resulting set is fixed for the subsequent quarter to avoid any look-ahead bias.
+3.1.2 Definition: Hierarchical Composition Each sector g holds a fixed subset Ig of stocks
+such that Ig = {i ∈ Iλ : g(i) = g}. If we select top K rank of Ig, that is to truncate |Ig| to the
+largest K stocks if |Ig| > K.
+The RL-BHRP Model framework consists of three main components. Specifically, the Bayesian
+Hierarchical Return modeling, the risk parity component for total risk contribution, and the Re-
+inforcement Learning agent that facilitates dynamic asset allocation.
+3.1.3 Definition: Market Level Mean µM µM ∼ N(0, σ2M ) captures the economy-wide or
+market-wide drift. The variance expresses the prior uncertainty about the drift.
+3.1.4 Definition: Sector Level Mean µg For each sector g ∈ G, µg|µM ∼ N(µm, σ2g).
+Theoretically, the sector mean should be derived from the market drift. Largerσ2g allows sectors
+to deviate further from the market trend.
+3.1.5 Definition: Asset Level Mean µi For each asset i ∈ Iλ, µi|µg(i) ∼ N(µg(i), σ2g(i)).
+3.1.6 Definition: Conditional Returns Given the return process {Ri,t+1}t≥0, the condi-
+tional return given asset level mean distribution is Ri,t+1|µi ∼ N(µi, σ2i )
+3.1.7 Weights Model Let I = {1, . . . , N} be the asset set and G = {1, . . . , G} the set of
+sectors. Each asset i ∈ Ibelongs to exactly one sector via a surjective map g : I → G.
+For g ∈ G, let Ig = {i ∈ I: g(i) = g} and ng = |Ig|. For K ≥ 1 define the (long-only,
+fully-invested) K-simplex
+∆K =
+
+x ∈ RK+ : 1⊤x = 1 	, int(∆K) = {x ∈ ∆K : xk > 0 ∀k}.
+The sector-level weights are a vector W = ( W1, . . . , WG) ∈ ∆G. For each sector g, the
+within-sector weights are η(g) = (ηi|g)i∈Ig ∈ ∆ng.
+Define
+Φ : ∆ G ×
+GY
+g=1
+∆ng → ∆N
+by
+wi = Wg(i) ηi|g(i), i ∈ Iλ
+4
+The resulting w = (w1, . . . , wN ) are the final asset-level weights.
+3.1.8 Proposition: Feasibility and Interior Bijection (a) For any(W, {η(g)}) in the domain
+of Φ, one has w = Φ(W, η) ∈ ∆N. (b) The restriction Φ : int(∆ G) × Qg int(∆ng ) → int(∆N )
+is a bijection with inverse
+Wg(w) =
+X
+i∈Ig
+wi, η i|g(w) = wiWg(w) (i ∈ Ig).
+Proof: (a) Non-negativity is immediate. For the budget constraint,
+NX
+i=1
+wi =
+GX
+g=1
+X
+i∈Ig
+Wg ηi|g =
+GX
+g=1
+Wg
+X
+i∈Ig
+ηi|g
+
+=
+GX
+g=1
+Wg = 1 .
+(b) If Wg > 0 and ηi|g > 0 for all g, i, then wi > 0 and w ∈ int(∆N ). Conversely, given
+w ∈ int(∆N ), the formulas define Wg > 0 and ηi|g > 0, and plugging them back yields
+wi = Wg(i)ηi|g(i). Uniqueness on the interior follows because Wg are uniquely recovered as
+sector sums, and then each η(g) is uniquely recovered by normalization.
+3.1.9 Definition: Block Covariance and Composite Sectors Let Σ ∈ RN ×N be the (pos-
+terior) asset-level covariance matrix, partitioned into blocks {Σgh}Gg,h=1 with Σgh ∈ Rng×nh.
+Given within-sector weights η = {η(g)}, define the sector-level (composite) covariance
+eΣ = eΣ(η) ∈ RG×G, eΣgh = ( η(g))⊤Σgh η(h). (1)
+Equivalently, if R = (Ri)i∈I denotes asset returns and Rηg = Pi∈Ig ηi|gRi the composite sector
+returns, then Cov(Rη) = eΣ.
+3.1.10 Definition: Risk Contributions For any w ∈ ∆N define the portfolio variance
+σ2p(w) = w⊤Σw; the marginal and total asset-level risk contributions,
+MRCi(w) = 2(Σw)i, RCi(w) = wi(Σw)i;
+and the sector-level risk contribution RCg(w) = Pi∈Ig RCi(w).
+Lemma: PNi=1 RCi(w) = σ2p(w) for all w ∈ ∆N. The proof is simple and follows thatP
+i wi(Σw)i = w⊤Σw.
+3.1.11 Two-level Variance and Sector Risk Decomposition Let w = Φ(W, η) be the final
+weights. Then
+σ2p(w) = W ⊤ eΣ(η) W, (2)
+and, for each sector g ∈ G,
+RCg(w) = Wg
+ eΣ(η) W g. (3)
+Proof: Write the sector-g subvector of w as w(g) = Wg η(g). Then
+σ2p(w) = X
+g,h
+(w(g))⊤Σgh w(h) = X
+g,h
+WgWh (η(g))⊤Σgh η(h) = W ⊤ eΣW,
+5
+which proves (2). For (3),
+RCg(w) =
+X
+i∈Ig
+wi(Σw)i = (w(g))⊤
+X
+h
+Σgh w(h)
+
+=
+X
+h
+WgWh (η(g))⊤Σgh η(h) = Wg (eΣW )g.
+This theorem leads to a corollary of Equivalence to Sector-level Risk Parity that Let w =
+Φ(W, η). Then the condition “ RCg(w) is equal for all g” is equivalent to the (flat) risk-parity
+condition for the G-asset problem with weights W and covariance eΣ(η); i.e., RCsectorg (W ) =
+Wg(eΣW )g is constant in g.The proof immediately follows from (3).
+The within-sector equal risk characteristics demonstrated that if we fix W and all η(h) for
+h ̸= g. Define the effective vector
+m(g)(W, η) = Wg Σgg η(g) + X
+h̸=g
+Wh Σgh η(h) ∈ Rng ,
+which is the restriction of (Σw) to sector g. For i ∈ Ig one has RCi(w) = Wg ηi|g m(g)i (W, η).
+Hence the within-sector equal-risk condition RCi(w) = RCj(w) for all i, j∈ Ig is equivalent
+to the fixed-point
+η(g) ∝ 1m(g)(W, η) (componentwise reciprocal, followed by normalization onto ∆ng).
+In the block-diagonal special case Σgh = 0 for h ̸= g, this reduces to the classical within-block
+risk-parity condition η(g) ∝ 1/(Σggη(g)), which admits a unique solution on∆ng when Σgg ≻ 0.
+3.1.12 Transaction Cost Model Trading incurs proportional cost c such that the transac-
+tion cost function for the entire trading period is defined by a linear function that Ct(c, w) =
+c Pi |wi,t − wi,t−1|
+6
+Algorithm 1 Two-Level BHRP Fixed-Point Updates (Sector and Within-Sector)
+Require: Posterior covariance Σ ≻ 0; sector partition {Ig}Gg=1; tolerance ε > 0; max iters
+Kmax.
+Helpers: NORMALIZE (x) = x/1⊤x; B LOCK (Σ, g, h) = Σgh (submatrix on Ig × Ih)
+RC(w, Σ) = w ◦ (Σw); RCV ARwithin = Pg Var RCIg ; RCV ARacross =
+Var
+  P
+i∈Ig RCi
+
+.
+1: Initialize: W (0) ← NORMALIZE (1G); for each g, η(g,0) ← NORMALIZE (1|Ig|).
+2: for k = 0, 1, 2, . . . , Kmax − 1 do
+3: Within-sector updates (Gauss–Seidel):
+4: for g = 1 to G do
+5: Σgg ← BLOCK (Σ, g, g); m(g) ← W (k)g Σggη(g,k) +P
+h̸=g W (k)h BLOCK (Σ, g, h) η(h,k)
+6: η(g,k+1) ← NORMALIZE  (m(g) ∨ δ)⊙(−1) ▷ δ >0 safeguards division; ⊙ is
+componentwise power
+7: end for
+8: Composite (sector) covariance: for all g, h, eΣgh ←
+(η(g,k+1))⊤BLOCK (Σ, g, h) η(h,k+1)
+9: Sector update (risk-parity fixed point): u ← eΣ W (k); W (k+1) ←
+NORMALIZE
+ 
+(u ∨ δ)⊙(−1)
+10: Assemble weights: for each i ∈ Ig, w(k+1)i ← W (k+1)g η(g,k+1)i|g
+11: Stopping test: Compute RC ← RC(w(k+1), Σ); ∆ ← ∥w(k+1) − w(k)∥1; E ←
+RCVARwithin + RCVARacross.
+12: if ∆ ≤ ε and E ≤ε then break
+13: end if
+14: end for
+Ensure: Final weights w⋆ ← w(k+1) on ∆N.
+Algorithm 2 Sector Risk-Parity via Log-Newton on (W, eΣ)
+Require: eΣ ≻ 0; budgets b ∈ RG++ with 1⊤b = 1; tolerance ε.
+1: Initialize y ← 0 (so u = exp(y) = 1), and enforce simplex by g(y) = 1⊤ exp(y) − 1 = 0.
+2: repeat
+3: u ← exp(y); z ← eΣu; U ← diag(u); Z ← diag(z)
+4: Residuals: r ← log z + y − log b − c 1 with scalar c s.t. g(y) = 0; s ← g(y)
+5: Jacobian: J ← I + Z −1 eΣU; Solve
+ J −1
+1⊤U 0
+ ∆y
+∆c
+
+= −
+r
+s
+
+6: Line search α ∈ (0, 1] to decrease ∥r∥22 + s2; y ← y + α∆y; c ← c + α∆c
+7: until ∥r∥∞ ≤ ε and |s| ≤ε
+Ensure: W ⋆ = exp(y) (already on ∆G).
+7
+Algorithm 3 Sequential Bayesian Hierarchical Update of (bµ, Σ)
+Require: New returns {Ri,t}Ni=1; rolling window Wt; sector map g(·); prior scales {τ 2i }.
+1: Compute per-asset sample mean/variance on Wt: ¯ri and s2i ; let n = |Wt|.
+2: Sector priors: µg ← 1|Ig| Pi∈Ig ¯ri.
+3: Posterior means (precision-weighted): bµi ← τ −2i µg(i) + n s−2i ¯ri
+τ −2i + n s−2i .
+4: Posterior covariance Σ ← Ledoit–Wolf({Ri,s}s∈Wt) (or other shrinkage).
+Ensure: Updated (bµ, Σ) for use in Algorithms 1–2.
+3.2 Reinforcement Learning Layer
+Trading occurs on a discrete rebalance gridt = 0, 1, 2, . . .. At each t we observe returns up tot
+and update a Bayesian hierarchical filter to obtain the posterior mean vector bµt and covariance
+matrix Σt ≻ 0 for one-period-ahead returns. We then select portfolio weights wt that are
+implemented over [t, t+1].
+3.2.1 MDP specification MDP is a common technique in reinforcement learning. In our
+reinforcement learning layer, we define the following:
+3.2.2 Definition: State, Action, Transition, Reward The portfolio control problem is cast
+as an average-reward MDP M = (S, A, P, U):
+• State st ∈ S ⊂Rd collects k lags of period returns, the posterior summaries(bµt, diag(Σt)),
+and the previous weights wt−1. The state space is compact because returns are bounded
+and weights lie on a simplex.
+• Action at is a two-level weight parametrization (Definition ??) with sector weights Wt ∈
+∆G and conditional within-sector weights η(g)t ∈ ∆ng; the final asset weights are wi,t =
+Wg(i),t ηi|g(i),t.
+• Transition P (·|st, at) is induced by the one-step return realization Rt+1 and the Bayesian
+update from data at t+1, producing (bµt+1, Σt+1).
+• Reward at t+1 is
+Ut+1(wt) = w⊤t Rt+1 − c ∥wt −wt−1∥1 − λhα Vwithin(wt; Σt)+(1 −α) Vacross(wt; Σt)i,
+(4)
+where c > 0 is proportional transaction cost, λ > 0 tunes risk-budget tightness, and
+α ∈ [0, 1] splits within/ across-sector penalties defined below.
+3.2.3 Definition: Hierarchical risk-parity penalty Let RC(wt) ∈ RN be the vector of
+asset-level total risk contributions RCi(wt) = wi,t (Σtwt)i and define sector aggregation by
+S ∈ {0, 1}G×N with Sg,i = 1{i ∈ Ig}, so RCsec(wt) = S RC(wt). Let PN = IN − 1N 11⊤
+and PG = IG − 1G 11⊤ denote centering operators. We measure dispersion by (scaled) squared
+norms:
+Vwithin(wt; Σt) = 1N PN RC(wt)22, Vacross(wt; Σt) = 1G PG S RC(wt)22.
+Both vanish iff asset-level (respectively sector-level) risk contributions are equal.
+8
+3.2.4 Policy Parametrization and Feasibility We use a factorized softmax policy that maps
+logits to simplexes.
+We define a Factorized Softmax Policy as given state s, the actor outputs logits Ψg(s) ∈ R
+for sectors and Φi|g(s) ∈ R within each sector. The corresponding probabilities are
+Wg(s) = exp(Ψg(s))PG
+h=1 exp(Ψh(s))
+, η i|g(s) = exp(Φi|g(s))P
+j∈Ig exp(Φj|g(s)) .
+The final weights are wi(s) = Wg(i)(s) ηi|g(i)(s).
+3.2.5 Definition: Feasibility and Representability For every state s, the map (Ψ, Φ) 7→
+w(s) yields w(s) ∈ ∆N. Moreover, for any w ∈ int(∆N ) there exist logits producing exactly
+w; e.g., choose Ψg = log
+P
+i∈Ig wi
+
++ c and Φi|g = log
+
+wi/ Pj∈Ig wj.
+Let w = w(s) and write g(i) for the sector of asset i. For any g and j ∈ Ih,
+∂wi
+∂Ψg
+= wi
+ 
+1{g(i) = g} −Wg
+
+, ∂wi
+∂Φj|h
+= Wg(i) ηi|g(i)
+ 
+1{i = j} −ηj|h
+
+.
+3.2.6 Reward Regularity and Policy-gradient Applicability We impose standard regular-
+ity: (i) returns are bounded almost surely, |Ri,t| ≤LR for all i, t; (ii) Σt is symmetric positive
+definite and ∥Σt∥2 ≤ LΣ; (iii) the state space is compact (finite lags of bounded variables) and
+the action space is ∆G × Qg ∆ng.
+Lemma: Boundedness and Lipschitz continuity Under the regularity above, the reward
+Ut+1(w) in (4) is bounded and globally Lipschitz in w on ∆N, with a constant depending only
+on (LR, LΣ, c, λ).
+Proof: The linear term w⊤Rt+1 is bounded by LR. The cost term is c∥w − wt−1∥1 ≤ 2c
+on the simplex and is 1-Lipschitz. For the penalty, RC(w) = w ◦ (Σtw), so its Jacobian
+is JRC(w) = diag(Σ tw) + diag(w)Σt; thus ∥JRC(w)∥2 ≤ ∥Σt∥2 + ∥Σt∥2 ≤ 2LΣ. The maps
+w 7→ PN RC(w) and w 7→ PGSRC(w) are linear post-compositions ofRC with operator norms
+≤ 1. The squared norms are C 1 with gradient bounded by 2∥(P ·)⊤∥ · ∥RC(w)∥ ∥JRC(w)∥,
+which is finite on the compact simplex. Summing yields the claim.
+Theorem: Policy-gradient identity and existence of optimal stationary policies Consider the
+average-reward objectiveJ(θ) = lim infT →∞ 1T EθPT −1t=0 Ut+1 under a differentiable stochas-
+tic policy πθ defined by the factorized softmax above. If the induced Markov chain on S under
+any stationary policy is irreducible and positive recurrent, then: (i) an optimal stationary policy
+exists; and (ii) the gradient satisfies the policy-gradient theorem
+∇θJ(θ) = Eθ
+
+∇θ log πθ(at | st) · Qπθ(st, at),
+where Qπθ is the action-value function. The expectation exists and is finite by the Lemma
+Proof: Existence follows from average-reward MDP theory on compact state–action spaces
+with bounded rewards. The policy-gradient identity is standard for differentiable policies when
+rewards are integrable and the chain is unichain; boundedness and Lipschitzness ensure the
+interchange of gradient and expectation is valid. The detailed proof is in the appendix section.
+3.2.7 Closed-form gradients for the RP penalty Let RC(w) = w ◦ (Σtw) and write
+JRC(w) = diag(Σtw) + diag(w)Σt. Define PN = I − 1N 11⊤ and PG analogously. Then
+∇w Vwithin(w; Σt) = 2N JRC(w)⊤PN RC(w), ∇w Vacross(w; Σt) = 2G JRC(w)⊤S⊤PG S RC(w).
+9
+By chain rule, ∇θUt+1 =
+ 
+∇wUt+1
+  
+∇θwθ(st)
+
+with ∇θwθ obtained from the softmax deriva-
+tives above.
+3.2.8 Algorithm: PPO with factorized actions We use Proximal Policy Optimization (PPO)
+with the factorized actor and a baseline critic.
+Algorithm 4 PPO for RL–BHRP
+Require: Posterior updater for (bµt, Σt); penalty (λ, α); cost c; PPO hyperparameters
+1: Initialize actor–critic (θ, ϕ); set w−1 ← equal-weight
+2: for iteration k = 1, 2, . . .do
+3: Roll out T steps: observe st, sample at ∼ πθ(· |st), map to wt, trade, observe Ut+1,
+update posterior
+4: Compute advantages bAt (e.g., GAE) and value targets
+5: Update θ via clipped surrogate with entropy bonus; update critic ϕ
+6: end for
+7: return trained policy s 7→ (W (s), η(s))
+3.2.9 Optional projection to exact hierarchical risk parity If exact equality of risk con-
+tributions is required at trade time, add a post-processing projection wt ← arg minw∈∆N ∥w −
+wt∥22 subject to asset- and sector-level equal-risk constraints. A practical alternative is a two-stage
+fixed-point: (i) solve sector RP for (Wt, eΣ(ηt)); (ii) solve within-sector RP in each block Σgg;
+iterate a few steps.
+4 Results
+Due to computational constraints, we evaluate the proposed RL-BHRP framework on a rules-based
+subset of the investable universe defined in the methodology. We obtain adjusted close (total-
+return) prices from Yahoo Finance from January 1, 2012, to August 13, 2025. The sample is
+partitioned into a training period (January 1, 2012, to January 1, 2020) used for model devel-
+opment and hyperparameter calibration, and a testing period (January 1, 2020, to August 31,
+2025) reserved strictly for out-of-sample evaluation. Because the daily data end on 2025-08-
+13, the final calendar month is partial. Our last monthly return reflects performance from the
+month-end to August 13, 2025, and annualizations use the standard 12-month convention for
+monthly data.
+Universe construction adheres to the screening and timing rules outlined in the methodology:
+membership is determined ex ante at each quarter-end using liquidity (20-day ADV) and price
+thresholds, and then frozen intra-quarter to prevent look-ahead. At each monthly rebalance, as-
+sets without a well-defined period return are masked, and remaining weights are renormalized
+on the simplex. Within this protocol we select a sector-balanced subset of large- and mega-cap
+names spanning all GICS sectors (Table 1). This preserves the cross-sectional breadth of the hi-
+erarchical prior and within-sector risk parity while keeping the computational budget tractable.
+10
+Table 1: Sector map for the evaluation subset with corresponding ETFs
+Sector ETF
+Ticker
+Constituents (tickers)
+Information Technology XLK AAPL, MSFT, NVDA, ADBE, ORCL, CSCO, INTC,
+A VGO, AMD, AMAT
+Communication
+Services
+XLC GOOGL, META, T, VZ
+Consumer Discretionary XLY AMZN, HD, NKE, LOW
+Consumer Staples XLP PG, KO, PEP, COST, PM
+Financials XLF JPM, BAC, WFC, V , MA
+Energy XLE XOM, CVX
+Health Care XLV LLY , UNH, ABBV , TMO, PFE, MRK
+Industrials XLI CAT, BA, MMM, GE, HON
+Utilities XLU DUK, SO, D
+Real Estate XLRE PLD, SPG
+Materials XLB LIN, APD
+4.1 Cumulative Performance
+Our primary benchmark is an equal-weight sector portfolio composed of the SPDR sector ETFs
+(XLC, XLY , XLP, XLE, XLF, XLV , XLI, XLK, XLB, XLRE, XLU). Benchmark returns are
+computed from adjusted closes, resampled at month-end, and rebalanced monthly to equal
+weights. All strategy returns are evaluated on the same calendar grid, with annualization based
+on a 12-period year. Transaction costs for RL-BHRP follow the paper’s cost model; the bench-
+mark is cost-free by construction. In the Results section we report (i) cumulative wealth curves
+for RL-BHRP vs. BHRP vs. Benchmark, (ii) full-period and year-by-year performance tables
+(CAGR, volatility, Sharpe, Sortino, max drawdown, tracking error, information ratio, CAPM
+alpha/beta), and (iii) dynamic weight diagnostics to document portfolio adaptivity over time.
+Figure 1 shows that RL-BHRP compounds to the highest terminal wealth during the out-of-
+sample window (Feb - 2020 to Aug - 2020), with a visibly wider gap from mid-2023 onward.
+Table 2 confirms the dominance in levels and on a risk-adjusted basis. RL-BHRP earns a to-
+tal cumulative return of 1.1996 ( ∼ 120%), versus 1.0137 for BHRP and 0.9141 for the sector
+benchmark, implying a CAGR of 15.16%, which is +1.81 pp above BHRP and +2.83 pp above
+the benchmark. Despite slightly higher volatility than BHRP (17.37% vs 16.52%; benchmark
+17.28%), RL-BHRP posts the highest Sharpe (0.905) and Sortino (1.648), indicating that the
+incremental return more than compensates for the modest rise in risk. Drawdowns are com-
+parable across strategies; RL-BHRP’s trough (∼ 20.33%) is marginally deeper than BHRP (∼
+19.10%) and the benchmark ( ∼ 18.32%), yet its Calmar (0.746) exceeds both alternatives be-
+cause of the higher geometric growth.
+RL–BHRP remains benchmark-proximal (beta 0.983; tracking error 3.69%) yet consistently
+adds value: the information ratio is 0.687 (BHRP: 0.220), and the Jensen alpha is 2.76%
+(BHRP: 1.64%). The hit rate (fraction of months with positive returns) is also favorable for RL–
+BHRP at 0.642 (benchmark 0.627). Tail-risk measures indicate the expected trade-off for an
+11
+adaptive allocator: period VaR5% and CVaR5% for RL–BHRP are −7.41% and −10.24%, re-
+spectively, lying between BHRP (less severe: −6.72%, −9.70%) and the benchmark (more se-
+vere: −8.00%, −10.34%). Taken together, these outcomes align with the design of RL–BHRP:
+Bayesian shrinkage stabilizes inputs; the hierarchical risk-parity structure limits concentration
+and sector imbalances; and the policy-gradient layer reallocates toward time-varying opportu-
+nities without materially increasing active risk. The result is a meaningful improvement in both
+absolute and benchmark-relative performance—higher CAGR, Sharpe, and alpha—achieved
+with low tracking error and only a modest increase in downside tail measures relative to the
+static BHRP baseline.
+Figure 1: Testing Period Cumulative Returns
+Table 2: Full-Period Metrics
+Metric RL-BHRP BHRP Benchmark
+Periods 67 67 67
+Start 2020-02-29 2020-02-29 2020-02-29
+End 2025-08-31 2025-08-31 2025-08-31
+Total Cumulative Return 1.199612 1.013672 0.914063
+CAGR (Geometric Ann.) 0.151637 0.133563 0.123310
+Annual Return (Mean×12) 0.157213 0.139742 0.131883
+Annual V olatility 0.173748 0.165164 0.172838
+Sharpe 0.904829 0.846076 0.763042
+Sortino 1.648382 1.534682 1.368210
+Max Drawdown -0.203308 -0.191023 -0.183210
+Calmar 0.745850 0.699201 0.673053
+Tracking Error 0.036883 0.035790 0.000000
+Information Ratio 0.686752 0.219576 NaN
+Beta 0.982509 0.935146 1.000000
+Jensen Alpha 0.027636 0.016412 0.000000
+VaR 5% (period) -0.074066 -0.067241 -0.079989
+CVaR 5% (period) -0.102409 -0.097049 -0.103351
+Hit Rate (>0) 0.641791 0.641791 0.626866
+4.2 Weights
+Figures 2 and 3 summarize the evolution of RL–BHRP portfolio weights over the out-of-sample
+period. The heatmap (Figure 2) reveals structured but adaptive allocations: intensity varies
+over time across a diversified set of large and liquid names from multiple sectors (e.g., PLD,
+APD, AMZN, META, SO, XOM, LIN, DUK, JPM, LOW, D, NKE, HD, CVX). No single position
+persists at a dominating level; instead, exposures rotate gradually as posterior signals and the
+hierarchical risk-parity penalty evolve. The stacked area in Figure 3 shows that the aggregate
+share of the Top 15 names (selected ex post by average weight) remains bounded and varies
+smoothly, which is consistent with the dispersion penalty in the reward discouraging excessive
+concentration and with the transaction-cost term limiting needless turnover.
+Let wt ∈ ∆N denote the asset-weight vector at month-end t. Define the Top– K set T as
+the K = 15 assets with the largest time-average weights over the test window, and set
+WTop15(t) =
+X
+i∈T
+wi,t, τ t = ∥wt − wt−1∥1, ρ t = w⊤t wt−1
+∥wt∥2 ∥wt−1∥2
+.
+Here WTop15(t) measures concentration in the leading names, τt is L1 turnover, and ρt is a unit-
+free measure of persistence (cosine similarity) in allocations. Over the out-of-sample window
+we report their time-averages W Top15 = 1T Pt WTop15(t), τ = 1T Pt τt, and ρ = 1T Pt ρt.
+Using the saved RL weights, the portfolio traded N = 48 distinct names. The Top–15 share
+averaged W Top15 ≈ 0.50 (median ≈ 0.50, range ≈ [0.40, 0.61]), indicating that roughly half
+12
+of the capital was allocated to the most influential names while the remaining half was diver-
+sified across the long tail. Turnover averaged τ ≈ 0.60 (95th percentile ≈ 0.85), which, under
+the 5 bps one-way cost model, implies average frictions on the order of ≈ 3 bps per month—
+two orders of magnitude smaller than the strategy’s average monthly return. The mean cosine
+similarity ρ ≈ 0.74 confirms high month-to-month persistence with gradual tilts rather than
+abrupt flips. Visually, the heatmap exhibits banded, slowly varying intensity by name, and the
+stacked chart shows migration of weight across sectors (e.g., periodic increases among Energy
+and Utilities names alongside shifts in Consumer and Technology/Communication holdings)
+without violating the risk-budget constraints.
+These diagnostics are consistent with the design of RL–BHRP. The Bayesian layer stabilizes
+inputs; the two-level risk-parity structure prevents single-name or single-sector dominance;
+and the policy-gradient layer reallocates toward time-varying opportunities with smooth ad-
+justments that respect the cost term. The result is an adaptive, diversified portfolio in which
+concentration is actively bounded, sector balance is preserved, and rebalancing dynamics re-
+main economically plausible rather than reactive or noisy, as evidenced by the heatmap and
+stacked-weight trajectories in Figures 2 and 3.
+Figure 2: Weights Heatmap
+ Figure 3: EL-BHRP Dynamic Weights Stack
+5 Limitations and Future Research
+5.1 Data and Universe Construction
+The empirical analysis relies on Yahoo Finance adjusted closes. While convenient and widely
+used, this source can omit delistings and occasionally mis-handle corporate actions, which
+introduces survivorship risk and measurement noise that may bias performance upward. To
+preserve computational tractability, we further evaluate a sector-balanced subset of the me-
+chanically screened tradable universe; although the quarterly screen is ex-ante and frozen
+intra-quarter, the reduction in cross-sectional breadth can attenuate the benefits of hierarchical
+shrinkage and within-sector risk parity. Replicating the study on survivorship-free, point-in-
+time data (e.g., CRSP/Refinitiv/Compustat with delisting returns and historical identifiers), and
+scaling to the full screened universe, such as the S&P500 or Russell1000, would strengthen
+external validity. Finally, because the last calendar month of our sample is partial, annualized
+statistics are slightly perturbed; robustness checks should either truncate that month or enforce
+a strict end-of-month grid for all assets.
+13
+5.2 Modeling Restrictions and Priors
+The Bayesian layer uses Normal likelihoods for returns with Ledoit–Wolf shrinkage for covari-
+ances. Equity returns, however, display heavy tails, skewness, and volatility clustering that are
+imperfectly captured by Gaussian assumptions. A more faithful specification would substitute
+heavy-tailed or skewed likelihoods (e.g., Student- t or skew-t), robust scatter estimators (e.g.,
+Tyler’s M-estimator), or dynamic structures such as EWMA/DCC, factor stochastic volatility,
+or state-space hierarchies. In addition, the current empirical-Bayes treatment fixes prior scales
+exogenously; learning hyperpriors from data—for example via hierarchical horseshoe priors
+or marginal likelihood maximization—could improve shrinkage in thinly observed names and
+adapt priors to regime changes.
+5.3 Risk Budgeting and Portfolio Constraints
+The hierarchical risk-parity component is enforced through a quadratic dispersion penalty on
+asset- and sector-level risk contributions. This soft penalty encourages, but does not guaran-
+tee, exact equality, and its quadratic form may overweight large deviations relative to small,
+systematic ones. Post-trade projection to the equal-risk manifold, or alternative divergences
+based on entropy or absolute deviations, offer principled ways to tighten risk budgets. Our im-
+plementation also assumes long-only, fully invested portfolios with monthly rebalancing and
+proportional L1 transaction costs. Realistic mandates often impose leverage bounds, short-sale
+constraints, turnover budgets, minimum-lot sizes, and sector or name caps. Embedding these
+as hard constraints or barrier terms, together with impact-aware costs (e.g., square-root impact
+scaled by volatility and ADV), would enhance implementability and capacity analysis.
+5.4 RL Design and Training
+We use PPO with a factorized softmax over sector and within-sector logits. Although robust and
+interpretable, PPO can be sensitive to reward scaling and hyperparameters, and it optimizes ex-
+pected return rather than explicit downside criteria. Risk-sensitive alternatives—distributional
+RL, CVaR policy gradients, or constrained actor–critic with Lagrangian updates—may de-
+liver tighter control of tail risk while preserving performance. The current state vector aggre-
+gates lagged returns and posterior summaries; it omits macro covariates, option-implied mea-
+sures, and learned regime indicators, and it models temporal dependence only through finite
+lags. Recurrent encoders (GRU/LSTM), attention over longer contexts, or learned latent states
+(HMM/SSM) could mitigate partial observability. Finally, the policy is trained on 2012–2019
+and evaluated post-2020 without re-training; distribution shift can erode performance. Rolling
+or expanding-window re-training with strict nesting, conservative offline RL, and robustness to
+covariance shocks would address nonstationarity explicitly.
+5.5 Evaluation and Inference
+Our design adopts a single anchored train/test split. To support stronger inferential claims, fu-
+ture evaluations should include rolling-origin tests across multiple non-overlapping windows,
+factor-model alphas (e.g., FF5+Momentum) with Newey–West standard errors, and formal
+tests of performance differences such as Ledoit–Wolf or Jobson–Korkie tests for Sharpe ratios.
+When comparing many model variants, the Superior Predictive Ability and Model Confidence
+Set procedures are advisable. Beyond statistical significance, economic significance should be
+stress-tested by varying cost assumptions (0–25 bps one way), scaling costs by volatility and
+liquidity, and quantifying capacity under impact-aware execution.
+14
+5.6 Theoretical Aspects
+While we establish the feasibility of the two-level weight construction and state a policy-
+gradient identity under standard regularity, several theoretical questions remain open. The
+existence, uniqueness, and convergence rates of the hierarchical RP fixed point under realistic
+block structures have not been derived; sufficient conditions based on block diagonal domi-
+nance or restricted eigenvalue bounds warrant further investigation. For the RL layer, gener-
+alization guarantees under nonstationarity are not available; deriving regret or stability bounds
+for average-reward RL with Lipschitz rewards and mixing conditions would provide principled
+guidance on sample complexity and robustness.
+5.7 Future Research
+A coherent next step is to replicate all results on survivorship-free data with point-in-time clas-
+sification, extend the universe to broad indices in the U.S. and internationally, and compare
+monthly, weekly, and daily rebalancing under impact-aware costs. On the modeling side, em-
+bedding heavy-tailed/dynamic covariances within the Bayesian hierarchy and learning hyper-
+priors endogenously should be paired with risk-sensitive RL objectives and constrained actor–
+critic algorithms. At the interface of learning and optimization, unrolling the BHRP fixed
+point as a differentiable layer would enable end-to-end training with KKT-consistent gradi-
+ents, offering a principled alternative to penalty tuning. Finally, operationalizing the frame-
+work with accelerated linear algebra (e.g., JAX) and releasing a reproducible codebase with
+nested cross-validation, ablations (no-RL, no-Bayes, no-HRP, sector-only), and formal infer-
+ence would broaden applicability and facilitate independent verification.
+6 Conclusion
+This paper proposes a reinforcement–learning embedded Bayesian Hierarchical Risk Parity
+(RL-BHRP) framework that unifies three key desiderata of institutional portfolio construction:
+statistically stable inputs, interpretable risk budgeting, and adaptive allocation. Methodologi-
+cally, we (i) impose a hierarchical Bayesian prior that shrinks asset expectations toward sector
+means and stabilizes covariance estimates; (ii) formalize a two–level weight map from sector
+budgets and within–sector allocations to final asset weights, with feasibility and interior bi-
+jection; (iii) derive a block–decomposed variance representation and an equivalence between
+sector–level risk parity and asset–level sector risk contributions; and (iv) embed this structure
+in a factorized softmax policy trained by policy gradients under an average–reward objective
+with a convex transaction–cost term and a hierarchical risk–parity dispersion penalty. Together,
+these elements yield an allocator that remains budget– and risk–aware while responding to
+time–varying opportunity sets.
+Empirically, the RL overlay improves both absolute and benchmark–relative performance over
+a 67–month out–of–sample window (Feb. 2020 to Aug. 2025). Relative to a static BHRP base-
+line and an equal–weight sector benchmark, RL–BHRP achieves the highest terminal wealth
+and geometric growth (CAGR 15.16% vs. 13.37% for BHRP and 12.33% for the benchmark),
+with the strongest risk–adjusted profile (Sharpe 0.905, Sortino 1.648). Against the bench-
+mark, RL–BHRP delivers an information ratio of 0.687 with low tracking error (3.69%) and a
+positive Jensen alpha (2.76%), indicating that the policy creates value while remaining bench-
+mark–proximal. Drawdowns are comparable across all portfolios (RL trough −20.33%), and
+the superior Calmar ratio reflects faster geometric recovery rather than reliance on excessive
+15
+risk. Weight diagnostics reveal gradual, economically plausible tilts, with approximately half
+of the capital allocated to the top 15 names on average, high month–to–month persistence, and
+moderate turnover, consistent with the cost term in the reward.
+Substantively, these findings support the central thesis: hierarchical risk budgeting is a ro-
+bust organizing principle for diversification, but coupling it with a Bayesian filter and a learned
+policy that selectively reallocates sector budgets and within–sector weights can harvest addi-
+tional return without materially increasing active risk. The penalty on risk-contribution disper-
+sion acts as an interpretable regularizer that connects the learned policy to a well–understood
+risk–parity target, thereby improving transparency and mitigating the usual black–box critique
+of RL in finance.
+The study has limitations. We work with adjusted prices from a public source and, for com-
+putational reasons, evaluate a sector–balanced subset of the mechanically screened universe;
+the data for the last month is partial. These choices do not compromise the integrity of the
+experimental design (no look–ahead, quarterly frozen membership, and tradability masks), but
+they motivate replication on survivorship-free, point–in–time databases and at a larger scale.
+Future research should (i) replace Gaussian likelihoods with heavy–tailed/dynamic specifica-
+tions inside the Bayesian hierarchy; (ii) investigate exact risk–parity projections and alterna-
+tive divergences for risk budgeting; (iii) adopt risk–sensitive RL objectives (distributional or
+CVaR–constrained actor–critic) under formal nonstationarity; and (iv) provide cross–fold infer-
+ence (factor alphas, difference–in–Sharpe, SPA/MCS) alongside capacity and impact analysis.
+In conclusion, RL-BHRP offers a practical, theoretically grounded approach to adaptive, risk–aware
+portfolio construction. By combining hierarchical shrinkage with two–level risk parity and a
+constrained policy gradient, it achieves economically meaningful improvements in both abso-
+lute and relative terms, while preserving interpretability and control. The framework is modular
+and extensible, making it a promising baseline for future work on scalable, risk–sensitive learn-
+ing in multi–asset portfolios.
+16
+References
+Ricky Cooper, Marat Molyboga, and Georgiy Molyboga. Black-litterman, exotic beta, and
+varying efficient portfolios: An integrated approach. SSRN, 2020.
+Guanhao Feng and Jingyu He. Factor investing: A bayesian hierarchical approach. Journal of
+Econometrics, 230(1):183–200, 2022.
+Marcos Lopez de Prado. Building diversified portfolios that outperform out-of-sample.Journal
+of Portfolio Management, 2016.
+Sbastien Maillard, Thierry Roncalli, and Jerome Teiletche. On the properties of equally-
+weighted risk contributions portfolios. ssrn, 2008.
+Adrian Millea and Abbas Edalat. Using deep reinforcement learning with hierarchical risk
+parity for portfolio optimization. International Journal of Financial Studies, 11(1):10, 2022.
+Sylvester Asan Ninsin. Advanced bayesian hierarchical models for cross-asset risk attribution
+and predictive portfolio drawdown under macroeconomic shocks.
+17
+Appendix A. Sector-Level Risk-Parity via Risk Budgeting: KKT System
+and Newton Solver
+Let G ≥ 2 be the number of sectors. The composite (sector) covariance is eΣ(η) ∈ RG×G,
+symmetric positive definite, built from within-sector weights η as in Eq. (1). We seek sector
+weights W ∈ ∆G = {W ∈ RG+ : 1⊤W = 1} such that sector risk contributions are equal:
+RCsecg (W, η) = Wg eΣ(η)W g is constant in g.
+Equivalently, RCsecg = bg σ2p with budgets bg > 0, Pg bg = 1. For equal sector risk parity we
+take bg = 1/G.
+A.1 Risk-budgeting formulation and KKT conditions
+Consider the (scale-invariant) risk-budgeting program
+min
+x∈RG++
+1
+2 x⊤ eΣ(η) x s.t.
+GX
+g=1
+bg log xg = c, (5)
+where c ∈ R is an arbitrary constant fixing the geometric mean (any c yields the same solution
+up to scaling). Define the Lagrangian
+L(x, ν) = 12 x⊤ eΣx − νX
+g
+bg log xg − c
+
+.
+First-order (KKT) conditions are
+eΣx = ν b⊘ x, X
+g
+bg log xg = c, x ∈ RG++, (6)
+where b = (bg)Gg=1 and ⊘ denotes componentwise division.
+Risk-budgeting ⇒ risk parity Let (x⋆, ν⋆) satisfy the KKT system (6). Then, with σ2p =
+x⋆⊤ eΣx⋆,
+RCsecg (x⋆, η) = x⋆g eΣx⋆g = ν⋆bg, X
+g
+RCsecg = σ2p = ν⋆.
+Hence RCsecg = bg σ2p for all g.
+Proof: Multiply the g-th component of eΣx⋆ = ν⋆b⊘x⋆ by x⋆g to get RCsecg = ν⋆bg. Summing
+over g and using Pg bg = 1 yields Pg RCsecg = ν⋆. But Pg RCsecg = x⋆⊤ eΣx⋆ = σ2p by
+conservation, hence ν⋆ = σ2p and the claim follows.
+Remark: Normalization to the simplex The solution x⋆ of (5) is unique up to a positive
+scalar. The sector weights on the simplex are W ⋆ = x⋆/(1⊤x⋆). Risk budgets are homoge-
+neous: for any s >0, RCsecg (sx) = s2 RCsecg (x) and σ2p(sx) = s2 σ2p(x), so RCsecg /σ2p remains
+bg after normalization.
+18
+A.2 Log-domain equations and Newton step
+Define y = log x ∈ RG and u = exp( y) ∈ RG++. Let z = eΣu. The KKT stationarity
+eΣu = ν b⊘ u is equivalent to the componentwise equations
+fi(y, c) = log zi + yi − log bi − c = 0 , i = 1, . . . , G, (7)
+where c = log ν. To fix the overall scale, impose the normalization constraint
+g(y) = 1⊤u − 1 = 0 , (8)
+so that the final x = exp(y) already lies on the simplex.
+Jacobian. Let U = diag(u), Z = diag(z). The Jacobian of f (·, c) with respect to y is
+J(y) = I + Z −1 eΣ U, (9)
+since ∂(log zi)/∂yj = ( eΣijuj)/zi and ∂yi/∂yj = δij. The derivative of f with respect to c is
+−1. The Jacobian of g with respect to y is 1⊤U; with respect to c it is 0.
+Augmented Newton system. At an iterate (y(k), c(k)), define the residualsr(k) = f  y(k), c(k)
+and s(k) = g y(k). The Newton step (∆y, ∆c) solves the linear system
+J(y(k)) −1
+1⊤U (k) 0
+ ∆y
+∆c
+
+= −
+r(k)
+s(k)
+
+, U (k) = diag exp(y(k)). (10)
+Update with backtracking to preserve positivity and decrease the residual: (y(k+1), c(k+1)) =
+(y(k), c(k)) + α(∆y, ∆c) with α ∈ (0, 1] chosen by Armijo line search; positivity is automatic
+because x = exp(y) ∈ RG++.
+Existence, uniqueness, and global convergence Assume eΣ(η) ≻ 0 and b ∈ RG++, 1⊤b =
+1. Then: (i) There exists a unique x⋆ ∈ RG++ (up to a scalar) satisfying the risk-budgeting
+KKT conditions (6). (ii) The log-domain Newton method (10) with backtracking is globally
+convergent to y⋆ = log x⋆ from any initial y(0) ∈ RG; the convergence is locally quadratic.
+Proof (i) The objective in (5) is strictly convex on RG++ and the constraint is affine in y =
+log x, hence the program has a unique minimizer for each c, unique up to positive scaling
+in x. The KKT system is therefore necessary and sufficient. (ii) In the log domain, f (·, c)
+is smooth and its Jacobian (9) is positive definite on the tangent space of the normalization
+constraint. Standard self-concordance arguments (or Spinu’s log-Newton analysis) yield global
+convergence with backtracking and quadratic local rate.
+Special case (diagonal covariance) If eΣ = diag( σ21, . . . , σ2G), then (eΣx)g = σ2gxg. The
+stationarity σ2gxg = νbg/xg gives xg ∝ pbg/σg. Normalization yields
+W ⋆g =
+p
+bg/σg
+P
+h
+√bh/σh .
+For equal budgets bg = 1/G: W ⋆g ∝ 1/σg.
+19
+A.3 Practical algorithm
+Algorithm 5 Sector risk-parity via log-domain Newton
+1: Input: eΣ ≻ 0, budgets b ∈ RG++, tolerance ϵ.
+2: Initialize y(0) = 0, c(0) = 0. ( x(0) = 1, W (0) = x(0)/G)
+3: repeat
+4: u = exp(y(k)), z = eΣu, U = diag(u), Z = diag(z).
+5: r = log z + y(k) − log b − c(k)1, s = 1⊤u − 1.
+6: Solve the linear system (10) for (∆y, ∆c).
+7: Backtracking line search on α ∈ (0, 1] to reduce ∥r∥22 + s2; set y(k+1) = y(k) + α∆y,
+c(k+1) = c(k) + α∆c.
+8: until ∥r∥∞ ≤ ϵ and |s| ≤ϵ
+9: Output: W ⋆ = exp(y(k)) (already on ∆G).
+Complexity and numerics. Each iteration solves a (G+1) × (G+1) linear system; cost is
+O(G3), negligible for G ≤ 20. The method is scale-free, strictly interior, and robust to condi-
+tioning when using double precision and mild regularization of eΣ (e.g., Ledoit–Wolf shrinkage
+at the asset level before aggregation).
+A.4 Connection to the two-level HRP fixed point
+Given within-sector weightsη, Theorem above showsσ2p(W, η) = W ⊤ eΣ(η)W and RCsecg (W, η) =
+Wg
+ eΣ(η)W g. Therefore the sector equal-risk condition is precisely the risk-budgeting KKT
+system (6) on (W, eΣ(η)) with budgets bg = 1/G. Inside each sector, an analogous log-Newton
+or reciprocal fixed-point update applies to η(g) (cf. the within-sector characterisation following
+Theorem ??).
+Appendix B. Existence and Policy-Gradient Identity
+Let (S, B(S)) be a compact metric state space with Borel σ-algebra, and for each s ∈ Slet
+A(s) ⊂ Rm be a nonempty compact action set. The one-step reward U : S ×Rm → R
+is bounded and continuous, and the transition kernel P (· |s, a) is Feller: for every bounded
+continuous f : S →R, the map (s, a) 7→
+R
+f (s′) P (ds′ | s, a) is continuous. A (stationary,
+possibly randomized) policy π is a stochastic kernel π(· |s) on A(s); for a parameterized
+policy we write πθ(· |s).
+For any stationary policy π, define the induced kernel
+Pπ(ds′ | s) =
+Z
+A(s)
+P (ds′ | s, a) π(da | s), ¯Uπ(s) =
+Z
+A(s)
+U (s, a) π(da | s).
+Unichain, ergodicity, and invariance For every stationary policy π, the Markov chain on
+S with kernel Pπ is ψ-irreducible, aperiodic, and positive recurrent, hence admits a unique
+invariant probability measure dπ on S; moreover, the chain is geometrically ergodic.
+For such π, the long-run average reward exists and equals the stationary expectation
+ρ(π) :=
+Z
+S
+¯Uπ(s) dπ(ds) = limT →∞ 1T EπhT −1Xt=0 U (st, at)i.
+20
+For a parameterized policy we write ρ(θ) := ρ(πθ) and J(θ) := ρ(θ).
+B.1 Existence of an optimal stationary policy (average-reward)
+We establish existence via the vanishing-discount approach.
+Lemma: Discounted problem - existence and measurability For each β ∈ (0, 1), the dis-
+counted value function
+Vβ(s) = sup
+π
+Eπ
+h ∞X
+t=0
+βtU (st, at)  s0 = si
+solves the Bellman equation
+Vβ(s) = maxa∈A(s)
+n
+U (s, a) + β
+Z
+S
+Vβ(s′) P (ds′ | s, a)o,
+and there exists a stationary deterministic selector π⋆β attaining the maximum for all s. More-
+over Vβ is bounded and continuous.
+Proof: Compactness of A(s), bounded continuity of U, and Feller continuity of P imply
+the Bellman operator maps C(S) into itself and is a contraction in the sup-norm. Berge’s max-
+imum theorem yields an upper hemicontinuous, nonempty argmax correspondence with mea-
+surable selectors; since the maximand is continuous and the correspondence compact-valued,
+a measurable deterministic selector exists. Standard contraction arguments yield existence and
+uniqueness of Vβ ∈ C(S).
+Define the vanishing-discount normalizations
+ρβ := (1 − β) Vβ(s0), h β(s) := Vβ(s) − Vβ(s0),
+for a fixed anchor s0 ∈ S.
+Limit points solve the ACOE There exists a sequence βn ↑ 1 such that ρβn → ρ⋆ ∈ R and
+hβn → h⋆ uniformly on S, where (ρ⋆, h⋆) solves the average-cost optimality equation (ACOE)
+ρ⋆ + h⋆(s) = max
+a∈A(s)
+n
+U (s, a) +
+Z
+h⋆(s′) P (ds′ | s, a)o, s ∈ S.
+Proof By boundedness ofU, the family{Vβ}β∈(0,1) is equicontinuous and uniformly bounded;
+Ascoli–Arzel`a yields relative compactness in C(S). Hence there exists βn ↑ 1 with hβn → h⋆
+uniformly and ρβn → ρ⋆. Divide the discounted Bellman equation by (1 − βn), subtract its
+value at s0, and pass to the limit using dominated convergence and Feller continuity to obtain
+the ACOE.
+Propsition: Existence of an average-reward optimal stationary policy There exists a sta-
+tionary deterministic policy π⋆ attaining ρ⋆, i.e.,
+ρ(π⋆) = sup
+π
+ρ(π) = ρ⋆,
+and π⋆ satisfies the ACOE: for eachs, it selects an action inarg maxa∈A(s){U (s, a)+R h⋆(s′)P (ds′ |
+s, a)}.
+21
+Proof: By Lemma 6 and Berge’s maximum theorem, the ACOE maximizer admits a mea-
+surable selector π⋆; compactness of A(s) ensures the maximum is attained. Standard average-
+cost MDP theory (vanishing-discount limit) shows that any stationary selector that attains the
+ACOE is average-reward optimal. The unichain Assumption 6 ensuresρ(π) is well-defined and
+independent of the initial state.
+B.2 Policy-gradient identity (average reward)
+Fix a parameter θ and write π = πθ, Pθ, dθ, ρ(θ). Define the differential value (bias) function
+hθ : S →R as the (bounded) solution of the Poisson equation
+hθ(s) =
+∞X
+t=0
+
+Eθ[ ¯Uθ(st) | s0 = s ] − ρ(θ)
+
+,
+Z
+hθ(s) dθ(ds) = 0. (11)
+Assumption 6 (geometric ergodicity on compact S) and bounded ¯Uθ guarantee existence of a
+bounded solution hθ.
+Define the Q-function
+Qθ(s, a) = U (s, a) − ρ(θ) +
+Z
+hθ(s′) P (ds′ | s, a). (12)
+Note that Qθ is bounded and measurable.
+Theorem: Policy-gradient identity and finiteness Suppose U and P do not depend onθ, and
+πθ(· |s) is differentiable for dθ-almost every s, with R ∥∇θ log πθ(a | s)∥ πθ(da | s) bounded
+uniformly in s. Then
+∇θρ(θ) =
+Z
+S
+dθ(ds)
+Z
+A(s)
+πθ(da | s)
+h
+∇θ log πθ(a | s)
+i
+Qθ(s, a),
+and the integral is finite.
+Proof: First write ρ(θ) =
+R ¯Uθ(s) dθ(ds), where ¯Uθ(s) = R U (s, a) πθ(da | s). Differenti-
+ate:
+∇θρ(θ) =
+Z
+(∇θdθ)(ds) ¯Uθ(s)
+| {z }
+T1
++
+Z
+dθ(ds)
+Z
+U (s, a) ∇θπθ(da | s)
+| {z }
+T2
+. (13)
+We next eliminate T1 via the stationary balance equation and the Poisson equation.
+Step 1 (derivative of the invariant measure).The invariant measure satisfiesdθ(·) = R dθ(ds) Pθ(· |
+s) with Pθ(· |s) =
+R
+P (· |s, a) πθ(da | s). Differentiating the balance equation in the sense of
+measures gives
+(∇θdθ)⊤(I − Pθ) = ( dθ)⊤∇θPθ.
+Multiply on the right by the bounded solution hθ to the Poisson equation (I − Pθ)hθ = ¯Uθ −
+ρ(θ)1, and use (∇θdθ)⊤1 = ∇θ1 = 0 to obtain
+Z
+(∇θdθ)(ds) ¯Uθ(s) =
+Z
+dθ(ds)
+Z
+∇θPθ(ds′ | s) hθ(s′). (14)
+Step 2 (expand the kernels). Because U and P do not depend on θ,
+∇θ ¯Uθ(s) =
+Z
+U (s, a) ∇θπθ(da | s), ∇θPθ(ds′ | s) =
+Z
+P (ds′ | s, a) ∇θπθ(da | s).
+22
+Substitute these into (13) and (14), and combine the two terms:
+∇θρ(θ) =
+Z
+dθ(ds)
+Z
+∇θπθ(da | s)
+h
+U (s, a) +
+Z
+hθ(s′) P (ds′ | s, a)i.
+Since
+R
+∇θπθ(da | s) = ∇θ1 = 0, we may subtract hθ(s) inside the bracket without changing
+the integral. Using the definition (12) of Qθ and the likelihood-ratio identity ∇θπθ(da | s) =
+πθ(da | s) ∇θ log πθ(a | s),
+∇θρ(θ) =
+Z
+dθ(ds)
+Z
+πθ(da | s)
+h
+∇θ log πθ(a | s)
+i
+Qθ(s, a).
+Finiteness. Boundedness of U and geometric ergodicity (Assumption 6) imply the series defin-
+ing hθ converges absolutely and hθ is bounded; hence Qθ is bounded. The integrability condi-
+tion on ∇θ log πθ gives finiteness of the integral.
+Conclusion. Proposition 6 establishes the existence of an optimal stationary policy for the
+average-reward criterion. Theorem 6 yields the policy-gradient identity
+∇θJ(θ) = Es∼dθ, a∼πθ(·|s)
+
+∇θ log πθ(a | s) Qπθ(s, a) ,
+with Qπθ defined by (12). In our implementation, the factorized softmax policy satisfies the
+differentiability and integrability conditions, and the boundedness/Lipschitz properties of the
+reward established earlier guarantee the assumptions hold.
+23

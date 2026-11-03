@@ -1,0 +1,1058 @@
+arXiv 2603.22835  https://arxiv.org/abs/2603.22835
+
+Breaking news
+Lars Winkelmanna, Wenying Yaob
+aSchool of Business and Economics, Freie Universit¨ at Berlin
+bMelbourne Business School, University of Melbourne
+Abstract
+This paper examines how regulatory interventions in high-frequency financial markets affect price
+discovery. We focus onBreaking news, where dynamic circuit breakers trigger trading halts immediately
+after the release of macroeconomic fundamentals. Within a high-frequency signal-in-noise model, we
+show that triggering rules complicate statistical inference for the price impact of news, rendering
+conventional non-parametric jump estimators inconsistent. Building on this insight, we develop a
+regression-based test for fundamental pricing that accounts for non-vanishing transition times. The
+test compares transition price changes to efficient jumps implied by observable factors. Our empirical
+analysis of CME E-mini S&P 500 futures shows that Breaking news are associated with systematic
+deviations from fundamental pricing, predominantly in the form of overshooting. Our findings highlight
+a regulatory trade-off: the appeal of simple and transparent circuit breaker rules must be weighed
+against their cost of preventing fundamentals from being priced contemporaneously, thereby creating
+adverse incentives and introducing distortions.
+JEL:C12, C22, G14, G58
+Keywords:Market microstructure, Fundamental pricing, Circuit breaker, Jumps, Drift, Persistent
+noise
+1
+arXiv:2603.22835v1  [econ.EM]  24 Mar 2026
+1. Introduction
+Financial markets aggregate information into prices. In frictionless settings, when new information
+about economic fundamentals arrives, prices adjust rapidly, often instantaneously, to a new level that
+reflects the market’s collective assessment of the news. This benchmark underlies much of modern
+asset pricing and event-study analysis.
+In practice, however, prices at modern electronic exchanges do not move freely. Trading is governed
+by a complex system of price limits and circuit breakers that mechanically constrain how fast and how
+far prices are allowed to move. 1 As an example, Table 1 illustrates trading rules for the world’s largest
+equity index futures contract, the E-mini S&P 500, at the Chicago Mercantile Exchange (CME). 2 The
+first three rules are commonly referred to as dynamic circuit breakers. They constrain price movements
+for intraday look-back windows ranging from one millisecond to one hour and trigger temporary trading
+halts whenever prices violate a limit that is defined relative to a reference price.
+These rules were originally introduced to prevent severe market disruptions, such as the 1987 Black
+Monday or the 2010 Flash Crash. Today, the tighter bands also serve as guardrails for continuous
+pricing to control execution risks. A common argument made by regulators and risk managers is
+that circuit breakers help to maintain orderly markets and to facilitate price discovery and trading
+at rational prices. 3 Yet the rules themselves do not distinguish between fundamentally justified and
+unjustified price movements. Any move that breaches the limits is mechanically curtailed, regardless of
+its informational content. When large fundamental shocks occur, the same limits apply. Consequently,
+to avoid trading rule violations, the new information must be priced in small steps, generating a smooth
+transition to a new price level. This raises a central question for market design and regulation: does
+the triggering of dynamic circuit breakers during price transition only delay price discovery, or does it
+also distort the pricing of fundamentals?
+At a first glance, the potential distortions may appear small. According to Table 1, the break in
+1Backed by Securities and Exchange Commission (SEC) Rule 80B and Commodity Futures Trading Commission
+(CFTC) regulation Part 38, for example.
+2The E-mini S&P 500 futures are the largest equity index futures in the world by trading value (notional value in
+2024 is 111T USD): FIA (2025).
+3Brady Report (1988, p66), and SEC release 2010-98.
+2
+Table 1: Trading rules in CME E-mini S&P 500 futures (July 2024)
+Type Look-back window Limit Break time
+(1) Velocity logic (narrow) 1 millisecond±6 ticks 5 seconds
+(2) Velocity logic (wide) 1 second±18 ticks 5 seconds
+(3) Dynamic circuit breaker (Non-U.S.
+trading hours)
+1 hour±3.5% 2 minutes
+(4) Price limits (Non-U.S. trading hours) 3 p.m. CT fixing price±7% N/A
+(5) Market-wide circuit breaker (U.S.
+trading hours)
+previous day’s closing price−7% 10 minutes
+(6) Market-wide circuit breaker (U.S.
+trading hours)
+previous day’s closing price−13% 10 minutes
+(7) Market-wide circuit breaker (U.S.
+trading hours)
+previous day’s closing price−20% Rest of day
+Notes: The tick size is 0.25 of an index point valued 50 USD (1 tick is 12.50 USD). Limits of Rules (1)–(2) are
+updated monthly. Rules (3)–(4) are only active during 5:00 p.m. to 8:30 a.m. Central Time (non-U.S. trading hours).
+Market-wide circuit breaker specified in (5)–(7) lead to a trading halt in the S&P 500 futures only when a regulatory
+halt occurs in the cash equity market due to downsize move in the underlying S&P 500 index. Source: CME website.
+matching orders induced by a velocity-logic event is often only a few seconds. However, unintended
+side effects of market interventions through circuit breakers have been discussed in the literature.
+These side effects include self-reinforcing price dynamics, such as the magnet or lock-out effects, which
+may change trading and quoting behavior. Subrahmanyam (1994) shows that the prospect of circuit
+breaker can prompt traders to shift volume earlier in the day, commonly referred to as the magnet
+effects. Chen et al. (2024) document that volatility rises with the probability of a trading break.
+Bongaerts et al. (2024) analyze coordination failures and market runs, proposing the incorporation of
+forward-looking component into circuit breakers. Hautsch & Horvath (2019) find that triggering events
+elevate volatility and produce undesirable shifts in prices. Most existing empirical studies rely on
+difference-in-differences-type methodologies that implicitly assume fundamentals either remain constant
+or cancel out. Since efficient prices are not directly observed, such assumptions are difficult to verify.
+This paper proposes a new empirical strategy to assess the effect of dynamic circuit breakers
+on fundamental pricing. We focus on scheduled macroeconomic news announcements that generate
+measurable, discrete shifts in efficient prices. A large literature shows that macroeconomic surprises
+and investor attention are key factors in pricing such news (Andersen et al., 2003; Benamar et al., 2021;
+Wachter & Zhu, 2022; Fisher et al., 2022). Building on this evidence, we model jumps in efficient prices
+at news releases as functions of observable news factors and develop an event-wise test of whether
+3
+changes in the transition price are consistent with the efficient benchmarks. Our main interest is in
+Breaking-newsevents, defined as announcements for which a dynamic circuit breaker interrupts trading
+shortly after the release time. Testing fundamental pricing across Breaking and non-Breaking news
+allows us to isolate the impact of circuit-breaker triggering on price discovery.
+Besides its empirical motivation, the paper makes the following methodological contributions. We
+embed exchange trading rules such as those in Table 1 into a continuous-time signal-in-noise model
+by allowing the observed price to adjust over a fixed transition window following the news arrival.
+The transition noise can account for situations where a jump in the efficient price may go beyond the
+trading limits and hence cannot be priced instantaneously. Our framework requires little regularity
+for the transition function and covers cases including the persistent noise model of Andersen et al.
+(2023). In this setting, we show that conventional nonparametric jump estimators, like the pre-average
+estimator of Lee & Mykland (2012) and the spectral estimator of Bibinger et al. (2019), are no longer
+consistent. The inconsistency stems from the fluctuations of the efficient price accumulated over the
+fixed transition interval. The test for fundamental pricing builds on an inconsistent pre-average event
+return estimator and its distance to the jump in the efficient price. Critical values are derived from
+concentration inequalities. We jointly bound fluctuations of the efficient price over the transition
+window and typical pre-averaging estimation errors. A feasible version of the test is obtained by
+estimating the efficient jump from cross-event regressions.
+Locally dominating drifts in high-frequency data and the drift-burst hypothesis are discussed by
+Christensen et al. (2022) and Shi & Phillips (2026), for example. While drift-burst aims at explaining
+a similar local phenomenon in observed high-frequency data as the persistent noise model, the former
+assigns the drift to the efficient price process. Economic reasoning for local drifts often builds on a
+learning process, during which markets discover the appropriate price level gradually. In contrast, the
+present paper studies a different mechanism of the price transition without learning involved. That is,
+at the time when macroeconomic news is released, markets know immediately and exactly the new
+level of the efficient price. However, trading rules, such as those in Table 1, prevent prices to fully
+adjust instantaneously. The aim is to investigate if trading rule violations during price transitions have
+an impact on the pricing of fundamentals.
+4
+We assess the finite-sample properties of the proposed procedures in a simulation study. The
+simulation results confirm a few theoretical insights. First, we demonstrate that conventional pre-
+average jump estimators suffer from sizable bias, whereas the regression-based estimator substantially
+reduces this bias. In addition, the feasible test for fundamental pricing maintains close-to-nominal size
+and exhibits meaningful power under the alternative, provided that transition times are not too long.
+The testing framework is then applied to high-frequency CME E-mini S&P 500 futures data around
+U.S. inflation announcements between 2020 and 2025. We distinguish Regular-news events from
+Breaking-news events that trigger dynamic circuit breakers. Using the regression-based jump estimates
+as efficient benchmarks, we implement the test for fundamental pricing event by event. For Regular-
+news events, the null of fundamental pricing is rarely rejected, indicating that post-announcement
+prices typically settle near levels justified by fundamentals. In contrast, Breaking-news events are
+characterized by substantially higher rejection rates of the null. Pricing errors at these events are
+predominantly overshooting, suggesting that when dynamic circuit breakers bind, they are associated
+with systematic deviations from fundamental pricing.
+The remainder of this paper proceeds as follows. Section 2 introduces the continuous-time model
+for the efficient price process and its discrete-time observation model. Section 3 develops the test for
+fundamental pricing. Section 4 examines the finite-sample performance of the testing procedure using
+a simulation study. Section 5 tests for fundamental pricing at inflation announcement times when
+dynamic circuit breakers are triggered after the announcements. Finally, Section 6 concludes. Technical
+derivations and more details about the Breaking-news events are relegated to the Appendix.
+2. The observation model
+The efficient log-price of a financial asset is defined on a suitable filtered probability space as
+Xt =
+Z t
+0
+σsdWs +
+X
+0<s≤t
+Js, t∈(0,1).(1)
+The continuous component X (c)t = R t0 σsdWs is a Brownian martingale driven by a standard Brownian
+motion Wt. The volatility σt displays standard minimal features (predictability, integrability) such
+5
+that the stochastic integral is well-defined. The discrete component X (d)t = P0<s≤t Js captures jumps
+of size ∆ Js = X (d)s −X (d)s− . Jumps are triggered by information arrivals, such as macroeconomic
+announcements. The time interval is normalized to unity; in the empirical application, this corresponds
+to a fixed local window around a pre-scheduled news release. We make the following assumption on
+the efficient log-price process (1).
+Assumption 1.(VOLATILITY & JUMPS)
+(i) Forh >0, a path-wise upper bound on integrated variance holds:
+R t+h
+t σ(s)2ds≤C h a.s. .
+(ii)X (d)t is degenerate, triggering a single jump att= 0.5on(0,1).
+Assumption 1(i) imposes a bound on the integrated squared volatility. Assumption 1(ii) reflects the
+structure of pre-scheduled macroeconomic announcements. At time τ = 0.5, new information about
+fundamentals becomes public and is instantaneously incorporated into the efficient price. Importantly,
+the efficient price fully adjusts at τ . Any delayed adjustments observed in the transaction price is
+therefore not attributed to delayed information processing in Xt, but rather to frictions in the trading
+environment.
+Traders and econometricians do not observe the efficient price Xt directly. Instead, they observe
+transaction log-pricesY i at discrete timest i,i= 1, . . . , n, satisfying
+Yi =X ti +ε i,0≤t 0 < t1 <· · ·< tn <1.(2)
+We assume equidistant sampling for expositional simplicity, ti −t i−1 = 1/n. The additive disturbance εi
+reflects the fact that the observed prices at financial exchanges may deviate from the latent efficient price
+because of market frictions and trading rules. We decompose this disturbance into two components:
+εi =U i +H ti, i= 1, . . . , n.
+The first component, Ui, represents the usual idiosyncratic microstructure noise (see Hansen & Lunde,
+2006; Jacod et al., 2009; A ¨ ıt-Sahalia & Xiu, 2019, for example). It is defined on an independent product
+6
+extension of the underlying probability space of the latent process (1). Ui accounts for frictions such as
+bid-ask bounces and minimum tick size, which appear fully random over time and tend to stochastically
+dominate the observed price Yi as n→ ∞. The second component, Ht, is an endogenous transition
+noise process that captures systematic deviations of observed prices from efficient prices during periods
+when trading rules constrain price adjustments. We impose the following assumption on the two noise
+components.
+Assumption 2.(NOISE)
+(i)U i i.i.d.∼(0, q 2)and has finite fourth moment.
+(ii)H t = 0fort < τandH t =H ¯τfort≥¯τ.
+Assumption 2(i) is standard in the market microstructure literature, the noise variance is denoted
+as q2. Assumption 2(ii) states that Ht is only active after the event time τ . Once the transition is
+completed at ¯τ, the deviation remains locally constant at H¯τ. We do not impose any parametric
+restriction on the shape of Ht over the transition window [ τ,¯τ). This flexibility allows for highly
+irregular adjustment paths, including interrupted transitions due to temporary trading halts. Crucially,
+the termination point ¯τand hence the transition time δ = ¯τ−τ do not depend on the sampling
+frequency n. This reflects the fact that trading rules of financial exchanges are defined with respect to
+fixed look-back windows and therefore do not vanish in more active markets.
+Example 1.The persistent noise (PN) model of Andersen et al. (2023) parametrizes Ht to capture
+power-law drifts in the noise at the jump eventτ:
+Ht =−η Jτ
+ 
+1−
+ t−τ
+¯τ−τ
+ϑ!
+1 {t∈[τ,¯τ]}, ϑ∈(0,0.5).(3)
+Under this specification, the observed price at the event time underreacts by the fraction η∈ [0, 1]of
+the efficient jump. During the transition interval[ τ,¯τ), the function decays to zero, gradually revealing
+the jump in the observed price.
+The PN model in Example 1 assumes H¯τ= 0, suggesting the convergence of the observed price to
+the efficient price at the termination time ¯τ. For our purposes, we allow for the possibility that H¯τ̸= 0.
+7
+This is the case if after the transition period, the observed price settles at a level that is different from
+the efficient benchmark. This terminal deviation H¯τis the key object of interest to be explored in
+testing for fundamental pricing. Our main statistical hypothesis to be tested is:
+H0 :H ¯τ= 0 (fundamental pricing)
+H1 :H ¯τ̸= 0 (non-fundamental pricing)
+Under the null hypothesis of fundamental pricing, any deviation between the observed and efficient
+prices is temporary and restricted to the transition window [τ,¯τ). As t→¯τ , the observed price converges
+to the efficient level implied by Jτ . Under the alternative H1, instead of pricing the fundamentally
+justified Jτ , the market either overreacts or underreacts to the news release and settles at a biased price
+level. This persistent deviation may arise because of additional information effects generated by the
+trading break itself, or behavioral responses from the market that go beyond the fundamentals of the
+news release. It is crucial to note that our econometric methods below do not require parameterization
+of the transition process. This is because we draw inference from Yi before τ and after ¯τ. We do not
+focus on the actual shape of the transition, but only the termination time ¯τ, whether the observed
+price has transited to a new price level that is justified by the news about fundamentals.
+3. T est for fundamental pricing
+This section develops inferential tools to detect non-fundamental pricing. The main objective is to
+evaluate if the observed price after the transition window settles at a level that is systematically different
+from the efficient price. We proceed in three steps. First, we show that conventional pre-average jump
+estimators are inconsistent when the transition window does not vanish asymptotically. We then derive
+a level-α test for fundamental pricing under the assumptions of known jump size. Lastly, we introduce
+a regression-based estimator of the jump size and show how it affects the critical value for testing.
+3.1. Why standard jump estimators fail
+The traditional high-frequency literature on jump detection and estimation assumes that price
+jumps are instantaneous events. In models like (2) with microstructure component εi = Ui, once a
+8
+jump occurs, the observed price immediately reflects the magnitude of the jump up to Ui and a small
+discretization error. If the sampling frequency n increases, the discretization error vanishes, and Ui can
+be controlled through smoothing, see the pre-average and spectral estimators in Lee & Mykland (2012)
+and Bibinger et al. (2019), respectively. These methods allow consistent estimation of the jump size.
+In the presence of exchange-imposed trading limits, however, this logic does not apply. When new
+information arrives at time τ , prices cannot adjust instantaneously to the new fundamental value,
+because binding price limits constrain the set of admissible transaction prices. As a result, the market
+requires a finite time interval of length δ = ¯τ−τ for order flow to gradually incorporate the information
+and for price to move towards the new equilibrium level step by step. Since the transition time does
+not vanish as n→ ∞, the discretization error persists asymptotically. The error can be particularly
+pronounced if volatility also jumps at τ . Hence, the modification changes the asymptotic behavior of
+conventional jump estimators.
+Consider the standard pre-averaging approach described by Jacod et al. (2009) for example. Pre-
+averaging smooths out the idiosyncratic noise Ui by averaging log-prices over short blocks of length
+Mn =c √nfor some constantc >0. A locally averaged log-price is
+¯Yj =M −1n
+(j+Mn)∧nX
+i=j
+Yi, j=⌊tn⌋.
+To accommodate a transition interval of lengthδ, we define theδ-pre-averaged event return
+∆n⌊τ n⌋,δˆX= ¯Y⌊(τ+δ)n⌋ − ¯Y⌊τ n⌋−Mn.(4)
+When δ = 0, this reduces to the standard pre-average jump estimator of Lee & Mykland (2012). When
+δ = (¯τ−τ ) > 0, the estimator compares the average price before the event time τ with the average
+price after the termination time ¯τ. The following lemma is an extension of Lemma 1 of Lee & Mykland
+(2012) and a direct translation of Proposition 3.1 of Bibinger et al. (2019), characterizing the asymptotic
+behavior of (4).
+9
+Lemma 1.Consider model (2) under Assumptions 1 and 2 with δ = ¯τ−τ . Then as n→ ∞, the
+δ-pre-average return(4)over the transition interval[τ,¯τ)obeys
+n1/4
+
+∆n⌊τ n⌋,δˆX−  Jτ +BIAS δ st− →ηδ,(5)
+where
+BIASδ =H ¯τ+
+Z ¯τ−
+τ
+σsdWs,
+andη δ ∼ N(0, Vτ,¯τ)with varianceV τ,¯τ= 13 (σ2τ− +σ 2¯τ)c+ 2q 2.
+Lemma 1 states that accounting for a non-vanishing transition time of δ >0 introduces the term
+BIASδ. It consists of the term H¯τwhich captures potential non-fundamental pricing and the increment
+of the efficient price (1) (Brownian martingale) over δ. The Brownian component is analogous to a
+discretization error studied in the high-frequency literature. However, discretization errors vanish
+because sampling windows shrink to zero as n→ ∞. Here, by contrast, the transition window is fixed
+in time, reflecting the fixed look-back windows of exchange trading rules. Therefore, the Brownian
+increment accumulated over [ τ,¯τ) remains even as sampling frequency increases. As a result, the
+δ-pre-average estimator is not a consistent estimator of the jumpJ τ .
+3.2. Testing fundamentalness
+While Lemma 1 suggests that we cannot directly estimate the jump Jτ with simple pre-averaging
+methods, it provides the terms to control for in order to test for fundamental pricing H0. We start by
+assuming Jτ to be known. Consider the test statistic |∆n⌊τ n⌋,δˆX−J τ |, which measures the deviation
+of the δ-pre-averaged return from the fundamentally justified true jump size. According to Lemma
+1, the test statistic consists of the following three terms: H¯τ+
+R ¯τ−
+τ σsdWs + ηδ. Under H0, H¯τ= 0,
+the test statistic reduces to the Brownian martingale increment over the transition interval and the
+δ-pre-average estimation error. Under H1, H¯τ̸= 0, a non-zero pricing error remains after the transition
+is completed.
+10
+Proposition 3.1.Given Lemma 1, underH 0 and a small test levelα, the test function
+φα,δ =1
+n∆n⌊τ n⌋,δˆX−J τ  > κα,δo
+with critical value
+κα,δ =
+p
+Cδ +n −1/4pVτ,¯τ slog 8πα2  −log log  8πα2  (6)
+provides an asymptotic level-αtest:P(φ α,δ = 1)≤α.
+The critical value κα,δ in Proposition 3.1 uses a union bound on the Brownian fluctuation
+R ¯τ−
+τ σsdWs
+and the δ-pre-average estimation error ηδ. Both components refer to a Gaussian tail bound, which is
+stated up to second order, explaining the log terms and depending on the joint error rate α/2. The
+absolute increment of the Brownian martingale over δ is bound by the worst-case scenario using Cδ
+from Assumption 1(i). This bound increases with the length of the transition window δ. In other
+words, the critical value becomes larger when longer transition interval is used, which makes the
+test of non-fundamental pricing less sensitive. The δ-pre-average estimation error is negligible in
+high-frequency observations with large n. The test is an asymptotic test because it builds on the
+Central Limit Theorem in Lemma 1. It is conservative because of the bounding of integrated squared
+volatility by Cδ and the Gaussian tail approximation. The tail approximation becomes tight for α→ 0.
+The test in Proposition 3.1 is infeasible in practice, because the true jump size Jτ is unknown. We
+develop a feasible test below when the true jump size can be consistently estimated.
+3.3. Feasible test with estimatedJ τ
+We exploit cross-event variation to enable consistent estimation of Jτ . For a single event, the
+Brownian martingale increment over the transition window contaminates the estimation of the jump.
+However, when averaging across multiple events, the Brownian component cancels out, allowing the
+jump component to be identified.
+11
+Assumption 3.(JUMP F ACTOR) Across a homogeneous set of events, jump sizes in the efficient
+log-prices satisfy
+Jτ =F b,
+whereFis aK-dimensional observable news factor, andbis a fixK-vector of loadings.
+Assumption 3 reflects the asset-pricing view that a jump in the efficient price is a linear function of
+the information content of the news release. For a homogeneous set of N events, this provides sufficient
+structure to estimate the loading b. We apply a leave-one-out approach to regress the δ-pre-averaged
+returns on the news factors. The left-out event is the one to be tested for fundamental pricing, while
+N events that are assumed to be predominantly fundamentally priced are used to estimate b. Denote
+the associated N -vector of δ-pre-average returns by ∆n⌊τ n⌋,δˆX ∗ and the corresponding ( N×K ) matrix
+of factors F ∗. Without loss of generality, the factors F ∗ are normalized to have unit variance. The
+loadingbis estimated via the regression
+∆n⌊τ n⌋,δˆX ∗ =F ∗b+e ∗.(7)
+Combining Assumption 3 with the decomposition in Lemma 1, theN-vectore ∗ has elements
+e∗(j) =
+Z ¯τ−
+τ
+σ(j)s dWs +η (j)δ , j= 1, ..., N,(8)
+which shows that the error in the linear regression (7) is heteroskedastic. Therefore, if F ∗ is strongly
+exogenous, the least square estimator ˆb is unbiased and consistent as N→ ∞. That is, via the classical
+regression approach, the conditional expectation at the tested event F ˆb provides a consistent estimator
+of the jump in the efficient price, Jτ . Replacing Jτ in Proposition 3.1 by F ˆb leads to a feasible test for
+fundamental pricing.
+Proposition 3.2.Under the conditions of Proposition 3.1 and Assumption 3, and using the least
+square estimator ofbfrom(7)with
+e∗(j) ≤c e∗ forj= 1, ..., N. UnderH 0, the test function
+φ∗α,δ =1 n∆n⌊τ n⌋,δˆX−F ˆb > κ∗α,δo
+12
+with critical value
+κ∗α,δ =κ 2/3α,δ +N −1/2ce∗∥F∥ 1
+s
+2 log
+ 6
+α
+
+(9)
+provides an asymptotic level-αtest:P(φ ∗α,δ = 1)≤α.
+The adjusted critical value κ∗α,δ augments the bound from Proposition 3.1 to account for the
+estimation error in estimating b. The correction term decreases as the number of events N used to
+estimate b increases. The factor vector F , containing the K observable components at the tested event,
+enters through its ℓ1-norm. The log term arises from the sub-Gaussian tail bound for e∗, while the
+numerical constants follow from a union bound over the three components of the test statistic. We
+rely on Hoeffding’s inequality to bound the sum of regression errors. Therefore, we do not require
+specific distributional assumptions for e∗ except that the elements of e∗ are centered, independent, and
+uniformly bounded by ce∗. Capturing data availability in our empirical study, the test is asymptotic in
+nbut non-asymptotic in cross-sectional eventsN.
+Under H1, the non-zero H¯τenters the test statistic through the δ-pre-average return ∆ n⌊τ n⌋,δˆX.
+Because all fundamental information is captured by F and incorporated through F ˆb, while estimation
+errors and Brownian fluctuation are controlled by κ∗α,δ, rejections of H0 can be interpreted as evidence
+of non-fundamental pricing. The rejections become more likely as the magnitude of the mispricing
+gets larger. In the simulation study below, we evaluate how large H¯τneeds to be for non-fundamental
+pricing to be detected with high probability.
+Remark 1.The testing procedure developed above requires knowledge of the termination time ¯τ. In
+practice, however, ¯τis not observed and needs to be inferred from the data. When the transition
+component fades out slowly, such as the power-law dynamics in the PN model in Example 1 with small
+ϑ, it can be difficult to determine when the transition has effectively ended. This presents a practical
+challenge that we abstract from in the present analysis. Our approach is to discuss different choices of
+δ while implementing the testing procedure below. Proposition 3.1 suggests selecting δ too large does
+not invalidate the test, but it reduces the power. This is because a larger δ inflates the critical value
+κα,δ through the bound on integrated squared volatilityC δ, making rejections less likely.
+13
+4. Simulation study
+The aim of the simulation study is to evaluate the finite-sample performance of the proposed testing
+procedure from Section 3. We first demonstrate the estimation bias in the δ-pre-average jump estimator
+and how the regression-based estimator reduces this bias. Then we investigate the size and power
+properties of the test for fundamental pricing.
+4.1. Simulation setup
+We simulate the efficient log-price Xt using a Heston-type stochastic volatility model with a single
+jump in price and volatility at the announcement time:
+Xt =
+Z t
+0
+σsdWs +J τ 1 {t≥τ} ,(10)
+dσ2t =κ  θ−σ 2t  dt+ς σtdBt +J σ(τ) e−κJ (t−τ) 1 {t≥τ} , t∈[0, T],(11)
+where τ = 0.5T denotes the news-release time. The time interval [0 , T] represents a 3-hour window
+centered around the event time τ . The standard Brownian motions Wt and Bt have correlation
+E(dWt dBt) = ρdt. At the event time, Xt jumps by Jτ = 0 .3F , where the factor F is drawn
+independently across simulations from N (0, 0.032). The annualized parameters of the squared volatility
+are set to ( κ, θ, ς, ρ) = (5 , 0.0225, 0.4,−
+√
+0.5), which are standard choices in the high-frequency
+literature. Empirical evidence suggests that macroeconomic news announcements often coincide with
+temporary shifts in volatility. 4 To capture this feature, we augment the Heston volatility process (11)
+with a volatility jump at the announcement time. The magnitude of the volatility jump is Jσ(τ) = cJ θ.
+We draw cJ from a uniform distribution over [4 , 16] such that the jump in volatility is between 2 and
+4 times of the pre-event mean θ. The decay rate is set to κJ = 2,500 such that the half-life of the
+volatility jump is approximately 45 minutes.
+The observed log-price is in accordance with (2), a discretized and noisy superposition of the
+efficient log-price. We set n = 21,600 with equally spaced observations over [0 , T]. This corresponds
+4Methods for assessing volatility jumps are discussed by Todorov & Tauchen (2011) and Bibinger & Winkelmann
+(2018), for example.
+14
+Figure 1: Simulated price path
+8.58
+8.59
+8.60
+8.61
+0.00 20.00 40.00 60.00
+Time (in seconds from event)
+log price
+Efficient price
+ϑ = 0.45
+ϑ = 0.15
+15 minutes
+10 minutes
+1 minute
+Note:Left: Price path over a 3 hour interval with shaded 1 minute interval after the jump event. Right: Same simulated
+path but zoomed at event time. Blue horizontal dashed lines indicate the efficient price 5, 10 and 15 minutes after the
+event.
+to 2 observations per second and matches the minimum number of trades observed in our S&P 500
+futures data over the 3-hour interval. The idiosyncratic noise Ui is drawn from N (0, q2). We set
+q = 0.004% to match the maximal noise level observed across all events in the empirical data. Although
+our methodology does not require specifying the transition noise Ht for t∈ [τ,¯τ), we also examine
+scenarios in which the pre-average returns is constructed using a value of δ that is too small. In this
+case, the termination time ¯τis chosen below its true value. Under such misspecification, it becomes
+necessary to explicitly model Ht. To this end, we consider the PN model of Andersen et al. (2023), as
+described in Example 1, settingη= 1. The true termination time is fixed at ¯τ= 30 seconds.
+Figure 1 depicts an example of a simulated price path to illustrate the characteristics of the
+simulated processes. The left panel shows the full 3-hour window around the announcement time τ ,
+while the right panel zooms into the interval from right before the jump to 60 seconds after the jump.
+The red line represents the efficient log-price Xt, which displays a large instantaneous jump of size
+Jτ = −2.7%. The black and gray dots on the right panel correspond to the observed log-prices Yi
+under the PN model with ϑ = 0.45 and 0.15, respectively. In both specifications, the observed prices do
+15
+not adjust instantaneously to the new efficient level. Instead, the jump in Xt is initially offset by the
+transition component Ht, and the adjustment unfolds gradually over the interval [ τ,¯τ). It is evident
+from Figure 1 that the smaller value of ϑ implies a flatter fade-out near ¯τ. Consequently, when ϑ is
+small, choosing a value of δ that is too small is less detrimental for pre-average return than in cases
+where the decay is steeper near ¯τ. In the analysis that follows, we focus on the case ofϑ= 0.45.
+The blue dashed horizontal lines in the right panel of Figure 1 indicate the efficient price evaluated
+1, 10, and 15 minutes after the announcement. The distance between the actual jump at time τ (red
+line) and the dashed blue lines represents the associated BIASδ from Lemma 1. Using a 1-minute
+window would understate the true efficient jump by 1.6%. If a 15-minute window is used, we would
+overstate the true jump by 28%. This discrepancy directly reflects the Brownian component of the
+bias term BIAS δ in Lemma 1, which tends to increase with the length of the transition window.
+The tests for fundamental pricing in Propositions 3.1 and 3.2 require an estimate of volatility.
+Estimating integrated volatility over intervals with a strong drift component is challenging. Laurent
+et al. (2026) analyze settings and propose estimators that address this issue. Because our framework
+allows for potentially irregular adjustments, such as cases in which a circuit breaker interrupts a
+transition, we do not impose a specific transition structure. To obtain the bound Cδ, we estimate
+integrated squared volatility using 30-second windows over the full 3-hour interval. With IVpre30 the
+collection of 30-second pre-average realized volatility prior to τ , we set Cδ = δc∆ max(IVpre30 )/30, where
+the scaling factorc ∆ is computed as the ratio of averageIV 30’s after ¯τand beforeτ.
+4.2. Assessment of price-jump estimators
+We evaluate the finite-sample behavior of two estimators. The first is theδ-pre-average estimator
+∆n⌊τ n⌋,ˆδ ˆX, with ad-hoc fixed transition window length δ ranging from 20 seconds to 10 minutes. We
+compare it with the regression-based estimator ˆJτ = ˆbF , which exploits the cross-event factor structure.
+In the simulation, we use N = 10 and N = 50 events to estimate the loading b using least square
+method. Table 2 reports the mean absolute percentage error (MAPE) and the mean squared error
+(MSE) across different estimation designs. Several findings emerge.
+First, when the pre-averaging window δ is at least as large as the true transition length of 30
+seconds, the estimation error increases with δ. For the simple δ-pre-average estimator, the MAPE
+16
+Table 2: Evaluation of jump size estimation error
+Length ofδwindow (seconds)
+20 30 40 60 300 600
+δ-pre-average
+MAPE 0.216 0.110 0.127 0.156 0.341 0.465
+MSE 0.101 0.104 0.142 0.226 1.064 1.992
+Regression (N= 10)
+MAPE 0.539 0.032 0.032 0.040 0.088 0.121
+MSE 2.717 0.015 0.012 0.019 0.094 0.196
+Regression (N= 50)
+MAPE 0.531 0.018 0.015 0.017 0.037 0.055
+MSE 2.417 0.003 0.003 0.005 0.018 0.035
+Notes: MAPE denotes the average absolute percentage error. Based on 25,000 simulation rounds with n = 21,600
+high-frequency observations.Nis the number of cross-events for the regression-based jump estimator.
+rises from 11% for 30-second window to 46.5% for 10-minutes window. With a 10-minute window,
+the pre-averaged event return exceeds the true jump size by almost 50% on average. In line with
+the decomposition in Lemma 1, the increase in the estimation error for longer windows is due to the
+Brownian variation in the efficient price over theδwindow.
+Second, incorporating cross-event information through the regression-based estimator substantially
+reduces the estimation error. Averaging over N = 10 events lowers MAPE considerably, especially
+for larger δ. When δ is larger than 30 seconds, MAPE declines by more than 70% compared to the
+δ-pre-average estimator. Moreover, increasing the number of events used to estimate the factor loadings
+further improves accuracy. Raising N from 10 to 50 reduces MAPE by another 50%. This result
+highlights the gains from cross-sectional averaging.
+Finally, if δ is chosen smaller than the true transition length, the estimation error becomes large
+and cannot be mitigated by pooling across events. In our simulation, selecting a δ that understates the
+true transition time by 10 seconds produces a MAPE of 21.6% for the δ-pre-average estimator. This
+error cannot be corrected by the regression approach. Indeed, the regression estimates of the jump
+increase MAPE to 53%, because the price transition is not completed using 20-second window.
+17
+Figure 2: Size and power for testing fundamental pricing
+0.00
+0.25
+0.50
+0.75
+1.00
+0.0 0.1 0.2 0.3 0.4
+Relative pricing error
+Rejection frequency
+δ is
+20 sec.
+30 sec.
+40 sec.
+1 min. 
+3 min. 
+5 min. 
+10 min. 
+Note:Results are based on 25,000 simulations and the critical value from Proposition 3.2. Jump sizes
+are estimated using the regression-based estimator ˆbF . δ indicates the window length for the pre-average
+event-return estimation. The true transition time is 30 seconds. The x-axis display the size of the pricing
+error at terminationH ¯τrelative to the average jump size across all simulations.
+4.3. Assessment of the test for fundamental pricing
+We now proceed to assess the size and power properties of the test for fundamental pricing from
+Proposition 3.2. We focus on the regression-based jump estimator withN= 50 and set the test level
+to α = 0.01. Figure 2 illustrates the rejection frequencies of H0 as a function of the relative magnitude
+of the pricing error H¯τ. Zero on the horizontal axis corresponds to the null hypothesis H¯τ= 0. Under
+H1, we increaseH ¯τto up to 43% of the average absolute jump sizeJ τ .
+Figure 2 confirms that under H0, when δ is at least as large as the true transition length of 30
+seconds, the rejection frequencies of H0 are below the nominal level of the test. In particular, false
+rejections fall below 1% for larger δ under H0. If δ is shorter than the true transition and the remaining
+adjustment is steep near ¯τ, the jump estimator becomes biased because the transition has not fully
+decayed. The resulting estimation error documented in Table 2 propagates through to the test statistic
+and induces false rejections. In our simulations, using estimation windows that undercut the true
+18
+transition time by 10 seconds leads to a rejection rate of about 16% underH 0.
+Under the alternative H1, the rejection rates quickly increase towards one. For window sizes that
+are at least 30-second long, smaller δ yields a quicker transition of the power curve. This is because
+the Brownian martingale component accumulates over the window length δ, which inflates the critical
+value when δ is larger and hence makes the test less sensitive. For mispricing of about 15%, tests based
+on estimation windows between 30 and 60 seconds display between 40% to 100% correct detections.
+In contrast, tests based on longer windows of 3 to 10 minutes can only achieve roughly 1% detection
+rates for the same sized misspricing of 15%. These results suggest that accurate localization of the
+transition time may enhance power by reducing the influence of the Brownian variability on the critical
+value. Excessively long windows dilute the test statistic and make the test of fundamental pricing
+overly conservative.
+5. Empirical application
+We apply the proposed testing framework to front-month E-mini S&P 500 futures traded at the
+CME. Our objective is to evaluate whether triggering events of dynamic circuit breakers affect the
+pricing of macroeconomic fundamentals.
+5.1. Data description
+We focus on pre-scheduled U.S. CPI inflation releases at 8:30 a.m. Eastern Time (ET) between
+January 2020 and October 2025. These events provide a homogeneous and economically meaningful set
+of announcements that regularly generate significant price movements. Importantly, a non-negligible
+fraction of these releases trigger trading breaks shortly after the release time. We classifyBreaking
+news(BN) as events for which a trading break of at least 4.99 seconds is triggered within the 3-minute
+window from 8:30 a.m.. The remaining announcements are referred to asRegular news(RN). Among
+the 69 inflation releases in our sample, 14 ( ∼ 20%) are classified as Breaking news. The complete list
+of Breaking-news dates is provided in Table B.1. In all 14 cases, the time between the news release and
+the first treading break is at most 2 seconds. The median duration of the trading halt is 5 seconds,
+and the maximum is 20 seconds.
+19
+Table 3: Breaking news vs. Regular news
+Trades per
+second
+Event return
+size (%)
+Volatility
+shift (factor)
+FactorF
+Surprise Attention
+RN BN RN BN RN BN RN BN RN BN
+Median 47.9 78.8 0.19 0.82 2.65 2.92 0.07 0.20 48.0 55.0
+Q25% 17.2 57.0 0.06 0.54 1.74 2.00 0.04 0.08 30.0 47.0
+Q75% 77.6 107 0.43 1.61 3.29 3.19 0.10 0.21 54.0 74.0
+MAD 45.7 37.7 0.23 0.48 1.03 0.91 0.04 0.09 16.3 16.3
+Min 3.32 32.6 0.01 0.11 0.09 0.60 0.00 0.00 20.0 39.0
+Max 130 157 1.05 2.49 5.95 3.89 0.56 0.26 73.0 100
+Notes: ‘RN’ includes 55 Regular-news events, ‘BN’ represents 14 Breaking-news events. The event time τ is 8:30 a.m.
+ET CPI inflation news release time. Trades per second is calculated based on the 1-minute interval between 8:30 and
+8:31. Absolute event returns are estimated using one-minute pre-average returns. Volatility shift is the square root of
+integrated variance before τ and after 8:31. Surprise is Bloomberg mean surprise in percentage points. Sample period
+is from January 2020 to October 2025.
+The descriptive statistics reported in Table 3 suggest that Breaking news is different from Regular
+news. Trading activity almost doubles from a median of roughly 50 to 80 trades per second. The
+median 1-minute absolute event return quadruples from 0.2% to 0.8%. The largest market response in
+the S&P 500 futures over an event window of 1 minute is 1% for Regular news and 2.5% for Breaking
+news. In contrast to the event returns, the difference in volatility between Breaking news and Regular
+news is smaller. However, volatility increases by a factor that is larger than two after the news release,
+suggesting the possibility of volatility jumps at the announcement time.
+We use two factors to quantify the fundamental content of the news releases. The first factor is
+the surprise component of the news release. The surprise is the difference between the announced
+inflation and the mean of Bloomberg economists’ survey forecasts. The second factor is a monthly
+Google attention index based on the search query “inflation”. The last four columns of Table 3
+display the difference in Bloomberg-survey surprises and the Google index between Regular-news and
+Breaking-news events. The mean month-on-month surprise across survey participants has a median
+across events of 7 basis points on Regular news days and 20 basis points on Breaking-news days. Thus,
+the surprise is almost 3 times larger on Breaking-news days. Attention also varies with slightly higher
+attention at Breaking-news events.
+Figure 3 presents the S&P 500 futures paths on two event days to illustrate the price dynamics
+20
+Figure 3: Examples of S&P 500 futures paths around inflation release times
+(A) Regular news (May 15, 2024)
+857.0
+857.2
+857.4
+857.6
+0 40 80 120
+Time (seconds from event)
+log price
+10 minutes
+5 minutes
+30 seconds
+Jump
+(B) Breaking news (February 12, 2025)
+870.4
+870.8
+871.2
+871.6
+0 40 80 120
+Time (seconds from event)
+log price
+10 minutes
+5 minutes
+30 seconds
+Jump
+Note:Examples for 8:30 a.m. news pricing (time=0). Left column: 7:00 a.m. to 10:00 a.m. futures transactions.
+Right column: Same day from 8:29:40 to 8:32 a.m.. The red horizontal line denotes the regression-based estimated
+jump size (7) at the event time with 30-seconds pre-average returns. Blue horizontal dashed lines represent the
+observed price 30 seconds, 5 and 10 minutes after the announcement, respectively.
+21
+around inflation news releases. Panel (A) corresponds to a Regular-news event on May 15, 2024, while
+Panel (B) corresponds to a Breaking-news event on February 12, 2025. At the Breaking-news event, a
+dynamic circuit breaker is triggered 1.08 seconds after the news release, causing the price transition
+to stop for 5 seconds. For each event, the left column displays transaction log-prices over the full
+3-hour window centered at 8:30 a.m. . The right column zooms into a narrow window from 20 seconds
+before the release to 2 minutes after. In each zoomed panel, several reference levels are displayed. The
+blue dashed horizontal lines represent the observed log-price at selected post-announcement times (30
+seconds, 5 and 10 minutes after 8:30 a.m.). The red horizontal line represents the regression-based
+estimate of the efficient jump ˆbF . The distance between the red and dashed blue lines indicates the
+magnitude of the test statistic for fundamental pricing.
+In both cases shown in Figure 3, the observed price moves rapidly at 8:30 a.m. and appears to
+stabilize after 30 seconds. While at Regular-news events prices always appear continuous, prices at
+Breaking-news events generally exhibit a clear discontinuity. Importantly, the price has only adjusted
+partially toward the efficient benchmark when trading is interrupted. When trading resumes 5 seconds
+later, the price continues to adjust toward a new level. This example illustrates that market interventions
+can happen before the pricing of the fundamental news is fully completed. Using a transition window
+of 30 seconds, H0 is not rejected on the Regular-news event on May 15, 2024 shown in Panel (A), but
+is rejected on the Breaking-news day February 12, 2025.
+5.2. Regressions for estimating jump sizes
+The implementation of the regression-based test for fundamental pricing in Proposition 3.2 assumes
+that the jump in the efficient price Jτ is a linear function of observable factors. Implementing (7),
+we estimate cross-event regressions of the δ-pre-averaged event return on the factors that capture the
+information content of the inflation release. Table 4 reports the regression results using the N = 55
+Regular-news events. This assumes that fundamental pricing prevails on days with regular news. Since
+the true termination time of the transition is unknown, we present δ-pre-average event returns with
+estimation windows of 20 seconds to 10 minutes.
+The regression coefficients shown in Table 4 appear quite stable across different window sizes
+considered. Coefficients in bold denote significance at the 1% level. In all regressions, the Bloomberg
+22
+Table 4: Regressions for jump size estimation
+δ(seconds) 20 30 40 60 120 300 600
+Const. 0.04
+(0.05)
+0.04
+(0.05)
+0.05
+(0.05)
+0.04
+(0.05)
+0.04
+(0.05)
+0.02
+(0.05)
+0.03
+(0.06)
+Surp.−0.21
+(0.05)
+−0.24
+(0.07)
+−0.27
+(0.07)
+−0.29
+(0.07)
+−0.29
+(0.07)
+−0.27
+(0.06)
+−0.30
+(0.08)
+Attn.−0.01
+(0.05)
+−0.01
+(0.05)
+−0.02
+(0.05)
+−0.02
+(0.05)
+−0.03
+(0.05)
+−0.03
+(0.06)
+−0.02
+(0.06)
+Surp.×Attn.−0.19
+(0.07)
+−0.20
+(0.07)
+−0.21
+(0.07)
+−0.21
+(0.07)
+−0.19
+(0.05)
+−0.22
+(0.07)
+−0.18
+(0.06)
+R2 0.24 0.34 0.40 0.42 0.42 0.38 0.37
+Notes: Regressions use N = 55 Regular-news events. The dependent variable is the δ-pre-averaged event return
+in percent. The Bloomberg surprise variable (Surp.) and Google attention index (Attn.) are standardized.
+Heteroskedasticity robust standard errors are in parentheses.
+surprise variable is significantly negative, indicating that if inflation is higher than markets have
+expected, the price of the S&P 500 futures tends to decline. While the Google-attention index is not
+significant, its interaction with the surprise variable is. The interaction term also has a negative sign,
+suggesting a more pronounced effect of surprise on event returns when attention is high.
+The regression fit provides some insights on the transition time. The R2 increases from 24% for
+20-seconds pre-average windows to above 40% for 2-minute windows. It then declines to 37% for
+10-minute returns. The decline is expected since the residual of the regression is affected by the term
+BIASδ in Lemma 1, which grows in the integrated squared volatility over δ. A fixed 20-seconds window
+for all events appears too short to capture completion of transitions. This is particularly true since
+the longest stop time on Breaking-news events is 20 seconds; see Table B.1. It is also important to
+recognize that the factor structure imposed in Assumption 3 does not imply that δ-pre-average-event
+returns are fully explained by observable factors such that we would expect R2 = 1. The percentage
+that is not explained through the regression (7) is ascribed to the additional components as shown in
+Proposition 3.2. That is, the increment of the Brownian martingale component of the efficient price and
+the two estimation errors coming from the pre-average-return estimation and the regression coefficients,
+respectively. The median 2.65-fold increase in volatility at the news-release time reported in Table 3
+suggests that the Brownian component may play a particularly strong role in lowering theR 2.
+23
+Table 5: Non-fundamental pricing of inflation releases
+δ(seconds) 20 30 40 60 120 300 600
+Rejection ofH 0
+BN 50% 50% 36% 29% 14% 7% 0%
+RN 9% 9% 7% 4% 0% 0% 0%
+Overshooting BN 86% 100% 100% 100% 100% 100% –RN 80% 80% 75% 50% – – –
+Notes: ‘RN’ denotes Regular-news events and ‘BN’ denotes Breaking-news events. The test from Proposition 3.2
+is implemented at the significance level α = 0.01. Overshooting represents the percentage of significant events
+where regression error and event return have the same sign.
+5.3. Non-fundamental pricing of inflation releases
+We now implement the test for fundamental pricing from Proposition 3.2. The central empirical
+question is whether the large price movements, particularly at Breaking-news events, are fully justified
+by fundamentals. Using the regression coefficients from Table 4, we estimate the jump in the efficient
+price for every news releast and compare it against the δ-pre-averaged event return. We vary the
+event-return window between 20 seconds and 10 minutes. For the critical value, we set the test level to
+α= 0.01 and compute the volatility boundC δ using the same procedure as in the simulation study.
+Table 5 summarizes the results of the fundamental-pricing test separately for all Regular-news and
+Breaking-news events. The first two rows report the percentage of events where we reject the null
+hypothesis of fundamental pricing. For event-return windows between 20 and 60 seconds, we reject
+fundamental pricing for 29%–50% of the Breaking-news events. In other words, 4–7 out of the 14
+Breaking-news events display pricing errors that cannot be justified by Brownian fluctuations of the
+efficient price over the transition interval. News releases that do not trigger a dynamic circuit breaker
+event can also display non-fundamental pricing. The rejection frequency for Regular-news events is
+between 7% and 9%, which corresponds to 4–5 out of 55 events. Another key result from Table 5 is
+that the detected mispricings at Breaking-news events are accompanied by price overshooting. That
+is, when prices move up (down), they settle at levels significantly larger (smaller) than the efficient
+benchmark. This indicates that regulatory interventions into fast-moving markets using dynamic circuit
+breakers do not provide a safeguard against deviations of asset prices from fundamentals. Instead,
+triggering events are more likely to generate an extra layer of news that push prices further away from
+the efficient benchmark.
+24
+When we use longer windows of at least one minute for the event-return estimation, results in Table
+5 show that the rejection frequencies fall rapidly to zero. This can be attributed to the possibility that
+prices revert in the direction toward their fundamental benchmark, such that non-fundamentalness is
+only a local phenomenon. On the other hand, it can also reflect a natural statistical feature of the test
+discussed in Section 3. Longer transition windows inflate the volatility bound in the critical value for
+testing fundamentalness, and hence make the test more conservative. The impact of δ on the power
+of the test has also been illustrated in Figure 2 in the simulation study. In fact, as the critical value
+scales with
+√
+δ, tests based on a 10-minute transition window use critical value that is 4.5 times larger
+than for a 30-second window, everything else being equal.
+The scatter plots in Figure 4 provide further insights on the test results for fundamental pricing.
+The horizontal axis reports the regression-implied jump estimate, and the vertical axis reports the
+δ-pre-averaged event return. The left panel uses an window of 30 seconds, the right panel uses 10
+minutes. The black 45-degree line represents perfect fundamental pricing where the regression-implied
+jump equals to the δ-pre-average event return. Colors distinguish between Regular-news and Breaking-
+news events, as well as between events for which fundamentalness is rejected or not rejected. The size
+of each circle is proportional to the magnitude of the critical value used in the test. Evidently, most
+Regular-news events cluster tightly around the 45-degree line.
+The left panel highlights the seven Breaking-news events in red where non-fundamental pricing is
+detected. These events display the largest dispersion from the 45-degree line. In contrast, the right
+panel based on the 10-minute return window displays no rejections of fundamentalness. Importantly,
+the disappearance of rejections for larger δ is not driven by prices reverting toward the fundamental
+benchmark. If anything, for events with large 30-second returns, the corresponding 10-minute returns
+tend to deviate even further from the diagonal. Rather, the key change is that the critical values increase
+sharply with δ, as reflected by the much larger circle sizes in the right panel. Taken together, this visual
+evidence supports the conclusion in Table 5 that longer transition windows eliminate rejections because
+the post-event volatility surge inflates the critical value more than it increases the initial mispricing.
+25
+Figure 4: Jump size at inflation release againstδ-pre-average event return.
+(A) 30-seconds event returns
+Regular news (H0)
+Breaking news (H1) 
+Breaking news (H0) 
+Regular news (H1)
+-0.02
+-0.01
+0.00
+0.01
+0.02
+-0.01 0.00 0.01
+Estimated jump
+Event return (B) 10-minutes event returns
+-0.04
+-0.02
+0.00
+0.02
+-0.01 0.00 0.01
+Estimated jump
+Event return
+Note:Each circle refers to one of the 69 inflation news releases between 2020 to 2025. Applies the test from Proposition
+3.2. The diagonal (black line) indicates no pricing and estimation error. The size of circle is proportional to the magnitude
+of critical value to test fundamental pricing ( H0) at α = 0.01. Critical values are about 4 times larger for the 10-minutes
+window compared with the 30-seconds window.
+6. Conclusion
+This paper studies a crucial question of whether dynamic circuit breakers distort the pricing of
+fundamentals. While circuit breaker rules are designed to stabilize markets and prevent disorderly
+price movements, they mechanically restrict price adjustments when new information arrives. The key
+issue is therefore whether the ultimate price level reached after the interruption remains consistent
+with economic fundamentals.
+To address this question, we develop high-frequency statistical methods to test for fundamental
+pricing at news release times. In our model, the efficient price responds instantaneously to news, but
+the observed price may adjust gradually over a transition interval due to exchange-imposed limits.
+This non-vanishing transition interval alters the statistical properties of conventional estimators that
+quantify the impact of the news on efficient prices. We show that standard pre-averaging methods
+for jump estimation become inconsistent, because Brownian fluctuations accumulated over a fixed
+transition interval generate a non-vanishing bias. The proposed test for fundamental pricing remains
+26
+valid in the presence of the fixed transition interval and microstructure noise. We implement the test
+by recovering the jump in the efficient price through a cross-event factor regression.
+We apply the framework to high-frequency E-mini S&P 500 futures data around U.S. inflation
+releases. We find that the triggering of the dynamic circuit breaker shortly after the news release
+does not guard against non-fundamental pricing. The trading break generally occurs before the
+price has reached the level that is justified by the content of the news release. Moreover, prices
+predominantly overshoot where the post-transition price lies beyond the efficient benchmark in the
+direction of the news. Our results support the interpretation that price distortion is more likely to
+occur at circuit-breaker-triggering events. Our findings highlight a regulatory trade-off between simple
+and transparent circuit-breaker rules versus distortions in price discovery. From a practical standpoint,
+our investigations suggest that more flexible circuit breaker rules are desirable. Ideally, the triggering
+thresholds can vary with the information flow in the market, allowing for wider bands when substantial
+news reaches the market. However, in such cases trading breaks lose their current signaling functionality
+warning about an upcoming discrete move in market prices.
+Our tests are based on fixed transition windows for pre-average return estimation. Since transition
+times across multiple events may display varying length, it is likely that our fixed windows are
+conservative. As demonstrated in the simulation study, conservative choices of transition windows can
+reduce the power of the test. Future research may study the detection of the termination point, which
+shares similarities with bubble detection in financial data.
+27
+References
+A ¨ ıt-Sahalia, Y. & Xiu, D. (2019). A hausman test for the presence of market microstructure noise in
+high frequency data.Journal of Econometrics, 211(1), 176–205.
+Andersen, T. G., Bollerslev, T., Diebold, F. X., & Vega, C. (2003). Micro effects of macro announcements:
+Real-time micro effects of macro announcements: Real-time price discovery in foreign exchange.
+American Economic Review, 93, 38–62.
+Andersen, T. G., Li, Y., Todorov, V., & Zhou, B. (2023). Volatility measurement with pockets of
+extreme return persistence.Journal of Econometrics, 237, 105046.
+Benamar, H., Foucault, T., & Vega, C. (2021). Demand for information, uncertainty, and the response
+of us treasury securities to news.Review of Financial Studies, 34(7), 3403–3455.
+Bibinger, M., Neely, C., & Winkelmann, L. (2019). Estimation of the discontinuous leverage effect:
+Evidence from the nasdaq order book.Journal of Econometrics, 209(2), 158–184.
+Bibinger, M. & Winkelmann, L. (2018). Common price and volatility jumps in noisy high-frequency
+data.Electronic Journal of Statistics, 12(1), 2018–2073.
+Bongaerts, D., Luca, S. D. D., & Achter, M. V. (2024). Circuit breakers and market runs.Review of
+Finance, 28, 1953–1989.
+Chen, H., Petukhov, A., Wang, J., & Xing, H. (2024). The dark side of circuit breakers.Journal of
+Finance, 79(2), 1405–1455.
+Christensen, K., Oomen, R., & Ren` o, R. (2022). The drift burst hypothesis.Journal of Econometrics,
+227(2), 461–497.
+Fisher, A., Martineau, C., & Sheng, J. (2022). Macroeconomic attention and announcement risk premia.
+Review of Financial Studies, 35(11), 5057–5093.
+Hansen, P. R. & Lunde, A. (2006). Realized variance and market microstructure noise.Journal of
+Business and Economic Statistics, 24(2), 127–161.
+Hautsch, N. & Horvath, A. (2019). How effective are trading pauses?Journal of Financial Economics,
+131(2), 378–403.
+Jacod, J., Li, Y., Mykland, P. A., Podolskij, M., & Vetter, M. (2009). Microstructure noise in the
+continuous case: The pre-averaging approach.Stochastic Processes and their Application, 119,
+2249–2276.
+Laurent, S., Ren` o, R., & Shi, S. (2026). Realized drift.Journal of Econometrics, 254, 105813.
+Lee, S. S. & Mykland, P. A. (2012). Jumps in equilibrium prices and market microstructure noise.
+Journal of Econometrics, 168(2), 396–406.
+Shi, S. & Phillips, P. C. B. (2026). Uncovering mild drift in asset prices with intraday high-frequency
+data.Journal of Econometrics, 253, 106177.
+Subrahmanyam, A. (1994). Circuit breakers and market volatility: A theoretical perspective.Journal
+of Finance, 49, 237–254.
+28
+Todorov, V. & Tauchen, G. (2011). Volatility jumps.Journal of Business and Economic Statistics,
+29(3), 356–371.
+Wachter, J. A. & Zhu, Y. (2022). A model of two days: Discrete news and asset prices.Review of
+Financial Studies, 35(5), 2246–2307.
+29
+Appendix A. Theoretical results
+The main purpose is to formally justify the tail bounds used in constructing the test for fundamental
+pricing and to show how the regression-based correction affects the critical value. The proofs state
+some fairly standard results which are applied to our setting.
+Appendix A.1.Proof of Proposition 3.1
+With reference to the model (2) and its underlying assumptions, one can obtain the α critical value
+κα,δ generally in three steps.
+(a) Standard Gaussian tail bound: The upper tail probability for Z∼ N(0, v) (Mill’s-type inequality):
+P(|Z|> t) = 2√2πv Z ∞t exp − z22v  dz
+=
+r
+2
+πv
+1
+t
+Z ∞
+t
+texp
+
+− z2
+2v
+
+dz
+≤
+r
+2
+πv
+1
+t
+Z ∞
+t
+zexp
+
+− z2
+2v
+
+dz
+=
+r
+2
+πv
+v
+t
+Z ∞
+t2/(2v)
+exp (−u)du
+takingu=z 2/(2v).Integrating gives
+P(|Z|> t)≤
+r
+2v
+π
+exp
+ 
+−t2/2v
+t .
+(b) Use standard Gaussian tail bound together with the bound on integrated squared volatility in
+Assumption 1(i) on the increment in Brownian martingale part over [τ,¯τ):
+P
+
+|∆τ,δ X (c)|> ξ ≤ r 2Cδπ 1ξ exp − ξ22Cδ  .
+The randomness of
+R ¯τ−
+τ σ2s dsis controlled byC δ.
+(c) Determine ξ by equating
+p
+2Cδ/π/ξexp
+
+− ξ22Cδ  with the test level α. Since κα,δ consists of two
+independent components (the Brownian martingale component and the δ-pre-average estimation
+30
+error) we use union bound with level a = α/2. We use the Lambert form xex = y, with x = ξ2/Cδ
+and y = 2/(πa2) and Lambert W-function: x = W (y). Here x >0 and y >0, so for Lambert we
+have exactly one real root as the unique real solution:ξ=
+q
+CδW( 2πa2 ).
+To eliminateW, we leta→0, soy→ ∞. Becausey=W(y) exp(W(y)) taking log gives
+log(W(y)) +W(y) = log(y).
+The r.h.s. diverges so also the l.h.s. must diverge, implying W (y) → ∞. Dividing by log(y) and
+studying the terms, the only possibility is W (y)/log(y) → 1. So we can use W (y) ≈log (y) (1st
+order) and rearranging the above equation gives W (y) ≈log (y) −log log(y) (2nd order approx) and
+ξ≈
+s
+Cδ
+
+log
+ 2
+πa2
+
+−log log
+ 2
+πa2
+
+.
+Plugging-ina=α/2 provides the log terms in Proposition 3.1.
+Since according to Lemma 1 the δ-pre-average estimation error is normal with random variance
+Vτ,¯τ, we follow the same steps but use a conditioning argument in (b) and otherwise replace Cδ by Vτ,¯τ
+to obtain the final additive bound.
+■
+Appendix A.2.Proof of Proposition 3.2
+We now derive the critical value for the test with estimated jump size F ˆb. That is, to the Brownian
+and δ-pre-average terms of Proposition 3.1, we add a third component that controls the estimation
+error of
+ˆb= (F ∗⊤F ∗)−1F ∗⊤∆n⌊τ n⌋,δˆX ∗
+in the multiple regression (7).
+Expanding the test statistic,
+∆n⌊τ n⌋,δˆX−F ˆb  ≤ ∆n⌊τ n⌋,δˆX−bF  + F  · ˆb−b ,
+31
+indicates that the first summand on the r.h.s. is what we studied in Proposition 3.1 but now the test
+statistic consists of three independent components. To uniformly bound all three, the new joint level is
+α/3. Since
+ˆb−b  = (F ∗⊤F ∗)−1F ∗⊤e∗, and F ∗ is fixed, we only need to control the sum of random
+elements of e∗. Since the error terms are independent, have mean zero and Proposition 3.2 provides the
+bound ce∗, we can directly use Hoeffding’s inequality for sub-Gaussian random variables. The following
+expression applies the bound element-wise to theKcoefficients inb:
+P
+ˆb−b  > ξ ≤2 exp − ξ2
+2c2e∗diag(F ∗⊤F ∗)−1
+
+.
+Since the factors F ∗ are all normalized, ( Ndiag (F ∗⊤F ∗/N)) = N . Solving for ξ as a function of the
+desired probability levelα/3 yields
+ξ=N −1/2 ce∗
+s
+2 log
+ 6
+α
+
+1K.
+All K entries have the same bound such that we can also use l1 norm of F insteat of multiplying by
+the vector of ones1 K.
+■
+32
+Appendix B. F urther statistics about Breaking-news events
+Table B.1: Break dates at inflation news
+Date Time to firstbreak (seconds) Total stoptime (seconds) Number of tradesbetween 7–10:00 a.m.
+2022-06-10 1.913 5.015 139,183
+2022-07-13 1.183 9.993 188,426
+2022-08-10 1.081 4.996 131,837
+2022-09-13 0.213 15.90 75,727
+2022-10-13 1.067 20.01 274,133
+2022-11-10 1.063 15.00 221,903
+2023-03-14 1.544 4.998 66,903
+2024-06-12 0.344 19.99 93,706
+2025-01-15 1.236 4.993 162,852
+2025-02-12 1.079 4.990 134,530
+2025-03-12 1.196 4.994 183,320
+2025-04-10 1.093 15.01 161,041
+2025-05-13 1.130 5.000 78,756
+2025-06-11 1.295 5.002 102,654
+Notes: First two columns refer to the transition period starting 8:30 a.m. ET. Last column displaysn.
+33

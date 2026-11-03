@@ -1,0 +1,2698 @@
+arXiv 2610.24289  https://arxiv.org/abs/2610.24289
+
+Unbounded Losses, Unchecked Inputs: Measuring the
+Safeguards of LLM Options-Trading Agents
+Mengxiao Wang
+Texas A&M University
+jacksonwang@tamu.edu
+Nitesh Saxena
+Texas A&M University
+nsaxena@tamu.edu
+Abstract
+Large language model (LLM) agents now place options or-
+ders at retail brokers, and developers publish open-source
+options agents faster than anyone has examined them. Prior
+security work on trading agents scored academic equities de-
+signs by whether an attacker can flip a buy-or-sell decision.
+We present the first measurement of the options agents that
+brokers and developers ship, scored by the safeguards they
+enforce and by the worst loss their documented order paths
+can reach. We screened 765 GitHub repositories, broker doc-
+umentation, and the research literature and found 215 eligible
+repositories and 8 broker-native agent interfaces. We then
+scored 26 systems, including every broker interface and every
+open-source project with at least 20 stars, on seven robustness
+and eleven security safeguards with cell-level evidence. The
+ecosystem is new: 198 of the 215 repositories were created in
+2026, and 129 (60.0%) appeared in the two weeks around one
+options-trading hackathon. Of the 22 systems that can place
+orders, 10 enforce a pre-trade limit outside the model, yet
+none of the 26 authenticate their text sources or cross-check
+market data. Of the 26, 17 can execute with no mandatory
+human step and 13 can reach unbounded loss, including 6 of
+the 8 broker interfaces. Because an attacker who writes the
+agent’s inputs can move an order’s strike, expiry, volatility,
+and legs while its direction stays correct, options agents need
+loss limits enforced at the order boundary.
+1 Introduction
+A large language model (LLM) agent can now open an options
+position at a retail broker with no human touching the order.
+Robinhood announced that agentic options trading is available
+to all US customers [1,2], on a platform with about 27 million
+funded customers [3]. The tastytrade Model Context Proto-
+col (MCP) server exposes equity, index, and futures options,
+including multi-leg orders, to agents with write access [4, 5],
+and 7 of the 14 brokers reviewed by StockBrokers.com in
+September 2026 run a first-party agent server [6]. Develop-
+ers are building on these interfaces even faster. Of the 215
+public options-agent repositories we found on GitHub, 198
+were created in 2026 (§5.1). The market they trade is large
+and short-dated, since listed options averaged 72.8 million
+contracts a day in 2026 Q2, up more than 19% from a year
+earlier [7], and zero-days-to-expiry (0DTE) contracts reached
+a record 66.2% of S&P 500 index-options volume in July
+2026 [8].
+An attacker who can publish text that an options agent
+reads can steer its orders without touching the model or the
+account, because indirect prompt injection [9] and MCP tool
+poisoning [10] let news, social posts, filings, and tool outputs
+control an agent’s actions. However, the worst case on options
+keeps the trade’s direction. Whereas a stock position reaches
+unbounded loss through an explicit short [11], the one variable
+that equities risk checks already watch, an options position
+reaches it when one leg is dropped while the direction and
+the named strategy stay the same. If text frames the protective
+leg of a bull put spread as a drag on returns and the agent
+drops it, a position that risked $400 per contract becomes
+an uncovered put that can lose $9,900, about 25 times more
+(Figure 2). Human-run funds have failed this way. In 2018, a
+fund that sold uncovered natural-gas options told about 290
+clients that their balances were gone and that they could owe
+their clearing broker more, after an 18% price spike [12].
+Despite this exposure, no one has measured whether the
+agents in use today can stop such an order. The closest
+work, the FARSIGHT systematization of Wang and Sax-
+ena [13], scored 15 academic equities designs by whether
+an attacker can flip a buy-or-sell decision. Agent-security
+benchmarks [14–16] count unintended tool calls, and attack
+studies of trading agents [17, 18] target equities and pricing
+agents. Because none of them examines the options agents
+that brokers and developers ship, or prices a failure by the loss
+the resulting order can reach, we ask three research questions.
+• RQ1 (Ecosystem).Who builds LLM options-trading
+agents, and how fast is that population growing?
+• RQ2 (Exposure).What can these agents do to an account
+without a human, and what is the worst loss their docu-
+mented order paths can reach?
+• RQ3 (Safeguards).Which robustness and security safe-
+guards do they enforce outside the model, and do any check
+the inputs an attacker writes?
+To answer them, we screened all 765 repositories returned
+1
+arXiv:2610.24289v1  [cs.CR]  16 Oct 2026
+1 Inputs
+no model or account
+access
+2 Agent decision
+five variables per order
+3 Order boundary
+bounds size, not truth
+4 Market
+thin books, public
+prints
+5 Loss at expiry
+worst reachable loss
+(H1)
+Attacker writes text/user-secret
+S1 news, flow
+reports
+S2 tool, MCP returns
+S2 memory
+S3 peer agents
+📰
+/tools
+/da◎abase
+♂robot
+fabricated, or accurate
+but selectively
+presented
+Direction
+Strike
+Expiry
+IV
+Legs
+✓ unchanged
+out of reach (O-2)
+too soon (O-2, O-4)
+overpaid (O-3)
+one dropped (O-1)
+decision-flip rates watch only
+direction: they record no
+attack
+no mandatory
+human step
+17/26
+uncovered shorts
+(W4)
+14/26
+the induced order
+is legal and fits the
+budget
+Counterparty
+(O-6)
+/user-secret
+reads the agent’s
+orders and prints,
+infers its triggers,
+and fills the induced
+order
+collects the spread,
+repeats, and needs
+no uncovered leg
+unbounded 13
+assignment (O-5) 6
+premium 1
+none 6
+times the next input (O-6)Safeguards
+C1 source
+authentication
+0/26
+R2 Greeks and IV provenance
+3/26
+C8 pre-trade limit
+10/22
+R3 spread and
+liquidity
+3/26
+R5 assignment, pin
+0/26
+C2 market-data
+integrity
+0/26
+R1 max loss
+4/26
+C9 least privilege
+3/26
+C10 monitoring, kill
+switch
+5/22
+R7 portfolio limits
+3/26
+C11 adversarial evaluation, any step 0/26 One mark per system: safeguard enforced outside the modelpartial or none exposed
+Figure 1:Attack path and the safeguards we measured.Top: an attacker who writes text into the agent’s inputs (S1–S3) moves
+four of the five decisions of an options order while its direction stays correct (O-1 to O-4). The induced order passes limits that
+bound its size, a counterparty who reads public prints can fill it (O-6), and the position can end in assignment (O-5) or unbounded
+loss. Bottom: two safeguards per step, one mark per scored system, filled if enforced outside the model. C8, the most common
+safeguard, is enforced by 10 of the 22 order-capable systems (Table 5).
+by six GitHub searches, read broker documentation and the
+research literature, and scored 26 systems at a single snapshot
+(§4). The scored set contains every broker-native agent inter-
+face (8), every academic system (2), and every open-source
+project with at least 20 stars (7) that we found, plus 9 lower-
+star repositories chosen for design coverage. Our codebook
+grades seven robustness and eleven security safeguards as
+enforced outside the model, dependent on the model, or un-
+documented, and every cell cites the public artifact behind
+it.
+The measurement shows a young population whose con-
+trols bound the size of an order and leave its inputs unchecked.
+First (RQ1), 129 (60.0%) of the 215 eligible repositories
+appeared in the two weeks around one options-trading
+hackathon, 136 name a single broker, and 161 have no stars.
+Second (RQ2), 17 of the 26 systems execute with no manda-
+tory human step, 14 can open an uncovered short, and 13
+can reach unbounded loss, among them 6 of the 8 broker
+interfaces. Third (RQ3), 10 of the 22 order-capable systems
+enforce a pre-trade limit outside the model, none of the 26
+authenticate their sources or cross-check market data, and 5
+can reach unbounded loss with neither control.
+We make the following contributions:
+• We give the first measurement of LLM options-trading
+agents, from a logged screen of 765 GitHub repositories to
+26 scored systems, and show that most of the open-source
+population appeared around a single hackathon (§4, §5.1).
+• We define a threat model in which the attacker keeps the
+trade’s direction and moves its strike, expiry, volatility, or
+legs, and derive six option-only attack primitives, includ-
+ing a counterparty attack that survives a ban on uncovered
+writing (§3).
+• We score every system on eighteen safeguards with cell-
+level evidence and show that the worst case is reachable on
+broker interfaces, while no system verifies its inputs (§5.2,
+§5.3).
+• We derive order-boundary controls for brokers and agent
+builders that work without detecting manipulated text, and
+we state five open problems for researchers (§6, §7).
+Because of this measurement, a broker that opens options to
+agents can check its order path against three controls that work
+without detecting manipulated text: defined-risk structures for
+agent orders, a maximum loss computed and enforced before
+entry, which 4 of the 22 order-capable systems have today,
+and a pre-trade limit enforced outside the model, which 10
+have.
+2
+2 Background
+Options matter for agent security because an option’s loss is
+no fixed multiple of its price move. A US equity option gives
+its holder the right to buy (a call) or sell (a put) 100 shares of
+an underlying at a fixed strike on or before an expiry date, and
+the holder may also let it lapse [19]. A long stock position
+pays off linearly and loses at most the capital committed.
+Options break both properties.
+0 50 100
+−10k
+−5k
+0 spread: max loss $400
+long put dropped:
+max loss $9,900
+(25×)
+Stock price at expiry ($)
+P&L per contract ($)
+(a) One leg dropped (O-1)
+90 100 110 120
+−10
+−5
+0
+5
+10
+IV held
+IV falls
+stock up, losing
+breakeven
++8.7%
+Stock price after the event ($)
+P&L per share ($)
+(b) IV crush (O-3)
+Figure 2:Two ways to lose money with the direction un-
+changed.(a) Structure: a bull put spread (sell the 100 put,
+buy the 95 put, $1.00 credit) risks at most $400 per contract,
+and the same position without its long put risks $9,900 (O-1).
+The shaded area is the loss that the dropped leg would have
+capped. (b) V olatility: a 30-day at-the-money call bought at
+80% implied volatility ahead of a scheduled event loses money
+after volatility falls to 25% unless the stock rises more than
+8.7% (O-3). The shaded band is a correct view that still loses.
+Black–Scholes values [19, 20] with illustrative parameters.
+Payoff asymmetry and defined-risk structures.The op-
+tion buyer’s maximum loss is the premium paid. The seller
+collects that premium and takes on the obligation, so a short
+put loses at most the strike minus the premium, while a short
+call written without an offsetting position, anakedcall, has
+no upper bound because the underlying price has none [19].
+Traders cap that exposure by pairing legs. A vertical spread
+sells one option and buys a further-out-of-the-money option
+of the same expiry, so its maximum loss is the strike width
+minus the net credit, and a covered call or cash-secured put
+writes against shares or cash already held. Thus, the bound
+comes from the joint configuration of the position. When the
+protective leg is dropped, or the option is written uncovered,
+a defined-risk position becomes a naked one with the direc-
+tional view unchanged. Equities have no such transition that
+keeps the direction, and it underlies the worst case of §3.2.
+Short selling, margin, and expiry.Unbounded loss exists
+on equities too, since a short sale has no loss ceiling [11] and
+Regulation T limits initial leverage on stock to 2:1 [21]. The
+difference is where the decision sits. While a stock position
+becomes unbounded when the agent chooses the short side,
+the variable that equities evaluations and risk checks already
+watch, an options position becomes unbounded when one leg
+of a structure is dropped. Its payoff of small, frequent gains
+and rare, large losses then looks better on a win-rate basis
+than the protected version. An option’s value also depends
+on implied volatility (IV) and on the Greeks (delta, gamma,
+theta, vega), which the Black–Scholes model [20] and its
+descendants derive and which neither a retail user nor an LLM
+checks at a glance. Because volume splits across many strikes
+and expiries, a contract trades far less than its underlying and
+quotes a wider relative spread [19]. Options also carry early
+exercise, assignment of a short leg, and pin risk at expiry,
+which zero-days-to-expiry contracts compress into a single
+session.
+Five decision variables.An options agent is a different target
+because its order carries more decisions. An equities order
+commits to one variable an attacker can corrupt, the direction,
+plus a size. An options order commits to five, namely direction
+(call or put, long or short), magnitude (the strike), time (the
+expiry), volatility (the IV paid or sold), and structure (the
+legs). Figure 1 shows the five variables, and Table 1 lists each
+difference from equities with the attack risk it adds. Rows
+2–5 of the table show that every variable other than direction
+can carry an attack while the direction stays correct, and rows
+6–8 list the market and lifecycle properties behind axes A3,
+A5 and A6. Each added variable is one the attacker can move
+while the direction stays correct.
+Six amplification axes.Six properties explain why the same
+agent error costs more, is harder to check, or is easier to ex-
+ploit on options. They are leverage and non-linear payoff
+(A1), the Greeks and IV knowledge gap (A2), wide bid-ask
+spreads (A3), pricing by time decay and IV (A4), exercise,
+assignment, and pin (A5), and order-flow observability (A6).
+Table 2 pairs each with its closest equities analogue and the
+agent failure mode it acts on. None of them needs a new kind
+of agent error. Instead, the same error lands on a payoff with
+a lower floor (A1, A4), on a number that is harder to check
+(A2), or on an order that a counterparty can see (A6). A2
+deserves emphasis because implied volatility is backed out
+of an observed price through a pricing model [20] and the
+Greeks are partial derivatives of that model. As a result, a
+human approver cannot check a claim such as “IV rank is
+at the 80th percentile” against a price chart, and the agent
+usually receives such numbers precomputed from a tool.
+LLM agents at the broker.LLM trading agents extend
+a language model with market-data tools, memory, and an
+order interface in an observe–reason–act loop over retrieved
+text and numbers [24]. On the broker side, most of them
+connect through MCP, which places each tool’s description
+3
+Table 1: Differences between options and equities, and the attack risk each difference adds. Rows 1–5 are the five decision
+degrees of freedom of an options order (§2), and rows 6–8 are properties of the options market and lifecycle. The last column
+points to the primitives of §3.2 and the axes of §2.
+Difference Equities Options Added attack risk
+1 Direction Buy, sell, or hold. Call or put, long or short, with
+leverage.
+A framed view flips the trade, now scaled by leverage (A1).
+2 Magnitude Any rise is a gain. Profit only past strike plus premium
+(breakeven).
+An overstated catalyst sets a strike the price never reaches: right
+direction, still losing (O-2).
+3 Time No deadline; a slow
+thesis can still pay.
+A hard expiry; time value decays
+faster as it nears.
+A misdated catalyst ends the expiry before the event; false urgency
+pushes short-dated contracts (O-2, O-4).
+4 V olatility Price is the only input. Premium embeds IV , which usually
+falls after a scheduled event.
+Pre-event hype induces overpriced volatility that collapses after: right
+call, still losing (O-3).
+5 Structure One position, loss capped
+by size.
+Multi-leg; one missing leg turns
+bounded loss unbounded.
+Framing the protective leg as a drag on returns induces an uncovered
+short (O-1).
+6 Liquidity and
+price moves
+Deep books, tight spreads,
+moves that track the
+stock.
+Thin per-contract books, gappy
+quotes, prices moving in multiples
+of the underlying.
+Market or midpoint fills pay the spread to a counterparty; small size
+moves the quotes the agent reads (A3, O-6).
+7 Order-flow visibil-
+ity
+An agent order is anony-
+mous in a deep book.
+A lone displayed order can be
+the only interest in a contract;
+flow routes to a few whole-
+salers [22], and every print is dis-
+seminated [23].
+Passive profiling of the agent’s rules, then timed inputs and harvesting
+as its counterparty (A6, O-6).
+8 Exercise and
+assignment
+None. Early exercise, assignment, and pin
+risk at expiry.
+Induced exercise or ignored assignment converts cash or shares into
+an unplanned position (O-5).
+and return value directly in the model’s context. The broker
+layer has opened quickly. Robinhood launched agentic trading
+in beta in May 2026, for equities only [25, 26], and later
+announced that agentic options trading is available to all US
+customers [1]. However, its two official sources disagree on
+what those orders can be. While the support article describes
+the agent as placing long options orders [27], the order tool
+the agent calls documents covered calls and cash-secured puts
+at Level 2 and defined-risk spreads at Level 3, with uncovered
+writing offered at no level [28, 29]. We score the documented
+tool, so Robinhood’s worst case is assignment into unplanned
+stock, and a long-only enforcement would lower it to the
+premium paid.
+Other brokers grant more write access. The tastytrade MCP
+server binds each order to a dry-run token that the same agent
+mints and redeems within 60 seconds, so the check confirms
+consistency between two calls of one agent, and uncovered
+writing is reachable when the account’s options level allows
+it [4]. Alpaca’s official MCP server posts option orders with
+no confirmation step, while Alpaca’s brokerage rejects uncov-
+ered options at every options level [30, 31]. Thus, each broker
+sets an agent’s worst case through two separate choices, how
+much the agent may write and whether anyone confirms it, and
+§5.2 measures both. The layer also inherits the weaknesses
+of MCP itself, since poisoned tool descriptions steer agent
+actions without touching the model [10]. Since options agents
+read their chain data, Greeks, and buying power through these
+same tools, a poisoned field reaches the order directly.
+3 Threat Model
+We fix one threat model and read every system in §5 against
+it. Figure 1 traces an attack from the text the attacker writes
+to the loss at expiry and marks the safeguards we measure at
+each step.
+3.1 Attacker and Victim
+Victim.The victim is an LLM agent that reads text, calls
+options tools for chains, quotes, and Greeks, and holds options
+order authority directly or through a human who approves
+its tickets. Its account sits at a broker whose quote, fill, and
+position reports are honest. However, the agent also treats
+ingested text and tool-returned numbers as honest, and that
+assumption is what the attacker breaks.
+Attacker goal.The attacker wants the agent to send an order
+whose risk differs from the order it would have sent on honest
+inputs. We judge success by three measurable properties of
+the final order: (i) a defined-to-undefined conversion, in which
+a short option leg is left without a covering position where the
+pre-attack plan had bounded loss, (ii) the maximum potential
+loss at expiry, labeled bounded or unbounded, and (iii) the
+premium and spread cost lost to a mis-chosen strike, expiry,
+or structure. Because the direction can stay correct, a decision-
+flip rate misses all three.
+Knowledge.Following Kerckhoffs’s principle, the attacker
+knows which public sources a system ingests, how its prompt,
+tools, and order path are designed, and every documented
+4
+Table 2: The six amplification axes. Each row pairs an options property with its closest equities analogue, states what gets strictly
+worse on options, and names the agent failure mode the property acts on. A1 carries the headline worst case, A2 the stealth, and
+A6 the reconnaissance and the counterparty channel.
+Axis Equities analogue Options amplification Agent failure mode
+A1Leverage and
+non-linear payoff
+Long stock: loss is linear and capped at
+the capital committed.
+One contract controls 100 shares, and a
+written leg without cover turns a bounded
+loss into one that runs to the strike (short
+put) or has no bound (short call).
+Treats a protective leg as a cost to trim
+and does not model the risk its removal
+re-opens.
+A2Greeks and IV
+knowledge gap
+Price, volume, and percentage moves that
+a supervisor can check against a chart.
+Delta, gamma, theta, vega, IV rank,
+expected move, and probability of profit
+are model-derived and cannot be checked
+by eye.
+Accepts a stated Greek or IV statistic
+without recomputing it from the chain,
+then sizes and structures the position on
+it.
+A3Wide bid-ask
+spreads
+Liquid large-cap stock trades near its
+quote.
+Far out-of-the-money and far-dated
+contracts quote wide spreads on thin open
+interest, so entry and exit each pay a large
+share of premium.
+Anchors on the midpoint, so a shifted
+strike or expiry costs money with the
+direction right.
+A4Pricing by time
+decay and IV
+Value tracks the underlying, so a correct
+directional call gains.
+Value also falls with time (theta) and
+implied volatility (vega), so a correct
+direction that arrives late, or after an IV
+collapse, still loses.
+Reasons in linear price terms and does
+not audit decay or a volatility change.
+A5Exercise,
+assignment, and pin
+Buy, sell, and hold, and holding is
+passive.
+Short legs can be assigned early, contracts
+near the strike carry pin risk at expiry, and
+exercise can discard time value.
+Mishandles involuntary events and
+expiry-day timing.
+A6Order-flow
+observability and
+illiquidity
+An agent order is anonymous in a deep,
+tight book.
+Per-contract books are thin, a displayed
+agent order may be the only visible
+interest, and every print is
+disseminated [23].
+Places predictable orders that fill against
+a counterparty who anticipated them.
+guardrail, because most systems in §5 publish them. It ob-
+serves public option chains, quotes, implied volatility, and
+prints, so it can profile an agent’s triggers without access to
+the agent (A6). It does not see the victim’s private prompt,
+memory, positions, or balance.
+Capabilities.The attacker writes text, and numbers embed-
+ded in text, into channels the agent reads, through the three
+surfaces of the FARSIGHT attack taxonomy [13]. Through
+information sources (S1), it posts news, social posts, earnings
+commentary, unusual-options-activity alerts, and flow reports,
+which is indirect prompt injection [9] with a market payload.
+Through prompts, tools, and memory (S2), it poisons tool
+descriptions and tool-return fields, including returned Greeks
+and IV , a channel in which tool poisoning reached up to 72.8%
+attack success across 20 agents [10]. Through other agents
+(S3), it controls an agent whose outputs the victim acts on,
+such as an analyst agent that passes a volatility view to an
+execution agent. The content may be fabricated or accurate
+but selectively presented. It must read as ordinary market com-
+mentary and yield a legal order that passes whatever spending
+limit, margin check, or dry-run the system has. The attacker
+cannot tamper with the broker’s reports, access the victim
+account, modify model weights [32], or move the underly-
+ing with its own capital, because each of these belongs to a
+different attacker class or to ordinary market manipulation.
+Counterparty attacker.One primitive (O-6) assumes a
+stronger attacker that can also post and fill orders in listed
+options, such as a trader with an options account or a liq-
+uidity provider. Retail options orders are mostly routed to a
+few wholesalers that pay for order flow [22], which internal-
+ize them through exchange price-improvement auctions and
+the limit order book [33, 34]. As a result, a non-wholesaler
+reaches the agent’s order when it rests on an exchange book
+or enters an auction, which is most likely in thin contracts.
+Profiling from public prints works where an agent with fixed
+rules dominates a contract’s flow.
+3.2 Option-Only Attack Primitives
+An options order lets the attacker corrupt four of the five de-
+cision variables while the direction stays correct. The agent
+buys the call it meant to buy, but at a strike the move never
+reaches, on an expiry that ends before the catalyst, at an im-
+plied volatility that collapses after the event, or as a spread
+without the leg that bounded its loss. Table 3 turns these vari-
+ables into six primitives. Five pair a variable with the payoff
+mechanism that turns a corrupted value into loss, and the
+sixth targets the observability of the agent’s own orders. Nine
+publicly documented attack classes against equities, pricing,
+and general-purpose agents reach these primitives through the
+surfaces above (Table 4), and in each one the options payoff
+5
+Table 3: Option-only attack primitives. Each primitive exploits a property of an options order that an equity order lacks. Worst-
+case loss is per contract (100 shares) from standard payoff mechanics [19], with K the strike, c the premium received, and p the
+premium paid. Reachability distinguishes platforms that forbid uncovered writing (No-naked) from write-enabled ones such as
+tastytrade MCP [4]. Precursor classes refer to Table 4.
+Primitive Mechanism Axes Worst-case loss No-naked Write-enabled Precursors
+O-1Risk-structure
+induction (defined
+→undefined)
+Text leads the agent to drop or skip the
+protective leg of a spread, or to open an
+uncovered short, while every stated fact
+stays true.
+A1, A5 Uncovered call: un-
+bounded. Uncovered
+put:(K−c)×100.
+✗ Uncovered
+legs forbidden.
+✓Reachable. M2, M3,
+M6, M7,
+M8
+O-2Strike and
+expiry displacement
+The direction is kept, but the choice moves
+to a farther out-of-the-money strike, a nearer
+expiry, or a thinner contract.
+A3, A4 Long: p×100 , with a
+higher chance of losing all
+of it. Short: strike moves
+toward the money.
+✓ Reachable;
+premium or
+assignment.
+✓Reachable. M1, M4,
+M5
+O-3Greeks and
+volatility misstate-
+ment
+IV rank, expected move, delta, or breakeven
+are misstated or re-presented, so the agent
+buys expensive volatility, sells cheap volatil-
+ity, or sizes on a wrong delta.
+A2, A4 Long: overpaid premium.
+Short: position sized on
+understated risk, up to the
+O-1 bound.
+✓ Reachable;
+premium or
+assignment.
+✓Reachable. M2, M4,
+M5, M6,
+M8
+O-4Expiry-
+pressure triggering
+Urgency or complacency about days to
+expiry and time decay leads the agent to
+chase, roll at a loss, or hold a decaying
+position to expiry.
+A4 Long: p×100 lost to
+decay. Short: held into an
+adverse move near expiry.
+✓ Reachable;
+premium or
+assignment.
+✓Reachable. M1, M3,
+M9
+O-5Exercise, as-
+signment, and pin
+exploitation
+The agent is induced to exercise early
+and forfeit time value, to ignore early-
+assignment risk on a short leg, or to mis-
+handle a position pinned near the strike at
+expiry.
+A5, A1 Long: forfeited time
+value. Short: assignment
+leaves an unplanned
+share position of 100 per
+contract.
+✓ Reachable
+via covered and
+cash-secured
+legs.
+✓Reachable. M3, M7,
+M9
+O-6Profile and
+harvest
+The attacker reads the agent’s displayed
+orders and prints, infers its triggers, times an
+input to induce an order in a thin contract,
+and fills it on the other side.
+A6, A3 Spread plus induced mis-
+pricing per fill, repeatable.
+Long: up top×100.
+✓ Reachable
+(no short leg
+needed).
+✓Reachable. M1, M4,
+M5
+turns the same corruption into a larger or harder-to-detect loss.
+Appendix A groups these escalations into three patterns.
+O-1: risk-structure induction.O-1 is the worst case we
+consider, the one corruption whose loss has no ceiling while
+the agent’s direction stays correct. Consider a bull put spread
+that sells the 100-strike put and buys the 95-strike put for a
+net credit of $1.00 per share, so its maximum loss is (5−
+1)×100=$400 per contract (Figure 2a). If the long 95 put
+is removed, the position becomes an uncovered put with a
+maximum loss of (100−1)×100=$9,900 . Removing the
+protective call from a bear call spread leaves no upper bound at
+all. The inducing text needs no falsehood, because presenting
+the protective leg as a cost that rarely pays out is true in most
+expiries, and an injected ticket or a falsified maximum-loss
+field reaches the same end state without persuading the model.
+O-2 to O-5: loss with the direction right.Strike and expiry
+displacement (O-2) moves the agent to a farther out-of-the-
+money strike, a nearer expiry, or a thinner contract, so the
+position expires worthless more often while it still matches
+the agent’s own analysis. Greeks and volatility misstatement
+(O-3) targets the numbers that decide whether an option is
+cheap, which few supervisors can check (A2). As a result,
+the agent overpays for volatility that collapses after the event
+(Figure 2b) or sizes a short position on an understated delta.
+Expiry-pressure triggering (O-4) uses urgency or compla-
+cency about time decay, which speeds up near expiry [19],
+to make the agent chase, roll at a loss, or hold a decaying
+position. Exercise and assignment exploitation (O-5) induces
+an early exercise that forfeits time value, or leads the agent
+to ignore early-assignment and pin risk on a short leg, which
+can leave an unplanned position of 100 shares per contract.
+O-6: profile and harvest.O-6 pays the attacker directly and
+needs no uncovered leg. When a fixed-rule agent dominates a
+thin contract’s flow, its displayed orders and the consolidated
+prints [23] reveal its entry conditions, strikes, and timing (A6).
+The counterparty attacker times an input from any precursor
+class so that the agent enters the contract, and then fills the
+order on the other side, collecting the spread and the induced
+mispricing. Because each trade is small and ordinary, the
+attack repeats.
+Reachability.The broker’s write policy decides which primi-
+tives an agent can reach. On a platform that forbids uncovered
+writing, such as Robinhood’s documented order tool or Al-
+paca (§2), O-1 is out of reach, O-2 to O-4 are bounded by the
+premium or by the assignment exposure of a covered leg, and
+O-5 and O-6 stay reachable. By contrast, all six are reachable
+on tastytrade’s MCP server [4]. Hence, a ban on uncovered
+writing removes one primitive and leaves five, which is why
+§5.2 measures write scope and the worst reachable loss for
+every system.
+6
+Table 4: Migration map from equities to options. Each row is a publicly documented attack class, grouped by the attack taxonomy
+of the equities SoK [13]. The effect column reports what the exemplar measured on its own victims (equities trading agents,
+pricing agents, or general LLM agents); no number in this table was measured on an options agent. The escalation column
+follows from options payoff mechanics (§2). Axes are those of §2, and primitives follow Table 3.
+Attack class Public exem-
+plar
+Documented effect (victim type) Options escalation Axes Feeds
+Attacks on information sources
+M1 Fabricated news
+and content injection
+TradeTrap [17] Counterfeit news cut an adaptive equities
+agent’s return from 11.59% to 5.26% and
+its Sharpe ratio from 4.34 to 3.20 (equities
+agent).
+A fabricated catalyst sets the expected move, so
+a long option bought ahead of it loses to time
+decay even if the underlying stays flat.
+A1, A4 O-2, O-4
+M2 Retrieval and
+corpus poisoning
+PoisonedRAG
+[35]
+Five injected texts per target question reached
+90% attack success over millions of documents
+(general RAG).
+A poisoned playbook entry can present an
+uncovered structure as the standard form of a
+defined-risk strategy, which the agent cannot
+check (A2).
+A1, A2 O-1, O-3
+M3 Misleading-but-
+true framing
+Framing and
+bias stud-
+ies [36, 37]
+Instruction-tuned models show stronger decoy,
+certainty, and belief biases than their base
+models (general LLMs).
+Short-premium payoffs win often and lose
+rarely but large, a profile certainty-effect
+framing favors, pointing the agent toward
+writing options.
+A1, A4 O-1, O-4
+M4 Presentation
+and market-signal
+injection
+Market Signal
+Injection [18]
+Changing number formatting, competitor
+ordering, or commentary, with data values
+unchanged, shifted pricing decisions across 12
+models (pricing agent).
+The manipulated quantities become IV rank,
+expected move, and Greeks, whose magnitude
+neither a supervisor nor the model can confirm
+by inspection.
+A2, A4 O-3
+M5 Manipulated
+provenance and man-
+ufactured consensus
+Adversarial
+SEO [38],
+source at-
+tribution [39],
+social bots [40]
+Crafted content steered production LLM
+search engines, and re-attributing the same
+text to another source shifted LLM judgments
+(general LLMs).
+Options-flow and “unusual activity” reports
+aggregate anonymous prints with weak prove-
+nance, so a consensus volatility narrative is
+cheap to manufacture.
+A2, A3 O-2, O-3
+M6 Visual-channel
+manipulation
+Self-
+interpreting
+images [41]
+Images with hidden meta-instructions steered
+a VLM’s answers while they stayed plausible
+(general VLMs).
+Payoff diagrams, volatility surfaces, and chain
+screenshots are image inputs, and a misread
+chart hides the tail of a written leg.
+A1, A2 O-1, O-3
+Attacks on agents
+M7 Indirect and
+hidden-content
+prompt injection
+Greshake et
+al. [9]
+Instructions planted in retrieved content con-
+trolled API calls of deployed LLM applications,
+including Bing Chat (general agents).
+An options ticket has more fields (legs, ratio,
+strike, expiry, open or close, exercise), so an
+injected ticket can alter one and leave the rest
+plausible.
+A1, A5 O-1, O-5
+M8 Tool-response,
+metadata, and state
+poisoning
+MCPTox [10],
+TradeTrap [17]
+Poisoned tool metadata reached up to 72.8%
+attack success across 20 agents (general MCP
+agents). Tampered state feedback turned a
+procedural equities agent’s 0.91% return into
+a 61.02% loss, with position utilization rising
+from 20.78% to 646.86% (equities agent).
+Options tools return Greeks, buying power,
+margin requirement, and maximum loss, so a
+falsified risk field disables the one check that
+bounds exposure before the order leaves.
+A1, A2 O-1, O-3
+M9 Persistent back-
+door and sleeper
+behavior
+Sleeper
+Agents [32],
+agent back-
+doors [42]
+Backdoors persisted through safety training,
+and triggers hidden in environment observa-
+tions evaded textual backdoor defenses (general
+LLMs and agents).
+Triggers can key on options-only state such as
+days to expiry, which an equities-style backtest
+never holds, so the trigger fires when gamma
+and theta peak.
+A4, A5 O-4, O-5
+4 Measurement Methodology
+4.1 Data Collection
+Sources and snapshot.We collected candidate systems from
+three sources at one snapshot, and every count in this paper
+refers to it. On GitHub, six repository searches through the
+search API (strings in Appendix D) returned 1,232 hits and
+765 unique repositories, each query staying under the API’s
+1,000-result cap. For brokers, we collected first-party agent
+interfaces, seeded by an industry test that found agent MCP
+servers at 7 of 14 brokers [6], and read each broker’s docu-
+mentation. For the research literature, we searched arXiv and
+security, machine-learning, and finance proceedings with op-
+tions terms combined with LLM and agent terms and followed
+references from recent trading-agent work [13, 24].
+Eligibility.A candidate is eligible if (I1) an LLM makes,
+proposes, or gates an options decision (strategy, strike, ex-
+piry, structure, entry, or exit), or an interface is published for
+an LLM agent to do so, (I2) it reads option-chain or option-
+position data, (I3) a public paper, README, or documenta-
+tion page supports scoring it, and (I4) the artifact is available
+on the snapshot date.
+Screening.Figure 3 traces the GitHub screen. First, a key-
+word filter keeps a repository if its name, description, topics,
+7
+and README match at least one of 21 LLM terms and one
+of 29 options terms, which leaves 468 of the 765 repositories.
+Because the filter favors recall, we then read every survivor
+against I1–I4 and coded each exclusion with one of seven
+reasons in a per-repository screening log (Appendix D). The
+reading pass leaves 215 eligible repositories. The most com-
+mon exclusions are software with no trading system (114),
+options bots with no LLM in the decision path (52), and du-
+plicates, forks, or mirrors of an eligible project (46).
+1,232query hits, six strings
+765unique repositories
+468pass the keyword filter
+215eligible after reading (I1–I4)
+14scored from the union
+The other 12 of the 26 scored systems come from broker
+documentation, searches outside the six strings, and the
+academic search.
+Figure 3:GitHub screening funnel.Counts from the logged
+screen of the six-query union. Bars are proportional to the
+number of repositories at each stage, and 201 eligible reposi-
+tories remain unscored.
+Ecosystem metadata.For RQ1 we record each eligible
+repository’s creation date, star count, and language from the
+GitHub API, the LLM and options terms that the keyword
+filter matched in its name, description, topics, or README,
+and whether its own name, description, or topics mention a
+hackathon or a broker. We count what a repository says about
+itself, so every keyword count can be recomputed from the
+logged metadata. Since creation dates describe the reposi-
+tories that still existed at the snapshot, a deleted repository
+leaves no trace in them.
+Scored sample.Because scoring all 215 repositories in depth
+is infeasible, we score a stratified sample of 26 systems. Three
+strata are censuses of what we found: every broker-native
+agent interface (8), every academic system meeting I1–I4
+(2), and every eligible open-source project with at least 20
+stars (7). The threshold falls on a natural break, since the next
+eligible repository below it has 11 stars. The fourth stratum
+is purposive. Its 9 lower-star repositories cover design points
+that the censuses lack, such as veto-only autonomy, paper-only
+execution, advisory-only agents, and crypto or index options.
+Therefore, we report prevalence from the 17 census systems or
+from all 26, and use the purposive stratum to describe designs.
+Of the 28 candidates examined in depth, 2 were excluded after
+review (Appendix C).
+4.2 The Safeguard Codebook
+We score each system with a design-level codebook built on
+the two dimensions of FARSIGHT [13], robustness and secu-
+rity, and redefined for the options order. As Figure 4 shows,
+the codebook asks two questions of every system, whether
+it stops a harmful order when nothing adversarial happens
+and whether it stops one that an attacker induced, and then
+records what the system can reach. Table 8 in Appendix B
+defines every indicator together with the public framework
+it operationalizes, namely the OW ASP Top 10 for LLM Ap-
+plications [43], the market-access Rule 15c3-5 of the U.S.
+Securities and Exchange Commission (SEC) [44], and Rule
+2360, under which FINRA, the U.S. self-regulator of broker-
+dealers, approves customers for options [45].
+Robustness (R1–R7).Seven indicators ask whether a system
+stops the harmful orders that an honest agent can produce
+on options when the market moves or the model errs. R1–
+R5 follow the axes A1–A5, from a maximum loss computed
+before entry (R1) and Greeks and IV derived from a pricing
+model (R2) to rules for exercise and assignment (R5). R6
+(stress) and R7 (portfolio limits) come from FARSIGHT. The
+same checks also stop a manipulated order, whatever produced
+it.
+Security (C1–C11).C1–C7 guard the inputs that arrive
+through the three surfaces of §3, covering source authentica-
+tion, market-data integrity, tool trust, instruction–data separa-
+tion, memory, peer agents, and supply chain. C8–C10 guard
+the order with a pre-trade limit outside the model, least privi-
+lege, and monitoring with a kill switch. C11 records whether
+anyone tested either side adversarially.
+Profile and impact.Five profile attributes record what a
+system can reach without judging it. Autonomy (X2) runs
+from A0 (advisory) to A4 (no gate), where A3 is a gate that
+the agent can clear, that is off by default, or that a docu-
+mented setting removes. Write scope (X3) runs from W0
+(read-only) through W1 (long premium), W2 (defined-risk
+spreads), and W3 (covered or cash-secured shorts) to W4 (un-
+covered shorts), counting the broker’s own restrictions. Three
+impact indicators are computed from the profile, namely the
+worst loss the order path can reach (H1), the blast radius (H2),
+and whether a control outside the model can stop a manipu-
+lated order before execution (H3).
+Scoring levels.Each robustness and security indicator takes
+one of three levels. means that the safeguard is documented
+and enforced outside the LLM, in code, configuration, or plat-
+form policy. means that it is documented but depends on
+the model following an instruction, is optional or off by de-
+fault, or can be cleared by the agent itself. means that the
+public artifacts document nothing, and C8 and C10 do not
+apply to a system without an order path. The line between
+full and partial is the one that matters for security, because an
+instruction in a prompt sits in the same context the attacker
+writes to.
+Scoring process and validation.One coder scored the sys-
+tems of an initial snapshot from their papers, repositories,
+and documentation, and the 13 systems added at the final
+snapshot were scored with LLM assistance from the same
+8
+Robustness no adversary: the market moves or the model errs
+R1 max loss axis A1 NEW
+R2 Greeks and IV provenance axis A2 NEW
+R3 spread and liquidity axes A3, A6 NEW
+R4 decay and expiry axis A4 NEW
+R5 exercise and assignment axis A5 NEW
+R6 stress FARSIGHT turbulence
+R7 portfolio limits FARSIGHT
+Security an adversary manipulates the input or the order
+input side: can a manipulated input reach the model?
+C1 source authentication OWASP LLM04
+C2 market-data integrity OWASP LLM04
+C3 tool and MCP trust OWASP LLM03, MCPTox
+C4 instruction–data separation OWASP LLM01
+C5 memory OWASP LLM08
+C6 multi-agent trust FARSIGHT taxonomy
+C7 supply chain OWASP LLM03
+order side: can a manipulated order reach the market?
+C8 out-of-model pre-trade limits SEC Rule 15c3-5 NEW
+C9 least privilege OWASP LLM06 NEW
+C10 monitoring and kill switch SEC Rule 15c3-5 NEW
+testing: has anyone tested either?
+C11 adversarial evaluation this work NEW
+Per system:
+enforced outside the LLM nothing documented
+in the prompt, optional, or clearable by the agent
+scores are design-level, from public artifacts at one snapshot
+Profile recorded → Impact computed by rule NEW
+X2 \ X3 W0 W1 W2 W3 W4 H3 interceptable
+A0 advisory yes
+A1 veto yes
+A2 approves yes
+A3 clearable partial
+A4 automatic partial with C8, else no
+Cells, H1 worst loss: none premium
+assignment unbounded
+X3 write scope: W0 read-only, W1 long premium, W2
+defined-risk multi-leg, W3 covered or cash-secured shorts, W4
+uncovered shorts
+Figure 4:The safeguard codebook.Seven robustness indicators (R) ask whether a system stops a harmful order when the market
+moves or the model errs, and eleven security indicators (C) ask whether a manipulated input or order can reach the model or the
+market. Each system gets one mark per indicator: filled if the safeguard is enforced outside the LLM, half-filled if it lives in the
+prompt, is optional, or can be cleared by the agent, and empty if nothing is documented. The grid at the bottom left shows how
+autonomy (X2, rows) and write scope (X3, columns) fix the worst reachable loss (H1, cell shading) and whether an order can be
+intercepted (H3, right of the grid). NEW marks indicators with no counterpart among the metrics FARSIGHT scores.
+public artifacts. Every cell cites its evidence with a quota-
+tion and a source locator (Appendix C). Five decision rules
+make the profile and impact cells mechanical (Appendix B),
+and a consistency check rejects any cell that violates them.
+After scoring, a second LLM-assisted pass rechecked the au-
+tonomy, write-scope, and pre-trade-limit cells of the added
+systems against their code and documentation, and every cell
+it changed keeps its previous value in the evidence file. The
+scores describe documented designs. As a result, an undoc-
+umented safeguard in a running deployment scores , and
+a documented safeguard that a deployment has switched off
+still counts as present.
+5 Findings
+Table 5 gives every score, and counts are over all 26 scored
+systems unless noted.
+5.1 RQ1: A Young Ecosystem Built Around
+One Event
+The open-source population of LLM options agents is young,
+has little reach, and clusters around one event and one broker.
+Of the 215 eligible repositories, 198 were created in 2026
+and 17 earlier. Figure 5 shows steady growth through mid-
+2026 followed by a jump. In the two weeks around the end of
+August 2026, 129 repositories (60.0%) were created. Those
+Oct '25 Jan '26 Apr '26 Jul '26 Oct '26
+0
+50
+100
+150
+200Repositories (cumulative)
+all eligible: 215
+name Alpaca: 136
+Figure 5:Eligible options-agent repositories by creation
+date.Cumulative count of the 215 eligible GitHub reposi-
+tories (blue) and of the 136 that name Alpaca in their own
+name, description, or topics (orange), from October 2025 to
+the snapshot; 10 repositories created before October 2025
+start the blue line. The shaded band is the Alpaca AI Trading
+Agents Hackathon (late August to early September 2026) [69].
+Most of the population appeared within days of that event.
+two weeks bracket the Alpaca AI Trading Agents Hackathon,
+an online event in late August and early September 2026
+whose rules require every strategy to trade options [69], and 87
+repositories name a hackathon in their own name, description,
+or topics. Thus, most of the population exists because an event
+asked for it, and much of it is likely to go unmaintained once
+9
+Table 5: Safeguard scores for the 26 included options-agent systems (at the snapshot), grouped by sampling stratum. The
+academic and broker-native groups and the open-source group with at least 20 GitHub stars are censuses, and the lower-star
+open-source group is a purposive sample that supports no prevalence claim. Safeguard cells: enforced outside the model,
+model-dependent, optional, or clearable by the agent, not documented, – not applicable (no order path). Shading marks
+automatic autonomy (A3, A4), uncovered write scope (W4), and the worst reachable loss: unb. unbounded, asgn. assignment,
+prem. premium. H1–H3 follow the rules of Appendix B, and H3 uses the safeguard colors. †Hosted service whose repository
+publishes the interface, not the server. Per-cell evidence is in Appendix C.
+Profile Impact Robustness Security
+#SystemX2 X3 H1 H2 H3 R1 R2 R3 R4 R5 R6 R7 C1 C2 C3 C4 C5 C6 C7 C8 C9 C10 C11
+Academic
+1Kuang and Lin[46] A0 W0 none user – –
+2OQL[47] A0 W0 none user – –
+Broker-native
+3OKX Agent Trade Kit[48] A4 W4 unb.plat.
+4Public MCP[49] A4 W4 unb.plat.
+5Webull MCP[50] A4 W4 unb.plat.
+6tastytrade MCP[4] A3 W4 unb.plat.
+7IBKR AI integration[51] A2 W4 unb.plat.
+8TradeStation MCP[52] A2 W4 unb.plat.
+9Alpaca MCP[30] A4 W3 asgn. plat.
+10Robinhood agentic options[2, 28] A3 W3 asgn. plat.
+Open source, at least 20 stars
+11lumibot[53] A4 W4 unb.plat.
+12tasty-agent[54] A4 W4 unb.plat.
+13openalgo[55] A3 W4 unb.plat.
+14schwab-mcp[56] A3 W4 unb.plat.
+15trade-it-mcp † [57] A3 W4 unb.plat.
+16OpenProphet[58] A4 W3 asgn. plat.
+17trading_skills[59] A3 W2 asgn. plat.
+Open source, fewer than 20 stars (purposive sample)
+18TastyScanner MCP[60] A4 W4 unb.user
+19deribit agent (Vida)[61] A2 W4 unb.user
+20options-trading-bot[62] A4 W3 asgn. user
+21Agentic-Trader[63] A3 W3 asgn. user
+22agentic-trading-research[64] A4 W1 prem. user
+23alpaca-options-agent[65] A1 W2 none user
+24Theta Desk[66] A1 W4 none user
+25AI-trading-Agent[67] A0 W0 none user – –
+26news-agent[68] A0 W0 none user – –
+Count(of 26; per column) 17 A3+ 14 W4 13 unb. 15 plat. 9 4 3 3 3 0 0 3 0 0 2 0 0 1 1 10 3 5 0
+the event ends.
+The same event concentrated the population on one bro-
+ker. Of the 215 repositories, 136 name Alpaca, 119 of them
+created inside the two-week window. Because Alpaca rejects
+uncovered options at every options level [31], the broker’s pol-
+icy bounds this population at assignment, whatever the agents
+themselves check. By contrast, agent code written against a
+write-enabled broker inherits that broker’s scope. For exam-
+ple, schwab-mcp and tasty-agent accept sell-to-open legs with
+no coverage check, so their authority equals the options level
+of the account they connect to (Appendix C). The same code
+is bounded at assignment on one account and unbounded on
+another.
+Assignment is a bound, not a small loss. When a cash-
+secured put is assigned, the account buys 100 shares per con-
+tract at the strike, so a fall in the underlying passes to the
+account in full, up to the strike times 100 less the premium
+received. A covered call that is assigned sells shares the ac-
+count wanted to keep. The hackathon population therefore
+cannot lose without limit through Alpaca, yet a manipulated
+put can still turn its cash into a falling stock position (O-5).
+Designs from the event.The event produced careful designs
+as well as careless ones. One hackathon submission in our
+scored sample, alpaca-options-agent, runs a deterministic risk
+gate before the model and lets the model only decline a can-
+didate the gate approved (A1). It submits each spread as one
+native multi-leg order, so its structure cannot leave an uncov-
+ered leg, and it enforces eight safeguards outside the model,
+as many as any system we scored, on a paper account with
+no stars. Its inputs, however, are as unchecked as everyone
+10
+MCP
+Claude or Anthropic
+OpenAI or GPT
+Qwen, DeepSeek, Llama, Mistral
+Gemini
+LangChain-style framework
+135
+102
+63
+46
+35
+25
+Agent stack
+0 100 200
+Eligible repositories
+that mention it (of 215)
+Greeks or implied volatility
+Defined-risk spreads
+Covered or cash-secured writing
+0DTE
+120
+64
+22
+14
+Options content
+Figure 6:Term mentions in the eligible repositories.For
+each term group, the number of the 215 eligible repositories
+whose name, description, topics, or README mention it,
+from the keyword matches logged during screening. A reposi-
+tory can mention several groups. The open-weight row counts
+Qwen, DeepSeek, Llama, and Mistral, and the framework row
+counts LangChain, LangGraph, CrewAI, and AutoGen.
+else’s, with nothing documented for source authentication
+(C1), market-data integrity (C2) or instruction–data separa-
+tion (C4) (Appendix C). The event thus produced at least one
+design that bounds the order, and none that verifies the text
+behind it.
+Reach is concentrated in a few projects. 161 of the 215
+repositories (74.9%) have no stars, and 6 in the union have
+at least 20. Although the most-starred general LLM trading
+frameworks we checked have up to 108,459 stars, none of
+them supports options (Appendix D). Adoption therefore rests
+on general trading platforms that expose options to agents,
+such as openalgo (2,722 stars) and lumibot (2,086 stars), and
+on the 8 broker interfaces, each of which reaches every cus-
+tomer who enables it.
+The population builds on the broker interfaces we score
+and on a few model vendors (Figure 6). Of the 215 reposi-
+tories, 135 mention MCP in their name, description, topics,
+or README, so their agents read chain data and send or-
+ders through the tool channel that tool poisoning targets [10].
+102 mention Claude or Anthropic, 63 OpenAI or GPT, 46
+an open-weight family, and 35 Gemini, while 58 mention
+models from at least two of these vendors. On the options
+side, 120 mention Greeks or implied volatility, the derived
+numbers that no scored system cross-checks against an inde-
+pendent feed (§5.3). Another 64 mention defined-risk spreads,
+the structures whose bound O-1 removes, and 22 mention
+covered or cash-secured writing, the short positions that keep
+O-5 reachable on brokers that ban uncovered writing.
+4 1, 2, 25,
+26
+2 23, 24
+1 22
+3 10, 17,
+21
+3 9, 16, 20
+3 7, 8, 19
+4 6, 13, 14,
+15
+6 3, 4, 5,
+11, 12,
+18
+no human step and unbounded: 10
+none premium assignment unbounded
+A0 advisory
+A1 veto
+A2 approves
+A3 clearable
+A4 automatic
+Worst reachable loss (H1)
+Autonomy (X2)
+academic broker-native
+adopted OSS purposive OSS
+Figure 7:Positions of the 26 systems.Each cell pairs the
+worst loss the documented order path can reach (H1) with an
+autonomy level (X2) and gives the number of systems and
+their row numbers in Table 5, colored by sampling stratum.
+The outlined block holds the 10 systems that can reach un-
+bounded loss behind an agent-clearable gate or none.
+Table 6: Exposure and safeguards by sampling stratum. Each
+cell counts the systems in the stratum that have an order path,
+can execute with no mandatory human step (A3 or A4), can
+write uncovered shorts (W4), can reach unbounded loss (H1),
+enforce a pre-trade limit outside the model (C8 full), and
+authenticate sources or cross-check market data (C1 or C2
+full). The purposive stratum describes designs, and prevalence
+is read from the other rows.
+Stratum Sys-tems Canorder Nohuman Un-cov. Unb.loss Sizelimit Inputcheck
+Academic 2 0 0 0 0 0 0
+Broker-native 8 8 6 6 6 3 0
+Open source,≥20 stars 7 7 7 5 5 1 0
+Open source, purposive 9 7 4 3 2 6 0
+All systems 26 22 17 14 13 10 0
+RQ1.LLM options agents are a 2026 phenomenon. 198
+of the 215 open-source repositories were created this year,
+60.0% of them around one hackathon, and 136 name a
+single broker, whose write policy sets their worst case.
+5.2 RQ2: The Worst Case Is Reachable
+Most systems that can trade do so with no human in the loop,
+and half of the scored systems can reach unbounded loss.
+Autonomy.Of the 26 systems, 22 have an order path and 17
+can execute without a mandatory human step on each order, 10
+11
+with no gate (A4) and 7 behind a gate that the agent can clear,
+that is off by default, or that a documented setting removes
+(A3). For example, tastytrade lets the agent that requests a dry-
+run token also redeem it [4], and Robinhood’s approval step
+is skipped when the customer asks for it [27]. Just 3 systems
+require a human to approve every order in every documented
+configuration.
+Write scope and worst loss.14 systems can place an un-
+covered short through their documented order path (W4), and
+13 reach unbounded loss (H1). Because its LLM can only
+veto (A1), Theta Desk reaches no loss by itself despite its W4
+scope. Another 6 systems are bounded by assignment, among
+them Robinhood and Alpaca, whose brokers offer covered
+calls, cash-secured puts, and defined-risk spreads with no un-
+covered writing [28, 29, 31]. Figure 7 places each system by
+autonomy and reachable loss. Its outlined block holds the 10
+systems in which an agent-clearable gate, or no gate at all,
+meets unbounded loss.
+Strata.Table 6 breaks the profile down by sampling stratum,
+and broker interfaces are the most exposed stratum. Of the 8,
+6 reach unbounded loss and 6 execute without a mandatory
+human step, compared with 7 and 11 of the 16 open-source
+systems. 3 broker interfaces, OKX Agent Trade Kit, Public
+MCP, and Webull MCP, combine no gate, uncovered writing,
+and no pre-trade limit outside the model. Similarly, the census
+strata give the same picture, with 11 of the 17 census systems
+reaching unbounded loss.
+Unbounded order paths.These three broker interfaces fail
+in three plain ways (Appendix C). OKX Agent Trade Kit’s
+order tool posts straight to the exchange with no confirmation,
+dry-run or preview parameter, and writing an option there is
+an ordinary margined sell. Public MCP builds each order from
+the raw tool arguments and accepts sell-to-open legs after a
+syntax check. Webull MCP ships notional and quantity risk
+controls in its code, but neither of its option-order validators
+calls them. In each case one tool call can open a naked short
+whose loss has no ceiling, on whatever account the customer
+connected to the agent. Open-source servers repeat the pattern
+at the account level. tasty-agent and schwab-mcp accept sell-
+to-open legs with no coverage check, so the agent’s authority
+equals the options level of the account it is given, and schwab-
+mcp’s human approval step disappears behind a documented
+command-line flag.
+Human approval.Two broker products, IBKR’s AI integra-
+tion and the TradeStation connector, require the customer to
+approve every order (A2), and both still reach unbounded loss.
+The orders they draft can be any order the account is approved
+for, IBKR’s Level 4 permits naked calls, and TradeStation’s
+connector states that it never narrows the account’s permis-
+sions. A customer who approves a credit spread that has lost
+its protective leg sees a routine ticket that collects a premium,
+which is exactly the order O-1 induces (§3.2). Of the 26 sys-
+tems, 3 require such an approval in every configuration, so
+human review is rare, and where it exists it bounds how often
+0 5 10 15 20 26
+R1 max loss
+R2 Greeks, IV source
+R3 spread, liquidity
+R4 decay, expiry
+R5 assignment, pin
+R6 stress
+R7 portfolio limits
+C1 source auth.
+C2 market-data check
+C3 tool, MCP trust
+C4 instruction–data sep.
+C5 memory
+C6 multi-agent trust
+C7 supply chain
+C8 pre-trade limit
+C9 least privilege
+C10 monitoring, kill switch
+C11 adversarial eval.
+Systems (of 26)
+full partial none n/a
+Figure 8:Safeguard coverage.For each robustness (R1–R7)
+and security (C1–C11) indicator, the number of the 26 sys-
+tems that score it full (enforced outside the model), partial
+(model-dependent, optional, or clearable by the agent), or
+none documented, with hatching where the indicator does not
+apply because the system has no order path (C8, C10). R5,
+R6, C1, C2, C4, C5, and C11 are full in none of the systems,
+and the most common full safeguard is C8 (pre-trade limit,
+10 of the 22 systems that can place orders).
+the agent acts rather than how much one order can lose.
+Blast radius.15 of the 26 systems have a platform-scale blast
+radius (H2), so one design’s failure reaches every user of the
+platform. They are all 8 broker interfaces and the 7 adopted
+open-source projects, and 11 of them can reach unbounded
+loss.
+RQ2.17 of the 26 systems can execute with no mandatory
+human step, and 13 can reach unbounded loss. Broker
+interfaces are the most exposed. 6 of 8 reach unbounded
+loss, and 3 of them combine no gate, uncovered writing,
+and no out-of-model limit.
+5.3 RQ3: Limits on Size, No Checks on Inputs
+The safeguards we found decide whether an order is afford-
+able and permitted. However, none of them decides whether
+the information behind the order was honest.
+Input side.Figure 8 shows the input side as the least cov-
+ered. No system scores full on source authentication (C1),
+market-data integrity (C2), instruction–data separation (C4),
+or adversarial evaluation (C11), and 8 of the 8 broker inter-
+faces document no market-data check at all. Of the 22 order-
+capable systems, 20 enforce none of the seven input-side
+controls (C1–C7) outside the model. These systems ingest
+the news, flow data, and Greeks that the primitives of §3.2
+12
+stop the text catch the error cap size
+C1 C2 C4 R1 R2 R3 R4 R5 C8
+O-1risk structure
+O-2strike, expiry
+O-3Greeks, IV
+O-4expiry pressure
+O-5assignment, pin
+O-6profile, harvest
+systems with it full 0 0 0 4 3 3 3 0 10
+Figure 9:Safeguards that would stop each primitive, with
+system counts.A dot marks a safeguard that addresses a prim-
+itive. The robustness indicators follow the primitive’s axes
+(R1–R5 operationalize A1–A5, and R3 also A6), the input-
+side controls follow its precursor classes (C1 for text sources,
+C2 for falsified tool fields, C4 for injected instructions), and
+the out-of-model limit C8 bounds every order. The bottom
+row counts the systems that score each safeguard full, out of
+26 (C8 out of the 22 that can place orders). Only the size limit
+C8 is common, and a manipulated order within budget passes
+it.
+corrupt, and Figure 9 shows that every primitive depends on
+at least one input-side control that no system enforces.
+Order side.A pre-trade limit enforced outside the model
+(C8) is the most common full safeguard, present in 10 of
+the 22 order-capable systems, followed by monitoring with a
+kill switch (C10, 5) and least privilege (C9, 3). These limits
+are rarest where reach is largest (Table 6). Among broker
+interfaces, 3 of 8 enforce C8, and among the adopted open-
+source projects 1 of 7 does, against 6 of the 7 order-capable
+repositories in the purposive stratum. Since these controls
+bound size, a manipulated order that fits the budget passes
+all of them. A cap on order size also leaves the loss of an
+uncovered short unbounded, and 4 of the 13 systems that
+reach unbounded loss enforce such a cap. Human review has
+the same blind spot, because a person approving a ticket sees
+the order and never sees the hidden instruction [9] or poisoned
+tool output [10] behind it.
+Options robustness.Options-specific robustness is mostly
+partial. Assignment and pin handling (R5) and stress handling
+(R6) are full in no system, maximum-loss computation (R1)
+is full in 4, and Greeks and IV provenance (R2) in 3. A partial
+score usually marks an instruction to the model, which catches
+an honest error and gives no protection against an attacker
+who writes into the same context.
+Partial safeguards in practice.Two examples show the
+pattern. tasty-agent’s only confirmation requirement lives in a
+skill prompt, while its order tool executes on a single call with
+dry-run off by default. lumibot scores partial on seventeen of
+the eighteen safeguards, almost all of them rules the model
+is asked to follow or settings the operator may turn on. An
+attacker who writes into the agent’s context writes into the
+same channel as these rules, so a partial score bounds an
+honest model’s mistakes and leaves the induced order open.
+The best-guarded systems.The best-guarded systems are
+among the least adopted. Two repositories with zero and three
+stars, alpaca-options-agent and Agentic-Trader, each enforce
+eight safeguards outside the model, including a maximum-
+loss computation (R1) and a pre-trade limit (C8). By contrast,
+no broker interface enforces more than three, and the two
+most-starred open-source platforms, openalgo and lumibot,
+enforce two and none. Even the two best-guarded systems
+leave the inputs to the model, since neither enforces source
+authentication, market-data integrity or instruction–data sepa-
+ration outside it. Adoption has therefore gone to the designs
+that guard least, and none of the designs guards the text.
+RQ3.0 of the 26 systems authenticate their sources or
+cross-check market data, and 20 of the 22 order-capable
+systems enforce no input-side control. The common safe-
+guard is a size limit (10 of 22), which a manipulated order
+that fits the budget passes.
+6 Recommendations
+Our findings point to the order as the place to bound an options
+agent’s loss, because that is where the risk structure becomes
+concrete. Beyond FARSIGHT’s case for invariants outside
+the model [13], options add a sharper reason. Because the
+manipulation we care about most asserts nothing false, the
+text gives a filter nothing to catch. Content-level detection
+looks for a malicious property of the input, such as an injected
+instruction, a fabricated figure, or a spoofed source, and a
+manipulation built from true statements has none. The harm
+arises when accurate text is mapped to a risk structure, since
+the same true earnings headline can justify a debit spread with
+a known maximum loss or an uncovered short call with none.
+The order is a small formal object whose worst-case loss at
+expiry is computable exactly [19], so defenses belong at the
+order boundary, with content filtering as a secondary layer.
+Brokers own that boundary, so the first five controls are theirs.
+Defined-risk structures for agent accounts.Agent-
+originated orders should be limited to structures with a fi-
+nite maximum loss, with uncovered writing gated behind a
+separate approval that no agent tool call can grant. FINRA
+Rule 2360 requires each customer to be approved for spe-
+cific option activities, including uncovered writing [45], and
+FINRA’s 2021 action against Robinhood found the firm ap-
+proving options accounts through “option account approval
+bots” under limited principal oversight [70]. Brokers should
+extend that approval to the agent as a distinct principal with its
+own options level. Robinhood’s two official sources describe
+different agent scopes (§2), and whichever one the broker
+enforces should be stated as the agent’s level.
+Per-order and per-leg maximum loss.Before routing, the
+broker should compute the worst-case loss of the whole order
+13
+and of each leg alone, then reject any order whose loss is
+unbounded or exceeds the account’s cap. Today 4 of the 22
+order-capable systems compute and enforce a maximum loss
+before entry (R1). The check matters per leg because a spread
+that is defined-risk as a package becomes naked if only its
+short leg fills, or if its long leg closes first.
+Confirmation outside the agent.The tastytrade MCP server
+binds submission to a dry-run check that an unattended agent
+can satisfy itself [4], so the gate stops a careless agent and lets
+a steered one through. 7 of the systems we scored sit behind
+such an agent-clearable gate (§5.2). A confirmation should
+travel through a channel the agent does not control, bind to a
+digest of the order, and show the broker-computed maximum
+loss.
+Dedicated agent accounts.Robinhood already places agents
+in a dedicated account with spending limits [27]. The cap
+should also cover margin, and an agent account should never
+draw buying power from the owner’s main account.
+Pre-trade risk controls.Under SEC Rule 15c3-5, a broker-
+dealer with market access must apply pre-trade credit, capital,
+and erroneous-order controls [44]. An agent MCP endpoint
+deserves the same filters: price collars against the quoted
+spread (A3), rejection of market orders on wide-spread con-
+tracts, limits on order size and frequency, and tighter limits
+near expiry, where decay and gamma dominate pricing (A4).
+Agent builders control everything before the order reaches
+the broker, from the text the agent reads to the order it sends.
+Untrusted text and tools.Every news item, social post, and
+tool output should be handled as attacker-controllable, be-
+cause indirect prompt injection needs no model access [9]
+and MCP tool descriptions are a documented poisoning vec-
+tor [10]. Signed feeds, C2PA manifests [71], and RFC 3161
+timestamps [72] narrow who can write into the agent’s con-
+text, although what is written still goes unjudged. Today no
+system we scored enforces source authentication (C1), and 8
+rely on an instruction to the model.
+Numbers re-derived from the chain.Greeks, implied
+volatility, and theoretical prices quoted in text should never
+enter a decision directly. The agent should recompute implied
+volatility from the quoted bid and ask by inverting a pricing
+model [19, 20], derive Greeks from it, and discard any text-
+stated figure outside a tolerance, because neither the model
+nor a reviewer can check these numbers by eye (A2). Just 3
+of the 26 systems derive Greeks and IV this way today (R2).
+Separate reasoning and order channels.CaMeL separates
+control flow from retrieved data [73], spotlighting marks input
+provenance [74], and StruQ and SecAlign train models to
+ignore data-channel instructions [75,76]. None of the systems
+we scored enforces such a separation outside the model (C4),
+and 5 rely on prompt instructions. Even where deployed, these
+defenses stop injected instructions and leave accurate text that
+shifts judgment untouched, so the order-level checks remain
+necessary.
+Sizing outside the model.Position size, maximum loss per
+trade, and per-day loss limits belong in deterministic code
+between the model and the broker API, where a policy engine
+that the model cannot rewrite gates each order. 10 of the 22
+order-capable systems enforce such a limit today (C8), and in
+7 more the agent can clear or disable it.
+Order-flow hygiene and liquidity limits.Because an agent’s
+orders are observable (A6), builders should avoid resting pre-
+dictable orders in thin contracts, vary timing and size, and
+refuse contracts below an open-interest or volume floor. These
+controls lower what a profile-and-harvest attacker (O-6) can
+collect without having to detect the manipulation.
+Adversarial testing before release.No system documents
+a full adversarial evaluation (C11), and 4 document a partial
+one. Before going live, builders should replay the primitives
+of §3.2 through the agent’s own order path on a paper-trading
+account and publish the worst loss of each resulting order
+with the code.
+7 Open Problems
+Our measurement shows which safeguards options agents
+document and what their order paths can reach. Six problems
+remain open before a broker or a builder can show that an
+agent withstands the attacker of §3.
+1. Attack success measured in dollars.Because we scored
+designs from their public artifacts, the next measurement
+replays the primitives of §3.2 against running agents
+through their own order paths on paper-trading accounts,
+and reports each primitive’s success per model and per
+safeguard configuration. Such a benchmark has to score
+the three properties of the final order defined in §3 and the
+shift in net Greeks, because a decision-flip rate records no
+attack whenever the direction stays correct.
+2. Provenance for derived statistics.Just 3 of the 26 systems
+derive Greeks and IV from a pricing model or an authorita-
+tive chain with sanity checks (R2), and none cross-checks
+market data against an independent feed (C2). Although
+recomputing IV from the quoted bid and ask is cheap, text
+and tools also carry statistics such as IV rank and expected
+move that depend on history. An open question is whether
+such a number can carry a signed computation chain that
+an adaptive attacker cannot forge.
+3. Leg-level atomicity.A defined-risk order becomes naked
+when its short leg fills before its long leg, or when its long
+leg closes first. One purposive system already builds every
+spread as a single native multi-leg order (Appendix C). It
+remains open how an order-level verifier should bound the
+window between legs at brokers that route legs separately.
+4. The price of unpredictability.Randomized order timing
+and size, and refusing thin contracts, lower what a profile-
+and-harvest attacker (O-6) can collect. The size of that
+14
+Table 7: This study compared with FARSIGHT [13], the equi-
+ties systematization, dimension by dimension. The differences
+follow from the four extra decision variables of an options
+order and from measuring systems that run today.
+FARSIGHT (equities) This study (options)
+Attacker levers 1: direction (plus size) 5: direction, magnitude,
+time, volatility, structure
+(plus size)
+Worst case Wrong direction; un-
+bounded through an explicit
+short
+Unbounded loss from one
+dropped leg, direction
+unchanged; assignment into
+unplanned stock
+Systems scored 15 academic designs 26 systems (2 academic,
+8 broker-native, 16 open-
+source), from a logged
+screen of 765 repositories
+Deployment Proposed in the literature Live: agents place options
+orders at retail brokers
+Codebook Robustness (R1–R4, turbu-
+lence) and security (S1–S3)
+Same two dimensions: 7
+robustness and 11 security
+indicators, plus a profile and
+a computed impact
+New dimen-
+sions
+None Write scope, Greeks and
+IV provenance, expiry and
+assignment, order-flow
+observability
+Headline 80% fail a robustness met-
+ric; all 15 vulnerable
+0 of 26 verify their inputs,
+14 can reach an uncovered
+short, and 13 can reach
+unbounded loss
+reduction and its execution cost to an honest agent are un-
+measured, and together they decide whether these controls
+are worth deploying.
+5. Adaptive attackers against platform bans.A ban on un-
+covered writing leaves five of the six primitives reachable
+(§3.2), and it bounds the Alpaca-centered population of
+§5.1. An adaptive attacker [77] who knows that a plat-
+form blocks O-1 may still reach a comparable loss through
+permitted structures, for example by stacking covered po-
+sitions into concentrated assignment risk. It is also open
+whether defenses built for text-only equities agents survive
+such an attacker.
+6. Keeping the measurement current.60.0% of the eligible
+repositories appeared within two weeks, and broker agent
+interfaces change their documentation monthly. Because
+a one-time snapshot ages quickly, the community needs a
+continuous measurement that reruns the screen and flags
+a broker that widens an agent’s write scope, for which
+our screening script and scoring rules are a starting point
+(Appendix D).
+8 Related Work
+Security of LLM trading agents.The closest work is FAR-
+SIGHT, the equities systematization of Wang and Saxena [13],
+which evaluated 15 academic equities designs and found that
+80% fail a core robustness metric and all 15 have security vul-
+nerabilities. Its unit of harm is a flipped buy-or-sell decision
+on a linear position. TradeTrap perturbs single components
+of equities trading agents and reports extreme concentration
+and large drawdowns in closed-loop backtests [17], and Mar-
+ket Signal Injection changes formatting, ordering, or com-
+mentary to shift LLM pricing-agent decisions in simulated
+oligopolies [18]. OQL, the closest options system, translates
+natural-language strategy descriptions into a domain-specific
+language that an engine validates and instantiates deterministi-
+cally, and it is evaluated for translation accuracy [47]. Table 7
+compares our study with FARSIGHT dimension by dimen-
+sion. In contrast, we measure the options agents that brokers
+and developers ship today and price each failure by the worst
+loss of the order it produces.
+Agent-security benchmarks and systematizations.Agent-
+Dojo [14], InjecAgent [15], and the Agent Security Bench [16]
+measure whether injected content triggers unintended tool
+calls, in the indirect prompt-injection setting of Greshake et
+al. [9], and MCPTox measures tool poisoning on real MCP
+servers [10]. Kim et al. [78] systematize attacks and defenses
+across agentic AI systems, and a systematization of agentic
+commerce [79] treats autonomous agents that transact on a
+user’s behalf. Defenses such as CaMeL [73], spotlighting [74],
+StruQ [75], and SecAlign [76] separate instructions from data.
+In contrast, we measure which protections deployed options
+agents enforce, and we score actions whose loss depends on
+the legs of an order and is counted in dollars at expiry.
+Adversarial trading and order-flow leakage.Trading
+against a victim whose orders leak is a known attack class.
+Flash Boys 2.0 documented front-running bots on decentral-
+ized exchanges [80], and a systematization of decentralized-
+finance attacks organized the class [81]. In contrast, our coun-
+terparty primitive (O-6) targets the observable options orders
+of an LLM agent in thin listed contracts, where the attacker
+first induces the order that it then fills.
+9 Discussion
+The broker as a point of control.Because an agent’s worst
+case is set by the broker’s write policy and the account’s
+options level (§5.1, §5.2), one broker decision protects ev-
+ery agent on the platform at once. Robinhood and Alpaca
+already exclude uncovered writing, and their agents stop at
+assignment whatever the agent code checks. The other bro-
+kers let an agent inherit the options level of the human who
+connected it. FINRA Rule 2360 approves that level by as-
+sessing the customer’s experience and finances [45], which
+15
+says nothing about the software that will place the orders. An
+agent-specific approval level that excludes uncovered writing
+would therefore remove the unbounded tail from 6 of the 8
+broker interfaces we scored without changing a line of agent
+code.
+Size limits and loss limits.The pre-trade controls that
+market-access rules require are written as caps on size, no-
+tional value and credit [44], and C8 is the safeguard we found
+most often. On options, however, a cap on contracts or no-
+tional leaves a naked short unbounded, and 4 of the 13 systems
+that reach unbounded loss enforce such a cap. The control that
+bounds the induced order is a maximum loss computed from
+the legs before entry (R1), which 4 of the 22 order-capable
+systems enforce. Brokers that already compute margin per
+position hold the numbers this check needs.
+Evaluating direction-preserving attacks.Agent-security
+benchmarks count unintended tool calls [14–16], and trading-
+agent evaluations count flipped buy-or-sell decisions [13]. An
+options attack that keeps the direction and drops a protective
+leg triggers neither, because the agent called the intended tool
+and chose the intended side. Evaluations of options agents
+should therefore score the risk class of the resulting order,
+the change in maximum loss between the honest and the
+induced order, rather than whether the decision changed, and
+no system we scored documents a full adversarial evaluation
+(C11).
+A fast-turnover ecosystem.Most of the open-source pop-
+ulation appeared within two weeks around one event (§5.1),
+and much of it is likely to stop being maintained once the
+event ends. Its designs nevertheless persist through forks and
+templates, and openalgo alone has 1,275 forks. Review effort
+is better spent on the shared layers that many agents reuse,
+namely broker SDKs, MCP servers and starter templates, than
+on individual repositories, because a missing coverage check
+in one shared order tool reaches every agent built on it.
+Generality.Index, futures and crypto options share all five
+decision variables, so the threat model and codebook apply to
+them unchanged, and our scored set already includes futures
+options (tastytrade) and crypto options (OKX, a Deribit agent).
+Although the enabling layer is deployed (§2), we found no
+public report of a realized loss from an autonomous options
+agent, so the window for building controls into the order path
+is open now.
+Limitations.Three limitations bound how far the counts ex-
+tend. First, we score documented designs at one snapshot, so
+the RQ2 and RQ3 counts describe what each paper, repository,
+or broker page commits to, and a running deployment may
+add or drop safeguards. Second, one coder and LLM-assisted
+passes produced the scores and we report no inter-coder agree-
+ment, so cells near the line between full and partial in Table 5
+carry one coder’s judgment. Third, proprietary desks are ab-
+sent, because our search finds public systems.
+10 Conclusion
+We measured the LLM options-trading agents that brokers
+and developers ship and scored each by the worst loss its
+order path can reach. Most of the open-source population
+appeared in 2026 around one hackathon. None of the 26 sys-
+tems verified their inputs and 13 could reach unbounded loss,
+so controls for options agents belong at the order boundary,
+outside the model.
+References
+[1] Robinhood Markets, Inc., “Agentic options trading is
+now available to all US customers,” Post on X by
+@RobinhoodApp, Jul. 2026. [Online]. Available: https:
+//x.com/RobinhoodApp/status/2074206140557037865
+[2] ——, “Agentic trading on robinhood,” Robinhood
+product page, 2026. [Online]. Available: https:
+//robinhood.com/us/en/agentic-trading/
+[3] ——, “Robinhood reports first quarter 2026 results,”
+Press release, GlobeNewswire, Apr. 2026, also at https:
+//investors.robinhood.com/news-releases/news-release
+-details/robinhood-reports-first-quarter-2026-results.
+[Online]. Available: https://www.globenewswire.com/
+news-release/2026/04/28/3283181/0/en/robinhood-rep
+orts-first-quarter-2026-results.html
+[4] tastytrade, Inc., “tastytrade/tastytrade-mcp: MCP server
+for the tastytrade open API,” https://github.com/tastytr
+ade/tastytrade-mcp, 2026, gitHub repository, 20 stars at
+the snapshot; developer documentation at https://develo
+per.tastytrade.com/docs/sdks-and-tools/mcp-server/.
+[5] ——, “Open API MCP brings AI to your tastytrade
+account,” tastytrade Newsroom, Aug. 2026. [Online].
+Available: https://tastytrade.com/newsroom/news/ope
+n-api-mcp-brings-ai-to-your-tastytrade-account/
+[6] J. Inskip, “Best brokers for AI trading agents in 2026:
+MCP tested,” StockBrokers.com, Sep. 2026. [Online].
+Available: https://www.stockbrokers.com/guides/ai-a
+gent-brokers
+[7] H. Schwartz, “State of the options industry: Options
+market continued to break records in Q2 2026,”
+Cboe Insights, Jul. 2026. [Online]. Available: https:
+//www.cboe.com/insights/posts/state-of-the-options-i
+ndustry-options-market-continued-to-break-records-i
+n-q-2-2026
+[8] Cboe Global Markets, Inc., “Cboe global markets
+reports trading volume for july 2026,” Press release, PR
+Newswire, Aug. 2026. [Online]. Available: https://www.
+prnewswire.com/news-releases/cboe-global-markets-r
+eports-trading-volume-for-july-2026-302844194.html
+16
+[9] K. Greshake, S. Abdelnabi, S. Mishra, C. Endres,
+T. Holz, and M. Fritz, “Not what you’ve signed up for:
+Compromising real-world LLM-integrated applications
+with indirect prompt injection,” inProceedings of the
+16th ACM Workshop on Artificial Intelligence and Secu-
+rity (AISec). Copenhagen, Denmark: ACM, 2023, pp.
+79–90.
+[10] Z. Wang, Y . Gao, Y . Wang, S. Liu, H. Sun, H. Cheng,
+G. Shi, H. Du, and X. Li, “MCPTox: A benchmark for
+tool poisoning on real-world MCP servers,” inProceed-
+ings of the AAAI Conference on Artificial Intelligence,
+vol. 40, no. 42, 2026, pp. 35 811–35 819.
+[11] U.S. Securities and Exchange Commission, Office of
+Investor Education and Assistance, “Investor bulletin:
+An introduction to short sales,” Investor.gov, 2026.
+[Online]. Available: https://www.investor.gov/introduct
+ion-investing/general-resources/news-alerts/alerts-bul
+letins/investor-bulletins-51
+[12] L. Moyer, “A risky natural gas bet gone awry leads
+to weepy YouTube confessional video,” CNBC, Nov.
+2018. [Online]. Available: https://www.cnbc.com/2018/
+11/21/a-risky-natural-gas-bet-gone-awry-leads-to-w
+eepy-youtube-confessional.html
+[13] M. Wang and N. Saxena, “Sok: Trading agents or market
+crashers? dissecting robustness and security failures
+in academic financial llm trading schemes,” 2026.
+[Online]. Available: https://arxiv.org/abs/2609.19705
+[14] E. Debenedetti, J. Zhang, M. Balunovic, L. Beurer-
+Kellner, M. Fischer, and F. Tramèr, “AgentDojo: A
+dynamic environment to evaluate prompt injection
+attacks and defenses for LLM agents,” inAdvances
+in Neural Information Processing Systems (NeurIPS)
+Datasets and Benchmarks Track, vol. 37, 2024. [Online].
+Available: https://proceedings.neurips.cc/paper_files/p
+aper/2024/hash/97091a5177d8dc64b1da8bf3e1f6fb5
+4-Abstract-Datasets_and_Benchmarks_Track.html
+[15] Q. Zhan, Z. Liang, Z. Ying, and D. Kang, “InjecAgent:
+Benchmarking indirect prompt injections in tool-
+integrated large language model agents,” inFindings
+of the Association for Computational Linguistics:
+ACL 2024. Bangkok, Thailand: Association for
+Computational Linguistics, Aug. 2024, pp. 10 471–
+10 506. [Online]. Available: https://aclanthology.org/2
+024.findings-acl.624/
+[16] H. Zhang, J. Huang, K. Mei, Y . Yao, Z. Wang,
+C. Zhan, H. Wang, and Y . Zhang, “Agent security
+bench (ASB): Formalizing and benchmarking attacks
+and defenses in LLM-based agents,” inProceedings of
+the Thirteenth International Conference on Learning
+Representations (ICLR), 2025. [Online]. Available:
+https://openreview.net/forum?id=V4y0CpX4hK
+[17] L. Yan, J. Mei, T. Zhou, L. Huang, J. Zhang, D. Liu, and
+J. Shao, “TradeTrap: Are LLM-based trading agents
+truly reliable and faithful?” 2025. [Online]. Available:
+https://arxiv.org/abs/2512.02261
+[18] D. Lee and H. Park, “Market signal injection:
+Adversarial context manipulation of LLM pricing
+agents,” 2026, accepted to the FinNLP 2026 Workshop
+at EMNLP 2026. [Online]. Available: https://arxiv.org/
+abs/2609.18357
+[19] J. C. Hull,Options, Futures, and Other Derivatives,
+11th ed. Pearson, 2021.
+[20] F. Black and M. Scholes, “The pricing of options and cor-
+porate liabilities,”Journal of Political Economy, vol. 81,
+no. 3, pp. 637–654, 1973.
+[21] Board of Governors of the Federal Reserve System, “12
+CFR § 220.12 — supplement: Margin requirements
+(regulation T),” Electronic Code of Federal Regulations,
+mirrored by Cornell Law School Legal Information
+Institute, 2026. [Online]. Available: https://www.law.co
+rnell.edu/cfr/text/12/220.12
+[22] S. Bryzgalova, A. Pavlova, and T. Sikorskaya, “Retail
+trading in options and the rise of the big three whole-
+salers,”The Journal of Finance, vol. 78, no. 6, pp. 3465–
+3514, Dec. 2023.
+[23] Options Price Reporting Authority, “OPRA: Consoli-
+dated options last-sale reports and quotation informa-
+tion,” https://www.opraplan.com/, 2026.
+[24] Y . Xia, P. You, T. Wang, F. Liu, H. Qi, X. Wu,
+and S. Zhang, “Agentic trading: When LLM agents
+meet financial markets,” 2026. [Online]. Available:
+https://arxiv.org/abs/2605.19337
+[25] Robinhood Markets, Inc., “Robinhood is now open to
+agents,” Robinhood Newsroom, May 2026. [Online].
+Available: https://robinhood.com/us/en/newsroom/rob
+inhood-is-now-open-to-agents/
+[26] I. Mehta, “Robinhood now lets your AI agents trade
+stocks,” TechCrunch, May 2026. [Online]. Available:
+https://techcrunch.com/2026/05/27/robinhood-now-let
+s-your-ai-agents-trade-stocks/
+[27] Robinhood Markets, Inc., “Trading with your agent,”
+Robinhood Support, 2026. [Online]. Available: https:
+//robinhood.com/us/en/support/articles/trading-with-y
+our-agent/
+17
+[28] Robinhood Markets, “Robinhood trading MCP server:
+Option order and review tool descriptions,” https://agen
+t.robinhood.com/mcp/trading, 2026.
+[29] ——, “Advanced options strategies (options level 3),”
+https://robinhood.com/us/en/support/articles/advance
+d-options-strategies/, 2026.
+[30] “alpacahq/alpaca-mcp-server: Alpaca’s official MCP
+server for trading stocks, ETFs, crypto, and options,”
+https://github.com/alpacahq/alpaca-mcp-server, 2026,
+gitHub repository, 991 stars at the snapshot.
+[31] Alpaca, “Options trading overview,” https://docs.alpaca.
+markets/docs/options-trading-overview, 2026, alpaca
+API documentation; lists covered calls and cash-secured
+puts as the only short strategies and rejects uncovered
+option orders.
+[32] E. Hubinger, C. Denison, J. Mu, M. Lambert, M. Tong,
+M. MacDiarmid, T. Lanham, D. M. Ziegleret al.,
+“Sleeper agents: Training deceptive LLMs that persist
+through safety training,” 2024. [Online]. Available:
+https://arxiv.org/abs/2401.05566
+[33] T. Ernst and C. S. Spatt, “Payment for order flow and
+option internalization,”The Review of Financial Studies,
+2026, advance access.
+[34] Cboe Exchange, Inc., “U.S. options crossing orders,”
+Cboe, 2026. [Online]. Available: https://www.cboe.com
+/us/options/trading/crossing_orders/
+[35] W. Zou, R. Geng, B. Wang, and J. Jia, “PoisonedRAG:
+Knowledge corruption attacks to retrieval-augmented
+generation of large language models,” inProceedings
+of the 34th USENIX Security Symposium (USENIX
+Security ’25). Seattle, WA: USENIX Association,
+Aug. 2025, pp. 3827–3844. [Online]. Available:
+https://www.usenix.org/conference/usenixsecurity25/p
+resentation/zou-poisonedrag
+[36] A. Tversky and D. Kahneman, “The framing of deci-
+sions and the psychology of choice,”Science, vol. 211,
+no. 4481, pp. 453–458, 1981.
+[37] I. Itzhak, G. Stanovsky, N. Rosenfeld, and Y . Belinkov,
+“Instructed to bias: Instruction-tuned language models
+exhibit emergent cognitive bias,”Transactions of the
+Association for Computational Linguistics, vol. 12,
+pp. 771–785, 2024. [Online]. Available: https:
+//aclanthology.org/2024.tacl-1.43/
+[38] F. Nestaas, E. Debenedetti, and F. Tramèr, “Ad-
+versarial search engine optimization for large
+language models,” inProceedings of the Thir-
+teenth International Conference on Learning Rep-
+resentations (ICLR), 2025. [Online]. Available:
+https://openreview.net/forum?id=hkdqxN3c7t
+[39] F. Germani and G. Spitale, “Source framing triggers
+systematic bias in large language models,”Science Ad-
+vances, vol. 11, no. 45, p. eadz2924, Nov. 2025, preprint:
+arXiv:2505.13488.
+[40] E. Ferrara, O. Varol, C. Davis, F. Menczer, and A. Flam-
+mini, “The rise of social bots,”Communications of the
+ACM, vol. 59, no. 7, pp. 96–104, 2016.
+[41] T. Zhang, C. Zhang, J. X. Morris, E. Bagdasarian, and
+V . Shmatikov, “Self-interpreting adversarial images,” in
+Proceedings of the 34th USENIX Security Symposium
+(USENIX Security ’25). Seattle, WA: USENIX
+Association, Aug. 2025, pp. 1037–1052. [Online].
+Available: https://www.usenix.org/conference/usenix
+security25/presentation/zhang-tingwei
+[42] W. Yang, X. Bi, Y . Lin, S. Chen, J. Zhou, and X. Sun,
+“Watch out for your agents! Investigating backdoor
+threats to LLM-based agents,” inAdvances in Neural In-
+formation Processing Systems (NeurIPS), vol. 37. Cur-
+ran Associates, Inc., 2024, pp. 100 938–100 964.
+[43] OWASP Foundation, “OWASP top 10 for LLM appli-
+cations 2025,” https://genai.owasp.org/llm-top-10/,
+2025.
+[44] U.S. Securities and Exchange Commission, “Risk
+management controls for brokers or dealers with market
+access,” Final rule, Exchange Act Release No. 34-63241,
+File No. S7-03-10, Nov. 2010, adopts Rule 15c3-5
+under the Securities Exchange Act of 1934 (17 CFR
+Part 240). Dated 2010-11-03. [Online]. Available: https:
+//www.sec.gov/files/rules/final/2010/34-63241.pdf
+[45] Financial Industry Regulatory Authority (FINRA),
+“Rule 2360: Options,” FINRA Rulebook, see paragraphs
+(b)(16) Opening of Accounts and (b)(20) Supervision
+of Accounts, and Regulatory Notice 21-15, “FINRA
+Reminds Members About Options Account Approval,
+Supervision and Margin Requirements” (2021-04-09),
+https://www.finra.org/rules-guidance/notices/21-15.
+[Online]. Available: https://www.finra.org/rules-guida
+nce/rulebooks/finra-rules/2360
+[46] X. Kuang and B. Lin, “A hybrid architecture for options
+wheel strategy decisions: LLM-generated bayesian
+networks for transparent trading,” 2025. [Online].
+Available: https://arxiv.org/abs/2512.01123
+[47] H. Luo, Z. Lai, J. Xu, Y . Li, Tang Pok Hin, Y . Zhang,
+and C. Liu, “From natural language to executable option
+strategies via large language models,” 2026. [Online].
+Available: https://arxiv.org/abs/2603.16434
+[48] “okx/agent-trade-kit: OKX trading MCP server connect-
+ing AI agents to spot, swap, futures, options, and grid
+18
+bots,” https://github.com/okx/agent-trade-kit, 2026,
+gitHub repository, 437 stars at the snapshot.
+[49] “Publicdotcom/publicdotcom-mcp-server: MCP server
+connecting AI assistants to a public.com brokerage ac-
+count,” https://github.com/PublicDotCom/publicdotc
+om-mcp-server, 2026, gitHub repository, 66 stars at the
+snapshot.
+[50] “webull-inc/webull-openapi-mcp: MCP server for the
+webull OpenAPI (webull agentic trading),” https://gith
+ub.com/webull-inc/webull-openapi-mcp, 2026, gitHub
+repository, 25 stars at the snapshot.
+[51] Interactive Brokers LLC, “AI-powered portfolio
+analysis & trading tools,” Interactive Brokers product
+page, 2026. [Online]. Available: https://www.interactiv
+ebrokers.com/en/trading/ai-integrations.php
+[52] TradeStation Securities, Inc., “TradeStation MCP: AI
+tools for your account,” TradeStation product page,
+2026, institutional connector described separately at
+https://institutional.tradestation.com/technology/in
+stitutional-ai-trading/. [Online]. Available: https:
+//www.tradestation.com/platforms-and-tools/mcp/
+[53] “Lumiwealth/lumibot: AI agents that actually place the
+trade,” https://github.com/Lumiwealth/lumibot, 2026,
+gitHub repository, 2086 stars at the snapshot.
+[54] “ferdousbhai/tasty-agent: MCP server letting Claude
+manage a tastytrade portfolio,” https://github.com/ferdo
+usbhai/tasty-agent, 2026, gitHub repository, 86 stars at
+the snapshot.
+[55] “marketcalls/openalgo: Open source algo trading plat-
+form for everyone,” https://github.com/marketcalls
+/openalgo, 2026, gitHub repository, 2722 stars at the
+snapshot.
+[56] “jkoelker/schwab-mcp: MCP server connecting a
+Charles schwab brokerage account to LLM-based ap-
+plications,” https://github.com/jkoelker/schwab-mcp,
+2026, gitHub repository, 61 stars at the snapshot.
+[57] “trade-it-inc/trade-it-mcp: guide to the hosted Trade
+It MCP server for multi-broker options, stock, and
+crypto trading,” h t t p s : / / g i t h u b . c o m / t r a d e - i
+t- inc/trade- it- mcp, 2026, gitHub repository is a
+documentation/registry-metadata mirror only; the live
+service runs at mcp.tradeit.app (closed-source). 60 stars
+at the snapshot.
+[58] “Jakenesler/openprophet: Autonomous AI trading agent
+with a heartbeat-loop MCP server and Go trading back-
+end,” https://github.com/JakeNesler/OpenProphet, 2026,
+gitHub repository, 112 stars at the snapshot.
+[59] “staskh/trading_skills: Claude-powered advisor skill
+pack and MCP server for option traders,” https://gi
+thub.com/staskh/trading_skills, 2026, gitHub repository,
+368 stars at the snapshot.
+[60] “technet365/tastyscanner-mcp-server: MCP server for
+tastytrade that lets Claude/GPT trade options,” https:
+//github.com/technet365/TastyScanner-MCP-Server,
+2026, gitHub repository, 3 stars at the snapshot.
+[61] “ipatpat/deribit-trading-agent: A deribit trading terminal
+with vida, an AI copilot that analyzes options, builds
+spreads, and places orders,” https://github.com/ipatpat/d
+eribit-trading-agent, 2026, gitHub repository, 4 stars at
+the snapshot.
+[62] “Rohan5commit/options-trading-bot: LLM-driven US
+options trading bot using the alpaca broker API (paper
+trading),” https://github.com/Rohan5commit/option
+s-trading-bot, 2026, gitHub repository, 0 stars at the
+snapshot.
+[63] “trevorgordon981/agentic-trader: LLM-assisted options
+swing trading,” https://github.com/trevorgordon981/A
+gentic-Trader, 2026, gitHub repository, 3 stars at the
+snapshot.
+[64] “Georgestatho/agentic-trading-research: A LLM based
+options trader,” https://github.com/GeorgeStatho/agenti
+c-trading-research, 2026, gitHub repository, 11 stars at
+the snapshot.
+[65] “Alejdro83/alpaca-options-agent: Autonomous credit-
+spread options trading agent on Alpaca via its official
+MCP server,” https://github.com/Alejdro83/alpaca-opt
+ions-agent, 2026, gitHub repository, 0 stars at the snap-
+shot; lablab.ai Alpaca AI Trading Agents Hackathon
+submission.
+[66] “mohitsolanki026/options-trading-bot: Auto-
+mated paper-trading bot for indian index op-
+tions with the theta desk dashboard,” h t t p s :
+//github.com/mohitsolanki026/Options-Trading-Bot,
+2026, gitHub repository, 1 star at the snapshot.
+[67] “liyangcccc/ai-trading-agent: Multi-agent LLM system
+for daily options trade recommendations,” https://gith
+ub.com/liyangcccc/AI-trading-Agent, 2025, gitHub
+repository, 1 star at the snapshot.
+[68] “Sharanrajani/news-agent: Greek-weighted, grounded
+pre-market briefing agent for an options trader,” https:
+//github.com/SharanRajani/news-agent, 2026, gitHub
+repository, 1 star at the snapshot.
+[69] lablab.ai, “Alpaca AI trading agents hackathon,” https:
+//lablab.ai/ai-hackathons/alpaca-ai-trading-agent
+s-hackathon, Aug. 2026, online event, 28 August to 4
+19
+September 2026, with Alpaca as lead partner; its rules
+require every strategy to trade options.
+[70] Financial Industry Regulatory Authority (FINRA),
+“Letter of acceptance, waiver and consent
+no. 2020066971201 (robinhood financial LLC),”
+FINRA AWC, Jun. 2021, signed 2021-06-30. [Online].
+Available: https://www.finra.org/sites/default/files/202
+1-06/robinhood-financial-awc-063021.pdf
+[71] Coalition for Content Provenance and Authen-
+ticity (C2PA), “Content credentials: C2PA tech-
+nical specification, version 2.2,” C2PA specifi-
+cation, May 2025. [Online]. Available: https:
+//spec.c2pa.org/specifications/specifications/2.2/s
+pecs/_attachments/C2PA_Specification.pdf
+[72] C. Adams, P. Cain, D. Pinkas, and R. Zuccherato,
+“Internet X.509 public key infrastructure time-stamp
+protocol (TSP),” RFC 3161, Internet Engineering Task
+Force, Aug. 2001, updated by RFC 5816. [Online].
+Available: https://www.rfc-editor.org/rfc/rfc3161
+[73] E. Debenedetti, I. Shumailov, T. Fan, J. Hayes, N. Car-
+lini, D. Fabian, C. Kern, C. Shi, A. Terzis, and F. Tramèr,
+“Defeating prompt injections by design,” in2026 IEEE
+Conference on Secure and Trustworthy Machine Learn-
+ing (SaTML), 2026, pp. 587–618.
+[74] K. Hines, G. Lopez, M. Hall, F. Zarfati, Y . Zunger,
+and E. Kiciman, “Defending against indirect prompt
+injection attacks with spotlighting,” 2024. [Online].
+Available: https://arxiv.org/abs/2403.14720
+[75] S. Chen, J. Piet, C. Sitawarin, and D. Wagner, “StruQ:
+Defending against prompt injection with structured
+queries,” inProceedings of the 34th USENIX Security
+Symposium (USENIX Security ’25). Seattle, WA:
+USENIX Association, Aug. 2025, pp. 2383–2400.
+[Online]. Available: https://www.usenix.org/conferenc
+e/usenixsecurity25/presentation/chen-sizhe
+[76] S. Chen, A. Zharmagambetov, S. Mahloujifar, K. Chaud-
+huri, D. Wagner, and C. Guo, “SecAlign: Defending
+against prompt injection with preference optimization,”
+inProceedings of the 2025 ACM SIGSAC Conference on
+Computer and Communications Security (CCS). ACM,
+2025, pp. 2833–2847.
+[77] M. Nasr, N. Carlini, C. Sitawarin, S. V . Schulhoff,
+J. Hayes, M. Ilie, J. Pluto, S. Song, H. Chaudhari,
+I. Shumailov, A. Thakurta, K. Y . Xiao, A. Terzis,
+and F. Tramèr, “The attacker moves second: Stronger
+adaptive attacks bypass defenses against LLM jailbreaks
+and prompt injections,” 2025. [Online]. Available:
+https://arxiv.org/abs/2510.09023
+[78] J. Kim, W. Guo, and D. Song, “SoK: Attack and defense
+landscape of agentic AI systems,” inProceedings of the
+35th USENIX Security Symposium (USENIX Security
+’26). Baltimore, MD: USENIX Association, Aug. 2026.
+[Online]. Available: https://www.usenix.org/conferenc
+e/usenixsecurity26/presentation/kim-juhee-agentic
+[79] Q. Mao, J. Wang, Y . Liu, L. Zhu, C. Ma, and
+J. Yan, “SoK: Security of autonomous LLM agents
+in agentic commerce,” 2026. [Online]. Available:
+https://arxiv.org/abs/2604.15367
+[80] P. Daian, S. Goldfeder, T. Kell, Y . Li, X. Zhao, I. Bentov,
+L. Breidenbach, and A. Juels, “Flash boys 2.0: Fron-
+trunning in decentralized exchanges, miner extractable
+value, and consensus instability,” in2020 IEEE Sympo-
+sium on Security and Privacy (SP), 2020, pp. 910–927.
+[81] L. Zhou, X. Xiong, J. Ernstberger, S. Chaliasos, Z. Wang,
+Y . Wang, K. Qin, R. Wattenhofer, D. Song, and A. Ger-
+vais, “SoK: Decentralized finance (DeFi) attacks,” in
+2023 IEEE Symposium on Security and Privacy (SP),
+2023, pp. 2444–2461.
+[82] A. Lopez-Lira, “Can large language models trade?
+Testing financial theories with LLM agents in
+market simulations,” 2025. [Online]. Available: https:
+//arxiv.org/abs/2504.10789
+A Attack Classes That Reach the Prim-
+itives
+Table 4 in §3.2 lists nine publicly documented attack classes,
+grouped by the FARSIGHT attack taxonomy [13], that reach
+an options agent with the attacker’s capabilities unchanged. A
+class enters the table if a peer-reviewed or public preprint ex-
+emplar demonstrates it on some LLM victim, if the attacker’s
+action uses a surface of §3, and if its escalation follows from
+payoff mechanics [19, 20] and names at least one axis of §2.
+The effect column reports what each exemplar measured on
+its own victims, none of which traded options, and the escala-
+tion column states what the same corruption costs on options.
+Each class feeds at least one primitive of Table 3, and the
+escalations fall into three patterns.
+Direction-preserving loss.On an equities agent, an
+information-source attack pays when it flips the buy-or-sell
+decision. Rows M1, M4, and M5 instead impose a loss while
+the agent picks the correct direction. An option priced on
+implied volatility and time (A4) loses value when a move
+arrives late or smaller than the premium implies, so inflating
+the expected size of a move sells the agent an overpriced
+bet in the right direction, and a wide spread (A3) makes a
+manufactured flow narrative cost the spread on entry and exit.
+20
+New order fields.Rows M7 to M9 act on the order itself. An
+equity order has a side, a size, and a price, while an options
+order adds legs, ratios, strikes, expiries, an opening or closing
+flag, and exercise decisions (A5). An injected instruction or a
+poisoned tool response therefore has more fields to hide in,
+and a single altered leg changes the risk class of the whole
+position (A1) while the order still looks routine. On an options
+account, the falsified state field of TradeTrap’s M8 result [17]
+would be a margin requirement or a maximum-loss figure.
+Framing without falsehood.Row M3 matters most for
+O-1, because writing an option collects a premium kept in
+most outcomes and gives back a large multiple of it in the
+rare adverse one [19]. Instruction-tuned models exhibit the
+certainty effect [37], which overweights outcomes presented
+as near-certain [36], and “this put expires worthless in most
+months” can be literally true while pointing the agent toward
+the payoff that hides its tail. A fact-check finds nothing to
+reject, because each stated fact checks out.
+B Safeguard Codebook
+Table 8 defines every indicator, the rule that separates a full
+score from a partial one, and the public framework or axis the
+indicator operationalizes. For every robustness and security
+indicator, applies when the safeguard is documented but
+depends on the model following an instruction, is optional
+or off by default, or can be cleared by the agent itself, and
+applies when the public artifacts document nothing. Scores
+are design-level, from public artifacts at the snapshot, with
+cell-level evidence in Appendix C. Five rules make the pro-
+file and impact cells mechanical, and a consistency check
+rejects any cell that violates them. (1) X2 and X3 describe
+the most permissive configuration that the documentation or
+code lets an operator enable, and X3 counts the broker’s own
+restrictions and the account’s highest options level. (2) A gate
+yields A2 only if it applies to every order in every documented
+configuration. A gate that the agent can clear, that is off by
+default, or that a documented setting removes yields A3. (3)
+C8 is full when at least one control outside the model that the
+agent cannot clear applies to every order, partial when such
+controls are optional or agent-clearable or when only broker
+eligibility rules apply, and none otherwise. C8 and C10 do
+not apply to a system without an order path (A0 or W0). (4)
+H1 is none for A0, A1, or W0 and otherwise premium (W1),
+assignment (W2, W3), or unbounded (W4), and H2 is plat-
+form for broker-native and adopted open-source systems. (5)
+H3 is interceptable for A0 to A2, partial for A3 or when C8
+is full or partial, and not interceptable otherwise. One coder
+scored the systems of the initial snapshot, and the 13 systems
+added at this snapshot were scored with LLM assistance and
+re-checked against their sources in a second LLM-assisted
+pass. Every cell changed by these rules keeps its previous
+value in the evidence file. We have not run a second-coder
+pass and report no inter-coder agreement.
+C Per-System Evidence
+Each block below covers one scored system: the public artifact
+behind it, the evidence for its autonomy (X2) and write-scope
+(X3) levels, the derivation of its worst reachable loss (H1), and
+which codebook indicators (Appendix B) it scores full, partial,
+or none. Quotations are shortened to the evidence needed to
+justify a score. Of the 28 systems examined in depth, 2 were
+excluded after review. That list, with its reasons, closes the
+appendix.
+1. Kuang and Lin [46].arXiv preprint v1 only (2025, q-
+fin.CP). No later version, code repository, or data-availability
+statement found. Autonomy A0: The paper contains no broker
+API, order-execution routine, or live or paper-trading infras-
+tructure. It is described as purely a backtest and simulation
+study. Write scope W0: No order-writing capability of any
+kind is described anywhere in the paper. The system outputs
+a recommendation a human would execute manually. Worst
+reachable loss (none): X2 is A0 and X3 is W0, so the system
+describes no order-writing capability. A human who followed
+its output manually could still lose money.Full:none.Partial:
+R3, R4, R5, R6, R7, C5, C6, C7.None:R1, R2, C1, C2, C3,
+C4, C9, C11.
+2. OQL [47].arXiv preprint v1 only (2026, cs.AI). No code,
+data, or artifact link on the abstract or HTML page. Auton-
+omy A0: The output is a ranked set of backtested candidate
+strategies. No order placement, broker, paper-trading, or live-
+execution component is described anywhere in the paper.
+Write scope W0: No broker API or order-writing capabil-
+ity is described. The engine only reads option-chain data and
+returns contract combinations for a human to consider. Worst
+reachable loss (none): X2 is A0 and X3 is W0, so the system
+itself can cause no automated loss. A human who manually
+executed its output could still lose money.Full:none.Partial:
+R1, R2, R4.None:R3, R5, R6, R7, C1, C2, C3, C4, C5, C6,
+C7, C9, C11.
+3. OKX Agent Trade Kit [48].Official server, 437 stars,
+68 forks, MIT, active. Repo created in 2026. Autonomy A4:
+option_place_order posts directly to the exchange’s order end-
+point with no confirmation, dry-run, or preview parameter
+anywhere in the handler. Write scope W4: Writing an op-
+tion is a margined position by product design. There is no
+covered or cash-secured order type distinct from an ordinary
+margined sell. Worst reachable loss (unbounded): No code or
+documentation computes or enforces a maximum-loss figure,
+and nothing outside the model can stop a manipulated option
+order before it executes.Full:none.Partial:R2, C3, C7, C9,
+C10.None:R1, R3, R4, R5, R6, R7, C1, C2, C4, C5, C6, C8,
+C11.
+4. Public MCP [49].Official server, 66 stars, 7 forks, Apache-
+2.0, active. Repo created in 2026. Autonomy A4: Each or-
+21
+Table 8: The safeguard codebook in full, in the order of Figure 4: robustness (R), security (C), profile (X), and computed impact
+(H). The Grounding column names the amplification axis (§2) or public framework the indicator operationalizes: the OW ASP Top
+10 for LLM Applications [43], SEC Rule 15c3-5 on market-access risk controls [44], and FINRA Rule 2360 options approval
+levels [45].
+ID Indicator Levels or rule for Grounding
+R1 Maximum loss Maximum loss is computed and enforced before entry, distinguishing defined from undefined
+risk.
+A1
+R2 Greeks and IV provenance Greeks and IV are computed from a pricing model or an authoritative chain, with sanity checks,
+not read from text.
+A2
+R3 Spread and liquidity Execution enforces limit orders, open-interest or volume floors, or maximum spreads. A3, A6
+R4 Decay and expiry Time decay, event volatility, and days to expiry gate entries and exits. A4
+R5 Exercise and assignment Early assignment, exercise, and pin risk are handled by rule. A5
+R6 Stress V olatility spikes, gaps, halts, and stale data trigger enforced behavior. Turbulence dimension
+of [13]
+R7 Portfolio limits Position size, net Greeks, concentration, or loss limits are enforced. [13]
+C1 Source authentication Text inputs are authenticated or provenance-checked before use. OWASP LLM04 data
+poisoning
+C2 Market-data integrity Quotes, chains, or Greeks are cross-validated against an independent authoritative feed. OW ASP LLM04
+C3 Tool and MCP trust Servers are allowlisted or pinned and tool outputs are validated. OWASP LLM03 supply
+chain; [10]
+C4 Instruction–data separation Untrusted content is structurally separated from instructions, or injection is mitigated in code. OWASP LLM01 prompt
+injection; [9]
+C5 Memory and retrieval Stored memory and retrieved documents are validated before reuse. OWASP LLM08 vector
+and embedding weak-
+nesses
+C6 Multi-agent trust Messages between agents are authenticated or constrained; single-agent systems score with
+a note.
+Attack taxonomy of [13]
+C7 Supply chain Configuration, prompts, models, or dependencies are pinned or provenance-checked. OW ASP LLM03
+C8 Out-of-model pre-trade
+limits
+A control outside the LLM that the agent cannot clear applies to every order: a size, notional, or
+loss cap, or a mandatory human confirmation. Not applicable without an order path.
+SEC Rule 15c3-5
+C9 Least privilege Dedicated agent account, scoped options level, capped buying power, or scoped keys. OW ASP LLM06
+C10 Monitoring and kill switch Logging, alerting, and a kill switch are enforced. Not applicable without an order path. SEC Rule 15c3-5
+C11 Adversarial evaluation Red-teaming, injection tests, or adversarial backtests are documented. This work (§6)
+X1 System type Academic system, open-source project, or broker-native agent interface. Descriptive
+X2 Autonomy A0 advisory, no orders; A1 the LLM can only veto; A2 a human approves every order in
+every documented configuration; A3 automatic behind a gate the agent can clear, that is off by
+default, or that a documented setting removes; A4 no gate.
+OWASP LLM06 exces-
+sive agency
+X3 Write scope Maximum reachable through the documented order path, counting broker restrictions and the
+account’s highest options level: W0 read-only; W1 long premium; W2 defined-risk multi-leg;
+W3 covered or cash-secured shorts; W4 uncovered shorts.
+FINRA Rule 2360 ap-
+proval levels
+X4 Instruments Equity, index, 0DTE, crypto, or futures options; multi-leg orders. Descriptive
+X5 Input channels I1 public text; I2 market data, chains, Greeks; I3 tool or MCP output; I4 memory or retrieval;
+I5 peer agents; I6 operator configuration, prompts, model, dependencies.
+Threat model (§3)
+H1 Worst reachable loss None for A0, A1, or W0; otherwise premium (W1), assignment (W2, W3), or unbounded (W4). O-1 (§3.2)
+H2 Blast radius One user, one design deployed to many users (platform), or the market. Platform for broker-
+native and adopted open-source systems.
+Descriptive
+H3 Interceptability Interceptable for A0 to A2; partial for A3 or when C8 is full or partial; not interceptable
+otherwise.
+X2, C8
+der tool builds a request from raw arguments and immedi-
+ately calls the SDK’s place method. No confirmation token
+or dry-run step links a preview call to it. Write scope W4:
+place_order and place_multileg_order accept sell-to-open legs
+with only syntactic validation. No coverage, margin, or naked-
+option check exists anywhere in the file. Worst reachable
+loss (unbounded): No gate exists before execution, uncovered
+short options are reachable with no coverage check, and no
+cap of any kind exists in code.Full:none.Partial:R2, R3,
+C3, C7, C9, C10.None:R1, R4, R5, R6, R7, C1, C2, C4, C5,
+C6, C8, C11.
+5. Webull MCP [50].Official server, 25 stars, 4 forks,
+Apache-2.0, active. Repo created in 2026. Autonomy A4:
+Order tools call the syntactic validator, then the SDK’s
+place_order directly. No confirmation token or required pre-
+view links to the place tools. Write scope W4: Strategy valida-
+tors permit straddles and strangles with no side or coverage
+constraint, so a nominal strategy order can be an uncovered
+22
+short position. Worst reachable loss (unbounded): The adver-
+tised notional and quantity risk controls exist in code but are
+never called from either option-order validator, so nothing
+caps an option order.Full:none.Partial:R2, C3, C7, C9,
+C10.None:R1, R3, R4, R5, R6, R7, C1, C2, C4, C5, C6, C8,
+C11.
+6. tastytrade MCP [4].Active, official server, 20 stars, 7
+forks. Repo created in 2026. Autonomy A3: The only built-
+in order gate is a dry-run confirmation token that the same
+agent both mints and redeems, so the agent can clear it itself.
+Write scope W4: Order legs accept Sell to Open for equity
+and future options with no local covered-or-uncovered check,
+so maximum authority equals the account’s options level.
+Worst reachable loss (unbounded): Uncovered Sell to Open is
+reachable whenever the account’s options level allows it, and
+the agent can clear the only order-level gate itself.Full:C3,
+C7, C8.Partial:R1, R2, R3, R4, R5, R6, R7, C1, C4, C5, C9,
+C10, C11.None:C2, C6.
+7. IBKR AI integration [51].Hosted broker product with
+no source code or repository. Scored from the official product
+page and FAQ (direct fetch blocked, browser used). Auton-
+omy A2: The AI drafts order instructions, including options
+strategies, and a human reviews and submits each one in the
+AI Instructions tab. Write scope W4: Instructions can express
+any options order the account is approved for, and IBKR
+Level 4 permits naked calls, straddles, and strangles. Worst
+reachable loss (unbounded): A drafted uncovered short that a
+human approves reaches unbounded loss.Full:C8.Partial:
+C9.None:R1, R2, R3, R4, R5, R6, R7, C1, C2, C3, C4, C5,
+C6, C7, C10, C11.
+8. TradeStation MCP [52].Hosted connector with no public
+repository or tool schema. Scored from two official TradeSta-
+tion pages at the snapshot. Autonomy A2: Both official pages
+state confirmation is mandatory and unconditional: no trade
+executes without the user’s explicit approval before it is sent.
+Write scope W4: The connector claims it never narrows the ac-
+count’s own trading permissions, and TradeStation’s general
+options-approval scale documents a tier that permits uncov-
+ered writing. Worst reachable loss (unbounded): The connec-
+tor inherits the account’s full approval, which reaches uncov-
+ered writing, and confirmation is a generic per-order approval
+rather than a coverage check.Full:C8.Partial:C9, C10.
+None:R1, R2, R3, R4, R5, R6, R7, C1, C2, C3, C4, C5, C6,
+C7, C11.
+9. Alpaca MCP [30].Official server, 991 stars, 317
+forks, MIT, active. Repo created in 2025. Autonomy A4:
+place_option_order posts directly to the order endpoint with
+no confirmation token, preview tool, or dry-run step anywhere
+in the code. Write scope W3: The server code has no local cov-
+erage check, but Alpaca’s brokerage platform independently
+rejects uncovered options at every options level, regardless of
+tier. Worst reachable loss (assignment): Covered calls, cash-
+secured puts, and defined-risk spreads are reachable under
+full automation, but the platform rejects uncovered options
+outright at any level.Full:R1.Partial:R2, R3, R5, C1, C3,
+C4, C7, C8, C9, C11.None:R4, R6, R7, C2, C5, C6, C10.
+10. Robinhood agentic options [2, 28].Production broker
+feature, labeled beta. Agentic Trading launched in May 2026
+for equities, with options added in a later rollout. Autonomy
+A3: The only gate before execution is a review step the agent
+or user can skip. The support article confirms trades can ex-
+ecute without per-order confirmation. Write scope W3: The
+order tool documents Level 2 strategies (covered calls, cash-
+secured puts) and Level 3 multi-leg spreads. Naked options
+and margin borrowing are not offered. Worst reachable loss
+(assignment): Covered calls and cash-secured puts carry as-
+signment risk. Naked options are banned platform-wide, so
+the documented order path cannot reach unbounded loss.Full:
+R1, C9, C10.Partial:R2, R3, R4, R5, R6, R7, C8.None:C1,
+C2, C3, C4, C5, C6, C7, C11.
+11. lumibot [53].Active open-source project (GPL-3.0),
+2,086 GitHub stars and 404 forks at the snapshot. Autonomy
+A4: allow_trading defaults to True, and the agent submits
+orders directly to the broker through submit_order with no
+per-order human approval. Write scope W4: Option orders
+accept side sell_to_open with no coverage check in code. Only
+chain-read readiness and closing-side consistency are verified.
+Worst reachable loss (unbounded): Sell-to-open single-leg
+and arbitrary multi-leg option orders are accepted with no
+coverage or margin check anywhere in the codebase.Full:
+none.Partial:R1, R2, R3, R4, R5, R6, R7, C1, C3, C4, C5,
+C6, C7, C8, C9, C10, C11.None:C2.
+12. tasty-agent [54].Active, community/unofficial MCP
+server, 86 stars, 26 forks, MIT. Created in 2024. No test-gated
+CI. Autonomy A4: place_order executes immediately on a
+single call with dry_run defaulting to False. The only ’require
+confirmation’ rule lives in a skill prompt, not in code. Write
+scope W4: Sell-to-open option legs are accepted with only an
+instrument-category check, no coverage check anywhere in
+the order path. Worst reachable loss (unbounded): A single
+tool call can submit an uncovered short option order whenever
+the account’s options level allows it, with no cap or confirma-
+tion the agent cannot clear.Full:none.Partial:R1, R2, R3,
+R4, R6, C3, C7, C10.None:R5, R7, C1, C2, C4, C5, C6, C8,
+C9, C11.
+13. openalgo [55].2,722 GitHub stars, 1,275 forks, AGPL-
+3.0, active. Autonomy A3: The MCP path auto-executes:
+every MCP order tool calls the broker API directly, with
+no approval step placed in between. Write scope W4:
+place_options_order runs no cover or margin check before
+dispatch, so uncovered short calls and puts on multiple ex-
+changes can be reached. Worst reachable loss (unbounded):
+The MCP path auto-executes and naked short options are
+reachable. The only pre-trade limit found is partial, not a hard
+cap.Full:R2, C10.Partial:R1, R3, R4, R6, R7, C1, C3, C4,
+C5, C7, C8, C9.None:R5, C2, C6, C11.
+14. schwab-mcp [56].Community server, 61 stars, 19 forks,
+23
+MIT, active. Repo created in 2025. Autonomy A3: Discord
+approval gates each order, but the documented –jesus-take-
+the-wheel flag removes the gate. Write scope W4: Sell-to-
+open legs are accepted with no coverage check anywhere
+in the code, so authority equals the account’s real options
+approval level. Worst reachable loss (unbounded): Uncovered
+orders are reachable, and the only non-model control, Discord
+approval, is fully bypassable through a documented flag with
+no max-loss check.Full:none.Partial:R2, C7, C8, C9, C10.
+None:R1, R3, R4, R5, R6, R7, C1, C2, C3, C4, C5, C6, C11.
+15. trade-it-mcp [57].Hosted, closed-source multi-broker
+service. GitHub repo is documentation/registry-metadata only
+(60 stars, 15 forks, CC0-1.0). Scored from this repo plus
+docs.tradeit.app at the snapshot. Autonomy A3: A draft-then-
+execute confirmation exists, but the agent itself decides when
+to call execute_trade. Write scope W4: The leg schema allows
+a single sell-to-open leg with no documented pairing or cov-
+erage requirement, so authority equals the linked brokerage’s
+own options-approval tier. Worst reachable loss (unbounded):
+A single sell-to-open leg is reachable with no documented
+coverage requirement, and nothing documented caps the loss
+or blocks execution outside the model.Full:none.Partial:
+C8, C9, C10.None:R1, R2, R3, R4, R5, R6, R7, C1, C2, C3,
+C4, C5, C6, C7, C11.
+16. OpenProphet [58].112 stars, 39 forks, CC BY-NC 4.0.
+Created in 2026. Featured in Bloomberg. Autonomy A4: The
+heartbeat loop executes trades without human intervention,
+and every guardrail lives in one object the agent can over-
+write through a single call. Write scope W3: Sell-to-open is
+accepted in code, but Alpaca, the only broker, rejects uncov-
+ered options at every level. Worst reachable loss (assignment):
+Covered and cash-secured shorts on Alpaca bound the worst
+case at assignment.Full:none.Partial:R2, R3, R4, R6, R7,
+C3, C8, C10.None:R1, R5, C1, C2, C4, C5, C6, C7, C9, C11.
+17. trading_skills [59].368 stars, 85 forks, MIT, active. Cre-
+ated in 2026. Positioned for Claude Desktop. Autonomy A3:
+The live-order tool defaults to a dry run, but execute is a
+plain boolean the calling model sets itself, with no separate
+human-confirmation step. Write scope W2: Executing places
+the chosen spread as a single native combo order margined
+as one defined-risk position. Only verticals and iron condors
+are ever opened. Worst reachable loss (assignment): Short
+legs of the vertical and iron-condor spreads carry assignment
+exposure even though the combo order’s structure keeps the
+position’s maximum loss capped.Full:R3, C8.Partial:R1,
+R2, R4, R5, R6, R7, C7, C9, C10.None:C1, C2, C3, C4, C5,
+C6, C11.
+18. TastyScanner MCP [60].3 stars, 1 fork, MIT, ac-
+tive. Repo created in 2026. Autonomy A4: Once EN-
+ABLE_LIVE_TRADING is set, execute_trade passes the
+agent’s legs straight to the broker’s order service with no
+per-order confirmation or preview step. Write scope W4: The
+execute_trade leg schema accepts any Sell to Open leg with
+an unbounded quantity and no coverage or margin check
+anywhere in the server. Worst reachable loss (unbounded):
+The strategy builder proposes naked short structures, and exe-
+cute_trade accepts arbitrary uncovered Sell to Open legs with
+no quantity cap.Full:none.Partial:R1, R2, R3, R4, R6, C3,
+C7, C9, C10.None:R5, R7, C1, C2, C4, C5, C6, C8, C11.
+19. deribit agent (Vida) [61].4 stars, MIT, not archived. A
+personal, self-hosted terminal. Autonomy A2: Every gated
+write tool registers a confirmation request, and the loop waits
+up to 30 seconds for a human response before proceeding.
+Write scope W4: place_order accepts any instrument, includ-
+ing options, with direction sell or buy and no check anywhere
+for covered or defined risk. Worst reachable loss (unbounded):
+Naked option shorts and leveraged perpetuals are reachable
+through place_order. Human confirmation lowers but does
+not eliminate the risk of a bad order.Full:C8.Partial:R1,
+R2, R3, R4, R6, R7, C3, C7, C9, C10.None:R5, C1, C2, C4,
+C5, C6, C11.
+20. options-trading-bot [62].0 stars, 44 commits, not
+archived. Created in 2026. Autonomy A4: A scheduled work-
+flow runs the full pipeline from LLM decision to order sub-
+mission with no human approval step anywhere. Write scope
+W3: The validator accepts any leg with side buy or sell and
+positive quantity, without checking that leg sides match the
+named strategy. Worst reachable loss (assignment): Single-
+leg sell puts are reachable as cash-secured shorts, and spread
+short legs carry assignment risk under full automation with
+no max-loss check.Full:C8, C9.Partial:R1, R2, R3, R4, R5,
+R6, R7, C5, C10.None:C1, C2, C3, C4, C6, C7, C11.
+21. Agentic-Trader [63].3 stars, no license, not archived.
+Described as a sanitized public fork. Autonomy A3: Auto-
+approval within gates is enabled by default in configuration,
+so gate-clean proposals are submitted automatically and only
+posted to Slack afterward. Write scope W3: Allowed struc-
+tures are long calls and puts, debit spreads, and cash-secured
+puts. A cash-secured put requires several settings to all be
+enabled. Worst reachable loss (assignment): A cash-secured
+put is reachable when credit entries are enabled. Its loss is
+bounded by the strike times 100 minus the premium received.
+Full:R1, R2, R3, R7, C3, C6, C8, C10.Partial:R4, R5, R6,
+C1, C2, C4, C5, C7, C9, C11.None:none.
+22. agentic-trading-research [64].11 stars, GPL-3.0, not
+archived. Described as an LLM-based options trader. Auton-
+omy A4: The scheduled trading cycle runs automatically at
+a fixed interval while the market is open, with no human ap-
+proval step. Write scope W1: The order gateway hard-codes
+buy-side market orders for opening. The sell path only closes
+existing long positions and rejects oversized sell quantities.
+Worst reachable loss (premium): Only long calls and puts
+can be opened, with code-enforced buying-power caps, so the
+worst-case loss is bounded by the premium paid.Full:R4,
+C8.Partial:R1, R2, R3, R5, R6, R7, C1, C6, C9, C10.None:
+C2, C3, C4, C5, C7, C11.
+23. alpaca-options-agent [65].Hackathon submission, 0
+24
+stars, 0 forks, MIT, active. Created in 2026. A judged paper
+account only. Autonomy A1: A deterministic risk gate runs
+before the LLM and rejects any failing candidate. The LLM
+can only decline a gate-approved candidate, never open a
+rejected one. Write scope W2: Every open or close call builds
+a single native multi-leg order, never two independent legs,
+so the spread structure cannot leave an uncovered position.
+Worst reachable loss (none): X2 is A1, so per the codebook’s
+rule the LLM cannot itself cause an order. A deterministic
+gate, not the LLM, fully specifies and submits the trade.Full:
+R1, R2, R3, R4, R7, C8, C9, C10.Partial:R5, R6, C3, C7.
+None:C1, C2, C4, C5, C6, C11.
+24. Theta Desk [66].1 star, 0 forks, no license. Created in
+2026. Active. Autonomy A1: A ten-check code gate must
+pass before the LLM is ever called, and the LLM is then
+used only as a one-time veto. Write scope W4: The strategy
+registry includes naked short straddles and strangles at the
+money, which is the code’s default, alongside defined-risk
+spreads. Worst reachable loss (none): The bot places no real
+orders. All trading runs against virtual paper capital, so no
+automated loss can reach a real account.Full:R4, R7, C8,
+C10.Partial:R1, R2, R3, R5, R6, C5, C7, C9.None:C1, C2,
+C3, C4, C6, C11.
+25. AI-trading-Agent [67].1 star, 0 forks, no license, not
+archived. Created in 2025. Autonomy A0: The only output is
+a recommendations file and a summary. No broker or order-
+placement code exists anywhere in the repository. Write scope
+W0: There is no write path to any broker. The compliance
+documentation states trading-account credentials are never
+collected, stored, or transmitted. Worst reachable loss (none):
+With no broker integration, credentials, or order code, a manip-
+ulated recommendation cannot lose money without a human
+acting on it first.Full:none.Partial:R4, R6, R7, C1, C5, C6,
+C9.None:R1, R2, R3, R5, C2, C3, C4, C7, C11.
+26. news-agent [68].1 star, 0 forks, MIT. Created in 2026.
+Public as of the snapshot. Autonomy A0: The system only
+writes briefing files and sends an email summary. No order-
+placement code path exists anywhere in the repository. Write
+scope W0: Every write action is a file or an email. A
+repository-wide search for broker, order, or execute code finds
+nothing relevant. Worst reachable loss (none): The system
+has no order authority. Any loss depends entirely on a human
+choosing to act on a manipulated briefing.Full:none.Partial:
+R1, R2, R4, R6, C1, C7, C9.None:R3, R5, R7, C2, C3, C4,
+C5, C6, C11.
+Excluded after review. alpha-agent: EXCLUDE. No
+LLM makes, recommends, or gates an options decision: a sen-
+timent LLM feeds only ETF buy-and-hold scoring, a separate
+causal LM predicts stock prices, and the options-strategy code
+is deterministic, disconnected, and never called.schwagent:
+EXCLUDE. Options trading is fully automated, but every op-
+tions decision is deterministic Python (theta wheel, covered-
+call screener, gamma scanner). The optional LLM only scores
+ETF sizing, writes filing summaries, or critiques backtests,
+never options.
+D Search Protocol
+Snapshot.Searches, star counts, READMEs, and documen-
+tation pages reflect the snapshot. Repositories and broker
+documentation change monthly, so the scores describe that
+snapshot.
+Sources and query strings.(i)Academic: arXiv and se-
+curity, machine-learning, and finance proceedings, with the
+terms “options trading”, “option strategy”, “implied volatil-
+ity”, “Greeks”, and “derivatives” each combined with “large
+language model”, “LLM”, or “agent”, plus backward and
+forward references from the equities SoK [13] and recent
+trading-agent work [17,18,24,82]. (ii)GitHub: the repository
+search API with six strings,options trading LLM , option
+greeks llm , llm options trader , options trading
+agent, options trading ai agent , and options mcp
+server, which returned 1,232 hits in total. Every query
+stayed under the API’s 1,000-result cap, and the union of all
+six holds 765 unique repositories. (iii)Broker documentation:
+first-party agent interfaces, seeded by an industry test that
+found first-party agent MCP servers at 7 of 14 brokers, all
+launched in 2026 [6].
+Screening.Figure 3 in §4 summarizes the GitHub screen,
+and this paragraph gives its details. An automated keyword
+filter runs first: a repository survives if its name, description,
+topics, and README (first 30 kB) match at least one of 21
+LLM- or agent-related terms (e.g., “llm”, “mcp”, “agentic”,
+or a named model family such as “claude” or “gemini”) and
+at least one of 29 options-related terms (e.g., “greeks”, “iron
+condor”, “0dte”, “covered call”), case-insensitively. Both lists
+are recall-oriented by design: a bare “expiry” or “mcp” can
+fire on unrelated software, so this stage over-includes on pur-
+pose and the reading pass below removes false positives. Of
+the 765 candidates, 468 survive for reading against four in-
+clusion criteria: a candidate is eligible if (I1) an LLM makes,
+proposes, or gates an options decision (strategy, strike, expiry,
+structure, entry, or exit), or an interface is published for an
+LLM agent to do so, (I2) the system reads option-chain or
+option-position data, live or historical, (I3) a public paper,
+README, or documentation page supports scoring the candi-
+date against the codebook (Appendix B), and (I4) the artifact
+is available on the snapshot date.
+Exclusion criteria.Every other Stage 1 survivor is coded
+with one reason. (E1) LLM trading framework without op-
+tions support (11): the most-starred general frameworks we
+checked, TradingAgents (108,459 stars), ai-hedge-fund
+(63,736), FinGPT (21,288), and FinRobot (8,080), mention
+no option chains, Greeks, IV , strikes, or expiries in their
+READMEs. (E2) Options bot with no LLM in the decision
+path (52). (E3) Public documentation insufficient to score (24).
+(E4) Attack, simulation, or taxonomy work rather than an op-
+25
+tions agent: no GitHub repository was excluded for this reason
+(0), but the same code separately removes TradeTrap [17] and
+Market Signal Injection [18], which study equities trading and
+pricing agents, the agentic-commerce SoK [79], which has
+no options-specific treatment, and a market-simulation study
+of LLM traders [82], all found through the academic search
+rather than GitHub. (E5) Not a trading system: education, data
+tools, or libraries without an LLM decision path (114). (E6)
+Duplicate, fork, or mirror of an included project (46). (E7)
+Empty or placeholder repository (6).
+Outcome.Academic search surfaced two systems meeting
+I1 to I4, OQL [47] and Kuang and Lin [46], and we scored
+both. Broker documentation and the industry test yielded 8 of-
+ficial interfaces: Robinhood [2,28] and tastytrade [4], plus six
+more: OKX Agent Trade Kit [48], Public MCP [49], Webull
+MCP [50], TradeStation MCP [52], Alpaca MCP [30], and
+IBKR AI integration [51]. Seven scored repositories entered
+from outside the six-query union, through broker documenta-
+tion or through searches outside the six strings: openalgo [55],
+Theta Desk [66], tastytrade MCP, schwab-mcp [56], trad-
+ing_skills [59], Public MCP, and Webull MCP. Beyond the
+scored set, 201 eligible repositories remain unscored. Of the
+215 eligible repositories, 161 have no stars, and 129 were
+created in the two weeks around the hackathon. Appendix D
+lists the query strings.
+26

@@ -1,0 +1,1126 @@
+arXiv 1706.07021  https://arxiv.org/abs/1706.07021
+
+Stop-loss and Leverage
+in optimal Statistical Arbitrage with
+an application to Energy market
+Roberto Baviera† & Tommaso Santagostino Baldi‡
+June 22, 2017
+(†) Politecnico di Milano, Department of Mathematics, 32 p.zza L. da Vinci, I-20133 Milano
+(‡) J.P. Morgan Chase Bank, 25 Bank St., Canary Wharf, London E14 5JP 1
+Abstract
+In this paper we develop a statistical arbitrage trading strategy with two key elements in hi-
+frequency trading: stop-loss and leverage. We consider, as in Bertram (2009), a mean-reverting
+process for the security price with proportional transaction costs; we show how to introduce
+stop-loss and leverage in an optimal trading strategy.
+We focus on repeated strategies using a self-ﬁnancing portfolio. For every given stop-loss level
+we derive analytically the optimal investment strategy consisting of optimal leverage and market
+entry/exit levels.
+First we show that the optimal strategy ´ a laBertram depends on the probabilities to reach
+entry/exit levels, on expected First-Passage-Times and on expected First-Exit-Times from an
+interval. Then, when the underlying log-price follows an Ornstein-Uhlenbeck process, we deduce
+analytical expressions for expected First-Exit-Times and we derive the long-run return of the
+strategy as an elementary function of the stop-loss.
+Following industry practice of pairs trading we consider an example of pair in the energy futures’
+market, reporting in detail the analysis for a spread on Heating-Oil and Gas-Oil futures in one
+year sample of half-an-hour market prices.
+Keywords: Mean-reversion trading, stop-loss, First-Exit-Time.
+Address for correspondence:
+Roberto Baviera
+Department of Mathematics
+Politecnico di Milano
+32 p.zza Leonardo da Vinci
+I-20133 Milano, Italy
+Tel. +39-02-2399 4630
+Fax. +39-02-2399 4621
+roberto.baviera@polimi.it
+1The views expressed here are those of the author and not necessarily those of the bank.
+1
+arXiv:1706.07021v1  [q-fin.PM]  21 Jun 2017
+Stop-loss and Leverage in optimal Statistical Arbitrage
+with an application to Energy market
+1 Introduction
+Statistical arbitrage trading exploits some statistical regularities in the dynamics of security prices,
+generally implementing repeated strategies; in this way it is able to obtain, with a high probability,
+a return larger than the risk-free return. These strategies are widespread among hedge funds.
+A quantity of interest for an investor is strategy return per unit time up to timet (hereinafter return)
+µt := 1t lnWtW0,
+where Wt is investor’s wealth invested in the strategy at time t.
+We consider in particular the case in which the investor has the possibility to repeat the strategy
+an indeﬁnite number of times: a common assumption within statistical arbitrage techniques. In the
+case of a repeated game with inﬁnite horizon, an objective function that makes sense maximizing is
+the long-run return that is an almost sure quantity (see e.g. Kelly 1956).
+This problem has been ﬁrst tackled by Taksaret al. (1988) who considered a portfolio with two assets
+with proportional costs, with the risky security that follows a Geometric Brownian Motion. This
+study and the literature that has followed (see e.g. Guasoni and Muhle-Karbe 2013, for a review)
+have clariﬁed that two are the relevant questions for the investor: i) when he needs to rebalance his
+portfolio and ii) what fraction of wealth should be invested in the risky security.
+In real situations, this chosen dynamics for the risky security appears to be oversimpliﬁed, and mean
+reversion is a relevant stylized fact that cannot be neglected especially in pairs trading (see e.g.
+Elliott et al. 2005, Gatev et al. 2006, Vidyamurthy 2004). Recently Bertram (2009) has considered
+the case where the log-price of risky asset follows an Ornstein-Uhlenbeck process (hereinafter OU)
+with transaction costs proportional to security prices. He considers an ansatz for the selection of the
+optimal long-run strategy identifying two trading bands where the investor has to buy and to sell,
+respectively, one unit of the security. The optimally chosen strategy within this ansatz can generate,
+as shown by Cummins and Bucca (2012), signiﬁcant returns in commodity pairs trading in energy
+market; they show that these results can be achieved even considering daily end-of-the-day prices.
+Unfortunately, when considering real statistical arbitrage strategies, even this approach is too simple.
+A statistical arbitrage strategy always requires a stop-loss, that is a level where the investor closes
+out a losing position (negative scenario) in order to limit maximum loss. The presence of a stop-loss
+is fundamental when applying these strategies in practice: indeed one can never be sure that, for a
+given security, the statistical description observed in the past, persists in the future.
+Moreover hedge funds have the possibility to leverage their position, e.g. borrowing either from his
+primary broker or from other lenders. In this paper we model this problem providing closed form
+solutions.
+The main contributions of this paper to the existing literature on statistical arbitrage are twofold.
+A ﬁrst contribution is to solve analytically, for any given stop-loss level, the problem with one risky
+asset ´ a laBertram with the possibility to borrow at a ﬁxed rate r: we identify the optimal bands
+and the optimal leverage. This approach clariﬁes also that the long-run return depends only on the
+probabilities to reach the trading bands and on the expected time interval between two trades in the
+strategy, time interval that is a simple function of a First-Passage-Time (hereinafter also FPT) and
+a First-Exit-Time (FET).
+2
+Second, we deduce for an OU an analytical expression for expected FET from an interval via ele-
+mentary functions. This allows a fast computation of the optimal strategy for any given stop-loss
+level, since analytical expressions of the probabilities to reach interval endpoints and expected FPTs
+are already known in the literature (see e.g. Borodin and Salminen 1996, Nobile et al. 1985).
+The paper is organized as follows. In Section 2 we describe the key elements in the proposed
+strategy and we deduce the long-run return as a function of stop-loss, trading bands and leverage
+with a continuous price process for the risky security; we also show how this quantity is linked
+to a Kullback-Leibler divergence (Kullback and Leibler 1956) associated to the optimal allocation
+problem. In Section 3 we deduce, for an OU, an analytical expression for the expected First-Exit-
+Time from an interval and specify the analytical expression for the long-run return in this case.
+In Section 4 we apply the trading strategy to a pair in the energy market on half-an-hour time-
+series, presenting some numerical results. We calibrate OU parameters via an In-Sample maximum
+likelihood discussing in detail the statistical signiﬁcance of the estimated quantities, we compute
+optimal trading bands for diﬀerent levels of leverage and then we measure, in an Out-of-Sample
+period, the observed return. Section 5 concludes.
+2 Statistical Arbitrage in presence of Stop-Loss and Lever-
+age
+We consider an investor that can include a risk-free asset paying an interest rater and a risky security.
+As in Bertram (2009), log-price dynamics for the risky security follows an OU, i.e. pt =eXt where
+dXt =κ(η−Xt)dt +σdBt (1)
+with Bt a 1-dimensional Brownian motion while κ,σ∈ℜ + and η∈ℜ are constant parameters: σ is
+the instantaneous standard deviation, κ the rate of reversion and η the mean-reverting value. As in
+Bertram (2009) transaction costs are proportional to the price of the risky security with c a positive
+constant modeling the total transaction cost associated with a trade. This model set up describes
+in a simple way a situation well studied in pair trading, leading to strategies that are often named
+“reversal statistical arbitrage”.
+A ﬁrst diﬀerence with Bertram (2009) is that we consider a risk-free asset in the portfolio and
+the possibility for an optimal allocation, instead of allowing an investment in the risky asset only.
+A trading strategy is a sequence of individual trades performed on the continuous time stochastic
+process (1). In particular we focus on an investor that can diversify his investment between these
+two assets in a self-ﬁnancing strategy; as in Bertram, we consider a repeated strategy and maximize
+strategy’s long-run return
+µ := lim
+t→∞
+µt.
+We show that this approach allows to introduce leverage in an elementary way.
+Deﬁnition 1 (Leverage) Leverage is deﬁned as the ratio at time t between the amount invested in
+the risky asset and investor’s total wealth Wt.
+In particular we consider leverage at times when trades take place. The other diﬀerence w.r.t.
+Bertram’s strategy is that we introduce a stop-loss.
+3
+Deﬁnition 2 (Stop-loss) Stop-loss is deﬁned as the level L for the log-price of the risky security
+such that, when it is reached, the trading strategy is interrupted in any case incurring in a loss.
+Before entering in a trade, the investor ﬁxes a stop-loss level.
+This approach mimics the behaviour often observed in practice in statistical arbitrage strategies: the
+investor establishes ex ante a stop-loss level L before starting the trading strategy. Given dynamics
+(1) with time independent parameters, a reasonable choice for the stop-loss level L is to consider a
+constant value during the whole strategy.
+OnceL is ﬁxed, the investor has to choose the optimal strategy given that constraint. This technique
+reminds the one introduced in Leung and Li (2015), where the stop-loss is introduced as a constraint
+for the strategy; they show how to determine the optimal bands for the expected earning of one
+single trade when security price is an OU. Unfortunately it is not straightforward to generalize their
+technique to a non linear objective function.
+Remark 1 Without losing any generality, we can consider a null interest rate r and a null drift
+term η. The choice r = 0 is not restrictive, indeed the case r⁄= 0 can be recovered by modifying
+the drift term η in the dynamics of the risky security and adding r to wealth growth rate (see e.g.
+Cartea et al. 2015). Furthermore we can choose η = 0: the case with a drift η not equal to zero can
+be recovered by a simple translation of the process Xt.
+The problem is then equivalent to the selection of the optimal trading strategy for an investor that
+has the possibility to choose the amount to invest in a risk-free asset identically equal to 1 and in a
+risky security whose log-price is
+dXt =−κXtdt +σdBt. (2)
+Let us ﬁrst consider a trading strategy where the investor can have a long position in the risky asset.
+The stop-loss is activated when the log-price reaches a level L (lower than zero in this case) selling
+the risky asset. This is the typical situation that is considered in practice by hedge funds in reversal
+statistical arbitrage strategies: the long position is closed out when the risky security has a given
+percentage drop to the mean level.
+Once the stop-loss L is ﬁxed, the ansatz for selecting the trading strategy is identiﬁed by an entry
+band D and an exit band U, as in Bertram (2009). In the entry band D the investor buys the
+security and sells it in the exit band U. The entry band D is lower than zero, the mean-reverting
+value forXt in (2), because the investor bets on the mean reversion of the log-price and D has to be
+larger than the stop-loss L.
+Once L has been chosen, the trading strategy is deﬁned by the following steps that generalize the
+ones in Bertram (2009) to the case with a stop-loss:
+1. the position is opened when the process reaches D, buying the security;
+2. if the process arrives at U without having reached the stop-loss L before, the position is closed
+in U with a proﬁt (positive scenario). Then the investor has to wait for the process Xt to
+return to D to re-open the position;
+3. if the process arrives at L before reaching U, the investor is forced to close out the position in
+L with a loss (negative scenario). Then, also in this case, he will wait for the process to return
+toD to re-open the position. Trade length is the time interval between two subsequent trades.
+4
+Figure 1: Sketch of the strategy with the trading bands and the stop-loss. The investor opens the long
+position (1) in D and closes it (0) in U or in L (continuous blue lines). He has to wait that the process Xt
+returns in D to re-open the position (dashed lines). Trade length is the time between two trades.
+Figure 1 shows the relationship between the trading bands and the stop-loss. Each trade starts with
+the log-price equal to D and ends the ﬁrst time Xt exits the channel (L,U ).
+Since many of the quantities related to the trading strategy (e.g. the return) depend on the time
+between two subsequent trades in the strategy, let us carefully deﬁne them.
+Deﬁnition 3 (First-Exit-Time and First-Passage-Time) The First-Exit-Time from the chan-
+nel (L,U ) starting in D, with L<D <U , is a random variables deﬁned as
+τe := inf{t :Xt /∈ (L,U )|X0 =D} (3)
+while τ +e (τ−e ) represents the FET in the positive (negative) scenario
+{ τ +e := inf {t :Xt /∈ (L,U ),Xt≥U|X0 =D}
+τ−e := inf {t :Xt /∈ (L,U ),Xt≤L|X0 =D}. (4)
+Also First-Passage-Times play a relevant role in trade length, since one has to include also the time
+waited to enter again in a new trade. They can be deﬁned as
+{ τp(U↝D) := inf {t :Xt≤D|X0 =U}
+τp(L↝D) := inf {t :Xt≥D|X0 =L}.
+In the two scenarios described above, for a continuous process Xt, trade lengths are
+{ τ + := τ +e +τp(U↝D)
+τ− := τ−e +τp(L↝D) (5)
+where τ + (τ−) represents the trade length in the positive (negative) scenario.
+As already mentioned in the introduction, the investment strategy is not realized only once but it is
+reproduced iteratively using a self-ﬁnancing portfolio. At time ti, corresponding to the ith trade, the
+investor diversiﬁes his entire available wealth in the two assets withfi the fraction of wealth invested
+in ti in the risky asset. In this trading strategy, if price dynamics is continuous, the wealth between
+the ith trade and the next one are related via
+Wti+1 =Wti [1 +fiv] (6)
+5
+where v is a random variable that can assume two values
+{ v+ := eU−D−c− 1
+v− := eL−D−c− 1 with probability p+ := P[Xτ +e =U|X0 =D]p− := P[Xτ −e =L|X0 =D] , (7)
+where we have considered the total transaction cost c associated to each trade. The fraction fi
+is positive because we are considering an investor who enters in a long position; when fi > 1 the
+investor is leveraging his investment borrowing some more capital. The quantity fi models leverage
+at time ti.
+Because security dynamics parameters and entry/exit bands are time independent, in the case in-
+vestor decision does not depend on his total wealth, every time the process reaches D the investor
+repeats the strategy allocating always the same f to the risky security.
+Summing up, the following conditions should be satisﬁed, in order to have a well posed ﬁnancial
+problem for the trading strategy of interest:
+i)U−D >c ii )D−L> 0 iii)f≥ 0. (8)
+The ﬁrst condition is equivalent to avoid trading inside the transaction costs; it is equivalent to state
+that v+ > 0. The second condition imposes that the stop-loss L is always lower than the entry level
+D: it implies that v− < 0. The other condition states that we are considering a long position in the
+risky security.
+We can now state two of the main results of this study, that hold for a generic continuous price
+dynamics.
+Proposition 1 If price dynamics is continuous, for a given stop-loss level L, the long-run return as
+a function of the leverage f and the trading bands D and U is:
+µ(f,D,U |L) = p+ ln(1 +fv +) +p− ln(1 +fv−)p+E[τ +] +p−E[τ−] (9)
+Proof. See Appendix A♣
+Let us observe that the denominator of (9) is the expected trade length. In particular, as shown in
+the next section, when Xt is OU (2) the quantities p+, E[τ +] and E[τ−] are analytical functions of
+D,U and L.
+Proposition 2 If the ﬁrst two moments of the trade length are ﬁnite, the variance of the return,
+V[µt], is O(1/t) when t goes to inﬁnity.
+Proof. See Appendix A♣
+The above proposition states that, for the described strategy, the returnµt is an almost sure quantity
+in an inﬁnite horizon. Stated diﬀerently the Sharpe Ratio of the strategy, deﬁned as the expected
+excess return (w.r.t. the risk-free rate r) over return’s standard deviation, goes to inﬁnity in the long
+run.
+Before analysing the optimal return let us introduce the probability for the “fair game”, that takes
+into account also the transaction costs paid.
+6
+Deﬁnition 4 (Fair probability) We deﬁne the following two quantities:
+q+ := v−
+v−−v+, q − := v+v+−v− = 1−q+. (10)
+If condition i) in (8) holds then q+∈ (0, 1) and Q :={q+,q−} is a probability set. It is possible to
+interpret Q as the fair probability set associated to the random variable v, i.e.
+q+v+ +q−v− = 0.
+We can divide the optimization problem in two steps: ﬁrst, we ﬁnd the optimal leverage f∗ with D
+and U ﬁxed, then we search the optimal trading bands.
+Lemma 1 If price dynamics is continuous, the optimal leverage f∗ satisﬁes:
+f∗ =
+
+
+
+−p+v+ +p−v−
+v+v− if p+ >q +
+0 otherwise
+. (11)
+Proof. Straightforward after having imposed to the long-run return (9) the ﬁrst order condition
+∂µ
+∂f|f=f ∗ = 0. The optimal leverage f∗ satisﬁes condition iii) in (8) whenp+ >q +; otherwisef∗ = 0♣
+The above lemma states that it is worth investing a non-null amount in the strategy (f∗ > 0) only if,
+for the chosen bands D and U, the “game” is unfair and it is mean reverting, i.e. the probability of
+the positive scenariop+ is larger than the fair probabilityq+. We could impose the trading strategy to
+a generic continuous price dynamics; however it makes sense only when dynamics is mean-reverting.
+Corollary 1 The long-run return (9) with the optimal leverage f∗ is
+µ(f∗,D,U|L) =
+
+
+
+p+ ln(p+
+q+ ) +p− ln(p−q− )
+p+E[τ +] +p−E[τ−] if p+ >q +
+0 otherwise
+, (12)
+i.e. it is the Kullback-Leibler divergence between probability P :={p+,p−} and Q, normalized by the
+expected time between two subsequent trades, when p+ >q + and it is zero otherwise.
+Proof. Straightforward from direct substitution of the optimal leverage f∗ (11) ♣
+We can observe that the numerator of (12) is very simple and we demonstrate in the next section
+that also the denominator can be expressed in an elementary way for an OU. The long-run return
+(12), given the stop-loss L, depends only from the trading bands U and D. It can be maximized in
+order to ﬁnd the optimal values for the trading bands, as we show in a detailed example in section
+4.
+Remark 2 When a short position in the risky asset is allowed, the long-run return of the strategy
+can be further increased. Given the symmetry of OU dynamics (2) the investor can consider also the
+reverted strategy doubling the long-run return: he opens a short position in −D > 0 and closes it
+buying back the risky security in −U (proﬁt) or in −L (loss).
+7
+3 First-Exit-Time moment of the Ornstein-Uhlenbeck pro-
+cess
+In previous section we have shown that the optimal long-run return depends on the probabilities to
+reach trading bands and on some expected FPTs and FETs, for any continuous price process. When
+Xt follows OU dynamics (2), the expression for expected FPT and probability to reach endpoints
+can be found in the literature; in this section we show how to compute expected FET in terms of
+elementary functions.
+Remark 3 It is possible to rescale time t and log-prices Xt in (2), measuring time in 1/κ units,
+and Xt in σ/√κ units, obtaining an equivalent dynamics (in the new units of measure) with κ =
+σ = 1. Stated diﬀerently, trading bands are multiples of the standard deviation Σ := σ/
+√
+2κ for the
+Gaussian stationary distribution for the process Xt (2); times (e.g. trade lengths) are multiples of
+OU characteristic time scale θ := 1/κ.
+We indicate with lowercase letters trading bands in Σ units, i.e.
+D =d Σ, U =u Σ.
+We can also indicate with l the stop-loss in Σ units
+L =l Σ
+with l a negative real number. In mathematical terms this choice corresponds to stop the strategy
+when the drawdown reaches a given quantile of the Gaussian stationary distribution. A typical choice
+for l is−1.96 that corresponds to the 2.5% quantile.
+In order to compute the expected FET, we consider FET’s Laplace transform in Borodin and Salmi-
+nen (1996) and the expression for the parabolic cylinder function in Nobile et al. (1985)
+D−λ(x) =
+√π 2−λ/2
+Γ( 1+λ2 ) e−x2/4
+∞∑
+k=0
+λkχk
+(
+− x√2) , λ ∈ℜ +,x∈ℜ (13)
+with Γ :ℜ+→ℜ + the gamma function and the functions{χk}k∈N deﬁned via the following iterative
+relation 
+
+
+χ0(z) := 1 z∈ℜ
+χi(z) := 2
+∫ z
+0
+dyey2
+∫ y
+−∞
+due−u2χi−1(u) z∈ℜ,i∈ N+ (14)
+In particular, it can be useful to decompose χi(z) functions in even and odd functions, as shown in
+the following lemma for the ﬁrst two.
+Lemma 2 For the ﬁrst two functions {χi(z)}i=1,2 deﬁned in (14), we have
+{ χ1(z) = √πϕ 1(z) +ψ1(z)
+χ2(z) = √π [ϕ2(z)− ln 2ϕ1(z)] +ψ2(z) z∈ℜ (15)
+where{ψi}i=1,2 are even functions while {ϕi}i=1,2 are odd functions, whose deﬁnitions can be found
+in the Glossary of Functions.
+8
+Proof. See Appendix A♣
+The quantity of interest is τe in (3), the FET starting from D and exiting from the interval ( L,U )
+with L<D <U ; in particular we are interested in the FET τ +e (τ−e ) when exiting from U (L).
+The probability to exit from above (Borodin and Salminen 1996, p.548 eq.3.0.4b) is
+p+ = Erﬁd(d,l )Erﬁd(u,l ) = ϕ1
+(
+d√
+2
+)
+−ϕ1
+(
+l√
+2
+)
+ϕ1
+(
+u√
+2
+)
+−ϕ1
+(
+l√
+2
+) , (16)
+where the last equality is obtained rewriting the probability as a function of the -previously mentioned-
+odd function ϕ1.
+The main result of this section is stated in the following proposition, where it is provided an explicit
+expression for the ﬁrst moment of τ +e for the OU (2).
+Proposition 3 The ﬁrst moment of τ +e in (4) for the OU dynamics (2) is
+E[τ +e ]
+θ =
+ϕ2
+(
+u√
+2
+)
+−ϕ2
+(
+l√
+2
+)
+−ψ1
+(
+u√
+2
+)
+ϕ1
+(
+l√
+2
+)
++ψ1
+(
+l√
+2
+)
+ϕ1
+(
+u√
+2
+)
+ϕ1
+(
+u√
+2
+)
+−ϕ1
+(
+l√
+2
+) −
+ϕ2
+(
+d√
+2
+)
+−ϕ2
+(
+l√
+2
+)
+−ψ1
+(
+d√
+2
+)
+ϕ1
+(
+l√
+2
+)
++ψ1
+(
+l√
+2
+)
+ϕ1
+(
+d√
+2
+)
+ϕ1
+(
+d√
+2
+)
+−ϕ1
+(
+l√
+2
+)
+(17)
+where{ψi}i=1,2 and{ϕi}i=1,2 are respectively even and odd functions, whose deﬁnitions can be found
+in the Glossary of Functions and θ the characteristic time of the OU.
+Proof. See Appendix A♣
+The ﬁrst moment of the First-Passage-Time τp(D↝ U) (with D < U) is obtained in the following
+corollary.
+Corollary 2 The ﬁrst moment of the FPT τp(D↝U) with D <U is
+E[τp(D↝U)]
+θ =√π[ϕ1( u√2)−ϕ1( d√2)] +[ψ1( u√2)−ψ1( d√2)] (18)
+Proof. This result can be proven as shown in Nobile et al. (1985) or as a limit for L→−∞ of
+previous proposition ♣
+Similarly, when exiting in L, one has the probability
+p− = Erﬁd(u,d )Erﬁd(u,l ) = ϕ1
+(
+u√
+2
+)
+−ϕ1
+(
+d√
+2
+)
+ϕ1
+(
+u√
+2
+)
+−ϕ1
+(
+l√
+2
+),
+9
+the expected FET τ−e is
+E[τ−e ]
+θ =
+ϕ2
+(
+u√
+2
+)
+−ϕ2
+(
+l√
+2
+)
+−ψ1
+(
+u√
+2
+)
+ϕ1
+(
+l√
+2
+)
++ψ1
+(
+l√
+2
+)
+ϕ1
+(
+u√
+2
+)
+ϕ1
+(
+u√
+2
+)
+−ϕ1
+(
+l√
+2
+) −
+ϕ2
+(
+u√
+2
+)
+−ϕ2
+(
+d√
+2
+)
+−ψ1
+(
+u√
+2
+)
+ϕ1
+(
+d√
+2
+)
++ψ1
+(
+d√
+2
+)
+ϕ1
+(
+u√
+2
+)
+ϕ1
+(
+u√
+2
+)
+−ϕ1
+(
+d√
+2
+)
+(19)
+and the expected value of FPT τp(U↝D) with D <U is
+E[τp(U↝D)]
+θ =√π[ϕ1(− d√2)−ϕ1(− u√2)] +[ψ1(− d√2)−ψ1(− u√2)] . (20)
+Remark 4 Using the same technique of proposition 3, also the following moments of FET can be
+computed. In particulary it can be shown that also the variance of τ +e and τ−e are ﬁnite, as required
+by proposition 2.
+Previous results for FETs allow writing the expected trade length in the denominator of (9) and (12)
+as a simple expression when Xt follows OU dynamics (2), as shown in the following corollary.
+Corollary 3 The expected trade length for the OU dynamics (2) is
+p+E[τ +] +p−E[τ−]
+θ =π Erﬁd(d,l ) Erﬁd(u,d )Erﬁd(u,l ) .
+Proof. Straightforward from direct substitution ♣
+In the OU case we can write explicitly long-run return (9), due to the simple expressions for proba-
+bilities and expected trade length. It becomes
+µ(f,D,U |L) = 1πθ
+(
+ln
+[
+1 +f
+(
+eU−D−c− 1)]
+Erﬁd(u,d ) + ln
+[
+1 +f
+(
+eL−D−c− 1)]
+Erﬁd(d,l )
+)
+. (21)
+In previous section we have discussed for a generic continuous price process the condition for having
+non trivial trading strategy, i.e. a non-null amount invested in the risky asset. Let us now comment
+on the main consequences when Xt follows OU dynamics (2). As shown in Lemma 1, for a given
+trading strategy (and then for a given set of bands D and U), it is required that
+p+ >q +⇔c< C := ln[1 +p+(eU−L− 1)]− (D−L).
+In the case of pair trading, the volatility Σ takes low values (typically lower than 5%). In this case
+we can consider the ﬁrst order expansion of C =c Σ +O(Σ2) with
+c =p+(u−l)− (d−l),
+10
+where p+, in the OU case, is given by (16). In the OU case, it is straightforward to show that c is
+always positive∀u∈ (d,−l). Stated diﬀerently, every time log-prices follow an OU (with a positive
+mean reversion κ) the “game” is unfair and mean-reverting ( p+ > q+), providing that transaction
+costs c are not too high. For any chosen stop-loss level l a quantity of practical interest is c∗, the
+maximum transaction cost that allows a non trivial trading strategy, i.e. the maximum of c w.r.t. d
+andu. This quantity c∗ is a universal function of the stop-loss level l (i.e. it does not depend on any
+model parameter) and in ﬁgure 2 we show its plot for l in the range of values relevant for practical
+purposes.
+Figure 2: Maximum allowed transaction cost c∗ (in Σ units) as a function of the stop-loss level l in the
+range (−3, 0).
+Remark 5 It can be interesting to obtain from (21) Bertram’s long-run return µB as a limit case
+for a stop-loss L→−∞ . In this case the expected trade length becomes πθ Erﬁd(u,d ) and one gets
+µB(f,D,U ) = ln
+[
+1 +f
+(
+eU−D−c− 1)]
+πθ Erﬁd(u,d ) ,
+which is an increasing function of f, because there are no losses in any scenario. Choosing f = 1 one
+gets the well known result (see e.g. Bertram 2009, eq.15)
+µB(f = 1,D,U ) = U−D−cπθ Erﬁd(u,d ) .
+4 An application to the energy market
+In this section we show a simple application of the trading strategy with stop-loss and leverage on
+empirical data in the energy market. We consider one of the pairs analyzed in Cummins and Bucca
+(2012) that presents a limited seasonality: the spread between the second future contract of Heating
+Oil and the sixth future contract of Gas Oil (generally identiﬁed as HOc2-LGOc6).
+As described in Cummins and Bucca (2012) the Heating Oil future (HO) is traded in USD per gallon
+on the New York Mercantile Exchange (NYMEX) with a contract unit of 42,000 gallons, while the
+11
+Gas Oil future (LGO) is traded in USD per metric ton with a contract unit of 100 metric tons on
+the Intercontinental Exchange (ICE); we consider a half-an-hour dataset for one year between the
+23.04.2015 and the 22.04.2016. Data provider is Thomson-Reuters. Both markets are round the clock
+markets, with a 60 minute break between 17:00 and 18:00 New York Time (NYT) of each business
+day for HO (on Sunday market opens at 18:00 NYT) and with a two-hour break between 18:00 and
+20:00 NYT of each business day for LGO (on Sunday market opens at 20:00 NYT). We use the classic
+approach of dividing our dataset into a 9-month In-Sample (IS) period and a 3-month Out-of-Sample
+(OS) period. In the IS period we calibrate OU parameters considering only the time interval between
+9:00-16:00 NYT when both markets are more liquid; outside this time slot the volume is signiﬁcantly
+smaller. We also determine the optimal trading bands for the strategy. Strategy’s performance is
+veriﬁed OS using round-the-clock prices (excluding the time interval between 17:00-20:00 NYT, where
+one of the two markets is closed). Similarly to Cummins and Bucca (2012) we consider the ratio
+Rt := p(1)t /p(2)t , where p(1) represents the mid price of the HO future contract, while p(2) represents
+the mid price of the LGO future contract.
+Table 1: Parameters estimated for the HOc2-LGOc6 time-series. We report the estimated values
+and the 95% Conﬁdence Interval (CI) obtained through a bootstrap technique with 10 4 samples.
+Conversions are done to ensure time-series are quoted consistently in dollars per barrel.
+Parameter Estimated Values CI
+ˆκ 18.51 (10.89, 37.55)
+ˆη (%) -0.94 (-1.84, -0.01)
+ˆσ (%) 8.93 (8.69, 9.16)
+Our dataset is composed by 2,908 and 2,752 observations, respectively, in the IS and in the OS
+periods. We consider two ﬁltering techniques in order to clean the time-series from outliers.
+Following the same technique described in Benth et al. (2008), we search for extreme outliers of
+Rt. Given the lower and upper quartiles, Q1 and Q3, respectively, and the interquartile range
+IQR :=Q3−Q1, an observation is considered an outlier if it is smaller than Q1− 3×IQR, or larger
+than Q3 + 3×IQR. Following this rule, no outlier is detected.
+Then we ﬁlter out antipersistent outliers that can inﬂuence the strategy: an observation is classiﬁed
+in this way if the diﬀerence between two subsequent ratios is, in absolute value, larger than the
+interquartile range, i.e. |Rt−R t−1| > IQR, and next observation Rt+1 recovers at least the 95%
+of IQR. Following this technique we remove 1 outlier both in IS (on the 3rd of July 2015 at 12:30
+NYT) and in OS time series (on the 15th of Feb. 2016 at 20:00 NYT).
+Parameters are estimated on the IS dataset via maximum likelihood; conﬁdence intervals are obtained
+via a bootstrap technique with 10 4 samples (see e.g. Appendix B for details). Numerical results are
+reported in table 1.
+In a similar way to Bertram (2009), we obtain the optimal trading bands maximizing numerically
+return (21) for the optimal leverage; we allow also for short positions. The optimization is immediate
+due to the simplicity of the expression. In ﬁgure 3 we show the optimal trading bands D andU as a
+function of the transaction cost c when the stop-loss l is−1.96, parameters are the ones in Table 1.
+Transaction cost parameterc at timet can be estimated from the bid-ask observed in price time-series
+12
+Figure 3: Optimal trading bands as a function of transaction costs. We consider a stop-loss l =−1.96,
+no leverage ( f = 1), and parameters equal to the estimated ones in Table 1, in this case Σ = 1 .47%. In
+Bertram (2009) trading bands u and d are symmetric; instead in presence of a stop-loss the trading bands
+u and d are not anymore symmetric. The plot shows |d| (red) and u (blue dashed line) as function of the
+transaction cost (in Σ units) in the range (0 , c∗ = 0.76), where c∗ is the maximum allowed transaction cost
+for the considered stop-loss level l, as computed in previous section.
+as
+ct =
+2∑
+i=1
+lnp(i,a)t
+p(i,b)t
+where p(i,a)t and p(i,b)t represent, respectively, the ask and bid price of the ith future with i=1,2. In
+ﬁgure 4 we show the empirical distribution of c values; its mean value is 9.33% Σ.
+Figure 4: Frequency histogram for c in Σ units.
+Optimal leverage is equal to 28.54, with the 95% Conﬁdence Interval (15.08, 41.97), a value too large
+for practical purposes. In table 2 we show results for optimal bands ( d andu) and returns with their
+conﬁdence intervals for diﬀerent levels of leverage: 1, 10 and the optimal leverage. We also report
+the corresponding OS returns. We observe that trading strategy results are signiﬁcant in the long
+run even introducing a stop loss as shown in this study and when leverage f is suboptimal.
+13
+Table 2: Bands (d eu) calibrated IS and the corresponding IS return with a stop-loss l =−1.96; we
+show values and their 95% Conﬁdence Interval obtained through a bootstrap technique. We consider
+three levels of leverage: 1, 10 and the optimal one. We also report returns obtained in OS dataset.
+f d CI u CI µ CI µOS
+1 −0.870 ( −0.915,−0.688) 0 .581 (0 .564, 0.603) 0 .145 (0 .124, 0.151) 0 .410
+10 −0.863 ( −0.924,−0.642) 0 .447 (0 .386, 0.521) 1 .175 (1 .049, 1.367) 4 .340
+opt −1.108 ( −1.112,−0.943) 0 .302 (0 .296, 0.326) 1 .945 (0 .894, 3.707) 5 .684
+5 Conclusions
+In this paper we develop a statistical arbitrage trading strategy in presence of stop-loss and leverage
+for a mean reverting security.
+We have ﬁrst introduced stop-loss and leverage within the modeling framework presented by Bertram
+(2009). For any given leverage levelL, we write analytically the optimal investment strategy and the
+associated long-run return; in order to reach this task we derive, for an OU, the expected First-Exit-
+Time from a channel in a closed form. In this case we can deduce a simple analytical expression for
+the long-run (21).
+We have also shown an application to a pair in futures’ energy market, considering 12 months
+half-an-hour time series. Optimal bands and leverage can be easily computed also imposing a stop-
+loss. Optimal leverage is too large for practical purposes, but Out-the-Sample results show that
+the proposed trading strategy provides signiﬁcant long-run returns even considering a suboptimal
+leverage.
+Acknowledgements
+We thank all participants to the Conference on the Mathematics of Energy Markets at WPI in Vienna
+2016 and to the Workshop on Energy Finance in Padova 2016 and in particular J. Palczewski for
+useful comments. The usual disclaimers apply.
+References
+Abramowitz, M. and Stegun, I., 1964. Handbook of Mathematical Functions With Formulas, Graphs,
+and Mathematical Tables , National Bureau of Standards.
+Benth, F.E., Benth, J.S., and Koekebakker, S., 2008. Stochastic modelling of electricity and related
+markets, World Scientiﬁc Publishing Co. Pte. Ltd.
+Bertram, W., 2009. Optimal trading strategies for Ito diﬀusion processes, Physica A: Statistical
+Mechanics and its Applications , 388, 2865 – 2873.
+Borodin, A. and Salminen, P., 1996.Handbook of Brownian Motion: Facts and Formulae, Birkhauser.
+Cartea, ´A., Jaimungal, S., and Penalva, J., 2015. Algorithmic and high-frequency trading, Cambridge
+University Press.
+Cox, D.R. and Miller, H.D., 1965. The theory of stochastic processes , Chapman and Hall.
+14
+Cummins, M. and Bucca, A., 2012. Quantitative spread trading on crude oil and reﬁned products
+markets, Quantitative Finance, 12, 1857 – 1875.
+Efron, B. and Tibshirani, R., 1986. Bootstrap methods for standard errors, conﬁdence intervals, and
+other measures of statistical accuracy, Statistical science, 1, 54–75.
+Elliott, R., Hoek, J.V.D., and Malcolm, W., 2005. Pairs trading, Quantitative Finance, 5, 271 – 276.
+Gatev, E., Goetzmann, W., and Rouwenhorst, K., 2006. Pairs trading: Performance of a relative-
+value arbitrage rule, The Review of Financial Studies , 19, 797 – 827.
+Guasoni, P. and Muhle-Karbe, J., 2013. Portfolio choice with transaction costs: a users guide, in:
+Paris-Princeton Lectures on Mathematical Finance 2013 , Springer, 169–201.
+Kelly, J.J.L., 1956. A new interpretation of the information rate, Bell Syst. Tech. J. , 35, 917 – 926.
+Kullback, S. and Leibler, R., 1956. On information and suﬃciency, Ann. Math. Statistics, 27, 79 – 86.
+Leung, T. and Li, X., 2015. Optimal mean reversion trading with transaction costs and stop-loss
+exit, International Journal of Theoretical and Applied Finance , 18, 1550020 1 – 1550020 31.
+Ng, E.W. and Geller, M., 1969. A table of integrals of the error functions, Journal of Research of the
+National Bureau of Standards B , 73 (1), 1–20.
+Nobile, A., Ricciardi, L., and Sacerdote, L., 1985. Exponential trends of Ornstein-Uhlenbeck ﬁrst-
+passage-time densities, Journal of Applied Probability , 360–369.
+Taksar, M., Klass, M., and Assaf, D., 1988. A diﬀusion model for optimal portfolio selection in
+presence of brokerage fees, Math. of Oper. Research, 13, 277 – 294.
+Vidyamurthy, G., 2004. Pairs Trading: Quantitative Methods and Analysis , Wiley.
+Weiss, N.A., 2006. A course in probability , Addison-Wesley.
+Yu, J. and Phillips, P.C., 2001. A Gaussian approach for continuous time models of the short-term
+interest rate, The Econometrics Journal , 4 (2), 210–224.
+15
+Notation and Glossary of Functions
+Notation
+Symbol Description
+Xt risky security log-price at time t, modeled as an OU
+Bt Brownian motion
+c transaction cost parameter, c∈ℜ +
+µt return per unit time up to time t (return)
+µ long-run return
+Wt investor’s wealth at time t
+κ,η,σ OU parameters: mean reversion speed, stationary mean, diﬀusion parameter
+θ the characteristic time of the OU dynamics, θ := 1/κ,
+Σ steady-state standard deviation for the OU dynamics, Σ := σ/
+√
+2κ
+ˆκ, ˆη, ˆσ estimated OU parameters via maximum likelihood
+f fraction of wealth allocated to the risky security, it models leverage
+f∗ optimal leverage
+U (D) upper (lower) trading band
+L stop-loss
+l, u&d stop-loss, upper & lower trading bands in Σ units
+p+ (p−) transition probability from D to U (L)
+q+ (q−) “fair” transition probability from D to U (L)
+r risk free rate
+τ trade length
+{φi}i=1,...,3 ﬁrst three moments of the trade length τ
+τ + (τ−) trade length, deﬁned in eq. (5), in the positive (negative) scenario
+τe First-Exit-Time from the channel (L,U ) for a process starting in D
+τp(D↝U) First-Passage-Time in U for a process starting in D
+v+ increase of wealth in the positive scenario, v+ :=eU−D−c− 1
+Dν(x) cylindric parabolic function, ν∈ℜ +,x∈ℜ
+S(ν,x,y ) cylindric parabolic function with two parameters, ν∈ℜ +,x,y ∈ℜ
+16
+Abbreviations
+Description
+CI Conﬁdence Interval
+FET First-Exit-Time
+FPT First-Passage-Time
+IS In-Sample
+OS Out-of-Sample
+OU Ornstein-Uhlenbeck process
+p.d.f. probability density function
+w.r.t. with respect to
+Glossary of Functions
+The basic functions are (Abramowitz and Stegun 1964)
+Erf(x) := 2√π∫ x0 dte−t2
+Erﬁ(x) := 2√π∫ x0 dtet2 =−i Erf(ix)
+Erfc(x) := 2√π∫ ∞x dte−t2 = 1− Erf(x)
+Erﬁd(x,y ) :=
+√
+2√π∫ xy dtet2/2 = Erﬁ( x√2)− Erﬁ( y√2).
+Similarly to Nobile et al. (1985), we introduce the even functions {ψi}i=1,2 and the odd functions
+{ϕi}i=1,2 that decompose the functions {χi}i=1,2 deﬁned via the recursive equation (14)
+ϕ1(x) :=
+∫ x
+0
+dtet2 =√π2 Erﬁ(x) = ∞∑n=0 x2n+1n! (2n + 1)
+ψ1(x) := 2
+∫ x
+0
+dtet2
+∫ t
+0
+due−u2 =√π∫ x
+0
+dtet2 Erf(t) =
+∞∑
+n=0
+2nx2n+2
+(2n + 1)!! (n + 1)
+ϕ2(x) := 2
+∫ x
+0
+dt2et22
+∫ t2
+0
+du2e−u22
+∫ u2
+0
+dt1et21 =
+∞∑
+n=0
+x2n+3
+(n + 1)! (2n + 3)
+n∑
+k=0
+1
+2k + 1
+ψ2(x) := 4
+∫ x
+0
+dt2et22
+∫ t2
+0
+du2e−u22
+∫ u2
+0
+dt1et21
+∫ t1
+0
+du1e−u21 =
+∞∑
+n=0
+2nx2n+4
+(2n + 3)!! (n + 2)
+n∑
+k=0
+1
+k + 1 .
+We have also written their Maclaurin series.
+17
+Appendix A
+In this Appendix we prove paper’s main results.
+Proof Proposition 1
+Let us deﬁne N +t (N−t ) as the number of times the process, started in D, reachesU (L) before L (U)
+in the time interval [0,t ]. Let us consider investor’s wealth Wt in the self-ﬁnancing strategy at time
+t equal to portfolio value immediately after the last trade before t if price dynamics is continuous
+Wt =W0 (1 +f(eU−D−c− 1))N +t (1 +f(eL−D−c− 1))N −t =W0eµtt.
+Then, for a particular realization of the process, we have
+µt = N +t α+ +N−t α−
+t , (22)
+with { α+ := ln(1 + fv +)
+α− := ln(1 + fv−).
+We can also rewrite the time t as the sum of the trade length, obtaining:
+µt = N +t α+ +N−t α−∑N +t
+i=1τ +i +∑N −ti=1τ−i =
+N +t
+N +t +N −t α+ + N −tN +t +N −t α−
+N +t
+N +t +N −t
+∑N +t
+i=1τ +i
+N +t + N −tN +t +N −t ∑N −ti=1τ −iN −t .
+The long-run return µ is deﬁned as the limit for t→∞ of previous expression; for the law of large
+numbers the proposition is proven after observing that
+N +t
+N +t +N−t
+a.s.
+−−→p+,
+N−t
+N +t +N−t
+a.s.
+−−→p−,
+∑N +t
+i=1τ +i
+N +t
+a.s.
+−−→E[τ +],
+∑N −t
+i=1τ−i
+N−t
+a.s.
+−−→E[τ−] ♣
+Proof Proposition 2
+We compute the expected value and the variance of µt, given by equation (22). Let us observe that
+N +t =Ntνt, whereNt is an ordinary renewal process andνt the frequency of OU processes that reach
+U before L in a time interval t; the interarrival time (trade length in our case) is described by the
+p.d.f. (see e.g. Cox and Miller 1965, p.353)
+f(τ) =p+f +(τ) +p−f−(τ)
+wheref +(τ) ( f−(τ) ) is the p.d.f. of the interarrival time in the positive (negative) scenario. Given
+Nt, the frequency νt follows a binomial distribution.
+18
+For an ordinary renewal process with ﬁnite ﬁrst three moments of the interarrival time, the following
+relations hold (see e.g. Cox and Miller 1965, p.345)
+
+
+
+E[Nt] = 1φ1t + φ22−φ212φ21 +O(1t)
+V[Nt] = φ22
+φ31t +
+( 1
+12 + 5φ424φ41− 2φ33φ31) +o (1) ,
+where{φi}i=1,...,3 are the ﬁrst three moments of the interarrival time, i.e.φ1 := E[τ],φ 22 := V[τ],φ 3 :=
+E[(τ−φ1)3].
+We can rewrite (22) as
+µt = (α+−α−)N +t +α−Nt
+t
+and using conditional expectation we get
+E[µt] = 1t{(α+−α−) E[E[N +t|Nt]] +α− E[Nt]} = αt E[Nt] =µ +αφ22−φ212φ21 1t +O(1t)2
+where α :=p+α+ + (1−p+)α− and µ =α/φ1 is the long-run return.
+Using the Law of total variance (see e.g. Weiss 2006) we obtain
+V[µt] = 1t2{E[V[(α+−α−)N +t +α−Nt|Nt]] + V[E[µt|Nt]]} =
+= 1t2{E[(α+−α−)2 V[N +t|Nt]] + V[αNt]} =
+= 1t2{(α+−α−)2p+ (1−p+) E[Nt] +α2 V[Nt]} =
+= 1t{(α+−α−)2p+ (1−p+) 1φ1 +α2φ22φ31} +
+1
+t2
+{
+(α+−α−)2p+ (1−p+)φ22−φ21
+2φ21 +α2
+( 1
+12 + 5φ424φ41− 2φ33φ31)} +o(1t)2 .
+If only the ﬁrst two moments of the interarrival time are ﬁnite, we obtain only the leading term
+O (1/t) in above expansion, proving the proposition.
+For practical purposes it can be useful to relate the ﬁrst two moments of τ with the corresponding
+quantities in the positive and negative scenario. After straightforward computations one gets
+{
+φ1 =p+φ+1 + (1−p+)φ−1
+φ22 =p+ (1−p+) (φ+1−φ−1 )2 +p+ (φ+2 )2 + (1−p+) (φ−2 )2 ♣
+Proof Lemma 2
+Straightforward for χ1(z). For χ2(z) one should
+χ2(z) =4
+∫ x
+0
+dt2et22
+∫ t2
+−∞
+du2e−u22
+∫ u2
+0
+dt1et21
+∫ t1
+−∞
+du1e−u21 =
+√πϕ 2(z) +ψ2(z) + 4∫ x
+0
+dt2et22
+∫ 0
+−∞
+du2e−u22
+∫ u2
+0
+dt1et21
+∫ t1
+−∞
+du1e−u21
+19
+which gives the required result after observing that the last three integrals can be computed explicitly
+I :=
+∫ 0
+−∞
+du2e−u22
+∫ u2
+0
+dt1et21
+∫ t1
+−∞
+du1e−u21 =−√π4 ln 2.
+As a matter of fact, having deﬁned
+g(u2) := −
+∫ ∞
+u2
+dte−t2 =−√π2 Erfc(u2)
+f(u2) :=
+∫ u2
+0
+dt1et21 Erfc(t1)
+the quantity I can be written as
+I =−
+∫ ∞
+0
+du2e−u22
+∫ u2
+0
+dt1et21
+∫ ∞
+t1
+du1e−u21 =−√π2 ∫ ∞0 du2e−u22∫ u20 dt1et21 Erfc(t1) =
+=−
+√π
+2
+∫ ∞
+0
+du2g′(u2)f(u2) =
+√π
+2
+∫ ∞
+0
+du2g(u2)f′(u2) =
+=−
+(√π
+2
+)2∫ ∞
+0
+du2 Erfc(u2)2eu22
+where we have integrated by parts and recognized tabled integral (4.7.6) in (Ng and Geller 1969,
+p.14) ♣
+Proof Proposition 3
+This proposition can be proven starting from the Laplace transform for the FET τ +e (Borodin and
+Salminen 1996, p. 548 eq.3.0.5b)
+E[e−sτ +e|Xτ +e =U] = E[e−sτ +e ;Xτ +e =U]P[Xτ +e =U] =:L+e [λ|U] = 1p+ S(λ,d,l )S(λ,u,l ),
+with λ := sθ and S(λ,x,y ) the parabolic cylinder function with two parameters (see e.g. Borodin
+and Salminen 1996, p.647)
+S(λ,x,y ) = Γ(λ)π e(x2+y2)/4[D−λ(−x)D−λ(y)−D−λ(x)D−λ(−y)] λ∈ℜ + andx,y∈ℜ .
+The Laplace Transform becomes
+L+e [λ|U] = 1p+ e(d2+l2)/4[D−λ(−d)D−λ(l)−D−λ(d)D−λ(−l)]e(u2+l2)/4[D−λ(−u)D−λ(l)−D−λ(u)D−λ(−l)].
+and using equation (13)
+L+e [λ|U] = 1p+
+∑∞
+k=0λkχk
+(
+d√
+2
+)∑∞
+i=0λiχi
+(
+− l√2
+)
+−∑∞k=0λkχk(− d√2)∑∞i=0λiχi( l√2)
+∑∞
+k=0λkχk
+(
+u√
+2
+)∑∞
+i=0λiχi
+(
+− l√2
+)
+−∑∞k=0λkχk(− u√2)∑∞i=0λiχi( l√2).
+20
+The expected value of τ +e is related to the ﬁrst derivative in zero (with opposite sign) of the Laplace
+transform
+E[τ +e ] =−θ ∂∂λL+e [λ|U]⏐⏐⏐⏐λ=0 =θ [ξ(U,L )−ξ(D,L )]
+with
+ξ(U,L ) := 1(
+χ1
+(
+u√
+2
+)
+−χ1
+(
+− u√2
+))
+−
+(
+χ1
+(
+l√
+2
+)
+−χ1
+(
+− l√2
+))
+{(
+χ2
+( u√
+2
+)
+−χ2
+(
+− u√2))−(χ2( l√2)−χ2(− l√2)) +
+χ1
+( u√
+2
+)
+χ1
+(
+− l√2)−χ1(− u√2) χ1( l√2)} .
+Using the decomposition of{χi}i=1,2 in odd and even functions, after a straightforward computation
+one obtains the expected FET, proving the proposition ♣
+Appendix B
+We brieﬂy recall the statistical techniques we use for the estimation of parameters and their statistical
+accuracy.
+Maximum likelihood estimation (MLE)
+Let us consider the OU process (1) withη not equal to zero as, in general, time series have a stationary
+mean diﬀerent from zero.
+In order to estimate the three parameters κ,η,σ we consider a maximum likelihood estimation (see
+e.g. Yu and Phillips 2001).
+The conditional density of Xti =xi at time ti givenXti−1 =xi−1 is:
+f(xi|xi−1;κ,η,σ ) = 1√2πς 2 exp{−(xi−xi−1e−κ∆t−η(1−e−κ∆t))22ς2 }, (23)
+where ∆t =ti−ti−1 and
+ς2 =σ2 1−e−2κ∆t
+2κ .
+We maximize the likelihood or equivalently the log-likelihood:
+lnL(κ,η,σ|{xi}i=0,...,N ) =−N2 ln(2π)−N2 lnς2 +
+N∑
+i=1
+(xi−xi−1e−κ∆t−η(1−e−κ∆t))2
+ς2 .
+Maximum likelihood estimators are given by (ˆκ, ˆη, ˆσ) = arg maxκ,η,σ lnL(κ,η,σ ).
+Bootstrap
+In order to check parameters signiﬁcance it is possible to use a bootstrap technique (see e.g. Efron
+and Tibshirani 1986). It corresponds to follow the steps:
+21
+1. estimate via MLE the values of {ˆκ, ˆη, ˆσ} of the time-series withN values;
+2. simulate the OU process with parameters {ˆκ, ˆη, ˆσ} M times (samples) with N values each
+sample;
+3. estimate a new set of parameters {ˆκi, ˆηi, ˆσi} via MLE on each ith sample with i = 1,...,M ;
+4. given the empirical distributions for the three parameters determine the conﬁdence intervals
+for each parameter.
+In the paper we consider M = 104 samples.
+22

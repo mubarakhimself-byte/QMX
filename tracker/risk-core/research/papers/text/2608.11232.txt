@@ -1,0 +1,1352 @@
+arXiv 2608.11232  https://arxiv.org/abs/2608.11232
+
+Backtrader-Bench: Benchmarking LLM Agents on Algorithmic Trading with
+Self-Generated MCQs
+Ruoxi Zhao,Maziar Raissi
+University of California, Riverside
+ruoxi.zhao@email.ucr.edu, maziar.raissi@ucr.edu
+Abstract
+Evaluating LLM coding agents in algorithmic trad-
+ing is difficult because static benchmarks risk data
+contamination and numerical backtest outputs re-
+quire ground truth from actual code execution.
+We present Backtrader-Bench, a framework with
+two complementary pipelines. A deterministic
+multiple-choice question (MCQ) pipeline generates
+questions from backtest configurations across five
+trading strategies, 33 templates, and three difficulty
+tiers, with an independent checker that re-derives
+every answer. A generator-solver filtering pipeline
+autonomously mines harder questions: a generator
+writes questions verified by executable code, con-
+verts them to MCQs, and discards any that a no-
+tool solver can answer without code execution. We
+evaluate 11 models without tools (10 runs each) and
+four with-tools configurations on a 30-question cu-
+rated set. Tool-augmented agents reach 90.0% ac-
+curacy in a single pass (GPT-5.5 and Opus 4.7),
+outperforming the best no-tools baselines (73.0%,
+averaged over 10 runs) by 17 percentage points.
+On 38 separately mined questions, no-tools accu-
+racy drops further, with half the models falling
+to roughly random-chance level (25%). Beyond
+evaluation, the scalable MCQ infrastructure is de-
+signed to produce a training corpus for reinforce-
+ment learning, with the ultimate goal of building
+a specialized agent for quantitative trading work-
+flows.
+1 Introduction
+Large language model (LLM) coding agents equipped with
+shell access and iterative code execution can now tackle com-
+plex software-engineering tasks [Yaoet al., 2023; Schicket
+al., 2023; Jimenezet al., 2024 ]. In finance, domain-specific
+models such as BloombergGPT [Wuet al., 2023 ] demon-
+strate strong financial NLP, reinforcement learning libraries
+like FinRL [Liuet al., 2020 ] automate strategy optimization,
+and tool-augmented systems including FinAgent [Zhanget
+Accepted to the FinLLM Workshop at IJCAI 2026.
+al., 2024], TradingAgents[Xiaoet al., 2024], and FinCon[Yu
+et al., 2024 ] show that coupling LLMs with code execution
+and multi-agent collaboration can surpass parametric base-
+lines. Recent surveys chart this rapid progress, covering fi-
+nancial foundation models broadly [Chenet al., 2025 ] and
+reasoning models such as DeepSeek-R1 in finance[Liuet al.,
+2025], while noting that rigorous domain-specific evaluation
+and reliable tool use remain open challenges, precisely the
+gap our benchmark targets. On the evaluation side, bench-
+marks such as PIXIU [Xieet al., 2023 ], FinBen [Xieet al.,
+2024], and InvestorBench [Liet al., 2024 ] cover financial
+NLP tasks and decision-making, but none measure whether
+an agent can correctlydrivea backtesting library: run a back-
+test under a given configuration, interpret its numerical out-
+put, and report the right answer. This capability matters in
+practice because backtesting correctness hinges on subtle in-
+teractions among strategy logic, broker settings, and position-
+sizing rules; a single misused parameter produces plausible
+but wrong profit-and-loss curves that no amount of surface-
+level code fluency can catch. In quantitative finance, such
+silent errors carry direct financial consequences: a misstated
+Sharpe ratio or understated maximum drawdown can lead
+portfolio managers to over-allocate capital to a strategy that
+would fail under realistic conditions, turning a backtest arti-
+fact into real trading losses.
+Despite a rich ecosystem of Python backtesting frame-
+works (backtrader [Rodriguez, 2015 ], zipline [Quantopian
+Inc., 2012 ], vectorbt [Polakow, 2017]), existing evaluations
+target strategygeneration. QuantCode-Bench [Khoroshilov
+et al., 2026 ], the closest concurrent work, tests whether an
+LLM can produce executable trading code from a natural-
+language description but does not test strategycomprehen-
+sion, i.e. whether an agent can run the engine and correctly
+interpret what it produces.
+Building a reliable benchmark faces three obstacles:
+(1) Data contamination: static benchmarks [Jimenezet al.,
+2024; Chenet al., 2021; Austinet al., 2021; Jainet al., 2025;
+Hendryckset al., 2021; Reinet al., 2024 ] cannot be regener-
+ated once public.(2) Ground-truth fidelity: numerical out-
+puts must come from the same execution path the agent takes.
+(3) Quality at scale: automated generation produces trivially
+easy or malformed items, and manual curation does not scale.
+We address all three withBacktrader-Bench, a
+contamination-resistant benchmarking framework for
+arXiv:2608.11232v1  [cs.CL]  31 Jul 2026
+tool-augmented LLM agents on backtrader [Rodriguez,
+2015]. Adeterministic multiple-choice question (MCQ)
+pipelineruns a backtest, synthesizes stratified four-option
+questions across three difficulty tiers and 33 templates
+spanning five strategies, and re-derives every answer with
+an independent checker. Questions are generated at runtime
+under a configurable seed, so no answer key need appear
+on the public web. Agenerator-solver filtering pipeline
+produces harder questions automatically: a generator agent
+writes a question with verification code; verified questions
+become MCQs with randomized distractors; a no-tool solver
+discards easy items; and a tool-augmented solver validates
+the remainder.
+We evaluate 11 models without tools (10 runs each) and
+four with-tools agent configurations on a 30-question curated
+set. Tool-augmented agents achieve up to 90.0% accuracy
+in a single pass (GPT-5.5 and Opus 4.7), outperforming the
+best no-tools baselines (73.0%, averaged over 10 runs) by
+17 percentage points. On 38 separately mined questions that
+the GPT-5.4 filter cannot solve tool-free, no-tools accuracy
+drops further, with half the models falling to roughly random-
+chance level (25%). Beyond benchmarking, the ultimate goal
+of this scalable MCQ generation infrastructure is to produce
+a large, verified training corpus for reinforcement learning,
+enabling the development of a domain-specific coding agent
+for algorithmic trading.
+Contributions.
+1. A deterministic, self-verifying MCQ pipeline for back-
+trader with 33 templates across three difficulty tiers and
+a per-question checker that re-runs the backtest.
+2. A generator-solver filtering pipeline that autonomously
+mines harder questions by discarding those the GPT-5.4
+filter solves tool-free.
+3. An empirical evaluation of 11 no-tools models and four
+with-tools configurations showing a 17-point accuracy
+gain from tool augmentation and near-chance no-tools
+performance on mined questions.
+Practical relevance.The capabilities tested here map di-
+rectly to quant workflows: configuring a backtesting engine,
+running strategy variants, and interpreting outputs such as
+drawdown and risk-adjusted returns. As LLM agents are de-
+ployed for strategy prototyping, measuring whether they can
+correctly drive a real backtesting library becomes a prerequi-
+site for safe adoption.
+2 Methodology
+This section describes the deterministic MCQ pipeline that
+generates verified questions from backtrader backtests (Sec-
+tion 2.1) and the generator-solver filtering pipeline that au-
+tomatically curates question quality (Section 2.2). Figure 1
+illustrates both workflows.
+2.1 Data collection: Backtrader MCQ pipeline
+Trading strategies and indicators
+The MCQ pipeline supports five canonical trading strategies:
+SMA Crossover, Rolling Window Mean, EWMA, RSI, and
+MACD Crossover. These exercise the core backtrader API
+(indicators, crossover signals, position sizing, broker con-
+figuration) while keeping strategy logic transparent enough
+for unambiguous verification; more complex strategies are
+planned as future extensions (Section 6). SMA Crossover is
+adapted from backtrader’s example code; the remaining four
+from Pik and Ghosh [Pik and Ghosh, 2021 ]. All strategies
+inherit from a shared instrumentation base class that logs or-
+ders, trades, and portfolio snapshots (Appendix A).
+Difficulty taxonomy
+The 33 question templates are each assigned to one of three
+difficulty tiers based on the computational steps required:
+Easy (9 templates): direct single-value lookups; Medium
+(11): conditional filtering or simple aggregation; Hard (13):
+multi-step derived metrics or comparative backtests with al-
+ternative parameters. Templates were designed from back-
+trader’s plotting outputs (Figure 2) and standard quantitative
+finance metrics, then implemented with the assistance of Cur-
+sor, an LLM-powered coding agent. Full tier definitions and
+example templates are in Appendix B; the complete template
+list is in Appendix C.
+Build-checker pipeline
+The pipeline produces verified questions through two stages
+(Appendix F): a build stage that runs a Backtrader backtest,
+generates MCQs from the selected templates with random-
+ized distractors, and writes JSONL records; and a check stage
+that independently re-runs the backtest and re-derives each
+answer, flagging any mismatch. Both stages share the same
+deterministic engine, so agreement provides a strong guaran-
+tee that the ground truth is internally consistent. This dual-
+verification design reflects the standard practice in quantita-
+tive finance, where backtest results are independently repro-
+duced before any capital allocation decision.
+Sampling and reproducibility
+A single random seed controls all stochastic aspects of ques-
+tion generation (template selection, distractor generation, op-
+tion shuffling, date/parameter sampling); the backtest itself is
+deterministic. The 160-question dataset is generated in “all-
+templates” mode (Appendix H), covering all 33 templates
+across three difficulty levels for five strategies. Fresh ques-
+tion sets can be produced by changing the ticker, date range,
+or seed (Appendix I).
+2.2 Generator-solver filtering pipeline
+Motivation
+The deterministic pipeline’s templates are hand-designed and
+finite. To scale, we let an LLM generate questions au-
+tonomously and filter for quality using two solver agents with
+complementary capabilities (Figure 1b; Appendix G).
+Generator and verification
+A generator agent writes a free-form question together with
+self-contained Python verification code that runs a Back-
+trader backtest and prints the ground-truth answer (Ap-
+pendix J). The verification code accepts an environment vari-
+able (MCQ SEED) that parameterises inputs such as ticker,
+date range, and commission rate, enabling seed-controlled
+distractor generation. The pipeline executes this code in a
+Config (seed, ticker, strategy, dates)
+MCQ Builder
+MCQ Checker (execute verifier)
+Verified?
+fail
+JSONL MCQ Set (30 questions)
+pass
+Agent (w/ tools)
+Write/execute
+code, answer
+Fresh sandbox
+Report: accuracy,
+time, tokens
+next Q
+One-shot (no tools)
+Answer as
+LLM one-shot
+Fresh sandbox
+Report: accuracy,
+time, tokens
+next Q
+(a) MCQ pipeline and CLI agent evaluation.
+Generator (LLM)
+Write text question
++ verification code
+Execute verifier
+Code passes? Discard
+fail
+Convert to MCQ
+(random seed
+distractors)
+pass
+No-tool Solver
+Solved? Discard(too easy)yes
+Tool Solver
+Solved?
+no
+Save
+yes
+Save + note
+for human review
+no
+(b) Generator-solver filtering pipeline.
+Figure 1: System workflows. (a) The MCQ pipeline generates and verifies questions, then dispatches them to an agent (w/ tools) or one-
+shot (no tools) evaluator. (b) The generator-solver filtering pipeline: the generator writes a free-form text question with verification code;
+failed verification discards the question. Verified questions are converted to MCQs with randomized distractors. A no-tool solver filters out
+questions solvable without code execution. A tool-augmented solver validates the remainder; unsolved questions are saved with a note for
+human review.
+subprocess with a 120-second timeout; failures discard the
+question. The generator prompt includes a history of prior
+attempts and their outcomes, allowing the LLM to learn from
+its own mistakes within a mining session.
+MCQ conversion
+Verified questions are converted into four-option MCQs.
+Three distractors are generated by re-running the verification
+code with perturbed seed values, collecting unique answer
+values; if fewer than four emerge, multiplicative jitter (±10%,
+±20%) fills the gap. Option ordering is shuffled deterministi-
+cally. A well-posedness check validates that all four options
+are non-empty and the ground-truth answer maps to exactly
+one of A/B/C/D.
+Distractor calibration.Because distractors are formed by
+multiplicative perturbation of the correct value (scale factors
+from0.7to1.3with small random jitter), every distractor
+lies within the same order of magnitude as the correct an-
+swer. Across20,000simulated items, distractor values fall
+between7%and33%from the correct value (mean20%), and
+the nearest distractor averages12.8%away (median10.7%).
+Coarse-scale or order-of-magnitude elimination is therefore
+ineffective: selecting the correct option requires computing
+the precise numerical value rather than estimating its rough
+size.
+Multi-stage filtering
+Stage 1: No-tool solver (discard if solved).Each MCQ
+is presented to a no-tool solver (Cursor SDK with all tool
+use disabled and a runtime inspector that cancels on any tool
+invocation). If the solver answers correctly, the question is
+discarded as solvable from parametric knowledge alone.
+Stage 2: Tool-augmented solver (keep if solved).Surviv-
+ing questions are passed to a tool-augmented solver with full
+code-execution permissions. If it answers correctly, the ques-
+tion is kept: the GPT-5.4 filter cannot answer it tool-free, and
+it is confirmed well-posed.
+Stage 3: Human review.Questions that neither solver an-
+swers are saved for human review to determine whether they
+are genuinely difficult or malformed.
+Agent backends and persistence
+Both solver roles and the generator are instantiated through
+a uniform adapter layer supporting four coding-agent CLIs
+(Cursor, Claude Code, OpenAI Codex, GitHub Copilot);
+all experiments use the Cursor backend (Appendix L).
+Pipeline state is persisted as flat JSONL files with SHA-256
+content-based deduplication across mining rounds and well-
+posedness validation before filtering (Appendix G).
+3 Evaluation Framework
+3.1 Prompting design
+Both evaluation modes receive the same MCQ prompt, which
+includes the backtest configuration (ticker, date range, strat-
+egy, parameters, commission rate, initial cash), the question
+text, four labeled options (A/B/C/D), and an answer format
+instruction requesting the response as a single letter (A, B, C,
+or D). Example questions for each difficulty tier are shown in
+Appendix D.
+With-tools mode.The agent is invoked via the Cursor
+Agent CLI with full code-execution permissions. The prompt
+instructs the agent to write a Python solution script, execute
+it in an isolated sandbox, and reply with the answer letter.
+The agent may install packages, read/write files, and iterate
+on its solution across multiple tool calls. Each question runs
+in a fresh working directory to prevent information leakage
+between questions (Appendix K; prompt in Appendix J).
+No-tools mode.The agent is invoked via the Cursor SDK
+with all tool use disabled through three enforcement layers:
+(1) SDK-level configuration that removes all MCP servers,
+subagents, and ambient settings; (2) a prompt instruction ex-
+plicitly prohibiting code execution and all external tools; and
+(3) a runtime stream inspector that monitors every event and
+immediately cancels the run if any tool invocation is detected.
+The agent must answer from parametric knowledge alone
+(Appendix K).
+3.2 Models
+With-tools models.We evaluate four model configurations
+available through the Cursor Agent CLI: GPT-5.5, Opus 4.7,
+auto (default routing), and composer-2. Each model runs in a
+sandbox with identical tool permissions and timeout settings.
+No-tools models.We evaluate 11 models spanning five
+providers: Opus 4.7, Gemini 3.1 Pro, GPT-5.3 Codex, GPT-
+5.5, Sonnet 4.6, Opus 4.6, Grok 4.3, Kimi K2.5, auto (de-
+fault), composer-2, and Gemini 2.5 Flash. All models are
+accessed through the Cursor SDK using the same no-tools en-
+forcement mechanism. Each model is run 10 times on the cu-
+rated benchmark to account for LLM stochasticity; reported
+accuracies are 10-run averages.
+3.3 Datasets
+Curated benchmark (30 questions).A balanced subset of
+30 questions (10 easy, 10 medium, 10 hard) drawn from the
+160-question base pool generated by the deterministic MCQ
+pipeline. All questions use AAPL data from 2020-01-01 to
+2024-01-01 with $50,000 initial cash and 0.1% commission.
+This set is used for both with-tools and no-tools evaluation.
+Mined question set (38 questions).Produced by 100 min-
+ing attempts (generator: GPT-5.5-medium; solvers: GPT-
+5.4). Of 98 well-posed questions, 60 were discarded as too
+easy and 38 accepted. This set is used for no-tools quality
+validation: all 11 models are run once to measure how much
+filtering reduces accuracy.
+3.4 Metrics
+We report accuracy (%) overall and per difficulty tier, total
+elapsed time, and standard deviation across 10 runs (no-tools
+curated benchmark only). Full protocol details are in Ap-
+pendix M.
+4 Results
+4.1 Curated benchmark results
+Tables 1 and 2 present accuracy on the curated 30-question
+benchmark (10 easy, 10 medium, 10 hard). No-tools results
+are averaged over 10 independent runs per model; with-tools
+entries reflect a single evaluation pass.
+Table 1: With-tools accuracy (%). Each agent writes, executes, and
+debugs code per question in an isolated sandbox.
+Model Easy Med. Hard All Min.
+GPT-5.5 100 100 7090.0 83
+Opus 4.7 100 100 7090.0103
+auto (default) 100 90 60 83.383
+composer-2 100 80 50 76.7 85
+Table 2: No-tools accuracy (%), averaged over 10 runs per model.
+Each agent answers in a single API call with no code execution.
+Model Easy Med. Hard All Min.
+Opus 4.7 100 51 6873.0 1.1
+Gemini 3.1 Pro 97 68 5473.06.3
+GPT-5.3 Codex 99 84 25 69.3 2.0
+GPT-5.5 100 68 36 68.0 8.0
+Sonnet 4.6 100 58 44 67.3 2.8
+Opus 4.6 100 50 43 64.3 6.7
+Grok 4.3 87 54 37 59.3 3.4
+Kimi K2.5 75 56 36 55.7 1.8
+auto (default) 76 63 20 53.0 2.2
+composer-2 72 61 20 51.0 2.8
+Gemini 2.5 Flash 68 46 33 49.0 1.8
+Tool augmentation improves accuracy.The best with-
+tools configurations (GPT-5.5 and Opus 4.7, both 90.0% in
+a single pass) outperform the best no-tools results (Opus 4.7
+and Gemini 3.1 Pro, both 73.0% over 10 runs) by 17 percent-
+age points. All four with-tools models achieve 100% on easy
+questions. The gap widens on harder tiers: with-tools agents
+score 50% to 70% on hard questions, while no-tools models
+range from 20% to 68%. For practitioners, this means that
+an agent without code execution will misreport metrics like
+drawdown or trade count on roughly one in four questions,
+errors that could propagate into flawed strategy selection if
+left unchecked.
+Difficulty tiers discriminate as intended.Across most
+models, accuracy decreases monotonically from easy to
+medium to hard, mirroring the progression from simple
+lookups (e.g., closing price on a date) through conditional
+queries (e.g., first profitable trade) to multi-step derived met-
+rics (e.g., maximum drawdown, comparative Sharpe ratio). A
+notable exception is Opus 4.7 (no-tools), which scores higher
+on hard (68%) than medium (51%) over 10 runs, suggest-
+ing its extended reasoning helps more on complex numerical
+questions than on intermediate ones.
+Model rankings shift between modes.Opus 4.7 ties for
+first in both modes (90.0% with tools, 73.0% without). How-
+ever, rankings are not preserved: GPT-5.3 Codex ranks third
+without tools (69.3%) but is not among the with-tools models
+tested. Composer-2 ranks last in both modes, confirming that
+weaker models benefit less from tool access.
+Multi-run averaging matters.No-tools standard devia-
+tions range from 1.1 to 8.0 percentage points, confirming that
+single-pass evaluation can be misleading. Opus 4.6 scored
+76.7% in a single run but averages 64.3% over 10 runs, an
+overestimate of more than 12 points.
+Cost of tool use.With-tools runs require 83-103 minutes
+per 30-question set; no-tools runs complete in 1-8 minutes
+(10-90×faster).
+4.2 Mining pipeline results
+Of 100 mining attempts, 98 produce well-posed questions;
+the pipeline accepts 38 (39%) where the no-tools solver fails
+but the tool solver succeeds, and discards 60 as too easy. The
+questions span eight domains (Appendix N). Bracket/stop-
+order questions have the highest acceptance rate (9/15, 60%)
+because they depend on backtrader’s event-loop and order-fill
+mechanics. MA crossover questions are most numerous (43)
+but only 47% are accepted, as the no-tools solver often in-
+fers the answer. Weaker domains such as slippage (1/6) and
+analyzer metrics (1/5) remain answerable without code exe-
+cution. These findings have practical implications for quant
+teams: the questions that most reliably resist tool-free solv-
+ing are precisely the order-mechanics scenarios where errors
+carry the highest financial risk, such as misconfigured stop-
+losses or unexpected order cancellations.
+4.3 Mined MCQ quality validation
+Table 3 evaluates all 11 no-tools models on the 38 accepted
+mined MCQs. Compared to the curated benchmark (Table 2),
+no-tools accuracy drops across every model, confirming that
+the filtering pipeline produces genuinely harder questions.
+Table 3: No-tools accuracy (%) on the 38 accepted mined MCQs.
+Random-chance baseline is 25%.
+Model Acc. % Time (min)
+Gemini 3.1 Pro60.59.4
+GPT-5.560.510.7
+Opus 4.6 57.9 5.7
+Opus 4.7 52.62.3
+Sonnet 4.6 39.5 4.8
+GPT-5.3 Codex 34.2 9.7
+Gemini 2.5 Flash 29.0 2.5
+auto (default) 26.3 16.0
+composer-2 23.7 4.4
+Grok 4.3 21.1 5.6
+Kimi K2.5 15.8 3.8
+Accuracy drops substantially across all models.Every
+model performs worse on the mined set than on the curated
+benchmark, confirming that the filtering pipeline successfully
+removes questions answerable from parametric knowledge.
+The largest drops are for mid-tier models: Grok 4.3 falls
+from 59.3% to 21.1% (38 points), Kimi K2.5 from 55.7%
+to 15.8% (40 points), and composer-2 from 51.0% to 23.7%
+(27 points). Even the strongest models decline: Gemini 3.1
+Pro drops from 73.0% to 60.5%, and GPT-5.5 from 68.0% to
+60.5%. The results reveal a clear split: the top four models
+(Gemini 3.1 Pro, GPT-5.5, Opus 4.6, Opus 4.7) cluster be-
+tween 53% and 61%, while five models (Gemini 2.5 Flash,
+auto (default), composer-2, Grok 4.3, Kimi K2.5) fall to be-
+tween 16% and 29%. Three of these land near the 25%
+random-chance baseline; atn= 38their scores are statis-
+tically indistinguishable from chance, so without code exe-
+cution they are effectively guessing. This validates the core
+premise of the mining pipeline: tool-free reasoning collapses
+toward chance for most models and plateaus near 60% even
+for the strongest, far below tool-augmented performance and
+bounded by the strength of the filter model.
+Filter model determines difficulty ceiling.The no-tools
+filter used during mining was GPT-5.4. Stronger models such
+as Gemini 3.1 Pro and GPT-5.5 still score 60.5% on these
+supposedly tool-requiring questions, indicating that mined-
+question difficulty is relative to the filtering model. Using a
+stronger filter or combining curated MCQ templates with the
+generator via in-context learning (Section 6) should improve
+difficulty calibration.
+Error analysis: which financial concepts are hardest.
+Agents most consistently err on multi-step derived finan-
+cial metrics: maximum drawdown (tracking a running peak
+across the equity curve), exposure-adjusted returns (comput-
+ing time-in-market from position logs), and risk-adjusted ra-
+tios such as Sharpe and Sortino. On the mined set, bracket-
+order and trailing-stop questions produce the largest accuracy
+drops because they depend on backtrader’s stateful event-loop
+and order-fill mechanics. These patterns suggest that fail-
+ures concentrate in multi-step numerical computation under
+library-specific execution semantics, not in concept recogni-
+tion.
+5 Limitations
+Filter model and evaluation variance.Mined-question
+difficulty is relative to the filtering model (GPT-5.4 in our ex-
+periments), not absolute; stronger models still solve 60.5%
+without tools. Both mined MCQ results (single-run) and
+with-tools results (single-pass due to 83-103 min per set)
+would benefit from multi-run averaging.
+Computational cost.The mining pipeline is token-
+intensive: each attempt requires the generator to produce a
+question and verification code, the verifier to execute it, and
+both solvers to write and run their own code. A single 100-
+attempt mining session consumes on the order of millions
+of tokens across generator and solver roles and takes several
+hours of total elapsed time. With-tools evaluation is similarly
+expensive (83-103 minutes per 30-question set), as the agent
+iteratively writes, executes, and debugs code for each ques-
+tion. These costs limit the scale of both mining and evalua-
+tion: no-tools results on the 38 mined MCQs are single-pass
+rather than 10-run averages, and we did not run with-tools
+evaluation on the mined set at all.
+Sample size and statistical power.The limited scale of our
+evaluation (30 curated and 38 mined questions) is a direct
+consequence of the per-run compute cost noted above. At
+n= 30, Wilson95%confidence intervals are wide (roughly
+±15points), so small differences among the top no-tools
+models (73.0%, 69.3%, and 68.0%) are not statistically sig-
+nificant (Fisher exactp >0.75), and we do not interpret
+fine-grained rankings. The effects we emphasize are those
+that survive this uncertainty: the large tool-free degradation
+on the mined set (top models fall to 60.5%, weaker models
+to roughly chance) and its consistency across all four paired
+tool-augmented configurations and 10 no-tools runs.
+Coverage and generalizability.The curated pipeline cov-
+ers five canonical strategies and 33 templates; the mining
+pipeline adds eight domains but 44% are MA crossover vari-
+ants. All experiments use Cursor as the sole agent frame-
+work and backtrader as the sole library, so we cannot fully
+isolate model capability from framework or library familiar-
+ity. The framework operates on historical single-equity data
+(AAPL, 2020-2024) and does not test live execution or multi-
+asset portfolios.
+6 Conclusion and Future Work
+We presented Backtrader-Bench, a benchmarking framework
+with two complementary pipelines: a deterministic MCQ
+pipeline (33 templates, three difficulty tiers) and a generator-
+solver filtering pipeline that mines harder questions by dis-
+carding those the GPT-5.4 filter solves tool-free.
+Tool augmentation improves accuracy by 17 points on the
+curated set (single-pass with-tools 90.0% vs. 10-run no-tools
+73.0%). On mined questions, half the no-tools models fall to
+roughly chance level, validating the filtering pipeline. Mined-
+question difficulty is relative to the filter model, indicating
+room for improvement. These pipelines serve as infrastruc-
+ture for building a domain-specific trading agent via rein-
+forcement learning on the structured feedback each MCQ
+provides.
+Future research
+Improving mining yield and difficulty.Feeding the gen-
+erator in-context examples of accepted (hard) and discarded
+(easy) questions could steer it toward domains with high ac-
+ceptance rates such as bracket-order mechanics (60%). Re-
+placing the no-tools filter (GPT-5.4) with a stronger model or
+ensemble would raise the difficulty ceiling.
+Scaling coverage.Adding strategies (Bollinger Bands,
+pairs trading, momentum), hard-tier metrics (Sharpe,
+Sortino, Calmar), additional backtesting frameworks (zi-
+pline [Quantopian Inc., 2012 ], vectorbt [Polakow, 2017 ],
+QSTrader [Halls-Moore, 2015]), and cross-agent benchmark-
+ing (Claude Code, Codex, Copilot) would broaden coverage
+and disentangle library/framework confounds. Scaling the
+curated set toward roughly 100 balanced questions (matched
+across easy, medium, and hard tiers) spanning additional tick-
+ers, date ranges, and strategy parameters, together with multi-
+run averaging on the mined and with-tools settings, would
+tighten the confidence intervals reported in Section 5 and im-
+prove the stability of per-model comparisons.
+Component ablations.Controlled ablations would quan-
+tify each pipeline component’s contribution: removing the in-
+dependent backtest checker, replacing generator-solver filter-
+ing with direct template-based hard questions, and disabling
+SHA-256 deduplication. Measuring the resulting change in
+question quality and discriminative power under each condi-
+tion would empirically validate the design choices this paper
+currently motivates qualitatively.
+RL fine-tuning of a domain-specific agent.The ultimate
+goal is to build a domain-specific coding agent for algorith-
+mic trading. Each MCQ carries structured feedback (correc-
+t/incorrect, difficulty tier, domain, tool use required) that can
+serve as a dense reward signal. As the mining pipeline scales
+to thousands of verified questions, it could produce enough
+training data to fine-tune an agent that reliably drives back-
+test engines and avoids the configuration errors that current
+general-purpose models frequently make. For quantitative fi-
+nance teams, such a specialized agent would reduce the man-
+ual effort of validating backtest outputs and lower the risk of
+silent errors propagating into capital allocation decisions.
+7 Data and Code Availability
+The 160-question dataset, both pipelines, evaluation scripts,
+and configuration files are publicly available at https://github.
+com/rzhao999/Backtrader-Bench, with instructions to regen-
+erate datasets under new seeds and reproduce all experiments.
+Ethical Statement
+The framework benchmarks agents against historical price
+data and does not take live positions; it is intended as a mea-
+surement tool, not an automated trading system. Agents may
+produce trading-shaped output during evaluation. Users who
+repurpose the strategy code beyond benchmarking should fol-
+low standard risk-management and regulatory practice; the
+authors accept no responsibility for financial losses incurred
+by such use.
+References
+[Austinet al., 2021 ] Jacob Austin, Augustus Odena,
+Maxwell Nye, Maarten Bosma, Henryk Michalewski,
+David Dohan, Ellen Jiang, Carrie Cai, Michael Terry,
+Quoc Le, and Charles Sutton. Program synthesis with
+large language models.arXiv preprint arXiv:2108.07732,
+2021.
+[Chenet al., 2021 ] Mark Chen, Jerry Tworek, Heewoo Jun,
+Qiming Yuan, Henrique Ponde de Oliveira Pinto, Jared
+Kaplan, Harri Edwards, Yuri Burda, Nicholas Joseph,
+Greg Brockman, Alex Ray, Raul Puri, Gretchen Krueger,
+Michael Petrov, Heidy Khlaaf, Girish Sastry, Pamela
+Mishkin, Brooke Chan, Scott Gray, Nick Ryder, Mikhail
+Pavlov, Alethea Power, Lukasz Kaiser, Mohammad Bavar-
+ian, Clemens Winter, Philippe Tillet, Felipe Petroski Such,
+Dave Cummings, Matthias Plappert, Fotios Chantzis, Eliz-
+abeth Barnes, Ariel Herbert-V oss, William Hebgen Guss,
+Alex Nichol, Alex Paino, Nikolas Tezak, Jie Tang, Igor
+Babuschkin, Suchir Balaji, Shantanu Jain, William Saun-
+ders, Christopher Hesse, Andrew N. Carr, Jan Leike, Josh
+Achiam, Vedant Misra, Evan Morikawa, Alec Radford,
+Matthew Knight, Miles Brundage, Mira Murati, Katie
+Mayer, Peter Welinder, Bob McGrew, Dario Amodei, Sam
+McCandlish, Ilya Sutskever, and Wojciech Zaremba. Eval-
+uating large language models trained on code.arXiv
+preprint arXiv:2107.03374, 2021.
+[Chenet al., 2025 ] Liyuan Chen, Shuoling Liu, Jiangpeng
+Yan, Xiaoyu Wang, Henglin Liu, Chuang Li, Kecheng
+Jiao, Jixuan Ying, Yang Veronica Liu, Qiang Yang, and
+Xiu Li. Advancing financial engineering with foundation
+models: Progress, applications, and challenges.Engineer-
+ing, 2025.
+[Halls-Moore, 2015] Michael Halls-Moore. QSTrader: Free
+python quantitative trading and backtesting, 2015.
+[Hendryckset al., 2021 ] Dan Hendrycks, Collin Burns,
+Steven Basart, Andy Zou, Mantas Mazeika, Dawn Song,
+and Jacob Steinhardt. Measuring massive multitask lan-
+guage understanding. InInternational Conference on
+Learning Representations (ICLR), 2021.
+[Jainet al., 2025 ] Naman Jain, King Han, Alex Gu, Wen-
+Ding Li, Fanjia Yan, Tianjun Zhang, Sida Wang, Ar-
+mando Solar-Lezama, Koushik Sen, and Ion Stoica. Live-
+CodeBench: Holistic and contamination free evaluation of
+large language models for code. InInternational Confer-
+ence on Learning Representations (ICLR), 2025.
+[Jimenezet al., 2024 ] Carlos E. Jimenez, John Yang,
+Alexander Wettig, Shunyu Yao, Kexin Pei, Ofir Press, and
+Karthik Narasimhan. SWE-bench: Can language models
+resolve real-world GitHub issues? InInternational
+Conference on Learning Representations (ICLR), 2024.
+[Khoroshilovet al., 2026 ] Alexey Khoroshilov, Alexey
+Chernysh, Orkhan Ekhtibarov, Nini Kamkia, and Dmitry
+Zmitrovich. QuantCode-Bench: A benchmark for eval-
+uating the ability of large language models to generate
+executable algorithmic trading strategies.arXiv preprint
+arXiv:2604.15151, 2026.
+[Liet al., 2024 ] Haohang Li, Yupeng Cao, Yangyang Yu,
+Shashidhar Reddy Javaji, Zhiyang Deng, Yueru He,
+Yuechen Jiang, Zining Zhu, Koduvayur Subbalakshmi,
+Guojun Xiong, Jimin Huang, Lingfei Qian, Xueqing
+Peng, Qianqian Xie, and Jordan W. Suchow. IN-
+VESTORBENCH: A benchmark for financial decision-
+making tasks with LLM-based agent.arXiv preprint
+arXiv:2412.18174, 2024.
+[Liuet al., 2020 ] Xiao-Yang Liu, Hongyang Yang, Qian
+Chen, Runjia Zhang, Liuqing Yang, Bowen Xiao, and
+Christina Dan Wang. FinRL: A deep reinforcement learn-
+ing library for automated stock trading in quantitative fi-
+nance.arXiv preprint arXiv:2011.09607, 2020.
+[Liuet al., 2025 ] Shuoling Liu, Liyuan Chen, Jiangpeng
+Yan, et al. When DeepSeek-R1 meets financial applica-
+tions: Benchmarking, opportunities, and limitations.Fron-
+tiers of Information Technology & Electronic Engineering,
+26(10):1862–1870, 2025.
+[Pik and Ghosh, 2021] Jiri Pik and Sourav Ghosh.Hands-
+On Financial Trading with Python. Packt Publishing,
+2021.
+[Polakow, 2017] Oleg Polakow. vectorbt: Find your trading
+edge, using the fastest backtesting engine, 2017.
+[Quantopian Inc., 2012] Quantopian Inc. Zipline: A
+pythonic algorithmic trading library, 2012. Quantopian
+ceased operations in 2020; repository archived.
+[Reinet al., 2024 ] David Rein, Betty Li Hou, Asa Cooper
+Stickland, Jackson Petty, Richard Yuanzhe Pang, Julien
+Dirani, Julian Michael, and Samuel R. Bowman. GPQA:
+A graduate-level Google-proof Q&A benchmark. InCon-
+ference on Language Modeling (COLM), 2024.
+[Rodriguez, 2015] Daniel Rodriguez. backtrader: Python
+backtesting library for trading strategies, 2015. Last com-
+mit 2020.
+[Schicket al., 2023 ] Timo Schick, Jane Dwivedi-Yu,
+Roberto Dess `ı, Roberta Raileanu, Maria Lomeli, Luke
+Zettlemoyer, Nicola Cancedda, and Thomas Scialom.
+Toolformer: Language models can teach themselves to
+use tools. InAdvances in Neural Information Processing
+Systems (NeurIPS), 2023.
+[Wuet al., 2023 ] Shijie Wu, Ozan Irsoy, Steven Lu, Vadim
+Dabravolski, Mark Dredze, Sebastian Gehrmann, Prab-
+hanjan Kambadur, David Rosenberg, and Gideon Mann.
+BloombergGPT: A large language model for finance.
+arXiv preprint arXiv:2303.17564, 2023.
+[Xiaoet al., 2024 ] Yijia Xiao, Edward Sun, Di Luo, and Wei
+Wang. TradingAgents: Multi-agents LLM financial trad-
+ing framework.arXiv preprint arXiv:2412.20138, 2024.
+[Xieet al., 2023 ] Qianqian Xie, Weiguang Han, Xiao Zhang,
+Yanzhao Lai, Min Peng, Alejandro Lopez-Lira, and Jimin
+Huang. PIXIU: A large language model, instruction data
+and evaluation benchmark for finance.arXiv preprint
+arXiv:2306.05443, 2023.
+[Xieet al., 2024 ] Qianqian Xie, Weiguang Han, Zhengyu
+Chen, et al. FinBen: A holistic financial benchmark for
+large language models.arXiv preprint arXiv:2402.12659,
+2024.
+[Yaoet al., 2023 ] Shunyu Yao, Jeffrey Zhao, Dian Yu, Nan
+Du, Izhak Shafran, Karthik Narasimhan, and Yuan Cao.
+ReAct: Synergizing reasoning and acting in language
+models. InInternational Conference on Learning Repre-
+sentations (ICLR), 2023.
+[Yuet al., 2024 ] Yangyang Yu, Zhiyuan Yao, Haohang Li,
+Zhiyang Deng, Yupeng Cao, Zhi Chen, Jordan W. Su-
+chow, Rong Liu, Zhenyu Cui, Zhaozhuo Xu, Denghui
+Zhang, Koduvayur Subbalakshmi, Guojun Xiong, Yueru
+He, Jimin Huang, Dong Li, and Qianqian Xie. FinCon: A
+synthesized LLM multi-agent system with conceptual ver-
+bal reinforcement for enhanced financial decision making.
+arXiv preprint arXiv:2407.06567, 2024.
+[Zhanget al., 2024 ] Wentao Zhang, Lingxuan Zhao, Hao-
+chong Xia, Shuo Sun, Jiaze Sun, Molei Qin, Xinyi Li,
+Yuqing Zhao, Yilei Zhao, Xinyu Cai, Longtao Zheng, Xin-
+run Wang, and Bo An. A multimodal foundation agent for
+financial trading: Tool-augmented, diversified, and gener-
+alist.arXiv preprint arXiv:2402.18485, 2024.
+A Strategy Implementations
+The following listings show the core logic of each trading strategy used in the MCQ pipeline. All strategies inherit from a
+shared instrumentation base class that logs order executions, trade closures, and daily portfolio snapshots. Each strategy is built
+around one or more standard technical indicators, described below.
+SMA Crossover.TheSimple Moving Average(SMA) is the unweighted arithmetic mean of the lastnclosing prices, where
+Ct denotes the closing price at timet:
+SMAt(n) = 1n
+n−1X
+i=0
+Ct−i
+This strategy computes two SMAs with different lookback periods: a fast (short-term, default 10 days) and a slow (long-term,
+default 30 days). A buy signal fires when the fast SMA crosses above the slow SMA, indicating upward momentum; a sell
+signal fires on the reverse crossing.
+class SmaCross(McqInstrumentedStrategy):
+params = dict(pfast=10, pslow=30, target_percent=1.0)
+def __init__(self):
+self.sma_fast = bt.ind.SMA(self.data.close, period=self.p.pfast)
+self.sma_slow = bt.ind.SMA(self.data.close, period=self.p.pslow)
+self.crossover = bt.ind.CrossOver(self.sma_fast, self.sma_slow)
+def next(self):
+if not self.position and self.crossover > 0:
+self.order = self.buy()
+elif self.position and self.crossover < 0:
+self.order = self.close()
+Rolling Window Mean.Uses a single SMA with a longer lookback window (default 90 days) as a trend filter. The rolling
+mean smooths out short-term noise, providing a baseline for the recent price regime. The strategy buys when the closing price
+rises above the rolling mean (interpreted as an uptrend) and exits when it falls below (interpreted as a downtrend).
+class RollingWindowMean(McqInstrumentedStrategy):
+params = dict(rolling_window=90, target_percent=1.0)
+def __init__(self):
+self.rolling_mean = bt.ind.SMA(self.data.close,
+period=self.p.rolling_window)
+def next(self):
+if self.data.close[0] > self.rolling_mean[0] and not self.position:
+self.buy()
+elif self.data.close[0] < self.rolling_mean[0] and self.position:
+self.close()
+EWMA.TheExponential Moving Average(EMA) assigns exponentially decreasing weights to older prices, making it more
+responsive to recent data than the SMA. With smoothing factorα= 2/(n+ 1), the EMA is defined recursively:
+EMAt =α C t + (1−α)EMA t−1
+This strategy uses a fast EMA (default period 5) and a slow EMA (default period 30). It buys when the fast EMA rises above
+the slow EMA and sells on the reverse crossing.
+class ExponentialWeightedMovingAverage(McqInstrumentedStrategy):
+params = dict(pfast=5, pslow=30, target_percent=1.0)
+def __init__(self):
+self.ema_fast = bt.ind.EMA(self.data.close, period=self.p.pfast)
+self.ema_slow = bt.ind.EMA(self.data.close, period=self.p.pslow)
+def next(self):
+if self.ema_fast[0] > self.ema_slow[0] and not self.position:
+self.buy()
+elif self.ema_fast[0] < self.ema_slow[0] and self.position:
+self.close()
+RSI.TheRelative Strength Index(RSI) is a momentum oscillator that measures the speed and magnitude of recent price
+changes on a 0 to 100 scale:
+RS= U n
+Dn
+,RSI= 100− 1001 +RS
+where U n is the average gain and Dn the average loss over the lastnperiods. Low RSI values indicate oversold conditions;
+high values indicate overbought conditions. This strategy buys when RSI drops below 10 (deeply oversold) and sells when it
+rises above 90 (deeply overbought). Default lookback period: 12 days.
+class RsiStrategy(McqInstrumentedStrategy):
+params = dict(rsi_period=12, rsi_buy_threshold=10,
+rsi_sell_threshold=90, target_percent=1.0)
+def __init__(self):
+self.rsi = bt.ind.RSI_Safe(self.data.close, period=self.p.rsi_period)
+def next(self):
+if self.rsi[0] < self.p.rsi_buy_threshold and not self.position:
+self.buy()
+elif self.rsi[0] > self.p.rsi_sell_threshold and self.position:
+self.close()
+MACD Crossover.TheMoving Average Convergence Divergence(MACD) indicator tracks the difference between a fast
+EMA and a slow EMA of the closing price, with a separate signal line that is itself an EMA of the MACD:
+MACDt =EMA fast(t)−EMA slow(t),Signal t =EMA s
+ 
+MACDt
+
+When the MACD line crosses above the signal line, it suggests bullish momentum; a downward crossing suggests bearish
+momentum. Default periods: 12 (fast EMA), 26 (slow EMA), 9 (signal EMA).
+class MacdCrossoverStrategy(McqInstrumentedStrategy):
+params = dict(pfast=12, pslow=26, psignal=9, target_percent=1.0)
+def __init__(self):
+self.macd = bt.ind.MACD(self.data.close,
+period_me1=self.p.pfast,
+period_me2=self.p.pslow,
+period_signal=self.p.psignal)
+self.macd_cross = bt.ind.CrossOver(self.macd.macd, self.macd.signal)
+def next(self):
+if self.macd_cross > 0 and not self.position:
+self.buy()
+elif self.macd_cross < 0 and self.position:
+self.close()
+B Difficulty Tier Definitions
+Each of the 33 question templates is assigned to one of three difficulty tiers based on the computational steps required to derive
+the answer from the backtest output.
+Easy (9 templates).Direct single-row or single-scalar lookups from the backtest dataframe, requiring no aggregation or multi-
+step reasoning. Examples: first close price, volume or broker cash on a given date, SMA value, position size, crossover/signal
+counts.
+Medium (11 templates).Conditional row selection or simple aggregation over the dataframe, requiring filtering by a condi-
+tion or combining multiple fields. Examples: first buy execution, profitable vs. losing trade counts, net P/L, total commission,
+days in position, peak portfolio date, P/L of a specific closed trade.
+Hard (13 templates).Multi-step derived metrics requiring non-trivial computation over the full time series or running a
+second backtest with alternative parameters. Examples: maximum drawdown (peak-to-trough), ROI, win rate, profit factor,
+annualized return, Calmar ratio, exposure-adjusted return, drawdown recovery days, golden cross counting within a sub-period,
+and comparative questions across different SMA parameters.
+C Question Templates
+Table 4 lists all 33 MCQ templates with their difficulty tier and a brief description of what each question asks.
+Table 4: All 33 MCQ question templates.
+Tier Template Description
+E first close First close price
+E volume V olume on a date
+E broker cash Broker cash on a date
+E portfolio value Portfolio value on a date
+E sma SMA value on a date
+E max shares Max affordable shares
+E position on date Position size on a date
+E crossovers Crossover event count
+E buy sell signals Buy/sell signal counts
+M first buy First buy: shares, price, date
+M trade outcomes Profitable/losing trade counts
+M net pnl Final net P/L
+M commission Commission + order count
+M total shares traded Total shares traded
+M days in position Days in/out of position
+M peak portfolio date Peak portfolio date/value
+M best trade day Best closed-trade day
+M strategy action on date Buy/sell/hold on a date
+M nth trade pnl Nth trade realized P/L
+M cash after nth order Cash after nth order
+H max drawdown Max drawdown ($)
+H roi percentage ROI %
+H win rate Win rate %
+H profit factor Profit factor
+H annualized return Annualized return
+H avg holding period Avg holding period
+H golden cross count Golden crosses in subperiod
+H max drawdown window Drawdown window details
+H drawdown recovery days Recovery days
+H calmar ratio Calmar ratio
+H exposure adjusted return Exposure-adj. return
+H sma comparison Compare P/L across params
+H signal diff Compare signals across params
+D Example Questions by Difficulty
+The following three examples are drawn from the 160-question base pool (SMA Crossover strategy, AAPL, 2020-01-01 to
+2024-01-01). Each question is preceded by the standard configuration preamble shown in Appendix H.
+Easy: first close price.
+What was the first close price observed
+for AAPL in this backtest window?
+A. $58.45 B. $95.86
+C. $75.09 D. $96.60
+Answer: C
+Medium: first buy execution.
+For the first buy execution, how many
+shares were bought, at what closing
+price, and on which date?
+A. 668 shares at $71.67 on 2020-04-16
+B. 478 shares at $177.15 on 2023-10-17
+C. 443 shares at $186.40 on 2023-11-10
+D. 396 shares at $178.96 on 2022-03-29
+Answer: A
+Hard: maximum drawdown.
+What was the maximum portfolio drawdown
+(peak-to-trough) during the backtest?
+A. $28843.29 B. $35256.48
+C. $34032.42 D. $23351.09
+Answer: A
+E Backtrader Plot
+Figure 2 shows a sample backtrader plot generated with the default pipeline configuration (Appendix H): SMA Crossover
+strategy on AAPL from 2020-01-01 to 2024-01-01. The plot displays the price series with buy/sell markers, the fast and slow
+SMA indicators, trade profit markers, and the portfolio value over time. The visual structure of this output directly inspired the
+MCQ template design: easy questions ask about values readable from individual data points (close price, volume, SMA value),
+medium questions target trade-level events visible in the markers (first buy, trade P/L), and hard questions require derived
+metrics computed over the full series (drawdown, ROI, Sharpe ratio).
+Figure 2: Sample backtrader plot for SMA Crossover on AAPL (2020 to 2024) using the default pipeline configuration. Buy and sell markers,
+SMA indicators, trade profit, and portfolio value are shown.
+F Pipeline Code
+The pipeline is invoked through a single CLI entry point that runs two stages sequentially: question generation followed by
+ground-truth verification.
+Build stage.The MCQ builder accepts a backtest configuration (symbol, date range, initial cash, commission rate, stake
+size, strategy name, and strategy parameters), runs a Cerebro backtest, extracts summary statistics and daily records from the
+instrumented strategy, and invokes the appropriate question factory for each selected template. Each factory derives the correct
+answer from the backtest output and generates three distractor options using randomized multiplicative jitter. The builder
+writes each question as a JSONL record containing the rendered question text with a configuration preamble, four labeled
+options (A/B/C/D), the correct answer letter, the question type, the difficulty tier, the strategy metadata, and the full backtest
+configuration.
+Check stage.An independent checker re-runs the same backtest from scratch using only the configuration stored in the
+JSONL record, re-derives the expected answer for each question type, and compares it against the recorded correct option. Any
+mismatch flags a verification failure, catching silent bugs such as template drift, rounding inconsistencies, or changes to the
+underlying strategy logic.
+def run_pipeline():
+# STEP 1: Generate questions
+builder_main(config_argv)
+# STEP 2: Verify ground truth
+results = check_mcq_file(output_path)
+passed = sum(1 for r in results if r["match"])
+failed = len(results) - passed
+if failed > 0:
+# Flag mismatches for inspection
+for r in results:
+if not r["match"]:
+print(f"Q{r[’index’]}: "
+f"stated={r[’stated_answer’]} "
+f"computed={r[’computed_answer’]}")
+return 1
+return 0
+The builder accepts configuration via CLI flags or a JSON file:
+python backtrader_MCQ_pipeline.py \
+--symbol AAPL \
+--start-date 2020-01-01 \
+--end-date 2024-01-01 \
+--initial-cash 50000 \
+--commission-rate 0.001 \
+--strategy sma_crossover \
+--num-questions 30 \
+--seed 42 \
+--difficulty all \
+-o output/AAPL_mcq_30.jsonl
+An interactive mode (-i) walks the user through every configuration field, and –all-templates generates one question per
+template for base pool construction.
+G Mining Pipeline Code
+The generator-solver filtering pipeline (Section 2.2) is implemented as a standalone CLI tool that orchestrates three components:
+a generator agent, a verifier subprocess, and two solver agents (no-tools and with-tools). The main loop runs a configurable
+number of mining attempts (default 10), feeding the generator a history of prior outcomes to discourage repeating easy patterns.
+Mining loop.Each attempt proceeds through four stages: generation, verification, MCQ conversion, and multi-stage filtering.
+The generator prompt includes a running history of prior attempts and their decisions (accepted, discarded as easy, or failed),
+enabling within-session learning.
+for attempt in range(1, args.attempts + 1):
+prompt = build_generator_prompt(history)
+invo = invoke_agent(generator, prompt,
+cwd=generator_dir, timeout=args.generator_timeout,
+model=args.generator_model)
+spec = parse_generator_spec(invo.stdout)
+mined, base_run, perturb_runs, reasons = \
+build_mined_question(args, spec, attempt,
+attempt_dir, base_seed=attempt_seed)
+# Stage 1: no-tool solver screens for easy questions
+no_tools = run_no_tools(args, question_path, attempt_dir)
+if runner_correct(no_tools.get("record")):
+decision = "easy_discarded"
+continue
+# Stage 2: tool-augmented solver validates remainder
+with_tools = run_with_tools(args, question_path, attempt_dir)
+decision = "tool_solver_correct" \
+if runner_correct(with_tools.get("record")) \
+else "tool_solver_wrong"
+history.append(attempt_summary)
+Generator output parsing.The generator returns three delimited blocks (question stem, verification code, rationale). The
+parser extracts each block via regex matching on the custom tag format:
+def parse_generator_spec(raw_text):
+text = logical_text(raw_text)
+question = extract_block(text, "QUESTION")
+code = extract_block(text, "CODE")
+rationale = extract_block(text, "RATIONALE") or ""
+if not question:
+raise ValueError("missing <<<QUESTION>>> block")
+if not code:
+raise ValueError("missing <<<CODE>>> block")
+return QuestionSpec(question, code, rationale)
+Verifier execution.The verification code produced by the generator is written to a temporary file and executed as a subprocess
+with the seed passed via the MCQ SEED environment variable. A 120-second timeout prevents runaway executions. The
+verifier output is parsed for structured answer lines (QUESTION JSON and ANSWER V ALUEJSON):
+def run_verifier(code, *, seed, work_dir, timeout=120,
+python_path=None):
+script_path = work_dir / "verifier.py"
+script_path.write_text(code)
+env = os.environ.copy()
+env["MCQ_SEED"] = str(seed)
+proc = subprocess.run(
+[str(python_path), str(script_path)],
+capture_output=True, text=True, timeout=timeout,
+cwd=str(work_dir), env=env)
+question, answer_value, answer_letter = \
+parse_verifier_output(proc.stdout)
+return VerificationRun(seed, proc.stdout, proc.stderr,
+proc.returncode, timed_out=False,
+question=question, answer_value=answer_value,
+answer_letter=answer_letter)
+MCQ conversion via seed perturbation.Distractors are generated by re-running the same verification code with perturbed
+seed values (up to 8 perturbations, default step size 1009). When fewer than four unique values emerge from perturbation,
+numeric jitter (±10%,±20%) is applied to the correct answer. Options are shuffled deterministically:
+def build_options_from_values( *, correct_value,
+distractor_values, shuffle_seed):
+choices = []
+seen = set()
+add(correct_value)
+for v in distractor_values:
+add(v)
+if len(choices) >= 4: break
+# Fallback: numeric jitter if too few distinct values
+if len(choices) < 4 and is_numeric(correct_value):
+for delta in [0.1, -0.1, 0.2, -0.2]:
+add(correct_value * (1.0 + delta))
+if len(choices) >= 4: break
+rng = random.Random(shuffle_seed)
+rng.shuffle(choices[:4])
+options = {letter: choices[i]
+for i, letter in enumerate("ABCD")}
+answer = next(l for l, v in options.items()
+if v == correct_value)
+return options, answer, choices
+CLI invocation.The mining pipeline accepts configuration via CLI flags:
+python mine_backtrader_questions.py \
+--attempts 10 \
+--generator-agent cursor \
+--generator-model gpt-5.5-medium \
+--no-tools-model gpt-5.4 \
+--with-tools-model gpt-5.4 \
+--generator-timeout 600 \
+--code-timeout 120 \
+--no-tools-timeout 120 \
+--with-tools-timeout 180 \
+--choice-perturbations 8 \
+--seed-step 1009
+All artifacts (generator output, verifier runs, solver reports, and per-attempt summaries) are persisted as JSONL on disk, and
+a final summary reports acceptance counts, token usage per role, and per-model invocation counts.
+Persistence and directory layout.The pipeline persists all state as flat JSONL files organized into three directories under a
+timestamped run identifier, avoiding external database dependencies:
+db/
+mcq/ # question records with verification
+attempts/ # per-question solver attempts
+summary/ # per-attempt and final summaries
+logs/
+mining_YYYYMMDD_HHMMSS/
+attempt_001/ # generator output, verifier
+attempt_002/ # runs, solver reports
+...
+Each mining session receives a unique run identifier constructed from the current timestamp and the number of rounds. All
+output files for a run share the same prefix, making it straightforward to correlate questions, attempts, and summaries:
+def make_run_id( *, attempts, run_name=None):
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+base = f"mining_{timestamp}_rounds_{attempts}"
+if run_name:
+base = f"{base}_{safe_path_segment(run_name)}"
+if not _run_files_exist(base):
+return base
+suffix = 2
+while True:
+candidate = f"{base}_{suffix}"
+if not _run_files_exist(candidate):
+return candidate
+suffix += 1
+Content-based deduplication.Each question is assigned a deterministic identifier by hashing its normalized text and four
+options with SHA-256. Whitespace is collapsed before hashing so that formatting differences do not produce distinct identifiers.
+When a question with an existing hash is generated in a later round, it is skipped automatically:
+def question_hash(question, options):
+parts = [_normalize_ws(question)]
+for letter in ("A", "B", "C", "D"):
+parts.append(
+f"{letter}:{_normalize_ws(options.get(letter, ’’))}")
+return hashlib.sha256(
+"\n".join(parts).encode("utf-8")).hexdigest()
+Well-posedness validation.Before entering the filtering stages, each candidate must pass a well-posedness check that rejects
+malformed questions early:
+def evaluate_well_defined( *, question, options, code,
+verifier_returncode, verifier_timed_out, answer):
+reasons = []
+if not question or not question.strip():
+reasons.append("missing question text")
+for letter in ("A", "B", "C", "D"):
+if not options.get(letter, "").strip():
+reasons.append(f"missing option {letter}")
+if not code or not code.strip():
+reasons.append("missing verification code")
+if verifier_timed_out:
+reasons.append("verification code timed out")
+elif verifier_returncode != 0:
+reasons.append(f"non-zero exit {verifier_returncode}")
+if answer not in ("A", "B", "C", "D"):
+reasons.append("no single ground-truth answer")
+return len(reasons) == 0, reasons
+Record schema.Each question record stored in the JSONL file contains: a content-based hash identifier, the question text and
+four options, the ground-truth answer letter, the full verification code and its execution output, a well-posedness flag with failure
+reasons, the pipeline decision (accepted, discarded as easy, or flagged for human review), and a set of labels for downstream
+filtering. Solver attempt records link back to the question identifier and store the agent’s answer, correctness, token usage, and
+evaluation mode (no-tools screening or with-tools validation).
+H Pipeline Configuration
+The following shows the default configuration dictionary used by the pipeline. Every field can be overridden via CLI flags, a
+JSON config file, or the interactive mode.
+PIPELINE_CONFIG = {
+"symbol": "AAPL",
+"start_date": "2020-01-01",
+"end_date": "2024-01-01",
+"initial_cash": 50000,
+"commission_rate": 0.001,
+"stake": 1000,
+"strategy": "sma_crossover",
+"strategy_params": {"pfast": 10, "pslow": 30,
+"target_percent": 1.0},
+"num_questions": 10,
+"seed": 42,
+"difficulty": "easy",
+"output": "backtrader_mcq.jsonl",
+"benchmark": "backtrader",
+"author": "MCQ_test",
+}
+Field descriptions.
+•symbol: Ticker symbol for the equity to backtest (e.g., AAPL, MSFT, GOOG).
+•start date,end date: Date range for the backtest window in YYYY-MM-DD format.
+•initial cash: Starting capital for the broker.
+•commission rate: Broker commission as a decimal fraction (e.g., 0.001 = 0.1%).
+•stake: Fixed order size in shares per trade.
+•strategy: Name of the trading strategy. One of: SMA Crossover, Rolling Window Mean, Exponential Weighted Moving
+Average, RSI Strategy, MACD Crossover.
+•strategy params: Strategy-specific parameters as a dictionary (e.g., SMA periods, RSI thresholds).
+•num questions: Number of MCQ questions to generate.
+•seed: Random seed for reproducibility.
+•difficulty: Difficulty pool to draw from: “easy”, “medium”, “hard”, “all” (balanced), or a comma-separated combination
+like “easy,medium”.
+I Sampling and Reproducibility Details
+The single random seed passed to the pipeline controls five stochastic aspects of question generation:
+1. Selecting which question templates appear in the output.
+2. Generating distractor answers via multiplicative jitter around the correct value.
+3. Shuffling the A/B/C/D option ordering.
+4. Picking sample dates for date-parameterized questions.
+5. Selecting alternative parameter sets for comparison questions.
+When multiple difficulty levels are requested, the total question count is split as evenly as possible across the selected levels.
+Within each level, templates are sampled without replacement when the quota is smaller than the pool; otherwise the pool is
+cycled with replacement to fill the remaining slots. This balanced allocation ensures that no single difficulty tier dominates the
+output.
+An “all-templates” mode generates exactly one question per template for the selected difficulty levels, producing a base pool
+that covers every question type. The 160-question dataset released with this paper is such a base pool, generated under the
+default configuration (Appendix H).
+Because the stock market is highly stochastic, different symbols and date ranges produce entirely different price data, trade
+sequences, and ground-truth answers, yielding fresh question sets suitable for independent evaluation runs.
+J Prompt Templates
+With-tools solver prompt.The following prompt wraps each MCQ when run with code-execution tools enabled.
+You are answering questions about a trading
+strategy and stock market behavior. Use the
+Backtrader package to code, compute or verify all
+answers.
+Configuration for this question group:
+- commission_rate: 0.001
+- end_date: 2024-01-01
+- initial_cash: 50000.0
+...
+Use the config and strategy setting for this
+question. Run the Backtrader strategy when
+positions, orders, trades, drawdowns, or alternate
+parameters matter; all answers should come from the
+resulting backtest dataframe values and the formula
+stated in the question.
+[question text and options]
+Respond in the form <<< X >>> where X is A, B, C,
+or D.
+No-tools prompt.The agent is explicitly prohibited from using any external capability and must answer from internal rea-
+soning alone.
+You are a no-tools multiple-choice answerer. This
+is a one-shot API chat completion, not an agent
+task.
+Do not use tools. Do not call web search, web
+fetch, Bash, Python, MCPs, file search, file read,
+file write, browser, workspace inspection, or any
+other external capability. Use only the question
+text and your internal reasoning.
+Reply with exactly <<< X >>> where X is one of A,
+B, C, or D. No explanation, no code, no extra
+text.
+[question text and options]
+Generator prompt.The following prompt is sent to the generator LLM for each mining round. The miner builds the final
+four MCQ choices from the verifier output; the generator provides only the question stem and standalone verification code. The
+{HISTORY}placeholder is filled at runtime with prior mining outcomes to discourage repeating easy patterns.
+You are generating one Backtrader MCQ spec.
+The miner builds the final four choices. Provide:
+1. A question stem (no A/B/C/D options).
+2. Standalone Python verifier code computing the answer.
+The verifier runs with different MCQ_SEED values. Use
+the seed to perturb inputs (ticker, dates, strategy
+params, cash, commission, metric). The base seed
+defines the true question/answer; perturbed runs yield
+distractor values.
+Verifier output protocol:
+- Print one QUESTION_JSON: ... line (JSON string).
+- Print one ANSWER_VALUE_JSON: ... line (JSON string).
+- Do not print A/B/C/D or ANSWER: X.
+Requirements:
+- About backtrader strategies or computed backtest
+metrics; must require code, not general finance facts.
+- Use backtrader, pandas, numpy, optionally yfinance.
+- Prefer deterministic data or generated OHLCV.
+- Verifier must be standalone (no project imports).
+- Keep base and perturbed runs in the same question
+family. Answer: compact scalar ($1234.56, 17, etc.).
+Prior mining outcomes: {HISTORY}
+Output exactly these blocks, no markdown fences:
+<<<QUESTION>>>
+<question stem, no options>
+<<</QUESTION>>>
+<<<CODE>>>
+import json, os
+seed = int(os.environ.get("MCQ_SEED", "0"))
+# Compute scenario and answer here.
+print("QUESTION_JSON:", json.dumps(question))
+print("ANSWER_VALUE_JSON:", json.dumps(answer_value))
+<<</CODE>>>
+<<<RATIONALE>>>
+Why this requires executable Backtrader reasoning.
+<<</RATIONALE>>>
+K Agent Invocation Details
+Cursor Agent CLI.Each MCQ is dispatched to Cursor Agent via a non-interactive CLI invocation of the form:
+agent -p --output-format json --yolo \
+--trust --workspace <session-dir> \
+[--model <model>] "<prompt>"
+The–yoloflag auto-approves tool use without pausing for interactive confirmation. Tool availability is determined by Cursor
+Agent’s standard tool set, which includes shell execution, file reading and writing, codebase search, and web access. The
+–workspaceflag isolates each question to its own session directory, enforcing the i.i.d. condition.
+The core invocation function:
+def run_cursor_agent(agent_bin, prompt,
+timeout, cwd, extra):
+cmd = [
+agent_bin, "-p",
+"--output-format", "json",
+"--yolo", "--trust",
+"--workspace", str(cwd),
+*extra,
+prompt,
+]
+return subprocess.run(
+cmd, capture_output=True, text=True,
+timeout=timeout, check=False, cwd=cwd,
+stdin=subprocess.DEVNULL,
+)
+No-tools enforcement.Cursor does not expose a documented “disable all tools” switch. To enforce a no-tools baseline, we
+use the Cursor SDK (@cursor/sdk) with three layered restrictions: (i) the agent is created with an empty MCP server map,
+no sub-agents, and sandboxing enabled; (ii) the prompt explicitly prohibits all external tools; (iii) the runner inspects every
+streaming event and, when it detects a tool-call-shaped SDK event, logs the event to a tool events file, sets the question status
+to “tool attempted,” and cancels the run if cancellation is supported. These detections represent attempted or blocked tool calls,
+not successful tool use. Affected questions are not answered normally, which is why the answered percentage drops below
+100% for some difficulty levels in the no-tools results. Questions flagged as “tool attempted” are excluded from the no-tools
+accuracy calculation.
+SDK agent initialization:
+const agent = await Agent.create({
+apiKey: process.env.CURSOR_API_KEY,
+model: { id: args.model },
+local: {
+cwd: process.cwd(),
+settingSources: [],
+sandboxOptions: { enabled: true },
+},
+mcpServers: {},
+agents: {},
+});
+Token estimation.When exact usage metadata is available in streaming events or the final result, the runner extracts it
+(supporting both snake case and camelCase field names). When exact counts are unavailable, the runner falls back to a regex-
+based approximation that tokenizes the prompt and response into word and punctuation chunks and scales by 1.25x. Estimated
+values are tagged as “estimated” in the report.
+L Agent Backend Registry
+The adapter layer provides a uniform interface for invoking different coding-agent CLIs. Each backend is registered as an
+AgentDef dataclass that specifies the binary name, prompt filename, and a run function. The pipeline selects a backend by
+name and calls it through the same interface regardless of the underlying CLI conventions.
+Registry design.Each backend is an AgentDef (name, binary path, prompt filename, run function, optional extra flags). A
+global registry maps backend names to definitions; adding a new backend requires only implementing a run function with a
+fixed signature (binary path, prompt string, timeout, working directory, extra flags) and registering it.
+Supported backends.The registry currently includes four backends:Cursor(Agent CLI with JSON output, auto-approved
+tool use, per-question workspace isolation);Claude Code(Bash tool access with permission skipping for batch evaluation);
+OpenAI Codex(exec subcommand with JSON output);GitHub Copilot(automatic CLI variant detection across different flag
+conventions, with result caching). All experiments in this paper use the Cursor backend.
+Token usage extraction.Each CLI produces JSON in a different format. A chain of format-specific adapters (Claude, Cursor,
+Codex, OpenAI) normalizes token counts into a common schema (input tokens, output tokens, cache read tokens, model). The
+extractor tries each adapter in sequence until one matches, enabling uniform cost tracking across heterogeneous backends.
+M MCQ Evaluation Protocol
+Due to token cost and computational constraints, we evaluate on a balanced subset of 30 questions (10 per difficulty tier) rather
+than the full 160-question pool. The subset covers all five strategies. Each question is presented in a fresh sandbox: the agent
+starts from scratch with only the MCQ prompt and has no access to prior questions or answers, enforcing the i.i.d. condition
+across the evaluation set.
+Each agent is run in two modes:with tools(code execution enabled via shell and package installation) andwithout tools
+(API-only, no external capabilities). For each run we record: (i) accuracy at each difficulty level and overall, (ii) whether the
+agent wrote and executed code (to verify the tool-use mode operated correctly), (iii) elapsed time per question, and (iv) input
+and output token counts.
+Multi-run averaging (no-tools, curated benchmark).Because LLM inference is inherently stochastic (sampling temper-
+ature, non-deterministic decoding), a single evaluation pass can be misleading. For the curated benchmark, all 11 no-tools
+models are run 10 times each; reported accuracies are 10-run averages with standard deviations. For example, Opus 4.6 scored
+76.7% in a single run but averages 64.3% over 10 runs, an overestimate of more than 12 percentage points. Multi-run aver-
+aging is especially important for no-tools evaluation, where the model relies entirely on internal reasoning with no execution
+grounding.
+Single-pass evaluation (with-tools and mined MCQs).With-tools runs require 83 to 103 minutes per 30-question set be-
+cause the agent iteratively writes, executes, and debugs code. This high cost limits with-tools evaluation on the curated bench-
+mark to a single pass per model configuration. Similarly, no-tools evaluation on the 38 mined MCQs is a single run per model
+due to the exploratory nature of the mining evaluation. Single-run variance on 38 questions can be substantial: Opus 4.7 scored
+68.4% in one run and 52.6% in another on the same mined set.
+N Mined Question Domains
+The generator/solver pipeline produces questions spanning several distinct domains. We classify the 98 well-posed mined
+questions into eight categories based on the trading mechanics each question exercises. Below we describe each type in detail.
+Plain MA crossover to final equity (43 questions, 47% accepted).These ask for the final broker value after a deterministic
+SMA/EMA crossover strategy. The core mechanics are indicator warm-up, crossover timing, fixed-size market orders, com-
+missions, and final mark-to-market value. This is the most common generated type; many are discarded because the no-tools
+solver can sometimes infer the correct option from a familiar template or answer-choice structure.Financial relevance:MA
+crossover is the canonical trend-following signal used in production systematic trading; correctly computing final equity after
+commissions is the most basic validation any backtesting workflow must pass.
+MA crossover + timed/percent exits (19 questions, 21% accepted).These add exit rules such as “sell after holdingNbars”
+or “sell after a fixed-percent gain/loss.” Despite appearing more complex, the added rule is usually explicit and local; in this
+sample they skew easy, suggesting that simple exit overlays do not reliably force tool use unless they interact with pending
+orders or subtle Backtrader state.Financial relevance:timed and percent-based exit rules are standard risk management
+overlays in production strategies; they interact with position sizing and can change P&L substantially when applied to volatile
+instruments.
+Bracket / trailing-stop order mechanics (15 questions, 60% accepted).These involve Backtrader-specific order behaviour:
+parent/child bracket orders, stop/limit children, StopTrail, moving stop levels, cancellation logic, or interactions between pro-
+tective orders and crossover exits. This is the strongest category; questions are accepted 60% of the time because they require
+precise knowledge of Backtrader’s event loop, order notifications, execution timing, and state transitions.Financial relevance:
+bracket orders and trailing stops are the primary downside-protection mechanisms in live trading. Misunderstanding their fill
+semantics (e.g., which child order triggers first, how cancellation propagates) can lead to unhedged positions or unexpected
+margin calls.
+Final equity with slippage (6 questions, 17% accepted).Final-value backtests where slippage is part of the broker setup.
+Slippage alone did not make questions difficult enough in this sample, likely because its numerical effect is small or the adjusted
+value is obvious from the answer choices.Financial relevance:slippage modelling is critical for realistic backtest-to-live
+performance translation; underestimating slippage is one of the most common causes of strategy degradation in production.
+MA/ATR regime with ATR-based exits (5 questions, 40% accepted).Moving-average entry logic with stops or take-
+profits derived from ATR values. These require computing a dynamic volatility indicator and applying it to exit logic; they
+are moderately promising but the sample is small.Financial relevance:ATR-scaled exits adapt to market volatility regimes, a
+technique widely used in managed futures and CTA strategies.
+Analyzer / non-equity metric (5 questions, 20% accepted).Questions asking for max drawdown, net profit, closed trade
+count, or another analyzer-style statistic rather than final portfolio value. Often discarded as easy because some metrics are
+near-zero, integer-like, or guessable from the scenario.Financial relevance:drawdown and trade-level statistics are among the
+most scrutinized metrics in fund due diligence; an agent that misreports max drawdown could lead to incorrect risk assessments.
+Inline OHLC / CSV feed (3 questions, 33% accepted).A small OHLCV table is pasted directly into the prompt. Making
+data visible can help readability but may also make the problem easier for a no-tools solver when the table is short.
+Breakout with filters (2 questions, 0% accepted).Entry rules like buying when close breaks above the previousN-bar
+high, often with indicator filters. Both examples were discarded as easy; the sample is too small to draw conclusions.Financial
+relevance:breakout strategies are a staple of momentum-based trading and represent an important domain for future mining
+expansion.

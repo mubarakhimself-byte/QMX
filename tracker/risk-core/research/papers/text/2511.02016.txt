@@ -1,0 +1,1316 @@
+arXiv 2511.02016  https://arxiv.org/abs/2511.02016
+
+ABIDES-MARL: A Multi-Agent Reinforcement
+Learning Environment for Optimal Execution with
+Endogenous Liquidity
+Patrick Cheridito†, Jean-Loup Dupret†and Zhexin Wu∗‡
+†Department of Mathematics, ETH Zurich, Switzerland
+‡Department of Management, Technology, and Economics, ETH Zurich, Switzerland
+Classical optimal execution models treat market impact as a pre-specified, exogenous process. However,
+when market makers adapt strategically, this assumption becomes a structural misspecification: execution
+dynamics depend on the policies and actions of other agents. The problem therefore ceases to be a
+single-agent control problem and instead becomes a finite-horizon stochastic game, in which liquidity
+emerges endogenously from the interactions among heterogeneous market players. We hence introduce
+ABIDES-MARL, a multi-agent reinforcement learning framework for studying optimal execution under
+endogenous liquidity in a realistic limit order book setting. The framework extends ABIDES-Gym to
+support multiple learning agents with synchronized decision periods that preserve proper information
+filtration and key market microstructure features. We validate the framework in an extended Kyle setting,
+where multiple learning agents recover gradual price discovery. Numerical results then show that execution
+strategies learned under endogenous, adaptive liquidity differ fundamentally from those implied by fixed
+exogenous price-impact benchmarks. In particular, strategies optimized under exogenous impact perform
+poorly once market makers adapt strategically: when information is not balanced across traders and
+market makers, market makers exploit predictable execution and the market dynamics may degenerate.
+The framework therefore provides a reproducible foundation for studying strategic adaptation in realistic
+markets and contributes to the development of economically interpretable agentic AI systems in finance.
+Keywords: Optimal execution; Endogenous liquidity; Multi-agent reinforcement learning; Market
+microstructure; Limit order book
+1. Introduction
+Optimal execution studies the problem of a liquidity trader who seeks to trade a large position over
+a finite horizon while minimizing transaction costs and controlling risk. In its classical formula-
+tion, the trader chooses a trading schedule that balances price impact against inventory risk. Early
+discrete-time models by Bertsimas and Lo (1998) and the mean–variance framework of Almgren
+and Chriss (2001) formalized this trade-off and derived explicit optimal schedules under linear
+impact assumptions. Subsequent work incorporated time-varying liquidity (Huberman and Stanzl
+2005), continuous-time stochastic control formulations (Carteaet al.2015), stochastic volatility
+and liquidity (Cheridito and Sepin 2014), and transient impact through propagator models consis-
+tent with no-dynamic-arbitrage conditions (Alfonsiet al.2010, Curatoet al.2017, Gatheral 2010,
+Obizhaeva and Wang 2013). More recently, Dupret and Hainaut (2025) derive tractable Hamil-
+ton–Jacobi–Bellman (HJB) formulations that link high-frequency microstructure with execution
+models.
+∗Corresponding author:zhexin.wu@proton.me
+1
+arXiv:2511.02016v2  [q-fin.TR]  24 Aug 2026
+Despite their differences, these models share a common structural feature: market liquidity and
+price impact are specified exogenously. The trader optimizes against a given impact process (e.g.
+the square-root law), and the resulting problem is a stochastic optimal control problem. However,
+in modern electronic markets, liquidity is supplied by strategic and adaptive agents. If market
+makers update their quoting behavior in response to the observed order flow, then price impact
+is not a fixed structural process but the outcome of interaction. In such a setting, the execution
+problem is no longer purely a control problem against a passive environment, but it becomes part
+of a strategic equilibrium problem. Consequently, treating impact as exogenous when liquidity
+is in fact endogenous constitutes astructural misspecification. Optimality claims derived
+under fixed impact coefficients need not remain valid once market makers adapt strategically.
+In particular, a liquidity trader’s execution strategy may alter future market states, which in
+turn affect the subsequent liquidity conditions she faces. This observation motivates the central
+question of this paper:How can optimal execution be studied in a market where liquidity and price
+formation arise endogenously from strategic interaction among heterogeneous agents?Addressing
+this question requires an environment that is consistent with equilibrium reasoning rather than
+one that assumes fixed impact dynamics.
+Recently, reinforcement learning (RL) has been applied to optimal execution and market
+making as a data-driven alternative to analytical control methods. Yet most of this literature
+operates within the same structural paradigm described above: the execution agent is trained in an
+environment where price impact is either specified parametrically or generated by a simulator with
+fixed rules. In other words, the underlying liquidity process remains effectively exogenous. Early
+contributions employed tabular Q-learning methods (Hendricks and Wilcox 2014, Nevmyvaka
+et al.2006). More recent studies adopt deep RL algorithms such as (double) deep Q-learning
+(DQN), actor–critic methods, and Proximal Policy Optimization (PPO) (Cheridito and Weiss
+2025, Espanaet al.2025, Ganeshet al.2019, Hafsi and Vittori 2024, Karpeet al.2020, Lin and
+Beling 2020, 2021, Nagyet al.2023, Ninget al.2021). Moallemi and Wang (2022) formulate
+execution timing as an optimal stopping problem and demonstrate empirical cost reductions using
+reinforcement and supervised learning techniques. Deep differentiable RL approaches further
+incorporate structural model components into policy optimization (Jaisson 2022). These methods
+enhance adaptivity and allow for nonlinear trading policies. However, even when learning is fully
+data-driven, the training environment typically does not model strategic adaptation among market
+makers. As a result, execution remains formulated as a single-agent stochastic control problem
+rather than as part of a stochastic game with endogenous liquidity and heterogeneous market
+players.
+In contrast, market microstructure theory models liquidity and price formation as equilib-
+rium outcomes of strategic interaction. In the seminal framework of Kyle (1985), prices adjust
+in response to order flow generated by informed traders interacting with competitive market
+makers and noise traders. Related models analyze liquidity provision and bid-ask spreads under
+inventory and adverse-selection effects (Glosten and Milgrom 1985, Ho and Stoll 1981). Huberman
+and Stanzl (2004) characterize recursive linear equilibria under no-manipulation constraints. In
+these models, liquidity depth and impact coefficients are endogenous equilibrium objects rather
+than exogenous parameters while prices incorporate information through strategic interaction
+among heterogeneous agents. This theoretical foundation therefore confirms that price formation
+emerges as a stochastic game rather than as an externally specified process. However, these
+Kyle-style analytical equilibrium models typically rely on restrictive assumptions, such as
+linear strategy parameterizations, Gaussian uncertainty, and perfect competition. While these
+assumptions enable tractable recursive solutions, they limit the models’ direct applicability to real-
+istic limit-order-book (LOB) environments and to execution setting involving heterogeneous agents.
+Recent machine learning research has explored the numerical approximation of such equi-
+2
+librium structures. Friedrich and Teichmann (2020) use adversarial training to recover the static
+Kyle equilibrium, while Liet al.(2024) examine the efficiency of market impact estimation from
+price trajectories. In parallel, multi-agent reinforcement learning (MARL) provides computational
+tools for modeling strategic interaction among adaptive agents, including independent learning
+approaches such as IPPO and centralized training decentralized execution (CTDE) methods such
+as MADDPG (Loweet al.2017) and its extensions MAPPO (Kubaet al.2022) and HAPPO
+(Yuet al.2022). MARL does not, in general, guarantee convergence to a Nash equilibrium.
+Nevertheless, if the learning dynamics stabilize and subsequent policy updates cease to induce
+substantial behavioral changes, the resulting policy profile may be interpreted operationally as an
+equilibrium-like configuration. In this paper, we adopt this stability-based interpretation without
+claiming formal convergence to Nash equilibrium by using structural and statistical diagnostics.
+However, financial applications rarely integrate such equilibrium-oriented learning with realistic
+LOB simulation under carefully controlled information structures. A framework that combines
+strategic learning with realistic market dynamics therefore remains largely underdeveloped.
+To study optimal execution under endogenous liquidity, three elements are required.
+(i) First, a mechanism ensuring a well-posed stochastic trading game with synchronized actions
+and controlled information flow. If agents observe inconsistent states or act on leaked infor-
+mation, the resulting process does not define a valid stochastic game, and learned strategies
+optimize against a misspecified objective.
+(ii) Second, a theoretical framework for approximating equilibrium-like behavior among het-
+erogeneous agents. Such a framework should be validated against a known benchmark
+equilibrium to demonstrate that it can recover meaningful equilibrium-like structures and
+price formation.
+(iii) Third, a methodology for embedding the liquidity trader’s execution problem within this
+stochastic trading game.
+To achieve each of these three elements, we propose a framework for analyzing optimal execution
+under endogenous liquidity using MARL within a realistic LOB simulator:
+(i) is addressed by constructing a novel synchronized multi-agent market simulator, called
+ABIDES-MARL, in which heterogeneous agents–including an informed trader, a liq-
+uidity trader, competing market makers, and noise traders–interact through a LOB while
+preserving strict control over information disclosure and action timing.
+(ii) is tackled by validating the framework in a benchmark trading game with asymmetric infor-
+mation inspired by Kyle (1985). We show that under appropriate constraints on the policy
+parameterization, the learning dynamics reproduce the gradual incorporation of private in-
+formation into prices. When policy classes are overly flexible, agents exploit predictability
+in systematic ways, leading to persistent deviations from the theoretical benchmark.
+(iii) is achieved by studying optimal execution in the presence of adaptive market makers. Unlike
+classical exogenous-impact models, execution strategies now both influence and respond to
+market behavior. The resulting dynamics differ structurally from single-agent benchmarks,
+demonstrating that equilibrium consistency is essential for valid execution analysis.
+To implement this ABIDES-MARL framework, we build on ABIDES (Agent-Based Interactive
+Discrete Event Simulation) (Byrdet al.2020), an event-driven multi-agent market simulator,
+and ABIDES-Gym (Amrouniet al.2021), which provides a single-agent RL interface. However,
+ABIDES-Gym supports only one learning agent and cannot enforce synchronized multi-agent
+decisions without risking information leakage. We therefore introduce architectural modifications
+that enable equilibrium-consistent multi-agent learning while preserving realistic LOB mechanics.
+To summarize, this paper shows thata valid analysis of optimal execution under endoge-
+nous liquidity requires a market environment that is consistent with equilibrium behavior. We
+3
+demonstrate that MARL can approximate equilibrium-like behavior in a realistic LOB setting
+with a finite population of heterogeneous market players. When execution is evaluated within such
+an endogenous environment, the resulting strategies differ structurally from those derived under
+exogenous price impact assumptions. Our contributions are therefore threefold:
+(i)Execution insight:An optimal execution setting under endogenous liquidity, which is
+shown to differ fundamentally from solutions derived in exogenous impact models.
+(ii)Equilibrium-approximation framework:A MARL-based theoretical framework for ap-
+proximating equilibrium-like behavior in finite-agent trading games.
+(iii)Market simulator design:ABIDES-MARL, a synchronized multi-agent extension of
+ABIDES and ABIDES-Gym that enforces controlled information flow and prevents infor-
+mation leakage.
+The remainder of the paper is organized as follows. Section 2 introduces the ABIDES-MARL
+market simulator and formalizes the stochastic trading game. Section 3 develops the execution
+models by transitioning from stochastic optimal control under exogenous liquidity to a stochastic
+game under endogenous liquidity. Section 4 presents numerical evidence on equilibrium validation
+through price discovery and on structurally distinct execution strategies. Section 5 concludes. All
+code and configurations are publicly released for reproducibility. 1
+2. Market Simulator: ABIDES-MARL
+ABIDES is anevent-drivenmulti-agent simulation system designed to model realistic LOB mar-
+kets (Byrdet al.2020). RL methods, by contrast, are formulated indiscrete time. MARL further
+requires that all agents observe a consistent market state before acting. This section explains how
+ABIDES-MARL reconciles these structural differences and ensures that the resulting interaction
+defines a well-posed stochastic trading game.
+2.1.From discrete event simulation to timestep-based MARL
+ABIDES operates as a discrete-event multi-agent simulation in which agents communicate and
+submit trading actions through timestamped messages to the exchange. These messages are sched-
+uled and processed sequentially by a central kernel using a priority queue. Because scheduling is
+entirely timestamp-driven, there is no fixed time grid. State transitions occur asynchronously when-
+ever events are processed by the kernel. Reinforcement learning, in contrast, assumes a timestep-
+based structure with a regular time grid. At discrete timen, an agent observes a states n, selects
+an actionx n, and the environment transitions to a new states n+1. In MARL with simultaneous
+actions, all agents must observe the same market state at timenbefore choosing their respective ac-
+tions. This difference creates a structural incompatibility. ABIDES is inherently asynchronous and
+event-driven, whereas RL requires a regular time grid to support timestep-based state transitions.
+Moreover, MARL requires a consistent observation time so that agents do not observe state updates
+generated by others before selecting their own actions. Without such synchronization, the interac-
+tion cannot be interpreted as a well-defined stochastic game. Bridging these paradigms therefore
+requires controlled interruption of the simulation kernel and a carefully designed synchronization
+protocol.
+1Repository:https://github.com/10258392511/MARLOptExecution.
+4
+2.2.Kernel synchronization, filtration, and well-posedness
+ABIDES-Gym partially bridges the gap between event-driven simulation and RL by introducing
+a special agent type, theFinancialGymAgent. This agent can interrupt the priority-queue-based
+kernel, collect raw simulation states, compute rewards, and return the standard RL interface tuple
+consisting of the next observation, reward, termination, truncation, and auxiliary information.
+However, this design is difficult to extend to a multi-agent setting. If multipleFinancialGymAgents
+interrupt the kernel independently, it becomes impossible to guarantee a consistent ordering of
+actions across learning agents. Sequential trading structures cannot be enforced reliably, and
+information may be revealed unintentionally if one agent observes a state that already reflects
+the action of another agent within the same decision period. Such behavior violates the filtration
+structure required for a well-defined stochastic game. Agents may observe inconsistent states, and
+their actions may depend on information that should not yet be available. In this case, learned
+strategies optimize against an artificial objective determined by implementation artifacts rather
+than by the intended economic model.
+To address this issue, ABIDES-MARL introduces a dedicatedStopSignalAgent. There is
+exactly one such agent in the simulation, and only this agent is permitted to interrupt the kernel.
+At each decision period, theStopSignalAgentpauses the kernel, schedules the next wakeup time,
+and triggers state collection for all RL agents simultaneously. Raw observations are collected
+before any learning agent acts. Each agent then computes its action, which is translated into a
+valid order submission and sent to the exchange. After all actions have been submitted according
+to a predefined protocol, control is returned to the kernel and the simulation resumes. This design
+ensures synchronized decision periods and strict control over the ordering of actions.
+The synchronization mechanism also enables a precise filtration structure. LetF n−1 denote
+theσ-algebra generated by all publicly observable information up to periodn−1. At timestep
+n, all agents observe the same information setF n−1, and their actionsx n are measurable with
+respect toF n−1. The system transitions to the updated information setF n only after all actions
+at periodnhave been executed. In particular, no agent observes anyF n-measurable information
+before choosing its action at timen. Under this construction, the trading interaction satisfies
+the basic measurability requirements of a stochastic game. Actions are chosen with respect to a
+common information set, and the state update occurs only after the action profile has been fixed,
+see Section 3.2 for more details. This in turn ensures that the learning problem is well-posed from
+a probabilistic perspective. Figure 1 illustrates the communication cycle of ABIDES-MARL. The
+cycle consists of kernel interruption, observation collection, policy inference, action transformation,
+order submission, and kernel resumption. This controlled procedure ensures that the stochastic
+game interpretation is enforced at the system level.
+2.3.Trading protocol and information structure
+The synchronized environment allows us to implement a hybrid trading protocol that combines
+simultaneous and sequential interaction. Agents are divided into two groups. Group A consists
+of traders, including the informed trader, the liquidity trader, and non-learning noise traders.
+Group B consists of market makers. Within each group, actions are taken simultaneously, whereas
+across groups the interaction is sequential. Specifically, at trading periodn, the general (high-level)
+structure of the stage game proceeds as follows 1:
+(i) The informed trader and the liquidity trader choose their order quantitiesxIT,(n) andx LT,(n),
+while noise traders submit independently generated random orders. Without loss of gener-
+1see Section 3.2 for a detailed description of each step and of each market player.
+5
+Figure 1. ABIDES-MARL communication cycle.
+ality, these random orders are aggregated and denoted byu (n).
+(ii) Market makers observe the aggregate order flow
+q(n) :=x IT,(n) +x LT,(n) +u (n).(1)
+(iii) Each of theMmarket makers independently chooses a quotep (n)i , wherei= 1, . . . , M.
+(iv) The exchange allocates orders according to quote competitiveness and the market clears at
+a common pricep (n) that is aggregated from the quotes (p (n)1 , . . . , p(n)M ).
+The stage game can therefore be defined asG= (A T , AM M, O, T), whereAT denotes the traders’
+action space,A M Mdenotes the market makers’ action space,Ospecifies the observation structure,
+andTdenotes the transition rule. This stage-game representation will be used and detailed
+in Section 3.2 to formulate optimal execution under endogenous liquidity as a finite-horizon
+stochastic game.
+The information structureOis explicitly controlled and is partitioned into global and local
+components.
+We consider two global observation modes. InExchangemode, the full LOB is observable to
+all agents. In over-the-counter (OTC) mode, only the volume-weighted average price is observable,
+that is, only a summary statistic of the full LOB is revealed. In both modes, all agents observe the
+current timet (n) ∈[0,1].
+In addition to global information, each agent observes local variables that are not observable to
+other agent types. The informed trader observes the constant fundamental valuevof the single
+risky asset. The liquidity trader observes the remaining inventory to be acquired, denoted by
+Q(n). Without loss of generality, we consider the liquidity trader performing an acquisition task.
+Each market maker then observes the aggregate order flowq (n). A formal specification of the cor-
+responding information sets and admissible strategy spaces for each agent is provided in Section 3.2.
+In summary, ABIDES-MARL defines a synchronized timestep-based stochastic trading game
+within an event-driven simulation system. It aligns decision periods, controls information flow,
+and enforces the sequential trading protocol. No agent observes future information before acting.
+As a result, equilibrium approximation via MARL is well-defined within this environment. We
+now turn to the formal market model and learning formulation.
+6
+3. Optimal Execution under Exogenous and Endogenous Liquidity
+This section develops the execution problem in two steps. We first treat in Section 3.1 market impact
+as exogenous, which yields a classical finite-horizon stochastic control formulation of the problem
+for a single liquidity trader. This benchmark admits an explicit dynamic programming solution
+and serves as a reference point for RL verification. In Section 3.2, we then endogenize liquidity by
+introducing adaptive market makers whose quoting policies jointly determine the effective market
+impact. In this setting, price dynamics become policy-dependent, and execution is no longer a
+single-agent control problem but a finite-horizon stochastic game.
+3.1.Optimal execution with exogenous market impact
+3.1.1.Model formulation.We consider an acquisition problem over a finite horizon ofN
+trading periods. The liquidity trader must buy a total quantityQ >0. Letx LT,(n) ≥0 denote the
+executed quantity at periodn= 1, . . . , N, and letQ(n) denote the remaining inventory to acquire
+at the beginning of periodn. The inventory dynamics are
+Q(n) =Q (n−1) −x LT,(n−1), Q (0) =Q,
+together with the terminal constraint PNn=1 xLT,(n) =Q,ensuring that the target quantityQis
+acquired exactly by the end of the horizon. Prices are modeled by separating a pre-trade price ˆp(n)
+with permanent price impact and an execution pricep (n) that includes temporary impact. The
+pre-trade price evolves according to
+ˆp(n) =αˆp(n−1) + (1−α)p (n−1) +ϵ (n),
+whereα∈[0,1] controls how strongly the last execution price affects future pre-trade levels, serving
+as a permanent-impact (or mean-reversion) proxy, andϵ (n) ∼ N(0, σ2ϵ ) is a mean-zero innovation
+representing a news component. The execution price is then
+p(n) = ˆp(n) +λ (n) xLT,(n) +u (n),
+whereu (n) ∼ N(0, σ2u) is mean-zero noise-trader order flow, independent ofϵ (n), whileλ (n) is
+an exogenous deterministic temporary impact process. This benchmark isexogenous-liquidityin
+the sense that the entire process{λ (n)}Nn=1 is specified outside the model and does not depend
+on the trader’s behavior or on other strategic agents. In contrast to Almgren and Chriss (2001)
+which assumes constant market impact parameters, our formulation allowsλ (n) to vary over
+time, consistent with the dynamic microstructure of real markets. Moreover, unlike Huberman
+and Stanzl (2005) which uses the variance of total execution cost as a risk measure (thereby
+complicating RL reward design), we provide here a tractable formulation suitable for RL.
+The execution problem can then be formulated as the following stochastic control problem:
+L(Q, N) := min
+{xL T,(n)∈M(H (n))}Nn=1
+E
+" NX
+n=1
+p(n)xLT,(n) +ϕ
+NX
+n=1
+ 
+Q(n)2
+#
+(2)
+s.t.
+NX
+n=1
+xLT,(n) =Q,
+7
+where
+ˆp(n) =αˆp(n−1) + (1−α)p (n−1) +ϵ (n),(3)
+p(n) = ˆp(n) +λ (n) xLT,(n) +u (n),(4)
+H (n) = {ˆp(j)}nj=1,{p (j)}n−1j=1 ,{x LT,(j)}n−1j=1 ,{u (j)}n−1j=1 ,{ϵ (j)}nj=1, Q(n) ,(5)
+andϕ≥0 controls the degree of inventory risk aversion. The notationM(H (n)) indicates that ad-
+missible controlsx LT,(n) are measurable with respect to the trader’s information setH (n), capturing
+that actions are conditioned only on information available up to periodn. In particular at period
+n, the liquidity trader does not observeu (n) nor the execution pricep (n) when choosingx LT,(n). We
+characterize the optimal strategy of the above optimization problem through a backward difference
+equation.
+Theorem3.1Letµ (n) satisfy the backward recursion:
+µ(n) =αλ (n−1) +λ (n) +ϕ− (λ(n))2(1 +α) 2
+4µ(n+1) ,∀n∈ {1, . . . , N−1},
+µ(N) =αλ (N−1) +λ (N) +ϕ.
+Ifµ (n) >0for alln, then the unique and time-consistent optimal strategy is
+xLT,(n) =θ (n)Q(n),where
+θ(n) = 1− λ(n)(1 +α)2µ(n+1) ,forn < N,andθ (N) = 1.
+The corresponding minimal cost at stepnis given by
+L(n)
+
+˜p(n−1), Q(n−1), Q(n)
+
+:=
+
+˜p(n−1) −αλ (n−1) Q(n−1) +u (n−1) Q(n) +µ (n) Q(n)2,
+with˜p(n−1) :=p (n−1) +ϵ(n),Q (0) :=Q,λ (0) := 0,u (0) := 0, andL (0) ˜p(−1), Q(−1), Q(0) :=L(Q, N).
+Remarks.
+•The optimal strategy depends only on the current inventoryQ (n), and not on the noise order
+flowu (n) or news shocksϵ (n), due to their zero-mean property.
+•The existence of a unique, time-consistent solution is guaranteed under the positivity condition
+onµ (n), which ensures strict convexity of the value function at each backward step.
+•Although the model could be extended to allow for a stochastic price-impact processλ (n) in the
+spirit of Cheridito and Sepin (2014), we retain a simpler benchmark here for RL comparison.
+3.1.2.Single-agent RL formulation.The above exogenous benchmark can be written as a
+standard single-agent RL problem. The purpose of this formulation is to verify that RL recovers the
+analytical solution in the single-agent setting and thereby provides a baseline from which we later
+construct the endogenous multi-agent formulation. Numerical results are presented in Section 4.2.
+State representation.The observation at stepnis
+
+t(n), p(n−1), Q(n),
+8
+wherep (n−1) denotes the previous execution price andQ (n) denotes the remaining inventory to
+acquire. This reduced state representation is indeed sufficient in our setting. By Theorem 3.1, the
+minimal cost-to-go at stepndepends only on
+
+t(n),˜p(n−1), Q(n) and the chosen actionx LT,(n).
+Moreover, since the optimal strategy does not depend on the innovationϵ (n) beyond its zero-mean
+property, we omit it in the RL implementation. Consequently, ˜p (n−1) can be replaced byp (n−1),
+which captures the relevant price information through the previous execution price incorporating
+temporary impact.
+Action space.At each stepn, the agent selects a trading intensityθ (n) ∈[0,1], corresponding to
+the order size
+xLT,(n) =θ (n)Q(n).
+We do not explicitly enforceθ (N) = 1. Instead, a terminal penalty on unfilled inventory is incorpo-
+rated into the reward structure to encourage full completion of the target position.
+Reward structure.Forn∈ {1, . . . , N−1}, the liquidity trader receives the step-wise reward
+RLT,(n) =− xLT,(n)p(n) +ϕ  Q(n)2 .
+Here,p (n) is the execution price at the current step, incorporating temporary impact. To incentivize
+exact acquisition of the target inventory, we add a terminal penalty on any remaining unfilled
+quantity at stepN:
+Qunfilled =Q (N) −x LT,(N),
+RLT,(N) =− xLT,(N)p(N) +ϕ  Q(N) 2 −γ  Qunfilled2,
+whereγ≥0 is chosen substantially larger thanϕ.
+3.2.Optimal execution under endogenous liquidity: the multi-agent trading game
+We now endogenize market impact by explicitly modeling liquidity as the outcome of strategic
+interaction among market makers. The resulting structure can be interpreted as an optimal execu-
+tion problem embedded within a Kyle-type market setting (Kyle 1985), in which prices are formed
+through competition among market makers in response to order flow. For a summary of the main
+result in Kyle (1985), see Appendix D.
+In contrast to Section 3.1, where the impact path{λ (n)}Nn=1 is specified exogenously, here the
+effective impact coefficient at each step is an endogenous function of market makers’ actions. Con-
+sequently, the liquidity trader’s problem is no longer a single-agent stochastic control problem: the
+state dynamics depend on the joint policy profile of multiple learning agents, and the environment
+must be treated as a finite-horizon stochastic game. Formally, this stochastic game is obtained by
+repeating overn= 1, . . . , Nthe stage gameG= (AT , AM M, O, T) introduced in Section 2, with
+state transitions and payoffs determined by the joint policy profile. We next describe this extended
+Kyle-style execution trading game in the context of endogenous liquidity provision.
+Agents and horizon.Fix a finite horizonN∈N. The set of learning agents is
+A={IT,LT,MM 1, . . . ,MMM },
+consisting of one informed trader (IT), one liquidity trader (LT), andMcompeting market makers
+(MMs). In addition, a representative noise trader generates random order flow but does not learn.
+9
+We now detail the structure of the stage gameG= (A T , AM M, O, T) introduced in Section 2.
+Initial information.We denotev∼ N(p 0, σ20), theex postfundamental (liquidation) value of
+the risky asset. Before trading begins, the exogenous value ofvis realized and is observed only by
+the informed trader.
+Extended Kyle-style execution trading game.At each trading roundn= 1, . . . , N, sequentially,
+(i)Simultaneously,
+-Noise traderssubmitu (n) ∼ N(0, σ2u), an exogenous mean-zero noise order flow, as-
+sumed i.i.d. acrossnand fromv.
+- Theliquidity tradersubmits an acquisition orderx LT,(n) ∈R + based on the remaining
+inventoryQ (n) and on the public history of execution prices{p (1), . . . , p(n−1)}(or LOB
+history{LOB (j)}n−1j=1 , see Definition 3.2 below).
+- Theinformed tradersubmits an orderx IT,(n) ∈R based onvand the public history
+of execution prices{p (1), . . . , p(n−1)}(or LOB history{LOB (j)}n−1j=1 ).
+(ii)Eachmarket makeri={1, . . . , M}then observes the the public history of execution prices
+{p(1), . . . , p(n−1)}(or LOB history{LOB (j)}n−1j=1 ) and the aggregate signed order flow
+q(n) =x IT,(n) +x LT,(n) +u (n).
+Each market makeriposts a quotep (n)i ∈R +, or equivalently1 specifies a liquidity impact
+parameterλ (n)i that determinesp (n)i . Under a linear quoting rule,
+p(n)i = ˆp(n−1) +λ (n)i q(n),(6)
+where ˆp(n−1) again denotes the pre-trade price with permanent price impactα∈[0,1],
+ˆp(n) =αˆp(n−1) + (1−α)p (n−1).
+(iii)Eachmarket makeris assigned a fraction of the total order flowq (n), and the market
+clears at the next common public execution pricep (n) =f(p (n)1 , . . . , p(n)M ), wherefis an
+aggregation rule applied to theMindividual quotes.
+LOB, allocation rule and market clearing price.What is left to defined is (iii): the rule for
+allocating order flow across market makers, as well as the aggregation procedure of the individual
+quotesp (n)i into the single public pricep (n). This requires a suitable definition of the LOB.
+Definition3.2 (Reduced-form LOB)Letλ (n)i denote the (implied) market impact parameter
+of market makeriat time stepn. The market depth provided by market makeriis defined as
+d(n)i := 1/|λ (n)i |. Leti (n)1 , . . . , i(n)M be the permutation that sorts the quotes{p (n)i }Mi=1 in ascending
+order. The limit order book at stepnis represented by
+LOB(n) :=
+
+d(n)i(n)1 p(n)i(n)1... ...
+d(n)i(n)M p(n)i(n)M
+
+ .(7)
+1Note that even if the quoting rule is nonlinear (the MM i quotesp (n)i instead ofλ (n)i ), the posted pricep (n)i in (6) always
+admits an implied linear impact coefficientλ (n)i = (p(n)i −ˆp(n−1))/q(n),forq (n) ̸= 0.
+10
+Specifically, only the sorted depth–price pairs are retained in this representation; the identity
+of the quoting market maker is not observable from the LOB snapshot. This reduced-form con-
+struction reflects the fact that, in the present execution setting, price formation is modeled as an
+auction-style clearing mechanism rather than a price–time priority queue. Execution prices depend
+on the competitiveness and aggregate depth of quotes, not on queue positions. This abstraction
+serves two purposes. First, it aligns the market-clearing mechanism with the pro-rata allocation
+rule introduced below and in Kyle (1985), ensuring a unique execution price and tractable
+aggregation of liquidity. Second, it provides a parsimonious representation of endogenous impact
+while remaining compatible with the full limit-order-book infrastructure of ABIDES-MARL. In
+particular, although we adopt this reduced-form LOB for analytical transparency and to recover
+known equilibrium characteristics in benchmark cases, the underlying ABIDES-MARL market
+simulator naturally supports standard price–time priority LOB mechanics, and the framework
+generalizes directly by modifying the allocation and sorting rules.
+We now use a pro-rata allocation to assign the total order flowq (n) to each market maker.
+Letd (n)i := 1/|λ (n)i |denote the depth implied by market makeri’s quote at periodn. Under
+pro-rata allocation, the volume assigned to market makeriis
+Order(n)i =q (n) · d(n)iPM
+j=1 d(n)j .(8)
+The public execution price is then defined as the volume-weighted average price (VW AP):
+p(n) :=
+PM
+i=1 Order(n)i p(n)i
+PM
+i=1 Order(n)i .(9)
+Proposition3.3 (Unanimous VW AP)Under pro-rata allocation, all trades in periodnclear at
+the common execution pricep (n), which can be rewritten as
+p(n) =
+PM
+i=1 d(n)i p(n)i
+PM
+i=1 d(n)i .(10)
+Moreover, under the linear quoting rule(6)for each market maker, the VWAP admits the reduced-
+form update
+p(n) = ˆp(n−1) +λ (n)eff q(n),(11)
+whereλ (n)eff is the effective impact coefficient given by
+λ(n)eff =
+PM
+i=1 λ(n)i d(n)i
+PM
+i=1 d(n)i =
+PM
+i=1 sign
+
+λ(n)i
+
+PM
+i=1
+1
+|λ
+(n)
+i |
+.(12)
+Proof.See Appendix B.
+Hence, (10) shows that the execution price is the volume-weighted average of quoted prices, with
+weights given by quoted depths. Moreover, the effectiveλ (n)eff is a depth-weighted aggregation of in-
+dividual impact parameters and is fully determined by the market makers’ period-npolicy outputs.
+Finally, we specify the objective function of each agent, as required for our MARL implementation.
+11
+Objectives.Each learning agent optimizes a finite-horizon conditional expected objective, subject
+to its own information constraints. Admissible strategies are required to be measurable with re-
+spect to the corresponding agent-specific information sets defined below. This yields a well-posed
+stochastic game under bothExchangeandOTCobservation modes.
+Liquidity trader.The liquidity trader solves
+min
+{xL T,(n)∈M(H L T,(n))}Nn=1
+E
+" NX
+n=1
+p(n)xLT,(n) +ϕ
+NX
+n=1
+ 
+Q(n)2
+#
+(13)
+subject to
+Q(n+1) =Q (n) −x LT,(n) ,
+withQ (0) =Qand PNn=1 xLT,(n) =Q. The information setH LT,(n) depends on the observation
+mode:
+H LT,(n)
+
+
+
+
+{LOB(j)}n−1j=1 ,{x LT,(j)}n−1j=1 , Q(n)
+
+,Exchange,
+
+{p(j)}n−1j=1 ,{x LT,(j)}n−1j=1 , Q(n)
+
+,OTC.
+In particular, at periodn, the liquidity trader does not observe the contemporaneous aggregate
+order flowq (n), the noise order flowu (n), or the current execution pricep (n) (nor LOB (n)) when
+choosingx LT,(n).
+Informed trader.The informed trader solves
+max
+{xIT,(n)∈M(H IT,(n))}Nn=1
+E
+" NX
+n=1
+xIT,(n) v−p (n)
+#
+.(14)
+Its information set is
+H IT,(n) =
+
+
+
+
+{LOB(j)}n−1j=1 ,{x IT,(j)}n−1j=1 , v ,Exchange,
+{p(j)}n−1j=1 ,{x IT,(j)}n−1j=1 , v ,OTC.
+In particular, the informed trader conditions on the public price history together with the privately
+observed fundamental valuev, but does not observe the contemporaneous aggregate order flowq (n),
+the noise order flowu (n), or the current execution pricep (n) (nor LOB(n)) when choosingx IT,(n).
+Market makeri.Market makerisolves
+max
+{p
+(n)
+i ∈M(H
+MM,(n)
+i )}Nn=1
+E
+" NX
+n=1
+Order(n)i  p(n)i −p (n)
+#
+.(15)
+Its information set is
+H MM,(n)i =
+
+
+
+
+{LOB(j)}n−1j=1 ,{p (j)i }n−1j=1 ,{q (j)}nj=1
+
+,Exchange,
+
+{p(j)}n−1j=1 ,{p (j)i }n−1j=1 ,{q (j)}nj=1
+
+,OTC.
+In particular, each market maker observes the contemporaneous aggregate order flowq (n) before
+quoting at periodn, consistent with the sequential protocol introduced in Section 2.
+12
+While the above formulation specifies the full admissible information sets required for a
+well-posed stochastic game, the MARL implementation uses reduced observations rather than the
+full histories. At periodn, the liquidity trader observes [t (n),LOB (n−1), Q(n)] inExchangemode
+and [t (n), p(n−1), Q(n)] inOTCmode. The informed trader observes [t (n),LOB (n−1), v] inExchange
+mode and [t (n), p(n−1), v] inOTCmode. Each market makeriobserves [t (n),LOB (n−1), q(n)] in
+Exchangemode and [t (n), p(n−1), q(n)] inOTCmode. This reduction is motivated by benchmark
+results. In the single-agent setting, Theorem 3.1 shows that the optimal policy depends only on
+the current inventory and the previous price. In the Kyle model (Kyle 1985), the equilibrium
+strategies likewise depend only on current sufficient statistics. Although such sufficient conditions
+cannot be established in general for the full multi-agent environment considered here, this reduced
+observation design enables direct comparison with both the single-agent benchmark (Section 3.1)
+and the Kyle benchmark (Appendix D).
+Linear versus nonlinear parameterization.To facilitate comparison with the benchmark
+linear recursive equilibria given in Appendix D, we consider a linear parameterization. For the
+informed trader, this takes the form
+xIT,(n) =β (n) v−ˆp(n−1),(16)
+whereβ (n) ∈R is chosen by the policy. For market makeri, the linear quoting rule is
+p(n)i = ˆp(n−1) +λ (n)i q(n),(17)
+whereλ (n)i ∈R. We refer to (16)–(17) aslinear parameterization. Undernonlinear parameterization,
+the informed trader directly selectsx IT,(n) and market makeridirectly selectsp (n)i without imposing
+linear structure. The two schemes are compared numerically in Section 4.
+Zero profit across market makers.Under pro-rata allocation and the VW AP definition, com-
+petition among market makers implies zero aggregate profit at each period. The period-nreward
+for market makeriis
+RMM,(n)i = Order(n)i  p(n)i −p (n).(18)
+Lemma3.4 (Zero profit among market makers)For every periodn,
+MX
+i=1
+RMM,(n)i = 0.
+Proof.See Appendix C.
+This effectively shows that our model avoids solving a repeated game at each trading step by
+relaxing the assumption of perfect competition in Kyle (1985). We instead introduce a weaker
+form of competition for computational tractability, while retaining the essential game-theoretic
+structure of the sequential Kyle framework.
+Endogenous-liquidity execution as a stochastic game.Because the execution pricep (n)
+depends on the effective impact coefficientλ (n)eff , and becauseλ (n)eff is a deterministic function of
+the market makers’ period-nactions, the state transition of the liquidity trader depends on the
+joint actions of the informed trader, liquidity trader and market makers. At the same time, each
+market maker’s optimal quoting decision depends on anticipated order flow, which itself depends on
+13
+the liquidity trader’s and informed trader’s actions. Hence the evolution of prices and inventories
+is jointly action-dependent. Formally, the execution problem under endogenous liquidity is not a
+stochastic control problem for a single agent, but a finite-horizon stochastic game. The MARL
+formulation of this game is now described.
+3.3.MARL formulation and equilibrium-like behavior
+This subsection specifies (i) the learning dynamics used to train policies and (ii) the precise sense
+in which the resulting trained profile is interpreted as “equilibrium-like.” We retain a fixed-point
+perspective as adiagnostic of convergence of the learning procedure, while carefully distinguishing
+it from a Nash equilibrium of the underlying stochastic game.
+3.3.1.Policies, objectives and joint training distribution.For each agenti∈ A, let
+πi(·;θ i) be a parameterized stochastic policy mapping observations to actions. Denote the joint
+parameter vector by
+θ=
+ 
+θIT,θ LT,θ MM1, . . . ,θMMM
+
+,
+and the corresponding joint policy profile by
+πθ =
+ 
+πIT(·;θ IT), πLT(·;θ LT), πMM1(·;θ MM1), . . . , πMMM (·;θ MMM )
+
+.
+For each agenti, define the objective functional
+Ji(θ) := Eπθ
+" NX
+n=1
+R(n)i
+#
+,
+whereR (n)i denotes the period-nreward of agentiand the expectation is taken with respect to
+the trajectory distribution induced by the environment dynamics underπ θ, including randomness
+from noise order flowu (n) and policy stochasticity.
+3.3.2.Independent PPO updates and the learning operator.Training is conducted via
+independent PPO updates in a shared environment, where each agent optimizes its own objective
+while treating the other agents as part of the environment. This corresponds to a decentralized
+learning scheme without a centralized critic. One training iteration consists of:
+(i)Rollout:Sample trajectories under the current joint profileπ θ(k).
+(ii)Update:For each agenti, apply one PPO improvement step, i.e., using its own value
+function, advantage estimates, and clipping constraints, to obtain updated parameters
+θ(k+1)i =U i θ(k),
+whereU i denotes the PPO update map induced by sampled trajectories and the optimiza-
+tion procedure; see Schulmanet al.(2017) for the PPO algorithm and Yuet al.(2022) for
+its multi-agent extension.
+14
+Collecting all agents, define the joint update map (thelearning operator)
+θ(k+1) =L  θ(k),(19)
+L(θ) :=
+ 
+UIT(θ),U LT(θ),U MM1(θ), . . . ,UMMM (θ)
+
+.(20)
+This defines a discrete-time dynamical system on the parameter space. The operatorLis algorithm-
+dependent and stochastic due to sampling and finite optimization.
+Stationarity as an algorithmic notion.If training stabilizes empirically, i.e., parameter up-
+dates become negligible, then the observed parameter vectorθ ∗ is approximately stationary under
+the learning dynamics:
+θ∗ ≈ L(θ∗).
+For single-agent PPO, Jinet al.(2023) prove stationary-point convergence for PPO-Clip, and
+Huanget al.(2024) give the first global convergence results for a PPO-Clip variant in tabu-
+lar and neural-function-approximation settings. However, for IPPO, there is no known general
+contraction/fixed-point convergence theorem in general Markov games forL, see Su and Lu (2022).
+Therefore, this “fixed-point” statement refers tostationarity of the learning algorithm, not to equi-
+librium existence of the underlying stochastic game. Specifically, it means that one additional PPO
+iteration, performed against the same opponents, produces negligible change in policy parameters.
+This should also be distinguished from a Nash equilibrium. A joint policy profileπ ∗ is a Nash
+equilibrium if, for every agenti,
+Ji(π∗i , π∗−i)≥J i(πi, π∗−i) for all admissibleπ i.
+In contrast,θ ∗ ≈ L(θ∗) asserts only that no further improvement is found by one PPO update
+within the chosen parameterization and optimization procedure. The two notions differ in several
+fundamental respects:
+(i)Algorithmic vs. game-theoretic optimality .PPO is not a best-response oracle. Ab-
+sence of PPO improvement does not imply absence of profitable deviations in the underlying
+game.
+(ii)Restricted deviations.PPO searches within a parameterized policy class under trust-
+region-type constraints and finite optimization steps. A Nash equilibrium is defined with
+respect to all admissible unilateral deviations (or at least all deviations within the specified
+policy class), not only those reachable via a local PPO update.
+(iii)Sampling and state distribution.The operatorLdepends on trajectories sampled
+underπ θ∗. A profitable deviation may exist but remain undetected if relevant states are
+rarely visited under the current joint policy.
+Accordingly, we use here an operational definition of equilibrium-like behavior, but do not claim
+existence of a Nash equilibrium. We refer to a trained profileπθ∗ asequilibrium-likeif it satisfies the
+training stability criterion: Across independent random seeds, training produces joint profiles
+that generate similar market statistics and similar agent returnsJ i. This operational notion hence
+provides a practical interpretation of equilibrium-like behavior emerging from the MARL training
+procedure.
+3.4.Special cases
+Extended Kyle benchmark (no liquidity trader).If the liquidity trader is removed, then
+A={IT,MM 1, . . . ,MMM }.Order flow reduces to informed trading plus noise trading, and mar-
+15
+ket makers’ quotes respond solely to informational order imbalance. This setting corresponds to
+the classical Kyle framework (Kyle 1985). This case serves as a benchmark because the classical
+Kyle model admits a closed-form linear recursive equilibrium under strong structural assumptions.
+Within our framework, when the policy class is restricted to linear parameterizations, the resulting
+equilibrium characterization can be directly compared to the analytical recursive solution. The
+closed-form linear recursive equilibrium is summarized in Appendix D. In Section 4.3, we use this
+benchmark to validate the numerical learning procedure by verifying that it reproduces the known
+qualitative features of price discovery in a setting where the equilibrium structure is analytically
+characterized.
+Liquidity trader versus market makers (no informed trader).If the informed trader is
+removed, thenA={LT,MM 1, . . . ,MMM }.In this case, there is no informational asymmetry in
+favor of the trading side. The liquidity trader must execute a predictable target inventory against
+adaptive market makers, while market makers observe aggregate order flow and face no adverse-
+selection risk. Under endogenous liquidity, this creates an informational imbalance: market makers
+anticipate forced execution and may optimally adjust quotes toward extreme price levels. As a
+result, price dynamics may become degenerate, with execution prices reflecting strategic extraction
+rather than meaningful liquidity provision.
+This case isolates the role of informational balance in sustaining non-trivial market dynamics.
+In Section 4.5, we show numerically that, in the absence of an informed counterparty, endogenous-
+liquidity execution may collapse into boundary behavior. This observation also highlights a limita-
+tion of exogenous-liquidity models. Because such models abstract from informational structure and
+strategic interaction, they cannot capture the destabilizing effects of informational imbalance. As
+a consequence, optimal policies derived under exogenous impact assumptions may fail to remain
+meaningful once liquidity becomes endogenous.
+4. Numerical Results
+This section presents numerical evidence supporting the theoretical framework developed in Sec-
+tion 3. We proceed in two steps. First, we verify that RL recovers the analytical solution in the
+benchmark execution problem with exogenous liquidity (Section 3.1). This serves as a control ex-
+periment, confirming that the learning algorithm correctly solves the classical stochastic control
+problem under fixed market impact. Second, we study execution in the multi-agent environment
+where liquidity is generated endogenously by strategic market makers (Section 3.2). We begin by
+validating equilibrium-like price discovery in the extended Kyle benchmark, and then examine
+optimal execution under endogenous liquidity across different policy parameterizations.
+4.1.Single-agent benchmark: exogenous liquidity
+We begin with the benchmark execution problem in which the liquidity coefficient is fixed and
+does not depend on other agents’ behavior. In this setting, execution reduces to a finite-horizon
+stochastic control problem with known and stationary dynamics.
+Environment configuration.We consider a time-constant impact process
+λ(n) ≡λ= 2,
+with horizonN= 20, target inventoryQ= 1000, running inventory penaltyϕ= 0.01, terminal
+penaltyγ= 100, and no mean reversion (α= 0). The initial price is set top (0) = 1000 cents. Noise
+order flowu (n) is i.i.d. Gaussian with distributionN(0, σ 2u) andσ u = 50. The optimal execution
+schedule is characterized by the backward recursion in Theorem 3.1.
+16
+RL versus analytical solution.We train a single PPO agent in this fixed-impact environment
+and compare the learned policy with the analytical benchmark. For validation purposes, the envi-
+ronment implements the price dynamics directly, without incorporating the LOB mechanisms of
+ABIDES-MARL, such as tick-size constraints and order matching. Training is conducted over 1000
+episodes, and evaluation is performed on 30 holdout episodes. The policy network consists of two
+hidden layers (64 units each) with Tanh activations.
+Figure 2. The left panel displays the remaining inventory trajectoryQ (n) under the analytical and PPO policies.
+The right panel shows the induced transaction price pathp (n).
+Figure 2 shows that the learned PPO policy closely matches the analytical inventory schedule
+and produces nearly identical price dynamics throughout the horizon. This experiment provides a
+numerical sanity check. In a stationary environment with fixed impact, RL successfully recovers the
+dynamic-programming solution. Consequently, any deviations observed in the endogenous-liquidity
+experiments below cannot be attributed to a failure of the learning algorithm to solve the baseline
+control problem. Rather, such deviations arise because, once liquidity is generated by strategic
+agents, the effective impact becomes policy-dependent and the execution problem is no longer
+governed by fixed coefficients.
+4.2.Multi-agent experiments: endogenous liquidity environment
+We now turn to the full stochastic game in which liquidity is generated endogenously by strategic
+market makers. In this environment, the effective market impact depends on the joint policy profile,
+and execution becomes policy-dependent.
+Experimental setup.All experiments are conducted in the synchronized ABIDES-MARL envi-
+ronment with horizonN= 20. Unless stated otherwise, the fundamental valuevis drawn indepen-
+dently at the start of each training episode from
+v∼ N(µv = 1000, σ2v = 1002),
+and prices are constrained to the symmetric band [p min, pmax] = [0.5v,1.5v] to ensure numerical
+stability. During evaluation, we fixv=µ v and consider, without loss of generality, two initial
+conditions for the opening price:p (0) = 0.7µv (“down”) andp (0) = 1.3µv (“up”). Noise order flow
+u(n) is i.i.d. Gaussian with distributionN(0, σ2u) andσ u = 50. All learning agents are trained using
+PPO for 1000 episodes and evaluated on 30 holdout episodes. Each policy network consists of two
+hidden layers (64 units each) with Tanh activations. Prices are represented in cents to respect
+tick-size constraints, while rewards are computed in dollars to control numerical scale. We consider
+17
+two global observation regimes:OTCmode (LOB hidden; only the transaction price observable) and
+Exchangemode (LOB observable).
+4.3.Equilibrium validation via price discovery
+We validate equilibrium consistency by studying the extended Kyle benchmark, obtained by re-
+moving the liquidity trader so that the learning agents are the informed trader and theMmarket
+makers. The objective of this subsection is not to claim convergence to a Nash equilibrium, but
+rather to test whether the learned dynamics reproduce the structural signature of the benchmark
+equilibrium, namely, the gradual incorporation of private information into prices, under a policy
+class aligned with the theoretical linear parameterization (Eqs. 16–17). We also diagnose systematic
+failures when the policy class is overly expressive.
+4.3.1.Extended Kyle benchmark (linear parameterization).We measure price discov-
+ery using two standard diagnostics. Letvdenote the fundamental value and define the pricing error
+e(n) :=v−¯p (n). First, we estimate an AR(1) model
+e(n) =ϕe (n−1) +ϵ (n),
+and report the implied half-life
+n 1
+2
+=− log 2log|ϕ| .
+Second, we run a Kyle-style regression
+∆¯p(n) := ¯p(n) −¯p(n−1) =λq (n) +ξ (n),
+whereq (n) denotes net order flow andξ (n) is the regression residual.
+(a) Opening price lower than the fundamental value.
+ (b) Opening price higher than the fundamental value.
+Figure 3. Linear policy parameterization with 20 market makers and no LOB information revealed. Each
+panel shows the evolution of transaction prices when the opening price is initialized below (a) or above (b)
+the fundamental value. The fundamental value is marked by the red dashed line. Across evaluation episodes,
+prices gradually converge toward the fundamental value, indicating that even with limited observability, market
+participants collectively recover informational efficiency.
+Figure 3 shows that under linear policy parameterization, transaction prices converge smoothly
+towardvunder both initial conditions. Table 1 demonstrates therobustness of the equilibrium
+18
+Table 1. Price discovery experiment results under linear policy parameterization. Each configuration varies in the
+number of market makers (N MM), visibility of the LOB (0 hidden, 1 fully visible), and whether the initial price is
+below (down) or above (up) the fundamental value. Each configuration reports the estimated AR(1) coefficient (ϕ),
+its p-value, the corresponding half-life, the Kyle regression coefficient (λ), and its p-value.
+N MM LOB Modeϕp(ϕ) Half-lifeλp(λ)
+20 0 down 0.745 3.18e-88 2.36 2.30 0.000
+20 0 up 0.804 0.000 3.18 2.78 7.05e-80
+20 1 down 0.774 1.23e-249 2.70 2.88 0.000
+20 1 up 0.827 0.000 3.64 2.64 1.66e-41
+2 0 down 0.232 7.09e-09 0.47 5.01 0.000
+2 0 up 0.416 2.36e-31 0.79 5.06 7.72e-124
+2 1 down 0.503 3.94e-53 1.01 5.13 0.000
+2 1 up 0.625 1.15e-128 1.48 3.66 5.75e-85
+structureacross different configurations. In particular, the estimatedϕis significantly less than
+one and the half-life is finite, consistent with progressive incorporation of private information into
+prices. The Kyle regression slopeλis positive and strongly significant, indicating that market
+makers systematically adjust quotes in the direction implied by order imbalance. This reproduces
+the qualitative hallmark of the multi-period Kyle equilibrium, i.e., gradual price discovery, under
+a theoretically aligned policy class. Across linear configurations, three consistent patterns emerge:
+(i)F ewer market makers accelerate convergence.With smallerM, the estimated half-life
+decreases, reflecting stronger per-agent price adjustment and reduced competitive dilution
+of impact.
+(ii)LOB visibility affects speed but not direction.Revealing LOB information changes
+the rate at which prices incorporate information, but the qualitative convergence towardv
+remains.
+(iii)Symmetry in up/down initialization.Whether the opening price starts above or below
+v, convergence remains directionally correct and statistically significant.
+Together, these ablation results support the interpretation that the learning dynamics recover a
+stable equilibrium-like structure under an appropriate policy constraint.
+(a) Opening price lower than the fundamental value.
+ (b) Opening price higher than the fundamental value.
+Figure 4. Nonlinear policy parameterization with 20 market makers and no LOB information revealed. Panels
+(a) and (b) correspond to opening prices initialized below or above the fundamental value, respectively. The
+fundamental value is marked by the red dashed line. With the more flexible nonlinear policy network, the
+informed trader dominated the market dynamics, persistently driving transaction prices toward the lower
+boundary of the admissible price range regardless of the initial condition.
+19
+Table 2. Price discovery experiment results under nonlinear policy parameterization. Each configuration varies in
+the number of market makers (N MM), visibility of the LOB (0 hidden, 1 fully visible), and whether the initial
+price is below (down) or above (up) the fundamental value. Each configuration reports the estimated AR(1)
+coefficient (ϕ), its p-value, the corresponding half-life, the Kyle regression coefficient (λ), and its p-value.
+N MM LOB Modeϕp(ϕ) Half-lifeλp(λ)
+20 0 down 0.995 0.000 145.41 -0.14 0.139
+20 0 up 0.943 0.000 11.82 0.68 0.317
+20 1 down 0.961 0.000 17.59 0.45 0.062
+20 1 up 1.009 0.000 -81.16 0.15 0.071
+2 0 down -0.058 0.193 0.24 3.25 0.000
+2 0 up 0.074 0.110 0.27 2.81 0.017
+2 1 down 0.004 0.926 0.12 6.78 0.001
+2 1 up -0.051 0.289 0.23 14.89 1.98e-49
+4.3.2.Policy class stress test (nonlinear policies).When policies are nonlinear and un-
+constrained, the equilibrium structure breaks in a systematic way. Figure 4 shows that prices no
+longer converge reliably towardv; instead, the informed trader can induce persistent deviations,
+often driving transaction prices toward boundary levels. In terms of diagnostics, Table 2 shows
+that the AR(1) decay becomes weak or unstable (withϕclose to or exceeding one in several
+configurations), and the Kyle regression coefficient loses robustness and statistical significance.
+Interpretation.With an overly expressive policy class, agents can exploit predictability and
+boundary effects that are not present in the stylized analytical benchmark, leading to systematic
+failure modes rather than mere noisy instability. This experiment therefore delineates the regime
+in which the equilibrium proxy is credible (linear policy class) from the regime in which strategic
+exploitation dominates.
+4.4.Optimal execution under endogenous liquidity
+We now study execution in the full trading game with an informed trader, a liquidity trader,
+Mmarket makers, and a representative noise trader. Unlike the exogenous-impact benchmark,
+where{λ (n)}Nn=1 is fixed, liquidity is now generated endogenously by the quoting policies of market
+makers. Consequently, the liquidity trader’s execution cost becomes dependent on the joint policy
+profile.
+4.4.1.Experimental design and strategy set.We evaluate five execution strategies for the
+liquidity trader, while the informed trader and market makers use the PPO policies obtained from
+multi-agent training.
+(i)PPO (joint MARL):The liquidity trader uses the policy learned during joint multi-agent
+training.
+(ii)VW AP (trajectory-based):A fixed volume profile{V (n)}Nn=1 is constructed from his-
+torical PPO evaluation trajectories (obtained from the PPO (joint MARL) holdout runs),
+and execution follows
+xLT,(n)VW AP=Q· V (n)PN
+k=1 V (k) .
+(iii)TW AP:Inventory is executed evenly over time,
+xLT,(n)TW AP= QN .
+20
+Table 3. Implementation shortfall (IS) comparison under linear policy parameterization. Values denote mean±
+standard deviation over 30 evaluation episodes, normalized to the opening pricep (0). Lower values indicate better
+performance. “N/A” in the PPO column denotes cases where the agent did not execute any acquisition during the
+trading horizon.
+LOBϕMode PPO VW AP TW AP Analytical PPO-Single
+0 0 down N/A 0.698±0.046 0.627±0.046 0.807±0.1410.597±0.046
+0 0 up N/A 0.008±0.035−0.065±0.0260.108±0.020−0.014±0.026
+0 0.01 down 0.876±0.012 0.834±0.0210.750±0.0730.775±0.084 0.801±0.079
+0 0.01 up 0.149±0.003 0.082±0.012−0.028±0.0380.117±0.015 0.055±0.032
+0 0.1 down 0.841±0.045 0.811±0.027 0.714±0.066 0.951±0.0370.703±0.022
+0 0.1 up 0.113±0.008 0.072±0.016−0.007±0.0380.134±0.008 0.105±0.007
+1 0 down 1.014±0.053 0.747±0.0590.740±0.0880.784±0.103 0.795±0.130
+1 0 up 0.153±0.001 0.112±0.0540.079±0.0590.107±0.016 0.111±0.037
+1 0.01 down 0.936±0.060 0.775±0.0880.703±0.1000.790±0.099 0.799±0.009
+1 0.01 up 0.087±0.0280.046±0.0350.050±0.030 0.118±0.020 0.144±0.001
+1 0.1 down 0.886±0.013 0.767±0.0210.500±0.0190.923±0.055 0.548±0.028
+1 0.1 up 0.154±0.000−0.172±0.009−0.178±0.0100.135±0.008−0.052±0.023
+(iv)Analytical (Kyle-style):A Kyle-style time-varying impact path is computed from the
+linear recursive benchmark (Appendix D) and substituted into the exogenous dynamic
+programming solution (Theorem 3.1) to obtain an execution schedule. This serves as a
+fixed-impactbenchmark and is not equilibrium-consistent under endogenous liquidity.
+(v)PPO-Single:The informed trader and market makers are frozen at their learned policies,
+and only the liquidity trader is retrained using PPO (500 episodes), yielding a best-response
+style policy against fixed opponents.
+Performance is evaluated usingimplementation shortfall (IS):
+IS := 1p(0)
+ PN
+n=1 p(n)xLT,(n)
+Q −p (0)
+!
+.
+Lower IS indicates better execution performance for an acquisition task. Unless stated otherwise,
+we setQ= 1000, the terminal penaltyγ= 10, and considerϕ∈ {0,0.01,0.1}. We setα= 0 to
+align the permanent component with the Kyle-style benchmark and to isolate endogenous liquidity
+effects from mean-reversion effects.
+4.4.2.Linear policy parameterization (constrained opponents).Table 3 reports the
+results under linear policy parameterization for the informed trader and theMmarket makers.
+Three findings are robust across configurations:
+(i)TW AP is the most robust baseline.A non-reactive schedule performs well when op-
+ponents are constrained.
+(ii)The analytical schedule under-performs.Although optimal under exogenous fixed
+impact, it becomes systematically inferior once liquidity is endogenous. This provides a
+direct indication of structural misspecification: the assumed impact path does not match
+the impact induced by strategic quoting.
+(iii)Joint MARL PPO is exploited.The liquidity trader’s jointly trained policy performs
+poorly in several configurations, indicating that during training, other agents adapt to the
+liquidity trader’s behavior and learn responses that are unfavorable to her objective.
+Interpretation.Under constrained policy classes, the informed trader’s influence on market dy-
+namics is limited, and execution is best served by stable schedules that reduce predictability and
+avoid triggering strong opponent adaptation. The failure of the analytical schedule already indicates
+21
+that “plugging in” fixed-impact solutions is unreliable in endogenous markets.
+4.4.3.Nonlinear policy parameterization (expressive opponents).Compared with the
+linear case, Table 4 and Figures 5–6 show that nonlinear parameterization amplifies endogenous
+effects:
+(i)PPO-Single is superior.Post-training against fixed opponents significantly improves the
+strategy, yielding lower IS. This indicates that once opponents stop adapting, the liquidity
+trader can exploit the induced market dynamics more effectively.
+(ii)Analytical remains unreliable.The fixed-impact schedule does not consistently perform
+well, even when it occasionally benefits from favorable price drift; its performance remains
+unstable across initial conditions.
+(iii)TW AP loses robustness.With expressive opponents, non-reactive schedules are no
+longer robust to strategic adaptation.
+(iv)Market makers intensify adaptation.The dispersion of outcomes and sensitivity to ini-
+tial conditions both increase, consistent with endogenous liquidity being shaped by strategic
+responses rather than by a fixed coefficient process.
+Table 4. Implementation shortfall (IS) comparison under non-linear policy parameterization. Values denote mean
+±standard deviation over 30 evaluation episodes, normalized to the opening pricep (0). Lower values indicate
+better performance.
+LOBϕMode PPO VW AP TW AP Analytical PPO-Single
+0 0 down−0.236±0.061−0.178±0.020−0.182±0.024 0.805±0.075−0.248±0.056
+0 0 up−0.152±0.007−0.142±0.005−0.141±0.004 0.103±0.029−0.147±0.006
+0 0.01 down−0.286±0.000−0.258±0.010−0.255±0.013 0.778±0.089−0.061±0.003
+0 0.01 up 0.154±0.001 0.151±0.000 0.152±0.000 0.116±0.0170.041±0.001
+0 0.1 down 0.000±0.010−0.271±0.009−0.282±0.0040.916±0.065−0.200±0.003
+0 0.1 up 0.051±0.006−0.413±0.023−0.432±0.0180.135±0.008−0.144±0.010
+1 0 down−0.278±0.003−0.278±0.002−0.278±0.003 0.783±0.091−0.286±0.000
+1 0 up−0.348±0.121−0.415±0.072−0.387±0.082 0.116±0.012−0.603±0.068
+1 0.01 down−0.229±0.016−0.262±0.008−0.265±0.003 0.824±0.076−0.266±0.002
+1 0.01 up 0.144±0.003 0.143±0.001 0.144±0.0010.116±0.0170.150±0.000
+1 0.1 down−0.217±0.025−0.280±0.002−0.281±0.0010.925±0.043−0.168±0.006
+1 0.1 up−0.052±0.004−0.165±0.023−0.170±0.0090.134±0.009 0.004±0.007
+Interpretation.When agents have expressive policy classes, the execution problem becomes
+strongly policy-profile dependent. The notion of “optimal execution under a fixed impact model”
+therefore collapses, because the effective liquidity process is itself an equilibrium outcome.
+4.5.Degenerate case: no informed trader
+We finally remove the informed trader and consider the game between the liquidity trader and the
+market makers only. This experiment isolates the role of informational balance. Figure 7 shows
+that in the absence of an informed trader, market makers anticipate a predictable forced acquisi-
+tion. The resulting dynamics become degenerate: market makers rapidly move quotes against the
+liquidity trader, leaving the trader with limited ability to reduce execution costs through strategic
+adaptation. This degeneracy highlights a key distinction between exogenous and endogenous liquid-
+ity frameworks. Under exogenous liquidity, informational balance is largely irrelevant because price
+impact is fixed. Under endogenous liquidity, however, informational asymmetry and strategic an-
+ticipation directly determine the effective impact process. Without a countervailing informational
+force, the execution problem can collapse into a structurally unfavorable regime.
+22
+(a) PPO
+ (b) VW AP
+(c) TW AP
+ (d) Analytical
+(e) PPO Single
+Figure 5. Nonlinear policy parameterization with 20 market makers and no LOB information revealed. The liquidity
+trader’s risk aversion is set toϕ= 0.01, and the opening price is initialized below the fundamental value. Each panel
+reports the price trajectory (left) and unfilled inventory process (right) averaged over 30 evaluation episodes. Among
+the five strategies, the PPO policy achieves the lowest implementation shortfall by waiting for prices to reach the
+floor level before initiating acquisition. In contrast, the Analytical strategy performs the worst, as it is the only one
+that induces an upward price movement during execution.
+5. Conclusion
+In standard optimal execution models, liquidity and price impact are treated as exogenous, which
+is analytically convenient but inadequate when liquidity provision is strategic. In such settings,
+execution is no longer a single-agent control problem against a passive environment, but a stochastic
+game in which the trader’s actions affect and are affected by the evolving behavior of market
+makers. This paper develops an equilibrium-consistent framework for studying optimal execution
+under endogenous liquidity by combining a synchronized multi-agent limit-order-book simulator
+with a stochastic-game formulation and a MARL-based equilibrium approximation. Our main
+finding is that, under endogenous liquidity, market impact is policy-profile dependent: execution
+strategies influence the distribution of order flow faced by market makers; market makers adapt
+their quotes in response, and the resulting effective impact feeds back into execution costs. As a
+result, optimal strategies differ structurally from those implied by fixed-impact models, making
+equilibrium consistency essential for meaningful execution analysis. Although we do not claim
+convergence to an exact Nash equilibrium, the framework provides a practical and economically
+grounded approach to approximating strategic interaction in realistic LOB markets, and offers a
+foundation for future work on richer agent populations, alternative learning dynamics, and broader
+applications in agent-based financial AI.
+23
+(a) PPO
+ (b) VW AP
+(c) TW AP
+ (d) Analytical
+(e) PPO Single
+Figure 6. Nonlinear policy parameterization with 20 market makers and no LOB information revealed. The liquidity
+trader’s risk aversion is set toϕ= 0.01, and the opening price is initialized above the fundamental value. Each panel
+reports the price trajectory (left) and unfilled inventory process (right), averaged over 30 evaluation episodes. Among
+the five strategies, the PPO-Single policy achieves the lowest implementation shortfall, despite not waiting for prices to
+decline before trading. The Analytical strategy, by inducing downward price adjustments during execution, performs
+notably better in this setting, ranking as the second-best approach.
+(a) Opening price lower than the fundamental value
+ (b) Opening price higher than the fundamental value
+Figure 7. Price and unfilled-inventory dynamics for the liquidity trader trading against 20 market makers under
+linear policy parameterization, with no LOB information revealed. The liquidity trader’s risk aversion is set to
+ϕ= 0.01. Panels (a) and (b) correspond to opening prices initialized below and above the fundamental value,
+respectively. In both cases, market makers rapidly adjust their quotes upward, limiting the trader’s ability to reduce
+transaction costs. This behavior reflects the market makers’ adaptation to the trader’s predictable acquisition strategy,
+resulting in consistently adverse price movements.
+Supplemental material
+A.Proof of Theorem 3.1
+Proof.We proceed by backward induction.
+24
+Base Case (n=N).At the final period, we evaluate
+L(N) (˜p(N−1) , Q(N−1) , Q(N) ) = EN
+h
+p(N) xLT,(N) +ϕ  Q(N) 2i .
+To express this in terms of known quantities (˜p(N−1) , Q(N−1) , Q(N) ), substitute forp (N) using (3)
+and (4):
+p(N) = ˆp(N) +λ (N)  xLT,(N) +u (N) 
+=αˆp(N−1) + (1−α)p (N−1) +ϵ (N) +λ (N)  xLT,(N) +u (N) 
+=α(ˆp(N−1) −p (N−1) ) +  p(N−1) +ϵ (N)  +λ (N)  xLT,(N) +u (N) 
+=−αλ (N−1)  xLT,(N−1) +u (N−1)  + ˜p(N−1) +λ (N)  xLT,(N) +u (N) .
+Sincex LT,(N) =Q (N) , we obtain
+p(N) xLT,(N) = ˜p(N−1) −αλ (N−1)  Q(N−1) −Q (N) +u (N−1)  +λ (N)  Q(N) +u (N)  Q(N) .
+Taking conditional expectation E N [·] and using E N [u(N) ] = 0, we obtain
+EN
+h
+p(N) xLT,(N)
+i
+=
+
+˜p(N−1) −αλ (N−1)  Q(N−1) +u (N−1)  Q(N) +  αλ(N−1) +λ (N)  Q(N) 2.
+Hence,
+L(N) (˜p(N−1) , Q(N−1) , Q(N) ) = ˜p(N−1) −αλ (N−1)  Q(N−1) +u (N−1)  Q(N)
++
+ 
+αλ(N−1) +λ (N) +ϕ | {z }
+=:µ(N)
+ 
+Q(N) 2.
+Inductive Step.Assume the representation holds for periodsN, N−1, . . . , n+ 1, i.e.,
+L(n+1)(˜p(n), Q(n), Q(n+1)) = ˜p(n) −αλ (n) Q(n) +u (n) Q(n+1) +µ (n+1) Q(n+1)2.(21)
+The Bellman equation at timenis
+L(n)(˜p(n−1), Q(n−1), Q(n)) = min
+xL T,(n)∈M(H (n)) En
+h
+p(n)xLT,(n) +ϕ  Q(n)2
++L (n+1)(˜p(n), Q(n), Q(n+1))i.
+After substitutingp (n),˜p(n), Q(n+1) =Q (n) −x LT,(n), and collecting terms, we obtain a quadratic
+form inx LT,(n):
+L(n) = min
+xL T,(n)
+n
+µ(n+1) xLT,(n)2 +  λ(n)(1 +α)Q (n) −2µ (n+1)Q(n)xLT,(n)
++
+ 
+αλ(n−1) +λ (n) +ϕ− (λ(n))2(1 +α) 2
+4µ(n+1)
+ 
+Q(n)2 + ˜p(n−1) −αλ (n−1) Q(n−1) +u (n−1) Q(n)o.
+25
+Sinceµ (n+1) >0, this quadratic is strictly convex inx LT,(n), yielding the unique minimizer
+xLT,(n)∗ = 2µ(n+1) −λ (n)(1 +α)2µ(n+1)
+| {z }
+=:θ(n)
+Q(n).(22)
+Substituting this optimizer back yields
+L(n)(˜p(n−1), Q(n−1), Q(n)) = ˜p(n−1) −αλ (n−1) Q(n−1) +u (n−1) Q(n) +µ (n) Q(n)2,(23)
+with
+µ(n) =αλ (n−1) +λ (n) +ϕ− (λ(n))2(1 +α) 2
+4µ(n+1) .(24)
+This completes the induction.
+B.Proof of Proposition 3.3
+Proof.Substituting the pro-rata allocation rule into the VW AP definition,
+p(n) =
+PM
+i=1 Order(n)i p(n)i
+PM
+i=1 Order(n)i
+=
+PM
+i=1 q(n) d
+(n)
+iPM
+j=1 d
+(n)
+j
+p(n)i
+q(n)
+=
+PM
+i=1 d(n)i p(n)i
+PM
+i=1 d(n)i .
+Hence the factorq (n) cancels out, showing that the execution pricep (n) is independent of the scale
+of order flow and is identical for all traders.
+Moreover, under the linear quoting rule for each market makeri= 1, . . . , M,
+p(n)i = ˆp(n−1) +λ (n)i q(n),
+the VW AP can be written as
+p(n) =
+PM
+i=1 p(n)i d(n)i
+PM
+i=1 d(n)i
+=
+PM
+i=1
+ 
+ˆp(n−1) +λ (n)i q(n)d(n)i
+PM
+i=1 d(n)i
+= ˆp(n−1) +q (n)
+PM
+i=1 λ(n)i d(n)i
+PM
+i=1 d(n)i .
+26
+Therefore the effective impact coefficient is
+λ(n)eff =
+PM
+i=1 λ(n)i d(n)i
+PM
+i=1 d(n)i .(25)
+Sinced (n)i = 1/|λ(n)i |, this can also be written as
+λ(n)eff =
+PM
+i=1 sign
+
+λ(n)i
+
+PM
+i=1
+1
+|λ
+(n)
+i |
+.(26)
+Thus,λ (n)eff is a depth-weighted aggregation of individual impact parameters and is fully determined
+by the market makers’ quoting policies at periodn.
+C.Proof of Lemma 3.4
+Proof.Summing (18) overi,
+MX
+i=1
+RMM,(n)i =
+MX
+i=1
+Order(n)i p(n)i −p (n)
+MX
+i=1
+Order(n)i .
+By definition of VW AP,
+p(n) =
+PM
+i=1 Order(n)i p(n)i
+PM
+i=1 Order(n)i .
+Therefore,
+MX
+i=1
+RMM,(n)i =
+ MX
+i=1
+Order(n)i p(n)i
+!
+−
+ MX
+i=1
+Order(n)i p(n)i
+!
+= 0.
+D.Characterization of Kyle model’s linear recursive equilibrium
+We restate the main result of the discrete-time Kyle model (Kyle 1985) using the notation adopted
+in this paper.
+Theorem5.1 (Recursive Linear Equilibrium of the Kyle Model)There exists a unique lin-
+ear equilibrium, which is a recursive linear equilibrium. In this equilibrium, there are constants
+27
+β(n), λ(n), α(n), δ(n),andΣ (n) such that, for each trading periodn∈ {1, . . . , N},
+xIT,(n) =β (n)
+
+v−p (n−1)
+
+∆t(n),(27)
+p(n) =p (n−1) +λ (n)
+
+xIT,(n) +u (n)
+
+,(28)
+Σ(n) :=Var v|q (1), . . . , q(n) ,(29)
+E
+" NX
+k=n
+xIT,(k)(v−p (k))
+ p(1), . . . , p(n−1), v# =α (n−1)(v−p (n−1))2 +δ (n−1),(30)
+where∆t (n) :=t (n) −t (n−1) =τdenotes the time step size.
+GivenΣ (0), the constantsβ (n), λ(n), α(n), δ(n),Σ (n) are the unique solution to the recursive system:
+α(n−1) = 14λ(n)  1−α (n)λ(n) ,(31)
+δ(n−1) =δ (n) +α (n)
+
+λ(n)
+2
+σ2u∆t(n),(32)
+β(n)∆t(n) = 1−2α (n)λ(n)
+2λ(n)  1−α (n)λ(n) ,(33)
+λ(n) = β(n)Σ(n)
+σ2u ,(34)
+Σ(n) = 1−β (n)λ(n)∆t(n) Σ(n−1),(35)
+subject toα (N) =δ (N) = 0and the second-order condition
+λ(n)(1−α (n)λ(n))>0.(36)
+References
+Alfonsi, A., Fruth, A. and Schied, A., Optimal execution strategies in limit order books with general shape
+functions.Quantitative finance, 2010,10, 143–157.
+Almgren, R. and Chriss, N., Optimal execution of portfolio transactions.The Journal of Risk, 2001,3, 5–39.
+Amrouni, S., Moulin, A., Vann, J., Vyetrenko, S., Balch, T. and Veloso, M., ABIDES-Gym: Gym environ-
+ments for multi-agent discrete event simulation and application to financial markets. InProceedings of
+the Second ACM International Conference on AI in Finance, ICAIF’21, pp. 1–9, 2021, ACM.
+Bertsimas, D. and Lo, A.W., Optimal control of execution costs.Journal of Financial Markets, 1998,1,
+1–50.
+Byrd, D., Hybinette, M. and Balch, T.,ABIDES: Towards high-fidelity multi-agent market simulation, 2020,
+Association for Computing Machinery.
+Cartea, A., Jaimungal, S. and Penalva, J.,Algorithmic and High-Frequency Trading, 2015, Cambridge Uni-
+versity Press.
+Cheridito, P. and Sepin, T., Optimal trade execution under stochastic volatility and liquidity.Applied Math-
+ematical Finance, 2014,21, 342–362.
+Cheridito, P. and Weiss, M., Reinforcement learning for trade execution with market impact.arXiv preprint
+arXiv:2507.06345, 2025.
+28
+Curato, G., Gatheral, J. and Lillo, F., Optimal execution with non-linear transient market impact.Quanti-
+tative Finance, 2017,17, 41–54.
+Dupret, J.L. and Hainaut, D., Optimal liquidation under indirect price impact with propagator.Quantitative
+Finance, 2025,25, 359–381.
+Espana, T., Hafsi, Y., Lillo, F. and Vittori, E., Reinforcement learning in queue-reactive models: application
+to optimal execution.arXiv preprint arXiv:2511.15262, 2025.
+Friedrich, P. and Teichmann, J., Deep investing in Kyle’s single period model.arXiv preprint
+arXiv:2006.13889, 2020.
+Ganesh, A., D’Adamo, G., Firoozye, N. and Skoulakis, S., Reinforcement learning for market making in a
+multi-agent dealer market.arXiv preprint arXiv:1911.05892, 2019.
+Gatheral, J., No-dynamic-arbitrage and market impact.Quantitative Finance, 2010,10, 749–759.
+Glosten, L.R. and Milgrom, P.R., Bid, ask and transaction prices in a specialist market with heterogeneously
+informed traders.Journal of Financial Economics, 1985,14, 71–100.
+Hafsi, Y. and Vittori, E., Optimal execution with reinforcement learning.arXiv preprint arXiv:2411.06389,
+2024.
+Hendricks, D. and Wilcox, D., A reinforcement learning extension to the Almgren–Chriss framework for op-
+timal trade execution. InProceedings of the IEEE Conference on Computational Intelligence for Financial
+Engineering and Economics (CIFEr), pp. 457–464, 2014, IEEE.
+Ho, T. and Stoll, H.R., Optimal dealer pricing under transactions and return uncertainty.Journal of Finan-
+cial Economics, 1981,9, 47–73.
+Huang, N.C., Hsieh, P.C., Ho, K.H. and Wu, I.C., Ppo-clip attains global optimality: Towards deeper under-
+standings of clipping. InProceedings of the Proceedings of the AAAI Conference on Artificial Intelligence,
+Vol. 38, pp. 12600–12607, 2024.
+Huberman, G. and Stanzl, W., Price manipulation and quasi-arbitrage.Econometrica, 2004,72, 1247–1275.
+Huberman, G. and Stanzl, W., Optimal liquidity trading.Review of Finance, 2005,9, 165–200.
+Jaisson, T., Deep differentiable reinforcement learning and optimal trading.Quantitative Finance, 2022,22,
+1429–1443.
+Jin, R., Li, S. and Wang, B., On stationary point convergence of PPO-Clip. InProceedings of the The Twelfth
+International Conference on Learning Representations, 2023.
+Karpe, M., Fang, J., Ma, Z. and Wang, C., Multi-agent reinforcement learning in a realistic limit order book
+market simulation. InProceedings of the First ACM International Conference on AI in Finance, 2020,
+ACM.
+Kuba, J.G., Chen, R., Wen, M., Wen, Y., Sun, F., Wang, J. and Yang, Y., Trust region policy optimisation
+in multi-agent reinforcement learning.arXiv preprint arXiv:2109.11251, 2022.
+Kyle, A.S., Continuous auctions and insider trading.Econometrica, 1985,53, 1315–1335.
+Li, F., Ihnatiuk, V., Chen, Y., Lin, J., Kinnear, R.J., Schneider, A., Nevmyvaka, Y. and Lam, H., Do price
+trajectory data increase the efficiency of market impact estimation?.Quantitative Finance, 2024,24,
+545–568.
+Lin, S. and Beling, P.A., An end-to-end optimal trade execution framework based on proximal policy op-
+timization. InProceedings of the Twenty-Ninth International Joint Conference on Artificial Intelligence
+(IJCAI-20), pp. 4548–4554, 2020.
+Lin, S. and Beling, P.A.,An agent-based market simulator for back-testing deep reinforcement learning based
+trade execution strategies, 2021, Springer International Publishing.
+Lowe, R., Wu, Y., Tamar, A., Harb, J., Abbeel, P. and Mordatch, I., Multi-agent actor-critic for mixed
+cooperative-competitive environments.arXiv preprint arXiv:1706.02275, 2017.
+Moallemi, C.C. and Wang, M., A reinforcement learning approach to optimal execution.Quantitative Fi-
+nance, 2022,22, 1051–1069.
+Nagy, P., Calliess, J.P. and Zohren, S., Asynchronous deep double dueling Q-learning for trading-signal
+execution in limit order book markets.Frontiers in Artificial Intelligence, 2023,6.
+Nevmyvaka, Y., Feng, Y. and Kearns, M., Reinforcement learning for optimized trade execution. InPro-
+ceedings of the 23rd International Conference on Machine Learning, pp. 673–680, 2006.
+Ning, B., Lin, F.H.T. and Jaimungal, S., Double deep Q-learning for optimal execution.Applied Mathematical
+Finance, 2021,27, 173–199.
+Obizhaeva, A.A. and Wang, J., Optimal trading strategy and supply/demand dynamics.Journal of Financial
+Markets, 2013,16, 1–32.
+Schulman, J., Wolski, F., Dhariwal, P., Radford, A. and Klimov, O., Proximal policy optimization algorithms.
+29
+arXiv preprint arXiv:1707.06347, 2017.
+Su, K. and Lu, Z., Decentralized policy optimization.arXiv preprint arXiv:2211.03032, 2022.
+Yu, C., Velu, A., Vinitsky, E., Gao, J., Wang, Y., Bayen, A. and Wu, Y., The surprising effectiveness of
+PPO in cooperative, multi-agent games. InProceedings of the Advances in Neural Information Processing
+Systems, Vol. 35, 2022.
+30

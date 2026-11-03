@@ -1,0 +1,1453 @@
+arXiv 2610.24558  https://arxiv.org/abs/2610.24558
+
+Optimal Trading Filters and the Value of Predictive Signals
+Matteo Smerlak∗
+Capital Fund Management, 23 rue de l’Université, 75007 Paris, France
+The value of a forecast depends on its accuracy, but also on its actionability. In trading, an
+investor must translate return forecasts into positions while accounting for trading costs and the
+lingering impact of earlier trades. We solve the stationary quadratic trading problem with transient
+price impact using tools from prediction theory: Wiener–Hopf factorization gives the optimal policy
+as the composition of a conditional forecast and an explicit causal linear filter. We recover the
+Gârleanu–Pedersen aim-portfolio under exponential resilience and derive fractional trading filters
+under power-law impact decay, requiring memory beyond finite-dimensional LQR control. At
+fixed positive risk penalty, signals of equal instantaneous predictive strength have equal frictionless
+Markowitz value. With trading costs, net attainable value is determined by the mean square of the
+friction-weighted conditional forecast. Under power-law impact with exposure bleeding, we find an
+intermediate optimal mean-reversion rate for Ornstein–Uhlenbeck signals.
+I. INTRODUCTION
+Given predictions of future returns, an investor must
+determine how to act on them and what they are worth
+after trading costs. Transient price impact connects these
+decisions across time: a trade earns exposure to the pre-
+dicted return but also changes the cost of subsequent
+trades. The investor must choose how quickly to build,
+maintain, and unwind a position as both forecasts and
+impact evolve.
+Transient impact has both theoretical and empirical mo-
+tivation. In the resilient-order-book model of Obizhaeva
+and Wang [1], depleted liquidity recovers between or-
+ders. Bouchaudet al. [2] documented persistent order
+signs alongside approximately diffusive prices; within their
+propagator model, individual-trade impact must decay
+with age. Bouchaudet al. [3] inferred algebraic decay
+after accounting for order-flow correlations, which con-
+found the measured response to a trade with subsequent
+trading. We use exponential and power-law kernels as
+tractable models, retaining linearity in trading rate as an
+assumption; the detailed decay law remains market- and
+estimation-dependent.
+In this paper we solve the stationary quadratic version
+of the trading problem using tools from prediction the-
+ory. We consider ongoing investment with an established
+trading history and no terminal liquidation date, allowing
+exposure to bleed between trades. (Such exposure bleed-
+ing occurs, for example, when an options book loses vega
+as maturity approaches, so maintaining a fixed exposure
+requires costly replenishment [4].) Using Wiener–Hopf
+factorization, we decompose the optimal policy into a
+conditional forecast of a friction-adjusted signal followed
+by a causal linear filter [5–8]. From this construction we
+obtain both the policy and its net value, together with
+the loss relative to knowing the entire predictor path. In
+the Gaussian examples, we obtain a linear policy with an
+explicit frequency response.
+∗ matteo.smerlak@cfm.com
+We recover the target portfolio of Gârleanu and Peder-
+sen[9,10]andderivefractionaltradingfiltersunderpower-
+law impact. Exponential impact admits finite-dimensional
+relaxation dynamics. Power-law impact gives a nonra-
+tional response, precluding an exact finite-dimensional
+linear time-invariant realization even for an Ornstein–
+Uhlenbeck (OU) predictor. These fractional policies ap-
+ply to stationary investment, complementing the finite-
+horizon liquidation results of Fordeet al.[11]. Matérn
+predictors allow us to study history-dependent forecasting
+alongside market memory.
+We compare signals at fixed instantaneous predictive
+strength. Under frictionless Markowitz allocation with
+a fixed positive inventory penalty [12], optimal value
+depends only on predictor variance, so all signals in this
+comparison have the same frictionless value. We show that
+attainable value equals half the mean square of a friction-
+weighted conditional forecast of future drift. This gives
+a market-dependent criterion for comparing predictors:
+their value depends on how strongly they forecast the
+future drift components that the investor can profitably
+exploit.
+Under power-law impact, replenishing bleeding expo-
+sure penalizes persistent positions, while adjustment costs
+penalize rapid changes. The balance selects an intermedi-
+ate optimal mean-reversion rate for OU signals. Coher-
+ence provides a separate source of value: concentrating
+signal variance at a frequency of minimum friction gives
+a sharp bound over stationary signal laws. Perfectly pre-
+dictable oscillations at costly frequencies can nevertheless
+have arbitrarily small value. We also compare predictor
+smoothness after optimizing signal speed, distinguish-
+ing this comparison from holding the predictor decay
+rate fixed. Empirical use requires estimating predictive
+strength jointly with signal dynamics and trading costs.
+The quadratic trading problem extends the single-
+period mean–variance framework of Markowitz[12] and
+dynamic portfolio theory [13–15]. Execution costs are
+studied by Bertsimas and Lo[16], Almgren and Chriss
+[17], Gatheralet al. [18]. Gârleanu and Pedersen
+[9, 10], Henry and Bouchaud[19] study dynamic portfo-
+lio choice with predictable returns and trading frictions,
+arXiv:2610.24558v1  [q-fin.MF]  17 Oct 2026
+2
+including exponentially relaxing impact. Lehalle and Neu-
+man [20] incorporate predictive signals into finite-horizon
+liquidation with transient impact; Neuman and Voß [21]
+derive signal-adaptive execution policies with temporary
+and transient impact. Abi Jaber and Neuman[22] treat
+general Volterra kernels and progressively measurable sig-
+nals, while Abi Jaberet al. [23] study portfolio choice
+with transient cross-impact. Our stationary formulation
+gives explicit trading filters and comparisons of signal
+value across speeds and coherence levels.
+In Section II we derive the general solution; in Sec-
+tion III we obtain explicit policies. We compare signal
+values in Section IV and discuss extensions in Section V.
+Derivations, technical assumptions, and general Bessel
+market extensions are given in the appendices.
+II. OPTIMAL TRADING FILTERS
+In this section we define and solve the stationary
+quadratic trading problem. We interpret the optimal
+policy as a causal prediction of the anticipative position,
+with prediction errors weighted by trading friction.
+A. The quadratic trading problem
+We use upright capitals for linear operators, lowercase
+letters for their convolution kernels, and hats for Fourier
+transforms:ˆφ(ω) =
+∫
+eiωtφ(t)dt. The predictor isαand
+the position isπ.
+a. Predictor.An investor observes a centered, sta-
+tionary return predictorαt, such that the unimpacted
+priceP t satisfies
+dPt =α tdt+dM t (1)
+where M is a martingale with respect to the available
+information(Ft). With the martingale noise scale held
+fixed, the predictor variances2α = E[α2t ]measures instan-
+taneous forecast strength, i.e. predictivity or ‘alpha’; we
+keep it fixed throughout.
+b. Bleeding.Trading at rate ut adds to a book’s
+current position πt. We allow this exposure to bleed
+passively at rateβ:
+∂tπt =u t−βπ t, β≥0.(2)
+This generalization to the usual notion of position as
+an integral of past trades is useful when dealing with
+derivative instruments with finite maturity. For example,
+an options portfolio can lose vega as maturity approaches,
+requiring additional trades to maintain its exposure [4].
+For stock holdings the bleeding rate isβ= 0.
+c. Risk aversion.A quadratic inventory penalty
+λE[π2t ]/2, with λ≥ 0, expresses aversion to risk. We
+use inventory risk or exposure bleeding to regularize the
+low-frequency behavior of the examples below.
+d. Impact cost.Trading moves prices. Let It denote
+the displacement with respect to the unimpacted pricePt
+due to present and past trading, with Volterra kernelg,
+andC t the corresponding impact cost:
+It =
+∫ ∞
+0
+g(τ)ut−τdτ, C t =I tut.(3)
+This is the Bouchaudet al.propagator model of price
+impact [2, 18]. We extend the impact kernelg(τ)evenly
+to negative lags, with Fourier transformˆg(ω). Its high-
+frequency limit η = lim|ω|→∞ˆg(ω)measures instanta-
+neous trading costs, while finite-frequency components
+measure transient impact.
+We assumeˆg≥ 0, such that for any finite trading
+window
+∫ ∞
+−∞
+ˆg(ω)|ˆu(ω)|2dω≥0.(4)
+This positivity condition rules out profits from one’s
+own impact on round trips, the no-price-manipulation
+of Gatheralet al. [18], Gatheral [24]. When g(τ)is
+also nonnegative, nonincreasing, and convex forτ > 0,
+transaction-triggered price manipulationin finite-window
+execution is also excluded: inserting trades opposite to
+the order’s direction cannot reduce expected impact costs
+[18, 25].
+e. Quadratic friction operator.The investor maxi-
+mizes expected signal earnings net of inventory risk and
+impact costs:
+J(π;α) =E[α tπt]− λ2 E[π2t ]
+− 12∫Rg(τ)E[utut−τ]dτ. (5)
+The factor1 /2converts the causal impact integral to
+a symmetric one. Write ∥π∥2F for the total quadratic
+penalty, soJ(π,α ) = E[αtπt]−∥π∥ 2F. The corresponding
+positive, self-adjointfriction operatorFis defined by
+∥π∥2F =⟨π, Fπ⟩/2, with⟨x,y⟩ = E[xtyt]. Stationarity
+makesFa convolution operator,F π =f∗π , withfriction
+kernelf.
+From the position dynamics we haveˆu= (β−iω )ˆπ,
+and hence the Fourier symbol ofF:
+ˆf(ω) =λ+ (β 2 +ω 2)ˆg(ω).(6)
+Here λ penalizes inventory,β2ˆgcharges for replenishing
+bleeding exposure, and ω2ˆgcharges for trade-induced
+price impact. We assumeinfω ˆf(ω)> 0for the stationary
+solution; selected noncoercive limits are discussed below.
+f. Adaptedness.A causal, or adapted, strategy uses
+only information available at the time of trading:πt must
+beFt-measurable. For the explicit filters and signal com-
+parisons below, we assume that the trader forecasts future
+signal values using the signal’s current and past values,
+{αs :s≤t} , without additional predictive information.
+The signal itself may already incorporate prices, order
+3
+flow, or other data. The general conditional-expectation
+solution allows a richer information set. We work on a two-
+sided stationary probability space with a shift-covariant
+filtration, so conditional projection preserves joint station-
+arity. For a square-integrable processy, define
+(Py)t =E[y t|F t].
+Conditional expectation is the orthogonal projection onto
+the square-integrable observables available at timet. Thus
+an adapted position satisfiesPπ =π. Removing adapted-
+ness while keeping the same quadratic functionalJ gives
+the anticipative benchmarkπant =F−1α. Its value is an
+upper bound for the adapted problem.
+We optimize over the spaceA of adapted, jointly sta-
+tionary positions with finite friction:
+v⋆(α) = sup
+π∈A
+J(π;α).(7)
+This optimal value is the adapted Legendre-Fenchel dual
+of the squared friction norm∥·∥ 2F. The domain, rate
+regularity, and quadratic-form conventions forA and the
+operator equations below are specified in Appendix A.
+B. Wiener-Hopf solution
+SinceP π =π for an adapted position andPα =α, the
+first-order condition for (7) is
+(PFP)π⋆ =α.(8)
+Thus we must invert thecompressionofFto adapted
+observables. All inverses of this compression are taken on
+that subspace.
+Wiener–Hopf factorization makes this inversion explicit
+[5, 6]. Under the spectral and domain conditions specified
+below [26], we factor the positive friction operator as
+F=F −F+,F − =F∗+,(9)
+where the factorF + and its inverse are causal: they
+preserve adaptedness. Its adjointF− is anticausal and
+acts on future observations.
+For a positive scalar friction spectrum, the logarithmic
+integrability condition
+∫ ∞
+−∞
+|log ˆf(ω)|
+1 +ω 2 dω <∞(10)
+gives an outer spectral factorˆf+ with ˆf =|ˆf+|2 [27]. To
+use this factor on stationary processes, we also requireF+
+to mapA onto the adapted square-integrable observables,
+with a causal inverse [7]. For power-law impact with
+β >0, theobservablespaceexcludesinvariantcomponents
+because ˆf diverges at zero; the centered OU and Matérn
+examples satisfy this restriction.
+On the adapted subspace, the friction form factors
+through the restricted causal operator. For the fixed
+filtration, we define the optimal-response operator by
+K:= (PFP)−1 =F−1+ PF−1− .(11)
+To solve(8), we apply the anticausal inverse to the sig-
+nal, take its conditional expectation, and reconstruct the
+position with the causal inverse.
+Under the factorization and domain conditions above,
+we obtain the unique optimizer and its value:
+π⋆ =Kα,
+v⋆ =∥π ⋆∥2F = 12 E[(PF−1− α)2t]. (12)
+Gross signal gain is twice the optimal net value:
+E[αtπ⋆t ] = 2∥π⋆∥2F = 2v⋆.(13)
+The gap to the anticipative benchmark for the same func-
+tional is
+vant−v⋆ = 12 E⏐⏐(I−P)F −1− α⏐⏐2.(14)
+We can express the optimization as a prediction problem.
+Completing the square gives
+J(π;α) =v ant−∥π−F −1α∥2F,(15)
+so we seek the closest adapted position toπant =F−1α,
+with errors measured in the friction norm. Factorization
+converts this loss into an ordinary mean-square error:
+∥π−π ant∥2F = 12 E⏐⏐(F+(π−π ant))t⏐⏐2.
+Under the assumed range condition,F+π ranges over all
+adapted square-integrable observables. Hence
+F+π⋆ =P(F +πant) =PF−1− α.
+We predict the friction-transformed anticipative position
+and then applyF−1+ to reconstruct exposure. Directly
+conditioning πant would minimize unweighted position
+error. In the Gaussian examples, the transformed pre-
+diction is linear and is a Wiener causal estimate. The
+conditional-expectation formulation also applies to non-
+Gaussian signals.
+Write h± for the kernels of the inverse operators:
+F−1± x =h±∗x andˆh± = 1/ˆf±. The identityF−1− = (F−1+ )∗
+givesh−(s) =h+(−s), soF−1− weights future signals. The
+forecast in (12) is therefore
+(F+π⋆)t =
+∫ 0
+−∞
+h−(r)E[αt−r|F t]dr
+=
+∫ ∞
+0
+h+(s)E[αt+s|F t]ds.
+(16)
+4
+C. Transfer function and spectrum
+For a stationary predictor with spectral densitySα
+satisfying the logarithmic integrability condition(10)with
+ˆfreplaced byS α, writeSα,+ for its causal outer factor:
+Sα(ω) =|S α,+(ω)|2.
+This factorization depends only on second-order statistics
+and applies to non-Gaussian predictors as well. The
+factor maps unit-spectral-density white-noise innovations,
+understood in the linear prediction sense, to the predictor.
+The subscript+includes the factor’s phase.
+We now assume the predictor is Gaussian, with in-
+novations containing the same past information as the
+observed signal. Best linear prediction then coincides
+with conditional expectation, and the responseKα has a
+causal convolution representationπ⋆ =k∗α . The kernel
+k depends on both friction and the predictor law;ˆk is its
+frequency response. Conditioning on past innovations re-
+tains nonnegative lags in their response kernel. Denoting
+this causal projection by[·] +, we obtain
+ˆπ⋆ =ˆkˆα,
+ˆk= 1ˆf+Sα,+
+[
+Sα,+
+ˆf−
+]
++
+. (17)
+Inside the projection we apply the anticausal inverse fric-
+tion to the predictor’s innovations factor. We then apply
+the causal inverse friction and express the response in
+terms of the observed predictor. All factors are evaluated
+at frequencyω. For non-Gaussian predictors, the general
+solution (12) still applies, but conditional forecasts can
+be nonlinear and the spectrum alone need not determine
+the optimal adapted policy.
+For the Gaussian predictor, usingˆf =|ˆf+|2, we obtain
+the position power spectral densitySπ⋆
+Sπ⋆(ω) = 1ˆf(ω)
+⏐⏐⏐⏐⏐[Sα,+ˆf− ]+ (ω)⏐⏐⏐⏐⏐2.
+The optimal value equals the friction cost of this position:
+v⋆ =∥π ⋆∥2F = 14π∫ ∞−∞ ˆf(ω)Sπ⋆(ω)dω.(18)
+III. EXPLICIT SOLUTIONS
+In this section we specialize the general solution to
+Markov predictors, recover the Gârleanu–Pedersen partial-
+adjustment and two-EMA policies, then derive fractional
+trading under power-law impact. We then introduce
+history-dependent Matérn predictors and compare the
+two sources of memory in Fig. 1. Derivations and cutoff
+extensions are collected in Appendix A.
+A. Markov predictors
+For the Markov examples, the forecast in(16) depends
+only on the current signalαt. For OU signals it is pro-
+portional toαt. Define the mean-reversion rateθs > 0
+through its conditional forecast:
+(Pα·+s)t =e−θssαt, s≥0.(19)
+For an arbitrary admissible causal operatorF+ with sym-
+bol ˆf+, the optimal policy, value, and transfer are
+π⋆ = F−1+ αˆf+(iθs), v ⋆(θs) = s2α2ˆf+(iθs)2,
+ˆk(ω) = [ˆf+(iθs)ˆf+(ω)]−1.
+(20)
+Changing θs therefore changes only the overall gain of
+ˆk; the normalized magnitude and phase depend only on
+market parameters.
+B. Gârleanu–Pedersen target portfolios
+Gârleanu and Pedersen[9, 10] derive partial adjust-
+ment toward a forward-looking target portfolio. Their
+continuous-time model includes both temporary costs and
+exponentially relaxing impact [10, Sec. 1.2]. For a scalar
+OU predictor, we express their zero-discount, zero-funding
+stationary specializations as a single EMA under instan-
+taneous costs and a two-EMA policy with exponential
+impact, using the factorization in (20).
+a. Instantaneous costs: the EMA solution.A fa-
+miliar risk-controlled policy follows by taking ordinary
+holdings, β = 0, local execution spectrum ˆg= η > 0,
+and inventory penaltyλ >0. Writing b =
+√
+λ/η gives
+ˆf =λ +ηω 2 and ˆf+(z) =√η(b−iz ). The OU position
+and value are
+∂tπ⋆ +bπ⋆ = αη(θs +b) ,
+v⋆ = s2α
+2η(θs +b) 2.
+(21)
+This is the stationary zero-discount limit of the partial-
+adjustment rule in Gârleanu and Pedersen[10, Proposi-
+tion 1]. The target portfolio is the risk-adjusted signal
+αt/λ, discounted byb/(θs +b)for the signal’s expected
+decay. The position relaxes toward this target at rateb.
+b. Exponential impact: the two-EMA solution.Add
+exponential transient impact to the local execution cost:
+ˆg(ω) = η +γ/(θ2m +ω2), withη,γ,θ m > 0. Retaining
+ordinary holdings,β= 0, and inventory riskλ>0gives
+ˆf(ω) =λ+ηω 2 + γω 2
+θ2m +ω 2
+=η (b21 +ω 2)(b22 +ω 2)θ2m +ω 2 . (22)
+5
+Matching numerator coefficients determines the causal
+spectral factor and its rates:
+ˆf+(z) =√η (b1−iz)(b 2−iz)θm−iz ,
+b21 +b 22 =θ 2m + (λ+γ)/η,
+b21b22 =λθ 2m/η.
+(23)
+The rates satisfy0 < b1 < θm < b2. Substituting the
+factor into (20) and expanding in partial fractions gives
+π⋆t = θs +θmη(θs +b 1)(θs +b 2)
+×
+[w1
+b1
+EMAb1[α]t + w2b2 EMAb2[α]t
+]
+.
+(24)
+The moving average and weights are
+EMAb[α]t =b
+∫ ∞
+0
+e−bταt−τdτ,
+w1 = θm−b 1b2−b 1 , w 2 = b2−θmb2−b 1 .
+Both weights are positive and sum to one. This gives the
+two-EMAstructureofGârleanuandPedersen [10, Sec.1.2,
+Proposition 2]; the corresponding characteristic rates also
+appear in Neuman and Voß [21, Eqs. (5.21)–(5.22)].
+C. Fractional trading under power-law impact
+Power-law impact yields another class of explicit solu-
+tions, with fractional trading responses. The Gârleanu–
+Pedersen policies above admit finite-dimensional linear
+time-invariant state-space realizations; the fractional re-
+sponse has a nonrational transfer and therefore requires
+memory beyond such a representation. We derive it with
+the same factorization, retaining the OU predictor so that
+the additional memory comes entirely from impact.
+Take the power-law execution spectrum ˆg(ω) =
+γ|ω| 2νm−2, withγ >0. The corresponding time-domain
+kernel isg(t)∝|t|−(2νm−1): its decay exponent is2νm−1.
+Requiring impact to decay at long lags and remain lo-
+cally integrable at zero gives0 < 2νm− 1 < 1, hence
+1/2<ν m < 1. The broader range0<ν m < 1is available
+for the Bessel market with a positive low-frequency cutoff.
+We setλ = η = 0and use β > 0to obtain stationary
+positions.
+The friction symbol isˆf(ω) =γ(β2 +ω2)|ω|2νm−2, with
+causal factor
+ˆf+(z) =√γ β−iz(−iz)1−νm,
+1
+ˆf+(z) = (−iz)1−νm√γ(β−iz) , ˆf+(iθs) =√γβ+θ sθ1−νms . (25)
+Substitution into (20) gives the fractional trading rate
+and position:
+u⋆t = θ1−νmsγ(θs +β) ∂1−νmt αt,
+π⋆t = θ1−νmsγ(θs +β) (∂t +β)−1∂1−νmt αt. (26)
+Thus power-law impact memory gives the optimal trad-
+ing rate as a fractional derivative of the predictor: a
+non-local operator depending on signal values far in the
+past. In particular, a sufficiently declining signal can
+induce selling even while it remains positive, for example
+when reducing an existing long position. Such signal-
+driven adjustment is consistent with the no-manipulation
+conditions above, which concern gains from impact alone
+and fixed-quantity execution costs. The rate gain grows
+as|ω|1−νm and its phase is−(1−νm)π/2at positive fre-
+quencies. Forβ >0, we reconstruct a stationary position
+with the stable operator(∂t +β)−1.
+Atβ = 0, integrating this rate gives no finite-variance
+stationary position; finite-time initialization defines a
+different problem.
+D. History-dependent predictors
+History-dependent forecasts change the dynamics of the
+optimal position: varying signal speed can change the nor-
+malized response and its phase. We obtain a nonrational
+trading filter from fractional predictor memory even with
+local execution costs, and then examine how forecasting
+and market memory combine. For a stationary Gaussian
+Matérn predictor, takeνs < 1/2and θs > 0. Its power
+spectrum and causal outer factor are [28]
+Sα(ω) =a 2(θ2s +ω 2)νs−1,
+Sα,+(ω) =a(θ s−iω)νs−1. (27)
+The normalizationa fixes E[α2t ] =s2α; finite variance re-
+quires νs < 1/2, with no lower bound. At fixed exponent,
+θs sets the time scale; its correlation-time interpreta-
+tion depends onνs. Decreasingνs increases smoothness:
+the predictor hasj mean-square derivatives for integers
+0≤j < 1/2−νs. The innovations factor is outer, so the
+histories ofα and W contain the same information. At
+νs = 0this recovers OU; other Matérn predictors have
+history-dependent conditional means. For Bessel impact,
+we give the general transfer function in (A4).
+a. Forecasting memory with local costs.We first ex-
+tend the local-cost benchmark(21), with ordinary hold-
+ings β = 0,ˆg=η >0, andλ> 0. Writingb =
+√
+λ/η, we
+obtain
+ˆk(ω) =
+1−
+(θs−iω
+θs +b
+)1−νs
+η(b2 +ω 2) .(28)
+At νs = 0, this reduces to[ η(θs +b)(b−iω )]−1, the
+OU response. For noninteger νs, the fractional power
+6
+10−4
+10−2
+100
+|ˆk(ω)|/|ˆk(ω0)|
+−1
+(a) OU / exponential
+θs/ω0 = 0.1
+θs/ω0 = 1
+θs/ω0 = 10
+10−3 10−2 10−1 100 101 102 103 104 105
+Frequencyω/ω 0
+−0.5
+0.0
+0.5
+1.0
+arg ˆk/π
+1/2
+10−4
+10−2
+100
+|ˆk(ω)|/|ˆk(ω0)|
+−1
+(b) OU / power-law
+10−3 10−2 10−1 100 101 102 103 104 105
+Frequencyω/ω 0
+−0.5
+0.0
+0.5
+1.0
+arg ˆk/π
+1/2
+10−2
+10−1
+100
+101
+|ˆk(ω)|/|ˆk(ω0)|
+−(1 +ν s)
+(c) Fractional Matérn / exponential
+10−3 10−2 10−1 100 101 102 103 104 105
+Frequencyω/ω 0
+−0.5
+0.0
+0.5
+1.0
+arg ˆk/π
+(1 +ν s)/2
+10−2
+10−1
+100
+101
+|ˆk(ω)|/|ˆk(ω0)|
+−(1 +ν s)
+(d) Fractional Matérn / power-law
+10−3 10−2 10−1 100 101 102 103 104 105
+Frequencyω/ω 0
+−0.5
+0.0
+0.5
+1.0
+arg ˆk/π
+(1 +ν s)/2
+Replenishment dominated Transient impact dominated Instantaneous costs dominated
+1
+FIG. 1. Stationary position filters with the explicit execution-cost cutoff(A5). Each panel shows magnitude normalized
+by|ˆk(ω0)| above and phase below. Rows use OU signals (νs = 0) and fractional Matérn signals (νs =−0.4); columns use
+exponential impact (νm = 0, θm/ω0 = 0.5) and regularized power-law impact (νm = 3/4,θm = 0). Colors and line styles identify
+θs/ω0 = 0.1, 1, 10. All panels useβ = η = 0.01, λ = 0, s2α = 1, and ω0 = 1. Matching ˆg(ω0) = 1givesΩ /ω0≃ 11.14, 104.
+OU curves coincide after normalization. Vertical bands identify the largest contribution toˆf: replenishment β2ˆg(blue),
+transient adjustmentω2(ˆg−η)(green), or instantaneous adjustmentηω 2 (orange). Dotted boundaries mark equality of adjacent
+contributions. In (b), the intermediate power-law regime has gain|ˆk|∝ω −νm and phaseνmπ/2. Dashed guides mark the
+ultimate cutoff-tail magnitude exponents−(1 +νs)and phase limits for the displayed parameters.
+makes the transfer nonrational, precluding an exact finite-
+dimensional linear time-invariant realization. Atνs =
+0,− 1,− 2,... , it is rational, but can be improper: deriva-
+tives of the smoother input are then required. Changing
+θs generally changes normalized shape and phase as well
+as gain, even without transient impact.
+b. Combining predictor and market memory.For the
+pure power-law market of Sec. IIIC, with well-separated
+ratesβ≪θ s, we obtain
+|ˆk(ω)|∝
+{
+|ω|−νm, β≪|ω|≪θ s,
+|ω|−(νm+νs), θ s≪|ω|. (29)
+Above the predictor’s correlation scale, its smoothness
+changes the response exponent; sufficiently smooth signals
+can have increasing high-frequency gain. These powers
+require separated scales and a nonzero leading forecast
+coefficient; without scale separation, they appear only as
+slope changes.
+c. Comparing the responses.In the upper row of
+Fig. 1, the normalized OU curves coincide within each
+market: signal speed changes only the gain. In the lower-
+left panel, forecasting memory changes the shape and
+phase even with exponential impact. In the lower-right
+panel, predictor and market memory jointly determine the
+intermediate response, as in(29). Positive instantaneous
+cost eventually replaces that scaling with the cutoff tail
+7
+indicated by the dashed guides. We match the execution
+spectra at the reference frequency,ˆg(ω0) = 1. The plotted
+tail coefficients are nonzero; exceptional cancellations can
+change the asymptotic powers.
+These responses show how forecasting memory changes
+the optimal use of a signal. In Section IV we compare
+the resulting values at fixed predictor variance.
+IV. THE VALUE OF PREDICTIVE SIGNALS
+We hold predictor variances2α = E[α2t ], martingale
+noise scale, and market costs fixed. To interpret this
+normalization, consider frictionless Markowitz allocation
+with a fixed positive inventory penaltyλref. The optimal
+position isαt/λref and optimized value iss2α/(2λref), in-
+dependent of signal dynamics. Our comparison holds this
+auxiliary frictionless benchmark constant while varying
+persistence, smoothness, and coherence. Finite-horizon
+forecast accuracy and realized strategy Sharpe can change.
+With trading costs, we evaluate each signal through
+its friction-weighted conditional forecast. Combining(16)
+and (12), we obtain
+zt =
+∫ ∞
+0
+h+(s)E[αt+s|F t]ds,
+v⋆ = 12 E[z2t ].
+(30)
+Market friction determines the weights. Among admissi-
+ble signals of fixed variance, maximizing value is equiva-
+lent to maximizing this forecast’s mean square under each
+signal’s information set. Concentration at inexpensive
+frequencies and predictability of the relevant future drift
+increase value; anticipative value and causality loss distin-
+guish these contributions. Empirical comparisons require
+each candidate to satisfy the conditional-drift assumption
+of Section II, relative to its available information.
+The figures use bleeding exposure,β >0, withλ = 0.
+This choice matters for the conclusions. With ordinary
+holdings and inventory risk,β = 0, λ >0, the impact
+models considered here haveˆf = λ +ω2ˆg, minimized
+at zero frequency. Slower signals are favored, and every
+Matérn exponent approaches the same supremums2α/(2λ)
+asθs↓ 0. Smoothness still orders value at a fixed predictor
+decay rate. Positive preferred speeds and strict differences
+between rate-optimized smoothness levels arise in the
+exposure-bleeding examples below. With β = λ = 0,
+these markets have no finite bound over signal laws.
+We first derive the value bound, then compare OU
+speeds and Matérn smoothness against it. The general
+results use the friction and domain assumptions of Sec. II;
+proofs and cutoff extensions are in Appendix B. Figure 2
+shows representative signals, and Fig. 3 compares a range
+of speeds and exponents.
+A. A benchmark for signal value
+Assume infω ˆf(ω) > 0. For a stationary predictor of
+variances 2α = (2π)−1∫RSα(ω)dω,
+v⋆(α)≤v ant(α) = 14π∫ ∞−∞ Sα(ω)ˆf(ω) dω
+≤ s2α
+2 infω ˆf(ω).
+(31)
+The gap between the final bound andvant reflects the
+signal’s spectral placement: variance at high-friction fre-
+quenciescontributeslessvalue. Thegap vant−v⋆ measures
+the additional loss from unavailable future observations.
+These are the two shortfalls shown by the open and filled
+bars in Fig. 2; the paths are illustrative draws, while the
+bars are stationary model expectations.
+A random-phase sinusoid of frequencyω >0and vari-
+ances 2α is fully predictable from its past. Its value is
+vsin(ω) = s2α
+2ˆf(ω).(32)
+For power-law and finite-cutoff impact,ˆf(ω)→∞ at high
+frequency, so this value can be arbitrarily small despite
+perfect predictability and unchanged variance.
+When friction is minimized at a positive frequencyω∗,
+we attain both inequalities in(31) with the stationary
+Gaussian sinusoid
+αt =Acos(ω ∗t) +Bsin(ω∗t),
+A,Bindependent, A,B∼N(0,s 2α). (33)
+Past observations determineA and B, making the antici-
+pative policy feasible:
+π⋆t = αtˆf(ω∗), u ⋆t = ∂tαt +βα tˆf(ω∗) ,
+vmax = s2α
+2ˆf(ω∗).
+(34)
+If the minimum occurs at zero, a centered random con-
+stant attains the bound when such observables are admis-
+sible.
+For power-law impact withβ > 0and λ = η = 0,
+signals with square-integrable causal innovations kernels
+fall strictly below the bound. Damped Gaussian oscil-
+lators approach it by concentrating their spectral mass
+at±ω∗. This coherence limit also holds with positive
+instantaneous cost.
+B. A preferred speed under power-law impact
+Take the power-law market of Sec. IIIC, with1/2<
+νm <1,β >0, andλ=η= 0. Its friction separates as
+ˆf(ω) =γβ 2|ω|2νm−2 +γ|ω| 2νm.
+8
+−2
+0
+2
+Slow OUθ s/β= 1/30
+0.0
+0.3
+0.6
+0.30
+0.37
+−2
+0
+2
+Optimal OU rateθ s/β= 1/3
+0.0
+0.3
+0.6
+0.57
+0.68
+0 20 40 60
+Timeβt
+−2
+0
+2
+Fast OUθ s/β= 10/3
+10−2 100 102
+Frequencyω/β
+0.0
+0.3
+0.6
+0.0 0.5 1.0
+Value /v max
+0.17
+0.37
+−2
+0
+2
+Rougherν s = 0.3, θ ∗s/β= 0.126
+0.0
+0.3
+0.6
+0.39
+0.53
+−2
+0
+2
+OU referenceν s = 0, θ ∗s/β= 0.333
+0.0
+0.3
+0.6
+0.57
+0.68
+0 20 40 60
+Timeβt
+−2
+0
+2
+Smootherν s =−2, θ ∗s/β= 1.406
+10−2 100 102
+Frequencyω/β
+0.0
+0.3
+0.6
+0.0 0.5 1.0
+Value /v max
+0.74
+0.79
+Predictor paths Spectral content Trading value
+ωSα/(πs2α); dotted:ω ∗αt/sα; same axes and stationary variance
+(a) Mean reversion: OU predictors
+(b) Matérn smoothness: rate optimized
+Power-law impact:ν m = 3/4,β=γ=s 2α = 1,θ m =η=λ= 0;v max = 0.285(sinusoid benchmark)
+Adapted
+Anticipative
+1
+FIG. 2. Signal speed and Matérn smoothness at fixed predictor variance and market costs. (a) OU predictors with different
+decay rates. (b) Matérn exponentsνs = 0.3, 0,− 2, each at its value-maximizing decay rate; the OU reference repeats the
+middle row of (a). Left: illustrative stationary paths on common axes. Middle: variance per logarithmic frequency interval,
+ωSα(ω)/(πs2α), with common axes; the dotted line marks the least-cost frequencyω∗. Right: adapted (filled) and anticipative
+(open) stationary values divided byvmax. The dotted value line is the separate sinusoidal bound, not a Matérn endpoint. Here
+νm = 3/4, β =γ =s2α = 1, andθm =η =λ = 0. Path realizations are sampled without demeaning or sample-variance rescaling;
+values are computed independently of those realizations.
+The first term penalizes replenishing persistent exposure;
+the second penalizes rapid adjustment. The OU value
+from (20) is
+v⋆(0,θs) = s2α2γ θ2−2νms(θs +β) 2.(35)
+It vanishes for both very slow and very fast signals. Min-
+imizing friction over carrier frequency and maximizing
+value over OU decay rate give
+ω∗ =β
+√
+1−ν m
+νm
+, θ ⋆s =β 1−ν mνm .(36)
+9
+These rates solve different comparisons:ω∗ selects the
+cheapest fully predictable oscillation, whileθ⋆s balances
+persistence and continual innovations within the OU fam-
+ily. The value bound at fixed predictor variance is
+vmax = s2α2γβ 2νmννmm (1−ν m)1−νm.(37)
+Forνm = 3/4and β =γ =s2α = 1, it is approximately
+0.2849, compared with0.1624for the best OU predictor.
+Figure 2(a) illustrates this trade-off. The slow signal
+concentrates variance where replenishment is expensive;
+the fast signal requires costly adjustment. Their adapted
+values are0.30and0 .17of the bound, versus0.57at the
+preferred rate. Even the best OU signal retains a broad
+spectrum and unpredictable innovations, leaving both a
+spectral-placement cost and a causality loss.
+With ordinary holdings and inventory risk,ˆf = λ +
+γ|ω| 2νm instead increases from a finite low-frequency
+penalty, favoring slow signals.
+C. The value of smoother predictors
+For the Matérn familyνs < 1/2, decreasingνs makes
+the predictor smoother. We compare the best value at
+each exponent by optimizing its decay rate:
+¯v⋆(νs) = sup
+θs>0
+v⋆(νs,θs).(38)
+Value is nondecreasing with smoothness under this com-
+parison. Hence the supremum over the family is
+sup
+νs<1/2,θs>0
+v⋆(νs,θs) = limνs→−∞ ¯v⋆(νs).(39)
+The ordering applies across admissible friction symbols;
+fixing the decay rate instead can reverse the ordering
+in the exposure-bleeding regime. For ordinary holdings
+with inventory risk,β = 0, λ > 0, the impact models
+considered here give a stronger comparison: smoother
+predictors have no lower value even at a fixed decay rate.
+Optimizing the rate gives the same supremums2α/(2λ)
+for every exponent, approached by slow signals.
+Figure 2(b) shows the rougher predictorνs = 0.3, the
+OU referenceνs = 0, and the smoother predictorνs =−2,
+each at its preferred rate. They attain0.39,0.57, and0.74
+of the value bound at fixed predictor variance. The OU
+row repeats the realization and value from (a). In these
+examples, smoother predictors reduce both the spectral-
+placement and information losses. All three remain below
+the sinusoidal benchmark, which is obtained by the sepa-
+rate coherence limit of Sec. IVA.
+a. Power-law improvement and fixed-rate reversals.
+Figure 3 shows the dependence on both parameters: mov-
+ing right increases signal speed, and moving down in-
+creases smoothness. Color gives value relative to each
+market’s bound; labelled contours give the percentage of
+the same signal’s anticipative value lost to causality.
+In the power-law panel (b), the dashed curve follows
+the maximizing decay rate. Moving toward smoother pre-
+dictors along this curve raises value and, for the displayed
+parameters, raises the preferred rate. The orange point is
+the OU optimum. Withνm = 3/4and β =γ =s2α = 1,
+the predictor νs =−2has preferred rate θs ≃ 1.4064
+and value0.2122, compared with1/3and0 .1624for OU.
+The full Matérn supremum is approximately0.2314, ap-
+proached in the Gaussian spectral limit described in Ap-
+pendix B.
+A vertical slice holds speed fixed and can give the oppo-
+site ordering. Atθs = 0.01, values forνs =−0.4, 0, 0.3are
+approximately0.0365, 0.0490, 0.0730: the rougher signal
+is more valuable because less variance lies at very low
+frequencies, where replenishment is costly. This is why
+the general smoothness comparison optimizes the rate
+separately for each exponent.
+The contours in panel (b) show that fast, rough signals
+lose a substantial fraction of their anticipative value. Slow,
+smooth signals have a smaller information gap but also
+low value, because their spectral placement is costly even
+with full foresight.
+b. Equality under exponential impact.For pure ex-
+ponential impact,ˆg=γ/(θ2m +ω2), takeθm,β > 0and
+λ =η = 0. In the completed strategy space, every Matérn
+exponent has the same rate-optimized supremum:
+¯v⋆(νs) = s2α2γ max{1,θ2mβ2}.(40)
+The supremum is approached asθs→∞ for θm <β and
+as θs→ 0for θm > β. At θm =β, every rate attains it
+with π⋆ =α/γ; for OU input this has no ordinary finite-
+variance trading rate, but causal smoothing approaches its
+value. In panel (a),θm <β : faster signals approach the
+high-frequency friction minimum with vanishing causality
+loss. Slow, smooth signals also have a small information
+gap, but occupy costlier frequencies.
+V. SCOPE AND EXTENSIONS
+a. Finite trading horizons.On a finite trading win-
+dow, we specify initial inventory, the impact left by re-
+alized trades, and terminal conditions. Inherited impact
+enters as a known contribution to future marginal trad-
+ing cost, alongside local execution costs and inventory
+risk. Under suitable coercivity and regularity conditions,
+causal triangular factorization gives the corresponding
+constrained projection [26]. In Appendix C we sum-
+marize this formulation and its relation to exponential-
+impact endpoint blocks [1], power-law liquidation profiles
+[18], and Gaussian signal-adaptive fractional execution
+[11]. We also give an explicit half-line continuation from
+realized trades for the pure-power-law OU case in Ap-
+pendix C2. General Volterra execution and cross-impact
+portfolio choice are treated in Abi Jaber and Neuman
+[22], Abi Jaberet al.[23].
+10
+10−2 10−1 100 101
+Signal decay rateθ s/β
+−2.0
+−1.5
+−1.0
+−0.5
+0.0
+Predictor exponentν s
+(a) Exponential impact
+5%
+5%
+10%
+10−2 10−1 100 101
+Signal decay rateθ s/β
+(b) Power-law impact
+10%
+25%
+50%
+75%
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Value / boundv ⋆/vmax
+Causality loss (percent) Value-maximizingθ s OU optimum
+1
+FIG. 3. Value and causality loss for (a) exponential and (b) power-law impact. Color shows adapted value divided by each
+market’s boundvmax =s2α/(2 infˆf); thin solid contours show the fraction(vant−v⋆)/vant lost to causality, labelled in percent.
+Exponential impact usesνm = 0, θm = 0.5, γ = 1.25; power-law impact usesνm = 3/4, θm = 0, γ = 1. Both haveβ =s2α = 1,
+η =λ = 0, andˆg(β) = 1. The bounds are0.4and approximately0 .2849, respectively. The horizontal line marks OU predictors.
+In (b), the dashed curve maximizes adapted value over the decay rate, and the orange dot marks the OU optimum. The
+displayed exponents extend through differentiable predictors toνs =−2; the family continues to arbitrarily negative exponents.
+In (a), every exponent approaches the value bound asθs→∞.
+b. Causally separable convex costs.For a convex fric-
+tion functional, optimal value is a constrained convex
+conjugate [29]. The explicit forecast-and-response con-
+struction extends when a causal linear isomorphismB
+separates the cost asΦ(π) = E[ϕ((Bπ)t)]. We then maxi-
+mize pointwise against the conditional forecast and apply
+B−1. In Appendix D we state the range, integrability, and
+attainment conditions. The isomorphism must respect the
+chosen stationary space; an unrestricted-mean nonlinear
+problem cannot automatically use the power-law factor,
+whose inverse annihilates the zero-frequency component.
+General nonlinear transient costs require establishing a
+suitable representation separately.
+VI. CONCLUSION
+We have obtained a causal stationary trading rule by
+using Wiener–Hopf factorization to separate forecasting
+from causal execution. For OU signals, the forecast is
+proportionaltothecurrentobservation, sowecanexamine
+the market response directly.
+We obtain an explicit fractional trading policy under
+power-law impact even for this one-state predictor. Its
+nonrational transfer precludes an exact finite-dimensional
+linear time-invariant realization. Exponential impact ad-
+mits finite-dimensional execution dynamics, while history-
+dependent Matérn forecasts can make the full trading
+response nonrational. Predictor memory changes the re-
+sponse even with local execution costs. We treat both
+sources of memory with the same factorization.
+Exposure bleeding makes maintaining a position costly.
+In the power-law examples, slow signals require sustained
+replenishment, while fast signals require costly adjust-
+ments. We therefore find an intermediate OU signal
+speed that gives the highest net value. For ordinary hold-
+ings with an inventory penalty, slower signals are favored
+in the markets we study.
+We have used stationary trading to study the value
+of information in systems with memory. Even for fully
+predictable signals, value depends on the relation between
+their temporal structure and the dynamics of the response.
+Extending the analysis beyond stationary quadratic mod-
+els would clarify which aspects of this dependence persist
+under more general dynamics.
+ACKNOWLEDGMENTS
+The author thanks CFM colleagues, and in particular J.-
+Y. Audibert, A. Bambade, R. Bénichou, J.-P. Bouchaud,
+R. Maillet, C. Masselin, I. Mastromatteo and M. Potters,
+for useful discussions. Research, literature review, and
+manuscript preparation were assisted by LLMs.
+Appendix A: Derivation of the trading filters
+1. Domain and projection
+In this appendix we justify the forecast-and-response
+construction of Section II and evaluate it for the models
+11
+in Section III. We first specify the admissible positions:
+finite quadratic cost can allow rougher positions than
+a finite-variance trading rate would. This distinction
+matters in the pure-impact limits.
+We use a real Hilbert spaceH of square-integrable
+stationary observables, invariant under a strongly con-
+tinuous, measure-preserving shift group. The filtration
+is shift-covariant, conditional expectation preservesH,
+andM =H∩L 2(F0)is the adapted subspace. For the
+spectral measureEx, normalized byEx(R) =∥x∥22, define
+∥x∥2F = 12
+∫
+R
+ˆfdE x,A={x∈M:∥x∥ F <∞}.
+(A1)
+Assumem≤ ˆf <∞ almost everywhere for everyEx, with
+m >0, and choose conjugate-symmetric boundary ver-
+sions of its outer factor satisfying|ˆf+|2 = ˆf. The closed
+multiplierF + has bounded inverseF−1+ , whose adjoint
+isF−1− . The logarithmic condition(10) gives Lebesgue-
+almost-everywhere factorization [27]; compatibility at sin-
+gular spectral components is an additional assumption.
+Proposition 1(Adapted optimization).If A is dense
+in M andF +A = M, then (12)–(14) hold, with the
+compression interpreted through the closed form(A1).
+Proof.Writingξ =F−1− α and π =F−1+ y gives, fory∈M ,
+J(F−1+ y;α) = 12∥Pξ∥22− 12∥y−Pξ∥ 22.
+Thus π⋆ =F −1+ PF−1− α. Its weak normal equation is
+⟨F+π⋆, F+h⟩ =⟨α,h⟩ for h∈A ; taking h = π⋆ gives
+the gain identity. Allowingy∈H gives the anticipative
+value, and orthogonality gives the gap.
+To apply the proposition to our examples, we approxi-
+mate admissible positions by causally smoothed positions.
+This also relates the completed strategy space to policies
+with ordinary trading rates.
+For the explicit markets withˆf≤C (1 +ω2), the causal
+regularizer ˆRε = (1−iεω)−1 verifiesthehypotheses:F +Rε
+andF −1+ are bounded causal multipliers, andRε →I
+strongly and in form norm. These facts give density and
+both inclusions inF+A =M [7]. For power-law impact
+with β >0, ˆf(0) =∞: restrict toEx({0}) = 0, assumeP
+preserves this space, and use
+ˆQε(ω) = −iω(ε−iω)(1−iεω)
+in the same argument. The centered Gaussian examples
+satisfy this restriction. Forβ = 0, λ> 0, use the contin-
+uous extension ˆf(0) = λ. In all casesRε approximates
+finite-form positions by positions with finite-variance rates.
+ThusA is their friction-norm completion. The execu-
+tion massηδ 0 has half-weight in the causal cost integral;
+masses in forecast and reconstruction convolutions have
+full weight.
+For Gaussian predictors under the information assump-
+tion of Sec. II, independence of future innovations makes
+conditional expectation retain the nonnegative-lag kernel
+of Sα,+/ˆf−. ApplyingF −1+ proves (17); Parseval gives
+(18).
+2. Bessel and cutoff formulas
+We now evaluate the causal projection for predictor
+and impact spectra in the same Bessel family. Working
+with both exponents at once lets us recover the OU and
+exponential special cases and identify how the two sources
+of memory combine.
+Takeβ,γ,θ s > 0, λ = 0, νs < 1/2, and0≤ν m < 1for
+θm > 0, or1/2 < νm < 1for θm = 0. The spectra and
+factors are
+ˆg=γ(θ 2m +ω 2)νm−1, S α,+ =a(θ s−iω)νs−1,
+a2 = 2√πΓ(1−ν s)Γ(1/2−ν s) s2αθ1−2νss ,
+ˆf+(z) =√γ β−iz(θm−iz) 1−νm.
+(A2)
+Powers are positive on the positive imaginary axis. The
+causal kernel of(θ−iω )ν−1 is t−νe−θt/Γ(1−ν )for t> 0
+[30]. To compute the forecast kernel, we integrate the
+predictor’sinnovationskernelagainstthefractionalpartof
+the inverse friction factor. Lethα have Fourier transform
+Sα,+ and, forνm >0, define
+φ(t) = 1Γ(νm)∫ ∞0 rνm−1e−θmrhα(t+r)dr.
+Euler’s integral [31, Eq. 15.6.1] gives
+ˆφ(ω) =C2F1
+(
+1,1 +ν m−νs
+1 +νm ;θm +iωθs +θm
+)
+,
+C= aΓ(1 +ν m−νs)Γ(1−ν s)Γ(1 +νm)(θs +θm)1+νm−νs. (A3)
+Atνm = 0, useˆφ=Sα,+; analytic continuation from posi-
+tive imaginary frequencies fixes the branch. Decomposing
+1/ˆf+ into(θm−iω )−νm[1 + (θm−β )/(β−iω )]/√γ and
+projecting gives
+ˆk(ω) = (θm−iω) 1−νm
+γ(β 2 +ω 2)Sα,+(ω)
+×
+[
+(θm +iω)ˆφ(ω)−(θm−β)ˆφ(iβ)
+]
+.
+(A4)
+The apparent pole atiβ is removable. For OU input,
+hα(t + r) = e−θsrhα(t), so ˆq= Sα,+/ˆf+(iθs), where
+ˆq= [Sα,+/ˆf−]+. This proves the OU and fractional
+formulas in Sec. III. For local friction,ˆq= [Sα,+(ω)−
+Sα,+(ib)]/[√η(b+iω)], proving (28).
+For Fig. 1, we retain instantaneous execution costs so
+that we can follow the crossover from fractional response
+to the high-frequency cutoff. We choose a regularization
+with an explicit spectral factor: takeη >0,Ω >θ m, and
+ˆg(ω) =η
+( Ω2 +ω 2
+θ2m +ω 2
+)1−νm
+, γ=ηΩ 2(1−νm).(A5)
+12
+ˆf+(z) =√η(β−iz) ( Ω−izθm−iz)1−νm.(A6)
+The pure-impact limit fixesγ and sendsΩ→∞ . With
+A(r) = ˆf+(ir)and Hω(r) = [A(r)(r−iω )]−1, choose an
+integern≥ 0with n +νs > 0. The gamma integral for
+hα gives
+ˆk(ω) = (−1)n(θs−iω) 1−νs
+ˆf+(ω)Γ(1−ν s)Γ(n+ν s)
+×
+∫ ∞
+θs
+(r−θ s)n+νs−1H (n)ω (r)dr.
+(A7)
+This representation covers every νs < 1/2; H (n)ω =
+O(r−n−2)ensures convergence at infinity. Forq(0+)̸= 0,
+ˆq∼q (0+)/(−iω)gives (29) and the cutoff tail ˆk∼
+q(0+)(−iω)−1−νs/(a√η). The plotted coefficients are
+positive; cancellation requires the next asymptotic term.
+Appendix B: Signal values and comparisons
+1. Value and rate optimization
+In this appendix we derive the comparisons in Sec-
+tion IV. Once we have the projected forecast kernel from
+Appendix A, its squared norm gives net value. We can
+therefore compare signals without simulating their real-
+ized trading profits.
+Under the assumptions of Appendix A2, the innova-
+tions isometry gives
+v⋆ = 12
+∫ ∞
+0
+q(t)2dt= 12π∫ ∞0 |ˆq(ω)|2dω.(B1)
+This is a one-dimensional quadrature; rate optimization
+includes both endpoint limits. For OU input,
+v⋆(0,θs) = s2α2γ (θs +θm)2−2νm(θs +β) 2 .(B2)
+Forνm > 0, logarithmic differentiation gives the maxi-
+mizing rate[(1−νm)β−θ m]/νm when positive, and the
+zero-rate supremum otherwise. Atνm = 0, value is mono-
+tone with signβ−θ m. The cutoff multiplies (B2) by
+(1 +θs/Ω)−2(1−νm); forθm = 0, the optimal rate solves
+θ2s +νmΩθs = (1−ν m)βΩ.
+For pure exponential impact, we also compute the
+information gap to establish when causal trading ap-
+proaches the anticipative bound. Put r = θs/β and
+rm = θm/β. The negative-lag innovations kernel is
+a(θm−β )eβt/[√γ(θs +β)1−νs]. Half its squared norm
+gives
+vant−v⋆ = s2α2γ√πΓ(1−ν s)Γ(1/2−ν s) (rm−1) 2r1−2νs(1 +r) 2−2νs .(B3)
+The gap vanishes at both rate limits. Since1/ˆf =γ−1[1+
+(θ2m−β 2)/(β2 +ω2)], dominated convergence gives the
+corresponding anticipative limitss2αr2m/(2γ)and s2α/(2γ).
+The bound1/ˆf≤γ −1 max{1,r 2m}then proves (40).
+2. Smoothness and inventory risk
+To compare smoothness after optimizing speed, we
+express a rougher predictor spectrum as a mixture of
+smoother spectra at different rates. A fixed trading filter
+has an objective linear in the spectrum, which lets us
+compare the optimized values through this mixture.
+Writeρ = 1−νs and normalizeSα = 2πs2αp(θ,ρ), where
+p(θ,ρ)(ω) = Γ(ρ)θ2ρ−1√πΓ(ρ−1/2)(θ 2 +ω 2)ρ.
+Forρ2 >ρ 1 > 1/2, Euler’s beta integral [31, Eq. 15.6.1]
+gives
+p(θ,ρ1) =E[p (θ/
+√
+U,ρ 2)],
+U∼Beta(ρ 1− 12,ρ 2−ρ 1). (B4)
+For each causal response ℓ, its objective Jℓ(S) =
+(2π)−1∫ (Reˆℓ− ˆf|ˆℓ|2/2)S is linear inS. Gaussian lin-
+ear optimality therefore implies
+v⋆(1−ρ 1,θ)≤E[v ⋆(1−ρ 2,θ/√U)]
+≤sup
+θ′>0
+v⋆(1−ρ 2,θ′). (B5)
+A finite-friction filter under the mixture is admissible
+for almost every component; approximation extends the
+inequality to the completed space. Taking the supremum
+overθproves the smoothness ordering and (39).
+We identify the full Matérn supremum through its
+Gaussian spectral limit:
+sup
+νs<1/2,θs>0
+v⋆ = sup
+σ>0
+s2α
+2√πσ
+∫
+R
+e−ω2/σ2
+ˆf(ω) dω.(B6)
+Indeed, p(θ,ρ) mixes Gaussian densitiese−ω2/σ2/(√πσ)
+withσ =θ/
+√
+Z,Z∼Gamma (ρ− 1/2, 1), proving the up-
+per bound. Conversely, fixσ, setθ =σ√ρanddρ =√ρ/σ.
+The centered factorsGρ(ω) =e−iωdρSα,+(ω)converge in
+L2 to(2√πs2α/σ)1/2e−ω2/(2σ2). The inverse transforms
+ψρ ofGρ/ˆf− converge toψ inL2 by boundedness. The un-
+centered negative-lag energy
+∫−dρ
+−∞|ψρ(t)|2dt→ 0, provingadapted attainability. The limiting Gaussian spectrum
+itself need not admit an outer innovations factor.
+We finally examine ordinary holdings with inventory
+risk, to distinguish the smoothness comparison from the
+effect of replenishing bleeding exposure. Forβ = 0,λ> 0,
+the execution models considered here haveˆf =λ +ω2ˆg
+nondecreasing in|ω|. Rescaling a causal response as
+L(ω/θs)leaves signal gain unchanged and replaces its
+friction by ˆf(θsω), so value decreases with θs. Since
+θs/
+√
+U≥θ s, (B5) also orders smoothness at fixed rate.
+As θs ↓ 0, the trial position EMAb[α]/λ, b > 0, has
+vanishing execution cost and value tending tos2α/(2λ).
+The execution integral converges becauseω2ˆg/(b2 +ω2)
+is bounded and vanishes at zero. Together with(31), this
+proves the stated supremum for every exponent. With
+λ = 0as well, sinusoidal values diverge as their frequency
+tends to zero.
+13
+3. Sharpness of the signal bound
+We establish both attainment by a perfectly predictable
+signal and approximation by signals with ongoing inno-
+vations. The latter shows how increasing coherence can
+bring attainable value close to the bound.
+The bound and sinusoidal attainment follow directly
+from (31)–(34), using spectral measures for line spectra.
+Differentiating ˆf gives (36); with cutoff power-law impact,
+the minimizing frequency solvesω4∗ +νmΩ2ω2∗ = (1−
+νm)β2Ω2. Absolute continuity makes the bound strict
+for square-integrable innovations kernels in these markets.
+To approach it, use damped Gaussian oscillators with
+spectra
+Sδ(ω) = 4δω 2∗s2α(ω2∗−ω 2)2 + 4δ2ω2, δ >0.(B7)
+Their variance iss2α and their spectra concentrate at±ω∗.
+ForEδ = (2π)−1∫ ˆfSδ, the adapted trialπ = s2αα/Eδ
+has values4α/(2Eδ). Away from resonance, the integrand
+is bounded by constants timesδ|ω| 2νm−2 near zero and
+δ|ω|−2 at infinity, including positive cutoff cost. Hence
+Eδ→s 2αˆf(ω∗), proving sharpness within the innovations
+class.
+Appendix C: Initial conditions, finite windows, and
+liquidation
+1. Finite windows
+The stationary solution presumes an established trading
+history. In this appendix we consider a trader starting
+from a specified inventory and inherited impact, with a
+terminal requirement when needed. We first formulate the
+finite-window problem, then derive an explicit power-law
+continuation on the half-line.
+On[0 ,T ], writeπt =e−βtπ0 + (Lβu)(t), whereLβu =∫t
+0e−β(t−s)usds, and lethpast(t) = ∫ 0−∞g(t−s )upasts ds.Assume square-integrable data, withπ0,h past known at
+time zero. Up to terms independent ofu, the objective is
+E⟨bT,u⟩−E⟨u,F Tu⟩/2, with
+bT =L∗βα−λL ∗β(e−β·π0)−h past,
+FT =G T +λL∗βLβ,(G Tu)(t) =
+∫ T
+0
+g(|t−s|)u sds.
+(C1)
+Here GT includes ηI. With η > 0and a continuous
+positive-semidefinite regular kernel, triangular factoriza-
+tion givesFT =F∗T,+ FT,+≥ηI with causal factor and
+inverse [26]. Completing the square gives
+u⋆ =F−1T,+ ProjFT,+U((F∗T,+)−1bT),(C2)
+whereU is the nonempty closed affine set of adapted rates
+satisfying the prescribed terminal condition, if any. A tar-
+getπT imposes
+∫T
+0 e−β(T−t)utdt =πT−e−βTπ0. Without
+this constraint, the projection isP, and conditioning the
+normal equation onF0 gives
+E[u⋆|F 0] =F−1T E[bT|F 0].
+AnF0-measurable L2 right trace determines the initial
+rate. Pure impact (η = 0) requires the corresponding
+finite-energy domain.
+As boundary-condition benchmarks, we recall the
+signal-free liquidation profiles. They show how expo-
+nential and power-law impact lead to different behavior
+near the trading endpoints. For liquidation withβ = 0,
+π0 = x, πT = 0, zero signal, no inherited impact, and
+λ=η= 0, the classical profiles are [1, 18]
+Uexp(dt) =− x[δ0(dt) +θmdt+δ T (dt)]2 +θmT ,
+u⋆pow(t) =− x[t(T−t)] νm−1T 2νm−1B(νm,νm). (C3)
+HereBis the beta function and1 /2 < νm < 1in the
+power-law case. Gaussian signal-adaptive fractional liqui-
+dation is treated by Fordeet al.[11, Theorem 2.2].
+2. Power-law continuation
+We now retain the OU predictor and ask how realized
+past trades change the fractional policy after time zero.
+We separate the response to the signal from the correction
+for inherited impact, then compute the initial trading
+behavior from their mismatch.
+Takeˆg= γ|ω| 2νm−2,1 /2 < νm < 1, λ = η = 0,
+β,γ,θ s > 0, anddαt =−θsαtdt +adWt on[0 ,∞ ), with
+a as in(A2). The initialα0,π 0 are square-integrable and
+F0-measurable; future Brownian increments are indepen-
+dent ofF0. Bounded,F0-measurable past rates of finite
+duration suffice for the formulas below. Set
+cs = θ1−νmsγ(θs +β) ,
+ϕpast(t) = 1Γ(1−ν m)∫ 0−∞(t−s) −νmupasts ds. (C4)
+The optimal continuation is
+u⋆t =c sD1−νm0+ αt
+− sin(πνm)π tνm−1
+∫ 0
+−∞
+(−s)1−νm
+t−s upasts ds, (C5)
+where D1−νm0+ f = Γ(νm)−1∂t∫t0 (t−s )νm−1f(s)ds is theinitialized Riemann–Liouville derivative [32]. Initial inven-
+tory contributes fixed earningsα0π0/(θs +β)and leaves
+the rate unchanged. For∆0 =c sα0−ϕ past(0),
+u⋆t = ∆0Γ(νm)tνm−1 +o P(tνm−1),∫ ε
+0
+u⋆tdt= ∆0Γ(1 +νm)ενm +o P(ενm). (C6)
+14
+Thus the mismatch determines initial buying or selling.
+A nonzero block has infinite impact energy, soπ0+ =π 0.
+If∆ 0 = 0and the past rate has a left limit,u⋆t→u past0−
+in probability.
+For verification, beta integration factors the kernel as
+g(|t−s|) = γΓ(1−ν m)2
+∫ ∞
+max(t,s)
+(r−t) −νm(r−s) −νmdr.
+Write Et = E[·|F t]and y =ϕpast+I 1−νm0+ u. The adapted
+marginal cost isγEt
+∫∞
+t (r−t )−νmyrdr/Γ(1−νm). Aty =csα, it equals the marginal earningsαt/(θs+β). Applying
+D1−νm0+ gives (C5). Here I 1−νm0+ u = Γ(1−νm)−1∫t0 (t−
+s)−νmusds.
+Optimality is relative: letJT be conditional expected
+earnings minus causal impact costs on[0,T ], including
+inherited impact. For bounded adapted perturbationsw
+of finite duration, the first variation vanishes and
+lim
+T→∞
+[JT (u⋆ +w)−J T (u⋆)]
+=− γ2 E0
+∫ ∞
+0
+|I 1−νm0+ w|2dt. (C7)
+The identity gives uniqueness in this comparison class and
+extends to finite-energy perturbations with convergent
+cross terms. This criterion permits nonstationary initial
+data while the undiscounted total OU reward generally
+diverges.
+Appendix D: Nonlinear costs
+For causally separable convex costs, we forecast, opti-
+mize pointwise in transformed positions, and reconstruct
+the policy.
+Let X be a stationary space with closed adapted sub-
+spaceM, and assumeα∈X ∗ under the payoff pairing
+⟨α,π⟩ = E[αtπt]. For proper lower-semicontinuous convex
+Φ, value is(Φ +ιM)∗(α), withιM the indicator and∗
+convex conjugacy [29]. SupposeΦ( π) = E[ϕ((Bπ)t)]
+for proper lower-semicontinuous convex ϕ. Assume
+B:X→L 2 is a bounded shift-commuting isomorphism,
+B,B−1 are causal, andBM is the adapted stationaryL2
+subspace. Set
+ξ= (B−1)∗α, ζ=Pξ,
+y⋆t∈∂ϕ∗(ζt), π ⋆ =B−1y⋆,
+v⋆ =E[ϕ∗(ζt)].
+(D1)
+Here∂ϕ∗ is the convex subdifferential. The formula holds
+whenever a measurable selectiony⋆∈BM exists with
+E|ϕ(y⋆t )|<∞ ; strict convexity ofϕ gives uniqueness. In
+y =Bπ, the objective isE[ζtyt−ϕ(yt)], so pointwise conju-
+gacy proves optimality. Conditional Jensen compares this
+value with E[ϕ∗(ξt)]when finite. The space must admit
+the resulting means. For power-law friction withβ >0,
+F−1+ annihilates constants and fails this unrestricted-mean
+isomorphism condition. General nonlinear transient costs
+require a separately established separable representation.
+[1] A. A. Obizhaeva and J. Wang, Optimal trading strat-
+egy and supply/demand dynamics, Journal of Financial
+Markets16, 1 (2013).
+[2] J.-P. Bouchaud, Y. Gefen, M. Potters, and M. Wyart,
+Fluctuations and response in financial markets: The sub-
+tle nature of ‘random’ price changes, Quantitative Finance
+4, 176 (2004).
+[3] J.-P. Bouchaud, J. Kockelkoren, and M. Potters, Random
+walks, liquidity molasses and critical response in financial
+markets, Quantitative Finance6, 115 (2006).
+[4] The Options Industry Council, Vega, https:
+//www.optionseducation.org/advancedconcepts/vega,
+accessed September 26, 2026.
+[5] N. Wiener,Extrapolation, Interpolation and Smoothing
+of Stationary Time Series(Technology Press of MIT and
+John Wiley, 1949).
+[6] P. Whittle,Prediction and Regulation by Linear Least-
+Square Methods(English Universities Press, 1963).
+[7] O. J. Staffans, Quadratic optimal control of stable systems
+through spectral factorization, Mathematics of Control,
+Signals, and Systems8, 167 (1995).
+[8] S. Subba Rao and J. Yang, A prediction perspective
+on the Wiener–Hopf equations for time series (2022),
+arXiv:2107.04994v2.
+[9] N. Gârleanu and L. H. Pedersen, Dynamic trading with
+predictable returns and transaction costs, Journal of Fi-
+nance68, 2309 (2013).
+[10] N. Gârleanu and L. H. Pedersen, Dynamic portfolio choice
+with frictions, Journal of Economic Theory165, 487
+(2016).
+[11] M. Forde, L. Sánchez-Betancourt, and B. Smith, Opti-
+mal trade execution for Gaussian signals with power-law
+resilience, Quantitative Finance22, 585 (2022).
+[12] H. Markowitz, Portfolio selection, Journal of Finance7,
+77 (1952).
+[13] J. Mossin, Optimal multiperiod portfolio policies, Journal
+of Business41, 215 (1968).
+[14] P. A. Samuelson, Lifetime portfolio selection by dynamic
+stochastic programming, Review of Economics and Statis-
+tics51, 239 (1969).
+[15] R. C. Merton, Lifetime portfolio selection under uncer-
+tainty: The continuous-time case, Review of Economics
+and Statistics51, 247 (1969).
+[16] D. Bertsimas and A. W. Lo, Optimal control of execution
+costs, Journal of Financial Markets1, 1 (1998).
+[17] R. Almgren and N. Chriss, Optimal execution of portfolio
+transactions, Journal of Risk3, 5 (2001).
+[18] J. Gatheral, A. Schied, and A. Slynko, Transient linear
+price impact and Fredholm integral equations, Mathemat-
+ical Finance22, 445 (2012).
+15
+[19] E. Henry and J.-P. Bouchaud,Fréquence optimale à laque-
+lle suivre un prédicteur, Unpublished internal report (Cap-
+ital Fund Management, 2007).
+[20] C.-A. Lehalle and E. Neuman, Incorporating signals into
+optimal trading, Finance and Stochastics23, 275 (2019).
+[21] E. Neuman and M. Voß, Optimal signal-adaptive trading
+with temporary and transient price impact, SIAM Journal
+on Financial Mathematics13, 551 (2022).
+[22] E. Abi Jaber and E. Neuman, Optimal liquidation with
+signals: The general propagator case, Mathematical Fi-
+nance35, 841 (2025), arXiv:2211.00447.
+[23] E. Abi Jaber, E. Neuman, and S. Tuschmann, Op-
+timal portfolio choice with cross-impact propaga-
+tors, Mathematical Finance 10.1111/mafi.70025 (2026),
+arXiv:2403.10273.
+[24] J. Gatheral, No-dynamic-arbitrage and market impact,
+Quantitative Finance10, 749 (2010).
+[25] A. Alfonsi, A. Schied, and A. Slynko, Order book re-
+silience, price manipulation, and the positive portfolio
+problem, SIAM Journal on Financial Mathematics3, 511
+(2012).
+[26] I. C. Gohberg and M. G. Krein,Theory and Applica-
+tions of Volterra Operators in Hilbert Space(American
+Mathematical Society, 1970).
+[27] N. H. Bingham, Prediction theory in continuous time
+(2021), arXiv:2111.08560 [math.PR].
+[28] J. M. Lilly, A. M. Sykulski, J. J. Early, and S. C. Olhede,
+Fractional Brownian motion, the Matérn process, and
+stochastic modeling of turbulent dispersion, Nonlinear
+Processes in Geophysics24, 481 (2017).
+[29] R. T. Rockafellar,Convex Analysis(Princeton University
+Press, Princeton, NJ, 1970).
+[30] N.AronszajnandK.T.Smith,TheoryofBesselpotentials.
+I, Annales de l’Institut Fourier11, 385 (1961).
+[31] NIST, Digital Library of Mathematical Functions,https:
+//dlmf.nist.gov/, sec. 15.6.
+[32] S. G. Samko, A. A. Kilbas, and O. I. Marichev,Frac-
+tional Integrals and Derivatives: Theory and Applications
+(Gordon and Breach, 1993).

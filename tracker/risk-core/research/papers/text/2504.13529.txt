@@ -1,0 +1,502 @@
+arXiv 2504.13529  https://arxiv.org/abs/2504.13529
+
+Improving Bayesian Optimization for Portfolio Management with
+an Adaptive Scheduling
+Zinuo You
+School of Computer Science
+University of Bristol
+Bristol, UK
+zinuo.you@bristol.ac.uk
+John Cartlidge
+School of Engineering Mathematics
+and Technology
+University of Bristol
+Bristol, UK
+john.cartlidge@bristol.ac.uk
+Karen Elliott
+Business School
+University of Birmingham
+Birmingham, UK
+k.elliott@bham.ac.uk
+Menghan Ge
+Stratiphy Limited
+London, UK
+menghan.ge@stratiphy.io
+Daniel Gold
+Stratiphy Limited
+London, UK
+daniel@stratiphy.io
+Abstract
+Existing black-box portfolio management systems are prevalent
+in the financial industry due to commercial and safety constraints,
+although their performance can fluctuate dramatically with chang-
+ing market regimes. Evaluating these non-transparent systems is
+computationally expensive, as fixed budgets limit the number of pos-
+sible observations. Therefore, achieving stable and sample-efficient
+optimization for these systems has become a critical challenge. This
+work presents a novel Bayesian optimization framework (TPE-AS)
+that improves search stability and efficiency for black-box portfolio
+models under these limited observation budgets. Standard Bayesian
+optimization, which solely maximizes expected return, can yield
+erratic search trajectories and misalign the surrogate model with
+the true objective, thereby wasting the limited evaluation budget.
+To mitigate these issues, we propose a weighted Lagrangian estima-
+tor that leverages an adaptive schedule and importance sampling.
+This estimator dynamically balances exploration and exploitation
+by incorporating both maximization of model performance and
+minimization of the variance of model observations. It guides the
+search from broad, performance-seeking exploration towards sta-
+ble and desirable regions as the optimization progresses. Extensive
+experiments and ablation studies, which establish our proposed
+method as the primary approach and other configurations as base-
+lines, demonstrate its effectiveness across four backtest settings
+with three distinct black-box portfolio management models.
+CCS Concepts
+•Computing methodologies→Continuous space search.
+Keywords
+Portfolio model tuning, Bayesian optimization, importance sam-
+pling, stock market
+Corresponding Author. Email: john.cartlidge@bristol.ac.uk.
+This work is licensed under a Creative Commons Attribution 4.0 International License.
+ICAAI 2025, Manchester, United Kingdom
+©2025 Copyright held by the owner/author(s).
+ACM ISBN 979-8-4007-2104-5/2025/11
+https://doi.org/10.1145/3787279.3787285
+ACM Reference Format:
+Zinuo You, John Cartlidge, Karen Elliott, Menghan Ge, and Daniel Gold.
+2025. Improving Bayesian Optimization for Portfolio Management with
+an Adaptive Scheduling. In2025 9th International Conference on Advances
+in Artificial Intelligence (ICAAI 2025), November 14–16, 2025, Manchester,
+United Kingdom.ACM, New York, NY, USA, 5 pages. https://doi.org/10.1145/
+3787279.3787285
+1 Introduction
+Stock portfolio management has been an open issue in academia
+and industry due to its inherent complexity and evolving nature.
+The challenge is to select an optimal set of stocks and determine
+the optimal weights for each stock to maximize portfolio returns.
+Traditional portfolio management methods, such as the Markowitz
+approach, prioritize asset diversification to mitigate risk by balanc-
+ing asset correlations [19]. However, these methods have restrictive
+prior assumptions, such as normally distributed returns and station-
+ary markets, which contradict the evolving nature of market condi-
+tions [10, 19]. Consequently, research efforts have shifted toward
+the capture of complex non-linear dynamics in stock markets using
+data-driven methods [9, 11]. These efforts typically focus on de-
+signing novel trading strategies. However, in real-world industrial
+applications, portfolio management often relies on non-transparent
+trading models (i.e., proprietary black-box systems). These mod-
+els are generally expensive to evaluate because of computational
+costs and safety issues. Consequently, Bayesian optimization has
+become a powerful framework for optimizing these black-box sys-
+tems. Unlike traditional stochastic methods (e.g., particle swarm
+optimization [20]), Bayesian optimization can efficiently navigate
+the exploration-exploitation trade-off in non-convex and noisy en-
+vironments, making it ideal for high-stakes financial applications.
+It consists of a surrogate model and an acquisition function, which
+approximates the unknown objective and finds the optimum pa-
+rameters. However, when applied to complex and noisy black-box
+functions with a severely limited evaluation budget, conventional
+Bayesian optimization can suffer from an inefficient search process.
+By focusing solely on maximizing the expected performance, opti-
+mization can become unstable, producing erratic trajectories, which
+also misaligns the surrogate’s target distribution with the true dis-
+tribution. This instability reveals a fundamental flaw: an objective
+arXiv:2504.13529v4  [cs.LG]  29 Apr 2026
+ICAAI 2025, November 14–16, 2025, Manchester, United Kingdom You and Cartlidge, et al.
+function focused solely on maximizing performance is ill-suited for
+noisy, budget-constrained financial model tuning. Therefore, we
+argue that the objective itself must be redefined to include stability
+of performance as a critical consideration.
+To address these challenges, we propose a novel Bayesian opti-
+mization framework featuring an adaptive weighted Lagrangian
+estimator. Our approach first reframes the optimization as a bi-
+objective problem that explicitly balances maximizing model per-
+formance with minimizing the variance of the observed perfor-
+mance scores. Then, we adopt an adaptive Lagrangian schedule to
+shift the optimization focus over time. Finally, we leverage clipped
+importance sampling to correct the surrogate bias with respect to
+the underlying true distribution. The contribution of this work is
+threefold:
+• We propose a novel Bayesian optimization framework that
+improves search stability and model performance through a
+bi-objective estimator with an adaptive scheduling, explic-
+itly balancing performance maximization and observation
+variance minimization.
+• We demonstrate that the proposed TPE-AS consistently out-
+performs baselines over three distinct black-box portfolio
+models across four real-world backtest settings.
+• We show that the proposed adaptive scheduling Bayesian
+optimization leads to a more reliable search of high-quality
+parameter configurations than the conventional setting.
+Code is available online: https://github.com/pixelhero98/TPE-AS.
+2 Related Work
+2.1 Portfolio Optimization Models
+The method of managing stock portfolios has evolved significantly
+from Markowitz’s foundational mean-variance theory [12], which
+laid the groundwork with assumptions of normality and stationar-
+ity. To address these limitations, Stochastic Portfolio Optimization
+(SPT) emerged, explicitly modeling uncertainty in asset returns.
+This paradigm incorporates sophisticated risk measures such as
+Conditional Value-at-Risk (CVaR) to capture tail risk [7, 15]. Meta-
+heuristics (e.g., GAs [13]) and, more recently, advanced data-driven
+models from reinforcement learning and deep learning [ 1, 3, 18]
+have focused on new trading strategies rather than efficient tun-
+ing of existing black-box systems. However, the critical industrial
+problem of efficiently tuning the hyperparameters of existing, non-
+transparent (i.e., black-box) systems remains a significant challenge.
+2.2 Bayesian Optimization
+Bayesian optimization is a well-established framework for sample-
+efficient optimization of expensive-to-evaluate black-box functions,
+particularly when gradient information is unavailable [16]. Com-
+mon surrogate models include Gaussian Processes (GPs) [ 2, 5],
+Tree-structured Parzen Estimators (TPEs) [14], and Bayesian Neu-
+ral Networks (BNNs) [8], which are paired with acquisition func-
+tions like Expected Improvement (EI) or Upper Confidence Bound
+(UCB) to navigate the fundamental trade-off between exploration
+and exploitation [6, 17]. However, under severe noise and scarce
+evaluation samples, which commonly exist in financial market ap-
+plications, standard Bayesian optimization often bounces among
+poor regions and fails to converge to desired outcomes. A singular
+focus on maximizing expected performance can lead to an erratic
+search trajectory, which wastes evaluations and fails to converge
+to desired solutions.
+3 Problem Formulation
+Consider a portfolio management model 𝑓 , which accepts a hy-
+perparameter configurationx ={𝑥 1, 𝑥2, . . . , 𝑥𝑚} from a bounded
+domainX ∈R𝑚. The function 𝑓( x) returns a scalar value (e.g.,
+annualized Sharpe ratio) representing the performance of the port-
+folio strategy. Here,x ={𝑥 1, 𝑥2, . . . , 𝑥𝑚} consists of a set of mixed
+integer and continuous hyperparameters that define the behavior of
+a given trading strategy (in all settings, the number of hyperparam-
+eters 𝑚≥ 25). The conventional objective in Bayesian optimization
+is to find the global maximizer of the black-box function, given by:
+x∗ =arg max
+x∈X
+E[𝑓(x)].(1)
+As stated previously, pursuing this single objective directly can
+lead to an unstable and inefficient search process, as we do not
+have access to the internal function of the trading model and must
+operate within a strict evaluation budget𝜂. Therefore, to promote a
+more stable and efficient search, we formulate the hyperparameter
+tuning of the portfolio management model as a stochastic bilevel
+optimization problem. Rather than optimizing E(𝑓( x)), we treat
+𝑓( x) as a noisy Sharpe ratio evaluator under a strict budget 𝜂.
+Therefore, we seek:
+max
+x∈X
+E(𝑓(x)),min
+x∈X
+𝜎 2(𝑓(x)),(2)
+which captures both model performance and performance stability.
+4 Methodology
+The proposed method, TPE-AS, focuses on improving the stability
+and expected performance of hyperparameter tuning for expensive
+black-box portfolio models with limited evaluations. As 𝑚≥ 25
+and often involves both discrete and categorical hyperparameters,
+we select TPE as the surrogate model and EI as the acquisition
+function, with an adaptive weighted Lagrangian estimator as the
+overall objective functionJ.
+4.1 The TPE framework
+The TPE is a sequential model-based optimization method that
+works by modeling two separate probability densities over the
+hyperparameter space. TPE partitions the history of evaluated
+pointsD𝑛 based on an objective score thresholdJ∗, which is the
+𝑘-quantile (e.g., 𝑘= 15%) of the observed past performance scores.
+This creates two groups:
+• A good group, 𝛾( x), modeling the distribution of hyperpa-
+rameters for high-performing observations, such that𝛾( x)=
+𝑃(x|J(x)≥J ∗).
+• A bad group, Ω( x), modeling the distribution of hyperparam-
+eters for lower-performing observations, such that Ω( x)=
+𝑃(x|J(x)<J ∗).
+TPE fits these densities using kernel density estimators, which
+avoids making strong functional assumptions and handles mixed-
+type (continuous and discrete) hyperparameters efficiently. The
+Bayesian Optimization for Portfolio Management with Adaptive Scheduling ICAAI 2025, November 14–16, 2025, Manchester, United Kingdom
+acquisition function is then defined by the ratio of these two densi-
+ties. The next point to evaluate,x 𝑛+1, is chosen to maximize,
+𝛼(x)= 𝛾(x)Ω(x) .(3)
+By maximizing this ratio, the search is guided toward regions where
+hyperparameters are likely to produce high performance (high
+𝛼( x)) and unlikely to produce low performance (low 𝛼( x)). This
+non-parametric approach effectively balances exploration and ex-
+ploitation and is well-suited for high-dimensional (high𝑚) financial
+tuning problems.
+4.2 Adaptive Weighted Lagrangian Estimator
+4.2.1 Dual Objectives.The portfolio optimization problem in Eq. (2)
+presents a dual challenge. Direct optimization of these two objec-
+tives typically requires multistage procedures, which are undesir-
+able and impractical in evolving financial decision-making due to
+their computational complexity and lack of unified optimization
+criteria. Moreover, Bayesian optimization frameworks are most
+efficient when applied to a single objective.
+To reconcile these issues, we present an adaptive Lagrangian
+estimator that balances these two objectives. Accordingly, we re-
+formulate Eq. (2) into a constrained optimization problem using a
+Lagrangian multiplier (e.g., see [4]),
+maxJ(x, 𝜆)=max{E[𝑓(x)]−𝜆𝜎 2(𝑓(x))},(4)
+where 𝜆 is the regularization term. This formulation explicitly en-
+forces stable optimization trajectories while maximizing expected
+model performance. Furthermore, to promote a more stable search
+process, we adopt an adaptive schedule for the penalty term 𝜆 at
+each step 𝑡. In this sense, we start with𝜆𝑡≈ 0to prioritize expected
+portfolio returns and then ramp 𝜆𝑡→ 1to penalize model perfor-
+mance variance as the budget depletes. The scheduling is defined
+by
+𝜆𝑡 =
+1−cos(min( 𝑡𝜂 𝜋, 𝜋))
+2 , 𝑡=1,2, ..., 𝜂.(5)
+4.2.2 Importance Sampling.To address the potential divergence
+between the predictive distribution of the surrogate model (the
+proposal distribution 𝑞𝜃(x), that is 𝛾( x)), and the true underlying
+distribution of high-quality portfolios (the true distribution 𝑔( x)),
+we incorporate importance sampling. This allows us to correct for
+distributional shifts during optimization. The full objective function,
+which incorporates the importance weight, becomes
+J(𝑥, 𝜆)=E 𝑞𝜃[𝑓(𝑥)]−𝜆 𝑡 𝜎 2𝑞𝜃(𝑓(𝑥) 𝑔(𝑥)𝑞𝜃(𝑥)),(6)
+where the expectation and the variance term are taken with respect
+to the proposal distribution 𝑞𝜃(x). In this sense, Eq. (6) enables
+a principled trade-off between achieving high performance and
+controlling risk under distributional shifts.
+In practice, the importance weight can vary considerably. To
+mitigate this, we apply a clipping mechanism, resulting in the final
+form of our estimator,
+J(𝑥, 𝜆)=E 𝑞𝜃[𝑓(𝑥)]−𝜆 𝑡 𝜎 2𝑞𝜃(𝑓(𝑥)·clip( 𝑔(𝑥)𝑞𝜃(𝑥) ,1−𝜖,1+𝜖)).(7)
+Here, 𝜖 controls the bias-variance trade-off of the importance weight
+correction, normally𝜖∈[0.1,0.35]. This objective guides the TPE
+surrogate to find solutions that are both high-performing and stable,
+and align with the desired target distribution.
+5 Experiments
+5.1 Experimental Setting
+We conducted experiments on twelve scenarios with six baselines.
+These scenarios comprised three distinct black-box portfolio man-
+agement models (M1-M3) tested in four different backtest settings
+(S1-S4). The observation budget was fixed at 𝜂= 500. Due to com-
+mercial sensitivity imposed by the company, the details of the
+black-box models, the backtest settings, and hyperparameters are
+not disclosed. However, we provide conceptual descriptions below
+to ensure that the experiments are clear.
+Baselines
+• GP-EI, GP-UCB, GP-PI: These baselines use a GP as the sur-
+rogate model. GPs are a standard choice in Bayesian opti-
+mization. It becomes computationally expensive when the
+size of the hyperparameter space,𝑚, increases.
+• BNN-EI, BNN-UCB, BNN-PI: These baselines adopt a BNN
+as the surrogate. BNNs are powerful for capturing com-
+plex, non-stationary patterns by leveraging neural networks’
+learning ability.
+Black-box Model
+• M1 (Trend-Following): A strategy that generates signals
+based on momentum indicators.
+• M2 (Mean-Reversion): A strategy that identifies assets that
+have deviated significantly from their historical averages.
+• M3 (Threshold-Based Hybrid): A complex, threshold-based
+hybrid strategy that generates trading signals only when
+specific conditions are met.
+Backtest Settings
+• S1 (High-Volatility Market): Simulates a short period (ap-
+proximately 1 year) with frequently changing patterns.
+• S2 (Stable Bull Market): Simulates a period of (approximately
+3 years) low volatility and consistent upward trends.
+• S3 (Range-Bound Market): Simulates a ‘sideways’ market
+with no clear long-term trend (approximately 5 years).
+• S4 (Range-Bound Market): Simulates a ‘sideways’ market
+with no clear long-term trend (approximately 4 years).
+Hyperparameter Configuration
+• x ={𝑥 1, 𝑥2, . . . , 𝑥𝑚} includes lookback periods (moving av-
+erages), buy/sell signal thresholds (relative strength index
+level), and risk and sizing parameters (stop-loss level).
+5.2 Performance Evaluation
+As shown in Table 1, TPE-AS achieves the highest annualized
+Sharpe ratio in eight out of twelve test cases, outperforming both
+GP-based and BNN-based baselines. In the remaining scenarios,
+notably M2-S3 and M3-S4, its performance is only marginally below
+the top entry. Table 2 further highlights optimization stability via
+the variance of achieved Sharpe ratios. Here, TPE-AS consistently
+exhibits the lowest variance across all twelve scenarios, with its
+maximum observed variance just 0.170 (in M2-S2) versus BNN-
+UCB’s 1.083 under the same scenario. The contrast is especially
+ICAAI 2025, November 14–16, 2025, Manchester, United Kingdom You and Cartlidge, et al.
+Table 1: Comparison of maximum model performance ( E(𝑓(𝑥)) annualized Sharpe ratio) for the proposed method and baselines
+across twelve scenarios (𝜂=500). A larger Sharpe ratio indicates a more profitable portfolio.
+Method M1 M2 M3S1 S2 S3 S4 S1 S2 S3 S4 S1 S2 S3 S4
+GP-EI 2.998 1.904 1.028 0.719 2.976 1.6721.222 0.860 3.288 1.596 1.040 0.783
+GP-UCB 2.752 1.656 0.965 0.545 2.730 1.424 1.159 0.686 3.192 1.386 0.977 0.594
+GP-PI 2.866 1.665 1.001 0.699 2.844 1.433 1.195 0.840 3.323 1.394 1.013 0.761
+BNN-EI 2.9992.0010.989 0.689 3.145 1.849 1.093 0.776 3.479 1.660 1.001 0.751
+BNN-UCB 2.646 1.955 0.998 0.568 2.792 1.920 1.102 0.655 3.070 1.565 1.010 0.619
+BNN-PI 2.665 1.547 0.981 0.711 2.811 1.595 1.085 0.798 3.095 1.295 0.993 0.775
+TPE-AS 3.0911.6781.035 0.754 3.405 2.0061.049 0.787 3.480 1.673 1.047 0.821
+Table 2: Comparison of model performance variance ( 𝜎 2(𝑓(𝑥)) optimization stability) for the proposed method and baselines
+across twelve scenarios (𝜂=500). Lower variance indicates a more stable optimization process.
+Method M1 M2 M3S1 S2 S3 S4 S1 S2 S3 S4 S1 S2 S3 S4
+GP-EI 1.278 0.407 0.180 0.078 0.900 0.277 0.171 0.085 1.327 0.220 0.176 0.052
+GP-UCB 1.382 0.497 0.191 0.102 1.004 0.367 0.182 0.109 1.435 0.268 0.187 0.068
+GP-PI 0.690 0.223 0.116 0.110 0.512 0.193 0.107 0.066 0.717 0.120 0.113 0.039
+BNN-EI 1.917 1.106 0.453 0.217 1.667 1.070 0.468 0.221 1.991 0.597 0.443 0.145
+BNN-UCB 1.955 1.119 0.697 0.222 1.705 1.083 0.712 0.226 2.031 0.604 0.148 0.148
+BNN-PI 1.341 0.533 0.209 0.096 1.091 0.497 0.224 0.114 1.393 0.288 0.204 0.073
+TPE-AS 0.613 0.131 0.073 0.049 0.492 0.170 0.111 0.049 0.309 0.084 0.071 0.033
+Table 3: Average time (in seconds) taken for each optimiza-
+tion step, including portfolio model response time.
+Method M3-S1 M3-S2 M3-S3 M3-S4
+GP-EI 45.12 46.49 48.71 60.62
+GP-UCB 44.99 46.33 48.93 60.41
+GP-PI 46.48 45.66 48.69 60.72
+BNN-EI 64.19 69.55 68.5 77.81
+BNN-UCB 63.57 70.90 69.17 77.16
+BNN-PI 64.25 71.99 69.62 77.96
+TPE-AS 43.22 45.13 47.77 58.76
+stark in M3-S1 (Threshold-Based Hybrid, High-Volatility Market),
+where TPE-AS’s variance is 0.309 compared to 2.031 for BNN-UCB.
+This is likely due to the BNN’s tendency to overfit when trained
+on limited samples, leading to an unstable approximation of the
+objective function and an erratic search path.
+In addition, Table 3 reports the average time per optimization
+iteration (including portfolio response). TPE-AS completes each
+step in 43.22–58.76 s, outpacing the nearest competitor, GP-UCB,
+by up to 1.77 s per step and offering a 10%–30% speed-up over BNN-
+based methods. Taken together, these results show that TPE-AS not
+only achieves superior or near-optimal peak performance but does
+so with markedly greater stability and lower runtime.
+5.3 Ablation Study
+We compare our TPE-AS (guided byJ( x, 𝜆)) against a standard TPE
+that maximizes only 𝑓( x), under the most challenging M3-S1 setup
+(Threshold-Based Hybrid in a High-Volatility market). Figure 1a
+shows the trajectories of TPE-AS in 500 optimization steps: blue
+dots (portfolio Sharpe ratios) rapidly climb into a tight cluster,
+matching the low variance in Table 2 (𝜎 2 = 0.309). While green dots
+(objective scoreJ) gradually impose a stronger variance penalty,
+steering the search toward a stable optimum. By contrast, Figure 1b
+illustrates the conventional TPE’s trajectory: erratic blue spikes
+(𝑓( x)= 0) and deep performance drops frequently occur, which
+yield a much higher variance (𝜎 2 = 1.367). Although the baseline
+eventually reaches 𝑓( x)= 2.980, it falls short of TPE-AS’ peak of
+3.288, highlighting the benefit of variance-aware scheduling.
+6 Conclusions
+In this work, we present TPE-AS, a novel Bayesian optimization
+framework that delivers sample-efficient hyperparameter tuning for
+costly black-box portfolio models. By augmenting the standard TPE
+algorithm with an adaptive Lagrangian estimator, TPE-AS explicitly
+trades off between chasing higher Sharpe ratios and maintaining
+search stability. Our experiments yield three key insights. First,
+TPE-AS produces markedly smoother and more reliable optimiza-
+tion trajectories than GP-based baselines or BNN-based baselines.
+Second, our ablation confirms that adaptive scheduling is essential:
+it curbs the erratic evaluations of a pure performance objective and
+Bayesian Optimization for Portfolio Management with Adaptive Scheduling ICAAI 2025, November 14–16, 2025, Manchester, United Kingdom
+0 100 200 300 400 500
+Optimization Step
+0.0
+0.5
+1.0
+1.5
+2.0
+2.5
+3.0
+3.5
+f(x)
+0 100 200 300 400 500
+Optimization Step
+1.0
+1.5
+2.0
+2.5
+3.0
+3.5
+4.0
+(x, )
+(a) Trajectories of TPE guided by J( x, 𝜆) , where E(𝑓( x))= 3.288(annualized Sharpe ratio = 3.288) and 𝜎 2𝑞𝜃(𝑓( x))=
+0.309(optimization stability).
+0 100 200 300 400 500
+Optimization Step
+0.0
+0.5
+1.0
+1.5
+2.0
+2.5
+3.0
+3.5
+f(x)
+0 100 200 300 400 500
+Optimization Step
+1.0
+1.5
+2.0
+2.5
+3.0
+3.5
+f(x)
+(b) Trajectories of TPE guided by 𝑓( x), where E(𝑓( x))= 2.980(annualized Sharpe ratio = 2.980) and 𝜎 2𝑞𝜃(𝑓( x))= 1.367
+(optimization stability).
+Figure 1: The x-axis shows 500 optimization steps. Blue dots represent portfolio model performance; green dots represent the
+corresponding objective score for each optimization step.
+keeps the search focused on robust regions. Third, among surro-
+gate choices, TPE scales better than GPs and avoids the overfitting
+pitfalls of BNNs under tight evaluation budgets.
+Acknowledgments
+This work was supported by UK Research and Innovation (UKRI) In-
+novate UK grant number 10094067: Stratlib.AI – A trusted machine
+learning platform for asset and credit managers.
+References
+[1] Chaher Alzaman. 2025. Optimizing portfolio selection through stock ranking and
+matching: A reinforcement learning approach.Expert Systems with Applications
+269 (2025), 126430.
+[2] Adam D Bull. 2011. Convergence rates of efficient global optimization algorithms.
+J. Machine Learning Research12, 88 (2011), 2879–2904.
+[3] Qishuo Cheng, Le Yang, Jiajian Zheng, Miao Tian, and Duan Xin. 2024. Optimizing
+portfolio management and risk assessment in digital assets using deep learning
+for predictive analysis. InInt. Conf. Artificial Intelligence, Internet and Digital
+Economy (Atlantis Highlights in Intelligent Systems, Vol. 11). Springer Nature,
+Dordrecht, Netherlands, 30.
+[4] Kazufumi Ito and Karl Kunisch. 2008.Lagrange multiplier approach to variational
+problems and applications. SIAM.
+[5] Donald R Jones, Matthias Schonlau, and William J Welch. 1998. Efficient global
+optimization of expensive black-box functions.J. Global Optimization13 (1998),
+455–492.
+[6] Emilie Kaufmann, Olivier Cappé, and Aurélien Garivier. 2012. On Bayesian upper
+confidence bounds for bandit problems. InArtificial Intelligence and Statistics,
+Vol. 22. 592–600.
+[7] Michal Kaut, Hercules Vladimirou, Stein W Wallace, and Stavros A Zenios. 2007.
+Stability analysis of portfolio management with conditional value-at-risk.Quan-
+titative Finance7, 4 (2007), 397–409.
+[8] Baptiste Kerleguer, Claire Cannamela, and Josselin Garnier. 2024. A Bayesian neu-
+ral network approach to multi-fidelity surrogate modeling.Int. J. for Uncertainty
+Quantification14, 1 (2024), 43–60.
+[9] Siddarth Krishnamoorthy, Satvik Mehul Mashkaria, and Aditya Grover. 2023.
+Diffusion models for black-box optimization. InInt. Conf. Machine Learning.
+17842–17857.
+[10] Ihsan Kulali. 2016. Portfolio optimization analysis with Markowitz quadratic
+mean-variance model.European J. Business and Management8, 7 (2016), 73–79.
+[11] Yang Li, Yu Shen, Wentao Zhang, Yuanwei Chen, Huaijun Jiang, Mingchao
+Liu, Jiawei Jiang, Jinyang Gao, Wentao Wu, Zhi Yang, et al. 2021. OpenBox: A
+generalized black-box optimization service. InACM SIGKDD Conf. Knowledge
+Discovery & Data Mining. 3209–3219.
+[12] Harry Markowitz. 1952. Portfolio selection.J. Finance7, 1 (1952), 77–91.
+[13] Konstantinos Metaxiotis and Konstantinos Liagkouras. 2012. Multiobjective
+evolutionary algorithms for portfolio management: A comprehensive literature
+review.Expert systems with applications39, 14 (2012), 11685–11698.
+[14] Yoshihiko Ozaki, Yuki Tanigaki, Shuhei Watanabe, Masahiro Nomura, and Masaki
+Onishi. 2022. Multiobjective tree-structured Parzen estimator.J. Artificial Intelli-
+gence Research73 (2022), 1209–1250.
+[15] Sergey Sarykalin, Gaia Serraino, and Stan Uryasev. 2008. Value-at-risk vs. con-
+ditional value-at-risk in risk management and optimization. InState-of-the-art
+decision-making tools in the information-intensive age. INFORMS, Chapter 13,
+270–294.
+[16] Bobak Shahriari, Kevin Swersky, Ziyu Wang, Ryan P Adams, and Nando De Fre-
+itas. 2015. Taking the human out of the loop: A review of Bayesian optimization.
+Proc. IEEE104, 1 (2015), 148–175.
+[17] Jasper Snoek, Hugo Larochelle, and Ryan P Adams. 2012. Practical bayesian
+optimization of machine learning algorithms.Adv. Neural Information Processing
+Systems25 (2012), 9 pages.
+[18] Zhicheng Wang, Biwei Huang, Shikui Tu, Kun Zhang, and Lei Xu. 2021. Deep-
+Trader: A deep reinforcement learning approach for risk-return balanced port-
+folio management with market conditions embedding. InAAAI Conf. Artificial
+Intelligence, Vol. 35(1). 643–650.
+[19] Yuanyuan Zhang, Xiang Li, and Sini Guo. 2018. Portfolio selection problems
+with Markowitz’s mean–variance framework: a review of literature.Fuzzy
+Optimization and Decision Making17 (2018), 125–158.
+[20] Hanhong Zhu, Yi Wang, Kesheng Wang, and Yun Chen. 2011. Particle Swarm
+Optimization (PSO) for the constrained portfolio optimization problem.Expert
+Systems with Applications38, 8 (2011), 10161–10169.

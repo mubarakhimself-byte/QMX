@@ -1,0 +1,1369 @@
+arXiv 2412.11575  https://arxiv.org/abs/2412.11575
+
+Cost-aware Portfolios in a Large Universe of
+Assets
+Qingliang Fan1, Marcelo C. Medeiros 2 , Hanming Yang3 and Songshan Yang3∗
+1The Chinese University of Hong Kong
+2The University of Illinois at Urbana Champaign
+3Renmin University of China
+Abstract
+This paper proposes a finite-horizon (multi-period) mean-variance portfolio esti-
+mator, in which rebalancing decisions are based on current information about asset
+returns and transaction costs. The novelty of this study stems from integrating
+transaction costs into the decision process within a high-dimensional portfolio set-
+ting, where the number of assets exceeds the sample size. We define the optimal
+cost-aware portfolio and propose novel models for its construction and rebalancing.
+Our approach incorporates a nonconvex penalty and explicitly accounts for both pro-
+portional and quadratic transaction costs. We establish that the estimators derived
+from the proposed construction and rebalancing models, as well as the corresponding
+in-sample and out-of-sample Sharpe ratio estimators, consistently converge to those
+of the optimal cost-aware portfolio. Monte Carlo simulations and empirical studies
+using S&P 500 and Russell 2000 stocks show the satisfactory performance of the
+proposed portfolio and highlight the importance of incorporating transaction costs
+during rebalancing.
+Keywords: High-dimensional Portfolio Optimization, Mean-variance Model, Optimal Re-
+balancing, Transaction Costs.
+Acknowledgments: The authors are very thankful to seminar participants at the University
+of Wisconsin-Madison, Queen Mary University of London, Bristol University, University of
+California at Davis, and Vanderbilt University.
+∗All the authors made equal contributions to this work and are listed alphabetically. The authors
+gratefully acknowledge please remember to list all relevant funding sources in the unblinded version
+1
+arXiv:2412.11575v2  [stat.ME]  20 Aug 2025
+1 Introduction
+Portfolio management attracts great interest in statistics, financial econometrics, and quan-
+titative finance. The mean-variance portfolio allocation model proposed by Markowitz
+(1952) stands as a cornerstone of modern portfolio theory. The model’s practicality in
+terms of high dimensionality and trading frictions (e.g., transaction costs) is further stud-
+ied in this paper.
+The classic Markowitz mean-variance formulation considers the following optimization
+problem in a single period:
+w∗ = arg min
+w
+w⊤Σw − γw⊤µ, (1.1)
+where w is the weight vector of the assets in the portfolio, γ is the inverse of the risk
+aversion parameter, µ = (µ1, · · ·, µp)⊤ is the mean vector of the excess returns of p assets
+and Σ is the covariance matrix of the excess returns. Here we assume that Ppi=1 wi = 1,
+so the portfolio is fully-invested on the pool of p risky assets. Samuelson (1975) extends
+the Markowitz (1952)model to consider discrete multi-period portfolio allocation. This ap-
+proach has an elegant analytical solution that depends only on the mean and covariance
+matrix of the excess returns. The solution to (1.1) is w∗ = c1Σ−1µ − c2Σ−11, where c1
+and c2 depend only on Σ and µ. However, in modern portfolio management, portfolios
+commonly exhibit high-dimensional characteristics, introducing new challenges to the tra-
+ditional framework. Notably, the inverse of the sample covariance matrix is not well defined
+when the number of assets is larger than the sample size.
+Besides the difficulties of covariance matrix estimation in high-dimensional portfolio
+allocation, transaction costs also make the classical Markowitz mean-variance model sub-
+optimal. In most empirical studies, transaction costs are retrospectively incorporated by
+analyzing a portfolio strategy’s performance under given-sized transaction costs. However,
+in financial practice, the costs of the portfolio are considered during the decision-making
+process, meaning the costs are an integral part of the rebalancing. Transaction costs are
+2
+generally assumed to be proportional to the trading amount for minor trades with negli-
+gible market impact. For larger trades, the literature usually assumes that they have a
+nonlinear impact on the market price, resulting in quadratic transaction costs (Olivares-
+Nadal and DeMiguel, 2018). Hautsch and Voigt (2019) illustrated that when incorporating
+transaction costs into the optimization problem, quadratic transaction costs can be un-
+derstood as causing the covariance matrix to contract towards a diagonal matrix and a
+mean shift proportionate to current holdings. Proportional transaction costs scale with the
+sum of the absolute values of rebalancing amounts, penalizing turnover more heavily and
+thereby reducing rebalancing volume and frequency. Some studies have provided empirical
+evidence that strategies incorporating transaction fees consistently demonstrate superior
+performance compared to the minimum variance benchmark methods (Du et al., 2022;
+Hautsch and Voigt, 2019).
+1.1 Main Takeaways
+This paper considers the problem faced by a real mutual fund or sophisticated investor.
+Transaction costs are an integral part of portfolio management and are passed on to in-
+vestors, who receive returns net of such costs. We propose an innovative method for con-
+strained portfolio selection tailored for high-dimensional portfolios, taking into account two
+different types of transaction costs. Moreover, our approach allows for adaptive weight ad-
+justments in multi-stage scenarios. Specifically, at each decision point, the portfolio weights
+are rebalanced in a data-driven manner based on the current holdings and the return in-
+formation from the previous stage. In other words, we construct the optimal portfolio that
+considers the cost of rebalancing, which provides guidance to cost-aware investors.
+The main contributions of our work are threefold. Firstly, we propose cost-aware
+optimal portfolio estimators for new construction and subsequent rebalancing in a high-
+dimensional framework. To our knowledge, such a portfolio estimator in high dimensions
+3
+appears to be novel. Also, the nonconvex penalization employed in our approach can
+improve the estimation accuracy compared to the ℓ1 penalization method. We establish
+theoretical properties for the proposed portfolio in both the construction and rebalancing
+stages under each cost function. We show that, under both cost functions, the estima-
+tors obtained in the construction and rebalancing stages—as well as the corresponding
+in-sample and out-of-sample Sharpe ratio estimators—consistently converge to those of the
+optimal cost-aware portfolio. Secondly, we adopt the local linear approximation (LLA)
+algorithm (Zou and Li, 2008) to solve the nonconvex optimization problem and develop
+the theoretical foundations of the proposed portfolio with LLA algorithm. Thirdly, we in-
+troduce data-dependent penalization for investors facing a large universe of assets in each
+period while considering transaction costs. We demonstrate the superior performance of
+the proposed portfolio through extensive simulation studies and empirical evaluations. In
+particular, we compare it against a wide range of existing portfolio construction methods.
+For the real data analysis, we use stock return data from the S&P 500 and Russell 2000
+indices over the period 2017–2020.
+1.2 Brief Literature Review
+Our paper connects to the literature on covariance learning and high-dimensional portfolio
+optimization.
+Fan et al. (2015) studied a factor-based risk estimator under many assets and introduced
+a high-confidence level upper bound to assess the estimation. Lam and Feng (2018) pro-
+posed a nonparametrically eigenvalue-regularized integrated covariance matrix estimator.
+Fan et al. (2019) constructed a robust covariance estimation under the approximate factor
+model with observed factors. Hafner et al. (2020) developed a Kronecker product model for
+the covariance matrix estimation and established central limit theorems for such estimator.
+Ren et al. (2015), Fan and Lv (2016) and Ren et al. (2019) conducted studies on the estima-
+4
+tion and statistical inference of sparse precision matrix under the assumption of conditional
+normal distribution. Nevertheless, practical challenges arise in verifying the normality of
+high-dimensional data. Wang et al. (2020) introduced a refitted cross-validation estima-
+tion method for a high-dimensional precision matrix utilizing its Cholesky decomposition.
+Other recent works include but are not limited to Engle et al. (2019); Cai et al. (2020); So
+et al. (2022); Ding et al. (2021).
+To enhance out-of-sample performance, Luo et al. (2024) proposed an iterative opti-
+mization framework based on almost second-degree stochastic dominance (ASSD), which
+improves convergence efficiency and empirically yields higher out-of-sample returns com-
+pared to traditional dominance and mean-variance approaches.
+The estimators in the works above converge to the true covariance matrix or preci-
+sion matrix under certain regularity conditions. However, whether the derived portfolio
+allocation provides the optimal strategy with cost consideration is still unclear.
+Another strand of literature considers various constraints on large portfolio optimiza-
+tion. Jagannathan and Ma (2003) proposed no-short-selling constraints to reduce the port-
+folio risks. Inspired by Jagannathan and Ma (2003), DeMiguel et al. (2009) imposed the
+norm constraints to the portfolios. In particular, they developed a unified framework for
+portfolio optimization by constraining the norm of the portfolio weights, which effectively
+mitigates estimation error and encompasses several existing strategies such as shrinkage-
+based estimators and the 1/N portfolio.
+Fan et al. (2012) proposed a gross-exposure constraint method to modify the Markowitz
+mean-variance optimization problem in a single period to reduce the sensitivity of the re-
+sulting allocation to input vectors. Du et al. (2022) showed that under mild conditions,
+solving the ℓ1 constrained problem yields the same expected utility as solving the ℓ0 con-
+strained problem, enabling effective implementation of cardinality constraints through ℓ1
+constraints. Zou (2006); Zhao and Yu (2006); Gai et al. (2013) suggested that ℓ1 regu-
+5
+larization methods demonstrate the support recovery property under restrictive regularity
+conditions while being prone to bias for large coefficients. In contrast, nonconvex penaliza-
+tion methods such as SCAD (Fan and Li, 2001) and MCP (Zhang, 2010) exhibit favorable
+theoretical properties without relying on restrictive conditions and effectively mitigate the
+estimation bias associated with Lasso.
+In addition, Ban et al. (2018) proposed performance-based regularization and cross-
+validation techniques for portfolio optimization, casting the problem into a robust opti-
+mization framework and showing that their method outperforms traditional and regularized
+approaches across several Fama-French datasets.
+On the other hand, the literature on transaction costs and portfolio optimization in large
+dimensions is significantly less abundant. Most of the papers in Mathematical Finance and
+Operations Research focus on low-dimensional settings. See, for example, Lobo et al. (2007)
+and Olivares-Nadal and DeMiguel (2018). One exception is the important work by Ledoit
+and Wolf (2025), where the authors also consider transaction costs at the optimization
+stage when constructing mean-variance portfolios. However, their paper focuses only on
+the empirical part and provides no theoretical guidance. Furthermore, the authors do not
+consider extra regularization terms to discipline the portfolio in large dimensions. In our
+opinion, our paper complements the analysis in Ledoit and Wolf (2025).
+From an algorithmic perspective, Best and Hlouskova (2005) propose an efficient method
+for portfolio optimization with transaction costs, which reduces a high-dimensional con-
+strained problem into a sequence of lower-dimensional subproblems by implicitly incorpo-
+rating transaction cost effects. Similarly, Perold (1984) provides a computationally efficient
+algorithm for large-scale mean-variance portfolio optimization with transaction costs and
+factor-based models, enabling parametric solutions under practical resource constraints.
+In the dynamic setting, Brown and Smith (2011) study multi-period portfolio optimiza-
+tion with transaction costs and propose heuristic strategies that perform close to optimal,
+6
+supported by dual-based upper bounds derived from information relaxation.
+1.3 Organization of the Paper
+The remainder of the article is organized as follows. Section 2 proposes the constrained
+nonconvex penalization model for high-dimensional portfolios in both construction and
+rebalacing stages with consideration of transaction cost. We also introduce the LLA to
+solve the proposed model. In Section 3, we conduct a comprehensive numerical study to
+examine the performance of the proposed method. Empirical analysis is included in Section
+4. We summarize our contribution in Section 5.
+Notations: We use the standard convention that constants c1, c2, etc., denote universal
+positive constants whose values may vary from line to line. We write f (n) = O(g(n)) if
+f (n) ≤ cg(n) for some constant c >0. For a matrix M , we let |||M |||∞ denote the L∞
+operator norm, ∥M ∥max = max |mij| denote the entrywise L∞ norm, and |||M |||2 denote
+the spectral norm. The minimal and maximal eigenvalues of M are denoted by λmin(M )
+and λmax(M ), respectively. For a vector v = (vj)pj=1 ∈ Rp, we use ∥v∥k (k = 1, 2) for its
+Lk norm, ∥v∥0 for the number of nonzero entries, and ∥v∥∞ = max |vj| for the L∞ norm.
+Given index sets A, B ⊂ {1, . . . , p}, we write MA,B for the submatrix of M with rows
+indexed by A and columns by B, and vA for the subvector of v with entries in A. The
+cardinality of A is denoted |A|. The symbol ⊙ represents element-wise multiplication. For
+a function h : Rp → R, ∇h denotes its gradient or subgradient. To simplify notation, when
+referring to time-specific quantities such as µt and Σt, we write µAt and ΣAt,At in place of
+the more precise µt,At and Σt,At,At whenever the context is clear.
+7
+2 Methodology
+2.1 Preliminary
+To contextualize our proposed approach, we review three foundational models in the mean-
+variance portfolio optimization literature. These models serve as natural precursors to our
+method and are also employed as benchmark comparisons in our simulation studies.
+1. The classical Markowitz mean-variance model. Originally introduced by Markowitz
+(1952), this model aims to balance risk and return by minimizing portfolio variance
+for a given level of expected return. It is formulated as:
+min
+w
+w⊤ bΣw − γw⊤ bµ, subject to
+pX
+i=1
+wi = 1, (2.1)
+where wi denotes the ith element of the portfolio weight vector w, bΣ is the estimated
+covariance matrix, and bµ is the vector of estimated expected returns. Despite its the-
+oretical elegance, the Markowitz model often suffers from poor empirical performance
+in high-dimensional settings due to estimation errors in the covariance matrix.
+2. The penalized mean-variance model with gross-exposure constraints . Fan
+et al. (2012) propose a regularized version of the classical mean-variance framework
+by incorporating an ℓ1 penalty on the portfolio weights to control gross exposure and
+improve stability in high-dimensional settings. The optimization problem is:
+min
+w
+w⊤ bΣw − γw⊤ bµ + λ∥w∥1, subject to
+pX
+i=1
+wi = 1, (2.2)
+where λ >0 is a tuning parameter that regulates the portfolio’s gross exposure. This
+formulation mitigates the accumulation of estimation errors in large portfolios and
+can outperform no-short-sale constraints by allowing limited short positions.
+3. The mean-variance model with transaction costs . Hautsch and Voigt (2019)
+extend the mean-variance paradigm to account for transaction costs explicitly. By
+8
+penalizing turnover directly, their model promotes more stable allocations while im-
+plicitly regularizing the covariance matrix. The corresponding optimization problem
+is:
+min
+w
+w⊤ bΣw − γw⊤ bµ + C(w), subject to
+pX
+i=1
+wi = 1, (2.3)
+where C(w) denotes the transaction cost function, often proportional or quadratic in
+the change of portfolio weights. This model demonstrates that incorporating transac-
+tion costs ex ante leads to empirically superior and more stable portfolios, especially
+under model uncertainty.
+Each of these models contributes essential insights: the classical mean-variance frame-
+work provides the theoretical foundation, the penalized model addresses high-dimensional
+estimation risk, and the cost-aware model introduces practical considerations arising in
+real-world trading environments. Our proposed approach, cost-aware portfolio estimator
+(CAPE), builds upon these developments by integrating both regularization and dynamic
+transaction cost modeling in a unified framework, tailored for large-scale portfolio opti-
+mization.
+2.2 Cost-aware Portfolio Estimator
+We consider an investor who aims to allocate wealth across p risky assets over m periods,
+assuming that asset returns are stationary within each period t = 1 , . . . , m. We denote
+the expected asset returns and the corresponding population covariance matrix in the t-
+th period by µt and Σt, respectively. Suppose an investor enters the market at day 1
+with an initial wealth, allocates the wealth (constructing the first portfolio) at day n + 1,
+where n ∈ N+ is a fixed number of trading days between two consecutive rebalances, and
+reallocates the wealth 1 at the beginning of each of the following m − 1 consecutive periods,
+1For simplicity but without loss of generality, we assume the investor rebalances the portfolio at same
+frequency, e.g., annually as in Section 4.
+9
+where m is the total number of portfolio formation decisions. At every decision day d, d =
+n + 1, 2n + 1, . . . , mn+ 1, we use the historical returns [ Rd−n, Rd−n+1, . . . ,Rd−1]⊤ ∈ Rn×p,
+that contains observed returns of asset j on its j-th column to estimate assets return and
+risk. Figure 1 illustrates the decision process.
+Define the portfolio weight vector at each transaction time point, t = 1, · · ·, mas wt
+wt = (wt,1, wt,2, . . . , wt,p)⊤ ,
+and the weights are taken at the beginning of period t. In real-world applications, investors
+tend to allocate wealth across a limited number of assets due to transaction costs, regulatory
+constraints, or interpretability concerns. To incorporate this preference, we consider the
+transaction cost under the Markowitz mean-variance framework (1.1). And the optimal
+cost-aware portfolio at first portfolio construction stage ( t = 1) is defined as
+w∗1 := arg min
+w∈Rp
+w⊤Σ1w − γw⊤µ1 + C1(w) s.t. w⊤1 = 1, ∥w∥0 ≤ s0, (2.4)
+where C1(w) is the transaction cost at first portfolio construction stage stage ( t = 1),
+depending on the trading activity (changes in portfolio weights) and s0 < ∞ denotes the
+maximum number of assets allowed in the portfolio. Similarly, the optimal cost-aware
+portfolio at reallocation stage ( t ≥ 2) is defined as
+δ∗t := arg min
+δ∈Rp
+δ⊤Σtδ + 2w+⊤t−1Σtδt − γδ⊤µt + Ct(δ) s.t. δ⊤1 = 0, ∥δ∥0 ≤ s0, (2.5)
+where the weight difference vector δt = wt − w+t−1, Ct(w) is the transaction cost at real-
+location stage ( t ≥ 2), and w+t−1 means the pre-rebalancing weight as the value of port-
+folio changes over the holding period, and w+t−1 = ( fn ◦ fn−1 ◦ · · · ◦f1)(wt−1), where
+fi(w) :=
+w⊙(1+R(t−2)n+i)
+1+w⊤R(t−2)n+i . This method is thus called the cost-aware portfolio estimator
+(CAPE) in high dimensions. This paper proposes a new estimator targeting w∗1 and δ∗t
+under the high-dimensional model setting.
+Denote the support sets ofw∗1 and δ∗t as A1 = j : w∗1,j ̸= 0	 and At = j : δ∗t,j ̸= 0	 , t≥
+2, respectively. And we assume the cardinality st = |At| ≤s0, for t = 1, 2, . . . , m. We be-
+10
+Figure 1: First portfolio construction and reallocation diagram for multi-periods portfolios
+selection problems
+lieve this assumption is empirically grounded as many active strategy investors only choose
+a relatively small number (compared to the vast universe) of assets considering the trans-
+action and management fees.
+To address the computational intractability of the ℓ0-constrained problems in (2.4) and
+(2.5), we approximate the ℓ0 constraint with a general sparsity-inducing penalty pλ(·),
+yielding the following penalized formulations.
+At the initial portfolio construction stage ( t = 1):
+bwpen1 = arg min
+w∈Rp
+w⊤ bΣ1w − γ w⊤ bµ1 + C1(w) +
+pX
+j=1
+pλ(|wj|) s.t. w⊤1 = 1. (2.6)
+At the reallocation stage ( t ≥ 2):
+bδpent = arg min
+δ∈Rp
+δ⊤ bΣtδ − γ δ⊤ bµt + Ct(δ) +
+pX
+j=1
+pλ(|δj|) s.t. δ⊤1 = 0. (2.7)
+Here, pλ(·) denotes the sparsity-inducing penalty, and bµt and bΣt are the estimators of
+the mean vector µt and covariance matrix Σt, respectively, for t = 1, 2, . . . , m.
+Two popular choices of pλ(·) are the ℓ1 penalty (i.e., Lasso), and the Smoothly Clipped
+Absolute Deviation (SCAD) penalty. While the Lasso penalty is convex and yields efficient
+computation, it introduces bias and requires the strong Irrepresentable Condition to achieve
+variable selection consistency (Zhao and Yu, 2006). In contrast, nonconvex penalties like
+SCAD can reduce the estimation bias and achieve better selection consistency under weaker
+conditions.
+11
+The SCAD penalty (Fan and Li, 2001) satisfies the following regularity conditions:
+(i) Pλ(t) is increasing and concave on t ∈ [0, ∞) with Pλ(0) = 0;
+(ii) Pλ is differentiable on t ∈ (0, ∞) with P ′λ(0+) ≥ a1λ;
+(iii) P ′λ(t) ≥ a1λ for t ∈ (0, a2λ];
+(iv) P ′λ(t) = 0 for t ∈ [aλ, ∞) with some constant a > a2,
+where a1 and a2 are fixed positive constants.
+The SCAD penalty has a1 = a2 = 1 and its derivative is given by
+P ′λ(|τ |) = λ
+
+I(|τ | ≤λ) + (aλ − |τ |)+
+(a − 1)λ I(|τ | > λ)
+
+for some a >2, and P ′λ(0+) = λ.
+Building on the general penalized formulations in (2.6) and (2.7), and leveraging the
+discussion of commonly used penalties such as Lasso and SCAD, we develop a novel cost-
+aware optimization framework specifically designed for high-dimensional portfolio selection.
+Specifically, we define the Cost-Aware Portfolio Estimator under SCAD Penalty (CAPE-S)
+at the first portfolio construction stage as follows:
+bw1 := arg min
+w1∈Rp
+w⊤1 bΣ1w1 − γw⊤1 bµ1 + C1(w1) + Pλ(w1) s.t. w⊤1 1 = 1, (2.8)
+where Pλ(w1) = Ppj=1 Pλ(wt,j) is SCAD penalty. This formulation simultaneously accounts
+for portfolio risk, expected return, transaction cost, and sparsity, making it particularly
+suitable for high-dimensional financial settings.
+To facilitate theoretical analysis, we consider the oracle estimator which assumes knowl-
+edge of the true support set A1. The oracle portfolio weight estimator is defined by re-
+stricting the weights outside A1 to zero:
+bworacle1 = arg min
+wAc1 =0, w⊤1 1=1
+w⊤1 bΣ1w1 − γw⊤1 bµ1 + C1(w1).
+12
+We assume the oracle solution satisfies the first-order optimality conditions:
+∇jLn,1( bworacle1 ) + horacle = 0, ∀j ∈ A1,
+where the Lagrange multiplier
+horacle = 2 − γ1⊤ bΣ−1A1,A1 bµA1 + 1⊤ bΣ−1A1,A1gA1
+1⊤ bΣ−1A1,A11 ,
+g := ∂C1(w1)/∂w1 is the vector of sub-derivatives of C1(w1)
+and
+Ln,1(w) = w⊤ bΣ1w − γw⊤ bµ1 + C1(w).
+The above describes the oracle estimator during the first initial portfolio construction
+stage. Similarly, for the reallocation stage with t ≥ 2, the Cost-Aware Portfolio Estimator
+under SCAD Penalty (CAPE-S) are defined as
+bδt := arg min
+δt∈Rp
+δ⊤t bΣtδt + 2w+⊤t−1 bΣtδt − γδ⊤ bµt + Ct(δt) + Pλ(δt) s.t. δ⊤t 1 = 0,
+where Pλ(δt) = Ppj=1 Pλ(δt,j) is SCAD penalty and the weight difference vector δt =
+wt − w+t−1, for t ≥ 2, and bµt and bΣt denote estimators of the true mean vector µt and
+covariance matrix Σt, respectively.
+The corresponding oracle estimator is
+bδoraclet = arg min
+δAct =0, δ⊤t 1=0
+δ⊤t bΣtδt + 2w+⊤t−1 bΣtδt − γδ⊤ bµt + Ct(δt),
+which satisfies
+∇jLn,t(bδoraclet ) + horaclet = 0, ∀j ∈ At,
+where
+horaclet = 2 − γ1⊤ bΣ−1At,At bµAt + 1⊤ bΣ−1A1,A1gAt
+1⊤ bΣ−1At,At1 ,
+g := ∂Ct(δt)/∂δt is the vector of sub-derivatives of Ct(δt),
+13
+and
+Ln,t(δt) = δ⊤t bΣtδt + 2w+⊤t−1 bΣtδt − γδ⊤t bµt + Ct(δt).
+However, the nonconvexity of SCAD poses significant computational challenges due to
+the presence of multiple local minima. To overcome this issue, Zou and Li (2008) proposed
+the local linear approximation (LLA) algorithm, which iteratively approximates the non-
+convex problem by a sequence of weighted ℓ1-penalized problems, thereby inheriting the
+computational advantages of convex optimization. Rather than pursuing full convergence,
+they advocated for a properly initialized one-step LLA estimator, which is computation-
+ally efficient and shown to possess the strong oracle property under the condition that
+X ⊤X/n → M for some positive definite matrix M. This framework was later extended
+by Fan et al. (2014) to high-dimensional settings, demonstrating that initializing the LLA
+algorithm with a Lasso solution yields an oracle estimator with high probability. The al-
+gorithmic procedures for the first portfolio construction and subsequent reallocation stages
+are presented in Algorithm 1 and Algorithm 2, respectively. Here, bwinitial1 and bδinitialt de-
+note initial estimators of w∗1 and δ∗t , respectively, satisfying certain regularity conditions.
+The specific definitions of these initial estimators, tailored to different transaction cost
+structures, are provided in Sections 2.3 and 2.4.
+To establish the non-asymptotic error bounds, we impose the following assumptions:
+(A1) There exist constants C1, C2 > 0, for t = 1, 2, . . . , m, such that
+∥Σ−1At,Atr∥∞ < C1, ∀r ∈ {−1, 0, 1}st,
+|||ΣAct ,At|||∞ < C2,
+0 < λmin(ΣAt,At) ≤ λmax(ΣAt,At) < ∞.
+(A2) For t = 1, 2, . . . , mand some absolute constants c1, c2, M1, M2,
+Pr
+
+∥ bµt − µt∥∞ ≤ M1
+p
+log p/n
+
+≥ 1 − O(p−c1),
+Pr
+
+∥ bΣt − Σt∥max ≤ M2
+p
+log p/n
+
+≥ 1 − O(p−c2).
+(2.9)
+14
+Algorithm 1 Local Linear Approximation (LLA) Algorithm for First Portfolio Construction
+1: Initialize bw(0)1 = bwinitial1 and compute the adaptive weight:
+bθ(0) = bθ(0)1 , . . . ,bθ(0)p ⊤ = P ′λ  bw(0)1,1 , . . . , P′λ  bw(0)1,p⊤
+2: for l = 1, 2, ...do repeat the LLA iteration till convergence
+3: Obtain bw(l)t by solving the following optimization problem
+bw(l)1 = minw∈Rp,w⊤1=1 Ln,1(w) + Xj bθ(l−1)j · |wj|
+4: Update the adaptive weight vector bθ(l) with bθ(l)j = P ′λ
+ bw(l)1,j
+5: end for
+6: Output: The portfolio allocation bwLLAt
+Algorithm 2 Local Linear Approximation (LLA) Algorithm for Reallocation
+1: Initialize bδ(0)t = bδinitialt and compute the adaptive weight:
+bθ(0) = bθ(0)1 , . . . ,bθ(0)p ⊤ = P ′λ bδ(0)1,1 , . . . , P′λ bδ(0)1,p⊤
+2: for l = 1, 2, ...do repeat the LLA iteration till convergence
+3: Obtain bδ(l)t by solving the following optimization problem
+bδ(l)t = minδ∈Rp,δ⊤1=0 Ln,t(δ) + Xj bθ(l−1)j · |δj|
+4: Update the adaptive weight vector bθ(l) with bθ(l)j = P ′λ
+bδ(l)1,j
+5: end for
+6: Output: The portfolio allocation bδLLAt
+(A3) The estimated covariance matrix bΣt satisfies the restricted strong convexity (RSC)
+condition:
+∀∆ ∈ Rp, ∆⊤ bΣt∆ ≥ v∥∆∥22 − τ
+r
+log p
+n ∥∆∥1, (2.10)
+where v >0, τ ≥ 0, and t = 1, 2, . . . , m.
+15
+Remark 1. Assumption (A1) guarantees three key properties. The bound on ∥Σ−1At,Atr∥∞
+ensures that the ℓ1-norms of w∗1 and δ∗t are controlled, preventing divergence in the estima-
+tion process. This condition aligns with assumptions in Cai et al. (2024). The constraint on
+|||ΣAct ,At|||∞, while weaker than the irrepresentable condition required for the Lasso, limits
+the correlation between active and inactive variables, promoting both sparsity and stability.
+Finally, the eigenvalue condition guarantees that ΣAt,At is well-conditioned, which facili-
+tates stable matrix inversion and avoids ill-posedness when estimating coefficients restricted
+to the active set At.
+Assumption (A2) holds when the sample mean vector and sample covariance matrix are
+used as estimators, provided that the returns R(t−1)n+1, . . . ,Rtn are i.i.d. sub-Gaussian
+vectors with mean µt and covariance matrix Σt, and that log p < n, as shown in Liu et al.
+(2024). Furthermore, we show that the linear shrinkage estimator (Ledoit and Wolf, 2020)
+for the population covariance matrix also satisfies (A2) under the same sub-Gaussianity
+assumption and mild structural conditions on Σt in the supplementary material. The linear
+shrinkage estimator has more favorable properties and, in high-dimensional settings (e.g.,
+p comparable to or exceeding n), provides well-conditioned covariance estimates that make
+the classical Markowitz mean–variance model (2.1) and its transaction-cost extension (2.3)
+feasible and numerically stable. Moreover, the bounds in (2.9) can be extended to settings
+with dependent observations, including strong-mixing ( α-mixing) processes, m-dependence,
+and time series exhibiting physical (or functional) dependence (Chang et al., 2024). For
+simplicity, we focus on the i.i.d. case in this paper and defer the dependent setting to future
+work.
+Assumption (A3) is a standard requirement in high-dimensional estimation. Loh and
+Wainwright (2015) established that the sample covariance matrix satisfies the RSC con-
+dition with high probability under sub-Gaussian assumptions. We further show that both
+linear and nonlinear shrinkage estimators (Ledoit and Wolf, 2020) satisfy (A3), as detailed
+16
+in the supplementary material.
+2.3 CAPE-S with Quadratic Transaction Cost
+2.3.1 First Portfolio Construction
+We begin with considering the quadratic transaction cost from the initial period, t = 1,
+C1(w) = (β ⊙ w)⊤w
+where β = ( β1, ..., βp)⊤, βj > 0 is the cost parameter, which means the unit transaction
+cost of the risky asset j is a linear function of the trading size with slope βj, for j = 1, ..., p.
+The problem (2.4) then becomes
+min
+w1
+w⊤1 Σ1w1 − γw⊤1 µ1 + (β ⊙ w1)⊤w1, s.t. w⊤1 1 = 1, ∥w1∥0 ≤ s0. (2.11)
+This is a constrained convex optimization problem. By applying the method of Lagrange
+multipliers and using the definitions of w∗1 and the active set A1, we obtain the explicit
+solution
+w∗A1 = 12 ˜Σ−1A1,A1
+ 
+γµA1 + 2 − γ1⊤ ˜Σ−1A1,A1µA1
+1⊤ ˜Σ−1A1,A11 1
+!
+and w∗Ac1 = 0.
+Here, ˜Σ1 = Σ1 + B, with B = diag( β1, . . . , βp). The explicit solution above is derived
+using the method of Lagrange multipliers and the sparsity structure of the optimizer. For
+a detailed derivation, we refer the reader to the proof of Theorem 1 in the supplementary
+material.
+As discussed earlier, we employ the LLA algorithm to solve CAPE-S and use the CAPE-
+L bwLasso,β1 as the initial estimate required by the LLA algorithm. The following lemma
+establishes the consistency of the CAPE-L.
+Lemma 1. For the first portfolio construction period, suppose that Assumptions (A1)-(A3)
+hold and ∥β∥∞ ≪ 1/C1, where C1 is defined in Assumption (A1). Let bwLasso,β1 be the unique
+17
+optimum of the program
+bwLasso,β1 = arg min
+1⊤w1=1
+w⊤1 bΣ1w1 − γw⊤1 bµ1 + (β ⊙ w1)⊤w1 + λLasso,1∥w1∥1 (2.12)
+with λLasso,1 = M
+q
+log p
+n for some large constant M . Then with probability at least 1−c1p−c2
+for some constant c1, c2, we have
+∥ bwLasso,β1 − w∗1∥1 = O
+ 
+s1
+r
+log p
+n
+!
+and ∥ bwLasso,β1 − w∗1∥2 = O
+ r
+s1 log p
+n
+!
+.
+In Lemma 1, the estimator bwLasso,β1 defined in Equation (2.12) essentially applies the ℓ1
+penalty to the penalty term introduced in Equation (2.6). Following the naming convention
+used in Equation (2.8), this class of estimators can be referred to as the Cost-Aware Port-
+folio Estimator under Lasso Penalty (CAPE-L) at the first portfolio construction stage.
+Lemma 1 says that the initial Lasso estimator yields an estimate that is consistent in ℓ2
+norm if
+p
+s1 log p/n → 0 as n, p→ ∞. In other words, if the portfolio has sufficient sparsity
+that s1 = o(
+q
+n
+log p ), the estimation error can be ignored. Our error rate also matches the
+rate of Lasso estimator for linear regression.
+For the first portfolio construction, the oracle portfolio construction weight estimator
+with quadratic transaction cost is given as
+bworacle,β1 = arg min
+wAc1 =0,w⊤1 1=1
+w⊤1 bΣ1w1 − γw⊤1 bµ1 + (β ⊙ w1)⊤w1. (2.13)
+The following theorem states that the oracle estimator can be obtained after two it-
+erations by implementing the LLA algorithm to solve CAPE-S, and it also provides the
+convergence rate in the ℓ∞-norm.
+Theorem 1. Suppose that Assumptions (A1)–(A3) hold and that ∥β∥∞ ≪ 1/C1, where
+C1 is defined in Assumption (A1). Choose λ ≥ M
+q
+s1 log p
+n for some sufficiently large
+constant M . Let bwLLA,β1 denote the solution obtained from the LLA algorithm 1 with the
+SACD penalty, initialized at bwLasso,β1 . If s1 = O
+q
+n
+log p
+
+and ∥w∗1∥min > (a + 1)λ1, then
+18
+bwLLA,β1 converges to bworacle,β1 within two iterations with probability at least 1 − c1k−c2 for
+all k ∈ [s1, p] and some constants c1, c2 > 0. Furthermore,
+∥ bwLLA,β1 − w∗1∥∞ = O
+ r
+log k
+n
+!
+.
+Theorem 1 establishes that, under mild regularity conditions, the proposed CAPE-
+S estimator attains the same performance as the oracle estimator bworacle,β1 after only two
+iterations of the LLA algorithm. In particular, when the portfolio dimension k diverges, the
+two estimators coincide with high probability, ensuring that CAPE-S inherits the oracle’s
+optimality properties in large-scale settings. This oracle property provides the theoretical
+foundation for subsequent results on risk and return estimation.
+Corollary 1. Given the same conditions as in Theorem 1, if s1
+p
+log s1/n = o(1), then we
+have
+|( bwLLA,β1 )⊤ bµ1 − (w∗1)⊤µ1| = op(1), |( bwLLA,β1 )⊤ bµ2 − (w∗1)⊤µ2| = op(1);
+|( bwLLA,β1 )⊤ bΣ1 bwLLA,β1 − w∗1Σ1w∗1| = op(1), |( bwLLA,β1 )⊤ bΣ2 bwLLA,β1 − (w∗1)⊤Σ2w∗1| = op(1); ( bwLLA,β1 )⊤ bµ1q( bwLLA,β1 )⊤ bΣ1 bw1 − (w∗1)⊤µ1p(w∗1)⊤Σ1w1  = op(1),  ( bwLLA,β1 )⊤ bµ2q( bwLLA,β1 )⊤ bΣ2 bw1 − (w∗1)⊤µ2p(w∗1)⊤Σ2w1  = op(1).
+Corollary 1 shows that if the sparsity level and the dimension satisfy thats1
+p
+log s1/n =
+o(1), the in-sample and out-of-sample Sharpe ratio estimation error of initial period vanishes
+when n goes to infinity. Caner et al. (2023) established similar results under a factor model
+framework. In contrast, we impose a weaker condition on the data-generating process.
+2.3.2 Portfolio Reallocation
+At reallocation decision day d, the transaction costs Ct(w) are a quadratic function of the
+weight difference vector δt, defined as δt := wt − w+t−1, for t ≥ 2. And δt represents the
+difference between the new allocation wt and the market value-adjusted allocation w+t−1.
+19
+The form of transaction costs Ct(w) is thus given by
+Ct(w) = [β ⊙ (wt − w+t−1)]⊤(wt − w+t−1)
+The program (2.5) turns out to be
+min
+δt
+δ⊤t Σtδt + 2w+⊤t−1Σtδt − γδ⊤t µt + (β ⊙ δt)⊤δt, s.t. δ⊤t 1 = 0, ∥δt∥ ≤s0. (2.14)
+Similarly, using the Lagrange multiplier method, we have that
+δ∗At = 12 ˜Σ−1At,At
+ 
+γµAt − 2(Σtw+t−1)At + 2 − γ1⊤ ˜Σ−1At,AtµAt
+1⊤ ˜Σ−1At,At1 1
+!
+and δ∗Act = 0.
+In high-dimensional regimes, we consider the following constrained and regularized
+quadratic programming to encourage a sparse estimator of δ∗t
+min
+δt
+δ⊤t b˜Σtδt + 2w+⊤t−1 bΣtδt − γδ⊤t bµt + Pλ(δt), s.t. δ⊤t 1 = 0,
+where bΣt and bµt are the estimators of covariance matrix and mean of the asset returns of the
+t period, b˜Σt = bΣt +B. By incorporating the transaction costs in the mean variance problem
+and regularizing rebalancing events, our portfolio achieves a higher post-cost Sharpe ratio
+and reduced transaction costs, as demonstrated in numerical studies.
+Define the oracle estimator (with known true support of δ) with quadratic transaction
+cost under portfolio reallocation as
+bδoracle,βt = arg min
+δAct =0,δ⊤1=0
+δ⊤t b˜Σtδt + 2w+⊤t−1 bΣtδt − γδ⊤t bµt. (2.15)
+where b˜Σt = bΣt + B, with B = diag(β1, . . . , βp).
+Lemma 2. Suppose that Assumptions (A1)-(A3) hold and ∥β∥∞ ≪ 1/C1 with C1 defined
+in Assumption (A1), let bδLasso,βt be the unique optimum of the program
+bδLasso,βt = arg min
+1⊤δt=0
+δ⊤t b˜Σtδt + 2w+⊤t−1 bΣtδt − γδ⊤t bµt + λLasso,t∥δt∥1. (2.16)
+20
+with λLasso,t = M
+q
+log p
+n for some large constant M . Then with probability at least 1−c1p−c2
+for some constant c1, c2, we have
+∥bδLasso,βt − δ∗t ∥1 = Op
+ 
+st
+r
+log p
+n
+!
+and ∥bδLasso,βt − δ∗t ∥2 = Op
+ r
+st log p
+n
+!
+.
+Theorem 2. Suppose that Assumptions (A1)-(A3) hold, and that ∥β∥∞ ≪ 1/C1, where C1
+is defined in Assumption (A1). Let st = O
+q
+n
+log p
+
+, and assume that ∥δ∗t ∥min > (a + 1)λt.
+Choose λt ≥ M
+q
+st log p
+n for some sufficiently large constant M . Let bδLLA,βt be the optimum
+of the LLA algorithm 2 with SCAD penalty, initialized at bδLasso,βt , as defined in (2.16).
+Then, we have the following results:
+(i) If ∥w+t−1∥1 < C0, then bδLLA,βt converges to bδoracle,βt after two iterations with probability
+at least 1 − c1p−c2 for some constants c1, c2 > 0. Furthermore,
+∥bδLLA,βt − δ∗t ∥∞ = O
+ r
+log p
+n
+!
+.
+(ii) If ∥w+t−1,Q∥1 ≤ C0 and w+t−1,Qc = 0 for some set Q ⊂[1, . . . , p] and absolute constant
+C0, then bδLLA,βt converges to bδoracle,βt after two iterations with probability at least
+1 − c1k−c2 for all k ∈ [max{st, |Q|}, p] and some constants c1, c2 > 0. Furthermore,
+∥bδLLA,βt − δ∗t ∥∞ = O
+ r
+log k
+n
+!
+.
+Theorem 2 and Lemma 2 have implied that in portfolio reallocation, the LLA algorithm
+initialized at CAPE-L yields a local optimum of the nonconvex regularized problem that
+satisfies oracle properties with low ℓ∞ error. Theorem 2 highlights the impact of differ-
+ent estimation methods employed in the previous t − 1 stages on the performance of our
+proposed method in stage t. Specifically, if regularized estimation methods, such as the
+proposed CAPE-S in (2.8) or CAPE-L in (2.12), were consistently applied in the previous
+t − 1 stages, the resulting w+t−1 will exhibit a certain level of sparsity. This sparsity en-
+ables bδLLA,βt to achieve a superior convergence rate in the current stage. Conversely, if the
+21
+estimation methods used in the earlier stages fail to produce sparse estimates, leading to a
+non-sparse w+t−1, our method can still ensure that bδLLA,βt converges to δ∗t with probability
+approaching 1. However, the convergence rate will be
+p
+log p/n, which is attributable to
+the lack of sparsity in w+t−1. Corollary 2 provides detailed conclusions regarding the estima-
+tion of w∗t when the proposed CAPE-S method is consistently applied across the previous
+t − 1 stages.
+Corollary 2. Define s0 ≤ kt ≤ p and bwLLA,βt = w+t−1 + bδLLA,βt , and we use CAPE-S to
+make estimation in the past t − 1 stage. Given the same conditions as in Theorem 1 and
+Theorem 2, with kt
+p
+log kt/n = o(1), then we have
+∥ bwLLA,βt − w∗t ∥∞ = Op
+ r
+log kt
+n
+!
+;
+|( bwLLA,βt )⊤ bµt − (w∗t )⊤µt| = op(1), |( bwLLA,βt )⊤ bµt+1 − (w∗t )⊤µt+1| = op(1);
+|( bwLLA,βt )⊤ bΣt bwLLA,βt −(w∗t )⊤Σtw∗t | = op(1), |( bwLLA,βt )⊤ bΣt+1 bwLLA,βt −(w∗t )⊤Σt+1w∗t | = op(1); ( bwLLA,βt )⊤ bµtq( bwLLA,βt )⊤ bΣt bwLLA,βt − (w∗t )⊤µtp(w∗t )⊤Σtw∗t  = op(1),  ( bwLLA,βt )⊤ bµt+1q( bwLLA,βt )⊤ bΣt+1 bwLLA,βt − w∗t µt+1p(w∗t )⊤Σt+1w∗t  = op(1).
+Corollary 2 shows that if the sparsity level and the dimension satisfy thatkt
+p
+log kt/n =
+o(1), the in-sample and out-of-sample Shape Ratio estimation errors of reallocation periods
+vanish when n goes to infinity.
+2.4 CAPE-S with Proportional Transaction Cost
+2.4.1 First Portfolio Construction
+We then consider some real trading scenarios where costs are proportional to the sum of
+absolute rebalancing ( ℓ1-norm of rebalancing). For the proportional transaction cost, the
+optimization problem corresponding to the initial period is as follows:
+min
+w1
+w⊤1 Σ1w1 − γw⊤1 µ1 + ∥α ⊙ w1∥1, s.t. w⊤1 1 = 1, ∥w1∥0 ≤ s0,
+22
+where α = (α1, ..., αp)⊤, αj > 0 is the cost parameter, which is similar to β in Section 2.3.
+By Lagrange multiplier method and the definition of w∗1 and A1, solving for w∗1 yields
+w∗A1 = 12 Σ−1A1,A1
+ 
+γµA1 − α ⊙ gA1 + 2 − γ1⊤Σ−1A1,A1µA1 + 1⊤Σ−1A1,A1(α ⊙ gA1)1⊤Σ−1A1,A11 1! and w∗Ac1 = 0.
+where g is the vector of sub-derivatives of ∥w1∥1, i.e., g := ∂ ∥w1∥1 /∂w1, consisting of
+elements which are 1 or −1 in case wj > 0 or wj < 0, respectively, or ∈ [−1, 1] in case
+wj = 0. Similar to Lemma 1 in Section 2.3, Lemma 3 shows the consistency of the CAPE-L
+bwLasso,α1 under proportional transaction cost.
+Lemma 3. For the initial period, suppose that Assumptions (A1)-(A3) hold, let bwLasso,α1
+be the unique optimum of the program
+bwLasso,α1 = arg min
+1⊤w1=1
+w⊤1 bΣ1w1 − γw⊤1 bµ1 + ∥α ⊙ w1∥1 + λLasso,1∥w1∥1, (2.17)
+with λLasso,1 = M
+q
+log p
+n for some large constant M , then with probability at least 1 − c1p−c2
+for some constants c1, c2, we have
+∥ bwLasso,α1 −w∗1∥1 = O
+ 
+s1∥α∥∞ + s1
+r
+log p
+n
+!
+and ∥ bwLasso,α1 −w∗1∥2 = O
+ 
+√s1∥α∥∞ +
+r
+s1 log p
+n
+!
+.
+Lemma 3 differs from Lemma 1 in Section 2.3 due to the distinct effects of the quadratic
+and proportional transaction costs. Specifically, the quadratic transaction cost can be in-
+terpreted as a perturbation to the diagonal elements of the covariance matrix. In contrast,
+the proportional transaction cost has a different influence, which is reflected in the conver-
+gence rate of bwLasso,α1 . If the convergence rate of α exceeds that of λLasso, the convergence
+rate of bwLasso,α1 will be determined by α.
+Similar to (2.13), at first portfolio construction stage, we define the oracle portfolio
+construction weight estimator with proportional transaction cost as
+bworacle,α1 = arg min
+wAc1 =0,w⊤1=1
+w⊤1 bΣ1w1 − γw⊤1 bµ1 + ∥α ⊙ w1∥1. (2.18)
+23
+Theorem 3. Under Assumptions (A1)-(A3) and ∥α∥∞ ≤ C
+q
+log p
+n for some large constant
+C, we select λ ≥ M
+q
+s1 log p
+n for some large constant M . Let bwLLA,αt be the optimum of
+LLA algorithm 1 with SCAD penalty, initialized at bwLasso ,αt . If s1 = O
+q
+n
+log p
+
+and
+∥w∗1∥min > (a + 1)λ1, bwLLA,αt converges to bworacle,α after two iterations with probability at
+least 1 − c1k−c2 for ∀k ∈ [s1, p] and some constant c1, c2. Furthermore,
+∥ bwLLA,α1 − w∗1∥∞ = O
+ r
+log k
+n
+!
+.
+To ensure the theoretical properties of subsequent proofs, Theorem 3 reasonably as-
+sumes ∥α∥∞ = O(
+p
+log p/n), which matches the convergence rate of λLasso. This differs
+from the assumption in Section 2.3, where ∥β∥∞ ≪ 1/C2 with C2 defined in Assumption
+(A1).
+Hautsch and Voigt (2019) examined the empirical implications of proportional transac-
+tion costs on the Sharpe ratio, demonstrating that smaller values of α yield optimal Sharpe
+ratios. Our choice of α aligns with this finding, maintaining the same order of magnitude.
+As in Corollary 1, we can show that under the condition s1
+√s1 log p = o(1), the es-
+timation errors for in-sample and out-of-sample Sharpe ratios during reallocation periods
+asymptotically vanish as n approaches infinity. Since the conclusion is identical to that
+of Corollary 1, we omit the formal statement here. This result highlights the diminishing
+impact of estimation uncertainty in high-dimensional settings when the sparsity condition
+is adequately controlled.
+2.4.2 Portfolio Reallocation
+We model the transaction costs Ct(w) as a proportional function at dynamic periods given
+by
+Ct(w) = ∥α ⊙ (wt − w+t−1)∥1.
+The program (2.5) turns out to be
+24
+min
+δt
+δ⊤t Σtδt + 2w+⊤t−1Σtδt − γδ⊤t µt + ∥α ⊙ δt∥1, s.t. δ⊤t 1 = 0, ∥δt∥0 ≤ s0.
+Similarly, solving for δ∗t yields
+δ∗At = 12 Σ−1At,At
+ 
+γµAt − 2(Σtw+t−1)At − α ⊙ gAt + 2 + γ1⊤Σ−1At,Atα ⊙ gAt − γ1⊤Σ−1At,AtµAt
+1⊤Σ−1At,At1 1
+!
+and δ∗Act = 0,
+where g is the vector of sub-derivatives of ∥wt∥1, i.e., g := ∂ ∥wt∥1 /∂wt. In practice, the
+feasible form is
+min
+δt
+δ⊤t bΣtδt + 2w+⊤t−1 bΣtδt − γδ⊤t bµt + ∥α ⊙ δt∥1 + Pλ(δt), s.t. δ⊤t 1 = 0.
+Similar to (2.15), we define the oracle estimator with proportional transaction cost
+under portfolio reallocation as
+bδoracle,αt = arg min
+δAct =0,δ⊤t 1=0
+δ⊤t bΣtδt + 2w+⊤t−1 bΣtδt − γδ⊤t bµt + ∥α ⊙ δt∥1. (2.19)
+Lemma 4. Suppose that Assumptions (A1)–(A3) hold, and that ∥α∥∞ = C
+q
+log p
+n for
+some large constant C. Let bδLasso,αt denote the unique solution to the following optimization
+problem:
+bδLasso,αt = arg min
+1⊤δt=0
+δ⊤t bΣtδt + 2w+⊤t−1 bΣtδt − γδ⊤t bµt−1 + ∥α ⊙ δt∥1 + λLasso,t∥δt∥1. (2.20)
+with λLasso,t = M
+q
+log p
+n for some large constant M . Then with probability at least 1−c1p−c2
+for some constant c1, c2, we have
+∥bδLasso,αt − δ∗t ∥1 = Op
+ 
+st
+r
+log p
+n
+!
+and ∥bδLasso,αt − δ∗t ∥2 = Op
+ r
+st log p
+n
+!
+.
+Theorem 4. Suppose that Assumptions (A1)–(A3) hold and that ∥α∥∞ = C
+q
+log p
+n for
+some large constant C. If st = O
+q
+n
+log p
+
+and ∥δ∗t ∥min > (a+1)λt, choose λt ≥ M
+q
+st log p
+n
+for some large constant M . Let bδLLA,αt be the optimum of the LLA algorithm 2 with SCAD
+penalty, initialized at bδLasso,αt as defined in (2.20). Then, the following holds:
+25
+(i) If ∥w+t−1∥1 < C0, then bδLLA,αt converges to bδoracle,αt after two iterations with probability
+at least 1 − c1p−c2 for some constants c1, c2 > 0. Furthermore,
+∥bδLLA,αt − δ∗t ∥∞ = O
+ r
+log p
+n
+!
+.
+(ii) If ∥w+t−1,Q∥1 ≤ C0 and w+t−1,Qc = 0 for some set Q ⊂[1, . . . , p] and absolute constant
+C0, then bδLLA,αt converges to bδoracle,αt after two iterations with probability at least
+1 − c1k−c2 for all k ∈ [max{st, |Q|}, p] and some constants c1, c2 > 0. Furthermore,
+∥bδLLA,αt − δ∗t ∥∞ = O
+ r
+log k
+n
+!
+.
+Remark 2. Although the conditions and conclusions of Theorem 4 and Theorem 2 appear
+to be very similar, the differences arise from the distinct assumptions regarding transaction
+costs. For quadratic transaction costs, we assume only that ∥β∥∞ ≪ 1/C2 with C2 defined
+in Assumption (A1). In contrast, for proportional transaction costs, we require α to satisfy
+a specific convergence rate. This distinction stems from the differing impacts of transaction
+costs on the optimization problem introduced in Section 2.2.
+For quadratic transaction costs, it suffices to verify that the modified covariance matrix
+continues to satisfy our assumptions, as demonstrated in the Supplementary Material.
+However, for proportional transaction costs, Lemma 3 explicitly illustrates the influence of
+α on both the convergence rate and consistency. This influence persists in Theorems 3 and
+4, where the assumptions regarding transaction costs lead to similar conclusions despite
+the differences in the underlying hypotheses.
+Analogous to Corollary 2, it can be established that if the sparsity level and dimension-
+ality satisfy kt
+√kt log p = o(1), the estimation errors for both in-sample and out-of-sample
+Sharpe ratios during reallocation periods converge to zero as n → ∞. Since the conclusion
+is identical to that of Corollary 2, we omit the formal statement here.
+26
+3 Simulation
+We follow the methodology outlined by Fan et al. (2008, 2012) to simulate excess returns.
+Specifically, we assume that the excess return of the ith asset is generated from a three-
+factor model:
+Ri = bi1fi1 + bi2fi2 + bi3fi3 + εi, i = 1, · · ·, p.
+First, the factor loadings bi are drawn from a trivariate normal distribution N (µb, covb)
+with parameters specified in Table 1 below. Once generated, these factor loadings remain
+fixed throughout the simulations. The returns of the three factors over n periods are also
+sampled from a trivariate normal distribution N (µf , covf ), with the relevant parameters
+provided in Table 1. Throughout this simulation study, we assume that E(ε | f ) = 0 and
+Cov(ε | f ) is a diagonal matrix with entries σ21, . . . , σ2p on the diagonal. The standard
+deviations of the idiosyncratic errors εi are generated from a gamma distribution with a
+shape parameter of 3.3586 and a scale parameter of 0.1876. Then, the generated parameters
+{σi} remain fixed across simulations. Finally, the idiosyncratic errors are generated from
+a normal distribution, where the standard deviations are set to {σi}.
+Table 1: Parameters used in the simulation
+Parameters for factor loadings
+µb covb
+0.78282 0.029145 0.023873 0.010184
+0.51803 0.023873 0.053951 -0.006967
+0.41003 0.010184 -0.006967 0.086856
+Parameters for factor returns
+µf covf
+0.023558 1.2507 -0.034999 -0.20419
+0.012989 -0.034999 0.31564 -0.0022526
+0.020714 -0.20419 -0.0022526 0.19303
+We set p = 2000, m = 5 and n = 200, dividing the data into five stages to calculate
+the out-of-sample annual Return, Cost, Turnover, Leverage and Sharpe ratio. And S0 is
+the portfolio construction stage, S1-S4 are rebalancing stages, respectively. The optimal
+tuning parameter λopt is selected based on the highest in-sample Sharpe ratio.
+27
+The main method is the proposed Cost-Aware Portfolio Estimator under SCAD Penalty
+(CAPE-S). For comparison, we utilize three different baseline models montioned in Section
+2.1: the classical Mean-Variance (MV) model (2.1), the Penalized Mean-Variance (PMV)
+model (2.2), and the Cost-Aware Mean-Variance (CMV) model (2.3) to compute portfolio
+weights at each stage. We estimate the covariance matrix Σt using the linear shrinkage
+estimator (LSE; Ledoit and Wolf (2004)) and the nonlinear shrinkage estimator (NLSE;
+Ledoit and Wolf (2020)), while the mean vector µt is estimated by the sample mean. The
+results based on the LSE, which satisfy Assumptions (A2) and (A3) outlined earlier, are
+presented in the main text. In contrast, the results based on the NLSE, which satisfy only
+Assumption (A3) but not (A2), are reported in the Supplementary Materials. Despite not
+meeting (A2), the NLSE performs well in both simulation studies and real data applications.
+To emulate real-world investment scenarios, we report the performance of portfolios
+across four stages (S1-S4). The first stage involves forming the initial portfolio, akin to
+establishing a new fund at its inception. The second stage corresponds to the first rebal-
+ancing, while the third stage entails the second rebalancing, and so forth. Following the
+conventions established in the literature, we define the parameters for proportional and
+quadratic transaction costs as β = β × 1p and α = α × 1p, where β = 0.15 and α = 0.001
+respectively. The costs in the following tables are therefore interpreted as the percentage
+of the normalized initial wealth that needs to cover the costs of transactions. Additionally,
+we quantify portfolio turnover and leverage at each stage k = 1, 2, 3, 4. The definitions of
+these metrics are as follows:
+Turnoverk =
+pX
+i=1
+|wk,i − w+k−1,i| and w+0,i = 0,
+Leveragek =
+pX
+i=1
+| min{wk,i, 0}|
+We evaluate the performance of CAPE-S and three benchmark models under both
+quadratic and proportional transaction cost settings. The results, reported in Tables 2 and
+3, demonstrate the consistent superiority of our proposed method in balancing return, risk,
+28
+Table 2: Simulation results with quadratic transaction costs, means and standard errors
+are calculated based on 1000 replicates, the unit rebalancing cost of the portfolio β = 0.15
+and γ = 1/3.
+Stage Method Return Cost Turnover Leverage SR
+S1
+MV 7.992(0.241) 4.120(0.005) 18.160(0.010) 8.580(0.005) 1.044(0.032)
+PMV 7.766(0.107) 0.624(0.001) 4.082(0.006) 1.541(0.003) 2.599(0.036)
+CMV 8.285(0.212) 2.993(0.003) 15.693(0.009) 7.347(0.004) 1.279(0.033)
+CAPE-S 7.723(0.097) 0.500(0.001) 3.562(0.005) 1.281(0.002) 2.851(0.036)
+S2
+MV 3.581(0.242) 7.736(0.024) 18.161(0.011) 8.580(0.005) 0.374(0.025)
+PMV 8.269(0.125) 0.831(0.002) 4.845(0.008) 2.662(0.003) 2.290(0.035)
+CMV 9.635(0.215) 4.974(0.013) 20.216(0.026) 7.186(0.004) 1.294(0.029)
+CAPE-S 8.247(0.115) 0.631(0.002) 4.088(0.007) 2.291(0.003) 2.506(0.035)
+S3
+MV 3.670(0.250) 7.792(0.024) 18.131(0.010) 8.566(0.005) 0.385(0.026)
+PMV 8.785(0.139) 0.934(0.003) 5.234(0.009) 3.305(0.003) 2.269(0.036)
+CMV 11.613(0.220) 4.870(0.012) 20.012(0.025) 7.050(0.004) 1.572(0.030)
+CAPE-S 8.758(0.128) 0.708(0.002) 4.406(0.007) 2.894(0.003) 2.469(0.036)
+S4
+MV 3.764(0.245) 7.787(0.025) 18.148(0.010) 8.574(0.005) 0.396(0.026)
+PMV 9.312(0.137) 0.981(0.003) 5.419(0.010) 3.692(0.004) 2.332(0.035)
+CMV 12.530(0.215) 4.797(0.012) 19.855(0.024) 6.997(0.004) 1.705(0.030)
+CAPE-S 9.294(0.128) 0.745(0.002) 4.566(0.008) 3.269(0.003) 2.530(0.035)
+Notes: MV, PMV, CMV and CAPE-S are mean variance, penalized mean variance, cost-aware mean
+variance, and the proposed cost-aware portfolios (all with linear shrinkage estimated covariance ma-
+trices), respectively. S0 is the portfolio construction stage, S1-S4 are rebalancing stages, respectively.
+And the values in columns of Return and Cost represent percentages.
+and cost-efficiency across all rebalancing stages (S1–S4).
+Under quadratic transaction costs (Table 2), CAPE-S yields the highest Sharpe ratio
+at every stage, significantly outperforming the traditional Mean-Variance (MV), Penalized
+Mean-Variance (PMV), and Cost-aware Mean-Variance (CMV) models. For example, in
+29
+Table 3: Simulation results with proportional transaction costs, means and standard errors
+are calculated based on 1000 replicates, the unit rebalancing cost of the portfolio α = 0.001
+and γ = 1/3.
+Stage Method Return Cost Turnover Leverage SR
+S1
+MV 10.296(0.241) 1.816(0.001) 18.160(0.010) 8.580(0.005) 1.489(0.035)
+PMV 7.983(0.107) 0.408(0.001) 4.082(0.006) 1.541(0.003) 2.698(0.036)
+CMV 10.169(0.235) 1.729(0.001) 17.293(0.010) 8.147(0.005) 1.513(0.035)
+CAPE-S 7.879(0.099) 0.353(0.001) 3.527(0.005) 1.264(0.003) 2.878(0.036)
+S2
+MV 8.833(0.241) 2.484(0.004) 24.840(0.039) 8.580(0.005) 1.245(0.034)
+PMV 8.615(0.125) 0.484(0.001) 4.845(0.008) 2.662(0.003) 2.420(0.035)
+CMV 8.965(0.237) 2.368(0.004) 23.684(0.037) 8.408(0.005) 1.287(0.034)
+CAPE-S 8.471(0.117) 0.410(0.001) 4.097(0.007) 2.277(0.003) 2.552(0.036)
+S3
+MV 8.968(0.248) 2.494(0.004) 24.937(0.038) 8.566(0.005) 1.267(0.035)
+PMV 9.196(0.139) 0.523(0.001) 5.233(0.009) 3.305(0.003) 2.414(0.037)
+CMV 9.078(0.245) 2.397(0.004) 23.967(0.038) 8.415(0.005) 1.304(0.035)
+CAPE-S 9.023(0.131) 0.444(0.001) 4.438(0.008) 2.892(0.003) 2.523(0.037)
+S4
+MV 9.060(0.244) 2.492(0.004) 24.918(0.040) 8.574(0.005) 1.278(0.035)
+PMV 9.751(0.137) 0.542(0.001) 5.419(0.010) 3.692(0.004) 2.483(0.035)
+CMV 9.142(0.242) 2.399(0.004) 23.986(0.040) 8.432(0.005) 1.310(0.035)
+CAPE-S 9.586(0.130) 0.461(0.001) 4.613(0.008) 3.282(0.003) 2.586(0.036)
+Note: See notes in Table 2.
+stage S1, CAPE-S achieves a Sharpe ratio of 2.851, compared to 2.599 (PMV), 1.279
+(CMV), and 1.044 (MV). Notably, CAPE-S accomplishes this with the lowest transaction
+cost (0.500%) and lowest turnover (3.562%), indicating efficient reallocation with minimal
+trading. This pattern persists through stages S2 to S4, with CAPE-S consistently attaining
+higher return-to-risk ratios, while incurring substantially less cost and leverage than the
+MV and CMV models.
+Similar conclusions hold under proportional transaction costs (Table 3). CAPE-S again
+30
+delivers the best Sharpe ratio in each stage, with performance gains most prominent in
+S1 and S4, where the Sharpe ratios reach 2.878 and 2.586, respectively. Although PMV
+also exhibits cost-awareness, it sacrifices return and remains less effective in capturing the
+full benefit of transaction cost control. Compared to CMV and MV, which often yield
+higher raw returns, CAPE-S achieves better overall risk-adjusted performance by avoiding
+excessive leverage and unnecessary trading. For instance, in S2, CAPE-S reduces the
+turnover to 4.097% and the cost to 0.410%, about 16.5% of the MV model’s transaction
+cost, while increasing the Sharpe ratio by approximately 105%.
+These findings highlight the advantage of our model in adapting to real-world trading
+frictions, demonstrating its ability to attain high returns while tightly controlling costs and
+maintaining portfolio sparsity. CAPE-S successfully balances the trade-off between return
+and cost, validating its practical value for large-scale portfolio management.
+4 Real Data Application
+In this section, we assess the empirical performance of the proposed CAPE-S method
+using two major U.S. equity universes: the S&P 500 and the Russell 2000 indices. For
+each index, we collect daily return data over the investment horizon from 02-Jan-2017 to
+23-Dec-2020, and implement portfolio rebalancing every 251 trading days. This results in
+three decision points and four stages: an initial formation period (S0), followed by three
+rebalancing stages (S1–S3). The out-of-sample evaluation period spans from 01-Jan-2018
+to 23-Dec-2020.
+A key feature of this empirical exercise is to use real transaction cost data instead of
+the pre-determined constant costs coefficients. First, to ensure consistency, we cleaned the
+data by removing stocks with incomplete return histories or missing auxiliary data required
+for real transaction cost estimation (e.g., bid-ask spreads, trading volumes). As a result,
+we retain 457 stocks from the S&P 500 and 935 stocks from the Russell 2000 for analysis.
+31
+The sample of stocks remain broadly representative of their respective index compositions.
+At each decision point, the covariance matrix Σt is estimated using two methods: the
+linear shrinkage estimator (LSE) and the nonlinear shrinkage estimator (NLSE), both based
+on the most recent 251 trading days. Similar to the setting described in Section 3, we report
+the results based on the LSE in the main text, while the results obtained from the NLSE
+are provided in Section 3 of the Supplementary Materials.
+Our evaluation includes the CAPE-S method, three benchmark approaches—mean-
+variance (MV), penalized mean-variance (PMV), and cost-aware mean-variance (CMV)—and
+the equally-weighted “1/N” portfolio (DeMiguel et al., 2009). We compare their perfor-
+mance using several metrics: annual return, transaction cost, turnover, leverage, stage-
+specific Sharpe ratios (S1–S3), and the overall Sharpe ratio across the entire out-of-sample
+period.
+In contrast to the simulation studies, where transaction cost coefficients were fixed
+across assets (i.e., 0.15 for quadratic costs and 0.001 for proportional costs), such fixed cost
+specification is likely unrealistic in real-world applications. In empirical settings, trans-
+action costs often vary substantially across stocks due to liquidity, trading frequency, and
+other microstructure factors. Therefore, we adopt asset-specific transaction cost coefficients
+for both proportional and quadratic forms, as discussed in the methodology sections.
+For proportional transaction cost coefficients, we follow the empirical estimates provided
+in Ren` o et al. (2025), who use the bid-ask spread estimator proposed by Hasbrouck (2009)
+to proxy the proportional transaction costs at the individual stock level. These estimates
+are averaged over the formation window and are available for a wide range of U.S. equities
+from 1927 to the present, including both S&P 500 and Russell 2000 constituents.
+For quadratic transaction cost coefficients, we define the asset-specific cost coefficient
+as twice the square of the corresponding proportional cost estimate. This specification
+ensures consistency in scaling and penalizes large rebalancing moves more heavily for less
+32
+liquid stocks. Moreover, it reflects the increasing marginal cost nature of market impact,
+thereby capturing a more realistic trading environment.
+By incorporating heterogeneity in cost parameters, our empirical analysis more accu-
+rately reflects the practical implementation of portfolio strategies under realistic trading
+frictions.
+4.1 S&P 500 Index
+We first present the empirical results on the S&P 500 dataset. The performance of all
+methods under both quadratic and proportional transaction cost models is summarized in
+Tables 4 and 5, respectively.
+Our proposed CAPE-S method achieves the highest overall out-of-sample Sharpe ratio
+across the three stages (S1 to S3) under both quadratic and proportional transaction cost
+settings. Examining performance at the stage level provides further insights:
+• Stage S1 (2018) coincided with a period of heightened market volatility and an
+overall downturn, particularly during Q4 2018 when the S&P 500 experienced a sharp
+correction. While all active strategies posted negative returns, CAPE-S recorded the
+smallest loss among them under the proportional cost setting (-2.694%) and one of the
+smallest losses under the quadratic cost setting (-3.687%), demonstrating resilience
+during stressed market conditions. Turnover (7.147% proportional, 6.951% quadratic)
+and leverage (3.074 proportional, 2.976 quadratic) remained moderate relative to
+other active strategies.
+• Stage S2 (2019) represented a strong recovery year, with broad-based gains across
+the S&P 500 driven by accommodative monetary policy and easing trade tensions.
+Under both cost structures, CAPE-S delivered competitive returns (37.775% pro-
+portional, 30.491% quadratic) and achieved one of the highest Sharpe ratios among
+actively managed portfolios (1.666 proportional, 2.490 quadratic), while maintaining
+33
+Table 4: S&P 500 with quadratic transaction cost.
+Method Stage Return Cost Turnover Leverage SR Overall SR
+1/N
+S1 -3.666 0.017 1.000 0.000 -0.234
+0.869S2 29.236 0.001 0.181 0.000 2.341
+S3 47.369 0.002 0.154 0.000 1.073
+MV
+S1 -7.313 2.545 9.794 4.397 -0.329
+0.772S2 36.261 13.795 19.462 7.166 1.254
+S3 141.735 12.551 18.118 6.441 1.158
+PMV
+S1 -10.570 1.346 6.082 2.541 -0.570
+0.665S2 23.493 1.569 3.081 2.867 2.150
+S3 78.677 0.532 1.561 2.796 1.027
+CMV
+S1 -5.150 1.488 7.536 3.268 -0.266
+0.891S2 48.870 8.571 15.235 6.338 2.081
+S3 96.660 6.899 13.651 5.504 1.127
+CAPE-S
+S1 -3.687 1.631 6.951 2.976 -0.188
+0.915S2 30.491 2.349 4.766 3.265 2.490
+S3 77.174 0.778 2.283 2.873 1.257
+Notes: ‘1/N’, MV, PMV, CMV and CAPE are the equally-weighted, mean variance, penalized mean
+variance, cost-aware mean variance, and the proposed cost-aware portfolios (all with linear shrinkage
+estimated covariance matrices), respectively. S1 is the portfolio construction stage, S2–S3 are rebal-
+ancing stages, respectively. And the values in columns of Return and Cost represent percentages.
+transaction costs (4.128% proportional, 2.349% quadratic) and turnover (15.688%
+proportional, 4.766% quadratic) at moderate levels compared to MV, PMV, and
+CMV.
+• Stage S3 (2020) covered a highly turbulent market cycle, including the COVID-
+19-induced crash in Q1 2020 followed by a rapid rebound. CAPE-S generated solid
+returns (108.519% proportional, 77.174% quadratic) and achieved the highest Sharpe
+ratio under the proportional cost setting (1.263), while keeping leverage (6.007 pro-
+34
+Table 5: S&P 500 with proportional transaction cost.
+Method Stage Return Cost Turnover Leverage SR Overall SR
+1/N
+S1 -3.797 0.147 1.000 0.000 -0.242
+0.866S2 29.185 0.053 0.181 0.000 2.336
+S3 47.323 0.047 0.154 0.000 1.072
+MV
+S1 -6.092 1.324 9.794 4.397 -0.274
+0.859S2 44.854 5.203 19.462 7.166 1.730
+S3 149.530 4.756 18.118 6.441 1.228
+PMV
+S1 -10.058 0.833 6.082 2.541 -0.543
+0.824S2 37.566 3.902 14.298 6.180 1.721
+S3 134.396 3.730 13.927 5.555 1.225
+CMV
+S1 -10.864 1.133 8.474 3.737 -0.523
+0.798S2 38.339 4.626 17.411 6.993 1.612
+S3 154.734 4.345 16.763 6.321 1.209
+CAPE-S
+S1 -2.694 0.949 7.147 3.074 -0.133
+0.909S2 37.775 4.128 15.688 6.606 1.666
+S3 108.519 3.912 15.051 6.007 1.263
+Note: See notes in Table 4.
+portional, 2.873 quadratic) relatively contained compared to MV and CMV. This
+highlights its adaptability to sharp market reversals.
+Across all stages, excluding the passive 1/N portfolio, CAPE-S consistently maintains
+one of the lowest turnover levels among actively managed strategies, reflecting operational
+efficiency. Its leading overall Sharpe ratio under both cost specifications (0.915 quadratic,
+0.909 proportional) highlights its capability to balance returns, risk, and transaction costs,
+demonstrating robustness to varying cost structures.
+35
+4.2 Russel 2000 Index
+Next, we report the results for the Russell 2000 dataset, following the same setup as in
+Section 4.1. The corresponding performance metrics are presented in Tables 6 and 7.
+Table 6: Russell 2000 with quadratic transaction cost.
+Method Stage Return Cost Turnover Leverage SR Overall SR
+1/N
+S1 -7.839 0.012 1.000 0.000 -0.488
+0.816S2 25.682 0.003 0.281 0.000 1.656
+S3 124.503 0.017 0.281 0.000 1.269
+MV
+S1 -55.130 6.625 19.522 9.261 -1.323
+0.518S2 -25.690 23.272 34.829 9.993 -0.406
+S3 261.635 23.275 34.694 11.870 1.404
+PMV
+S1 -10.425 0.566 2.762 0.881 -0.686
+1.243S2 21.163 1.216 4.343 2.144 0.987
+S3 122.167 1.880 5.011 2.788 2.197
+CMV
+S1 -46.062 4.543 16.201 7.600 -1.290
+0.784S2 12.367 12.775 25.798 8.301 0.237
+S3 366.413 12.120 25.018 9.537 1.551
+CAPE
+S1 3.273 0.319 1.307 0.153 0.297
+1.170S2 32.691 0.280 1.519 0.695 2.745
+S3 177.988 0.356 1.600 0.973 1.710
+Note: See notes in Table 4.
+Despite the higher volatility and liquidity challenges inherent in small-cap stocks, the
+CAPE-S method maintains robust performance under both quadratic and proportional
+transaction cost settings. Tables 6 and 7 report detailed results under the two cost regimes.
+• Stage S1 (2018) was a period of elevated volatility and broad market drawdown.
+The Russell 2000 Index, which is generally more sensitive to macroeconomic uncer-
+tainty, suffered larger losses than the S&P 500. In this challenging environment,
+36
+Table 7: Russell 2000 with proportional transaction cost.
+Method Stage Return Cost Turnover Leverage SR Overall SR
+1/N
+S1 -8.157 0.330 1.000 0.000 -0.508
+0.813S2 25.569 0.116 0.281 0.000 1.649
+S3 124.399 0.121 0.281 0.000 1.268
+MV
+S1 -54.555 6.050 19.522 9.261 -1.311
+0.599S2 -13.976 11.559 34.829 9.993 -0.240
+S3 274.625 10.285 34.694 11.870 1.484
+PMV
+S1 -10.945 1.086 2.762 0.881 -0.723
+1.234S2 20.627 1.752 4.343 2.144 0.961
+S3 122.238 1.809 5.011 2.788 2.199
+CMV
+S1 -57.093 5.355 17.963 8.482 -1.465
+0.533S2 -47.534 10.907 33.960 10.564 -0.849
+S3 483.051 21.687 75.347 17.964 1.196
+CAPE
+S1 2.603 0.594 1.282 0.141 0.237
+1.158S2 32.209 0.678 1.477 0.665 2.732
+S3 177.379 0.635 1.568 0.956 1.699
+Note: See notes in Table 4.
+CAPE-S was the only strategy to achieve positive returns, with modest gains ac-
+companied by low turnover (approximately 1.3%) and low leverage (around 0.15),
+highlighting its defensiveness and cost-efficiency.
+• Stage S2 (2019) was characterized by a broad market rebound, driven by easing
+monetary policy and reduced trade tensions. During this recovery phase, CAPE-S
+achieved the highest Sharpe ratio (2.745) among all strategies, while maintaining the
+lowest transaction cost (0.280%) and turnover (approximately 1.52%), far below the
+MV strategy’s cost of 23.272% and turnover of 34.829%. This demonstrates that
+CAPE-S effectively balances risk and return without relying on aggressive rebalanc-
+37
+ing.
+• Stage S3 (2020) encompassed one of the most turbulent and rapidly rebounding
+market periods in recent history due to the COVID-19 pandemic. The small-cap
+segment staged a dramatic recovery following the March 2020 crash, benefiting dis-
+proportionately from fiscal stimulus and risk-on sentiment. CAPE-S captured sub-
+stantial gains (approximately 177.99%) while preserving a favorable risk profile, with
+low leverage (0.973) and turnover (1.60%), outperforming all alternatives in terms of
+Sharpe ratio (1.710).
+Overall, the MV and CMV strategies performed poorly, particularly under proportional
+cost settings, due to high turnover and leverage. The PMV method showed some improve-
+ment but still lagged behind CAPE-S. Across all three stages, CAPE-S consistently achieved
+the highest overall Sharpe ratio (1.170 for quadratic costs and 1.158 for proportional costs)
+while maintaining the lowest turnover among actively managed portfolios. These findings
+confirm CAPE-S’s adaptability and robustness, particularly in the more volatile and cost-
+sensitive small-cap universe, and underscore its practical relevance for real-world portfolio
+management.
+5 Conclusion
+In this paper, we propose a novel approach to integrate the transaction costs within the
+optimization problem when the number of assets is larger than the sample size. By using
+LLA algorithm, we prove the sign consistency and provide the ℓ∞ bound of our proposed
+CAPE-S method for both proportional and quadratic transaction costs.
+In addition to the sound statistical properties, CAPE-S demonstrates exceptional per-
+formance in practical applications. Through extensive simulations and applications to real
+data, we demonstrate the superior performance and broad applicability of our method
+38
+across diverse tasks.
+39
+References
+Ban, G.-Y., N. El Karoui, and A. E. Lim (2018). Machine learning and portfolio optimiza-
+tion. Management Science 64 (3), 1136–1154.
+Best, M. J. and J. Hlouskova (2005). An algorithm for portfolio optimization with trans-
+action costs. Management Science 51 (11), 1676–1688.
+Brown, D. B. and J. E. Smith (2011). Dynamic portfolio optimization with transaction
+costs: Heuristics and dual bounds. Management Science 57 (10), 1752–1770.
+Cai, T. T., J. Hu, Y. Li, and X. Zheng (2020). High-dimensional minimum variance portfolio
+estimation based on high-frequency data. Journal of Econometrics 214 (2), 482–494.
+Cai, Z., C. Li, J. Wen, and S. Yang (2024). Asset splitting algorithm for ultrahigh dimen-
+sional portfolio selection and its theoretical property. Journal of Econometrics 239 (2),
+105291.
+Caner, M., M. Medeiros, and G. F. Vasconcelos (2023). Sharpe ratio analysis in high
+dimensions: Residual-based nodewise regression in factor models. Journal of Economet-
+rics 235 (2), 393–417.
+Chang, J., X. Chen, and M. Wu (2024). Central limit theorems for high dimensional
+dependent data. Bernoulli 30 (1), 712–742.
+DeMiguel, V., L. Garlappi, F. J. Nogales, and R. Uppal (2009). A generalized approach to
+portfolio optimization: Improving performance by constraining portfolio norms. Man-
+agement Science 55 (5), 798–812.
+DeMiguel, V., L. Garlappi, and R. Uppal (2009). Optimal versus naive diversification:
+How inefficient is the 1/n portfolio strategy? The review of Financial studies 22 (5),
+1915–1953.
+40
+Ding, Y., Y. Li, and X. Zheng (2021). High dimensional minimum variance portfolio
+estimation under statistical factor models. Journal of Econometrics 222 (1), 502–515.
+Du, J.-H., Y. Guo, and X. Wang (2022). High-dimensional portfolio selection with cardi-
+nality constraints. Journal of the American Statistical Association 118 (542), 779–791.
+Engle, R. F., O. Ledoit, and M. Wolf (2019). Large dynamic covariance matrices. Journal
+of Business & Economic Statistics 37 (2), 363–375.
+Fan, J., Y. Fan, and J. Lv (2008). High dimensional covariancematrix estimation using a
+factor model. Journal of Econometrics 147 (1), 186–197.
+Fan, J. and R. Li (2001). Variable selection via nonconcave penalized likelihood and its
+oracle properties. Journal of the American Statistical Association 96 (456), 1348–1360.
+Fan, J., Y. Liao, and X. Shi (2015). Risks of large portfolios. Journal of Economet-
+rics 186 (2), 367–387.
+Fan, J., W. Wang, and Y. Zhong (2019). Robust covariance estimation for approximate
+factor models. Journal of Econometrics 208 (1), 5–22.
+Fan, J., L. Xue, and H. Zou (2014). Strong oracle optimality of folded concave penalized
+estimation. The Annals of Statistics 42 (3), 819–849.
+Fan, J., J. Zhang, and K. Yu (2012). Vast portfolio selection with gross-exposure con-
+straints. Journal of the American Statistical Association 107 (498), 592–606.
+Fan, Y. and J. Lv (2016). Innovated scalable efficient estimation in ultra-large gaussian
+graphical models. The Annals of Statistics 44 (5), 2098–2126.
+Gai, Y., L. Zhu, and L. Lin (2013). Model selection consistency of dantzig selector.Statistica
+Sinica 23 (2), 615–634.
+41
+Hafner, C. M., O. B. Linton, and H. Tang (2020). Estimation of a multiplicative correlation
+structure in the large dimensional case. Journal of Econometrics 217 (2), 431–470.
+Hasbrouck, J. (2009). Trading costs and returns for us equities: Estimating effective costs
+from daily data. The Journal of Finance 64 (3), 1445–1477.
+Hautsch, N. and S. Voigt (2019, sep). Large-scale portfolio allocation under transaction
+costs and model uncertainty. Journal of Econometrics 212 (1), 221–240.
+Jagannathan, R. and T. Ma (2003). Risk reduction in large portfolios: Why imposing the
+wrong constraints helps. The Journal of Finance 58 (4), 1651–1683.
+Lam, C. and P. Feng (2018). A nonparametric eigenvalue-regularized integrated covariance
+matrix estimator for asset return data. Journal of Econometrics 206 (1), 226–257.
+Ledoit, O. and M. Wolf (2004). A well-conditioned estimator for large-dimensional covari-
+ance matrices. Journal of multivariate analysis 88 (2), 365–411.
+Ledoit, O. and M. Wolf (2020). Analytical nonlinear shrinkage of large-dimensional covari-
+ance matrices. The Annals of Statistics 48 (5), 3043–3065.
+Ledoit, O. and M. Wolf (2025). Markowitz portfolios under transaction costs.The Quarterly
+Review of Economics and Finance 100 , 101962.
+Liu, W., X. Yu, W. Zhong, and R. Li (2024). Projection test for mean vector in high
+dimensions. Journal of the American Statistical Association 119 (545), 744–756.
+Lobo, M. S., M. Fazel, and S. Boyd (2007). Portfolio optimization with linear and fixed
+transaction costs. Annals of Operations Research 152 (1), 341–365.
+Loh, P.-L. and M. J. Wainwright (2015). Regularized m-estimators with nonconvexity:
+Statistical and algorithmic theory for local optima. Journal of Machine Learning Re-
+search 16 (19), 559–616.
+42
+Luo, C., P. Chen, and P. Jaillet (2024). Portfolio optimization based on almost second-
+degree stochastic dominance. Management Science 71 (8), 7029–7055.
+Markowitz, H. (1952). Portfolio selection. The Journal of Finance 7 (1), 77–91.
+Olivares-Nadal, A. V. and V. DeMiguel (2018). A robust perspective on transaction costs
+in portfolio optimization. Operations Research 66 (3), 733–739.
+Perold, A. F. (1984). Large-scale portfolio optimization. Management Science 30 (10),
+1143–1160.
+Ren, Z., Y. Kang, Y. Fan, and J. Lv (2019). Tuning-free heterogeneous inference in massive
+networks. Journal of the American Statistical Association 114 (528), 1908–1925.
+Ren, Z., T. Sun, C.-h. Zhang, and H. H. Zhou (2015). Asymptotic normality and optimal-
+ities in estimation of large gaussian graphical models. The Annals of Statistics 43 (3),
+991–1026.
+Ren` o, R., R. T´ edongap, and X. Zhang (2025). Pure momentum.Technical Report.
+Samuelson, P. A. (1975). Lifetime portfolio selection by dynamic stochastic programming.
+In Stochastic Optimization Models in Finance , pp. 517–524.
+So, M. K., T. W. Chan, and A. M. Chu (2022). Efficient estimation of high-dimensional
+dynamic covariance by risk factor mapping: Applications for financial risk management.
+Journal of Econometrics 227 (1), 151–167.
+Wang, L., Z. Chen, C. D. Wang, and R. Li (2020). Ultrahigh dimensional precision matrix
+estimation via refitted cross validation. Journal of Econometrics 215 (1), 118–130.
+Zhang, C.-H. (2010). Nearly unbiased variable selection under minimax concave penalty.
+The Annals of Statistics 38 (2), 894–942.
+43
+Zhao, P. and B. Yu (2006). On model selection consistency of lasso. Journal of Machine
+Learning Research 7 (90), 2541–2563.
+Zou, H. (2006). The adaptive lasso and its oracle properties. Journal of the American
+Statistical Association 101 (476), 1418–1429.
+Zou, H. and R. Li (2008). One-step sparse estimates in nonconcave penalized likelihood
+models. The Annals of Statistics 36 (4), 1509–1533.
+44

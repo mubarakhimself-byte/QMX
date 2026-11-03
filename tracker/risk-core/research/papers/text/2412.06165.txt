@@ -1,0 +1,3024 @@
+arXiv 2412.06165  https://arxiv.org/abs/2412.06165
+
+Conservative Contextual Bandits: Beyond Linear
+Representations
+Rohan Deb
+University of Illinois, Urbana-Champaign
+rd22@illinois.edu
+Mohammad Ghavamzadeh
+Amazon AGI
+ghavamza@amazon.com
+Arindam Banerjee
+University of Illinois, Urbana-Champaign
+arindamb@illinois.edu
+Abstract
+Conservative Contextual Bandits (CCBs) address safety in sequential decision making by requiring
+that an agent’s policy, along with minimizing regret, also satisfies a safety constraint: the performance is
+not worse than a baseline policy (e.g., the policy that the company has in production) by more than(1 +α)
+factor. Prior work developed UCB-style algorithms in the multi-armed [Wu et al., 2016] and contextual
+linear [Kazerouni et al., 2017] settings. However, in practice the cost of the arms is often a non-linear
+function, and therefore existing UCB algorithms are ineffective in such settings. In this paper, we consider
+CCBs beyond the linear case and develop two algorithms C9SquareCB and C9FastCB, using Inverse Gap
+Weighting (IGW) based exploration and an online regression oracle. We show that the safety constraint
+is satisfied with high probability and that the regret of C9SquareCB is sub-linear in horizon T , while
+the regret of C9FastCB is first-order and is sub-linear in L∗, the cumulative loss of the optimal policy.
+Subsequently, we use a neural network for function approximation and online gradient descent as the
+regression oracle to provide ˜O(√KT + K/α) and ˜O(√KL ∗ + K(1 + 1/α)) regret bounds, respectively.
+Finally, we demonstrate the efficacy of our algorithms on real-world data and show that they significantly
+outperform the existing baseline while maintaining the performance guarantee.
+Keywords: Safe Bandits, Neural Contextual Bandits, Non-linear Bandits, Constrained Bandits
+1 Introduction
+Contextual bandits provide a framework to make sequential decisions over time by actively interacting with
+the environment. In each time step, the learner observes K context vectors associated with corresponding
+arms, selects an arm based on the history of interaction and observes the corresponding noise corrupted cost1
+of playing that arm. The objective of the learner is to minimize the cumulative sum of costs over the entire
+horizon of length T , or equivalently to minimize the regret. Although a lot of progress had been made in
+the multi-armed [Auer et al., 2002, Agrawal and Goyal, 2012, Bubeck et al., 2012, Bubeck and Slivkins,
+2012] and linear formulation [Chu et al., 2011, Abbasi-Yadkori et al., 2011, Agrawal and Goyal, 2013], until
+recently solutions for the general non-linear cost function did not exist. A series of work on neural contextual
+1We use the cost formulation instead of the more common reward formulation in this paper.
+1
+arXiv:2412.06165v1  [cs.LG]  9 Dec 2024
+bandits [Zahavy and Mannor, 2020, Zhou et al., 2020, Zhang et al., 2021] have provided algorithms and
+guarantees for general non-linear cost functions, paving the way for practical use of bandit algorithms in
+real-world problems. Distinct from the previous set of works, Foster and Rakhlin [2020] and Foster and
+Krishnamurthy [2021] developed general reductions from the bandit problem to online regression using the
+Inverse Gap Weighting (IGW) idea [Abe and Long, 1999, Abe et al., 2003]. This reduction works for general
+cost functions and uses only a mild realizability assumption (see Assumption 1).
+In addition to non-linear cost functions, safety is another crucial consideration that significantly enhances
+the practical use of these algorithms in the real-world. In this work, we consider a specific notion of safety
+called safety with respect to a baseline [Kazerouni et al., 2017]. Algorithms that are safe, meaning it is
+assured to perform at least as well as an established (possibly already deployed) baseline, are more likely
+to be used in practice. While existing online algorithms for bandits are expected to eventually identify an
+optimal or high-performing policy, their performance during the initial learning phase can be unpredictable
+and often unsafe. To ensure safety in such algorithms, it is important to regulate their exploration, by making
+them more conservative. This is done by making sure that the cumulative cost of the algorithm at any step is
+not worse than the cumulative cost of the baseline by more than a (1 + α) factor (cf. Definition 2.2). Such a
+conservative bandit formulation was studied in the multi-armed setting [Wu et al., 2016] and the linear setting
+[Kazerouni et al., 2017, Garcelon et al., 2020], but algorithms and regret guarantees for the general case do
+not exist.
+Existing conservative bandit algorithms have considered the standard multi-armed bandits [Wu et al., 2016]
+and linear contextual bandits [Kazerouni et al., 2017, Garcelon et al., 2020], using a suitable variant of the
+popular Upper Confidence Bound (UCB) approach [Auer et al., 2002, Abbasi-Yadkori et al., 2011]. In this
+work, we are interested in Conservative Contextual Bandits (CCBs) beyond the linear case. One simple and
+lazy way to extend the analysis to general non-linear functions would be to modify the Neural UCB algorithm
+[Zhou et al., 2020], and extend the regret analysis to the conservative setup. However, a recent work [Deb
+et al., 2024a] has shown that the regret bound for Neural UCB in Zhou et al. [2020] (and Neural Thompson
+Sampling Zhang et al. [2021]) is Ω(T ) in the worst case even with an oblivious adversary, which would also
+extend to any modification for the conservative case.
+In this paper, we consider CCBs with general functions and make the following contributions. First, as our
+main contribution, under the assumption of an online regression oracle for general functions, we propose
+CCB algorithms that utilize the oracle and performs exploration using inverse gap weighting (IGW) [Abe
+and Long, 1999, Foster and Rakhlin, 2020, Foster and Krishnamurthy, 2021]. The regret of our proposed
+algorithms, respectively based on squared loss and KL-loss regression (Sections 3 and 4), can be expressed in
+terms of the regret of the corresponding regression oracle, while ensuring that the conservative performance
+guarantee is not violated with high probability. Our analysis differs substantially from the standard UCB
+based analysis, since our algorithms do not maintain high confidence sets around the true cost functions,
+which is challenging for general functions. Our analysis also differs from the standard IGW analysis in
+Foster and Rakhlin [2020] and Foster and Krishnamurthy [2021]. The CCB algorithms we propose carefully
+balance exploring actions through IGW and relying on the baseline algorithm to ensure the safety constraint is
+always met. Second, we instantiate the proposed CCB algorithms by using online neural regression, leverage
+O(log T ) regret for neural regression with both square-loss and KL-loss, and provide regret bounds for CCBs
+with neural networks (Section 5). A more detailed description of existing works leading up to the current
+work can be found in Appendix A.
+2
+Next we summarize our specific technical contributions below:
+1. Reduction using Squared loss: We provide an algorithm for conservative bandits for general cost
+functions using an oracle for online regression with squared loss (see Algorithm 1). We subsequently
+prove a O(
+p
+KT RegSq(T ) + KRegSq(T )/α) regret bound, where RegSq(T ) is the regret of online
+regression with squared loss, and also ensure that the performance constraint is satisfied in high probability
+(see Theorem 3.1).
+2. Reduction using KL loss: Next, we provide an algorithm using an oracle for online regression with KL
+loss (see Algorithm 2) and prove a O(
+p
+KL∗ log(L∗) RegKL(T ) + K RegKL(T )(1 + 1/α) regret bound.
+Here, RegKL(T ) is the regret of online regression with KL loss andL∗ is the cumulative cost of the optimal
+policy, while ensuring that the performance constraint is satisfied in high probability (see Theorem 4.1).
+This is a first order regret bound and is data-dependent in the sense that it scales with the cumulative cost
+of the best policy L∗T , instead of the horizon length T .
+3. Regret Bounds using Neural Networks: We instantiate the online regression oracle with Online
+Gradient Descent (OGD) and the function approximator with a feed-forward neural network to give
+an end-to-end regret bound of O
+ p
+KT log(T ) + K log(T )/α
+
+for Algorithm 1 (Theorem 5.1) and
+O
+ p
+KL∗ log(L∗) log( T ) + K log T + K log(T )/α for Algorithm 2 (Theorem 5.2).
+4. Experiments: Finally, we compare our proposed algorithms with existing baselines for conservative
+bandits and show that our algorithms consistently perform better (see Section 6).
+2 Problem Formulation
+Contextual Bandits: We consider a contextual bandit problem where a learner needs to make sequential
+decisions over T time steps. At any round t ∈ [T ], the learner observes the context for K arms Xt =
+{xt,1, , ...,xt,K} ⊆Rd. The contexts can be chosen adversarially unlike in Agarwal et al. [2014], Simchi-
+Levi and Xu [2020], Ban et al. [2022] where the contexts are chosen i.i.d. from a fixed distribution. The
+learner chooses an arm at ∈ [K] and then the associated cost of the arm yt,at ∈ [0, 1] is observed. We make
+the following assumption on the cost.
+Assumption 1 (Realizability). The conditional expectation of yt,a given xt,a is given by some h ∈ H, where
+H is the function class, such that h : Rd 7→ [0, 1], i.e., E[yt,a|xt,a] = h(xt,a). Further, the context vectors
+satisfy ∥xt,a∥ ≤1, t ∈ [T ], a∈ [K].
+Definition 2.1 (Regret). The learner’s goal is to minimize the regret, defined as the expected difference
+between the cumulative cost of the algorithm and that of the optimal policy:
+RegCB(T ) = E
+h TX
+t=1
+ 
+yt,at − yt,a∗t
+ i
+=
+TX
+t=1
+ 
+h(xt,at) − h(xt,a∗t ) , (1)
+where a∗t = argmin a∈[K] h(xt,a), minimizes the expected cost in round t. The subscript CB stands for
+Contextual Bandits and subsequently differentiates it from the regret of online regression.
+Conservative Contextual Bandits: There exists a baseline policy πb that at each round t, selects action
+bt ∈ [K] and receives the expected cost h(xt,bt). This baseline policy is to be interpreted as the default or
+status quo policy that the company follows and knows to provide a reasonable performance. However, the
+company wants to improve the policy but at the same time not incur a high cost while trying to do so. Thus, it
+insists on the following performance constraint on any algorithm:
+3
+Definition 2.2 (Performance Constraint). At each round t, the cumulative loss of the agent’s policy should
+remain below (1 + α) times the cumulative loss of the baseline policy for some α >0, i.e.,
+tX
+i=1
+h(xi,ai) ≤ (1 + α)
+tX
+i=1
+h(xi,bi) , ∀t ∈ {1, . . . , T}. (2)
+The parameter α controls how conservative the agent has to be with respect to the baseline policy. When
+α is very small, the cumulative loss by the agent’s policy cannot be very large in comparison to baseline
+cumulative loss and as α is increased the agent can take larger risks to explore more. We assume that
+the expected costs of the actions taken by the baseline policy, h(xt,bt), are known. This is a reasonable
+assumption as argued in Kazerouni et al. [2017], Garcelon et al. [2020], since we usually have access to a
+large amount of data generated by the baseline policy as this is the default strategy of the company.
+Next, we make the following assumption on the baseline gap and the costs of the baseline actions.
+Assumption 2 (Baseline Gap and Cost Bounds ). Let ∆t,bt := h(xt,bt) − h(xt,a∗t ) be the baseline gap.
+There exist 0 ≤ ∆l ≤ ∆h and 0 < yl < yh, such that for all t ∈ [T ], we have
+∆l ≤ ∆t,bt ≤ ∆h and yl ≤ yt,bt ≤ yh.
+The assumption ensures a minimum level of performance by the baseline action and is standard in conservative
+bandits. Assumption 3 in both Kazerouni et al. 2017 and Garcelon et al. [2020] are exactly as Assumption 2
+in this work, while the regret bound provided in Theorem 2 of Wu et al. [2016] implicitly depends on similar
+quantities.
+3 Reduction to Online Regression with Squared Loss
+In this section, we develop an algorithm for Conservative Bandits with general output functions by reducing
+it to a black-box online regression oracle with squared loss. In Section 5, we instantiate the oracle by
+online gradient descent and give end-to-end regret guarantees. Before proceeding to the algorithm, we
+briefly describe the online regression formulation below. For a more detailed treatment, see Hazan [2021],
+Shalev-Shwartz [2012], Bubeck [2011].
+Online Regression with Squared Loss: We assume access to an oracle Sq9Alg that takes as input all
+data points until time t − 1, Dt−1 = {(xi,ai, yi.ai) : 1 ≤ i ≤ t − 1} and makes the prediction ˆyt,a =
+Sq9Alg(Dt−1, xt,a) in [0, 1] for input xt,a at time t. We further make the following assumption on the regret
+incurred by the oracle Sq9Alg:
+Assumption 3 (Online Regression Regret for Squared Loss). The regret of the online regression oracle
+Sq9Alg is bounded by RegSq(T ) ≥ 1, i.e.,
+TX
+t=1
+ℓsq(ˆyt,at, yt,at) − infg∈H
+TX
+t=1
+ℓsq(g(xt,at), yt,at) ≤ RegSq(T ), (3)
+where the squared loss is given by ℓsq(ˆyt,at, yt,at) = (ˆyt,at − yt,at)2.
+We refer to our algorithm as C9SquareCB, whose pseudo-code is reported in Algorithm 1. At a high level,
+C9SquareCB does the following: 1) It samples an action from the IGW distribution using the outputs of the
+4
+Algorithm 1 Conservative SquareCB (C9SquareCB)
+1: Input: α
+2: Hyper-parameter: Exploration parameter γt
+3: Initialize: S0 = ∅, and let m0 = 0, mt := |St|, t∈ [T ]
+4: for t = 1, . . . , Tdo
+5: Receive contexts xt,1, . . . ,xt,K and compute ˆyt,k, ∀k ∈ [K] using Sq9Alg
+6: Let zt = argmin
+a∈[K]
+ˆyt,a, and compute
+pt,a = 1K + γt(ˆyt,a − ˆyt,zt) , ∀k ∈ [K] \ {zt}; pt,zt = 1 − Xa̸=zt pt,a .
+7: Sample ˜at ∼ pt
+8: if the safety condition in (4) is satisfied then
+9: Play the IGW action at = ˜at and observe output yt,at
+10: Set St = St−1 ∪ t, S ct = S ct−1
+11: Set Dt = Dt−1 ∪ {(xt,at, yt,at)} and update the oracle Sq9Alg
+12: else
+13: Play at = bt and observe output h(xt,bt)
+14: Set St = St−1, S ct = S ct−1 ∪ t, Dt+1 = Dt
+oracle Sq9Alg, 2) It then verifies if a certain safety condition is met, 3) If yes, it then plays the sampled
+action, otherwise turns conservative and plays the baseline action. We use St ⊆ [T ] and its complement
+S ct ⊆ [T ] to denote the subsets containing the time-steps until round t when the IGW and baseline actions
+were played, respectively. We denote the cardinality of these sets by mt = |St| and nt = |S ct |.
+At every round t, the agent receives K different contexts xt,1, . . . ,xt,K and computes the cost estimates for
+every arm ˆyt,a using the online regression oracle (line 5). It then finds the arm with the lowest estimatezt (see
+line 6) and computes the Inverse Gap Weighted (IGW) distribution using the estimate gaps ˆyt,a − ˆyt,zt and
+the exploration parameter γt. Next it samples a candidate action ˜at in line 7 and verifies a safety condition in
+line 7 (corresponding to (2)) by checking if the following inequality holds:
+ˆyt,˜at +
+X
+i∈St−1
+X
+a∈[K]
+pi,a ˆyi,a
+| {z }
+(A)
++
+X
+i∈Sct−1
+h(xi,bi)
+| {z }
+(B)
++ 16
+s
+mt−1
+
+RegSq(mt−1) + log(4/δ)
+
+| {z }
+(C)
+≤ (1 + α)
+tX
+i=1
+h(xi,bi). (4)
+Here, term (A) sums up the expected costs of the regression oracle for all rounds when the IGW action was
+played and the cost of the current IGW action ˜at under consideration. Term (B) simply sums up the baseline
+costs for all the rounds when the baseline action was played. To ensure that the performance constraint (2) is
+5
+not violated, in our proof we show that (see proof of Lemma 4)
+(A) −
+X
+i∈St−1∪{t}
+h(xi,ai) ≥ −16
+q
+mt−1(RegSq(mt−1) + log(4/δ)).
+Observe that now term (C) compensates for the above gap and immediately implies that the constraint in
+(2) is satisfied. Note that an easy way to ensure that (2) holds would be to replace (A) with the observed
+costs yt,at and use Azuma-Hoeffding to bound Pi∈St−1(yi,ai − h(xi,ai)). However this approach does not
+let us control the number of times the baseline action is played by the algorithm, which is crucial to bound
+the final regret (see Step 2 in the proof of Theorem 3.1). If the safety condition in (4) is satisfied, then the
+IGW action at = ˜at is played and the output yt,at is observed in line 9. The current time step is added to St
+and the current input-output pair (xt,at, yt,at) is added to the online regression dataset Dt (lines 10 and 11).
+Otherwise we play the baseline action bt in line 13, observe the true output h(xt,bt) and add the current
+time step to S ct in line 14. We now state the main theoretical result of this section that bounds the regret of
+C9SquareCB (Algorithm 1) along with satisfying the performance constraint in (2) in high probability.
+Theorem 3.1 (Regret Bound for C-SquareCB). Suppose Assumptions 1,2 and 3 hold. With probability
+at least 1 − δ, C9SquareCB (Algorithm 1) satisfies the performance constraint in (2) and has the following
+regret bound:
+RegCB(T ) = O
+ √
+KT
+q
+RegSq(T ) +
+p
+log(8δ−1)
+
+| {z }
+I
++ K(RegSq(T ) + log(8δ−1))αyl(∆l + αyl)| {z }
+II
+
+. (5)
+Remark 3.1 (Term interpretations). Term I and II in (5) correspond to the regret of playing the IGW
+and baseline actions, respectively. Note that term II grows with RegSq(T ), unlike the linear case where the
+second term is independent of the horizon T (see Theorem 5 in Kazerouni et al. 2017). However, in Section 5,
+when we instantiate the oracle with OGD and the function approximator with a neural network, RegSq(T )
+only contributes a log T factor to the regret to the second term.
+Remark 3.2 (Infinite actions). The regret in (5) scales with the number of actions K, and thus, holds for
+finite number of actions. In case of infinite actions, a straightforward extension of our results following the
+analysis of Theorem 1 in Foster et al. [2020] will lead to a regret that scales with the dimension of the action
+space instead of K.
+Proof of Theorem 3.1. The proof of the theorem follows along the following steps. We report the proof of
+the intermediate lemmas in Appendix B.
+1. Regret Decomposition: We begin by decomposing the regret in(1) into two parts following Kazerouni
+et al. [2017]: the regret accumulated by playing the IGW and baseline actions, terms I and II in the regret
+bound (5), respectively.
+Lemma 3.1. Let Assumptions 1 and 2 hold. Then, the regret defined in (1) can be bounded as
+RegCB(T ) ≤
+X
+t∈ST
+
+h(xt,at) − h(xt,a∗t )
+
++ nT ∆h, (6)
+where the set ST consists of the rounds until the horizon T when C9SquareCB played an IGW action and
+nT = |S cT | is the number of times until T where a baseline action was played.
+6
+2. Upper Bound on nT : The safety condition in (4) determines how many times the baseline action is
+played. In what follows, we use mt := |St| and τ := max{1 ≤ t ≤ T : at = bt}, i.e., the last time step
+at which C9SquareCB played an action according to the baseline strategy.
+(a) The following lemma upper-bounds nT in terms of mτ and RegSq(mτ −1).
+Lemma 3.2. Suppose Assumption 1,2 and 3 holds. Then, with probability 1 − δ/4 the number of
+times the baseline action is played by C9SquareCB is bounded as
+nT ≤ 1αyl
+(
+− (mτ −1 + 1)(∆l + αyl)
++ 64
+√
+K
+p
+(mτ −1 + 1)
+q
+RegSq(T ) +
+p
+log(8δ−1)
+ )
+. (7)
+(b) Note that the second term in (7) grows as √mτ −1 and the first term decreases linearly in mτ , and
+therefore, one can find the maximum and further bound nT as in the following lemma.
+Lemma 3.3. Suppose Assumption 1,2 and 3 holds. Then, with probability 1 − δ/4 the number of
+times the baseline action is played by C9SquareCB is bounded as follows:
+nT ≤ O
+ K(RegSq(T ) + log(8δ−1))
+αyl(∆l + αyl)
+
+. (8)
+3. Bounding the Final Regret: The first term in (6) can be bounded along the lines of the analysis in [Foster
+and Rakhlin, 2020]. Note that DT only contains the input-output pairs at time steps when the IGW action
+was picked, i.e., all t ∈ ST , and therefore, using mT = |ST |, (3) reduces to
+X
+t∈ST
+(ˆyt,at − yt,at)2 − infg∈H Xt∈ST  g(xt,at) − yt,at2 ≤ RegSq(mT ). (9)
+However, unlike Foster and Rakhlin [2020], we need an a time varying exploration parameter γt that
+depends on the size of St for all t ∈ [T ] in order to bound nT in Step 2. The next lemma bounds the regret
+of the first term in (6) with an such adaptive γt.
+Lemma 3.4. Suppose Assumptions 1 and 3 hold. Then, for any δ >0, with the exploration parameter
+γt =
+p
+K|St|/(RegSq(T ) + log(4δ−1)), with probability 1 − δ/4, C9SquareCB guarantees
+X
+t∈ST
+
+h(xt,at) − h(xt,a∗t )
+
+≤ O
+ q
+KmT RegSq(T ) +
+p
+KmT log(8δ−1)
+!
+. (10)
+Note that mT ≤ T . Combining (6), (8), and (10), and taking a union bound over the high probability
+events shows that the regret bound in (5) holds with probability 1 − δ/2.
+4. Performance Constraint: Finally the following lemma shows that the condition in Line 7 ofC9SquareCB
+ensures that the performance constraint in (2) is satisfied.
+7
+Lemma 3.5. Let Assumptions 1, 2 and 3 hold. Then, for any δ >0, with the exploration parameter γt =p
+K|St|/(RegSq(mT ) + log(8δ−1)), with probability 1 − δ/2, C9SquareCB satisfies the performance
+constraint in (2).
+Taking a union bound with the high probability regret bound in Step 3, we have that with probability1 − δ,
+C9SquareCB simultaneously satisfies the performance constraint in (2) and the regret upper-bound in (5),
+which concludes the proof.
+Remark 3.3 (Bounding baseline regret). The analysis in Foster and Rakhlin [2020] does not have a safety
+condition and therefore our analysis bounding nT (the number of times the baseline action is played) in Step
+2 and the performance constraint satisfaction in Step 4 of proof of Theorem 3.1 are original contributions.
+One of the important parts of the analysis involves bounding nT , the number of times the baseline actions are
+played. In the linear case [Kazerouni et al., 2017], the analysis crucially uses the upper and lower confidence
+bounds for the parameter estimates. For general function classes it is difficult to maintain such confidence
+bounds around estimates, and further the estimates from the regression oracle ˆyt,at do not provide any such
+guarantees. Therefore our analysis crucially relates nT to squared loss and through that gives a reduction to
+online regression.
+Remark 3.4 (Time dependent Exploration). The analysis from Foster and Rakhlin [2020] cannot be directly
+used to bound the regret for the time steps when the IGW actions were picked (term I in (5)). This is because
+we need to carefully choose a time dependent exploration parameter γt, to simultaneously ensure that term I
+is
+√
+T while ensuring that nT is small. In the process, we extend the analysis in Foster and Rakhlin [2020] to
+time-dependent γt and bound the regret in I.
+4 First Order Regret Bound with log loss
+In this section, we use an oracle with KL loss, KL9Alg, and provide a reduction from the conservative
+contextual bandit (CCB) problem to online regression. The objective of this reduction is to provide a first
+order data dependent2 regret bound, i.e., a bound that scales with L∗ = PTt=1 L∗(t), where L∗(t) = h(xt,a∗t )
+is the cost of the optimal action at time t.
+Online Regression with KL Loss: We assume access to an oracle KL9Alg that takes as input all data points
+until time t − 1, Dt−1 = {(xi,ai, yi.ai) : 1 ≤ i ≤ t − 1} and makes the prediction ˆyt,a = KL9Alg(Dt−1, xt,a)
+in [0, 1] for input xt,a at time t. We further make the following assumption on the regret incurred by the
+oracle KL9Alg:
+Assumption 4 (Online Regression Regret for KL Loss). The regret of the online regression oracleKL9Alg
+is bounded by RegKL(T ) ≥ 1, i.e.,
+TX
+t=1
+ℓKL(ˆyt,at, yt,at) − infg∈H
+TX
+t=1
+ℓKL
+ 
+g(xt,at), yt,at
+
+≤ RegKL(T ), (11)
+where the KL loss is given by ℓKL(ˆy, y) = y log(1/ˆy) + (1 − y) log(1/(1 − ˆy)).
+2See Appendix A for more details on Data Dependent Bounds
+8
+Algorithm 2 Conservative FastCB (C9FastCB)
+1: Input: α
+2: Hyper-parameter: Exploration parameter γt
+3: Initialize: S0 = ∅
+4: for t = 1, . . . , Tdo
+5: Receive contexts xt,1, . . . ,xt,K and compute ˆyt,k, ∀k ∈ [K] using KL9Alg
+6: Let zt = argmin
+k∈[K]
+ˆyt,k and compute
+pt,k = ˆyt,zt
+K ˆyt,zt + γt(ˆyt,k − ˆyt,zt) ∀k ∈ [K] \ {zt}; pt,zt = 1 −
+X
+a̸=zt
+pt,a
+7: Sample ˜at ∼ pt
+8: if
+ˆyt,˜at +
+X
+i∈St−1
+X
+a∈[K]
+pi,a ˆyi,a +
+X
+i∈Sct−1
+h(xi,bi) + 16
+p
+mt−1RegKL(T ) ≤ (1 + α)
+tX
+i=1
+h(xi,bt)
+then
+9: Play at = ˜at and observe output yt,at
+10: Set St = St−1 ∪ t, S ct = S ct−1
+11: Set Dt = Dt−1 ∪ {(xt,at, rt,at)} and update the oracle KL9Alg
+12: else
+13: Play at = bt and observe output h(xt,bt)
+14: Set St = St−1, S ct = S ct−1 ∪ t, Dt+1 = Dt
+We refer to the resulting algorithm as C9FastCB. It follows the same structure as C9SquareCB (Algorithm 1)
+and is summarized in Algorithm 2. We now state the main theory of this section that bounds the regret of
+C9FastCB along with satisfying the performance constraint in high probability.
+Theorem 4.1 (Regret Bound for C-FastCB). Let Assumptions 1, 2 and 4 hold. With probability 1 − δ,
+C9FastCB (Algorithm 2) with γi chosen in (γi-Schedule), satisfies the performance constraint in (2) and
+has the following bound on the expected regret (expectation is for the action distributions):
+E
+
+RegCB(T )
+
+= O
+p
+KL∗ log(L∗) RegKL(T ) + KRegKL(T )αyl(∆l + αyl) log  epKRegKL(T )∆l + αyl . (12)
+Remark 4.1 (First Order Regret). Note that the regret in (12) depends on
+√
+L∗ instead of √T , where
+L∗ = PTt=1 L∗(i) is the cumulative loss of the optimal policy and depends on the complexity of the bandit
+instance, L∗ ≪ T , thus improving the performance of the learner. Such a data dependent regret is referred to
+as a first-order regret[Agarwal et al., 2017a, Foster and Krishnamurthy, 2021].
+Remark 4.2 (Challenges). We face similar set of challenges as in Theorem 5.1 in trying to bound nT , and
+our analysis relates nT to the KL loss using the sampling strategy and reduces it to online regression with KL
+loss. We face an additional challenge. In Foster and Krishnamurthy [2021], the exploration parameter γt
+9
+is set to a fixed value γ = max(
+p
+KL∗/3RegKL(T ), 10K). In our analysis we need a time dependent γt to
+ensure that we can bound the regret contributed by both the IGW and baseline actions (cf. decomposition in
+(6)). However, unlike in Algorithm 1, we crucially need to set γt in an episodic manner to ensure that the
+final regret does not have a
+√
+T dependence. By having log(L∗) episodes and keeping γt constant within an
+episode, we derive our final regret in (12), in which term I has only an additional
+p
+log(L∗) factor. A more
+detailed description of the exact choice of γt along with the episodic analysis has been pushed to Appendix C,
+for clarity.
+Proof of Theorem 4.1. The proof broadly follows the same sequence of steps as in the proof of Theorem 3.1,
+and has been reported in Appendix C.
+5 Neural Conservative Bandits
+In this section, we instantiate the online regression oracles Sq9Alg (Algorithm 1) and KL9Alg (Algorithm 2)
+by (projected) Online Gradient Descent (OGD), and use feed-forward neural networks for function approxi-
+mation. The setup closely follows the one in Deb et al. [2024a], which we restate it here for completeness.
+We consider a feed-forward neural network whose output is given by
+f (θt; x) := m−1/2v⊤t ϕ(m−1/2Wt(L)ϕ(· · ·ϕ(m−1/2Wt(1)x) · · ·)), (13)
+where L is the number of hidden layers and m is the width of the network. Further, Wt(1) ∈ Rm×d and
+W (l)t = [ w(l)t,i,j] ∈ Rm×m for all l ∈ {2, . . . , L} are layer-wise weight matrices, and vt ∈ Rm is the last
+layer vector. Similar to Du et al. [2019], Banerjee et al. [2023], we consider a (point-wise) smooth and
+Lipschitz activation function ϕ(·). We define θt ∈ Rp, where θt := (vec(W (1)t )⊤, . . . ,vec(W (L)t )⊤, v⊤)⊤,
+as the vector of all parameters in the network, and make the following assumption on the initialization of the
+network [Liu et al., 2020, Banerjee et al., 2023].
+Assumption 5. We initialize θ0 with w(l)0,ij ∼ N(0, σ20) for l ∈ [L], where σ0 = σ121+ √log m√2m  , σ1 > 0, and v0
+is a random unit vector with ∥v0∥2 = 1.
+Next, we define the Neural Tangent Kernel (NTK) matrix [Jacot et al., 2018] at θ as
+Kntk(θ) := [⟨∇f (θ; xt), ∇f (θ; xt′)⟩] ∈ RT ×T ,
+and make the following assumption on this matrix which is common in the deep learning literature [Du et al.,
+2019, Arora et al., 2019, Cao and Gu, 2019]. Note that our NTK is defined for a specific sequence of xt’s
+where xt depends on the choice of arms played, and our assumption on the NTK matrix is for all sequences,
+which is equivalent to the assumption for the (T K× T K) NTK matrix as in Zhou et al. [2020] and Zhang
+et al. [2021].
+Assumption 6. The matrix Kntk(θ0) is positive definite, i.e., Kntk(θ0) ⪰ λ0I for some λ0 > 0 .
+The assumption can be ensured if no two context vectors xt overlap. Note that this assumption is used by all
+existing regret bounds for neural bandits (see Assumption 4.2 in Zhou et al. 2020, Assumption 3.4 in Zhang
+et al. 2021, Assumption 5.1 in Ban et al. 2022 and Assumption 5 in Deb et al. 2024a). The choice of the
+width of the network m depends on λ0 and is similar to the width requirements in Zhou et al. [2020] and
+Zhang et al. [2021].
+10
+We define a perturbed network as in Deb et al. [2024a] as follows:
+˜f (θt, xt, ε) = f (θt; xt) + cp
+pX
+j=1
+(θt − θ0)T ejεj
+m1/4 , (14)
+where {ej}pj=1 are standard basis vectors, ε = (ε1, . . . , εp)T is an i.i.d. random Rademacher vector, i.e.,
+P (εj = +1) = P (εj = −1) = 1/2, and cp is the perturbation constant. As in Deb et al. [2024a], we use an
+ensemble of S = O(log T ) random networks as follows:
+˜f (S)
+
+θ; xt, ε(1:S)
+
+= 1S SXs=1 ˜f (θ; xt, εs), (15)
+where each εs is a Rademacher vector. We run projected OGD on the loss function
+L(S)Sq yt,  ˜f (θ; xt, εs)	Ss=1 := 1S SXs=1 ℓSq yt, ˜f (θ; xt, εs) , (16)
+which with the projection operator
+Y
+B
+(θ) = arginf θ′∈B∥θ′ − θ∥2 gives us the following update:
+θt+1 =
+Y
+B
+ 
+θt − ηt∇L(S)Sq yt,at,  ˜f (θ; xt,at, εs)	Ss=1. (17)
+We now prove a regret bound for C9SquareCB with feed-forward neural networks (neural C9SquareCB) and
+OGD as a regression oracle.
+Theorem 5.1 (Regret bound for Neural C-SquareCB). We instantiate Sq9Alg with the predictor ˆyt,at =˜f (S)  θ; xt, ε(1:S) from (15) and update the parameters using OGD in (17). Under Assumptions 1,2, 5 and
+6 with γt as in Theorem 5.1, step-size sequence {ηt}, width m, perturbation constant cp, and projection ball
+B, with high probability (1 − O(δ)), the performance constraint in (2) is satisfied by C-SquareCB and the
+regret is given by
+RegCB(T ) ≤ O
+p
+KT log T +
+p
+KT log(16δ−1) + K(log T + log(16δ−1))αyl(∆l + αyl) .
+Next, for the first-order bound, we use the following ensembled network as the predictor:
+σ
+  ˜f (S) θ; xt, ε(1:S) = 1S SXs=1 σ( ˜f (θ; xt, εs)) (18)
+where ˜f (θ; xt, εs) is as defined in (14) and σ(·) is the sigmoid function. Our next theorem provides a
+first-order regret bound for C9FastCB when coupled with feed-forward networks and OGD.
+Theorem 5.2 (Regret bound for Neural C-FastCB). We instantiate Sq9Alg with the predictor ˆyt,at =˜f (S)  θ; xt, ε(1:S) from (15) and update the parameters using OGD in (17). Under Assumptions 1,2, 4, 5
+and 6 with γt chosen as in (γi-Schedule), step-size sequence {ηt}, width m, perturbation constant cp, and
+projection ball B, with probability (1 − O(δ)), the performance constraint in (2) is satisfied by C-FastCB
+and the expected regret is given by
+E RegCB(T ) ≤ O
+p
+KL∗ log L∗ log T + K log T + K log Tαyl(∆l + αyl) .
+11
+0 1000 2000 3000 4000 5000
+Rounds
+0
+1
+2
+3
+4Regret
+1e3 covertype
+C SquareCB
+C FastCB
+C LinUCB
+0 1000 2000 3000 4000 5000
+Rounds
+0
+1
+2
+3
+4Regret
+1e3 fashion
+C SquareCB
+C FastCB
+C LinUCB
+0 1000 2000 3000 4000 5000
+Rounds
+0.0
+0.5
+1.0
+1.5
+2.0
+2.5Regret
+1e3 MagicTelescope
+C SquareCB
+C FastCB
+C LinUCB
+0 1000 2000 3000 4000 5000
+Rounds
+0.0
+0.5
+1.0
+1.5
+2.0
+2.5
+3.0Regret
+1e3 mushroom
+C SquareCB
+C FastCB
+C LinUCB
+0 1000 2000 3000 4000 5000
+Rounds
+0
+1
+2
+3
+4Regret
+1e3 Plants
+C SquareCB
+C FastCB
+C LinUCB
+0 1000 2000 3000 4000 5000
+Rounds
+0
+1
+2
+3
+4Regret
+1e3 shuttle
+C SquareCB
+C FastCB
+C LinUCB
+Figure 1: Comparison of cumulative regret of C-SquareCB and C-FastCB with the baseline C-LinUCB on
+openml datasets (averaged over 10 runs).
+6 Experiments
+We evaluate our algorithms C9SquareCB and C9FastCB and compare the regret bounds with the existing
+baseline - Conservative Linear UCB ( C9LinUCB) [Kazerouni et al., 2017]. The algorithm estimates the
+parameter associated with the cost function using least squares regression and uses existing results on
+high probability confidence bounds around the estimate [Abbasi-Yadkori et al., 2011] to set up a safety
+condition. When the safety condition is satisfied, it plays actions according to Linear UCB [Chu et al., 2011,
+Abbasi-Yadkori et al., 2011], otherwise switches to the baseline action.
+We use the evaluation setting for bandit algorithms developed in Bietti et al. [2021] and subsequently used
+in [Zhou et al., 2020, Zhang et al., 2021, Ban et al., 2022, Deb et al., 2024a]. We consider a series of
+multiclass classification problems from the openml.org platform. We transform each d-dimensional input
+into K different context vectors of dimension dK, where K is the number of classes as follows: xt,1 =
+(xt, 0, 0, . . . ,0)T , xt,2 = (0, xt, 0, . . . ,0)T ), . . . ,xt,K = (0, 0, . . . ,0, xt)T . The K vectors correspond to
+the K different action choices in the bandit problem. We assign a cost of1 to all the context vectors associated
+with the incorrect classes, and a cost of 0.01 to the correct class. Note that when an action corresponding to
+an incorrect class is selected, the learner does not learn the identity of the action with the lowest cost. For
+each of the datasets, we fix one action as the baseline action, and the baseline policy corresponds to always
+choosing this pre-defined action.
+Both C9SquareCB and C9FastCB use a two layered neural network with ReLU hidden activation. We update
+the network parameter every 10-th round do a grid search over step sizes (0.01, 0.005, 0.001). We compare
+12
+0.02 0.04 0.06 0.08 0.10
+0
+5
+10
+15
+20
+25Percentage of violated constraint
+covertype
+C SquareCB
+SquareCB
+C FastCB
+FastCB
+0.02 0.04 0.06 0.08 0.10
+0
+2
+4
+6
+8
+10Percentage of violated constraint
+Plants
+C SquareCB
+SquareCB
+C FastCB
+FastCB
+0.02 0.04 0.06 0.08 0.10
+0
+5
+10
+15
+20Percentage of violated constraint
+fashion
+C SquareCB
+SquareCB
+C FastCB
+FastCB
+0.02 0.04 0.06 0.08 0.10
+0
+2
+4
+6
+8
+10
+12Percentage of violated constraint
+MagicTelescope
+C SquareCB
+SquareCB
+C FastCB
+FastCB
+Figure 2: Comparison of Percentage of Constraints violated by C-SquareCB and C-FastCB with their vanilla
+non conservative versions on openml datasets (averaged over 100 runs).
+the cumulative regret of the algorithms across rounds in Figure 1. Note that C9SquareCB and C9FastCB
+consistently show a sub-linear trend in regret and beat the existing benchmark, with C9FastCB performing
+better in some of the datasets, owing to it’s first order order regret guarantee.
+We also compare the Percentage of Constraints violated by our conservative algorithms C-SquareCB and
+C-FastCB compared to their vanilla counterparts that does not use any safety condition in Figure 2. Our
+algorithms maintain the performance constraint while minimizing the regret.
+7 Conclusion
+In this paper, we developed two new algorithms,C9SquareCB and C9FastCB, for the problem of Conservative
+Contextual Bandits with general non-linear cost functions. Our algorithms use Inverse Gap Weighting (IGW)
+for exploration and rely on an online regression oracle for prediction. We provided regret guarantees for
+both algorithms, showing that C9SquareCB achieves a sub-linear regret in T , while C9FastCB achieves a
+first-order regret in terms of the cumulative loss of the optimal policy L∗. We also extended our approach by
+using neural networks for function approximation and provide end-to-end regret bounds. Finally, through
+experiments on real-world data, we showed that our methods outperform existing baseline while maintaining
+safety guarantee. Adapting our methods to other safe bandit frameworks such as the stage-wise setting
+[Moradipari et al., 2019, Amani et al., 2019] and to the more general reinforcement learning framework
+following Foster et al. [2023b] and Foster et al. [2023a] is left for future work.
+Acknowledgement
+The work was supported in part by grants from the National Science Foundation (NSF) through awards IIS
+21-31335, OAC 21-30835, DBI 20-21898, IIS-2002540 as well as a C3.ai research award.
+References
+Y . Abbasi-Yadkori, D. Pál, and C. Szepesvári. Improved algorithms for linear stochastic bandits.Advances in
+neural information processing systems, 24, 2011.
+N. Abe and P. M. Long. Associative reinforcement learning using linear probabilistic concepts. In ICML,
+pages 3–11. Citeseer, 1999.
+13
+N. Abe, A. W. Biermann, and P. M. Long. Reinforcement learning with immediate rewards and linear
+hypotheses. Algorithmica, 37(4):263–293, 2003.
+A. Agarwal, D. Hsu, S. Kale, J. Langford, L. Li, and R. Schapire. Taming the monster: A fast and simple
+algorithm for contextual bandits. In International Conference on Machine Learning, pages 1638–1646.
+PMLR, 2014.
+A. Agarwal, S. Bird, M. Cozowicz, L. Hoang, J. Langford, S. Lee, J. Li, D. Melamed, G. Oshri, O. Ribas,
+S. Sen, and A. Slivkins. A multiworld testing decision service. ArXiv, abs/1606.03966, 2016. URL
+https://api.semanticscholar.org/CorpusID:18670075.
+A. Agarwal, A. Krishnamurthy, J. Langford, H. Luo, and S. R. E. Open problem: First-order regret bounds
+for contextual bandits. In S. Kale and O. Shamir, editors, Proceedings of the 2017 Conference on Learning
+Theory, volume 65 of Proceedings of Machine Learning Research, pages 4–7. PMLR, 07–10 Jul 2017a.
+URL https://proceedings.mlr.press/v65/agarwal17a.html.
+A. Agarwal, A. Krishnamurthy, J. Langford, H. Luo, and S. R. E. Open problem: First-order regret bounds
+for contextual bandits. In S. Kale and O. Shamir, editors, Proceedings of the 2017 Conference on Learning
+Theory, volume 65 of Proceedings of Machine Learning Research, pages 4–7. PMLR, 07–10 Jul 2017b.
+URL https://proceedings.mlr.press/v65/agarwal17a.html.
+S. Agrawal and N. R. Devanur. Linear contextual bandits with knapsacks. In Proceedings of the 30th
+International Conference on Neural Information Processing Systems, NIPS’16, page 3458–3467, Red
+Hook, NY , USA, 2016. Curran Associates Inc. ISBN 9781510838819.
+S. Agrawal and N. Goyal. Analysis of thompson sampling for the multi-armed bandit problem. In S. Mannor,
+N. Srebro, and R. C. Williamson, editors, Proceedings of the 25th Annual Conference on Learning Theory,
+volume 23 of Proceedings of Machine Learning Research, pages 39.1–39.26, Edinburgh, Scotland, 25–27
+Jun 2012. PMLR. URL https://proceedings.mlr.press/v23/agrawal12.html.
+S. Agrawal and N. Goyal. Thompson sampling for contextual bandits with linear payoffs. In International
+conference on machine learning, pages 127–135. PMLR, 2013.
+Z. Allen-Zhu, S. Bubeck, and Y . Li. Make the minority great again: First-order regret bound for contextual
+bandits. In J. Dy and A. Krause, editors, Proceedings of the 35th International Conference on Machine
+Learning, volume 80 of Proceedings of Machine Learning Research, pages 186–194. PMLR, 10–15 Jul
+2018. URL https://proceedings.mlr.press/v80/allen-zhu18b.html.
+Z. Allen-Zhu, Y . Li, and Z. Song. A convergence theory for deep learning via over-parameterization. In
+International Conference on Machine Learning, pages 242–252. PMLR, 2019.
+S. Amani, M. Alizadeh, and C. Thrampoulidis. Linear stochastic bandits under safety constraints. Curran
+Associates Inc., Red Hook, NY , USA, 2019.
+S. Arora, S. S. Du, W. Hu, Z. Li, R. R. Salakhutdinov, and R. Wang. On exact computation with an infinitely
+wide neural net. Advances in Neural Information Processing Systems, 32, 2019.
+P. Auer, N. Cesa-Bianchi, and P. Fischer. Finite-time analysis of the multiarmed bandit problem. Mach.
+Learn., 47(2–3):235–256, may 2002. ISSN 0885-6125. doi: 10.1023/A:1013689704352. URL https:
+//doi.org/10.1023/A:1013689704352.
+14
+A. Badanidiyuru, R. Kleinberg, and A. Slivkins. Bandits with knapsacks. In 2013 IEEE 54th Annual
+Symposium on Foundations of Computer Science . IEEE, oct 2013. doi: 10.1109/focs.2013.30. URL
+https://doi.org/10.1109%2Ffocs.2013.30.
+Y . Ban, Y . Yan, A. Banerjee, and J. He. EE-net: Exploitation-exploration neural networks in contextual
+bandits. In International Conference on Learning Representations, 2022. URL https://openreview.
+net/forum?id=X_ch3VrNSRg.
+A. Banerjee, P. Cisneros-Velarde, L. Zhu, and M. Belkin. Restricted strong convexity of deep learning models
+with smooth activations. In The Eleventh International Conference on Learning Representations, 2023.
+URL https://openreview.net/forum?id=PINRbk7h01.
+A. Bietti, A. Agarwal, and J. Langford. A contextual bandit bake-off. Journal of Machine Learning Research,
+22(133):1–49, 2021. URL http://jmlr.org/papers/v22/18-863.html.
+S. Bubeck. Introduction to online optimization, December 2011. URL https://www.microsoft.
+com/en-us/research/publication/introduction-online-optimization/ .
+S. Bubeck and A. Slivkins. The best of both worlds: Stochastic and adversarial bandits. In Conference on
+Learning Theory, pages 42–1. JMLR Workshop and Conference Proceedings, 2012.
+S. Bubeck, N. Cesa-Bianchi, et al. Regret analysis of stochastic and nonstochastic multi-armed bandit
+problems. Foundations and Trends® in Machine Learning, 5(1):1–122, 2012.
+Y . Cao and Q. Gu. Generalization error bounds of gradient descent for learning over-parameterized deep relu
+networks. In AAAI Conference on Artificial Intelligence, 2019.
+N. Cesa-Bianchi, Y . Mansour, and G. Stoltz. Improved second-order bounds for prediction with expert advice,
+2006a. URL https://arxiv.org/abs/math/0602629.
+N. Cesa-Bianchi, Y . Mansour, and G. Stoltz. Improved second-order bounds for prediction with expert advice,
+2006b. URL https://arxiv.org/abs/math/0602629.
+W. Chu, L. Li, L. Reyzin, and R. Schapire. Contextual bandits with linear payoff functions. In Proceedings
+of the Fourteenth International Conference on Artificial Intelligence and Statistics, pages 208–214. JMLR
+Workshop and Conference Proceedings, 2011.
+R. Deb, Y . Ban, S. Zuo, J. He, and A. Banerjee. Contextual bandits with online neural regression. In The
+Twelfth International Conference on Learning Representations, 2024a. URL https://openreview.
+net/forum?id=5ep85sakT3.
+R. Deb, A. Saha, and A. Banerjee. Think before you duel: Understanding complexities of preference learning
+under constrained resources. In S. Dasgupta, S. Mandt, and Y . Li, editors, Proceedings of The 27th
+International Conference on Artificial Intelligence and Statistics, volume 238 of Proceedings of Machine
+Learning Research, pages 4546–4554. PMLR, 02–04 May 2024b. URL https://proceedings.
+mlr.press/v238/deb24a.html.
+S. Du, J. Lee, H. Li, L. Wang, and X. Zhai. Gradient descent finds global minima of deep neural networks. In
+International conference on machine learning, pages 1675–1685. PMLR, 2019.
+M. Dudik, D. Hsu, S. Kale, N. Karampatziakis, J. Langford, L. Reyzin, and T. Zhang. Efficient optimal
+learning for contextual bandits. In Proceedings of the Twenty-Seventh Conference on Uncertainty in
+15
+Artificial Intelligence, UAI’11, page 169–178, Arlington, Virginia, USA, 2011. AUAI Press. ISBN
+9780974903972.
+S. Filippi, O. Cappe, A. Garivier, and C. Szepesvári. Parametric bandits: The generalized
+linear case. In J. Lafferty, C. Williams, J. Shawe-Taylor, R. Zemel, and A. Culotta, edi-
+tors, Advances in Neural Information Processing Systems , volume 23. Curran Associates, Inc.,
+2010. URL https://proceedings.neurips.cc/paper_files/paper/2010/file/
+c2626d850c80ea07e7511bbae4c76f4b-Paper.pdf.
+D. Foster and A. Rakhlin. Beyond ucb: Optimal and efficient contextual bandits with regression oracles. In
+International Conference on Machine Learning, pages 3199–3210. PMLR, 2020.
+D. Foster, A. Agarwal, M. Dudik, H. Luo, and R. Schapire. Practical contextual bandits with regression
+oracles. In J. Dy and A. Krause, editors, Proceedings of the 35th International Conference on Machine
+Learning, volume 80 of Proceedings of Machine Learning Research, pages 1539–1548. PMLR, 10–15 Jul
+2018. URL https://proceedings.mlr.press/v80/foster18a.html.
+D. J. Foster and A. Krishnamurthy. Efficient first-order contextual bandits: Prediction, allocation, and
+triangular discrimination. Advances in Neural Information Processing Systems, 34, 2021.
+D. J. Foster, C. Gentile, M. Mohri, and J. Zimmert. Adapting to misspecification in contextual
+bandits. In H. Larochelle, M. Ranzato, R. Hadsell, M. Balcan, and H. Lin, editors, Advances
+in Neural Information Processing Systems , volume 33, pages 11478–11489. Curran Associates,
+Inc., 2020. URL https://proceedings.neurips.cc/paper_files/paper/2020/file/
+84c230a5b1bc3495046ef916957c7238-Paper.pdf.
+D. J. Foster, N. Golowich, and Y . Han. Tight guarantees for interactive decision making with the decision-
+estimation coefficient. In G. Neu and L. Rosasco, editors, Proceedings of Thirty Sixth Conference on
+Learning Theory, volume 195 of Proceedings of Machine Learning Research, pages 3969–4043. PMLR,
+12–15 Jul 2023a. URL https://proceedings.mlr.press/v195/foster23b.html.
+D. J. Foster, N. Golowich, J. Qian, A. Rakhlin, and A. Sekhari. Model-free reinforcement learning with the
+decision-estimation coefficient. In A. Oh, T. Naumann, A. Globerson, K. Saenko, M. Hardt, and S. Levine,
+editors, Advances in Neural Information Processing Systems, volume 36, pages 20080–20117. Curran
+Associates, Inc., 2023b. URL https://proceedings.neurips.cc/paper_files/paper/
+2023/file/3fcd0f8747f9217c6dbc45ed138b1fde-Paper-Conference.pdf.
+Y . Freund. Open problem: Second order regret bounds based on scaling time. In V . Feldman, A. Rakhlin, and
+O. Shamir, editors, 29th Annual Conference on Learning Theory, volume 49 of Proceedings of Machine
+Learning Research, pages 1651–1654, Columbia University, New York, New York, USA, 23–26 Jun 2016.
+PMLR. URL https://proceedings.mlr.press/v49/freund16.html.
+Y . Freund and R. E. Schapire. A decision-theoretic generalization of on-line learning and an application
+to boosting. Journal of Computer and System Sciences , 55(1):119–139, 1997. ISSN 0022-0000. doi:
+https://doi.org/10.1006/jcss.1997.1504. URL https://www.sciencedirect.com/science/
+article/pii/S002200009791504X.
+P. Gaillard, G. Stoltz, and T. V . Erven. A second-order bound with excess losses, 2014. URL https:
+//arxiv.org/abs/1402.2044.
+16
+E. Garcelon, M. Ghavamzadeh, A. Lazaric, and M. Pirotta. Improved algorithms for conservative exploration
+in bandits. Proceedings of the AAAI Conference on Artificial Intelligence, 34(04):3962–3969, Apr. 2020.
+doi: 10.1609/aaai.v34i04.5812. URL https://ojs.aaai.org/index.php/AAAI/article/
+view/5812.
+Y . Han, J. Zeng, Y . Wang, Y . Xiang, and J. Zhang. Optimal contextual bandits with knapsacks un-
+der realizability via regression oracles. In F. Ruiz, J. Dy, and J.-W. van de Meent, editors, Pro-
+ceedings of The 26th International Conference on Artificial Intelligence and Statistics , volume 206
+of Proceedings of Machine Learning Research , pages 5011–5035. PMLR, 25–27 Apr 2023. URL
+https://proceedings.mlr.press/v206/han23b.html.
+E. Hazan. Introduction to online convex optimization, 2021.
+N. Immorlica, K. Sankararaman, R. Schapire, and A. Slivkins. Adversarial bandits with knapsacks. J. ACM,
+69(6), nov 2022. ISSN 0004-5411. doi: 10.1145/3557045. URL https://doi.org/10.1145/
+3557045.
+S. Ito, S. Hirahara, T. Soma, and Y . Yoshida. Tight first- and second-order regret bounds for adversar-
+ial linear bandits. In H. Larochelle, M. Ranzato, R. Hadsell, M. Balcan, and H. Lin, editors, Ad-
+vances in Neural Information Processing Systems , volume 33, pages 2028–2038. Curran Associates,
+Inc., 2020. URL https://proceedings.neurips.cc/paper_files/paper/2020/file/
+15bb63b28926cd083b15e3b97567bbea-Paper.pdf.
+A. Jacot, F. Gabriel, and C. Hongler. Neural tangent kernel: Convergence and generalization in neural
+networks. Advances in neural information processing systems, 31, 2018.
+A. Kazerouni, M. Ghavamzadeh, Y . Abbasi-Yadkori, and B. Van Roy. Conservative contextual linear bandits.
+NIPS’17, page 3913–3922, Red Hook, NY , USA, 2017. Curran Associates Inc. ISBN 9781510860964.
+L. Li, Y . Lu, and D. Zhou. Provably optimal algorithms for generalized linear contextual bandits. In
+D. Precup and Y . W. Teh, editors,Proceedings of the 34th International Conference on Machine Learning,
+volume 70 of Proceedings of Machine Learning Research, pages 2071–2080. PMLR, 06–11 Aug 2017.
+URL https://proceedings.mlr.press/v70/li17c.html.
+C. Liu, L. Zhu, and M. Belkin. On the linearity of large non-linear models: when and why the tangent kernel
+is constant. Advances in Neural Information Processing Systems, 33:15954–15964, 2020.
+X. Lu and B. Van Roy. Ensemble sampling. In Proceedings of the 31st International Conference on Neural
+Information Processing Systems, NIPS’17, page 3260–3268, Red Hook, NY , USA, 2017. Curran Associates
+Inc. ISBN 9781510860964.
+A. Moradipari, S. Amani, M. Alizadeh, and C. Thrampoulidis. Safe linear thompson sampling. ArXiv,
+abs/1911.02156, 2019. URL https://api.semanticscholar.org/CorpusID:207794176.
+A. Pacchiano. Second order bounds for contextual bandits with function approximation, 2024. URL
+https://arxiv.org/abs/2409.16197.
+C. Riquelme, G. Tucker, and J. Snoek. Deep bayesian bandits showdown: An empirical comparison of
+bayesian deep networks for thompson sampling. In International Conference on Learning Representations,
+2018. URL https://openreview.net/forum?id=SyYe6k-CW.
+17
+S. Shalev-Shwartz. Online learning and online convex optimization. Foundations and Trends® in Machine
+Learning, 4(2):107–194, 2012. ISSN 1935-8237. doi: 10.1561/2200000018. URL http://dx.doi.
+org/10.1561/2200000018.
+D. Simchi-Levi and Y . Xu. Bypassing the monster: A faster and simpler optimal algorithm for contextual
+bandits under realizability. ArXiv, abs/2003.12699, 2020.
+V . Sivakumar, S. Zuo, and A. Banerjee. Smoothed adversarial linear contextual bandits with knapsacks. In
+K. Chaudhuri, S. Jegelka, L. Song, C. Szepesvari, G. Niu, and S. Sabato, editors, Proceedings of the 39th
+International Conference on Machine Learning, volume 162 ofProceedings of Machine Learning Research,
+pages 20253–20277. PMLR, 17–23 Jul 2022. URL https://proceedings.mlr.press/v162/
+sivakumar22a.html.
+A. Slivkins, K. A. Sankararaman, and D. J. Foster. Contextual bandits with packing and covering constraints:
+A modular lagrangian approach via regression, 2023.
+Y . Wu, R. Shariff, T. Lattimore, and C. Szepesvari. Conservative bandits. In M. F. Balcan and K. Q.
+Weinberger, editors,Proceedings of The 33rd International Conference on Machine Learning, volume 48
+of Proceedings of Machine Learning Research, pages 1254–1262, New York, New York, USA, 20–22 Jun
+2016. PMLR. URL https://proceedings.mlr.press/v48/wu16.html.
+T. Zahavy and S. Mannor. Neural linear bandits: Overcoming catastrophic forgetting through likelihood
+matching, 2020. URL https://openreview.net/forum?id=r1gzdhEKvH.
+W. Zhang, D. Zhou, L. Li, and Q. Gu. Neural thompson sampling. In International Conference on Learning
+Representation (ICLR), 2021.
+D. Zhou, L. Li, and Q. Gu. Neural contextual bandits with ucb-based exploration. InInternational Conference
+on Machine Learning, pages 11492–11502. PMLR, 2020.
+A Related Works
+Contextual Bandits. The study of bandit algorithms, especially in the contextual bandit setting, has seen
+significant development over the years. Initial works on linear bandits, such as those by Abe et al. [2003], Chu
+et al. [2011], and Abbasi-Yadkori et al. [2011], laid the foundation for exploration strategies with provable
+regret bounds. These works primarily leveraged linear models, achieving near-optimal performance in various
+settings. Agrawal and Goyal [2012] provided regret guarantee for the Thompson sampling algorithm in the
+multi-armed case and later extended it to the linear setting with provable guarantees [Agrawal and Goyal,
+2013]. The success of linear bandits naturally led to their extension to more complex settings, particularly
+nonlinear models. Generalized linear bandits (GLBs) explored by Filippi et al. [2010] and Li et al. [2017]
+introduced non-linearity through a link function, while preserving a linear dependence on the context.
+Contextual Bandits beyond linearity. More recently, the rise of deep learning has led to interest in neural
+models for contextual bandits. Early attempts to incorporate neural networks into the bandit framework
+relied on using deep neural networks (DNNs) as feature extractors, with a linear model learned on top of the
+last hidden layer of the DNN [Lu and Van Roy, 2017, Zahavy and Mannor, 2020, Riquelme et al., 2018].
+Although these methods demonstrated empirical success, they lacked theoretical regret guarantees. The
+NeuralUCB [Zhou et al., 2020] algorithm combined neural networks with UCB-based exploration, and
+provided regret guarantees. This approach was further extended to Thompson Sampling in the work of Zhang
+18
+et al. [2021], with both methods drawing on neural tangent kernels (NTKs) [Jacot et al., 2018, Allen-Zhu
+et al., 2019] and the notion of effective dimension ˜d. However rcently Deb et al. [2024a] showed that these
+bounds are Ω(T ) in the worst case even with an oblivious adversary. These methods also suffer from the
+computational complexity of inverting large matrices at each step of the algorithm remained a limitation, as
+the inversion scales with the number of neural network parameters. In response, Ban et al. [2022] introduced
+a novel approach that achieved regret bounds independent of the effective dimension ˜d, though this method
+required specific distributional assumptions on the context.
+Agnostic Contextual Bandits. Concurrently, agnostic algorithms for bandit problems were also studied
+starting from Dudik et al. [2011], Agarwal et al. [2014]. Foster et al. [2018] provided an approach to
+leverage an offline weighted least squares regression oracle and demonstrated that this approach performs
+well compared to other existing contextual bandit algorithms. However, despite its success, the algorithm
+was theoretically sub-optimal, potentially incurring high regret in the worst case. Subsequently [Foster and
+Rakhlin, 2020] adapted the inverse gap weighting idea from Abe and Long [1999], Abe et al. [2003] related
+the bandit regret to the regret of online regression with square loss, while Foster and Krishnamurthy [2021]
+modified [Foster and Rakhlin, 2020], with binary Kullback–Leibler (KL) loss and a re-weighted inverse gap
+weighting scheme to provide a first-order regret bound. Further, Simchi-Levi and Xu [2020] showed that
+an offline regression oracle with O(log T ) calls can also be used to derive optimal regret gurantees for the
+general realizable case. This improves ove the O(T ) calls by Foster and Krishnamurthy [2021] and [Foster
+and Rakhlin, 2020] and also relaxes the assumption to offline oracles instead of online, however it needs to
+make a strong assumption about the contexts - they are drawn i.i.d. from a fixed distribution.
+Constrained Bandits. Bandit problems under constraints have also been studied extensively. The Bandits
+with Knapsacks problem looks at cumulative reward maximization under budget constraints [Badanidiyuru
+et al., 2013, Agrawal and Devanur, 2016, Immorlica et al., 2022, Sivakumar et al., 2022, Deb et al., 2024b].
+The general cost function case as in this work has been studied in Slivkins et al. [2023], Han et al. [2023] and
+provided sub-linear regret bounds using the Inverse gap weighting idea from Abe and Long [1999], Foster and
+Rakhlin [2020], Foster and Krishnamurthy [2021]. In the stage-wise constraint setup, each arm generates both
+reward and cost signals from unknown distributions. The objective is to maximize cumulative rewards while
+ensuring the expected cost stays below a threshold at each round. Amani et al. [2019] and Moradipari et al.
+[2019] investigated this setting in the context of linear bandits, developing and evaluating explore-exploit
+algorithm and a Thompson sampling algorithm respectively. The setup in this work,conservative bandits was
+introduced in Wu et al. [2016] and subsequently studied in the linear setting Kazerouni et al. [2017], Garcelon
+et al. [2020], and all existing methods use a modified version of UCB. To the best of our knowledge neither a
+Thompson Sampling version has been studied, nor an oracle based approach for the general function case.
+Data Dependent Regret Bounds. Adaptive algorithms can often perform better if the environment it is
+operating in is comparatively easier. A data dependent regret bound tries to capture such a phenomena.
+In a first-order regret bounds, the regret scales as in L∗ = PTt=1 ℓt,a∗t , the cumulative loss/cost of the
+optimal policy. It has a rich history, with Freund and Schapire [1997] proving the first such bound for
+the full information setting (or the classical expert setting) using Exponential Weights algorithm. For the
+K-armed bandit setting (with no contexts), first order bounds were provided in Agarwal et al. [2016]. For the
+adversarial setting Agarwal et al. [2017b] provided a O(L2/3∗ ) bound and subsequently also posed an open
+problem at COLT - ‘Can first-order regret bounds be developed for contextual bandits ?’. Allen-Zhu et al.
+[2018] responded by providing a first order bound with an inefficient algorithm, and subsequently Foster and
+Krishnamurthy [2021] provided an algorithm with a reduction to online regression that was both efficient and
+provided a first order regret.
+19
+Cesa-Bianchi et al. [2006a] first posed the question of whether further improvements could be achieved by
+deriving second-order (variance-like) bounds on the regret for the full information setting. They provided
+two choices for second order bounds, one that depends on PTt=1 ℓ2t,a∗t (variance across time) and another
+that depends on Pk≤K pk,t(ˆℓt − ℓk,t)2 (variance across actions), where ˆℓt = PKk=1 pt,kℓt,k, and pk,t is the
+probability with which expert k is chosen in round t. For a more detailed discussion of second order bounds
+we refer the reader to Ito et al. [2020], Gaillard et al. [2014], Freund [2016], Ito et al. [2020], Cesa-Bianchi
+et al. [2006b], Pacchiano [2024].
+B Proof of Regret Bound for C9SquareCB
+Lemma 3.1. Let Assumptions 1 and 2 hold. Then, the regret defined in (1) can be bounded as
+RegCB(T ) ≤
+X
+t∈ST
+
+h(xt,at) − h(xt,a∗t )
+
++ nT ∆h, (6)
+where the set ST consists of the rounds until the horizon T when C9SquareCB played an IGW action and
+nT = |S cT | is the number of times until T where a baseline action was played.
+Proof. The decomposition follows as in Proposition 2 in [Kazerouni et al., 2017], and we reproduce the proof
+here for completeness. Recall that ST = {t ∈ [T ] : at = bt} is the set of time steps when the baseline action
+was chosen and S cT = {t ∈ [T ] : at = ˜at} is the set of time steps when the SquareCB action was played.
+Then, we can decompose the regret as follows:
+RegCB(T ) =
+TX
+t=1
+h(xt,at) −
+TX
+t=1
+h(xt,a∗t )
+(a)
+=
+X
+t∈ST
+
+h(xt,at) − h(xt,a∗t )
+
++
+X
+t∈ScT
+
+h(xt,bt) − h(xt,a∗t )
+
+(b)
+=
+X
+t∈ST
+
+h(xt,at) − h(xt,a∗t )
+
++
+X
+t∈ScT
+∆tbt
+(c)
+≤
+X
+t∈ST
+
+h(xt,at) − h(xt,a∗t )
+
++ nT ∆h,
+where (a) follows because ST ∪ ScT = [T ], (b) follows by the definition of ∆tbt = h(xt,bt) − h(xt,a∗t ), and
+(c) follows by Assumption 2.
+Lemma 3.2. Suppose Assumption 1,2 and 3 holds. Then, with probability 1 − δ/4 the number of times the
+baseline action is played by C9SquareCB is bounded as
+nT ≤ 1αyl
+(
+− (mτ −1 + 1)(∆l + αyl)
++ 64
+√
+K
+p
+(mτ −1 + 1)
+q
+RegSq(T ) +
+p
+log(8δ−1)
+ )
+. (7)
+20
+Proof. Let τ be the last round at which the algorithm plays the conservative action, i.e.,
+τ = max{1 ≤ t ≤ T |at = bt}.
+Recall that mt = |St| and nt = |S ct |. By the definition of τ, we have that at round τ
+ˆyτ,˜aτ +
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a ˆyi,a +
+X
+i∈Scτ −1
+h(xi,bi) + 16
+s
+mτ −1
+
+RegSq(T ) + log(2/δ)
+
+> (1 + α)
+τX
+i=1
+h(xi,bi).
+Therefore, we may write
+α
+τX
+i=1
+h(xi,bi) <
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a ˆyi,a + ˆyτ,˜aτ −
+X
+i∈Sτ −1
+(h(xi,bi) + h(xτ,bτ ))
++ 16
+s
+mτ −1
+
+RegSq(T ) + log(2/δ)
+
+=
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a ˆyi,a + ˆyτ,˜aτ −
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,ah(xi,a∗i )
++
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,ah(xi,a∗i ) +
+X
+a∈[K]
+pτ,ah(xτ,a∗τ )
+−
+X
+a∈[K]
+pτ,ah(xτ,a∗τ ) −
+X
+i∈Sτ −1
+(h(xi,bi) + h(xτ,bτ ))
++ 16
+s
+mτ −1
+
+RegSq(T ) + log(2/δ)
+
+=
+X
+i∈Sτ −1
+ 
+h(xi,a∗i ) − h(xi,bi) +  h(xτ,a∗τ ) − h(xτ,bτ )
+| {z }
+I
++
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a
+
+ˆyi,a − h(xi,a∗i )
+
+| {z }
+II
++
+X
+a∈[K]
+pτ,a
+ 
+ˆyτ,˜aτ − h(xτ,a∗τ )
+| {z }
+III
+(19)
++ 16
+s
+mτ −1
+
+RegSq(T ) + log(2/δ)
+
+First consider term I. Using Assumption 2 we have that ∆l ≤ h(xi,a∗i ) − h(xi,bi) ≤ ∆h. Also recall that
+mτ −1 = |Sτ −1|. Combining these we have:
+X
+i∈Sτ −1
+ 
+h(xi,a∗i ) − h(xi,bi) +  h(xτ,a∗τ ) − h(xτ,bτ ) < −(mτ −1 + 1)∆l
+21
+Next consider term II . Adding and subtracting h(xi,a), we obtain
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a
+
+ˆyi,a − h(xi,a∗i )
+
+=
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a
+
+h(xi,a) − h(xi,a∗i )
+
+| {z }
+II (a)
++
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a
+
+ˆyi,a − h(xi,a)
+
+| {z }
+II (b)
+.
+Consider term II (a). Using Lemma 3 in Foster and Rakhlin [2020] we have
+X
+a∈[K]
+pi,a
+
+h(xi,a) − h(xi,a∗i ) − γi4  ˆyi,a − h(xi,a)2
+
+≤ Kγi .
+Now summing for all i ∈ Sτ −1 we have
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a
+
+h(xi,a) − h(xi,a∗i ) − γi4  ˆyi,a − h(xi,a)2
+
+≤
+X
+i∈Sτ −1
+K
+γi
+.
+Using this, we can bound term II (a) as follows:
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a
+
+h(xi,a) − h(xi,a∗i )
+
+≤
+X
+i∈Sτ −1
+2K
+γi
++
+X
+i∈Sτ −1
+X
+a∈[K]
+γi
+4 pi,a
+ 
+ˆyi,a − h(xi,a)
+2.
+Now recall that γi =
+p
+K|Si|/(2RegSq(T ) + 16 log(8δ−1)) and therefore plugging this back in the above
+equation we get
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a
+
+h(xi,a) − h(xi,a∗i )
+
+≤
+X
+i∈Sτ −1
+2K
+γi
++
+X
+i∈Sτ −1
+X
+a∈[K]
+γi
+4 pi,a
+ 
+ˆyi,a − h(xi,a)
+2
+= 2K
+X
+i∈Sτ −1
+s
+2RegSq(T ) + 16 log(8δ−1)
+K|Si|
++ 14 Xi∈Sτ −1
+s
+K|Si|
+(2RegSq(T ) + 16 log(8δ−1))
+X
+a∈[K]
+pi,a
+ 
+ˆyi,a − h(xi,a)
+2
+(a)
+≤ 2
+q
+K(2RegSq(T ) + 16 log(8δ−1))
+mτ −1X
+i=1
+1√
+i
++ 14
+s
+Kmτ −1
+2RegSq(T ) + 16 log(8δ−1)
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a
+ 
+ˆyi,a − h(xi,a)
+2.
+In (a), we used the fact that γi depends on |Si| and that maxi∈Si γi =
+s
+Kmτ −1
+2RegSq(T ) + 16 log(8δ−1). Now note
+that the C9SquareCB actions are only played for i ∈ ST and therefore invoking Assumption 3, we can use
+22
+Lemma 2 in Foster and Rakhlin [2020] to show that with probability 1 − δ/4
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a
+ 
+ˆyi,a − h(xi,a)
+2 ≤ 2RegSq(mτ −1) + 16 log(8δ−1)
+Further note that
+mτ −1X
+i=1
+1√
+i
+≤ 2√mτ −1 . Therefore term II (a) can be bounded as
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a
+
+h(xi,a) − h(xi,a∗i )
+
+≤ 16
+q
+Kmτ −1(RegSq(T ) + log(8δ−1))
++ 14
+s
+Kmτ −1
+2RegSq(T ) + 16 log(8δ−1)
+
+2RegSq(mτ −1) + 16 log(8δ−1)
+≤ 17
+p
+Kmτ −1
+q
+RegSq(T ) +
+p
+log(8δ−1)
+
+,
+where we have used the fact RegSq(mτ −1) ≤ RegSq(T ).
+Now consider term II (b). Suppose Epi be the expectation with respect to pi,a. Then, we may write
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a
+
+h(xi,a) − ˆyi,a
+
+=
+X
+i∈Sτ −1
+Epi
+h 
+h(xi,a) − ˆyi,a
+i
+=
+X
+i∈Sτ −1
+Epi
+q 
+h(xi,a) − ˆyi,a
+2
+(a)
+≤
+X
+i∈Sτ −1
+q
+Epi
+ 
+h(xi,a) − ˆyi,a
+2
+(b)
+≤
+s
+mτ −1
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a
+ 
+h(xi,a) − ˆyi,a
+2,
+where (a) follows by Jensen and (b) follows by Cauchy Schwartz. Again, using Lemma 2 in Foster and
+Rakhlin [2020], with probability 1 − δ/4, we have
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a
+
+h(xi,a) − ˆyi,a
+
+≤
+q
+mτ −1
+ 
+2RegSq(mτ −1) + 16 log(8δ−1).
+Finally consider term III . Since 0 ≤ h(xi,a), ˆyi,a ≤ 1, we may write
+X
+a∈[K]
+pτ,a
+ 
+ˆyτ,˜aτ − h(xτ,a∗τ ) ≤ 2.
+Combining all the bounds, for K ≥ 2 and RegSq(T ) ≥ 1, with probability 1 − δ/2, we have
+α
+τX
+i=1
+h(xi,bi) ≤ −(mτ −1 + 1)∆l + 64
+p
+K(mτ −1 + 1)
+q
+RegSq(T ) +
+p
+log(8δ−1)
+
+. (20)
+23
+Now, using the fact that mτ −1 + nτ −1 + 1 = τ, and Assumption 2, we have yl ≤ h(xi,bi) ≤ yh, ∀i ∈ [T ].
+Therefore,
+α
+τX
+i=1
+h(xi,bi) ≥ α (mτ −1 + nτ −1 + 1) yl.
+Combining this with (20), with probability 1 − δ/2, we obtain
+αnτ −1yl ≤ −(mτ −1 + 1)(∆l + αyl) + 64
+p
+K(mτ −1 + 1)
+
+RegSq(T ) +
+p
+log(8δ−1)
+
+= −(mτ −1 + 1)(∆l + αyl) + 64
+√
+K
+p
+(mτ −1 + 1)
+
+RegSq(T ) +
+p
+log(8δ−1)
+
+.
+Finally, using nT = nτ = nτ −1 + 1, with probability 1 − δ/2, we have
+nT ≤ 1αyl
+(
+− (mτ −1 + 1)(∆l + αyl) + 64
+√
+K
+p
+(mτ −1 + 1)
+q
+RegSq(T ) +
+p
+log(2δ−1)
+ )
+.
+Lemma 3.3. Suppose Assumption 1,2 and 3 holds. Then, with probability 1 − δ/4 the number of times the
+baseline action is played by C9SquareCB is bounded as follows:
+nT ≤ O
+ K(RegSq(T ) + log(8δ−1))
+αyl(∆l + αyl)
+
+. (8)
+Proof. Let us define
+Q(mτ −1) = −(mτ −1 + 1)(∆l + αyl) + 64
+√
+K
+p
+(mτ −1 + 1)
+q
+RegSq(T ) +
+p
+log(2δ−1)
+
+Note that we have
+Q(mτ −1) ≤ −c1m + c2
+√m := f (m)
+where
+c1 = ∆l + αrl ≥ 0,
+c2 = 64
+√
+K
+q
+RegSq(T ) +
+p
+log(2δ−1)
+
+≥ 0,
+m = mτ −1 + 1.
+Setting f ′(m) = 0, and solving we get m∗ = c22
+4c21 . Now note that f is concave and that f ′′(m∗) < 0 andtherefore,
+Q(mτ −1) ≤ f (m) ≤ f (m∗) = − c224c1 + c222c1
+= c22
+4c1
+≤ O
+ K(RegSq(T ) + log(2δ−1))
+∆l + αyl
+
+.
+24
+Finally noting that nT ≤ nτ −1 + 1 ≤ Q(mτ −1)αyl + 1 completes the proof.
+Lemma 3.4. Suppose Assumptions 1 and 3 hold. Then, for any δ > 0, with the exploration parameter
+γt =
+p
+K|St|/(RegSq(T ) + log(4δ−1)), with probability 1 − δ/4, C9SquareCB guarantees
+X
+t∈ST
+
+h(xt,at) − h(xt,a∗t )
+
+≤ O
+ q
+KmT RegSq(T ) +
+p
+KmT log(8δ−1)
+!
+. (10)
+Proof. Using Lemma 3 from Foster and Rakhlin [2020] for any i ∈ [K] we have
+X
+a∈[K]
+pi,a
+
+h(xi,a) − h(xi,a∗i ) − γi4  ˆyi,a − h(xi,a)2
+
+≤ Kγi
+Now summing for all i ∈ ST we have
+X
+i∈ST
+X
+a∈[K]
+pi,a
+
+h(xi,a) − h(xi,a∗i ) − γi4  ˆyi,a − h(xi,a)2
+
+≤
+X
+i∈ST
+K
+γi
+.
+Using this get the following bound:
+X
+i∈ST
+X
+a∈[K]
+pi,a
+
+h(xi,a∗i ) − h(xi,a)
+
+≤
+X
+i∈ST
+2K
+γi
++
+X
+i∈ST
+X
+a∈[K]
+γi
+4 pi,a
+ 
+ˆyi,a − h(xi,a)
+2
+Now recall that γi =
+p
+K|Si|/(RegSq(T ) + 16 log(8δ−1)) and therefore plugging this back in the above
+equation we get:
+X
+i∈ST
+X
+a∈[K]
+pi,a
+
+h(xi,a∗i ) − h(xi,a)
+
+≤
+X
+i∈ST
+2K
+γi
++
+X
+i∈ST
+X
+a∈[K]
+γi
+4 pi,a
+ 
+ˆyi,a − h(xi,a)
+2
+= 2K
+X
+i∈ST
+s
+RegSq(T ) + 16 log(8δ−1)
+K|Si|
++ 14 Xi∈ST
+s
+K|Si|
+(RegSq(T ) + 16 log(2δ−1))
+X
+a∈[K]
+pi,a
+ 
+ˆyi,a − h(xi,a)
+2
+(a)
+≤ 2
+q
+K(RegSq(T ) + 16 log(8δ−1))
+mTX
+i=1
+1√
+i
++ 14
+s
+KmT
+RegSq(T ) + 16 log(8δ−1)
+X
+i∈ST
+X
+a∈[K]
+pi,a
+ 
+ˆyi,a − h(xi,a)
+2
+In (a) we used the fact that γi depends on |Si| and that maxi∈Si γi =
+s
+KmT
+RegSq(T ) + 16 log(8δ−1). Now note
+that the C9SquareCB actions are only played for i ∈ ST and therefore invoking Assumption 3, we can use
+25
+Lemma 2 from [Foster and Rakhlin, 2020] to show that with probability 1 − δ/4
+X
+i∈ST
+X
+a∈[K]
+pi,a
+ 
+ˆyi,a − h(xi,a)
+2 ≤ 2RegSq(mT ) + 16 log(8δ−1)
+Further note that
+mTX
+i=1
+1√
+i
+≤ 2√mT . Therefore term II (a) can be bounded as follows
+X
+i∈ST
+X
+a∈[K]
+pi,a
+
+h(xi,a∗i ) − h(xi,a)
+
+≤ 4
+q
+KmT (RegSq(T ) + 16 log(8δ−1))
++ 14
+s
+KmT
+2RegSq(T ) + 16 log(8δ−1)
+
+2RegSq(mT ) + 16 log(8δ−1)
+≤ 17
+p
+KmT
+q
+RegSq(T ) +
+p
+log(8δ−1)
+
+, (21)
+where we have used the fact RegSq(mT ) ≤ RegSq(T ).
+Now we can modify the proof of Lemma 2 of Foster and Rakhlin [2020] to take the sum over i ∈ ST instead
+of i ∈ [T ] to ensure that with probability 1 − δ/4
+X
+i∈ST
+h(xt,at) − h(xt,a∗t ) ≤
+X
+i∈ST
+X
+a∈[K]
+pi,a
+
+h(xi,a∗i ) − h(xi,a)
+
++
+p
+2mT log(8δ−1).
+Combining with (21) and noting that RegSq(T ) ≥ 1 we get with probability 1 − δ/4
+X
+i∈ST
+h(xt,at) − h(xt,a∗t ) ≤ 32
+p
+KmT
+q
+RegSq(T ) +
+p
+log(8δ−1)
+
+which completes the proof.
+Lemma 3.5. Let Assumptions 1, 2 and 3 hold. Then, for any δ > 0, with the exploration parameter
+γt =
+p
+K|St|/(RegSq(mT ) + log(8δ−1)), with probability 1 − δ/2, C9SquareCB satisfies the performance
+constraint in (2).
+Proof. For t = 1 if the condition in line 8 holds then ˜a1 = a1 and we have that with probability 1 − δ
+ˆy1,a1 − 16
+p
+(m0 + 1)(1 + log(1/δ)) ≤ (1 + α)h(x1,b1)
+Noting that |ˆy1,a1 − h(xi,a1)| ≤2 and therefore with probability 1 − δ
+h(xi,a1) ≤ (1 + α)h(x1,b1).
+Further, if the condition in line 8 doesn’t hold, then a1 = b1, and therefore
+h(xi,a1) ≤ (1 + α)h(x1,b1),
+26
+showing that the performance constraint in Definition 2.2 is satisfied. Now assume that the constraint holds
+for t − 1 and now consider t ∈ [T ]. Note that
+ Xi∈St−1 Xa∈[K] pi,a ˆyi,a − h(xi,˜ai) ≤  Xi∈St−1 Xa∈[K] pi,a ˆyi,a − Xi∈St−1 Xa∈[K] pi,ah(xi,a)| {z }
+I
++
+ Xi∈St−1 Xa∈[K] pi,ah(xi,a) − h(xi,˜ai)| {z }
+II
+Consider term I. We handle it as in the proof of Lemma 3.2 as follows: Suppose Epi be the expectation with
+respect to pi,a. Then
+ Xi∈St−1 Xa∈[K] pi,ah(xi,a) − ˆyi,a =  Xi∈St−1 Epih h(xi,a) − ˆyi,ai
+=
+ Xi∈St−1 Epiq h(xi,a) − ˆyi,a2
+(a)
+≤
+ Xi∈St−1 qEpi h(xi,a) − ˆyi,a2
+(b)
+≤
+s
+mt−1
+X
+i∈St−1
+X
+a∈[K]
+pi,a
+ 
+h(xi,a) − ˆyi,a
+2
+where (a) follows by Jensen and (b) follows by Cauchy Schwartz. Again using Lemma 2 from [Foster and
+Rakhlin, 2020] with probability 1 − δ2
+X
+i∈St−1
+X
+a∈[K]
+pi,a
+
+h(xi,a) − ˆyi,a
+2
+≤
+q
+mt−1
+ 
+2RegSq(mt−1) + 16 log(2δ−1) (22)
+Next, consider term II . Consider the following filtration
+Ft−1 = σ
+
+(xi,a, ˜ai, yi,˜ai), xt,a; 1 ≤ i ≤ t − 1, a∈ [K]
+
+.
+Note that E
+
+h(xt,˜at)|Ft−1
+
+=
+X
+a∈[K]
+pt,ah(xt,a), and therefore using Azuma-Hoeffding we have that with
+probability 1 − δ2
+ Xi∈St−1 Xa∈[K] pi,ah(xi,a) − h(xi,˜ai) ≤ 2vuutmt−1 log  2δ ! (23)
+27
+Combing (22) and (23) and taking a union bound we have with probability 1 − δ
+ Xi∈St−1 Xa∈[K] pi,a ˆyi,a − h(xi,˜ai) ≤ 8smt−1RegSq(mt−1) + log(2/δ)
+Further |ˆyt,˜at − h(xt,˜at)| ≤2, and therefore with probability 1 − δ
+ˆyt,˜at + Xi∈St−1 Xa∈[K] pi,a ˆyi,a − h(xi,˜ai) − h(xt,˜at) ≤ 16smt−1RegSq(mt−1) + log(2/δ). (24)
+Now if line 8 of Algorithm 1 holds at time step t, then we have
+ˆyt,˜at +
+X
+i∈St−1
+X
+a∈[K]
+pi,a ˆyi,a +
+X
+i∈Sct−1
+h(xi,bi) + 16
+s
+mt−1
+
+RegSq(mt−1) + log(2/δ)
+
+≤ (1 + α)
+tX
+i=1
+h(xi,bt),
+and therefore invoking (24), we have with probability 1 − δ
+h(xt,˜at) +
+X
+i∈St−1
+h(xi,˜ai) +
+X
+i∈Sct−1
+h(xi,bi) ≤ (1 + α)
+tX
+i=1
+h(xi,bt)
+Now note that for all i ∈ St−1, ai = ˜ai, for all i ∈ Sct−1, ai = bi, and using St−1 ∪ Sct−1 = [t − 1], and the
+fact that the condition in line 8 is satisfied we have with probability 1 − δ
+h(xt,at) +
+X
+i∈[t−1]
+h(xi,ai) ≤ (1 + α)
+tX
+i=1
+h(xi,bt),
+satisfying the performance condition in Definition 2.2.
+Next we consider the case when the condition in line 8 does not hold. Invoking the fact that the performance
+constraint holds until time t − 1, we have with probability 1 − δ
+t−1X
+t=1
+h(xi,ai) ≤ (1 + α)
+t−1X
+i=1
+h(xi,bt)
+Adding h(xt,bt) on both sides of the above equation we get
+h(xt,bt) +
+t−1X
+i=1
+h(xi,ai) ≤ h(xt,bt) + (1 +α)
+t−1X
+i=1
+h(xi,bt).
+Noting that when condition in line 8 does not hold at step t, then at = bt and that α >0, we have with
+probability 1 − δ
+tX
+i=1
+h(xi,ai) ≤ (1 + α)
+tX
+i=1
+h(xi,bt),
+satisfying the performance constraint in Definition 2.2 for step t. Using mathematical induction we conclude
+that the performance constraint holds for all t ∈ [T ], completing the proof.
+28
+C Proof of Regret Bound for C9FastCB
+Proof of Theorem 4.1. The proof of the theorem follows along the following steps, and the proof of the
+intermediate lemmas can be found at the end of this proof.
+1. Regret Decomposition: The regret decomposition follows using Lemma 3.1 as in the proof of Theo-
+rem 3.1.
+Lemma 3.1. Let Assumptions 1 and 2 hold. Then, the regret defined in (1) can be bounded as
+RegCB(T ) ≤
+X
+t∈ST
+
+h(xt,at) − h(xt,a∗t )
+
++ nT ∆h, (6)
+where the set ST consists of the rounds until the horizon T when C9SquareCB played an IGW action and
+nT = |S cT | is the number of times until T where a baseline action was played.
+2. Upper Bound on nT : The condition in Line 7 determines how many times the baseline action is played.
+Suppose mt = |St| and τ = max {1 ≤ t ≤ T : at = bt}, i.e., the last time step at which C9FastCB
+played an action according to the baseline strategy.
+Before we proceed and give a bound on nT , the number of times the baseline action is played by
+Algorithm 2, we specify how the exploration factor γi is chosen. Unlike in Foster and Krishnamurthy
+[2021] where γi = γ = max(
+p
+KL∗/(3RegKL(T )), 10K), for all i ∈ [K], we need to choose a time
+dependent γi to ensure that we control both nT and the regret by playing the non-conservative actions.
+However using a different γi at every step does not lead to a first-order regret bound for the first term in
+(6). Therefore we set γi in an episodic manner, where γi remains same in an episode. More specifically
+we choose γi as follows:
+γ0 = 1, η0 = 1, L∗i = 0
+for i ∈ ST
+L∗i = L∗i−1 + h(xt,a∗i )
+if L∗i > 2ηi−1
+ηi = 2ηi−1 (γi-Schedule)
+else
+ηi = ηi−1
+γi = max
+ 
+10K,
+s
+Kηi
+RegKL(T )
+!
+(a) The following lemma upper-bounds nT in terms of mτ , Pi∈Sτ L∗(i), the cumulative cost in the set
+Sτ −1, and the KL loss RegKL(T ), using the above schedule for γi.
+Lemma C.1. Suppose Assumption 1,2, 4 holds. Then, the number of times the baseline action is
+29
+played by C9FastCB is bounded as
+nT ≤ 1αyl
+(
+− (mτ −1 + 1)(∆l + αyl)
++ 60
+vuuutKRegKL(T ) log X
+i∈Sτ −1
+h(xi,a∗i )
+
+
+
+ X
+i∈Sτ −1
+h(xi,a∗i ) + 1
+
+
+)
+. (25)
+(b) Now note that since L∗(i) ∈ [0, 1], X
+i∈Sτ −1
+L∗(i) ≤ mτ −1. Therefore the second term in (25) grows
+as
+p
+mτ −1 log mτ −1 and that the first term decreases linearly inmτ −1, and therefore one can further
+bound nT in the following lemma.
+Lemma C.2. Suppose Assumption Assumption 1,2, 4 holds. Then the number of times the baseline
+action is played by C9SquareCB is bounded as follows:
+nT ≤ O
+ 
+KRegKL(T )
+αyl(∆l + αyl) log
+ 
+e
+p
+KRegKL(T )
+∆l + αyl
+!!
+. (26)
+3. Bounding the Final Regret: We next move to bounding the first term in(6), with the schedule of γi as
+described in Step-2. Note that DT only contains the input-output pairs at time steps when the IGW action
+was picked, i.e., all t ∈ ST , and therefore, (11) reduces to
+X
+t∈ST
+ℓKL(ˆyt,at, yt,at) − infg∈H
+X
+t∈ST
+ℓKL
+ 
+g(xt,at), yt,at
+
+≤ RegKL(T ). (27)
+The next lemma bounds the regret of the first term in (6) with an adaptive γi.
+Lemma C.3. Suppose Assumptions 1 and 4 hold. Then for γt chosen as in (γi-Schedule), we have
+E
+X
+t∈ST
+
+h(xt,at) − h(xt,a∗t )
+
+≤ O
+ q
+KRegKL(T ) log
+ 
+L∗ST
+
+L∗ST
+!
+. (28)
+where L∗ST = Pt∈ST h(xt,a∗t ) is the cumulative cost of the optimal policy in the subset ST .
+Note that L∗ST ≤ L∗ and therefore combining (6), (26), and (28), the regret bound in (12) holds.
+4. Performance Constraint: Finally the following lemma shows that the condition in Line 7 ofC9SquareCB
+ensures that the Performance Constraint in (2) is satisfied.
+Lemma C.4. Suppose Assumptions 1 and 4 hold. Then for δ > 0 with γi chosen according to
+(γi-Schedule), with probability 1 − δ, C9FastCB satisfies the performance constraint in (2).
+Combining all four steps, C9FastCB simultaneously satisfies the performance constraint in (2) with
+probability 1 − δ and the regret upper-bound in (12), which concludes the proof.
+30
+Lemma C.1. Suppose Assumption 1,2, 4 holds. Then, the number of times the baseline action is played by
+C9FastCB is bounded as
+nT ≤ 1αyl
+(
+− (mτ −1 + 1)(∆l + αyl)
++ 60
+vuuutKRegKL(T ) log X
+i∈Sτ −1
+h(xi,a∗i )
+
+
+
+ X
+i∈Sτ −1
+h(xi,a∗i ) + 1
+
+
+)
+. (25)
+Proof. Let τ be the last round at which the algorithm plays the conservative action, i.e.,
+τ = max{1 ≤ t ≤ T |at = bt}.
+Recall that mt = |St| and nt = |S ct |. By the definition of τ, we have that at round τ
+ˆyτ,˜aτ +
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a ˆyi,a +
+X
+i∈Scτ −1
+h(xi,bi) + 16
+p
+mτ −1RegKL(T )
+> (1 + α)
+τX
+i=1
+h(xi,bi).
+Therefore, we may write
+α
+τX
+i=1
+h(xi,bi) <
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a ˆyi,a + ˆyτ,˜aτ −
+X
+i∈Sτ −1
+(h(xi,bi) + h(xτ,bτ ))
+=
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a ˆyi,a + ˆyτ,˜aτ −
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,ah(xi,a∗i )
++
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,ah(xi,a∗i ) +
+X
+a∈[K]
+pτ,ah(xτ,a∗τ )
+−
+X
+a∈[K]
+pτ,ah(xτ,a∗τ ) −
+X
+i∈Sτ −1
+(h(xi,bi) + h(xτ,bτ ))
++ 16
+p
+mτ −1RegKL(T )
+=
+X
+i∈Sτ −1
+ 
+h(xi,a∗i ) − h(xi,bi) +  h(xτ,a∗τ ) − h(xτ,bτ )
+| {z }
+I
++
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a
+
+ˆyi,a − h(xi,a∗i )
+
+| {z }
+II
++
+X
+a∈[K]
+pτ,a
+ 
+ˆyτ,˜aτ − h(xτ,a∗τ )
+| {z }
+III
+(29)
++ 16
+p
+mτ −1(RegKL(T ) + log(2/δ)
+First consider term I. Using Assumption 2 we have that ∆l ≤ h(xi,a∗i ) − h(xi,bi) ≤ ∆h. Also recall that
+mτ −1 = |Sτ −1|. Combining these we have:
+X
+i∈Sτ −1
+ 
+h(xi,a∗i ) − h(xi,bi) +  h(xτ,a∗τ ) − h(xτ,bτ ) < −(mτ −1 + 1)∆l
+31
+Next consider term II . Adding and subtracting h(xi,a), we obtain
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a
+
+ˆyi,a − h(xi,a∗i )
+
+=
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a
+
+h(xi,a) − h(xi,a∗i )
+
+| {z }
+II (a)
++
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a
+
+ˆyi,a − h(xi,a)
+
+| {z }
+II (b)
+Using the AM-GM inequality we can bound term II (a) as follows:
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a
+
+ˆyi,a − h(xi,a∗i )
+
+≤
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a
+ 
+1
+4β (ˆyi,a − h(xi,a∗i )) + β (ˆyi,a − h(xi,a∗i ))2ˆyi,a + h(xi,a∗i ) !
+for any β >1. Using Lemma 5 in [Foster and Krishnamurthy, 2021] we have
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a ˆyi,a ≤ 3
+X
+a∈[K]
+pi,ah(xi,a∗i ) +
+X
+a∈[K]
+pi,a
+(ˆyi,a − h(xi,a∗i ))2
+ˆyi,a + h(xi,a∗i )
+Therefore we have the following bound on term II (b):
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a
+
+ˆyi,a − h(xi,a∗i )
+
+≤ 1β Xi∈Sτ −1 Xa∈[K] pi,ah(xi,a∗i ) + 2β Xi∈Sτ −1 Xa∈[K] pi,a (ˆyi,a − h(xi,a∗i ))2ˆyi,a + h(xi,a∗i )
+Using Proposition 5 from Foster and Krishnamurthy [2021] we have
+2β
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a
+(ˆyi,a − h(xi,a∗i ))2
+ˆyi,a + h(xi,a∗i ) ≤ 4βRegKL(T )
+and therefore,
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a
+
+ˆyi,a∗i − h(xi,a∗i )
+
+≤ 1β Xi∈Sτ −1 Xa∈[K] pi,ah(xi,a∗i ) + 4βRegKL(T )
+= 1β Xi∈Sτ −1 h(xi,a∗i ) + 4βRegKL(T )
+Choosing β =
+s P
+i∈Sτ −1 h(xi,a∗i )
+RegKL(T ) we have
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a
+
+ˆyi,a∗i − h(xi,a∗i )
+
+≤ 4
+s X
+i∈Sτ −1
+h(xi,a∗i )RegKL(T ) (30)
+Next consider term II (a). We use the per round regret guarantee (Theorem 4) from Foster and Krishnamurthy
+[2021] as follows:
+X
+a∈[K]
+pi,a
+
+h(xi,ai) − h(xi,a∗i )
+
+≤ 5Kγi Xa∈[K] pi,ah(xi,ai) + 7γi Xa∈[K] pi,a (ˆyi,a − h(xi,ai))2ˆyi,a + h(xi,ai) (31)
+32
+Adding and subtracting h(xi,a∗i ) we get
+X
+a∈[K]
+pi,a
+
+h(xi,a∗i ) − h(xi,a∗i )
+
+≤ 5Kγi Xa∈[K] pi,ah(xi,a∗i ) + 5Kγi Xa∈[K] pi,a(h(xi,ai) − h(xi,a∗i ))
++ 7γi
+X
+a∈[K]
+pi,a
+(ˆyi,a − h(xi,ai))2
+ˆyi,a + h(xi,ai) ,
+and therefore
+
+1 − 5Kγi
+ X
+a∈[K]
+pi,a
+
+h(xi,ai) − h(xi,a∗i )
+
+≤ 5Kγi Xa∈[K] pi,ah(xi,a∗i ) + 7γi Xa∈[K] pi,a (ˆyi,a − h(xi,ai))2ˆyi,a + h(xi,ai)
+Using γi ≥ 10K we have
+X
+a∈[K]
+pi,a
+
+h(xi,ai) − h(xi,a∗i )
+
+≤ 10Kγi Xa∈[K] pi,ah(xi,a∗i ) + 14γi Xa∈[K] pi,a (ˆyi,a − h(xi,ai))2ˆyi,a + h(xi,ai) (32)
+Recall that we set the exploration factor γi as follows:
+γ0 = 1, η0 = 1, L∗i = 0
+for i ∈ ST
+L∗i = L∗i−1 + h(xt,a∗i )
+if L∗i > 2ηi−1
+ηi = 2ηi−1
+else
+ηi = ηi−1
+γi = max
+ 
+10K,
+s
+Kηi
+RegKL(T )
+!
+Note that according to the above schedule of γi there are E = log
+
+ X
+i∈Sτ −1
+L∗i
+
+ episodes, that we denote by
+Te(Sτ −1), e ∈ [E], ηi = ηe and ηi := ηe is constant for all i ∈ Te(Sτ −1) with the following guarantee
+X
+i∈Te(Sτ −1)
+h(xi,a∗i ) ≤ ηe ≤ 2
+X
+i∈Te(Sτ −1)
+h(xi,a∗i ) (33)
+33
+Therefore summing up the inequality in (32) for i ∈ Sτ −1 we get
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a
+
+h(xi,ai) − h(xi,a∗i )
+
+≤
+X
+i∈Sτ −1
+10K
+γi
+X
+a∈[K]
+pi,ah(xi,a∗i ) +
+X
+i∈Sτ −1
+14γi
+X
+a∈[K]
+pi,a
+(ˆyi,a − h(xi,ai))2
+ˆyi,a + h(xi,ai)
+(a)
+≤
+EX
+e=1
+X
+i∈Te(Sτ −1)
+10K
+γi
+X
+a∈[K]
+pi,ah(xi,a∗i ) + 14( maxi∈Sτ −1 γi)
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a
+(ˆyi,a − h(xi,ai))2
+ˆyi,a + h(xi,ai)
+(b)
+=
+EX
+e=1
+10K
+γe
+X
+i∈Te(Sτ −1)
+X
+a∈[K]
+pi,ah(xi,a∗i ) + 14( maxi∈Sτ −1 γi)
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a
+(ˆyi,a − h(xi,ai))2
+ˆyi,a + h(xi,ai)
+(c)
+=
+EX
+e=1
+10K
+s
+RegKL(T )
+K Pi∈Te(Sτ −1) h(xi,a∗i )
+X
+i∈Te(Sτ −1)
+h(xi,a∗i )
++ 14( max
+i∈Sτ −1
+γi)
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a
+(ˆyi,a − h(xi,ai))2
+ˆyi,a + h(xi,ai) ,
+where (a) follows by changing the sum ini ∈ Sτ −1 to PEe=1 Pi∈Te(Sτ −1) and noting that maxi∈Sτ −1 γi ≥ γi
+for all i ∈ Sτ −1. Next (b) follows because γi is constant within an episode e ∈ [E]. Finally (c) follows by
+our choice of γi from (γi-Schedule) and the property in (38). Therefore we have
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a
+
+h(xi,ai) − h(xi,a∗i )
+ (d)
+≤
+EX
+e=1
+10K
+s
+RegKL(T )
+K Pi∈Te(Sτ −1) h(xi,a∗i )
+X
+i∈Te(Sτ −1)
+h(xi,a∗i )
++ 14
+s
+K
+P
+i∈Sτ −1 h(xi,ai∗ )
+RegKL(T )
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a
+(ˆyi,a − h(xi,ai))2
+ˆyi,a + h(xi,ai)
+(e)
+≤ 10
+EX
+e=1
+s
+KRegKL(T )
+X
+i∈Te(Sτ −1)
+h(xi,a∗i )
++ 14
+s
+K
+P
+i∈Sτ −1 h(xi,ai∗ )
+RegKL(T ) RegKL(mτ −1)
+(f )
+≤ 10
+vuutKE RegKL(T ) EX
+e=1
+X
+i∈Te(Sτ −1)
+h(xi,a∗i )
++ 14
+s
+K
+X
+i∈Sτ −1
+h(xi,ai∗ )RegKL(mτ −1),
+where (d) again follows by our choice ofγi and (38), (e) follows by Proposition 5 of Foster and Krishnamurthy
+34
+[2021] and (f ) follows by Cauchy-Schwarz inequality. Finally we arrive at the following bound
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a
+
+h(xi,ai) − h(xi,a∗i )
+
+≤ 25
+vuuutKRegKL(T ) log X
+i∈Sτ −1
+h(xi,a∗i )
+
+ X
+i∈Sτ −1
+h(xi,a∗i ) (34)
+and combining with (30) we have the following bound on term II :
+X
+i∈Sτ −1
+X
+a∈[K]
+pi,a
+
+ˆyi,a − h(xi,a∗i )
+
+≤ 30
+vuuutKRegKL(T ) log X
+i∈Sτ −1
+h(xi,a∗i )
+
+ X
+i∈Sτ −1
+h(xi,a∗i )
+Now consider term III . Since 0 ≤ h(xi,a), ˆyi,a ≤ 1 we have that
+X
+a∈[K]
+ˆyτ,˜aτ − pτ,ah(xτ,a∗τ ) =
+X
+a∈[K]
+pτ,a
+ 
+ˆyτ,˜aτ − h(xτ,a∗τ ) ≤ 2
+Combining all the bounds we get for K ≥ 2 and RegKL(T ) ≥ 1 we have
+α
+τX
+i=1
+h(xi,bi) ≤ −(mτ −1 + 1)∆l
++ 30
+vuuutKRegKL(T ) log X
+i∈Sτ −1
+h(xi,a∗i )
+
+
+
+ X
+i∈Sτ −1
+h(xi,a∗i ) + 1
+
+ (35)
+Now, note that mτ −1 + nτ −1 + 1 = τ, and using Assumption 2 we have yl ≤ h(xi,bi) ≤ yh, ∀i ∈ [T ].
+Therefore
+α
+τX
+i=1
+h(xi,bi) ≥ α (mτ −1 + nτ −1 + 1) yl.
+Combining with (35) and noting that nT = nτ = nτ −1 + 1 we have
+nT ≤ 1αyl
+(
+− (mτ −1 + 1)(∆l + αyl)
++ 60
+vuuutKRegKL(T ) log X
+i∈Sτ −1
+h(xi,a∗i )
+
+
+
+ X
+i∈Sτ −1
+h(xi,a∗i ) + 1
+
+
+)
+35
+Lemma C.2. Suppose Assumption Assumption 1,2, 4 holds. Then the number of times the baseline action is
+played by C9SquareCB is bounded as follows:
+nT ≤ O
+ 
+KRegKL(T )
+αyl(∆l + αyl) log
+ 
+e
+p
+KRegKL(T )
+∆l + αyl
+!!
+. (26)
+Proof. Note that we have from Lemma C.1 and using the fact that h(·) ∈ [0, 1] we
+nT ≤ 1αyl
+(
+− (mτ −1 + 1)(∆l + αyl)
++ 60
+vuuutKRegKL(T ) log X
+i∈Sτ −1
+h(xi,a∗i )
+
+
+
+ X
+i∈Sτ −1
+h(xi,a∗i ) + 1
+
+
+)
+≤ 1αyl
+(
+− (mτ −1 + 1)(∆l + αyl) + 60
+p
+KRegKL(T ) log (mτ −1) (mτ −1 + 1)
+)
+We define Q(m) := −m c1 +
+p
+m log(m) c2 where
+c1 = ∆l + αyl ≥ 0,
+c2 = 60
+p
+KRegKL(T ),
+m = mτ −1 + 1
+Next observe that for m ≥ 3, we have −m c1 +
+p
+m log(m) c2 ≤ −m c1 + √m log m c2. Now we use
+Lemma 8 from Kazerouni et al. [2017] to conclude that
+−m c1 + √m log m c2 ≤ 16c229c1
+"
+log
+ 2c2e
+c1
+ #2
+= O
+ 
+KRegKL(T )
+∆l + αyl
+log
+ 
+e
+p
+KRegKL(T )
+∆l + αyl
+!!
+which completes the proof.
+Lemma C.3. Suppose Assumptions 1 and 4 hold. Then for γt chosen as in (γi-Schedule), we have
+E
+X
+t∈ST
+
+h(xt,at) − h(xt,a∗t )
+
+≤ O
+ q
+KRegKL(T ) log
+ 
+L∗ST
+
+L∗ST
+!
+. (28)
+where L∗ST = Pt∈ST h(xt,a∗t ) is the cumulative cost of the optimal policy in the subset ST .
+Proof. The proof follows along similar lines as term II (a) in the proof of Lemma C.1 and is provided here
+for completeness. We use the per round regret guarantee (Theorem 4) from Foster and Krishnamurthy [2021]
+as follows:
+X
+a∈[K]
+pi,a
+
+h(xi,ai) − h(xi,a∗i )
+
+≤ 5Kγi Xa∈[K] pi,ah(xi,ai) + 7γi Xa∈[K] pi,a (ˆyi,a − h(xi,ai))2ˆyi,a + h(xi,ai) (36)
+36
+Adding and subtracting h(xi,a∗i ) we get
+X
+a∈[K]
+pi,a
+
+h(xi,a∗i ) − h(xi,a∗i )
+
+≤ 5Kγi Xa∈[K] pi,ah(xi,a∗i ) + 5Kγi Xa∈[K] pi,a(h(xi,ai) − h(xi,a∗i ))
++ 7γi
+X
+a∈[K]
+pi,a
+(ˆyi,a − h(xi,ai))2
+ˆyi,a + h(xi,ai) ,
+and therefore
+
+1 − 5Kγi
+ X
+a∈[K]
+pi,a
+
+h(xi,ai) − h(xi,a∗i )
+
+≤ 5Kγi Xa∈[K] pi,ah(xi,a∗i ) + 7γi Xa∈[K] pi,a (ˆyi,a − h(xi,ai))2ˆyi,a + h(xi,ai)
+Using γi ≥ 10K we have
+X
+a∈[K]
+pi,a
+
+h(xi,ai) − h(xi,a∗i )
+
+≤ 10Kγi Xa∈[K] pi,ah(xi,a∗i ) + 14γi Xa∈[K] pi,a (ˆyi,a − h(xi,ai))2ˆyi,a + h(xi,ai) (37)
+Using the schedule of γi from (γi-Schedule), there are E = log
+
+ X
+i∈ST
+L∗i
+
+ episodes, that we denote by
+Te(ST ), e ∈ [E], ηi = ηe and ηi := ηe is constant for all i ∈ Te(ST ) with the following guarantee
+X
+i∈Te(ST )
+h(xi,a∗i ) ≤ ηe ≤ 2
+X
+i∈Te(ST )
+h(xi,a∗i ) (38)
+Now summing for i ∈ ST as in the proof of Lemma C.1 (cf. equation (34)) we obtain
+X
+i∈ST
+X
+a∈[K]
+pi,a
+
+h(xi,ai) − h(xi,a∗i )
+
+≤ 25
+vuuutKRegKL(T ) log X
+i∈ST
+h(xi,a∗i )
+
+ X
+i∈ST
+h(xi,a∗i )
+= 25
+r
+KRegKL(T ) log
+
+L∗ST
+
+L∗ST
+where L∗ST = Pt∈ST h(xt,a∗t ). Define the following filtration
+Ft−1 = σ
+
+(xi,a, ˜ai, yi,˜ai), xt,a; 1 ≤ i ≤ t − 1, a∈ [K]
+
+.
+Note that E
+
+h(xt,˜at)|Ft−1
+
+=
+X
+a∈[K]
+pt,ah(xt,a) and therefore
+E
+X
+t∈ST
+
+h(xt,at) − h(xt,a∗t )
+
+=
+X
+i∈ST
+X
+a∈[K]
+pi,a
+
+h(xi,ai) − h(xi,a∗i )
+
+which completes the proof.
+37
+Lemma 3.5. Let Assumptions 1, 2 and 3 hold. Then, for any δ > 0, with the exploration parameter
+γt =
+p
+K|St|/(RegSq(mT ) + log(8δ−1)), with probability 1 − δ/2, C9SquareCB satisfies the performance
+constraint in (2).
+Proof. For t = 1 if the condition in line 8 holds then ˜a1 = a1 and we have that with probability 1 − δ
+ˆy1,a1 − 16
+p
+(m0 + 1)(1 + log(1/δ)) ≤ (1 + α)h(x1,b1)
+Noting that |ˆy1,a1 − h(xi,a1)| ≤2 and therefore with probability 1 − δ
+h(xi,a1) ≤ (1 + α)h(x1,b1).
+Further, if the condition in line 8 doesn’t hold, then a1 = b1, and therefore
+h(xi,a1) ≤ (1 + α)h(x1,b1),
+showing that the performance constraint in Definition 2.2 is satisfied. Now assume that the constraint holds
+for t − 1 and now consider t ∈ [T ]. Note that
+ Xi∈St−1 Xa∈[K] pi,a ˆyi,a − h(xi,˜ai) ≤  Xi∈St−1 Xa∈[K] pi,a ˆyi,a − Xi∈St−1 Xa∈[K] pi,ah(xi,a)| {z }
+I
++
+ Xi∈St−1 Xa∈[K] pi,ah(xi,a) − h(xi,˜ai)| {z }
+II
+Consider term I. We handle it as in the proof of Lemma C.1 as follows: Using the AM-GM inequality,
+X
+i∈St−1
+X
+a∈[K]
+pi,a
+
+ˆyi,a − h(xi,a∗i )
+
+≤
+X
+i∈St−1
+X
+a∈[K]
+pi,a
+ 
+1
+4β (ˆyi,a − h(xi,a∗i )) + β (ˆyi,a − h(xi,a∗i ))2ˆyi,a + h(xi,a∗i ) !
+for any β >1. Using Lemma 5 in [Foster and Krishnamurthy, 2021] we have
+X
+i∈St−1
+X
+a∈[K]
+pi,a ˆyi,a ≤ 3
+X
+a∈[K]
+pi,ah(xi,a∗i ) +
+X
+a∈[K]
+pi,a
+(ˆyi,a − h(xi,a∗i ))2
+ˆyi,a + h(xi,a∗i )
+Therefore we have the following bound on term II (b):
+X
+i∈St−1
+X
+a∈[K]
+pi,a
+
+ˆyi,a − h(xi,a∗i )
+
+≤ 1β Xi∈St−1 Xa∈[K] pi,ah(xi,a∗i ) + 2β Xi∈St−1 Xa∈[K] pi,a (ˆyi,a − h(xi,a∗i ))2ˆyi,a + h(xi,a∗i )
+Using Proposition 5 from Foster and Krishnamurthy [2021] we have
+2β
+X
+i∈St−1
+X
+a∈[K]
+pi,a
+(ˆyi,a − h(xi,a∗i ))2
+ˆyi,a + h(xi,a∗i ) ≤ 4βRegKL(T )
+38
+and therefore,
+X
+i∈St−1
+X
+a∈[K]
+pi,a
+
+ˆyi,a∗i − h(xi,a∗i )
+
+≤ 1β Xi∈St−1 Xa∈[K] pi,ah(xi,a∗i ) + 4βRegKL(T )
+= 1β Xi∈St−1 h(xi,a∗i ) + 4βRegKL(T )
+Choosing β =
+s P
+i∈St−1 h(xi,a∗i )
+RegKL(T ) we have
+X
+i∈St−1
+X
+a∈[K]
+pi,a
+
+ˆyi,a∗i − h(xi,a∗i )
+
+≤ 4
+s X
+i∈St−1
+h(xi,a∗i )RegKL(T )
+Using the fact that h(·) ≤ 1 we have
+X
+i∈St−1
+X
+a∈[K]
+pi,a
+
+ˆyi,a∗i − h(xi,a∗i )
+
+≤ 4
+p
+mt−1RegKL(T )
+Next, consider term II . Consider the following filtration
+Ft−1 = σ
+
+(xi,a, ˜ai, yi,˜ai), xt,a; 1 ≤ i ≤ t − 1, a∈ [K]
+
+.
+Note that E
+
+h(xt,˜at)|Ft−1
+
+=
+X
+a∈[K]
+pt,ah(xt,a), and therefore using Azuma-Hoeffding we have that with
+probability 1 − δ
+ Xi∈St−1 Xa∈[K] pi,ah(xi,a) − h(xi,˜ai) ≤ 2pmt−1 log(2δ−1) (39)
+Combining (22) and (39) and taking a union bound we have with probability 1 − δ
+ Xi∈St−1 Xa∈[K] pi,a ˆyi,a − h(xi,˜ai) ≤ 8smt−1RegKL(mt−1) + log(2/δ)
+Further |ˆyt,˜at − h(xt,˜at)| ≤2, and therefore with probability 1 − δ
+ˆyt,˜at + Xi∈St−1 Xa∈[K] pi,a ˆyi,a − h(xi,˜ai) − h(xt,˜at) ≤ 16smt−1RegKL(mt−1) + log(2/δ). (40)
+Now if line 8 of Algorithm 2 holds at time step t, then we have
+ˆyt,˜at +
+X
+i∈St−1
+X
+a∈[K]
+pi,a ˆyi,a +
+X
+i∈Sct−1
+h(xi,bi) + 16
+s
+mt−1
+
+RegKL(mt−1) + log(2/δ)
+
+≤ (1 + α)
+tX
+i=1
+h(xi,bt),
+39
+and therefore invoking (40), we have with probability 1 − δ
+h(xt,˜at) +
+X
+i∈St−1
+h(xi,˜ai) +
+X
+i∈Sct−1
+h(xi,bi) ≤ (1 + α)
+tX
+i=1
+h(xi,bt)
+Now note that for all i ∈ St−1, ai = ˜ai, for all i ∈ Sct−1, ai = bi, and using St−1 ∪ Sct−1 = [t − 1], and the
+fact that the condition in line 8 is satisfied we have with probability 1 − δ
+h(xt,at) +
+X
+i∈[t−1]
+h(xi,ai) ≤ (1 + α)
+tX
+i=1
+h(xi,bt),
+satisfying the performance condition in Definition 2.2.
+Next we consider the case when the condition in line 8 does not hold. Invoking the fact that the performance
+constraint holds until time t − 1, we have with probability 1 − δ
+t−1X
+t=1
+h(xi,ai) ≤ (1 + α)
+t−1X
+i=1
+h(xi,bt)
+Adding h(xt,bt) on both sides of the above equation we get
+h(xt,bt) +
+t−1X
+i=1
+h(xi,ai) ≤ h(xt,bt) + (1 +α)
+t−1X
+i=1
+h(xi,bt).
+Noting that when condition in line 8 does not hold at step t, then at = bt and that α >0, we have with
+probability 1 − δ
+tX
+i=1
+h(xi,ai) ≤ (1 + α)
+tX
+i=1
+h(xi,bt),
+satisfying the performance constraint in Definition 2.2 for step t. Using mathematical induction we conclude
+that the performance constraint holds for all t ∈ [T ], completing the proof.
+D Proof for Regret Bounds for Neural Conservative Bandits
+Theorem 5.1 (Regret bound for Neural C-SquareCB). We instantiate Sq9Alg with the predictor ˆyt,at =˜f (S)  θ; xt, ε(1:S) from (15) and update the parameters using OGD in (17). Under Assumptions 1,2, 5 and
+6 with γt as in Theorem 5.1, step-size sequence {ηt}, width m, perturbation constant cp, and projection ball
+B, with high probability (1 − O(δ)), the performance constraint in (2) is satisfied by C-SquareCB and the
+regret is given by
+RegCB(T ) ≤ O
+p
+KT log T +
+p
+KT log(16δ−1) + K(log T + log(16δ−1))αyl(∆l + αyl) .
+40
+Proof. We set the width of the network m = max
+ 
+O(T 5), O( 4LTδ ) and the projection set B = BFrobρ,ρ1 (θ0),
+the layer-wise Frobenius ball around the initialization θ0 with radii ρ, ρ1 which is defined as
+BFrobρ,ρ1 (θ0) := {θ ∈ Rp : ∥ vec(W (l)) − vec(W (l)0 )∥2 ≤ ρ, l∈ [L], ∥v − v0∥2 ≤ ρ1}. (41)
+We set ρ and ρ1 according to Theorem 3.2 in Deb et al. [2024a], and the perturbation constant cp = O(
+√
+λ),
+where λ is the Lipschitz parameter of the loss. Now, invoking Theorem 3.2 in Deb et al. [2024a] we get with
+probability 1 − O(δ) over the randomness of initialization and {ε}Ss=1, the regret of projected OGD with loss
+L(S)Sq yt,  ˜f (θ; xt, εs)	Ss=1 for online regression with squared loss is bounded by O(log T ) i.e.,
+TX
+t=1
+ℓsq(ˆyt,at, yt,at) − infg∈H
+TX
+t=1
+ℓsq(g(xt,at), yt,at) ≤ O(log T )
+Therefore with probability 1 − O(δ) Assumption 3 is satisfied with RegSq ≤ O(log T ).
+Before proceeding further we note that Foster and Rakhlin [2020] invokes Assumption-3 (Assumption 2a
+in Foster and Rakhlin [2020]) for all sequences. In the proof of Lemma 2 in Foster and Rakhlin [2020],
+Appendix B, using this assumption, the authors conclude that SqAlg guarantees that with probability 1
+TX
+t=1
+ℓsq(ˆyt,at, yt,at) − infg∈H
+TX
+t=1
+ℓsq(g(xt,at), yt,at) ≤ O(log T )
+In our analysis this would hold in high probability, i.e., with probability1 − O(δ) (this randomness is over the
+initialization and the perturbation of the network). Subsequently we invoke Freedman’s Inequality (Lemma 1
+in Foster and Rakhlin [2020]) that holds with probability (1 − δ) and take a union bound of both the high
+probability events to conclude that with probability (1 − (δ + O(δ)))
+TX
+t=1
+X
+a∈A
+pt,a (ˆyt(xt, at) − f ∗(xt, at))2 ≤ 2RegSq(T ) + 16 log(δ−1).
+Note that the the 1 − δ high probability event is with respect to the randomness of the arm algorithm.
+Thereafter the analysis follows as in Foster and Rakhlin [2020]. Therefore for any sequence of contexts and
+costs, our regret bound holds in high probability over the randomness of initialization and the perturbation of
+the network and the randomness of the arm choices.
+Invoking Theorem 3.1 we get with with probability 1 − δ/2
+RegCB(T ) = O
+p
+KT log T +
+p
+KT log(16δ−1) + K(log T + log(16δ−1))αyl(∆l + αyl) .
+Taking a union bound over all the high probability events, we have with probability 1 − O(δ) over all the
+randomness in the Algorithm the performance constraint in (2) is satisfied and,
+RegCB(T ) = O
+√
+KT
+q
+RegSq(T ) +
+p
+log(16δ−1)
+
++ K(RegSq(T ) + log(16δ−1))αyl(∆l + αyl) 
+41
+Theorem 5.2 (Regret bound for Neural C-FastCB). We instantiate Sq9Alg with the predictor ˆyt,at =˜f (S)  θ; xt, ε(1:S) from (15) and update the parameters using OGD in (17). Under Assumptions 1,2, 4, 5
+and 6 with γt chosen as in (γi-Schedule), step-size sequence {ηt}, width m, perturbation constant cp, and
+projection ball B, with probability (1 − O(δ)), the performance constraint in (2) is satisfied by C-FastCB
+and the expected regret is given by
+E RegCB(T ) ≤ O
+p
+KL∗ log L∗ log T + K log T + K log Tαyl(∆l + αyl) .
+Proof. As in the previous Theorem, we set the width of the network m = max
+ 
+O(T 5), O( 4LTδ ) and the
+projection set B = BFrobρ,ρ1 (θ0), the layer-wise Frobenius ball around the initialization θ0 with radii ρ, ρ1
+which is defined as
+BFrobρ,ρ1 (θ0) := {θ ∈ Rp : ∥ vec(W (l)) − vec(W (l)0 )∥2 ≤ ρ, l∈ [L], ∥v − v0∥2 ≤ ρ1}. (42)
+We set ρ and ρ1 according to Theorem 3.3 in Deb et al. [2024a], and the perturbation constant cp = O(
+√
+λ),
+where λ is the Lipschitz parameter of the loss. Now, invoking Theorem 3.3 in Deb et al. [2024a] we get with
+probability 1 − O(δ) over the randomness of initialization and {ε}Ss=1, the regret of projected OGD with loss
+L(S)Sq yt,  ˜f (θ; xt, εs)	Ss=1 for online regression with KL loss is bounded by O(log T ) i.e.,
+TX
+t=1
+ℓKL(ˆyt,at, yt,at) − infg∈H
+TX
+t=1
+ℓKL(g(xt,at), yt,at) ≤ O(log T )
+Therefore with probability 1 − O(δ), Assumption 4 is satisfied with RegSq ≤ O(log T ).
+Before proceeding further we note that Foster and Krishnamurthy [2021] invokes Assumption-3 (Assump-
+tion 2 in Foster and Krishnamurthy [2021]) for all sequences. In the proof of Theorem 1 in Foster and
+Krishnamurthy [2021], using this assumption, the authors conclude that E[ ¯RegKL(T )] ≤ RegKL(T ), where¯RegKL(T ) is the conditional expectation of of the KL regret with respect toFt−1 = σ((xi,ai, yi,ai), i≤ t−1).
+In our case ¯RegKL(T ) ≤ O(log T ) holds with probability 1 − O(δ) and we need to provide an expected
+bound. Now note that ¯RegKL(T ) ≤ T , for all sequences therefore setting O(δ) = 1/T we get that
+E[ ¯RegKL(T )] ≤ O(log(T )) 1 − 1T  + 1 = O(log T )
+Thereafter the analysis follows as in Foster and Krishnamurthy [2021]. Now invoking Theorem 4.1
+E RegCB(T ) ≤ O
+p
+KL∗ log L∗ log T + K log T + K log Tαyl(∆l + αyl) .
+Taking a union bound over all the high probability events, we have with probability1 − O(δ) over over the
+randomness of initialization and {ε}Ss=1 the expected regret is bounded by
+RegCB(T ) = O
+√
+KT
+q
+RegSq(T ) +
+p
+log(16δ−1)
+
++ K(RegSq(T ) + log(16δ−1))αyl(∆l + αyl) 
+while simultaneously with probability 1 − O(δ) over all the randomness in the Algorithm the performance
+constraint in (2) is satisfied.
+42

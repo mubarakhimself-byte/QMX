@@ -1,0 +1,1048 @@
+arXiv 2610.02925  https://arxiv.org/abs/2610.02925
+
+POSITIVE-UNLABELEDLEARNING FORAGENTSAFETY
+FALSEALARMAUDITING
+Xichen Yan1,*,Chongyang Gao 2,3,Kezhen Chen 3,Guangyi Zhang 4,Jiaqi Wu 5,Lixu Wang 6,†
+1Jinan University, 2Northwestern University, 3Analogy AI, Inc., 4Shenzhen Technology University
+5Tsinghua University, 6The Chinese University of Hong Kong, Shenzhen
+xxy315@student.bham.ac.uk chongyanggao2026@u.northwestern.edu
+kzchen0204@gmail.com zhangguangyi@sztu.edu.cn
+wujiaqi@mail.tsinghua.edu.cn wanglixu@cuhk.edu.cn
+ABSTRACT
+Safety monitors help safeguard language-model agents interacting with external
+tools and environments, but conservative monitoring can generate many false
+alarms, consuming extensive review resources and weakening trust in alerts. Be-
+cause false and genuine alarms often remain interleaved in native monitor scores,
+obtaining a reliable cutoff still requires substantial manual verification. In prac-
+tice, a small set of verified-safe non-alarmed trajectories may be available while
+alarms remain unlabeled, naturally casting false-alarm auditing as a positive–
+unlabeled (PU) ranking problem. The key challenge ismonitor-induced selection,
+since observed safe references are accepted by the monitor, while the hidden safe
+alarms of interest are precisely those it incorrectly flags, making the observed
+positives poorly representative of the positives to be recovered. To address this
+challenge, we propose a two-stage framework in whichTrust-aware PU Super-
+visionadapts safe references toward the alarm domain and protects plausible
+false alarms from excessive negative pressure, whileReliability-gated Rank Dis-
+tillationconsolidates consistent ordering preferences from multiple PU reference
+models into a single student.Consensus-guided Structural Refinementthen im-
+proves the student ranking using hierarchical safe-reference support, alarm re-
+lations, and predicted reference consensus. The framework requires no alarm
+safety labels for fitting and leaves the underlying monitor unchanged. Across
+mainstream safety monitors, our method achieves a macro AUPRC of 0.6444,
+outperforming eight evaluated PU baselines by 5.27–16.98 absolute percentage
+points; compared with PULDA, the strongest evaluated PU baseline, it recovers
+33.3% more false alarms at a 5% review budget. Code is available at https:
+//anonymous.4open.science/r/safe-alarm-ranking-c4d2/.
+1 INTRODUCTION
+Language-model agents increasingly perform real-world tasks through multi-round interactions with
+external tools and environments. During execution, they may be exposed to prompt injection attacks
+or take actions that violate safety constraints, potentially causing serious harm (Debenedetti et al.,
+2024; Wang et al., 2022; Sun et al., 2026; Jiao et al., 2025; Feng et al., 2026). An agent’s execution
+trajectory records its intermediate actions, observations, and tool interactions, providing a natural
+basis for safety monitoring mechanisms that detect unsafe behavior (Liu et al., 2026; Xiang et al.,
+2025; Chen et al., 2025). Existing trajectory monitors assess such execution traces using learned
+evaluators or explicit safety criteria and produce safety scores, risk judgments, or intervention signals
+when potentially unsafe behavior is detected. These approaches have demonstrated effective detection
+of unsafe agent behavior across a range of settings, including coding, web interaction, and tool-use
+tasks (Liu et al., 2026; Xiang et al., 2025; Chen et al., 2025; Li et al., 2026a).
+*Work carried out during a research internship at The Chinese University of Hong Kong, Shenzhen.
+†Corresponding author.
+1
+arXiv:2610.02925v1  [cs.AI]  2 Oct 2026
+Preprint. Under review.
+(a) False alarms by monitor
+AgentDoG1.5
+ATBench 53.6%
+Granite Guardian
+ATBench 57.9%
+AgentDoG-Qwen3
+TraceSafe 45.4%
+StepGuard
+TraceSafe 39.4%
+0 50 100
+FPs / alarms (%)
+(b) Native-score order
+FP TP N
+56
+76
+269
+109
+0 50 100
+Native-score rank (%)
+Figure 1:False alarms and overlap in the native score order.(a) Share of safe trajectories among
+alarms in four dataset–monitor settings. (b) The native monitor-score ordering for the same four
+settings, with lower-risk alarms on the left. Each tile is one alarm (teal for FP, sand for TP); row
+widths are normalized to cohort size, and N gives the alarm count. All 510 alarms are shown. FP and
+TP remain interleaved within each order, leaving no clean score cutoff. Ground-truth labels determine
+tile colors only, not the ordering; ties in native scores are broken by sample ID.
+However, this seemingly strong performance in unsafe-behavior detection comes with a substantial
+cost. Agent trajectories vary considerably in structure and format across tasks and datasets, while the
+safety of an individual action often depends on both the task context and the preceding execution
+history (Yuan et al., 2024; Chen et al., 2026). To reduce the risk of overlooking unsafe behavior
+across such heterogeneous settings, safety monitors often favor sensitivity, for example by adopting
+permissive alarm thresholds or overly inclusive safety criteria that also flag borderline cases. Our
+empirical study reveals that this design choice results in a substantial number of false alarms: across
+mainstream safety monitors, 39.4%–57.9% of triggered alarms actually correspond to safe trajectories
+and should therefore be regarded as false positives (FPs) (Figure 1a). Such a high false-positive rate
+is consequential. Repeated false warnings can erode users’ trust in the monitoring system and reduce
+their willingness to respond to subsequent alerts (Chancey et al., 2017). Moreover, each false alarm
+must be investigated before it can be dismissed, incurring additional human effort and computational
+overhead (Alahmadi et al., 2022; Yang et al., 2024; Oliver et al., 2024).
+A natural way to prioritize likely false alarms for review is to reuse the monitor’s original safety
+score, possibly with an additional cutoff. Our empirical study shows that false and true alarms
+often receive similar scores and remain mixed in the native ordering (Figure 1b). With this overlap,
+moving the cutoff cannot reliably separate the two groups. Even if stronger future monitors produced
+better-separated scores, choosing a cutoff that preserves genuine alarms would require manually
+verifying many cases. That verification is impractical under a limited review budget.
+Let us reconsider the alarm-isolation problem from a different perspective. In practice, it is often
+easy to obtain a small set of verified-safe trajectories, either from routine benign traces that do not
+trigger alarms or from the monitor’s training data. Because safety monitors are typically conservative,
+trajectories that they confidently classify as safe provide reliable positive examples. Treating safety
+as the class of interest, these verified-safe trajectories form the observed positive set, while false
+alarms hidden within the alarm pool constitute latent positives. The task therefore becomes one of
+identifying positive-class samples from an otherwise unlabeled alarm pool, naturally giving rise to a
+positive-unlabeled (PU) learning formulation (Elkan & Noto, 2008). However, this setting differs
+fundamentally from standard PU learning. The safety monitor itself has already partitioned the two
+types of safe trajectories across its alarm boundary: observed positives correspond to safe behavior
+that the monitor accepts, whereas the latent positives of interest are precisely the safe trajectories
+that it incorrectly rejects. Consequently, the observed positive set may not be representative of the
+false alarms in the unlabeled pool. Learning directly from these positives without accounting for this
+selection mechanism risks reproducing the monitor’s existing decision pattern rather than correcting
+its errors (Bekker & Davis, 2018).
+2
+Preprint. Under review.
+In this work, to prioritize false-alarm agent trajectories identified by safety monitors, we propose a
+two-stage positive–unlabeled ranking framework that can prioritize most-likely false alarms in an
+auditing queue. In the first stage, we adapt the verified-safe non-alarms towards the alarm pool and
+reduce excessive negative pressure on plausible false alarms to mitigate the shift between the safe
+references and the false alarms, which helps us develop much more effective PU classifiers. But due
+to the uncertainty of PU learning process, we found that trained classifiers with different initializations
+provide distinctive auditing queues. Therefore, we propose a reliability-gated distillation strategy to
+distill the consistent alarm orderings across multiple PU classifiers into a single student. Then, in the
+second stage, we can obtain an initial auditing queue by ranking the scores predicted by the student
+PU classifier. To further exploit structure across task contexts, we refine the auditing queue with
+consensus-guided structural refinement driven by hierarchical safe-reference support, target-alarm
+relations, and reference agreement. Extensive experiments on two benchmark datasets and four
+dataset–monitor settings demonstrated the superiority of our proposed framework in prioritizing false
+alarms of agent trajectories compared with a variety of state-of-the-art potential baseline approaches.
+In summary, our main contributions are:
+• We identify the issue of frequent false alarms raised by current agent safety monitors, and to our
+best knowledge, propose the first effective framework to prioritize most-likely false alarms in the
+auditing queue.
+• We formulate agent false-alarm auditing as a special positive–unlabeled ranking problem under
+monitor-conditioned selection and develop a series of designs to mitigate the shift between
+positives and hidden positives and search for consistency across PU learning processes and task
+contexts.
+• We conduct extensive experiments against established PU methods, direct auditing controls
+based on native monitor scores and frozen representations, and local LLM re-judgment. Across
+mainstream safety monitors, our method achieves a macro AUPRC of 0.6444, outperforming
+eight evaluated PU baselines by 5.27–16.98 absolute percentage points and recovering 33.3%
+more false alarms than PULDA at only a5%auditing budget (Table 1).
+2 PRELIMINARIES
+Safety monitoring and LLM-based judgment.Existing work assesses agent safety through
+learned risk prediction, policy verification, and direct LLM judgment. Granite Guardian detects
+risks in model inputs and outputs (Padhi et al., 2025), while AgentDoG provides contextual risk
+diagnosis for execution trajectories (Liu et al., 2026). StepGuard checks candidate tool actions before
+execution and balances safe and unsafe supervision to reduce over-defense and under-defense (Zheng
+et al., 2026). Policy-based approaches include GuardAgent, which translates safety requirements
+into executable checks (Xiang et al., 2025), and ShieldAgent, which combines policy modeling with
+logical verification (Chen et al., 2025). R-Judge evaluates the ability of general-purpose LLMs to
+judge safety from interaction records (Yuan et al., 2024). These studies focus on improving safety
+judgments and interventions. Our work addresses a complementary task after alarms are raised: using
+limited verified-safe supervision to prioritize likely false alarms for human review.
+Positive–unlabeled learning.PU methods learn from labeled positives and an unlabeled mixture
+through risk estimation, distribution alignment, or sample-level supervision. Prior work includes
+nnPU, which uses non-negative risk estimation to reduce overfitting (Kiryo et al., 2017), and DC-
+PU, which constrains positive and negative risks to balance classification errors (Li et al., 2025).
+Dist-PU aligns predicted label distributions with class-prior information (Zhao et al., 2022), and
+PULDA combines this alignment with functional-margin learning (Jiang et al., 2023). Robust-PU
+iteratively selects reliable negative examples (Zhu et al., 2023), PUL-CPBF constructs supervision
+using classifiers with different probability boundaries (Li et al., 2024), and HolisticPU identifies
+unlabeled examples through their prediction trends (Wang et al., 2023). NcPU addresses unreliable
+PU supervision through representation alignment (Zhao et al., 2026). Related work also addresses
+nonrandom positive selection (Bekker & Davis, 2018) and AUC optimization from PU data (Sakai
+et al., 2018). Our setting connects these directions through monitor-induced selection: verified-safe
+non-alarms and hidden safe alarms share a safety label but are selected by opposite monitor decisions.
+Our method adapts safe supervision and ranking refinement to recover false alarms under a fixed
+review budget.
+3
+Preprint. Under review.
+Setting and observed data.Let τi denote an agent execution trajectory and yi ∈ {+1,−1}its
+safety label, with +1 indicating safe behavior and −1 indicating unsafe behavior. A safety monitor
+Mψ with fixed configuration ψ provides a representation hi ∈R d and an alarm decision ai ∈ {0,1},
+where ai = 1 indicates an alarm. We observe a small set DP of verified-safe non-alarmed trajectories
+(yi = +1, ai = 0), a set DU of unlabeled training alarms, and a separate target cohort C={τ i}Ni=1
+with ai = 1 for every member of both alarm sets. Safety is the positive class in our PU formulation;
+members of DP are observed positives and are termedTN referencesrelative to the monitor’s alarm
+decision. Frozen representations, task features, and isolation-group identifiers are available for all
+three sets. Safety labels are observed only forDP during fitting; the labels and false-alarm proportions
+ofD U andCare unknown.
+Problem definition.The auditor produces an ordering of the N target alarms for human review.
+Under a review budget B∈ {1, . . . , N}, only the first B alarms are inspected, and the objective is
+to maximize the number of false alarms (yi = +1) among them. The ordering may depend on the
+unlabeled target features; target safety labels are used only for evaluation after the order is fixed. The
+auditor determines review priority while preserving all original alarm decisions.
+3 METHOD
+3.1 OVERVIEW
+The difficulty is that the known-safe trajectories passed the monitor, whereas the false alarms we
+seek were selected by it. Treating every alarm as a negative example can therefore bury the very
+trajectories that reviewers should see first. Stage I learns a PU auditor in two steps. Trust-aware
+supervision transfers TN references toward the alarm domain and reduces negative pressure on
+plausible FPs. Reliability-gated distillation then combines the ordering preferences of several frozen
+reference auditors in one student. Stage II freezes that student and refines its queue with hierarchical
+TN support and relations among target alarms. A predicted measure of reference agreement controls
+the final per-alarm adjustment. Both stages may use unlabeled target features; neither uses target
+safety labels for fitting. Figure 2 follows these three components from left to right.
+Stage I: Reliable PU ranker learning
+Stage II: Structural queue refinement
+Trust-aware
+PU supervision
+Reliability-gated
+ rank distillation
+Consensus-guided
+structural refinement
+Observed data
+Verified-safe TNs
+Training alarms
+Target alarms
+Frozen
+monitor
+TN transfer
+Role boundary
+Soft protection
+Transferred safe supervision
+Frozen references
+R1
+R2
+R3
+Median
+ ranks
+1
+2
+3
+Student
+Reliability gate
+Stable ordering in one student
+TN hierarchy
+Alarm relations
+Structural
+ ranking
+Rank shift
+Agreement
+Frozen student ranking
+Review
+priority
+1
+2
+3
+4
+5
+Top B
+Human review
+Verified-safe TN
+Unlabeled alarm
+Frozen
+Figure 2:Overview of our method.Stage I learns one student through trust-aware TN transfer and
+soft protection (§3.2.1), followed by median-rank supervision with a shared reliability gate (§3.2.2).
+Stage II freezes the student, combines hierarchical TN support and target-alarm relations into a
+structural ranking, and uses an agreement head to scale the final rank shift (§3.3). Components 1–2
+form Stage I and component 3 forms Stage II; the final queue uses no test-time reference ensemble.
+3.2 STAGEI: RELIABLEPU RANKERLEARNING
+Precursor, reference, and student auditors share a PU objective. Its common part regularizes predicted
+safety scores across verified-safe and alarm batches through a distribution-alignment loss Lalign, and
+adds a group-structured representation mixing loss Lmix: Lbase =L align +λ mix(t)Lmix. Here t is
+the training step and λmix(t) is its mixing weight. Appendix A.3 gives the terms and optimization.
+The two components below determine how safe references and other alarms contribute to fitting.
+4
+Preprint. Under review.
+3.2.1 TRUST-AWAREPU SUPERVISION
+Transferring safe references.A role classifier, fitted out of fold on training data, distinguishes
+TN references from training alarms using monitor and task representations. Its decision boundary
+describes the monitor’sselectionof trajectories into the alarm pool; it is not a boundary between
+safe and unsafe behavior. For a TN reference τp ∈ DP , let ehp be its nearest feasible representation
+on that role boundary, with the task representation and monitor-vector norm held fixed. A transfer
+weight λtrp ∈[0,1] reflects boundary proximity and the displacement needed to reach it. The positive
+comparison score is
+srefp = (1−λ trp )fθ(hp) +λ trp fθ(ehp).(1)
+Thus a well-supported transfer uses more of the boundary-oriented score, while a doubtful transfer
+stays closer to the observed TN. The role classifier, projections, and weights remain fixed asfθ learns.
+Appendix A.2 specifies their construction.
+Protecting uncertain alarms.Changing the TN comparison score alone does not prevent a plau-
+sible FP from being repeatedly pushed below it. We assign each alarm asoft protectionweight
+qproti ∈[0,1] , computed separately in each pool V ∈ {DU ,C} . Training-alarm evidence combines
+running auditor scores and proximity to the role boundary. Target-alarm evidence also uses frozen
+precursor predictions, with transfer trust and allocation overlap moderating their influence. Precursors
+initialize protection; the independent reference auditors below provide the distillation targets.
+Let mV be the protection mass assigned to pool V. An order-preserving allocator AmV maps alarm
+evidence ei to qproti =σ(e i −ξ) , where the shared offset ξ is chosen so that Pi∈V qproti =m V. Here
+σ(z) = (1 + exp(−z)) −1 is the logistic function. The mass is mV =⌈bρtr|V|⌉. The training-only
+quantity bρtr measures TN-supported safe mass among alarms; it is not claimed to identify their global
+FP prevalence (Appendix A.6). The massm V is distinct from the human review budgetB.
+Let ℓi,V be the comparison loss for alarm i, averaged over the transferred TN scores srefp . With
+ηC ≥0denoting the relative use of the unlabeled target cohort, we train against
+Lcmp,V =
+P
+i∈V (1−q proti )ℓi,VP
+i∈V (1−q proti ) ,J PU = Lcmp,DU +η CLcmp,C1 +η C .(2)
+Protection reduces comparison pressure; it does not assign an alarm a safe label. The two pools retain
+separate updating memories. A reference auditor minimizesL base +J PU.
+3.2.2 RELIABILITY-GATEDRANKDISTILLATION
+Consensus positions.Even with adapted supervision, independently fitted PU auditors can place
+uncertain alarms in different positions. We use a frozen bank{fϕk }Kk=1 and transfer its ordering, rather
+than its raw score scale, into one student. LetRank(a) denote ascending midpoint ranks normalized to
+(0,1) ; equal values receive equal average ranks. For referencek, define r(k)i = Rank((fϕk (hj))Nj=1)i.
+Their median and a fixed soft allocation are defined usinglogit(u) = log(u/(1−u)):
+¯ri = median1≤k≤K r(k)i ,q ref =A mC  logit(¯r).(3)
+The median limits the effect of an extreme reference position. qref is fixed during student fitting and
+encodes review-order preference, not a safety label.
+Pairwise transfer.For target alarms i̸=j , let wdistij =q refi (1−q refj )|¯ri −¯rj|. Let si =f θ(hi) be
+the student score andµ≥0the ranking margin. The distillation loss is
+Ldist =
+P
+i̸=j wdistij log(1 + exp(µ−s i +s j))P
+i̸=j wdistij .(4)
+Both pair directions remain in the loss. Their unequal weights favor the reference-preferred direction;
+the rank gap downweights nearly tied positions. The gap is a measure ofseparation, not pair-specific
+agreement among references.
+5
+Preprint. Under review.
+One reliability gate.Agreement alone cannot reveal a bias shared by all references. We therefore
+use a cohort-level gate λdist =o ref (¯λtr)2, where oref ∈[0,1] is the soft-allocation overlap of a fixed
+reference pair and ¯λtr is mean TN transfer weight. A lower overlap or weaker transfer reduces the
+influence of distillation. The student minimizes
+Ltrain =L base + JPU +λ distLdist1 +λ dist .(5)
+The base terms retain their weights; only PU comparison and distillation are blended. Reference
+ranks and the gate stay fixed while the student’s protection memory updates. Stage I returns one
+student, and keeps reference-rank dispersion for Stage II (Appendix A.4).
+3.3 STAGEII: CONSENSUS-GUIDEDSTRUCTURALREFINEMENT
+The student captures a common ordering, but that ordering does not explicitly express how TN
+references support alarms at different granularities or how alarms relate within the target cohort.
+We freeze the student and use those two kinds of structure to refine its review queue. No student
+parameter is updated in this stage.
+Hierarchical TN support.Training role–group centers form a root–parent–leaf hierarchy. When
+local TN support is sparse, the hierarchy allows a score to borrow support from a broader ancestor.
+Holding the student score fixed, we form threescore viewson the cohort: slocal uses local support,
+sflat shrinks directly from leaf to root, and shier shares support through the parent. Their matched
+contrast defines
+s(0) =s local + (shier −s flat).(6)
+The difference adds parent-level information without counting the shared student score twice. Ap-
+pendix B.1 defines the support and the three views.
+Relations among target alarms.The three views also suggest preferences between alarms. We
+retain a cross-group directed pair (i, j)only when the root view and at least one other support view
+agree that i should precede j. Let E be this edge set, wstrij ≥0 its support weight, and δij ≥0
+its desired separation. A sigmoid transform of the ranks of s(0) yields p∈(0,1) N . We solve the
+following constrained problem, where Ber(u) denotes a Bernoulli distribution with mean u, KL is
+its Kullback–Leibler divergence, and[z] + = max{z,0}:
+min
+v∈Ω(p)
+1
+N
+X
+i
+KL(Ber(vi)∥Ber(p i)) +
+P
+(i,j)∈E wstrij [δij −v i +v j]2+P
+(i,j)∈E wstrij ,
+Ω(p) ={v∈[0,1] N :1 ⊤v=1 ⊤p}.
+(7)
+The first term keeps the solution near the hierarchy-supported initialization; the second penalizes
+violated relations. The constraints retain its total soft mass. With no supported relations, the solution
+is p. Let bv be the finite solver output. The structural ordering is formed with the endpoint-normalized
+ascending rankRank 01, which maps the smallest and largest positions to 0 and 1 (Appendix A.1):
+sstr = (1−α) Rank 01(s(0)) +αRank 01(bv),(8)
+where α∈[0,1] controls the contribution of cohort relations. Appendices A.1 and B.2 give the
+operators and solver details.
+Agreement-guided readout.We use the reference bank to estimate how stable the ranking of each
+alarm is. Its rank spread and relative agreement target are
+di = max1≤k≤K r(k)i −min1≤k≤K r(k)i , c ⋆i = 1−Rank(d) i.(9)
+A ridge head predicts ci ∈[0,1] from standardized frozen monitor features. It is fitted once per cohort
+to c⋆i , without alarm safety labels, and shared across student-seed repetitions. Unlike the cohort-level
+distillation gate,c i controls anindividualalarm’s final adjustment.
+Let rstu = Rank((f θ(hi))Ni=1) and rstr = Rank(s str). For a fixed adjustment scale β≥0 , final
+review priority is
+souti =r stri +βc i(rstri −r stui ).(10)
+6
+Preprint. Under review.
+Predicted agreement determines how far to move along the structural correction; it is not itself evi-
+dence of safety. The final scores need not lie in[0,1] and are sorted in descending order. Appendix B.3
+specifies feature standardization, ridge fitting, and score handling.
+The fitted cohort is scored with one student, the agreement head, and stored structural statistics.
+A new cohort requires its own reference ranks and pool-dependent statistics; it does not require
+changing the frozen monitor’s decisions.
+4 EXPERIMENTS
+4.1 EXPERIMENTALSETUP
+Protocol.We evaluate four dataset–monitor settings on ATBench (Li et al., 2026b) and Trace-
+Safe (Chen et al., 2026), covering AgentDoG (Liu et al., 2026), Granite Guardian (Padhi et al., 2025),
+and StepGuard (Zheng et al., 2026). Each setting provides 40 verified-safe non-alarms and unlabeled
+training alarms, with 510 target alarms in total. Target labels remain sealed until all rankings are
+fixed, and all safety monitors remain frozen.
+Baselines and metrics.We compare against eight PU methods: nnPU (Kiryo et al., 2017), DC-
+PU (Li et al., 2025), Dist-PU (Zhao et al., 2022), Robust-PU (Zhu et al., 2023), PULDA (Jiang
+et al., 2023), PUL-CPBF (Li et al., 2024), HolisticPU (Wang et al., 2023), and feature-adapted
+NcPU (Zhao et al., 2026). All methods use the same frozen features and data splits. We report macro
+AUPRC/AUROC (↑), AUGRC (↓), and false alarms recovered under 5%, 10%, and 20% review
+budgets. Full implementation and evaluation details are in Appendix A.
+4.2 RANKINGPERFORMANCE ANDREVIEWYIELD
+Our method achieves macro AUPRC/AUROC/AUGRC of64.44/61.70/22.85, improving over the
+strongest PU baseline by 5.27/2.32/0.56 favorable points and obtaining the strongest result across
+all 96 evaluated setting–seed–baseline comparisons. The advantage is particularly pronounced un-
+der limited review budgets: at 5%, we recover 22.67 false alarms versus PULDA’s17.00 (+33.3%),
+while the gain remains substantial at20%(65.00versus54.33,+19.6%).
+4.3 LARGE-SCALEEXTERNALVALIDATION
+23
+25
+27
+29AUPRC (%)
+(a) Ranking quality
+1,034 2,027 3,062 4,054
+Target alarms
+0
+25
+50
+75
+100FPs found at Top 5%
+(b) Early audit yield
+Our method PULDA
+Figure 3:External cohort scaling.Macro
+AUPRC and Top-5%false-alarm recovery.
+We further evaluate on Agent-SafetyBench (Zhang
+et al., 2024), yielding 4,054 held-out alarms from
+1,400 evaluation cases and two frozen monitors.
+Our method improves PULDA from 24.39 to 28.72
+AUPRC and increases Top-5% recovery from 66 to
+94 false alarms (+42.4%).The AUPRC improve-
+ment is supported by a case-level 95% bootstrap
+interval of [3.12,5.58] . Even the K= 1 variant out-
+performs a three-model PULDA ensemble ( 26.15
+versus 25.42), while the full method maintains its
+advantage as the target cohort grows from 1,034 to
+4,054 alarms. This consistent scaling indicates that
+the improvement transfers beyond the smaller pri-
+mary evaluation to substantially larger audit pools.
+4.4 DIRECTLLM RE-JUDGMENT
+We compare against a zero-shot Qwen2.5-7B-Instruct judge that independently re-evaluates each
+policy, task, and trajectory without access to labels, safe references, or monitor scores. Although
+direct semantic re-judgment improves over the native monitor order, our method achieves substantially
+higher AUPRC (64.44 versus 57.78) and recovers 4.67, 9.00, and 15.00 more false alarms at the
+5%, 10%, and 20% budgets, respectively (Figure 4(a,d)).This gap shows that cohort-level PU
+supervision provides information beyond independent semantic re-evaluation of individual alarms.
+7
+Preprint. Under review.
+Table 1:Ranking performance and review yield.Upper: two ATBench settings. Lower: four-setting
+macro mean±std over seeds {13,37,73} (100×) and summed FP yield.Boldand underlining mark
+the best and second-best values.
+ATBench
+AgentDoG1.5-Qwen3.5-2B
+ATBench
+Granite-Guardian-3.1-2B
+Method (year) AUPRC↑AUROC↑AUGRC↓AUPRC↑AUROC↑AUGRC↓
+nnPU(2017)61.75±0.0965.94±0.1519.66±0.0460.73±0.2450.97±0.3521.09±0.09
+Dist-PU(2022)70.04±2.7670.00±3.5718.65±0.8968.16±1.1257.81±1.5719.43±0.38
+Robust-PU(2023)62.02±0.5566.75±0.7119.46±0.1860.24±0.1950.78±0.1421.14±0.03
+PULDA(2023)72.89 ±0.9273.59 ±0.5117.76 ±0.1369.82 ±0.6558.43 ±1.1719.28 ±0.29
+HolisticPU(2023)61.85±1.1865.77±1.1419.71±0.2857.97±0.5448.06±0.5321.80±0.13
+PUL-CPBF(2024)61.95±2.0664.70±2.0919.97±0.5261.56±2.2451.28±4.2621.02±1.04
+DC-PU(2025)51.23±8.9247.35±11.1324.30±2.7551.72±2.3042.99±4.0323.04±0.98
+NcPU(2026)60.46±1.5064.57±1.6920.00±0.4261.19±0.3951.52±0.6920.96±0.17
+Ours 79.48±0.65 76.67±0.59 17.00±0.15 73.91±0.81 62.55±0.86 18.27±0.21
+Average over all four combinations FPs found over all four combinations
+Method (year) AUPRC↑AUROC↑AUGRC↓Top 5% Top 10% Top 20%
+nnPU(2017)53.41±0.1755.15±0.1424.45±0.0312.67 24.67 52.33
+Dist-PU(2022)57.78±0.4558.08±0.5923.73±0.1516.00 29.33 54.33
+Robust-PU(2023)53.14±0.1754.99±0.1624.49±0.0412.00 24.00 50.00
+PULDA(2023)59.17 ±0.2559.38 ±0.4023.41 ±0.1017.00 31.00 53.33
+HolisticPU(2023)53.55±0.4355.28±0.3824.42±0.0913.33 25.00 52.33
+PUL-CPBF(2024)52.96±1.1954.03±1.9824.74±0.4911.00 25.00 48.33
+DC-PU(2025)47.46±2.7847.50±4.2126.26±1.0811.33 19.33 43.67
+NcPU(2026)53.71±0.2855.59±0.5024.35±0.1214.67 24.67 51.67
+Ours 64.44±0.21 61.70±0.20 22.85±0.05 22.67 37.00 65.00
+The 5%, 10%, and 20% budgets review 27, 52, and 104 alarms, respectively, across 510 target alarms containing
+239 hidden FPs.
+Table 2:Large-scale external validation on Agent-SafetyBench.Ranking metrics are two-monitor
+macro scores (100×); FP columns report recovered false alarms at each review budget.
+Method AUPRC↑AUROC↑AUGRC↓FP@5%↑FP@10%↑FP@20%↑
+Dist-PU 24.16 57.20 40.97 66 110 165
+PULDA 24.39 58.57 40.74 66 106 186
+PULDA ensemble 25.42 59.45 40.21 71 114 195
+Our method (K= 1) 26.15 60.32 39.68 76 125 208
+Our method (K= 3) 28.72 63.45 37.82 94 152 241
+4.5 ABLATION ANDROBUSTNESS
+Each component contributes consistently: trust-aware supervision, rank distillation, and structural
+refinement increase AUPRC from 58.42 to 60.35, 61.92, and 64.44, respectively, while improving
+all three ranking metrics at every stage.
+Table 3:Cumulative component ablation.Rows add one module; metrics use a 100× scale.
+Bold/underlining: best/second-best.
+ID Configuration AUPRC↑AUROC↑AUGRC↓
+(1) Base PU student 58.42 57.80 23.650
+(2) + Trust-aware PU supervision 60.35 59.92 23.210
+(3) + Reliability-gated rank distillation 61.92 61.34 22.955
+(4) + Structural queue refinement (Ours) 64.44 61.70 22.846
+Each component improves all three metrics; together they add 6.02 AUPRC and 3.90 AUROC points
+and reduce AUGRC by0.804.
+8
+Preprint. Under review.
+Table 4:Local LLM re-judgment control.Four-setting macro ranking and summed FP yield; the
+Judge uses its frozen bidirectional score.Bold/underlining : best/second-best.
+Macro ranking (100×) FPs recovered
+Method AUPRC↑AUROC↑AUGRC↓Top 5% Top 10% Top 20%
+Native monitor score 53.39 55.21 24.71 12.00 24.00 50.00
+PULDA 59.17 59.38 23.41 17.00 31.00 53.33
+Qwen2.5-7B judge 57.78 57.17 23.97 18.00 28.00 50.00
+Our method 64.44 61.70 22.85 22.67 37.00 65.00
+5 10 20
+10
+30
+50
+70Recovered FPs
+(a) Direct re-judgment: FP yield
+0.5× 1× 2× 4× 8×
+50
+55
+60
+65Macro AUPRC (%)
+(b) Prior-mass sensitivity
+10 20 40 60 80
+Confirmed TNs
+56
+60
+64
+66Macro AUPRC (%)
+(c) Verified-TN budget
+5 10 20
+Review budget (%)
+40
+60
+80Audit precision (%)
+(d) Direct re-judgment: precision
+0.5× 1× 2× 4× 8×
+Multiplier on ̂ρtr
+10
+15
+20Recovered FPs
+(e) Prior-mass Top-5% yield
+1 2 3 5 7
+Frozen references K
+62
+63
+64
+65Macro AUPRC (%)
+(f) Reference-bank size
+Our method
+nnPU
+Qwen2.5-7B judge
+DC-PU
+Native
+Robust-PU
+PULDA
+PUL-CPBF
+Dist-PU
+Figure 4:Controls and sensitivity analyses.(a,d) Direct LLM re-judgment; (b,e) prior-mass
+sensitivity; (c) verified-safe supervision; (f) reference-bank size.
+The improvement is not explained by simple ensembling: our single-reference variant reaches 62.35
+AUPRC, exceeding the three-model PULDA ensemble at 60.24. The method is also robust to
+its training-only prior-mass estimate: across a 0.5–8× range, AUPRC remains 61.52–64.44 and
+Top-5% recovery remains 21.67–22.67. Performance further improves with additional verified-safe
+supervision, rising from 59.28 AUPRC with 10 references to 66.45 with 80. At the default 40-
+reference setting, K= 3 captures nearly all of the observed benefit from increasing the reference
+bank (Figure 4(b–f)). Together, these results show that the gains persist across both supervision levels
+and reference-bank configurations.
+4.6 DEPLOYMENTCOST
+With cached features, the default K= 3 configuration requires 162.86 seconds of offline fitting on
+one NVIDIA H200. Deployment uses a single student scorer without reference-model ensembling,
+keeping the final auditing pipeline compact despite the richer training procedure. Detailed cost
+analysis is provided in Appendix C.
+5 CONCLUSION
+In this work, we study false-alarm auditing for agent safety monitors under monitor-induced selection,
+where verified-safe non-alarms may poorly represent the hidden safe alarms of interest. We develop a
+two-stage PU ranking framework that first adapts verified-safe supervision toward the alarm domain
+and reduces excessive negative pressure on plausible false alarms, then stabilizes ranking preferences
+across independently trained PU models and further exploits hierarchical safe-reference support and
+relations among alarms. Across mainstream safety monitors, our method improves macro AUPRC
+over eight PU baselines by 5.27–16.98 absolute percentage points and recovers 33.3% more false
+alarms than PULDA at a 5% review budget, with consistent gains on a larger external benchmark
+of 4,054 held-out alarms. The framework requires no alarm safety labels for fitting and leaves the
+monitor decisions unchanged.
+9
+Preprint. Under review.
+AI USESTATEMENT
+Generative AI tools were used to assist with language editing, manuscript organization, and feedback
+on presentation. All research decisions, experimental designs, implementations, analyses, and
+reported results were reviewed and verified by the authors, who take full responsibility for the final
+content.
+ETHICSSTATEMENT
+This work prioritizes alarms for human review rather than automatically suppressing them. A high-
+ranked alarm is not certified safe, and the original monitor decisions remain in force. Deployment
+should keep reviewers in the loop and respect the privacy and access conditions of the underlying
+agent traces.
+REPRODUCIBILITYSTATEMENT
+The main text and appendix specify the method, evaluation protocol, and fixed training configuration.
+The code repository contains the core implementation, fixed configurations, sample manifests, frozen
+predictions, implementation tests, and scripts for regenerating the reported results. Benchmark data
+and checkpoints follow their original distribution licenses.
+REFERENCES
+Bushra A. Alahmadi, Louise Axon, and Ivan Martinovic. 99% false positives: A qualitative study of
+SOC analysts’ perspectives on security alarms. In31st USENIX Security Symposium (USENIX
+Security 22), pp. 2783–2800. USENIX Association, 2022. URL https://www.usenix.org/
+conference/usenixsecurity22/presentation/alahmadi.
+Jessa Bekker and Jesse Davis. Learning from positive and unlabeled data under the selected at random
+assumption. InProceedings of the Second International Workshop on Learning with Imbalanced
+Domains: Theory and Applications, volume 94 ofProceedings of Machine Learning Research,
+pp. 8–22. PMLR, 2018. URL https://proceedings.mlr.press/v94/bekker18a.
+html.
+Eric T. Chancey, James P. Bliss, Yusuke Yamani, and Holly A. H. Handley. Trust and the compliance–
+reliance paradigm: The effects of risk, error bias, and reliability on trust and dependence.Human
+Factors, 59(3):333–345, 2017. doi: 10.1177/0018720816682648. URL https://journals.
+sagepub.com/doi/10.1177/0018720816682648.
+Yen-Shan Chen, Sian-Yao Huang, Cheng-Lin Yang, and Yun-Nung Chen. TraceSafe: A sys-
+tematic assessment of LLM guardrails on multi-step tool-calling trajectories.arXiv preprint
+arXiv:2604.07223, 2026. URLhttps://arxiv.org/abs/2604.07223.
+Zhaorun Chen, Mintong Kang, and Bo Li. ShieldAgent: Shielding agents via verifiable safety
+policy reasoning. InProceedings of the 42nd International Conference on Machine Learning,
+volume 267 ofProceedings of Machine Learning Research, pp. 8313–8344. PMLR, 2025. URL
+https://proceedings.mlr.press/v267/chen25ae.html.
+Edoardo Debenedetti, Jie Zhang, Mislav Balunovic, Luca Beurer-Kellner, Marc Fis-
+cher, and Florian Tramèr. AgentDojo: A dynamic environment to evaluate
+prompt injection attacks and defenses for LLM agents. InAdvances in Neural
+Information Processing Systems, volume 37, 2024. doi: 10.52202/079017-2636.
+URL https://proceedings.neurips.cc/paper_files/paper/2024/
+hash/97091a5177d8dc64b1da8bf3e1f6fb54-Abstract-Datasets_and_
+Benchmarks_Track.html.
+Charles Elkan and Keith Noto. Learning classifiers from only positive and unlabeled data. In
+Proceedings of the 14th ACM SIGKDD International Conference on Knowledge Discovery and
+Data Mining, pp. 213–220. ACM, 2008. doi: 10.1145/1401890.1401920. URL https://dl.
+acm.org/doi/10.1145/1401890.1401920.
+10
+Preprint. Under review.
+Weitao Feng, Lixu Wang, Peizhuo Lv, Tianyi Wei, Jie Zhang, Chongyang Gao, Sinong Zhan, and
+Wei Dong. Token buncher: Shielding llms from harmful reinforcement learning fine-tuning.The
+ACM Conference on Computer and Communications Security (CCS), 2026.
+Yangbangyan Jiang, Qianqian Xu, Yunrui Zhao, Zhiyong Yang, Peisong Wen, Xiaochun Cao,
+and Qingming Huang. Positive-unlabeled learning with label distribution alignment.IEEE
+Transactions on Pattern Analysis and Machine Intelligence, 45(12):15345–15363, 2023. doi:
+10.1109/TPAMI.2023.3319431.
+Ruochen Jiao, Shaoyuan Xie, Justin Yue, Takami Sato, Lixu Wang, Yixuan Wang, Qi Alfred Chen,
+and Qi Zhu. Can we trust embodied agents? exploring backdoor attacks against embodied llm-
+based decision-making systems. InInternational Conference on Learning Representations, volume
+2025, pp. 86638–86668, 2025.
+Ryuichi Kiryo, Gang Niu, Marthinus C. du Plessis, and Masashi Sugiyama. Positive-unlabeled
+learning with non-negative risk estimator. InAdvances in Neural Information Processing Systems,
+volume 30, 2017.
+Changchun Li, Yuanchao Dai, Lei Feng, Ximing Li, Bing Wang, and Jihong Ouyang. Positive
+and unlabeled learning with controlled probability boundary fence. InProceedings of the 41st
+International Conference on Machine Learning, volume 235 ofProceedings of Machine Learning
+Research, pp. 27641–27652. PMLR, 2024.
+Ximing Li, Yuanchao Dai, Bing Wang, Changchun Li, Jianfeng Qu, and Renchu Guan. Balancing
+positive and negative classification error rates in positive-unlabeled learning. InAdvances in Neural
+Information Processing Systems, volume 38, 2025. doi: 10.52202/085713-2456.
+Xinfeng Li, Tianze Qiu, Yingbin Jin, Lixu Wang, Hanqing Guo, Xiaojun Jia, Xiaofeng Wang, and Wei
+Dong. Webcloak: Characterizing and mitigating threats from llm-driven web agents as intelligent
+scrapers. In2026 IEEE Symposium on Security and Privacy (SP), pp. 436–455. IEEE, 2026a.
+Yu Li, Haoyu Luo, Yuejin Xie, Yuqian Fu, Zhonghao Yang, Shuai Shao, Qihan Ren, Wanying Qu,
+Yanwei Fu, Yujiu Yang, Jing Shao, Xia Hu, and Dongrui Liu. ATBench: A diverse and realistic
+agent trajectory benchmark for safety evaluation and diagnosis.arXiv preprint arXiv:2604.02022,
+2026b. URLhttps://arxiv.org/abs/2604.02022.
+Dongrui Liu, Qihan Ren, Chen Qian, Shuai Shao, Yuejin Xie, Yu Li, Zhonghao Yang, Haoyu Luo,
+Peng Wang, Qingyu Liu, Binxin Hu, Ling Tang, Jilin Mei, Dadi Guo, Leitao Yuan, Junyao Yang,
+Guanxu Chen, Qihao Lin, Yi Yu, Bo Zhang, Jiaxuan Guo, Jie Zhang, Wenqi Shao, Huiqi Deng,
+Zhiheng Xi, Wenjie Wang, Wenxuan Wang, Wen Shen, Zhikai Chen, Haoyu Xie, Jialing Tao, Juntao
+Dai, Jiaming Ji, Zhongjie Ba, Linfeng Zhang, Yong Liu, Quanshi Zhang, Lei Zhu, Zhihua Wei, Hui
+Xue, Chaochao Lu, Jing Shao, and Xia Hu. AgentDoG: A diagnostic guardrail framework for AI
+agent safety and security.arXiv preprint arXiv:2601.18491, 2026. doi: 10.48550/arXiv.2601.18491.
+URLhttps://arxiv.org/abs/2601.18491.
+Jonathan Oliver, Raghav Batta, Adam Bates, Muhammad Adil Inam, Shelly Mehta, and Shugao Xia.
+Carbon filter: Real-time alert triage using large scale clustering and fast search.arXiv preprint
+arXiv:2405.04691, 2024. doi: 10.48550/arXiv.2405.04691. URL https://arxiv.org/abs/
+2405.04691.
+Inkit Padhi, Manish Nagireddy, Giandomenico Cornacchia, Subhajit Chaudhury, Tejaswini Peda-
+pati, Pierre Dognin, Keerthiram Murugesan, Erik Miehling, Martin Santillan Cooper, Kieran
+Fraser, et al. Granite Guardian: Comprehensive LLM safeguarding. InProceedings of the
+2025 Conference of the Nations of the Americas Chapter of the Association for Computational
+Linguistics: Human Language Technologies, 2025. URL https://research.ibm.com/
+publications/granite-guardian-comprehensive-llm-safeguarding.
+Tomoya Sakai, Gang Niu, and Masashi Sugiyama. Semi-supervised AUC optimization based
+on positive–unlabeled learning.Machine Learning, 107(4):767–794, 2018. doi: 10.1007/
+s10994-017-5678-9.
+11
+Preprint. Under review.
+Bernhard Schölkopf, John C. Platt, John Shawe-Taylor, Alex J. Smola, and Robert C. Williamson.
+Estimating the support of a high-dimensional distribution.Neural Computation, 13(7):1443–1471,
+2001. doi: 10.1162/089976601750264965.
+Yinggang Sun, Haining Yu, Wei Jiang, Xiangzhan Yu, Dongyang Zhan, Lixu Wang, Siyue Ren, Yue
+Sun, and Tianqing Zhu. A survey on the unique security of autonomous and collaborative llm
+agents: Threats, defenses, and futures. 2026.
+Lixu Wang, Shichao Xu, Ruiqi Xu, Xiao Wang, and Qi Zhu. Non-transferable learning: A new ap-
+proach for model ownership verification and applicability authorization.International Conference
+on Learning Representations, 2022.
+Xinrui Wang, Wenhai Wan, Chuanxing Geng, Shaoyuan Li, and Songcan Chen. Beyond myopia:
+Learning from positive and unlabeled data through holistic predictive trends. InAdvances in
+Neural Information Processing Systems, volume 36, 2023.
+Zhen Xiang, Linzhi Zheng, Yanjie Li, Junyuan Hong, Qinbin Li, Han Xie, Jiawei Zhang, Zidi
+Xiong, Chulin Xie, Carl Yang, Dawn Song, and Bo Li. GuardAgent: Safeguard LLM agents via
+knowledge-enabled reasoning. InProceedings of the 42nd International Conference on Machine
+Learning, volume 267 ofProceedings of Machine Learning Research, pp. 68316–68342. PMLR,
+2025. URLhttps://proceedings.mlr.press/v267/xiang25a.html.
+Limin Yang, Zhi Chen, Chenkai Wang, Zhenning Zhang, Sushruth Booma, Phuong Cao, Constantin
+Adam, Alexander Withers, Zbigniew Kalbarczyk, Ravishankar K. Iyer, and Gang Wang. True
+attacks, attack attempts, or benign triggers? an empirical measurement of network alerts in a
+security operations center. In33rd USENIX Security Symposium (USENIX Security 24), pp.
+1525–1542. USENIX Association, 2024. URL https://www.usenix.org/conference/
+usenixsecurity24/presentation/yang-limin.
+Tongxin Yuan, Zhiwei He, Lingzhong Dong, Yiming Wang, Ruijie Zhao, Tian Xia, Lizhen Xu, Binglin
+Zhou, Fangqi Li, Zhuosheng Zhang, Rui Wang, and Gongshen Liu. R-Judge: Benchmarking safety
+risk awareness for LLM agents. InFindings of the Association for Computational Linguistics:
+EMNLP 2024, pp. 1467–1490. Association for Computational Linguistics, 2024. doi: 10.18653/
+v1/2024.findings-emnlp.79.
+Zhexin Zhang, Shiyao Cui, Yida Lu, Jingzhuo Zhou, Junxiao Yang, Hongning Wang, and Minlie
+Huang. Agent-safetybench: Evaluating the safety of LLM agents.arXiv preprint arXiv:2412.14470,
+2024. URLhttps://arxiv.org/abs/2412.14470.
+Hengwei Zhao, Zhengzhong Tu, Zhuo Zheng, Wei Wang, Junjue Wang, Rusty Feagin, and Wenzhe
+Jiao. Noisy-pair robust representation alignment for positive-unlabeled learning. InInternational
+Conference on Learning Representations, 2026.
+Yunrui Zhao, Qianqian Xu, Yangbangyan Jiang, Peisong Wen, and Qingming Huang. Dist-PU:
+Positive-unlabeled learning from a label distribution perspective. InProceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition, pp. 14461–14470, 2022.
+Zhijie Zheng, Yu Li, Chen Qian, Yuqian Fu, Yanwei Fu, Lu Sheng, Jing Shao, and Dongrui Liu.
+StepGuard: Learning step-level guardrails with scalable supervision and safety-utility balancing.
+arXiv preprint arXiv:2608.24777, 2026. URLhttps://arxiv.org/abs/2608.24777.
+Zhangchi Zhu, Lu Wang, Pu Zhao, Chao Du, Wei Zhang, Hang Dong, Bo Qiao, Qingwei Lin, Saravan
+Rajmohan, and Dongmei Zhang. Robust positive-unlabeled learning via noise negative sample
+self-correction. InProceedings of the 29th ACM SIGKDD Conference on Knowledge Discovery
+and Data Mining, pp. 3663–3673, 2023. doi: 10.1145/3580305.3599491.
+A TRAININGDEFINITIONS ANDIMPLEMENTATION
+We provide the implementation details required to reproduce the reported system. All training
+diagnostics use only verified-safe TNs and unlabeled training alarms, while target safety labels
+remain sealed until all ranking scores are fixed. The same configuration is used across all reported
+dataset–monitor settings.
+12
+Preprint. Under review.
+A.1 RANKOPERATORS
+For a∈R n, let arank(a) denote ascending ranks with midpoint tie handling. Reference models use
+Rank(a)i = arank(a)i − 12n .(11)
+Structural refinement uses Rank01(a)i = (arank(a)i −1)/(n−1) for n >1. Sample ID resolves
+remaining ties. We useσ(z) = (1 + exp(−z)) −1 andlogit(u) = log(u/(1−u)).
+A.2 TN TRANSFER ANDSOFTPROTECTION
+Transfer diagnostics.A five-fold, isolation-group-disjoint logistic role classifier is fitted on verified
+TNs and training alarms using normalized monitor and task representations. For TN τp, let ℓp be
+its held-out role logit, Arole the task-block AUC, and tp its normalized task representation. With
+role-classifier parametersφ= (w h,w t, b), define
+a= wh
+∥wh∥2
+, c p =− w⊤t tp +b∥wh∥2 ,x p = hp∥hp∥2 .
+The nearest role-boundary representation preserving task features and hidden norm is
+ehp =∥h p∥2
+
+cpa+
+q
+1−c 2p xp −(a ⊤xp)a∥xp −(a ⊤xp)a∥2  .(12)
+Letd p =∥ ehp/∥hp∥2 −x p∥2. Transfer support is
+urolep = exp
+"
+−
+ 1−A role
+0.02
+8
+− |ℓp|8
+#
+, u geomp = exp
+"
+−
+ 1−A role
+0.02
+8
+−
+ dp
+0.12
+8#
+.
+(13)
+Withc 75 = exp[−Q0.75(|ℓ|)8]computed from training TNs,
+λtrp =c 75urolep + (1−c 75) min(urolep , ugeomp )∈[0,1].(14)
+All transfer quantities are fixed before PU fitting.
+Soft protection.Each alarm receives evidence ei from running ranking information and role-
+boundary proximity. The order-preserving allocator produces
+qproti =σ(e i −ξ), X
+i∈V
+qproti =m V ,(15)
+where ξ is obtained by bisection. Training and target pools maintain separate memories. Protection
+adjusts comparison strength while preserving the original unlabeled status of every alarm.
+Task-conditioned comparisons.For normalized task representationst p,t i, define
+Dpi = max{0,2−2t ⊤p ti}, κ pi = exp[−Dpi/(2htask)],
+where htask is the median positive training TN–alarm distance. For TN minibatchBP , the comparison
+term is
+ℓi,V =
+X
+p∈BP
+νpi,V log(1 + exp(µ−s refp +s i)).(16)
+These weights redistribute comparison pressure without introducing alarm labels.
+13
+Preprint. Under review.
+A.3 PU OBJECTIVE ANDREFERENCEFITS
+Every fitted scorer uses the common objective
+Lbase =L align +λ mix(t)Lmix.(17)
+For TN and alarm minibatches, let ¯pP and ¯pU be their mean predicted safety probabilities. With
+ζT (z) =T −1 log(1 + exp(T z))andDT (p, ρ) =ζT (p−ρ) +ζ T (ρ−p), the alignment term is
+Lalign = 2ρ(1−¯pP ) +
+DT (¯pU , ρ),first alarm minibatch,
+DT (epU , ρ)/(1−aU ),otherwise, (18)
+whereepU =a U epprevU + (1−a U )¯pU andρ=bρ tr.
+For group-structured mixing, let ci be the role–isolation-group centroid, µχi the corresponding role
+mean,b i =c i −µ χi, andu i =h i −c i. For a cross-role pair(i, j),
+hmixi =ξ iµχi + (1−ξ i)µχj + pξibi + p1−ξ ibj
++ξ iui + (1−ξ i)uj.
+(19)
+Same-role pairs use standard interpolation.
+With detached soft targetsbyi andp mixi =σ(clip(f θ(hmixi ),−10,10)),
+Lmix = 1|B| Xi∈B ξi BCE(pmixi ,byi) + (1−ξ i) BCE(pmixi ,byϖ(i)) .(20)
+A.4 REFERENCERANKS ANDSTUDENTDISTILLATION
+Reference models use identical data, architecture, and PU objectives with independent initialization.
+Their frozen outputs are converted to normalized ranks, whose coordinatewise median yields ¯r.
+The fixed reference allocation is
+qref =A mC (logit(¯r)).
+For equal-mass allocations,
+o(q,q ′) =
+P
+i min(qi, q′i)
+mC
+,
+and the cohort-level distillation weight is
+λdist =o ref (¯λtr)2.
+Reference ranks, pair weights, and the gate remain fixed while the student is optimized, so the
+reference bank contributes relative ordering information throughout distillation.
+A.5 OPTIMIZATION ANDFIXEDSETTINGS
+All scorers use a two-hidden-layer MLP with width 1000. Adam uses learning rate 10−3, weight
+decay 10−4, and gradient clipping at 5. Each fit runs for 400 epochs with TN/alarm minibatches
+of size 64, with the first 200 epochs forming the common warm-up. All reported dataset–monitor
+settings use the same optimization schedule and hyperparameters; seeds 13, 37, and 73 differ only in
+initialization and minibatch order.
+14
+Preprint. Under review.
+Table 5:Fixed implementation settings.Values are shared across all four dataset–monitor cells and
+all seeds.
+Component Setting
+PU scorer two hidden layers; width 1000 each; Adam, learning rate 10−3, weight decay 10−4;
+gradient clip5
+Training400 epochs; TN/alarm batches 64/64; max{1,⌈|D U |/64⌉} updates per epoch; 200-
+epoch warm-up
+Ranking and mixing margin 0.6; post-warm-up λmix = 4.2; Beta(11,11) mixing; protection-memory
+EMA0.5
+Distribution alignment smoothing temperatureT= 3.5; alarm-mean EMA coefficienta U = 0.85
+Role and transfer five group-disjoint role folds; logistic C= 1; L-BFGS tolerance 10−10; role scale 1;
+displacement scale0.12
+Reference bankK= 3; midpoint ranks; coordinatewise median; protection mass⌈bρ tr|V|⌉
+Structural readout16 PCA components; root/parent/leaf branching 1/2/2; 50 projected iterations; solver-
+rank blend0.25
+Agreement head target standardization; constant-feature threshold 10−10; Ridge strength 100; output
+clip[0,1]; final coefficient0.20
+Evaluation seeds13,37,73; checkpoint epoch400; ascending sample ID resolves score ties
+A.6 TN-SUPPORTEDMASS ANDSENSITIVITY
+The training-only quantity bρtr controls the amount of alarm mass eligible for soft protection rather
+than estimating global false-alarm prevalence.
+For a TN-like upper tailH t ={τ:g φ(τ)≥t},
+Rt = PrDU (Ht)PrDP (Ht) =π U κt + (1−π U )δt,(21)
+which motivates the observed tail ratio as a training-only support statistic.
+Isolation groups are split into three folds and the statistic is computed from held-out role-classifier
+scores. A single fixed construction is used across all reported settings before target labels are accessed.
+Table 6:Training-only TN-supported mass.Values are computed without alarm safety labels.
+Dataset Monitorbρ tr
+ATBench AgentDoG1.5-Qwen3.5-2B 0.02381
+ATBench Granite-Guardian-3.1-2B 0.02368
+TraceSafe AgentDoG-Qwen3-4B 0.01000
+TraceSafe StepGuard-4B 0.01266
+We evaluate {0.5,1,2,4,8}bρ tr for all applicable methods. Our method remains strongest throughout
+the sweep, with AUPRC of 61.52–64.44 and Top-5% recovery of 21.67–22.67, compared with the
+strongest baseline operating points of59.17and17.00, respectively.
+Table 7:Prior-mass sensitivity.Four-setting macro AUPRC under multipliers of the training-only
+TN-supported mass.
+Method0.5×1×2×4×8×
+nnPU 53.36 53.41 53.18 52.86 52.87
+DC-PU 50.48 47.46 48.69 49.22 51.49
+Dist-PU 58.86 57.78 58.09 57.88 57.71
+Robust-PU 53.04 53.14 53.21 52.91 53.45
+PUL-CPBF 52.96 52.96 52.96 52.96 52.96
+PULDA 58.23 59.17 58.48 58.38 56.13
+Ours 63.30 64.44 63.49 62.27 61.52
+15
+Preprint. Under review.
+Table 8:Evaluation cells and fixed protocol.Training alarms are unlabeled during fitting; target FP
+counts are used only for evaluation. Each cell contains 40 verified TNs.
+Dataset Monitor Training alarms Target alarms Target FPs
+ATBench AgentDoG1.5-Qwen3.5-2B 249 56 30
+ATBench Granite-Guardian-3.1-2B 300 76 44
+TraceSafe AgentDoG-Qwen3-4B 949 269 122
+TraceSafe StepGuard-4B 504 109 43
+Total target pool — 510 239
+Macro AUPRC, AUROC, and AUGRC give equal weight to the four settings. At review budgetb, we
+inspect ⌈bNc⌉ alarms per setting, sum recovered FPs, and average over seeds. Checkpoints are fixed
+at epoch400.
+B STRUCTURALQUEUEREFINEMENT
+Structural refinement is a frozen-student readout using training-derived TN support, unlabeled target
+representations, and reference-rank consensus.
+B.1 HIERARCHICALTN SUPPORT
+Training role–group centers define a root–parent–leaf hierarchy. When local TN support is weak,
+support shrinks toward the nearest reliable ancestor:
+ug =ρ gulocalg + (1−ρ g)upar(g), ρ g ∈[0,1].(22)
+The reliability ρg depends only on training support and geometry. The local, flat, and hierarchical
+views share the same student contribution, so their contrast isolates additional hierarchical support.
+B.2 CONSENSUS-SUPPORTEDRELATIONS
+Cross-group alarm relations are retained only when the root view and at least one more specific
+support view agree on direction. Starting from the hierarchy-supported initialization, we solve
+min
+v∈Ω(p)
+1
+N
+X
+i
+KL(Ber(vi)∥Ber(p i))
++
+P
+(i,j)∈E wstrij [δij −v i +v j]2+P
+(i,j)∈E wstrij ,
+Ω(p) =
+
+v∈[0,1] N :1 ⊤v=1 ⊤p	 .
+(23)
+We use 50 projected iterations with monotone backtracking. The student remains frozen throughout
+refinement.
+B.3 REFERENCECONSENSUS ANDFINALREADOUT
+Reference dispersion for alarmiisd i = maxk r(k)i −min k r(k)i , with relative consensus target
+c⋆i = 1−Rank(d) i.(24)
+A ridge head predicts this target from standardized frozen monitor representations. It is fitted once
+per target cohort using reference ranks only, without alarm safety labels.
+Predicted agreement scales the final structural displacement. The same readout coefficient is used
+across all reported settings. Deployment requires only the frozen student and stored cohort statistics,
+without reference-model ensembling.
+16
+Preprint. Under review.
+C DATAPROVENANCE ANDEXPERIMENTALCONTROLS
+C.1 BENCHMARKS ANDMONITORIDENTIFIERS
+ATBench follows Li et al. (2026b); AgentDoG follows Liu et al. (2026); TraceSafe refers to TraceSafe-
+Bench (Chen et al., 2026); Granite Guardian follows Padhi et al. (2025); and StepGuard follows Zheng et al.
+(2026). Table 8 lists the exact benchmark–monitor pairings and sample counts.
+C.2 COMPUTATIONALCOST
+With cached monitor and task features, the default K= 3 configuration requires 162.86 seconds of offline
+cohort-level fitting on one NVIDIA H200. After fitting, deployment uses one student scorer together with
+lightweight stored cohort statistics, without reference-model ensembling.
+Table 9:Resource usage for the default K= 3 configuration.Measurements start from cached
+monitor and task features on one NVIDIA H200.
+ResourceK= 3
+Total elapsed time (s) 162.86
+Peak GPU allocation (MiB) 138.93
+Peak GPU reservation (MiB) 164.00
+Peak process memory (MiB) 2223.91
+C.3 LOCALLLM-AS-A-JUDGECONTROL
+We evaluate Qwen2.5-7B-Instruct as a zero-shot semantic re-judgment baseline. For each target alarm, the model
+receives the safety policy, task instruction, and serialized trajectory, but no target label, verified-safe reference,
+target-set statistic, or monitor confidence. The prompt and bidirectional scoring rule are fixed before labels are
+opened.
+Direct re-judgment reaches 57.78 macro AUPRC, while our method reaches 64.44 and recovers an additional
+4.67,9.00, and15.00false alarms at the5%,10%, and20%review budgets, respectively.
+C.4 DEPLOYMENTPROTOCOL
+The method is designed for periodic batch auditing. Deployment uses the frozen student and stored structural
+statistics, with cohort-level statistics constructed using the same fixed procedure for each audit batch.
+Reproducibility.The supplement contains fixed configurations, sample manifests, frozen predictions,
+implementation tests, and table-regeneration scripts. Target labels are accessed only after prediction outputs are
+fixed.
+D ADDITIONALEXPERIMENTALCONTROLS
+D.1 SELECTION ANDREPRESENTATIONCONTROLS
+Role propensity and SAR-EM test whether modeling monitor selection alone is sufficient, while
+deterministic representation baselines test whether the ranking can be reduced to proximity to verified
+TNs. The complete method outperforms both classes of controls.
+D.2 PRIOR-MASSSENSITIVITY
+The full sensitivity sweep is reported in Table 7 and visualized in Figure 4(b,e). Our method remains
+above the strongest baseline throughout the complete evaluated range.
+D.3 ENSEMBLECONTROL
+Three-model logit averaging improves PULDA to 60.24 AUPRC. Our single-reference variant
+reaches 62.35, while the full K= 3 model reaches 64.44 and deploys as a single student scorer. The
+improvement therefore extends beyond simple inference-time ensembling.
+17
+Preprint. Under review.
+Table 10:Selection-bias and representation controls.Ranking metrics are macro-averaged over
+the same four target cells (100×); yield is the summed number of recovered FPs. SAR-EM uses the
+official selected-at-random implementation (Bekker & Davis, 2018). Deterministic representation
+controls use only the 40 training TNs and frozen monitor representations. PULDA and our method
+are the three-seed results from Table 1.
+Method AUPRC↑AUROC↑AUGRC↓Top 5% Top 10% Top 20%
+Native monitor score — — — — — 50.00
+TN centroid distance 55.44 57.98 23.75 13.00 28.00 53.00
+5-NN to TNs 54.69 57.74 23.82 14.00 27.00 50.00
+One-class SVM (Schölkopf et al., 2001) 57.74 59.30 23.43 14.00 29.00 52.00
+TN PCA support 54.97 57.55 23.86 14.00 29.00 51.00
+Role-propensity score 53.89 55.93 24.26 13.00 26.00 53.00
+SAR-EM (role propensity) 54.11 54.51 24.63 12.00 26.00 52.00
+PULDA 59.17 59.38 23.41 17.00 31.00 53.33
+Ours 64.44 61.70 22.85 22.67 37.00 65.00
+Native outputs were archived consistently for all four cells at the20%cutoff; unavailable full-score entries are
+left blank rather than reconstructed. SAR-EM and the representation controls are deterministic fits, so no seed
+dispersion is attached.
+Table 11:Compute and ensemble control under the main protocol.All rows use the same
+four dataset–monitor settings, 40 TNs per setting, 400 training epochs, MLP capacity, and seeds
+{13,37,73} . Ranking metrics are macro-averaged over the four settings within each seed and then
+averaged over seeds. FP yield sums the recovered FPs at ⌈bNc⌉ within each setting and then averages
+the sum over seeds. Baseline ensembles average the logits of three independently trained seeds; our
+K= 3model uses three frozen references during training and one student scorer at inference.
+Method Architecture / compute
+Macro
+AUPRC↑
+Macro
+AUROC↑
+Top-5%FP
+yield↑
+Top-10%FP
+yield↑
+(%) (%)/27/52
+Dist-PU (Single) one model; three-run mean 57.78 58.08 16.00 29.33
+Dist-PU (Ensemble) three-logit average 58.65 58.74 17.00 30.67
+PULDA (Single) one model; three-run mean 59.17 59.38 17.00 31.00
+PULDA (Ensemble) three-logit average 60.24 60.18 18.33 32.67
+Ours (K= 1) single model 62.35 60.82 20.67 34.67
+Ours (K= 3) three references→one student 64.44 61.70 22.67 37.00
+D.4 TNANDREFERENCE-BANKSENSITIVITY
+Performance rises from 59.28 AUPRC with 10 verified TNs to 66.45 with 80 TNs. At the default
+40-TN setting, increasing the reference bank from K= 1 to K= 3 raises AUPRC from 62.35 to
+64.44, withK= 3capturing nearly all of the observed reference-bank benefit.
+E AGENT-SAFETYBENCHEXTERNALVALIDATION
+Protocol.Agent-SafetyBench (Zhang et al., 2024) provides 2,000 case IDs, split case-wise into
+600 training and 1,400 held-out evaluation cases. Across three trajectory-generation seeds and two
+frozen monitors, the final evaluation contains 4,054 held-out alarms, including 638 false alarms. The
+training split supplies 40 verified-safe non-alarms. All method settings and predictions are fixed
+before evaluation labels are accessed.
+Full results.Macro ranking metrics average the two monitor-specific cohorts. Review-budget yield
+counts recovered false alarms within the corresponding aggregate target budget.
+The full method improves PULDA by 4.33 AUPRC points and recovers 42.4% more false alarms at
+the Top-5%review budget. TheK= 1variant also exceeds the three-model PULDA ensemble.
+Monitor-level results.The improvement appears consistently across both frozen monitor families.
+18
+Preprint. Under review.
+Table 12:Full Agent-SafetyBench results.Macro ranking metrics average two frozen monitors
+(100×); FP columns report false alarms recovered at each review budget.
+Method AUPRC↑AUROC↑AUGRC↓FP@1% FP@2% FP@5% FP@10% FP@20%
+Native monitor score 16.98 49.36 42.42 5 10 34 65 121
+nnPU 19.40 54.98 41.34 8 18 45 78 143
+DC-PU 15.32 45.35 42.84 5 9 22 36 76
+Dist-PU 24.16 57.20 40.97 24 42 66 110 165
+Robust-PU 20.26 55.01 41.28 13 22 53 85 149
+PULDA 24.39 58.57 40.74 23 38 66 106 186
+PUL-CPBF 20.81 45.95 41.64 16 33 53 91 147
+HolisticPU 20.27 54.98 41.38 12 21 50 84 146
+PULDA ensemble 25.42 59.45 40.21 25 41 71 114 195
+Our method (K= 1) 26.15 60.32 39.68 26 45 76 125 208
+Our method (K= 3) 28.72 63.45 37.82 32 57 94 152 241
+Table 13:External monitor-specific AUPRC (100×).
+Monitor Alarms FPs Native PULDA Our method
+AgentDoG-Qwen3-4B 2,427 213 14.92 19.7022.85
+Granite-Guardian-3.1-2B 1,627 425 19.05 29.0934.58
+Table 14:External risk-category AUPRC ( 100×).Categories contain at least 30 false and 30
+genuine alarms.
+Risk category Alarms FPs Native PULDA Our method
+Unsafe information / misinformation 606 329 63.31 59.0969.85
+Property loss 503 71 19.58 23.3427.12
+Sensitive-data leak 496 65 17.34 27.7330.45
+Availability compromise 455 46 11.24 13.1915.60
+Physical harm 439 39 16.73 22.9324.88
+Harmful / vulnerable code 716 62 14.74 27.6929.35
+Risk-category results.Our method achieves the strongest AUPRC in all six sufficiently populated
+risk categories, showing that the external improvement extends across heterogeneous safety risks.
+Scaling and uncertainty.The nested cohorts in Figure 3 contain 1,034, 2,027, 3,062, and 4,054
+alarms. The AUPRC improvement over PULDA increases from 3.07 to 4.33 points as the cohort
+grows. Uncertainty is estimated using 2,000 case-level bootstrap resamples.
+19

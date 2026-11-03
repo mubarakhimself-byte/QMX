@@ -1,0 +1,3303 @@
+arXiv 2310.03722  https://arxiv.org/abs/2310.03722
+
+Anytime-valid t-tests and confidence sequences
+for Gaussian means with unknown variance ∗
+Hongjian Wang1 and Aaditya Ramdas2
+1,2Department of Statistics and Data Science, Carnegie Mellon University
+2Machine Learning Department, Carnegie Mellon University
+{hjnwang,aramdas}@cmu.edu
+November 8, 2024
+Abstract
+In 1976, Lai constructed a nontrivial confidence sequence for the mean µ of a Gaussian
+distribution with unknown variance σ2. Curiously, he employed both an improper (right
+Haar) mixture over σ and an improper (flat) mixture over µ. Here, we elaborate carefully
+on the details of his construction, which use generalized nonintegrable martingales and an
+extended Ville’s inequality. While this does yield a sequential t-test, it does not yield an
+“e-process” (due to the nonintegrability of his martingale). In this paper, we develop two
+new e-processes and confidence sequences for the same setting: one is a test martingale in a
+reduced filtration, while the other is an e-process in the canonical data filtration. These are
+respectively obtained by swapping Lai’s flat mixture for a Gaussian mixture, and swapping
+the right Haar mixture over σ with the maximum likelihood estimate under the null, as
+done in universal inference. We also analyze the width of resulting confidence sequences,
+which have a curious polynomial dependence on the error probability α that we prove
+to be not only unavoidable, but (for universal inference) even better than the classical
+fixed-sample t-test. Numerical experiments are provided along the way to compare and
+contrast the various approaches, including some recent suboptimal ones.
+Contents
+1 Introduction 2
+2 Preliminaries 3
+3 t-T est e-Processes via Universal Inference 8
+4 Sequential t-T ests via Scale Invariance 10
+5 Comparison of Results 21
+6 Optimality 25
+7 Concluding Remarks 30
+A Additional Sequential t-T ests in the Literature 34
+B Universal Inference Z-T ests 37
+C Omitted Proofs 38
+∗to appear in Sequential Analysis
+1
+arXiv:2310.03722v5  [math.ST]  6 Nov 2024
+1 Introduction
+The classical location tests for Gaussian data fall into either of the two categories: the Z-test,
+where the population variance is assumed to be known a priori , and a sample average is
+rescaled by the sample deviation to create a standardized test statistic; or the t-test [Student,
+1908], where the population variance is unknown, and a plug-in estimator of the variance is
+used in lieu of the variance, accounting for the heavier (“regularly varying”) tail of the t-test
+statistic than the Gaussian Z-test statistic.
+This paper concerns sequential analogs of t-tests. Sequential Z-tests have been widely
+established since Wald [1945]. One-sided or “power-one” variants have even been generalized
+nonparametrically to subGaussian data [Robbins, 1970, Howard et al., 2021], and recently to
+any data in the square-integrable class [Wang and Ramdas, 2023b].
+Sequential extensions of the t-test were studied by Rushton [1950], Hoel [1954], Ghosh
+[1960], Sacks [1965], who were interested in calculating the approximate thresholds to control
+the type 1 error at a particular predefined stopping time. Inspired by the sequential Z-
+test work of Robbins, Lai [1976] constructed a sequential t-test that controls a different
+type of error that will be of particular interest to us: nonasymptotic, conservative (i.e. non-
+approximate) time-uniform control of the type 1 error at all arbitrary stopping times, possibly
+not specified in advance. We will define this formally later, but we mention at the outset that
+the filtration will become an interesting matter as different sequential methods are defined on
+different filtrations. Studying this phenomenon in the context of t-tests will be an important
+part of this paper.
+Lai and more recent authors [Gr¨ unwald et al., 2024, P´ erez-Ortiz et al., 2024] situate the
+Gaussian t-test problem into the broader framework of group-invariant tests; indeed, the
+t-test null is invariant under rescaling of observations by a constant.
+The tests are mostly constructed using variants of the sequential likelihood ratio statistic
+by Wald [1945], utilizing the fact that the likelihood ratios are nonnegative martingales (see
+Section 2.6). Notably, P´ erez-Ortiz et al. [2024] shows the group-invariant extension of the
+likelihood ratio statistic to be optimal (in the “e-power” sense to be defined in Section 2.3)
+primarily in the point-versus-point ( µ/σ = θ0 versus µ/σ = θ1) setting. We shall closely
+discuss their contributions later. Building upon these group invariance tools, Lindon et al.
+[2022] construct a sequential F-test for the regression set-up, which coincides with one of the
+t-tests that we shall present when no covariate exists. A slightly different approach is taken by
+Jourdan et al. [2023] who study the same problem in the bandit context, sequentially bounding
+the empirical mean and variance separately using existing Z-test-type bounds and obtaining
+via a union bound a sequence of confidence “boxes” for mean and variance simultaneously.
+We shall return to and compare our bounds with some of these results later.
+We shall focus in this paper primarily on the construction of e-processes, which are se-
+quences of test statistics whose realized values reflect the evidence against the null in favor of
+the alternative. These e-processes can be thresholded and/or inverted to yield nonasymptotic,
+conservative, “anytime-valid” hypothesis tests and confidence intervals (called “confidence se-
+quences”), but we emphasize that they have clear interpretations without thresholding them
+to yield tests. Indeed, these e-processes directly measure evidence against the null: values
+below one are expected under the null, and large(r) values indicate (more) evidence against
+the null.
+Nonnegative supermartingales are the prototypical examples of e-processes [Ramdas et al.,
+2022]. We emphasize that we are testing a composite null hypothesis, and it is not a priori
+obvious how to construct such “simultaneous” or “composite” nonnegative supermartingales
+or e-processes, or to compare various options. We shall formalize these concepts in greater
+detail in Sections 2.2 and 2.3. The main contributions of this paper are listed as follows:
+2
+1. We apply the method of “Universal Inference”, a variant of the likelihood ratio test by
+Wasserman et al. [2020], to construct a t-test e-process for the point null 1 µ = µ0, as
+well as for the one-sided composite null µ ⩽ µ0, implying respectively a two-sided and
+a one-sided confidence sequence for the mean µ, both of which are new.
+2. We fill in the missing details of Lai’s [1976] sequential t-test, looking into the curious
+question of why his approach yields a confidence sequence without an e-process, using
+the theory of non-integrable nonnegative supermartingales [Wang and Ramdas, 2023a].
+3. We introduce a simple variant of Lai [1976], deriving instead closed-form e-processes
+for the null µ = µ0. The resulting confidence sequence enjoys improved tightness, and
+unlike Lai’s original, does not require numerical inversion or thresholding.
+4. We derive the information-theoretic lower bound on the width of confidence intervals,
+and the upper bound on the growth of e-processes for the t-test, both of which are
+attained, or almost attained, by our results (Contributions 1 and 3 in this list). We also
+show that other conservative sequential t-tests available in the literature (Lai’s original
+method, the plug-in method by Jourdan et al. [2023], the median method by Howard
+and Ramdas [2022]), and very surprisingly, even the fixed-time classical t-test , fail to be
+optimal in the rate with respect to the sample size n and/or the type 1 error level α.
+5. We conduct a detailed comparison among tests we derive and in the literature in terms
+of (a) which filtration they are safe for optional stopping in (the larger the better); (b)
+what their e-powers are against a fixed alternative (the larger the better); and (c) for
+their derived confidence sequences, the width or expected width, especially as a function
+of sample size n and level α.
+2 Preliminaries
+2.1 Notations
+A universal probability space (Ω , A, P) is used when we consider the randomness of data,
+where the expectation is denoted by E. We use the indexed letters X1, X2, . . .to denote
+an infinite stream of observations, taking values in R. We denote by {Fn}n⩾0 the canonical
+filtration generated by the data, i.e. Fn = σ(X1, . . . , Xn). Our shorthand notations on the
+sample include the partial sum Sn = Pni=1 Xi, the sample average bµn = Sn/n, the partial
+sum of squares Vn = Pni=1 X 2i , the average square X 2n = Vn/n, the sample variance without
+Bessel’s correction s2n = Vn/n − S2n/n2, and the t-statistic Tn−1 = √n − 1 Sn−nµ0√nVn−S2n where µ0
+is the actual mean of X1, X2, . . ..
+Usually, we consider i.i.d. observations X1, X2, . . .; and we use italic P etc. to denote
+distributions over R, while calligraphic P etc. to denote classes of distributions. For a sample-
+dependent event A, we use the notation P (A) for the probability P[A] when X1, X2, . . .iid∼ P ;
+and for a random variable realized as a function of the sample Z = Z(X1, . . . , Xn), we write
+EP (Z) for the expectation E[Z] when X1, X2, . . .iid∼ P . The conditional expectation E P ( · |F)
+given F ⊆ Ais defined similarly. Univariate normal distribution with mean µ and variance
+σ2 will be referred to as Nµ,σ2 – so “ N0,1(X1 > 0) = 0 .5” means “ P[X1 > 0] = 0 .5 when
+X1, X2, . . .iid∼ standard normal”; its density is denoted by pµ,σ2. The class of all normal
+distributions on R (excluding the degenerate σ = 0 case) is denoted by N . Classes of normal
+1In this paper, a “point null” refers to a null hypothesis that a parameter of interest takes a specific value.
+Since it possibly contains multiple distributions, this is different from a “simple null”.
+3
+distributions with specified mean (or range of means) but any positive variance are denoted
+by, e.g., Nµ=µ0, Nµ⩽µ0; those with specified standardized mean by, e.g., Nµ/σ=θ0.
+Occasionally, we allow the observations X1, X2, . . .to be non-i.i.d., in which case we use
+blackboard bold italic letters like P to denote distributions on R×R×. . ., i.e. the distributions
+of the entire stochastic processes. The notations P ( · ), EP ( · ), and E P ( · |F) are used for the
+probabilities and expectations when X1, X2, · · · ∼P .
+2.2 Sequential Statistics
+The theory of sequential hypothesis testing is formulated as testing the null H0 : P ∈ P0
+against the alternative H1 : P ∈ P1, where the statistician makes a decision (to reject, accept,
+or sample further) each time a new data point Xn ∼ P is seen until rejection or acceptance.
+In the formulation of Wald [1945, 1947], the decision scheme is required to control the type 1
+error rate P (H0 is ever rejected) for P ∈ P0 within a prescribed level α, and the type 2 error
+rate P (H0 is ever accepted) for P ∈ P1 within β. A slightly different formulation, proposed
+by Darling and Robbins [1968], only requires the type 1 error rate to be controlled within
+α, but the decision schemes under this constraint are often proved to have “power one”, i.e.,
+P (H0 is ever rejected) = 1 for P ∈ P1. We shall follow the latter formulation. We derive
+sequential tests of type 1 error rate strictly bounded by α (“level-α sequential tests”) and
+prove their power guarantees. These power guarantees are stated in terms of “e-power”, to
+be formally introduced in Section 2.4, which is a finer-grained quantification of power than
+the rejection rate P (H0 is ever rejected) under P ∈ P1.
+The classical duality between tests and interval estimates also manifests in the sequential
+setting. Let P be a family of distributions and let θ : P →R be the parameter of interest.
+A (1 − α)-confidence sequence (CS) [Darling and Robbins, 1967] over P for θ is a sequence
+of confidence intervals {CIn}n⩾1 such that, for any P ∈ P, P (∀n ⩾ 1, θ(P ) ∈ CIn) ⩾ 1 − α;
+or equivalently, P (θ(P ) ∈ CIτ ) ⩾ 1 − α for any stopping time τ (see Lemma 3 of Howard
+et al. [2021]). If the null P0 ⊆ Pis defined as a preimage θ−1(θ0), a sequential test can be
+constructed via rejection H0 whenever θ0 /∈ CIn, and vice versa. In this paper, the asymptotic
+tightness of a confidence sequence is measured in terms of (1) itsgrowth rate, the rate at which
+its width increases when n and the sample are fixed while α → 0 (or while α ↓ α⋆(n) if α
+is not allowed to be below α⋆(n)); and (2) its shrinkage rate , the rate at which its width
+decreases when α is fixed while n → ∞). For example, it is known that the minimax rates
+of growth
+p
+log(1/α) and shrinkage
+p
+log log(n)/n can be obtained in CSs for the mean over
+all 1-subGaussian random variables [Howard et al., 2021, Waudby-Smith and Ramdas, 2023],
+and also all random variables with variance upper bounded by some constant σ2 [Wang and
+Ramdas, 2023b]. As we shall see soon, the optimal rates for the t-test are larger.
+2.3 Test Processes and Their Maximal Inequalities
+There has been a recent revival of the idea, originally due to Robbins [1970], of constructing
+sequential tests and confidence sequences via nonnegative supermartingales (NSMs) and more
+generally, e-processes [Howard et al., 2021, Ramdas et al., 2022]. Let us define them below.
+Consider a stochastic process {Mn}n⩾0 where each Mn is defined as a [0 , ∞]-valued func-
+tion of X1, . . . , Xn. We say it is
+• a nonnegative supermartingale (NSM) for P on a filtration {Gn}n⩾0 if E P (M0) < ∞,
+Mn is Gn-measurable and E P (Mn+1|Gn) ⩽ Mn for all n ⩾ 0;
+• a nonnegative martingale (NM) for P if, further, the equality EP (Mn+1|Gn) = Mn holds.
+4
+Recently, Wang and Ramdas [2023a] defined a wider class of processes by dropping the
+integrability assumption EP (M0) < ∞, as the conditional expectation E P (Mn+1|Gn) can still
+be well-defined as long as Mn+1 is nonnegative. We say the process {Mn} is
+• an extended nonnegative supermartingale (ENSM) for P on {Gn} if Mn is Gn-measurable
+and EP (Mn+1|Gn) ⩽ Mn are satisfied, irrespective of the finiteness of E P (M0).
+We say the process {Mn} is NSM (or NM, ENSM) for P if it is an NSM (or NM, ENSM) for
+all P ∈ P. When an NSM (or NM) for P has an initial expected value E P (M0) = 1 for all
+P ∈ P, we call it a test supermartingale (or test martingale) for P. We call a nonnegative
+random variable M = M (X1, . . . , Xn) with sup P ∈P EP (M ) ⩽ 1 an e-value for P. Further,
+we say the process {Mn} is
+• an e-process for P on {Gn} if for any {Gn}-adapted stopping time τ , Mτ is an e-value
+for P; i.e., sup P ∈P EP (Mτ ) ⩽ 1.
+Note that the filtration {Gn} is usually the canonical one {Fn}, but as we shall see later, other
+non-trivial choices will lead to interesting results. NMs and NSMs for P are clearly e-processes
+for P, on the same filtration. More generally, the following equivalent characterization of e-
+processes is due to Ramdas et al. [2020, Lemma 6]:
+• A nonnegative process {Mn} adapted to {Gn} is an e-process for P on {Gn} if and only
+if for each P ∈ P, there is a test supermartingale {N Pn } for P on {Gn} that upper
+bounds {Mn}: P (Mn ⩽ N Pn ) = 1.
+A parametrized family of NSMs or ENSMs can lead to a new NSM or ENSM by mixture.
+If {Mn(θ)} is an NSM for P for any θ ∈ Θ, so is the mixture {
+R
+Mn(θ)µ(dθ)} for any finite
+measure µ over Θ, under mild measurability assumptions; if each is an ENSM for P, the
+mixture is still an ENSM for P as long as µ is σ-finite [Wang and Ramdas, 2023a, Section
+5.2]. Similar results hold straightforwardly for the mixtures of e-processes as well.
+An important property of these processes is Ville’s inequality [Ville, 1939] and the recently
+discovered extended Ville’s inequality [Wang and Ramdas, 2023a, Theorem 4.1]. These max-
+imal inequality bounds the crossing probability of a NSM (and hence e-process) or ENSM
+over an unbounded time horizon.
+Lemma 2.1 (Ville’s inequality). If {Mn}n⩾0 is an NSM for P, for all P ∈ P, ε ∈ (0, 1),
+P (∃n ⩾ 0, Mn ⩾ ε) ⩽ ε−1EP (M0). (1)
+Consequently, if {Mn}n⩾0 is an e-processes for P, for all P ∈ P, ε ∈ (0, 1),
+P (∃n ⩾ 0, Mn ⩾ ε) ⩽ ε−1. (2)
+Lemma 2.2 (Extended Ville’s inequality) . Let {Mn}n⩾0 be an ENSM for P. Then for all
+P ∈ P, ε ∈ (0, 1),
+P (∃n ⩾ 0, Mn ⩾ ε) ⩽ ε−1EP (1 {M0<ε}M0) + P (M0 ⩾ ε). (3)
+Lemmas 2.1 and 2.2 suggest that, if P0 is a set of null distributions, NSMs, e-processes,
+and ENSMs for P0 can be seen as measurements of evidence against the null H0 : P ∈ P0.
+To see that, if we have at hand an NSM or e-process {Mn} for P0 such that M0 = 1, we may
+reject the null P0 whenever the process Mn exceeds 1/α. This, due to Lemma 2.1, controls the
+sequential type 1 errorP (H0 is ever rejected) within α for any P ∈ P0. Similarly, if we have an
+ENSM {Mn} for P0, we may set the right hand side of (3) to α and solve the corresponding ε,
+5
+rejecting H0 : P ∈ P0 whenver Mn exceeds ε. We refer to test (super)martingales, e-processes,
+and ENSMs for P0 as test processes for the null P0.
+A confidence sequence for a parameter θ follows in the same manner as mentioned in
+Section 2.2 if we have an NSM or an ENSM {M θ0n } for every Pθ0 = {P ∈ P: θ(P ) = θ0}:
+by solving the inequality M θ0n ⩽ 1/α or M θ0n ⩽ ε in θ0, that is. An illustrative comparison
+between NSMs and ENSMs in the Gaussian case with known variance for both constructing
+tests and confidence sequences is provided recently by Wang and Ramdas [2023a, Section 5].
+Of course, all above is applicable to the non-i.i.d. case as well. NMs etc. for P are defined
+in similar manners. NMs, NSMs, ENSMs, and e-processes for P (or P, P ) are all referred to
+as test processes for P (or P, P ).
+2.4 e-Power of Test Processes
+Desirably, a powerful test process shrinks or stays small under the null P0, and grows under
+the alternative P1 so rejection can happen. To measure the power of a test process under a
+fixed alternative distribution Q ∈ P1, we define the e-power of test processes as follows [Vovk
+and Wang, 2024].
+Definition 2.3 (e-power). For a test process {Mn}, we define its e-power as the Q-almost
+sure limit lim infn→∞ log Mnn . For a single e-value M = M (X1, . . . , Xn), we define its e-power
+as EQ(log M ).
+The motivation, we note, is that it quantifies the rate at which the process grows expo-
+nentially under the alternative, i.e., how fast evidence accumulates. The value of an e-process
+is often intuitively understood as one’s total capital when betting against a casino pricing
+according to the null (hence the term “game-theoretic statistics”, see e.g. Shafer and Vovk
+[2005]). The idea of quantifying and optimizing the growth of a capital process by its ex-
+pected log-value can be traced back to Kelly [1956], Breiman [1961], among other classical
+references in the literature. Breiman [1961], for example, justifies this log-optimality criterion
+by noting that “under reasonable betting systems Mn increases exponentially and maximizing
+EQ(log Mn) maximizes the rate of growth.”
+More concretely, many e-processes in the literature take a multiplicative form Mn =Qn
+i=1 M (Xi) where M (Xi)’s are i.i.d. e-values. In this case, the e-power of the entire process
+{Mn} and that of the individual e-values M (Xi) coincide due to the strong law of large
+numbers, and the growth is characterized asymptotically as Mn = exp(nEQ(log M1) +oQ(n)).
+Alternatively, one can also informally say that the e-power E Q(log M1) is roughly inversely
+proportional to the expectation of the rejection time τ = min{n : Mn ⩾ 1/α} as
+log(1/α) ≈ EQ(log Mτ ) = EQ(log M1) · EQ(τ ), (4)
+where the equality is due to Wald’s identity (see e.g. Roters [1994, Theorem 2.1]). More
+formally, lower bounds are known for the expected rejection time of simple testing problems,
+attained exactly by the inverse of e-power of the likelihood ratio martingale, a topic we shall
+return to in Section 2.6.
+2.5 Sequential t-Test and t-Confidence Sequences
+Different objectives are pursued for the sequential Gaussian t-test problem. Early authors
+have studied the problem of testing the null Nµ=0 (or more generally Nµ/σ=θ0) against the
+alternative Nµ/σ=θ1 [Rushton, 1950, Ghosh, 1960, Sacks, 1965], and its scale-invariant na-
+ture translates into the group-invariant setting as the problem of testing orbital nulls and
+alternatives [P´ erez-Ortiz et al., 2024].
+6
+In this paper, we shall roughly follow the same routine as Lai [1976] and aim at power
+against a broader range of alternatives, chiefly focusing instead on the construction of (1)
+test processes for the null Nµ=0 (and study their behavior under both null and non-null
+underlying distributions); (2) Confidence sequences for the population mean µ over the set of
+all Gaussian distributions N , which we shall often shorthand as “t-confidence sequences”, or
+“t-CSs” for brevity. One may note that (1) is sufficient to produce tests for arbitrary point
+location null Nµ=µ0 by shifting, and consequently (2) by Lemmas 2.1 and 2.2 and inversion.
+Occasionally we are interested in test processes for the one-sided null Nµ⩽0 as these give rise
+to one-sided tests and CSs. In fact, we shall later construct test processes for Nµ/σ=θ0 which
+is the strongest statistical quantity in the setting, as it leads to both CSs and tests for the
+mean µ and the normalized mean µ/σ.
+2.6 Likelihood Ratio Martingales
+It is well known that the likelihood ratio process is a nonnegative martingale.
+Lemma 2.4. Let Q ≪ P be probability distributions on R. Then, the process
+Ln =
+nY
+i=1
+dQ
+dP (Xi) (5)
+is a nonnegative martingale for P on the canonical filtration {Fn}n⩾0.
+Recalling Definition 2.3, the e-power of {Ln} equals the Kullback-Leibler divergence
+DKL(Q∥P ). The growth of Ln = exp( nDKL(Q∥P ) + oQ(n)) is optimal in this point ver-
+sus point case, matching the Θ
+ 
+log(1/α)DKL(Q∥P )−1 lower bound in the expected rejection
+time with type 1 error rate α. See e.g. Garivier et al. [2019, Section 2] and Kaufmann et al.
+[2016, Lemma 1] for this lower bound in the equivalent bandit formulation.
+We shall use two stronger forms of Lemma 2.4 stated below and proved in Appendix C.1.
+First, the distribution on the numerator, Q, can be varying and depend on previous observa-
+tions.
+Lemma 2.5. Let P be a probability distribution on R. For each n ⩾ 1 let Qn : Ω × B(R) → R
+be a Markov kernel such that: 1) Qn( · , B) is Fn−1-measurable for all B ∈ B(R), and 2)
+Qn(ω, · ) ≪ P for P -almost all ω ∈ Ω. Then, the process
+Ln =
+nY
+i=1
+dQi
+dP (Xi) (6)
+is a nonnegative martingale for P on the canonical filtration {Fn}n⩾0.
+Second, the data does not have to be i.i.d. [Lai, 1976, Section 2]. Recall that if a stochastic
+process X1, X2, . . .has distribution P , the joint distribution of ( X1, . . . , Xn) is the push-
+forward measure of P under the coordinate map ( x1, . . .) 7→ (x1, . . . , xn), which we denote
+by P (n).
+Lemma 2.6. Let P and Q be probability distributions on R × R × . . .such that Q (n) ≪ P (n)
+for all n. Then, the process
+L0 = 1, L n = dQ (n)dP (n) (X1, . . . , Xn) (7)
+is a nonnegative martingale for P on the canonical filtration {Fn}n⩾0.
+7
+3 t-Test e-Processes via Universal Inference
+We shall demonstrate how the method of universal inference [Wasserman et al., 2020] leads
+to e-processes and confidence sequences for the t-test. Throughout this section, for n ⩾ 0, we
+denote by eµn and eσn any point estimators for µ and σ adapted to the canonical filtration Fn
+(i.e. based on X1, . . . , Xn). For example, they can simply be the sample mean bµn and sample
+standard deviation sn; we may also use the Bayesian approach by sequentially updating them
+as the posterior mean or maximum a posteriori from, say, a normal-inverse-gamma prior 2
+on (µ, σ2). The method of sequential universal inference [Wasserman et al., 2020, Section 8]
+implies the following plug-in likelihood ratio martingale for a fixed Gaussian distribution:
+Corollary 3.1 (Universal inference Z-test martingale). For any µ, σ and their point estima-
+tors {eµn}, {eσn} adapted to the canonical filtration {Fn}n⩾0 (such as the sample mean and
+standard deviation), the process
+ℓµ,σ2n =
+Qn
+i=1 peµi−1,eσ2i−1(Xi)Qn
+i=1 pµ,σ2(Xi) = σnQni=1 eσi−1 exp ( nXi=1  (Xi − µ)22σ2 − (Xi − eµi−1)22eσ2i−1 ) (8)
+is a martingale for Nµ,σ2 on {Fn}n⩾0.
+It is not hard to see that Corollary 3.1 follows from Lemma 2.5, so we omit its proof. It is
+so named as the process {ℓµ,σn } itself can be used, when σ2 is known, as a sequential Z-test.
+From martingales for Nµ,σ2 for each µ and σ to test processes for the t-test nulls, Nµ=0 and
+Nµ⩽0, we can simply take the infima of (8) over {µ = 0, σ >0} and {µ ⩽ 0, σ >0}, which
+leads to e-processes for these nulls. They both have a closed-form expression and are stated
+below as Theorem 3.2 and Theorem 3.4, both proved in Appendix C.2.
+Theorem 3.2 (Universal inference t-test e-process). For any point estimators {eµn} and {eσn}
+adapted to the canonical filtration {Fn}n⩾0, the process
+Rn =
+
+X 2n
+n/2
+en/2
+nY
+i=1
+1
+eσi−1
+exp
+(
+− 12  Xi − eµi−1eσi−1 2) (9)
+is an e-process for Nµ=0 on {Fn}. Consequently, define
+Wn = 1α2/ne exp
+
+
+
+Pn
+i=1 log eσ2i−1 +  Xi−eµi−1eσi−1 2
+n
+
+
+ . (10)
+Then CIn =
+
+bµn ±
+q
+bµ2n − X 2n + Wn
+
+forms a (1 − α)-CS for µ over N .
+It is worth remarking that for the general location null Nµ=µ0, one must resist the temp-
+tation to replace all Xi in (9) above by Xi − µ0, which, while indeed produces an e-process
+for Nµ=µ0, loses its power. The correct modification is to only shift Xi in the X 2n term, i.e.
+using the e-process for Nµ=µ0
+Rµ0n =
+ Pn
+i=1(Xi − µ0)2
+n
+n/2
+en/2
+nY
+i=1
+1
+eσi−1
+exp
+(
+− 12  Xi − eµi−1eσi−1 2) . (11)
+2The normal-inverse-gamma distribution serves as the conjugate prior for the Gaussian family when both
+of µ and σ are unknown. See Section 5.2 for more description.
+8
+This can be understood as shifting Xi and also eµi−1 by µ0. This is how we arrive at the
+confidence sequence CI n =
+
+bµn ±
+q
+bµ2n − X 2n + Wn
+
+above.
+As a test process, the e-process {Rn} distinguishes the null Nµ=0 and the alternative Nµ̸=0
+due to the following asymptotic result on a limit which, we recall, is defined in Section 2.3 as
+the “e-power” of the test process.
+Proposition 3.3 (e-power of the universal inference t-test e-process). Under any distribution
+P with mean µ and variance σ2, for example Nµ,σ2, suppose there is a γ >0 such that {eµn}
+converges to µ in L3 with rate EP (|eµn − µ|3) ≲ n−γ, {eσ−2n } converges to σ−2 both in L2
+with rate EP (eσ−2n − σ−2)2 ≲ n−γ and almost surely, and has uniformly bounded 3 rd moment
+lim supn EP (eσ−6n ) < ∞. Then,
+lim
+n→∞
+log Rn
+n = 12 log(1 + µ2/σ2) almost surely. (12)
+Consequently, {Rn} diverges almost surely to R∞ = ∞ exponentially fast under Nµ̸=0.
+Note that we place no Gaussian assumption on the true alternative distribution P for this
+e-power statement, only that the plug-in point estimators need to satisfy some convergence
+assumptions. These assumptions, we note, are mild, as they are satisfied by the empirical
+mean and variance under Nµ,σ2 due to the moment properties of the inverse- χ2 distribution,
+as well as their smoothed or Bayesian extensions (posterior means or maximum a posteriori
+under reasonable priors). The exponential growth of {Rn} under the alternative Nµ̸=0 is in
+contrast to its restrained behavior under the null Nµ=0, characterized by Ville’s inequality for
+e-processes (Lemma 2.1).
+The 12 log(1 + µ2/σ2) e-power in Proposition 3.3, we remark, is universal among test
+processes for t-tests. If one uses the plug-in likelihood ratio {ℓ0,σ2n } in Corollary 3.1 to conduct
+the Z-test for the null N0,σ2, then, under the actual distribution Nµ,σ2, it is not hard to see
+that a faster rate log ℓ0,σ2nn → µ2/2σ2 holds under similar assumptions of the point estimators
+(which we show in Appendix B). We shall see in the rest of the paper many more occurrences
+of the same 12 log(1 + µ2/σ2) limit, and we shall discuss that this is indeed the optimal rate
+in Section 6.3.
+Apart from the asymptotics of the test process, we can also analyze the confidence se-
+quence it implies. Let us briefly study the asymptotics of the radius
+q
+bµ2n − X 2n + Wn =r
+Wn −
+
+X 2n − bµ2n
+
+of the CS in Theorem 3.2, as α → 0, σ → ∞, and n → ∞. Note that
+both Wn and X 2n − bµ2n converge to σ2, as long as the estimators ˜ σi and ˜µi are consistent.
+From (10), the deviation of Tn from σ2 is approximately σ2(α−2/n exp(1/√n) − 1); While by
+the χ2-tail bound and the Chernoff bound,
+P
+ nn − 1 X 2n − bµ2n − σ2 ⩾ σ2t ≲ e−nt2, (13)
+so the deviation of X 2n − bµ2n from σ2 is approximately σ2/n. Hence the radius of the CS scales,
+as a function of α, σ and n, at the rate of σα−1/nn−1/2. We remark that the “growth rate” of
+the CS, i.e., its dependence on α → 0, is in the time-dependent form of α−1/n which is worse
+than the typical known-variance rate
+p
+log(1/α). This, as we shall explain in Section 6.1, is
+also unavoidable.
+Let us now state the e-process for the one-sided null.
+9
+Theorem 3.4 (Universal inference one-sided t-test e-process). For any point estimators {eµn}
+and {eσn} adapted to the canonical filtration {Fn}n⩾0, the process
+R−n = X 2n − (bµn ∧ 0)2n/2 en/2 nY
+i=1
+1
+eσi−1
+exp
+(
+− 12  Xi − eµi−1eσi−1 2) (14)
+is an e-process for Nµ⩽0 on {Fn}.
+There is clear similarity between the expression of the point null e-process (9), and that
+of the one-sided (14). The only difference is in that the former’s X 2n term is here off by a
+−(bµn ∧ 0)2 term in (14). When the data are predominantly negative, this term inhibits the
+exponential growth of the e-process. Therefore, while we shall witness exponential growth of
+(9) when the actual mean is negative (significant in the scale of standard deviation), no such
+growth is likely to happen in (14). We can formalize this by an asymptotic result similar to
+Proposition 3.3.
+Proposition 3.5 (e-power of the universal inference one-sided t-test e-process) . Under any
+distribution P with mean µ and variance σ2, for example Nµ,σ2, suppose the point estimators
+{eµn} and {eσ−2n } satisfy the same assumptions as Proposition 3.3. Then,
+lim
+n→∞
+log R−n
+n = 12 log(1 + (µ ∨ 0)2/σ2) almost surely. (15)
+Consequently, {R−n } diverges almost surely to R−∞ = ∞ exponentially fast under Nµ>0.
+A slightly weaker similarity between the expressions of these e-processes and the plug-
+in martingale (8) can also be observed under careful comparison, which we do in the “Test
+Process” row of Table 2, where we compare all aspects of universal inference methods for
+Z-test (including a one-sided test involving taking infimum over t ⩽ 0 in (8)) and t-test.
+4 Sequential t-Tests via Scale Invariance
+4.1 Lai’s [1976] Confidence Sequence
+Let us first quote a theorem due to Lai [1976] who presented it almost without proof.
+Theorem 4.1 (Lai’s t-Confidence Sequence; Theorem 2 of Lai [1976]) . Choose a starting
+time m ⩾ 2 and a constant a >0. Recall that s2n = 1n Pni=1(Xi − bµn)2. Further, define
+b := 1m 1 + a2m − 1 m , (16)
+ξn :=
+q
+s2n[(bn)1/n − 1]. (17)
+Then, the intervals CIn = [bµn ± ξn] satisfy, for any µ and σ >0,
+Nµ,σ2 (∃n ⩾ m, µ /∈ CIn) ⩽ 2(1 − Fm−1(a) + afm−1(a)), (18)
+where Fm−1, fm−1 denote the CDF, PDF of t-distribution with m − 1 degrees of freedom.
+If we want {CIn} to be a (1 − α)-CS over N for µ, we need to solve a from the equation
+2(1 − Fm−1(a) + afm−1(a)) = α beforehand. To see the relationship between a and α, note
+that when a is large,
+fm−1(a) ≍ a−m, (19)
+1 − Fm−1(a) ≍ a−(m−1). (20)
+10
+Hence
+α ≍ a−(m−1) =⇒ a ≍ α−1/(m−1). (21)
+The radius hence grows as (for fixed m, nand α → 0)
+ξn ≈ σ
+s 1
+m
+
+1 + a2
+m − 1
+m
+n
+1/n
+− 1 ≍ α− mn(m−1) . (22)
+In terms of its shrinkage rate (fixed m, αbut n → ∞), we have
+ξn ≈ σ
+r
+log bn
+n + ˜O(n−2). (23)
+The CS is only valid from some time m ⩾ 2, which we shall soon explain (and, in some
+sense, remedy). The proof of this theorem, as it turns out, hinges on the extended Ville’s
+inequality (Lemma 2.2) for nonintegrable nonnegative supermartingale. Equally interestingly,
+it mixes a parametrized family of martingales under a coarser filtration . We shall begin our
+reworking of Lai’s CS from this concept, and eventually state and prove Theorem 4.7, a more
+revealing version of Theorem 4.1; as well as Theorem 4.9, a variant of Theorem 4.1 that does
+not involve an improper mixture and nonintegrability.
+4.2 Scale Invariant Filtration
+We say that a functionf : Rn → R is scale invariant if it is measurable and for anyx1, . . . , xn ∈
+R and λ >0, f (x1, . . . , xn) = f (λx1, . . . , λxn). Let us define the following sub-filtration of
+the canonical filtration {Fn}.
+Definition 4.2 (Scale invariant filtration). For n ⩾ 1, let
+F ∗n = σ(f (X1, . . . , Xn) : f is scale invariant). (24)
+Then, the filtration {F ∗n}n⩾1 is called the scale invariant filtration of data X1, X2, . . ..
+Definition 4.2 states that F ∗n is the coarsest σ-algebra to which all scale invariant functions
+of X1, . . . , Xn are measurable. For example, recall that we denote by Tn−1 the t-statistic of
+the data √n − 1 Sn−nµ0√nVn−S2n , which is F ∗n-measurable when µ0 = 0 and is a quantity frequently
+used to construct scale-invariant statistics later. To see that {F ∗n} is indeed a filtration, let
+f be any scale invariant function Rn → R, and define g : Rn+1 → R as g(x1, . . . , xn, xn+1) =
+f (x1, . . . , xn) which is also scale invariant. So f (X1, . . . , Xn) = g(X1, . . . , Xn, Xn+1) is F ∗n+1-
+measurable. The arbitrariness of f implies that F ∗n ⊆ F∗n+1.
+The filtration {F ∗n} contains all the information up to time n about the relative sizes of the
+observations. For example, {max{X1, . . . , X4} ⩾ 2X3} ∈ F4 while {max{X1, . . . , X4} ⩾ 2} /∈
+F4. The reader may recall the exchangeable sub-σ-algebra in the theory of exchangeability and
+backwards martingales such as in Klenke [2013, Chapter 12] for an analogy. The reader might
+also find the following analogy helpful in understanding the intuition: Imagine in prehistoric
+times when units of length were yet to be invented, our ancestors collected a sequence of
+leaves and fathomed their sizes. Due to the lack of units however, no absolute real-valued
+sizes (in inches, say) but only ratios of sizes relative to each other (or to the first leaf) were
+recorded. Actually, when X1 is non-zero, F ∗n has the following clean expression.
+Proposition 4.3. If X1 ̸= 0,
+F ∗n = σ
+ X1
+|X1| , X2|X1| , . . . ,Xn|X1|  . (25)
+11
+Proof. Let F ∗∗n = σ (X1/|X1|, X2/|X1|, . . . , Xn/|X1|). Suppose f : Rn → R is scale invariant.
+Then, f (X1, . . . , Xn) = f (X1/|X1|, . . . , Xn/|X1|), which is clearly F ∗∗n -measurable, implying
+F ∗n ⊆ F∗∗n . The inclusion F ∗∗n ⊆ F∗n is trivial: x1/|x1|, x2/|x1|, ..., xn/|x1| are themselves
+scale invariant functions of x1, . . . , xn.
+In our scenario of application, the t-test under Gaussian distribution, data are not non-
+zero but almost surely non-zero. We do not distinguish (24) and (25) as the definition of the
+scale-invariant filtration because processes adapted to it are often derived by manipulations
+of X1/|X1|, . . . , Xn/|X1|, which we call the scale invariant reduction of the observations,
+ignoring the Nµ,σ2-negligible event {X1 = 0 }. Indeed, Lai [1976] defines such filtration via
+(25) for the t-test case. However, we remark that one would need the more general (24) in
+Definition 4.2 for the case when X1 ̸= 0 does not hold almost surely (e.g. when exploring a
+nonparametric extension of our set-up and methods).
+As a counter-example, one may verify that the e-processes for t-test that we have pre-
+viously introduced via universal inference, {Rn} in (9) and {R−n } in (14), are not adapted
+to {F ∗n}. They would have been if the plug-in estimates eµi−1 and eσi−1 were allowed to be
+homogeneous of degree 1. However, as eµ0 and eσ0 must be constants, this cannot be the case.
+In fact, when n = 1, these two e-processes are necessarily non-constant, and thus are not F ∗1 -
+measurable. In what follows, we shall present numerous test processes on the scale invariant
+filtration {F ∗n}, beginning with some generality. A close-up discussion on this intriguing issue
+follows afterward, in Section 4.6.5.
+4.3 Scale Invariant Likelihood Ratios for Location-Scale Families
+Let us suppose, temporarily in this subsection for the sake of generality, that Pµ,σ2 is a
+distribution on R parametrized by µ ∈ R and σ >0, and η a reference measure on R, such
+that Pµ,σ2 ≪ η with density
+dPµ,σ2
+dη (x) = σ−1g(σ−1(x − µ)). (26)
+Further, suppose η does not charge the singleton {0}, so Pµ,σ2(Xi = 0) is always 0. The
+following was observed by Lai [1976, Section 5].
+Lemma 4.4 (Density of the scale invariant reduction) . Let φn : Rn → Rn be the function
+φn(x1, . . . , xn) = (x1/|x1|, x2/|x1|, . . . , xn/|x1|). (27)
+(It does not matter how φn is defined when x1 = 0.)
+Let Qnµ,σ2 be the push-forward measure of P ⊗nµ,σ2 under the map φn. Let η⟨n−1⟩ be the
+measure on {±1} ×Rn−1 that charges both {1} ×Rn−1 and {−1} ×Rn−1 with η⊗(n−1). Then,
+dQnµ,σ2
+dη⟨n−1⟩ (x1, . . . , xn) =
+Z
+τ >0
+( nY
+i=1
+(1/τ )g(xi/τ − µ/σ))
+)
+dτ
+τ =
+Z
+τ >0
+( nY
+i=1
+dPτ µ/σ,τ2
+dη (xi)
+)
+dτ
+τ .
+(28)
+The lemma says, in probabilistic terms, that the “maximal invariant” reduction of the
+sample, ( X1/|X1|, X2/|X1|, . . . , Xn/|X1|), has a density that relates to the density of the
+original sample in the form of (28) — which depends on µ and σ2 only through µ/σ.
+Denoting the class of distributions having the same standardized mean by P = {Pµ′,σ′2 :
+µ′/σ′ = µ/σ}, we can further write the right hand side of (28) in the form of
+Z
+P
+( nY
+i=1
+dP
+dη (xi)
+)
+J(dP ). (29)
+12
+Where J is the Jeffreys prior over P with density 1σ(P ) . This improper prior is known in
+the Bayesian literature as an uninformative prior on the scale parameter. We have shown
+above that taking the mixture (in some sense) with the Jeffreys prior
+R
+τ >0(. . .) dττ of like-
+lihood ratios is equivalent to taking the likelihood ratio of the scale invariant reduction
+X2/|X1|, . . . , Xn/|X1|. Indeed, our treatment for the location-scale family {Pµ,σ2} so far
+in this subsection to compute the density of Qnµ,σ2 is a special case of group invariant models
+formulated by P´ erez-Ortiz et al. [2024, Section 2.2], where the Jeffreys priorJ(dP ) with den-
+sity σ−1(P ) arises as the Haar measure of the group (R+, ×), and the function Vn corresponds
+to the “maximally invariant statistic” under the group action. The exact relation of our work
+to that of P´ erez-Ortiz et al. [2024] shall be discussed in detail in Section 4.6.3. We shall make
+further remarks on how our approaches are related to previous Bayesian work with Jeffreys
+prior in Section 4.6.4.
+Now using the fact that the general non-i.i.d. likelihood ratios are martingales (Lemma 2.6)
+on Qnµ,σ2, we have:
+Lemma 4.5 (Scale invariant likelihood ratio) . For any θ and θ0, the process
+hn(θ; θ0) =
+R
+τ >0
+nQn
+i=1
+dPτ θ,τ2
+dη (Xi)
+o
+dτ
+τ
+R
+τ >0
+nQn
+i=1
+dPτ θ0,τ 2
+dη (Xi)
+o
+dτ
+τ
+(30)
+is an NM for {Pµ0,σ20 : µ0/σ0 = θ0} on the scale invariant filtration {F ∗n}n⩾1 with expectedvalue 1.
+4.4 An Extended Test Martingale for t-Test
+It is now convenient for us to replace the general distribution Pµ,σ2 in the previous subsection
+with the Gaussian Nµ,σ2, and η with the Lebesgue measure on R. A direct calculation with
+the Gaussian density function in Lemma 4.5 gives the following,
+Corollary 4.6 (Scale invariant t-likelihood ratio) . Let θ be any real number. The process
+{hθ,n}n⩾1, defined by
+hθ,n = e−nθ2/2Γ(n/2) Zy>0 yn/2−1 exp −y + θSnr 2yVn  dy, (31)
+is an NM for Nµ=0 on the scale invariant filtration {F ∗n}n⩾1.
+The θ in the martingale (31) parametrizes the standardized mean µ/σ of the alternative.
+That is, when the actual distribution is in the class Nµ/σ=θ, the process {hθ,n} grows the
+fastest. A flat integral over θ yields an ENSM that stands behind Lai’s t-CS (Theorem 4.1),
+which we restate in our language as follows.
+Theorem 4.7 (Scale invariant t-test extended martingale). The process {Hn}n⩾1, defined as
+H1 = ∞ and
+Hn =
+r
+2π
+n
+ nVn
+nVn − S2n
+n/2
+, (for n ⩾ 2) (32)
+is an ENSM for Nµ=0 on the scale invariant filtration {F ∗n}n⩾1. Lai’s t-CS stated in Theo-
+rem 4.1 follows from applying the extended Ville’s inequality (Lemma 2.2) to this ENSM.
+To see how {Hn} behaves under Nµ=0, recall that Tn−1 = √n − 1 Sn√nVn−S2n has Student’s
+t-distribution of n − 1 degrees of freedom. Hn can thus be re-expressed as
+Hn =
+r
+2π
+n
+
+1 + T 2n−1
+n − 1
+n/2
+. (33)
+13
+{Hn} works favorably as a test process for the null Nµ=0 and the alternative Nµ̸=0 due to
+the following symptotic result on both its e-power under the alternative and its convergence
+under the null.
+Proposition 4.8 (Asymptotic behavior of the scale invariant t-test extended martingale) .
+Under any distribution with mean µ and variance σ2, for example Nµ,σ2,
+lim
+n→∞
+log Hn
+n = 12 log(1 + µ2/σ2) almost surely. (34)
+Consequently, {Hn} diverges almost surely to H∞ = ∞ exponentially fast under Nµ̸=0. Fur-
+thermore, {Hn} converges almost surely to H∞ = 0 under Nµ=0.
+The reader may compare the ENSM {Hn} with the ENSM for the Z-test case by Wang
+and Ramdas [2023a, Proposition 5.7], obtained via a flat mixture over the standard Gaussian
+likelihood ratio. Both are free of any parameter. Under the null, both, as extended martin-
+gales, start from ∞ and shrink to 0 almost surely. Under the alternative, both start from ∞
+and diverge back to ∞. Both can be seen as frequentist embodiments of the Bayesian idea of
+uninformative, improper prior.
+4.5 Classical Test Martingales for t-Test
+In some sense a classical, integrable test martingale issued at 1 is preferred. Besides a simple,
+universally valid rejection rule “reject when the test process exceeds 1 /α”, the use of classical
+Ville’s inequality often leads to closed-form CSs as opposed the one in Theorem 4.7 that
+involves root finding. Further, these classical NMs often come with “tunable hyperparame-
+ters” arising from the mixture distributions. We replace the flat mixture on θ that leads to
+Theorem 4.7 by a Gaussian one, obtaining the following classical test martingales.
+Theorem 4.9 (Scale invariant t-test martingale) . For any c > 0, the process {G(c)n }n⩾1
+defined by
+G(c)n =
+r
+c2
+n + c2
+ (n + c2)Vn
+(n + c2)Vn − S2n
+n/2
+(35)
+is an NM for Nµ=0 on the scale invariant filtration {F ∗n}n⩾1 with expected value E[G(c)n ] =
+G(c)1 = 1. Consequently, let
+radiusn =
+vuuuuut (n + c2) 1 −  α2c2n+c2 1/n α2c2
+n+c2
+1/n
+(n + c2) − c2
+
+∨ 0
+
+X 2n − bµ2n
+
+, (36)
+the intervals
+[bµn ± radiusn] (37)
+form a (1 − α)-CS for µ over N . (When the denominator in (36) takes 0, radiusn = ∞, the
+CI is the entire R at time n.)
+The tuning parameter c2 of prior precision, we note, does not affect the safety (the se-
+quential test having type 1 error rate within α) or coverage (the CS covering µ with at least
+1 − α probability) of our method, but does affect the power of the sequential test and the
+tightness of the confidence sequence. First, considering the growth of the e-process under the
+alternative, since the mixing distribution N0,c−2 is put over all possibilities of the true effect
+size θ = µ/σ, it would be ideal if N0,c−2 “covers” the true underlying effect size with adequate
+14
+weight. Therefore, if one has acquired prior knowledge of the rough scale of the true effect size
+θ, matching c−1 to the same scale can improve power, as we shall demonstrate numerically
+in Section 5.2. However, as we shall see soon in Proposition 4.10, in the large sample regime
+different choices of c2 lead to the same e-power under a fixed alternative distribution. On
+the other hand, the tuning parameter c2 plays a distribution-free role on the tightness of the
+(1 − α)-CS, as the expression for the radius (36) contains decoupled ( c, α, n)-dependent and
+data-dependent terms. In this case, difference choices of c2 optimize the radius of the CS at
+different times n. As discussed in a similar situation of the Gaussian mixture Z-test CS by
+Howard et al. [2021, Section 3.5], there is a trade-off in “making a bound tighter for some
+range of times requires making it looser at other times.” We shall numerically demonstrate
+this in our case in Section 5.4. More specifically, to approximately minimize radius n at some
+fixed n, one can take c2 such that
+c2
+n + c2 = α2/(n−1)2−n/(n−1), (38)
+in which case
+radiusn =
+r 
+α−2/(n−1)2n/(n−1) − 2 X 2n − bµ2n, (39)
+which is always finite and has a growth rate of α−1/(n−1) as α → 0 while keeping the sample
+fixed, a slightly worse rate compared to the α−1/n of the universal inference CS, and at least
+as good as the α−m/n(m−1) rate of Lai’s original CS since m ⩽ n. On the other hand, if c and
+n are both fixed, the radius grows like ( α − α⋆(n))−1/n as α ↓ α⋆(n) = exp(Θ(−n log n)).
+While the test martingale (35) works without any limitation on n or c, the CS (37) is
+non-trivial only when the
+
+α2c2
+n+c2
+1/n
+(n + c2) − c2 term in the denominator is positive. For a
+fixed α and a fixed c, the CS is non-trivial on n ⩾ n0 for some n0, instead of all n ⩾ 1. For
+example, when c = 0.01 and α = 0.05, the range of (37) is n ⩾ 3. Thus, the starting time m
+in Theorem 4.1 seems to be avoided by switching from the extended Ville’s inequality to the
+classical Ville’s inequality, but it remains in another form. In this case, if n → ∞, radius n
+shrinks as a function of n at the rate of
+s
+1 −
+ α2c2
+n + c2
+1/n
+≈
+r
+log(n/α2c2)
+n . (40)
+One may further express G(c)n in terms of the t-statistic under Nµ=0 as well,
+G(c)n =
+r
+c2
+n + c2
+
+1 + n(n+c2)(n−1)
+T 2n−1 + c2
+
+
+n/2
+(41)
+which again leads to the following asymptotic result that shows their merits for being test
+process candidates.
+Proposition 4.10 (Asymptotic behavior of the scale invariant t-test martingales) . Under
+any distribution with mean µ and variance σ2, for example Nµ,σ2,
+lim
+n→∞
+log G(c)n
+n = 12 log(1 + µ2/σ2) almost surely. (42)
+Consequently, {G(c)n } diverges almost surely to G(c)∞ = ∞ exponentially fast under Nµ̸=0.
+Furthermore, {G(c)n } converges almost surely to G(c)∞ = 0 under Nµ=0.
+15
+The NM {G(c)n } thus have the same asymptotic properties as the ENSM {Hn}, but the
+free parameter c, which is absent for the ENSM, does introduce a difference that emerges only
+non-asymptotically. To wit, if one fixes n and the data-dependent quantity T 2n−1, the value
+of G(c)n would approach 0 (hence the power vanishes) if c is too large or too small.
+The reader may compare Theorem 4.9 with Theorem 4.7, and compare this comparison
+with the comparison between the Gaussian mixed NSM [Wang and Ramdas, 2023a, Propo-
+sition 5.6] and flat mixed ENSM [Wang and Ramdas, 2023a, Proposition 5.7] in the Z-test
+case. Multiple similarities manifest. A full comparison shall be presented next in Table 3. It
+is unclear why Lai [1976] skipped this more universally accepted method of a proper Gaussian
+mixture and used an improper flat mixture instead, which seems very ahead of its time in
+hindsight.
+We also note that Lindon et al. [2022, Proposition 3.7] concurrently derive the same t-
+test martingale and confidence sequence as our Theorem 4.9, a special case of their F-test
+martingale. Our paper, however, is concerned much more with comparing the Gaussian
+mixture with Lai’s flat mixture in theory and practice, with understanding the tradeoffs
+between test martingales in the reduced filtration and e-processes in the original filtration for
+this fundamental problem, as well as deriving their dependence on α.
+In place of the full Gaussian prior, a half-Gaussian prior mixture over µ/σ >0 will give
+us a “semi-one-sided” test process in the sense that it is valid only for the point null Nµ=0
+(unlike Theorem 3.4) but still leads to a test powerful againstNµ>0 and a one-sided confidence
+sequence.
+Theorem 4.11 (Scale invariant semi-one-sided t-test e-process) . For any c >0, the process
+G(c−)n defined by
+G(c−)n = 2
+s
+c2
+n + c2
+ 
+1 − S2n
+(n + c2)Vn
+−n/2
+−
+
+1 − (Sn ∧ 0)2
+(n + c2)Vn
+−n/2!
+= 2G(c)n − 2G(c)n |(Sn←Sn∧0). (43)
+is an e-process for Nµ=0 on the scale invariant filtration {F ∗n}n⩾1.
+Here, the notation G(c)n |(Sn←Sn∧0) refers to replacing the sample sum Sn in the two-sided
+martingale (35) with its negative part Sn ∧ 0. The process is an e-process instead of a
+martingale because a step of approximation is used to unravel a non-closed-form martingale,
+as seen from its proof in Appendix C.1. As a direct consequence of Proposition 4.10, the
+process G(c−)n = 2G(c)n − 2G(c)n |(Sn←Sn∧0) diverges almost surely to G(c−)∞ = ∞ exponentially
+fast under Nµ>0 and converges almost surely to G(c−)∞ = 0 under Nµ=0, and satisfies exactly
+the same asymptotic as Proposition 3.5,
+lim
+n→∞
+log G(c−)n
+n = 12 log(1 + (µ ∨ 0)2/σ2) almost surely . (44)
+Further, P´ erez-Ortiz et al. [2024, Corollary 8] show that at any fixed sample sizen the scale-
+invariant t-likelihood ratio (31) is actually an e- value for the larger one-sided null Nµ⩽0 if
+θ ⩾ 0 and vice versa. Therefore, the mixture G(c−)n expressed above is also an e-value for
+Nµ⩽0, meaning that one can non-sequentially test the null Nµ⩽0 using this statistic. However,
+it is unclear if the t-likelihood ratio process (31), and thus {G(c−)n }, is an e- process for Nµ⩽0.
+We leave this question open for future investigation. Again, it is worth noting that {G(c−)n }
+being an e-process for the point null Nµ=0 is sufficient for a one-sided confidence sequence for
+µ.
+16
+4.6 Remarks
+4.6.1 Remark I: Symmetry and e-Hacking
+An ideal property that the test processes and confidence sequences derived in this section via
+scale invariant reduction enjoy, but those via universal inference do not, is that they are all
+symmetric with respect to the observations X1, . . . , Xn. This is because they depend on the
+sample only through the symmetric statistics Sn and Vn.
+This makes the methods robust against the following way to “hack” the e-values or the
+confidence sequences: a practitioner may permute a batch of data, compute the e-processes or
+confidence sequences repeatedly via multiple orders of observation, and announce the maximal
+e-process or minimal width confidence sequence. While e-processes allow optional stopping
+and continuation, they do not allow “optional permutation” like this. However symmetric
+methods, since their final results are path-independent, are robust against this type of hacking.
+4.6.2 Remark II: Asymptotic Coverage for Non-Gaussian Data
+Classical tests derived under Gaussian assumption (e.g. the classical t-, F-, and χ2-tests)
+are frequently applied to data that are not known to be Gaussian on grounds of the central
+limit theorem, leading to type 1 error or interval coverage guanratees that are of asymptotic
+nature. In this subsection, let us substantiate the similar claim that our confidence sequences
+derived in this section are all asymptotic confidence sequences under any i.i.d. data with finite
+variance. Let us use L2 to denote the set of all these distributions on R.
+The concept of asymptotic confidence sequences is proposed recently by Waudby-Smith
+et al. [2024, Section 2.1]. To wit, let P be a family of distributions and θ : P →R be the
+parameter of interest. A (1 − α)-asymptotic confidence sequence over P for θ is a sequence of
+intervals {[ˆθn ± rn]}n⩾1 such that, the convergence lim n→∞ rn/r∗n = 1 holds P -almost surely
+for all P ∈ P, where {[ˆθn ± r∗n]}n⩾1 form a (1 − α)-CS over P for θ (non-asymptotically,
+in the sense that is defined in Section 2.2). Appealing to a similar technique, we prove in
+Appendix C.3 that, for example,
+Theorem 4.12. The intervals (37) form a (1 − α)-asymptotic confidence sequence for µ over
+L2.
+On the other hand, we note that it is impossible to construct a non-degenerate universal
+non-asymptotic confidence interval even for the set of allbounded distributions (with unknown
+bounds). Thus it also excludes the existence of CIs or CSs for larger classes, e.g. the set of
+all subGaussian distributions, or L2. This result can be traced back to Bahadur and Savage
+[1956, Theorem 2]. The crux of the matter, we remark, lies in the convexity of these large
+nonparametric sets of distributions.
+4.6.3 Remark III: Relation to the Group Invariance Study by P´ erez-Ortiz et al.
+[2024]
+Up to the derivation of the t-likelihood ratio between µ/σ = 0 and µ/σ = θ in Corollary 4.6,
+we have largely shared the path with P´ erez-Ortiz et al. [2024] who are primarily interested
+in the optimality of such canonical group-invariant (scale-invariant in the t-test) likelihood
+ratios for point null (for the “maximally invariant parameter”, e.g. µ/σ = 0) against the point
+alternative (e.g. µ/σ = θ). P´ erez-Ortiz et al. [2024] do discuss the extension to composite
+nulls and alternatives in their Section 3.3, via a seemingly similar method of mixture (that
+takes place on both sides of the ratio, over the null and alternative sets alike). However, their
+approaches and conclusions differ substantially from ours, and let us restate their two major
+results in t-test terms.
+17
+Central to the results of P´ erez-Ortiz et al. [2024, Section 3.3] is the concept of Bayesian
+marginal measure
+πθPθ(·) :=
+Z
+Θ
+Pθ(·)π(dθ) (45)
+for a family of measures {Pθ}θ∈Θ and a prior distribution π on Θ.
+Corollary 8 by P´ erez-Ortiz et al. [2024] concerns testing the null Nµ/σ∈∆0 against the
+alternative Nµ/σ∈∆1. Suppose that among all pairs of distributions on ∆ 0 and ∆ 1, π0 and
+π1 minimize the Kullback-Leibler divergence DKL(π1θ Qnσθ,σ 2∥π0θ Qnσθ,σ 2), where we recall that
+Qnµ,σ2 is the distribution of the reduced sample, defined in Lemma 4.4, and depends only on
+θ = µ/σ (hence the minimization is independent of the choice of σ). Then, the likelihood
+ratio
+dπ1θ Qnσθ,σ 2
+dπ0θ Qnσθ,σ 2 (X1/|X1|, . . . , Xn/|X1|) is the optimal e-value — for the null Nµ/σ∈∆0 and in
+terms of the worst case e-power against the alternative Nµ/σ∈∆1. The minimization, however,
+can only be nontrivially established when ∆0 and ∆1 are closed and separated, and when this
+happens the minimizing measures π0 and π1 are singular (i.e. Dirac masses on the boundary)
+as is exemplified by “Example 1 (continued)” after Corollary 8 in P´ erez-Ortiz et al. [2024]. As
+we mention after Theorem 4.11, while a mixture leads to an e-value for the null Nµ⩽0 against
+the alternative Nµ>0 in identical form as the e-process in Theorem 4.11, it is unclear if it is
+also an e-process under this larger null.
+Corollary 9 by P´ erez-Ortiz et al. [2024], on the other hand, requires no such minimum
+divergence property on the mixing measures. Still letting π0 and π1 be distributions on
+∆1, ∆2 ⊆ R, it states that the likelihood ratio
+dπ1θ Qnσθ,σ 2
+dπ0θ Qnσθ,σ 2 (X1/|X1|, . . . , Xn/|X1|) is the optimal
+e-value for the marginal null {π0θ Nσθ,σ 2 : σ >0} against the marginal alternative {π1θ Nσθ,σ 2 :
+σ >0}, understood as the mixture model where a distribution is first drawn according to the
+prior from the null or alternative set, and then the sample is drawn from the distribution. It
+is in general not an e-value for the composite null Nµ/σ∈∆0; further, in the point null case
+∆0 = {0} and ∆ 1 = R \ {0} where the null, the mixture, and the e-value obtained via the
+mixture coincide with those of our Theorem 4.9 (taking π1 = N0,c−2), their statement does
+not provide power optimality for every single distribution in Nµ/σ∈∆1 as our statement does.
+We finally note that their “ratio of mixtures” approach, in contrast to our “mixture of
+ratios”, bears a closer tie to the classical Bayesian method of Bayes factors, a topic discussed
+immediately next.
+4.6.4 Remark IV: Bayesian t-T est with the JZS Prior, and Cauchy Mixture
+In a highly influential paper, Rouder et al. [2009] provide a Bayesian framework for the t-test
+that makes extensive use of Bayes factors . To explain this approach, we consider as we did
+in Section 4.3 a general location-scale family Pµ,σ2 dominated by a reference measure η. The
+Bayes factor for the null Pµ=0 = {P0,σ2 : σ > 0} and the alternative Pµ̸=0 is defined as
+[Rouder et al., 2009, p.229]
+Bn = M 0nM 1n =
+R nQn
+i=1
+dP0,τ 2
+dη (Xi)
+o
+π0(dτ 2)
+R nQn
+i=1
+dPm,τ 2
+dη (Xi)
+o
+π1(dm, dτ 2) , (46)
+where π0 and π1 are priors on R+ and R × R+, that can be chosen freely by the statistician.
+Rouder et al. [2009, p.231], regarding themselves as “objective Bayesians”, recommend the
+following choice:
+π0(dτ 2) = τ −2dτ 2 = 2τ −1dτ, and π1(dm, dτ 2) = C0,1(d(m/τ )) · π0(dτ 2), (47)
+18
+where C0,1 is the standard Cauchy distribution. This is dubbed the “JZS prior”, an acronym
+for the Jeffreys prior π0, and the Cauchy prior on µ/σ due to Zellner and Siow [1980]. We
+can immediately write Bn as
+BJZSn =
+R
+τ >0
+nQn
+i=1
+dP0,τ 2
+dη (Xi)
+o
+dτ
+τ
+R
+θ
+R
+τ >0
+nQn
+i=1
+dPτ θ,τ2
+dη (Xi)
+o
+dτ
+τ C0,1(dθ)
+. (48)
+Comparing to mixing the scale-invariant likelihood ratio (30) (letting θ0 = 0) with a prior
+ϖ on the alternative θ,
+M ϖn =
+Z
+hn(θ; 0)ϖ(dθ) =
+R
+θ
+R
+τ >0
+nQn
+i=1
+dPτ θ,τ2
+dη (Xi)
+o
+dτ
+τ ϖ(dθ)
+R
+τ >0
+nQn
+i=1
+dP0,τ 2
+dη (Xi)
+o
+dτ
+τ
+. (49)
+Clearly, BJZSn equals 1/Mϖn when the mixture measure ϖ is taken to be C0,1. Some remarks
+regarding the comparison. First, Rouder et al. [2009] did not mention the sequential benefits
+of their approach, as {1/BJZSn } is an NM for Pµ=0 by virtue of Lemma 4.5, or equivalently
+{BJZSn } is an anytime-valid p-value which we briefly defined in Section 2.2. Second, while
+choosing π0 to be the Jeffreys prior seems necessary to attain a test process according to our
+Section 4.3, different (perhaps objectivistic) methodological choices lead to different priors on
+θ = µ/σ. Lai’s choice in Section 4.4 is a flat ϖ while in Section 4.5 we choose ϖ = N0,c−2,
+both leading to closed-form expressions. Rouder et al.’s Cauchy prior, in turn, arises from a
+hyper-prior on the precision c−2 of this Gaussian prior θ ∼ N0,c−2, which is c2 ∼ χ21 proposed
+by Zellner and Siow [1980], but this has led to the BJZSn that lacks a closed form.
+4.6.5 Remark V: Does the Filtration Matter?
+We finally discuss the issue of the reduced, scale invariant filtration {F ∗n}, on which various
+test processes in this section are defined. First, we note the perhaps surprising fact that
+stopping, say, the test martingale {G(c)n } in Theorem 4.9, at a stopping time τ on the larger,
+canonical filtration {Fn}, and rejecting the null Nµ=0 if G(c)τ ⩾ 1/α does not inflate the type
+1 error rate. This is formally due to the following statement.
+Proposition 4.13. Let {Mn} be a nonnegative supermartingale with M0 = 1 on the filtration
+{Gn} in the probability space (Ω, A, P). In particular, G∞ can be strictly smaller than A.
+For any A-measurable random variable T taking values in {0, 1, 2, . . . ,∞} and α ∈ (0, 1),
+P[MT ⩾ 1/α] ⩽ α.
+Proof. As an NSM, Mn converges to some random variable M∞ almost surely, so we have
+{MT ⩾ 1/α} =
+[
+n=0,1,...,∞
+({Mn ⩾ 1/α} ∩ {T = n}) ⊆
+
+sup
+n
+Mn ⩾ 1/α
+
+(50)
+since each {Mn ⩾ 1/α} is a subset of {supn Mn ⩾ 1/α}. This concludes the proof because
+the event {supn Mn ⩾ 1/α} has probability at most α due to Ville’s inequality.
+In particular, the above is true when T is a stopping time on a filtration finer than {Gn}.
+It is easy to see that this argument extends easily to the corresponding stopped tail bound for
+an e-process for a family of data-generating distributions P, and for the coverage probability
+of a stopped confidence sequence at T . While the tail probability P[MT ⩾ 1/α] is always
+bounded by α under arbitrary random time T , it is worth noting that there is no guarantee
+on the expected value E[MT ]. That is, MT is not necessarily an e-value.
+19
+Back to the test martingale {G(c)n } on {F ∗n}, if one stops the test at some stopping criterion
+τ that comes from the “sizes” of the observations, or even some external source of randomness
+coupled to the experiment, while it is safe to reject if G(c)τ ⩾ 1/α or report the confidence
+sequence [bµτ ± radiusτ ] at this time, the stopped value G(c)τ might not be an e-value and thus
+it is unsafe to use G(c)τ in various downstream tasks that require e-value inputs. These include:
+• Multiple hypothesis testing with the e-BH procedure [Xu et al., 2021] under arbitrary
+dependence.
+• Combining independent e-values via multiplication [Gr¨ unwald et al., 2024, Proposition
+2] to obtain a supermartingale.
+• Taking a weighted average over dependent e-values to obtain a new e-value.
+On the other hand, it is possible to sightly decrease the random variable MT , making use
+of the tail bound P[MT ⩾ 1/α] ⩽ α, to construct an e-value f (MT ), i.e. E[f (MT )] ⩽ 1, so
+that all of the e-value-based downstream tasks above can take f (G(c)τ ) as input. For example,
+f (x) = ( x ∨ 1 − 1 − log(x ∨ 1))/ log2(x ∨ 1) works. This is called an “adjuster” in the e-
+value literature. See e.g. Shafer et al. [2011], Koolen and Vovk [2014], Vovk and Wang [2021]
+for the topic in various contexts, and the recent study by Choe and Ramdas [2024] for the
+cross-filtration problem similar to our discussion here.
+20
+5 Comparison of Results
+5.1 Theoretical Comparison
+We have presented three t-confidence sequences (i.e., confidence sequences for µ over N ) so far, based on universal inference and scale invariance,
+and we summarize them in Table 1. Two additional results that can be obtained from (1) the two-step plug-in method of Jourdan et al. [2023,
+Appendix E], (2) the confidence sequence for median by Howard and Ramdas [2022, Theorem 1] are also included, both described in Appendix A.
+In terms of shrinkage rates, these two results enjoy the optimal iterated logarithmic rate faster than the other three. However, we point out
+that this is achieved by the technique of “stitching” which universally turns a n−1/2 CI into n−1/2 log log(n) CS (by paying a significant price of
+constants), thus applicable to the other three methods as well, see e.g. Howard et al. [2021, Section 3.1] and Duchi and Haque [2024, Section 4].
+Growth-wise, the original flat-mixed CS by Lai [1976] and the result of Jourdan et al. [2023] are subject to a parameter-dependent worse rate,
+and the result of Howard and Ramdas [2022] becomes degenerate when α is small enough, thus they are less favorable when α is very small (an
+issue that Theorem 4.9 can avoid by tuning c2.).
+Result Theorem 3.2 Theorem 4.1 [Lai, 1976] Theorem 4.9 Theorem A.3(JDK23) Proposition A.4(HR22)
+Method Universal inference Scale invariant likelihood mixture Likelihood mixture (mean)χ2 Chernoff bound (variance) Chernoff bound for median
+Mixture N/A Flat Gaussian N/A
+Free parameters Point estimators˜µi and ˜σ2i Starting time m ⩾ 2 Prior precision c2 Stitching parametersη >0, s >1 N/A
+Growth rate
+(α → 0, or α → α⋆
+= e− eΘ(n) while n fixed) α−1/n α−m/n(m−1) α−1/(n−1) (CI)(α − α⋆)−1/n (CS) α−(1+η)/(n−1) plog(1/(α − α⋆))
+Shrinkage rate
+(n → ∞while α fixed) n−1/2 polylog(n) n−1/2 log log(n)
+Table 1: Comparison of t-confidence sequences in this paper. JDK23 refers to the paper by Jourdan et al. [2023], and HR22 refers to the paper
+by Howard and Ramdas [2022].
+We now zoom out and cross-compare sequential t-tests with sequential Z-tests in terms of their test processes. As we mentioned earlier,
+both universal inference and likelihood mixture can be used on Z-test and t-test to construct e-processes or extended e-processes, and confidence
+sequences. Additional results on universal inference Z-tests may be found in Appendix B. We summarize in Tables 2 and 3 the results from
+universal inference and likelihood mixture respectively. Note that the plug-in method of Jourdan et al. [2023] and the median bound of Howard
+and Ramdas [2022] yield confidence sequences without any test process, so are not included in these tables.
+21
+Result Corollary 3.1 Proposition B.2 Theorem 3.2 Theorem 3.4
+Problem Sequential Z-test Sequential t-test
+Null N0,σ2 Nµ⩽0,σ2 Nµ=0 Nµ⩽0
+Alternative Nµ̸=0,σ2 Nµ>0,σ2 Nµ̸=0 Nµ>0
+Test process;
+class;
+filtration
+σne
+Vn
+2σ2 Kn
+NM
+{Fn}
+σne Vn −n( bµn ∧0)22σ Kn
+e-process
+{Fn}
+
+X 2n
+n/2
+en/2Kn
+e-process
+{Fn}
+
+X 2n − (bµn ∧ 0)2
+n/2
+en/2Kn
+e-process
+{Fn}
+Behavior under null with probability 1 − α: 1 → [0, 1/α]
+Behavior under alternative 1 → ∞a.s.
+e-power µ2/2σ2 (µ ∨ 0)2/2σ2 12 log(1 + µ2/σ2) 12 log(1 + (µ ∨ 0)2/σ2)
+Table 2: Comparison of universal inference-based Z-tests and t-tests, where Kn := Qni=1 exp
+
+− 12
+ Xi−eµi−1
+eσi−1
+2
+eσi−1 . The arrow notation x → y in“Behavior under null” and “Behavior under alternative” means that the test process Mn starts off from M0 = x and reaches lim n→∞ Mn = y
+(where y is a number) or stays Mn ∈ y (where y is a set). The “e-power” of a process Mn refers to the almost sure limit of log Mnn under the true
+distribution Nµ,σ2.
+Result WR23 Prop. 5.6 WR23 Prop. 5.7 WR23 Prop. 6.3 Theorem 4.9 Theorem 4.7 Theorem 4.11
+Problem Sequential Z-test Sequential t-test
+Null N0,σ2 Nµ⩽0,σ2 Nµ=0
+Alternative Nµ̸=0,σ2 Nµ>0,σ2 Nµ̸=0 Nµ>0
+Base martingales;
+parametrized by
+Gaussian likelihood ratio;
+µ, the alternative mean
+Scale invariant likelihood ratio;
+θ = µ/σ, the alternative standardized mean
+Mixture µ ∼ N0,c−2 µ ∼ F µ ∼ F >0 θ ∼ N0,c−2 θ ∼ F θ ∼ N >00,c−2
+Test process;
+class;
+filtration
+q
+c2
+n+c2 e
+n2 bµ2n
+2(n+c2 )σ2
+NM
+{Fn}
+1√n e
+n bµ2n
+2σ2
+ENSM
+{Fn}
+1√
+4n V (√nbµn/σ)
+ENSM
+{Fn}
+r
+c2
+n+c2
+
+(n+c2 )Vn
+(n+c2 )Vn −S2n
+ n
+2
+NM
+{F ∗n}
+q
+2π
+n
+
+nVn
+nVn−S2n
+ n
+2
+ENSM
+{F ∗n}
+2G(c)n − 2G(c)n |(Sn←Sn∧0)
+e-process
+{F ∗n}
+Behavior under null 1 → 0 a.s. ∞ →0 a.s. 1 → 0 a.s. ∞ →0 a.s. 1 → 0 a.s.
+Behavior under
+alternative 1 → ∞a.s. ∞ → ∞a.s. 1 → ∞a.s. ∞ → ∞a.s. 1 → ∞a.s.
+e-power µ2/2σ2 (µ ∨ 0)2/2σ2 12 log(1 + µ2/σ2) 12 log(1 + (µ ∨ 0)2/σ2)
+Table 3: Comparison of mixture-based Z-tests and t-tests. WR23 refers to the paper by Wang and Ramdas [2023a], which also covers the
+subGaussian case, but we omit it for a more direct comparison. The function V is V (x) = ex2/2(1 + erf(x/√2)), and G(c)n refers to the test process
+listed above under Theorem 4.9.
+22
+5.2 Simulations on e-Processes
+We empirically demonstrate the pros and cons of the two major two-sided e-processes for
+Nµ=0 we present in this paper, Theorem 3.2 and 4.9, under various underlying distributions
+and choices of hyperparameters that reflect prior knowledge. Our simulations contain two null
+data-generating distributions N0,1 and N0,4, as well as two alternativeN0.1,1 and N1,4. For the
+method of Gaussian mixture of scale invariant likelihood ratios (Theorem 4.9), the mixture
+precision parameters range from c2 ∈ {1, 0.1, 50}, corresponding to the prior distributions
+µ/σ ∼ N0,1, N0,10, and N0,0.02. For universal inference method (Theorem 3.2), the plug-in
+estimators for µ and σ2 are chosen as the maximum a posterior (MAP) estimators via using
+a normal-inverse-gamma prior, the conjugate prior for Gaussian models with unknown µ and
+σ2. The prior
+(µ, σ2) ∼ N Γ−1(µ0, ν0, α0, β0), (51)
+corresponds to estimating the mean through additional ν0 prior observations with mean µ0,
+and variance through additional 2 α0 observations with mean µ0 and sum of squared devia-
+tions 2β0. We choose N Γ−1(0, 20, 10, 10) and N Γ−1(0, 20, 10, 40) in our simulations, and also
+employ the idea of using the first 40 observations to fit the prior (which we call “burning
+in”) and start the e-process afterward. The computed log-e-processes are plotted in Figure 1,
+averaged over 100 independent repeats. While none exhibits any growth under nulls, they
+differ qualitatively under alternatives.
+Under the N0.1,1 alternative, the “confident” Gaussian prior N0,0.02 leads in power when
+the true effect size µ/σ = 0 .1 is indeed small and falls around the unit standard deviation
+range of the prior, beating the “underconfident” priorsN0,1 and N0,10, and universal inference.
+Among universal inference instances, the one with a N Γ−1(0, 20, 10, 10) prior which correctly
+guesses the true parameters, and the one that burns in to learn them are much more powerful
+than the other one with a “wrong” prior.
+Under the N1,4 alternative, the “modest” Gaussian prior N0,1 is advantageous, and the
+“overconfident” N0,0.02 is penalized for not adequately capturing the true effect sizeµ/σ = 0.5.
+Among universal inference, this time the N Γ−1(0, 20, 10, 40) prior is closer to the underlying
+true distribution so it leads in power, followed by the burned-in one, and followed in turn by
+the one with the “wrong” prior.
+We thus conclude that in general universal inference is more sensitive to the quality of
+prior information, and a weak or biased prior likely degrades the power of the test. The
+technique of burning-in, as we show, partially helps the method obtain all-case adaptivity
+to any underlying distribution via the construction of a data-dependent prior, paying the
+price that the evidence does not accumulate during the burn-in phase. This is a wisdom that
+resonates with the “split-sample” idea of the fixed-time universal inference [Wasserman et al.,
+2020].
+5.3 E-Processes on a Real Dataset
+We next apply our methods to a real public dataset by Hand et al. [1993, Data set 285], from
+a study on the effect of two treatments on anorexia. The dataset contains the weights in lbs
+before and after the treatment of 72 young female anorexia patients, divided into Control
+(26 subjects), Treatment I (“family treatment”, 17 subjects), and Treatment II (“Cognitive
+Behavioural treatment”, 29 subjects). This dataset is curated in the R package “MASS”
+under the identifier “anorexia”.
+For within-subject studies like this, the paired t-test (i.e. classical one-sample t-test on
+the differences of weights pre- and post-treatment) for Nµ=0 is commonly applied to each
+group testing the null that there was no effect on weight. We obtain classical t-test p-values
+of 0.776, 0.0007, and 0.035 respectively from the three groups.
+23
+0 25 50 75 100
+time
+10.0
+7.5
+5.0
+2.5
+0.0
+2.5
+log e-process (averaged)
+N(0, 1)
+0 25 50 75 100
+time
+10
+5
+0
+N(0, 4)
+0 1000 2000
+time
+10
+5
+0
+5
+10
+N(0.1, 1)
+0 25 50 75 100
+time
+10
+5
+0
+5
+N(1, 4)
+Gaussn. mixt. N(0,1)
+Gaussn. mixt. N(0,10)
+Gaussn. mixt. N(0,0.02)
+Univ. inf. N ¹(0,20,10,10)
+Univ. inf. N ¹(0,20,10,40)
+Univ. inf. 40 burns in
+Figure 1: Logarithm of e-processes for the null Nµ=0, averaged over 100 independent repeats.
+Dotted grey horizontal lines represent the rejection threshold log 20 for α = 0.05. The Gaus-
+sian mixture method is less sensitive to the prior choice, whereas universal inference exhibits
+a higher sensitivity to the plug-in estimators. The burn-in technique helps universal inference
+improve worst-case performance.
+We then simulate observing these weight changes (in the original order of the dataset)
+sequentially and test the Nµ=0 null via our two e-process methods. For the Gaussian mixture
+method, we use the prior N0,1 and the prior that minimizes the radius of the CS according to
+(38); and for universal inference, we use 2/3 of each dataset for burn-in due to the relatively
+small sample sizes.
+The evolution of these e-processes, and the final p-values are shown in Figure 2. These
+p-values are computed using p = 1 ∧ (maxn Mn)−1 where max n Mn is the maximum of the
+e-process, and it is clear that P (p ⩽ α) ⩽ α under any null P . (This is an instance of the
+“anytime-valid p-values” due to Johari et al. [2022].) We observe that no false discoveries
+are made by either of the methods in the Control group. For Treatment I, the hypothetical
+sequential researcher can always make the rejection, sometimes earlier. In particular, we see
+that the width-minimizing prior for the Gaussian mixture method does not produce a larger
+final e-value. For Treatment II, however, neither of the methods makes any rejection even
+though the classical t-test provides a (borderline) significant p-value of 0.035. This experiment
+highlights that if one is unsure what the effect strength is and hence unsure if the sample
+size suffices, a sequential test is a much safer bet in that if the intended fixed sample size is
+n, one can hope to get away with less than n observations if the effect is strong (Treatment
+I), while potentially collecting more than n observations if the signal is weaker than expected
+(Treatment II).
+5.4 Simulations on Confidence Sequences
+We demonstrate the three confidence sequences in the paper, as well as the additional “plug-
+in” one, Theorem A.3, and the median CS, Proposition A.4, by some experiments with the
+data-generating distribution set to N0,1. For the universal inference CS, we calculate the
+point estimators by putting a prior where we “imagine” having seen pre-observations −1 and
+1 (i.e. a N Γ−1(0, 2, 1, 1) prior), and defining ˜µi and ˜σ2i as the empirical means and variances
+posterior. For the Gaussian mixture of scale invariant likelihood ratios, we take c2 to be 1
+and 100.
+First, we present them visually in the plot of Figure 3 in a single run of i.i.d. standard
+normal observations. For the plug-in CS, we fix η = 0.5 and let s ∈ {1.25, 4} since s is the
+parameter that controls the shrinkage rate. We see that the Gaussian mixture CS we derived
+24
+in Section 4.5 with c = 1 performs better than Lai’s improper, flat mixture one; increasing c
+results in interval explosion at earlier times but is slightly tighter at later times. The universal
+inference CS seems unfavorable at later times, but we shall soon see in repeated experiments
+that this is not necessarily the case. The plug-in CS by Jourdan et al. [2023], however, is much
+looser than the rest even at n = 10000 despite its asymptotically optimal iterated logarithmic
+rate, thus is excluded from the next simulation. A similar issue of large constant is observed
+in the iterated-logarithmic-rate median CS by Howard and Ramdas [2022] as well.
+We next compare their rates of growth and shrinkage. Still drawing observations from i.i.d.
+N0,1, we first fix n = 500 and let α vary, then fix α = 0.05 and let n vary, plotting the widths
+of the CSs in 100 independent runs, since all of these CSs have random widths. The results
+are shown in Figure 4. We see with greater clarity that Lai’s CS is looser than the Gaussian
+mixture CS especially when α is small, even though the extended Ville’s inequality seems a
+tighter and more advanced technique; larger precision c2 in Gaussian mixture gradually gains
+an advantage as n increases. Even after a “smoothing” prior, the universal inference CS is
+still the most volatile. Its width varies significantly among runs. We also see that for the
+Gaussian mixture CS, larger values of the prior precision c2 lead to tightness at later times,
+agreeing with the expression of the fixed-time near-optimal choice of c2 in (38).
+6 Optimality
+In this section, we show that the O(α−1/n) or O(α−1/(n−1)) growth rate (when n is fixed
+and α → 0) in our t-confidence sequences shown in Table 1, and that the 12 log(1 + µ2/σ2)
+0 10 20
+time (sample size)
+4
+2
+0
+2
+4
+log e-process
+Control
+0 10
+time (sample size)
+Treatment I
+0 10 20
+time (sample size)
+Treatment II
+Gaussn. mixt. N(0,1)
+Gaussn. mixt. width optimal
+Univ. inf. 2/3 burn-ins
+Method Control(n = 26) Treatment I(n = 17) Treatment II(n = 29)
+Classical t-test 0.776 0.0007* 0.035*
+Gaussian mixture N0,1 0.711 0.013*(τrej = 15) 0.539
+Gaussian mixture width optimal 0.923 0.044*(τrej = 17) 0.397
+Universal inference 2/3 burn-ins 0.816 0.019*(τrej = 16) 0.436
+Figure 2: E-processes testing the null of no effect over three groups. Dotted grey horizontal
+lines represent the rejection threshold log 20 for α = 0 .05. In the table, we compare p-
+values obtained via different methods. Asterisks denote p-values smaller than 0.05, with the
+associated τrej denoting the rejection time when the e-process first reaches 20 (or p-value first
+reaches 0.05).
+25
+101 102 103 104
+time
+2.0
+1.5
+1.0
+0.5
+0.0
+0.5
+1.0
+1.5
+2.0
+Lai's t-CS
+Gaussn. mixt. t-CS, c = 1
+Gaussn. mixt. t-CS, c = 10
+Univ. inf. t-CS
+Plug-in t-CS, s = 1.25
+Plug-in t-CS, s = 4
+Median CS
+Figure 3: Five classes of confidence sequences for t-test under N0,1 observations.
+10 6
+10 5
+10 4
+10 3
+10 2
+0.1
+0.2
+0.3
+0.4
+0.5radius
+Lai's t-CS
+Gaussn. mixt. t-CS, c = 1
+Gaussn. mixt. t-CS, c = 10
+Univ. inf. t-CS
+Median CS
+Figure 4: This pair of plots studies the behavior of width as one of α and n vary, holding
+the other fixed. In the left plot, we plot widths of 3 CSs against α at n = 500; whereas in
+the right plot, we plot widths multiplied by √n against sample size n at α = 0.05. Both are
+under N0,1 observations, repeated 100 times. Lines indicate averages over 100 repeats.
+e-power in our t-test processes shown in Tables 2 and 3, are both optimal. These two kinds
+of optimality require different techniques, but the Kullback-Leibler divergence
+DKL(Nµ,σ2∥N0,µ2+σ2) = 12 log(1 + µ2/σ2) (52)
+is used in both cases.
+6.1 Information-Theoretic Lower Bound of t-Confidence Intervals
+Recall from Table 1 that our best CSs have width scaling with α like the nonstandard rate
+α−1/n, which is very different from the rate ofplog(1/α) that one typically sees for confidence
+intervals and sequences when the variance is known. Indeed, we will see now that for t-CIs
+(and hence t-CSs), this α−1/n rate is actually minimax optimal.
+26
+We define Lα,n to be the set of all lower (1 − α)-confidence bounds for µ over N with
+fixed sample size n, i.e., functions L : Rn → R such that
+for all P ∈ N, P (µ(P ) ⩾ L(X1, . . . , Xn)) ⩾ 1 − α. (53)
+Fix a particular ε >0 and P ∈ N. For any L ∈ Lα,n, denote by Wε(L, P) the ε-upper
+quantile of the random variable µ(P ) − L(X1, . . . , Xn) under P , i.e.,
+P (µ(P ) − L(X1, . . . , Xn) ⩾ Wε(L, P)) = ε. (54)
+Let us study the minimax rate
+M −α,n = infL∈Lα,n supP ∈N σ−1(P ) · W2α(L, P). (55)
+The definition above characterizes the following: the event that a lower CI covers µ with an
+excess of M −α,n has probability at least 2 α, which is an event disjoint from the event that
+it fails to cover µ which has probability at most α. As we shall soon see, this one-sided
+lower bound immediately implies a lower bound for two-sided CIs. The two layers of 2 α-low
+probability and (1 − α)-high probability are introduced to include confidence intervals with
+data-dependent radii, which, though uncommon in Z-tests, recur in t-tests throughout this
+paper.
+We establish the following lower bound for M −α,n:
+Theorem 6.1 (Minimax Lower Bound of Lower t-CIs). If α <1/3, M −α,n ⩾ p(6α − 9α2)−2/n − 1.
+This lower bound is proved by employing a standard two-point information-theoretic ar-
+gument, via a pair of Nµ,σ2 and N0,µ2+σ2 such that the total variation distance between N ⊗nµ,σ2
+and N ⊗n0,µ2+σ2 is at most 1 − 3α. The details are in Appendix C.4.
+Immediately following the one-sided lower bound, we can establish the following two-sided
+lower bound. Let Iα,n be the set of all two-sided (1 − α)-confidence intervals for µ over N
+with fixed sample size n. For any CI ∈ Iα,n, denote by Wε(CI, P) the ε-upper quantile of its
+width | CI | under P , and let
+Mα,n = infCI∈Iα,n supP ∈N σ−1(P ) · Wα(CI, P). (56)
+Then, we have the following minimax lower bound, also proved in Appendix C.4:
+Corollary 6.2 (Minimax Lower Bound of t-CIs). If α <1/3, Mα,n ⩾
+p
+(6α − 9α2)−2/n − 1.
+If n is fixed, the lower bound above is asymptotically O(α−1/n), the growth rate attained
+by universal inference method (Theorem 3.2), and almost attained by Gaussian mixture of
+scale invariant likelihood ratios method (Theorem 4.9) in our paper.
+6.2 The Surprising α-Suboptimality of the Classical t-Test
+While the lower bound O(α−1/n) proved above is matched by one of the t-CSs we derive, we
+now come to the surprising fact that the confidence interval obtained by inverting the classical
+one-sample Student’s t-test with a fixed sample size n fails to attain the same optimality as a
+function of α. Under Nµ,σ2, the classical t-test relies on the following “pivotal” quantity that
+follows the t-distribution of n − 1 degrees of freedom:
+Tn−1 =
+√
+n − 1 Sn − nµp
+nVn − S2n , (57)
+27
+10 6
+10 5
+10 4
+10 3
+10 2
+0
+100
+200
+300
+400
+500radius
+Classical t-CI
+Univ. inf. t-CS
+Figure 5: Growth rates of the t-CS by universal inference (Theorem 3.2) and the classical
+t-test CI with n = 3 observations.
+where Sn and Vn denote the sum of samples and the sum of sample squares respectively. The
+following, therefore, is a (1 − α)-confidence interval for µ:
+CItn =
+"
+bµn ±
+s
+nVn − S2n
+n2(n − 1) · t1−α/2(n − 1)
+#
+, (58)
+where t1−α/2(n−1) denotes the 1−α/2 quantile of the student t-distribution withn−1 degrees
+of freedom. Since the survival function of the student t-distribution with n − 1 degrees of
+freedom scales as O(x−(n−1)), t1−α/2(n − 1), therefore the width of CI tn as well, scales as
+O(α−1/(n−1)) when the sample is fixed and α → 0.
+The α−1/(n−1) growth rate of the classical t-CI is the same as the Gaussian mixture CS,
+Theorem 4.9, but worse than the α−1/n optimal rate attained by the other of our t-CSs, i.e.,
+Theorem 3.2 by universal inference. That is, if we fix a sample size n and decrease α, the CI
+reported by Theorem 3.2 will eventually be tighter than CI tn when α is sufficiently small, as
+is shown in Figure 5.
+We explain this phenomenon from the following perspective. Consider the case with only
+n = 1 observation X1. The classical t-test is undefined; however, Theorem 3.2 implies the
+following valid e-value (taking eµ0 = 0 and eσ0 = 1) for Nµ,σ2,
+|X1 − µ| exp
+ 1 − X 21
+2
+
+. (59)
+To see that this is an e-value without invoking the full Theorem 3.2, use the fact that|x−µ| ⩽
+σ exp((x − µ)2/2σ2 − 1/2) for all x, σto conclude that
+ENµ,σ2
+
+|X1 − µ| ·exp
+ 1 − X 21
+2
+
+⩽ (60)
+ENµ,σ2
+
+σ exp
+ (X1 − µ)2
+2σ2 − 12  · exp  1 − X 212  = ENµ,σ2  dN0,1dNµ,σ2 (X1) = 1. (61)
+Applying Markov’s inequality to the e-value above gives rise to a non-trivial CI for µ:
+
+X1 ± α−1 exp
+ X 21 − 1
+2
+
+(62)
+28
+with O(α−1) growth rate. It takes a second observation for the classical t-test to be non-trivial,
+thresholding the t-statistic T1 = (X1−µ)+(X2−µ)|X1−X2| , which has a Cauchy distribution, resulting in
+a O(α−1)-CI that corresponds to the O(x−1) tail of Cauchy distribution. While with n = 2,
+Theorem 3.2 produces a better CI in terms of growth rate: taking just eµ0 = 0, eµ1 = X1 and
+eσ0 = eσ1 = 1 for simplicity, the e-value reads,
+ENµ,σ2
+ (X1 − µ)2 + (X2 − µ)2
+2 exp
+
+1 − X 21 + (X2 − X1)2
+2
+
+⩽ 1. (63)
+Applying Markov’s inequality to the e-value above gives rise to a CI with O(α−1/2) growth
+rate due to the quadratic dependence on µ.
+Remark 6.3 (On one-observation e-values) . E-values for Nµ=µ0 via one single observation
+X1 can be constructed by methods other than (59). For example, in anticipation of the
+reverse information projection to be introduced in the next subsection, and fully formulated
+in Appendix C.4 by Proposition C.3, the following likelihood ratio,
+B := dN0,1
+dNµ0,µ20+1
+(X1) =
+q
+µ20 + 1 exp
+ (X1 − µ0)2
+2(µ20 + 1) − X 212  , (64)
+is an e-value for the entire set Nµ=µ0, not only for Nµ0,µ20+1, meaning that E P [B] ⩽ 1 for any
+P ∈ Nµ0. (64), however, does not lead to a closed-form CI via inversion.
+Remark 6.4 (Related work on one-observation CIs). (62) is an instance of “one-observation
+confidence intervals” for µ over N , a classical topic studied by numerous authors including
+Charles M. Stein, Abbott and Rosenblatt [1962], and Portnoy [2019] who studies the lower
+bound in this problem 3. These constructions typically look like [ X1 ± cα|X1|], where, for
+example, c0.05 ≈ 10, and are often tighter than (62). Our CI (62), however, enjoys a simple
+closed-form expression that requires no numerical inversion, and is proved directly by the
+e-value (59) to provide intuition. All these CIs including our (62), we note, contain 0 (or
+another fixed constant by shifting) regardless of the value of X1. These prior results, together
+with our (62), showcase the lesser-known suboptimality of the classical t-test CI under small
+samples; in particular, its unnecessary vacuity when n = 1. On a separate note, our one-
+observation CI (62) can be randomly and losslessly tightened due to a recent randomized
+Markov’s inequality by Ramdas and Manole [2024, Theorem 1.2]. This randomization halves
+the expected width of the CI. To elaborate, the randomized CI has the 1 /α term in (62)
+replaced by a U/α, where U is an independent uniform random variable on [0 , 1], which
+halves the expected width without changing its validity.
+6.3 Log-Optimality by Reverse Information Projection
+We now show that the recurring e-power 12 log(1 + µ2/σ2) in various test processes presented
+thus far is not a coincidence, as it is optimal in the problem of t-test. We study the e-power
+upper bound by focusing, again, on the case with a single observation X1, via the expected
+log-value under a fixed alternative of an e-value (called “e-power” by Vovk and Wang [2024],
+and “growth rate”4 by P´ erez-Ortiz et al. [2024]). If an e-valueM = M (X1) for P necessarily
+satisfies the e-power upper bound E Q(log M ) ⩽ δ(Q) for Q /∈ P, then the e-power of any
+supermartingale for P can at most be δ(Q) under Q as well.
+3The paper by Portnoy [2019] contains an important typo: the two Φ(λ(1+ 1c1 )) terms should be Φ(λ(1− 1c1 ))instead, in the main result Theorem 1.1.
+4To be disambiguated with the “growth rate” of a confidence interval as α → 0 discussed in our paper.
+29
+It is known that when testing the point null P , if the real distribution Q ̸= P , the e-power
+of an e-value M is at most
+EQ(log M ) ⩽ DKL(Q∥P ), (65)
+with equality if and only if M is the likelihood ratio dQdP (X1), i.e. the L1 in Lemma 2.4. See
+e.g. Vovk and Wang [2024, Lemma 1]. For example, in the Z-test, P = N0,σ2 and Q = Nµ,σ2,
+then the upper bound reads
+DKL(Nµ,σ2∥N0,σ2) = µ22σ2 , (66)
+matching those Z-test grow rates in Tables 2 and 3.
+As a direct consequence, if we are to test a composite null P and the real distribution
+Q /∈ P, an e-value M has e-power at most
+EQ(log M ) ⩽ infP ∈P DKL(Q∥P ). (67)
+With the t-test where P = Nµ=0 and Q = Nµ,σ2, a simple calculation shows the following.
+Proposition 6.5. The probability measure N0,σ2+µ2 attains the following minimum
+DKL(Nµ,σ2∥N0,σ2+µ2) = minP ∈Nµ=0 DKL(Nµ,σ2∥P ) = 12 log(1 + µ2/σ2). (68)
+Consequently, the e-power of a t-test e-value is at most 12 log(1 + µ2/σ2) under Nµ,σ2.
+This upper bound is matched by the e-powers of all two-sided t-test processes we derive
+throughout the paper, as displayed in Tables 2 and 3. We shall prove an extended version of
+Proposition 6.5 in Appendix C.4, as Proposition C.3, where we discuss the minimization (68)
+as an instance of “reverse information projection”, a topic studied recently by Larsson et al.
+[2024] regarding the design of log-optimal e-values.
+7 Concluding Remarks
+In this paper, we derive several sequential t-tests via universal inference and scale invariant
+likelihood ratio mixtures. In particular, we focus on the construction of test processes (non-
+negative supermartingales, e-processes, and extended nonnegative supermartingales), and the
+confidence sequences they imply.
+The two methods we explore yield similar results in numerous regards. They asymptot-
+ically share the same optimalities in terms of test processes and confidence sequences alike;
+they both extend to the one-sided test; and the computation of the test processes only requires
+linear time in both cases (unlike the quadratic cost that universal inference incurs worst-case,
+as mentioned by Wasserman et al. [2020, Section 7]).
+One of the key differences between the two methods is the filtrations to which the processes
+are adapted, as the test processes scale invariant likelihood ratio mixtures produce are only
+adapted to a reduced filtration, allowing for a smaller set of stopping times that optionally
+stop the experiment. On the other hand, the universal inference test processes, while robust
+under a larger set of stopping times, sometimes suffer from lower stability depending on the
+quality of the estimators plugged in. We remark that the issue of filtration disappears once
+we convert tests into confidence sequences.
+While we only focus on the class of one-dimensional normal distributions N in this paper,
+we expect similar techniques may lead to sequential Hotelling’s T-tests (with test processes
+and confidence sphere sequences [Chugg et al., 2023]) for the class of multivariate normal
+distributions. A slightly different way to generalize in dimensionality is the sequential F-tests
+for linear models, on which the most recent and comprehensive work by Lindon et al. [2022]
+only covers one of the numerous methods in our paper (namely, Gaussian mixture of scale
+invariant likelihood ratios). We leave these topics for future authors to study in depth.
+30
+Acknowledgements
+The authors acknowledge support from NSF grants IIS-2229881 and DMS-2310718. AR
+thanks Ashwin Pananjady for useful conversations.
+References
+J. Abbott and J. Rosenblatt. Two stage estimation with one observation on the first stage.
+Annals of the Institute of Statistical Mathematics , 14(1):229–235, 1962.
+R. R. Bahadur and L. J. Savage. The nonexistence of certain statistical procedures in non-
+parametric problems. The Annals of Mathematical Statistics , 27(4):1115–1122, 1956.
+L. Breiman. Optimal gambling systems for favorable games. The Kelly Capital Growth
+Investment Criterion , pages 47–60, 1961.
+Y. J. Choe and A. Ramdas. Combining evidence across filtrations. arXiv preprint
+arXiv:2402.09698, 2024.
+B. Chugg, H. Wang, and A. Ramdas. Time-uniform confidence spheres for means of random
+vectors. arXiv preprint arXiv:2311.08168 , 2023.
+D. Darling and H. Robbins. Some nonparametric sequential tests with power one. Proceedings
+of the National Academy of Sciences , 61(3):804–809, 1968.
+D. A. Darling and H. Robbins. Confidence sequences for mean, variance, and median. Pro-
+ceedings of the National Academy of Sciences , 58(1):66–68, 1967.
+J. C. Duchi and S. Haque. An information-theoretic lower bound in time-uniform estimation.
+arXiv preprint arXiv:2402.08794 , 2024.
+A. Garivier, P. M´ enard, and G. Stoltz. Explore first, exploit next: The true shape of regret
+in bandit problems. Mathematics of Operations Research, 44(2):377–399, 2019.
+J. Ghosh. On some properties of sequential t-test. Calcutta Statistical Association Bulletin ,
+9(3):77–86, 1960.
+P. Gr¨ unwald, R. de Heide, and W. M. Koolen. Safe testing. Journal of the Royal Statistical
+Society: Series B (to appear with discussion) , 2024.
+D. J. Hand, F. Daly, K. McConway, D. Lunn, and E. Ostrowski. A Handbook of Small Data
+Sets. cRc Press, 1993.
+P. G. Hoel. On a property of the sequential t-test. Scandinavian Actuarial Journal , 1954(1):
+19–22, 1954.
+S. R. Howard and A. Ramdas. Sequential estimation of quantiles with applications to A/B
+testing and best-arm identification. Bernoulli, 28(3):1704 – 1728, 2022. doi: 10.3150/
+21-BEJ1388.
+S. R. Howard, A. Ramdas, J. McAuliffe, and J. Sekhon. Time-uniform Chernoff bounds via
+nonnegative supermartingales. Probability Surveys, 17:257–317, 2020.
+S. R. Howard, A. Ramdas, J. McAuliffe, and J. Sekhon. Time-uniform, nonparametric,
+nonasymptotic confidence sequences. The Annals of Statistics , 49(2):1055–1080, 2021.
+31
+R. Johari, P. Koomen, L. Pekelis, and D. Walsh. Always valid inference: Continuous moni-
+toring of A/B tests. Operations Research, 70(3):1806–1821, 2022.
+M. Jourdan, R. Degenne, and E. Kaufmann. Dealing with unknown variances in best-arm
+identification. In International Conference on Algorithmic Learning Theory, pages 776–849.
+PMLR, 2023.
+E. Kaufmann, O. Capp´ e, and A. Garivier. On the complexity of best-arm identification in
+multi-armed bandit models. The Journal of Machine Learning Research , 17(1):1–42, 2016.
+J. L. Kelly. A new interpretation of information rate. the bell system technical journal , 35(4):
+917–926, 1956.
+A. Klenke. Probability theory: a comprehensive course . Springer Science & Business Media,
+2013.
+W. M. Koolen and V. Vovk. Buy low, sell high. Theoretical Computer Science, 558:144–158,
+2014. ISSN 0304-3975. doi: 10.1016/j.tcs.2014.09.030. Algorithmic Learning Theory.
+T. L. Lai. On confidence sequences. The Annals of Statistics , pages 265–280, 1976.
+M. Larsson, A. Ramdas, and J. Ruf. The numeraire e-variable and reverse information
+projection. arXiv preprint arXiv:2402.18810 , 2024.
+M. Lindon, D. W. Ham, M. Tingley, and I. Bojinov. Anytime-valid linear models and regres-
+sion adjusted causal inference in randomized experiments.arXiv preprint arXiv:2210.08589,
+2022.
+M. F. P´ erez-Ortiz, T. Lardy, R. de Heide, and P. Gr¨ unwald. E-statistics, group invariance
+and anytime valid testing. The Annals of Statistics (to appear) , 2024.
+S. Portnoy. Invariance, optimality, and a 1-observation confidence interval for a normal mean.
+The American Statistician , 73(1):10–15, 2019.
+A. Ramdas and T. Manole. Randomized and exchangeable improvements of markov’s, cheby-
+shev’s and chernoff’s inequalities. Statistical Science (to appear) , 2024.
+A. Ramdas, J. Ruf, M. Larsson, and W. Koolen. Admissible anytime-valid sequential inference
+must rely on nonnegative martingales. arXiv preprint arXiv:2009.03167 , 2020.
+A. Ramdas, J. Ruf, M. Larsson, and W. M. Koolen. Testing exchangeability: Fork-convexity,
+supermartingales and e-processes. International Journal of Approximate Reasoning , 141:
+83–109, 2022.
+H. Robbins. Statistical methods related to the law of the iterated logarithm. The Annals of
+Mathematical Statistics, 41(5):1397–1409, 1970.
+M. Roters. On the validity of Wald’s equation. Journal of applied probability , 31(4):949–957,
+1994.
+J. N. Rouder, P. L. Speckman, D. Sun, R. D. Morey, and G. Iverson. Bayesian t tests for
+accepting and rejecting the null hypothesis. Psychonomic bulletin & review , 16:225–237,
+2009.
+S. Rushton. On a sequential t-test. Biometrika, 37(3/4):326–333, 1950.
+32
+J. Sacks. A note on the sequential t-test. The Annals of Mathematical Statistics , 36(6):
+1867–1869, 1965.
+G. Shafer and V. Vovk. Probability and finance: it’s only a game! , volume 491. John Wiley
+& Sons, 2005.
+G. Shafer, A. Shen, N. Vereshchagin, and V. Vovk. Test Martingales, Bayes Factors and
+p-Values. Statistical Science, 26(1):84 – 101, 2011. doi: 10.1214/10-STS347.
+P. Sprent and N. C. Smeeton. Applied nonparametric statistical methods. CRC press, 2007.
+Student. The probable error of a mean. Biometrika, pages 1–25, 1908.
+J. Ville. Etude critique de la notion de collectif . Gauthier-Villars, 1939.
+V. Vovk and R. Wang. E-values: Calibration, combination and applications. The Annals of
+Statistics, 49(3):1736 – 1754, 2021. doi: 10.1214/20-AOS2020.
+V. Vovk and R. Wang. Nonparametric e-tests of symmetry. The New England Journal of
+Statistics in Data Science , pages 1–10, 2024.
+A. Wald. Sequential tests of statistical hypotheses. The Annals of Mathematical Statistics ,
+16(2):117–186, 1945.
+A. Wald. Sequential analysis. 1947.
+H. Wang and A. Ramdas. The extended Ville’s inequality for nonintegrable nonnegative
+supermartingales. arXiv preprint arXiv:2304.01163 , 2023a.
+H. Wang and A. Ramdas. Catoni-style confidence sequences for heavy-tailed mean estimation.
+Stochastic Processes and their Applications , 163:168–202, 2023b.
+L. Wasserman, A. Ramdas, and S. Balakrishnan. Universal inference. Proceedings of the
+National Academy of Sciences , 117(29):16880–16890, 2020.
+I. Waudby-Smith and A. Ramdas. Estimating means of bounded random variables by betting.
+Journal of the Royal Statistical Society: Series B (Methodological), with discussion , 2023.
+I. Waudby-Smith, D. Arbour, R. Sinha, E. H. Kennedy, and A. Ramdas. Time-uniform central
+limit theory and asymptotic confidence sequences. The Annals of Statistics (to appear) ,
+2024.
+Z. Xu, R. Wang, and A. Ramdas. A unified framework for bandit multiple testing. Advances
+in Neural Information Processing Systems , 34:16833–16845, 2021.
+A. Zellner and A. Siow. Posterior odds ratios for selected regression hypotheses. Trabajos de
+estad ´ ıstica y de investigaci´ on operativa, 31:585–603, 1980.
+33
+A Additional Sequential t-Tests in the Literature
+A.1 A Plug-in t-Confidence Sequence by Jourdan et al. [2023]
+In this section, we review the method by Jourdan et al. [2023, Appendix E], who first derive
+a confidence sequence for the variance σ2 based on the sample variance s2n over N (using
+an example by Howard et al. [2021]), and then use a standard Z-confidence sequence via
+the method of likelihood mixture (e.g. Equation 10 of Howard et al. [2021]) that requires
+knowing the true variance σ2. They then use a union bound to combine the two to obtain
+a rectangular confidence sequence for the pair ( µ, σ2) over N . A tighter confidence sequence
+can be obtained, we remark, if only the estimation of µ is of interest.
+Throughout the section, we follow the same notation as Jourdan et al. [2023] of W i(x) =
+−Wi(− exp(−x)) where W0, W−1 are the Lambert W functions, the inverses of x 7→ xex. It
+is not hard to see that
+lim
+x→∞
+W −1(x)
+x = 1, limx→∞
+1/W 0(x)
+exp(x) = 1. (69)
+We also let ζ be the Riemann Zeta function, which naturally arises in stitching [Howard
+et al., 2021], a technique for obtaining law-of-the-iterated-logarithm rate confidence sequences.
+Recall that we denote by s2n the sample variance without Bessel correction,
+s2n = 1n nXi=1(Xi − bµn)2. (70)
+Corollary 26 of Jourdan et al. [2023] states the following bound:
+Proposition A.1 (Stitched Upper Confidence Sequence for Gaussian Variance) . Let s >
+1, η >0. The intervals
+
+0, s2n
+W0
+
+1 + 2(1+η)n−1
+
+log ζ(s)α + s log 1 + log(n−1)log(1+η)  − 1n−1
+
+ (71)
+with n > nmin where nmin = polylog(1/α) is the largest n such that the denominator above is
+nonpositive, form an (1 − α)-CS for σ2 over N .
+It is very worth noting that, since 1 /W 0(x) ≈ exp(x) for large x, the confidence sequence
+(73) has polynomial, as opposed to the seemingly logarithmic dependence on 1 /α.
+For the mean µ, Lemma 28 of Jourdan et al. [2023] quotes the following well-known bound:
+Proposition A.2 (Stitched Normal Mixture Confidence Sequence for Gaussian Mean) . Let
+s >1. The intervals
+
+bµn ± σ
+s
+W −1 (1 + 2 log(1/α) + 2 logζ(s) + 2s(1 − log(2s)) + 2s log(2s + log n))
+n
+
+ (72)
+form an (1 − α)-CS for µ over Nσ2.
+A union bound between Propositions A.1 and A.2 immediately implies the following t-
+confidence sequence, by “plugging in” the variance upper confidence bound into the fixed-
+variance confidence sequence.
+34
+Theorem A.3 (Plug-In t-Confidence Sequence) . Let s >1, η >0. The intervals
+
+bµn ±
+vuut s2n
+n · W −1 (1 + 2 log(2/α) + 2 logζ(s) + 2s(1 − log(2s)) + 2s log(2s + log n))W0 1 + 2(1+η)n−1 log 2ζ(s)α + s log 1 + log(n−1)log(1+η)  − 1n−1
+
+ (73)
+with n > nmin where nmin = polylog(1/α) is the largest n such that the denominator above is
+nonpositive, form an (1 − α)-CS for µ over N .
+When n is fixed, the growth rate of the CS as α → 0 is ˜O
+q
+exp( 2(1+η)n−1 log 1α )
+
+=
+˜O(α− 1+ηn−1 ), depending on the stitching parameterη >0 chosen. This is less desirable compared
+to two of the O(α−1/n)-rate t-confidence sequences we derived in this paper; see Table 1.
+When α is fixed, the shrinkage rate of the CS as n → ∞is the optimal iterated logarithm
+rate
+p
+n−1 log logn; however, such asymptotic benefit, overshadowed by the nonasymptotic
+price of large constants, does not manifest even with very large values of n, as is shown in the
+simulation Figure 3. Furthermore, the plug-in approach does not give a test process: though
+both of the two steps are based on some supermartingales, no union bound argument conjoins
+them, unlike the case of confidence sequences. In practice, therefore, the plug-in approach
+by Jourdan et al. [2023] is less appealing than our universal inference and scale-invariant
+likelihood ratio mixture.
+A.2 A Sequential Test for Median by Howard and Ramdas [2022]
+Since Gaussian distributions are symmetric, any confidence sequence for the median is a
+confidence sequence for the mean as well. We quote the following recent result from Howard
+and Ramdas [2022, Theorem 1]:
+Proposition A.4 (Confidence Sequence for Median) . Let
+fn = 0.75
+p
+ℓn + 0.8ℓn ℓn = 1.4 log log 2.1n + log(10/α)n . (74)
+For any continuous distribution P on R,
+CImdn = [ bQn(0.5 − fn), bQ−n (0.5 + fn)] (75)
+forms a (1 − α) confidence sequence for the median of P ; therefore also a (1 − α) confidence
+sequence for µ over N .
+Here, the empirical quantiles bQn and bQ−n are defined as as
+bQn(p) = sup{x : bFn(x) ⩽ p}, bQ−n (p) = sup{x : bFn(x) < p}. (76)
+When n is fixed and α → 0, we note, the CS eventually becomes the entire R as long as
+fn > 0.5, which is true when log(10 /α) > n/10. If, on the other hand, letting α⋆(n) be the
+value of α such that fn is exactly 0 .5, then, as α ↓ α⋆(n) = exp(− eΘ(n)),
+| CImdn | ≍2σΦ−1(0.5 + fn) = eΘ(plog(1/(0.5 − fn))) = eΘ plog(1/(α − α⋆(n))) (77)
+under Nµ,σ2 and large n (where eΘ hides log log(1/(α − α⋆(n)))-order terms).
+When α is fixed, the shrinkage rate of the CS as n → ∞also enjoys the optimal iterated
+logarithm rate
+p
+n−1 log logn due to the stitching technique it employs; to be precise,
+lim
+n→∞
+nσ−2| CImdn |2 − 4.5π log(10/α)
+log logn = 6.3π, almost surely under Nµ,σ2, (78)
+35
+indicating that when n and 1/α grows simultaneously, in the rate of n = eΘ(log(1/α)) (where
+eΘ hides log log(1/α)-order terms), the width of the CS stays bounded, a property satisfied by
+all of those O(α−1/n)-width CSs mentioned so far as well.
+Again, as is shown in Figures 3 and 4, this asymptotically optimal rate does not translate
+into practical advantages for sample size < 10000.
+Proposition A.4 is based on the following test supermartingale, a Chernoff bound on i.i.d.
+Bernoulli indicator random variables due to Howard et al. [2020, Fact 1 (b)].
+Proposition A.5 (One-Sided Test Supermartingale for Median) . For any constant λ ∈ R,
+the process
+Bλn = exp
+ 
+λ
+nX
+i=1
+1 {Xi>0} − nλ2 − n log  exp(λ/2) + exp(−λ/2)2 ! (79)
+is a supermartingale on {Fn}n⩾0 for the set of all continuous distributions with median 0; in
+particular, for Nµ=0.
+It is straightforward to see that the growth of {Bλn} under some Nµ,σ2 has the following
+e-power:
+lim
+n→∞
+log(Bλn)
+n = λ(Φ(µ/σ) − 1/2) − log
+ exp(λ/2) + exp(−λ/2)
+2
+
+almost surely. (80)
+Here, Φ is the cumulative distribution function of N0,1. As is shown in Figure 6, this is a
+very small e-power compared to the optimal 12 log(1 + µ2/σ2), and is powerful only against
+the alternative Nµ>0 when λ >0. Therefore, Howard and Ramdas [2022] consider different
+choices of λ for different epochs of time (“stitching”) to obtain Proposition A.4, which is still
+much looser than many of the other CSs we derive. Another way to gain universal power
+against all Nµ̸=0 is, again, via the method of mixture, and Howard and Ramdas [2022] consider
+a beta-binomial mixture distribution on λ. Below, we let B( a, b) denote the beta function.
+Proposition A.6 (Beta-Binomial Mixture Test Supermartingale for Median) . Let Tn =Pn
+i=1 1 {Xi>0} − n/2. For any a, b >0, the process
+B(a,b)n = B(a + n/2 + Tn, b+ n/2 − Tn)(1/2)n B(a, b) (81)
+is a supermartingale on {Fn}n⩾0 for the set of all continuous distributions with median 0; in
+particular, for Nµ=0. Under Nµ,σ2, it has the following e-power:
+lim
+n→∞
+log(B(a,b)n )
+n = log
+
+Φ(µ/σ)Φ(µ/σ)Φ(−µ/σ)Φ(−µ/σ)
+
+− log(1/2). (82)
+This statement, proved in Appendix C.5, shows that the mixture does gain power over all
+µ ̸= 0 as is depicted in Figure 6. However, compared to the optimal e-power 12 log(1 +µ2/σ2),
+it falls short in power especially when the effect size µ/σ is large.
+Remark A.7. The convergence (82) also holds in expectation (because the sequence is uni-
+formly integrable). Following Vovk and Wang [2024, Section 5], we may define a concept of
+asymptotic relative efficiency (ARE) of the test process {B(a,b)n } here, as the ratio between
+the second derivatives at 0 of the e-power curves of the upper bound and {B(a,b)n } in Figure 6:
+ARE(B(a,b)n ) = limθ→0
+1
+2 log(1 + θ2)
+log
+ 
+Φ(θ)Φ(θ)Φ(−θ)Φ(−θ) − log(1/2) (83)
+=
+d2
+dθ2
+1
+2 log(1 + θ2)|θ=0
+d2
+dθ2 log
+ 
+Φ(θ)Φ(θ)Φ(−θ)Φ(−θ) |θ=0 =
+p
+π/8 ≈ 0.627. (84)
+36
+4
+ 3
+ 2
+ 1
+ 0 1 2 3 4
+/
+0.50
+0.25
+0.00
+0.25
+0.50
+0.75
+1.00
+1.25
+1.50
+growth index
+ = 5
+ = 1
+ = 0.2
+ = -0.2
+ = -1
+ = -5
+beta-binomial mixture
+upper bound
+Figure 6: The e-powers of the one-sided median test supermartingale (80) and mixture test
+supermartingale (82) under different choices of λ and alternative effect sizes µ/σ. The “upper
+bound” refers to the optimal e-power 12 log(1 + µ2/σ2).
+This quantity bears the following meaning: fix any β >0 and define by n(µ, σ2) the sample
+size when E Nµ,σ2 (log B(a,b)n ) first reaches β, n∗(µ, σ2) the sample size when the upper bound
+of expected log value of e-processes, n2 log(1 + µ2/σ2), first reaches β under Nµ,σ2. Then,
+ARE(B(a,b)n ) = lim µ/σ→0 n(µ,σ2)n∗(µ,σ2) . In comparison, we note that in the fixed-time setting the
+classical Pitman ARE of the sign test (which Proposition A.6 sequentializes) relative to the
+optimal t-test is 2 /π ≈ 0.637 in the Gaussian case [Sprent and Smeeton, 2007, p.74]. Note
+that the fixed-time sign test is exact, whereas the sequential Proposition A.6 is conservative.
+B Universal Inference Z-Tests
+B.1 Two-Sided Z-Test
+Recall from Corollary 3.1 that, for any µ, σ and their point estimators {eµn}, {eσn} adapted
+to the canonical filtration {Fn}n⩾0, the process
+ℓµ,σ2n =
+Qn
+i=1 peµi−1,eσ2i−1(Xi)Qn
+i=1 pµ,σ2(Xi) = σnQni=1 eσi−1 exp ( nXi=1  (Xi − µ)22σ2 − (Xi − eµi−1)22eσ2i−1 ) (85)
+is a martingale for Nµ,σ2 on {Fn}n⩾0.
+For the two-sided Z-test, we consider the point null N0,σ2 and the alternative Nµ̸=0,σ2. In
+this case, the variance σ2 being a known quantity, the plug-in estimates {eσ2n} can be taken
+simply as σ2. We have the following exponential growth asymptotic which is slightly faster
+than the 12 log(1 + µ2/σ2) rate we see so far for t-tests. Both rates are optimal in their
+respective regimes due to our calculation in Section 6.3.
+Proposition B.1 (Asymptotic behavior of the universal inference Z-test e-process) . Under
+any P = Nµ,σ2, suppose there is a γ > 0 such that {eµn} converges to µ in L2 with rate
+EP (|eµn − µ|2) ≲ n−γ, and eσ2n = σ2 for all n. Then,
+lim
+n→∞
+log ℓ0,σ2n
+n = µ22σ2 almost surely. (86)
+Consequently, {ℓ0,σ2n } diverges almost surely to ℓ0,σ2∞ = ∞ exponentially fast under Nµ̸=0.
+37
+Proof.
+1
+n log ℓ0,σ2n = 1n nXi=1  X 2i2σ2 − (Xi − eµi−1)22σ2  = 12σ2 X 2n − (Xi − eµi−1)22σ2 . (87)
+Repeating the steps in the Proof of Proposition 3.3 in Appendix C, we see that the first of
+these terms converges a.s. to ( µ2 + σ2)/2σ2, and the last to 1 /2.
+B.2 One-Sided Z-Test
+An infimum over µ ⩽ 0 yields the following one-sided Z-test.
+Proposition B.2 (Universal inference one-sided Z-test e-process) . For any µ, σ and their
+point estimators {eµn}, {eσn} adapted to the canonical filtration {Fn}n⩾0, the process
+ℓσ2−n = infµ⩽0 ℓµ,σ2n = σnQni=1 eσi−1 exp ( nXi=1  Vn − n(bµn ∧ 0)22σ2 − (Xi − eµi−1)22eσ2i−1 ) (88)
+is an e-process for Nµ⩽0,σ2 on {Fn}n⩾0.
+The corresponding asymptotic can be similarly derived so we omit its proof.
+Proposition B.3 (Asymptotic behavior of universal inference one-sided Z-test e-process) .
+Under any P = Nµ,σ2, suppose there is a γ >0 such that {eµn} converges to µ in L2 with rate
+EP (|eµn − µ|2) ≲ n−γ, and eσ2n = σ2 for all n. Then,
+lim
+n→∞
+log ℓσ2−n
+n = (µ ∨ 0)22σ2 almost surely. (89)
+Consequently, {ℓσ2−n } diverges almost surely to ℓσ2−∞ = ∞ exponentially fast under Nµ>0.
+C Omitted Proofs
+C.1 Proofs for Likelihood Ratio Martingales
+Proof of Lemma 2.5. It suffices to prove that
+EP
+ dQn
+dP (Xn)
+X1, . . . , Xn−1 = 1. (90)
+For any B ∈ B(R), by the Doob–Dynkin factorization lemma (e.g. Klenke [2013, Corollary
+1.97]), since ω 7→ Qn(ω, B) is Fn−1 measurable, there is a measurable q(·, B) : Rn−1 → R
+such that q(X1, . . . , Xn−1, B) = Qn(ω, B).
+Let A ⊆ Rn−1 be measurable. Then,
+EP
+
+1 {(X1,...,Xn−1)∈A} · dQndP (Xn) (91)
+=
+Z
+A×R
+dqn(x1, . . . , xn−1, ·)
+dP (xn) dP ⊗n(x1, . . . , xn) (92)
+=
+Z
+A
+Z
+R
+dqn(x1, . . . , xn−1, ·)
+dP (xn) dP (xn)
+
+dP ⊗(n−1)(x1, . . . , xn−1) (93)
+=
+Z
+A
+qn(x1, . . . , xn−1, R) dP ⊗(n−1)(x1, . . . , xn−1) (94)
+=
+Z
+A
+dP ⊗(n−1)(x1, . . . , xn−1) = P ⊗(n−1)(A). (95)
+38
+Since A is arbitrary, we conclude that
+EP
+ dQn
+dP (Xn)
+X1, . . . , Xn−1 = 1, (96)
+which yields the desired result.
+Proof of Lemma 2.6. Let A ⊆ Rn−1 be measurable. Then,
+EP
+
+1 {(X1,...,Xn−1)∈A} · dQ (n−1)dP (n−1) (X1, . . . , Xn−1) (97)
+=
+Z
+A
+dQ (n−1)
+dP (n−1)
+(x1, . . . , xn−1) dP (n−1)(x1, . . . , xn−1) = Q (n−1)(A). (98)
+And
+EP
+
+1 {(X1,...,Xn−1)∈A} · dQ (n)dP (n) (X1, . . . , Xn) (99)
+=
+Z
+A×R
+dQ (n)
+dP (n)
+(x1, . . . , xn) dP (n)(x1, . . . , xn) = Q (n)(A × R) = Q (n−1)(A). (100)
+Since A is arbitrary, we conclude that
+EP
+ dQ (n)
+dP (n)
+(X1, . . . , Xn)
+X1, . . . , Xn−1 = dQ (n−1)dP (n−1) (X1, . . . , Xn−1). (101)
+Further, this holds for n = 1 as well in the degenerate sense that R0 = {·} and both P (0) and
+Q (0) charge the singleton with 1. This concludes the full proof.
+C.2 Proofs for Universal Inference t-Tests
+Proof of Theorem 3.2. For each σ >0 consider the likelihood ratio martingale under N (µ, σ2)
+M µ,σ2n =
+Qn
+i=1 peµi−1,eσ2i−1(Xi)Qn
+i=1 pµ,σ2(Xi) . (102)
+The following process is an e-process under any N (µ, ·)
+Rµn =
+Qn
+i=1 peµi−1,eσ2i−1(Xi)
+sups>0
+Qn
+i=1 pµ,s2(Xi) = infs>0 M µ,s2n . (103)
+Note that
+sup
+σ>0
+P
+N (µ,σ2)[∃n, Rµn ⩾ 1/α] ⩽ PN (µ,σ2)[∃n, Mµ,σ2n ⩾ 1/α] ⩽ α. (104)
+Since s =
+q P(Xi−µ)2
+n maximizes the denominator of Rµn, it has a closed-form expression:
+Rµn =
+Q 1
+eσi−1 exp
+
+− 12
+
+Xi−eµi−1
+eσi−1
+2
+sups>0
+Q 1
+s exp
+
+− 12
+
+Xi−µ
+s
+2 =
+Q 1
+eσi−1 exp
+
+− 12
+
+Xi−eµi−1
+eσi−1
+2
+ P(Xi−µ)2
+n
+−n/2
+exp
+
+− n2 	 . (105)
+39
+Hence due to (104), with probability at least 1 − α, for all n,
+P(Xi − µ)2
+n ⩽
+(
+1
+α exp
+n
+− n2 o Y eσi−1 exp ( 12  Xi − eµi−1eσi−1 2) )2/n (106)
+= 1α2/ne nYi=1 eσ2/ni−1 exp ( 1n  Xi − eµi−1eσi−1 2) (107)
+= 1α2/ne exp
+
+
+
+Pn
+i=1 log eσ2i−1 +  Xi−eµi−1eσi−1 2
+n
+
+
+
+| {z }
+Tn
+(108)
+Recall that the random variable on the RHS is Tn. The UI-CS then reads
+CIn =
+
+bµn ±
+q
+bµ2n − X 2n + Tn
+
+. (109)
+Proof of Proposition 3.3. Let P be a distribution with mean µ and variance σ2. Note that
+1
+n log Rn = 12 log X 2n + 12 − Pni=1 log eσi−1n − Pni=1  Xi−eµi−1eσi−1 22n . (110)
+The first three terms converge a.s. to 12 log(µ2 + σ2), 1/2, and log σ. It remains to show that
+the last term above converges a.s. to 1 /2.
+Define An = Pni=1 1i
+ Xi−µeσi−1 2 −  Xi−µσ 2. Then,
+EP (An) =
+nX
+i=1
+1
+i EP
+ 
+|Xi − µ|2 · |eσ−2i−1 − σ−2| (111)
+⩽
+nX
+i=1
+1
+i EP
+ 
+(Xi − µ)4i−γ/2 + (eσ−2i−1 − σ−2)2iγ/2
+2
+!
+(112)
+= 12 nXi=1 1i EP (Xi − µ)4 · i−γ/2 + EP (eσ−2i−1 − σ−2)2 · iγ/2 (113)
+= 12 nXi=1 1i (O(1) · i−γ/2 + O(i−γ) · iγ/2) = 12 nXi=1 O(i−1−γ/2) = O(1). (114)
+So there exists a constant K > 0 such that E P (An) ⩽ K for all n. By Markov’s inequality
+and Fatou’s lemma,
+P ( lim
+n→∞
+An ⩾ a) ⩽ EP (limn→∞ An)a ⩽ lim infn→∞ EP (An)a ⩽ Ka , (115)
+which implies P (limn→∞ An < ∞) = 1. By Kronecker’s lemma, this implies that
+lim
+n→∞
+Pn
+i=1
+
+Xi−µ
+eσi−1
+2
+−
+
+Xi−µ
+σ
+2
+n = 0 almost surely. (116)
+40
+We now define Bn = Pni=1 1i
+ Xi−eµi−1eσi−1 2 −  Xi−µeσi−1 2. Without loss of generality as-
+sume sup n⩾0 EP (eσ−6n ) < ∞ (otherwise, if only sup n⩾n0 EP (eσ−6n ) < ∞ holds, use summationPn
+i=n0+1 instead). Then,
+EP (Bn) =
+nX
+i=1
+1
+i EP
+ 
+eσ−2i−1 · |2Xi − eµi−1 − µ| · |eµi−1 − µ1| (117)
+⩽
+nX
+i=1
+1
+i EP
+ 
+eσ−6i−1i−γ/4 + |2Xi − eµi−1 − µ|3i−γ/4 + |eµi−1 − µ|3iγ/2
+3
+!
+(118)
+= 13 nXi=1 1i EP (eσ−6i−1) · i−γ/4 + EP (|2Xi − eµi−1 − µ|3) · i−γ/4 + EP (|eµi−1 − µ|3) · iγ/2 (119)
+= 13 nXi=1 1i O(1) · i−γ/4 + O(1) · i−γ/4 + O(i−γ) · iγ/2 = 13 nXi=1 O(i−1−γ/4) = O(1). (120)
+Similarly by Markov’s inequality, Fatou’s and Kronecker’s lemma,
+lim
+n→∞
+Pn
+i=1
+
+Xi−eµi−1
+eσi−1
+2
+−
+
+Xi−µ
+eσi−1
+2
+n = 0 almost surely. (121)
+Finally, strong law of large numbers implies that
+lim
+n→∞
+Pn
+i=1
+
+Xi−µ
+σ
+2
+n = 1 almost surely. (122)
+Combining (116), (121), and (122), we see that
+lim
+n→∞
+Pn
+i=1
+
+Xi−eµi−1
+eσi−1
+2
+n = 1 almost surely. (123)
+This concludes the proof.
+Proof of Theorem 3.4. The following process is an e-process under any N (µ, σ2), (µ ⩽ 0 and
+σ >0).
+Qn
+i=1 peµi−1,eσ2i−1(Xi)
+supm⩽0
+s>0
+Qn
+i=1 pm,s2(Xi) = infm⩽0s>0 M m,s2n . (124)
+We have
+Q 1
+eσi−1 exp
+
+− 12
+
+Xi−eµi−1
+eσi−1
+2
+supm⩽0 sups>0
+Q 1
+s exp
+
+− 12
+
+Xi−m
+s
+2 =
+Q 1
+eσi−1 exp
+
+− 12
+
+Xi−eµi−1
+eσi−1
+2
+supm⩽0
+ P(Xi−m)2
+n
+−n/2
+exp
+
+− n2 	 (125)
+=
+Q 1
+eσi−1 exp
+
+− 12
+
+Xi−eµi−1
+eσi−1
+2
+supm⩽0
+
+m2 − 2bµnm + X 2n
+−n/2
+exp
+
+− n2 	 (126)
+41
+The denominator is maximized by m = bµn ∧ 0. Therefore
+· · ·=
+Q 1
+eσi−1 exp
+
+− 12
+
+Xi−eµi−1
+eσi−1
+2
+
+(bµn ∧ 0 − bµn)2 + X 2n − bµ2n
+−n/2
+exp
+
+− n2 	 =
+Q 1
+eσi−1 exp
+
+− 12
+
+Xi−eµi−1
+eσi−1
+2
+
+(0 ∨ bµn)2 + X 2n − bµ2n
+−n/2
+exp
+
+− n2 	
+(127)
+=
+Q 1
+eσi−1 exp
+
+− 12
+
+Xi−eµi−1
+eσi−1
+2
+
+X 2n − (bµn ∧ 0)2
+−n/2
+exp
+
+− n2 	 = R−n . (128)
+Proof of Proposition 3.5. The four terms of
+1
+n log R−n = 12 log X 2n − (bµn ∧ 0)2 + 12 − Pni=1 log eσi−1n − Pni=1  Xi−eµi−1eσi−1 22n (129)
+converges a.s. to 12 log(µ2 + σ2 − (µ ∧ 0)2), 1 /2, log σ, and 1 /2 respectively, concluding the
+proof.
+C.3 Proofs for Scale Invariant t-Tests
+Proof of Lemma 4.4. Let Q+n be the distribution of ( X1, X2, . . . , Xn) conditioned on {X1 >
+0}. Define the constant p>0 = P[X1 > 0] = Pµ,σ{(0, ∞)}. Then,
+dQ+n
+dη⊗n (x1, x2, . . . , xn) = p−1>0 · 1 (x1 > 0) ·
+nY
+i=1
+
+σ−1g(σ−1(xi − µ))	 , (130)
+meaning that for any measurable A ⊆ R+ × Rn−1,
+Q+n {A} =
+Z
+A
+p−1>0 ·
+nY
+i=1
+
+σ−1g(σ−1(xi − µ))	 η(dx1)η(dx2) . . . η(dxn). (131)
+Now recall φn : ( x1, x2, . . . , xn) 7→ (x1/|x1|, x2/|x1|, . . . , xn/|x1|). Let Q∗+n be the push-
+forward measure of Q+n by φn, a measure on {1} ×Rn−1 (which is the conditional distribution
+of (X1/|X1|, . . . , Xn/|X1|) given {X1 > 0}). Suppose the set Vn(A) = {1} ×B. We have the
+following change of variables (letting ( x∗1, . . . , x∗n) = Vn(x1, . . . , xn), so x∗1 = 1 below),
+Q∗+n {Vn(A)} = Q+n {A} =
+Z
+A
+p−1>0 ·
+nY
+i=1
+
+σ−1g(σ−1(xi − µ))	 η(dx1)η(dx2) . . . η(dxn) (132)
+= p−1>0 ·
+Z
+x1>0
+η(dx1)
+Z
+B
+nY
+i=1
+
+σ−1g(σ−1(x∗i |x1| −µ))	 η(dx∗2) . . . η(dx∗n)  d(x2, . . . , xn)d(x∗2, . . . , x∗n)  (133)
+= p−1>0 ·
+Z
+x1>0
+η(dx1)
+Z
+B
+nY
+i=1
+
+σ−1g(σ−1(x∗i |x1| −µ))	 η(dx∗2) . . . η(dx∗n)
+ 1|x1| 0 . . . 00 1|x1| 0... . . . 00 . . . 0 1|x1| −1
+(134)
+= p−1>0 ·
+Z
+x1>0
+η(dx1)
+Z
+B
+nY
+i=1
+
+σ−1g(σ−1(x∗i x1 − µ))	 xn−11 η(dx∗2) . . . η(dx∗n). (135)
+42
+We thus conclude that (letting δ1 be the Dirac point mass on 1),
+dQ∗+n
+δ1 ⊗ η⊗(n−1) (x∗1, x∗2, . . . , x∗n) = p−1>0 ·
+Z
+x1>0
+nY
+i=1
+
+σ−1g(σ−1(x∗i x1 − µ))	 xn−11 η(dx1). (136)
+We can simplify the integral above by substituting τ = σ/x1, obtaining,
+dQ∗+n
+δ1 ⊗ η⊗(n−1) (x∗1, x∗2, . . . , x∗n) (137)
+=p−1>0 ·
+Z
+τ >0
+
+σ−1g(1/τ − σ−1µ)	
+( nY
+i=2
+σ−1g(x∗i /τ − σ−1µ))
+)
+(σ/τ )n−1σ(1/τ 2)η(dτ ) (138)
+=p−1>0 ·
+Z
+τ >0
+( nY
+i=1
+(1/τ )g(x∗i /τ − µ/σ))
+)
+(1/τ )dτ. (139)
+Similarly, let Q∗−n be the conditional distribution of ( X1/|X1|, . . . , Xn/|X1|) given {X1 <
+0}). We have
+dQ∗−n
+δ−1 ⊗ η⊗(n−1) (x∗1, x∗2, . . . , x∗n) = (1−p>0)−1 ·
+Z
+τ >0
+( nY
+i=1
+(1/τ )g(x∗i /τ − µ/σ))
+)
+(1/τ )dτ. (140)
+Finally, the measure Q∗n = 1 {x1>0} · p>0 · Q∗+n + 1 {x1<0} · (1 − p>0) · Q∗−n . So we see that
+dQn
+dη⟨n−1⟩ (x∗1, . . . , x∗n) =
+Z
+τ >0
+( nY
+i=1
+(1/τ )g(x∗i /τ − µ/σ))
+)
+dτ
+τ (141)
+holds for both x∗1 = ±1. This concludes the proof.
+From now, let us denote
+p∗θ(x∗1, . . . , x∗n) =
+Z
+τ >0
+( nY
+i=1
+(1/τ )g(x∗i /τ − θ))
+)
+(1/τ )dτ, (142)
+i.e. the density dQndη⟨n−1⟩ when Pµ,σ2 satisfies µ/σ = θ. Here is a property of p∗θ.
+Lemma C.1. Let λ >0 be any constant. Then, p∗θ(λx∗1, . . . , λx∗n) = λ−np∗θ(x∗1, . . . , x∗n). In
+particular, taking λ = |x1|, we have p∗θ(x1, . . . , xn) = |x1|−np∗θ(x∗1, . . . , x∗n).
+Proof of Lemma C.1.
+p∗θ(λx∗1, . . . , λx∗n) (143)
+=
+Z
+τ >0
+( nY
+i=1
+(1/τ )g(λx∗i /τ − θ))
+)
+(1/τ )dτ (144)
+=
+Z
+γ=λ−1τ >0
+( nY
+i=1
+(1/λγ)g(x∗i /γ − θ))
+)
+(1/λγ)λdγ (145)
+=λ−np∗θ(x∗1, . . . , x∗n). (146)
+43
+Proof of Lemma 4.5. Denote Xi/|X1| by X ∗i .
+hn(θ; θ0) = p∗θ(X1, . . . , Xn)p∗θ0(X1, . . . , Xn) = p∗θ(X ∗1 , . . . , X∗n)p∗θ0(X ∗1 , . . . , X∗n)| {z }
+equality due to Lemma C.1
+=
+dQnµ,σ2
+dQnµ0,σ20 (X ∗1 , . . . , X∗n). (147)
+for any µ/σ = θ and µ0/σ0 = θ0. Now it follows from Lemma 2.6 that {hn(θ; θ0)} is an NM
+for Pµ0,σ20 on the canonical filtration generated by {X ∗n}, which according to Proposition 4.3
+is just {F ∗n}.
+Proof of Corollary 4.6. Using g(x) = 1√2π exp(−x2/2) in (142),
+p∗θ(x1, . . . , xn) =
+Z
+τ >0
+( nY
+i=1
+(1/τ )g(xi/τ − θ))
+)
+(1/τ )dτ (148)
+= 1(2π)n/2
+Z
+τ >0
+( nY
+i=1
+e−(xi/τ −θ)2/2
+)
+1
+τ n+1 dτ (149)
+= e−nθ2/2
+(2π)n/2
+Z
+τ >0
+exp
+
+−
+Pn
+i=1 xi2
+2τ 2 + θ Pni=1 xiτ  1τ n+1 dτ. (150)
+Therefore, applying Lemma 4.5 with θ0 = 0, we have
+hn(θ; 0) = e−nθ2/2
+R
+τ >0 exp
+n
+−
+Pn
+i=1 Xi2
+2τ 2 + θ Pni=1 Xiτ o 1τ n+1 dτ
+R
+τ >0 exp
+n
+−
+Pn
+i=1 Xi2
+2τ 2
+o
+1
+τ n+1 dτ
+(151)
+(the denominator being a generalized Gaussian integral) (152)
+= e−nθ2/2
+Γ(n/2)
+Z
+y>0
+yn/2−1 exp
+(
+−y + θ
+ nX
+i=1
+Xi
+! s
+2yPn
+i=1 Xi2
+)
+dy, (153)
+coinciding with hθ,n.
+Proof of Theorem 4.7 (as well as Theorem 4.1). Putting a flat, improper prior d π(θ) = d θ
+over R, we have the following improperly mixed, extended nonnegative supermartingale,
+Hn =
+Z
+hθ,nπ(dθ) (154)
+=
+Z
+θ
+e−nθ2/2
+Γ(n/2)
+ Z
+y>0
+yn/2−1 exp
+(
+−y + θ
+ nX
+i=1
+Xi
+! s
+2yPn
+i=1 Xi2
+)
+dy
+!
+· dθ (155)
+= 1Γ(n/2) Zy>0 yn/2−1e−y  Zθ exp (− n2 θ2 + θ  nXi=1 Xi! s 2yPni=1 Xi2 ) dθ! dy (156)
+= 1Γ(n/2) Zy>0 yn/2−1e−y
+
+
+r
+2π
+n exp
+
+
+
+(Pni=1 Xi)2 2yPni=1 Xi2
+2n
+
+
+
+
+ dy (157)
+= 1Γ(n/2)
+r
+2π
+n
+Z
+y>0
+yn/2−1 exp
+
+−
+
+1 − S2n
+nVn
+
+y
+
+dy (158)
+= 1Γ(n/2)
+r
+2π
+n Γ(n/2)
+
+1 − S2n
+nVn
+−n/2
+=
+r
+2π
+n
+
+1 − S2n
+nVn
+−n/2
+(159)
+=
+r
+2π
+n
+ nVn
+nVn − S2n
+n/2
+(160)
+44
+Note that when n = 1, nVn − S2n = 0, and H0 is understood to be + ∞. Note that
+tn−1 ∼
+1
+n Sn
+1√n
+q
+1
+n−1 (Vn − 1n S2n) =
+√
+n − 1
+s
+S2n
+nVn − S2n =: Tn−1 (161)
+Then Hn =
+q
+2π
+n
+ T 2n−1
+n−1 + 1
+n/2
+.
+In terms of CS, every Xi should be seen as Xi − 0 = Xi − µ, and hence
+H µn =
+r
+2π
+n
+ n P(Xi − µ)2
+n P(Xi − µ)2 − (P(Xi − µ))2
+n/2
+(162)
+is also an extended nonnegative supermartingale.
+The extended Ville’s inequality, applied on the process
+p
+m/2πH µn , reads,
+With probability at most
+P = P
+ T 2m−1
+m − 1 + 1 ⩾ η
+
++ η−m/2E
+
+1  T 2m−1
+m−1 +1<η
+
+ T 2m−1
+m − 1 + 1
+m/2
+
+ , (163)
+there exists n ⩾ m,
+r m
+n
+ n P(Xi − µ)2
+n P(Xi − µ)2 − (P(Xi − µ))2
+n/2
+⩾ ηm/2. (164)
+Define a =
+p
+(m − 1)(η − 1). Then ηm/2 = (1 + a2/(m − 1))m/2 = h(a) and
+P = P[|Tm−1| ⩾ a] + h(a)−1E[1 {|Tm−1|<a}h(Tm−1)] (165)
+= 2P[Tm−1 > a] + 2E[1 {0⩽Tm−1<a}h(Tm−1)]h(a) (166)
+Let fm−1, Fm−1 be the density and CDF of Tm−1. The expectation E[1 {0⩽Tm−1<a}h(Tm−1)]
+must be smaller than aa−a′ E[1 {a′⩽Tm−1<a}h(Tm−1)], for all a′ ∈ (0, a). Note that
+lim
+a′→a
+a
+a − a′ E[1 {a′⩽Tm−1<a}h(Tm−1)] = ah(a)fm−1(a). (167)
+Hence
+P ⩽ 2(1 − Fm−1(a)) + 2afm−1(a). (168)
+This concludes the missing proof of Lai’s t-CS.
+Proof of Theorem 4.9. Let us put a Gaussian prior on θ,
+dπ(θ)
+dθ = c√2π e−c2θ2/2, (169)
+45
+and define the martingale
+G(c)n =
+Z
+hθ,nπ(dθ) (170)
+=
+Z
+θ
+e−nθ2/2
+Γ(n/2)
+ Z
+y>0
+yn/2−1 exp
+(
+−y + θ
+ nX
+i=1
+Xi
+! s
+2yPn
+i=1 Xi2
+)
+dy
+!
+· π(dθ) (171)
+= c√2πΓ(n/2) Zy>0 yn/2−1e−y  Zθ exp (− n + c22 θ2 + θ  nXi=1 Xi! s 2yPni=1 Xi2 ) dθ! dy
+(172)
+= c√2πΓ(n/2) Zy>0 yn/2−1e−y
+
+
+s
+π
+n+c2
+2
+exp
+
+
+
+(Pni=1 Xi)2 2yPni=1 Xi2
+2(n + c2)
+
+
+
+
+ dy (173)
+= c√2πΓ(n/2)
+s
+π
+n+c2
+2
+Z
+y>0
+yn/2−1 exp
+
+−
+
+1 − S2n
+(n + c2)Vn
+
+y
+
+dy (174)
+= cΓ(n/2)
+r
+1
+n + c2 Γ(n/2)
+
+1 − S2n
+(n + c2)Vn
+−n/2
+=
+r
+c2
+n + c2
+
+1 − S2n
+(n + c2)Vn
+−n/2
+. (175)
+This is a valid test martingale.
+While this is a test martingale for Nµ=0, a shifting argument ( Xi → Xi − µ0) yields that
+G(c,µ0)n =
+r
+c2
+n + c2
+
+1 − (Sn − nµ0)2
+(n + c2)(Vn − 2Snµ0 + nµ20)
+−n/2
+(176)
+is a test martingale for Nµ=µ0. Applying Ville’s inequality, with probability at least 1 − α,
+for all n,
+nc2µ20 − 2c2Snµ0 + (n + c2)Vn − S2n
+(n + c2)(nµ20 − 2Snµ0 + Vn) ⩾
+ α2c2
+n + c2
+1/n
+, (177)
+nc2(µ0 − bµn)2 + (n + c2)(Vn − S2n/n)
+(n + c2)(n(µ0 − bµn)2 + Vn − S2n/n) ⩾
+ α2c2
+n + c2
+1/n
+, (178)
+( α2c2
+n + c2
+1/n
+(n + c2)n − nc2
+)
+(µ0 − bµn)2 ⩽
+(
+(n + c2)
+ 
+1 −
+ α2c2
+n + c2
+1/n!)
+(Vn − S2n/n),
+(179)
+(µ0 − bµn)2 ⩽
+(n + c2)
+
+1 −
+
+α2c2
+n+c2
+1/n
+
+α2c2
+n+c2
+1/n
+(n + c2) − c2
+
+X 2n − bµ2n
+
+(180)
+This concludes the proof.
+Proof of Proposition 4.8. First, under any distribution with mean µ and variance σ2, note
+that Tn−1 = √n − 1 Sn−nµ√nVn−S2n and s2n = Vn/n − S2n/n2. We replace Tn−1√n−1 by Tn−1√n−1 + µsn in (33)
+to have
+Hn =
+r
+2π
+n
+ 
+1 +
+ Tn−1√n − 1 + µsn 2!n/2 , (181)
+log Hn
+n = log(2π/n)2n + 12 log
+ 
+1 +
+ Tn−1√n − 1 + µsn 2! . (182)
+46
+It is well known s2n converges to σ2 almost surely. Therefore Tn−1√n−1 = bµn−µsn converges almost
+surely to 0. These imply that log Hnn converges almost surely to 12 log(1 + µ2/σ2).
+Second, under any P ∈ Nµ=0, let δ >0. By (33) we have
+P (Hn > δ) = P
+ 
+T 2n−1 >
+  δ2n
+2π
+1/n
+− 1
+!
+(n − 1)
+| {z }
+≳log n
+!
+≲ P (T 21 > log n). (183)
+The underbraced term grows logarithmically because n1/n − 1 = log nn + O(n−2). The “ ≲”
+holds because the tail of Student’s t-distribution strictly decreases when the DOF increases.
+So P (Hn > δ) goes to 0 as n → ∞, concluding that {Hn} converges to 0 in probability. By
+Wang and Ramdas [2023a, Proposition A.14], an ENSM converges almost surely, so {Hn}
+converges to 0 almost surely. The proof is complete.
+Proof of Proposition 4.10. First, under any distribution with mean µ and variance σ2, we
+replace in (41) Tn−1√n−1 by Tn−1√n−1 + µsn ,
+G(c)n =
+r
+c2
+n + c2
+
+1 + nn+c2 Tn−1√n−1 + µsn 2 + c2
+
+
+n/2
+, (184)
+log G(c)n
+n =
+log( c2n+c2 )
+2n + 12 log
+
+1 + nn+c2 Tn−1√n−1 + µsn 2 + c2
+
+ . (185)
+As in the proof of Proposition 4.8, Tn−1√n−1 converges to 0 and s2n to σ2 almost surely. Therefore
+log G(c)n
+n converges a.s. to 12 log(1 + µ2/σ2).
+Second, under any P ∈ Nµ=0, let δ >0. By (41) we have
+P (G(c)n > δ) = P
+ 
+n
+(n+c2)(n−1)
+T 2n−1 + c2
+>
+ (n + c2)δ2
+c2
+1/n
+− 1
+| {z }
+≳ log nn
+!
+≲ P (T 21 > log n), (186)
+which converges to 0. So {G(c)n } converges to 0 in probability. It thus also converges to 0
+almost surely due to Doob’s martingale convergence theorem, concluding the proof.
+Proof of Theorem 4.11. Let us put a half Gaussian prior on θ,
+dπ+(θ)
+dθ = 1 θ⩾0
+c√
+2π e−c2θ2/2, (187)
+47
+and define the martingale
+Z
+hθ,nπ+(dθ) (188)
+=
+Z
+θ>0
+e−nθ2/2
+Γ(n/2)
+ Z
+y>0
+yn/2−1 exp
+(
+−y + θ
+ nX
+i=1
+Xi
+! s
+2yPn
+i=1 Xi2
+)
+dy
+!
+· π(dθ) (189)
+= c√2πΓ(n/2) Zy>0 yn/2−1e−y  Zθ>0 exp (− n + c22 θ2 + θ  nXi=1 Xi! s 2yPni=1 Xi2 ) dθ! dy
+(190)
+= c√2πΓ(n/2) Zy>0 yn/2−1e−y
+
+
+s
+π
+n+c2
+2
+exp
+
+
+
+(Pni=1 Xi)2 2yPni=1 Xi2
+2(n + c2)
+
+
+ Φ
+
+
+(Pni=1 Xi) q 2yPni=1 Xi2√
+n + c2
+
+
+
+ dy
+(191)
+= c√2πΓ(n/2)
+s
+π
+n+c2
+2
+Z
+y>0
+yn/2−1 exp
+
+−
+
+1 − S2n
+(n + c2)Vn
+
+y
+
+Φ
+ 
+Sn
+√2yp
+(n + c2)Vn
+!
+dy (192)
+(Chernoff approximation 1 − Φ(x) ⩽ e−(x∨0)2/2 (193)
+⩾ c√2πΓ(n/2)
+s
+π
+n+c2
+2
+Z
+y>0
+yn/2−1 exp
+
+−
+
+1 − S2n
+(n + c2)Vn
+
+y
+ 
+1 − exp
+
+− (Sn ∨ 0)2y(n + c2)Vn  dy
+(194)
+= c√2πΓ(n/2)
+s
+π
+n+c2
+2
+ Z
+y>0
+yn/2−1 exp
+
+−
+
+1 − S2n
+(n + c2)Vn
+
+y
+
+dy (195)
+−
+Z
+y>0
+yn/2−1 exp
+ (S2n − (Sn ∨ 0)2)y
+(n + c2)Vn − 1
+
+dy
+
+(196)
+= cΓ(n/2)
+r
+1
+n + c2
+(
+Γ(n/2)
+
+1 − S2n
+(n + c2)Vn
+−n/2
+− Γ(n/2)
+
+1 − (Sn ∧ 0)2
+(n + c2)Vn
+−n/2)
+(197)
+=
+r
+c2
+n + c2
+ 
+1 − S2n
+(n + c2)Vn
+−n/2
+−
+
+1 − (Sn ∧ 0)2
+(n + c2)Vn
+−n/2!
+=: G(c−)n /2. (198)
+Since π+ is of total measure 1 /2, Gc+n is an e-process for Nµ=0.
+Proof of Theorem 4.12. Recall that Theorem 4.9 states that, letting
+radiusn =
+vuuuuuuuut (n + c2) 1 −  α2c2n+c2 1/n α2c2n+c2 1/n (n + c2) − c2 ∨ 0| {z }
+ρ2(n,c,α)
+·
+
+X 2n − bµ2n
+
+| {z }
+s2n(X)
+, (199)
+then the intervals
+[bµn(X) ± radiusn] (200)
+form a (1 − α)-CS for µ over N .
+Now, suppose {Xn} iid∼ P with mean µ and variance σ2. By Waudby-Smith et al. [2024,
+Lemma A.1], there exist {Gn} iid∼ N0,1 such that
+bµn(X) − µ = sn(X)bµn(G) + εn, ε n = o(
+p
+log logn/n). (201)
+48
+Applying Theorem 4.9 to {Gn}, we have, with probability at least 1 − α,
+|bµn(G)| ⩽ ρ(n, c, α)sn(G). (202)
+Therefore, with probability at least 1 − α,
+|bµn(X) − µ| ⩽ |bµn(X) − µ − sn(X)bµn(G)| + sn(X)|bµn(G)| (203)
+⩽ |εn| + sn(X)ρ(n, c, α)sn(G). (204)
+Finally, we recall from our previous analysis that sn(X)ρ(n, c, α) = O(
+p
+log n/n) = Ω( εn),
+therefore
+|εn| + sn(X)ρ(n, c, α)sn(G)
+sn(X)ρ(n, c, α) = |εn|sn(X)ρ(n, c, α) + sn(G) a.s.− →0 + 1 = 1, (205)
+concluding that (200) is an (1 − α)-asymptotic CS over L2.
+C.4 Proofs for Optimality
+Proof of Theorem 6.1. Fix an L ∈ L, σ >0, and α >0. Let
+µ = σ
+q
+(1 − (1 − 3α)2)−2/n − 1. (206)
+First, consider the distribution N0,µ2+σ2. We have
+N0,µ2+σ2(0 < L(X1, . . . , Xn)) ⩽ α. (207)
+Next, consider the distribution Nµ,σ2. Since DKL(N ⊗nµ,σ2∥N ⊗n0,µ2+σ2) = n2 log(1 + µ2/σ2), it
+follows from Bretagnolle-Huber inequality that
+TV(N ⊗nµ,σ2, N⊗n0,µ2+σ2) ⩽ q1 − exp(−DKL(N ⊗nµ,σ2∥N ⊗n0,µ2+σ2)) = q1 − (1 + µ2/σ2)−n/2. (208)
+Therefore,
+Nµ,σ2(0 < L(X1, . . . , Xn)) ⩽ α +
+q
+1 − (1 + µ2/σ2)−n/2 = α + 1 − 3α = 1 − 2α. (209)
+By the definition of W2α(L, P),
+Nµ,σ2(µ − L(X1, . . . , Xn) < W2α(L, P)) = 1 − 2α, (210)
+indicating that W2α(L, Nµ,σ2) ⩾ µ = σ
+p
+(1 − (1 − 3α)2)−2/n − 1. Since this holds for any
+lower confidence bound L ∈ Lα,n, we see that
+M −α,n = infL∈Lα,n supP ∈N σ−1(P ) · W2α(L, P) ⩾
+q
+(1 − (1 − 3α)2)−2/n − 1 (211)
+=
+q
+(6α − 9α2)−2/n − 1. (212)
+Proof of Corollary 6.2. Fix a CI = [ L(X1, . . . , Xn), U(X1, . . . , Xn)] ∈ Iα,n and consider any
+P ∈ N. First, since L ∈ Lα,n, we have
+P (µ(P ) − L(X1, . . . , Xn) ⩾ W2α(L, P)) = 2α. (213)
+Next, since [ L(X1, . . . , Xn), U(X1, . . . , Xn)] is a (1 − α)-CI,
+P (µ(P ) ⩽ U (X1, . . . , Xn)) ⩾ 1 − α. (214)
+By a union bound,
+P (U (X1, . . . , Xn) − L(X1, . . . , Xn) ⩾ W2α(L, P)) ⩾ α, (215)
+implying that Wα(CI, P) ⩾ W2α(L, P). Therefore Mα,n ⩾ M −α,n by taking a minimax.
+49
+Discussion on Proposition 6.5. Before we present and prove an extended version of
+Proposition 6.5, let us briefly review some key definitions and results of Larsson et al. [2024].
+Let P and Q be mutually equivalent probability measures. Let P ◦◦ be the “bipolar” of the
+measure set P, which contains all sub-probability measures for which any e-value for P is an
+e-value as well. P ◦◦ is thus a superset of P, understood as the “effective null”. If the infimum
+inf P ∈P ◦◦ DKL(Q∥P ) is attained as minimum by some P ∗ ∈ P◦◦, we say that P ∗ is the reverse
+information projection of Q onto the set P. Proposition 2.4, Theorem 3.4, and Theorem 4.1
+of Larsson et al. [2024] jointly state the following.
+Lemma C.2. Let P ∗ be a sub-probability measure such that M ∗ = dQdP ∗ (X1) is an e-value for
+P. Then, the following are equivalent:
+1. P ∗ ∈ P◦◦;
+2. P ∗ is the reverse information projection of Q onto P;
+3. M ∗ is the optimal e-value for P: any e-value M for P satisfies EQ(log M ) ⩽ EQ(log M ∗).
+When this happens, the optimal e-value M ∗ is called the numeraire e-value.
+We have the following statement regarding the reverse information projection and the
+numeraire in t-tests where P = Nµ=0 and Q = Nµ,σ2.
+Proposition C.3 (Reverse information projection and numeraire in the t-test) . The proba-
+bility measure N0,σ2+µ2 attains the following minimum
+DKL(Nµ,σ2∥N0,σ2+µ2) = minP ∈Nµ=0 DKL(Nµ,σ2∥P ) = 12 log(1 + µ2/σ2). (216)
+Further, M ∗ = dNµ,σ2dN0,σ2+µ2 (X1) is an e-value for Nµ=0, thus it is the numeraire e-value and
+N0,σ2+µ2 the reverse information projection of Nµ,σ2 onto Nµ=0. Consequently, any e-value
+M for Nµ=0 has e-power at most
+ENµ,σ2 (log Mn) ⩽ 12 log(1 + µ2/σ2), (217)
+equality if and only if M is the numeraire M ∗.
+Proof of Proposition C.3. Let P = N0,σ20 . Then
+DKL(Nµ,σ2∥P ) = 12 (log σ20 − log σ2) + σ2 + µ22σ20 − 12 . (218)
+As a function of σ20, the above takes minimum when σ20 = σ2 + µ2, in which case the minimum
+is DKL(Nµ,σ2∥N0,σ2+µ2) = 12 log(1 + µ2/σ2).
+50
+Under any P0 = N0,σ20 ∈ P:
+EP0
+ dQ
+dP ∗ (X1)
+
+=
+Z pσ2 + µ2
+σσ0
+√
+2π exp
+
+− (x − µ)2
+2σ2 + x22(σ2 + µ2) − x22σ20  dx (219)
+=
+p
+σ2 + µ2
+σσ0
+√
+2π
+Z
+exp
+
+− µ2σ20 + σ2(σ2 + µ2)2σ2σ20(σ2 + µ2) x2 + µσ2 x − µ22σ2  dx (220)
+=
+p
+σ2 + µ2
+σσ0
+√
+2π ·
+s π
+µ2σ20+σ2(σ2+µ2)
+2σ2σ20(σ2+µ2)
+exp
+
+ µ2/σ4
+4 µ2σ20+σ2(σ2+µ2)2σ2σ20(σ2+µ2) − µ22σ2
+
+ (221)
+= σ2 + µ2p
+µ2σ20 + σ2(σ2 + µ2) exp
+ µ2(σ20 − (σ2 + µ2))
+2(µ2σ20 + σ2(σ2 + µ2))
+
+(222)
+letting z =
+q
+µ2σ20 + σ2(σ2 + µ2) and y = σ2 + µ2 (223)
+= yz exp  z2 − y22z2  = s y2z2 exp 1 − y2z2  ⩽ 1. (224)
+This concludes that the likelihood ratio is an e-value for Nµ=0. The rest of the statement
+follows from Lemma C.2.
+C.5 Proofs for Additional t-Tests
+Proof of Proposition A.6. Following Howard et al. [2021, Proposition 7], letp = exp(λ/2)exp(λ/2)+exp(−λ/2) .
+We can now write the process Bλn as
+Bλn = pn/2+Tn(1 − p)n/2−Tn
+(1/2)n . (225)
+Now, integrating the supermartingale above with p ∼ Beta(a, b),
+B(a,b)n =
+Z 1
+0
+pn/2+Tn(1 − p)n/2−Tn
+(1/2)n/2+Tn(1/2)n/2−Tn · pa−1(1 − p)b−1B(a, b) dp = B(a + n/2 + Tn, b+ n/2 − Tn)(1/2)n B(a, b)
+(226)
+forms a supermartingale as well.
+Next, due to the facts
+1. lim n→∞ log B(αn,βn)n = log ααββ(α+β)α+β for any α, β >0; and
+2. Tn/n → Φ(µ/σ) − 1/2 almost surely,
+we can see that the test supermartingale {B(a,b)n } under some Nµ,σ2 has the following e-power:
+lim
+n→∞
+log(B(a,b)n )
+n = log
+
+Φ(µ/σ)Φ(µ/σ)Φ(−µ/σ)Φ(−µ/σ)
+
+− log(1/2). (227)
+51

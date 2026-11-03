@@ -1,0 +1,994 @@
+arXiv 2604.17251  https://arxiv.org/abs/2604.17251
+
+ORCA — Online Regime Correlation Analyzer
+Boris Kriuk
+Department of Computer Science & Engineering
+Hong Kong University of Science and Technology
+Clear Water Bay, Hong Kong
+bkriuk@connect.ust.hk
+Fedor Kriuk
+Faculty of Engineering & Information Technology
+University of Technology Sydney
+Sydney, New South Wales, Australia
+fedor.kriuk@student.uts.edu.au
+Abstract—Standard risk models reduce the rich dependence
+fabric of financial markets to scalar volatility estimates, dis-
+carding the topological information encoded in cross-asset cor-
+relation networks. We present ORCA (Online Regime Corre-
+lation Analyzer), an end-to-end framework that fuses spectral
+graph theory, random matrix theory, and supervised machine
+learning to deliver calibrated, continuously updated probabil-
+ity estimates for both rally and crash events over a ten-day
+forward horizon. ORCA constructs rolling correlation matrices
+from 24 diversified exchange-traded instruments using three
+parallel estimators operating at different time scales, and extracts
+127 spectral features—including absorption ratios, eigenvalue
+entropy, effective rank, spectral gap, eigenvector concentration
+metrics, and graph-topological descriptors at multiple correlation
+thresholds—which are concatenated with 79 traditional price-
+derived indicators to form a 206-dimensional feature vector. A
+depth-limited Random Forest with balanced sub-sample weight-
+ing is evaluated under a strict eight-fold walk-forward protocol
+with ten-day anti-leakage gaps spanning fifteen years of daily
+US market data. ORCA achieves a Balanced Crisis Detection
+AUC (BCD-AUC=
+p
+AUCrally ×AUC crash) of 0.741, ranking
+first against all baselines. Ablation studies confirm that spectral
+features contribute +10.3 percentage points of AUC for crash
+detection and +5.2 for rally detection relative to traditional fea-
+tures alone, with SHAP analysis revealing that graph-topological
+descriptors—clustering coefficient, edge density, and dominant-
+eigenvalue percentile rank—constitute the three most important
+crash predictors. A backtested ensemble walk-forward strategy
+that maps the joint rally–crash signal space to dynamic equity
+exposure with risk-on/risk-off rotation achieves a Sharpe ratio
+of 1.13, a CAGR of 15.6%, and a maximum drawdown of only
+−7.5%, compared to 3.7% CAGR and−33.7%drawdown for a
+buy-and-hold benchmark.
+Index Terms—financial crisis detection, spectral graph theory,
+random matrix theory, correlation networks, absorption ratio,
+eigenvalue decomposition, walk-forward validation, tail-event
+prediction, regime detection, risk-on/risk-off strategy
+I. INTRODUCTION
+Financial crises are characterised by a distinctive structural
+signature: assets that are normally weakly correlated begin to
+move in lockstep, compressing the eigenvalue spectrum of the
+cross-asset correlation matrix well before headline volatility
+indicators react. Standard risk models such as GARCH-family
+estimators [1, 2] and realised-variance measures [3, 4] are in-
+herently reactive—they quantify the amplitude of price fluctu-
+ations after a shock has materialised. By contrast, the spectral
+properties of correlation networks shift during the formation of
+a crisis: the dominant eigenvalue absorbs an increasing share
+of total variance as herding behaviour intensifies [5, 6, 7],
+the spectral gap between the first and second eigenvalues
+narrows, and the effective rank of the correlation matrix
+collapses, signalling that diversification is evaporating. Despite
+decades of evidence for this phenomenon, most practitioner
+risk systems still reduce the rich, high-dimensional dependence
+fabric of the market to a single scalar—for example the
+VIX or a rolling volatility estimate—discarding precisely the
+topological information that could serve as an early warning.
+This paper presents ORCA (Online Regime Correlation
+Analyzer), an end-to-end framework that fuses spectral graph
+theory, random matrix theory, and supervised machine learning
+to deliver calibrated, continuously updated probability esti-
+mates for both rally and crash events over a ten-day forward
+horizon. ORCA operates on a diversified universe of 24
+exchange-traded instruments spanning broad equities, sector
+ETFs, international markets, fixed income, commodities, and
+currencies. At each time step the system constructs rolling
+correlation matrices using three parallel estimators—a 60-day
+window capturing short-term regime dynamics, a 120-day win-
+dow for medium-term structure, and an exponentially weighted
+estimator with a 30-day half-life for adaptive smoothing—
+and extracts 127 spectral features from their eigendecompo-
+sitions. These features include absorption ratios at multiple
+ranks (k∈ {1,3,5}), eigenvalue entropy and the derived
+effective rank, the Marchenko–Pastur excess [8, 9] measuring
+the distance from the random-matrix null, the spectral gap
+as a herding indicator, the condition number as a fragility
+proxy, eigenvector concentration metrics such as the Herfind-
+ahl index of the first-component loadings, graph-topological
+descriptors (edge density, clustering coefficient, and degree
+centralisation computed at correlation thresholds of 0.3, 0.5,
+and 0.7), and multi-horizon dynamics capturing the rate of
+change,z-scores, and acceleration of all key spectral quantities
+over 5-, 10-, and 20-day lookbacks. The spectral features are
+augmented with 79 traditional price-derived indicators—multi-
+horizon returns, realised and GARCH volatility, downside
+semi-deviation, maximum intra-window loss, momentum ra-
+tios, RSI, drawdown depth, higher moments (skewness, kurto-
+sis), volatility-of-volatility, and cross-asset return dispersion—
+yielding a combined feature vector of 206 dimensions.
+The unified feature set is ingested by a Random Forest
+classifier [10] with 200 trees, a maximum depth of six, and
+balanced sub-sample class weighting, pre-processed via a Ro-
+bustScaler. The model is evaluated under a strict walk-forward
+arXiv:2604.17251v1  [cs.CE]  19 Apr 2026
+protocol: eight expanding-window folds span fifteen years of
+daily US market data, each with a three-year training window,
+a six-month test window, and a ten-day gap between them
+to prevent look-ahead contamination. All reported metrics are
+purely out-of-sample. ORCA produces two outputs per time
+step: the probability that the S&P 500 appreciates by more
+than 3% within ten trading days (rally detection, base rate
+≈7.7%), and the probability that the index suffers an intra-
+window drawdown exceeding 7% (crash detection, base rate
+≈0.9%). We evaluate both tasks jointly via the Balanced
+Crisis Detection AUC (BCD-AUC= pAUCrally ×AUC crash),
+which penalises models that are strong in only one direction.
+On walk-forward evaluation ORCA achieves a BCD-AUC
+of 0.741, ranking first against competitive baselines. Ablation
+studies isolate the contribution of the spectral feature family
+at +5.2% AUC for rally detection and +10.3% AUC for crash
+detection relative to traditional features alone, confirming that
+correlation network structure encodes crisis precursors absent
+from price-based indicators. A backtested ensemble walk-
+forward strategy that maps the two-dimensional signal space
+of rally and crash ranks to a continuous equity exposure—
+incorporating risk-on/risk-off rotation into a defensive port-
+folio of Gold, intermediate Treasuries, and the US dollar—
+translates these signals into a Sharpe ratio of 1.13, a CAGR of
+15.6%, and a maximum drawdown of only−7.5%, compared
+to 3.7% CAGR and−33.7%drawdown for a buy-and-hold
+benchmark, while operating at an average leverage of just
+0.39×.
+The principal contributions of this work are threefold:
+1) Spectral–traditional feature fusion for balanced crisis de-
+tection. We formalise the integration of 127 eigenvalue-
+derived, eigenvector-derived, and graph-topological fea-
+tures extracted from three parallel correlation estimators
+with 79 classical technical indicators, and demonstrate
+through ablation that the spectral family contributes
+an additional +10.3% AUC for crash detection and
++5.2% AUC for rally detection—gains that are espe-
+cially pronounced for the rarest and most economically
+consequential tail events.
+2) Walk-forward evaluation with the BCD-AUC metric. We
+design an eight-fold temporal cross-validation protocol
+with strict ten-day anti-leakage gaps and propose the
+BCD-AUC as a single summary statistic that rewards
+models effective in both the rally and crash directions,
+addressing the common pitfall of one-sided optimisation
+in crisis prediction literature. ORCA ranks first on this
+metric against all baselines evaluated.
+3) A deployable, auto-refreshing monitoring system with
+three-dimensional correlation-network visualisation. We
+implement the entire pipeline as a self-contained server
+that ingests live market data, re-estimates the full model
+every twelve hours, and serves an interactive dashboard
+in which the 24-asset correlation graph is rendered
+as a force-directed network with eigenvector-centrality-
+scaled nodes and correlation-coloured edges, enabling
+real-time visual monitoring of dependence topology
+shifts that would be invisible in conventional tabular
+displays.
+II. RELATEDWORK
+The detection and prediction of financial crises has attracted
+sustained attention across quantitative finance, econometrics,
+and more recently machine learning. The literature most
+relevant to ORCA spans four broad areas: volatility modelling
+and forecasting, spectral analysis of financial correlation matri-
+ces, network-based approaches to systemic risk, and machine
+learning for tail-event prediction.
+V olatility-based crisis detection has its roots in the au-
+toregressive conditional heteroskedasticity family of models,
+beginning with the original ARCH specification [1] and its
+generalised extension GARCH [2], which model time-varying
+variance as a function of past squared returns and past
+conditional variances. These models and their many variants,
+including exponential GARCH, threshold GARCH, and re-
+alised GARCH, remain the dominant paradigm for risk mea-
+surement in practice. The heterogeneous autoregressive model
+of realised volatility [3, 4] decomposes volatility into daily,
+weekly, and monthly components and has proven surprisingly
+effective as a simple linear benchmark. A common limitation
+of all such approaches is that they are fundamentally univariate
+and reactive: they measure the amplitude of price fluctuations
+after a shock has arrived rather than detecting the structural
+dependence shifts that precede it.
+Random matrix theory provides the theoretical foundation
+for distinguishing genuine correlation structure from estima-
+tion noise in large-dimensional covariance matrices [6, 7, 9,
+11, 12]. The Marchenko–Pastur distribution [8] characterises
+the bulk eigenvalue density of a purely random correlation
+matrix, allowing researchers to identify eigenvalues that ex-
+ceed the noise threshold as carriers of true economic signal.
+The absorption ratio, defined as the fraction of total variance
+explained by a fixed number of top eigenvalues, was proposed
+as a measure of systemic risk [5, 13, 14] on the grounds
+that rising absorption indicates increasing market fragility.
+Empirical studies have documented that the absorption ratio
+tends to increase in the months preceding major drawdowns
+and that its rate of change can serve as a timing indicator.
+ORCA extends this line of work by extracting a much richer
+set of spectral descriptors, including eigenvalue entropy, ef-
+fective rank, spectral gap, condition number, and eigenvector
+concentration, and by combining features from three parallel
+correlation estimators operating at different time scales.
+Network-based approaches to systemic risk model the fi-
+nancial system as a graph in which nodes represent assets
+or institutions and edges encode pairwise dependence, typi-
+cally measured by correlation, partial correlation, or mutual
+information [15, 16, 17]. Minimum spanning trees and planar
+maximally filtered graphs [18, 19, 20, 21, 22, 23] have been
+used to track the evolving topology of equity markets, reveal-
+ing that network structure becomes more centralised and less
+modular during stress episodes. Granger-causality networks
+and transfer-entropy graphs [24, 25] have been employed to
+study directional spillovers across markets and sectors. More
+recently, graph neural networks have been applied to financial
+contagion modelling, learning node and edge representations
+that capture higher-order relational structure. ORCA draws
+on graph-topological features such as edge density, clustering
+coefficient, and degree centralisation computed at multiple
+correlation thresholds, but deliberately avoids deep graph
+neural architectures in favour of interpretable ensemble tree
+models, which are better suited to the small-sample, non-
+stationary setting of crisis prediction.
+Machine learning methods for tail-event forecasting have
+explored gradient-boosted trees [26], support vector machines,
+long short-term memory networks [27], and attention-based
+architectures for predicting market crashes, drawdowns, and
+volatility spikes [28, 29, 30, 31]. A recurring finding is
+that ensemble tree methods such as random forests [10]
+and gradient-boosted machines [26, 32] offer a favourable
+bias-variance trade-off for tabular financial data, particularly
+when combined with careful temporal cross-validation to
+avoid look-ahead bias. Class imbalance, which is acute for
+extreme events occurring on fewer than one percent of trading
+days, is typically addressed through resampling, cost-sensitive
+learning, or threshold optimisation. ORCA adopts balanced
+sub-sample class weighting within a depth-limited random
+forest and evaluates performance using threshold-free metrics,
+specifically AUC and average precision, to avoid artefacts
+introduced by arbitrary probability cut-offs.
+Despite the breadth of prior work, no existing framework
+simultaneously extracts multi-scale spectral and topological
+features from dynamic correlation networks, fuses them with
+traditional volatility and momentum indicators, evaluates both
+rally and crash detection under a unified balanced metric, and
+deploys the resulting model as a continuously refreshing mon-
+itoring system with real-time network visualisation. ORCA
+aims to fill this gap.
+III. METHODOLOGY
+This section describes the ORCA pipeline in full: the multi-
+asset universe and correlation estimation scheme, the spec-
+tral and topological feature extraction, the traditional feature
+baseline, the supervised classification model, the walk-forward
+evaluation protocol, and the regime-to-exposure mapping used
+in the backtested strategy.
+A. Data and correlation estimation
+ORCA ingests daily adjusted close prices for a uni-
+verse of 24 exchange-traded instruments spanning six asset
+classes: broad equities (S&P 500, Nasdaq 100, Russell 2000),
+US sector ETFs (Financials, Energy, Technology, Healthcare,
+Utilities, Consumer Staples, Consumer Discretionary, Indus-
+trials, Materials), international equities (Developed Interna-
+tional, Emerging Markets, Europe, Japan), fixed income (Long
+Treasury, Intermediate Treasury, Investment-Grade Corporate,
+High Yield), commodities (Gold, Oil), currencies (US Dollar),
+and real estate (REITs). Prices are sourced via the EODHD
+API with local disk caching and cover fifteen years of history.
+After forward-filling gaps of up to five trading days and
+dropping residual missing values, daily simple returns are
+computed asr i,t =p i,t/pi,t−1 −1.
+At each datetwe construct three parallel estimates of the
+n×ncross-asset correlation matrix, wheren= 24. The first
+uses a 60-day trailing window of returns, the second a 120-day
+window, and the third an exponentially weighted covariance
+estimator with a half-life of 30 days. For the exponential
+estimator the covariance matrixΣ ewmt is computed from the
+exponentially weighted second moments and then converted
+to correlation form by normalising each entry by the product
+of the corresponding marginal standard deviations. All three
+matrices are symmetrised, have their diagonals set to unity, and
+are clipped to the interval[−1,1]. The use of multiple windows
+allows the model to distinguish short-term regime shifts (60-
+day) from medium-term structural changes (120-day) and to
+benefit from the adaptive smoothing properties of exponential
+weighting.
+B. Spectral and topological features
+Given a correlation matrixC t ∈R n×n, we com-
+pute its eigendecompositionC t =VΛV ⊤, whereΛ =
+diag(λ1, . . . , λn)withλ 1 ≥λ 2 ≥ · · · ≥λn ≥0. The
+eigenvalues and eigenvectors give rise to the following feature
+families.
+The absorption ratio at rankkmeasures the fraction of total
+variance captured by the topkeigenvalues:
+ARk =
+Pk
+i=1 λiPn
+i=1 λi
+.
+We extractAR 1,AR 3, andAR 5. A rising absorption ratio
+indicates that variance is concentrating into fewer dimensions,
+a hallmark of herding behaviour.
+The eigenvalue entropy quantifies how uniformly variance
+is distributed across the spectrum:
+H=−
+nX
+i=1
+˜λi ln ˜λi , ˜λi = λiPn
+j=1 λj
+.
+From the entropy we derive the effective rank asER =
+exp(H), which can be interpreted as the number of indepen-
+dent risk factors driving the market. During normal conditions
+ERis close ton; during crises it collapses toward unity.
+The spectral gap is defined as the ratio of the first to
+the second eigenvalue,γ=λ 1/λ2. A large gap indicates
+that a single market factor dominates, consistent with panic-
+driven co-movement. We also record the condition number
+κ=λ 1/λn, the Marchenko–Pastur excessλ 1 −(1 +
+p
+n/T) 2
+whereTis the estimation window length, eigenvalue standard
+deviation, skewness, and kurtosis.
+From the first eigenvectorv 1 = (v1,1, . . . , v1,n)⊤ we extract
+concentration metrics. The normalised absolute loadings are
+¯v1,i =|v 1,i|/ Pj |v1,j|, from which we compute the Herfind-
+ahl indexHHI = Pi ¯v21,i, loading entropy, maximum load-
+ing, and the dispersion between the top-quartile and bottom-
+quartile loadings. High concentration signals that the crisis
+factor loads unevenly on the asset universe, while uniform
+loadings indicate broad market stress.
+For the graph-topological features, we threshold the absolute
+correlation matrix at levelsτ∈ {0.3,0.5,0.7}to obtain binary
+adjacency matricesA (τ)ij =1[|C t,ij|> τ]with zeros on
+the diagonal. At each threshold we compute edge density,
+mean degree, degree standard deviation, maximum degree, the
+number of isolated nodes, Freeman degree centralisation, and
+the global clustering coefficient
+C(τ) =
+P
+i
+P
+j<k A(τ)ij A(τ)jk A(τ)ik
+P
+i
+ d(τ)i
+2
+ ,
+whered (τ)i = Pj A(τ)ij is the degree of nodei. We additionally
+record aggregate correlation statistics: mean, median, and
+maximum absolute correlation, correlation standard deviation
+and skewness, and the fraction of pairs exceeding 0.50 and
+0.70.
+To capture the dynamics of regime transitions, we compute
+for each of eight key spectral quantities — the dominant
+eigenvalue, its variance share, the rank-one absorption ratio,
+eigenvalue entropy, effective rank, mean absolute correlation,
+edge density at 0.50, and clustering coefficient at 0.50 — a
+set of temporal derivatives over horizons of 5, 10, and 20
+trading days: percentage rate of change, absolute difference,
+and a rolling z-score computed against a window of twice
+the horizon length. We also record the acceleration (second
+difference) and a 252-day trailing percentile rank for each
+quantity. The idea yields a dynamics feature set that tracks not
+only the level but also the speed and acceleration of spectral
+regime change.
+All spectral, eigenvector, topological, and dynamics features
+are extracted from each of the three correlation estimators,
+producing a total of 127 features [33].
+C. Traditional features
+To provide a competitive baseline and to supply the model
+with price-level information absent from the correlation spec-
+trum, we construct 79 traditional features from the S&P 500
+price series and the multi-asset return panel. These include
+multi-horizon returns at 1, 5, 10, 20, and 60 days; rolling
+annualised volatility at 5, 10, 20, and 60 days; volatility
+ratios (5-to-20 day, 10-to-60 day); a GARCH(1,1) conditional
+volatility estimate with parametersα= 0.1,β= 0.85;
+downside semi-deviation over 20 days; maximum single-day
+loss over 5 and 20 days; price-to-moving-average ratios at
+10, 20, and 50 days; a 14-day RSI; drawdown from rolling
+20-day and 60-day highs; rolling skewness and kurtosis at
+20 and 60 days; volatility-of-volatility (the 20-day standard
+deviation of 5-day rolling volatility); and cross-asset return
+dispersion, defined as the cross-sectional standard deviation
+of daily returns across all 24 instruments. The 127 spectral
+features and 79 traditional features are concatenated into a
+combined vector of 206 dimensions.
+Daily Prices (24 assets)
+Returnsr i,t
+60d Corr 120d Corr EWM Corr
+Eigenvalue
+feat.
+Eigenvector
+feat.
+T opology
+feat.
+Dynamics (ROC, z, accel)
+127 spectral feat.
+T raditional
+(79 feat.)
+Concatenation (206 dim)
+RobustScaler
+Random Forest (200 trees, d=6)
+WF-CV (8 folds)
+ˆprally ˆpcrash
+126d Percentile Rank
+Regime
+(5 states)
+Exposure
+wt ∈[0,1.5]
+RORO Strategy
+BCD-AUC
+Fig. 1: ORCA architecture. Solid arrows show primary data
+flow; dashed arrows indicate cross-estimator feature sharing.
+WF-CV denotes walk-forward cross-validation.
+D. Classification model and walk-forward protocol
+The combined feature vector is pre-processed with a robust
+scaler (centering on the median and scaling by the inter-
+quartile range) and any residual non-finite values are replaced
+with zero. The scaled features are fed to a Random Forest
+classifier [10, 34] with 200 trees, a maximum depth of six, a
+minimum of 30 samples per leaf, a minimum of 60 samples
+per split, and balanced sub-sample class weighting to address
+the severe class imbalance inherent in rare-event prediction.
+We define two binary prediction targets on the S&P 500
+over a ten-day forward window. The rally target equals one
+when the endpoint return exceeds three percent. The crash
+target equals one when the maximum intra-window drawdown
+from the entry price exceeds seven percent. Base rates are
+approximately 7.7 percent and 0.9 percent respectively.
+Evaluation follows a strict walk-forward protocol with eight
+expanding-window folds. Each fold uses a three-year training
+window, a ten-day gap to prevent information leakage from
+overlapping return horizons, and a six-month out-of-sample
+test window. Folds are laid out sequentially with no overlap
+between test periods. All metrics reported in this paper are
+computed exclusively on out-of-sample predictions aggregated
+across folds.
+We evaluate both tasks with threshold-free metrics to avoid
+artefacts from arbitrary probability cut-offs: AUC-ROC and
+average precision. For precision, recall, and F1 we select the
+probability threshold that maximises F1 on the out-of-sample
+predictions, clipped to the interval[0.05,0.95]. To obtain a
+single summary statistic that rewards models effective in both
+directions, we define the Balanced Crisis Detection AUC:
+BCD-AUC =
+p
+AUCrally ×AUC crash .
+The geometric mean penalises models that are strong in only
+one direction more severely than the arithmetic mean would,
+which is desirable because a system that detects rallies but
+misses crashes (or vice versa) is of limited practical value.
+E. Regime assignment
+The raw rally and crash probabilities produced by the model
+are converted to 126-day rolling percentile ranks,ˆr t and
+ˆct respectively, to make thresholds stationary across market
+regimes. A deterministic rule maps the two-dimensional signal
+(ˆrt,ˆct)to one of five regimes: Normal, Rally, Caution, Eupho-
+ria, and Crisis. The same pair is mapped to a continuous equity
+exposure multiplierw t ∈[0,1.5]via a piecewise function
+calibrated on conditional return analysis. Whenˆr t ≥0.90or
+ˆct ≥0.60the exposure is set to zero, as the former condition
+corresponds to rally overconfidence (which historically pre-
+cedes negative returns) and the latter to elevated crash risk.
+When0.78≤ˆr t <0.90andˆc t <0.40the exposure reaches
+its maximum of1.5×. Intermediate zones receive exposures
+of 0.3, 0.7, 1.0, or 1.2 depending on the crash rank.
+IV. EXPERIMENTS
+A. Experimental Setup
+We evaluate ORCA on 15 years of daily US market data
+(2009–2024) spanning 24 diversified assets across six cate-
+gories: broad equity (SPY , QQQ, IWM), sectors (XLF, XLE,
+XLK, XLV , XLU, XLP, XLY , XLI, XLB, XLRE), international
+(EFA, EEM, VGK, EWJ), fixed income (TLT, IEF, LQD,
+HYG), commodities (GLD, USO), and currencies (UUP).
+The universe is intentionally heterogeneous: spectral features
+derive their predictive power from cross-asset correlation dy-
+namics, and a diverse universe ensures the correlation matrix
+captures genuine structural shifts rather than sector-specific
+noise.
+All data are sourced from the EODHD API using adjusted
+close prices. Returns are computed as simple daily percentage
+changes. Missing values are forward-filled up to five days;
+remaining gaps are dropped. The final aligned dataset contains
+approximately 3,750 trading days across all 24 assets.
+B. Prediction Tasks
+We define two complementary binary classification tasks
+designed to capture extreme tail events in both directions:
+Rally Detection.The target is 1 if the S&P 500 rises by
+more than 3% at any point within the next 10 trading days,
+measured as the endpoint returnr t+10 =P t+10/Pt−1>0.03.
+The base rate is approximately 7.7%, making it a moderately
+imbalanced problem.
+TABLE I: Walk-forward out-of-sample classification perfor-
+mance. BCD-AUC = √Rally×Crash. Bold indicates best per
+column.
+Model Rally Crash BCD-AUC #Feat
+ORCA (Ours) 0.7720.7110.741206
+HAR-RV 0.6960.7630.729 4
+SMA V olatility 0.682 0.671 0.676 9
+Traditional RF 0.736 0.608 0.669 27
+Spectral Only RF 0.620 0.666 0.643 179
+Turbulence 0.647 0.565 0.605 5
+Crash Detection.The target is 1 if the S&P 500 experiences
+a maximum intra-window drawdown exceeding 7% within
+the next 10 trading days, computed asmin k∈[1,10] Pt+k/Pt −
+1<−0.07. The base rate is approximately 0.9%, making
+it a severely imbalanced rare-event detection problem. The
+drawdown formulation is deliberately more conservative than
+an endpoint return measure: it captures intra-period stress that
+an end-of-window snapshot would miss.
+These two tasks are evaluated jointly through the Balanced
+Crisis Detection AUC (BCD-AUC), defined as the geometric
+mean of the per-task AUC-ROC scores:
+BCD-AUC=
+p
+AUCrally ×AUC crash
+Such metric penalises models that excel in one direction at the
+expense of the other, rewarding balanced detection capability.
+C. Walk-Forward Validation Protocol
+Temporal data prohibits standard cross-validation. We em-
+ploy a strict walk-forward protocol with anti-leakage guaran-
+tees:
+1)Training window:3 years.
+2)Gap:10 trading days between the end of training and
+start of testing, preventing any target leakage from the
+10-day prediction horizon.
+3)Test window:6 months .
+4)Folds:8 non-overlapping test periods .
+All reported metrics are computed exclusively on out-of-
+sample test folds. No hyperparameter tuning is performed on
+test data; the Random Forest configuration (200 trees, max
+depth 6, minimum 30 samples per leaf, balanced subsample
+class weighting) is fixed across all folds and tasks.
+D. Baselines
+We compare ORCA against five competitive baselines
+spanning the spectrum from simple heuristics to established
+financial econometric models [2, 4, 5, 13].
+E. Classification Results
+Table I presents the walk-forward out-of-sample results for
+all six models across both tasks.
+ORCA achieves the highest BCD-AUC of 0.741, ranking
+first overall. Several patterns merit discussion.
+First, ORCA dominates on Rally AUC (0.772) by a sub-
+stantial margin over all baselines, with the nearest competitor
+TABLE II: Ablation study: spectral feature contribution.∆is
+measured relative to the Traditional-only baseline.
+Feature Set Rally AUC Crash AUC∆vs Trad.
+Traditional only 0.736 0.608 baseline
+Spectral only 0.620 0.666−0.116 / +0.058
+Combined (ORCA) 0.772 0.711 +0.036 / +0.103
+being Traditional RF at 0.736. Such observation suggests that
+the combination of spectral and traditional features captures
+upside momentum signals that neither feature set achieves
+alone.
+Second, HAR-RV achieves the highest Crash AUC (0.763),
+outperforming ORCA’s 0.711 on this individual task. How-
+ever, HAR-RV’s Rally AUC of 0.696 is significantly weaker,
+resulting in a lower BCD-AUC of 0.729. The pattern illustrates
+the value of the geometric mean metric: HAR-RV’s crash
+detection strength comes at the cost of rally detection, while
+ORCA maintains high performance on both.
+Third, the Turbulence baseline performs poorly on both
+tasks (BCD-AUC 0.605), despite being a widely cited crisis
+indicator. It is consistent with the understanding that Maha-
+lanobis distance is a coincident rather than leading indicator:
+it peaks during crises rather than before them.
+F . Ablation Study
+Table II isolates the contribution of spectral features by
+comparing three feature configurations under identical model
+and walk-forward validation settings.
+The spectral contribution is asymmetric. For crash detection,
+adding spectral features yields a +10.3 pp AUC improvement
+over traditional features alone (0.608→0.711), the largest
+single-source gain in our experiments. Spectral features alone
+already surpass traditional features on this task (0.666vs.
+0.608), confirming the central hypothesis: correlation network
+structure encodes crisis precursors absent from univariate
+price-based features.
+For rally detection, spectral features in isolation underper-
+form (0.620vs.0.736), yet the combination yields the best
+score (0.772, a +3.6 pp lift). This complementarity demon-
+strates that spectral features supply orthogonal regime-level
+context rather than duplicating momentum or volatility signals.
+Fig. 2 quantifies this asymmetry through aggregated SHAP
+importance. In absolute terms the crash model’s total SHAP
+mass is dominated by spectral/graph features (0.376vs.0.151),
+translating to a 71.3% relative share—nearly three times
+the contribution of traditional features. The rally model is
+more balanced (spectral 46.9%, traditional 53.1%), consistent
+with the ablation table: traditional momentum and drawdown
+features carry the rally signal while spectral features refine it
+at the margin.
+G. Feature Importance Analysis
+We examine individual feature importances and their nonlin-
+ear dependence profiles via SHAP [35], computed on pooled
+out-of-sample predictions across all eight walk-forward folds.
+Fig. 2: Aggregated SHAP importance by feature family.
+Fig. 3 ranks the top 20 features by mean absolute SHAP
+value for each task. For rally detection the four most im-
+portant features—drawdown (60d),price_to_sma_50,
+max_loss_5d, anddrawdown_20d—are all price-based,
+capturing mean-reversion after distress. Spectral features
+appear lower in the ranking, contributing refinement
+rather than primary signal. For crash detection the pic-
+ture inverts: the top three features—clustering_coef_
+t50_pct_252d,edge_density_t50_pct_252d, and
+lambda_1_ratio_pct_252d—are all graph-topological,
+tracking how tightly correlated the asset universe has become
+relative to its recent history. Traditional features such as
+price_to_sma_50andvolatility_20dremain rele-
+vant but occupy secondary ranks.
+Fig. 4 presents SHAP dependence plots for the six most in-
+fluential features side-by-side for rally (left column) and crash
+(right column). Each point is one out-of-sample observation;
+colour runs from blue (low feature value) to red (high).
+Drawdown (60d).For rallies the relationship is a hockey
+stick: SHAP is near zero when the drawdown is shallow
+but swings sharply positive as it deepens beyond≈ −4σ,
+capturing mean-reversion after distress. For crashes the depen-
+dence inverts: deep prior drawdowns produce negative SHAP,
+reflecting the empirical regularity that severe crashes rarely
+compound without a bounce.
+Price-to-SMA 50.Prices well below the 50-day average
+generate positive rally SHAP (mean-reversion) and mildly pos-
+itive crash SHAP (further distress risk). Prices well above the
+average suppress rally SHAP, consistent with overextension.
+Max loss 5d.Extreme recent losses generate strongly nega-
+tive rally SHAP—acute stress suppresses immediate rebound
+predictions—but only weakly affect crash SHAP, indicating
+the crash model relies more on structural (spectral) than acute
+(price) stress signals.
+Volatility 20d.Both tasks show a two-regime structure.
+At low volatility SHAP fans out widely (uninformative). At
+elevated volatility (>4σ) both models assign positive SHAP:
+vol spikes signal a tail event, but the direction is resolved by
+other features.
+Clustering coefficient.This is the most striking depen-
+dence. For crash detection a sharp cliff appears: when the 252-
+day percentile drops below≈ −0.4(the correlation network
+becoming unusually sparse), SHAP plummets to−0.06to
+Fig. 3: SHAP feature importance for rally (left) and crash (right) detection. The crash model is led by graph-topological features
+while the rally model is led by traditional drawdown and momentum features.
+−0.08, strongly pushing toward the crash class. A sudden
+collapse in clustering signals decorrelation among formerly
+linked assets—a hallmark of liquidity withdrawal and flight-
+to-quality dynamics preceding market dislocations. For rally
+detection the same feature has near-zero SHAP across its
+range, confirming its crash-specific informational content.
+Drawdown 20d.Mirrors the 60-day version with shorter
+memory. Deep 20-day drawdowns yield positive rally SHAP,
+but for crash detection the effect is attenuated relative to
+spectral features, reinforcing the hierarchy: network topology
+matters more than short-term drawdowns for anticipating sys-
+temic events.
+Taken together the SHAP analysis provides a mechanistic
+explanation for the ablation results: traditional drawdown and
+momentum features dominate rally detection because rallies
+are price-driven mean-reversion events. Crashes, by contrast,
+are preceded by structural shifts in the correlation network—
+captured by clustering coefficients, edge densities, and eigen-
+value ratios—invisible to univariate price statistics. ORCA
+succeeds because it fuses both signal families, recreating
+balanced tail-event detection in either direction.
+V. TRADINGSTRATEGY
+To assess whether ORCA’s classification signals translate
+into economically meaningful portfolio decisions, we design
+a single backtested trading strategy—Ensemble Walk-Forward
+Optimisation (Ensemble WFO)—that converts rally and crash
+probability estimates into dynamic equity exposure. The strat-
+egy achieves a Sharpe ratio of 1.13 with 15.6% CAGR and
+only−7.5% maximum drawdown, compared to the S&P 500
+Fig. 4: SHAP dependence plots for the six most important features. Left column: rally detection; right column: crash detection.
+Thex-axis is the scaled feature value; they-axis is the SHAP contribution.
+Fig. 5: Live demonstration of regime-dependent portfolio
+behaviour. High-exposure periods capture equity upside, while
+defensive periods rotate into safe-haven assets during mar-
+ket drawdowns. Can be found at https://orca.boriskriuk-
+powered.com/
+buy-and-hold benchmark’s Sharpe of 0.09 and−33.7% max-
+imum drawdown over the same period.
+A. Signal Processing
+The raw model outputsˆprally,t andˆpcrash,t are non-stationary:
+their distributional properties shift across walk-forward folds
+as market regimes evolve. To normalise these signals, we apply
+a rolling 126-day (6-month) percentile rank transformation:
+Rt = rank
+ 
+ˆpt within{ˆpt−125, . . . ,ˆpt}
+
+126
+yielding rally rankR rt ∈[0,1]and crash rankR ct ∈[0,1]. This
+transformation is strictly causal—it uses only past and current
+predictions—and adapts to the local signal distribution without
+requiring any forward-looking calibration.
+B. Two-Dimensional Exposure Map
+Rather than treating rally and crash signals independently,
+we define a joint exposure functionw t =f(R rt , Rct )∈[0,1.5]
+based on conditional return analysis of each percentile bin
+computed on the inner training period. The key empirical
+findings are threefold. First, rally rank above the 90th per-
+centile corresponds to annualised conditional returns of ap-
+proximately−189%, making it the single strongest sell signal
+in the dataset; this counterintuitive result reflects the tendency
+for extreme model confidence to coincide with overextended
+markets. Second, crash rank above the 60th percentile corre-
+sponds to annualised conditional returns between−17%and
+−25%. Third, rally rank in the 78th–90th percentile range with
+simultaneously low crash rank produces the highest positive
+conditional returns, representing a high-conviction regime.
+The exposure map assigns: zero equity allocation when
+either rally rank exceeds 0.90 (euphoria exit) or crash rank
+exceeds 0.60 (danger exit); maximum allocation of1.5×when
+rally rank is in the sweet spot (0.78–0.90) with crash rank
+below 0.40; and intermediate allocations of1.2×,1.0×,0.7×,
+or0.3×for other combinations depending on the joint signal
+state. Exposure decisions are held for a minimum of 8 trading
+days to control turnover. Sell signals override the holding
+period: if an exit condition triggers during a hold, the position
+is closed immediately.
+C. Risk-On / Risk-Off Rotation
+When equity exposure is reduced below1.0×, the freed cap-
+ital is not held in zero-yielding cash but rotated into a defensive
+portfolio comprising 50% Gold (GLD), 30% intermediate
+Treasuries (IEF), and 20% US Dollar index (UUP). Such
+assets were selected for their empirical tendency to appreciate
+during equity stress events via flight-to-quality dynamics.
+Over the evaluation period, the defensive portfolio delivered
+a positive CAGR with low volatility and negative correlation
+to equities during drawdown episodes. This risk-on/risk-off
+(RORO) mechanism converts what would otherwise be dead
+capital into a positive-return allocation, materially improving
+the strategy’s Sharpe ratio compared to a cash-when-defensive
+alternative.
+D. Ensemble Parameter Averaging
+To mitigate overfitting to any single parameter configu-
+ration, we perform a grid search over the exposure map
+thresholds on the first 55% of the signal history (the in-
+ner training period). The grid spans rally entry and exit
+thresholds, crash entry and exit thresholds, base exposure
+levels, holding periods, bounce allocations, and leverage limits,
+totalling approximately 50,000 parameter combinations. Each
+combination is evaluated by its in-sample Sharpe ratio after
+accounting for transaction costs (5 bps per unit of position
+change) and leverage costs (50 bps annually on exposure
+exceeding1.0×).
+Rather than selecting the single best parameter set—which
+would maximise in-sample Sharpe but degrade out-of-sample
+through overfitting—we average the positions generated by the
+top-20 parameter sets [36]. The ensemble averaging smooths
+idiosyncratic parameter sensitivity and reduces the train-to-
+test Sharpe degradation that is characteristic of single-best
+selection. The ensemble approach is motivated by the observa-
+tion that multiple high-performing parameter sets agree on the
+broad directional signal (exit during euphoria and crash danger,
+enter during the rally sweet spot) while disagreeing on exact
+threshold placement, so averaging preserves the consensus
+signal while discarding noise.
+E. Performance
+Table III reports the out-of-sample performance of the
+Ensemble WFO strategy against the S&P 500 buy-and-hold
+benchmark.
+The Ensemble WFO strategy achieves a Sharpe ratio of
+1.13 with a CAGR of 15.6% and maximum drawdown of
+only−7.5%, yielding a Calmar ratio of 2.09. The benchmark
+delivers a Sharpe of 0.09, a CAGR of 3.7%, and suffers a
+−33.7%maximum drawdown (Calmar 0.11). The strategy
+thus multiplies risk-adjusted return by more than12×while
+reducing the worst peak-to-trough loss by approximately4.5×.
+The Calmar ratio of 2.09 deserves particular emphasis.
+It indicates that the strategy generates more than twice its
+TABLE III: Backtesting performance (out-of-sample). Trans-
+action costs of 5 bps per trade and leverage costs of
+50 bps/year are included. Risk-free rate assumed at 4%.
+Strategy Sharpe CAGR Max DD Calmar
+Ensemble WFO (Ours) 1.13 15.6%−7.5% 2.09
+Buy & Hold (Benchmark) 0.09 3.7%−33.7% 0.11
+worst drawdown in annual returns. For a systematic strategy
+operating over a 10-year out-of-sample window that includes
+the 2020 COVID crash and the 2022 rate-hiking drawdown,
+such level of drawdown control is a direct consequence of the
+crash detection signal’s lead time.
+F . Regime Behaviour
+Decomposing returns by exposure regime reveals the mech-
+anism underlying the strategy’s performance. During high-
+equity periods (exposure≥0.8×), the strategy captures
+equity upside with average annualised returns exceeding the
+benchmark. During defensive periods (exposure≤0.01×),
+the RORO portfolio generates small positive returns from
+Gold and Treasuries appreciation while the equity market is
+declining. The strategy’s ability to distinguish the regimes
+ex ante—allocating aggressively when both rally and crash
+signals are favourable, and rotating defensively when either
+indicates danger—is the primary source of alpha.
+VI. CONCLUSION
+This paper introduced ORCA, an end-to-end framework that
+fuses spectral and topological features extracted from dynamic
+cross-asset correlation networks with traditional price-based
+indicators to produce calibrated, continuously updated prob-
+ability estimates for both rally and crash events over a ten-
+day forward horizon. By constructing three parallel correlation
+estimators at different time scales and decomposing them
+into 127 spectral, eigenvector, and graph-topological features,
+ORCA captures the structural dependence shifts that precede
+tail events—information that is invisible to conventional uni-
+variate volatility measures.
+On a strict eight-fold walk-forward evaluation spanning
+fifteen years of daily US market data with ten-day anti-leakage
+gaps, ORCA achieves a Balanced Crisis Detection AUC of
+0.741, ranking first against all baselines including HAR-RV ,
+turbulence indices, and traditional-feature-only random forests.
+Ablation studies isolate the spectral feature contribution at
++10.3 percentage points of AUC for crash detection and
++5.2 for rally detection, confirming the central hypothesis
+that correlation network structure encodes crisis precursors
+absent from price-based indicators. SHAP analysis reveals a
+clear division of labour: traditional drawdown and momentum
+features dominate rally detection as a mean-reversion signal,
+while graph-topological descriptors—clustering coefficient,
+edge density, and eigenvalue ratios—drive crash detection by
+capturing the collapse of diversification that precedes systemic
+stress. A backtested ensemble walk-forward strategy translates
+these signals into a Sharpe ratio of 1.13 with a maximum
+drawdown of only−7.5%, compared to−33.7%for buy-and-
+hold, demonstrating that the classification gains carry genuine
+economic value.
+Several limitations should be acknowledged. The model is
+evaluated exclusively on US equity markets; whether the spec-
+tral features retain their predictive power in other geographies
+or asset classes remains to be tested. The Random Forest
+architecture, while interpretable and robust to overfitting at
+the chosen depth, may leave performance on the table relative
+to gradient-boosted or deep-learning alternatives that could ex-
+ploit higher-order feature interactions. The backtested strategy,
+despite ensemble averaging and transaction cost modelling,
+is inherently subject to the caveats of historical simulation:
+execution slippage, liquidity constraints, and regime changes
+not represented in the sample could erode live performance.
+Future work will pursue several directions: extending the
+asset universe to include international markets and alternative
+asset classes to test the generality of spectral crisis precursors;
+replacing the static Random Forest with online or incremen-
+tally trained models that adapt to non-stationary feature dis-
+tributions; incorporating higher-frequency intraday correlation
+dynamics to improve signal timeliness; and conducting live
+paper-trading validation to measure the gap between back-
+tested and realised performance. Overall, ORCA demonstrates
+that the spectral properties of cross-asset correlation networks
+constitute a rich and under-exploited source of predictive
+information for balanced tail-event detection, and that fusing
+this structural signal with classical technical indicators yields
+economically significant improvements in both crisis anticipa-
+tion and portfolio risk management.
+REFERENCES
+[1] R. F. Engle, “Autoregressive conditional heteroscedas-
+ticity with estimates of the variance of united kingdom
+inflation,”Econometrica, vol. 50, no. 4, pp. 987–1007,
+1982.
+[2] T. Bollerslev, “Generalized autoregressive conditional
+heteroskedasticity,”Journal of Econometrics, vol. 31,
+no. 3, pp. 307–327, 1986.
+[3] T. G. Andersen, T. Bollerslev, F. X. Diebold, and
+P. Labys, “Modeling and forecasting realized volatility,”
+Econometrica, vol. 71, no. 2, pp. 579–625, 2003.
+[4] F. Corsi, “A simple approximate long-memory model of
+realized volatility,”Journal of Financial Econometrics,
+vol. 7, no. 2, pp. 174–196, 2009.
+[5] M. Kritzman, Y . Li, S. Page, and R. Rigobon, “Principal
+components as a measure of systemic risk,”The Journal
+of Portfolio Management, vol. 37, no. 4, pp. 112–126,
+2011.
+[6] L. Laloux, P. Cizeau, J.-P. Bouchaud, and M. Potters,
+“Noise dressing of financial correlation matrices,”Phys-
+ical Review Letters, vol. 83, no. 7, pp. 1467–1470, 1999.
+[7] V . Plerou, P. Gopikrishnan, B. Rosenow, L. A. N. Amaral,
+T. Guhr, and H. E. Stanley, “Random matrix approach to
+cross correlations in financial data,”Physical Review E,
+vol. 65, no. 6, p. 066126, 2002.
+[8] V . A. Marˇcenko and L. A. Pastur, “Distribution of eigen-
+values for some sets of random matrices,”Mathematics
+of the USSR-Sbornik, vol. 1, no. 4, pp. 457–483, 1967.
+[9] J.-P. Bouchaud and M. Potters, “Financial applications
+of random matrix theory: A short review,”arXiv preprint
+arXiv:0910.1205, 2009, also appeared as Chapter 40 in
+The Oxford Handbook of Random Matrix Theory, 2015.
+[10] L. Breiman, “Random forests,”Machine Learning,
+vol. 45, no. 1, pp. 5–32, 2001.
+[11] V . Plerou, P. Gopikrishnan, B. Rosenow, L. A. N. Amaral,
+and H. E. Stanley, “Universal and nonuniversal properties
+of cross correlations in financial time series,”Physical
+Review Letters, vol. 83, no. 7, pp. 1471–1474, 1999.
+[12] O. Ledoit and M. Wolf, “Honey, i shrunk the sample co-
+variance matrix,”The Journal of Portfolio Management,
+vol. 30, no. 4, pp. 110–119, 2004.
+[13] M. Kritzman and Y . Li, “Skulls, financial turbulence, and
+risk management,”Financial Analysts Journal, vol. 66,
+no. 5, pp. 30–41, 2010.
+[14] D. Bisias, M. Flood, A. W. Lo, and S. Valavanis, “A
+survey of systemic risk analytics,”Annual Review of
+Financial Economics, vol. 4, pp. 255–296, 2012.
+[15] M. Billio, M. Getmansky, A. W. Lo, and L. Pelizzon,
+“Econometric measures of connectedness and systemic
+risk in the finance and insurance sectors,”Journal of
+Financial Economics, vol. 104, no. 3, pp. 535–559, 2012.
+[16] T. Preis, D. Y . Kenett, H. E. Stanley, D. Helbing, and
+E. Ben-Jacob, “Quantifying the behavior of stock corre-
+lations under market stress,”Scientific Reports, vol. 2, p.
+752, 2012.
+[17] D. Y . Kenett, T. Preis, G. Gur-Gershgoren, and E. Ben-
+Jacob, “Quantifying meta-correlations in financial mar-
+kets,”Europhysics Letters (EPL), vol. 99, no. 3, p. 38001,
+2012.
+[18] R. N. Mantegna, “Hierarchical structure in financial
+markets,”The European Physical Journal B, vol. 11,
+no. 1, pp. 193–197, 1999.
+[19] M. Tumminello, T. Aste, T. Di Matteo, and R. N.
+Mantegna, “A tool for filtering information in complex
+systems,”Proceedings of the National Academy of Sci-
+ences, vol. 102, no. 30, pp. 10 421–10 426, 2005.
+[20] G. Bonanno, G. Caldarelli, F. Lillo, and R. N. Mantegna,
+“Topology of correlation-based minimal spanning trees
+in real and model markets,”Physical Review E, vol. 68,
+no. 4, p. 046130, 2003.
+[21] J.-P. Onnela, A. Chakraborti, K. Kaski, and J. Kert ´esz,
+“Dynamic asset trees and black monday,”Physica A:
+Statistical Mechanics and its Applications, vol. 324, no.
+1–2, pp. 247–252, 2003.
+[22] J.-P. Onnela, A. Chakraborti, K. Kaski, J. Kert ´esz, and
+A. Kanto, “Dynamics of market correlations: Taxonomy
+and portfolio analysis,”Physical Review E, vol. 68, no. 5,
+p. 056110, 2003.
+[23] F. Pozzi, T. Di Matteo, and T. Aste, “Spread of risk across
+financial markets: Better to invest in the peripheries,”
+Scientific Reports, vol. 3, p. 1665, 2013.
+[24] F. X. Diebold and K. Yilmaz, “Better to give than to
+receive: Predictive directional measurement of volatility
+spillovers,”International Journal of Forecasting, vol. 28,
+no. 1, pp. 57–66, 2012.
+[25] ——, “On the network topology of variance decompo-
+sitions: Measuring the connectedness of financial firms,”
+Journal of Econometrics, vol. 182, no. 1, pp. 119–134,
+2014.
+[26] T. Chen and C. Guestrin, “XGBoost: A scalable tree
+boosting system,” inProceedings of the 22nd ACM
+SIGKDD International Conference on Knowledge Dis-
+covery and Data Mining. ACM, 2016, pp. 785–794.
+[27] S. Hochreiter and J. Schmidhuber, “Long short-term
+memory,”Neural Computation, vol. 9, no. 8, pp. 1735–
+1780, 1997.
+[28] S. P. Chatzis, V . Siakoulis, A. Petropoulos,
+E. Stavroulakis, and N. Vlachogiannakis, “Forecasting
+stock market crisis events using deep and statistical
+machine learning techniques,”Expert Systems with
+Applications, vol. 112, pp. 353–371, 2018.
+[29] B. Kriuk, L. Ng, and Z. Al Hossain, “DeepSupp:
+Attention-driven correlation pattern analysis for dynamic
+time series support and resistance levels identification,”
+arXiv preprint arXiv:2507.01971, 2025.
+[30] A. Alkhamov and B. Kriuk, “To what extent can public
+equity indices statistically hedge real purchasing power
+loss in compounded structural emerging-market crises?
+an explainable ML-based assessment,”arXiv preprint
+arXiv:2507.13055, 2025.
+[31] W. Shi, M. Zhang, R. Zhang, S. Chen, and Z. Zhan,
+“Change detection based on artificial intelligence: State-
+of-the-art and challenges,”Remote Sensing, vol. 12,
+no. 10, p. 1688, 2020.
+[32] B. Kriuk, “MorphBoost: Self-organizing universal gradi-
+ent boosting with adaptive tree morphing,”arXiv preprint
+arXiv:2511.13234, 2025.
+[33] B. Kriuk and F. Kriuk, “POSEIDON: Physics-optimized
+seismic energy inference and detection operating net-
+work,”arXiv preprint arXiv:2601.02264, 2026.
+[34] F. Pedregosa, G. Varoquaux, A. Gramfort, V . Michel,
+B. Thirion, O. Grisel, M. Blondel, P. Prettenhofer,
+R. Weiss, V . Dubourg, J. Vanderplas, A. Passos, D. Cour-
+napeau, M. Brucher, M. Perrot, and ´E. Duchesnay,
+“Scikit-learn: Machine learning in Python,”Journal of
+Machine Learning Research, vol. 12, pp. 2825–2830,
+2011.
+[35] S. M. Lundberg and S.-I. Lee, “A unified approach to
+interpreting model predictions,” inAdvances in Neural
+Information Processing Systems, vol. 30. Curran Asso-
+ciates, Inc., 2017, pp. 4765–4774.
+[36] B. Kriuk, K. Sulamanidze, and F. Kriuk, “ELENA:
+Epigenetic learning through evolved neural adaptation,”
+Evolutionary Intelligence, vol. 18, no. 50, 2025.

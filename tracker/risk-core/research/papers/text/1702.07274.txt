@@ -1,0 +1,1743 @@
+arXiv 1702.07274  https://arxiv.org/abs/1702.07274
+
+Rotting Bandits
+Nir Levine
+Electrical Engineering Department
+The Technion
+Haifa 32000, Israel
+levin.nir1@gmail.com
+Koby Crammer
+Electrical Engineering Department
+The Technion
+Haifa 32000, Israel
+koby@ee.technion.ac.il
+Shie Mannor
+Electrical Engineering Department
+The Technion
+Haifa 32000, Israel
+shie@ee.technion.ac.il
+Abstract
+The Multi-Armed Bandits (MAB) framework highlights the trade-off between
+acquiring new knowledge (Exploration) and leveraging available knowledge (Ex-
+ploitation). In the classical MAB problem, a decision maker must choose an arm at
+each time step, upon which she receives a reward. The decision maker’s objective
+is to maximize her cumulative expected reward over the time horizon. The MAB
+problem has been studied extensively, speciﬁcally under the assumption of the
+arms’ rewards distributions being stationary, or quasi-stationary, over time. We
+consider a variant of the MAB framework, which we termedRotting Bandits, where
+each arm’s expected reward decays as a function of the number of times it has been
+pulled. We are motivated by many real-world scenarios such as online advertis-
+ing, content recommendation, crowdsourcing, and more. We present algorithms,
+accompanied by simulations, and derive theoretical guarantees.
+1 Introduction
+One of the most fundamental trade-offs in stochastic decision theory is the well celebrated Exploration
+vs. Exploitation dilemma. Should one acquire new knowledge on the expense of possible sacriﬁce in
+the immediate reward (Exploration), or leverage past knowledge in order to maximize instantaneous
+reward (Exploitation)? Solutions that have been demonstrated to perform well are those which
+succeed in balancing the two. First proposed by Thompson [1933] in the context of drug trials, and
+later formulated in a more general setting by Robbins [1985], MAB problems serve as a distilled
+framework for this dilemma. In the classical setting of the MAB, at each time step, the decision maker
+must choose (pull) between a ﬁxed number of arms. After pulling an arm, she receives a reward
+which is a realization drawn from the arm’s underlying reward distribution. The decision maker’s
+objective is to maximize her cumulative expected reward over the time horizon. An equivalent, more
+typically studied, is the regret, which is deﬁned as the difference between the optimal cumulative
+expected reward (under full information) and that of the policy deployed by the decision maker.
+MAB formulation has been studied extensively, and was leveraged to formulate many real-world
+problems. Some examples for such modeling are online advertising [Pandey et al., 2007], routing of
+packets [Awerbuch and Kleinberg, 2004], and online auctions [Kleinberg and Leighton, 2003].
+Most past work (Section 6) on the MAB framework has been performed under the assumption that
+the underlying distributions are stationary, or possibly quasi-stationary. In many real-world scenarios,
+31st Conference on Neural Information Processing Systems (NIPS 2017), Long Beach, CA, USA.
+arXiv:1702.07274v4  [stat.ML]  2 Nov 2017
+this assumption may seem simplistic. Speciﬁcally, we are motivated by real-world scenarios where
+the expected reward of an arm decreases over time instances that it has been pulled. We term this
+variant Rotting Bandits. For motivational purposes, we present the following two examples.
+• Consider an online advertising problem where an agent must choose which ad (arm) to present
+(pull) to a user. It seems reasonable that the effectiveness (reward) of a speciﬁc ad on a user
+would deteriorate over exposures. Similarly, in the content recommendation context, Agarwal et al.
+[2009] showed that articles’ CTR decay over amount of exposures.
+• Consider the problem of assigning projects through crowdsourcing systems [Tran-Thanh et al.,
+2012]. Given that the assignments primarily require human perception, subjects may fall into
+boredom and their performance would decay (e.g., license plate transcriptions [Du et al., 2013]).
+As opposed to the stationary case, where the optimal policy is to always choose some speciﬁc arm, in
+the case of Rotting Bandits the optimal policy consists of choosing different arms. This results in the
+notion of adversarial regret vs. policy regret [Arora et al., 2012] (see Section 6). In this work we
+tackle the harder problem of minimizing the policy regret.
+The main contributions of this paper are the following:
+• Introducing a novel, real-world oriented MAB formulation, termed Rotting Bandits.
+• Present an easy-to-follow algorithm for the general case, accompanied with theoretical guarantees.
+• Reﬁne the theoretical guarantees for the case of existing prior knowledge on the rotting models,
+accompanied with suitable algorithms.
+The rest of the paper is organized as follows: in Section 2 we present the model and relevant
+preliminaries. In Section 3 we present our algorithm along with theoretical guarantees for the general
+case. In Section 4 we do the same for the parameterized case, followed by simulations in Section 5.
+In Section 6 we review related work, and conclude with a discussion in Section 7.
+2 Model and Preliminaries
+We consider the problem of Rotting Bandits (RB); an agent is givenK arms and at each time step
+t = 1, 2,.. one of the arms must be pulled. We denote the arm that is pulled at time step t as
+i (t)∈ [K] ={1,..,K}. When armi is pulled for thenth time, the agent receives a time independent,
+σ2 sub-Gaussian random reward,rt, with meanµi (n).1
+In this work we consider two cases: (1) There is no prior knowledge on the expected rewards, except
+for the ‘rotting’ assumption to be presented shortly, i.e., a non-parametric case (NPC). (2) There is
+prior knowledge that the expected rewards comprised of an unknown constant part and a rotting part
+which is known to belong to a set of rotting models, i.e., a parametric case (PC).
+LetNi (t) be the number of pulls of armi at timet not including this round’s choice (Ni (1) = 0),
+and Π the set of all sequences i (1),i (2),.. , where i (t)∈ [K],∀t∈ N. i.e., π∈ Π is an inﬁnite
+sequence of actions (arms), also referred to as a policy. We denote the arm that is chosen by policy
+π at timet asπ (t). The objective of an agent is to maximize the expected total reward in time T ,
+deﬁned for policyπ∈ Π by,
+J (T ;π) = E
+[ T∑
+t=1
+µπ(t)
+(
+Nπ(t) (t) + 1
+)
+]
+(1)
+We consider the equivalent objective of minimizing the regret in timeT deﬁned by,
+R (T ;π) = max
+˜π∈Π
+{J (T ; ˜π)}− J (T ;π). (2)
+Assumption 2.1. (Rotting)∀i∈ [K],µi (n) is positive, and non-increasing inn.
+1Our results hold for pulls-number dependent variancesσ2 (n), by upper bound themσ2≥σ2 (n),∀n. It
+is fairly straightforward to adapt the results to pulls-number dependent variances, but we believe that the way
+presented conveys the setting in the clearest way.
+2
+2.1 Optimal Policy
+Letπmax be a policy deﬁned by,
+πmax (t)∈ argmax
+i∈[K]
+{µi (Ni (t) + 1)} (3)
+where, in a case of tie, break it randomly.
+Lemma 2.1. πmax is an optimal policy for the RB problem.
+Proof: See Appendix B of the supplementary material.
+3 Non-Parametric Case
+In the NPC setting for the RB problem, the only information we have is that the expected rewards
+sequences are positive and non-increasing in the number of pulls. The Sliding-Window Average
+(SW A) approach is a heuristic for ensuring with high probability that, at each time step, the agent did
+not sample signiﬁcantly sub-optimal arms too many times. We note that, potentially, the optimal arm
+changes throughout the trajectory, as Lemma 2.1 suggests. We start by assuming that we know the
+time horizon, and later account for the case we do not.
+Known Horizon
+The idea behind the SW A approach is that after we pulled a signiﬁcantly sub-optimal arm “enough"
+times, the empirical average of these “enough" pulls would be distinguishable from the optimal
+arm for that time step and, as such, given any time step there is a bounded number of signiﬁcantly
+sub-optimal pulls compared to the optimal policy. Pseudo algorithm for SW A is given by Algorithm 1.
+Algorithm 1 SW A
+Input :K,T,α> 0
+Initialize :M←⌈α42/3σ2/3K−2/3T 2/3 ln1/3(√2T)⌉, andNi← 0 for alli∈ [K]
+fort = 1, 2,..,KM do
+Ramp up :i (t) by Round-Robin, receivert, and setNi(t)←Ni(t) + 1 ;r
+Ni(t)
+i(t) ←rt
+end for
+fort =KM + 1,...,T do
+Balance :i (t)∈ argmaxi∈[K]
+{
+1
+M
+∑Ni
+n=Ni−M+1rni
+}
+Update : receivert, and setNi(t)←Ni(t) + 1 ;r
+Ni(t)
+i(t) ←rt
+end for
+Theorem 3.1. Suppose Assumption 2.1 holds. SWA algorithm achieves regret bounded by,
+R
+(
+T ;πSW A)≤(α max
+i∈[K]
+µi (1) +α−1/2
+)
+42/3σ2/3K1/3T 2/3 ln1/3
+(√
+2T
+)
++ 3K max
+i∈[K]
+µi (1)
+(4)
+Proof: See Appendix C.1 of the supplementary material.
+We note that the upper bound obtains its minimum for α =
+(
+2 maxi∈[K]µi (1)
+)−2/3
+, which can
+serve as a way to chooseα if maxi∈[K]µi (1) is known, butα can also be given as an input to SW A
+to allow control on the averaging window size.
+Unknown Horizon
+In this case we use doubling trick in order to achieve the same horizon-dependent rate for the regret.
+We apply the SW A algorithm with a series of increasing horizons (powers of two, i.e.,1, 2, 4,.. ) until
+reaching the (unknown) horizon. We term this Algorithm wSW A (wrapper SW A).
+Corollary 3.1.1. Suppose Assumption 2.1 holds. wSWA algorithm achieves regret bounded by,
+R
+(
+T ;πwSW A)≤(α max
+i∈[K]
+µi (1) +α−1/2
+)
+8σ2/3K1/3T 2/3 ln1/3
+(√
+2T
+)
++ 3K max
+i∈[K]
+µi (1) (log2T + 1) (5)
+Proof: See Appendix C.2 of the supplementary material.
+3
+4 Parametric Case
+In the PC setting for the RB problem, there is prior knowledge that the expected rewards comprised
+of a sum of an unknown constant part and a rotting part known to belong to a set of models, Θ. i.e.,
+the expected reward of armi at itsnth pull is given by,µi (n) =µci +µ (n;θ∗i ), whereθ∗i∈ Θ. We
+denote{θ∗i}[K]i=1 by Θ∗. We consider two cases: The ﬁrst is the asymptotically vanishing case (A V),
+i.e.,∀i :µci = 0. The second is the asymptotically non-vanishing case (ANV), i.e.,∀i :µci∈ R.
+We present a few deﬁnitions that will serve us in the following section.
+Deﬁnition 4.1. For a functionf : N→ R, we deﬁne the functionf⋆↓ : R→ N∪{∞} by the follow-
+ing rule: given ζ∈ R,f⋆↓ (ζ) returns the smallestN∈ N such that∀n≥N :f (n)≤ζ, or∞ if
+suchN does not exist.
+Deﬁnition 4.2. For anyθ1⁄=θ2∈ Θ2, deﬁnedetθ1,θ2,Ddetθ1,θ2 : N→ R as,
+detθ1,θ2 (n) = nσ2(∑n
+j=1µ (j;θ1)−∑nj=1µ (j;θ2))2
+Ddetθ1,θ2 (n) = nσ2(∑⌊n/2⌋
+j=1 [µ (j;θ1)−µ (j;θ2)]−∑nj=⌊n/2⌋+1 [µ (j;θ1)−µ (j;θ2)])2
+Deﬁnition 4.3. Letbal : N∪∞→ N∪∞ be deﬁned at each pointn∈ N as the solution for,
+min α s.t, max
+θ∈Θ
+µ (α;θ)≤ min
+θ∈Θ
+µ (n;θ)
+We deﬁnebal (∞) =∞.
+Assumption 4.1. (Rotting Models) µ (n;θ) is positive, non-increasing in n, and µ (n;θ)∈o (1),
+∀θ∈ Θ, where Θ is a discrete known set.
+We present an example for which, in Appendix E, we demonstrate how the different following
+assumptions hold. By this we intend to achieve two things: (i) show that the assumptions are not
+too harsh, keeping the problem relevant and non-trivial, and (ii) present a simple example on how to
+verify the assumptions.
+Example 4.1. The reward of arm i for its nth pull is distributed as N(µci +n−θ∗i,σ 2). Where
+θ∗i∈ Θ ={θ1,θ 2,...,θ M}, and∀θ∈ Θ : 0.01≤θ≤ 0.49.
+4.1 Closest To Origin (A V)
+The Closest To Origin (CTO) approach for RB is a heuristic that simply states that we hypothesize
+that the true underlying model for an arm is the one that best ﬁts the past rewards. The ﬁtting criterion
+is proximity to the origin of the sum of expected rewards shifted by the observed rewards. Let
+ri1,ri2,..,r iNi(t) be the sequence of rewards observed from armi up until timet. Deﬁne,
+Y (i,t ; Θ) =
+{Ni(t)∑
+j=1
+rij−
+Ni(t)∑
+j=1
+µ (j;θ)
+}
+θ∈Θ
+. (6)
+The CTO approach dictates that at each decision point, we assume that the true underlying rotting
+model corresponds to the following proximity to origin rule (hence the name),
+ˆθi (t) = argmin
+θ∈Θ
+{|Y (i,t ;θ)|}. (7)
+The CTOSIM version tackles the RB problem by simultaneously detecting the true rotting models and
+balancing between the expected rewards (following Lemma 2.1). In this approach, every time step,
+each arm’s rotting model is hypothesized according to the proximity rule (7). Then the algorithm
+simply follows an argmax rule, where least number of pulls is used for tie breaking (randomly
+between an equal number of pulls). Pseudo algorithm for CTOSIM is given by Algorithm 2.
+Assumption 4.2. (Simultaneous Balance and Detection ability)
+bal
+(
+max
+θ1⁄=θ2∈Θ2
+{
+det⋆↓θ1,θ2
+( 1
+16 ln−1 (ζ)
+)})
+∈o (ζ)
+4
+The above assumption ensures that, starting from some horizonT , the underlying models could be
+distinguished from the others, w.p 1− 1/T 2, by their sums of expected rewards, and the arms could
+then be balanced, all within the horizon.
+Theorem 4.1. Suppose Assumptions 4.1 and 4.2 hold. There exists a ﬁnite step T∗SIM, such that
+for all T≥T∗SIM, CTOSIM achieves regret upper bounded by o (1) (which is upper bounded by
+maxθ∈Θ∗µ (1;θ)). Furthermore,T∗SIM is upper bounded by the solution for the following,
+minT
+s.t
+
+
+
+T,b ∈ N∪{ 0},t∈ NK
+∀b,∃t :
+
+
+
+‖t‖1≤T +b
+ti≥ maxθ∈Θ∗
+{
+m∗
+(
+1
+K(T+b)2 ;θ
+)}
+µ (ti + 1;θ∗i )≤ min˜θ∈Θ
+[
+µ
+(
+maxθ∈Θ∗
+{
+m∗
+(
+1
+K(T+b)2 ;θ
+)}
+; ˜θ
+)]
+(8)
+Proof: See Appendix D.1 of the supplementary material.
+Regret upper bounded byo (1) is achieved by proving that w.p of 1− 1/T the regret vanishes, and in
+any case it is still bounded by a decaying term. The shown optimization bound stems from ensuring
+that the arms would be pulled enough times to be correctly detected, and then balanced (following
+the optimal policy, Lemma 2.1). Another upper bound forT∗SIM can be found in Appendix D.1.
+4.2 Differences Closest To Origin (ANV)
+We tackle this problem by estimating both the rotting models and the constant terms of the arms. The
+Differences Closest To Origin (D-CTO) approach is composed of two stages: ﬁrst, detecting the
+underlying rotting models, then estimating and controlling the pulls due to the constant terms. We
+denotea∗ = argmaxi∈[K]{µci}, and ∆i =µca∗−µci.
+Assumption 4.3. (D-Detection ability)
+max
+θ1⁄=θ2∈Θ2
+{
+Ddet⋆↓θ1,θ2 (ϵ)
+}
+≤D (ϵ)<∞, ∀ϵ> 0
+This assumption ensures that for any given probability, the models could be distinguished, by the
+differences (in pulls) between the ﬁrst and second halves of the models’ sums of expected rewards.
+Models Detection
+In order to detect the underlying rotting models, we cancel the inﬂuence of the constant terms. Once
+we do this, we can detect the underlying models. Speciﬁcally, we deﬁne a criterion of proximity to
+the origin based on differences between the halves of the rewards sequences, as follows: deﬁne,
+Z (i,t ; Θ) =
+
+
+⌊Ni(t)/2⌋∑
+j=1
+rij−
+Ni(t)∑
+j=⌊Ni(t)/2⌋+1
+rij
+
+−
+
+
+⌊Ni(t)/2⌋∑
+j=1
+µ (j;θ)−
+Ni(t)∑
+j=⌊Ni(t)/2⌋+1
+µ (j;θ)
+
+.
+(9)
+The D-CTO approach is that in each decision point, we assume that the true underlying model
+corresponds to the following rule,
+ˆθi (t) = argmin
+θ∈Θ
+{|Z (i,t ;θ)|} (10)
+We deﬁne the following optimization problem, indicating the number of samples required for ensuring
+correct detection of the rotting models w.h.p. For some armi with (unknown) rotting modelθ∗i ,
+min m s.t
+{
+P
+(
+ˆθi (l)⁄=θ∗i
+)
+≤p, ∀l≥m
+while pulling only armi.
+(11)
+We denote the solution to the above problem, when we use proximity rule (10), bym∗diff (p;θ∗i ), and
+deﬁnem∗diff (p) = maxθ∈Θ{m∗diff (p;θ)}.
+5
+Algorithm 2 CTOSIM
+Input :K, Θ
+Initialization :Ni = 0,∀i∈ [K]
+fort = 1, 2,..,K do
+Ramp up :i (t) =t ,and updateNi(t)
+end for
+fort =K + 1,..., do
+Detect : determine{ˆθi} by Eq. (7)
+Balance :i (t)∈ argmaxi∈[K]µ
+(
+Ni + 1; ˆθi
+)
+Update :Ni(t)←Ni(t) + 1
+end for
+Algorithm 3 D-CTOUCB
+Input :K, Θ,δ
+Initialization :Ni = 0,∀i∈ [K]
+fort = 1, 2,..,K ×m∗diff (δ/K) do
+Explore :
+i (t) by Round Robin, updateNi(t)
+end for
+Detect : determine{ˆθi} by Eq. (10)
+fort =K×m∗diff (δ/K) + 1,..., do
+UCB :i (t) according to Eq. (12)
+Update :Ni(t)←Ni(t) + 1
+end for
+D-CTOUCB
+We next describe an approach with one decision point, and later on remark on the possibility of
+having a decision point at each time step. As explained above, after detecting the rotting models,
+we move to tackle the constant terms aspect of the expected rewards. This is done in a UCB1-like
+approach [Auer et al., 2002a]. Given a sequence of rewards from armi,{rik}Ni(t)k=1 , we modify them
+using the estimated rotting model ˆθi, then estimate the arm’s constant term, and ﬁnally choose the
+arm with the highest estimated expected reward, plus an upper conﬁdent term. i.e., at timet, we pull
+armi (t), according to the rule,
+i (t)∈ argmax
+i∈[K]
+[
+ˆµci (t) +µ(Ni (t) + 1; ˆθi (t)) +ct,Ni(t)] (12)
+where ˆθi (t) is the estimated rotting model (obtained in the ﬁrst stage), and,
+ˆµci (t) =
+∑Ni(t)
+j=1
+(
+rij−µ(j; ˆθi (t)))
+Ni (t) , c t,s =
+√
+8 ln (t)σ2
+s
+In a case of a tie in the UCB step, it may be arbitrarily broken. Pseudo algorithm for D-CTOUCB is
+given by Algorithm 3, accompanied with the following theorem.
+Theorem 4.2. Suppose Assumptions 4.1, and 4.3 hold. Forδ∈ (0, 1), with probability of at least
+1−δ, D-CTOUCB algorithm achieves regret bounded at timeT by,
+∑
+i∈[K]
+i⁄=a∗
+[
+max
+{
+m∗diff (δ/K),µ⋆↓ (ϵi;θ∗i ), 32σ2 lnT(∆i−ϵi)2}× (∆i +µ (1;θ∗a∗))] +C (Θ∗,{µci}) (13)
+for any sequenceϵi∈ (0, ∆i),∀i⁄=a∗. Where 32σ2 lnT(∆i−ϵi)2 is the only time-dependent factor.
+Proof: See Appendix D.2 of the supplementary material.
+A few notes on the result: Instead of calculatingm∗diff (δ/K), it is possible to use any upper bound
+(e.g., as shown in Appendix E, maxθ1⁄=θ2∈Θ2Ddet⋆↓θ1,θ2( 18 ln−1( 2Kδ )) rounded to higher even
+number). We cannot hope for a better rate than lnT as stochastic MAB is a special case of the RB
+problem. Finally, we can convert the D-CTOUCB algorithm to have a decision point in each step: at
+each time step, determine the rotting models according to proximity rule (10), followed by pulling an
+arm according to Eq. (12). We term this version D-CTOSIM-UCB.
+5 Simulations
+We next compare the performance of the SW A and CTO approaches with benchmark algorithms.
+Setups for all the simulations we use Normal distributions withσ2 = 0.2, andT = 30, 000.
+Non-Parametric:K = 2. As for the expected rewards: µ1 (n) = 0.5,∀n, andµ2 (n) = 1 for its ﬁrst
+7, 500 pulls and 0.4 afterwards. This setup is aimed to show the importance of not relying on the
+6
+Table 1: Number of ‘wins’ and p-values between the different algorithms
+UCB1 DUCB SWUCB wSW A (D-)CTO
+UCB1 <1e-5 <1e-5 <1e-5
+DUCB 100 <1e-5 <1e-5
+SWUCB 100 100 <1e-5
+NP
+wSW A 100 100 100
+UCB1 0.81 <1e-5 <1e-5 <1e-5
+DUCB 55 <1e-5 <1e-5 <1e-5
+SWUCB 15 22 <1e-5 <1e-5
+wSW A 98 99 100 <1e-5
+A V
+CTO 100 100 100 100
+UCB1 0.54 0.83 <1e-5 <1e-5
+DUCB 40 0.91 < 1e-5 <1e-5
+SWUCB 50 50 <1e-5 <1e-5
+wSW A 97 98 97 <1e-5
+ANV
+D-CTO 100 100 100 66
+0
+ 5 0 0 0
+ 1 0 0 0 0
+1 5 0 0 0
+2 0 0 0 0
+2 5 0 0 0
+3 0 0 0 0
+time steps
+0
+5 0 0
+1 0 0 0
+1 5 0 0
+2 0 0 0
+2 5 0 0Regret
+Non-Parametric Case
+UCB1
+DUCB
+SWUCB
+wSWA
+0
+ 5 0 0 0
+ 1 0 0 0 0
+1 5 0 0 0
+2 0 0 0 0
+2 5 0 0 0
+ 3 0 0 0 0
+time steps
+0
+1 0 0
+2 0 0
+3 0 0
+4 0 0
+5 0 0
+6 0 0Regret
+Asymptotically Vanishing Case
+UCB1
+DUCB
+SWUCB
+wSWA
+CTO
+0
+ 5 0 0 0
+ 1 0 0 0 0
+1 5 0 0 0
+2 0 0 0 0
+2 5 0 0 0
+3 0 0 0 0
+time steps
+0
+5 0
+1 0 0
+1 5 0
+2 0 0
+2 5 0
+3 0 0
+3 5 0
+4 0 0
+4 5 0Regret
+Asymptotically Non-Vanishing Case
+UCB1
+DUCB
+SWUCB
+wSWA
+D-CTO
+Figure 1: Average regret. Left: non-parametric. Middle: parametric A V . Right: parametric ANV
+whole past rewards in the RB setting.
+Parametric AV & ANV:K = 10. The rotting models are of the form µ (j;θ) =
+(
+int
+( j
+100
+)
++ 1
+)−θ
+,
+where int(·) is the lower rounded integer, and Θ ={0.1, 0.15,.., 0.4} (i.e., plateaus of length 100,
+with decay between plateaus according to θ). {θ∗i}Ki=1 were sampled with replacement from Θ,
+independently across arms and trajectories.{µci}Ki=1 (ANV) were sampled randomly from [0, 0.5]K.
+Algorithms we implemented standard benchmark algorithms for non-stationary MAB: UCB1 by
+Auer et al. [2002a], Discounted UCB (DUCB) and Sliding-Window UCB (SWUCB) by Garivier and
+Moulines [2008]. We implemented CTOSIM, D-CTOSIM-UCB, and wSW A for the relevant setups. We
+note that adversarial benchmark algorithms are not relevant in this case, as the rewards are unbounded.
+Grid Searches were performed to determine the algorithms’ parameters. For DUCB, following
+Kocsis and Szepesvári [2006], the discount factor was chosen fromγ∈{ 0.9, 0.99,.., 0.999999}, the
+window size for SWUCB fromτ∈{ 1e3, 2e3,.., 20e3}, andα for wSW A from{0.2, 0.4,.., 1}.
+Performance for each of the cases, we present a plot of the average regret over 100 trajectories,
+specify the number of ‘wins’ of each algorithm over the others, and report the p-value of a paired
+T-test between the (end of trajectories) regrets of each pair of algorithms. For each trajectory and two
+algorithms, the ‘winner’ is deﬁned as the algorithm with the lesser regret at the end of the horizon.
+Results the parameters that were chosen by the grid search are as follows: γ = 0.999 for the
+non-parametric case, and 0.999999 for the parametric cases. τ = 4e3, 8e3, and 16e3 for the non-
+parametric, A V , and ANV cases, respectively.α = 0.2 was chosen for all cases.
+The average regret for the different algorithms is given by Figure 1. Table 1 shows the number of
+‘wins’ and p-values. The table is to be read as the following: the entries under the diagonal are the
+number of times the algorithms from the left column ‘won’ against the algorithms from the top row,
+and the entries above the diagonal are the p-values between the two.
+While there is no clear ‘winner’ between the three benchmark algorithms across the different cases,
+wSWA, which does not require any prior knowledge, consistently and signiﬁcantly outperformed
+them. In addition, when prior knowledge was available and CTO SIM or D-CTOUCB-SIM could be
+deployed, they outperformed all the others, including wSW A.
+7
+6 Related Work
+We turn to reviewing related work while emphasizing the differences from our problem.
+Stochastic MAB In the stochastic MAB setting [Lai and Robbins, 1985], the underlying reward
+distributions are stationary over time. The notion of regret is the same as in our work, but the optimal
+policy in this setting is one that pulls a ﬁxed arm throughout the trajectory. The two most common
+approaches for this problem are: constructing Upper Conﬁdence Bounds which stem from the seminal
+work by Gittins [1979] in which he proved that index policies that compute upper conﬁdence bounds
+on the expected rewards of the arms are optimal in this case (e.g., see Auer et al. [2002a], Garivier
+and Cappé [2011], Maillard et al. [2011]), and Bayesian heuristics such as Thompson Sampling
+which was ﬁrst presented by Thompson [1933] in the context of drug treatments (e.g., see Kaufmann
+et al. [2012], Agrawal and Goyal [2013], Gopalan et al. [2014]).
+Adversarial MAB In the Adversarial MAB setting (also referred to as the Experts Problem, see the
+book of Cesa-Bianchi and Lugosi [2006] for a review), the sequence of rewards are selected by an
+adversary (i.e., can be arbitrary). In this setting the notion of adversarial regretis adopted [Auer et al.,
+2002b, Hazan and Kale, 2011], where the regret is measured against the best possible ﬁxed action
+that could have been taken in hindsight. This is as opposed to the policy regret we adopt, where the
+regret is measured against the best sequence of actions in hindsight.
+Hybrid models Some past work consider settings between the Stochastic and the Adversarial settings.
+Garivier and Moulines [2008] consider the case where the reward distributions remain constant over
+epochs and change arbitrarily at unknown time instants, similarly to Yu and Mannor [2009] who
+consider the same setting, only with the availability of side observations. Chakrabarti et al. [2009]
+consider the case where arms can expire and be replaced with new arms with arbitrary expected
+reward, but as long as an arm does not expire its statistics remain the same.
+Non-Stationary MAB Most related to our problem is the so-called Non-Stationary MAB. Originally
+proposed by Jones and Gittins [1972], who considered a case where the reward distribution of a
+chosen arm can change, and gave rise to a sequence of works (e.g., Whittle et al. [1981], Tekin
+and Liu [2012]) which were termed Restless Bandits and Rested Bandits. In the Restless Bandits
+setting, termed by Whittle [1988], the reward distributions change in each step according to a known
+stochastic process. Komiyama and Qin [2014] consider the case where each arm decays according to
+a linear combination of decaying basis functions. This is similar to our parametric case in that the
+reward distributions decay according to possible models, but differs fundamentally in that it belongs
+to the Restless Bandits setup (ours to the Rested Bandits). More examples in this line of work are
+Slivkins and Upfal [2008] who consider evolution of rewards according to Brownian motion, and
+Besbes et al. [2014] who consider bounded total variation of expected rewards. The latter is related to
+our setting by considering the case where the total variation is bounded by a constant, but signiﬁcantly
+differs by that it considers the case where the (unknown) expected rewards sequences are not affected
+by actions taken, and in addition requires bounded support as it uses the EXP3 as a sub-routine. In
+the Rested Bandits setting, only the reward distribution of a chosen arm changes, which is the case
+we consider. An optimal control policy (reward processes are known, no learning required) to bandits
+with non-increasing rewards and discount factor was previously presented (e.g., Mandelbaum [1987],
+and Kaspi and Mandelbaum [1998]). Heidari et al. (2016) consider the case where the reward decays
+(as we do), but with no statistical noise (deterministic rewards), which signiﬁcantly simpliﬁes the
+problem. Another somewhat closely related setting is suggested by Bouneffouf and Feraud [2016], in
+which statistical noise exists, but the expected reward shape is known up to a multiplicative factor.
+7 Discussion
+We introduced a novel variant of theRested Bandits framework, which we termed Rotting Bandits.
+This setting deals with the case where the expected rewards generated by an arm decay (or generally
+do not increase) as a function of pulls of that arm. This is motivated by many real-world scenarios.
+We ﬁrst tackled the non-parametric case, where there is no prior knowledge on the nature of the decay.
+We introduced an easy-to-follow algorithm accompanied by theoretical guarantees.
+We then tackled the parametric case, and differentiated between two scenarios: expected rewards
+decay to zero (A V), and decay to different constants (ANV). For both scenarios we introduced
+8
+suitable algorithms with stronger guarantees than for the non-parametric case: For the A V scenario
+we introduced an algorithm for ensuring, in expectation, regret upper bounded by a term that decays
+to zero with the horizon. For the ANV scenario we introduced an algorithm for ensuring, with high
+probability, regret upper bounded by a horizon-dependent rate which is optimal for the stationary
+case.
+We concluded with simulations that demonstrated our algorithms’ superiority over benchmark
+algorithms for non-stationary MAB. We note that since the RB setting is novel, there are not suitable
+available benchmarks, and so this paper also serves as a benchmark.
+For future work we see two main interesting directions: (i) show a lower bound on the regret for the
+non-parametric case, and (ii) extend the scope of the parametric case to continuous parameterization.
+Acknowledgment The research leading to these results has received funding from the European
+Research Council under the European Union’s Seventh Framework Program (FP/2007-2013) / ERC
+Grant Agreement n. 306638
+References
+D. Agarwal, B.-C. Chen, and P. Elango. Spatio-temporal models for estimating click-through rate. InProceedings
+of the 18th international conference on World wide web, pages 21–30. ACM, 2009.
+S. Agrawal and N. Goyal. Further optimal regret bounds for thompson sampling. In Aistats, pages 99–107, 2013.
+R. Arora, O. Dekel, and A. Tewari. Online bandit learning against an adaptive adversary: from regret to policy
+regret. arXiv preprint arXiv:1206.6400, 2012.
+P. Auer, N. Cesa-Bianchi, and P. Fischer. Finite-time analysis of the multiarmed bandit problem. Machine
+learning, 47(2-3):235–256, 2002a.
+P. Auer, N. Cesa-Bianchi, Y . Freund, and R. E. Schapire. The nonstochastic multiarmed bandit problem.SIAM
+Journal on Computing, 32(1):48–77, 2002b.
+B. Awerbuch and R. D. Kleinberg. Adaptive routing with end-to-end feedback: Distributed learning and
+geometric approaches. In Proceedings of the thirty-sixth annual ACM symposium on Theory of computing,
+pages 45–53. ACM, 2004.
+O. Besbes, Y . Gur, and A. Zeevi. Stochastic multi-armed-bandit problem with non-stationary rewards. In
+Advances in neural information processing systems, pages 199–207, 2014.
+D. Bouneffouf and R. Feraud. Multi-armed bandit problem with known trend. Neurocomputing, 205:16–21,
+2016.
+N. Cesa-Bianchi and G. Lugosi. Prediction, learning, and games. Cambridge university press, 2006.
+D. Chakrabarti, R. Kumar, F. Radlinski, and E. Upfal. Mortal multi-armed bandits. In Advances in Neural
+Information Processing Systems, pages 273–280, 2009.
+S. Du, M. Ibrahim, M. Shehata, and W. Badawy. Automatic license plate recognition (alpr): A state-of-the-art
+review. IEEE Transactions on Circuits and Systems for Video Technology, 23(2):311–325, 2013.
+A. Garivier and O. Cappé. The kl-ucb algorithm for bounded stochastic bandits and beyond. In COLT, pages
+359–376, 2011.
+A. Garivier and E. Moulines. On upper-conﬁdence bound policies for non-stationary bandit problems. arXiv
+preprint arXiv:0805.3415, 2008.
+J. C. Gittins. Bandit processes and dynamic allocation indices. Journal of the Royal Statistical Society. Series B
+(Methodological), pages 148–177, 1979.
+A. Gopalan, S. Mannor, and Y . Mansour. Thompson sampling for complex online problems. InICML, volume 14,
+pages 100–108, 2014.
+E. Hazan and S. Kale. Better algorithms for benign bandits. Journal of Machine Learning Research, 12(Apr):
+1287–1311, 2011.
+H. Heidari, M. Kearns, and A. Roth. Tight policy regret bounds for improving and decaying bandits.
+9
+D. M. Jones and J. C. Gittins. A dynamic allocation index for the sequential design of experiments. University
+of Cambridge, Department of Engineering, 1972.
+H. Kaspi and A. Mandelbaum. Multi-armed bandits in discrete and continuous time. Annals of Applied
+Probability, pages 1270–1290, 1998.
+E. Kaufmann, N. Korda, and R. Munos. Thompson sampling: An asymptotically optimal ﬁnite-time analysis. In
+International Conference on Algorithmic Learning Theory, pages 199–213. Springer, 2012.
+R. Kleinberg and T. Leighton. The value of knowing a demand curve: Bounds on regret for online posted-price
+auctions. In Foundations of Computer Science, 2003. Proceedings. 44th Annual IEEE Symposium on, pages
+594–605. IEEE, 2003.
+L. Kocsis and C. Szepesvári. Discounted ucb. In 2nd PASCAL Challenges Workshop, pages 784–791, 2006.
+J. Komiyama and T. Qin. Time-decaying bandits for non-stationary systems. In International Conference on
+Web and Internet Economics, pages 460–466. Springer, 2014.
+T. L. Lai and H. Robbins. Asymptotically efﬁcient adaptive allocation rules. Advances in applied mathematics,
+6(1):4–22, 1985.
+O.-A. Maillard, R. Munos, G. Stoltz, et al. A ﬁnite-time analysis of multi-armed bandits problems with
+kullback-leibler divergences. In COLT, pages 497–514, 2011.
+A. Mandelbaum. Continuous multi-armed bandits and multiparameter processes. The Annals of Probability,
+pages 1527–1556, 1987.
+S. Pandey, D. Agarwal, D. Chakrabarti, and V . Josifovski. Bandits for taxonomies: A model-based approach. In
+SDM, pages 216–227. SIAM, 2007.
+H. Robbins. Some aspects of the sequential design of experiments. In Herbert Robbins Selected Papers, pages
+169–177. Springer, 1985.
+A. Slivkins and E. Upfal. Adapting to a changing environment: the brownian restless bandits. In COLT, pages
+343–354, 2008.
+C. Tekin and M. Liu. Online learning of rested and restless bandits. IEEE Transactions on Information Theory,
+58(8):5588–5611, 2012.
+W. R. Thompson. On the likelihood that one unknown probability exceeds another in view of the evidence of
+two samples. Biometrika, 25(3/4):285–294, 1933.
+L. Tran-Thanh, S. Stein, A. Rogers, and N. R. Jennings. Efﬁcient crowdsourcing of unknown experts using
+multi-armed bandits. In European Conference on Artiﬁcial Intelligence, pages 768–773, 2012.
+P. Whittle. Restless bandits: Activity allocation in a changing world. Journal of applied probability, pages
+287–298, 1988.
+P. Whittle et al. Arm-acquiring bandits. The Annals of Probability, 9(2):284–292, 1981.
+J. Y . Yu and S. Mannor. Piecewise-stationary bandit problems with side observations. InProceedings of the 26th
+Annual International Conference on Machine Learning, pages 1177–1184. ACM, 2009.
+10
+A Hoeffding’s Inequality for Sub-Gaussian RVs
+LetX1,..,X n be independent, mean-zero,σ2i -sub-Gaussian random variables. Then for allt≥ 0,
+P
+( n∑
+i=1
+Xi≥t
+)
+≤ exp
+{
+− t2
+2∑ni=1σ2i
+}
+(14)
+B Optimal Policy
+B.1 Proof of Lemma 2.1
+In this section we show thatπmax, deﬁned by Eq. (3) is an optimal policy for the RB problem.
+Assume on the contrary, thatπmax is not an optimal policy. Thus, there exists a time horizon,T , for
+which there exists some other policyπcand that satisﬁesJ(T ;πcand)>J (T ;πmax).
+Letm be the ﬁrst time step in whichπcand deviates fromπmax, sinceJ(T ;πcand)>J (T ;πmax) we
+infer thatm≤T (i.e., there is such time step). Let ˜π be a policy deﬁned by,
+˜π (t) =
+
+
+
+πcand (t), ift<m
+argmaxi∈[K]{µ (Ni (m) + 1;θ∗i )}, ift =m
+πcand (t− 1), ift>m
+where if there exist more than one member in argmaxi∈[K]{µ (Ni (m) + 1;θ∗i )}, ˜π chooses the
+same action asπmax. That is, ˜π mimicsπcand until time stepm, then plays according to argmax rule,
+and then re-mimicsπcand. Letµm,µT be the expected rewards of the arms that ˜π chose at themth
+time step, and thatπcand chose at theTth time step, respectively. It is easy to see that,
+J (T ; ˜π)−J
+(
+T ;πcand) =µm−µT≥ 0 (15)
+where the second transition holds by theargmax rule combined with the assumption that the expected
+rewards are non-increasing (assumption 2.1). Thus,J (T ; ˜π)≥J
+(
+T ;πcand). If we apply the above
+logic steps recursively, we obtain a series of policies with non-decreasing values of expected total
+rewardJ (T ;·), where the series ends when there is no time step which deviates from πmax, i.e.,
+J (T ;πmax)≥J(T ;πcand), in contradiction toπmax being non-optimal. Thus, we infer thatπmax is
+indeed an optimal policy.
+C Non-Parametric Case
+C.1 Proof of Thm. 3.1
+We deﬁne, {
+M =⌈α42/3σ2/3K−2/3T 2/3 ln1/3(√2T)⌉
+q =α−1/221/3σ2/3K1/3T−1/3 ln1/3(√2T)
+and start by making two useful observations:
+Observation 1: By Hoeffding’s Inequality we have,
+P
+(
+| ¯XM− E[ ¯XM]|≥ q)≤ 1T 2 (16)
+where ¯XM is the empirical average ofM independentσ2 sub-Gaussian samples.
+Observation 2: Since the expected rewards of an arm only depends on the time it is being pulled (and
+not on the time step itself), the expected total reward of a policy only depends on the number of pulls
+of the different arms (and not on the order of pulls).
+From now on we assume that| ¯XM− E[ ¯XM]|<q (see Observation 1) for all arms throughout the
+trajectory, and later address the case where it is violated.
+11
+Step 1: bound the number of signiﬁcantly sub-optimal pulls.
+In what is following we prove by induction that for all the ends of time stepst∈ [T ], by applying
+SW A, there is no armj for which,
+{
+|n| :µj
+(
+NπSW Aj (t)−n)< maxi∈[K][µi(NπSW Ai (t))]− 2q, n ∈ N0}>M (17)
+whereNπSW Ai (t) is the number of pulls of armsi at timet induced by policyπSW A, which is deﬁned
+by the SWA algorithm. That is, following SWA ensures that for all time steps, no arm would be
+pulled more thanM times in which its expected reward is at least 2q lower than the expected reward
+of the (current) optimal arm.
+Basis: for all the ends of time steps t∈{ 1,..,KM } this holds trivially since, by the deﬁnition of
+SW A we pull each arm exactlyM times.
+Inductive hypothesis: Assume that the above statement holds for the end of time step t′ such that,
+KM≤t′ <T .
+Inductive step: We show that the above statement holds for the end of time step t′ + 1. By the
+non-increasing Assumption 2.1 we note two things: (1) The RHS of the inner inequality in Eq. (17)
+is non-increasing int, thus if the inequality did not hold for some armj at the end of time stept′ it
+can only hold for it at the end oft′ + 1 if SWA pulls armj in that round. (2) The number ofns for
+which the inequality holds for some armj can increase only by one at each time step. Combining the
+two with our inductive hypothesis we simply need to show that if for some armj, Eq. (17) holds with
+equality (i.e., the number ofns isM), that arm would not be pulled int′ + 1. By the non-increasing
+Assumption 2.1 we know that the last M expected rewards of armj are those who are at least 2q
+lower. Leti∗∈ argmaxi∈[K]
+[
+µi
+(
+NπSW Ai (t′ + 1))] (if this set contains more than one arm, choose
+arbitrarily). We have,
+1
+M
+NπSW Aj (t′+1)∑
+n=NπSW Aj (t′+1)−M+1
+rnj (1)< E
+
+ 1M
+NπSW Aj (t′+1)∑
+n=NπSW Aj (t′+1)−M+1
+rnj
+
+ +q (2)≤
+µj
+(
+NπSW Aj (t′ + 1)−M + 1) +q (3)< µi∗(NπSW Ai∗ (t′ + 1))−q (4)≤
+E
+
+ 1M
+NπSW Ai∗ (t′+1)∑
+n=NπSW Ai∗ (t′+1)−M+1
+rni∗
+
+−q (5)< 1M
+NπSW Ai∗ (t′+1)∑
+n=NπSW Ai∗ (t′+1)−M+1
+rni∗ (18)
+where (1) and (5) hold by our assumption regarding| ¯XM− E[ ¯XM]|<q , (2) and (4) hold by the
+non-increasing Assumption 2.1, and (3) holds by the deﬁnition of the inequality in Eq. (17). Since the
+SW A algorithm chooses in the Balance step according to the empirical averages of the lastM-pulls of
+each arm, we infer that armj would not be pulled (i∗ has higher empirical average). This concludes
+the inductive step proof, and hence our statement holds.
+Step 2: boundJ
+(
+T ;πˆmax)−J(T ;πSW A).
+Letπˆmax be a policy deﬁned by,
+πˆmax (t)∈ argmax
+i∈[K]
+{µi (Ni (t))} (19)
+where we ﬁrst pull each arm once using Round-Robin (before following the above rule), and in a
+case of tie, break it using the smallest index.
+Deﬁne
+I ˆmax (T ) =
+{(
+iˆmaxt ,n ˆmaxt
+)}T
+t=1
+(20)
+to be the (deterministic) set of tuples induced by applyingπˆmax, whereiˆmaxt is the arm chosen at time
+stept, and nˆmaxt is the time it is being pulled. In the same manner, we deﬁne the (stochastic) set
+ISW A(T ), composed of(iSW At ,n SW At ) tuples, which induced by applying πSW A. We further deﬁne
+I ˆmax\SW A(T ) =I ˆmax (T )\{I ˆmax (T )∩ISW A(T )}, andISW A\ˆmax (T ) =ISW A(T )\{I ˆmax (T )∩ISW A(T )},
+12
+and alsoµSW Amax (T + 1) = maxi∈[K]
+[
+µi
+(
+NπSW Ai (T + 1))]. By Observation 2, the difference in the
+policies expected total rewards only depends on these number of pull sets. Since both policies start
+with one Round-Robin pulls of the arms we have,
+J
+(
+T ;πˆmax
+)
+−J
+(
+T ;πSW A) =∑
+(iˆmaxt ,nˆmaxt )∈I ˆmax
+µiˆmaxt
+(
+nˆmaxt
+)
+−
+∑
+(iSW At ,nSW At )∈ISW A
+µiSW At
+(
+nSW At )
+=
+∑
+(iˆmaxt ,nˆmaxt )∈I ˆmax\SW A
+µiˆmaxt
+(
+nˆmaxt
+)
+−
+∑
+(iSW At ,nSW At )∈ISW A\ˆmax
+µiSW At
+(
+nSW At )
+≤µSW Amax (T + 1)×|I ˆmax\SW A|− 0×KM
+−
+(
+µSW Amax (T + 1)− 2q)×(|I ˆmax\SW A|− KM)
+≤KM max
+i∈[K]
+µi (1) + 2qT
+(21)
+The ﬁrst inequality holds by: (1) the non-increasing Assumption 2.1 implies that all the tuples in
+I ˆmax\SW Acorrespond to expected reward upper bounded byµSW Amax (T + 1), and (2) by what we showed
+in Step 1, there are at mostKM members inISW A\ˆmax that are more than 2q belowµSW Amax (T + 1), and
+the positiveness of the expected rewards by Assumption 2.1. The second inequality holds by trivially
+boundingµSW Amax (T + 1)≤ maxi∈[K]µi (1), and|I ˆmax\SW A| =|ISW A\ˆmax|≤ T .
+Finally, we note that all the above analysis was done assuming that | ¯XM− E[ ¯XM]|<q for all
+arms throughout the trajectory, and we now address the case where it is violated. By Observation 1,
+the probability of the inequality to be violated ≤ 1/T 2. The number of times this inequality is
+tested throughout the trajectory is bounded byKT (for each of the arms, in every time step, during
+the Balance step), and if the inequality is violated (even once) then J
+(
+T ;πˆmax)−J(T ;πSW A) is
+trivially bounded byT maxi∈[K]µi (1) according to the non-increasing Assumption 2.1. Thus, we
+infer that in expectation we have,
+J
+(
+T ;πˆmax
+)
+−J
+(
+T ;πSW A)≤KM max
+i∈[K]
+µi (1) + 2qT +K maxi∈[K]µi (1) (22)
+Step 3: bound the regret.
+We bound the regret using our previous obtained result forπˆmax by,
+R
+(
+T ;πSW A) = max
+π∈Π
+{J (T ;π)}− J
+(
+T ;πSW A)
+=J (T ;πmax)−J(T ;πSW A)
+=
+(
+J (T ;πmax)−J(T ;πˆmax)) +(J(T ;πˆmax)−J(T ;πSW A))
+≤K max
+i∈[K]
+µi (1) +
+(
+J
+(
+T ;πˆmax
+)
+−J
+(
+T ;πSW A))
+≤ 2K max
+i∈[K]
+µi (1) +KM maxi∈[K]µi (1) + 2qT
+=
+(
+α max
+i∈[K]
+µi (1) +α−1/2
+)
+42/3σ2/3K1/3T 2/3 ln1/3
+(√
+2T
+)
++ 3K max
+i∈[K]
+µi (1)
+(23)
+where the ﬁrst equality holds by Lemma 2.1, the ﬁrst inequality holds by Theorem 3 in Heidari
+et al. [2016], the second inequality holds by the bound we found in Step 2, and the last equality holds
+by plugging in the deﬁnition forM andq. This establishes Theorem 3.1.
+C.2 Proof of Corollary 3.1.1
+For convenience, we deﬁne the following objects:R (t1→t2;π) is the regret accumulated between
+time steps t1 andt2 (included), by applying policy π consistently.R (t1→t2;π2|π1 (t1)) is the
+regret accumulated between time stepst1 andt2, by applyingπ1 until time stept1, and thenπ2 for
+the measured time steps. We deﬁne similar objects for the expected total reward,J.
+13
+We note that,
+J (t1→t2;πmax)≤J
+(
+t1→t2;πmax
+⏐⏐⏐⏐π (t1)), ∀π∈ Π (24)
+The above inequality can be understood by the following argument: consider a decreasing sorted list
+of all the expected rewards across all arms. By Assumption 2.1, at each time step,πmax simply pulls
+an arm corresponding to the highest element in that list, that was not previously pulled (independently
+of previous pulls).
+Thus,J (t1→t2;πmax) is the sum of thetth1 totth2 elements in this list, which is the lowest possible
+sum of the|t2−t1 + 1| highest elements in the list, following any|t1− 1| pulls.
+Consider thenth iteration of wSWA. i.e., between time stepst1 = 2n−1 andt2 = min [2n− 1,T ].
+We have,
+R
+(
+t1→t2;πwSW A) (1)= J (t1→t2;πmax)−J(t1→t2;πwSW A)
+(2)
+= J
+(
+t1→t2;πmax
+⏐⏐⏐⏐πmax (t1))−J(t1→t2;πwSW A⏐⏐⏐⏐πwSW A(t1))
+(3)
+≤ J
+(
+t1→t2;πmax
+⏐⏐⏐⏐πwSW A(t1))−J(t1→t2;πwSW A⏐⏐⏐⏐πwSW A(t1))
+(4)
+= J
+(
+t1→t2;πmax
+⏐⏐⏐⏐πwSW A(t1))−J(t1→t2;πSW A⏐⏐⏐⏐πwSW A(t1))
+(5)
+=R
+(
+t1→t2;πSW A
+⏐⏐⏐⏐πwSW A(t1))
+(6)
+≤R bound (t2−t1 + 1)
+(25)
+where (1) and (2) hold by deﬁnition. (3) holds by Eq. (24). (4) by noting the wSWA applies SW A
+betweent1 andt2. (5) by deﬁnition. (6) by observing that it is the regret of a known horizon problem
+that holds Assumption 2.1, thus we can use the upper bound from Theorem 3.1, denoted byRbound.
+Let ˜n =⌊log2T⌋ + 1, thus 2˜n−1≤T≤ 2˜n− 1, and we have,
+R
+(
+T ;πwSW A) (1)= ˜n−1∑
+y=1
+R
+(
+2y−1→ 2y− 1;πwSW A) +R(2˜n−1→T ;πwSW A)
+(2)
+≤
+˜n−1∑
+y=1
+Rbound
+(
+2y−1) +Rbound(T− 2˜n−1 + 1)
+(3)
+≤
+˜n−1∑
+y=0
+Rbound (2y)
+(4)
+=
+˜n−1∑
+y=0
+[
+A22y/3 ln1/3
+(
+2y+1/2
+)
++B
+]
+(5)
+≤ A ln1/3
+(√
+2T
+) ˜n−1∑
+y=0
+22y/3 +B (log2T + 1)
+(6)
+≤ A25/3T 2/3 ln1/3
+(√
+2T
+)
++B (log2T + 1)
+(26)
+where (1) holds by dividing the horizon and noting that the regret is additive. (2) holds by
+Eq (25). (3) holds by noting that both Theorem 3 from Heidari et al. and Step 1 from
+the proof of Theorem 3.1 hold for any t ∈ [T ], thus the upper bound Rbound holds for any
+t∈ [T ] (clearly, by plugging T in the bound). (4) holds by plugging Rbound and deﬁning
+A =
+(
+α maxi∈[K]µi (1) +α−1/2) 42/3σ2/3K1/3, and B = 3K maxi∈[K]µi (1). (5) holds by
+monotonicity of the logarithm, and noting thatA andB are independent ofy. Finally, (6) holds as a
+sum of a geometric series, and simple algebra.
+Plugging backA andB, we establish Corollary 3.1.1.
+14
+D Parametric Case
+D.1 Proof of Thm. 4.1
+Bounding number of steps to optimality
+We ﬁrst characterize the bound, and later show feasibility (i.e., that the analysis we show here indeed
+holds within the horizon).
+Similar to the deﬁnition of m∗diff (p;θ∗i ) and m∗diff (p), we deﬁne m∗ (p;θ∗i ) as the solution
+to optimization problem (11) using Eq. (7) as the proximity rule to hypothesize ˆθ, and
+m∗ (p) = maxθ∈Θm∗ (p;θ).
+LetT be some unknown horizon. We ﬁrst show thatm∗( 1KT 2) is ﬁnite. Deﬁne,
+θ
+′
+i ( ˜m) = argmin
+θ⁄=θ∗i
+{⏐⏐⏐⏐ ˜m∑
+j=1
+µ (j;θ∗i )−
+˜m∑
+j=1
+µ (j;θ)
+⏐⏐⏐⏐} (27)
+Thus we have, when we sample only from armi,
+P
+(
+ˆθi ( ˜m)⁄=θ∗i
+)
+=P (∃θ⁄=θ∗i :|Y (i, ˜m;θ)|≤| Y (i, ˜m;θ∗i )|)
+≤P
+
+
+⏐⏐⏐⏐ ˜m∑
+j=1
+rij−
+˜m∑
+j=1
+µ (j;θ∗i )
+⏐⏐⏐⏐> 12⏐⏐⏐⏐ ˜m∑j=1µ (j;θ∗i )− ˜m∑j=1µ(j;θ′i ( ˜m))⏐⏐⏐⏐
+≤ 2 exp
+{
+− 18×detθ∗i,θ′i( ˜m) ( ˜m)}
+(28)
+where the ﬁrst inequality holds by inclusion of events, and the second inequality holds by Eq. (14)
+and the deﬁnition ofdetθ∗i,θ′i .
+Since triviallybal (n)≥n, by assumption 4.2, there exists a ﬁnite ˜m, for which,
+max
+θ1⁄=θ2∈Θ2
+{
+detθ1,θ2 ( ˜m)
+}
+≤ 18 ln−1(2KT 2) (29)
+Therefore, if we plug ˜m back in to the above equation we get,
+2 exp
+{
+− 18×detθ∗i,θ′i ( ¯m)}≤ 1KT 2 (30)
+Thus, we have a ﬁnite ˜m that satisﬁes the constraints of optimization problem (11) forp = 1/KT 2,
+and by deﬁnitionm∗( 1KT 2)≤ ˜m. i.e.,m∗( 1KT 2) is ﬁnite.
+Given a rotting model, θ∗i of arm i, we term that arm ‘saturated’ if it has been pulled at least
+m∗( 1KT 2 ;θ∗i) times, which is ﬁnite since, by deﬁnition,m∗( 1KT 2 ;θ∗i)≤m∗( 1KT 2). We assumethat once an arm is ‘saturated’, it is truely detected every time step, and omit this assertion from now
+on (we deal with the misdetection case later). i.e., we assume that once arm i hypothesize its rotting
+model to be ˆθi and also has been pulled at leastm∗( 1KT 2 ;θ∗i) times, then ˆθi =θ∗i .
+We next bound the number of pulls of different arms, given the number of pulls of some other arm.
+Lets be the ﬁrst time step for which mini∈[K]{Ni (s)} = maxθ∈Θ∗{m∗( 1KT 2 ;θ)}. We ﬁrst note
+thats is ﬁnite since by Assumption 4.1 we have µ (n;θ)∈o (1), combined with the argmax rule
+CTOSIM follows and its tie breaking rule, at some ﬁnite time step all arms would be pulled the
+speciﬁed amount of times. By our above assumption, from this point on, all the arms’ rotting models
+are correctly detected. Thus, for any armj,Nj (s) can be upper bounded by the solution for,
+mintj
+s.t
+
+
+
+tj∈ N
+tj≥ maxθ∈Θ∗{m∗( 1KT 2 ;θ)}
+µ
+(
+tj + 1;θ∗j)≤ min˜θ∈Θ
+[
+µ
+(
+maxθ∈Θ∗
+{
+m∗( 1KT 2 ;θ)}; ˜θ)] (31)
+15
+where the above optimization bound characterization holds since:
+(1) For any arm j∈ argmini∈[K]{Ni (s)}, this holds trivially by the explicit constraint
+tj≥ maxθ∈Θ∗{m∗( 1KT 2 ;θ)}.
+(2) For any arm j /∈ argmini∈[K]{Ni (s)}, clearly the constraint on the lower bound holds. As
+for the constraint on the upper bound, it holds by noting that all the arms’ hypothesized mod-
+els are correct and CTO SIM follows an argmax policy, thus j would not be pulled such that
+µ
+(
+Nj (s) ;θ∗j)< minθ∈Θ[µ(maxθ∈Θ∗{m∗( 1KT 2 ;θ)})], as the RHS is the lowest obtainable ex-pected reward until time steps. In addition, since the tie breaking rule is least # of pulls, its expected
+reward would not be equal to minθ∈Θ
+[
+µ
+(
+maxθ∈Θ∗{m∗( 1KT 2 ;θ)})].
+Letµmin (s; Θ∗) = minj∈[K]{µ(Nj (s) ;θ∗j)}. Following CTOSIM policy we infer that there exists
+˜s≥s for which:
+(1)µ (Ni (˜s) + 1;θ∗i )≤µmin (s; Θ∗), for alli∈ [K].
+(2)µ (Ni (˜s) ;θ∗i )>µ min (s; Θ∗), for alli /∈ argminj∈[K]{µ(Nj (s) ;θ∗j)}.
+The above observation holds by noting that CTO SIM follows an argmax rule, thus it would
+choose arms /∈ argminj[K]{µ
+(
+Nj (s) ;θ∗j)} to be pulled as long as their expected reward is
+strictly greater than already pulled minimal expected reward µmin (s; Θ∗), before the possibil-
+ity of choosing arms with expected reward ≤µmin (s; Θ∗). Since by Eq. (31) we have that
+minj∈[K]{µ
+(
+Nj (s) ;θ∗j)}≥ min˜θ∈Θ[µ(maxθ∈Θ∗{m∗( 1KT 2 ;θ)}; ˜θ)], we can upper bound ˜s
+by the following,
+min‖t‖1
+s.t
+
+
+
+t∈ NK
+ti≥ maxθ∈Θ∗{m∗( 1KT 2 ;θ)}, ∀i∈ [K]
+µ (ti + 1;θ∗i )≤ min˜θ∈Θ
+[
+µ
+(
+maxθ∈Θ∗
+{
+m∗( 1KT 2 ;θ)}; ˜θ)], ∀i∈ [K] (32)
+We turn to show optimality starting from time step ˜s. We start by showing for ˜s.
+Assume on the contrary that,J (˜s;πmax)⁄=J(˜s;πCTOSIM). On the one hand, by Lemma 2.1, we have,
+J (˜s;πmax)≥ J(˜s;πCTOSIM). On the other hand, Let {qi}i∈[K] be the set of the arms’ number of
+pulls at time ˜s followingπmax (respectively,{˜si}i∈[K] for CTOSIM), i.e.,
+J (˜s;πmax) = ∑
+i∈[K]
+qi∑
+j=1
+µ (j;θ∗i ) (33)
+We have that J
+(
+˜s;πCTOSIM
+)
+−J (˜s;πmax) is a sum of pairs in the form of, µ (l;θ∗i )−µ(h;θ∗j)
+where l ≤ ˜si, and h > ˜sj, for i ⁄= j ∈ [K]. By deﬁnition of {˜si} and the non-increasing
+assumption 2.1, we have that µ (l;θ∗i )≥µmin (s; Θ∗), andµmin (s; Θ∗)≥µ(h;θ∗j), resulting in
+J
+(
+˜s;πCTOSIM
+)
+≥J (˜s;πmax). Hence, the regret vanishes in time step ˜s, achieving optimality.
+We next show that the regret remains zero for ˆs≥ ˜s.
+We showed optimality for time step ˜s deﬁned above. We next show optimality for ˜s + 1. We examine
+the two possible cases.
+Case 1:∀i∈ [K] : qi = ˜si. Since CTO SIM follows the argmax rule as πmax does, we infer that
+arms with equal expected reward would be chosen by both CTO SIM andπmax. Thereby, holding
+J (˜s + 1;πmax) =J(˜s + 1;πCTOSIM). i.e., zero regret as stated.
+Case 2:∃i : ˜si⁄= qi. Therefore, there is an arm, denoted as igap, for which ˜sigap <q igap. By the
+argmax rule, CTOSIM chooses an armi˜s+1 such that,µ
+(
+˜si˜s+1 + 1;θ∗i˜s+1
+)
+≥µ
+(
+˜sigap + 1;θ∗igap
+)
+.
+By the non-increasing assumption 2.1, and the deﬁnition of πmax, since qigap ≥ ˜sigap + 1, we
+haveµ
+(
+qj˜s+1;θ∗j˜s+1
+)
+≤µ
+(
+qigap;θ∗igap
+)
+≤µ
+(
+˜sigap + 1;θ∗igap
+)
+, wherej˜s+1 is the arm chosen by
+πmax. Thus, on the one hand we have J (˜s + 1;πmax)≤ J(˜s + 1;πCTOSIM). On the other hand,
+by Lemma 2.1, we have J (˜s + 1;πmax) ≥ J(˜s + 1;πCTOSIM). Combining the two, we have
+J (˜s + 1;πmax) =J(˜s + 1;πCTOSIM). i.e., zero regret as stated.
+The above argument can be applied recursively for anyˆs> ˜s, thus establishing optimality of CTOSIM
+for all ˆs≥s, under true detection.
+16
+If it happens to be that‖t‖1≤T , then for thatT , CTOSIM will achieve zero regret (starting from ˜s).
+Since we require that the result will hold from someT∗SIM onward, we need the above characterization
+to also hold for any ˜T≥ T . We thereby infer that the smallest T such that for any ˜T≥ T , there
+existst for which the above stated result holds (i.e., the solution to the optimization problem is indeed
+holds‖t‖1≤ ˜T ), can serve as an upper bound forT∗SIM, resulting inT∗SIM being upper bounded by
+the solution for,
+minT
+s.t
+
+
+
+T,b ∈ N∪{ 0},t∈ NK
+∀b,∃t :
+
+
+
+‖t‖1≤T +b
+ti≥ maxθ∈Θ∗
+{
+m∗
+(
+1
+K(T+b)2 ;θ
+)}
+µ (ti + 1;θ∗i )≤ min˜θ∈Θ
+[
+µ
+(
+maxθ∈Θ∗
+{
+m∗
+(
+1
+K(T+b)2 ;θ
+)}
+; ˜θ
+)]
+(34)
+Feasibility
+In order to show feasibility, we wish to obtain,
+{# of steps for Detection} + {# of steps for Balance}≤T
+where Detection is a phase of pulling arms until the rotting models are detected with high
+enough probability (deﬁned below), and Balance is a phase which at the end of it there is no
+arm which yields strictly higher expected reward than the minimal observed expected reward
+so far, as explained in the former step, resulting in vanishing regret (similar to s and ˜s dis-
+cussed above). We require that the detection of each arm is w.p of at least 1− 1KT 2 . Deﬁne
+W (T ) = maxθ1,θ2
+{
+det⋆↓θ1,θ2
+(
+1
+16 ln−1
+(√
+2KT
+))}
+. As shown in the beginning of this proof, af-
+ter pulling an arm for W (T ) times, the probability of misdetection its rotting model≤ 1KT 2 . Werefer to an arm that has been pulled at leastW (T ) times as ‘strongly saturated’. From now on we will
+assume that any ‘strongly saturated’ arm is truely detected at each decision point, and will discuss the
+other case later on.
+On the one hand, by the deﬁnition of bal (), the non-increasing assumption 2.1, and the rule of
+tie breaking applied by CTOSIM, we have that all arms become ‘strongly saturated’ after, at most,
+W (T ) + (K− 1)×bal (W (T )) time steps.
+On the other hand, from the deﬁnition ofbal (), and CTOSIM, we infer that no arm would be pulled
+bal (W (T )) + 1 times before all other arms would become ‘strongly saturated’.
+Combining the two above observations we have that, after at mostW (T ) + (K− 1)×bal (W (T ))
+time steps, there exists a time step in which all arms have became ‘strongly saturated’, but were
+not pulled more than bal (W (T )) times. From that point, following the same ﬂow at the former
+subsection, the total number of pulls required in order to “balance" the arms (i.e., there is no pull that
+would yield strictly higher reward than the minimal expected reward observed so far), is bounded by
+K×bal (W (T )). That is under the worst case scenario, where every arm that becomes ‘strongly
+saturated‘ is detected to be an arm that requiresbal (W (T )) pulls to “balance" itself w.r.t to another
+‘strongly saturated’ arm. Thus, we infer that,
+{# of steps for Detection} + {# of steps for Balance}≤K×bal (W (T ))
+Letϵ =
+(
+K
+√
+2K
+)−1
+. By assumption 4.2, we have that there exists a ﬁnite ˜Tmax for which,
+∀ ˜T≥ ˜Tmax :bal
+(
+max
+θ1⁄=θ2∈Θ2
+{
+det⋆↓θ1,θ2
+( 1
+16 ln−1
+(
+˜T
+))})
+≤ϵ ˜T (35)
+We denoteT =
+(√
+2K
+)−1
+˜T , and get,
+∀T≥
+˜Tmax√
+2K
+:K×bal (W (T ))≤T (36)
+which implies, under true detection, that∀T≥ ˜Tmax/√2K, CTOSIM algorithm achieves zero regret.
+Since by deﬁnition we have∀θ∈ Θ :m∗( 1KT 2 ;θ)≤m∗( 1KT 2), and by deﬁnition of m∗( 1KT 2)
+17
+we havem∗( 1KT 2)≤W (T ), we infer that there exists (a ﬁnite) T∗SIM that holds the optimization
+problem characterization as stated above (i.e.,∀ ˜T≥T∗SIM the optimization problem is feasible).
+Misdetection and Expectation
+So far, we assumed that each ‘saturated’ (or ‘strongly saturated’) arm is truely detected. By deﬁnition
+each ‘saturated’ (or ‘strongly saturated’) arm probability of misdetection in any time step is upper
+bounded by 1/KT 2. Thereby, after all the arms are ‘saturated’, the probability of a misdetection
+in each time step is upper bounded by 1/T 2. The number of time steps where all the arms are
+‘saturated’ (referred to as the ‘saturated step’) is trivially bounded byT . Hence, the probability that a
+misdetection occurs after the ‘saturated step’ is bounded by 1/T . Meaning that∀T≥T∗SIM, CTOSIM
+achieves zero regret w.p of at least1− 1/T .
+Next, we note that, as for the case where we misdetect any arm,
+J (T ;πmax)−J(T ;πCTOSIM) = K∑
+i=1
+N maxi (T)∑
+j=1
+µ (j;θ∗i )−
+K∑
+i=1
+N
+CTOSIM
+i (T)∑
+j=1
+µ (j;θ∗i )
+≤
+K∑
+i=1
+I{N maxi (T)>N CTOSIMi (T)}
+N maxi (T)∑
+N
+CTOSIM
+i (T)+1
+µ (j;θ∗i )
+≤T max
+θ∈Θ∗
+{
+µ
+(
+min
+i∈[K]
+{N CTOSIMi (T )};θ
+)}
+(37)
+where the ﬁrst inequality holds by only considering cases whereN maxi (T )>N CTOSIMi (T ), and not
+the other way around (since the expected rewards are positive by Assumption 4.1).
+By applying expectation over events (true detection or not), we get,
+R
+(
+T ;πCTOSIM) =R(T ;πCTOSIM|true detection)×P (true detection)
++R
+(
+T ;πCTOSIM|misdetection)×P (misdetection)
+≤ max
+θ∈Θ∗
+{
+µ
+(
+min
+i∈[K]
+{N CTOSIMi (T )};θ
+)} (38)
+Finally,
+T =
+K∑
+i=1
+N CTOSIMi (T )
+≤ min
+i∈[K]
+N CTOSIMi (T ) + (K− 1) maxi∈[K]N CTOSIMi (T )
+≤ min
+i∈[K]
+N CTOSIMi (T ) + (K− 1)×bal
+(
+min
+i∈[K]
+N CTOSIMi (T )
+)
+≤K×bal
+(
+min
+i∈[K]
+N CTOSIMi (T )
+)
+(39)
+Hence, by assumption 2.1, mini∈[K]N CTOSIMi (T ) T→∞−→ ∞, resulting inR(T ;πCTOSIM)∈o (1), and
+trivially≤ maxθ∈Θ∗µ (1;θ).
+We Note that from the feasibility step, given a functionU (ϵ) that satisﬁes∀n≥U (ϵ),
+bal
+(
+max
+θ1⁄=θ2∈Θ2
+{
+det⋆↓θ1,θ2
+( 1
+16 ln−1 (n)
+)})
+≤ϵn (40)
+we have,
+T∗SIM≤
+U
+((
+K
+√
+2K
+)−1)
+√
+2K
+(41)
+18
+D.2 Proof of Thm. 4.2
+Decomposing the regret
+First, we upper bound the regret by,
+R
+(
+T ;πD-CTOUCB) = K∑
+i=1
+E
+[
+Nπmaxi (T)]∑
+j=1
+µi (j)−
+K∑
+i=1
+E
+[
+NπD-CTOUCBi (T)]∑
+j=1
+µi (j)
+≤
+∑
+i⁄=a∗
+µ⋆↓(∆i;θ∗i )∑
+j=1
+µi (j)
+| {z }
+= ˜C(Θ∗,{µci})
++
+T∑
+j=1
+µa∗ (j)−
+K∑
+i=1
+E
+[
+NπD-CTOUCBi (T)]∑
+j=1
+µi (j)
+= ˜C (Θ∗,{µci}) +
+T∑
+E[Nπmaxa∗ (T)]+1
+µa∗ (j)−
+∑
+i⁄=a∗
+E
+[
+NπD-CTOUCBi (T)]∑
+j=1
+µi (j)
+≤ ˜C (Θ∗,{µci}) +
+T∑
+E[Nπmaxa∗ (T)]+1
+(µca∗ +µ (1;θ∗a∗))−∑
+i⁄=a∗
+E
+[
+NπD-CTOUCBi (T)]∑
+j=1
+µci
+≤ ˜C (Θ∗,{µci}) +∑
+i⁄=a∗
+E
+[
+NπD-CTOUCBi (T )]× (∆i +µ (1;θ∗a∗))
+(42)
+where E
+[
+Nπmaxi (T )] is the expected number of pulls of arm i at time T induced by the optimal
+policy,πmax, and ENπD-CTOUCBi (T ) is the expected number of pulls induced by policyπD-CTOUCB. The
+ﬁrst inequality holds by noting thatπmax pulls according to argmax rule, thus any armi⁄=a∗ would
+not be pulled after yielding expected reward not greater thanµca∗, according to the behavior ofµ (·;·)
+by assumption 2.1.
+Detecting the models
+Next, we show thatm∗diff (δ/K) is ﬁnite. Deﬁne,
+D (µ (·;θ), 1,n ) =
+⌊n2⌋∑
+j=1
+µ (j;θ)−
+n∑
+j=⌊n2⌋+1
+µ (j;θ) (43)
+and,
+θ
+′
+i ( ˜m) = argmin
+θ⁄=θ∗i
+{⏐⏐⏐⏐D (µ (·;θ∗i ), 1, ˜m)−D (µ (·;θ), 1, ˜m)⏐⏐⏐⏐} (44)
+Thus, we have, when we sample only from armi, and for an even ˜m
+P
+(
+ˆθi ( ˜m)⁄=θ∗i
+)
+=P (∃θ⁄=θ∗i :|Z (i, ˜m;θ)|≤| Z (i, ˜m;θ∗i )|)
+≤P
+
+
+⏐⏐⏐⏐ ˜m2∑
+j=1
+rij−
+˜m∑
+j= ˜m2 +1
+rij
+
+−D (µ (·;θ∗i ), 1, ˜m)
+⏐⏐⏐⏐>
+1
+2
+⏐⏐⏐⏐D (µ (·;θ∗i ), 1, ˜m)−D (µ(·;θ′i ( ˜m)), 1, ˜m)⏐⏐⏐⏐)
+≤ 2 exp
+{
+− 18×Ddetθ∗i,θ′i( ˜m) ( ˜m)}
+(45)
+19
+where the ﬁrst inequality holds by inclusion of events, and the second inequality holds by Eq. (14),
+the deﬁnition ofDdetθ∗i,θ′i , and noting that for an even ˜m we have,
+E
+
+
+˜m
+2∑
+j=1
+rij−
+˜m∑
+j= ˜m2 +1
+rij
+
+ =D (µ (·;θ∗i ), 1, ˜m) (46)
+By assumption 4.3, there exists a ﬁnite, even, ˜m for which,
+max
+θ1⁄=θ2∈Θ2
+{
+Ddetθ1,θ2 ( ˜m)
+}
+≤ 18 ln−1
+(2K
+δ
+)
+(47)
+If we plug ˜m back to the above equation we get,
+2 exp
+{
+− 18×Ddetθ∗i,θ′i( ˜m) ( ˜m)}≤ δK (48)
+Thus, we have a ﬁnite ˜m that satisﬁes the constraints of Prob. (11) forp =δ/K, and by deﬁnition
+m∗diff (δ/K)≤ ˜m. i.e.,m∗diff (δ/K) is ﬁnite.
+Bounding number of pulls
+We wish to bound E
+[
+NπD-CTOUCBi (T )] for alli⁄=a∗. Remember that in the exploration part (leading
+to the Detect step), we pull each armm∗diff (δ/K) times, hence,
+NπD-CTOUCBi (T ) =m∗diff (δ/K) + T∑
+t=K×m∗diff(δ/K)+1
+1{i(t)=i} (49)
+where 1{·} is the indicator function. Similarly to the proof of UCB1 (Auer et al. [2002a]) we have,
+NπD-CTOUCBi (T )≤li + ∞∑
+t=1
+t−1∑
+s=m∗diff(δ/K)
+t−1∑
+si=li
+1{ˆµca∗(s)+µ(s;θ∗a∗)+ct,s≤ˆµci(si)+µ(si;θ∗i )+ct,si} (50)
+where for someϵi∈ (0, ∆i), we denoteli = max
+{
+m∗diff (δ/K),µ⋆↓ (ϵi;θ∗i ),⌈ 32σ2 lnT(∆i−ϵi)2⌉}, and we
+note that we assume that we have detected the true underlying rotting models (holds w.p of at least
+1−δ as shown above).
+The above indicator function holds when at least one of the following holds,
+
+
+ˆµca∗ (s)≤µca∗−ct,s
+ˆµci (si)≥µci +ct,si
+µca∗ +µ (s;θ∗a∗)<µ ci +µ (si;θ∗i ) + 2ct,si
+(51)
+Pluggingct,s andct,si, and using Eq. (14), we have,{P (ˆµca∗ (s)≤µca∗−ct,s) =t−4
+P (ˆµci (si)≥µci +ct,si) =t−4 (52)
+And forsi≥li we have,
+µca∗ +µ (s;θ∗a∗)−µci−µ (si;θ∗i )− 2ct,si≥µca∗−µci−µ (si;θ∗i )− 2ct,si
+≥µca∗−µci−ϵi− 2ct,si
+= (∆i−ϵi)− 2ct,si
+≥ 0
+(53)
+where the ﬁrst inequality holds by assumption 4.1, the second inequality bysi≥µ⋆↓ (ϵi;θ∗i ), and
+the third inequality bysi≥⌈ 32σ2 lnT(∆i−ϵi)2⌉.
+Thus, combining the above observations, we get,
+E [Nπi (T )]≤li +
+∞∑
+t=1
+t−1∑
+s=m∗diff(δ/K)
+t−1∑
+si=li
+(P (ˆµca∗≤µca∗−ct,s) +P (ˆµci≥µci +ct,si))
+≤li + π23
+(54)
+DenotingC (Θ∗,{µci}) = ˜C (Θ∗,{µci}) +∑i⁄=a∗ π2+33 (∆i +µ (1;θ∗a∗)), and plugging back into
+the upper bound on the regret, we achieve the stated result.
+20
+E Example 4.1
+Next, we show an example for which the different assumptions hold; the case where the reward of
+armi for its nth pull is distributed asN(µci +n−θ∗i,σ 2). Where θ∗i∈ Θ ={θ1,θ 2,...,θ M}, and
+∀θ∈ Θ : 0.01≤θ≤ 0.49.
+E.1 Assumption 4.1
+The assumption given by µ (n;θ) is positive, non-increasing in n, and µ (n;θ)∈o (1),∀θ∈ Θ,
+where Θ is a discrete known set. Indeed, for anyθ∈{θ1,θ 2,...,θ M}, which is a discrete known set
+where 0.01≤θ≤ 0.49, we haven−θ≥ 0 for alln≥ 1. Moreover, ∂n−θ∂θ =−θn−θ−1 < 0 for all
+n≥ 1, andn−θ n→∞−→ 0.
+E.2 Assumption 4.2
+The assumption is given by,
+bal
+(
+max
+θ1⁄=θ2∈Θ2
+{
+det⋆↓θ1,θ2
+( 1
+16 ln−1 (ζ)
+)})
+∈o (ζ) (55)
+Without a loss of generality, assumeθ2 >θ 1. We have for large enoughn,
+detθ1,θ2 (n) = nσ2(∑n
+j=1j−θ1−∑nj=1j−θ2)2
+≤ nσ2
+(c1n1−θ1−c1−c2n1−θ2)2
+= nσ2
+c21n2−2θ1 +c22n2−2θ2− 2c1c2n2−θ1−θ2− 2c21n1−θ1 + 2c1c2n1−θ2 +c21
+≤ nσ2
+˜cn2−2θ1
+= ¯cn1−2θ1
+(56)
+where{c1,c 2, ˜c, ¯c} are positive constants (independent ofn). The ﬁrst inequality holds by bounding
+the sums by integrals and keeping in mind thatθ2 >θ 1 combined with 0.01≤θ≤ 0.49. The second
+inequality holds from large enoughn (leading exponent, depends only on{θ1,θ 2}, but ﬁnite).
+Next, we have,
+¯c
+n1−2θ1 < 116 ln−1 (ζ) =⇒n> (16¯c ln (ζ)) 11−2θ1 > (16¯c ln (ζ))50 (57)
+Meaning thatζ large enough,
+max
+θ1⁄=θ2∈Θ2
+{
+det⋆↓θ1,θ2
+( 1
+16 ln−1 (ζ)
+)}
+< (16¯c ln (ζ))50 (58)
+Next, we have,
+α−0.1≤x−0.49 =⇒α≥x4.9 (59)
+Hence,bal (x) =x4.9. Sincebal (·) is monotonically increasing, we have that forζ large enough,
+bal
+(
+max
+θ1⁄=θ2∈Θ2
+{
+det⋆↓θ1,θ2
+( 1
+16 ln−1 (ζ)
+)})
+< ˆc ln245 (ζ) (60)
+where ˆc is a positive constant (independent ofζ). Finally, we note that,
+lim
+ζ→∞
+ln245 (ζ)
+ζ = 0 (61)
+Thus we infer that the assumption holds.
+21
+E.3 Assumption 4.3
+The assumption is given by,
+max
+θ1⁄=θ2∈Θ2
+{
+Ddet⋆↓θ1,θ2 (ϵ)
+}
+≤B (ϵ)<∞, ∀ϵ> 0 (62)
+Without a loss of generality, assumeθ2 >θ 1. We have for large enoughn,
+Ddetθ1,θ2 (n) = nσ2((∑⌊n2⌋
+j=1 j−θ1−∑nj=⌊n2⌋+1j−θ1
+)
+−
+(∑⌊n2⌋
+j=1 j−θ2−∑nj=⌊n2⌋+1j−θ2
+))2
+≤ nσ2(
+c1
+(
+−1 + 2
+⌊n
+2
+⌋1−θ1
+−n1−θ1
+)
+−c2
+(
+2
+(⌊n
+2
+⌋
++ 1
+)1−θ2
+−n1−θ2
+))2
+≤ nσ2
+˜cn2−2θ1
+= ˜cn1−2θ1
+(63)
+where{c1,c 2, ˜c} are positive constants (independent of n). The inequalities hold by the same
+arguments as in E.2. Again, following the same logic as the end of E.2, we have that the assumption
+holds.
+22

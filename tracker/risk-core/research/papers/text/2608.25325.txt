@@ -1,0 +1,2103 @@
+arXiv 2608.25325  https://arxiv.org/abs/2608.25325
+
+FinRiskAtlas: Decision-Aligned Evaluation of
+Large Language Models for Financial Risk Review
+Suyang Zhong1,2,†, Jingzhe Zhu1,†, Qi Xu1,3,†, Liyao Sun1, Yin Wang4, Qingqing Sun1,*, Shuai
+Chen1,*, and Tianyi Zhang1,*
+1Ant International,2Xiamen University,3Shanghai University,4Tongji University
+†These authors contributed equally to this work.
+*Corresponding authors to whom correspondence should be addressed.
+Deploying large language models for professional financial review requires more than measuring general
+financialcompetence: modelsmustperformthespecificreviewoperationrequiredbyaworkflowanddetermine
+whether the available evidence is sufficient for a defensible decision. Existing financial benchmarks provide
+broad coverage of knowledge, reasoning, compliance, and professional tasks, but their evaluation units are
+often organized around datasets or task formulations rather than the professional decisions that deployed
+systems support. We introduceFinRiskAtlas, a Chinese-language benchmark that evaluates financial LLMs
+through two complementary dimensions: operation execution under fixed evidence states and evidence-state
+control under evolving review conditions. The static benchmark contains 9,742 instances across 53 task
+families, including 42 Domain Knowledge families and eleven downstream review operations defined by
+explicit evaluation contracts.FinRisk-Askextends this framework through offline replay of 680 pre-action
+states from 104 de-identified professional trajectories, where future evidence is withheld during inference
+and used only to construct expert-verified evidence targets. Across 33 model configurations, operation-level
+evaluation produces non-redundant model rankings, with a mean pairwise Spearman correlation of 0.42 across
+downstream operations, and knowledge-based shortlisting can incur up to 18.01 points of regret on individual
+operations. FinRisk-Ask further shows that entering the Ask branch more frequently does not necessarily yield
+better request targeting or stronger end-to-end evidence acquisition. These results demonstrate that broad
+financial capability scores do not fully capture where models are reliable in professional workflows, motivating
+evaluation units aligned with the decisions and evidence states that deployed systems must support.
+1. Introduction
+Financial risk and compliance review is a sequence of evidence-dependent professional decisions rather
+than a single prediction task. A reviewer may need to identify transaction parties, extract decision-relevant
+evidence, verify financial quantities, determine applicable provisions, assign risk categories, or produce a
+supported professional recommendation. These operations may rely on overlapping records, but they resolve
+different professional questions and produce different artifacts for downstream decisions. Their reliability
+also depends on the evidence available at the time of review. For example, when documentation establishing
+a transaction party’s beneficial ownership is missing, a reliable system should recognize that the current
+evidence state is insufficient and request the necessary information before producing a risk judgment, rather
+than forcing a conclusion from an incomplete record.
+Thissettingcreatestwofundamentalquestionsfordeployinglargelanguagemodels(LLMs)inprofessional
+financial workflows. The first is operation execution: given the currently visible record, which model
+configuration can reliably perform the required review operation? The second is evidence-state control: given
+an evolving review state, should the workflow proceed with the available information or acquire additional
+evidence before making a decision? These capabilities are related but fundamentally different. A model
+arXiv:2608.25325v1  [cs.AI]  26 Aug 2026
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+248
+211
+249
+58
+STATIC BENCHMARK
+48.0%
+KNOWLEDGE 2,202
+1,602
+416
+15.4%PROCESSING445
+750 36.6%
+REVIEW
+366
+1,445
+1,000
+750
+FinRiskAtlas
+9,742
+instances
+53 task families
+1 Domain knowledge
+SUPPORTING CAPABILITY 4,679 instances · 42 families
+Risk & compliance 2,202
+Trade & international business 1,602
+FinTech & security 416
+Commerce & payments 248
+Finance & law 211
+2 Evidence-grounded processing
+EVIDENCE TRANSFORMATION 1,502 instances · 5 families
+Case classification 445
+Information extraction 249
+Entity matching 750
+Quantitative reasoning 58
+3 Applied review
+PROFESSIONAL DECISION 3,561 instances · 6 families
+Risk classification 366
+Legal reasoning 1,445
+Provision selection 1,000
+Review generation 750
+FinRisk-Ask Offline trajectory-replay extension
+01  TRAJECTORY SOURCE
+104
+completed review
+trajectories
+02  OFFLINE REPLAY
+Reconstruct pre-action decision states
+Later observations withheld during inference
+03  EVALUATION STATES
+680 evaluation states
+583 Ask 97 Proceed
+Figure1:Composition of FinRiskAtlas.The static benchmark evaluates whether a model can execute a
+specified financial review operation under a fixed evidence state. FinRisk-Ask evaluates whether a model
+should proceed or acquire additional evidence from an intermediate review state and, after choosing to ask,
+whether the request targets a trajectory-supported unresolved need. Static instances and trajectory states
+represent different evaluation units and are evaluated separately.
+may retrieve the correct regulation yet apply it to the wrong entity, accurately extract requested fields yet
+fail to integrate them into a case-level assessment, or correctly recognize that information is missing while
+requesting evidence unrelated to the actual unresolved issue. Therefore, broad financial capability alone
+does not determine where a model configuration is reliable within a professional review workflow.
+Existing financial LLM benchmarks have substantially expanded coverage of financial language under-
+standing and numerical reasoning Shah et al. (2022), Chen et al. (2021, 2022), Zhu et al. (2021), broad
+financial knowledge, prediction, and professional applications Xie et al. (2023, 2024), Matlin et al. (2025),
+Nie et al. (2025), Guo et al. (2025), and compliance, safety, and tool-supported research Ding et al. (2026),
+Dou et al. (2026), Kim et al. (2026), Bigeard et al. (2025). These benchmarks provide valuable measurements
+of general financial competence. However, their primary evaluation units are commonly organized around
+knowledge domains, source datasets, or task formulations rather than the professional decisions that models
+are expected to support in deployment Xie et al. (2023, 2024), Nie et al. (2025), Guo et al. (2025), Ding
+et al. (2026). Such units often do not explicitly represent the evidence boundary available to the model, the
+decision object being resolved, the reviewer artifact being produced, or the criterion by which the output is
+evaluated. As a result, two tasks derived from the same case record may correspond to different professional
+operations, while tasks with different surface formats may represent the same operational capability. This
+creates an evaluation-unit mismatch: a benchmark score may indicate whether a model performs well on a
+task, but not whether that model is appropriate for a particular decision point in a financial review workflow.
+A second limitation concerns the evolution of evidence during professional review. Many fixed-input
+financial evaluations implicitly assume that the provided record is sufficient for solving the evaluated task Xie
+2
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+et al. (2023, 2024), Nie et al. (2025), Guo et al. (2025). Real-world financial risk-control processes, however,
+are iterative: evidence is collected, verified, reconciled, and expanded before decisions are finalized. Prior
+work on clarification and selective answering Rao and Daumé III (2018), Cole et al. (2023), abstention,
+expert deferral, and help seeking Feng et al. (2024), Mozannar and Sontag (2020), Ren et al. (2023), and
+active information acquisition Li et al. (2024, 2025), Zhou et al. (2025), Zhao et al. (2026) demonstrates
+the importance of recognizing underspecification. However, recognizing that information is missing is only
+the first step of evidence acquisition. In professional review, a useful request must identify the specific
+evidence gap that blocks the current decision, respect the temporal boundary of the review state, and request
+information that can advance the workflow. Thus, deciding whether to acquire evidence and determining
+what evidence to acquire represent distinct capabilities.
+To address the first limitation, we introduceFinRiskAtlas, a benchmark that organizes financial LLM
+evaluation around fine-grained professional operations in financial risk-control and compliance review.
+FinRiskAtlas therefore takes a professional review operation as the downstream evaluation unit, rather than a
+source dataset or task format. Each downstream family is defined before model evaluation through an explicit
+contract specifying the visible evidence regime, professional decision object, required reviewer artifact, and
+scoring protocol. This design allows downstream scores to be interpreted as operation-specific performance
+signals rather than generic capability measurements. Unlike task-oriented evaluation, operation-oriented
+evaluation asks whether a model is suitable for the specific decision it is deployed to support. The static
+FinRiskAtlas benchmark contains 9,742 instances across 53 task families. Forty-two Domain Knowledge
+families, comprising 4,679 instances, evaluate the concepts, regulations, obligations, and risk mechanisms
+required for financial risk-control review. Eleven downstream operation families contain 5,063 instances,
+covering Evidence-Grounded Processing and Applied Review operations, including information extraction,
+entity matching, quantitative reasoning, risk classification, rule grounding, legal-outcome prediction, and
+professional review generation. FinRiskAtlas combines broad summary signals with operation-specific
+evaluation: theDomainKnowledgemacrosupportscoarsescreening, whiletheelevendownstreamoperations
+retain their task-native scores for fine-grained configuration selection.
+To address the second limitation, we introduceFinRisk-Ask, a complementary benchmark for evidence-
+state control through offline replay of professional review trajectories. FinRisk-Ask contains 680 pre-action
+states reconstructed from 104 completed, de-identified trajectories, including 583 recorded Ask states and
+97 recorded Proceed states. Candidate models observe only the case record and review history available
+before the recorded action; later evidence, subsequent reviewer actions, and downstream outcomes are
+withheld during inference. For each retained Ask state, later-observed evidence is used only to construct
+expert-verified unresolved evidence targets. Unlike incomplete-information benchmarks constructed from
+clinical dialogues or deliberately underspecified reasoning problems Li et al. (2024, 2025), Zhou et al.
+(2025), Zhao et al. (2026), FinRisk-Ask grounds request targets in later-observed evidence from completed
+professional trajectories and evaluates whether a model can acquire the evidence required to advance a
+professional decision under a realistic information boundary. The evaluation target is not the optimal question
+in an abstract dialogue, but the evidence request required to advance a concrete professional review decision.
+Experiments across 33 model configurations demonstrate why both evaluation dimensions are necessary.
+The eleven fixed-evidence operations produce non-redundant configuration rankings, with a mean pairwise
+Spearman correlation of 0.42. Broad knowledge performance does not uniformly preserve operation-specific
+selection: restricting selection to the Domain Knowledge leader can forgo up to 18.01 points on an individual
+downstream operation. Evidence-state evaluation reveals another source of divergence. FinRisk-Ask uses
+ERA as the primary end-to-end measure of the evidence-acquisition pathway: a model receives credit only
+when it enters the recorded Ask branch and generates a request aligned with an expert-verified unresolved
+need. ERA is further decomposed into recorded-Ask recall and Conditional Request Alignment, allowing
+branch-entry failures to be distinguished from request-targeting failures. The results show that similar
+3
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+action-selection behavior can still yield substantially different end-to-end evidence-acquisition performance.
+Our contributions are as follows:
+• An operation-centric evaluation paradigm for financial review.We introduce FinRiskAtlas, which
+defines professional review operations as the fundamental evaluation unit for financial LLM assessment. By
+explicitly modeling the evidence boundary, decision object, reviewer artifact, and scoring protocol of each
+operation, FinRiskAtlas provides fine-grained evaluation signals aligned with real financial risk-control
+decisions.
+• A trajectory-grounded benchmark for evidence-state control.We introduce FinRisk-Ask, an offline
+replay framework that evaluates whether models should proceed or acquire additional evidence and
+whether their requests target expert-verified unresolved needs, while preventing access to future trajectory
+information. ERA provides the primary end-to-end measure of the evidence-acquisition pathway, while
+action- and request-level metrics diagnose where end-to-end performance is gained or lost.
+• Evidencethatbenchmarkgranularityaffectsmodelselection.Across33configurations, wedemonstrate
+that operation-level evaluation and evidence-state evaluation reveal differences hidden by broad capability
+scores, exposing distinct strengths and failure modes of LLMs in professional financial workflows.
+2. Related Work
+2.1. Financial LLM Evaluation: From Capability Coverage to Workflow Operations
+Financial LLM evaluation has progressed from focused capability assessment to broader measurements of
+financial knowledge, reasoning, and professional applications. Early benchmarks isolate specific abilities.
+FLUE evaluates financial language understanding; FinQA and ConvFinQA study numerical reasoning over
+financial reports and conversational contexts; and TAT-QA combines textual and tabular evidence for financial
+reasoning Shah et al. (2022), Chen et al. (2021, 2022), Zhu et al. (2021). FinanceReasoning and BizBench
+further extend evaluation toward complex financial and business reasoning Tang et al. (2025), Krumdick
+et al. (2024). These benchmarks establish the importance of measuring financial capabilities beyond general-
+language evaluation.
+Subsequent benchmark suites broaden coverage across heterogeneous financial tasks. PIXIU and FinBen
+evaluate multiple financial capabilities including understanding, reasoning, prediction, and application, while
+FLaME, CFinBench, and FinEval further expand evaluation of financial knowledge and reasoning, including
+Chinese financial scenarios Xie et al. (2023, 2024), Matlin et al. (2025), Nie et al. (2025), Guo et al. (2025).
+Such benchmarks provide valuable capability profiles, but their evaluation units are typically inherited from
+knowledge categories, source datasets, or task formulations. Consequently, they may not directly correspond
+to the professional decisions supported by a deployed system. A set of tasks derived from the same case
+record may represent different review operations, while tasks with different surface formats may serve the
+same workflow purpose.
+Recent work moves closer to realistic financial applications. FinED-Bench evaluates financial document
+error detection, while Finance Agent Benchmark studies multi-step financial research supported by external
+tools He et al. (2026), Bigeard et al. (2025). CNFinBench jointly considers financial capability, compliance,
+and safety; FinGuard derives compliance evaluation from financial regulations; and FinRED studies finance-
+specific red-team behavior Ding et al. (2026), Dou et al. (2026), Kim et al. (2026). These efforts introduce
+realistic documents, safety considerations, and specialized professional scenarios. However, they generally
+retain capability- or task-oriented evaluation units, leaving open how benchmark organization should reflect
+the operational decisions supported by deployed systems.
+2.2. Diagnostic Evaluation and Decision-Aligned Measurement
+Beyond benchmark coverage, prior work has emphasized the importance of structured diagnostic eval-
+uation. CheckList organizes behavioral tests around specific linguistic capabilities and expected model
+4
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+behaviors, while HELM evaluates models across diverse scenarios and multiple metrics under transparent
+protocols Ribeiro et al. (2020), Liang et al. (2023). These studies show that aggregate scores alone can hide
+meaningful differences across capabilities.
+Professional-domain benchmarks similarly adopt structured taxonomies to expose specialized abilities.
+C-Eval organizes evaluation by knowledge subjects, while LawBench, LegalBench, and DiagnosisArena
+construct domain-specific evaluations for legal and clinical reasoning Huang et al. (2023), Fei et al. (2024),
+Guha et al. (2023), Zhu et al. (2026). These benchmarks demonstrate the value of expert-defined capability
+structures.
+However, existing diagnostic frameworks primarily organize evaluation around capabilities or scenar-
+ios rather than the professional operations and evidence boundaries involved in deployment. Extending
+diagnostic evaluation toward workflow-aligned measurement remains an open direction for professional
+applications Ribeiro et al. (2020), Liang et al. (2023), Fei et al. (2024), Guha et al. (2023).
+2.3. From Abstention to Active Evidence Acquisition
+A separate research line studies model behavior when available information is insufficient for reliable
+answering. Clarification-question formulation and selective answering methods investigate how models
+handle ambiguity or unanswerable inputs Rao and Daumé III (2018), Zhang et al. (2024), Zhao et al. (2024),
+Cole et al. (2023). Abstention, expert deferral, and help-seeking approaches similarly study whether models
+can recognize uncertainty and appropriately transfer or delay decisions Feng et al. (2024), Mozannar and
+Sontag (2020), Ren et al. (2023).
+Recent benchmarks evaluate information acquisition more directly. MediQ studies follow-up question
+generation in clinical diagnosis, QuestBench evaluates whether models identify missing variables required
+for reasoning, and active-reasoning benchmarks examine when and what information should be requested
+under incomplete conditions Li et al. (2024, 2025), Zhou et al. (2025), Zhao et al. (2026). RealFin further
+studies whether financial questions contain unavailable necessary premises Dai et al. (2026). These works
+demonstrate that answering a fully specified problem and identifying missing information are distinct
+abilities.
+Trajectory-based approaches provide another perspective by using expert interaction histories. Learn-to-
+Ask uses sequential expert demonstrations and later observations to learn proactive information-seeking
+policiesWeietal.(2026). FinRisk-Asksharestheuseofcompletedtrajectoriesandlaterevidenceobservations,
+but differs in objective and evaluation setting. It does not learn a policy or optimize future interaction.
+Instead, it performs offline evaluation of a recorded professional boundary, measuring whether a model
+shouldproceedoracquireevidenceandwhethertherequestedevidenceaddressesanunresolvedreviewneed.
+These directions leave open how evidence acquisition behavior should be evaluated within a professional
+workflow, where the objective is not only to recognize missing information but also to acquire evidence
+required for a specific decision. This highlights the need for evaluation frameworks that jointly consider the
+operation being performed and the evidence state from which that operation is reached.
+3. The FinRiskAtlas Benchmark
+3.1. Benchmark Scope and Evaluation Units
+FinRiskAtlas is built around the observation that model selection in professional workflows occurs at the
+level of decisions rather than isolated task formats. A useful benchmark unit should therefore correspond
+to a stable decision context: what information is available to the model, what decision must be resolved,
+what artifact is expected from the reviewer, and how the result should be evaluated. This design principle
+motivates operation-centric evaluation, where the benchmark unit reflects the professional action that a
+model is expected to support. The distinction is important because a deployment decision is not determined
+by whether a model performs well on an isolated task, but by whether it can reliably produce the artifact
+5
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+1ReviewSources
+Chinese Financial Risk 
+andCompliance
+Exams and
+Textbooks
+Regulations
+Industry
+Documents
+Business
+Cases
+Expert
+Investigations
+2CapabilityTaxonomy
+Domain 
+Knowledge
+Evidence-
+Grounded 
+Processing
+Applied 
+Review
+3
+Observed Case
+Corporate Loan Case
+Observed Evidence
+Observed-Future Evidence
+Q2 Bank
+Records
+Tax Payment
+Proof
+Related-Party
+Transactions
+Guarantor
+Info
+Key Risk
+Fact
+Constructexpert-verified evidence targets
+Borrower: ***Co., Ltd.
+Load Amount: 80,000,000¥
+Purpose: Working Capital
+·Financial Statements(2025)
+·Bank Transaction Records
+·Collateral Info (Partial)…
+FinRisk-Ask  ✦
+GPT Qwen
+DeepseekClaude
+…
+…
+…
+…
+Request one 
+focused item
+Continue with 
+the currently 
+available record
+5
+—
+——
+1
+Evaluation
+Contract
+2
+Candidate
+Construction
+3
+Quality 
+Control
+4
+Expert
+Validation
+Static 
+Benchmark
+Contracts Fixed Before Model Evaluation
+5
+Capability-First Construction
+Evaluation Contract
+• Evidence Boundary
+• Decision Object
+• Reviewer Artifact
+• Scoring Protocol
+Documents · Records · Trajectories
+Figure2:Benchmark design around operation and evidence state.Professional source materials are
+organized through an operation-aligned taxonomy and fixed evaluation contracts to construct the static
+benchmark. FinRisk-Ask complements fixed-evidence operation evaluation through offline replay of model-
+visible pre-action states, measuring both the Ask-or-Proceed transition and the alignment of generated
+requests with later-observed, expert-verified evidence targets. Later evidence is withheld during inference
+and used only for target construction.
+required at a specific workflow stage. Changing the evaluation unit changes the selection signal available to
+practitioners.
+Figure 2 illustrates the two evaluation settings in FinRiskAtlas. The static benchmark evaluates fixed-
+evidence review operations, while FinRisk-Ask evaluates control of evolving evidence states. These two
+settings share the same principle: evaluation should be aligned with the decision context rather than only
+the surface form of the task.
+The static benchmark contains three nested units. A capability layer groups families according to their
+role in financial review. A task family is the finest stable analysis unit, representing either a review-relevant
+knowledge area or a concrete fixed-evidence review operation. An instance is one evaluation item governed
+by the contract of its family. The static benchmark contains 53 families: 42 Domain Knowledge families and
+eleven downstream operation families. FinRisk-Ask is a separate state-level evaluation setting and is not
+counted as an additional static family.
+To operationalize this principle, we define each family through an explicit evaluation contract:
+Γ f = (cf ,I f ,d f ,Y f ,s f ),(1)
+where c f specifies the capability being measured,I f defines the model-visible information regime,d f specifies
+the professional decision object,Y f defines the required reviewer-artifact schema, ands f specifies the fixed
+parsing and scoring protocol. The information regime includes the evidence sources, fields, and temporal
+boundary available to the model rather than merely the surface format of the input.
+6
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+Table 1:Operation coverage in FinRiskAtlas.The static benchmark contains eleven fixed-evidence review
+operations. FinRisk-Ask evaluates the complementary state-level decision of whether the current evidence
+state should be advanced or expanded.
+Evaluation component Operations Workflow outputs
+Evidence-Grounded Pro-
+cessing
+Case classification; information extraction;
+institution matching; person matching;
+quantitative reasoning
+Procedure routing, structured evidence fields,
+entity-identity decisions, and normalized
+quantities
+Applied Review Risk classification; applicable-provision selection;
+legal-outcome prediction; legal-judgment
+generation; disputed-issue generation;
+decision-view generation
+Risk grades, governing provisions, dispositions,
+reasoned analyses, issue lists, and review
+opinions
+State-level extension
+FinRisk-Ask Ask-or-Proceed decision, with one focusedevidence request after selecting Ask Advancement of the current state or a targetedevidence request
+The contract defines the measurement boundary rather than a fixed execution order for every review
+case. Two tasks may originate from the same source case but belong to different families when they resolve
+different decisions or produce different artifacts. Conversely, records with different surface formats may
+belong to the same family when they instantiate the same decision context. Therefore, family boundaries
+are determined by professional function rather than incidental properties of source data.
+3.2. Operation-Aligned Capability Taxonomy
+The static benchmark organizes financial risk-review capability into three layers:
+Domain Knowledge→Evidence-Grounded Processing→Applied Review.
+The arrows indicate information dependency rather than a mandatory linear workflow. Individual cases may
+skip, repeat, or enter conditional branches, and the taxonomy organizes evaluation coverage rather than
+prescribing the execution order of every professional review process.
+Families are grouped according to their role in review. Table 1 provides a compact overview of the eleven
+fixed-evidence downstream operations and the complementary state-level decision evaluated by FinRisk-
+Ask. Detailed operation contracts, including the model-visible information regime, professional decision
+object, reviewer artifact, and scoring protocol, are reported in Appendix B, Table 7. Domain Knowledge is
+treated as a supporting layer because its families evaluate concepts, rules, obligations, and risk mechanisms
+rather than workflow actions. The taxonomy and operation definitions were fixed by domain experts before
+candidate-model evaluation.
+Domain Knowledge.The Domain Knowledge layer evaluates conceptual, regulatory, and risk-related
+knowledge required for financial risk and compliance review. It contains 42 task families with 4,679 instances
+distributed across sixteen taxonomy groups, including financial risk, fraud, money laundering, compliance,
+international trade and finance, financial technology and security, commerce and payments, and finance-
+related law. These families provide the knowledge foundation required for interpreting evidence and making
+professional decisions.
+Evidence-Grounded Processing.This layer evaluates whether models can transform heterogeneous finan-
+cial and legal records into structured, decision-relevant evidence. It contains five task families with 1,502
+instances: case classification, information extraction, institution matching, person matching, and quantitative
+reasoning.
+Applied Review.This layer evaluates whether models can integrate available evidence, apply relevant rules,
+and produce professional review outputs. It contains six task families with 3,561 instances: risk classification,
+7
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+legal-outcome prediction, legal-judgment generation, applicable-provision selection, decision-view generation,
+and disputed-issue generation.
+The static benchmark therefore contains 53 families and 9,742 instances. Domain Knowledge is sum-
+marized by an unweighted macro-average over its 42 families, while downstream operations retain their
+task-native metrics. Because downstream operations correspond to different reviewer artifacts and decision
+objectives, FinRiskAtlas does not collapse them into a single aggregate score.
+3.3. Capability-First Construction and Quality Control
+FinRiskAtlas follows a capability-first construction process. We first define the review-relevant capability
+or professional operation, establish its evaluation contract, identify suitable source materials, construct
+candidate instances, and perform expert review. Therefore, family boundaries are determined by intended
+professional function rather than by available data sources or output formats.
+The benchmark draws from four source categories: professional examinations and textbooks; regulatory
+documents and industry guidance; business, transaction, entity, and legal records; and completed financial-
+risk review trajectories. Static instances are constructed through three routes: normalization of expert-
+authored questions, structured transformation of financial and legal records into evidence-processing tasks,
+and source-conditioned construction of case-level review tasks when the expected output is supported by
+visible evidence or documented professional decisions.
+Importantly, family definitions and evaluation contracts are fixed before candidate-model evaluation.
+Construction decisions are therefore independent of model predictions and cannot be adapted according to
+observed model behavior. Six domain experts, including four experts in financial risk and compliance review
+and two experts in legal review of financial disputes, defined the taxonomy, reviewed family boundaries,
+audited candidate items, and resolved disagreements through consensus.
+Quality control is conducted at both family and instance levels. Family-level review verifies that items
+within a family share the same capability target, information regime, decision object, reviewer artifact, and
+scoring protocol. Instance-level review checks evidence support, ambiguity, duplication, information leakage,
+parser validity, and provenance. Items without a stable reference or reproducible scoring procedure are
+removed.
+3.4. FinRisk-Ask: Controlling an Evolving Evidence State
+FinRisk-Ask extends the operation-centric evaluation principle to settings where the evidence state itself
+changes during review. It is not an interactive dialogue benchmark or a policy-learning framework of the
+kinds studied in prior information-acquisition work Li et al. (2024), Zhou et al. (2025), Wei et al. (2026);
+instead, it performs offline evaluation of whether a model can make the appropriate evidence-state transition
+under a fixed historical decision boundary. The goal is not to optimize future interaction, but to measure
+whether a model can recognize when additional evidence is required and request evidence that supports a
+concrete professional decision.
+The static benchmark assumes that the visible evidence state is fixed. FinRisk-Ask evaluates whether
+that state should be advanced or expanded through offline replay of completed, de-identified financial-risk
+review trajectories collected from an enterprise risk-control workflow.
+For a decision pointt, letCt denote the case record and review history visible immediately before the
+recorded action. Candidate models observe onlyCt; later evidence, subsequent actions, and downstream
+outcomes are withheld during inference. The model selects either to proceed with the available record or to
+request additional evidence.
+A retained state must satisfy three conditions: the pre-action context can be reconstructed without later
+information, the immediately following reviewer action maps unambiguously to Ask or Proceed, and no
+post-action information is included in the model-visible context. Ask states require an additional condition:
+8
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+later evidence must be verified by experts as unavailable at the decision point and relevant to an unresolved
+review need. Proceed states do not require request targets because their evaluated action is the decision to
+advance without initiating evidence acquisition.
+The released FinRisk-Ask benchmark contains 680 states from 104 trajectories: 583 recorded Ask states
+and 97 recorded Proceed states. Every released Ask state supports both action evaluation and request
+evaluation. The reference action represents the recorded professional transition in one workflow; it does not
+claim to be the unique optimal review policy.
+For each retained Ask state, the benchmark constructs an expert-verified set of later-observed evidence
+needs that were unavailable and unresolved at the replayed decision point. Candidate models never observe
+these targets during inference. Requests are evaluated against the underlying evidence need rather than the
+historical wording of the reviewer request, allowing semantically equivalent requests to receive credit.
+FinRisk-Ask evaluates end-to-end evidence acquisition on recorded Ask states with ERA, which assigns
+credit only when a model both enters the Ask branch and requests evidence aligned with a verified unresolved
+need. CRA complements ERA by isolating request-targeting capability conditional on entering the Ask branch,
+while BAcc, AskR, and ProceedR characterize agreement with the recorded action boundary and its two
+branches. Together, these metrics complement static operation-level assessment with a structured evaluation
+of evidence-state control.
+4. Experiments
+4.1. Experimental Setup
+Evaluation protocol.We evaluate the static FinRiskAtlas benchmark and FinRisk-Ask over 33 model config-
+urations. All candidate evaluations use zero-shot direct-answer inference without in-context demonstrations
+or requested chain-of-thought. Each model–instance pair is evaluated once under the archived inference
+configuration, and malformed or unparseable outputs remain in the evaluation denominator. Open-ended
+Applied Review tasks and FinRisk-Ask request alignment are evaluated with a fixed semantic evaluator config-
+uration. Reported results should therefore be interpreted as point estimates for the evaluated configurations
+rather than repeated-sampling estimates.
+Models and comparison sets.The evaluation suite contains 33 configurations spanning open-weight
+checkpoints and API systems across multiple scales and model families, including Qwen, DeepSeek, Kimi,
+GLM, GPT, Gemini, Claude, Nemotron, Ling, Seed, Dianjin, and FinR1. The evaluation unit is the archived
+configuration rather than an abstract model family because serving configurations and inference settings
+can affect observed behavior. For analyses involving semantic evaluation, DeepSeek-V4-Flash is excluded
+from comparative rankings because it also serves as the fixed evaluator. All reported comparative analyses
+involving judge-scored operations therefore use the remaining 32 configurations. LetMcmp denote the 32
+non-evaluator configurations used in analyses involving judge-scored tasks. For each downstream operation
+o, letMo denote its eligible configuration set: all 33 configurations for the eight structured operations and
+Mcmp for the three judge-scored operations. Configurations are ranked withinMo in descending order of
+their Domain Knowledge macro scoreKm. We letrKm,o denote the resulting competition rank, with rank 1
+assigned to the highest score and tied configurations receiving the same rank.
+Metrics.For static operations, we retain each operation’s native metric because downstream families corre-
+spond to different reviewer artifacts and decision objectives. For FinRisk-Ask, Evidence-Request Alignment
+(ERA) measures end-to-end acquisition on recorded Ask states by jointly accounting for Ask-branch entry
+and alignment of the resulting request with an expert-verified evidence need. Conditional Request Alignment
+(CRA) complements ERA by measuring request-targeting capability conditional on entering the Ask branch,
+making it useful for comparing how effectively different configurations formulate evidence requests. Balanced
+Recorded-Action Agreement (BAcc), Ask recall (AskR), and Proceed recall (ProceedR) characterize agreement
+9
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+Figure3:Operation-level profiles across evaluated configurations.(a) Within-column percentile heatmap,
+with configurations ordered by the Domain Knowledge macro; hatched cells denote evaluator self-scores
+excluded from evaluator-dependent comparisons. (b) Raw downstream-operation scores for the knowledge-
+near pair Gemini-3-Flash-preview and Kimi-K3. (c) Spearman correlations between the Domain Knowledge
+macro and downstream operations, using 33 configurations for structured operations and 32 for judge-scored
+operations.
+with the recorded action boundary and its two branches. Formal definitions are provided in Appendix C.
+Research questions.The experiments investigate three consequences of decision-aligned evaluation. RQ1:
+How much operation-specific variation exists across downstream review operations? RQ2: How well does
+broad financial knowledge preserve downstream configuration selection? RQ3: How do action selection and
+request targeting jointly determine evidence-state performance?
+4.2. RQ1: Operation-Level Evaluation Reveals Heterogeneous Model Strengths
+The downstream review operations induce substantially different configuration rankings despite being
+evaluated on the same configuration pool. Figure 3(a) visualizes this behavior by ordering configurations
+according to their Domain Knowledge macro scores and displaying their within-operation percentile ranks.
+Rather than preserving a common ordering across downstream operations, many configurations change
+relative positions between evidence-processing and applied-review tasks, suggesting that different operations
+emphasize different capabilities.
+We quantify this variation by computing the11×11 Spearman rank-correlation matrix overMcmp using
+the complete downstream operation scores (Tables 9 and 10). The mean pairwise correlation isρ=0.42 , with
+37 of the 55 operation pairs exhibiting correlations below 0.5. Some operations exhibit almost independent
+10
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+40 45 50 55 60
+Balanced recorded-action agreement, BAcc (%)
+20
+40
+60
+80
+Evidence-Request Alignment, ERA (%)
+ΔERA = +28.31 pp
+|ΔBAcc| = 0.07 pp
+single-action
+BAcc = 50
+40 70 100
+Ask recall (%)
+Qwen3-8B
+Kimi-K3
+GPT-5.6-Luna
+Ling-2.6-1T
+40 60 80 100
+Recorded-Ask recall, AskR (%)
+30
+50
+70
+90
+Conditional Request Alignment, CRA (%)
+ERA 40
+ERA 55
+ERA 70
+ERA 80
+40 50 60
+BAcc (%)
+Ling-2.6-1T
+ERA #1
+Qwen3.7-Max
+CRA #1
+Kimi-K3
+CRA #2
+Qwen3-8B
+BAcc #2
+Claude-Opus-4.7
+1 2 3 5 10 15 20 23
+Knowledge shortlist size, k
+0
+2
+4
+6
+Mean shortlist regret (points)
+5.35
+2.59
+0.90
+0.00
+Case
+classification
+InformationextractionInstitutionmatching
+Person
+matchingQuantitativereasoning
+Risk
+classificationLegal-outcome
+prediction
+Applicable-provision
+selection
+Legal-judgment
+generationDecision-viewgenerationDisputed-issuegeneration
+0
+5
+10
+15
+20
+Shortlist regret (points)
+18.01
+11.21
+6.70
+k=1 k=3 k=10 k=15
+a b
+c d
+Figure4:Evidence-state behavior and operation-specific screening regret.(a) Relationship between
+Balanced Recorded-Action Agreement and Evidence-Request Alignment across configurations. (b) Decompo-
+sition of request alignment into recorded-Ask recall and Conditional Request Alignment. (c–d) Score forgone
+under Domain-Knowledge-based shortlisting across different shortlist sizes.
+rankings. For example, institution matching and risk classification have a Spearman correlation of only
+ρ=−0.03 . The eigenspectrum of the same correlation matrix, shown in Figure 5(b), provides the same
+conclusion from a complementary perspective. The leading component explains 49.9% of the total eigenvalue
+mass, whereas the first five components explain 85.0%, indicating that downstream operations share a
+common capability component but cannot be reduced to a single latent ordering.
+Figure 3(c) shows that the correlation between the Domain Knowledge macro and downstream operations
+varies substantially, ranging from 0.33 for institution matching to 0.89 for case classification. This effect is also
+visible among configurations with nearly identical knowledge performance. Gemini-3-Flash-preview and Kimi-
+K3 differ by only 0.01 points on the Domain Knowledge macro, yet Gemini-3-Flash-preview leads by 14.10
+points on applicable-provision selection, whereas Kimi-K3 leads by 8.47 points on legal-outcome prediction.
+Consistent with this observation, knowledge-near configuration pairs (within 0.5 Domain Knowledge points)
+still exhibit a median downstream profile difference of 25.5 percentile points (Figure 5(a)). Moreover, the
+eleven downstream operation leaders are distributed across nine different configurations (Figure 5(d)),
+indicating that no single configuration consistently dominates all review operations. These observations show
+that operation-level evaluation provides configuration-selection signals that are not preserved uniformly by
+broad financial capability scores.
+11
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+4.3. RQ2: Knowledge-Based Screening Incurs Operation-Dependent Regret
+The heterogeneous rankings observed in RQ1 suggest that knowledge-based screening may not preserve
+the configurations preferred by individual downstream operations. We therefore quantify the resulting
+deployment cost by measuring the regret incurred when candidate configurations are shortlisted solely
+according to their Domain Knowledge ranking.
+For operationo, let Sm,o denote the score of configurationm. Restricting selection to the top-k configura-
+tions under the Domain Knowledge ranking, the observed shortlist regret is defined as
+Rego(k) =maxm∈Mo Sm,o −maxm∈Mo
+rKm,o ≤k
+Sm,o.(2)
+Ties at the rank threshold are retained, so the set{m∈ M o :r Km,o ≤k} may contain more than
+k configurations. This convention avoids arbitrary tie-breaking. Because downstream operations follow
+heterogeneous evaluation contracts, regret is reported in each operation’s native score units. Figure 4(c,d)
+summarizes the resulting operation-specific regret curves. The cost of knowledge-based screening varies
+substantially across downstream operations. Atk=1 , selecting only the Domain Knowledge leader incurs
+no regret for institution matching and risk classification, but forfeits 18.01 points on information extraction,
+11.21 points on quantitative reasoning, and 8.47 points on legal-outcome prediction. Increasing the shortlist
+reduces, but does not eliminate, these gaps. For example, decision-view generation still retains 6.70 points
+of regret even atk=15 . These results suggest that the Domain Knowledge macro is well suited for coarse
+screening, whereas selecting the final deployment configuration benefits from operation-level evaluation.
+4.4. RQ3: Evidence-State Control Separates Action Selection from Request Targeting
+Evidence-state control requires both selecting the appropriate evidence-state transition and generating a
+request that targets the unresolved evidence need. FinRisk-Ask evaluates these behaviors through comple-
+mentary metrics. ERA measures the end-to-end acquisition outcome on recorded Ask states, BAcc measures
+agreement with the full recorded Ask-or-Proceed boundary, and AskR and CRA expose branch entry and
+conditional request alignment.
+Recorded-action agreement does not determine end-to-end evidence acquisition. Figure 4(a) shows
+that, among configuration pairs whose BAcc values differ by no more than 0.1 points, ERA differs by as
+much as 28.31 points. Configurations can therefore reproduce the recorded action boundary at similar rates
+while differing substantially in whether their behavior culminates in a request aligned with the unresolved
+evidence need. Figure 4(b) makes the decomposition of ERA explicit by plotting recorded-Ask recall against
+Conditional Request Alignment and overlaying iso-ERA contours. Configurations in the upper-right region
+combine broad coverage of recorded Ask states with strong request targeting and therefore achieve high
+end-to-end alignment. Ling-2.6-1T attains the highest ERA by combining an AskR of 96.57% with a CRA of
+82.58%. Kimi-K3 and Claude-Opus-4.7 occupy a similar high-coverage and high-alignment region, yielding
+ERA scores of 77.10% and 75.98%, respectively. By contrast, Qwen3.7-Max achieves the highest CRA at
+87.67% but enters the recorded Ask branch on only 57.80% of recorded Ask states, limiting its ERA to 50.68%.
+The panel therefore shows that strong conditional request alignment alone is insufficient for end-to-end
+evidence acquisition: high ERA requires both reliable entry into the Ask branch and a request that targets
+the unresolved evidence need.
+The same separation is visible in the aggregate action behavior. Across all 32 non-evaluator configurations,
+AskR exceeds ProceedR. The median Ask–Proceed recall gap is 46.26 points, and 24 configurations exhibit
+gaps larger than 20 points. This systematic asymmetry indicates that the evaluated configurations reproduce
+recorded requests for additional evidence more readily than recorded decisions to proceed with the current
+record. It also motivates reporting BAcc together with the two branch-specific recalls rather than relying on
+12
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+overall action agreement alone. Taken together, ERA provides the primary end-to-end measure of evidence
+acquisitiononrecordedAskstates, whileBAcccharacterizesagreementwiththefullrecordedactionboundary
+and AskR, ProceedR, and CRA diagnose where performance is gained or lost. These results demonstrate that
+evidence-state control is not a single capability, but the combination of selecting an appropriate evidence-state
+transition and acquiring evidence that resolves the underlying professional decision.
+5. Conclusion
+FinRiskAtlas studies financial LLM evaluation through the lens of professional decision making. It evaluates
+whether a model configuration can perform the required review operation and control the evidence state
+from which that decision is made. The static benchmark provides operation-aligned evaluation under fixed
+evidence conditions, while FinRisk-Ask extends evaluation to evolving states where models must determine
+whether additional evidence is needed and whether the requested evidence addresses the underlying
+decision need. Our experiments show that these two dimensions reveal capability differences hidden by
+broad benchmark scores. Different review operations induce distinct model profiles, and evidence-state
+evaluation separates recognizing the need for information from acquiring the right information. These
+findings suggest that selecting LLMs for professional financial workflows requires evaluation units aligned
+with deployment decisions rather than relying only on general financial competence. FinRiskAtlas provides
+the contracts, review operations, reconstructed evidence states, and reproducible evaluation protocols needed
+to study this perspective. We hope this perspective encourages future benchmarks to align evaluation units
+more closely with the professional decisions that deployed language models are expected to support.
+13
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+References
+Antoine Bigeard, Langston Nashold, Rayan Krishnan, and Shirley Wu. Finance agent benchmark: Bench-
+marking llms on real-world financial research tasks. arXiv preprint arXiv:2508.00828, 2025. URL
+https://arxiv.org/abs/2508.00828.
+Zhiyu Chen, Wenhu Chen, Charese Smiley, Sameena Shah, Iana Borova, Dylan Langdon, Reema Moussa,
+Matt Beane, Ting-Hao Huang, Bryan Routledge, and William Yang Wang. FinQA: A dataset of numerical
+reasoning over financial data. InProceedings of the 2021 Conference on Empirical Methods in Natural
+Language Processing, pages 3697–3711. Association for Computational Linguistics, 2021. doi: 10.18653/
+v1/2021.emnlp-main.300. URLhttps://aclanthology.org/2021.emnlp-main.300/.
+Zhiyu Chen, Shiyang Li, Charese Smiley, Zhiqiang Ma, Sameena Shah, and William Yang Wang. Con-
+vFinQA: Exploring the chain of numerical reasoning in conversational finance question answering. In
+Proceedings of the 2022 Conference on Empirical Methods in Natural Language Processing, pages 6279–
+6292. Association for Computational Linguistics, 2022. doi: 10.18653/v1/2022.emnlp-main.421. URL
+https://aclanthology.org/2022.emnlp-main.421/.
+Jeremy Cole, Michael Zhang, Daniel Gillick, Julian Eisenschlos, Bhuwan Dhingra, and Jacob Eisenstein.
+Selectively answering ambiguous questions. InProceedings of the 2023 Conference on Empirical Methods
+in Natural Language Processing, pages 530–543. Association for Computational Linguistics, 2023. doi:
+10.18653/v1/2023.emnlp-main.35. URLhttps://aclanthology.org/2023.emnlp-main.35/.
+Yuyang Dai, Yan Lin, Zhuohan Xie, and Yuxia Wang. RealFin: How well do LLMs reason about finance when
+users leave things unsaid? InFindings of the Association for Computational Linguistics: ACL 2026, pages
+25050–25080, San Diego, California, United States, July 2026. Association for Computational Linguistics.
+doi: 10.18653/v1/2026.findings-acl.1255. URL https://aclanthology.org/2026.findings-acl.
+1255/.
+Jinru Ding, Chao Ding, Yidong Jiang, Wenrao Pang, Boyi Xiao, Zhiqiang Liu, Jiayuan Chen, Yun Zhong,
+TiantianYuan,JunmingGuan,DaweiCheng,andJieXu. Beyondknowledgetoagency: Evaluatingexpertise,
+autonomy, and integrity in finance with CNFinBench. InProceedings of the 32nd ACM SIGKDD Conference
+on Knowledge Discovery and Data Mining V.2, pages 8765–8776. Association for Computing Machinery,
+2026. doi: 10.1145/3770855.3817482. URLhttps://doi.org/10.1145/3770855.3817482.
+Huaixia Dou, Jie Zhu, Minghao Wu, Shuo Jiang, Junhui Li, Lifan Guo, Feng Chen, and Chi Zhang. FinGuard:
+Detecting financial regulatory non-compliance in LLM interactions. arXiv preprint arXiv:2605.29427,
+2026. URLhttps://arxiv.org/abs/2605.29427.
+Zhiwei Fei, Xiaoyu Shen, Dawei Zhu, Fengzhe Zhou, Zhuo Han, Alan Huang, Songyang Zhang, Kai Chen,
+Zhixin Yin, Zongwen Shen, Jidong Ge, and Vincent Ng. LawBench: Benchmarking legal knowledge of
+large language models. InProceedings of the 2024 Conference on Empirical Methods in Natural Language
+Processing, pages 7933–7962. Association for Computational Linguistics, 2024. doi: 10.18653/v1/2024.
+emnlp-main.452. URLhttps://aclanthology.org/2024.emnlp-main.452/.
+Shangbin Feng, Weijia Shi, Yike Wang, Wenxuan Ding, Vidhisha Balachandran, and Yulia Tsvetkov. Don’t
+hallucinate, abstain: Identifying LLM knowledge gaps via multi-LLM collaboration. InProceedings of
+the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers), pages
+14664–14690. Association for Computational Linguistics, 2024. doi: 10.18653/v1/2024.acl-long.786.
+URLhttps://aclanthology.org/2024.acl-long.786/.
+14
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+Neel Guha, Julian Nyarko, Daniel E. Ho, Christopher Ré, Adam Chilton, Aditya Narayana, Alex Chohlas-Wood,
+Austin Peters, Brandon Waldon, Daniel N. Rockmore, Diego Zambrano, Dmitry Talisman, Enam Hoque,
+Faiz Surani, Frank Fagan, Galit Sarfaty, Gregory M. Dickinson, Haggai Porat, Jason Hegland, Jessica Wu,
+Joe Nudell, Joel Niklaus, John Nay, Jonathan H. Choi, Kevin Tobia, Margaret Hagan, Megan Ma, Michael
+Livermore, Nikon Rasumov-Rahe, Nils Holzenberger, Noam Kolt, Peter Henderson, Sean Rehaag, Sharad
+Goel, Shang Gao, Spencer Williams, Sunny Gandhi, Tom Zur, Varun Iyer, and Zehua Li. LegalBench: A
+collaboratively built benchmark for measuring legal reasoning in large language models. InAdvances in
+Neural Information Processing Systems, volume 36, pages 44123–44279. Curran Associates, Inc., 2023. doi:
+10.52202/075280-1915. URL https://proceedings.neurips.cc/paper_files/paper/2023/
+hash/89e44582fd28ddfea1ea4dcb0ebbf4b0-Abstract-Datasets_and_Benchmarks.html.
+Xin Guo, Haotian Xia, Zhaowei Liu, Hanyang Cao, Zhi Yang, Zhiqiang Liu, Sizhe Wang, Jinyi Niu, Chuqi
+Wang, Yanhui Wang, Xiaolong Liang, Xiaoming Huang, Bing Zhu, Zhongyu Wei, Yun Chen, Weining
+Shen, and Liwen Zhang. FinEval: A Chinese financial domain knowledge evaluation benchmark for large
+language models. InProceedings of the 2025 Conference of the Nations of the Americas Chapter of the
+Association for Computational Linguistics: Human Language Technologies (Volume 1: Long Papers), pages
+6258–6292. Association for Computational Linguistics, 2025. doi: 10.18653/v1/2025.naacl-long.318.
+URLhttps://aclanthology.org/2025.naacl-long.318/.
+Ying He, Zhouhong Gu, Zhecheng Hu, Yubo Zhou, Hao Shen, Jiaqing Liang, Zhaoqian Dai, Shuguang Ma,
+Fei Yu, Yanghua Xiao, and Zhixu Li. Are large language models reliable reviewers? a benchmark for
+error detection in financial documents. InFindings of the Association for Computational Linguistics: ACL
+2026, pages 29625–29643. Association for Computational Linguistics, 2026. doi: 10.18653/v1/2026.
+findings-acl.1481. URLhttps://aclanthology.org/2026.findings-acl.1481/.
+Yuzhen Huang, Yuzhuo Bai, Zhihao Zhu, Junlei Zhang, Jinghan Zhang, Tangjun Su, Junteng Liu,
+Chuancheng Lv, Yikai Zhang, Jiayi Lei, Yao Fu, Maosong Sun, and Junxian He. C-Eval: A multi-
+level multi-discipline chinese evaluation suite for foundation models. InAdvances in Neural Infor-
+mation Processing Systems, volume 36, pages 62991–63010. Curran Associates, Inc., 2023. doi:
+10.52202/075280-2749. URL https://proceedings.neurips.cc/paper_files/paper/2023/
+hash/c6ec1844bec96d6d32ae95ae694e23d8-Abstract-Datasets_and_Benchmarks.html.
+Chaeyun Kim, Dae-Young Park, Junghwan Kim, Jinyoung Jeong, Eunji Song, YongTaek Lim, and Minwoo Kim.
+FinRED: An expert-guided benchmark generation and evaluation framework for financial LLM red-teaming.
+arXiv preprint arXiv:2606.19887, 2026. URLhttps://arxiv.org/abs/2606.19887.
+Michael Krumdick, Rik Koncel-Kedziorski, Viet Dac Lai, Varshini Reddy, Charles Lovering, and Chris Tanner.
+BizBench: A quantitative reasoning benchmark for business and finance. InProceedings of the 62nd
+Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers), pages 8309–
+8332. Association for Computational Linguistics, 2024. doi: 10.18653/v1/2024.acl-long.452. URL
+https://aclanthology.org/2024.acl-long.452/.
+Belinda Z. Li, Been Kim, and Zi Wang. QuestBench: Can LLMs ask the right question to acquire information
+in reasoning tasks? InAdvances in Neural Information Processing Systems, volume 38. Curran Associates,
+Inc., 2025. doi: 10.52202/085713-4503. URL https://proceedings.neurips.cc/paper_
+files/paper/2025/hash/c42c8d51556fabb4b57fc86d3d3d0d09-Abstract-Datasets_and_
+Benchmarks_Track.html.
+ShuyueStellaLi,VidhishaBalachandran,ShangbinFeng,JonathanS.Ilgen,EmmaPierson, PangWeiKoh,and
+Yulia Tsvetkov. MediQ: Question-asking LLMs and a benchmark for reliable interactive clinical reasoning.
+15
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+InAdvances in Neural Information Processing Systems, volume 37, pages 28858–28888. Curran Associates,
+Inc., 2024. doi: 10.52202/079017-0908. URLhttps://proceedings.neurips.cc/paper_files/
+paper/2024/hash/32b80425554e081204e5988ab1c97e9a-Abstract-Conference.html.
+Percy Liang, Rishi Bommasani, Tony Lee, Dimitris Tsipras, Dilara Soylu, Michihiro Yasunaga, Yian Zhang,
+Deepak Narayanan, Yuhuai Wu, Ananya Kumar, Benjamin Newman, Binhang Yuan, Bobby Yan, Ce Zhang,
+Christian Alexander Cosgrove, Christopher D. Manning, Christopher Ré, Diana Acosta-Navas, Drew Arad
+Hudson, Eric Zelikman, Esin Durmus, Faisal Ladhak, Frieda Rong, Hongyu Ren, Huaxiu Yao, Jue Wang,
+Keshav Santhanam, Laurel Orr, Lucia Zheng, Mert Yuksekgonul, Mirac Suzgun, Nathan Kim, Neel Guha,
+Niladri S. Chatterji, Omar Khattab, Peter Henderson, Qian Huang, Ryan Andrew Chi, Sang Michael Xie,
+Shibani Santurkar, Surya Ganguli, Tatsunori Hashimoto, Thomas Icard, Tianyi Zhang, Vishrav Chaudhary,
+William Wang, Xuechen Li, Yifan Mai, Yuhui Zhang, and Yuta Koreeda. Holistic evaluation of language
+models.Transactions on Machine Learning Research, 2023. ISSN 2835-8856. URLhttps://openreview.
+net/forum?id=iO4LZibEqW.
+Yang Liu, Dan Iter, Yichong Xu, Shuohang Wang, Ruochen Xu, and Chenguang Zhu. G-eval: NLG evaluation
+using GPT-4 with better human alignment. InProceedings of the 2023 Conference on Empirical Methods
+in Natural Language Processing, pages 2511–2522. Association for Computational Linguistics, 2023. doi:
+10.18653/v1/2023.emnlp-main.153. URLhttps://aclanthology.org/2023.emnlp-main.153/.
+Glenn Matlin, Mika Okamoto, Huzaifa Pardawala, Yang Yang, and Sudheer Chava. Financial language
+model evaluation (FLaME). InFindings of the Association for Computational Linguistics: ACL 2025, pages
+22633–22679. Association for Computational Linguistics, 2025. doi: 10.18653/v1/2025.findings-acl.1164.
+URLhttps://aclanthology.org/2025.findings-acl.1164/.
+Hussein Mozannar and David Sontag. Consistent estimators for learning to defer to an expert. InPro-
+ceedings of the 37th International Conference on Machine Learning, volume 119 ofProceedings of Machine
+Learning Research, pages 7076–7087. PMLR, 2020. URLhttps://proceedings.mlr.press/v119/
+mozannar20b.html.
+Ying Nie, Binwei Yan, Tianyu Guo, Hao Liu, Haoyu Wang, Wei He, Binfan Zheng, Weihao Wang, Qiang Li,
+Weijian Sun, Yunhe Wang, and Dacheng Tao. CFinBench: A comprehensive Chinese financial benchmark
+for large language models. InProceedings of the 2025 Conference of the Nations of the Americas Chapter
+of the Association for Computational Linguistics: Human Language Technologies (Volume 1: Long Papers),
+pages 876–891. Association for Computational Linguistics, 2025. doi: 10.18653/v1/2025.naacl-long.40.
+URLhttps://aclanthology.org/2025.naacl-long.40/.
+Arjun Panickssery, Samuel R. Bowman, and Shi Feng. LLM evaluators recognize and favor their own genera-
+tions. InAdvances in Neural Information Processing Systems, volume 37, pages 68772–68802. Curran Asso-
+ciates, Inc., 2024. doi: 10.52202/079017-2197. URLhttps://proceedings.neurips.cc/paper_
+files/paper/2024/hash/7f1f0218e45f5414c79c0679633e47bc-Abstract-Conference.
+html.
+Sudha Rao and Hal Daumé III. Learning to ask good questions: Ranking clarification questions using neural
+expected value of perfect information. InProceedings of the 56th Annual Meeting of the Association for
+Computational Linguistics (Volume 1: Long Papers), pages 2737–2746. Association for Computational
+Linguistics, 2018. doi: 10.18653/v1/P18-1255. URLhttps://aclanthology.org/P18-1255/.
+Allen Z. Ren, Anushri Dixit, Alexandra Bodrova, Sumeet Singh, Stephen Tu, Noah Brown, Peng Xu, Leila
+Takayama, Fei Xia, Jake Varley, Zhenjia Xu, Dorsa Sadigh, Andy Zeng, and Anirudha Majumdar. Robots
+16
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+that ask for help: Uncertainty alignment for large language model planners. InProceedings of the 7th
+Conference on Robot Learning, volume 229 ofProceedings of Machine Learning Research, pages 661–682.
+PMLR, 2023. URLhttps://proceedings.mlr.press/v229/ren23a.html.
+Marco Tulio Ribeiro, Tongshuang Wu, Carlos Guestrin, and Sameer Singh. Beyond accuracy: Behavioral
+testing of NLP models with CheckList. InProceedings of the 58th Annual Meeting of the Association
+for Computational Linguistics, pages 4902–4912. Association for Computational Linguistics, 2020. doi:
+10.18653/v1/2020.acl-main.442. URLhttps://aclanthology.org/2020.acl-main.442/.
+Raj Shah, Kunal Chawla, Dheeraj Eidnani, Agam Shah, Wendi Du, Sudheer Chava, Natraj Raman, Charese
+Smiley, Jiaao Chen, and Diyi Yang. When FLUE meets FLANG: Benchmarks and large pretrained language
+model for financial domain. InProceedings of the 2022 Conference on Empirical Methods in Natural Language
+Processing, pages 2322–2335. Association for Computational Linguistics, 2022. doi: 10.18653/v1/2022.
+emnlp-main.148. URLhttps://aclanthology.org/2022.emnlp-main.148/.
+Zichen Tang, Haihong E, Ziyan Ma, Haoyang He, Jiacheng Liu, Zhongjun Yang, Zihua Rong, Rongjin
+Li, Kun Ji, Qing Huang, Xinyang Hu, Yang Liu, and Qianhe Zheng. FinanceReasoning: Benchmarking
+financial numerical reasoning more credible, comprehensive and challenging. InProceedings of the 63rd
+Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers), pages 15721–
+15749. Association for Computational Linguistics, 2025. doi: 10.18653/v1/2025.acl-long.766. URL
+https://aclanthology.org/2025.acl-long.766/.
+Fei Wei, Daoyuan Chen, Ce Wang, Yilun Huang, Yushuo Chen, Xuchen Pan, Yaliang Li, and Bolin Ding.
+Grounded in reality: Learning and deploying proactive LLM from offline logs. InProceedings of the
+43rd International Conference on Machine Learning, 2026. URLhttps://openreview.net/forum?id=
+J4k8q8nku1. ICML 2026 Poster; arXiv:2510.25441.
+Qianqian Xie, Weiguang Han, Xiao Zhang, Yanzhao Lai, Min Peng, Alejandro Lopez-Lira, and Jimin Huang.
+PIXIU: A comprehensive benchmark, instruction dataset and large language model for finance. InAdvances
+in Neural Information Processing Systems, volume 36, pages 33469–33484. Curran Associates, Inc., 2023.
+doi: 10.52202/075280-1454. URL https://proceedings.neurips.cc/paper_files/paper/
+2023/hash/6a386d703b50f1cf1f61ab02a15967bb-Abstract-Datasets_and_Benchmarks.
+html.
+Qianqian Xie, Weiguang Han, Zhengyu Chen, Ruoyu Xiang, Xiao Zhang, Yueru He, Mengxi Xiao, Dong
+Li, Yongfu Dai, Duanyu Feng, Yijing Xu, Haoqiang Kang, Ziyan Kuang, Chenhan Yuan, Kailai Yang,
+Zheheng Luo, Tianlin Zhang, Zhiwei Liu, Guojun Xiong, Zhiyang Deng, Yuechen Jiang, Zhiyuan Yao,
+Haohang Li, Yangyang Yu, Gang Hu, Jiajia Huang, Xiao-Yang Liu, Alejandro Lopez-Lira, Benyou
+Wang, Yanzhao Lai, Hao Wang, Min Peng, Sophia Ananiadou, and Jimin Huang. FinBen: A
+holistic financial benchmark for large language models. InAdvances in Neural Information Pro-
+cessing Systems, volume 37, pages 95716–95743. Curran Associates, Inc., 2024. doi: 10.52202/
+079017-3033. URL https://proceedings.neurips.cc/paper_files/paper/2024/hash/
+adb1d9fa8be4576d28703b396b82ba1b-Abstract-Datasets_and_Benchmarks_Track.html.
+Tong Zhang, Peixin Qin, Yang Deng, Chen Huang, Wenqiang Lei, Junhong Liu, Dingnan Jin, Hongru Liang,
+and Tat-Seng Chua. CLAMBER: A benchmark of identifying and clarifying ambiguous information needs
+in large language models. InProceedings of the 62nd Annual Meeting of the Association for Computational
+Linguistics (Volume 1: Long Papers), pages 10746–10766. Association for Computational Linguistics, 2024.
+doi: 10.18653/v1/2024.acl-long.578. URLhttps://aclanthology.org/2024.acl-long.578/.
+17
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+Jiale Zhao, Ke Fang, and Lu Cheng. When and what to ask: AskBench and rubric-guided RLVR for LLM
+clarification. InFindings of the Association for Computational Linguistics: ACL 2026, pages 17120–17140.
+Association for Computational Linguistics, 2026. doi: 10.18653/v1/2026.findings-acl.845. URLhttps:
+//aclanthology.org/2026.findings-acl.845/.
+Wenting Zhao, Ge Gao, Claire Cardie, and Alexander M. Rush. I could’ve asked that: Reformulating
+unanswerable questions. InProceedings of the 2024 Conference on Empirical Methods in Natural Language
+Processing, pages 4207–4220. Association for Computational Linguistics, 2024. doi: 10.18653/v1/2024.
+emnlp-main.242. URLhttps://aclanthology.org/2024.emnlp-main.242/.
+Lianmin Zheng, Wei-Lin Chiang, Ying Sheng, Siyuan Zhuang, Zhanghao Wu, Yonghao Zhuang,
+Zi Lin, Zhuohan Li, Dacheng Li, Eric P. Xing, Hao Zhang, Joseph E. Gonzalez, and Ion Sto-
+ica. Judging LLM-as-a-judge with MT-bench and chatbot arena. InAdvances in Neural Infor-
+mation Processing Systems, volume 36, pages 46595–46623. Curran Associates, Inc., 2023. doi:
+10.52202/075280-2020. URL https://proceedings.neurips.cc/paper_files/paper/2023/
+hash/91f18a1287b398d378ef22505bf41832-Abstract-Datasets_and_Benchmarks.html.
+Zhanke Zhou, Xiao Feng, Zhaocheng Zhu, Jiangchao Yao, Sanmi Koyejo, and Bo Han. From passive to
+active reasoning: Can large language models ask the right questions under incomplete information? In
+Proceedings of the 42nd International Conference on Machine Learning, volume 267 ofProceedings of Machine
+Learning Research, pages 78714–78758. PMLR, 2025. URLhttps://proceedings.mlr.press/v267/
+zhou25e.html.
+Fengbin Zhu, Wenqiang Lei, Youcheng Huang, Chao Wang, Shuo Zhang, Jiancheng Lv, Fuli Feng, and
+Tat-Seng Chua. TAT-QA: A question answering benchmark on a hybrid of tabular and textual content in
+finance. InProceedings of the 59th Annual Meeting of the Association for Computational Linguistics and
+the 11th International Joint Conference on Natural Language Processing (Volume 1: Long Papers), pages
+3277–3287. Association for Computational Linguistics, 2021. doi: 10.18653/v1/2021.acl-long.254. URL
+https://aclanthology.org/2021.acl-long.254/.
+Yakun Zhu, Zhongzhen Huang, Linjie Mu, Yutong Huang, Wei Nie, Jiaji Liu, Shaoting Zhang, Pengfei Liu, and
+Xiaofan Zhang. DiagnosisArena: Benchmarking diagnostic reasoning for large language models. InFindings
+of the Association for Computational Linguistics: ACL 2026, pages 3074–3098, San Diego, California, United
+States, July 2026. Association for Computational Linguistics. doi: 10.18653/v1/2026.findings-acl.151.
+URLhttps://aclanthology.org/2026.findings-acl.151/.
+18
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+Table 2: Positioning of FinRiskAtlas relative to representative financial and information-acquisition bench-
+marks.Operation-alignedindicates that downstream units are defined by their role in a professional workflow
+rather than source format or task type.Decision contractindicates that the visible evidence regime, de-
+cision object, reviewer artifact, and scoring protocol are fixed at the family level.Evidence acquisition
+indicates evaluation of whether and what additional information should be requested.✓ denotes present as
+a benchmark-level design unit,✗not documented as such, and◦partial.
+Benchmark Primary focus
+Operation
+aligned
+Decision
+contract
+Evidence
+acquisition
+Expert
+trajectories
+FLUE Shah et al. (2022) Financial language
+understanding
+✗ ✗ ✗ ✗
+FinQA / ConvFinQA Chen et al. (2021, 2022) Numerical reasoning
+over financial reports
+✗ ✗ ✗ ✗
+BizBench Krumdick et al. (2024) Business quantitative
+reasoning
+✗ ✗ ✗ ✗
+PIXIU / FinBen Xie et al. (2023, 2024) Broad financial
+capability coverage
+✗◦✗ ✗
+CFinBench / FinEval Nie et al. (2025), Guo et al. (2025) Chinese financial
+knowledge evaluation
+✗◦✗ ✗
+CNFinBench Ding et al. (2026) Financial capability,
+compliance, and
+safety
+◦ ◦✗ ✗
+FinGuard Dou et al. (2026) Regulation-derived
+compliance evaluation
+◦ ◦✗ ✗
+FinED-Bench He et al. (2026) Financial document
+error detection
+◦✗ ✗ ✗
+Finance Agent Bigeard et al. (2025) Tool-supported
+financial research
+agents
+◦✗◦✗
+MediQ / QuestBench Li et al. (2024, 2025) Clarification under
+incomplete
+information
+✗ ✗ ✓ ✗
+RealFin Dai et al. (2026) Unanswerable
+financial premises
+✗ ✗◦✗
+Learn-to-Ask Wei et al. (2026) Policy learning from
+expert dialogue
+✗ ✗ ✓ ✓
+FinRiskAtlasOperation-level
+financial risk and
+compliance review
+✓ ✓ ✓ ✓
+A. Benchmark Construction and Inventory
+A.1. Design Comparison with Existing Benchmarks
+Table 2 compares FinRiskAtlas with representative financial and information-acquisition benchmarks along
+the design dimensions relevant to our evaluation framework. A property is marked as present only when it
+serves as a benchmark-level organizing principle rather than an isolated task capability. The comparison
+is intended to clarify differences in evaluation design, rather than to rank existing benchmarks by overall
+quality.
+This appendix describes the benchmark inventory, construction process, data sources, and quality-control
+procedures. The evaluation units and family contracts are defined in Section 3, while the FinRisk-Ask
+reconstruction protocol is described in Appendix C. Static instances and trajectory states represent different
+evaluation units and are therefore reported separately.
+19
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+Table 3: Benchmark composition of FinRiskAtlas. Static instances and active-review states represent different
+evaluation units and are not combined.
+Layer Evaluation focus Families / settings Instances
+Domain Knowledge Financial concepts, regulations, obliga-
+tions, and risk mechanisms supporting
+professional review
+42 4,679
+Evidence-Grounded Processing Transforming heterogeneous records
+into structured and decision-relevant ev-
+idence
+5 1,502
+Applied Review Evidence-based case analysis, rule
+grounding, and professional review
+generation
+6 3,561
+Static benchmark Three-layer financial review evaluation 53 9,742
+FinRisk-Ask Evidence-state control over recon-
+structed professional review states
+1 setting 680 states (583 Ask, 97 Proceed)
+A.2. Capability-First Construction Pipeline
+FinRiskAtlas follows a capability-first construction process. The central principle is that data collection proce-
+dures should instantiate predefined evaluation contracts rather than determine the benchmark organization.
+We first define the professional capability or review operation, specify its evaluation contract, identify suitable
+source materials, construct candidate instances, and then perform expert validation.
+Three construction routes are used.
+Direct normalizationconverts expert-authored questions and verified answers into standardized evalua-
+tion items while preserving their original capability targets and reference decisions.
+Structured transformationconverts financial and legal records into evidence-processing tasks such as
+extraction, matching, classification, and quantitative reasoning while preserving the relationship between
+source evidence and evaluation targets.
+Source-conditioned constructionderives case-level review tasks from complex business, transaction, or
+legal materials when the expected output is supported by model-visible evidence, documented professional
+decisions, or deterministic calculations.
+The construction route determines how an item is obtained, but not how it is evaluated. After construction,
+every candidate item is assigned to a family only when it instantiates the same evaluation contract as other
+items in that family. This separation prevents source format, collection procedure, or annotation availability
+from becoming the implicit definition of a benchmark unit.
+Table 3 summarizes the benchmark composition. The detailed family inventory is provided in Table 4.
+Family sizes are intentionally unequal because construction follows capability coverage rather than balanced
+sampling. Aggregation is therefore performed only over explicitly compatible family sets.
+A.3. Data Sources and Expert Involvement
+FinRiskAtlas integrates multiple source categories covering different stages of professional financial review.
+Static benchmark construction involved six domain experts: four with experience in financial risk control and
+compliance review and two with experience in legal review of financial and commercial disputes. Experts
+participated in capability definition, family-boundary validation, candidate-item review, ambiguity analysis,
+and quality control.
+Every retained instance underwent independent review by at least two experts with relevant financial or
+legal backgrounds before inclusion. Disagreements were resolved through adjudication, and items without
+stableexpertconsensuswereremovedratherthanassignedmajoritylabels. Thereleasedbenchmarktherefore
+20
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+Table 4: Group-level composition of FinRiskAtlas. Each row reports the taxonomy group, coverage, number of
+families, and total number of instances. The complete per-family inventory, including sources and contracts,
+is released with the benchmark package.
+Layer Group Coverage Families InstancesDomain Knowledge
+Financial risk Risk management, markets, products, valuation, credit, operational, liq-
+uidity, and fixed-income risk
+8 892
+Fraud risk Card, insurance, telecom, contract, invoice, and AI-enabled fraud 6 624
+Money-laundering risk Anti-money-laundering obligations and typologies 2 244
+Compliance risk Regulatory obligations and compliance controls 4 442
+Trade theory and policy International trade theory and policy 4 457
+FDI and multinationals Foreign direct investment and multinational operations 2 208
+International finance Cross-border finance and settlement 4 499
+International business Business environment and operations 4 438
+FinTech Financial technology 1 103
+AI security AI-related security risk 1 106
+Technical security Security controls 1 103
+Security engineering Security engineering practice 1 104
+E-commerce E-commerce risk and operations 1 139
+Payments Payment systems and controls 1 109
+Finance law Finance-related legal knowledge 1 110
+Law General legal knowledge for review 1 101
+Subtotal 42 4,679
+Evidence-
+Grounded
+Case classification Identifying case structure and category 1 445
+Information extraction Extracting requested fields from source records 1 249
+Entity matching Institution and person matching 2 750
+Quantitative reasoning Decision-relevant financial computation 1 58
+Subtotal 5 1,502
+Applied Review
+Risk classification Case-level risk categorization 1 366
+Legal decision Legal-outcome prediction and legal-judgment generation 2 1,445
+Provision grounding Applicable-provision selection 1 1,000
+Review generation Decision-view and disputed-issue generation 2 750
+Subtotal 6 3,561
+Static benchmark total 53 9,742
+FinRisk-Ask active review 1 setting 680 states
+contains consensus references rather than unresolved annotations.
+A.4. Quality Control and Leakage Prevention
+Quality control is conducted at both the family and instance levels.
+At the family level, experts verify that all items within a family share the same target capability, model-
+visible information regime, professional decision object, reviewer artifact, and scoring protocol. Candidate
+families are split when they contain distinct decision objects and merged when their contracts are equivalent.
+At the instance level, we apply the following checks:
+• Evidence support:reference outputs must be supported by supplied evidence, authoritative documents,
+deterministic transformations, or adjudicated expert decisions.
+• Ambiguity control:items with unclear decision targets or unstable scoring criteria are revised or removed.
+• Duplicate control:normalized inputs, source identifiers, and templates are examined to reduce accidental
+duplication.
+21
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+Table 5: Data sources and expert roles in benchmark construction.
+Source category Capability coverage Expert involvement
+Professional examinations and textbooks Financial concepts, regulations, and risk
+mechanisms
+Reviewed capability alignment and ref-
+erence correctness
+Regulatory documents and industry guidance Compliance obligations and rule-
+grounded reasoning
+Reviewed regulatory interpretation and
+applicability
+Business, transaction, entity, and legal recordsEvidence extraction, entity reconcilia-
+tion, quantitative reasoning, and applied
+review
+Reviewed decision targets and evidence
+support
+Completed risk-review trajectories Ask-or-Proceed transitions and evidence-
+request evaluation
+Verifiedreconstructedstates, actionmap-
+pings, and evidence targets
+• Leakage control:answer-bearing metadata, hidden targets, and unavailable future information are
+removed from model-visible contexts.
+• Parservalidation:released examples and adversarial formatting variants are used to validate deterministic
+output extraction.
+• Provenance tracking:every released item is associated with source information and construction records.
+For publicly available materials, provenance information is retained and knowledge-oriented evaluation
+is distinguished from record-grounded review operations, where correctness depends on evidence available
+within the evaluation context rather than memorized facts. Family-level and instance-level review jointly
+enforce the five-part evaluation contract: the former defines the measurement unit, while the latter verifies
+that each retained item is a valid instantiation of that unit.
+B. Evaluation Protocol and Reproducibility
+This appendix specifies the execution protocol, response processing, scoring procedures, semantic evaluation,
+and reproducibility practices of FinRiskAtlas. The benchmark follows a unified evaluation pipeline in
+which raw model responses, parsed predictions, and final evaluation outputs are retained for verification.
+FinRiskAtlas is evaluation-only: candidate models are not trained, adapted, or optimized on any benchmark
+component.
+B.1. Inference Configuration
+All experiments use zero-shot direct-answer inference without in-context demonstrations or requested
+chain-of-thought. Models receive the task instruction and the model-visible information defined by the
+corresponding family contract.
+All reported results correspond to archived evaluation runs. The run manifest records the exact model
+identifier, provider or checkpoint revision, decoding configuration, output length limit, evaluation timestamp,
+retry status, and prediction-file hash for every evaluated configuration. These records define the execution
+environment required to reproduce the reported results.
+Eachmodel–instancepairisevaluatedonceunderthearchivedconfiguration. Empty,failed,orunparseable
+responses remain in the evaluation denominator. Therefore, reported values should be interpreted as point
+estimates of the evaluated configurations rather than estimates over repeated stochastic generations.
+B.2. Prompt and Output Processing
+During evaluation, each family contract is instantiated through a fixed prompt template, output schema,
+parser, and scoring implementation. The output contract determines the expected response format and the
+corresponding parsing procedure before candidate evaluation.
+Knowledge and classification tasks require labels, options, or option sets. Information-extraction tasks
+require structured fields. Entity-reconciliation tasks require identity decisions. Quantitative reasoning tasks
+22
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+Table 6: Task-native evaluation contracts in FinRiskAtlas.
+Task type Output Scoring rule Metric
+Knowledge and classification Label, option, or option set Correctness after family-specific extraction, set han-
+dling, and normalization
+Accuracy-style score
+Information extraction Requested fields Normalized field-level comparison with reference fields,
+preserving required field identity and order
+Field-level score
+Entity reconciliation Entity identity Exact correspondence with the reference identity deci-
+sion
+Accuracy
+Quantitative reasoning Numerical answer Family-specific numerical normalization and correct-
+ness checking
+Accuracy-style score
+Risk and legal decisions Categorical decision Exact decision matching after label normalization Accuracy
+Open-ended review generation Professional analysis Fixed semantic rubric evaluating correctness, coverage,
+and evidence use
+Rubric score
+FinRisk-Ask action Ask or Proceed Agreement with the recorded reviewer transition RAA, AskR, ProceedR, BAcc
+FinRisk-Ask evidence request Focused evidence request Three-level semantic alignment with later-observed,
+expert-verified evidence targets
+ERA, CRA, DEH, REH
+require normalized numerical answers. Open-ended Applied Review tasks require professional analyses
+evaluated by semantic rubrics. FinRisk-Ask requires either an Ask decision with one evidence request or a
+Proceed decision.
+The evaluation pipeline preserves:
+1. raw model responses before parsing;
+2. parsed outputs produced by deterministic parsers;
+3. final metric values produced by family-specific scoring functions.
+Answer normalization is restricted to formatting variation and does not modify the underlying prediction
+content. Parsed outputs are retained so that parsing success and valid-only analyses can be recovered without
+changing the primary evaluation protocol.
+B.3. Task-Native Scoring Protocol
+For a model configurationm and a task familyf containing Nf instances, let ˆym,i denote the raw response to
+instance i, let p f denote the fixed family parser, and letg f ∈[0, 1] denote the family-specific scoring function.
+The configuration–family score is
+Sm,f = 100Nf
+Nf∑︁
+i=1
+g f
+(︀
+p f ( ˆym,i),y i
+)︀
+.(3)
+Malformed or unparseable outputs are mapped byp f to a designated invalid value and receive zero credit
+underg f. For a downstream operationo, we writeSm,o for the corresponding operation-family score.
+Table 7 instantiates the evaluation contractΓ f = (cf ,I f ,d f ,Y f ,s f ) for each of the eleven fixed-evidence
+downstream operations. The operation name specifiesc f, while the remaining columns summarizeI f, d f,
+Y f, ands f.
+Let FK denote the set of 42 Domain Knowledge families. The Domain Knowledge macro score of
+configurationmis
+Km = 1|FK| ∑︁f∈F K Sm,f ,|F K|=42.(4)
+Each knowledge family therefore contributes equally regardless of its number of instances. No corresponding
+cross-operation macro is used as a primary result because downstream operations produce different reviewer
+artifacts and use different native scoring protocols.
+23
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+Table 7:Evaluation contracts for the eleven fixed-evidence downstream operations.The operation name
+specifies the target capabilityc f; the remaining columns summarize the model-visible information regime
+I f, decision objectdf, reviewer-artifact schemaYf, and scoring protocolsf.
+Operation Model-visible information Decision object Reviewer artifact Scoring
+Evidence-Grounded Processing
+Case classification Full case record and a fixed
+candidate category set
+Case category Procedure-routing label Accuracy
+Information extrac-
+tion
+Source record and an
+ordered list of requested
+fields
+Values of the requested fields Structured evidence-field
+sequence
+Normalized field-level score
+Institution matching Two institution descriptions,
+possibly from different
+records or languages
+Whether the descriptions
+denote the same institution
+Institution-identity decision Accuracy
+Person matching Two person records with
+partially overlapping
+attributes
+Whether the records denote
+the same natural person
+Person-identity decision Accuracy
+Quantitative reason-
+ing
+Case figures together with
+the applicable definition or
+formula
+Requested numerical
+quantity
+One normalized quantity Numerical correctness
+Applied Review
+Risk classification Case-level evidence and the
+applicable risk-category set
+Case-level risk category Risk grade Accuracy
+Applicable-provision
+selection
+Case facts and a candidate
+provision set
+Governing provisions Provision set cited as the
+decision basis
+Set-based accuracy-style
+score
+Legal-outcome predic-
+tion
+Case facts and procedural
+record, with the later
+outcome withheld
+Case disposition Disposition label Accuracy
+Legal-judgment gener-
+ation
+Case facts, evidence, and
+procedural record
+Reasoned analysis supporting
+a disposition
+Professional legal analysis Fixed semantic rubric
+Disputed-issue genera-
+tion
+Case record containing
+overlapping legal and
+contractual relationships
+Set of contested issues Structured issue list Fixed semantic rubric
+Decision-view genera-
+tion
+Case record and the review
+question presented to the
+reviewer
+Recommended review
+position
+Professional review opinion Fixed semantic rubric
+B.4. Semantic Evaluation Protocol
+Three open-ended Applied Review operations use semantic evaluation: legal-judgment generation, decision-
+view generation, and disputed-issue generation. Candidate responses are evaluated by a fixed semantic
+evaluator, DeepSeek-V4-Flash, following established LLM-based, rubric-guided evaluation practice for open-
+ended generation Liu et al. (2023), Zheng et al. (2023).
+The evaluator receives:
+•the original task input;
+•reference information;
+•the candidate response;
+•the task-specific evaluation rubric.
+Candidate-model identity is not provided as an evaluator input. Evaluator configuration, prompts, and
+parsing procedures are fixed independently of candidate generation and applied uniformly to all responses.
+The evaluator configuration’s own candidate outputs are retained for transparency but excluded from
+best-value annotations, operation-level comparisons, and analyses involving judge-scored tasks.
+FinRisk-Ask request alignment uses the same fixed evaluator with a three-level rubric. For each retained
+Ask state, the evaluator receives the generated request and the expert-verified future evidence target set. A
+score of 1 indicates direct alignment, 0.5 indicates a relevant but incomplete request, and 0 indicates an
+unrelated request. The evaluator does not determine the Ask-or-Proceed reference action, which is derived
+24
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+from the recorded workflow transition.
+The semantic evaluator is treated as a fixed measurement instrument rather than an oracle of professional
+correctness. Excluding evaluator self-comparison and releasing evaluator artifacts improve reproducibility
+but do not eliminate evaluator-specific effects Zheng et al. (2023), Panickssery et al. (2024). Semantic scores
+should therefore be interpreted as rubric measurements under the released evaluator configuration.
+B.5. Aggregation and Statistical Interpretation
+Reported results are descriptive comparisons among archived configurations. Several configurations belong
+to related model families and should not be interpreted as independent samples from a model population.
+FinRisk-Ask states originate from 104 trajectories, and multiple states from the same trajectory may share
+case-level dependencies.
+Interpretation of reported comparisons follows several principles. First, analyses involving operation
+maxima refer to observed point-estimate maxima rather than universal model rankings. Second, regret
+analyses consider near-tied Domain Knowledge configurations to reduce sensitivity to arbitrary ordering.
+Third, Ask-or-Proceed comparisons are evaluated against one shared recorded workflow boundary rather
+than treated as independent hypothesis tests. Fourth, FinRisk-Ask metrics are state-weighted, meaning
+trajectories contributing more retained states receive greater influence.
+Percentile profiles are used only for comparing relative rankings across heterogeneous operations. They do
+not imply that extraction, classification, numerical reasoning, and rubric-based generation share a common
+performance scale.
+B.6. Reproducibility Artifacts
+The released evaluation package includes the benchmark manifest, prompts, inference parameters, raw
+and parsed predictions, evaluator configurations, scoring implementations, and analysis scripts. These
+artifacts allow new model configurations to be evaluated under the same contracts and compared on the
+same operation and evidence-state dimensions.
+C. FinRisk-Ask Protocol
+FinRisk-Ask is an offline trajectory-replay evaluation of evidence-state control in financial review. Unlike
+interactive information-seeking benchmarks and policy-learning approaches Li et al. (2024, 2025), Zhou et al.
+(2025), Zhao et al. (2026), Wei et al. (2026), it does not optimize a dialogue policy or evaluate long-horizon
+interaction. Instead, it measures whether a model can make an appropriate evidence-state transition under
+a fixed historical decision boundary and whether a generated request addresses a trajectory-supported
+evidence need.
+C.1. Trajectory Reconstruction and Release Filtering
+FinRisk-Ask is constructed from completed financial-risk review trajectories collected from an internal
+enterprise risk-control workflow. The trajectories originate from real review processes and are released only
+through de-identified reconstructed states.
+For each trajectory, reconstruction proceeds chronologically to identify decision points where the recorded
+workflow either initiates additional evidence acquisition or advances using the currently available record. A
+candidate state is retained when three conditions are satisfied: (i) the pre-action context can be reconstructed
+without later observations, (ii) the immediately following reviewer action maps unambiguously to Ask or
+Proceed, and (iii) no post-action information is included in the model-visible context.
+Ask-labeled states require one additional condition. At least one later-observed evidence item must be
+available from the completed trajectory and verified by experts as unavailable at the decision point, relevant
+to an unresolved review need, and appropriate as an evidence-acquisition target. During reconstruction,
+25
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+10 Ask-labeled states were removed because no admissible future evidence target could be identified and
+verified. The released benchmark therefore contains 680 states from 104 trajectories, including 583 recorded
+Ask states and 97 recorded Proceed states.
+The filtering rule is defined independently of candidate-model outputs. Every released state supports
+action evaluation, and every released Ask state additionally supports request evaluation, providing a shared
+denominator for AskR, ERA, and CRA. Multiple states may originate from the same trajectory, but each state
+preserves the evidence boundary that existed at its own historical decision point.
+For each released decision pointt, Ct denotes the complete case evidence and review history available
+immediately before the recorded actiona∗t. Subsequent evidence, later reviewer actions, and downstream
+outcomes are excluded fromCt and are accessible only to the evaluation pipeline.
+C.2. Reference Action and Evidence Target Construction
+The Ask-or-Proceed reference is derived from the recorded reviewer action immediately following each
+reconstructed state. It is not inferred from whether additional evidence appears later in the trajectory. A
+state is labeled Ask when the recorded action initiates a new evidence-acquisition request, and Proceed
+when the workflow advances using the currently available record without initiating a request at that point.
+Evidence acquisition that occurs at later decision points does not change the current label.
+The reference action is defined as:
+a∗t =
+{︃
+Ask,if the recorded action attinitiates additional evidence acquisition,
+Proceed,if the workflow advances attwithout initiating a new request. (5)
+The released labels contain 583 Ask states and 97 Proceed states. Action mappings were reviewed by domain
+experts, and disagreements were resolved through adjudication. The reference represents an observed
+professional transition under one workflow rather than a claim that it is the only defensible review policy.
+For retained Ask states, FinRisk-Ask constructs an expert-verified set of later-observed evidence needs:
+E +t ={e t,1,e t,2, . . . ,e t,nt },n t ≥1.(6)
+Historicalreviewerrequestsarenotusedasexacttextualreferences. Instead, generatedrequestsareevaluated
+against the underlying evidence need, allowing semantically equivalent requests to receive credit.
+Future evidence targets are constructed by collecting later-observed materials after the decision point,
+normalizing evidence descriptions, and verifying the resulting targets with domain experts. A target is
+retained only if experts confirm that the evidence is temporally unavailable at statet, addresses an unresolved
+review need, and corresponds to a meaningful evidence-acquisition objective.
+Candidate models never observeE+t or any other future trajectory information during inference.
+C.3. Expert Validation and Quality Control
+FinRisk-Ask applies expert validation to three aspects of trajectory reconstruction: state validity, action
+mapping, and evidence-target admissibility. Experts verify that reconstructed states preserve the original
+information boundary, that Ask-or-Proceed labels correspond to the recorded workflow transition, and that
+retained evidence targets represent unresolved decision-relevant needs at the replayed state.
+The quality-control process separates three requirements:
+• Temporal validity:target evidence must appear only after the evaluated decision point and must not
+already exist in the visible context.
+• Decision relevance:the evidence must address a need that affects the professional decision at that state.
+• Semantic validity:different descriptions referring to the same evidence need should be recognized as
+equivalent.
+Targets failing any of these requirements are removed or revised before release.
+26
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+C.4. Evaluation Protocol and Parsing
+Given the pre-action contextCt, the required structured model output is
+ˆyt =
+{︃
+Ask( ˆqt),request one focused item of additional evidence,
+Proceed,continue with the currently available evidence. (7)
+The action parser mapsˆyt to ˆat ∈ {Ask, Proceed, Invalid}. When ˆat =Ask , the request parser additionally
+extracts ˆqt and checks whether it satisfies the one-request output contract. A parsed Ask action with an
+empty, malformed, rejected, or multi-item request remains an Ask prediction for AskR but receives zero
+request-alignment credit. A structurally valid but semantically unrelated request likewise receives zero
+credit under the alignment rubric. An Invalid action receives zero action-agreement credit, while a Proceed
+prediction on a recorded Ask state receives zero ERA credit because no request is produced.
+The parsing rules and normalization procedures are fixed before model evaluation and released with the
+benchmark artifacts.
+C.5. Metrics
+For a fixed model configuration, we suppress the configuration index. LetT={1, . . . ,N} denote the
+released state set, whereN=680 , and letˆat and a∗t denote the parsed model action and recorded reviewer
+action at statet. Recorded-Action Agreement is
+RAA= 100N ∑︁t∈T I[ ˆat =a ∗t ].(8)
+Define the two reference-state subsets
+TAsk ={t∈ T:a ∗t =Ask},T Proceed ={t∈ T:a ∗t =Proceed},(9)
+where|T Ask|=583and|T Proceed|=97. The branch-specific recalls are
+AskR= 100|TAsk| ∑︁t∈TAsk I[ ˆat =Ask],(10)
+ProceedR= 100|TProceed| ∑︁t∈TProceed I[ ˆat =Proceed].(11)
+Balanced Recorded-Action Agreement gives equal weight to the two reference branches:
+BAcc= AskR+ProceedR2 .(12)
+For eacht∈ TAsk, define the request-alignment credit
+zt =
+⎧
+⎨
+⎩
+max
+e∈E +t
+ℓ( ˆqt,e),if ˆat =Askand ˆqt is valid,
+0,otherwise,
+(13)
+where
+ℓ( ˆqt,e) =
+⎧
+⎪⎨
+⎪⎩
+1,direct alignment with the evidence need,
+0.5,relevant but incomplete alignment,
+0,unrelated request.
+(14)
+27
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+Evidence-Request Alignment measures end-to-end request alignment over all recorded Ask states:
+ERA= 100|TAsk| ∑︁t∈TAsk zt.(15)
+Let
+A={t∈ T Ask : ˆat =Ask}(16)
+denote the recorded Ask states on which the model enters the Ask branch. For|A|>0 , Conditional Request
+Alignment is
+CRA= 100|A| ∑︁t∈A zt.(17)
+When |A|=0 , CRA is undefined and is reported as “–”. For|A|>0 , the shared recorded-Ask denominator
+yields the exact identity
+ERA= AskR×CRA100 .(18)
+Direct Evidence Hit and Relevant Evidence Hit are
+DEH= 100|TAsk| ∑︁t∈TAsk I[zt =1],(19)
+REH= 100|TAsk| ∑︁t∈TAsk I[zt ≥0.5].(20)
+Becausez t ∈ {0, 0.5, 1}under the three-level rubric,
+ERA= DEH+REH2 .(21)
+C.6. Interpretation Boundary
+FinRisk-Ask evaluates recorded professional transitions and trajectory-supported evidence needs under an
+offline replay setting. Later observations establish target provenance, but the evaluation does not execute
+generated requests or estimate their causal value after acquisition.
+The target set represents evidence needs recoverable from completed trajectories and does not enumerate
+every professionally reasonable acquisition strategy. Similarly, the recorded Ask-or-Proceed action reflects
+one operational workflow and should not be interpreted as the unique optimal review policy.
+Therefore, BAcc measures agreement with recorded workflow behavior, while ERA and CRA measure
+alignment with the released evidence-target set. These metrics characterize evidence-state control under the
+benchmark protocol rather than provide a complete measure of professional review quality.
+D. Supplementary Capability Analyses
+This appendix provides additional analyses supporting the main empirical claims in Section 4: operation-
+specific model profiles, the limitations of knowledge-based routing, and the separation between recorded
+action agreement and evidence-request targeting.
+28
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+D.1. Robustness of Operation-Specific Capability Profiles
+The main experiments show that downstream review operations induce different model rankings. We
+further examine whether this observation is driven only by large differences in broad Domain Knowledge
+performance or whether models with similar knowledge scores can still exhibit different operational profiles.
+For each configuration pair (m,n) , we define the absolute difference in Domain Knowledge macro
+performance as
+DKmn =|K m −K n|.(22)
+Let M=|M cmp|=32 . For each downstream operationo, let Rm,o denote the descending average rank
+of configurationm within Mcmp, with rank 1 assigned to the highest score and tied configurations receiving
+average ranks. We map this rank to a within-operation percentile:
+Pm,o =100 M−R m,oM−1 .(23)
+The downstream profile gap between configurationsmandnis
+Gmn = 1|O| ∑︁o∈O |Pm,o −P n,o|,(24)
+where O denotes the eleven downstream operations. Percentile normalization is used only to compare
+relative profiles across operations with heterogeneous native scoring scales.
+For the spectral analysis, letC∈R 11×11 denote the Spearman rank-correlation matrix of the downstream
+operation scores, with eigenvaluesλ1 ≥λ 2 ≥ · · · ≥λ11 ≥0 . The contribution of componentj is measured
+byλ j/ ∑︀11ℓ=1 λℓ.
+Among the 30 configuration pairs withDKmn ≤0.5 , the median downstream profile gap is 25.5 percentile
+points, demonstrating that similar broad knowledge performance does not imply similar operational behavior.
+Across all 496 pairs, the median profile gap is 34.2 percentile points. The eigenspectrum further shows that
+operation rankings share common structure but are not reducible to a single latent ordering: the leading
+eigenvalue accounts for 49.9% of the total eigenvalue mass, while the first five eigenvalues account for 85.0%
+cumulatively.
+We additionally examine whether Domain Knowledge ranking can recover operation-specific leaders.
+Within their respective operation-eligible configuration sets, the observed leaders occupy Domain Knowledge
+ranks from 1 to 23. A shortlist of size one recovers 2 of the 11 operation maxima, while a shortlist of size
+ten recovers 8 of 11. Full recovery requires a shortlist of size 23. These results show that broad knowledge
+ranking provides useful but incomplete information for operation-specific model selection.
+D.2. Relationship Between Static Capability and Evidence-State Control
+FinRisk-Ask evaluates evidence-state control separately from fixed-evidence operation execution. We further
+analyze whether static downstream capabilities are strongly associated with active-review behavior.
+Figure 6(a) reports Spearman associations between each downstream static operation and three FinRisk-
+Ask metrics: Balanced Recorded-Action Agreement (BAcc), Evidence-Request Alignment (ERA), and Con-
+ditional Request Alignment (CRA). These correlations are descriptive associations within the evaluated
+configuration pool and do not imply causal relationships.
+Several applied-review operations exhibit stronger association with request targeting than with recorded-
+action agreement. For example, legal-judgment generation shows stronger correlation with CRA (ρ=0.78 )
+than with BAcc (ρ=0.14 ), while decision-view generation shows stronger correlation with CRA (ρ=0.79 )
+than with BAcc (ρ=0.07 ). These observations suggest that generating useful evidence requests relies on
+capabilities that are not fully captured by matching the recorded Ask-or-Proceed boundary.
+29
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+0 10 20 30 40
+Absolute Domain Knowledge difference (pp)
+0
+20
+40
+60
+80
+Mean downstream profile gap
+(percentile points)
+ near-equal median = 25.5
+all-pair median = 34.2
+Kimi-K3 vs Gemini-3-Flash-preview
+ΔKnowledge = 0.01 pp; gap = 26.0
+ΔKnowledge ≤ 0.5 pp (n=30) Other pairs (n=466)
+PC1 PC2 PC3 PC4 PC5 PC6 PC7 PC8 PC9PC10PC11
+Principal component
+0
+10
+20
+30
+40
+50
+Individual explained variance (%)
+49.9%
+Individual Cumulative
+1 5 10 15 20 23 30 33
+Domain Knowledge shortlist size, k
+0
+2
+4
+6
+8
+10
+11
+Leaders recovered
+(out of 11)
+k=1: 2/11
+k=3: 4/11
+k=10: 8/11
+k=23: 11/11
+1 5 10 15 20 25 30 33
+Domain Knowledge competition rank (1 = highest)
+Case
+classification
+Information
+extraction
+Institution
+matching
+Person
+matching
+Quantitative
+reasoning
+Risk
+classification
+Legal-outcome
+prediction
+Applicable-provision
+selection
+Legal-judgment
+generation
+Decision-view
+generation
+Disputed-issue
+generation
+Kimi-K2.5
+GPT-5.6-Luna
+Gemini-3-Flash-preview
+Kimi-K3
+Ling-2.6-1T
+Gemini-3-Flash-preview
+Kimi-K3
+GPT-5.6-Sol
+GPT-5.4
+DeepSeek-V3-0324
+DeepSeek-V4-Pro
+0
+20
+40
+60
+80
+100
+Cumulative variance (%)
+PC1–2: 61.2%
+first crosses 80% at PC5
+(cumulative 85.0%)
+a b
+c d
+Figure5:Additional analyses of operation-specific capability profiles.(a) Relationship between Domain
+Knowledge difference and downstream profile gap over 496 configuration pairs. Knowledge-near pairs
+(|∆K| ≤0.5) still exhibit substantial downstream divergence. (b) Eigenspectrum of the eleven-operation
+Spearman correlation matrix, showing shared but non-identical ranking structure across operations. (c)
+Number of observed operation leaders recovered by Domain Knowledge-based shortlists of different sizes.
+(d) Domain Knowledge rank of each configuration attaining an observed operation maximum. All maxima
+correspond to point estimates from the evaluated configuration pool.
+Figure 6(b–d) further examines action-level behavior. Across the 32 non-evaluator configurations, Ask
+recall is generally higher than Proceed recall, indicating an asymmetric tendency toward reproducing
+evidence requests rather than recorded advancement decisions. Figure 6(c) shows that overall RAA can differ
+from balanced action agreement because the two reference classes are imbalanced. Figure 6(d) illustrates
+that configurations can shift substantially in ranking depending on whether they are evaluated by action
+agreement or end-to-end request alignment.
+Together, these analyses reinforce that FinRisk-Ask measures multiple aspects of evidence-state control:
+reproducing a recorded transition, recognizing when additional evidence is required, and requesting evidence
+aligned with the unresolved decision need.
+30
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+−0.1 0.0 0.2 0.4 0.6 0.8
+Spearman ρ with static operation score
+Case classification
+Applicable provision
+Decision view
+Legal judgment
+Legal outcome
+Information extraction
+Risk classification
+Quantitative reasoning
+Person matching
+Disputed issue
+Institution matching
+BAcc ERA CRA
+0 20 40 60 80 100
+Class-specific recall (%)
+FinR1-7B
+Dianjin-R1-7B
+Ling-2.6-1T
+Qwen3-1.7B
+GPT-5.6-Luna
+GPT-5.6-Terra
+Claude-Opus-4.7
+Kimi-K3
+GPT-5.6-Sol
+Kimi-K2.5
+Seed-2.0-Mini
+Nemotron-3-Ultra
+Qwen3-235B-A22B
+Gemini-2.5-Flash
+DeepSeek-V4-Pro
+Gemini-3-Flash-preview
+GPT-5.4
+Qwen3-14B
+Ling-2.6-Flash
+GLM-5.2
+GLM-5
+Qwen3-Next-80B
+Seed-2.0-Lite
+Qwen3.7-Max
+Qwen3-8B
+Nemotron-3-Super
+DeepSeek-V3-0324
+Qwen3-32B
+GPT-5.4-Mini
+Qwen2.5-7B
+Nemotron-3-Nano
+Qwen3-4B
+ Proceed recall
+Ask recall
+40 45 50 55 60
+Balanced recorded-action agreement (BAcc, %)
+40
+50
+60
+70
+80
+85
+Review Action Accuracy (RAA, %)
+RAA = BAcc
+FinR1-7B
+Qwen3-8B
+Kimi-K3
+1 5 10 15 20 25 30 32
+Competition rank (1 = best; eligible n = 32)
+Ling-2.6-1T
+GPT-5.6-Luna
+Kimi-K3
+Claude-Opus-4.7
+Qwen3-8B
+18
+1 13
+21
+3 5
+42
+22
+BAcc rank
+ERA rank
+a b
+c
+d
+Figure6:Additional analyses of static capability and evidence-state behavior.(a) Spearman associations
+between downstream operation scores and FinRisk-Ask metrics. (b) Ask recall and Proceed recall across
+non-evaluator configurations, showing asymmetric reproduction of recorded transitions. (c) Relationship
+between Recorded-Action Agreement (RAA) and Balanced Recorded-Action Agreement (BAcc). (d) Rank
+displacement between BAcc and Evidence-Request Alignment (ERA) for representative configurations.
+E. Complete Model Results
+This appendix reports the complete configuration-level results underlying the analyses in Section 4. The
+tables provide the full score matrices for all benchmark components under the same evaluation protocols
+used in the main experiments. For semantically evaluated tasks, the evaluator configuration’s own score is
+retained for transparency but excluded from best-value annotations and comparative analyses restricted to
+Mcmp.
+E.1. Complete Domain Knowledge Results
+The Domain Knowledge score is the unweighted macro-average over 42 knowledge task families. Each family
+contributes equally, preventing taxonomy groups with larger numbers of instances from dominating the
+overall knowledge score.
+31
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+Table 8: Complete Domain Knowledge macro results over all 33 archived configurations (%).
+Model Risk & Compliance Trade FinTech & Security Commerce & Payment Finance & Law Overall
+Dianjin-R1-7B 64.00 63.43 70.25 72.50 68.00 65.00
+FinR1-7B 66.35 68.00 78.25 75.50 76.00 68.93
+Ling-2.6-Flash 71.80 74.71 80.00 79.00 77.50 74.17
+Ling-2.6-1T 75.22 78.96 83.22 78.82 80.49 77.65
+Seed-2.0-Mini 73.22 76.64 80.43 78.32 80.04 75.62
+Seed-2.0-Lite 73.70 80.36 78.78 81.51 78.55 77.01
+Nemotron-3-Nano 49.06 49.30 57.49 57.46 49.92 50.38
+Nemotron-3-Super 64.74 68.49 73.37 70.36 72.16 67.43
+Nemotron-3-Ultra 71.81 76.89 78.06 79.73 81.85 74.96
+Qwen2.5-7B 62.23 61.79 67.11 71.85 70.94 63.42
+Qwen3-1.7B 40.13 37.87 43.78 44.49 46.05 40.21
+Qwen3-4B 63.17 60.38 68.45 69.46 69.10 63.32
+Qwen3-8B 67.12 65.68 71.24 74.42 73.06 67.66
+Qwen3-14B 67.92 70.93 76.49 73.66 77.65 70.48
+Qwen3-32B 70.90 74.46 79.73 79.20 80.66 73.79
+Qwen3-Next-80B 74.20 78.97 82.52 79.03 82.08 77.19
+Qwen3-235B-A22B 73.25 79.02 83.02 82.08 81.26 76.90
+Qwen3.7-Max 77.15 82.49 85.04 86.01 83.65 80.41
+DeepSeek-V3-0324 70.44 75.65 78.33 74.99 79.48 73.57
+DeepSeek-V4-Flash 71.33 75.49 79.98 76.30 77.65 74.08
+DeepSeek-V4-Pro 72.11 76.87 82.73 81.55 79.88 75.53
+Kimi-K2.5 75.23 81.95 82.15 80.25 79.21 78.56
+Kimi-K378.1183.05 84.07 82.80 80.95 80.68
+GLM-5 73.53 78.14 80.27 79.93 78.81 76.26
+GLM-5.2 74.65 79.18 80.33 79.43 79.02 77.13
+GPT-5.4-Mini 74.38 79.48 80.59 84.34 80.16 77.42
+GPT-5.4 74.46 81.17 84.69 84.3485.3478.66
+GPT-5.6-Luna 72.49 77.61 77.59 78.81 78.53 75.27
+GPT-5.6-Terra 74.87 81.58 81.19 82.73 80.24 78.34
+GPT-5.6-Sol 76.30 83.00 80.23 82.42 76.71 79.21
+Gemini-2.5-Flash 70.27 77.68 80.56 80.51 77.98 74.57
+Gemini-3-Flash-preview 77.2483.8084.33 86.41 80.5380.69
+Claude-Opus-4.7 76.55 82.1586.92 86.8182.75 80.19
+E.2. Complete Fixed-Evidence Operation Results
+Table 9 reports the complete results for Evidence-Grounded Processing and structured-output Applied Review
+operations. Columns correspond to the downstream operations defined in Table 1. Each operation retains its
+native scoring protocol and is not combined into a single downstream aggregate score.
+E.3. Complete Open-Ended Applied Review Results
+Table 10 reports the complete results for open-ended Applied Review operations evaluated with the fixed se-
+manticevaluatordescribedinAppendixB.Theevaluatorconfiguration’sself-scoreisretainedfortransparency
+and marked with†, but excluded from comparative analyses involving judge-scored operations.
+E.4. Complete FinRisk-Ask Results
+Table 11 reports complete FinRisk-Ask results over all evaluated configurations. The metrics follow the defini-
+tions in Appendix C: RAA measures agreement with recorded actions, BAcc balances Ask and Proceed recall,
+ERA measures end-to-end evidence-request alignment, and CRA measures request alignment conditional on
+entering the Ask branch. The request-alignment evaluator configuration is marked with† and excluded from
+evaluator-dependent comparative analyses.
+32
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+Table 9: Complete Evidence-Grounded Processing and structured Applied Review results over all 33 archived
+configurations (%). Column abbreviations correspond to the operations summarized in Table 1; their full
+evaluation contracts are reported in Table 7.
+Model Case Extract. Inst. Person Quant. Risk Legal Provision
+Dianjin-R1-7B 77.00 59.00 90.00 70.00 63.00 31.00 38.00 33.00
+FinR1-7B 76.00 10.00 82.00 82.00 73.00 29.00 64.00 35.00
+Ling-2.6-Flash 80.00 72.00 78.00 80.00 62.00 75.00 60.00 40.00
+Ling-2.6-1T 82.92 74.53 78.80 80.4086.2175.68 64.76 52.10
+Seed-2.0-Mini 83.15 75.42 86.80 73.80 79.31 66.61 62.22 36.95
+Seed-2.0-Lite 85.62 84.48 84.00 81.80 79.31 73.22 63.81 56.40
+Nemotron-3-Nano 66.29 70.43 75.60 73.40 65.52 54.92 53.76 23.50
+Nemotron-3-Super 79.78 72.44 82.40 79.20 75.00 71.86 56.72 30.15
+Nemotron-3-Ultra 82.02 81.49 74.80 85.60 81.90 75.41 61.69 29.45
+Qwen2.5-7B 76.63 59.14 78.00 82.00 75.00 53.28 62.96 40.55
+Qwen3-1.7B 54.61 61.79 79.60 76.40 56.03 71.86 58.94 16.20
+Qwen3-4B 76.40 75.72 80.00 84.00 75.00 71.31 62.33 12.80
+Qwen3-8B 81.75 61.69 80.32 83.00 70.86 74.59 64.49 17.44
+Qwen3-14B 81.80 76.82 78.80 85.40 74.14 68.85 64.97 33.40
+Qwen3-32B 82.11 74.63 90.00 84.36 79.66 73.77 62.96 27.44
+Qwen3-Next-80B 84.94 76.02 90.80 81.60 80.17 73.77 65.71 41.30
+Qwen3-235B-A22B 83.37 81.25 88.00 83.40 81.03 62.84 65.08 40.50
+Qwen3.7-Max 85.39 82.79 84.00 84.40 78.45 75.68 66.03 46.85
+DeepSeek-V3-0324 83.15 79.12 84.40 80.40 76.72 74.86 63.70 34.15
+DeepSeek-V4-Flash 82.92 51.84 88.00 83.40 72.41 75.41 63.70 53.00
+DeepSeek-V4-Pro 85.62 76.02 86.80 85.20 68.97 70.49 64.97 41.45
+Kimi-K2.588.0984.28 87.20 83.60 75.86 56.56 65.93 46.40
+Kimi-K3 87.19 74.43 84.8087.0077.59 74.8668.1551.65
+GLM-5 84.72 81.39 87.60 84.20 84.48 73.22 64.76 51.50
+GLM-5.2 84.94 81.69 85.60 83.60 78.45 71.86 65.71 51.15
+GPT-5.4-Mini 85.62 83.78 81.60 85.80 76.72 71.86 64.97 55.35
+GPT-5.4 86.29 83.98 82.00 85.60 75.86 74.04 67.51 60.45
+GPT-5.6-Luna 84.0485.9785.60 85.80 75.00 71.86 65.93 50.80
+GPT-5.6-Terra 85.62 83.48 90.40 85.80 76.72 73.77 67.83 56.95
+GPT-5.6-Sol 87.42 85.07 90.00 86.00 77.59 74.59 67.0967.55
+Gemini-2.5-Flash 82.25 75.72 89.20 85.60 64.66 72.95 60.11 66.25
+Gemini-3-Flash-preview 84.94 67.9693.6085.80 75.0076.7859.68 65.75
+Claude-Opus-4.7 85.17 76.62 63.20 50.80 73.28 75.14 65.19 54.80
+F. Qualitative Case Studies
+ThissectionprovidesqualitativeexamplesillustratinghowFinRiskAtlasinstantiatesoperation-levelevaluation
+contracts. The examples are not intended to compare model performance or serve as additional benchmark
+statistics. Instead, they demonstrate how different professional decisions require different visible evidence
+boundaries, reviewer artifacts, and scoring criteria. The static examples are organized according to the three
+benchmark layers introduced in Section 3: Domain Knowledge, Evidence-Grounded Processing, and Applied
+Review.
+Each static example contains the evaluation input, the reference decision or artifact, and an example
+model output. The displayed outputs are observable generations returned by the model and do not represent
+reconstructed hidden reasoning. For open-ended Applied Review tasks, evaluation scores are produced by
+the fixed semantic evaluator under the corresponding rubric; the examples illustrate the evaluation contract
+rather than standalone evidence of general model capability.
+F.1. Domain Knowledge
+The Domain Knowledge layer measures whether models possess conceptual and regulatory knowledge
+required to interpret financial-review evidence. Figure 7 presents an AML compliance example in which
+the model must identify the applicable customer-identification penalty range. The case illustrates that even
+33
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+Table 10: Complete open-ended Applied Review results over all 33 archived configurations (%). DeepSeek-
+V4-Flash is the fixed semantic evaluator. Its self-scored row is marked with† and excluded from best-value
+annotation and evaluator-dependent comparisons.
+Model Legal Judgment Decision View Disputed Issue
+Dianjin-R1-7B 29.00 20.00 36.00
+FinR1-7B 18.00 15.00 52.00
+Ling-2.6-Flash 30.00 37.00 63.00
+Ling-2.6-1T 40.27 55.69 63.30
+Seed-2.0-Mini 28.95 47.11 72.73
+Seed-2.0-Lite 29.66 58.73 73.35
+Nemotron-3-Nano 21.48 17.09 39.57
+Nemotron-3-Super 28.62 37.17 76.67
+Nemotron-3-Ultra 30.68 52.00 71.58
+Qwen2.5-7B 28.10 36.24 70.40
+Qwen3-1.7B 16.18 7.76 41.13
+Qwen3-4B 19.38 21.99 68.83
+Qwen3-8B 17.37 30.05 37.30
+Qwen3-14B 35.02 39.03 53.81
+Qwen3-32B 34.54 35.60 53.30
+Qwen3-Next-80B 32.43 53.10 67.51
+Qwen3-235B-A22B 39.26 49.00 57.35
+Qwen3.7-Max 36.22 57.84 70.58
+DeepSeek-V3-0324 36.2671.3151.68
+DeepSeek-V4-Flash† 25.16 54.86 81.23
+DeepSeek-V4-Pro 30.67 54.4877.12
+Kimi-K2.5 34.49 62.74 61.26
+Kimi-K3 35.05 64.13 74.84
+GLM-5 31.60 57.16 72.49
+GLM-5.2 31.59 58.59 68.37
+GPT-5.4-Mini 39.86 48.77 62.13
+GPT-5.446.3662.91 54.04
+GPT-5.6-Luna 41.70 52.77 61.33
+GPT-5.6-Terra 40.98 54.72 58.29
+GPT-5.6-Sol 42.09 62.25 58.11
+Gemini-2.5-Flash 45.29 65.27 74.05
+Gemini-3-Flash-preview 40.48 64.61 74.69
+Claude-Opus-4.7 35.53 51.97 74.06
+knowledge-oriented evaluation requires a precise decision target: the model must distinguish the requested
+administrative fine from other possible sanctions associated with different legal consequences.
+F.2. Evidence-Grounded Processing
+Evidence-Grounded Processing evaluates whether models can transform heterogeneous records into struc-
+tured, decision-relevant evidence. The following examples cover four representative operations: long-context
+case classification, quantitative verification, structured information extraction, and entity reconciliation.
+Together, they illustrate that evidence processing is not a single retrieval capability but a collection of
+operations with different decision objects and output contracts.
+F.3. Applied Review
+The Applied Review layer evaluates whether models can integrate evidence, apply professional decision
+frameworks, and generate case-level artifacts. These examples highlight a central motivation of FinRiskAtlas:
+thesame underlyingcase materialcansupportmultipleprofessional operations, whileeach operationrequires
+a different output artifact and evaluation criterion.
+Figure 12 illustrates disputed-issue generation, where the required artifact is a structured issue list rather
+than a final judgment. Figure 13 illustrates legal-judgment generation, which requires synthesizing evidence,
+34
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+Table 11:Complete FinRisk-Ask results for two reference policies and 33 archived model configurations
+(%).ERA is the end-to-end evidence-acquisition metric. DeepSeek-V4-Flash is the fixed request-alignment
+evaluator; its self-scored row is marked with†and excluded from evaluator-dependent comparisons.
+End-to-end Action behavior Request alignment
+Model ERA BAcc AskR ProceedR RAA CRA DEH REH
+Reference policies
+Always-Ask – 50.00 100.00 0.00 85.74 – – –
+Always-Proceed – 50.00 0.00 100.00 14.26 – – –
+Model configurations
+Dianjin-R1-7B 57.72 45.97 91.94 0.00 78.82 62.78 51.97 63.46
+FinR1-7B 48.46 50.00100.000.0085.7448.46 45.45 51.46
+Ling-2.6-Flash 51.80 56.03 75.99 36.08 70.29 68.17 49.39 54.20
+Ling-2.6-1T 79.7551.89 96.57 7.22 83.82 82.5876.50 83.01
+Seed-2.0-Mini 54.54 48.65 75.64 21.65 67.94 72.10 52.31 56.77
+Seed-2.0-Lite 42.96 44.36 60.89 27.84 56.18 70.55 40.30 45.62
+Nemotron-3-Nano 24.78 39.48 40.82 38.14 40.44 60.70 22.98 26.58
+Nemotron-3-Super 36.27 46.77 56.43 37.11 53.68 64.27 34.99 37.56
+Nemotron-3-Ultra 67.75 55.69 82.50 28.87 74.85 82.12 66.20 69.29
+Qwen2.5-7B 26.84 43.52 45.80 41.24 45.15 58.61 25.04 28.64
+Qwen3-1.7B 31.38 51.38 94.51 8.25 82.21 33.20 29.33 33.44
+Qwen3-4B 34.30 54.68 55.7553.6155.44 61.53 32.93 35.67
+Qwen3-8B 48.79 59.39 69.30 49.48 66.47 70.41 46.14 51.45
+Qwen3-14B 50.77 54.83 75.64 34.02 69.71 67.12 48.88 52.65
+Qwen3-32B 48.54 58.19 65.87 50.52 63.68 73.69 45.96 51.11
+Qwen3-Next-80B 57.71 56.21 73.24 39.18 68.38 78.79 56.08 59.34
+Qwen3-235B-A22B 62.86 53.63 79.42 27.84 72.06 79.15 61.57 64.15
+Qwen3.7-Max 50.68 43.85 57.80 29.90 53.8287.6749.91 51.45
+DeepSeek-V3-0324 45.79 49.52 57.80 41.24 55.44 79.22 44.42 47.16
+DeepSeek-V4-Flash† 59.51 50.19 81.82 18.56 72.79 72.73 57.63 61.40
+DeepSeek-V4-Pro 60.29 50.71 75.64 25.77 68.53 79.70 58.49 62.09
+Kimi-K2.5 66.80 55.68 83.53 27.84 75.59 79.97 65.35 68.26
+Kimi-K3 77.1059.4689.02 29.90 80.59 86.6176.5077.70
+GLM-5 55.66 55.26 73.41 37.11 68.24 75.82 54.20 57.11
+GLM-5.2 58.49 53.37 71.70 35.05 66.47 81.58 57.28 59.69
+GPT-5.4-Mini 39.27 48.15 51.97 44.33 50.88 75.56 38.25 40.30
+GPT-5.4 59.17 50.45 72.04 28.87 65.88 82.13 57.97 60.37
+GPT-5.6-Luna 77.87 54.21 95.03 13.40 83.38 81.95 75.81 79.93
+GPT-5.6-Terra 75.64 56.11 91.60 20.62 81.47 82.58 74.09 77.18
+GPT-5.6-Sol 67.75 54.05 83.36 24.74 75.00 81.27 66.55 68.95
+Gemini-2.5-Flash 62.60 49.33 74.96 23.71 67.65 83.51 61.23 63.97
+Gemini-3-Flash-preview 64.49 52.51 77.19 27.84 70.15 83.55 62.95 66.03
+Claude-Opus-4.7 75.98 56.11 88.51 23.71 79.26 85.85 74.09 77.87
+legal elements, and remedies into a supported analysis. Figure 14 illustrates a structured instance of decision-
+view generation, where the required review position is expressed through a constrained dispositive schema
+rather than unrestricted prose.
+F.4. FinRisk-Ask: Action Agreement versus Request Targeting
+FinRisk-Ask evaluates evidence-state control through offline replay rather than interactive dialogue. The
+model receives only the information available before the recorded reviewer transition. Later trajectory
+information is withheld during inference and is used only to construct expert-verified evaluation targets.
+The three examples below illustrate three request-alignment outcomes. They correspond to direct
+alignment, partial alignment, and missed evidence acquisition. Each example separates the visible pre-action
+context from the observed future evidence used only for evaluation. The examples demonstrate why entering
+the Ask branch and producing a useful evidence request are distinct capabilities.
+35
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+Figure7:Domain Knowledge example: AML customer-identification compliance.The task evaluates
+whether the model can retrieve the applicable customer-identification requirement and determine the stated
+upper bound of the corresponding administrative fine. Solving the item requires distinguishing the directly
+applicable penalty range from more severe sanctions associated with different consequences or aggravating
+conditions.
+Figure8:Evidence-Grounded Processing example: long-context maritime contract classification.The
+input contains contracts, waybills, delivery records, freight and insurance amounts, performance evidence,
+and procedural events. The model must distinguish the operative legal relationship from contextual and
+procedural distractors and select the most specific case category.
+Where case cards displayCONTINUE and STOP, CONTINUE denotes Ask andSTOP denotes Proceed in the
+archived output protocol. These tokens represent the replayed action transition and should not be interpreted
+as an interactive dialogue policy or as a claim that the recorded workflow is the only valid professional
+strategy.
+An Ask prediction with an invalid or unrelated request receives zero request-alignment credit despite
+entering the correct branch. Conversely, a Proceed prediction on a recorded Ask state fails to enter request
+evaluation because no evidence request is produced. These cases illustrate why action agreement, Ask-state
+coverage, and request targeting are reported separately in FinRisk-Ask.
+G. Limitations and Responsible Use
+Scope and interpretation.FinRiskAtlas focuses on Chinese-language financial risk-control and compliance
+review and evaluates model configurations under explicitly defined operation contracts. The reported scores
+should therefore be interpreted as measurements of performance on the released review operations and
+36
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+Figure9:Evidence-Grounded Processing example: quantitative financial reasoning.The effective-
+protection-rate task requires the model to identify the relevant variables, apply the correct formula, compute
+the tariff burden on imported inputs, and normalize by domestic value added.
+Figure10:Evidence-Grounded Processing example: multi-field extraction from a long legal record.
+The model must extract five evidence spans in a predefined order while ignoring unrelated monetary values,
+dates, and procedural events. The task contract evaluates field correctness, field ordering, delimiter validity,
+and agreement with the reference output.
+Figure11:Evidence-Grounded Processing example: cross-lingual company entity resolution.The task
+requires the model to determine whether Chinese and English company names refer to the same entity.
+The decision depends on the joint alignment of geographic information, transliterated name components,
+translated industry terms, and legal-entity suffixes.
+37
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+Figure12:Applied Review example: open-ended disputed-issue generation.The source case contains
+overlapping agency, letter-of-credit, guarantee, insurance, and payment relationships. The model must
+transform these facts into a structured set of issues covering the responsible parties, contractual instruments,
+disputed conduct, claimed amounts, interest and fee calculations, and alternative liability relationships.
+Figure13:Applied Review example: legal-judgment generation.The model must identify the appropriate
+legal route, establish the claimant’s standing, synthesize transaction and valuation evidence, determine
+whether the challenged asset transfer impaired creditors, address the disputed execution settlement, and
+produce an appropriate dispositive analysis.
+evidence states, rather than as a general certification of financial-review capability across all institutions,
+jurisdictions, or workflows. The benchmark is designed to study how evaluation units influence model
+selection in professional review settings.
+Evidence-state evaluation boundary.FinRisk-Ask evaluates evidence-state control through offline replay
+of completed professional trajectories. The benchmark measures whether a model follows the recorded
+transition and whether its request aligns with trajectory-supported evidence needs under the released
+evaluation protocol. Because targets are derived from evidence realized in completed trajectories, FinRisk-Ask
+evaluates alignment with verified evidence needs rather than executing requests in a live review environment
+or estimating their downstream operational impact.
+Professional reference behavior.The Ask-or-Proceed labels represent observed reviewer transitions from
+one enterprise risk-control workflow. They provide a consistent reference boundary for evaluation while
+preserving the fact that professional workflows may differ across organizations, policies, and operating
+conditions. Accordingly, FinRisk-Ask measures agreement with the released workflow behavior and request-
+target alignment, rather than defining a universal review policy.
+38
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+Figure14:Applied Review example: structured decision-view generation.The model must express the
+supported review position in a constrained dispositive schema that preserves the affected parties, monetary
+obligations, and procedural treatment. This example illustrates a structured output form within the decision-
+view generation contract rather than an additional downstream operation.
+VISIBLE CONTEXT · CASE 01 OBSERVED FUTURE
+STATE · Merchant-entity review
+• De-identified mainland CN-EC merchant; Puning, Guangdong 
+address
+• Registered 2021-03-02; WF onboarding 2021-05-21 — an 80-
+day gap
+• E_COMMERCE account · PORTAL onboarding · merchant tier T3
+• Declared goods span software/electronics, appliances, 
+outdoor/sports, toys, stationery and daily goods
+• CN mobile number; phone/email change query returned no 
+records
+• SOP signal: registration-to-onboarding gap <180 days denotes 
+YE onboarding
+LLM-JUDGE VERDICT
+CONTINUE = CONTINUE · DIRECT HIT
+Evaluation target only — hidden from the model at inference
+HIT · 1.0
+01 Reviewer confirmed proxy-registration / 
+batch-attack risk.
+02 AML/KYC-terminated merchants: 2 strong; 
+plus 2 strong + 5 weak links.
+03 Top inflows were L2L internal transfers; PSP 
+inflow was only EUR 423.
+04 A prior AML task was rejected and linked 
+to a high-risk legal representative.
+05 Risk remained unresolved; the expert 
+recommended enhanced monitoring.
+GPT-5.6-Sol
+[CONTINUE] Registered on 2021-03-02 and onboarded 80 days later. Does this 
+YE-onboarding pattern make the merchant-entity module an Issue?
+Figure15:Direct request alignment ( zt =1 ).The visible record leaves a proxy-registration or batch-
+onboarding concern unresolved. The model follows the recorded Ask branch and requests verification of
+that concern. The request matches a retained need supported by the later trajectory, so the state is both an
+Ask-action hit and a direct alignment hit. The observed-future panel was unavailable at inference.
+Data provenance and annotation.FinRiskAtlas combines benchmark instances constructed from profes-
+sional materials, regulatory resources, financial and legal records, and de-identified review trajectories. Static
+benchmark families and FinRisk-Ask states were defined and reviewed by domain experts with financial risk
+and legal backgrounds. Expert review was applied to taxonomy design, family contracts, instance quality
+control, action mapping, and evidence-target verification. Raw enterprise trajectories are not released; only
+de-identified reconstructed states and evaluation artifacts are provided.
+Responsible use.FinRiskAtlas is intended as an evaluation resource for studying and comparing model
+configurations in professional financial-review scenarios. It is not designed to replace qualified reviewers or
+support autonomous financial or legal decisions. Deployment in real workflows should additionally consider
+institution-specific policies, regulatory requirements, human oversight, and operational constraints beyond
+the benchmark contracts.
+39
+Decision-Aligned Evaluation of Large Language Models for Financial Risk Review
+VISIBLE CONTEXT · CASE 02 OBSERVED FUTURE
+STATE · VA and storefront verification
+• De-identified HK CN-EC merchant; Tsim Sha Tsui registered 
+address
+• Registered 2022-01-26; onboarded 2022-03-22 — reported as a 
+56-day gap (inclusive)
+• Tier T4 · declared daily goods / tableware / cosmetics trade
+• Free 163.com email; contact-change query returned no records
+• Earlier reviewer response: system label = no_risk for the rapid-
+onboarding signal
+• VA / store-transaction query returned 0 records
+• Website query returned 7 records: 5 ManoMano search/brand 
+pages + 2 Amazon seller links
+LLM-JUDGE VERDICT
+CONTINUE = CONTINUE · PARTIAL ALIGNMENT
+Evaluation target only — hidden from the model at inference
+PARTIAL · 0.5
+01 Reviewer marked ‘7 URLs + 0 VA transactions’ 
+as high risk.
+02 The reported 56-day gap and free email 
+remained a proxy-registration signal.
+03 All 7 URLs were search/brand pages, not 
+independent stores.
+04 Device, IP , identity, contact, and payee 
+fields overlapped an AML-terminated 
+account.
+05 Linked-account risk: MONEY_LAUNDERING; 
+merchant 365-day inflow: 100% master–
+subaccount pooling.
+GPT-5.6-Sol
+[CONTINUE] Can backend ownership or payout-account evidence confirm that 
+the listed Amazon and ManoMano stores are merchant-operated?
+Figure16:Partial request alignment ( zt =0.5 ).The model follows the recorded Ask branch, but the
+question captures only part of the retained storefront-authenticity need and remains underspecified relative
+to the closest verified target. Selecting Ask is an action hit; full request-alignment credit is not automatic.
+Credit is assigned by the best-matching retained target, so the model need not enumerate every item that
+later appeared.
+VISIBLE CONTEXT · CASE 03 OBSERVED FUTURE
+STATE · Black-association review
+• Same trace as Case 02; reviewer marked “7 URLs + 0 VA” high 
+risk
+• Black-association query returned a terminated B2B account
+• B2B risk: MONEY_LAUNDERING; terminated 2026-04-02
+• Operational overlap: in-session IP + device
+• Identity overlap: company names + legal-representative ID + 
+registration number
+• Contact overlap: phone + email
+• Financial-network overlap: payee account
+• The terminated account triggered this investigation
+EVALUATION OUTCOME
+STOP ≠ CONTINUE · JUDGE NOT CALLED
+Gold action was CONTINUE; early STOP bypassed the LLM judge
+WA · 0.0
+01 Expert target: ask whether the merchant is 
+part of an AML-linked merchant ring.
+02 Human reviewer selected high risk.
+03 Top-2 and Top-3 outbound counterparties 
+still required trade-background 
+documents.
+04 The linked B2B account’s termination 
+triggered the investigation.
+GPT-5.6-Sol
+[STOP] <stop />
+No follow-up question generated.
+Figure17:Missed information acquisition ( zt =0 ).The recorded state is Ask, but the model selects
+Proceed and issues no request. Because the Ask branch is not entered, no candidate request is compared
+with the retained target set and the state contributes zero to ERA. The state is an Ask-recall error even if
+proceeding from the visible record appears locally plausible.
+40

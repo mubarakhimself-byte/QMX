@@ -1,0 +1,2615 @@
+arXiv 2610.25821  https://arxiv.org/abs/2610.25821
+
+Optimal Priors for Betting Tests with Bounded Payoffs:
+An Exact Expected-Time Characterization
+Francesco Orabona
+King Abdullah University of Science and Technology (KAUST)
+Thuwal, 23955-6900, Kingdom of Saudi Arabia
+francesco@orabona.com
+Abstract
+Testing by betting is a powerful framework that recasts hypothesis testing as a betting game. A
+popular approach spreads the initial wealth over fixed bets according to a prior distribution, using a
+universal portfolio algorithm. For suitable priors, this approach achieves the optimal expected rejection
+time as the error probability goes to zero at a fixed alternative. Yet, priors with this guarantee can
+behave quite differently near the null. This motivates the question: Which prior should we use in
+testing-by-betting algorithms? We study bounded scalar payoffs and, under technical conditions, prove a
+sharp formula for expected rejection time, uniform over all bounded alternatives as the error probability
+tends to zero. The formula shows how the prior’s mass around the zero bet determines the cost of
+adapting to an unknown alternative. We characterize the priors that attain the best possible leading
+constant when the error probability and alternative vary together. We also show that no valid test can
+uniformly improve on this cost across ranges of alternatives near the null. In particular, the uniform
+prior can require arbitrarily more observations than suitable priors that concentrate around the zero
+bet. A general inversion argument converts our results into sharp expected times to reach a prescribed
+confidence-sequence width. We also give a concrete prior choice and an FFT-based algorithm with almost
+linear computational complexity.
+1 Introduction
+Suppose a hypothesis lets us place bets that are fair whenever it is true. The observations need not themselves
+be the quantity of interest: a bet may be based on a bounded score, a difference between two measurements,
+or an e-value [Vovk and Wang, 2021] supplied by another procedure. Our wealth over time represents the
+evidence against that hypothesis: if we gain enough money, we can reject the hypothesis while keeping the
+chance of a false alarm small. This is the testing-by-betting framework [Shafer and Vovk, 2001, Shafer, 2021,
+Ramdas and Wang, 2025].
+Here, we focus on the practically relevant setting of scalar bounded payoffs. Write the payoff asX i −µ 0,
+whereX i ∈[0,1] andµ 0 ∈(0,1). Under the null, we assume each payoff has mean zero given the previous
+observations. Every fixed betting fractionβ∈[−1/(1−µ 0),1/µ 0] then gives wealth
+Wealthn(β) :=
+nY
+i=1
+(1 +β(X i −µ 0)).(1)
+This is a nonnegative martingale under the null, so Ville’s inequality guarantees that rejection at wealth 1/α
+has false-alarm probability at mostα[Ville, 1939].
+A core issue of this approach is choosing a suitable betting strategy. In fact, a strategy that works well
+for one alternative could work poorly for another, and we do not know the alternative in advance. A natural
+1
+arXiv:2610.25821v2  [math.ST]  26 Oct 2026
+solution is to spread our initial wealth over fixed bets according to a priorF:
+WealthFn :=
+Z
+Wealthn(β) dF(β).
+In the online learning literature, this is known as anF-weighted portfolio for the case of two stocks [Cover,
+1991, Cover and Ordentlich, 1996, Orabona and Jun, 2024]. Using a priorFgives a valid test without
+choosing a single fixed bet, but leaves us with another choice: which prior should we use?
+We evaluate a test by its expected rejection time under i.i.d. observations from an alternative lawQ
+withE Q[X]̸=µ 0. Writeτ α for the rejection time of a test with false-alarm probability at mostα. Recent
+optimality results by Waudby-Smith et al. [2026] and Agrawal et al. [2026] provide partial answers to the
+choice of prior. In the bounded-mean setting, both give sufficient conditions for tests to attain
+EQ[τα]∼ ln(1/α)ℓ⋆Q asα→0, Q∈ Qfixed,(2)
+whereβ ⋆Q is the fixed bet that maximizes the expected log wealth gained per observation, andℓ⋆Q :=E Q[ln(1+
+β⋆Q(X−µ 0))] is its growth rate. Agrawal et al. [2026] also study alternatives approaching the null: when
+the limiting null law has positive variance, they prove matching-order expected-time bounds at fixed error
+probability.
+However, these results still leave the choice of the prior unresolved. In fact, the fixed-alternative limit in
+(2) can hold for priors that behave quite differently near the null, while the matching-order near-null bound
+in Agrawal et al. [2026] still leaves the sharp prior-dependent constant unspecified. The prior’s mass around
+the zero bet matters: Robbins-type priors give Law-of-the-Iterated-Logarithm (LIL) boundaries, whereas
+smooth priors typically incur a larger logarithmic cost [Robbins, 1970, Orabona, 2018, Orabona and Jun,
+2024]. So, the core question of this paper iswhich priors attain the optimal leading constant uniformly when
+the error probability and alternative vary together.
+Under technical conditions, we prove a sharp formula forEQ[τ Fα ], the expected rejection time of a portfolio
+test with priorFwith false-alarm probability at mostα, uniform over all bounded alternatives asα→0
+(Theorem 2). The prior enters through the amount of mass it places around the zero bet, separately on the
+positive and negative sides. The result allows both alternatives with vanishing variance and oracle bets at
+the endpoints of the admissible interval.
+For suitable Robbins-type priors, the expected rejection time is asymptotic, uniformly over all alternatives
+asα→0, to
+Bα(Q) :=
+ln 1α + LL(|β⋆Q|)
+ℓ⋆Q ,(3)
+where LL(x) := ln max{1,ln(1/x)}forx >0. The first term in the numerator of (3) captures the cost of
+requesting a small error probability. The second captures the cost of adapting to the unknown alternative.
+Our result identifies the oracle bet|β ⋆Q|as thecorrectquantity governing this adaptation cost. This is
+different from prior work that usedℓ ⋆Q [Farrell, 1964, Robbins and Siegmund, 1974, Agrawal et al., 2026],
+but not in contradiction because near a null law with positive variance we have LL(|β ⋆Q|) = LL(ℓ⋆Q) +O(1).
+Under our regularity conditions, we give a necessary and sufficient condition on the prior’s density near
+zero for attaining the best possible worst-case ratio toB α(Q) (Corollary 6). This optimal ratio is 1. The-
+orem 5 establishes the full benchmark as the sharp minimax cost over ranges of small oracle bets, among
+all valid sequential tests. In contrast, Beta priors, including the uniform and Krichevsky–Trofimov pri-
+ors [Krichevsky and Trofimov, 1981], can require an arbitrarily large multiple ofB α(Q) when the alternative
+approaches the null asα→0.
+A consequence of our result is that the exactF-weighted portfolio with the combined prior described
+in Orabona and Jun [2024, Remark 2] attainsB α(Q) uniformly. We also show how priors can complement
+one another: one can supply enough mass near small positive bets and another near small negative bets.
+Their combination can attainB α(Q) uniformly even when each component has an unbounded worst-case
+ratio (Corollary 9).
+2
+Then, Section 5 combines our guarantees on portfolio testing to obtain sharp expected times to reach a
+prescribed confidence-sequence width using portfolio-based approaches.
+Finally, Section 6 gives a concrete prior choice and an FFT-based algorithm for exact continuous-mixture
+evaluation given prior moments, with nearly linear computational cost in the number of observations.
+2 Related work
+The connection between betting and probability goes back to Ville [1939], whose martingale inequality
+supplies the validity guarantee used here. The oracle betting strategy when the payoff distribution is known
+is Kelly’s criterion, which maximizes the expected log wealth [Kelly, 1956, Breiman, 1961]. When we do
+not know this probability distribution, universal portfolio algorithms show how to compete with the best
+constant allocation in hindsight [Cover, 1991, Cover and Ordentlich, 1996]. The same betting viewpoint
+later became a tool for parameter-free online learning [Orabona and P´ al, 2016, Cutkosky and Orabona,
+2018]. These developments connect probabilistic validity, stochastic growth, and adversarial regret, but each
+supplies a different guarantee.
+Shafer and Vovk [2001] develop a game-theoretic foundation for probability: forecasts specify betting
+prices, and nonnegative capital processes test their agreement with subsequent outcomes. Their bounded
+forecasting protocol (Sections 3.2–3.3) is exactly the betting setup we use here. Modern accounts of testing
+by betting include Shafer [2021], Ramdas and Wang [2025]. The log-growth viewpoint underlies growth-
+optimal e-values [Gr¨ unwald et al., 2024, Larsson et al., 2025] and e-processes [Wang et al., 2025, Waudby-
+Smith et al., 2026]. For bounded means, Waudby-Smith and Ramdas [2024] characterize test martingales
+under the constant-conditional-mean null as predictable betting products, and Clerico [2025] identifies these
+products as the admissible e-processes. This resolves which wealth processes are undominated, but it leaves
+open which betting strategies have the best expected rejection times.
+F rom betting guarantees to concentration and prior choice.The construction of priors for se-
+quential LIL boundaries was developed by Darling and Robbins [1967], Robbins [1970]. The game-theoretic
+development in Shafer and Vovk [2001, Section 5.2, especially equation (5.15)] similarly combines nonnega-
+tive capital processes across betting scales to obtain a LIL bound. They credit the earlier proofs of Dawid
+and Vovk [1999] and Vovk [1988], and trace the underlying idea back to Ville [1939]. These pathwise guaran-
+tees motivate adaptation across scales, but do not characterize the expected rejection time associated with
+a prior. An early connection to online betting appears in the technical report of Orabona [2018]. His proof
+method works by localizing a log-squared prior in a relative interval of bets, and then turning the resulting
+wealth guarantee into an empirical Bernstein LIL bound for bounded martingale differences. We will use his
+localization argument in our expected-time proof.
+Jun and Orabona [2019, Section 7.2] show how noisy coin-betting potentials give time-uniform concentra-
+tion through a nonnegative supermartingale. Their log-squared prior gives LIL-rate bounds for sub-Gaussian
+martingale differences, and their online-learning reduction extends the construction to Banach spaces. Build-
+ing on this connection, Orabona and Jun [2024] derive bounded-mean confidence sequences from universal-
+portfolio regret and obtain the sharp LIL leading constant with a prior adapted from Robbins [1970]. The
+mixture proposed in Orabona and Jun [2024, Remark 2] already combines logarithmic worst-case regret,
+LIL behavior, and optimal i.i.d. alternative growth. This idea is developed in Agrawal and Ramdas [2026],
+who give explicit regret bounds and a sharp asymptotic regret bound for their full-support Robbins prior
+on paths with bounded mixture wealth and diverging intrinsic variance. Ryu and Bhatt [2024] subsequently
+develop efficient approximations to universal-portfolio wealth.
+The relation between prior concentration and boundary growth has itself been studied systematically.
+For mixtures of constant-proportion product strategies, Sato et al. [2018] give Robbins-type priors yielding
+the sharp self-normalized LIL and establish a correspondence between classes of prior densities near zero
+and upper-class boundary functions. Their results apply to bounded forecasting and concern pathwise
+boundaries. Instead, our criterion classifies the joint expected rejection-time cost of full-support priors. For
+3
+exponential mixtures, Howard et al. [2021] show that a density positive and continuous at zero produces a
+boundary of order
+√
+vlnvin intrinsic timev, explaining a related penalty for smooth priors.
+Finite-time LIL concentration and anti-concentration bounds already capture the transition between
+confidence and adaptation costs [Balsubramani, 2015]. Kaufmann and Koolen [2021] combine confidence
+and iterated-logarithm time corrections in mixture bounds for exponential families, including Bernoulli
+observations. Related developments include LIL-based bandit bounds [Jamieson et al., 2014] and almost-
+sure iterated-logarithm regret [Agrawal and Ramdas, 2025]. The finer logarithmic terms have classical
+antecedents in upper-class integral tests [Erd˝ os, 1942, Feller, 1943]. Priors are also connected to coding:
+describing the logarithmic betting scale incurs an iterated-logarithm cost [Rissanen, 1983], and the prior
+governs asymptotics under prior averaging more generally [Clarke and Barron, 1990].
+Expected-time optimality .The small-error and near-null regimes also have a history of their own.
+Farrell [1964] proves an iterated-logarithm lower bound near the null in regular parametric models, and
+Robbins and Siegmund [1974] study power-one tests based on prior-weighted likelihood ratios. Fellouris and
+Tartakovsky [2012] study how to choose a mixture prior by expected sample size. They optimize a higher-
+order minimax criterion based on KL-weighted expected sample size for exponential-family alternatives in
+a compact interval bounded away from the null. Our criterion instead distinguishes priors through their
+leading cost as the alternative approaches the null. Chen et al. [2017, Lemma 4.1 and Remark D.4] give a
+lower bound combining confidence and the entropy of the unknown scale, up to constants, for sign testing,
+including a Bernoulli extension. Theorem 5 identifies the sharp sum in our bounded model, uniformly as
+both the error level and betting scales vanish.
+Nonasymptotic expected-time bounds also combine the two costs. Shin et al. [2021] analyze generalized-
+likelihood-ratio tests with iterated-logarithm boundaries, including bounded observations through their cu-
+mulant bounds; their information measure is determined by those bounds rather than by the full alterna-
+tive law. For bounded adapted observations, Durand and Wintenberger [2025] derive power and expected
+rejection-time guarantees from regret, allowing conditional means to change and vanish over time. That
+setting differs from a sequence of i.i.d. alternative laws approaching a fixed null, which we consider.
+For general composite hypotheses, Agrawal et al. [2026] establish the small-error information lower bound
+and a nonparametric Farrell-type lower bound near the null, together with sufficient conditions for matching
+upper bounds. Their bounded-mean specialization uses the same KL distance to the null as our oracle rate,
+and their Proposition 5.1 combines tests attaining the two guarantees in their respective limits. Waudby-
+Smith et al. [2026] obtain the sharp fixed-alternative expected-time limit from a deterministic sublinear
+portfolio-regret bound and a moment condition. Section 4.2 compares these expected-time guarantees with
+our uniform formula, including their assumptions and orders of limits. Related information bounds arise in
+best-arm identification [Garivier and Kaufmann, 2016]; the bounded-support divergence studied by Honda
+and Takemura [2010] for cumulative bandit regret coincides with our oracle log wealth.
+Expected-time criteria also arise for confidence sequences, which can be obtained by inverting betting
+tests [Hendriks, 2018, Orabona and Jun, 2024, Waudby-Smith and Ramdas, 2024]. Shekhar and Ramdas
+[2023] define effective width through the expected time to reach a prescribed width, give an information lower
+bound, and bound the width of betting confidence sequences with logarithmic regret when the observation
+law is supported strictly inside [0,1]. Effective width concerns two endpoints rather than a specified null
+mean. In Section 5, we obtain a sharp formula for the expected time to reach a prescribed width, improving
+over their result.
+3 Setting
+We consider bounded scalar payoffs. Without loss of generality, we will assume them to be in [0,1]. Hence,
+letX 1, X2, . . .∈[0,1] be i.i.d. and fixµ 0 ∈(0,1). The bets that guarantee nonnegative wealth form the
+interval [−1/(1−µ 0),1/µ 0], so 0≤1 +β(X i −µ 0)≤max{1/µ 0,1/(1−µ 0)}. The null and alternative classes
+are
+P0 :={P:E P [X] =µ 0},Q:={Q:E Q[X]̸=µ 0},
+4
+where all distributions are supported on [0,1].
+We aim to produce alevel-αfamily, that is, a familyτ= (τ α)α∈(0,1/2] of stopping times with respect to
+the natural filtration such that sup P∈P 0 PP {τα <∞} ≤αfor allα. Here, stopping means rejecting the null
+hypothesis.
+Portfolio tests.We follow the bounded forecasting protocol of Shafer and Vovk [2001, Sections 3.2–3.3]
+to define a wealth process of a fixed betβas in (1). Given a probability priorFon [−1/(1−µ 0),1/µ 0], the
+F-weighted portfolio has portfolio wealth
+WealthFn :=
+Z 1/µ0
+−1/(1−µ0)
+Wealthn(β) dF(β).(4)
+The portfolio wealth in (4) is generated by the online 1 bets
+βn :=
+R 1/µ0
+−1/(1−µ0) βWealth n−1(β) dF(β)
+WealthFn−1 ,
+withβ n := 0 when Wealth Fn−1 = 0. To see the portfolio interpretation introduced by Orabona and Jun
+[2024], setp:=µ 0 +βµ 0(1−µ 0)∈[0,1]. Then,
+1 +β(X i −µ 0) =p Xiµ0 + (1−p) 1−X i1−µ 0 .(5)
+Equation (5) identifies Wealth F as a portfolio selection problem on these two stocks. Under everyP∈ P 0,
+it is a nonnegative martingale starting from 1. Ville’s inequality gives
+τ Fα := inf{n≥1 : Wealth Fn ≥1/α},sup
+P∈P 0
+PP {τ Fα <∞} ≤α .(6)
+The log-optimal bettor.ForQ∈ Q, define
+ℓQ(β) :=E Q[ln(1 +β(X−µ 0))] andℓ ⋆Q := maxβ∈[−1/(1−µ0),1/µ0] ℓQ(β),
+and letβ ⋆Q be the maximizer. Upper semicontinuity on the compact interval [−1/(1−µ 0),1/µ 0] gives
+existence, strict concavity gives uniqueness, andℓ ′Q(0) =E Q[X−µ 0]̸= 0 givesℓ ⋆Q >0: a sufficiently small
+bet with the same sign asE Q[X−µ 0] improves onℓ Q(0) = 0. Also,
+0< ℓ⋆Q ≤min{|β ⋆Q|,ln max{1/µ0,1/(1−µ 0)}},(7)
+since ln(1 +β(X−µ 0))≤β(X−µ 0)≤ |β|and 1 +β(X−µ 0)≤max{1/µ 0,1/(1−µ 0)}. Lemma 17 identifies
+ℓ⋆Q with the infimum Kullback–Leibler (KL) divergence fromQto the null, the same quantity studied by
+Honda and Takemura [2010]. We allowβ ⋆Q to take endpoint values, as well as alternatives converging to the
+point mass atµ 0.
+4 Main results
+Here, we introduce our main result: The prior’s behavior around the zero bet determines the leading cost of
+adaptation. All the proofs of the results of this section are deferred to Appendix A.
+1In the statistics literature, people use “predictable” instead of “online”, but we prefer “online” because universal portfolio
+is an online algorithm.
+5
+4.1 Uniform expected rejection times
+First, we define a logarithmic decay index for the prior around the zero bet. This will quantify the prior’s
+contribution to the expected rejection time.
+Definition 1(Logarithmic decay index).LetFhave a densityfon [−1/(1−µ 0),1/µ 0] that is bounded below
+by a positive constant on each compact subset of (−1/(1−µ0),1/µ 0)\{0}. Moreover, lettingh(β) :=|β|f(β),
+assume that the limits
+a±(F) := limβ→0±
+ln(1/h(β))
+ln ln(1/|β|) (8)
+exist in [−∞,+∞]. We calla(F) := max{a +(F), a−(F)}thelogarithmic decay indexof the priorF.
+On each side of zero,his the prior density in the coordinate ln(1/|β|). Integrability forces both limits in
+(8) to be at least 1.
+Our main result identifies the leading expected time at each alternative, uniformly as the error probability
+tends to zero.
+Theorem 2.Fixµ 0 ∈(0,1)and a priorFsatisfying Definition 1 witha(F)<∞. For eachQ∈ Q, define
+aQ(F) :=
+(
+a+(F), β ⋆Q >0,
+a−(F), β ⋆Q <0, eBFα (Q) := ln(1/α) +a Q(F) LL(|β ⋆Q|)ℓ⋆Q .
+Then the normalized rejection time converges uniformly inL 1:
+lim
+α↓0
+sup
+Q∈Q
+EQ
+" τ FαeBFα (Q) −1 # = 0.(9)
+In particular, for everyϵ >0there isα 0 >0such that(1−ϵ) eBFα (Q)≤E Q[τ Fα ]≤(1 +ϵ) eBFα (Q)for all
+Q∈ Qand0< α≤α 0.
+Proof sketch.For the upper bound, we localize the prior to betstβ ⋆Q with 1−2δ≤t≤1−δ, for fixed
+δ∈(0,1/2), following Orabona [2018], Orabona and Jun [2024]. Concavity preserves at least (1−2δ)ℓ ⋆Q of the
+oracle growth. Jensen’s inequality turns the reciprocal prior mass of this interval into an additive logarithmic
+penalty. The decay index bounds this penalty by (a Q(F) +ζ) LL(|β ⋆Q|) plus a constant independent ofQ, α,
+for any fixedζ >0. A bounded-stopping argument then converts positive drift into an expected-time bound,
+including at endpoint oracle bets (Lemmas 19–20).
+For the lower tail, small oracle bets require accounting for the prior penalty. In this case, a change of
+measure controls early rejection. Afterwards, concentration controls the empirical first and second moments.
+These estimates remain uniform when variance vanishes because, as|β⋆Q| →0,ℓ⋆Q = 12 (β⋆Q)2EQ[(X−µ 0)2](1+
+o(1)). On the resulting event, only a small interval of bets can produce wealth above 1. We bound the excess
+wealth WealthFn −1: a convex-chord inequality supplies a factor vanishing linearly at zero, which cancels
+the density’s 1/|β|singularity. The resulting bound prevents rejection before almost eBFα (Q) observations,
+with probability tending to 1 uniformly (Lemma 21). For oracle bets away from zero, Lemma 18 gives the
+analogous probability bound at the information scale. Together with the expected-time upper bound, these
+early-rejection bounds control the positive and negative parts of the normalized deviation, proving uniform
+L1 convergence.
+Note that the alternative may vary arbitrarily withα, that is, no variance lower bound or support margin
+is assumed. Ifa(F) = 1, both directional indices equal 1. Thus, eBFα (Q) =B α(Q), and the theorem gives
+EQ[τ Fα ]/Bα(Q)→1 uniformly overQ.
+6
+4.2 Comparison with earlier expected-time bounds
+The confidence cost is unavoidable: Waudby-Smith et al. [2026, Proposition 3.2] and Agrawal et al. [2026,
+Theorem 3.1] show that for everyQ∈ Qandα∈(0,1), any stopping timeτwith sup P∈P 0 PP {τ <∞} ≤α
+satisfies the information lower bound
+EQ[τ]≥ ln(1/α)ℓ⋆Q .(10)
+For a fixed alternative, Theorem 2 attains this lower bound asymptotically because the adaptation term is
+constant. Its uniform formula also covers alternatives approaching the null, where that term can dominate.
+Finer distributional limits are available at a fixed alternative. Under their Assumption 4.1, Deep and
+Agrawal [2026, Theorem 4.4] prove that the stopping timeτ α of their test based on the empirical KL
+divergence to the null satisfies, for each fixedQ∈ Q,
+τα −ln(1/α)/ℓ ⋆Qp
+ln(1/α)
+d
+− → N
+ 
+0,
+VarQ[ln(1 +β ⋆Q(X−µ 0))]
+(ℓ⋆Q)3
+!
+(α↓0).
+Their proof first establishes a central limit theorem for the empirical KL statistic (Theorem 4.2), then
+transfers it to the stopping time. This describes fluctuations around the fixed-alternative benchmark on
+the scale
+p
+ln(1/α). Our Theorem 2 gives a complementary guarantee for prior mixtures: convergence in
+L1 relative to a prior-dependent benchmark, uniformly as the alternative varies withα. It identifies the
+adaptation cost near the null, but does not give a Gaussian fluctuation limit.
+Theorem 5.3 of Waudby-Smith et al. [2026] gives a uniform expected-time bound whenℓ ⋆Q ≥ℓ >0
+throughout the alternative class. Our Theorem 2 removes this growth-rate restriction in our bounded model
+and identifies the sharp prior-dependent adaptation cost.
+For each fixedα∈(0,1/2), Corollary 4.8 of Agrawal et al. [2026] constructs a testτ α such that, along every
+sequenceQ k of bounded alternatives with means belowµ 0 converging weakly toP∈ P0 with VarP (X)>0,
+lim sup
+k→∞
+ℓ⋆Qk EQk [τα]
+LL(ℓ⋆Qk ) <∞.
+Their nonasymptotic bound in equation (26) already contains both confidence and iterated-logarithm gap
+costs, but with generally nonsharp constants.
+To compare their growth-rate scale with the oracle-bet scale in Theorem 2, we first relate the two under
+nondegeneracy. The proof is in Appendix A.5.
+Proposition 3.LetQ k ∈ QsatisfyEQk [X]→µ 0 andinf k EQk [(X−µ 0)2]>0. Then,|β ⋆Qk | →0and
+LL(ℓ⋆Qk ) = LL(|β⋆Qk |) + ln 2 +o(1).
+Our upper bound also gives an explicit leading coefficient in their fixed-error near-null regime. LetF
+satisfy Definition 1 witha(F) = 1, fixα∈(0,1/2), and letQ k ∈ Qconverge weakly toP∈ P 0 with
+VarP (X)>0. Then,
+lim sup
+k→∞
+ℓ⋆Qk EQk [τ Fα ]
+LL(ℓ⋆Qk ) ≤1.
+Indeed, Proposition 3 gives LL(|β ⋆Qk |)/LL(ℓ ⋆Qk )→1. Divide (44) by LL(ℓ ⋆Qk )/ℓ⋆Qk , sendk→ ∞, and then
+sendδ, ζ→0. This gives an upper bound at fixedα. Whenα k →0, Theorem 2 gives a matching formula
+for every prior satisfying Definition 1 with finite indices. By Proposition 3, we can replace LL(|β ⋆Qk |) by
+LL(ℓ⋆Qk ) along these nondegenerate sequences.
+When variance vanishes, the distinction between the two scales can be a difference in order. For example,
+fix the error levelα∈(0,1/2) and consider the deterministic alternatives
+Q∆ :=δ µ0+∆,0<∆<1−µ 0,
+7
+whereδ x denotes the point mass atx. These alternatives converge to the null lawδ µ0 as ∆↓0. So, we have
+β⋆Q∆ = 1µ0 , ℓ ⋆Q∆ = ln(1 + ∆/µ0)∼ ∆µ0 (∆↓0).
+Thus, LL(|β ⋆Q∆ |) = 0, and for any fixed priorFsatisfying Definition 1 with finite indices, the upper bound
+(44) and the information lower bound (10) show that the expected time has order 1/ℓ ⋆Q∆ . Consequently, as
+∆↓0,
+EQ∆ [τ Fα ] = Θ
+ 1
+∆
+
+,
+LL(ℓ⋆Q∆ )
+ℓ⋆Q∆ = Θ
+ ln ln(1/∆)
+∆
+
+,
+where the implicit constants may depend onα, F, µ0, but not on ∆. The growth-rate scale therefore intro-
+duces an extra factor of order ln ln(1/∆). That said, this example lies outside the positive-limiting-variance
+assumption of Agrawal et al. [2026, Corollary 4.8].
+4.3 Worst-case efficiency
+To summarize performance, we compare expected rejection time with the benchmark in (3).
+Definition 4(Efficiency).Define theefficiencyof a level-αfamilyτas
+eff(τ) := lim
+α0↓0
+sup
+ EQ[τα]
+Bα(Q) : 0< α≤α 0, Q∈ Q
+
+.(11)
+Note that the limit in (11) exists because the supremum decreases asα 0 ↓0.
+To isolate the cost of adapting to an unknown betting scale, we compare tests over a range of small oracle
+bets. ForR≥1, the interval [e −2R, e−R] has lengthRin the coordinate ln(1/|β|), so it contains orderR
+bets separated by a factor of 4 asRgrows. Note that, throughout this interval, LL(|β|) differs from lnRby
+at most ln 2.
+The next theorem shows that this adaptation cost is unavoidable even if the test knowsR.
+Theorem 5.ForR≥1and0< α≤1/2, define
+QR :={Q∈ Q:e −2R ≤ |β⋆Q| ≤e−R},T α :=
+
+τ: sup
+P∈P 0
+PP {τ <∞} ≤α
+
+,(12)
+whereτranges over stopping times with values in{1,2, . . .} ∪ {∞}, optionally using an independent random
+seed with the same law under every hypothesis. Then, for each fixedµ 0 ∈(0,1), we have
+lim
+α↓0
+R→∞
+inf
+τ∈T α
+sup
+Q∈QR
+EQ[τ]
+Bα(Q) = 1.(13)
+That is, for everyϵ >0, there areα 0 ∈(0,1/2]andR 0 ≥1such that the infimum–supremum in(13)lies in
+[1−ϵ,1 +ϵ]for every0< α≤α 0 and everyR≥R 0. The test in the infimum may depend on bothαandR.
+Proof sketch.We pack the range withmBernoulli alternativesQ 1, . . . , Qm whose oracle bets are separated
+by a factor of 4, withmof orderR. LetPbe their common Bernoulli null, and letQ τj andP τ be the laws
+of the stopped historyZ, including any independent random seed and a symbol for nonrejection. Choose
+the generating indexJuniformly and define the mixture law by
+P{J=j}:= 1/m(1≤j≤m), Q
+τ
+:= 1m
+mX
+j=1
+Qτj .
+If the expected times are finite, the stopped likelihood identity and the KL chain rule give
+1
+m
+mX
+j=1
+ℓ⋆Qj EQj [τ] = KL( Qτ ∥P τ ) + I(J;Z),
+8
+where I(J;Z) is the mutual information between the alternative index and the stopped history. The first
+term is at least ln(1/α): rejection occurs almost surely under eachQ j, but with probability at mostα
+underP. Moreover, validity makes early rejection unlikely, and by the time of rejection the empirical mean
+identifies the separated scale with error tending to zero asα→0, uniformly inmand the scales. Fano’s
+inequality [Cover and Thomas, 2006] therefore bounds the second term below by (1−o(1)) lnm−ln 2.
+Lemma 23 gives the finite bound. Since lnm= lnR+O(1), this proves the lower bound; an infinite expected
+time makes it immediate. Theorem 2 supplies the upper bound using any fixed prior with index 1.
+Theorem 5 implies eff(τ)≥1 for every level-αfamily. Thus, efficiency 1 means that, for everyϵ >0,
+there existsα 0 >0 such that
+EQ[τα]≤(1 +ϵ)B α(Q) for allQ∈ Qand 0< α≤α 0 .
+For finite indices, the following characterization follows from Theorem 2. For infinite indices, the lower
+bound in Lemma 21 gives the same conclusion.
+Corollary 6.For any priorFsatisfying Definition 1 and the full bounded alternative classQ, we have
+eff
+ 
+τ F  =a(F).
+Proof sketch.For finitea(F), Theorem 2 gives the upper bound because eBFα (Q)/Bα(Q)≤a(F). To attain
+this ratio, choose the side with indexa(F), taking the positive side without loss of generality. For sufficiently
+small ∆>0, define
+Q∆ := Ber(µ0 + ∆), α ∆ := 1/LL(β ⋆Q∆ ).
+Then,β ⋆Q∆ →0,α ∆ →0, and ln(1/α ∆) =o(LL(β ⋆Q∆ )). Thus, the adaptation term dominates, and
+uniformity in Theorem 2 givesEQ∆ [τ Fα∆ ]/Bα∆ (Q∆)→a(F). For an infinite index, Lemma 21 gives arbitrarily
+large limiting lower bounds by allowing any finite exponent below that index.
+Together with Theorem 5, Corollary 6 says that a portfolio test with a prior that satisfies the conditions
+of Definition 1 is optimal if and only ifa(F) = 1, equivalently, when the log-scale prior density decays like
+(ln 1|β| )−1−o(1). Integrability forbids (ln 1|β| )−1 itself, so optimal priors sit at the border of integrability.
+It is worth remarking that one can construct priors with efficiency 1 for which a one-sided decay-index
+limit does not exist, so the assumptions of Theorem 2 would not hold.
+Let’s now see some examples.
+Corollary 7.LetL 1(β) := ln emax{1/µ 0,1/(1−µ0)}|β| ≥1andL 2(β) := ln(eL 1(β))≥1forβ∈[−1/(1−
+µ0),1/µ 0]\ {0}.
+(i) Ifp=µ 0 +βµ 0(1−µ 0)has aBeta(ν 1, ν2)prior,ν 1, ν2 >0, theneff(τ F ) =∞. This includes the
+Beta(1/2,1/2)priorν 1 =ν 2 = 12 and the uniform prior [Krichevsky and Trofimov, 1981, Cover and
+Ordentlich, 1996].
+(ii) Iff(β)∝1/(|β|L 1(β)a)witha >1, theneff(τ F ) =a.
+(iii) Iff η(β) :=C η/(|β|L1(β)L2(β)1+η)withη >0andC η a normalizing constant, theneff(τ Fη ) = 1.
+Note that the priorf η is a proper probability density: the change of variablew:=L 2(β) gives
+Z
+0<|β|≤max{1/µ0,1/(1−µ0)}
+dβ
+|β|L1(β)L2(β)1+η = 2η .
+It is the analogue for betting of the priors used by Robbins [1970] to obtain LIL boundaries.
+9
+4.4 Comparison with growth and LIL guarantees
+If eff(τ) = 1, (10) gives the fixed-alternative limit (2). The converse fails:F-weighted portfolios with Beta
+priors satisfy that limit but have infinite efficiency by Corollary 7(i). Thus, efficiency 1 is strictly stronger
+than fixed-alternative expected-time optimality in this bounded model.
+Sublinear portfolio regret gives oracle growth at each fixed alternative by Waudby-Smith et al. [2026,
+Theorem 2.3]. Their Theorem 5.2 also gives distribution-uniform comparisons of log wealth. However, these
+guarantees do not determine the leading expected time along changing alternatives: the Beta(1/2,1/2) prior
+has logarithmic regret but infinite efficiency by Corollary 7(i).
+Moreover, a LIL-order bound alone also does not determine the sharp expected-time constant. For
+example, the log-squared prior in Orabona [2018] gives a betting-based empirical Bernstein LIL bound. Its
+logarithmic decay index is 2, so a full-support extension satisfying Definition 1 and preserving its behavior
+near zero has efficiency 2.
+4.5 One-sided tests and combinations of priors
+We can also consider nonnegative bets to test a one-sided mean null. In this case, only the prior’s behavior
+on the positive side matters.
+Corollary 8.For the nullE P [X]≤µ 0 and alternativesE Q[X]> µ0, letFbe a probability prior on[0,1/µ 0]
+with a density bounded below by a positive constant on each compact subset of(0,1/µ 0). Suppose its positive-
+side logarithmic decay indexa +(F)exists. Define the oracle, benchmark, and efficiency using these null and
+alternative classes and nonnegative bets. Then,eff(τ F ) =a +(F), and every valid test family has efficiency
+at least 1. Ifa +(F)<∞, the uniformL 1 limit(9)also holds over this one-sided alternative class, with
+aQ(F) =a +(F).
+AnF-weighted portfolio can also use a convex combination of priors that are effective on different sides
+of the null.
+Corollary 9.LetF 1, . . . , Fk be distributions satisfying Definition 1, and letw 1, . . . , wk >0be fixed weights
+summing to one. ForF:= Pkj=1 wjFj,
+eff(τ F ) = max
+
+min
+1≤j≤k
+a+(Fj),min1≤j≤k a−(Fj)
+
+.
+In particular,Fhas efficiency 1 if and only if each side has at least one component with logarithmic decay
+index 1 on that side. If both sidewise minima are finite, Theorem 2 also applies, with these minima as the
+directional coefficients.
+For example, letf 1 be proportional tof η on positive bets and to a positive constant on negative bets,
+and reverse these choices forf 2. Their pairs of one-sided logarithmic decay indices are (1,∞) and (∞,1), so
+both component tests have infinite efficiency, while everyF-weighted portfolio whose prior is a fixed convex
+combination of these two priors with positive weights has efficiency 1. That is, different components supply
+the efficient behavior on the two sides.
+4.6 Losses in oracle growth
+We now consider processes that lose oracle growth. A strict loss at even one alternative prevents a process
+from attaining the optimal efficiency of 1.
+Proposition 10.LetWealthbe a finite-valued nonnegative process adapted to the natural filtration, let
+τα := inf{n: Wealth n ≥1/α}, and assume(τ α)is a level-αfamily. If for someQ∈ Qandg < ℓ ⋆Q we
+10
+havelim sup n 1n ln Wealthn ≤g Q-a.s., theneff(τ)≥ℓ ⋆Q/g(interpreted as+∞ifg≤0). In particular, the
+prior-weighted Hoeffding process [Hoeffding, 1963, Howard et al., 2021]
+WealthHn :=
+Z
+exp
+
+β
+nX
+i=1
+(Xi −µ 0)− nβ28  dF(β) (14)
+satisfieseff(τ H) =∞overQfor any probability priorFonR.
+For online betting strategies constrained to a compact setK ⊂(−1/(1−µ 0),1/µ 0), a strict gap fol-
+lows wheneverβ ⋆Q /∈ K. Indeed, strict concavity and compactness giveg K := max β∈K ℓQ(β)< ℓ ⋆Q.
+The log increments are uniformly bounded, so the strong law for bounded martingale differences gives
+lim supn n−1 ln Wealthn ≤g K almost surely. Proposition 10 then applies. This includes the betting strategy
+in Cutkosky and Orabona [2018] based on the Online Newton Step [Hazan et al., 2007] constrained to [−12 , 12 ]
+for payoffsX−µ 0.
+5 Confidence sequences by inverting the tests
+In this section, we show how to recover guarantees on confidence sequences by inverting tests of candidate
+means [Hendriks, 2018, Orabona and Jun, 2024, Waudby-Smith and Ramdas, 2024]. Our construction allows
+us to convert the uniformL 1 rejection-time guarantee into the expected time to reach a prescribed width.
+All proofs in this section are in Appendix B.
+LetPdenote all laws on [0,1], and write
+µQ :=E Q[X], σ 2Q := VarQ(X) (Q∈ P).
+For each candidate meanm∈(0,1), choose a probability priorF m with densityf m on [−1/(1−m),1/m].
+Define the mixture wealth by
+Wealthn(m) :=
+Z 1/m
+−1/(1−m)
+nY
+i=1
+(1 +β(X i −m)) dF m(β),and Wealth 0(m) := 1.(15)
+For 0< α <1/2, define the rejection time and its running inversion by
+τα(m) := inf{n≥1 : Wealth n(m)≥1/α},
+C αn :={m∈(0,1) :τ α(m)> n}.
+Include 0 exactly whenX 1 =· · ·=Xn = 0, and include 1 exactly whenX 1 =· · ·=Xn = 1.
+We measure precision by the time to reach a prescribed diameter, and by its inverse, the effective width
+of Shekhar and Ramdas [2023, Definition 5.2]:
+T αw := inf{n≥1 : diam(C αn )≤w}, w e(n, Q, α) := inf{w >0 :EQ[T αw ]≤n},
+where diam(∅) := 0.
+Coverage of the obtained sets is immediate, as stated in the following proposition.
+Proposition 11.For everyQ∈ P,
+PQ{µQ ∈C αn for everyn≥1} ≥1−α .
+Coverage also holds for adapted observations with a constant conditional mean. The sets are nested; if
+m7→Wealth n(m)is convex for everynand every observation sequence, they are intervals, possibly empty.
+11
+Reusing a testing prior for confidence sequences.Let’s now consider the case that we have a fixed
+prior and we want to use to generate the priorsF m. The admissible interval changes with the candidate
+meanmin (15). So, we can rescale the prior accordingly. Fix a null meanµ 0 ∈(0,1) and a priorF
+satisfying Definition 1 witha(F)<∞. To reuseF, rescale each bet by the ratio of the corresponding
+interval endpoints:
+βm(β) :=
+(
+µ0β/m, β≥0,
+(1−µ 0)β/(1−m), β <0. (16)
+Then, one takesF m to be the distribution ofβ m(β) whenβ∼F; this gives convex wealth. The next theorem
+will allow candidate-dependent priors uniformly comparable to this rescaled prior on compact intervals of
+means.
+Writeβ ⋆Q(m) andℓ ⋆Q(m) for the oracle bet and growth rate with null meanm. Use the corresponding
+directional index from Definition 1 in the testing benchmark:
+aQ(F, m) :=
+(
+a+(F), m < µQ,
+a−(F), m > µQ,
+eBγ(Q, m) :=ln(1/γ) +a Q(F, m) LL(|β⋆Q(m)|)ℓ⋆Q(m) .(17)
+Here 0< γ <1 andm̸=µ Q. Rescaling and bounded density ratios preserve the two indices, so this is the
+benchmark of Theorem 2 for each candidate prior satisfying the comparison below.
+Theorem 12.Consider i.i.d. observations and a priorFsatisfying Definition 1 witha(F)<∞. Suppose
+m7→Wealth n(m)is convex for every observation sequence andn. Fixκ∈(0,1/4), and assume that
+constants0< c κ ≤C κ <∞satisfy
+cκf(β)≤f m(βm(β))β ′m(β)≤C κf(β) (m∈[κ,1−κ]) (18)
+for almost everyβ∈(−1/(1−µ 0),1/µ 0), whereβ m is defined in(16). Define
+Qκ :={Q∈ P:µ Q ∈[2κ,1−2κ]}.
+For eachQ∈ Qκ,0< w < κ, and0< α <1/2, letr ⋆ ∈(0, w)be the unique solution of
+eBα(Q, µQ −r ⋆) = eBα(Q, µQ +w−r ⋆).(19)
+Then
+lim
+α↓0
+sup
+Q∈Qκ
+0<w<κ
+EQ
+" T αweBα(Q, µQ −r ⋆) −1 # = 0.(20)
+In particular,E Q[T αw ]/ eBα(Q, µQ −r ⋆)→1uniformly over these laws and widths.
+For the rescaled prior itself, the assumptions hold withc κ =C κ = 1.
+Remark13.The exact CO96/R70 mixture of Orabona and Jun [2024, Remark 2], given in (24) withµ 0 =m,
+satisfies the theorem witha(F) = 1. It combines the Beta(1/2,1/2) prior on portfolio allocations for CO96
+and the R70 betting prior on [−1,1], with half the initial capital in each. Appendix B.3 verifies the prior
+comparison and the interval property. Also, any fixed positive allocation to both components gives the same
+asymptotic limits.
+We now present simplifying corollaries of our result.
+Corollary 14.Assume the hypotheses of Theorem 12 for every fixedκ∈(0,1/4), with the same reference
+priorF. FixQ∈ Pwithσ 2Q >0. Jointly asα↓0andw↓0,
+EQ[T αw ]≤(1 +o(1)) 8σ2Qw2 ln 1α +a(F) LL(w)  .(21)
+12
+Ifα n ↓0andln(1/α n) =o(n), then
+we(n, Q, αn)≤(1 +o(1))
+s
+8σ2Q
+n
+
+ln 1αn +a(F) ln lnn  .(22)
+If the two indices in Definition 1 coincide, both bounds are asymptotic equalities. In particular, this holds
+whena(F) = 1. For each fixedα∈(0,1/2), we also have the upper bounds
+lim sup
+w↓0
+w2EQ[T αw ]
+8a(F)σ 2Q LL(w) ≤1,lim supn→∞
+we(n, Q, α)q
+8a(F)σ 2Q ln lnn/n ≤1.(23)
+For deterministic observations, the iterated-logarithm penalty vanishes.
+Corollary 15.Assume the hypotheses of Theorem 12 for every fixedκ∈(0,1/4), with the same reference
+priorF. LetQ=δ µ withµ∈(0,1). For0< w <min{µ,1−µ}, the balanced endpoints areµ(1−w)and
+µ+ (1−µ)w, and
+eBα(δµ, µ(1−w)) = ln(1/α)−ln(1−w) .
+Consequently, jointly asα↓0andw↓0,
+Eδµ [T αw ]∼ ln(1/α)w .
+Ifα n ↓0andln(1/α n) =o(n), thenw e(n, δµ, αn)∼ln(1/α n)/n.
+5.1 Comparison with effective-width bounds
+Shekhar and Ramdas [2023, Theorem 5.6] bound the same effective width for a betting confidence sequence
+with logarithmic regret, assuming that the observation law is supported strictly inside [0,1]. For a fixed law
+with positive variance, expanding their information radii gives
+we(n, Q, α)≤(4 +o(1))σQ
+r
+ln(1/α) + 2 lnn+C Q
+n ,
+when the numerator iso(n), whereC Q depends only on the law. Our Corollary 14 replaces the logarithmic
+sampling penalty by an iterated logarithm. It also improves the leading constant in this upper bound by
+a factor
+√
+2 whenα→0 and ln(1/α)≫lnn. Finally, Theorem 12 allows endpoint support and vanishing
+variance.
+6 An optimal prior and fast portfolio evaluation
+We now choose a concrete prior for the bounded-mean test and describe how to evaluate its portfolio wealth.
+Consider the mixture of Orabona and Jun [2024, Remark 2]:
+Fw :=wF CO96 + (1−w)F R70, w:= 1/2,
+whereF CO96 is the prior induced by the Beta(1/2,1/2) distribution on portfolio allocations [Cover and
+Ordentlich, 1996], andF R70 is the fixed betting prior on [−1,1] used by Orabona and Jun [2024], adapted
+from Robbins [1970]. Both are defined in Proposition 16 below. We compute the exact mixture wealth and
+reject at its first threshold crossing:
+WealthFwn = 12 WealthFCO96n + 12 WealthFR70n , τ Fwα = inf{n≥1 : Wealth Fwn ≥1/α}.(24)
+Ville’s inequality gives sup P∈P 0 PP {τ Fwα <∞} ≤α.
+We now show that eff(τ Fw ) = 1.
+13
+Proposition 16.Fixµ 0 ∈(0,1)and a weightw∈(0,1), independent of the observations and the error
+probability. LetF CO96 be the prior induced byp∼Beta(1/2,1/2)underp=µ 0 +βµ 0(1−µ 0). Its density
+on(−1/(1−µ 0),1/µ 0)satisfies
+fCO96(β) := µ0(1−µ 0)πpp(1−p) ≥ 2µ0(1−µ 0)π .(25)
+Define thef R70 density by
+fR70(β) := ln lnc2|β|ln(c/|β|)[ln ln(c/|β|)] 2 (0<|β| ≤1), c:= 6.6e,(26)
+and setf R70(β) := 0for|β|>1; its value at zero is immaterial. LetF R70 denote its distribution and define
+Fw :=wF CO96 + (1−w)F R70, f w :=wf CO96 + (1−w)f R70 .
+Then, the test based on the wealthWealth Fwn =wWealth FCO96n +(1−w) Wealth FR70n haseff(τ Fw ) = 1over
+the full bounded alternative classQ, and satisfies Theorem 2 witha Q(Fw) = 1.
+Proof.The substitutionu= ln(c/|β|) shows thatf R70 integrates to 1. The densityf w has a positive
+lower bound on every compact subset of the interior away from zero, by (25). Sincef CO96 is bounded
+near zero andf R70(β)→ ∞, we havef w(β)∼(1−w)f R70(β) asβ→0 ±. Equation (26) therefore gives
+a+(Fw) =a −(Fw) = 1. Theorem 2 and Corollary 6 apply, including the jumps atβ=±1.
+Using (44) we can be even more precise: for everyδ∈(0,1/2) andϵ >0, we have
+EQ[τ Fwα ]≤ ln(1/α) + (1 +ϵ) LL(|β⋆Q|) +C µ0,δ,ϵ(1−2δ)ℓ ⋆Q (Q∈ Q),
+where the constant is independent ofQandα. Theorem 2 also givesE Q[τ Fwα ]/Bα(Q)→1 uniformly overQ
+asα→0.
+6.1 Comparison with regret-based tests
+The fixed positive CO96 weight also retains logarithmic portfolio regret: Wealth Fwn ≥wWealth FCO96n adds
+at most ln(1/w) to the CO96 regret bound. Thus, the mixture inherits the known growth guarantees of
+Waudby-Smith et al. [2026, Theorems 2.3 and 5.2] while attaining efficiency 1.
+The computable PRECiSE bounds in Orabona and Jun [2024, Algorithms 1 and 3] use regret-based
+wealth lower bounds, whose inversion can give different confidence sequences. Using a regret upper bound
+to lower bound wealth requires a separate expected-time analysis. Theorem 25 in Appendix C derives such
+a bound for the exact prior mixture in Orabona and Jun [2024, Remark 2], while preserving efficiency 1 and
+the uniform expected-time formula. In contrast, Proposition 27 in Appendix D gives a sequence along which
+the test based on the explicit regret bound by Agrawal and Ramdas [2026] takes twice the benchmark and
+twice the expected time of its exact mixture asymptotically. Thus, this proxy has efficiency at least 2, while
+the exact mixture has efficiency 1.
+6.2 Numerical evaluation by a regional grid and FFT
+Evaluating the wealth in (24) can be computationally demanding. Waudby-Smith et al. [2026, Remark 2.2]
+suggested using an exact implementation ofF-weighted portfolios for small sample sizes, and the regret-based
+approach of Orabona and Jun [2024] for large sample sizes. Here, we show how to evaluate the continuous
+mixture efficiently.
+We combine a fixed spatial partition with FFT integration inside each region. Every region retains the
+continuous conditional prior, represented by its Chebyshev moments through the required polynomial degree.
+14
+Given these moments exactly, the algorithm evaluates the original mixture exactly in exact arithmetic.
+We use a one-dimensional specialization of the grid operations andPrefixrecursion of Liu et al. [2026,
+Appendices E.3–E.4]. Their algorithm handles a restarting three-stock portfolio; the fixed-start two-stock
+specialization and regional combination below are our derivation. We provide this implementation as OPT-
+FFT (Optimal Portfolio Testing with Fast Fourier Transforms) athttps://github.com/AdaMLLab/OPT-FFT.
+To describe the computation, use the portfolio coordinate
+p:=µ 0 +βµ 0(1−µ 0)∈[0,1],
+and let Fbe its distribution underF. By (5), a single observation contributes the linear polynomial
+ri(p) :=p Xiµ0 + (1−p) 1−X i1−µ 0 .
+The fixed-allocation wealth afternobservations is the degree-npolynomial Qni=1 ri(p). Its integral under F
+is WealthFn , and the online allocation to the first stock is
+pn :=
+R 1
+0 p Qn−1i=1 ri(p) dF(p)R 1
+0
+Qn−1
+i=1 ri(p) dF(p)
+.
+If the denominator is zero, wealth remains zero and we may choose any allocation.
+Before observing data, partition the allocation interval intoKregions. On each region, map the coor-
+dinate affinely toz∈[−1,1] and use the conditional prior’s moments to construct an integration rule on
+Chebyshev points. The rule covers every polynomial degree needed up to the chosen horizonT. ThePrefix
+recursion evaluates the integrals of each prefix product and that product multiplied byz. Splitting the
+observations into two halves, we absorb the first half’s product into the integration functional for the second
+half. Polynomial multiplication is pointwise on a sufficiently large grid; interpolation and its transpose use
+cosine transforms computed by FFT. The ratio of the two integrals gives the posterior mean ofz, which we
+map back to the allocation interval.
+Finally, combine the regional allocations using their preceding wealths and the original prior interval
+masses. In exact arithmetic, each regional wealth is the continuous conditional mixture, so their weighted
+sum is exactly WealthFn . Appendix E gives the integration rule, pseudocode in Algorithms 1–2, and a proof.
+Why the grid improves numerical stability .Note that the grid is not necessary for the exactness of
+the algorithm in exact arithmetic. However, after a long run favoring one direction, fixed-allocation wealths
+can differ by many orders of magnitude. Then, cosine interpolation and its transpose combine signed terms:
+roundoff that is small relative to the largest entries can overwhelm small contributions that become important
+after a reversal [Liu et al., 2026, Appendix E.6]. This affects both CO96 and R70 prior. A single common
+rescaling prevents overflow but does not restore lost relative accuracy.
+For this reason we use the decomposition in a grid that permits independent rescaling of products and
+functionals in different parts of the bet interval. Note that we do not claim any bound of the error due to
+the floating point truncations, but in our experiments this method substantially improved the accuracy. We
+store each region’s accumulated wealth logarithmically and combine regions by positive weights, so a region
+can regain posterior weight after a reversal. Within a narrow region, we compute the posterior mean of the
+local coordinatezbefore mapping it back. This avoids computing an allocation from nearly proportional
+numerator and denominator functionals; an error in the local mean is also multiplied by the region’s half-
+width. We place more boundaries near the zero bet and the support endpoints, where small betting scales
+and concentrated likelihoods need resolution.
+Calculations of the moments.The R70 singularity at zero requires a dedicated moment calculation.
+We isolate it in an interval centered at zero, use its analytic prior mass, and pair the contributions atβand
+−βin the change of variables described in Appendix E. The continuous prior retains all its mass near zero.
+The FFT integration weights can still be signed, and products can still concentrate inside a region, so these
+measures do not give a uniform roundoff guarantee.
+15
+Cost and numerical choices.Given the conditional moments,Kregions costO(KTln 2(T+ 1)) arith-
+metic operations andO(KT) memory per candidate mean. We chooseK=O(ln 2(T+1)), givingO(Tln 4(T+
+1)) = eO(T) operations andO(Tln 2(T+ 1)) memory. Numerical moment preprocessing also has cost eO(T)
+for fixed accuracy parameters.
+In floating point, we project each computed regional allocation onto its interval, combine regions using
+their preceding wealths, and accumulate the actual returns of the resulting predictable allocations. This
+construction retains betting validity under the null, whereas substituting arbitrary approximate mixture
+values need not. The exact-arithmetic algorithm computes the continuous mixture covered by our expected-
+time results; their extension to the rounded strategy requires a separate analysis.
+7 Conclusion
+We have presented a novel characterization of how a prior’s density near zero determines expected rejection
+time in bounded i.i.d. testing. Under Definition 1, the expected-time formula is uniform over all alternatives
+asα→0 for finite indices, and the efficiency identity eff(τ F ) =a(F) also covers infinite indices. The
+adaptation cost depends on the oracle bet through LL(|β ⋆Q|), including when variance vanishes. Thus, priors
+with index 1 are optimal under this criterion, certifying existing Robbins-type constructions. These priors
+also attain the joint minimax constant over ranges of small oracle bets among all valid sequential tests. We
+also present a rule for combining priors showing that different components can supply the required mass on
+the two sides of zero: two priors with infinite efficiency can together attain efficiency 1.
+The uniformL 1 limit also gives a general route from rejection times to confidence-sequence widths through
+test inversion and balanced endpoint benchmarks. This yields sharp expected times to reach a prescribed
+width, including at laws with vanishing variance.
+Our characterization also certifies the expected-time optimality of the prior proposed in Orabona and
+Jun [2024, Remark 2]. For this prior, we combine a spatial grid with FFT recursion inside each region,
+retaining betting validity. Given exact prior moments, this computes the continuous mixture exactly in
+exact arithmetic, using eO(T) operations per candidate mean.
+It remains open how to distinguish between different priors with index 1. For example, higher-order
+expected-time bounds could guide the choice of their parameters and hedging weights.
+Acknowledgments
+The author acknowledges the use of GPT 6 and Claude 5.5 for assistance with proofs and code. The author
+has checked all details for correctness and takes full responsibility for the content of this paper.
+References
+S. Agrawal and A. Ramdas. Eventually LIL regret: Almost sure ln lntregret for a sub-Gaussian mixture
+on unbounded data.arXiv preprint arXiv:2512.12325, 2025. URLhttps://arxiv.org/pdf/2512.123
+25v1.
+S. Agrawal and A. Ramdas. Cover meets Robbins while betting on bounded data: lnnregret and almost
+sure ln lnnregret.arXiv preprint arXiv:2604.20172v3, 2026. URLhttps://arxiv.org/pdf/2604.201
+72v3.
+S. Agrawal, A. Ram, and A. Ramdas. On stopping times of power-one sequential tests: Tight lower and
+upper bounds.arXiv preprint arXiv:2504.19952v2, 2026. URLhttps://arxiv.org/pdf/2504.19952v2.
+A. Balsubramani. Sharp finite-time iterated-logarithm martingale concentration.arXiv preprint
+arXiv:1405.2639v4, 2015. URLhttps://arxiv.org/pdf/1405.2639v4.
+16
+L. Breiman. Optimal gambling systems for favorable games. InProceedings of the Fourth Berkeley Sympo-
+sium on Mathematical Statistics and Probability, pages 65–78, 1961. URLhttps://digicoll.lib.ber
+keley.edu/record/112884/files/math_s4_v1_article-05.pdf.
+L. Chen, J. Li, and M. Qiao. Towards instance optimal bounds for best arm identification. InProceedings
+of the 2017 Conference on Learning Theory, volume 65 ofProceedings of Machine Learning Research,
+pages 535–592. PMLR, 2017. URLhttps://proceedings.mlr.press/v65/chen17b/chen17b.pdf.
+B. S. Clarke and A. R. Barron. Information-theoretic asymptotics of Bayes methods.IEEE Transactions
+on Information Theory, 36(3):453–471, 1990. URLhttps://bertrandsclarke.weebly.com/uploads/2
+/7/3/6/2736392/clarkebarron1990.pdf.
+E. Clerico. On the optimality of coin-betting for mean estimation.International Journal of Approximate
+Reasoning, page 109550, 2025. URLhttps://arxiv.org/pdf/2412.02640v4.
+T. M. Cover. Universal portfolios.Mathematical Finance, pages 1–29, 1991. URLhttps://isl.stanford
+.edu/~cover/papers/universal_portfolios.pdf.
+T. M. Cover and E. Ordentlich. Universal portfolios with side information.IEEE Transactions on Infor-
+mation Theory, 42(2):348–363, 1996. URLhttps://isl.stanford.edu/ ~cover/papers/cover_ordent
+lich_96.pdf.
+T. M. Cover and J. A. Thomas.Elements of information theory. Wiley-Interscience, 2006.
+A. Cutkosky and F. Orabona. Black-box reductions for parameter-free online learning in Banach spaces.
+InProc. of the Conference on Learning Theory (COLT), 2018. URLhttps://arxiv.org/pdf/1802.0
+6293.
+D. A. Darling and H. Robbins. Confidence sequences for mean, variance, and median.Proceedings of the
+National Academy of Sciences, 58(1):66–68, 1967. URLhttps://www.pnas.org/doi/pdf/10.1073/pna
+s.58.1.66.
+A. P. Dawid and V. G. Vovk. Prequential probability: Principles and properties.Bernoulli, 5(1):125–162,
+1999. doi: 10.2307/3318616. URLhttps://projecteuclid.org/download/pdf_1/euclid.bj/1173707
+098.
+V. Deep and S. Agrawal. Beyond first-order asymptotics in sequential mean testing. InProceedings of
+the 43rd International Conference on Machine Learning, volume 306 ofProceedings of Machine Learning
+Research, pages 23527–23561. PMLR, 2026. URLhttps://raw.githubusercontent.com/mlresearch
+/v306/main/assets/deep26a/deep26a.pdf.
+A. Durand and O. Wintenberger. Power comparison of sequential testing by betting procedures.arXiv
+preprint arXiv:2504.00593v2, 2025. URLhttps://arxiv.org/pdf/2504.00593v2.
+P. Erd˝ os. On the law of the iterated logarithm.Annals of Mathematics, 43(3):419–436, 1942. URLhttps:
+//www.renyi.hu/~p_erdos/1942-04.pdf.
+R. H. Farrell. Asymptotic behavior of expected sample size in certain one sided tests.The Annals of
+Mathematical Statistics, 35(1):36–72, 1964. URLhttps://projecteuclid.org/journals/annal
+s-of-mathematical-statistics/volume-35/issue-1/Asymptotic-Behavior-of-Expected-Sampl
+e-Size-in-Certain-One-Sided/10.1214/aoms/1177703731.pdf.
+W. Feller. The general form of the so-called law of the iterated logarithm.Transactions of the American
+Mathematical Society, 54:373–402, 1943. URLhttps://www.ams.org/tran/1943-054-03/S0002-994
+7-1943-0009263-7/S0002-9947-1943-0009263-7.pdf.
+G. Fellouris and A. G. Tartakovsky. Nearly minimax one-sided mixture-based sequential tests.Sequential
+Analysis, 31(3):297–325, 2012. doi: 10.1080/07474946.2012.694346. URLhttps://arxiv.org/pdf/1110
+.0902v2.
+17
+A. Garivier and E. Kaufmann. Optimal best arm identification with fixed confidence. InProc. of the Con-
+ference on Learning Theory (COLT), pages 998–1027, 2016. URLhttps://proceedings.mlr.press/v4
+9/garivier16a.pdf.
+P. Gr¨ unwald, R. de Heide, and W. M. Koolen. Safe testing.Journal of the Royal Statistical Society Series
+B, 86(5):1091–1128, 2024. URLhttps://arxiv.org/pdf/1906.07801.
+E. Hazan, A. Agarwal, and S. Kale. Logarithmic regret algorithms for online convex optimization.Ma-
+chine Learning, 69(2-3):169–192, 2007. URLhttps://link.springer.com/content/pdf/10.1007/s1
+0994-007-5016-8.pdf.
+H. Hendriks. Test martingales for bounded random variables.arXiv preprint arXiv:1801.09418, 2018. URL
+https://arxiv.org/abs/1801.09418.
+W. Hoeffding. Probability inequalities for sums of bounded random variables.Journal of the American
+Statistical Association, 58(301):13–30, 1963. URLhttps://www.cs.rpi.edu/academics/courses/spr
+ing06/random/hoefding.pdf.
+J. Honda and A. Takemura. An asymptotically optimal bandit algorithm for bounded support models. In
+Proc. of the Conference on Learning Theory (COLT), pages 67–79, 2010. URLhttps://www.learning
+theory.org/colt2010/papers/29honda.pdf.
+S. R. Howard, A. Ramdas, J. McAuliffe, and J. Sekhon. Time-uniform, nonparametric, nonasymptotic
+confidence sequences.The Annals of Statistics, 49(2):1055–1080, 2021. URLhttps://arxiv.org/pdf/
+1810.08240.
+K. Jamieson, M. Malloy, R. Nowak, and S. Bubeck. lil’ UCB: An optimal exploration algorithm for multi-
+armed bandits. InProc. of the Conference on Learning Theory (COLT), pages 423–439, 2014. URL
+https://proceedings.mlr.press/v35/jamieson14.pdf.
+K.-S. Jun and F. Orabona. Parameter-free online convex optimization with sub-exponential noise. InProc.
+of the Conference on Learning Theory (COLT), 2019. URLhttps://proceedings.mlr.press/v99/ju
+n19a/jun19a.pdf.
+E. Kaufmann and W. M. Koolen. Mixture martingales revisited with applications to sequential tests and
+confidence intervals.Journal of Machine Learning Research, 22(246):1–44, 2021. URLhttps://ir.cwi
+.nl/pub/31315/31315.pdf.
+J. L. Kelly, jr. A new interpretation of information rate.IRE Transactions on Information Theory, 2(3):
+185–189, 1956. URLhttps://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=1056803.
+R. Krichevsky and V. Trofimov. The performance of universal encoding.IEEE Trans. on Information
+Theory, 27(2):199–207, 1981. URLhttps://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=10563
+31.
+M. Larsson, A. Ramdas, and J. Ruf. The numeraire e-variable and reverse information projection.The
+Annals of Statistics, 53(3):1015–1043, 2025. URLhttps://arxiv.org/pdf/2402.18810.
+T. Liu, D. Prinster, and F. Orabona. Monitoring for shifts at unknown times: Parameter-free conditional
+conformal martingales.arXiv preprint arXiv:2610.17343, 2026. URLhttps://arxiv.org/pdf/2610.1
+7343v1.
+F. Orabona. From betting to empirical Bernstein LIL.arXiv preprint arXiv:2605.22124, 2018. URL
+https://arxiv.org/pdf/2605.22124v1. Technical report dated January 22, 2018; posted May 21, 2026
+as a verbatim copy of the 2017–2018 report.
+F. Orabona and K.-S. Jun. Tight concentrations and confidence sequences from the regret of universal
+portfolio.IEEE Trans. Inf. Theory, 70(1):436–455, 2024. URLhttps://arxiv.org/pdf/2110.14099.
+18
+F. Orabona and D. P´ al. Coin betting and parameter-free online learning. In D. D. Lee, M. Sugiyama,
+U. V. Luxburg, I. Guyon, and R. Garnett, editors,Advances in Neural Information Processing Systems
+29, pages 577–585. Curran Associates, Inc., 2016. URLhttps://arxiv.org/pdf/1602.04128.pdf.
+A. Ramdas and R. Wang. Hypothesis testing with e-values.Foundations and Trends in Statistics, 1(1-2):
+1–390, 2025. URLhttps://arxiv.org/pdf/2410.23614.
+J. Rissanen. A universal prior for integers and estimation by minimum description length.The Annals of
+Statistics, 11(2):416–431, 1983. URLhttps://www.ccs.neu.edu/home/jaa/CS188.01W/Papers/Rissan
+en83.pdf.
+H. Robbins. Statistical methods related to the law of the iterated logarithm.The Annals of Mathematical
+Statistics, 41(5):1397–1409, 1970. URLhttps://projecteuclid.org/journals/annals-of-mathemati
+cal-statistics/volume-41/issue-5/Statistical-Methods-Related-to-the-Law-of-the-Iterate
+d-Logarithm/10.1214/aoms/1177696786.pdf.
+H. Robbins and D. Siegmund. The expected sample size of some tests of power one.The Annals of Statis-
+tics, 2(3):415–436, 1974. URLhttps://projecteuclid.org/journals/annals-of-statistics/volu
+me-2/issue-3/The-Expected-Sample-Size-of-Some-Tests-of-Power-One/10.1214/aos/117634270
+4.pdf.
+J. J. Ryu and A. Bhatt. On confidence sequences for bounded random processes via universal gambling
+strategies.IEEE Transactions on Information Theory, 2024. URLhttps://arxiv.org/pdf/2207.123
+82.
+R. Sato, K. Miyabe, and A. Takemura. Relation between the rate of convergence of strong law of large
+numbers and the rate of concentration of Bayesian prior in game-theoretic probability.Stochastic
+Processes and their Applications, 128(5):1466–1484, 2018. doi: 10.1016/j.spa.2017.07.014. URL
+https://arxiv.org/pdf/1604.07911v1.
+G. Shafer. Testing by betting: A strategy for statistical and scientific communication.Journal of the Royal
+Statistical Society Series A, 184(2):407–431, 2021. URLhttps://glennshafer.com/assets/downloads
+/articles/article104_jrss_shafer-testingbybetting-with-discussion-response.pdf.
+G. Shafer and V. Vovk.Probability and finance: it’s only a game!John Wiley & Sons, 2001.
+S. Shekhar and A. Ramdas. On the near-optimality of betting confidence sets for bounded means.arXiv
+preprint arXiv:2310.01547v2, 2023. URLhttps://arxiv.org/pdf/2310.01547v2.
+J. Shin, A. Ramdas, and A. Rinaldo. Nonparametric iterated-logarithm extensions of the sequential gener-
+alized likelihood ratio test.IEEE Journal on Selected Areas in Information Theory, 2(2):691–704, 2021.
+URLhttps://arxiv.org/pdf/2010.08082v4.
+J. Ville. ´Etude critique de la notion de collectif. Gauthier-Villars, Paris, 1939. URLhttps://www.numdam
+.org/item/THESE_1939__218__1_0.pdf.
+V. Vovk and R. Wang. E-values: Calibration, combination and applications.The Annals of Statistics, 49
+(3):1736–1754, 2021.
+V. G. Vovk. Kolmogorov–Stout law of the iterated logarithm.Mathematical Notes, 44(1):502–507, 1988.
+doi: 10.1007/BF01158114. URLhttps://link.springer.com/content/pdf/10.1007/BF01158114.p
+df.
+Q. Wang, R. Wang, and J. Ziegel. E-backtesting.Management Science, 2025. URLhttps://arxiv.org/
+pdf/2209.00991.
+I. Waudby-Smith and A. Ramdas. Estimating means of bounded random variables by betting.Journal of
+the Royal Statistical Society Series B: Statistical Methodology, 86(1):1–27, 2024. URLhttps://arxiv.
+org/pdf/2010.09686.
+19
+I. Waudby-Smith, R. J. Sandoval, and M. I. Jordan. Instance-log-optimality of portfolio-based e-processes
+and their sequential hypothesis tests.arXiv preprint arXiv:2504.02818v2, 2026. URLhttps://arxiv.
+org/pdf/2504.02818v2.
+A Proofs of Section 4
+Throughout this section, constants may depend onµ 0 andF, and on explicitly fixed approximation param-
+eters, but never onQorα. Recall that 0≤1 +β(X−µ 0)≤max{1/µ 0,1/(1−µ 0)}for every admissible
+bet. The oracle betβ ⋆Q maximizesℓ Q(β) =E Q[ln(1 +β(X−µ 0))], with valueℓ ⋆Q >0.
+First of all, we introduce the lemmas that we will use in our proofs.
+The first lemma adapts the KL-projection construction in Waudby-Smith et al. [2026, Lemma A.4] to
+the bounded-mean null and bounds all positive-order moments of the oracle log multiplier uniformly over
+alternatives. The cases= 1 supplies the integrability needed below.
+Lemma 17.For everyQ∈ Q, there existsP ⋆ ∈ P0 such thatQ≪P ⋆ and
+dQ
+dP ⋆ (X) = 1 +β ⋆Q(X−µ 0),KL(Q∥P ⋆) =ℓ ⋆Q = infP∈P 0 KL(Q∥P).
+Moreover, for everys >0,
+sup
+Q∈Q
+EQ
+
+|ln(1 +β ⋆Q(X−µ 0))|s ≤(ln max{1/µ 0,1/(1−µ 0)})s + (s/e)s <∞.(27)
+Proof.Letr:=E Q[(1 +β ⋆Q(X−µ 0))−1]. For 0< t <1, the functiont7→ℓ Q(tβ⋆Q) is concave and
+nondecreasing, since its maximum is att= 1. On any closed interval oftvalues inside (0,1), the denominator
+1 +tβ ⋆Q(X−µ 0)≥1−tstays bounded away from zero and the numeratorβ ⋆Q(X−µ 0) is bounded. We
+can therefore differentiate under the expectation to obtainE Q[β⋆Q(X−µ 0)/(1 +tβ ⋆Q(X−µ 0))]≥0. So, we
+obtainE Q[(1 +tβ ⋆Q(X−µ 0))−1] = 1−tE Q[β⋆Q(X−µ 0)/(1 +tβ ⋆Q(X−µ 0))]≤1. Fatou’s lemma givesr≤1
+andP Q{β⋆Q(X−µ 0) =−1}= 0.
+Foru≥0, maximizingu se−u atu=sgivesu s ≤(s/e) seu. Takingu:=−ln(1 +β ⋆Q(X−µ 0)) on
+{1 +β ⋆Q(X−µ 0)<1}and usingr≤1 bounds the negative-partsth moment by (s/e) s; the positive-part
+moment is at most (ln max{1/µ 0,1/(1−µ 0)})s. This proves (27), in particular integrability.
+We now construct the null law by dividingQby the oracle multiplier; if this leaves total mass below one,
+we add the missing mass where that multiplier is zero.
+Ifβ ⋆Q ∈(−1/(1−µ 0),1/µ 0), differentiation at the maximizer givesE Q[(X−µ 0)/(1 +β ⋆Q(X−µ 0))] = 0
+andr= 1. DefineP ⋆ by dP ⋆ := (1 +β ⋆Q(X−µ 0))−1dQin this case. Otherwise, letx b :=µ 0 −1/β ⋆Q ∈ {0,1}
+and define
+dP ⋆(x) := dQ(x)1 +β ⋆Q(x−µ 0) + (1−r) dδ xb (x).(28)
+SinceQis the law ofX,
+Z
+[0,1]
+dQ(x)
+1 +β ⋆Q(x−µ 0) =E Q[(1 +β ⋆Q(X−µ 0))−1] =r .
+Here,δ xb is the unit point mass atx b. Sincer≤1, both terms in (28) are nonnegative, and the preceding
+identity shows that their masses sum tor+ (1−r) = 1. In the interior case,r= 1 already. Thus,P ⋆
+is a probability measure. The identityβ ⋆Q(X−µ 0)/(1 +β ⋆Q(X−µ 0)) = 1−(1 +β ⋆Q(X−µ 0))−1 gives
+EQ[(X−µ 0)/(1 +β ⋆Q(X−µ 0))] = (1−r)/β ⋆Q. In the endpoint case, the atom supplies the missing mass and
+corrects the mean:
+EP ⋆ [X−µ 0] = 1−rβ⋆Q + (1−r)(x b −µ 0) = 0.
+20
+The interior case follows fromr= 1 andE Q[(X−µ 0)/(1+β ⋆Q(X−µ 0))] = 0. At an endpoint, 1+β ⋆Q(xb−µ0) =
+0. IfP Q{X=x b}>0, the oracle log multiplier would therefore equal−∞with positive probability. Since
+its positive part is bounded, this would giveℓ Q(β⋆Q) =−∞, contradicting optimality because the zero bet
+givesℓ Q(0) = 0. Thus,P Q{X=x b}= 0, so the likelihood ratio is zero at the additional atom; elsewhere it
+follows directly from the density in (28). Thus, KL(Q∥P ⋆) =E Q[ln(1 +β⋆Q(X−µ 0))] =ℓ ⋆Q, by the definition
+of oracle log growth. For anyP∈ P 0 with KL(Q∥P)<∞, Jensen’s inequality gives
+ℓ⋆Q −KL(Q∥P) =E Q
+
+ln
+1 +β ⋆Q(X−µ 0)
+(dQ/dP)(X)
+
+≤lnE P [1 +β ⋆Q(X−µ 0)] = 0.(29)
+In (29), canceling the density dQ/dPin the expectation of the ratio leaves the integral of 1 +β ⋆Q(X−µ 0)
+only over{dQ/dP >0}. Extending that integral to the whole space can only increase it, since the multiplier
+is nonnegative. The last equality in (29) usesE P [X−µ 0] = 0, the defining property of the null classP 0.
+The case KL(Q∥P) =∞is immediate.
+Lemma 18(Information bound for early rejection).Fixµ 0 ∈(0,1). There isC µ0 <∞such that, for every
+Q∈ Q,0< α <1,ϵ∈(0,1), and stopping timeτsatisfyingsup P∈P 0 PP {τ <∞} ≤α,
+PQ
+(
+τ≤ (1−ϵ) ln(1/α)ℓ⋆Q
+)
+≤α ϵ/2 + 4Cµ0
+ϵ2 ln(1/α) .
+Proof.LetP ⋆ be the null projection from Lemma 17. Its likelihood ratio is the oracle multiplier, bounded
+above by max{1/µ0,1/(1−µ 0)}. The ratio
+r(lnr) 2
+rlnr−r+ 1
+extends continuously atr= 0 andr= 1, with values 0 and 2, respectively. It is therefore bounded by
+someC µ0 <∞on [0,max{1/µ 0,1/(1−µ 0)}]. Integrating the resulting inequality underP ⋆, and using
+EP ⋆ [dQ/dP ⋆] = 1, gives
+EQ
+
+ln2(1 +β ⋆Q(X−µ 0)) ≤C µ0 KL(Q∥P ⋆) =C µ0 ℓ⋆Q .(30)
+This also holds at endpoint oracle bets, including the additional null atom where the likelihood ratio is zero.
+Define the log likelihood increments, their product likelihood, and the deterministic time horizon by
+Zi := ln(1 +β ⋆Q(Xi −µ 0)), L n := exp
+ nX
+i=1
+Zi
+!
+, N:=
+$
+(1−ϵ) ln(1/α)
+ℓ⋆Q
+%
+.
+IfN= 0, the event is empty. Otherwise, change of measure on each event{τ=k},k≤N, gives
+PQ{τ≤N,lnL τ <(1−ϵ/2) ln(1/α)} ≤α −(1−ϵ/2)PP ⋆ {τ≤N} ≤α ϵ/2 .
+On the remaining early-rejection event, somek≤Nsatisfies Pki=1(Zi −ℓ ⋆Q)≥ϵln(1/α)/2. The increments
+are independent underQand have meanℓ ⋆Q. Kolmogorov’s maximal inequality and (30) give
+PQ
+(
+max
+k≤N
+kX
+i=1
+(Zi −ℓ ⋆Q)≥ ϵln(1/α)2
+)
+≤
+4N Cµ0 ℓ⋆Q
+ϵ2 ln2(1/α) ≤ 4Cµ0ϵ2 ln(1/α) .
+Adding the two probabilities proves the claim. Only the projection’s null validity was used, so the same
+bound applies to the one-sided setting of Corollary 8.
+The next lemma contains the main upper-bound argument. We restrict the prior to an interval around
+the optimal bets. Concavity preserves most of the optimal growth, and Jensen’s inequality converts the
+interval’s prior mass into an additive penalty. This localization appears in Orabona [2018, Theorem 1] and
+in Orabona and Jun [2024, equations (16)–(18)].
+21
+Lemma 19.Forδ∈(0,1/2)andQ∈ Q, let
+Iδ(β⋆Q) :={tβ ⋆Q : 1−2δ≤t≤1−δ}.(31)
+Recall from(6)thatτ Fα is the first time the portfolio wealth reaches1/α. IfF(I δ(β⋆Q))>0, then for every
+α∈(0,1),
+EQ[τ Fα ]≤ ln(1/α) + ln(1/F(Iδ(β⋆Q))) + ln max{1/µ0,1/(1−µ 0)}(1−2δ)ℓ ⋆Q .(32)
+Proof.LetH Q beFconditioned on the intervalI δ(β⋆Q) in (31), and define the i.i.d. increments
+Zi :=
+Z
+ln(1 +β(X i −µ 0)) dHQ(β).
+For anyβ=tβ ⋆Q inI δ(β⋆Q), we have 1 +β(Xi −µ 0) = (1−t) +t(1 +β ⋆Q(Xi −µ 0))≥δ. Thus, 1 +β(X i −µ 0)∈
+[δ,max{1/µ 0,1/(1−µ 0)}], andZ i ∈[lnδ,ln max{1/µ 0,1/(1−µ 0)}]. Concavity givesℓ Q(tβ⋆Q)≥tℓ Q(β⋆Q) +
+(1−t)ℓ Q(0) =tℓ ⋆Q. Hence,E Q[Zi]≥(1−2δ)ℓ ⋆Q >0. Jensen’s inequality gives, pathwise,
+WealthFn ≥F(I δ(β⋆Q))
+Z
+exp
+ nX
+i=1
+ln(1 +β(X i −µ 0))
+!
+dHQ(β)≥F(I δ(β⋆Q)) exp
+ nX
+i=1
+Zi
+!
+.
+SetA Q := ln(1/α) + ln(1/F(I δ(β⋆Q)))>0 andT:= inf{n≥1 : Pni=1 Zi ≥A Q}. Taking logarithms in
+the preceding inequality givesτ Fα ≤T. For each integerN, the sum stopped atT∧Nis belowA Q if no
+crossing has occurred; otherwise it is at mostA Q + ln max{1/µ0,1/(1−µ 0)}, since each increment is at
+most ln max{1/µ0,1/(1−µ 0)}. SinceT∧N= PNi=1 1{T≥i}and{T≥i}depends only on the firsti−1
+observations, independence gives
+(1−2δ)ℓ ⋆QEQ[T∧N]≤
+NX
+i=1
+EQ[1{T≥i}Z i]≤A Q + ln max{1/µ0,1/(1−µ 0)}.
+This bound is uniform inN, so monotone convergence provesE Q[T]<∞and gives (32).
+Finally, we prove a lemma that allows us to introduce the logarithmic decay index of the prior.
+Lemma 20.Ifa(F)<∞, then for everyδ∈(0,1/2)andϵ >0there existsC δ,ϵ <∞such that, uniformly
+overQ∈ Q,
+ln 1F(I δ(β⋆Q)) ≤(a Q(F) +ϵ) LL(|β ⋆Q|) +C δ,ϵ .
+Proof.Recall the limits defininga ±(F) in (8). For somer∈(0,1/e), on the side ofβ ⋆Q we have
+f(β)≥ 1|β|(ln(1/|β|)) aQ(F)+ϵ (0<|β| ≤r).
+If|β ⋆Q| ≤r, thenI δ(β⋆Q) has lengthδ|β ⋆Q|, and everyβ∈ I δ(β⋆Q) satisfies (1−2δ)|β ⋆Q| ≤ |β| ≤(1−δ)|β⋆Q|.
+Integrating the preceding lower bound onfover this interval gives
+F(I δ(β⋆Q))≥ δ1−δ
+ 
+ln 1(1−2δ)|β ⋆Q|
+!−(aQ(F)+ϵ)
+.(33)
+Also,
+ln 1(1−2δ)|β ⋆Q| ≤ 1 + ln 11−2δ  max (1,ln 1|β⋆Q| ) .
+Taking logarithms in (33) and using the preceding inequality proves the stated bound in this case. If|β⋆Q|> r,
+thenI δ(β⋆Q) lies in the compact set [−(1−δ)/(1−µ0),(1−δ)/µ 0]∩{|β| ≥(1−2δ)r} ⊂(−1/(1−µ0),1/µ 0)\{0}.
+On this setfhas a positive lower bound independent ofQ, andI δ(β⋆Q) has lengthδ|β ⋆Q| ≥δr, giving a uniform
+positive lower bound onF(I δ(β⋆Q)). EnlargingC δ,ϵ completes the proof.
+22
+A.1 A uniform pointwise lower bound
+The following finite lower bound also applies to an infinite directional index. It also supplies the matching
+lower bound for the efficiency characterization.
+Lemma 21(Pointwise lower bound at small oracle bets).LetFsatisfy Definition 1. Fix a finitea ′ ∈
+(0, a+(F))andϵ∈(0,1/2). There are constantsb 0, A0, C, κ >0, independent ofQ, α, such that if0< β⋆Q ≤
+b0 andln(1/α)≥A 0, then
+EQ[τ Fα ]≥
+$
+(1−ϵ){ln(1/α) +a ′ LL(β⋆Q)}
+ℓ⋆Q
+%
+(1−Cα κ).(34)
+The analogous statement holds for negative oracle bets, usinga −(F)and|β ⋆Q|.
+Proof.We split time at a deterministic cutoffmthat will be defined in the following. Change of measure
+controls rejection beforem; afterwards, concentration and a bound on the prior mass keep the portfolio
+below the rejection threshold until the horizon in (34).
+We will chooseb 0, A0, C, κto depend only onµ0, F, a′, ϵ.
+Now, we compute some preliminary inequalities for the quantities of interest. FixQ∈ Qwith 0< β ⋆Q ≤
+b0. Sinceℓ Q is concave andℓ ′Q(0) =E Q[X−µ 0], a positive oracle bet implies
+∆ :=E Q[X−µ 0]>0,
+v:=E Q[(X−µ 0)2]>0.
+We takeb 0 ≤1/4 and reduce it further below. Then, the oracle is interior, and its first-order condition gives
+EQ
+"
+X−µ 0
+1 +β ⋆Q(X−µ 0)
+#
+= 0 and ∆ =β ⋆Q EQ
+"
+(X−µ 0)2
+1 +β ⋆Q(X−µ 0)
+#
+.
+Since|X−µ 0| ≤1,
+β⋆Qv
+1 +β ⋆Q ≤∆≤
+β⋆Qv
+1−β ⋆Q and
+(β⋆Q)2v
+2(1 +β ⋆Q)2 ≤ℓ ⋆Q ≤ (β⋆Q)2v2(1−β ⋆Q)2 .(35)
+The first pair follows by bounding the denominator in the first-order identity between 1−β ⋆Q and 1 +β ⋆Q.
+For the second pair, subtract the zero quantityE Q[β⋆Q(X−µ 0)/(1 +β ⋆Q(X−µ 0))] fromℓ ⋆Q. For|t| ≤β ⋆Q,
+using ln(1 +t)− t1+t =t 2 R 10 s(1+st)2 ds, we have
+t2
+2(1 +β ⋆Q)2 ≤ln(1 +t)− t1 +t ≤ t22(1−β ⋆Q)2 .
+Substitutet=β ⋆Q(X−µ 0) and take expectations to obtain the claimed bounds. These inequalities imply,
+uniformly asβ ⋆Q →0 even ifv→0,
+∆ =β ⋆Qv(1 +O(β ⋆Q)), ℓ ⋆Q = 12 (β⋆Q)2v(1 +O(β ⋆Q)), ∆22vℓ⋆Q = 1 +O(β ⋆Q).(36)
+For all 0< β⋆Q ≤1/4, using alsov≤1, convenient weaker bounds are
+β⋆Q∆≤5ℓ ⋆Q, ∆2vℓ⋆Q ≥ 12 , vℓ⋆Q ≥ 1(β⋆Q)2 ,andℓ ⋆Q ≤1.(37)
+23
+Early rejection.The null projection from Lemma 17 is dP(x) := dQ(x)/(1 +β ⋆Q(x−µ 0)). To check that
+P∈ P0, the first-order condition gives
+EQ
+"
+1
+1 +β ⋆Q(X−µ 0)
+#
+= 1−β ⋆QEQ
+"
+X−µ 0
+1 +β ⋆Q(X−µ 0)
+#
+= 1,E P [X−µ 0] = 0.
+The multiplier is strictly positive, so the likelihood ratio of the firstnobservations underQto those under
+PisL n := Qni=1(1 +β ⋆Q(Xi −µ 0)). Independence and the definition ofPgive
+EP [L2n] =  EP [(1 +β ⋆Q(X−µ 0))2]n =  EQ[1 +β ⋆Q(X−µ 0)]n = (1 +β ⋆Q∆)n .
+Set
+m:=
+&
+ln 1α
+20ℓ⋆Q
+’
+,
+which is deterministic for fixedQ, α. Since{τ Fα ≤m}is measurable at timem, change of measure, Cauchy–
+Schwarz, and null validity in (6) give
+PQ{τ Fα ≤m}=E P [Lm1{τ Fα ≤m}]≤ qEP [L2m]PP {τ Fα ≤m} ≤qα(1 +β ⋆Q∆)m ≤ qαexp(mβ ⋆Q∆)
+≤ √αexp(ln(1/α)/8 + 5/2) =e 5/2α3/8,(38)
+where the second-to-last inequality uses 1 +t≤e t, while for the last inequality, (37) and the definition ofm
+givemβ ⋆Q∆≤5mℓ ⋆Q ≤ln(1/α)/4 + 5.
+Uniform concentration afterm.Define
+Sn :=
+nX
+i=1
+(Xi −µ 0) andV n :=
+nX
+i=1
+(Xi −µ 0)2 .
+Chooseθ, ρ∈(0,1/4], independently ofQ, α, small enough that
+(1 +θ) 2(1 +ρ) 2
+1−θ ≤1 + ϵ4 .(39)
+The parameterρwill determine the range of the quadratic approximation below. Define
+G:=
+\
+n≥m
+{|Sn −n∆| ≤θn∆, Vn ≥(1−θ)nv}.
+OnG, we have (1−θ)n∆≤S n ≤(1 +θ)n∆ andV n ≥(1−θ)nvsimultaneously for everyn≥m.
+If|Z| ≤1,E Q[Z] = 0, andE Q[Z 2]≤v, then, for|λ| ≤1, we have
+EQ[eλZ]≤1 +λE Q[Z] +λ 2EQ[Z 2]≤1 +λ 2v≤e λ2v,
+where the first inequality usese t ≤1 +t+t 2 on [−1,1]. BothX−E Q[X] = (X−µ 0)−∆ and (X−µ 0)2 −v
+satisfy these conditions, because their absolute values are at most 1, and
+VarQ(X) =v−∆ 2 ≤v,Var Q((X−µ 0)2)≤E Q[(X−µ 0)4]≤v .
+By (35),θ∆/(2v)≤θβ ⋆Q/(2(1−β ⋆Q))≤1, and alsoθ/2≤1. Independence and the preceding exponential-
+moment bound therefore make
+M ±n := exp
+
+± θ∆2v (Sn −n∆)− nθ2∆24v  , fMn := exp − θ2 (Vn −nv)− nθ2v4 
+24
+nonnegativeQ-supermartingales starting from 1. If±(S n −n∆)> θn∆ at anyn≥m, thenM ±n >
+exp(nθ2∆2/(4v))≥exp(mθ 2∆2/(4v)). Similarly,V n <(1−θ)nvat anyn≥mimplies fMn >exp(mθ 2v/4).
+Since each supermartingale starts from 1, Ville’s inequality bounds the probability of crossing each fixed
+threshold by its reciprocal. Applying this separately to the three events gives
+PQ{∃n≥m:S n −n∆> θn∆} ≤PQ
+
+sup
+n≥0
+M +n ≥exp
+ mθ2∆2
+4v
+
+≤exp
+
+− mθ2∆2
+4v
+
+,
+PQ{∃n≥m:n∆−S n > θn∆} ≤PQ
+
+sup
+n≥0
+M −n ≥exp
+ mθ2∆2
+4v
+
+≤exp
+
+− mθ2∆2
+4v
+
+,
+PQ{∃n≥m:V n <(1−θ)nv} ≤P Q
+
+sup
+n≥0
+fMn ≥exp
+ mθ2v
+4
+
+≤exp
+
+− mθ2v4  .
+The eventG c, the complement ofG, is the union of these three events: at somen≥m, eitherS n is too large,
+Sn is too small, orV n is too small. Hence, the union bound gives
+PQ{Gc} ≤PQ{∃n≥m:S n −n∆> θn∆}+P Q{∃n≥m:n∆−S n > θn∆}
++P Q{∃n≥m:V n <(1−θ)nv}
+≤2 exp
+
+− mθ2∆2
+4v
+
++ exp
+
+− mθ2v4  ≤2α θ2/160 +α θ2/(80(β⋆Q)2) ≤3α θ2/160,(40)
+where the second-to-last inequality usesm≥ln(1/α)/(20ℓ ⋆Q) and (37), while the last inequality follows from
+β⋆Q ≤1/4 and 0< α <1.
+A deterministic bound on the portfolio.Set
+H:= ln(1/α) +a ′ LL(β⋆Q),andN:=
+$
+(1−ϵ)H
+ℓ⋆Q
+%
+.
+The floor and ceiling give
+N−m≥ (19/20−ϵ) ln(1/α)ℓ⋆Q −2>0
+when ln(1/α)≥5, sinceH≥ln(1/α),ϵ <1/2, andℓ ⋆Q ≤1.
+Fixm < n≤N, work onG, and define the concave function
+gn(β) := ln Wealthn(β),
+whereg n(0) = 0. On [−ρ, ρ], the second derivative of ln(1 +t) is at most−1/(1 +ρ) 2. Taylor’s theorem at
+zero therefore gives ln(1 +t)≤t−t 2/(2(1 +ρ) 2). Apply this inequality witht=β(X i −µ 0) and sum over
+i. Since|X i −µ 0| ≤1 and we are onG, for 0≤β≤ρwe obtain
+gn(β)≤βS n − β2Vn2(1 +ρ) 2 ≤βS n − β2(1−θ)nv2(1 +ρ) 2 =nv ′ xnβ− β22  ,
+where
+v′ := (1−θ)v(1 +ρ) 2 andx n := Snnv′ .
+Here,x n is the unconstrained maximizer of this quadratic upper bound on log-wealth. Completing the
+square gives
+nv′
+
+xnβ− β22  =K n − nv′2 (β−x n)2 ≤K n,whereK n := S2n2nv′ = nv′x2n2 .
+25
+OnG, the bounds onS n and (35) imply
+0< xn ≤ (1 +θ)(1 +ρ) 2(1−θ)(1−β ⋆Q) β⋆Q ≤C 0β⋆Q,whereC 0 := 4(1 +θ)(1 +ρ) 23(1−θ) .
+Reducingb 0 so that 2C 0b0 ≤ρensures 2x n ≤ρ. Moreover,
+Kn ≤nℓ ⋆Q (1 +θ) 2(1 +ρ) 21−θ ∆22vℓ⋆Q .
+By (39), the first ratio is at most 1 +ϵ/4; by (36), the second ratio tends uniformly to 1 asβ ⋆Q →0. We can
+therefore reduceb 0, independently ofQ, α, so that
+∆2
+2vℓ⋆Q ≤ 1 +ϵ/21 +ϵ/4 .
+The product of the two ratios is then at most 1 +ϵ/2, giving
+Kn ≤(1 +ϵ/2)nℓ ⋆Q ≤(1 +ϵ/2)(1−ϵ)H= (1−ϵ/2−ϵ 2/2)H≤(1−ϵ/2)H .
+We have established, simultaneously for allm < n≤NonG,
+0< xn ≤C 0β⋆Q,2x n ≤ρ, K n ≤(1−ϵ/2)H .(41)
+We now bound the wealth above its initial value of 1. First, considerβoutside (0,2x n). Forβ <0,
+the inequality ln(1 +t)≤tgivesg n(β)≤βS n ≤0. For 2x n ≤β≤ρ, the quadratic bound givesg n(β)≤
+nv′β(xn −β/2)≤0. Forβ≥ρ, concavity gives
+gn(ρ)≥ ρβ gn(β) + 1− ρβ  gn(0) = ρβ gn(β).
+So, using the quadratic bound atρtogether with 2x n ≤ρ, givesg n(β)≤(β/ρ)g n(ρ)≤0. Endpoint zeros
+are interpreted as log wealth−∞. SinceFhas total mass 1 ande gn(β) ≤1 outside (0,2x n), we have
+WealthFn = 1 +
+Z  
+egn(β) −1  dF(β)≤1 + Z 2xn
+0
+ 
+egn(β) −1 f(β) dβ .
+For 0≤β≤2x n, the quadratic bound andK n =nv ′x2n/2 give
+gn(β)≤K n
+ 2β
+xn
+− β2
+x2n
+
+,0≤ 2βxn − β2x2n = 1− 1− βxn 2 ≤1.
+By convexity, the functiont7→e tKn lies below the chord joining its values at 0 and 1. Thus,
+egn(β) −1≤exp
+
+Kn
+ 2β
+xn
+− β2
+x2n
+
+−1≤(e Kn −1)
+ 2β
+xn
+− β2
+x2n
+
+.
+Sincea ′ < a+(F), the limit in (8) lets us choose
+β1 ∈(0,1/e) such thatβf(β)≤
+
+ln 1β −a′ (0< β≤β 1).
+Reduceb 0 so that 2C 0b0 ≤β 1 andb 0 ≤(2C 0)−2. Then
+ln 12xn ≥ln 1β⋆Q −ln(2C 0)≥ 12 ln 1β⋆Q .
+26
+For every 0< β≤2x n, the density envelope therefore gives
+βf(β)≤
+
+ln 1β −a′ ≤ ln 12xn −a′ ≤2 a′ "ln 1β⋆Q #−a′ = 2a′e−a′ LL(β⋆Q),
+where the last equality usesβ ⋆Q ≤1/4<1/e, so that LL(β ⋆Q) = ln ln(1/β⋆Q).
+Combining the preceding bounds gives
+WealthFn ≤1 + (e Kn −1)
+Z 2xn
+0
+ 2β
+xn
+− β2
+x2n
+
+f(β) dβ≤1 + 2 a′e−a′ LL(β⋆Q)(eKn −1) Z 2xn
+0
+ 2
+xn
+− βx2n
+
+dβ
+= 1 + 2a′+1e−a′ LL(β⋆Q)(eKn −1),
+where the integral is Z 2xn
+0
+ 2
+xn
+− βx2n
+
+dβ=
+ 2β
+xn
+− β2
+2x2n
+2xn
+0
+= 4−2 = 2.
+The factor multiplyingf(β) vanishes linearly at zero, canceling the 1/βin the density bound. Thus, the
+integral is finite even whena ′ <1.
+Bye Kn −1≤e Kn , the definition ofH, and (41),
+αe−a′ LL(β⋆Q)(eKn −1)≤αe Kn−a′ LL(β⋆Q) =e Kn−H ≤e −ϵH/2 .
+Multiplying the wealth bound byα, we conclude that
+αWealth Fn ≤α+ 2 a′+1e−ϵH/2 (m < n≤N).(42)
+ChooseA 0 large enough that
+A0 ≥5 ande −A0 + 2a′+1e−ϵA0/2 <1.
+Such a choice exists because both exponential terms tend to zero asA 0 → ∞. WheneverH≥ln(1/α)≥A 0,
+(42) gives
+αWealth Fn ≤e −A0 + 2a′+1e−ϵA0/2 <1.
+Thus, onG, no rejection occurs at anym < n≤N.
+Conclusion.The preceding bound gives{τ Fα ≤N} ⊆ {τFα ≤m} ∪ Gc. Combining (38) and (40),
+PQ{τ Fα ≤N} ≤e5/2α3/8 + 3αθ2/160 ≤Cα κ, C:=e 5/2 + 3, κ:=θ 2/160.(43)
+Finally,
+EQ[τ Fα ]≥NP Q{τ Fα > N} ≥N(1−Cακ),
+which proves (34). For a negative oracle bet, replaceX, µ 0, βby 1−X,1−µ 0,−βto obtain the analogous
+result witha +(F) replaced bya −(F).
+A.2 Proof of Theorem 2
+We use the following elementary criterion to combine an expected-time upper bound with control of early
+rejection. Its comparison form will also apply to confidence-sequence widths and to the regret-based test in
+Appendix C.
+27
+Lemma 22(A uniformL 1 criterion).LetZ α,Q be nonnegative integrable random variables underQ, indexed
+by0< α <1and a family of lawsQ, such that
+lim sup
+α↓0
+sup
+Q∈Q
+EQ[Zα,Q]≤1.
+Thensup Q∈Q EQ[|Zα,Q −1|]→0asα↓0if, for everyη∈(0,1),
+sup
+Q∈Q
+PQ{Zα,Q <1−η} − →0.
+The same conclusion holds if there are random variables0≤U α,Q ≤Z α,Q almost surely such that
+sup
+Q∈Q
+EQ[|Uα,Q −1|]− →0 (α↓0).
+Proof.For everyx≥0,|x−1|=x−1 + 2(1−x) +. Also,
+(1−x) + ≤η+1{x <1−η},
+because the left side is at mostηwhenx≥1−ηand at most 1 otherwise. Taking expectations gives
+EQ[|Zα,Q −1|]≤E Q[Zα,Q]−1 + 2η+ 2P Q{Zα,Q <1−η}.
+Taking the supremum overQand then the upper limit asα↓0 bounds the left side by 2η: the expectation
+minus 1 has upper limit at most zero, and the probability tends uniformly to zero. Sendingη↓0 proves the
+first conclusion.
+For the comparison form, (1−Z α,Q)+ ≤(1−U α,Q)+ ≤ |Uα,Q −1|. The same identity therefore gives
+EQ[|Zα,Q −1|]≤E Q[Zα,Q]−1 + 2E Q[|Uα,Q −1|].
+After taking the supremum and upper limit, the right side is at most zero. Nonnegativity proves the claimed
+convergence.
+Proof of Theorem 2.Fixδ∈(0,1/2) andζ >0. Enlarge the finite constantC δ,ζ from Lemma 20, if necessary,
+so that it is nonnegative, and define
+C ′δ,ζ :=C δ,ζ + ln max{1/µ0,1/(1−µ 0)}<∞.
+This constant is independent ofQ, α. So, combining Lemma 19 with Lemma 20 gives
+EQ[τ Fα ]≤ ln(1/α) + (aQ(F) +ζ) LL(|β ⋆Q|) +C ′δ,ζ(1−2δ)ℓ ⋆Q ,(44)
+uniformly inQ, α. Dividing by eBFα (Q) gives
+EQ[τ Fα ]
+eBFα (Q) ≤ 11−2δ
+ 
+1 +
+ζLL(|β ⋆Q|) +C ′δ,ζ
+ln(1/α) +a Q(F) LL(|β ⋆Q|)
+!
+≤ 11−2δ 1 +ζ+ C ′δ,ζln(1/α)  ,
+where in the second inequality,a Q(F)≥1 makes the denominator at least LL(|β ⋆Q|), and it is also at least
+ln(1/α)>0. SinceC ′δ,ζ is finite for fixedδ, ζ, its contribution tends to zero uniformly overQasα↓0. Hence,
+lim sup
+α↓0
+sup
+Q∈Q
+EQ[τ Fα ]
+eBFα (Q) ≤ 1 +ζ1−2δ .
+Now sendδ, ζ↓0 to obtain
+lim sup
+α↓0
+sup
+Q∈Q
+EQ[τ Fα ]
+eBFα (Q) ≤1.
+28
+The constantC ′δ,ζ need not remain bounded in this last step, because we have already taken the limit inα
+withδ, ζfixed.
+To control the lower tail, fixη∈(0,1) and chooseϵ∈(0,1/2) so that (1−ϵ) 2 >1−η. Define
+a′s := (1−ϵ)a s(F)∈(0, a s(F)), s∈ {+,−}.
+Apply Lemma 21 separately on the two sides. Chooseb 0 as the smaller betting cutoff,A 0 as the larger
+confidence cutoff,Cas the larger constant, andκas the smaller exponent. Since 0< α <1, decreasing the
+exponent increasesα κ. Thus, for ln(1/α)≥A 0, these choices give a common probability bound in (43), with
+constants independent ofQ, α.
+For 0<|β ⋆Q| ≤b0, letsbe the side containingβ ⋆Q. The choicea ′s = (1−ϵ)a Q(F) gives
+ln(1/α) +a ′s LL(|β⋆Q|) = ln(1/α) + (1−ϵ)a Q(F) LL(|β ⋆Q|)
+≥(1−ϵ){ln(1/α) +a Q(F) LL(|β ⋆Q|)}.
+Consequently, the lemma’s time horizon satisfies
+N:=
+$
+(1−ϵ){ln(1/α) +a ′s LL(|β⋆Q|)}
+ℓ⋆Q
+%
+≥
+j
+(1−ϵ) 2 eBFα (Q)k .
+One factor 1−ϵcomes from the horizon and the other from the preceding comparison of the two numerators.
+The floor loses at most one observation, whose normalized cost is bounded by (7):
+1
+eBFα (Q) ≤ ln max{1/µ0,1/(1−µ 0)}ln(1/α) .
+It follows that
+N
+eBFα (Q) ≥(1−ϵ) 2 − ln max{1/µ0,1/(1−µ 0)}ln(1/α) .
+Since (1−ϵ) 2 >1−η, this ratio is at least 1−ηwhenever
+ln(1/α)≥ ln max{1/µ0,1/(1−µ 0)}(1−ϵ) 2 −(1−η) .
+This cutoff is independent ofQ. Equation (43) therefore gives
+PQ{τ Fα ≤(1−η) eBFα (Q)} ≤Cακ .
+For|β ⋆Q|> b0, the adaptation term is bounded bya(F) LL(b 0). Hence, whenever
+ln(1/α)≥ 2(1−η)a(F) LL(b 0)η ,
+we have (1−η)a(F) LL(b 0)≤(η/2) ln(1/α) and therefore
+(1−η) eBFα (Q)≤ (1−η/2) ln(1/α)ℓ⋆Q
+uniformly on this range. Apply Lemma 18 withϵ=η/2 to obtain
+PQ{τ Fα ≤(1−η) eBFα (Q)} ≤αη/4 + 16Cµ0
+η2 ln(1/α) .
+29
+For allαsatisfying the three cutoffs above, the supremum overQ∈ Qis at most the maximum of this bound
+andCα κ. Both tend to zero asα↓0, proving
+lim
+α↓0
+sup
+Q∈Q
+PQ{τ Fα ≤(1−η) eBFα (Q)}= 0.(45)
+Apply Lemma 22 to the normalized rejection times
+Zα,Q := τ FαeBFα (Q) (Q∈ Q).
+They are nonnegative and integrable by (44), and the preceding upper-bound argument gives the required
+uniform upper limit of their expectations. Equation (45) supplies the lower-tail condition for everyη∈(0,1),
+since the event with a strict inequality is contained in the displayed event. The lemma proves (9).
+A.3 Proof of Corollary 6
+Proof.For the upper bound, supposea(F)<∞. Theorem 2 givesE Q[τ Fα ]/ eBFα (Q)→1 uniformly overQas
+α→0. Since 1≤a Q(F)≤a(F),
+eBFα (Q)
+Bα(Q) =
+ln(1/α) +a Q(F) LL(|β ⋆Q|)
+ln(1/α) + LL(|β⋆Q|) ≤a(F).
+Hence, eff(τ F )≤a(F). The same upper bound is automatic fora(F) =∞.
+For the lower bound, choose a side with indexa(F), taking the positive side without loss of generality.
+For 0<∆<1−µ 0, let
+Q∆ := Ber(µ0 + ∆) andσ 20 :=µ 0(1−µ 0).
+Then
+β⋆Q∆ = ∆/σ20,
+ℓ⋆Q∆ = infP∈P 0 KL(Q∆∥P) = KL Bern(µ0 + ∆;µ 0) = ∆22σ20 (1 +O(∆)), (46)
+where KLBern(p;q) denotes the Kullback–Leibler divergence between Bernoulli distributions with parameters
+pandq:
+KLBern(p;q) :=pln pq + (1−p) ln 1−p1−q , p∈[0,1], q∈(0,1),
+with zero-weight terms interpreted as zero. The first equality forℓ ⋆Q∆ follows from Lemma 17. To evaluate
+the infimum, note that everyP∈ P 0 satisfies
+PP {X= 1} ≤EP [X] =µ 0,P P {X= 0} ≤EP [1−X] = 1−µ 0 .
+SinceQ ∆ is supported on{0,1},
+KL(Q∆∥P) = (µ 0 + ∆) ln µ0 + ∆PP {X= 1} + (1−µ 0 −∆) ln 1−µ 0 −∆PP {X= 0}
+≥KL Bern(µ0 + ∆;µ 0).
+Equality holds forP= Ber(µ 0), which belongs toP 0. Thus, the Bernoulli divergence is the attained infimum
+over the full null class.
+For sufficiently small ∆, set
+α∆ := 1LL(β⋆Q∆ ) .
+30
+Here,α ∆ is the prescribed upper bound on the false-alarm probability under every null law, and we evaluate
+the test at this level underQ ∆. As ∆↓0 withµ 0 fixed,Q ∆ approaches the null law Ber(µ 0) while the
+permitted false-alarm probabilityα ∆ also tends to zero. Our choice makesα ∆ decrease slowly enough that
+the confidence cost is negligible compared with the adaptation cost:
+ln(1/α∆) =o
+ 
+LL(β⋆Q∆ ) (∆↓0).
+Fix any finitea ′ ∈(0, a(F)) andϵ∈(0,1/2). The constants in Lemma 21 are uniform overQ, α, so
+we can apply it along the changing alternatives and levels (Q ∆, α∆): for all sufficiently small ∆, we have
+0< β⋆Q∆ ≤b 0 and ln(1/α ∆)≥A 0. EnlargeA 0 so that 0≤1−Cα κ∆ ≤1. Dividing (34) byB α∆ (Q∆) and
+using⌊t⌋ ≥t−1 gives
+EQ∆ [τ Fα∆ ]
+Bα∆ (Q∆) ≥(1−ϵ)(1−Cα κ∆) ln(1/α∆) +a ′ LL(β⋆Q∆ )ln(1/α∆) + LL(β⋆Q∆ ) − 1Bα∆ (Q∆) .
+The floor loses at most one observation, and (7) gives
+1
+Bα∆ (Q∆) ≤ ln max{1/µ0,1/(1−µ 0)}ln(1/α∆) − →0.
+In the lower bound, dividing the numerator and denominator of the fraction containinga ′ by LL(β⋆Q∆ ) shows
+that this fraction tends toa ′, while 1−Cα κ∆ →1. Hence,
+lim inf
+∆↓0
+EQ∆ [τ Fα∆ ]
+Bα∆ (Q∆) ≥(1−ϵ)a ′ .
+For everyα 0 >0, all sufficiently small ∆ satisfyα ∆ ≤α 0, so the supremum in Definition 4 is at least
+(1−ϵ)a ′. Sendingα 0 ↓0 and thenϵ↓0 gives eff(τ F )≥a ′. Finally, leta ′ ↑a(F) ifa(F)<∞, ora ′ → ∞
+otherwise. This proves the lower bound in both cases.
+A.4 Proofs of Corollaries 7, 8, 9, and Proposition 10
+Proof of Corollary 7.All three priors satisfy the local positivity part of Definition 1, so we only need to
+computea(F) and apply Corollary 6. Recall thatL 1(β) = ln(emax{1/µ 0,1/(1−µ 0)}/|β|) andL 2(β) =
+ln(eL1(β)).
+For (i), the density ofβisf(β) =µ 0(1−µ 0)b(µ 0 +βµ 0(1−µ 0)), wherebis the Beta density, which is
+continuous and positive atµ 0 ∈(0,1). Hence, ln 1h(β) = ln 1|β| +O(1) anda ±(F) = +∞.
+For (ii), ln 1h(β) =alnL 1(β) +O(1) and lnL 1(β)/ln ln 1|β| →1, soa ±(F) =a.
+For (iii), ln 1h(β) = lnL 1(β)+(1+η) lnL 2(β)−lnC η and lnL 2 = ln(1+lnL 1) =o(lnL 1), soa ±(Fη) = 1.
+Proof of Corollary 8.For nonnegative bets,E P [1 +β(X−µ 0)]≤1 under the one-sided null, so the portfolio
+wealth is a nonnegative supermartingale and the test is valid. Sinceℓ ′Q(0) =E Q[X]−µ 0 >0, the oracle
+bet is positive, soI δ(β⋆Q)⊂(0,1/µ 0) and the bounds in Lemmas 19 and 20 use onlya +(F). The projection
+in Lemma 17 has meanµ 0 and belongs to the one-sided null, giving the universal lower bound. Lemma 21
+uses only the positive-side density bound and the null projection with meanµ 0. Lemma 18 also applies
+because that projection belongs to the one-sided null. Thus, the proof of both the expected-time andL 1
+limits applies unchanged. The positive Bernoulli alternatives in the proof of Corollary 6 give the matching
+efficiency lower bound.
+Proof of Corollary 9.Letf j be the component densities. The combined densityf(β) = Pkj=1 wjfj(β)
+satisfies
+max
+j
+{wj|β|fj(β)} ≤ |β|f(β)≤kmaxj {wj|β|fj(β)}.(47)
+31
+The negative logarithm of the maximum in (47) is min j{ln(1/(|β|fj(β))) + ln(1/w j)}. Taking negative
+logarithms in (47), we see that ln(1/(|β|f(β))) differs from this minimum by at most lnk. Divide by
+ln ln(1/|β|) and pass to each one-sided limit. Sincekand the weights are fixed,a ±(F) = min j a±(Fj),
+including infinite logarithmic decay indices. Finally, apply Corollary 6 and Theorem 2 when both minima
+are finite.
+Proof of Proposition 10.Ifg≤0, the assumption also holds with anyg ′ ∈(0, ℓ⋆Q) in place ofg, and letting
+g′ →0 gives eff(τ) =∞; so, assumeg >0 and fixη >0.Q-a.s., there existsn 0(ω)<∞such that
+ln Wealthn ≤n(g+η) for alln≥n 0. For sufficiently smallα, the threshold 1/αexceeds all the finitely many
+wealth values beforen 0. Thus,τ α ≥n 0 and
+τα ≥ ln(1/α)g+η .
+This inequality also holds whenτ α =∞. So, lim inf α→0 τα/ln 1α ≥ 1g+η Q-a.s., and by Fatou’s lemma
+lim infα→0 EQ[τα]/ln 1α ≥ 1g+η . SinceB α(Q)∼ln 1α /ℓ⋆Q asα→0, we get eff(τ)≥ℓ ⋆Q/(g+η), and we
+conclude by lettingη→0.
+For the Hoeffding process in (14), letS n := Pni=1(Xi −µ 0). Then, exp(βS n −nβ 2/8) is a supermartingale
+under everyP∈ P 0 by Hoeffding’s lemma, so (τ Hα ) is a level-αfamily. Moreover, completing the square
+givesβS n −nβ 2/8 = 2S 2n/n−(n/8)(β−4S n/n)2 ≤2S 2n/n, so 1n ln WealthHn ≤2(S n/n)2 →2(E Q[X−µ 0])2
+Q-a.s. To see that the growth gap is unbounded, takeQ ∆ :=δ µ0+∆ for 0<∆<1−µ 0. Then,β ⋆Q∆ = 1/µ0
+and ℓ⋆Q∆
+2(EQ∆ [X−µ 0])2 = ln(1 + ∆/µ0)2∆2 − → ∞.
+Applying the proposition separately at each fixedQ ∆ proves infinite efficiency.
+A.5 Proof of Proposition 3
+Proof.We first show that the oracle bet tends to zero. For each fixedc∈(0,1), the bound 1+c(X−µ 0)≤1+c
+gives
+ℓ′Qk (c) =E Qk [X−µ 0]−cE Qk
+ (X−µ 0)2
+1 +c(X−µ 0)
+
+≤E Qk [X]−µ 0 − c1 +c EQk [(X−µ 0)2]<0
+eventually, since the mean tends toµ 0 and the second moment is bounded below. Concavity givesβ ⋆Qk < c
+eventually; applying the same argument to 1−Xat null mean 1−µ 0 givesβ ⋆Qk >−ceventually. Sincecis
+arbitrary,|β ⋆Qk | →0.
+Equation (36), with reflection for negative bets, now gives
+ℓ⋆Qk = 12 (β⋆Qk )2EQk [(X−µ 0)2](1 +o(1)).
+The second moment is bounded above by 1 and bounded away from zero, so
+ln(1/ℓ⋆Qk ) = 2 ln(1/|β⋆Qk |) +O(1).
+Taking logarithms again proves the claimed relation between the two LL terms.
+A.6 Proof of Theorem 5
+Recall from (12) thatQ R consists of the alternatives withe −2R ≤ |β⋆Q| ≤e−R, andT α contains all valid
+level-αstopping times. We first prove a finite lower bound whose error is uniform in the number and location
+of the betting scales.
+32
+Lemma 23(Confidence and scale information).Define
+σ20 :=µ 0(1−µ 0), ρ α :=α 3/8 + 2ασ20 /64 .
+Fix0< α≤e −1, an integerm≥2, and gaps∆ 1, . . . ,∆m satisfying
+0<∆ m <· · ·<∆1 ≤σ 20/e,∆ j+1 ≤∆ j/4 (1≤j < m).
+For the Bernoulli laws
+P:= Ber(µ 0), Q j := Ber(µ0 + ∆j) (1≤j≤m),
+every stopping time withP P {τ <∞} ≤αsatisfies
+1
+m
+mX
+j=1
+ℓ⋆Qj EQj [τ]≥ln(1/α) + (1−ρ α) lnm−ln 2.(48)
+In particular, the maximum of these normalized expected times satisfies the same lower bound. The result
+includes stopping times using independent randomization.
+Proof.If any of the expectations on the left is infinite, the claim is immediate. We may therefore assume
+that they are all finite. This gives power one at the finitely many alternatives used in the proof.
+For these Bernoulli laws, recall from (46) that
+β⋆Qj = ∆jσ20 , ℓ ⋆Qj = KL(Qj∥P) = KL Bern(µ0 + ∆j;µ 0),(49)
+wherePattains the infimum divergence over the full bounded null class, as shown in the proof of Corollary 6.
+LetUbe the independent random seed, with the same law under every hypothesis, where a constant
+seed covers deterministic tests. Define
+Fn :=σ(U, X1, . . . , Xn) (n≥0).
+Rejection is unlikely before enough observations have arrived.For each alternative, choose the determin-
+istic time
+nj :=
+$
+σ20 ln(1/α)
+4∆2j
+%
+.
+The quantity inside the floor is at leaste 2/(4σ20)>2. Hence,n j ≥1, and rounding loses at most half of that
+quantity:
+nj∆2j ≥ σ20 ln(1/α)8 .(50)
+The likelihood ratio on the firstnobservations is
+Lj,n :=
+nY
+i=1
+dQj
+dP (Xi) =
+nY
+i=1
+
+1 + ∆j
+σ20 (Xi −µ 0)
+
+.
+Independence and the definition ofσ 0 give
+EP [L2j,n] =
+ 
+1 + ∆2j
+σ20
+!n
+≤exp
+ 
+n∆2j
+σ20
+!
+.
+The seed contributes no likelihood factor. Since{τ≤n j} ∈Fnj , change of measure and Cauchy–Schwarz
+yield
+PQj {τ≤n j} ≤
+q
+PP {τ≤n j}EP [L2j,nj ]≤ pαexp(ln(1/α)/4) =α 3/8 .(51)
+33
+The empirical mean identifies the scale after that time.Define the cumulative payoff by
+Sn :=
+nX
+i=1
+(Xi −µ 0).
+UnderQ j, Hoeffding’s lemma [Hoeffding, 1963] implies that, for eachs∈ {−1,1},
+M s,jn := exp
+ 
+s∆j(Sn −n∆ j)− n∆2j8 ! , n≥0,
+is a nonnegative supermartingale starting at one. Ifs(S n −n∆ j)≥n∆ j/4 at somen≥n j, thenM s,jn ≥
+exp(nj∆2j /8). Applying Ville’s inequality [Ville, 1939] separately for eachsgives
+PQj {∃n≥n j :s(S n −n∆ j)≥n∆ j/4} ≤e−nj ∆2j /8 ≤α σ20 /64,
+where the final inequality uses (50). A union bound over the two signs now yields
+PQj {∃n≥n j :|S n/n−∆ j| ≥∆j/4} ≤2ασ20 /64 .(52)
+The intervals [3∆ j/4,5∆ j/4] are disjoint by the separation assumption. Define a decoder from the
+stopped observations by
+bJ:=
+(
+j, τ <∞andS τ /τ∈[3∆ j/4,5∆ j/4],
+1,otherwise.
+UnderQ j, the stopping time is finite almost surely. Combining (51) and (52), we obtain
+PQj { bJ̸=j} ≤ρ α (1≤j≤m).
+Rejection and scale identification require additive information.Record the seed and the finite stopped
+history, using a distinguished symbol for nonrejection:
+Z:=
+(
+(U, τ, X1, . . . , Xτ ), τ <∞,
+†, τ=∞.
+Define the laws of the stopped history by
+Qτj := LawQj (Z), P τ := LawP (Z).
+Their density ratio on finite histories isL j,τ . To compute its expected logarithm, first stop atτ∧N.
+Independence gives
+EQj [lnL j,τ∧N ] =
+NX
+i=1
+EQj
+
+1{τ≥i}ln dQj
+dP (Xi)
+
+= KL(Qj∥P)E Qj [τ∧N].
+Each log likelihood increment is bounded, andE Qj [τ]<∞. Thus, dominated convergence applies to the
+stopped log likelihood, while monotone convergence applies toτ∧N. Using (49), we conclude that
+KL(Qτj ∥P τ ) =ℓ ⋆Qj EQj [τ].(53)
+For the information calculation, draw the generating index uniformly and then draw observations under
+QJ :
+P{J=j}:= 1/m(1≤j≤m), Q
+τ
+:= 1m
+mX
+j=1
+Qτj .
+34
+The mutual information between the index and the stopped history is
+I(J;Z) := 1m
+mX
+j=1
+KL(Qτj ∥Qτ ).
+Splitting each log density ratio at the mixture density gives the KL chain rule
+1
+m
+mX
+j=1
+KL(Qτj ∥P τ ) = KL(Qτ ∥P τ ) + I(J;Z).(54)
+SinceP Qτ {Z̸=†}= 1 andP P τ {Z̸=†} ≤α, data processing through the rejection event gives
+KL(Q
+τ
+∥P τ )≥ln(1/α).
+Fano’s inequality [Cover and Thomas, 2006] bounds the second term. We include its short argument.
+Define the decoding-error indicator by
+D:=1{ bJ̸=J}.
+Conditional onZ, this indicator determines whetherJequals the decoded value; on an error there are at
+mostm−1 remaining choices. Therefore, with entropy and mutual information measured in nats,
+H(J|Z)≤H(D|Z) + H(J|D, Z)≤ln 2 +P{D= 1}lnm≤ln 2 +ρ α lnm,
+I(J;Z) = lnm−H(J|Z)≥(1−ρ α) lnm−ln 2.
+Substituting these two bounds and (53) into (54) proves (48).
+We can now prove Theorem 5.
+Proof of Theorem 5. Lower bound.ForR≥ln 4, choose the number of alternatives and their mean gaps as
+m:=
+ R
+ln 4
+
++ 1,∆ j :=µ 0(1−µ 0)e−R4−(j−1), Q j := Ber(µ0 + ∆j) (1≤j≤m).
+The gaps satisfy Lemma 23, and (49) gives
+β⋆Qj =e −R4−(j−1) ∈[e −2R, e−R].
+Thus, all these alternatives belong toQ R. Everyτ∈ T α is valid under their common nullP= Ber(µ 0).
+Lemma 23 gives the finite bound
+inf
+τ∈T α
+sup
+Q∈QR
+ℓ⋆QEQ[τ]
+ln(1/α) + lnR ≥ ln(1/α) + (1−ρ α) lnm−ln 2ln(1/α) + lnR .(55)
+ForR≥ln 4, the inequalitiesR/ln 4< m≤2R/ln 4 imply that lnm−lnRis bounded by an absolute
+constant in magnitude. Alsoρ α →0 asα↓0 for fixedµ 0. Hence, the right-hand side of (55) tends to 1
+jointly, regardless of the relative rates ofαandR. In particular, for some absoluteC <∞and all sufficiently
+smallα, it is at least
+1−ρ α − Cln(1/α) + lnR .
+Upper bound and simultaneous attainment.Fix a priorFsatisfying Definition 1 witha(F) = 1; Corol-
+lary 7(iii) supplies such priors. Its test belongs toT α by (6). Since both directional indices equal one,
+Theorem 2 gives, for everyη >0, a cutoffα 0 >0 such thatE Q[τ Fα ]≤(1 +η)B α(Q) for everyQ∈ Qand
+every 0< α≤α 0. Thus, for all these error levels and everyR≥1, (56) gives
+sup
+Q∈QR
+ℓ⋆QEQ[τ Fα ]
+ln(1/α) + lnR ≤(1 +η)
+
+1 + ln 2ln(1/α) + lnR  .
+35
+Taking the joint upper limit and then sendingη↓0 proves the upper half of (13). The finite lower bound
+applies to this fixed mixture as well, proving simultaneous attainment.
+Finally, observe that
+lnR≤LL(|β ⋆Q|)≤lnR+ ln 2 (Q∈ Q R).(56)
+Hence, (56) bounds the two normalizing denominators between ln(1/α) + lnRand that quantity plus ln 2.
+Their ratio tends to 1 uniformly overQ R, proving the stated result.
+B Proofs of Section 5
+B.1 Proof of Proposition 11
+Proof of Proposition 11.At the true mean, each fixed-bet product in (15) is a nonnegative martingale under
+the conditional-mean null. The prior mixture starts at one, so Ville’s inequality gives
+PQ
+
+sup
+n≥1
+Wealthn(µQ)≥1/α
+
+≤α .
+This proves coverage for interior means. If the conditional mean is 0 or 1, boundedness forces every obser-
+vation to equal that endpoint almost surely, and our convention gives coverage as well.
+If the wealth is convex inm, every set{m∈(0,1) : Wealth s(m)<1/α}is an interval. Their running
+intersection is a nested interval, possibly empty. Adding the stipulated endpoints preserves this property:
+on an all-zero path, every admissible bet gives 1−βm≤1/(1−m), so Wealth s(m)≤(1−m) −s and the
+intersection contains all sufficiently small positivem. Thus, adding 0 leaves an interval. Reflection proves
+the claim at 1.
+B.2 Proof of Theorem 12
+First we need a lemma.
+Lemma 24.FixQ∈ Pwithµ Q ∈(0,1)and0< γ <1. The functionm7→ eBγ(Q, m)is continuous and
+strictly increasing on(0, µQ), continuous and strictly decreasing on(µ Q,1), and divergent asm→µ Q from
+either side.
+Proof.Form < µQ, express log growth in the normalized betting coordinate:
+ϕm(t) :=E Q[ln(1−t+tX/m)] (0≤t≤1).
+Its unique maximizer is the fraction of the maximal positive bet,
+θ⋆Q(m) :=mβ ⋆Q(m)>0,
+and its maximum isℓ ⋆Q(m). Form 1 < m2,
+0≤ϕ m1 (t)−ϕ m2 (t)≤ln(m 2/m1) (57)
+whenever these values are finite; att= 1 they are either both finite or both−∞. This bound gives continuity
+of the optimal value. Using the optimizer atm 2 also gives strict decrease of that value, sinceP Q{X >0}>0.
+Upper semicontinuity int, compactness, uniqueness of the maximizer, and (57) give continuity ofθ ⋆Q(m),
+including at endpoint optima. Its monotonicity follows from decreasing differences: fort <1,
+∂2
+∂m ∂tln(1−t+tx/m) =− x[m+t(x−m)] 2 ≤0.
+36
+The differenceϕ m1 (t)−ϕ m2 (t) is nondecreasing int, also at a finite endpoint by limits. Ifθ ⋆Q(m1)< θ⋆Q(m2),
+the two strict optimality inequalities contradict this monotonicity. Hence,θ ⋆Q(m) is nonincreasing. Since
+β⋆Q(m) =θ ⋆Q(m)/m >0, the oracle bet is nonincreasing as well.
+The coefficient in (17) is the fixed indexa +(F) on this side. Its numerator is therefore nondecreasing and
+its positive denominator strictly decreases, proving strict increase of the benchmark. Asm↑µ Q, (57) and
+Jensen’s inequality giveℓ ⋆Q(m)→0, so the benchmark diverges. Reflection proves the upper-side statements
+with the fixed indexa −(F).
+Proof of Theorem 12.We first obtain the required rejection-time limits from Corollary 8. Define the positive-
+and negative-bet contributions of the rescaled reference prior by
+A±n (m) :=
+Z
+{β:±β>0}
+nY
+i=1
+(1 +β m(β)(Xi −m)) dF(β).
+Their initial masses are
+q+ :=F((0,1/µ 0]), q − :=F([−1/(1−µ 0),0)).
+Compact-set positivity givesq +, q− >0, andq + +q − = 1. For positive bets, each product factor is
+1−µ0β+µ0βXi/m, which is nonincreasing inm. For negative bets, it is 1+(1−µ0)β−(1−µ0)β(1−Xi)/(1−m),
+which is nondecreasing. Hence,A +n is nonincreasing andA −n nondecreasing. Changing variables in the prior
+comparison (18) gives
+cκ(A+n (m) +A −n (m))≤Wealth n(m)≤C κ(A+n (m) +A −n (m)) (m∈[κ,1−κ]).(58)
+Integrating the density bounds also givesc κ ≤1≤C κ. Define the reference crossing times in the direction
+of the alternative by
+σγ(Q, m) :=
+(
+inf{n≥1 :A +n (m)≥1/γ}, m < µ Q,
+inf{n≥1 :A −n (m)≥1/γ}, m > µ Q.
+Form < µQ, rescale the observations and normalize the positive part of the prior at the fixed null mean
+κ:
+bXi := κXim , f +κ (β) := κµ0q+ f  κβµ0  (0< β <1/κ).
+The density integrates to 1. Sincem≥κ, the transformed observations lie in [0,1] and have mean greater
+thanκ. Rescaling the bet preserves each factor:
+1 + µ0βκ ( bXi −κ) = 1 +β m(β)(Xi −m) (β >0).
+Thus,A +n (m)/q+ is the exact one-sided mixture with densityf +κ , andσ γ(Q, m) is its rejection time at level
+q+γ. Its oracle growth isℓ ⋆Q(m) and its oracle bet ismβ ⋆Q(m)/κ. Scaling and normalization preserve the
+indexa +(F) and compact-set positivity, so Corollary 8 applies uniformly over all transformed laws.
+Form > µQ, use the reflected observations and normalized negative prior:
+bXi := κ(1−X i)1−m , f −κ (β) := κ(1−µ 0)q− f − κβ1−µ 0  (0< β <1/κ).
+The same argument applies toA −n (m)/q− at levelq −γ, with indexa −(F), growthℓ ⋆Q(m), and oracle bet
+(1−m)|β ⋆Q(m)|/κ.
+We also need fixed changes in the error level. Forx >0 and 1≤v≤1/κ,
+0≤LL(x)−LL(vx)≤ln(1 + ln(1/κ)).(59)
+37
+Indeed, ln(1/x) = ln(1/(vx)) + lnvbounds max{1,ln(1/x)}by (1 + ln(1/κ)) max{1,ln(1/(vx))}. For each
+fixedd >0, the positive-side testing benchmark forσ dα(Q, m) is
+ln(1/(q+dα)) +a +(F) LL(m|β ⋆Q(m)|/κ)
+ℓ⋆Q(m) ,
+withq −, a−(F),1−min place ofq +, a+(F), mon the negative side. By (59), its absolute relative difference
+from (17) is at most
+maxs∈{+,−} |ln(q sd)|+a(F) ln(1 + ln(1/κ))
+ln(1/α) .
+Forx≥0 andr >0, the inequality|rx−1| ≤r|x−1|+|r−1|therefore transfers the testing limit to our
+benchmark. In particular,
+ρκ(α) := sup
+d∈{cκ,2Cκ}, Q∈Qκ
+m∈[κ,1−κ], m̸=µQ
+EQ
+" σdα(Q, m)eBα(Q, m)−1 # − →0.(60)
+We henceforth takeαsufficiently small that 2C κα <1 andρ κ(α)<∞; all the corresponding times are
+integrable.
+By Lemma 24, asrincreases from 0 tow, the lower-endpoint benchmark decreases continuously from
+infinity and the upper-endpoint benchmark increases continuously to infinity. They meet exactly once, giving
+r⋆. Define the balanced endpoints and their common benchmark by
+l:=µ Q −r ⋆, u:=µ Q +w−r ⋆,
+Kα(Q, w) :=eBα(Q, l) =eBα(Q, u).(61)
+Both endpoints lie in (κ,1−κ), sinceµ Q ∈[2κ,1−2κ] andw < κ.
+To bound the width on every path, we use convexity and the empirical mean
+X n := 1n
+nX
+i=1
+Xi .
+At an interior empirical mean, the arithmetic–geometric mean inequality gives
+nY
+i=1
+(1 +β(X i − X n))≤
+ 
+1
+n
+nX
+i=1
+(1 +β(X i − X n))
+!n
+= 1⇒Wealth n(X n)≤1.
+IfA +n (l)≥1/(c κα), then X n > l: otherwise the same inequality bounds each positive-bet product atlby
+1, soA +n (l)≤q + ≤1. At this crossing, (58) gives Wealth n(l)≥1/α. If X n <1, its wealth is at most 1. If
+X n = 1, all observations are one and Wealth n(m)≤m −n, which tends to 1 asm↑1. In either case, there
+is a pointz∈(l,1) with Wealth n(z)<1/α. For any 0< m < l, convexity gives
+Wealthn(l)≤ z−lz−m Wealthn(m) + l−mz−m Wealthn(z),
+which forces Wealth n(m)>1/α. Thus, everym≤lis excluded from the running inversion, including 0
+because X n > l. Reflection proves that crossing byA −n (u) excludes everym≥u. Consequently, on every
+path,
+T αw ≤max{σ cκα(Q, l), σcκα(Q, u)}.
+Equation (60) proves integrability. Using max{x, y} ≤1 +|x−1|+|y−1|also gives
+EQ[T αw ]
+Kα(Q, w)≤1 + 2ρ κ(α).
+38
+For the lower bound, Ville’s inequality applied to Wealth n(µQ) gives
+Eα :=
+
+sup
+n≥1
+Wealthn(µQ)< cκ2Cκα  ,P Q{E cα} ≤2Cκαcκ .
+By continuity and monotonicity of the benchmarks, choosel ′ < landu ′ > u, still in (κ,1−κ), with
+1−α≤
+eBα(Q, m)
+Kα(Q, w)≤1 (m∈ {l ′, u′}).
+OnE α, monotonicity of the reference contributions and (58) imply, for everyn,
+CκA−n (l′)≤C κA−n (µQ)≤ Cκcκ Wealthn(µQ)< 12α .
+BeforeA +n (l′) reaches 1/(2Cκα), the upper bound in (58) therefore keeps Wealthn(l′)<1/α. Reflection gives
+the same conclusion atu ′. Both endpoints remain in the running inversion until the first of these crossings,
+andu ′ −l ′ > w. Hence
+T αw ≥min{σ 2Cκα(Q, l′), σ2Cκα(Q, u′)}onE α .
+Define the bounded lower comparison
+Uα,Q,w :=1{E α}min
+
+1, σ2Cκα(Q, l′)Kα(Q, w) , σ2Cκα(Q, u′)Kα(Q, w)  .
+It satisfies 0≤U α,Q,w ≤T αw /Kα(Q, w) on every path. Forx≥0 and 0≤r≤1,|rx−1| ≤ |x−1|+ 1−r.
+Apply this with each endpoint’s benchmark ratio, whose deficit from 1 is at mostα. Since 1−min{1, x, y} ≤
+|x−1|+|y−1|, we obtain
+EQ[|Uα,Q,w −1|]≤ 2Cκαcκ + 2ρκ(α) + 2α− →0
+uniformly overQ, w. The expected upper bound and this lower comparison verify Lemma 22 and prove (20).
+Finally, ifF m is the distribution ofβ m(β) underF, then Wealth n(m) =A +n (m) +A−n (m). In the product
+factors displayed at the start of the proof, the constant term and the coefficient of 1/mor 1/(1−m) are
+nonnegative. Expanding the positive-bet product therefore gives a nonnegative linear combination ofm −k,
+0≤k≤n, and the negative-bet product gives one of (1−m) −k. These functions are convex; integration
+and addition preserve convexity.
+B.3 Verification of Remark 13
+The integrals in Orabona and Jun [2024, equations (5), (11), and Remark 2] are
+Wealthn(m) = 12 Z 10 nYi=1 p Xim + (1−p) 1−X i1−m  dpπpp(1−p) + 12 Z 1−1 nYi=1(1 +β(X i −m))f R70(β) dβ .
+To check the prior comparison, use the fraction of the maximal directional bet as a coordinate. For
+0< t <1, define the corresponding density by
+hm(t) := fm(t/m)m = 12πp(1−t)(m/(1−m) +t) + fR70(t/m)2m 1{t≤m},
+hm(−t) := fm(−t/(1−m))1−m =h 1−m(t).
+39
+As a reference prior satisfying Definition 1, takeµ 0 = 1/2 and the density
+f(β) := 14 fR70(β/2) + 116p1− |β|/2 (0<|β|<2).
+Each term integrates to 1/2 on (−2,2); the density is bounded below on every compact subset away from
+zero and has both indices equal to 1. The rescaling (16) gives
+fm(βm(β))β ′m(β) = 12 hm(β/2).
+Thus, it suffices to compareh m(t) with 2f(2t). Uniformly form∈[κ,1−κ], the CO96 term ofh m(t) is
+bounded above and below by positive constant multiples of (1−t) −1/2: its other denominator factor satisfies
+κ
+1−κ ≤ m1−m +t≤ 1κ .
+Fort≤m, the R70 density ratio is
+fR70(t/m)/m
+fR70(t) = ln(c/t)ln(cm/t)  ln ln(c/t)ln ln(cm/t)2 .
+Both ratios are at least 1 and uniformly bounded. Indeed, ln(c/t) = ln(cm/t) + ln(1/m), ln(cm/t)≥lnc >1,
+and 0≤ln(1/m)≤ln(1/κ) give
+ln(c/t)
+ln(cm/t) ≤1 + ln(1/κ)lnc , ln ln(c/t)ln ln(cm/t) ≤1 + ln(1 + ln(1/κ)/lnc)ln lnc .
+Fort > m≥κ, the omitted R70 term is bounded on [κ,1] and is therefore dominated by a constant multiple
+of the CO96 term. These bounds and reflection prove (18), with constants depending only onκ. Fixed
+positive mixing weights only change these constants.
+Finally, Orabona and Jun [2024, Theorem 10] gives convexity inmfor the R70 integral, whose betting
+prior is fixed on [−1,1]. For CO96, expand the product at each fixedp: it is a nonnegative linear combination
+ofm −k(1−m) −(n−k), 0≤k≤n. These terms are log-convex, hence convex, because
+d2
+dm2 ln
+ 
+m−k(1−m) −(n−k) = km2 + n−k(1−m) 2 ≥0.
+Integration and addition preserve convexity. Thus, Theorem 12 applies witha(F) = 1, and Proposition 11
+gives nested confidence intervals. Their endpoint conventions also agree with the wealth limits: at 0 the
+CO96 integral is at most 1 on an all-zero path, and otherwise diverges by Fatou’s lemma, since each fixed
+0< p <1 gives a diverging product. The R70 integral tends to 1 on an all-zero path. Reflection gives the
+corresponding limits at 1.
+B.4 Proofs of simplifying corollaries
+Proof of Corollary 14.The derivative argument in the proof of Proposition 3, with the candidate mean
+varying, givesβ ⋆Q(µQ ±r)→0 asr↓0. SinceE Q[(X−(µ Q ±r)) 2] =σ 2Q +r 2, the small-bet identities (36)
+give
+β⋆Q(µQ ±r) =∓ rσ2Q (1 +o(1)), ℓ ⋆Q(µQ ±r) = r22σ2Q (1 +o(1)).
+Consequently, LL(|β⋆Q(µQ ±r)|) = LL(r) +o(1). Forr=cw, uniformly overcin each compact subinterval
+of (0,1) and in the joint limit,
+eBα(Q, µQ −cw) = 2σ2Qc2w2 {ln(1/α) +a +(F) LL(w)}(1 +o(1)),
+40
+witha −(F) in the reflected formula for the upper endpoint. Recall thatK α(Q, w) in (61) is the common
+cost at the balanced endpoints. For any interval of widthwcontainingµ Q, at least one endpoint cost is as
+large as this common cost: moving the lower endpoint to the left decreases its cost and increases the upper
+endpoint’s cost, and conversely. In particular,
+Kα(Q, w)≤max{ eBα(Q, µQ −w/2), eBα(Q, µQ +w/2)} ≤(1 +o(1)) 8σ2Qw2 {ln(1/α) +a(F) LL(w)}.
+Theorem 12 givesE Q[T αw ]∼K α(Q, w), proving (21). Ifa +(F) =a −(F), the expansions atr=w/4 and
+r= 3w/4 placer ⋆/wbetween these two fractions eventually. The expansions are uniform there, and equality
+of the endpoint costs forcesr ⋆/w→1/2. Thus, (21) is an asymptotic equality in this case.
+To invert the expected-time bound, define
+vn :=
+s
+8σ2Q
+n {ln(1/αn) +a(F) ln lnn}.
+The assumptions implyv n →0. For every fixedc >0,
+ln(1/αn) +a(F) LL(cv n)
+ln(1/αn) +a(F) ln lnn − →1.
+Indeed, when ln(1/α n)/ln lnnis bounded, ln(1/v n)∼ 12 lnn; when that ratio diverges, both iterated-
+logarithm terms are negligible relative to ln(1/α n). These two cases cover all subsequences. Equation (21)
+gives
+lim sup
+n
+EQ[T αncvn ]
+n ≤c −2 .
+Forc >1, the expected time is therefore belowneventually, sow e(n, Q, αn)≤cv n. Sendingc↓1 proves
+(22). If the indices coincide, the expected-time ratio tends toc −2. Takingc <1 then gives the matching
+lower bound by monotonicity in the target width.
+For fixedα∈(0,1/2), reduce the error probability slowly with the target width:
+αw := min{α,exp(−
+p
+LL(w))}.
+Thenα w →0 and ln(1/α w) =o(LL(w)). SinceC αn ⊆C αwn , we haveT αw ≤T αww pathwise. Applying (21) at
+(αw, w) gives the first upper bound in (23). For the second, set
+vn :=
+q
+8a(F)σ 2Q ln lnn/n .
+For any fixedc >1, the first bound gives lim sup n EQ[T αcvn ]/n≤c −2 <1, sow e(n, Q, α)≤cvn eventually.
+Sendc↓1. These fixed-αconclusions are upper bounds.
+Proof of Corollary 15.ForQ=δ µ, the oracle bet is 1/mbelowµand−1/(1−m) aboveµ. Its magnitude
+exceeds 1, so its LL term is zero on both sides, regardless of the prior indices. The two rates are
+ℓ⋆Q(m) = ln(µ/m) (m < µ), ℓ ⋆Q(m) = ln((1−µ)/(1−m)) (m > µ).
+Atm=µ(1−w) andm=µ+ (1−µ)w, both rates equal−ln(1−w). Equation (19) gives the claimed
+benchmark. Theorem 12 and−ln(1−w)∼wgive the expected time. Inverting at widthscln(1/α n)/n,
+withcon either side of 1, gives the effective-width limit as in the preceding proof.
+41
+C An efficient regret bound for the CO96/R70 mixture
+Here, we derive a wealth lower bound for the exact prior mixture in Orabona and Jun [2024, Remark 2].
+The resulting test retains the uniformL 1 guarantee of Theorem 2 and hence efficiency 1. It is a separate
+test from exact mixture inversion and from the PRECiSE bounds in their Algorithms 1 and 3.
+The equal allocation in Remark 2 corresponds tow= 1/2. For a regret bound, we need a density lower
+bound along the segment from zero to the hindsight-optimal bet. The R70 component supplies this bound
+near zero, and the CO96 component covers the rest of the admissible interval.
+Theorem 25(A regret bound preserving efficiency).Letµ 0, w, Fw, fw, fR70 be as in Proposition 16. Define
+ρw := min
+
+1−w, 2wµ0(1−µ 0)πfR70(1)  , f w(β) :=ρ wfR70(min{|β|,1}),
+forβ̸= 0. For any sequenceX 1, X2, . . .∈[0,1]andn≥1, choose a hindsight-optimal bet and its wealth:
+bβn ∈argmax
+β∈[−1/(1−µ0),1/µ0]
+Wealthn(β),Wealth ⋆n := Wealthn( bβn).
+Take bβn := 0whenever zero is a maximizer. Define the logarithmic-mean regret bound by
+RegretLMn := ln ln Wealth⋆n1−1/Wealth ⋆n −ln  | bβn|f w( bβn) (62)
+when bβn ̸= 0, and setRegret LMn := +∞otherwise. Combining this with the regret bound of universal portfolio
+for 2 stocks [Cover and Ordentlich, 1996] gives
+\Regretn := min
+
+ln
+√πΓ(n+ 1)
+wΓ(n+ 1/2) ,Regret LMn
+
+,Wealth n := Wealth⋆n exp(− \Regretn).(63)
+Then, for everyn≥1,
+ln Wealth⋆n −ln WealthFwn ≤ \Regretn .
+Consequently,τ α := inf{n≥1 : Wealth n ≥1/α}defines a level-αfamily. For i.i.d. observations, its
+normalized rejection time converges uniformly inL 1:
+lim
+α↓0
+sup
+Q∈Q
+EQ
+ τ αBα(Q) −1  = 0.(64)
+In particular,E Q[τ α]/Bα(Q)→1uniformly overQ∈ Q, andeff(τ ) = 1.
+Proof.On the admissible interval, 0< f w ≤f w almost everywhere by (25) and the definition ofρ w.Thef R70 density is decreasing in|β|on (0,1], as used in Orabona and Jun [2024, Section V-H]. Hence,
+f w(−β) =f w(β) andf w is nonincreasing in|β|, whilebf w(b) is nondecreasing forb >0. Near zero,f w hasthe same logarithmic decay index asf R70.
+We first repeat the log-concavity argument in Orabona and Jun [2024, Section V-H, equation (16)], using
+f w along the segment from zero to bβn. If bβn ̸= 0, then Wealth⋆n >1, and
+WealthFwn ≥ |bβn|f w( bβn)
+Z 1
+0
+Wealthn(t bβn) dt
+≥ |bβn|f w( bβn)
+Z 1
+0
+(Wealth⋆n)t dt=| bβn|f w( bβn) Wealth⋆n −1ln Wealth⋆n .
+Taking logarithms gives (62). We retain the logarithmic mean, rather than using its square-root lower bound
+in equation (17) of the cited proof. The other branch in (63) follows from Wealth Fwn ≥wWealth FCO96n and
+42
+the regret bound of Cover and Ordentlich [1996]. Thus, Wealth n ≤Wealth Fwn , and Ville’s inequality proves
+validity.
+For the expected-time upper bound, fixQ∈ Q,δ∈(0,1/2),η∈(0,1), andϵ >0. Recall thatβ ⋆Q
+maximizes expected log wealth, with valueℓ ⋆Q. Setγ Q := (1−δ)β ⋆Q andg n(β) := ln Wealth n(β). The
+increments ofg n(γQ) are i.i.d., lie in [lnδ,ln max{1/µ 0,1/(1−µ 0)}], and have mean
+ℓQ(γQ)≥(1−δ)ℓ ⋆Q >0
+by concavity. Following the Taylor argument in Orabona and Jun [2024, Section V-H, equation (19)], we
+compare the empirical maximizer withγ Q. We claim that wheneverg n(γQ)>0,
+bβnγQ >0,| bβn| ≥cδ|γQ|, c δ := δ22(max{1/µ0,1/(1−µ 0)})2 .(65)
+To prove this, writeS n := Pni=1(Xi −µ 0) andV n := Pni=1(Xi −µ 0)2. On the segment between zero andγ Q,
+− Vn
+δ2 ≤g ′′n(β)≤ − Vn(max{1/µ0,1/(1−µ 0)})2 .
+Supposeγ Q >0; the negative case follows analogously. Taylor’s theorem andg n(γQ)>0 giveV n >0 and
+Sn > γQVn2(max{1/µ0,1/(1−µ 0)})2 >0.
+Hence, bβn >0. If bβn ≥γ Q, the claim is immediate. Otherwise,g ′n( bβn) = 0, and integrating the lower bound
+ong ′′n givesS n ≤ bβnVn/δ2, proving (65). This argument also allows a population or empirical maximizer at
+an admissible endpoint.
+By (65), monotonicity ofbf w(b), and ln Wealth⋆n ≥g n(γQ), the logarithmic-mean branch gives, whenevergn(γQ)>0,
+Wealthn ≥c δ|γQ|f w(cδγQ)
+Z 1
+1−η
+exp
+ 
+tgn(γQ)
+
+dt
+≥ηc δ|γQ|f w(cδγQ) exp
+ 
+(1−η)g n(γQ)
+
+.
+The index-one behavior off w implies that, for some constantC δ,ϵ uniform overQ,
+ln 1cδ|γQ|f w(cδγQ) ≤(1 +ϵ) LL(|β ⋆Q|) +C δ,ϵ .(66)
+Indeed, near zero, ln(1/(bf w(b)))/ln ln(1/b)→1. Alsoc δ|γQ|=c δ(1−δ)|β ⋆Q|, and multiplication by thisfixed positive constant changes LL(|β ⋆Q|) by a bounded amount near zero. Away from zero,bf w(b) has apositive lower bound. These observations give (66) with the regularized LL used in the benchmark.
+For any admissible nonzeroβ, monotonicity and the density minorant give|β|f w(β)≤1 by integrationover the segment from zero toβ. Thus, the threshold ln(1/α) + ln(1/(ηc δ|γQ|f w(cδγQ))) is positive. Applythe bounded-stopping argument of Lemma 19 to (1−η)g n(γQ) at this threshold. Its mean increment is at
+least (1−η)(1−δ)ℓ ⋆Q, and (66) gives
+EQ[τ α]≤
+ln(1/α) + (1 +ϵ) LL(|β⋆Q|) +C µ0,w,δ,η,ϵ
+(1−δ)(1−η)ℓ ⋆Q ,(67)
+with the bounded overshoot absorbed into the constant, which we take to be nonnegative. Dividing by
+Bα(Q) gives
+EQ[τ α]
+Bα(Q) ≤ 1(1−δ)(1−η)
+ 
+1 +
+ϵLL(|β ⋆Q|) +C µ0,w,δ,η,ϵ
+ln(1/α) + LL(|β⋆Q|)
+!
+≤ 1 +ϵ+C µ0,w,δ,η,ϵ/ln(1/α)(1−δ)(1−η) .
+43
+The constant is finite and independent ofQ, αfor fixedδ, η, ϵ. First take the supremum overQand the
+upper limit asα↓0, and then sendϵ, δ, η↓0. We obtain
+lim sup
+α↓0
+sup
+Q∈Q
+EQ[τ α]
+Bα(Q) ≤1.
+We now apply the comparison form of Lemma 22 to the normalized proxy and exact-mixture rejection
+times:
+Zα,Q := τ αBα(Q) , U α,Q := τ FwαBα(Q) .
+Since Wealthn ≤Wealth Fwn , we haveτ Fwα ≤τ α pathwise, and hence 0≤U α,Q ≤Z α,Q. Both are integrable
+by (67), and the preceding bound gives the required uniform upper limit ofE Q[Zα,Q]. Proposition 16
+givesa Q(Fw) = 1, so its prior-dependent benchmark equalsB α(Q). Theorem 2 therefore gives uniformL 1
+convergence ofU α,Q to 1. The lemma now proves (64).
+Finally, Jensen’s inequality also gives
+ EQ[τ α]Bα(Q) −1  ≤E Q  τ αBα(Q) −1  .
+Thus, the normalized expectations converge uniformly to one, and Definition 4 gives eff(τ ) = 1.
+D A regret bound that does not preserve efficiency
+The mixture of Agrawal and Ramdas [2026] has efficiency 1 by our index criterion. Unfortunately, its explicit
+regret bound can nevertheless lose efficiency when used to lower bound the wealth in a test. We state their
+bounds at null mean 1/2 in our notation, including every branch, before giving the counterexample.
+Lemma 26(Agrawal–Ramdas regret bounds at null mean 1/2).Fixµ 0 := 1/2andc:= 6.6e. LetF AR26 be
+the prior on[−2,2]with density
+fAR26(β) := ln lnc2|β|ln(2c/|β|)[ln ln(2c/|β|)] 2 (0<|β| ≤2),(68)
+with value zero outside[−2,2]and arbitrary value at zero. For observationsX 1, X2, . . .∈[0,1]andn≥1,
+define
+Wealthn(β) :=
+nY
+i=1
+(1 +β(X i −1/2)),Wealth FAR26n :=
+Z 2
+−2
+Wealthn(β)fAR26(β) dβ,
+Sn :=
+nX
+i=1
+(Xi −1/2), V n :=
+nX
+i=1
+(Xi −1/2) 2 .
+Choose bβn ∈argmax β∈[−2,2] Wealthn(β), taking bβn := 0when zero is a maximizer, and define the hindsight-
+optimal wealth and the actual regret by
+Wealth⋆n := Wealthn( bβn),Regret AR26n := ln Wealth⋆n −ln WealthFAR26n .
+Define the constants
+C:= ln(4 lncln lnc) + 2 ln 11, C ′ := 1 + ln(16 lncln lnc).
+44
+Set \Regret
+(8)
+n := 0ifV n = 0. ForV n >0, define
+\Regret
+(8)
+n :=
+
+
+
+9 + ln 8ln lnc + ln ln 14ep1 +V n
++ 2 ln ln ln
+ 
+14e
+p
+1 +V n
+
+,
+|Sn|< √2Vn,| bβn|<2,
+4 + ln(4 lncln lnc),|S n|< √2Vn,| bβn|= 2,
+1 + ln 4ln lnc + ln 20|Sn|3q 43 |Sn|+ 2V n
++ ln ln
+ 
+28e(1 +
+p
+Vn)
+
++ 2 ln ln ln
+ 
+28e(1 +
+p
+Vn)
+
+,
+√2Vn ≤ |Sn| ≤Vn/10,
+1
+2 ln Wealth⋆n +C, √2Vn ≤ |Sn|, Vn/10<|S n|.
+(69)
+Then, for every observation sequence and everyn≥1,
+RegretAR26n ≤min{ \Regret(8)n ,ln(n+ 1) +C ′}.(70)
+Proof.These are the prior in equation (7), the four branches of Theorem 4.1, equation (8), and the logarith-
+mic bound at the end of Remark 1 of Agrawal and Ramdas [2026], specialized toµ 0 = 1/2. Their betting
+fraction is−βin our notation, andf AR26(−β) =f AR26(β) at this null mean. The quantities min{µ 0,1−µ 0}
+and max{µ 0,1−µ 0}both equal 1/2, andf AR26(2) =f AR26(−2) = 1/(4 lncln lnc), giving the displayed
+constants. IfV n = 0, all observations equal 1/2, both wealths equal one, and the regret is zero.
+The last branch of (69) loses half of the best log wealth. Taking the minimum with the logarithmic bound
+in (70) does not repair the joint efficiency, as the following example shows.
+Proposition 27(Counterexample for the Agrawal–Ramdas regret bound).Use the prior, wealths, and
+regret bounds of Lemma 26. Define
+\Regret
+AR26
+n := min{ \Regret
+(8)
+n ,ln(n+ 1) +C ′},Wealth AR26n := Wealth⋆n exp(− \RegretAR26n ),
+τ FAR26α := inf{n≥1 : Wealth FAR26n ≥1/α}, τ AR26α := inf{n≥1 : Wealth AR26n ≥1/α}.
+For0<∆<1/2, letQ ∆ be the point mass at1/2 + ∆, and define
+A∆ :=
+p
+ln(1/∆), α ∆ :=e −A∆ .
+Recall thatℓ ⋆Q = maxβ∈[−2,2] EQ[ln(1 +β(X−1/2))]is the oracle rate, thatβ ⋆Q is its maximizer, and that
+Bα(Q) =
+ln(1/α) + LL(|β⋆Q|)
+ℓ⋆Q ,LL(x) = ln max{1,ln(1/x)}.
+Then
+EQ∆ [τ AR26α∆ ]
+Bα∆ (Q∆) − →2as∆↓0.(71)
+Moreover,
+EQ∆ [τ AR26α∆ ]
+EQ∆ [τ FAR26α∆ ] − →2.(72)
+In particular,eff(τ AR26)≥2, whereaseff(τ FAR26 ) = 1.
+45
+Proof.By (70), Wealth AR26n ≤Wealth FAR26n , and Ville’s inequality gives validity.
+UnderQ ∆, every observation equals 1/2 + ∆, so
+ℓ⋆Q∆ = ln(1 + 2∆),Wealth ⋆n = (1 + 2∆)n, S n =n∆, V n =n∆ 2 .
+For everyn≥2, we have|S n|=n∆≥
+√
+2n∆2 = √2Vn and|S n|=n∆> n∆ 2/10 =V n/10. Thus, the last
+branch of (69) applies, giving
+\Regret
+(8)
+n = 12 nℓ⋆Q∆ +C .
+Consequently,
+ln WealthAR26n = max  12 nℓ⋆Q∆ −C, nℓ⋆Q∆ −ln(n+ 1)−C ′	 .(73)
+The first branch reachesA ∆ at⌈2(A ∆ +C)/ℓ ⋆Q∆ ⌉. No rejection can occur whenn < A ∆/ℓ⋆Q∆ , since the
+proxy is at most Wealth ⋆n. Throughout the remaining possible crossing window
+A∆
+ℓ⋆Q∆ ≤n≤
+&
+2(A∆ +C)
+ℓ⋆Q∆
+’
+,
+we have ln(n+1)∼ln(1/∆)≫A ∆ uniformly, whilenℓ ⋆Q∆ ≤2A ∆+O(1). Therefore, the second branch in (73)
+cannot reachA ∆. For all sufficiently small ∆, the stopping time is deterministic and equals⌈2(A∆ +C)/ℓ ⋆Q∆ ⌉.
+Sinceβ ⋆Q∆ = 2 and LL(|β ⋆Q∆ |) = 0, the benchmark isB α∆ (Q∆) =A ∆/ℓ⋆Q∆ , proving (71).
+The density in (68) has full support and both logarithmic decay indices equal to one, so Corollary 6 gives
+eff(τ FAR26 ) = 1. Theorem 2 also givesE Q∆ [τ FAR26α∆ ]∼B α∆ (Q∆), proving (72). The factor 2 comes from the
+term 12 ln Wealth⋆n in (69). In Agrawal and Ramdas [2026, Lemma B.1], this term results from replacing the
+logarithmic mean (Wealth⋆n −1)/ln Wealth⋆n by its smaller lower bound pWealth⋆n.
+E Details on OPT-FFT
+The algorithm in Section 6 divides the allocation interval into regions, computes an allocation within each
+region, and combines these allocations using their accumulated wealth. The main task inside a region is
+to integrate products of returns. These products are polynomials, so finitely many prior moments suffice
+to integrate them exactly up to a prescribed horizon. We first construct the integration rule, then explain
+how the FFT recursion updates it as observations arrive. The final part describes the regions and numerical
+moments used by OPT-FFT for CO96 and R70.
+E.1 Integrating on one region
+Recall that Fis the prior in the portfolio coordinatep∈[0,1]. An observationX n gives the return
+rn(p) =p Xnµ0 + (1−p) 1−X n1−µ 0 .(74)
+Within a regionI j, the next allocation is the average ofp, weighted by its prior mass and the wealth it has
+earned so far:
+pj,n :=
+R
+Ij p Qn−1i=1 ri(p) dF(p)R
+Ij
+Qn−1
+i=1 ri(p) dF(p)
+.(75)
+This is the regional posterior mean whenever the denominator is positive. The two integrands have degrees
+at mostnandn−1, respectively. Thus, for a horizonT≥1, it is enough to integrate polynomials through
+degreeD, whereDis the smallest power of 2 at leastT.
+46
+We use the same local coordinatez∈[−1,1] in every region. For a regionI j with endpointsa j < bj, the
+map back to the allocation interval and the conditional Chebyshev moments are
+pj(z) := aj +b j2 + bj −a j2 z, m j,k := 1F(I j) ZIj Tk 2p−a j −b jbj −a j  dF(p) (0≤k≤D),(76)
+where the Chebyshev polynomials are
+Tk(z) := cos(karccosz) (z∈[−1,1], k= 0,1, . . .).
+The normalization by F(I j) makes these moments conditional on the region; in particular,m j,0 = 1. We
+omit zero-mass regions. For priors with atoms, each boundary atom belongs to exactly one region. The
+same construction works in betting coordinates, withβandFin place ofpand F.
+We turn these moments into an integration rule onD+ 1 cosine-spaced points:
+zℓ := cos
+ π(ℓ+ 1/2)
+D+ 1
+
+,
+hj,ℓ := 1D+ 1
+ 
+mj,0 + 2
+DX
+k=1
+mj,k cos
+ πk(ℓ+ 1/2)
+D+ 1
+!
+(0≤ℓ≤D).
+To integrate a polynomial, we evaluate it at these points and take the weighted sum with weightsh j,ℓ.
+Discrete cosine orthogonality makes this sum equal to the prescribed moment for eachT k, 0≤k≤D. By
+linearity, the rule is exact for every polynomial of degree at mostD. The weights may be negative: they
+represent integration against the continuous conditional prior. An inverse cosine transform computes them
+inO(Dln(D+ 1)) operations.
+E.2 Moving between grids
+Short blocks of observations need fewer grid points. The recursion therefore moves between grids of different
+sizes, using the one-dimensional operations of Liu et al. [2026, Appendix E.3]. There are two operations:
+Resampleevaluates a polynomial on another grid, andRestricttransfers integration weights to a smaller
+grid while preserving the integrals needed there.
+A block ofdobservations usesd+ 1 points. Write the grid vector and the initial integration weights as
+z(d) :=
+
+cos π(ℓ+ 1/2)d+ 1 dℓ=0 ,h j := (hj,ℓ)Dℓ=0 .(77)
+Both operations use a discrete cosine transform. We specify its normalization explicitly so that the formulas
+can be implemented with a standard FFT library. The orthonormal type-II cosine matrixC d ∈R (d+1)×(d+1)
+is
+(C d)kℓ :=
+
+
+
+1/
+√
+d+ 1, k= 0,
+p
+2/(d+ 1) cos
+ πk(ℓ+ 1/2)
+d+ 1
+
+,1≤k≤d, 0≤ℓ≤d .(78)
+Multiplication byC d converts grid values to cosine coefficients; multiplication byC ⊤d converts them back.
+To resample, we transform the values, adjust the number of coefficients, and apply the inverse transform on
+the new grid:
+Resampled→d′(q) :=
+r
+d′ + 1
+d+ 1 C ⊤d′[C dq]0:d′ .(79)
+Here, [·]0:d′ retains coefficients 0, . . . , d′, padding with zeros if the original vector is shorter. The square-root
+factor accounts for the different transform normalizations. The result gives the same polynomial on the new
+grid whenever its degree is at most min{d, d′}.
+47
+Algorithm 1Regional FFT portfolio with a prescribed horizon
+Require:HorizonT≥1,µ 0 ∈(0,1),α∈(0,1), leaf sized 0, and regional endpoints, masses, and moments
+from (76)
+1:D:= 2 ⌈log2 T⌉ ; formz (D) using (77); moments are required through degreeD
+2:Wealth 0 := 1; Wealthj,0 := 1 forj= 1, . . . , K
+3:forj:= 1, . . . , Kdo
+4:h j :=
+r
+2
+D+ 1 C ⊤D(mj,0/√2, mj,1, . . . , mj,D)⊤
+5:A j := Prefix(j,1, D,hj,z (D) ⊙h j), a generator from Algorithm 2
+6:p j,1 := next(Aj)
+7:end for
+8:forn:= 1, . . . , Tdo
+9:p n :=
+PK
+j=1 F(I j) Wealthj,n−1 pj,n
+PK
+j=1 F(I j) Wealthj,n−1
+(usep n :=µ 0 if the denominator is zero)
+10:Allocate fractionp n to the first stock, then observeX n
+11:Wealth n := Wealthn−1 rn(pn); Wealthj,n := Wealthj,n−1 rn(pj,n) for everyj, using (74)
+12:ifn < Tthen
+13:p j,n+1 :=A j.send(X n) for everyj
+14:else
+15:Resume eachA j withX n and discard its next yield or completed block product
+16:end if
+17:Report Wealth n and record the firstnwith Wealth n ≥1/α, if any
+18:end for
+For integration weights, we want a different property: the dot product with polynomial values should
+stay the same after moving to the smaller grid. This requires the transpose of interpolation from that smaller
+grid:
+Restrictd→d′(u) := d+ 1d′ + 1 Resampled→d′(u) = Resample⊤d′→d u, d ′ ≤d .(80)
+In particular, the restricted weights give the same integral for every polynomial of degree at mostd ′.
+We apply these transforms by FFT without forming the dense matrices in (78). Each operation costs
+O(max{d, d′}ln(max{d, d′}+ 1)). In the algorithms below,⊙means componentwise multiplication, and a
+scalar function applied to a vector is evaluated at each entry.
+E.3 Computing allocations as observations arrive
+Algorithm 1 coordinates the regions. On each round, it obtains their allocations, averages them using prior
+mass times past wealth, and then observesX n. It uses the resulting returns to update wealth and passes
+Xn to each region to prepare the next allocation. Algorithm 2 performs the computation within one region.
+It is our fixed-start specialization of thePrefixrecursion in Liu et al. [2026, Appendix E.4].
+We write each regional computation as agenerator: a routine that pauses when it produces an allocation
+and resumes when the next observation arrives. It keeps all its local variables while paused. The operation
+next runs it to its first allocation; send(X n) supplies the observation and runs to the next allocation or the
+end of the block. Thus,p j,n is always available beforeX n is observed. IfT < D, we stop after observation
+Tand leave the unfinished recursions paused.
+What a recursive call stores.A call Prefix(j, L, d,u,v) handles thedobservations starting at round
+L. It carries two integration-weight vectors of lengthd+ 1. The vectorucomputes the denominator of the
+local posterior mean, andvcomputes its numerator in the coordinatez. Both already include the returns
+from observations beforeL. More precisely,uintegrates those past returns times any polynomial of degree
+48
+Algorithm 2Prefix(j, L, d,u,v): yield regional allocations on roundsL, . . . , L+d−1
+Require:Regionj, block startL, power-of-two block lengthd, functional weightsu,v∈R d+1;µ 0 andd 0
+are shared with Algorithm 1
+1:Usep j from (76),z (d) from (77), and the operations (79)–(80)
+2:ifd≤d 0 then
+3:q:= (1, . . . ,1)∈R d+1
+4:forn:=L, . . . , L+d−1do
+5:bz:= 0
+6:ifu ⊤q>0then
+7:bz:= min
+
+1,max
+
+−1, v⊤qu⊤q 
+8:end if
+9:Yieldp j,n := (aj +b j)/2 + (bj −a j)bz/2 and receiveXn on resumption
+10:q:=q⊙r n(pj(z(d))), evaluating (74) at alld+ 1 grid points
+11:end for
+12:returnq
+13:else
+14:k:=d/2
+15:q L := Prefix(j, L, k,Restrictd→k(u),Restrict d→k(v))
+16:q L := Resamplek→d(qL)
+17:q R := Prefix(j, L+k, k,Restrictd→k(u⊙q L),Restrict d→k(v⊙q L))
+18:returnq L ⊙Resample k→d(qR)
+19:end if
+at mostd;vdoes the same with an extra factorz, for polynomials of degree at mostd−1. Initially these
+vectors areh j andz (D) ⊙h j.
+In a short block, the vectorqstores the product of the returns observed within that block, evaluated
+on its grid. When the denominator is positive, the ratiov ⊤q/(u⊤q) gives the posterior mean ofz, which
+we map back toI j to obtain (75). Computing the mean in local coordinates keeps the numerator’s scale
+independent of the region’s location. Before each observation, this block product has degree at mostd−1,
+so the numerator also fits within the available moments. We process blocks of at mostd 0 observations this
+way, where the leaf sized 0 is a fixed positive integer, 32 by default.
+For a longer block, we process its left half first. Once that half is complete, we multiply its return product
+into both integration-weight vectors and pass the updated weights to the right half. This is how the right
+half accounts for all earlier observations. Each call returns the product of all returns in its block, evaluated
+on its own grid.
+The two recursive assignments in Algorithm 2 use the programming conventionyield from. While a
+child call is running, the parent forwards its allocations to Algorithm 1 and sends each new observation back
+to it. The assignment finishes only when the child returns its completed block product. Thus, the right call
+starts only after all observations in the left block have arrived.
+Combining CO96 and R70.Run Algorithm 1 separately for each component. Section E.4 gives their
+partitions, masses, and moments. The pseudocode uses portfolio coordinates for both components. For R70,
+map the region endpoints fromβ∈[−1,1] usingp=µ 0 +βµ 0(1−µ 0); the moments in the local coordinatez
+remain unchanged. Writep CO96n andp R70n for the allocations returned by the two runs. For the prior mixture
+in (24), we again average allocations using their past wealths:
+pFwn := wWealth FCO96n−1 pCO96n + (1−w) Wealth FR70n−1 pR70n
+wWealth FCO96n−1 +(1−w) Wealth FR70n−1 ,
+WealthFwn = WealthFwn−1 rn(pFwn ) =wWealth FCO96n +(1−w) Wealth FR70n .
+(81)
+49
+Start all wealths at 1 and useµ 0 as the allocation if the denominator is zero. For the mixture test, compare
+only the combined wealth, Wealth Fwn , with 1/α. The implementation keeps R70 in betting coordinates: if
+its output isβ R70n , convert it byp R70n =µ 0 +β R70n µ0(1−µ 0) before using (81). The return then equals
+1 +β R70n (Xn −µ 0).
+Rescaling and extending the horizon.Long products can overflow or underflow. We can rescale a
+block product by any positive scalar without changing the ratio that determines the allocation. We can also
+rescale both integration-weight vectors of a region by the same positive scalar. The pseudocode omits these
+rescalings; the implementation uses them and stores regional wealth logarithmically. If either inner product
+is nonfinite, it uses the region’s midpoint. The projection onto [−1,1] in Algorithm 2 keeps the allocation
+inside its region; it is inactive in exact arithmetic whenever regional wealth is positive.
+The supplied implementation uses a fixed horizon. To continue after roundDin exact arithmetic, prepare
+new integration rules for horizon 2Dwith the same prior, and replay the firstDobservations to reconstruct
+the recursive state. Discard the allocations produced during replay, then resume betting at roundD+ 1 with
+the existing wealth. Exactness makes the combined allocations independent of the horizon and partition
+whenever total wealth is positive. Summing the work over doubled horizons preserves the arithmetic and
+memory orders in Proposition 28, using the largest region count reached.
+Proposition 28(Exactness and arithmetic cost).FixT≥1, a candidate meanµ 0 ∈(0,1), and a partition
+intoKpositive-mass regions. Given their exact prior masses and conditional Chebyshev moments through
+degreeD, Algorithms 1 and 2 computeWealth Fn for every1≤n≤Texactly in exact arithmetic. With
+constant leaf size, they useO(KTln 2(T+ 1))operations andO(KT)memory, excluding the computation of
+the supplied moments.
+Proof.Before observationn, the prefix product has degreen−1 and its product with the local coordinate has
+degreen. Both are at mostD, so the integration rule returns the exact conditional posterior mean. Every
+recursive split transfers a functional by the transpose of exact polynomial interpolation. Multiplication by
+the completed left product gives the functional needed for the right prefixes, with sufficient degree at every
+node. Thus, the recursion preserves these integrals.
+Let Wealthj,n denote the mixture wealth under the prior conditional onI j. Its posterior-mean allocation
+has return Wealth j,n /Wealth j,n−1 whenever the denominator is positive. Weight the regional allocations
+before observationnby
+F(I j) Wealthj,n−1P
+ℓ F(I ℓ) Wealthℓ,n−1
+.
+Since returns are affine in the allocation, the combined return telescopes to wealth Pj F(I j) Wealthj,n =
+WealthFn . A region with zero wealth stays at zero and receives zero weight; if all regions have zero wealth,
+any allocation suffices.
+At recursion sized, the transforms takeO(dln(d+ 1)) work per region, followed by two recursions of half
+the size. Summing over the levels givesO(Tln 2(T+ 1)) work per region. Arrays along a recursion branch
+have geometrically decreasing sizes, so the workspace, cached initial functionals, and allocation traces use
+O(T) memory per region. Constructing the root rules and combining the regional strategies fit within these
+bounds.
+E.4 Setting up the CO96 and R70 priors
+The algorithms take a partition, its prior masses, and its conditional moments as inputs. We now give the
+choices used by OPT-FFT: (82)–(83) specify the regions, (84)–(85) give their masses, and the numerical
+procedure below computes the moments in (76).
+Choosing the regions.We place more boundaries near the zero bet and the support endpoints, where
+small betting scales and concentrated wealth products need resolution. Choose an integerP≥1 before
+50
+observing data and define
+sj := sin2
+ πj
+2P
+
+(0≤j≤P).(82)
+For CO96, use the boundariesµ 0(1−s j) andµ 0 + (1−µ 0)sj. They give 2Pintervals, clustered around
+p= 0, µ0,1. For R70, use betting coordinates: take the central interval [−s 1, s1] and the intervals [s j, sj+1]
+and [−sj+1,−s j], 1≤j < P. This gives 2P−1 regions. Together, their conditional priors retain the whole
+support, including arbitrarily small nonzero bets.
+The default number of regions depends on the horizon through
+L:=⌈log 2(T+ 1)⌉, P:= min
+n
+2⌈log2(L2)⌉,max{1, D/16}o .(83)
+Here,Dis the power-of-two horizon used above. The cap limits the number of regions on short streams.
+For longer streams, the squared logarithm increases resolution while keepingP=O(ln 2(T+ 1)). With leaf
+size 32, Proposition 28 givesO(Tln 4(T+ 1)) work andO(Tln 2(T+ 1)) memory. This choice is empirical:
+exactness holds for every partition, while numerical stability depends on the partition.
+Prior masses.These can be computed analytically. For CO96, in portfolio coordinates,
+F CO96([a, b]) =2π  arcsin √b−arcsin √a .(84)
+For R70, recallc= 6.6efrom (26). Its central and positive interval masses are
+FR70([−h, h]) = ln lncln ln(c/h) (0< h≤1),
+FR70([a, b]) =ln lnc2  1ln ln(c/b) − 1ln ln(c/a) (0< a < b≤1). (85)
+The negative interval masses satisfyF R70([−b,−a]) =F R70([a, b]) for 0< a < b≤1. For narrow intervals,
+directly subtracting two nearly equal numbers can lose accuracy. We use reflected coordinates or logarithmic
+identities when they reduce this cancellation.
+Moments away from the R70 singularity .The substitutionz= cosθturnsT k(z) into cos(kθ), so the
+moments become cosine integrals over [0, π]. At CO96 support endpoints, the Jacobian cancels the square-
+root singularity; we perform this cancellation analytically before numerical evaluation. For an accuracy
+target 0< ϵ <1, we divide the angular interval into panels of width at most 4/D, apply positive Gaussian
+quadrature of order⌈max{16,ln(1/ϵ)/ln 8}⌉on each panel, and normalize the weights to sum to one. The
+default target is 10 −13.
+Evaluating each cosine sum separately would cost quadratically inD. We instead compute all the
+moments together by FFT. We round the phases to a uniform grid of at least 4Dpoints, expand the residual
+phase in a Taylor series, and sum each term by FFT. In every Fourier mode we need, the residual phase
+has magnitude at mostπ/4. Thus,O(ln(1/ϵ)) terms give absolute truncation error at mostϵfor normalized
+positive weights.
+The central R70 region.The region [−h, h] needs special treatment because its density is unbounded
+at zero. Sincef R70(−β) =f R70(β), we can integrate over (0, h] and pair the contributions atβand−β. Use
+the change of variables
+ah := ln(c/h), β:=hsinϕ(0< ϕ≤π/2).
+The identityT k(−z) = (−1)kTk(z) makes all odd moments zero, while the even moments are
+mj,2k = (−1)k
+Z π/2
+0
+cos(2kϕ) lna h cosϕsinϕ(a h −ln sinϕ)[ln(a h −ln sinϕ)] 2 dϕ .
+51
+The density in this integral has total mass one. Near zero, the cosine factor is close to 1, so we can integrate
+that part using its exact mass. For 0< u≤π/2, this mass is
+lna h
+ln(ah −ln sinu) .
+Choose the cutoff
+u:=
+√ϵ
+2 max{2, D},
+and replace cos(2kϕ) by 1 on (0, u]. Since 2k≤D, the resulting error in each moment is at most
+sup
+0≤ϕ≤u
+|1−cos(2kϕ)| ≤D2u2/2≤ϵ/8.
+This step retains the prior mass near zero and approximates only the cosine factor. On the remaining interval
+[u, π/2], we use geometrically spaced panels near zero, followed by panels of width at most 4/D. The first
+resolve the density near its singularity; the second resolve the cosine oscillations. The Gaussian quadrature
+order grows asO(ln(D/ϵ)). The same FFT summation computes all even moments together, and we set the
+zeroth moment to 1.
+Preprocessing cost and accuracy .For fixed quadrature oversampling, computing the moments and
+integration rules takesO(K(D+ ln(1/ϵ)) ln(D/ϵ) ln(1/ϵ)) operations. Storing the moments and rules takes
+O(KD) memory. The central R70 quadrature hasO(D+ ln(1/ϵ)) panels and orderO(ln(D/ϵ)), and the
+implementation stores all its nodes. Processing regions one at a time therefore requires an additionalO((D+
+ln(1/ϵ)) ln(D/ϵ)) workspace, which isO(DlnD) at fixed tolerance. With our default region count, total
+memory remainsO(Tln 2(T+ 1)), and preprocessing takes eO(T) operations at fixed tolerance.
+The bounds above control the approximation near zero and the truncation of the Fourier expansion. We
+check the remaining Gaussian quadrature error by increasing its order. Accordingly,ϵis a numerical target,
+not a certified bound on all moments or accumulated wealth. The implementation also accepts conditional
+moments computed by another routine; Proposition 28 applies whenever those input moments and masses
+are exact.
+Default hyperparameters.Our default partitions use squared-sine spacing on each side of the zero bet,
+with a polylogarithmic number of intervals rounded to a power of 2. At horizons 512, 2,048, and 8,192, this
+gives respectively 64, 256, and 512 CO96 regions, and 63, 255, and 511 R70 regions. These are continuous
+regions, not point masses. The degree within each region grows with the horizon. A leaf size of 32 avoids
+transforms for short products, and the numerical moment routine uses an accuracy target of 10 −13. The
+spacing targets the sensitive parts of the domain; the region count and leaf size balance their resolution
+against transform overhead. Appendix E specifies the choices.
+We empirically validated these hyperparameter choices on 15 paths: Bernoulli and bounded reversals,
+Bernoulli alternatives with means 0.505 and 0.7, and Beta(4,3) observations, each at lengths 512, 2,048, and
+8,192, withµ 0 = 1/2. Against refined positive quadrature, the largest discrepancy in mixture log wealth was
+6.7×10 −11, and no regional allocation required projection. Analytic Bernoulli calculations and independent
+integration provide additional checks.
+52

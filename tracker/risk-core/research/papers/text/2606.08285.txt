@@ -1,0 +1,1465 @@
+arXiv 2606.08285  https://arxiv.org/abs/2606.08285
+
+Execution Realism and Reproducibility in LLM-Based Trading Systems:
+A Systematic Scoping Review and Evidence Audit
+Junyi Yao∗1, Zihao Zheng †1, and Baichuan Li ‡2
+1Washington University in St. Louis, St. Louis, MO 63130, USA
+2Department of Operations Research and Engineering Management, Southern Methodist University,
+Dallas, TX 75275, USA
+Abstract
+Execution realism remains weakly standardized in re-
+search on large-language-model-based trading systems,
+limiting comparison and reproduction across backtests,
+simulations, and portfolio benchmarks. This article
+presents a PRISMA-ScR systematic scoping review with a
+nested execution-reproducibility evidence audit. Eight re-
+producible query families returned 796 query-level records;
+DOI/title deduplication left 687 unique records, 101 re-
+ports were sought for retrieval, and 59 full texts were
+recovered through direct and fallback open-access routes.
+Fifty-three reports are provisionally eligible for expanded
+evidence charting, subject to reconciliation of two blind
+author-validation packets. The charting framework sep-
+arately evaluates point-in-time controls, temporal splits,
+held-out evaluation, trading costs and turnover, execu-
+tion semantics, universe construction, architecture report-
+ing, and artifact availability. Direct-trading, portfolio or
+alpha-construction, and benchmark studies are retained
+as distinct descriptive subgroups rather than pooled as
+a common performance estimand. Search responses, re-
+trieval attempts, file hashes, evidence excerpts, screening
+decisions, and coding worksheets are archived with the
+review materials. Final field-level counts are intentionally
+withheld until author validation is complete.
+Keywords:algorithmic trading; financial artificial in-
+telligence; large language models; PRISMA-ScR; repro-
+ducibility; systematic scoping review.
+1 Introduction
+Execution realism has become a central comparability
+problem in research on large-language-model-based trad-
+ing. Large language models (LLMs) now support finance-
+oriented retrieval, reasoning, decision support, and au-
+tonomous workflows. Recent systems gather heteroge-
+neous information, maintain memory, deliberate over mar-
+ket scenarios, and coordinate analyst, trader, and risk-
+∗ORCID: 0009-0005-6375-2503; e-mail: j.yao@wustl.edu
+†E-mail: z.zihaogary@wustl.edu
+‡Corresponding author; e-mail: baichuanl@smu.edu
+management roles [1, 2, 3, 4]. Their architectural appeal
+is clear: financial decisions combine prices, filings, news,
+macroeconomic signals, and portfolio constraints under
+changing regimes [5, 6, 7].
+Evaluation practice has not matured at the same pace.
+A reported return depends not only on the decision model
+but also on when information became available, when
+orders could execute, whether costs and slippage were
+charged, how the asset universe was formed, how out-of-
+sample periods were selected, and whether code, prompts,
+model versions, and data snapshots were documented.
+Empirical finance has long shown that data snooping,
+backtest overfitting, and omitted trading costs can inflate
+apparent performance [8, 9, 10, 11]. LLM workflows add
+further provenance and version-control risks because lan-
+guage, retrieval, memory, and tool use may each alter the
+effective information set.
+Existing surveys provide valuable architecture-centered
+maps of financial LLMs and trading agents [1, 12]. The
+present study addresses a different question: among
+LLM-based systems connected to trading, portfolio con-
+struction, alpha research, market simulation, or trade-
+relevant decisions, which execution and reproducibility
+assumptions are recoverable from the public record, and
+where do reporting gaps prevent economic interpreta-
+tion or independent reproduction? We answer this ques-
+tion through a bounded systematic scoping review re-
+ported with PRISMA-ScR and PRISMA-S guidance, to-
+gether with a nested study-level evidence audit. Unlike
+architecture-centered evidence maps, the unit of analysis
+here is the public evidence supporting each execution as-
+sumption: every code is tied to a study-level record and
+recoverable passage, and heterogeneous system types are
+synthesized only within descriptive subgroups.
+The contributions are as follows:
+1. We define and archive a reproducible, date-bounded
+search, deduplication, screening, retrieval, and
+version-reconciliation workflow for trade-relevant
+LLM studies.
+2. We chart point-in-time discipline, temporal splits,
+held-out evaluation, transaction costs and turnover,
+1
+arXiv:2606.08285v3  [cs.AI]  7 Oct 2026
+execution semantics, universe construction, and ar-
+tifact availability using explicit Y/P/NR/N/A rules
+and source anchors.
+3. We separate machine-assisted retrieval and passage
+detection from final human eligibility and coding
+decisions, and provide independent blind validation
+worksheets for two authors.
+4. We organize the evidence into direct-trading, portfo-
+lio or alpha-construction, and benchmark or decision-
+evaluation subgroups without treating heterogeneous
+outcomes as a common meta-analytic estimand.
+5. We distinguish recoverability from study quality and
+predictive validity, avoiding a composite score that
+would pool inapplicable criteria across heterogeneous
+study types.
+6. We derive a minimum reporting checklist for future
+authors, reviewers, and benchmark designers.
+2 Related Work: From Agent De-
+signs to Evaluation Assumptions
+2.1 Financial LLM Infrastructure and Re-
+view Scope
+Financial language models and agent platforms provide
+the infrastructure on which trading systems are built.
+BloombergGPT and FinGPT emphasize finance-specific
+corpora and tasks [13, 14]; FinanceBench, FinBen, and
+related evaluations span question answering, extraction,
+forecasting, risk, and decision support [15, 16, 17, 18]. Fin-
+Robot connects models to retrieval, analytical tools, and
+workflow orchestration [19]. Adjacent work on factor de-
+composition and bankruptcy prediction from filings shows
+how structured market variables and textual evidence are
+increasingly combined [20, 21].
+These studies motivate, but do not automatically enter,
+the primary evidence set. Financial question answering,
+sentiment analysis, retrieval, or forecasting is included
+only when the study establishes an explicit path from
+model output to a tradable decision, portfolio, market
+simulation, or evaluation benchmark. That boundary
+distinguishes general financial NLP from claims whose
+interpretation depends on execution assumptions [22, 23].
+2.2 Architecture-Centered Surveys and
+Systems
+Prior surveys map trading-agent architectures, inputs,
+and reported performance [1, 12]. Memory and reflection
+systems include FinMem and reflective cryptocurrency
+agents [5, 7]. Multi-agent systems decompose work among
+specialized roles or simulated participants [2, 3, 4, 24, 25,
+26,27]. Multimodalandtool-augmentedsystemsfusetext,
+market data, visual signals, routing, and computational
+traces [6, 28, 29]. Alpha-mining and hybrid policy systems
+place LLMs closer to factor discovery, signal generation,
+and quantitative research automation [30, 31, 32, 33, 34,
+35].
+Architecture families explain design intent but do not
+make reported returns comparable. Memory, debate,
+and multimodal systems can all report performance un-
+der materially different information sets, fill rules, costs,
+universes, and validation windows. The present review
+therefore treats architecture as a study characteristic and
+execution-reproducibility reporting as the primary chart-
+ing target.
+More generally, persistent agent memory creates an au-
+dit problem because stale or faulty records can propagate
+into later reasoning and actions. Execution-provenance
+research organizes traces and evidence dependencies for
+process-level accountability [36]; provenance-aware shared
+memory additionally uses lineage, access constraints, and
+action-risk gates [37]. Transactional belief commits and
+dependency-guided rollback illustrate complementary con-
+trols for preventing unsafe state propagation and selec-
+tively repairing affected actions [38, 39]. These studies
+provide background for the review’s emphasis on recover-
+able execution records, but they are not treated as primary
+evidence about trading performance.
+Outside finance, agentic reasoning, program-guided ex-
+ecution, and reusable policy routines illustrate broader
+ways to decompose long-horizon decisions into explicit
+components [40, 41, 42]. These works motivate archi-
+tecture descriptors but do not provide evidence about
+financial execution realism; accordingly, they are treated
+only as background and are excluded from the primary
+trading-study audit.
+Likewise, work on grounded neural representations and
+probabilistic object tracking illustrates how upstream
+perception modules can expose structured intermediate
+representations [43, 44]. Such perception research is rele-
+vant only to the modular-systems context; it is not used
+to support claims about trading performance, costs, or
+reproducibility.
+2.3 Benchmarks, Portfolios, and Execu-
+tion Realism
+InvestorBench, AI-Trader, PortBench, Look-Ahead-
+Bench, and LLM market simulations move the liter-
+ature toward structured financial decision evaluation
+[45, 46, 47, 48, 49]. Point-in-time and event-driven designs
+are particularly important because they reduce retrospec-
+tive leakage. Portfolio settings add allocation, correlation,
+turnover, and regime sensitivity, while calibrated techni-
+cal strategies show that parameter and friction sensitiv-
+ity matter even without an LLM [50]. Recent audits of
+foundation-model evaluation likewise show that aggregate
+benchmark results can conceal regime-dependent failures
+[51]. Related work embeds foundation-model predictions
+in a structurally constrained discrete-choice model, il-
+2
+lustrating how predictive components can be coupled to
+explicit behavioral and economic guarantees [52]. Adver-
+sarial news and live or simulated evaluations further test
+whether apparent skill survives temporal separation and
+manipulation [53, 46, 49].
+Execution assumptions are often mundane but deci-
+sive. Same-close fills can overstate performance when a
+signal uses closing information; high turnover can erase
+gross returns after commissions, spread, and slippage; fu-
+ture constituents introduce survivorship bias; and closed
+model endpoints without version records impede repro-
+duction. These observations motivate the evidence fields
+and reporting checklist used in this review.
+3 Systematic Scoping-Review Pro-
+tocol
+3.1 Review Design and Question
+This study is designed as a systematic scoping review
+with a nested execution-reproducibility evidence audit.
+Reporting follows PRISMA-ScR [54], the PRISMA 2020
+flow logic [55], and PRISMA-S search-reporting principles
+[56]. Ascopingdesignisappropriatebecausetheliterature
+spans direct trading agents, portfolio and alpha-research
+systems, market simulations, and decision benchmarks
+with incompatible outcomes, markets, horizons, and eval-
+uation protocols. A pooled meta-analysis would therefore
+imply a common estimand that the source literature does
+not provide.
+The review asks: among LLM-based or LLM-agent sys-
+tems connected to trading, portfolio construction, alpha
+research, market simulation, or trade-relevant financial
+decisions, which execution and reproducibility assump-
+tions are publicly recoverable, and where do reporting
+gaps prevent economic interpretation or independent re-
+production?
+The publication window is January 1, 2023 through
+May 30, 2026. English-language journal articles, confer-
+ence papers, accessible preprints, and technical reports are
+eligible. Secondary reviews are retained for background
+and citation searching but are not coded as primary ev-
+idence. The review was not prospectively registered. A
+dated protocol reconstructed and frozen during the post-
+rejection redesign is supplied with the review materials;
+this absence of prospective registration is treated as a
+limitation rather than obscured.
+3.2 Information Sources and Search
+Eight query families cover large language models, LLM
+agents, multi-agent trading, portfolio management, al-
+pha mining, financial backtesting, and quantitative trad-
+ing. The machine-readable search script records the ex-
+act strings, date bounds, returned metadata, query-level
+counts, and OpenAlex identifiers. The search was re-
+run on October 4, 2026 while preserving the prespeci-
+fied publication cutoff of May 30, 2026. Because several
+broad query families produced very large result sets, the
+bounded search retained the first 100 relevance-ranked
+OpenAlex records per query family. This cap makes the
+review reproducible but introduces ranking-based selec-
+tion risk; the review is systematic within the declared
+bounds rather than an exhaustive census. Citation search-
+ing from retained studies and prior financial-LLM reviews
+supplements the database search. Source versions are
+reconciled by DOI and normalized title, with the most
+complete accessible report retained.
+The bounded electronic search archived 796 query-level
+records. DOI/title deduplication removed 109 records,
+leaving 687 unique records for title and abstract screen-
+ing. The raw JSON response, deduplicated CSV, search
+summary, scripts, and retrieval logs are included in the
+review materials so the search can be rerun or audited.
+3.3 Eligibility and Screening
+Eligibility is based on population, concept, and context.
+The population is an LLM, foundation model, or LLM-
+agent system. The concept is an empirical trading, port-
+folio, alpha-factor, market-simulation, or trade-relevant
+benchmark evaluation. The context is securities, cryp-
+tocurrencies, investment portfolios, or financial decisions
+with an explicit path to tradable action. Pure finan-
+cial NLP, generic forecasting without a decision path,
+non-investment trading contexts, tutorials, editorials, and
+secondary reviews are excluded from the primary evidence
+set.
+Records are screened in two stages. Title/abstract
+screening applies cascading, fixed rules: concept screening
+first requires an LLM/agent term and a finance/trading
+term in the title or indexed abstract; title-level scope re-
+finement then requires an LLM/agent and trade-relevant
+term in the title; and metadata/abstract triage removes
+secondary reviews, non-investment trading contexts, and
+conceptual or advisory studies without an empirical trade-
+evaluation claim. Together these rules provisionally ex-
+clude 586 records: 280 without a finance/trading concept,
+28 without an LLM/agent concept, 260 at title-level scope
+refinement, eight secondary reviews or perspectives, seven
+non-investment trading records, and three conceptual or
+advisory records. The remaining 101 reports proceed to
+retrieval. Full-text screening uses E5–E10 and inclusion
+codes I1–I3. Machine-assisted triage is used only to prior-
+itize retrieval and expose potentially relevant passages; it
+does not constitute a final eligibility decision. Direct PDF
+links, arXiv DOI reconstruction, SSRN delivery links, DOI
+landing pages, and open-access page links are attempted
+in sequence. Every retrieval attempt and successful file
+hash is logged.
+The audit measures reporting recoverability, not pre-
+dictive validity, study quality, or risk of bias. A Y code
+means that an execution-relevant assumption can be re-
+constructed or stress-tested from public evidence; it does
+3
+not imply that the assumption is economically realistic
+or that the reported strategy is profitable. Conversely,
+NR records absence of recovered evidence rather than
+proof that the underlying implementation omitted the
+feature. This distinction prevents the charting scheme
+from becoming an unsupported composite quality score.
+Table 1: Provisional PRISMA-ScR Screening Summary
+Stage Count
+Records retrieved across eight query fam-
+ilies
+796
+Duplicate DOI/title records removed 109
+Deduplicated records screened 687
+Excludedbycascadingtitle/abstractrules 586
+Reports sought for retrieval 101
+Reports not retrieved after fallback at-
+tempts
+42
+Full-text reports assessed 59
+Low empirical signal, pending exclusion
+confirmation
+6
+Provisionallyeligibleforevidencecharting 53
+Exclusions comprise 280 records without a finance/trading con-
+cept, 28 without an LLM/agent concept, 260 failing title-level
+scope refinement, eight secondary reviews or perspectives, seven
+non-investment trading records, and three conceptual/advisory
+records without an empirical trade-evaluation claim. Final in-
+clusion remains subject to two-author reconciliation.
+3.4 Data Charting and Audit Variables
+For each provisionally eligible report, the charting form
+records study role, market and task scope, temporal
+split or point-in-time controls, held-out evaluation, cost
+or turnover treatment, execution semantics, universe
+construction, system-architecture reporting, and artifact
+availability. “Y” denotes explicit evidence detailed enough
+to reconstruct or stress-test the field, “P” denotes partial
+or indirect recoverability, “NR” denotes that no supporting
+evidence was recovered, and “N/A” denotes a field gen-
+uinely outside the study’s scope. Architecture is charted
+as a descriptive-reporting variable, not as evidence of
+trading validity; this prevents architecture clarity from
+being asserted without direct coding.
+The extraction pipeline first identifies candidate pas-
+sages using fixed regular expressions and stores the sur-
+rounding text. Two blind validation packets then present
+the study, field, and evidence excerpt without the machine-
+proposed code. Each author assigns Y, P, NR, or N/A
+and supplies a page or section anchor. Disagreements
+are reconciled by consensus. Until this reconciliation is
+complete, generated entries and aggregate counts remain
+provisional and are not used as final inferential claims.
+3.5 Synthesis
+The synthesis is descriptive rather than meta-analytic.
+Final reporting will provide the PRISMA-ScR flow, study
+characteristics, field-level recoverability counts, direct-
+trading versus portfolio/alpha versus benchmark sub-
+groups, and study-level caveats. No composite quality
+ranking is constructed because field applicability differs
+across study types and recoverability is not equivalent to
+empirical validity.
+4
+Figure 1: Provisional PRISMA-ScR flow. Counts are generated from archived search, deduplication, retrieval, and
+evidence-scan logs. Final inclusion requires reconciliation of the two blind author-validation packets.
+Table 2: Evaluation Assumptions That Determine Whether LLM Trading Results Are Economically Interpretable
+Dimension Coding Question Why It Matters
+Point-in-time data Are all inputs available before the deci-
+sion time?
+Prevents future information from entering
+prompts, retrieval, features, or benchmark
+labels.
+Temporal split Are train, validation, tuning, and test
+periods explicitly dated?
+Makes out-of-sample claims inspectable
+and reduces hidden tuning leakage.
+Execution timing When does a signal become an exe-
+cutable order?
+Distinguishes same-close, next-open, next-
+close, and delayed execution assumptions.
+Trading frictions Are commissions, spreads, slippage, and
+turnover reported?
+Determines whether active-strategy gains
+survive realistic implementation costs.
+Universe construc-
+tion
+Is the asset universe fixed using informa-
+tion available at the time?
+Reduces survivorship and hindsight bias in
+stock or portfolio selection.
+Artifact release Are code, prompts, data identifiers, and
+model versions documented?
+Supports replication despite model drift,
+prompt sensitivity, and changing APIs.
+5
+Table 3: Coding Rulebook for Execution-Reproducibility Fields
+Field Y P NR
+Split/PiT Explicit dated train, validation, and
+test periods or a clear point-in-time
+protocol.
+Dates, periods, or temporal controls
+are partially recoverable, but not
+enough for full reconstruction.
+No recoverable split dates or point-
+in-time controls in the public
+manuscript or linked artifacts.
+Held-out A temporally or otherwise indepen-
+dent test set is explicitly identified
+and separated from training, tuning,
+or prompt development.
+Evaluation separation is suggested,
+but the independence of the re-
+ported test is not fully recon-
+structable.
+No recoverable held-out evaluation
+protocol.
+Costs Transaction costs, spreads, slippage,
+or turnover are explicitly modeled
+or reported.
+Costs or turnover are mentioned, or
+can be approximately inferred, but
+the implementation is incomplete.
+No recoverable cost, slippage, or
+turnover treatment.
+Execution Signal formation and order timing
+are specified clearly enough to dis-
+tinguish same-period and delayed
+execution.
+Timing is implied by the environ-
+ment or backtest description but not
+implementation-ready.
+No recoverable execution-timing se-
+mantics.
+Universe Asset universe and inclusion rules
+are specified with enough detail to
+assess survivorship or selection bias.
+Universe is named but constituent
+timing or selection rules remain par-
+tial.
+No recoverable universe-
+construction rule.
+Architecture Agents, modules, roles, information
+flow, and decision interfaces are
+specified sufficiently to reconstruct
+the system design.
+The architecture family or major
+components are named, but inter-
+faces or workflow details remain in-
+complete.
+No recoverable system-architecture
+description.
+Artifacts Code, prompts, data identifiers,
+model versions, or reproducibility
+package are released.
+Some artifacts are released or de-
+scribed, but not enough for inde-
+pendent replication.
+No recoverable reproducibility arti-
+facts.
+Ambiguous cases are coded conservatively. A field is marked Y only when the manuscript gives enough information for an informed
+reader to reconstruct or stress-test the assumption. N/A is reserved for a field genuinely outside a study’s scope and is never used
+merely because reporting is absent.
+6
+Table 4: Expanded PRISMA-ScR Evidence Matrix, Part I of III (Provisional Pending Two-Author Validation)
+Study Subgroup Split/PiT Held-out Costs Exec. Univ. Arch. Art.
+A Multi-agent System Based On LLM For
+Trading Financial Assets [57]
+Direct trad-
+ing/simulation
+NR NR P P NR Y NR
+A Reflective LLM-based Agent to Guide Zero-
+shot Cryptocurrency Trading [58]
+Direct trad-
+ing/simulation
+P Y P NR NR Y P
+Adversarial News and Lost Profits: Manipu-
+lating Headlines in LLM-Driven Algorithmic
+Trading [53]
+Direct trad-
+ing/simulation
+Y Y P Y NR Y Y
+Agentic AI for Clustering, Relationship Dis-
+covery, and Semantic Trading in Prediction
+Markets [59]
+Direct trad-
+ing/simulation
+NR NR P Y NR Y NR
+Agentic AI in Commodity Trading: A Com-
+parative Simulation Study [60]
+Direct trad-
+ing/simulation
+NR NR Y NR NR Y NR
+AgenticAITA: A Proof-Of-Concept About
+Deliberative Multi-Agent Reasoning for Au-
+tonomous Trading Systems [61]
+Direct trad-
+ing/simulation
+Y NR P Y NR Y NR
+Alpha-GPT: Human-AI Interactive Alpha
+Mining for Quantitative Investment [30]
+Portfolio/alpha Y Y P Y Y Y Y
+AlphaAgent: LLM-Driven Alpha Mining
+with Regularized Exploration to Counteract
+Alpha Decay [33]
+Portfolio/alpha P Y P Y Y Y Y
+An End-To-End LLM Enhanced Trading Sys-
+tem [62]
+Direct trad-
+ing/simulation
+NR NR NR P NR P Y
+Analysis of the Application of Large Lan-
+guage Models in Three Major Fields: Trading
+and Portfolio Management, Financial Risk
+Management, and Financial Text Mining [63]
+Portfolio/alpha P NR NR P NR P NR
+Can ChatGPT Forecast Stock Price Move-
+ments? Return Predictability and Large Lan-
+guage Models [22]
+Direct trad-
+ing/simulation
+Y Y Y Y NR Y P
+CN-Buzz2Portfolio: A Chinese-Market
+Dataset and Benchmark for LLM-Based
+Macro and Sector Asset Allocation from
+Daily Trending Financial News [64]
+Benchmark/decision P P Y NR Y Y P
+Constructing a Portfolio Optimization Bench-
+mark Framework for Evaluating Large Lan-
+guage Models [65]
+Benchmark/decision NR NR NR NR NR P Y
+CryptoTrade: A Reflective LLM-based Agent
+to Guide Zero-shot Cryptocurrency Trading
+[7]
+Direct trad-
+ing/simulation
+P Y P NR NR Y Y
+Decision-informed Neural Networks with
+Large Language Model Integration for Port-
+folio Optimization [66]
+Portfolio/alpha Y Y NR NR P Y P
+Evolutionary Factor Searching for Sparse
+Portfolio Optimization Using Large Lan-
+guage Models [67]
+Portfolio/alpha Y Y Y Y P Y Y
+Exploring LLM Cryptocurrency Trading
+Through Fact-Subjectivity Aware Reasoning
+[68]
+Direct trad-
+ing/simulation
+P Y NR NR NR Y Y
+Exploring Sentiment Manipulation by LLM-
+Enabled Intelligent Trading Agents [69]
+Direct trad-
+ing/simulation
+Y Y P Y P Y NR
+Y = explicit evidence recovered; P = partial evidence; NR = not recovered. Entries remain provisional until the two blind validation
+packets are reconciled.
+7
+Table 5: Expanded PRISMA-ScR Evidence Matrix, Part II of III (Provisional Pending Two-Author Validation)
+Study Subgroup Split/PiT Held-out Costs Exec. Univ. Arch. Art.
+Financial News-Driven LLM Reinforcement
+Learning for Portfolio Management [70]
+Portfolio/alpha NR NR P NR NR Y NR
+Fine-Tuning Large Language Models for
+Stock Return Prediction Using Newsflow [71]
+Direct trad-
+ing/simulation
+Y Y NR P P Y Y
+FinLLM-B: When Large Language Models
+Meet Financial Breakout Trading [72]
+Direct trad-
+ing/simulation
+P P NR NR NR P NR
+FinPos: A Position-Aware Trading Agent
+System for Real Financial Markets [73]
+Direct trad-
+ing/simulation
+Y P P Y Y Y P
+FinRL-DeepSeek: LLM-Infused Risk-
+Sensitive Reinforcement Learning for
+Trading Agents [34]
+Direct trad-
+ing/simulation
+P P NR NR NR Y Y
+FLAG-TRADER: Fusion LLM-Agent with
+Gradient-based Reinforcement Learning for
+Financial Trading [74]
+Direct trad-
+ing/simulation
+P NR P P NR Y P
+From Knowing to Doing: A Memory-
+Controlled Benchmark for LLM Trading
+Agents on Stock Markets [75]
+Benchmark/decision P P P Y NR Y P
+From Text to Returns: Using Large Lan-
+guage Models for Mutual Fund Portfolio Op-
+timization and Risk-Adjusted Allocation [76]
+Portfolio/alpha P NR NR NR P P NR
+HedgeAgents: A Balanced-aware Multi-agent
+Financial Trading System [77]
+Direct trad-
+ing/simulation
+P P NR P Y Y Y
+Integrating Large Language Models with
+Deep Reinforcement Learning for Portfolio
+Optimization [78]
+Portfolio/alpha NR P Y Y NR Y NR
+INVESTORBENCH: A Benchmark for Fi-
+nancial Decision-Making Tasks with LLM-
+based Agent [45]
+Benchmark/decision P Y NR Y NR Y P
+Leveraging Large Language Models for In-
+stitutional Portfolio Management: Persona-
+Based Ensembles [79]
+Portfolio/alpha P Y NR P P NR Y
+LLM-Gated FinRL: Point-in-Time Risk Au-
+diting for Reinforcement Learning in High-
+Beta Portfolio Trading [80]
+Portfolio/alpha Y Y P P NR P NR
+LLM-Powered Multi-Agent System for Auto-
+mated Crypto Portfolio Management [81]
+Portfolio/alpha Y Y Y P P Y Y
+MadEvolve: Evolutionary Optimization of
+Trading Systems with Large Language Mod-
+els [82]
+Direct trad-
+ing/simulation
+Y Y P Y NR Y Y
+MARAG-Fin: An Intelligent Multi-agent
+RAG-LLM Architecture Integrating Finan-
+cial News Sentiment and Time Series Data
+for Data-driven Trading Decision-making [83]
+Direct trad-
+ing/simulation
+P P NR NR Y Y Y
+Market-Bench: Evaluating Large Language
+Models on Introductory Quantitative Trad-
+ing and Market Dynamics [84]
+Benchmark/decision Y P NR Y NR P NR
+PortfolioPilot: An Agentic Platform for Fi-
+nancial Portfolio Management Algorithm De-
+velopment and Evaluation [85]
+Portfolio/alpha Y NR P NR NR P Y
+Y = explicit evidence recovered; P = partial evidence; NR = not recovered. Entries remain provisional until the two blind validation
+packets are reconciled.
+8
+Table 6: Expanded PRISMA-ScR Evidence Matrix, Part III of III (Provisional Pending Two-Author Validation)
+Study Subgroup Split/PiT Held-out Costs Exec. Univ. Arch. Art.
+PredictionMarketBench: A SWE-bench-
+Style Framework for Backtesting Trading
+Agents on Prediction Markets [86]
+Direct trad-
+ing/simulation
+Y Y P Y NR Y P
+QTMRL: An Agent for Quantitative Trading
+Decision-Making Based on Multi-Indicator
+Guided Reinforcement Learning [87]
+Direct trad-
+ing/simulation
+Y Y P NR Y Y Y
+QuantAgent: Seeking Holy Grail in Trading
+by Self-Improving Large Language Model [31]
+Direct trad-
+ing/simulation
+Y NR P NR Y Y Y
+QuantAgents: Towards Multi-agent Finan-
+cial System via Simulated Trading [88]
+Direct trad-
+ing/simulation
+Y Y P P P Y P
+SHARP: A Self-Evolving Human-Auditable
+Rubric Policy for Financial Trading Agents
+[89]
+Direct trad-
+ing/simulation
+Y Y Y Y P Y P
+Summoning the Oracle to Slay It: Mitigating
+Look-Ahead Bias in Financial Backtesting
+with Large Language Models [90]
+Direct trad-
+ing/simulation
+Y Y Y Y NR Y Y
+Temporal Relational Reasoning of Large Lan-
+guage Models for Detecting Stock Portfolio
+Crashes [91]
+Portfolio/alpha Y Y P Y Y Y P
+The Alpha Illusion: Reported Alpha from
+LLM Trading Agents Should Not Be Treated
+as Deployment Evidence [92]
+Portfolio/alpha Y Y Y Y P Y Y
+Trade in Minutes! Rationality-Driven Agen-
+tic System for Quantitative Financial Trad-
+ing [93]
+Direct trad-
+ing/simulation
+NR NR P Y Y Y P
+TradingAgents: Multi-Agents LLM Financial
+Trading Framework [4]
+Direct trad-
+ing/simulation
+P Y NR Y P Y Y
+TradingGPT: Multi-Agent System with Lay-
+ered Memory and Distinct Characters for
+Enhanced Financial Trading Performance [2]
+Direct trad-
+ing/simulation
+NR P NR NR NR Y NR
+When Valid Signals Fail: Regime Boundaries
+Between LLM Features and RL Trading Poli-
+cies [94]
+Direct trad-
+ing/simulation
+Y Y P P NR Y P
+Adaptive Multi-Agent LLM Systems for Fi-
+nancial Trading: A Framework for Realistic
+Simulation and Dynamic Prompt Optimiza-
+tion [95]
+Direct trad-
+ing/simulation
+NR P P Y NR Y Y
+AlphaForgeBench: Benchmarking End-to-
+End Trading Strategy Design with Large Lan-
+guage Models [96]
+Benchmark/decision Y Y P P Y Y Y
+Biased echoes: Large language models rein-
+force investment biases and increase portfolio
+risks of private investors [97]
+Portfolio/alpha Y Y P NR NR NR P
+REGIQUANT: A MULTI-AGENT LLM
+AND REINFORCEMENT-LEARNING SYS-
+TEM FOR REGIME-AWARE QUANTITA-
+TIVE TRADING [98]
+Direct trad-
+ing/simulation
+P NR P P Y Y NR
+TrustTrade: Human-Inspired Selective Con-
+sensus Reduces Decision Uncertainty in LLM
+Trading Agents [99]
+Direct trad-
+ing/simulation
+Y NR NR Y P Y Y
+Y = explicit evidence recovered; P = partial evidence; NR = not recovered. Entries remain provisional until the two blind validation
+packets are reconciled.
+9
+4 Provisional Review Results and
+Discussion
+4.1 Search Yield and Retrieval
+The updated bounded search materially expands the ev-
+idence base beyond the earlier targeted review. Across
+eight query families, 796 query-level records were archived
+and 687 unique DOI/title records remained after dedu-
+plication. Cascading title/abstract rules provisionally
+removed 586 records: 308 failed the broad concept screen,
+260 failed stricter title-level scope refinement, and 18
+were secondary, non-investment, or non-empirical records
+identified during metadata/abstract triage. Full text was
+sought for 101 reports. Direct and fallback retrieval recov-
+ered 59 reports, while 42 could not be retrieved through
+the recorded open-access routes. This retrieval gap is
+itself a review limitation and is reported separately from
+substantive exclusion.
+The evidence scan prioritized 53 reports for full charting
+because their retrieved text contained both an empirical-
+evaluation signal and a trading, portfolio, alpha, or bench-
+mark outcome. Six retrieved reports had insufficient em-
+pirical signal under the fixed rules and await author con-
+firmation of their exclusion code. These counts remain
+provisional until the two blind eligibility and field-level
+coding packets are reconciled.
+The provisional evidence set also reflects the field’s
+publication maturity. OpenAlex source metadata and
+persistent identifiers classify 13 reports as journal, confer-
+ence, thesis, or other formally indexed venue records and
+40 as preprint or repository versions. The review there-
+fore separates stable methodological foundations from
+rapidly changing system reports and treats version recon-
+ciliation as part of evidence charting. Preprint prevalence
+is reported as a characteristic of the evidence base, not
+concealed through selective citation replacement.
+4.2 Preliminary Reporting Pattern
+The machine-assisted charting pass does not replace au-
+thor coding, but it provides a reproducible diagnostic of
+where evidence is likely to be found. Among the 53 provi-
+sional rows, temporal-split and held-out-evaluation pas-
+sages are recovered more often than implementation-ready
+cost passages. Execution language is heterogeneous: some
+reports identify next-day, market-order, fill-price, or simu-
+lator semantics, whereas others only mention rebalancing
+or generic trade execution. Artifact evidence ranges from
+explicit repository links to partial data-availability state-
+ments.
+The pattern is directionally consistent with the orig-
+inal 30-study audit, but the expanded search changes
+the denominator and introduces newer peer-reviewed,
+benchmark, cryptocurrency, and portfolio studies. The
+final manuscript therefore must not simply transplant
+the earlier aggregate counts. Final Y/P/NR/N/A totals,
+subgroup denominators, and study-level caveats will be
+recalculated after validation.
+4.3 Implications for Evidence Quality
+Three implications already follow from the expanded re-
+trieval record. First, review transparency is inseparable
+from version control: preprints, conference versions, jour-
+nal versions, and repository copies frequently overlap.
+Longitudinal evidence that benchmark scores drift across
+open-source model release lines reinforces the need to
+record the exact model and evaluation version [100]. Sec-
+ond, failure to retrieve a report is not evidence that the
+report lacks execution detail, so retrieval failures must not
+be coded as NR. Third, keyword presence is not equiva-
+lent to implementation-ready reporting. A passage that
+mentions transaction costs without specifying the rate or
+application rule supports at most partial recoverability.
+These distinctions sharpen the paper’s contribution.
+The review is not a leaderboard of agent architectures
+and does not infer that more detailed reporting implies
+stronger predictive performance. It maps whether the
+public record permits readers to reconstruct when infor-
+mation became available, when a trade could execute,
+how frictions were applied, and which artifacts support
+replication.
+4.4 Limitations of the Systematic Scoping
+Review
+The review was not prospectively registered, and the
+dated protocol was reconstructed during a post-rejection
+redesign. OpenAlex supplies reproducible metadata and
+broadcoveragebutisnotasubstituteforeveryproprietary
+10
+Table 7: Provisional Recoverability by Study Subgroup (Y or P)
+SubgroupnSplit/PiT Held-out Costs Exec. Univ. Arch. Art.
+Direct trading/simulation 32 25 22 22 22 13 32 24
+Portfolio/alpha 15 13 11 11 10 9 13 10
+Benchmark/decision 6 5 5 3 4 2 6 5
+All provisionally eligible 53 43 38 36 36 24 51 39
+Counts combine Y and P as recoverable evidence and retain subgroup-specific denominators. They are machine-assisted provisional
+diagnostics, not final author-validated results. Final tables will report Y, P, NR, and N/A separately after reconciliation.
+bibliographic database. The first-100 relevance-ranked
+cap for each query family may favor highly connected
+or lexically obvious studies and omit lower-ranked eligi-
+ble work. Citation searching partly mitigates but does
+not eliminate that risk. Forty-two reports remained un-
+retrieved after the recorded attempts, creating possible
+availability bias. The title/abstract rules may miss studies
+whose titles do not identify their LLM or trading compo-
+nent. The literature is also version-sensitive and changes
+quickly.
+Machine assistance was used to archive search results,
+deduplicate records, prioritize retrieval, extract candi-
+date passages, and generate validation worksheets. It
+was not authorized to make final eligibility or evidence
+codes. Those decisions require two-author review and
+consensus. This separation is necessary because regular-
+expression hits can locate relevant language but cannot
+determine whether an assumption is sufficiently specified
+for reconstruction.
+5 Conclusion
+This systematic scoping-review redesign broadens the evi-
+dentiary basis of the paper and makes its search, retrieval,
+and coding decisions auditable. The provisional search
+record shows that LLM-based trading research is larger
+and more heterogeneous than the original targeted sample
+suggested. At the same time, the expanded evidence chart-
+ing continues to indicate that architecture descriptions
+alone are insufficient for judging economic interpretability
+or reproducibility.
+The final contribution will be a PRISMA-ScR flow, a
+version-reconciled study ledger, field-level evidence an-
+chors, subgroup summaries, and a reporting checklist
+centered on point-in-time controls, held-out evaluation,
+execution semantics, trading frictions, universe construc-
+tion, and artifact release. The review deliberately avoids
+using a non-LLM heuristic as a proxy for an LLM trading
+system; methodological conclusions are grounded in the
+retrieved literature and its public evidence record.
+Final numerical conclusions are intentionally withheld
+from this internal draft until both author-validation pack-
+ets are reconciled. This constraint prevents machine-
+assisted retrieval and passage detection from being misre-
+ported as completed human evidence assessment.
+Data Availability Statement
+The manuscript source, search strings, raw query meta-
+data, deduplicated screening ledger, retrieval log, file
+hashes, provisional evidence matrix, candidate evidence
+excerpts, coding rulebook, blank two-author validation
+packets, derived tables, and analysis scripts are organized
+in the accompanying review package. Third-party full-
+text articles remain subject to their original licenses and
+are not claimed as a newly published dataset.
+Authors’ Contributions
+Junyi Yao developed the review question and execution-
+reproducibility framework, performed the initial search
+and machine-assisted evidence preparation, drafted the
+manuscript, and implemented the LaTeX and analysis
+project. Zihao Zheng contributed to study-scope refine-
+ment and manuscript review. Baichuan Li contributed
+to methodological discussion, audit design, and techni-
+cal revision. Final eligibility decisions, field-level codes,
+consensus adjudication, and approval of the numerical syn-
+thesis will be completed and documented by the authors
+before submission. All authors will review and approve
+the submission version.
+Funding Statement
+This work received no external funding.
+Conflicts of Interest
+The authors declare no known competing financial or
+non-financial interests related to this manuscript.
+Ethical Approval and Consent to
+Participate
+Not applicable. This study reviews published literature
+andusespubliclyavailablemarketdata; itdoesnotinvolve
+human participants, identifiable personal data, or animals.
+11
+AI Usage Statement
+Artificial intelligence systems supported literature orga-
+nization, candidate-passage retrieval, editorial drafting,
+code editing, table preparation, and build verification.
+They were not treated as authors and were not authorized
+to make final eligibility or evidence-coding decisions. All
+AI-assisted material and all final scholarly judgments are
+subject to author review; the authors remain responsible
+for the content, citations, analysis, coding decisions, and
+conclusions.
+References
+[1] Han Ding, Yinheng Li, Junhao Wang, Hang Chen,
+Doudou Guo, and Yunbai Zhang. Large language
+model agent in financial trading: A survey.arXiv
+preprint arXiv:2408.06361, 2024.
+[2] Yang Li, Yangyang Yu, Haohang Li, Zhi Chen, and
+Khaldoun Khashanah. TradingGPT: Multi-agent
+system with layered memory and distinct characters
+for enhanced financial trading performance.arXiv
+preprint arXiv:2309.03736, 2023.
+[3] Chong Zhang, Xinyi Liu, Zhongmou Zhang, Mingyu
+Jin, Lingyao Li, Zhenting Wang, Wenyue Hua, Dong
+Shu, Suiyuan Zhu, Xiaobo Jin, Sujian Li, Mengnan
+Du, and Yongfeng Zhang. When AI meets finance
+(StockAgent): Large language model-based stock
+trading in simulated real-world environments.arXiv
+preprint arXiv:2407.18957, 2024.
+[4] Yijia Xiao, Edward Sun, Di Luo, and Wei Wang.
+TradingAgents: Multi-agents LLM financial trading
+framework.arXiv preprint arXiv:2412.20138, 2024.
+[5] Yangyang Yu, Haohang Li, Zhi Chen, Yuechen
+Jiang, Yang Li, Denghui Zhang, Rong Liu, Jor-
+dan W. Suchow, and Khaldoun Khashanah. Fin-
+Mem: A performance-enhanced LLM trading agent
+with layered memory and character design.arXiv
+preprint arXiv:2311.13743, 2023.
+[6] Wentao Zhang, Lingxuan Zhao, Haochong Xia,
+Shuo Sun, Jiaze Sun, Molei Qin, Xinyi Li, Yuqing
+Zhao, Yilei Zhao, Xinyu Cai, Longtao Zheng,
+Xinrun Wang, and Bo An. FinAgent: A mul-
+timodal foundation agent for financial trading:
+Tool-augmented, diversified, and generalist.arXiv
+preprint arXiv:2402.18485, 2024.
+[7] Yuan Li, Bingqiao Luo, Qian Wang, Nuo Chen,
+Xu Liu, and Bingsheng He. CryptoTrade: A reflec-
+tive LLM-based agent to guide zero-shot cryptocur-
+rency trading.arXiv preprint arXiv:2407.09546,
+2024.
+[8] Halbert White. A reality check for data snooping.
+Econometrica, 68(5):1097–1126, 2000.
+[9] Ryan Sullivan, Allan Timmermann, and Halbert
+White. Data-snooping, technical trading rule perfor-
+mance, and the bootstrap.The Journal of Finance,
+54(5):1647–1691, 1999.
+[10] David H. Bailey and Marcos López de Prado. The
+deflated sharpe ratio: Correcting for selection bias,
+backtest overfitting, and non-normality.The Jour-
+nal of Portfolio Management, 40(5):94–107, 2014.
+[11] Robert A. Korajczyk and Ronnie Sadka. Are mo-
+mentum profits robust to trading costs?The Jour-
+nal of Finance, 59(3):1039–1082, 2004.
+[12] Yihan Xia, Panpan You, Taotao Wang, Fang Liu,
+Han Qi, Xiaoxiao Wu, and Shengli Zhang. Agentic
+trading: When LLM agents meet financial markets.
+arXiv preprint arXiv:2605.19337, 2026.
+[13] Shijie Wu, Ozan Irsoy, Steven Lu, Vadim Dabravol-
+ski, MarkDredze, SebastianGehrmann, Prabhanjan
+Kambadur, David Rosenberg, and Gideon Mann.
+BloombergGPT: A large language model for finance.
+arXiv preprint arXiv:2303.17564, 2023.
+[14] Hongyang Yang, Xiao-Yang Liu, and Christina Dan
+Wang. FinGPT: Open-source financial large lan-
+guage models.arXiv preprint arXiv:2306.06031,
+2023.
+[15] Yinheng Li, Shaofei Wang, Han Ding, and Hang
+Chen. Large language models in finance: A survey.
+arXiv preprint arXiv:2311.10723, 2023.
+[16] Jean Lee, Nicholas Stevens, Soyeon Caren Han,
+and Minseok Song. A survey of large language
+models in finance (FinLLMs).arXiv preprint
+arXiv:2402.02315, 2024.
+[17] Pranab Islam, Anand Kannappan, Douwe Kiela,
+Rebecca Qian, Nino Scherrer, and Bertie Vidgen.
+FinanceBench: A new benchmark for financial ques-
+tion answering.arXiv preprint arXiv:2311.11944,
+2023.
+[18] Qianqian Xie, Weiguang Han, Zhengyu Chen,
+Ruoyu Xiang, Xiao Zhang, Yueru He, Mengxi Xiao,
+Dong Li, Yongfu Dai, Duanyu Feng, Yijing Xu, Hao-
+qiang Kang, Ziyan Kuang, Chenhan Yuan, Kailai
+Yang, ZhehengLuo, TianlinZhang, ZhiweiLiu, Guo-
+jun Xiong, Zhiyang Deng, Yuechen Jiang, Zhiyuan
+Yao, Haohang Li, Yangyang Yu, Gang Hu, Jia-
+jia Huang, Xiao-Yang Liu, Alejandro Lopez-Lira,
+Benyou Wang, Yanzhao Lai, Hao Wang, Min Peng,
+Sophia Ananiadou, and Jimin Huang. FinBen: A
+holistic financial benchmark for large language mod-
+els.arXiv preprint arXiv:2402.12659, 2024.
+[19] Hongyang Yang, Boyu Zhang, Neng Wang, Cheng
+Guo, Xiaoli Zhang, Likun Lin, Junlin Wang, Tianyu
+Zhou, Mao Guan, Runjia Zhang, and Christina Dan
+12
+Wang. FinRobot: An open-source AI agent plat-
+form for financial applications using large language
+models.arXiv preprint arXiv:2405.14767, 2024.
+[20] Xiao Han, Yao Xiao, Zhen Zhang, and Moxuan
+Zheng. Interpretable factor decomposition for deci-
+sion intelligence in large-scale financial markets: Ev-
+idence from china’s A-share market.arXiv preprint
+arXiv:2606.12843, 2026.
+[21] Zhen Zhang, Moxuan Zheng, Tongchen Zhang,
+Luyun Lin, Yiqing Wang, and Lixing Lin.
+Bankruptcy prediction from 10-K narratives: Evi-
+dence from interpretable text scores and accounting
+baselines.arXiv preprint arXiv:2606.05623, 2026.
+[22] Alejandro Lopez-Lira and Yuehua Tang. Can
+ChatGPT forecast stock price movements? return
+predictability and large language models.arXiv
+preprint arXiv:2304.07619, 2023.
+[23] Kemal Kirtac and Guido Germano. Sentiment trad-
+ing with large language models.arXiv preprint
+arXiv:2412.19245, 2024.
+[24] Tianjiao Zhao, Jingrao Lyu, Stokes Jones, Harri-
+son Garber, Stefano Pasquali, and Dhagash Mehta.
+AlphaAgents: Large language model based multi-
+agents for equity portfolio constructions.arXiv
+preprint arXiv:2508.11152, 2025.
+[25] Li Zhao, Rui Sun, Zuoyou Jiang, Bo Yang, Yuxiao
+Bai, Mengting Chen, Xinyang Wang, Jing Li, and
+Zuo Bai. ContestTrade: A multi-agent trading
+system based on internal contest mechanism.arXiv
+preprint arXiv:2508.00554, 2025.
+[26] Kunihiro Miyazaki, Takanobu Kawahara, Stephen
+Roberts, and Stefan Zohren. Toward expert
+investment teams: A multi-agent LLM system
+with fine-grained trading tasks.arXiv preprint
+arXiv:2602.23330, 2026.
+[27] Yishuo Yuan, Jiayi Sheng, Sirui Zeng, Jiaqi Wang,
+and Jiaheng Liu. AlphaCrafter: A full-stack multi-
+agent framework for cross-sectional quantitative
+trading.arXiv preprint arXiv:2605.05580, 2026.
+[28] Yang Chen, Yueheng Jiang, Zhaozhao Ma, Yuchen
+Cao, Jacky Keung, Kun Kuang, Leilei Gan, Yiquan
+Wu, and Fei Wu. MM-DREX: Multimodal-driven
+dynamic routing of LLM experts for financial trad-
+ing.arXiv preprint arXiv:2509.05080, 2025.
+[29] Terence Lim, Kumar Muthuraman, and Michael
+Sury. QRAFTI: An agentic framework for empirical
+research in quantitative finance.arXiv preprint
+arXiv:2604.18500, 2026.
+[30] Saizhuo Wang, Hang Yuan, Leon Zhou, Lionel M.
+Ni, Heung-Yeung Shum, and Jian Guo. Alpha-GPT:
+Human-AI interactive alpha mining for quantitative
+investment.arXiv preprint arXiv:2308.00016, 2023.
+[31] Saizhuo Wang, Hang Yuan, Lionel M. Ni, and Jian
+Guo. QuantAgent: Seeking holy grail in trading by
+self-improving large language model.arXiv preprint
+arXiv:2402.03755, 2024.
+[32] Dat Mai. StockGPT: A GenAI model for
+stock prediction and trading.arXiv preprint
+arXiv:2404.05101, 2024.
+[33] Ziyi Tang, Zechuan Chen, Jiarui Yang, Jiayao Mai,
+Yongsen Zheng, Keze Wang, Jinrui Chen, and Liang
+Lin. AlphaAgent: LLM-driven alpha mining with
+regularized exploration to counteract alpha decay.
+arXiv preprint arXiv:2502.16789, 2025.
+[34] Mostapha Benhenda. FinRL-DeepSeek: LLM-
+infused risk-sensitive reinforcement learning for trad-
+ing agents.arXiv preprint arXiv:2502.07393, 2025.
+[35] Runze Shi, Shengyu Yan, Yuecheng Cai, and
+Chengxi Lv. Hubble: An LLM-driven agentic frame-
+work for safe, diverse, and reproducible alpha factor
+discovery.arXiv preprint arXiv:2604.09601, 2026.
+[36] Yiqi Wang, Jiaqi Zhang, Zhangkai Wu, Taotao
+Cai, Zirui Liu, Zequn Sun, Manqing Dong, Mingkai
+Zheng, Yiqun Duan, Xuefei Yin, and Yanming Zhu.
+From agent traces to trust: A survey of evidence
+tracing and execution provenance in LLM agents,
+2026.
+[37] Yiqi Wang, Zihao Yan, Jiaqi Zhang, Zhangkai Wu,
+Mingkai Zheng, Zequn Sun, Yanming Zhu, and Tao-
+tao Cai. MAP-Graph: Provenance-aware shared
+memory for multi-agent workflows, 2026.
+[38] Xiaoyang Li, Yiqi Wang, Haohui Lu, Zhi Chen,
+Mo Li, Pingan Song, Mingkai Zheng, and Taotao
+Cai. MemTX: Transactional belief commit for state-
+ful agent memory, 2026.
+[39] Caili Yu, Yiqi Wang, Jiaqi Zhang, Yiqun Duan,
+Mingkai Zheng, Zhangkai Wu, Kaize Shi, and Tao-
+tao Cai. From faulty memories to corrected actions:
+Dependency-guided rollback repair for memory-
+augmented agents, 2026.
+[40] Zelin Zhao, Bo Yuan, Yuchen Zhu, Jaemoo Choi,
+and Yongxin Chen. RMA: An agentic system for
+research-level mathematical problems. InCOLM
+2026 Workshop on Lifelong Agents: Learning, Align-
+ing, and Evolving, 2026.
+[41] Zelin Zhao, Karan Samel, Binghong Chen, and
+Le Song. ProTo: Program-guided transformer for
+program-guided tasks. InAdvances in Neural In-
+formation Processing Systems, volume 34, pages
+17021–17036. Curran Associates, Inc., 2021.
+13
+[42] Zelin Zhao, Chuang Gan, Jiajun Wu, Xiaoxiao
+Guo, and Joshua B. Tenenbaum. Augmenting pol-
+icy learning with routines discovered from a single
+demonstration. InProceedings of the AAAI Con-
+ference on Artificial Intelligence, volume 35, pages
+11024–11032, 2021.
+[43] Zelin Zhao, Fenglei Fan, Wenlong Liao, and Junchi
+Yan. Grounding and enhancing grid-based models
+for neural fields. InProceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recog-
+nition (CVPR), pages 19425–19435, 2024.
+[44] Zelin Zhao, Ze Wu, Yueqing Zhuang, Boxun Li, and
+Jiaya Jia. Tracking objects as pixel-wise distribu-
+tions. InComputer Vision – ECCV 2022, pages
+76–94. Springer, 2022.
+[45] Haohang Li, Yupeng Cao, Yangyang Yu, Shashid-
+har Reddy Javaji, Zhiyang Deng, Yueru He,
+Yuechen Jiang, Zining Zhu, Koduvayur Subbalak-
+shmi, Guojun Xiong, Jimin Huang, Lingfei Qian,
+Xueqing Peng, Qianqian Xie, and Jordan W. Su-
+chow. INVESTORBENCH: A benchmark for finan-
+cial decision-making tasks with LLM-based agent.
+arXiv preprint arXiv:2412.18174, 2024.
+[46] Tianyu Fan, Yuhao Yang, Yangqin Jiang, Yifei
+Zhang, Yuxuan Chen, and Chao Huang. AI-Trader:
+Benchmarking autonomous agents in real-time fi-
+nancial markets.arXiv preprint arXiv:2512.10971,
+2025.
+[47] Yuxuan Zhao, Sijia Chen, and Ningxin Su. Port-
+Bench: A correlation-aware, full-pipeline bench-
+mark for LLM-driven portfolio management.arXiv
+preprint arXiv:2605.27887, 2026.
+[48] Mostapha Benhenda. Look-Ahead-Bench: A
+standardized benchmark of look-ahead bias in
+point-in-time LLMs for finance.arXiv preprint
+arXiv:2601.13770, 2026.
+[49] Alejandro Lopez-Lira. Can large language mod-
+els trade? testing financial theories with LLM
+agents in market simulations.arXiv preprint
+arXiv:2504.10789, 2025.
+[50] Luyun Lin, Lixing Lin, Zhen Zhang, Moxuan Zheng,
+and Yiqing Wang. A volume-price-adjusted MACD
+trading strategy with sensitivity calibration for U.S.
+equity indices.arXiv preprint arXiv:2604.26063,
+2026.
+[51] Yingshuo Wang, Xian Sun, Lingdong Kong, Wei
+Gao, Yanhang Li, Zhichao Fan, and Zexin Zhuang.
+Do time series foundation model benchmarks hide
+regime-dependent failures? evidence from traffic
+speed forecasting, 2026.
+[52] Yingshuo Wang, Xian Sun, Yanhang Li, Zhichao
+Fan, and Zexin Zhuang. Embedding foundation
+model predictions in discrete-choice models with
+structural guarantees, 2026.
+[53] Advije Rizvani, Giovanni Apruzzese, and Pavel
+Laskov. Adversarial news and lost profits: Manipu-
+lating headlines in LLM-driven algorithmic trading.
+arXiv preprint arXiv:2601.13082, 2026. Accepted
+at IEEE SaTML 2026.
+[54] Andrea C. Tricco, Erin Lillie, Wasifa Zarin, Kelly K.
+O’Brien, Heather Colquhoun, Danielle Levac, David
+Moher, Micah D. J. Peters, Tanya Horsley, Laura
+Weeks, Susanne Hempel, Elie A. Akl, Christine
+Chang, Jessie McGowan, Lesley Stewart, Lisa
+Hartling, Adrian Aldcroft, Michael G. Wilson,
+Chantelle Garritty, Simon Lewin, Christina M. God-
+frey, Marilyn T. Macdonald, Etienne V. Langlois,
+Karla Soares-Weiser, Jo Moriarty, Tammy Clifford,
+Özge Tunçalp, and Sharon E. Straus. PRISMA ex-
+tension for scoping reviews (PRISMA-ScR): Check-
+list and explanation.Annals of Internal Medicine,
+169(7):467–473, 2018.
+[55] Matthew J. Page, Joanne E. McKenzie, Patrick M.
+Bossuyt, Isabelle Boutron, Tammy C. Hoffmann,
+Cynthia D. Mulrow, Larissa Shamseer, Jennifer M.
+Tetzlaff, Elie A. Akl, Sue E. Brennan, Roger Chou,
+Julie Glanville, Jeremy M. Grimshaw, Asbjørn
+Hróbjartsson, Manoj M. Lalu, Tianjing Li, Eliz-
+abeth W. Loder, Evan Mayo-Wilson, Steve Mc-
+Donald, Luke A. McGuinness, Lesley A. Stewart,
+James Thomas, Andrea C. Tricco, Vivian A. Welch,
+Penny Whiting, and David Moher. The PRISMA
+2020 statement: An updated guideline for reporting
+systematic reviews.BMJ, 372:n71, 2021.
+[56] Melissa L. Rethlefsen, Shona Kirtley, Siw Waf-
+fenschmidt, Ana Patricia Ayala, David Moher,
+Matthew J. Page, and Jonathan B. Koffel. PRISMA-
+S: An extension to the PRISMA statement for re-
+porting literature searches in systematic reviews.
+Systematic Reviews, 10(1):39, 2021.
+[57] Simona-Vasilica Oprea and Adela Bârã. A multi-
+agent system based on llm for trading financial as-
+sets. Ovidius University Annals Economic Sciences
+Series, 2025. Provisionally eligible record; metadata
+verified through OpenAlex.
+[58] Yuan Li, Bingqiao Luo, Qian Wang, Nuo Chen,
+Xu Liu, and Bingsheng He. A reflective llm-based
+agent to guide zero-shot cryptocurrency trading.
+RePEc: Research Papers in Economics, 2024. Pro-
+visionally eligible record; metadata verified through
+OpenAlex.
+[59] Agostino Capponi, Alfio Gliozzo, and Brian Zhu.
+Agentic ai for clustering, relationship discovery, and
+14
+semantic trading in prediction markets. arXiv (Cor-
+nell University), 2025. Provisionally eligible record;
+metadata verified through OpenAlex.
+[60] TarakRam Nunna and Ananya Samala. Agentic ai
+in commodity trading: A comparative simulation
+study. International Journal of Advanced Computer
+Science and Applications, 2025. Provisionally eligi-
+ble record; metadata verified through OpenAlex.
+[61] Ivan Letteri. Agenticaita: A proof-of-concept
+about deliberative multi-agent reasoning for au-
+tonomous trading systems. arXiv (Cornell Univer-
+sity), 2026. Provisionally eligible record; metadata
+verified through OpenAlex.
+[62] Ziyao Zhou and Ronitt Mehra. An end-to-end llm
+enhanced trading system. RePEc: Research Papers
+in Economics, 2025. Provisionally eligible record;
+metadata verified through OpenAlex.
+[63] Hangkai Zhang. Analysis of the application of large
+language models in three major fields: Trading and
+portfolio management, financial risk management,
+and financial text mining. Journal of innovation
+and development, 2026. Provisionally eligible record;
+metadata verified through OpenAlex.
+[64] Liyuan Chen, Shilong Li, Jiangpeng Yan, Shuoling
+Liu, Qiang Yang, and Xiu Li. Cn-buzz2portfolio:
+A chinese-market dataset and benchmark for llm-
+based macro and sector asset allocation from daily
+trending financial news. arXiv (Cornell University),
+2026. Provisionally eligible record; metadata verified
+through OpenAlex.
+[65] Hanyong Cho and Jang Ho Kim. Constructing a
+portfolio optimization benchmark framework for
+evaluating large language models. arXiv (Cornell
+University), 2026. Provisionally eligible record;
+metadata verified through OpenAlex.
+[66] Yoontae Hwang, Yaxuan Kong, Stefan Zohren, and
+Yongjae Lee. Decision-informed neural networks
+with large language model integration for portfolio
+optimization. RePEc: Research Papers in Eco-
+nomics, 2025. Provisionally eligible record; meta-
+data verified through OpenAlex.
+[67] Jiandong Chen, Haochen Luo, Yuan Zhang, Chen
+Liu, and Qingfu Zhang. Evolutionary factor search-
+ing for sparse portfolio optimization using large lan-
+guage models. arXiv (Cornell University), 2025. Pro-
+visionally eligible record; metadata verified through
+OpenAlex.
+[68] Qian Wang, Yuchen Gao, Zhenheng Tang, Bingqiao
+Luo, Nuo Chen, and Bingsheng He. Exploring llm
+cryptocurrency trading through fact-subjectivity
+aware reasoning. arXiv (Cornell University), 2024.
+Provisionally eligible record; metadata verified
+through OpenAlex.
+[69] David Byrd. Exploring sentiment manipulation
+by llm-enabled intelligent trading agents. arXiv
+(Cornell University), 2025. Provisionally eligible
+record; metadata verified through OpenAlex.
+[70] Ananya Unnikrishnan. Financial news-driven llm
+reinforcement learning for portfolio management.
+RePEc: Research Papers in Economics, 2024. Pro-
+visionally eligible record; metadata verified through
+OpenAlex.
+[71] Tian Guo and Emmanuel Hauptmann. Fine-tuning
+large language models for stock return prediction
+using newsflow. Conference on Empirical Methods
+in Natural Language Processing: Industry Track
+(EMNLP), 2024. Provisionally eligible record; meta-
+data verified through OpenAlex.
+[72] Kang Zhang, Osamu Yoshie, Lichao Sun, and
+Weiran Huang. Finllm-b: When large language
+models meet financial breakout trading. arXiv (Cor-
+nell University), 2024. Provisionally eligible record;
+metadata verified through OpenAlex.
+[73] B. Liu and Ronghao Dang. Finpos: A position-
+aware trading agent system for real financial mar-
+kets. arXiv (Cornell University), 2025. Provision-
+ally eligible record; metadata verified through Ope-
+nAlex.
+[74] Guojun Xiong, Zhiyang Deng, Keyi Wang, Yupeng
+Cao, Haohang Li, Yangyang Yu, Xueqing Peng,
+Mingquan Lin, Kaleb E Smith, Xiao-Yang Liu,
+Jimin Huang, Sophia Ananiadou, and Qianqian
+Xie. Flag-trader: Fusion llm-agent with gradient-
+based reinforcement learning for financial trading.
+OpenAlex-indexed source, 2025. Provisionally eligi-
+ble record; metadata verified through OpenAlex.
+[75] Taojie Zhu, Wentao Zhao, Rui Sun, Beidi Luan,
+Jiacheng Lu, Sinuo Wang, Jing Li, Daxin Jiang,
+Yonghong He, and Zuo Bai. From knowing to doing:
+A memory-controlled benchmark for llm trading
+agents on stock markets. arXiv (Cornell University),
+2026. Provisionally eligible record; metadata verified
+through OpenAlex.
+[76] Abrar Hossain, Mufakir Qamar Ansari, Haziq Jee-
+lani, Monia Digra, and Fayeq Jeelani Syed. From
+text to returns: Using large language models for mu-
+tual fund portfolio optimization and risk-adjusted
+allocation. arXiv (Cornell University), 2025. Provi-
+sionally eligible record; metadata verified through
+OpenAlex.
+[77] Xiangyu Li, Yawen Zeng, Xiaofen Xing, Jin Kai Xu,
+and Xixiong Xu. Hedgeagents: A balanced-aware
+15
+multi-agent financial trading system. RePEc: Re-
+search Papers in Economics, 2025. Provisionally eli-
+gible record; metadata verified through OpenAlex.
+[78] Renad Alsweed and Mohammed Alsuhaibani. Inte-
+grating large language models with deep reinforce-
+ment learning for portfolio optimization. Interna-
+tional Journal of Advanced Computer Science and
+Applications, 2025. Provisionally eligible record;
+metadata verified through OpenAlex.
+[79] Yoshia Abe, Shuhei Matsuo, Ryoma Kondo, and Ry-
+ohei Hisano. Leveraging large language models for
+institutional portfolio management: Persona-based
+ensembles. arXiv (Cornell University), 2024. Provi-
+sionally eligible record; metadata verified through
+OpenAlex.
+[80] Jean Direl nze kabeyene. Llm-gated finrl: Point-in-
+time risk auditing for reinforcement learning in high-
+beta portfolio trading. Research Square, 2026. Pro-
+visionally eligible record; metadata verified through
+OpenAlex.
+[81] Yichen Luo, Yebo Feng, Jiahua Xu, Paolo Tasca,
+and Yang Liu. Llm-powered multi-agent system for
+automated crypto portfolio management. RePEc:
+Research Papers in Economics, 2025. Provision-
+ally eligible record; metadata verified through Ope-
+nAlex.
+[82] Yurii Kvasiuk, Tianyi Li, Owen Colegrove, and
+Moritz Münchmeyer. Madevolve: Evolutionary op-
+timization of trading systems with large language
+models. arXiv (Cornell University), 2026. Provi-
+sionally eligible record; metadata verified through
+OpenAlex.
+[83] Marvin Luckianto and Alexander Agung Santoso
+Gunawan. Marag-fin: An intelligent multi-agent
+rag-llm architecture integrating financial news sen-
+timent and time series data for data-driven trading
+decision-making. International journal of intelligent
+engineering and systems, 2026. Provisionally eligible
+record; metadata verified through OpenAlex.
+[84] Abhay Kumar Srivastava, Sam Jung, and Spencer
+Mateega. Market-bench: Evaluating large lan-
+guage models on introductory quantitative trading
+and market dynamics. arXiv (Cornell University),
+2025. Provisionally eligible record; metadata verified
+through OpenAlex.
+[85] Jared Chan Xu Yang, Haokai Ma, and Yunshan Ma.
+Portfoliopilot: An agentic platform for financial
+portfolio management algorithm development and
+evaluation. Proceedings of the AAAI Conference on
+Artificial Intelligence, 2026. Provisionally eligible
+record; metadata verified through OpenAlex.
+[86] Avi Arora and Ritesh Malpani. Predictionmarket-
+bench: A swe-bench-style framework for backtesting
+trading agents on prediction markets. arXiv (Cor-
+nell University), 2026. Provisionally eligible record;
+metadata verified through OpenAlex.
+[87] Jingfeng Pan and Jiahao Chen. Qtmrl: An agent
+for quantitative trading decision-making based on
+multi-indicatorguidedreinforcementlearning. arXiv
+(Cornell University), 2025. Provisionally eligible
+record; metadata verified through OpenAlex.
+[88] Xiangyu Li, Yawen Zeng, Xiaofen Xing, Jin Kai
+Xu, and Xixiong Xu. Quantagents: Towards multi-
+agent financial system via simulated trading. arXiv
+(Cornell University), 2025. Provisionally eligible
+record; metadata verified through OpenAlex.
+[89] Xiwen Chen, Wenhui Zhu, Songzhu Zheng, Kashif
+Rasul, Yueyue Deng, and Huayu Li. Sharp: A
+self-evolving human-auditable rubric policy for fi-
+nancial trading agents. arXiv (Cornell University),
+2026. Provisionally eligible record; metadata verified
+through OpenAlex.
+[90] Weixian Waylon Li, Mengyu Wang, and Tiejun
+Ma. Summoning the oracle to slay it: Mitigat-
+ing look-ahead bias in financial backtesting with
+large language models. arXiv (Cornell University),
+2026. Provisionally eligible record; metadata verified
+through OpenAlex.
+[91] Kelvin J. L. Koa, Yunshan Ma, Yi Xu, Ritchie Ng,
+Huanhuan Zheng, and Tat-Seng Chua. Temporal
+relational reasoning of large language models for
+detecting stock portfolio crashes. RePEc: Research
+Papers in Economics, 2024. Provisionally eligible
+record; metadata verified through OpenAlex.
+[92] Yuxuan Ye, Jun Han, Ao Hu, Juncheng Bu,
+Yiyi Chen, Liangjian Wen, Danilo Mandic,
+Danny Dongning Sun, Xu Yinghui, and Zenglin
+Xu. The alpha illusion: Reported alpha from llm
+trading agents should not be treated as deployment
+evidence. arXiv (Cornell University), 2026. Provi-
+sionally eligible record; metadata verified through
+OpenAlex.
+[93] Zifan Song, Kaitao Song, Guosheng Hu, Qi Ding,
+Junyao Gao, Xiao Hua Wang, Dongsheng Li, and
+Cairong Zhao. Trade in minutes! rationality-driven
+agentic system for quantitative financial trading.
+arXiv (Cornell University), 2025. Provisionally eli-
+gible record; metadata verified through OpenAlex.
+[94] Zhengzhe Yang. When valid signals fail: Regime
+boundaries between llm features and rl trading poli-
+cies. OpenAlex-indexed source, 2026. Provision-
+ally eligible record; metadata verified through Ope-
+nAlex.
+16
+[95] Charidimos Papadakis. Adaptive multi-agent llm
+systems for financial trading: A framework for real-
+istic simulation and dynamic prompt optimization.
+DSpace - NTUA (National Technical University of
+Athens), 2026. Provisionally eligible record; meta-
+data verified through OpenAlex.
+[96] Wentao Zhang, Mingxuan Zhao, Jincheng Gao,
+Jieshun You, Huaiyu Jia, Yilei Zhao, Bo An, and
+Shuo Sun. Alphaforgebench: Benchmarking end-
+to-end trading strategy design with large language
+models. arXiv (Cornell University), 2026. Provi-
+sionally eligible record; metadata verified through
+OpenAlex.
+[97] P D Winder, Christian Hildebrand, and Jochen
+Hartmann. Biased echoes: Large language models
+reinforce investment biases and increase portfolio
+risks of private investors. PLoS ONE, 2025. Provi-
+sionally eligible record; metadata verified through
+OpenAlex.
+[98] Kaushik Yadav, Kaustubh Naik, Aditya Rane,
+and Om Shimpi. Regiquant: A multi-agent llm
+and reinforcement-learning system for regime-aware
+quantitative trading. International Research Jour-
+nal of Modernization in Engineering Technology
+and Science, 2026. Provisionally eligible record;
+metadata verified through OpenAlex.
+[99] Minghan Li, Rachel Gonsalves, Weiyue Li,
+Sunghoon Yoon, and Mengyu Wang. Trusttrade:
+Human-inspired selective consensus reduces decision
+uncertainty in llm trading agents. Research Square,
+2026. Provisionally eligible record; metadata verified
+through OpenAlex.
+[100] Zhichao Fan, Yanhang Li, Zexin Zhuang, Xian Sun,
+and Yingshuo Wang. The moving target: A longi-
+tudinal audit of trust-benchmark score drift across
+open-source chat LLM release lines, 2026.
+17

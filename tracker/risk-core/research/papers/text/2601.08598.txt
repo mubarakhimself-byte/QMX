@@ -1,0 +1,2243 @@
+arXiv 2601.08598  https://arxiv.org/abs/2601.08598
+
+Systemic Risk Surveillance∗
+Timo Dimitriadis† Yannick Hoga‡
+January 14, 2026
+Abstract
+Following several episodes of financial market turmoil in recent decades, changes in sys-
+temic risk have drawn growing attention. Therefore, we propose surveillance schemes
+for systemic risk, which allow to detect misspecified systemic risk forecasts in an “on-
+line” fashion. This enables daily monitoring of the forecasts while controlling for the
+accumulation of false test rejections. Such online schemes are vital in taking timely
+countermeasures to avoid financial distress. Our monitoring procedures allow multiple
+series at once to be monitored, thus increasing the likelihood and the speed at which
+early signs of trouble may be picked up. The tests hold size by construction, such that
+the null of correct systemic risk assessments is only rejected during the monitoring
+period with (at most) a pre-specified probability. Monte Carlo simulations illustrate
+the good finite-sample properties of our procedures. An empirical application to US
+banks during multiple crises demonstrates the usefulness of our surveillance schemes
+for both regulators and financial institutions.
+Keywords:CoVaR, Forecasting, Monitoring, Multiple Testing, Systemic Risk
+JEL classification:C52 (Model Evaluation, Validation, and Selection); G17 (Finan-
+cial Forecasting and Simulation); G32 (Financial Risk and Risk Management)
+1 Motivation
+The numerous financial crises of recent times and their severe economic reverberations have
+raised awareness of the importance of systemic risk (Adrian and Brunnermeier, 2016; Acharya
+et al., 2017; Van Oordt and Zhou, 2019). To better appreciate the difference between risk and
+∗The first author gratefully acknowledges support of the Deutsche Forschungsgemeinschaft (DFG, Ger-
+man Research Foundation) through grant 502572912 and the second author through grants 460479886,
+531866675 and 568876076. Replication material for the simulations and application is available on Github
+under https://github.com/TimoDimi/replication CoVaR Monitoring.
+†Faculty of Economics and Business, Goethe University Frankfurt, 60629 Frankfurt am Main, Germany,
+and Heidelberg Institute for Theoretical Studies, dimitriadis@econ.uni-frankfurt.de.
+‡Faculty of Economics and Business Administration, University of Duisburg-Essen, Universit¨ atsstraße 12,
+D–45117 Essen, Germany, yannick.hoga@vwl.uni-due.de.
+1
+arXiv:2601.08598v1  [econ.EM]  13 Jan 2026
+systemicrisk, consider the returns on shares of banks. While bank returns are often subject
+to higher volatility during crises (implying larger risk), this does not necessarily translate
+into increased commonality (implying largersystemicrisk). However, it is precisely the
+increased commonality that regulators have come to be most concerned about, as this may
+entail system-wide distress with potentially severe economic costs (Giglioet al., 2016).
+Therefore, it is important to evaluate systemic risk forecasts in the financial system.
+While classical financial “one-shot” backtests are designed for such forecast evaluations,
+under repeated application their statistical type I errors (false test rejections) accumulate
+over time—up to the point that a true null will be rejected with probability approaching one.
+As systemic risks are to be monitored continuously (e.g., daily), it is necessary to control
+accumulatedfalse rejections, aligning with recent interest in safe anytime-valid statistical
+inference (Shafer, 2021; Vovk and Wang, 2021; Ramdaset al., 2023; Wanget al., 2025). In
+this paper, we interchangeably call methods with “time-uniform” false rejection guarantees
+monitoring procedures, surveillance schemes or online tests.
+Despite the apparent need for systemic risk surveillance, there is a lack of statistically
+valid tools for this in the literature. It is the main aim of this paper to fill this gap by
+providing such tools and to show their validity. To the best of our knowledge, there only exist
+“one-shot” backtests that assess the adequacy of systemic risk forecasts (Banulescu-Radu
+et al., 2021; Fissler and Hoga, 2024). However, their rejection rates would accumulate under
+repeated application. We propose monitoring procedures for the most popular systemic risk
+measure, the conditional Value-at-Risk (CoVaR) of Adrian and Brunnermeier (2016), and
+the reverse CoVaR (RCoVaR). In Appendix B, we also develop monitoring schemes for the
+conditional expected shortfall (CoES) and marginal expected shortfall (MES) of Acharya
+et al.(2017).
+For the construction of the monitoring procedure for the CoVaR as the most important
+systemic risk measure, we draw on recent work of Fissler and Hoga (2024). They provide
+so-called identification functions that uniquely identify both the stand-alone risk and sys-
+2
+temic risk. Under the null hypothesis that the CoVaR forecasts are correctly specified (i.e.,
+calibrated), the probabilistic structure of the corresponding identification functions is fully
+known: they are independent and identically distributed (IID) Bernoulli random variables.
+This remains true without making any additional assumptions about the dynamic structure
+of the return series. As the probabilistic structure under the null is fully known, it can
+be used to simulate time-uniform and non-asymptotic critical values. The simulation-based
+construction is particularly useful as systemic risk events are rare by definition, such that
+standard asymptotic theory may not be relied upon to provide accurate approximations in
+finite samples (Hoga, 2019). We also extend our monitoring procedure to the CoVaR with
+reversed conditioning.
+Because the probabilistic structure of the identification functions for CoES and MES is
+not fully characterized under the null, a direct extension of our CoVaR monitoring scheme
+is infeasible. Instead, in Appendix B, we exploit a systemic-risk analogue of the classical
+cumulative violation sequenceused in Acerbi (2002), Du and Escanciano (2017), Duet al.
+(2024), among others. We show that, under the null, the full probabilistic structure of this
+sequence—namely its uniform-type distribution and independence—is known, which again
+enables the computation of non-asymptotic, time-uniform critical values via simulation.
+Our approach of constructing the CoVaR monitoring procedure is closely related to Hoga
+and Demetrescu (2023), who propose online detection schemes for singleunivariaterisk fore-
+casts, viz. Value-at-Risk (VaR) and expected shortfall (ES). However, we improve upon their
+procedure by using normalized detectors, and most importantly, extend their theory tosys-
+temicrisk measures. The latter necessitates monitoring multiple time series at once, whereas
+Hoga and Demetrescu (2023) only consider a single series. This multivariate monitoring ne-
+cessitates a Bonferroni-type correction to obtain critical values with finite-sample validity,
+which are not too conservative in practice. A further benefit of the Bonferroni correction is
+that it allows to attribute a monitoring alarm to a specific financial institution.
+Additional work that is related to ours are the monitoring procedures proposed by Wied
+3
+and Galeano (2013), Naet al.(2014) and Manneret al.(2020). These authors do, however,
+not focus on systemic risk itself, but only on quantities that can at best be described as
+crude approximations to it, such as correlation (Wied and Galeano, 2013) and the copula
+(Naet al., 2014; Manneret al., 2020). Moreover, these procedures rely on an initial period
+of non-contamination, which our approach does not require.
+Regarding calibration (backtesting) under repeated use, our work relates to the literature
+on safe and anytime-valid inference (SA VI) based on e-values. For VaR and ES, several e-
+value–based monitoring schemes have been proposed, but they do not extend tosystemicrisk
+measures. While e-value tests are typically valid indefinitely, they are often overly conser-
+vative. In contrast, our approach fixes the monitoring horizon and delivers non-asymptotic,
+simulation-based, and hence (almost) exact size control via (almost) exact critical values.
+Horv´ athet al.(2025) take yet another approach by proposing a sequential monitoring proce-
+dure for VaR and ES models that is, however, highly model-specific and based on asymptotic
+theory.
+Our Monte Carlo simulations use a realistic DCC–GARCH model (Engle, 2002) for the
+asset returns to demonstrate the good finite-sample properties of our monitoring procedures.
+Despite the use of a potentially conservative Bonferroni-type correction, the empirical size
+remains close to the nominal level—even in moderately high-dimensional settings, where
+numerous individual tests could, in principle, amplify such conservative tendencies. We also
+show that, under the null, the detector to first raise a false alarm pertains to the VaR or
+the CoVaR with equal probability. The simulations further demonstrate the high power
+of our procedures in identifying misspecified forecasts, again exhibiting a balanced pattern
+regarding which detector first signals a suboptimal predictive performance.
+In the empirical application, we apply our monitoring procedure to the stock returns of
+systemically relevant US banks. In doing so, we evaluate systemic risk forecasts from two
+competing multivariate GARCH models over a calm period and three turbulent episodes:
+the global financial crisis, the COVID-19 pandemic, and the recent US tariff period under
+4
+President Trump. The monitoring results indicate that the constant covariance structure
+of the simpler CCC–GARCH model is inadequate for capturing thesystemiccomponent
+of financial risk during such volatile periods, whereas the forecasts of the more flexible
+DCC–GARCH cannot be rejected.
+The remainder of the paper is structured as follows. Section 2 formally introduces the
+CoVaR and its reverse variant and our corresponding monitoring procedures. A related
+monitoring scheme for the CoES and MES is constructed in Appendix B. Simulations in
+Section 3 explore the finite-sample performance of our methods, and Section 4 presents the
+empirical application. Finally, Section 5 concludes. Next to our CoES and MES surveillance
+schemes in Section B, the appendix contains Section A with the proofs for our CoVaR
+procedures, and Section C that contains the algorithms to compute critical values.
+2 Systemic Risk Monitoring
+First, we define the systemic risk measures we consider in Section 2.1. Then, we introduce
+monitoring procedures for the CoVaR in Section 2.2, which we extend to the reverse CoVaR
+in Section 2.3. Surveillance schemes for the CoES and MES are presented in Appendix B.
+2.1 Defining Systemic Risk Measures
+Consider the to-be-monitored sequence of random variables
+
+(Xt, Y1t, . . . , YKt)′	t∈N, where
+K∈Nis the number of monitored variables. Here,Y kt (k= 1, . . . , K) stands for the log-
+losses of interest (e.g., the losses of a bank’s shares / losses of a business unit) andX t are
+the log-losses of some reference position (e.g., system-wide losses in the financial system /
+bank-wide losses of all business units). In a concrete monitoring situation, the variables at
+timet= 1,2. . .are still to be (sequentially) observed and are not yet available when setting
+up the surveillance scheme at timet= 0.
+LetF t =σ
+ 
+(Xt, Y1t, . . . , YKt)′,Z t,(X t−1, Y1,t−1, . . . , YK,t−1)′,Z t−1, . . . denote the time-t
+5
+information set with (possibly multivariate)Z t containing additional covariates. Further, we
+denote byF (Xt,Ykt)′|Ft−1(·,·) the cumulative distribution function (CDF) of (Xt, Ykt)′ | Ft−1 for
+k∈[K], where we use the shorthand notation [K] :={1, . . . , K}for anyK∈N. Throughout
+this paper, we assume that (X t, Ykt)′ | Ft−1 has a strictly positive Lebesgue density for all
+(x, y)∈R 2 such thatF (Xt,Ykt)′|Ft−1(x, y)∈(0,1). This assumption ensures that we do not
+have to rely on generalized inverses to compute our (quantile-based) risk measures, which
+we introduce next.
+Define the VaR as the quantile at levelβ∈(0,1) of the conditional distributionF Xt|Ft−1,
+i.e., VaR t,β =F −1Xt|Ft−1(β). The VaR is a popularunivariaterisk measure. Note that the
+inverseF −1Xt|Ft−1(·) exists thanks to our assumption on the distribution of (X t, Ykt)′ | Ft−1.
+We now introduce the systemic risk measures CoVaR and its reverse variant that we
+denote by RCoVaR. The stress event in the definition of all these measures is that the loss
+of the reference position exceeds its VaR, i.e.,{X t ≥VaR t,β}. Then, we define the CoVaR
+of thek-th seriesY kt as
+CoVaRkt,α|β =F −1Ykt|Xt≥VaRt,β ,Ft−1(α),(1)
+whereF Ykt|Xt≥VaRt,β ,Ft−1(·) =P{Y kt ≤ · |Xt ≥VaR t,β,F t−1}, andα∈(0,1). As for
+the VaR, our assumption on the CDF of (X t, Ykt)′ | Ft−1 ensures that the inverse in (1)
+exists. Note that the CoVaR is simply theα-VaR of the distribution ofY kt conditionalon
+{Xt ≥VaR t,β}, i.e., conditional onX t beingin distress. Without the conditioning on the
+distress event{X t ≥VaR t,β}(or, equivalently, withβ= 0), the CoVaR reduces to the VaR
+ofY kt, such that CoVaR t,α|0 =F −1Ykt|Ft−1(α). SinceX t denotes financial losses, we typically
+consider values forαandβclose to one for the CoVaR to capture (downside) systemic risk
+(e.g.,α=β= 0.95). Whenα=βwe simply write CoVaR kt,α = CoVaRkt,α|α.
+Following among others Girardi and Tolga Erg¨ un (2013), Nolde and Zhang (2020) and
+Banulescu-Raduet al.(2021), our CoVaR definition deviates from the original one of Adrian
+and Brunnermeier (2016), who use{X t = VaRt,β}as the stress event. This latter choice is
+6
+problematic because it often has probability zero and it does not fully incorporate all tail
+events ofX t. We refer to Dimitriadis and Hoga (2025, Section 2.1) for a detailed account of
+the advantages of the definition in (1).
+The above interpretation of the CoVaR in (1) withY kt as losses of financial institutions
+andX t as market losses coincides with what Adrian and Brunnermeier (2016, Sec. II.D) call
+theExposure CoVaR, and it measures how institutionkisexposedto market risk. A regulator
+might however also be interested in the reverse direction, i.e., how an individual bankaffects
+the market. Therefore, we additionally define the CoVaR withreverseconditioning as
+RCoVaRkt,α|β =F −1Xt|Ykt≥VaRkt,β ,Ft−1(α), k∈[K],(2)
+where VaRkt,β =F −1Ykt|Ft−1(β) is now specific to institutionk. The reverse CoVaR in (2) mea-
+sures the impact of distress in bankkon the general market, which corresponds to the notion
+of banks as transmitters of systemic risk. In contrast, our initial CoVaR definition views
+banks as receivers of systemic risk. Of course, both definitions reveal useful information, and
+which definition is more suitable depends on the context.
+2.2 CoVaR Monitoring
+We now propose procedures for monitoring the correct specification of CoVaR forecasts.
+Importantly, the monitoring should be carried out in anonlinefashion, i.e., sequentially
+as new observations become available. Classical backtests with asymptotic validity based
+on a test statisticZ T with sample sizeTand critical valuec ι for significance levelι∈
+(0,1) require that under the null hypothesis of correct specification,H 0, the asymptotic
+rejection probability limT→∞ PH0{ZT > cι} ≤ιis belowι. In contrast, sequentialmonitoring
+proceduressatisfy the stronger non-asymptotic notion
+PH0
+
+∃T∈ I: ZT > cι
+	
+≤ι.(3)
+7
+1 m n − m + 1 n
+Day
+Figure 1: Illustration of the Monitoring Windows.
+This implies that even though the test decision is monitored every trading day—not unusual
+in a risk management context—theaccumulatedprobability of a false rejection (type I error)
+remains controlled. We will achieve suchfinite sampletype I error guarantees in (3) by
+constructing detectors (essentially: test statistics), whose probabilistic structure is (almost)
+fully known under the null hypothesis, such that exact critical values can be calculated.
+In a practical monitoring situation, we are about to sequentially observe
+(X1, Y11, . . . , YK1)′, . . . ,(Xn, Y1n, . . . , YKn)′ at times (trading days) 1, . . . , n. Our monitor-
+ing procedure defined below requires arolling monitoring windowof fixed lengthm≤n, as
+illustrated by the blue bars in Figure 1. Thus, at eachmonitoring timeT∈ {m, . . . , n}—the
+endpoint of a given monitoring window—the procedure relies on the window spanning the
+times{T−m+ 1, . . . , T}. We only start monitoring when the first full window ofmtrading
+days is available at timeT=m. While starting earlier with an initially expanding window
+would be possible, this would come at the cost of an explosion of technicalities, which we
+avoid for better readability.
+We now formalize the null hypothesis ofrisk measure forecast adequacy, which is closely
+related to the statistical notion of conditional forecast calibration; see Gneiting and Resin
+(2023) for a recent and detailed treatment of forecast calibration. The strongest notion of
+idealforecasts dVaRt,β and \CoVaRkt,α|β for the VaR and CoVaR is given by
+H CoVaR0 : dVaRt,β = VaRt,β and \CoVaRkt,α|β = CoVaRkt,α|β, k∈[K], t∈N.
+We synonymously refer to this null as testing ideal forecasts, correct specification or calibra-
+8
+tion.
+Clearly,H CoVaR0 is not directly testable, because the true VaR t,β and CoVaR kt,α|β are
+not observable evenex post. To circumvent this, we exploit the existence of a strict iden-
+tification function for the CoVaR (jointly with the VaR), given in Fissler and Hoga (2024,
+Theorem S.3.1),
+V
+ 
+(v, c)′,(x, y)′ =
+
+ 1{x≤v} −β
+1{x>v}
+
+1{y≤c} −α
+
+
+ .(4)
+Identification functions are at the heart of many classical backtests (Nolde and Ziegel, 2017).
+The property that renders them useful in testing calibration is that their (conditional) ex-
+pectation is zeroif and only ifthe true (conditional) VaR and CoVaR are inserted. More
+precisely, Fissler and Hoga (2024, Theorem S.3.1) show that
+E
+h
+V
+ 
+(v, c)′,(X t, Ykt)′  Ft−1i =0⇐ ⇒v= VaR t,β andc= CoVaR kt,α|β
+under our conditions on the CDF of (X t, Ykt)′ | Ft−1. Hence, the relevant implication in
+monitoring calibration becomes
+E
+
+V
+
+
+
+ dVaRt,β
+\CoVaRkt,α|β
+
+ ,
+
+Xt
+Ykt
+
+
+
+
+ Ft−1
+
+ =0for allk∈[K], t∈N.(5)
+The following result shows that the full, joint probabilistic properties of the indicators
+It :=1 {Xt> dVaRt,β } andI kt :=1 {Xt> dVaRt,β , Ykt> \CoVaRkt,α|β } (6)
+is known under the null hypothesisH CoVaR0 .
+Proposition 1.UnderH CoVaR0 , it holds for allk∈[K]that
+
+(It, Ikt)′	t∈N d= (1{U1t>β},1 {U1t>β, U2t>α})′	t∈N,(7)
+whereU it
+IID
+∼ U[0,1]are independent of each other fori= 1,2and allt∈N.
+9
+As the full probabilistic structure of
+
+(It, Ikt)′	t∈N is known for eachk∈[K] individu-
+ally, the result of Proposition 1 can be used for our monitoring procedure to simulate critical
+values that are valid in a monitoring sense (3) without the need for asymptotic approxima-
+tions. Importantly, the binary nature of the CoVaR identification function in (4) facilitates
+such a treatment, while remaining agnostic about the (conditional) distributions ofX t and
+Ykt. Since forK >1, Proposition 1 stays silent on the dependence structure between the
+contemporaneousI kt andI k′t withk̸=k ′, we will exploit a Bonferroni-type correction in
+Theorem 1 below.
+For a (prospective) monitoring sample of sizen∈N, Proposition 1 leads to the testable
+implications ofH CoVaR0 that
+It
+IID
+∼Bern(1−β) andI kt
+IID
+∼Bern
+ 
+(1−α)(1−β)
+
+, k∈[K], t∈[n],(8)
+where Bern(γ) denotes a Bernoulli distribution with success probabilityγ∈(0,1).
+Remark 1(V aR monitoring for the CoV aR).In CoVaR monitoring, it is crucialnot
+to disregard the VaR indicatorI t in (8), even though superficially it only concerns the VaR
+while not being directly related to the CoVaR. To see why, consider probability levelsα ′ ̸=α
+andβ ′ ̸=βsatisfying (1−α ′)(1−β ′) = (1−α)(1−β). Then, by the same arguments leading
+to (8),I ′kt :=1 {Xt>VaRt,β′ , Ykt>CoVaRkt,α′|β′ } IID∼Bern  (1−α ′)(1−β ′) = Bern  (1−α)(1−
+β)
+
+. Therefore, the true CoVaR kt,α|β are indistinguishable from the incorrect CoVaR kt,α′|β′,
+becauseI kt andI ′kt are both IID with the same Bern  (1−α)(1−β) -distribution. This
+would allow the possibility of completely misspecified CoVaR forecasts not being detected
+by a monitoring procedure that disregardsI t. Thus, it is vital to also monitor for VaR
+calibration viaI t
+IID
+∼Bern(1−β)̸= Bern(1−β ′).
+We now explain the construction of a VaR detector that monitorsI t
+IID
+∼Bern(1−β) from
+(8), and continue with a CoVaR detector below. For monitoring the VaR-specific sequence
+It, we adapt the method of Hoga and Demetrescu (2023) and use a moving sum (MOSUM)
+10
+detector inspired by the one-shot backtest of Kr¨ amer and Wied (2015) of the form
+VaR(T) =aVaR uc(T) + (1−a) VaR iid(T),(9)
+whereT∈ {m, . . . , n}anda∈(0,1) with canonical choicea= 0.5. The constantais a user-
+specified parameter that allows to vary the sensitivity of the procedure towards violations
+of correct unconditional calibration (i.e.,E[I t] = 1−β) and violations of IIDness of theI t.
+These two properties are assessed by VaR uc(T) and VaR iid(T), respectively. The length of
+the rolling monitoring window is denoted bym∈N, but the dependence of VaR(T) onmis
+not made explicit for notational brevity.
+For VaRuc(T) in (9), we choose the standardized detector
+VaRuc(T) = VT −E H CoV aR0 [VT ]q
+VarH CoV aR0 (VT )
+withV T =
+ 1m TXt=T−m+1 It −(1−β) , T≥m.(10)
+The mean,E H CoV aR0 [VT ], and variance, Var H CoV aR0 (VT ), are obtained from simulations as the
+full probabilistic structure ofI t is known underH CoVaR0 ; see (8). The standardization in
+VaRuc(T) differs from Hoga and Demetrescu (2023) and is used to better balance the sensi-
+tivity of the two detectors in (9). In contrast toE H CoV aR0 [VT ] and VarH CoV aR0 (VT ), the sequence
+VT has to be computed from the data (i.e., observations and appertaining forecasts) and is
+responsible for giving the procedure its power. Specifically,V T is designed to uncover de-
+viations fromE[I t] = 1−β, i.e., correct unconditional calibration. By construction, large
+values of VaR uc(T) provide evidence against the null, where deviations in both directions
+(i.e.,E[I t]>1−βandE[I t]<1−β) raise an alarm. 1
+For VaRiid(T) in (9), we consider the durationsd i :=t i −t i−1 (t0 :=T−m) between
+VaR violation times in the window{T−m+ 1, . . . , T}. These are defined as
+{t1, . . . , tST }=
+
+t∈ {T−m+ 1, . . . , T}: It = 1	,
+1One could also consider one-sided detectors here. However, we refrain from doing so, because it remains
+unclear how a too conservative (and, hence, classically acceptable) misspecification of VaR forecasts interact
+with the validity of the CoVaR forecasts in light of the joint identification function in (4); also see Wang
+et al.(2025, Remark 2).
+11
+whereS T := PTt=T−m+1 It counts the number of VaR violations in the window{T−m+
+1, . . . , T}. As a measure of the “inequality” between the durationsdi, we follow Kr¨ amer and
+Wied (2015) and use the Gini coefficient
+gT =
+1
+S2T
+PST
+i,j=1 |di −d j|
+2d ,with d= 1ST
+STX
+i=1
+di.
+The detector for the second part of (9) then is the standardized Gini coefficient
+VaRiid(T) = gT −E H CoV aR0 [gT ]q
+VarH CoV aR0 (gT )
+,
+whereE H CoV aR0 [gT ] and Var H CoV aR0 (gT ) are the mean and variance, respectively, ofg T under
+the null. As above, these moments are derived from Monte Carlo simulations, and it is only
+gT itself that is computed from the data.
+The idea underlying the use of VaR iid(T) is to test the IID property ofI t by considering
+the spacing between the VaR exceedances (i.e., thosetfor whichI t = 1). Unevenly spaced
+exceedances with large values for the Gini coefficient (and, hence, large values of VaR iid(T))
+weigh against IIDness. Note that in principle also too evenly spaced exceedances (with small
+values for the Gini coefficient) provide evidence againstH CoVaR0 . However, such a violation
+of the null is of no concern in risk management, where only a clustering of exceedances is
+seen as problematic (see, e.g., Kr¨ amer and Wied, 2015, Fig. 1).
+To also monitor the CoVaR forecasts, i.e., to sequentially testIkt
+IID
+∼Bern
+ 
+(1−α)(1−β)
+
+from (8), we use the same strategy as for monitoring VaR predictions. Therefore, we define
+the CoVaR detectors CoVaRk(T) for anyk∈[K] similarly as the VaR detector VaR(T):
+CoVaRk(T) =aCoVaR uck (T) + (1−a) CoVaR iidk (T).(11)
+Here, the right-hand side quantities are defined in analogy to those in (9), with the only
+difference thatI kt replacesI t, and (1−α)(1−β) replaces 1−βat every occurrence.
+The following theorem shows how the probability of a false detection in the sense of (3)
+can be bounded uniformly over time and over different institutionsk∈[K], for which the
+12
+CoVaR is forecasted.
+Theorem 1.For any significance levelι∈(0,1), it holds that
+PH CoV aR0
+n
+∃T∈ {m, . . . , n}: VaR(T)≥v
+orCoVaR k(T)≥c k for somek∈[K]
+o
+≤ι,(12)
+if the critical valuesvand thec k’s are chosen such, that
+PH CoV aR0
+n
+sup
+T=m,...,n
+VaR(T)≥v
+o
++
+KX
+k=1
+PH CoV aR0
+n
+sup
+T=m,...,n
+CoVaRk(T)≥c k
+o
+−
+KX
+k=1
+PH CoV aR0
+n
+sup
+T=m,...,n
+VaR(T)≥v,sup
+T=m,...,n
+CoVaRk(T)≥c k
+o
+=ι.(13)
+In other words, Theorem 1 shows that size at levelι∈(0,1) is controlledin finite samples
+if we rejectH CoVaR0 as soon as either
+VaR(T)≥vor CoVaR k(T)≥c k for someT=m, . . . , n, k∈[K].
+The two probabilities in the upper row of (13) are associated with a standard Bonferroni
+correction for testing theK+ 1 hypotheses of calibration of dVaRt,β and \CoVaRkt,α|β fork∈
+[K]. However, the presence of thenegativethird term on the right-hand side of (13) allows
+for a less conservative—and, hence, potentially more powerful—procedure. We mention that
+there may not existvandc k, such that the equality in (13) holds exactly, because of the
+binary nature of the detectors. Therefore, in practicevandc k should be chosen to lead to
+a sum that is smaller but as close as possible toι; see also step 5 in Algorithm 1 below.
+For the practical computation of the critical valuesvandc k, we use the following Algo-
+rithm 1, which approximates the probabilities in (13) by using the probabilistic structure in
+(7) to sample under the null.
+Algorithm 1.To compute critical values for Theorem 1 proceed as follows:
+1. Generate a large numberBof mutually independent samples
+
+U1t
+IID
+∼ U[0,1]
+	
+t∈[n] and
+13
+
+U2t
+IID
+∼ U[0,1]
+	
+t∈[n].
+2. Compute theBsequences
+
+I ∗t =1 {U1t>β}	t∈[n] and I ∗1t =1 {U1t>β, U2t>α}	t∈[n].
+3. Forb= 1, . . . , B, calculate:
+i.sup T=m,...,n VaRb(T), whereVaR b(T)is defined asVaR(T), except that{I t}is
+replaced by theb-th sample from{I ∗t }from step 2 of this algorithm;
+ii.sup T=m,...,n CoVaRb(T), whereCoVaR b(T)is defined asCoVaR 1(T), except that
+{I1t}is replaced by theb-th sample from{I ∗1t}from step 2 of this algorithm.
+4. On a fine grid forν∈[0,1], compute the empirical(1−ν)-quantiles of
+i.
+
+supT=m,...,n VaRb(T) 	b∈[B], which we denote byv(ν), and
+ii.
+
+supT=m,...,n CoVaRb(T) 	b∈[B], which we denote byc(ν).
+5. Find the valueν∈[0,1]for which
+1
+B
+BX
+b=1
+1 supT=m,...,n VaRb(T)≥v(ν) 	 + KB
+BX
+b=1
+1 supT=m,...,n CoVaRb(T)≥c(ν) 	
+− KB
+BX
+b=1
+1 supT=m,...,n VaRb(T)≥v(ν),sup T=m,...,n CoVaRb(T)≥c(ν) 	
+is equal to (or smaller than)ι; cf.(13). The appertaining critical values will be denoted
+byv CoVaR andc CoVaR.
+The above algorithm also overcomes the theoretical ambiguity that there exists a contin-
+uum of critical valuesvandc k that ensure the probabilities in (13) sum toι. In principle, such
+a continuum allows to weight the importance of the VaR and CoVaR hypotheses. However,
+the fourth step in Algorithm 1 advocates a natural approach that balances the importance
+of VaR and CoVaR by choosingvandc k to correspond to some (1−ν)-quantile of the vari-
+ables supT=m,...,n VaR(T) and sup T=m,...,n CoVaRk(T), respectively. Then,νin step 5 simply
+has to be chosen to ensure that the probabilities in (13) sum toι. Note that this entails
+14
+the computation of two critical values only—one for the VaR (writtenv CoVaR) and one for
+the CoVaR (writtenc CoVaR), where the latter one is the same for allk∈[K], because the
+distribution ofI kt
+IID
+∼Bern
+ 
+(1−α)(1−β)
+
+is independent ofk. These critical values have the
+superscript “CoVaR” to distinguish them from critical values used for monitoring different
+systemic risk measures.
+Clearly, the use of Boole’s inequality forK >1 (in the proof of Theorem 1) implies
+that our monitoring procedure is conservative, indicated by theinequalityin (12). Only for
+K= 1, this becomes an equality such that size is kept exactly. While a conservative test
+reduces the probability of actually making a type I error, this usually has the drawback of
+increasing the probability of a type II error, such that the ability to identify (systemic) risk
+changes is reduced. However, we show in simulations in Section 3 that our procedure is not
+too conservative for values ofKrepresentative of practical applications.
+A possible reason for the good performance of the Bonferroni correction is explained by
+Holm (1979), who states that: “The power gain obtained by using a sequentially rejective
+Bonferroni test [based on orderingp-values] instead of a classical Bonferroni test depends
+very much upon the alternative. It is small if all the hypotheses are ‘almost true’, but it may
+be considerable if a number of hypotheses are ‘completely wrong’.” In our case, systemic risk
+builds up slowly for all banks, rendering all hypotheses ’almost true’ at first, thus leading to
+good detection properties of our simple Bonferroni-type corrections.
+The use of the Bonferroni-type correction has two further advantages. First, it ensures
+controlled size in finite samples. In particular, we do not have to rely on large-sample
+asymptotics, which may be unreliable in backtesting contexts (Hoga, 2019). Second, the
+Bonferroni correction allows us to attribute a rejection of the null to a specific institution.
+For instance, if the detector CoVaR k∗ for somek ∗ ∈[K] is the first to raise an alarm, the
+rejection of the null can be pinpointed to bankk ∗. Of course, precisely identifying the most
+vulnerable institution is of utmost importance in systemic risk analysis. 2
+2A further implication ofH CoVaR0 is thatI s andI kt are independent fors̸=t. We do not explicitly reflect
+this implication in the construction of our detectors. While doing so may increase the power of the detector
+15
+Remark 2(Flexibility of detector specification).Other CoVaR monitoring detectors
+VaR(T) and CoVaRk(T) depending solely on
+
+(It, Ikt)′	t∈[n] can be constructed that preserve
+the accumulated type I error control in (3); compare Algorithm 1. This flexibility enables the
+construction of detectors specifically tailored to the particular form of misspecification one
+aims to detect. The same observation applies to the monitoring procedures for the RCoVaR
+in Section 2.3, and CoES and MES in Appendix B.
+2.3 CoVaR Monitoring with Reversed Conditioning
+Section 2.2 focuses on a monitoring procedure for the CoVaR in (1), which measures the
+individual exposure of (e.g., financial institution)Y kt onto the joint (market)X t. Now, we
+consider monitoring of the RCoVaR in (2), which measures the effect the individual (e.g.,
+financial institution)Y kt has on the joint (market)X t.
+Similarly as above, for given VaR forecasts dVaRkt,β and RCoVaR forecasts \RCoVaRkt,α|β,
+the null is
+H RCoVaR0 : dVaRkt,β = VaRkt,β and \RCoVaRkt,α|β = RCoVaRkt,α|β, k∈[K], t∈N.
+Employing analogous arguments as in Section 2.2, we rely on a testable impli-
+cation ofH RCoVaR0 that is based on the indicatorsI vkt :=1 {Ykt> dVaRkt,β } andI ckt :=
+1{Ykt> dVaRkt,β , Xt> \RCoVaRkt,α|β }. Specifically, we have the following analog to Proposition 1.
+Proposition 2.UnderH RCoVaR0 , it holds for allk∈[K]that
+
+(I vkt, Ickt)′	t∈N d= (1{U1t>β},1 {U1t>β, U2t>α})′	t∈N,
+whereU it
+IID
+∼ U[0,1]are independent of each other fori= 1,2and allt∈N.
+The proof is similar to that of Proposition 1 and, hence, omitted. Proposition 2 sug-
+gests the following surveillance approach. VaR changes may be monitored via the detector
+(depending, of course, on the specific type of alternative), this would again render infeasible the attribution
+of a rejection ofH CoVaR0 to a specific institution.
+16
+VaRk(T), which is defined in analogy to VaR(T) at (9) withI t replaced byI vkt. Similarly,
+CoVaR surveillance now uses the detector RCoVaR k(T), where the definition is identical to
+that of CoVaRk(T) at (11) except thatI ckt is used in place ofI kt.
+Theorem 2.For any significance levelι∈(0,1), it holds that
+PH RCoV aR0
+n
+∃T∈ {m, . . . , n}: VaRk(T)≥v k
+orRCoVaR k(T)≥c k for somek∈[K]
+o
+≤ι,(14)
+if the critical valuesv k andc k are chosen such, that
+KX
+k=1
+PH RCoV aR0
+n
+sup
+T=m,...,n
+VaRk(T)≥v k
+o
+∪
+n
+sup
+T=m,...,n
+RCoVaRk(T)≥c k
+o
+=ι.(15)
+As in Section 2.2, almost the full probabilistic structure of the detectors is known under
+H RCoVaR0 , such that the probabilities in (15) and, thereby, the critical valuesv k andc k can
+be computed explicitly via simulations. For this, we employ Algorithm 2 in Appendix C,
+which is very similar to Algorithm 1, but takes into account the differences between (13) and
+(15). Again, Algorithm 2 only computes two critical values—one for the VaR component
+(vRCoVaR), and one for the RCoVaR component (c RCoVaR).
+As in Theorem 1, our procedure is less conservative than a standard Bonferroni correction.
+Recall that a Bonferroni correction suggests monitoring each of the 2Khypotheses at a
+significance level ofι/(2K), such that the total probability of rejection under the null is
+bounded from above byι. In contrast, our monitoring scheme based on Theorem 2 is less
+conservative because the sum in (15) is less than the “Bonferroni sum”, i.e.,
+KX
+k=1
+PH RCoV aR0
+n
+sup
+T=m,...,n
+VaRk(T)≥v k
+o
+∪
+n
+sup
+T=m,...,n
+RCoVaRk(T)≥c k
+o
+≤
+KX
+k=1
+
+PH RCoV aR0
+n
+sup
+T=m,...,n
+VaRk(T)≥v k
+o
++P H RCoV aR0
+n
+sup
+T=m,...,n
+RCoVaRk(T)≥c k
+o
+.
+Remark 3(Model-estimation error).We intentionally exclude model-estimation error
+from the uncertainty quantification of our detectors. Consequently, we treat the forecasts
+17
+as the outcome of a particular modeling choice—including its estimation—and therefore
+evaluate the forecasting model and the estimation method jointly as in Diebold and Mariano
+(1995), Giacomini and White (2006) and Rossi and Sekhposyan (2019). In this sense, the risk
+forecasts are regarded as the final product that must satisfy the respective null hypotheses,
+irrespective of the underlying model and its estimation. This approach parallels Hoga and
+Demetrescu (2023), who provide several arguments in favor of this practice for monitoring
+risk forecasts, all of which carry over directly to the present setting. See Figure 4 for an
+analysis of our procedures’ sensitivity to model-estimation error.
+3 Simulations
+Here, we investigate size and power of our monitoring procedures. We place a particular
+emphasis on studying size, because Bonferroni-type corrections—such as those underlying
+our monitoring schemes—are known to be conservative when many hypotheses are tested.
+3.1 The DCC–GARCH Data-Generating Process
+We simulate the variables
+
+(Xt, Y1t, . . . , YKt)′	t=−E+1,...,n from a DCC–GARCH model of
+Engle (2002). The sequence consists ofE∈Ntime points for model estimation (used in
+one simulation setting), andn∈Ntime points for generating forecasts and their evaluation.
+The data-generating process (DGP) is
+Wt := (Xt, Y1t, . . . , YKt)′ =D tεt,ε t | Ft−1 ∼t ν(Rt),
+whereD 2t is theF t−1-measurable diagonal matrix containing the componentwise conditional
+variances ofW t | Ft−1, the matrixR t is the conditional correlation ofW t | Ft−1, andt ν(Rt)
+denotes the multivariatet-distribution with degrees of freedom equal toν >2, correlation
+matrixR t and marginals standardized to have zero mean and unit variance. Therefore, the
+conditional variance-covariance matrix ofW t | Ft−1 isH t =D tRtDt. The matricesD t and
+18
+Rt are modeled in the DCC–GARCH fashion of Engle (2002) as
+D2t = diag(ωG) + diag(αG)◦W t−1W ′t−1 + diag(βG)◦D 2t−1,
+Qt = Q(1−α Q −β Q) +α Qεt−1ε′t−1 +β QQt−1,
+Rt = diag(Qt)−1/2Qt diag(Qt)−1/2,
+where Qis the unconditional correlation matrix of the “devolatilized” seriesε t−1, and diag(a)
+and diag(A) denote the diagonal matrices containing the elements of the vectoraand the
+diagonal elements of the matrixA, respectively. Note that both the conditional variance
+matrixD 2t and the conditional correlation matrixR t evolve in a GARCH-type fashion (the
+latter through the recursion forQ t).
+We parametrize the process as follows: We choose Qto be the matrix with ones on
+the main diagonal and 0.5 elsewhere (i.e., an equicorrelation matrix), such that the uncon-
+ditional correlation between any two elements ofε t equals 0.5. Furthermore, we fix the
+parametersν= 5,ω G = (0.1, . . . ,0.1)′,α G = (0.1, . . . ,0.1)′, andα Q = 0.1. In contrast, the
+autoregressive parametersβ G = (βG,1, . . . , βG,K+1)′ andβ Q vary over time. Specifically,
+βG,i =β G,i,t =
+
+
+
+0.7, t≤t ∗,
+βpost, t > t∗,
+andβ Q =β Q,t =
+
+
+
+0.7, t≤t ∗,
+βpost, t > t∗,
+(16)
+such that there is an upward change in the persistences at timet ∗ ∈[n]. In the baseline
+simulation setup, we fixβ post = 0.85.
+Through (16), we misspecify the dynamics of the process, which will then be picked up
+by the monitoring procedure. Of course, ift ∗ =n, then there is no structural change in the
+sample, and the systemic risk forecasts (issued from the estimates of the initial fixed window)
+are correctly specified. Hence, except for the estimation error, the forecasts are correctly
+specified, such that a rejection probability close to the nominal level should be expected.
+19
+3.2 Systemic Risk Forecasts from DCC–GARCH Models
+For generating the forecasts, we either use fixed DCC–GARCH parameters or (in one setup)
+estimate the parameters based on a sample
+
+(Xt, Y1t, . . . , YKt)′	t=−E+1,...,0 of lengthEby
+using theRpackagermgarch(Galanos, 2022). In doing so, we estimate the marginals via
+standard Gaussian quasi-maximum likelihood estimation (to obtainK+ 1 estimates ofω G,i,
+αG,i andβ G,i). The dependence parameters (ν,α Q andβ Q) are estimated in a second step
+using a multivariatet-assumption for theε t.
+Given DCC-forecasts (either based on fixed or estimated model parameters) for bDt,
+bRt and cHt, we obtain the VaR forecasts at timetas dVaRt,β = bD−1t,11qtν (β), whereq tν (β)
+denotes theβ-quantile of the univariatet ν-distribution with unit variance and (either fixed
+or estimated) degrees of freedomν. For the CoVaR forecasts, we are not aware of a closed-
+form solution. Instead, we apply a root finding algorithm to approximate \CoVaRkt,α|β via
+P
+n
+Ykt ≥ \CoVaRkt,α|β, Xt ≥ dVaRt,β
+ Ft−1o −(1−α)(1−β) = 0.(17)
+The probability in (17) is taken with respect to (X t, Ykt)| F t−1 ∼t ν(cHt,k), where
+cHt,k =  (cHt,11, cHt,1(k+1))′ |( cHt,1(k+1), cHt,(k+1)(k+1))′ consists of the respective entries of the
+forecasted variance-covariance matrix cHt. Based on the forecasts dVaRt,β and \CoVaRkt,α|β,
+we compute the VaR and CoVaR indicators as described in Sections 2.2–2.3.
+3.3 Simulation Results under the Null Hypothesis
+All following results are based on 5000 simulation replications. We first fixn= 1000,t ∗ =n,
+m= 250, and generate the systemic risk forecasts based on the correct DCC–GARCH
+parameters from the “pre-break” period such that we omit parameter estimation noise. We
+deliberately do not compare against one-shot systemic risk backtests of, e.g., Banulescu-
+Raduet al.(2021) and Fissler and Hoga (2024) since these—opposed to our monitoring
+procedure—accumulate type I errors when applied repeatedly.
+The columns “Joint” in Tables 1 and 2 show the rejection rates of the CoVaR and RCoVaR
+20
+α=β KJoint VaR CoVaR for series numberk
+1 2 3 4 5 6 7 8 9 10
+0.9
+1 10.00 5.30 4.70
+2 10.28 3.30 3.46 3.56
+5 7.58 1.46 1.14 1.32 1.40 1.10 1.32
+10 8.36 0.78 0.92 0.74 0.96 0.80 0.64 0.54 0.88 0.86 0.78 0.58
+0.95
+1 9.62 4.28 5.36
+2 9.26 3.46 3.04 2.82
+5 8.24 1.56 1.22 1.24 1.38 1.50 1.52
+10 6.38 0.68 0.66 0.60 0.52 0.74 0.60 0.52 0.46 0.68 0.70 0.50
+Table 1: Joint and disaggregatedfirstrejection rates (in percent) of our CoVaR surveillance proce-
+dure under the null hypothesis of correctly specified forecasts. Results are reported for a nominal
+level ofι= 10%, forK∈ {1,2,5,10}andα=β∈ {0.9,0.95}. The column “VaR” reports the
+percentage of cases in which the VaR detector raised the first alarm, while the columns labeled
+“1”–“10” report the corresponding first-alarm rates of the respective CoVaR detectors.
+Series numberk
+α=β KJoint Measure 1 2 3 4 5 6 7 8 9 10
+2 9.32 VaR 2.22 2.48RCoVaR 2.32 2.44
+0.9 5 6.96 VaR 0.70 0.88 0.62 0.92 1.06RCoVaR 0.66 0.56 0.56 0.68 0.62
+10 7.70 VaR 0.48 0.40 0.50 0.44 0.36 0.48 0.64 0.62 0.54 0.50RCoVaR 0.30 0.34 0.28 0.52 0.34 0.30 0.30 0.30 0.36 0.26
+2 9.64 VaR 2.80 2.92RCoVaR 2.12 2.22
+0.95 5 8.12 VaR 1.00 1.02 1.20 0.88 1.18RCoVaR 0.80 0.70 0.78 0.74 0.82
+10 6.70 VaR 0.66 0.56 0.44 0.44 0.40 0.50 0.48 0.52 0.54 0.50RCoVaR 0.26 0.30 0.22 0.22 0.20 0.22 0.28 0.22 0.42 0.12
+Table 2: Joint and disaggregatedfirstrejection rates (in percent) of our RCoVaR surveillance
+procedure under the null hypothesis of correctly specified forecasts. Results are reported for a
+nominal level ofι= 10%, forK∈ {2,5,10}andα=β∈ {0.9,0.95}. The columns labeled “1”–
+“10” report the percentage of cases in which the respective VaR or CoVaR detector—indicated in
+the column “Measure”—raised the first alarm.
+monitoring procedures under the no-break null hypotheses—i.e.,t ∗ =nin (16). We consider
+α=β∈ {0.9,0.95}together withK∈ {1,2,5,10}for the CoVaR andK∈ {2,5,10}. For
+K= 1, the rejection rates of the CoVaR and RCoVaR coincide due to the symmetry of
+the DGP. We find that all combined empirical rejection rates in the columns “Joint” are
+21
+below 10.28%, which corresponds to our theoretical finding that the monitoring procedures
+hold size exactly. 3 Even forK= 10, the rejection rates are not too conservative and lie
+between 6% and 9%, which illustrates that the application of Boole’s inequality in the proof
+of Theorem 1 is relatively tight here.
+As the columns “Joint” merely indicate whetheranyof the detectors raises an incorrect
+alarm under the null, we also analyzewhichof the detectors is responsible for the rejection.
+For this, the right-hand side columns (denoted “VaR” and with the series numbers “1”–“10”)
+of the tables show the frequencies how often a given detector is responsible forfirstraising a
+false alarm. Notice here that the joint rejection frequency is somewhat lower than the sum of
+the individual frequencies as multiple detectors occasionally reject simultaneously. Overall,
+we find that for both, CoVaR and RCoVaR, the spurious alarms of the individual detectors
+are relatively balanced between the VaR and the systemic risk detectors as well as between
+the different assetsk= 1, . . . , K. Especially the former is noteworthy, and as desired by the
+choice of the levelνin steps 4 and 5 of the Algorithms 1 and 2.
+3.4 Simulation Results under the Alternative Hypothesis
+We now analyze our procedures’ power to detect misspecified forecasts. For this, Figure 2
+plots rejection frequencies under the alternative (t ∗ < nin (16)). The plots in the left panel
+display power against the break pointt ∗ ∈ {0,1, . . . ,1000}, withβpost = 0.85 in (16). The
+right panel shows power for a fixed break point att ∗ = 0 for a varying degree of post-break
+parameter misspecificationβ post ∈ {0.7,0.75,0.8,0.85,0.87,0.89,0.899}. We again consider
+K∈ {1,2,5,10}andα=β∈ {0.9,0.95}. Notice that monitoring only starts att=m= 250.
+In the left panel, the plots recover the “joint” size from Tables 1–2 fort ∗ =n= 1000, and
+in the right panel, forβ post = 0.7.
+As expected, power increases monotonically for earlier break points as well as for higher
+3Given that these empirical rejection rates are based on 5000 Monte Carlo replications, a 99%-confidence
+interval of IID Bernoulli-distributed variables with success probability 0.1 is given by approximately
+[8.9%,11.1%], indicating that our procedure is able to hold sizeexactly, while the deviations from 10%
+are explained by the finite number of Monte Carlo replications.
+22
+CoVaR Reverse CoVaR
+0.90.95
+0 250 500 750 1000 0 250 500 750 1000
+0.00
+0.25
+0.50
+0.75
+1.00
+0.00
+0.25
+0.50
+0.75
+1.00
+Break point
+Rejection rate
+CoVaR Reverse CoVaR
+0.90.95
+0.70 0.75 0.80 0.85 0.900.70 0.75 0.80 0.85 0.90
+0.00
+0.25
+0.50
+0.75
+1.00
+0.00
+0.25
+0.50
+0.75
+1.00
+Post break DCC parameter
+Rejection rate
+K 1 2 5 10
+Figure 2: Rejection rates of our CoVaR and RCoVaR surveillance methods plotted against the
+break point in (16) in the left panel and against the post-break DCC parameter in the right panel.
+In both plots, we considerα=β∈ {0.9,0.95}as well asK∈ {1,2,5,10}for the CoVaR and
+K∈ {2,5,10}for the RCoVaR.
+degrees of parameter misspecification in all plots, and the procedure works equally well for
+both probability levels. Whether a larger numberKof to-be-monitored stocks increases or
+decreases power depends on the specific situation. In general, monitoring more sequences
+simultaneously is subject to a trade-off between a stricter correction of the significance level
+and more series in which misspecifications can be detected.
+When comparing the monitoring proceduresacrosssystemic risk measures, we find that
+the reverse CoVaR procedure is the most powerful, which can be explained by the fact that
+more (2Kinstead ofK+ 1) forecast series are monitored, and that more (Kinstead of 1)
+VaR series are monitored simultaneously, which are not “as far in the tail” as the CoVaR.
+Figure 3 shows the joint rejection rates in the same setting as in the left panel of Figure 2
+in black, keepingK= 5 andα=β= 0.9 fixed. Additionally, the colored dashed (VaR) and
+dot-dashed (Systemic Risk) lines indicate how often the respective detector was the first to
+raise an alarm, akin to the numbered columns in Tables 1–2. We find that the systemic risk
+23
+CoVaR Reverse CoVaR
+0 250 500 750 1000 0 250 500 750 1000
+0.00
+0.25
+0.50
+0.75
+1.00
+Break point
+Rejection rate
+Detector Joint VaR Systemic Risk
+Series Joint X 1 2 3 4 5
+Figure 3: Rejection rates of the joint CoVaR and RCoVaR procedure in black, and frequencies how
+often the individual detectors are thefirstto generate a detection in colors in the setting of the left
+panel of Figure 2. Dashed lines depict “first” rejection rates for the VaR detector, and dot-dashed
+lines for the systemic risk detectors. The colors indicate the respective component ofW t. The
+nominal level ofι= 10% is indicated by the dashed horizontal line.
+detectors for differentk∈[K] have identical rates of rejecting first, which is sensible given
+the symmetry of the DCC–GARCH DGP. Moreover, the VaR detector is more powerful than
+the systemic risk detectors, most likely as the VaR is not as far in the tail.
+We continue to analyze the effect parameter estimation noise within the forecasts has
+on the rejection frequencies. Recall that, as argued in Remark 3, we view model estimation
+error as part of a misspecified forecast sequence. Figure 4 compares the rejection rates when
+the forecasts are based on (correctly specified) DCC–GARCH models that are estimated on
+an in-sample period of lengthE∈ {1000,2000,5000,∞}withK∈ {1,2,5,10}, while fixing
+n= 1000,m= 250,t ∗ = 0,β post = 0.85, andα=β= 0.9. We find that small(er) estimation
+window sizes distort the systemic risk forecasts and, hence, deliver increased rejection rates
+of up to 20% even in the “no-break case” witht ∗ = 1000. This effect is somewhat more
+pronounced for the RCoVaR than for the CoVaR. A further effect of the model estimation
+is that power increases naturally fort ∗ <1000 when the length of the estimation periodE
+is decreased.
+Overall, our simulations reinforce the theoretical finding that the surveillance schemes
+hold size exactly, even when the tests are employed repeatedly at every time point. Fur-
+24
+K = 1 K = 2 K = 5 K = 10
+CoVaRReverse CoVaR
+0 250 500 750 1000 0 250 500 750 1000 0 250 500 750 1000 0 250 500 750 1000
+0.00
+0.25
+0.50
+0.75
+1.00
+0.00
+0.25
+0.50
+0.75
+1.00
+Break point
+Rejection rate
+E 1000 2000 5000 True parameter value
+Figure 4: Rejection rates of our CoVaR and RCoVaR surveillance methods plotted against the
+break point for different estimation window lengthsE, whereE=∞implies the use of the correct
+parameters. We considerK∈ {1,2,5,10}and note that the rejection rates of CoVaR and RCoVaR
+coincide forK= 1. We further keepn= 1000,t ∗ = 0,β post = 0.85 andα=β= 0.9 fixed.
+thermore, the power of our tests behaves naturally for varying break times, different break
+magnitudes, and a varying dimensionality of the monitored sequences. Finally, we find that
+VaR and systemic risk rejections occur relatively balanced under the null, whereas the VaR
+detector naturally has more power (i.e., it detects earlier), due to the systemic risk measures
+being further out in the tail.
+4 Empirical Application
+We apply the systemic risk surveillance procedures to real financial data to analyze their
+sensitivity to sub-optimal risk forecasts in practice. For the market indicatorX t, we use the
+negative returns of the S&P 500 Financials index (SPF) and we use theK= 5 systemically
+important US banks Bank of America Corp (BAC), Citigroup Inc (C), Goldman Sachs Group
+25
+Financial Crisis Calm Time COVID Trumps Tariffs
+CCC−GARCH GaussianDCC−GARCH Student−t
+2007 2008 2009 2014 2015 2016 2017 2019 2020 2021 2023 2024 2025
+−0.5
+0.0
+0.5
+1.0
+1.5
+2.0
+−0.5
+0.0
+0.5
+1.0
+1.5
+2.0
+Date
+Normalized Detector Value
+Monitoring Sequence VaR CoVaR Asset SPF BAC C GS JPM WFC
+Figure 5: Normalized VaR and CoVaR detector values for the SPF, and the financial institutions
+BAC, C, GS, JPM and WFC for forecasts from a Gaussian CCC–GARCH and a Student’stDCC–
+GARCH model. We use the specificationsι= 0.1,α=β= 0.95,E= 1500,n= 1000 andm= 250.
+The displayed detector values are normalized by their respective critical values, such that a detector
+exceeding the black horizontal unit line implies a detection. The vertical dotted lines represent the
+bankruptcy of Lehman Brothers on 15 September 2008, the beginning of the COVID crisis on 13
+March 2020 (when the US declared a national emergency), the collapse of the Silicon Valley Bank
+on 10 March 2023, and the tariff announcement of Donald Trump on 2 April 2025.
+Inc (GS), JPMorgan Chase & Co (JPM) and Wells Fargo & Co (WFC) as (Y 1t, . . . , YKt)′.
+The four considered monitoring time periods each spann= 1000 days and are chosen
+as (i) the global financial crisis: 23 September 2005 – 14 September 2009, containing the
+bankruptcy of Lehman Brothers on 15 September 2008; (ii) a calm period: 14 January 2013 –
+30 December 2016; (iii) the COVID period: 23 March 2017 – 12 March 2021, containing the
+outbreak of the COVID pandemic; and (iv) Trump’s tariffs: 29 October 2021 – 23 October
+2025, containing the introduction of Trump’s tariffs on 2 April 2025 (and the collapse of the
+Silicon Valley Bank on 10 March 2023). In all four settings, we use a rolling monitoring
+window ofm= 250 trading days, consider the systemic risk measures at levelsα=β= 0.95
+and use the monitoring level ofι= 0.1.
+26
+We generate systemic risk forecasts by modeling theK+ 1 = 6 returns by a CCC–
+GARCH model with Gaussian innovations and a DCC–GARCH model with Student’st
+innovations, introduced by Engle (2002) and further described in Section 3.1. We deliber-
+ately choose a Gaussian distribution for the CCC–GARCH model’s innovations to analyze a
+suboptimal model. The latter DCC–GARCH–tmodel performs relatively well in horse races
+of multivariate volatility models (Laurentet al., 2012, 2013) and is, hence, still a standard
+forecasting model in financial risk management. From these two models, we generate CoVaR
+and RCoVaR forecasts as described in Section 3.2 based on the presumed distributions of the
+model innovationsε t | Ft−1 ∼t ν(Rt); usingν=∞for the Gaussian case. The models are
+estimated in all four settings usingE= 1500 observations, i.e., data starting approximately
+six years before the beginning of the monitoring period.
+Figure 5 presents the VaR and CoVaR detector values, normalized by their respective
+critical values, for both multivariate GARCH models across the four considered time periods.
+Under this normalization, values exceeding unity indicate rejections of the null hypothesis.
+The detector values may take negative values as a consequence of their standardization, as
+defined, for example, in (10).
+While we do not find rejections during the calm time for either forecasting model, the
+detectors raise an alarm for the CCC–GARCH–Nforecasts in all three other considered
+periods. Importantly, these alarms are raised by the systemic CoVaR detector, hence im-
+plying that specifically the systemic component of the risk forecasts is misspecified. This
+highlights the importance of monitoringsystemicrisk as opposed to monitoring only the
+risk component (i.e., the VaR) via the procedures of Hoga and Demetrescu (2023) and Wang
+et al.(2025). In contrast, for the DCC–GARCH–tforecasts, only the VaR component raises
+an alarm after the start of the COVID pandemic, showing that the dynamic correlation
+structure implies by the DCC is much better able to capture the changing co-movements in
+turbulent times.
+Figure 6 provides corresponding results for the RCoVaR forecasts with overall similar
+27
+Financial Crisis Calm Time COVID Trumps Tariffs
+CCC−GARCH GaussianDCC−GARCH Student−t
+2007 2008 2009 2014 2015 2016 2017 2019 2020 2021 2023 2024 2025
+−0.5
+0.0
+0.5
+1.0
+1.5
+2.0
+−0.5
+0.0
+0.5
+1.0
+1.5
+2.0
+Date
+Normalized Detector Value
+Monitoring Sequence VaR RCoVaR Asset BAC C GS JPM WFC
+Figure 6: Normalized VaR and reverse CoVaR detector values. For details, see the caption of
+Figure 5.
+findings. While there are no rejections during the calm time in either model, especially the
+RCoVaR detectors raise alarms for the CCC–GARCH–Nforecasts around the times where
+(systemic) market risks have increased markedly. In contrast, for the Student’stDCC–
+GARCH forecasts, mostly the VaR detectors yield rejections, implying once more that this
+model with its dynamic correlation structure is much better suited to model systemic risks.
+As for the attribution of forecast failure to a specific institution, consider the financial
+crisis, which had its origins in the housing market (Mishkin, 2011). During this time, Wells
+Fargo’s increased systemic riskiness was responsible for the forecast failure of the CCC–
+GARCH–Nmodel. This holds true when Wells Fargo is viewed both as a systemic risk
+receiverandtransmitter(see Figures 5 and 6, respectively). The preeminent role of Wells
+Fargo early on may be explained by its heavy reliance on mortgage lending (later on increased
+through the acquisition of Wachovia in early 2008), which contrasts with the other considered
+retail and investment banks.
+28
+Our empirical results are consistent with Laurentet al.(2012, 2013). In their horse
+race of multivariate volatility models, they find that DCC and CCC specifications perform
+equally well during calm times, yet the former are more adequate for crises periods. We
+find their conclusion forvolatilityforecasting to also hold true forsystemic riskforecasting.
+However, in contrast to the (repeated) “one-shot analysis” of Laurentet al.(2012, 2013),
+our monitoring procedures also allow us to date the time point when a forecast breakdown
+of a specific model occurs and, equally important, also to pinpoint the model failure to a
+specific institution.
+5 Conclusion
+Regulators as well as financial institutions are particularly concerned about the commonal-
+ities in risk factors, i.e., systemic risk. To effectively take preventive measures, it becomes
+vital to detect changes in systemic risk assessments as soon as possible. To that end, this
+paper proposes formal monitoring tools for systemic risk. These are shown to work well in
+simulations and are useful in practice, as the empirical application to the US banking sector
+in Section 4 demonstrates.
+The advantages of our proposed procedures are fourfold. First, unlike classical “one-
+shot” backtests, our monitoring schemes control size underrepeated applicationover a fixed
+horizon, as required for, e.g., daily risk monitoring in financial markets. Second, size control
+holdsin finite samplesby construction, in contrast to asymptotic one-shot backtests such as
+Fissler and Hoga (2024). Third, our procedures accommodatemultiple time seriessimulta-
+neously, unlike the one-shot backtests of Banulescu-Raduet al.(2021), which are restricted
+to bivariate settings (i.e.,K= 1 in our notation). Fourth, a Bonferroni-type correction
+enables us toattributedetected deficiencies in systemic risk forecasts to specific institutions,
+a key feature in regulatory applications where identification matters as much as detection.
+We stress that while our empirical application deals with systemic risk in the financial
+29
+system, our monitoring procedures may be used more widely in other contexts. For instance,
+it could be used by individual banks to monitor systemic risk forecasts in their financial
+positions. Again, the key concern of the institutions is not necessarily the risk inherent in
+their positions (as risk is associated with reward in financial markets), but the commonality
+in their exposures. This is because it is precisely during times of extreme co-movements that
+diversification benefits vanish, which—as the saying goes—is the only free lunch around. For
+this reason, it may also be useful for banks to monitor the systemic risk in their positions.
+References
+Acerbi C. 2002. Spectral measures of risk: A coherent representation of subjective risk aversion.
+Journal of Banking & Finance26: 1505–1518.
+Acharya VV, Pedersen LH, Philippon T, Richardson M. 2017. Measuring systemic risk.The Review
+of Financial Studies30: 2–47.
+Adrian T, Brunnermeier MK. 2016. CoVaR.American Economic Review106: 1705–1741.
+Artzner P, Delbaen F, Eber JM, Heath D. 1999. Coherent measures of risk.Mathematical Finance
+9: 203–228.
+Banulescu-Radu D, Hurlin C, Leymarie J, Scaillet O. 2021. Backtesting marginal expected shortfall
+and related systemic risk measures.Management Science67: 5730–5754.
+Bayer S, Dimitriadis T. 2022. Regression-based expected shortfall backtesting.Journal of Financial
+Econometrics20: 437–471.
+Diebold FX, Gunther TA, Tay AS. 1998. Evaluating density forecasts with applications to financial
+risk management.International Economic Review39: 863–883.
+Diebold FX, Mariano RS. 1995. Comparing predictive accuracy.Journal of Business & Economic
+Statistics13: 253–263.
+Dimitriadis T, Hoga Y. 2025. Dynamic CoVaR modeling and estimation.Journal of Business &
+Economic Statisticshttps://doi.org/10.1080/07350015.2025.2590126.
+Dovern J, Manner H. 2020. Order-invariant tests for proper calibration of multivariate density
+forecasts.Journal of Applied Econometrics35: 440–456.
+Du Z, Escanciano JC. 2017. Backtesting expected shortfall: Accounting for tail risk.Management
+Science63: 940–958.
+Du Z, Pei P, Wang X, Yang T. 2024. Powerful backtests for historical simulation expected shortfall
+models.Journal of Business & Economic Statistics42: 864–874.
+Emmer S, Kratz M, Tasche D. 2015. What is the best risk measure in practice? A comparison of
+standard measures.Journal of Risk18: 31–60.
+Engle RF. 2002. Dynamic conditional correlation: A simple class of multivariate generalized au-
+toregressive conditional heteroskedasticity models.Journal of Business & Economic Statistics
+20: 339–350.
+30
+Federal Register. 2012. Risk-based capital guidelines: Market risk.https://www.govinfo.gov/
+content/pkg/FR-2012-08-30/pdf/2012-16759.pdf.
+Fissler T, Hoga Y. 2024. Backtesting systemic risk forecasts using multi-objective elicitability.
+Journal of Business & Economic Statistics42: 485–498.
+Galanos A. 2022.rmgarch: Multivariate GARCH models. R package version 1.3-9.
+Giacomini R, White H. 2006. Tests of conditional predictive ability.Econometrica74: 1545–1578.
+Giglio S, Kelly B, Pruitt S. 2016. Systemic risk and the macroeconomy: An empirical evaluation.
+Journal of Financial Economics119: 457–471.
+Girardi G, Tolga Erg¨ un A. 2013. Systemic risk measurement: Multivariate GARCH estimation of
+CoVaR.Journal of Banking & Finance37: 3169–3180.
+Gneiting T, Resin J. 2023. Regression diagnostics meets forecast evaluation: conditional calibration,
+reliability diagrams, and coefficient of determination.Electronic Journal of Statistics17: 3226–
+3286.
+Gordy MB, McNeil AJ. 2020. Spectral backtests of forecast distributions with application to risk
+management.Journal of Banking & Finance116: 105817.
+Hoga Y. 2019. Extending the limits of backtesting via the ‘vanishingp’-approach.Journal of Time
+Series Analysis40: 858–866.
+Hoga Y, Demetrescu M. 2023. Monitoring value-at-risk and expected shortfall forecasts.Manage-
+ment Science69: 2954–2971.
+Holm S. 1979. A simple sequentially rejective multiple test procedure.Scandinavian Journal of
+Statistics6: 65–70.
+Hong Y. 1996. Consistent testing for serial correlation of unknown form.Econometrica64: 837–864.
+Hong Y. 2010. Serial correlation and serial dependence. In Durlauf SN, Blume LE (eds.)Macroe-
+conometrics and Time Series Analysis, New York: Palgrave Macmillan, pages 227–244.
+Horv´ ath L, Lazar E, Liu Z, Wang S, Xue X. 2025. Sequential monitoring for changes in dynamic
+semiparametric risk models.Journal of Business & Economic Statisticshttps://doi.org/10.
+1080/07350015.2025.2540071.
+Hu´ e S, Hurlin C, Lu Y. 2024. Backtesting expected shortfall: Accounting for both duration and
+severity with bivariate orthogonal polynomials.Preprint.https://arxiv.org/abs/2405.02012.
+Kr¨ amer W, Wied D. 2015. A simple and focused backtest of value at risk.Economics Letters137:
+29–31.
+Laurent S, Rombouts JVK, Violante F. 2012. On the forecasting accuracy of multivariate GARCH
+models.Journal of Applied Econometrics27: 934–955.
+Laurent S, Rombouts JVK, Violante F. 2013. On loss functions and ranking forecasting perfor-
+mances of multivariate volatility models.Journal of Econometrics173: 1–10.
+Manner H, Stark F, Wied D. 2020. A monitoring procedure for detecting structural breaks in factor
+copula models.Studies in Nonlinear Dynamics & Econometrics25: 171–192.
+McNeil AJ, Frey R, Embrechts P. 2015.Quantitative Risk Management: Concepts, Techniques and
+Tools. Princeton: Princeton University Press, revised edn.
+Mishkin FS. 2011. Over the cliff: From the subprime to the global financial crisis.Journal of
+Economic Perspectives25: 49–70.
+31
+Na O, Lee J, Lee S. 2014. Monitoring test for stability of copula parameter in time series.Journal
+of the Korean Statistical Society43: 483–501.
+Nolde N, Zhang J. 2020. Conditional extremes in asymmetric financial markets.Journal of Business
+& Economic Statistics38: 201–213.
+Nolde N, Ziegel JF. 2017. Elicitability and backtesting: Perspectives for banking regulation.The
+Annals of Applied Statistics11: 1833–1874.
+Ramdas A, Gr¨ unwald P, Vovk V, Shafer G. 2023. Game-theoretic statistics and safe anytime-valid
+inference.Statistical Science38: 576–601.
+Rosenblatt M. 1952. Remarks on a multivariate transformation.Annals of Mathematical Statistics
+23: 470–472.
+Rossi B, Sekhposyan T. 2019. Alternative tests for correct specification of conditional predictive
+densities.Journal of Econometrics208: 638–657.
+Shafer G. 2021. Testing by betting: A strategy for statistical and scientific communication.Journal
+of the Royal Statistical Society Series A: Statistics in Society184: 407–431.
+Van Oordt M, Zhou C. 2019. Systemic risk and bank business models.Journal of Applied Econo-
+metrics34: 365–384.
+Vovk V, Wang R. 2021. E-values: Calibration, combination and applications.The Annals of Statis-
+tics49: 1736–1754.
+Wang Q, Wang R, Ziegel J. 2025. E-backtesting.Management Sciencehttps://doi.org/10.1287/
+mnsc.2023.01659.
+Wied D, Galeano P. 2013. Monitoring correlation change in a sequence of random variables.Journal
+of Statistical Planning and Inference143: 186–196.
+A Proofs of the main paper
+Proof of Proposition 1:Since the random variables on both sides of (7) are binary, their
+expectations and covariance determine their full probabilistic structure.
+First, it holds underH CoVaR0 thatE t−1[It] =E t−11{Xt> dVaRt,β } =E t−11{Xt>VaRt,β } = 1−
+βfor allt∈N. Thus, by the law of iterated expectations (LIE),E[I t] = 1−β=E
+
+1{U1t>β}
+
+,
+such that
+It
+d
+=1 {U1t>β},(18)
+where
+d
+= denotes equality in distribution.
+Second, using the notationP t−1
+
+Xt ≤ ·, Ykt ≤ ·
+	 :=P Xt ≤ ·, Ykt ≤ · | Ft−1	, under
+H CoVaR0 and for allt∈N, we have
+Et−1
+
+Ikt
+
+=E t−1
+
+1{Xt> dVaRt,β , Ykt> \CoVaRkt,α|β }
+
+=E t−1
+
+1{Xt>VaRt,β , Ykt>CoVaRkt,α|β }
+
+=P t−1
+
+Xt >VaR t,β, Ykt >CoVaR kt,α|β
+	
+32
+=P t−1
+
+Xt >VaR t,β
+	
+Pt−1
+
+Ykt >CoVaR kt,α|β |X t >VaR t,β
+	
+= (1−β)(1−α).
+Therefore, by the LIE,E
+
+Ikt
+
+= (1−β)(1−α) =E
+
+1{U1t>β, U2t>α}
+
+, such that
+Ikt
+d
+=1 {U1t>β, U2t>α}.(19)
+Third, by using the above, we get for the contemporaneous covariance that
+Cov
+ 
+It, Ikt
+
+=E
+
+ItIkt
+
+−E[I t]E[Ikt]
+=E
+n
+Et−1
+
+1{Xt>VaRt,β , Ykt>CoVaRkt,α|β }
+o
+−(1−β) 2(1−α)
+= (1−α)(1−β)−(1−β) 2(1−α)
+=β(1−β)(1−α)
+=
+
+1−E
+
+1{U1t>β}
+
+E
+
+1{U1t>β, U2t>α}
+
+=E
+
+1{U1t>β}1{U1t>β, U2t>α}
+
+−E
+
+1{U1t>β}
+
+E
+
+1{U1t>β, U2t>α}
+
+= Cov
+ 
+1{U1t>β},1 {U1t>β, U2t>α}
+
+.
+In light of this and (18)–(19), we conclude that
+(It, Ikt)′ d= (1{U1t>β},1 {U1t>β, U2t>α})′.(20)
+Fourth, to establish independence ofI s andI kt fors̸=t, observe that underH CoVaR0 and
+forx, y∈ {0,1},
+P
+
+Is =x| Fs−1
+	
+=β1 {x=0} + (1−β)1 {x=1},(21)
+P
+
+Ikt =y| Ft−1
+	
+=
+
+1−(1−α)(1−β)
+
+1{y=0} + (1−α)(1−β)1 {y=1}.(22)
+Lets > t. Then, forx, y∈ {0,1},
+P
+
+Is =x, I kt =y| Fs−1
+	
+=E
+
+1{Is=x, Ikt=y} | Fs−1
+
+=E
+
+1{Ikt=y}1{Is=x} | Fs−1
+
+=1 {Ikt=y}E
+
+1{Is=x} | Fs−1
+
+=1 {Ikt=y}P
+
+Is =x| Fs−1
+	
+=1 {Ikt=y}
+
+β1{x=0} + (1−β)1 {x=1}
+
+33
+by (21), such that, by the LIE,
+P
+
+Is =x, I kt =y
+	
+=E
+h
+P
+
+Is =x, I kt =y| Fs−1
+	i
+=E
+
+1{Ikt=y}
+
+β1{x=0} + (1−β)1 {x=1}
+
+=
+n
+1−(1−α)(1−β)
+
+1{y=0} + (1−α)(1−β)1 {y=1}
+o
+β1{x=0} + (1−β)1 {x=1}
+
+=P
+
+Ikt =y
+	
+P
+
+Is =x
+	
+.
+Since the cases < tcan be treated analogously (using (22) instead of (21)), the above
+factorization holds for anys̸=t. Now, showing full independence, i.e.,
+P
+
+Is1 =x 1, . . . , Isℓ =x ℓ, Ikt1 =y 1, . . . , Iktm =y m
+	
+=P
+
+Is1 =x 1
+	
+·. . .·P
+
+Isℓ =x ℓ
+	
+·P
+
+Ikt1 =y 1
+	
+·. . .·P
+
+Iktm =y m
+	
+(23)
+fors 1 < . . . < sℓ andt 1 < . . . < tm (ℓ, m∈N) withs i ̸=t j (i= 1, . . . , ℓandj= 1, . . . , m) is
+only notationally more complicated.
+Combining (18)–(20) with (23) completes the proof.
+Proof of Theorem 1:The actual probabilityι ∗ of making a type I error in the sense of
+(12) is
+ι∗ :=P H CoV aR0
+n
+∃T∈ {m, . . . , n}: VaR(T)≥v
+or CoVaR k(T)≥c k for somek∈[K]
+o
+=P H CoV aR0
+n
+sup
+T=m,...,n
+VaR(T)≥v
+o
+∪
+K[
+k=1
+n
+sup
+T=m,...,n
+CoVaRk(T)≥c k
+o
+=P H CoV aR0
+n
+sup
+T=m,...,n
+VaR(T)≥v
+o
++P H CoV aR0
+ K[
+k=1
+n
+sup
+T=m,...,n
+CoVaRk(T)≥c k
+o
+\
+n
+sup
+T=m,...,n
+VaR(T)≥v
+o
+,(24)
+where we used thatP
+
+A∪B
+	
+=P
+
+A
+	
++P
+
+B\A
+	
+in the third step.
+IfK= 1, all probabilities in the above equation can be computed by virtue of Proposi-
+tion 1. However, forK >1, the null is silent about the dependence structure betweenI kt
+andI k′t (k̸=k ′) and, hence, between CoVaR k(T) and CoVaR k′(T). Similarly as for the
+34
+well-known Bonferroni correction, we therefore apply Boole’s inequality to obtain that
+PH CoV aR0
+ K[
+k=1
+n
+sup
+T=m,...,n
+CoVaRk(T)≥c k
+o
+\
+n
+sup
+T=m,...,n
+VaR(T)≥v
+o
+≤
+KX
+k=1
+PH CoV aR0
+n
+sup
+T=m,...,n
+CoVaRk(T)≥c k
+o
+\
+n
+sup
+T=m,...,n
+VaR(T)≥v
+o
+=
+KX
+k=1
+PH CoV aR0
+n
+sup
+T=m,...,n
+CoVaRk(T)≥c k
+o
+−P H CoV aR0
+n
+sup
+T=m,...,n
+CoVaRk(T)≥c k,sup
+T=m,...,n
+VaR(T)≥v
+o
+.
+Plugging this into (24), we get that
+ι∗ ≤P H CoV aR0
+n
+sup
+T=m,...,n
+VaR(T)≥v
+o
++
+KX
+k=1
+PH CoV aR0
+n
+sup
+T=m,...,n
+CoVaRk(T)≥c k
+o
+−
+KX
+k=1
+PH CoV aR0
+n
+sup
+T=m,...,n
+CoVaRk(T)≥c k,sup
+T=m,...,n
+VaR(T)≥v
+o
+.
+Since the right-hand side equalsιby (13), we can deduce that the actual levelι ∗ of the
+monitoring procedure is smaller than or equal toι. Hence, size at levelιmay be controlled
+even in finite samples.
+Proof of Theorem 2:The actual probabilityι ∗ of making a type I error for the rejection
+rule implied by Theorem 2 is
+ι∗ =P H RCoV aR0
+ K[
+k=1
+n
+sup
+T=m,...,n
+VaRk(T)≥v k
+o
+∪
+n
+sup
+T=m,...,n
+RCoVaRk(T)≥c k
+o
+≤
+KX
+k=1
+PH RCoV aR0
+n
+sup
+T=m,...,n
+VaRk(T)≥v k
+o
+∪
+n
+sup
+T=m,...,n
+RCoVaRk(T)≥c k
+o
+=ι,
+where we have used Boole’s inequality in the second step, and (15) in the final step. Once
+again, size is controlled.
+35
+B The CoES and MES
+We now turn to the systemic risk measures CoES and MES, which we formally define in
+Section B.1. The monitoring procedures are introduced in Section B.2, and their finite-
+sample properties are examined through simulations in Section B.3. We defer the proofs of
+all technical results to Section D.
+B.1 Defining CoES and MES
+Since CoVaR defined in (1) is merely anα-quantile of a conditional distribution, it suffers
+from the same defects as the VaR, discussed, e.g., in Artzneret al.(1999) and Emmeret al.
+(2015). In particular, by not considering the magnitude of losses beyond itself, the CoVaR
+may not adequately capture systemictailrisks. Therefore, we also consider the CoES, i.e.,
+CoESkt,α|β = 11−α Z 1α CoVaRkt,γ|β dγ.(25)
+The CoES also encompasses the MES via MES kt,β = CoESkt,0|β. Under our assumption on
+the CDF of (X t, Ykt)′ | Ft−1 and by using the notationE t−1[·] :=E[· | Ft−1], we have the
+intuitive formulas (see, e.g., McNeilet al., 2015, Lemma 2.13)
+CoESkt,α|β =E t−1
+
+Yt |Y t ≥CoVaR kt,α|β, Xt ≥VaR t,β
+
+,
+MESkt,β =E t−1
+
+Yt |X t ≥VaR t,β
+
+.
+B.2 CoES and MES Monitoring
+We now propose monitoring procedures for the CoES as defined in (25) and for the MES,
+which arises as a special case of the CoES forα= 0. Recall that our monitoring approach for
+the CoVaR in Sections 2.2–2.3 crucially relies on the fact that conditional calibration implies
+a given probabilistic behavior of thebinarysequencesI t andI kt in (6). This results from the
+VaR and CoVaR being certain quantiles, such that the associated identification functions
+in (4) are binary. In contrast, for the CoES (and MES), the respective joint identification
+functions given in equations (S.5)–(S.6) in the supplementary material of Fissler and Hoga
+(2024) take continuous values and their full probabilistic structure under the null is not
+known. Hence, a direct extension of the CoVaR monitoring procedure with sequential finite-
+sample guarantees as in (3) is not possible. Therefore, we do not directly test the null of
+ideal VaR and CoES forecasts.
+Instead, we test that the forecasts dVaRt,β and \CoVaRkt,γ|β are ideal for allγ∈
+[α,1). This is closely related to testing VaR and CoES calibration, because CoES kt,α|β =
+36
+1
+1−α
+R 1
+α CoVaRkt,γ|β dγis defined by an integral over the CoVaR forγ∈[α,1). Formally:
+H CoES0 : dVaRt,β = VaRt,β and \CoVaRkt,γ|β = CoVaRkt,γ|β
+for allγ∈[α,1), k∈[K],andt∈N.
+To test the “CoVaR part” of this null, we use the notationI kt,γ|β :=
+1{Xt> dVaRt,β , Ykt> \CoVaRkt,γ|β } and follow Banulescu-Raduet al.(2021) in considering thecu-
+mulative CoVaR violation sequence
+Hkt,α|β := 11−α Z 1α Ikt,γ|β dγ= 1{Xt> dVaRt,β }1−α Z 1α 1{Ykt> \CoVaRkt,γ|β } dγ.(26)
+Such cumulative (integrated) quantile violations in (26) are well-known from backtesting the
+univariate risk measure ES; see, e.g., Acerbi (2002), Du and Escanciano (2017) and Duet al.
+(2024). While the classical cumulative violation sequence integrates over quantile violations
+It, our conditional version in (26) uses the CoVaR-version of the violationsI kt,γ|β . Impor-
+tantly, the sequence in (26) as an integral over CoVaR violations resembles the definition of
+the CoES in (25) as an integral over the CoVaR values and, therefore, provides a suitable
+tool for CoES monitoring.
+Our cumulative CoVaR violation sequence is related to a conditional tail-version of the
+classicalprobability integral transformations, PITs, (also called Rosenblatt (1952) transfor-
+mations) of (X t, Ykt)′. These are an essential tool for assessing calibration of distributional
+forecasts (Dieboldet al., 1998; Dovern and Manner, 2020; Gneiting and Resin, 2023). Define
+the classical PIT ofX t and the conditional tail version ofY kt |X t >VaR t,β as
+bU Xt = bFXt|Ft−1(Xt) and bU Yk|X>VaRt = bFYkt|Xt>VaRt,β ,Ft−1(Ykt),(27)
+with “population” counterpartsU Xt =F Xt|Ft−1(Xt) andU Yk|X>VaRt =F Ykt|Xt>VaRt,β ,Ft−1(Ykt).
+Now, our cumulative CoVaR violation sequence is related to theconditional tail PIT
+eHkt,α|β :=1  bU Xt >β, bU Yk |X>V aRt >α	 bU Yk|X>VaRt −α1−α .(28)
+eHkt,α|β in (28) isconditionalas it involves the conditional PIT, bU Yk|X>VaRt , and concerns the
+tailonly, as it is truncated through the indicator function. The precise relation toH kt,α|β is
+given in the following proposition.
+Proposition 3.Suppose thatβ7→ dVaRt,β = bF −1Xt|Ft−1(β)andγ7→ \CoVaRkt,γ|β =
+bF −1Ykt|Xt>VaRt,β ,Ft−1(γ)are continuous and strictly increasing functions in a neighbourhood
+aroundβ, and for an open set containing allγ∈(α,1), respectively. Then, the condi-
+37
+tional tail PIT from(28)equals the cumulative CoVaR violation sequence from(26), i.e.,
+Hkt,α|β = eHkt,α|β.
+Proposition 3 is useful to derive several (testable) properties ofH kt,α|β underH CoES0 ,
+viz. IIDness ofH kt,α|β and its CDF. We formally do so in the following proposition.
+Proposition 4.UnderH CoES0 , it holds for allk∈[K]that
+
+(It, Hkt,α|β)′	t∈N d= 1{U1t>β},1 {U1t>β, U2t>α} U2t −α1−α ′t∈N,
+whereU it
+IID
+∼ U[0,1]are independent of each other fori= 1,2and allt∈N.
+UnderH CoES0 , Proposition 4 implies that
+H(x) :=P Hkt,α|β ≤x 	 = x(1−α) +α (1−β) +β, x∈[0,1],(29)
+andH(x) = 0 for anyx <0. The two properties ofH kt,α|β—its IIDness and the specific
+form of its CDF—allow for a feasible way of monitoringH CoES0 . Notice that as argued in
+Remark 1 for the CoVaR, we simultaneously have to monitor the condition dVaRt,β = VaRt,β
+inH CoES0 , which we do by employing the VaR detector from (9).
+The unconditional part of our CoES detector monitors whether the CDF ofH kt,α|β
+equals the uniform-type CDFH(·) by sequentially computing the Kolmogorov–Smirnov
+statisticD kT = sup x∈[0,1]
+FkT (x)−H(x) , whereF kT (·) denotes the empirical CDF of
+{Hkt,α|β}t=T−m+1,...,T . Based on these considerations, we propose the detector
+CoESuck (T) = DkT −E H CoES0 [DkT ]qVarH CoES0 (DkT ) ,
+whereE H CoES0 [DkT ] and Var H CoES0 (DkT ) denote the null-hypothetical mean and variance of
+DkT .
+It remains to check IIDness of{H kt,α|β}t∈[n]. For this, we draw on Hong (1996), who
+proposes to assess the non-autocorrelatedness with a spectral density-based test statistic
+CoESiidk (T) = MkT −E H CoES0 [MkT ]qVarH CoES0 (MkT ) ,whereM kT =m m−1Xj=1 κ2(j/pm)bρ2kj(T).
+Here,bρkj(T) =bγkj(T)/bγk0(T) is thej-th sample autocorrelation of thek-th series, where
+bγkj(T) =m −1
+TX
+t=T−m+1+|j|
+
+Hkt,α|β − H k,α|β(T)
+
+Hk,t−|j|,α|β − H k,α|β(T)
+
+38
+is thej-th sample autocovariance of{H kt,α|β}t=T−m+1,...,T , with H k,α|β(T) =
+m−1 PTt=T−m+1 Hkt,α|β denoting the sample mean. Furthermore,κ : R→[−1,1] is some ker-
+nel function andp m denotes a smoothing parameter satisfyingp m − → ∞andpm/m− →0,
+asm→ ∞. While the choiceκ(z) =1 {|z|≤1} recovers the classical Box–Pierce test, we
+follow the power considerations of Hong (1996, Theorem 5) and use the Daniell kernel
+κ(z) = sin(πz)/[πz],z∈R. We employ a “small” choicep m = log(m) as Hong (1996)
+reports that smallp m lead to higher power, though possibly at the expense of some size
+distortions. Yet, these potential size distortions are of no concern for our monitoring, where
+size is controlled infinitesamples.
+Of course, many other detectors (test statistics) could potentially be used to detect
+deviations from independence (see Hong, 2010, for an overview). We opt forMT here because
+it is intuitive, computationally easy to handle and powerful, as shown by Hong (1996).
+Putting together the individual components, we obtain the CoES detector
+CoESk(T) =aCoES uck (T) + (1−a) CoES iidk (T), a∈[0,1].
+As for the CoVaR, we simultaneously monitor calibration of the associated VaR forecasts via
+(9). The validity of the CoES monitoring procedure is established by the following theorem,
+which corresponds verbatim to Theorem 1, with CoVaR k(T) replaced by CoES k(T).
+Theorem 3.For anyι∈(0,1), it holds that
+PH CoES0
+n
+∃T∈ {m, . . . , n}: VaR(T)≥v
+orCoES k(T)≥c k for somek∈[K]
+o
+≤ι,(30)
+if the critical valuesvand thec k’s are chosen such, that
+PH CoES0
+n
+sup
+T=m,...,n
+VaR(T)≥v
+o
++
+KX
+k=1
+PH CoES0
+n
+sup
+T=m,...,n
+CoESk(T)≥c k
+o
+−
+KX
+k=1
+PH CoES0
+n
+sup
+T=m,...,n
+VaR(T)≥v,sup
+T=m,...,n
+CoESk(T)≥c k
+o
+=ι.(31)
+Proof:Analogous to that of Theorem 1, where CoES k(T) simply replaces CoVaR k(T) at
+every occurrence.
+As discussed after Theorem 1 for the CoVaR monitoring, we advocate choosingvand
+ck to correspond to some (1−ν)-quantiles of the null distributions of sup T=m,...,n VaR(T)
+and supT=m,...,n CoESk(T), respectively. These critical values (denotedv CoES andc CoES) are
+computed by following Algorithm 3 in Appendix C.
+39
+By takingα= 0 in Theorem 3, we obtain a monitoring scheme for the MES, since
+MESkt,β = CoES kt,0|β. In that case, we write the CoES detector CoES k(T) simply as
+MESk(T) with appertaining critical valuesv MES andc MES.
+Remark 4(Conditional tail monitoring).Formally, our monitoring procedure for the
+CoES requires conditional tail forecasts to compute (27)–(28). In the strict sense of Bayer and
+Dimitriadis (2022, Definition 1.1), this implies that we essentially monitor the conditional
+tail distribution beyond the CoVaR. However, as argued by Gordy and McNeil (2020) and
+Hu´ eet al.(2024), (tail) PITs are a “middle ground” between reporting risk measures and
+(tail) distributions and their reporting is already mandatory for the US banking system; see
+Federal Register (2012, p. 53105): In detail, while reporting full (tail) distributions would
+allow to reach conclusions about the banks’ internal risk models, reporting of (tail) PITs
+is sufficient for many evaluation metrics, yet at the same time conceals the confidential tail
+distribution forecasts. While forecasts for the tail distribution can and should of course be
+submitted before the return materializes, the PITs also rely on the corresponding observation
+and, hence, are only availableex post. A fair PIT reporting mechanism could be set up by
+submitting the tail distributions to a “trustee” before the return materializes, and the trustee
+then only reports the materialized PIT value (according to the observed return). Such a
+procedure would allow for a proper tail forecast evaluation, while maintaining confidentiality
+of the full predictive (tail) distributions.
+B.3 Simulations for the CoES and MES
+Here, we extend the simulations from Section 3 to the CoES and MES. We use the same
+DGP as in Section 3.1 and generate covariance matrix forecasts as described in Section 3.2.
+Based on the implied forecasted Student’stdistribution (nesting the Gaussian special case
+forν=∞), we obtain the CoES (and MES) sequenceH kt,α|β by noting that
+Hkt,α|β =
+1{Xt> dVaRt,β }
+1−α
+Z 1
+α
+1{Ykt> \CoVaRkt,γ|β } dγ=
+1{Xt> dVaRt,β }
+1−α 1{ξkt(Ykt)≥α}
+ 
+ξkt(Ykt)−α
+
+,
+whereξ kt(ykt) is obtained for any realizationy kt of the random variableY kt as
+ξkt(ykt) =P
+ eXt > dVaRt,β, eYkt > ykt  Ft−1	(1−β),
+where ( eXt, eYkt)′ | Ft−1 ∼t ν(cHt,k) follow the same law as (X t, Ykt)′ | Ft−1.
+Table 3 displays results as in Table 1, but for the CoES and MES instead of the CoVaR.
+The results are almost identical: “Joint” size is held exactly forK= 1 and slightly con-
+servatively forK∈ {2,5,10}with an equal distribution among the VaR and CoES/MES
+40
+Measureβ KJoint VaR CoES/MES for series numberk
+1 2 3 4 5 6 7 8 9 10
+CoES:
+α=β
+0.9
+1 10.56 5.28 5.28
+2 8.42 3.24 2.54 2.68
+5 8.16 1.54 1.38 1.10 1.56 1.30 1.40
+10 8.70 0.82 0.88 0.64 0.78 0.86 0.84 1.04 1.02 0.82 0.74 0.56
+0.95
+1 9.58 4.32 5.26
+2 9.94 3.48 3.22 3.36
+5 9.38 1.44 1.86 1.74 1.76 2.02 1.68
+10 8.00 0.72 0.78 0.78 0.70 0.90 1.06 0.70 0.82 1.06 1.16 0.88
+MES:
+α= 0
+0.9
+1 10.60 5.52 5.12
+2 9.04 3.16 3.12 2.96
+5 8.18 1.44 1.50 1.44 1.76 1.12 1.24
+10 5.16 0.76 0.36 0.48 0.54 0.38 0.48 0.38 0.60 0.48 0.48 0.56
+0.95
+1 9.06 4.24 4.82
+2 10.44 3.52 3.82 3.42
+5 7.26 1.62 1.42 1.38 1.12 1.32 1.36
+10 5.88 0.68 0.48 0.64 0.62 0.60 0.60 0.66 0.72 0.68 0.64 0.66
+Table 3: Joint and disaggregatedfirstrejection rates (in percent) of our CoES and MES surveillance
+procedure under the null hypothesis of correctly specified forecasts. Results are reported for a
+nominal level ofι= 10%, forK∈ {1,2,5,10}andβ∈ {0.9,0.95}, withα=βfor the CoES, and
+α= 0 for the MES. The column “VaR” reports the percentage of cases in which the VaR detector
+raised the first alarm, while the columns labeled “1”–“10” report the corresponding first-alarm
+rates of the respective CoVaR detectors.
+detectors.
+The analysis of our CoES and MES monitoring procedures’ power in Figures 7–9 follows
+Figures 2–4, but displays rejection rates of the CoES and MES instead of for the CoVaR and
+RCoVaR. The results are again very similar to the CoVaR: Figure 7 displays good power
+under misspecification, and Figure 9 a similar behavior under parameter estimation noise.
+The rates when the CoES/MES detectors reject first in Figure 8, however, is considerably
+smaller for the CoES and MES than for the CoVaR. This might be caused by the more
+complicated construction of the detectors for the CoES than for the CoVaR due to the non-
+binary CoES identification functions. Notice however that Figure 8 displays which detector
+rejectsfirst, and not whether a given detector rejectsat all.
+41
+CoES MES
+0.90.95
+0 250 500 750 1000 0 250 500 750 1000
+0.00
+0.25
+0.50
+0.75
+1.00
+0.00
+0.25
+0.50
+0.75
+1.00
+Break point
+Rejection rate
+CoES MES
+0.90.95
+0.70 0.75 0.80 0.85 0.900.70 0.75 0.80 0.85 0.90
+0.00
+0.25
+0.50
+0.75
+1.00
+0.00
+0.25
+0.50
+0.75
+1.00
+Post break DCC parameter
+Rejection rate
+K 1 2 5 10
+Figure 7: Rejection rates of our CoES and MES surveillance methods plotted against the break
+point in (16) in the left panel and against the post-break DCC parameter in the right panel. In
+both plots, we considerα=β∈ {0.9,0.95}andK∈ {1,2,5,10}.
+CoES MES
+0 250 500 750 1000 0 250 500 750 1000
+0.00
+0.25
+0.50
+0.75
+1.00
+Break point
+Rejection rate
+Detector Joint VaR Systemic Risk
+Series Joint X 1 2 3 4 5
+Figure 8: Rejection rates of the joint CoES and MES procedure in black, and frequencies how often
+the individual detectors are thefirstto generate a detection in colors in the setting of the left panel
+of Figure 2. Dashed lines depict “first” rejection rates for the VaR detector, and dot-dashed lines
+for the systemic risk detectors. The colors indicate the respective component ofW t. The nominal
+level ofι= 10% is indicated by the dashed horizontal line.
+42
+K = 1 K = 2 K = 5 K = 10
+CoESMES
+0 250 500 750 1000 0 250 500 750 1000 0 250 500 750 1000 0 250 500 750 1000
+0.00
+0.25
+0.50
+0.75
+1.00
+0.00
+0.25
+0.50
+0.75
+1.00
+Break point
+Rejection rate
+E 1000 2000 5000 True parameter value
+Figure 9: Rejection rates of our CoES and MES surveillance methods plotted against the break
+point for different estimation window lengthsE, whereE=∞implies the use of the correct
+parameters. We considerK∈ {1,2,5,10}, and further keepn= 1000,t ∗ = 0,β post = 0.85 and
+α=β= 0.9 fixed.
+43
+C Algorithms
+Here, we describe how critical values for the Reverse CoVaR, the CoES and MES are com-
+puted by modifying Algorithm 1.
+For the Reverse CoVaR and Theorem 2, we compute the critical values as follows:
+Algorithm 2.To compute critical values for Theorem 2 proceed as follows:
+1. Generate a large numberBof mutually independent samples
+
+U1t
+IID
+∼ U[0,1]
+	
+t∈[n] and
+U2t
+IID
+∼ U[0,1]
+	
+t∈[n].
+2. Compute theBsequences
+
+I ∗t =1 {U1t>β}	t∈[n] and I ∗1t =1 {U1t>β, U2t>α}	t∈[n].
+3. Forb= 1, . . . , B, calculate:
+i.sup T=m,...,n VaRb(T), whereVaR b(T)is defined asVaR(T), except that{I t}is
+replaced by theb-th sample from{I ∗t }from step 2 of this algorithm;
+ii.sup T=m,...,n RCoVaRb(T), whereRCoVaR b(T)is defined asRCoVaR 1(T), except
+that{I 1t}is replaced by theb-th sample from{I ∗1t}from step 2 of this algorithm.
+4. On a fine grid forν∈[0,1], compute the empirical(1−ν)-quantiles of
+i.
+
+supT=m,...,n VaRb(T) 	b∈[B], which we denote byv(ν), and
+ii.
+
+supT=m,...,n RCoVaRb(T) 	b∈[B], which we denote byc(ν).
+5. Find the valueν∈[0,1]for which
+K
+B
+BX
+b=1
+1 supT=m,...,n VaRb(T)≥v(ν)∨sup T=m,...,n RCoVaRb(T)≥c(ν) 	
+is closest to (or smaller than)ι; cf.(15). The appertaining critical values will be
+denoted byv RCoVaR andc RCoVaR.
+Algorithm 3.To compute critical values for Theorem 3 proceed as follows:
+1. Generate a large numberBof mutually independent samples
+
+U1t
+IID
+∼ U[0,1]
+	
+t∈[n] and
+U2t
+IID
+∼ U[0,1]
+	
+t∈[n].
+2. Compute theBsequences
+
+I ∗t =1 {U1t>β}	t∈[n] and H ∗1t,α|β =1 {U1t>β, U2t>α}(U2t −
+α)/(1−α)
+	
+t∈[n].
+3. Forb= 1, . . . , B, calculate:
+44
+i.sup T=m,...,n VaRb(T), whereVaR b(T)is defined asVaR(T), except that{I t}is
+replaced by theb-th sample from{I ∗t }from step 2 of this algorithm;
+ii.sup T=m,...,n CoESb(T), whereCoES b(T)is defined asCoES 1(T), except that
+{H1t,α|β}is replaced by theb-th sample from{H ∗1t,α|β}from step 2 of this al-
+gorithm.
+4. On a fine grid forν∈[0,1], compute the empirical(1−ν)-quantiles of
+i.
+
+supT=m,...,n VaRb(T) 	b∈[B], which we denote byv(ν)and
+ii.
+
+supT=m,...,n CoESb(T) 	b∈[B], which we denote byc(ν).
+5. Find the valueν∈[0,1]for which
+1
+B
+BX
+b=1
+1 supT=m,...,n VaRb(T)≥v(ν) 	 + KB
+BX
+b=1
+1 supT=m,...,n CoESb(T)≥c(ν) 	
+− KB
+BX
+b=1
+1 supT=m,...,n VaRb(T)≥v(ν),sup T=m,...,n CoESb(T)≥c(ν) 	
+is closest to (or smaller than)ι; cf.(31). The appertaining critical values will be
+denoted byv CoES andc CoES.
+As above, the validity of the resulting critical values from Algorithm 3 relies on
+the fact that the sequence
+
+(I ∗t , H∗1t,α|β)′	t∈[n] has the same probabilistic properties as
+(It, Hkt,α|β)′	t∈[n] has under the null. Hence, the critical valuesv CoES andc CoES from Algo-
+rithm 3 can be computed with arbitrary precision by choosingBsufficiently large.
+D Proofs for CoES and MES Monitoring
+Proof of Proposition 3:The proof follows from the following calculation, where we write
+(26) as
+Hkt,α|β =
+1{Xt> dVaRt,β }
+1−α
+Z 1
+α
+1{Ykt> \CoVaRkt,γ|β } dγ
+=
+1Xt> bF −1Xt|Ft−1 (β)	
+1−α
+Z 1
+α
+1Ykt> bF −1Ykt |Xt≥V aRt,β ,Ft−1 (γ)	 dγ
+=
+1 bFXt|Ft−1 (Xt)>β	
+1−α
+Z 1
+α
+1 bFYkt |Xt>V aRt,β ,Ft−1 (Ykt)>γ	 dγ
+45
+=
+1 bU Xt >β	
+1−α
+Z 1
+α
+1 bU Yk |X>V aRt >γ	 dγ
+=
+1 bU Xt >β	
+1−α 1 bU Yk |X>V aRt >α	  bU Yk|X>VaRt −α 
+=1  bU Xt >β, bU Yk |X>V aRt >α	 bU Yk|X>VaRt −α1−α
+= eHkt,α|β.
+Here, the second and forth equalities use the definitions of the VaR, CoVaR and of the PITs
+in (27), and the third equality thatF(F −1(z)) =zifFis continuous and strictly increasing
+aroundF −1(z). The fifth equality follows from computing the integral over the indicator
+function.
+Proof of Proposition 4:Before proceeding, we collect two useful results. First,
+U Yk|X>VaRt | {UXt > β,Ft−1} ∼ U[0,1], because forx∈(0,1),
+P
+
+U Yk|X>VaRt ≤x|U Xt > β,Ft−1	 =P FYkt|Xt>VaRt,β ,Ft−1(Ykt)≤x|X t >VaR t,β,F t−1	
+=P
+
+Ykt ≤F −1Ykt|Xt>VaRt,β ,Ft−1(x)|X t >VaR t,β,F t−1	
+=F Ykt|Xt>VaRt,β ,Ft−1
+ 
+F −1Ykt|Xt>VaRt,β ,Ft−1(x)
+=x.(32)
+The statement (32) extends to allx∈[0,1] asU Yk|X>VaRt ∈[0,1] almost surely by definition.
+Second, for a uniform random variableU∼ U[0,1] andx∈[0,1], using the law of total
+probability,
+P
+n
+1{U >α}
+U−α
+1−α ≤x
+o
+=P
+n
+1{U >α}
+U−α
+1−α ≤x|U > α
+o
+P{U > α}+P
+n
+1{U >α}
+U−α
+1−α ≤x|U≤α
+o
+P{U≤α}
+=P
+n U−α
+1−α ≤x|U > α
+o
+P{U > α}+P
+n
+0≤x|U≤α
+o
+α
+=P
+n
+U≤α+x(1−α)|U > α
+o
+P{U > α}+α
+=P
+n
+α < U≤α+x(1−α)
+o
++α
+=x(1−α) +α.(33)
+Similarly as in the proof of Proposition 1, we establish Proposition 4 in four steps. First,
+we show thatI t
+d
+=1 {U1t>β}. This, however, follows as in the proof of Proposition 1.
+46
+Second, we establish that
+Hkt,α|β
+d
+=1 {U1t>β, U2t>α}
+U2t −α
+1−α .
+Similar to the proof of Proposition 3, but here under the stronger assumption of correctly
+specified forecasts, dVaRt,β =F −1Xt|Ft−1(β) and \CoVaRkt,α|β =F −1Ykt|Xt>VaRt,β ,Ft−1(γ) for any
+γ≥αunderH CoES0 , we obtain that
+Hkt,α|β =
+1{Xt> dVaRt,β }
+1−α
+Z 1
+α
+1{Ykt> \CoVaRkt,γ|β } dγ
+= 1{Xt>VaRt,β }
+1−α
+Z 1
+α
+1{Ykt>CoVaRkt,γ|β } dγ
+=
+1Xt>F −1Xt|Ft−1 (β)	
+1−α
+Z 1
+α
+1Ykt>F −1Ykt |Xt>V aRt,β ,Ft−1 (γ)	 dγ
+=
+1FXt|Ft−1 (Xt)>β	
+1−α
+Z 1
+α
+1FYkt |Xt>V aRt,β ,Ft−1 (Ykt)>γ	 dγ
+=
+1U Xt >β	
+1−α
+Z 1
+α
+1U Yk |X>V aRt >γ	 dγ
+=1 U Xt >β, UYk |X>V aRt >α	 U Yk|X>VaRt −α1−α .(34)
+Hence, we may write for allx∈[0,1],
+P
+
+Hkt,α|β ≤x| Ft−1
+	
+=P
+
+Hkt,α|β ≤x|U Xt > β,Ft−1	PU Xt > β| Ft−1	
++P
+
+Hkt,α|β ≤x|U Xt ≤β,F t−1	PU Xt ≤β| Ft−1	
+=P
+
+1U Yk |X>V aRt >α	 U Yk|X>VaRt −α1−α ≤x  U Xt > β,Ft−1(1−β)
++ 1·β
+=
+
+x(1−α) +α
+
+(1−β) +β,(35)
+where we have exploited in the final step thatU Yk|X>VaRt | {UXt > β,Ft−1} ∼ U[0,1] from
+(32) and the CDF from (33). By the LIE, we obtain from (35) that
+P
+
+Hkt,α|β ≤x
+	
+=
+
+x(1−α) +α
+
+(1−β) +β=H(x),
+as claimed.
+47
+Third, we show that
+(It, Hkt,α|β)′ d= 1{U1t>β},1 {U1t>β, U2t>α} U2t −α1−α ′.
+To do so, we prove that forx∈[0,1],
+P
+
+Hkt,α|β ≤x|I t = 0
+	
+= 1,
+P
+
+Hkt,α|β ≤x|I t = 1
+	
+=x(1−α) +α.
+This fully determines the dependence structure betweenHkt,α|β andI t, because fory∈ {0,1},
+by the law of total probability,
+P
+
+Hkt,α|β ≤x, I t =y}=P
+
+Hkt,α|β ≤x|I t = 0
+	
+P
+
+It = 0
+	
++P
+
+Hkt,α|β ≤x|I t = 1
+	
+P
+
+It = 1
+	
+,
+where the marginal probabilitiesP
+
+It = 0
+	
+andP
+
+It = 1
+	
+are already known from the first
+step of this proof. We follow similar steps as in (35) and use (34) to deduce that
+P
+
+Hkt,α|β ≤x|I t = 0
+	
+= 1,
+P
+
+Hkt,α|β ≤x|I t = 1
+	
+=P
+
+Hkt,α|β ≤x|U Xt > β	
+=E
+"
+P
+
+1U Yk |X>V aRt >α	 U Yk|X>VaRt −α1−α ≤x  U Xt > β,Ft−1#
+=x(1−α) +α.
+This is the same conditional distribution as that of1 {U1t>β, U2t>α}(U2t −α)/(1−α)|1 {U1t>β},
+as is easy to verify.
+In the fourth step, we show IIDness of (I t, Hkt,α|β)′ under correct specification. To do so,
+putH t :=H kt,α|β for brevity. We start by showing independence ofI s andH t fors̸=t. For
+s > t, we deduce that
+P
+
+Is =x, H t ≤y| Fs−1
+	
+=1 {Ht≤y}P
+
+Is =x| Fs−1
+	
+=1 {Ht≤y}
+
+β1{x=0} + (1−β)1 {x=1}
+
+,(36)
+where the first step follows fromF s−1-measurability ofH t, and the second step from (21).
+Hence,
+P
+
+Is =x, H t ≤y
+	
+=E
+h
+P
+
+Is =x, H t ≤y| Fs−1
+	i
+=E
+h
+1{Ht≤y}
+
+β1{x=0} + (1−β)1 {x=1}
+	i
+48
+=P
+
+Ht ≤y
+	
+β1{x=0} + (1−β)1 {x=1}
+
+=P
+
+Ht ≤y
+	
+P
+
+Is =x
+	
+,(37)
+where we used the LIE in the first step, (36) in the second step, and (21) in the final step.
+The cases < tcan be dealt with similarly, such that (37) holds for alls̸=t.
+Adopting similar arguments, we may also deduce that
+P
+
+Is1 =x 1, . . . , Isℓ =x ℓ, Ht1 ≤y 1, . . . , Htm ≤y m
+	
+=P
+
+Is1 =x 1
+	
+·. . .·P
+
+Isℓ =x ℓ
+	
+·P
+
+Ht1 ≤y 1
+	
+·. . .·P
+
+Htm ≤y m
+	
+for any indicess 1 < . . . < sℓ andt 1 < . . . < tm (ℓ, m∈N) withs i ̸=t j (i= 1, . . . , ℓand
+j= 1, . . . , m), as required for full independence.
+49

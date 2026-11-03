@@ -1,0 +1,401 @@
+arXiv 2610.29500  https://arxiv.org/abs/2610.29500
+
+Auditing LLM Alpha-Factor Mining:
+Metric Provenance and Full-Cohort Reanalysis
+Yufeng He
+The University of Hong Kong
+he-yufeng@connect.hku.hk
+Abstract
+Reliable evaluation of LLM-based alpha min-
+ing requires more than positive backtest sum-
+maries. We audit a preserved project at three
+levels: historical run counters, outcome re-
+tention, and a separately scoped public re-
+analysis. Three historical runs report 67, 20,
+and 11 keep decisions, but the comparison
+mixes metric populations: a mean over kept
+candidates is compared with a mean of per-
+round maxima, and successful evaluations with
+all returned outcomes. These artifacts can-
+not identify an architecture advantage. A re-
+leased 1,837-expression catalog also excludes
+non-positive OOS outcomes, making its zero-
+reversal rate non-informative. We then account
+for all 1,047 unique expressions in a frozen, IS-
+screened preserved pool using forty A-shares
+and 2024–2025 rank associations. A versioned
+public-operator correction yields 923 scorable
+records, 99 with insufficient valid dates, and 25
+unsupported, without modifying the other 990
+prior diagnostics. Among scorable records, 671
+have positive and 252 negative signed mean
+rank-IC. Simple untrained references also show
+positive associations, so this distribution does
+not establish incremental agent skill or prof-
+itability. The case study motivates explicit met-
+ric grains, immutable cohort accounting, and
+provenance-aware interpretation rather than ar-
+chitectural rankings from incomplete records.
+1 Introduction
+LLM-based factor mining combines expression
+generation, a backtester, and selection rules. Its
+appeal is practical: models can propose candidate
+signals, use feedback, and revise a search direc-
+tion. Yet a pipeline can produce plausible summary
+tables without preserving the evidence needed to
+interpret them. A field namedSharpedoes not spec-
+ify which population was averaged; a count named
+backtesteddoes not establish whether failures are
+included; and a positive-only artifact cannot esti-
+mate the frequency of negative outcomes.
+We study these problems through a pre-
+served project containing a three-role planning–
+generation–review pipeline and a twenty-specialist
+evolutionary workflow. The historical reports ini-
+tially suggested an architectural difference. Our
+audit instead asks:which conclusions do the coun-
+ters, source paths, and retained artifacts support?
+We do not introduce a new mining algorithm or
+claim superiority over prior systems.
+The study contributes (1) a source-and-report
+audit exposing incompatible metric grains and in-
+complete configuration/state provenance (§4); (2)
+an outcome-retention audit of a 1,837-expression
+catalog (§5); and (3) a full-cohort public reanalysis
+of 1,047 frozen expressions, retaining non-scorable
+records and a versioned implementation correction
+(§6). These are related project artifacts, not inter-
+changeable experimental populations.
+2 Related Work
+Agentic generate–evaluate systems and evolution-
+ary expression search are active approaches to al-
+pha mining [1, 2, 3]. They motivate careful evalua-
+tion of search outcomes, but our contribution is an
+artifact-level case study rather than a new search
+method or a benchmark against those systems. The
+findings do not imply that other systems lack ad-
+equate controls. They identify concrete ways in
+which this project’s reporting and retained artifacts
+fail to support its initial interpretation.
+3 Workflow and Evidence Scope
+The preserved three-role workflow has a Re-
+searcher that plans a direction, an Implementor that
+generates and tests expressions, and a Reviewer.
+In the inspected source, keep/discard decisions
+are programmatic. The reviewer then attempts an
+LLM-generated next-step suggestion, with a rule
+fallback on failure. A role name or model config-
+uration is not a verified successful model request,
+1
+arXiv:2610.29500v1  [cs.CE]  21 Oct 2026
+Table 1: Recovered historical counters. P is the pipeline;
+S-A and S-B are two swarm runs. Different accounting
+stages occupy different rows.
+Reported counter P S-A S-B
+Rounds 20 20 20
+Keep decisions 67 20 11
+Pipeline tested candidates 289 – –
+Pipeline successful outcomes 234 – –
+Swarm generated proposals – 887 876
+Swarm returned outcomes – 816 461
+Keep decisions / round 3.35 1.00 0.55
+and we have not recovered the exact historical re-
+quest graph.
+The swarm has twenty specialists across twelve
+configured categories, an orchestrator, adaptive al-
+location weights, sign-flipped candidates, and pe-
+riodic prompt-revision proposals. Both workflows
+use a functional price/volume DSL and a propri-
+etary evaluator. The historical narrative lists com-
+mon thresholds of Sharpe ≥2 , Fitness ≥0 , and
+Turnover ≤500 . However, preserved source paths
+also have workflow-specific IC, complexity, pool-
+score, or correlation checks. Exact executed policy
+versions and matching initial pool states are not
+bound to the reports, so identical effective selec-
+tion policies are not established.
+The evidence consists of March 2026 run reports,
+a native OOS checkpoint, an outcome-filtered cata-
+log, and a separately frozen list selected from 3,114
+preserved input rows. Current source explains re-
+port construction but is not automatically treated
+as the exact historically executed commit. We cor-
+roborate its implications by recomputing statistics
+from printed report rows where possible.
+4 Historical Run-Report Audit
+4.1 Recoverable counters
+Each report contains twenty rounds. Table 1 pre-
+serves their recoverable counters without present-
+ing unlike stages as one metric. Keep decisions are
+not proved counts of distinct factors surviving in
+the final pool. Missing cells are unavailable at a
+harmonized stage, not zero values.
+The contemporaneous narrative labels the
+pipeline generator as Claude Opus 4.6, S-A spe-
+cialists as Claude Sonnet 4.5, and S-B specialists
+as Claude Opus 4.6. Some report labels are hard-
+coded in the template rather than recovered from
+requests. We retain them only as reported configu-
+ration labels, not a verified model-quality ranking
+or backend identity.
+4.2 Metric populations do not align
+The earlier mean-Sharpe comparison is not a
+common-population mean. The pipeline collec-
+tor appends kept-candidate Sharpes, while the
+swarm collector appends positive per-round max-
+ima. Three-decimal report entries reproduce aver-
+ages of approximately 2.227 over 67 kept rows and
+2.433 over 20 round maxima, matching the earlier
+rounded 2.23 versus 2.43 display. We do not retain
+this as a performance comparison.
+The maximum also changes population: the
+pipeline’s kept-candidate maximum is 2.449,
+whereas its evaluated round summaries reach 3.171;
+the swarm’s 4.206 is an evaluated round maximum
+and need not be kept. These values cannot establish
+superior outlier discovery.
+Likewise, 234 is the pipeline’s reported
+successful-outcome count, but 816 is the swarm’s
+returned-outcome count, including possible fail-
+ures and additional sign-flip evaluations. Six S-
+A rounds have more outcome records than newly
+generated proposals. The thin report does not re-
+cover a success-only denominator, so 67/234 ver-
+sus 20/816 is not a verified common-denominator
+acceptance-rate comparison.
+4.3 Categories and state provenance
+The pipeline’s four category labels cover all round
+directives; the swarm’s two productive labels cover
+mapped specialists with keep decisions. These are
+different populations. S-A’s agent leaderboard at-
+tributes 8 keep decisions while the run counter is
+20; S-B attributes 9 while its counter is 11. The
+source’s sign-flip route can fall outside configured-
+specialist attribution, but the missing per-event at-
+tribution has not been reconstructed.
+The comparison code runs the pipeline before
+the swarm without an explicit initial-pool snap-
+shot/reset binding. Together with missing exact
+executed versions and request-level provenance,
+this prevents treating the reports as a controlled
+experiment. More seeds alone would not repair
+incompatible counters: future work must align ac-
+counting stages, selection policies, initial state and
+resource budgets before using independent runs for
+inference.
+5 Outcome-Retention Audit
+The original analysis described 1,837 records as
+an OOS validation set. A read-only audit of the
+2
+Table 2: Read-only audit of OOS artifacts. The retained
+catalog was selected using OOS outcomes.
+Artifact count Value
+Checkpoint expressions 2,016
+Negative-OOS checkpoint rows 368
+Retained catalog expressions 1,837
+Non-positive-OOS catalog rows 0
+Checkpoint-only expressions 368
+Checkpoint-only negative OOS 368
+Catalog rows passing stated IS rule 1,037
+preserved artifacts and runner shows that this in-
+terpretation is not valid: the runner uses a looser
+preliminary screen and explicitly drops records
+with OOS Sharpe ≤0 before writing the retained
+file. Moreover, only 1,037 rows in that file sat-
+isfy the manuscript’s stated IS rule ( Sharpe≥2 ,
+Fitness≥0 , Turnover≤500 ). The checkpoint con-
+tains 2,016 unique expressions, including 368 with
+negative OOS Sharpe. All 368 expressions found
+only in the checkpoint are negative OOS; all 189
+expressions found only in the retained catalog are
+positive OOS; and the 1,648 common expressions
+have no sign disagreement. The catalog’s zero sign-
+reversal rate and its decay summaries are there-
+fore properties of outcome-based retention, not evi-
+dence that the mined factors generalize.
+A clean OOS evaluation remains pending. It
+must recover and hash the complete pre-OOS pool,
+pre-specify an IS-only screen, perform any dedu-
+plication using IS data, freeze the expression list
+before OOS access, checkpoint every response, and
+preserve every numerical OOS outcome and error
+regardless of sign. Numerical OOS and general-
+ization claims should not be restored until that run
+exists.
+6 Full-Cohort Public Reanalysis
+We separately evaluate a frozen list of 1,047 unique
+expressions selected from 3,114 preserved input
+rows using the stated IS screen. This does not es-
+tablish a census of all generated candidates or a
+historically blind holdout. The broader preserved
+pool is not a matched replay of the three historical
+keep totals. All IDs are retained regardless of sub-
+sequent public-evaluator outcome; no expression
+is chosen by its new score.
+The new snapshot contains the same ordered
+40-stock convenience universe over 727 trading
+dates in 2023–2025. We acquire both unadjusted
+and provider-adjusted daily views through BaoS-
+tock 0.9.3 and verify all 80 files, their byte hashes,
+Table 3: Full frozen cohort under the corrected public
+evaluator. Non-scorable records remain in the denomi-
+nator; no missing result is assigned zero alpha.
+Outcome Records
+Scorable signed rank-IC 923
+Insufficient valid dates 99
+Unsupported operator or variable 25
+All frozen records 1,047
+Positive mean rank-IC (of 923) 671
+Negative mean rank-IC (of 923) 252
+Median mean rank-IC (of 923) 0.0148
+date/stock/adjustment identities, and shared quan-
+tity and trading-status fields. Features use nomi-
+nal prices, shares, and nominal traded amount; the
+adjusted-price view is reserved for labels. Two
+non-trading stock-day cells are masked. We neither
+forward-fill missing observations nor substitute a
+smaller acquired stock prefix.
+For each 2024–2025 date t, the label is the
+provider-adjusted close change over five trading-
+calendar rows,
+yi,t =
+Padji,t+5
+Padji,t −1.
+Both endpoint prices must be finite and positive
+and both endpoints tradable. This is not an investor
+total-return or executable-P&L claim; the last five
+captured dates have no label. Daily rank-IC is the
+Pearson correlation of average-tie cross-sectional
+ranks. We require at least five eligible stocks, three
+distinct signal values, and two distinct labels. The
+three-signal-value threshold is a chosen diagnostic
+convention, not a claim that binary signals cannot
+have a mathematically defined correlation. A factor
+is scorable only with at least 20 valid dates. Its
+mean/SD ratio, if reported, is unannualized and is
+not a trading Sharpe.
+The frozen public implementation initially pro-
+duces 57 numerical errors: its conditional operator
+attempts to interpret a panel as one Boolean when
+the true branch is scalar. We preserve this v1 run
+and add a versioned scalar-broadcasting correction
+with the existing elementwise conditional seman-
+tics. All 1,047 records are then re-evaluated, rather
+than rerunning only promising failures. The other
+990 diagnostic records remain unchanged; 56 cor-
+rected records become scorable and one remains
+insufficiently observed.
+Table 3 is descriptive. Of the 923 scorable ex-
+pressions, 835 have all 480 label-available target
+3
+Table 4: Post-reanalysis descriptive references, each
+with 480 valid dates. These untrained signals are con-
+text, not a matched-sample ranking against the factor
+cohort.
+Fixed reference Mean signed rank-IC
+Nominal close level−0.0218
+Share volume 0.0234
+Nominal traded amount 0.0021
+One-day nominal reversal−0.0007
+Five-day nominal reversal−0.0155
+Twenty-day nominal change 0.0229
+dates; the other 88 have varying coverage, which
+further limits cross-factor comparisons. We verify
+file identities and nine fixed record/date rank-IC
+cells with a separate tie-ranking/Pearson calcula-
+tion. Factors and overlapping five-day labels are
+not independent observations, so we do not attach
+an independent-factor significance test to the ag-
+gregate distribution. These results are not native
+OOS Sharpe, are not directly interchangeable with
+the outcome-filtered catalog’s metrics, and do not
+identify an architecture effect.
+6.1 Fixed reference-signal context
+After the cohort analysis, we specify six fixed ref-
+erence signals before computing their outcomes.
+All are reported in Table 4; signs and horizons are
+not selected based on these scores. They use the
+same snapshot and scoring convention. Reversal
+references negate nominal trailing close changes;
+the twenty-day reference retains the positive orien-
+tation.
+V olume and recent-change references also have
+positive associations. Therefore a positive IC alone
+does not establish incremental agent skill; we have
+not estimated incremental prediction beyond these
+references. Factors can have different eligible dates
+and stocks, so their cohort median and the stan-
+dalone reference means do not establish matched-
+sample outperformance. No reference is selected
+for a profitability or significance claim.
+7 Implications and Limitations
+The defensible contribution is an evaluation-audit
+case study, not an architectural ranking. Histor-
+ical reports preserve different keep counters but
+not verified common-grain Sharpe, rate, or cate-
+gory comparisons. Single runs, unequal budgets,
+unbound starting state and uncertain executed con-
+figurations further limit interpretation. The public
+cohort comes from a broader preserved pool and
+cannot be assigned back to the three run conditions
+from the available records.
+The reanalysis completes data collection and as-
+signs an explicit outcome to every frozen expres-
+sion. It still covers one market and a convenience
+stock universe. It uses public rather than native
+semantics; factor coverage varies and five-day la-
+bels overlap. The original proprietary evaluator
+and full historical request traces are not released.
+The reference checks were planned after the cohort
+analysis, not as part of its original primary protocol.
+A stronger study would fix common masks and
+comparators, retain generation and run identities,
+and test repeated systems under matched budgets
+and a suitable temporal design.
+8 Conclusion
+Preserved artifacts can support an audit even
+when they cannot support a performance rank-
+ing. This case reveals metric-population mis-
+matches, outcome-conditioned retention, and a pub-
+lic conditional-operator defect. A complete, ver-
+sioned reanalysis retains all 1,047 IDs, including
+124 non-scorable records, without treating positive
+associations as profitability or architecture effects.
+Reliable future comparisons require aligned defi-
+nitions and provenance before additional scale or
+significance testing.
+Ethics Statement
+The new analysis uses publicly accessible histori-
+cal market data for research, makes no live-trading
+or financial-advice claim, and sends no trading or-
+ders. Failed and non-scorable records are preserved.
+Proprietary components and raw provider data are
+not represented as publicly redistributable artifacts;
+the SDK license is not a data-redistribution grant.
+Model labels are reported with provenance limits
+rather than as verified backend identities.
+AI-assistant disclosure.AI assistants supported
+literature review, audit design, implementation,
+statistical checking and manuscript preparation.
+Numerical findings are computed from preserved
+source records and versioned reanalysis outputs,
+not generated as substitutes for observations. No
+human-annotation study or independent human re-
+view is claimed. The author remains responsible
+for the content.
+4
+References
+[1] Ziyi Tang, Zechuan Chen, Jiarui Yang, et al. 2025.
+AlphaAgent: LLM-Driven Alpha Mining with Regu-
+larized Exploration to Counteract Alpha Decay.arXiv
+preprint arXiv:2502.16789. https://arxiv.org/
+abs/2502.16789.
+[2] Jun Han, Shuo Zhang, Wei Li, et al. 2026. QuantaAl-
+pha: An Evolutionary Framework for LLM-Driven
+Alpha Mining.arXiv preprint arXiv:2602.07085v3.
+https://arxiv.org/abs/2602.07085v3.
+[3] Fengyuan Liu, Yi Huang, Sichun Luo, et al. 2025.
+Cognitive Alpha Mining via LLM-Driven Code-
+Based Evolution.arXiv preprint arXiv:2511.18850.
+https://arxiv.org/abs/2511.18850.
+5

@@ -1,0 +1,1378 @@
+arXiv 2610.35702  https://arxiv.org/abs/2610.35702
+
+Weekend Crypto Volatility and Monday Market Risk
+Pedram Ebadollahyvahed1, Nneka Umeorah1
+1School of Mathematics, Cardiff University, Cardiff CF24 4AG, United Kingdom
+Emails: EbadollahyvahedP@cardiff.ac.uk; umeorahn@cardiff.ac.uk
+Corresponding author: Pedram Ebadollahyvahed
+Abstract
+Cryptocurrencies trade continuously while major traditional markets close over the weekend. We
+examine whether weekend cryptocurrency volatility predicts Monday variance in equity, commodity
+and fixed-income markets. Using daily range-based variance measures for Bitcoin, Ether, XRP, the
+S&P 500, gold and a US Treasury ETF over 2017–2026, we augment heterogeneous autoregressive
+models with a common weekend cryptocurrency factor. Predictive content is weak before 2024 but
+significant thereafter. In the post-2024 sample, a one-standard-deviation increase in the factor is
+associated with 27–54% higher fitted Monday variance. Adding the factor reduces out-of-sample
+QLIKE losses by 11–22%, although statistical evidence varies across markets. Friday cryptocurrency
+volatility does not reproduce the result, and coin-specific variation adds no significant predictive
+information beyond the common factor. An endogenous procedure estimates a break in late 2023,
+during growing anticipation of US spot-Bitcoin ETF approval. However, ETF-flow interactions
+provide no evidence of amplification through greater measured Monday flow activity, leaving the
+mechanism unresolved. The findings suggest that calendar-specific volatility measures reveal pre-
+dictive information that aggregate connectedness measures may obscure.
+Keywords:cryptocurrency; volatilitytransmission; weekendeffect; realisedvolatility; spotexchange-
+traded funds; market integration.JEL:G14, G15, G23.
+1. Introduction
+The trading calendars of cryptocurrency and traditional markets do not coincide. Equities,
+commodities and bonds close over the weekend, while cryptocurrencies trade continuously. Infor-
+mation arriving during this period can therefore be incorporated into cryptocurrency prices before
+traditional markets reopen. Most empirical studies address this calendar mismatch by aligning cryp-
+tocurrency and traditional-market observations to a common trading calendar. We instead exploit
+the mismatch asa source of temporalidentification: cryptocurrency marketscan respondto weekend
+information while traditional markets remain closed, allowing us to test whether volatility accumu-
+lated in cryptocurrency during this interval contains predictive information for traditional-market
+volatility when trading resumes.
+Using this timing asymmetry, we find that weekend cryptocurrency volatility contains predictive
+information for volatility in traditional markets on Monday. Specifically, higher weekend cryptocur-
+rency variance predicts higher Monday variance in the S&P 500, gold and a US Treasury bond
+ETF, even after controlling for each asset’s recent volatility and for cryptocurrency variance on the
+preceding Friday. Importantly, this relationship is not evident earlier in the sample. It emerges
+around 2023–24 and is statistically significant across all nine cryptocurrency–traditional asset pairs
+considered in this study during the post-2024 period.
+1
+arXiv:2610.35702v1  [q-fin.ST]  26 Oct 2026
+The timing coincides with an important period of institutional change in cryptocurrency mar-
+kets. On 10 January 2024, the US Securities and Exchange Commission approved rule changes
+permitting the listing and trading of eleven spot-Bitcoin exchange-traded products in the United
+States, following repeated rejections and a court ruling vacating its earlier denial of Grayscale’s
+proposal (SEC, 2024). These products expanded access to Bitcoin exposure through regulated
+US securities exchanges for institutional and retail investors. A growing literature documents in-
+creased integration between cryptocurrency and traditional markets around this period (Babalos
+et al., 2025, Bukaita and Li, 2026, Hong et al., 2025). Whereas this literature primarily charac-
+terises changes in aggregate integration, we examine whether a specific calendar-based predictive
+relationship emerged around the same period. An endogenous structural-break procedure places
+the change in late 2023, broadly coinciding with the period in which spot-Bitcoin ETF approval
+became increasingly anticipated.
+Several findings support the interpretation that the predictive relationship is specifically associ-
+ated with weekend cryptocurrency volatility rather than cryptocurrency volatility more generally.
+First, weekend variance remains statistically significant when Friday cryptocurrency variance is in-
+cluded as a control, whereas Friday variance alone has little predictive content for Monday volatil-
+ity. Second, the relationship is driven primarily by a common cryptocurrency-market component.
+When each coin’s weekend variance is decomposed into common and coin-specific components, the
+common factor significantly predicts Monday variance across all three traditional assets, while the
+coin-specific components do not. Third, the relationship is economically and forecast relevant. In
+the post-2024 sample, a one-standard-deviation increase in the weekend cryptocurrency factor is
+associated with approximately 28% higher Monday variance for the S&P 500, 54% for gold and
+27% for the Treasury ETF, while adding the factor to the HAR benchmark reduces out-of-sample
+QLIKE loss by 11–22%. Fourth, the main finding is robust to several alternative specifications,
+including controlling for the pre-weekend VIX, estimating a date-clustered panel specification, ex-
+cluding the most influential observation, and allowing the timing of the structural change to be
+determined endogenously.
+The calendar-specific nature of the relationship also helps explain why it is not apparent in con-
+ventional measures of market connectedness. Applying the Diebold–Yilmaz connectedness frame-
+work to the same six assets produces relatively weak volatility transmission from individual cryp-
+tocurrencies to the traditional assets, while the rolling connectedness index shows no comparable
+change around the 2023–24 period. This contrast suggests that transmission concentrated around
+a particular part of the trading calendar may be diluted when connectedness is measured using
+daily observations pooled across all weekdays. More generally, the result highlights the value of
+explicitly accounting for differences in trading calendars when studying information flows between
+continuously traded and periodically closed markets.
+Finally, we also examine whether spot cryptocurrency ETF flows provide a potential mechanism
+linking weekend cryptocurrency volatility to Monday volatility in traditional markets. If ETF ac-
+tivity were the primary conduit, we would expect the relationship to strengthen when fund flows
+are larger. We find no evidence of this pattern: the interaction between weekend cryptocurrency
+variance and ETF flows is statistically insignificant for the S&P 500 and gold and negative for the
+Treasury ETF. Thus, although the relationship emerges during a period of increasing cryptocur-
+rency institutionalisation, our results do not support ETF flows as the mechanism driving it. The
+underlying mechanism therefore remains unresolved.
+The study most closely related to ours is Mourey et al. (2025), who show that weekend cryp-
+tocurrency returns predict Monday equity returns and date a structural change in that relationship
+to the 2022 LUNA collapse. Our analysis differs along three dimensions. First, we examine volatility
+rather than returns, shifting the focus from return predictability to measuring and forecasting mar-
+2
+ket risk. Second, we consider three traditional asset classes: equities, commodities and fixed income,
+rather than equities alone. Third, we examine the timing and potential mechanisms underlying the
+emergence of the volatility relationship, including structural-break analysis and ETF-flow interac-
+tions. The distinction between returns and volatility is economically important because volatility
+forecasts enter risk management, margin requirements and value-at-risk calculations. Our analysis
+also relates to the classical evidence of French and Roll (1986) that return variance differs sub-
+stantially between trading and non-trading periods. Continuous cryptocurrency trading provides a
+setting in which information can be reflected in one market while traditional markets remain closed.
+This paper makes four contributions.
+•A new empirical finding.We document a calendar-specific relationship in which weekend
+cryptocurrency volatility predicts Monday volatility across equities, commodities and fixed
+income, emerging primarily around 2023–24.
+•A methodological contribution.We show that accounting explicitly for differences in
+trading calendars can reveal predictive relationships that may be less apparent in aggregate
+connectedness measures.
+•A forecasting contribution.We compare conventional and machine-learning volatility
+modelsandfindthattunedmachine-learningmethodsdonotconsistentlyoutperformtheHAR
+benchmark. However, adding the weekend cryptocurrency factor improves HAR forecasts.
+•Evidence on the mechanism.ETF-flow interactions provide no evidence that spot-ETF
+flows explain the weekend relationship, suggesting that its emergence cannot be attributed to
+this specific channel.
+The remainder of the paper is organised as follows. Section 2 reviews the relevant literature.
+Section 3 presents the empirical methodology, including the volatility measures, forecasting frame-
+work and the weekend-channel specification. Section 4 describes the data and the choice of assets.
+Section 5 examines the emergence of the weekend relationship, distinguishes weekend from Friday
+and coin-specific information, and assesses its economic magnitude and forecasting value. It also
+presents robustness checks, ETF-flow interactions, and complementary forecasting and connected-
+ness analyses. Section 6 concludes the study.
+2. Related literature
+This study builds on research on volatility measurement and forecasting, cryptocurrency volatil-
+ity, cross-market connectedness, and calendar effects in financial markets. Together, these areas
+provide the theoretical and empirical background for examining whether cryptocurrency volatility
+observed while traditional markets are closed contains predictive information for volatility when
+those markets reopen.
+2.1 Measuring and forecasting volatility
+Volatility is latent and must therefore be estimated from observed prices. Financial returns are
+characterised by heavy tails and volatility clustering (Mandelbrot, 1963, Fama, 1965, Cont, 2001),
+features that motivated the development of ARCH and GARCH models (Engle, 1982, Bollerslev,
+1986) and their asymmetric extensions (Nelson, 1991, Glosten et al., 1993). With the availability of
+high-frequency data, realised-volatility measures constructed from intraday returns provided more
+informative ex-post measures of price variation than squared daily returns (Andersen and Bollerslev,
+1998, Andersen et al., 2001, 2003, Barndorff-Nielsen and Shephard, 2002).
+3
+The heterogeneous autoregressive (HAR) model of Corsi (2009) provides a parsimonious frame-
+work for forecasting realised volatility using its daily, weekly and monthly components. Its ability to
+capture volatility persistence while remaining relatively simple has made it a widely used benchmark
+for volatility forecasting. When intraday data are unavailable, range-based estimators provide an
+alternative by extracting information from daily open, high, low and close (OHLC) prices (Parkin-
+son, 1980, Garman and Klass, 1980, Rogers and Satchell, 1991). These estimators are particularly
+relevant to our analysis because our volatility measures are constructed from daily OHLC data.
+Forecast evaluation also requires care because observed volatility measures are proxies for the
+underlying latent variance. Loss functions such as QLIKE are robust to certain forms of volatility-
+proxy noise (Patton, 2011), while the Diebold-Mariano test provides a formal comparison of pre-
+dictive accuracy across competing forecasts (Diebold and Mariano, 1995). Previous evidence also
+shows that greater model complexity does not necessarily translate into superior volatility forecasts
+(Hansen and Lunde, 2005, Dudek et al., 2024). We therefore use the HAR model as a parsimonious
+benchmark and assess whether incorporating weekend cryptocurrency volatility provides additional
+predictive information for Monday volatility.
+2.2 Cryptocurrency volatility and traditional financial assets
+Cryptocurrencieshavedevelopedfromanalternativedigitalpaymentsystemintoawidelytraded
+class of financial assets. Their market behaviour nevertheless differs in important respects from
+that of traditional assets. Corbet et al. (2019) review the development of cryptocurrency markets
+and document their historically low correlations with conventional financial assets, a feature that
+initially motivated interest in their potential diversification benefits. A particularly distinctive
+characteristic is their high and persistent volatility. For Bitcoin, Katsiampa (2017) shows that
+GARCH-type models capture important features of the volatility dynamics, while Baur and Dimpfl
+(2018) document an asymmetric response to shocks that differs from the pattern commonly observed
+in equity markets: positive shocks can generate stronger volatility responses than negative shocks.
+Research has also examined the broader financial role of cryptocurrencies. Questions of infor-
+mational efficiency have received considerable attention (Urquhart, 2016), alongside debate over
+whether cryptocurrencies behave primarily as speculative assets, alternative means of exchange,
+diversifiers or hedges (Dyhrberg, 2016, Bouri et al., 2017). Gold is particularly relevant in this
+context because of its established role as a store of value and safe-haven asset (Baur and Lucey,
+2010), and comparisons between Bitcoin and gold have therefore become common in the cryptocur-
+rency literature. These studies show that the relationship between cryptocurrencies and traditional
+assets cannot be characterised solely by their individual return or volatility dynamics; their degree
+of co-movement and potential for cross-market information transmission are also important.
+Another feature distinguishes cryptocurrencies from the traditional assets considered in this pa-
+per: cryptocurrency markets operate continuously, including when major traditional markets are
+closed. Although trading is available around the clock, activity is not uniform across time; Ja-
+hanshahloo et al. (2022) document pronounced time-of-day effects in Bitcoin trading and network
+activity, strongly influenced by conventional US trading hours, with these effects diminishing at
+weekends. The absence of scheduled weekend closure nevertheless creates periods when cryptocur-
+rency prices can adjust to new information while major equity, bond, and commodity markets are
+not trading. This difference in trading calendars has become increasingly relevant as cryptocurrency
+markets have developed stronger links with the wider financial system. Using return and volatility
+connectedness measures, Iyer and Popescu (2023) document increasing spillovers between crypto
+assets and traditional financial markets over time, particularly during periods of market turbulence.
+More directly related to the timing considered here, Mourey et al. (2025) exploit the difference be-
+tween continuous cryptocurrency trading and weekend equity-market closure and show that weekend
+4
+cryptocurrency returns contain predictive information for Monday equity returns, with the relation-
+ship strengthening following the LUNA collapse in 2022. Taken together, these findings motivate
+examining whether the same calendar-based relationship extends to volatility and, beyond equities,
+to commodity and fixed-income markets.
+2.3 Volatility connectedness and post-2024 integration
+Cross-market volatility transmission is commonly studied using measures of spillovers and con-
+nectedness. A prominent approach is the Diebold-Yilmaz framework (Diebold and Yilmaz, 2012,
+2014), which uses generalised forecast-error variance decompositions to quantify the proportion of
+variation in one market associated with shocks originating in others. The framework has subse-
+quently been extended to examine connectedness across different frequencies (Baruník and Křehlík,
+2018) and to allow relationships between markets to evolve over time (Antonakakis et al., 2020).
+Applications to cryptocurrency markets provide evidence that their links with traditional financial
+assets have strengthened over time and that the magnitude and direction of volatility spillovers
+can vary during periods of market stress (IMF, 2022, Iyer and Popescu, 2023). More recent stud-
+ies examine how these relationships have evolved alongside the increasing institutionalisation of
+cryptocurrency markets. Around the introduction of US spot-Bitcoin exchange-traded products in
+January 2024, evidence points to changes in Bitcoin’s co-movement with equity markets and in its
+volatility dynamics (Babalos et al., 2025, Hong et al., 2025), while Bukaita and Li (2026) document
+changes in the spillover structure linking Bitcoin, Ether, gold and US equities.
+These studies provide evidence of an evolving relationship between cryptocurrency and tradi-
+tional financial markets, but connectedness is generally measured using observations aggregated over
+time and is designed to characterise the overall magnitude and direction of cross-market spillovers
+(Diebold and Yilmaz, 2012, 2014, Baruník and Křehlík, 2018). This may leave calendar-specific re-
+lationships less visible when predictive information concentrates in particular trading periods. The
+distinction is especially relevant for cryptocurrency markets, where trading continues outside con-
+ventional market hours and through weekends, despite pronounced time-of-day patterns in trading
+and network activity (Jahanshahloo et al., 2022). Indeed, Mourey et al. (2025) show that exploiting
+the weekend closure of equity markets reveals predictive information in weekend cryptocurrency
+returns for Monday equity returns. These findings motivate a complementary approach to aggre-
+gate connectedness analysis: we examine whether cryptocurrency volatility accumulated specifically
+over the weekend contains predictive information for traditional-market volatility on Monday, and
+subsequently compare this calendar-specific relationship with conventional connectedness measures
+in Section 5.6.2.
+2.4 Calendar effects and information transmission
+Calendar effects have long been documented in financial markets. Early studies identify sys-
+tematic differences in equity returns across trading days, including the weekend effect (Cross, 1973,
+French, 1980). French and Roll (1986) extend this perspective to volatility, showing that return
+variance differs substantially between trading and non-trading periods and highlighting the impor-
+tance of market opening and closing for incorporating information into prices. Calendar regularities
+are also present in cryptocurrency markets despite their continuous trading structure. Caporale
+and Plastun (2019), for example, document day-of-the-week effects in cryptocurrency returns, sug-
+gesting that continuous trading does not eliminate systematic temporal patterns. More directly
+related to our analysis, Mourey et al. (2025) exploit the difference between continuous cryptocur-
+rency trading and weekend equity-market closure and show that weekend cryptocurrency returns
+predict Monday equity returns, with a structural change in the relationship around the 2022 LUNA
+5
+collapse. Their analysis establishes the relevance of the weekend trading-calendar mismatch for re-
+turn predictability. We examine whether a corresponding relationship exists in volatility: whether
+cryptocurrency variance accumulated over the weekend contains predictive information for Monday
+volatility in traditional financial markets. In doing so, we shift the focus from return predictability
+to market-risk forecasting, extend the analysis beyond equities to commodity and fixed-income mar-
+kets, and examine when the volatility relationship emerges and the mechanisms that may account
+for its evolution.
+3. Methodology
+This section presents the methodology used to examine whether cryptocurrency volatility over
+theweekendprovidesadditionalinformationaboutMondayvarianceintraditionalfinancialmarkets.
+We first construct daily variance proxies from OHLC prices and specify a heterogeneous autoregres-
+sive (HAR) model as the forecasting benchmark. An expanding-window forecasting framework is
+then used to assess predictive performance using only information available at each forecast date.
+The central analysis augments the HAR benchmark with weekend and Friday cryptocurrency vari-
+ance factors to distinguish the predictive contribution of weekend activity from that of preceding
+Friday activity. Further analyses examine changes in this relationship over time, distinguish com-
+mon cryptocurrency-market variation from coin-specific variation, and assess whether ETF flow
+activity is associated with the strength of the relationship. The section concludes with the forecast
+evaluation criteria and statistical inference procedures.
+3.1 Measuring daily variance
+Volatility is not directly observed and must be estimated from price data. We construct daily
+variance proxies using each asset’s opening, highest, lowest and closing prices, denoted byOi,t,H i,t,
+Li,t andC i,t, respectively. Here,iindexes assets andtdenotes the date of the daily observation.
+Range-based estimators use information about price variation within the observation window that
+is not captured by squared close-to-close returns. Our primary measure is the Garman and Klass
+(1980) estimator:
+bσ2,GKi,t = 12 ln  Hi,tLi,t 2 −(2 ln 2−1) ln  Ci,tOi,t 2 .(3.1)
+As robustness checks, reported in Appendix A, we also compute the Parkinson (1980) estimator,
+bσ2,Pi,t = 14 ln 2ln  Hi,tLi,t 2 ,(3.2)
+and the Rogers and Satchell (1991) estimator,
+bσ2,RSi,t = ln
+ Hi,t
+Ci,t
+
+ln
+ Hi,t
+Oi,t
+
++ ln
+ Li,t
+Ci,t
+
+ln
+ Li,t
+Oi,t
+
+. (3.3)
+The Parkinson estimator uses the high-low range alone, whereas the Rogers-Satchell estimator
+accommodates non-zero drift under its underlying diffusion assumptions.
+Before constructing the analysis series, we clean the daily Garman-Klass volatility estimates.
+Zero estimates are treated as missing. Separately for each asset, non-missing volatility estimates
+below their 0.5th percentile are replaced by that threshold. Missing observations are then forward-
+filled, with backward-filling used only for any remaining leading gaps. The cleaned volatility es-
+timates are squared to obtain the daily variance proxy, denoted byRVi,t. Thus, unless otherwise
+stated,RV i,t refers to the cleaned Garman-Klass variance proxy.
+6
+We work with its logarithmic transformation:
+vi,t = ln(RVi,t +ϵ), ϵ= 10 −12.(3.4)
+The positive constantϵprovides a numerical safeguard for the logarithmic transformation. Work-
+ing in logarithms reduces right-skewness and compresses large variance observations. These esti-
+mators measure price variation within the observation window represented by each daily bar. For
+cryptocurrencies, this window covers a calendar day; for traditional assets, it follows the trading
+session represented by the data source. The estimators do not directly include the return between
+the previous session’s close and the current session’s open. Consequently, MondayRVi,t measures
+within-session variation rather than the total price adjustment between Friday’s close and Monday’s
+close. Also, where annualised volatility is reported, we use
+p
+252RV i,t for traditional assets andp
+365RV i,t for cryptocurrencies, reflecting their different trading calendars.
+3.2 The HAR benchmark
+We use the HAR model of Corsi (2009) as the benchmark for forecasting daily log variance.
+The model captures persistence over daily, weekly and monthly horizons through a parsimonious
+combination of lagged log variance and its historical averages.
+Letv i,t = ln(RVi,t +ϵ), as defined in Section 3.1, and define
+¯vi,t−1:t−h = 1h hXj=1 vi,t−j.(3.5)
+Here,t−jdenotes thejth available daily observation preceding the observation indexed byt. For
+traditional assets, these lags refer to trading sessions; for cryptocurrencies, they refer to calendar
+days. Thus, for a traditional asset observed on Monday,v i,t−1 normally denotes the preceding
+Friday’s log variance.
+The HAR specification is
+vi,t =β 0 +β dvi,t−1 +β w ¯vi,t−1:t−5 +β m¯vi,t−1:t−22 +ε i,t,(3.6)
+whereβ 0 is the intercept,β d,β w andβ m measure dependence on the daily, weekly and monthly
+components, respectively, andεi,t is the regression disturbance. The model is estimated separately
+foreachassetbyordinaryleastsquares; theassetindexonthecoefficientsissuppressedfornotational
+simplicity.
+The five- and twenty-two-observation averages follow the conventional HAR specification. They
+approximate a trading week and a trading month for traditional assets. For cryptocurrencies,
+which trade continuously, they represent five- and twenty-two-calendar-day windows. Retaining
+these observation counts provides a common benchmark specification across assets, although the
+corresponding calendar horizons differ.
+The HAR model serves two purposes. First, it provides a benchmark against which the out-
+of-sample performance of alternative forecasting models is assessed. Second, its daily, weekly and
+monthly components control for the traditional asset’s own variance history in the weekend-channel
+regressions. The weekend cryptocurrency factor is therefore assessed for the additional predictive
+information it provides beyond these persistence controls.
+7
+3.3 Expanding-window forecasting design
+We assess forecasting performance using an expanding-window walk-forward design. For each
+forecast datet, a one-step-ahead forecast ofvi,t is generated using only information available at the
+forecast origin. Lagged predictors are constructed as defined in equation 3.6.
+For the general forecasting comparison, HAR and the tree-based models are re-estimated every
+21observations, whereas the LSTM is re-estimated every63observations. Between re-estimation
+dates, parameters remain fixed while predictors are updated using newly available observations. For
+the Monday comparison between HAR and HAR+Wt, both models are instead re-estimated before
+each Monday forecast using all preceding Monday observations in the estimation window. The
+HAR predictors are constructed from the asset’s daily trading history, andWt uses the completed
+Saturday and Sunday cryptocurrency observations.
+In both exercises, the estimation window expands over time. Any feature scaling and hyperpa-
+rameter selection use only the corresponding training data.
+3.4 The weekend volatility channel
+We examine whether cryptocurrency variance observed over the weekend provides additional
+predictive information about Monday variance in traditional financial markets. The analysis aug-
+ments the HAR benchmark with weekend and Friday cryptocurrency variance factors. The HAR
+terms control for the traditional asset’s own variance history, while the Friday factor helps distin-
+guish the predictive contribution of weekend activity from that of preceding Friday activity. We
+refer to this predictive relationship as the weekend volatility channel.
+3.4.1 Constructing the weekend and Friday factors
+We construct a weekend variance proxy by summing the Saturday and Sunday daily variance
+estimates. For cryptocurrencycand a Monday datedt, define
+RV wkc,t =RV c,t−1 +RV c,t−2, RV fric,t =RV c,t−3,(3.7)
+where, in this construction, the offsets denote calendar days:t−1is Sunday,t−2is Saturday
+andt−3is Friday. This calendar-day convention applies to the cryptocurrency factors; the HAR
+lags for traditional assets continue to refer to preceding available trading observations, as defined
+in Section 3.2. The sumRVwkc,t approximates accumulated weekend variance using the range-based
+daily proxies defined in Section 3.1.
+To capture variation shared across the three cryptocurrencies, we construct equally weighted
+market-level factors by averaging their logged variance proxies:
+Wt = 1Nc NcXc=1 lnRV wkc,t +ϵ  , F t = 1Nc NcXc=1 lnRV fric,t +ϵ  ,(3.8)
+whereN c = 3andϵ= 10 −12, consistent with Section 3.1. Thus,W t measures common weekend
+cryptocurrency variance in logarithmic units, whileFt is its Friday counterpart. The daily variance
+estimates are summed before taking logarithms to construct the weekend factor.
+The distinction between the two factors is what identifies the channel, and Figure 1 sets out
+the timing on which it rests. Cryptocurrency daily bars close at 00:00 UTC, so the Saturday and
+Sunday bars that enterRV wkc,t together span Saturday 00:00 to Monday 00:00 UTC. The regular
+US equity session closes on Friday at 21:00 UTC during US standard time or 20:00 UTC during US
+daylight saving time, and reopens on Monday at 14:30 or 13:30 UTC, respectively, so the whole of
+the weekend window lies inside the period during which the traditional market was closed: nothing
+8
+that entersW t could have been traded before Monday’s open. The Friday bar, by contrast, spans a
+calendar day on which the traditional market was open, so the information it carries could be priced
+on Friday itself.1 If the traditional market reacts on Monday to information it could not trade at
+the weekend,Wt should predict Monday variance; if the effect merely reflects recent cryptocurrency
+turbulence in general,Ft should predict it just as well. Gold is a partial exception, since COMEX
+futures reopen on Sunday evening and the last hours of the Sunday bar are therefore tradable; we
+return to this in Section 5.4.2.
+Figure 1: Timing of the weekend predictive test. The factorWt uses Saturday and Sunday cryptocurrency variance
+observed during the regular US equity-market closure to predict Monday variance. Related instruments may trade
+before Monday’s cash-market opening.
+3.4.2 The HAR-augmented predictive regression
+For traditional assetmand Mondayt, we augment the HAR benchmark in (3.6) with the
+weekend and Friday cryptocurrency variance factors:
+v(m)t =α+β dv(m)t−1 +β w ¯v(m)t−1:t−5 +β mo¯v(m)t−1:t−22 +γW t +δF t +ε t.(3.9)
+Here,v (m)t =v m,t denotes the log variance of traditional assetm, using the transformation defined
+in Section 3.1. The regression is estimated separately for each traditional asset using Monday
+observations; asset indices on the coefficients and disturbance are suppressed for simplicity. The
+HAR lags refer to preceding available trading observations, sov(m)t−1 normally denotes the preceding
+Friday’slogvariance. Thefive-andtwenty-two-observationaveragesareconstructedfromtheasset’s
+daily trading history, rather than from Monday observations alone.
+The coefficient of interest isγ, which measures the additional predictive association between
+weekend cryptocurrency variance and Monday log variance after controlling for the asset’s own
+variance history and Friday cryptocurrency variance. The null hypothesis of no additional weekend
+predictive content isH0 :γ= 0.
+BecauseW t andF t are correlated, their joint inclusion may increase the uncertainty of the
+coefficient estimates. We therefore estimate (3.9) in three forms: the joint model as written, a
+weekend-only model omittingFt, and a Friday-only model omittingWt. The separate models assess
+each factor conditional on the HAR controls, while the joint model assesses each factor conditional
+on both the HAR controls and the other cryptocurrency factor.
+We also assess whether the weekend coefficient exceeds the Friday coefficient through the one-
+sided contrast
+H0 :γ≤δagainstH 1 :γ > δ.(3.10)
+1The final three hours of the Friday bar during US standard time (21:00–00:00 UTC), or four hours during US
+daylight saving time (20:00–00:00 UTC), fall after the regular US equity session has closed. This slice makesFt
+slightly weekend-like and therefore works against the distinction we draw; a finding thatWt predicts whileF t does
+not is conservative on this account.
+9
+This test is computed from the joint model using the robust covariance estimator described in
+Section 3.5, with the null evaluated at the boundaryγ=δ.
+Evidence for the weekend volatility channel is assessed through these coefficient estimates and
+tests, together with the out-of-sample forecasting results. Significance in the weekend-only model
+does not by itself establish predictive content beyond Friday activity, and the regressions do not
+establish causal transmission.
+3.4.3 Dating the emergence of the channel
+To examine when the channel emerged, we estimateγwithin disjoint sub-periods and rolling
+windows, and interactW t with indicators for candidate break dates. We also estimate the break
+date rather than impose it in advance. For each candidate dateτin the trimmed sample interval
+[τ1, τ2], we compute the Wald statisticW(τ)for a change inγand define
+ˆτ= arg max
+τ∈[τ 1,τ2]
+W(τ),sup-W= max
+τ∈[τ 1,τ2]
+W(τ).(3.11)
+We exclude the first and last15%of observations from the candidate break dates and evaluate the
+resulting statistic against the critical values of Andrews (1993), which account for the break date
+being estimated rather than known.
+3.4.4 Separating market-level from coin-specific transmission
+To examine whether the channel reflects common cryptocurrency-market variation or coin-
+specific variation, we decompose each coin’s logged weekend variance into a component explained
+byW t and a residual:
+ln
+
+RV wkc,t +ϵ  =a c +b cWt +u c,t.(3.12)
+The coefficientb c measures the coin’s loading on the common factor, whileuc,t captures variation
+in its logged weekend variance not explained byWt. We estimate this decomposition by ordinary
+least squares.
+We then augment (3.9) with each estimated residualˆuc,t separately, retainingWt and the other
+controls. BecauseW t is the average of the same logged weekend variances, the residuals sum to zero
+when estimated over a common sample and cannot all be included jointly.
+IfW t remains significant while the coin-specific residuals provide no additional predictive infor-
+mation, the results are consistent with a predominantly market-level channel. A significant residual
+coefficient instead indicates additional predictive information associated with that coin beyond the
+common factor.
+3.4.5 Testing the exchange-traded-fund flow mechanism
+A candidate mechanism is that institutional ETF activity is associated with the transmission
+of weekend cryptocurrency information into Monday trading. The variableFlowt is constructed
+by summing the absolute aggregate daily net flows into US spot Bitcoin and Ether ETFs, then
+subtracting the sample mean and dividing by the sample standard deviation. This measure captures
+the magnitude of aggregate net flows rather than ETF trading volume.
+The interaction betweenW t andFlow t tests whether the weekend relationship is stronger on
+Mondays with greater measured flow activity:
+v(m)t =α+ X
+j
+βjxj,t +γW t +δF t +ϕFlow t +ψ(W t ×Flow t) +ε t.(3.13)
+Here, Pj βjxj,t denotes the daily, weekly and monthly HAR terms in (3.9). The coefficientϕ
+captures the association between ETF flow activity and Monday log variance, whileψmeasures
+10
+how the weekend coefficient varies with flow activity. The marginal association withWt is therefore
+γ+ψFlow t.
+If measured ETF flow activity amplifies the weekend relationship, the interaction coefficientψ
+should be positive. This specification tests that prediction. Since contemporaneous Monday flows
+may respond to the same information as Monday variance, the results do not identify a causal
+mechanism or establish whether ETF approval contributed to the relationship’s emergence.
+3.4.6 Economic magnitude
+The coefficientγmeasures the change in Monday log variance associated with a one-unit increase
+in the weekend factorWt. To express this relationship in economic terms, we calculate
+∆ = exp(ˆγ σW )−1,(3.14)
+whereσ W is the standard deviation ofWt over the relevant estimation sample. Holding the other
+regressors fixed,100∆is the approximate percentage change in fitted Monday variance associated
+with a one-standard-deviation increase inWt. Here, fitted variance denotes exponentiated fitted log
+variance, and the approximation neglects the small constantϵused in the logarithmic transforma-
+tion. This quantity refers to variance rather than volatility.
+We also report the incremental coefficient of determination,∆R2 =R 2HAR+W −R 2HAR, computed
+over the same observations. This measures the additional in-sample explanatory power obtained by
+adding the weekend factor to the HAR benchmark.
+3.5 Evaluation and inference
+3.5.1 Forecast evaluation
+Forecast accuracy is assessed using QLIKE and, for the Monday forecasting comparison, RMSE
+in daily volatility units. Letbvt denote the forecast ofvt = ln(RVt +ϵ), and letndenote the number
+of forecast evaluation observations. The volatility-scale RMSE is defined as:
+RMSEvol =
+"
+1
+n
+X
+t
+p
+ht −
+p
+RVt
+2
+#1/2
+,
+whereh t = exp(ˆvt)is the variance forecast.
+The QLIKE loss is
+QLIKE(RVt, ht) = RVtht −ln  RVtht  −1,(3.15)
+whereRV t is the cleaned daily variance proxy defined in Section 3.1. We report the average QLIKE
+loss over the evaluation period. Lower values indicate greater forecast accuracy. Under the condi-
+tions described by Patton (2011), QLIKE provides forecast rankings that are robust to noise in the
+variance proxy.
+We compare predictive accuracy using the test of Diebold and Mariano (1995). For lossesℓ1,t
+andℓ 2,t, defined t =ℓ 1,t −ℓ 2,t. The statistic is
+DM =
+¯dq
+dVar(¯d)
+.(3.16)
+For the Monday comparison,d t = QLIKE HAR,t −QLIKE HAR+W,t, so positive statistics favour
+HAR+Wt;p-values are one-sided. The baseline variance estimate is the sample variance ofd t
+divided byn. A Newey-West estimate with four lags is used as a robustness check.
+11
+3.5.2 Standard errors and inference
+We use heteroskedasticity- and autocorrelation-consistent standard errors to account for het-
+eroskedasticity and serial dependence in the predictive regressions. Following Newey and West
+(1987), the estimated long-run covariance matrix is
+bΩ = bΓ0 +
+qX
+j=1
+
+1− jq+ 1  bΓj + bΓ′j ,
+bΓj = 1T TXt=j+1 ˆηt ˆη′t−j, (3.17)
+whereˆηt =x t ˆεt,x t is the vector of regressors, andTis the number of regression observations. The
+estimator uses Bartlett weights withq= 5lags. In the Monday-only regressions, these lags refer to
+five preceding weekly observations.
+Because the three cryptocurrencies share substantial common variation, the nine crypto-asset
+pairs cannot be treated as independent tests. We therefore also report a pooled panel regression
+with standard errors clustered by date, allowing for dependence across pairs observed on the same
+date. The pairwise results are interpreted as related evidence rather than as nine independent
+confirmations of the channel.
+4. Data
+4.1 Sources and sample
+Daily data are obtained from Yahoo Finance for six assets. The cryptocurrencies are Bitcoin
+(BTC-USD), Ether (ETH-USD) and XRP (XRP-USD). The traditional assets are the S&P 500
+index (ˆGSPC) for equities, COMEX gold futures (GC=F) for commodities, and the iShares 7-
+10 Year Treasury Bond ETF (IEF) for fixed income; we refer to the last as “Treasury” throughout,
+noting that it is a bond fund rather than the on-the-run ten-year note. The common sample runs
+from November 2017, bounded by the availability of Ether and XRP histories, to June 2026. Two
+auxiliary datasets are used in later tests: the CBOE Volatility Index (ˆVIX), and daily US spot
+Bitcoin and Ether exchange-traded fund net flows obtained from Farside Investors.
+The six assets are chosen to make the identification of Section 3.4 as clean as possible and to
+guard against the result being an artefact of any one market. On the cryptocurrency side, Bitcoin
+and Ether are the two largest coins by market capitalisation and the two for which US spot funds
+began trading in January and July 2024 respectively, so they are the natural candidates for any
+channel that runs through institutional access. XRP is included as a contrast. It is also among the
+largest and longest-traded coins, but it had no US spot fund until November 2025, near the end of
+the sample, so it allows us to ask whether transmission requires a coin to be fund-listed. All three
+have deep and liquid weekend trading and price histories that begin before the sample, and we stop
+at three because the major coins load heavily on a single common factor, so adding further coins
+would multiply tests without adding independent information.
+On the traditional side, each asset represents a distinct asset class and has a genuine week-
+end closure, which the identification requires. The S&P 500 is the benchmark for US equities,
+the market in which the classical weekend literature of Section 2 was developed, and the one for
+which an options-implied volatility control, the VIX, is available. Gold is the reference asset of the
+cryptocurrency literature, where Bitcoin has repeatedly been compared with it as a store of value
+or hedge (Dyhrberg, 2016, Baur and Lucey, 2010); its futures reopen on Sunday evening, giving a
+shorter closure than equities, a difference we exploit in Section 5.4.2. The Treasury fund represents
+12
+fixed income, the asset class through which macroeconomic news is most directly priced. We use
+an exchange-traded fund rather than Treasury futures because the fund trades only during the
+US equity session and therefore has a full weekend closure, whereas the futures reopen on Sunday
+evening. Together, the three span equities, commodities and fixed income, so the result cannot be
+dismissed as an equity-only artefact.
+4.2 Data preparation
+For each assetiand daytwe observe the openO i,t, highH i,t, lowL i,t and closeC i,t. Daily
+logarithmic returns are
+ri,t = ln
+ Ci,t
+Ci,t−1
+
+.
+Cryptocurrency bars close at 00:00 UTC and are available on every calendar day, whereas traditional
+assets trade only on business days. Rather than force a common calendar by interpolation, which
+would fabricate observations, we retain each series on its own trading calendar and align them only
+where a test requires it. The variance series are cleaned as described in Section 3.1. Zero variance
+estimates are treated as missing because their logarithms are undefined. Where a Monday is a US
+market holiday, the traditional asset has no observation and that week is dropped from the main
+weekend tests; a separate placebo test maps the weekend to the first subsequent trading day. The
+post-ETF joint and VIX-regime specifications contain 115 Monday observations for the S&P 500
+and Treasury (IEF), and 116 for gold. Adding Friday VIX does not reduce these estimation samples.
+4.3 Descriptive statistics
+Table 1 reports summary statistics of daily logarithmic returns over the common sample period.
+Annualised return volatility is calculated by multiplying the daily return standard deviation by√
+365for cryptocurrencies and
+√
+252for traditional assets. Mean daily returns are positive for all
+six assets. Cryptocurrencies exhibit substantially greater return variability than the traditional
+assets, with daily standard deviations ranging from3.49%for Bitcoin to5.58%for XRP. Among
+the traditional assets, daily standard deviations range from0.43%for Treasury to1.21%for the
+S&P 500. XRP has the highest annualised return volatility at106.6%, while Treasury has the lowest
+at6.9%.
+Bitcoin, Ether, the S&P 500 and gold exhibit negative skewness, whereas XRP exhibits positive
+skewness and Treasury returns are approximately symmetric. All six assets have positive excess
+kurtosis, indicating heavier tails than a normal distribution. These statistics describe unconditional
+daily returns; they do not establish the weekend predictive relationship examined in Section 3.4.
+These distributional differences have implications for risk measurement and modelling. The
+greater return variability of cryptocurrencies indicates larger fluctuations at the daily horizon, while
+negativeskewnessinseveralassetshighlightsdownsideasymmetry. Positiveexcesskurtosisacrossall
+six assets suggests that a normal distribution may underrepresent extreme returns. These features
+motivate the use of robust inference and complementary forecast evaluation criteria, although they
+do not themselves provide evidence of a weekend volatility channel.
+13
+Table 1: Summary statistics of daily logarithmic returns, common sample (November 2017 to June 2026). Annualised
+volatility uses
+√
+365for cryptocurrencies and
+√
+252for traditional assets.
+Asset Mean (%) Std. dev. (%) Skewness Excess kurtosis Ann. vol. (%)
+Bitcoin 0.074 3.49−0.7413.6 66.6
+Ether 0.054 4.50−0.7710.6 85.9
+XRP 0.054 5.581.1220.6 106.6
+S&P 500 0.049 1.21−0.6615.0 19.2
+Gold 0.057 1.09−0.9010.4 17.2
+Treasury (IEF) 0.004 0.430.163.1 6.9
+Figure 2 shows daily log variance across the six assets. Cryptocurrency variance generally
+exceeds that of the traditional assets, while Bitcoin and Ether display broadly similar temporal
+patterns. Treasury (IEF) variance is visibly elevated around 2022–2023 relative to much of the
+earlier sample. Gold exhibits pronounced downward spikes associated with very low estimated
+within-session variance; the most extreme observations are bounded by the asset-specific lower
+winsorisation threshold. These descriptive patterns do not, by themselves, establish cross-market
+transmission.
+15
+10
+5
+Bitcoin S&P 500
+15
+10
+5
+Ether Gold
+2018 2019 2020 2021 2022 2023 2024 2025 2026
+15
+10
+5
+XRP
+2018 2019 2020 2021 2022 2023 2024 2025 2026
+Treasury (IEF)
+vi, t = ln(RVi, t + )
+Date
+Figure 2: Daily log variance for the six assets. Each panel plotsvi,t = ln(RVi,t +ϵ), using the Garman-Klass variance
+proxy defined in Section 3.1.
+5. Results
+We first examine the emergence of the weekend predictive relationship and assess whether week-
+end cryptocurrency variance provides information beyond Friday activity and the traditional as-
+14
+sets’ own variance histories. We then distinguish common cryptocurrency-market variation from
+coin-specific information, quantify the economic magnitude of the relationship and evaluate its out-
+of-sample forecasting value. Next, we assess robustness and examine variation across weekdays,
+holiday reopening dates and VIX regimes, and we investigate whether ETF-flow activity helps ex-
+plain the relationship. Finally, complementary comparisons with flexible forecasting models and
+aggregate connectedness measures conclude the section.
+5.1 The channel and its emergence
+Table 2 reports the average weekend coefficient across nine separate crypto–asset regressions
+within disjoint sub-periods. Each regression relates an individual cryptocurrency’s weekend variance
+to Monday variance in one traditional asset, controlling for that cryptocurrency’s Friday variance
+and the traditional asset’s daily, weekly and monthly HAR terms. The COVID–Recovery sub-period
+begins on 20 February 2020, and the post-ETF sub-period begins on 11 January 2024. The reported
+mean is the simple average of the nine estimated weekend coefficients, rather than a pooled panel
+estimate.
+Table 2: Emergence of the weekend channel: average of nine pairwise weekend coefficients by sub-period.
+Sub-period MeanˆγPositive and significant pairs (p <0.05)
+Pre-COVID (2017-11 to 2020-02)−0.030/9
+COVID-Recovery (2020-02 to 2021-12) 0.03 0/9
+LUNA/FTX era (2022-01 to 2023-12) 0.14 2/9
+Post-ETF (2024-01 to 2026-06) 0.35 9/9
+The mean coefficient is close to zero and slightly negative before 2020, and remains relatively
+weak during 2022-2023, when only two of the nine pairwise coefficients are positive and significant
+at the5%level. After January 2024, the mean rises to0.35, with all nine coefficients positive and
+significant. Figure 3 presents rolling two-year panel estimates. The coefficient remains close to zero
+over much of 2020-2023, increases from late 2023 and subsequently settles around0.30during 2025
+and 2026.
+2020 2021 2022 2023 2024 2025 2026
+0.0
+0.1
+0.2
+0.3 (weekend factor)
+  BTC spot ETF (Jan 2024)
+Rolling 2-year panel weekend coefficient
+Figure 3: Rolling two-year panel estimate of the weekend coefficientˆγ. The dashed line marks the January 2024 US
+spot-Bitcoin ETF approvals.
+15
+We also estimate the break date without imposing the ETF approval date. The sup-Wald
+procedure in (3.11) places the break in October 2023, withsup-W ≈8.8, corresponding to a
+maximum absolute test statistic of2.97. Comparison with the critical values of Andrews (1993)
+indicates significance at the10%level and borderline evidence at the5%level. Excluding the week
+of 16 October 2023 moves the estimated break to early November 2023.
+The estimated break precedes January 2024 and is consistent with the increase in the rolling
+coefficient during late 2023. This timing is compatible with anticipation of ETF approval, but does
+not establish that anticipation caused the change. January 2024 therefore provides a subsequent
+comparison date rather than the estimated onset of the relationship. These results suggest that
+the weekend predictive relationship strengthened across the crypto-asset pairs after January 2024,
+rather than being confined to a single pair. However, the pairwise estimates are not independent,
+and the timing alone does not establish that ETF approval caused the change.
+5.2 The weekend volatility channel
+We examine two aspects of the weekend predictive relationship. First, we assess whether week-
+end cryptocurrency variance provides additional information about Monday variance beyond Fri-
+day cryptocurrency activity and the traditional asset’s own variance history. Second, we examine
+whether this predictive information reflects variation shared across cryptocurrency markets or coin-
+specific components.
+5.2.1 Identification: weekend versus Friday
+The weekend and Friday factors are correlated (ρ= 0.67). Table 3 therefore reports the joint,
+weekend-only and Friday-only specifications described in Section 3.4. The weekend coefficient is
+positive and significant in both the joint and weekend-only models. In the weekend-only specifica-
+tion, it is0.256for the S&P 500,0.447for gold and0.246for Treasury, withp≤0.005in all three
+cases. The Friday-only coefficients are close to zero and statistically insignificant, withp-values
+ranging from0.521to0.883. Separately, the one-sided contrast in (3.10) rejects in favour of the
+weekend coefficient in all nine coin-asset pairwise regressions.
+Together, these findings support additional predictive content associated with weekend cryp-
+tocurrency variance. However, the difference between a significant weekend coefficient and an in-
+significant Friday coefficient does not itself establish that the coefficients differ; this comparison
+is assessed by the one-sided contrast. The results provide predictive evidence rather than causal
+identification of transmission during market closure.
+Table 3: Weekend versus Friday: joint, weekend-only and Friday-only specifications, post-2024.
+Joint (γ) Weekend-only (γ) Friday-only (δ)
+Assetˆγ pˆγ p ˆδ p
+S&P 500 0.349 0.001 0.256 0.005−0.0150.869
+Gold 0.645 <0.001 0.447 0.001−0.0170.883
+Treasury (IEF) 0.340 0.001 0.246 0.001 0.034 0.521
+Notes:All specifications include the HAR controls. Reported coefficientp-values use Newey-West standard errors
+with five lags.
+5.2.2 Market-level, not coin-specific
+Table 4 reports the results of adding each coin’s residual from equation (3.12) separately to the
+joint specification. The common factor remains positive and significant in all nine specifications,
+16
+with coefficients between 0.33 and 0.64 andp≤0.002. None of the nine coin-specific residuals is
+significant at the 5% level; two are significant at the 10% level (Bitcoin for gold,p= 0.081, and
+XRP for Treasury,p= 0.066), with opposite signs. The predictive content is therefore associated
+mainly with variation shared across cryptocurrencies rather than with any individual coin.
+Table 4: Common crypto factor versus coin-specific components, post-2024. Each row adds one coin’s residualˆuc,t
+from equation (3.12) to the joint specification (3.9), which already containsWt,F t and the HAR terms. Newey-West
+standard errors with five lags.
+Common factorW t Coin residualˆuc,t
+Asset Residual addedˆγ pCoefficientp
+S&P 500 Bitcoin 0.344 0.001−0.0280.858
+Ether 0.349 0.0010.0130.931
+XRP 0.347 0.0010.0120.901
+Gold Bitcoin 0.592 0.002−0.3720.081
+Ether 0.639<0.0010.1150.697
+XRP 0.627 0.0010.2000.221
+Treasury (IEF) Bitcoin 0.358<0.0010.1520.289
+Ether 0.328 0.0010.1730.308
+XRP 0.349<0.001−0.1870.066
+Theseresultsareconsistentwithpredictivecontentarisingprimarilyfromvariationsharedacross
+cryptocurrency markets. This may also explain the similar pairwise findings across Bitcoin, Ether
+and XRP. The coin-specific components provide no statistically significant additional predictive
+information beyond the common factor and the other controls. However, these findings do not rule
+out ETF-related explanations, since ETF activity may also affect the common market factor. The
+underlying mechanism remains unresolved.
+Furthermore, Figure 4 illustrates this common-market relationship by plotting the standardised
+weekend factor alongside Monday volatility for each traditional asset2. The unconditional corre-
+lations are 0.41 for the S&P 500, 0.33 for gold and 0.34 for Treasury. These positive associations
+complement Table 4, which assesses the factor’s predictive content conditional on the HAR controls,
+Friday cryptocurrency variance and coin-specific components.
+2For comparison, the aggregate connectedness analysis is reported in Section 5.6.2.
+17
+2
+0
+2
+4
+z-score
+corr = 0.41
+Weekend crypto volatility vs Monday traditional volatility (standardised, post-2024)
+Weekend crypto factor Monday S&P 500 volatility
+4
+2
+0
+2
+z-score
+corr = 0.33 Weekend crypto factor Monday Gold volatility
+2024-01 2024-04 2024-07 2024-10 2025-01 2025-04 2025-07 2025-10 2026-01 2026-04 2026-07
+2
+0
+2
+z-score
+corr = 0.34 Weekend crypto factor Monday Treasury volatility
+Figure 4: Weekend cryptocurrency volatility factor and Monday traditional-market realised volatility (standardised),
+post-2024. Reported correlations are unconditional, that is, before the HAR controls of equation (3.9).
+5.3 Economic magnitude and out-of-sample value
+We assess the practical relevance of the weekend predictive relationship in two ways. First, we
+translate the estimated weekend coefficient into the percentage change in fitted Monday variance as-
+sociated with a one-standard-deviation increase in the weekend factor. Second, we evaluate whether
+adding this factor to the HAR benchmark improves out-of-sample Monday variance forecasts.
+5.3.1 Economic magnitude
+Table5translatestheweekend-onlyestimatesintoeconomictermsusing (3.14). Withσ W = 0.97
+over the post-2024 sample, a one-standard-deviation increase in the weekend factorWt is associated
+with approximately28%higher fitted Monday variance for the S&P 500,54%for gold and27%for
+Treasury, holding the HAR controls fixed. AddingWt increases the in-sampleR 2 by between3.9
+and7.0percentage points relative to the HAR benchmark. These estimates indicate a substantial
+relationship between weekend cryptocurrency variance and Monday variance beyond the traditional
+asset’s own variance history.
+18
+Table 5: Economic magnitude of the weekend factor, post-2024. The one-standard-deviation effect isexp(ˆγ σW )−1,
+using the weekend-only coefficients of Table 3.
+Asset Weekend-onlyˆγ σ W 1-SD effect on Monday variance∆R 2 (pp)
+S&P 500 0.256 0.97+28%3.9
+Gold 0.447 0.97+54%6.2
+Treasury (IEF) 0.246 0.97+27%7.0
+5.3.2 Out-of-sample value
+The in-sample findings are complemented by the out-of-sample forecast comparison in Table 6.
+The evaluation covers 103-104 Monday observations per asset from April 2024 to June 2026, with
+models re-estimated weekly using an expanding window. AddingWt to the HAR benchmark reduces
+QLIKE by approximately22%for the S&P 500,17%for Treasury and11%for gold. RMSE,
+measured in daily volatility units, also decreases for all three assets.
+The one-sided Diebold-Mariano test uses QLIKE loss differences, with positive statistics favour-
+ing HAR+Wt. The improvement is significant at the5%level for Treasury (p= 0.042), near the
+5%threshold for gold (p= 0.050), and significant at the10%level for the S&P 500 (p= 0.066).
+Thus, the weekend factor lowers both forecast loss measures across all three assets, although the
+statistical evidence varies across markets.
+Table 6: Out-of-sample Monday volatility forecasts: HAR versus HAR+Wt, April 2024-June 2026.
+Asset QLIKE (HAR) QLIKE (HAR+W t) RMSE (HAR) RMSE (HAR+W t) DMp
+S&P 500 0.695 0.545 0.00547 0.00514 1.51 0.066
+Gold 3.182 2.845 0.00878 0.00836 1.64 0.050
+Treasury (IEF) 0.424 0.350 0.00104 0.00098 1.73 0.042
+Furthermore, Figure 5 illustrates the forecast comparison for the S&P 500 over the final forty
+Mondays of the sample. The HAR and HAR+Wt forecasts are visually similar, and both underes-
+timate some of the largest realised-volatility spikes. The lower forecast losses reported in Table 6
+therefore reflect improvements that are not always apparent from the plotted paths.
+19
+2025-08 2025-09 2025-10 2025-11 2025-12 2026-01 2026-02 2026-03 2026-04 2026-05 2026-06
+0.002
+0.004
+0.006
+0.008
+0.010
+0.012
+0.014
+0.016Realised volatility
+Monday volatility forecasts, S&P 500 (last 40 Mondays)
+Realised volatility
+HAR forecast
+HAR + weekend
+Figure 5: Monday realised volatility for the S&P 500 against the HAR and HAR-plus-weekend forecasts over the last
+40 Mondays of the sample. Both forecast series are one-step-ahead, walk-forward forecasts.
+These findings complement the benchmark comparison in Section 5.6.1. The flexible models
+did not consistently outperform HAR, whereas adding the weekend factor reduces forecast losses
+for all three traditional assets. Within the specifications examined, the results support the value of
+incorporating weekend information alongside the asset’s own variance history.
+5.4 Robustness
+We assess the robustness of the weekend predictive relationship using additional controls, al-
+ternative inference procedures and influential-observation checks. We then examine whether the
+relationship is concentrated on Mondays or also appears on other weekdays and holiday-delayed
+reopening dates. Finally, we investigate whether its strength varies with the preceding Friday’s
+VIX.
+5.4.1 Additional controls and sample-sensitivity checks
+Three checks assess the sensitivity of the weekend predictive relationship to pre-weekend mar-
+ket uncertainty, dependence across crypto-asset pairs observed on the same date, and influential
+observations. Table 7 summarises these checks alongside the other robustness analyses.
+20
+Table 7: Robustness checks on the weekend channel. Results refer to the post-2024 sample; “pairs” denotes the nine
+crypto-asset combinations and “assets” the three traditional assets.
+Check Concern addressed Result
+Weekend-only specification Sensitivity to joint inclusion of
+Wt andF t (ρ= 0.67)
+Significant for 3/3 assets,p≤
+0.005
+Wald test ofH0 :γ≤δWhether the weekend coeffi-
+cient exceeds the Friday coef-
+ficient
+Null rejected in favour ofγ >
+δfor 9/9 pairs
+Friday VIX control Whether pre-weekend equity-
+market uncertainty explains
+the weekend relationship
+8/9 pairs remain significant
+Date-clustered panel Dependence across pairs ob-
+served on the same date
+ˆγ= 0.38,t= 5.6, 116 Mon-
+days
+Most influential Monday re-
+moved
+Sensitivity to a single influen-
+tial observation
+8/9 pairs remain significant
+Orthogonalisation Common versus coin-specific
+predictive information
+Common factor significant for
+all three assets; no coin-
+specificresidualcoefficientsig-
+nificant
+Endogenous break (sup-
+Wald)
+Sensitivity to imposing the
+break date
+October 2023,sup|t|= 2.97
+(sup-W ≈8.8)
+Weekday comparison (Tue,
+Wed)
+Whether the relationship is
+concentrated on Mondays
+Monday coefficient largest
+for 3/3 assets; Monday-
+Wednesday contrast signifi-
+cant at 5% for Treasury
+Holiday-week reopen test Monday concentration versus
+a generic reopening relation-
+ship
+Negative holiday interactions;
+only 11 holiday weeks
+Walk-forward out-of-sample Whether forecast gains extend
+beyond the estimation sample
+QLIKE falls by 11-22%; one-
+sided DMp= 0.042for Trea-
+sury,0.050for gold and0.066
+for the S&P 500
+Alternative range estima-
+tors (Appendix A)
+Dependence on the Garman-
+Klass estimator
+Weekend effect significant for
+3/3 assets under Parkinson
+and Rogers-Satchell; break
+date sensitive
+The first check adds the preceding Friday’s VIX to the pairwise regressions. This assesses
+whether the weekend coefficient reflects equity-market uncertainty already observable before the
+weekend. Eight of the nine weekend coefficients remain statistically significant, with little change
+in their magnitudes. The relationship is therefore not fully explained by pre-weekend uncertainty
+as measured by VIX, although other sources of uncertainty may remain relevant.
+The second check addresses dependence across the nine crypto-asset pairs. Since the cryptocur-
+rencies share substantial common variation, the pairwise findings should not be interpreted as nine
+independent confirmations. Pooling the pairs in a panel with standard errors clustered by date gives
+a weekend coefficient of0.38and at-statistic of5.6across 116 Mondays. The relationship remains
+21
+significant after allowing for dependence across pairs within each Monday. However, date clustering
+does not address serial dependence across Mondays.
+The third check examines sensitivity to influential observations. Each pairwise regression is
+re-estimated after removing its most influential post-2024 Monday. Eight of the nine weekend
+coefficients remain statistically significant, suggesting that the pairwise findings are generally robust
+to removing a single influential observation.
+Together, these checks support the robustness of the weekend predictive relationship to the
+Friday VIX control, within-date dependence and individual influential observations.
+5.4.2 Concentration on Mondays
+Table 8 reports the weekend factor’s coefficient for Monday, Tuesday and Wednesday sessions.
+The coefficient is largest on Monday in all three markets. The formal Monday-minus-Wednesday
+contrast is significant for Treasury (one-sidedp= 0.02), significant at the10%level for the S&P 500
+(p= 0.07), and insignificant for gold. Gold’s weaker evidence of Monday concentration is compatible
+with its shorter closure, since its futures reopen on Sunday evening. However, the comparison does
+not establish that closure length explains the differences across assets.
+Table 8: Reopen gradient: weekend factor coefficient by weekday, post-2024.
+Monday Tuesday Wednesday
+Asset ˆβ p ˆβ p ˆβ p
+S&P 500 0.285 <0.001 0.170 0.060 0.137 0.011
+Gold 0.432 0.002−0.1950.321 0.259 0.043
+Treasury (IEF) 0.252 0.001 0.077 0.338 0.077 0.353
+Notes:Separate regressions are estimated for each weekday using available post-2024 observa-
+tions. Each regression includes an intercept, the preceding trading session’s log variance and the
+weekend factor for the same calendar week. Unlike Table 3, weekly and monthly HAR controls
+are omitted. Samples are not restricted to common weeks. Coefficientp-values use Newey-West
+standard errors with five lags.
+We also examine the eleven weeks in which a Monday holiday moves the reopening session to
+Tuesday. The holiday interaction is negative and significant for the S&P 500 (−0.45,p= 0.01)
+and Treasury (−0.50,p= 0.01), and negative but insignificant for gold (−0.23,p= 0.36). These
+estimates indicate a weaker weekend relationship on holiday-delayed reopening dates. Whether the
+relationship remains significant on those dates requires a test of the baseline weekend coefficient
+plus the holiday interaction.
+Given the small number of holiday weeks, these findings are interpreted cautiously. They suggest
+that the relationship may be concentrated on Mondays rather than on the first trading session after
+any weekend closure. This limits the reopening interpretation, while leaving the main Monday
+predictive results as a separate finding.
+5.4.3 VIX-dependent variation in the weekend relationship
+We examine whether the weekend cryptocurrency-Monday variance relationship varies with pre-
+weekend equity-market uncertainty. Using the post-ETF sample beginning on 11 January 2024,
+we classify Monday observations according to the preceding Friday’s VIX. Where Friday’s VIX is
+missing, we use the latest earlier available observation. Two thresholds are considered: the median
+and the 75th percentile of log Friday VIX in each asset’s estimation sample. Observations strictly
+22
+above the relevant threshold form the high-VIX regime; the remaining observations form the low-
+VIX regime. Under the 75th-percentile definition, the comparison is therefore between the upper
+quarter and the lower three quarters of the distribution.
+We extend the joint weekend-Friday specification in equation 3.9 by allowing its intercept and
+all slopes to vary across these regimes:
+v(m)t = X
+r∈{L,H}
+I (r)m,thαr +β d,rv(m)t−1 +β w,r ¯v(m)t−1:t−5 +β mo,r ¯v(m)t−1:t−22
++γ rWt +δ rFt
+i
++ε t.
+Here,I (r)m,t is an indicator identifying the VIX regime for traditional assetmon Mondayt.
+Specifically,
+I (H)m,t =1 ln(VIXFri(t))> cm	 , I (L)m,t = 1−I (H)m,t ,
+where1{·}equals one when the stated condition holds and zero otherwise,VIXFri(t) is the preceding
+Friday’s VIX (or the latest earlier available observation if Friday’s value is missing), andcm is the
+median or 75th percentile of log Friday VIX in assetm’s post-ETF estimation sample, depending
+on the specification. Observations equal to the threshold are assigned to the low-VIX regime.
+The model is estimated separately for each traditional asset and threshold definition; asset and
+threshold indices on the coefficients are suppressed for simplicity. The HAR terms retain their
+definitions from Section 3.2 and are constructed from the asset’s daily trading history, rather than
+from Monday observations alone. The weekend and Friday cryptocurrency factors,Wt andF t, retain
+their definitions in equation 3.8.
+Each asset-specific threshold defines a separate regression specification. VIX is used to assign
+observations to regimes; it does not enter as a separate explanatory variable.3 Newey-West standard
+errors with five lags are used to construct 95% confidence intervals. A Wald test ofH0 :γ H =γ L
+assesses whether the weekend coefficient differs between regimes.
+Figures 6-8 show larger weekend coefficients in the high-VIX regime for all three assets, although
+the evidence of regime differences varies. For the S&P 500, the coefficient increases from0.090to
+0.675under the median split (p= 0.0055), and from0.204to0.953under the 75th-percentile split
+(p= 0.0022). Thus, the association between weekend cryptocurrency variance and Monday S&P 500
+variance is stronger when pre-weekend VIX is elevated under both threshold definitions.
+The evidence is less consistent for gold and IEF. For gold, the low- and high-VIX coefficients are
+0.519and0.768under the median split (p= 0.5391), and0.491and1.200under the 75th-percentile
+split (p= 0.0737). Neither difference is significant at the 5% level. For IEF, the median-split
+difference is also insignificant (0.186versus0.431;p= 0.1867), whereas the 75th-percentile split
+produces a significant difference (0.203versus0.671;p= 0.0150).
+Overall, VIX-dependent variation is most clearly supported for the S&P 500, while the IEF
+finding depends on the threshold and the gold evidence remains weaker. VIX represents equity-
+market uncertainty rather than gold- or Treasury-specific implied volatility. The reportedp-values
+are unadjusted for the six comparisons, and the two threshold specifications use overlapping obser-
+vations. These findings indicate that the weekend predictive relationship is stronger during periods
+of elevated pre-weekend VIX, with the clearest evidence for the S&P 500.
+3For the S&P 500, the median split contains 58 lower-VIX and 57 higher-VIX Mondays. The 75th-percentile split
+contains 86 lower-VIX and 29 higher-VIX Mondays.
+23
+Figure 6: S&P 500 weekend coefficients by Friday VIX regime. Bars show 95% confidence intervals using Newey-West
+standard errors with five lags. Intercepts and all slopes vary across regimes. Differencep-values are Wald tests of
+equal weekend coefficients, unadjusted for multiple comparisons. Thresholds are asset-specific.
+Figure 7: Gold weekend coefficients by Friday VIX regime. Estimation and inference follow Figure 6.
+24
+Figure 8: Treasury ETF (IEF) weekend coefficients by Friday VIX regime. Estimation and inference follow Figure 6.
+5.5 The exchange-traded-fund flow mechanism
+We examine whether the weekend relationship is stronger when institutional ETF flow activity is
+greater. In (3.13), the interaction betweenWt and total Bitcoin and Ether spot-ETF flow activity is
+statistically insignificant for the S&P 500 (p= 0.30) and gold (p= 0.85), and significantly negative
+for Treasury (t=−2.6). These results do not support the hypothesis that the weekend relationship
+strengthens with greater measured ETF flow activity.
+The insignificant interactions do not rule out ETF-related transmission, since the flow proxy may
+not capture all relevant institutional activity. Similarly, the negative Treasury interaction indicates
+a weaker association betweenWt and Monday log variance when flow activity is greater, but does
+not identify the reason for this difference. Broader links through overlapping holders, dealers and
+risk-management systems remain possible explanations. However, these mechanisms are not directly
+tested here, and contemporaneous Monday flows may respond to the same information as Monday
+variance. The underlying mechanism therefore remains unresolved.
+5.6 Complementary forecasting and connectedness analyses
+The following analyses place the weekend results in a broader context by comparing HAR with
+flexible forecasting models and examining aggregate daily volatility connectedness.
+5.6.1 Comparison with flexible forecasting models
+We first assess whether flexible forecasting models improve on the HAR benchmark. Machine
+learning has delivered economic gains in empirical asset pricing (Gu et al., 2020), while neural-
+network and high-dimensional methods have improved realised-volatility forecasts in some settings
+(Bucci, 2020, Rahimikia and Poon, 2020). Using the expanding-window walk-forward design in
+Section 3.3, we compare HAR with a random forest (Breiman, 2001), gradient boosting (Friedman,
+25
+2001, Chen and Guestrin, 2016) and a long short-term memory network (Hochreiter and Schmid-
+huber, 1997). Each flexible model receives the HAR predictors and the preceding day’s absolute
+return.
+Hyperparameters are tuned separately for each asset through an exhaustive grid search evaluated
+usingQLIKEundertime-seriescross-validationwithinthefirst60%ofeachseries. Thisproduces372
+fitted configurations in total. Forecast evaluation begins at observation400, which falls within the
+tuning block, creating a partial overlap between the tuning and evaluation periods. Consequently,
+the evaluation is not strictly out of sample with respect to hyperparameter selection and may
+favour the machine-learning models. Nevertheless, these models do not consistently outperform
+HAR: gradient boosting achieves lower QLIKE for XRP, while the random forest achieves lower
+QLIKE for gold. HAR and the tree-based models are re-estimated every21observations, whereas
+the LSTM is re-estimated every63observations. The network’s inputs and target are standardised
+using training-window statistics only.
+The HAR benchmark achieves the lowest reported QLIKE for four of the six assets: Bitcoin
+(0.763), Ether (0.640, tied with the random forest), the S&P 500 (0.454) and Treasury (0.402).
+Gradient boosting performs better for XRP (1.004compared with1.032for HAR), while the random
+forest performs better for gold (2.093compared with2.370). The recurrent network does not achieve
+the lowest QLIKE for any asset. Tuning improves the tree models in eleven of the twelve asset-
+model combinations relative to their default settings, but does not change the overall ranking. For
+Treasury, the random forest and gradient boosting losses remain approximately40%and25%higher
+than the HAR loss, respectively. The results therefore show that greater model flexibility does not
+consistently improve forecasting performance in this sample.
+These findings support the use of HAR as a parsimonious benchmark for the weekend-channel
+analysis. Any forecasting improvement from addingWt is assessed relative to this benchmark. The
+comparison does not rule out gains from other flexible models or from models that explicitly include
+weekend information.
+5.6.2 Aggregate volatility connectedness
+We next apply the standard connectedness framework of Diebold and Yilmaz (2012) to the
+log realised variances of all six assets over the post-2024 sample. Figure 9 reports the resulting
+generalised variance decomposition.
+26
+Bitcoin Ether XRP S&P 500 Gold Treasury
+shock from
+Bitcoin
+Ether
+XRP
+S&P 500
+Gold
+Treasury variance of
+49 26 18 4 2 1
+26 45 22 5 2 0
+18 23 55 3 1 0
+7 5 2 72 7 7
+2 2 1 8 86 1
+1 1 1 16 1 80
+Directional volatility connectedness (%), post-2024
+10
+20
+30
+40
+50
+60
+70
+80
+Figure 9: Directional volatility connectedness (%), post-2024. Rowi, columnjgives the share of the forecast-error
+variance of assetiattributable to shocks in assetj, from the generalised variance decomposition of Diebold and
+Yilmaz (2012). Note the near block-diagonal structure and the small off-block entries.
+The structure is approximately block-diagonal. The three cryptocurrencies form a tightly con-
+nected group, with 26% of Bitcoin’s forecast-error variance attributable to Ether and 18% to XRP.
+The three traditional assets are similarly self-contained, each retaining between 72% and 86% of its
+own variance, the largest cross-link being the 16% of Treasury variance attributable to the S&P 500.
+Transmissionbetweenthe blocks is small: individual cryptocurrencies account for between 1% and
+7% of the forecast-error variance of each traditional asset. A rolling 250-day connectedness index
+shows no break at the spot-fund approvals, moving instead with episodes of market stress, peaking
+near 43% during the March 2020 pandemic shock and falling to about 27% in 2022.
+These results indicate limited average daily connectedness between cryptocurrencies and tra-
+ditional assets, but do not rule out a relationship concentrated on particular days. The standard
+daily connectedness framework does not explicitly distinguish weekend cryptocurrency activity from
+weekday activity or isolate its association with Monday variance. A calendar-specific relationship
+may therefore be less apparent in the aggregate decomposition. The weekend-channel analysis ex-
+amines this possibility directly by relatingW t to Monday log variance while controlling for the
+HAR terms andFt. Its results complement Figure 9 by assessing a predictive relationship that the
+aggregate connectedness measure is not specifically designed to isolate.
+27
+6. Conclusion
+6.1 Summary
+This paper documents a predictive relationship between weekend cryptocurrency variance and
+Monday variance in the S&P 500, gold and a US Treasury bond fund. Weekend cryptocurrency
+variance provides additional information beyond each asset’s own variance history and Friday cryp-
+tocurrency variance. The relationship is weak before 2024 and significant across all nine crypto-asset
+pairs in the post-2024 sample. An endogenous sup-Wald test places the estimated break in Octo-
+ber 2023, preceding the January 2024 spot-Bitcoin ETF approvals. This timing is compatible with
+anticipation of approval, but does not establish its role in the change.
+The weekend factor remains significant when the Friday factor is excluded, whereas Friday
+cryptocurrency variance alone has no significant predictive association. The decomposition results
+supportapredominantlycommoncryptocurrency-marketrelationship, withnosignificantadditional
+predictive information detected in the coin-specific residuals.
+The estimated magnitude is substantial: a one-standard-deviation increase inWt is associated
+withapproximately27-54%higherfittedMondayvarianceacrossthethreetraditionalassets, holding
+the HAR controls fixed. AddingW t to the HAR benchmark reduces out-of-sample QLIKE loss
+by approximately11-22%, although the statistical evidence for improved forecast accuracy varies
+across markets. The findings generally remain significant after controlling for Friday’s VIX, allowing
+for within-date dependence across pairs and removing influential observations. The holiday-week
+results limit interpretation of the relationship as a generic reopening effect. ETF flow interactions
+also provide no support for a stronger relationship on higher-flow Mondays. The evidence therefore
+supports a Monday predictive relationship, while its underlying mechanism remains unresolved.
+6.2 Interpretation
+Two aspects of the findings deserve emphasis. First, the aggregate connectedness results in
+Section 5.6.2 and the weekend-specific regressions capture different features of cross-market re-
+lationships. Individual cryptocurrencies account for relatively small shares of traditional assets’
+forecast-error variance in the daily connectedness analysis, while the weekend factor provides addi-
+tional predictive information about Monday variance. These findings are compatible because the
+daily connectedness framework does not explicitly isolate weekend cryptocurrency activity and its
+relationship with Monday outcomes. The comparison highlights the value of examining calendar-
+specific predictive relationships alongside aggregate connectedness.
+Second, the emergence of the relationship around 2023-24 does not establish an ETF-related ex-
+planation. TheestimatedbreakprecedestheJanuary2024spot-BitcoinETFapprovals, andtheflow
+interactions do not support a stronger weekend relationship on Mondays with greater measured ETF
+flow activity. However, these findings do not exclude broader ETF-related or institutional channels.
+Overlapping ownership, dealer exposures and common risk-management practices remain possible
+explanations, but are not directly tested here. The evidence supports a predictive relationship; its
+underlying mechanism remains unresolved.
+6.3 Limitations and further work
+Several limitations qualify these conclusions. Daily variance is estimated from OHLC prices
+rather than intraday returns. These range-based proxies measure within-session price variation but
+exclude close-to-open price changes and do not reveal when variation occurs within the session.
+Intraday data would permit more detailed measurement and timing analysis, subject to appropriate
+treatment of market microstructure noise. The post-2024 estimation samples are short, containing
+115–116 Mondays depending on the asset, so the emergence result rests on a limited number of
+28
+observations and the endogenous break is only borderline significant at the 5% level. The flow
+proxy is coarse and endogenous, so the flow null should be read as an absence of evidence rather
+than strong evidence of absence. The fixed-income leg is a 7-10 year bond fund rather than the
+on-the-run ten-year note. No cryptocurrency provides a clean never-listed control by the end of
+the sample, since spot XRP funds launched in November 2025. The holiday-week results suggest a
+weaker weekend relationship when reopening is delayed until Tuesday, limiting a generic reopening
+interpretation. However, with only eleven holiday weeks, the evidence distinguishing a Monday-
+specific relationship from a generic reopening effect remains limited.
+Four extensions follow naturally from these limitations. Intraday realised measures would
+sharpen estimation and allow the Monday effect to be traced through the trading session rather than
+observed only daily. A longer post-event window will permit a sharper test of the emergence date
+and reveal whether the channel persists, strengthens, or is gradually arbitraged away as participants
+learn of it. Finer institutional data, such as dealer positions or fund holdings rather than aggregate
+net flows, would allow the mechanism to be tested more precisely. Finally, the identification strategy
+generalises: any pair of markets with differing closure schedules offers the same predictive setting
+based on differences in trading calendars, so the approach could be applied across time zones, or to
+assets whose closure lengths differ, to test whether the length of the closed window governs the size
+of the effect.
+29
+References
+Andersen, T.G., Bollerslev, T., 1998. Answering the skeptics: yes, standard volatility models do provide
+accurate forecasts.International Economic Review39, 885-905.
+Andersen, T.G., Bollerslev, T., Diebold, F.X., Ebens, H., 2001. The distribution of realized stock return
+volatility.Journal of Financial Economics61, 43-76.
+Andersen, T.G., Bollerslev, T., Diebold, F.X., Labys, P., 2003. Modeling and forecasting realized volatility.
+Econometrica71, 579-625.
+Andrews, D.W.K., 1993. Tests for parameter instability and structural change with unknown change point.
+Econometrica61, 821-856.
+Antonakakis, N., Chatziantoniou, I., Gabauer, D., 2020. Refined measures of dynamic connectedness based
+on time-varying parameter vector autoregressions.Journal of Risk and Financial Management13, 84.
+Babalos, V., Bouri, E., Gupta, R., 2025. Does the introduction of US spot Bitcoin ETFs affect spot returns
+and volatility of major cryptocurrencies?Quarterly Review of Economics and Finance102, 102006.
+Barndorff-Nielsen, O.E., Shephard, N., 2002. Econometric analysis of realized volatility and its use in esti-
+mating stochastic volatility models.Journal of the Royal Statistical Society: Series B64, 253-280.
+Baruník, J., Křehlík, T., 2018. Measuring the frequency dynamics of financial connectedness and systemic
+risk.Journal of Financial Econometrics16, 271-296.
+Baur, D.G., Dimpfl, T., 2018. Asymmetric volatility in cryptocurrencies.Economics Letters173, 148-151.
+Baur, D.G., Lucey, B.M., 2010. Is gold a hedge or a safe haven? An analysis of stocks, bonds and gold.
+Financial Review45, 217-229.
+Bollerslev, T., 1986. Generalized autoregressive conditional heteroskedasticity.Journal of Econometrics31,
+307-327.
+Bouri, E., Molnár, P., Azzi, G., Roubaud, D., Hagfors, L.I., 2017. On the hedge and safe haven properties
+of Bitcoin: is it really more than a diversifier?Finance Research Letters20, 192-198.
+Breiman, L., 2001. Random forests.Machine Learning45, 5-32.
+Bucci, A., 2020. Realized volatility forecasting with neural networks.Journal of Financial Econometrics18,
+502-531.
+Bukaita, W., Li, X., 2026. Structural spillovers among Bitcoin, Ethereum, gold, and U.S. equities: evidence
+from the 2024 spot ETF institutionalization regime.Economies14(4), 143.
+Caporale, G.M., Plastun, A., 2019. The day of the week effect in the cryptocurrency market.Finance
+Research Letters31, 258-269.
+Chen, T., Guestrin, C., 2016. XGBoost: a scalable tree boosting system. In:Proceedings of the 22nd ACM
+SIGKDD International Conference on Knowledge Discovery and Data Mining, 785-794.
+Cont, R., 2001. Empirical properties of asset returns: stylized facts and statistical issues.Quantitative
+Finance1, 223-236.
+Corbet, S., Lucey, B., Urquhart, A., Yarovaya, L., 2019. Cryptocurrencies as a financial asset: a systematic
+analysis.International Review of Financial Analysis62, 182-199.
+Corsi, F., 2009. A simple approximate long-memory model of realized volatility.Journal of Financial Econo-
+metrics7, 174-196.
+30
+Cross, F., 1973. The behavior of stock prices on Fridays and Mondays.Financial Analysts Journal29(6),
+67-69.
+Diebold, F.X., Mariano, R.S., 1995. Comparing predictive accuracy.Journal of Business & Economic Statis-
+tics13, 253-263.
+Diebold, F.X., Yilmaz, K., 2012. Better to give than to receive: predictive directional measurement of
+volatility spillovers.International Journal of Forecasting28, 57-66.
+Diebold, F.X., Yilmaz, K., 2014. On the network topology of variance decompositions.Journal of Econo-
+metrics182, 119-134.
+Dudek, G., Fiszeder, P., Kubus, P., Orzeszko, W., 2024. Forecasting cryptocurrencies volatility using statis-
+tical and machine learning methods: a comparative study.Applied Soft Computing151, 111132.
+Dyhrberg, A.H., 2016. Bitcoin, gold and the dollar: a GARCH volatility analysis.Finance Research Letters
+16, 85-92.
+Engle, R.F., 1982. Autoregressive conditional heteroscedasticity with estimates of the variance of United
+Kingdom inflation.Econometrica50, 987-1007.
+Fama, E.F., 1965. The behavior of stock-market prices.Journal of Business38, 34-105.
+French, K.R., 1980. Stock returns and the weekend effect.Journal of Financial Economics8, 55-69.
+French, K.R., Roll, R., 1986. Stock return variances: the arrival of information and the reaction of traders.
+Journal of Financial Economics17, 5-26.
+Friedman, J.H., 2001. Greedy function approximation: a gradient boosting machine.Annals of Statistics29,
+1189-1232.
+Garman, M.B., Klass, M.J., 1980. On the estimation of security price volatilities from historical data.Journal
+of Business53, 67-78.
+Glosten, L.R., Jagannathan, R., Runkle, D.E., 1993. On the relation between the expected value and the
+volatility of the nominal excess return on stocks.Journal of Finance48, 1779-1801.
+Gu, S., Kelly, B., Xiu, D., 2020. Empirical asset pricing via machine learning.Review of Financial Studies
+33, 2223-2273.
+Hansen, P.R., Lunde, A., 2005. A forecast comparison of volatility models: does anything beat a
+GARCH(1,1)?Journal of Applied Econometrics20, 873-889.
+Hochreiter, S., Schmidhuber, J., 1997. Long short-term memory.Neural Computation9, 1735-1780.
+Hong, Y., Feng, H., Wang, Y., Li, B., 2025. The impact of Bitcoin ETF approval on Bitcoin’s hedging
+properties against traditional assets. Working paper, arXiv:2512.12815.
+International Monetary Fund, 2022. Cryptic connections: spillovers between crypto and equity markets.
+Global Financial Stability Notes2022/01.
+Iyer, R., Popescu, A., 2023. New evidence on spillovers between crypto assets and financial markets.Inter-
+national Monetary Fund Working Paper, 23/213.
+Jahanshahloo, H., Corbet, S., Oxley, L., 2022. Seeking sigma: Time-of-the-day effects on the Bitcoin network.
+Finance Research Letters49, 103101.
+Katsiampa, P., 2017. Volatility estimation for Bitcoin: a comparison of GARCH models.Economics Letters
+158, 3-6.
+31
+Mandelbrot, B., 1963. The variation of certain speculative prices.Journal of Business36, 394-419.
+Mourey, M., Shahrour, M.H., Şoiman, F., 2025. A crypto-stock weekend effect: predicting Monday stock
+returns using weekend cryptocurrency returns.Finance Research Letters86, 108661.
+Nelson, D.B., 1991. Conditional heteroskedasticity in asset returns: a new approach.Econometrica59, 347-
+370.
+Newey, W.K., West, K.D., 1987. A simple, positive semi-definite, heteroskedasticity and autocorrelation
+consistent covariance matrix.Econometrica55, 703-708.
+Parkinson, M., 1980. The extreme value method for estimating the variance of the rate of return.Journal of
+Business53, 61-65.
+Patton, A.J., 2011. Volatility forecast comparison using imperfect volatility proxies.Journal of Econometrics
+160, 246-256.
+Rahimikia, E., Poon, S.-H., 2020. Machine learning for realised volatility forecasting. Working paper, SSRN
+3707796.
+Rogers, L.C.G., Satchell, S.E., 1991. Estimating variance from high, low and closing prices.Annals of Applied
+Probability1, 504-512.
+U.S. Securities and Exchange Commission, 2024. Statement on the approval of spot Bitcoin exchange-traded
+products. 10 January 2024, Washington, DC.
+Urquhart, A., 2016. The inefficiency of Bitcoin.Economics Letters148, 80-82.
+32
+Appendix A. Robustness to the choice of range estimator
+The main analysis measures daily variance with the Garman and Klass (1980) estimator. This
+appendix repeats the principal tests using the two alternative range-based estimators introduced
+in Section 3.1, that is, the Parkinson (1980) estimator, which uses only the high-low range, and
+the Rogers and Satchell (1991) estimator, which allows for a non-zero drift. For each estimator,
+every variance series is rebuilt from the same daily prices with the same cleaning steps: the cryp-
+tocurrency weekend and Friday factorsWt andF t, and the traditional asset’s Monday log variance
+and HAR terms. The regression and forecasting exercises follow the corresponding main-text de-
+signs (Section 5), with all variance-based variables reconstructed using the chosen estimator. The
+Garman-Klass results are included as a benchmark.
+How similar are the estimators?
+Table A1 reports correlations between the cleaned daily log-variance series. Parkinson is closely
+correlated with Garman-Klass for all six assets (0.96-0.98). Rogers-Satchell is also highly correlated
+with Garman-Klass for five assets (0.94-0.97), but less strongly for gold (0.75). Before cleaning,
+Rogers-Satchell produces 367 zero estimates for gold, compared with 131 under Garman-Klass and
+Parkinson. Rogers-Satchell can equal zero despite a positive high-low range when the opening and
+closing prices coincide with opposite daily extremes. Zero estimates are treated as missing under
+the cleaning procedure described in Section 3.1. The gold results therefore depend more heavily on
+this procedure, particularly under Rogers-Satchell.
+Table A1: Similarity of the alternative estimators, November 2017 to June 2026. Correlations are between cleaned
+daily log-variance series; the last two columns count days on which the estimator equals zero before cleaning.
+Correlation with Garman-Klass Days with zero estimate
+Asset Parkinson Rogers-Satchell
+Garman-Klass,
+Parkinson Rogers-Satchell
+Bitcoin 0.97 0.97 0 5
+Ether 0.97 0.96 0 4
+XRP 0.98 0.97 0 2
+S&P 500 0.96 0.94 0 0
+Gold 0.96 0.75 131 367
+Treasury (IEF) 0.96 0.96 0 4
+The emergence of the relationship.
+Table A2 repeats the sub-period analysis of Table 2. All three estimators give a mean weekend
+coefficient close to zero before 2020 and a clearly positive coefficient after January 2024, when eight
+or nine of the nine pairs are positive and significant. The estimators differ in the intermediate
+sub-periods. Parkinson identifies four positive and significant pairs in 2022-2023, whereas Rogers-
+Satchell identifies two in 2020-2021 and one in 2022-2023.
+33
+Table A2: Emergence of the weekend channel by estimator: mean of the nine pairwise weekend coefficients and the
+number that are positive and significant at the 5% level.
+Garman-Klass Parkinson Rogers-Satchell
+Sub-period MeanˆγSig. MeanˆγSig. MeanˆγSig.
+Pre-COVID (2017-11 to 2020-02)−0.030/9−0.040/9−0.020/9
+COVID-Recovery (2020-02 to 2021-12)0.030/90.070/90.022/9
+LUNA/FTX era (2022-01 to 2023-12)0.142/90.194/90.091/9
+Post-ETF (2024-01 to 2026-06)0.359/90.299/90.318/9
+Weekend versus Friday, magnitude and forecasting value.
+Table A3 repeats Tables 3 and 5 for the post-2024 sample. Under every estimator and for
+every asset, the weekend coefficient is positive and significant in the weekend-only specification
+(p≤0.021), whereas the Friday-only coefficient is not statistically significant (p >0.30). In the
+joint specification, the one-sided test rejectsH0 :γ≤δin favour ofH 1 :γ > δ(p≤0.008).
+A one-standard-deviation increase inWt is associated with 27-54% higherfitted Mondayvariance
+under Garman-Klass, 27-46% under Parkinson and 26-37% under Rogers-Satchell. Table A4 shows
+that the pooled panel coefficient remains between 0.31 and 0.38 witht≥5.0, and that addingWt
+to HAR lowers out-of-sample QLIKE for all three assets under all three estimators, by 9-25%. As
+in the main text, the Diebold-Mariano evidence varies across markets: the one-sidedp-values range
+from 0.024 to 0.094, and which asset reaches the 5% level depends on the estimator.
+Table A3: Weekend versus Friday and economic magnitude by estimator, post-2024. Weekend-only and Friday-only
+specifications as in Table 3; the contrast is the one-sided test ofγ > δin the joint model; the one-standard-deviation
+effect and∆R 2 are computed as in Table 5. Newey-West standard errors, five lags.
+Weekend-only Friday-only Contrast 1-SD∆R 2
+Estimator Assetˆγ p ˆδ p peffect (pp)
+Garman-Klass
+S&P 500 0.256 0.005−0.0150.869 0.001+28%3.9
+Gold 0.447 0.001−0.0170.883 0.001+54%6.2
+Treasury (IEF) 0.246 0.0010.0340.521 0.001+27%7.0
+Parkinson
+S&P 500 0.238 0.0090.0070.944 0.006+27%3.5
+Gold 0.377 0.0080.0350.725 0.008+46%5.3
+Treasury (IEF) 0.248 0.0010.0360.561<0.001+28%6.9
+Rogers-Satchell
+S&P 500 0.278 0.0100.0250.783 0.002+31%3.9
+Gold 0.330 0.021−0.1170.309<0.001+37%3.2
+Treasury (IEF) 0.235 0.0030.0140.792 0.002+26%5.6
+Table A4: Pooled estimates, break dates and out-of-sample forecast performance by variance estimator.
+Panel Endogenous break QLIKE reduction (DMp)
+Estimatorˆγ(t) Date sup-WS&P 500 Gold Treasury
+Garman-Klass 0.38 (5.6) Oct 2023 8.8 22% (0.066) 11% (0.050) 17% (0.042)
+Parkinson 0.36 (5.3) Dec 2022 6.8 15% (0.047) 15% (0.063) 18% (0.056)
+Rogers-Satchell 0.31 (5.0) Apr 2024 10.1 25% (0.094) 9% (0.024) 12% (0.060)
+34
+Notes:Panel regressions standardise the outcome and crypto predictors within each pair, control for the daily HAR
+term, and cluster standard errors by date; parentheses containt-statistics. Break regressions include all HAR terms
+but exclude Friday variance, with 15% trimming. Forecast entries show QLIKE reductions, with one-sided DM
+p-values in parentheses.
+Timing of the change.
+The estimated break date is sensitive to the choice of estimator. The maximum sup-Wald
+statistic occurs in October 2023 under Garman-Klass (8.8), December 2022 under Parkinson (6.8),
+and April 2024 under Rogers-Satchell (10.1). The alternative estimators therefore give different
+estimates of the timing of the change. These differences do not establish whether the underlying
+change was abrupt or gradual.
+Implications.
+The positive post-2024 relationship is robust to the choice of range estimator. Under both
+alternatives, the weekend factor is positive and statistically significant for all three traditional as-
+sets in the weekend-only specifications controlling for HAR terms. Friday-only coefficients are not
+statistically significant, and joint-model contrasts favour a larger weekend than Friday coefficient.
+Estimated economic effects remain substantial. Adding the weekend factor reduces out-of-sample
+QLIKE for every asset under each estimator, although statistical evidence of forecast improvement
+varies across assets and estimators.
+The timing of the change is less robust. No pairwise coefficient is positive and statistically
+significant in the pre-COVID sub-period, compared with eight or nine in the post-ETF sub-period.
+Estimated break dates differ across estimators. The October 2023 estimate reported in Section 5.1
+should therefore be interpreted cautiously rather than as a precisely established onset. These results
+do not establish whether spot-ETF approvals caused the stronger relationship.
+35

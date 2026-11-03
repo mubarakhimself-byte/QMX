@@ -1,0 +1,636 @@
+arXiv 1710.01503  https://arxiv.org/abs/1710.01503
+
+arXiv:1710.01503v1  [math.OC]  4 Oct 2017
+On Drawdown-Modulated Feedback
+Control in Stock Trading
+Chung-Han Hsieh and B. Ross Barmish
+ECE Department
+University of Wisconsin
+Madison, WI 53706
+e-mail: hsieh23@wisc.edu, barmish@engr .wisc.edu
+Abstract: Control of drawdown, that is, the control of the drops in weal th over time from peaks to
+subsequent lows, is of great concern from a risk management p erspective. With this motivation in mind,
+the focal point of this paper is to address the drawdown issue in a stock trading context. Although
+our analysis can be carried out without reference to control theory, to make the work accessible to
+this community, we use the language of feedback systems. The takeoff point for the results to follow,
+which we call the Drawdown Modulation Lemma , characterizes any investment which guarantees that
+the percentage drawdown is no greater than a prespeciﬁed lev el with probability one. With the aid of
+this lemma, we introduce a new scheme which we call the drawdown-modulated feedback control .
+To illustrate the power of the theory, we consider a drawdown -constrained version of the well-known
+Kelly Optimization Problem which involves maximizing the e xpected logarithmic growth of the trader’s
+account value. As the drawdown parameter dmax in our new formulation tends to one, we recover
+existing results as a special case. This new theory leads to a n optimal investment strategy whose
+application is illustrated via an example with historical s tock-price data.
+Keywords: Financial Engineering, Stochastic Systems, Rob ustness
+1. INTRODUCTION
+Control of drawdown, that is, the control of the drops in weal th
+over time from peaks to subsequent lows, is of great concern
+from a risk management perspective. Sufﬁce it to say, the iss ue
+of drawdown control has received a considerable attention i n
+the ﬁnance literature. More speciﬁcally, to properly contr ol
+drawdown in a stock trading context, one standard approach i s
+to incorporate this consideration into a constrained optimization
+framework which typically includes other performance crit e-
+ria; e.g., see [1] and [2] which focus on a single-stock scena rio.
+There are also some papers dealing with modiﬁcations and
+extensions of these results for the single-stock case to add ress
+an entire portfolio under various stochastic modeling assu mp-
+tions; e.g., see [3]-[8]. Finally, the literature also incl udes var-
+ious methodologies to address different types of drawdown.
+For example, absolute drawdown is studied in [11] and other
+drawdown-based metrics are considered in [4], [9] and [26].
+In this paper, we focus on the notion of percentage drawdown
+whose technical deﬁnition is given in the next section. We
+provide a new result which enables a trader to guarantee that
+a prescribed maximum level dmax for this quantity will not be
+exceeded. To provide further context for this paper, we mention
+a sampling of some other papers in the existing literature us ing
+different risk measures rather than drawdown. Examples of
+such measures include V alue at Risk (V aR), Conditional V alue
+at Risk, Expected Shortfall and the celebrated mean-varian ce
+criterion; e.g., see [18]-[20] and [27]. In addition to the a nal-
+ysis of risk, some papers in the literature consider portfol io
+optimization involving a maximization of expected logarit hmic
+growth. This is the so-called Kelly Optimization Problem which
+will be used to demonstrate our theory; e.g., see [13]-[15]. Re-
+lated to this, the literature also includes a well-known met hod
+called the Fractional Kelly Strategy . This is aimed at scaling
+down the size of investment for the purpose of mitigating the
+risk; e.g., see [12] and [16].
+The takeoff point for this paper, which we call the Drawdown
+Modulation Lemma, characterizes investments which guarantee
+that the percentage drawdown is no greater than a prespeciﬁed
+level dmax ∈ (0, 1) with probability one. To make our exposi-
+tion appealing to this community, this investment scheme which
+we derive from the lemma, is expressed in a classical feed-
+back control setting. We call it drawdown-modulated feedback
+control. As the drawdown parameter dmax, we recover existing
+results as a special case. To further illustrate its use, as p revi-
+ously mentioned, we consider a drawdown-constrained versi on
+of the Kelly Optimization Problem which involves maximizin g
+the expected logarithmic growth. Then, a numerical example
+with historical data is carried out and a further generaliza tion
+of the lemma for portfolio case is discussed in this paper.
+2. DRAWDOWN DEFINITIONS
+For k = 0 , 1, 2, ..., N, we let V (k) denote the account value at
+stage k. Then as k evolves, the percentage drawdown (to-date)
+is deﬁned as
+d(k) .= Vmax(k) − V (k)Vmax(k)
+where
+Vmax(k) .= max0≤i≤k V (i).
+This leads to overall percentage drawdown
+d∗max .= max0≤k≤N d(k).
+Note that the percentage drawdown satisﬁes 0 ≤ d(k) ≤ 1.
+Although not considered here, there is another well-known
+measure, called the maximum absolute drawdown , which we
+denote by D∗max and is given by
+D∗max .= max0≤k≤N Vmax(k) − V (k).
+The reader is referred to [10] and [23] for work on this topic.
+To further elaborate on these two notions of drawdown, we con-
+sider an example with a hypothetical account value V (k) shown
+in Figure 1. From the plot, we obtain the overall percentage
+drawdown, d∗max ≈ 0.8333, occurs at stage k = 7. On the other
+hand, the maximum absolute drawdown, D∗max = 4 .5, occurs
+at stage k = 24 . This toy example shows that the two types of
+drawdown described above can be quite different. In this pap er,
+we concentrate on the percentage drawdown. This is the ver-
+sion of drawdown which is better suited to deal with differen t
+“scales” for V (k). That is both small and large investors can
+identify with this concept.
+0 5 10 15 20 25
+Time, k
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10Hypothetical Account Value, V(k)
+d∗max
+D∗max
+Fig. 1: Maximum Percentage and Absolute Drawdown
+3. FEEDBACK CONTROL POINT OF VIEW
+In the sequel, as previously mentioned, we emphasize the
+control-theoretic point of view. Our formulation here is co nsis-
+tent with a growing body of the literature addressing ﬁnance
+problems but originating from the control community; e.g.,
+see [22]-[25]. Although our analysis to follow can be carried out
+without reference to control theory, to make the work accessible
+to this audience, we use the language of feedback systems.
+Speciﬁcally, we view the stock prices S(k) as exogenous inputs
+to a feedback system. In this setting, we use a linear feedbac k
+controller which modiﬁes the investment I(k) using a time-
+varying gain K(k) applied to the account value V (k). That is,
+for each stage k, we consider the controller having the form
+I(k) = K(k)V (k).
+Typically, when selecting this feedback gain, we include a c on-
+straint which we express as K(k) ∈ K . For instance, suppose
+we restrict attention to a so-called cash-ﬁnanced investment.
+Then we impose a constraint which guarantees |I(k)| ≤ V (k).
+That is, the investment level is limited to the value of one’s
+account. This in turn forces |K(k)| ≤ 1. The feedback control
+conﬁguration which describes this scheme is depicted in Fig -
+ure 2 for a single stock. Such a conﬁguration can be generaliz ed
+to deal with a portfolio case of n stocks; e.g., see [4]. To link
+back to ﬁnance concepts, the special case of buy-and-hold is
+obtained when K(k) ≡ 1.
+Fig. 2: Feedback Control Conﬁguration
+4. STOCK-TRADING FORMULA TION
+For k = 0 , 1, 2, ..., N, we let S(k) > 0 denote the stock price.
+The associated returns up to stage N − 1 are given by
+X(k) .= S(k + 1) − S(k)S(k)
+In the sequel, we assume that the returns are bounded; i.e.,
+Xmin ≤ X(k) ≤ Xmax
+with Xmin and Xmax being points in the support, denoted by X ,
+and satisfying
+−1 < X min < 0 < X max.
+In the sections to follow, when necessary, we assume the
+random variables X(k) are independent and identically dis-
+tributed (i.i.d.).
+Account V alue and Drawdown : Now letting I(k) be the
+investment at stage k and note that I(k) < 0 stands for short
+selling. Beginning at some initial account value V (0) > 0, the
+evolution to terminal state V (N ) is described sequentially by
+the recursion
+V (k + 1) = V (k) + I(k)X(k).
+Now, given a maximum acceptable drawdown level dmax sat-
+isfying 0 < d max < 1, we focus on conditions on I(k) under
+which satisfaction of the constraint
+d(k) ≤ dmax
+is assured along all sample pathes with probability one.
+Idealized Market : In the sequel, we further assume that our
+stock-trading occurs within “idealized market.” That is, w e
+assume zero transaction costs, zero interest rates and perf ect
+liquidity conditions. For more details about idealized mar ket
+assumption, the reader is referred to reference [25].
+5. THE DRAWDOWN MODULA TION LEMMA
+In this section, the stepping stone in this paper, which we ca ll
+it The Drawdown Modulation Lemma , is given. This lemma
+provides a necessary and sufﬁcient condition on the invest-
+ment I(k) which guarantees that the percentage drawdown is
+no greater than a given level dmax with probability one.
+The Drawdown Modulation Lemma : An investment func-
+tion I(·) guarantees maximum acceptable drawdown leveldmax
+or less with probability one if and only if for all k, the condition
+− dmax − d(k)(1 − d (k)) Xmax V (k) ≤ I(k) ≤ dmax − d(k)(1 − d (k)) |Xmin| V (k)
+is satisﬁed along all sample pathes.
+Proof: To prove necessity, assuming that d(k) ≤ dmax for
+all k with probability one, we must show the required condition
+on I(k) holds along all sample pathes. Indeed, letting k be
+given, since both d(k) ≤ dmax and d(k + 1) ≤ dmax with
+probability one, we claim this forces the required inequali ties
+on I(k). Without loss of generality, we provide a proof of the
+rightmost inequality for the case I(k) ≥ 0 and note that a
+nearly identical proof is used for I(k) < 0. Indeed, using the
+fact that Xmin is in the support X , there exists a suitably small
+neighborhood of Xmin, call it N (Xmin), such that
+P (X(k) ∈ N (Xmin)) > 0.
+Thus, given any arbitrarily small ε > 0, there exists some point
+Xε(k) < 0 such that Xε(k) ∈ N ε(Xmin), |Xmin − Xε(k)| < ε
+and leading to associated realizable loss I(k)|Xε(k)|. Noting
+that Vmax(k + 1) = Vmax(k) and
+d(k + 1) = d(k) + |Xε(k)| I(k)Vmax(k) ≤ dmax
+we now substitute
+Vmax(k) = V (k)1 − d (k) > 0
+into the inequality above and noting that |Xε(k)| → | Xmin|
+as ε → 0, we obtain
+I(k) ≤ dmax − d(k)(1 − d (k)) |Xmin| V (k).
+To prove sufﬁciency, we assume that the condition on I(k)
+holds along all sample pathes. We must show d(k) ≤ dmax for
+all k with probability one. Proceeding by induction, for k = 0 ,
+we trivially have d(0) = 0 ≤ dmax with probability one. To
+complete the inductive argument, we assume that d(k) ≤ dmax
+with probability one, and must show d(k + 1) ≤ dmax with
+probability one. Without loss of generality, we again provi de
+a proof for the case I(k) ≥ 0 and note that a nearly identical
+proof is used for I(k) < 0. Now, by noting that
+d (k + 1) = 1 − V (k + 1)Vmax (k + 1) ,
+and Vmax(k) ≤ Vmax(k + 1) with probability one, we split
+the argument into two cases: If Vmax(k) < V max(k + 1), then
+Vmax(k + 1) = V (k + 1). Thus, we have d(k + 1) = 0 ≤ dmax.
+On the other hand, if Vmax(k) = Vmax(k + 1), with the aid of
+the dynamics of account value, we have
+d (k + 1) = 1 − V (k) + I (k) X (k)Vmax (k)
+≤ 1 − V (k) − I (k) |Xmin|Vmax (k)
+Using the rightmost inequality condition on I(k), we obtain
+d (k + 1) ≤ dmax which completes the proof. □
+Remarks: First, it is worth to mentioning that since dmax < 1,
+any investment I(k) satisfying the inequality condition in
+the lemma assures survival. That is, along all sample pathes ,
+V (k) > 0 for k = 0 , 1, 2, ..., N. This is an easy consequence
+of the fact that at each stage k, drawdown of 100% from some
+previous maximum for V (k) never occurs. Second, the satis-
+factions of the drawdown condition d(k) ≤ dmax along sample
+pathes opens a door to solution of new drawdown-constrained
+optimization problems which involve parameters entering i nto
+an investment I(k) satisfying the inequality in the lemma; e.g.,
+see Section 6 to follow. Finally, note that the i.i.d. assump tion
+on the returns X(k) is not required in the proof of the lemma.
+What is needed is an explicit bound on the returns which is
+realizable with non-zero probability.
+Feedback Control Realization: With the aid of the Drawdown
+Modulation Lemma, we can readily obtain a class of invest-
+ment functions I(k) expressed as a linear feedback control
+parameterized by a gain γ and leading to satisfaction of the
+drawdown speciﬁcation. To be more speciﬁc, for each stage
+k = 0, 1, 2, ..., N − 1, we deﬁne
+M (k) .= dmax − d (k)1 − d (k)
+which we call modulator function . Now, using M (k), we ex-
+press I(k) in the feedback form
+I(k) .= γM (k)V (k)
+with constraint
+− 1Xmax ≤ γ ≤ 1|Xmin| .
+Note that the feedback gain γ can be selected without regard
+for the modulator M (k). This idea has a similar ﬂavor to
+that of the celebrated Separation Theorem in linear control
+theory; e.g., see [21]. Henceforth, we call the investment I(k)
+described above a drawdown-modulated feedback controller
+and the constraint on γ above is denoted by writing γ ∈ Γ.
+We note that this is not the only feedback-control realizati on
+which is possible. A more general class of feedback con-
+trols, to be pursued in our future work, can be formulated
+with a time varying gain γ(k). That is, one can equally well
+take I(k) = γ(k)M (k)V (k) with γ(k) ∈ Γ and still satisfy
+the drawdown requirement; see the conclusion of this paper f or
+further discussion of promising research along these lines .
+6. DRAWDOWN-MODULA TED KELLY OPTIMIZA TION
+In this section, we consider one of many possible ways to inco r-
+porate the Drawdown Modulation Lemma into an optimization
+problem. To this end, we formulate a drawdown-constrained
+version of the so-called Kelly Optimization Problem. To be
+more speciﬁc, for k = 0 , 1, 2, ..., N − 1, assuming that the re-
+turns X(k) are i.i.d. random variables with probability density
+function (PDF) denoted by fX , we work with the drawdown-
+modulated feedback controller
+I(k) = γM (k)V (k)
+with feedback gain γ ∈ Γ treated as an optimization parameter.
+Now letting Vγ(k) be the account value at stage k induced by
+feedback gain γ, the associated recursion is described by
+Vγ(k + 1) = (1 + γM (k)X(k))Vγ(k)
+and we seek to ﬁnd γ which achieves
+g∗ .= max
+γ∈Γ
+1
+N E
+[
+log Vγ (N )V (0) ] .
+Moreover, in the sequel, a corresponding maximizer is then
+denoted by γ∗.
+Remarks: The limiting case obtained by letting dmax → 1
+leads to M (k) → 1 which brings us back into the world of
+classical Kelly optimization; e.g., see [12] and [17]. Thus , the
+classical Kelly problem can be viewed as a special case of our
+theory. In the next section, we consider a numerical example ,
+based on historical data, to compare the trading performanc e
+obtained via drawdown-modulated feedback control with tha t
+obtained via a classical Kelly solution. Given that this sol ution
+is often deemed to be too risky, some existing papers introdu ce
+the so-called Fractional Kelly strategy which was discussed
+in the introduction. One disadvantage of a fractional Kelly
+strategy is that it is often designed in an ad-hoc manner. In
+contrast, the drawdown-modulated feedback control provid es
+a systematic way to obtain a time-varying problem solution.
+7. NUMERICAL EXAMPLE
+In this section, we provide a numerical example involving re al
+stock data to illustrate how the drawdown modulation is used
+in practice. We consider the Kelly Optimization Problem de-
+scribed in the last section and use historical price data for Tesla
+Motors (ticker TSLA) covering the period December 31, 2013
+to March 28, 2014; see Figure 3 where these underlying stock
+prices are plotted. The ﬁgure also shows an additional sixty-one
+days within the period from March 28, 2014 to June 24, 2014
+of stock prices which will be used in an out-of-sample test
+described below.
+0 20 40 60 80 100 120
+Time in Days
+120
+140
+160
+180
+200
+220
+240
+260Stock Price, S(k)
+Price for In-Sample Simulation
+Price for Out-of-Sample Simulation
+Fig. 3: TSLA Stock Price, S(k)
+Our goal is to ﬁrst use the price data to estimate a probabilit y
+mass function (PMF) model then calculate the optimal feed-
+back gain γ∗ which maximizes the objective function
+J(γ) .= 1N E [log Vγ(N )V (0) ]
+with Vγ(N ) generated using the cash-ﬁnancing constraint im-
+posed. We use this γ∗ to study the out-of-sample trading per-
+formance for the resulting controller. In this example we us e
+dmax = 0.05
+as the maximum acceptable drawdown level. To be more spe-
+ciﬁc, using the stock prices, we ﬁrst calculate the corresponding
+returns
+X(k) = S(k + 1) − S(k)S(k) .
+Now letting xi = X(i − 1) denote the i-th calculated return
+for i = 1 , 2, ..., 60, we obtain the estimated PMF of the returns
+as the sum of impulses
+ˆfX (x) = 160
+60∑
+i=1
+δ(x − xi)
+which is used as input to the optimization to be carried
+out. This PMF, plotted in Figure 4, has Xmin ≈ − 0.049
+and Xmax ≈ 0.157. Hence, the constraint set Γ is described by
+−6.354 ≤ γ ≤ 20.248
+for the Kelly Optimization Problem to be solved.
+Next, to evaluate J(γ) for each ﬁxed γ, we perform Monte
+Carlo simulation to generate 100, 000 sample pathes for S(k)
+from the PMF. Then we use these to estimate E[log Vγ(N )]
+which is needed for the J function evaluation. We note that
+use of the modulator automatically assures that the drawdow n
+requirement is satisﬁed. Using the plot of the expected loga -
+rithmic growth in Figure 5, we obtain a maximizer for J(γ)
+given by
+γ∗ ≈ 11.15.
+-0.1 -0.05 0 0.05 0.1 0.15 0.2
+Returns X(k)
+0
+0.002
+0.004
+0.006
+0.008
+0.01
+0.012
+0.014
+0.016
+0.018ˆfX (x)
+Fig. 4: Estimated PMF ˆfX (x) of Returns
+-5 0 5 10 15 20
+-1
+-0.5
+0
+0.5
+1
+1.5
+2
+Expected Log-Growth
+×10-3
+γ∗γ
+Fig. 5: Expected Growth V ersus γ via Drawdown Modulation
+In-Sample Trading Performance : Now, to examine the in-
+sample trading performance, we take the initial account val ue
+V (0) = 10 , 000 and then compare the trading performance
+obtained via drawdown-modulated feedback control with tha t
+obtained via the classical Kelly solution. Figure 6 depicts the
+sixty-one days in-sample simulation result. In particular, we see
+that the drawdown-modulated feedback control with
+γ∗ ≈ 11.15
+leads to account value given by V (60) = 1 .146 × 104 with the
+overall percentage drawdown
+d∗max ≈ 0.047
+which is within the allowed upper limit of 5%. For comparison
+purposes, we also computed the classical Kelly solution whi ch
+is obtained as a special case of our formulation as dmax → 1.
+In this case, the optimum turned out to be γ∗ = 1 with the
+account value V (60) = 1 .412 × 104 and the overall percentage
+drawdown d∗max ≈ 0.186 which is much higher than the
+drawdown we obtained using modulation.
+Out-of-Sample Trading Analysis : Next, we evaluate the
+out-of-sample performance for the second segment of stock
+prices given in Figure 3. That is, we use the optimal feed-
+back gain γ∗ ≈ 11.15 obtained previously to carry out
+sixty new trades. Again, we begin with the same initial ac-
+count value; i.e., V (60) = 10 , 000. The associated trading
+performance is depicted in Figure 7. We see that the the
+drawdown-modulated control leads to the terminal account
+value V (120) ≈ 1.005 × 104 with the overall percentage draw-
+down d∗max ≈ 0.05 as required. In contrast, the classical Kelly
+strategy without a drawdown constraint leads to the termina l
+account value V (120) ≈ 1.136×104 and the overall percentage
+drawdown d∗max ≈ 0.225 which corresponds to 22%. While
+this level is much higher than the speciﬁcation dmax = 0 .05 ,
+the terminal account value is considerably higher. This hig her
+return is to be expected since the drawdown risk was neglecte d.
+There is one interesting observation can be made from Figure 7.
+That is, when the maximum drawdown acceptable level dmax is
+hit, then the investment I(k) becomes zero. Thus, we see that
+the drawdown-modulated feedback control yields a “stop-lo ss”
+type of behavior.
+0 10 20 30 40 50 60
+Time in Days
+0.9
+1
+1.1
+1.2
+1.3
+1.4
+1.5
+1.6
+1.7Account Value, V(k)
+×104
+Classical Kelly
+Drawdown-Modulated Kelly
+Fig. 6: Account V alue Under Two Strategies (In-Sample)
+60 70 80 90 100 110 120
+Time in Days
+0.85
+0.9
+0.95
+1
+1.05
+1.1
+1.15Account Value, V(k)
+×104
+Classical Kelly
+Drawdown-Modulated Control
+Fig. 7: Account V alue Under Two Strategies (Out-of-Sample)
+8. GENERALIZED DRAWDOWN MODULA TION
+The Drawdown Modulation Lemma in Section 5 can be gener-
+alized to address a portfolio of n stocks as follows: With Si(k)
+being the i-th stock price, we form the returns
+Xi(k) .= Si(k + 1) − Si(k)Si(k)
+for i = 1, 2, ..., n and vectorize it as
+X(k) .= [X1(k) X2(k) · · · Xn(k)]T .
+As in the scalar case, we assume known bounds
+Xmin,i ≤ Xi(k) ≤ Xmax,i
+with
+−1 < X min,i < 0 < X max,i
+for i = 1 , 2, ..., n and k = 0 , 1, 2, ..., N − 1. We let V
+denote the 2n vertices of the hypercube deﬁned by Xmin,i
+and Xmax,i above and assume that every point v ∈ V is in the
+support X of X(k). Henceforth, for simplicity of notation, we
+take Xmin and Xmax to be vectors with i-th components Xmin,i
+and Xmax,i, respectively and we let |Xmin| denote the vector
+with i-th component by |Xmin,i|. Now letting Ii(k) be the i-th
+component of the investment vector I(k), the associated ac-
+count value is updated as
+V (k + 1) = V (k) + I T (k)X(k).
+Now denoting the positive and negative parts ofI(k) component-
+wise by I +i (k) .= max {Ii(k), 0} and I −i (k) .= min{Ii(k), 0}
+respectively, we are now prepared to provide a result for the
+general case of an n-stock portfolio. The proof which proceeds
+along similar lines to that of the lemma in Section 5 is includ ed
+for the sake of completeness.
+Generalized Drawdown Modulation Lemma : An investment
+function I(·) guarantees that the maximum acceptable draw-
+down level dmax or less with probability one if and only if for
+all k, the condition⏐⏐X Tmin⏐⏐ I +(k) − X TmaxI −(k) ≤ M (k)V (k)
+is satisﬁed along all sample pathes.
+Proof: To prove necessity, assuming that d(k) ≤ dmax for
+all k with probability one, we must show the required condition
+on I(k) holds along all sample pathes. Indeed, letting k be
+given, since both d(k) ≤ dmax and d(k + 1) ≤ dmax with
+probability one, we claim this forces the required inequali -
+ties on I(k). Indeed, with the i-th component Ii(k) being ei-
+ther I +i (k) or I −i (k), there exists a vertex v ∈ V such that
+vT I(k) = X TmaxI −(k) + X TminI +(k) ≤ 0.
+Using the fact that v is in the support X , it follows that there
+exists a neighborhood of v, call it N (v), such that
+P (X(k) ∈ N (v)) > 0.
+Hence, given any arbitrarily small ε > 0, there exists some
+point Xε(k) such that Xε(k) ∈ N ε(v), ||v − Xε(k)|| < ε and
+leading to the realizable loss X Tε (k)I(k) ≤ 0. Noting that we
+have Vmax(k + 1) = Vmax(k). Thus, it follows that
+d(k + 1) = d(k) − X Tε (k)I(k)Vmax(k) ≤ dmax.
+Now, substituting
+Vmax(k) = V (k)1 − d (k) > 0
+into the inequality above and noting that X Tε (k)I(k) → vT I(k)
+as ε → 0, we obtain
+|X Tmin|I +(k) − X TmaxI −(k) ≤ M (k)V (k).
+To prove sufﬁciency, we assume the condition on I(k) holds
+along all sample pathes. We must show d(k) ≤ dmax for all k
+with probability one. Proceeding by induction, for k = 0 ,
+we trivially have d(0) = 0 ≤ dmax with probability one. To
+complete the inductive argument, we assume that d(k) ≤ dmax
+with probability one, and must show d(k + 1) ≤ dmax with
+probability one. Now, by noting that
+d (k + 1) = 1 − V (k + 1)Vmax (k + 1)
+and Vmax(k) ≤ Vmax(k + 1), we split the argument into two
+cases: If Vmax(k) < Vmax(k+1), then Vmax(k+1) = V (k+1).
+Thus, we have d(k + 1) = 0 ≤ dmax. On the other hand,
+if Vmax(k) = Vmax(k + 1) , with the aid of the dynamics of
+account value, we have
+d (k + 1) = 1 − V (k) + I T (k) X (k)Vmax (k)
+≤ 1 − V (k) −
+(⏐⏐X Tmin⏐⏐ I +(k) − X TmaxI −(k))
+Vmax (k) .
+Using the given inequality condition on I(k), we obtain
+d (k + 1) ≤ dmax which completes the proof. □
+Remarks: The drawdown-modulated feedback realization de-
+scribed for the single-stock case is generalized to this mul ti-
+stock case as follows: For the i-th stock, we use feedback
+gain γi and take the investment to be
+Ii(k) .= γiM (k)V (k).
+Then, the condition in the Generalized Drawdown Modulation
+Lemma above leads to the constraint on γ as follows:
+|X Tmin|γ+ − X Tmaxγ− ≤ 1
+where γ− and γ+ have i-th component
+γ−i .= min{γi, 0}; γ+i .= max{γi, 0}.
+9. CONCLUSION AND FUTURE RESEARCH
+In this paper we introduced a new scheme, which we called
+drawdown-modulated feedback control. It enables us to express
+the investment I(k) as a linear feedback realization with a
+gain γ which leads to satisfaction of a given percentage draw-
+down speciﬁcation with probability one. We also provided anil-
+lustration of our theory in the context of the Kelly Optimiza tion
+Problem. The resulting drawdown-modulated feedback contr ol
+which we obtain provides a systematic way to obtain a time-
+varying fractional Kelly strategy which takes care of the dr aw-
+down requirements.
+To further pursue this research, one obvious problem to con-
+sider would be the portfolio optimization version of the ex-
+pected logarithmic growth maximization described in Section 6
+with consideration of drawdown along the lines of Section 8.
+To ﬁnd an associated optimal solution vector γ∗ in the portfolio
+scenario, some efﬁcient algorithm aimed at dealing with pot en-
+tial computational complexity issue might need to be used.
+Further to the optimization aspects of the work in this paper ,
+we draw attention to the fact that the solution γ∗ we obtained
+is simply a pure gain. However, it can be argued that such
+a pure gain γ is not necessarily the true optimum for many
+problems. Recalling the discussion in Section 5, it may prov e
+to be the case that a time-varying feedback gain γ(k) may lead
+to superior performance.
+REFERENCES
+[1] S. J. Grossman and Z. Zhou, “Optimal Investment Strate-
+gies for Controlling Drawdowns,” Mathematical Finance,
+vol. 3, pp. 241-276, 1993.
+[2] M. J. Klass and K. Nowicki, “The Grossman and Zhou
+Investment Strategy is Not Always Optimal,” Statistics
+and Probability Letters, vol. 74, pp. 245-252, 2005.
+[3] J. Zhou and J. Shang. “Drawdown Control With
+a Risk Floor,” The Journal of Alternative Invest-
+ments, vol 17, pp. 79-94, 2015.
+[4] C. H. Hsieh and B. R. Barmish, “On Kelly Betting: Some
+Limitations,” Proceedings of Annual Allerton Confer-
+ence on Communication, Control, and Computing, Mon-
+ticello, pp. 165-172, 2015.
+[5] J. Cvitanic and I. Karatzas, “On Portfolio Optimization
+Under Drawdown Constraints,” IMA Lecture Notes in
+Mathematics and Applications, vol. 65, pp. 77-88, 1994.
+[6] A. Chekhlov, S. Uryasev and M. Zabarankin, “Portfolio
+Optimization with Drawdown Constraints,” Asset and Li-
+ability Management T ools, pp. 263-278, 2003.
+[7] A. Chekhlov, S. Uryasev and M. Zabarankin. “Drawdown
+Measure in Portfolio Optimization,” International Journal
+of Theoretical and Applied Finance vol 8, pp.13-58, 2005.
+[8] V . Cherney and J. Obloj, “Portfolio Optimization Un-
+der Non-linear Drawdown Constraints in a Semi-
+martingale Financial Model,” Finance and Stochas-
+tics, vol. 17, pp. 771-800, 2013.
+[9] R. T. Rockafellar, S. P . Uryasev, and M. Zabarankin,
+“Generalized Deviations in Risk Analysis,” Fiance and
+Stochastics, vol 10, pp. 51-74, 2002
+[10] M. Ismail, A. Atiya, A. Pratap and Y . Abu-Mostafa, “On
+the Maximum Drawdown of a Brownian Motion,”Journal
+of Applied Probability, vol. 41, pp. 147-161, 2004.
+[11] B. T. Hayes, “Maximum Drawdowns of Hedge Funds
+with Serial Correlation,” Journal of Alternative Invest-
+ments, vol. 8, pp. 26-38, 2006.
+[12] E. O. Thorp, “The Kelly Criterion in Blackjack Sports
+Betting and The Stock Market,” Handbook of As-
+set and Liability Management: Theory and Methodol-
+ogy, vol. 1, pp. 385-428, Elsevier Science, 2006.
+[13] L. C. Maclean, W . T. Ziemba and G. Blazenko “Growth
+V ersus Security in Dynamic Investment Analysis,” Man-
+agement Science, vol. 38, pp. 1562-1585, 1992.
+[14] L. C. Maclean and W . T. Ziemba “Growth V ersus Security
+Tradeoffs in Dynamic Investment Analysis,” Annals of
+Operations Research, vol. 85, pp. 193-227, 1999.
+[15] L. C. MacLean, E. O. Thorp, and W . T. Ziemba, The
+Kelly Capital Growth Investment Criterion: Theory and
+Practice, World Scientiﬁc Publishing Company, 2011.
+[16] L. C. Maclean, E. O. Thorp, and W . T. Ziemba “Long-
+term Capital Growth: The Good and Bad Properties of
+The Kelly and Fractional Kelly Capital Growth Criteria,”
+Quantitative Finance, vol. 10, pp. 681-687, 2010.
+[17] J. L. Kelly, “A New Interpretation of Information Rate, ”
+Bell System T echnical Journal,pp. 917-926, 1956.
+[18] P . Jorion, V alue at Risk: The New Benchmark for Manag-
+ing Financial Risk, McGraw-Hill, 2006.
+[19] Z. Bodie, A. Kane, A. Marcus, Investments, McGraw-
+Hill, 2010.
+[20] D. G. Luenberger, Investment Science, Oxford University
+Press, New Y ork, 2011.
+[21] C. T. Chen, Linear System Theory and Design , Oxford
+University Press, 1995.
+[22] B. R. Barmish, “On Performance Limits of Feedback
+Control-Based Stock Trading Strategies”, Proceedings of
+American Control Conference, pp. 3874-3879, 2011
+[23] S. Malekpour and B. R. Barmish, “A Drawdown For-
+mula for Stock Trading Via Linear Feedback in a
+Market Governed by Brownian Motion,” Proceedings
+of the European Control Conference, Zurich, Switzer-
+land, pp. 87-92, 2013.
+[24] C. H. Hsieh, B. R. Barmish and J. A. Gubner, “Kelly
+Betting Can be Too Conservative,” Proceedings of IEEE
+Conference on Decision and Control , pp. 3695-3701, Las
+V egas, 2016.
+[25] B. R. Barmish and J. A. Primbs, “On a New
+Paradigm for Stock Trading Via a Model-Free Feed-
+back Controller,” IEEE Transactions on Automatic Con-
+trol, AC-61, pp. 662-676, 2016.
+[26] L. R. Goldberg and O. Mahmoud, “Drawdown: From
+Practice to Theory and Back Again,” Mathematics and
+Financial Economics, pp. 1-23, 2016.
+[27] H. Markowitz, Portfolio Selection, Y ale University
+Press, 1959.

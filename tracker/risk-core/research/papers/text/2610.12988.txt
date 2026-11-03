@@ -1,0 +1,892 @@
+arXiv 2610.12988  https://arxiv.org/abs/2610.12988
+
+SwingGuard: Risk-Conditioned Multi-Agent Swing Trading with Dual-Timescale
+Governance
+Junzhou Su1, Yichen Luo2,3, Yebo Feng4∗, Teng Li1, Jiahua Xu2
+1Xidian University
+2University College London
+3The University of Hong Kong
+4Nanyang Technological University
+yebo.feng@ntu.edu.sg
+Abstract
+Cryptocurrency swing trading spans mismatched timescales:
+positionsremainactivewhilemarketandeventriskcanchange
+within minutes. However, many predictive and large lan-
+guage model (LLM)-based trading systems assess risk af-
+ter strategy generation or run both functions at the same ca-
+dence, leaving proposals unconditioned by current risk and
+exposure weakly governed between revisions. We propose
+SwingGuard, a dual-timescale, long-only multi-agent frame-
+work for risk-conditioned strategy generation. At the strat-
+egy timescale, specialized analysts synthesize point-in-time
+technical, sentiment, on-chain, and macroeconomic evidence
+through bullish–bearish deliberation. The resulting evidence
+and current risk context are then combined by a Portfolio Ar-
+chitecttoformatargetposition.Atthegovernancetimescale,
+afive-minuteRiskControllerperformsconditionaldiagnosis,
+maintains persistent risk states with staged recovery, audits
+the proposal, and constrains execution until the next strategy
+revision. This design allows risk to shape the feasible strat-
+egy before proposal finalization while continuing to govern
+the active position afterward. Evaluations on Bitcoin (BTC)
+andEther(ETH)showthatSwingGuardpreservespositivere-
+turns after transaction costs while maintaining shallow draw-
+downs and strong risk-adjusted performance on both assets.
+Theexposure-cappedjointportfolioachievesaSharperatioof
+2.98, compared with 2.79 for an otherwise identical Post-hoc
+Risk variant. Structured traces further link risk evidence and
+state transitions to strategy constraints and executed position
+changes, providing an auditable framework for asynchronous
+cryptocurrencyswingtrading.Overall,theresultsindicatethat
+conditioningstrategyformationoncurrentrisk,togetherwith
+persistenthigh-frequencygovernance,improvesrisk-adjusted
+performance without sacrificing auditability.
+Introduction
+Cryptocurrencyswingtradingcreatesanasynchronouscon-
+trol problem: a strategy formed from a completed daily re-
+search window remains active while prices, liquidity, on-
+chain activity, and event risk can change within minutes. A
+medium-horizon thesis may therefore remain directionally
+validafteritsplannedexposurebecomesunsafe.Tradingsys-
+tems must coordinate what position to seek with how much
+of that position remains executable and when exposure may
+berestored(LiuandTsyvinski2021;Liu,Tsyvinski,andWu
+∗Corresponding author.
+2022; Makarov and Schoar 2020; Corbet et al. 2019; Fang
+et al. 2025; Omrane et al. 2025).
+Forecasting and reinforcement-learning methods primar-
+ily learn price or return patterns and map predictive signals
+to trading decisions or portfolio positions (Jiang and Liang
+2017;LahmiriandBekiros2019;Tharunetal.2023;Cakici
+et al. 2024; Liu et al. 2023b; Jing and Kang 2024). These
+representative methods mainly optimize prediction or strat-
+egy decisions without explicitly modeling the independent
+fastrisk-governancelayerstudiedhere.Sequenceforecasters
+model long-horizon and general temporal structure (Zhou
+et al. 2021; Wu et al. 2021; Nie et al. 2023; Wu et al.
+2023a).Largelanguagemodels(LLMs)supportincreasingly
+structured forms of reasoning and financial-domain adapta-
+tion (Wei et al. 2022; Xiong et al. 2025; Xiong, Payani,
+and Fekri 2026; Liu et al. 2023a; Xie et al. 2023), while
+LLM-basedmulti-agenttradingsystemsusecomplementary
+mechanisms including specialized analysis, agent coordina-
+tion, deliberation, and memory (Luo et al. 2025; Yu et al.
+2024;Xiaoetal.2024).Yetproposal-onlyriskreviewneither
+shapestheprecedingdeliberationnorgovernsthepositionat
+a faster cadence.
+Thecentraldistinctionisinterventiontiming.Forstrategy
+informationX t,policyπ,andriskcontextR t,apost-hocop-
+eratorg(π(X t), Rt)modifiesacompletedproposal,whereas
+π(Xt, Rt)lets risk alter direction, exposure, and parameters
+during deliberation. We ask whether this conditioning im-
+proves the return–risk trade-off over an otherwise identical
+post-hocdesignwhilepreservinganauditablepathtoexecu-
+tion.
+We proposeSwingGuard, a dual-timescale multi-agent
+architecture for risk-conditioned cryptocurrency swing trad-
+ing. Technical, sentiment, and fundamentals analyzers in-
+form bullish–bearish deliberation, after which a Portfolio
+Architect forms a long-only target. A coupled five-minute
+riskchaindiagnosesthreats,maintainsapersistentstatewith
+staged recovery, and constrains execution. Its current risk
+context enters the Portfolio Architect before proposal final-
+ization; a deterministic audit subsequently enforces the con-
+troller boundaries. The strategy and governance layers oper-
+ate at distinct timescales: strategy reasoning occurs over the
+completed research window, while risk governance updates
+every five minutes.
+We evaluate Bitcoin (BTC) and Ether (ETH) from Au-
+arXiv:2610.12988v1  [cs.MA]  9 Oct 2026
+gust2024throughJanuary2025againstpassive,rule-based,
+machine-learning, and single-agent references using cost-
+adjusted performance and trace-level evidence.
+The main contributions of this paper are summarized as
+follows:
+•Risk-conditioned strategy generation:the current Sys-
+tem Risk Context constrains the feasible strategy before
+the Portfolio Architect finalizes a proposal.
+•Dual-timescale risk governance:daily structural rea-
+soning is coordinated with five-minute detection, persis-
+tent state transitions, staged recovery, and execution con-
+straints.
+•Auditablerisk-to-executionlinkage:structuredrecords
+connect risk evidence and state transitions to strategy
+constraints and executed positions.
+Related Work
+Cryptocurrency forecasting and reinforcement learning es-
+timate returns or map signals to positions (Zhang, Cai, and
+Wen 2024; John, Binnewies, and Stantic 2024; Jiang and
+Liang 2017; Liu et al. 2023b; Jing and Kang 2024), while
+technical, news, and momentum evidence remains regime
+sensitive (Hudson and Urquhart 2021; Anamika and Subra-
+maniam 2022; Asness, Moskowitz, and Pedersen 2013; Ca-
+kici et al. 2024). Volatility-managed and regime-switching
+methodsinsteadtreatexposureandpersistentmarketstateas
+controlobjects(MoreiraandMuir2017;Harveyetal.2018;
+Hamilton 1989). SwingGuard builds on this distinction be-
+tween a directional thesis and executable exposure.
+FinancialLLMscombinedomainresources(Lietal.2023;
+Liu et al. 2023a; Xie et al. 2023) with trading-oriented re-
+flection and specialized reasoning (Koa et al. 2024; Li et al.
+2024;Wangetal.2024;Dingetal.2024).Multi-agentframe-
+works add structured roles (Wu et al. 2023b; Hong et al.
+2024), debate (Du et al. 2023; Liang et al. 2024), and scal-
+able collaboration (Qian et al. 2025). Beyond role special-
+ization, recent work on general LLM reasoning increasingly
+introduces explicit structure and control into long-horizon
+inference. Structure-aware planning organizes intermediate
+reasoning around structured state transitions and verifica-
+tion (Xiong et al. 2025), multi-level reasoning decomposes
+long trajectories into high-level planning and low-level ex-
+ecution (Xiong, Payani, and Fekri 2026), and adaptive in-
+formation control regulates the extent and granularity of ev-
+idence acquisition in search-augmented reasoning (Xiong
+etal.2026).Theseapproachesmotivatestructuredreasoning
+and controlled information flow, but address general reason-
+ing or retrieval rather than financial risk governance. Finan-
+cial systems apply role-based and deliberative mechanisms
+to research and trading (Yu et al. 2024; Xiao et al. 2024),
+whilerecentcryptocurrencyapplicationsemploymulti-agent
+reasoning in portfolio allocation and adversarial trading en-
+vironments(Luoetal.2025,2026).SwingGuardinsteadad-
+dresses the asynchronous case: faster risk updates condition
+strategygenerationandgoverntheactiveswingposition.Be-
+yond post-hoc attribution and the broader interpretable-ML
+literature (Lundberg and Lee 2017; Rudin 2019; Yeo et al.
+2023), it links evidence, risk states, constraints, and realized
+positions through an auditable strategy–risk interface.
+Methodology
+We first formulate the asynchronous decision problem, then
+describe the strategy and risk chains and their mapping to
+executed exposure.
+Problem Formulation
+Letdindex a completed daily strategy-generation window
+andτasubsequentfive-minutegovernanceinstant.Thestrat-
+egy inputX d = (M d, Nd, Fd)contains technical market,
+newsandeventsentiment,andon-chainandmacroeconomic
+evidence observable by the close ofd. LetZd,τ be the latest
+completed five-minute observation. From it, the controller
+assignsS d,τ to NORMAL, ALERT, SURVIVAL, or RE-
+COVERY and exposes theSystem Risk Context
+Rd,τ = (Sd,τ , qd,τ ,¯wd,τ , ξd,τ , ℓd),(1)
+whereqis the composite risk score,¯wthe position cap,ξ
+supporting short-horizon evidence, andℓthe long-horizon
+market regime.
+LetD d denote analysis and deliberation, andUd the car-
+ried position and strategy feedback. The Portfolio Architect
+produces a raw long-only targetbwd and executable parame-
+tersΘ d:
+(bwfulld ,Θ fulld ) =π(D d, Rd,0, Ud),
+(bwpostd ,Θ postd ) =π(D d, Ud). (2)
+Letp(d, τ)denote the preceding execution instant and
+wexecp(d,τ) itsrealizedposition.Bothvariantsthenusethesame
+deterministic audit-and-arbitration mapping:
+wd,τ =g(bwd,Θ d, Rd,τ , wexecp(d,τ) ),0≤w d,τ ≤¯wd,τ .
+(3)
+Heregabbreviatesthetwo-stagedeterministicapplicationof
+audithfollowed by arbitrationa, detailed below. Thus the
+ablation changes when risk enters reasoning, not the down-
+stream safety mechanism. Targets formed from completed
+observations apply only to the next return interval.
+The distinction can be stated as a difference in feasible
+strategy spaces. LetΘ d collect entry, exit, stop, validity-
+horizon,andsizingparameters,letΓ d = (bwd,Θ d)denotethe
+complete proposal, and letF(Rd,0)denote the set admitted
+by the current risk state. Risk-conditioned generation and
+post-hoc control can be represented as
+Γfulld =π(D d, Ud;F(R d,0)),
+Γpostd =P F(R d,0)[π(Dd, Ud;F 0)], (4)
+whereF 0 is the risk-agnostic strategy space under the fixed
+long-only rules andPis the downstream audit projection.
+These operators are not generally equivalent: projection can
+enforce safety bounds, but cannot reconstruct the rationale
+and coupled parameters that would have been formed inside
+the risk-conditioned feasible set.
+Market
+Data Team
+Bearish
+Manager
+Fundamentals
+Analyzer
+Bullish
+Manager
+Portfolio
+Architect
+Execution ManagerRisk Controller
+Trading TeamPredictive Deliberation Team
+Risk Governance Team
+Sentiment 
+Analyzer
+Technical
+Analyzer
+Final Portfolio
+Allocation
+API
+Crypto
+Exchange
+Pre-Strategy Risk
+Context
+Risk
+Memory
+Discussion
+News
+Transaction
+M2 Money
+Supply
+answer
+search / add
+Risk-Conditioned
+Strategy Proposal
+Figure 1: Overall SwingGuard architecture. The Data Team provides market, news, and on-chain transaction evidence to the
+analyticalagentsandaddsthelatestobservableU.S.M2broad-moneycontextbeforedeliberation.TheRiskControllersupplies
+pre-generationriskcontexttothePortfolioArchitect,auditstheproposedtargetposition,andcontinuesfive-minutegovernance
+before the validated target reaches the Execution Manager.
+Dual-Timescale SwingGuard Framework
+Figure 1 shows two coupled loops. The deterministic Data
+Team aligns point-in-time sources for the daily analytical
+loop, which combines multimodal evidence and bullish–
+bearish debate intobwd. The five-minute loop suppliesRd,0
+before generation, audits the proposal, and updates the exe-
+cutable cap until the next daily cycle without rerunning the
+strategy LLMs. The deterministic Execution Manager con-
+verts approved position changes into exchange actions. This
+manager–specialist organization follows established role-
+basedagentcoordination,whiletheexplicitcontrollerbound-
+ary restricts open-ended conversation with a deterministic
+executioninterface (Wuetal.2023b;Hongetal.2024;Qian
+et al. 2025).
+Daily Multi-Agent Strategy Generation
+The Technical Analyzer, Sentiment Analyzer, and Funda-
+mentalsAnalyzertransformX d intotechnical-market,news-
+event-sentiment, and on-chain-macroeconomic reports,
+Ad = (ϕM (Md), ϕN (Nd), ϕF (Fd)).(5)
+The Bullish and Bearish Managers receive the same reports
+andconstructopposinglong-onlyinterpretations:theformer
+argues for exposure, while the latter argues for reduction
+or cash rather than short selling. This deliberation exposes
+competingreasoningpathsbeforesynthesis (Duetal.2023;
+Liang et al. 2024). Their trace is
+Bd =β(A d, Ud), D d = (Ad, Bd).(6)
+The Portfolio Architect internally uses a Research Manager
+to synthesizeD d and a Trader to convert that plan into a
+targetandexecutableparametersΘ d (entry,stop,take-profit,
+validity,andsize).FullSwingGuardsuppliesR d,0tobothin-
+ternalstages,sotheriskstatecanalterthedirection,feasible
+size,andparametersconsideredbeforefinalization.Post-hoc
+Risk omits this input while holding reports, debate, strategy
+memory, and downstream control fixed.
+Five-Minute Hierarchical Risk Diagnosis
+AssummarizedinFigure2,foreverycompletedfive-minute
+bar, Stage 1 screens market, on-chain, and news anomalies
+withdeterministicrules.Stage2evaluatesmulti-sourceaccu-
+mulation,recentdensity,andsourcediversityoverasix-hour
+buffer.Onlyanaccumulatedtriggerγ d,τ ordesignatedsevere
+eventb d,τ invokes Stage 3:
+Dd,τ =
+L(Zd,τ ,C d,τ ,K d,τ ), γ d,τ ∨b d,τ ,
+∅,otherwise, (7)
+whereC d,τ isrecentcontextandK d,τ historicalcontext.The
+LLM classifies the current condition as normal, gray-rhino
+risk,orblack-swanrisk,withconfidenceandsupportingevi-
+dence;adeterministicfallbackhandlesinvalidoutputs.Con-
+ditionalinvocationconcentratesLLMreasoningonpersistent
+or severe events.
+For historical context, each archived snapshotei stores
+symbols i,metadatatimet metai ,diagnosticfields,andavec-
+torv i. A fixed, normalized 14-dimensional vector summa-
+rizes market, transaction, and news conditions. For traded
+symbols d,thecurrentvectorv d,τ retrievesonlyearliersame-
+symbol snapshots:
+Kd,τ =
+(
+ei :i∈Top3
+i:s i=sd, tmetai <td,τ
+cos(vd,τ ,v i)
+)
+.(8)
+Here,Top3returns the indices of the three highest co-
+sine similarities. The retrieved snapshots provide precur-
+sors, causes, drawdown, and recovery profiles for diagnosis.
+This design draws on retrieval augmentation and episodic-
+memory mechanisms (Lewis et al. 2020; Shinn et al. 2023),
+Input Data
+Abnormal Indicators 
+Detected?
+Suspicious 
+Data
+Normal Market
+Data
+No Yes
+Black Swan Chara-
+cteristics Detected?
+No Yes
+Risk Accumulation
+ within 6-hour Window?
+YesNo
+LLM CoT 
+Analysis
+Gray Rhino 
+Event
+Black Swan 
+Event
+Retrieve Top-3
+Similar Historical
+Risk Snapshots Vector
+Database
+Stage 1: Rule
+Filtering
+Stage 2: Risk
+Pattern Detection
+Stage 3: Deep 
+Risk Diagnosis
+ALERT NORMAL
+SURVIVAL RECOVERY
+confirmed risk
+escalation
+risk
+dissipation
+market
+stabilization
+detected
+critical risk
+trigger
+Risk Prediction
+event type
+severity
+confidence
+supporting evidence
+Portfolio
+Architect
+System Risk Context
+risk
+accumulation
+risk state 
+risk score
+position cap
+short-horizon evidence
+long-horizon regime
+Market Monitor
+drawdown
+volatility / ATR
+momentum / trend
+current exposure
+(a) Three-Stage Risk Detection and Diagnosis. (b) Persistent Risk-State Transition and Strategy Conditioning.
+Figure 2: Hierarchical risk diagnosis and control framework. Panel (a) uses rule screening and six-hour persistence to trigger
+retrieval-augmented diagnosis. Panel (b) combines confirmed evidence and market conditions into persistent state transitions,
+producing the System Risk Context for strategy generation. “LLM CoT” records Stage 3’s bounded diagnostic rationale.
+while keeping the historical archive distinct from the online
+persistence state: the former supplies similar-event evidence
+for diagnosis, whereas the latter tracks whether current risk
+is accumulating, dissipating, or recovering.
+Persistent Risk State and Recovery
+TheRiskPredictioninterfacenormalizeseventtype,severity,
+confidence,andsupportingevidence,whiletheMarketMon-
+itorsuppliesdrawdown,volatility/averagetruerange(ATR),
+momentum/trend, and current exposure. Their fusion pro-
+ducesq d,τ.Givenpredecessorp(d, τ),thestateevolveswith
+active eventsE, hold countersu, and recovery evidenceρ:
+Sd,τ =T(S p(d,τ) , qd,τ ,E d,τ ,u d,τ , ρd,τ ).(9)
+Hysteresis and minimum holds prevent a quiet bar from im-
+mediately erasing risk. Recovery requires jointly satisfied
+hold, price, volatility, quiet, and market-repair predicates:
+ρd,τ =I[c hold ∧c price ∧c vol ∧c quiet ∧c repair].(10)
+NORMALpermitsthestandardcap;ALERTcompressesex-
+posure; SURVIVAL forces zero; and RECOVERY restores
+exposure in stages. Renewed risk can re-escalate any recov-
+ery. The resulting control is
+( ¯wd,τ , ariskd,τ ) =ψ(S d,τ , srecd,τ ,E d,τ , Eintd,τ ).(11)
+Heres recisthestaged-recoverylevel,E intistheactivesetof
+intervention constraints, andarisk is the resulting controller
+action.Atτ= 0,thecontrollerfirstconsumesthelatestcom-
+pleted bar, updates the state, and serializes Eq. (1) before
+building either strategy prompt. This ordering implements
+pre-strategy conditioning without seeing the subsequent re-
+turn.
+Risk-Conditioned Strategy Generation, Audit, and
+Execution
+After proposal generation, a hard-boundary auditorhval-
+idates long-only direction, size, stop, validity horizon, and
+controllerlimits;anarbiteraappliesthecurrentstateaction:
+(ewd,τ , Vd,τ ) =h(bwd,Θ d, Rd,τ ),(12)
+wd,τ =a(ewd,τ , Rd,τ , wexecp(d,τ) ).(13)
+The audit verdictV d,τ records any validation or clipping
+decision. Until the next five-minute open, the preceding ex-
+ecuted position remains active; at that open,wexecd,τ =w d,τ
+anda execd,τ records the corresponding position change. Both
+Full and Post-hoc Risk retain this audit; only Eq. (2) dif-
+fers. Between daily updates,Rd,τ may reduce, liquidate, or
+stage re-entry without regenerating the strategy. The Execu-
+tion Manager maps the change from the preceding executed
+position to OPEN, ADD, HOLD, REDUCE, or CLOSE and
+records
+Qd,τ = (Rd,τ ,Θ d,bwd, Vd,τ ,
+ewd,τ , wd,τ , aexecd,τ , wexecd,τ ). (14)
+ThistraceseparatestheLLMproposal,validatedtarget,state-
+drivenconstraint,andrealizedposition,linkingriskevidence
+to execution.
+Experimental Setup
+We evaluate cost-adjusted value, cross-asset consistency,
+and risk-to-execution auditability. External baselines mea-
+sure comparative performance; controlled variants test ar-
+chitectural effects.
+Data and protocol.We evaluate long-only BTC and ETH
+from August 1, 2024 through January 31, 2025. Each asset
+provides 52,992 five-minute observations; earlier data sup-
+port indicator warm-up and Random Forest training. Deci-
+sions use only completed bars, preceding-seven-day news,
+observable on-chain records, and the latest released U.S.
+M2 broad-money observation (series code WM2NS); ex-
+postregimesserveanalysisonly.Single-assettestsstartwith
+unit wealth and zero exposure. The joint portfolio synchro-
+nizesexecutedBTCandETHpositionswithoutanotherLLM
+decision. ForwBt , wEt ∈[0,1],
+(ωBt , ωEt ) =
+
+
+
+(wBt , wEt ), w Bt +w Et ≤1,
+(wBt , wEt )
+wBt +w Et , w Bt +w Et >1. (15)
+Grossjointreturnisω Bt rBt+1 +ω Et rEt+1;costsarechargedon
+both weight changes after scaling.
+Models and baselines.The controlled SwingGuard vari-
+ants share the GPT-4o backbone, zero-temperature decod-
+ing, a 2,048-token response limit, identical prompts for re-
+tained components, and all other non-ablated settings; vari-
+ants retaining the debate module use one round. Base-
+lines include buy-and-hold and a 20-day moving average
+(MA);a4-hourDonchian–ATRrulemotivatedbypriorcryp-
+tocurrencytechnical-tradingevidence(HudsonandUrquhart
+2021) and the average true range (ATR) (Wilder 1978); a 4-
+hourATRtrend-exposureruleusingmomentumsignals(As-
+ness, Moskowitz, and Pedersen 2013); a pre-evaluation 4-
+hourRandomForeststrategy(Breiman2001;Gu,Kelly,and
+Xiu 2020); a daily volatility-managed rule that scales ex-
+posure toward 35% annualized volatility estimated over 20
+days (Moreira and Muir 2017; Harvey et al. 2018); an ob-
+servable regime-switching rule combining a 120-day trend
+with 20-day volatility relative to its trailing 120-day me-
+dian (Hamilton 1989); and a Daily Single-Agent LLM. The
+latter uses the same model, decoding settings, token limit,
+point-in-timemodalities,anddailycadence,butasingletool-
+free promptthat directly outputsa long-only targetexposure
+in[0,1], held until the next revision.
+Controlled comparisons.Table 1 supports two adjacent
+risk comparisons and two supporting component removals.
+Full versus Post-hoc Risk changes only whetherRd,0 enters
+strategy generation while retaining the same subsequent au-
+dit and controller. Post-hoc Risk versus No Risk Controller
+thenchangesonlythedownstreamauditandfive-minutegov-
+ernance while keeping pre-generation conditioning absent;
+the strategy-native stop remains active. The final two vari-
+antsremovethethreeanalystreportsasonegrouporremove
+bullish–bearish deliberation. Point-in-time source windows
+and unaffected upstream outputs are held fixed, while af-
+fected downstream decisions are regenerated.
+Mode Pre Post Analysts Debate
+Full SwingGuard Yes Yes Yes Yes
+Post-hoc Risk No Yes Yes Yes
+No Risk Controller No No Yes Yes
+No Analyst Team Yes Yes No Yes
+No Bull/Bear Debate Yes Yes Yes No
+Table1:ControlledSwingGuardconfigurations.PreandPost
+denote risk conditioning before strategy generation and risk
+governance afterward.
+Execution and metrics.Signals execute at the next
+five-minute open. Every method uses the same prices,
+long-only constraint, 10-basis-point commission, and 5-
+basis-point slippage, for a 15-basis-point one-way cost;
+turnover is charged whenever executed exposure changes.
+Primary comparisons use cumulative net return, annualized
+Sharpe (Sharpe 1994), and maximum drawdown. We addi-
+tionally compute annualized volatility, Sortino (Sortino and
+Price 1994), Calmar, turnover, and average exposure from
+the five-minute marked-to-market series, using a 365-day
+cryptocurrencycalendarandzerorisk-freerate.Monthlynet
+returns measure temporal concentration, while single-asset
+and exposure-capped portfolio results measure cross-asset
+consistency.
+Look-aheadbiascontrol.Alldecisioninputsobeyapoint-
+in-time availability boundary. For a decision timestampt,
+technical features use only bars closed byt; the news win-
+dowendsatt;on-chainobservationsmustalreadybeobserv-
+able; and WM2NS contributes only the latest observation
+whose release date has occurred byt. The Random Forest
+is trained exclusively on data before August 1, 2024 and is
+frozen throughout evaluation. SwingGuard and every base-
+line form signals from the same historical boundary, and
+any resulting position change is executed no earlier than the
+nextfive-minuteopen.Finally,ex-postregimelabelsandfu-
+ture local troughs are used only for retrospective analysis
+andfigureannotation;neitherentersagentprompts,baseline
+features, portfolio construction, nor ablation regeneration.
+Experimental Results
+Cross-Asset Economic Performance
+Table2comparescost-adjustedBTCandETHperformance.
+SwingGuard is the only reported method that produces
+double-digit positive returns on both assets while maintain-
+ing Sharpe ratios above 2 and maximum drawdown (MDD)
+below 6%. It also has the highest Sharpe and smallest draw-
+down point estimates, together with the lowest reported an-
+nualized volatility, in both single-asset comparisons.
+VolatilitymanagementpreservesmuchoftheBTCoppor-
+tunity (42.13% return and 1.93 Sharpe) but transfers weakly
+to ETH. Observable regime switching improves ETH return
+to 9.23% and Sharpe to 0.68, yet retains 22.48% drawdown.
+BTC ETH
+Method Sharpe↑Return (%)↑MDD (%)↑Vol. (%)↓Sharpe↑Return (%)↑MDD (%)↑Vol. (%)↓
+Buy-and-hold 1.94 58.25-24.70 54.45 0.40 1.96 -33.06 68.97
+MA (20d) 1.91 41.69 -15.32 40.52 -0.52 -14.53 -31.10 42.34
+Donchian–ATR 4h 1.95 36.94 -12.22 35.22 0.28 1.78 -23.64 38.58
+ATR trend exposure 4h 1.34 17.29 -10.91 26.25 0.07 -0.67 -16.74 25.06
+Random Forest 4h 0.50 6.00 -21.98 36.75 -0.54 -12.94 -28.76 37.91
+Volatility managed 1.93 42.13 -19.70 40.23 0.22 0.60 -22.31 38.19
+Observable regime switching 1.52 27.54 -18.50 36.00 0.68 9.23 -22.48 34.75
+Daily Single-Agent LLM 0.56 7.02 -12.41 36.79 0.23 1.17 -16.45 35.64
+Full SwingGuard 2.7019.91 -3.74 13.67 2.36 15.35 -5.78 12.32
+Table 2: Cost-adjusted performance from August 2024 to January 2025. MDD is reported as a negative return; Vol. denotes
+annualized volatility. Arrows show the preferred direction. Blue, orange, green, and gray-blue identify the top three results per
+column for Sharpe, return, MDD, and volatility, respectively; the best result is boldfaced.
+SwingGuard remains profitable on both assets, exceeds pas-
+sive ETH return by 13.39 percentage points, and reduces
+ETHdrawdownby82.5%.ItshigherSharpeandlowerdraw-
+down on both assets are not reproduced by either simple
+exposure scaling or an observable trend–volatility filter. Its
+BTC and ETH annualized volatilities, 13.67% and 12.32%,
+are approximately half the next-lowest reported values of
+26.25% and 25.06%, respectively.
+The Daily Single-Agent LLM aligns the daily cadence
+and continuous long-only position space, providing a direct
+single-agentreference.Itisprofitableonbothassetsbuttrans-
+fersweaklytoETH,whereasSwingGuardpreservesdouble-
+digit ETH return and improves BTC Sharpe and drawdown.
+Theremainingsystem-leveldistinctionisSwingGuard’sspe-
+cializedroles,deliberation,andfive-minuteriskgovernance.
+Capital Efficiency and Temporal Concentration
+SwingGuardattainsthisrisk-adjustedperformancewithlim-
+ited capital deployment: average exposure is 19.42% for
+BTC, 12.56% for ETH, and 31.74% after the joint cap. The
+synchronized, cost-adjusted portfolio returns 37.16% with
+2.98Sharpeand6.44%drawdown,versus30.11%,1.19,and
+28.47% for equal-weight buy-and-hold. Because the joint
+result uses capped positions rather than summed returns, its
+comparisonwithbuy-and-holdreflectsactivetiming,cashal-
+location,proportionalexposurescaling,andassociatedtrad-
+ingcostsunderasharedcapitalbudget.BTC,ETH,andjoint
+turnoverare14.54,11.50,and25.80.Repricingthesameex-
+ecuted positions at 5, 30, and 50 basis points one-way cost
+leaves joint returns of 40.75%, 31.95%, and 25.31% and
+Sharpe ratios of 3.21, 2.62, and 2.15, respectively.
+With 31.74% average exposure, the capped portfolio ex-
+ceeds equal-weight buy-and-hold return by 7.05 percentage
+points, raises Sharpe from 1.19 to 2.98, and reduces draw-
+down magnitude by 77.4%, linking selective deployment to
+capital efficiency and downside control.
+Downside-sensitive metrics reinforce the shallow-
+drawdownresult.BTCandETHobtainSortinoratiosof3.89
+and 3.36 and Calmar ratios of 11.60 and 5.66; the capped
+portfolioreaches4.26and13.54,respectively.Sortinoratios
+abovethecorrespondingSharperatiosindicatethatdownside
+variationissmallerthantotalreturnvariation.Separately,low
+average exposure shows that this risk-adjusted performance
+is achieved through selective capital deployment rather than
+continuous market participation.
+BTC, ETH, and the portfolio are profitable in five of six
+months. November provides the largest common opportu-
+nity, while divergent December and January exposures off-
+set losses across assets. Returns are therefore concentrated
+but not confined to a single month: the largest single-asset
+monthly loss is 0.94%, and the portfolio’s sole monthly loss
+is 0.02%. SwingGuard captures the principal opportunity
+while preserving gains as the assets later weaken or diverge.
+Figure 3: BTC risk-to-execution trace around the December
+18survivalintervention.Thecontrollercloseda30%posi-
+tion before an 8.82% decline to the subsequent local trough.
+Risk-to-Execution Auditability
+Figure3tracesarepresentativeinterventionwhilethesystem
+held an active BTC position. At 21:15 on December 18, the
+controllerenteredthesurvivalresponseandclosedthe30%
+exposure. BTC subsequently declined 8.82% to the local
+trough on December 20 while executed exposure remained
+zero.Thetracelinksdetectedrisk,statetransition,controller
+Figure 4: Cost-adjusted five-minute net value and drawdown paths for SwingGuard on BTC, ETH, and the exposure-capped
+joint portfolio.
+action, and realized position over the subsequent decline.
+Figure 4 shows shallow drawdowns throughout the five-
+minute paths. The BTC and ETH equity curves rise most
+during the shared November opportunity and then consol-
+idate without surrendering the accumulated gain. The De-
+cember trace complements this aggregate pattern: nonzero
+exposure precedes escalation, the state changes before the
+trough, and exposure remains zero during the decline. To-
+gether they connect state transitions to trading actions; the
+controlledcomparisonbelowthenteststheincrementaleffect
+of pre-generation conditioning.
+Controlled Ablation Results
+Table3reportstheconfigurationsinTable1ontheexposure-
+capped BTC–ETH portfolio. Full versus Post-hoc Risk tests
+whenriskentersstrategygeneration;Post-hocRiskversusNo
+Risk Controller tests downstream governance; the final two
+variants measure the Analyst Team and debate components.
+Mode Sharpe↑Return (%)↑MDD (%)↑
+Full SwingGuard 2.98 37.16 -6.44
+Post-hoc Risk 2.79 35.03 -8.62
+No Risk Controller 1.87 23.02 -14.19
+No Analyst Team 2.88 35.96 -6.71
+No Bull/Bear Debate 2.82 34.90 -7.03
+Table 3: Controlled ablation results for the exposure-capped
+BTC–ETH portfolio. Blue, orange, and green identify the
+top three results for Sharpe, return, and MDD, respectively;
+the best result is boldfaced. MDD is reported as a negative
+return, so higher is better.
+Full SwingGuard ranks first on all three metrics. Against
+Post-hoc Risk, it increases Sharpe from 2.79 to 2.98 and re-
+turn from 35.03% to 37.16%, while improving MDD from
+-8.62% to -6.44%. Because these configurations share evi-
+dence,strategymachinery,audit,andcontroller,theobserved
+difference is associated with placing risk before strategy fi-
+nalization. Sharpe and return improve by 6.8% and 6.1%,
+while drawdown magnitude falls by 25.3%, indicating that
+conditioning has its strongest relative effect on downside
+quality.
+Withpre-generationconditioningabsent,removingdown-
+stream governance produces the largest adjacent deteriora-
+tion: Sharpe falls from 2.79 to 1.87, return from 35.03% to
+23.02%,andMDDdeterioratesfrom-8.62%to-14.19%.Re-
+movingtheAnalystTeamordebateyieldssmallerbutdirec-
+tionally consistent losses: Sharpe declines to 2.88 and 2.82,
+respectively,withlowerreturnsandhigherdrawdowns.This
+ordering associates the largest increment with five-minute
+governance, a further improvement to upstream condition-
+ing, and complementary gains to specialization and delib-
+eration. Together, these comparisons separate two sources
+of stability: downstream governance limits realized expo-
+sure between revisions, while pre-generation conditioning
+changestheproposalenteringthatlayer.Theircombinedad-
+vantagereflectscoordinatedinterventiontimingandproposal
+formation.
+Conclusion and Future Work
+SwingGuard formulates cryptocurrency swing trading as
+dual-timescale control: daily multi-agent reasoning forms a
+risk-conditionedtarget,whilethefive-minuteRiskController
+maintainstheSystemRiskContext,constrainsexposure,and
+records the path from evidence to execution. This coordina-
+tionletsriskshapeproposalformationandmaintainexposure
+compatibility between daily revisions.
+Across BTC and ETH, SwingGuard remains profitable
+withthehighestSharpeandlowestdrawdownpointestimates
+among reported methods. The capped portfolio also earns a
+higherreturnthanequal-weightbuy-and-holdatlowerexpo-
+sure. Monthly results support cross-asset consistency, while
+theeventtraceestablishesauditablestate-to-positionlinkage.
+Ablations support both risk pathways, with the largest
+deterioration after removing downstream governance. Sup-
+porting ablations distinguish this primary risk-governance
+contribution from the complementary effects of specialized
+analysis and deliberation.
+Future work will test broader regimes and recovery effi-
+ciency.
+Acknowledgments
+This work was supported in part by Ripple under Univer-
+sity Blockchain Research Initiative (UBRI) (Feng, Xu, and
+Weymouth 2022).
+References
+Anamika,A.;andSubramaniam,S.2022.Donewsheadlines
+matter in the cryptocurrency market?Applied Economics,
+54(54): 6322–6338.
+Asness, C. S.; Moskowitz, T. J.; and Pedersen, L. H. 2013.
+Value and momentum everywhere.The journal of finance,
+68(3): 929–985.
+Breiman,L.2001.Randomforests.Machinelearning,45(1):
+5–32.
+Cakici, N.; Shahzad, S. J. H.; Będowska-Sójka, B.; and
+Zaremba, A. 2024. Machine learning and the cross-section
+ofcryptocurrencyreturns.InternationalReviewofFinancial
+Analysis, 94: 103244.
+Corbet, S.; Lucey, B.; Urquhart, A.; and Yarovaya, L. 2019.
+Cryptocurrencies as a financial asset: A systematic analysis.
+International Review of Financial Analysis, 62: 182–199.
+Ding, Q.; Shi, H.; Guo, J.; and Liu, B. 2024. TradEx-
+pert: Revolutionizing trading with mixture of expert LLMs.
+arXiv:2411.00782.
+Du,Y.;Li,S.;Torralba,A.;Tenenbaum,J.B.;andMordatch,
+I. 2023. Improving factuality and reasoning in language
+models through multiagent debate. arXiv:2305.14325.
+Fang, F.; Ventre, C.; Basios, M.; Kanthan, L.; Martinez-
+Rego, D.; Wu, F.; and Li, L. 2025. Cryptocurrency Trading:
+AComprehensiveSurvey. InBlockchain,CryptoAssets,and
+Financial Innovation, 55–127. Springer.
+Feng, Y.; Xu, J.; and Weymouth, L. 2022. University
+blockchain research initiative (UBRI): Boosting blockchain
+education and research.IEEE Potentials, 41(6): 19–25.
+Gu, S.; Kelly, B.; and Xiu, D. 2020. Empirical asset pric-
+ing via machine learning.The Review of Financial Studies,
+33(5): 2223–2273.
+Hamilton, J. D. 1989. A new approach to the economic
+analysis of nonstationary time series and the business cycle.
+Econometrica: Journal of the econometric society, 57(2):
+357–384.
+Harvey,C.R.;Hoyle,E.;Korgaonkar,R.;Rattray,S.;Sargai-
+son, M.; and Van Hemert, O. 2018. The impact of volatility
+targeting. SSRN Working Paper 3175538.
+Hong,S.;Zhuge,M.;Chen,J.;Zheng,X.;Cheng,Y.;Wang,
+J.;Zhang,C.;Wang,Z.;Yau,S.K.S.;Lin,Z.;Zhou,L.;Ran,
+C.; Xiao, L.; Wu, C.; and Schmidhuber, J. 2024. MetaGPT:
+Meta Programming for a Multi-Agent Collaborative Frame-
+work. InInternational Conference on Learning Representa-
+tions.
+Hudson, R.; and Urquhart, A. 2021. Technical trading and
+cryptocurrencies.Annals of Operations Research, 297(1):
+191–220.
+Jiang,Z.;andLiang,J.2017. Cryptocurrencyportfolioman-
+agement with deep reinforcement learning. In2017 Intelli-
+gent systems conference (IntelliSys), 905–913. IEEE.
+Jing, L.; and Kang, Y. 2024. Automated cryptocurrency
+trading approach using ensemble deep reinforcement learn-
+ing: Learn to understand candlesticks.Expert Systems with
+Applications, 237: 121373.
+John, D. L.; Binnewies, S.; and Stantic, B. 2024. Cryp-
+tocurrency price prediction algorithms: A survey and future
+directions.Forecasting, 6(3): 637–671.
+Koa,K.J.;Ma,Y.;Ng,R.;andChua,T.-S.2024. Learningto
+generate explainable stock predictions using self-reflective
+large language models. InProceedings of the ACM web
+conference 2024, 4304–4315.
+Lahmiri, S.; and Bekiros, S. 2019. Cryptocurrency fore-
+casting with deep learning chaotic neural networks.Chaos,
+Solitons & Fractals, 118: 35–40.
+Lewis, P.; Perez, E.; Piktus, A.; Petroni, F.; Karpukhin, V.;
+Goyal, N.; Küttler, H.; Lewis, M.; Yih, W.-t.; Rocktäschel,
+T.; Riedel, S.; and Kiela, D. 2020. Retrieval-augmented
+generation for knowledge-intensive NLP tasks. InAdvances
+inNeuralInformationProcessingSystems,volume33,9459–
+9474.
+Li, Y.; Luo, B.; Wang, Q.; Chen, N.; Liu, X.; and He, B.
+2024. CryptoTrade: A reflective LLM-based agent to guide
+zero-shotcryptocurrencytrading.InProceedingsofthe2024
+ConferenceonEmpiricalMethodsinNaturalLanguagePro-
+cessing, 1094–1106.
+Li, Y.; Wang, S.; Ding, H.; and Chen, H. 2023. Large lan-
+guage models in finance: A survey. InProceedings of the
+fourth ACM international conference on AI in finance, 374–
+382.
+Liang, T.; He, Z.; Jiao, W.; Wang, X.; Wang, Y.; Wang, R.;
+Yang, Y.; Shi, S.; and Tu, Z. 2024. Encouraging divergent
+thinking in large language models through multi-agent de-
+bate. InProceedings of the 2024 conference on empirical
+methods in natural language processing, 17889–17904.
+Liu, X.-Y.; Wang, G.; Yang, H.; and Zha, D. 2023a. Fin-
+GPT: Democratizing internet-scale data for financial large
+language models. arXiv:2307.10485.
+Liu,Y.;Li,Z.;Nekhili,R.;andSultan,J.2023b. Forecasting
+cryptocurrency returns with machine learning.Research in
+International Business and Finance, 64: 101905.
+Liu, Y.; and Tsyvinski, A. 2021. Risks and returns of cryp-
+tocurrency.The Review of Financial Studies, 34(6): 2689–
+2727.
+Liu, Y.; Tsyvinski, A.; and Wu, X. 2022. Common risk
+factors in cryptocurrency.The Journal of Finance, 77(2):
+1133–1177.
+Lundberg, S. M.; and Lee, S.-I. 2017. A unified approach
+to interpreting model predictions. InAdvances in Neural
+Information Processing Systems, volume 30.
+Luo, Y.; Feng, Y.; Xu, J.; and Liu, Y. 2026. Resisting Ma-
+nipulativeBotsinMemeCoinCopyTrading:AMulti-Agent
+Approach with Chain-of-Thought Reasoning. InProceed-
+ings of the ACM Web Conference 2026, 3414–3425.
+Luo, Y.; Feng, Y.; Xu, J.; Tasca, P.; and Liu, Y. 2025. LLM-
+powered multi-agent system for automated crypto portfolio
+management. arXiv:2501.00826.
+Makarov, I.; and Schoar, A. 2020. Trading and arbitrage in
+cryptocurrency markets.Journal of Financial Economics,
+135(2): 293–319.
+Moreira, A.; and Muir, T. 2017. Volatility-managed portfo-
+lios.The Journal of Finance, 72(4): 1611–1644.
+Nie, Y.; Nguyen, N. H.; Sinthong, P.; and Kalagnanam, J.
+2023.Atimeseriesisworth64words:Long-termforecasting
+with transformers. InInternational Conference on Learning
+Representations.
+Omrane, W. B.; Dabbou, H.; Saadi, S.; Savaser, T.; and Se-
+bai,S.2025. Exploringvolatilityreactionsincryptocurrency
+marketsusingintradaymacroeconomicnewsanalysis.Inter-
+national Review of Economics & Finance, 103: 104509.
+Qian, C.; Xie, Z.; Wang, Y.; Liu, W.; Zhu, K.; Xia, H.;
+Dang, Y.; Du, Z.; Chen, W.; Yang, C.; et al. 2025. Scaling
+large language model-based multi-agent collaboration. In
+International Conference on Learning Representations.
+Rudin,C.2019. Stopexplainingblackboxmachinelearning
+modelsforhighstakesdecisionsanduseinterpretablemodels
+instead.Nature machine intelligence, 1(5): 206–215.
+Sharpe, W. F. 1994. The Sharpe Ratio.The Journal of
+Portfolio Management, 21(1): 49–58.
+Shinn, N.; Cassano, F.; Gopinath, A.; Narasimhan, K.; and
+Yao, S. 2023. Reflexion: Language agents with verbal re-
+inforcement learning. InAdvances in Neural Information
+Processing Systems, volume 36, 8634–8652.
+Sortino,F.A.;andPrice,L.N.1994. Performancemeasure-
+mentinadownsideriskframework.theJournalofInvesting,
+3(3): 59–64.
+Tharun, S.; Saranya, G.; Tamilvizhi, T.; and Surendran, R.
+2023. Cryptocurrency price prediction using deep learn-
+ing. InInternationalConferenceonMiningIntelligenceand
+Knowledge Exploration, 283–300. Springer.
+Wang, Q.; Gao, Y.; Tang, Z.; Luo, B.; Chen, N.; and He,
+B. 2024. Exploring LLM cryptocurrency trading through
+fact-subjectivity aware reasoning. arXiv:2410.12464.
+Wei, J.; Wang, X.; Schuurmans, D.; Bosma, M.; Ichter, B.;
+Xia, F.; Chi, E. H.; Le, Q. V.; and Zhou, D. 2022. Chain-of-
+thought prompting elicits reasoning in large language mod-
+els. InAdvances in Neural Information Processing Systems,
+volume 35, 24824–24837.
+Wilder, J. W. 1978.New concepts in technical trading sys-
+tems. Greensboro, NC: Trend Research.
+Wu, H.; Hu, T.; Liu, Y.; Zhou, H.; Wang, J.; and Long,
+M. 2023a. TimesNet: Temporal 2D-variation modeling for
+general time series analysis. InInternational Conference on
+Learning Representations.
+Wu, H.; Xu, J.; Wang, J.; and Long, M. 2021. Autoformer:
+Decomposition transformers with auto-correlation for long-
+term series forecasting. InAdvances in Neural Information
+Processing Systems, volume 34, 22419–22430.
+Wu,Q.;Bansal,G.;Zhang,J.;Wu,Y.;Li,B.;Zhu,E.;Jiang,
+L.; Zhang, X.; Zhang, S.; Liu, J.; Awadallah, A. H.; White,
+R. W.; Burger, D.; and Wang, C. 2023b. AutoGen: En-
+abling next-gen LLMapplications via multi-agentconversa-
+tion. arXiv:2308.08155.
+Xiao, Y.; Sun, E.; Luo, D.; and Wang, W. 2024. Tradin-
+gAgents: Multi-agents LLM financial trading framework.
+arXiv:2412.20138.
+Xie, Q.; Han, W.; Zhang, X.; Lai, Y.; Peng, M.; Lopez-Lira,
+A.; and Huang, J. 2023. PIXIU: A large language model,
+instruction data and evaluation benchmark for finance. In
+Advances in Neural Information Processing Systems, vol-
+ume 36.
+Xiong, S.; Gungordu, O.; Kerce, J. C.; and Fekri, F. 2026.
+Adaptive Information Control for Search-Augmented LLM
+Reasoning.arXiv preprint arXiv:2602.01672.
+Xiong, S.; Payani, A.; and Fekri, F. 2026. Enhancing lan-
+guagemodelreasoningwithstructuredmulti-levelmodeling.
+InInternational Conference on Learning Representations,
+volume 2026, 36557–36610.
+Xiong, S.; Payani, A.; Yang, Y.; and Fekri, F. 2025. Delib-
+erate reasoning in language models as structure-aware plan-
+ning with an accurate world model. InProceedings of the
+63rd Annual Meeting of the Association for Computational
+Linguistics (Volume 1: Long Papers), 31900–31931.
+Yeo, W. J.; Van Der Heever, W.; Mao, R.; Cambria, E.;
+Satapathy, R.; and Mengaldo, G. 2023. A comprehensive
+review on financial explainable AI. arXiv:2309.11960.
+Yu,Y.;Yao,Z.;Li,H.;Deng,Z.;Jiang,Y.;Cao,Y.;Chen,Z.;
+Suchow, J. W.; Cui, Z.; Liu, R.; Xu, Z.; Zhang, D.; Subbal-
+akshmi,K.;Xiong,G.;He,Y.;Huang,J.;Li,D.;andXie,Q.
+2024. FinCon: A synthesized LLM multi-agent system with
+conceptualverbalreinforcementforenhancedfinancialdeci-
+sionmaking. InAdvancesinNeuralInformationProcessing
+Systems, volume 37, 137010–137045.
+Zhang,J.;Cai,K.;andWen,J.2024. Asurveyofdeeplearn-
+ingapplicationsincryptocurrency.iScience,27(1):108509.
+Zhou, H.; Zhang, S.; Peng, J.; Zhang, S.; Li, J.; Xiong, H.;
+andZhang,W.2021. Informer:Beyondefficienttransformer
+for long sequence time-series forecasting. InProceedings
+of the AAAI conference on artificial intelligence, volume 35,
+11106–11115.

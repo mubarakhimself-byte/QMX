@@ -1,0 +1,1990 @@
+arXiv 2111.02376  https://arxiv.org/abs/2111.02376
+
+Multiplicative Component GARCH Model of Intraday Volatility 
+Xiufeng Yan 
+Phd, University of Sussex, 2021 
+School of Mathematical and Physical Sciences 
+University of Sussex 
+                                                               BN1 9QH 
+ 
+ 
+ 
+ii 
+Abstract.  
+This paper proposes a multiplicative component intraday volatility model. The intraday 
+conditional volatility is expressed as the product of intraday periodic component, intraday 
+stochastic volatility component and daily conditional volatility component. I extend the 
+multiplicative component intraday volatility model of Engle (2012) and Andersen and 
+Bollerslev (1998) by incorporating the durations between consecutive transactions. The 
+model can be applied to both regularly and irregularly spaced returns. I also provide a  
+nonparametric estimation technique of the intraday volatility periodicity. The empirical 
+results suggest the model can successfully capture the interdependency of intraday 
+returns.  
+Key Words: tick -by-tick returns, Intraday volatility, Intraday seasonality, Autoregressive 
+Conditional Duration models, realized volatilities.  
+iii 
+Table of content 
+Abstract ................................ ................................ ................................ ........................... ii 
+Table of content ................................ ................................ ................................ ............. iii 
+List of Tables ................................ ................................ ................................ .................. iv 
+List of Figures................................ ................................ ................................ .................. v 
+Multiplicative Component GARCH Model of Intraday Volatility................................ ....... 1 
+1. Introduction ................................ ................................ ................................ ............. 1 
+2. Literature Review ................................ ................................ ................................ .... 3 
+3. Data ................................ ................................ ................................ ....................... 5 
+3.1 Descriptive statistics ................................ ................................ .......................... 6 
+3.2 Intraday return periodicity ................................ ................................ .................. 7 
+4 Multiplicative component intraday volatility model ................................ .................... 12 
+4.1 Interpretation of the intraday return volatility ................................ .................... 12 
+4.2 Multiplicative component intraday volatility ................................ ...................... 16 
+5 Intraday volatility components and model estimation ................................ ................. 19 
+5.1 ARCH effect of daily returns ................................ ................................ ............ 20 
+5.2 Intraday volatility periodicity ................................ ................................ ............ 28 
+5.3 Econometrics regarding estimation ................................ ................................ . 30 
+6 Empirical results ................................ ................................ ................................ .... 32 
+6.1 Normalized intraday returns and filtered intraday returns ................................ ..... 33 
+6.1.1   Normalized intraday returns ................................ ................................ ............ 33 
+6.1.2  The filtered intraday returns ................................ ................................ .......... 37 
+6.2 Results of GARCH estimation and volatility persistence ................................ ...... 41 
+7 Conclusion ................................ ................................ ................................ ............ 45 
+Appendix A. ................................ ................................ ................................ ................. 47 
+Appendix B. ................................ ................................ ................................ ................. 49 
+Appendix C ................................ ................................ ................................ .................. 52 
+References ................................ ................................ ................................ ................... 57 
+ 
+iv 
+List of Tables 
+       Table 1 Descriptive statistics of time-aggregated returns ........................................................ 6 
+Table 2 Descriptive statistics of 5-minute return series, absolute 5-minute return series and 
+squared 5-minute return series. ............................................................................................... 6 
+Table 3 Descriptive statistics of 10-minute return series, absolute 10-minute return series and 
+squared 10-minute return series. ............................................................................................. 6 
+Table 4 Autocorrelations of average returns and absolute average returns ........................... 11 
+Table 5 Descriptive statistics of daily return series, absolute daily return series and squared 
+daily return series .................................................................................................................. 20 
+Table 6 Parameter estimation of the MA (1)-GARCH (1,1) model ...................................... 23 
+Table 7 Correlations between GARCH forecasts and other ex post daily variability measures
+ ............................................................................................................................................... 27 
+Table 8 The normalized time-aggregated returns .................................................................. 34 
+Table 9 The normalized transaction-aggregated returns ....................................................... 34 
+Table 10 The filtered time-aggregated returns ...................................................................... 38 
+Table 11 ARCH test of filtered time-aggregated returns ...................................................... 39 
+Table 12 GARCH estimation of intraday time-aggregated returns ....................................... 42 
+Table 13 GARCH estimation of filtered intraday time-aggregated returns .......................... 43 
+ 
+v 
+List of Figures 
+Figure 1 The average SPY 5-minute return over the trading day ............................................ 8 
+Figure 2 The average SPY 10-minute return over a trading day ............................................. 8 
+Figure 3 The average SPY 10-minute return over a trading day ........................................... 10 
+Figure 4 The average SPY 10-minute return over a trading day ........................................... 10 
+Figure 5 Five days SPY absolute 5-minute return correlogram ............................................ 11 
+Figure 6 Five days SPY absolute 10-minute return correlogram .......................................... 12 
+Figure 7 SPY daily returns from January 3, 2005 to December 31, 2014 ............................. 20 
+Figure 8 SPY absolute daily return correlogram ................................................................... 21 
+Figure 9 SPY squared daily return correlogram .................................................................... 21 
+Figure 10 The conditional variance and standardized residuals of MA (1)-GARCH (1,1) 
+fitting ..................................................................................................................................... 24 
+Figure 11 The correlogram of squared standardized residuals of MA (1)-GARCH (1,1) 
+fitting ..................................................................................................................................... 24 
+Figure 12 The Quantile-Quantile Plot of the standardized residuals ..................................... 25 
+Figure 13 The absolute daily returns and GARCH (1,1) volatility forecasts ........................ 26 
+Figure 14 The cumulative absolute returns, realized volatility and GARCH (1,1) forecasts 27 
+Figure 15 One-day-ahead MA (1) -GARCH (1,1) estimation .............................................. 33 
+Figure 16  The correlogram of normalized 5-minute absolute returns .................................. 36 
+Figure 17 The correlogram of normalized 10-minute absolute returns ................................. 37 
+Figure 18 The estimated intraday periodicity for each 5-minute time interval ..................... 38 
+Figure 19 The correlogram of filtered 5-minute absolute returns ......................................... 40 
+Figure 20 The correlogram of filtered 10-minute absolute returns ....................................... 40 
+Figure 21 Residuals correlogram of the filtered 5-minute returns ........................................ 44 
+Figure 22 Residuals correlogram of the filtered 10-minute returns ...................................... 44 
+Figure 23 The Q-Q plot of filtered 5-minute residuals .......................................................... 45 
+ 
+ 
+1 
+Multiplicative Component GARCH Model of Intraday 
+Volatility 
+1. Introduction 
+ 
+The modelling of return dynamics is of both theoretical and empirical importance for 
+financial research. Among the vast literatures on this topic, the ARCH-GARCH models are 
+widely developed and are accepted as the standard techniques for the analysis of return 
+volatility (Engle 1982 and Bollerslev 1986). The ARCH-GARCH models are developed to 
+describe the phenomena of volatility clustering that is the positive autocorrelation in return 
+volatility. However, financial research using high frequency data generally suggest the 
+inadequacy of this standard time series volatility model for the modelling of intraday return 
+dynamics. In general, when applied to high frequency intraday returns, estimations of 
+GARCH models are often contradictory and defy theoretical predictions. For instance, 
+Andersen and Bollerslev (1997) identified that the estimation using GARCH model for 
+returns with different intraday frequencies gave parameters that are inconsistent with the 
+theoretical results on time aggregation of GARCH estimation from Dorst and Nijman 
+(1993). 
+ 
+It is well known that the return volatility systematically varies over the trading day and are 
+highly correlated with the variation of other random variables associated with the 
+transaction records such as the volumes and waiting -time over the trading day . In many 
+markets, this systematical variation of intraday return volatilities is identified as a U-shape 
+pattern in return volatility over the day. Specifically, returns during market opening and 
+closing hours are much more volatile. Such intraday periodic pattern in the return volatility 
+in equity market has been proven to have strong influence on the dynamics of equity returns 
+(Bollerslev 1994, Guillaume et al. 1995). Consequently, in order to carry out meaningful 
+analysis about intraday volatility dynamics, it is necessary to consider the intraday periodic 
+volatility pattern as a fundamental determinant of the intraday volatility process.  
+ 
+2 
+In this paper, I investigate the difficulties encountered by GARCH volatility models when 
+applied to the high frequency returns. I focus on the strong impact of intraday periodicity 
+of return dynamics on the modelling of intraday volatility process using standard GARCH 
+models. Besides, I construct our estimation of the intraday periodicity in volatility process 
+based on the realized volatility calculated from tick -by-tick transactions. The estimation 
+procedure could be applied to both time -aggregated and transaction -aggregated returns. 
+The periodicity estimation based on tick -by-tick returns provide the most accurate 
+description of intraday periodic volatility pattern. I also analyze the different impact of the 
+intraday periodic feature of return dynamics on returns sampled  from both fixed time 
+interval and fixed number of transactions at various frequencies to verify our estimation of 
+the intraday periodicity of return dynamics. Moreover, to identify the distinctive 
+characteristics of the intraday returns process, the findi ngs are compared with the 
+corresponding features of daily returns series. Finally, I generalize the multiplicat ive 
+GARCH model for intraday volatility of Engle (2012).  I modify the intraday volatility 
+periodicity component of the model to allow it to be conditional on the varying trading 
+period of tick-by-tick transactions.  
+ 
+This paper is organized as follows. Section  2 presents the discussion about literatures 
+regarding the intraday volatility modelling. Section 3 describes the data set and presents 
+the intraday return pattern. Section 4 exhibit s the multiplicative component intraday 
+volatility models. Section 5 discusses the specification of the multiplicative volatility  
+model using empirical evidences. It also includes my characterization of intraday volatility 
+periodicity pattern. A relatively simple model that allows the estimation of intraday 
+volatility periodicity to be conditional on the trading period. Section 6 co ntains the 
+empirical analysis regarding our multiplicative component volatility models. I also analyze 
+the statistical properties of the corresponding filtered returns series generated by 
+normalizing the raw return series according to the estimated intraday volatility periodicity 
+and the corresponding estimated daily volatility. I employ high frequency time-aggregated 
+returns at different frequencies. Estimates of the degree of volatility persistence at the 
+various sampling frequencies are compared with the  theoretical aggregation results. 
+Section 7 presents the conclusion.                        
+3 
+ 
+2. Literature Review 
+Early in 1980s, authors like Wood et al. (1985) and Harris (1986)  gave the empirical 
+evidence about the distinctive U -shaped pattern in return volatility over the trading day 
+using average intraday returns of stock market. After that, the intraday periodic feature of 
+asset returns is widely reported and considered as a stylized fact regarding financial return 
+series in different markets. For instance, similar evidence for foreign exchange markets can 
+be found in Muller et.al (1990) and Baillie and Bollerslev (1991). Meanwhile, a main topic 
+of financial research using high frequency data is intraday return volatility modelling based 
+on the ARCH-GARCH model of Engle (1982) and Bollerslev (1986). These are partially 
+motivated by an attempt to identify the economic origins of the volatility clustering 
+phenomenon such as the mixture of distributions hypothesis; see for example Clark (1973), 
+Tauchen and Pitts (1983), Harris (1987), Gallant et al. (1991), Ross (1989) and Andersen 
+(1994, 1996). 
+ 
+A direct comparison of these research is difficult because of the different sampling 
+frequencies used by these literatures. Nevertheless, as argued by Ghose and Kroner (1984), 
+Guillaume (1994), Andersen and Bollerslev (1997) and Engle (2012), most of the r esults 
+regarding degree of volatility persistence and parameter estimation conflicts with the 
+theoretical aggregational results for ARCH-GARCH models by Nelson (1992) and Dorst 
+and Nijman (1993). A plausible explanation is that the strong intraday volatility periodicity 
+cannot be captured by GARCH -ARCH models. Specifically, the intraday volatility 
+periodicity causes the contradictory phenomena between estimation of GARCH -ARCH 
+parameters for returns at different intraday frequencies and theoretical predictions.  
+ 
+In 1990s, efforts on the modelling of intraday volatility periodicity pattern are given by the 
+research group at Olsen and Associates on the foreign exchange market. For instance,  
+Muller et al. (1990,1993) and Dacorogna et al. (1993) use time invaria nt polynomial 
+functions to approximate the trading activities in different FOREX exchange market during 
+the 24-hour trading cycle.  
+4 
+ 
+Andersen and Bollerslev (1997) gave a more general methodology for the modelling of 
+intraday volatility periodicity pattern . They construct a multiplicat ive model of daily and 
+intraday volatility for the 5-minute returns on both Deutschemark-dollar exchange rate and 
+US stock market. They express the conditional variance as a product of intraday component 
+and daily component. T his specification allows the periodic pattern to be conditional on 
+the current overall level of return volatility. Other closely related models for intraday 
+volatility periodicity can be found in Ghose and Kroner (1996), Andersen and Bollerslev 
+(1998), and Giot (2005). For instance, Giot (2005) adds a deterministic intraday periodicity 
+pattern to the GARCH (1,1) and the EGARCH (Nelson 1991) models and estimates the 
+two model for high frequency return series. Taylor and Xu (1997) provided an alternative 
+specification for high frequency return volatility. They construct an hourly volatility model 
+using an ARCH specification. The conditional variance specification is modified with two 
+elements: the implied volatility and the realized volatility. In 2012, Eng le developed a 
+multiplicative component GARCH models based on the work of Andersen and Bollerslev 
+(1998). Specifically, the conditional variance of 10-minute return series in US stock market 
+is expressed as a product of daily, intraday periodicity and stochas tic intraday volatility 
+components. Compared with the model of Andersen and Bollerselv (1998) that considers 
+the intraday volatility pattern as deterministic, Engle used two intraday components for the 
+conditional variance model: a deterministic diurnal pattern and stochastic intraday ARCH. 
+ 
+Most of the discussed above use returns sampled from fixed time interval. Consequently, 
+the estimation of intraday volatility periodicity is also based on observations that are 
+equally spaced in time with the same length of interval. Meanwhile, a fundamental feature 
+of tick -by-tick transaction records is that observations are not equally spaced in time. 
+Returns sampled from fixed number transactions exhibit different statistical characteristics. 
+For instance, the distribution of transaction -aggregated returns approaches the normal 
+distribution much faster than the time -aggregated returns as the frequencies of returns 
+decrease. Thus, it is interesting to examine whether the models based on time -aggregated 
+returns ca n be extend to the transaction -aggregated returns , specifically, whether the 
+intraday volatility periodicity estimation based on realized volatility from previous 
+5 
+literatures such as Anderson and Bollerslev (1997) can be extended to the transaction -
+aggregated returns. Finally, I want to estimate the intraday periodicity directly from the 
+tick-by-tick transaction records instead of imposing fixed observing time interval.  
+ 
+Based on the work of Anderson and Bollerslev (1997) and Engle (2012), I use the tick-by-
+tick transactions to estimate the intraday volatility periodicity component and allow the 
+estimation to be conditional on the trading period during the day. Thus, it can be applied to 
+transaction-aggregated return series and should capture the intraday v olatility periodicity 
+more accurately. My estimation method different  from the previous research on intraday 
+volatility modelling mainly in three perspectives. First, I generalize the multiplicative 
+component intraday volatility model of Engle (2012) for tick-by-tick return sample. Second, 
+my estimation of intraday periodicity is based on the tick -by-tick transactions, it should 
+give more accurate description on the intraday volatility pattern in the specific time 
+durations. Finally, I test the specificatio n using both time -aggregated and transaction -
+aggregated returns.  
+ 
+3. Data  
+In this section, I give the data set. In order to comprehensively illustrate the periodic pattern 
+of returns during the trading day, I focus on the time-aggregated return series. In Section 
+3.1, I first exhibit the descriptive statistics about the time-aggregated return series at various 
+frequencies. I focus on the 5-minute and 10-minute return series.  There are  three main 
+reasons for choosing the two frequencies. First, since most of the discussed literatures used 
+these frequencies, I wish to compare the intraday periodic pattern of my data sample with 
+theirs. Second, the preliminary tests show that the intraday pattern is not obvious for returns 
+on higher frequency such as 30s, 1 min and 3 min. Third, the estimation of intraday periodic 
+pattern during short time interval rises computation difficulties.  In Section 3.2, I exhibit 
+the intraday periodic pattern of the 5-minute and 10-minute return series. 
+6 
+3.1 Descriptive statistics  
+The data set is the tick -by-tick transaction records of symbol SPY during 01/02/2014 -
+12/31/2014. It contains transactions for 252 trading days. The out -of-hour transactions 
+whose occurrence lie outside the time period between 9:30 am and 4:00 pm on each da y 
+are removed.  
+ 
+Sample Size Mean Variance Kurtosis Skewness Maximum Minimum 
+30Sec 196560 1.29618E-07 5.30347E-08 264.8727029 -0.173806698 0.01225414 -0.012983101 
+1Min 98280 2.59236E-07 9.67974E-08 95.91646403 -0.103161028 0.012458815 -0.012906394 
+1.5Min 65520 3.88855E-07 1.39691E-07 80.86530506 -0.005621653 0.012036628 -0.013264313 
+3Min 32760 7.77709E-07 2.70802E-07 39.85096976 -0.238157281 0.011012149 -0.014459855 
+5Min 19656 1.29618E-06 4.06658E-07 8.436150587 0.075305595 0.006182118 -0.005359357 
+10Min 9828 2.59236E-06 8.03275E-07 7.918815602 -0.037720742 0.008269006 -0.006320998 
+15Min 6552 3.88855E-06 1.17727E-06 7.388130566 -0.079263515 0.007751481 -0.006653523 
+30Min 3276 7.77709E-06 2.34033E-06 6.660810707 -0.095190193 0.011082252 -0.009269532 
+78Min 1260 2.02204E-05 6.20987E-06 6.687141886 -0.195275515 0.014103076 -0.014359004 
+Table 1. Descriptive statistics of time-aggregated returns 
+In this section  I focus on the 5 -minute and 10-minute return series. It seems natural to 
+choose the time-aggregated return to present an illustration of intraday periodic pattern of 
+the returns over the trading day. I choose the absolute value of the returns and squared 
+returns as the proxies of the return volatility.  
+ 
+Mean Variance Kurtosis Skewness Maximum Minimum First Lag 
+autocorrelation 
+5-Minute Return 1E-06 4.07E-07 8.4362 0.0753 0.006182 -0.0054 -0.015058796 
+Absolute 5-Minute 
+Return 
+0.0004 2.13E-07 14.733 2.5577 0.006182 0 0.256396005 
+Squared 5-Minute 
+Return 
+4E-07 1.23E-12 237.48 11.289 3.82E-05 0 0.179436501 
+Table 2. Descriptive statistics of 5 -minute return series, absolute 5 -minute return series and squared 5 -minute 
+return series 
+  Mean Variance Kurtosis Skewness Maximum Minimum First Lag 
+autocorrelation 
+10-Minute Return 2.59E-06 8.03E-07 7.918815602 -0.03772074 0.008269006 -0.006321 -0.02467549 
+Absolute 10 -Minute 
+Return 
+0.000621954 4.16E-07 13.50275706 2.470604056 0.008269006 0 0.247384273 
+Squared 10 -Minute 
+Return 
+8.03E-07 4.46E-12 197.0880086 10.11289837 6.84E-05 0 0.16996921 
+Table 3. Descriptive statistics of 10-minute return series, absolute 10-minute return series and squared 10-minute 
+return series 
+The mean of the 5-minute return series and 10 -minute return series are 1E-06 and 2.59E-
+7 
+06 respectively. Given their variance of 4.07E-07 and 8.03E -07, the mean of 5 -minute 
+return series and 10 -minute return series can safely assumed to be zero. However, as  
+suggested by the kurtosis in Tables 2 and 3, they are clearly not normally distributed. An 
+interesting fact is that although the 5 -minute return series have a positive skewness of 
+0.0753, the 10-minute return series have a negative skewness of -0.0378. Meanwhile, the 
+maximum and minimum of the 5-minute returns are 0.0062 and -0.0054 respectively. These 
+values do not suggest of sharp discontinuities in the return series. The maximum and 
+minimum of 10-minute return series exhibit similar characteristics.  
+ 
+Note that the first lag autocorrelations of the 5-minute and 10-minute returns, -0.0151 and 
+-0.0247 respectively, are significant  since corresponding lower confidence bounds at the 
+significance level of 5% are -0.0143 and -0.0201 respectively. The values of the correlation 
+are nearly negligible from the economic perspective. In contrast, the volatilities of the 5 -
+minute returns and 10-minute returns have highly significant positive autocorrelations. For 
+instance, the absolute 5 -minute return series has a fir st lag autocorrelation of 0.2564 and 
+the absolute 10 -minute return series has a first lag autocorrelation of 0.2474. The upper 
+confidence bounds of the 5 -minute return series and the 10 -minute return series at the 
+significance level of 5% are 0.0143 and 0. 0201 respectively. The positive correlations of 
+return volatility clearly suggest the phenomena of volatility clustering. The squared returns 
+exhibit slightly smaller but also highly significant positive first lag autocorrelations.  
+ 
+3.2 Intraday return periodicity 
+ 
+In order to evaluate the intraday volatility periodicity, I present the plot of average and 
+absolute average during the trading day for both 5 -minute return series and the 10-minute 
+return series first.   
+ 
+8 
+ 
+Figure 1. The average SPY 5-minute return over the trading day 
+ 
+The average SPY 5-minute returns are centered around 0 but fluctuate dramatically during 
+the trading day. Figure 2 suggests that the average 5-minute returns during the opening and 
+closing hours of the trading day are much more volatile. For instance, three of the four 
+violations of the constant 5% confidence band for the null hypothesis of an iid series occur 
+during the first and last ten intervals. Specifically, the first ten interval represents the period 
+from 9:30 to 10:20 and last ten interval represents the period from 3:10 to 4:00. The sharp 
+drop off during such intervals provide graphic evidence. Also note that , the Andersen -
+Darling statistics cannot reject the null hypothesis that the average 5 -minute returns come 
+from a normal distribution at significance level of 5%.  
+ 
+Figure 0. The average SPY 10-minute return over a trading day 
+
+9 
+Figure 2 gives similar but more clear presentation of intraday return periodicity for the 
+average 10-minute return series. Three of the four violations of the constant 5% confidence 
+band for the null hypothesis of an iid series occur during the first and l ast five intervals, 
+which is consistent with the finding of the average 5 -minute return series. As the case of 
+average 5-minute returns, the average 10-minute returns also can be safely assumed to be 
+normally distributed.  It is worthy to mention that duri ng the end of trading day, the 
+dramatic variation of SPY 5 -minute returns in Figure 1 no longer exist in Figure 2. In 
+contrast, the 10-minute SPY average returns tend to be more volatile than 5 -minute SPY 
+average return during the opening hours. 
+ 
+Figure 3 exhibits the volatility (measured as the absolute average returns) of SPY average 
+5-minute returns during the trading day. It clearly verifies the pronounced U-shape of return 
+volatility in financial markets. The volatility ranges from a low of around 0.03 % at the 
+13:05 to a high of around 0.08% at the 9:35. It starts out at a relatively high level of 0.07% 
+at 9:30 and decays slowly to 0.03% at 13:05, and then it again surges to around 0.05% at 
+16:00. The highly significant first lag positive autocorrelatio n of 0.256 in Table 2 also 
+support the existence of intraday periodic volatility pattern. Figure 4 suggests similar 
+periodic pattern for 10-minute return volatility. It also can be concluded from Figures 3 and 
+4 that the returns are more volatile during the opening hours than the closing hours, which 
+corresponds to the 10am FED news announcements.   
+ 
+ 
+
+10 
+Figure 1. The absolute average SPY 5-minute return over a trading day 
+ 
+ 
+Figure 4. The absolute average SPY 10-minute return over a trading day 
+To support my prior investigation of the unconditional intraday volatility periodic pattern, 
+I now examine the autocorrelations of the absolute 5-minute and absolute 10-minute return 
+series to explore the dynamic feature of those two return series.   
+ 
+5-minute return  absolute 5-minute return 10-minute return absolute 10-minute return 
+Lag1 -0.015058796 0.256396005 -0.024675493 0.247384273 
+Lag2 -0.02727115 0.27393497 -0.007165027 0.262341418 
+Lag3 0.011513466 0.266731377 0.025501631 0.271487025 
+Lag4 -0.002240064 0.25614196 -0.018678124 0.256228375 
+Lag5 -0.001991967 0.248556941 0.038864765 0.246937983 
+Lag6 0.007446405 0.267334076 0.029325701 0.236207573 
+Lag7 0.005399493 0.265061453 0.00940831 0.230465298 
+Lag8 -0.004431232 0.230266141 -0.002262395 0.217919076 
+Lag9 0.004174203 0.244515482 -0.002524387 0.209070546 
+Lag10 0.023174997 0.230559214 0.02308969 0.199440976 
+Lag11 0.022193775 0.232530198 0.008302441 0.189182483 
+Lag12 0.00899738 0.219332721 -0.015269527 0.188770108 
+Lag13 -0.005247707 0.217748927 -0.011524974 0.185738101 
+Lag14 0.013262886 0.222211507 0.025102784 0.194993096 
+Lag15 0.007466957 0.219513545 0.009805094 0.174629519 
+Lag16 -0.009635652 0.199277327 0.004593636 0.175036007 
+Lag17 -0.004045313 0.214672245 -0.027126605 0.155205843 
+Lag18 0.006474428 0.200850752 -0.029243554 0.152888546 
+Lag19 0.00035781 0.184185116 -0.017268827 0.145260443 
+Lag20 0.009019369 0.18152872 0.010949894 0.141655001 
+
+11 
+Upper Bounds 0.01426535 0.01426535 0.020174251 0.020174251 
+Lower Bounds -0.01426535 -0.01426535 -0.020174251 -0.020174251 
+Table 4. Autocorrelations of average returns and absolute average returns 
+As discussed previously, the 5 -minute return series and 10 -minute return series can be 
+plausibly considered as uncorrelated. For instance, although 5-minute return has significant 
+first and second lag autocorrelations, the values of the autocorrelations ar e as small as -
+0.015 and -0.027 respectively. In contrast, the absolute return series exhibits highly 
+significant strong positive correlations at almost all 20 lags. Observe that the 
+autocorrelation of both absolute 5-minute and absolute 10-minute return series decay very 
+slowly. If there is a periodic pattern of the volatility during each trading day, the 
+correlations should also have a 24-hour cycle pattern.  
+ 
+To further investigate the intraday volatility periodicity pattern, I plot the correlogram for 
+both absolute 5-minute return and absolute 10-minute return series for up to five days.   
+  
+Figure 5. Five days SPY absolute 5-minute return correlogram 
+The Figures 5 and 6  present autocorrelation pattern of the absolute returns.  The intraday 
+volatility periodicity is exhibited as the  corresponding U-shape in the correlogram. The 
+correlations at daily frequency decay very slowly during the five days.  Observe that the 
+slowly declining U-shape cycles around every 80 intervals for the 5 -minute lag and every 
+40 intervals for the 10 -minute lag. Since the NYSE operates from 9:30 to 4:00 on each 
+trading day, U-shape cycles on daily frequency exactly.  
+
+12 
+ 
+ 
+Figure 6. Five days SPY absolute 10-minute return correlogram 
+4 Multiplicative component intraday volatility model 
+In this section I present my multiplicative component intraday volatility model. The model 
+is based on the work of Andersen and Bollerslev (1997) and Eng le (2012). In order to 
+illustrate the reasoning behind the model specificatio n, I first discuss the interpretation of 
+the intraday volatility periodicity pattern in section 4.1. I then present the model and discuss 
+the econometric issues in section 4.2.  
+4.1 Interpretation of the intraday return volatility  
+The periodic pattern of the intraday volatility discussed in Section 3 suggests that a direct 
+use of the ARCH -GARCH for modelling of the intraday return volatility could be 
+inappropriate. The main reason is that the standard ARCH -GARCH models impose a 
+geometric decay for the return autocorrelation structure. It cannot capture the periodic 
+pattern of the volatility correlation that are reported in Section 3. In order to jointly describe 
+the intraday periodicity and daily conditional heteroskedasticity, Andersen and Bollerslev 
+(1997) present the following stylized specification of the intraday returns. Consider an 
+intraday time -aggregated logarithm return series {𝑟𝑡,𝑛}𝑡,𝑛  , where 𝑟𝑡,𝑛  represent the nth 
+
+13 
+return at day t. Suppose there are N observation during each trading day. Then 
+𝑟𝑡,𝑛 = 𝜎𝑡
+1
+√𝑁 𝑠𝑛𝑧𝑡,𝑛 ,                                                              (1) 
+where 𝜎𝑡 is the conditional daily volatility at day 𝑡, 𝑠𝑛 is the intraday volatility periodicity 
+during the period of 𝑟𝑡,𝑛  and 𝑧𝑡,𝑛  is an iid series of zero mean and unit variance that is 
+independent of the daily volatility 𝜎𝑡  and the intraday periodicit y 𝑠𝑛 . The volatility 
+components 𝜎𝑡 and 𝑠𝑛 are required to be positive. For instance, 𝜎𝑡 > 0  for all t and 𝑠𝑛 > 0 
+for all n. The intraday volatility periodicity component 𝑠𝑛 is a periodic function at daily 
+frequency. Specifically, 𝑠𝑛+𝑗𝑁 = 𝑠𝑛 for all j and n. Thus, the daily return at day t 𝑅𝑡, is  
+𝑅𝑡 = ∑ 𝑟𝑡,𝑛𝑁𝑛=1 = 𝜎𝑡 1√𝑁 ∑ 𝑠𝑛𝑧𝑡,𝑛𝑁𝑛=1 .                                   (2) 
+With respect to the model estimation, Andersen and Bollerslev (1997,1998) apply a flexible 
+Fourier transform to estimate the intraday volatility periodicity component 𝑠𝑛  and use 
+standard GARCH volatility model to estimate the conditional daily volatility  𝜎𝑡 . For 
+further details of the Fourier transform, see the appendix of Andersen and Bollerslev (1997). 
+ 
+Under the assumption that the intraday returns are serially uncorrelated, the daily 
+conditional variance is the sum of variances from each time interval. Thus, 
+                                                   𝐸 (∑ 𝑟𝑡,𝑛2
+𝜎𝑡2
+𝑁
+𝑛=1 ) = 1.                                                               (3) 
+(2.3) immediately gives that ∑ 𝑠𝑛2/𝑁𝑁𝑛=1 = 1 . This intuitive specification of intraday 
+volatility has two important features. First, it extends naturally to standard specifications 
+of daily return volatility models with intraday innovations and deterministic daily volatility. 
+Specifically, in the case that 𝑠𝑛 = 1  for all n, the 𝑟𝑡,𝑛 = 𝜎𝑡
+1
+√𝑁 𝑧𝑡,𝑛 . Consequently, 𝑟𝑡 =
+𝜎𝑡
+1
+√𝑁 ∑ 𝑧𝑡,𝑛𝑁𝑛=1 . Thus, the daily return at day t is the sum of product of independent intraday 
+innovations and daily conditional volatility patterns. The innovation component 
+1
+√𝑁 ∑ 𝑧𝑡,𝑛𝑁𝑛=1  is clearly an iid series with zero mean and unit variance.  
+ 
+Besides, the model does not affect the autocorrelation structure of the returns measured at 
+daily frequency. When returns are measured at daily frequency, 𝑅𝑡 the daily return at day t 
+is 𝑅𝑡 = ∑ 𝑠𝑛√𝑁𝑁𝑛=1 𝑧𝑡𝜎𝑡 where 𝑧𝑡 is an iid series of zero and unit variance. Thus, the expected 
+14 
+absolute return 𝐸|𝑅𝑡| is,  
+  𝐸|𝑅𝑡| = ∑ 𝑠𝑛√𝑁 𝐸|𝑧𝑡|𝜎𝑡𝑁𝑛=1 .                                                      (4) 
+Observe that since 𝐸(∑ 𝑠𝑛2/𝑁𝑁𝑛=1 ) = 1 , ∑ 𝑠𝑛√𝑁𝑁𝑛=1 ≥ 1  since (∑ 𝑠𝑛√𝑁𝑁𝑛=1 )2 = (∑ 𝑠𝑛𝑁𝑛=1 )2/
+𝑁 ≥ ∑ 𝑠𝑛2/𝑁𝑁𝑛=1   . Consequently, the expected daily absolute return is an increasing 
+function of the variation of the intraday periodicity pattern. Let 𝑐 = (𝐸|𝑧𝑡|)−2 − 1 > 0. I 
+immediately have,   
+ 
+                                             𝐶𝑜𝑟𝑟(|𝑅𝑡|, |𝑅𝜏|) = 𝐶𝑜𝑣(𝜎𝑡,𝜎𝜏)𝑉𝑎𝑟(𝜎𝑡)+𝑐𝐸(𝜎𝑡2).                                           (5) 
+(5) clearly suggests that the model does not impose any structural changes to the 
+autocorrelation of the daily returns.  
+ 
+Second, the model gives a qualitative description of the impact of intraday volatility 
+periodicity on the autocorrelation of the absolute intraday returns. Specifically, suppose 
+that 𝑛 ≥ 𝑚, then 
+                  𝐶𝑜𝑟𝑟(|𝑅𝑡,𝑛|, |𝑅𝜏,𝑚|) =
+∑ 𝑠𝑗𝑠𝑗−(𝑛−𝑚)𝐶𝑜𝑣(𝜎𝑡,𝜎𝜏)+𝐶𝑜𝑣((𝑠𝑛,𝑠𝑚)𝐸2(𝜎𝑡)𝑁𝑗=1
+𝑉𝑎𝑟(𝜎𝑡)(∑ 𝑠𝑗𝑁𝑗=1 )2
+𝑁 +𝑐𝐸(𝜎𝑡2)
+(∑ 𝑠𝑗𝑁𝑗=1 )2
+𝑁 +𝐸2(𝜎𝑡)𝑉𝑎𝑟(𝑠)
+.                 (6) 
+Notice that, when 𝑛 = 𝑚, equation (2.6) reduces to  
+                    𝐶𝑜𝑟𝑟(|𝑅𝑡,𝑛|, |𝑅𝜏,𝑛|) =
+𝐶𝑜𝑣(𝜎𝑡,𝜎𝜏)+( 𝑉𝑎𝑟(𝑠)
+(∑ 𝑠𝑗𝑁𝑗=1 )2
+𝑁
+)𝐸2(𝜎𝑡)
+𝑉𝑎𝑟(𝜎𝑡)+𝑐𝐸(𝜎𝑡2)+( 𝑉𝑎𝑟(𝑠)
+(∑ 𝑠𝑗𝑁𝑗=1 )2
+𝑁
+)𝐸2(𝜎𝑡).                                  (7) 
+ 
+(6) gives a qualitative description between the intraday periodicity and the daily 
+heteroskedasticity of the absolute returns. The positive covariance of the daily return 
+volatility 𝐶𝑜𝑣(𝜎𝑡, 𝜎𝜏)  is strong when  t and 𝜏  are very close. Consequently, it causes 
+positive dependence in the absolute returns, as the distance between t and 𝜏 grows larger 
+this effect becomes less significant. This implication is consistent with the slow decay of 
+the correlations in Figures 5 and 6.  
+ 
+At the same time, the strong intraday volatility periodicity also has an impact on the 
+15 
+correlations of absolute returns. For instance, the autocorrelations of 5-minute return series 
+reaches the lowest value generally at the forty lags, which is exactly half of the trading day. 
+The covariance of the intraday volatility periodicity 𝐶𝑜𝑣((𝑠𝑛, 𝑠𝑚) is expected to reach the 
+minimal at the same time according to the U -shape. Figure 6 suggests that the 10 -minute 
+return series exhibit similar characteristic s as well. These findings further confirm the 
+correspondence between the qualitative implications of (1) and the autocorrelation 
+structure of the intraday absolute returns.  
+ 
+Although the model of (1) gives a plausible explanation of the autocorrelation structure of 
+the absolute intraday returns and might serve as a starting point for the high frequency 
+volatility modelling, the simplistic intraday volatility specification 𝜎𝑡
+1
+√𝑁 𝑠𝑛 implies that the 
+only intraday component in the intraday volatility pattern is 𝑠𝑛.  
+ 
+Based on the intraday return volatility model of Andersen and Bollerslev (1997,1998), 
+Engle (2012) proposed the following multiplicative specification for intraday return 
+volatility to provide a more realistic volatility dynamic description, 
+                                                     𝑅𝑡,𝑛 = 𝜎𝑡𝜖𝑡,𝑛𝑠𝑛𝑧𝑡,𝑛,                                                      (8) 
+where 𝜎𝑡  is the conditional volatility at day t, 𝑠𝑛  is the intraday volatility periodicity 
+component, 𝜖𝑡,𝑛 is the stochastic intraday volatility component with 𝐸(𝜖𝑡,𝑛2) = 1  and 𝑧𝑡,𝑛 
+is an iid series that follows the normal distribution with zero mean and unit variance. 
+Moreover, the normalized return  𝑦𝑡,𝑛 =
+𝑟𝑡,𝑛
+𝜎𝑡𝑠𝑛
+ is assumed to follow a GARCH (1,1) process. 
+Specifically, 
+𝑦𝑡,𝑛|𝐹𝑡,𝑛−1~ 𝑁(0, 𝜖𝑡,𝑛), 
+𝑦𝑡,𝑛 =
+𝑟𝑡,𝑛
+𝜎𝑡𝑠𝑛
+= 𝜖𝑡,𝑛𝑧𝑡,𝑛, 
+𝜖𝑡,𝑛2 = 𝜔 + 𝛼𝑦𝑡,𝑛−12 + 𝛽𝜖𝑡,𝑛−12. 
+Similarly, given the assumption that the intraday return s are not serially correlated, one 
+immediately has   𝐸 (∑ 𝑟𝑡,𝑛2
+𝜎𝑡2
+𝑁
+𝑛=1 ) = 1. Then 𝐸 (∑ 𝑟𝑡,𝑛2𝜎𝑡2𝑁𝑛=1 ) = ∑ 𝑠𝑛2𝑁𝑛=1 = 1. Regarding the 
+model estimation, for the intraday volatility periodicity pattern 𝑠𝑛 , Engle applies a 
+commercially available risk measure to estimate 𝜎𝑡 and further the calculates the 𝑠𝑛 as the 
+16 
+variance of returns in each time interval after deflating by the conditional daily variance 
+𝜎𝑡.  
+Specifically,  
+                         𝐸 (
+𝑅𝑡,𝑛2
+𝜎𝑡2 ) = 𝐸(𝜖𝑡,𝑛2𝑧𝑡,𝑛2𝑠𝑛) = 𝑠𝑛.                                                            (9) 
+Note that the model of both (1) and (8) are based on the return series that are sampled from 
+fixed time interval. In order to study the intraday volatility periodicity for the transaction -
+aggregated return series, I must estimate the intraday volatility periodicity for irregular 
+spaced time interval during the trading day.  
+4.2 Multiplicative component intraday volatility 
+In this section I present the multiplicative component intraday volatility model. My model 
+is based on the Andersen and Bollerslev (1997, 1998) and Engle (2012). In 1997, Andersen 
+and Bollerslev proposed the intraday volatility model of (1). They expressed the daily 
+conditional variance as the product of intraday and daily volatility. As discussed in section 
+4.1, this specification successfully describes the periodic structure of the absolute intraday 
+return and can be extended to standard daily volatility model when returns are measured at 
+daily frequencies. This prior specification is proved to be very fruitful. In 1998, Andersen 
+and Bollerslev further add a component to the multiplicative specification of intraday 
+volatility to capture macroeconomic announcements. The model is widely accepted for the 
+modelling of intraday volatility in foreign exchange data. Later in 2012, Engle propose a 
+multiplicative intraday volatility model that express the intraday conditional variance as a 
+product of intraday periodicity, intraday variance and daily variance.  
+ 
+When using tick-by-tick data for an equity with high liquidity like SPY , the component that 
+accounts for macroeconomic announcements in the volatility model is not very practical.  
+E.g., Andersen and Bollerslev (1998) and Rangel (2009).  First, most important 
+macroeconomic announcements such as the release of new monetary police happen before 
+the stock market opens. Second, the timing of announcements that are particularly 
+important to equity markets are hard to predict. Third, it is very difficult to capture and 
+measure the market response to the macroeconomic announcement in a circumstance that 
+17 
+the duration between two consecutive transactions is less than 0.1s. Finally, asymmetric 
+information and microstructure are generally believed to play a decisive role in the high 
+frequency return dynamics. However, macr oeconomic or public announcement dummies 
+cannot account for information arrival through order flow (Engle 2012).  
+ 
+Besides, the intraday volatility models of (1) and (8) are based on returns sampled from 
+fixed time interval. It cannot be applied directly for the transaction-aggregated return series. 
+For instance, consider a tick -by-tick return series 𝑟𝑡,𝑛, where 𝑟𝑡,𝑛 represents the nth tick-
+by-tick return at day t. In general, 𝑤𝑡,𝑛 ≠ 𝑤𝜏,𝑛 when 𝑡 ≠ 𝜏 where 𝑤𝑡,𝑛 is the waiting-time 
+between transaction n and transaction n+1 at day t. Consequently, the periodic component 
+𝑠𝑛 in (1) and (8) should be conditional on both 𝑡 and n. I therefore generalize the model of 
+(8) by Engle (2012) to allow the intraday periodicity component to be conditional on the 
+corresponding waiting-time of 𝑟𝑡,𝑛. I present our intraday volatility model as the follows.   
+                                     𝑟𝑡,𝑛/√𝑤𝑡,𝑛 = 𝜎𝑡𝜖𝑡,𝑛𝑠𝑡,𝑛𝑧𝑡,𝑛,                                                           (10) 
+where 𝜎𝑡  is the conditional volatility at day t, 𝑤𝑡,𝑛  is the duration that corresponds to  
+𝑟𝑡,𝑛, 𝑠𝑡,𝑛  is the intra day volatility periodicity component, 𝜖𝑡,𝑛  is the stochastic intraday 
+volatility component with  𝐸(𝜖𝑡,𝑛2) = 1  and 𝑧𝑡,𝑛 is an iid series that follows the normal 
+distribution with zero mean and unit variance. 𝜖𝑡,𝑛 and 𝑧𝑡,𝑛 are assumed to be independent 
+of each other. 𝜎𝑡, 𝑠𝑡,𝑛 and 𝜖𝑡,𝑛 are strictly positive. That is, 𝜎𝑡 > 0  for all t, 𝑠𝑡,𝑛 > 0 for all 
+t, n, 𝜖𝑡,𝑛 > 0 for all t, n.  
+ 
+It is noticeable that in the specification of (10), I do not consider the duration 𝑤𝑡,𝑛 as a 
+random variable. It is given exogenously. The incorporation of  𝑤𝑡,𝑛 in (10) therefore is for 
+the normalization of irregularly spaced returns.  
+ 
+There are several reasons behind this consideration. Frist, joint modelling of durations and 
+volatilities requires an explicit parametric modelling of the arrivals of transactions that is 
+beyond the scope of this paper. Second, the intraday periodic patter n of volatilities and 
+durations are quite different. Adding the intraday periodic component into (10) would 
+further complicate the model specification. Finally, the durations are in general correlated 
+18 
+with volatilities. The modelling of durations often inv olves explanatory variables that are 
+volatility measures. Hence, a multiplicative specification seems to be over simplistic.  
+ 
+Under (10) the daily return 𝑅𝑡 at day t is, 
+                                                𝑅𝑡 = 𝜎𝑡 ∑ √𝑤𝑡,𝑛𝜖𝑡,𝑛𝑠𝑡,𝑛𝑧𝑡,𝑛𝑁𝑡𝑛=1 ,                                           (11) 
+where the 𝑁𝑡 represents the total number of tick -by-tick transaction records at day t. It is 
+clear that 𝐸(𝑅𝑡) = 0. Moreover, the expected value of the squared daily return 𝐸(𝑅𝑡2) is,  
+    𝐸(𝑅𝑡2) = 𝜎𝑡2 ∑ 𝐸(𝑤𝑡,𝑛𝜖𝑡,𝑛2𝑠𝑡,𝑛2𝑧𝑡,𝑛2)𝑁𝑡𝑛=1 = 𝜎𝑡2 ∑ 𝑤𝑡,𝑛𝑠𝑡,𝑛2𝑁𝑡𝑛=1 .                             (12) 
+Consequently, ∑ 𝑤𝑡,𝑛𝑠𝑡,𝑛2𝑁𝑡𝑛=1 = 1 . Without the presence of the intraday periodicity, in 
+which case  𝑠𝑡,𝑛 =
+1
+√𝑁𝑡
+  for all n, the daily return 𝑅𝑡 is 
+                                          𝑅𝑡 = 𝜎𝑡 ∑ 1√𝑁𝑡 √𝑤𝑡,𝑛𝜖𝑡,𝑛𝑧𝑡,𝑛𝑁𝑡𝑛=1 .                                               (13) 
+Observe that ∑ 1√𝑁𝑡 √𝑤𝑡,𝑛𝜖𝑡,𝑛𝑧𝑡,𝑛𝑁𝑡𝑛=1   is an independent but not necessarily identical 
+distributed sequence of zero mean and unit variance. I further model the 𝜖𝑡,𝑛 by a GARCH 
+(1,1) process, that is  
+𝑦𝑡,𝑛|𝐹𝑡,𝑛−1~ 𝑁(0, 𝜖𝑡,𝑛),                          
+𝑦𝑡,𝑛 =
+𝑟𝑡,𝑛
+𝜎𝑡𝑠𝑡,𝑛√𝑤𝑡,𝑛
+= 𝜖𝑡,𝑛𝑧𝑡,𝑛,                  
+                                        𝜖𝑡,𝑛2 = 𝜔 + 𝛼𝑦𝑡,𝑛−12 + 𝛽𝜖𝑡,𝑛−12                                          (14) 
+ 
+In a summary of the extensive ARCH/GARCH literatures, Bollerslev, Chou, and Kroner 
+(1992) argued that GARCH (1,1) is the most popular model. Moreover, even if the 
+conditional variance specification requires more lag terms, the models are not of a higher 
+order than GARCH (1,2) or GARCH (2,1). In 1990, Nelson gave an explanation of this 
+empirical result. Specifically, efficiency considerations favor models of a lower order since 
+many ARCH/GARCH models could be consistent filters of a particular diffusion process.  
+ 
+With respect to the model estimation, Engle (2012) used a commercially available daily 
+volatility measure that is based on the multifactor risk model of Fabozzi, Jones, and 
+Vardharaj (2002). The use of a daily variance forecasts from the structural analysis allows 
+19 
+the intraday volatility model to capture industry factor and common liquidity factors. 
+Nevertheless, the market efficiency theory asserts that such information should be included 
+in the market price. Moreover, given the strong ARCH effect of our daily return of SPY , a 
+GARCH modelling seems to be natural. Thus, I capture the 𝜎𝑡 by a GARCH specification. 
+Note that the daily variance component 𝜎𝑡  can be estimated by daily realized volatility 
+approaches such as the Engle and Gallo (2006) and Zhang et.al. (2005). 
+ 
+For the intraday periodicity component 𝑠𝑡,𝑛, Andersen and Bollerslev (1997,1998) applied 
+a flexible Fourier transform to estimate the intraday volatility periodicity component  𝑠𝑡,𝑛. 
+Their approach has an important advantage tha t it allows the 𝑠𝑡,𝑛 to be conditional on t. 
+Specifically, the intraday periodic pattern is time varying and is dependent on the 
+conditional daily volatility 𝜎𝑡. However, although the periodic pattern of financial returns 
+is a well-known empirical stylized fact, there is no widely accepted economic theory that 
+could stipulate the parametric specification of dynamic structure of the intraday periodicity. 
+As a resul t, nonparametric procedure seems natural. Thus, I follow the methodology of 
+Engle (2012) and consider 𝑠𝑡,𝑛 as the variance of returns during its corresponding waiting-
+time deflat ed by the daily conditional variance. This specification allows the daily 
+conditional variance to be completely free. Specifically, observe that the specification of 
+(10) implies that 
+                          𝐸 (
+𝑟𝑡,𝑛2
+𝜎𝑡2 ) = 𝐸(𝑤𝑡,𝑛𝜖𝑡,𝑛2𝑠𝑡,𝑛2𝑧𝑡,𝑛2) = 𝑤𝑡,𝑛𝑠𝑡,𝑛2.                                    (15)  
+(15) establishes the basis of the estimation of intraday periodicity pattern.  
+5 Intraday volatility components and model estimation 
+In this section I further explain the reasoning behind of the specification of (10) and discuss 
+the econometrics regarding the estimation of the model. In Section 5.1 I discuss the ARCH 
+effect of the daily returns of SPY and the impact of the ARCH effect on the intraday return 
+series. I also present my modelling for the daily conditional variance 𝜎𝑡.  In Section 5.2 I 
+present my estimation methodology for the intraday volatility periodicity. In Section 5.3 I 
+discuss the econometrics regarding my estimation.  
+20 
+5.1 ARCH effect of daily returns 
+In this section I discuss the ARCH effect of daily returns and estimate the daily conditional 
+volatility 𝜎𝑡. I first present the descriptive statistics of the SPY daily returns from January 
+3, 2005 to December 31, 2014. There are total 2517 daily observations and overnight effect 
+are not included.  
+ 
+Mean Variance Kurtosis Skewness Maximum Minimum First Lag 
+autocorrelation 
+Daily returns 2.03E-06 0.000104 14.64993 -0.52421 0.076669 -0.09421 -0.08628 
+Absolute daily returns 0.006581 6.02E-05 25.97425 3.688621 0.094207 0 0.330214 
+Squared daily returns 0.000103 1.46E-07 197.7099 11.9846 0.008875 0 0.227522 
+Table 5. Descriptive statistics of daily return series, absolute daily return series and squared daily return series 
+ 
+Figure 7. SPY daily returns from January 3, 2005 to December 31, 2014 
+Figure 7 suggests that the daily returns between October 2008 and December 2008 are 
+extremely volatile, which corresponds to the burst of the subprime mortgage financial crisis 
+in 2008. The other busy period following since the end of 2009 corresponds to the European 
+debt crisis. In general, the daily returns fluctuate dramatically around zero. This behavior 
+gives a graphic illustration of the conditional heteroscedasticity. 
+ 
+Besides, although the mean of the daily SPY returns can be safely assumed to be zero, the 
+kurtosis of 14.65 and skewness of -0.52 suggest that the returns are not normally distributed. 
+The daily returns have a small but significant negative first lag autoc orrelation. Given the 
+standard significance level of 5%, the lower bound and the upper bound are -0.03986 and 
+
+21 
+0.03986 respectively. As expected, the daily volatility presents strong volatility clustering 
+phenomenon. The first lag autocorrelations of the absolute daily and squared daily returns 
+are of nonnegligible values and are highly significant. T he following correlograms of the 
+absolute daily returns and the squared daily returns provide further evidence.  
+ 
+Figure 8. SPY absolute daily return correlogram 
+Figure 8 exhibits the slow decay of the correlation in the volatility of SPY daily returns.  
+ 
+Figure 9. SPY squared daily return correlogram 
+ 
+To test the ARCH effect statistically, I apply the ARCH test developed by Engle (1988). 
+Consider an ARCH (p) process, 
+𝑦𝑡2 = 𝑎0 + 𝑎𝑖 ∑ 𝑦𝑡−𝑖2𝑝𝑖=1 + 𝜀𝑡.  
+
+22 
+The alternative hypothesis is that there is at least one  𝑎𝑖 ≠ 0 for i=1,2,3…, q. The test 
+statistic is the Lagrange multiplier statistic T𝑅2  where T is the sample size and 𝑅2 is 
+obtained from fitting the ARCH(p) model via regression . Under the null hypothesis that 
+𝑎𝑖 = 0 for all i, the asymptotic distribution of the test statistic 𝑇𝑅2  is Chi -Square with  
+p degrees of freedom. 
+ 
+A commonly accepted procedure for choosing the number of lags in the ARCH modelling 
+is that one first estimates different lag structures and choose s the one with the minimal 
+Akaike Information Criterion statistics (AIC). However, this procedure in practice usually 
+favors a relatively long lag structure. Thus, I test the null hypothesis that there is no ARCH 
+effect in the daily series against the alternative hypothesis of an ARCH model with two 
+lagged squared innovations that is equivalent to a GARCH (1,1) model locally (Bollerslev 
+1986). Although the GARCH (1,1) model is not necessarily the preferred model, it still 
+gives a simple and comprehensive approximation to the dependenc e structure in the 
+autocorrelation of squared returns. The result shows that the test rejects the null hypothesis 
+at the significance level of 1% with a p value of zero for the test statistics. Specifically, the 
+value of the test statistics is 747.5967 and the critical value for the given significance level 
+of 1% is 9.2103.  
+ 
+The pronounced ARCH effect in the previous discussion might not be very surprising since 
+it is widely documented for financial research. However, the question remains that how 
+this ARCH effect observed from daily returns, the ag gregation of tick -by-tick returns, 
+influences the intraday volatility process. According to my prior investigation of the ARCH 
+effect on the daily return series, an intraday volatility process with conditional 
+heteroskedasticity seems natural. Nevertheless, the poor performance of ARCH -GARCH 
+models for the modelling of intraday volatility also is widely reported. (Cumby et al. 1993, 
+West and Cho 1995, Figlewski 1995 and Jorin 1995). In order to explicitly explain the 
+intraday volatility process, I first investigate the relation between the daily observed ARCH 
+effect and intraday volatility pattern. 
+  
+To assess the influence of the ARCH effect observed from daily returns on the intraday 
+23 
+returns, we explore the relation between one -step-ahead volatility estimation provided by 
+GARCH models on daily returns and other daily ex post return variability meas ures 
+calculated from intraday returns. I choose the daily returns from January 3, 2005 to 
+December 31, 2013 to estimate the GARCH model and further compare the one-step-ahead 
+GARCH estimations with volatility measures calculated from intraday returns using  
+sample from January 2, 2014 to December 31, 2014.  
+ 
+For the conditional heteroskedasticity modelling of the daily returns, I choose the MA (1)-
+GARCH (1,1) model specification. The moving average term MA (1) is included to explain 
+the weak but significant negative first order autocorrelation in Table 5. The model is 
+specified as, 
+ 
+𝑅𝑡 = 𝑢 + 𝜃𝜀𝑡−1 + 𝜀𝑡, 
+𝜀𝑡 = 𝜎𝑡𝑧𝑡, 
+𝜎𝑡2 = 𝜔 + 𝛼𝜀𝑡−12 + 𝛽𝜎𝑡−12 ,                                                    (16) 
+where 𝑧𝑡 is an iid sequence and 𝑧𝑡~𝑁 (0,1). The ARMA is proposed by the thesis of Peter 
+Whittle (1951). The maximum likelihood estimation regarding the ARMA -GARCH 
+process can be found in Ling and Li (1997,1998), McAleer (2003) and Franco (2004). Note 
+that, the GJR-GARCH could be another natural candidate for modelling  𝜎𝑡2 since the daily 
+return series has a skewness of -0.5241. The leverage effect that is the asymmetric 
+contribution of returns with different signs to the variability of the prices is expected to be 
+pronounced when returns are measured at daily frequency.  
+ 
+ 
+Values Standard Error T statistics P values 
+𝒖 0.000272 0.000137 1.988748 0.046729 
+𝜽 -0.06674 0.024112 -2.76797 0.005641 
+𝝎 1.69E-06 5.11E-07 3.311307 0.000929 
+𝜷 0.873353 0.010796 80.89544 0 
+𝜶 0.104926 0.009394 11.16934 5.76E-29 
+Table 6. Parameter estimation of the MA (1)-GARCH (1,1) model 
+Table 6 presents the estimated MA (1) -GARCH (1,1) model. Observe that 𝛼 is relatively 
+large and 𝛽 is relatively small. The sum of 𝛽 and 𝛼 is around 0.978 that represents a high 
+level of volatility persistence. The following Figure 2.10 exhibits the plot of standardized 
+24 
+residuals and conditional daily variances. Observe the sudden surge of the conditional 
+variance between the interval between  900 to 1000 that corresponds to the dramatic 
+variation of daily returns during the same period in Figure 7.  
+ 
+Figure 10.  The conditional variance and standardized residuals of MA (1)-GARCH (1,1) fitting 
+ 
+Figure 11. The correlogram of squared standardized residuals of MA (1)-GARCH (1,1) fitting 
+Figure 11 exhibits the autocorrelation function of the squared standardized residuals. The 
+autocorrelations are eliminated as expected. Although the MA (1)-GARCH (1,1) captures 
+the conditional heteroskedasticity successfully as suggested by Figures 10  and 11. Figure 
+12 suggests the standardized residuals still presents fat tails.  Another interesting finding is 
+that, compared with Figure 7,  the volatility of SPY daily returns in Figure 10 is much 
+regular. Specifically, the effect of financial crisis in 2008 still stays but other noisy periods 
+start to drop. It might suggest the different effect of intraday events such as mini flash crash 
+and events lasting over days such as the financial crisis in 2008 ove r the daily volatility 
+
+25 
+pattern of SPY .  
+ 
+Figure 10. The Quantile-Quantile Plot of the standardized residuals 
+I now turn to the ex post return variability measure that are calculated from intraday returns. 
+The two measures that we choose are the realized variance and the cumulative absolute 
+returns. Specifically, ∑ |𝑟𝑡,𝑛|𝑁𝑡𝑛=1  and ∑ 𝑟𝑡,𝑛2𝑁𝑡𝑛=1 . 
+ 
+Compared with volatility measures that are based on daily returns that cannot capture the 
+variability of intraday prices movement, the realized volatility gives a more realistic 
+estimation since it takes, at the highest frequency, each tick -by-tick observation int o 
+account. For instance, the intraday price can fluctuate dramatically over the trading day but 
+ends with a value that is very close to the opening price.  
+ 
+I present the comparison of the one-step-ahead MA (1)-GARCH (1,1) daily forecasts with 
+the absolute daily return |𝑅𝑡| = ⌈∑ 𝑟𝑡,𝑛𝑁𝑡𝑛=1 ⌉ , realized variance ∑ 𝑟𝑡,𝑛2𝑁𝑡𝑛=1   and cumulative 
+absolute returns ∑ |𝑟𝑡,𝑛|𝑁𝑡𝑛=1 . Daily returns of SPY from January 3, 2005 to December 31, 
+2013 are employed to estimate the MA (1)-GARCH (1,1) model. Tick-by-tick transactions 
+from January 2, 2014 to December 31, 2014 are used to calculate the realized volatility and 
+cumulative absolute returns and are aggregated to daily frequency to serve as the out -
+sample for the GARCH forecasts. All series are normalized to have an average of one. 
+ 
+
+26 
+The following Figure 13 presents the one-step-ahead GARCH (1,1) forecasts and the daily 
+absolute returns |𝑅𝑡|. The daily absolute returns fluctuate arbitrarily arounds the GARCH 
+predictions. It seems intuitively that the GARCH forecasts should have weak explanatory 
+power of the observed daily variability of returns that is measured by, |𝑅𝑡| = ⌈∑ 𝑟𝑡,𝑛𝑁𝑡𝑛=1 ⌉. 
+Further, it might also implicitly suggest that the ARCH effects of the daily returns have 
+negligible impact on the intraday volatility. However, the suggestion is misleading, since 
+ |𝑅𝑡| = ⌈∑ 𝑟𝑡,𝑛𝑁𝑡𝑛=1 ⌉ = |∑ ln (𝑃𝑡,𝑛+1𝑃𝑡,𝑛𝑁𝑡𝑛=1 )| = |𝑙𝑛𝑃𝑡,𝑁𝑡+1 − 𝑙𝑛𝑃𝑡,1|.                          (17) 
+ 
+(17) suggests that under the assumption that there is no over night effect |𝑅𝑡| = ⌈∑ 𝑟𝑡,𝑛𝑁𝑡𝑛=1 ⌉ 
+should coincide with the daily absolute returns. In real world, the two concepts are not 
+equivalent for sure. Thus, |𝑅𝑡| = ⌈∑ 𝑟𝑡,𝑛𝑁𝑡𝑛=1 ⌉ only catupres the variablility for aggregated 
+tick-by-tick prices. It actully just takes the first and last tick-by-tick prices into account.  
+  
+Figure 13.2 The absolute daily returns and GARCH (1,1) volatility forecasts 
+In contrast, Figure 14 suggests the daily GARCH forecasts are much more in line with the 
+ex post daily return variability measure √∑ 𝑟𝑡,𝑛2𝑁𝑡𝑛=1   and ∑ |𝑟𝑡,𝑛|𝑁𝑡𝑛=1 . These two measures 
+are calculated by tick -by-tick returns and account for the variabili ty of every tick-by-tick 
+return.  
+
+27 
+ 
+Figure 14.3 The cumulative absolute returns, realized volatility and GARCH (1,1) forecasts 
+To further illustrate this issue, I examine the correlations between the daily GARCH 
+forecasts and the other three series. The results are reported in Table 7. 
+ 
+ 
+∑ |𝒓𝒕,𝒏|
+𝑵𝒕
+𝒏=𝟏
+ P value |𝑹𝒕| = ⌈∑ 𝒓𝒕,𝒏𝑵𝒕
+𝒏=𝟏
+⌉ P value √∑ 𝒓𝒕,𝒏𝟐𝑵𝒕
+𝒏=𝟏
+  
+P value 
+𝝈𝒕 0.553814319 1.17E-21 0.236701 1.49E-04 0.559359 3.80E-22 
+       
+ 
+[∑ |𝒓𝒕,𝒏|
+𝑵𝒕
+𝒏=𝟏
+]𝟐 P value 𝑹𝒕𝟐 P value ∑ 𝒓𝒕,𝒏𝟐𝑵𝒕
+𝒏=𝟏
+ P value 
+𝝈𝒕𝟐 0.54229162 1.14E-20 0.230797 2.19E-04 0.548984 3.08E-21 
+Table 7. Correlations between GARCH forecasts and other ex post daily variability measures 
+Table 7 confirms the finding from Figures 13 and 14. The correlation between the GARCH 
+forecasts and the realized volatility is around 0.559. That is, 31.25 percent of the variation 
+in the realized volatility can be explained by the MA  (1)-GARCH (1,1) model. Besides, 
+the correlation between the GARCH forecast and cumulative absolute returns is also as 
+high as 0.5538. In contrast, the correlation between the GARCH forecast and absolute daily 
+returns is only 0.2367. Thus, only about 6 per cent of the variation of the daily absolute 
+returns can be captured by the MA (1)-GARCH (1,1) forecasts.  
+ 
+Moreover, since the GARCH forecasts are based on daily observations, the strong 
+correlation between GARCH forecasts and realized variance cannot be e xplained by only 
+intraday volatility pattern. No matter what the intraday volatility pattern is, it should be 
+annihilated when returns are measured at daily frequency. Consequently, it suggests that 
+
+28 
+the ARCH effects observed at daily frequency have strong impact on the intraday volatility 
+pattern. As a result, ignoring the pronounced ARCH effect at daily frequency and the 
+corresponding GARCH-ARCH forecasts in intraday volatility modelling inevitably results 
+in the loss of a large percentage of predictable intraday return variability.  
+ 
+According to the analysis and discussion in this section, a misspecification of the intraday 
+volatility process might emerge if we cannot capture the daily ARCH effect. The empirical 
+results of Figures 13, 14 and Table 7 justify the daily conditional component  𝜎𝑡 in (10) and 
+support the use of the GARCH prediction to estimate the 𝜎𝑡.  
+5.2 Intraday volatility periodicity 
+In this section, I present our estimation of the intraday volatility periodicity component 𝑠𝑡,𝑛. 
+In Andersen and Bollerslev (1998), the intraday returns are modelled by the following 
+equation.  
+𝑟𝑡,𝑛 = 𝐸(𝑟𝑡,𝑛) + 𝜎𝑡,𝑛𝑠𝑡,𝑛𝑧𝑡,𝑛,                                          (18) 
+where the conditional volatility component is 𝜎𝑡,𝑛 , 𝑠𝑡,𝑛  is the intraday periodicity 
+component and 𝑧𝑡,𝑛 is an iid sequence with zero mean and unit variance. For the estimation 
+of 𝜎𝑡,𝑛, they use the estimator 𝜎𝑡/√𝑁 where 𝜎𝑡 is the daily GARCH estimation. Therefore, 
+the intraday periodicity component 𝑠𝑡,𝑛 is considered as a stochastic process evolving with 
+time and is estimated by flexible Fourier transform. Regarding the functional data analysis 
+of intraday volatility peri odicity are in Muller et al. (2007) and Andersen and Bollerslev 
+(1998). Alternatively, Engle (2012) considers the 𝑠𝑡,𝑛  as constants and grants complete 
+freedom to the daily volatility component 𝜎𝑡. Specifically, 𝑠𝑡,𝑛 = 𝑠𝜏,𝑛 = 𝑠𝑛 for all 𝜏 and 𝑡.  
+ 
+Here, I follow the methodology of Engle (2012) for the estimation of 𝑠𝑡,𝑛  based on 
+following considerations. First, if I assume that the 𝐸(𝑟𝑡,𝑛) in (18) to be zero and replace 
+the intraday volatility component 𝜎𝑡,𝑛 with its estimator 𝜎𝑡/√𝑁. The equation now reduces 
+to (1), which is  
+𝑟𝑡,𝑛 = 1/√𝑁𝜎𝑡𝑠𝑡,𝑛𝑧𝑡,𝑛. 
+29 
+The intraday component in (18) is now 𝑠𝑡,𝑛. It evidently should be assumed as a stochastic 
+process. In contrast, recall the specification of intraday returns in (10),  
+𝑟𝑡,𝑛/√𝑤𝑡,𝑛 = 𝜎𝑡𝜖𝑡,𝑛𝑠𝑡,𝑛𝑧𝑡,𝑛, 
+where 𝜖𝑡,𝑛  is the intraday volatility component and is stochastic. If I consider 𝑠𝑡,𝑛  as a 
+stochastic process, it is hard to assume that it should be independent of 𝜖𝑡,𝑛 and further 
+complicate the picture. In order to explicitly exhibit the intraday return dynamics, it seems 
+natural to assume the periodicity component to be unconditional . Secondly, based on our 
+discussion of realized variance, I should have, 
+𝐸(𝜎𝑡2) = 𝐸(∑ 𝑟𝑡,𝑛2) = ∑ 𝐸(𝑤𝑡,𝑛𝜎𝑡2𝑠𝑡,𝑛2)
+𝑁𝑡
+𝑛=1
+.
+𝑁𝑡
+𝑛=1
+ 
+It intuitively suggests that 𝑠𝑡,𝑛2 should be considered as time invariant as well.  
+ 
+I now present the estimation of intraday periodicity component 𝑠𝑡,𝑛. Since that 𝐸 (
+𝑟𝑡,𝑛2
+𝜎𝑡2 ) =
+𝐸(𝑤𝑡,𝑛𝜖𝑡,𝑛2𝑠𝑡,𝑛2𝑧𝑡,𝑛2) = 𝑤𝑡,𝑛𝑠𝑡,𝑛2 , under the assumption that 𝑤𝑡,𝑛 = 𝑤𝜏,𝑛  for all 𝑡  and 𝜏 
+(time-aggregated returns), a natural way to estimate the 𝑠𝑡,𝑛2 is 
+ 𝑠𝑡,𝑛2̂ = 1𝑇 ∑ 𝑟𝑡,𝑛2𝑤𝑡,𝑛𝜎𝑡2𝑇𝑡=1 .                                                  (19) 
+This is reasonable for intraday return series formed from identical time interval (time -
+aggregated returns). Since my tick-by-tick and transaction -aggregated are not equally 
+spaced in time, in general  the nth return of day t, 𝑟𝑡,𝑛 and nth return of day  𝜏, 𝑟𝜏,𝑛 are not 
+sampled from the same time interval if t ≠ 𝜏. I circumvent the difficulty by followings.  
+ 
+Let 𝑥𝑡,𝑛 represent the time of the nth transaction at day 𝑡. Since 𝑟𝑡,𝑛 = ln (
+𝑃𝑡,,𝑛+1
+𝑃𝑡,𝑛
+), it can be 
+viewed as the return of day 𝑡 on period from 𝑥𝑡,𝑛 to 𝑥𝑡,𝑛+1. I now consider the intraday 
+volatility pattern during the period 𝑥𝑡,𝑛 to 𝑥𝑡,𝑛+1 on each trading day. For another day k,  
+let 𝑘(𝑥𝑡,𝑛+1) = max {𝑠|𝑥𝑘,𝑠 ≤ 𝑥𝑡,𝑛+1, 𝑠 = 1,2,3 … , } ,  𝑘(𝑥𝑡,𝑛) = min{𝑠|𝑥𝑘,𝑠 ≥ 𝑥𝑡,𝑛, 𝑠 =
+1,2,3 … , } . Let 𝑆𝑘(𝑡, 𝑛) = {𝑠|𝑘(𝑥𝑡,𝑛) ≤ 𝑠 ≤ 𝑘(𝑥𝑡,𝑛+1)  . The prices at 𝑥𝑡,𝑛  and 𝑥𝑡,𝑛+1  on 
+day k are conjectured by taking the average of adjacent two transactions in case that  
+𝑆𝑘(𝑡, 𝑛) = ∅. 
+30 
+I then define 𝑉𝑘(𝑡, 𝑛) = 1𝑆[𝑆𝑘(𝑡,𝑛)] ∑ 𝑟𝑘,𝑠2 /𝑤𝑘,𝑠𝜎𝑘2𝑠∈𝑆𝑘(𝑡,𝑛) where 𝑆[𝑆𝑘(𝑡, 𝑛)] is the number of 
+elements in [𝑆𝑘(𝑡, 𝑛)] .Further, 𝑠𝑡,𝑛2̂ = 1𝑁 ∑ 𝑉𝑘(𝑡, 𝑛)𝑁𝑘=1   is applied to estimate the intraday 
+volatility periodicity pattern during that period. The Matlab code for the estimation is given 
+in Appendix C.  
+ 
+My intraday periodicity estimation procedure allows the shape of the periodic pattern 
+depend on the estimated trading period. It turns out to be important for the tick -by-tick 
+return series and transaction -aggregated return series for which the observations are not 
+equally spaced in time. Besides, my approach uses the full tick -by-tick return series to 
+accurately capture the periodicity.  
+ 
+However, due to the extremely large tick-by-tick sample size, the searching algorithm used 
+to find out 𝑆𝑘(𝑡, 𝑛) = {𝑠|𝑘(𝑥𝑡,𝑛) ≤ 𝑠 ≤ 𝑘(𝑥𝑡,𝑛+1)   requires very long execution time. 
+Moreover, the random -access memory requirement for the computation is beyond the 
+capacity of my equipment. However, it is possible for traders with high technique capacity 
+to use the tick-by-tick based algorithm to estimate the intraday periodic volatility pattern. 
+Thus, I choose the time-aggregated returns to examine our specification since searching a 
+regular partition of time massively reduce the computational difficulties.  
+ 
+5.3 Econometrics regarding estimation 
+In this s ection, I discuss statistical properties regarding my model estimation. I estimate 
+the daily conditional volatility component 𝜎𝑡 use the MA (1) -GARCH (1,1) model first. 
+Although in principle the parameters of the model in (10) should be estimated 
+simultaneously, I do not adapt this standard procedure according to the following 
+considerations. First, the daily GARCH model estimation generally requires a relatively 
+large sample. However, the corresponding tick -by-tick high frequency data are not 
+available. Second, a tick-by-tick transaction records of several years will have huge number 
+of observations. E.g. My tick-by-tick transaction  records of symbol SPY during 
+01/02/2014-12/31/2014 has 79156264 observations. Consequently, it rises the practical 
+31 
+difficulty of storing and computing data of such magnitude in a joint estimation. Finally, 
+since 𝜎𝑡 is estimated by MA (1)-GARCH (1,1) without a clear specification in (10), it gives 
+the flexibility to use other daily volatility measures.  
+ 
+Thus, the estimation now is a two -step procedure. The first step I estimate the intraday 
+volatility periodicity component as discussed in Section 5.2. The second step I estimate the 
+GARCH (1,1) model for the stochastic intraday volatility component  𝜖𝑡,𝑛 . In general, 
+results from a multi-step estimation procedure can be flawed by the errors that are induced 
+by errors in the previous estimation steps. In order to show the estimation are consistent, I 
+apply the generalized methods of moments methodology (GMM).  
+ 
+Let 𝜓 be the 𝑘1 parameters estimated at the first step and 𝜃 be the 𝑘2 parameters estimated 
+at the second step. Besides, suppose 𝑔1 (𝜓)  and 𝑔2(𝜓, 𝜃)  are the 𝑘1  and 𝑘2  moments 
+conditions which specify the parameters by true moments. Denote the corresponding 
+sample s um as 𝑔1,𝑀  and  𝑔2,𝑀 . Let 𝑔𝑀 = (𝑔1,𝑀′ , 𝑔2,𝑀′ )′ , 𝛿 = (𝜓𝜃)  and 𝑔(𝛿) = ( 𝑔1(𝜓)𝑔2(𝜓,𝜃)) . 
+The GMM estimator of the parameter can be presented as  
+(𝜓̂𝜃̂) = arg 𝑚𝑖𝑛 𝑔𝑀𝐼𝑔𝑀 = arg min 𝑔𝑀 𝑔𝑀  
+𝐼 is the diagonal matrix. In order to solve the above equation, 𝜓 must solve the equation in 
+first row and 𝜃 should solve the equation in the second row given 𝜓̂. According to Newey 
+and McFadden (1994), if 𝜓̂  and 𝜃̂  are consistent estimators of the 𝜓  and 𝜃 , under quite 
+general conditions (Newey and McFadden 1994) of 𝑔𝑀 , the following estimator 
+√𝑀 (𝜓̂ 𝜓
+𝜃̂ 𝜃) is consistent and asymptotically normal. Specifically, it converges in 
+distribution to  the normal distribution  𝑁(0, 𝐺−1Λ𝐺−1′)  where 𝐺 = 𝐸(𝜕𝑔(𝛿)/𝜕𝛿)  and 
+Λ = E(g(𝛿)𝑔(𝛿)′).  
+ 
+As showed by Hansen (1982) and Eng le (2012), the matrix √𝑀 (𝜓̂ 𝜓
+𝜃̂ 𝜃)  can be 
+consistently estimated by using sample averages to replace expectations and using 
+estimation of parameters to replace parameters. 
+32 
+In the context of my estimation, let 𝑟𝑡,𝑛, 𝜖𝑡,𝑛, 𝜎𝑡 and 𝑠𝑡,𝑛 be defined as in equation (10). I 
+have 
+𝑔1,𝑀(𝜓) = 𝑔1,𝑀 = (
+1/𝑇 ∑
+𝑟𝑡,12
+𝜎𝑡2 −𝑠𝑡,12𝑇𝑡,1
+⋮
+1/𝑇 ∑
+𝑟𝑡,𝑁𝑡2
+𝜎𝑡2 −𝑠𝑡,𝑁𝑡2𝑇𝑡,𝑁𝑡
+), 
+𝑔2,𝑀(𝜓̂, 𝜃) = 𝑔2,𝑀 = 1/𝑇 ∑ ∑ ∑ ∇𝜃(log(𝜖𝑡,𝑛2) + ( 𝑟𝑡,12𝜎𝑡2𝑠𝑡,𝑛2̂ 𝜖𝑡,𝑛2))𝑁𝑡𝑛=1𝑇𝑡=1 , 
+𝐺 =
+1
+𝑀 ∑ (∇𝜓𝑔1 0∇𝜓𝑔2 ∇𝜃𝑔2), 
+                                                  
+1
+𝑀 ∑ ( 𝑔1,𝑡2 𝑔1,𝑡𝑔2,𝑡𝑔1,𝑡𝑔2,𝑡 𝑔2,𝑡2 ) → Λ.                                      (20) 
+The convergence is in the sense of convergence in probability measure. Moreover, the 𝜓̂ 
+and 𝜃̂ estimated at the first and second stage are consistent estimator for 𝜓 and 𝜃 clearly. 
+Under the assumption of stationarity and ergodicity, Large Number Theorem verifies the 
+consistency of  𝜓̂. Consistency of the GARCH parameters can be found in Lee and Hansen 
+(1994) and Bollerslev (1992).  
+6 Empirical results 
+In this section I present the empirical results of my intraday volatility specification of (10). 
+I evaluate the specification from mainly two perspectives. First, I analyze the intraday 
+returns normalized by one -day-ahead GARCH forecasts, the intraday returns normalized 
+by one-day-ahead GARCH forecasts and intraday volatility periodicity pattern. 
+ 
+I use the terminology “normalized returns” to refer to the intraday returns normalized by 
+one-day-ahead GARCH forecasts. Specifically, 𝑟𝑡,𝑛̃ =  𝑟𝑡,𝑛/𝜎𝑡̂  . The terminology  filtered 
+returns’’ are used to describe intraday returns normalized by one -day-ahead GARCH 
+forecasts and intraday volatility periodicity pattern. Specifically,𝑟𝑡,𝑛̂ = 𝑟𝑡,𝑛/𝑤𝑡,𝑛𝜎𝑡̂ 𝑠𝑡,𝑛̂ . As 
+explained in previous section 5.2, the de -seasonal technique requires large amount of 
+computation for the transaction-aggregated returns since it is based on searching tick -by-
+tick transactions records. Thus, I only exhibit the filtered returns for time -aggregated 
+returns. Since those returns are sampled from identical time intervals, the duration 𝑤𝑡,𝑛 in 
+33 
+(10) can be defined as unit. 
+ 
+Second, I present the model estimation for time-aggregated returns at various frequencies. 
+I compare the estimated parameters with the theoretical aggregational prediction of 
+GARCH (1,1) from Nelson (1992) and analyze the model residuals.  
+ 
+6.1 Normalized intraday returns and filtered intraday returns  
+In this section I present the analysis regarding normalized intraday returns and filtered 
+intraday returns. I divide the analysis into two sections. Section 6.1.1 discusses the analysis 
+of the normalized intraday returns. Section 6. 1.2 re presents the analysis of the filtered 
+intraday returns.  
+ 
+ 
+6.1.1   Normalized intraday returns 
+Figure 15 presents the one-day-ahead MA (1)-GARCH (1,1) estimates for the period 
+during 01/02/2014-12/31/2014. The details of the estimation are presented in section 5.1. 
+I now present a summary of descriptive statistics for the normalized intraday returns 
+𝑟𝑡,𝑛/𝜎𝑡̂ .  
+ 
+ 
+Figure 15. One-day-ahead MA (1) -GARCH (1,1) estimation 
+ 
+
+34 
+ 
+Sample 
+Size 
+ Mean Variance Kurtosis Skewness Max Min 𝒑𝟏 (𝒂)𝒑𝟏  (𝒔)𝒑𝟏 
+30Second 196560 1.25E-07 0.001204 167.665 -0.13508 1.385718 -1.46815 -0.10463 0.312765 0.489134 
+1Minute 98280 2.51E-07 0.002231 64.42646 -0.1912 1.408863 -1.45948 -0.08058 0.282229 0.467608 
+1.5Minute 65520 3.76E-07 0.00321 48.6927 -0.16571 1.361122 -1.49995 -0.06177 0.268761 0.453377 
+3Minute 32760 7.52E-07 0.006195 20.9807 -0.26811 1.245272 -1.63514 -0.04921 0.240136 0.378386 
+5Minute 19656 1.25E-06 0.0095 6.321807 -0.14592 0.731673 -0.83181 -0.01585 0.19892 0.15415 
+10Minute 9828 2.51E-06 0.018818 5.993268 -0.22319 0.814763 -0.98106 -0.01946 0.190533 0.125991 
+15Minute 6552 3.76E-06 0.027404 5.769621 -0.23229 0.945254 -1.09734 0.003031 0.181626 0.105811 
+30Minute 3276 7.52E-06 0.055366 5.137176 -0.25934 1.091958 -1.15388 0.008075 0.152081 0.107696 
+78Minute 1260 1.96E-05 0.146711 4.904028 -0.39886 1.448271 -1.88065 0.068372 0.167124 0.112384 
+Table 8. The normalized time-aggregated returns 
+ 
+ 
+Sample 
+Size 
+ Mean Variance Kurtosis Skewness Max Min 𝒑𝟏 (𝒂)𝒑𝟏  (𝒔)𝒑𝟏 
+T=400 198261 -1.9E-06 0.001155 1308.24 0.189044 3.307417 -3.29112 -0.0962854 0.253815 0.499309 
+T=800 98942 -6.1E-06 0.002064 210.4466 0.008546 2.210617 -2.19975 -0.047105 0.182147 0.495312 
+T=1200 65893 -9.5E-06 0.003171 372.8296 0.021205 3.31828 -3.31285 -0.0569775 0.194002 0.497701 
+T=2400 32876 0.000106 0.005926 113.042 2.467613 3.35631 -0.55958 0.00530582 0.064171 0.001178 
+T=4000 19663 1.99E-05 0.009473 3.529551 -0.04754 0.557197 -0.58379 0.00794604 0.07018 0.088125 
+T=8000 9763 -2.2E-05 0.019155 3.4 -0.05032 0.755934 -0.53138 -0.0011895 0.052102 0.050723 
+T=12000 6468 0.000195 0.028742 3.314235 -0.15596 0.696386 -0.64206 -0.0049805 0.059878 0.055918 
+T=24000 3162 0.000689 0.057648 3.233583 -0.15545 0.891024 -0.91855 -0.0108197 0.032436 0.032172 
+T=62000 1165 -0.00216 0.161005 3.056574 -0.13479 1.343841 -1.22803 0.01098296 0.082668 0.060503 
+Table 9. The normalized transaction-aggregated returns 
+Tables 8 and 9 give the descriptive statistics of the time-aggregated returns and transaction-
+aggregated at various frequencies, where 𝑝1 , (𝑎)𝑝1  and (𝑠)𝑝1  are the first lag 
+autocorrelations of the normalized returns, absolute normalized returns and squared 
+normalized returns respectively. 
+ 
+Although I again detect little interests in the sample mean, the skewness and kurtosis have 
+intriguing features. Regarding the kurtosis, it turns out that when returns are measured at 
+the highest frequencies, the normalized time-aggregated returns have much smaller 
+kurtosis compared with the transaction-aggregated returns. For instance, the kurtosis of the 
+normalized 30 -second, 1 -minute, 1.5 -minute and 3 -minute returns series are 167.67, 
+35 
+64.43,48.69 and 20.9807 respectively. Meanwhile, the kurtosis of the corresponding 
+normalized T-400, T-800, T-1200 and T -2400 transaction aggregated returns series are  
+1308.24, 210.45, 372.83 and 113.04 respectively. In other words, transaction -aggregated 
+returns are more fat -tailed compared w ith time -aggregated returns at the highest 
+frequencies. However, when returns are measured at relatively low level of intraday 
+frequency, the normalized transaction -aggregated returns exhibit much regular kurtosis 
+compared with corresponding normalized tim e-aggregated returns. For example, the 
+kurtosis of the corresponding normalized T -4000, T -8000, T -12000 and T -24000 
+transaction aggregated returns series are  3.53, 3.4, 3.33 and 3.23 respectively. However, 
+the corresponding normalized 5-minute, 10-minute, 15-minute and 30-minute return series 
+have kurtosis of 6.32, 5.99, 5.77 and 5.13 respectively. Observe the sharp drop of kurtosis 
+between the T-2400 and T-4000 normalized transaction aggregated returns.  
+ 
+Regarding the skewness, note that the normalized T -4000 and T-8000 return series have 
+skewness that are very close to 0. In contrast, the skewness of normalized time-aggregated 
+returns varies and present no obvious dependence on the return frequencies.  
+ 
+Another important empirical finding comes from the last three columns in Tables 8 and 9. 
+First, both normalized intraday time -aggregated and transaction -aggregated returns are 
+approximately uncorrelated, although there is a small, but significant, negative  first order 
+autocorrelations at the highest frequencies. This is explained the bid -ask bounce as 
+mentioned previously.  
+ 
+Second, in general the normalized intraday returns still exhibit significant volatility 
+clustering feature. For instance, the normalized 1-minute, 1.5-minute and 3-minute squared 
+returns have the first lag autocorrelations of 0.4676, 0.4533 and 0.3784 respectively. 
+Meanwhile, the first lag autocorrelations of these three normalized time-aggregated returns 
+are -0.0806, -0.0618 and -0.0492 that are neglectable from the economic perspective. The 
+normalized transaction-aggregated returns exhibit similar characteristics. For example, the 
+normalized T -800 and T -1200 squared returns have very strong positive first lag 
+autocorrelations of 0.4953 and 0.4978 and meanwhile the first lag autocorrelation of the 
+36 
+normalized T-800 and T-1200 return series are –0.0481 and -0.0570. This finding suggests 
+the intraday returns exhibit strong ARCH effect even after normalizing by ARCH-GARCH 
+daily volatility forecasts. This implicitly supports our specification of (10). However, this 
+intraday ARCH effect generally dies out when return frequencies decrease as suggested by 
+the monotonically decreasing values of the last two columns in Tables 8 and 9.  
+ 
+Third, compared with the normalized time-aggregated return series for which the intraday 
+ARCH effect is significant even at very low intraday frequency, the ARCH effect of 
+normalized transaction-aggregated return series vanishes very quickly. For instance, when 
+the nu mber used to aggregate the tick -by-tick transactions exceeds 2400, the first lag 
+autocorrelation of normalized squared transaction -aggregated returns and normalized 
+absolute transaction-aggregated are of very small values that can be assumed zero plausibly.  
+ 
+Under (10), The normalized time -aggregated intraday returns 
+𝑟𝑡,𝑛
+𝜎𝑡
+= 𝜖𝑡,𝑛𝑠𝑡,𝑛𝑧𝑡,𝑛. Thus, in 
+addition to the discussed conditional heteroskedasticity, it should present the intraday 
+periodicity pattern as well. I here present the correlogram  of the normalized 5 -minute 
+absolute return series and the normalized 10 -minute absolute return series for up to five 
+trading days.  
+ 
+Figure 4.  The correlogram of normalized 5-minute absolute returns 
+
+37 
+ 
+Figure 17. The correlogram of normalized 10-minute absolute returns 
+Figures 16 and 17 exhibit strong periodic pattern as expected. Compared with the Figures 
+5 and 6 in section 3, a salient feature is that the normalized intraday returns now no longer 
+constantly possess significant autocorrelations for the lags up to five trading days.  
+ 
+6.1.2  The filtered intraday returns 
+In this section, I discuss the filtered intraday returns 𝑟𝑡,𝑛̂ = 𝑟𝑡,𝑛/𝜎𝑡̂ 𝑠𝑡,𝑛̂  . I first present a 
+graphic illustration of our estimation of 𝑠𝑡,𝑛. To be consistent with the previous description, 
+I use the 5-minute time intervals to present the intraday periodicity.  
+ 
+Figure 18 presents the expected U-shape of intraday periodicity. It starts at the highest level 
+when market opens and then gradually decreases with time. It reaches the lowest value at 
+the forty 5-minute trading interval that is around 12:50. After that, it increases with time 
+until the market is closed.  
+ 
+
+38 
+ 
+Figure 18. The estimated intraday periodicity for each 5-minute time interval 
+ 
+ 
+Sample 
+Size 
+ Mean Variance Kurtosis Skewness Max Min 𝒑𝟏 (𝒂)𝒑𝟏  (𝒔)𝒑𝟏 
+30Second 196560 -0.00037 1.000005 16.04269 -0.04466 15.14489 -15.1776 -0.04421 0.237787 0.39142 
+1Minute 98280 -0.00047 1.00001 12.22964 -0.08725 14.24929 -14.3882 -0.05103 0.228836 0.346531 
+1.5Minute 65520 -0.00073 1.000015 12.90129 -0.08684 13.81001 -13.7784 -0.0321 0.217655 0.354665 
+3Minute 32760 -0.00078 1.00003 10.25224 -0.09803 12.36469 -12.5788 -0.03602 0.205242 0.321281 
+5Minute 19656 -0.00078 1.00005 5.63634 -0.13308 6.100498 -8.11604 -0.02155 0.171075 0.145198 
+10Minute 9828 -0.00118 1.0001 5.424702 -0.18769 5.90282 -6.74803 -0.02201 0.169528 0.125574 
+15Minute 6552 -0.00212 1.000148 5.408844 -0.24594 5.388117 -7.40249 0.009641 0.160309 0.099098 
+30Minute 3276 -0.00411 1.000288 4.959931 -0.27933 4.463494 -5.19666 0.012625 0.143373 0.108887 
+78Minute 1260 -0.00165 1.000792 4.869385 -0.34463 4.633105 -4.41664 0.069233 0.181823 0.128609 
+Table 10.1 The filtered time-aggregated returns 
+Table 10 summaries the descriptive statistics regarding the filtered time-aggregated returns 
+at different frequencies. Observe the var iance now is almost unity for filtered time -
+aggregated returns as specified under (10). The filtered time-aggregated returns still present 
+excessive high kurtosis and negative skewness, suggesting that the unconditional 
+distribution is not normal. An interesting finding is that the filtered time-aggregated returns 
+
+39 
+now present little evidence for autocorrelations. Specifically, the first lag autocorrelation 
+for the 30 -second, 1-minute, 1.5-minute, 3-minute and 5 -minute return series are now -
+0.044, -0.051, -0.032, -0.036 and -0.022 respectively. These values are still significant but 
+of small magnitude.  In contrast, the squared filtered time -aggregated return series still 
+present strong autocorrelations as suggested by the last column of Table 10. This implie s 
+the existence of conditional heteroskedasticity.  
+ 
+I carry out the ARCH test (Engle 1988) to verify the conditional heteroskedasticity as in 
+Section 5.1. Specifically, we test the null hypothesis that there is no ARCH effect in the 
+filtered time-aggregated return series against the alternative hypothesis of an ARCH model 
+with two lagged squared innovations that is equivalent to a GARCH (1,1) model locally. 
+ 
+P values Value of T𝑹𝟐 
+ 
+Critical value of T𝑹𝟐  
+30Second 0 32328.71024 9.210340372 
+1Minute 0 12087.05103 9.210340372 
+1.5Minute 0 8450.709077 9.210340372 
+3Minute 0 3402.702996 9.210340372 
+5Minute 0 728.5254549 9.210340372 
+10Minute 0 303.1955374 9.210340372 
+15Minute 0 123.6137445 9.210340372 
+30Minute 0 113.2577976 9.210340372 
+78Minute 0 86.10606377 9.210340372 
+Table 11. ARCH test of filtered time-aggregated returns 
+As the suggested by Table 11, the null hypothesis of no ARCH effect is rejected at all 
+frequencies. The significance level is 0.01. In other words, the time -aggregated returns 
+after normalization by daily condi tional variance and intraday periodicity still present 
+strong conditional heteroskedasticity. Finally, I present the correlogram of the absolute 
+filtered 5-minute and 10-minute time-aggregated return series for up to five days.  
+40 
+ 
+Figure 19. The correlogram of filtered 5-minute absolute returns 
+The autocorrelations of filtered 5 -minute absolute returns decreases now very slowly 
+through the lags since the intraday periodic pattern has been excluded by 𝑟𝑡,𝑛̂ = 𝑟𝑡,𝑛/𝜎𝑡̂ 𝑠𝑡,𝑛̂  . 
+This is in line with autocorrelation structure of GARCH model. The U-shape in the Figures 
+15 and 16 now no longer exist s. It suggests that my estimation of the intraday volatility 
+periodicity is effective. The following Figure 20 is equally telling.  
+ 
+Figure 5. The correlogram of filtered 10-minute absolute returns 
+
+41 
+6.2 Results of GARCH estimation and volatility persistence  
+In this section I present the results of the GARCH estimation. I first exhibit the inadequacy 
+of the standard GARCH modelling for describing intraday volatility process. I then present 
+our GARCH estimation of the filtered time -aggregated return volatility. I focus on the 
+comparison between the estimates and the theoret ical aggregation results from Nelson 
+(1990,1992). Finally, I present the model residuals using the example of 5-minute and 10-
+minute filtered returns.  
+There are vast literatures regarding the modelling of high frequency return dynamics using 
+GARCH (1,1) m odel. Thus, I first examine the effectiveness of the GARCH (1,1) in 
+modelling raw intraday time -aggregated returns. In order to capture the significant first 
+order autocorrelation, I choose the MA (1)-GARCH (1,1) specification.  
+𝑅𝑡,𝑛 = 𝑢 + 𝜃𝜀𝑡,𝑛−1 + 𝜀𝑡,𝑛, 
+𝜀𝑡.𝑛 = 𝜎𝑡.𝑛𝑧𝑡.𝑛, 
+                                                            𝜎𝑡.𝑛2 = 𝜔 + 𝛼𝜀𝑡,𝑛−12 + 𝛽𝜎𝑡,𝑛−12 ,                            (21) 
+where 𝐸𝑡,𝑛−1[(𝜀𝑡,𝑛2 )] = 𝜎𝑡.𝑛2  is the conditional variance and 𝑧𝑡.𝑛~𝑁(0,1) and is iid. 
+The estimation is based on the quasi -maximum likelihood methods. Given the intraday 
+conditional heteroskedasticity discussed previous, it seems natural to choose the GARCH 
+(1,1) specification for the intraday variance modelling since it usually represents a 
+reasonable approximation. Besides, estimating the GARCH (1,1) model across all time -
+aggregated return frequencies yields meaningful comparisons between estimated 
+parameters. In order to describe the volatility persistence implied by the GARCH (1,1) 
+parameters, I use the  half-life” that is the number of periods the process takes for half of 
+the expected reversion backs to the unconditional variance. Specifically, -𝑙𝑛2/𝑙𝑛(𝛼 + 𝛽). 
+The  mean lag” is also supplied as an additional measure of the volatilit y persistence. i.e. 
+𝛼(1 −  𝛼 − 𝛽 +  𝛼𝛽)−1.  
+Nelson (1990,1992) and Drost and Nijman (1993) provide a framework to assess the 
+GARCH parameter estimates at various sampling frequencies. Specifically, consider the 
+GARCH (1,1) at the daily frequency. Let 𝛼(1) and 𝛽(1) be the parameters for the GARCH 
+42 
+(1,1) daily return model, then the 𝛼(𝑡) and 𝛽(𝑡) that are parameters for the GARCH model 
+for the 𝑡-day returns should suffice the equation, 
+                      𝛼(𝑡) + 𝛽(𝑡) = (𝛼(1) + 𝛽(1))𝑡.                                                                   (22) 
+Equation (22) immediately implies that the estimated t-day GARCH half-life should be 
+related with daily GARCH half-life as the following equation,  
+-𝑙𝑛2/ln (𝛽(𝑡) + 𝛼(𝑡)) = −𝑙𝑛2 1
+ln(𝛼(1)+𝛽(1))𝑡 = −
+1
+𝑡
+𝑙𝑛2
+𝑙𝑛(𝛼(1)+𝛽(1)).                                    (23) 
+As a result, the estimated half -life of GARCH models of return series with different 
+sampling frequencies should be stable if they are normalized by corresponding frequencies. 
+Besides, as showed by Nelson (1990, 1992), the relations hold under general conditions of 
+GARCH (1,1), no matter whether the model is mis -specified at some frequencies or not. 
+Empirical evidence for the relations between daily and lower frequency GARCH 
+estimation can  be found in Drost and Nijman (1993), Drost and Werker (1996) and 
+Bollerslev (1997).  
+ 
+𝜶 Standard 
+error 
+𝜷 Standard 
+error 
+𝜶 + 𝜷 Half-life Median lag 
+30-Second 0.157 0.0065542 0.918 0.0022418 1.075 ∞ ∞ 
+1-Minute 0.139047 0.0015039 0.681 0.0051612 0.820047 3.493795158 0.506280349 
+1.5-Minute 0.114605 0.0011804 0.434 0.0053909 0.548605 1.73177985 0.343036541 
+3-Minute 0.290064 0.0067264 0.195893 0.0029211 0.485957 2.881572988 1.524343333 
+5-Minute 0.335584 0.0106232 0.250198 0.0068206 0.585782 6.480334013 3.368093719 
+10-Minute 0.318509 0.0143567 0.472546 0.0092005 0.791055 29.57271835 8.860894976 
+15-Minute 0.278234 0.0100601 0.575654 0.014528 0.853889 65.82402449 13.62654377 
+30-Minute 0.160019 0.0110557 0.7568 0.0083571 0.916819 239.4433497 23.49961427 
+78-Minute 0.148918 0.0177689 0.791006 0.0153911 0.939924 872.6371124 65.30338637 
+Table 10. GARCH estimation of intraday time-aggregated returns 
+The half-life and median-lag in Table 12 are converted into unit minute. Consider the daily 
+MA (1)-GARCH (1,1) estimation that gives the 𝛼 = 0.104 𝑎𝑛𝑑 𝛽 = 0.873, the results of 
+Drost and Nijman (1993) now suggest that the intraday returns should follow weak 
+GARCH (1, 1) processes with 𝛼 + 𝛽 approaching 1 and 𝛼 approaching 0 as the frequencies 
+increase. However, the 𝛼 and 𝛽 in Table 12 behave erratically since the sum of the two 
+parameters does not exhibit such tendency clearly. Moreover, the half-life and median-lag 
+present dramatic variations along with the sample frequencies. It is very clear that a direct 
+43 
+use of GARCH (1,1) specification of intraday return volatility is seriously in doubt. I now 
+present the results of GARCH modelling of the filtered time-aggregated return 𝑅𝑡,𝑛/𝜎𝑡̂ 𝑠𝑡,𝑛̂  
+in further details.   
+ 
+𝝎 
+Stand 
+error 
+T statistics 𝜶 Standard 
+error 
+T statistics 𝜷 Standard 
+error 
+T 
+statistics 
+𝜶 + 𝜷 Half-
+life 
+Median 
+lag 
+30second 0.00471 6.04E-05 77.95481167 0.04074 0.000236967 171.939 0.95588 0.000240364 3976.801 0.9966 102.422 0.4813303 
+1minute 0.00575 0.000113 50.86504525 0.04562 0.000533077 85.58773 0.94968 0.00054553 1740.836 0.9953 147.25 0.9500191 
+1.5minute 0.00592 0.0001692 34.97214726 0.05346 0.000738496 70.29338 0.94265 0.000760529 1276.446 0.9961 266.826 1.4772541 
+3minute 0.0087 0.0003331 26.11107358 0.05715 0.001174732 48.64809 0.93564 0.001247306 750.1245 0.9928 287.116 2.8251007 
+5minute 0.00936 0.0005619 16.65479684 0.06235 0.002083684 29.92373 0.9295 0.002230022 416.8098 0.9918 423.339 4.7158355 
+10minute 0.01609 0.0013179 12.20932696 0.08228 0.003900577 21.09331 0.90385 0.00415363 217.6043 0.9861 496.054 9.3240088 
+15minute 0.02301 0.002541 9.05468895 0.111 0.006779362 16.37279 0.87125 0.007439406 117.1129 0.9822 580.461 14.546339 
+30minute 0.03857 0.0043299 11.19373674 0.10985 0.009813608 11.19374 0.85459 0.01109267 77.04099 0.9644 574.33 25.46061 
+78minute 0.11523 0.0195757 5.886293674 0.18905 0.028076156 6.733532 0.70614 0.033930637 20.81114 0.8952 488.296 61.877751 
+Table 13. GARCH estimation of filtered intraday time-aggregated returns 
+Table 13 suggests that the estimation now is much more in line with theoretical predictions. 
+First, the half -life estimated from various frequencies are relatively stable now. For 
+instance, the half-life estimated from the filtered 5 -minute, 10-minute, 30-minute and 78-
+minute return series are 423.34, 496.05, 580.46, 574.33 and 488.30 respectively. Second, 
+the parameters 𝛼 and 𝛽 are strikingly regular as the theoretical prediction. Observe now 𝛼 
+monotonically decreases and meanwhile 𝛽  monotonically incr eases as the sample 
+frequencies increase. Since the daily MA (1) -GARCH (1,1) estimation that gives the 𝛼 =
+0.104 𝑎𝑛𝑑 𝛽 = 0.873, according to (22), I should observe that 𝛼 + 𝛽 approaches one 
+and 𝛼 approaches zero as the frequencies increases, which is perfectly matched by the 
+empirical results. 
+I now present the residual correlogram of the filtered 5 -minute return series and filtered 
+10-minute return series.  
+44 
+ 
+Figure 01. Residuals correlogram of the filtered 5-minute returns 
+ 
+ 
+Figure 02. Residuals correlogram of the filtered 10-minute returns 
+Figures 21 and 22 suggest that the intraday conditional heteroskedasticity in Figures 19, 20 
+and Table 11 is successfully captured by the GARCH (1,1) model. Figure 23 gives the 
+
+45 
+residual Q-Q plot of the filtered 5 -minute returns, the residuals still present  the fat-tailed 
+property that is widely identified by high frequency financial research. 
+ 
+Figure 03. The Q-Q plot of filtered 5-minute residuals 
+7 Conclusion 
+In this paper I analyze the intraday volatility pattern of the SPY on NYSE. I show that 
+standard time series modelling techniques might draw erroneous conclusions due to the 
+distortion induced by strong intraday volatility periodicity. In order to draw meaningful 
+results from the high frequency intraday data, the modelling of the intraday periodicity 
+pattern is necessary. Based on the tick -by-tick transaction records, I develop a non -
+parametric intraday periodicity modelling methodology that can be used in the data set 
+where observations are not equally spaced in time. However, the estimation procedure for 
+intraday volatility periodicity requires large computation capacities and durations are given 
+exogenously. Further research could be carried out to jointly model the dur ations and 
+intraday volatility. I also examine the relation between the daily and intraday conditional 
+heteroskedasticity. I find out the intraday conditional heteroskedasticity cannot be fully 
+explained by the long -memory characteristics of daily observat ions. I prove that the 
+combination of intraday volatility periodicity and intraday conditional heteroskedasticity 
+helps to explain the intraday volatility pattern.  
+
+46 
+In the analysis of the intraday return dynamics, I find out that a key element that relates  
+closely to the estimation of periodicity and the modelling of instantaneous volatility is the 
+duration between consecutive transactions. 
+47 
+Appendix A.   
+The classic paper of Stephens in 1974 presents a detailed discussion with respect to the 
+empirical distribution function statistics such as the statistics D (derived from 𝐷+ and 𝐷−), 
+𝑊2, V , 𝑈2 and 𝐴2. Given some random sample 𝑥1, 𝑥2, 𝑥3,…, 𝑥𝑛 and the null hypothesis 
+𝐻0 that the random sample comes from a distribution with distribution function 𝐹(𝑥), the 
+EDF statistics compare the 𝐹(𝑥) with the empirical distribution function 𝐹𝑛(𝑥). In our case, 
+we estimate the 𝑢 and 𝜎2 by the average of the sample 𝑥̂ and 𝜎̂2 = ∑ (𝑥𝑖 − 𝑥̂𝑖 )/(𝑛 − 1).  
+ 
+The sample are supposed to be indexed by values in ascending order, 𝑥1 ≤ 𝑥2 ≤ 𝑥3 ≤. . . ≤
+𝑥𝑛. The test procedures are organized as follows.  
+(a) Estimate parameters 𝑢 and 𝜎2 as discussed previously. 
+(b) Calculate 𝑧𝑖 ’s as 𝑧𝑖 = 𝐹(𝑥𝑖) , where  𝐹(𝑥)  is the distribution function of normal 
+distribution with 𝑢 and 𝜎2 estimated in (a).  
+(c) Calculate D, 𝑊2, V , 𝑈2 and 𝐴2 as follows: 
+1. The Kolmogorov statistics D, D+ and D-: 
+       𝐷+ = 𝑚𝑎𝑥1≤𝑖≤𝑛 [( 𝑖𝑛) − 𝑧𝑖] ; 
+𝐷− = 𝑚𝑎𝑥1≤𝑖≤𝑛 [− (𝑖−1𝑛 ) + 𝑧𝑖]; 
+D   = max (𝐷+, 𝐷−). 
+ 
+2. The Cramér–von Mises statistics 𝑊2: 
+             𝑊2 = ∑ [𝑧𝑖 − (2𝑖−1)2𝑛 ]2 + 1/12𝑛𝑛𝑖=1 . 
+ 
+3. The Kuiper statistic V: 
+V= 𝐷+ + 𝐷−. 
+ 
+4. The Waston statistics 𝑈2:  
+𝑈2 =  𝑊2 − 𝑛 (∑ 𝑧𝑖
+𝑛
+𝑛
+𝑖=1
+− 12)
+2
+. 
+48 
+5. The Andersen-Darling statistics 𝐴2: 
+            𝐴2 = − {∑ (2𝑖−1𝑛𝑖=1 )[𝑙𝑛𝑧𝑖+ln(1−𝑧𝑛+1−𝑖)]}𝑛 − 𝑛. 
+  
+I produce my table of critical values by Monte -Carol simulation. The null hypothesis 𝐻0 
+that the sample comes from a normal distribution is rejected if the values of the statistics 
+are larger than the critical values given corresponding significance levels. The test is the 
+traditional upper-tail test.   
+ 
+Statistics Significance level 
+ 
+5% 2.5% 1% 
+D 0.895 0.955 1.035 
+V 1.489 1.585 1.693 
+𝑾𝟐 0.126 0.148 0.178 
+𝑼𝟐 0.116 0.136 0.163 
+𝑨𝟐 0.787 0.918 1.092 
+Table 1.10(a) Critical values of EDF statistics for the null hypothesis of normal 
+distribution.  
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+49 
+Appendix B.   
+The standard Central Limit Theory is the cornerstone of probability theory and statistics. 
+It asserts that: 
+ 
+If {𝑋𝑡}  be a sequence of identically distributed independent random variables with 
+𝐸(𝑋𝑡) = 𝑢 and 𝑉𝑎𝑟(𝑋𝑡) = 𝜎2 for all t. Then,  
+ 𝑙𝑖𝑚
+𝑡→∞
+𝑃 (
+∑ 𝑋𝑡−𝑛𝑢𝑛𝑡=1
+√𝑛𝜎 ≤ 𝑥) = 𝛷(𝑥) , where 𝛷  is the cumulative distribution function of the 
+standard normal distribution.  
+ 
+In many economic circumstances, the i.i.d assumption cannot be assumed to hold easily. 
+Thus, an issue of both practical and theoretical importance is that: 
+ 
+Assume that {𝑋𝑡}𝑡∈𝑍  is a process with zero mean 𝐸(𝑋𝑡) = 0  and finite second moment 
+𝐸(𝑋𝑡2) < ∞ . Define the partial sum 𝑆𝑛 = ∑ 𝑋𝑡𝑛𝑡=1   and its normalized variance 𝑠𝑛2 =
+𝑉𝑎𝑟(𝑆𝑛)
+𝑛 .  Whether or not we can apply the Central Limit Theorem to have 𝑙𝑖𝑚𝑛→∞𝑃(𝑆𝑛 ≤
+𝑥√𝑛𝑠𝑛2) = 𝛷(𝑥) where 𝛷 is the cumulative distribution function of the standard normal 
+distribution. Moreover, if the central limit theorem holds, what is the possible convergence 
+rate. Most of the literatures regarding the convergence rate use the Kolmogorov metric as 
+the metric of underlying {𝑋𝑡}.  Define∆𝑛(𝑥) = | 𝑃(𝑆𝑛 ≤ 𝑥√𝑛𝑠𝑛2) − 𝛷(𝑥) |  and further 
+∆𝑛= sup {∆𝑛(𝑥)|𝑥 ∈ 𝑅}. Hörmann (2009) provides the bounds for normal approximation 
+error ∆𝑛 for dependent {𝑋𝑡}. An important class of dependent {𝑋𝑡} is the ARCH/GARCH 
+process.  
+ 
+In the last decades, the ARCH/GARCH model are widely applied for the modelling of 
+time-varying volatility. In 1997, Duan introduces a general functional form of GARCH 
+model, the so -called augmented GARCH (1,1) process, that contains many existing 
+GARCH mod els as special cases. The augmented GARCH (1,1) process is given by:                                      
+                                                          𝑦𝑡 = 𝜎𝑡𝜀𝑡,  
+                                                 ⋀(𝜎𝑡2) = 𝑐(𝜀𝑡−1)⋀(𝜎𝑡−12) + 𝑔(𝜀𝑡−1),      
+50 
+where ⋀, 𝑐 and 𝑔 are real-valued measurable functions and {𝑦𝑡}𝑡∈𝑍 is a random variable 
+and {𝜀𝑡}𝑡∈𝑍 is an i.i.d sequence. In order to solve 𝜎𝑡2, the definition requires the existence 
+of ⋀−1. Aue et al. (2006) discuss the necessary and sufficient conditions for the augmented 
+GARCH (1,1) model to have a strictly stationary and non-negative solution for 𝜎𝑡2. For the 
+special case of GARCH (1,1),  
+ 
+𝜎𝑡2 = 𝜔 + 𝛽𝜎𝑡−12 + 𝛼𝑦𝑡−12 = 𝜔 + [𝛽 + 𝛼𝜀𝑡−12]𝜎𝑡−12 .  
+ 
+It requires that E(𝑙𝑜𝑔|𝛽 + 𝛼𝜀02|) < 0. Hörmann (2008) analyzes the dependence structure 
+and asymptotical properties of the augmented GARCH process and shows that m-
+dependent approximations { 𝑌𝑡𝑚}  to the original sequence of { 𝑌𝑡}  can be obtained. 
+Specifically, ||𝑌𝑡𝑚 − 𝑌𝑡||2 < 𝑐𝑜𝑛𝑠𝑡 ∙ 𝜌𝑚 (𝜌 < 1), where||∙||2 is the 𝐿2 norm. He then uses 
+the m-dependent approximations to construct the proof of convergence to normal 
+distribution and corresponding convergence rate. Details of the proof can be found in 
+Hörmann (2008).  
+ 
+Based on this result, consider the ARMA (p,q)-GARCH (1,1) model: 
+𝑥𝑡 = 𝜙1𝑥𝑡−1 + ⋯ + 𝜙𝑝𝑥𝑡−𝑝 + 𝜃1𝑦𝑡−1 + ⋯ + 𝜃𝑞𝑦𝑡−𝑞, 
+𝑦𝑡 = 𝜎𝑡𝜀𝑡, 
+𝜎𝑡2 = 𝜔 + 𝛽𝜎𝑡−12 + 𝛼𝑦𝑡−12. 
+ 
+If a strictly stationary and casual solution of the equation 𝑥𝑡 = 𝜙1𝑥𝑡−1 + ⋯ + 𝜙𝑝𝑥𝑡−𝑝 +
+𝜃1𝑦𝑡−1 + ⋯ + 𝜃𝑞𝑦𝑡−𝑞 exists, Brockwell and Davis (1991) show that the solution can be 
+presented as a linear process ∑ 𝜓𝑖𝑦𝑡−𝑖𝑖  where the coefficients 𝜓𝑖 exponentially decay as 
+the lags. Then the convergence of the distribution of normalized sums of 𝑥𝑡′𝑠 to the normal 
+distribution can be verified. According to Hörmann (2009), if 𝑝 ∈ (2,3] moments exist for 
+𝑥𝑡, ∆𝑛= 𝑂((𝑙𝑜𝑔𝑛)𝑝−1𝑛1− 𝑝2).  
+ 
+However, our tick-by-tick return data presents many erratic statistical features that cannot 
+be explained by the ARMA-GARCH models. The fit of ARMA-GARCH models using 
+tick-by-tick returns gives poor results. The required stationarity is violated since the fit 
+51 
+gives the value of 𝛼 + 𝛽 that exceeds 1. More importantly, the raw tick-by-tick returns 
+are seriously affected by the market microstructural issues such as  split-transactions” 
+which we cannot analyze since the bid and ask prices are not included in the dataset. 
+Thus, a theoretical modelling of the tick-by-tick price dynamics seem to be impractical. 
+52 
+Appendix C 
+The following Matlab program  tickstnadardize” estimates the periodicity pattern for given 
+trading interval. In practice, it is used with other programs jointly. For instance, if I want 
+to filter the transaction -aggregated returns T-400, I will use the T -400 return series and 
+corresponding tick-by-tick table in a for -loop to find out its periodicity pattern. The  for-
+loop will search the whole tick-table. For time-aggregated return series, the computation is 
+much simpler since the for-loop will be executed for fixed time interval.  
+function [r1] =tickstandardize(Ticktable,tradetimes,r) 
+%  tradetimes and r are one day's data for a specific day, Ticktable is 
+%  252*4 cell table for tick transactions 
+ 
+n=length(r); % number of returns in r series 
+  
+for i=1:n 
+s2=tradetimes(i+1);  
+s1=tradetimes(i); % trade interval is [s1 s2] for return r(i) 
+v=[]; 
+  
+for j=1:252 
+  
+ tickprices=Ticktable{1 {j ; 
+ ticktimes=Ticktable{2 {j ; 
+ transactions=[]; % This variable is for the transactions that occurs between s1 and s2 on 
+day j 
+  
+ for k=1:length(ticktimes) 
+      
+     if ticktimes(k)>=s1 && ticktimes(k)<=s2 
+     transactions=[transactions;tickprices(k)]; 
+53 
+     elseif ticktimes(k)>s2 
+     break  
+     end 
+ end 
+ standardizer=log(transactions(2:end))-log(transactions(1:end-1)); 
+ v(j)=sum(standardizer.^2);   % use realized variance to estimate the periodicity  
+end 
+sv=(sum(v)/252)^(1/2); 
+r1(i)=r(i)/sv;  
+end 
+end 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+54 
+The following Matlab program   tfiteration” uses the conditional daily variance and  
+intraday periodicity to normalize the intraday transaction-aggregated returns.  
+ 
+function [p,t,r,adjustr,ar] = tfiteration(data,tickt,tickp,T,v) 
+% This function uses the conditional daily variance and intraday 
+% periodicity to normalize the returns.  
+% data is the spyfiltered data,tickt,tickp are the corresppongding 
+% ticktable, T is the frequency index 
+  
+dayindex=datasort(data{2 ); 
+  
+for i=1:length(dayindex)-1 
+  
+dayprices=data{4 (dayindex(i)+1:dayindex(i+1)); 
+daytradetimes=data{3 (dayindex(i)+1:dayindex(i+1)); % extract the day data 
+  
+  
+[p{i ,t{i ,r{i ,~]=tsprices(dayprices,daytradetimes,T);  % get the intraday transaction -
+aggregated returns.  
+s=[]; 
+for j=1:length(r{i ) 
+t1=t{i (j); 
+t2=t{i (j+1); % [t1,t2] is the timeinterval of jth intraday return  
+prices1=pricelock(t1,tickp,tickt); 
+prices2=pricelock(t2,tickp,tickt); 
+ticksquare=log(prices2./prices1).^2; 
+s(j)=mean(ticksquare./v); %s(j) is actually s^2(j) 
+end 
+  
+55 
+adjustr{i =(r{i /sqrt(v(i)))./sqrt(s); 
+end 
+ar=[];  
+for i=1:length(dayindex)-1 
+ar=[ar, adjustr{i ]; 
+end 
+end 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+56 
+This Matlab program  pricelock” searches the tick -by-tick transaction records for 
+transactions occurring in specific time interval.   
+function [prices] = pricelock(timing,tickp,tickt) 
+for i=1:length(tickp) 
+     
+t=tickt{i ;    %get the ith day tick time table  
+n=length(t);   %n is the length of transactions 
+  
+right=t(t>=timing); 
+left=t(t<=timing); 
+     
+if isempty(right) 
+    pright=tickp{i (end); 
+else 
+   pright=tickp{i (n-length(right)+1); 
+end 
+  
+if isempty(left) 
+    pleft=tickp{i (1); 
+else 
+   pleft=tickp{i (length(left)); 
+end 
+  
+prices(i)=(pright+pleft)/2; 
+end 
+ 
+ 
+ 
+57 
+References 
+Admati, A. and Pfleiderer, P., 1988. A Theory of Intraday Patterns: Volume and Price 
+Variability. Review of Financial Studies, 1(1), pp.3-40. 
+Admati, A. and Pfleiderer, P., 1988. Selling and trading on information in financial 
+markets. American Economic Review, 78 (1988), pp. 96-103 
+Andersen, T. and Bollerslev, T., 1997. Intraday periodicity and volatility persistence in 
+financial markets. Journal of Empirical Finance, 4(2-3), pp.115-158. 
+ 
+Andersen, T. and Bollerslev, T., 1998. Deutsche Mark-Dollar Volatility: Intraday Activity 
+Patterns, Macroeconomic Announcements, and Longer Run Dependencies. The Journal of 
+Finance, 53(1), pp.219-265. 
+ 
+Andersen, T., 1996. Return Volatility and Tr ading Volume: An Information Flow 
+Interpretation of Stochastic Volatility. The Journal of Finance, 51(1), pp.169-204. 
+ 
+Andersen, T. G. (1994). Stochastic Autoregressive Volatility: A Framework for Volatility 
+Modeling. Mathematical Finance, 4, 75-102. 
+ 
+Andersen, T., 2001. The distribution of realized stock return volatility. Journal of 
+Financial Economics, 61(1), pp.43-76. 
+Andersen, T., Bollerslev, T., Diebold, F. and Labys, P., 2000. Exchange Rate Returns 
+Standardized by Realized Volatility are (Nearly) Gaussian. Multinational Finance 
+Journal, 4(3/4), pp.159-179. 
+Andersen, T., T Bollerslev, FX Diebold, P Labys 1999. Realized volatility and 
+correlation. LN Stern School of Finance Department Working Paper. 
+Ané , T. and Geman, H., 2000. Order Flow, Transaction Clock, and Normality of Asset 
+Returns. The Journal of Finance, 55(5), pp.2259-2284. 
+58 
+Baillie, R. and Bollerslev, T., 1991. Intra -Day and Inter -Market Vol atility in Foreign 
+Exchange Rates. The Review of Economic Studies, 58(3), p.565. 
+ 
+Barclay, M. and Warner, J., 1993. Stealth trading and volatility. Journal of Financial 
+Economics, 34(3), pp.281-305. 
+Bauwens and Giot, 2000. The Logarithmic ACD Model: An Application to the Bid-Ask 
+Quote Process of Three NYSE Stocks. Annales d'É conomie et de Statistique, (60), p.117. 
+Bauwens, L. and Giot, P., 2003. Asymmetric ACD models: Introducing price information 
+in ACD models. Empirical Economics, 28(4), pp.709-731. 
+Bauwens, L. and Veredas, D., 2004. The stochastic conditional duration model: a latent 
+variable model for the analysis of financial durations. Journal of Econometrics, 119(2), 
+pp.381-412. 
+Bauwens, L., Preminger, A. and Rombouts, J., 2006. Regime Switching GARCH 
+Models. SSRN Electronic Journal,. 
+Beltratti, A. and Morana, C., 1999. Computing value at risk with high frequency 
+data. Journal of Empirical Finance, 6(5), pp.431-455. 
+Bertram, W., 2004. An empirical investigation of Australian Stock Exchange 
+data. Physica A: Statistical Mechanics and its Applications, 341, pp.533-546. 
+Blume, L., Easley, D. and O'hara, M., 1994. Market Statistics and Technical Analysis: 
+The Role of Volume. The Journal of Finance, 49(1), pp.153-181. 
+Blume, L., Easley, D. and O'Hara, M., 1994. Market Statistics and Technical Analysis: 
+The Role of Volume. The Journal of Finance, 49(1), pp.153-181. 
+Bollerslev, T. and Domowitz, I., 1993. Trading Patterns and Prices in the Interbank 
+Foreign Exchange Market. The Journal of Finance, 48(4), pp.1421-1443. 
+Bollerslev, T. and Ghysels, E., 1996. Periodic Autoregressive Conditional 
+Heteroscedasticity. Journal of Business & Economic Statistics, 14(2), p.139. 
+59 
+ 
+Bollerslev, T. and Ole Mikkelsen, H., 1996. Modeling and pricing long memory in stock 
+market volatility. Journal of Econometrics, 73(1), pp.151-184. 
+Bollerslev, T. and Wright, J., 2000. High Frequency Data, Frequency Domain Inference 
+and Volatility Forecasting. SSRN Electronic Journal,. 
+Bollerslev, T., 1986. Generalized autoregressive conditional heteroskedasticity. Journal of 
+Econometrics, 31(3), pp.307-327. 
+ 
+Bollerslev, T., Chou, R. and Kroner, K., 1992. ARCH modeling in finance.  Journal of 
+Econometrics, 52(1-2), pp.5-59. 
+ 
+Campbell, J., Grossman, S. and Wang, J., 1993. Trading Volume and Serial Correlation 
+in Stock Returns. The Quarterly Journal of Economics, 108(4), pp.905-939. 
+Carrasco, M. and Chen, X., 2002. Mixing and Moments Properties of Various GARCH 
+and Stochastic Volatilities Models. Econometric Theory, 18(1), pp.17-39. 
+Chanda, A., Engle, R. and Sokalska, M., 2005. High Frequency Multiplicative 
+Component GARCH. SSRN Electronic Journal,. 
+Chernov, M. and Ghysels, E., 2000. A study towards a unified approach to the joint 
+estimation of objective and risk neutral measures for the purpose of options 
+valuation. Journal of Financial Economics, 56(3), pp.407-458. 
+Christoffersen, P. and Pelletier, D., 2003. Backtesting Value-at-Risk: A Duration-Based 
+Approach. SSRN Electronic Journal,. 
+Clark, P., 1973. A Subordinated Stochastic Process Model with Finite Variance for 
+Speculative Prices. Econometrica, 41(1), p.135. 
+Cont, R. and Bouchaud, J., 1998. Herd Behavior and Aggregate Fluctuations in Financial 
+Markets. SSRN Electronic Journal,. 
+60 
+Cont, R., 2001. Empirical properties of asset returns: stylized facts and statistical 
+issues. Quantitative Finance, 1(2), pp.223-236. 
+Coronel-Brizio, H. and Herná ndez-Montoya, A., 2005. On fitting the Pareto–Levy 
+distribution to stock market index data: Selecting a suitable cutoff value. Physica A: 
+Statistical Mechanics and its Applications, 354, pp.437-449. 
+Cox, D. and Isham, V., 2018. Point Processes. Boca Raton: Routledge. 
+Cumby, R., Figlewski, S. and Hasbrouck, J., 1993. Forecasting Volatilities and 
+Correlations with EGARCH Models. The Journal of Derivatives, 1(2), pp.51-63. 
+ 
+Dacorogna, M., Mü ller, U., Nagler, R., Olsen, R. and Pictet, O., 1993. A geographical 
+model for the daily and weekly seasonal volatility in the foreign exchange market. Journal 
+of International Money and Finance, 12(4), pp.413-438. 
+ 
+Dacorogna, M., Mü ller, U., Pictet, O. and Olsen, R., 1997. Modelling Short-Term 
+Volatility with GARCH and HARCH Models. SSRN Electronic Journal,. 
+Daley, D. and Vere-Jones, D., 2003. An Introduction to The Theory of Point Processes. 
+New York: Springer. 
+Diebold, F., Hahn, J. and Tay, A., 1999. Multivariate Density Forecast Evaluation and 
+Calibration in Financial Risk Management: High-Frequency Returns on Foreign 
+Exchange. Review of Economics and Statistics, 81(4), pp.661-673. 
+Drost, F. and Nijman, T., 1993. Temporal Aggregation of Garch Processes. Econometrica, 
+61(4), p.909. 
+Drost, F. and Werker, B., 1996. Closing the GARCH gap: Continuous time GARCH 
+modeling. Journal of Econometrics, 74(1), pp.31-57. 
+Drost, F. and Werker, B., 2004. Semiparametric Duration Models. Journal of Business & 
+Economic Statistics, 22(1), pp.40-50. 
+Easley, D., Kiefer, N., O'hara, M. and Paperman, J., 1996. Liquidity, Information, and 
+Infrequently Traded Stocks. The Journal of Finance, 51(4), pp.1405-1436. 
+61 
+Engle, R. and Gallo, G., 2006. A multiple indicators model for volatility using intra-daily 
+data. Journal of Econometrics, 131(1-2), pp.3-27. 
+Engle, R. and Russell, J., 1997. Forecasting the frequency of changes in quoted foreign 
+exchange prices with the autoregressive conditional duration model. Journal of Empirical 
+Finance, 4(2-3), pp.187-212. 
+Engle, R. and Russell, J., 1998. Autoregressive Conditional Duration: A New Model for 
+Irregularly Spaced Transaction Data. Econometrica, 66(5), p.1127. 
+Engle, R. and Sokalska, M., 2011. Forecasting intraday volatility in the US equity market. 
+Multiplicative component GARCH. Journal of Financial Econometrics, 10(1), pp.54-83. 
+ 
+Engle, R., 1982. A general approach to lagrange multiplier model diagnostics. Journal of 
+Econometrics, 20(1), pp.83-104. 
+Engle, R., 1982. Autoregressive Conditional Heteroscedasticity with Estimates of the 
+Variance of United Kingdom Inflation. Econometrica, 50(4), p.987. 
+ 
+Engle, R., 2000. The Econometrics of Ultra-high-frequency Data. Econometrica, 68(1), 
+pp.1-22. 
+Engle, R., 2002. Dynamic Conditional Correlation. Journal of Business & Economic 
+Statistics, 20(3), pp.339-350. 
+Engle, R., Hendry, D. and Richard, J., 1983. Exogeneity. Econometrica, 51(2), p.277. 
+Fama, E., 1965. The Behavior of Stock-Market Prices. The Journal of Business, 38(1), 
+p.34. 
+Farrell, L., 1996. Foreign Exchange Volume: Sound and fury, signifying nothing. BMJ, 
+313(7050), pp.174-174. 
+Feng, D., 2004. Stochastic Conditional Duration Models with "Leverage Effect" for 
+Financial Transaction Data. Journal of Financial Econometrics, 2(3), pp.390-421. 
+62 
+Focardi, S. and Fabozzi, F., 2005. An autoregressive conditional duration model of 
+credit‐risk contagion. The Journal of Risk Finance, 6(3), pp.208-225. 
+Gallant, A., Hsu, C. and Tauchen, G., 2000. Using Daily Range Data to Calibrate Volatility 
+Diffusions and Extract the Forward Integrated Variance. SSRN Electronic J ournal,. 
+ 
+Gallant, A., Rossi, P.E., Tauchen G., 1993. Nonlinear dynamic structures . 
+Econometrica, 61, pp. 871-907 
+Gallant, A., Rossi, P. and Tauchen, G., 1992. Stock Prices and Volume. Review of 
+Financial Studies, 5(2), pp.199-242. 
+Gerhard, F. and Hautsch, N., 2001. Volatility Estimation on the Basis of Price 
+Intensities. SSRN Electronic Journal,. 
+Ghysels, E., and J. Jasiak, 1998, GARCH for irregularly spaced ﬁnancial data: The 
+ACDGARCH model, Studies in Nonlinear Dynamics and Econometrics, 2, 133–149. 
+Ghysels, E., C. Gourieroux, and J. Jasiak, 1998, Stochastic volatility duration models, 
+CIRANO. 
+Ghysels, E., Lee, H. and Siklos, P., 1993. On the (mis)specification of seasonality and its 
+consequences: An empirical investigation with US data. Empirical Economics, 18(4), 
+pp.747-760. 
+Giot, P., 2003. Implied Volatility Indices as Leading Indicators of Stock Index 
+Returns?. SSRN Electronic Journal,. 
+Giot, P., 2005. Market risk models for intraday data.  The European Journal of Finance, 
+11(4), pp.309-324. 
+Gnaciński, P. and Makowiec, D., 2004. Another type of log-periodic oscillations on 
+Polish stock market. Physica A: Statistical Mechanics and its Applications, 344(1-2), 
+pp.322-325. 
+63 
+Goodhart, C. and O'Hara, M., 1997. High frequency data in financial markets: Issues and 
+applications. Journal of Empirical Finance, 4(2-3), pp.73-114. 
+Gramming, J., and Wellner, M. (2002). ‘Modeling the interdependence of volatility and 
+intertransaction duration processes’, Journal of Econometrics, 106: 369 400. 
+Gu, G., Chen, W. and Zhou, W., 2007. Quantifying bid-ask spreads in the Chinese stock 
+market using limit-order book data. The European Physical Journal B, 57(1), pp.81-87. 
+Guillaume, D., Dacorogna, M., Davé , R., Mü ller, U., Olsen, R. and Pictet, O., 1997. From 
+the bird's eye to the microscope: A survey of new stylized facts of the intra -daily foreign 
+exchange markets. Finance and Stochastics, 1(2), pp.95-129. 
+ 
+H. McInish, T. and Wood, R., 1990. A transactions data analysis of the variability of 
+common stock returns during 1980 –1984. Journal of Banking & Finance, 14(1), pp.99 -
+112. 
+ 
+Harris, L. and Gurel, E., 1986. Price and Volume Effects Associated with Changes in the 
+S&P 500 List: New Evidence for the Existence of Price Pressures. The Journal of 
+Finance, 41(4), p.815. 
+Harris, L., 1987. Transaction Data Tests of the Mixture of Distributions Hypothesis.  The 
+Journal of Financial and Quantitative Analysis, 22(2), p.127. 
+Hasbrouck, J. and Sofianos, G., 1993. The Trades of Market Makers: An Empirical 
+Analysis of NYSE Specialists. The Journal of Finance, 48(5), pp.1565-1593. 
+Hasbrouck, J., 1991. The Summary Informativeness of Stock Trades: An Econometric 
+Analysis. Review of Financial Studies, 4(3), pp.571-595. 
+Hautsch, N., 2004. Modelling Irregularly Spaced Financial Data. Berlin: Springer. 
+Heston, S., 1993. Invisible Parameters in Option Prices. The Journal of Finance, 48(3), 
+pp.933-947. 
+Hö rmann, S. (2009). Berry-Esseen bounds for econometric time series. ALEA 6 377–
+397. 
+64 
+Hujer, R. and Vuletic, S., 2005. The Regime Switching ACD Framework: The Use of the 
+Comprehensive Family of Distributions. SSRN Electronic Journal,. 
+Jansen, D. and de Vries, C., 1991. On the Frequency of Large Stock Returns: Putting 
+Booms and Busts into Perspective. The Review of Economics and Statistics, 73(1), p.18. 
+Jasiak, J., 1999. Persistence in Intertrade Durations. SSRN Electronic Journal,. 
+Jirak, M., 2016. Berry–Esseen theorems under weak dependence. The Annals of 
+Probability, 44(3), pp.2024-2063. 
+Jones, C., Kaul, G. and Lipson, M., 1994. Transactions, Volume, and Volatility. Review 
+of Financial Studies, 7(4), pp.631-651. 
+Lee, S. and Hansen, B., 1994. Asymptotic Theory for the Garch (1,1) Quasi-Maximum 
+Likelihood Estimator. Econometric Theory, 10(1), pp.29-52. 
+Lehmann, B. and Modest, D., 1994. Trading and Liquidity on the Tokyo Stock 
+Exchange: A Bird's Eye View. The Journal of Finance, 49(3), pp.951-984. 
+Lumsdaine, R., 1996. Consistency and Asymptotic Normality of the Quasi-Maximum 
+Likelihood Estimator in IGARCH(1,1) and Covariance Stationary GARCH(1,1) 
+Models. Econometrica, 64(3), p.575. 
+Mandelbrot, B., 1963. The Stable Paretian Income Distribution when the Apparent 
+Exponent is Near Two. International Economic Review, 4(1), p.111. 
+Manganelli, S., 2005. Duration, volume and volatility impact of trades. Journal of 
+Financial Markets, 8(4), pp.377-399. 
+Mantegna, R. and Stanley, H., 1995. Scaling behaviour in the dynamics of an economic 
+index. Nature, 376(6535), pp.46-49. 
+McCulloch, J., 1997. Measuring Tail Thickness to Estimate the Stable Index α: A 
+Critique. Journal of Business & Economic Statistics, 15(1), p.74. 
+65 
+Mü ller, U., Dacorogna, M., Davé , R., Olsen, R., Pictet, O. and von Weizsä cker, J., 1997. 
+Volatilities of different time resolutions — Analyzing the dynamics of market 
+components. Journal of Empirical Finance, 4(2-3), pp.213-239. 
+Mü ller, U., Dacorogna, M., Olsen, R., Pictet, O., Schwarz, M. and Morgenegg, C., 1990. 
+Statistical study of foreign exchange rates, empirical evidence of a price change scaling 
+law, and intraday analysis. Journal of Banking & Finance, 14(6), pp.1189-1208. 
+ 
+Nelson, D. and Cao, C., 1992. Inequality Constraints in the Univariate GARCH 
+Model. Journal of Business & Economic Statistics, 10(2), p.229. 
+Nelson, D., 1991. Conditional Heteroskedasticity in Asset Returns: A New 
+Approach. Econometrica, 59(2), p.347. 
+ 
+Newey, W., 1994. The Asymptotic Variance of Semiparametric Estimators. Econometrica, 
+62(6), p.1349. 
+ 
+Richardson, M. and Smith, T., 1994. A Direct Test of the Mixture of Distributions 
+Hypothesis: Measuring the Daily Flow of Information. The Journal of Financial and 
+Quantitative Analysis, 29(1), p.101. 
+Russell, J. and Engle, R., 1998. Econometric Analysis of Discrete-Valued Irregularly-
+Spaced Financial Transactions Data Using a New Autoregressive Conditional 
+Multinomial Model. SSRN Electronic Journal,. 
+Russell, J. and Engle, R., 2005. A Discrete-State Continuous-Time Model of Financial 
+Transactions Prices and Times. Journal of Business & Economic Statistics, 23(2), 
+pp.166-180. 
+Scalas, E., Gorenflo, R. and Mainardi, F., 2000. Fractional calculus and continuous-time 
+finance. Physica A: Statistical Mechanics and its Applications, 284(1-4), pp.376-384. 
+Spierdijk, L., 2004. An empirical analysis of the role of the trading intensity in 
+information dissemination on the NYSE. Journal of Empirical Finance, 11(2), pp.163-
+184. 
+66 
+Tauchen, G. and Pitts, M.,  1983. The Price Variability -Volume Relationship on 
+Speculative Markets. Econometrica, 51(2), p.485. 
+ 
+Taylor, S. and Xu, X., 1997. The incremental volatility information in one million foreign 
+exchange quotations. Journal of Empirical Finance, 4(4), pp.317-340. 
+ 
+Tsay, R., 2003. Analysis of Financial Time Series. Wiley. 
+Veredas, D., Rodriguez-Poo, J., & Espasa, A. (2002). On the (intradaily) seasonality and 
+dynamics of a financial point process: A semiparametric approach, CORE Discussion 
+Paper, 23, Université  Catholique de Louvain. 
+West, K. and Cho, D., 1995. The predictive ability of several models of exchange rate 
+volatility. Journal of Econometrics, 69(2), pp.367-391. 
+ 
+Wood, R., Mcinish, T. and ORD, J., 1985. An Investigation of Transactions Data for NYSE 
+Stocks. The Journal of Finance, 40(3), pp.723-739. 
+ 
+Whittle, P., 1953. The Analysis of Multiple Stationary Time Series.  Journal of the Royal 
+Statistical Society: Series B (Methodological), 15(1), pp.125-139. 
+ 
+Young, M. and Graff, R., 1995. Real estate is not normal: A fresh look at real estate 
+return distributions. The Journal of Real Estate Finance and Economics, 10(3), pp.225-
+259. 
+Zhang, L., 2010. Implied and realized volatility: empirical model selection. Annals of 
+Finance, 8(2-3), pp.259-275. 
+Zhang, L., Mykland, P. and Aï t-Sahalia, Y., 2005. A Tale of Two Time Scales. Journal of 
+the American Statistical Association, 100(472), pp.1394-1411. 
+ 

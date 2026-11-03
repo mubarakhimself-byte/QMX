@@ -1,0 +1,278 @@
+arXiv 1707.01457  https://arxiv.org/abs/1707.01457
+
+You are in a drawdown. When should you start worrying?
+Adam Rej, Philip Seager & Jean-Philippe Bouchaud
+Capital Fund Management, 23 rue de l’Université, 75007 Paris
+Trading strategies that were proﬁtable in the past often degrade with time. Since unlucky streaks can also hit “healthy”
+strategies, how can one detect that something truly worrying is happening? It is intuitive that a drawdown that lasts too long
+or one that is too deep should lead to a downward revision of the assumed Sharpe ratio of the strategy. In this note, we give a
+quantitative answer to this question based on the exact probability distributions for the length and depth of the last drawdown
+for upward drifting Brownian motions. We also point out that both managers and investors tend to underestimate the length
+and depth of drawdowns consistent with the Sharpe ratio of the underlying strategy.
+INTRODUCTION
+The search for automated trading strategies lies at the
+heart of quantitative trading. This is a complex pro-
+cess. First, caution should be exercised to avoid tak-
+ing spurious statistical relationships for viable strategies
+(the so-called data snooping problem). Second, even if
+one believes the relationship to be valid, one has to de-
+termine the amount of “in-sampleness” or overﬁtting that
+has been employed in the process of looking for the strat-
+egy in question. Finally, a trading cost analysis usually
+leads to a slowed-down, lower-Sharpe version of the strat-
+egy. In practice, however, this is not the end of the story.
+The strategy that has made it into production should be
+monitored and its performance should be benchmarked
+against what one believes is the best estimate of the out-
+of-sample Sharpe ratio, with and without costs.
+Let us assume that a manager put into production a
+strategy for which she believes that the best-estimate
+before-cost Sharpe ratio is SR∗. After some time an un-
+welcome event sets in: the gross-of-cost PnL is exhibiting
+a signiﬁcant drawdown. This may either be a drawdown
+thatisparticularlydeeporonethatlastsforlongtime(or
+both). The manager (or the investor!) starts asking her-
+selfwhethershewasrightaboutherbest-estimateSharpe
+ratio. When should she start worrying? In what follows,
+we shall work out how the length and the depth of the
+last drawdown aﬀect the best-estimate Sharpe ratio.
+THE SETUP
+Let us assume that the (log-)PnL of the strategy is well
+modelled by a drifted Brownian motion
+dPnL =µ dt +σ dW (1)
+over a ﬁnite time interval(0,T ). In what follows we will
+normalize the risk such thatσ = 1; the corresponding
+annualized Sharpe ratio is then SR = µ. We measure
+time in years. It is a well-known property of the Brow-
+nian motion that, as long as the interval(0,T ) is ﬁnite,
+the maximum
+PnLmax = max0≤s≤TPnLs (2)
+Figure 1: Schematic representation of a depth and a
+length of a drawdown for a 10y process assuming 257
+trading days per year.
+is well-deﬁned and the last time the maximum occurred,
+smax, is almost surely unique, and deﬁnes the “length”
+of the drawdown, 𝓁 := T−smax. The “depth” of the
+drawdownd> 0 is simply deﬁned as the diﬀerence
+d := PnLmax−PnLT. (3)
+We illustrate these quantities in Figure 1. In the ap-
+pendix we compute the unconditional probability distri-
+butionofthelength ofthelastdrawdown ρ(𝓁|SR)andthe
+probabilitydistributionofthedepthofthelastdrawdown
+ψ(d|SR). These densities depend on the Sharpe ratio of
+the process (1), as well as the total timeT.
+THE TEST
+Having these two densities at her disposal, can the as-
+set manager test her Sharpe ratio hypothesis? Let us
+assume that she plots her PnL and determines that her
+strategy is in a drawdown of depthd and length 𝓁 [1].
+We deﬁne5% extreme drawdown length, conditional on
+the assumed Sharpe ratio SR∗, as
+∫ T
+𝓁5%
+duρ (u|SR∗) = 0.05, (4)
+arXiv:1707.01457v2  [q-fin.PM]  21 Jul 2017
+2
+and thed5%
+∫ ∞
+d5%
+duψ (u|SR∗) = 0.05. (5)
+Both quantities have very intuitive interpretation. For a
+strategy with a Sharpe ratio SR∗ there is only 5% chance
+that the the drawdown will last longer than𝓁5%. In the
+same vein, there is 5% chance that the depth of the draw-
+down will exceedd5%. We show the numerical depen-
+dence of𝓁5% and d5% on the Sharpe ratio in Figures 2
+and 3. These results are consistent with the well-known
+fact (see e.g. [2]) that for a Brownian motion the depth
+of a typical drawdown is inversely related to the Sharpe
+ratio, while the length of drawdown is inversely related
+to the square of the Sharpe ratio. We ﬁtted and overlaid
+this heuristic dependence upon the 5% curves. We ob-
+serve almost perfect match for a wide range of values of
+Sharpe ratios. The mismatch for small Sharpe ratios is
+due to the ﬁnite time interval eﬀects.
+Now the asset manager may compare the values of her
+current drawdown length𝓁 and depthd with the above
+5% values. If either of them lies outside its 5% interval,
+what should the manager conclude? There are essentially
+three possible scenarios.
+• Scenario 1: Both the Brownian model and the as-
+sumption made about the Sharpe ratio SR∗ are ac-
+ceptable. The deep or long drawdown observed is
+just bad luck or, put diﬀerently, a 5% event.
+• Scenario 2: The Brownian model is acceptable but
+the Sharpe ratio SR∗ has been overestimated.
+• Scenario 3: The Brownian model is inadequate and
+underestimates the probability of drawdowns. This
+can happen for various reasons like a non-Gaussian
+distribution of real-life returns, non-stationarity of
+the volatility, or weak positive autocorrelation of
+the returns of the strategy, etc. [3] All these eﬀects
+generate longer and/or deeper drawdowns.
+The last scenario is of course important to keep in
+mind, but we argue that from a practitioner’s point of
+view, it is always better to err on the side of caution,
+so that the Brownian model sets a very useful bench-
+mark. The test we propose clearly does not allow to dis-
+tinguish between the ﬁrst two scenarios. It is thus possi-
+ble that this test will cast doubt on a correctly estimated
+Sharpe ratio, but, again, can serve as a precautionary
+signal. However, we believe that both managers and in-
+vestors tend to underestimate the length and depth of
+perfectly acceptable, “normal” drawdowns. Indeed, there
+is a 5% chance for the drawdown of a ten-year process
+with SR = 0.5 to last 7 years or more! Figures 2 and 3
+are therefore helpful for managers and investors to draw a
+(ﬁne) line between “business as usual” and possibly wor-
+risome events.
+Figure 2: The5% length (in years) of a drawdown as a
+function of the Sharpe ratio for a ten-year process, and
+a ﬁt as𝓁5% = 2.14×SR−2.
+Figure 3: The normalized5% depth of the drawdown
+interval as a function of the Sharpe ratio for a ten-year
+process, and a ﬁt asd5% = 1.50×SR−1.
+The proposed test allows one to update the Sharpe ra-
+tio estimate so that it becomes consistent with the draw-
+down observed. Let us assume, for example, that the
+manager determined that the drawdown depthdobs that
+she had observed is outside the 5% interval,dobs >d 5%.
+She then can use Figure 3 to update the Sharpe ratio to
+SRupdated such that
+∫ ∞
+dobs
+duψ (u|SRupdated) = 0.05. (6)
+In the same way, we may update the Sharpe ratio in order
+3
+Figure 4: The upper boundary of the conditional
+drawdown corridor, deﬁned asP(𝓁≥𝓁+|d∗) = 0.05, for
+diﬀerent values of the Sharpe ratio of a 10y process.𝓁+
+is expressed in years.
+Figure 5: The lower boundary of the conditional
+drawdown corridor, deﬁned asP(𝓁≤𝓁−|d∗) = 0.05, for
+diﬀerent values of the Sharpe ratio of a 10y process.𝓁−
+is expressed in years.
+to render it compatible with the length of the observed
+drawdown.
+Finally, the knowledge of the joint distribution of𝓁
+and d allows us to answer more complex questions. For
+example, having observed a drawdown of depthd∗, one
+can compute the conditional probability of the length𝓁
+of that drawdown. Let us deﬁne the boundaries of the
+90% probability region,𝓁±(d∗), as
+P(𝓁≥𝓁+|d∗) = 0.05, P(𝓁≤𝓁−|d∗) = 0.05. (7)
+In other words, a typical drawdown of depthd∗ should
+last between𝓁− and 𝓁+ with 90 % probability. We plot
+theseboundaryvaluesfordiﬀerentvaluesofSharperatios
+in Figures 4, 5. In particular, we observe that a deep
+drawdown is unlikely to be very short. For example, for
+SR = 1.6, the (unconditional) normalized 5 % depth of
+a drawdown is≈ 0.95, but it is very unlikely that such a
+drawdown will end in less than𝓁−≈ 2 months.
+ACKNOWLEDGEMENTS
+We would like to thank Raphaël Benichou, Emmanuel
+Buﬀet and Kay Wiese for discussions, and Paul Wilmott
+for suggesting to fully exploit the joint distribution of𝓁
+and d.
+APPENDIX : THE UNCONDITIONAL
+DENSITIES
+The maxima of stochastic processes have been exten-
+sively studied in mathematical literature. We shall not
+walk the reader through the history of this research,
+but rather immediately refer to [5, 6] and the references
+therein. These article prove an impressive result regard-
+ing the joint probability density of the value of the max-
+imum (B∗T), time of the last visit time of the maximum
+(θT) and the terminal value of the process (BT) for vari-
+ouslineardiﬀusionprocesses. TheBrownianmotionwith
+drift is a linear diﬀusion process and the corresponding
+joint probability distribution may be found to be
+FBT,B∗T,θT (a,b,s ) = b(b−a)π(s(T−s))3/2×
+exp
+(
+µa− µ2T2 − (b−a)22(T−s)− b22s) .
+(8)
+To adapt this function to the problem at hand, we per-
+form the following change of variables
+d :=b−a, 𝓁 :=T−s, (9)
+which lends the depth of drawdown the status of an in-
+dependent variable. The so-obtained~F (d,b,𝓁 ) is the un-
+conditional joint probability density for the process to
+reach the maximumb at time T−𝓁 and subsequently
+suﬀer a drawdown of depthd.
+Now, the quantities we used in the previous sections
+may be easily derived
+ρ(𝓁) =
+∫ ∞
+−∞
+db
+∫ ∞
+0
+du~F (u,b,𝓁 ), (10)
+ψ(d) =
+∫ ∞
+−∞
+db
+∫ T
+0
+d𝓁~F (d,b,𝓁 ). (11)
+4
+The ﬁrst density may be worked out analytically
+ρ(𝓁) = 2
+( 1√
+T−𝓁φ(µ
+√
+T−𝓁) +µΦ(µ
+√
+T−𝓁)
+)
+×
+( 1√
+𝓁
+φ(µ
+√
+𝓁)−µΦ(−µ
+√
+𝓁)
+)
+. (12)
+Here, φ(x) and Φ(x) are, respectively, the pdf and the
+cdf of the normal distribution. This result has been pre-
+viously found in [7] and [8]. The second density may be
+written as a single integral
+ψ(d) = dπ exp(−µd− µ2T2 )∫ T0 d𝓁 e− d22𝓁(𝓁(T−𝓁))3/2×(
+T−𝓁 +
+√
+2πµ (T−𝓁)
+3
+2 e
+µ2(T−𝓁)
+2 Φ(µ√T−𝓁)) .
+(13)
+[1] In the absence of theσ = 1 normalization, the quantity
+entering the formulae of this paper would be the normal-
+ized depth of drawdownd deﬁned as the dollar amount of
+drawdown divided by the annualized dollar volatility.
+[2] Jean-Philippe Bouchaud, Marc Potters, Theory of Finan-
+cial Risks and Derivative Pricing, Cambridge University
+Press (2nd Edition, 2003)
+[3] On the last point, it would be very interesting to adapt the
+methods of Ref. [4] to compute the drawdown distribution
+of weakly correlated fractional Brownian motions.
+[4] Tridib Sadhu, Mathieu Delorme, Kay Jörg Wiese,Gen-
+eralized arcsine laws for fractional Brownian motion ,
+arXiv:1706.01675, and refs. therein.
+[5] Larry Shepp,The Joint Density of the Maximum and Its
+Location for a Wiener Process with Drift, Journal of Ap-
+plied Probability, Vol. 16, No. 2 (1979), pp. 423 – 427
+[6] Endre Csáki, Antónia Földes, Paavo Salminen, On the
+joint distribution of the maximum and its location for a
+linear diﬀusion, Annales de l’H.P., section B, tome 23, 2
+(1987), pp. 179 – 194
+[7] Emmanuel Buﬀet,On the time of the maximum of Brow-
+nian motion with drift, Journal of Applied Mathematics
+and Stochastic Analysis 16.3 (2003), pp. 201–207.
+[8] Satya Majumdar, Jean-Philippe Bouchaud,Optimal Time
+to Sell a Stock in Black-Scholes Model: Comment on
+"Thou shall buy and hold", by A. Shiryaev, Z. Xu and
+X.Y. Zhou, Quantitative Finance, 8(8), pp. 753–760.

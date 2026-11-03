@@ -1,0 +1,1646 @@
+arXiv 2501.04130  https://arxiv.org/abs/2501.04130
+
+Multiple testing in multi-stream sequential change detection
+Sanjit Dandapanthula ∗
+sanjitd@cmu.edu
+Aaditya Ramdas †
+aramdas@stanford.edu
+October 19, 2026
+Abstract
+Multi-stream sequential change detection involves simultaneously monitoring many data
+streams and raising an alarm when their distributions change. We study the multiple testing
+issues that arise naturally in this setting. We first point out a fundamental tension between the
+criteria used in change detection and multiple testing: any procedure with finite average run
+length (ARL) must have worst-case false discovery rate (FDR) and family-wise error rate equal
+to one. Given this conflict, we find a middle ground by introducing theerror over patience(EOP)
+class of Type I error metrics, which measure error relative to expected monitoring time. To control
+the EOP, we propose procedures combining e-detectors, which generalize Shiryaev-Roberts and
+CUSUM methods, with the recent e-Benjamini-Hochberg and e-Bonferroni methods for multiple
+testing. Our EOP guarantees hold uniformly over changepoints and stopping times with finite
+expectation, allowing dependence when each e-detector remains valid using information from all
+streams. If finite ARL is forfeited, using e-processes instead yields ordinary FDR and per-family
+error control at stopping times. We also prove power and delay bounds for Gaussian changes,
+establish first-order minimax optimality, and compare our procedures with existing methods in
+numerical experiments.
+1 Introduction
+In single-stream sequential change detection, we observe a sequence of random variables(Xt)∞t=1 one
+at a time and our goal is to stop as soon as we detect a change in the data-generating distribution.
+∗Department of Statistics and Machine Learning Department, Carnegie Mellon University
+†Department of Statistics, Stanford University
+1
+arXiv:2501.04130v5  [math.ST]  15 Oct 2026
+The unknown time of the change is called thechangepoint. A common metric considered in this
+setting is the average run length (ARL), which is the expected time until a false alarm when there is
+no change. One typically seeks change detection algorithms that have a small detection delay while
+guaranteeing a lower bound on the ARL.
+The multi-stream setting is concerned with detecting changes in many streams. We do not
+assume that changes, if any, occur at the same time across streams. An algorithm which is effective
+in the single-stream setting may not be good when deployed without alteration on each of the
+multiple streams. This is because we would only obtain a guarantee on the per-stream ARL, but not
+on metrics that evaluate the reported changes across streams.
+For instance, we may want control over the false discovery rate (FDR), which is the expected
+proportion of detections which are false. False detections may be costly, and one may consequently
+desire to control the family-wise error rate (FWER), the probability that at least one reported
+detection is false, or the per-family error rate (PFER), the expected number of false detections.
+These criteria concern which streams are reported to have changed. We therefore study algorithms
+that identify changed streams, in addition to detecting that a change has occurred somewhere.
+We consider monitoring algorithms which report a set of streams at each time, and allow the user
+to decide when to stop. Astopping timeis a rule for stopping that uses only information available
+at the time of the decision. For example, a user might stop when the first change is declared, when
+several changes are declared, or when there are insufficient resources to continue monitoring. We
+seek error guarantees that hold for any such choice, including rules that use observations from all
+streams.
+We first show that finite global-null ARL prevents FDR or FWER control below one at every
+stopping time. Under theglobal null, meaning that no stream ever changes, a finite ARL implies
+that a first alarm occurs almost surely. If we stop at that alarm, all the reported changes are false.
+Thus, the worst-case FDR and FWER over stopping times and choices of changepoints equal one.
+This gives a fundamental tension between finite ARL and error control at arbitrary stopping times.
+Controlling the error at each fixed time is a different requirement.
+We proposeerror over patience(EOP), a class of Type I error metrics for sequential monitoring.
+EOP divides an error criterion, such as FDR or PFER, by expected monitoring time:
+EOP = sup
+changepoints
+sup
+stopping timesτ
+Type I error atτ
+E[τ] .
+2
+Here, the denominator is termedpatience. We take the supremum over stopping times with finite
+expectation. An EOP bound requires the error to be small when the expected monitoring time is
+short, and permits it to grow with expected duration. For example, an EOP bound ofα gives an
+error bound ofαB for any stopping rule with expected duration at mostB. A user with an error
+budget q and expected duration at mostB can therefore takeα = q/B, while still choosing when to
+report using the observed data. We show that FDR EOP control also implies the familiar global-null
+ARL bound1 /α. Its further requirement is to control errors in the reported set at other stopping
+times, including after some streams have changed. We explain these implications and discuss other
+denominators in Section 2.
+To construct procedures with these guarantees, we use e-detectors (Shin et al., 2024). An
+e-detectoris a nonnegative process whose expected value at a stopping time is at most the expected
+stopping time under the null hypothesis. E-detectors generalize the classical Shiryaev–Roberts
+(SR) and cumulative sum (CUSUM) procedures to nonparametric settings: the SR statistic and a
+likelihood-ratio CUSUM statistic are particular examples. Ramdas (2026) relaxes this expectation
+condition to obtain a universal representation of change detection procedures satisfying an ARL
+constraint. We use the stopped expectation bound to control EOP at data-dependent reporting
+times.
+We construct e-d-BH by combining the streamwise e-detectors with the e-Benjamini–Hochberg
+(e-BH) procedure of Wang and Ramdas (2022). We also construct e-d-Bonferroni, which applies
+a common threshold to the e-detectors. With e-d-BH, the evidence in several streams can lower
+the threshold for declaring a change, allowing streams with less evidence to be included. We prove
+that the two procedures control FDR EOP and PFER EOP, respectively, and derive lower bounds
+on the expected time to false declarations. We do not require independence across streams: each
+e-detector must instead remain valid when stopping can use observations from all streams. We state
+this condition precisely in Section 3.1 and give Gaussian and nonparametric examples in Section D.1.
+We then analyze detection in a Gaussian mean-change model in Section 4. We prove finite-sample
+bounds on the number of observations sufficient to detect a prescribed fraction of the changes, and
+use these bounds to control expected delay. The bounds explain how having more changed streams
+reduces the evidence required by e-d-BH. For independent streams and a fixed number of streams,
+we also prove a matching first-order minimax lower bound under the FDR EOP constraint. Both
+e-d-BH and e-d-Bonferroni attain this bound as the error level tends to zero. This establishes their
+3
+leading-order efficiency for identifying changed streams, while leaving room for differences at finite
+error levels.
+In Section 5, we compare the performance of our EOP-controlling procedures with existing
+frequentist and Bayesian identification methods. We evaluate the errors and true discoveries in
+each method’s first report, and include both fixed changepoints and changepoints generated from
+the Bayesian prior. We find that e-d-BH reports more true changes and reports sooner than a
+time-adjusted CUSUM procedure in the fixed-change experiments; Bayesian procedures benefit when
+the data follow their prior. We also show that the gain over e-d-Bonferroni persists with heavy-tailed
+observations and dependent counts. Finally, we compare with classical global detectors at a common
+ARL target. These methods can combine evidence to raise an alarm sooner without deciding which
+streams to report, and the comparison helps explain the additional cost of identification.
+We give the proofs in Appendices A to C, following the order of the main results. In Appendix D,
+we discuss other discounts and further consequences of the error bounds.
+1.1 Related work
+Classical multi-stream change detection often asks when to raise a global alarm, subject to a lower
+bound on the no-change ARL. Examples include the scalable CUSUM procedures of Mei (2010), the
+mixture procedures of Xie and Siegmund (2013), and the asymptotic analysis of Chan (2017). These
+methods can combine moderate evidence from many streams to detect a change quickly, and their
+model assumptions permit detailed analyses of detection delay. We study the additional problem of
+identifying which streams changed. Controlling false discoveries in the reported set can require more
+evidence than raising a global alarm.
+Multiple-testing criteria have also been studied in change detection. Bodenham and Adams
+(2017) discuss false detections and changes correctly detected in a single stream. For independent
+streams, Gandy and Lau (2013) compute p-values from the null distribution of bounded CUSUM
+statistics and apply BH to control FDR at each fixed time. In the parallel setting, Chen et al. (2020)
+study FDR-oriented detection under a Bayesian model, while Lu et al. (2022) develop a broader
+framework for balancing detection errors and utility. Chen and Li (2023) control the expected
+proportion of changed streams among those still being monitored, with declarations permanently
+removing streams. The latter two works derive optimality results under their assumptions on the
+changepoints and data distributions. We treat changepoints as unknown fixed quantities and prove
+4
+bounds that hold for every choice of these times; our error criterion scales with expected monitoring
+time.
+The work of Lee et al. (2026), whose preprint appeared after the first version of our paper, is
+especially close to ours. They usee-values, nonnegative statistics with null expectation at most
+one, to control FDR at each deterministic time in a sensor network whose membership can change.
+For a fixed set of sensors, their basic SHEREF rule is a special case of our fixed-time procedure
+in Section 3.3: it applies e-BH to SR statistics divided by the current time. Their framework
+additionally handles sensor entry and removal, and develops methods to improve power. Our main
+result uses the unnormalized e-detectors to bound error divided by expected monitoring time at an
+arbitrary stopping time.
+2 Setup and error over patience
+We introduce the monitoring problem and the error criteria used throughout the paper. The proofs
+for this section are in Appendix A.
+2.1 Multi-stream sequential change detection
+Let N = {1, 2, . . .}. Suppose we are monitoring K∈N streams of data, denoted( X (k)t )∞t=1 for
+k∈ [K] = {1, . . . , K}. At time t, we observe( X (1)t , . . . , X(K)t ). Each stream has a changepoint
+ξ(k) ∈N∪ {∞}, where ξ(k) = ∞ means that there is no change. Streamk is pre-change at times
+t < ξ(k) and post-change at timest≥ξ (k). We call the vector of changepointsξ = (ξ(1), . . . , ξ(K))
+theconfiguration. Theglobal nullis the configuration ξG = (∞, . . . ,∞)in which no stream changes.
+We allow dependence within and across streams. Let P denote the joint data-generating
+distribution. Theglobal filtration F = (Ft)t≥0 records the information available at each time from
+all streams. Unless specified otherwise, we take
+Ft =σ
+ 
+X (k)s :s≤t, k∈[K] .
+We writeP∞ and E∞ for probability and expectation under a global-null law. Astopping timeis a
+random variable τ∈N∪ {∞} such that {τ≤t} ∈ Ft for every t. All stopping times below refer to
+F, so they may depend on observations from all streams. In Section D.1, we explain why a guarantee
+for stopping times based on one stream need not hold when the other streams are also observed.
+Our guarantees hold for every joint law satisfying the stated assumptions. When taking a supremum
+over configurations, we also take the supremum over all such laws for each configuration.
+5
+Achange monitoring algorithmis a collection of processes φ = (φ(1), . . . , φ(K)), where φ(k)t ∈
+{0, 1} is Ft-measurable. We interpretφ(k)t = 1as a declaration that streamk has changed by timet.
+After accumulating more evidence, the algorithm may change its decision: we allowφ(k)t = 1and
+φ(k)s = 0for s > t. Achange detection algorithmis a pair( φ, τ), which stops atτ and outputs
+(φ(k)τ )Kk=1 whenτ <∞.
+Throughout the paper, writex∨y = max{x, y}and x∧y = min{x, y}. Let Rt = {k : φ(k)t = 1}
+be the set of declared streams andH0(t) = {k : ξ(k) > t}the set of streams that have not yet
+changed. We writeNt = |Rt| for the number of declarations andVt = |Rt ∩ H0(t)| for the number
+that are false. Thefalse discovery proportionis FDPt = Vt/(Nt ∨ 1). The error metrics we consider
+are
+FDR(φ, ξ, t) =E
+ Vt
+Nt ∨1
+
+,FWER(φ, ξ, t) =P(V t ≥1),PFER(φ, ξ, t) =E[V t].(1)
+We use the same definitions at a stopping time, replacingt by τ. These metrics evaluate the set
+currently declared. Retaining all past declarations would produce a different set, to which our
+guarantees need not apply.
+For1 ≤η≤K , let τ ∗η (φ)be the first time at leastη streams are declared. Its expectation under
+the global null is theaverage run length:
+τ ∗η (φ) = inf{t≥1 :N t ≥η},ARL η(φ) =E ∞[τ ∗η (φ)].(2)
+As usual,inf∅=∞. Under a general configuration, we also consider
+τ ∗η (φ, ξ) = inf{t≥1 :V t ≥η},ARL η(φ, ξ) =E[τ∗η (φ, ξ)].(3)
+Thus, ARLη(φ, ξ)is the expected time to at leastη false declarations. The stopping rule defining it
+depends on the unknown changepoints and is mainly of theoretical interest. Theprobability of false
+alarmunder the global null is PF A(φ) = P∞(τ ∗1 (φ) <∞ ). ARL describes false alarms; we study
+detection delay separately under a specified alternative in Section 4.
+2.2 Error over patience
+We first show that any procedure with finite global-null ARL cannot control FDR or FWER below
+one at every stopping time. Under the global null, every declaration is false. A user who waits for
+the first declaration will therefore receive a false discovery, however long the procedure takes to
+make it. The same reasoning applies when the user waits for at leastη declarations. We state this
+observation below.
+6
+Proposition 2.1.IfARL η(φ)<∞, then
+FDR(φ, ξG, τ∗η (φ)) = FWER(φ, ξG, τ∗η (φ)) = 1,PFER(φ, ξ G, τ∗η (φ))≥η.
+Finite ARL ensures that the reporting time in Theorem 2.1 is almost surely finite; we give the
+proof in Section A.1. For example, a procedure whose first false alarm takes10,000observations
+on average still has FDR one when we report at that alarm. Increasing the average wait does not
+change the proportion of false discoveries in this report. Nor does FDR control at each fixed time
+resolve this issue: choosing the reporting time from the data can change its error rate.
+We propose to account for how long we have monitored when measuring Type I error. Dividing
+the error by expected monitoring time distinguishes an early false report from one that requires a
+long wait on average. This leads to the following metric, which we callerror over patience(EOP).
+Let TP denote the set ofF-stopping times with finite expectation underP. Since τ≥ 1, every
+τ∈ TP satisfies1 ≤E [τ ] <∞ and is finite almost surely. We use this class in the EOP definition.
+The run-length lower bounds below also hold when the relevant expectation is infinite.
+Definition 2.2(Error over patience).ForQ∈ {FDR,FWER,PFER}, define
+EOPQ(φ) = sup
+ξ
+sup
+τ∈T P
+Q(φ, ξ, τ)
+E[τ] .(4)
+We typically seek to upper bound EOP at a predefined levelα >0. One can think of smallE[τ ]
+as low patience and largeE[τ]as high patience. More concretely,EOPQ(φ)≤αimplies
+Q(φ, ξ, τ)≤αBwheneverE[τ]≤B.(5)
+For a chosen error budgetq and expected duration B, taking α = q/B therefore suffices. The
+denominator is an expectation: EOP bounds a ratio of expectations, and does not bound the realized
+false discovery proportion orE[FDPτ /τ]. For FDR and FWER, (5) is informative whenαB <1.
+Upper bounding EOPFDR by α also gives ARL1(φ) ≥ 1/α: if the ARL is finite, apply(4) at
+τ ∗1 (φ)under the global null, where the FDP equals one. EOP control asks for more than this
+run-length bound, since it applies to other stopping times and configurations. It is weaker than
+ordinary error control at levelα, since the permitted error grows with expected duration.
+The linear denominator matches the expectation bound of an e-detector, which we define formally
+in Section 3.1. For each error criterion, we construct a procedure whose bound has the form
+Q(φ, ξ, τ)≤αK KXk=1 E[τ∧(ξ (k) −1)]≤αE[τ].(6)
+7
+Each summand counts how long streamk is observed before its change, up to the stopping time.
+Thus, the sharper bound accounts for the time during which each stream can generate a false
+discovery. We useE[τ ]in the EOP definition because it refers to the duration of monitoring without
+requiring the changepoints.
+Other discounts are possible. For a positive nondecreasing functiong : [1,∞ ) → (0,∞ ), one
+could divide the error byg(E[τ]). IfQ≤B Q andEOP Q(φ)≤α, then
+sup
+ξ
+sup
+τ∈T P
+Q(φ, ξ, τ)
+g(E[τ]) ≤supu≥1
+min{BQ, αu}
+g(u) .(7)
+Here BQ = 1for FDR and FWER, andBQ = K for PFER. For example, withg(u) = up,0 < p <1,
+and α≤B Q, the bound isαpB1−pQ . Thus, the linear EOP bound also gives guarantees for slower
+discounts. In Section D.2, we construct procedures for concave discounts directly by changing the
+weights assigned to possible changepoints, and show how the weights affect detection of late changes.
+2.3 Run length when some streams change
+We next show how EOP control gives run-length guarantees when some streams change. The
+global-null ARL only describes a system in which no stream changes. If we raise an alarm after
+declaring at least η streams, we may instead want a long expected wait whenever fewer thanη
+streams actually change. This is the same reporting ruleτ ∗η (φ)as in Theorem 2.1: it counts all
+declarations and does not require knowledge of which are false.
+Suppose at most q streams ever change, whereq is an integer with0 ≤q < η. At the alarm,
+at least η−q declarations must then be false. If we bound how quickly these false discoveries can
+accumulate through EOP, we obtain a lower bound on the expected time to the alarm. Write
+Ξq ={ξ:|{k:ξ (k) <∞}| ≤q},0≤q < η.
+We prove the following bounds in Section A.2. They apply to any monitoring algorithm with the
+stated EOP guarantee.
+Proposition 2.3.For every configuration inΞq,
+E[τ ∗η (φ)]≥ 1−q/ηα ifEOP FDR(φ)≤α,
+E[τ ∗η (φ)]≥ 1β ifEOP FWER(φ)≤β,
+E[τ ∗η (φ)]≥ η−qβ ifEOP PFER(φ)≤β.
+8
+To interpret these bounds, suppose we wait for five declarations when at most two streams
+change. At least three declarations are false, and the false discovery proportion is at least3/5. FDR
+EOP control at levelα therefore requires an expected wait of at least3/(5α); PFER EOP control at
+level β requires at least3/β. FWER only records whether any false declaration occurs, so its bound
+is1/β.
+Taking q = 0recovers the global-null guarantees. Takingq = η− 1covers every configuration
+with fewer than η changes and gives lower bounds1/(αη)from FDR EOP and1 /β from either
+FWER or PFER EOP. The FDR bound decreases as more true changes are allowed because true
+declarations can reduce the false discovery proportion. The PFER bound instead depends on the
+number of false declarations needed to reach the alarm.
+3 Multiple testing with e-detectors
+We now construct procedures that control EOP. We maintain one e-detector for each stream, using
+it to measure evidence that the stream has changed. We then apply a multiple testing rule to theK
+detector values at each time. We first describe how to construct the individual detectors, then prove
+that the resulting reporting rules control false discoveries across streams and stopping times.
+3.1 Constructing e-detectors
+We first give some background on e-values and e-processes. Ane-valuefor a null hypothesis is a
+nonnegative random variable with expectation at most one under every distribution in the null. An
+e-processis a nonnegative process(Et)t≥0, with eachEt measurable with respect toFt, such that
+E[Eτ ] ≤ 1under every null distribution and every almost surely finite stopping timeτ. Thus, an
+e-process yields an e-value whenever it is stopped. One can think of it as accumulating evidence
+against the null; ideally, it grows quickly under an alternative. See Ramdas et al. (2023) for further
+background.
+Ane-detectoris a nonnegative process( Mt)t≥0, with eachMt measurable with respect toFt,
+satisfying M0 = 0and E[Mτ ] ≤E [τ ]for all stopping times with finite expectation under every null
+distribution (Shin et al., 2024; Ramdas, 2026). Unlike an e-process, its null expectation is allowed to
+grow with monitoring time. Thresholding an e-detector atb gives an alarm with ARL at leastb
+(Shin et al., 2024). The stopped expectation bound also applies when we choose to report for reasons
+9
+other than this detector crossing its threshold. We use this property to combine evidence across
+streams.
+For each streamk, we maintain an e-detectorM (k) = (M (k)t )t≥0. A declaration about this stream
+can be false only before its changepoint, so we require its expectation bound up to the last pre-change
+observation:
+E
+h
+M (k)τ∧(ξ (k)−1)i ≤E[τ∧(ξ (k) −1)]for everyk, ξ, τ∈ T P.(8)
+We use the convention∞ −1 = ∞. The inequality must hold under each joint law in the model,
+including when other streams have changed. Under the global null, it is the usual e-detector condition.
+Requiring it for stopping times based on all streams is stronger than requiring it for stopping times
+based on streamkalone.
+We can construct such detectors from successive nonnegative,Ft-measurable evidence factors
+L(k)t . We require that each factor have conditional expectation at most one while its stream remains
+pre-change:
+E[L(k)t | Ft−1]≤1fort < ξ (k).(9)
+Starting both processes at zero, define the SR and CUSUM recursions
+M SR,(k)t = (M SR,(k)t−1 + 1)L(k)t , M CU,(k)t = max{M CU,(k)t−1 ,1}L (k)t .(10)
+We prove in Section B.1 that both recursions satisfy(8). Classical SR and CUSUM statistics are
+specific instances: when the pre-change and post-change observations have known densitiesp0 and p1,
+and the conditional pre-change density given the global past isp0, we can takeLt = p1(Xt)/p0(Xt)
+whenever this ratio is well-defined. We can also choose factors satisfying(9) without specifying
+either density, as in the conditional-symmetry example in Section D.1. The same recursions then
+give nonparametric e-detectors.
+To see how these recursions account for an unknown changepoint, we write them as
+M SR,(k)t =
+tX
+j=1
+tY
+s=j
+L(k)s , M CU,(k)t = max1≤j≤t
+tY
+s=j
+L(k)s .(11)
+Each product measures evidence from observationsj, . . . , t, treating j as a possible changepoint.
+SR sums the evidence over all possible starting times, while CUSUM keeps the largest value. In
+both cases, we start a new product at each observation, so a late change need not overcome all the
+evidence accumulated before it. We prove the error bounds below for any collection of processes
+satisfying (8); the two recursions give concrete choices for the experiments and delay analysis.
+10
+3.2 The e-d-BH and e-d-Bonferroni procedures
+Given one detector M (k) for each stream, we must decide which streams have enough evidence
+to declare a change. We make this decision using allK detector values together. At timet, let
+M [1]t ≥ · · · ≥M[K]t be these values in decreasing order. Given a levelα∈ (0, 1), thee-d-BH procedure
+sets
+rt = max
+
+r∈[K] :M [r]t ≥ Kαr  ,(12)
+with rt = 0when the set is empty, and declares thert streams with largest detector values. We use
+a fixed ordering to break ties. This applies the e-BH rule (Wang and Ramdas, 2022) at each time,
+although an unnormalized e-detector value need not itself be an e-value.
+For a levelβ >0, thee-d-Bonferroni proceduredeclares
+RBonft ={k:M (k)t ≥K/β}.(13)
+With SR inputs, this is precisely a collection of parallel SR charts at the common thresholdK/β. The
+same observation holds for CUSUM inputs. Below, we prove a guarantee for the false declarations
+made by these charts across streams and stopping times.
+The e-d-BH threshold depends on the number of declarations. If several streams have large
+detector values, the threshold for including another stream can be smaller thanK/α. At equal levels
+β = α, e-d-BH includes every declaration made by e-d-Bonferroni. We writeφBH and φBonf for the
+two monitoring algorithms.
+In our main theorem, we prove that e-d-BH controls FDR EOP and e-d-Bonferroni controls
+PFER EOP. We allow each stream to change at a different time, including never, and the reporting
+time may depend on all the observations. We do not require independence across streams; we require
+each detector to satisfy (8) with respect to the global filtration.
+11
+Theorem 3.1(EOP control).Suppose each M (k) satisfies (8). For every configuration andτ∈ TP,
+e-d-BH satisfies
+FDR(φBH, ξ, τ)≤αK KXk=1 E[τ∧(ξ (k) −1)],(14)
+and e-d-Bonferroni satisfies
+PFER(φBonf , ξ, τ)≤βK KXk=1 E[τ∧(ξ (k) −1)].(15)
+In particular, EOPFDR(φBH) ≤α and EOPPFER(φBonf ) ≤β . Since FWER is bounded by PFER,
+we also haveEOPFWER(φBonf )≤β.
+We prove Theorem 3.1 in Section B.2. The main idea is to bound the contribution of each
+false declaration by its stream’s detector value. The BH threshold accounts for the total number
+of declarations when bounding their false proportion; the Bonferroni threshold instead bounds the
+number of false declarations. We then use the stopped expectation bound for each still-null stream
+and sum over streams.
+The bounds retain more information than the EOP guarantee alone. A stream can contribute
+false discoveries only while it remains pre-change, which explains the termE[τ∧ (ξ(k) − 1)]. Under
+the global null, every term equalsE[τ ], giving FDR at mostαE[τ ]for e-d-BH and PFER at most
+βE[τ ]for e-d-Bonferroni. When some streams change, their contributions stop at their changepoints.
+The procedure does not need to know these times to obtain the guarantee.
+For example, if we will report by a horizonH and want FDR at mostq, we can run e-d-BH at
+level α = q/H. We may stop at the first declaration, after several declarations, or at another time
+chosen from the observations, provided it is at mostH. More generally, the same conclusion holds
+for any stopping rule with expected duration at mostH. We use the bounded-horizon choice in the
+experiments.
+We can also express the theorem as a lower bound on the expected time to false declarations.
+This connects the EOP guarantee to the usual ARL criterion and makes its consequences under
+partial changes explicit.
+12
+Corollary 3.2(Run-length bounds).Under the global null, e-d-BH satisfies ARL1(φBH) ≥ 1/α.
+Under any configuration, e-d-Bonferroni satisfies
+ARLη(φBonf , ξ)≥η/β.
+For e-d-BH under a general configuration, we haveARL1(φBH, ξ) ≥ 1/(Kα). If at mostq streams
+ever change, the latter bound improves to1/{(q+ 1)α}.
+Under the global null, the first declaration is necessarily false, so its false discovery proportion is
+one. If some streams have changed, the first false declaration can appear alongside true declarations.
+With at mostq true changes, that report has false discovery proportion at least1/(q + 1). Thus, a
+bound on FDR permits a shorter expected wait to the first false declaration in this case. This also
+agrees with the BH rule: true discoveries can lower the threshold for declaring another stream.
+For e-d-Bonferroni, we bound the expected number of false declarations directly. Reachingη
+false declarations therefore requires an expected wait of at leastη/β, regardless of how many true
+changes have occurred. We prove these claims in Section B.3. The bounds concern the time to false
+declarations, which differs from the time toηdeclarations of either kind in Theorem 2.3.
+3.3 Fixed-time error control
+The EOP guarantee allows the error to grow with expected monitoring time. If we instead want
+FDR at most α at each fixed time, we can normalize the detectors before applying e-BH. For a
+stream that has not changed by timet, (8) gives E[M (k)t ] ≤t . Dividing byt therefore produces an
+e-value. We apply the usual multiple testing procedures to these normalized values.
+For normalized e-d-BH, we replace the thresholdK/(αr)by Kt/(αr), or equivalently use level
+αt = α/t in (12). For normalized e-d-Bonferroni, we replaceK/β by Kt/β. With SR inputs and a
+fixed collection of streams, the normalized BH rule gives the basic SHEREF procedure of Lee et al.
+(2026) as a special case.
+Proposition 3.3(Fixed-time control).Suppose E[M (k)t ] ≤t whenever t < ξ(k). Applying e-BH at
+levelαto(M (k)t /t)Kk=1 gives
+FDR(φ, ξ, t)≤α|H0(t)|K ≤αfor every fixedt.(16)
+Applying e-Bonferroni at levelβ to the same values gives PFER at mostβ|H0(t)|/K. If the full
+stopped expectation bound(8) also holds, then the normalized BH rule has infinite global-null ARL
+forα <1.
+13
+We prove Theorem 3.3 in Section B.4. The fixed-time error bounds require only the expectation
+bound at the time of the report. The infinite-ARL conclusion uses the stronger requirement that the
+detector bound hold at stopping times. We distinguish these assumptions because a fixed-time FDR
+guarantee alone does not apply at the first declaration.
+Normalization makes the evidence threshold increase with time. This differs from the constant
+thresholds used for EOP control, which continue to give the same opportunity to detect a change
+even after a long period without changes. On a finite horizonH, the two calibrations can also be
+compared directly. At a common error targetq, the normalized BH threshold isKt/(qr), whereas
+e-d-BH with EOP levelq/H uses KH/(qr). The normalized rule thus has a smaller threshold before
+H, in exchange for a guarantee at each fixed reporting time. We compare both rules in Section E.2.
+Infinite ARL is compatible with Theorem 2.1, whose premise is finite ARL. It does not by itself
+bound the probability of ever making a false declaration. We next obtain this additional guarantee
+by changing the evidence processes themselves.
+3.4 Using e-processes
+A second option is to require FDR or PFER control at every stopping time, without dividing by
+expected monitoring time. To do so, we maintain an e-processE(k) in each stream in place of its
+e-detector. We require
+E
+h
+E(k)τ∧(ξ (k)−1)i ≤1for everyk, ξ, τ∈ T P.(17)
+The expectation bound is now one, regardless of how long we monitor. We apply the same e-BH
+and e-Bonferroni rules as before, usingE(k)t instead of M (k)t and the constant thresholdsK/(αr)
+andK/β.
+Proposition 3.4(Stopping-time control with e-processes).Under (17), e-BH has FDR at mostα
+and e-Bonferroni has PFER at mostβ for every configuration andτ∈ TP. Under the global null,
+the probability of ever making a declaration is at mostα for e-BH and at mostβ for e-Bonferroni.
+Their global-null ARLs are therefore infinite whenα <1andβ <1, respectively.
+We prove Theorem 3.4 in Section B.5. At levels below one, these procedures must have positive
+probability of never declaring a change under the global null. This is how they provide ordinary
+error control even when we report at the first declaration. In contrast, EOP control permits eventual
+false declarations while accounting for the expected time until the report.
+14
+We can construct suitable e-processes by weighting evidence from possible changepoints. For each
+candidate time j, start with value one beforej and multiply the factorsL(k)s from time j onwards.
+This gives evidence for a change starting atj. Since the actual changepoint is unknown, we combine
+these processes with nonnegative deterministic weights(wj)j≥1 satisfying Pj wj ≤1:
+E(k)t =
+tX
+j=1
+wj
+tY
+s=j
+L(k)s + X
+j>t
+wj.(18)
+The first sum combines the products already started. The second accounts for candidate changepoints
+after t, whose processes still have value one. Under(9), each component has nonincreasing conditional
+expectation before the stream changes. The bound on the total weight then gives(17); we give the
+proof in Section B.5.
+For example,wj = 1/{j(j + 1)} gives positive weight to every candidate changepoint and sums
+to one. The remaining sum in(18) is then1 /(t + 1). Every possible starting time contributes to the
+process, but evidence from a late starting time receives less weight. For a change atν with wν > 0, it
+suffices for the product starting there to reachK/(αrwν)for that component alone to meet the BH
+threshold for r declarations. The corresponding sufficient threshold for an SR e-detector isK/(αr).
+In this sufficient condition, weighting addslog(1/wν)to the log threshold for this product, equal to
+log{ν(ν + 1)} for the example above. Other components of the mixture can also contribute to a
+declaration.
+SR instead assigns weight one to every possible starting time. Its null expectation is allowed to
+grow with time, so a late change receives the same initial weight as an early one. We thus obtain
+different error guarantees by choosing how to combine the same evidence products. In the next
+section, we study how the constant-threshold e-detector procedures translate evidence after a change
+into detection delay.
+4 Power and detection delay for Gaussian changes
+To understand the detection delay of our algorithms, we consider a simple Gaussian mean-change
+setting. We use it to relate the time needed to detect changes to their size, the number of streams,
+and the number of changes we want to identify. We first prove finite-sample power and delay bounds,
+then prove that both procedures attain the smallest possible leading delay term as the error level
+15
+decreases. Suppose the observation vectors are independent over time, with
+X (k)t ∼
+(
+N(0,1), t < ξ(k),
+N(µ,1), t≥ξ (k), µ >0.(19)
+The streams may be dependent. We take the shiftµ to be known and useL(k)t = exp{µX (k)t −µ 2/2}
+in either recursion in(10). The conditional expectation in(9) is one before the change, so all the
+error bounds above apply. WriteI = µ2/2for the mean post-change log likelihood ratio. A likelihood
+product starting at the change therefore accumulates mean log evidencenI after n observations.
+Comparing this growth with the logarithm of the detection threshold explains the dependence onµ
+andαin the bounds below.
+4.1 Power and delay
+Suppose a setS of m∈ [K]streams changes at time ν, while the remaining streams do not change.
+Define
+Tn =
+X
+k∈S
+φ(k)ν+n−1,(20)
+the number of changed streams declared aftern post-change observations. We want at leastr of
+the m changed streams to be declared, with probability at least1−δ . The following theorem gives
+a sufficient number of observations for this to happen, conditional on the observations before the
+change.
+Theorem 4.1(Detecting changed streams).Consider e-d-BH at level α with SR or CUSUM inputs
+under(19). For anyr∈[m]andδ∈(0,1), we haveP(T n ≥r| Fν−1)≥1−δwhenever
+n≥ 4µ2 log Kαr + 8µ2 log mδ(m−r+ 1) .(21)
+The first term reflects the evidence thresholdK/(αr): if at leastr changed streams reach it, BH
+declares them. The second term allows for variation in the accumulated evidence and the desired
+probability of detection. Increasing r lowers the BH threshold, but also requires more changed
+streams to have accumulated enough evidence. Requiring a smaller failure probabilityδ increases
+the bound only logarithmically.
+To detect a fractionc∈ (0, 1)of the changed streams, taker = ⌈cm⌉. The second logarithm is
+then at mostlog{1/[δ(1 −c )]}. For fixedc and δ, a number of post-change observations of order
+[1 +log{K/(αm)}]/µ2 therefore suffices. The logarithmic term decreases when more streams change,
+16
+since more streams can contribute to lowering the BH threshold. The bound grows as1/µ2 when
+the shift becomes smaller.
+If we require allm changed streams to be declared, we taker = m, which replaces the second
+logarithm by log(m/δ). The additional dependence onm comes from requiring that none of the
+changed streams be missed. The reported set may also contain unchanged streams; its FDR remains
+bounded by Theorem 3.1.
+The proof in Section C.1 bounds the probability that a changed stream has insufficient evidence,
+then bounds the number of streams that fall below the threshold. For independent streams, we give
+sharper bounds in Section C.2, including a bound on thetrue discovery rateE[Tn/m], the expected
+proportion of changed streams declared.
+The delay until at leastrchanged streams are declared is
+Dr = inf{n≥1 :T n ≥r}, r∈[m].
+In Section C.3, we prove an expected-delay bound of the same order as(21). This bound does
+not increase for late changes: both SR and CUSUM include a likelihood product starting at each
+possible changepoint, so evidence accumulated fromν onwards gives the same bound regardless ofν.
+Since Dr depends on the unknown changed streams and changepoint, we use it to assess detection
+performance.
+For e-d-Bonferroni at level0< β < K, we replaceK/(αr)in (21) by K/β. At equal levels, its
+sufficient evidence threshold stays fixed as the number of changed streams increases. The lower
+threshold for e-d-BH suggests that it can identify several changes sooner. We compare the actual
+delays and false discoveries in the experiments, since the two procedures control different errors and
+the upper bounds alone do not order their delays.
+These bounds describe a monitoring rule that continues after earlier declarations. If monitoring
+ends at the first alarm, an alarm before the change also matters. We report its probability separately
+in the experiments.
+4.2 Asymptotic optimality
+We now prove a matching first-order lower bound on delay as the error level decreases. We compare
+with every monitoring algorithm satisfying FDR EOP control, including algorithms constructed
+without e-detectors. For this result, we assume that the streams are also independent. LetAα be the
+17
+class of monitoring algorithms withEOPFDR ≤α over every configuration in the Gaussian model
+(19). In particular, the error bound must hold when fewer thanmstreams change.
+Write PS,ν for the law under which precisely the streams inS change at time ν, and write
+Dr(φ; S, ν)to make the dependence of the delay on the procedure and configuration explicit. We
+use the worst conditional expected delay, following the minimax formulation of Lorden (1971):
+Dm,r(φ) = sup
+|S|=m
+sup
+ν≥1
+ess supES,ν[Dr(φ;S, ν)| Fν−1].(22)
+Thus we consider every changed set of sizem and every changepoint. We also condition on the
+observations before the change and take the largest conditional expected delay, apart from histories
+with probability zero. With this criterion, we require a procedure to remain quick even after an
+unfavorable history or a late change. The infimum in the next theorem chooses the best procedure
+subject to the error constraint. As above, monitoring continues after earlier declarations.
+Theorem 4.2(Gaussian optimality).Fix K,1 ≤r≤m≤K , and µ >0. For independent streams
+in(19),
+inf
+φ∈Aα
+Dm,r(φ)∼ 2 log(1/α)µ2 , α↓0.(23)
+Both e-d-BH at levelα and e-d-Bonferroni at levelβ = α, with either SR or CUSUM inputs, attain
+this bound.
+We prove Theorem 4.2 in Section C.4. The lower bound compares a configuration in which stream
+k changes with one in which only that change is removed. The evidence from the other streams has
+the same distribution in both cases, so declaring streamk still requires sufficient evidence from that
+stream. This is where identification differs from raising a global alarm, for which several changed
+streams can contribute evidence about the same event.
+The absence ofK, m, rfrom the leading term comes from holding them fixed whileα tends to
+zero. For example, the logarithm of the BH threshold is
+log Kαr = log 1α + log Kr .
+The first term grows, while the second stays constant. The corresponding logarithm for Bonferroni is
+log(1/α) + logK , so both have the same leading term. Requiringr of a fixed numberm of changed
+streams to cross their thresholds also affects terms below this leading order. The shift size remains
+in the limit because it determines the rateI = µ2/2at which each changed stream accumulates log
+evidence.
+18
+We therefore obtain a sharp first-order delay bound under the EOP constraint, and prove that
+both proposed procedures attain it. Thus EOP control permits asymptotically optimal identification
+of changed streams in this Gaussian setting. The dependence onK, m, ris still present in the
+finite-sample bounds, and differences between BH and Bonferroni can matter at the levels used in
+practice. To compare those differences, or settings with a growing number of streams, we turn to the
+experiments.
+5 Experiments
+We compare our procedures with existing methods for identifying changed streams, then study the
+time needed to identify a substantial fraction of the changes. We also examine the effect of the BH
+threshold with non-Gaussian observations. We use our EOP bounds to calibrate the procedures
+and assess the resulting error and identification at specified reporting times. Finally, we compare
+global detection delays, for methods whose aim is to raise an alarm without identifying the changed
+streams. All code for our experiments can be found at the following GitHub repository:
+https://github.com/sanjitdp/multistream-change-detectors
+5.1 Comparison with existing identification methods
+We simulateK = 100independent Gaussian streams with variance one and shifts of sizeµ = 0.5.
+We use a horizonH = 400and an error budget q = 0.05. For both e-d-BH and e-d-Bonferroni, we
+take α = q/H and use SR statistics. This gives thresholds800,000/r for e-d-BH at rankr, and
+800,000for e-d-Bonferroni. Our EOP bounds then give FDR control for e-d-BH and PFER control
+for e-d-Bonferroni at any reporting time bounded byH.
+We compare with the CUSUM procedure of Gandy and Lau (2013), MD-FDR of Chen et al.
+(2020), and the posterior LFDR procedure of Lu et al. (2022). Gandy–Lau applies ordinary BH to
+p-values computed from the null distribution of bounded CUSUM statistics. We use its fixed-time
+level q and also a time-adjusted levelq/H, which gives FDR at mostq at any reporting time up to
+H. The Bayesian procedures use independent changepoint priors with probability1/2of no change
+and a geometric distribution of mean 100 conditional on a change. Their first-report FDR guarantees
+average over this prior. We give the exact procedures and parameter choices in Section E.1.
+For each method, we stop at its first nonempty declaration, or report an empty set if none is
+made by H. We record FDR and the number of true discoveries in that report. This is a common
+19
+decision for all the methods: the Bayesian procedures have not removed any streams before their
+first report. Each setting uses 3000 paired runs. We consider no changes, 10 or 50 simultaneous
+changes at time 101 or 251, and changes generated from the Bayesian prior.
+Table 1: Error and identification at the first nonempty report through time 400 (an empty set if
+there is no report). There are 100 streams; in the two alternative settings, 50 change by a mean
+of 0.5 at the indicated time. True counts are unconditional and are zero for pre-change or absent
+reports. Entries are estimates (Monte Carlo standard errors) from 3000 paired runs. Smaller FDR↓
+and larger true count↑ are preferable. The methods have different stated guarantees; see the text.
+With K = 100and α = 0.05/400, our SR procedures useM [r]t ≥ 800,000/r for e-d-BH (rankr) and
+M (k)t ≥800,000for e-d-Bonferroni.
+No changes Change at 101 Change at 251
+Method FDR↓FDR↓True count↑FDR↓True count↑
+e-d-BH (ours) .0267 (.0029) .0031 (.0010) 2.050 (.030) .0207 (.0026) 1.982 (.031)
+e-d-Bonferroni (ours) .0267 (.0029) .0032 (.0010) 1.071 (.005) .0203 (.0026) 1.056 (.006)
+Gandy–Lau .9060 (.0053) .6200 (.0088) 1.181 (.044) .8156 (.0070) 0.609 (.034)
+Gandy–Lau (time adj.) .0037 (.0011) .0047 (.0012) 1.752 (.024) .0047 (.0012) 1.822 (.026)
+MD-FDR .0287 (.0030) .0085 (.0016) 2.014 (.030) .0251 (.0029) 1.844 (.027)
+Posterior LFDR .9487 (.0040) .6948 (.0084) 0.400 (.012) .9192 (.0050) 0.102 (.007)
+In Table 1, we find that the error requirement has a substantial effect on the first report. The
+fixed-time Gandy–Lau guarantee does not protect a report made at the first alarm; we observe much
+larger FDR at that time. The time adjustment prevents this accumulation of error. Against this
+adjusted rule, we find that e-d-BH reports more true changes and reports sooner in each fixed-change
+setting. With 50 changes, its mean post-change report delay is about 29 observations, compared
+with 38–39 for the adjusted Gandy–Lau rule. These delays condition on no earlier report; we give
+the pre-change report probabilities and full delay comparisons in Section E.1. Our EOP calibration
+thus provides a useful error bound for data-dependent reporting. We evaluate its consequences at
+the specified reporting rule, without estimating the supremum in EOP.
+We find that MD-FDR reports sooner than e-d-BH for changes at time 101, but later for changes
+at time 251. Its prior assigns less probability to a new change as time passes, whereas our restart
+weights do not decrease. e-d-BH has the largest estimated mean number of true discoveries in the
+first report among the procedures considered in each fixed-change setting, although it does not always
+20
+have the smallest FDR. When we generate changes from the stated prior, the Bayesian procedures
+benefit from this information: posterior LFDR reports much sooner while keeping prior-averaged
+FDR belowq. We include that setting and the sparse alternatives in Section E.1.
+5.2 Time to identify several changes
+A first report may contain only a few true discoveries. To study how long it takes to identify a
+substantial fraction of the changes, we continue monitoring after earlier declarations and record
+the first time at least 80% of the changed streams are declared together. We again useK = 100
+independent Gaussian streams, shifts of size0.5, H = 400and q = 0.05, with either 10 or 50 streams
+changing at time 101. Each setting uses 4000 paired runs. The identification times depend on the
+true changed set and serve only to assess performance.
+We use the same SR inputs and levelα=q/Hfor e-d-BH and e-d-Bonferroni. We also include
+separate SR charts at threshold1/α = 8000, which adjust for monitoring time but not the number of
+streams, and SHEREF at fixed-time FDR levelq. Table 2 reports the mean number of post-change
+observations needed to reach the identification target, together with the probability of any declaration
+by H under the global null. We count the first post-change observation as one; all runs reached the
+target byH.
+Table 2: Gaussian comparison withK = 100, H = 400and q = 0.05, using 4000 paired runs per
+setting. Changes have size0.5and occur at time 101. Null alarm probability is the probability of
+any declaration byH when no stream changes. At descending rankr, e-d-BH uses the SR threshold
+800,000/r; e-d-Bonferroni and the separate SR charts use800,000and8000, respectively. SHEREF
+uses2000 t/r at time t. Identification columns give the mean number of post-change observations
+needed to declare 80% of the changed streams. Parentheses give Monte Carlo standard errors.
+Null alarm Identification delay↓
+Method probability↓10 changes 50 changes
+e-d-BH (ours)0.031 (0.003) 84.7 (0.2) 76.9 (0.1)
+e-d-Bonferroni (ours)0.031 (0.003) 103.8 (0.3) 112.0 (0.1)
+Per-stream SR0.970 (0.003) 61.3 (0.2) 67.9 (0.1)
+SHEREF0.059 (0.004) 77.1 (0.2) 68.3 (0.1)
+21
+We find that e-d-BH identifies 80% of the changes sooner than e-d-Bonferroni, with a larger gain
+when more streams change. Both procedures have the same estimated global-null alarm probability
+in these experiments. With more changed streams, BH can lower its threshold further, whereas
+Bonferroni continues to require the same evidence in each stream. This agrees with the threshold
+dependence in Section 4, although the two procedures control different errors: FDR for e-d-BH and
+PFER for e-d-Bonferroni.
+The separate SR charts identify changes quickly but make a false declaration in nearly every
+global-null run. SHEREF also identifies changes sooner than e-d-BH, using a smaller threshold
+before H, but its fixed-time guarantee does not cover stopping at the first declaration. We therefore
+assess identification time alongside error at the reporting rule of interest. In Section E.2, we give the
+full identification curves and further comparisons of reporting times.
+5.3 Non-Gaussian observations
+We next compare our procedures when the evidence does not come from an independent Gaussian
+model. We consider heavy-tailed observations with dependence across streams, and Poisson counts
+with dependence over time. In both settings, we apply e-d-BH to SR statistics and e-d-Bonferroni to
+both SR and CUSUM statistics, using the same factors andα = 0.05/400. Thus our thresholds are
+8000K/r for e-d-BH at rankr, and8000 K for e-d-Bonferroni. Our bounds give FDR control for
+e-d-BH and PFER control for e-d-Bonferroni at level 0.05 at any reporting time bounded by 400.
+We report ordinary FDR and the expected proportion of already changed streams currently
+declared, which we call the true discovery rate (TDR). Each setting uses 1500 runs. We also include
+SHEREF, which applies e-BH to the SR statistics divided by the current time, at fixed-time FDR
+level 0.05. Its threshold20Kt/r is lower than e-d-BH’s before time 400, and the two declaration sets
+agree at time 400. We give the complete data-generating models in Section E.4.
+5.3.1 Heavy-tailed observations
+For the heavy-tailed observations, we combine shared and stream-specific Student-t noise with three
+degrees of freedom. We consider independent streams and streams with correlationρ = 0.5. The
+changed streams have shifts of size 0.45 or 0.9. We use the bounded factorsL(k)t = 1 + 0.5 sign(X (k)t ),
+which satisfy(9) by conditional symmetry. These factors use the signs of observations, so a large
+outlier cannot by itself contribute arbitrarily large evidence.
+In Figure 1, we change 20 of the 100 streams at time 101.
+22
+0.000
+0.002
+0.004
+0.006
+0.008
+Independent (ρ = 0)
+FDR at time t
+False discovery rate ↓
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+TDR at time t
+True discovery rate ↑
+100 200 300 400
+Time t
+0.000
+0.002
+0.004
+0.006
+0.008
+Correlated (ρ = 0.5)
+FDR at time t
+100 200 300 400
+Time t
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+TDR at time t
+e-d-BH (ours)
+e-d-Bonferroni/SR (ours)
+e-d-Bonferroni/CUSUM (ours)
+SHEREF (fixed-time FDR)
+Figure 1:FDR ↓ and TDR↑ for simultaneous heterogeneous shifts in 20 of 100 heavy-tailed streams at
+time 101. Rows use independent and correlated streams. Our thresholds are800,000/r for e-d-BH at
+rank r, and800 ,000for both e-d-Bonferroni procedures, withα = 0.05/400. SHEREF uses threshold
+2000t/r, for fixed-time FDR level 0.05. Shading shows 1.96 Monte Carlo standard errors over 1500
+runs.
+We find higher identification rates for e-d-BH than for either e-d-Bonferroni procedure. Evidence
+from the larger shifts allows e-d-BH to lower its threshold and identify more of the smaller shifts.
+We observe this gain both for independent and correlated streams, even though the input processes
+use only signs. We find that all four procedures identify nearly all changed streams by the end of
+monitoring; the main difference is how much earlier they become identifiable. Using the same SR
+inputs for e-d-BH and e-d-Bonferroni isolates the effect of their different thresholds.
+We also find that e-d-Bonferroni makes fewer false discoveries, in keeping with its stronger PFER
+requirement. The FDR curves remain well below 0.05 for all four procedures in this experiment.
+SHEREF identifies changes earlier than e-d-BH because its threshold is smaller before time 400. At
+23
+time 400, their thresholds and declaration sets agree. Thus the earlier identification from SHEREF
+accompanies a different error requirement: its guarantee applies at each fixed time, while our
+calibration also covers data-dependent reporting.
+We also consider changes at different times. When ten streams change at time 101 and another
+ten at time 201, we find that e-d-BH retains its identification advantage after the second group
+changes. We give this experiment and its interpretation in Figure 6 in Section E.4.
+5.3.2 Dependent Poisson counts
+We next consider observations with dependence over time. Before a change, streamk has a Poisson
+distribution conditional on the past, with meanak + 0.3X (k)t−1, where the known intercepts alternate
+between ak = 0.1and ak = 1. A change multiplies this conditional mean by 1.75. The streams
+are independent of one another, and we use the exact conditional likelihood ratios to construct
+the e-detectors. At each K∈ {20, 100, 500}, either 10% or 50% of the streams change at time
+101. Figure 2 reports the error and identification rates at time 200. We give the initialization and
+likelihood ratios in Section E.4.
+24
+0.0000
+0.0005
+0.0010
+0.0015
+0.0020
+0.0025
+10% changed
+FDR at time 200
+False discovery rate ↓
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0TDR at time 200
+True discovery rate ↑
+20 100 500
+Number of streams K
+0.0000
+0.0005
+0.0010
+0.0015
+0.0020
+0.0025
+50% changed
+FDR at time 200
+20 100 500
+Number of streams K
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0TDR at time 200
+e-d-BH (ours)
+e-d-Bonferroni/SR (ours)
+e-d-Bonferroni/CUSUM (ours)
+SHEREF (fixed-time FDR)
+Figure 2:FDR ↓ and TDR ↑ at time 200 for Poisson counts whose conditional means depend on the
+previous count. Either 10% or 50% of streams change at time 101. Our thresholds are8000K/r for
+e-d-BH at rankr, and8000 K for both e-d-Bonferroni procedures, withα = 0.05/400. SHEREF uses
+threshold4000 K/r at time 200. The number of streams is on a logarithmic scale. Bars show 1.96
+Monte Carlo standard errors over 1500 runs; some lie inside the markers.
+When half the streams change, we find that e-d-BH’s identification rate remains nearly constant
+as K grows. With 10% changed, it decreases modestly, while the e-d-Bonferroni rates decrease more.
+Here the number of changed streams grows withK. If the number of declarations is proportional to
+K, the step-up thresholdK/(rα)remains of constant order, while the e-d-Bonferroni thresholdK/α
+grows with K. This accounts for the increasing separation between the identification curves. We
+also find a larger gain when half the streams change, since more streams can contribute to lowering
+the threshold.
+The different baseline intensities help explain why identification is incomplete at time 200.
+A change in a low-intensity stream generates fewer additional counts, and hence less likelihood
+25
+evidence, than the same multiplicative change in a high-intensity stream. Many low-intensity changes
+therefore remain undetected at the reporting time. The improvement from e-d-BH concerns the
+fraction identified by that time, rather than recovery of every changed stream. We also find fewer
+false discoveries with the e-d-Bonferroni procedures, which control their expected number; these
+comparisons do not match the achieved FDR.
+5.3.3 Error under no changes
+We also run each model with no changes. In Table 3, we report FDR at time 200, which under the
+global null is the probability of making any declaration at that time. All four procedures have small
+estimated error probabilities in these settings. Together with the alternative results, we find that
+the BH threshold improves identification while keeping the observed FDR below the nominal bound.
+These are evaluations at specified reporting times; they do not estimate the supremum over stopping
+times in EOP. In Section E.2, we also compare our procedures with separate SR charts that do not
+adjust for multiple streams.
+Table 3: Global-null FDR↓ at time 200. Under the global null, this is the probability of any current
+declaration. Entries are estimates (Monte Carlo standard errors) from 1500 runs. The conditional
+mean of each Poisson count depends on its previous count. The SR threshold for e-d-BH is8000K/r;
+the e-d-Bonferroni thresholds for SR and CUSUM are8000K. SHEREF uses SR threshold4000K/r
+at time 200, wherer is the step-up rank. Zero estimates and standard errors mean that no false
+declarations were observed at this time.
+FDR↓
+SettingK
+e-d-BH
+(ours)
+e-d-Bonferroni
+SR (ours)
+e-d-Bonferroni
+CUSUM (ours) SHEREF
+Heavy tails,ρ= 01000.0007 (0.0007) 0.0007 (0.0007) 0.0000 (0.0000) 0.0007 (0.0007)
+Heavy tails,ρ= 0.51000.0007 (0.0007) 0.0007 (0.0007) 0.0000 (0.0000) 0.0013 (0.0009)
+Poisson counts 200.0007 (0.0007) 0.0007 (0.0007) 0.0000 (0.0000) 0.0040 (0.0016)
+Poisson counts 1000.0007 (0.0007) 0.0007 (0.0007) 0.0000 (0.0000) 0.0007 (0.0007)
+Poisson counts 5000.0000 (0.0000) 0.0000 (0.0000) 0.0000 (0.0000) 0.0007 (0.0007)
+5.4 Global detection
+Identifying streams is more demanding than declaring that some change has occurred. To compare
+the latter task, we add Sum-CUSUM (Mei, 2010), the scan and mixture procedureT2 of Xie and
+26
+Siegmund (2013), and the transformed-CUSUM procedure of Chan (2017). We fit thresholds to
+global-null ARL 1000 and validate them on independent runs. We use 50 streams, shifts of size 0.4
+or 0.75, and either 5 or 25 changes at time 101.
+We find that the global procedures usually raise an alarm sooner, particularly when many streams
+change. They can combine evidence across the changed streams without deciding which ones to
+report. We use this comparison to complement the identification lower bound in Theorem 4.2. A
+common ARL also allows different probabilities of an alarm before the change. We report those
+probabilities, validated ARLs, conditional delays and the methods’ tuning choices in Section E.3.
+6 Discussion
+We propose EOP as a Type I error metric for sequential monitoring, and construct e-d-BH and
+e-d-Bonferroni to control it. The metric allows the user to choose when to report while relating
+the permitted error to expected monitoring time. We prove guarantees under the global-filtration
+condition (8), allowing dependence within and across streams, and show that they imply lower bounds
+on the expected time to false declarations. Thus the procedures provide run-length guarantees as
+well as bounds on errors in the set reported at a stopping time. We also show how normalizing the
+e-detectors gives FDR control at each fixed time, and how using e-processes gives FDR control at
+stopping times without the patience denominator.
+For Gaussian changes, we prove finite-sample bounds on the observations sufficient to identify a
+prescribed number of changes. These bounds quantify the effect of the shift size and the number of
+changed streams on detection. For independent streams, we also prove a matching first-order delay
+lower bound under the FDR EOP constraint. Both procedures attain the minimax leading term as
+the error level tends to zero with the number of streams fixed. The lower bound requires control
+over every changepoint configuration: evidence that other streams have changed cannot by itself
+justify declaring a change in a stream that may still be null.
+We find that the EOP-controlling procedures also have useful identification power in the experi-
+ments. e-d-BH reports more true changes and reports sooner than the time-adjusted Gandy–Lau
+procedure in the fixed-change settings. The comparisons also show the benefit of information supplied
+to competing methods: Bayesian procedures can report sooner when the data follow their changepoint
+prior, and global scan and aggregation methods can combine evidence without identifying the affected
+streams. Between our two procedures, we find that the BH threshold improves identification over
+27
+Bonferroni, including with heavy-tailed observations and dependent counts. We report ordinary
+errors alongside these gains, since controlling different error criteria does not imply the same achieved
+FDR.
+Our optimality result fixes the number of streams. Studying a growing number of streams may
+distinguish the BH and Bonferroni thresholds beyond the leading term proved here. Another question
+is how much detection delay is needed when the post-change distribution must be estimated. We
+also allow one changepoint per stream and evaluate the current set of declarations. To extend the
+guarantees to permanent removal of declared streams or repeated changes, we would need to account
+for errors accumulated over successive decisions.
+Acknowledgements
+The vast majority of the theoretical results in this paper were obtained without the use of AI. We
+used AI tools to write code for several of the experiments and to help restructure the paper. The
+authors take full responsibility for the correctness, originality and intellectual integrity of the paper,
+including all theoretical results, experimental code and reported findings.
+References
+Lorden, G. (1971). Procedures for reacting to a change in distribution.The Annals of Mathematical
+Statistics,42(6), 1897–1908.
+Holm, S. (1979). A simple sequentially rejective multiple test procedure.Scandinavian journal of
+statistics, 65–70.
+Mei, Y. (2010). Efficient scalable schemes for monitoring a large number of data streams.Biometrika,
+97(2), 419–433.
+Gandy, A., & Lau, F. D.-H. (2013). Non-restarting cumulative sum charts and control of the false
+discovery rate.Biometrika,100(1), 261–268.
+Xie, Y., & Siegmund, D. (2013). Sequential multi-sensor change-point detection.The Annals of
+Statistics,41(2), 670–692.
+Bodenham, D., & Adams, N. (2017). Continuous monitoring for changepoints in data streams using
+adaptive estimation.Statistics and Computing,27, 1257–1270.
+Chan, H. P. (2017). Optimal sequential detection in multi-stream data.The Annals of Statistics,
+45(6), 2736–2763.
+28
+Chen, J., Zhang, W., & Poor, H. V. (2020). A false discovery rate oriented approach to parallel
+sequential change detection problems.IEEE Trans. Sig. Proc.,68, 1823–1836.
+Lu, Z., Chen, Y., & Li, X. (2022). Optimal parallel sequential change detection under generalized
+performance measures.IEEE Trans. on Signal Proc.,70, 5967–5981.
+Wang, R., & Ramdas, A. (2022). False discovery rate control with e-values.Journal of the Royal
+Statistical Society Series B: Statistical Methodology,84(3), 822–852.
+Chen, Y., & Li, X. (2023). Compound sequential change-point detection in parallel data streams.
+Statistica Sinica,33(1), 453–474.
+Ramdas, A., Grünwald, P., Vovk, V., & Shafer, G. (2023). Game-theoretic statistics and safe
+anytime-valid inference.Statistical Science,38(4), 576–601.
+Shin, J., Ramdas, A., & Rinaldo, A. (2024). E-detectors: A nonparametric framework for sequential
+change detection.The New England J of Stat. in Data Sci.,2(2), 229–260.
+Lee, S., Chen, Y., & Li, X. (2026). Sequential change-point detection with FDR control in reconfig-
+urable sensor networks.IEEE Transactions on Information Theory,72(5), 3312–3326.
+Ramdas, A. (2026). Universality of e-detectors for ARL control [arXiv:2608.12660].
+29
+A Proofs for error over patience
+A.1 Proof of Theorem 2.1
+Proof. Finite expectation implies thatτ ∗η (φ)is finite almost surely. At that time there are at leastη
+declarations, all of which are false under the global null.
+A.2 Proof of Theorem 2.3
+Proof. We need only consider finite expected stopping times. Atτ ∗η (φ), at mostq of the Nτ ≥η
+declarations can be true. HenceVτ ≥η−q≥ 1and Vτ /Nτ ≥ 1 −q/η . Apply the corresponding
+EOP bound.
+B Proofs for multiple testing with e-detectors
+B.1 Validity of the SR and CUSUM constructions
+Proof. We prove that(9) implies (8) for both recursions in(10). Fix a stream and writec = ξ(k) − 1,
+omitting the stream index. Before the change, both recursions satisfy
+E[Mt | Ft−1]≤M t−1 + 1.
+Finite-time integrability of the process stopped atc follows by induction. ThereforeMt∧c − (t∧c )is
+a supermartingale. Optional stopping at the bounded timeτ∧ngives
+E[Mτ∧n∧c ]≤E[τ∧n∧c].
+Fatou’s lemma on the left and monotone convergence on the right give(8). This also coversc = 0,
+sinceM 0 = 0. The product representations (11) follow by induction from the recursions.
+B.2 Proof of Theorem 3.1
+Proof.If e-d-BH declares streamkatτ, thenM (k)τ ≥K/(αN τ ). Thus, pathwise,
+Vτ
+Nτ ∨1 ≤ αK KXk=1 M (k)τ 1{τ <ξ(k)} ≤ αK KXk=1 M (k)τ∧(ξ (k)−1).(24)
+Taking expectations and using(8) proves (14). For e-d-Bonferroni, use1{k∈RBonfτ } ≤βM (k)τ /K, sum
+over the streams still pre-change, and apply the same argument.
+30
+B.3 Proof of Theorem 3.2
+Proof. When the relevant expectations are finite, apply Theorem 3.1 at the corresponding first-alarm
+times. Under the global null, the FDP at the first declaration is one. At the firstη false declarations,
+Vτ ≥η . At the first false declaration under any configuration, the FDP is at least1/K; if at mostq
+streams change, it is at least1/(q+ 1).
+B.4 Proof of Theorem 3.3
+Proof. At a fixed timet, write Z(k)t = M (k)t /t. Each still-null stream satisfiesE[Z(k)t ] ≤ 1. The e-BH
+inequality gives
+FDR(φ, ξ, t)≤αK Xk∈H0(t) E[Z (k)t ]≤α |H0(t)|K .
+The same calculation bounds PFER for e-Bonferroni, using1{Z(k)t ≥K/β} ≤βZ (k)t /K and summing
+overk∈ H0(t).
+For the run-length claim, assume(8). Let T be the first rejection time of e-d-BH applied to
+M (k)t /tat levelα <1. IfE ∞[T]were finite, thenT <∞almost surely and
+KX
+k=1
+M (k)T ≥KT /α.
+Taking expectations and applying (8) under the global null gives
+K
+α E∞[T]≤
+KX
+k=1
+E∞[M (k)T ]≤KE ∞[T],
+which is impossible since1≤E ∞[T]<∞andα <1.
+B.5 Proof of Theorem 3.4
+Proof. Replacing the e-detectors by e-processes in(24) and applying(17) gives FDR control at level
+α. The same substitution in the Bonferroni argument gives PFER control at levelβ.
+Under the global null, letT be the first rejection time for e-BH at levelα. On {T≤n} , we have
+K−1 Pk E(k)T ≥1/α. Nonnegativity and (17) atT∧ntherefore give
+P∞(T≤n)≤ αK KXk=1 E∞[E(k)T∧n ]≤α.
+31
+Letting n→ ∞yields PF A≤α . When α <1, we haveP∞(T = ∞) ≥ 1 −α > 0, so the ARL is
+infinite. For e-Bonferroni, a declaration requires at least oneE(k)T ≥K/β , and the same argument
+withβin place ofαgives its PFA bound and infinite ARL whenβ <1.
+For the weighted restart construction(18), write c = ξ(k) − 1. Under (9), the processE(k)t∧c is a
+nonnegative supermartingale with initial valuePj wj ≤ 1. Indeed, the weightwt moves from the
+unused tail to a new likelihood product at timet, and every active product has conditional expected
+multiplier at most one. Optional stopping atτ∧nand Fatou’s lemma give (17).
+C Proofs for Gaussian changes
+Throughout this appendix, we writeI=µ 2/2andb r = log{K/(αr)}.
+C.1 Proof of Theorem 4.1
+Proof.For a changed streamk∈S, both detectors dominate the likelihood product starting atν:
+M (k)ν+n−1 ≥exp(Z k,n), Z k,n =
+ν+n−1X
+t=ν
+logL (k)t .
+Conditional on Fν−1, each Zk,n has distribution N (nI, 2nI). For nI≥b r, the Gaussian tail bound
+gives
+P(Zk,n < br | Fν−1)≤exp
+
+− (nI−b r)2
+4nI
+
+.
+Write a = log{m/[δ(m−r + 1)]}. Condition (21) gives nI≥ 2br + 4a. Since(2 br + 4a−b r)2 −
+4a(2br + 4a) = b2r ≥ 0, and( x−b r)2/(4x)increases for x≥b r, the probability above is at moste−a.
+Let Y count the changed streams withZk,n ≥b r. On {Y≥r} , e-d-BH declares all theseY
+streams. Indeed, any such stream among the largestr detector values is selected; a stream of rank
+j > rmeets the smaller thresholdK/(αj)and forces at least j selections. Thus Tn ≥Y 1{Y≥r}.
+Markov’s inequality now gives
+P(Tn < r| Fν−1)≤P(m−Y≥m−r+ 1| F ν−1)
+≤ me−a
+m−r+ 1 =δ.
+We used only the marginal Gaussian distributions and independence over time, so dependence
+between streams does not affect this argument.
+32
+C.2 Sharper bounds for independent streams
+We can improve the power bound when the streams are independent. LetΦdenote the standard
+normal distribution function and define
+pr,n = Φ
+ nI−b r√
+2nI
+
+, π r,n =P{Bin(m, pr,n)≥r},(25)
+where Bin(m, p)denotes a binomial random variable withm trials and success probabilityp. Here
+pr,n is the probability that one changed stream’s likelihood product exceedsK/(αr).
+Proposition C.1.Under the assumptions of Theorem 4.1, if the streams are also independent, then
+P(Tn ≥r| Fν−1)≥π r,n,(26)
+E[Tn/m| Fν−1]≥max1≤r≤m pr,nP{Bin(m−1, pr,n)≥r−1}.(27)
+The second bound controls the true discovery rate, the expected proportion of changed streams
+currently declared. Its complement is the expected proportion missed, which differs from the usual
+false non-discovery rate: the latter divides by the number of non-declarations.
+Proof. The count Y in the proof of Theorem 4.1 now has distributionBin(m, pr,n), giving(26). For
+(27), useT n ≥Y1 {Y≥r} and
+E[Y1 {Y≥r} ] =mp r,nP{Bin(m−1, pr,n)≥r−1}.
+Dividing bymand maximizing overrproves the claim.
+C.3 Detection delay
+For the model in Theorem 4.1, including dependent streams, let
+nr =
+ 2br + 4 log{2m/(m−r+ 1)}
+I
+
+.
+We prove that
+E[Dr | Fν−1]≤2n r.(28)
+Thus the expected delay has the same order as the number of observations in (21) for fixedδ.
+Proof. Divide the post-change observations into consecutive groups ofnr observations. At the end
+of each group, both detectors dominate the likelihood product starting at its beginning. The proof
+33
+of Theorem 4.1, withδ = 1/2, shows that the observations in that group alone suffice to declare
+r changed streams with probability at least1/2. The groups are independent, so the probability
+that the firstℓ all fail is at most2−ℓ. Summing these probabilities bounds the expected number of
+groups by two, giving (28).
+When the streams are independent, the same reasoning gives the sharper bounds
+P(Dr > ℓn| Fν−1)≤(1−π r,n)ℓ, ℓ= 0,1, . . . ,(29)
+E[Dr | Fν−1]≤infn≥1
+n
+πr,n
+.(30)
+Here we use the sufficient event with probabilityπr,n from Theorem C.1 for each group of n
+observations.
+For fixedK, m, µandα↓0, we can also improve the leading constant in (28):
+E[Dr | Fν−1]≤ log{K/(αr)}I {1 +o(1)}.(31)
+This holds even for dependent streams.
+Proof. Take n = ⌈(br + b3/4r )/I⌉. Then pr,n → 1and n/(br/I) → 1. By the same Markov inequality
+used in Section C.1, each group succeeds with probability at least1−m (1 −p r,n)/(m−r + 1), which
+tends to one. The expected delay is at mostndivided by this probability, proving (31).
+Forcompleteness, asharpersufficientsamplesizefordeclaringallchangedstreamswithprobability
+at least1−εis
+nε =
+&
+{
+p
+log(m/ε) +
+p
+bm + log(m/ε)}2
+I
+’
+.(32)
+The Gaussian tail bound in Section C.1 makes each stream’s failure probability at mostε/m at this
+sample size. A union bound givesP(Tnε = m| Fν−1) ≥ 1 −ε, and henceP(Dm ≤n ε | Fν−1) ≥ 1 −ε.
+For e-d-Bonferroni, replace eachbr by log(K/β). Each stream crossing this threshold is selected,
+so the proofs above still hold. The asymptotic statement then takesβ↓0withK, m, µfixed.
+C.4 Proof of Theorem 4.2
+Proof.First fixS,ν, and an integern≥1, and puth=ν+n−1. Fork∈S, let
+Ak ={φ (k)t = 1for someν≤t≤h},
+τk = inf{t≥ν:φ (k)t = 1} ∧h, Q k =P S\{k},ν .
+34
+The stopping timeτk is bounded byh. Under Qk, stream k never changes and the FDP atτk is at
+least1 Ak /K. The FDR EOP bound therefore gives
+Qk(Ak)≤KE Qk [FDPτk ]≤KαE Qk [τk]≤Kαh.(33)
+The two laws differ only in streamkfrom timeνonwards. Their log likelihood ratio onFh is
+Zk,n =
+hX
+t=ν
+(µX (k)t −µ 2/2)∼ N(nI,2nI)underP S,ν.
+Forγ > nI, change of measure and the Gaussian tail bound yield
+PS,ν(Ak)≤e γQk(Ak) +P S,ν(Zk,n > γ)
+≤Kαhe γ + exp
+
+− (γ−nI) 2
+4nI
+
+.(34)
+The event{D r ≤n}requiresA k for at leastrmembers ofS. Consequently,
+PS,ν(Dr ≤n)≤ mr Kαhe γ + exp − (γ−nI) 24nI  .(35)
+This bound holds for every algorithm inAα.
+For ε∈ (0, 1), write L = log(1/α)and take n = ⌊(1 −ε )L/I⌋ and γ = (1 −ε/ 2)L. For small
+enoughα,n≥1,γ−nI≥εL/2, and (35) is at most
+m
+r
+h
+K(ν+n−1)α ε/2 +α ε2/[16(1−ε)]i .
+It tends to zero for fixedν. Thus ES,ν[Dr] ≥nP S,ν(Dr > n)gives lim infα↓0 IE S,ν[Dr]/log (1/α) ≥ 1
+after letting ε↓ 0. At ν = 1, the same lower bound is uniform overAα, and eachDm,r(φ)is at least
+ES,1[Dr]. This proves the required minimax lower bound.
+For the upper bound, e-d-BH belongs toAα by Theorem 3.1. The same is true of e-d-Bonferroni
+at β = α, since FDR is bounded by PFER. For these procedures,(31) and its Bonferroni counterpart
+give
+ES,ν[Dr | Fν−1]≤ bI {1 +o(1)},
+where b = log{K/(αr)} for BH andb = log(K/α)for Bonferroni. The deterministic bound in that
+proof depends only onK, m, r, µand α, so we can take the suprema in(22). Since b/log (1/α) → 1,
+both procedures attain (23).
+35
+D Further results
+D.1 Dependence and the global filtration
+We give examples that explain the role of the global filtration in(8). Suppose X (1)t are i.i.d. standard
+Gaussian and X (2)t = X (1)t+1. Observing the second stream reveals the next observation in the first.
+A stopping rule using both streams therefore has more information than one using only the first
+stream, and a likelihood-ratio process valid for the latter need not be valid for the former.
+The following two constructions allow dependence while satisfying (8). First, suppose
+(X (1)t , . . . , X(K)t )| Ft−1 ∼ N(µt,Σ t),
+where µt andΣ t may depend on the past. Before streamk changes, assumeµ(k)t ≤ 0and(Σ t)kk = σ2k
+is known. The off-diagonal entries need not be known. Then, for any nonnegativeFt−1-measurable
+λ(k)t ,
+L(k)t = exp nλ(k)t X (k)t −(λ (k)t )2σ2k/2o (36)
+satisfies (9) before streamkchanges.
+Second, suppose the pre-change conditional distribution ofX (k)t is symmetric about zero given
+Ft−1. Choose a function h(k)t : R→ [−1, 1]using the global past, and require it to be odd:
+h(k)t (−x) =−h (k)t (x). Then
+L(k)t = 1 +h (k)t (X (k)t )(37)
+has conditional mean one. For example, takeh(k)t (x) = λ(k)t sign(x), where λ(k)t ∈ [−1, 1]is Ft−1-
+measurable and sign(0) = 0. Applying (10) gives a nonparametric detector without specifying a
+density or requiring moments. Conditional symmetry of each coordinate is sufficient, even when the
+streams are dependent.
+D.2 Other discounts
+In (7), we changed the denominator while keeping the procedure fixed. We can instead choose the
+detector weights to obtain a bound with the desired denominator. Supposeg : [0,∞ ) → [0,∞ )is
+nondecreasing and concave, withg(0) = 0and g(1) = 1. Let wt = g(t) −g (t− 1), and replace the
+SR recursion by
+M (k),g0 = 0, M (k),gt = (M (k),gt−1 +w t)L(k)t .(38)
+36
+Write c = ξ(k) − 1. Under (9), the processM (k),gt∧c −g (t∧c )is a supermartingale, so the optional-
+stopping argument in Section B.1 gives
+E[M (k),gτ∧(ξ (k)−1)]≤E[g(τ∧(ξ (k) −1))].
+Letφ g denote e-d-BH applied to these statistics. Using (24) and Jensen’s inequality yields
+FDR(φg, ξ, τ)≤αK Xk E[g(τ∧(ξ (k) −1))]≤αg(E[τ]).(39)
+The analogous PFER bound holds for e-d-Bonferroni. The weights therefore give error control with
+denominatorg(E[τ])directly.
+To see how these weights affect detection, consider a change at timeν and writebr = log{K/(αr)}.
+The likelihood product starting atν now has weightwν. When wν > 0, its sufficient log threshold
+becomes br + log(1/wν). For g(t) = tp,0 < p <1, the additional term is(1−p ) logν−logp + o(1)
+as ν→ ∞. Later changes therefore require more evidence from this product. The linear choice
+g(t) = t assigns weight one to every start. This is also what allows the delay proof in Section C.3 to
+use the same detection probability for successive groups of observations. When the weights decrease,
+the sufficient evidence threshold changes from one group to the next.
+D.3 Global null testing
+If we only want to declare that some stream has changed, we can use the e-detector global null
+testing (e-d-GNT) rule
+φ∗t =1 {PKk=1 M (k)t ≥K/α}.
+Define its global error atτas
+GER(φ∗, ξ, τ) =Ehφ∗τ 1{τ <mink ξ(k)}i .
+By nonnegativity and (8),
+GER(φ∗, ξ, τ)≤αK Xk E[M (k)τ 1{τ <ξ(k)}]≤ αK Xk E[τ∧(ξ (k) −1)]≤αE[τ].
+This gives a bound on error over patience and a global-null ARL of at least1/α. The rule raises an
+alarm whenever e-d-Bonferroni at the same level makes a declaration. It can also combine evidence
+from several streams to raise an alarm before any individual threshold is crossed, but does not
+identify the changed streams. Here we sum the nonnegative detector values; the procedure of Mei
+(2010) instead sums local log-CUSUM statistics.
+37
+D.4 Holm’s procedure at a fixed time
+At a deterministic timet, P (k)t = min{1, t/M(k)t } is a valid p-value for eachk∈ H0(t), with t/0 = ∞.
+Indeed, Markov’s inequality givesP(P (k)t ≤u ) ≤u for u∈ (0, 1). Applying Holm’s procedure (Holm,
+1979) to these p-values therefore controls FWER at levelα. In detector notation, it declares the
+largestr t values, where
+rt = max
+
+r∈[K] :M [i]t ≥ t(K−i+ 1)α for everyi≤r  ,
+and rt = 0when the set is empty. This rule includes the fixed-time Bonferroni declarations. Its
+FWER guarantee holds at each deterministic time, as does the validity of the normalized e-values
+used to construct the p-values.
+D.5 Choosing a level after observing the data
+The inequality (24) holds for each realization of the data and everyα∈ (0, 1), using the same
+detector values. Writeφ(α)for the e-d-BH rule at levelα, and letFDP(φ(α), ξ, τ)denote its false
+discovery proportion atτ. For any fixedτ∈ TP,
+E
+"
+sup
+α∈(0,1)
+FDP(φ(α), ξ, τ)
+α
+#
+≤ 1K Xk E[τ∧(ξ (k) −1)].
+The same argument gives the analogous inequality for e-d-Bonferroni withVτ /β. In particular, a
+level chosen after observing the data can be substituted forα inside the expectation. The guarantee
+averages over both the data and the selected level; it does not condition on that level.
+E Experimental details and further results
+E.1 External identification methods
+In Section 5.1, we useK = 100, µ = 0.5, H = 400and q = 0.05, with 3000 paired runs for each
+setting. All observations are independent conditional on the changepoints. We use the Gaussian
+likelihood factors L(k)t = exp{µX (k)t −µ 2/2}. For fixed-change settings, the first 10 or 50 streams
+change at time 101 or 251 and the rest never change. In the prior-generated setting, changepoints
+are independent with
+P(ξ(k) =∞) = 12 ,P(ξ (k) =t) = 12 (0.01)(0.99)t−1, t≥1.
+38
+We use this same prior for the two Bayesian methods in every setting, including those with fixed
+changepoints.
+For Gandy–Lau, we implement Algorithm 2 of Gandy and Lau (2013). Starting fromC(k)0 = 0,
+set
+C(k)t =ϕ  min{20,max{0, C(k)t−1 + logL (k)t }},
+where ϕ rounds to the nearest point of{0, 0.025, . . . ,20}. We compute the null distribution by
+the finite-state Markov recursion, integrating the Gaussian increment density over each rounding
+interval. Let F t(c) = P∞(Ct ≥c )be the tail probability of a null chart following this recursion. We
+take p(k)t = F t(C(k)t ), the inclusive null tail for the observed statistic. We fixed the upper boundary
+before the simulations, large enough to permit the smallest BH cutoffq/(KH ). We apply ordinary
+BH at levelq for the original fixed-time comparison. We also use levelq/H, labeled time-adjusted
+throughout. For anyτ≤H, this adjustment gives
+E[FDPτ ] =
+HX
+t=1
+E[FDPt1{τ=t} ]≤
+HX
+t=1
+E[FDPt]≤q.
+This uses the fixed-time FDR guarantee under independence, and does not assume independence
+between reporting decisions at different times.
+For the Bayesian methods, letπt = P(ξ(k) = t)and st = P(ξ(k) > t)under the stated prior. The
+posterior odds and posterior null probability are
+G(k)t = st−1G(k)t−1 +π tst L(k)t , z (k)t = 11 +G (k)t , G (k)0 = 0.
+Before the first declaration, MD-FDR (Chen et al., 2020, Algorithm 1) declares the largestr posterior
+odds, where
+r= max{j∈[K] :G [j]t ≥K/(qj)−1},
+with r = 0for an empty set. The posterior LFDR procedure (Lu et al., 2022, Algorithms 3–4)
+instead orders the null probabilities asz(1)t ≤ · · · ≤z(K)t and chooses
+r= max
+(
+j∈[K] : 1j
+jX
+i=1
+z(i)t ≤q
+)
+.
+It declares theser streams. This is their LFDR specialization with the utility that rewards detections.
+Both methods subsequently remove declared streams, but our comparison ends at their first nonempty
+39
+batch. For MD-FDR, every selected posterior null probability in that batch is at mostqr/K≤q ; for
+posterior LFDR, their average is at mostq. Averaging over the data and the stated prior therefore
+gives FDR at mostq for the first report from either method. This argument does not give the same
+bound for every fixed configuration.
+We evaluate all first-report errors and true counts at the same decision: the first nonempty
+declared set by time 400, with an empty report if no declaration occurs. A declaration before a
+stream changes is false. Mean true counts include zero for pre-change reports and for no report. We
+also give the delay to a post-change report conditional on no earlier report, with pre-change report
+probabilities shown alongside it. These conditioning sets differ across methods. A report need not
+contain a true discovery; its FDR and true count are therefore needed to interpret its delay. We
+exclude reports after the horizon and assign nondetections the remaining monitoring duration. We
+observed no nondetections in the alternative runs. For the random-prior setting, we measure delay
+from the earliest changepoint in each run.
+In Figure 3, we continue monitoring after the first report and examine the current declaration
+sets. This lets us compare how quickly the frequentist procedures identify the remaining changed
+streams.
+40
+0.00
+0.02
+0.04
+0.06
+FDR at time t
+50 changes at 101
+False discovery rate ↓
+50 changes at 251
+False discovery rate ↓
+0 100 200 300 400
+Time t
+0.0
+0.5
+1.0
+TDR at time t
+True discovery rate ↑
+0 100 200 300 400
+Time t
+True discovery rate ↑
+e-d-BH (ours)
+e-d-Bonferroni (ours)
+Gandy–Lau (fixed-time)
+Gandy–Lau (time-adjusted)
+Figure 3:Fixed-time FDR and proportion of changed streams currently declared, with 50 of 100
+Gaussian streams changing at time 101 or 251. Gandy–Lau uses levelq = 0.05; its time-adjusted
+version uses q/H. With H = 400and α = q/H, our thresholds are800,000/r for e-d-BH at rank
+r, and800 ,000for e-d-Bonferroni. Shading shows 1.96 Monte Carlo standard errors over 3000
+runs. These are current declaration sets from continued monitoring, distinct from the first reports in
+Table 1.
+We find that Gandy–Lau at levelq identifies changes earliest, while its estimated fixed-time
+FDR remains near or belowq. In the separate global-null runs, we estimate its FDR at times 100,
+200 and 400 as0.051 (0.004),0 .054 (0.004)and0 .047 (0.004), respectively, where parentheses give
+Monte Carlo standard errors. These estimates agree with its fixed-time guarantee, even though its
+first-report FDR under the global null is0.906 (0.005). The two observations are compatible: a
+small chance of a false declaration at each specified time can yield a large chance of at least one
+false declaration over the monitoring period. Stopping at that first declaration therefore changes the
+error criterion substantially.
+41
+Moving the change from time 101 to 251 has little effect on the curves when measured from the
+change. After 50 post-change observations, we find that e-d-BH identifies about40%of the changed
+streams, compared with about13%for either e-d-Bonferroni or time-adjusted Gandy–Lau, in both
+settings. The additional time before the change nevertheless gives more opportunities for an early
+false report. For unadjusted Gandy–Lau, its probability rises from0.605to0 .807. Thus the similar
+post-change identification curves need not lead to similar first reports. Our continued-monitoring
+comparison measures how well the current set identifies changes as evidence accumulates; the
+first-report comparison also measures the consequences of choosing when to report.
+Table 4: First reports when 10 of 100 streams change. FDR, true count and the probability of
+a pre-change report are unconditional. Delay counts observations from the change to a report,
+conditional on no pre-change report; it need not be a true discovery. All runs reported by time 400,
+so the no-report probability and its empirical MC SE are zero for every row. Entries are estimates
+(Monte Carlo standard errors) from 3000 runs. Conditional sample sizes and uncapped-delay details
+are retained in the accompanying CSV. WithK = 100and α = 0.05/400, our SR procedures use
+M [r]t ≥800,000/rfor e-d-BH (rankr) andM (k)t ≥800,000for e-d-Bonferroni.
+Method FDR↓True count↑Delay↓Pre-change↓
+Change at 101
+e-d-BH (ours) .0053 (.0013) 1.376 (.013) 40.80 (.19) .0020 (.0008)
+e-d-Bonferroni (ours) .0050 (.0013) 1.031 (.004) 41.24 (.19) .0020 (.0008)
+Gandy–Lau .6455 (.0086) 0.599 (.018) 19.49 (.22) .6083 (.0089)
+Gandy–Lau (time adj.) .0027 (.0009) 1.314 (.012) 51.42 (.22) .0027 (.0009)
+MD-FDR .0110 (.0019) 1.368 (.014) 39.13 (.19) .0047 (.0012)
+Posterior LFDR .7451 (.0079) 0.297 (.010) 15.30 (.23) .6903 (.0084)
+Change at 251
+e-d-BH (ours) .0163 (.0023) 1.375 (.014) 41.17 (.18) .0133 (.0021)
+e-d-Bonferroni (ours) .0160 (.0023) 1.020 (.004) 41.60 (.19) .0133 (.0021)
+Gandy–Lau .8250 (.0069) 0.287 (.014) 19.57 (.29) .8063 (.0072)
+Gandy–Lau (time adj.) .0057 (.0014) 1.301 (.012) 52.44 (.21) .0053 (.0013)
+MD-FDR .0229 (.0027) 1.310 (.013) 46.66 (.20) .0203 (.0026)
+Posterior LFDR .9192 (.0050) 0.090 (.006) 22.04 (.48) .9147 (.0051)
+42
+Table 5: Reporting delays and pre-change reports for the 50-change settings in Table 1. Delay counts
+observations from the change to a report, conditional on no pre-change report; it need not be a true
+discovery. Pre-change-report probabilities are unconditional, so the methods condition on different
+sets of runs. No reports were censored at 400 in these settings. Entries are estimates (Monte Carlo
+standard errors) from 3000 runs; conditioning counts are in the accompanying CSV. WithK = 100
+and α = 0.05/400, our SR procedures useM [r]t ≥ 800,000/r for e-d-BH (rankr) and M (k)t ≥ 800,000
+for e-d-Bonferroni.
+Change at 101 Change at 251
+Method Delay↓Pre-change↓Delay↓Pre-change↓
+e-d-BH (ours) 29.31 (.11) .0020 (.0008) 29.10 (.12) .0200 (.0026)
+e-d-Bonferroni (ours) 30.02 (.12) .0020 (.0008) 29.81 (.13) .0200 (.0026)
+Gandy–Lau 11.81 (.11) .6053 (.0089) 11.95 (.16) .8073 (.0072)
+Gandy–Lau (time adj.) 37.89 (.13) .0040 (.0012) 38.71 (.13) .0047 (.0012)
+MD-FDR 27.48 (.12) .0063 (.0014) 33.45 (.13) .0243 (.0028)
+Posterior LFDR 9.16 (.13) .6700 (.0086) 14.46 (.33) .9153 (.0051)
+Table 6: First reports under the correctly specified changepoint prior. Each stream independently
+has no change with probability1/2; otherwise its first post-change observation is geometric with
+hazard 0.01. The Bayesian FDR guarantees average over this prior. Delay is from the first actual
+change in the family to a report, conditional on no report before that change. It is not a delay to
+a true discovery. Every run reported by time 400. Entries are estimates (Monte Carlo standard
+errors), with 3000 runs. WithK = 100and α = 0.05/400, our SR procedures useM [r]t ≥ 800,000/r
+for e-d-BH (rank r) and M (k)t ≥ 800,000for e-d-Bonferroni. A superscript a means zero events
+observed, with empirical MC SE zero; it does not assert a zero error probability.
+Method FDR↓True count↑Delay↓Pre-change↓
+e-d-BH (ours)0 a 1.467 (.016) 52.84 (.17)0 a
+e-d-Bonferroni (ours)0 a 1.054 (.004) 53.27 (.18)0 a
+Gandy–Lau .3469 (.0084) 0.874 (.015) 15.89 (.18) .0547 (.0042)
+Gandy–Lau (time adj.) .0030 (.0010) 1.214 (.011) 48.03 (.26) .0003 (.0003)
+MD-FDR .0007 (.0005) 1.494 (.016) 48.56 (.16)0 a
+Posterior LFDR .0379 (.0033) 1.117 (.008) 26.12 (.11)0 a
+43
+E.2 Comparing e-d-BH and e-d-Bonferroni
+We give further results for the Gaussian experiment in Section 5.2, usingK = 100independent
+streams, H = 400and changes of size0 .5at time 101. We use 4000 paired runs per case and
+α = 0.05/400, with the same SR statistics for both procedures. This lets us examine the effect of
+the multiple testing rule while keeping the evidence fixed. We also include separate SR charts at
+threshold1/α, which adjust for monitoring time but not the number of streams.
+Figure 4 compares the probability of any declaration under no changes with identification when
+50 streams change. We estimate the global-null alarm probability as 0.031 for each of our procedures,
+compared with 0.970 for the separate charts. The identification curves show the cost of the larger
+Bonferroni threshold: it takes longer for changed streams to reach it. BH uses the evidence in other
+streams to lower the threshold and identifies a larger fraction sooner. Its guarantee controls the false
+proportion, while Bonferroni controls the number of false declarations; both use the same levelα
+here.
+Horizon 400; budget q = 0.05
+Method Prob. MC SE
+e-d-BH
+(ours) 0.0307 0.0027
+e-d-Bonferroni
+(ours) 0.0307 0.0027
+Per-stream SR 0.9695 0.0027
+(a) False-alarm probability ↓
+No changes
+0 20 40 60 80 100 120 140 160 180
+Observations after the change
+0.00
+0.25
+0.50
+0.75
+1.00Proportion identified
+(b) Identification ↑
+50 of 100 streams change
+e-d-BH (ours)
+e-d-Bonferroni (ours)
+Per-stream SR
+Figure 4:Comparison within our proposed family and with separate SR charts. Left: probability of
+any declaration by time 400 under the global null, with Monte Carlo standard errors in parentheses;
+q = 0.05. Right: proportion of changed streams currently declared when 50 of 100 streams change
+at time 101. Withα = q/400, our thresholds are800,000/r for e-d-BH at rankr and800 ,000for
+e-d-Bonferroni. The separate SR threshold is8000. Curve shading shows 1.96 Monte Carlo standard
+errors over 4000 runs.
+44
+The separate charts identify changes quickly, but their guarantee applies to each stream in-
+dividually. To see this, letT be a null stream’s first crossing of1/α, capped at H. By (8), its
+crossing probability is at mostαE[M (k)T ] ≤αH = q. Summing across streams gives onlyKq, which
+is uninformative here. Thus the high collection-wide alarm probability in Figure 4 is consistent with
+the individual guarantees.
+Figure 5 compares 10 and 50 changes and adds SHEREF. For a fixed collection of streams,
+SHEREF applies e-BH to the SR statistics divided by the current time, at fixed-time FDR level
+q = 0.05. We find a larger gap between e-d-BH and e-d-Bonferroni when more streams change.
+More streams can then contribute to increasing the selected rankr, which lowers the BH threshold
+K/(αr). The Bonferroni threshold remainsK/αin both settings.
+0 50 100 150
+Observations after the change
+0.00
+0.25
+0.50
+0.75
+1.00Proportion identified
+10 of 100 streams change
+Identification ↑
+0 50 100 150
+Observations after the change
+50 of 100 streams change
+Identification ↑
+e-d-BH (ours)
+e-d-Bonferroni (ours)
+Per-stream SR
+SHEREF (fixed-time FDR)
+Figure 5:Expected proportion of changed streams currently declared, for 10 or 50 changes among 100
+streams. Our thresholds are800,000/r for e-d-BH at rankr and800 ,000for e-d-Bonferroni, with
+α = 0.05/400. The separate SR threshold is8000; SHEREF uses threshold2000t/r for fixed-time
+FDR level 0.05. Shading shows 1.96 Monte Carlo standard errors over 4000 runs.
+These curves explain the identification-time comparison in Table 2. Requiring several changed
+streams to be declared together describes a different task from making the first report in Section 5.1.
+SHEREF has a smaller threshold than e-d-BH beforeH: its threshold Kt/(qr)is t/H times
+our threshold KH/(qr). This explains its earlier identification in Figure 5; the declaration sets
+agree at H. Its error guarantee concerns fixed times. Under the global null, we estimate its FDR as
+45
+0.0015 at time 400 and 0.059 at the first declaration capped at 400. We therefore assess the faster
+identification together with the reporting rule and its error criterion.
+We count the first post-change observation as one when measuring delay. If a run has not
+identified 80% of the changes by time 400, we assign time 401 and retain it in the mean. No such
+nondetections occurred for this target in these simulations. The monitoring rules continue after an
+earlier declaration; the identification times depend on the true changed set and serve only to assess
+performance.
+We specified both alternatives and all reporting rules before running the experiment. The
+accompanying data files also retain results at the first one or ten declarations, capped at the horizon,
+and at time 400.
+E.3 Global detection at a common ARL target
+We useK = 50independent Gaussian streams with shiftsµ∈ {0.4, 0.75} in either 5 or 25 streams at
+time 101. We fit all thresholds to global-null ARL 1000 and compare our e-d-BH and e-d-Bonferroni
+procedures with Sum-CUSUM (Mei, 2010), the scan and mixture procedureT2 of Xie and Siegmund
+(2013), and the transformed-CUSUM procedure of Chan (2017).
+For our CUSUM inputs and Sum-CUSUM, write
+W (k)0 = 0, W (k)t = max{0, W(k)t−1 +µX (k)t −µ 2/2}.
+e-d-Bonferroni thresholds maxk W (k)t , while Sum-CUSUM thresholdsPk W (k)t . For our SR inputs,
+we thresholdmax r{logM [r]t + logr}for e-d-BH andmax k logM (k)t for e-d-Bonferroni. A threshold
+h on these log statistics corresponds to e-detector thresholds eh/r for e-d-BH and eh for e-d-
+Bonferroni. We report the fittedh values in Table 7. For Xie–Siegmund, writeSk,t = Pts=1 X (k)s
+andU k,t,ℓ = (Sk,t −S k,t−ℓ)/
+√
+ℓ. TheirT 2 procedure thresholds
+max
+1≤ℓ≤min(t,199)
+KX
+k=1
+log
+
+1−p 0 +p 0 exp{(Uk,t,ℓ ∨0) 2/2} , p 0 = 0.1.
+The window restriction and mixing weight follow their numerical setup. This procedure estimates
+the positive shifts and does not use their true size. Chan’s procedure instead runs local CUSUM
+statisticsR (k)t with design shiftµ0 = 1and thresholds
+KX
+k=1
+log
+h
+1 +p 0{λM exp(R(k)t /2)−1} i , p 0 = 0.1, λ M = 0.64.
+46
+Table 7: Global detection with thresholds fitted to null ARL 1000. The fitted statistic thresholdh is
+shown to four decimal places; the statistic definitions are given in the text. For our procedures, the
+corresponding evidence thresholds areeh/r for BH (at rankr) and eh for Bonferroni. Other entries
+give independently validated ARL or conditional detection delay, with Monte Carlo standard errors
+in parentheses. Delay conditions on no alarm before time 101. Xie–Siegmund and Chan use 750
+validation runs; the other methods use 1500. Every alternative uses the same 2000 runs.
+MethodhValidated ARL Conditional delay↓
+5 changes 25 changes
+Shiftµ= 0.4
+e-d-BH (ours) 10.5188 1025 (25) 43.55 (0.34) 26.76 (0.18)
+e-d-Bonf./SR (ours) 10.5156 1029 (25) 44.10 (0.35) 27.93 (0.20)
+e-d-Bonf./CUSUM (ours) 7.7936 1028 (25) 43.96 (0.36) 27.46 (0.20)
+Sum-CUSUM 58.0955 992 (25) 37.21 (0.39) 8.01 (0.07)
+Xie–Siegmund T2 12.2527 955 (35) 33.85 (0.38) 9.08 (0.09)
+Chan transformed CUSUM 2.0659 1009 (36) 43.65 (0.76) 8.79 (0.10)
+Shiftµ= 0.75
+e-d-BH (ours) 10.3810 1023 (26) 15.64 (0.11) 10.22 (0.06)
+e-d-Bonf./SR (ours) 10.3810 1023 (26) 15.79 (0.11) 10.55 (0.07)
+e-d-Bonf./CUSUM (ours) 8.6791 1058 (28) 15.66 (0.11) 10.42 (0.07)
+Sum-CUSUM 52.8639 991 (25) 13.26 (0.13) 2.99 (0.02)
+Xie–Siegmund T2 12.2527 955 (35) 11.14 (0.10) 3.36 (0.03)
+Chan transformed CUSUM 2.0659 1009 (36) 11.13 (0.11) 3.62 (0.03)
+These parameters also follow the published numerical setup and stay fixed across alternatives. Our
+likelihood ratios and those of Sum-CUSUM use the true shift. The three external procedures make
+global declarations, so we do not assign them stream-identification sets.
+We fit thresholds for our procedures and Sum-CUSUM using 800 null runs, then validate their
+ARLs with 1500 fresh runs continued until every alarm occurs. Xie–Siegmund and Chan use 400
+independent null training runs and 750 fresh, uncensored validation runs. There is no adjustment
+using the validation data. Every alternative uses the same 2000 observation paths for all methods.
+We report the actual validated ARLs rather than assuming exact equality.
+47
+We measure global detection delay conditional on no alarm before the change, assigning delay 301
+to nondetections by time 400. We observed no nondetections for Xie–Siegmund or Chan. Threshold
+fitting does not retain the nominal EOP level used in the identification experiments. Here we
+compare global detection at a common ARL target, rather than procedures at a common FDR EOP
+level.
+We find that the scan and aggregation procedures benefit from combining evidence about whether
+any change has occurred, especially when 25 streams change. We also find differences in their
+pre-change behavior despite the similar ARLs. For 25 changes of size 0.4, we estimate the probability
+of an alarm before time 101 as 0.026 for our two SR procedures, 0.036 for our CUSUM procedure,
+0.033 for Sum-CUSUM, and approximately 0.092 for both Xie–Siegmund and Chan. Monte Carlo
+standard errors range from 0.0036 to 0.0065. We retain these probabilities and all conditional sample
+sizes in the accompanying results.
+E.4 Heavy-tailed observations and dependent counts
+We use 1500 independent runs for each of 15 configurations, with a monitoring horizon ofH = 400.
+We setq = 0.05and α = q/H = 0.000125. Given factors L(k)t , the SR and restart-CUSUM statistics
+are
+M (k)t = (1 +M (k)t−1)L(k)t , C (k)t = max{1, C(k)t−1}L(k)t , M (k)0 =C (k)0 = 0.
+The latter is the maximum product over nonempty restart windows and can be smaller than one.
+e-d-BH uses the SR inputs and thresholdsK/(rα) = 8000K/r. We apply e-d-Bonferroni to both
+SR and CUSUM statistics at thresholdK/α = 8000K. The resulting guarantees concern FDR for
+e-d-BH and PFER for e-d-Bonferroni, each at levelq for any stopping time bounded byH. We also
+run SHEREF with inputsM (k)t /t and fixed-time FDR levelq. Its threshold Kt/(rq)is smaller than
+e-d-BH’s KH/(rq)before H, and the declaration sets agree atH. Its earlier identification therefore
+does not establish the same guarantee at a data-dependent stopping time.
+E.4.1 Heavy-tailed observations
+Let allZ (k)t andU t be independent Student-t3 variables divided by√3, and define
+X (k)t =µ (k)t + p1−ρ Z(k)t + √ρ Ut, K= 100, ρ∈ {0,0.5}.
+Vectors are independent over time. The six configurations are the global null, simultaneous changes
+in streams 1–20 at time 101, and staggered changes in streams 1–10 at time 101 and streams 11–20
+48
+at time 201, each at both values ofρ. Changed streams have shifts alternating between 0.45 and 0.9,
+so each group of ten contains five of each size. The remaining streams have mean zero throughout.
+The factors are
+L(k)t = 1 + 0.5 sign(X(k)t ).
+For every still-null stream, conditional symmetry givesE[L(k)t | Ft−1] = 1. This construction uses
+symmetry, rather than the Student-t likelihood or an exponential-moment assumption. We report
+the simultaneous changes in Figure 1. In Figure 6, we examine the staggered changes, keeping the
+same noise distribution and shift sizes.
+0.000
+0.002
+0.004
+0.006
+0.008
+Independent (ρ = 0)
+FDR at time t
+False discovery rate ↓
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+TDR at time t
+True discovery rate ↑
+100 200 300 400
+Time t
+0.000
+0.002
+0.004
+0.006
+0.008
+Correlated (ρ = 0.5)
+FDR at time t
+100 200 300 400
+Time t
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+TDR at time t
+e-d-BH (ours)
+e-d-Bonferroni/SR (ours)
+e-d-Bonferroni/CUSUM (ours)
+SHEREF (fixed-time FDR)
+Figure 6:FDR ↓ and TDR ↑ with ten heterogeneous shifts at time 101 and another ten at time
+201, among 100 heavy-tailed streams. TDR counts only already changed streams, so its denominator
+increases at the second change. Our thresholds are800,000/r for e-d-BH at rankr, and800 ,000for
+both e-d-Bonferroni procedures, withα = 0.05/400. SHEREF uses threshold2000t/r. Shading shows
+1.96 Monte Carlo standard errors over 1500 runs.
+49
+We find that e-d-BH retains its identification advantage after the second group changes, for both
+independent and correlated streams. Declarations from the first group can lower the threshold for
+the newly changed streams. For example, with ten streams declared, the e-d-BH threshold is80,000,
+compared with800 ,000for e-d-Bonferroni. The later group can therefore benefit from evidence
+already accumulated in other streams, without knowing when either group changes.
+TDR drops at time 201 because its denominator increases from ten to twenty, adding streams
+that have only just changed. We use the fraction of already changed streams so that the curves
+describe identification at the displayed time. We find that all four procedures eventually identify
+nearly all twenty changes in this experiment; e-d-BH reaches high identification rates sooner than
+either e-d-Bonferroni procedure. The FDR curves remain small through both changes. As in
+the simultaneous-change experiment, SHEREF uses a lower threshold before time 400 and has a
+fixed-time guarantee.
+E.4.2 Dependent Poisson counts
+For the count experiment,K∈ {20, 100, 500} and the known intercepts alternate betweenak = 0.1
+anda k = 1. Streams are independent acrossk. Conditional on the observed past, let
+λ(k)t =a k + 0.3X(k)t−1, X (k)t ∼Poisson(c (k)t λ(k)t ).
+The multiplier c(k)t is one before a change and 1.75 afterwards. Since0.3(1.75) < 1, both regimes
+have finite stationary means. Starting withX = 0, we generate 200 null warmup observations and
+retain the last count as observed initial history; only the detector statistics are reset. At eachK, we
+run the global null and configurations in which the first 10% or 50% of streams change at time 101.
+Every affected subset has equal numbers from both intercept groups. These give nine configurations.
+The exact conditional likelihood factors are
+L(k)t = exp{X (k)t log(1.75)−0.75λ (k)t }.
+They have conditional mean one for every still-null stream, despite the serial dependence. The
+intensity model and all its parameters are known. In Figure 2, we report results at the prespecified
+time 200 for both affected fractions.
+We compute Monte Carlo standard errors across independent runs, retaining within-run depen-
+dence. Shading and bars show 1.96 standard errors, clipped to[0, 1]for rates. Zero estimates mean
+no observed errors. All summaries concern current declaration sets.
+50

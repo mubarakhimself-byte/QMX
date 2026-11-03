@@ -1,0 +1,2836 @@
+arXiv 2501.03938  https://arxiv.org/abs/2501.03938
+
+In-Sample and Out-of-Sample Sharpe Ratios
+for Linear Predictive Models
+Antoine Jacquier1, Johannes Muhle-Karbe 1, and Joseph Mulligan 1, 2
+1Department of Mathematics, Imperial College London
+2Qube Research & Technologies
+December 2, 2025
+Abstract
+We study how much the in-sample performance of trading strategies based on linear pre-
+dictive models is reduced out-of-sample due to overfitting. More specifically, we compute the
+in- and out-of-sample means and variances of the corresponding PnLs and use these to derive a
+closed-form approximation for the corresponding Sharpe ratios. We find that the out-of-sample
+“replication ratio” diminishes for complex strategies with many assets and based on many weak
+rather than a few strong trading signals, and increases when more training data is used. The
+substantial quantitative importance of these effects is illustrated with a simulation case study
+for commodity futures following the methodology of Gârleanu and Pedersen [GP13], and an
+empirical case study using the dataset compiled by Goyal, Welch, and Zafirov [GWZ24].
+Conflict of Interest Statement
+The authors have no conflicts of interest to disclose.
+Data Availability Statement
+The data that support the findings of this study consists of publicly available commodity futures
+prices, which are accessible from various market data providers, and the dataset compiled by Goyal,
+Welch and Zafirov, which is available from Amit Goyal’s webpage.
+Open Access Statement
+Forthepurposeofopenaccess, theauthor(s)hasappliedaCreativeCommonsAttribution(CCBY)
+licence (where permitted by UKRI, ‘Open Government Licence’ or ‘Creative Commons Attribution
+No-derivatives (CC BY-ND) licence’ may be stated instead) to any Author Accepted Manuscript
+version ‘arising’.
+Funding Statement
+This research was supported by Qube Research & Technologies and the EPSRC Centre for Doctoral
+TraininginMathematicsofRandomSystems: Analysis, ModellingandSimulation(EP/S023925/1).
+Corresponding Author: j.mulligan21@imperial.ac.uk. Please note the disclaimer from QRT at the end of this
+document. The authors would like to thank Daniel Giamouridis and Paolo Guasoni for their pertinent remarks, and
+discussants at Imperial College London and Qube Research & Technologies for fruitful discussions throughout the
+preparation of this work. The pertinent remarks of three anonymous reviewers are also gratefully acknowledged.
+1
+arXiv:2501.03938v3  [q-fin.MF]  1 Dec 2025
+1 Introduction
+1 Introduction
+A standard approach to building systematic trading strategies is to first fit some predictive model
+to historical training data. For example, Gârleanu and Pedersen [GP13] regress price changes
+of commodity futures against past returns with various lookback periods. Using the forecasting
+model, one can then form a trading strategy, e.g., by combining forecasts for several assets using
+mean-variance analysis, and “backtest” its performance on historical data. The strategy’s “out-
+of-sample” performance on new testing data or in live trading will typically be worse than its
+“in-sample” performance on the training data for a number of reasons. But how much worse?
+A number of empirical studies find that the out-of-sample performance of ETFs, anomalies
+and various other strategies tends to be significantly lower than the corresponding in-sample
+performance, with estimates ranging widely depending on the dataset [BL15; Wie+16; MP16;
+SLP17; FRT22].1 One commonly used rule of thumb is to haircut the in-sample performance by
+50% [HL15]. While such rules of thumb are useful, we seek a more systematic approach, enabling
+us to estimate the out-of-sample performance of different trading strategies based on their charac-
+teristics, and without having to resort to a new large-scale simulation study each time the strategy
+is modified.
+To this end, we focus on one crucial issue in this context:overfitting. 2 Kan, Wang, and
+Zheng [KWZ24] obtain analytical results in this spirit for the simplest setting where investment
+opportunities are constant, in that expected asset returns and covariances do not change over time.
+When these model parameters are estimated from a finite training dataset, Kan, Wang, and Zheng
+derive explicit formulas for the “replication ratio”, that is, the fraction of the in-sample Sharpe
+ratio that can be recovered out-of-sample.
+In the present paper, we extend this analysis to a setting closer to that of Gârleanu and
+Pedersen and many related papers, where trading strategies exploit several trading signals per
+asset and also take into account that these signals are not fully persistent but fluctuate over time.
+More specifically, we assume that expected returns are linear functions of iid trading signals drawn
+from a multivariate normal distribution. When the variance of this distribution tends to zero, the
+constant-parameter model of Kan, Wang, and Zheng is recovered as a special case. Conversely, our
+iid expected returns correspond to the limiting case of short-lived signals in the setting of Gârleanu
+and Pedersen.
+The relationship between signals and expected returns can be estimated empirically by linear
+regression. For portfolios corresponding to this plug-in estimate, we compute the (unconditional)
+in- and out-of-sample means and variances of the P&L and derive closed-form approximations for
+the replication ratio, i.e., the fraction of the in-sample Sharpe ratio that can be achieved out-of-
+sample.
+We find that as in Kan, Wang, and Zheng [KWZ24] the replication ratio is increasing in the size
+of the training dataset and the magnitude of the “true” Sharpe ratio of the strategy (i.e., the exact
+unconditional Sharpe ratio computed in the model rather than based on estimated parameters).
+Indeed, when the true Sharpe ratio is low the strategies are more prone to overfitting, and small
+increases in the true Sharpe ratio yield significant improvements in the replication ratio. Once the
+true Sharpe ratio is sufficiently large, the model is more robust to overfitting and the replication
+ratio slowly converges towards 100%.
+Conversely, the replication ratio is decreasing in the number of model parameters. In Kan,
+Wang, and Zheng [KWZ24] this quantity only depends on the number of assets; in our setting, it
+is determined both by the number of assets and by the trading signals per asset. The takeaway
+message is that complex strategies are more prone to overfitting, which needs to be balanced with
+sufficiently long backtesting periods.
+The practical relevance of these theoretical results is in turn explored in a simulation study
+that follows the implementation in [GP13]. To wit, we fit a linear predictive model to a set of
+commodity futures forecast using momentum-style signals, and in turn use this as a simulation
+1More generally, as in many other quantitative disciplines [Ioa05], there is a controversial ongoing debate whether
+there is a “replication crisis” in financial economics [HLZ16; JKP23].
+2Another key driver of lower out-of-sample performance ismultiple testingstudied by [BL14; HL15]. While
+multiple testing may lead to overfitting, we focus on overfitting from a single test perspective.
+2
+1 Introduction
+engine. We test our approach on simulations with both Gaussian and fat-tailed returns, and for
+both iid and autoregressive signals. Our analytical approximations provide very good predictions
+in the Gaussian iid setting where they were derived, but also perform encouragingly well with
+autoregressive signals driven by heavy-tailed noise, confirming the practicality of our results in
+realistic settings.
+20 40 60 80 100 120
+Backtest Length (Years)
+30%
+40%
+50%
+60%
+70%
+80%Replication Ratio
+Replication Ratio by Backtest Length
+Figure 1: The replication ratio for the case study in Section 5 with varying backtest length.
+We observe that a ten-year backtest yields an expected replication ratio of just 30% (Figure 1).
+This steep haircut arises from the large number of parameters in the model; it can be reduced by
+imposing constraints on the model, such as regularisation or a panel regression as in the empirical
+section of [GP13].
+To further confirm that our results are also relevant for real data, we test the method with
+the comprehensive dataset compiled by Goyal, Welch, and Zafirov [GWZ24], which provides over
+100 years of monthly signals which have been published in the literature for predicting the equity
+premium. This allows us to deploy the methodology developed in the present paper to subsets of
+the predictors and, in doing so, control both complexity of the composite strategy and backtest
+length. Encouragingly, we recover the key relationships from our model in the data, in that more
+signals lead to more overfitting, whereas longer backtests and higher strength signals mitigate the
+issue.
+Insummary, ourresultssuggestthefollowingbroadpracticalconclusions: bewaryoflowSharpe
+ratio strategies, keep your models as simple as possible, and use the longest sensible backtest period
+available. While much of this advice aligns with practitioners’ intuition, our results allow one to
+pinpoint how much of a haircut one should expect out-of-sample depending on the characteristics
+of the backtest, rather than broad rules of thumb. Additionally, estimating the out-of-sample
+haircut by simulation is often numerically slow. In contrast, our closed-form expressions permit
+acceleratingthistime-sensitiveprocessbyinstantlycomputingtheexpectedout-of-samplehaircuts.
+The remainder of this paper is organised as follows. Section 2 sets up the model and differ-
+entiates between the true and the sample Sharpe ratios. Section 3 presents the main results and
+their interpretation. Section 4 compares our results to the existing literature on overfitting. Sec-
+tion 5 applies our results in a simulation case study using commodity futures, Section 6 applies
+the method to the Goyal, Welch, and Zafirov dataset, and Section 7 concludes. Section A and
+C provide derivations of results used in the main text, Section B provides the general case of
+the main result, and Section D provides details of the Monte Carlo analysis we use to check the
+approximations used.
+3
+2 Model Setup
+2 Model Setup
+We consider a researcher who wants to fit a linear model to forecast asset returns and to trade
+based on these predictions. The researcher has access to some historical data observed at discrete
+timesT 1 ={0, . . . , T1}. We denote the returns per time step byrt+1 ∈R m and the predictive
+signals bys t ∈R p for eacht∈ T 1. The researcher assumes that the relationship between the
+signals and the returns follows a linear model with parameterβ∈Rm×p:
+rt+1 =βs t +ϵ t+1,
+whereϵ t+1 ∈R m denotes the unexplained residual returns. We assume that the sequences{st}and
+{ϵt+1}are independent of each other, and iid across time with distributionssanderespectively,
+which are assumed to be multivariate Gaussian:3
+s∼ N(µs,Σ s)ande∼ N(0,Σ ϵ).
+We note here that trading signals are typically assumed to be autoregressive as in [GP13]. However,
+imposingtheiidassumptionasin[DL18]makesthecalculationsbelowsubstantiallymoretractable,
+and we demonstrate using simulation experiments in Section 5 that the resulting formulas also
+provide very good approximations for autoregressive signals fitted using the methodology from the
+empirical part of [GP13].
+We impose without loss of generality that the signals are centred, except for a possible intercept
+term, i.e.,µ s = (µs,1,0, . . .)whereµs,1 = 1if the model includes a constant (intercept) term, and
+µs,1 = 0otherwise; removing the intercept simplifies many of the expressions, but we leave the
+expressions general as including a drift term may be desirable for some applications such as long-
+only equity portfolios.
+Assumingβis known, the researcher can use the signals t at timetto accurately predict the
+expected returnsE t[rt+1] =βs t conditional on the information at timet, and in turn trade a
+portfolio of the formwt =Zβs t whereZ∈R m×m is some symmetric weight matrix. For example,
+the standard (one-period) Markowitz portfolio is given bywt =Σ −1t µt whereΣ t andµ t denote
+the covariance matrix and expected returns of the traded assets conditional on the information
+available at timet. In the present context, these are given by
+Et[βst +ϵ t+1] =βs t,Cov t[βst +ϵ t+1] =Σ ϵ,
+and thus the one-step Markowitz optimal portfolio is of the formwt =Zβs t withZ=Σ −1ϵ .
+Somewhat less common but still relevant choices ofZinclude diag(Σ ϵ)−1, corresponding to an
+inverse variance allocation by asset, orI m, corresponding to a risk indifferent portfolio. The
+researcher can then test this portfolio against the returns to compute the Profit & Loss per time
+step,
+PnLt =w Tt rt+1.
+2.1 The True Sharpe Ratio
+The Sharpe ratio typically refers to a summary statistic that compares the sample mean of a time
+series of returns to their sample standard deviation. In the model from the previous section, we
+can compare this to its “true” equivalent, defined as the ratio of the expected return and standard
+deviation of the daily P&L, averaged over the distributions of the signal and noise terms:
+SR := E[PnLt]p
+V[PnLt]
+= E[wTt rt+1]p
+V[wTt rt+1] = E[(Zβst)T(βst +ϵ t+1)]pV[(Zβst)T(βst +ϵ t+1)] .(2.1)
+Using identities for quadratic expectations of Gaussian vectors, this can be computed as
+SR= tr(GΣs) +µ Ts Gµsp
+2 tr((GΣs)2) + 4µTs GΣsGµs + tr(FΣs) +µ Ts Fµs ,(2.2)
+3We focus on the Gaussian case as it simplifies the exposition in many places. One can compute the true Sharpe
+ratio when the signals/noise are non-Gaussian, but we omit it here as the expression is verbose and broadly similar.
+4
+2 Model Setup
+where
+F :=β TZΣϵZβandG :=β TZβ.
+See Section A for the derivation of this expression. To provide some intuition for this result,
+suppose for simplicity that the signals include no intercept (µs = 0). Then, (2.2) simplifies to
+SR= tr(βTZβΣs)q
+2 tr((βTZβΣs)2) + tr(βTZΣϵZβΣs) .
+In this form, clearly the expected return (numerator) increases with the Frobenius norm∥β∥F
+(which measures the “predictability” of future asset returns), however the variance (denominator)
+also increases. For a single asset or signal, the Sharpe ratio is monotonically increasing in∥β∥F,
+but with multiple assets or signals the relationship is no longer obvious. We also see that the
+Sharpe ratio increases as the signal-to-noise ratio rises with smaller∥Σϵ∥F. Similarly toβ, the
+relationship with the signal varianceΣs is generally not monotone, but for parameters similar to
+our simulation case study in Section 5 the Sharpe ratio typically increases when∥Σs∥F increases
+relative to∥Σϵ∥F, again indicating an improvement in the signal-to-noise ratio of the model.
+2.2 The In-Sample Sharpe Ratio
+When a given predictive model is deployed in practice, its parametersβmust be estimated. In
+the linear model we consider here, this can be done using ordinary least-squares (OLS) by stacking
+the returns across all time steps into the matrixR∈Rm×T1 and the signals across all time steps
+into the matrixS∈R p×T1 and computing the OLS estimator
+bβ=RS T(SST)−1.(2.3)
+Although this is the best estimator forβin many senses (unbiased,L2 optimal, consistent, etc.),
+it is also naturally overfit to the particular realisations of the signal and returns in the in-sample
+period, which will clearly differ in the out-of-sample period.
+Moreover, using this estimate forβfor backtesting on the same in-sample dataset naturally
+induces “look-ahead bias”, as data from the full sample period has been used to estimate the model
+parameters which are then used to test the trading strategy on the same period.4
+To determine the magnitude of these effects, we can also stack the residualsϵt+1 into the matrix
+E∈R m×T1 and with a substitution of the model for the returns into (2.3) we obtain
+bβ=β+ES T(SST)−1.
+Thisexpressionenablesustodecomposetheestimatedregressionparameterintothetrueregression
+parameter plus some sampling error. If the researcher trades the portfoliobwt =Z bβst using this
+estimate, the corresponding P&L per time step is dPnLt = bwTt rt+1. The sample average and
+variance in the training data set in turn are
+bE
+h
+( dPnLt)t∈T1
+i
+:= 1T1
+T1−1X
+t=0
+dPnLt,(2.4)
+bV
+h
+( dPnLt)t∈T1
+i
+:= 1T1 −1
+T1−1X
+t=0
+
+dPnLt − bE
+h
+( dPnLt)t∈T1
+i2
+.(2.5)
+Together, these lead to the in-sample Sharpe ratio
+SRIS :=
+bE
+h
+( dPnLt)t∈T1
+i
+r
+bV
+h
+( dPnLt)t∈T1
+i .
+4The look-ahead bias could be avoided using a walk-forward regression as in [Jou+24], but this does not avoid
+the issue of overfitting.
+5
+3 Main Results
+The issue here is thatbβhas been estimated using the same returns observationsrt+1 which the
+model is then tested against, i.e. the model has been fit to the specific realisation of the noise in
+the historical period. Expanding out the sample P&L,
+dPnLt = bwTt rt+1 = (Σ−1ϵ bβst)T(βst +ϵ t+1)
+= (Σ−1ϵ βst)Tβst + (Σ−1ϵ βst)Tϵt+1
++
+
+Σ−1ϵ EST(SST)−1st
+T
+βst
++
+
+Σ−1ϵ EST(SST)−1st
+T
+ϵt+1 .
+Truth
+Misestimation
+Overfitting
+We observe that by usingbβinstead ofβwe obtain a combination of the true P&L and some
+additional P&L as a result of the estimation error inβ. In the in-sample periodϵt+1 is an element
+ofE, but in the out-of-sample period it is not (Eis the matrix of stacked noise realisations from the
+in-sample period). The impact of this is that, in expectation, the misestimation term has expected
+value zero in both the in- and out-of-sample period due toE[E] =0. The overfitting term however
+only has zero expectation in the out-of-sample period, leading to inflation in the expected return
+in the in-sample period, this is how the look ahead bias discussed earlier inflates the in-sample
+performance. However, in both periods the variance of the sample P&L is higher than if we had
+used the true estimatorβ, as we will see in our main result in Proposition 3.1.
+2.3 The Out-of-Sample Sharpe Ratio
+After estimating the predictive model on the training dataset, the researcher deploys the model
+out-of-sample at discrete trading timesT2 ={T 1 + 1, . . . , T1 +T 2 + 1}. The corresponding sample
+mean and variance then lead to the out-of-sample Sharpe ratio
+SROOS :=
+bE
+h
+( dPnLt)t∈T2
+i
+r
+bV
+h
+( dPnLt)t∈T2
+i .
+The difference, of course, is that in the future periodbβis not fit to the particular observations of
+the returns and signals, and thus the out-of-sample Sharpe ratio will typically be lower than the
+in-sample Sharpe ratio previously calculated. We also see from the expressions derived below that
+the out-of-sample Sharpe ratio will be lower than the true Sharpe ratio due to misestimation of
+the regression parameter causing increased volatility over trading with the trueβ.
+The questions therefore are: How much lower? And what can be done to mitigate this bias?
+3 Main Results
+The unconditional means of the in-sample and out-of-sample Sharpe ratio,E[SRIS]andE[SR OOS],
+cannot be computed in closed form. We can however compute the expected in-sample and out-of-
+sample expected return and variance. For clarity of exposition, we present here our main result for
+a special (but extremely common) case, takingZ=Σ−1ϵ ,µ s =0andΣ s =I p, i.e., the Markowitz
+portfolio for a set of centred standardised signals. The impact of having to estimate the covariance
+matrix when constructing the portfolio is discussed in Section 3.3. The general version of this
+result is reported in Appendix B.
+6
+3 Main Results
+Proposition 3.1.The expected average in-sample P&L and out-of-sample P&L is given by
+E
+"
+bE
+
+dPnLt
+
+t∈T1
+#
+= tr(Γ) + pmT1 ,
+E
+"
+bE
+
+dPnLu
+
+u∈T2
+#
+= tr(Γ).
+The expected variance of the in-sample and out-of-sample P&L is given by
+E
+"
+bV
+
+dPnLt
+
+t∈T1
+#
+= 2 tr(Γ2) + (c1 +ec1) tr(Γ) +c2 +ec2 +ε,
+E
+"
+bV
+
+dPnLu
+
+u∈T2
+#
+= 2 tr(Γ2) +c 1 tr(Γ) +c 2,
+where
+Γ=β TΣ−1ϵ β,
+c1 = 1 + p+ 1T1 −p−1 ,˜c 1 = 2p+ 5T1 −p−1 + 2m(p2 +p+ 2T 1)T1(T1 −p−1) ,
+c2 = mpT1 −p−1 ,˜c 2 = mp(2m+p+T 1 + 4)T1 (T1 + 2) − 2m2p2T 21 (T1 + 2) − mpT1 −p−1 ,
+(3.1)
+and
+ε= tr
+
+Cov
+h
+(SST)−1,s tsTt βTZΣϵZβstsTt
+i
++ tr
+
+Cov
+h
+(SST)−1,s tsTt βTZβstsTt
+i
++ tr
+
+Cov
+h
+(SST)−1,s tsTt βTZZΣϵZβstsTt
+i
+.
+The proof relies on a combination of results on the expectations of Gaussian vectors or matrices,
+properties of projection matrices and matrix statistics tricks. For better readability, these lengthy
+computations are deferred to Appendix C. The out-of-sample expected PnL and its variance as
+well as the in-sample expected PnL can be computed explicitly. The in-sample variance of the PnL
+is also almost fully explicit, up to theεterm which does not have a closed-form expression. In
+practice, we approximate the in-sample variance by simply dropping this term as it is typically very
+small compared to the other terms. The accuracy of this approximation is verified in Section 3.1.
+Here, let us mention a few implications.
+Remark1 (Expected Mean Return).Examining the difference between the expected in-sample and
+out-of-sample returns, we see that the in-sample return is inflated bypmT1 . Thus, as the number ofin-sample observationsT 1 increases, our in-sample P&L will converge to our out-of-sample P&L.
+Conversely, as the number of signalspincreases the overfitting bias becomes arbitrarily large.
+Increasing the number of assetsmwill also lead to further inflation of the in-sample P&L (see
+Figure 6).
+Remark2 (Expected Variance).Inspecting the expected variance, we see that˜c 1 >0provided
+T1 > p+ 1, which we would always expect to be the case, but whether˜c2 >0depends on the
+interplay between the lengthT 1 of the backtest, as well as the numbermandpof assets and
+signals. For a range of backtest lengths, Figure 2 displays the combinations ofm, pfor which
+ec2 >0. Generally, whenp < m(with some sublinearity for largem) thenec 2 >0, and for large
+enoughT 1 thenpmust be much larger thanmforec 2 <0. Overfittingβthus causes the in-sample
+variance to be marginally larger than the out-of-sample variance for smallm, but for largemit
+can be significantly higher. Further, the out-of-sample variance can be much larger than the true
+variance, which causes the out-of-sample Sharpe to be lower than the true theoretical Sharpe ratio
+ifβwas known.
+7
+3 Main Results
+500 1000
+m
+200
+400
+600
+800
+1000p
+T1 = 252
+500 1000
+m
+200
+400
+600
+800
+1000
+T1 = 1260
+500 1000
+m
+200
+400
+600
+800
+1000
+T1 = 2520
+Region where ˜c2 > 0
+Figure 2: Values ofm, p, T1 where˜c2 >0.
+3.1 Accuracy of the Approximation of the In-Sample Variance
+In our simulation study for commodity futures in Section 5, we find that the error termεfrom
+Proposition 3.1 is negative but small relative to the other terms, with the estimated variance be-
+ing3%smaller than the analytical result withε= 0. To support the robustness of this observation
+across a wide range of parameter values, we run separate simulations where the model parame-
+ters are selected randomly from distributions centred around the empirical point estimates (full
+details can be found in Appendix D). This is distinct from the case study in Section 5, where
+all true parameters are calibrated to that particular dataset and held fixed. We find that forT1
+sufficiently larger thanp,εare small, less than3%forp/T 1 <0.1as can be seen in Figure 3.
+This is equivalent to having at least ten data points per signal which in fact is a common rule
+of thumb [Har06, Sec. 4.4]. Furthermore,mhas no strong effect onεas these terms are driven
+by the covariance between the inverse Gram matrix(SST)−1 and the individual signal vectorsst,
+which becomes negligible as the number of signalspincreases. Based on these observations, we
+henceforth disregardεin our analysis.
+0 1 2 3 4 5
+SR
+−25.0%
+−20.0%
+−15.0%
+−10.0%
+−5.0%
+0.0%
+ε Percentage of IS Var
+ε Percentage of IS Var vs SR and p/T1
+0.0016
+0.1004
+0.1992
+0.2980
+0.3968
+p/T1
+Figure 3: Magnitude ofPi εi as a percentage of the in-sample varianceEbV h( dPnLt)t∈T1 i.
+8
+3 Main Results
+3.2 The Replication Ratio
+In view of Proposition B.1 and the discussion in Section 3.1 we propose the following approxima-
+tions to the expected in- and out-of-sample Sharpe ratios:
+E[SRIS]≈SR EIS :=
+E
+
+bE
+h
+( dPnLt)t∈T1
+i
+s
+E
+
+bV
+h
+( dPnLt)t∈T1
+i ,
+E[SROOS]≈SR EOOS :=
+E
+
+bE
+h
+( dPnLt)t∈T2
+i
+s
+E
+
+bV
+h
+( dPnLt)t∈T2
+i .
+(3.2)
+Here we takeε= 0inE[ bV[( dPnLt)t∈T1 ]]as discussed in Section 3.1. Moreover, we assume that
+the difference between taking expectations of the numerator and denominator individually, rather
+than jointly, is small.
+We again check this by the same simulation process as Section 3.1 and find that indeed the
+convexity adjustment is generally very small, with maximum errors of 0.01 for the in-sample Sharpe
+ratio and 0.005 for the out-of-sample Sharpe ratio, as can be seen in Figure 4. Compared to the
+magnitude of the sample Sharpe ratios (shown in the second row), the errors due to convexity are
+negligible, at most 2.5%. In these simulations we letp=mandT=T 1, T2.5
+0 5
+0
+2
+4Sample SR
+IS SR
+T = 252
+0 5
+0
+1
+2
+IS SR
+T = 1260
+0 5
+0.0
+0.1
+0.2
+OOS SR
+T = 252
+0 5
+0.0
+0.1
+0.2
+0.3
+OOS SR
+T = 1260
+0 5
+True SR
+−0.01
+0.00
+Error
+0 5
+True SR
+0.000
+0.002
+0 5
+True SR
+−0.004
+−0.002
+0.000
+0 5
+True SR
+−0.001
+0.000
+Error in SR Due to Missing Convexity Adjustment
+p, m 2 10 50 100
+Figure 4: Difference between the expected Sharpe RatioE[SR]and the ratio of the expected
+mean and varianceE[bE[( dPnLt)t∈Ti ]]/
+q
+E[bV[( dPnLt)t∈Ti ]], i.e. the error due to the missing convexity
+adjustment for both in-sample and out-of-sample Sharpe ratios.
+Armed with these analytical approximations, we can study the “replication ratio”, i.e., the
+fraction SREOOS/SREIS of the in-sample Sharpe ratio that is recovered out of sample. A replication
+ratio of100%means that the strategy completely replicates out of sample. Conversely, a replication
+5Note these estimates are purely calculated via simulation, and we do not use our analytical values. This is
+as the error due to the missingεterms (as studied in Section 3.1) dominates the small convexity error when
+p= 100, T1 = 252, yielding no insight into the magnitude of the convexity error.
+9
+3 Main Results
+ratio of0%means that it returns zero, e.g., because the signals are completely uninformative (i.e.,
+the true parameterβis0) and thus the expected out-of-sample Sharpe ratio is zero.
+Univariate CaseTo gain some intuition we first evaluate the replication ratio in the simplest
+case with one asset (m= 1) and one dynamic signal with no intercept (p= 1) and where we
+scaleσ s to be equal toσϵ, which is always possible as one can always scale the original signal to
+achieve this. In this case the formulas derived above simplify as
+SR= β2p
+2β4 +β 2 ,
+SREIS =
+β2 + 1T1r
+2β4 +
+
+1 + 15T1−2 − 2T1
+
+β2 + 4T1 − 3T1+2 − 1T 21
+,
+SREOOS = β2r
+2β4 +
+
+1 + 2T1−2
+
+β2 + 1T1−2
+.
+Whence, the replication ratio only depends on the sizeT1 of the training dataset and the parame-
+terβ(or, equivalently, the true Sharpe ratio) in this case:
+SREOOS
+SREIS
+=
+β2
+r
+2β4 +
+
+1 + 15T1−2 − 2T1
+
+β2 + 4T1 − 3T1+2 − 1T 21
+
+β2 + 1T1
+ r
+2β4 +
+
+1 + 2T1−2
+
+β2 + 1T1−2
+.(3.3)
+We plot a heat map of this relationship in Figure 5. As the Sharpe ratio (equivalentlyβ) in-
+creases, overfitting becomes less of an issue. Indeed, as the signal-to-noise ratio becomes arbitrarily
+large forβ→ ∞, the replication ratio approaches 100% (SREOOS/SREIS →1). Similarly, the dif-
+ference between in- and out-of-sample performance also vanishes as the training data set becomes
+arbitrarily large (T1 → ∞). Both these relationships are nonlinear, with large initial improvements
+that eventually saturate.
+0 1 2 3
+SR
+0%
+20%
+40%
+60%
+80%
+100%Repl. Ratio
+Replication Ratio
+0 1 2 3
+SR
+0
+1
+2
+3SR EIS
+SR EIS
+0 1 2 3
+SR
+0
+1
+2
+3SR EOOS
+SR EOOS
+250
+500
+750
+1250
+1750
+2500
+T1
+Figure 5: Replication ratio SREOOSSREIS , SREIS and SREOOS in the 1-asset, 1-signal case as in (3.3),with varying SR, T1.
+Multivariate CaseWe now turn to the case of multiple assets and signals (m, p >1). To
+illustrate some of the basic mechanisms, we look at a representative example. To wit, we consider
+an in-sample Sharpe ratio of2with a ten-year backtest of daily returns (T1 = 2520), and assume
+that assets and signals are uncorrelated,Σs =I p,Σ ϵ =I m. For simplicity, we also assume that
+the signals include no intercept (µs =0) and that investments are directly proportional to the
+10
+3 Main Results
+signals without reweighing (Z=I m). Finally, to achieve the desired in-sample Sharpe ratio of2,
+we letβ=k1 m,p for a suitable constantkand the matrix1 m,p ∈R m×p of all ones.
+This is a kind of worst-case scenario for overfitting, because independent signals and returns
+introduce a maximal amount of freedom into the model. In this case the replication ratio becomes
+SREOOS
+SREIS
+= k2pmk2pm+ pmT1
+p
+2(k2pm)2 + (c1 +ec1)k2pm+c 2 +ec2p
+2(k2pm)2 +c 1k2pm+c 2 ,(3.4)
+for the constantsci,eci defined in (3.1). Whence, for independent signals and residuals, we obtain
+a similar expression as in the univariate case (3.3).
+Figure 6 shows that, conditional on constant in-sample Sharpe ratio SREIS = 3, the replication
+ratio (3.4) declines more quickly inpas the number of assetsmincreases. Why does this happen?
+For each additional asset or signal we increase the freedom in the model to overfit to the historical
+period, therefore reducing the replication ratio.
+One way to address this is to reduce the number of model parameters, e.g., by running a pooled
+regression that assumes that, up to some suitable normalisations, a family of common signals affects
+all assets in the same manner. For example, [GP13] normalise their momentum signals for each
+asset to make them comparable in the cross-section and then only fit one parameter across all stocks
+for each of these signals, rather than many stock-specific coefficients.6 While it is entirely possible
+that the assets have differing true reactions to stimuli (for example, stocks in different sectors
+may respond differently to the same economic shock), in many cases this fact is overruled by the
+benefit that can be gained through reducing the number of parameters and avoiding overfitting. A
+concrete example of this is provided in Section 5 where we observe that a panel regression increases
+the replication ratio from 71% to 30% for a ten-year backtest.
+0 10 20 30
+p
+0%
+20%
+40%
+60%
+80%
+100%
+EOOS/EIS
+Replication Ratio by m, p
+1
+5
+10
+20
+30
+m
+Figure 6: Replication ratio SREOOSSREIS for increasing assetsmand signalsp, and fixed in-sampleSharpe ratio SREIS = 3withT 1 = 252·100. LargeT 1 is required to keep SREIS fixed at 3 asp, m
+increase, with smallerT1 we cannot always findβsuch that SREIS = 3.
+Importantly, the above discussion is linked to the Sharpe ratio being held constant as the num-
+ber of assetsmincreases. Generally, we observe that Sharpe ratios increase as we add additional
+uncorrelated assets to strategies, primarily due to diversification. To test when this additional
+performance boost outstrips the overfitting effect we consider a simple case with one signal and an
+increasing number of assets that the signal works equally well on. Figure 7 shows that if these assets
+are completely independent, then adding additional assets results in both an increased replication
+ratio and out-of-sample Sharpe ratio. However, even with just 1% average correlation between
+assets we see that the replication ratio already becomes monotonically decreasing. For such a low
+level of correlation between the assets, the out-of-sample Sharpe ratio does initially increase as
+6This is reminiscent to the fitting of price impact models where, after normalising for each asset’s volatility and
+trading volume, universal models also often outperform stock-specific models out of sample, as in [MWW24] and
+references therein.
+11
+3 Main Results
+0 200 400
+Number of Assets
+20%
+40%
+60%
+80%Replication Ratio
+Replication Ratio
+0 200 400
+Number of Assets
+2
+4
+6
+8
+IS SR (Ann.)
+In-Sample Sharpe Ratio
+0 200 400
+Number of Assets
+2
+4
+6
+8
+OOS SR (Ann.)
+Out-of-Sample Sharpe Ratio
+Uncorrelated 1% Correlated 10% Correlated
+Figure 7: Replication ratio, IS Sharpe ratio and OOS Sharpe ratio as assets increase under different
+correlations
+more assets are added because diversification more than compensates for overfitting. However,
+already with 10% correlation this effect is reversed. In summary, adding assets generally is bad for
+your replication ratio. But if you can find some lowly correlated assets with consistent predictive
+power, it is certainly a benefit to the out-of-sample performance to include them.
+3.3 Unknown Covariances
+In Proposition 3.1 we have assumed that the true covariance matrixΣϵ is known when we construct
+the portfolio bwt. Of course, in practice we must also estimate this parameter from the observed
+data. This is not an easy task, and much has been written on how one can improve your estimation
+of the covariance matrix of returns [BBP17]. However, the corresponding estimation errors are
+usually of secondary importance compared to misestimation of the regression parameterβ.
+When the covariance matrix is also estimated, it is no longer feasible to obtain analytical results
+on the replication ratio. However, it is straightforward to assess this in a simulation study. To this
+end we perform a Monte Carlo simulation with30,000samples where, as in Section 3.1, we select
+random parameters centred around the empirical point estimates from Section 5 (cf. Section D for
+more details) for varying numbers of signalspand assetsm, along with varying lookback windows
+T1. We form portfolios using either the known precision matrixΣ−1ϵ or the estimated precision
+matrix from the observed residualsbΣ−1ϵ .
+In the high-dimensional regime where the dimensionmexceeds the effective sample sizeTeff =
+T1 −1, the sample covariance matrix bΣϵ is rank-deficient and singular. To ensure the matrix is
+invertible we use a simple trace-preserving linear shrinkage estimator. We define the regularised
+covariance matrix as:
+bΣreg =α bΣϵ +γI m,
+whereI m is the identity matrix. The shrinkage intensityαand the scaling factorγare determined
+by the ratioq=m/T eff. Whenq >1, we setα= 1/qandγ= (1−1/q) ¯λ, where ¯λ= tr( bΣϵ)/m
+representstheaverageeigenvalue. Thisapproachpreservesthetrace(totalvarianceoftheresiduals)
+while giving us an invertible covariance matrixΣreg. Note that whenq <1we simply use the
+estimated covariance matrix directly.
+Figure 8 displays the in-sample Sharpe ratio, the out-of-sample Sharpe ratio and the replication
+ratio form= 20andm= 500. In the first case, where the asset universe is small, results using
+the estimated and true covariance matrices are nearly identical. In the high-dimensional setting
+(m= 500), the in-sample Sharpe ratio is inflated further when using the estimated covariance
+matrix instead of the true one. Regarding the out-of-sample Sharpe ratios, we see that when
+the numberTof time steps observed is less than the number of assets (m= 500, i.e., where
+the covariance matrix is rank-deficient) then the out-of-sample Sharpe ratio is much worse with
+the estimated covariance matrix (almost zero). However, once this is resolved (T > m), the
+estimated portfolio actually slightly outperforms the one constructed with the true covariance
+12
+3 Main Results
+matrix. Moreover, as long asT > m, the replication ratio is very well aligned even whenmis
+large.
+3.5
+4.0
+4.5
+m = 20
+IS SR
+1.6
+1.8
+2.0
+2.2
+OOS SR
+30%
+40%
+50%
+60%
+Repl. Ratio
+500 1000
+T
+8.0
+8.5
+9.0
+9.5
+10.0
+m = 500
+500 1000
+T
+0.0
+0.5
+1.0
+1.5
+2.0
+2.5
+500 1000
+T
+0%
+10%
+20%
+30%
+Performance Estimation: Sample vs True Covariance
+Row 1: m = 20, Row 2: m = 500
+True Cov Est Cov
+Figure 8: In- and out-of-sample Sharpe ratio and replication ratio using either the true or estimated
+covariance matricesΣ ϵ, bΣϵ to form bwt in Monte Carlo simulations.
+3.4 Autoregressive Signals
+So far, we assumed for analytical tractability that signals and residuals are iid. A typical assump-
+tion (in [GP13] for example) is that instead the signal follows an AR(1) process, so that signals are
+persistent and investment opportunities in turn autocorrelated across time. Such persistent signals
+are not analytically tractable in our framework, but we can assess the corresponding replication
+ratios via simulations. We examine the simplest case with one asset and one AR(1) signal,
+rt+1 =βs t +ϵ t+1, s t =ϕs t−1 +u t,
+whereϵ t+1 ∼ N(0,1)andu t is a centred white noise process with unit variance.7 In this case, the
+true Sharpe ratio is
+SR= E[wtrt+1]p
+V[wtrt+1]
+= β2σ2sp
+2β4σ4s +β 2σ2s = βp1 + 2β2 −ϕ 2 ,(3.5)
+where we have takenwt =βs t,κ s is the kurtosis (not excess kurtosis) of the signal’s noise and
+assumedβ >0without loss of generality. For the second equality in (3.5), we have used that
+κs = 3foru t normally distributed, andσ2s = 11−ϕ2.
+To understand the impact of the persistence of AR(1) signal compared to their iid counterparts,
+we proceed by Monte Carlo simulations. We letT 2 = 1260and varyT 1 ∈ {252,1260,2520},
+ϕ∈ {0,0.5,0.9,0.99,0.999}and SR∈[0,2]. Note thatϕ= 0.9corresponds to a signal half-life
+of6.5(daily) time-steps, whereasϕ= 0.999implies a half-life of 690 time-steps. For a given
+7We assume that|ϕ|<1so that(s t)is weakly stationary thusE[s t] = 0andV[st] = 11−ϕ2.
+13
+4 Comparison with the Literature
+signal persistenceϕwe vary the parameterβto achieve the desired true Sharpe ratio in each case
+using (3.5).
+In Figure 9 we compare the replication ratios (and their difference to their counterparts com-
+puted in our model with iid signals) for different signal persistences parametrised byϕ. Unlessϕ
+is very close to1(>0.99), the difference compared to the iid caseϕ= 0is surprisingly small.
+Thus, although our assumption of iid signals may initially seem like a strong one, it in fact has
+little impact on the replication ratio in practice.
+0 1 2 3
+0%
+50%
+100%
+OOS/IS
+T1 = 252
+0 1 2 3
+OOS/IS
+T1 = 1260
+0 1 2 3
+OOS/IS
+T1 = 2520
+0 1 2 3
+−20%
+0%
+Diﬀ vs φ = 0
+0 1 2 3
+Diﬀ vs φ = 0
+0 1 2 3
+Diﬀ vs φ = 0
+Impact of AR(1)
+φ
+0.0
+0.5
+0.9
+0.99
+0.999
+Figure 9: Impact ofs t following an AR(1) process. The top row shows the replication ratio, and
+the bottom row shows the simple difference of this ratio vsϕ= 0, corresponding to the iid case.
+4 Comparison with the Literature
+Most closely related to the present study is the work of Kan, Wang, and Zheng [KWZ24]. They
+compare the expected in- and out-of-sample Sharpe ratios of the Markowitz portfolio formassets
+whose expected returns are estimated on a training dataset of sizeT. They find that the expected
+in-sample Sharpe ratio is
+E[bθ] = Γ
+  m+1
+2
+
+Γ
+
+T−m−1
+2
+
+Γ
+  m
+2
+
+Γ
+
+T−m
+2
+ 1F1
+ 
+− 12 ; m2 ;− mθ22 ! ,
+whereΓ(·)is the Gamma function, 1F1(·;·;·)the confluent hypergeometric function, andθ=p
+µTΣ−1µthe true Sharpe ratio of the Markowitz portfolio. Likewise, the expected out-of-sample
+Sharpe ratio can also be computed in closed form as
+E[˜θ] = θ2√TΓ   m+12  Γ  T−m+22  Γ  T2 √
+2Γ
+  m+2
+2
+
+Γ
+
+T−m+1
+2
+
+Γ
+
+T+1
+2
+ 1F1
+ 
+1
+2 ; m+ 22 ;− T θ22 ! .
+In the framework of [GP13], the setting of [KWZ24] corresponds to using a single, infinitely
+persistent trading signal (ϕ→1) for each asset. In contrast, we consider multiple signals per
+asset that decay quickly (ϕ→0). Incorporating multiple signals per asset allows us to cover
+many common trading strategies, such as momentum strategies based on several different moving
+averages of past returns. Figure 10 illustrates how overfitting becomes an increasingly important
+14
+5 Predicting Commodity Futures
+concern when allowing for additional freedom in the model by considering multiple signals per
+asset. We fixT=T 1 =T 2 = 2520, SR= 1.5, vary the number of assetsmin both models and set
+eitherp= 1orp= 10in our model. We observe that for a single signal (p= 1) our haircuts are
+similar to the ones of [KWZ24], but forp= 10signals our haircut is much more severe. Note that
+this is conditional on a fixed true Sharpe ratio, and therefore the strength of each signal must be
+lower aspincreases; in practice, adding signals involves a trade-off between increasing the true SR
+and raising the risk of overfitting.
+0 5 10 15 20 25 30
+m
+20%
+40%
+60%
+80%
+100%Replication Ratio
+Replication Ratio Method Comparison
+T = 2520, True SR = 1.5
+Kan, Wang, Zheng
+Ours, p = 1
+Ours, p = 10
+Figure 10: Comparison of the replication ratio for Kan, Wang, and Zheng and ours withT=T1 =
+T2 = 2520and SR= 1.5for varyingm. For ours we setp= 10orp= 1.
+An important common conclusion of both [KWZ24] and the present study is the non-linear
+dependence of the replication ratio on the true Sharpe ratio. To wit, for small values of the true
+Sharpe ratio, the expected out-of-sample Sharpe ratio is much lower than the expected in-sample
+Sharpe ratio. A takeaway from this is that when developing investment strategies, it is preferable
+to develop a single high Sharpe strategy than many low Sharpe strategies. This aligns with the
+accepted wisdom of successful practitioners, for example Peter Muller (Founder, PDT Partners)
+who quipped [Mul01]:
+In my opinion it is far better to refine an individual strategy...than to attempt to put together
+lots of weaker strategies. Depth is more important than breadth for investment strategies... I
+would much rather have a single strategy with an expected Sharpe ratio of 2 than a strategy
+that has an expected Sharpe ratio of 2.5 formed by putting together five supposedly uncorrelated
+strategies each with an expected Sharpe ratio of 1.
+5 Predicting Commodity Futures
+To test our method we follow the approach of Gârleanu and Pedersen [GP13] in the empirical
+application section of their seminal paper on dynamic trading. We select the commodity futures
+in Table 1 and collect close prices for the closest-to-expiry contracts from May 1998 to December
+2023. The daily returns are computed as close-to-close percent changes in prices.
+As in [GP13], we compute the 5-day, 1-year and 5-year Sharpe ratios for each asset and use
+these as signals. In effect these are normalised versions of the moving averages typically used
+in momentum-style strategies. We additionally transform the signals to be mean zero and unit
+variance. Normalizing the variances enables us to easily applyL2-regularisation when fittingβto
+calibrate the model we later use as a simulation engine; the centring is required per our conditions
+on the signals in the theoretical model. This yields a total of 36 dynamic (cross-sectional) signals,
+which with the addition of the asset-specific intercept yields 37 regressors per asset.
+15
+5 Predicting Commodity Futures
+Commodity Venue Ticker
+Aluminium LME MAL3=LX
+Copper LME MCU3=LX
+Nickel LME MNI3=LX
+Zinc LME MZN3=LX
+Lead LME MPB3=LX
+Gasoil ICE LGOc1
+WTI NYMEX CLc1
+Gold COMEX GCc1
+Silver COMEX SIc1
+Coffee NYBOT KCc1
+Cocoa NYBOT CCc1
+Sugar NYBOT SBc1
+Table 1: Commodities selected for testing from the LME (London Metal Exchange), ICE (Intercon-
+tinental Exchange), NYMEX (New York Mercantile Exchange), COMEX (Commodity Exchange)
+and NYBOT (New York Board of Trade).
+To assess the validity of our results we need to compare our analytical approximations for the
+expected in-sample and out-of-sample Sharpe ratios, SREIS and SREOOS, to similarly averaged ob-
+served equivalents. This requires more than the one realisation of the returns available historically.
+To resolve this, we simulate many realisations of a fitted model and use these to check our results.
+The first step in enabling this simulation is to estimate a model for the returns, which naturally
+we take as
+rt+1 =βs t +ϵ t+1.
+We estimateβ∈R 37×12 by ridge regression withγ= 0.1. We additionally estimate the covariance
+of the signalsΣ s and residualsΣ ϵ from the historical data (noting that the means are zero by
+construction).
+To simulate non-iid and non-Gaussian signals and residuals we also fit an AR(1) process to the
+historically observed signals,
+s′t = Φs′t−1 +u t,
+wheres ′t ∈R 36 denotes the non-intercept signals,u t ∈R 36 denotes the shocks to the AR(1)
+process, andΦ∈R 36×36 denotes the AR(1) parameter.
+Additionally, we consider the impact ofϵt+1 andu t not being multivariate Gaussian, by fitting
+at-distribution to each dimension of the residuals and shocks and using these to simulate residuals
+and shocks with fat tails. To induce the original covariance structure of the residuals and shocks we
+scale the independent samples by the Cholesky transformation of the relevant covariance matrix,
+Σϵ orΣ u.
+With the fitted models we simulate10,000realisations of the signals and residuals under both
+the Gaussian IID model, and with the AR(1) with fat tails model. All fitted parameter values
+from this section can be found on the authors’ webpages. For context, we observe that the average
+correlation between signals is20%, with most signals exhibiting very low correlation, and a few
+exhibiting very high correlation. The average correlation between residuals is28%and the average
+excess kurtosis for the residuals is 9. The diagonal of theΦmatrix has average 0.88, and the
+off-diagonal has average 0.02.
+As mentioned in the introduction, the haircuts we observe for these trials are quite steep, and
+they could be improved by reducing the amount of freedom in the model, for example by panel
+regression. Indeed, making the structural assumption that the normalised momentum signals have
+universal weights across assets reduces the number of model parameters form= 12assets and
+p= 3×12 + 1 = 37signals each from444to3. In simulations where the full model is used to
+generate the data but the panel regression is used for the portfolio construction, we see that the
+replication ratio is 70%, much higher than the 38% observed when the portfolio is constructed
+using the beta from the full regression. This is due to reduced overfitting, causing us to have
+16
+5 Predicting Commodity Futures
+lower in-sample Sharpe ratios (0.9 vs 8.2) but more consistent out-of-sample Sharpe ratios (0.6
+vs 3.1). On the real data, when we compare panel regression with the full model we observe that
+the panel portfolio not only has a better replication ratio than the full model (68% vs 9%), but
+it also has a higher out-of-sample Sharpe ratio (0.5 vs 0.3), a sharp reversal given the latter’s
+substantially better in-sample performance (panel 0.7, full 3.6). This further cements our advice
+to prefer simpler models wherever possible.
+In addition to the study below, we conduct an additional study on the impact of using the esti-
+mated covariance matrixbΣϵ rather than the true covariance matrixΣϵ to construct the portfolio,
+the results of which can be seen in Section E. Broadly, we find that the impact is minimal, which
+affirms our previous study in Section 3.3.
+5.1 Gaussian and iid Signals and Residuals
+We first test our approach in the case where the data-generating model satisfies our key assump-
+tions, namely that the signals and residuals are Gaussian and iid.
+We simulate 13 years, with 252 trading days per year, of new signals and returns, and use 10
+years as in-sample and 3 years as out-of-sample data. For each in-sample simulation we compute
+the OLS estimator forbβ=RS T(SST)−1, whereR∈R 12×252·10 is the stacked matrix of returns
+andS∈R 37×252·10 is the stacked matrix of signals. We then form the portfoliobwt =Σ −1ϵ bβst as
+described in Section 2, utilising the true covariance matrix from the historical data. (As noted in
+Section 3.3 estimating the covariance matrix as well only has a minor impact. This is confirmed
+also for this example, see Table 2). This portfolio is then tested on the in-sample and out-of-sample
+periods to compute the observed in-sample and out-of-sample Sharpe ratios for each simulation.
+In Figure 11 we see that the simulated expected in-sample and out-of-sample Sharpe ratios
+align perfectly with our analytical results, and so does the replication ratio. This shows that with
+real-world parameter values our analytical approximations are highly accurate. We note here that
+we have plotted the sample Sharpe ratios directly, and are thus comparingE[SRIS]with SR EIS
+and similarly for the out-of-sample Sharpe ratios. For completeness, we report the average mean,
+variance and other metrics in Table 2. In the next section we additionally check the robustness of
+our results when our assumptions are violated.
+7 8 9
+IS SR
+2 4
+OOS SR
+20% 40% 60%
+Repl. Ratio
+IS SR, OOS SR and Replication Ratio
+Gaussian + IID
+Analytical Monte-Carlo
+Figure 11: The expected in-sample Sharpe ratio, expected out-of-sample Sharpe ratio and replica-
+tion ratio for the experiments in Section 5.1.
+5.2 AR(1) Signals andt-distributed Residuals and Shocks
+Next, we examine how our calculations hold up when the assumptions of the model are no longer
+true by simulating the returns and signals using the AR(1) model with fat-tail residuals and shocks.
+In Figure 12 we see that even when our assumptions are violated, our analytical replication ratio
+is still remarkably close to its simulation observed counterpart. Relaxing the Gaussian assumption
+to allow for fat tails causes the in-sample Sharpe ratio to decrease, but also causes the out-of-
+sample Sharpe ratio to decrease. Additionally, allowing the signals to be AR(1) rather than iid
+17
+6 Empirical Study: Goyal, Welch, and Zafirov Dataset
+causes the out-of-sample Sharpe ratio to decrease, however this effect is rather small. Finally, as
+the out-of-sample and in-sample Sharpe ratio are affected by the non-Gaussian returns, and the
+AR(1) signals have a relatively small effect, the replication ratio with both is almost identical to
+our analytical value under the Gaussian and iid assumptions. This confirms the practical relevance
+of our analytical results.
+6 8 10
+IS SR
+0 2 4 6
+OOS SR
+0% 20% 40% 60% 80%
+Repl. Ratio
+IS SR, OOS SR and Replication Ratio
+t + AR(1)
+Analytical Monte-Carlo
+Figure 12: The expected in-sample Sharpe ratio, expected out-of-sample Sharpe ratio and replica-
+tion ratio for the experiments in Section 5.2.
+6 Empirical Study: Goyal, Welch, and Zafirov Dataset
+Dataset
+As another test of our approach, we use the extensive dataset compiled by Goyal, Welch, and
+Zafirov [GWZ24]. The authors have constructed monthly, quarterly and annual signals which have
+been proposed in the academic literature to predict the equity premium of the CRSP US Index,
+a broad US equity index. We utilise the monthly predictors, of which there are 39 with at least
+some data from 1926 to 2024, almost 1200 months. These predictors are highly diverse, ranging
+from macroeconomic indicators, measures of investor sentiment, and variance-related signals to
+stock cross-sectional data, technical indicators, and commodity prices. For further details, an
+extensive description of each predictor is given in [GWZ24]. To pre-process these signals and the
+corresponding returns we wish to predict, we follow the approach of [KMZ24], who also leverage
+this dataset, and normalise the returns by the rolling 12-month volatility and the signals by their
+respective expanding volatility.
+Empirical Methodology
+Our analytical results are derived for theexpectedreplication ratio, so to check their validity we
+must perform some sort of averaging to mitigate the random out- or under-performance of any
+given signal and sample period. To achieve that on this dataset we proceed as follows.
+We repeatedly select random groups of signals of sizes between 1 and 39. We then randomly
+draw total lengths between 10 and 70 years and split them into (chronologically ordered) in- and
+out-of-sample periods with both legs at least five years long. Specifically, we perform this sampling
+5,000,000 times. We constrain the sampled signals and periods to be such that each signal has full
+data coverage over the in- and out-of-sample period (as not all signals have data coverage for the
+full 1926 to 2024 period).
+For each draw, we centre the selected predictors over the entireT1 +T 2 window and whiten
+them using a Cholesky decomposition of their sample covariance. This is useful later on when
+we wish to estimateβfor our analytical values. We subsequently add a column of ones to this
+whitened design matrix to include an intercept in the regression model.
+We then estimate the OLS parameterbβusing the sampled signals’ in-sample data (per Equa-
+tion (2.3)) and test this on the in-sample and out-of-sample periods using the estimated Markowitz
+18
+6 Empirical Study: Goyal, Welch, and Zafirov Dataset
+portfolio bwt = bΣ−1ϵ bβst, where bΣ−1ϵ is also estimated from the observed in-sample residuals. In this
+case we cannot know the true covariance matrixΣϵ, but as we are predicting just one asset (the
+CRSP Index), bΣϵ is simply the variance of the residualsσ2ϵ, which is relatively easy to estimate
+(in comparison to a large covariance matrix of many assets).
+Parameter Estimation for Analytical V alues
+This process yields pairs of in-sample and out-of-sample Sharpe ratios SRIS and SROOS. According
+to our analysis above, the primary drivers of their ratio SROOS/SRIS should be: the number of
+signalsp, in-sample periodsT 1, and true signal strengthβfor the strategy. Clearly, the number of
+signalspand backtest lengthT 1 are directly available here, but we will need to estimateβ. From
+our analysis throughout the paper, we’ve shown that estimatingβis quite difficult.
+However, for our needs, the exact value of each entry ofβis less important than having the
+correct magnitude ofβand in turn the correct magnitude of the true Sharpe ratio (see Figure 5).
+We found in experimentation that using thebβvalue directly led to the analytical values being poor
+estimates, and therefore devised the following method to calibrateβas an input to the analytical
+computations. Specifically, rather than using bβdirectly, we compute an implied parameterβ ⋆
+by minimising the difference between the observed out-of-sample Sharpe ratio SROOS and the
+expected out-of-sample Sharpe ratio SREOOS:
+β⋆ = arg min
+β
+ 
+SROOS −SR EOOS(µs,Σ s,Σ ϵ, T1,β)
+2
+.
+We perform this calibration separately for each resample. We fix the intercept coefficient withinβ
+to zero (assuming we predict day-to-day price moves but not the unconditional drift). For the
+remaining active signals,µ s =0 p andΣ s =I p due to our whitening step. Additionally,Σ ϵ is
+estimated by bΣϵ from the particular sample, andT1 is the length of the sample’s in-sample period.
+For the minimisation, we take a reduced form forβand assume equal predictive power for all
+the active signals,β= (0, k, k, . . .). We do this to further reduce the degrees of freedom. We use a
+root-finding routine to choose the value ofksuch that the analytical SREOOS matches the realised
+out-of-sample Sharpe ratio for each specific trial. Consequently, we view the resultingβ⋆ as a local
+calibration of the true Sharpe ratio for that particular set of signals and period.
+Once we have this impliedβ, we can use it to estimate the expected in- and out-of-sample
+mean, variance and Sharpe ratio, and expected replication ratio for that particular set of signals
+over that particular sampled time period. We note here that in the following analysis, all analytical
+values use this impliedβ.
+Analysis
+We recap what we now have in hand. From the process described above we have obtained many
+sets of observed in- and out-of-sample empirical and analytical metrics. As discussed, the analyt-
+ical metrics are expectations, while the empirical metrics are simply observed data points for a
+particular set of signals over a particular period, which will naturally have measurement error and
+deviate from their (unknown) expected values.
+To resolve this, we look at averages for both the empirical and analytical metrics as a function
+of our identified key variables: number of signalsp, length of backtestT1 and true Sharpe ratio
+SR. By computing the averages as a function of these variables across all the samples, the effect of
+selecting different signals over different periods, and the finite sample measurement error, should
+average out, and our average empirical values should approach our average analytical values.
+TheresultsofthisprocedurearedisplayedinFigure13. Ineachpanel, weplotboththeexpected
+ratio of the out-of-sample and in-sample Sharpe ratios, and the ratio of their expectations, and the
+analytical replication ratio. Generally, we see that all the estimates are very close to each other. In
+the first panel, we observe that indeed the replication ratio decreases considerably as the number
+of signalspincreases.
+In the second panel, we plot the replication ratio as a function ofT1. We found that this
+was not smoothly monotonic (perhaps due to insufficient samples), so we plot both the means per
+19
+7 Conclusion
+backtest length in our samples, and a smooth fit. We see that in general the three estimates agree,
+with the replication ratio increasing as the backtest length increases.
+The final panel shows the replication ratio as a function of the implied true Sharpe ratio.
+Again, all three cases show the expected (increasing) behaviour, and the empirical value, which
+correspondsmorecloselytoouranalyticalestimate(theratiooftheexpectations)isindeedcloserto
+our analytical values than the alternative (expectation of the ratios). In addition to the replication
+ratio displayed, we report the individual metrics (mean, variance and Sharpe ratio) in Section E.
+0 10 20 30
+Number of Signals p
+20%
+40%
+60%
+80%
+100%Replication Ratio
+200 400 600
+Backtest Length T1
+0.5 1.0 1.5
+Implied True Sharpe SR
+MC: E
+[
+SROOS
+SRIS
+]
+MC: E[SROOS ]E[SRIS ] Analytical: SREOOS /SREIS
+Figure 13: Empirical and implied analytical replication ratio by number of signalsp, backtest
+lengthT 1 and implied true Sharpe ratio SR (annualised).
+7 Conclusion
+This paper derives analytical approximations for the in-sample and out-of-sample Sharpe ratios of
+portfolios constructed using linear prediction models. We show that increasing either the number
+of signals or assets too much makes this procedure susceptible to overfitting and thereby yields
+wildly overestimated in-sample Sharpe ratios.
+We show that low true Sharpe ratio signals are particularly vulnerable to overfitting. Con-
+versely, by extending the length of the in-sample period one can reduce the overfitting risk, and
+can produce a higher replication ratio out of sample.
+We test our results on commodity futures using momentum-style signals and find that allowing
+AR(1) signals and non-Normal signals/residuals does not significantly impact the validity of our
+results. In particular, once we match the theoretical out-of-sample Sharpe ratio to the observed
+value, we see that the replication ratio is primarily a function of the out-of-sample Sharpe ratio
+and the curves for the AR(1) signals closely matches those of iid signals.
+From this analysis, it seems that the best way to minimise the potential for overfitting is to
+minimise the number of signals and assets that are being used for any predictive model used to
+trade, and utilise the largest amount of data possible. To conclude, we quote Nick Patterson [Pat16]
+on his experience at Renaissance Technologies, which is very much in line with these results:
+It’s funny that I think the most important thing to do on data analysis is to do the simple
+things right. So, here’s a kind of non-secret about what we did at Renaissance: in my opinion,
+our most important statistical tool was simple regression with one target and one independent
+variable.
+They might be on to something.
+20
+References
+References
+[BBP17] Joël Bun, Jean-Philippe Bouchaud, and Marc Potters. “Cleaning Large Correlation
+Matrices: Tools from Random Matrix Theory”. In:Physics Reports. Cleaning Large
+Correlation Matrices: Tools from Random Matrix Theory 666 (Jan. 2017), pp. 1–109.
+issn: 0370-1573.doi:10.1016/j.physrep.2016.10.005.
+[BKW04] David A. Belsley, Edwin Kuh, and Roy E. Welsch.Regression Diagnostics: Identifying
+Influential Data and Sources of Collinearity: 546. 1st edition. Hoboken, N.J: Wiley-
+Interscience, July 2004.isbn: 978-0-471-69117-4.
+[BL14] David H. Bailey and Marcos López de Prado.The Deflated Sharpe Ratio: Correcting
+for Selection Bias, Backtest Overfitting and Non-Normality. SSRN Scholarly Paper
+ID 2460551. Rochester, NY: Social Science Research Network, July 2014.doi:10.
+2139/ssrn.2460551.
+[BL15] Chris Brightman and Feifei Li.Chasing Performance with ETFs. Tech. rep. Research
+Affiliates, Nov. 2015.
+[Bro20] Mike Brookes. “The Matrix Reference Manual”.http://www.ee.imperial.ac.uk/
+hp/staff/dmb/matrix/intro.html. 2020.
+[CH88] Samprit Chatterjee and Ali S. Hadi.Sensitivity Analysis in Linear Regression: 190.
+1st edition. New York: Wiley, Apr. 1988.isbn: 978-0-471-82216-5.
+[DL18] Hadrien De March and Charles-Albert Lehalle. “Optimal Trading Using Signals”. Nov.
+2018. arXiv:1811.03718 [q-fin].
+[FRT22] Antoine Falck, Adam Rej, and David Thesmar. “When Do Systematic Strategies De-
+cay?” In:Quantitative Finance22.11 (Nov. 2022), pp. 1955–1969.issn: 1469-7688.
+doi:10.1080/14697688.2022.2098810.
+[GP13] Nicolae Gârleanu and Lasse Heje Pedersen. “Dynamic Trading with Predictable Re-
+turns and Transaction Costs”. In:The Journal of Finance68.6 (Dec. 2013), pp. 2309–
+2340.issn: 00221082.doi:10.1111/jofi.12080.
+[Gup00] A. K. Gupta.Matrix Variate Distributions. Chapman & Hall/CRC Monographs and
+Surveys in Pure and Applied Mathematics 104. Boca Raton, FL: Chapman & Hall,
+2000.isbn: 978-1-58488-046-2.
+[GWZ24] Amit Goyal, Ivo Welch, and Athanasse Zafirov. “A Comprehensive 2022 Look at the
+Empirical Performance of Equity Premium Prediction”. In:The Review of Finan-
+cial Studies37.11 (Nov. 2024), pp. 3490–3557.issn: 0893-9454.doi:10.1093/rfs/
+hhae044.
+[Har06] Frank E. Harrell.Regression Modeling Strategies: With Applications to Linear Models,
+Logistic Regression, and Survival Analysis. 2nd ed. edition. New York, NY: Springer-
+Verlag New York Inc., Jan. 2006.isbn: 978-0-387-95232-1.
+[HL15] Campbell R. Harvey and Yan Liu.Backtesting. SSRN Scholarly Paper ID 2345489.
+Rochester, NY: Social Science Research Network, July 2015.doi:10 . 2139 / ssrn .
+2345489.
+[HLZ16] CampbellR.Harvey,YanLiu,andHeqingZhu.“... andtheCross-SectionofExpected
+Returns”. In:The Review of Financial Studies29.1 (Jan. 2016), pp. 5–68.issn: 0893-
+9454.doi:10.1093/rfs/hhv059.
+[Ioa05] John P. A. Ioannidis. “Why Most Published Research Findings Are False”. In:PLOS
+Medicine2.8 (Aug. 2005), e124.issn: 1549-1676.doi:10 . 1371 / journal . pmed .
+0020124.
+[JKP23] Theis Ingerslev Jensen, Bryan Kelly, and Lasse Heje Pedersen. “Is There a Replication
+Crisis in Finance?” In:The Journal of Finance78.5 (2023), pp. 2465–2518.issn: 1540-
+6261.doi:10.1111/jofi.13249.
+21
+References
+[Jou+24] JacquesJoubertetal.“TheThreeTypesofBacktests”.SSRNScholarlyPaper.Rochester,
+NY, July 2024.doi:10.2139/ssrn.4897573.
+[KMZ24] Bryan Kelly, Semyon Malamud, and Kangying Zhou. “The Virtue of Complexity in
+Return Prediction”. In:The Journal of Finance79.1 (Feb. 2024), pp. 459–503.issn:
+1540-6261.doi:10.1111/jofi.13298.
+[KWZ24] Raymond Kan, Xiaolu Wang, and Xinghua Zheng. “In-Sample and out-of-Sample
+Sharpe Ratios of Multi-Factor Asset Pricing Models”. In:Journal of Financial Eco-
+nomics155 (May 2024), p. 103837.issn: 0304-405X.doi:10.1016/j.jfineco.2024.
+103837.
+[LKJ09] Daniel Lewandowski, Dorota Kurowicka, and Harry Joe. “Generating Random Corre-
+lation Matrices Based on Vines and Extended Onion Method”. In:Journal of Multi-
+variate Analysis100.9 (Oct. 2009), pp. 1989–2001.issn: 0047-259X.doi:10.1016/
+j.jmva.2009.04.008.
+[MP16] R. David Mclean and Jeffrey Pontiff. “Does Academic Research Destroy Stock Return
+Predictability?” In:The Journal of Finance71.1 (2016), pp. 5–32.issn: 1540-6261.
+doi:10.1111/jofi.12365.
+[Mul01] P. Muller. “Proprietary Trading: Truth and Fiction”. In:Quantitative Finance1.1
+(Jan. 2001), pp. 6–8.issn: 1469-7688.doi:10.1080/713665546.
+[MWW24] Johannes Muhle-Karbe, Zexin Wang, and Kevin Webster. “Stochastic Liquidity as a
+Proxy for Nonlinear Price Impact”. In:Operations Research72.2 (Mar. 2024), pp. 444–
+458.issn: 0030-364X.doi:10.1287/opre.2022.0627.
+[Pat16] Nick Patterson. “Talking Machines: AI Safety and the Legacy of Bletchley Park, with
+Nick Patterson - Robohub”.https://robohub.org/talking-machines-ai-safety-
+and-the-legacy-of-bletchley-park-with-nick-patterson/. Feb. 2016.
+[PP12] Kaare Brandt Petersen and Michael Syskind Pedersen. “Matrix Cookbook”. In: (Nov.
+2012).
+[Rao09] C. Radhakrishna Rao.Linear Statistical Inference and Its Applications. John Wiley
+& Sons, Sept. 2009.isbn: 978-0-470-31714-3.
+[SLP17] Antti Suhonen, Matthias Lennkh, and Fabrice Perez. “Quantifying Backtest Overfit-
+ting in Alternative Beta Strategies”. In:The Journal of Portfolio Management43.2
+(Jan. 2017), pp. 90–104.issn: 0095-4918, 2168-8656.doi:10.3905/jpm.2017.43.2.
+090.
+[Wie+16] Thomas Wiecki et al.All That Glitters Is Not Gold: Comparing Backtest and Out-
+of-Sample Performance on a Large Cohort of Trading Algorithms. SSRN Scholarly
+Paper ID 2745220. Rochester, NY: Social Science Research Network, Mar. 2016.doi:
+10.2139/ssrn.2745220.
+22
+A Derivation of Equation (2.2)
+A Derivation of Equation (2.2)
+To derive (2.2) we need to derive the expressions for
+E[(Zβst)T(βst +ϵ t+1)]andV[(Zβs t)T(βst +ϵ t+1)].
+We start with the former:
+E[(Zβst)T(βst +ϵ t+1)] =E[s Tt βTZβst +s Tt βTZϵt+1],
+=E[s Tt βTZβst],
+= tr(GΣs) +µ Ts Gµs,
+whereG :=β TZβ. We have usedE[ϵt+1] = 0in the second equality, and identity 5.24 from [Bro20]
+in the final equality.
+Next we tackle the variance,
+V[(Zβst)T(βst +ϵ t+1)] =V[s Tt βTZβst +s Tt βTZϵt+1],
+=V[s Tt βTZβst] +V[s Tt βTZϵt+1] + Cov[sTt βTZβst,s Tt βTZϵt+1],
+=V[s Tt βTZβst] +V[s Tt βTZϵt+1],
+= 2 tr((GΣs)2) + 4µTs GΣsGµs +V[s Tt βTZϵt+1],
+= 2 tr((GΣs)2) + 4µTs GΣsGµs +E[s Tt βTZϵt+1sTt βTZϵt+1]−E[s Tt βTZϵt+1]2,
+= 2 tr((GΣs)2) + 4µTs GΣsGµs +E[s Tt βTZϵt+1sTt βTZϵt+1],
+= 2 tr((GΣs)2) + 4µTs GΣsGµs +E[s Tt βTZΣϵZβst],
+= 2 tr((GΣs)2) + 4µTs GΣsGµs + tr(FΣs) +µ Ts Fµs,
+whereF :=β TZΣϵZβ. We have usedE[ϵ t+1] = 0to deduceCov[s Tt βTZβst,s Tt βTZϵt+1] = 0,
+identity 379 from [PP12, sec. 8.2.2] to computeV[sTt βTZβst], identity 322 from [PP12, sec. 6.2.2]
+to compute the penultimate line and identity 5.24 from [Bro20] in the final equality.
+Thus,
+SR= tr(GΣs) +µ Ts Gµsp
+2 tr((GΣs)2) + 4µTs GΣsGµs + tr(FΣs) +µ Ts Fµs ,
+where
+F :=β TZΣϵZβandG :=β TZβ.
+B General Case Result of Proposition 3.1
+Proposition B.1.The expected average in-sample P&L is
+E
+h
+bE[( dPnLt)t∈T1 ]
+i
+= tr(GΣs) +µ Ts Gµs + pT1 tr(ZΣϵ).
+23
+C Proof of Proposition B.1
+The expected variance of the in-sample P&L is
+E
+
+bV
+h
+( dPnLt)t∈T1
+i
+= 2 tr
+
+(GΣs)2
+
++ 4µTs GΣsGµs + tr(FΣs) +µ Ts Fµs
++ 3T1 −p−1 tr 2F(Σs +µ sµTs ) +µ Ts Fµs ·(Σ s +µ sµTs )−1(Σs −µ sµTs ) +pFΣ s
++ tr(ΣϵZΣϵZ)
+ 
+p(p+T 1 + 4)
+T1 (T1 + 2) − 21Tp µs (p−T 1 −2) (p−T 1)T 21 (T1 + 1) (T1 + 2) !
+−tr(Σ ϵZ)2
+2 (p−T 1)
+
+(p−2)1 Tp µs +T 1
+
+p−1 Tp µs
+
++p
+
+T 21 (T1 + 1) (T1 + 2)
++ 2T1 −p−1 tr(ZΣϵ) tr2G Σs +µ sµTs  +µ Ts Gµs ·(Σ s +µ sµTs )−1(Σs −µ sµTs ) +pGΣ s
+− 2pT1 tr(ZΣϵ) tr(GΣs) +µ Ts Gµs
++ε 1 +ε 2 +ε 3,
+whereF=β TZΣϵZβ,G=β TZβand
+ε1 = tr
+
+Cov
+h
+(SST)−1,s tsTt βTZΣϵZβstsTt
+i
+,
+ε2 = tr
+
+Cov
+h
+(SST)−1,s tsTt βTZβstsTt
+i
+,
+ε3 = tr
+
+Cov
+h
+(SST)−1,s tsTt βTZZΣϵZβstsTt
+i
+,
+for anyt∈ T1 by the iid property of(st)t∈T1.
+The expected average out-of-sample P&L is
+E
+
+bE
+h
+( dPnLt)t∈T2
+i
+= tr(GΣs) +µ Ts Gµs,
+The expected variance of the out-of-sample P&L is
+E
+
+bV
+h
+( dPnLt)t∈T2
+i
+= 2 tr
+
+(GΣs)2
+
++ 4µTs GΣsGµs + tr(FΣs) +µ Ts Fµs
++µ Ts
+
+2DΣTs F+ tr FΣTs  D+ tr ΣTs D F µs + tr DΣTs FΣs + tr (DΣs) trFΣTs 
++ tr
+
+(ZΣϵ)2
+ 
+tr
+
+ΣTs D +µ Ts Dµs ,
+whereD :=
+ 
+Σs +µ sµTs −1
+T1 −p−1 .
+C Proof of Proposition B.1
+Recall that the classical Ordinary Least Square method yields the estimator
+bβ=β+ES T(SST)−1,
+24
+C Proof of Proposition B.1
+whereE∈R m×T1 is the matrix of stacked residuals. This is a more convenient expression to work
+with than (2.3), and we will use it to evaluate the expectations of the sample means, variances and
+covariances. Since(s t)t and(ϵ t+1)t are iid sequences, the expectation of the sample expectation,
+variance and covariance are simply the true expectation, variance and covariance respectively.
+C.1 In-sample expected average
+From the definition (2.4), the in-sample expected P&LE[bE[( dPnLt)t∈T1 ]]can be evaluated as
+E
+"
+bE
+
+(Zbβst)T(βst +ϵ t+1)t∈T1 #
+=E
+"
+bE
+
+{Zbβst}Tβst
+
+t∈T1
+#
++E
+"
+bE
+
+{Zbβst}Tϵt+1
+
+t∈T1
+#
+,
+=E
+
+bE
+
+
+ 
+Z
+
+β+ES T(SST)−1
+
+st
+T
+βst
+!
+t∈T1
+
+
+
+
++E
+
+bE
+
+
+ 
+Z
+
+β+ES T(SST)−1
+
+st
+T
+ϵt+1
+!
+t∈T1
+
+
+
+ ,
+=E
+h
+(Zβst)T βst
+i
++E
+
+bE
+"
+ZEST(SST)−1st
+T
+βst
+
+t∈T1
+#
+
++E
+
+bE
+"n
+ZEST(SST)−1st
+oT
+ϵt+1
+
+t∈T1
+#
+ ,
+since the sample mean is an unbiased estimator, and since(st)t and(ϵ t+1)t are respectively iid,
+andE[ϵ t+1] =0.
+Since we can “extract” thet-th column from a matrixXby multiplying it by a vectoret which
+has1in thet-th position and zero everywhere else, then
+E
+
+bE
+"
+ZEST(SST)−1st
+T
+βst
+
+t∈T1
+#
+ =E
+h
+eTt ST(SST)−1SETZβSet
+i
+= 0,for allt∈ T 1,
+sinceEhas a Matrix Normal distributionMN(0,Σ ϵ,I T1 )by assumption and sinceZis assumed
+symmetric. As previously mentioned, the first equality is true for allt∈ T1 by the iid property
+of(s t)t, and the fact the sample mean is an unbiased estimator.
+The next term reads
+E
+
+bE
+"
+ZEST(SST)−1st
+T
+ϵt+1
+
+t∈T1
+#
+ =E
+h
+eTt ST(SST)−1SETZEet
+i
+,for anyt∈ T 1,
+=e Tt E[ST(SST)−1S]E[ETZE]et,
+= tr(ZΣϵ)eTt E[ST(SST)−1S]et = pT1 tr(ZΣϵ),
+where we have used the Matrix Normal identity
+E[XAXT] =Utr(A TV) +MAM T,
+withX∼ MN(M,U,V)[Gup00, Theorem 2.3.5]. We also used thattr(E[S T(SST)−1S]) =p
+since the projection matrixS T(SST)−1Sis idempotent and thus its trace equals its rank, and
+25
+C Proof of Proposition B.1
+since(s t)t are iid, then the expectation of each element of the diagonal ofST(SST)−1Sare equal,
+thuse Tt E[ST(SST)−1S]et = pT1. Therefore, the in-sample expected P&L is given by
+E
+
+bE
+h
+( dPnLt)t∈T1
+i
+= tr
+
+βΣsβTZ +µ Ts βTZβµs + pT1 tr (ZΣϵ).
+C.2 In-sample expected variance
+We turn next to the expected varianceE[bV[( dPnLt)t∈T1 ]]:
+E
+"
+bV
+
+(Zbβst)T(βst +ϵ t+1)t∈T1 #
+=E
+
+bV
+
+
+ 
+Z
+
+β+ES T(SST)−1
+
+st
+T
+βst +
+
+Z
+
+β+ES T(SST)−1
+
+st
+T
+ϵt+1
+!
+t∈T1
+
+
+
+ ,
+=E
+"
+bV
+
+(Zβst)Tβst + (ZEST(SST)−1st)Tβst + (Zβst)Tϵt+1 + (ZEST(SST)−1st)Tϵt+1
+
+t∈T1
+#
+,
+=E
+"
+bV
+
+(Zβst)Tβst
+
+t∈T1
+#
++E
+"
+bV
+
+(Zβst)Tϵt+1
+
+t∈T1
+#
++E
+"
+bV
+
+(ZEST(SST)−1st)Tβst
+
+t∈T1
+#
++E
+"
+bV
+
+(ZEST(SST)−1st)Tϵt+1
+
+t∈T1
+#
++E
+"
+2 dCov
+
+(Zβst)Tβst
+
+t∈T1
+,
+
+(Zβst)Tϵt+1
+
+t∈T1
+#
++E
+"
+2 dCov
+
+(Zβst)Tβst
+
+t∈T1
+,
+
+(ZEST(SST)−1st)Tβst
+
+t∈T1
+#
++E
+"
+2 dCov
+
+(Zβst)Tβst
+
+t∈T1
+,
+
+(ZEST(SST)−1st)Tϵt+1
+
+t∈T1
+#
++E
+"
+2 dCov
+
+(Zβst)Tϵt+1
+
+t∈T1
+,
+
+(ZEST(SST)−1st)Tβst
+
+t∈T1
+#
++E
+"
+2 dCov
+
+(Zβst)Tϵt+1
+
+t∈T1
+,
+
+(ZEST(SST)−1st)Tϵt+1
+
+t∈T1
+#
++E
+"
+2 dCov
+
+(ZEST(SST)−1st)Tβst
+
+t∈T1
+,
+
+(ZEST(SST)−1st)Tϵt+1
+
+t∈T1
+#
+.
+Since the signals and residuals are iid, and the sample variance is an unbiased estimator for the
+population variance, we can replace all the expected sample variance terms with the true variance.
+We are thus left with computing these true variances. The first two terms are
+E
+"
+bV
+
+(Zβst)Tβst
+
+t∈T1
+#
+=V
+h
+(Zβst)T βst
+i
+= 2 tr
+
+ZβΣsβTZβΣsβT
+
++ 4µTs βTZβΣsβTZβµs,
+E
+"
+bV
+
+(Zβst)Tϵt+1
+
+t∈T1
+#
+=V
+h
+(Zβst)Tϵt+1
+i
+= tr
+
+ZβΣsβTZΣϵ
+
++µ Ts βTZΣϵZβµs,
+where the first equality in both expressions is for allt∈ T1, and the first equality comes from the
+iid assumption and the fact the sample variance is an unbiased estimator.
+26
+C Proof of Proposition B.1
+The next term is
+E
+"
+bV
+
+(ZEST(SST)−1st)Tβst
+
+t∈T1
+#
+=V
+h
+(ZEST(SST)−1st)Tβst
+i
+,for allt∈ T 1
+=E
+
+(ZEST(SST)−1st)Tβst
+2
+−E
+
+ZEST(SST)−1st
+T
+βst
+2
+=E
+
+(ZEST(SST)−1st)Tβst
+2
+,
+sinceE[E] = 0andEandSare independent. To evaluate this further we again uses t =Se t and
+letH :=S T(SST)−1S(the so called ‘hat’ matrix in linear regression), so that
+E
+
+(ZEST(SST)−1st)Tβst
+2
+=E
+
+eTt ST(SST)−1SETZβSet
+2
+=E
+h
+eTt HETZβSeteTt HETZβSet
+i
+=E
+h
+eTt H(IT1 HTeteTt STβTZΣϵ)ZβSet
+i
+=E
+h
+eTt HeteTt STβTZΣϵZβSet
+i
+,
+= tr
+
+E
+h
+eTt HeteTt STβTZΣϵZβSet
+i
+= tr
+
+E
+h
+(SST)−1SeteTt STβTZΣϵZβSeteTt ST
+i
+= tr
+
+E
+h
+(SST)−1
+i
+E
+h
+SeteTt STβTZΣϵZβSeteTt ST
+i
++E 1
+
+,
+where
+E1 :=E
+h
+(SST)−1SeteTt STβTZΣϵZβSeteTt ST
+i
+−E
+h
+(SST)−1
+i
+E
+h
+SeteTt STβTZΣϵZβSeteTt ST
+i
+.
+TheE 1 term results from the fact that(SST)−1 is of course not independent of the other terms,
+however experimentally we find thattr(E1)is negligible compared to the trace of the expectation
+product and decreases rapidly in the ratiop/T1. Provided we are in the regime whereT1 ≫p,
+then this approximation is reasonable as can be seen in Figure 3.
+With this, we can finish the evaluation. To simplify the expression it is convenient to swapSet
+withs t again, and define the matrixF:=β TZΣϵZβ, so that
+E
+
+(ZEST(SST)−1st)Tβst
+2
+= tr
+
+E
+h
+(SST)−1
+i
+E
+h
+stsTt βTZΣϵZβstsTt
+i
++E 1
+
+= tr
+
+
+ 
+Σs +µ sµTs −1
+T1 −p−1
+
+2
+
+Σs +µ sµTs
+
+F
+
+Σs +µ sµTs
+
++µ Ts Fµs
+
+Σs −µ sµTs
+
++ tr(FΣs)
+
+Σs +µ sµTs
+
+ +ε 1
+= 1T1 −p−1 tr 2F Σs +µ sµTs  +µ Ts Fµs · Σs +µ sµTs −1 Σs −µ sµTs  +pFΣ s +ε 1,
+withε 1 := tr(E1). Thus, the expected variance term is given by
+E
+"
+bV
+
+(ZEST(SST)−1st)Tβst
+
+t∈T1
+#
+= 1T1 −p−1 tr 2F Σs +µ sµTs  +µ Ts Fµs · Σs +µ sµTs −1 Σs −µ sµTs  +pFΣ s +ε 1.
+27
+C Proof of Proposition B.1
+Moving on, we tackle the next term in the expected variance similarly:
+E
+"
+bV
+
+(ZEST(SST)−1st)Tϵt+1
+
+t∈T1
+#
+=V
+h
+(ZEST(SST)−1st)Tϵt+1
+i
+,for allt∈ T 1,
+=E
+
+(ZEST(SST)−1st)Tϵt+1
+2
+−E
+h
+(ZEST(SST)−1st)Tϵt+1
+i2
+=E
+
+(ZEST(SST)−1st)Tϵt+1
+2
+−
+
+tr(ZΣϵ) pT1
+2
+.
+We can evaluate the first term as
+E
+
+(ZEST(SST)−1st)Tϵt+1
+2
+=E
+h
+etHETZEeteTt ETZEHTet
+i
+= tr(ΣϵZΣϵZ)
+
+E
+h
+eTt Het
+i
++E
+h
+eTt HeteTt HTet
+i
++ tr(ΣϵZ)2E heTt HeteTt Heti
+= tr(ΣϵZΣϵZ)
+ 
+p
+T1
++
+ p(p+ 2)
+T1(T1 + 2) −1 Tp µs 2(T1 −p)(T 1 −p+ 2)T 2(T+ 1)(T+ 2) !
++ tr(ΣϵZ)2
+ p(p+ 2)
+T1(T1 + 2) −1 Tp µs 2(T1 −p)(T 1 −p+ 2)T 2(T+ 1)(T+ 2)  ,
+where we have used the fact that when there is no intercept term the diagonal entries of the hat
+matrixHare distributedβ
+
+p
+2 , (T−p)2
+
+[BKW04, Appendix 2A], and for the case where there is an
+intercept term, Chatterjee and Hadi [CH88, Section 2.3.7] derive an approximate distribution for
+the diagonal elements of the hat matrix,
+T1 −p
+p−1
+htt − 1T1
+1−h tt
+˙∼F(p−1, T1 −p),
+whereF(p−1, T1 −p)denotes theFdistribution withp−1andT 1 −pdegrees of freedom. However,
+according to Rao [Rao09, p. 542] this is an exact distribution, rather than an approximate one
+whenµ s =0, which holds in our assumptions. With a little work this yields
+E[h2tt] = p(p+ 2)T1(T1 + 2) − 2(T1 −p)(T 1 −p+ 2)T 2(T+ 1)(T+ 2) ,
+and noting that1Tp µs is zero with no intercept, and one with an intercept, this yields the final line
+of the derivation above. Putting it all together we obtain the expected variance term
+E
+"
+bV
+
+(ZEST(SST)−1st)Tϵt+1
+
+t∈T1
+#
+= tr(ΣϵZΣϵZ)
+ 
+p
+T1
++
+ p(p+ 2)
+T1(T1 + 2) −1 Tp µs 2(T1 −p)(T 1 −p+ 2)T 2(T+ 1)(T+ 2) !
++ tr(ΣϵZ)2
+ p(p+ 2)
+T1(T1 + 2) −1 Tp µs 2(T1 −p)(T 1 −p+ 2)T 2(T+ 1)(T+ 2)  − tr(ZΣϵ) pT1 2
+= tr(ΣϵZΣϵZ) pT1 (T1 + 1) (p+T 1 + 4)−2 (p−T 1 −2) (p−T 1)1 Tp µsT 21 (T1 + 1) (T1 + 2)
+−tr(Σ ϵZ)2
+2 (p−T 1)
+
+(p−2)1 Tp µs +T 1
+
+p−1 Tp µs
+
++p
+
+T 21 (T1 + 1) (T1 + 2) .
+28
+C Proof of Proposition B.1
+Next we begin to tackle the covariance terms, again we use the fact that the sample covariance
+is an unbiased estimator and the iid property. The first two covariance terms are zero:
+E
+"
+2 dCov
+
+(Zβst)Tβst
+
+t∈T1
+,
+
+(Zβst)Tϵt+1
+
+t∈T1
+#
+= 2Cov[(Zβst)Tβst,(Zβs t)Tϵt+1] = 0,
+sinceE[ϵ t+1] =0, and
+E
+"
+2 dCov
+
+(Zβst)Tβst
+
+t∈T1
+,
+
+(ZEST(SST)−1st)Tβst
+
+t∈T1
+#
+= 2Cov
+h
+(Zβst)Tβst,(ZES T(SST)−1st)Tβst
+i
+is null for allt∈ T1 as well sinceE[ϵt+1] =0. Regarding the next covariance term,
+E
+"
+2 dCov
+
+(Zβst)Tβst
+
+t∈T1
+,
+
+(ZEST(SST)−1st)Tϵt+1
+
+t∈T1
+#
+= 2Cov
+h
+(Zβst)Tβst,(ZES T(SST)−1st)Tϵt+1
+i
+,for allt∈ T 1,
+= 2
+
+E
+h
+(Zβst)Tβst(ZEST(SST)−1st)Tϵt+1
+i
+−E
+h
+(Zβst)Tβst
+i
+E
+h
+(ZEST(SST)−1st)Tϵt+1
+i
+.
+Starting with the first expectation,
+E
+h
+(Zβst)Tβst(ZEST(SST)−1st)Tϵt+1
+i
+=E
+h
+eTt STβTZβSeteTt HETZEet
+i
+= tr(ZΣϵ)E
+h
+eTt STβTZβSeteTt Het
+i
+= tr(ZΣϵ) tr
+
+E
+h
+(SST)−1
+i
+E
+h
+stsTt βTZβstsTt
+i
++E 2
+
+=
+tr(ZΣϵ) tr
+
+2βTZβ(Σs +µ sµTs ) +µ Ts βTZβµs(Σs +µ sµTs )−1(Σs −µ sµTs ) +pβ TZβΣs
+
+T1 −p−1 +ε 2,
+where we have proceeded as before with a mixed expectation of(SST)−1 andS, and
+E2 =E
+h
+(SST)−1stsTt βTZβstsTt
+i
+−E
+h
+(SST)−1
+i
+E
+h
+stsTt βTZβstsTt
+i
+,
+andε 2 := tr(E2). Next, the second expectation reads
+E
+h
+(Zβst)Tβst
+i
+E
+h
+(ZEST(SST)−1st)Tϵt+1
+i
+=
+
+tr(βΣsβTZ) +µ Ts βTZβµs
+ p
+T1
+tr(ZΣϵ).
+Putting this together yields
+E
+"
+2 dCov
+
+(Zβst)Tβst
+
+t∈T1
+,
+
+(ZEST(SST)−1st)Tϵt+1
+
+t∈T1
+#
+= 2T1 −p−1 tr(ZΣϵ) tr2βTZβ(Σs +µ sµTs ) +µ Ts βTZβµs ·(Σ s +µ sµTs )−1(Σs −µ sµTs ) +pβ TZβΣs
+− 2pT1 tr(ZΣϵ) tr(βΣsβTZ) +µ Ts βTZβµs +ε 2.
+29
+C Proof of Proposition B.1
+The next covariance term is similar, namely
+E
+"
+2 dCov
+
+(Zβst)Tϵt+1
+
+t∈T1
+,
+
+(ZEST(SST)−1st)Tβst
+
+t∈T1
+#
+= 2Cov
+h
+(Zβst)Tϵt+1,(ZES T(SST)−1st)Tβst
+i
+,for allt∈ T 1,
+= 2
+
+E
+h
+(Zβst)Tϵt+1(ZEST(SST)−1st)Tβst
+i
+−E
+h
+(Zβst)Tϵt+1
+i
+E
+h
+(ZEST(SST)−1st)Tβst
+i
+= 2E
+h
+(Zβst)Tϵt+1(ZEST(SST)−1st)Tβst
+i
+,
+sinceE[ϵ t+1] =0. The first expectation can be evaluated as
+E
+h
+(Zβst)Tϵt+1(ZEST(SST)−1st)Tβst
+i
+=E
+h
+eTt STβTZtr(e Tt ST(SST)−1Set)ΣϵZβSet
+i
+= tr
+
+E
+h
+(SST)−1
+i
+E
+h
+stsTt βTZZΣϵZTβstsTt
+i
++E 3
+
+= 1T1 −p−1 tr 2F(Σs +µ sµTs ) +µ Ts Fµs ·(Σ s +µ sµTs )−1(Σs −µ sµTs ) +pFΣ s +ε 3,
+where again we handle the(SST)−1 terms as before, and
+E3 =E
+h
+(SST)−1stsTt βTZZΣϵZTβstsTt
+i
+−E
+h
+(SST)−1
+i
+E
+h
+stsTt βTZZΣϵZTβstsTt
+i
+,
+andε 3 := tr(E3). Thus,
+E
+"
+2 dCov
+
+(Zβst)Tϵt+1
+
+t∈T1
+,
+
+(ZEST(SST)−1st)Tβst
+
+t∈T1
+#
+= 2T1 −p−1 tr 2F(Σs +µ sµTs ) +µ Ts Fµs ·(Σ s +µ sµTs )−1(Σs −µ sµTs ) +pFΣ s +ε 3,
+where againF=β TZΣϵZβ. We turn now to the penultimate term:
+E
+"
+2 dCov
+
+(Zβst)Tϵt+1
+
+t∈T1
+,
+
+(ZEST(SST)−1st)Tϵt+1
+
+t∈T1
+#
+= 2Cov
+h
+(Zβst)Tϵt+1,(ZES T(SST)−1st)Tϵt+1
+i
+,for allt∈ T 1,
+= 2
+
+E
+h
+(Zβst)Tϵt+1(ZEST(SST)−1st)Tϵt+1
+i
+−E
+h
+(Zβst)Tϵt+1
+i
+E
+h
+(ZEST(SST)−1st)Tϵt+1
+i
+= 0,
+as the derivation yields a cubic inEandE[ϵt+1] =0.
+For the final term, we can write
+E
+"
+2 dCov
+
+(ZEST(SST)−1st)Tβst
+
+t∈T1
+,
+
+(ZEST(SST)−1st)Tϵt+1
+
+t∈T1
+#
+= 2E
+"
+bE
+
+(ZEST(SST)−1st)Tβst(ZEST(SST)−1st)Tϵt+1
+
+t∈T1
+
+−bE
+
+(ZEST(SST)−1st)Tβst
+
+t∈T1
+
+bE
+
+(ZEST(SST)−1st)Tϵt+1
+
+t∈T1
+#
+= 0,
+30
+C Proof of Proposition B.1
+which again yields terms with onlyEor cubics inE, and from the identity for cubic expectations
+we see that every term in the expectation includesµϵ which is zero, and thus the full expectation
+is zero. We can now collate all the terms for the expected varianceE[bV[( dPnLt)t∈T1 ]]:
+E[bV[( dPnLt)t∈T1 ]]
+= 2 tr
+
+(GΣs)2
+
++ 4µTs GΣsGµs + tr(FΣs) +µ Ts Fµs
++ 3T1 −p−1 tr 2F(Σs +µ sµTs ) +µ Ts Fµs ·(Σ s +µ sµTs )−1(Σs −µ sµTs ) +pFΣ s
++ tr(ΣϵZΣϵZ) pT1 (T1 + 1) (p+T 1 + 4)−2 (p−T 1 −2) (p−T 1)1 Tp µsT 21 (T1 + 1) (T1 + 2)
+−tr(Σ ϵZ)2
+2 (p−T 1)
+
+(p−2)1 Tp µs +T 1
+
+p−1 Tp µs
+
++p
+
+T 21 (T1 + 1) (T1 + 2)
++ 2T1 −p−1 tr(ZΣϵ) tr2G(Σs +µ sµTs ) +µ Ts Gµs ·(Σ s +µ sµTs )−1(Σs −µ sµTs ) +pGΣ s
+− 2pT1 tr(ZΣϵ) tr(GΣs) +µ Ts Gµs
++ε 1 +ε 2 +ε 3,
+where
+F :=β TZΣϵZβandG :=β TZβ,
+and
+ε1 = tr
+
+E
+h
+(SST)−1SeteTt STβTZΣϵZβSeteTt ST
+i
+−E
+h
+(SST)−1
+i
+E
+h
+SeteTt STβTZΣϵZβSeteTt ST
+i
+,
+ε2 = tr
+
+E
+h
+(SST)−1stsTt βTZβstsTt
+i
+−E
+h
+(SST)−1
+i
+E
+h
+stsTt βTZβstsTt
+i
+,
+ε3 = tr
+
+E
+h
+(SST)−1stsTt βTZZΣϵZTβstsTt
+i
+−E
+h
+(SST)−1
+i
+E
+h
+stsTt βTZZΣϵZTβstsTt
+i
+.
+C.3 Out-of-sample expected average
+Next we derive the expected out-of-sample expected return and variance. We now have thatbβ
+is independent of the realisations of the signal and the residuals, thus the derivation is simplified
+significantly. Firstly, the expected out-of-sample P&L is given by
+E
+"
+bE
+
+(Zbβst)T(βst +ϵ t+1)t∈T2 # =E[(Zβs t)Tβst] = tr(βΣsβTZ) +µ Ts βTZβµs,
+where we have noE[(Zβst)Tϵt+1]term sinceE[ϵ t+1] =0and by independence.
+C.4 Out-of-sample expected variance
+Next the variance is given by
+E
+"
+bV
+
+(Zbβst)T(βst +ϵ t+1)t∈T2 #
+=E
+"
+bV
+
+(Zbβst)Tβst
+
+t∈T2
+
++ bV
+
+(Zbβst)Tϵt+1
+
+t∈T2
+
++ 2dCov
+
+(Zbβst)Tβst
+
+t∈T2
+,
+
+(Zbβst)Tϵt+1
+
+t∈T2
+#
+.
+31
+C Proof of Proposition B.1
+The first term can be evaluated as
+E
+"
+bV
+
+(Zbβst)Tβst
+
+t∈T2
+#
+=E
+"
+bV
+
+(Zβst)Tβst
+
+t∈T2
+
++ bV
+
+(ZEST(SST)−1st)Tβst
+
+t∈T2
+
++2 dCov
+
+(Zβst)Tβst
+
+t∈T2
+,
+
+(ZEST(SST)−1st)Tβst
+
+t∈T2
+#
+,
+where we must be careful to note thatEST(SST)−1, i.e. the error inbβ, are the errors and signals
+from the first period, not the second. The first term of this is simply given by
+E
+"
+bV
+
+(Zβst)Tβst
+
+t∈T2
+#
+=V[(Zβs t)Tβst] = 2 tr(ZβΣsβTZβΣsβT) + 4µTs βTZβΣsβTZβµs,
+where the first equality holds for allt∈ T2 sinces t are iid. The covariance term is zero since
+E[ϵt+1] =0, so we are left withE
+
+bV
+h 
+(ZEST(SST)−1st)Tβstt∈T2 i. Withε β :=ES T(SST)−1,
+E
+"
+bV
+
+(ZEST(SST)−1st)Tβst
+
+t∈T2
+#
+=V
+h
+(Zεβst)Tβst
+i
+,for allt∈ T 2,
+=E
+"
+tr
+
+εTβ ZβΣs
+
+εTβ Zβ+β TZεβ
+
+Σs
+
++µTs
+
+εTβ Zβ+β TZεβ
+
+Σs
+
+εTβ Zβ+β TZεβ
+
+µs
+
+.
+To evaluate this we require some intermediate expectations,
+E
+h
+εTβ ZβΣsεTβ Zi =DΣ Ts βTZΣϵZ,
+E
+h
+εTZβΣsβTZεi =Dtr ΣsβTZΣϵZβ ,
+E
+h
+εβΣsεTβ
+i
+=Σ ϵ tr
+
+ΣTs D ,
+where
+D :=
+ 
+Σs +µ sµTs −1
+T1 −p−1 .
+Putting this all together yields
+E
+"
+bV
+
+(ZEST(SST)−1st)Tβst
+
+t∈T2
+#
+= tr
+
+DΣTs βTZΣϵZβΣs
+
++ tr (DΣs) tr
+
+ΣϵZβΣTs βTZ
++µ Ts
+
+2DΣTs βTZΣϵZβ+ tr ΣϵZβΣTs βTZ D+ tr ΣTs D βTZΣϵZβ µs.
+Thus, the first term for the expected variance out-of-sample is
+E
+"
+bV
+
+(Zbβst)Tβst
+
+t∈T2
+#
+= 2 tr(ZβΣsβTZβΣsβT) + 4µTs βTZβΣsβTZβµs
++ tr
+
+DΣTs βTZΣϵZβΣs
+
++ tr (DΣs) tr
+
+ΣϵZβΣTs βTZ
++µ Ts
+
+2DΣTs βTZΣϵZβ+ tr ΣϵZβΣTs βTZ D+ tr ΣTs D βTZΣϵZβ µs.
+32
+D Monte Carlo Details
+We can proceed similarly for the second term,
+E
+"
+bV
+
+(Zbβst)Tϵt+1
+
+t∈T2
+#
+=E
+"
+bV
+
+(Zβst)Tϵt+1
+
+t∈T2
+
++ bV
+
+(ZEST(SST)−1st)Tϵt+1
+
+t∈T2
+
++2 dCov
+
+(Zβst)Tϵt+1
+
+t∈T2
+,
+
+(ZEST(SST)−1st)Tϵt+1
+
+t∈T2
+#
+.
+Again the first term is simply
+E
+"
+bV
+
+(Zβst)Tϵt+1
+
+t∈T2
+#
+=V
+h
+(Zβst)Tϵt+1
+i
+= tr(ZβΣsβTZΣϵ) +µ Ts βTZΣϵZβµs,
+and the final term is zero asEis from the in-sample period, and therefore independent ofϵt+1
+from the out-of-sample period, andE[ϵt+1] =0. Thus, we need only to find the second term,
+E
+"
+bV
+
+(ZEST(SST)−1st)Tϵt+1
+
+t∈T2
+#
+=E
+h
+tr(ZεβΣsεTβ ZΣϵ) +µ Ts εTβ ZΣϵZεβµs
+i
+= tr
+
+(ZΣϵ)2
+ 
+tr(ΣTs D) +µ Ts Dµs
+
+.
+And therefore, the full second term is given by
+E
+"
+bV
+
+(Zbβst)Tϵt+1
+
+t∈T2
+#
+= tr(ZβΣsβTZΣϵ)+µTs βTZΣϵZβµs+tr (ZΣϵ)2 tr(ΣTs D) +µ Ts Dµs .
+The third term, the covariance term, is necessarily zero byE[ϵt+1] =0and independence, thus the
+expected out-of-sample variance is given by
+E
+"
+bV
+
+(Zbβst)T(βst +ϵ t+1)t∈T2 #
+= 2 tr(ZβΣsβTZβΣsβT) + 4µTs βTZβΣsβTZβµs
++ tr
+
+DΣTs βTZΣϵZβΣs
+
++ tr (DΣs) tr
+
+ΣϵZβΣTs βTZ
++µ Ts
+
+2DΣTs βTZΣϵZβ+ tr ΣϵZβΣTs βTZ D+ tr ΣTs D βTZΣϵZβ µs
++ tr(ZβΣsβTZΣϵ) +µ Ts βTZΣϵZβµs + tr (ZΣϵ)2 tr(ΣTs D) +µ Ts Dµs .
+D Monte Carlo Details
+As previously mentioned, we use Monte Carlo simulations both to check that the approxima-
+tions (3.2) are reasonable (εi = 0and ignoring the convexity adjustment) and to support and
+provide additional analysis. To do this, we observe the point estimates of the parameters from the
+experiments using commodity futures in Section 5 and select distributions to draw new realisations
+within a cloud around these point estimates. Specifically,
+•For the signals we let the standard deviation of the signals be1, which is unrestrictive as we
+can always standardise any given signal.
+•For the residuals we sample the variances from aχ2 distribution, which is well known to be
+the sample distribution for variance.
+•ForbothsignalsandresidualswedrawcorrelationmatricesfromtheLJKdistribution[LKJ09],
+commonly used as a prior for correlation matrices in Bayesian modelling, and which can be
+considered the correlation equivalent of the Wishart distribution used for covariance matrices.
+33
+E Additional Values for Section 5 and Section 6
+•We can then construct the covariance matrixΣ=diag(σ)Pdiag(σ), whereσis the vector of
+variances per signal/residual andPis the sampled correlation matrix for the signal/residuals.
+•Forβwe sample entries from a Laplace distribution, which provided the best fit when looking
+at the entries of realβmatrices from Section 5.
+WithβandΣ ϵ,Σ s coming from real data we would expect certain structures such as clusters
+with the covariance matrix (e.g. similarity between stocks in the same sector), or similar parameters
+for certain stocks; this random sampling unfortunately misses out on this. However, from studying
+the expressions for the replication ratio it does not appear that these characteristics would impact
+our results. This is further confirmed by noting that when using real assets and signals in Section 5,
+the results remain valid. To achieve a desired true Sharpe ratio we simply scale the matrixβ
+appropriately. Finally, we letµs =0and do not include a drift term.
+We note here that to simulate even 100 assets requires a significant amount of compute, par-
+ticularly with largeT, which realistically will almost always be the case for a strategy of this
+style. Thus, the analytical approximations are useful to enable quick comparative adjustments for
+strategies, without requiring lengthy simulations.
+E Additional Values for Section 5 and Section 6
+Section 5 - Estimated Covariance
+In Section 5 we have used the true covariance matrix when constructing our portfolios. To further
+confirm that the values are robust to the estimation of the covariance matrix (as previously shown
+in Section 3.3), we run the same simulation again, but this time estimating the covariance matrix
+for each sample from the observed in-sample data, and using that to construct the portfoliobw=
+bΣ−1ϵ bβst.
+We collect all the metrics for the analytical, Gaussian + IID simulated estimates, and t +
+AR(1) simulated estimates into Table 2. Overall, we see that replacing the true residual covariance
+matrix with its in-sample estimate has only a negligible impact on both in-sample and out-of-
+sample performance, in line with the sensitivity analysis in Section 3.3. Additionally, we see that
+the average realised Sharpe ratio is extremely close to the estimate which does not account for
+convexity (yielded by dividing the average mean by the square root of the average variance), which
+is in turn close to our analytical value. Thus, to conclude this section, we see that even when the
+data generating process departs from our idealised assumption, the analytical estimates are still a
+good estimator for all the metrics of interest.
+Section 6 - Full Metrics
+We report here the expected metrics in the same style as the previous section. Note that the results
+reported are averages over all 5,000,000 samples. For example, the interpretation of the empirical
+expected in-sample mean is: “The average observed in-sample mean for all combinations of signals
+over all sub-periods”, and the interpretation of the analytical expected in-sample mean is: “The
+average expected in-sample mean for all combinations of signals over all sub-periods”.
+We observe that while the raw mean and variance estimates differ significantly between the
+analytical and empirical results, this discrepancy is primarily attributable to a scale factor. Most
+notably, the large empirical out-of-sample variance of44.58(compared to the analytical0.27) is
+driven by significant kurtosis in the empirical values; for comparison, the modal values are0.05and
+0.09and the median values are0.49and0.12respectively. In particular, some resamples generate
+very large realised variances for portfolios whose corresponding out-of-sample Sharpe ratios are
+essentially zero. These extreme observations have little impact on the average Sharpe ratio but
+inflate the average variance. As the portfolio weights can be multiplied by a constant to scale both
+the mean and variance without altering the risk-adjusted return, the scale-invariant Sharpe ratio
+provides a more robust metric for comparison.
+34
+E Additional Values for Section 5 and Section 6
+Gaussian + IIDt+ AR(1)
+Analytical True Cov Est. Cov True Cov Est. Cov
+In-Sample
+Meanµ0.28 0.28 0.29 0.31 0.32
+Varianceσ 2 0.30 0.30 0.30 0.41 0.38
+Sharpe Ratio SRIS N/A 8.24 8.26 7.95 8.12
+µ/σ(SR EIS) 8.22 8.24 8.26 7.72 8.10
+Out-of-Sample
+Meanµ0.11 0.11 0.11 0.14 0.14
+Varianceσ 2 0.29 0.29 0.30 0.59 0.62
+Sharpe Ratio SROOS N/A 3.14 3.13 2.83 2.83
+µ/σ(SR EOOS) 3.13 3.14 3.13 2.79 2.79
+Replication Ratio
+SROOS/SRIS N/A 38% 38% 36% 35%
+SREOOS/SREIS 38% 38% 38% 36% 34%
+Table 2: Simulation Results comparing Analytical and Estimated values under Gaussian IID and
+AR(1)+t assumptions for Section 5. Sharpe ratios are annualised assuming 252 trading days.
+In this regard, the analytical and empirical estimates align remarkably well. The in-sample ex-
+pected analytical Sharpe ratioE[SREIS] = 1.16is comparable to the derived empirical ratio of1.21.
+Similarly, the out-of-sample estimates are similar for the analytical and empirical values: the an-
+alytical model predictsE[SREOOS] = 0.18, which matches the average observedE[SROOS] = 0.18.
+This alignment results in consistent replication ratios across the different aggregation methods,
+ranging between46%and54%.
+Analytical Empirical
+In-Sample
+MeanE[µ]0.19 0.33
+VarianceE[σ 2]0.32 0.87
+Sharpe RatioE[SR IS]N/A 1.33
+µ/σ(E[SR EIS]) 1.16 1.21
+Out-of-Sample
+MeanE[µ]0.09 0.41
+VarianceE[σ 2]0.27 44.58
+Sharpe RatioE[SR OOS]N/A 0.18
+µ/σ(E[SR EOOS]) 0.18 0.21
+Replication Ratio
+E[SROOS/SRIS]N/A 52%
+E[SROOS]/E[SRIS]N/A 46%
+E[SREOOS/SREIS]54% N/A
+E[SREOOS]/E[SREIS]52% N/A
+Table 3: Statistics from resampling study, comparing analytical (implied) and empirical values for
+Section 6. Sharpe ratios are annualised from monthly values.
+35
+E Additional Values for Section 5 and Section 6
+Disclaimer
+Unless specifically indicated otherwise, the views and opinions expressed in this communication
+are those of the author(s) and do not reflect the official policy or position of [Qube Research &
+Technologies Ltd]. The information provided herein is for informational purposes only and should
+not be construed as advice, financial or otherwise, or opinion of [Qube Research & Technologies
+Ltd]. [Qube Research & Technologies Ltd] has neither approved nor disapproved of such content
+and makes no representations as to the accuracy, completeness, or reliability of any information
+contained herein.
+Recipientsareadvisednottorelysolelyonthiscommunicationforanypurpose. [QubeResearch
+& Technologies Ltd] shall not be liable for any errors or omissions, nor for any damages resulting
+from reliance on this information.
+36

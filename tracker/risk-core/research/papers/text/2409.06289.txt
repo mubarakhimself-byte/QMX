@@ -1,0 +1,1521 @@
+arXiv 2409.06289  https://arxiv.org/abs/2409.06289
+
+Automate Strategy Finding with LLM in Quant Investment
+Zhizhuo Kou1, Holam Yu2, Junyu Luo3, Jingshu Peng1, Xujia Li1,
+Chengzhong Liu1,Juntao Dai 3,Lei Chen 1, 2,Sirui Han 1* † Yike Guo1*,
+1 The Hong Kong University of Science and Technology
+2 The Hong Kong University of Science and Technology (Guangzhou)
+3 Peking University
+zkouaa@connect.ust.hk {siruihan, yikeguo}@ust.hk
+Abstract
+We present a novel three-stage framework lever-
+aging Large Language Models (LLMs) within
+a risk-aware multi-agent system for automate
+strategy finding in quantitative finance. Our ap-
+proach addresses the brittleness of traditional
+deep learning models in financial applications
+by: employing prompt-engineered LLMs to
+generate executable alpha factor candidates
+across diverse financial data, implementing
+multimodal agent-based evaluation that filters
+factors based on market status, predictive qual-
+ity while maintaining category balance, and
+deploying dynamic weight optimization that
+adapts to market conditions. Experimental re-
+sults demonstrate the robust performance of
+the strategy in Chinese & US market regimes
+compared to established benchmarks. Our
+work extends LLMs capabilities to quantita-
+tive trading, providing a scalable architecture
+for financial signal extraction and portfolio con-
+struction. The overall framework significantly
+outperforms all benchmarks with 53.17% cu-
+mulative return on SSE50 1 (Jan 2023 to Jan
+2024), demonstrating superior risk-adjusted
+performance and downside protection on the
+market. Our protocol code are available at
+https://github.com/kouzhizhuo/Auto
+mate-Strategy-Finding-with-LLM-in-Q
+uant-investment.
+1 Introduction
+Recent advances in LLMs and multi-agent systems
+are converging to transform quantitative finance.
+This synergistic relationship leverages LLMs’ text
+comprehension and generation capabilities along-
+side multi-agent frameworks that simulate mar-
+ket dynamics, creating sophisticated approaches
+to portfolio management (Lee et al., 2020).
+*Corresponding author.
+†Project leader
+1The SSE 50 Index tracks the performance of the 50 most
+influential large-cap blue-chip stocks on the Shanghai Stock
+Exchange.
+LLMs have evolved from supporting ana-
+lytical tools to active participants in financial
+decision-making (Luo et al., 2025c). For exam-
+ple, BloombergGPT demonstrates superior perfor-
+mance in parsing market sentiment and answering
+domain-specific questions (Wu et al., 2023). Re-
+search shows that LLMs effectively generate trad-
+ing actions by contextualizing price trends with
+news and earnings reports (Ding et al., 2023). Con-
+currently, multi-agent systems offer powerful ap-
+proaches to portfolio optimization through decen-
+tralized interaction. The Multi-Agent Portfolio
+System demonstrates the portfolio managed by
+agents have achieved well-diversified returns with
+improved risk-adjusted performance (Lee et al.,
+2025). These frameworks capture complex mar-
+ket dynamics such as information sharing and
+strategic arbitrage that single-agent models can-
+not address (Spooner and Savani, 2020). The in-
+tegration of these technologies creates sophisti-
+cated financial environments where LLM-enhanced
+agents demonstrate adaptive behavior. StockA-
+gent exemplifies this approach with LLM-powered
+agents mimic diverse investor personas responding
+to market events (Zhang et al., 2024a). Hierar-
+chical structures such as FinCon organize agents
+in manager-analyst relationships, facilitating col-
+laboration through natural language communica-
+tion (Yu et al., 2024). This convergence heralds a
+future of intelligent, distributed financial decision
+making that combines data-driven learning with
+human-like reasoning capabilities for more robust
+investment strategies (Yu et al., 2023b).
+Alpha mining is the process of discovering trad-
+ing signals that generate excess returns in financial
+markets, we identify three critical challenges in
+alpha mining: Rigidity of traditional methods that
+lack adaptability to dynamic markets (Tang et al.,
+2025); Data diversity and integration challenges de-
+spite machine learning advances (Cui et al., 2021;
+Yu et al., 2023a); and Adaptation to market variabil-
+arXiv:2409.06289v4  [q-fin.PM]  3 Nov 2025
+ity despite progress in prediction (Xu and Cohen,
+2018) and strategy formulation (Chen et al., 2019).
+Our LLM-driven framework addresses these lim-
+itations through three components: Flexible Alpha
+Mining employs LLMs to extract, categorize, and
+filter alpha factors from financial literature, organiz-
+ing them as momentum, fundamental, or liquidity
+factors with established independence (Xu and Co-
+hen, 2018). Multi-agent Multimodal Market Evalu-
+ation conducts rigorous backtesting across diverse
+market conditions, with specialized agents evalu-
+ating factor effectiveness from multiple perspec-
+tives. Dynamic Strategy Optimization implements
+a weight gating layer that assigns optimal alpha
+factor weights based on current market conditions,
+ensuring adaptive strategy development.
+Our methodology synthesizes cutting-edge ma-
+chine learning techniques with established financial
+domain knowledge to create a robust interdisci-
+plinary framework for alpha identification and opti-
+mization across diverse asset classes. This research
+is grounded in empirical quantitative investment
+practices, bridging theoretical advancements with
+practical applications in portfolio management.
+Our main contributions are three-fold: ❶ A
+novel framework for identifying formulaic alpha
+factors using LLMs, leveraging their exploratory
+capabilities to establish an Alpha factory from mul-
+timodal information with incremental update func-
+tionality; ❷ Introduction of a multi-agent approach
+to portfolio management for evaluating relation-
+ships between market conditions and alpha factors,
+enabling specialized evaluation under different sce-
+narios; ❸ Integration of advanced techniques from
+machine learning and finance, representing a signif-
+icant advancement in developing robust, adaptive
+investment strategies without human intervention.
+The proposed framework demonstrates versatil-
+ity across various asset classes, enhancing its utility
+and practical effectiveness. To support future re-
+search and ensure reproducibility, we make source
+code publicly available at https://github.com
+/kouzhizhuo/Automate-Strategy-Finding-w
+ith-LLM-in-Quant-investment.
+2 Problem Formulation
+This section establishes the theoretical foundation
+for our research on alpha factor strategies in quanti-
+tative finance. We formulate a framework address-
+ing three interconnected challenges: mathemati-
+cally formalizing these alphas, developing dynamic
+methodologies to generate seed alphas, and defin-
+ing and optimizing alpha factor strategies. Our
+approach integrates LLMs and multi-agent systems
+to overcome limitations in traditional quantitative
+trading methods.
+We employ consistent notation throughout:
+n stocks observed over trading periods t∈
+1,2, . . . , T, each characterized by m financial fea-
+tures. Alpha factors are denoted as α(t)ij for stock i
+in category j at time t, with corresponding weights
+wi. Market conditions at time t are represented
+by M(t), and alpha factor predictive power is mea-
+sured using the Information Coefficient (IC) 1.
+IC=σ(u, v)(1)
+A higher IC indicates stronger predictive rela-
+tionships between alpha values and future returns.
+where σ(u, v)is correlation coefficient between
+predicted alphasuand actual future returnsv.
+2.1 Alpha Factor Representation
+The first challenge involves effectively represent-
+ing alpha factors using mathematical expressions
+that capture meaningful financial signals (Lo,
+2007). Given raw financial features Xi(t) =
+{Xi1 (t), X(t)i2 , . . . , X(t)im} for each stock i at time t
+(such as price, volume, and volatility), we define
+alpha factors through two classes of operators:
+Cross-Section Operators fcs: These operators
+process data from a single time period, capturing
+instantaneous relationships between financial vari-
+ables:
+α(t)cs =f cs(Xi(t))(2)
+Time-Series Operators fts: These operators
+analyze data spanning multiple periods, identifying
+trends and temporal patterns:
+α(t)ts =f ts(Xi(t),X (t−1)i , . . . ,X(t−n)i )(3)
+The seed alpha for stock i in category j at time t
+is formulated as:
+α(t)ij =w cs·fcs(Xi(t))+wts·fts(Xi(t), . . . ,X(t−n)i )
+(4)
+where wcs and wts are weights assigned to the
+cross-section and time-series components respec-
+tively. This representation allows for the flexible
+combination of different financial signals, enabling
+the creation of complex and nuanced alpha factors.
+2.2 Alpha Mining and Selection
+The second challenge addresses the limitations of
+traditional alpha mining methods, which often fail
+to adapt to changing market conditions. We formu-
+late a dynamic selection approach that identifies the
+most relevant alphas for current market conditions
+using two complementary evaluation mechanisms:
+Confidence Score Evaluation: Assesses the
+statistical reliability of each alpha factor:
+θij =E
+h
+IC(α (t)ij |M(t))i (5)
+where θij represents the confidence score for alpha
+αij, and E[·] denotes the expected value. Higher
+confidence scores indicate more consistent perfor-
+mance across various market environments.
+Risk Preference Evaluation: Examines the risk
+characteristics of each alpha factor:
+ρij =f risk(α(t)ij ,M (t))(6)
+where ρij represents the risk score and frisk is a
+function that evaluates how well the alpha performs
+under different risk scenarios.
+The optimal set of seed alphas is selected by
+considering both confidence and risk evaluations:
+αij = arg max
+αij
+[wc ·θ ij +w r ·ρ ij](7)
+where wc and wr are weights assigned to confi-
+dence and risk scores respectively, reflecting their
+relative importance in the selection process.
+2.3 Strategy Optimization
+The third challenge involves combining the se-
+lected alphas into an effective investment strategy.
+The final alpha strategy is defined as a weighted
+combination of the optimal alphas from each cate-
+gory:
+α(t) =
+kX
+j=1
+wj ·α ij (8)
+where wj represents the weight assigned to cate-
+gory j, and k is the total number of alpha categories.
+These weights are dynamically adjusted based on
+current market status to maximize strategy perfor-
+mance while managing overall portfolio risk. This
+optimization completes our framework, transform-
+ing raw financial data into a robust trading strategy
+that can adapt to changing market environments.
+3 Methodology
+3.1 Framework Overview
+Our framework comprises three interconnected
+components (Figure 1): the SAF, multi-agent
+decision-making, and weight optimization. The
+initial phase employs LLMs to analyze and cate-
+gorize multimodal financial research documents,
+constructing a comprehensive SAF. The LLM’s
+capability to process diverse datasets enables the
+creation of a robust set of seed alphas categorized
+into independent groups, aligning with established
+finance alpha mining principles (OpenAI, 2023).
+The second phase implements a multimodal multi-
+agent evaluation process that incorporates varied
+risk perspectives, enhancing strategy adaptability
+across different market conditions. This phase pro-
+duces an optimized alpha set tailored to current
+market states and risk preferences. The final phase
+employs deep learning methods to optimize the
+weights of selected alphas, constructing a cohesive
+overall strategy.
+The framework’s dynamic architecture enables
+continuous refinement through incremental updates
+to the SAF as new research emerges and market
+conditions evolve. This adaptability ensures the
+strategy maintains relevance and robustness over
+time. The methodology’s versatility permits appli-
+cation to any structured market globally, effectively
+replicating and enhancing professional investment
+research approaches.
+3.2 LLM-Based Seed Alpha Generation
+The first stage implements an LLM-based filter-
+ing and categorization process for alpha-related re-
+search. We utilize GPT-4o model to perform these
+tasks on a diverse corpus of financial research. Our
+initial dataset comprises 11 documents spanning
+both theoretical and applied aspects of alpha min-
+ing research (see Appendix A.2). Through this pro-
+cess, the system generates 9 distinct categories con-
+taining 100 seed alphas. The approach enhances
+the model’s ability to extract intricate details and
+relationships within financial research, resulting in
+a more robust and diverse SAF.
+The output is a structured set of seed alphas cat-
+egorized into distinct financial domains such as
+Momentum, Mean Reversion, and Fundamental
+analysis et al. Each category includes specific al-
+pha designations and corresponding executable for-
+mulations derived from the LLM’s analysis (see
+Appendix A.3). This structured output forms the
+Confidence Score
+Risk Preference
+Textual Data Audio Data
+Video Data Visual Data
+Numerical Data
+Academic Paper
+Alpha Research
+Seed Alphas 
+Factory
+Selected Seed 
+Alphas
+LLM Filter & Category Multi-Agent Multi-modal Selection Optimal Strategy 
+Market Status
+Seed Alphas 
+Back test
+CS: 9
+RP: Agr
+Figure 1: Overview of the strategy generate process in three components, a Seed Alpha Factory built using LLMs,
+a multi-agent decision-making system, and a weight optimization approach for overall strategy (CS stands for
+confidence score; RP stands for risk preference)
+foundation for subsequent processing stages.
+3.3 Multimodal Multi-Agent Evaluation
+The second stage implements a comprehensive
+evaluation and selection of alpha factors through
+a multimodal and multi-agent system. Our system
+incorporates five types of multimodal data (detailed
+in Appendix A.4) encompassing textual, numerical,
+visual, audio, and video inputs. The multi-agent ar-
+chitecture comprises two agents Confidence Score
+Agent (CSA) and Risk Preference Agent (RPA). Se-
+lected alpha factors undergo rigorous backtesting
+using historical market data, with key evaluation
+metrics including the IC (Goodwin, 1998) 1 and
+Sharpe Ratio (Sharpe, 1994) 9:
+Sharpe Ratio= E[R(α(t))−R f ]p
+Var[R(α(t))] (9)
+where R(α(t)) represents the return of the strategy
+and Rf represents the risk-free rate. We devel-
+oped a Category-Based Alpha Selection algorithm
+(detailed in Appendix A.5) to automate the selec-
+tion. This algorithm systematically identifies and
+selects alphas from different categories based on
+their confidence scores, ensuring rigorous selection
+of factors that meet confidence thresholds across
+all categories while maintaining category diversity.
+3.4 Weight Optimization
+The final stage employs a 3-layer MLP to optimize
+the weights of selected seed alphas by mapping
+historical alpha calculations to future yields (Chen
+and et al., 2020). The architecture consists of an
+input layer processing daily alpha values, a hidden
+layer with ten ReLU-activated nodes, and a single-
+node output layer for yield prediction.
+During training, the network employs backprop-
+agation and gradient descent to minimize the loss
+function, quantifying the discrepancy between pre-
+dicted and actual yields. We utilize a separate val-
+idation set to ensure model generalizability and
+prevent overfitting. The DNN processes input
+data through the hidden layer, transforming it with
+learned weights and biases, and generates the final
+output through the output layer’s weights, biases,
+and activation function.
+This methodology establishes a robust frame-
+work for predicting future yields based on historical
+alpha values, demonstrating the efficacy of deep
+learning techniques in optimizing alpha weights
+and enhancing investment strategy performance.
+Algorithm ?? provides a formal specification of our
+complete framework, illustrating the logical flow
+from multimodal data processing through multi-
+agent evaluation to final weight optimization.
+4 Experiment
+Our research aims to develop a comprehensive
+LLM-driven alpha mining framework that oper-
+ates without human intervention. This framework
+is uniquely capable of processing multimodal infor-
+mation and adapting to varying market conditions.
+To validate the effectiveness of our framework, we
+have conducted a series of experiments.
+4.1 Datasets
+Our study focuses on financial data from the Chi-
+nese market and US market, specifically target-
+ing the SSE 50 Index. Table 1 shows the experi-
+ment dataset, which encompasses six primary fea-
+tures as original inputs for our Alpha factors: open,
+high, low, close, volume (OHLCV), and volume-
+weighted average price (VWAP). To ensure rigor-
+ous evaluation and robust model performance. Our
+experiments integrate financial reports and factor
+Table 1: Summary of the experiment dataset
+Aspect Details
+Primary Features Open, High, Low, Close, V olume, VW AP
+Alpha Factors Custom factors based on price, volume, financial ratios,
+moving averages, sentiment analysis
+Financial Reports Quarterly and Annual reports from Index constituent companies
+Time Periods Jan 2019-Jun 2024
+Market Coverage SSE50, CSI300, SP500 Index
+Evaluation Criteria Causal relationships, Alpha factor performance, model robustness
+performances of the 50 constituent companies of
+the SSE 50 Index, providing a comprehensive view
+of the market (Li and Mei, 2020). The evaluation
+considers various datasets, including financial re-
+ports from the specified periods and performance
+metrics of different Alpha factors.
+4.2 Multimodal Knowledge Extraction and
+Adaptive Alpha Discovery
+We implement a prompt architecture (Figure 2)
+that incorporates multimodal market information
+into LLMs for comprehensive knowledge extrac-
+tion and seed alpha selection. This architecture
+integrates textual financial sentiment data, numeri-
+cal company financial statements, and visual trad-
+ing charts to provide holistic market analysis (Luo
+et al., 2025b). Our contextual analysis mechanism
+dynamically adjusts parameters based on prevailing
+market trends and sector performance. Experimen-
+tal validation demonstrates the framework’s adapt-
+ability across varying market conditions. In Case
+1, analyzing SSE50 data from Jan 2023 to Dec
+2023, the model selected momentum and volume-
+based indicators such as price momentum, RSI, and
+MACD. Conversely, in Case 2, when processing
+the time window from Jan 2022 to Dec 2022, the
+model prioritized volatility and economic factors,
+including ATR, Bollinger Bands, and gross profit
+indicators.
+These results confirm the framework’s capacity
+to dynamically adapt to changing market condi-
+tions through effective multimodal data integra-
+tion. This adaptability enables the identification
+of market-appropriate alphas, enhancing strategy
+robustness across diverse market environments.
+4.3 Comparative Performance Against
+Traditional Alpha Factories
+When evaluating the performance of selected seed
+alpha signals, the primary metric is the IC. We eval-
+uated five most common alpha categories: Momen-
+tum, Mean Reversion, V olatility, Fundamental and
+Growth. The results in Table 2 demonstrate that
+our LLM-driven framework consistently achieves
+Case 1 Case 2
+Context: Text + Table + Image 
+Text: SSE50 company announcement(Jan 2023-Dec 2023) 
+Table: SSE50 company finical statement(Jan 2023-Dec 2023) 
+Image: SSE50 Kline chart & trading chart(Jan 2023-Dec 2023)
+Context: Text + Table + Image 
+Text: SSE50 company announcement(Jan 2022-Dec 2022) 
+Table: SSE50 company finical statement(Jan 2022-Dec 2022) 
+Image: SSE50 Kline chart & trading chart(Jan 2022-Dec 2022)
+(CLOSE-DELAY(CLOSE.14))
+(RSI.DELAY(RSI,14))
+(CLOSE-DELAY(SMA(CLOSE,14),7))
+(MA(CLOSE.20)-CLOSE)
+(SMA(CLOSE,20)-CLOSE)
+(MAX(HIGH, 20)-CLOSE)
+(100-RSI)
+(BOLL UP.BOLL DOWN)/SMA(CLOSE, 20)
+STD(CLOSE,10)/STD(CLOSE, 50)
+VOLUME/MARKET CAP
+VOLUME*CLOSE
+(EPS/DELAY(EPS,1)-1)
+Selected Alpha
+(ATR-DELAY(ATR,14))
+(UPPER BAND-LOWER BAND)/SMA(CLOSE,20)
+(VOLUME-DELAY(VOLUME,14))/ DELAY(VOLUME,14)
+(GROSS PROFIT/REVENUE)
+(OPERATING INCOME/REVENUE)
+(MAX(HIGH,14)-CLOSE)/(MAX(HIGH,14)-MIN(LOW,14)))*-100
+(MAX(HIGH,20)-CLOSE)
+Selected Alpha
+Our Framework
+Figure 2: Sample Experiment on Different Market Sta-
+tus Input and Alpha Selection, Selected Alpha Depends
+on Different Context
+Table 2: IC comparison of mean & selected
+Momentum MeanReversion V olatility Fundamental Growth
+Mean IC of SAF 0.0092 0.0135 0.0177 0.0118 0.0146
+Mean IC of
+Selected SAF 0.0208 0.0187 0.0258 0.0192 0.0217
+higher average IC values across all categories, par-
+ticularly in V olatility and Fundamental, indicating
+superior trading effectiveness compared to original.
+4.4 Performance Evaluation of the Integrated
+Alpha Framework in Benchmark
+Comparison
+Table 3: SSE50 2023 test combination of 12 Alphas
+# Alpha Weight IC(SSE50)
+1 (CLOSE - DELAY(CLOSE, 14)) -0.1459 0.0209
+2 (RSI - DELAY(RSI, 14)) -1.0265 -0.0225
+3 (CLOSE - DELAY(SMA(CLOSE, 14), 7)) -0.1978 0.0193
+4 (MA(CLOSE, 20) - CLOSE) 0.0556 -0.0186
+5 (SMA(CLOSE, 20) - CLOSE) -0.945 -0.0186
+6 (MAX(HIGH, 20) - CLOSE) -0.4053 -0.0185
+7 (100-RSI) -0.3199 0.0194
+8 (BOLL_UP - BOLL_DOWN) / SMA(CLOSE, 20) 3.6186 0.0278
+9 STD(CLOSE, 10) / STD(CLOSE, 50) -0.183 0.0236
+10 VOLUME / MARKET_CAP -3.2145 -0.0194
+11 VOLUME * CLOSE -0.0058 0.0187
+12 (EPS / DELAY(EPS, 1) - 1) -1.8351 -0.0215
+Weighted Combination -0.0587
+Table 3 presents an example combination of 12
+alphas generated by our framework, evaluated on
+the SSE50 constituent stock set. The table details
+the seed alphas selected by the LLM from each cat-
+egory, along with their respective weights and IC 1
+values. The weight combination IC 1 value is quite
+high as -0.0587. Although some of the seed alphas
+exhibit relatively low IC 1 values individually, their
+removal results in a significant drop in the retrained
+combination weight, indicating their critical role
+in the overall performance. For example, if we re-
+move alpha #6 the weight combination will drop to
+Figure 3: Cumulative return backtest result on SSE50. The line track the net worth of different methods
+-0.055; once we remove the alpha #11, the weight
+combination will drop to merely 0.0491. This sug-
+gests that the seed alpha set selected by the LLM
+synergizes effectively, providing robust predictive
+power (Zhang et al., 2020). To address the ques-
+tion of whether our overall strategy, incorporating
+the LLM-driven framework and confidence scor-
+ing, can consistently beat the market, we conducted
+a backtest using a straightforward investment ap-
+proach during the period from Jan 2023 to Jan 2024
+(training: Jan 2021-Jun 2022; validation: Jul 2022-
+Dec 2022), on the SSE50 dataset we conduct the
+framework to construct the portfolio ( A.8). The
+net worth progression of the respective strategies
+over the testing period is shown in Figure 3, and
+the comparison matrix shows in Table 4. Despite
+not explicitly optimizing for absolute returns, our
+framework demonstrates impressive performance
+in the backtest, achieving the highest profit com-
+pared to other methods. Our cumulative return
+for 2023 backtest comes to 53.17% positive and
+meanwhile the index performance is -11.73%. We
+also do the compression with 4 advanced statistical
+methods and 2 LLM based methods. The frame-
+work strategy substantially outperforms all com-
+petitors with the highest return (53.17%), best risk-
+adjusted metrics (Sharpe: 0.287, Sortino 2: 0.208,
+Calmar 3: 1.052), and lowest volatility (0.762%).
+LLM based mathods FinCon and SEP show moder-
+ate success (22.47%, 17.89%), while conventional
+machine learning methodologies yield marginal re-
+turns (XGBoost 9.53%). Notably, all evaluated
+strategies surpass the SSE50 benchmark, which
+exhibits negative performance (-13.22%). This
+2Sortino ratio computing excess return per unit of down-
+side deviation, evaluating only negative return volatility.
+3Calmar ratio divides annualized return by maximum draw-
+down, measuring reward relative to risk.
+Table 4: Performance comparison of trading strategies
+Strategy FinalReturn (%) SharpeRatio Volatility(%) SortinoRatio CalmarRatio
+Ours53.173 0.287 0.762 0.208 1.052
+XGBoost (Chen
+and Guestrin, 2016)
+9.532 0.038 1.019 0.067 0.103
+LightGBM (Ke
+et al., 2017)
+7.125 0.030 0.993 0.053 0.066
+MLP 3.110 0.013 0.960 0.023 0.043
+PPO_filter (Schul-
+man et al., 2017)
+2.865 0.013 0.886 0.024 0.017
+FinCon (Yu et al.,
+2024)
+22.474 0.077 1.196 0.126 0.232
+SEP (Koa et al.,
+2024)
+17.891 0.060 1.217 0.103 0.157
+SSE 50 -13.22 -0.063 0.859 -0.111 -0.043
+approach demonstrates the efficacy of our LLM-
+driven framework consistently outperforming mar-
+ket benchmarks through dynamic adaptation to
+changing conditions.
+4.5 Framework Robustness Across Time
+Periods and Markets
+We conducted rigorous cross-temporal and cross-
+market validation using two comprehensive
+datasets: CSI300 4 constituents (accessed via
+Tushare API) and SP500 5 constituents (accessed
+via CRSP platform) spanning January 2019 to
+December 2023. Our dataset incorporated daily
+OHLCV price metrics, quarterly financial state-
+ments, and relevant macroeconomic indicators to
+enable robust alpha factor construction. To ensure
+methodological integrity, we systematically par-
+titioned the dataset into training, validation, and
+testing subsets with precise chronological segmen-
+tation as detailed in Table 5. This experimental
+design facilitates comprehensive evaluation of our
+4CSI300 Index tracking the 300 largest companies listed
+on China’s Shanghai and Shenzhen exchanges.
+5SP500 Index measuring the performance of 500 large U.S.
+companies traded on American stock exchanges.
+framework’s generalizability across different mar-
+ket environments and temporal contexts.
+Table 5: Training, validation, and test Periods for
+CSI300 and SP500
+Assets Training Period Validation Period Test Period
+CSI300
+Jan 2019-Jun 2020 Jun-Dec 2020 Jan-Jun 2021
+Jan 2020-Jun 2021 Jun-Dec 2021 Jan-Jun 2022
+Jan 2021-Jun 2022 Jun-Dec 2022 Jan-Jun 2023
+SP500
+Jan 2019-Jun 2020 Jun-Dec 2020 Jan-Jun 2021
+Jan 2020-Jun 2021 Jun-Dec 2021 Jan-Jun 2022
+Jan 2021-Jun 2022 Jun-Dec 2022 Jan-Jun 2023
+We employed consistent temporal partitioning
+across Chinese A-share and US markets to enable
+direct comparative analysis. Our findings demon-
+strate the framework’s robust performance across
+diverse market environments. From Table 6 shows
+in the Chinese A-Share market, the strategy gen-
+erated substantial alpha with CSI300 constituents,
+particularly in H1 2023 (192.27% annual return vs.
+benchmark 9.13%). Similarly, in the US market,
+the framework achieved strong returns with SP500
+constituents (93.61% in H1 2021, 118.24% in H1
+2023). Notably, during the H1 2022 market down-
+turn, the strategy maintained positive returns in
+both markets (12.78% in CSI300, 2.77% in SP500)
+while their respective benchmarks declined signifi-
+cantly (-30.37% and -44.22%).
+The empirical evidence substantiates both the
+temporal persistence and cross-market robustness
+of our findings, with notably beneficial counter-
+cyclical characteristics emerging during periods
+of market distress. The framework demonstrates
+consistent alpha generation across diverse market
+architectures, regulatory frameworks, and investor
+behavioral patterns, establishing its broad appli-
+cability. Specifically, the model maintains stable
+outperformance trajectories through bullish, bear-
+ish, and range-bound market conditions, thereby
+validating its structural integrity and adaptability to
+varying macroeconomic environments.
+4.6 Ablation Study
+Our ablation study systematically evaluates the con-
+tribution of CSA and RPA within a multi-agent
+framework. We evaluate three configurations of
+each, using the SSE50 index data (2010-2022) and
+measure performance by IC 1 and Sharpe Ratio 9.
+Table 7 demonstrates that the complete model
+achieved superior performance, with an out-of-
+sample IC of 0.047 and Sharpe Ratio of 1.73. Re-
+moving the CSA caused substantial degradation,
+Table 6: Backtest performance results across different
+time windows
+Time Window Annual Return (%) Cum. Return (%) Max DD (%)
+Strategy Baseline Strategy Baseline Strategy Baseline
+Our Strategy vs CSI300
+Jan-Jun 2021 29.707.31 11.913.10 -19.40-10.86
+Jan-Jun 2022 12.78-30.37 5.29-14.37 -24.01-28.59
+Jan-Jun 2023 192.279.13 59.033.85 -17.03-8.44
+Our Strategy vs SP500
+Jan-Jun 2021 93.6129.67 35.1912.59 -7.89-4.23
+Jan-Jun 2022 2.77-44.22 1.25-23.39 -20.55-23.51
+Jan-Jun 2023 118.2435.22 42.7814.76 -11.52-7.75
+Note:Max DD = Maximum Drawdown.
+Table 7: Ablation study results: impact of agent compo-
+nents on performance metrics
+Model Configuration IC(In-Sample) IC(Out-of-Sample) SharpeRatio
+Full Model0.059 0.047 1.94
+Without Confidence Score 0.054 0.032 1.51
+Without Risk Preference 0.056 0.039 1.34
+Table 8: Performance across market regimes (out-of-
+sample IC)
+Model Configuration BullMarket BearMarket SidewaysMarket
+Full Model0.051 0.042 0.045
+Without Confidence Score 0.046 0.021 0.029
+Without Risk Preference 0.049 0.028 0.037
+reducing out-of-sample IC by 31.9% and Sharpe
+Ratio by 22.5%. RPA removal also decreased per-
+formance metrics, with particularly significant im-
+pact on the Sharpe Ratio. These results indicate that
+while both components contribute meaningfully,
+the CSA plays a more critical role in maintaining
+predictive stability. To assess performance consis-
+tency across market conditions, we analyzed out-of-
+sample IC values during different market regimes
+(Table 8). The complete model maintained consis-
+tent performance across bull, bear, and sideways
+markets. In contrast, the model without CSA per-
+formed particularly poorly during bear markets(IC:
+0.021 vs. 0.042). The model without RPA showed
+moderate degradation during non-bull markets, less
+severe than observed without CSA.
+This analysis confirms that both components en-
+hance performance stability, with the CSA provid-
+ing especially critical functionality during adverse
+market conditions.
+4.7 Sensitive Study
+We analyzed the framework’s sensitivity to agent
+weights and neural network hyperparameters. The
+CSA & RPA weight ratio of 0.6/0.4 provided su-
+Table 9: Sensitivity to agent weight configurations
+Confidence Risk Sharpe Ratio
+Weight Weight Bull Market Bear Market Overall
+1.0 0.0 4.32 6.60 8.10
+0.8 0.2 -3.41 -7.23 -2.68
+0.6 0.48.70 10.37 11.39
+0.5 0.5 -0.49 -1.62 -5.10
+0.4 0.6 -4.27 -4.41 -8.04
+0.2 0.8 5.68 8.51 9.00
+0.0 1.0 -0.61 1.78 -4.35
+Table 10: Sensitivity to neural network hyperparameters
+Hidden Learning Batch Regularization Sharpe
+Nodes Rate Size Parameter Ratio
+5 0.001 32 0.001 9.69
+10 0.001 32 0.00113.33
+20 0.001 32 0.001 6.93
+10 0.0005 32 0.001 7.03
+10 0.002 32 0.001 5.13
+10 0.001 16 0.001 6.26
+10 0.001 64 0.001 4.25
+10 0.001 32 0.0005 -1.88
+10 0.001 32 0.002 -6.91
+perior performance across market regimes, partic-
+ularly during bear markets (Sharpe: 10.37), indi-
+cating enhanced robustness to regime shifts (Table
+9). Optimal neural network configuration (10 hid-
+den nodes, learning rate: 0.001, batch size: 32,
+regularization: 0.001) achieved a Sharpe ratio of
+13.33, with performance particularly sensitive to
+regularization strength (Table 10).
+The analysis revealed regime-dependent behav-
+ior across market conditions, and critical sensitivity
+to regularization strength. The optimal configura-
+tion achieved a robust overall Sharpe ratio of 11.39.
+5 Related Work
+Formulaic alphasin quantitative investment repre-
+sent systematic, rule-based strategies that generate
+excess returns by exploiting specific market pat-
+terns and inefficiencies (Kakushadze, 2016). These
+strategies employ various methodologies, includ-
+ing genetic programming that involves structural
+and numerical mutations to generate novel alphas
+(Cong et al., 2021), enhanced time-series opera-
+tors with mutual information as fitness measures
+(Lin et al., 2019), and algorithmic graphs for more
+complex predictions (Cui et al., 2021). Machine
+learning approaches utilize neural network archi-
+tectures such as LSTM (Hochreiter and Schmidhu-
+ber, 1997) and Transformer models (Vaswani et al.,
+2017), while decision tree models like XGBoost
+(Chen and Guestrin, 2016) and LightGBM (Ke
+et al., 2017) offer interpretability advantages. Re-
+cent research focuses on integrating non-standard
+data sources, as demonstrated by REST (Xu et al.,
+2021b) and HIST (Xu et al., 2021a).
+The development ofgeneral-domain LLMshas
+catalyzed interest in Finance LLMs (Fin-LLMs),
+although this specialized domain remains nascent
+(Novy-Marx, 2015; Yang et al., 2023; Zhao et al.,
+2023). Open-source LLMs such as LLaMA (Tou-
+vron et al., 2023), BLOOM (W. and et al., 2023),
+and Flan-T5 (W. and et al., 2022) provide flexibil-
+ity but may underperform proprietary alternatives.
+Fine-tuned financial LLMs demonstrate enhanced
+domain-specific comprehension, yet their genera-
+tive performance indicates the need for improved
+domain-specific datasets (Lewis and et al., 2020;
+Koa et al., 2024; Wen et al., 2025).
+Multimodal LLMshave shown significant po-
+tential in investment contexts by processing diverse
+data types (L et al., 2023; Luo et al., 2025a), devel-
+oping strategies that mitigate market volatility (K
+et al., 2024), and analyzing textual data to gauge
+investor sentiment (Zhao et al., 2024). Multi-agent
+LLM systems enhance market analysis capabilities
+by leveraging vast datasets to interpret financial
+reports and market sentiment (Zhang et al., 2024b),
+simulating various market scenarios (Talebirad and
+Nadiri, 2023), and facilitating parallel testing of
+diverse strategies (Wang et al., 2024). Implemen-
+tation raises important considerations regarding
+transparency, accountability, and bias mitigation
+(Yu and et al., 2024; Mundhenk et al., 2021).
+6 Conclusion
+In this paper we proposed a novel quantitative in-
+vestment framework integrating LLMs and multi-
+Agent architectures to address instability in tradi-
+tional approaches. Our system generates diversified
+alpha factors from multimodal financial data, con-
+structs risk-calibrated trading agents, and employs
+a deep learning mechanism for dynamic agent
+weighting based on market conditions.
+Experimental results confirm the framework’s ef-
+fectiveness across CN and US markets, our frame-
+work demonstrates significant outperformance ver-
+sus SOTA alpha generation methods and bench-
+mark indices across key financial metrics. This
+work successfully extends LLM capabilities to
+quantitative trading, creating a scalable, adaptive
+architecture for financial signal extraction that func-
+tions effectively without human intervention.
+7 Limitations
+Our framework presents several significant limi-
+tations. First, system efficacy is contingent upon
+input document quality, potentially perpetuating in-
+herent biases (Deb et al., 2017; Ashok et al., 2018).
+Second, LLM-generated alphas occasionally lack
+the financial intuition characteristic of human ana-
+lysts, resulting in theoretically sound but practically
+infeasible factors (Tuarob et al., 2017). Third, our
+multi-agent evaluation methodology presupposes
+persistent historical relationships between market
+conditions and alpha performance, an assumption
+that may prove tenuous during market regime shifts.
+Finally, our validation efforts have primarily tar-
+geted equity markets, with cross-asset applicability
+requiring additional empirical investigation. Future
+research directions should address these constraints
+through exploring Mixture of Experts (MoE) archi-
+tectures to improve learning efficiency (Masoudnia
+and Ebrahimpour, 2014), adaptive agent architec-
+tures, transfer learning methodologies (Wang et al.,
+2023), related regulation requirements (Han and
+Xi, 2020), and computationally efficient implemen-
+tations.
+8 Acknowledgments
+This paper is partially supported by grants from
+the HKUST Start-up Fund (R9911), Theme-based
+Research Scheme grant (T45-205/21-N), the In-
+noHK initiative of the Innovation and Technology
+Commission of the Hong Kong Special Adminis-
+trative Region Government, and the research fund-
+ing under HKUST-DXM AI for Finance Joint Lab-
+oratory (DXM25EG01). Also supported by Na-
+tional Key Research and Development Program of
+China Grant No. 2023YFF0725100, National Sci-
+ence Foundation of China (NSFC) under Grant
+No. U22B2060, Guangdong-Hong Kong Tech-
+nology Innovation Joint Funding Scheme Project
+No. 2024A0505040012, the Hong Kong RGC GRF
+Project 16213620, RIF Project R6020-19, AOE
+Project AoE/E-603/18, Theme-based project TRS
+T41-603/20R, CRF Project C2004-21G, Key Areas
+Special Project of Guangdong Provincial Universi-
+ties 2024ZDZX1006, Guangdong Province Science
+and Technology Plan Project 2023A0505030011,
+Guangzhou municipality big data intelligence
+key lab, 2023A03J0012, Hong Kong ITC ITF
+grants MHX/078/21 and PRP/004/22FX, Zhujiang
+scholar program 2021JC02X170, Microsoft Re-
+search Asia Collaborative Research Grant, HKUST-
+Webank joint research lab and 2023 HKUST
+Shenzhen-Hong Kong Collaborative Innovation In-
+stitute Green Sustainability Special Fund, from
+Shui On Xintiandi and the InnoSpace GBA. The
+authors are grateful to anonymous reviewers for
+their efforts and insightful suggestions to improve
+this article.
+References
+Aditya Ashok, Manimaran Govindarasu, and Venkatara-
+mana Ajjarapu. 2018. Online detection of stealthy
+false data injection attacks in power system state
+estimation.IEEE Transactions on Smart Grid,
+9(3):1636–1646.
+Chi Chen, Li Zhao, Jiang Bian, Chunxiao Xing, and Tie-
+Yan Liu. 2019. Investment behaviors can tell what
+inside: Exploring stock intrinsic properties for stock
+trend prediction. InProceedings of the 25th ACM
+SIGKDD International Conference on Knowledge
+Discovery & Data Mining, pages 2376–2384.
+Tianqi Chen and Carlos Guestrin. 2016. Xgboost: A
+scalable tree boosting system. InProceedings of
+the 22nd ACM SIGKDD International Conference
+on Knowledge Discovery and Data Mining, pages
+785–794, San Francisco, CA, USA. ACM.
+Yinpeng Chen and et al. 2020. Dynamic relu. InEu-
+ropean Conference on Computer Vision. Springer
+International Publishing.
+L. W. Cong, K. Tang, J. Wang, and Y . Zhang. 2021.
+Alphaportfolio: Direct construction through deep
+reinforcement learning and interpretable ai.
+Can Cui, Wei Wang, Meihui Zhang, Gang Chen, Zhao-
+jing Luo, and Beng Chin Ooi. 2021. Alphaevolve: A
+learning framework to discover novel alphas in quan-
+titative investment. InProceedings of the 2021 Inter-
+national Conference on Management of Data (SIG-
+MOD ’21), pages 2208–2216, Virtual Event, China.
+ACM.
+Chirag Deb, Fan Zhang, Junjing Yang, Siew Eang Lee,
+and Kwok Wei Shah. 2017. A review on time series
+forecasting techniques for building energy consump-
+tion.Renewable and Sustainable Energy Reviews,
+74:902–924.
+Yujie Ding, Shuai Jia, Tianyi Ma, Bingcheng Mao, Xi-
+uze Zhou, Liuliu Li, and Dongming Han. 2023. In-
+tegrating stock features and global information via
+large language models for enhanced stock return pre-
+diction.Preprint, arXiv:2310.05627.
+Thomas H Goodwin. 1998. The information ratio.Fi-
+nancial Analysts Journal, 54(4):34–43.
+Sirui Han and Chao Xi. 2020. Financial regulation as
+interagency competition? The saga of venture capital
+rule-making in China. In Douglas W. Arner, Wai Yee
+Wan, Andrew Godwin, Wei Shen, and Evan Gibson,
+editors,Research Handbook on Asian Financial Law.
+Edward Elgar Publishing.
+Sepp Hochreiter and Jürgen Schmidhuber. 1997. Long
+short-term memory.Neural Computation, 9(8):1735–
+1780.
+Ouyang K, Liu Y , Li S, and et al. 2024. Modal-adaptive
+knowledge-enhanced graph-based financial predic-
+tion from monetary policy conference calls with llm.
+Zura Kakushadze. 2016. 101 formulaic alphas.Wilmott,
+2016(84):72–81.
+Guolin Ke, Qi Meng, Thomas Finley, Taifeng Wang,
+Wei Chen, Weidong Ma, Qiwei Ye, and Tie-Yan Liu.
+2017. Lightgbm: A highly efficient gradient boosting
+decision tree. InAdvances in Neural Information Pro-
+cessing Systems 30: Annual Conference on Neural
+Information Processing Systems 2017, pages 3146–
+3154, Long Beach, CA, USA. Neural Information
+Processing Systems Foundation.
+K. J. Koa, Y . Ma, R. Ng, and T.-S. Chua. 2024. Learning
+to generate explainable stock predictions using self-
+reflective large language models. InProceedings of
+the ACM on Web Conference 2024, pages 4304–4315.
+Li L, Chang T Y , and Wang H. 2023. Multimodal gen-ai
+for fundamental investment research.
+Jean Lee, Nicholas Stevens, and Soyeon Caren Han.
+2025. Large language models in finance (finllms).
+Neural Computing and Applications.
+Jinho Lee, Raehyun Kim, Seok-Won Yi, and Jaewoo
+Kang. 2020. Maps: Multi-agent reinforcement
+learning-based portfolio management system. In
+Proceedings of the Twenty-Ninth International Joint
+Conference on Artificial Intelligence, IJCAI-PRICAI-
+2020, page 4520–4526. International Joint Confer-
+ences on Artificial Intelligence Organization.
+P. Lewis and et al. 2020. Retrieval-augmented genera-
+tion for knowledge-intensive nlp tasks. InNeurIPS,
+volume 33, pages 9459–9474.
+Weiping Li and Feng Mei. 2020. Asset returns in deep
+learning methods: An empirical analysis on sse 50
+and csi 300.Research in International Business and
+Finance, 54:101291.
+Xiaoming Lin, Ye Chen, Ziyu Li, and Kang He. 2019.
+Stock alpha mining based on genetic algorithm. Tech-
+nical report, Huatai Securities Research Center.
+Andrew W Lo. 2007. Where do alphas come from?:
+A new measure of the value of active investment
+management.A new measure of the value of active
+investment management (May 8, 2007).
+Junyu Luo, Zhizhuo Kou, Liming Yang, Xiao Luo,
+Jinsheng Huang, Zhiping Xiao, Jingshu Peng,
+Chengzhong Liu, Jiaming Ji, Xuanzhe Liu, Sirui
+Han, Ming Zhang, and Yike Guo. 2025a. Finmme:
+Benchmark dataset for financial multi-modal reason-
+ing evaluation.Preprint, arXiv:2505.24714.
+Junyu Luo, Yuhao Tang, Yiwei Fu, Xiao Luo, Zhizhuo
+Kou, Zhiping Xiao, Wei Ju, Wentao Zhang, and Ming
+Zhang. 2025b. Sparse causal discovery with gen-
+erative intervention for unsupervised graph domain
+adaptation.Preprint, arXiv:2507.07621.
+Junyu Luo, Weizhi Zhang, Ye Yuan, Yusheng Zhao,
+Junwei Yang, Yiyang Gu, Bohan Wu, Binqi Chen,
+Ziyue Qiao, Qingqing Long, Rongcheng Tu, Xiao
+Luo, Wei Ju, Zhiping Xiao, Yifan Wang, Meng Xiao,
+Chenwu Liu, Jingyang Yuan, Shichang Zhang, and
+7 others. 2025c. Large language model agent: A
+survey on methodology, applications and challenges.
+Preprint, arXiv:2503.21460.
+Saeed Masoudnia and Reza Ebrahimpour. 2014. Mix-
+ture of experts: a literature survey.Artificial Intelli-
+gence Review, 42:275–293.
+T. Nathan Mundhenk, Mikel Landajuela, Ruben Glatt,
+Daniel M. Faissol, and Brenden K. Petersen. 2021.
+Symbolic regression via neural-guided genetic pro-
+gramming population seeding. In9th International
+Conference on Learning Representations (ICLR), Vir-
+tual Event, Austria.
+Robert Novy-Marx. 2015. Fundamentally, momen-
+tum is fundamental momentum. Technical Report
+w20984, NBER.
+OpenAI. 2023. Gpt-4 technical report.
+John Schulman, Filip Wolski, Prafulla Dhariwal,
+Alec Radford, and Oleg Klimov. 2017. Prox-
+imal policy optimization algorithms.Preprint,
+arXiv:1707.06347.
+William F Sharpe. 1994. The sharpe ratio.Journal of
+portfolio management, 21(1):49–58.
+Thomas Spooner and Rahul Savani. 2020. Robust mar-
+ket making via adversarial reinforcement learning.
+Preprint, arXiv:2003.01820.
+Y . Talebirad and A. Nadiri. 2023. Multi-agent collabora-
+tion: Harnessing the power of intelligent llm agents.
+Ziyi Tang, Zechuan Chen, Jiarui Yang, Jiayao Mai,
+Yongsen Zheng, Keze Wang, Jinrui Chen, and Liang
+Lin. 2025. Alphaagent: Llm-driven alpha mining
+with regularized exploration to counteract alpha de-
+cay.Preprint, arXiv:2502.16789.
+H. Touvron, T. Lavril, G. Izacard, X. Martinet, M.-A.
+Lachaux, T. Lacroix, B. Rozière, N. Goyal, E. Ham-
+bro, F. Azhar, A. Rodriguez, A. Joulin, E. Grave,
+and G. Lample. 2023. Llama: Open and efficient
+foundation language models.
+Suppawong Tuarob, Conrad S. Tucker, Soundar R. T.
+Kumara, C. Lee Giles, Aaron L. Pincus, David E.
+Conroy, and Nilam Ram. 2017. How are you feeling:
+A personalized methodology for predicting mental
+states from temporally observable physical and be-
+havioral information.Journal of Biomedical Infor-
+matics, 68:1–19.
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob
+Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz
+Kaiser, and Illia Polosukhin. 2017. Attention is all
+you need. InAdvances in Neural Information Pro-
+cessing Systems 30: Annual Conference on Neural
+Information Processing Systems 2017, pages 5998–
+6008, Long Beach, CA, USA. Neural Information
+Processing Systems Foundation.
+B. W. and et al. 2023. Bloom: A 176b-parameter open-
+access multilingual language model.
+H. W. and et al. 2022. Scaling instruction-finetuned
+language models.
+Liping Wang, Jiawei Li, Lifan Zhao, Zhizhuo Kou, Xi-
+aohan Wang, Xinyi Zhu, Hao Wang, Yanyan Shen,
+and Lei Chen. 2023. Methods for acquiring and in-
+corporating knowledge into stock price prediction: A
+survey.arXiv preprint arXiv:2308.04947.
+Q. Wang, Z. Wang, Y . Su, and et al. 2024. Rethink-
+ing the bounds of llm reasoning: Are multi-agent
+discussions the key?
+Pengcheng Wen, Jiaming Ji, Chi-Min Chan, Juntao Dai,
+Donghai Hong, Yaodong Yang, Sirui Han, and Yike
+Guo. 2025. Thinkpatterns-21k: A systematic study
+on the impact of thinking patterns in llms.Preprint,
+arXiv:2503.12918.
+Shijie Wu, Ozan Irsoy, Steven Lu, Vadim Dabravolski,
+Mark Dredze, Sebastian Gehrmann, Prabhanjan Kam-
+badur, David Rosenberg, and Gideon Mann. 2023.
+Bloomberggpt: A large language model for finance.
+Preprint, arXiv:2303.17564.
+Wentao Xu, Weiqing Liu, Lewen Wang, Yingce Xia,
+Jiang Bian, Jian Yin, and Tie-Yan Liu. 2021a. Hist:
+A graph-based framework for stock trend forecasting
+via mining concept-oriented shared information.
+Wentao Xu, Weiqing Liu, Chang Xu, Jiang Bian, Jian
+Yin, and Tie-Yan Liu. 2021b. Rest: Relational event-
+driven stock trend forecasting. InWWW ’21: The
+Web Conference 2021, pages 1–10, Virtual Event /
+Ljubljana, Slovenia. ACM / IW3C2.
+Yumo Xu and Shay B Cohen. 2018. Stock movement
+prediction from tweets and historical prices. InPro-
+ceedings of the 56th Annual Meeting of the Associ-
+ation for Computational Linguistics (ACL), pages
+1970–1979.
+Y . Yang, Y . Tang, and K. Y . Tam. 2023. Investlm: A
+large language model for investment using financial
+domain instruction tuning.
+Shuo Yu, Hongyan Xue, Xiang Ao, Feiyang Pan, Jia He,
+Dandan Tu, and Qing He. 2023a. Generating syner-
+gistic formulaic alpha collections via reinforcement
+learning. InProceedings of the 29th ACM SIGKDD
+Conference on Knowledge Discovery and Data Min-
+ing (KDD ’23), pages 5476–5486, New York, NY ,
+USA. Association for Computing Machinery.
+Yangyang Yu and et al. 2024. Finmem: A performance-
+enhanced llm trading agent with layered memory
+and character design. InProceedings of the AAAI
+Symposium Series, volume 3.
+Yangyang Yu, Haohang Li, Zhi Chen, Yuechen Jiang,
+Yang Li, Denghui Zhang, Rong Liu, Jordan W.
+Suchow, and Khaldoun Khashanah. 2023b. Fin-
+mem: A performance-enhanced llm trading agent
+with layered memory and character design.Preprint,
+arXiv:2311.13743.
+Yangyang Yu, Zhiyuan Yao, Haohang Li, Zhiyang Deng,
+Yupeng Cao, Zhi Chen, Jordan W. Suchow, Rong Liu,
+Zhenyu Cui, Zhaozhuo Xu, Denghui Zhang, Kodu-
+vayur Subbalakshmi, Guojun Xiong, Yueru He, Jimin
+Huang, Dong Li, and Qianqian Xie. 2024. Fincon: A
+synthesized llm multi-agent system with conceptual
+verbal reinforcement for enhanced financial decision
+making.Preprint, arXiv:2407.06567.
+Chong Zhang, Xinyi Liu, Zhongmou Zhang, Mingyu
+Jin, Lingyao Li, Zhenting Wang, Wenyue Hua, Dong
+Shu, Suiyuan Zhu, Xiaobo Jin, Sujian Li, Mengnan
+Du, and Yongfeng Zhang. 2024a. When ai meets
+finance (stockagent): Large language model-based
+stock trading in simulated real-world environments.
+Preprint, arXiv:2407.18957.
+Feng Zhang, Ruite Guo, and Honggao Cao. 2020. Infor-
+mation coefficient as a performance measure of stock
+selection models.
+W. Zhang, L. Zhao, H. Xia, and et al. 2024b. A multi-
+modal foundation agent for financial trading: Tool-
+augmented, diversified, and generalist. Technical
+report.
+H. Zhao, Z. Liu, Z. Wu, and et al. 2024. Revolutionizing
+finance with llms: An overview of applications and
+insights.
+W. X. Zhao, K. Zhou, J. Li, T. Tang, X. Wang, Y . Hou,
+Y . Min, B. Zhang, J. Zhang, Z. Dong, and et al. 2023.
+A survey of large language models.
+A Appendix
+A.1 Sample of Seed Alpha
+The seed alpha representation depicted in Figure
+4 illustrates a fundamental construct in quantita-
+tive finance for generating trading signals. This
+figure presents a comprehensive visualization of
+the Detrended Price Oscillator (DPO) formula,
+which compares the current closing price with a
+delayed simple moving average (SMA) of clos-
+ing prices. Panel A shows the mathematical for-
+mulation of the seed alpha, expressed as CLOSE
+- DELAY(SMA(CLOSE, 14), 7) , which captures
+price momentum by measuring deviations from
+historical trends. Panel B transforms this formula
+into an equivalent expression tree, demonstrating
+the hierarchical relationship between operators and
+operands, which facilitates algorithmic implemen-
+tation and analysis. Panel C provides a practical
+illustration through a tabulated step-by-step com-
+putation of this alpha formula on a sample time
+series, showing how the signal evolves over multi-
+ple trading days. This representation exemplifies
+how complex financial indicators can be system-
+atically decomposed, formalized, and applied to
+market data for quantitative trading strategies.
+Figure 4: Seed Alpha Representation: (A) An example
+of the seed alpha formula. (B) Its equivalent expression
+tree. (C) Step-by-step computation of this seed alpha on
+an example time series.
+A.2 Seed Alphas document lists for GPTs
+The presented table offers a comprehensive
+overview of cutting-edge research pertinent to
+the development of a SAF in quantitative finance.
+These documents collectively represent the conflu-
+ence of traditional financial methodologies with
+advanced computational techniques. Of particular
+significance is Kakushadze’s "101 Formulaic Al-
+phas," which provides a foundational repository of
+trading signals that can be categorized according
+to traditional financial factors. Lopez de Prado’s
+work on "Causal Factor Investing" introduces scien-
+tific rigor to factor classification, ensuring indepen-
+dence between alpha categories. The integration
+of artificial intelligence is evident in multiple stud-
+ies, including "Alpha-GPT" and "FinGPT," which
+leverage LLMs for alpha generation. Portfolio con-
+struction methodologies are addressed through re-
+inforcement learning approaches in "AlphaPortfo-
+lio" and "Dynamic Graph-based Deep Reinforce-
+ment Learning." Performance enhancement strate-
+gies are explored in "Mastering Stock Markets with
+Efficient Mixture of Diversified Trading Experts,"
+while market dependency analysis is covered in
+"Model-Free Implied Dependence and the Cross-
+Section of Returns." This literature collection pro-
+vides quantitative researchers with the theoretical
+frameworks and methodological tools necessary
+to construct a Seed Alpha Factory that systemati-
+cally generates, categorizes, and implements trad-
+ing signals across independent financial categories,
+balancing traditional financial theory with contem-
+porary computational advancements.
+Sample prompt "Summarize the document infor-
+mation to help quantitative researchers build the
+Seed Alpha Factory according to traditional finan-
+cial categories, ensuring that each category of seed
+alphas is independent."
+A.3 Generate Seed Alpha factory
+This taxonomy presents quantitative trading sig-
+nals organized into eight categories: Momentum,
+Mean Reversion, V olatility, Fundamental, Liquid-
+ity, Quality, Growth, Technical, and Macroeco-
+nomic indicators. Each category targets distinct
+market phenomena with specific mathematical im-
+plementations. Momentum factors identify persis-
+tent trends, Mean Reversion signals detect market
+overreactions, V olatility metrics quantify price dis-
+persion, and Fundamental factors evaluate com-
+pany valuations. The framework also includes Liq-
+uidity measures of trading activity, Quality indi-
+cators of operational efficiency, Growth metrics
+of financial expansion, Technical indicators de-
+rived from price-volume patterns, and Macroeco-
+nomic signals reflecting broader economic condi-
+tions. The mathematical formulations provided
+enable researchers to implement diverse, uncorre-
+lated alpha factors for robust quantitative trading
+strategies.
+Category Name Short Code
+Momentum Price Momentum (CLOSE - DELAY(CLOSE, 14))
+V olume Momentum (VOLUME - DELAY(VOLUME, 14))
+RSI Momentum (RSI - DELAY(RSI, 14))
+Rate of Change (ROC) ((CLOSE / DELAY(CLOSE, 14)) - 1)
+MACD Momentum (MACD - DELAY(MACD, 14))
+Momentum Oscillator ((CLOSE - DELAY(CLOSE, 14)) / DELAY(CLOSE, 14))
+Chande Momentum Oscilla-
+tor (CMO)
+(SUM(IF(CLOSE - DELAY(CLOSE, 1) > 0, CLOSE -
+DELAY(CLOSE, 1), 0), 14) - SUM(IF(CLOSE - DE-
+LAY(CLOSE, 1) < 0, DELAY(CLOSE, 1) - CLOSE, 0),
+14)) / (SUM(IF(CLOSE - DELAY(CLOSE, 1) > 0, CLOSE
+- DELAY(CLOSE, 1), 0), 14) + SUM(IF(CLOSE - DE-
+LAY(CLOSE, 1) < 0, DELAY(CLOSE, 1) - CLOSE, 0),
+14)) * 100
+Stochastic Momentum Index
+(SMI)
+((CLOSE - MIN(LOW, 14)) - (MAX(HIGH, 14) - CLOSE))
+/ (MAX(HIGH, 14) - MIN(LOW, 14))
+ATR Momentum (ATR - DELAY(ATR, 14))
+Detrended Price Oscillator
+(DPO)
+(CLOSE - DELAY(SMA(CLOSE, 14), 7))
+Average Directional Index
+(ADX) Momentum
+(ADX - DELAY(ADX, 14))
+Mean Reversion Mean Reversion (MEAN(CLOSE, 20) - CLOSE)
+Z-Score Mean Reversion (CLOSE - MEAN(CLOSE, 20)) / STD(CLOSE, 20)
+Bollinger Bands (CLOSE - LOWER_BAND) / (UPPER_BAND -
+LOWER_BAND)
+Keltner Channel (CLOSE - LOWER_CHANNEL) / (UPPER_CHANNEL -
+LOWER_CHANNEL)
+Moving Average Reversion (SMA(CLOSE, 20) - CLOSE)
+Exponential Moving Average
+(EMA) Reversion
+(EMA(CLOSE, 20) - CLOSE)
+Distance from High (MAX(HIGH, 20) - CLOSE)
+Distance from Low (CLOSE - MIN(LOW, 20))
+Relative Strength Index (RSI)
+Reversion
+(100 - RSI)
+Percent B ((CLOSE - LOWER_BAND) / (UPPER_BAND -
+LOWER_BAND)) * 100
+V olatility Standard Deviation STD(CLOSE, 20)
+Average True Range (ATR) ATR(14)
+Bollinger Band Width (UPPER_BAND - LOWER_BAND) / SMA(CLOSE, 20)
+Historical V olatility STD(RETURNS, 20) * SQRT(252)
+V olatility Ratio STD(CLOSE, 10) / STD(CLOSE, 50)
+Chaikin V olatility (EMA(HIGH - LOW, 10) / DELAY(EMA(HIGH - LOW,
+10), 10)) - 1
+Garman-Klass V olatility SQRT(0.5 * LOG(HIGH / LOW) 2 - (2 * LOG(2) - 1) *
+LOG(CLOSE / OPEN)2)
+Parkinson V olatility SQRT((1 / (4 * N * LOG(2))) * SUM(LOG(HIGH / LOW)2,
+20))
+Yang-Zhang V olatility SQRT(V AR(LOG(CLOSE / OPEN)) + 0.5 *
+V AR(LOG(HIGH / OPEN) - LOG(LOW / OPEN))
++ 0.25 * V AR(LOG(CLOSE / DELAY(OPEN, 1))))
+Ulcer Index SQRT(MEAN(DRAWDOWN 2, 14))
+Fundamental Price-to-Earnings Ratio (P/E) (CLOSE / EPS)
+Price-to-Book Ratio (P/B) (CLOSE / BOOK_V ALUE)
+Dividend Yield (DIVIDENDS / CLOSE)
+Earnings Yield (EPS / CLOSE)
+Sales-to-Price Ratio (SALES / CLOSE)
+Cash Flow Yield (OPERATING_CASH_FLOW / CLOSE)
+Liquidity Trading V olume VOLUME
+Average Trading V olume MEAN(VOLUME, 20)
+V olume Rate of Change
+(VROC)
+(VOLUME - DELAY(VOLUME, 14)) / DE-
+LAY(VOLUME, 14)
+On-Balance V olume (OBV) SUM(VOLUME * SIGN(CLOSE - DELAY(CLOSE, 1)))
+Liquidity Ratio VOLUME / MARKET_CAP
+Turnover Rate VOLUME / SHARES_OUTSTANDING
+Amihud Illiquidity Ratio ABS(RETURN) / VOLUME
+High-Low Spread (HIGH - LOW) / CLOSE
+Dollar V olume VOLUME * CLOSE
+Debt-to-Equity Ratio (TOTAL_DEBT / TOTAL_EQUITY)
+Return on Equity (ROE) (NET_INCOME / EQUITY)
+Return on Assets (ROA) (NET_INCOME / TOTAL_ASSETS)
+Gross Profit Margin (GROSS_PROFIT / REVENUE)
+Price-to-Sales Ratio (P/S) (CLOSE / SALES)
+Price-to-Cash Flow Ratio
+(P/CF)
+(CLOSE / OPERATING_CASH_FLOW)
+Book-to-Market Ratio (B/M) (BOOK_V ALUE / CLOSE)
+Enterprise Value to EBITDA
+(EV/EBITDA)
+(ENTERPRISE_V ALUE / EBITDA)
+Bid-Ask Spread (ASK_PRICE - BID_PRICE) / MID_PRICE
+High-Low Spread (HIGH - LOW) / CLOSE
+Dollar V olume VOLUME * CLOSE
+Quality Gross Profit Margin (GROSS_PROFIT / REVENUE)
+Operating Profit Margin (OPERATING_INCOME / REVENUE)
+Net Profit Margin (NET_INCOME / REVENUE)
+Earnings Stability STD(EPS, 5) / MEAN(EPS, 5)
+Debt to Equity Ratio (TOTAL_DEBT / TOTAL_EQUITY)
+Interest Coverage Ratio (EBIT / INTEREST_EXPENSE)
+Cash Conversion Cycle (DIO + DSO - DPO)
+Asset Turnover Ratio (REVENUE / TOTAL_ASSETS)
+Growth Earnings Growth Rate (EPS / DELAY(EPS, 1) - 1)
+Revenue Growth Rate (REVENUE / DELAY(REVENUE, 1) - 1)
+EBITDA Growth Rate (EBITDA / DELAY(EBITDA, 1) - 1)
+Cash Flow Growth Rate (CASH_FLOW / DELAY(CASH_FLOW, 1) - 1)
+Dividends Growth Rate (DIVIDENDS / DELAY(DIVIDENDS, 1) - 1)
+Book Value Growth Rate (BOOK_V ALUE / DELAY(BOOK_V ALUE, 1) - 1)
+Sales Growth Rate (SALES / DELAY(SALES, 1) - 1)
+Asset Growth Rate (ASSETS / DELAY(ASSETS, 1) - 1)
+Equity Growth Rate (EQUITY / DELAY(EQUITY , 1) - 1)
+Retained Earnings Growth
+Rate
+(RETAINED_EARNINGS / DE-
+LAY(RETAINED_EARNINGS, 1) - 1)
+Technical Moving Average (MA) SMA(CLOSE, 20)
+Exponential Moving Average
+(EMA)
+EMA(CLOSE, 20)
+Relative Strength Index (RSI) RSI(14)
+Moving Average Conver-
+gence Divergence (MACD)
+(EMA(CLOSE, 12) - EMA(CLOSE, 26))
+Bollinger Bands UPPER_BAND - LOWER_BAND
+Stochastic Oscillator ((CLOSE - MIN(LOW, 14)) / (MAX(HIGH, 14) -
+MIN(LOW, 14))) * 100
+Average True Range (ATR) ATR(14)
+Commodity Channel Index
+(CCI)
+(TYPICAL_PRICE - SMA(TYPICAL_PRICE, 20)) /
+(0.015 * MEAN_DEV(TYPICAL_PRICE, 20))
+Williams %R ((MAX(HIGH, 14) - CLOSE) / (MAX(HIGH, 14) -
+MIN(LOW, 14))) * -100
+Macro Economics GDP Growth Rate GDP - DELAY(GDP, n)
+Inflation Rate CPI - DELAY(CPI, n)
+Unemployment Rate UNEMPLOYMENT_RATE - DE-
+LAY(UNEMPLOYMENT_RATE, n)
+Interest Rate INTEREST_RATE - DELAY(INTEREST_RATE, n)
+Industrial Production Index IPI - DELAY(IPI, n)
+Retail Sales Growth RETAIL_SALES - DELAY(RETAIL_SALES, n)
+Housing Starts Growth HOUSING_STARTS - DELAY(HOUSING_STARTS, n)
+Consumer Confidence Index
+(CCI)
+CCI - DELAY(CCI, n)
+Trade Balance EXPORTS - IMPORTS
+Foreign Exchange Reserves FX_RESERVES - DELAY(FX_RESERVES, n)
+A.4 Multimodal Data types
+Table 11 presents a taxonomy of multimodal data
+types essential for comprehensive quantitative fi-
+nance research. The classification encompasses
+five categories: textual data (financial reports, news
+articles, social media discourse), numerical data
+(historical price series, returns, volatility metrics),
+visual data (charts and technical analysis patterns),
+audio data (financial broadcasts and market com-
+mentary), and video data (specialized financial
+news channels). This multimodal framework en-
+ables researchers to develop more robust predictive
+models by integrating complementary information
+channels, potentially identifying market inefficien-
+cies that remain undetectable when analyzing iso-
+lated data types. By synthesizing diverse informa-
+tion formats, quantitative analysts can gain multidi-
+mensional insights into market dynamics, enhanc-
+ing both analytical depth and predictive capability
+in financial modeling applications.
+Table 11: Multimodal data types
+Data Type Description Examples
+Textual Data Financial reports,
+academic papers,
+news articles, and
+other textual docu-
+ments.
+Trading forums’ sentiment anal-
+ysis and stock predictions, com-
+pany disclosures, financial state-
+ments, Sina Finance
+Numerical Data Historical stock
+market data, fi-
+nancial metrics,
+and performance
+indicators.
+Returns, log returns, annualized
+returns, volatility
+Visual Data Charts, graphs, and
+other visual repre-
+sentations of finan-
+cial data.
+Kline charts, trading charts
+Audio Data Financial news
+broadcasts.
+Financial morning news radio,
+stock review radio, market dis-
+cussion radio
+Video Data Financial news
+channels.
+CCTV Securities Information
+Channel, CCTV News Broadcast
+(news affecting China’s stock
+market)
+A.5 Category-Based Alpha Selection
+Algorithm 1 delineates a systematic methodology
+for alpha selection in quantitative investment strate-
+gies, employing a category-based approach to en-
+sure diversification across multiple financial fac-
+tors. The procedure operates on a structured set of
+alpha categories C, each representing distinct mar-
+ket phenomena such as momentum, mean rever-
+sion, or volatility. For each category, the algorithm
+identifies superior alpha factors through the Se-
+lectBestAlphas function, which presumably evalu-
+ates historical performance metrics. The innovation
+lies in the subsequent dual-agent evaluation system:
+the RiskPreferenceAgent assesses each alpha’s risk
+characteristics, while the ConfidenceScoreAgent
+evaluates the statistical robustness of its historical
+performance. These complementary evaluations
+are synthesized using weight parameters wr and
+wc to compute a comprehensive Final Score. Only
+alphas exceeding a predefined confidence threshold
+X are incorporated into the final selection set A.
+This methodical approach ensures that the result-
+ing alpha portfolio exhibits both category diversi-
+fication and individual signal quality, potentially
+enhancing risk-adjusted returns while mitigating
+exposure to specific market regimes or factor dete-
+rioration.
+Algorithm 1Category-Based Alpha Selection
+Input: Categories C={C 1, . . . , Cm}, each Ci containing
+a set of alphas; confidence thresholdX
+1: Initialize selected alphasA ← ∅
+2:foreach categoryC i ∈ Cdo
+3:A i ←SelectBestAlphas(C i)
+4:foreachα∈ A i do
+5: risk_score←RiskPreferenceAgent(α)
+6: confidence_score←ConfidenceScoreAgent(α)
+7: final_score←w r ·risk_score+w c ·
+confidence_score
+8:iffinal_score> Xthen
+9:A ← A ∪ {α}
+10:end if
+11:end for
+12:end for
+13:returnA
+A.6 Dynamic Alpha Strategy Construction
+Algorithm 2Overall Framework Algorithm
+Input: Multimodal financial data D, market conditions
+M(t), stocksS, confidence thresholdτ
+Output:Optimized alpha strategyα (t)
+/* Phase 1: SAF */
+1: Initialize empty Seed Alpha FactoryF ← ∅
+2:foreach documentd∈ Ddo
+3: filtered_content←LLM.Filter(d)
+4: categories←LLM.Categorize(filtered_content)
+5:foreach categoryc∈categoriesdo
+6: seed_alphas←LLM.GenerateAlphas(c)
+7:F c ← Fc∪seed_alphas
+8:end for
+9:end for
+/* Phase 2: Multi-Agent Evaluation */
+10: Initialize selected alphasA ← ∅
+11:foreach categoryc∈ Fdo
+12:foreach alphaα ij ∈ Fc do
+13:θ ij ←ConfidenceScoreAgent(α ij,M (t))▷
+Statistical evaluation
+14:ρ ij ←RiskPreferenceAgent(α ij,M (t))▷Risk
+assessment
+15: score ij ←w c ·θ ij +w r ·ρ ij ▷Combined score
+16:ifscore ij > τthen
+17:A c ← Ac ∪ {αij}
+18:end if
+19:end for
+20:ifA c ̸=∅then
+21:α ∗c ←arg maxαij ∈Ac scoreij ▷Select best alpha in
+category
+22:A ← A ∪ {α ∗c }
+23:end if
+24:end for
+/* Phase 3: Weight Optimization */
+25: Initialize MLP with architecture{|A|,10,1}▷Input,
+hidden, output layers
+26:X train ←ComputeHistoricalAlphas(A,S,t start,t end)
+27:y train ←FutureReturns(S,t start + 1,tend + 1)
+28:w←TrainMLP(X train,y train)▷Learn optimal weights
+29:foreach stockS i ∈ Sdo
+30:α (t)i ← P|A|j=1 wj ·α (t)ij ▷Compute composite alpha
+31:end for
+32:returnα (t) ={α (t)1 , α(t)2 , . . . , α(t)n }▷Final alpha
+strategy
+A.7 Sample prompt for Seed Alpha selection
+1. The training set includes:
+• Financial Reports:6 quarters (from Jan 2021
+to Jun 2022) for 50 companies listed in the
+SSE 50.
+• Factor Analysis Data:37 factors (from Jan
+2021, to Jun 2022) divided into groups: Mo-
+mentum, Mean Reversion, V olatility, Funda-
+mental, Quality, Growth, Technical, Macro
+Economics. The metric used is the IC.
+2.Objective:Learn the relationship between
+the performance of financial reports for the first
+four quarters from 2022 to 2023 and the factor
+analysis data (IC) for each of the 37 factors in the
+last quarter of 2022.
+3.When provided with the test set (perfor-
+mance of the first 4 quarters of 2023):
+• Select the factors that will perform best in the
+last quarter of the SSE 50.
+• Provide a confidence score & the risk pref-
+erence for your selection for each selected
+Alpha factor.
+4.Selection Criteria:
+• If no relationship between financial reports
+and IC can be found, select the Alpha factor
+with the highest IC value in each group.
+• For verification of market information differ-
+ences, if no relationship between financial re-
+ports and IR can be found, select the Alpha
+factor with the highest IR value.
+A.8 Portfolio Construction Methods
+Our investment methodology implements a daily
+portfolio reconstruction using a top-k/drop-n selec-
+tion framework. At each trading session, we rank
+all securities by their alpha values—quantitative
+indicators of expected excess returns—and select
+the top k stocks for portfolio inclusion. This ap-
+proach targets securities with the strongest signals,
+potentially exploiting short-term market inefficien-
+cies. We employ an equal-weighting scheme across
+selected securities, distributing capital homoge-
+neously among the top candidates, which offers
+diversification benefits and aligns with our view
+that alpha signals primarily provide directional in-
+dications rather than precise return forecasts.
+To optimize transaction costs and operational
+efficiency, we limit portfolio turnover to a max-
+imum of n securities per trading day. This con-
+straint balances maintaining alignment with cur-
+rent alpha signals while minimizing trading friction
+costs. For our experiment in Section 4.4, we set
+k= 13 and n= 5 based on extensive backtesting.
+This configuration establishes a portfolio concen-
+tration that balances diversification against signal
+dilution, while limiting daily turnover to approxi-
+mately 38%—a level that demonstrates favorable
+characteristics in our transaction cost modeling and
+represents an efficient trade-off between signal uti-
+lization and implementation costs.

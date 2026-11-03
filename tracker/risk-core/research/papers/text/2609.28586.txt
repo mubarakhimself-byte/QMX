@@ -1,0 +1,2144 @@
+arXiv 2609.28586  https://arxiv.org/abs/2609.28586
+
+Agent Approval Laundering:
+Transitive Effects Beyond the Approved Invocation
+Jinqian Zhang 1,2, Haojun Xia 1,2,†, Shujiang Wu 3, Jingkun Yue 4, Xia Zhang 1,2, Zhangpei Cheng 1,2, Bibo Tu 1,2,†
+1Institute of Information Engineering, Chinese Academy of Sciences
+2School of Cyber Security, University of Chinese Academy of Sciences
+3Beihang University
+4State Key Laboratory of Networking and Switching Technology,
+Beijing University of Posts and Telecommunications, Beijing, China
+† Corresponding authors.
+Abstract—Coding-agent approval interfaces bind a human
+decision to a command or tool call, whereas developer tools
+execute the transitive workflow that invocation activates. Package
+installation can invoke lifecycle hooks and write files; an MCP
+tool call can exercise network authority. We call the resulting
+structural record-coverage failureapproval laundering: a durable
+record faithfully names the entry invocation yet omits effects
+exercised within its workflow.
+We present the first systematic security analysis of this record-
+to-closure relation in approval-gated, tool-using agent systems.
+We formalize it asclosure-bound approval, instantiate it in coding-
+agent workflows with six operational effect classes, and derive
+an information limit: if executions with identical policy-visible
+fields require different effect-specific decisions, no deterministic
+or randomized record-only policy can guarantee both. The
+Approval-to-Action Security Benchmark binds captured approval
+objects and inspectable decision-time metadata to immutable
+post-execution evidence.
+Across 111 fixed approval-object/trace pairs, residual records
+fall from 40 under explicit fields to 17 with command semantics
+and 13 when post hoc analysis adds metadata available at
+decision time. Across 11 fixed-SHA project executions, the same
+retrospective ladder reaches zero metadata residuals; two exact
+mappings recur across three product frontends.
+For prospective recovery,effect-bound recordscommit frozen,
+source-backed effect predictions and provenance before autho-
+rization. On 17 target-executed workflows from a prespecified
+holdout, predictions achieve 0.926 macro recall and 0.941 macro
+precision. Binding them cuts residual effect instances from 10
+to 3. Finally, a proof-of-concept integration with Claude Code’s
+PreToolUsehook carries the same frozen effect-bound record
+through the product’s existing permission path without automatic
+approval.
+Together, these results establish approval laundering as a
+measurable, recurrent record-coverage failure despite truthful in-
+vocation identity. They identify the corresponding design require-
+ment: before authorization, bind the entry invocation together
+with a source-backed prediction of the launched workflow’s
+transitive effect boundary and its provenance, and preserve that
+binding with the decision.
+I. INTRODUCTION
+Approval interfaces for coding agents ask a human to autho-
+rize a command or tool call before a side-effecting invocation
+executes [1]–[3]. Yet the durable record names an entry
+invocation, whereas the developer tool executes the transitive
+workflow that invocation activates. In a Vite project pinned
+to a fixed commit, an approved package-install command
+invokedpostinstalland wrote a workspace file. In an
+MCP case pinned to a fixed revision, a named documentation-
+tool call exercised both its represented MCP capability and
+network authority. In each case, the record faithfully identified
+the entry invocation while the workflow crossed a wider
+operational boundary. Exact invocation identity and effect-
+complete approval are therefore distinct security properties.
+Across npm, PEP 517, Cargo, Docker, Git, and VS Code,
+documented execution semantics expose expansion points
+through which one developer-facing invocation can activate
+behavior selected by project, dependency, or configuration arti-
+facts [4]–[9]. MCP introduces a distinct server-side indirection:
+a namedtools/callinvokes server-exposed behavior that
+can interact with external systems [10]. In the fixed-SHA cases
+above, we empirically show that these mechanisms produce
+multi-step executions crossing file and network boundaries,
+respectively, while each durable record remains bound to its
+entry invocation alone.
+The mismatch is a representation failure in the durable
+approval record. We call itapproval laundering: relative to
+an operational vocabulary, a durable record faithfully iden-
+tifies the entry invocation but leaves at least one effect of
+its transitive workflow unbound. The invocation is truthful;
+the authority it activates is incompletely represented. The
+omission directly constrains enforcement: when an omitted
+effect is policy-relevant, identical policy-visible approval fields
+can require different decisions, making guaranteed-correct
+record-only enforcement impossible. Workflow expansion is
+the mechanism; approval laundering is the resulting structural
+record-coverage failure. Documented tool semantics produce
+structural instances, while adversarially controlled metadata or
+dependencies can exploit the same channel to route security-
+sensitive effects.
+Research gap.Prior work addresses approval–execution
+binding, task-level closure, delegated capabilities, canonical
+actions, tool admission, and user permissions [11]–[18]. These
+lines of work leave a different authorization property unmea-
+sured: whether a durable record sealed before execution covers
+the transitive operational effects of the workflow activated by
+the invocation it records. We formalize this record-to-closure
+arXiv:2609.28586v1  [cs.CR]  23 Sep 2026
+relation over an operational effect vocabulary, systematically
+measure it in coding-agent workflows, and evaluate a pre-
+authorization repair.
+Our approach.To make this gap measurable, we first
+formalize closure-bound approval over six operational effect
+classes and derive a record-only indistinguishability result.
+We then instantiate the property in the Approval-to-Action
+Security Benchmark, which binds prompt-visible fields and
+inspectable decision-time metadata to immutable execution
+evidence under three nested information views. Finally, we
+evaluate prospective recovery from frozen decision-time meta-
+data, bind the resulting effect predictions and provenance
+into an effect-bound record before authorization, and integrate
+that record into an approval-path prototype. Coding agents
+provide the concrete instantiation evaluated here; the same
+relation applies wherever a system exposes an effect vocab-
+ulary, inspectable decision-time expansion sources, activation
+evidence, and post-execution effect evidence. Figure 1 places
+the structural failure, its closure-bound security condition, and
+the prospective effect-bound response side by side.
+Research questions.The problem decomposes into three
+questions:
+RQ1: Approval-record coverage.How does approval-record
+coverage change across explicit-field, command-aware, and
+metadata-aware views, overall and by source?
+RQ2: Cross-project and cross-frontend recurrence.Does the
+same approval-to-effect gap recur in fixed-SHA public-project
+workflows and across coding-agent frontends?
+RQ3: Pre-execution recovery.Can decision-time metadata
+predict and bind missing effects before execution, and how
+often does the resulting policy request additional approval?
+Results and contributions.This paper makes three contri-
+butions:
+•The first systematic analysis of the record-to-closure
+relation.We identify and formalize approval laundering
+as a general, vocabulary-relative record/trace coverage
+failure in approval-gated, tool-using agent systems and
+define closure-bound approval over six operational effect
+classes. We prove that when identical policy-visible fields
+require different effect-specific decisions, no determinis-
+tic or randomized record-only policy can guarantee both.
+•A temporally bound approval-to-action benchmark.We
+bind captured approval objects to append-only, hash-
+bound execution evidence across nine workflow mech-
+anisms. Every mechanism class and all eight protocol-
+selected fixed-SHA project cases yield an explicit-field
+gap. Across 111 approval-object/trace pairs held fixed
+across views, records omitting at least one observed effect
+fall from 40 under explicit fields to 17 with command
+semantics and 13 when post hoc analysis adds metadata
+available at decision time. Across 11 evidence-complete
+executions of the eight fixed-SHA cases, the correspond-
+ing count falls from 10 to 2 to 0. Two exact mappings
+recur in four qualifying runs across three product fron-
+tends.
+•Prospective recovery and effect-bound records.On 17
+target-executed holdout workflows, frozen predictions
+attain 0.926 macro recall, 0.941 macro precision, and
+13/17 exact effect sets versus 9/17 for the command-
+only baseline. Binding those predictions raises case-
+macro disclosed-effect coverage from 0.755 to 0.922 and
+reduces residual effect instances from 10 to 3. We also
+quantify the resulting demand for additional approvals. A
+real-hook integration carries the same frozen effect-bound
+record through an existing product approval boundary.
+II. THEAPPROVAL-REPRESENTATIONLADDER
+Approval-time information forms a representation ladder.
+Explicit record fields state what the interface binds directly.
+Generic command semantics recover effects implied by the
+invocation class. Instance-specific metadata exposes effects
+that the first two layers omit. The following cases isolate the
+two successive transitions: Vite moves from explicit fields
+to command semantics, and MCP moves from command
+semantics to decision-time metadata.
+A. Explicit-Field Gap: Vite
+Consider a dependency installation invitejs/vite
+at commit64dfee12using the repository-pinned pnpm
+10.34.3. An AI coding agent requested approval for one
+command:
+pnpm --dir <fixed-sha-workspace>
+install --frozen-lockfile
+Approval-time representation.The approval record identi-
+fied this shell invocation exactly and represented itsprocess
+effect. The approved command, however, was the entry point
+to an installation workflow rather than the complete workflow
+that executed. Figure 2 separates the approval-time expansion
+source, the effects realized after authorization, and their align-
+ment under the bound-record and command views.
+Executed workflow.After approval, package-manager se-
+mantics invokedpostinstall. The execution transcript
+bindssimple-git-hooks, and the workspace delta binds
+node_modules/.modules.yaml. The record therefore
+represents a process effect, while the executed workflow
+exercises both process and file effects.
+Coverage across views.The explicit record leaves the
+file effect uncovered. Conservative package-install semantics
+recover it before execution but also predict network for this
+execution (Figure 2(b)), closing the residual without yielding
+an exact set.
+2
+Approval laundering Closure-bound approval Effect-bound record
+PROSPECTIVE RESPONSE
+AI agent
+Proposed invocation 𝑎
+Developer / approver
+approve
+Approval record 𝑝
+approved invocation 𝑎
+Rep₆(𝑝) = {P}
+P F E N C M
+Observed trace τ
+P F E N C M
+Eff₆(τ) = {P,F}
+⇒ Coverage gap
+Faithful invocation identity does not imply
+effect-complete approval.
+Coverage—not invocation identity—
+is the security criterion.
+Bind predicted effects + provenance before authorization.
+Ω6: P Process F File E Environment N Network C Container M MCP
+Γ expands workflow
+package build hook
+container MCP
+Eff₆(τ) ∖ Rep₆(𝑝) ={F}
+Record–trace residual
+∀ τ ∈ CΓ(a,m,s₀):
+Eff₆(τ) ⊆ Rep₆(p)
+Residual₆(p,τ) = Eff₆(τ) ∖ Rep₆(p)
+Residual₆(p,τ) ≠ ∅  ⇒
+Decision-time context
+invocation a m ·  s₀ source hashes ·  provenance
+frozen prediction
+Pred₆(a,m,s₀) = {P,F}
+Effect-bound record pEB
+Rep₆(pEB) = {P,F}
+P F E N C M
+prediction ·  source hashes ·  provenance ·  decision
+authorization / execution boundary
+Same later trace τ
+P F E N C M
+Eff₆(τ) = {P,F}
+Coverage check
+Eff₆(τ) ⊆ Rep₆(pEB)?
+Covered = {P,F}    ·     Residual = ∅
+append-only evidence
+p⁺EB = pEB ∥ ⟨transcript hash, effect hashes⟩
+Context: one approved invocation can activate a workflow whose realized effects extend beyond what its durable record binds.
+Residual₆(p,τ) = {F}
+Residual₆(pEB,τ) = ∅
+Coverage gap
+Same later trace τ
+Invocation-only record (p)
+Effect-bound record (pEB)
+F ∈ Eff₆(τ) ∖ Rep₆(p)
+Rep₆(p)
+P F
+Fig. 1. Approval laundering and its effect-bound response. A record can truthfully bind the entry invocation yet omit a transitive file effect (left); closure-bound
+approval marks criterion violation (cross) or satisfaction (check) beside the residual (center); an effect-bound record binds predictions and provenance before
+authorization and appends execution evidence afterward (right).
+a Fixed-SHA Vite evidence chain b Effect-view alignment
+DECISION TIME EXECUTION & EVIDENCE
+authorization
+Bound approval record p
+pnpm --dir <workspace>
+install --frozen-lockfile
+Vite @ 64dfee12 ·  Rep₆(p) = {P}
+Decision-time source
+package.json · f91d…c0a8
+postinstall = simple-git-hooks
+approved command
+approved pnpm install
+package-manager expansion
+P ·  postinstall
+process
+simple-git-hooks
+F ·  workspace
+file write
+node_modules/.modules.yaml
+hook match
+transcript binds P workspace delta binds F
+Observed Eff₆(τ) = {P,F}
+same (p, τ) ·  Vite @ 64dfee12
+P F E N C M R X
+Observed truth
+Eff₆(τ) — —
+Bound record
+Rep₆(p) F —
+Command view
+Avail₆ᶜᵐᵈ ∅ N
+Eff₆(τ) ∖ Rep₆(p) =
+Command view: residual ∅; extra {N}
+not bound by p
+{F}
+Fig. 2. Fixed-SHA Vite evidence chain and effect-view alignment. (a) Decision-time metadata explains how the approved install expands, while post-execution
+artifacts bind the realizedprocessandfileeffects. (b) The bound record missesfile; the conservative command view covers it but overpredictsnetwork.
+B. Command-Residual Gap: MCP
+The Vite gap closes once conservative command semantics
+enrich the record. The MCP case identifies the next boundary:
+command semantics omit an instance-specific network effect.
+Approval-time representation.At commit7b1170d1
+ofmodelcontextprotocol/servers, GitHub Copi-
+lot CLI and Qwen Code each issued a successful, named
+documentation-tool call through the fixed-SHA product con-
+figuration.mcp.json. Their records represented the MCP
+capability; generic tool-call semantics likewise exposed only
+that capability.
+Executed workflow.Post-execution evidence binds both
+the named MCP calls and concrete remote responses. The
+workflow therefore uses the represented MCP capability and
+also exercises network authority.
+Coverage across views.The network effect remains uncov-
+3
+ered under both the explicit-field and command-aware views.
+The missing information is nevertheless available before exe-
+cution: the 123-byte instance-specific.mcp.jsonidentifies
+the configured transport. This case therefore locates the next
+gap between generic invocation semantics and inspectable
+workflow metadata.
+Vite and MCP thus locate different boundaries in one
+representation ladder. In Vite, command semantics recover an
+effect omitted by explicit fields; in MCP, instance metadata
+recovers an effect omitted by generic command semantics.
+The next section turns this ladder into a property of the sealed
+approval record and its execution closure.
+III. CLOSURE-BOUNDAPPROVAL ANDTHREATMODEL
+The representation ladder culminates in one binding ques-
+tion: whether the approval record covers the operational effects
+reachable through the approved workflow. We formalize that
+problem as a coverage relation over traces, derive an observ-
+able gap predicate and a record-only policy indistinguishability
+result, and instantiate both over the six effect classes used in
+our experiments.
+A. Approval Transaction and Execution Closure
+An approval transaction separates the object presented for
+a decision from the record produced by that decision. The
+approval surfaceis the information made available to the
+decision-maker. A base contextb 0 ∈ B0 is committed before
+any adapter response; it identifies the requested entry invoca-
+tionaand any effect assertions supplied to the decision path.
+A staged mediator may then issue a routing outcomeh∈
+H, such as ASK, pass-through, or local denial. Thebound
+decision contextb=⟨b 0, h⟩ ∈ Bis the exact machine-readable
+basis committed before final authorization; for an unstaged
+mediator,h=⊥.
+Because the bound basis may carry more information than
+a particular policy consumes, we distinguish its policy-visible
+projection. For a concrete policy consumer,I(b)∈ Idenotes
+the complete decision-time input on which its output distribu-
+tion may depend; any other state affecting that distribution is
+included inI(b)or fixed across compared instances. Audit-
+only identifiers and provenance may remain inbwithout
+enteringI(b). Let∆(D)denote the distributions over final
+outcomes. A record-only policy is a possibly randomized rule
+F:I →∆(D), with deterministic rules represented by point
+masses.
+The completed permission path draws a final outcome
+d∼F(I(b))and seals the durable pre-execution record
+p= Seal(b, d), withB(p) =bandD(p) =d. We callb
+the decision-timeapproval objectandpits sealedapproval
+record.Permit(D(p))holds only when the completed ap-
+proval path authorizes execution; in particular,h=ASK
+is not permission. Post-execution evidence may be appended
+to formp +, withB(p +) =B(p)andD(p +) =D(p); it
+never becomes decision-time information. Here,Sealdenotes
+semantic immutability of the transaction basis and outcome.
+A product may exposepas a native audit entry; in our em-
+pirical instantiation, a hash-bound evidence bundle preserves
+contemporaneous product artifacts and supports exactly the
+fields those artifacts establish.
+Execution need not stop at the entry invocation. Given
+a decision-time initial-state snapshots 0 committed for ex-
+ecution, a snapshot of inspectable expansion sourcesm,
+and identified toolchain semanticsΓ, theexecution clo-
+sureC Γ(a, m, s0)contains every reachable trace causally
+attributable toΓ’s expansion ofa. The boundary begins when
+the permitted invocation starts and ends when its workflow ter-
+minates, becomes quiescent, or reaches another independently
+mediated request. It includes effects produced before a failed
+workflow terminates and by causally attributable descendants
+within that boundary. A realized traceτis theexecuted object.
+We writeCtxBind(p;a, m,Γ, s0)when the pre-execution
+binding commits the exact invocation, source contents and di-
+gests, toolchain identity, and initial-state snapshot to the same
+transaction asp. For an observed trace,Bind(p, τ;a, m,Γ, s0)
+additionally requires causal and temporal attribution ofτto
+that committed context. An execution using different com-
+mitted content or identity requires a new decision context.
+Nondeterministic behavior reachable from the fixed basis
+remains inside the closure.
+To compare an approval object with the executed object,
+letΩbe a chosen vocabulary of coarse operational labels. Let
+RepΩ(b)⊆Ωcontain the machine-readable effect assertions
+carried by the frozen basisb, and letα Ω project the raw effects
+Eff(τ)of traceτinto that vocabulary. For a sealed record,
+we use the shorthandRep Ω(p) := Rep Ω(B(p)). We write
+Eff Ω(τ) =α Ω(Eff(τ)).
+B. Threat Model
+Actors and authorization boundary.We study one
+approval-mediated execution initiated by an AI coding agent.
+The agent proposesa; a human principal or automated policy
+decides through the approval mediator; and, when the com-
+pleted path permits execution, the developer toolchain expands
+aintoτ. Although mediation originates in a local coding-
+agent session, the resulting closure may cross process, file,
+environment, network, container, and MCP boundaries before
+the next independent mediation point.
+Structural and adversarial regimes.The same record–
+trace coverage failure arises understructural occurrence,
+when ordinary nonmalicious expansion exercises an omitted
+effect label, and underadversarial exploitation, when an actor
+controls or influences an expansion source consumed byΓ
+to induce a policy-relevant omitted label behind the same
+faithfully identified entry invocation. The regimes differ in
+source control, not in the coverage predicate below.
+Adversary capabilities.Beforeb 0 is committed, the adver-
+sary may control or influence an expansion-bearing workspace
+artifact, local tool configuration or state, or a referenced
+implementation, for example through a repository contribution
+or a dependency/supply-chain position. In the studied work-
+flows, these sources include package lifecycle definitions and
+4
+reachable scripts, build-backend selection and enabled build
+scripts, Dockerfile instructions, configured Git hooks, named
+IDE tasks and their reachable scripts, import-time code in
+discovered test modules, and MCP configuration selecting a
+local command or remote transport. The adversary may know
+the approval schema,a, and ordinary toolchain semantics, and
+choose the source so that execution activates a target effect
+class. Normal toolchain expansion carries the effect while the
+recorded entry invocation remains unchanged.
+Trust and binding assumptions.At deployment, we trust
+the integrity and temporal ordering of the agent–mediator
+path:pidentifies the invocation actually launched, remains
+immutable once sealed, and binds its decision only to commit-
+ted contextb. This establishes transaction and entry-invocation
+identity, not effect completeness. Expansion-bearing artifacts,
+dependencies, configuration, and referenced code remain un-
+trusted.
+Establishing a witness against this model also requires
+measurement integrity. For an empirical witness, the mea-
+surement trusted computing base (TCB) additionally includes
+approval capture, record–trace association, artifact hashing,
+effect collectors, and frozen projection rules. We assume exe-
+cuted workflow code cannot forge or corrupt those externally
+preserved objects.
+Security objective and adversarial success.The protected
+property is the integrity of the durable approval record as an
+effect-bearing authorization object: its effect assertions should
+cover every label exercised within a permitted, validly bound
+closure. LetAdvCtrl(ω, τ;a, m,Γ, s0)mean that adversarial
+control or influence over an expansion source causally induces
+labelωinτ. Adversarial success occurs when the completed
+path permits, the trace is validly bound to the approved
+context, and some omitted labelω∈Eff Ω(τ)\Rep Ω(p)is
+causally induced by that adversarial control. The omittedω
+is policy-relevant when the decision required by an effect-
+specific ruleQdepends on whetherωoccurs; Lemma 1
+gives the consequence for policy-view-identical executions
+requiring different outcomes. Concretely, letQpermit a P-
+onlynpm installbut re-mediate an attacker-controlled
+postinstallthat adds F behind the same policy-visible
+record. SinceFreceives identical input, it induces the same
+decision distribution and cannot guarantee the two required
+outcomes from that input alone. If the policy draw permits
+the latter validly bound context, it realizes adversarial success.
+Removing the adversarial-control condition yields the corre-
+sponding structural witness.
+Practicality of the threat model.Documented developer
+toolchains expose executable expansion points in project,
+dependency, and configuration artifacts [4]–[9], [19]. Under
+pnpm 10, dependency install scripts are eligible to execute
+only when permitted by project build settings [19]. Within the
+source-control assumptions above, the adversary controls an
+expansion source that the selected toolchain already consumes.
+In the MCP case, committed configuration selects the transport
+and server endpoint behind the recorded tool name. Our fixed-
+SHA executions confirm that these existing paths generate the
+transitive closures to which approval must bind.
+C. Closure-Bound Approval and Witnessed Violation
+For those closures, the relevant criterion is coverage rather
+than object equality. A record may conservatively represent
+more effects than one execution realizes; the failure of interest
+occurs when an executed effect is absent from the represented
+set.
+Definition 1 (Closure-bound approval).For a fixed trans-
+action context(p, a, m,Γ, s0)satisfyingPermit(D(p))and
+CtxBind(p;a, m,Γ, s0), an approval is closure-bound with
+respect toΩwhen
+∀τ∈C Γ(a, m, s0) : Eff Ω(τ)⊆Rep Ω(p).(1)
+Conservative overrepresentation satisfies this one-sided rela-
+tion, whereas one omitted label does not. A command-only
+record may therefore identify the entry invocation exactly
+while leaving effects triggered by its transitive workflow
+unstated.
+Definition 2 (Approval-object coverage gap).For a
+captured approval objectband an observed traceτ∈
+CΓ(a, m, s0), define the pure coverage predicate
+GapΩ(b, τ)⇐ ⇒EffΩ(τ)̸⊆Rep Ω(b).(2)
+For a completed recordp= Seal(b, d), a pair(p, τ)is a
+measuredstructural approval-laundering witnesswhen the
+completed path permits,τis validly bound to(p, a, m,Γ, s 0),
+andGap Ω(B(p), τ)holds. It is adversarial when an omitted
+labelωis also causally induced by adversarial control over an
+expansion source.
+Observation 1 (One-sided falsification).One structural
+witness decisively falsifies the closure-bound condition in (1)
+for its fixed(p, a, m,Γ, s0,Ω)context. The empirical test is
+one-sided: observed witnesses falsify the universal property;
+an observed run without a witness does not establish the
+property over the entire reachable closure.
+The same mismatch has a decision-theoretic consequence
+when executions that require different effect-specific outcomes
+remain indistinguishable to the policy.
+Lemma 1 (Record-only policy indistinguishability).Let
+F:I →∆(D)be a possibly randomized record-only
+decision rule, with deterministic rules represented by point
+masses, and letQ:P(Ω)→ Dbe deterministic. For an
+execution instancei, writeq i =Q(Eff Ω(τi)). For two validly
+bound execution instances, record-level indistinguishability
+with distinct required outcomes gives
+I(B(p 1)) =I(B(p 2)), q 1 ̸=q 2,
+=⇒F(I(B(p 1))) =F(I(B(p 2))) =:µ, (3)
+andFcannot agree withQalmost surely on both instances:
+it is impossible thatµ({q 1}) =µ({q 2}) = 1.
+Proof.By (3), both instances induce the same output distri-
+butionµ. Sinceq 1 ̸=q 2, the singleton events{q 1}and{q 2}
+are disjoint, soµ({q 1}) +µ({q 2})≤1.QED
+5
+This is the information requirement behind the representa-
+tion ladder. BecauseI(B(p))may include the exact invoca-
+tion,Fmay interpret generic command semantics. Whenever
+policy-relevant executions remain indistinguishable under that
+projection, any record-only policy that implementsQwith
+probability one requires additional decision-time information
+that separates them. If no such information is available, the
+decision path must conservatively represent the union, re-
+mediate, reject, or contain the unresolved effects. Randomiza-
+tion can trade off error across the two instances, but it cannot
+recover the missing distinction or guaranteeQon both.
+D. Six-Class Operationalization
+The experiments instantiateΩas the six-class operational
+vocabularyΩ 6: process, file, environment, network, container,
+and MCP. The environment class denotes mutation of ses-
+sion or persistent environment state, and MCP denotes a
+client-observed protocol capability or successful named tool
+call [10], [20]–[22].
+The six labels deliberately span four operational dimen-
+sions: process, file, and network denote operations; environ-
+ment denotes a mutation; container denotes a resource bound-
+ary; and MCP denotes a protocol capability. Together, they
+measure operational effect-class coverage at this abstraction,
+while destination, intent, severity, credentials, and product-
+contract status remain separate policy dimensions. Coverage
+is the representation-layer completeness condition; RQ3 pairs
+it with precision and the rate of additional approval requests
+so that conservative disclosure is measured against selectivity.
+Accordingly,Eff 6(τ)abbreviatesα 6(Eff(τ)), andRep 6(b)
+contains only labels carried by machine-readable effect asser-
+tions in the frozen approval object. For a completed record,
+Rep6(p) = Rep6(B(p)).
+Figure 2 illustrates the measurable predicate. Its explicit pro-
+jection isRep 6(b) ={process}, whereas the bound trace
+yieldsEff 6(τ) ={process,file}. ThereforeGap 6(b, τ)
+holds; if the completed path permits and the trace is validly
+bound, the same pair is a structural witness.
+This concrete gap also determines how the benchmark is
+evaluated: it compares one approval-object/trace pair at a time
+rather than treating a package as the observation. Mechanism
+classes describe how an invocation expands, whereas effect
+labels describe the resulting operation, mutation, resource
+boundary, or protocol capability. The benchmark carries this
+comparison forward: Section IV fixes the captured approval
+basis and inspectable sources before execution and derives
+labels only from post-execution evidence. Where the com-
+pleted decision and full transaction binding are observed, it
+also instantiates the permission-bearing record required for a
+witness.
+To measure decision-time recoverability for a fixed approval
+basis, letAvail v6(b, a, m,Γ, s0)denote the labels recoverable
+under information viewv∈ {explicit,command,metadata}.
+Section IV evaluates these fixed views. Section VI then makes
+the metadata prediction a durable approval-time assertion by
+committing it tobbefore the decision and preserving it inp.
+IV. THEAPPROVAL-TO-ACTIONSECURITYBENCHMARK
+The Approval-to-Action Security Benchmark fixes captured
+approval fields and the inspectable source snapshot before
+execution, associates them with immutable post-execution
+evidence, and evaluates the Definition 2 coverage gap on
+each approval-object/trace pair. Over the same fixed pair, it
+compares the explicit-field, command-aware, and metadata-
+awareAvail v6 views. The explicit-field view tests the cap-
+tured approval basis; the richer views estimate counterfactual
+decision-time recoverability. Section VI tests the prospective
+construction that commits a frozen prediction before confir-
+matory execution, evaluates routing over that object, and tests
+the product decision handoff through a live hook.
+A. Benchmark Overview and Temporal Pipeline
+The pipeline follows the order approval object, completed
+decision, execution, and evidence. For captured RQ1 instances,
+the benchmark preserves the approval objectb, identified
+invocationa, source snapshotm, and initial-state snapshots 0.
+When contemporaneous product artifacts also establish final
+outcomed, the same transaction instantiatesp= Seal(b, d);
+Table I specifies the corresponding claim eligibility. The
+prospective pipeline constructs a distinct approval object by
+freezing a prediction and its source/rule hashes. The policy
+evaluation instantiates routing outcomehover that object,
+while the live hook separately observes the handoff fromh
+to a final product decision; Section VI gives the construc-
+tion. When that path permits execution, identified toolchain
+semanticsΓexpandaand realize one traceτ∈C Γ(a, m, s0).
+Only afterward do mechanism-specific collectors preserve
+transcripts, state deltas, and hashes from whichEff 6(τ)is
+derived.
+These paths support two no-hindsight checks: RQ1 com-
+paresEff 6(τ)withRep 6(b), whereas RQ3 compares it with
+the frozenPred 6(a, m, s0).
+Figure 3 shows their shared forward-only evidence discipline;
+post-execution evidence enters scoring but never the approval
+basis or recorded prediction.
+Protocol invariants.Across this pipeline, every approval-
+time field used by a view, the invocation, captured source
+contents and identities, identified toolchain semantics, and
+initial-state snapshot are fixed before the execution they are
+used to evaluate; evidence attribution must preserve their
+approval-object–trace binding.
+Formal-to-empirical correspondence.For runr, the hash-
+bound bundleE r preserves the available approval surface, de-
+cision evidence, execution context, and trace evidence. Table I
+maps these artifacts to the logical objects and their acceptance
+tests.
+Claim eligibility.These encodings define nested claim gates.
+A pair iscoverage-completewhenE r preservesband an
+attributableτ; all 111 canonical RQ1 pairs satisfy this gate. It
+isdecision-completeonly when a receipt or transcript/driver
+event records the completed ALLOW or DENY for the exact
+invocation, andbind-completeonly when the context and
+6
+PRE-EXECUTION ·  FREEZE & SEAL EXECUTION ·  APPEND-ONLY EVIDENCE READ-ONLY CHECKS
+t₀ execution begins
+RQ1
+captured path
+Captured approval
+basis b
+a ·  Rep₆(b)
+Captured approval
+basis b
+a ·  Rep₆(b)
+RQ3
+prospective path
+Frozen prediction
+Pred₆(a,m,s₀)
+source + parser/rule hashes
+Frozen prediction
+Pred₆(a,m,s₀)
+source + parser/rule hashes
+Permission path
+h → d
+seal pEB
+Permission path
+h → d
+seal pEB
+read-only Rep₆(b)
+read-only Pred₆
+EXECUTION
+bound context
+Fixed execution context
+a ·  m ·  Γ ·  s₀
+Fixed execution context
+a ·  m ·  Γ ·  s₀ trace τtrace τ
+Immutable raw evidence
+artifact hashes
+Immutable raw evidence
+artifact hashes
+derived
+Eff₆(τ)Eff₆(τ)
+p⁺ = p ‖ ⟨evidence hashes⟩ ·  B(p⁺) = B(p), D(p⁺) = D(p)p⁺ = p ‖ ⟨evidence hashes⟩ ·  B(p⁺) = B(p), D(p⁺) = D(p)
+RQ1 ·  residual
+Eff₆(τ) ∖ Rep₆(b)
+nonempty ⇒ coverage gap
+RQ1 ·  residual
+Eff₆(τ) ∖ Rep₆(b)
+nonempty ⇒ coverage gap
+RQ3 ·  prediction
+Pred₆ vs. Eff₆(τ)
+recall ·  precision ·  exact
+RQ3 ·  prediction
+Pred₆ vs. Eff₆(τ)
+recall ·  precision ·  exact
+PRE-EXECUTION ·  FREEZE & SEAL EXECUTION ·  APPEND-ONLY EVIDENCE READ-ONLY CHECKS
+t₀ execution begins
+RQ1
+captured path
+Captured approval
+basis b
+a ·  Rep₆(b)
+RQ3
+prospective path
+Frozen prediction
+Pred₆(a,m,s₀)
+source + parser/rule hashes
+Permission path
+h → d
+seal pEB
+read-only Rep₆(b)
+read-only Pred₆
+EXECUTION
+bound context
+Fixed execution context
+a ·  m ·  Γ ·  s₀ trace τ
+Immutable raw evidence
+artifact hashes
+derived
+Eff₆(τ)
+p⁺ = p ‖ ⟨evidence hashes⟩ ·  B(p⁺) = B(p), D(p⁺) = D(p)
+RQ1 ·  residual
+Eff₆(τ) ∖ Rep₆(b)
+nonempty ⇒ coverage gap
+RQ3 ·  prediction
+Pred₆ vs. Eff₆(τ)
+recall ·  precision ·  exact
+Permit(· )
+permitted
+transcript · deltas
+D(p)
+D(pEB)
+APPEND-ONLY
+INVARIANT
+p = Seal(b,d)
+if d established
+Fig. 3. Forward-only benchmark protocol. RQ1 freezes the captured approval basisb, while RQ3 freezes a prediction beforet 0; their decision inputs converge
+with the fixed execution context at a shared permission and evidence spine. The resulting effect projection feeds both read-only checks. Where contemporaneous
+decision evidence establishesd, the completed recordp= Seal(b, d)feedsD(p)toPermit(·). Appended hashes leave the decision-time state unchanged.
+Coverage is scored onb; Table I operationalizes the additional evidence required for a permission-bearing witness.
+TABLE I
+FORMAL-TO-EMPIRICAL CORRESPONDENCE. FOR EACH RUNr,THE HASH-BOUND BUNDLEE r PRESERVES THE RECORDED EVIDENCE USED TO
+INSTANTIATE EACH LOGICAL OBJECT;THE RIGHT COLUMN GIVES THE CORRESPONDING ACCEPTANCE CONDITION.
+Object Recorded evidence Acceptance condition
+a, b0 Exact invocation; captured prompt or fixture approval surface and its displayed effect
+fields
+Capture precedes the adapter/final
+decision; surface and launched invocation
+match; capture hash verifies
+h, b Adapter routing outcome, orh=⊥when no routing stage exists; bound basis
+b=⟨b 0, h⟩
+Same transaction;bis committed before
+final authorization
+d, p Native decision receipt or transcript/driver event for the exact invocation; sealed basis
+and outcome
+ASK is not permission;dprecedes
+launch; missingdremains unobserved
+m,Γ, s0 Source contents and digests or fixed SHA; tool, agent, and version; pre-run
+workspace/configuration state
+Identities and hashes belong to runr
+τ,Bind Non-prompt transcript, event log, state delta, and mechanism-specific effect evidence Same run; temporal and causal attribution;
+artifact hashes verify
+ordering tests in Table I establishBind(p, τ;a, m,Γ, s0). Cov-
+erage completeness supportsGap 6(b, τ); only decision and
+binding completeness together withPermit(D(p))support
+a structural witness. Thus calibration, product capture, and
+permission-bearing evidence retain distinct roles.
+B. Unit of Analysis and Evidence Strata
+Every execution attempt contributes one append-only ledger
+row with an immutable terminal snapshot. The ledger retains
+149 attempts: 139 terminate inSUCCESS, while 10 retain a
+non-success terminal status. Non-success attempts remain part
+of the ledger but do not enter the primary RQ1 denominator.
+Retries must not receive additional analytical weight. At
+the same time, a corrected capture must be able to super-
+sede an earlier successful snapshot. The canonical RQ1 view
+therefore retains the latest successful snapshot for eachagent–
+taskkey, yielding 111deduplicated successful agent–task
+records; retries thus contribute at most one successful record
+per key. Each canonical record is paired with its observed
+trace. RQ1 scores Definition 2 coverage gaps on the 111
+coverage-complete pairs; Table I governs the additional eligi-
+bility for a structural witness. A qualifying structural witness
+therefore falsifies closure-bound approval for its fixed context
+under Observation 1; adversarial success additionally requires
+AdvCtrl. Appendix Table V gives the complete terminal-state
+and deduplication accounting for this denominator.
+These 111 approval-object/trace pairs form the RQ1 de-
+nominator; source provenance determines which claims each
+pair can support. Theharness/parser fixture stratumisolates
+npm lifecycle scripts, PEP 517 hooks, Cargo build scripts, git
+hooks, IDE tasks, nested shells, test imports, Docker builds,
+and MCP configuration under known conditions. Thecross-
+frontend construct controluses the same fixtures across fron-
+tends and requires a captured approval prompt, a non-prompt
+transcript or driver artifact, agent metadata, observed effects,
+and hash-bound copied artifacts.Real-project executionsbind
+protocol-selected fixed-SHA public repositories to concrete
+post-approval evidence.Prospective holdoutsinstead bind
+parser predictions over unmodified raw workflow metadata to
+outcomes observed only after those predictions are frozen.
+These strata have distinct analytical roles. The full RQ1
+corpus contains nine successful mechanism classes. Har-
+ness/parser fixtures isolate the coverage construct, the shared-
+7
+fixture stratum controls frontend capture, and qualifying prod-
+uct and fixed-SHA evidence can additionally pass the witness-
+eligibility gate above. RQ2 interprets fixed-SHA real-project
+executions alongside that cross-frontend construct control,
+which covers eight classes; Docker is represented in the
+harness/parser fixture and fixed-SHA project strata. RQ3 keeps
+its controlled, natural-project development, and confirmatory
+fixed-SHA cohorts separate from the retrospective views.
+C. RQ1: Approval-Record Coverage
+RQ1 holds the 111 coverage-complete approval-object/trace
+pairs fixed and asks how coverage changes as decision-time
+information is enriched. On the approval side, letCmd 6(a; Γ)
+denote conservative generic semantics of exact invocation
+aunder the identified toolchain. The metadata-aware view
+uses parser v1.1, developed from the controlled cohort and
+a natural-project development cohort (A), then frozen before
+a disjoint fixed-SHA confirmatory cohort (B); Section VI
+gives the full development-and-freeze sequence. Its output
+Pred6(a, m, s0)is the full pre-execution set emitted by the
+frozen predictor for the fixed identifiedΓ(suppressed in its
+argument list): it includes the command/surface baseline and
+labels inferred from transitive metadata, soCmd 6(a; Γ)⊆
+Pred6(a, m, s0)in the evaluated pipeline. Suppressing com-
+mon arguments, the three available sets are
+Availexplicit6 = Rep6(b),
+Availcommand6 = Rep6(b)∪Cmd 6(a; Γ),
+Availmetadata6 = Rep6(b)∪Pred 6(a, m, s0).
+(4)
+On the trace side, mechanism-specific collectors bind the
+observed process (P), file (F), environment (E), network (N),
+container (C), and MCP (M) classes to raw post-execution
+artifacts. The resulting operational projection spans operations,
+state mutation, resource boundaries, and protocol capability,
+with every label grounded in post-execution evidence.
+The frozen codebook requires an environment effect to mu-
+tate session or persistent environment state. A child workflow
+that only reads an inherited canary, or declares a task-local
+variable, does not contribute an environment effect. The MCP
+class requires either client-observed capability availability un-
+der the effective protocol revision, established through legacy
+initialization or modern discovery and per-request metadata,
+or a named successful tool call. Fixture-authored protocol-
+shaped output alone is excluded [10], [20]–[22]. Accordingly,
+an approved configuration that reportsMCP_NOT_VISIBLE
+and has no post-approval child-process evidence contributes
+no strict M or P effect.
+Under the view-specific sets in (4), a pair remains residual
+under viewvwhenEff 6(τ)̸⊆Avail v6(b, a, m,Γ, s0). By (2),
+the explicit residuals are observed Definition 2 coverage gaps.
+Reductions under the richer views estimate counterfactual
+decision-time recoverability while the captured approval object
+bremains unchanged. Appendix A provides the complete sen-
+sitivity, reclassification, and codebook-reproduction account-
+ing from the append-only, hash-bound evidence.
+Results.
+Finding 1: Explicit approval fields omit observed effect
+classes in every benchmark mechanism class.Under the
+captured explicit-field view, 40 of the 111 canonical records
+have a nonemptyEff 6(τ)\Rep 6(b)residual. Every one of
+the nine mechanism classes contributes at least one gap,
+establishing the occurrence of explicit-field coverage failures
+throughout this benchmark.
+Appendix Table IV localizes those 40 explicit-field gaps and
+tracks the remaining residual records in each mechanism class
+after command and metadata information is added.
+We next apply the command-semantic and frozen-metadata
+enrichments to the explicit-field gaps. The frozen metadata
+predictions are computed over 61 hash-bound source files.
+Neither enrichment consumes expected-effect annotations or
+post-execution labels.
+For comparison, an annotation-backed reference contrasts
+prompt-only inference with replay of explicit expected-effect
+annotations over the same 111 tasks. Appendix A reports this
+comparison alongside the frozen non-annotation views.
+Finding 2: Command semantics resolve 23 of 40 residual
+records; metadata resolves four more.Across the same
+111 records, residual records fall from 40 under explicit
+fields to 17 after generic command semantics and to 13 after
+raw metadata. All 13 remaining residual records belong to
+the harness/parser fixture stratum.
+Appendix A reports the complete mutually exclusive source
+partition. This same-corpus gradient isolates the contribution
+of each information layer. Appendix Figure 6 carries the
+40→17→13gradient forward as the bridge from ret-
+rospective record–trace coverage to prospective decision-time
+recovery. The next section first tests recurrence across fixed-
+SHA projects and product frontends.
+V. FIXED-SHA RECURRENCEACROSSPROJECTS AND
+CODING-AGENTFRONTENDS
+RQ1 establishes the decision-time representation gradient.
+RQ2 asks whether it persists in fixed-SHA public projects and
+recurs across product frontends.
+We test those two steps in order: first individual executions
+in a fixed-SHA project stratum, then exact represented-to-
+observed mappings across frontends at the same repository
+revision.
+The paired executions remain nested within the 11 fixed-
+SHA executions and the enclosing 111-record corpus. A
+separate cross-frontend construct control uses shared fixtures
+to test whether frontend-specific capture behavior could cre-
+ate apparent recurrence outside those paired executions. Ap-
+pendix Figure 6 shows the fixed-SHA representation gradient;
+Figure 4 shows the exact cross-frontend mappings and the
+construct-control view.
+A. Fixed-SHA Workflow Recurrence
+To test whether RQ1’s approval-record coverage gradient
+persists in real dependency and build graphs, we construct a
+8
+fixed-SHA project stratum spanning npm lifecycle, PEP 517,
+Cargo, Docker, and MCP workflows. The analysis extends the
+comparison to public-repository executions with file, container,
+and network effects.
+Outcome-blind case selection.
+Before any execution entered the ledger, a deterministic
+fixed-SHA scan of nine predefined public repositories pro-
+duced 81 mechanism-bearing metadata findings. From those
+findings, the protocol fixed eight repository–mechanism cases
+using repository provenance, source hashes, and supported
+mechanisms.
+Those eight fixed-SHA repository–mechanism cases yield
+11 imported executions: six cases contribute one execution,
+Vite two, andmodelcontextprotocol/serversthree.
+Because gap status is computed from each run’s approval
+object and observed effects, the analysis evaluates these 11
+executions individually.
+Evidence protocol.
+Each evidence-complete execution contains a captured ap-
+proval record, agent metadata, a non-prompt transcript or
+driver artifact, observed-effect evidence, and a hash-bound
+snapshot. The append-only ledger retains capture attempts;
+canonicalization fixes the 11 evidence-complete imported exe-
+cutions before coverage-gap computation. Pre-execution meta-
+data identifies workflow expansion, while artifacts captured
+after approval bind the observed effects.
+This three-view comparison yields the following fixed-SHA
+result.
+Finding 3: Residual records fall from 10 to 2 to 0
+across fixed-SHA workflows.Across 11 evidence-complete
+executions of eight repository–mechanism cases, explicit
+fields leave 10 residual records, command semantics leave
+2, and post hoc metadata leaves none.
+All eight cases contribute at least one explicit-field gap, and
+the two command-aware residual records are successful MCP
+calls. Table II reports all three residual views and the corre-
+sponding expansion source per case; Appendix Table VI binds
+each case to its post-approval evidence. Appendix Figure 6
+provides the compact 11-run view comparison.
+Evidence behind the gradient.Package, build, and container
+cases realize P→P,F or P→P,F,C, and conservative command
+semantics cover every such row. The two successful remote
+MCP executions realize M→M,N, remain command-residual,
+and are covered once instance-specific metadata is added;
+the retained configuration attempt is the sole fixed-SHA non-
+gap because it activates no capability. Appendix Table VI
+binds each row to its post-approval artifact evidence. The next
+analysis tests frontend-specific capture with the shared-fixture
+construct control.
+B. Cross-Frontend Exact-Mapping Recurrence
+Capture comparability.Cross-frontend recurrence is inter-
+pretable only if frontend-specific capture behavior does not it-
+self create strict coverage gaps. We therefore use that construct
+control. The prespecified 42-cell frontend–fixture matrix yields
+40 evidence-complete bundles and two fail-closed refusals.
+The strict label projection places inherited canary reads and
+fixture-authored protocol-shaped events outside the coverage-
+gap construct while retaining all 40 records, yielding 0/40
+strict gaps across five frontends. This negative control rules
+out capture-created strict gaps across the tested shared fixtures;
+the lower portion of Figure 4 shows the projected labels and
+resulting strict count. Appendix Table VII reports the full
+configuration matrix; the fixed-SHA paired analysis below
+tests exact-mapping recurrence.
+To isolate frontend variation, we compare codebook-valid
+executions of the same fixed-SHA case under distinct product
+frontends. The comparison spans two qualitatively different
+expansion settings in the fixed-SHA stratum: Vite’s package-
+lifecycle expansion, covered by command semantics, and
+MCP’s protocol-mediated expansion, residual under command
+semantics. Both cases are evaluated under the same run-level
+eligibility rule. An imported execution enters the comparison
+only if it provides a captured approval record, agent and
+version metadata, a non-prompt transcript or driver artifact,
+observed-effect evidence, and artifact hashes. Each qualifying
+execution yields a captured explicit-field represented set and an
+observed effect set. We count an exact represented-to-observed
+mapping as recurrent across frontends only when two such
+executions yield that same mapping. Prompt wording, local
+paths, and model backend remain recorded run attributes rather
+than matching criteria; command-aware and metadata-aware
+persistence are evaluated separately.
+Applying this exact-mapping rule yields Finding 4.
+Finding 4: Two fixed-SHA exact mappings recur across
+three product frontends.Across four qualifying runs, the
+Vite P→P,F and MCP M→M,N mappings each recur under
+two frontends. Vite resolves under command semantics,
+whereas MCP remains command-residual; both resolve un-
+der the post hoc metadata-aware view.
+The four qualifying executions span tested configurations of
+Claude Code, GitHub Copilot CLI, and Qwen Code. Within
+these versions and configurations, the paired recurrence rules
+out a single-frontend explanation for the two exact mappings.
+For Vite, two approvals represent the pinned package-install
+process, and two independentnode_modules/.modules.
+yamlsnapshots bind the additional file effect. For MCP,
+two M-only records bind named, successful documentation-
+tool calls and concrete responses; both executions additionally
+exercise network authority. Figure 4 identifies each run’s
+frontend and the two mappings across representation views.
+Table II reports the fixed-SHA cases and mappings; Appendix
+Table VI binds each case to its post-approval evidence.
+Together, the fixed-SHA workflow result and paired-
+frontend exact mappings establish recurrence at two levels:
+the representation gradient persists across project executions,
+and the same Vite and MCP mappings recur across product
+frontends. These results provide the retrospective basis for
+asking whether decision-time metadata can become a bound
+security object before the approval decision.
+9
+TABLE II
+PER-CASE RESIDUAL RECORDS ACROSS11FIXED-SHARUNS. EXPLICIT FIELDS,COMMAND SEMANTICS,AND POST HOC METADATA LEAVE10, 2,AND
+0RESIDUAL RECORDS,RESPECTIVELY. P, F, C, N,ANDMDENOTE PROCESS,FILE,CONTAINER,NETWORK,ANDMCP.
+Case and short SHA Runs Residual records Mechanism / source Represented→
+observed
+Explicit Command Metadata
+webpack/webpack
+@efeb5ce2
+1 1 0 0 npm lifecycle /package.json P→P,F
+vitejs/vite
+@64dfee12
+2 2 0 0 npm lifecycle /package.json P→P,F
+pypa/pip @72e6c594 1 1 0 0 PEP 517 /pyproject.toml P→P,F
+pallets/flask
+@36e4a824
+1 1 0 0 PEP 517 /examples/celery/
+pyproject.toml
+P→P,F
+BurntSushi/ripgrep
+@dfe4a81d
+1 1 0 0 Cargo build script /build.rs P→P,F
+microsoft/vscode
+@8d5908d6
+1 1 0 0 Docker build /
+.devcontainer/Dockerfile
+P→P,F,C
+docker/
+awesome-compose
+@30f4b7f6
+1 1 0 0 Docker build /angular/
+angular/Dockerfile
+P→P,F,C
+modelcontextprotocol/servers
+@7b1170d1
+1 0 0 0 MCP client configuration /
+.mcp.json
+M→ ∅(strict)
+same fixed-SHA case 2 2 2 0 MCP remote calls / client
+.mcp.json
+M→M,N
+Total 11 10 2 0 8 fixed-SHA cases across five mechanism families
+4 qualifying runs · 2 recurrent exact mappings · 3 frontends
+ nested in the same 11 fixed-SHA executions
+represented
+observed
+Vite
+Claude Code
+GitHub Copilot CLI
+P
+P
+F
+resolved by command view
+MCP
+GitHub Copilot CLI
+Qwen Code
+M
+M
+N
+resolved by metadata view
+Shared-fixture construct control
+same 40 records · strict label-projection view
+40/40
+records retained
+projected labels
+36 inherited-read E
+4 protocol-shaped M
+0/40
+strict gaps
+Fig. 4. Exact mappings recur across product frontends; a construct-control
+view tests capture comparability. ViteP→P, Fand MCPM→M, Neach
+recur under two product frontends across four qualifying fixed-SHA runs.
+A strict label projection over the same 40 shared-fixture records retains all
+40 and yields0/40strict gaps after projecting 36 inherited-read E and four
+protocol-shaped M labels.
+VI. PRE-EXECUTIONRECOVERY ANDEFFECT-BOUND
+RECORDS
+RQ3 turns retrospective recoverability into a prospective
+test: whether a source-backed effect prediction can be com-
+puted, frozen, and bound before the approval decision. We
+evaluate this transition from recovery to approval through
+a prospective predictor, an effect-bound record, and a real-
+hook integration experiment. The evaluation tests how much
+decision-time metadata improves predictive effect coverage,
+how often the resulting policy requests additional approval at
+the evaluated operating point, and whether the enriched record
+integrates with an existing approval path.
+A. Prospective Protocol and Freeze Discipline
+The evaluation follows a development-and-freeze sequence.
+Parser v1.0 was frozen before the controlled cohort and
+natural-project cohort A. We preserved A’s errors, used them
+to develop v1.1, and then froze v1.1, the evaluation protocol,
+source hashes, rule hashes, and all B predictions before any
+confirmatory execution. Each of the 18 primary B cases was
+run once under the primary protocol; no primary outcome
+altered the parser or its predictions. Appendix Figure 7 records
+this freeze-and-score boundary.
+At the center of the frozen pipeline is a decision-
+time metadata parser. It reads raw localpackage.json,
+pyproject.toml,Cargo.tomlandbuild.rs, Dock-
+erfile instructions, VS Code task JSONC, MCP configura-
+tion, Git hooks, and referenced shell or PowerShell scripts.
+It excludes benchmark-generated reports, execution traces,
+observed-effect files, and harness instrumentation. For compar-
+ison, the command-only baseline sees only the prompt-visible
+surface invocation and maps generic command semantics to a
+conservative effect set.
+For each target-executed workflowi, letE i ⊆Ω 6 be the
+independently observed effect set and bEi ⊆Ω 6 the frozen
+prediction. Case-level effect recall is the fraction of observed
+effects included in the prediction, and precision is the fraction
+of predicted effects that are observed. Recall is one when
+the observed set is empty; precision is one only when both
+sets are empty and zero when exactly one set is empty.
+We macro-average both metrics equally across target-executed
+10
+workflows and report exact-set accuracy as the fraction with
+bEi =E i. A case that does not reach target execution
+contributes to protocol accounting but not to these outcome-
+dependent metrics. Appendix B-A gives the complete metric
+definitions and denominators. Appendix Figure 8 summarizes
+the three cohorts, while Figure 5 reports the paired command-
+versus-metadata comparison on B.
+B. Development Cohorts
+Parser v1.0 was evaluated on a controlled cohort and a
+disjoint Natural-A fixed-SHA development cohort. Preserved
+Natural-A errors provided the development evidence for v1.1;
+before Confirmatory B, we froze v1.1, the protocol, source/rule
+hashes, and both B prediction sets. Appendices A and B report
+the development scores and error profiles, respectively.
+C. Prespecified Confirmatory Holdout B
+B prespecifies 18 workflows from 18 previously unseen
+fixed-SHA repositories: one positive and one negative or low-
+risk control for each of npm, PEP 517, Cargo, Docker, IDE
+tasks, MCP, Git hooks, nested shell, and unittest import.
+Seventeen workflows reach target execution. Thirteen com-
+plete successfully, and four terminate after producing effect
+evidence. One fails during setup before the target workflow.
+The 17 target-executed cases form the prediction-accuracy de-
+nominator; the setup failure remains in protocol and terminal-
+flow accounting but supplies no realized effect set.
+On those 17 cases, frozen metadata predictions achieve
+0.926 macro recall, 0.941 macro precision, and exact effect
+sets in 13/17 executions. Positive recall and precision are 0.972
+and 1.000; control recall and precision are both 0.875. All
+three predeclared targets pass: overall recall≥.80, overall
+precision≥.80, and executed-control precision≥.80.
+The command-only baseline on the same 17 cases obtains
+0.770 macro recall, 0.941 macro precision, and exact effect
+sets in 9/17 executions. Both prediction sets, their freeze time,
+the parser/rule hash, and the source hashes are bound in the
+pre-execution bundle. Figure 5 exposes the paired score change
+and the direction of every exact-set transition.
+Finding 5: Frozen metadata improves prospective recov-
+ery on the paired holdout.Metadata raises macro recall
+from .770 to .926 at the same .941 macro precision, while
+exact-set matches rise from 9/17 to 13/17 through four
+repairs and zero exact-set regressions.
+Independent effect-set reconstruction.A separately imple-
+mented verifier hash-checks 109 artifacts and reconstructs all
+17 target-executed effect sets independently of the predictor
+and original collector labels, with zero effect-set or artifact-
+hash mismatches; it marks the setup failureNOT_EXECUTED.
+Six prespecified cases rerun three times each have mean pair-
+wise effect-set Jaccard 1.000. Appendix Table VIII gives the
+scoring predicates; Appendix B provides the error localization
+and sensitivity analyses.
+Confirmatory B
+n = 17 paired cases
+command-only
+metadata v1.1
+Recall
+Precision
+0.770
+0.926
+ +0.157
+0.941
+ no change
+0.50
+0.75
+1.00
+Macro score (shown range: 0.45–1.00)
+Exact-set transitions
+9/17
+13/17
+command-only
+ (rows)
+metadata v1.1
+ (columns)
+exact
+nonexact
+exact
+9
+stable exact
+0
+regressed
+nonexact
+4
+repaired
+4
+stable nonexact
+Fig. 5. Confirmatory-B paired comparison across the 17 target-executed cases.
+The transition matrix tracks how command-only exact-set status changes under
+frozen metadata v1.1.
+D. Effect-Bound Approval Record
+Turning prospective recovery into an approval object re-
+quires committing the frozen prediction and its provenance to
+the decision context before authorization and preserving that
+binding in the durable record. A product interface can make
+this binding concrete by displaying the surface invocation and
+predicted effects as distinct fields, attaching each effect to its
+metadata source, and persisting the prediction and provenance
+with the decision. Sandboxing constrains what execution may
+do after the decision; an effect-bound record improves what the
+approval object represents before execution. The two controls
+protect different temporal boundaries and compose in one
+approval path.
+We instantiate the approval transaction model from Sec-
+tion III. Letb cmd denote the prospective command-only ob-
+ject for the same invocation. Because its represented and
+command-semantic sets are contained in the frozen metadata
+prediction, the effect-bound object seals that complete set:
+pEB = Seal(bEB, d),
+Rep6(pEB) = bE6 = Pred6(a, m, s0). (5)
+Before the decision,b EB binds the invocation, frozen pre-
+diction, metadata sources and hashes, parser/rule provenance,
+binding mode, and adapter routing outcome; sealing adds
+the final permission outcomed. After a permitted execution,
+transcript and realized-effect hashes are appended for audit
+but cannot retroactively become approval-time disclosure. This
+construction composes directly withCtxBind: in a closure-
+bound deployment, the mediator’s binding layer supplies the
+full transaction context, while the effect-bound record supplies
+its effect-assertion component. Appendix Table IX gives the
+field-level schema.
+11
+Having established what the record contains, we next test
+whether it can be produced synchronously on the approval
+path. At the evaluated scale, the parser satisfies that require-
+ment. Across 12 controlled and 8 fixed-SHA real-project
+metadata snapshots, every prediction is stable, with no parser
+failure or timeout. Worst same-process P95 is 12.3 ms; the all-
+case fresh-process maximum P95, including Python startup, is
+168.2 ms. These measurements establish parser-level preflight
+cost; the hook experiment below measures integrated adapter
+overhead.
+E. Approval-Path Integration and Policy Operating Point
+We next reuse the frozen B predictions in an approval-path
+policy to measure one disclosure–selectivity operating point.
+The policy returns routing outcomeh=ASK, requesting an
+additional approval decision, when metadata identifies induced
+mechanisms, added effects, or warnings. ASK delegates to the
+existing permission flow; it is not the final outcomeD(p). If
+metadata produces no signal, the request passes through to that
+flow. Invalid output fails closed, and the policy never auto-
+allows. We operationalize demand for additional approvals
+as the fraction of prespecified cases routed to ASK, directly
+measuring how often this policy invokes another decision at
+the product boundary.
+To quantify disclosure independently of the policy con-
+sumer, letE i = Eff 6(τi)and letR i be the effect set disclosed
+by the evaluated record. For an effect-bound record, instanti-
+ating (5) per workflow givesR i = bE6,i = Rep6(pEB,i)once
+sealed. Of the 17 target-executed cases, 16 have nonempty
+Ei and therefore a defined per-case coverage fraction. Equa-
+tion (7) in Appendix B-A averages these 16 fractions while
+counting residual effect instances over all 17. For the remain-
+ing control case,E i =∅whileR i ̸=∅, so|R i ∩E i|/|Ei|=
+0/0and no coverage score is defined. The case remains in the
+other outcome analyses: under (6), it receives recall one and
+precision zero, is not an exact-set match, and contributes zero
+residuals.
+Table III reports the resulting operating point, separating
+overall disclosure from the positive and control strata and
+placing the corresponding policy-routing demand alongside
+each stratum.
+TABLE III
+CONFIRMATORY-BDISCLOSURE AND ROUTING BY STRATUM.
+Scope
+Coverage
+Cmd.→EB
+Residual
+Cmd.→EB
+Exact sets
+Cmd.→EB
+ASK
+protocol
+No-added-
+effect ASK
+Overall .755→.922 10→3 9/17→13/17 17/18 9/17
+Positive .676→.972 8→1 4/9→8/9 9/9 4/9
+Controls .857→.857 2→2 5/8→5/8 8/9 5/8
+Note.Cmd. and EB denote command-only and effect-bound records,
+respectively. Denominators are overall/positive/control: 16/9/7 for coverage
+over nonempty observed effect sets; 17/9/8 for residual and exact-set results
+over target-executed cases; 18/9/9 for ASK routing over all protocol cases;
+and 17/9/8 for no-added-effect ASK over reached cases. A no-added-effect
+ASK is a reached case routed to ASK whose realized trace exercises no
+effect class beyond those disclosed by the command-only record.
+The seven newly disclosed effect instances all occur in the
+positive stratum, while control disclosure remains unchanged.
+Because these are record-level comparisons, the disclosure
+gain is independent of the policy consumer. The evaluated
+consumer routes every positive and all but one control to ASK;
+9/17 reached cases are no-added-effect ASK cases under the
+realized-trace proxy, with one warning and no parser failures.
+This operating point separates the record-level disclosure gain
+from policy-specific routing demand.
+Finding 6: Effect-bound records disclose seven additional
+effect instances.Reusing the frozen predictions raises case-
+macro coverage from .755 to .922 and reduces residual effect
+instances from 10 to 3. The evaluated conservative policy
+makes the disclosure–selectivity tradeoff explicit.
+The B operating point measures cohort-level policy behav-
+ior; we next exercise insertion of the same frozen record
+into an existing product approval path. In the predeclared
+npm case, 100 in-process preflights have P95 1.51 ms; 30
+fresh hook processes have median 87.8 ms and P95 98.1 ms,
+including startup, hook input, parsing, and serialization. An
+isolated Claude Code 2.1.205PreToolUseintegration run
+then issues the exactnpm run buildrequest. The hook
+emitsh=ASK, the noninteractive permission path returns
+final outcomed=DENY, no automatic allow occurs, and
+the workspace remains hash-identical. This run exercises the
+evaluated product approval-path boundary: the adapter receives
+the request, binds the predicted effects into an ASK routing
+outcome, and returns that outcome to the existing permission
+flow.
+VII. DISCUSSION
+Security implication.Closure-bound approval separates ef-
+fect coverage from invocation identity: a truthfully identi-
+fied invocation remains insufficient when the decision-time
+approval objectbomits effects activated by its workflow.
+Binding recovered effects and their provenance intobmakes
+that workflow knowledge policy-visible; sealing that enriched
+object with decisiondproduces the completed effect-bound
+recordp. Recurrence across the evaluated mechanisms and
+frontends, together with the record-only indistinguishability
+result, locates the repair at the approval boundary. When an
+omitted effect changes the required decision, a policy restricted
+to unchanged visible fields cannot recover that distinction.
+Record construction and policy calibration remain independent
+design axes: deployments can tune predicates over destina-
+tions, arguments, credentials, severity, or outcomes without
+discarding the predicted boundary or its provenance from the
+durable record.
+Bind–Enforce–Contain.The architecture carries one trans-
+action context through a forward-only chain.Bindderives
+source-backed predictions from workflow-expansion sources
+and commits the frozen effect set, supporting inputs, and
+provenance tobbefore authorization. Toolchains can ex-
+pose versioned, provenance-carrying effect declarations, which
+agents combine with command semantics and instance-specific
+12
+metadata.Enforceevaluates product policy overI(b)to pro-
+duced; the completed recordp= Seal(b, d)then preserves
+both. For permitted execution,Containrestricts behavior to
+the effect boundary recorded inB(p). Post-execution audit
+appends artifact-bound observations to formp +, comparing
+realized effects with the frozen prediction while leaving
+B(p+) =B(p)andD(p +) =D(p). Missing or unverifiable
+decision-time evidence must not yield automatic approval.
+Toolchain declarations, agent prediction, policy, containment,
+and audit thereby operate on one temporally coherent record
+lineage.
+Generalization and design principle.The relation extends
+beyond coding agents wherever a system supplies an effect
+vocabulary, inspectable decision-time expansion sources, acti-
+vation evidence, and post-execution effect evidence. Browser,
+SaaS/API, nested-agent, and other tool-using systems are
+natural instantiation targets under these conditions. The six-
+class projectionΩ 6 instantiates the relation here; deployments
+can refine its labels with destinations, arguments, credentials,
+severity, timing, or outcomes without changing the binding
+relation.Design principle: bind the effect boundary before
+the decision, enforce from the bound record, and contain
+execution to that boundary.This forward-only chain turns
+approval from an invocation-level checkpoint into an auditable
+control over the workflow that executes.
+VIII. RELATEDWORK
+Prior work addresses neighboring security objects across
+agent execution, authorization, and workflow expansion. We
+organize these lines by the property they constrain.
+Agent execution and tool security.XTHP studies ma-
+licious companion tools that redirect selection and control
+flow in tool pools [23]. IsolateGPT isolates application ex-
+ecution, while ACE constrains planning and execution un-
+der information-flow and capability policies [24], [25]. Tool-
+Guardian derives facts from descriptions, traces, mock exe-
+cution, and source analysis for tool admission and runtime
+authorization [18]. Adjacent work studies prompt injection,
+tool emulation, excessive agency, coding-assistant behavior,
+permission gates, and agent-human interaction [26]–[33].
+These approaches constrain which tools execute, where ex-
+ecution occurs, or how behavior conforms to policy. We
+instead hold the selected entry invocation fixed and faithfully
+identified, then measure whether its decision-time approval
+object covers the transitive operational effects activated by the
+selected implementation.
+Authorization scope, action identity, and provenance.
+Classic authorization establishes complete mediation, exposes
+confused-deputy risks, and constrains delegation [34]–[37].
+Prior work on cross-layer systems shows that individually
+meaningful authorization policies can fail to compose across
+software layers [38]. Approval laundering exposes a record-
+level form of this broader compositional hazard: even when
+entry-invocation identity is preserved, the durable decision-
+time record may not cover the selected implementation’s
+execution closure. Permission studies examine whether autho-
+rization boundaries are intelligible and how agents request and
+enforce user permission [15], [39], [40]. Recent agent work
+protects adjacent properties. AuthBench infers task-level file
+policies and evaluates execution-closure proxies [14], while
+Consent Integrity binds approval to the exact boundary action
+rendered by a trusted mediator [11]. The distinction is direct:
+AuthBench asks which authority a task requires; Consent
+Integrity asks whether the approved action is the action that
+executes; we ask whether the decision-time approval object
+for a faithfully identified invocation covers the transitive
+operational effects activated by its selected implementation.
+OverEager-Bench applies rule oracles to agent actions, and
+Schmotz et al. show how malicious skills can reuse task autho-
+rization [41], [42]. The Authorization-Execution Gap frames
+broader intent-to-execution divergence [12]. Proof-Carrying
+Agent Actions and CA V A bind action identity, receipts, canon-
+icalization, and attestation [16], [17]; ChainCaps attenu-
+ates explicit proxy-visible capability flows [13], Approval-
+Framed Delegation studies downstream compliance [43], and
+GhostApproval exposes canonical-target substitution behind a
+displayed path [44]. These works structure authority, identity,
+provenance, or delegated flow; closure-bound approval adds
+a measurable coverage relation between the decision-time ap-
+proval object and the selected invocation’s execution closure.
+Transitive expansion sources and approval envelopes.
+Software-supply-chain studies characterize malicious pack-
+ages, dependency exposure, and registry abuse [45]–[47],
+while Latch mediates package capabilities at installation
+time [48]. Documented npm, pnpm, PEP 517, Cargo, Git, IDE,
+and Docker mechanisms expose concrete sources of transitive
+expansion [4]–[9], [19]; MCP exposes named tools whose
+server implementations can interact with external systems [10].
+At the authorization boundary, compound-action representa-
+tions expose explicit sub-actions [49]; skill packages combine
+discoverable instructions, scripts, and resources [50], [51];
+and MCP provides versioned discovery and routing metadata
+[22], [52], [53]. AuthZEN, COAZ, and COAZ-MCP define
+structured authorization and approval-request envelopes [54]–
+[56], while deployed systems mediate explicit commands and
+tool calls [1]–[3], [57]. These mechanisms expose either the
+sources from which transitive behavior arises or structured
+boundaries at which authorization is mediated.
+Together, these lines of work constrain origin, authority,
+identity, delegation, request structure, and execution; closure-
+bound approval makes record-to-closure coverage measurable
+as a distinct approval-boundary property.
+IX. CONCLUSION
+Approval laundering is a record-to-closure security failure:
+a durable record faithfully identifies an entry invocation yet
+omits effects activated by its selected implementation. We
+present the first systematic analysis of this relation across
+controlled mechanisms, fixed-SHA projects, and product fron-
+tends. We formalize closure-bound approval and prove its
+information limit: no deterministic or randomized record-only
+13
+policy can guarantee correctness for validly bound execu-
+tions with identical policy-visible inputs but different required
+effect-specific decisions. On the prespecified holdout, binding
+frozen, source-backed predictions cuts residual effect instances
+from 10 to 3; a Claude Code hook routes an effect-bound ASK
+via an existing permission path without automatic approval.
+Authorization should bind the invocation, predicted transitive
+effect boundary, and provenance before deciding, preserving
+that commitment through execution and audit.
+ETHICSCONSIDERATIONS
+Study conduct.This defensive study executes con-
+trolled fixtures and public fixed-SHA repositories in isolated
+workspaces. It involves no human subjects or personal data and
+accesses no private repository or unrelated production target.
+Authentication uses researcher-controlled accounts; credential
+checks use synthetic canaries or non-reversible evidence. Net-
+work activity is limited to ordinary product access and task-
+bounded calls to a documented public MCP endpoint. The
+experiments neither submit upstream changes nor generate
+traffic intended to affect maintainers or users.
+Attribution and release.Because the evaluated mecha-
+nisms are documented workflows in protocol-selected public
+projects, we attribute those mechanisms to the projects while
+evaluating the approval-record boundary on the agent side.
+This preprint is paper-only and does not include a public
+artifact URL, the experiment ledger, or raw execution captures.
+The paper reports the evaluation protocol and claim-bound
+results from sanitized, frozen evidence. Any future public ar-
+tifact release, if made, will be version-matched and announced
+separately; this version makes no artifact- availability claim.
+Responsible disclosure.We privately disclosed the product-
+specific approval-record findings for Claude Code, GitHub
+Copilot CLI, and Qwen Code to Anthropic, GitHub, and Al-
+ibaba, respectively. Each disclosure included version-specific
+reproduction instructions and supporting evidence to facilitate
+independent validation.
+Authorized use and dual use.The controlled demon-
+strations have dual-use potential and are intended only for
+authorized reproduction, defensive evaluation, and improve-
+ment of agent approval mechanisms. The paper does not grant
+authorization to probe, exploit, or disrupt third-party systems;
+reproduction should be limited to systems the evaluator owns,
+controls, or has explicit permission to test.
+Deployment responsibility.Effect-bound approval can cre-
+ate harm if incomplete predictions produce false assurance,
+over-broad ASK routing produces approval fatigue, or durable
+records expose repository and infrastructure metadata. De-
+ployers should retain accountable policy ownership, minimize
+secret-bearing content before sealing, and govern records
+as sensitive security telemetry through access and retention
+controls. Deployment should be staged and reversible; un-
+explained residual effects or excessive additional-approval
+demand should pause rollout and trigger review, with rollback
+if either remains unresolved.
+REFERENCES
+[1] OpenAI. Agent approvals & security. Accessed: Aug. 20, 2026. [Online].
+Available: https://learn.chatgpt.com/docs/agent-approvals-security
+[2] Anthropic. Claude Code settings. Accessed: Aug. 20, 2026. [Online].
+Available: https://code.claude.com/docs/en/settings
+[3] GitHub. Configuring GitHub Copilot CLI. Accessed: Aug. 20,
+2026. [Online]. Available: https://docs.github.com/en/copilot/how-tos/
+copilot-cli/set-up-copilot-cli/configure-copilot-cli
+[4] npm, Inc. Scripts. Accessed: Aug. 20, 2026. [Online]. Available:
+https://docs.npmjs.com/cli/v10/using-npm/scripts/
+[5] N. J. Smith and T. Kluyver. (2015, Sep. 30) PEP 517 – a build-system
+independent format for source trees. Accessed: Aug. 20, 2026. [Online].
+Available: https://peps.python.org/pep-0517/
+[6] The Rust Project Developers. Build scripts. Accessed: Aug. 20,
+2026. [Online]. Available: https://doc.rust-lang.org/cargo/reference/
+build-scripts.html
+[7] Docker, Inc. Dockerfile reference. Accessed: Aug. 20, 2026. [Online].
+Available: https://docs.docker.com/reference/dockerfile/
+[8] The Git Project. githooks documentation. Accessed: Aug. 20, 2026.
+[Online]. Available: https://git-scm.com/docs/githooks
+[9] Microsoft. Integrate with external tools via tasks. Accessed: Aug. 20,
+2026. [Online]. Available: https://code.visualstudio.com/docs/debugtest/
+tasks
+[10] Model Context Protocol. (2026, Jul. 28) Tools. Accessed: Aug. 20,
+2026. [Online]. Available: https://modelcontextprotocol.io/specification/
+2026-07-28/server/tools
+[11] X. Weng, “What you approve is what executes: Consent integrity for
+black-box LLM agents,”arXiv preprint arXiv:2606.02668, Jun. 2026.
+[12] B. Wu, Q. Liu, A. Bibi, I. King, and S. Lyu, “The authorization-
+execution gap is a major safety and security problem in open-world
+agents,”arXiv preprint arXiv:2605.11003, May 2026.
+[13] X. Jiang, S. Yang, Z. Li, L. Liu, H. Yu, and Y . Liu,
+“ChainCaps: Composition-safe tool-using agents via monotonic
+capability attenuation,” inSecond Workshop on Agents in the
+Wild: Safety, Security, and Beyond, 2026. [Online]. Available:
+https://openreview.net/forum?id=KtrAm71ER9
+[14] Z. Yan, J. Weng, C. Chen, D. Peng, E. Qin, J. Guan, J. Liu, Q. Yu,
+Y . Yuan, F. Meng, C. Che, and M. Hu, “Do coding agents understand
+least-privilege authorization?”arXiv preprint arXiv:2605.14859, May
+2026.
+[15] A. E. Michael and F. Roesner, “How agents ask for permission: User
+permissions for AI agents, from interfaces to enforcement,”arXiv
+preprint arXiv:2607.13718, Jul. 2026.
+[16] Z. Wang, “Proof-carrying agent actions: Model-agnostic runtime
+governance for heterogeneous agent systems,”arXiv preprint
+arXiv:2606.04104, Jun. 2026.
+[17] ——, “CA V A: Canonical action verification and attestation for runtime
+governance of agentic AI systems,”arXiv preprint arXiv:2607.13716,
+Jul. 2026.
+[18] A. Ravindran and S. Deochake, “ToolGuardian: Declarative security for
+AI agent-tool interactions,”arXiv preprint arXiv:2607.21835, Jul. 2026.
+[19] pnpm. pnpm 10.x settings: Build settings. Accessed: Aug. 20, 2026.
+[Online]. Available: https://pnpm.io/10.x/settings#allowbuilds
+[20] Model Context Protocol. (2025, Nov. 25) Tools. Accessed: Aug. 20,
+2026. [Online]. Available: https://modelcontextprotocol.io/specification/
+2025-11-25/server/tools
+[21] ——. (2025, Nov. 25) Lifecycle. Accessed: Aug. 20,
+2026. [Online]. Available: https://modelcontextprotocol.io/specification/
+2025-11-25/basic/lifecycle
+[22] ——. (2026, Jul. 28) Versioning and compatibility. Accessed: Aug. 20,
+2026. [Online]. Available: https://modelcontextprotocol.io/specification/
+2026-07-28/basic/versioning
+[23] Z. Li, J. Cui, X. Liao, and L. Xing, “Les dissonances: Cross-tool
+harvesting and polluting in pool-of-tools empowered LLM agents,” in
+Proceedings of the Network and Distributed System Security Symposium
+(NDSS), 2026.
+[24] Y . Wu, F. Roesner, T. Kohno, N. Zhang, and U. Iqbal, “IsolateGPT:
+An execution isolation architecture for LLM-based agentic systems,” in
+Proceedings of the Network and Distributed System Security Symposium
+(NDSS), 2025.
+[25] E. Li, T. Mallick, E. Rose, W. Robertson, A. Oprea, and C. Nita-Rotaru,
+“ACE: A security architecture for LLM-integrated app systems,” in
+14
+Proceedings of the Network and Distributed System Security Symposium
+(NDSS), 2026.
+[26] K. Greshake, S. Abdelnabi, S. Mishra, C. Endres, T. Holz, and M. Fritz,
+“Not what you’ve signed up for: Compromising real-world LLM-
+integrated applications with indirect prompt injection,” inProceedings of
+the 16th ACM Workshop on Artificial Intelligence and Security (AISec),
+2023, pp. 79–90.
+[27] Y . Ruan, H. Dong, A. Wang, S. Pitis, Y . Zhou, J. Ba, Y . Dubois,
+C. J. Maddison, and T. Hashimoto, “Identifying the risks of LM
+agents with an LM-emulated sandbox,” inThe Twelfth International
+Conference on Learning Representations (ICLR), 2024. [Online].
+Available: https://openreview.net/forum?id=GEcwtMk1uA
+[28] E. Debenedetti, J. Zhang, M. Balunovi ´c, L. Beurer-Kellner, M. Fischer,
+and F. Tram`er, “AgentDojo: A dynamic environment to evaluate prompt
+injection attacks and defenses for LLM agents,” inAdvances in Neural
+Information Processing Systems 37, Datasets and Benchmarks Track,
+2024, pp. 82 895–82 920.
+[29] OW ASP Gen AI Security Project. LLM06:2025 Excessive Agency.
+Accessed: Aug. 20, 2026. [Online]. Available: https://genai.owasp.org/
+llmrisk/llm062025-excessive-agency/
+[30] N. Perry, M. Srivastava, D. Kumar, and D. Boneh, “Do users write
+more insecure code with AI assistants?” inProceedings of the 2023
+ACM SIGSAC Conference on Computer and Communications Security
+(CCS), 2023, pp. 2785–2799.
+[31] J. Yang, C. E. Jimenez, A. Wettig, K. Lieret, S. Yao, K. Narasimhan,
+and O. Press, “SWE-agent: Agent-computer interfaces enable automated
+software engineering,” inAdvances in Neural Information Processing
+Systems 37, 2024, pp. 50 528–50 652.
+[32] Z. Ji, Z. Li, W. Jiang, Y . Gao, and S. Wang, “Measuring the permission
+gate: A stress-test evaluation of Claude Code’s auto mode,”arXiv
+preprint arXiv:2604.04978, Apr. 2026.
+[33] P. Wang, Y . Li, and Y . Tian, “Reframing LLM agent security as an
+agent-human interaction problem,”arXiv preprint arXiv:2605.24309,
+May 2026.
+[34] J. H. Saltzer and M. D. Schroeder, “The protection of information in
+computer systems,”Proceedings of the IEEE, vol. 63, no. 9, pp. 1278–
+1308, Sep. 1975.
+[35] N. Hardy, “The confused deputy: (or why capabilities might have been
+invented),”ACM SIGOPS Operating Systems Review, vol. 22, no. 4, pp.
+36–38, Oct. 1988.
+[36] A. Birgisson, J. G. Politz, ´U. Erlingsson, A. Taly, M. Vrable, and
+M. Lentczner, “Macaroons: Cookies with contextual caveats for decen-
+tralized authorization in the cloud,” inProceedings of the Network and
+Distributed System Security Symposium (NDSS), 2014.
+[37] A. Ibrahim and Y . Li, “Overlaying governance: A compositional au-
+thorization framework for delegation and scope in agentic AI,”arXiv
+preprint arXiv:2606.03518, Jun. 2026.
+[38] M. Georgiev, S. Jana, and V . Shmatikov, “Breaking and fixing origin-
+based access control in hybrid web/mobile application frameworks,” in
+Proceedings of the Network and Distributed System Security Symposium
+(NDSS), 2014.
+[39] A. P. Felt, E. Ha, S. Egelman, A. Haney, E. Chin, and D. Wagner,
+“Android permissions: User attention, comprehension, and behavior,” in
+Proceedings of the Eighth Symposium on Usable Privacy and Security
+(SOUPS), 2012, pp. 1–14.
+[40] P. Wijesekera, A. Baokar, A. Hosseini, S. Egelman,
+D. Wagner, and K. Beznosov, “Android permissions remystified:
+A field study on contextual integrity,” in24th USENIX
+Security Symposium (USENIX Security 15), Aug. 2015, pp.
+499–514. [Online]. Available: https://www.usenix.org/conference/
+usenixsecurity15/technical-sessions/presentation/wijesekera
+[41] Y . Qu, Y . Zhang, Y . Zhang, G. Deng, Y . Li, L. Y . Zhang, and Y . Liu,
+“Overeager coding agents: Measuring out-of-scope actions on benign
+tasks,”arXiv preprint arXiv:2605.18583, May 2026.
+[42] D. Schmotz, S. Abdelnabi, and M. Andriushchenko, “Agent skills enable
+a new class of realistic and trivially simple prompt injections,”arXiv
+preprint arXiv:2510.26328, Oct. 2025.
+[43] L. Liu, H. Yu, X. Jiang, S. Wang, P. Qian, and Y . Chen, “Operational
+reframing and approval-framed delegation in multi-agent LLM safety,”
+arXiv preprint arXiv:2607.07097, Jul. 2026.
+[44] M. Dokhanian. (2026, Jul. 8) GhostApproval: A trust boundary
+gap in AI coding assistants. Wiz Research. Accessed:
+Aug. 20, 2026. [Online]. Available: https://www.wiz.io/blog/
+ghostapproval-a-trust-boundary-gap-in-ai-coding-assistants
+[45] M. Ohm, H. Plate, A. Sykosch, and M. Meier, “Backstabber’s knife
+collection: A review of open source software supply chain attacks,”
+inDetection of Intrusions and Malware, and Vulnerability Assessment
+(DIMVA), 2020, pp. 23–43.
+[46] M. Zimmermann, C.-A. Staicu, C. Tenny, and M. Pradel, “Small world
+with high risks: A study of security threats in the npm ecosystem,” in
+28th USENIX Security Symposium (USENIX Security 19), Aug. 2019,
+pp. 995–1010. [Online]. Available: https://www.usenix.org/conference/
+usenixsecurity19/presentation/zimmerman
+[47] R. Duan, O. Alrawi, R. P. Kasturi, R. Elder, B. Saltaformaggio, and
+W. Lee, “Towards measuring supply chain attacks on package man-
+agers for interpreted languages,” inProceedings of the Network and
+Distributed System Security Symposium (NDSS), 2021.
+[48] E. Wyss, A. Wittman, D. Davidson, and L. D. Carli, “Wolf at the door:
+Preventing install-time attacks in npm with Latch,” inProceedings of
+the 2022 ACM on Asia Conference on Computer and Communications
+Security (ASIA CCS), 2022, pp. 1139–1153.
+[49] Microsoft AI Red Team, “Taxonomy of failure modes in
+agentic AI systems, version 2.0,” Microsoft, Technical report,
+Apr. 2026, accessed: Aug. 20, 2026. [Online]. Available:
+https://cdn-dynmedia-1.microsoft.com/is/content/microsoftcorp/
+microsoft/bade/documents/products-and-services/en-us/security/
+Taxonomy-of-Failure-Modes-in-Agentic-AI-Systems-v2-0.pdf
+[50] Anthropic. Extend Claude with skills. Accessed: Aug. 20, 2026.
+[Online]. Available: https://code.claude.com/docs/en/skills
+[51] GitHub. About agent skills. Accessed: Aug. 20, 2026.
+[Online]. Available: https://docs.github.com/en/copilot/concepts/agents/
+about-agent-skills
+[52] Model Context Protocol. (2026, Jul. 28) Specification. Accessed:
+Aug. 20, 2026. [Online]. Available: https://modelcontextprotocol.io/
+specification/2026-07-28
+[53] ——. (2026, Jul. 28) Key changes. Accessed: Aug. 20,
+2026. [Online]. Available: https://modelcontextprotocol.io/specification/
+2026-07-28/changelog
+[54] K. McGuinness. (2026, Aug. 13) AuthZEN access request and approval
+profile – draft 1. OpenID AuthZEN Working Group. Accessed:
+Aug. 20, 2026. [Online]. Available: https://openid.github.io/authzen/
+authzen-access-request-approval-profile-1 0.html
+[55] A. Olivier and A. Tulshibagwale. (2026, Feb. 13) COAZ: A
+framework for mapping information models to AuthZEN authorization
+requests – draft 1. OpenID AuthZEN Working Group. Accessed:
+Aug. 20, 2026. [Online]. Available: https://openid.github.io/authzen/
+authzen-coaz-framework-1 0.html
+[56] A. Tulshibagwale and A. Olivier. (2026, Feb. 13) COAZ-MCP: COAZ
+binding for the Model Context Protocol – draft 1. OpenID AuthZEN
+Working Group. Accessed: Aug. 20, 2026. [Online]. Available:
+https://openid.github.io/authzen/authzen-coaz-mcp-binding-1 0.html
+[57] OpenAI. Human-in-the-loop. Accessed: Aug. 20, 2026. [Online].
+Available: https://openai.github.io/openai-agents-python/human in the
+loop/
+APPENDIXA
+SUPPLEMENTARYEXPERIMENTALEVIDENCE
+This appendix provides the detailed evidence tables, denom-
+inator accounting, and claim-level analyses referenced from
+the main paper.
+A. Claim Evidence and Denominator Accounting
+This appendix follows the paper’s research questions. C1
+reconstructs the 111-record RQ1 coverage ladder, C2 isolates
+the fixed-SHA and cross-frontend RQ2 evidence, C3 follows
+the frozen cohorts used by RQ3, and C4 carries those frozen
+predictions through independent reconstruction and approval-
+path integration. Each group identifies its primary denominator
+and keeps analytically distinct views separate.
+C1: Approval-record coverage and representation ladder.
+Across the 111 canonical records, the experiment summary
+15
+TABLE IV
+MECHANISM-LEVEL RESIDUAL COUNTS ACROSS THREERQ1
+REPRESENTATION VIEWS.
+MechanismnExplicit +Command +Metadata
+Cargo build script 15 5 0 0
+Docker build 2 2 0 0
+Git hook 11 3 0 0
+IDE task 13 4 3 3
+MCP server 14 6 6 4
+npm lifecycle 17 7 3 2
+Python PEP 517 15 6 0 0
+Nested shell 13 4 3 2
+Test-runner import 11 3 2 2
+Total 111 40 17 13
+Note.All three views use the same 111 canonical records. Explicit uses
+captured approval fields; +Command adds generic command semantics;
++Metadata applies the frozen v1.1 parser post hoc to raw metadata available
+at decision time.
+TABLE V
+RQ1DENOMINATOR AND LEDGER ACCOUNTING.
+Unit Count Selection
+Execution attempts / run snapshots 149 Ledger total
+SUCCESSterminal snapshots 139 10 non-success
+Deduplicated successful agent–task
+records
+111 Latest
+success/key
+contains 81 trace-reported effect-label assignments and re-
+constructs 40/111 strict explicit-field gaps under the latest-
+success rule. An alternative first-success rule changes only
+three agent–task keys and yields 39/111. The construct-validity
+audit excludes inherited-readElabels from 68 records, fixture-
+authored protocol-shapedMlabels from 11 records, and strict
+M/Plabels from theMCP_NOT_VISIBLEattempt. These
+operations produce 41 trace-preserving label reclassifications
+without modifying a ledger row or run snapshot.
+Over the same 111 canonical records, conservative com-
+mand semantics leave 17/111 residual records and the frozen
+raw-metadata parser leaves 13/111; the first-success sensitiv-
+ities are 16/111 and 12/111. In explicit/command/metadata
+order, the harness/parser fixture stratum contributes 30/15/13
+over 60 records, and all 13 metadata-aware residual records
+belong to that stratum.
+The separate 111-task annotation-backed reference supplies
+an independent comparison for this representation ladder.
+Prompt-only recall is 0.616; annotation replay gives recall
+1.000, precision 0.976, eight false-positive rows, and 0.072
+additional predictions per row, with none among 22 con-
+trols. Expected-effect annotations make this the annotation-
+backed reference, while headline estimates use the frozen
+non-annotation views. Its provenance records the parser and
+rule versions, prediction time, source and outcome hashes,
+leakage status, collector, terminal state, and artifact-predicate
+recomputation.
+C2: Fixed-SHA project evidence and recurrence.The real-
+project views reconstruct 10 explicit-field gaps, two command-
+residual MCP runs, zero metadata-aware residual records, and
+Representation view
+Residual records
+Explicit
++ command
++ metadata
+Enclosing corpus
+(n = 111)
+40
+17
+13
+Fixed-SHA executions
+(same n = 11)
+-8 residuals
+-2 residuals
+10/11
+2/11
+0/11
+Fig. 6. Fixed-SHA residuals under richer decision-time representation views.
+Across the same 11 evidence-complete fixed-SHA executions, residual records
+fall from10/11under explicit fields to2/11with command semantics and
+to0/11under the post hoc metadata-aware view over metadata available at
+decision time. The enclosing 111-record corpus follows the same direction
+(40→17→13). One of the 11 executions is already non-residual under the
+explicit-field view.
+one retained MCP-configuration non-gap among 11 fixed-SHA
+executions spanning eight selected cases. The recurrence view
+contains two exact pairs for P→P,F and M→M,N, spanning
+four runs across three product frontends; both recurrent map-
+pings have hash-bound evidence.
+The separate cross-frontend construct control uses shared
+fixtures across five frontends, six configurations, and eight
+classes. In explicit/command/metadata order it contributes
+0/0/0 over 40 evidence-complete cells, including 0/40 strict
+gaps. Together with the 60-record harness/parser stratum in C1
+and the 10/2/0 fixed-SHA stratum over 11 executions, these
+views form the mutually exclusive 111-record source partition.
+RQ2 uses the fixed-SHA recurrence denominator rather than
+the construct-control cells.
+Separate artifact-only npm, Cargo, and MCP checks provide
+three passing external trace validations without fixture event
+logs. The package also inventories 48 controlled successful
+runs, 22 successful audit-control runs, 40 agent-measured
+successful runs, and 11 real-project agent executions. These
+overlapping or distinct views answer separate questions about
+construct coverage, agent behavior, project recurrence, and
+external trace validity.
+Table VII separates evaluated cells from refusals and con-
+figurations that were not scheduled.
+C3: Frozen pre-execution recovery.The prospective se-
+quence moves from the controlled cohort to Natural A and then
+to confirmatory B. The controlled cohort contains 12 work-
+flows, including six controls, and yields macro recall 0.903 and
+macro precision 0.917. Natural A contains 12 workflows from
+nine repositories, including six controls, and yields recall 0.694
+and precision 0.732. Appendix Figure 8 reports the fixed-
+cohort stability intervals while keeping the v1.0 development
+cohorts separate from the frozen v1.1 confirmation.
+Confirmatory B contains 18 prespecified workflows across
+18 repositories, including nine controls and nine workflow
+classes. Seventeen cases reach target execution and yield recall
+0.926, precision 0.941, exact-set accuracy 0.765, and control
+precision 0.875. Frozen hashes bind the predictions and inputs
+for every cohort. Appendix B supplies the class-level error
+16
+TABLE VI
+POST-APPROVAL EVIDENCE FOR THE11FIXED-SHAEXECUTIONS INTABLEII;THEVITE ANDMCPREMOTE-CALL ROWS EACH AGGREGATE TWO
+RUNS.
+Case, short SHA, and execution view Runs Post-approval evidence
+webpack/webpack @efeb5ce2 1 transcript, file delta, and Husky-created.husky/_shims
+vitejs/vite @64dfee12 2 two agent transcripts and twonode_modules/.modules.yamlsnapshots
+pypa/pip @72e6c594 1 file delta and generated wheel
+pallets/flask @36e4a824 1 file delta and generated example wheel
+BurntSushi/ripgrep @dfe4a81d 1 transcript andtarget/debug/rg.exe
+microsoft/vscode @8d5908d6 1 iidfile, image inspection, and image history
+docker/awesome-compose @30f4b7f6 1 iidfile and Docker image inspection
+modelcontextprotocol/servers@7b1170d1
+(configuration)
+1 MCP_NOT_VISIBLE; no activated capability or post-approval child process
+modelcontextprotocol/servers@7b1170d1
+(remote calls)
+2 named documentation-tool calls and concrete responses
+TABLE VII
+SHARED-FIXTURE CROSS-FRONTEND CONSTRUCT CONTROL.
+Configuration Version
+Evaluable/
+Scheduled Refused Unscheduled
+Claude Code (primary) 2.1.193 8/8 0 0
+Claude Code (Gemma, supp.) 2.1.193 2/2 0 6
+Codex CLI 0.142.0 8/8 0 0
+GitHub Copilot CLI 1.0.65 8/8 0 0
+OpenCode 1.1.25 6/8 2 0
+Qwen Code 0.19.2 8/8 0 0
+Total — 40/42 2 6
+Note.All 40 evidence-complete cells yield zero strict gaps. RQ2 recurrence
+is evaluated separately on the fixed-SHA view.
+TABLE VIII
+CONFIRMATORY-BRAW-ARTIFACT PREDICATES(ORACLE V1.0.1).
+Effect Raw-artifact predicate
+Process At least one process-observation step, or a successful
+MCP stdio exchange.
+File A workspace or sandbox delta contains a created, mod-
+ified, or deleted path; Git HEAD changes; or a Docker
+image is successfully inspected.
+Network At least one captured network connection, or a successful
+MCP Streamable HTTP exchange.
+Container Successful Docker inspection with a nonempty image
+identifier.
+MCPmcp_protocol.jsonrecords at least one successful
+stdio or Streamable HTTP server exchange.
+Environment Not measured by the confirmatory-B outcome collector;
+B prespecifies no environment-positive target.
+Note.All 109 raw artifacts pass hash verification. A separately implemented
+verifier exactly reconstructs the effect sets of all 17 target-executed cases,
+marks the remaining setup-failure case asNOT_EXECUTED, and reports no
+effect-set or artifact-hash mismatches.
+profiles, terminal-state sensitivities, and repeated-run stability
+analysis.
+C4: Evidence recomputation and approval-path integra-
+tion.Starting from the frozen predictions and inputs in C3, the
+separately implemented verifier hash-checks 109 raw artifacts
+and exactly reconstructs the effect sets of all 17 target-executed
+B cases, with zero mismatches; the remaining setup failure
+is markedNOT_EXECUTED. Deterministic artifact predicates
+and frozen-codebook reconstruction establish exact, hash-
+bound evidence-to-label reproducibility.
+The reconstructed effects score the two approval-record con-
+DEVELOPMENT
+Freeze v1.0
+Preserve A errors
+Revise from A
+PRE-B FREEZE
+CONFIRMATORY B
+Frozen B bundle
+parser v1.1 + B protocol
+source/rule hashes
+both B prediction sets
+frozen B protocol
+Primary B run
+ one pass
+frozen
+predictions
+observed effects
+Score frozen predictions
+against independently observed effects
+Fig. 7. Pre-B freeze and scoring boundary. Natural A may inform devel-
+opment of v1.1; parser v1.1, the B protocol, source/rule hashes, and both
+B prediction sets are frozen before any Confirmatory-B outcome. Frozen
+predictions and independently observed effects meet only at scoring.
+structions. Command-only and effect-bound records provide
+coverage 0.755 and 0.922 and leave 10 and three residual
+effect instances, respectively. The frozen policy then emits
+ASK to request an additional approval decision in 17/18
+prespecified protocol cases. Among the 17 reached executions,
+nine are no-added-effect ASK cases under the realized-trace
+ex-post proxy; no parser failure or automatic allow occurs. The
+real hook integration run exercises the adapter-to-permission
+handoff: it emits one ASK, receives one denial from the
+permission path, and leaves the workspace unchanged.
+The parser microbenchmark contains 12 controlled and
+eight selected-project inputs. After five warmups, each is eval-
+uated in 100 same-process repetitions and 30 fresh processes.
+Every prediction digest is stable, with no failure or timeout;
+the worst same-process P95 is 12.298 ms, and the selected-
+project and all-case fresh-process maximum P95 values are
+164.752 and 168.241 ms.
+17
+Missed effects concentrate in the file class, while exact-set
+accuracy and control precision vary most across the reported
+confirmatory-B profiles. Table X localizes the cohort errors,
+while Appendix Figure 9 shows how the headline metrics
+change under denominator and cache-treatment alternatives.
+The product-facing record schema below makes the order
+of prediction, routing, final authorization, and post-run binding
+explicit.
+TABLE IX
+BINDING ORDER OF THE PRODUCT-FACING EFFECT-BOUND RECORD.
+Field Purpose
+Before routing
+Surface invocation Preserve the exact prompt-visible request.
+Predicted effects Store the frozen surface-plus-metadata set
+over six effect classes.
+Evidence sources Bind predictions to scripts, backends, Dock-
+erfiles, task files, hooks, or MCP definitions.
+Binding mode Pre-bind frozen effects and provenance to
+the invocation.
+Prediction
+provenance
+Persist parser/rule version, decision time,
+and source hashes.
+Permission path
+Adapter outcome Record ASK, pass-through, or local denial.
+Final decision Record the permission path’s final al-
+low/deny outcome.
+After execution
+Post-run binding Append transcript and realized-effect evi-
+dence hashes.
+APPENDIXB
+SECONDARYAUDITANALYSES
+Building on the frozen denominators and runtime headline
+in C3–C4, these analyses add class-level error localization,
+terminal-state sensitivity, repeated-run stability, and runtime
+detail while preserving the primary estimates in Section VI.
+A. Metric Definitions and Denominators
+For each target-executed workflowi, letE i ⊆Ω 6 and bEi ⊆
+Ω6 denote the independently observed and frozen predicted
+effect sets. Section VI uses the following case-level scores.
+ρi =
+(
+1, E i =∅,
+| bEi ∩E i|/|Ei|,otherwise,
+πi =
+
+
+
+1, bEi =E i =∅,
+| bEi ∩E i|/| bEi|,| bEi|>0,
+0,otherwise.
+(6)
+Macro recall and precision average the case-level scores in (6)
+equally over the target-executed workflows in each cohort; the
+primary Confirmatory-B denominator is 17. Its one additional
+workflow that does not reach target execution remains in pro-
+tocol accounting but not in these outcome-dependent metrics.
+Development
+Confirmation
+0.50
+0.75
+1.00
+Macro score (shown range: 0.45–1.00)
+Controlled v1.0 (n=12)
+Recall
+0.903
+[0.792–1.000]
+Precision
+0.917
+[0.833–1.000]
+Natural A v1.0 (n=12)
+Recall
+0.694
+[0.514–0.861]
+Precision
+0.732
+[0.537–0.903]
+Confirmatory B v1.1 (n=17)
+Recall
+0.926
+[0.838–1.000]
+Precision
+0.941
+[0.824–1.000]
+Fig. 8. Cohort-separated prospective estimates. Controlled and Natural A
+are v1.0 development-side cohorts; Confirmatory B evaluates the frozen
+v1.1 parser. Points report cohort-level macro recall and precision; whiskers
+show 95% fixed-cohort case-resampling stability intervals, not population
+confidence intervals.
+overall / ctrl
+Primary
+17/8
+Terminal
+18/9
+Success
+13/6
+Cache post hoc
+18/9
+0.70
+0.80
+0.90
+1.00
+Macro recall
+0.926
+Macro precision
+0.941
+Exact-set accuracy
+0.765
+Control precision
+0.875
+Metric value (0.70–1.00)
+Fig. 9. Confirmatory-B sensitivity to denominator and cache treatment. The
+primary target-executed profile (17 overall/8 controls) is compared with all-
+terminal (18/9), successful-only (13/6), and post hoc cache-excluded (18/9)
+profiles; gray segments span their range.
+For a disclosed effect setR i, 16 of the 17 target-executed
+cases have a nonempty observed set. Case-macro coverage and
+residual effect instances are
+Cov(R) = 116 Xi:|E i|>0 |Ri ∩E i||Ei| ,
+Residual(R) =
+17X
+i=1
+|Ei \R i|.
+(7)
+The empty-observed case contributes zero residuals and is
+excluded only from the undefined per-case coverage ratio.
+18
+B. Prospective Cohort Error Profiles
+Controlled v1.0 pairs one positive with one control in each
+of six classes; class recall/precision are Cargo 1.000/0.833,
+IDE 0.833/1.000, MCP 0.583/1.000, npm 1.000/1.000,
+PEP 517 1.000/0.667, and shell 1.000/1.000.
+Natural A has ten successful executions and two
+evidence-complete command failures. Exact-set accuracy
+is 0.167; positive and control recall/precision are
+0.778/0.819 and 0.611/0.644. The successful-only view gives
+0.733/0.678/0.200. Five missed file effects and five extra envi-
+ronment predictions dominate; the post hoc surface/metadata
+partition localizes them to the corresponding prediction layer.
+Across the 17 target-executed Confirmatory B cases, three
+cases miss a file effect, while one process effect and one MCP
+effect are extra.
+TABLE X
+EFFECT-CLASS ERRORS ACROSS PROSPECTIVE COHORTS. ENTRIES ARE
+CASES WITH MISSED(M)OR EXTRA(E)EFFECTS;GRAY ZEROS DENOTE
+NO CASES.
+Controlled
+n= 12
+Natural A
+n= 12
+Confirmatory B
+n= 17
+Effect M E M E M E
+Process 0 010 01
+File305 1 30
+Environment 03050 0
+Network 0 02 20 0
+Container 0 0 010 0
+MCP 0 0 0 0 01
+C. Confirmatory-B Sensitivities
+Confirmatory B contains 18 prespecified cases: 13 suc-
+cesses, four evidence-complete command failures, and one
+setup failure. The primary target-executed view reports 0.875
+control recall/precision. TreatingNOT_EXECUTEDas empty
+yields recall/precision/exact-set accuracy 0.931/0.889/0.722
+and 0.778 control precision; restricting to successes yields
+0.942/0.923/0.769 and 0.833. The setup failure never reached
+target execution.
+Six predeclared three-run cases have mean pairwise Jaccard
+1.000. Excluding Node/V8 cache deltas yields recall/exact-
+set accuracy 1.000/0.889. For the one target-executed empty-
+observed case, scoring recall as one, excluded, or zero yields
+0.926/0.922/0.868; all exceed 0.80. Precision (0.941) and exact
+sets (13/17) are unchanged.
+19

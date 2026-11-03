@@ -1,0 +1,1333 @@
+arXiv 1909.03673  https://arxiv.org/abs/1909.03673
+
+An Evaluation of BBR and its variants ∗
+Songyang Zhang
+School of Computer Science and Engineering, Northeastern University, China
+sonyang.chang@foxmail.com
+ABSTRACT
+/T_he congestion control algorithm bring such importance that it
+avoids the network link into severe congestion and guarantees net-
+work normal operation. Since /T_he loss based algorithms introduce
+high transmission delay, to design new algorithm simultaneously
+achieving high throughout and low buﬀer occupation is a new
+working direction. /T_he bo/t_tleneck bandwidth and round trip time
+(BBR) belongs such kind, and it has drawn much a/t_tention since
+its release. /T_here are other algorithms modi/f_ied from BBR to gain
+be/t_ter performance. And the implementation of BBR v2.0 is released
+recently. We implement a framework to compare the performance
+of these algorithms in simulated environment.
+KEYWORDS
+congestion control, ns3 simulation, BBR, bandwidth fairness
+ACM Reference format:
+Songyang Zhang. 2016. An Evaluation of BBR and its variants. In Proceed-
+ings of ACM Conference, Washington, DC, USA, July 2017 (Conference’17),
+11 pages.
+DOI: 10.1145/nnnnnnn.nnnnnnn
+1 INTROCTION
+Ever since the congestion collapse in internet was observed in
+1986, Jocobson [ 1] proposed to implement the additive increase
+and multiplicative decrease to regulate the congestion window
+of TCP /f_low and the research works on congestion control seem
+endless. /T_he congestion control for TCP bears such importance that
+it guarantees the internet can work in normal status and avoids
+congestion collapse happening again. Several algorithms have been
+proposed by making minor changes to the basic AIMD control law
+and to adapt it in some speci/f_ic network environments [2][3].
+As the development of the internet infrastructure, it is realized
+that these rate control algorithms based on AIMD do not perform
+well. /T_hese AIMD-like algorithms taking packet loss as link conges-
+tion indication tend to /f_ill the pipe. Especially in today/f_is internet,
+large buﬀers are con/f_igured in intermediate routers and the noto-
+rious buﬀerbloat problem [ 4] is introduced. It is reported in [ 5],
+users experience delays of seconds to minutes in cellular network.
+In recently, developing congestion control algorithms to achieve
+high throughout while minimizing transmission delay at the same
+∗Produces the permission block, and copyright information
+Permission to make digital or hard copies of all or part of this work for personal or
+classroom use is granted without fee provided that copies are not made or distributed
+for pro/f_it or commercial advantage and that copies bear this notice and the full citation
+on the /f_irst page. Copyrights for components of this work owned by others than ACM
+must be honored. Abstracting with credit is permi/t_ted. To copy otherwise, or republish,
+to post on servers or to redistribute to lists, requires prior speci/f_ic permission and/or a
+fee. Request permissions from permissions@acm.org.
+Conference’17, Washington, DC, USA
+© 2016 ACM. 978-x-xxxx-xxxx-x/YY/MM. . . $15.00
+DOI: 10.1145/nnnnnnn.nnnnnnn
+time becomes a new trend. BBR [ 5] is one typical example of such
+kinds. Since its release by google in 2016, BBR has gain much
+a/t_tention. Google /f_irst deployed BBR in its B4 wide area network
+and YouTube. Several works [ 6–8] were published to analyze its
+behavior either in simulated links or in real network testbed.
+It was concluded that BBR can signi/f_icantly improve throughput
+for TCP connection from these experiments with diﬀerent sources.
+For such merit, BBR is widely applied to build VPN (virtual private
+network) service for rate acceleration purpose. BBR suﬀers from
+RTT unfairness issue (reported in [ 6][9]) and tends to overload the
+bo/t_tleneck link when /f_lows coexisting, which causes considerable
+packets loss in links with shallow buﬀer.
+/T_here are some works Tsunami 1, BBRPlus2, BBR+[10] to make
+some modi/f_ication to these control parameters in BBR in order to
+gain be/t_ter performance or apply it to a diﬀerent network domain.
+Both Tsunami and BBRPlus have gain some a/t_tention. BBRPlus has
+won 623 stars and 280 forks on github. Whether the two are applied
+in real program are not clear. /T_here are no public available report
+to analyze their performance too. In May 2019, google has released
+BBR v2 in QUIC 3 codebase with a goal to be/t_ter coexistence with
+Reno and Cubic [ 11] /f_lows. And its implementation in Linux net
+stack can be got at 4.
+In this article, a framework is implemented and the performance
+of BBR algorithm and its variants (Tsunami, BBRPlus, BBR+ and
+BBR v2) are evaluated on simulated network environment. Since
+the release of BBR v2 is recent event, it seems no other works doing
+a full evaluation on its performance.
+/T_he transmission protocol implemented in simulation is a sim-
+pli/f_ied version of QUIC protocol and only three frames (STREAM,
+STOP W AITTING and ACK) are applied to build a reliable transmis-
+sion protocol on top UDP. /T_he framework is about 10000 lines c++
+codes and it can be available at 5. /T_he collected data trace during
+simulation is about 1Gbps a/f_ter compression and is public available
+at 6
+/T_he rest of this paper is organized as follows. /T_he background
+and related works on congestion control are briefed in Section 2.
+/T_he detail on these algorithms are presented on Section 3. Section
+4 is the simulation results and evaluation. /T_he conclusion and
+discussion is made on Section 5.
+2 RELATED WORK
+In October of 1986, the data rate from LBL to UC Berkeley dropped
+from 32kbps to 40bps, which was recorded as the /f_irst congestion
+collapse event in internet [ 1]. A series mechanisms e.g. slow start,
+round trip time variance estimation and the AIMD control rule
+1h/t_tps://github.com/dlxg/Linux-NetSpeed
+2h/t_tps://github.com/cx9208/bbrplus
+3h/t_tps://www.chromium.org/quic
+4h/t_tps://github.com/google/bbr/blob/v2alpha/net/ipv4/tcp bbr2.c
+5h/t_tps://github.com/SoonyangZhang/Drain/Q_ueueCongestion
+6h/t_tps://pan.baidu.com/s/170pReidrkW7TzTBar6wKBA: q9m2
+arXiv:1909.03673v1  [cs.NI]  9 Sep 2019
+were introduced to achieve network stability. /T_hese ideas are im-
+plemented in TCP Reno and it remained as the default congestion
+control algorithms in FreeBSD and Linux . /T_he transport connec-
+tion should obey the packet conservation principle when network
+system in stability: a new packet can be injected into the network
+only when an old packet leaves.
+In Reno, the packet loss event is interpreted as network con-
+gestion signal. On every RTT, Reno sender could inject one more
+packet into network to probe more available bandwidth and multi-
+plicatively reduces congestion window size by half when packet
+loss happens to recover the network back to normal status. Its ad-
+justment on congestion window (w) can be summarized as Equation
+(1). For Reno, α = 1 and β = 0.5.
+w(t + 1) =
+{
+w(t) + αw(t) , when ack is received
+βw(t), when packet loss is detected
+(1)
+Based on the /f_luid model [ 12], a diﬀerential equation on the rate
+adjustment process of a AIMD /f_low can be deduced as Equation
+2. p is packet loss rate. Let Ûx = 0, the throughout at equilibrium
+is x = 1RT T
+√ 1−p
+p , which is usually used as rate control on these
+/f_lows to be friendly to AIMD /f_low.
+Ûx = 1− pRTT 2− x 2p2 (2)
+/T_he reason to choose AIMD as congestion window control is it
+can guarantee bandwidth allocation fairness [ 13] with a decentral-
+ized solution. Kelly [ 14] modeled the congestion control algorithm
+as optimization problem by introducing utilization function. /T_he
+goal is to maximum the service satisfactory to each user under the
+constraint of the capacity ( cl ) of bo/t_tleneck link. xs denotes the
+sending rate of user s, U(xs) measures the satisfaction or welfare
+of user s.
+max
+Õ
+s
+U(xs)
+s.t.
+Õ
+s∈S(l)
+xs≤ cl
+(3)
+To /f_ind the optimal solution in a global view is impractical in
+consideration of larger scale and heterogeneity of real networks. A
+showdown price in introduced to decompose the primal problem
+into its dual form as shown. A decentralized solution is shown in
+Equation (4). pl can be interpreted as price per unit bandwidth at
+link l. Such rate iteration is a mathematical expression to AIMD
+control law. /T_he rate adjustment in Equation (4) is to converge
+to the optimal value by iteration. For the /f_irst time, the /f_low rate
+control problem is backup by mathematical theory. /T_he utility max-
+imization theory is applied for stability analysis in new designed
+rate control algorithms and is further developed in [15].
+Ûxs(t) =λ(ws− xs(t)
+Õ
+l∈L(s)
+pl) (4)
+In high speed network, once a packet loss happens, the classic
+AIMD algorithm will take quite long time to recover back to the
+congestion window before the multiplicative reduction action and
+has a low utilization of bandwidth resource. Several algorithms
+e.g. STCP[16], HSTCP[17], BIC[18], Cubic[11] have been proposed
+to remedy such problem. /T_he congestion window increase and
+decrease behavior is modi/f_ied to adapt for high speed network in
+these solutions. STCP and HSTCP introduce several RTT unfairness,
+with which the /f_low with short RTT obtain more bandwidth. In
+BIC, the congestion control is viewed as a binary search problem to
+enable aggressive bandwidth probe. /T_he congestion window grows
+to the middle point of wmin and wmax . wmax is the congestion
+window before the last fast recovery and wmax is the window
+value a/f_ter the fast recovery. When the packet loss is detected, the
+middle point is assigned to wmax , and it is taken as the new value
+of wmin otherwise. Cubic is an update version of BIC. A cubic
+function is introduced for window adjustment. It can be solve the
+RTT unfairness issue since its congestion window increase is only
+depended on the time between two consecutive congestion events.
+/T_he Cubic algorithm achieves be/t_ter performance than AIMD, and
+it has been the default con/f_iguration in Linux net stack until now.
+/T_here are algorithms taking delay as congestion signal. /T_he
+delay based algorithms can prevent queue from building up, make
+highly use of channel resource and maintain throughput stability.
+Once the delay has exceeded of some threshold, the congestion
+window will be reduced to alleviate congestion. Vegas [ 19] and
+Fast [20] are belonging to such kind. Even Vegas can achieve quite
+low queue occupation, it get starvation when sharing links with
+loss based algorithms. For such reason, it is not widely applied in
+real network. /T_here are other protocols TCP-LP [ 21] and LEDBAT
+[22] following the working mechanism of AIMD and taking delay
+as congestion signal. /T_hese two take themselves junior to TCP
+/f_lows and actively yield bandwidth to when sharing links with high
+priority TCP /f_lows.
+Some other algorithms take both delay and packet loss to indicate
+link congestion. Veno [23] takes backlog queue delay to diﬀerential
+random loss and congestion loss to improve TCP throughput perfor-
+mance in wireless network. In Illinois [ 24], the window adjustment
+parametersα andβ are dynamically changed with delay. When
+delay signal is small, a large value of α is applied for fast conver-
+gence. Compound [ 25] is the rate control algorithm in Windows
+operating systems. /T_he congestion widow is increased fast when
+bandwidth resource is available.
+A/t_tempts are made to the coexistence of delay based congestion
+control with delay base congestion control. When facing packet
+loss, CHD [26] will back oﬀ the congestion window with probability.
+When the backlog queue delay is aboveqt h, the possibility to reduce
+congestion window decreases in CHD to gain be/t_ter competiveness
+with buﬀering /f_illing /f_lows. CDG [ 27] used delay gradient to infer
+link buﬀer in full, empty, rising, and falling status. CDG has the
+ability to tolerate non-congestion related loss and only backs oﬀ
+for congestion related packet loss.
+Given the delay problem introduced by loss based algorithms,
+to design congestion control with high throughput and low delay
+becomes trend. Serval works e.g. Sprout [ 28], PCC [ 29], BBR [ 5]
+and Copa [30] were designed with such porpose.
+Sprout, Verus [ 31], ExLL [ 32] and C2TCP [ 33] are mainly de-
+signed for cellular network. Legacy algorithms have degenerate per-
+formance in links with highly variable capacities and non-congested
+packet loss. DCTCP [ 34] and Timely [ 35] are proposed to achieve
+low message delivery delay and high throughout for datacenter
+networks. Some works e.g. Remy [ 36], QTCP [37] and TCP-Drinc
+[38] apply reinforce learning in rate control. /T_hey are evaluated
+2
+Optimal point
+RTT_min
+RTTRATE
+BtlBW
+Loss based 
+operating point
+A
+B
+bandwidth 
+limitedapp limited buffer limited
+Figure 1: Congestion control operating point, based on [5]
+in simulated paltform, whether such methods can be applied in
+network stack need further investigation.
+As the popular of real time communication applications, deploy-
+ing rate control algorithms on multimedia traﬃc is a necessary to
+avoid congestion and to promote fair bandwidth allocation. GCC
+[39], NADA [40], and SCReAM [41] are optimized for interactive
+multimedia transmission. GCC is the default rate control algorithm
+in WebRTC 7 project, which enables video communication among
+browsers.
+3 ALGORITHM DETAIL
+Loss based algorithms were designed to avoid congestion, but it
+inevitably leads the network into overuse. /T_he capacity of a bo/t_tle-
+neck link is denoted as BtlBW . When only one /f_low is presence in
+this link and it packet sending rate is less than BtlBW , the packet
+round trip delay is the minimum RTTmin as shown in Figure 1.
+But the /f_low with loss based rate control will keep increase its rate
+when no packet loss happens. /T_he rate /f_inally exceeds BtlBW and
+these extra sent packets will be buﬀered at routers. /T_he packets can
+be received with the full rate BtlBW at the cost of increased delay.
+/T_he points on le/f_t edge of the bandwidth limited region achieve
+the same throughout but lower delay compared with loss based
+operating point. /T_he optimal point in congestion control is named
+a/f_ter Kleinrock [ 42], maximizing throughput while minimizing de-
+lay and loss. However, the Kleinrock/f_is point can not be reached
+with distributed algorithm, proved in [ 43]. BBR is proposed to get
+close to the optimal point.
+3.1 BBR
+In BBR, the bandwidth can be estimated on each received acknowl-
+edge packet. When a new packet is sent out, the packet state infor-
+mation (total b/y.altte acked , last acked packet ack time ) is recorded.
+total b/y.altte acked counts for the bytes that successfully received by
+its peer. last acked packet ack time is the received time of last
+acknowledgement packet. When a sent packet is acknowledged
+7h/t_tps://webrtc.org/
+at now, a new bandwidth estimation sample can be calculated as
+Equation (6). /T_he BW of the channel is the maximum bw es within
+10 RTTs. And the minimal r/t_t RTTmin is monitored during the
+whole phase.
+last acked packet ack time = now
+total b/y.altte acked + = sent packet .b/y.alttes
+∆t = now− sent packet .last acked packet ack time
+∆deli/v.altered = total b/y.altte acked
+− sent packet .total b/y.altte acked
+(5)
+bw es = ∆deli/v.altered∆t (6)
+/T_here are four control states StartUp, Drain, ProbeBW, and
+ProbeRTT in BBR as shown in Figure 2. In each control state,
+the packet sending rate ( pacin/afii10069.ital rate ) is the product of pacin/afii10069.ital /afii10069.italain
+and BW .
+/T_he states StartUp and Drain are applied at session initial phase
+in BBR. /T_he startup state is quite similar to slow start in TCP. In
+StartUp, pacin/afii10069.ital /afii10069.italain is 2l n2 to double the in/f_light packets at each
+RTT to let sender probes the maximum available bandwidth. When
+newly estimated bandwidth is 1.25 times less than the previous
+value and such circumstance lasts for 3 times, the pipe seems to
+be get fully /f_iled and the state is changed into Drain state. /T_he
+pacin/afii10069.ital /afii10069.italain in Drain is l n22 to decrease the sending rate below
+bw. Until the in/f_light packets match BDP (BW∗ RTT min), state is
+changed from Drain to ProbeBW.
+During ProbeBW state, /T_he pacin/afii10069.ital /afii10069.italain cycles in 8 RTTs with
+diﬀerent values ( kPacin/afii10069.italGain[] =[1.25, 0.75, 1, 1, 1, 1, 1, 1]). /T_he
+probe up phase with 1.25 gain is to increase the sending rate to
+probe more available bandwidth, and probe down phase with 0.75
+gain is to get rid of the excess queue which may be accumulated in
+the probe up phase.
+/T_he cwnd is set as 2 ∗ BDP in ProbeBW to guarantee enough
+packets can be sent during probe up phase. If cwnd is set exactly
+equal with BDP , the acknowledgement clocking is aﬀected by dis-
+turbance in real network, new packets can not be sent out during
+probe up once the cwnd is exhausted and a small estimated band-
+width is got. If RTTmin is not sampled again within 10 seconds,
+the link is deemed falling into congestion, and ProbeRTT state id
+applied. /T_he cwnd is set as 4*MSS. Until the in/f_light packets size
+is less than 4*MSS, new packets are injected into the network and
+ProbeRTT will last at most 200 milliseconds. In ProbeRTT, the
+in/f_light packets are nearly totally drained from links and a new
+RTTmin value is sampled.
+/T_here are two diﬀerent versions to update the pacin/afii10069.ital /afii10069.italain from
+probe down phase to probe cruise phase in ProbeBW. /T_he /f_irst is
+to increase the cycle oﬀset when the prove down phase holds for
+essentially 1 RTTmin . /T_he second is to increase cycle oﬀset only
+when the in/f_light packets Less than or equal to the target BDP
+to achieve lower queue delay than the /f_irst form. Most published
+works only analyse the performance of BBR in the /f_irst form. In
+later part, both versions will be evaluated. For convenience, the
+second form is named as BBR’.
+3
+1.25
+0.75 1
+1
+1
+11
+1
+ProbeBW
+StartUp
+ProbeBW
+ProbeRTTDrain
+2/ln2 ln2/2
+Figure 2: Control states in BBR
+3.2 BBRPlus
+BBRPlus was /f_irst introduced in a blog 8. In the origin version
+of BBR, the duration of probe down lasting 1 RTTmin introduces
+considerable latency. When the network system changes a lot, the
+/f_ixed probe cycle length may not adapt well. /T_he probe cycle length
+is randomized from 2 to 8 (line 4 in Algorithm 1) in BBRPlus. /T_he
+probe down phase exists only when the in/f_light packets match
+the estimated BDP (line 11-12 in Algorithm 1). Such change is
+to improve fairness and reduce packet loss when multiple /f_lows
+sharing a bo/t_tleneck.
+/T_he procedure to update pacin/afii10069.ital /afii10069.italain in BBRPlus is shown in Al-
+gorithm 1. kGainC/y.altcleLen is 8 and CYCLE RAN D equals 7. When
+there is packet loss event, the probe up phase exists earlier (line 14
+in Algorithm 1).
+Algorithm 1 UpdateGainCyclePhase
+Input:
+the timestamp (now), in f li/afii10069.italht, has loss
+1: elapsed← now− c/y.altcle mstamp
+2: if elapsed > c/y.altcle len ∗ RTTmin then
+3: c/y.altcle mstamp ← now
+4: c/y.altcle len ← kGainC/y.altcleLen− rand()%CYCLE RAN D
+5: pacin/afii10069.ital /afii10069.italain← 1.25
+6: return
+7: end if
+8: if pacin/afii10069.ital /afii10069.italain == 1.0 then
+9: return
+10: end if
+11: if pacin/afii10069.ital /afii10069.italain < 1.0andin f li/afii10069.italht≤ BDP then
+12: pacin/afii10069.ital /afii10069.italain← 1.0
+13: end if
+14: if elapsed > RTTmin and(in f li/afii10069.italht > 1.25∗ BDP orhas loss)
+then
+15: pacin/afii10069.ital /afii10069.italain← 0.75
+16: end if
+3.3 BBR+ and Tsunami
+/T_he performance of Cubic and BBR is tested over LTE on high
+speed rail (HSR) in [ 10]. /T_he authors concluded that BBR achieves
+suboptimal performance in networking environment where both
+bandwidth and RTT change rapidly. /T_he bandwidth probe strategy
+and RTT estimation do not adapt well to the network dynamics
+in HSR situation. /T_he sequence to update pacin/afii10069.ital /afii10069.italain is set to be
+8h/t_tps://blog.csdn.net/dog250/article/details/80629551
+Inflight
+Time
+Inflight_hi
+Inflight_lo
+probe_cruise
+probe_down
+probe_refill
+probe_up
+Figure 3: BBR v2 /f_low life cycle, from [44]
+more radically as [1.5, 0.5, 1.5, 0.5, 1.5, 0.5, 1.5, 0.5] in BBR+. /T_he
+constant RTTmin is too conservative over the last 10 seconds in
+BBR, and a compensation is added according to Equation (7) in
+HSR environment. λ2 is the shape parameter of gamma distribu-
+tion. /T_hey observed the traced RTT values approximately follow a
+shi/f_ted gamma distribution with a fat tail. In our simulation, the
+compensation part on the RTTmin is not implemented.
+RTprop = RTTmin +λ
+√
+V ar(RTT) (7)
+From the perspective of egoism, Tsunami applies the sequence
+[1.5, 0.75, 1.25, 1.25, 1.25, 1.25, 1.25, 1.25] for gain value update
+during ProbeBW state in order to gain higher throughput. It gains
+264 stars and 136 forks on github. As its name claims, when there
+is extra bandwidth resource available, Tsunami may quick occupy
+it. If when the capacity of the bo/t_tleneck is fully occupied, Tsunami
+will cause quite high packet loss rate. Such rate adjustment behavior
+is harmful to other /f_lows without bene/f_iting itself.
+3.4 BBR v2
+BBR /f_low will send packets at the full estimated bandwidth and
+packet loss is not exploited to indicate link congestion. If the queue
+length at the bo/t_tleneck is smaller than 1 .5∗ BDP [44], multiple
+BBR /f_lows will cause high packet loss. Reno/CUBIC /f_lows gain low
+throughput when share bo/t_tleneck with BBR /f_lows. BBR v2 [ 44] is
+proposed to solve these issues in BBR v1. BBR v2 is claimed that it
+can make be/t_ter coexistence with Reno/CUBIC /f_lows and achieves
+low queue delay.
+BBR v2 takes packet loss into its control logic. /T_he life cycle
+of BBR v2 /f_low is shown in Figure 3. When the estimated band-
+width dost not exceed the target for 3 times, the sender assumes
+reaching the full bandwidth in BBR v1. Besides that, condition on
+packet loss is added to exist from StartUp to Drain: the number
+of loss packet in a round exceeds 8 and packet loss rate exceeds
+loss threshold (0.02). Such condition is applied to avoid excessive
+packet loss. If the condition on packet loss holds true, the calculated
+BDP is assigned to in f li/afii10069.italht hi. When a new acknowledge packet
+arrives, in f li/afii10069.italht lo is updated as Equation (8). Here, ∆deli/v.altered is
+4
+calculated in the same way in Equation (5) and kBeta is 0.3.
+in f li/afii10069.italht = ∆deli/v.altered
+in f li/afii10069.italht lo = max(in f li/afii10069.italht, in f li/afii10069.italht lo∗( 1− kBeta)) (8)
+In ProbeBW state, the working mechanism of BBR v2 is quite dif-
+ferent from BBR v1. /T_he phases (probe up, probe down, probe cruise)
+switching is no longer depended on the time interval RTTmin .
+cwnd is also not set as 2 ∗ BDP and is related with in f li/afii10069.italht lo
+and in f li/afii10069.italht hi. in f li/afii10069.italht hi is updated if the in/f_light packets are
+too high (in/f_light too high), in which the loss packet rate exceeds
+loss threshold in last round. In the probe down phase, thepacin/afii10069.ital /afii10069.italain
+is 0.75, the phase will be switched to probe cruise if the in/f_light pack-
+ets are drained to BDP or the conditionin f li/afii10069.italht too hi/afii10069.italh holds true.
+/T_he cwnd in probe cruise is calculated by Equation (9). kHeadRoom
+is 0.15. in f li/afii10069.italht hi indicates the channel is in dangerous area. To
+leave headroom to cwnd is to alleviate link congestion to some
+extent. /T_he inter/v.altal for probe cruise is randomized from 2 sec-
+onds to 3 seconds. If duration in probe cruise phase exceeds the
+inter/v.altal, a probe re/f_ill phase is applied as shown in Figure 3. cwnd
+is set as in f li/afii10069.italht hi to increase the in/f_light packets in a round. /T_he
+probe re/f_ill is to make preparation for probe up.
+in f li/afii10069.italht headroom = in f li/afii10069.italht hi∗( 1− kHeadRoom)
+cwnd = min(in f li/afii10069.italht lo, in f li/afii10069.italht headroom) (9)
+In probe up phase, cwnd is increases exponentially per round:1,
+2 ,4, 8/f_i. It makes a fast probe to if extra bandwidth available. Once
+lost bytes are too much, probe down phase is applied to get rid of
+excess queue, as the red ring shows in Figure 3. Algorithm 2 is to
+exponentially increase in f li/afii10069.italht hi per round. In ProbeRTT, cwnd
+is reduced by half in v2 to remedy the throughput variation.
+Algorithm 2 ProbeIn/f_lightHighUpward
+Input:
+bytes acked, is round end
+1: probe up acked + = b/y.alttes acked
+2: if probe up acked≥ probe up b/y.alttes then
+3: delta =⌊ pr obe up ackedpr obe up b/y.altt es⌋
+4: probe up acked− = delta∗ probe up b/y.alttes
+5: in f li/afii10069.italht hi← in f li/afii10069.italht hi + delta∗ MSS
+6: end if
+7: if is round end then
+8: /afii10069.italrowth← 1 << probe up rounds
+9: probe up rounds← min(30, probe up rounds + 1)
+10: probe up b/y.alttes←⌊ cwnd/afii10069.italr ow t h⌋
+11: probe up b/y.alttes← max(MSS , probe up b/y.alttes)
+12: end if
+4 EV ALUATION
+/T_hese algorithms are evaluated on ns3.26 9 platform. A dumbbell
+topology as shown in Figure 4 is built.
+9h/t_tps://www.nsnam.org/
+n0 n4
+n1 n5
+n2 n3
+l1
+l2
+l3
+l4 l5
+Figure 4: Network topology
+Table 1: the con/f_iguration of l2
+Case Bandwidth Propagation delay /Q_ueue length
+1 5Mbps 50ms 5Mbps*100ms
+2 5Mbps 50ms 5Mbps*150ms
+3 5Mbps 50ms 5Mbps*200ms
+4 6Mbps 50ms 6Mbps*100ms
+5 6Mbps 50ms 6Mbps*150ms
+6 7Mbps 50ms 7Mbps*150ms
+7 7Mbps 100ms 7Mbps*300ms
+8 8Mbps 100ms 8Mbps*200ms
+9 8Mbps 100ms 8Mbps*300ms
+10 10Mbps 50ms 10Mbps*150ms
+11 10Mbps 50ms 10Mbps*200ms
+4.1 Intra protocol fairness
+To test whether this algorithms can guarantee bandwidth allocation
+property, four /f_lows are created from source n2 to destination n3.
+/T_hese parameters in Table 1 to con/f_igure link l2 are bandwidth (in
+unit of Mbps), one way propagation delay (in unit of milliseconds)
+and queue length in nodes. /T_here are total 11 experiments. In each
+running case, these /f_lows follow a same rate control algorithm.
+Each simulation process lasts about 400 seconds. /T_he time points to
+send packets into the network of the four /f_lows are diﬀerent. /T_he
+/f_irst /f_low starts at 0 and ends at 400s, the life length of the second
+/f_low is 40s to 400s, the third /f_low is 80s to 200s and the fourth /f_low is
+120s to 300s. At the sender side, when a new packet can be sent out,
+the rate of the congestion controller is traced. /T_he packet sent time
+is tagged into ns packet object for receiver to computer one way
+transmission delay. /T_he one way transmission delay is an indicator
+to the occupied buﬀer status in routers. Besides one way delay, at
+received side, the length of received packet is also recorded.
+/T_he average transmission delay of all /f_lows in each experiment
+is calculated and the results are shown in Figure 5. /T_he results on
+average packet loss rate is shown in Figure 6. Two other buﬀer
+/f_illing algorithms Reno and Cubic are also tested.
+Due to the limitation of space, only two cases work as example
+for further analysis. /T_he link buﬀer is con/f_igured as 1∗ BDP in Case
+1 and 2∗ BDP in Case 3. In shallow buﬀer case, the four BBR /f_lows
+are not reach the bandwidth fairness line as shown in Figure 7(a).
+With BBR /f_lows presence, there is considerable packet loss rate
+(about 9%) in Case 1 as shown in Figure 6. Such high packet loss
+rate will impact the bandwidth estimation at sender side. In case 3,
+the bandwidth allocation fairness is achieved. But when a new /f_low
+5
+ 50
+ 100
+ 150
+ 200
+ 250
+ 300
+ 350
+ 400
+ 450
+ 500
+ 1  2  3  4  5  6  7  8  9  10  11
+average one way delay/ms
+index
+BBR
+BBR'
+BBRPlus
+BBR+
+Tsunami
+BBRv2
+Reno
+Cubic
+Figure 5: Average one way transmission delay
+-0.05
+ 0
+ 0.05
+ 0.1
+ 0.15
+ 0.2
+ 0.25
+ 0.3
+ 1  2  3  4  5  6  7  8  9  10
+packet loss rate
+index
+BBR
+BBR'
+BBRPlus
+BBR+
+Tsunami
+BBRv2
+Reno
+Cubic
+Figure 6: Average packet loss rate
+is initialized, it tends to make over estimation on the bandwidth
+during the StartUp state, as the steep spike shown in Figure 7(b)
+in /f_low2 and /f_low3. Such rate spikes will lead the network into
+congestion and introduce packet loss. It is the reason for higher
+packet loss rate (1%) for Case 3 with longer link buﬀer compared
+with Case 2, in which the average packet loss rate is 0.7%.
+ 0
+ 1000
+ 2000
+ 3000
+ 4000
+ 5000
+ 0  50  100  150  200  250  300  350  400
+rate/kbps
+time/s
+ﬂow1
+ﬂow2
+ﬂow3
+ﬂow4
+(a) C1
+ 0
+ 1000
+ 2000
+ 3000
+ 4000
+ 5000
+ 0  50  100  150  200  250  300  350  400
+rate/kbps
+time/s
+ﬂow1
+ﬂow2
+ﬂow3
+ﬂow4 (b) C3
+Figure 7: Rate dynamics of BBR /f_lows
+BBR/f_i will drain the in/f_light packets to match the estimated BDP
+in probe down phase. It can achieve the lowest queue delay as
+shown in Figure 5 in all tested algorithms, and lower packet loss
+rate compared with BBR. It also achieve be/t_ter bandwidth allocation
+fairness than BBR in shallow buﬀer case as shown in Figure 8(a).
+But it introduces rate variation. /T_he rate of BBR/f_i /f_low is not quite
+stable as BBR /f_low, as shown in Figure 8(b) and 7(b).
+BBRPlus can achieve the second low average transmission delay.
+/T_he average packet loss rate is also quite low. At each stage, the
+ 0
+ 1000
+ 2000
+ 3000
+ 4000
+ 5000
+ 0  50  100  150  200  250  300  350  400
+rate/kbps
+time/s
+ﬂow1
+ﬂow2
+ﬂow3
+ﬂow4
+(a) C1
+ 0
+ 1000
+ 2000
+ 3000
+ 4000
+ 5000
+ 0  50  100  150  200  250  300  350  400
+rate/kbps
+time/s
+ﬂow1
+ﬂow2
+ﬂow3
+ﬂow4 (b) C3
+Figure 8: Rate dynamics of BBR’ /f_lows
+throughputs of each /f_low are quite close. /T_here are some small
+spikes during the rate adjustment process as shown in Figure 9.
+ 0
+ 1000
+ 2000
+ 3000
+ 4000
+ 5000
+ 0  50  100  150  200  250  300  350  400
+rate/kbps
+time/s
+ﬂow1
+ﬂow2
+ﬂow3
+ﬂow4
+(a) C1
+ 0
+ 1000
+ 2000
+ 3000
+ 4000
+ 5000
+ 0  50  100  150  200  250  300  350  400
+rate/kbps
+time/s
+ﬂow1
+ﬂow2
+ﬂow3
+ﬂow4 (b) C3
+Figure 9: Rate dynamics of BBRPlus /f_lows
+Both Tsunami and BBR+ suﬀer from the bandwidth allocation
+fairness in links with shallow buﬀer. /T_he way of Tsunami to adjust
+rate will get the buﬀer fully occupied. Tsunami /f_lows have the
+highest packet loss rate and the average transmission delay is quite
+high. /T_he rate High rate variation can be observed of BBR+ /f_lows
+in Figure 11(b).
+ 0
+ 1000
+ 2000
+ 3000
+ 4000
+ 5000
+ 0  50  100  150  200  250  300  350  400
+rate/kbps
+time/s
+ﬂow1
+ﬂow2
+ﬂow3
+ﬂow4
+(a) C1
+ 0
+ 1000
+ 2000
+ 3000
+ 4000
+ 5000
+ 0  50  100  150  200  250  300  350  400
+rate/kbps
+time/s
+ﬂow1
+ﬂow2
+ﬂow3
+ﬂow4 (b) C3
+Figure 10: Rate dynamics of Tsunami /f_lows
+ 0
+ 1000
+ 2000
+ 3000
+ 4000
+ 5000
+ 0  50  100  150  200  250  300  350  400
+rate/kbps
+time/s
+ﬂow1
+ﬂow2
+ﬂow3
+ﬂow4
+(a) C1
+ 0
+ 1000
+ 2000
+ 3000
+ 4000
+ 5000
+ 0  50  100  150  200  250  300  350  400
+rate/kbps
+time/s
+ﬂow1
+ﬂow2
+ﬂow3
+ﬂow4 (b) C3
+Figure 11: Rate dynamics of BBR+ /f_lows
+6
+BBR v2 /f_lows can maintain well bandwidth allocation fairness.
+/T_he rate adjustment is quite frequency in BBR v2. /T_hat is the result
+of the balance between probing more bandwidth and avoiding link
+congestion. /T_he lower queue delay in some test cases is lower than
+BBR but is still higher than BBR/f_i in all test cases.
+ 0
+ 1000
+ 2000
+ 3000
+ 4000
+ 5000
+ 0  50  100  150  200  250  300  350  400
+rate/kbps
+time/s
+ﬂow1
+ﬂow2
+ﬂow3
+ﬂow4
+(a) C1
+ 0
+ 1000
+ 2000
+ 3000
+ 4000
+ 5000
+ 0  50  100  150  200  250  300  350  400
+rate/kbps
+time/s
+ﬂow1
+ﬂow2
+ﬂow3
+ﬂow4 (b) C3
+Figure 12: Rate dynamics of BBR v2 /f_lows
+4.2 RTT unfairness
+As indicated in several reports, BBR /f_lows traversing the bo/t_tleneck
+link with same RTT converge to a fair share bandwidth line within
+their group, but these /f_lows with longer RTT can achieve higher
+throughput, contrary to the classic Reno algorithm. Reno algorithm
+favors towards shorter RTT /f_lows. /T_he Reno /f_lows with shorter
+RTT can get acknowledge packet more quickly and the congestion
+window can be increased faster in these /f_lows. Such RTT unfairness
+property in BBR can be easily manipulated by malicious receiver
+for data transmission acceleration by delaying the acknowledge
+packets.
+/T_he dumbbell topology is applied to reproduce the RTT unfair-
+ness phenomenon of BBR algorithm. /T_he bo/t_tleneck link is l2. /T_he
+capacities of l1, l3, l4, l5 are 100 Mbps. /T_he propagation delay val-
+ues for l1, l3 are 10 milliseconds. 20 milliseconds is con/f_igured for
+l4, l5. Nine experiments cases are tested. /T_he parameters to con-
+/f_igure l2 are in each case given in Table 2. Two /f_lows are applied.
+f low1starts from n0 to destination n4 (path1) and f low2 starts from
+n1 to destination n5 (path2). /T_he max round trip propagation delay
+of path1 and path2 is denoted as RPTmax . Qdela/y.alt is 1.5∗ RPTmax .
+In other word, the buﬀer length of bo/t_tleneck link is 1 .5∗ BDP . /T_he
+buﬀer length of Other links is BW∗ Qdela/y.alt.
+/T_he running time of each simulation lasts 200 seconds. Both /f_lows
+are running in the whole simulation time. /T_he average throughout
+is calculated as Equation (10). b/y.alttes is the length of all received
+packets. /T_he jain/f_is fairness index [ 45] is exploited to indicate how
+fair the bandwidth is shared when /f_lows competing for bandwidth
+resource. /T_he way to compute the jain/f_is fairness index is shown
+in (11). /T_he closer Jain’s fairness index is to 1, the be/t_ter in terms
+of bandwidth allocation fairness.
+In this part, only two /f_lows are involved in each case. As we
+found in some case, Jain’s fairness index may not work well to
+re/f_lect the throughput variance and the throughput ratio of the two
+/f_low is computed as Equation (12). /T_he /f_inal results are shown in
+Table 3. x 1 and x 2 are the average throughput (in unit of kbps) of
+f low1 and f low2 in respectively.
+x = b/y.alttesduration (10)
+Table 2: the con/f_iguration of l2 to test RTT unfairness
+Case Bandwidth Propagation delay Q(bw*Qdelay)
+1 4Mbps 10ms 4Mbps*150ms
+2 4Mbps 20ms 4Mbps*180ms
+3 4Mbps 30ms 4Mbps*210ms
+4 6Mbps 10ms 6Mbps*150ms
+5 6Mbps 20ms 6Mbps*180ms
+6 6Mbps 30ms 6Mbps*210ms
+7 8Mbps 10ms 8Mbps*150ms
+8 8Mbps 20ms 8Mbps*180ms
+9 8Mbps 30ms 8Mbps*210ms
+/J.alt =
+(˝ni xi)2
+n∗( ˝ni x 2i) (11)
+r = xmax
+xmin
+(12)
+Some conclusions can be made based on Table 3. BBR f low2 with
+longer RTT acquires more than four times the throughput of f low1
+in Case7. As the RTT ratio gets smaller in diﬀerent cases, the rates
+of two /f_lows are get closer and the jain/f_is fairness is also increase.
+/T_he reason for RTT unfairness is related to buﬀer occupation in
+intermediate routers. /T_he /f_low with large RTT will send more
+packets out when the bo/t_tleneck is already in congestion. It will
+get larger bandwidth estimation than the /f_low with shorter RTT
+/f_low.
+In BBR/f_i and BBRPlus cases, the throughput ratios are not so
+large as in BBR cases. /T_he RTT unfairness issue has been signi/f_i-
+cantly improved. Both algorithms will drain the in/f_light packet to
+match the estimated BDP in the probe down phase and lower queue
+delay can be achieved as shown in Figure 5. /T_he action to drain
+to the target will give other /f_lows an opportunity to probe more
+available bandwidth. /T_hat/f_is the reason behind such improvement.
+/T_he RTT unfairness is not so severe in BBR v2 test cases as BBR.
+/T_he results on Reno verify the conclusion that the /f_low with shorter
+RTT can gain higher throughout.
+4.3 Channel utilization
+/T_he channel utilization of these congestion control algorithms is
+tested in links with random loss. /T_he con/f_iguration of the point to
+point channel (n2 to n3) remains unchanged as in Table 1. Only /f_ive
+cases (C2, C5, C7, C9, C10) are involved and the con/f_igured buﬀer
+length of the bo/t_tleneck is 1 .5∗ BDP . In each case, the random
+packet loss rates are 1%, 3% and 5%. /T_he four /f_lows are running in
+the whole simulation process.
+/T_he channel utilization of all /f_lows is calculates as Equation (13).
+b/y.alttes i is the length of all received packets at application layer of
+/f_low i. cap is the bandwidth of the bo/t_tleneck link and duration is
+the simulation running time. /T_he /f_inal results are given in Table 4.
+When no random packet loss is existence, these algorithms
+achieve channel bandwidth utilization above 90%. BBR v2 can
+achieve channel utilization about 97%, similar to the two buﬀer
+/f_illing algorithms Reno and Cubic. /T_he link utilization of the three
+algorithms (BBR, BBR/f_i and BBRPlus) is less aﬀected by random
+7
+Table 3: /T_he calculated results in RTT unfairness simulation
+algo 1 2 3 4 5 6 7 8 9(x1, x2, jain’s fairness index, r)
+BBR 840, 2970, 0.76, 3.53 1029, 2767, 0.83, 2.69 1177, 2606, 0.88, 2.21 1154, 4543, 0.74, 3.94 1511, 4166, 0.82, 2.76 1703, 3947, 0.86, 2.32 1421, 6164, 0.72, 4.34 1944, 5611, 0.81, 2.89 2259, 5269, 0.86, 2.33
+BBR’ 1668, 2159, 0.98, 1.29 1712, 2098, 0.99, 1.23 1800, 2001, 1.0, 1.11 2498, 3221, 0.98, 1.29 2508, 3168, 0.99, 1.26 2729, 2964, 1.0, 1.09 3329, 4273, 0.98, 1.28 3344, 4216, 0.99, 1.26 3517, 4055, 0.99, 1.15
+BBRPlus 1713, 2105, 0.99, 1.23 1785, 2017, 1.0, 1.13 1774, 2021, 1.0, 1.14 2594, 3126, 0.99, 1.21 2580, 3098, 0.99, 1.2 2656, 3024, 1.0, 1.14 3381, 4223, 0.99, 1.25 3394, 4164, 0.99, 1.23 3389, 4182, 0.99, 1.23
+Tsunami 902, 2914, 0.78, 3.23 1103, 2706, 0.85, 2.45 1336, 2462, 0.92, 1.84 1226, 4486, 0.75, 3.66 1621, 4080, 0.84, 2.52 1792, 3873, 0.88, 2.16 1418, 6182, 0.72, 4.36 1977, 5601, 0.81, 2.83 2360, 5181, 0.88, 2.19
+BBR+ 1345, 2481, 0.92, 1.84 1500, 2305, 0.96, 1.54 1682, 2116, 0.99, 1.26 2073, 3653, 0.93, 1.76 2235, 3436, 0.96, 1.54 2495, 3181, 0.99, 1.27 2543, 5054, 0.9, 1.99 2999, 4556, 0.96, 1.52 3334, 4225, 0.99, 1.27
+BBRv2 1695, 2182, 0.98, 1.29 1663, 2212, 0.98, 1.33 2025, 1850, 1.0, 1.09 2474, 3343, 0.98, 1.35 2337, 3469, 0.96, 1.48 3338, 2473, 0.98, 1.35 3649, 4102, 1.0, 1.12 4134, 3602, 1.0, 1.15 4465, 3279, 0.98, 1.36
+Cubic 1716, 2166, 0.99, 1.26 1625, 2257, 0.97, 1.39 2429, 1452, 0.94, 1.67 2845, 2978, 1.0, 1.05 3239, 2583, 0.99, 1.25 3501, 2320, 0.96, 1.51 3501, 4263, 0.99, 1.22 3524, 4239, 0.99, 1.2 4824, 2936, 0.94, 1.64
+Reno 2237, 1645, 0.98, 1.36 2062, 1820, 1.0, 1.13 2239, 1642, 0.98, 1.36 3406, 2417, 0.97, 1.41 3393, 2429, 0.97, 1.4 3370, 2451, 0.98, 1.37 4219, 3546, 0.99, 1.19 4154, 3608, 1.0, 1.15 4331, 3429, 0.99, 1.26
+Table 4: channel utilization with random loss
+algo rand loss(%) C2 C5 C7 C9 C10
+BBR
+0 0.95 0.95 0.94 0.94 0.95
+1 0.95 0.94 0.93 0.92 0.94
+3 0.92 0.92 0.91 0.90 0.92
+5 0.91 0.90 0.89 0.89 0.90
+BBR’
+0 0.95 0.95 0.94 0.94 0.95
+1 0.94 0.94 0.93 0.93 0.94
+3 0.92 0.92 0.91 0.91 0.92
+5 0.90 0.90 0.89 0.89 0.90
+BBRPlus
+0 0.95 0.95 0.95 0.94 0.95
+1 0.94 0.94 0.93 0.92 0.94
+3 0.92 0.92 0.91 0.90 0.92
+5 0.90 0.90 0.89 0.88 0.90
+BBR v2
+0 0.97 0.97 0.97 0.97 0.97
+1 0.96 0.96 0.95 0.96 0.96
+3 0.94 0.93 0.87 0.84 0.92
+5 0.91 0.91 0.62 0.51 0.81
+Cubic
+0 0.97 0.97 0.96 0.96 0.97
+1 0.96 0.96 0.70 0.62 0.92
+3 0.93 0.86 0.38 0.33 0.53
+5 0.76 0.64 0.28 0.25 0.40
+Reno
+0 0.97 0.97 0.96 0.96 0.97
+1 0.96 0.96 0.85 0.75 0.96
+3 0.94 0.92 0.46 0.40 0.64
+5 0.87 0.78 0.34 0.30 0.48
+packet loss. With 5% random packet loss rate, the channel utiliza-
+tion of BBR v2 /f_lows is quite low in C7 and C9.
+util =
+˝
+i b/y.alttes i
+cap∗ duration (13)
+4.4 Responsiveness
+In cellular access network or wireless network, channel throughput
+can present drastic change in a short time span due to noise inter-
+ference and fading. /T_he performance of BBR is tested in cellular
+network in [46]. Here, the point to point link n2 to n3 is used to test
+whether these algorithm can make fast response to link bandwidth
+change. /T_he link capacity is changed every 50 seconds from 1Mbps
+to 4Mbps to simulate link throughout change. /T_he propagation
+delay is 50 milliseconds. Two /f_lows are involved and the simulation
+process lasts 400 second.
+Table 5: /T_he statistical results of the responsive experiments
+loss owd utility
+BBR 0.001 170.21 0.95
+BBR’ 0.001 117.35 0.95
+BBRPlus 0.001 139.15 0.95
+Tsunami 0.003 182.37 0.95
+BBR+ 0.005 186.19 0.95
+BBrv2 0.006 224.58 0.97
+Cubic 0.009 272.23 0.97
+Reno 0.020 257.26 0.97
+Table 6: the con/f_iguration of l2 to test inter protocol fairness
+Case Bandwidth Propagation delay /Q_ueue length
+1 4Mbps 50ms 4Mbps*100ms
+2 4Mbps 50ms 4Mbps*150ms
+3 4Mbps 50ms 4Mbps*200ms
+4 6Mbps 50ms 6Mbps*100ms
+5 6Mbps 50ms 6Mbps*150ms
+6 6Mbps 50ms 6Mbps*200ms
+7 8Mbps 50ms 8Mbps*150ms
+8 10Mbps 50ms 10Mbps*150ms
+9 12Mbps 50ms 12Mbps*150ms
+Table 7: Results of Jain’s fairness index and ratio
+1 2 3 4 5 6 7 8 9
+(Jain’s fairness index, ratio)
+BBR 0.55, 13.61 0.95, 1.7 1.0, 1.09 0.5, 17.08 0.97, 1.52 0.98, 1.42 0.96, 1.63 0.97, 1.53 0.97, 1.59
+BBR’ 0.93, 1.94 0.97, 1.68 0.99, 1.31 0.99, 1.38 0.98, 1.48 0.97, 1.57 0.96, 1.73 0.95, 1.86 0.95, 1.81
+BBRPlus 0.98, 1.48 0.98, 1.4 1.0, 1.13 0.99, 1.22 1.0, 1.17 0.99, 1.28 0.99, 1.28 0.98, 1.51 0.98, 1.35
+BBR+ 0.65, 5.87 0.81, 3.0 0.95, 1.69 0.54, 7.93 0.92, 1.97 0.97, 1.58 0.86, 2.46 0.96, 1.6 0.92, 2.0
+Tsunami 0.4, 26.08 0.91, 2.04 0.74, 4.03 0.38, 34.44 0.91, 2.13 0.74, 3.67 0.86, 2.62 0.86, 2.56 0.95, 1.76
+BBRv2 0.96, 1.65 0.98, 1.46 0.99, 1.35 0.99, 1.31 0.97, 1.44 1.0, 1.13 1.0, 1.13 0.97, 1.61 0.95, 1.73
+/T_he rate adjustment process of each /f_low is shown in Figure 13.
+All these algorithms can adapt well the throughput of the /f_low as
+the link rate changes. /T_he average packet loss rate, average packet
+transmission delay and channel utilization are calculated in Table
+5. Since the buﬀer length is con/f_igured as 1 .5∗ 4Mbps∗ 100ms, the
+loss rate of /f_lows with BBR like algorithms is quite small (below 1%).
+/T_he packet transmission delay values are higher in Tsunami, BBR+
+and BBRv2. BBR/f_i can achieve the lowest packet transmission delay
+and the second is BBRPlus.
+8
+ 0
+ 500
+ 1000
+ 1500
+ 2000
+ 2500
+ 3000
+ 0  50  100  150  200  250  300  350  400
+rate/kbps
+time/s
+ﬂow1
+ﬂow2
+(a) BBR
+ 0
+ 500
+ 1000
+ 1500
+ 2000
+ 2500
+ 3000
+ 0  50  100  150  200  250  300  350  400
+rate/kbps
+time/s
+ﬂow1
+ﬂow2 (b) BBR’
+ 0
+ 500
+ 1000
+ 1500
+ 2000
+ 2500
+ 3000
+ 0  50  100  150  200  250  300  350  400
+rate/kbps
+time/s
+ﬂow1
+ﬂow2 (c) BBRPlus
+ 0
+ 500
+ 1000
+ 1500
+ 2000
+ 2500
+ 3000
+ 0  50  100  150  200  250  300  350  400
+rate/kbps
+time/s
+ﬂow1
+ﬂow2
+(d) BBR+
+ 0
+ 500
+ 1000
+ 1500
+ 2000
+ 2500
+ 3000
+ 0  50  100  150  200  250  300  350  400
+rate/kbps
+time/s
+ﬂow1
+ﬂow2 (e) Tsunami
+ 0
+ 500
+ 1000
+ 1500
+ 2000
+ 2500
+ 3000
+ 0  50  100  150  200  250  300  350  400
+rate/kbps
+time/s
+ﬂow1
+ﬂow2 (f) BBRv2
+Figure 13: Rate dynamic of /f_lows in link with variable capacity
+ 0
+ 1000
+ 2000
+ 3000
+ 4000
+ 5000
+ 6000
+ 0  50  100  150  200
+rate/kbps
+time/s
+ﬂow1
+ﬂow2
+ﬂow3
+ﬂow4
+(a) BBR vs Cubic
+ 0
+ 1000
+ 2000
+ 3000
+ 4000
+ 5000
+ 6000
+ 0  50  100  150  200
+rate/kbps
+time/s
+ﬂow1
+ﬂow2
+ﬂow3
+ﬂow4 (b) BBR’ vs Cubic
+ 0
+ 1000
+ 2000
+ 3000
+ 4000
+ 5000
+ 6000
+ 0  50  100  150  200
+rate/kbps
+time/s
+ﬂow1
+ﬂow2
+ﬂow3
+ﬂow4 (c) BBRPlus vs Cubic
+ 0
+ 1000
+ 2000
+ 3000
+ 4000
+ 5000
+ 6000
+ 0  50  100  150  200
+rate/kbps
+time/s
+ﬂow1
+ﬂow2
+ﬂow3
+ﬂow4
+(d) BBR+ vs Cubic
+ 0
+ 1000
+ 2000
+ 3000
+ 4000
+ 5000
+ 6000
+ 0  50  100  150  200
+rate/kbps
+time/s
+ﬂow1
+ﬂow2
+ﬂow3
+ﬂow4 (e) Tsunami vs Cubic
+ 0
+ 1000
+ 2000
+ 3000
+ 4000
+ 5000
+ 6000
+ 0  50  100  150  200
+rate/kbps
+time/s
+ﬂow1
+ﬂow2
+ﬂow3
+ﬂow4 (f) BBRv2 vs Cubic
+Figure 14: Rate dynamic of /f_lows with diﬀerent congestion control algorithms
+4.5 Inter Protocol Competition
+In real networks, a bo/t_tleneck link is multiplexed by multiple /f_lows
+following diﬀerent congestion control algorithm. And one of the
+goals of BBR v2 is to make be/t_ter coexistence with Cubic and Reno
+/f_lows. /T_he performance of these algorithms are evaluated when the
+Cubic /f_lows are presence. Total nine experiments are designed and
+the con/f_iguration of l2 is shown in Table 6. /T_he simulation process
+lasts 200 seconds. In each case, the congestion control algorithm
+used by /f_low3 and /f_low4 is Cubic.
+/T_he jain/f_is fairness and the throughout ratio between the /f_low
+with the maximum rate and the /f_low with the minimum rate are
+calculated in Table 7. As example, the rate dynamic over time of
+the four /f_lows in Case 5 is plo/t_ted in Figure 14.
+In Case1 and Case4, the buﬀer length is equal to BDP . /T_here are
+high packet loss rate when BBR, BBR+ and Tsunami are applied for
+/f_low1 and /f_low2 as congestion control algorithm. /T_he two Cubic
+/f_lows suﬀer great loss in throughout due to these packet loss event.
+Most of bandwidth is occupied by /f_low1 and /f_low2. /T_he jain/f_is
+fairness index is quite low and the throughput ratio is high in this
+two test cases. As the link buﬀer increase (Case2, Case3, Case5
+and Case6), Cubic /f_lows can achieve higher throughput, but the
+throughputs of /f_low1 and /f_low2 still dominate. /T_his conclusion gets
+9
+support in Figure 14(a), Figure 14(d), Figure 14(e). /T_he rate of BBR
+/f_lows (Figure 14(a)), Tsunami /f_lows (Figure 14(e)) shows oscillation
+when competing bandwidth with Cubic /f_lows.
+When BBRPlus /f_lows sharing bo/t_tleneck link with Cubic /f_lows,
+the value of Jain/f_is fairness is quite close to 1, and the rates of
+BBRPlus /f_lows and Cubic /f_lows are quite close in Case5 as shown
+in Figure 14(c). In Figure 14(f), the rates of BBRv2 /f_lows and Cubic
+/f_lows converge close to the fairness line. Both BBRPlus and BBRv2
+can be friendly to Cubic.
+5 DISCUSSION AND CONCLUSION
+We evaluate the performance of BBR, BBR v2 and other algorithms
+(BBR/f_i, BBRPlus, BBR+, Tsunami) modi/f_ied from BBR on ns3 plat-
+form. Bandwidth allocation fairness, packet loss rate, link queue
+buﬀer occupation, RTT unfairness, channel utilization, rate respon-
+siveness in variable links and inter protocol fairness are evaluated
+or measured in this article.
+In link with shallow buﬀer, the /f_lows taking BBR, BBR+ and
+Tsunami as rate control can not converge the fairness bandwidth
+line and high packet loss rate is introduced. In the probe down
+down, the in/f_light packet will be drained to match the estimated
+bandwidth delay product in BBR/f_i and BBRPlus. /T_hese two can
+achieve lower transmission delay. BBR/f_i and BBRPlus can main-
+tain well bandwidth fairness property even in shallow buﬀer link.
+But the rates of BBR/f_i /f_lows have larger range of variation com-
+pared with BBR. Tsunami /f_low will send packet with aggressive rate
+higher than its estimated bandwidth and introduces high transmis-
+sion delay and highest packet loss rate. Tsunami will lead severe
+congestion, and such egoistic implementation is not recommended
+to applied in real networks.
+As for the RTT unfairness issue, the results in BBR/f_i, BBRPlus
+and BBR v2 show improvement when compared with BBR test
+cases. /T_he average packet transmission delay values in BBR v2
+/f_lows are lower than these delay values in Cubic/Reno /f_lows.
+All tested algorithms can get high channel utilization When
+bo/t_tleneck has no random packet loss. With 5% random loss rate,
+BBR v2 /f_lows can get low channel utilization in two test cases.
+BBR v2 indeed achieve its goal to make be/t_ter coexistence with
+Cubic/Reno /f_lows. But its claim to achieve lower queue delay is not
+obvious when compared with BBR. /T_he inter protocol friendliness
+can also be achieved in BBRPlus to some extent.
+BBRPlus is an good improvement to BBR and is highly recom-
+mended to be applied in this paper.
+REFERENCES
+[1] V. Jacobson, Congestion avoidance and control, in: ACM SIGCOMM computer
+communication review, Vol. 18, ACM, 1988, pp. 314–329.
+[2] J. Lin, L. Cui, Y. Zhang, F. P. Tso, Q. Guan, Extensive evaluation on the
+performance and behaviour of tcp congestion control protocols under var-
+ied network scenarios, Computer Networks 163 (2019) 106872. doi:https:
+//doi.org/10.1016/j.comnet.2019.106872.
+URL h/t_tp://www.sciencedirect.com/science/article/pii/S1389128618311265
+[3] B. Turkovic, F. A. Kuipers, S. Uhlig, Fi/f_ty shades of congestion control: A perfor-
+mance and interactions evaluation, arXiv preprint arXiv:1903.03852.
+[4] J. Ge/t_tys, K. Nichols, Buﬀerbloat: Dark buﬀers in the internet, /Q_ueue 9 (11) (2011)
+1–15.
+[5] N. Cardwell, Y. Cheng, C. S. Gunn, S. H. Yeganeh, V. Jacobson, Bbr: Congestion-
+based congestion control, /Q_ueue 14 (5) (2016) 50:20–50:53. doi:10.1145/
+3012426.3022184.
+[6] M. Hock, R. Bless, M. Zi/t_terbart, Experimental evaluation of bbr congestion
+control, in: 2017 IEEE 25th International Conference on Network Protocols
+(ICNP), 2017, pp. 1–10. doi:10.1109/ICNP.2017.8117540.
+[7] D. Scholz, B. Jaeger, L. Schwaighofer, D. Raumer, F. Geyer, G. Carle, Towards a
+deeper understanding of tcp bbr congestion control, in: 2018 IFIP Networking
+Conference (IFIP Networking) and Workshops, 2018, pp. 1–9. doi:10.23919/
+IFIPNetworking.2018.8696830.
+[8] V. Jain, V. Mi/t_tal, M. P. Tahiliani, Design and implementation of tcp bbr in ns-3,
+in: Proceedings of the 10th Workshop on Ns-3, WNS3 ’18, ACM, New York, NY,
+USA, 2018, pp. 16–22. doi:10.1145/3199902.3199911.
+[9] S. Ma, J. Jiang, W. Wang, B. Li, Fairness of congestion-based congestion control:
+Experimental evaluation and analysis, arXiv preprint arXiv:1706.09115.
+[10] J. Wang, Y. Zheng, Y. Ni, C. Xu, F. Qian, W. Li, W. Jiang, Y. Cheng, Z. Cheng, Y. Li,
+X. Xie, Y. Sun, Z. Wang, An active-passive measurement study of tcp performance
+over lte on high-speed rails, in: /T_he 25th Annual International Conference on
+Mobile Computing and Networking, MobiCom ’19, ACM, New York, NY, USA,
+2019, pp. 18:1–18:16. doi:10.1145/3300061.3300123.
+URL h/t_tp://doi.acm.org/10.1145/3300061.3300123
+[11] S. Ha, I. Rhee, L. Xu, Cubic: a new tcp-friendly high-speed tcp variant, ACM
+SIGOPS operating systems review 42 (5) (2008) 64–74.
+[12] V. Misra, W.-B. Gong, D. Towsley, Fluid-based analysis of a network of aqm
+routers supporting tcp /f_lows with an application to red, SIGCOMM Comput.
+Commun. Rev. 30 (4) (2000) 151–160. doi:10.1145/347057.347421.
+[13] D.-M. Chiu, R. Jain, Analysis of the increase and decrease algorithms for conges-
+tion avoidance in computer networks, Computer Networks and ISDN Systems
+17 (1) (1989) 1 – 14. doi:https://doi.org/10.1016/0169-7552(89)90019-6 .
+[14] F. P. Kelly, A. K. Maulloo, D. K. H. Tan, Rate control for communication networks:
+shadow prices, proportional fairness and stability, Journal of the Operational Re-
+search Society 49 (3) (1998) 237–252. doi:10.1057/palgrave.jors.2600523.
+[15] S. H. Low, D. E. Lapsley, Optimization /f_low control. i. basic algorithm and
+convergence, IEEE/ACM Transactions on Networking 7 (6) (1999) 861–874. doi:
+10.1109/90.811451.
+[16] T. Kelly, Scalable tcp: Improving performance in highspeed wide area networks,
+SIGCOMM Comput. Commun. Rev. 33 (2) (2003) 83–91. doi:10.1145/956981.
+956989.
+[17] D. Leith, R. Shorten, H-tcp: Tcp for high-speed and long-distance networks, in:
+Proceedings of PFLDnet, Vol. 2004, 2004.
+[18] Lisong Xu, K. Harfoush, Injong Rhee, Binary increase congestion control (bic) for
+fast long-distance networks, in: IEEE INFOCOM 2004, Vol. 4, 2004, pp. 2514–2524
+vol.4. doi:10.1109/INFCOM.2004.1354672.
+[19] L. S. Brakmo, L. L. Peterson, Tcp vegas: End to end congestion avoidance on a
+global internet, IEEE Journal on selected Areas in communications 13 (8) (1995)
+1465–1480.
+[20] D. X. Wei, C. Jin, S. H. Low, S. Hegde, Fast tcp: motivation, architecture, al-
+gorithms, performance, IEEE/ACM transactions on Networking 14 (6) (2006)
+1246–1259.
+[21] A. Kuzmanovic, E. W. Knightly, Tcp-lp: a distributed algorithm for low priority
+data transfer, in: IEEE INFOCOM 2003. Twenty-second Annual Joint Conference
+of the IEEE Computer and Communications Societies (IEEE Cat. No.03CH37428),
+Vol. 3, 2003, pp. 1691–1701 vol.3. doi:10.1109/INFCOM.2003.1209192.
+[22] D. Rossi, C. Testa, S. Valenti, L. Muscariello, Ledbat: /T_he new bi/t_torrent con-
+gestion control protocol, in: 2010 Proceedings of 19th International Con-
+ference on Computer Communications and Networks, 2010, pp. 1–6. doi:
+10.1109/ICCCN.2010.5560080.
+[23] Cheng Peng Fu, S. C. Liew, Tcp veno: Tcp enhancement for transmission over
+wireless access networks, IEEE Journal on Selected Areas in Communications
+21 (2) (2003) 216–228. doi:10.1109/JSAC.2002.807336.
+[24] S. Liu, T. Baar, R. Srikant, Tcp-illinois: A loss- and delay-based congestion control
+algorithm for high-speed networks, Performance Evaluation 65 (6) (2008) 417
+– 440, innovative Performance Evaluation Methodologies and Tools: Selected
+Papers from ValueTools 2006. doi:https://doi.org/10.1016/j.peva.2007.
+12.007.
+[25] K. Tan, J. Song, Q. Zhang, M. Sridharan, A compound tcp approach for high-
+speed and long distance networks, in: Proceedings IEEE INFOCOM 2006. 25TH
+IEEE International Conference on Computer Communications, 2006, pp. 1–12.
+doi:10.1109/INFOCOM.2006.188.
+[26] A. H. David, G. Armitage, Improved coexistence and loss tolerance for delay
+based tcp congestion control, in: IEEE Local Computer Network Conference,
+2010, pp. 24–31. doi:10.1109/LCN.2010.5735714.
+[27] D. A. Hayes, G. Armitage, Revisiting tcp congestion control using delay gradi-
+ents, in: J. Domingo-Pascual, P. Manzoni, S. Palazzo, A. Pont, C. Scoglio (Eds.),
+NETWORKING 2011, Springer Berlin Heidelberg, Berlin, Heidelberg, 2011, pp.
+328–341.
+[28] K. Winstein, A. Sivaraman, H. Balakrishnan, Stochastic forecasts achieve high
+throughput and low delay over cellular networks, in: Presented as part of the
+10th USENIX Symposium on Networked Systems Design and Implementation
+(NSDI 13), 2013, pp. 459–471.
+[29] M. Dong, Q. Li, D. Zarchy, P. B. Godfrey, M. Schapira, Pcc: Re-architecting
+congestion control for consistent high performance, in: 12th USENIX Symposium
+on Networked Systems Design and Implementation (NSDI 15), 2015, pp. 395–408.
+10
+[30] V. Arun, H. Balakrishnan, Copa: Practical delay-based congestion control for
+the internet, in: 15th USENIX Symposium on Networked Systems Design and
+Implementation (NSDI 18), 2018, pp. 329–342.
+[31] Y. Zaki, T. P¨otsch, J. Chen, L. Subramanian, C. G ¨org, Adaptive congestion control
+for unpredictable cellular networks, SIGCOMM Comput. Commun. Rev. 45 (4)
+(2015) 509–522. doi:10.1145/2829988.2787498.
+[32] S. Park, J. Lee, J. Kim, J. Lee, S. Ha, K. Lee, Exll: An extremely low-latency
+congestion control for mobile cellular networks, in: Proceedings of the 14th
+International Conference on Emerging Networking EXperiments and Tech-
+nologies, CoNEXT ’18, ACM, New York, NY, USA, 2018, pp. 307–319. doi:
+10.1145/3281411.3281430.
+[33] S. Abbasloo, Y. Xu, H. J. Chao, C2tcp: A /f_lexible cellular tcp to meet stringent
+delay requirements, IEEE Journal on Selected Areas in Communications 37 (4)
+(2019) 918–932. doi:10.1109/JSAC.2019.2898758.
+[34] M. Alizadeh, A. Greenberg, D. A. Maltz, J. Padhye, P. Patel, B. Prabhakar, S. Sen-
+gupta, M. Sridharan, Data center tcp (dctcp), SIGCOMM Comput. Commun. Rev.
+41 (4) (2010) –.
+URL h/t_tp://dl.acm.org/citation.cfm?id=2043164.1851192
+[35] R. Mi/t_tal, V. T. Lam, N. Dukkipati, E. Blem, H. Wassel, M. Ghobadi, A. Vahdat,
+Y. Wang, D. Wetherall, D. Zats, Timely: R/t_t-based congestion control for the
+datacenter, SIGCOMM Comput. Commun. Rev. 45 (4) (2015) 537–550. doi:
+10.1145/2829988.2787510.
+[36] K. Winstein, H. Balakrishnan, Tcp ex machina: Computer-generated congestion
+control, SIGCOMM Comput. Commun. Rev. 43 (4) (2013) 123–134. doi:10.1145/
+2534169.2486020.
+[37] W. Li, F. Zhou, K. R. Chowdhury, W. M. Meleis, Qtcp: Adaptive congestion
+control with reinforcement learning, IEEE Transactions on Network Science and
+Engineering (2018) 1–1 doi:10.1109/TNSE.2018.2835758.
+[38] K. Xiao, S. Mao, J. K. Tugnait, Tcp-drinc: Smart congestion control based on
+deep reinforcement learning, IEEE Access 7 (2019) 11892–11904. doi:10.1109/
+ACCESS.2019.2892046.
+[39] G. Carlucci, L. De Cicco, S. Holmer, S. Mascolo, G. Carlucci, L. De Cicco, S. Holmer,
+S. Mascolo, Congestion control for web real-time communication, IEEE/ACM
+Trans. Netw. 25 (5) (2017) 2629–2642. doi:10.1109/TNET.2017.2703615.
+[40] X. Zhu, R. Pan, M. Ramalho, S. de la Cruz, C. Ganzhorn, P. Jones, S. D/f_iAronco,
+Nada: A uni/f_ied congestion control scheme for real-time media, Internet-dra/f_t,
+Internet Engineering Task Force, work in Progress (2018).
+URL h/t_tps://tools.ietf.org/html/dra/f_t-ietf-rmcat-nada-07
+[41] I. Johansson, Z. Sarker, Self-clocked rate adaptation for multimedia, RFC 8298,
+RFC Editor (Dec 2017).
+URL h/t_tps://www.rfc-editor.org/rfc/rfc8298.txt
+[42] L. Kleinrock, Power and deterministic rules of thumb for probabilistic problems
+in computer communications, in: Proceedings of the International Conference
+on Communications, Vol. 43, 1979, pp. 1–10.
+[43] J. Jaﬀe, Flow control power is nondecentralizable, IEEE Transactions on Com-
+munications 29 (9) (1981) 1301–1306. doi:10.1109/TCOM.1981.1095152.
+[44] N. Cardwell, Y. Cheng, S. H. Yeganeh, I. Swe/t_t, V. Jacobson, Bbr v2 a model-based
+congestion control, 2019.
+URL h/t_tps://datatracker.ietf.org/meeting/104/materials/
+slides-104-iccrg-an-update-on-bbr-00
+[45] R. K. Jain, D.-M. W. Chiu, W. R. Hawe, A quantitative measure of fairness and
+discrimination for resource allocation in shared computer systems, Eastern
+Research Laboratory, Digital Equipment Corporation, Hudson, MA.
+[46] E. Atxutegi, F. Liberal, H. K. Haile, K. Grinnemo, A. Brunstrom, A. Arvidsson, On
+the use of tcp bbr in cellular networks, IEEE Communications Magazine 56 (3)
+(2018) 172–179. doi:10.1109/MCOM.2018.1700725.
+11

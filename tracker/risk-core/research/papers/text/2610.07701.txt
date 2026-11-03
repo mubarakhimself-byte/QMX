@@ -1,0 +1,478 @@
+arXiv 2610.07701  https://arxiv.org/abs/2610.07701
+
+On the Boundary of Admission Gates:
+An Injected-Truth Study of Falsification-First
+Selection in Quantitative Strategy Research
+Tianlun Zheng ∗
+Fudan University
+October 2026
+Abstract
+Strategy research conflates two problems: finding a profitable rule, and establishing that the
+finding is not search luck. The latter calls foradmission gates—statistical criteria that must
+be satisfied before a conclusion is adopted—yet whether gates work, and at what cost, remains
+untested. We introduce aninjected-truth protocolwith arandom-admission controlthat
+adopts at the same rate as the gate; only if the gate beats this control does it carry information
+rather than merely raise a threshold. Across synthetic and real-calibrated panels, gates eliminate
+false discoveries in the weak-signal regime but cut adoption to1–7%, and add nothing when
+signals are strong. Most importantly, criteria computed onabsoluterather thanexcessreturns
+silently reject every candidate, including true signals.
+Keywords:multiple testing, backtest overfitting, strategy admission, injected-truth validation,
+excess returns, false discovery rate
+1 Introduction
+1.1 Two kinds of failure
+Data-driven strategy research fails in two qualitatively different ways.Type I failureis not finding:
+search is inefficient and genuine signals remain undiscovered.Type II failureis finding something
+false: after searching many candidates on a finite sample, noise is mistaken for signal. The statistical
+root of Type II failure is elementary—when one testsNstrategies and reports the best, the reported
+statistic is not any single strategy’s performance but anextreme value—but its consequences are
+not.
+1.2 The engineering response, and what it assumes
+Practitioners and automated research systems respond by insertingadmission gates: a set of criteria
+that a conclusion must satisfy before it is adopted. Current agentic pipelines instantiate this as
+multi-stage funnels. Wang et al. (2026) report a92%elimination rate across information-coefficient
+(IC) screening, correlation filtering, deduplication, and backtesting; Tang et al. (2025) enforce
+originality, hypothesis–factor alignment, and complexity control; MinervaScore (2026) compose four
+∗Correspondence:simplify23@users.noreply.github.com. Code and data to reproduce every number in this
+paper are available athttps://github.com/simplify23/quant-trading-agent.
+1
+arXiv:2610.07701v1  [cs.AI]  6 Oct 2026
+established validation statistics into a robustness grade. The idea is natural. It is also largely
+untested, and two pitfalls follow.
+Conservatism is not effectiveness.Gates usually manifest asadopting less. Without a control
+one cannot distinguish a gate that carries information from one that simply raised a threshold. A
+high elimination rate does not settle the question: random elimination at the same rate might do
+equally well.
+A gate can fail without announcing it.MinervaScore (2026) calibrate their score on359,062
+production backtests, yet in theirpre-registeredreal-market test it showed no significant forward
+relationship (Spearmanρ s = 0.013,p= 0.40); the authors describe it as “an auditable validation
+and reporting layer, rather than evidence of demonstrated real-market predictability.” Having gates
+is not the same as gates being effective.
+1.3 Contributions
+We askwhenadmission gates are useful andat what cost, using aninjected-truth protocolin
+which known signals are embedded so that ground truth is observable. Its essential component is a
+random-admission controlthat adopts at the same rate as the gate but by coin flip, separating
+“carries information” from “is more conservative.” Our contributions:
+1. A reproducible evaluation protocol for admission gates, including the equal-adoption-rate
+control (§3.4).
+2. An empirical boundary: gates help for training-periodt <2.5and are pure overhead beyond
+it; the cost is quantified in adoption rate and recall (§5).
+3. A necessary condition: criteria must be evaluated onexcessreturns. On absolute returns
+they systematically andsilentlyreject every candidate, including a ground-truth signal with
+t= 4.0(§5.3).
+4. Honest negatives: a redundant sample-size criterion, failed control designs, and a task mor-
+phology in which gates are unhelpful (§5.4–5.5).
+Why it matters.Every automated research pipeline that admits conclusions must decidewhen to
+stop believing its own output. Gates are the instrument that decision rests on, yet their effectiveness
+is typically assumed rather than measured—and the one published calibration of such an instrument
+reported a null forward result (MinervaScore, 2026). If gates are weaker than assumed, the pipelines
+that rely on them inherit an unbounded false-discovery risk; if they are merely conservative, those
+pipelines silently discard real findings. Neither failure is visible from the outside, which is what
+makes the question worth measuring.
+We do not claim that gates increase returns, nor that our implementation improves on prior
+work.
+2 Related Work
+Our paper sits at the intersection of four literatures, and belongs to none of them. We state the
+branch explicitly in §2.5.
+2
+2.1 The replication crisis, quantified in finance
+Ioannidis (2005) argued that for most study designs the probability that a claimed finding is true
+is below one half, driven by small samples, small effects, and the number of relationships probed.
+Finance supplies unusually clean measurements of the same phenomenon. McLean and Pontiff
+(2016) tracked 97 published cross-sectional predictors and found returns26%lower out-of-sample
+and58%lower post-publication. Harvey et al. (2016) showed that after accounting for the number
+of factors tried, a newly claimed factor needst >3.0, not2.0. Hou et al. (2020) re-ran 452 published
+anomalies:65%fail a single|t| ≥1.96hurdle, rising to82%under the multiple-testing hurdle of
+2.78. This literature establishes that Type II failure is not hypothetical—it is the modal outcome
+in this field.
+2.2 Statistical machinery for data snooping
+The corrective tools are also mature. Lo and MacKinlay (1990) documented data-snooping bias in
+asset-pricing tests; Brock et al. (1992) provided the canonical technical-rule study that later work
+used to quantify snooping; Sullivan et al. (1999) evaluated trading rules by bootstrap against the
+full universe they were drawn from. White (2000) formalised the Reality Check and Hansen (2005)
+refined it into the Superior Predictive Ability test. Bailey and López de Prado (2014) introduced the
+deflated Sharpe ratio, and Bailey et al. (2016) the probability of backtest overfitting; Harvey and
+Liu (2015) showed the appropriate Sharpe deflation is non-linear in the strategy’s own statistics.
+We use the DSR (Bailey and López de Prado, 2014) directly as one of our four criteria.
+2.3 Robustness scoring and admission in practice
+A recent line composes these statistics into deployable instruments: MinervaScore (2026) aggregate
+DSR, PBO, SPA and minimum track record length into a display score; Sheppert (2026) embeds
+anti-overfitting terms directly into the optimisation objective. Both operatepost hocon a completed
+backtest. Our question is different in kind: not “how robust is this result?” but “does the rule that
+decides whether to accept a result actually work, and what does it cost?” The distinction matters
+because a scoring function’s output is only as useful as the decision rule that consumes it.
+2.4 Agentic alpha mining and automated research
+Automated pipelines attack Type I failure. Xiao et al. (2024) simulate trading-firm organisation
+with debating analyst agents; Wang et al. (2026) add a memory loop that distils successful and failed
+mining attempts; Han et al. (2026) evolve whole mining trajectories; Tang et al. (2025) constrain
+generation by abstract-syntax originality and hypothesis alignment, and have been published at
+KDD ’25; Kou et al. (2024) combine LLM factor generation with multi-agent evaluation. AlphaSeek
+(2026) pursue trajectory-level self-iteration. In the broader automated-research literature, Chen et
+al. (2026) survey 1,250 papers and observe that demonstrated self-improvement tracks a verification
+hierarchy—formal verifiers>execution feedback>learned judges>intrinsic self-assessment—while
+Zhao et al. (2026) close the loop on an agent’s own code. Our criteria sit at theexecution feedback
+level of that hierarchy.
+2.5 Where this paper sits
+Table 1 states the positioning. Concretely, the paper belongs to themethodologybranch of the
+replication literature (§2.1–2.2): it takes that branch’s diagnosis as given, and instead of measuring
+3
+Table 1: Positioning. This paper belongs to the methodology branch of the replication literature,
+applied at admission time inside an automated research loop.
+Replication lit. Robustness
+scoring
+Agentic alpha
+mining
+This paper
+Question Are published find-
+ings true?
+How robust is this
+backtest?
+How to find more
+alpha?
+Are the gates
+effective, and at
+what cost?
+Unit of analysis Published factor One completed
+backtest
+Candidate factorA candidatedeci-
+sion
+When applied Post hoc, after pub-
+lication
+Post hoc, before
+deployment
+At search timeAt admission
+time, inside the
+loop
+Output Failure / FDR rates A robustness grade Factors and weightsAn effectiveness
+boundary
+Typical method Surveys, replica-
+tions
+Composite statis-
+tics
+LLM agents, evolu-
+tion
+Injected truth
++random-
+admission control
+how often findings fail, it tests the instrument practitioners built in response. Relative to robustness
+scoring (§2.3) we change the object of study from a score to a decision rule, and relative to agentic
+mining (§2.4) our contribution is orthogonal and composable: gates can serve as the admission layer
+of those pipelines, and a search-efficiency improvement does not by itself make admission more
+reliable.
+3 Method
+3.1 Admission decision
+Let roundkpropose a candidatec k with evidenceE k. The admission decision isA(ck, Ek)→v k ∈
+{adopt,pending,reject,inv alid}, wherependingdenotesnot detected(insufficient power) and
+is strictly distinguished fromreject(evidence against). Our experiments use three outcomes:
+adopt,abstain, andfalse adoption.
+3.2 Criteria
+We use four criteria (Table 2).
+3.3 A necessary condition: criteria on excess returns
+Write strategyj’s return on daytasr jt =w t +ε jt, wherew t is the benchmark return andεjt the
+strategy-specific part. Total volatility is inflated by the market component,σ(rj)≳σ(w), whereas
+true discernibility depends onα/σ(ε), not onα/σ(rj).
+If criteria are evaluated onabsolutereturns while market volatility dominates—in our panels
+σ(w) = 0.0208versusσ(ε) = 0.007—then the absolute Sharpe ofeverycandidate, including the
+ground-truth one, lies inside the noise band and all four criteria fail. The correction is to evaluate
+every criterion on the excess returnxjt =r jt −w t; for the DSR this is the information ratio. We
+takew t to be the equal-weighted panel return.
+4
+Table 2: Admission criteria used in this study.
+Criterion Definition Analogue
+G6 sub-period sta-
+bility
+Four sub-periods of the training window; at least three
+have positive mean
+Parameter
+plateau
+F6 leave-one-trade-
+out
+After removing the best five trading days, the mean
+remains positive
+Single-event-
+carry check
+F1 sample sizen≥N ∗,N ∗ =⌈(2σ/µ) 2⌉Falsification
+threshold
+G9a multiple test-
+ing
+Deflated Sharpe ratio≥0.95givenN trials = 40Trial-count de-
+flation (Bailey
+and López de
+Prado, 2014)
+3.4 Arms and controls
+Table 3 lists the four arms. Arm C is the key control: with adoption rates aligned, a criterion carries
+information if and only if∆FDR=FDRC −FDR B >0. If∆FDR≈0, the gate is merely a stricter
+threshold.
+Table 3: Experimental arms. Arm C separates information from conservatism.
+Arm Rule Purpose
+A Pure search Adopt the candidate with the highest training-
+period Sharpe (current practice).
+B Gate Among candidates passing all four criteria, adopt
+the highest training Sharpe; abstain if none pass
+(method under evaluation).
+C Random admission Adopt arm A’s choice with probabilityp, otherwise
+abstain;ptuned so that C’s adoption rate matches
+B’s (identifies “effective” vs. “merely conservative”).
+B′ Gate without F1 Arm B with the sample-size criterion removed (ab-
+lation).
+Control design iterations.Our first two designs for arm C were invalid. A Sharpe-quantile
+threshold always leaves the training-period winner inside the passing set, so “take the best passer”
+isidenticalto arm A—confirmed empirically, with identical FDR at everyα. “Randomly keepk,
+then take the best” always adopts fork≥1, so its adoption rate is identically one and cannot be
+aligned. A valid control must be able toabstain andhave a tunable adoption rate.
+4 Experimental Setup
+Figure 1 summarises the protocol.
+4.1 Data and power pre-check
+We use a panel of 29 A-share ETFs (745 return points, backward-adjusted); Table 4 reports its
+statistics. Before designing any portfolio-level comparison we compute the smallest detectable effect.
+A leg with a 30-day minimum holding period yields at most10–13trades over the 322-day training
+5
+Real panel Inject knownα Ground truth observable
+1
+Panel I
+synthetic
+Panel II
+real-calibrated
+Panel III real
+cross-section2
+Apure search: high-
+est training Sharpe
+Bgate: adopt best
+passer, else abstain
+Crandom ad-
+mission: same
+rate, coin flip
+3
+compare
+∆FDR=
+FDRC −FDR B
+4
+Figure 1: The injected-truth protocol, in four numbered steps: (1) inject a known effect so that
+ground truth becomes observable; (2) instantiate it in one of three panel families; (3) apply three
+arms to the same candidate set—arm C adopts at thesame rateas arm B but by coin flip; (4) com-
+pare. Only if∆FDR>0does the gate carry information rather than merely being more conserva-
+tive.
+window, whereasN ∗ is93trades forµ= 1.25%, σ= 6%and576forµ= 0.5%. Portfolio-level
+comparison is thereforeundecidablehere—resolving it would require roughly 37 years of data—
+which is precisely why the injected-truth design is needed (Appendix A lists the reproduction
+commands).
+Table 4: Real panel statistics and power pre-check.
+Panel statistic Value Power item
+Daily standard deviation0.02075Training window: 322 days
+Kurtosis (normal= 3)7.84Trades per leg (upper bound): 10–13
+First-order autocorrelation+0.021N ∗ (µ= 1.25%): 93 trades
+Mean cross-sectional correlation+0.504N ∗ (µ= 0.5%): 576 trades
+4.2 Panels
+Panel I (synthetic, independent candidates).T= 750(training 322),N= 40candidates
+of whichK= 5are ground truth. NoiseN(0, σ 2),σ= 0.01; ground-truth columns receive a
+constantα∈ {0.0004,0.0008,0.0016,0.0032}(annualized10.1%–80.6%). 400repetitionspersetting;
+N∈ {20,40,80}for sensitivity.
+Panel II (real-calibrated strategy family).The benchmark series is the equal-weighted
+return of the real panel, preserving fat tails and volatility clustering; strategy-specific noise
+σε ∈ {0.007,0.004}implies inter-strategy correlations of roughly0.89and0.96. Ground-truth
+columns receiveαcalibratedrelative toσ ε so that the intendedt-statistics are actually attained.
+Panel III (real cross-section, counter-example).The 29 real ETFs are themselves treated
+as candidates, i.e. anasset-selectiontask (§5.5).
+Metrics: FDR=share of false among adopted;hit rate=share of runs adopting a ground-truth
+signal;abstention rate= 1−adoption rate.
+6
+1 2 3 4 5 6
+0
+0.2
+0.4
+0.6
+0.8
+1
+gate adds
+nothing be-
+yond here
+Training-periodtof the ground-truth signal
+False discovery rate (FDR)
+A: pure search
+B: gate
+C: random admission (equal rate)
+Figure 2: Panel I (400 repetitions). Pure search errs on24%–59%of weak-signal adoptions; the
+gate drives FDR to zero but only belowt≈2.5. To the right of the dotted line the gate is pure
+overhead: pure search barely errs and gating only lowers the adoption rate (Table 5).
+5 Results and Analysis
+5.1 Panel I: help when signals are weak, overhead when they are strong
+Table 5: Panel I (synthetic, independent candidates), 400 repetitions.
+α(ann.) traintA FDRB adoptB FDR C FDR∆FDR Verdict
+10.1%0.720.5900.0170.4001.000+0.600effective
+20.2%1.440.2430.0470.0000.200+0.200effective
+40.3%2.87 0.010 0.603 0.000 0.010+0.010indistinguishable
+80.6%5.74 0.000 1.000 0.000 0.000+0.000indistinguishable
+Figure 2 plots the same result as a curve: In the weak regime pure search’s FDR is24%–59%;
+gates reduce it to zero at the cost of an adoption rate of1.7%–4.7%. For trainingt >2.5, pure search
+already errs essentially never (FDR≤1%) and gates add no value while lowering the adoption rate.
+5.2 Panel II: stable across data source and correlation structure
+Table 6 reports both correlation levels. The real-calibrated panel reproduces the morphology of the
+synthetic one: in the weak regime arm A’s FDR is18%–42%while arm B’s is≈0, with abstention
+of93%–99%. The conclusion is therefore not an artifact of the i.i.d. assumption. Holdingt= 1.44
+fixed,∆FDR forN∈ {20,40,80}is+0.250,+0.200,+0.317—all positive, so neither candidate
+count nor ground-truth share changes the direction of the result.
+5.3 Diagnostic experiment: the excess-return requirement
+Before the correction of Section 3.3, arm B abstained100%of the time even att= 4.0. Figure 3 and
+Table 7 give per-criterion rejection rates for ground-truth columns and identifies the cause: under
+absolute returns the market component dominates total volatility and compresses the effectivet-
+statistic by roughly a factor of three, so the DSR never passes. After the correction, arm B at
+7
+Table 6: Panel II (real-calibrated strategy family), 400 repetitions each.
+σε (corr.)tA FDRB adoptB FDRB hit B abstain
+0.007 (≈0.89) 1.000.3880.0120.0000.013 0.988
+0.007 1.510.1880.0730.0340.070 0.927
+0.007 2.51 0.020 0.3870.0000.388 0.613
+0.007 4.00 0.003 0.9820.0000.983 0.018
+0.004 (≈0.96) 0.990.4150.0170.0000.018 0.983
+0.004 1.530.1820.0680.0000.068 0.932
+0.004 2.51 0.018 0.3950.0000.395 0.605
+0.004 3.99 0.000 0.9870.0000.988 0.013
+G6 F6 F1 G9a
+0
+0.5
+1
+Criterion
+Rejection rate on ground-truth columns
+t= 1.00
+t= 2.51
+t= 4.00
+Figure 3: Per-criterion rejection rate onground-truthcolumns before the excess-return correction.
+The DSR rejects a true signal100%of the time at every strength: under absolute returns the market
+component inflates volatility and compresses the effectivet-statistic by roughly a factor of three.
+t= 4.0attains a hit rate of98.3%while keeping FDR at zero.
+Finding (central).The failure issilent: it presents as “the framework found nothing,” easily
+misread as “the candidates are poor.” Any gate framework should define criteria on excess returns
+and, at deployment, print per-criterion rejection rates for ground-truth versus noise columns.
+5.4 Ablation: the sample-size criterion is redundant
+Across the three Panel I settings, arm B′ and arm B producebit-identicalresults: theN ∗ criterion
+is fully covered by the DSR in this regime. This does not establish thatN∗ is useless—when trials
+are few and single-run sample size binds, it may still be necessary—but it is reported as a negative
+ablation result.
+5.5 Task morphology matters
+Treating the 29 real ETFs as candidates (Panel III), arm A attains a100%hit rate and FDR
+= 0ateverysignal strength, while gates only cause missed opportunities. The cause is the0.504
+mean cross-sectional correlation: assets receiving injectedαsystematically outperform the rest, so
+8
+Table 7: Per-criterion rejection rate for ground-truth columns (pre-correction), Panel II.
+Criteriont= 1.00t= 2.51t= 4.00
+G6 sub-period stability 1.00 0.60 0.40
+F6 leave-one-trade-out 1.00 0.60 0.20
+F1 sample size (N∗) 1.00 1.00 0.80
+G9a DSR1.00 1.00 1.00
+the training-period winner is necessarily a ground-truth signal. An injected-truth protocol must
+match the candidate structure of the task under study, or one may wrongly conclude that gates are
+harmful.
+6 Discussion
+6.1 What gates are for
+Our results position admission gates as aprecision device, not a return device. Use them when
+the candidate count is large, the training window is limited, and the cost of a wrong adoption
+exceeds the cost of a miss—for example when capital is at stake. Do not use them when the signal
+is already strong (trainingt >2.5), where they only reduce the adoption rate.
+The result resonates with the replication literature. Ioannidis (2005) notes that a finding is
+less likely to be true when effect sizes are small and many relationships are probed—the regime in
+which our gates help. Conversely Harvey et al. (2016) and Hou et al. (2020) document that failures
+concentrate in exactly the marginal cases our gates reject. Gates are therefore best understood as
+implementing, at decision time, the multiple-testing discipline this literature prescribes after the
+fact.
+6.2 Relation to prior work
+Section 2 positions this paper; two points bear emphasis here. First, relative to robustness scoring
+(MinervaScore, 2026; Sheppert, 2026) we change the object of study from a score to a decision rule,
+and the excess-return requirement (§3.3) applies to those scores as much as to ours. Second, relative
+to agentic mining (Wang et al., 2026; Han et al., 2026; Tang et al., 2025; Kou et al., 2024; AlphaSeek,
+2026) our contribution is composable: gates can serve as their admission layer, and improved search
+efficiency does not by itself make admission more reliable.
+6.3 Limitations
+1.Synthetic component.Ground truth is injected as a constant effect; real alpha decay
+and regime dependence are more complex. Panel II uses real return series as the common
+factor—preserving kurtosis7.84and cross-correlation0.504—and reproduces the synthetic
+morphology, which mitigates but does not eliminate the concern.
+2.Single market, single asset class(A-share ETFs, 29 assets / 745 points).
+3.Incomplete criterion set.Difference-trade auditing, selection degree-of-freedom diagnos-
+tics, and PBO/SPA are implemented in the framework but not exercised here.
+4.Thresholds are not calibrated.The DSR level of0.95and the2σ/µcoefficient follow prior
+choices; their sensitivity is not scanned.
+9
+5.Abstention has no utility model.Abstention is recorded as “not adopted” without an
+explicit trade-off between the cost of a miss and the cost of a wrong adoption.
+6.4 Future work
+Introduce an explicit utility function to ground thresholds in decision theory; extend the protocol
+to PBO/SPA and difference-trade auditing to map criterion redundancy; repeat across markets and
+asset classes; and apply it to audit the admission stages of published methods.
+7 Conclusion
+We tested whether admission gates in quantitative research are effective, using an injected-truth
+protocol on synthetic independent candidates and on strategy-family panels calibrated to a real
+ETF panel. Gates carry genuine information—at equal adoption rates their false discovery rate is
+well below that of random admission (∆FDR0.10–0.60), so they are not merely a stricter threshold.
+But the value has a boundary: it materialises only for trainingt <2.5, at the cost of an adoption
+rate of1%–7%; beyondt≈2.5pure search suffices and gating is pure overhead. Criteria must
+be defined on excess returns, or they silently reject all candidates. A sample-size criterion proved
+redundant here, and in an asset-selection morphology the gates were unhelpful.
+In one sentence: admission gates increasedecisional precisionat a substantial cost inrecall.
+Treating them as return enhancers is a category error; treating them as a conservative decision
+device under uncertainty—and validating, with the control protocol above, that they beat random
+admission at the same adoption rate—is their correct role.
+A Reproducibility
+Every number in this paper is reproducible from the accompanying artefacts:
+python3 exp1_injected_gate_efficacy.py --reps 400
+python3 exp1_injected_gate_efficacy.py --reps 300 \
+--n-cand 20 --k-true 5 --alphas 0.0008
+python3 exp2_real_based_validation.py --reps 400 \
+--panel-kind strategy --sigma-e 0.007 \
+--alphas 0.00039 0.00059 0.00098 0.00156
+python3 exp2_real_based_validation.py --reps 400 \
+--panel-kind strategy --sigma-e 0.004 \
+--alphas 0.00022 0.00034 0.00056 0.00089
+python3 exp2_real_based_validation.py --reps 300 \
+--panel-kind asset \
+--alphas 0.00116 0.00174 0.00289 0.00463
+Data anchor:etf_panel_ts.frozen-20260930.json(29 ETFs, 746 days, backward-adjusted).
+Results are written to*_results.json.
+References
+W. Brock, J. Lakonishok, and B. LeBaron. Simple technical trading rules and the stochastic prop-
+erties of stock returns.The Journal of Finance, 47(5):1731–1764, 1992.
+10
+D. H. Bailey and M. López de Prado. The deflated Sharpe ratio: Correcting for selection bias,
+backtest overfitting, and non-normality.The Journal of Portfolio Management, 40(5):94–107,
+2014. DOI: 10.3905/jpm.2014.40.5.094.
+D. H. Bailey, J. M. Borwein, M. López de Prado, and Q. J. Zhu. The probability of backtest
+overfitting.Journal of Computational Finance, 20(4), 2016.
+P. R. Hansen. A test for superior predictive ability.Journal of Business & Economic Statistics,
+23(4):365–380, 2005.
+C. R. Harvey and Y. Liu. Backtesting.The Journal of Portfolio Management, 42(1), 2015. (Page
+ranges in secondary sources differ, 12–28 versus 13–28; verify against the publisher record.)
+C. R. Harvey, Y. Liu, and H. Zhu. ... and the cross-section of expected returns.The Review of
+Financial Studies, 29(1):5–68, 2016. DOI: 10.1093/rfs/hhv059.
+K. Hou, C. Xue, and L. Zhang. Replicating anomalies.The Review of Financial Studies, 33(5):2019–
+2133, 2020. DOI: 10.1093/rfs/hhy131.
+J. P. A. Ioannidis. Why most published research findings are false.PLoS Medicine, 2(8):e124, 2005.
+DOI: 10.1371/journal.pmed.0020124.
+A. W. Lo and A. C. MacKinlay. Data-snooping biases in tests of financial asset pricing models.The
+Review of Financial Studies, 3(3):431–467, 1990.
+R. D. McLean and J. Pontiff. Does academic research destroy stock return predictability?The
+Journal of Finance, 71(1):5–32, 2016. DOI: 10.1111/jofi.12365.
+R.Sullivan, A.Timmermann, andH.White. Data-snooping, technicaltradingruleperformance, and
+the bootstrap.The Journal of Finance, 54(5):1647–1691, 1999. DOI: 10.1111/0022-1082.00163.
+H. White. A reality check for data snooping.Econometrica, 68(5):1097–1126, 2000.
+Z. Tang, Z. Chen, J. Yang, J. Mai, Y. Zheng, K. Wang, J. Chen, and L. Lin. AlphaAgent:
+LLM-driven alpha mining with regularized exploration to counteract alpha decay. InProc. 31st
+ACM SIGKDD Conf. (KDD ’25), V.2, Toronto, Canada, August 2025. arXiv:2502.16789; DOI:
+10.1145/3711896.3736838.
+Y. Xiao, E. Sun, D. Luo, and W. Wang. TradingAgents: Multi-agents LLM financial trading
+framework.arXiv preprintarXiv:2412.20138, 2024.
+FactorMiner: A memory-augmented, self-evolving agent for alpha factor mining.arXiv preprint
+arXiv:2602.14670, 2026.
+J. Han, S. Zhang, W. Li, and et al. QuantaAlpha: An evolutionary framework for LLM-driven
+alpha mining.arXiv preprintarXiv:2602.07085, 2026.
+Z. Kou, H. Yu, J. Luo, and et al. Automate strategy finding with LLM in quant investment.arXiv
+preprintarXiv:2409.06289, 2024.
+Equity strategy backtesting: Luck or edge? The MinervaScore as a statistical robustness grade.
+arXiv preprintarXiv:2608.23808, 2026.
+11
+A. P. Sheppert. The GT-Score: A robust objective function for reducing overfitting in data-driven
+trading strategies.arXiv preprintarXiv:2602.00080, 2026.
+M. Chen, L. Wang, and B. Qu. Recursive self-improvement in AI: From bounded self-refinement to
+autonomous research loops.arXiv preprintarXiv:2607.07663, 2026.
+B. Zhao, Z. Jiang, Y. Wu, D. Srikanth, and D. Xu. Recursive self-improvement of AI research
+agents.arXiv preprintarXiv:2609.26457, 2026.
+AlphaSeek: Trajectory-level self-iterative factor mining framework for multi-source financial data.
+arXiv preprintarXiv:2608.13913, 2026.
+12

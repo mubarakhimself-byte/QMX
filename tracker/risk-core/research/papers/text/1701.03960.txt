@@ -1,0 +1,1059 @@
+arXiv 1701.03960  https://arxiv.org/abs/1701.03960
+
+arXiv:1701.03960v2  [q-fin.MF]  22 Mar 2019
+Optimal trading with a trailing stop
+Tim Leung ∗ Hongzhong Zhang †
+March 26, 2019
+Abstract
+Trailing stop is a popular stop-loss trading strategy by whi ch the investor will sell the asset once its
+price experiences a pre-speciﬁed percentage drawdown. In t his paper, we study the problem of timing
+to buy and then sell an asset subject to a trailing stop. Under a general linear diﬀusion framework, we
+study an optimal double stopping problem with a random path- dependent maturity. Speciﬁcally, we ﬁrst
+analytically solve the optimal liquidation problem with a t railing stop, and in turn derive the optimal
+timing to buy the asset. Our method of solution reduces the pr oblem of determining the optimal trading
+regions to solving the associated diﬀerential equations. F or illustration, we implement an example and
+conduct a sensitivity analysis under the exponential Ornst ein-Uhlenbeck model.
+Keywords: trailing stop, stop loss, optimal stopping, drawdown, stochastic ﬂ oor
+JEL Classiﬁcation: C41, C61, G11
+Mathematics Subject Classiﬁcation (2010): 60G40, 62L15, 91G20, 91G80
+∗Department of Applied Mathematics, University of Washingt on, Seattle W A 98195. E-mail: timleung@uw.edu.
+Corresponding author.
+†IEOR Department, Columbia University. New York, NY 10027. E -mail: hz2244@columbia.edu.
+1
+1 Introduction
+Trailing stops are a popular trade order widely used by proprietary t raders and retail investors to provide
+downside protection for an existing position. In contrast to a stop -loss exit that closes a position at a ﬁxed
+price, a trailing stop is characterized by a stochastic ﬂoor that mov es based on the running maximum of the
+asset price. This provides a dynamic downside protection as the sto chastic ﬂoor is automatically adjusted
+upward whenever the asset price moves to a new high. A trailing stop is triggered when the prevailing
+price of an asset falls below the stochastic ﬂoor. In essence, it allow s an investor to specify a limit on
+the maximum possible loss while not limiting the maximum possible gain. This is particularly relevant in
+common trend-following strategies, and trailing stop provides an au tomatic trigger to exit when prices start
+to trend downward due to, for example, regime switching (Dai et al., 2010).
+In addition to setting a trailing stop order, the investor can also use a limit order to sell at a certain
+price target. If the price is suﬃciently high, the investor may prefe r to take proﬁt immediately, rather than
+waiting further with the possibility of setting oﬀ the trailing stop. The investor’s position will be liquidated
+by either order, whichever comes ﬁrst.
+In this paper, we investigate the mathematical problem of optimal t iming to liquidate a position subject
+to a trailing stop. Mathematically, we recognize the trailing stop as a stochastic timing constraint in the
+sense that it installs a path-dependent random maturity into the liqu idation problem, rending the problem
+signiﬁcantly more diﬃcult to analyze or solve. Furthermore, the inve stor can decide when to establish the
+position in the ﬁrst place. This leads us to also analyze the optimal timin g to enter the market. In sum,
+we study an optimal double stopping problem subject to a trailing sto p. Using excursion theory of linear
+diﬀusion, we derive the value functions using the smallest concave ma jorant characterization, and discuss
+the eﬀect of trailing stopping on the optimal trading strategies ana lytically and numerically. Among our
+results, we reduce the problem of ﬁnding the optimal timing strateg ies to solving an ODE problem, which
+forms the basis of our numerical scheme in determining the optimal a sset acquisition and liquidation regions.
+In general, a trailing stop can be deﬁned as the ﬁrst time when the as set priceX drops below f (X), where
+X is the running maximum process of X, and f is an increasing function such that f (x)<x for all x in the
+support of X. In applied probability literature, such a stopping time is related to th e drawdown process and
+its ﬁrst passage time. We refer to Lehoczky (1977), Zhang (2015 ), and Zhang and Hadjiliadis (2012), for
+a partial list of studies on drawdowns under linear diﬀusions. Moreov er, the optimality of trailing stops in
+exercising (generalized) Russian options and detecting abrupt cha nges can be found in Shepp and Shiryaev
+(1993), Egami and Oryu (2017) and Zhang et al. (2015), respect ively
+Despite being commonly used by practitioners, trailing stops have be en scarcely studied in the mathe-
+matical ﬁnance literature. We trace back to Glynn and Iglehart (19 95), who studied the expected discounted
+reward at a trailing stop under a discrete-time random walk or a geom etric Brownian motion (GBM) model,
+and found that it would be optimal to never use the trailing stop if the stock followed a GBM with a positive
+drift. In contrast, our study is conducted in a more general linear diﬀusion framework, and provides con-
+crete illustrative example on how to the use of a trailing stop will aﬀect the optimal timing to sell an asset
+under the exponential Ornstein-Uhlenbeck model. In a random walk model, Warburton and Zhang (2006)
+performed a probabilistic analysis of a variant of trailing stop. Yin et a l. (2010) implemented a stochastic
+approximation scheme to determine the optimal percentage trailing stop level that maximizes the expected
+discounted simple return from liquidation. The recent study by Imke ller and Rogers (2014) compared the
+performance of a number of trading rules with ﬁxed and trailing stop s under an arithmetic Brownian motion
+model.
+2
+Compared to these works, we tackle the trading problem by formula ting an optimal double stopping with
+a stochastic timing constraint induced by the trailing stop, and we rigorously derive the optimal tra ding
+strategy. Our method of solution applies to a general linear diﬀusion framework, and our analytical results
+facilitate computation of the value function and optimal timing strat egies (see Section 5). In our optimal
+liquidation problem subject to the trailing stop, we show that it is optim al to use a limit sell order at a
+suﬃciently high price. In other words, once the investor enters th e market, he/she can immediately set
+the optimal limit sell order together with the trailing stop order, and wait for either order to be executed
+automatically.
+The trailing stop can be viewed as a random maturity or stopping time c onstraint in the optimal stopping
+problem, in the sense that any admissible stopping time must come bef ore triggering the trailing stop. Related
+studies by the authors include optimal stopping problems with matur ities determined by an occupation time
+(Rodosthenous and Zhang (2017a,b)) or by a default time (Leung a nd Yamazaki (2013)), and optimal mean
+reversion trading with a ﬁxed stop-loss exit (Leung and Li (2015)) . In particular, part of our study (Section
+3) generalizes the analytical framework of Leung and Li (2015) to general linear diﬀusions, and the results
+from optimal stopping subject to a ﬁxed stop-loss exit will prove to be directly useful for solving the analogous
+problem with a trailing stop.
+The remaining of the paper is structured as follows. Section 2 prese nts stochastic framework for our
+trading problem. In Section 3, we study an optimal trading problem w ith a ﬁxed stop-loss. Then, in Section
+4, we study the optimal stopping problems for trading with a trailing s top. To illustrate our analytical
+results, we consider trading under the exponential Ornstein-Uhle nbeck model, and numerically compute the
+optimal acquisition and liquidation regions in Section 5. We also provide a sensitivity analysis on the optimal
+trading strategies with respect to model parameters. Detailed pr oofs are collected in the Appendix.
+2 Model Formulation
+Let us consider a risky asset value process X· = {Xt}t≥0 modeled by a linear diﬀusion on I ≡ (l,r ) ⊂ R
+with the inﬁnitesimal generator:
+L = 12σ2(x) ∂2∂x2 +µ(x) ∂∂x, ∀x ∈I, (1)
+where (µ(·),σ (·)) is a pair of real-valued functions on I such that
+1 + |µ(·)|
+σ2(·) ∈ L1Loc(I) and σ(x)> 0, ∀x ∈I.
+For any ¯x ∈I, the running maximum of X is denoted by
+Xt := ¯x ∨ sup
+s∈[0,t]
+Xs, t ≥ 0.
+We denote the unique probability law of X· by Px,¯x given {X0 =x,X 0 = ¯x} for any x, ¯x ∈I withx ≤ ¯x.
+The expectation associated with Px,¯x is denoted by Ex,¯x. In calculations and results where the initial value
+X 0 = ¯x is irrelevant, we simply write Px and Ex to denote the probability law of X· and the associated
+expectation given {X0 =x}. Throughout, we assume that the both boundaries l,r are inaccessible.
+We consider an investor who holds long one unit of the risky asset X. Our objective is to investigate the
+3
+2 4 6 8 10
+0.5
+1.0
+1.5
+2.0
+2.5
+3.0
+3.5
+Figure 1: Sample paths of the asset price (solid black), its running ma ximum (gray dashed), and the 30%-
+drawdown ﬂoor representing the trailing stop (red dashed).
+optimal trading strategy with a trailing stop. To this end, we conside r the problem of optimal early liquidation
+of this risky asset, given a pre-speciﬁed trailing stop mandatory liqu idation order. Speciﬁcally, we will model
+liquidation time by a stopping time τ of the underlying process X·, and the reward to be realized upon
+liquidation by h(Xτ ), where h(·) is a real-valued increasing function on I, such that {x ∈I :h(x)> 0} ⁄= ∅.
+Fix a function f (·) on I, such that
+f (·) is continuous, strictly increasing on I,
+for all x ∈I,f (x) ∈I,f (x)<x.
+(2)
+Then, we deﬁne the stochastic ﬂoor by f (X), where X is the running maximum of X. The trailing stop,
+denoted by ρf , is deﬁned as the ﬁrst time the asset value X reaches the stochastic ﬂoor f (X) from above.
+That is, 1
+ρf := inf {t> 0 : Xt<f (Xt)}. (3)
+Remark 2.1. We give two standard choices of the ﬂoor function f (·) here. For example, if I = R, setting
+f (x) = x −a for some a > 0 gives the absolute drawdown ﬂoor, and ρf is the ﬁrst time X falls from its
+maximum X by a units. Another speciﬁcation when I = R+, f (x) = (1 −α)x for some α ∈ (0, 1), gives the
+percentage drawdown, and ρf is the ﬁrst time X falls from its maximum X by (100 ×α)%, as depicted in
+Figure 1 with α = 0.3.
+The investor faces the following optimal stopping problem:
+vf (x, ¯x) := sup
+τ ∈T Tf
+Ex,¯x(e−qτh(Xτ )1{τ< ∞}). (4)
+where q >0 is a subjective discounting rate, and T Tf is the set of all stopping times of X that stop no later
+than the trailing stop ρf . Notice that ρf puts a mandatory selling order of the risky asset, pre-speciﬁed by
+the investor.
+To quantify the gain in terms of expected discounted reward from liq uidating earlier than the trailing
+1As usual, we set inf ∅ = ∞.
+4
+stop time ρf , we deﬁne the early liquidation premium by the diﬀerence
+pf (x, ¯x) :=vf (x, ¯x) −gf (x, ¯x), (5)
+where the second term represents the expected discounted rew ard from waiting to sell at the trailing stop,
+that is,
+gf (x, ¯x) := Ex,¯x(e−qρfh(Xρf )1{ρf<∞}). (6)
+As a convention, we deﬁne ∞ − ∞ = ∞ if both terms on the right-hand side of (5) are inﬁnity. Clearly,
+we have pf (x, ¯x) ≥ 0 for all x, ¯x ∈ I with x ≤ ¯x. For our study, the early liquidation premium turns
+out to be amenable to analysis and give intuitive interpretations. The related concepts of early/delayed
+exercise/purchase premium have been analyzed in pricing American o ptions (see Carr et al. (1992)) and
+derivatives trading (Leung and Ludkovski (2011)), among other applications.
+Remark 2.2. If ﬂoor functions f1(·),f 2(·) both satisfy (2), and f1(x) ≤f2(x) for all x ∈I, then for every
+ﬁxedx ∈I, we have the inequalities:
+h(x) ≤vf2 (x, ¯x) ≤vf1 (x, ¯x) ≤ sup
+τ ∈T
+Ex(e−qτh(Xτ )1{τ< ∞}), (7)
+where T is the set of all stopping times of X.
+Given the optimal value vf (x, ¯x), another related problem is
+v(1)f (x) = supτ ∈T Ex(e−qτ (vf (Xτ,Xτ ) −hb(Xτ ))1{τ< ∞}), (8)
+wherehb(·) is an increasing function on I such thathb(x) ≥h(x) for all x ∈I,2 and supx∈I(vf (x,x )−hb(x))>
+0, T is the set of all stopping times w.r.t. the ﬁltration generated by X. The problem arises, for example,
+in optimal acquisition of the asset X when hb(x) = x +cb, where cb ≥ 0 is a transaction fee. 3 In general, if
+we assume that hb(X) is the price the investor need to pay to acquire one unit of the risky asset, then (8)
+represents the problem of ﬁnding the optimal time to purchase this risk asset. Note that the investor will
+select the optimal time to sell but subject to a trailing stop exit. For this reason, we will call the problem
+in (8) the optimal acquisition problem with a trailing stop, even for a ge neral reward hb(·).
+Remark 2.3. Note that in (8), we apply the value function vf (x, ¯x) only withx = ¯x. From a practical point
+of view, this is the most relevant case since a trailing stop s hould be placed based on the price at which the
+asset was purchased, rather than an arbitrary reference pri ce.
+In summary, the solutions to (8) and (4) yield the optimal trading st rategy that involves buying a risky
+asset and selling it later while being protected by a trailing stop.
+2.1 Preliminaries of Linear Diﬀusions
+It is well known that (see, for example, (Borodin and Salminen, 2002 )), for any q >0, the Sturm-Liouville
+equation (L −q)u(x) = 0 has a positive increasing solution φ+q (·) and a positive decreasing solution φ−q (·).
+2If there is an x ∈ I such that hb(x) < h (x), then immediate selling after purchasing when the asset pr ice is at x yields a
+strictly positive proﬁt with certainty, hence an arbitrage .
+3In this case, h(x) = x − cs where cs ≥ 0 is a transaction fee.
+5
+In fact, for an arbitrary ﬁxed κ ∈I, the solutions can be expressed as
+φ+q (x) =
+
+
+
+Ex(e−qτ +X (κ)), if x ≤κ
+1
+Eκ(e−qτ +X (x)), if x>κ , φ−q (x) =
+
+
+
+1
+Eκ(e−qτ −X (x)), if x ≤κ
+Ex(e−qτ −X (κ)), if x>κ , (9)
+where τ +X (y) and τ −X (y) are the ﬁrst passage times of X to level y ∈I from below and above, respectively,
+τ ±X (y) := inf {t> 0 : Xt ≷y}, ∀y ∈I. (10)
+The functions φ±q (·) are also closely related to two-sided exit problems of X. Speciﬁcally, we have:
+Lemma 2.1. Lehoczky (1977) Suppose that l<y ≤x ≤z <r, then for q >0, we have
+Ex(e−qτ −X (y)1{τ −X (y)<τ +X (z)}) = φ−q (x)φ−q (y)ψq(z) −ψq(x)ψq(z) −ψq(y),
+Ex(e−qτ +X (z)1{τ −X (y)>τ +X (z)}) = φ−q (x)φ−q (z)ψq(x) −ψq(y)ψq(z) −ψq(y),
+whereψq :I ↦→ R+ is a strictly increasing function deﬁned as
+ψq(x) := φ+q (x)φ−q (x), ∀x ∈I. (11)
+Remark 2.4. By the boundary behavior of X, we have φ−q (l+) = φ+q (r−) = ∞, hence ψq(I) = (0, ∞). See
+(Borodin and Salminen, 2002, p. 18-19) for more details.
+2.2 Standing Assumption and its Implications
+We now discuss the following standing assumption on the reward func tion h(·).
+Assumption 2.1. The reward function h(·) is increasing, twice diﬀerentiable on I, and there is an x0 in
+the interior of I such that
+(L −q)h(x) ≥ 0 if and only if x ≤x0. (12)
+Moreover, we have
+lim
+x→r
+h(x)
+φ+q (x) < supx>x0
+h(x)
+φ+q (x) < ∞, (13)
+Remark 2.5. By (Dayanik and Karatzas, 2003, Proposition 5.10), it is eas ily seen that Assumption 2.1
+ensures the ﬁniteness of the upper bound in (7) for all x ∈ I. Moreover, the assumption implies that the
+optimal stopping time for the upper bound is of threshold typ e, as proved in the following lemma.
+Lemma 2.2. Under Assumption 2.1, there is an x⋆ ∈ [x0,r ) such that,
+sup
+τ ∈T
+Ex(e−rτh(Xτ )1{τ< ∞}) = Ex(e−rτ +X (x⋆)h(Xτ +X (x⋆))1{τ +X (x⋆)<∞}).
+Lemma 2.2 shows that Assumption 2.1 is suﬃcient for the optimality of u pcrossing strategy T +x⋆ in optimal
+stopping problem sup τ ∈T Ex(e−rτh(Xτ )1{τ< ∞}), where x⋆ is a constant in ( x0,r ). Since h(Xτ ) represents
+the proceeds from selling the risky asset, the economic insight of Le mma 2.2 is that, under no constraint (i.e.
+6
+no trailing stop), it is optimal to sell the asset when its price is suﬃcien tly high. Thus, apart from analytical
+tractability considerations, Assumption 2.1 is also economically reaso nable for our trading problem.
+Remark 2.6. We give a few examples in which Assumption 2.1 holds. First, l et h(x) = x −K for some
+constant K > 0, and X· be the Black-Scholes model, i.e. µ(x) = µx,σ (x) = σx for all x ∈ I = R+,
+with constants µ < q,σ >0.4 Second, we can let h(x) = x and X· be the Ornstein-Uhlenbeck process, i.e.
+µ(x) = λ(θ −x) and σ(x) = σ for x ∈I = R, with constants λ,σ > 0 and θ ∈ R.
+3 Optimal Trading with a Fixed Stop-Loss
+To gain some intuition for our solution method for the problem in (4) wit h a trailing stop, we ﬁrst consider the
+optimal stopping problems when the investor uses a ﬁxed stop-loss exit instead of a trailing stop. Precisely,
+arbitrarily ﬁx a y ∈I, we consider the following class of problems indexed by y:
+Vy(x) := sup
+τ ∈T Sy
+Ex(e−qτh(Xτ )1{τ< ∞}), (14)
+where T Sy is the set of all stopping times of X that stops no later than the ﬁrst passage time to level y, i.e.
+τ −X (y) = inf {t> 0 : Xt<y }, (15)
+and c ∈ [0, supx∈I (Vy(x) −h(x))) is a transaction fee for asset acquisition. The problem in (14) pu ts a
+mandatory liquidation constraint upon hitting the ﬁxed stop-loss lev el y from above.
+The special cases of the problem in (14) with the reward function h(x) = x −c driven by the OU and
+CIR processes have been studied in Cartea et al. (2015); Leung an d Li (2015); Leung et al. (2014, 2015). In
+this section, we present the analysis of problem (14) driven by a gen eral linear diﬀusion.
+3.1 Optimal Liquidation Subject to a Stop-loss Exit
+We now study the optimal liquidation problem (14) where X follows a general linear diﬀusion (see (1)). To
+facilitate our analysis, we also consider the extended case of (14) f or y =l, in which case we have
+Vl(x) = sup
+τ ∈T
+Ex(e−qτh(Xτ )1{τ< ∞}). (16)
+Notice that the value function Vl(·) has already been derived in Lemma 2.2.
+Remark 3.1. For each ﬁxed x ∈I, the mapping y ↦→Vy(x) is obviously non-increasing over [l,r ).
+Remark 3.2. The connection between (4) and (14) can be seen as follows. For any x, ¯x ∈ I such that
+x ∈ (f (¯x), ¯x], by the Px,¯x-a.s. inequality that ρf ≤ τ −X (f (¯x)), we know that T Tf ⊂ T Sf (¯x). Hence, vf (x, ¯x) ≤
+Vf (¯x)(x). As a consequence, if we deﬁne the optimal liquidation regio ns
+ST,Lf (¯x) :={x ∈ (l, ¯x] : vf (x, ¯x) = h(x)}, ∀¯x ∈I, (17)
+SS,Ly :={x ∈I :Vy(x) = h(x)}, ∀y ∈I, (18)
+4It is well-known that if µ ≥ q, then the optimal stopping region is the empty set.
+7
+then we have (
+SS,Lf (¯x) ∩ (l, ¯x]) ⊂ S T,Lf (¯x), ∀¯x> 0.
+Additionally, if ¯x ∈ S S,Lf (¯x) then we have (SS,Lf (¯x) ∩ (l, ¯x]) = ST,Lf (¯x), since in this case it is optimal to liquidate
+beforeX reaching a new maximum.
+Proposition 3.1. Under Assumption 2.1, for any ﬁxed y ∈ (l,x 0), there is a ﬁnite threshold b(y) ∈ (x0,r )
+such that 5
+Vy(x) = Ex(e−q(τ +X (b(y))∧τ −X (y))h(Xτ +X (b(y))∧τ −X (y))), ∀x ∈I. (19)
+Hereb(y) can be identiﬁed as the smallest solution over (x0,r ) to
+h′(b) −h(b)φ−,′q (b)φ−q (b) = φ−q (b)ψ′q(b)ψq(b) −ψq(y) ( h(b)φ−q (b) − h(y)φ−q (y) ). (20)
+Moreover, the mapping y :↦→b(y) is strictly decreasing and diﬀerentiable over (l,x 0), with limits b(x0−) = x0,
+and b(l+) ≤x∗ <r , where x∗ is deﬁned in Lemma 2.2.
+Corollary 3.1. If y ∈ [x0,r ), then the stopping region SS,Ly =I, i.e. there is no continuation region.
+4 Optimal Trading with a Trailing Stop
+In this section, we apply the results we obtained to study the optima l liquidation problem (4) and the optimal
+acquisition problem (8).
+4.1 Optimal Liquidation
+Returning to the problem in (4), we will ﬁrst using results in Theorem 3 .1 to construct a candidate threshold
+type strategy for liquidation before the trailing stop ρf .
+Corollary 4.1. There is a unique b⋆f ≥x0 such that b(f (¯x))> ¯x if and only if ¯x<b ⋆f . Moreover, b⋆f can be
+identiﬁed as the unique solution over (x0,f −1(x0)) to Γ(¯x) = 0 , where
+Γ(¯x) := 1ψ′q(¯x) ( h′(¯x)φ−q (¯x) − h(¯x)φ−,′q (¯x)(φ−q (¯x))2 ) − 1ψq(¯x) −ψq(f (¯x)) ( h(¯x)φ−q (¯x) − h(f (¯x))φ−q (f (¯x)) ). (21)
+Moreover, Γ(¯x)> 0 if l< ¯x<b ⋆f , and Γ(¯x)< 0 if f −1(x0)> ¯x>b ⋆f .
+Remark 4.1. We brieﬂy explain the rationale behind the characterizatio n of b⋆f in Corollary 4.1 here.
+Instead of solving the stopping problem with a trailing stop (4) optimally, let us consider a sub-optimal,
+myopic strategy. The strategy that will be considered is the optimal strategy given in Theorem 3.1 when
+y = f (x), where x is the initial level of the running maximum. We call this stra tegy myopic because the
+strategy is obtained by ﬁxing a stop-loss level, instead of a llowing the stop level moving along with the running
+maximum. Typically, it is impossible to attain the optimal m yopic stopping threshold without establishing
+a new high for the running maximum, unless the initial maximu m level is already suﬃciently high. The
+5Notice that in the expectation (19) we don’t have the indicat or 1{τ +X (b(y))∧τ −X (y)<∞}, as it is equal to 1 almost surely.
+8
+thresholdb⋆f is the critical level beyond which, the above myopic strateg y becomes optimal. In fact, when the
+initial running maximum x =b⋆f , the optimal stopping threshold for the ﬁxed stop-loss leve l at y =f (b⋆f ) is
+exactly at b⋆f . Hence, (21) is obtained by imposing (20) to hold when b =x and y =f (x).
+Let us suppose for now that ¯x ≥b⋆f . Then,
+1. If we still have f (¯x) < x0, then by the deﬁnition of b⋆f given in Corollary 4.1, we have b(f (¯x)) ≤ ¯x.
+Thus, by Remark 3.2,
+h(x) ≤vf (x, ¯x) ≤Vf (¯x)(x), ∀x, ¯x ∈I with x ≤ ¯x,
+((l,f (¯x)] ∩ [b(f (¯x)), ¯x]) ≡
+(
+SS,Lf (¯x) ∪ (l, ¯x]) = ST,Lf (¯x).
+2. If f (¯x) ≥x0, then by Corollary 3.1, we can use the same argument as above to co nclude that (l, ¯x] ≡(
+SS,Lf (¯x) ∩ (l, ¯x]) = ST,Lf (¯x).
+As a consequence we obtain the following theorem:
+Theorem 4.1. Under Assumption 2.1, for x, ¯x ∈I with x ≤ ¯x and ¯x ≥b⋆f , we have
+vf (x, ¯x) ≡Vf (¯x)(x).
+So the optimal stopping time is ρf ∧τ +X (b(f (¯x))).
+In what follows we consider the remaining case l < x≤ ¯x < b⋆f and we shall establish the optimality of
+the stopping rule τ +X (b⋆f ) ∧ρf . To this end, we ﬁrst calculate the associated value of this strateg y, denoted
+by uf (x, ¯x). In particular, by the strong Markov property of X, applying Lemma 2.1 we have for any
+x ∈ (f (¯x), ¯x) with ¯x<b ⋆f ,
+uf (x, ¯x) := Ex,¯x(e−r(ρf ∧τ +X (b⋆f ))h(Xρf ∧τ +X (b⋆f ))))
+=h(f (¯x))Ex(e−qτ −X (f (¯x))1{τ −X (f (¯x))<τ +X (¯x)}) +uf (¯x, ¯x)Ex(e−qτ +X (¯x)1{τ +X (¯x)<τ −X (f (¯x))})
+=φ−q (x)
+( h(f (¯x))
+φ−q (f (¯x))
+ψq(¯x) −ψq(x)
+ψq(¯x) −ψq(f (¯x)) + uf (¯x, ¯x)φ−q (¯x) ψq(x) −ψq(f (¯x))ψq(¯x) −ψq(f (¯x)) ), (22)
+where for ¯x<b ⋆f , we have
+uf (¯x, ¯x)
+φ−q (¯x) =
+h(b⋆f )
+φ−q (¯x) E¯x,¯x(e−qτ +X (b⋆f )1{τ +X (b⋆f )<ρf }) + 1φ−q (¯x) E¯x,¯x(e−qρfh(Xρf )1{ρf<τ +X (b⋆f )}). (23)
+The two expectations in (23) can be computed using standard calcu lation using excursion theory:
+Lemma 4.1. For any b> ¯x, we have
+E¯x,¯x(e−qρfh(Xρf )1{ρf<τ +X (b)}) = φ−q (¯x)
+∫ b
+¯x
+h(f (v))
+φ−q (f (v))
+ψ′q(v)
+ψq(v) −ψq(f (v)) exp(−
+∫ v
+¯x
+ψ′q(u) du
+ψq(u) −ψq(f (u)) )dv,
+and
+E¯x,¯x(e−qτ +X (b)1{τ +X (b)<ρf }) = φ−q (¯x)φ−q (b) exp(− ∫ b¯x ψ′q(u)duψq(u) −ψq(f (u)) ).
+9
+In particular, as b →r we obtain the value of the plain trailing stop (deﬁned in (6))
+gf (¯x, ¯x) = φ−q (¯x)
+∫ r
+¯x
+h(f (v))
+φ−q (f (v))
+ψ′q(v)
+ψq(v) −ψq(f (v)) exp(−
+∫ v
+¯x
+ψ′q(u) du
+ψq(u) −ψq(f (u)) )dv,
+and for f (¯x)<x ≤ ¯x,
+gf (x, ¯x) = φ−q (x)
+( (hf (¯x))
+φ−q (f (¯x))
+ψq(¯x) −ψq(x)
+ψq(¯x) −ψq(f (¯x)) + gf (¯x, ¯x)φ−q (¯x) ψq(x) −ψq(f (¯x))ψq(¯x) −ψq(f (¯x)) ).
+To establish the optimality of τ +X (b⋆f ) ∧ρf when 0 <x ≤ ¯x<b ⋆f , we need to show that the value of the
+ruleuf (x, ¯x) dominates the reward function h(x). This claim can be proved by using (22) and the optimality
+of b⋆f (see Corollary 4.1).
+Lemma 4.2. For all ¯x ∈ (l,b⋆f ) and x ∈ (f (¯x), ¯x], we have uf (x, ¯x)>h (¯x).
+Lemma 4.2 says that waiting until τ +X (b⋆f ) ∧ρf yields positive “time value” uf (x, ¯x) −h(x) > 0 for all
+f (¯x) < x ≤ ¯x < b⋆f , so this region should be part of the optimal continuation region. On the one hand,
+before hitting b⋆f , this region is obviously the maximum possible continuation region. Fur thermore, upon
+hitting b⋆f we have ¯x =b⋆f , and the case has already been treated in Theorem 4.1, which sugge st immediate
+stopping at τ +X (b⋆f ). So we know that the stopping time τ +X (b⋆f ) ∧ρf is optimal for problem (4) if ¯x<b ⋆f .
+Theorem 4.2. Under Assumption 2.1, we have for all l<x ≤ ¯x<b ⋆f that,
+vf (x, ¯x) ≡uf (x, ¯x) = Ex,¯x(e−q(τ +X (b⋆f )∧ρf ))h(Xτ +X (b⋆f )∧ρf ),
+where b⋆f is deﬁned in Corollary 4.1. Moreover, the mapping f ↦→ b⋆f is non-increasing over all functions
+satisfying (2).
+Proof. The only claim that needs a proof is the monotonicity of f ↦→b⋆f . But that is due to Remark 2.2 and
+the structure of the optimal stopping region.
+Corollary 4.2. The value of the plain trailing stop gf (x, ¯x) given in Lemma 4.1 is ﬁnite. Moreover, for any
+f (¯x)<x ≤ ¯x<b ⋆f , the early liquidation premium given the trailing stop ρf is given by
+pf (x, ¯x) = φ−q (x)φ−q (b⋆f )ψq(x) −ψq(f (¯x))ψq(¯x) −ψq(f (¯x)) exp(∫ b⋆f¯x −ψ′q(u)duψq(u) −ψq(f (u)) ) (h(b⋆f ) −gf (b⋆f,b⋆f )),
+where gf (b⋆f,b⋆f ) is given in Lemma 4.1. If f (¯x)< x0, ¯x ≥b⋆f and f (¯x)<x <b (f (¯x)) (see Proposition 3.1
+for the existence of b(y)), then the early liquidation premium given the trailing sto p ρf is
+pf (x, ¯x) = φ−q (x)φ−q (b(f (¯x))) ψq(x) −ψq(f (¯x))ψ(b(f (¯x))) −ψq(f (¯x)) (h(b(f (¯x))) −gf (b(f (¯x)), ¯x)).
+Finally, if f (¯x)<x 0, ¯x ≥b⋆f andb(f (¯x)) ≤x ≤ ¯x, or f (¯x) ≥x0 andf (¯x)<x ≤ ¯x, then the early liquidation
+premium given the trailing stop ρf is
+pf (x, ¯x) =h(x) −gf (x, ¯x).
+10
+Remark 4.2. If the ﬁrst inequality in (13) is an equality, then the optimal threshold b⋆f may be at the
+boundary r, in which case, it will be optimal not to liquidate before the trailing stop. That is, pf (x, ¯x) = 0
+for all x, ¯x ∈I such that x ∈ (f (¯x), ¯x].
+4.2 Optimal Acquisition with a Trailing Stop
+In this section, we solve the optimal stopping problem related to acq uisition with a trailing stop, which we
+recall as follows:
+v(1)f (x) = supτ ∈T Ex(e−qτ (vf (Xτ,Xτ ) −hb(Xτ ))1{τ< ∞}), (24)
+where T is the set of all stopping times of X, and supx∈I (vf (x,x ) −hb(x))> 0.
+Let us deﬁne the optimal acquisition region with a trailing stop as
+ST,Af := {x ∈I :v(1)f (x) = vf (x,x ) −hb(x)}.
+Following (Dayanik and Karatzas, 2003, Proposition 5.10) and (23), to determine ST,Af , it suﬃces to obtain
+the smallest concave majorant of
+H (1)(z) := vf (x,x ) −hb(x)φ−q (x) , where z =ψq(x) ∈ R+,x ∈I. (25)
+In light of Theorem 4.1, we know that for x ≥b⋆f , we have vf (x,x ) −hb(x) = h(x) −hb(x) ≤ 0, so we must
+have ST,Af ⊂I\[b⋆f,r ) = (l,b⋆f ). Therefore, if we denote by
+z⋆f := sup arg maxz∈R+H (1)(z). (26)
+Then we have H (1)(z⋆f ) > 0 (since sup x>0(vf (x,x ) −hb(x)) > 0), and z⋆f ∈ [0,ψq(b⋆f )), and the smallest
+concave majorant of H (1)(·) over [z⋆f, ∞) must be given by the constant function H (1)(z⋆f ), so we can deduce
+that ST,Af ⊂ (l,ψ −1q (z⋆f )]. However, no further information about ST,Af is available under general diﬀusions,
+mainly due to lack of information about the concavity of H (1)(·). In fact, as seen in Lemma 4.3 below,
+even in the special case hb(·) ≡ h(·), function H (1)(·) over (0 ,ψq(b⋆f )) is the diﬀerence between a convex
+function Hf (·) over (0 ,ψq(b⋆f )) and a function H(·) that is convex over (0 ,ψq(x0)) and is strictly concave
+over (ψq(x0),ψq(b⋆f )), so we only know that H (1)(·) is convex on ( ψq(x0),ψq(b⋆f )), but the concavity of this
+function over (0,ψq(x0)) is not available to us.
+Lemma 4.3. Consider function
+Hf (z) := vf (x,x )φ−q (x) , H (z) := h(x)φ−q (x), wherez =ψq(x) ∈ R+. (27)
+ThenHf (·) is convex on (0,ψq(b⋆f )), and H(·) is strictly concave on (ψq(x0), ∞) and is convex on (0,ψq(x0)).
+Remark 4.3. If X follows the Black-Scholes model with drift µ < q, and volatility σ > 0, then as in
+Leung et al. (2015), it is never optimal to acquire the stock g iven h(x) = x −cs and hb(x) = x +cb, with
+transaction fees cs > 0 and cb ≥ 0. To see this, we recall that vf (x,x ) < V0(x) = 1{x<b}(xb )β+ (b −cs) +
+1{x≥b}(x −cs), where β+ =δ +
+√
+δ2 + 2qσ2 > 1 with δ = µσ2 − 12 , and b = βcsβ−1 . The convexity of V0(·) implies
+thatV0(x) −h(x)<c s for all x ∈ R+, so vf (x,x ) −h(x)<c s for all x ∈ R+, for any ﬂoor function f (·) that
+11
+satisﬁes (2). Thus, we have vf (x,x ) −hb(x) = vf (x,x ) −h(x) − (cb +cs)< −cb ≤ 0, so the payoﬀ function
+for problem (24) to be negative throughout R+, yielding an empty optimal stopping region. For some other
+forms of h(·), one may obtain a non-empty stopping region for problem (24) (see Example 4.1 below).
+Example 4.1. Assuming that µ(x) = µx,σ (x) = σx,h (x) = hb(x) = x −Kx −ǫ for all x ∈I ≡ R+, where
+µ ∈ R such that µ<q , and σ,K > 0 and ǫ ≥ 0 such that 12σ2ǫ(ǫ + 1) −µǫ −q <0. Let f (x) = (1 −α)x for
+some α ∈ (0, 1). Then we have ST,Af = (0,b⋆f ], where b⋆f := ψ−1q (z⋆f ) with z⋆f given in (26), or equivalently,
+with z⋆f as the unique root to (50) in the Appendix. That is, for all x ∈I
+v(1)f (x) = Ex(e−qτ −X (b⋆f )(vf (Xτ −X (b⋆f ),Xτ −X (b⋆f )) −hb(Xτ −X (b⋆f )))1{τ −X (b⋆f )<∞}).
+In general, one can analyze the concavity of H (1)(·) (and hence the optimal stopping region) on a case-
+by-case basis with possibly helps of numerical computation. To demo nstrate the idea, let us deﬁne
+z⋆f :=ψq(b⋆f ), ϕ (z) := ψq(f (ψ−1q (z))), ∀z ∈ R+. (28)
+It is clear that ϕ(·) is an increasing function such that 0 < ϕ(z) < z. From Lemma 4.1 we have for all
+z ∈ (0,z⋆f )
+Hf (z) = exp(−
+∫ z⋆f
+z
+dν
+ν −ϕ(ν) )H(z⋆f ) +
+∫ z⋆f
+z
+H(ϕ(ν)) exp(−
+∫ ν
+z
+dw
+w −ϕ(w) ) dνν −ϕ(ν), (29)
+where Hf (·) is deﬁned in (27). To obtain the smallest concave majorant of H (1)(z) = Hf (z) −H(z) −
+c/φ−q (ψ−1q (z)), we need to numerically evaluate Hf (·). To that end, it will be more convenient to rewrite
+(29) into an equivalent ﬁrst-order linear ODE form:
+
+
+
+H ′f (z) = Hf (z) −H(ϕ(z))z −ϕ(z) , ∀z ∈ (0,z⋆f ),
+subject to Hf (z⋆f ) = H(z⋆f ).
+(30)
+Then we can use Mathematica’s NDSolve command to eﬃciently compute the values of H (1)(·) and its
+derivatives.6
+5 Case Study: Trading with a Trailing Stop under the Exponent ial
+OU Model
+In this section, we apply our results in Section 4 to an exponential Or nstein-Uhlenbeck (OU) model:
+dXt =Xt
+(
+λ(θ − logXt) + 12σ2
+)
+dt +σXtdWt, X 0 =x ∈I ≡ R+, (31)
+whereW is a standard Brownian motion, λ,σ > 0 are positive constants, and θ ∈ R is the long term average
+for the log-price log X:
+d(logXt) = λ(θ − logXt)dt +σdWt.
+6The procedure can be conveniently generalized to allow for d istinct discounting rates for the acquisition and liquidat ion
+problems.
+12
+0.2 0.4 0.6 0.8 1.0 1.2 1.4
+1
+2
+3
+(a) Hf (z) vs. H(z)
+1.5 2.0 2.5 3.0
+1.5
+2.0
+2.5
+3.0
+(b) vf (x, x) vs. h(x)
+0.5 1.0 1.5 2.0
+-0.05
+0.05
+0.10
+0.15
+0.20
+(c) H (1)(z) and its concave majorant
+1.5 2.0 2.5 3.0
+0.2
+0.4
+0.6
+0.8
+1.0
+1.2
+(d) v(1)f (x) vs. vf (x, x) − hb(x)
+Figure 2: Numerical results under the exponential OU model (31): (a) Plots of function H(z) (dashed gray)
+and Hf (z) (solid black). The “pasting point” ψq(b⋆f ) = 1 .0674 is indicated by the black dot. (b) Plots of
+the reward function h(x) (dashed gray) and the value function vf (x,x ) (solid black). The “pasting point”
+is b⋆f = 2.8845 (black dot). (c) Plots of the reward function H (1)(z) (dashed gray) and its smallest concave
+majorant (solid black), along with the “pasting point” ¯ z⋆f = 0.5441 (black dot). (d) Plots of the reward
+functionvf (x,x ) −hb(x) (dashed gray) and the value function v(1)f (x) (solid black), and the “pasting point”
+b⋆f = 1.9488 (black dot).
+With reference to (9), it is well-known (see p.542 of Borodin and Salmin en (2002)) that
+φ+q (x) =e λ2σ2 (y−θ)2D− qλ ( √2λσ (y −θ)),
+φ−q (x) =e λ2σ2 (y−θ)2D− qλ ( √2λσ (θ −y)),
+wherey = logx, and Dν(·) is the parabolic cylinder function with parameter ν. We are interested in optimal
+liquidation and acquisition of one unit of an risky asset whose price is mo deled by X. To that end, we let
+h(x) = x −c0, ,h b(x) = x +c0, ∀x ∈I,
+where c0 ≥ 0 is a transaction cost to buy or sell. Then it follows that, for any q >0
+(L −q)h(x) =
+(
+λ(θ − logx) + 12σ2 −q)x +qc0, ∀x ∈I,
+which is a strictly decreasing function with range equal to R. Moreover, by the asymptotic behavior of Dν(·)
+(see e.g. equation (1.8) of Temme (2000)), we know that the rewar d function h(·) satisﬁes Assumption 2.1.
+A number of related studies, such as Zhang and Zhang (2008); Zer vos et al. (2013); Leung and Wang (2018),
+have also analyzed the optimal buy-low-sell-high strategy under th e OU or exponential OU model, with or
+without a ﬁxed stop-loss exit. Compared to them, we study a diﬀere nt optimal stopping problem with a
+random maturity due to the trailing stop.
+13
+5.1 Value Function and Optimal Strategy
+Upon purchasing of the asset, we set a percentage drawdown tra iling stop, i.e. f (x) = (1 −α)x, where
+α ∈ (0, 1) is a constant.
+In this study, we select the following parameter values:
+λ = 0.6,θ = 1,σ = 0.2,q = 0.05,c 0 = 0.02,α = 0.3. (32)
+This means that we will liquidate the asset whenever its price drops fr om its running maximum since the
+acquisition by more than 30%.
+In Figure 2(a), we plot the function H(·) deﬁned as in (27). We also have plotted the function Hf (·)
+deﬁned as in (23) (see also (29)), which is obtained by ﬁrst solving eq uation (21) with f (x) = (1 −α)x for
+b⋆f (= 2.8845), and then using ODE (29) to numerically obtain Hf (·). We notice that, in contrast to the value
+function for a ﬁxed stop-loss level (Theorem 3.1, see also Leung an d Li (2015)), the function Hf (·) is not
+concave over (0,ψq(b⋆f )). This is because, although φ−q (x)Hf (ψq(x)) = vf (x,x ) is the value function for the
+optimal stopping problem (4) when x = ¯x, it does not yield a martingale of ( Xt,Xt), which requires using
+the function vf (x, ¯x), not vf (x,x ).
+In Figure 2(b), we plot the reward function h(x) and the value function vf (x,x ) for the optimal liquidation
+problem (4) with x = ¯x.
+In Figure 2(c), we plot the function H (1)(z) deﬁned in (25) under the current exponential OU model.
+By checking the function’s derivative numerically, we conclude that it is concave to the left of its maximum
+point. Hence, the smallest concave majorant is given by
+ˆH (1)f,q (z) = H (1)(z ∧z⋆f ), ∀z ∈ R+.
+Therefore, in this case, the optimal acquisition strategy is to purc hase the asset once the price is lower than
+b⋆f = 1.9488.
+In Figure 2(d), we plot the function vf (x,x ) −hb(x) and the value function v(1)f (x) for the optimal
+acquisition problem (8), and the “pasting point” is at ψ−1q (¯z⋆f ) = 1.9488.
+In summary, for the exponential OU model (31) with parameters a s given in (32), the optimal trading
+strategy is to purchase the asset when price is lower than ψ−1q (¯z⋆f ) = 1 .9488, and setup the 30% trailing
+stop order as an exit plan, and then wait until either the trailing stop is being activated or the price reaches
+target b⋆f = 2.8845.
+Lastly, in Figure 3 we plot the early liquidation premium of ρf ∧τ +X (b⋆f ) over the plain trailing stop ρf
+when x = ¯x. This measure the “value” of our result in problem (4). By Corollary 4 .2, we know that, for
+eachx ∈I,
+pf (x,x ) = exp(
+∫ b⋆f ∨x
+x
+−ψ′q(u)du
+ψq(u) −ψq(f (u)) )
+(
+h(b⋆f ∨x) −gf (b⋆f ∨x,b⋆f ∨x)). (33)
+To numerically evaluate (33), we use the fusion of a “limiting order” τ +X (b) and the trailing stop ρf , with b
+chosen suﬃciently large so that
+Ex(e−q(τ +X (b)∧ρf )1{τ +X (b)<ρf })< 0.005,
+0<h (b)Ex(e−q(τ +X (b)∧ρf )1{τ +X (b)<ρf })< 0.03,
+14
+1.5 2.0 2.5 3.0 3.5 4.0
+0.4
+0.6
+0.8
+1.0
+1.2
+Figure 3: Earlier liquidation premium (black) pf (x,x ) and function x −f (x) = αx (dashed) under the
+exponential OU model (31).
+for all x in the plotting region of Figure 3. Then gf (x,x ) is approximated by the value of this strategy, which
+is subsequently solved using an ODE similar as (30).
+In Figure 3, we compare the early liquidation premium pf (x,x ) with the function x−f (x) = αx (α = 0.3),
+which is the maximum loss of the trailing stop order if the price X reaches the trailing ﬂoor immediately
+(but without an overshoot). We notice that, for large x, the gain from our strategy over the plain trailing
+stop approaches 30% of the price level. Take into account of discou nting and transaction costs, this example
+suggests that setting a trailing stop when the asset price is high will a lmost always incur a 30% loss at exit.
+5.2 Sensitivity Analysis and Financial Interpretations
+The following illustrative numerical examples will shed light on the sensit ivity of the optimal acquisition and
+liquidation thresholds, b⋆f and b⋆f , with respect to the trailing stop level α, and transaction cost c0. This
+involve numerical computation of the thresholds, as well as the crit ical level where function ( L − q)h(x)
+vanishes. In Figure 4(a), we plot ( b⋆f,x 0,b⋆f ) as a function of the trailing stop level α, with x0 (the dashed
+line) deﬁned in Assumption 2.1. The optimal liquidation level b⋆f is increasing in α, conﬁrming our result
+in Theorem 4.2. Moreover, the optimal acquisition level b⋆f is also increasing in α. Recalling that a higher
+α means a lower trailing stop trigger, this means that a larger downside protection induces the investor
+to enter the market earlier. As seen in Figure 4(a), the investor wit h a higher α will acquire the asset at
+a price level closer to the critical level x0. Our numerical results also suggest that, for small α, it may
+not be optimal to initiate the position at all, because the gain to be rea lized at the sell order at b⋆f or
+at the trailing stop will be too low compared to the transaction cost c0. In such cases, we observe that
+supx∈R(vf (x,x ) −h(x))<c 0 = 0.02.
+In Figure 4(b), we plot ( b⋆f,x 0,b⋆f ) as a function of the asset’s volatility parameter σ. We see that,
+as σ increases, the optimal liquidation level increases, thanks to stron ger force from the Brownian motion.
+However, the acquisition price level is lower for higher σ, which means that the investor is willing to establish
+a position at a lower price. However, higher volatility will increase the lik elihood for the asset price to reach
+low levels earlier, so the actual entry time by the investor may be ear lier or later. The decreasing pattern of
+b⋆f with respect to σ suggests that the investor voluntarily lowers the take-proﬁt leve l to mitigate the risk of
+realizing a reduced proﬁt or a loss at the trailing stop in a more volatile m arket.
+Figure 4(c) illustrates the eﬀect of the asset’s rate of mean rever sion λ. A higher λ means that the
+15
+0.15 0.20 0.25 0.30 0.35 0.401.8
+2.0
+2.2
+2.4
+2.6
+2.8
+3.0
+(a) ( b⋆f , x0, b⋆f ) vs. α
+0.15 0.20 0.25 0.30 0.35 0.40
+2.0
+2.5
+3.0
+(b) ( b⋆f , x0, b⋆f ) vs. σ
+0.4 0.6 0.8 1.0 1.2
+1.8
+2.0
+2.2
+2.4
+2.6
+2.8
+3.0
+(c) ( b⋆f , x0, b⋆f ) vs. λ
+0.01 0.02 0.03 0.04
+2.0
+2.2
+2.4
+2.6
+2.8
+(d) ( b⋆f , x0, b⋆f ) vs. c0
+Figure 4: Sensitivity of thresholds b⋆f (black), b⋆f (gray), and the root x0 (red dashed) of ( L −q)h(x) = 0,
+under the exponential OU model (31): (a) Dependence on α ∈ [0.1, 0.4]; (b) Dependence of on σ ∈ [0.1, 0.4];
+(c) Dependence of on λ ∈ [0.2, 1.2], and (d) Dependence of on c0 ∈ [0, 0.04]. In all ﬁgures, other parameters
+are set as in (32).
+log-price will move around its long-term mean θ faster. As a response, the investor enters the market earlier
+at a higher entry level and exit at a lower level, resulting in a quick roun dtrip, as reﬂected in the plot by
+the increasing trends of b⋆f and b⋆f with respect to λ. Moreover, their distance is shrinking as λ continues
+to increase. Intuitively, since the asset price tends to rapidly reve rt to the mean, it does not make sense to
+select entry and exit price levels that are far apart and away from t he mean as the chance of execution is
+too low.
+The eﬀect of transaction cost c0 is shown in Figure 4(d), where we plot ( b⋆f,x 0,b⋆f ) as a function of c0.
+The optimal liquidation level b⋆f increases slightly with respect to c0 while the optimal acquisition level b⋆f
+decreases in c0. To interpret, higher transaction costs discourage both acquisit ion and liquidation, though
+the eﬀect is not signiﬁcant. Nevertheless, as pointed out in our ana lysis above, while there is always a
+ﬁnite optimal liquidation price b⋆f given any transaction cost, a high transaction cost may make the t rade
+unproﬁtable and thus exclude market entry.
+A Proofs
+Proof of Lemma 2.2. Following Dayanik and Karatzas (2003), let us deﬁne For any b ∈I, let us deﬁne
+H(z) := h(x)φ−q (x), where z =ψq(x) ∈ R+. (34)
+By (Dayanik and Karatzas, 2003, Proposition 5.11), we know that t he value function
+V (x) := sup
+τ ∈T
+Ex(e−rτh(Xτ )1{τ< ∞}),
+16
+is given by φ−q (x) ˆH(ψq(x)), where ˆH(·) is the smallest nonnegative concave majorant of H(·) on R+. On
+the other hand, by (Dayanik and Karatzas, 2003, Section 6), we h ave
+H ′′(z) = 2σ2(x)φ−q (x)(ψ′q(x))2 ((L −q)h(x)), for z =ψq(x).
+So Assumption 2.1 implies that H(·) is convex on (0 ,ψq(x0)), and concave on ( ψq(x0), ∞). We now examine
+the behavior of H(·) near 0 and ∞. From (34) we know that,
+1. if h(l+) ≥ 0, then h(l+) is ﬁnite, and H(0+) = limx↓l h(x)φ−q (x) = 0;
+2. if h(l+)< 0, then H(z)< 0 for suﬃciently small z >0.
+Moreover, from
+F (z) := H(z)z = h(x)φ+q (x), where z =ψq(x)
+we know H(z) > 0 for suﬃciently large z > 0. Here, function F (·) is twice continuously diﬀerentiable on
+R+, and by Assumption 2.1 we know that sup z≥ψq(x0)F (z) = F (z∗) for some z∗ ∈ [ψq(x0), ∞). Obviously
+F (z∗)> 0, which implies that H(z) = h(x)φ−q (x) > 0 for all z >z∗ sinceh(·) is monotone. Furthermore, z∗ must
+satisfy the ﬁrst order condition
+1
+z∗
+(H ′(z∗) −F (z∗)) = 0. (35)
+Now deﬁne function
+˜H(z) = F (z∗)z1{z<z∗} +H(z)1{z≥z∗},
+which is clearly continuously diﬀerentiable and concave on R+, thanks to (35). Function ˜H(·) is also positive
+on R+, which is evident from the construction. Hence we conclude that ˜H(·) is the smallest concave majorant
+of H(·). So the optimal stopping region is given by
+ψ−1q ({z ∈ R+ : ˜H(z) = H(z)}) = (ψ−1q (z∗),r ).
+Therefore, x⋆ =ψ−1q (z∗) is the optimal stopping threshold.
+Proof of Proposition 3.1. The proof is similar as that for Lemma 2.2. In the spirit of Dayanik and K aratzas
+(2003), we derive the optimal value function and the stopping regio n by constructing the smallest concave
+majorant of H(z) on [ψq(y), ∞). By the convexity of H(·), we know this concave majorant is given by
+ˆHy(z) =
+
+
+
+H(ψq(y)) z(y) −zz(y) −ψq(y) +H(z(y)) z −ψq(y)z(y) −ψq(y), ∀z ∈ (ψq(y),z (y)),
+H(z), ∀z ⁄∈ (ψq(y),z (y)),
+(36)
+where z(y) is deﬁned as
+z(y) := inf arg max
+z>ψq(x0)
+H(z) −H(ψq(y))
+z −ψq(y) . (37)
+Thus, the optimal stopping region is given by
+SS,Ly =ψ−1q (R+\(ψq(y),z (y))) = (l,y ] ∪ [ψ−1q (z(y)),r ).
+Therefore, the optimal stopping barrier is given by b(y) := ψ−1q (z(y)).
+17
+From Remark 3.1 we know that, for l ≤y1<y 2<x 0, the equalities hold:
+((l,y 1] ∪ [b(y1),r )) ≡ S S,Ly1 ⊂ S S,Ly2 ≡ ((l,y 2] ∪ [b(y2),r )).
+Thus necessarily, b(y2) ≤ b(y1) ≤ b(l) = x∗ < r. Because z(y) is an interior maximizer in the objective
+function in (37), it must satisfy the ﬁrst order condition:
+1
+z(y) −ψq(y)
+(
+H ′(z(y)) − H(z(y)) −H(ψq(y))z(y) −ψq(y) ) = 0. (38)
+This gives (20).
+As y ↑x0, b(y) converges to some limit in [ x0,r ). Suppose that b(x0−) ≡b> x0, then the concavity of
+H(·) over (ψq(x0), ∞) implies that
+H ′(ψq(b)) ≤ H(ψq(b)) −H(ψq(x0))ψq(b) −ψq(x0) .
+However, taking limit in (38) as y ↑ x0, we know that the above inequality is in fact an equality. This,
+together with the concavity of H(·) implies that H(·) is in fact a straight line over [ ψq(x0),ψq(b)], but then
+(by the deﬁnition of z(y), again) we must have b(x0−) = x0 instead.
+We use implicit diﬀerentiation to prove b(y) is strictly decreasing and diﬀerentiable on ( l,x 0). To that
+end, we denote z =z(y) and u =ψq(y), then the ﬁrst order equation in (38) reads as
+f (z,u ) = 0, where f (z,w ) = H ′(z) − H(z) −H(u)z −u .
+By the deﬁnition of z ≡z(y) we have
+∂f
+∂u =H ′(u) − H(z) −H(u)(z −u) < 0,
+∂f
+∂z =H ′′(z) − 1z −uf (z,u ) = H ′′(z)< 0.
+Thus, we know thatz(y) is strictly decreasing and diﬀerentiable in ψq(y). In order words, z(y) is diﬀerentiable
+in y and z′(y)< 0 for any y ∈ (l,x 0).
+Proof of Corollary 4.1. From Theorem 3.1 we know that ¯x ↦→b(f (¯x)) is strictly decreasing and continuous
+over (f −1(l),f −1(x0)), and the mapping ¯x :↦→ ¯x is strictly increasing over the same domain. Therefore, the
+diﬀerence D(¯x) := b(f (¯x)) − ¯x is strictly decreasing, and D(¯x) ≥D(x0)> 0 for all ¯x ∈ (f −1(l),x 0], and by
+Proposition 3.1,
+lim
+¯x↑f −1(x0)D(¯x) = x0 −f −1(x0)< 0.
+As a consequence, we can deﬁne b⋆f := inf {¯x<f −1(x0) : D(¯x) ≤ 0}, and b⋆f ∈ (x0,f −1(x0)), so f (b⋆f ) ≤x0.
+Now for all ¯x<b ⋆f , by the construction of b⋆f we haveb(f (¯x))> ¯x, by deﬁnition of z(f (¯x)) ≡ψq(b(f (¯x)))
+in the proof of Proposition 3.1 we know that z(f (¯x)) > ψq(¯x). Because the line segment l0 connecting
+(ψq(f (¯x)),H (ψq(f (¯x)))) and ( z(f (¯x)),H (ψq(f (¯x)))) gives part of the concave majorant of H(·), we know
+that the line segment l1 connecting (ψq(f (¯x)),H (ψq(f (¯x)))) and ( ψq(¯x),H (ψq(¯x))), which is below line
+segment l0, must go below the graph of H(·) at ψq(¯x). This implies that the derivative of H(·) at ψq(¯x)
+18
+must be strictly greater than that of line segment l1. That is,
+H ′(ψq(¯x))> H(ψq(¯x)) −H(ψq(f (¯x)))ψq(¯x) −ψq(f (¯x)) ⇔ Γ(¯x)> 0.
+On the other hand, for all f −1(x0) > ¯x > b⋆f , we have b(f (¯x)) < ¯x. Using similar argument as above, we
+know that z(f (¯x)) = ψq(b(f (¯x)))<ψ q(¯x). Since the line segment l1 connecting (ψq(f (¯x)),H (ψq(f (¯x)))) and
+(ψq(¯x),H (ψq(¯x))) is a line segment connecting two points on the graph of a concave function ˆH(·), which is
+the smallest concave majorant of H(·) over [ψq(f (¯x)), ∞), we know that
+ˆH ′(ψq(¯x)) = H ′(ψq(¯x))< H(ψq(¯x)) −H(ψq(f (¯x)))ψq(¯x) −ψq(f (¯x)) ⇔ Γ(¯x)< 0.
+Expressing H(·) and its derivative with h(·),φ −q (·),ψq(·) and their derivatives yields (21) and completes the
+proof.
+Proof of Lemma 4.1. Let us denote by eq an exponential random variable with mean 1 /q, which is indepen-
+dent of X. Then we notice that
+E¯x,¯x(e−qρfh(Xρf )1{τ +X (b)<ρf }) =E¯x,¯x(h(Xρf )1{ρf<τ +X (b)∧eq}),
+E¯x,¯x(e−qτ +X (b)1{τ +X (b)<ρf }) =P¯x,¯x(τ +X (b)<ρ f ∧ eq).
+To calculate the right-hand sides of the above, we consider an excu rsion of X belowu (notice that τ +X (u−) =
+inf{t> 0 : Xt ≥u} is the ﬁrst hitting time of X to u):
+ǫu = {ǫu(s) := Xτ +X (u−) −Xτ +X (u−)+s}0<s≤τ +X (u)−τ +X (u−),
+which is deﬁned for all u ≥X0 =X 0 = ¯x such that its lifetime ζ(ǫu) := τ +X (u)−τ +X (u−)> 0. When ζ(ǫu) = 0
+we setǫu =∂, an isolated point. Then the process {(u,ǫu)}u≥¯x is a Poisson point process with jump measure
+du × dnu, where nu is the excursion measure for ǫu. Deﬁne Tf (ǫu) := inf {0<s<ζ (ǫu) : ǫu(s)>u −f (u)}.
+It is known from Salminen et al. (2007) and Lemma 2.1 that,
+nu(eq <ζ (ǫu) ∧Tf (ǫu)) = limx↑u
+1
+u −x
+(
+1 − Ex(e−qτ +X (u)1{τ +X (u)<τ −X (f (u))})) − limx↑u Ex(e−qτ −X (f (u))1{τ −X (f (u))<τ +X (u)})u −x
+=φ−,′q (u)φ−q (u) + (1 − φ−q (u)φ−q (f (u)) ) ψ′q(u)ψq(u) −ψq(f (u)),
+nu(Tf (ǫu)<ζ (ǫu) ∧ eq) = limx↑u
+Ex(e−qτ −X (f (u))1{τ −X (f (u))<τ +X (u)})
+u −x = φ−q (u)φ−q (f (u)) ψ′q(u)ψq(u) −ψq(f (u)).
+Hence,
+nu(eq <ζ (ǫu) ∧Tf (ǫu) or Tf (ǫu)<ζ (ǫu) ∧ eq) = φ−,′q (u)φ−q (u) − ψ′q(u)ψq(u) −ψq(f (u)).
+Let A be the space of all excursions ǫu such that Tf (ǫu)<ζ (ǫu) ∧ eq, and B be the space of all excursions
+ǫu such that eq <ζ (ǫu) ∧Tf (ǫu). We have that A ∩B = ∅. Consider a Poisson process (with time indexed
+by the running maximum X) that jumps whenever the current excursion ǫX ∈A ∪B, then from the above
+19
+calculation, we know that this Poisson process has jump intensity nu(eq < ζ(ǫu) ∧ Tf (ǫu) or Tf (ǫu) <
+ζ(ǫu) ∧ eq). So P¯x,¯x(τ +X (b)< ρf ∧ eq) is the same as the probability that this Poisson process has no jump
+over [¯x,b ), which is given by
+exp(−
+∫ b
+¯x
+nu(eq <ζ (ǫu) ∧Tf (ǫu) or Tf (ǫu)<ζ (ǫu) ∧ eq)du) =φ−q (¯x)φ−q (b) exp(− ∫ b¯x ψ′q(u)duψq(u) −ψq(f (u)) ).
+Moreover, for any v ∈ [¯x,b ), the probability that the Poisson process will have the ﬁrst jump a t “time”
+dv as a result of ǫv ∈A, is given by
+exp(−
+∫ v
+¯x
+nu(eq <ζ (ǫu) ∧Tf (ǫu) or Tf (ǫu)<ζ (ǫu) ∧ eq)du) ·nv(Tf (ǫv)<ζ (ǫv) ∧ eq)dv
+=φ−q (¯x)φ−q (v) exp(− ∫ v¯x ψ′q(u)duψq(u) −ψq(f (u)) ) × φ−q (v)φ−q (f (v)) ψ′q(v)ψq(v) −ψq(f (v)) dv
+= φ−q (¯x)φ−q (f (v)) ψ′q(v)ψq(v) −ψq(f (v)) exp(− ∫ v¯x ψ′q(u)duψq(u) −ψq(f (u)) )dv,
+which is the same as P¯x,¯x(Xρf ∈ dv,ρf < τ+X (b) ∧ eq). The proof is complete by integrating in v over
+[¯x,b ).
+Proof of Lemma 4.2. Let us deﬁne for any b ≥ ¯x
+¯H(ψq(¯x),b ) := H(ψq(b)) exp(−
+∫ b
+¯x
+ψ′q(u) du
+ψq(u) −ψq(f (u)) )
++
+∫ b
+¯x
+ψ′q(v)H(ψq(f (v)))
+w(v) −w(f (v)) exp(−
+∫ v
+¯x
+ψ′q(u)
+ψq(u) −ψq(f (u)) du)dv.
+It is clear that ¯H(ψq(¯x), ¯x) = H(ψq(¯x)) = h(¯x)φ−q (¯x) , and for b> ¯x we have the right derivative of Hf (ψq(¯x),b )
+in b:
+∂
+∂b
+¯H(ψq(¯x),b )
+=ψ′q(b) exp(−
+∫ b
+¯x
+ψ′q(u)du
+ψq(u) −ψq(f (u)) )
+(
+H ′+(ψq(b)) − H(ψq(b)) −H(ψq(f (b)))ψq(b) −ψq(f (b)) ).
+It follows that the sign of ∂∂b ¯H(ψq(¯x),b ) depends on that of
+Γ(b) = H ′(ψq(b)) − H(ψq(b)) −H(ψq(f (b)))ψq(b) −ψq(f (b)) .
+But the latter is known to be positive for all b<b ⋆f , thanks to Corollary 4.1. Because H ′(ψq(·)) is continuous,
+so is Γ( ·). So we know that
+uf (x, ¯x)
+φ−q (x) = ¯H(ψq(¯x),b⋆f ) = H(ψq(¯x)) +
+∫ b⋆f
+¯x
+∂
+∂u
+¯H(ψq(¯x),u )du>H (ψq(¯x)) = h(x)φ−q (x), ∀¯x<b ⋆f.
+This completes the proof.
+20
+Proof of Corollary 4.2. If f (¯x)<x ≤ ¯x<b ⋆f , then by the strong Markov property of X, we have
+pf (x, ¯x) =Ex,¯x([e−qτ +X (b⋆f )h(Xτ +X (b⋆f )) − e−qρfh(Xρf )]1{τ +X (b⋆f )<ρf<∞})
+=Ex,¯x(e−qτ +X (b⋆f )1{τ +X (b⋆f )<ρf }) (h(b⋆f ) − Eb⋆f,b⋆f (e−qρfh(Xρf )1{ρf<∞})),
+where Eb⋆f,b⋆f (e−qρfh(Xρf )1{ρf<∞}) = gf (b⋆f,b⋆f ) is given in Lemma 4.1, which is ﬁnite since we know that it
+is dominated from above by vf (b⋆f,b⋆f ) = h(b⋆f ). On the other hand, by the analysis in (22) and the results
+in Lemma 4.1, we have
+Ex,¯x(e−qτ +X (b⋆f )1{τ +X (b⋆f )<ρf }) = φ−q (x)φ−q (b⋆f )ψq(x) −ψq(f (¯x))ψq(¯x) −ψq(f (¯x)) exp(− ∫ b⋆f¯x ψ′q(u)duψq(u) −ψq(f (u)) ).
+We obtain the claimed formula by combining the above results.
+Iff (¯x)<x 0 and ¯x ≥b⋆f , then from Theorem 3.1 and Theorem 4.1 we know that b(f (¯x)) ≤ ¯x, and for all
+f (¯x)<x<b (f (¯x)),
+pf (x, ¯x) =Ex(e−qτ +X (b(f (¯x)))1{τ +X (b(f (¯x)))<τ −X (f (¯x))}) (h(b(f (¯x))) − Eb(f (¯x),¯x(e−qρfh(Xρf )1{ρf<∞})).
+By using Lemma 2.1 we obtain that
+Ex(e−qτ +X (b(f (¯x)))1{τ +X (b(f (¯x)))<τ −X (f (¯x))}) = φ−q (x)φ−q (b(f (¯x))) ψq(x) −ψq(f (¯x))ψ(b(f (¯x))) −ψq(f (¯x)).
+The claim in this case follows from Lemma 4.1.
+In the last case that f (¯x) < x0, ¯x ≥ b⋆f and b(f (¯x)) ≤ x ≤ ¯x, or f (¯x) ≥ x0 and f (¯x) < x ≤ ¯x, from
+Theorem 3.1 and Theorem 4.1 we know that the optimal stopping rule f or problem (4) is 0, so we have
+pf (x, ¯x) = h(x) − Ex,¯x(e−qρfh(Xρf )1{ρf<∞}).
+The completes the proof.
+Proof of Lemma 4.3. The convexity of H(·) has already been proved in the proof of Lemma 2.2, so we only
+need to prove that for Hf (·). To that end, we recall (30) that
+H ′f (z) = Hf (z) −H(ϕ(z))z −ϕ(z) , ∀z ∈ (0,z⋆f ),
+from which we obtain that, for z ∈ (0,z⋆f ),
+dH ′f (z) =
+Hf (z)−H(ϕ(z))
+z−ϕ(z) dz −H ′(ϕ(z))dϕ(z)
+z −ϕ(z) − Hf (z) −H(ϕ(z))(z −ϕ(z))2 (dz − dϕ(z))
+=
+(Hf (z) −H(ϕ(z))
+z −ϕ(z) −H ′(ϕ(z))
+) dϕ(z)
+z −ϕ(z)
+≥
+(H(z) −H(ϕ(z))
+z −ϕ(z) −H ′(ϕ(z))
+) dϕ(z)
+z −ϕ(z). (39)
+We prove that the embraced expression in (39) is positive, which implie s that H ′f (·) is increasing so Hf (·) is
+convex.
+21
+To prove the claim, we notice that for z ∈ (0,z⋆f ), we have ϕ(z)<ϕ (z⋆f ) = ψq(f (ψ−1q (z⋆f ))) = ψq(f (b⋆f ))<
+ψq(x0), thanks to Corollary 4.1. We now prove that the line segment conne cting (ϕ(z),H (ϕ(z))) and
+(z,H (z)) stays above the graph of H(·). Suppose not, then by the convexity of H(·) this can happen only if
+the line segment crosses the graph of H(·) twice, and z >ψq(b(ψ−1q (ϕ(z)))), the latter of which is the point
+where the tangent line of H(·) that crosses ( ϕ(z),H (ϕ(z))) touches the graph of H(·). In other words,
+ψ−1q (z)>b (ψ−1q (ϕ(z)). (40)
+On the other hand, by the monotonicity of b(y) (see Proposition 3.1) we know that
+b(ψ−1q (ϕ(z))>b (ψ−1q (ϕ(z⋆f )) = b⋆f, (41)
+where we used the deﬁnition of b⋆f in Corollary 4.1. However, (40) is contradictory to (41). Thus, the the
+line segment connecting ( ϕ(z),H (ϕ(z))) and ( z,H (z)) stays above the graph of H(·). Given that H(·) is
+convex at ϕ(z), we know that the slope of this line segment, H(z)−H(ϕ(z))z−ϕ(z) , is larger than H ′(ϕ(z)).
+Lemma A.1. Deﬁne the constant β± := −δ ±γ, where
+δ = µσ2 − 12, γ =
+√
+δ2 + 2qσ2.
+Then, we have β+ > 1 and
+−ǫ −β−
+2γ , 1 −β−2γ ∈ (0, 1). (42)
+Proof. First, since g(1) = µ −q < g(β+) = 0 where g(β) = 12σ2β(β − 1) + µβ −q, we conclude that
+1 < β+. It follows from δ < γthat −β− = δ +γ < 2γ, so −β−2γ < 1. From g(−ǫ) < g(β−) = 0 where
+g(β) = 12σ2β(β − 1)+µβ −q, we know that −ǫ>β −. Moreover, 1 −β− − 2γ = 1 +δ −γ = 1 +δ − √δ2 + 2qσ2 <
+δ + 1 −
+√
+δ2 + 2µσ2 =δ + 1 − √δ2 + 2δ + 1 ≤ 0, so 1−β−2γ < 1.
+Proof of Example 4.1. First of all, we verify that h(·) satisﬁes Assumption 2.1. To that end, we calculate
+(L −q)h(x) = (µ −q)x − [ 12σ2ǫ(1 +ǫ) −µǫ −q]Kx −ǫ,
+from which we know that (12) holds. From Borodin and Salminen (2002 ) we know that
+φ±q (x) = xβ±,ψq(x) = xβ+−β− =x2γ, (43)
+where β± is deﬁned in Lemma A.1. Condition (13) holds since β+ > 1, and thus, Assumption 2.1 holds.
+Using (43) and f (x) = (1 −α)x we obtain that
+H(z) = z
+1−β−
+2γ −Kz
+−ǫ−β−
+2γ , ϕ (z) = (z
+1
+2γ (1 −α))2γ = (1 −α)2γz =: ¯αz. (44)
+H ′′(z) = n1(n1 − 1)zn1−2 −Kn 2(n2 − 1)zn2−2 =zn2−2[n1(n1 − 1)zn1−n2 +Kn 2(1 −n2)]
+1
+2σ2(−ǫ)(−ǫ − 1) −µǫ −q <0, 12σ2ǫ(ǫ + 1) −µǫ −q <0.
+22
+It follows that
+Hf (z) = exp(−
+∫ z⋆f
+z
+dν
+ν −ϕ(ν) )H(z⋆f ) +
+∫ z⋆f
+z
+H(ϕ(ν)) exp(−
+∫ ν
+z
+dw
+w −ϕ(w) ) dνν −ϕ(ν)
+=
+( z
+z⋆f
+) 1
+1− ¯α
+[(z⋆f ) 1−β−2γ −K(z⋆f ) −ǫ−β−2γ ] + (¯α)
+1−β−
+2γ
+(1 − ¯α) 1−β−2γ − 1 [(z⋆f ) 1−β−2γ
+( z
+z⋆f
+) 1
+1− ¯α
+−z
+1−β−
+2γ ]
+−K (¯α)
+−ǫ−β−
+2γ
+(1 − ¯α) −ǫ−β−2γ − 1 [(z⋆f ) −ǫ−β−2γ
+( z
+z⋆f
+) 1
+1− ¯α
+−z
+−ǫ−β−
+2γ ]. (45)
+Notice that (42) ensures that two detonators in the last line of (45 ) are negative.
+Using (43), (44) and (45), we obtain
+H (1)(z)
+=Hf (z) −H(z)
+=
+( (¯α) 1−β−2γ + (1 − ¯α) 1−β−2γ − 1
+(1 − ¯α) 1−β−2γ − 1 (z⋆f ) 1−β−2γ −K (¯α)
+−ǫ−β−
+2γ + (1 − ¯α) −ǫ−β−2γ − 1
+(1 − ¯α) −ǫ−β−2γ − 1 (z⋆f ) −β−2γ
+)( z
+z⋆f
+) 1
+1− ¯α
+−
+(¯α)
+1−β−
+2γ + (1 − ¯α) 1−β−2γ − 1
+(1 − ¯α) 1−β−2γ − 1 (z⋆f ) 1−β−2γ
+( z
+z⋆f
+) 1−β−
+2γ
++K
+(¯α)
+−ǫ−β−
+2γ + (1 − ¯α) −ǫ−β−2γ − 1
+(1 − ¯α) −ǫ−β−2γ − 1 (z⋆f ) −ǫ−β−2γ
+( z
+z⋆f
+) −ǫ−β−
+2γ
+=:k( zz⋆f ), (46)
+where k(u) is a polynomial in u:
+k(u) = Aun1 +Bun2 +Cun3, ∀u ∈ (0, 1] (47)
+with
+1
+1 − ¯α ≡n1> 1>n 2 ≡ 1 −β−2γ >n 3 ≡ −ǫ −β−2γ > 0,
+and unambiguous deﬁnitions of the coeﬃcients A,B, andC. We can show that C >0. In view of the fraction
+insideC, we let g(x) = xp +p(1−x)−1 forp = −ǫ−β−2γ ∈ (0, 1). Then g(1) = 0 and g′(x) = p(xp−1 −1)> 0 for
+all x ∈ (0, 1) so g(·) is strictly increasing over (0 , 1). In particular, g(¯α)<g (1) = 0. Since the denominator
+in C is also negative, we conclude that C >0.
+Also, observe that k(0+) = 0 = H (1)(0+). Now, taking derivative of k(u) in (47), we get
+u1−n3k′(u) = An1un1−n3 +Bn2un2−n3 +Cn 3. (48)
+From limu↓0u1−n3k′(u) = Cn 3> 0 we know that H (1),′(z)> 0 for suﬃciently small z >0. Moreover,
+u2−n3k′′(u) = An1(n1 − 1)un1−n3 +Bn2(n2 − 1)un2−n3 +Cn 3(n3 − 1). (49)
+Using standard argument by taking the derivative, it can be shown t hat functions like the right hand side
+of (49) can change monotonicity at most once over (0 , 1). Clearly, the right hand side of (49) converges to
+Cn 3(n3 − 1) < 0 as u ↓ 0. On the other hand, because Hf (z) −H(z) is convex over ( ψq(x0),ψq(b⋆f )) (see
+Lemma 4.3), we know that the right hand side of (49) is positive as u ↑ 1. Given that k(u) is maximized at
+23
+z⋆f
+z⋆f , we know that k′′(u) changes sign exactly once over (0 , 1). More speciﬁcally, there are u1 ∈ (0, 1) such
+that k′′(u) < 0 for all u ∈ (0,u 1), and k′′(u) > 0 for all u ∈ (u1, 1). This proves the pattern of convexity
+change for H (1)(·). It follows that H (1)(·) is strictly increasing from 0 to z⋆f , in particular, H (1)(z)> 0 for
+all z ∈ (0,z⋆f ). Thus, the smallest nonnegative concave majorant of H (1)(·) is given by
+H (1)(z ∧z⋆f ),
+and the optimal stopping region for (24) is given by ψ−1q ((0,z⋆f ]) = (0,b⋆f ]. Finally, the global maximum z⋆f
+is the unique solution to
+k′( zz⋆f ) = 0,z⋆fz⋆f ∈ (0,u 1). (50)
+References
+Borodin, A. and Salminen, P. (2002). Handbook of Brownian Motion: Facts and Formulae . Birkhauser, 2nd
+edition.
+Carr, P., Jarrow, R., and Myneni, R. (1992). Alternative characte rizations of American put options. Math-
+ematical Finance, 2:87–105.
+Cartea, A., Jaimungal, S., and Penalva, J. (2015). Algorithmic and High-Frequency Trading . Cambridge
+University Press, Cambridge, England.
+Dai, M., Zhang, Q., and Zhu, Q. (2010). Trend following trading under a regime switching model. SIAM
+Journal on Financial Mathematics , 1(1):780–810.
+Dayanik, S. and Karatzas, I. (2003). On the optimal stopping pro blem for one-dimensional diﬀusions.
+Stochastic Processes and their Applications Appl. , 107 (2):173–212.
+Egami, M. and Oryu, T. (2017). A direct solution method for pricing o ptions involving maximum process.
+Finance and Stochastics , forthcoming.
+Glynn, P. and Iglehart, D. (1995). Trading securities using trailing s tops. Management Science, 41:1096–1106.
+Imkeller, N. and Rogers, L. (2014). Trading to stops. SIAM Journal on Financial Mathematics , 5(1):753–781.
+Lehoczky, J. (1977). Formulas for stopped diﬀusion processes w ith stopping times based on the maximum.
+Annals of Probability , 5(4):601–607.
+Leung, T. and Li, X. (2015). Optimal mean reversion trading with tr asaction costs and stop-loss exit.
+International Journal of Theoretical and Applied Finance , 18(3):1550020.
+Leung, T., Li, X., and Wang, Z. (2014). Optimal starting–stopping a nd switching of a CIR process with
+ﬁxed costs. Risk and Decision Analysis , 5(2):149–161.
+Leung, T., Li, X., and Wang, Z. (2015). Optimal multiple trading times u nder the exponential OU model
+with transaction costs. Stochastic Models, 31(4):554–587.
+24
+Leung, T. and Ludkovski, M. (2011). Optimal timing to purchase op tions. SIAM Journal on Financial
+Mathematics, 2(1):768–793.
+Leung, T. and Wang, Z. (2018). Optimal risk-averse timing of an as set sale: trending versus mean-reverting
+price dynamics. Annals of Finance . Forthcoming.
+Leung, T. and Yamazaki, K. (2013). American step-up and step-d own credit default swaps under L´ evy
+models. Quantitative Finance, 13(1):137–157.
+Rodosthenous, N. and Zhang, H. (2017a). Beating the Omega cloc k: an optimal stopping problem with
+random time-horizon under spectrally negative L´ evy models. The A nnals of Applied Probability, forth-
+coming.
+Rodosthenous, N. and Zhang, H. (2017b). How to sell a stock amid anxiety about drawdowns - an optimal
+stopping approach. Working paper.
+Salminen, P., Vallois, P., and Yor, M. (2007). On the excursion theory for linear diﬀusions. Japanese Journal
+of Mathematics , 2(1):97–127.
+Shepp, L. and Shiryaev, A. N. (1993). The Russian option: Reduce d regret. Annals of Applied Probability ,
+3(3):603–631.
+Temme, N. (2000). Numerical and asymptotic aspects of parabolic cylinder functions. Journal of Computa-
+tional and Applied Mathematics , 121(1-2):221–246.
+Warburton, A. and Zhang, Z. (2006). A simple computational mode l for analyzing the properties of stop-less,
+take proﬁt, and price breakout trading strategies. Computers and Operations Research , 33(1):32–42.
+Yin, G., Zhang, Q., and Zhuang, C. (2010). Recursive algorithms for trailing stop: stochastic approximation
+approach. Journal of Optimization Theory and Applications , 146(1):209–231.
+Zervos, M., Johnson, T., and Alazemi, F. (2013). Buy-low and sell-hig h investment strategies. Mathematical
+Finance, 23(3):560–578.
+Zhang, H. (2015). Occupation time, drawdowns, and drawups for one-dimensional regular diﬀusion. Advances
+in Applied Probability , 47(1):210–230.
+Zhang, H. and Hadjiliadis, O. (2012). Drawdowns and the speed of m arket crash. Methodology and Computing
+in Applied Probability , 14:739–752.
+Zhang, H., Rodosthenous, N., and Hadjiliadis, O. (2015). Robustne ss of the N-CUSUM stopping rule in a
+Wiener disorder problem. The Annals of Applied Probability , 25(6):3405–3433.
+Zhang, H. and Zhang, Q. (2008). Trading a mean-reverting asset : Buy low and sell high. Automatica,
+44(6):1511–1518.
+25

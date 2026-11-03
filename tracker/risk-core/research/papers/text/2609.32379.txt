@@ -1,0 +1,796 @@
+arXiv 2609.32379  https://arxiv.org/abs/2609.32379
+
+Measurement Boundaries in LLM Financial Agent Evaluation:
+Fixed-Tape Execution and Multi-Defect Auditing
+Weicheng Xue
+Virginia Tech
+weich97@vt.edu
+Abstract
+What controls are needed to interpret execution performance and audit scores in LLM
+agent evaluations? We study two limits on these interpretations in a financial agent harness.
+In Study A, comparing independent runs under idealized and stressed execution on three
+synthetic settings that share one 24-day upward phase mixes the execution rule with fresh
+model responses and portfolio feedback: the parsed decision paths agree in only19.8%of
+450pairs. Replaying each stored response tape through both execution destinations gives
+a narrower result. Conditional on those responses, stressed execution changes total return
+by−0.0170(95% interval[−0.0230,− 0.0117]), or10.4%of the idealized baseline, and ten
+seed clusters do not resolve the model ranking. Study B corrects an incomplete answer key
+and replaces legacy tasks with matched zero-, one-, and two-defect tasks under an explicit
+multi-label prompt. The drop in target violation recall from one to two defects is positive in
+five of six combinations of auditor and source (median0.267), with three surviving Holm
+correction. Yet the auditor that includes both target labels most often has micro-precision
+0.149, emits findings on98/100zero-defect tasks, and returns the exact dual-defect set in
+only21 /100cases. Target recall by itself therefore gives a poor account of audit quality
+on this construction. The studies address different limits: what an execution comparison
+estimates, and what target recall captures. Together, they show how fixed conditions and
+diagnostic controls bound the claims a score can support.
+1 Introduction
+An LLM agent can be evaluated by the outcomes of its actions, and an LLM auditor by the defects it finds in
+an action record. Neither score explains its own scope. A simulator turns intended orders into fills, and a
+scorer decides which findings count. We ask:what controls are needed for execution performance and audit
+scores to support the claims made from them?We study two distinct limits on those claims in a financial
+agent harness.
+Study A begins with a common but ambiguous comparison: run the same model under idealized and stressed
+execution and compare the outcomes. The two runs do not differ only in execution. They draw fresh provider
+responses, and once their trades differ they also expose the model to different portfolio states. We use a
+stored-response replay to answer a narrower question: what does the execution mechanism change when the
+provider response sequence is held fixed? The replay yields a measurable contrast on our synthetic matrix,
+and ten seed clusters do not resolve whether the top order is preserved.
+Study B concerns a scoring failure. Our original answer key listed one defect where the generator had made
+two stated rules false. The legacy prompts also contained quantity cues, phrased differently across domains.
+Re-scoring credits valid edit findings but neither recovers an unreported target violation nor identifies why
+the auditor omitted it. We therefore collected matched zero-, one-, and two-defect tasks under a prompt
+that permits multiple findings. Target violation recall falls in five of six cells, but the auditors’ specificity
+is poor and differs sharply. deepseek-v4-pro includes both target labels more often, yet produces the exact
+dual-defect set in only21/100cases and emits findings on98/100zero-defect tasks.
+1
+arXiv:2609.32379v1  [cs.LG]  26 Sep 2026
+These cases address two parts of agent evaluation: measuring action outcomes and measuring the quality of
+checks on action records. Study A asks whether a comparison estimates the intended effect; Study B asks
+whether the scored success captures the intended audit quality.
+Contributions.
+1. An empirical distinction between independently sampled closed-loop comparisons and fixed-response
+execution contrasts. Parsed decision paths agree in19.8%of450source pairs, showing that the
+source comparison does not hold the action sequence fixed. A two-origin, two-destination replay
+estimates a conditional mechanical contrast and quantifies its uncertainty.
+2. A two-model, matched multi-defect audit experiment whose target recall, false-positive, precision,
+and exact-set outcomes are reported together. The plan and corpus are internally hash-bound.
+2 Related Work
+LLM agents for trading and financial decision making.A growing literature equips language models
+with memory, tools, and role structure, and then reports trading performance. Yu et al. (2023) add a layered
+memory and a character profile; Yu et al. (2024) introduce a hierarchy of managers and analysts with a
+risk-control component and conceptual verbal reinforcement; Xiao et al. (2024) use debates between bullish
+and bearish researchers and a risk-management team in a multi-agent trading framework. Domain foundation
+models (Wu et al., 2023; Yang et al., 2023) and environment libraries such as FinRL-Meta (Liu et al., 2022)
+supply the substrate, and a recent survey (Ding et al., 2024) reviews backtesting-based evaluation of trading
+agents. These works motivate studying how measured performance depends on both agent design and
+evaluation choices. Study A focuses on the execution convention (fill price, fill timing, and cost attribution)
+by holding one realized response tape fixed and measuring the downstream mechanical contrast between two
+destinations.
+Execution realism, microstructure, and backtest overfitting.The cost of trading is not a nuisance
+term. Adverse selection produces a spread even with risk-neutral, zero-profit market making (Glosten &
+Milgrom, 1985), and price impact is linear in order flow in the canonical strategic-trading model (Kyle, 1985);
+Almgren & Chriss (2001) formalise the resulting trade-off between price impact and risk in optimal execution,
+and Hasbrouck (2007) gives the econometric treatment. Empirically, Frazzini et al. (2018) measure realised
+costs on $1.7 trillion of live institutional executions and find them an order of magnitude below common
+academic estimates, so misspecifying the convention can move results in either direction. In parallel, repeated
+strategy search inflates backtest performance (Bailey et al., 2014; López de Prado, 2018); selection-adjusted
+Sharpe inference addresses one consequence of that search, as a deflated Sharpe ratio (Bailey & López de
+Prado, 2014) or a multiple-testing haircut (Harvey & Liu, 2015); and related multiple-testing concerns arise in
+factor discovery (Harvey et al., 2016). This body of work models the cost function as an object to be estimated,
+or the search process as an object to be corrected. This report treats the destination as an experimental
+factor in a controlled replay, a record-and-replay argument in the sense of LeBlanc & Mellor-Crummey (1987).
+Replay is the right tool when the intended estimand holds realized responses fixed, particularly because
+nominally deterministic LLM settings need not reproduce identical outputs (Atil et al., 2024).
+LLM-as-a-judge and its biases.Zheng et al. (2023) established strong LLMs as scalable proxies for
+human preference and catalogued position, verbosity, and self-enhancement biases; Wang et al. (2024) show
+that pairwise rankings can be flipped by reordering candidates alone, Panickssery et al. (2024) link self-
+preference to self-recognition, and Gu et al. (2024) survey the resulting mitigation literature. Closer to defect
+detection, Ullah et al. (2024) and Ding et al. (2025) show that LLM security auditors are non-robust and
+that prevailing benchmarks overstate their capability. Study B identifies a different measurement problem: a
+corpus containing only single-defect instances cannot estimate behaviour on co-occurring defects. Our new
+experiment adds the missing conditions and shows why target recall must be reported with specificity.
+2
+Scalable oversight.Debate (Irving et al., 2018), iterated amplification (Christiano et al., 2018), recursive
+reward modelling (Leike et al., 2018), and assisted self-critique (Saunders et al., 2022) propose ways to
+supervise systems that humans cannot directly evaluate, building on learning from human preferences
+(Christiano et al., 2017); Bowman et al. (2022) make the claim empirically testable via sandwiching, Amodei
+et al. (2016) frame the accident-risk setting, and Greenblatt et al. (2024) evaluate oversight protocols against
+an intentionally subversive policy. These works propose and measure oversight protocols. Study B asks
+whether the benchmark used to evaluate an auditor can itself shape the conclusion, and replaces a single-defect
+construction with matched zero-, one-, and two-defect tasks.
+Benchmark and evaluation fragility.LLM scores move under meaning-preserving perturbations of
+prompt formatting (Sclar et al., 2024), instruction paraphrase (Mizrahi et al., 2024), and adversarial prompt
+edits (Zhu et al., 2023); leaderboard rankings shift by up to eight positions under trivial changes to answer
+ordering or extraction (Alzahrani et al., 2024). Liang et al. (2023) argue for multi-metric, multi-scenario
+reporting. Kapoor et al. (2024) show that evaluation focused on accuracy can overlook cost and lead to
+mistaken conclusions about the benefits of agent complexity. Yao et al. (2024) show that agent success
+is inconsistent across repeated trials, with pass8 below25%in their retail domain. This report extends
+fragility from surface form to two structural conventions. The execution convention has been varied as an
+ablation before, including in the substrate paper (Xue, 2026), and recorded-decision replay is an established
+device rather than a contribution of this report. Study A crosses both response origins with both execution
+destinations on a five-identifier, 24-period matrix and examines conditional contrasts and unresolved ranking
+uncertainty. Study B uses separate audit-task collections and examines what target recall does and does not
+measure.
+Fault injection and mutation testing.Measuring a checker by seeding faults is old: the coupling
+effect motivates mutation adequacy (DeMillo et al., 1978), Jia & Harman (2011) survey the field, and Just
+et al. (2014) find that mutant detection is correlated with real fault detection in the programs they studied.
+Analogues in hardware and systems run from classical fault injection (Hsueh et al., 1997) to chaos engineering
+(Basiri et al., 2016). This report applies that discipline to an LLM auditor, where matched single- and
+multi-defect conditions expose differences in target violation recall.
+3 Two Boundaries Between Scores and Claims
+The studies follow the same reasoning: identify the claim, state what the original comparison or score
+measures, add controls for what it leaves open, and limit the conclusion to the resulting evidence. It organizes
+the two studies; it is not a claim that they share one source of error.
+The comparison boundary.In Study A, an independently sampled closed-loop comparison allows
+responses and portfolio states to differ. Feedback is part of a total execution effect, not automatically a
+nuisance; deterministic policies can also react to changed state. A fixed-response replay blocks that feedback
+and measures a narrower mechanical contrast. It does not correct the closed-loop comparison into an estimate
+of the same quantity. Path disagreement shows that responses were not held fixed, not that the comparison
+is biased. We treat the observed diagonal as descriptive because the collection does not separately identify
+provider-time changes, sampling, and adaptation.
+The score-coverage boundary.In Study B, target recall measures whether a specified violation is
+reported. Even a correctly computed recall score does not measure unsupported findings or complete audit
+correctness. Matched source cases with zero, one, and two defects test behaviour beyond a single-defect
+condition. Complete rule-based keys, zero-defect controls, precision, and exact-set accuracy then separate
+target coverage from correct auditing.
+3
+4 Shared Substrate and Protocol
+Both studies use one codebase introduced in earlier work (Xue, 2026). It records signal, intended target
+weight, risk-gate revision, order conversion, simulated execution, and portfolio update as serialized artifacts.
+Study A replays the execution stage; Study B audits injected trajectory defects.
+Models.Studies A and B record the direct provider and API model identifier used for each response. An
+identifier without a dated revision is a provider snapshot, not an immutable model version. Study A uses five
+identifiers (two DeepSeek and three GLM); Study B uses deepseek-v4-pro and glm-5.
+Provenance.Runs carry manifests and content digests, and the released scripts compare derived tables
+against recorded values. These are consistency checks; the Reproducibility statement gives their exact scope.
+Replay.Provider responses are cached with per-task checkpointing, so the reported analyses reuse stored
+responses. The multi-label collection contains600provider responses, and the corrected self-consistency
+arm contains720responses at temperature0 .7. The fixed-tape replay and answer-key re-scoring run locally
+without new provider calls.
+5 Study A: A Fixed-Tape Contrast for Execution Mechanics
+Independent E0 and E1 runs change the execution rule and, through fresh sampling and portfolio feedback,
+the realized response path as well. We therefore replay each stored response tape through both execution
+destinations. The replay isolates the mechanical execution contrast conditional on fixed responses, and it
+shows how little ten seed clusters say about the model ranking.
+5.1 What independent runs compare
+The completed direct-API matrix contains five recorded model identifiers, three synthetic market settings,
+two execution levels (E0, an immediate full-fill reference simulator; E1, a fixed stress simulator), ten seeds,
+and three provider samples:900runs. The market settings vary volatility, trend scale, and tail behaviour,
+but they all cover the same 24-day upward phase; across the fixed seeds and two assets, every generated price
+path ends above its starting value. E1 uses one-step latency and a5%participation cap. Both arms charge
+one basis point of commission and start from two basis points of slippage; E1 additionally applies0.15times
+realized participation and0.1times intraday bar volatility to its slippage rate.
+The diagonal comparison pairs an independently sampled E0 run with an independently sampled E1 run.
+Across450such pairs, which share their initial prompt, the first raw response agrees only44.9%of the time
+and the parsed 24-period decision path agrees in19.8%. Of the pairs whose parsed responses eventually differ,
+61%already differ at the first response, before execution can feed anything back. The remaining paths may
+also diverge through portfolio feedback. The diagonal therefore combines a change in execution with fresh
+sampling, provider time, and a legitimate closed-loop response to different state; it is not an execution-only
+contrast.
+5.2 The fixed-response control and its estimand
+For each stored provider-response tape, we replay the recorded responses through both execution destinations.
+The replayer returns the stored response in sequence even when the portfolio-dependent prompt generated at
+the other destination would differ. It therefore fixes the pre-risk decision path by construction. Risk approval
+and fills remain downstream, but the route from execution through the next portfolio prompt back into the
+model is blocked.
+LetYod be an outcome of the tape recorded under origino∈{E0,E1} and replayed at destinationd∈{E0,E1} ,
+averaged over the450matched pairs. The within-tape destination contrast isDo =Yo,E1−Y o,E0, and the
+estimand is thebalanced destinationcontrast ¯D = (DE0 +DE1)/2: what the stress simulator changes for the
+recorded decisions. Thebalanced tape-origincontrast ¯O averagesOd =YE1,d−Y E0,d overd and is descriptive,
+4
+Table 1: Sharpe-rank comparison under a fixed response tape. Kendallτb is near one, but exact-order
+agreement occurs in only0.26–0.76of seed-cluster bootstrap resamples, and the winner changes in the
+jump–tail setting with tapes from E1. “Exact order” is a bootstrap agreement frequency, not a posterior
+probability that the population order is correct.
+Setting Tapeτ b 95% CI Exact-order freq. Winner E0→E1
+calm trend E0 1.000 [0.80, 1.00] 0.7635 glm-5.2→glm-5.2
+calm trend E1 1.000 [0.60, 1.00] 0.2608 glm-5.2→glm-5.2
+high volatility E0 1.000 [0.60, 1.00] 0.5368 glm-5.2→glm-5.2
+high volatility E1 1.000 [0.60, 1.00] 0.5678 glm-5.2→glm-5.2
+jump–tail E0 1.000 [0.80, 1.00] 0.7369 glm-5.2→glm-5.2
+jump–tail E1 0.800 [0.40, 1.00] 0.3265 glm-5.2→glm-5
+because origin bundles sampling, feedback, collection time, and provider state. The two sum to the observed
+diagonal YE1,E1−Y E0,E0, and the interactionDE1−D E0 measures how much the destination effect depends
+on which tape is replayed.
+5.3 What the fixed-response control supports
+Figure 1 reports the decomposition. On total return,¯D is−0.0170with a seed-cluster bootstrap interval of
+[−0.0230,− 0.0117], equal to10.4%of the+0 .164E0 baseline, and ¯O is+0 .0035([−0.0061, +0.0136]). The
+observed diagonal,−0.0135, is their sum. A reader who takes the diagonal as the execution effect attributes
+part of a sampling and feedback difference to the simulator; a reader who takes¯D as the total effect ignores
+that an adaptive agent can answer E1 fills with different later decisions.
+The split is metric-specific. On Sharpe,¯O is+0 .813([+0 .441, +1.239]), and ¯D is21 .3%of baseline Sharpe,
+compared with10.4%of baseline return.
+Uncertainty with ten seeds.A t9 interval based on the cluster standard error is[−0.0239,− 0.0101]for
+the fixed-tape total-return contrast, compared with the bootstrap interval[−0.0230,− 0.0117]. Recomputing
+after dropping each seed in turn moves the point estimate within[−0.0181,− 0.0152]. This leave-one-seed
+range is a sensitivity diagnostic, not an uncertainty interval. The same distinction matters for the total-return
+tape-origin term: its leave-one-seed range is[+0.0005,+0.0061], while its bootstrap interval includes zero.
+Ranking uncertainty and activity.Under a fixed tape the E0 and E1 Sharpe rankings haveτb = 1.000
+in five of six combinations of setting and tape origin and+0.800in the sixth (Table 1). These point estimates
+do not establish stability. The frequency of exact-order agreement across seed-cluster bootstrap resamples
+ranges from0.26to0 .76, and the top-ranked model changes from glm-5.2 to glm-5 in the jump–tail setting
+with tapes from E1. At ten seed clusters, the ranking question is unresolved. The apparent agreement is also
+helped by an almost inactive row: deepseek-v4-pro records zero return, all-hold, and zero gross exposure
+in358of360replay rows, so it is last in nearly every ranking and contributes several concordant pairs
+mechanically.
+The inactive row is a substantive warning. A model that almost never trades is largely insensitive to execution,
+has little drawdown, and pays little slippage. A leaderboard should report activity beside robustness so that
+inaction is not mistaken for successful adaptation (Figure 3a).
+Supported claim.For the stored responses on this 24-day upward synthetic matrix, replacing the immediate
+reference fills with the specified stress simulator lowers total return by0.0170on average; the model ranking
+under either simulator remains unresolved at ten seed clusters.
+5
+−0.03 −0.02 −0.01 0.00 0.01 0.02 0.03
+Total-return contrast (seed-cluster mean, 95% CI)
+observed diagonal
+(E0/E0 →  E1/E1)
+balanced destination
+execution | tape from E1
+execution | tape from E0
+balanced tape origin
+response origin | replay E1
+response origin | replay E0
+interaction
+-0.0135
+-0.0170
+-0.0147
+-0.0193
++0.0035
++0.0059
++0.0012
++0.0047
+(a) Destination contrast: 10% of baseline return
+95% CI excludes 0 95% CI includes 0
+0.0 0.2 0.4 0.6 0.8 1.0
+E0 vs E1 Sharpe-rank agreement: Kendall τb (95% CI)
+calm trend
+tape from E0
+calm trend
+tape from E1
+high volatility
+tape from E0
+high volatility
+tape from E1
+jump tail
+tape from E0
+jump tail
+tape from E1
+exact-order freq.=0.76
+exact-order freq.=0.26
+exact-order freq.=0.54
+exact-order freq.=0.57
+exact-order freq.=0.74
+exact-order freq.=0.33
+top-1 glm-5.2 → glm-5
+(b) Similar rank estimates; exact order remains unresolved
+E0-origin tape E1-origin tape top-1 model flips
+Figure 1: The fixed-tape execution contrast. (a) The2× 2decomposition on total return. The downstream
+mechanical contrast excludes zero under either tape origin; the tape-origin term is descriptive rather than
+causal. (b) Kendall τb between E0 and E1 Sharpe rankings under a fixed tape, with the frequency of
+exact-order agreement across cluster-bootstrap resamples. Confidence intervals come from a bootstrap over
+the10shared seed clusters; rank-correlation values are discrete because only five models are ranked.
+6 Study B: What a Single-Defect Audit Score Misses
+Target recall records whether one specified violation is mentioned. We first correct the legacy answer key,
+then collect matched zero-, one-, and two-defect tasks and report target recall beside false positives, precision,
+and exact-set accuracy.
+6
+6.1 What target recall measures
+We take a valid agent trajectory, inject defects by a known procedure, and score the auditor’s structured
+findings against the resulting rule violations. Injection alone does not guarantee an exhaustive answer key, as
+the legacy error below shows. For the new corpus, the generator and analyzer contain separately implemented
+rule oracles over the four stated rules in each domain. A task is admitted only when the complete set of
+violated (step, rule) pairs exactly matches its zero-, one-, or two-defect key. This establishes ground truth
+relative to those coded rules, not for defects outside them. Defects span a difficulty ladder by construction: a
+single-record constraint check (L1), cross-record reconciliation (L2), and recomputation (L3). Auditors are
+two directly served API snapshots, deepseek-v4-pro and glm-5, run under a neutral audit-role prompt at
+temperature 0. Target recall credits the specified violation when it appears in a response.
+A defect in our own answer key.Our first version of this benchmark interpreted lower recall of constraint
+violations as a preference for an alternative reading of the same step. That interpretation does not survive
+scrutiny of how the tasks were built: the alternative label describes another real defect, not a benign
+explanation.
+The confounded variant differs from the one-defect variant in a single field: the recorded intent for the
+defective symbol. Nothing is deleted to build it. The injected approval already carries no intervention record
+in either arm. Moving the intent away from the approved value is therefore enough to make a second stated
+ruleactuallyfalse, because the auditor is told that an approval differing from its intent must record the
+intervention, and none does. Two of the stated rules are violated at that step. The answer key listed one.
+An auditor that reported the unrecorded edit was therefore assigned a false-positive penalty for a valid
+finding. Correcting the key removes that penalty and changes set-level scoring; it does not turn an unreported
+constraint violation into a hit, so the old score mixed a genuine omission with an incorrect penalty for a valid
+finding.
+Quantity cues in the legacy prompts.Re-scoring the stored responses against a key in which the
+confounded arm carries two true defects credits valid edit findings and removes the incorrect precision penalty.
+It also shows what the auditors actually reported. On the two-defect arm they reportexactly oneof the two
+true defects in62–100%of tasks and both in0–33%; glm-5 never reported both in any of its sixty trading
+pairs (Figure 2).
+All120trading prompts state that exactly one record was tampered with; all80tool-use prompts state
+“Exactly one step contains a single injected defect.” These are different quantity cues. One tampered record
+can violate multiple rules, so the trading instruction does not logically require one label. Moreover, reporting
+one of the two true labels is not the same as reporting only one finding in the entire response. In4/60of
+deepseek-v4-pro’s legacy trading dual-defect tasks, exactly one target label is reported but the response
+contains multiple findings. The legacy design cannot distinguish quantity-cue effects from other causes of
+omission; it does not establish that one-label behaviour is instruction compliance.
+The drop in target violation recall remains after correcting the key, because a valid edit finding does not
+substitute for the target violation (deepseek-v4-pro0.93→0.30and glm-50 .78→0.32in trading;0 .97→0.78
+and1 .00→0.45in tool-use; within-pair McNemarp = 7× 10−12,8 × 10−7,2 × 10−2,5 × 10−7). We therefore
+use a new matched multi-defect design with an explicit multiple-finding instruction for the primary analysis.
+6.2 Matched controls and the primary estimand
+Re-scoring stored responses is a corrective analysis of data collected for another purpose. We therefore
+collected responses for matched triplets of the same source case carrying zero, one, and two true defects:300
+tasks over100triplets, two auditors, temperature 0, and one sample per task. The source cases come from
+three collections, named consistently in the tables and figures:trading A, valid trading trajectories produced
+by deepseek-v4-pro;trading B, valid trading trajectories produced by glm-5; andtool-use, rule-generated
+tool-call logs of a synthetic operations agent.
+7
+deepseek-v4-pro
+(trading)
+glm-5
+(trading)
+deepseek-v4-pro
+(tool-use)
+glm-5
+(tool-use)
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0Share of two-defect responses
+both: 3% both: 0% both: 32% both: 15%
+(a) Target-label coverage on two-defect tasks
+both reported violation only edit only neither
+deepseek-v4-pro
+(trading)
+glm-5
+(trading)
+deepseek-v4-pro
+(tool-use)
+glm-5
+(tool-use)
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0Violation recall
+p=7e-12
+p=8e-07
+p=2e-02 p=5e-07
+(b) Target recall with one vs two defects
+one true defect two true defects
+Figure 2: Behaviour on the legacy corpus, whose prompts contain domain-specific quantity cues. (a) On tasks
+where two defects are objectively true, the share of responses reporting both target labels, one, or neither;
+this is not the total number of findings in a response. (b) Violation recall with one true defect versus two,
+with within-pair McNemarp-values, scored against the corrected key so that reporting the edit is credited
+rather than penalized. The low frequency of “both” does not identify a quantity-cue effect. The new matched
+experiment uses an explicit multi-label instruction.
+One trading triplet shows the construction. The source step approves a target weight for one symbol under a
+stated per-name cap of0.35. In the zero-defect variant the approval keeps the value the risk gate actually
+produced and, where that value differs from the model’s intent, carries the required clip record. In the
+one-defect variant the intended and approved weights are both set to0.56and the clip record is removed, so
+exactly one stated rule is false: an approval above the cap without clip evidence. The two-defect variant
+changes a single field, the intended weight, to0.28; the approval now also differs from the intent without an
+intervention record, so a second stated rule is false at the same step. A complete audit therefore returns
+the empty set,{unclipped position}, and{unclipped position,silent risk edit}respectively, and target recall
+8
+Table 2: Presence of the two target labels on the two-defect arm. The four columns partition responses only
+by whether the target violation and target edit appear. Additional or duplicate findings do not change a
+response’s column, so “both targets” is not exact-set accuracy and “violation target” does not mean that no
+unsupported finding was emitted.
+Auditor Source Both targets Violation target Edit target Neither target
+deepseek-v4-pro tool-use353 0 2
+deepseek-v4-pro trading A220 7 1
+deepseek-v4-pro trading B210 9 0
+glm-5 tool-use 19 0 21 0
+glm-5 trading A 4 9 16 1
+glm-5 trading B 0 5 25 0
+Table 3: Target-label counts beside specificity outcomes. “Zero any” is the number of zero-defect tasks with
+at least one emitted finding. “Zero exact” is a parse-valid, duplicate-free empty finding set; parse failures
+are not credited. “Dual both” requires both target labels but permits extras, whereas “dual exact” requires
+a parse-valid, duplicate-free match. Micro-precision pools all findings over the300tasks per auditor, and
+overall exact set applies the same strict match to all300.
+Auditor Zero any Zero exact Micro-P Exact/300 Dual both Dual exact
+deepseek-v4-pro98/100 1/1000.14929/300 78/100 21/100
+glm-545/100 55/1000.199108/300 23/100 7/100
+asks only whether the first label is present. The tool-use triplets mirror this with a per-tool argument cap
+and a silent change to an approved argument.
+The primary estimand is∆c =Rsingle−R dual within matched triplets, tested by two-sided exact McNemar
+tests with Holm correction across six combinations of auditor and source.
+The task tree contains an analysis plan and manifest linked by SHA-256 digests, and the completed grid
+contains600/600unique (auditor, task, sample) keys. The digests establish agreement among the released
+plan, corpus, and result grid, not temporal precedence, because all three remain in an author-writable tree
+without a third-party timestamp; we therefore call the design internally hash-bound rather than preregistered.
+This corpus doesnotassert cardinality: its prompt says the artifact “may contain zero, one, or multiple
+defects” and asks for one finding per violated rule. That makes the answer counts and specificity outcomes
+recorded in the plan interpretable (Tables 2 and 3).
+6.3 What the matched controls support
+Table 4 reports the primary outcome. The drop is positive in five of six cells, its median is0.267, and three
+cells survive Holm correction. Nine of600responses fail to parse (1.5%); malformed output is never credited
+as a correct empty answer.
+Once the prompt permits multiple findings, the two auditors differ sharply in whether the two target labels
+appear. deepseek-v4-pro includes both in70–88%of dual-defect responses across the three sources, whereas
+glm-5 does so in0–48%(Table 2). Performance on tasks containing only one defect therefore does not
+determine behaviour on this two-defect construction.
+Despite including both targets more often, deepseek-v4-pro has lower overall exact-set accuracy (29/300)
+than glm-5 (108/300), because it also emits unsupported findings; on the dual-defect tasks alone its exact-
+set accuracy is nevertheless higher (21/100against7 /100). Neither model is well described by a single
+“completeness” score.
+The new and re-scored estimates also differ in magnitude and, for deepseek-v4-pro on tool-use tasks, in sign.
+The datasets differ in task construction and cardinality instructions, so the legacy values are prompt-specific
+9
+Table 4: Internally hash-bound multi-label experiment. Target violation recall on the one-defect and two-
+defect conditions within matched triplets, with exact two-sided McNemar tests and Holm correction across
+six cells. Positive drop means that the target violation label appears less often when the specified edit defect
+also occurs.
+Auditor SourcenSingle Dual Drop Holmp
+deepseek-v4-pro tool-use 40 0.900 0.950−0.0500.625
+deepseek-v4-pro trading A 30 0.900 0.733+0.1670.125
+deepseek-v4-pro trading B 30 0.967 0.700+0.2670.031
+glm-5 tool-use 40 1.000 0.475+0.5256×10 −6
+glm-5 trading A 30 0.833 0.433+0.4000.009
+glm-5 trading B 30 0.433 0.167+0.2670.116
+retrospective contrasts, not a replication or an upper bound. We use the new collection for the primary claim
+and retain the legacy analysis to document the answer-key and prompt defects.
+Supported claim.On this matched violation-plus-edit construction, recall measured with one defect does
+not carry over to the same case with two, and coverage of both targets is a different quantity from exact
+correctness. The remaining analyses use legacy tasks to examine prompt sensitivity and self-audit and are
+secondary.
+6.4 Prompt sensitivity of target violation recall
+We next ask whether three changes to prompts and sampling alter the presence of the target violation label
+on the legacy two-defect tasks. These analyses measure targeted recall, not exact-set accuracy or overall
+audit quality. We re-audit the same matched pairs under an explicitconstraint-checkinstruction that names
+the rule, a genericstep-by-stepinstruction, andself-consistencyusing three samples at temperature0 .7with
+majority aggregation. Each arm containsn = 60matched pairs per auditor, pooled over the two producers.
+The six arm-by-auditor comparisons are exploratory; the McNemarp-values in this subsection are unadjusted.
+Naming the rule produces the largest increase in target violation recall. Violation recall rises from0.300to
+0.833for deepseek-v4-pro (34pairs fixed against2regressed, McNemar p = 2× 10−8) and from0.317to0 .933
+for glm-5 (38fixed,1regressed, p = 1× 10−10), while recall on the legacy one-defect arm stays high (0.850
+and0 .883). Precision and exact-set outcomes are not reported for these arms, so the gain concerns targeted
+recall only.
+Generic deliberation changes targeted violation recall differently across the two auditors: deepseek-v4-pro
+moves from0.300to0 .333( p = 0.73), while glm-5 moves from0.317to0 .617(24fixed against6regressed,
+p= 0.001).
+Self-consistency splits the auditors the other way. Using a majority of three samples at temperature0.7
+increases recall for deepseek-v4-pro from0.300to0 .500(16fixed against4regressed, p = 0.012). For glm-5,
+observed recall decreases from0.317to0 .283, but the difference is not statistically detectable (p = 0.77).
+Anany-of-threerule would yield0 .883and0 .433, but it credits a finding from any single sample and so
+inflates recall mechanically; we show it only to indicate how much the aggregator matters. The arm also
+varies temperature alongside sampling, so it is not a single-factor contrast.
+For these two auditors on this legacy task set, naming the constraint raises observed targeted recall for both;
+generic deliberation does so only for glm-5, and majority self-consistency only for deepseek-v4-pro.
+Responses for the self-consistency arm were collected under a cache key that includes the sampling temperature;
+an earlier key omitted it and could have replayed a temperature-0response, so that arm was collected afresh.
+10
+6.5 No detectable self-favoritism at this resolution
+A model might go easy on trajectories it produced. Under the neutral prompt each auditor audits both
+producers’ task sets (n = 120per cell), and neither is more lenient on itself: deepseek-v4-pro scores0.700on
+its own trajectories against0.667on the other’s (gap−0.033, Fisherp = 0.68), and glm-5 scores0.583on
+both (gap exactly0.000). Two limits keep this from being strong evidence of absence. The design’s minimum
+detectable effect is roughly0.17absolute recall at this sample size, so only a large self-preference would
+have shown. And with two producers each auditor’s “cross” condition is a single other model, which aliases
+producer difficulty with self-favoritism perfectly.
+7 Discussion
+The two studies answer the question in the introduction with different controls: Study A holds the response
+tape fixed before an execution contrast counts as mechanical, and Study B adds matched defect conditions
+and specificity outcomes before a recall score counts as audit quality.
+What the headline summaries leave out.In Study A, all89agreeing paths come from the nearly
+inactive model; pooled agreement should not be read as stability of active policies. In Study B, coverage of
+the target labels can coexist with many unsupported findings. A descriptive decomposition of the existing
+dual-defect responses shows that deepseek-v4-pro reports both true labels in78/100tasks, but adds extra
+findings in57of those cases, leaving21 /100strictly correct sets. The corresponding counts for glm-5 are23,
+16, and7. None of these both-target cases is a parse failure. This explains the gap between coverage and
+exact correctness.
+Figure 3 shows why pooled summaries are insufficient here. The model-level path split changes the in-
+terpretation of19.8%, and the six audit cells show both heterogeneity and an exception to the median
+direction.
+Reporting checks.Four checks follow from the two studies. State the quantity the design estimates.
+State what is compared and what is held fixed: the response tape in Study A, the source case and audit
+instruction across defect conditions in Study B. Report what the headline score leaves out: activity and
+ranking uncertainty beside an execution contrast, unsupported findings and zero-defect behaviour beside
+recall. Keep the conclusion within the design’s resolution: a rank correlation of1.000over ten seeds coexists
+with exact-order agreement in only0.26of bootstrap resamples, and detecting both targets often coexists
+with an incorrect full answer.
+8 Limitations
+Study A rests on ten shared seed clusters, three synthetic settings that occupy the same 24-day upward phase,
+one uncalibrated stress parameterization, and a provider mix that includes an almost inactive model. How an
+adaptive agent would respond to E1 fills, and how the contrast behaves over a downward or sideways phase,
+are outside the design.
+Study B uses two hosted API snapshots, synthetic substrates, and one coupled violation-plus-edit construction.
+Other defect combinations, models, prompts, and deployment distributions are untested.
+Scope.The substrate is financial, the conventions are not. We make no claim that any model studied here
+is better or worse at trading, and the returns reported are properties of a simulator under stated assumptions.
+9 Conclusion
+In Study A, holding the response tape fixed turns an ambiguous comparison between E0 and E1 into a
+mechanical contrast of−0.0170in total return, while ten seed clusters leave the model ranking open. In
+Study B, recall measured with one defect does not carry over to the same case with two, and the auditor that
+11
+0.00 0.25 0.50 0.75 1.00
+Pre-risk decision paths identical across E0 and E1
+deepseek-v4-pro
+deepseek-v4-flash
+glm-5
+glm-5-turbo
+glm-5.2
+89/90
+0/90
+0/90
+0/90
+0/90
+pooled 0.198
+(a) Study A: one model supplies all path agreements
+nearly inactive (358/360)
+trades
+pooled over 450 pairs
+−0.2 0.0 0.2 0.4 0.6 0.8
+Violation-recall drop: one defect →  two
+deepseek-v4-pro
+tool-use
+deepseek-v4-pro
+trading A
+deepseek-v4-pro
+trading B
+glm-5
+trading B
+glm-5
+trading A
+glm-5
+tool-use
+Holm p=0.625
+Holm p=0.125
+Holm p=0.0312
+Holm p=0.116
+Holm p=0.00916
+Holm p=6e-06median 0.267
+(b) Study B: six cells, three survive Holm
+Figure 3: Two aggregate summaries and their cell structure. (a) Parsed-path agreement in the independently
+sampled E0/E1 source runs. The pooled19.8%consists of89 /90agreements from one nearly inactive model
+and0 /90from each active model. This shows that the diagonal is not a fixed-output comparison; it does not
+show that execution caused the divergence, since most divergent pairs already differ in the first response. (b)
+The six cells recorded in the internally hash-bound multi-label plan. Five target-recall drops are positive,
+three survive Holm correction, and one is negative.
+most often includes both targets also has low precision, frequent zero-defect false positives, and only21/100
+exact dual-defect sets.
+A performance score supports only the claim that its controls identify and its scoring covers. Stating that
+estimand, reporting activity and ranking uncertainty beside an execution contrast, and reporting specificity
+beside recall keep a limited statistic from carrying a broader claim than the design supports.
+12
+Reproducibility
+The accompanying research artifact contains analysis code, figure sources, frozen inputs, and a strict
+offline verifier. It is released at https://github.com/weich97/llm-evaluation-boundaries-artifact.
+For Study A it supports statistical reanalysis of the1,800recorded replay outcomes, not regeneration of the
+underlying provider calls or execution trajectories. For Study B’s primary experiment it includes300tasks,
+their answer keys,600structured results, and the original response text, including all nine parse failures.
+Prompts are reconstructed from the task artifacts and checked against recorded request hashes. The verifier
+reruns the parser, task-rule checks, scoring, and analysis. Legacy re-scoring, interventions, and self-audit
+summaries are reproducible from released structured findings and keys; raw responses for those secondary
+collections are not included.
+The plan, manifests, and task trees use content digests to detect disagreement. Because they remain author-
+writable and have no third-party timestamp, those digests do not prove that the plan predates collection. A
+separate outcome-dependent rule, outside the hashed analysis plan, guided whether to pursue Study B as a
+standalone paper, merge it into a broader report, or release it as a negative result.
+The entry point isscripts/verify_tmlr_supplement.py. It checks the file manifest and complete required
+inputs, rejects missing or duplicate result keys, recomputes tables, and regenerates the appendix and figures.
+Required checks cannot be skipped. A separate checker validates selected printed values against the manuscript
+source when that source is present; the repository ships code and data, not the manuscript. Neither verifier
+establishes provider authenticity or corpus representativeness. The included coverage statement identifies the
+reconstruction level for each study and secondary analysis; no new provider call is needed.
+Use of Generative AI
+The author planned and led the study, reviewed the literature, developed the methods, designed the
+experiments, analyzed the results, and wrote the paper. Under the author’s guidance, generative AI tools
+helped write code, gave feedback on the experimental design, and helped check the mathematical and
+statistical analyses. The tools also helped edit the text, write plotting scripts, prepare the figures, and prepare
+and check the data and code package for release with the paper.
+References
+Robert Almgren and Neil Chriss. Optimal execution of portfolio transactions.Journal of Risk, 3(2):5–39,
+2001. doi: 10.21314/JOR.2001.041. URLhttps://doi.org/10.21314/JOR.2001.041.
+Norah Alzahrani, Hisham Alyahya, Yazeed Alnumay, Sultan AlRashed, Shaykhah Alsubaie, Yousef Al-
+mushayqih, Faisal Mirza, Nouf Alotaibi, Nora Al-Twairesh, Areeb Alowisheq, M Saiful Bari, and Haidar
+Khan. When benchmarks are targets: Revealing the sensitivity of large language model leaderboards. In
+Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (ACL 2024),
+pp. 13787–13805, 2024. doi: 10.18653/v1/2024.acl-long.744. URL https://aclanthology.org/2024.
+acl-long.744/.
+Dario Amodei, Chris Olah, Jacob Steinhardt, Paul Christiano, John Schulman, and Dan Mané. Concrete
+problems in AI safety.arXiv preprint arXiv:1606.06565, 2016. URLhttps://arxiv.org/abs/1606.06565.
+Berk Atil, Sarp Aykent, Alexa Chittams, Lisheng Fu, Rebecca J. Passonneau, Evan Radcliffe, Guru Rajan
+Rajagopal, Adam Sloan, Tomasz Tudrej, Ferhan Ture, Zhe Wu, Lixinyu Xu, and Breck Baldwin. Non-
+determinism of “deterministic” LLM settings.arXiv preprint arXiv:2408.04667, 2024. URL https:
+//arxiv.org/abs/2408.04667.
+David H. Bailey and Marcos López de Prado. The deflated Sharpe ratio: Correcting for selection bias,
+backtest overfitting and non-normality.The Journal of Portfolio Management, 40(5):94–107, 2014. URL
+https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2460551.
+13
+David H. Bailey, Jonathan M. Borwein, Marcos López de Prado, and Qiji Jim Zhu. Pseudo-mathematics
+and financial charlatanism: The effects of backtest overfitting on out-of-sample performance.Notices of
+the American Mathematical Society, 61(5):458–471, 2014. URL https://papers.ssrn.com/sol3/papers.
+cfm?abstract_id=2308659.
+Ali Basiri, Niosha Behnam, Ruud de Rooij, Lorin Hochstein, Luke Kosewski, Justin Reynolds, and Casey
+Rosenthal. Chaos engineering.IEEE Software, 33(3):35–41, 2016. doi: 10.1109/MS.2016.60. URL
+https://doi.org/10.1109/MS.2016.60.
+Samuel R. Bowman, Jeeyoon Hyun, Ethan Perez, Edwin Chen, Craig Pettit, Scott Heiner, Kamil˙ e Lukoši¯ ut˙ e,
+Amanda Askell, Andy Jones, Anna Chen, Anna Goldie, Azalia Mirhoseini, Cameron McKinnon, Christopher
+Olah, Daniela Amodei, Dario Amodei, Dawn Drain, Dustin Li, Eli Tran-Johnson, Jackson Kernion, Jamie
+Kerr, Jared Mueller, Jeffrey Ladish, Joshua Landau, Kamal Ndousse, Liane Lovitt, Nelson Elhage, Nicholas
+Schiefer, Nicholas Joseph, Noemí Mercado, Nova DasSarma, Robin Larson, Sam McCandlish, Sandipan
+Kundu, Scott Johnston, Shauna Kravec, Sheer El Showk, Stanislav Fort, Timothy Telleen-Lawton, Tom
+Brown, Tom Henighan, Tristan Hume, Yuntao Bai, Zac Hatfield-Dodds, Ben Mann, and Jared Kaplan.
+Measuring progress on scalable oversight for large language models.arXiv preprint arXiv:2211.03540, 2022.
+URLhttps://arxiv.org/abs/2211.03540.
+Paul Christiano, Buck Shlegeris, and Dario Amodei. Supervising strong learners by amplifying weak experts.
+arXiv preprint arXiv:1810.08575, 2018. URLhttps://arxiv.org/abs/1810.08575.
+Paul F. Christiano, Jan Leike, Tom B. Brown, Miljan Martic, Shane Legg, and Dario Amodei. Deep
+reinforcement learning from human preferences. InAdvances in Neural Information Processing Systems 30
+(NIPS 2017), 2017. URLhttps://arxiv.org/abs/1706.03741.
+Richard A. DeMillo, Richard J. Lipton, and Frederick G. Sayward. Hints on test data selection: Help
+for the practicing programmer.Computer, 11(4):34–41, 1978. doi: 10.1109/C-M.1978.218136. URL
+https://doi.org/10.1109/C-M.1978.218136.
+Han Ding, Yinheng Li, Junhao Wang, Hang Chen, Doudou Guo, and Yunbai Zhang. Large language model
+agent in financial trading: A survey.arXiv preprint arXiv:2408.06361, 2024. URLhttps://arxiv.org/
+abs/2408.06361.
+Yangruibo Ding, Yanjun Fu, Omniyyah Ibrahim, Chawin Sitawarin, Xinyun Chen, Basel Alomair, David
+Wagner, Baishakhi Ray, and Yizheng Chen. Vulnerability detection with code language models: How far
+are we? InProceedings of the 47th International Conference on Software Engineering (ICSE 2025), 2025.
+URLhttps://arxiv.org/abs/2403.18624.
+Andrea Frazzini, Ronen Israel, and Tobias J. Moskowitz. Trading costs.SSRN Working Paper 3229719, 2018.
+URLhttps://papers.ssrn.com/sol3/papers.cfm?abstract_id=3229719.
+Lawrence R. Glosten and Paul R. Milgrom. Bid, ask and transaction prices in a specialist market with heteroge-
+neously informed traders.Journal of Financial Economics, 14(1):71–100, 1985. doi: 10.1016/0304-405X(85)
+90044-3. URLhttps://www.sciencedirect.com/science/article/pii/0304405X85900443.
+Ryan Greenblatt, Buck Shlegeris, Kshitij Sachan, and Fabien Roger. AI control: Improving safety despite
+intentional subversion. InProceedings of the 41st International Conference on Machine Learning (ICML
+2024), 2024. URLhttps://arxiv.org/abs/2312.06942.
+Jiawei Gu, Xuhui Jiang, Zhichao Shi, Hexiang Tan, Xuehao Zhai, Chengjin Xu, Wei Li, Yinghan Shen, Shengjie
+Ma, Honghao Liu, Saizhuo Wang, Kun Zhang, Yuanzhuo Wang, Wen Gao, Lionel Ni, and Jian Guo. A survey
+on LLM-as-a-judge.arXiv preprint arXiv:2411.15594, 2024. URLhttps://arxiv.org/abs/2411.15594.
+Campbell R. Harvey and Yan Liu. Backtesting.The Journal of Portfolio Management, 42(1):13–28, 2015.
+URLhttps://www.pm-research.com/content/iijpormgmt/42/1/13.
+14
+Campbell R. Harvey, Yan Liu, and Heqing Zhu. ...and the cross-section of expected returns.The Review
+of Financial Studies, 29(1):5–68, 2016. doi: 10.1093/rfs/hhv059. URL https://academic.oup.com/rfs/
+article-abstract/29/1/5/1843824.
+Joel Hasbrouck.Empirical Market Microstructure: The Institutions, Economics, and Econometrics of
+Securities Trading. Oxford University Press, 2007. ISBN 9780195301649. URLhttps://global.oup.com/
+academic/product/empirical-market-microstructure-9780195301649.
+Mei-Chen Hsueh, Timothy K. Tsai, and Ravishankar K. Iyer. Fault injection techniques and tools.Computer,
+30(4):75–82, 1997. doi: 10.1109/2.585157. URLhttps://doi.org/10.1109/2.585157.
+Geoffrey Irving, Paul Christiano, and Dario Amodei. AI safety via debate.arXiv preprint arXiv:1805.00899,
+2018. URLhttps://arxiv.org/abs/1805.00899.
+Yue Jia and Mark Harman. An analysis and survey of the development of mutation testing.IEEE
+Transactions on Software Engineering, 37(5):649–678, 2011. doi: 10.1109/TSE.2010.62. URL https:
+//doi.org/10.1109/TSE.2010.62.
+René Just, Darioush Jalali, Laura Inozemtseva, Michael D. Ernst, Reid Holmes, and Gordon Fraser. Are
+mutants a valid substitute for real faults in software testing? InProceedings of the 22nd ACM SIGSOFT
+International Symposium on Foundations of Software Engineering (FSE 2014), 2014. doi: 10.1145/2635868.
+2635929. URLhttps://doi.org/10.1145/2635868.2635929.
+Sayash Kapoor, Benedikt Stroebl, Zachary S. Siegel, Nitya Nadgir, and Arvind Narayanan. AI agents that
+matter.arXiv preprint arXiv:2407.01502, 2024. URLhttps://arxiv.org/abs/2407.01502.
+Albert S. Kyle. Continuous auctions and insider trading.Econometrica, 53(6):1315–1335, 1985. doi:
+10.2307/1913210. URLhttps://www.jstor.org/stable/1913210.
+Thomas J. LeBlanc and John M. Mellor-Crummey. Debugging parallel programs with Instant Replay.
+IEEE Transactions on Computers, C-36(4):471–482, 1987. doi: 10.1109/TC.1987.1676929. URL https:
+//doi.org/10.1109/TC.1987.1676929.
+Jan Leike, David Krueger, Tom Everitt, Miljan Martic, Vishal Maini, and Shane Legg. Scalable agent
+alignment via reward modeling: A research direction.arXiv preprint arXiv:1811.07871, 2018. URL
+https://arxiv.org/abs/1811.07871.
+Percy Liang, Rishi Bommasani, Tony Lee, Dimitris Tsipras, Dilara Soylu, Michihiro Yasunaga, Yian
+Zhang, Deepak Narayanan, Yuhuai Wu, Ananya Kumar, Benjamin Newman, Binhang Yuan, Bobby
+Yan, Ce Zhang, Christian Cosgrove, Christopher D. Manning, Christopher Ré, Diana Acosta-Navas,
+Drew A. Hudson, Eric Zelikman, Esin Durmus, Faisal Ladhak, Frieda Rong, Hongyu Ren, Huaxiu Yao,
+Jue Wang, Keshav Santhanam, Laurel Orr, Lucia Zheng, Mert Yuksekgonul, Mirac Suzgun, Nathan Kim,
+Neel Guha, Niladri Chatterji, Omar Khattab, Peter Henderson, Qian Huang, Ryan Chi, Sang Michael Xie,
+Shibani Santurkar, Surya Ganguli, Tatsunori Hashimoto, Thomas Icard, Tianyi Zhang, Vishrav Chaudhary,
+William Wang, Xuechen Li, Yifan Mai, Yuhui Zhang, and Yuta Koreeda. Holistic evaluation of language
+models.Transactions on Machine Learning Research, 2023. URLhttps://arxiv.org/abs/2211.09110.
+Xiao-Yang Liu, Ziyi Xia, Jingyang Rui, Jiechao Gao, Hongyang Yang, Ming Zhu, Christina Wang, Zhaoran
+Wang, and Jian Guo. FinRL-Meta: Market environments and benchmarks for data-driven financial
+reinforcement learning. InAdvances in Neural Information Processing Systems 35 (NeurIPS 2022),
+Datasets and Benchmarks Track, 2022. URL https://proceedings.neurips.cc/paper_files/paper/
+2022/hash/0bf54b80686d2c4dc0808c2e98d430f7-Abstract-Datasets_and_Benchmarks.html.
+Marcos López de Prado.Advances in Financial Machine Learning. John Wiley & Sons,
+2018. ISBN 9781119482086. URL https://www.wiley.com/en-us/Advances+in+Financial+Machine+
+Learning-p-9781119482086.
+15
+Moran Mizrahi, Guy Kaplan, Dan Malkin, Rotem Dror, Dafna Shahaf, and Gabriel Stanovsky. State of what
+art? a call for multi-prompt LLM evaluation.Transactions of the Association for Computational Linguistics,
+12:933–949, 2024. doi: 10.1162/tacl_a_00681. URL https://direct.mit.edu/tacl/article/doi/10.
+1162/tacl_a_00681/123885/.
+Arjun Panickssery, Samuel R. Bowman, and Shi Feng. LLM evaluators recognize and favor their own
+generations.arXiv preprint arXiv:2404.13076, 2024. URLhttps://arxiv.org/abs/2404.13076.
+William Saunders, Catherine Yeh, Jeff Wu, Steven Bills, Long Ouyang, Jonathan Ward, and Jan Leike.
+Self-critiquing models for assisting human evaluators.arXiv preprint arXiv:2206.05802, 2022. URL
+https://arxiv.org/abs/2206.05802.
+Melanie Sclar, Yejin Choi, Yulia Tsvetkov, and Alane Suhr. Quantifying language models’ sensitivity to
+spurious features in prompt design or: How I learned to start worrying about prompt formatting. In
+The Twelfth International Conference on Learning Representations (ICLR 2024), 2024. URL https:
+//arxiv.org/abs/2310.11324.
+Saad Ullah, Mingji Han, Saurabh Pujar, Hammond Pearce, Ayse Coskun, and Gianluca Stringhini. LLMs
+cannot reliably identify and reason about security vulnerabilities (yet?): A comprehensive evaluation,
+framework, and benchmarks. In2024 IEEE Symposium on Security and Privacy (SP), 2024. URL
+https://ieeexplore.ieee.org/document/10646663/.
+Peiyi Wang, Lei Li, Liang Chen, Zefan Cai, Dawei Zhu, Binghuai Lin, Yunbo Cao, Lingpeng Kong, Qi Liu,
+Tianyu Liu, and Zhifang Sui. Large language models are not fair evaluators. InProceedings of the
+62nd Annual Meeting of the Association for Computational Linguistics (ACL 2024), 2024. URL https:
+//aclanthology.org/2024.acl-long.511/.
+Shijie Wu, Ozan Irsoy, Steven Lu, Vadim Dabravolski, Mark Dredze, Sebastian Gehrmann, Prabhanjan
+Kambadur, David Rosenberg, and Gideon Mann. BloombergGPT: A large language model for finance.
+arXiv preprint arXiv:2303.17564, 2023. URLhttps://arxiv.org/abs/2303.17564.
+Yijia Xiao, Edward Sun, Di Luo, and Wei Wang. TradingAgents: Multi-agents LLM financial trading
+framework.arXiv preprint arXiv:2412.20138, 2024. URLhttps://arxiv.org/abs/2412.20138.
+Weicheng Xue. Representation signatures and risk-feedback alignment in LLM trading agents.arXiv preprint
+arXiv:2605.28850, 2026. doi: 10.48550/arXiv.2605.28850. URLhttps://arxiv.org/abs/2605.28850.
+Hongyang Yang, Xiao-Yang Liu, and Christina Dan Wang. FinGPT: Open-source financial large language
+models.arXiv preprint arXiv:2306.06031, 2023. URL https://arxiv.org/abs/2306.06031. FinLLM
+Symposium at IJCAI 2023.
+Shunyu Yao, Noah Shinn, Pedram Razavi, and Karthik Narasimhan.τ-bench: A benchmark for tool-
+agent-user interaction in real-world domains.arXiv preprint arXiv:2406.12045, 2024. URL https:
+//arxiv.org/abs/2406.12045.
+Yangyang Yu, Haohang Li, Zhi Chen, Yuechen Jiang, Yang Li, Denghui Zhang, Rong Liu, Jordan W. Suchow,
+and Khaldoun Khashanah. FinMem: A performance-enhanced LLM trading agent with layered memory
+and character design.arXiv preprint arXiv:2311.13743, 2023. URL https://arxiv.org/abs/2311.13743.
+Yangyang Yu, Zhiyuan Yao, Haohang Li, Zhiyang Deng, Yuechen Jiang, Yupeng Cao, Zhi Chen, Jor-
+dan W. Suchow, Zhenyu Cui, Rong Liu, Zhaozhuo Xu, Denghui Zhang, Koduvayur Subbalakshmi,
+Guojun Xiong, Yueru He, Jimin Huang, Dong Li, and Qianqian Xie. FinCon: A synthesized LLM
+multi-agent system with conceptual verbal reinforcement for enhanced financial decision making. In
+Advances in Neural Information Processing Systems 37 (NeurIPS 2024), pp. 137010–137045, 2024.
+doi: 10.52202/079017-4354. URL https://proceedings.neurips.cc/paper_files/paper/2024/hash/
+f7ae4fe91d96f50abc2211f09b6a7e49-Abstract-Conference.html.
+16
+Lianmin Zheng, Wei-Lin Chiang, Ying Sheng, Siyuan Zhuang, Zhanghao Wu, Yonghao Zhuang, Zi Lin,
+Zhuohan Li, Dacheng Li, Eric P. Xing, Hao Zhang, Joseph E. Gonzalez, and Ion Stoica. Judging LLM-as-
+a-judge with MT-Bench and Chatbot Arena. InAdvances in Neural Information Processing Systems 36
+(NeurIPS 2023), Datasets and Benchmarks Track, 2023. URLhttps://arxiv.org/abs/2306.05685.
+Kaijie Zhu, Jindong Wang, Jiaheng Zhou, Zichen Wang, Hao Chen, Yidong Wang, Linyi Yang, Wei Ye,
+Yue Zhang, Neil Zhenqiang Gong, and Xing Xie. PromptRobust: Towards evaluating the robustness
+of large language models on adversarial prompts.arXiv preprint arXiv:2306.04528, 2023. URL https:
+//arxiv.org/abs/2306.04528.
+Appendix: per-cell tables
+The appendix reports the per-cell values underlying the summaries in the main text. All tables are generated
+directly from the released CSV files byscripts/build_appendix_tables.py.
+Table 5: Study A, every estimand of the fixed-tape2× 2replay, on the four outcomes the body draws on.
+Intervals are seed-cluster bootstrap (10,000draws,10clusters,450matched pairs). The replay records five
+further outcomes; they are infactorial_estimands.csv.
+Outcome Estimand Estimate 95% CI
+total returnD E0: execution|tape from E0 -0.0193[−0.0273,−0.0121]
+DE1: execution|tape from E1 -0.0147[−0.0197,−0.0100]
+¯D: balanced destination -0.0170[−0.0230,−0.0117]
+OE0: response origin|replay at E0 +0.0012[−0.0075,+0.0101]
+OE1: response origin|replay at E1 +0.0059[−0.0053,+0.0176]
+¯O: balanced tape origin +0.0035[−0.0061,+0.0136]
+DE1−D E0: interaction +0.0047[−0.0005,+0.0105]
+¯D+ ¯O: observed diagonal -0.0135[−0.0238,−0.0025]
+SharpeD E0: execution|tape from E0 -3.3944[−3.8297,−3.0142]
+DE1: execution|tape from E1 -1.9269[−2.4712,−1.3757]
+¯D: balanced destination -2.6607[−3.1269,−2.2312]
+OE0: response origin|replay at E0 +0.0796[−0.3052,+0.4790]
+OE1: response origin|replay at E1 +1.5470[+1.1073,+2.0632]
+¯O: balanced tape origin +0.8133[+0.4409,+1.2386]
+DE1−D E0: interaction +1.4674[+1.1168,+1.8250]
+¯D+ ¯O: observed diagonal -1.8473[−2.4076,−1.1905]
+max drawdownD E0: execution|tape from E0 -0.0050[−0.0070,−0.0031]
+DE1: execution|tape from E1 -0.0035[−0.0062,−0.0013]
+¯D: balanced destination -0.0042[−0.0065,−0.0025]
+OE0: response origin|replay at E0 +0.0004[−0.0006,+0.0019]
+OE1: response origin|replay at E1 +0.0020[+0.0004,+0.0033]
+¯O: balanced tape origin +0.0012[+0.0003,+0.0023]
+DE1−D E0: interaction +0.0015[−0.0004,+0.0033]
+¯D+ ¯O: observed diagonal -0.0030[−0.0047,−0.0014]
+fill rateD E0: execution|tape from E0 -0.0682[−0.0718,−0.0642]
+DE1: execution|tape from E1 -0.0496[−0.0519,−0.0473]
+¯D: balanced destination -0.0589[−0.0613,−0.0563]
+OE0: response origin|replay at E0 -0.0022[−0.0067,+0.0000]
+OE1: response origin|replay at E1 +0.0164[+0.0098,+0.0219]
+¯O: balanced tape origin +0.0071[+0.0017,+0.0109]
+DE1−D E0: interaction +0.0186[+0.0147,+0.0223]
+¯D+ ¯O: observed diagonal -0.0518[−0.0578,−0.0474]
+17
+Table 6: Study B, the six auditor× source cells recorded in the internally hash-bound multi-label plan. Recall
+is on the target violation, within matched triplets; the discordant counts are the McNemar pairs. Intervals
+are unadjusted 95% paired percentile-bootstrap confidence intervals based on10,000resamples. p-values are
+from two-sided exact McNemar tests with Holm correction across the six primary comparisons.
+Auditor SourcenSingle Dual Drop 95% CIb/cHolmp
+deepseek-v4-pro tool-use 40 0.900 0.950 -0.050[−0.150,+0.050]1/3 0.625
+deepseek-v4-pro trading A 30 0.900 0.733 +0.167[+0.033,+0.300]5/0 0.125
+deepseek-v4-pro trading B30 0.967 0.700+0.267[+0.133,+0.433]8/00.0312
+glm-5 tool-use40 1.000 0.475+0.525[+0.375,+0.675]21/05.7e-06
+glm-5 trading A30 0.833 0.433+0.400[+0.200,+0.600]13/10.00916
+glm-5 trading B 30 0.433 0.167 +0.267[+0.067,+0.467]10/2 0.116
+18

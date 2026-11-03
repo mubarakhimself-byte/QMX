@@ -1,0 +1,1757 @@
+arXiv 2607.28527  https://arxiv.org/abs/2607.28527
+
+MANTA: Multi-Agent Network Topology Adaptation for Self-Evolving
+Multi-Agent Systems
+MaoXun Huang1,†, Jerry Wang2,†, Yi-Cheng Lai3,†
+Zhenxing Zhang1, Claire Cardie1, Hen-Hsen Huang3
+1Department of Computer Science, Cornell University, United States
+2Department of Computer Science, University of Illinois Urbana-Champaign, United States
+3Institute of Information Science, Academia Sinica, Taiwan
+†Equal contribution
+Abstract
+Large language model-based multi-agent systems improve
+complex problem solving through task decomposition, agent
+specialization,informationexchange,andintermediatevalida-
+tion.However,existingsystemstypicallytreatcommunication
+topology as a fixed design choice or an offline optimization
+target. We introduceMANTA, a framework forMulti-Agent
+NetworkTopologyAdaptation that enables communication
+structures to self-evolve at inference time. Before execution,
+MANTA initializes a task-conditioned topology from prior
+structuralexperience.Duringdeployment,itmonitorscollab-
+oration traces and applies bounded structural updates when
+the current organization becomes insufficient. These updates
+canmodifyagentroles,communicationlinks,executionorder,
+informationvisibility,andvalidationpathwayswhilepreserv-
+ingthetaskinterfaceandagentbudget.WeevaluateMANTA
+against representative single-agent and multi-agent baselines
+on five benchmarks spanning information seeking, tool use,
+planning, workflow execution, and mathematical reasoning.
+MANTA achieves the highest average score of 74.0, outper-
+forming the strongest baseline by 5.8 percentage points and
+obtainingthebestresultonPlanCraft.Theseresultsshowthat
+inference-time self-improvement can extend to the architec-
+ture of collaboration itself.
+Introduction
+Biological systems adapt not only before encountering their
+environments, but also through continued interaction with
+environmentalpressures.ModernAIsystemsareundergoing
+a similar transition from predominantly offline optimization
+toward adaptation during execution. Large language mod-
+els (LLMs) increasingly operate as components of agen-
+tic systems that reason, use tools, retain experience, and
+coordinate with other agents. Rather than relying only on
+pre-deployment weight updates, these systems can adapt at
+inference time through prompts, demonstrations, reasoning
+traces, memories, tools, workflows, and coordination proto-
+cols.In-contextlearningfirstshowedthatdemonstrationscan
+inducetaskadaptationduringinference(Brownetal.2020),
+while chain-of-thought prompting and ReAct demonstrated
+thevalueofintermediatereasoningandreasoning-and-acting
+trajectories (Wei et al. 2023; Yao et al. 2023b).
+Copyright©2027, Association for the Advancement of Artificial
+Intelligence (www.aaai.org). All rights reserved.
+Existing self-improvement methods adapt outputs,
+prompts,reasoningtraces,andmemory(Madaanetal.2023;
+Shinnetal.2023).Mostapproaches,however,adaptindivid-
+ualagentsratherthanhowmultipleagentsareorganizedand
+communicate.
+Multi-agentframeworksdecomposecomplextasksacross
+specialized roles and collaborative reasoning processes, al-
+lowing agents to debate, verify, aggregate, implement, cri-
+tique, or coordinate toward a shared objective (Wu et al.
+2023; Qian et al. 2024; Hong et al. 2024; Du et al. 2023).
+Their topology determines who communicates with whom,
+howinformationisrouted,wherevalidationoccurs,andhow
+intermediate outputs are refined.
+Topology is still typically optimized at design time rather
+than adapted during execution. Existing methods jointly op-
+timize prompts and topologies or automate workflow de-
+sign (Zhou et al. 2026; Zhang et al. 2025a; Hu, Lu, and
+Clune 2025; Shang et al. 2025), but generally fix the result-
+ing structure before task execution. Whether topology can
+self-improve online therefore remains underexplored.
+This raises a central question: Can a multi-agent system
+improve its communication topology while solving each in-
+dividual task? Unlike prior approaches that rely on training,
+offline search, or pre-execution optimization, this requires
+instance-conditioned planning, test-time topology mutation
+from intermediate collaboration traces, and cross-run trans-
+fer of topology experience without updating model weights.
+We proposeMANTA, a framework forMulti-Agent Net-
+work Topology Adaptationthat combines these capabilities.
+For each task, MANTA plans a topology from accumulated
+experience, audits the collaboration process, and applies a
+bounded structural mutation when the current organization
+becomes insufficient. A cross-run playbook continually dis-
+tills topology-selection and repair experience across execu-
+tions.
+Across five benchmarks, MANTA achieves the highest
+average score of74.0, outperforming the strongest baseline
+by5.8points. These results highlight the value of adapt-
+ingcollaborationstructurestotaskneedsandexecution-time
+failures. Our contributions are as follows.
+•A new problem.We argue that a multi-agent system’s
+communication structure should be treated as something
+the system can change while it works, rather than a de-
+sign choice fixed before deployment. We formalize this
+arXiv:2607.28527v1  [cs.AI]  30 Jul 2026
+Levels of Self-Improvement
+higher level
+lower level
+L0 Output Self-Refine
+L1 Prompt APO, APE, DSPy, MIPRO, PromptBreeder,TextGrad, GEPA
+L2 Trace CoT, Self-Consistency, Zero-shot CoT, ToT, GoT
+L3 Skill/Tool ReAct, Toolformer, Voyager
+L4 Memory Reflexion, DC, Generative Agents, A-MEM,AWM, ACE
+L5 Agent RoleCAMEL, ChatDev, MetaGPT, Debate, EoT,MALLM
+L6 Topology MASS, AFlow, ADAS, AgentSquare,MANTA
+L7 Weights RLHF, SELF
+our focus
+text capability multi-agent weights
+Figure 1:Levels of self-improvement in agent systems.
+Methods adapt different system components, from outputs
+andpromptstoagenttopologyandmodelweights.MANTA
+self-improves the communication topology.
+astopology-level self-improvement.
+•Amethod.WeproposeMANTA,whichorganizesateam
+ofagentstofitthetaskathand,watchesthecollaboration
+as it unfolds, and reorganizes when the current structure
+is clearly failing. What it learns from each task carries
+over to the next, without any weight updates or offline
+search.
+•Evidence that it works.Across five benchmarks,
+MANTAoutperformssingle-agentmethods,staticmulti-
+agent topologies, and automated workflow-design base-
+lines. Case studies show it recovering from concrete fail-
+ures such as an overloaded branch, a missing check, an
+agreement reached too early, an action taken twice.
+Related Work
+Figure 1 organizes prior work by the object being adapted,
+ranging from outputs and prompts to agent capabilities,
+multi-agentorganization,andmodelweights.Thisviewhigh-
+lights MANTA’s position: whereas most methods improve
+what an agent produces, observes, remembers, or executes,
+MANTAimproveshowmultipleagentsareorganizedduring
+task solving.
+Text-level adaptation.Text-level methods adapt outputs,
+prompts, or reasoning traces. Self-Refine iteratively revises
+generated answers through feedback (Madaan et al. 2023).
+Prompt-level methods search for improved instructions or
+prompt variants (Pryzant et al. 2023; Zhou et al. 2023), op-
+timize instructions, demonstrations, or modular language-
+model programs (Khattab et al. 2023; Opsahl-Ong et al.
+2024), or formulate prompt design as evolutionary, differ-
+entiable, or reflective optimization (Fernando et al. 2023;
+Yuksekgonul et al. 2024; Agrawal et al. 2026). Trace-level
+methods restructure intermediate reasoning through chain-
+of-thought,self-consistency,andtree-orgraph-basedsearch
+(Weietal.2023;Wangetal.2023b;Kojimaetal.2023;Yao
+et al. 2023a; Besta et al. 2024). These methods adapt textual
+or reasoning artifacts while leaving the surrounding agent
+organization unchanged.
+Agent-capability adaptation.Tool- and skill-oriented
+methods improve how agents act, call external tools, or ac-
+quire reusable behaviors (Yao et al. 2023b; Schick et al.
+2023; Wang et al. 2023a). Memory-oriented methods store,
+retrieve, and refine experience, reflections, or task-solving
+playbooks across interactions (Shinn et al. 2023; Suzgun
+etal.2025;Parketal.2023;Xuetal.2025;Wangetal.2024;
+Zhang et al. 2025b). These approaches create more persis-
+tent and reusable agent state, but generally adapt individual
+capabilities or context rather than collective organization.
+Multi-agentorganizationandtopology.Role-basedsys-
+tems such as CAMEL, ChatDev, and MetaGPT decompose
+tasks into specialized agents for communication, planning,
+coding,reviewing,ormanagement(Lietal.2023;Qianetal.
+2024; Hong et al. 2024). Interaction-based systems coordi-
+nate agents through discussion or aggregation, as in multi-
+agentdebate,Exchange-of-Thought,andMALLM(Duetal.
+2023; Yin et al. 2023; Becker et al. 2025). These systems
+demonstrate the importance of collaboration structure but
+generally rely on predefined roles and interaction patterns.
+More recent work treats multi-agent structure as an opti-
+mizationtarget.MASSjointlyoptimizespromptsandtopolo-
+gies (Zhou et al. 2026), while AFlow, Automated Design of
+AgenticSystems,andAgentSquaresearchoveragenticwork-
+flowsormodularsystemdesigns(Zhangetal.2025a;Hu,Lu,
+and Clune 2025; Shang et al. 2025). These approaches es-
+tablishtopologyandworkflowasmeaningfuldesigntargets,
+butprimarilyoptimizethembeforeexecutionthroughoffline
+search or aggregate validation performance. The selected
+workflow is generally fixed once task execution begins.
+MANTA instead treats topology as an execution-time ob-
+ject of self-improvement. It uses prior experience to plan
+an initial task-conditioned organization, then locally re-
+pairscommunication,coordination,andvalidationstructures
+whenintermediatetracesexposeastructuraldeficiency.This
+distinguishes MANTA from methods that search for a fixed
+workflow before execution.
+Weight-level adaptation.Weight-level methods improve
+agentsthroughtrainingoralignment(Ouyangetal.2022;Lu
+etal.2024).MANTAinsteadkeepsmodelweightsfixedand
+adapts the collaboration structure at inference time.
+Method
+MANTA chooses a communication topology for each task
+and can revise it during execution. This section defines its
+topology representation, orchestration loop, and memory.
+System Overview
+Figure 2 shows two nested layers. Thetarget multi-agent
+systemsolvesthetaskthroughreasoning,toolcalls,andmes-
+sage exchange. Theorchestration layerselects the agents,
+Planning & adaptation execution auditing & control memory & learning deterministic code Agent LLM agent 1 stage order
+Task
+Topology
+Planner
+designs a
+team for the
+task: topology,
+agents, roles
+Orchestrator
+validates the
+topology; spawns
+the agents
+Turn Executor
+runs one
+collaboration turn
+Trace Auditor
+flags process
+anomalies
+in the trace
+Controller
+stop or
+repair
+Finalizer
+votes;
+synthesizes
+from evidence
+Final
+answer
+Agent task agents
+target multi-agent system
+1 /s♀ap
+Agent
+2 /cgs 3 /♀ay 4 /searc
+Agent
+5 /rand 7 
+Agent
+trace auditreport stop
+Trace-backed repair(one mutation per run)
+mutate
+new verifier
+edits: add or expand agents, rewire edges,
+or adjust visibility
+6 🔧
+Short-term playbook
+(this run)
+each turn’s topology,
+findings, and decision
+/aste
+repair needed
+a final turn runs on
+the revised topology
+records
+each turn
+informs
+Long-term playbook
+standing principles·how
+to choose a topology·
+lessons from experience
+🕮
+Reflector
+periodically
+rewrites the lessons
+8 /refres
+Agent
+read at initial plan
+and repair time
+run outcome
+(process signals)
+rewrites the lessons (batched)
+per-task loopcross-run memory
+Figure 2:MANTA overview.MANTA first plans a task-conditioned multi-agent topology and executes the task under that
+structure.TheTraceAuditorflagsprocess-observableanomaliesinthecollaborationtrace;itdoesnotjudgeanswercorrectness.
+The Controller either finalizes the answer or returns the diagnosis for one bounded topology revision. A short-term playbook
+supports repair within the current run, while a long-term playbook transfers reusable topology-selection lessons across runs.
+communication links, and information visibility without
+solving the task. It combines three LLM components called
+theTopologyPlanner,TraceAuditor,andSkillReflectorwith
+deterministic code that validates topologies, runs agents,
+routes messages, controls repair, and decides when to stop.
+For each task, the Planner chooses the team size, inter-
+action pattern, and roles. After one collaboration turn, the
+Auditor reports observable process risks rather than answer
+correctness. The Controller then finalizes the answer or per-
+mits one bounded repair and a final turn.
+Two playbooks provide memory. One records topology
+and audit history within the current run. The other stores
+lessons across runs and is updated by the Skill Reflector
+everyNruns.Itusesonlyprocesssignalsandneverreceives
+the benchmark verdict.
+Topology Representation
+A topology specification defines a versioned and validated
+multi-agent system. Each agent has astructural role, such
+as coordinator, worker, verifier, debater, or voter, that deter-
+mines its graph position. It also has astage roleas a worker
+or critic. Workers produce contributions supported by evi-
+dence.Criticscheckandrevisevisibleclaims.Anagentmay
+also receive a domain persona and a list of allowed tools.
+Agents belong topattern groupswith predefined interac-
+tion structures. Groups can be nested, which lets an agent
+delegate work to a subgroup and synthesize its reports. Di-
+rectconnectionsmaysupplementthistree.Eachcontextpol-
+icy controls the messages, senders, and shared evidence an
+agent can access, how far its messages travel, and whether
+it receives full or summarized reports. Code enforces these
+policies whenever information is read.
+Beforeexecution,MANTAchecksgroupmembership,at-
+tachmentcycles,roles,andtheagentbudget.Invalidpropos-
+als are rejected. The representation includes a single agent
+and the six fixed workflows as special cases while also sup-
+porting nested combinations.
+The Orchestration Loop
+Query-conditioned planning.The Planner receives the
+taskandtheexperiencememorywithoutaccesstothebench-
+mark identity or a hand-designed topology. It analyzes the
+task requirements and likely process risks, then produces a
+compactplanspecifyingtheinteractionpattern,agentcount,
+andanyoptionalverifierornestedgroups.Deterministiccode
+expandsthisplanintoacompletetopology,assignsrolesand
+context policies, and validates all structural constraints.
+Turn execution.Each collaboration turn executes the
+topologyrecursivelyaccordingtoitsgroupstructure.Agents
+communicate through structured relay packets rather than
+raw transcripts. These packets summarize their answers, ev-
+idence, confidence, and unresolved issues. A shared-context
+controller enforces the visibility policy of every agent. Dur-
+ing execution, identical tool calls are deduplicated, while an
+append-only evidence ledger preserves the claims and sup-
+porting evidence produced across branches.
+Trace auditing and repair.After each turn, an LLM Au-
+ditor scans structured artifacts, tool records, relay packets,
+confidence,unresolvedissues,andevidencevisibility.Itmay
+alsoaddanewtrace-groundedprocessflag,butitcannotcon-
+sult the benchmark answer or verdict. We call a runflagged
+when the initial audit recommends repair because at least
+onerepairableflaghasmediumorhighseverity.Acleanrun
+doesnotactivatethisgate.Thesetermsdescribetheobserved
+collaboration process rather than answer correctness.
+Forageneraltask,thePlannerreturnsonemutationwithat
+mostthreeoperations.Itmayaddorexpandanagent,change
+agrouppattern,editacommunicationedge,orchangeinfor-
+mation visibility. Deterministic code applies the operations
+to a copy of the topology and validates all roles, references,
+memberships,nesting,andagentlimits.Invalidproposalsuse
+a conservative repair compiler or are skipped.
+Two-Horizon Playbook Memory
+MANTAmaintainsmemoryattwotimescales.Ashort-term
+playbookliveswithinasinglerunandalong-termplaybook
+accumulates across runs.
+Theshort-termplaybooklogseachturnofthecurrentrun,
+recording the topology in use, the process flags reported by
+the Auditor, the repair it recommended, and the decision the
+controller took. The Planner therefore sees which structures
+havealreadybeentriedandwhichobservableanomaliesthey
+produced rather than only the latest state.
+Thelong-termplaybookstoresgeneralprinciplesthatmap
+task characteristics and process risks to topology choices.
+The Planner consults it both when drafting the initial topol-
+ogy and when choosing a repair. After everyNruns a Skill
+Reflector rewrites its lessons from summaries of recent exe-
+cution traces.
+This learning loop never sees benchmark feedback. Each
+runinareflectionbatchreceivesonlyaprocess-derivedlabel.
+Aruniscalledprocedurallycleanwhentheauditcontainsno
+processflagandexecutionendsindecision-gradeconsensus.
+Thislabelmeansthatnoencodedcoordinationanomalywas
+observed;itdoesnotmeanthattheansweriscorrect.Ground-
+truth outcomes are used solely for evaluation and are never
+exposed to the Planner or either playbook.
+Experiments
+Models and evaluation benchmarks.We evaluate
+MANTA on five benchmarks spanning three complemen-
+tarycapabilitycategories.Forinformationseekingandtool
+use, we use BrowseComp (Wei et al. 2025), which evalu-
+ates multi-step information seeking and evidence synthesis,
+and StableToolBench (Guo et al. 2024), which evaluates re-
+liable external tool selection and execution. Forplanning
+and workflow execution, we use PlanCraft (Dagan, Keller,
+andLascarides2025),whichemphasizeslong-horizonplan-
+ning and dependency-aware action sequencing, and Work-
+Bench (Styles et al. 2024), which evaluates realistic multi-
+step workflows. We additionally include MATH (Hendrycks
+et al. 2021) as areasoningbenchmark to test whether coor-
+dination improvements generalize to tasks that primarily re-
+quirestructuredreasoning.AllmethodsuseGemma4asthe
+backbonemodel(GoogleDeepMind2026).Foreachbench-
+mark, we evaluate 30 questions and repeat each experiment
+over three independent runs.
+Baselines.
+Single-AgentMethods. SingleAgentdirectlysolveseach
+task using one language model agent.CoTsolves each task
+with step-by-step reasoning using a single language model
+agent(Weietal.2023;Kojimaetal.2023).Self-Consistency
+samplesmultiplereasoningtracesandselectsthefinalanswer
+through consistency-based aggregation (Wang et al. 2023b).
+Self-Refineiteratively improves the answer by generating
+feedback and revising the response (Madaan et al. 2023).
+Static Multi-Agent Workflows. Static Agentic Work-
+flowsuse fixed communication structures throughout task
+solving. We evaluate voting, group-chat debate, fully linked
+debate, orchestrator without discussion, orchestrator with
+discussion, and an orchestrator tree structure. Among these
+workflows,multi-agentdebateallowsmultipleagentstopro-
+pose,critique,andrevisecandidateanswersbeforeproducing
+a final decision (Du et al. 2023).
+Automatic Agentic System Design Methods. AFlow
+searches over agentic workflows using predefined operators
+andworkflow-leveloptimization(Zhangetal.2025a).ADAS
+uses an LLM-based meta-agent to iteratively propose im-
+proved agentic systems based on previous evaluations (Hu,
+Lu, and Clune 2025).AgentSquaresearches over modular
+agentic system designs by composing agents, tools, mem-
+ory, and workflow components (Shang et al. 2025).MASS
+jointly optimizes agent prompts and communication topolo-
+gies within a multi-agent design space (Zhou et al. 2026).
+Results
+Experimental Results and Analysis
+Overall performance.Table 1 shows MANTA performs
+consistently across information seeking, tool use, planning,
+workflow execution, and reasoning.MANTA achieves the
+strongest average score of74.0across the five bench-
+marks, leading the next best method by5.8points.It
+also improves on the Single Agent across every benchmark.
+The results indicate adapting the collaboration to each task
+provides a broad advantage rather than a gain limited to one
+task type.
+The supporting studies explain where this advantage
+comesfrom.Theablationstudyidentifiesstronginitialplan-
+ning as the largest contributor, while repair and past experi-
+enceprovideadditionalimprovements.Themutationanalysis
+showsthefirstchangecapturesmostofthebenefit,withupto
+three changes extending coverage to the most difficult tasks.
+Past learned experience also improves results on the same
+benchmarkandproducestheonlypositiveaveragegainwhen
+transferred across benchmarks. At the same time, MANTA
+uses the fewest tokens among the evaluated multi-agent sys-
+tems.Together,thesefindingsshowthatcarefulplanning,
+targeted changes, and reusable experience improve over-
+all performance without requiring more computation.
+Category System Information Seeking and Tool Use Planning and Workflow Execution Reasoning Average
+BrowseComp StableToolBench PlanCraft WorkBench MATH
+Reasoning
+Models
+Single Agent34.4 ±4.2 74.4±7.9 61.1±1.6 41.1±5.7 85.6±6.3 59.3±2.5
+CoT26.7 ±5.4 50.0±7.2 62.2±12.6 35.6±4.2 75.6±3.1 50.0±3.3
+Self-Consistency37.8 ±1.6 51.1±1.6 61.1±15.7 15.6±1.6 78.9±4.2 48.9±3.3
+Self-Refine14.4 ±3.1 68.9±1.6 62.2±15.0 35.6±4.2 96.7±2.7 55.6±3.2
+Static MAS
+Voting43.3 ±2.7 85.6±1.6 61.1±1.6 41.1±1.6 92.2±1.6 64.7±0.8
+Group Chat Debate61.1 ±3.1 82.2±5.7 72.2±3.1 21.1±4.2 91.1±4.2 65.5±1.9
+Fully Linked Debate58.9 ±9.6 81.1±5.7 73.3±2.7 21.1±4.2 91.1±1.6 65.1±2.5
+Orchestrator w/o Discussion53.3 ±2.7 82.2±1.6 74.4±1.6 23.3±4.7 94.4±3.1 65.5±1.3
+Orchestrator w/ Discussion64.4 ±4.2 80.0±0.0 73.3±2.7 20.0±2.7 93.3±0.0 66.2±1.1
+Orchestrator Tree Structure54.4 ±5.7 78.9±3.1 62.2±3.1 16.7±2.7 94.4±1.6 61.3±1.6
+Adaptive MAS
+AFlow12.2 ±3.1 66.7±5.4 21.1±4.2 61.1±4.2 96.7±0.0 51.6±1.7
+ADAS48.9 ±1.6 77.8±4.2 57.8±13.4 66.7±0.0 90.0±0.0 68.2±3.2
+AgentSquare32.2 ±1.6 88.9±5.7 34.4±6.8 62.2±3.1 96.7±2.7 62.9±1.7
+MASS50.0 ±2.7 50.0±5.4 70.0±0.0 46.7±0.0 95.6±1.6 62.5±1.2
+Ours MANTA 76.7±4.7 82.2±3.1 76.7±3.3 43.3±2.7 91.1±5.7 74.0±1.8
+Table 1: Main results across five benchmarks using Gemma 4 31B with medium reasoning effort. Methods are grouped into
+reasoning models, static MAS, and adaptive MAS. We report mean success rates over three runs, with standard deviations in
+subscript. Best results, including ties, are bolded.
+Expanding an overloaded branch
+StableToolBench and Browsecomp task
+a0
+a1 a2
+T0: star of 3
+Detected issue
+one worker covers
+several facets and
+encounters an
+unvalidated tool failure
+Topology repair
+expand the over-
+loaded worker into a
+dedicated subgroup
+a0
+a1 a2
+a3 a4 a5
+T1: two-level tree
+Figure3:Branchexpansion.Whenoneworkerintheinitial
+star becomes overloaded and encounters an unvalidated tool
+failure, MANTA expands that worker into a dedicated sub-
+group while preserving the unaffected branch.
+Ablation Study
+WeevaluatefourvariantversionsofMANTAtomeasurethe
+contribution of its main components. This experiment uses
+30tasksfromeachofBrowseComp,WorkBench,PlanCraft,
+and StableToolBench. Table 2 reports the average success
+rate across these four benchmarks.
+The first ablation replaces task-conditioned initial topol-
+ogy planning with a fixed coordinator–worker topology; it
+retains the Auditor and the repair-time mutation planner.
+The second retains the initial Topology Planner, but dis-
+ables audit-triggered topology mutation. The remaining two
+settings either freeze updates to the long-term playbook or
+remove the long-term playbook entirely.
+Full MANTA achieves the highest average success rate.
+Replacing task-conditioned planning with a fixed topology
+causes the largest drop, from 71.7 to 57.5. Removing topol-
+ogy repair reduces the average to 60.8. Freezing or remov-
+ing the long-term playbook gives smaller but consistent
+drops. These results show that initial topology planning and
+execution-time repair provide the largest gains, while cross-
+Success Mean tokens per run
+Ablation setting (%) Input Output Total
+Full MANTA 71.794,811 5,504 100,315
+No initial Topology Planner 57.5 105,941 6,099 112,040
+No topology mutation 60.867,5284,57772,105
+No long-term playbook update 67.5 97,145 5,474 102,620
+No long-term playbook 66.7 74,0674,28978,356
+Table 2: MANTA ablation results averaged across four
+benchmarks. Token counts include the amortized cost of
+batched long-term playbook updates.
+run learning provides an additional benefit.
+Effect of Mutation Budget
+Wenexttestwhetheralargertopology-mutationbudgethelps
+MANTAsolvemoretasks.WerunfullMANTAwithbudgets
+from zero to three on 30 tasks from each of BrowseComp,
+StableToolBench, PlanCraft, and WorkBench. We evaluate
+the budgets progressively. Starting at zero, we retain solved
+tasks and isolate the unsuccessful ones. At each larger bud-
+get, we identify failures that flip to success and carry those
+successes forward. Thus, at budgetb, a task is counted as
+solved if it has succeeded at any evaluated budget up tob.
+This measures the task coverage provided by the available
+repair budget.
+AsshowninFigure4,allfourbenchmarksimproveasthe
+available budget increases. The largest average gain comes
+from the first mutation opportunity, while later mutations
+provide smaller additional gains. These results show that
+bounded topology repair expands the set of tasks MANTA
+can solve.
+0 1 2 3
+Mutation budget
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+Success rate
+BrowseComp
+StableToolBench
+PlanCraft
+WorkBench
+Average
+Figure 4: Success rate under different mutation budgets.
+Cross-domain transfer
+Method PlanCraft→WorkBench WorkBench→PlanCraft Mean∆
+ADAS66.7→66.7 76.7→70.0−3.3
+AgentSquare60.0→36.7 26.7→23.3−13.3
+MASS46.7→0.0 70.0→0.0−58.3
+MANTA43.3→50.0 70.0→70.0+3.3
+In-domain playbook adaptation (MANTA)
+Method PlanCraft→PlanCraft WorkBench→WorkBench Mean∆
+MANTA 70.0→73.3 43.3→46.7+3.3
+Table3:Playbooktransferatmutationbudgetzero.Eachcell
+reports the success rate before and after transferring source-
+benchmark experience. The pre-transfer success rate is the
+median across three runs (%).
+Transferability of the Long-Term Playbook
+A central goal of MANTA’s long-term playbook is to accu-
+mulate structural experience that remains useful beyond the
+tasksonwhichitwasoriginallyacquired.Wethereforeeval-
+uate whether the learned playbook can improve topology
+initialization on unseen tasks from either the same bench-
+mark or a different benchmark. This experiment examines
+whetherMANTAlearnsreusablestructuralknowledgerather
+than benchmark-specific workflows.
+We construct a playbook from 30 source-benchmark runs
+and update it after every 10 runs. The resulting playbook
+is then frozen and evaluated on 30 target tasks. In-domain
+transfer uses the same benchmark for learning and evalua-
+tion,whereascross-domaintransferexchangesPlanCraftand
+WorkBench as the source and target. We set the mutation
+budget to zero so that any performance difference comes
+solely from playbook-guided topology initialization rather
+than execution-time topology adaptation.
+As shown in Table 3, MANTA benefits from both in-
+domain and cross-domain experience. In-domain reuse im-
+proves PlanCraft and WorkBench by3.3points each, while
+cross-domain transfer yields a mean gain of3.3points. In
+Type System Offline Inference Overall
+In Out Total In Out Total Total
+Single Single Agent — 17,767 4,044 21,811 21,811
+Static
+Voting
+—
+64,895 15,885 80,781 80,781
+Orch. (No Disc.) 94,125 21,173 115,298 115,298
+Orch. (Tree) 107,227 28,194 135,421 135,421
+Orch. (Discussion) 149,950 34,257 184,207 184,207
+Fully Linked 128,726 34,212 162,938 162,938
+Group Chat 159,809 41,843 201,651 201,651
+Adaptive
+AFlow 126,292 6,225 132,517 17,472 1,082 18,553 151,070
+ADAS 229,228 18,447 247,675 26,220 1,508 27,728 275,403
+AgentSquare 115,561 27,494 143,056 13,009 1,929 14,938 157,993
+MASS 49,801 3,347 53,148 120,690 7,188 127,878 181,026
+Ours MANTA —63,724 13,928 77,652 77,652
+Table 4:Mean token usage per run across four bench-
+marks.Offline costs correspond to workflow search or vali-
+dation;MANTA’sinferenceusageincludes9,416meta-level
+and 68,236 inner-agent tokens.
+contrast, transferring the structures learned by the adap-
+tive baselines produces neutral or substantially negative ef-
+fects. MANTA transfers more effectively because its long-
+term playbook preserves inheritable and actionable struc-
+tural knowledge rather than fixed workflows optimized for
+predefined training tasks. Since MANTA does not assume a
+specific training-task set, these results demonstrate its abil-
+ity to dynamically adapt its topology to different tasks and
+domains.
+Token Usage
+Although token efficiency is not the primary objective of
+MANTA, the results reveal an additional benefit of adap-
+tive topology revision. As shown in Table 4, static multi-
+agent systems often incur substantial inference costs be-
+cause they execute fixed agent configurations and com-
+munication patterns regardless of task needs. Meanwhile,
+workflow-optimization methods can reduce inference-time
+usage, but introduce additional offline search or validation
+costs. MANTA achieves the lowest overall token consump-
+tion among the evaluated multi-agent systems. In particu-
+lar, its meta-level operations account for only approximately
+12%of its inference budget, suggesting that targeted topol-
+ogy planning and repair can improve coordination without
+introducing substantial token overhead.
+Topology Evolution and Repair
+Expanding overloaded branches.Figure 3 shows a Sta-
+bleToolBench and Browsecomp task with multiple retrieval
+facets. The Planner initially selects a three-agent star in
+which a coordinator distributes the facets across two work-
+ers. During execution, one worker becomes responsible for
+severalfacetsandencountersatoolfailurewithoutsufficient
+downstreamvalidation.MANTArespondsbyexpandingthat
+worker into the hub of a dedicated subgroup. The topology
+evolves from a star into a two-level tree, increasing decom-
+position and specialization only within the affected branch.
+Changing verification and execution order.Figure 5
+showstworepairsthatmodifycoordinationwithoutincreas-
+ing the size of the entire system. When a singleton produces
+a low-confidence output without verification, MANTA adds
+a verifier and forms a two-agent chain. When parallel agents
+attempt the same state-changing action, MANTA replaces
+the star with a chain that serializes execution and prevents
+the action from being applied more than once.
+Repairing verification and execution structure
+Missing validation
+a0
+singleton
+low confidence
+no down-
+stream check
+a0 a1
+proposer→verifier
+Duplicate state-changing actions
+a0
+a1 a2
+parallel star
+repeated write
+from parallel agents
+a0 a1 a2
+serialized chain
+Figure 5:Verification and serialization repairs.Miss-
+ing validation introduces a verifier, while duplicated state-
+changing actions replace parallel execution with a serialized
+chain.
+Rewiring communication and inserting a critic.The
+traces contain two further repairs, and neither one grows
+a branch (Figure 6). The first rewires communication while
+keeping the agent set fixed. In the PlanCraft trace, all three
+agents agreed after the first turn, but the agreement came
+with imperfect confidence and issues still open, so the au-
+ditor flagged it as premature consensus. The repair kept all
+three agents and added the one edge the star lacked, a direct
+linkbetweenworkerandverifier,turningthetopologyintoa
+fully connected debate (Figure 6, top). The next turn passed
+the audit, terminated by consensus with confidence1.0, and
+the answer received benchmark score of1.0.
+The second repair adds validation capacity instead of an-
+other solver. In the Math500 trace, a single agent returned a
+low-confidence answer that no one checked. The repair in-
+sertedexactlyoneagent,assigneditthecriticrole,andpaired
+the two in a debate (Figure 6, bottom). The next audit was
+again clean, and the run ended with a consensus confidence
+of1.0and a score of1.0. The added agent never attempts
+thetaskitself;itsonlyjobistochecktheanswerthatalready
+exists.
+Insight.Topologyevolutionisnotsimplyaddingagentsoredges.
+Of the five repairs above, only branch expansion makes the sys-
+temlarger:serializationreordersexecution,rewiringchangeswho
+talkstowhom,andcriticinsertiongivesnewcomputeachecking
+role rather than a solving one. In every case, the appropriate re-
+pairisdeterminedbythestructuralfailurevisibleintheexecution
+trace, not by the size of the system.
+Rewiring communication and inserting a critic
+Premature consensus
+a0
+a1 a2
+star of 3
+agents agree early
+open issues remain
+a0
+a1 a2
+debate of 3
+Unchecked answer
+a0
+singleton
+low confidence
+no critic
+a0 a1
+worker–critic debate
+Figure 6:Rewiring and critic insertion.Illustration of two
+topology repairs that add a missing communication edge to
+transform a star into a fully connected debate and insert a
+critic to transform a singleton into a worker–critic debate.
+Highlighted elements indicate the modifications introduced
+by each repair.
+How Well Does Trace Auditing Work?
+Weevaluatetheinitialauditoverall450MANTArunswith-
+out exposing benchmark verdicts to the system. Runs with
+no repair flag are correct83.2percent of the time, com-
+pared with62.5percent for flagged runs. The resulting20.7
+pointseparationshowsthattracequalityprovidesmeaningful
+information about answer reliability while remaining inde-
+pendent of the benchmark answer. The Auditor identifies
+75of the117incorrect runs. On WorkBench it reaches F1
+0.78because empty branches and duplicated state changes
+leaveclearprocessevidence.ItrarelychangesPlanCraftand
+MATHruns,whichpreservestheoriginalreasoningprocess
+when no structural symptom is visible.
+MANTAapplies151repairs.Thenumberofprocessflags
+decreases after60.9percent of repairs, and59.6percent of
+namedrepairtargetsareabsentfromthenextaudit.Repaired
+runs produce a correct final answer in69.5percent of cases.
+Acleantraceremainsareliabilitysignalratherthanacorrect-
+nessguarantee,sinceagentscanagreeonthesameincorrect
+answer without an observable process anomaly.
+Conclusion
+WepresentedMANTA,aframeworkthatenablesmulti-agent
+systems to revise their collaboration topology during task
+execution.Bycombiningtopologyplanning,trace-basedau-
+diting, targeted structural repair, and cross-run experience,
+MANTA adapts how agents communicate and validate in-
+formation when the initial organization becomes insuffi-
+cient. Our findings highlight topology as a distinct layer
+of self-improvement, where effective adaptation may in-
+volve rewiring communication, changing execution order,
+or adding validation rather than simply increasing the num-
+ber of agents. This perspective opens a path toward agent
+systems that can reorganize their collaboration processes in
+response to emerging failures.
+References
+Agrawal, L. A.; Tan, S.; Soylu, D.; Ziems, N.; Khare, R.;
+Opsahl-Ong, K.; Singhvi, A.; Shandilya, H.; Ryan, M. J.;
+Jiang,M.;Potts,C.;Sen,K.;Dimakis,A.G.;Stoica,I.;Klein,
+D.; Zaharia, M.; and Khattab, O. 2026. GEPA: Reflective
+PromptEvolutionCanOutperformReinforcementLearning.
+arXiv:2507.19457.
+Becker,J.;Kaesberg,L.B.;Bauer,N.;Wahle,J.P.;Ruas,T.;
+and Gipp, B. 2025. MALLM: Multi-Agent Large Language
+Models Framework. arXiv:2509.11656.
+Besta, M.; Blach, N.; Kubicek, A.; Gerstenberger, R.;
+Gianinazzi, L.; Gajda, J.; Lehmann, T.; Podstawski, M.;
+Niewiadomski, H.; Nyczyk, P.; and Hoefler, T. 2024. Graph
+of Thoughts: Solving Elaborate Problems with Large Lan-
+guage Models.Proceedings of the AAAI Conference on Ar-
+tificial Intelligence, 38(16): 17682–17690.
+Brown, T. B.; Mann, B.; Ryder, N.; Subbiah, M.; Kaplan, J.;
+Dhariwal,P.;Neelakantan,A.;Shyam,P.;Sastry,G.;Askell,
+A.; Agarwal, S.; Herbert-Voss, A.; Krueger, G.; Henighan,
+T.; Child, R.; Ramesh, A.; Ziegler, D. M.; Wu, J.; Winter,
+C.; Hesse, C.; Chen, M.; Sigler, E.; Litwin, M.; Gray, S.;
+Chess, B.; Clark, J.; Berner, C.; McCandlish, S.; Radford,
+A.; Sutskever, I.; and Amodei, D. 2020. Language Models
+are Few-Shot Learners. arXiv:2005.14165.
+Dagan,G.;Keller,F.;andLascarides,A.2025. Plancraft:an
+evaluation dataset for planning with LLM agents. InSecond
+Conference on Language Modeling.
+Du,Y.;Li,S.;Torralba,A.;Tenenbaum,J.B.;andMordatch,
+I. 2023. Improving Factuality and Reasoning in Language
+Models through Multiagent Debate. arXiv:2305.14325.
+Fernando, C.; Banarse, D.; Michalewski, H.; Osin-
+dero, S.; and Rocktäschel, T. 2023. Promptbreeder:
+Self-Referential Self-Improvement Via Prompt Evolution.
+arXiv:2309.16797.
+Google DeepMind. 2026. Gemma 4 Model Card. https:
+//ai.google.dev/gemma/docs/core/model_card_4. Accessed:
+2026-07-03.
+Guo, Z.; Cheng, S.; Wang, H.; Liang, S.; Qin, Y.; Li, P.;
+Liu, Z.; Sun, M.; and Liu, Y. 2024. StableToolBench: To-
+wards Stable Large-Scale Benchmarking on Tool Learning
+of Large Language Models. In Ku, L.-W.; Martins, A.; and
+Srikumar, V., eds.,Findings of the Association for Com-
+putational Linguistics: ACL 2024, 11143–11156. Bangkok,
+Thailand: Association for Computational Linguistics.
+Hendrycks, D.; Burns, C.; Kadavath, S.; Arora, A.; Basart,
+S.; Tang, E.; Song, D.; and Steinhardt, J. 2021. Measuring
+Mathematical Problem Solving With the MATH Dataset. In
+Thirty-fifth Conference on Neural Information Processing
+Systems Datasets and Benchmarks Track (Round 2).
+Hong,S.;Zhuge,M.;Chen,J.;Zheng,X.;Cheng,Y.;Zhang,
+C.;Wang,J.;Wang,Z.;Yau,S.K.S.;Lin,Z.;Zhou,L.;Ran,
+C.; Xiao, L.; Wu, C.; and Schmidhuber, J. 2024. MetaGPT:
+MetaProgrammingforAMulti-AgentCollaborativeFrame-
+work. arXiv:2308.00352.
+Hu, S.; Lu, C.; and Clune, J. 2025. Automated Design of
+Agentic Systems. arXiv:2408.08435.
+Khattab, O.; Singhvi, A.; Maheshwari, P.; Zhang, Z.; San-
+thanam, K.; Vardhamanan, S.; Haq, S.; Sharma, A.; Joshi,
+T. T.; Moazam, H.; Miller, H.; Zaharia, M.; and Potts, C.
+2023. DSPy: Compiling Declarative Language Model Calls
+into Self-Improving Pipelines. arXiv:2310.03714.
+Kojima, T.; Gu, S. S.; Reid, M.; Matsuo, Y.; and Iwasawa,
+Y. 2023. Large Language Models are Zero-Shot Reasoners.
+arXiv:2205.11916.
+Li, G.; Hammoud, H. A. A. K.; Itani, H.; Khizbullin, D.;
+and Ghanem, B. 2023. CAMEL: Communicative Agents
+for "Mind" Exploration of Large Language Model Society.
+arXiv:2303.17760.
+Lu, J.; Zhong, W.; Huang, W.; Wang, Y.; Zhu, Q.; Mi, F.;
+Wang,B.;Wang,W.;Zeng,X.;Shang,L.;Jiang,X.;andLiu,
+Q. 2024. SELF: Self-Evolution with Language Feedback.
+arXiv:2310.00533.
+Madaan, A.; Tandon, N.; Gupta, P.; Hallinan, S.; Gao, L.;
+Wiegreffe, S.; Alon, U.; Dziri, N.; Prabhumoye, S.; Yang,
+Y.; Gupta, S.; Majumder, B. P.; Hermann, K.; Welleck, S.;
+Yazdanbakhsh,A.;andClark,P.2023. Self-Refine:Iterative
+Refinement with Self-Feedback. arXiv:2303.17651.
+Opsahl-Ong, K.; Ryan, M. J.; Purtell, J.; Broman, D.; Potts,
+C.; Zaharia, M.; and Khattab, O. 2024. Optimizing Instruc-
+tions and Demonstrations for Multi-Stage Language Model
+Programs. arXiv:2406.11695.
+Ouyang, L.; Wu, J.; Jiang, X.; Almeida, D.; Wainwright,
+C. L.; Mishkin, P.; Zhang, C.; Agarwal, S.; Slama, K.; Ray,
+A.; Schulman, J.; Hilton, J.; Kelton, F.; Miller, L.; Simens,
+M.; Askell, A.; Welinder, P.; Christiano, P.; Leike, J.; and
+Lowe, R. 2022. Training language models to follow instruc-
+tions with human feedback. arXiv:2203.02155.
+Park, J. S.; O’Brien, J. C.; Cai, C. J.; Morris, M. R.; Liang,
+P.; and Bernstein, M. S. 2023. Generative Agents: Inter-
+active Simulacra of Human Behavior. Inthe 36th Annual
+ACM Symposium on User Interface Software and Technol-
+ogy(UIST’23),UIST’23.NewYork,NY,USA:Association
+for Computing Machinery.
+Pryzant, R.; Iter, D.; Li, J.; Lee, Y. T.; Zhu, C.; and Zeng,
+M. 2023. Automatic Prompt Optimization with "Gradient
+Descent" and Beam Search. arXiv:2305.03495.
+Qian, C.; Liu, W.; Liu, H.; Chen, N.; Dang, Y.; Li, J.; Yang,
+C.; Chen, W.; Su, Y.; Cong, X.; Xu, J.; Li, D.; Liu, Z.; and
+Sun,M.2024.ChatDev:CommunicativeAgentsforSoftware
+Development. In Ku, L.-W.; Martins, A.; and Srikumar,
+V., eds.,Proceedings of the 62nd Annual Meeting of the
+Association for Computational Linguistics (Volume 1: Long
+Papers), 15174–15186. Bangkok, Thailand: Association for
+Computational Linguistics.
+Schick, T.; Dwivedi-Yu, J.; Dessì, R.; Raileanu, R.; Lomeli,
+M.; Zettlemoyer, L.; Cancedda, N.; and Scialom, T. 2023.
+Toolformer:LanguageModelsCanTeachThemselvestoUse
+Tools. arXiv:2302.04761.
+Shang, Y.; Li, Y.; Zhao, K.; Ma, L.; Liu, J.; Xu, F.; and Li,
+Y. 2025. AgentSquare: Automatic LLM Agent Search in
+Modular Design Space. arXiv:2410.06153.
+Shinn, N.; Cassano, F.; Berman, E.; Gopinath, A.;
+Narasimhan, K.; and Yao, S. 2023. Reflexion: Lan-
+guage Agents with Verbal Reinforcement Learning.
+arXiv:2303.11366.
+Styles, O.; Miller, S.; Cerda-Mardini, P.; Guha, T.; Sanchez,
+V.;andVidgen,B.2024. WorkBench:aBenchmarkDataset
+forAgentsinaRealisticWorkplaceSetting. InFirstConfer-
+ence on Language Modeling.
+Suzgun,M.;Yuksekgonul,M.;Bianchi,F.;Jurafsky,D.;and
+Zou,J.2025. DynamicCheatsheet:Test-TimeLearningwith
+Adaptive Memory. arXiv:2504.07952.
+Wang, G.; Xie, Y.; Jiang, Y.; Mandlekar, A.; Xiao, C.; Zhu,
+Y.; Fan, L.; and Anandkumar, A. 2023a. Voyager: An
+Open-Ended Embodied Agent with Large Language Mod-
+els. arXiv:2305.16291.
+Wang,X.;Wei,J.;Schuurmans,D.;Le,Q.;Chi,E.;Narang,
+S.; Chowdhery, A.; and Zhou, D. 2023b. Self-Consistency
+ImprovesChainofThoughtReasoninginLanguageModels.
+arXiv:2203.11171.
+Wang,Z.Z.;Mao,J.;Fried,D.;andNeubig,G.2024. Agent
+Workflow Memory. arXiv:2409.07429.
+Wei, J.; Sun, Z.; Papay, S.; McKinney, S.; Han, J.; Fulford,
+I.; Chung, H. W.; Passos, A. T.; Fedus, W.; and Glaese, A.
+2025. BrowseComp: A Simple Yet Challenging Benchmark
+for Browsing Agents. arXiv:2504.12516.
+Wei, J.; Wang, X.; Schuurmans, D.; Bosma, M.; Ichter, B.;
+Xia, F.; Chi, E.; Le, Q.; and Zhou, D. 2023. Chain-of-
+Thought Prompting Elicits Reasoning in Large Language
+Models. arXiv:2201.11903.
+Wu,Q.;Bansal,G.;Zhang,J.;Wu,Y.;Li,B.;Zhu,E.;Jiang,
+L.; Zhang, X.; Zhang, S.; Liu, J.; Awadallah, A. H.; White,
+R. W.; Burger, D.; and Wang, C. 2023. AutoGen: Enabling
+Next-GenLLMApplicationsviaMulti-AgentConversation.
+arXiv:2308.08155.
+Xu, W.; Liang, Z.; Mei, K.; Gao, H.; Tan, J.; and Zhang,
+Y. 2025. A-MEM: Agentic Memory for LLM Agents.
+arXiv:2502.12110.
+Yao, S.; Yu, D.; Zhao, J.; Shafran, I.; Griffiths, T. L.;
+Cao, Y.; and Narasimhan, K. 2023a. Tree of Thoughts:
+Deliberate Problem Solving with Large Language Models.
+arXiv:2305.10601.
+Yao, S.; Zhao, J.; Yu, D.; Du, N.; Shafran, I.; Narasimhan,
+K.R.;andCao,Y.2023b.ReAct:SynergizingReasoningand
+Acting in Language Models. InThe Eleventh International
+Conference on Learning Representations.
+Yin, Z.; Sun, Q.; Chang, C.; Guo, Q.; Dai, J.; Huang, X.;
+and Qiu, X. 2023. Exchange-of-Thought: Enhancing Large
+Language Model Capabilities through Cross-Model Com-
+munication. arXiv:2312.01823.
+Yuksekgonul, M.; Bianchi, F.; Boen, J.; Liu, S.; Huang, Z.;
+Guestrin, C.; and Zou, J. 2024. TextGrad: Automatic "Dif-
+ferentiation" via Text. arXiv:2406.07496.
+Zhang, J.; Xiang, J.; Yu, Z.; Teng, F.; Chen, X.; Chen, J.;
+Zhuge, M.; Cheng, X.; Hong, S.; Wang, J.; Zheng, B.; Liu,
+B.;Luo,Y.;andWu,C.2025a. AFlow:AutomatingAgentic
+Workflow Generation. arXiv:2410.10762.
+Zhang, Q.; Hu, C.; Upasani, S.; Ma, B.; Hong, F.; Kama-
+nuru, V.; Rainton, J.; Wu, C.; Ji, M.; Li, H.; Thakker, U.;
+Zou,J.;andOlukotun,K.2025b. AgenticContextEngineer-
+ing: Evolving Contexts for Self-Improving Language Mod-
+els. arXiv:2510.04618.
+Zhou, H.; Wan, X.; Sun, R.; Palangi, H.; Iqbal, S.; Vulić, I.;
+Korhonen, A.; and Arik, S. O. 2026. Multi-Agent Design:
+Optimizing Agents with Better Prompts and Topologies. In
+The Fourteenth International Conference on Learning Rep-
+resentations.
+Zhou, Y.; Muresanu, A. I.; Han, Z.; Paster, K.; Pitis, S.;
+Chan, H.; and Ba, J. 2023. Large Language Models are
+Human-Level Prompt Engineers. InThe Eleventh Interna-
+tional Conference on Learning Representations.
+Implementation Details
+Experimental Setup and Fair Comparison
+Forfaircomparison,allmulti-agentmethodsareconstrained
+to the same maximum number of agents and compara-
+ble inference budget. Static workflows use the same set
+of agent roles as MANTA but keep their communication
+topology fixed throughout the entire task-solving process.
+For optimization-based baselines such as AFlow, ADAS,
+AgentSquare,andMASS,wefollowtheiroriginaloptimiza-
+tion procedures when applicable and match the search bud-
+get as closely as possible. For MANTA, topology revision
+is performed online according to intermediate collaboration
+signals, and the revised topology is used for subsequent rea-
+soning steps. Unless otherwise stated, the final answer is
+producedbythedesignatedaggregatororcoordinatoragent.
+MANTA Configuration
+Table 5 lists the configuration used in all MANTA exper-
+iments. All meta-agents (Topology Planner, Trace Auditor,
+andSkillReflector)usethesamebackbonemodelasthetask
+agents,withtemperature0.IfthePlannerreturnsaninvalidor
+unparseableplan,theOrchestratorsubstitutesadeterministic
+fallback topology (a coordinator–worker star, or a singleton
+when the budget is one agent).
+Parameter Value
+Maximum initial agents 5
+Maximum total agents (after repair) 10
+Topology mutations per run 1
+Operations per mutation≤3
+Root interaction patterns singleton, star, chain,
+debate, voting
+Meta-agent temperature 0.0
+long-term playbook reflection batch
+size
+12 runs
+Table 5: MANTA hyperparameters.
+Topology Mutation Operators
+Foranon-retrievaltask,arepairisexpressedasatmostthree
+of the operators in Table 6. The Planner emits a compact
+JSON object containing a rationale and an ordered oper-
+ation list. Deterministic code discards unknown operators,
+normalizesrolealiases,andattachesthecurrentauditmodes
+as the mutation targets. It then applies the operations to a
+copy of the current topology specification. The new version
+isacceptedonlyifitpassesfullstructuralvalidation(unique
+groupmembership,valididentifiersandroles,acyclicattach-
+mentstructure,legalgrouppatterns,andthemaximumagent
+budget); otherwise the proposal is rejected before any agent
+isinstantiated.Aconservativerepaircompilermaythenmap
+the grounded audit modes to one local edit; if it cannot do
+so, execution finalizes without a mutation.
+Operator Effect
+add_agentAdd one agent to an existing group,
+with a specified structural role (e.g.,
+verifier) and stage role (worker or
+critic).
+expand_agent_
+to_group
+Turn one agent into the hub of a new
+nestedsubgroupwithitsowninterac-
+tion pattern and members.
+set_group_patternChange the interaction pattern of an
+existing group (e.g., star→debate,
+star→chain).
+add_edge,
+remove_edge
+Add or remove a direct communica-
+tion link between two agents.
+set_context_policyAdjust an agent’s information visibil-
+ity (e.g., grant global access to the
+shared evidence ledger).
+Table 6: Bounded topology mutation operators available to
+the Planner during trace-backed repair.
+Retrieval-heavy tasks use the same audit and budget gate
+butaseparatedeterministicmutation.Theresourceguardse-
+lects the existing non-coordinator that made the most search
+calls (with deterministic tie-breaking), replaces the active
+topologybyasingletoncontainingthatagent,grantsitglobal
+evidenceaccess,andassignsafocusedevidence-recoverydi-
+rective. Thisretrieval contractiondoes not add agents and
+is not part of the Planner’s mutation language. It avoids re-
+running a wide set of searchers after the first fan-out has
+already failed. All old packets, evidence, and turn-level can-
+didatesremainintheappend-onlyrunstateunderbothrepair
+paths.
+Deterministic Audit Taxonomy
+The deterministic component of the Trace Auditor scans the
+execution trace for the fixed process-anomaly patterns in
+Table 7. The implementation calls these patterns “failure
+modes,” but the term is diagnostic: a match means that an
+encodedriskisvisibleinthetrace,notthatthefinalansweris
+incorrect. Each flag carries a severity, the implicated agents,
+and a repairability field; the open-set LLM auditor may add
+further trace-grounded flags beyond this taxonomy.
+Process flag Signal in the trace
+tool_error_cascadeRepeated failing tool calls
+within a branch.
+branch_collapseA branch yields no substantive
+artifact (blocked or empty out-
+put).
+unsupported_
+impossibility_claim
+Anagentdeclaresthetaskunan-
+swerablewithoutsupportingev-
+idence.
+unverified_impossibility_
+consensus
+Agents agree the task is unan-
+swerable without independent
+verification.
+evidence_lost_
+before_synthesis
+Gathered evidence is absent
+from the synthesis input.
+premature_consensusAgreement despite low confi-
+denceoropenunresolvedissues.
+message_
+compaction_loss
+Relay-packet compaction
+dropped load-bearing content.
+insufficient_
+search_coverage
+Too few distinct queries for a
+broad retrieval task.
+duplicate_state_mutationThe same state-changing tool
+callisissuedbymultipleagents.
+missing_validatorA high-precision task lacks a
+distinct verification step.
+give_up_shaped_
+candidate
+Every candidate answer con-
+cludes that the task cannot be
+completed.
+Table 7: Deterministic process-anomaly taxonomy used by
+theTraceAuditor.Internalidentifiersretaintheimplementa-
+tion’sfailure_modevocabulary.
+Trace Auditing Statistics
+This section is the aggregate results of Trace Auditing over
+the450MANTA runs.
+Correctness-proxyscoresperbenchmark.Table8com-
+pares theinitialrepair-level audit flag with benchmark an-
+swer incorrectness. Using the first audit avoids evaluating
+a detector after its own intervention. Here precision, recall,
+FPR,andFNRuseanswerincorrectnessasthepositiveclass.
+Theymustnotbereadasliteralprocess-detectionscores:no
+human label says whether a trace truly contains a coordina-
+tiondefect.“Falsepositive”thereforemeansonlyflaggedbut
+ultimately answer-correct, and “false negative” meansclean
+but answer-incorrect.
+Acrossallruns,theauditflags64.1percentofincorrectan-
+swersat37.5percentprecision.TheaggregateFPRandFNR
+are37.5and35.9percent.Thebenchmarkspreadismorein-
+formative than the aggregate: WorkBench answer errors of-
+tenco-occurwithvisibleworkflowanomalies,whereasPlan-
+CraftandMATHfrequentlycontainwrongreasoningwithno
+observablecoordinationsymptom.BrowseCompandStable-
+ToolBench show the opposite difficulty: retrieval or tool-use
+anomaliesarecommonbutoftenrecoverable,producinghigh
+proxy FPR.
+Benchmark Flag Prec. Rec. FPR FNR F1
+BrowseComp 83 0.25 1.00 0.90 0.00 0.40
+StableToolBench 67 0.21 0.88 0.72 0.13 0.34
+PlanCraft 1 1.00 0.05 0.00 0.95 0.09
+WorkBench 47 0.81 0.75 0.23 0.25 0.78
+MATH 2 0.50 0.13 0.01 0.88 0.20
+All 200 0.38 0.64 0.38 0.36 0.47
+Table 8: Initial audit as a proxy for answer incorrectness,
+with90runs per benchmark. Flag is the number of runs
+whose audit recommends repair. Metrics treat benchmark-
+incorrect as positive; they do not use manually annotated
+process-failure ground truth.
+Initial audit Incorrect Correct
+Repair flag 75 125
+No repair flag 42 208
+Total 117 333
+Table9:Initialauditoutcomeversusbenchmarkcorrectness
+over all450MANTA runs.
+Whichprocessflagscorrelatewithcorrectness.Table10
+reports,foreachmode,howmanyrunsitappearsin,thedif-
+ference in success rate between runs where it fires and runs
+where it does not, and how often a repair that targeted it re-
+moved it from the following audit. Seven of the nine modes
+areassociatedwithalowersuccessrate,andthefourstrongest
+ofthemcarryagapofmorethan30points,showingthatsev-
+eral deterministic detectors contain useful correctness infor-
+mation. This association does not establish that every firing
+isatrueprocessdefect.Twomodes,relay-packetcompaction
+loss and failing tool calls, show no such gap. They capture
+recoverable events that a competent topology absorbs, and
+down-weighting them in the severity gate is a direct way to
+raise precision in future work.
+Process flag Runs∆succ. Cleared
+Evidence lost before syn-
+thesis
+7−60.76/6
+Missing validator 71−46.117/19
+Branch collapse 100−38.64/12
+Give-up shaped candidate 36−32.1n/a
+Premature consensus 48−17.59/11
+Duplicate state mutation 143−14.223/39
+Insufficient search cover-
+age
+68−5.8n/a
+Message compaction loss 131+2.25/8
+Tool error cascade 61+5.423/51
+Table 10: Detected process flags over all450runs.∆succ.
+is the success rate of runs containing the mode minus the
+success rate of runs without it, in percentage points, against
+anoverallrateof74.0.Clearedistheshareofrepairstargeting
+thatmodeafterwhichthemodeisabsentfromthenextaudit.
+Modesmarkedn/aareonlyobservedonretrievalruns,which
+are repaired by a deterministic contraction that names no
+target.
+Effect of repair in detail.The pre/post comparison is
+made on audit outputs, not benchmark counterfactuals. Of
+151repairs,92(60.9%) reduce the total number of flags,
+27(17.9%) leave it unchanged, and32(21.2%) increase it;
+27(17.9%) leave a trace with no flag of any severity. For
+the146named non-retrieval targets,87(59.6%) are absent
+from the following audit. Target names are attached from
+the audit by construction, so their146/146consistency is a
+schemainvariant,notevidencethattherecommendationwas
+semantically correct.
+The condition MANTA uses to write an entry into long-
+termmemoryisstricterthanacleanauditalone,sinceitalso
+requires the run to terminate by decision-grade consensus.
+Runsmeetingthatstricterconditionarecorrect85.8percent
+ofthetimeagainst74.0percentforthecorpus.Thissupports
+using the condition as a high-yield process-only filter, while
+theremaining14.2percenterrorrateshowswhyitcannotbe
+treated as a correctness label.
+Which operators are used.Table 11 shows how the151
+repairs were expressed as162operations:140repairs use
+one operation and11use two; none reaches the three-
+operation limit. The deterministic retrieval contraction is
+the most frequent operation. Among Planner-language op-
+erations,changingthegrouppatternandexpandingabranch
+dominate. Adding a new agent accounts for only9.3percent
+of operations. Duplicated state-changing calls are answered
+by serializing the group into a chain in33of39targeted
+cases, a missing verification step is answered by adding a
+critic agent in15of19cases, and a failing tool branch is
+answered by expanding that agent into a subgroup in28of
+51cases.Thusrepairmoreoftenchangesexecutionstructure
+than increases agent count.
+Operation Count Share
+Deterministic retrieval contraction 6842.0%
+set_group_pattern4427.2%
+expand_agent_to_group3320.4%
+add_agent159.3%
+set_context_policy10.6%
+remove_edge10.6%
+add_edge00.0%
+Table11:Repairoperatorsappliedacrossallruns.Countsare
+per operation (162total), and a single repair may combine
+up to three. The retrieval contraction is a fixed structural
+narrowing applied without invoking the Planner.
+Complementary validation.The current evaluation mea-
+sureshowstronglytheauditpredictsanswercorrectnessand
+how often repair removes its named process target. Two ex-
+tensions can provide further resolution. Human annotation
+of a stratified trace sample can directly evaluate process flag
+precision and recall, with agreement reported across inde-
+pendentannotators.Apairedreplaycancomparetherecom-
+mendedmutationwithanequalbudgetcontinuationfromthe
+same trace prefix. This design would isolate the effect of the
+recommendation while preserving the process-only setting
+used by MANTA.
+Comparison with Automated Design Frameworks
+Thereproducedautomateddesignbaselinesselectworkflows
+usingaggregatevalidationperformanceandkeepthosework-
+flows fixed during test-time execution. MANTA combines
+priortopologyexperiencewithsignalsfromthecurrenttrace.
+Memoryguidestheinitialdesign,whileobservedprocessev-
+idence determines whether the topology should be retained
+or revised.
+ThisdistinctionisvisibleonBrowseComp.AFlowusesan
+answer,review,andrevisesequence,butlaterstagesreusethe
+initial evidence. ADAS retains one reasoning agent without
+anindependentretrievalpath.AgentSquarecombinesreflec-
+tion with tools but does not preserve a dedicated evidence
+validation route. MASS uses repeated debate, where agents
+can reinforce an answer supported by the same evidence.
+MANTA can instead add an independent retrieval or valida-
+tion path for the affected instance. Its advantage comes from
+revising the structure that produced the observed process
+issue.
+Meta-Agent Prompts
+We reproduce the system prompts and message templates of
+the three meta-agents. Placeholders such as⟨task preview⟩
+are filled deterministically at run time; the wording is other-
+wise verbatim.
+TopologyPlanner:InitialPlanningThePlannerreceives
+thetaskandthelong-termplaybook;itneverseesthebench-
+markidentitybeyondthenameofthetasksource,anditnever
+sees ground-truth outcomes.
+Planner system prompt (initial plan)
+Y ou are an expert topology planner (architect) for a
+multi-agent system. Given one task, you design a small,
+query-conditioned topology of specialized agents. Work
+in three steps: (1) analyze the task, (2) choose the topol-
+ogy its analysis implies, (3) justify the choice and say
+what each agent does. Y ou return only a compact JSON
+plan; deterministic code expands and validates it.
+Analyze along three axes:
+•task type: retrieval/search, multi-step reasoning, cod-
+ing, external tool use, state mutation, verification,
+planning, comparison, summarization, etc.;
+•attributes: ambiguity, need for breadth/parallelism,
+need for debate, need for verification, hallucination
+risk, whether external state is mutated, whether tools
+are required, whether outputs must be aggregated;
+•failure risks: duplicated writes, thin search coverage,
+premature consensus, weak verification, poor de-
+composition.
+Prefer the smallest topology that covers the work – extra
+agents cost tokens and can conflict – but do provision
+enough agents to cover the task (for example, several
+searchers for broad retrieval). Count independent evi-
+dence sources, not requested output fields: when one
+read-only API call or structured dataset can supply all
+fields, assign exactly one retriever and at most one ver-
+ifier over its relayed result; do not send parallel agents
+to repeat the same call. Consult the topology planning
+skill / accumulated experience below (standing princi-
+ples, how-to-choose guidance, and lessons from prior
+runs); follow it unless this task clearly calls for otherwise.
+Planner user message (initial plan)
+Plan the topology for one task from the⟨benchmarkname⟩
+benchmark.
+Task preview.⟨first 800 characters of the task prompt⟩
+Topology planning skill (accumulated experience
+— consult before choosing).⟨long-term playbook
+document⟩
+Constraints.
+•Total agents (root group plus all subgroup members)
+must be≤ ⟨max agents⟩.
+•Root patterns: singleton|star|chain|debate|vot-
+ing.
+•star requires num_agents≥2(one coordinator plus
+workers).
+•debate and voting require num_agents≥2.
+•Optional expansions turn one root worker into the
+hub of a nested subgroup (member_index counts
+root workers from 0, excluding the coordinator;
+num_subagents≥1, or≥2for debate/voting).
+•Optional “verifier”: true makes the last root worker a
+critic that verifies instead of producing parallel work.
+Output format.Return ONL Y one JSON object,
+no markdown fences, of the form: {“task_analysis”:
+{“task_type”: “...”, “attributes”: [“...”], “failure_risks”: [“...”]},
+“rationale”: “why this topology fits and what each agent
+does”, “pattern”: “star”, “num_agents”: 3, “verifier”: false,
+“expansions”: []}
+Topology Planner: Trace-Backed RepairAt repair time
+the Planner is conditioned on the current topology, the audit
+report, and both playbook horizons: the short-term log of
+this run’s turns and the long-term skill document.
+Planner system prompt (repair mutation)
+Y ou are a topology planner performing one step in a
+bounded trace-backed repair loop for a multi-agent sys-
+tem. Given the current topology and audit findings, pro-
+pose ONE small mutation that addresses the strongest
+failure signal. Y ou return only a compact JSON muta-
+tion; deterministic code applies and validates it. If no
+mutation is clearly useful, return {“ops”: []}. A repair
+must have counterfactual information gain. If the current
+agents already queried the same read-only API or struc-
+tured dataset, do not add or expand agents with iden-
+tical access: change context/decision structure, add at
+most one evidence-checking verifier, or return no muta-
+tion. More agents cannot repair data that the source did
+not return. Weigh the topology planning skill and play-
+book memories below as accumulated experience when
+choosing the repair.
+Planner user message (repair mutation)
+Current topology (version⟨v⟩).One line per group:
+⟨group id⟩: pattern, members, and leader.
+Audit findings.One line per finding –⟨mode⟩[⟨severity⟩]
+⟨implicated agents⟩:⟨detail⟩– followed by the Auditor’s
+one-sentence recommendation.
+Topology planning skill (accumulated experience
+— consult before mutating).⟨long-term playbook
+document⟩
+Playbook repair memories (long-term and turn-
+level).⟨short-term playbook entries from this run⟩
+Available ops (at most 3 per mutation).
+•expand_agent_to_group: {“op”: “ex-
+pand_agent_to_group”, “agent_id”: “agent_1”, “pat-
+tern”: “star|chain|debate|voting”, “num_subagents”:
+3} – the agent becomes the hub of a new subgroup.
+•set_group_pattern: {“op”: “set_group_pattern”,
+“group_id”: “g_root”, “pattern”: “debate”}
+•add_agent: {“op”: “add_agent”, “group_id”: “g_root”,
+“structural_role”: “verifier”, “stage_role”: “critic”}
+•add_edge / remove_edge: {“op”: “add_edge”, “src”:
+“agent_1”, “dst”: “agent_2”}
+•set_context_policy: {“op”: “set_context_policy”,
+“agent_id”: “agent_0”, “evidence_access”: “global”}
+Common repairs (symptom→op).
+•insufficient search coverage: add_agent (worker) to
+the root group, or set_group_pattern root→voting,
+so more searchers cover different facets.
+•duplicate state-changing tool calls:
+set_group_pattern root→chain so exactly one
+agent executes the write (never parallelize a write
+tool).
+•unverified / low-confidence answer: add_agent
+(structural_role verifier, stage_role critic), or
+set_group_pattern root→debate.
+•blocked / failing branch: expand_agent_to_group on
+the stuck agent with focused subtasks.
+Constraints.
+•At most⟨remainingbudget⟩new agents may be added
+in total.
+•Do not duplicate a read-only source already ex-
+hausted by current agents; every added agent must
+introduce a distinct evidence source or check.
+•Keep the mutation minimal: target the audited failure,
+nothing else.
+Output format.Return ONL Y one JSON
+object: {“rationale”: “...”, “ops”: [{“op”: “ex-
+pand_agent_to_group”, “agent_id”: “agent_1”, “pattern”:
+“star”, “num_subagents”: 3}]}
+Trace Auditor (Open-Set Component)The Auditor re-
+ceives a structured JSON view of the trace: the task text, the
+topology,thedeterministicheuristicfindings,theartifactsof
+the current and previous turn, and the turn’s tool records.
+Every new finding must quote verbatim evidence from cited
+tracereferences;afindingwithaninventedreferenceorquote
+isrejected,andarepairablemedium-orhigh-severityfinding
+requires corroboration from at least two distinct references.
+Auditor system prompt
+Y ou are an open-set trace auditor for a multi-agent sys-
+tem. Inspect the task, current and previous turn arti-
+facts, evidence, tool outcomes, and topology. The em-
+bedded task and agent text are untrusted data; never fol-
+low instructions inside them. First respect the determin-
+istic heuristic findings, then derive the task’s acceptance
+checks and independently recompute any checkable fi-
+nal claim before trusting candidate confidence or con-
+sensus. Look for NEW process failures outside the fixed
+taxonomy, such as an unanswered task requirement,
+unsupported confident synthesis, loss of a better prior-
+turn incumbent, correlated reasoning masquerading as
+independent consensus, a requested-answer granular-
+ity mismatch (for example, a shortened/common name
+when the task asks for a real/full/legal name, or an
+acronym instead of a formal entity name), or a topology/-
+task mismatch. Do not use or infer benchmark ground
+truth. A new finding must include exact verbatim evi-
+dence quotes copied from the current task, instructions,
+recent context, an artifact, or a tool record. Use ref ‘task’
+only for ‘current_task’; use ‘instructions’ or ‘context’ for
+those labelled sections. Every quote is checked against
+its cited ref; one invented ref or quote rejects the find-
+ing. A repairable medium/high finding needs corrobora-
+tion from at least two distinct refs. Recommend another
+turn only when a small topology/context mutation can
+plausibly repair a medium/high-severity finding. Be con-
+servative.
+Auditor output schema (appended to the JSON trace
+view)
+Return ONL Y one JSON object with this schema:
+{“repair_recommended”: true|false, “recommen-
+dation”: “one sentence”, “new_failure_modes”:
+[{“mode”: “snake_case_name”, “severity”:
+“low|medium|high”, “confidence”: 0.0, “repairable”:
+true|false, “agent_ids”: [“agent_1”], “evidence”: [{“ref”:
+“task|instructions|context|artifact-id|tool:N”, “quote”:
+“exact copied text”}], “detail”: “trace-grounded explana-
+tion”}]}
+Skill ReflectorThe Reflector rewrites the long-term play-
+book from summaries of recent runs. Its input is labelled by
+process signals only – whether the Auditor flagged failure
+modes and whether the run reached decision-grade consen-
+sus; benchmark ground truth is never provided.
+Reflector system prompt
+Y ou maintain a ‘Topology Planning Skill’: a markdown
+document that teaches a planner how to choose a multi-
+agent topology for a task. Y ou are given the current
+skill and outcomes from recent runs. IMPORTANT: the
+outcomes are labelled by PROCESS SIGNALS ONL Y
+(whether the run’s trace auditor flagged failure modes
+and whether it reached decision-grade consensus) –
+there is NO ground-truth correctness here. Revise the
+skill so it captures which topologies run cleanly and
+which trigger process failures.
+Rules:
+•PRESERVE these sections, refining wording only,
+never deleting them: “Standing principles”, “How to
+choose a topology”.
+•Grow the “Lessons from experience” section: add
+or refine concise, actionable lessons grounded in
+the process signals (cite the evidence, e.g. ‘chain/3
+ran clean 2/2 on tool-using medium retrieval; star/3
+flagged duplicate_state_mutation 3x’). Speak of run-
+ning cleanly / avoiding process failure modes, NOT of
+being ‘correct’ or ‘right’.
+•Keep every lesson GENERAL – key it on task charac-
+teristics (task type, tools, size, state mutation, search
+breadth), not on benchmark-specific trivia.
+•Prefer revising an existing lesson over duplicating it;
+drop lessons the new evidence contradicts. Keep the
+document tight and readable.
+•Output the COMPLETE updated markdown docu-
+ment and nothing else (no fences).
+Task-Agent System Prompt
+Every task agent shares one structural system prompt that
+fixesitsstagecontract,outputschema,andconfidencerubric;
+role-specific and tool-specific clauses are appended per
+agent. Instruction priority is stated explicitly so that domain
+personascanneveroverridestagebehavior.Agentsexchange
+compacted relay packets derived from these structured arti-
+factsratherthanrawtranscripts,andinformationvisibilityis
+enforced in code when packets are read, not through prompt
+instructions.
+Task-agent system prompt (shared structural core)
+Y ou are one agent in a deterministic multi-agent work-
+flow. Agent ID:⟨agent id⟩. Agent Role:⟨structural role⟩.
+Stage Role:⟨worker|critic|aggregator|planner⟩.
+Instruction priority: 1) structural stage contract, 2) tool-
+use contract, 3) task and benchmark instructions, 4) do-
+main persona.
+Use only the task messages, the prior artifact, and the
+visible packets provided in this conversation. Do not in-
+vent hidden context. Return exactly one JSON object
+and do not wrap it in markdown. Required JSON keys:
+answer_artifact, summary, critique, revision_request,
+confidence, unresolved_issues, evidence_summary.
+Set confidence to reflect confidence in the current an-
+swer_artifact only, using this rubric: 0.0 = no answer
+or pure planning; 0.25 = weak hypothesis; 0.5 = plau-
+sible but incomplete; 0.75 = likely correct with remain-
+ing gaps; 1.0 = strongly supported final answer. If a
+field is unknown, use an empty string, an empty list,
+or a conservative confidence score. evidence_summary
+must summarize actual evidence from tool outputs, vis-
+ible packets, or the prior artifact. Do not claim evidence
+that was not actually retrieved or provided.
+Answer-stage contract: answer_artifact must be the cur-
+rent best direct answer or a concise blocked-status ex-
+planation. Do not use answer_artifact for plans, tool lists,
+search strategies, or sub-question lists.
+•Worker contract:gather or apply evidence, then
+state the best supported answer you can defend.
+•Critic contract:challenge weak claims, verify
+against available evidence, and revise toward the
+best supported answer.
+•Aggregator contract:synthesize peer outputs into
+one supported answer; do not simply restate unre-
+solved debate.
+Tool-use contract (tool-enabled stages): if evidence is
+missing or weak, call the relevant tool instead of narrat-
+ing that you need to search. Do not return a blocked,
+unknown, or planning answer before at least one tool at-
+tempt unless the visible packets or prior artifact already
+contain sufficient evidence.
+Long-Term Playbook (Topology Planning Skill)
+Thelong-termplaybookisamarkdowndocumentreadinfull
+by the Planner at both planning and repair time. Its first two
+sectionsareprotected:theReflectormayrefinetheirwording
+but never delete them. The final section is rewritten by the
+Reflector from process-signal-labelled run summaries. We
+showthedocumentwiththelessonsaccumulatedduringour
+experiments, typeset for readability.
+Topology planning skill document
+Standing principles.Always apply these, on any
+benchmark, even one never seen before.
+1.Concentrate state changes in a single executor.
+Writes, sends, schedules, deletions, and payments
+must be performed by exactly one agent. Repeat-
+ing the same state-changing action across agents
+wastes effort and can double-apply it, corrupting the
+result. Reading, planning, and genuinely indepen-
+dent sub-actions can still run in parallel.
+2.Match the topology to the question’s shape.Par-
+allel workers suit independent facets (breadth); a
+chain of clues where each step depends on resolv-
+ing the previous is better served by shared context
+(chain or debate) so the reasoning assembles in-
+stead of fragmenting across agents that each see
+only a piece. Add an agent only when it does work
+the task needs – a verifier earns its slot only if it also
+gathers or checks evidence, not if it merely waits.
+3.Distinguish a premature give-up from honest
+uncertainty.If the gathered evidence supports or
+points toward an answer (including by inference from
+partial clues), commit the best-supported one rather
+than stalling (“let me search more”) or returning a
+non-answer. Only when the evidence genuinely sup-
+ports no answer should you say so and note what
+is missing – never fabricate. Convey degree of belief
+with a confidence value.
+How to choose a topology.Analyze the task’s depen-
+dency structure, evidence needs, action risks, aggre-
+gation requirements, and resource budget. Choose the
+smallest topology in which every agent has a distinct,
+necessary contribution. Treat the following as possibili-
+ties, not fixed mappings:
+•Independent subtasks may benefit from parallel work-
+ers.
+•Dependent subtasks may benefit from sequential ex-
+ecution or shared context.
+•Material uncertainty may justify an independent
+evidence-checking critic.
+•Tasks requiring decomposition and aggregation may
+benefit from a coordinator.
+•A singleton is appropriate when another agent would
+not contribute distinct work.
+For external state mutation, exactly one agent may ex-
+ecute the mutating action; other agents may only read,
+plan, or verify. Use lessons from prior runs as evidence-
+weighted suggestions. Consider their relevance, sample
+size, and observed process failures, and depart from
+them when the current task analysis supports another
+topology. State why the selected topology is preferable
+to the simplest viable alternative.
+Lessons from experience.Concrete patterns learned
+from prior runs, with the evidence behind them. The re-
+flection agent grows and prunes this list.
+•Prefer voting over singleton or debate for tool-
+less reasoning.Sequential or interactive topologies
+(chain/2, debate/2, star/2) and singletons correlate
+with higher process failure rates in tool-less reason-
+ing contexts. Evidence shows voting/3 and voting/4
+running clean 35/35 in these settings, while single-
+ton/1 (0/6), debate/2 (0/4), and star/2 (0/1) have trig-
+gered process failures.
+•Minimize topology complexity to avoid sig-
+nal loss.Inefficient or over-provisioned structures
+correlate strongly with message_compaction_loss
+(flagged repeatedly across runs). Keep the topology
+lean to ensure evidence is preserved through the
+pipeline without being truncated or lost during syn-
+thesis.
+•Include explicit validation for high-precision
+tasks.Relying on implicit aggregation without a ded-
+icated validator can trigger process failures; the au-
+ditor has flagged missing_validator when topologies
+lacked a distinct verification step to audit the final syn-
+thesis.
+Agent Harness and the Agentic Loop
+Every task agent runs inside a single shared harness that
+defines one stage-execution contract. The harness exposes
+onegenerationinterfacethattakesthestageprompt,thetool
+schemas, a temperature, and a tool-iteration budget, and re-
+turnsthestagetexttogetherwithtokenusageandastructured
+record of every tool call.
+A stage execution proceeds as follows. Deterministic or-
+chestrator code first assembles the stage prompt from fixed
+parts. These parts are the structural system prompt, the role-
+specificclause,thestagedirective,therelaypacketstheagent
+is allowed to see, and the bounded evidence digest. The har-
+ness then runs a bounded agentic loop, shown in Figure 7.
+In each iteration the model may either return tool calls or
+return a final text. Tool calls are executed by harness-owned
+handlers, and their outcomes are appended to the conversa-
+tion as tool messages. When the model returns a final text
+without tool calls, the loop ends and the text is coerced into
+the structured JSON artifact of the stage contract. The run-
+time never fabricates tool calls after the fact. If the model
+claimsevidenceitdidnotretrieve,theclaimsimplyremains
+unsupported in the artifact and is visible to the Auditor.
+The loop manages its own context. Only the most recent
+ktool iterations are kept verbatim in the conversation. All
+older iterations are replaced by one deterministic summary
+message that lists, for every summarized iteration, the as-
+sistant text preview and each tool call with its arguments,
+status,andacompactedoutput.Fulldocumenttextretrieved
+by a read tool is preserved in this summary up to a larger
+character budget, because retrieved evidence is the part of
+the history the final answer depends on. The model is told
+explicitlythatthesummaryiscompressedandthatthelatest
+raw tool messages win on any conflict.
+The loop also carries a set of deterministic guards (Ta-
+ble 12). They stop unproductive behavior early and convert
+every abnormal exit into a typed, non-silent outcome. In
+particular, when the iteration budget is exhausted or a hard
+timeoutfires,theharnessforcesonefinaltool-freemodelcall
+that must answer from the evidence already gathered, so the
+stagealwaysproducesanartifactratherthananemptyoutput.
+Afterthestagereturns,theorchestratorremovestoolrecords
+whose exact tool name and arguments already ran earlier in
+therun,whichguaranteesthatareplayedstate-changingcall
+isappliedexactlyonce,andappendstheartifact’sclaimsand
+evidence to the shared evidence ledger. If one agent trips its
+tool-failure circuit breaker, only that agent’s contribution is
+droppedandtheremainingagentscontinue,soasingleflaky
+tool cannot kill the whole task.
+Guard Behavior
+Duplicate call check An identical tool call repeated inside
+one stage is answered from its earlier
+result instead of re-executing.
+Stagnant search check When consecutive search iterations
+return the same result set, the loop
+steers the agent to read or answer in-
+stead of searching again.
+Failure circuit breaker Repeated consecutive failures of the
+same tool end the tool phase for this
+stage (3 failures, 2 for search tools).
+Read gate An agent that searched but never
+opened a document may not return a
+blocked answer. It is redirected once
+to read the top hit first.
+Forced final answer On budget exhaustion, timeout, or an
+empty completion, one final tool-free
+callmustproduceabest-effortanswer
+from the gathered evidence, recorded
+with a typed stop reason.
+Table 12: Deterministic guards inside the agentic loop.
+Parameter Value
+Tool iterations per stage 8
+Raw tool iterations kept verbatim 2
+Summary budget for older iterations 6,000 chars
+Preserved document text in summary 12,000 chars
+Tool-failure circuit breaker (general /
+search)
+3 / 2
+Table 13: Agentic-loop defaults.
+Assemble stage prompt
+structural contract + role clause + direc-
+tive + visible packets + evidence digest
+Build working context
+base messages + summary of older
+tool iterations + last 2 raw iterations
+Model call with tool schemas
+Tool calls
+returned?
+Execute tool calls, record outcomes,
+apply guards (Table 12)
+Coerce final text into the structured
+JSON stage artifact
+Post-stage bookkeeping
+drop already-executed duplicate calls, append
+claims and evidence to the shared ledger
+yes
+next
+iteration
+no / budget spent
+(forced final answer)
+Figure7:Theagenticloopexecutedbythesharedharnessfor
+oneagentstage.TheloopisidenticalforbothLLMbackends.
+Worker Context Management Under Topology
+Mutation
+Agents in MANTA are stateless between stages. No agent
+owns a private chat history that survives a turn. All conver-
+sationalstatelivesinonesharedrunstatewiththreeappend-
+only stores. The packet store holds every relay packet ever
+sent. The evidence ledger holds every claim and its support-
+ingevidence,deduplicatedbyagent,turn,andclaimtext.The
+candidate list holds the best group output of each completed
+turn. A stage prompt is always rebuilt from these stores at
+execution time.
+What an agent sees is decided at read time, in code, by
+a shared context controller. When a stage is about to run,
+the controller selects the packets addressed to that agent,
+filters them by kind, turn, and sender, keeps only the latest
+packet per sender and kind, checks that the sender’s share
+scopepermitsthereader,andfinallyappliesthereader’sown
+bounds such as summary-only compaction and a per-packet
+character budget. The controller also renders the evidence
+ledger into one bounded digest packet whose scope follows
+the reader’s policy. A worker may see only its own branch,
+while every final synthesis stage always receives the global
+digest.Thedigestisprompt-onlycontextandisneverwritten
+back into the packet store.
+This design makes topology mutation cheap and lossless,
+as sketched in Figure 8. A mutation is applied to a copy
+Turntagents
+topology specv
+Turnt+1agents
+topology specv+1,
+new agents regis-
+tered deterministically
+Shared context controller
+applies thecurrentspec at read time: recip-
+ient, kind, sender scope, latest per sender,
+reader bounds, evidence digest scope
+Packet store
+append only
+Evidence ledger
+append only
+Turn candidates
+temporal voting
+one bounded
+mutation
+Figure 8: Context management across a topology mutation.
+Agents are stateless and read the shared stores only through
+the controller, so re-pointing the controller at the mutated
+specification changes visibility without migrating or losing
+any state.
+of the current topology specification and validated. The or-
+chestrator then simply re-points the context controller at the
+newspecification.Because everyreadislazy,nothingismi-
+grated,recomputed,ortruncated.Allpackets,ledgerentries,
+and candidates written under the old topology remain in the
+sharedstate,andthenextturn’sagentsinheritthemautomat-
+ically through the same read path. Only the visibility rules
+change, since branch membership, share scopes, and evi-
+denceaccessarenowresolvedagainstthenewspecification.
+Agents created by a mutation are registered deterministi-
+cally. The orchestrator assigns their backbone model type,
+message budget, and domain persona from fixed rules with-
+out any extra LLM call. A new agent starts with an empty
+private context. Its first prompt is assembled from the task
+packets addressed to it, the packets its policy makes visible,
+and the evidence digest, so it can build on all prior evidence
+without ever seeing a raw transcript. Agents that a mutation
+removes from the active topology leave their packets and
+ledger entries behind, so their work is not lost.
+Two further mechanisms connect the mutated turn to the
+audited one. First, the Auditor’s one-sentence recommenda-
+tionisinjected intoeverystagedirective oftherepairedturn
+as an explicitly untrusted diagnosis. Agents are instructed to
+verify it against the task and to re-evaluate the prior answer
+under it, rather than to obey it blindly. Second, the best out-
+putofeveryearlierturnispreservedasatemporalcandidate.
+Final answer selection votes over these candidates, so a mu-
+tationthatmakestheanswerworsecannotoverwriteabetter
+incumbent from before the mutation.

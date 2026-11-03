@@ -1,0 +1,908 @@
+arXiv 2611.03384  https://arxiv.org/abs/2611.03384
+
+Can We Stop the Backtest Yet? Anytime-Valid Promotion Tests for
+Adaptive Financial Research Agents
+Eric Benhamou
+Ai For Alpha
+Neuilly-sur-Seine, France
+LAMSADE, Université Paris
+Dauphine–PSL
+Paris, France
+eric.benhamou@aiforalpha.com
+Jean-Jacques Ohana
+Ai For Alpha
+Neuilly-sur-Seine, France
+jean-jacques.ohana@aiforalpha.com
+Beatrice Guez
+Ai For Alpha
+Neuilly-sur-Seine, France
+beatrice.guez@aiforalpha.com
+Ethan Setrouk
+Ai For Alpha
+Neuilly-sur-Seine, France
+ethan.setrouk@aiforalpha.com
+Chamyl Saadi
+Ai For Alpha
+Neuilly-sur-Seine, France
+chamyl.saadi@aiforalpha.com
+Thomas Jacquot
+Ai For Alpha
+Neuilly-sur-Seine, France
+thomas.jacquot@aiforalpha.com
+Abstract
+Financial research agents can generate and monitor trading rules
+faster than a human can document the resulting selection process.
+Candidates appear at data-dependent times, weak rules are aban-
+doned, and promising ones are watched until they cross a reporting
+threshold. We introducePromote, a protocol that assigns every
+candidate predictable testing wealth at birth and accumulates a
+cost-aware e-process only from subsequent returns. If lifetime al-
+locations sum to at most one, a weighted Ville argument bounds
+the probability of ever promoting a rule whose declared bounded
+net score has always had nonpositive conditional mean. The re-
+sult permits dependent candidates, adaptive births, and indefinite
+monitoring. We audit the implementation in two settings. A ret-
+rospective pseudo-out-of-sample replay contains 24 panel–rule
+hypotheses, 3,000 shared-sign null paths, injected alternatives, and
+public ETF and industry data. Repeated unadjusted tests produce a
+family crossing in 94.5% of null paths, versus 0.0% forPromote; at
+a 15-bp aligned ETF-component perturbation,Promotehas 70.1%
+target power and median crossing session 2,327. A separate exact
+mean-zero experiment lets an agent select candidate identities and
+birth times from past scores; the funded gate has 1.77% false-family
+crossings across 3,000 programs. The market replay produces zero
+promotions after costs. The certificate controls historical false pro-
+motion under the declared null; it is not a certificate that an earlier
+edge remains profitable at deployment.
+AI-use disclosure.Generative AI tools, including OpenAI Codex,
+assisted manuscript preparation. For this preprint version, Codex as-
+sisted with LaTeX editing, author and venue metadata, compilation,
+and layout checks.
+CCS Concepts
+•Mathematics of computing → Probability and statistics;•
+Computing methodologies→Sequential decision making.
+Keywords
+financial agents, anytime-valid inference, e-processes, backtest over-
+fitting, strategy selection, responsible AI
+Accepted at ICAIF 2026, Milan, Italy. Author preprint.
+1 Introduction
+A conventional backtest has a nominal end date. Research rarely
+does. An analyst looks at interim results, changes the universe, adds
+a seasonal interaction, drops an unpromising rule, and continues
+when the evidence is close. An autonomous research agent can
+perform the same sequence at machine speed. Treating the final
+rule as if it came from one fixed test understates the number of
+opportunities the system had to be lucky.
+This failure is familiar in empirical finance. Data-snooping cor-
+rections compare many strategies on a common terminal sample
+[9, 18, 27], while empirical-finance protocols quantify selection and
+backtest overfitting [1, 2, 10]. Neither device, by itself, authorizes
+continuous inspection of a library whose membership is decided
+from the observed history. The relevant error event is operational:
+did the research process ever promote a strategy whose declared net
+score has no positive conditional mean?
+Test martingales and e-values are well suited to this question
+because they remain valid at stopping times [16, 19, 22, 23]. Their
+use still requires a protocol. A newly proposed rule must not inherit
+evidence from before it was specified; adding near-duplicates must
+consume a finite research budget; transaction costs must be known
+before the return used to update the test; and trading must begin
+after, rather than on, the boundary-crossing observation. Those
+details are where an apparently safe backtest can leak.
+Promoteturns them into a ledger. At a predictable birth time,
+candidateℎ receives initial testing wealth𝜋ℎ. Subsequent bounded,
+cost-adjusted payoffs update an e-process with bets chosen from
+the past. Promotion occurs at the first crossing of1/(𝛼𝜋ℎ). If the
+total wealth assigned over the life of the research program is at
+most one, a weighted Ville argument controls the probability of any
+false promotion by𝛼. The library may be dependent, monitored at
+different frequencies, and expanded in response to old data.
+Contributions.The statistical ingredients are established; our
+contribution is to make them operational for an adaptive financial-
+research workflow:
+1
+arXiv:2611.03384v1  [cs.AI]  2 Nov 2026
+Benhamou et al.
+• a pathwise testing-wealth ledger that covers dependent,
+predictably registered candidates and continuous monitor-
+ing;
+• a cost-aware implementation that separates pre-registration
+data, evidence, promotion, and next-session execution; and
+• matched fixed-family and adaptive-birth audits that expose
+false-family error, detection delay, and the economic weak-
+ness of the historical library.
+The protocol tests an executable bounded payoff, not a semantic
+strategy story supplied by an agent. Its certificate concerns the
+complete promotion history, including rejected ideas; the market
+replay is a deliberately narrower pseudo-out-of-sample special case.
+2 Research Process and Null Hypotheses
+Let(F𝑡)𝑡≥0 contain all prices, candidate definitions, test states, and
+decisions available immediately before outcome𝑡+ 1. A research
+agent may create candidateℎ at a stopping time𝜈ℎ. Its rule is an
+executable map fromF𝑡−1 to an exposure𝑎ℎ,𝑡∈[− 1, 1] for𝑡>𝜈 ℎ.
+The candidate definition includes its asset, direction, rebalance
+convention, and cost model; changing any of these fields creates a
+new candidate.
+In the ledger, “hash the rule” means compute a cryptographic
+fingerprint of one canonical, machine-readable package containing
+the executable code and all settings that determine its trades. For
+example, the package includes the asset universe, signal formula,
+parameter values, data fields, calendar, position sizing, rebalance
+timing, and cost convention. A function such as SHA-256 maps
+those bytes to a short identifier: identical packages produce the
+same identifier, while even a small edit almost certainly produces a
+different one. The hash is not the rule, encryption, or proof that the
+rule is correct; the full package is retained. It is a tamper-evident
+label that lets an auditor verify exactly which frozen version was
+registered before later returns arrived.
+Let𝑟 netℎ,𝑡 be the return that candidateℎ would have earned over
+period𝑡 after its predictable transaction cost. We use a predictable
+positive scale𝑠ℎ,𝑡 and define
+𝑌ℎ,𝑡 =clip
+
+𝑟 netℎ,𝑡/𝑠ℎ,𝑡,−1,1 .(1)
+Clipping is part of the estimand: the test concerns the conditional
+mean of the bounded score, not the unbounded mean return. Eco-
+nomic results are always computed from the unclipped net return.
+For each candidate, the null is
+𝐻ℎ :E[𝑌 ℎ,𝑡|F𝑡−1]≤0for every𝑡>𝜈 ℎ.(2)
+This is stronger than a zero unconditional full-sample mean. It
+defines a uniform post-birth null: the false-promotion guarantee
+applies only when the conditional mean has been nonpositive at
+every scored date. If an edge was positive and later decays, the null
+is false and old evidence does not certify that the edge remains
+positive today.
+Assumption 1 (Predictable registration).The candidate def-
+inition, scale𝑠 ℎ,𝑡 , transaction cost, and bet𝜆 ℎ,𝑡 areF𝑡−1 -measurable,
+with0≤𝜆 ℎ,𝑡≤1. The first scored return begins strictly after𝜈 ℎ.
+The score may be inactive on dates when the rule holds cash;
+equivalently,𝑌ℎ,𝑡 = 0on those dates. Candidates can share assets
+and returns, so no cross-rule independence is assumed.
+3 A Wealth-Conserving Promotion Protocol
+3.1 One candidate
+Starting from𝐸ℎ,𝜈ℎ =1, define
+𝐸ℎ,𝑡 =
+𝑡Ö
+𝑠=𝜈ℎ+1
+ 1+𝜆 ℎ,𝑠𝑌ℎ,𝑠.(3)
+The nonnegative factor is the return on one unit of statistical wealth
+bet against𝐻ℎ.
+Proposition 1 (Anytime validity).Under 𝐻ℎ and Assumption 1,
+(𝐸ℎ,𝑡)𝑡≥𝜈ℎ is a nonnegative supermartingale. For every𝑢∈(0,1),
+P𝐻ℎ
+ 
+sup
+𝑡≥𝜈ℎ
+𝐸ℎ,𝑡≥𝑢−1
+!
+≤𝑢.
+Proof. Conditional onF𝑡−1 , E[1+𝜆ℎ,𝑡𝑌ℎ,𝑡|F𝑡−1]≤ 1. Thus (3)
+is a nonnegative supermartingale beginning at one. Ville’s inequal-
+ity gives the crossing bound.□
+The product in (3) is cumulative. A rolling product that deletes
+old factors is generally not an e-process and cannot use Proposi-
+tion 1. Restarting is possible, but every restart must be funded as a
+new test or combined through a valid mixture.
+The implementation avoids choosing a bet after seeing test re-
+turns. For the fixed grid Λ={. 025,. 05,. 10,. 20,. 35}, let𝐸(𝜆)ℎ,𝑡 denote
+(3) with constant bet𝜆and set
+¯𝐸ℎ,𝑡 = 1|Λ| ∑︁𝜆∈Λ𝐸(𝜆)ℎ,𝑡 .(4)
+Each component starts at one and is a nonnegative supermartingale,
+so their fixed convex mixture is one as well. The promotion rule
+uses ¯𝐸ℎ,𝑡 throughout; it never substitutes the best component in
+hindsight.
+3.2 An adaptively growing library
+Suppose a budget account assigns candidateℎ a nonnegative mass
+𝜋ℎ at birth. The allocation may depend onF𝜈ℎ , but the pathwise
+total must satisfy ∑︁
+ℎever created
+𝜋ℎ≤1.(5)
+The rule is promoted at
+𝜏ℎ =inf{𝑡>𝜈 ℎ :𝐸 ℎ,𝑡≥(𝛼𝜋 ℎ)−1}.(6)
+Theorem 1 (False-promotion control).Under Assumption 1
+and(5),
+P{at least one true𝐻 ℎ is ever promoted}≤𝛼.
+The statement allows dependent candidates, data-dependent birth
+times, and an unbounded monitoring horizon.
+Proof. Condition onF𝜈ℎ . Proposition 1 bounds the crossing
+probability of a null candidate by 𝛼𝜋ℎ. A union bound over the
+countable set of created nulls and (5) give the result. Random pre-
+dictable masses are handled by iterated expectation.□
+2
+Safe Promotion Tests for Financial Research Agents
+Promote: auditable promotion ledger
+1. Before outcome𝑡+ 1, freeze the rule package, compute its fingerprint,
+and record its birth𝜈ℎ, scale, cost convention, bet mixture, and mass
+𝜋ℎ.
+2. Debit𝜋ℎ from the remaining lifetime budget; reject a birth that
+would make cumulative allocations exceed one.
+3. For each𝑡>𝜈 ℎ, append the realized net score𝑌ℎ,𝑡 and update every
+predeclared mixture component. Never import pre-birth evidence.
+4. Record ¯𝐸ℎ,𝑡 , the applicable boundary (𝛼𝜋ℎ)−1, and the crossing
+decision.
+5. If a crossing occurs at𝜏ℎ, schedule economic exposure no earlier
+than𝜏ℎ+1and maintain evidence and P&L as separate ledgers.
+Minimum row key:candidate hash, event time, data-version hash, score, cost,
+evidence, boundary, decision, and first executable session.
+Figure 1: The protocol is implementable as an append-only
+ledger. A changed rule, restart, or current-regime certificate
+is a newly funded candidate.
+Conditioning is what permits adaptive research: pre-birth ob-
+servations may determine the rule’s code, identity, and mass, but
+cannot enter its post-birth product. Abandonment can set future
+bets to zero but does not replenish the account; the program already
+enjoyed a crossing opportunity. Revival, rescaling, or a nearby pa-
+rameterization requires another debit. Zero-mass candidates are
+ineligible. These rules block free restarts and hidden near-duplicate
+tests.
+This theorem controls familywise error, a demanding criterion
+appropriate to an automated promotion gate. If the objective is
+discovery rather than certification, stopped e-values can instead be
+passed to e-BH, which controls FDR under arbitrary dependence
+[25]. That is a different operating point and is not used for the
+primary experiment.
+3.3 Promotion is not same-period trading
+The crossing observation belongs to the test, not to post-promotion
+performance. If𝜏ℎ <∞ , live or holdout exposure starts at𝜏ℎ+1. This
+one-period separation prevents the return that triggers promotion
+from being counted as evidence of deployed profitability. Statistical
+wealth is also not trading capital:𝐸ℎ,𝑡 may be highly volatile even
+when the economic position is small.
+For a promoted rule, we therefore maintain two ledgers. The ev-
+idence ledger continues to update (3); the economic ledger records
+the actual net return from the next executable interval. Demotion
+can be governed by a separately registered rule, but optional re-
+moval does not retroactively change the false-promotion guarantee.
+Production use therefore requires a distinct current-regime or for-
+ward deployment check. A predictable epoch restart can provide
+one, but it must be funded as a new test; deleting old factors from
+the original product would break anytime validity.
+3.4 State, corrections, and recovery
+Each update reads the committed state at𝑡− 1, joins one point-in-
+time outcome, and writes one state for𝑡. Its unique key combines
+the candidate fingerprint, event time, and data-version fingerprint.
+Replaying a key after a crash returns the stored row instead of
+multiplying an e-factor twice; partial writes are not evidence.
+Event time and ingestion time remain separate. Revised data or
+code cannot silently overwrite an old factor: the ledger retains the
+original row, flags the certificate, and computes a versioned diagnos-
+tic. Any corrected series used for authorization starts prospectively
+as a newly funded stream. Thus a reviewer can reconstruct what
+the gate actually knew when it acted.
+Automated checks enforce idempotent replay, no influence from
+post-𝑡 inputs, and cumulative birth debits that never decrease or
+exceed one. These target double counting, look-ahead joins, and
+budget recycling.
+3.5 A simple power calculation
+Under an alternative with E[𝑌ℎ,𝑡|F 𝑡−1]≥𝜇> 0and |𝑌ℎ,𝑡|≤ 1, a
+fixed bet𝜆∈(0,1)obeys
+log(1+𝜆𝑌 ℎ,𝑡)≥𝜆𝑌 ℎ,𝑡−
+𝜆2𝑌 2ℎ,𝑡
+2(1−𝜆) .(7)
+If the predictable second moment is bounded by 𝑣, the expected
+log-growth per active observation is at least𝜆𝜇−𝜆 2𝑣/[ 2(1−𝜆)] .
+For every component in the implemented grid, (4) giveslog ¯𝐸ℎ,𝑡≥
+log𝐸(𝜆)ℎ,𝑡 −log 5. Thus adaptation over the five predeclared bet sizes
+costs at most log 5units of log evidence relative to the best compo-
+nent on that path; it does not license selecting the best component
+after the test. The growth bound makes the cost of a small𝜋ℎ ex-
+plicit: a candidate born late or deep in a hypothesis tree needs more
+observations to reach (6). Validity is cheap computationally but not
+statistically.
+4 Experimental Design
+4.1 Retrospective pseudo-out-of-sample library
+The implementation crosses three asset panels with eight calen-
+dar definitions, giving 24 panel–rule hypotheses. This is the fixed-
+family special case of Theorem 1: within the replay, all candidates
+are frozen before the 2015 segment is processed and receive equal
+wealth. Adaptive births and data-dependent allocations are not ex-
+ercised by the market replay; Section 4.3 isolates them under an
+exact mean-zero score law. The panels are six equity ETFs (SPY,
+QQQ, IWM, EFA, EEM, and VNQ), five defensive or diversifying
+ETFs (IEF, TLT, GLD, DBC, and SHY), and the ten value-weighted
+Fama–French industries. The rules are turn of month, first three
+and last three trading days, Monday, Friday, last three trading days
+of a quarter, January, and the third Friday of a month. The common
+daily sample runs from March 2006 through May 2026.
+For rule indicator 𝐼ℎ,𝑡, the candidate takes the approximately
+calendar-neutral panel exposure
+𝑞ℎ,𝑡 =𝑑ℎ
+𝐼ℎ,𝑡− ˆ𝑝ℎ
+max( ˆ𝑝ℎ,1− ˆ𝑝ℎ),
+split equally across the assets in its panel. The activation frequency
+ˆ𝑝ℎ and direction𝑑ℎ∈{− 1, 1} are fixed on March 2006–December
+2010. The predictable score scale is the larger of 50 bp and the
+training 99.5th percentile of absolute net return. The 2011–2014
+segment records stability and component-bet diagnostics, but does
+not choose the test bet or alter the family. Every test stream uses the
+predeclared equal mixture in (4) and restarts at one in January 2015.
+The replay code does not use a post-2014 return to change these
+choices; the overall split and library were nevertheless designed
+retrospectively.
+3
+Benhamou et al.
+The replay segment covers January 2015 through May 2026.
+Candidates divide wealth equally, so each boundary is24/𝛼. All
+strategies pay five basis points per dollar of one-way risky-asset
+turnover. The code solves the proportional-cost self-financing equa-
+tion against drifted pre-trade weights rather than subtracting cost
+from stale targets. At each date it records exposures and costs, ob-
+serves the return, updates evidence, and schedules any promotion
+for the following trading day.
+4.2 Shared-sign null and power experiments
+Type-I error is evaluated on 3,000 Monte Carlo paths using a shared-
+date sign randomization of the observed gross test returns. The
+same independent Rademacher sign multiplies the complete cross-
+hypothesis vector on a date, preserving observed magnitudes and
+contemporaneous cross-rule dependence while removing serial sign
+dependence. The nonnegative cost-fraction path is conditioned
+upon rather than recomputed, and scores are recalculated and
+clipped after costs. This construction satisfies (2) conditionally
+on the magnitudes and costs. Indeed, with 𝑓(𝑢)=clip(𝑢,− 1, 1),
+𝑎=−𝑐/𝑠≤0,𝑏=(1−𝑐)𝑔/𝑠, and a Rademacher sign𝑆,
+E𝑆𝑓(𝑎+𝑆𝑏)= 12{𝑓(𝑎+𝑏)+𝑓(𝑎−𝑏)}≤ 12{𝑓(𝑏)+𝑓(−𝑏)}=0,
+because𝑓 is increasing and odd. The complete fixed-family moni-
+toring rule is rerun, including every intermediate inspection. The
+primary statistic is whether at least one null candidate is ever pro-
+moted.
+The comparator repeatedly computes an expanding one-sided
+z statistic after a minimum of 63 sessions and declares success
+whenever an unadjusted𝑝-value falls below𝛼 at an inspection date.
+This baseline is intentionally common rather than defensible: it
+measures the inflation caused by the workflow thatPromoteis
+designed to replace. A second comparator gives every stream its
+own anytime boundary1/𝛼 without splitting wealth; it isolates
+cross-candidate multiplicity from optional stopping. A matched-
+error fixed-horizon comparator rejects candidateℎ only when its
+terminal mixture satisfies ¯𝐸ℎ,𝑛≥(𝛼𝜋 ℎ)−1. Markov’s inequality and
+a union bound give the same familywise guarantee under(2); unlike
+Promote, this comparator discards earlier crossings and cannot
+stop before session𝑛.
+Power paths shift each equity component return on every date
+by 5, 10, 15, 20, or 30 basis points in the sign of the target equity
+turn-of-month weight. The target therefore receives a positive gross
+contribution proportional to its absolute exposure, and overlapping
+equity rules also move. The five shifts correspond to 4.8%, 9.6%,
+14.4%, 19.2%, and 28.8% annualized gross alpha for the target over-
+lay. We report target detection and delay; the repeated-𝑝 curve is
+diagnostic and is not a matched-Type-I-error comparison.
+4.3 Adaptive-birth boundary-null audit
+The fixed market replay cannot demonstrate the adaptive-birth part
+of Theorem 1. We therefore add a separate exact boundary-null ex-
+periment. Each of 3,000 research programs contains 32 independent
+Rademacher score streams over 768 sessions. After a 64-session
+warm-up, an agent inspects the past only and registers the unregis-
+tered stream with the largest trailing-64 sum whenever that sum
+is at least 20. Births are separated by 32 sessions and capped at 12.
+Table 1: Fixed-family audit. Entries are percentages [95%
+Wilson interval]. Null rates use 3,000 paths; 15-bp target
+power uses 1,500. Median is the one-based crossing session
+conditional on detection.
+Procedure Null FWER 15-bp power Med. session
+Repeated𝑝<.0594.5 [93.6,95.3] 99.9 [99.6,100.0] 125
+Fixed ¯𝐸𝑛≥4800.0 [0,.128] 67.1 [64.7,69.5] 2,868
+Per-stream ¯𝐸𝑡≥200.7 [.46,1.07] — —
+Promote ¯𝐸𝑡≥4800.0 [0,.128] 70.1 [67.7,72.3] 2,327
+The selected identity and birth time are thus data dependent, but
+its first test score is the next independent Rademacher increment,
+soE[𝑌ℎ,𝑡|F𝑡−1]=0exactly after registration.
+At each birth the agent predictably spends one half of remaining
+wealth when the trailing sum is at least 28 and one quarter other-
+wise. Consequently the pathwise lifetime allocation never exceeds
+one even though candidate identity, birth time, mass, and final fam-
+ily size vary by path. We compare the funded boundary with an
+unfunded per-stream boundary of 20 and with repeated one-sided
+Gaussian tests after 32 post-birth observations. The simulation uses
+seed 20262731 and the same fixed e-mixture as the market study.
+4.4 Public-market replay
+The market study uses a July 31, 2026 frozen snapshot: Yahoo
+adjusted closes for the ETFs and the Ken French Data Library’s
+value-weighted ten-industry file. Source and derived-file SHA-256
+hashes accompany the artifact; the replay itself performs no net-
+work retrieval. Returns, candidate indicators, costs, and evidence
+are computed from information available at each decision. The
+study reports the entire promotion ledger, including candidates
+that never cross. The split and library were designed retrospec-
+tively, and trading-day ranks are reconstructed from the realized
+exchange calendar. No test return calibrates direction, scale, bet
+grid, or prior wealth, but one historical path cannot establish the
+conditional null in (2).
+For any promoted strategy, exposure begins one interval after
+crossing and pays exact one-way turnover under the declared cost
+convention. Program-level wealth includes cash before activation;
+the complete daily ledger permits a separate live-only analysis
+when a crossing occurs.
+5 Results
+5.1 Fixed-family calibration and power
+Table 1 gives the principal calibration result. Continuous use of un-
+adjusted fixed-sample tests turns a nominal threshold into a much
+larger research-program error rate. The wealth-split rule records
+no false family crossing in 3,000 paths; its Wilson upper endpoint
+is 0.128%. This shared-sign law includes frozen positive costs and
+is therefore generally a strict, conservative null rather than a least-
+favorable boundary case. Giving every stream its own boundary of
+20 has no 5% familywise guarantee; it records 21 crossings (0.7%)
+here, still below 5% because the component e-processes are conser-
+vative under this law. The fixed-horizon and anytime wealth-split
+rules both record zero crossings.
+4
+Safe Promotion Tests for Financial Research Agents
+Table 2: Complete target-power frontier (1,500 paths per
+shift). Shift is bp per ETF component per session, with annu-
+alized target gross alpha in parentheses. Power entries are
+percentages [95% Wilson interval]; 𝑡50 is the anytime median
+crossing session conditional on detection. A terminal detec-
+tion, when present, occurs at session 2,868.
+Shift (ann. %) Terminal power Anytime power𝑡 50
+0 (0.0) 0.00 [0,.26] 0.00 [0,.26] —
+5 (4.8) 0.00 [0,.26] 0.00 [0,.26] —
+10 (9.6) 5.73 [4.67,7.03] 7.73 [6.49,9.20] 2,568
+15 (14.4) 67.13 [64.72,69.46] 70.07 [67.70,72.33] 2,327
+20 (19.2) 99.20 [98.61,99.54] 99.27 [98.69,99.59] 1,743
+30 (28.8) 100 [99.74,100] 100 [99.74,100] 1,049
+The injected alternatives show the price of validity. Evidence
+accumulates only on observations realized after the test starts, and
+a candidate with mass𝜋ℎ must earnlog(1/(𝛼𝜋 ℎ))units of log evi-
+dence. Strong, persistent effects are promoted; weak or intermittent
+effects often remain below the boundary during the available hori-
+zon. Target power rises from 0% at 5 bp to 7.7%, 70.1%, 99.3%, and
+100% at 10, 15, 20, and 30 bp, respectively. At 15 bp, the matched
+terminal rule has 67.1% power (95% Wilson interval 64.7–69.5%),
+whilePromotehas 70.1% (67.7–72.3%) and crosses at a median 2,327
+of 2,868 sessions. The terminal rule necessarily waits for session
+2,868; the naive test crosses after 125 sessions in paths where it
+detects the target, but its null FWER is 94.5%. At 15 bp the anytime
+event contains 3.0 percentage points of paths that cross before the
+horizon but finish below the terminal boundary. This is useful for
+a gate, althoughPromoteis not designed to maximize discovery
+count.
+Table 2 exposes the full operating curve rather than a single
+favorable effect. The valid procedures detect none of the zero- or
+5-bp target paths; with 1,500 paths, the zero-count Wilson upper
+endpoint is 0.26%. The repeated z workflow, by comparison, declares
+the target on 23.2% of zero-shift paths and 74.2% of 5-bp paths, so its
+apparent sensitivity cannot be separated from its inflated inspection
+error. Between 10 and 15 bp the funded methods move through
+their steep transition. The anytime rule gains 2.0 and 2.9 power
+points over the terminal rule, respectively, because it retains paths
+that cross earlier and later fall below 480; overlapping intervals
+caution against interpreting these differences as a tuned advantage.
+At 20 bp the power gap nearly disappears, but the anytime median
+crossing is 1,125 sessions earlier than the terminal decision. Even at
+30 bp, its median requires 1,049 sessions. The boundary therefore
+rewards persistent net evidence, not a visually strong but short
+backtest.
+5.2 Adaptive registration on an exact boundary
+null
+The agent registers a mean of 9.88 candidates per program (median
+10; 10th–90th percentiles 8–12) after selecting strong pre-birth
+histories. It allocates 93.45% of testing wealth on average, while
+the pathwise total never exceeds one. Because only independent
+future increments enter evidence, this experiment sits exactly on
+the conditional mean-zero boundary. Table 3 shows that adaptive
+selection itself does not invalidate the funded gate: its interval lies
+Table 3: Adaptive-birth mean-zero audit (3,000 programs).
+Intervals are 95% Wilson intervals in percentage points.
+Procedure Crossings FWER [95% CI]
+Repeated one-sided𝑝<.052,792 93.07 [92.10, 93.92]
+Anytime per stream, ¯𝐸𝑡≥20552 18.40 [17.05, 19.83]
+Funded adaptivePromote53 1.77 [1.35, 2.30]
+Table 4: Predictable allocation sensitivity on the same 3,000
+adaptive null programs. “First” and “spent” are mean per-
+centages of initial testing wealth; FWER is a percentage [95%
+Wilson interval].
+Allocation rule First Spent FWER [95% CI]
+Observed-strength split 25.29 93.45 1.77 [1.35,2.30]
+Equal 12-slot reserve 8.33 82.36 1.17 [0.84,1.62]
+Quarter remaining 25.00 93.34 1.77 [1.35,2.30]
+Half remaining 50.00 99.75 2.37 [1.88,2.97]
+below 5%. In contrast, reusing a full 5% threshold for each adaptively
+selected stream produces 18.4% familywise error.
+Table 4 replays the identical births and post-birth evidence under
+four predeclared spending policies. The equal-slot rule reserves
+1/12for every possible birth. The geometric rules spend a quarter
+or a half of remaining wealth, and the observed-strength rule uses
+the pre-birth trailing sum to choose between those fractions. Each
+policy obeys ˝ℎ𝜋ℎ≤ 1pathwise; unfilled equal slots and the tail
+of a geometric schedule remain unspent. Thus Theorem 1 applies
+to all four without assuming how many candidates will arrive.
+The estimated FWER stays below 5% for every policy, but the
+finite-sample rates illustrate a design trade-off rather than a ranking
+theorem. Spending half of the remainder gives early proposals the
+lowest boundary, then rapidly shrinks later masses; it also has the
+largest crossing rate here. Equal slots retain more capacity for late
+births and spend only 82.36% on average because programs regis-
+ter fewer than 12 candidates. The signal-dependent and quarter-
+remaining rules happen to produce the same 53 crossing programs,
+but their masses are not generally identical. Allocation may favor
+proposals using information available at birth; it must not be re-
+vised after observing their test evidence. This separates an auditable
+research priority from post-selection threshold shopping.
+5.3 Market evidence and the finance ledger
+The pseudo-out-of-sample market run promotes zero of 24 candi-
+dates. This count should not be read as a rejection rate under a
+known stochastic null: market returns need not satisfy (2), and the
+experiment supplies only one dependent path. Its role is to show
+how the protocol behaves when familiar strategy families compete
+for the same research budget.
+The largest evidence value reached by any candidate is 1.93, ver-
+sus the declared boundary of 480. Repeated unadjusted inspection
+instead promotes the reversed Fama–French industry January rule
+on 13 January 2016. Its full 2015–2026 shadow path loses 0.90% per
+year (Sharpe−0.18); the fixed1/24sleeve activated by the naive
+gate ends at 0.992 after costs. These figures do not prove that the
+5
+Benhamou et al.
+Naive
+repeated
+Fixed
+horizon
+Per-stream
+anytime
+Wealth-split
+anytime
+0%
+25%
+50%
+75%
+100%
+Familywise crossing rate
+94.5%
+0.0% 0.7% 0.0%
+Shared-sign null (3,000 paths)
+Fixed Per-stream Split
+0
+0.5%
+1.0%
+0--1.2% detail
+0 5 10 15 20 25 30
+Aligned ETF-component shift (bp per session)
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+T arget promotion probability
+T arget power under aligned perturbations
+Naive sequential
+Fixed-horizon mixture
+Wealth-split anytime
+Figure 2: Fixed-family diagnostics. Left: familywise crossings over candidates and inspection times; the inset makes the 0.7%
+per-stream result and zero-count Wilson intervals visible. Right: target promotion probability under an aligned shift to each
+ETF component return; shaded regions are 95% Wilson intervals. The repeated-test curve is diagnostic, not a matched-error
+comparator.
+Table 5: Finance audit from the exact daily ledger. Returns,
+volatility, and one-way risky-asset turnover are annualized;
+SR uses zero cash yield. All paths pay 5 bp per dollar traded.
+Industry sleeves are non-tradable, so the economics are diag-
+nostic.
+Metric FundedPromoteNaive sleeve All 24 sleeves
+Annualized net return 0.000%−0.071%−1.341%
+Annualized volatility 0.000% 0.167% 1.577%
+Sharpe, zero cash yield 0.00−0.43−0.85
+Maximum drawdown 0.00%−0.90%−15.41%
+One-way turnover/year 0.00 0.10 26.06
+Mean gross exposure 0.00% 0.55% 10.23%
+Terminal wealth 1.000 0.992 0.858
+crossing was a statistical false positive, but they show why a nomi-
+nal𝑝<.05crossing is a poor deployment event.
+Only two of the 24 full-test shadow paths have a positive arith-
+metic mean, and the larger is 0.087% annualized; neither comes
+close to the boundary. This is a weak library after the retrospective
+split, not evidence that the gate suppresses profitable rules. Con-
+versely, any promoted rule has an audit trail identifying the exact
+observations, score scaling, cost, bet, and boundary responsible
+for the decision. This is more informative than reporting only the
+winning backtest.
+5.4 What the artifacts establish
+The rowwise replay verifies three deterministic invariants: the 24
+fixed-family weights sum to one, every test e-process restarts at one,
+and no promoted return is credited before the interval following a
+crossing. The adaptive simulation checks variable birth times, iden-
+tities, masses, and family sizes under an exact mean-zero law. Seeds
+20260731 and 20262731, the complete hypothesis ledger, summary
+tables for 15,000 simulated programs or paths, and SHA-256 hashes
+of every machine-readable result accompany the artifact.
+These checks do not establish a stable positive conditional mean
+for a market rule. Power depends on clipping, effect persistence,
+family size, and bet fractions. Changing those choices after see-
+ing the replay creates another research layer that requires new
+validation data or testing wealth.
+6
+Safe Promotion Tests for Financial Research Agents
+2016 2019 2022 2025
+0.00
+0.25
+0.50
+0.75
+1.00
+1.25
+1.50
+1.75
+2.00
+Mixture e-value
+boundary: 480 (off scale)
+Largest pseudo-out-of-sample evidence paths
+Defensive month-end-3
+Industry January
+Equity January
+Industry month-start-3
+Defensive turn-of-month
+Equity month-start-3
+2016 2019 2022 2025
+0.86
+0.88
+0.90
+0.92
+0.94
+0.96
+0.98
+1.00
+Net wealth (zero cash yield)
+Exact-cost economic ledger
+Naive promoted sleeve
+Funded promoted sleeves
+All 24 sleeves from start
+Figure 3: Pseudo-out-of-sample evidence and economic ledgers, January 2015–May 2026. Left: the six largest mixture e-processes;
+the artifact retains all 24 paths. Right: portfolio wealth after exact five-basis-point one-way turnover costs. The funded gate
+stays at one because no rule crosses; cash is assigned zero yield in this diagnostic ledger.
+6 Relation to Existing Work
+Backtest overfitting has been studied through data-snooping tests,
+superior-predictive-ability tests, multiple-testing adjustments, and
+selection diagnostics [2, 9, 10, 18, 27]. These methods address closely
+related selection problems, usually for a collection evaluated at
+a terminal sample size. Our target is the event generated by an
+ongoing research system: a false strategy is promoted at some
+random time after a data-dependent proposal.
+Repeated interaction with a holdout set is adaptive data analysis;
+the reusable-holdout framework gives a privacy-based route to
+valid reuse [6]. Asynchronous online testing handles overlapping
+sequential experiments [29]. Neither is a cost-aware familywise
+promotion ledger for financial strategies.
+Online multiple-testing methods allocate error across a sequence
+of hypotheses, including alpha-investing and adaptive FDR rules
+[7, 13, 17]. Our pathwise masses are deliberately simpler: they are a
+weighted online Bonferroni allocation for familywise control, with
+no claim of wealth recycling. That conservative choice makes the
+audit rule transparent when candidate identities and birth times
+are selected from the past.
+E-values provide the underlying evidence currency [ 23], and
+safe testing, betting-based inference, and confidence sequences ex-
+plain their optional-stopping behavior [ 8, 12, 16, 26]. The e-BH
+procedure extends the framework to false-discovery control un-
+der arbitrary dependence [25]. Sequential e-values have also been
+used to evaluate probability forecasts and backtest financial risk
+measures [11, 24]; those applications test forecasts, whereas our
+unit is a strategy-promotion workflow. We use the conservative
+wealth-weighted crossing rule because one false launch can matter
+operationally. Our contribution is its implementation as a strategy-
+level gate, an exact adaptive-birth audit, and a reproducible market
+ledger with costs and delayed deployment.
+Calendar and technical trading rules provide a demanding case
+study because their design space is easy to expand and many re-
+ported effects are sample-sensitive [3, 14, 20, 21]. More broadly, the
+attenuation of published return predictability and the prevalence
+of false anomaly rejections motivate a strict separation between
+discovery and deployment [5, 15]. The candidate generator may
+instead be a language model, feature search, or a human, provided
+its executable definition and wealth are fixed before scoring. ICAIF
+studies multiscale evaluation of financial time-series foundation
+models [4], and AAAI studies trading-policy generalization beyond
+offline data [28]. Neither controls the probability of ever promoting
+a null strategy during adaptive search.
+6.1 Expiring evidence and predictably funded
+revalidation
+A promotion is historical evidence, not a perpetual certificate of cur-
+rent profitability. The process in (3) is cumulative: evidence earned
+during an early favorable regime is not erased when the conditional
+mean later becomes zero or negative. Theorem 1 controls crossing
+under the uniformly nonpositive null (2); it does not assert that the
+conditional mean remains positive after a genuine crossing. Simply
+deleting old factors or resetting the displayed process to one while
+reusing its original testing mass would create additional crossing
+opportunities outside the theorem.
+A production protocol can instead make authorization expire and
+fund every revalidation as a new candidate. Give strategy definition
+ℎ a lifetime base mass𝜔ℎ, allocated predictably at its original birth,
+with ˝ℎever created 𝜔ℎ≤ 1pathwise. Choose (𝑞𝑒)𝑒≥0 nonnegative
+with ˝𝑒𝑞𝑒≤ 1. Epoch𝑒 may begin at any stopping time𝜌ℎ,𝑒 deter-
+mined from past information and receives fresh mass𝜋ℎ,𝑒 =𝜔ℎ𝑞𝑒.
+Its e-process starts from one, uses only scores strictly after𝜌ℎ,𝑒, and
+crosses at ¯𝐸ℎ,𝑒,𝑡≥(𝛼𝜔 ℎ𝑞𝑒)−1. A finite authorization window can
+be declared at epoch birth; setting bets to zero after expiry freezes
+the process, and renewal requires a separately funded epoch.
+7
+Benhamou et al.
+Proposition 2 (False authorization under funded restarts).
+Suppose every epoch satisfies Assumption 1, and define its null by
+E[𝑌ℎ,𝑡|F𝑡−1]≤ 0at every time on which that epoch places a nonzero
+bet. If authorization or renewal occurs only after its funded boundary,
+then the probability that any null epoch ever authorizes a strategy is
+at most𝛼. The result allows data-dependent restart times, overlapping
+epochs, shared returns, and an unbounded number of reviews.
+Proof. Treat each pair(ℎ,𝑒) as a distinct candidate in Theo-
+rem 1. Its predictable mass is𝜔ℎ𝑞𝑒. Moreover,∑︁
+ℎ,𝑒
+𝜔ℎ𝑞𝑒≤(
+∑︁
+ℎ
+𝜔ℎ)(
+∑︁
+𝑒
+𝑞𝑒)≤1.
+The theorem applies directly; no independence across epochs is
+required.□
+With 𝐻 initially equal-weighted definitions, 𝜔ℎ = 1/𝐻, the
+epoch-𝑒 threshold and log-evidence requirement are𝐻/(𝛼𝑞𝑒) and
+log(𝐻/𝛼)+log( 1/𝑞𝑒). Doubling the family adds log 2to the evi-
+dence requirement, while later restarts pay log(1/𝑞𝑒). For example,
+𝑞𝑒 = 6/[𝜋 2(𝑒+ 1)2] reserves finite lifetime wealth while making
+the threshold grow quadratically rather than permitting cost-free
+restarts. Epoching does not prove that a profitable regime persists
+after crossing; it makes every renewed authorization depend on
+fresh post-restart observations and a declared share of the lifetime
+error budget.
+7 Limitations and Governance
+The guarantee is narrow by design. It concerns the clipped, cost-
+adjusted score and a null that is uniformly nonpositive after birth;
+it does not certify that a formerly positive edge remains profitable.
+Clipping can also suppress rare economic losses. It occurs in 128
+of 68,832 historical candidate–session scores (0.186%), so every
+evidence row is retained beside its unclipped return.
+The two simulations answer different questions. Shared indepen-
+dent signs preserve magnitudes and contemporaneous cross-rule
+dependence, but remove serial sign dependence and freeze observed
+cost fractions; the resulting null is generally strict. The adaptive
+audit is exactly mean zero and exercises selection and staggered
+births, but its iid Rademacher scores are not a market model. Neither
+construction asserts that realized returns satisfy (2).
+Validity is only as trustworthy as the filtration. Revised data,
+survivorship-biased universes, pretrained-model knowledge of the
+replay era, or same-close execution can import future information.
+A production agent must therefore retain data and prompt hashes,
+candidate births, allocations, and rejected proposals. An idea with-
+out a deterministic executable rule receives no testing wealth.
+The economic replay uses adjusted closes and zero cash yield.
+Five-basis-point turnover costs are explicit, but financing, borrow
+fees, bid–ask dynamics, impact, taxes, and capacity are absent;
+French industries are not directly tradable. The design and pseudo-
+out-of-sample periods were chosen retrospectively, and realized
+trading-day ranks can encode rare unscheduled closures. These
+facts make Table 5 an audit, not a live performance claim.
+Finally, familywise control becomes conservative when an agent
+proposes many correlated variants. Hierarchical predictable allo-
+cations expose but do not eliminate that cost; discovery-oriented
+systems may prefer FDR control. In all cases, promotion should
+trigger a separately governed forward evaluation rather than unre-
+stricted scaling.
+In production, a crossing is an authorization request, not an
+order. A pre-trade gate still checks data availability, venue and
+borrow eligibility, spread and impact, concentration, turnover, and
+duplicate portfolio exposure. It may veto or cap a trade without
+changing the evidence. A predictable risk kill switch may stop
+exposure or betting, but cannot reclaim testing mass or justify a
+same-day restart.
+The ledger should fail closed: missing prices, ambiguous calen-
+dars, stale features, or a code-hash mismatch suspend updates and
+deployment until an operator records the resolution and first usable
+session. The e-process asks whether the historical null was crossed;
+operations controls ask whether the position is safe to trade now.
+7.1 Certificate lifecycle under failure
+A certificate moves through registered, accumulating, crossed, au-
+thorized, suspended, and expired states. Crossing concerns one
+frozen version; authorization is separate and time limited. Expiry
+requires a funded epoch from Section 6.1; corrected history cannot
+backdate promotion.
+The release manifest binds the fingerprint to its rule package,
+data vintage, calendar, costs, bet grid, budget, and expiry. This
+supports audits of replay, post-decision inputs, and the first trade.
+It does not prove profitability; it prevents implementation changes
+from voiding the theorem’s premises.
+8 Conclusion
+Adaptive research changes the unit of inference. The relevant object
+is the sequence of proposals, inspections, and stopping decisions,
+not one terminal backtest.Promotegives that process a finite error
+budget: candidates inherit no evidence and must cross a cost-aware,
+wealth-adjusted boundary. The guarantee survives continuous mon-
+itoring and an adaptively expanding library.
+The experiments expose the price: repeated inspection finds win-
+ners readily, whereas the valid gate may wait for weak effects. That
+delay is the cost of an optional-stopping guarantee, not evidence
+of current profitability. Frictions, scale, and forward risk remain
+deployment questions.
+References
+[1] Robert D. Arnott, Campbell R. Harvey, and Harry Markowitz. 2019. A Backtesting
+Protocol in the Era of Machine Learning.The Journal of Financial Data Science1,
+1 (2019), 64–74. doi:10.3905/jfds.2019.1.064
+[2] David H. Bailey, Jonathan M. Borwein, Marcos López de Prado, and Qiji Jim Zhu.
+2017. The Probability of Backtest Overfitting.The Journal of Computational
+Finance20, 4 (2017), 39–69. doi:10.21314/JCF.2016.322
+[3] Pierre Bajgrowicz and Olivier Scaillet. 2012. Technical Trading Revisited: False
+Discoveries, Persistence Tests, and Transaction Costs.Journal of Financial Eco-
+nomics106, 3 (2012), 473–491. doi:10.1016/j.jfineco.2012.06.001
+[4] Nigel Cheong, Ling Wei Hsuen, Ranjan Satapathy, Erik Cambria, Rick Siow Mong
+Goh, and Joyjit Chattoraj. 2025. BForTFin: A Financial Domain-Aware Multiscale
+Evaluation Method for Time-Series Foundation Models. InProceedings of the
+6th ACM International Conference on AI in Finance. Association for Computing
+Machinery, 274–282. doi:10.1145/3768292.3770402
+[5] Tarun Chordia, Amit Goyal, and Alessio Saretto. 2020. Anomalies and False
+Rejections.The Review of Financial Studies33, 5 (2020), 2134–2179. doi:10.1093/
+rfs/hhaa018
+[6] Cynthia Dwork, Vitaly Feldman, Moritz Hardt, Toni Pitassi, Omer Reingold,
+and Aaron Roth. 2015. Generalization in Adaptive Data Analysis and Holdout
+8
+Safe Promotion Tests for Financial Research Agents
+Reuse. InAdvances in Neural Information Processing Systems 28. Curran Asso-
+ciates, Inc. https://papers.nips.cc/paper/5993-generalization-in-adaptive-data-
+analysis-and-holdout-reuse
+[7] Dean P. Foster and Robert A. Stine. 2008. Alpha-Investing: A Procedure for
+Sequential Control of Expected False Discoveries.Journal of the Royal Statistical
+Society: Series B (Statistical Methodology)70, 2 (2008), 429–444. doi:10.1111/j.1467-
+9868.2007.00643.x
+[8] Peter Grünwald, Rianne de Heide, and Wouter M. Koolen. 2024. Safe Testing.
+Journal of the Royal Statistical Society Series B: Statistical Methodology86, 5 (2024),
+1091–1128. doi:10.1093/jrsssb/qkae011
+[9] Peter Reinhard Hansen. 2005. A Test for Superior Predictive Ability.Journal of
+Business & Economic Statistics23, 4 (2005), 365–380.
+[10] Campbell R. Harvey, Yan Liu, and Heqing Zhu. 2016. . . . and the Cross-Section
+of Expected Returns.The Review of Financial Studies29, 1 (2016), 5–68. doi:10.
+1093/rfs/hhv059
+[11] Alexander Henzi and Johanna F. Ziegel. 2022. Valid Sequential Inference on
+Probability Forecast Performance.Biometrika109, 3 (2022), 647–663. doi:10.1093/
+biomet/asab047
+[12] Steven R. Howard, Aaditya Ramdas, Jon McAuliffe, and Jasjeet Sekhon. 2021.
+Time-Uniform, Nonparametric, Nonasymptotic Confidence Sequences.The
+Annals of Statistics49, 2 (2021), 1055–1080. doi:10.1214/20-AOS1991
+[13] Adel Javanmard and Andrea Montanari. 2018. Online Rules for Control of False
+Discovery Rate and False Discovery Exceedance.The Annals of Statistics46, 2
+(2018), 526–554. doi:10.1214/17-AOS1559
+[14] Josef Lakonishok and Seymour Smidt. 1988. Are Seasonal Anomalies Real? A
+Ninety-Year Perspective.The Review of Financial Studies1, 4 (1988), 403–425.
+doi:10.1093/rfs/1.4.403
+[15] R. David McLean and Jeffrey Pontiff. 2016. Does Academic Research Destroy
+Stock Return Predictability?The Journal of Finance71, 1 (2016), 5–32. doi:10.
+1111/jofi.12365
+[16] Aaditya Ramdas, Peter Grünwald, Vladimir Vovk, and Glenn Shafer. 2023. Game-
+Theoretic Statistics and Safe Anytime-Valid Inference.Statist. Sci.38, 4 (2023),
+576–601. doi:10.1214/23-STS894
+[17] Aaditya Ramdas, Tijana Zrnic, Martin J. Wainwright, and Michael I. Jordan. 2018.
+SAFFRON: An Adaptive Algorithm for Online Control of the False Discovery
+Rate. InProceedings of the 35th International Conference on Machine Learning
+(Proceedings of Machine Learning Research, Vol. 80). PMLR, 4286–4294. https:
+//proceedings.mlr.press/v80/ramdas18a.html
+[18] Joseph P. Romano and Michael Wolf. 2005. Stepwise Multiple Testing as Formal-
+ized Data Snooping.Econometrica73, 4 (2005), 1237–1282. doi:10.1111/j.1468-
+0262.2005.00615.x
+[19] Glenn Shafer, Alexander Shen, Nikolai Vereshchagin, and Vladimir Vovk. 2011.
+Test Martingales, Bayes Factors and p-Values.Statist. Sci.26, 1 (2011), 84–101.
+doi:10.1214/10-STS347
+[20] Ryan Sullivan, Allan Timmermann, and Halbert White. 1999. Data-Snooping,
+Technical Trading Rule Performance, and the Bootstrap.The Journal of Finance
+54, 5 (1999), 1647–1691. doi:10.1111/0022-1082.00163
+[21] Ryan Sullivan, Allan Timmermann, and Halbert White. 2001. Dangers of Data
+Mining: The Case of Calendar Effects in Stock Returns.Journal of Econometrics
+105, 1 (2001), 249–286. doi:10.1016/S0304-4076(01)00077-X
+[22] Jean Ville. 1939.Étude critique de la notion de collectif. Gauthier-Villars, Paris.
+[23] Vladimir Vovk and Ruodu Wang. 2021. E-values: Calibration, Combination, and
+Applications.The Annals of Statistics49, 3 (2021), 1736–1754. doi:10.1214/20-
+AOS2020
+[24] Qiuqi Wang, Ruodu Wang, and Johanna Ziegel. 2025. E-backtesting.Management
+Science72, 6 (2025), 4952–4973. Published online September 23, 2025; issue dated
+June 2026. doi:10.1287/mnsc.2023.01659
+[25] Ruodu Wang and Aaditya Ramdas. 2022. False Discovery Rate Control with
+E-values.Journal of the Royal Statistical Society Series B: Statistical Methodology
+84, 3 (2022), 822–852. doi:10.1111/rssb.12489
+[26] Ian Waudby-Smith and Aaditya Ramdas. 2024. Estimating Means of Bounded
+Random Variables by Betting.Journal of the Royal Statistical Society Series B:
+Statistical Methodology86, 1 (2024), 1–27. doi:10.1093/jrsssb/qkad009
+[27] Halbert White. 2000. A Reality Check for Data Snooping.Econometrica68, 5
+(2000), 1097–1126. doi:10.1111/1468-0262.00152
+[28] Haochen Yuan, Minting Pan, Yunbo Wang, Siyu Gao, and Xiaokang Yang. 2026.
+MetaTrader: Learning to Generalize RL Trading Policies Beyond Offline Data. In
+Proceedings of the AAAI Conference on Artificial Intelligence, Vol. 40. 28023–28031.
+doi:10.1609/aaai.v40i33.40027
+[29] Tijana Zrnic, Aaditya Ramdas, and Michael I. Jordan. 2021. Asynchronous Online
+Testing of Multiple Hypotheses.Journal of Machine Learning Research22, 33
+(2021), 1–39. https://jmlr.org/papers/v22/19-910.html
+9

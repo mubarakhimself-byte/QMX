@@ -1,0 +1,1087 @@
+arXiv 2510.21147  https://arxiv.org/abs/2510.21147
+
+Hierarchical AI Multi-Agent Fundamental Investing:
+Evidence from China’s A-Share Market
+Chujun He, Zhonghao Huang, Xiangguo Li, Ye Luo, Kewei Ma
+Faculty of Business and Economics, University of Hong Kong skylar@connect.hku.hk, huangzh0624@connect.hku.hk,
+u3590480@connect.hku.hk, kurtluo@hku.hk, u3596913@connect.hku.hk
+Yuxuan Xiong
+Department of Mathematics, University of Hong Kong u3637747@connect.hku.hk
+Xiaowei Zhang, Mingyang Zhao
+Department of Industrial Engineering and Decision Analytics, Hong Kong University of Science and Technology
+xiaoweiz@ust.hk, mingyang.zhao@connect.ust.hk
+We present a multi-agent, AI-driven framework for fundamental investing that integrates macro indicators,
+industry-level and firm-specific information to construct optimized equity portfolios. The architecture com-
+prises: (i) a Macro agent that dynamically screens and weights sectors based on evolving economic indicators
+and industry performance; (ii) four firm-level agents—Fundamental, Technical, Report, and News—that
+conduct in-depth analyses of individual firms to ensure both breadth and depth of coverage; (iii) a Port-
+folio agent that uses reinforcement learning to combine the agent outputs into a unified policy to generate
+the trading strategy; and (iv) a Risk Control agent that adjusts portfolio positions in response to market
+volatility. We evaluate the system on the constituents by the CSI 300 Index of China’s A-share market and
+find that it consistently outperforms standard benchmarks and a state-of-the-art multi-agent trading system
+on risk-adjusted returns and drawdown control. Our core contribution is a hierarchical multi-agent design
+that links top-down macro screening with bottom-up fundamental analysis, offering a robust and extensible
+approach to factor-based portfolio construction.
+Key words: Multi-agent system, artificial intelligence, large language models, reinforcement learning,
+fundamental investing, robo-advisor
+1. Introduction
+Equity portfolio management is a multi-source, multi-horizon decision problem facing persistent
+uncertainty. Practitioners like fund managers synthesize macroeconomic and industry trends, firm
+fundamentals, price dynamics, and rapidly evolving textual information while contending with
+regime shifts. Signal fragility and overfitting are perennial risks when statistical models are trained
+on noisy, path-dependent data. These challenges are particularly acute for individual investors,
+who, as a vast body of literature documents, exhibit behavioral biases such as portfolio over-
+concentration and under-diversification (French and Poterba 1991, Huberman 2001). Meanwhile,
+1
+arXiv:2510.21147v1  [q-fin.PM]  24 Oct 2025
+2 He et al.:Hierarchical AI Multi-Agent Investing
+risk management and governance demand transparent, attributable decisions rather than opaque
+end-to-end predictions. These pressures call for architectures that flexibly integrate diverse data
+modalities, adapt to changing conditions, and remain interpretable—ideally with a hierarchical
+organization that clarifies how top-level context informs downstream decisions.
+Although new technologies are continually adopted in financial investing—most visibly through
+robo-advising and the broader deployment of machine learning, and existing work largely eval-
+uates them in isolation. Machine learning and deep learning—such as AutoAlpha (Zhang et al.
+2020) and AlphaGPT (Wang et al. 2023)—are often used for factor discovery or return forecasting;
+reinforcement learning (RL) is positioned as a direct portfolio policy optimizer (Ye et al. 2020);
+and natural language processing, including large language models (LLMs) is applied to sentiment
+extraction from news, filings, or earnings calls (Xing 2025). This single-technology focus yields valu-
+able insights, but it leaves open the question of principled integration: how should macro context,
+structured signals, market microstructure awareness, and unstructured text be combined so that
+each technology operates where it adds the most value, conflicts are reconciled, and accountability
+is preserved? In practice, single-model pipelines centered on structured fundamentals or technical
+indicators often under utilize unstructured text and macro context, limiting responsiveness to news
+and policy shocks. Conversely, monolithic deep learning systems that ingest everything end to end
+can be difficult to diagnose, audit, govern in regulated environments, and often suffer from overfit-
+ting. While recent LLM-based agents, such as FinMem (Yu et al. 2025) and FinAgent (Zhang et al.
+2024) demonstrate the value of textual information, they often focus on single-stock trading or lack
+a comprehensive hierarchical framework for portfolio construction. Traditional ensemble methods
+typically combine signals at the feature or model level without explicit role specialization or cross-
+level coordination, and they can be slow to reweight under regime changes. Our work addresses
+this gap with a hierarchical, role-based framework that assigns each technology to the level of
+the decision process where it is most effective and unifies them through adaptive aggregation and
+risk-aware execution.
+We propose an organizing principle inspired by the structure of fundamental investment firms
+such as mutual funds and macro-fundamental based hedge funds: a hierarchical, role-differentiated
+multi-(AI)-agent system that mirrors the top-down investment process. Responsibilities of each
+agent are designed modular as leave-one-out ablation study is easy to carry for us to under-
+stand which component plays a bigger role in fundamental investing. The agents are aligned
+with real-world functions—macro strategy, security analysis, portfolio construction, and risk con-
+trol—facilitating interpretability, targeted improvements, and clear attribution. Unlike the typical
+quant strategy that ensembles a parallel set of features by purely statistical machine learning
+approach, our macro-to-micro flow concentrates modeling capacity where it matters, allowing
+He et al.:Hierarchical AI Multi-Agent Investing3
+upstream agents to set context and constraints that downstream agents exploit, while preserving
+the ability to audit each stage independently.
+At a high level, the system comprises five components arranged in a hierarchy. AMacro agent,
+acting as a chief economist, occupies the top layer and analyzes macroeconomic and industry-level
+signals to identify sectors with favorable conditions, and therefore, allows us to focus our analyze
+on these particular sectors. Within these sectors, four specialized stock-scoring agents operate at
+the analysis layer: aFundamental agent, aTechnical agent, aNews agent, and aReport agent, while
+the News and Report agents use LLMs to extract signals from unstructured text, and the other two
+agents depend on traditional numerical analysis. Such an approach addresses the multi-modality
+issue of data of different frequencies. APortfolio agentsits at the following up allocation layer,
+aggregating these heterogeneous views by learning dynamic weights over the specialized agents
+based on state variables such as their recent performances, thereby producing composite scores
+and constructing the portfolio. Finally, aRisk Control agentforms the protective layer, adjusting
+exposures in response to extreme volatility. Each specialized agent can form a stand alone portfolio
+by investing in the top decile of its ranked list, and the hierarchical ensemble combines their
+strengths into a unified, adaptive allocation.
+Beyond this overall design, our technical contributions center on how the hierarchy structure
+assembles heterogeneous technologies in a cohesive pipeline. First, we integrate LLMs for unstruc-
+tured text ingestion at the analysis layer, enabling the News and Report agents to transform
+earnings calls, filings, and real-time news into structured signals. This moves beyond using LLMs
+for simple sentiment analysis by embedding them in a dynamic, hierarchical workflow, addressing a
+key challenge in complex financial decision-making (Zhao et al. 2024a, Yao et al. 2023b,a). Rather
+than treating LLM outputs generally as features, we embed them within the hierarchical workflow
+to allow them to compare with the structure signals in a dynamic way.
+Second, we introduce an adaptive ensembling mechanism at the allocation layer that learns
+dynamic weights across heterogeneous agents using previously rolling performance metrics. This
+online reweighting allows the system to respond to regime shifts by reallocating emphasis among
+fundamentals, technicals, and text-driven insights, while the hierarchical separation ensures that
+reweighting occurs after sector context has been established. This RL-guided adaptive approach is
+similar in spirit to recent work applying RL to portfolio management (Ye et al. 2020) but operates
+at the level of agent weights within a hierarchy. That is, the allocation process is guided by the
+instructions of the Macro agent, which resembles the real industry corporate decision process, and
+maintains robustness without simply collapsing signals into a single monolithic model.
+Third, the hierarchy begins with a sector prefiltering stage that narrows the search space and
+reduces noise. By allowing the Macro agent to select favorable sectors before stock-level analysis, we
+4 He et al.:Hierarchical AI Multi-Agent Investing
+dynamically focus stock pools where the signal-to-noise ratio could be higher, and create a natural
+interface for incorporating macro and industry priors. This top-down selection is a key benefit of
+the hierarchical organization which is grounded in financial theory, such as the well-documented
+industry momentum effect (Moskowitz and Grinblatt 1999): context is set once, then propagated
+to lower layers. Besides, compared to existing literature on applying LLM based analysis to stock
+level files, our approach is more scalable and less costly due to this hierarchy design.
+Fourth, we enforce a clear separation of responsibilities across levels—alpha generation by spe-
+cialized agents, portfolio construction via adaptive aggregation, and risk control through exposure
+management. This separation improves interpretability and governance by enabling attribution
+and drill-down diagnostics at each layer. It also supports operational robustness: components can
+be upgraded, swapped, or extended in a modular way without destabilizing the entire system, pro-
+vided their interfaces to adjacent layers remain consistent. This modularity satisfies key governance
+requirements in regulated financial environments and creates a natural interface for human-AI
+synergy, where human analysts may excel at interpreting intangible factors while AI handles volu-
+minous data (Cao et al. 2024a).
+Finally, we position the approach as a general framework for multi-agent coordination in financial
+investiment rather than a single, fixed model. The hierarchy establishes roles, interfaces, and learn-
+ing rules that can accommodate new agents—such as order-book microstructure models or alter-
+native data specialists in the future—alongside alternative weighting schemes, including Bayesian
+model averaging or meta-learning, and extensions to other asset classes. In this way, the hierarchical
+multi-agent architecture serves as a foundation for ongoing innovation that mimics the operational
+structure of fundamental/value investing. In principle, this design can allow human-in-the-loop,
+e.g., replace our LLM-based AI Macro agent with a real experienced macro economist (i.e., a
+human agent), or they can operate together in a copilot form, and similar to other components of
+the system.
+We evaluate the proposed framework using a comprehensive and challenging dataset comprising
+the Chinese A-share market from January 1, 2019, to December 31, 2024—a period character-
+ized by pronounced volatility and two major market regime shifts. The dataset integrates detailed
+macroeconomic indicators, industry-level factors, and firm-specific features, providing a rich empir-
+ical foundation. Extensive experiments demonstrate that our framework consistently outperforms
+all benchmark models in both training and testing sample, while rigorous backtesting further con-
+firms its capacity to generate robust excess returns with reduced volatility. To mitigate risks of
+hyperparameter overfitting and to assess generalizability, model parameters are trained exclusively
+on the sample from January 2019 to December 2023, with performance validated on the out-of-
+sample period covering January to December 2024. Additionally, an ablation study is conducted
+to systematically examine the contribution of each model component.
+He et al.:Hierarchical AI Multi-Agent Investing5
+1.1. Literature Review
+1.1.1. Challenges in Individual InvestmentOrdinary market participants, particularly
+the financially unsophisticated, find it intrinsically difficult to make good investment decisions
+in these financial markets. Despite extensive empirical evidence in the classical finance literature
+(Badarinza et al. 2016). Tobin (1958), Markowits (1952), Campbell and Viceira (2002), and Fama
+and French (2002) document the existence of higher expected returns (risk premiums) in equity
+markets. Campbell (2006) finds that only a small share of people at the bottom of the wealth
+spectrum hold investments in publicly traded stocks.
+Beyond the participation puzzle, a vast and ingenious empirical literature investigates the com-
+position of household stock portfolios, often assuming that investors operate with partial infor-
+mation. Individuals tend to exhibit excessive portfolio concentration in local, domestic equities
+(French and Poterba 1991, Huberman 2001) as well as their own company’s stock (Mitchell and
+Utkus 2004). This behavioral pattern reveals significant limitations in their market comprehension
+and a pronounced lack of diversification knowledge. On the contrary, our model can achieve a
+more comprehensive understanding of market conditions and individual stock information through
+hierarchical analysis at macro, industry and individual stock levels, while integrating multiple
+data sources including news, financial statements, equity reports, and price-volume data, thereby
+enabling the selection of high-quality stocks from a larger stock pool.
+A further critical shortcoming of individual investment strategies is suboptimal portfolio con-
+struction, manifested as persistent under-diversification. A robust empirical finding indicates that
+retail investors tend to allocate a disproportionate share of their capital to a concentrated set of
+risky assets, typically individual equities or poorly-diversified fund products; see Barber and Odean
+(2000), Gargano and Rossi (2018), and D’Acunto et al. (2019). Our Risk Control agent enables
+more effective risk mitigation in investment decision-making. In back-testing results, during periods
+of adverse market conditions, the model demonstrates significantly lower drawdown magnitudes
+compared to the benchmark.
+1.1.2. Limitations of Human Financial AdvisorsAlthough some may argue that invest-
+ment advisors can enhance portfolio returns, there is in fact scant empirical evidence in the liter-
+ature to support this claim. Gennaioli et al. (2015) point out that professional financial guidance
+can help address underdiversification issues and enhance investment performance for individual
+investors. Providing empirical evidence that greater trust in financial advisers leads to increased
+risk-taking among investors. However, the higher returns experienced are insufficient to offset the
+elevated fees. This suggests that investors may either be unaware of the costs associated with advi-
+sory services or prioritize factors beyond maximizing portfolio returns in their interactions with
+financial advisers.
+6 He et al.:Hierarchical AI Multi-Agent Investing
+Contrary to the conventional expectation that human investment advisors contribute to superior
+investment performance, numerous studies indicate that human investment advisors confront sig-
+nificant practical limitations. Recent empirical evidence suggests that conflicts of interest inherent
+in the advisor-client relationship can lead to a significant distortion of portfolio asset allocation.
+Investment accounts managed by financial advisors and mutual funds sold through brokers tend to
+deliver poorer performance compared to self-managed portfolios (Bergstresser et al. 2008, Christof-
+fersen et al. 2013, Chalmers and Reuter 2020). Hackethal et al. (2012) demonstrate that advised
+accounts under-perform self-managed portfolios in net returns and risk-adjusted performance
+(Sharpe ratios), particularly under bank advisors, with elevated trading costs from commission-
+driven turnover. Linnainmaa et al. (2021) find that financial advisors exhibit investment behaviors
+similar to their clients, characterized by frequent trading, return chasing, a preference for expen-
+sive actively managed funds, and under-diversification. Investment advisors tend to accommodate
+the behavioral biases of their clients, prompting them to pursue strong historical performance and
+invest in actively managed mutual funds (Mullainathan et al. 2012). Retirement plan administrators
+tend to prioritize their own proprietary funds when creating investment lineups (Pool et al. 2016).
+Client behaviors strongly correlate with advisors’ personal strategies (Linnainmaa et al. 2021). In
+contrast, LLM-derived analytical results can circumvent the subjective biases inherent in human
+advisory services and remain uninfluenced by personal preferences or individual predispositions.
+As a consequence, many individuals exhibit pronounced mistrust towards human financial advi-
+sors, driven by apprehensions about being subjected to financially motivated malfeasance (Calcagno
+and Monticone 2015, Lachance and Tang 2012, Burke and Hung 2021).
+As Reher and Sokolinski (2024) note, human investment advisors typically serve an exclusive
+clientele of affluent individuals. In contrast, our system is designed to deliver cost-effective advisory
+services to a much broader demographic.
+1.1.3. Rise of Robo-AdvisorsThe advent of robo-advisors in the mid-2000s was driven by
+the shortcomings of traditional financial advisory services. D’Acunto et al. (2019) offer empiri-
+cal evidence that robo-advising tools enhance portfolio diversification, mitigate behavioral biases,
+and improve investment performance. D’Acunto and Rossi (2021) investigate the emergence of
+robo-advisors, analyzing their classifications, benefits, and challenges while outlining unresolved
+interdisciplinary issues that will determine the evolution of algorithmic financial advice. Robo-
+advisors are capable of serving individuals with significantly lower wealth levels, while human
+financial advisors, being limited by time, generally focus on catering to more affluent households
+(Reher and Sokolinski 2024).
+In the study of an Automated Financial Management service, Reher and Sun (2019) finds that
+portfolios constructed through the service exhibit a higher degree of diversification compared to
+He et al.:Hierarchical AI Multi-Agent Investing7
+those that are self-managed. Furthermore, they document that a reduction in the minimum invest-
+ment threshold required for access is associated with a significant increase in customer fund inflows.
+Moreover, in contrast to traditional human advisors who use survey-based approaches to assess
+investor risk preferences, robo-advising can leverage machine learning algorithms to infer risk toler-
+ance from investors’ historical investment decisions (Alsabah et al. 2021), especially for financially
+unsophisticated investors.
+Several studies compare robo-advisors with human analysts. Coleman et al. (2022) compares
+algorithmic (“Robo”) analysts to their human counterparts, finding that robo-analysts produce less
+optimistic and more frequently revised recommendations with reduced conflicts of interest. Their
+automated processing of complex disclosures generates long-term investment value, significantly
+outperforming human analysts’ buy recommendations. Similarly, Cao et al. (2024a) explores the
+synergy between human analysts and AI in stock return predictions, noting that while AI excels
+in handling voluminous data, humans are better at interpreting intangible assets and financial
+distress. Combined approaches reduce extreme errors, suggesting complementary strengths.
+Recent research examines the profiles of early adopters and the industry-wide effects of auto-
+mated financial advisory platforms. Based on the FINRA 2015 survey data, Kim et al. (2019) and
+Lu et al. (2023) find that younger age groups, higher disposable income, and greater risk propensity
+are significantly associated with early adoption of automated financial advisory platforms. Simi-
+larly, Baulkaran and Jain (2023) examines robo-advisor users in India, revealing that typical users
+are young, male, married, small investors, and professionals. Ben-David et al. (2022) further notes
+that robo-advisors significantly reduce demand for human financial advice, especially among dis-
+trustful investors, underscoring their disruptive potential in wealth management. Our framework
+exhibits strong interactivity and can articulate analytical reasoning and rationale, thereby enhanc-
+ing accessibility and usability for investors, particularly elderly and non-professional investors.
+1.1.4. LLMs for Financial Decision-MakingSubstantial research is dedicated to creating
+versatile LLM-based agents capable of sequential decision-making (Zhao et al. 2024a, Yao et al.
+2023a,b). Moreover, scholars have begun to investigate strategies for leveraging LLM agents to
+achieve enhanced performance in more complex decision-making tasks within the financial domain
+(De Curt` o et al. 2023, Zhao et al. 2024b, Liu et al. 2025, Cao et al. 2024b), wherein environments
+exhibit greater volatility, resulting in a multitude of unpredictable factors that hinder the agent’s
+capacity for precise introspection into the causes of suboptimal decision outcomes. FinMem (Yu
+et al. 2025) augments performance in single-stock trading by integrating a memory module with its
+LLM agent to facilitate a cycle of reflection and refinement. FinAgent (Zhang et al. 2024) enhances
+trading profitability by leveraging an external quantitative tool to counteract market volatility.
+8 He et al.:Hierarchical AI Multi-Agent Investing
+AlphaGPT (Wang et al. 2023) and AutoAlpha (Zhang et al. 2020) to discover both price-volume
+and formulaic alpha factors, further underscoring their adaptability across financial applications.
+Diverging from conventional rule-based and RL methodologies, which are often constrained to
+using only price data and typically function as “black boxes” lacking interpretability, our framework
+leverages a multi-source data integration approach. It provides not only stock recommendations
+but also the explicit rationales behind them, significantly enhancing the model’s transparency and
+explainability.
+Furthermore, we address the limitations observed in current mainstream models. For instance,
+models like TradingGPT often focus on single-stock trading tasks and are validated through back-
+tests on a single asset. Similarly, models such as FinAgent and FinCon base their backtesting on
+a small selection of mainstream stocks. In stark contrast, our framework conducts stock selec-
+tion and backtesting across a much broader and more representative stock pool—the CSI 300
+index—thereby yielding results with substantially greater robustness and generalizability.
+While some advanced models like FinCon have begun to incorporate portfolio management, our
+framework advances this concept further by constructing a hierarchical portfolio that allocates
+capital from the macro level down to individual stocks. Critically, it adopts a RL mechanism
+to dynamically adjust the weights among different agents. This process systematically amplifies
+the influence of agents with superior historical performance in the portfolio construction process,
+ensuring continuous optimization and adaptation.
+Compared to the open-source MASS (Guo et al. 2025), a multi-agent scaling simulation frame-
+work designed for portfolio construction, this model demonstrates superior performance in back-
+testing on the CSI 300 index.
+The remainder of this paper is organized as follows. Section 2 outlines a detailed description of
+our proposed methodology, multi-agent system architecture, and the key agents that deals with
+different kinds of data. Section 3 introduces data, conducts a comprehensive comparative analysis,
+benchmarking our model against both standard market indices and other contemporary multi-agent
+models to demonstrate its efficacy and robustness. Section 4 concludes.
+2. Methodology
+Our system implements a QuantMental investment framework, following a top-down framework:
+from macro and industry to the firms analysis; see Figure 1. At the top level, the Macro agent
+identifies the most promising industries, serving as a filter to focus subsequent analysis. Within
+the selected industries, multiple firm-level agents—including the Fundamental agent, Technical
+agent, News agent, and Report agent generate distinct scores for each stock, capturing diverse
+aspects such as financial health, market behavior and informational sentiment. The Portfolio agent
+He et al.:Hierarchical AI Multi-Agent Investing9
+then dynamically allocates weights across these firm-level signals, optimizing for expected Sharpe
+ratio and annual return while ensuring diversification between agents. Finally, the Risk Control
+agent adjusts overall portfolio exposure according to market volatility, helping the system navigate
+extreme events such as policy shocks or geopolitical crises. By integrating top-down sector analysis
+with multi-agent stock evaluation and adaptive portfolio management, the system aims to create
+a prevailing portfolio and manage risk in a dynamic market environment.
+Figure 1 Multi-Agent Trading System
+2.1. Data Flow and Obfuscation
+The proposed fundamental investing workflow combines a CSI 300 stock pool with industry-level
+filtering mechanisms and firm-level multi-agent evaluation. This integrated approach enables the
+systematic incorporation of multi-level market information, encompassing macroeconomic con-
+ditions and industry-level characteristics, firm-specific features, and benchmark-based variables
+derived from equity indices.
+We curate the stock pool from the Chinese A-share market, the CSI 300 index,S CSIt ⊆ {1, . . . , n}
+at rebalancing datet. Compared to existing literature on portfolio construction and asset selection
+frequently suffers from limited scope, either by confining analyses to short time intervals or by
+focusing exclusively on a small group of high-performing U.S. equities (e.g., Google and Apple), it
+provides a broader and more representative analysis.
+We accord with the China Securities Regulatory Commission (CSRC) Industry Classification
+for the industry-level featuresS∈R T×d s overTtrading days withd s features. We collect industry
+10 He et al.:Hierarchical AI Multi-Agent Investing
+daily return and macro data including CPI, money supply and PMI, so the Macro agent facilitates
+comprehensive analysis in both macro and industrial perspectives.
+The firm-level scoring agents, which incorporate perspectives in parallel from fundamental, tech-
+nical, news, and analyst report dimensions, operate on firm-level featuresF∈R N×T×d f overT
+trading days withd f features andNassets. The historical price data encompass daily market
+observations, including opening, high, low, closing, and adjusted closing prices and trading volume.
+Technical indicators complement the market dynamics with Moving Average Convergence Diver-
+gence (MACD), Relative Strength Index (RSI), and Stochastic Oscillator (KDJ)—computed per
+asset to identify trends, momentum, and potential reversal points. We curated daily news feeds are
+aggregated from Google and Baidu covering the informational context about the company. Analyst
+reports offering professional assessments, including investor activities, legal dishonesty details and
+the company financial activities.
+To safeguard sensitive financial information and mitigate the risk of training leakage within the
+backbone LLM, the firm-level features are deliberately obfuscated prior to their utilization by the
+scoring agents. This obfuscation process conceals key identifiers and proprietary signals embedded
+within the raw data, ensuring that the model does not inadvertently internalize asset-specific
+knowledge that could create unintended information leakage.
+After collection and obfuscation, the data are transmitted directly to the agents in order to pre-
+vent distortions common in chain-based communication. Such distortions often arise when numeri-
+cal values are abstracted into summaries, leading to rounding errors, omission of key figures, or even
+fabricated values. The proposed approach preserves data fidelity, ensuring agents receive accurate
+and reliable information.
+2.2. Macro Agent: Industry-Level Filtering
+From the basic stock pool, the Macro agent selects industries by integrating macroeconomic regime
+signals with industry-level momentum. Building on the Merrill Lynch investment clock Merrill
+Lynch (2004), the industry rotation framework Grauer et al. (1990), and the documented industry
+momentum effect Moskowitz and Grinblatt (1999), we classify the economic cycle into four phases:
+recovery,overheating,stagflation, andrecession. Industry allocation is determined by a combina-
+tion of prevailing macroeconomic conditions and systematic industry-level momentum effects, with
+portfolio adjustments incorporating liquidity conditions.
+We use four macroeconomic indicators:
+•M1 Money Supply: LetM1 t represent the money supply at timet, including currency in
+circulation and demand deposits, measuring the most liquid components of the money supply.
+•M2 Money Supply: LetM2 t represent the money supply at timet, includingM1 t plus savings
+deposits and other near-money assets, capturing broader monetary aggregates.
+He et al.:Hierarchical AI Multi-Agent Investing11
+•CPI year-over-year growth rate:π YoYt = CPIt−CPIt−12CPIt−12 ,measuring long-term inflation pressure.
+•Purchasing Managers’ Index (PMI): The official index PMI t, where PMIt >50 indicates expan-
+sion and PMI t <50 indicates contraction.
+Based on (π YoYt ,PMI t), we classify the economy into one of the four Merrill Lynch regimes
+Rt ∈ {Recovery,Overheating,Stagflation,Recession}:
+Rt =
+
+
+
+Recovery, π YoYt ↓,PMI t >50,
+Overheating, π YoYt ↑,PMI t >50,
+Stagflation, π YoYt ↑,PMI t <50,
+Recession, π YoYt ↓,PMI t <50.
+We use the Purchasing Managers’ Index (PMI) rather than Gross Domestic Product (GDP) as
+a proxy for economic growth, as PMI is available on a monthly basis, whereas GDP is released
+only quarterly. This choice ensures consistency with the monthly frequency of the Consumer Price
+Index (CPI) and enables timely, monthly updates to our allocation decisions.
+For each regimeR t, we assign a prior weight vector over industries:
+wmacrot =f macro(Rt,∆M t),∆M t = M1 t −M1 t−1M1 t−1 − M2 t −M2 t−1M2 t−1 ,
+represent the difference in growth rates betweenM1 t andM2 t at timet, reflecting relative liquidity
+dynamics in the market. The functionf macro(·) encodes economic intuition from human expertise,
+including:
+•Recovery: overweight cyclical sectors (technology, industrials, consumer discretionary).
+•Overheating: overweight commodities, energy, materials.
+•Stagflation: overweight defensive sectors (utilities, staples, healthcare).
+•Recession: overweight bonds or defensive equities (staples, healthcare).
+For industryj, we compute multi-horizon momentum as
+Mj,t =
+X
+n∈N
+wn R(n)j,t , R (n)j,t = Pj,t −P j,t−nPj,t−n ,
+whereP j,t is the index level of industryj, andNis a set of look-back windows. We then rank
+industries byM j,t for each horizonn, select the top-mindustries, and assign them equal weights:
+wmomj,t =
+(
+1
+m , j∈arg⊤ m{Mj,t}Jj=1,
+0,otherwise.
+The final allocation combines macro-cycle weights and momentum-based weights as:
+windustryj,t =λ wmacroj,t + (1−λ)w momj,t ,
+whereλ∈[0,1] controls the relative emphasis on macro regime alignment versus industry momen-
+tum.
+The reduced stock pool is then defined as
+S indt =  i∈ SCSIt  industry(i)∈arg⊤ mwfinalj,t }.
+12 He et al.:Hierarchical AI Multi-Agent Investing
+2.3. Firm-Level Multi-Agent Scoring
+Within the reduced stock poolS indt , we evaluate individual stocks using a set of four specialized
+agents,A={Fundamental,Technical,News,Report}. These agents leverage firm-level features to
+assess the investment potential of each stock and construct an optimized portfolio. For each agent
+a∈ A, letX(a) ∈R n×T×d a denote the panel of features, andf ϕa the scoring function. Each stocki
+receives an agent-specific score:
+z(a)t,i =f ϕa(X (a)i,t−n:t), i∈ S indt .
+whereX (a)i,t−n:t represents the panel of features for assetiover the time window fromt−ntot.
+The temporal horizonnvaries by agent type: the Fundamental agent requires extensive financial
+data spanning up to five years to capture long-term trends, while the News agent utilizes a shorter
+horizon of one month to reflect recent sentiment dynamics.
+We then collect all agent scores into
+zt,i =
+
+z(a)t,i a∈A ∈R |A|.
+2.3.1. F undamental AgentThe agent analyzes accounting and financial statement data to
+evaluate the overall financial health, operating efficiency, management quality, intrinsic value, and
+innovation-driven growth potential of firms. Key variables include return on equity (ROE), net
+profit, revenue, and the asset-to-debt ratio. By integrating these metrics, the Fundamental agent
+provides a score reflecting long-term value creation and the sustainability of firms.
+2.3.2. T echnical AgentThis agent evaluates stocks based on their historical price and vol-
+ume data to identify strong technical signals. It synthesizes dynamic features across multiple tem-
+poral horizons, thereby capturing short-term, medium-term, and cross-sectional price dynamics.
+The indicators include:
+(i) Momentum: Utilizes sustained price trends via indicators like the Exponential Moving Average
+(EMA).
+(ii) Mean Reversion: Identifies price deviations using the Relative Strength Index (RSI).
+(iii) Volatility: Uses volatility measures such as the Average True Range (ATR).
+(iv) Statistical Arbitrage: Applies quantitative indicators, e.g., Bollinger Bands, Average Direc-
+tional Index (ADX), and Hurst exponent.
+Through a weighted ensemble of these signals, the Technical agent generates a composite score
+reflecting the relative trading attractiveness of each stock.
+He et al.:Hierarchical AI Multi-Agent Investing13
+2.3.3. News AgentThe News agent functions as a sentiment analyst, focusing on media
+and news feeds. It analyzes recent news articles for each stock to gauge sentiment intensity. It
+fetches news data from Baidu and Google and uses the LLM to summarize sentiment. The agent’s
+reasoning includes identifying dominant news themes for the stock and any signals arising from
+news. By providing the LLM with an updated working memory that includes current volatility, it
+generates a sentiment polarity scores newst,i , which quantifies market perception:
+znewst,i =f LLM(News Articlesi,1:t).
+The agent evaluates whether positive or negative media narratives are likely to affect near-term
+stock performance.
+2.3.4. Report AgentThis agent acts as a specialist in fundamental disclosures and analyst
+reports. It analyzes the reports from five areas: Investor Research and Inquiry Records, Legal
+Enforcement and Dishonesty Details, Company Financial Performance Analysis, Stock Distribution
+Plans and Institutional Investor Holding Proportions for each company. From these, it computes
+composite scoresz report including the analyst interest level, integrity risk, sentiment score of com-
+pany management, dividend policy quality, and institutional confidence.:
+zreportt,i =f LLM(Reportsi,1:t),
+thereby capturing institutional sentiment and professional investor expectations.
+2.4. Portfolio Agent: Reinforcement Learning for Portfolio Management
+We utilize RL to integrate signals from fundamental, technical, news, and reports agents for port-
+folio optimization. By allocating weights across these agents, the RL aims to maximize expected
+returns. It incorporates state features, such as performance rankings and return histories, and
+optimizes actions by simulating diverse potential allocations. The agent’s policy is refined through
+Proximal Policy Optimization (PPO) with action simulation and behavioral cloning, enhancing
+both stability and convergence in volatile markets.
+The final portfolioP t is constructed by reweighting the scores from each agent for each stock
+into scores:
+Pt=
+n
+ρ(zt,i,w industryt ,w agentt ) :i∈ Sindt
+o
+whereρ(z t,i,w industryt ,w agentt ) represents the aggregated score of stockiobtained using the industry
+and agent weightsw industryt ,w agentt . The generation of agent weight is formalized as an RL problem.
+At each trading dayt, the RL allocates weights of the fundamental, technical, news-sentiment and
+report analysis LLM agents. The environment evolves ass t+1 ∼ P(· |st,w agentt ),Driven by next-day
+14 He et al.:Hierarchical AI Multi-Agent Investing
+market data. The objective is to identify the subset of agents with the portfolio with the highest
+return:
+π∗θ = arg maxπθ
+" ∞X
+t=1
+γt−1rt(st, πθ(st))
+#
+= arg max
+πθ
+Q (st, πθ(st))
+with discount factorγ. Without considering the cost of changing the portfolio, the objective can
+be viewed as maximizing the return of the next trading day, so the discount factor is set to be
+close to zero. Considering the noisy reward function and nonstationary environment, a critic that
+learns the expected immediate reward is proposed to improve the efficiency of the policy gradient.
+States t =
+
+x(a)t :a∈ A ∈ S, where eachxa∈At encodes the trading returns ofNtrading days
+ri,t−1:t−N , similar to Ye et al. (2020), we augmented the state for RL to select the top-k agents,
+the relative frequency of agentibeing top-k over a sliding window, last action weightw (a)t−1 and a
+reference weighting decisionw (a)reft .w (a)reft is formed as the allocation weights across the agents
+on a rolling basis and determined using K-means clustering. Following modern portfolio theory,
+the weights are optimized to maximize the expected Sharpe ratio of the resulting portfolio:
+wref ⋆t = arg max
+wreft
+Eτ≤t [Rτ (wreft , Y(k))]−r fq
+Varτ≤t [Rτ (wreft , Y(k))] ,
+wherer f denote the (constant) risk-free rate andR τ (wreft , Y(k)) denotes the realized return of the
+portfolio at timeτformed by combining the four-agent signals with weightsw reft .
+Actiona t ∈ Acorresponds to portfolio weights across agents and is generated as a pair of weight
+vectors:
+˜wagentt = softmax(πθ(st)/τ)w agentt = Normalize  TopK(˜wagentt +β ref wref ⋆t )
+Whereπ θ the decision policy incorporated with temperature parameterτ, ˜wagentt is the raw softmax
+distribution, whilew agentt is the masked Top-kallocation actually deployed in the portfolio. Both
+satisfy Pa∈A w(a)t = 1.
+Rewardr t ∈R N denote the agent rewards on dayt:
+rt,i =λ 1(Rt(wagentt )−R deft )
+with non-negativeλ 1. The term respectively measures excess performance over equal-weight base-
+lineR t(wagentt )−R deft .
+2.4.1. Action Simulation and Behavior CloningIn online learning, where only one state-
+action pair is updated each trading day, the available samples for training are limited. Inspired by
+Yang et al. (2020), Zhuang et al. (2023), we incorporate action simulation by generating decisions
+from a mixture of strategies, thereby increasing the sample size. To enhance the sampling efficiency
+He et al.:Hierarchical AI Multi-Agent Investing15
+of the Proximal Policy Optimization (PPO) algorithm using off-policy data, we apply behavioral
+cloning (BC) to minimize the discrepancy between the behavior policy and the current policy.
+Action simulationexplores the action space by generating multiple potential actions for each
+trading day. These strategies are designed to explore a diverse set of potential allocations: expert
+weight, specific weight, uniformly sampled weight and current weight. These four types of action
+distributions are the expert actions from the previous days, a constant weight from the previous
+observations leading to the highest return, the weight sampled from a uniform distribution for
+exploring the action space and the weight from the current policy respectively. Candidate actions
+are evaluated in the environment, and their outcomes are stored in a replay buffer.
+Behavioral cloningis a supervised learning technique used to encourage the agent to mimic
+expert actions during training Shafiullah et al. (2022), Florence et al. (2022). The expert action is
+generated from the return by rank the top-k agent returns and reweighted with the sum of one.
+The BC loss combines mean-squared error (MSE) and cross-entropy (CE):
+LBC = MSE
+ 
+wpredmask,w expertmask | {z }
+matching sparse allocations
++ 12 CE wexpertmask ,w predmask| {z }
+target-as-weights cross-entropy
+2.4.2. V alue F unction and Policy GradientThe training process is built around the
+actor–critic paradigm with Proximal Policy Optimization (PPO).
+Thecriticis trained to predict the value functionQ ϕ(st, at), which represents expected returns
+from states t. It is optimized by minimizing:
+Lcritic(ϕ) =E t
+h
+(rt +γQ ϕ (st+1, at+1) −Q ϕ (st, at))
+2
+i
+.
+Theactorupdates its policyπ θ(a|s) using the PPO clipped surrogate loss:
+LPPO(θ) =E t [min (ρtAt,clip(ρ t,1−ϵ,1 +ϵ)A t)] ,
+where:ρ t = πθ(at|st)πθold (at|st) is the probability ratio between the new and old policies,A t:
+At =r t +γQ ϕ(st+1, at+1)−Q ϕ(st, at),
+whereV ϕ(st) is the value function learned by the critic, andr t is the reward at timet.
+The actor’s total loss integrates PPO, imitation, and entropy regularization:
+Lactor =β P P OLPPO +β M SEMSE(wpredmask,w batchmask ) +βEntropy H( ˜w) +βBC LBC
+Performance is evaluated out-of-sample by applying the learned policy to the next day’s returns,
+typically using closing prices. After the market is closed, the agent is trained using the updated
+data and decides the weight allocation for the next day. This ensures the model is trained on
+historical information while tested on unseen market dynamics.
+16 He et al.:Hierarchical AI Multi-Agent Investing
+Algorithm 1Single-Actor PPO with Critic for Portfolio Allocation
+Require:θ, ϕ; targetsθ ′ ←θ,ϕ ′ ←ϕ;γ,τ;ϵ;E PPO; Top-k
+Require:β PPO,β MSE,β Entropy,β BC,β decay
+Require:λ 1; (αexpert, αspecific, αuniform, αcurrent)
+1:Initialize device-side buffer for (s, ˜wagent,w agent, r, s′,logπ old)
+2:foreach trading daytdo
+3:Observes t =
+
+x(a)t :a∈ A
+4:Actor: w agentt = Normalize  TopK(˜wagentt +β ref wref ⋆t )
+5:Observe rewardsr t,i =λ 1Rt(wagentt ), next states t+1
+6:Simulate:(s t,w (m), r(m)t , s(m)t+ 1) using ratios (α expert, αspecific, αuniform, αcurrent) with
+added noiseN(0, σ 2)
+7:forb= 1 :⌊buffer/batch⌋do
+8:L critic(ϕ) =E
+h 
+r+γQ ϕ′(st+1, at+1)−Q ϕ(st, at)2i
+9:L PPO(θ) =−E
+
+min
+ 
+ρtAt,clip(ρ t,1−ϵ,1 +ϵ)A t
+
+10:L actor =β PPOLPPO +β MSE MSE
+ 
+wpredmask,w batchmask  +β Entropy H( ˜w) +β BCLBC
+Updateθ←θ−η actor∇θLactor
+11:end for
+12:T arget updates:θ ′ ←τ θ+ (1−τ)θ ′,ϕ ′ ←τ ϕ+ (1−τ)ϕ ′
+13:end for
+2.5. Risk Control Agent
+To further investigate the risk-neutral performance of our model, we design a risk scaling agent.
+Specifically, IF contracts can be traded on the China Financial Futures Exchange as a hedging
+instrument. This agent manages portfolio exposure by dynamically adjusting positions in response
+to market volatility. It implements a risk scaling algorithm, which reduces positions when market
+volatility is extreme and gradually increases them when volatility is moderate (up to a maximum
+scale of 1).
+Specifically, after portfolio construction, the weight of the assets can be generated:
+pt =f θ
+ 
+F:,1:t,:,S 1:t,:,B 1:t,:
+
+,p t ∈R N ,1 ⊤pt = 1,p t ⪰0,
+wheref θ(·) is a parameterized allocation rule that maps information up to timetto weights and
+θdenotes learnable parameters and the nonnegativity enforces long-only allocations.
+The Risk Control agent scales exposure dynamically to stabilize portfolio volatility around a
+pre-specified target levelσ tgt. Following Zhang et al. (2019), the scaling factor is defined as
+βt = σtgt
+bσt−1
+,bσ 2t−1 = (1−λ)
+nX
+j=1
+λ j−1r2t−j,0< λ <1,
+He et al.:Hierarchical AI Multi-Agent Investing17
+wherebσt−1 is the estimated market volatility at timet−1. The volatility estimate is computed
+using an exponentially weighted moving standard deviation of past returnsrt over ann-day window
+withλbeing the decay factor.
+The final tradable portfolio weights are therefore given by
+˜pt =β t pt =β t fθ
+ 
+F:,1:t,:,S 1:t,:,B 1:t,:
+
+providing a volatility-targeting adjustment, ensuring that position sizes are adaptively
+scaled—expanded (up to full allocation) in tranquil market conditions and contracted under height-
+ened volatility—thereby improving Sharpe ratio and Calmar ratio.
+3. Experiments
+This section delineates the experimental framework used to assess the performance of our multi-
+agent trading system. It provides an exposition of the baseline models, LLM configurations, and
+evaluation metrics utilized to ensure a robust and systematic analysis of the system’s efficacy.
+3.1. Experimental Setup
+We use Qwen3-32B as the foundational LLM as agents’ reasoning core. Recognizing that pretrained
+models may contain implicit knowledge of financial markets, we obfuscate industry & company
+identifiers before submission to the model in order to prevent information leakage. To prevent
+look-ahead bias, agents’ decisions on trading dayTare generated exclusively from masked inputs
+observed up to dayT−1. The outputs are aggregated by a portfolio manager, who proposes the
+preliminary asset allocation. This allocation is then processed by a dedicated risk manager agent,
+which incorporates recent volatility dynamics to adjust exposures, thereby aligning the portfolio
+with risk-control objectives.
+Training and testing protocol.We assess the proposed framework through backtesting simula-
+tion conducted over the period from January 1, 2019, to December 31, 2024, using the CSI 300
+constituent stock pool. We split the data into training and testing periods: from 2019-01-01 to
+2023-12-31 as the training period and from 2024-01-01 to 2024-12-31 as the testing period.
+In the training period, parameter search is conducted for each agent independently. For each
+firm-level agent (fundamental, technical, report, and news), we design a time-series optimizer that
+leverages arbitrage principles to produce daily trading signals, compensating for the low update
+frequency of financial, news, and report data. Parameter search is carried out within each optimizer.
+For agenta, parametersϕ a are optimized to maximize its standalone annualized Sharpe ratio:
+ϕ⋆a = arg maxϕa
+Et
+h
+R(a)t (ϕa, Y(k))i −r f
+r
+Vart
+h
+R(a)t (ϕa, Y(k))i ,(1)
+18 He et al.:Hierarchical AI Multi-Agent Investing
+whereR (a)t is the realized portfolio return constructed solely from agenta’s scores. The optimized
+parametersϕ ⋆a are then fixed and directly applied to the testing period without re-estimation.
+3.2. Benchmark
+To assess the efficacy of our system, we conduct analysis against a range of established baselines
+across multiple categories. These include conventional proxy indicators—specifically, MACD (Lim
+et al. 2020), KDJ, RSI, sign(R) (Moskowitz et al. 2012), and SMA—as well as the MASS framework
+(Guo et al. 2025). Below we introduce a detailed list of benchmarks:
+(i) MASS (Multi-Agent Simulation Scaling for Portfolio Construction): MASS (Guo et al. 2025)
+is a framework that leverages large-scale collaborative agents to systematically construct and
+optimize investment portfolios.
+(ii) CSI 300: The CSI 300 Index is a capitalization-weighted stock market index designed to reflect
+the performance of the top 300 stocks listed on the Shanghai and Shenzhen stock exchanges.
+It covers a diverse range of industries and serves as a key benchmark for the Chinese A-share
+market.
+(iii) SMA (Simple Moving Average): This trend-following strategy generates signals from crossovers
+of a 5-period short-term SMA and a 10-period long-term SMA.
+(iv) RSI (Relative Strength Index): RSI measures price momentum over a 10-period look-back,
+entering long positions when RSI<30 (oversold) and closing when RSI>70 (overbought).
+(v) Sign: This strategy focus only on the sign of the past 20 days return, triggering buy signals
+when sign(20)>0 and sell signals when sign(20)<0.
+(vi) KDJ: This stochastic oscillator uses a 9-period look-back to generate trading signals based on
+K and D line crossovers, with the J line confirming momentum.
+(vii) MACD (Moving Average Convergence Divergence): This trend-following strategy uses a fast
+EMA (12 periods), slow EMA (26 periods), and signal line (9 periods) to generate buy/sell
+signals based on MACD-signal line crossovers.
+System performance is quantified using eight key metrics: Cumulative Return (CR), Annualized
+Return (AR), Annualized Standard Deviation (STD), Downside Deviation (DD) (Ang et al. 2006),
+Sharpe Ratio (Sharpe 1994), Sortino Ratio (Rollinger and Hoffman 2013), Maximum Drawdown
+(MDD), and Calmar Ratio (Young 1991). The precise formulations for these metrics are detailed
+in the e-companion.
+3.3. Main Results
+In contrast to existing multi-agent frameworks, such as MASS, which relies on rule-based opti-
+mization without incorporating risk scaling, our proposed system exhibits superior performance.
+He et al.:Hierarchical AI Multi-Agent Investing19
+Figure 2 Backtesting Results Compared with Baseline Strategies and the CSI 300 Index (Training Sample) (a)
+Cumulative Returns, (b) Excess Returns Relative to the CSI 300 Index
+(a)
+(b)
+Table 1 Performance in Training Sample
+Strategy CR (%)↑AR (%)↑STD (%)↑DD (%)↑Sharpe↑Sortino↑MDD (%)↓Calmar↑
+SMA -1.06 -0.21 13.05 9.03 -0.02 -0.02 -46.50 -0.01
+RSI 18.61 3.72 13.41 9.61 0.28 0.39 -28.48 0.13
+SIGN 17.93 3.59 13.39 9.31 0.27 0.39 -28.82 0.12
+KDJ 23.33 4.678.23 4.770.57 0.98-17.890.26
+MACD 24.93 4.99 12.97 8.61 0.38 0.58 -39.41 0.13
+Ours 167.52 34.7718.94 11.411.84 3.05-24.581.42
+Figure 2a and Table 1 show that our framework consistently outperforms benchmark models
+in the training period. It achieves a cumulative return (CR) of 167.52%, a Sharpe ratio (SR) of
+1.84, a Sortino ratio of 3.05, and a Calmar ratio of 1.42. For excess returns, the system records a
+cumulative return of 146.10%, with SR, Sortino, and Calmar ratios of 1.83, 3.01, and 1.84, respec-
+20 He et al.:Hierarchical AI Multi-Agent Investing
+Table 2 Performance of Excess Returns in Training Sample
+Strategy CR (%)↑AR (%)↑STD (%)↑DD (%)↓Sharpe↑Sortino↑MDD (%)↑Calmar↑
+SMA alpha -23.11 -4.62 14.20 9.85 -0.33 -0.47 -50.55 -0.09
+RSI alpha -3.44 -0.6913.869.91 -0.05 -0.07 -49.69 -0.01
+SIGN alpha -4.12 -0.82 13.88 9.64 -0.06 -0.09 -29.35 -0.03
+KDJ alpha 1.28 0.26 17.44 11.86 0.01 0.02 -43.87 0.01
+MACD alpha 2.88 0.58 14.28 9.57 0.04 0.06 -35.31 0.02
+Ours alpha 146.10 30.3316.5710.07 1.83 3.01 -16.49 1.84
+Figure 3 Backtesting Results Compared with Baseline Strategies and the CSI 300 Index (Testing Sample) (a)
+Cumulative Returns, (b) Excess Returns Relative to the CSI 300 Index
+(a)
+(b)
+tively. Compared with both traditional methods (RSI and KDJ) and multi-agent systems such as
+MASS, ContestTrade demonstrates stronger profitability and improved risk-adjusted performance,
+confirming the efficacy of its competitive multi-agent design.
+He et al.:Hierarchical AI Multi-Agent Investing21
+Table 3 Performance in Testing Sample
+Strategy CR (%)↑AR (%)↑STD (%)↑DD (%)↑Sharpe↑Sortino↑MDD (%)↓Calmar↑
+SMA -1.53 -1.53 17.68 10.95 -0.09 -0.14 -17.09 -0.09
+RSI 0.64 0.6411.80 7.420.05 0.09-8.640.07
+SIGN 16.53 16.53 17.98 10.66 0.92 1.55 -11.89 1.39
+KDJ 11.91 11.91 15.34 8.54 0.78 1.40 -9.14 1.30
+MACD 10.84 10.84 18.19 10.66 0.60 1.02 -11.84 0.92
+MASS 7.01 7.01 21.79 14.57 0.32 0.48 -20.41 0.34
+Ours 55.41 55.4128.20 14.901.96 3.72-12.524.43
+Table 4 Performance of Excess Returns in Testing Sample
+Strategy CR (%)↑AR (%)↑STD (%)↓DD (%)↓Sharpe↑Sortino↑MDD (%)↑Calmar↑
+SMA alpha -17.40 -17.40 11.94 10.09 -1.46 -1.72 -19.41 -0.90
+RSI alpha -15.23 -15.23 17.79 14.51 -0.86 -1.05 -24.94 -0.61
+SIGN alpha 0.66 0.66 11.49 9.15 0.06 0.07 -12.20 0.05
+KDJ alpha -3.96 -3.96 14.85 11.48 -0.27 -0.35 -15.12 -0.26
+MACD alpha -5.03 -5.0311.18 8.77-0.45 -0.57 -7.43 -0.68
+MASS alpha -10.16 -10.16 12.04 9.11 -0.84 -1.12 -21.66 -0.47
+Ours alpha 39.22 39.2217.60 10.562.23 3.71 -6.44 6.09
+The framework also exhibits strong out-of-sample generalization. As presented in Figure 3a and
+Table 3, it yields a cumulative return of 55.41% in the testing period, outperforming the best
+baseline by 38.88
+As evidenced in Figure 3b and Table 4, our framework demonstrates robust efficacy, consistently
+achieving enhanced risk-adjusted returns and reduced volatility relative to baseline strategies.
+Figure 4 Comparative Performance of the Full Model and Ablated Configurations Over Time
+Note.“w/o” indicates removing the specified configuration.
+22 He et al.:Hierarchical AI Multi-Agent Investing
+Table 5 Ablation Study of Model Performance
+Model CR (%)↑AR (%)↑STD (%)↑DD (%)↑Sharpe↑Sortino↑MDD (%)↓Calmar↑
+F ull Model185.33 32.08 16.75 10.151.92 3.16-16.49 1.95
+w/o Risk Scaling190.27 32.9318.05 11.10 1.82 2.97 -16.492.00
+w/o Combine Opt. 98.56 17.06 13.72 8.94 1.24 1.91-13.231.29
+w/o Text Process 143.36 24.81 16.57 10.57 1.50 2.35 -17.16 1.45
+w/o Structured Data 87.87 15.21 19.57 12.24 0.78 1.24 -27.81 0.55
+w/o All 14.36 2.494.99 3.450.50 0.72 -13.83 0.18
+3.4. Ablation Configurations
+To rigorously evaluate the contributions of individual components within our AI-based fundamental
+investing framework, we conduct an ablation study by systematically disabling key modules.
+(i) Without Risk Scaling. In this configuration, the risk scaling mechanism is deactivated, result-
+ing in a portfolio without volatility control. This setup isolates the role of risk management in
+improving the Sortino Ratio and reducing maximum drawdown, highlighting its effectiveness
+in stabilizing returns.
+(ii) Without Combined Optimization. The combined optimization module is excluded, and final
+trading signals are equally weighted across all assets. This configuration evaluates the incre-
+mental benefits of the optimization process in enhancing portfolio performance metrics, such
+as risk-adjusted returns.
+(iii) Without Text Processing (Remove News and Report agents). The text-processing modules,
+including the Report and News agents, are removed, thereby eliminating the framework’s
+ability to incorporate textual information. This ablation assesses the value of qualitative data
+in informing investment decisions.
+(iv) Without Structured Data (Remove Fundamental and Technical agents). In this setting, the
+framework relies exclusively on news and report agents, omitting signals derived from the
+Fundamental agent and the Technical agent. This configuration quantifies the contribution of
+structured data to the framework’s predictive accuracy.
+(v) Without All Components. All key components—risk scaling, combined optimization, text
+processing, and structured data—are disabled, resulting in a baseline portfolio that equally
+weights all constituents of the CSI 300 index. This setup serves as a control, illustrating the
+collective impact of the proposed innovations on portfolio performance.
+As evidenced by Figure 4 and Table 5, the ablation of any individual component substantially
+impairs the performance of the AI-based fundamental investing framework, with the complete
+removal of all components resulting in severe degradation of portfolio outcomes. This underscores
+the critical and synergistic role of each module in achieving optimal results.
+He et al.:Hierarchical AI Multi-Agent Investing23
+4. Conclusion
+In this paper, we proposed a hierarchical AI multi-agent framework for fundamental equity invest-
+ing. The framework organizes the investment process along a macro–industry–firm path and imple-
+ments it with a coordinated set of agents. It builds equity portfolios from firm fundamentals and
+runs a systematic trading workflow that combines fundamental signals, technical timing, sentiment
+inputs, portfolio optimization, and risk scaling.
+The framework integrates specialized agents for research, portfolio construction, and risk con-
+trol, which supports adaptability and robustness in China’s volatile A-share market. It delivers a
+unified analysis across financial, technical, and sentiment dimensions. In empirical tests, the sys-
+tem outperforms standard benchmarks and non-hierarchical multi-agent baselines on key metrics,
+delivering higher cumulative returns, stronger risk-adjusted performance, and lower downside risk.
+Future work includes extending the framework to multiple asset classes and international markets
+to assess robustness across market regimes. Another direction is adding human-in-the-loop oversight
+so expert judgment can complement algorithmic decisions.
+References
+Alsabah H, Capponi A, Ruiz Lacedelli O, Stern M (2021) Robo-advising: Learning investors’ risk preferences
+via portfolio choices.Journal of Financial Econometrics19(2):369–392.
+Ang A, Chen J, Xing Y (2006) Downside risk.Review of Financial Studies19(4):1191–1239.
+Badarinza C, Campbell JY, Ramadorai T (2016) International comparative household finance.Annual
+Review of Economics8(1):111–144.
+Barber BM, Odean T (2000) Trading is hazardous to your wealth: The common stock investment performance
+of individual investors.Journal of Finance55(2):773–806.
+Baulkaran V, Jain P (2023) Who uses robo-advising and how?Financial Review58(1):65–89.
+Ben-David I, Li J, Rossi A, Song Y (2022) What do mutual fund investors really care about?Review of
+Financial Studies35(4):1723–1774.
+Bergstresser D, Chalmers JM, Tufano P (2008) Assessing the costs and benefits of brokers in the mutual
+fund industry.Review of Financial Studies22(10):4129–4156.
+Burke J, Hung AA (2021) Trust and financial advice.Journal of Pension Economics & Finance20(1):9–26.
+Calcagno R, Monticone C (2015) Financial literacy and the demand for financial advice.Journal of Banking
+& Finance50:363–380.
+Campbell JY (2006) Household finance.Journal of Finance61(4):1553–1604.
+Campbell JY, Viceira LM (2002)Strategic Asset Allocation: Portfolio Choice for Long-Term Investors
+(Clarendon Lectures in Economic).
+24 He et al.:Hierarchical AI Multi-Agent Investing
+Cao S, Jiang W, Wang J, Yang B (2024a) From man vs. machine to man + machine: The art and AI of
+stock analyses.Journal of Financial Economics160:103910.
+Cao Y, Chen Z, Pei Q, Dimino F, Ausiello L, Kumar P, Subbalakshmi K, Ndiaye PM (2024b) Risklabs:
+Predicting financial risk using large language model based on multi-sources data. URLhttps://arxiv.
+org/abs/2404.07452.
+Chalmers J, Reuter J (2020) Is conflicted investment advice better than no advice?Journal of Financial
+Economics138(2):366–387.
+Christoffersen SE, Evans R, Musto DK (2013) What do consumers’ fund flows maximize? Evidence from
+their brokers’ incentives.Journal of Finance68(1):201–235.
+Coleman B, Merkley K, Pacelli J (2022) Human versus machine: A comparison of robo-analyst and traditional
+research analyst investment recommendations.Accounting Review97(5):221–244.
+De Curt` o J, de Zarza I, Roig G, Cano JC, Manzoni P, Calafate CT (2023) LLM-informed multi-armed bandit
+strategies for non-stationary environments.Electronics12(13):2814.
+D’Acunto F, Prabhala N, Rossi AG (2019) The promises and pitfalls of robo-advising.Review of Financial
+Studies32(5):1983–2020.
+D’Acunto F, Rossi AG (2021)Robo-Advising(Springer).
+Fama EF, French KR (2002) The equity premium.Journal of Finance57(2):637–659.
+Florence P, Lynch C, Zeng A, Ramirez OA, Wahid A, Downs L, Wong A, Lee J, Mordatch I, Tompson
+J (2022) Implicit behavioral cloning.Proceedings of the 5th Conference on Robot Learning, 158–168
+(PMLR).
+French KR, Poterba JM (1991) Investor diversification and international equity markets.
+Gargano A, Rossi AG (2018) Does it pay to pay attention?Review of Financial Studies31(12):4595–4649.
+Gennaioli N, Shleifer A, Vishny R (2015) Money doctors.Journal of Finance70(1):91–114.
+Grauer RR, Hakansson NH, Shen FC (1990) Industry rotation in the U.S. stock market: 1934–1986 returns
+on passive, semi-passive, and active strategies.Journal of Banking & Finance14(2–3):513–538.
+Guo T, Shen H, Huang J, Mao Z, Luo J, Chen Z, Liu X, Xia B, Liu L, Ma Y, et al. (2025) MASS: Multi-agent
+simulation scaling for portfolio construction. URLhttps://arxiv.org/abs/2505.10278.
+Hackethal A, Haliassos M, Jappelli T (2012) Financial advisors: A case of babysitters?Journal of Banking
+& Finance36(2):509–524.
+Huberman G (2001) Familiarity breeds investment.Review of Financial Studies14(3):659–680.
+Kim SD, Cotwright M, Chatterjee S (2019) Who are robo-advisor users?Journal of Finance Issues18(2):33–
+50.
+Lachance ME, Tang N (2012) Financial advice and trust.Financial Services Review21(3):209.
+He et al.:Hierarchical AI Multi-Agent Investing25
+Lim B, Zohren S, Roberts S (2020) Enhancing time series momentum strategies using deep neural networks.
+URLhttps://arxiv.org/abs/1904.04912.
+Linnainmaa JT, Melzer BT, Previtero A (2021) The misguided beliefs of financial advisors.Journal of
+Finance76(2):587–621.
+Liu Z, Zhang X, Yang K, Xie Q, Huang J, Ananiadou S (2025) FMDLlama: Financial misinformation
+detection based on large language models.Companion Proceedings of the ACM on Web Conference
+2025, 1153–1157.
+Lu D, Wu H, Liang J, Xu Y, He Q, Geng Y, Han M, Xin Y, Xiao Y (2023) BBT-Fin: Comprehensive
+construction of chinese financial domain pre-trained language model, corpus and benchmark. URL
+https://arxiv.org/abs/2302.09432.
+Markowits HM (1952) Portfolio selection.Journal of Finance7(1):71–91.
+Merrill Lynch (2004) The investment clock. Research report, Merrill Lynch & Co., New York.
+Mitchell OS, Utkus SP (2004) Lessons from behavioral finance for retirement plan design. Mitchell OS,
+Utkus SP, eds.,Pension Design and Structure: New Lessons from Behavioral Finance, chapter 1, 82–94
+(Oxford University Press).
+Moskowitz TJ, Grinblatt M (1999) Do industries explain momentum?Journal of Finance54(4):1249–1290.
+Moskowitz TJ, Ooi YH, Pedersen LH (2012) Time series momentum.Journal of Financial Economics
+104(2):228–250.
+Mullainathan S, Noeth M, Schoar A (2012) The market for financial advice: An audit study. URLhttps:
+//ssrn.com/abstract=2028263.
+Pool VK, Sialm C, Stefanescu I (2016) It pays to set the menu: Mutual fund investment options in 401 (k)
+plans.Journal of Finance71(4):1779–1812.
+Reher M, Sokolinski S (2024) Robo advisors and access to wealth management.Journal of Financial Eco-
+nomics155:103829.
+Reher M, Sun C (2019) Automated financial management: Diversification and account size flexibility.Journal
+of Investment Management17(2):63–75.
+Rollinger TN, Hoffman ST (2013)Sortino: A ‘Sharper’ Ratio(Chicago, Illinois: Red Rock Capital).
+Shafiullah NM, Cui Z, Altanzaya AA, Pinto L (2022) Behavior transformers: Cloningkmodes with one
+stone.Advances in Neural Information Processing Systems 35, 22955–22968.
+Sharpe WF (1994) The Sharpe ratio.The Journal of Portfolio Management21(1):49–58.
+Tobin J (1958) Liquidity preference as behavior towards risk.Review of Economic Studies25(2):65–86.
+Wang S, Yuan H, Zhou L, Ni LM, Shum HY, Guo J (2023) Alpha-GPT: Human-AI interactive alpha mining
+for quantitative investment. URLhttps://arxiv.org/abs/2308.00016.
+26 He et al.:Hierarchical AI Multi-Agent Investing
+Xing F (2025) Designing heterogeneous LLM agents for financial sentiment analysis.ACM Transactions on
+Management Information Systems16(1):1–24.
+Yang H, Liu XY, Zhong S, Walid A (2020) Deep reinforcement learning for automated stock trading: An
+ensemble strategy.Proceedings of the First ACM International Conference on AI in Finance, 1–8.
+Yao S, Yu D, Zhao J, Shafran I, Griffiths T, Cao Y, Narasimhan K (2023a) Tree of thoughts: Deliberate
+problem solving with large language models.Advances in Neural Information Processing Systems 36,
+11809–11822.
+Yao S, Zhao J, Yu D, Du N, Shafran I, Narasimhan KR, Cao Y (2023b) ReAct: Synergizing reasoning and
+acting in language models.The Eleventh International Conference on Learning Representations, URL
+https://openreview.net/forum?id=WE_vluYUL-X.
+Ye Y, Pei H, Wang B, Chen PY, Zhu Y, Xiao J, Li B (2020) Reinforcement-learning based portfolio man-
+agement with augmented asset movement prediction states.Proceedings of the Thirty-Fourth AAAI
+Conference on Artificial Intelligence, 1112–1119.
+Young T (1991) Calmar ratio: A smoother tool.Futures20(8):40–41.
+Yu Y, Li H, Chen Z, Jiang Y, Li Y, Suchow JW, Zhang D, Khashanah K (2025) FinMem: A performance-
+enhanced LLM trading agent with layered memory and character design.IEEE Transactions on Big
+Data, forthcoming.
+Zhang T, Li Y, Jin Y, Li J (2020) AutoAlpha: An efficient hierarchical evolutionary algorithm for mining
+alpha factors in quantitative investment. URLhttps://arxiv.org/abs/2002.08245.
+Zhang W, Zhao L, Xia H, Sun S, Sun J, Qin M, Li X, Zhao Y, Zhao Y, Cai X, et al. (2024) A multimodal
+foundation agent for financial trading: Tool-augmented, diversified, and generalist.Proceedings of the
+30th ACM SIGKDD Conference on Knowledge Discovery and Data Mining, 4314–4325.
+Zhang Z, Zohren S, Roberts S (2019) Deep reinforcement learning for trading. URLhttps://arxiv.org/
+abs/1911.10107.
+Zhao A, Huang D, Xu Q, Lin M, Liu YJ, Huang G (2024a) ExpeL: LLM agents are experiential learners.
+Proceedings of the Thirty-Eighth AAAI Conference on Artificial Intelligence, 19632–19642.
+Zhao H, Liu Z, Wu Z, Li Y, Yang T, Shu P, Xu S, Dai H, Zhao L, Mai G, et al. (2024b) Revolutionizing finance
+with LLMs: An overview of applications and insights. URLhttps://arxiv.org/abs/2401.11641.
+Zhuang Z, LEI K, Liu J, Wang D, Guo Y (2023) Behavior proximal policy optimization.The Eleventh
+International Conference on Learning Representations, URLhttps://openreview.net/forum?id=
+3c13LptpIph.
+e-companion toHe et al.:Hierarchical AI Multi-Agent Investingec1
+Supplementary Material
+This supplementary material provides additional details to support the main document. It
+includes a high-level illustration of our framework and detailed information on dataset construction.
+EC.1. Performance Metrics
+The performance of the portfolio is evaluated using the following metrics:
+(i) Cumulative Return (CR): The total return of the portfolio over a specific period, reflecting
+the overall growth of the investment.
+(ii) Annualized Return (AR): The average return of the portfolio per year, providing a standard-
+ized measure for comparing performance across different time frames.
+(iii) Annualized Standard Deviation (STD): A measure of the portfolio’s volatility, indicating the
+degree of dispersion of returns around the average return.
+(iv) Downside Deviation (DD): Also known asdownside risk, this metric measures the volatility
+of only the negative returns. It focuses on the risk of losses, providing a more specific view of
+the portfolio’s exposure to adverse movements.
+(v) Sharpe Ratio: A risk-adjusted measure of return, calculated as the annualized return minus the
+risk-free rate, divided by the annualized standard deviation. A higher Sharpe Ratio indicates
+a better return for a given level of risk. The formula is:
+Sharpe Ratio = AR−R f
+ST D
+whereARis the annualized return,R f is the risk-free rate, andST Dis the annualized standard
+deviation of portfolio returns. In this study, we assume the risk-free rate (R f ) is 0.
+(vi) Sortino Ratio: A variant of the Sharpe Ratio that uses downside deviation instead of total
+standard deviation as the risk measure. This ratio assesses the return generated per unit of
+downside risk. The formula is:
+Sortino Ratio = AR−R f
+DD
+whereARis the annualized return,R f is the risk-free rate, andDDis the annualized downside
+deviation of portfolio returns.
+(vii) Maximum Drawdown (MDD): This metric represents the largest peak-to-trough decline in
+the portfolio’s value over a specified period. It shows the maximum observed loss from any
+peak, serving as an indicator of capital preservation risk.
+ec2e-companion toHe et al.:Hierarchical AI Multi-Agent Investing
+(viii) Calmar Ratio: A risk-adjusted performance metric that evaluates the annualized excess return
+relative to the maximum drawdown, defined as:
+Calmar Ratio = AR−R f
+|M DD|
+whereARis the annualized return,R f is the risk-free rate, and|M DD|is the absolute value
+of the maximum drawdown.
+EC.2. Dataset Details
+EC.2.1. Macro-level Data Details
+V ariable Definition
+CPI Year-over-Year Growth
+Rate
+Calculated asπ YoYt = CPIt−CPIt−12CPIt−12 , measuring long-terminflation pressure.
+M1 Money Supply Represents the money supply at timet, including currency
+in circulation and demand deposits, measuring the most liq-
+uid components of the money supply.
+M2 Money Supply Represents the money supply at timet, including M1 plus
+savings deposits, money market securities, and other near-
+money assets, capturing broader monetary aggregates.
+Purchasing Managers’ Index
+(PMI)
+The official index PMI t, where PMI t >50 indicates expan-
+sion and PMI t <50 indicates contraction.
+EC.2.2. Industry-level Data Details
+V ariable Definition
+Industry Index Return Daily return rates of industry index based on the indus-
+try classification codes of listed companies published by the
+China Securities Regulatory Commission.
+e-companion toHe et al.:Hierarchical AI Multi-Agent Investingec3
+EC.2.3. Firm-level Data Details
+V ariable Definition
+Capital Expenditures
+(CapEx)
+The money an organization or corporate entity spends to
+buy, maintain, or improve its fixed assets, such as buildings,
+vehicles, equipment, or land.
+Cash & Cash Equivalents Cash on hand and highly liquid short-term investments.
+Close
+Current Assets Assets expected to be converted into cash within one year.
+Current Liabilities Short-term obligations due within one year.
+Dividends paid Cash or stock payments distributed to shareholders or hold-
+ers of certain equity-based awards.
+Earnings Before Interest &
+Taxes
+Company’s operating profit without interest expenses and
+income taxes.
+Earnings before tax The money retained internally by a company before deduct-
+ing tax expenses.
+Earnings Per Share (EPS) Portion of a company’s profit allocated to each outstanding
+share of common stock.
+Enterprise Value / EBIT
+(EV/EBIT)
+Valuation ratio that compares a company’s enterprise value
+(EV) to its earnings before interest and taxes (EBIT).
+Enterprise Value / EBITDA
+(EV/EBITDA)
+Valuation ratio comparing enterprise value to cash earnings
+(EBITDA).
+Free Cash Flow (FCF) The money that a company has available to repay its cred-
+itors or pay dividends and interest to investors.
+Goodwill Excess paid in acquisitions above fair value of net assets.
+Gross Profit Margin Percentage of revenue that exceeds the cost of goods sold.
+Intangible Assets Non-physical assets including intellectual property, patents,
+and goodwill.
+Interest Expense Cost incurred by an entity for borrowing funds.
+MarketValue Current value of a publicly traded company, based on the
+total dollar amount that all of its outstanding shares are
+worth.
+Net Income Remains from a company’s total revenues after deducting
+all operating costs, taxes, interest, and other expenses.
+Operating Costs Daily expenses necessary to maintain, operate, and admin-
+ister a business.
+Operating Margin Profitability ratio that measures revenue after covering the
+operating and non-operating expenses.
+Operating Profit Total earnings from a company’s core business operations
+excluding deductions of interest and tax.
+Operating Revenue The money a company generates from its primary business
+activities.
+Paid-in Capital Capital contributed by shareholders.
+R&D Expenses The money companies spend on innovation and improving
+their products, services, technologies, and processes.
+Return on Equity (ROE) Profitability of a business in relation to its equity.
+Return on Invested Capital Profitability ratio measuring return relative to invested cap-
+ital.
+Revenue The total amount of income generated by the sale of goods
+and services related to the primary operations of a business.
+ec4e-companion toHe et al.:Hierarchical AI Multi-Agent Investing
+V ariable Definition
+Shareholders’ Equity Total amount of assets that a company would retain if it
+paid all of its debts.
+Total Assets Sum of all owned assets (current + non-current).
+Total Liabilities All debts and obligations of a company.
+Table EC.4 Descriptive statistics of our dataset
+count mean std min 25% 50% 75% max
+CPI YoY Growth Rate 8.40×10 1 1.552 381 1.351 490−8.00×10 −1 3.75×10 −1 1.55 2.4725 5.38
+M1 Money Supply 8.40×10 1 6.726 956×10 5 1.746 188×10 5 5.170 36×10 5 5.570 53×10 5 6.231 289×10 5 6.744 551×10 5 1.120 12×10 6
+M2 Money Supply 8.40×10 1 2.366 131×10 6 4.464 552×10 5 1.720 814×10 6 1.950 588×10 6 2.307 211×10 6 2.809 994×10 6 3.135 322×10 6
+Purchasing Managers’ Index (PMI) 8.40×10 1 4.998 571 4×101 1.886 358 3.57×10 1 4.94×10 1 5.01×10 1 5.09×10 1 5.26×10 1
+Industry Index Return 1.321 79×10 5 5.46×10 −4 2.1171×10 −2 −1.203 14×10 −1 −9.50×10 −3 7.20×10 −5 1.0181×10 −2 2.675 919
+Capital Expenditures 1.40×10 4 2.85×10 9 1.29×10 10 0.00 1.31×10 8 4.71×10 8 1.60×10 9 3.31×10 11
+Cash & Cash Equivalents 1.40×10 4 2.67×10 10 1.90×10 11 0.00 7.38×10 8 2.12×10 9 6.81×10 9 4.04×10 12
+Close 2.98×10 6 1.78×10 2 7.80×10 2 1.13 2.05×10 1 5.46×10 1 1.40×10 2 6.58×10 4
+Current Assets 1.31×10 4 2.66×10 10 9.37×10 10 0.00 2.32×10 9 6.06×10 9 1.67×10 10 2.28×10 12
+Current Liabilities 1.31×10 4 2.33×10 10 8.19×10 10 0.00 1.49×10 9 4.62×10 9 1.44×10 10 1.76×10 12
+Dividends paid 1.38×10 4 2.31×10 9 1.27×10 10 0.00 1.13×10 8 3.66×10 8 1.16×10 9 1.13×10 12
+EBIT 1.40×10 4 4.98×10 9 2.32×10 10 −6.52×10 10 2.20×10 8 8.06×10 8 2.41×10 9 4.25×10 11
+Earnings before tax 1.40×10 4 4.60×10 9 2.30×10 10 −7.13×10 10 1.46×10 8 6.63×10 8 2.07×10 9 4.25×10 11
+EPS 1.40×10 4 6.13×10 −1 1.58−1.65×10 1 1.10×10 −1 3.60×10 −1 8.01×10 −1 6.86×10 1
+EV/EBIT 1.40×10 4 1.55×10 1 9.24×10 2 −8.85×10 4 5.67 1.80×10 1 3.49×10 1 1.65×10 4
+EV/EBITDA 1.40×10 4 2.30×10 1 4.23×10 2 −2.66×10 4 4.93 1.44×10 1 2.95×10 1 3.25×10 4
+Free Cash Flow (FCF) 1.40×10 4 −3.79×10 10 2.72×10 11 −6.09×10 12 −3.13×10 9 −5.22×10 8 8.65×10 7 1.60×10 11
+Goodwill 7.42×10 3 9.57×10 8 3.03×10 9 0.00 1.31×10 7 9.75×10 7 5.70×10 8 4.61×10 10
+Gross Profit Margin 1.30×10 4 2.75×10 1 2.03×10 1 −3.25×10 2 1.38×10 1 2.34×10 1 3.77×10 1 1.15×10 2
+Intangible Assets 1.37×10 4 2.57×10 9 1.09×10 10 −1.78×10 8 1.10×10 8 3.78×10 8 1.32×10 9 2.69×10 11
+Interest Expense 3.99×10 2 6.51×10 8 2.37×10 9 0.00 4.69×10 6 3.99×10 7 1.79×10 8 1.92×10 10
+MarketValue 2.98×10 6 6.04×10 10 1.68×10 11 1.21×10 8 1.04×10 10 2.23×10 10 4.72×10 10 8.05×10 12
+Net Income 1.40×10 4 3.69×10 9 1.87×10 10 −6.87×10 10 1.14×10 8 5.39×10 8 1.70×10 9 3.67×10 11
+Operating Costs 1.40×10 4 3.51×10 10 1.43×10 11 −5.74×10 7 2.19×10 9 6.51×10 9 2.07×10 10 3.23×10 12
+Operating Margin 1.40×10 4 4.00×10 −3 1.19×10 1 −1.11×10 3 2.75×10 −2 8.94×10 −2 2.07×10 −1 1.81×10 2
+Operating Profit 1.40×10 4 4.56×10 9 2.30×10 10 −7.16×10 10 1.22×10 8 6.26×10 8 1.99×10 9 4.24×10 11
+Operating Revenue 1.40×10 4 3.93×10 10 1.54×10 11 −3.87×10 8 2.49×10 9 7.23×10 9 2.31×10 10 3.32×10 12
+Paid-in Capital 1.40×10 4 5.29×10 9 2.44×10 10 4.20×10 7 6.99×10 8 1.42×10 9 3.14×10 9 4.62×10 11
+R&D Expenses 5.03×10 3 1.08×10 9 3.09×10 9 0.00 6.72×10 7 2.83×10 8 8.12×10 8 5.32×10 10
+ROE 1.39×10 4 6.25 1.06×10 2 −7.78×10 3 3.61 8.77 1.50×10 1 1.35×10 3
+ROIC 1.40×10 4 2.95×10 −2 1.24−1.14×10 2 6.51×10 −3 3.94×10 −2 9.03×10 −2 5.13×10 1
+Revenue 1.40×10 4 3.94×10 10 1.54×10 11 −3.87×10 8 2.53×10 9 7.36×10 9 2.33×10 10 3.32×10 12
+Shareholders Equity 1.40×10 4 3.61×10 10 1.62×10 11 −2.91×10 10 2.87×10 9 7.44×10 9 1.91×10 10 3.99×10 12
+Total Assets 1.40×10 4 2.51×10 11 1.84×10 12 0.00 5.66×10 9 1.56×10 10 4.61×10 10 4.88×10 13
+Total Liabilities 1.40×10 4 2.15×10 11 1.69×10 12 0.00 2.13×10 9 7.27×10 9 2.74×10 10 4.48×10 13
+EC.3. Within the Macro Agent: Merrill Lynch Clock vs Industry
+Momentum
+During the training period, the Merrill Lynch Clock:Industry Momentum configuration with a 25:75
+weighting was selected for the Macro agent, as it optimally integrates macroeconomic and industry
+momentum scores. This configuration was chosen based on its superior risk-adjusted performance,
+demonstrated by the highest combined Sharpe and Sortino ratios (2.514) among the evaluated
+configurations (see Table EC.5). Consequently, this setting was adopted for out-of-sample testing
+to assess its generalizability.
+Table EC.5 Within the Macro Agent: Merrill Lynch Clock vs Industry Momentum
+Model CR (%) AR (%) STD (%) DD (%) Sharpe Sortino MDD (%) Calmar
+Merrill Lynch Clock:Industry Momentum = 25:75 89.30 17.86 22.40 10.400.797 1.717-41.00 0.436
+Merrill Lynch Clock:Industry Momentum = 50:50 88.79 17.76 22.57 11.11 0.787 1.599 -41.84 0.424
+Merrill Lynch Clock:Industry Momentum = 75:25 63.22 12.65 15.65 9.25 0.808 1.367 -16.48 0.767
+e-companion toHe et al.:Hierarchical AI Multi-Agent Investingec5
+EC.4. Notation
+Table EC.6 Key Notation for Problem Formulation
+Symbol Description
+N, TNumber of assets, number of trading days
+dm, df , ds, db Dimensions of macro-economic, firm, industry, benchmark features
+M,F,S,BMacro-, Industry-, Firm-, and benchmark-level data tensors/matrices
+RMatrix of realized asset returns
+wt Portfolio weights at timet
+rt, xt Portfolio return and excess return at timet
+rf Risk-free rate
+fθ Parameterized allocation rule with parametersθ
+SR(θ) Sharpe Ratio of the strategy induced byθ

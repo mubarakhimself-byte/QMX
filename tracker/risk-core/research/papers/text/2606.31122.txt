@@ -1,0 +1,726 @@
+arXiv 2606.31122  https://arxiv.org/abs/2606.31122
+
+GENERA TING PLAUSIBLE STRESS SCENARIOS VIA LARGE
+DEVIA TIONS
+Anand Deo
+Abstract.Financial stress tests based on handpicked scenarios can mislead risk management
+by overlooking genuinely dangerous configurations or overemphasizing shocks that are too im-
+plausible to be decision-relevant. We develop a systematic method for generating plausible
+stress scenarios for financial losses driven by exogenous risk factors. The method exploits a
+large-deviations principle: conditional on a large loss, the risk factors concentrate near the
+most likely stress configurations. We use this structure to define representative stress distri-
+butions and to extrapolate observed samples into more extreme scenarios while preserving the
+relative plausibility of stress mechanisms. As a result, the procedure can generate informative
+stress scenarios even when historical data contain few or no observations in the stressed regime.
+Numerical experiments on two financial network models show that the method recovers the
+stressed loss law and key stress diagnostics, including in settings where benchmark generators
+fail to generate any stressed samples.
+1.INTRODUCTION
+Crises such as the 2008 global financial crisis and the COVID-19 pandemic have made stress
+testing a central tool for assessing the resilience of financial systems. In practice, supervisory
+stress tests specify shocks to underlying risk factors and propagate them through a portfolio or
+network model. The central difficulty is that useful stress scenarios must be bothsevereand
+plausible. A shock that is mild across all risk factors may leave the system within its normal
+operating range, whereas a handpicked combination of extreme market conditions may be so
+implausible that it obscures rather than clarifies systemic risk. This difficulty is especially acute
+in multivariate settings, where the joint configurations driving large losses are rarely, if ever,
+observed in historical data.
+A useful theory of stress testing must therefore identify the rare joint configurations that
+drive systemic losses. This naturally leads to a large-deviations viewpoint: in stressed regimes,
+plausibility should be tied to the configurations under which the rare event is most likely to
+occur. What matters is not only the size of individual shocks, but how they combine to produce
+large losses. Ad hoc scenario design offers little guidance here, and the problem is not resolved
+simply by replacing such scenarios with a fitted multivariate model. Even models that match
+observed marginals and correlations may still route exceedances through structurally incorrect
+parts of the tail, producing severe scenarios that misrepresent the mechanisms of systemic stress.
+These observations lead to two central questions:
+(Q1)Can the probabilistic structure of the risk factors be used to characterize precisely what
+it means for a stress scenario to be plausible?
+1
+arXiv:2606.31122v1  [q-fin.RM]  30 Jun 2026
+2Anand Deo
+(Q2)Can this characterization be turned into a data-driven extrapolation procedure that
+generates plausible stress scenarios even beyond the observed severity range?
+In this paper, we provide an answer to the above questions in two parts. First, we define
+plausibility endogenously, meaning that the stress configurations are determined by the baseline
+tail model itself rather than imposed externally through a handpicked shock set. Second, we
+use this characterization not merely to rank or locate adverse scenarios, but to construct a
+benchmark for generating stressed realizations whose exceedances concentrate on those same
+configurations. Our contributions are below.
+(i) A large-deviations characterization of stress scenarios:We use large-deviations
+theory to formalize plausibility in stressed regimes. Conditional on a high-loss event{L(ξ)> u},
+the risk factors concentrate near a most-likely set of configurations that captures the dominant
+mechanisms by which systemic stress occurs. This yields an endogenous benchmark: a stress
+distribution is representative if, conditional on exceedance, it concentrates on the same most-
+likely configurations as the baseline model.
+(ii) Data-driven generation of plausible stress scenarios:This characterization leads
+to a natural generator: a sample-based extrapolation procedure that pushes observed samples
+to more extreme levels while preserving the configurations that drive large losses. Givenn
+baseline samples and an extrapolation factors >1, the procedure generates realizations whose
+exceedances approximate the target conditional distribution. We show that representative sce-
+narios can be generated for stress events with probabilities of ordern −γ(s) for someγ(s)>1,
+including regimes in which the event is not directly observed in the available sample. Numerical
+experiments on two financial network models show that the method recovers the stressed loss
+law and key stress diagnostics in practice.
+Our objective is not unbiased rare-event estimation, but the generation of scenarios that
+recover the stressed regime. At the same time, because the generated scenarios preserve the
+relevant tail structure, they can also be used to approximate tail risk quantities at the large-
+deviations scale.
+Comparison with Existing Literature:There is a large literature on stress testing and
+scenario-based risk assessment, including foundational frameworks for supervisory and port-
+folio stress testing (for instance, Morgan et al. (1997); Berkowitz (1999); Kupiec (2002)) and
+later work on banking-system and systemic-risk stress tests (see Amini et al. (2012); Schuer-
+mann (2014); Acharya et al. (2014)). Closest to our setting are approaches that formalize
+plausibility or identify likely drivers of stress. One line of work defines plausibility through
+neighborhoods around a baseline model: Breuer et al. (2009) identify severe scenarios within a
+local neighborhood, while Breuer et al. (2012) implement this idea in a credit-risk setting. A
+related literature studies reverse stress testing, which seeks the most likely scenarios leading to
+a prescribed adverse outcome (see McNeil and Smith (2012); Kopeliovich et al. (2015); Glasser-
+man et al. (2015)). More recently Pesenti et al. (2019) and Millossovich et al. (2024) develop
+theoretical frameworks based on reweighting stress-scenario probabilities.
+Much of this literature treats stress testing primarily as anidentificationproblem: the goal
+is to locate adverse configurations, either within an exogenously specified neighborhood of a
+GENERATING PLAUSIBLE STRESS SCENARIOS 3
+baseline model or through reverse stress testing tied to a prescribed outcome. Our perspective
+differs in two respects. First, we define plausibility endogenously through a large-deviations
+characterization of the baseline tail, thereby identifying the stress mechanisms selected by the
+model itself. Second, we use this characterization not only to rank or locate adverse scenarios,
+but to construct a generative benchmark: stressed realizations are representative when their
+exceedances preserve the same large-deviations structure as the baseline model. Unlike reweight-
+ing approaches, which tilt the baseline measure toward an exogenously specified stress event,
+our method generates realizations directly from the model’s most-likely stress configurations.
+The present paper shares the tail-asymptotic setting of Deo and Murthy (2025), but repur-
+poses it for data-driven stress-scenario generation. Deo and Murthy (2025) work with a specified
+input distribution and use self-structuring transformations for importance sampling estimation
+of the scalar probabilityP(L(ξ)> u). Here, we start from samples and use the same tail
+extrapolation idea to construct an empirical distribution of transformed exceedances for the
+conditional stress regime given{L(ξ)> u}. Thus, the contribution is not a tail-probability
+estimator, but a data-driven stress-generation framework whose outputs are assessed by recov-
+ery of the baseline large-deviations geometry and stressed-system diagnostics such as severity,
+breadth, and concentration.
+Paper Outline:Section 2 formulates the stress-scenario generation problem precisely. Sec-
+tion 3 develops the large-deviations framework and the benchmark notion of representative
+stress generation. Section 4 validates the theory numerically on two financial network exam-
+ples. Proofs are collected in Section 5.
+Notation:Vectors are denoted in boldface; for example,z= (z 1, . . . , zd). For a random
+vectorξ= (ξ 1, . . . , ξd), letΛdenote the component-wise marginal cumulative hazard transform,
+defined by Λ i(t) :=−logP(ξ i > t) fori= 1, . . . , d. We letqdenote the component-wise left
+inverse ofΛ, and defineq ⋆ := lim t→∞ q(t)/∥q(t)∥ ∞, whenever the limit exists. Forα=
+(α1, . . . , αd), we writeα ⋆ := min1≤i≤d αi. ForA⊂R d, we letA δ :={y:d(y, A)≤δ},where
+d(y, A) := inf{∥y−z∥:z∈A}is the distance fromytoA.
+2.TECHNICAL PRELIMINARIES AND PROBLEM SETUP
+Our analysis rests on two ingredients: a marginal standardization that puts the risk factors
+on comparable tail scales, and a large-scale approximation of the loss function. The first step
+is to standardize the coordinates so that tail growth is measured on a common scale across risk
+factors.
+Definition 1.A functionf:R + →R + is said to be regularly varying with indexγ∈Rif
+f(tx)
+f(t) →x γ for everyx >0
+ast→ ∞. We denote this byf∈RV(γ), or simplyf∈RVwhen the index is not important.
+Regular variation is used to construct the marginal transforms Λ i, which put all coordinates
+on a common tail scale. This standardization isolates joint tail dependence from differences in
+marginal tail decay, allowing the geometry of rare losses to be studied on the transformed scale.
+4Anand Deo
+Definition 2.A family of random vectors{Z u}u>0 is said to satisfy a large deviations principle
+with speedg:R + →R + satisfyingg(u)→ ∞and rate functionI ⋆ if
+lim sup
+u→∞
+[g(u)]−1 logP(Z u ∈F)≤ −infz∈F I ⋆(z)andlim infu→∞ [g(u)]−1 logP(Z u ∈G)≥ −infz∈G I ⋆(z)
+(1)
+for every closed setFand open setG. In this case, we writeZ u ∈LDP(g, I⋆).
+Following De Valk (2016), we model tail dependence through an LDP for the marginally
+standardized vectorY=Λ(ξ). This is the key structural input in our analysis, and the
+extrapolation procedure is designed precisely to preserve this large-deviations geometry.
+2.1.Problem Setup.Consider a financial system, such as a clearing network or a reinsurance
+system, whose loss depends on a vector of nonnegative risk factorsξ∈R d+. LetL(z) denote
+the loss incurred in statez, and assume thatξadmits a densityf ξ. Fix a high thresholdu.
+The benchmark for stress-scenario generation is the conditional distribution Law(ξ|L(ξ)> u),
+supported on the exceedance setS u ={z∈R d+ :L(z)> u}. Since direct resampling yields
+few or no exceedances at such thresholds, our objective is to instead construct a data-driven
+extrapolation procedure to approximate this conditional distribution.
+Stress-scenario generation is inherently a tail problem: whenuis large, the scenarios that
+dominate{L(ξ)> u}are determined by the extreme behavior ofξand the large-loss geometry
+ofL(·) rather than by behavior in the body of the distribution. To capture this, we impose the
+following assumptions on the tail behavior of the risk factors and the loss function.
+Assumption 1(T ail behavior of risk factors).LetY=Λ(ξ)denote the marginally stan-
+dardized risk vector. Assume thatYadmits a density of the form
+fY (y) =p(y) exp(−φ(y)),
+where
+lim
+n→∞
+n−1φ(nyn) =φ ⋆(y)andlim n→∞ n−ς logp(ny n) = 0 (2)
+for every sequencey n →y̸=0and everyς >0. In addition, there exist positive numbers
+α1, . . . , αd such thatΛ i ∈RV(α i)for eachi.
+Assumption 1 says that after marginal standardization, the transformed risk vector admits
+a large-deviations description with rate functionφ ⋆. This includes a broad class of dependence
+structures, such as Gaussian, elliptical, and certain Archimedean copula models, while the
+condition Λi ∈RV(α i) allows for a wide range of light-tailed marginals.
+Assumption 2(Asymptotic homogeneity of loss).The loss functionL(·)satisfies
+n−1L(nzn)→L ⋆(z) (3)
+for every sequencez n →z, whereL ⋆ is a non-degenerate limiting function in the sense that
+{z:L ⋆(z)>0} ̸=∅.
+Assumption 2 only requires that the loss admit a first-order homogeneous approximation at
+high stress levels; this limiting shape determines which configurations dominate the stressed
+GENERATING PLAUSIBLE STRESS SCENARIOS 5
+regime. Nonlinear losses such asL(z) =∥z∥ 2 satisfy the condition directly. More generally,
+ifL 0 has tail orderr >0, meaning thatn −rL0(nzn)→L ⋆0(z), then the transformed loss
+L=L 1/r0 satisfiesn −1L(nzn)→  L⋆0(z)1/r. Hence losses with general tail order can be put
+into the normalization used in Assumption 2. The next two examples illustrate this flexibility
+for thresholded linear and network-clearing losses.
+Example 1(Bipartite Reinsurance Network).Consider the bipartite agent-object market
+model (see Kley et al. (2016)), in which agent exposures are linear in object losses. Letξ=
+(ξ1, . . . , ξd)∈R d+ denote object losses, and letA ij ≥0 denote the exposure of agentito object
+j, withA ij = 0 whenever agentiis not exposed to objectj. WritingAξ= ((Aξ) 1, . . . ,(Aξ)q) =
+(a⊺1ξ, . . . ,a⊺q ξ) for the vector of agent losses, and lettingc i >0 denote the capital of agenti,
+define the aggregate market distress by
+L(ξ) :=
+qX
+i=1
+ 
+a⊺i ξ−c i+.(4)
+Lemma 2.1.The loss function in(4)satisfies Assumption 2. In particular,L ⋆(z) = Pqi=1 a⊺i z.
+The next example shows that the asymptotic homogeneity condition also holds in a nontrivial
+network model with contagion effects.
+Example 2(State-Dependent Clearing Network).Consider a banking network withm
+firms and exogenous loss driversξ= (ξ 1, . . . , ξd)∈R d+. Firmjincurs gross lossC j(ξ) :=a ⊺j ξ
+fora j ∈R d+, and has state-dependent nominal liabilities
+¯pj(ξ) :=
+ 
+Cj(ξ)−r j
+
++, r j ≥0.
+Thus, liabilities activate only once the loss of firmjexceeds its retention levelr j.
+The network structure is described by fixed relative liability weightsλ ji ≥0, whereλ ji
+denotes the fraction of firmj’s total liabilities owed to firmi. Assume that Pmi=1 λji = 1 for
+eachj= 1, . . . , m. The nominal liability of firmjto firmiis
+Rij(ξ) :=λ ji ¯pj(ξ).
+Letx j(ξ)≥0 denote the external resources of firmjin stateξ, that is, funds from outside
+the interbank network available to meet its liabilities, such as recoveries from external assets
+or payments from non-network counter-parties. The clearing vectorp(ξ) solves the system (see
+Eisenberg and Noe (2001))
+pj(ξ) = min
+n
+¯pj(ξ), xj(ξ) +
+mX
+k=1
+λkj pk(ξ)
+o
+, j= 1, . . . , m.
+Since payments are made pro rata, the realized payment from firmjto firmiisλ jipj(ξ). The
+unpaid liability is therefore
+Uij(ξ) :=R ij(ξ)−λ jipj(ξ) =λ ji
+ 
+¯pj(ξ)−p j(ξ)
+
+.
+6Anand Deo
+We take the aggregate loss to be total unpaid obligations:
+L(ξ) :=
+mX
+i=1
+mX
+j=1
+Uij(ξ) =
+mX
+j=1
+ 
+¯pj(ξ)−p j(ξ)
+
+,
+where the second equality uses Pmi=1 λji = 1. If external resources admit a corresponding
+first-order limit, then the clearing system itself admits a homogeneous asymptotic counterpart.
+Lemma 2.2.Assume that for eachj= 1, . . . , m,t−1xj(tzt)→x ⋆j (z)for every sequencez t →z,
+and define¯p⋆j (z) :=a ⊺j z. Assume further that, for eachz, the limiting clearing system
+p⋆j (z) = min n¯p⋆j (z), x⋆j (z) + mX
+k=1
+λkj p⋆k(z)o, j= 1, . . . , m,
+admits a unique clearing vectorp ⋆(z). Then the loss functionL(·)satisfies Assumption 2 with
+L⋆(z) = Pmj=1 ¯p⋆j (z)−p ⋆j (z).
+3.STRESS TESTING VIA LARGE DEVIATIONS
+3.1.A Large-Deviations Benchmark for Stress Scenarios.We begin by identifying the
+tail states through which the stress event{L(ξ)> u}is most likely to occur at largeu. The
+large-deviations characterization below expresses this through a rate minimization problem. The
+minimizers form the dominant set: among all stress-producing points, they have the smallest
+large-deviations rate and hence the largest probability on the exponential scale. We say that
+scenarios are plausible when, after tail standardization, they lie near this set. The construction
+is endogenous because the set is determined by (φ ⋆, L⋆), rather than by an externally imposed
+shock.
+Under Assumptions 1-2, Theorem 2 of Deo and Murthy (2025) implies that asu→ ∞
+P
+ 
+L(ξ)> u
+
+= exp
+ 
+−t(u) (κ ⋆ +o(1)) ,whereκ ⋆ := min nφ⋆(z) :L ⋆ q⋆z1/α ≥1 o (5)
+andt(u) := min 1≤i≤d Λi(u). Thus,κ ⋆ governs the asymptotic exponential decay of the stress
+event{L(ξ)> u}. To characterize the configurations that achieve this decay rate, define the
+feasible set and its minimizers
+Γ :=
+n
+z:L ⋆ q⋆z1/α ≥1 o andS:= arg min φ⋆(z) :z∈Γ 	
+respectively. Elements ofSdescribe the dominant tail configurations at the large-deviations
+scale, and therefore form the benchmark set around which plausible stress scenarios concentrate.
+Under strict convexity ofφ ⋆, this minimizer is unique, though the analysis requires only thatS
+be nonempty and closed. To formalize concentration nearS, forδ >0 let
+Mδ,u :=q
+ 
+t(u)S cδ  ={q(t(u)y) :y∈ S cδ }
+whereS δ is the set of points at a distance of at mostδfromS. Thus,M δ,u collects scenarios
+whose tail-standardized coordinates lie outside theδ-neighborhood of the dominant setS.
+GENERATING PLAUSIBLE STRESS SCENARIOS 7
+Proposition 3.1(Stress scenarios via large deviations).Let Assumptions 1-2 hold. Then
+for anyδ >0,
+lim sup
+u→∞
+[t(u)]−1 logP(ξ∈ Mδ,u |L(ξ)> u)<0.
+Proposition 3.1 provides the large-deviations justification for plausibility. Sinceξ∈ M δ,u is
+equivalent toY u := [t(u)] −1Λ(ξ)/∈ Sδ, the proposition implies that, conditional on the stress
+event{L(ξ)> u}, the tail-standardized vectorY u concentrates near the dominant setS. In
+particular, for any fixedδ >0,P(Y u /∈ Sδ |L(ξ)> u) is exponentially small at speedt(u). This
+motivates the interpretation that a scenariozis plausible at leveluwhen its standardized tail
+coordinates [t(u)] −1Λ(z) lie nearS. Scenarios away from this set carry negligible mass in the
+conditional stress regime.
+Definition 3(Asymptotically representative stress distribution).A random vector ˜ξ
+is anasymptotically representative stress distributionforL(·)ifP(L( ˜ξ)> u)>0for all
+sufficiently largeuand, for everyδ >0,
+lim sup
+u→∞
+[t(u)]−1 logP  ˜ξ∈ Mδ,u  L( ˜ξ)> u <0.
+Definition 3 requires that, under stress, ˜ξreproduce the same tail geometry as the baseline
+model after marginal standardization. BecauseM δ,u is constructed from the baseline trans-
+formsΛandq, the criterion compares stress distributions using the baseline tail scaling and
+the baseline large-deviations geometry. Both features are essential: even a distribution with
+correctly specified marginals will fail to be representative if its exceedances are routed through
+the wrong large-deviations configurations.
+3.2.A Self-Structuring T ransform for Representative Stress Generation.We now
+construct a transformed distribution designed to meet this benchmark while making target
+exceedances more frequent. Fors >1, define the self-structuring mapT s :R d+ →R d+ compo-
+nentwise by
+Ts,j(z) :=z j sκj (z), κ j(z) := log(1 +z j)max1≤i≤d log(1 +z i) , j= 1, . . . , d.(6)
+Self-structuring maps were introduced in Deo and Murthy (2025) for loss-agnostic importance
+sampling, where they define a proposal law for estimatingP(L(ξ)> u). Here, we use the
+same tail-extrapolation mechanism for a different purpose: transforming observed samples into
+an empirical distribution of representative scenarios for the conditional stress regime. The
+normalization inκ j(z) captures relative tail weights, allowingT s to make stress scenarios more
+frequent in the transformed sample while preserving the large-deviations geometry of the most
+likely stress configurations. To analyze this effect, define
+Yu := [t(u)]−1Λ(ξ),Y s,u := [t(u)]−1Λ Ts(q(t(u)Yu)).
+Proposition 3.2.LetY s,u be defined as above. ThenY s,u ∈LDP(t, φ⋆s), where
+φ⋆s(z) =s −α⋆φ⋆(z).
+8Anand Deo
+Proposition 3.2 shows that the self-structuring transform preserves the baseline tail structure
+up to a positive scalar rescaling of the rate function. Becauseφ ⋆s is a positive multiple ofφ ⋆,
+the minimizer set remains unchanged. Thus, the transformed distribution ˜ξs :=T s(ξ) preserves
+the same most-likely stress configurations as the baseline model while making tail exceedances
+occur more frequently.
+Theorem 3.1.Let Assumptions 1-2 hold. Then for anyδ >0,
+lim sup
+u→∞
+[t(u)]−1 logP  ˜ξs ∈ Mδ,u  L( ˜ξs)> u <0,
+and consequently ˜ξs is an asymptotically representative stress distribution in the sense of Defi-
+nition 3.
+Theorem 3.1 gives the main justification for self-structuring stress generation: the trans-
+formed law makes exceedances less rare without changing the most-likely stress configurations.
+3.3.An Empirical Plug-In Generator.Given data{ξ 1, . . . ,ξn}, Algorithm 1 approximates
+the benchmark conditional stress distribution Law(ξ|L(ξ)> u) from Section 2. Theorem 3.1
+provides the large-deviations justification: the transformed law eξs =T s(ξ) preserves the most-
+likely configurations while making threshold exceedances more frequent.
+Algorithm 1:Self-Structuring Stress Scenario Generator
+Input:Data samplesξ 1, . . . ,ξn ∈R d+, loss functionL(·), target stress thresholdu,
+stretch parameters >1
+I) T ransformation Step:Fori= 1, . . . , n, set˜ξi =T s(ξi).
+II) Construct Stress Samples:Compute the transformed exceedance index set
+Iu,s :=
+n
+i∈[n] :L( ˜ξi)> u
+o
+, and form the transformed exceedance pool
+Gu,s :=
+n
+˜ξi :i∈ Iu,s
+o
+.
+III) Output Stress Distribution:Construct the empirical stress distribution
+ˆP stressu,s :=|I u,s|−1 X
+i∈Iu,s
+δ ˜ξi,
+Output:Stress scenariosG u,s and empirical stress law ˆP stressu,s .
+The algorithm implements this idea by applyingT s to the baseline samples, retaining trans-
+formed exceedances, and forming their empirical distribution. Thus, its output is a finite-sample
+proxy, not an exact conditional sampler. Apart from evaluatingL, the procedure requires only
+one componentwise transformation and one exceedance check per input sample, making it com-
+putationally light.
+Numerical Illustration 1.We illustrate Algorithm 1 on a reinsurance network withd= 2
+objects andq= 3 agents. Figure 1a shows that a Gaussian copula, even with matched marginals
+and covariance, misses the true tail dependence structure. A naive empirical sampler is omitted
+because realistic baseline samples typically yield no exceedances at these quantiles. Figure 1b
+shows that the empirical stress law ˆP stressu,s from Algorithm 1 more closely matches the true
+stressed distribution.
+GENERATING PLAUSIBLE STRESS SCENARIOS 9
+3 4 5 6 7 8
+1
+3
+4
+5
+6
+7
+82
+True
+Gaussian Copula
+(a)Gaussian copula generator
+2 3 4 5 6 7 8 9 10
+1
+0
+2
+4
+6
+8
+10
+122
+True
+Self-structuring (b)Samples from Algorithm 1
+Figure 1.Conditional distribution of risk factors given that the loss exceeds
+a high threshold. Algorithm 1 produces samples that more closely match the
+true stressed distribution than the Gaussian-copula benchmark, while remaining
+implementable at stress levels where a naive empirical exceedance resampler
+would produce no samples.
+Sample Complexity Reduction using Self-Structuring T ransformations:A repre-
+sentative stress distribution is useful only if it can be learned from finite data. For practically
+relevant thresholdsu, however, the exceedance probabilityp u :=P(L(ξ)> u) is very small.
+Naive sampling from the baseline model yields onlynp u exceedances on average. Thus, observ-
+ing even a modest number of stress scenarios requires a sample size of orderp −1u . The next
+proposition shows that the self-structuring transformT s mitigates this difficulty by making
+exceedances occur at a strictly larger rate on the logarithmic scale.
+Proposition 3.3.Let ˜ξs =T s(ξ)and letξsatisfy Assumptions 1–2. Then
+logP(L(ξ)> u)
+logP(L( ˜ξs)> u) − →sα⋆, u→ ∞.
+Proposition 3.3 implies thatP
+ 
+L( ˜ξs)> u  ≈P  L(ξ)> u s−α⋆ =p s−α⋆u , so exceedances
+are exponentially less rare under ˜ξs than under the baseline model. Consequently, the sample
+size required to observe a fixed expected number of exceedances is reduced from orderp −1u
+to orderp −s−α⋆u . Equivalently, fromnbaseline samples, the expected number of transformed
+exceedances at leveluis of ordern p s−α⋆u .Thus one can still expect to observe a nondegenerate
+number of transformed exceedances whenevern ps−α⋆u ≍1, that is, for target events with baseline
+probabilityp u ≍n −sα⋆ .In particular, writingγ(s) :=s α⋆ >1, one can expect to generate a
+nondegenerate number of representative transformed exceedances fromnbaseline samples for
+target events with probabilities of ordern −γ(s), including regimes in which the raw dataset
+contains few or no direct exceedances. The sensitivity of the procedure to the choice ofsis
+briefly examined in Section 4.
+4.NUMERICAL EXPERIMENTS
+We evaluate the proposed stress generator along two dimensions:representativeness, namely
+recovery of the baseline conditional stress law, anddata efficiency, namely the ability to generate
+informative stress scenarios when target-level exceedances are rare or absent. The baseline risk
+factorsξare generated from at-copula with Weibull marginals with cdfF i(x) = 1−exp(−x αi),
+10Anand Deo
+so as to capture both extremal-tailed dependence and flexible marginal tail decay. For each
+thresholdu, we construct a high-fidelity reference sample fromP u :=L(ξ|L(ξ)> u) using a
+Monte Carlo sample of size 10 6 from the baseline model.
+4.1.Experiment 1: Efficient Learning Beyond Observed Data.We first test whether
+the proposed generator can recover the stressed conditional law from finite baseline data, espe-
+cially in regimes where direct exceedances are sparse or unavailable. Letube a high quantile
+of the baseline lossL(ξ), and consider the two thresholdsu=q 0.99 andu=q 0.999. For each
+input sample sizen∈ {250,500,750,1000}, we generate an independent baseline sample of
+sizenand construct three stress generators: (i) the proposed extrapolation-based generator,
+(ii) a Gaussian-copula generator with correctly specified marginals, and (iii) a naive empirical
+baseline that resamples observed exceedances when available. Each generator is then used to
+generate a stress sample targeted at the same thresholdu. Performance is measured by the
+Wasserstein-1 distance between the generated and reference exceedance samples, normalized by
+u. Repeating the experiment overK= 1000 independent samples yields, for eachn, a median
+normalized Wasserstein error together with pointwise 95% empirical bands.
+We begin with the reinsurance-network loss from Example 1 in a system withd= 10 risky
+objects andq= 30 agents. Figure 2 reports the resulting normalized Wasserstein errors. At
+the more extreme thresholdu=q 0.999, the Gaussian-copula benchmark fails completely: even
+after generating 10 5 samples, it produces no exceedances above the target level. By contrast,
+the extrapolation-based generator continues to recover the stressed law accurately from finite
+training data. For the same threshold, we also examine sensitivity to the stretch parameter
+sby fixingn= 1000, varyingsover the indicated range, and again reporting the median
+normalized Wasserstein error together with pointwise 95% empirical bands. We choosesusing
+the following heuristic: for a candidate value ofs, letN s(u) := Pni=1 1{L(T s(ξi))> u}denote
+the number of transformed exceedances at levelu. In each experiment, we select the smallest
+sfor whichN s(u) is roughly 50. SinceN s(u) is monotone insunder monotone losses, the
+rule can be implemented by a simple grid search overs. This choice is fixed before evaluating
+the reported error. Figure 2c nevertheless shows that it lies close to the interior minimizer,
+suggesting robustness to moderate misspecification ofs.
+(a)q= 0.99,s= 1.61
+ (b)q= 0.999,s= 2.36
+ (c)q= 0.999, varyings
+Figure 2.Normalized Wasserstein-1 error for the reinsurance-network loss at
+u=q 0.99 (left) andu=q 0.999 (middle), and sensitivity to the stretch parameter
+satu=q 0.999 withn= 1000 (right). Here the marginals are Weibull with
+αi = 1.2
+GENERATING PLAUSIBLE STRESS SCENARIOS 11
+We next examine the proposed method for the clearing network from Example 2 in a sys-
+tem withm= 30 banks andd= 20 exogenous risk factors. We consider three stylized net-
+work topologies: hub-and-spoke, core-periphery, and fully connected. The topology is specified
+through the support of the relative liability weightsλ ji. In the fully connected case,λ ji >0 for
+alli̸=j. In the hub-and-spoke case, one hub bank is connected to every other bank, and no
+peripheral banks are linked among themselves. In the core-periphery case, banks are partitioned
+into a core and a periphery, with dense links within the core, no links within the periphery,
+and links between the core and the periphery. This stylized specification is standard in the
+interbank tiering literature; see Craig and Von Peter (2014).
+Figure 3 reports the corresponding normalized Wasserstein errors for the three topologies
+atu=q 0.99. Across all three network structures, the extrapolation-based generator more
+accurately reproduces the reference stress law than either the Gaussian-copula benchmark or
+the naive empirical baseline. The former misses the relevant tail dependence, whereas the latter
+is limited by the small number of observed exceedances. Taken together with Figure 2c, these
+results show that the proposed generator remains accurate across materially different stress
+models and is relatively insensitive to the choice of stretch parameters.
+(a)Core–periphery
+ (b)Hub-and-spoke
+ (c)Fully connected
+Figure 3.Normalized Wasserstein-1 error for three stylized topologies, all at
+u=q 0.99. Box plots summarize median and 95% empirical bands acrossK=
+1000 independent replications for the three generators: self-structuring, Gaussian
+copula, and naive empirical resampler. Here the marginals are Weibull with
+αi = 0.9.
+4.2.Experiment 2: Stress Diagnostics Under the Conditional Law.We next test
+whether the proposed extrapolation reproduces the internal structure of stress under the con-
+ditional lawP u = Law(ξ|L(ξ)> u), beyond the stressed loss law itself. In both Exam-
+ple 1 and Example 2, the aggregate loss admits a natural institution-level decomposition,
+L(ξ) = Pninsti=1 Li(ξ), whereL i(ξ) denotes the contribution of institutionito total loss and
+ninst is the number of participating institutions. To distinguish breadth from concentration of
+distress, we consider the diagnostics
+Gfrac(ξ) := 1ninst
+ninstX
+i=1
+1{Li(ξ)>0}, G HHI(ξ) :=
+ninstX
+i=1
+ Li(ξ)
+L(ξ)
+2
+, G loss(ξ) :=L(ξ).
+12Anand Deo
+HereG frac(ξ) records the fraction of distressed institutions, whileG HHI(ξ) measures the con-
+centration of aggregate loss, ranging fromn −1inst under uniform loss sharing to 1 when a sin-
+gle institution accounts for the entire loss. For the breadth and loss diagnostics,G frac and
+Gloss, we compare the conditional stressed distributions through their complementary CDFs,
+¯F Gu (t) :=P(G(ξ)> t|L(ξ)> u). For each training sample sizen, we generateK= 1000
+independent training samples, construct the corresponding stress generator, and estimate the
+conditional CCDF from the resulting stress sample. We then compare these conditional tail
+CDFs with the reference conditional CCDF and plot the corresponding pointwise 95% empirical
+interval as a function oft. For the concentration diagnosticG HHI, we instead summarize each
+generated stress sample by its conditional mean,
+µHHIu :=E[G HHI(ξ)|L(ξ)> u],
+and examine its distribution across simulation replications. This directly tests whether the
+generator reproduces the average degree of loss concentration in stressed scenarios.
+Since both competing methods produce no exceedances at the levelu=q 0.999, this ex-
+periment isolates whether the self-structuring generator preserves these stress diagnostics in a
+regime where the alternatives cannot generate stress samples at all. Across training sizes, the
+estimated conditional CCDFs forG frac andG loss remain close to their reference curves, with
+the corresponding bands narrowing asnincreases. Likewise, the distribution of the estimated
+conditional mean ofG HHI contracts toward the reference value asngrows. Taken together,
+these results show that the proposed generator recovers not only the stressed loss law, but also
+the breadth, concentration, and severity structure of distress, even at a stress level where the
+competing methods generate no stress scenarios.
+(a)Conditional mean ofG HHI
+ (b)Conditional CCDF ofG frac
+ (c)Conditional CCDF ofG loss
+Figure 4.Diagnostic recovery for the reinsurance network atu=q 0.999. Left:
+distribution of the estimated conditional mean ofG HHI across replications, with
+the reference value marked. Middle and right: pointwise 95% empirical bands
+for the conditional CCDFs ofG frac andG loss, with the reference CCDF overlaid.
+The value ofsis chosen so that the self-structuring stress generator produces
+approximately 50 samples exceedingu.
+5.PROOFS
+In the following proofs, letLu(z) =u −1L(q(t(u)z)). Further, let ˜Ts,u(z) = [t(u)]−1Λ(Ts(q(t(u)z))).
+GENERATING PLAUSIBLE STRESS SCENARIOS 13
+(a)Conditional mean ofG HHI
+ (b)Conditional CCDF ofG frac
+ (c)Conditional CCDF ofG loss
+Figure 5.Diagnostic recovery for the fully connected clearing network at
+u=q 0.999. Left: distribution of the estimated conditional mean ofG HHI across
+replications, with the reference value marked. Middle and right: pointwise 95%
+empirical bands for the conditional CCDFs ofG frac andG loss, with the reference
+CCDF overlaid.
+Proof of Lemma 2.2: Letz t →z. Since ¯pj(x) = (a⊺j x−r j)+, we have
+t−1 ¯pj(tzt) =  a⊺j zt −t −1rj+ − →(a⊺j z)+ =a ⊺j z=: ¯p⋆j (z),
+where the last equality usesa j ≥0andz≥0. Define
+¯p(t)j (zt) :=t −1 ¯pj(tzt), p (t)(zt) :=t −1p(tzt), x (t)j (zt) :=t −1xj(tzt).
+Dividing the clearing fixed point bytgives, for eachj= 1, . . . , m,
+p(t)j (zt) = minn¯p(t)j (zt), x(t)j (zt) + mX
+k=1
+λkj p(t)k (zt)o = [Φt(p(t)(zt);z t)]j,
+where the map Φ t(·;z t) is defined componentwise by
+[Φt(p;z t)]j := min
+n
+¯p(t)j (zt), x(t)j (zt) +
+mX
+k=1
+λkj pk
+o
+.
+By hypothesis,x (t)j (zt)→x ⋆j (z), and from the preceding calculation, ¯p (t)j (zt)→¯p ⋆j (z). Hence
+Φt(·;z t) converges uniformly on bounded sets to the limiting map Φ ⋆(·;z), defined by
+[Φ⋆(p;z)] j := minn¯p⋆j (z), x⋆j (z) + mX
+k=1
+λkj pk
+o
+.
+Since0≤p (t)(zt)≤¯p (t)(zt), and ¯p(t)(zt)→¯p ⋆(z), the sequence{p (t)(zt)}t≥1 is eventually
+bounded. Letp (tm)(ztm) be any convergent subsequence, and writep (tm)(ztm)→¯p. Then
+¯p−Φ⋆(¯p;z) ≤ ¯p−p(tm)(ztm)+p(tm)(ztm)−Φ⋆(p(tm)(ztm);z) +Φ⋆(p(tm)(ztm);z)−Φ ⋆(¯p;z).
+The first term converges to zero by the definition of the subsequence. The third term converges
+to zero because Φ ⋆(·;z) is continuous. For the second term, use the fixed point identity
+p(tm)(ztm) = Φtm(p(tm)(ztm);z tm).
+14Anand Deo
+Since the subsequence remains in a bounded set and Φ t(·;z t)→Φ ⋆(·;z) uniformly on bounded
+sets, we obtain p(tm)(ztm)−Φ ⋆(p(tm)(ztm);z)  − →0.
+Therefore ¯p= Φ⋆(¯p;z). Thus ¯pis a fixed point of the limiting clearing system. By the assumed
+uniqueness of the limiting clearing vector, ¯p=p ⋆(z). Since every convergent subsequence of
+{p(t)(zt)}t≥1 has the same limitp ⋆(z), the full sequence converges:
+t−1p(tzt) =p (t)(zt)− →p⋆(z).
+Finally, the aggregate unpaid-obligation loss satisfies
+L(tzt) =
+mX
+j=1
+(¯pj(tzt)−p j(tzt)).
+Hence
+t−1L(tzt) =
+mX
+j=1
+
+¯p(t)j (zt)−p (t)j (zt) → mX
+j=1
+ 
+¯p⋆j (z)−p ⋆j (z) =L ⋆(z).
+ThereforeL(·) satisfies Assumption 2 with
+L⋆(z) =
+mX
+j=1
+ 
+¯p⋆j (z)−p ⋆j (z) .
+This proves the lemma.□
+Proof of Proposition 3.1:Let
+Yu := [t(u)]−1Λ(ξ), L u(z) :=u −1L(q(t(u)z)).
+Then{L(ξ)> u}={L u(Yu)>1}. Moreover, by the definitionM δ,u =q(t(u)S cδ ), the event
+{ξ∈ Mδ,u}is represented on the standardized scale as{Y u ∈ Scδ }. Hence
+P(ξ∈ Mδ,u |L(ξ)> u) = P(Yu ∈ Scδ , Lu(Yu)>1)P(Lu(Yu)>1) .
+By Deo and Murthy (2025), Theorem 2,
+lim
+u→∞
+[t(u)]−1 logP(L u(Yu)>1) =−κ ⋆,
+where
+κ⋆ = inf
+z∈Γ
+φ⋆(z),Γ ={z:L ⋆(q⋆z1/α)≥1}.
+For the numerator, define the closed set
+Fδ :={z:d(z,S)≥δ}.
+SinceS cδ ⊆F δ, we have
+P(Yu ∈ Scδ , Lu(Yu)>1)≤P(Y u ∈F δ, Lu(Yu)>1).
+The large deviations upper bound gives
+lim sup
+u→∞
+[t(u)]−1 logP(Y u ∈ Scδ , Lu(Yu)>1)≤ −infz∈Fδ∩Γ φ⋆(z).
+GENERATING PLAUSIBLE STRESS SCENARIOS 15
+We next show that the constrained infimum is strictly larger thanκ ⋆. Suppose, to the contrary,
+that
+inf
+z∈Fδ∩Γ
+φ⋆(z) =κ ⋆.
+Then there exists a sequencez n ∈F δ ∩Γ such thatφ ⋆(zn)↓κ ⋆. Sinceφ ⋆ is a good rate function,
+the sequence eventually lies in a compact sublevel set. Passing to a subsequence if necessary,
+letz n → ¯z. The setsF δ and Γ are closed, so ¯z∈F δ ∩Γ. By lower semicontinuity ofφ ⋆,
+φ⋆( ¯z)≤κ ⋆.
+Since ¯z∈Γ andκ ⋆ is the minimum ofφ ⋆ over Γ, equality holds. Hence ¯z∈ S. But ¯z∈F δ
+impliesd( ¯z,S)≥δ, a contradiction. Therefore
+ηδ := infz∈Fδ∩Γ φ⋆(z)−κ ⋆ >0.
+Combining the numerator and denominator estimates gives
+lim sup
+u→∞
+[t(u)]−1 logP(ξ∈ Mδ,u |L(ξ)> u)≤ −infz∈Fδ∩Γ φ⋆(z) +κ ⋆
+=−η δ <0.
+This proves the proposition.□
+Proof of Proposition 3.2:Note that from Deo and Murthy (2025), Theorem 1,Y u ∈
+LDP(t, φ⋆), and thatY s,u = ˜Ts,u(Yu). To complete the proof, we show that ˜Ts,u →f s uni-
+formly on the sets{z:φ ⋆(z)≤γ}for everyγ >0, wheref s(z) =s α⋆z. Sinceφ ⋆ is a good rate
+function, these sets are compact, so it is enough to establish uniform convergence on compact
+sets. The approximate contraction principle (see Dembo and Zeitouni (2009), Theorem 4.2.23)
+then yields
+Ys,u = ˜Ts,u(Yu)∈LDP(t, φ ⋆s),
+whereφ ⋆s(z) = inf{φ ⋆(y) :f s(y) =z}. Sincef s(y) =s α⋆y,φ ⋆s(z) =φ ⋆(zs−α⋆) =s −α⋆φ⋆(z),
+where the last equality follows from the homogeneity ofφ ⋆ (see Deo and Murthy (2025), Lemma
+2(b)). The rest of the proof shows uniform convergence.
+From Deo and Murthy (2025), Corollary 1, [q(t(u))] −1Ts(q(t(u)z))→(s α⋆z)1/α uniformly
+over compact sets. As a consequence,T s(q(t(u)z)) =q(t(u))(s α⋆z)1/α(1 +r u(z)) where
+supz∈K ∥ru(z)∥ →0 asu→ ∞for any compact setK. In particular (s α⋆z)1/α(1 +r u(z))
+stays within a compact set, call itCfor allularge enough wheneverz∈K. Since Λ i ∈RV(α i)
+and is increasing, De Haan and Ferreira (2007), Proposition B.1.9 applied coordinate wise
+implies thatΛ
+ 
+q(t(u)) (sα⋆z)1/α(1 +r u(z)) ∼t(u)s α⋆z, uniformly overC(sinceΛ ← =q).
+Therefore, we have ˜Ts,u(z)→s α⋆zuniformly over compact which concludes the proof.□
+Proof of Theorem 3.1:Recall that from Proposition 3.2,Y s,u ∈LDP(t, φ⋆s). Next, observe
+that
+{L( ˜ξs)> u}={L(T s(q(t(u)Yu)))> u}={L(q(Λ(T s(q(t(u)Yu)))))> u}={L u(Ys,u)>1}.
+16Anand Deo
+The third equality follows sinceY s,u = ˜Ts,u(Yu) where ˜Ts,u(z) = [t(u)] −1Λ(Ts(q(t(u)z))).
+Therefore,
+P
+
+˜ξs ∈ Mδ,u |L( ˜ξs)> u
+
+=P(Y s,u ∈ Scδ |L u(Ys,u)>1).
+Following the proof of Proposition 3.1 now yields
+lim sup
+u→∞
+[t(u)]−1 logP  ˜ξs ∈ Mδ,u  L( ˜ξs)> u ≤ − κ⋆s +c s(δ) +κ ⋆s =−c s(δ)
+whereκ ⋆s = min{φ ⋆s(z) :z∈Γ}. Withφ ⋆s(z) =s −α⋆φ⋆(z),κ ⋆s =s −α⋆κ⋆. In particular
+cs(δ)>0. □
+Proof of Proposition 3.3:Note that from Proposition 3.2,Y s,u ∈LDP(t, φ⋆s) and that
+{L( ˜ξs)> u}={L u(Ys,u)>1}. Applying the proof of Deo and Murthy (2025), Theorem 2,
+withφ ⋆s instead ofφ ⋆ yields
+lim
+u→∞
+[t(u)]−1 logP L( ˜ξs)> u =−inf{s −α⋆φ⋆(z) :L ⋆(q⋆z1/α)≥1}=−s −α⋆κ⋆.
+Combining the above asymptotic with the tail probability bound from earlier on,
+log(P(L(ξ)> u))
+log(P(L( ˜ξs)> u) →s α⋆ □
+References
+Viral Acharya, Robert Engle, and Diane Pierret. Testing macroprudential stress tests: The risk
+of regulatory risk weights.Journal of Monetary Economics, 65:36–53, 2014.
+Hamed Amini, Rama Cont, and Andreea Minca. Stress testing the resilience of financial net-
+works.International Journal of Theoretical and Applied Finance, 15(01):1250006, 2012.
+Jeremy Berkowitz. A coherent framework for stress-testing. Technical report, Board of Gover-
+nors of the Federal Reserve System (US), 1999.
+Thomas Breuer, Martin Jandacka, Klaus Rheinberger, and Martin Summerb. How to find
+plausible, severe, and useful stress scenarios.International Journal of Central Banking, 2009.
+Thomas Breuer, Martin Jandaˇ cka, Javier Menc ´ ıa, and Martin Summer. A systematic approach
+to multi-period stress testing of portfolio credit risk.Journal of Banking & Finance, 36(2):
+332–340, 2012.
+Ben Craig and Goetz Von Peter. Interbank tiering and money center banks.Journal of Financial
+Intermediation, 23(3):322–347, 2014.
+Laurens De Haan and Ana Ferreira.Extreme value theory: an introduction. Springer Science
+& Business Media, 2007.
+Cees De Valk. Approximation and estimation of very small probabilities of multivariate extreme
+events.Extremes, 19(4):687–717, 2016.
+Amir Dembo and Ofer Zeitouni.Large deviations techniques and applications, volume 38.
+Springer Science & Business Media, 2009.
+Anand Deo and Karthyek Murthy. Achieving efficiency in black-box simulation of distribution
+tails with self-structuring importance samplers.Operations Research, 73(1):325–343, 2025.
+Larry Eisenberg and Thomas H Noe. Systemic risk in financial systems.Management Science,
+47(2):236–249, 2001.
+GENERATING PLAUSIBLE STRESS SCENARIOS 17
+Paul Glasserman, Chulmin Kang, and Wanmo Kang. Stress scenario selection by empirical
+likelihood.Quantitative Finance, 15(1):25–41, 2015.
+Oliver Kley, Claudia Kl¨ uppelberg, and Gesine Reinert. Risk in a large claims insurance market
+with bipartite graph structure.Operations Research, 64(5):1159–1176, 2016.
+Yaacov Kopeliovich, Arcady Novosyolov, Daniel Satchkov, and Barry Schachter. Robust risk
+estimation and hedging: A reverse stress testing approach.The Journal of Derivatives, 22
+(4):10–25, 2015.
+Paul Kupiec. Stress testing in a value at risk framework.Risk management: value at risk and
+beyond, 10:76–99, 2002.
+Alexander J McNeil and Andrew D Smith. Multivariate stress scenarios and solvency.Insurance:
+Mathematics and Economics, 50(3):299–308, 2012.
+Pietro Millossovich, Andreas Tsanakas, and Ruodu Wang. A theory of multivariate stress
+testing.European Journal of Operational Research, 318(3):851–866, 2024.
+JP Morgan et al. Creditmetrics-technical document.JP Morgan, New York, 1:102–127, 1997.
+Silvana M Pesenti, Pietro Millossovich, and Andreas Tsanakas. Reverse sensitivity testing:
+What does it take to break the model?European Journal of Operational Research, 274(2):
+654–670, 2019.
+Til Schuermann. Stress testing banks.International Journal of Forecasting, 30(3):717–728,
+2014.
+Indian Institute of Management, Bannerghatta Road, Bangalore 560076
+Email address:anand.deo@iimb.ac.in

@@ -1,0 +1,3486 @@
+arXiv 2609.07989  https://arxiv.org/abs/2609.07989
+
+Research Project (PRe) — Internship Report
+ENSTA — Institut Polytechnique de Paris
+Regimes in the Order Flow
+Duration-Aware and Multivariate Bayesian Online
+Changepoint Detection for High-Frequency Markets
+Field of study:Applied Mathematics — Quantitative Finance
+Ramzi Jebali
+Master of Engineering, ENSTA, Class of 2027
+Host institution
+Scuola Normale Superiore —Quantitative Financeresearch group
+Piazza dei Cavalieri, 7 — 56126 Pisa, Italy
+Head of the research groupProf. FabrizioLillo
+SupervisorDr Ioanna-YvonniTsaknaki
+Academic tutorProf. FrancescoRusso
+Internship carried out from May 18th to July 31st, 2026
+arXiv:2609.07989v1  [q-fin.TR]  7 Sep 2026
+Acknowledgements
+I would like to express my gratitude to all those who made this Research Project possible
+and who accompanied it throughout.
+First, I am sincerely grateful toProfessor Francesco Russo, academic tutor of this
+internship, without whom this experience would simply not have taken place. His availability,
+the clarity of his advice and his unfailing kindness deserve far more than the few lines I can
+devote to him here.
+My thanks then go toProfessor Fabrizio Lillo, professor at the Scuola Normale Su-
+periore and head of theQuantitative Financeresearch group, for welcoming me into his team,
+for the confidence he placed in me by entrusting me with an open-ended subject, and for the
+remarks that, on several occasions, redirected my work towards the right questions.
+Finally, and most particularly, I thankDr Ioanna-Yvonni Tsaknaki, researcher at the
+Scuola Normale Superiore and supervisor of this internship, for her guidance, her patience with
+my questions, the rigour she demanded at every stage, her incredible kindness. Her own work
+on online changepoint detection is the starting point of this report.
+I also thank the PhD students and post-doctoral researchers of the group, whose seminars
+and informal discussions considerably broadened my view of the field, as well as the academic
+staff of ENSTA for organising the PRe.
+The high-frequency data used in this report were obtained from LOBSTER (https:
+//php.lobsterdata.com/index.php), a specialised limit-order-book data platform to which
+the Scuola Normale Superiore subscribes; access is restricted to subscribing institutions and
+the data are not publicly available. I thank the Scuola Normale Superiore for making them
+available for this project.
+Abstract
+Financial markets alternate between periods of relative stability and instability, with
+structural breaks marking the transitions between these regimes. Identifying such breaks in
+real time is a central requirement for any trading or risk system operating at high frequency.
+This report studies Bayesian Online Changepoint Detection (BOCPD) and two extensions pro-
+posed in the literature, and applies them to the signed order flow of NASDAQ-listed equities.
+We first re-derive and implement the baseline algorithm of Adams and MacKay (2007), whose
+conjugate exponential-family structure yields a closed-form predictive likelihood, and we as-
+sess it along three complementary criteria: a segmentation criterion (the covering metric), a
+point-forecast criterion (the mean squared error) and a fully probabilistic criterion (the cu-
+mulative predictive log-likelihood). We then replace the constant hazard rate of BOCPD —
+and the geometric regime durations it implies — by a run-length-dependent hazard derived
+from an explicit duration law within a hidden semi-Markov model, following the formulation of
+Agudelo-España et al. (2020). Calibrating Pareto and log-normal duration laws on NASDAQ
+order flow, we find that the duration-aware filter outperforms the constant-hazard baseline,
+the log-normal specification dominating both the geometric and the Pareto alternatives con-
+sistently across assets, months and calibration criteria; this is in agreement with the absence
+of a characteristic timescale in order flow. We finally implement the multivariate BOCPDMS
+framework of Knoblauch and Damoulas (2018), which combines a model universe with Bayesian
+vector autoregressions and online hyperparameter learning, and verify that its conjugacy ex-
+tends to any known symmetric positive-definite noise matrix. Here the outcome is negative:
+on bivariate order flow the multivariate filter is outperformed by two independent univariate
+filters, whatever the noise specification. We trace this to the interaction between short regimes
+and heavy-tailed innovations, which turns the adaptivity of the model into a liability rather
+than an asset.
+Keywords:Bayesian online changepoint detection; hidden semi-Markov model; hazard rate;
+market microstructure; order flow; Bayesian VAR; model selection; high-frequency data.
+Contents Research internship report
+Contents
+1 Introduction 5
+2 Background: Bayesian online changepoint detection 6
+2.1 Foundations of Bayesian Inference and the Exponential Family . . . . . . . . . . 6
+2.2 Bayesian Inference in the Univariate Gaussian Case . . . . . . . . . . . . . . . . 7
+2.3 Bayesian Online Changepoint Detection . . . . . . . . . . . . . . . . . . . . . . 8
+3 Implementation of the BOCPD algorithm 9
+3.1 Generation of simulated data . . . . . . . . . . . . . . . . . . . . . . . . . . . . 9
+3.2 Model Initialization . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 10
+3.3 The Run Length Posterior . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 10
+3.4 The impact of the hazard rate . . . . . . . . . . . . . . . . . . . . . . . . . . . . 10
+4 Performance Evaluation Metrics 11
+4.1 Covering Metric . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 11
+4.2 Mean Squared Error . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 12
+5 From Constant to Time-Varying Hazard Rate 12
+5.1 The fundamental limitation of a constant hazard rate . . . . . . . . . . . . . . . 12
+5.2 The structural flaw: the geometric constraint . . . . . . . . . . . . . . . . . . . . 13
+5.3 From HMM to HSMM . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 13
+5.4 The HSMM-consistent data generation process . . . . . . . . . . . . . . . . . . . 14
+5.5 From 3D Inference to 2D . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 15
+5.6 TheK= 1Reduction: our implementation . . . . . . . . . . . . . . . . . . . . . 15
+5.7 Deriving the Time-Varying Hazard Rate . . . . . . . . . . . . . . . . . . . . . . 16
+5.8 Benchmarking . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16
+6 Market microstructure and memory of order flow 17
+6.1 Structure of order flow . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 18
+6.2 Long-range correlation in order flow . . . . . . . . . . . . . . . . . . . . . . . . . 18
+7 Application to real market data 19
+7.1 Calibration results . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 19
+7.2 Out-of-Sample Comparison . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 20
+8 From BOCPD to BOCPDMS: Model Selection 21
+8.1 The problem with a single model . . . . . . . . . . . . . . . . . . . . . . . . . . 21
+8.2 The new latent variable: the model index . . . . . . . . . . . . . . . . . . . . . . 21
+8.3 The model prior . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 21
+8.4 The central recursive equation . . . . . . . . . . . . . . . . . . . . . . . . . . . . 22
+8.5 The posteriors: what the algorithm gives us . . . . . . . . . . . . . . . . . . . . 23
+8.6 Prediction: Bayesian Model Averaging . . . . . . . . . . . . . . . . . . . . . . . 23
+2
+Contents Research internship report
+9 Bayesian parameter learning inside BOCPDMS 24
+9.1 Our multivariate model: the Bayesian VAR . . . . . . . . . . . . . . . . . . . . . 24
+9.2 Why conjugacy matters (again) . . . . . . . . . . . . . . . . . . . . . . . . . . . 25
+9.3 The Bayesian update for BVAR parameters . . . . . . . . . . . . . . . . . . . . 25
+9.4 The UPM with Bayesian parameter learning . . . . . . . . . . . . . . . . . . . . 26
+10 Learning the hyperparameters online 27
+10.1 Hyperparameter optimization . . . . . . . . . . . . . . . . . . . . . . . . . . . . 27
+10.2 The idea: online gradient ascent on the hyperparameters . . . . . . . . . . . . . 27
+10.3 Which hyperparameters do we actually learn? . . . . . . . . . . . . . . . . . . . 28
+10.4 The core computation: differentiating the Student-t . . . . . . . . . . . . . . . . 29
+10.5 Can the noise matrix be non-diagonal? . . . . . . . . . . . . . . . . . . . . . . . 30
+11 Experiments on synthetic data 31
+11.1 One change in the AR matrix (diagonal matrices) . . . . . . . . . . . . . . . . . 31
+11.2 One change in the AR matrix (cross-dependencies) . . . . . . . . . . . . . . . . 33
+11.3 One change in the variance of the noise . . . . . . . . . . . . . . . . . . . . . . . 33
+11.4 One change in the mean of the noise . . . . . . . . . . . . . . . . . . . . . . . . 34
+11.5 Multiple changepoints in the AR matrix . . . . . . . . . . . . . . . . . . . . . . 34
+11.6 Multiple changepoints in the variance of the noise . . . . . . . . . . . . . . . . . 35
+11.7 Multiple changepoints in the mean of the noise . . . . . . . . . . . . . . . . . . . 35
+12 Experiments on real data 36
+12.1 The frequentist baseline: an expanding-window VAR(q) . . . . . . . . . . . . . . 36
+12.2 Evaluation metrics . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 36
+12.3 A scale problem . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 37
+12.4 Parameter choices . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 38
+12.5 Results . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 38
+12.6 Implementation notes . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 40
+13 Conclusion 41
+A Proofs of the results of Section 2 44
+A.1 Gaussian conjugate update: unknown meanµ, known varianceσ2 . . . . . . . . 44
+A.2 Gaussian Predictive Posterior . . . . . . . . . . . . . . . . . . . . . . . . . . . . 45
+A.3 Recursive Message Passing . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 45
+A.4 Closed-form UPM for the Gaussian case . . . . . . . . . . . . . . . . . . . . . . 46
+B Regime duration distributions for BOSD (K= 1) 47
+B.1 The Gaussian Model . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 47
+B.2 The Pareto Model . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 47
+B.3 The Log-Normal Model . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 47
+B.4 The Poisson Model . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 48
+B.5 Summary . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 48
+C Outputs of the univariate out-of-sample runs 49
+3
+Contents Research internship report
+D BOCPD regime duration distributions 53
+D.1 Data Generating Process and Experimental Setup . . . . . . . . . . . . . . . . . 53
+D.2 Theoretical Distribution vs. Empirical Histogram . . . . . . . . . . . . . . . . . 53
+D.3 Empirical Validation on real data . . . . . . . . . . . . . . . . . . . . . . . . . . 54
+E BOSD (K= 1) regime duration distributions 55
+E.1 Data Generating Process and Experimental Setup . . . . . . . . . . . . . . . . . 55
+E.2 Theoretical Distributions vs. Empirical Histograms . . . . . . . . . . . . . . . . 55
+F Posterior for a general known SPD noise matrix 57
+4
+1 Introduction Research internship report
+1 Introduction
+The modelling of order flow is central to the understanding of price formation in electronic
+markets and to the design of execution algorithms. One of its most robust empirical regularities
+is the persistence of the signed trade order flow: buy trades tend to be followed by buy trades
+and sell trades by sell trades, over horizons as long as several weeks. Documented independently
+by Lillo and Farmer (2004) and Bouchaud et al. (2004), this persistence takes the form of an
+autocorrelation function decaying as a non-summable power law, which is the formal signature
+of a long-memory process. It has been attributed primarily to order splitting, the practice
+by which large investors execute a singlemetaorderthrough a long sequence of smaller child
+orders; Lillo et al. (2005) establish quantitatively the relationship between the autocorrelation
+of order flow and the distribution of metaorder sizes.
+From an econometric standpoint, a long-memory series can be generated, at least ap-
+proximately, by a regime-shift process in which each regime is short-memory and the regime
+lengths are heterogeneous. This observation motivates the description of order flow as a se-
+quence of regimes, and suggests a natural correspondence between a regime and the execution
+of a metaorder. It is the approach followed by Tsaknaki et al. (2025), who use Bayesian online
+change-point detection to identify order-flow regimes on NASDAQ data and show that regime
+information improves the prediction of both order flow and market impact. The present report
+starts from that work.
+Among the algorithms available for this task, we concentrate on those performing detec-
+tiononline, that is, using only the observations available up to the current instant, and within
+a Bayesian framework, which is well suited to quantifying the uncertainty attached to a change-
+point through a posterior distribution rather than committing to a hard decision at each step.
+The reference algorithm is that of Adams and MacKay (2007), which recursively computes the
+posterior distribution of the time elapsed since the last change-point — therun length— and
+remains tractable because conjugacy makes its predictive likelihood available in closed form.
+Its constant hazard rate, however, carries an implication that sits uneasily with the stylised
+fact recalled above: a constant hazard forces regime durations to be geometric, a law possessing
+a characteristic timescale, whereas order flow has none. The heterogeneity of regime lengths,
+which is precisely what makes the regime-shift description of long memory work, is therefore
+excluded by construction.
+This report examines that tension. We re-derive and implement the baseline algorithm
+in full, and equip it with an evaluation framework measuring segmentation quality, point-
+forecast accuracy and probabilistic calibration. We then replace the constant hazard rate by a
+run-length-dependent one, derived from an explicit duration law within a hidden semi-Markov
+model following the formulation of Agudelo-España et al. (2020), and calibrate Pareto and
+log-normal duration laws on NASDAQ order flow. We finally move from the univariate to the
+multivariate setting with the BOCPDMS framework of Knoblauch and Damoulas (2018), which
+combines a model universe with Bayesian vector autoregressions and online hyperparameter
+learning. The algorithms studied here are due to their respective authors; the implementations
+used throughout, and the experiments run with them, are ours.
+The report is organised as follows. Section 2 recalls the Bayesian ingredients of BOCPD
+and derives the algorithm; Section 3 implements it on synthetic data and Section 4 introduces
+the evaluation metrics. Section 5 moves from a constant to a run-length-dependent hazard
+rate, Section 6 presents the microstructural facts that motivate this choice, and Section 7
+reports the calibration and out-of-sample results on NASDAQ data. Sections 8 to 10 present
+the BOCPDMS framework, its Bayesian vector autoregressions and the online learning of its
+hyperparameters; Sections 11 and 12 report the corresponding experiments on synthetic and on
+real data. Section 13 concludes. Proofs and additional material are collected in the appendices.
+5
+2 Background: Bayesian online changepoint detection Research internship report
+2 Background: Bayesian online changepoint detection
+Historically, Frequentist statistics provided fast, online algorithms to try to detect these shifts,
+but they struggled to quantify uncertainty rigorously. Conversely, Bayesian models handled
+uncertainty exceptionally well, but their heavy computational cost restricted them to offline
+analysis. The foundational paper by Adams and MacKay (2007) is ground-breaking because it
+brought the power of Bayesian probabilities into the real-time (online) world: it predicts the
+next data point using only the data observed up to the present moment, while providing a full
+probability distribution over the uncertainty of a changepoint.
+2.1 Foundations of Bayesian Inference and the Exponential Family
+In classical statistics (the Frequentist approach), parameters are estimated using Maximum
+Likelihood (ML), which yields a point estimate (a single numerical value). However, in the
+Bayesian framework, parameters are treated as random variables themselves. We maintain a
+probability distribution over the parameters, which reflects uncertainty. As more data points
+arrive, this distribution narrows, eventually peaking around the ML estimate.
+To perform this Bayesian updating efficiently in real-time as new data arrives, we cannot
+afford to keep the entire historical dataset in the computer’s active memory. We need a math-
+ematical shortcut. This is why we strictly restrict our models to a specific class of probability
+distributions: theExponential Family.
+Definition 2.1(Exponential family).Letx xxbe aD-dimensional vector (or a scalar ifD= 1).
+The exponential family of distributions overxxx, given natural parametersηηη, is defined as:
+p(xxx|ηηη) =h(xxx)g(ηηη) exp{ηηηTuuu(xxx)}(2.1)
+whereh(xxx)is the base measure,uuu(xxx)is the vector of sufficient statistics, andg(ηηη)acts as the
+normalizing constant ensuring the probability integrates to1.
+Proposition 2.1(Likelihood of i.i.d. data).For a datasetX={x xx1, . . . , xxxN }where each
+observation is independent and identically distributed (i.i.d.), the joint likelihood under the
+exponential family is given by the product of individual probabilities:
+p(X|ηηη) =
+NY
+n=1
+p(xxxn|ηηη) =
+ NY
+n=1
+h(xxxn)
+
+g(ηηη)N exp nηηηT NX
+n=1
+uuu(xxxn)
+o
+The reason we use the exponential family: it guarantees the existence of aconjugate prior.
+Definition 2.2(Conjugacy).In Bayesian probability theory, a prior distribution is said to be
+conjugate to a likelihood function if the resulting posterior distribution belongs to the same
+parametric family as the prior.
+Proposition 2.2(Conjugate prior for the exponential family).For any member of the expo-
+nential family, there exists a conjugate prior distribution over the parametersηηηof the form:
+p(ηηη|χχχ, ν) =f(χχχ, ν)g(ηηη)ν exp νηηηTχχχ	
+whereχχχandνact as the hyperparameters defining our prior belief before observing the data.
+To demonstrate the analytical power of this conjugacy, we must first recall Bayes’ theorem,
+which is the fundamental engine of our sequential learning.
+6
+2 Background: Bayesian online changepoint detection Research internship report
+Proposition 2.3(Bayes’ Theorem).Given the observed dataX, Bayes’ theorem allows us to
+update our prior belief about the parametersηηηto obtain the posterior distribution:
+p(ηηη|X) = p(X|η ηη)p(ηηη)p(X) ∝p(X|η ηη)p(ηηη)⇐ ⇒Posterior∝Likelihood×Prior
+The marginal likelihood (or evidence)p(X)acts as a normalizing constant.
+By applying this theorem to our exponential family likelihood and its conjugate prior, we can
+explicitly compute the updated posterior distribution:
+Proposition 2.4(Posterior Update Rule).Given the likelihood of i.i.d. dataXand the
+conjugate prior, the posterior distribution over the natural parametersηηηretains the exact same
+exponential form as the prior:
+p(ηηη|X, χχχ, ν)∝p(X|η ηη)p(ηηη|χχχ, ν)∝g(ηηη)ν+N exp
+(
+ηηηT
+ 
+χχχ+
+NX
+n=1
+uuu(xxxn)
+!)
+Consequently, the new hyperparameters of the posterior are updated via simple additive rules:
+νposterior =ν prior +N, χ χχposterior =χχχprior +
+NX
+n=1
+uuu(xxxn)
+Definition 2.3(Sufficient Statistics).The quantitiesN(number of observations) andPN
+n=1 uuu(xxxn)are called thesufficient statistics. They contain all the necessary information
+from the dataXrequired to perform inference onηηη.
+The concept of sufficient statistics is the cornerstone of Bayesian online learning. It proves that
+to continuously update our beliefs as new data arrives, we do not need to look back at the entire
+historical dataset. Maintaining and updating these running counters is sufficient, ensuring that
+the computational memory footprint remains minimal.
+2.2 Bayesian Inference in the Univariate Gaussian Case
+We now apply the framework to the specific case of the univariate Gaussian distribution.
+Case of unknown meanµand known varianceσ 2
+Let dataD={x 1, . . . , xN }be drawn independently fromN(µ, σ 2). Our aim is to infer the
+unknown meanµsequentially. We establish the formal update rules (proof in Appendix A.1):
+Proposition 2.5(Gaussian Conjugate Update).If the prior distribution of the mean is Gaus-
+sianp(µ) =N(µ|µ 0, σ20), and the likelihood is Gaussian with known varianceσ2, the posterior
+distribution remains Gaussianp(µ|D) =N(µ|µ N , σ2N ). The sufficient statistics are given by:
+1
+σ2N = Nσ2 + 1σ20 |µ N = N σ20N σ20 +σ 2 µM L+ σ2N σ20 +σ 2 µ0
+As noted by Bishop (2006), the posterior meanµN is a convex combination between the prior
+meanµ 0 and the maximum likelihood solutionµM L. IfN= 0(no data),µ N =µ 0. AsN→ ∞,
+µN →µ M Landσ 2N →0, meaning our uncertainty about the mean vanishes.
+7
+2 Background: Bayesian online changepoint detection Research internship report
+When predicting a new unseen data pointxN+1, we rely on thepredictive posterior
+distribution, obtained by marginalizing over the unknown parameter, which isµhere:
+p(xN+1 |x1:N ) =
+Z
+p(xN+1 |µ, x1:N )p(µ|x1:N )dµ=
+Z
+p(xN+1 |µ)p(µ|x1:N )dµ
+The last equality follows directly from conditional independence:xN+1 ⊥ ⊥x1:N |µ.
+Proposition2.6(Gaussian Predictive Posterior).Giventheposteriordistributionofthemean
+N(µ N , σ2N )and the known observation varianceσ2, the posterior predictive distribution is:
+p(xN+1 |D) =
+Z
+N(x N+1 |µ, σ2)N(µ|µ N , σ2N )dµ=N(µ N , σ2N +σ 2)N(µ N , σ2N +σ 2)N(µ N , σ2N +σ 2)
+This demonstrates that the total variance of our prediction is the sum of our uncertainty about
+the mean (σ2N) and the inherent noise of the data (σ2).The proof is given in Appendix A.2.
+2.3 Bayesian Online Changepoint Detection
+We now introduce the foundational algorithm for detecting structural breaks. The core idea is
+to use the sequential Gaussian framework we just derived.
+In statistics, we assume that a data sequence is "generated" by an underlying probability
+distribution, which is defined bygenerative parameters. Achangepointis defined as an
+abrupt, structural shift in these generative parameters.
+The work of Adams and MacKay (2007) is groundbreaking because it brought exact
+Bayesian inference into a real-time (online) setting.
+BOCPD Foundational assumptions
+To achieve exact, real-time inference, the model relies on two strong assumptions:
+•(a) Intra-regime i.i.d.:Within any given regimeρ, the data pointsxt are independent
+and identically distributed (i.i.d.) given the generative parametersηρ:x t ∼P(x t|ηρ)
+•(b) Inter-regime independence:The generative parameters are completely i.i.d. from
+one regime to the next. When a changepoint occurs, the algorithm forgets its "history"
+and draws brand new parametersηρ+1 blindly from the base prior distributionP(η).
+We use the BOCPD algorithm to detect changes in the mean of the data, assuming the ob-
+servations are normally distributed with a fixed varianceσ2 and a regime-switching meanµ
+governed by a Gaussian prior with meanµ0 and standard deviationσ0.
+Mathematical breakdown of the algorithm
+Definition 2.4(Run Length).The duration of the current regime is tracked by a discrete state
+variable called therun length, denotedrt. At timet, it evolves via a Bernoulli process:
+p(rt|rt−1) =
+(
+1/hifr t = 0(a changepoint occurs)
+1−1/hifr t =r t−1 + 1(the regime survives)
+1/his thehazard rate, the prior probability of a changepoint occurring at the next time step.
+The algorithm’s objective is to compute theposterior distribution of the run length:
+P(r t|x1:t) =P(r t, x1:t)/P(x 1:t). To compute it, we first compute recursively thejoint distri-
+butionP(r t, x1:t)and then, we compute theevidenceP(x 1:t) = Prt P(r t, x1:t).
+8
+3 Implementation of the BOCPD algorithm Research internship report
+Proposition 2.7(Recursive Message Passing).By applying Bayes’ chain rule and the condi-
+tional independence of the run length, the joint distribution decomposes recursively into three
+distinct computational blocks:
+P(r t, x1:t) =
+X
+rt−1
+P(r t, xt|rt−1, x1:t−1)P(r t−1, x1:t−1)
+=
+X
+rt−1
+P(r t|rt−1)| {z }
+Hazard Rate
+P(x t|rt−1, x(r)t−1)| {z }
+UPM
+P(r t−1, x1:t−1)| {z }
+Previous Message
+Usually, in Bayesian statistics, evaluating this predictive probability requires calculating
+a complex integral over all possible values of the unknown parameter. However, by exploiting
+the conjugacy property, we can get aclosed-form UPM(proofs of the last two propositions
+in Appendix A).
+Proposition 2.8(Closed-form UPM for the Gaussian Case).If the data within a regime is
+modeled as a Gaussian with an unknown mean and a known varianceσ2, and we use a conjugate
+Gaussian prior, the UPM evaluates to a closed-form Gaussian distribution:
+p(xt |r t−1, x(r)t−1) =N(x t |µ rt−1, σ2 +σ 2rt−1)N(x t |µ rt−1, σ2 +σ 2rt−1)N(x t |µ rt−1, σ2 +σ 2rt−1)
+whereµ rt−1 andσ 2rt−1 are the updated sufficient statistics using strictly thert−1 observations of
+the current regime, using the Gaussian conjugate update (Proposition 2.5).
+This closed-form solution allows the algorithm to evaluate the likelihood of a new data point
+instantaneously, thus making true real-time detection feasible.
+The algorithm yields the run length posterior distribution from which we can get the
+posterior predictive distribution, on which we could rely for prediction:
+P(x t+1|x1:t) =
+X
+rt
+P(x t+1|rt, x(r)t )P(r t|x1:t)
+This is Bayesian Model Averaging. Instead of making a hard decision about changepoint
+location, the algorithm maintains a full probability distribution over all possible run lengths.
+The final predictionP(xt+1|x1:t)is a weighted average of every run length’s prediction, weighted
+by the posterior beliefP(rt|x1:t)in that scenario. This way the model deals with uncertainty.
+3 Implementation of the BOCPD algorithm
+Now we translate the theoretical BOCPD framework into practice using it on synthetic data.
+3.1 Generation of simulated data
+To rigorously test the BOCPD algorithm, we need to generate synthetic data whose ground
+truth is perfectly known. The design of this generative process must mirror the probabilistic
+assumptions that the algorithm itself postulates.
+The importance of a coherent generative process
+As established, the algorithm models the run lengthrt as a Bernoulli process: at every time
+stept, there is a probability1/hthat a changepoint occurs. The duration of any regime is
+therefore a geometric random variable with parameter1/h.
+9
+3 Implementation of the BOCPD algorithm Research internship report
+Definition 3.1(Bernoulli Generative Process).Given a time horizonT, a hazard rate1/hgen,
+a prior distributionN(µ 0, σ20)for the regime means, and a known observation varianceσ2, the
+datax 1:T is generated as follows. At each time stept, a Bernoulli trial with success probability
+1/hgen is performed:
+•If the trial succeeds (with probability1/h gen), a changepoint occurs att. A new regime
+meanµ new is drawn independently fromN(µ0, σ20).
+•If the trial fails (with probability1−1/hgen), the current regime continues with its existing
+mean.
+Within any regime with meanµρ, each observation is drawn independently:xt ∼ N(µρ, σ2)
+3.2 Model Initialization
+Now that we have simulated data we can work with, we initialize the BOCPD algorithm with
+three core components, to try to infer the locations of the changepoints (marked by red lines
+in the figures):
+1.The known observation variance (σ2)
+2.The prior distribution parameters (µ0, σ20)
+3.The hazard rate of the algorithm (1/halgo).
+3.3 The Run Length Posterior
+At each time stept, the primary output of the BOCPD algorithm is the conditional distribution
+of the run length given the past observations:P(rt |x 1:t).
+Definition 3.2(Run Length Posterior Matrix).The Run Length Posterior Matrix is a two-
+dimensional grid of sizeT×T. The horizontal axis represents the absolute timet, and the
+vertical axis represents the potential run lengthrt. Because the run length can never exceed
+the current time (rt ≤t), this matrix naturally forms a lower-triangular structure, where all
+upper-triangular entries are strictly equal to zero.
+To interpret this matrix visually, we plot it as a heatmap where the intensity of the color
+represents the probability mass. Reading it is quite intuitive:
+•If a regime is stable, its age increases by exactly one step at each time tick (rt =r t−1 + 1).
+This survival translates into a clear, upward diagonal line of high probability.
+•The moment the algorithm receives a data point that is highly improbable under the
+current regime, the probability shifts heavily toward the birth of a new regime (rt = 0).
+The diagonal line abruptly drops (rt = 0).
+In an ideal world, the drops of these diagonal lines should coincide with the red lines that mark
+the changepoints of our generated dataset.
+3.4 The impact of the hazard rate
+We deliberately deceive the algorithm by setting a very high prior probability for changepoints
+(1/h= 1/10) and then run it with the true average frequency of our generative model (halgo =
+hdata).
+10
+4 Performance Evaluation Metrics Research internship report
+0 100 200 300 400 500
+−50
+0
+50
+xt
+Data
+pvar
+pmean
+0 100 200 300 400 500
+Time t
+0
+rt
+BOCPD: Run Length Posterior
+most likely path
+10−4
+10−3
+10−2
+10−1
+100
+(a)Hyper-reactive hazard rate (halgo = 10).
+0 100 200 300 400 500
+−50
+0
+50
+xt
+Data
+pvar
+pmean
+0 100 200 300 400 500
+Time t
+0
+125
+rt
+BOCPD: Run Length Posterior
+most likely path
+10−4
+10−3
+10−2
+10−1
+100 (b)Optimal hazard rate (halgo = 100).
+Figure 3.1:Run Length Posterior matrix under a mis-specified and a well-specified hazard rate.
+This highlights one practical difficulty of the BOCPD model: the choice ofh. If it is
+too large, the algorithm may become hyper-sensitive to local noise, resulting in numerous false
+positive detections. With an adequate value, it strikes a good balance. However, it may still
+miss the subtlest jump as changes buried within the local noise variance are difficult to infer.
+In our simulation, choosing an optimalhis easy because we own the generative model.
+However, when we switch to real data, the true frequency of regimes is unknown.
+4 Performance Evaluation Metrics
+Now let us establish a rigorous mathematical framework to evaluate the detection performance.
+The core problem with point-wise metrics such as theF1-Score is that they reduce the
+segmentation problem to a simple “hit or miss” question at individual points, discarding all
+information about how well the algorithm guesses the shape and duration of the regimes.
+4.1 Covering Metric
+Instead of measuring if the algorithm detected a given changepoint, it measures how well the
+algorithm’s segmentation of the time axis agrees with the true segmentation.
+A set of changepoints{τ 1, . . . , τK}on a time series of lengthTinduces apartitionof
+the time axis[0, T]intoK+ 1contiguous intervals (the regimes). We denote the ground truth
+partitionS={A 1, . . . , AK+1}and the algorithm’s partitionS ′ ={B 1, . . . , BK′+1}. We assess
+how well each true regimeAi is “covered” by the best-matching detected regimeBj.
+Definition 4.1(Jaccard Index).For two intervalsA= [a 1, a2)andB= [b 1, b2)on the real
+line, the Jaccard Index measures their degree of overlap relative to their combined extent:
+J(A, B) =|A∩B||A∪B| = max(0,min(a 2, b2)−max(a 1, b1))|A|+|B| − |A∩B| ∈[0,1](4.1)
+The Jaccard Index equals1if and only ifA=B(perfect overlap), and equals0if the two
+intervals are completely disjoint.
+For each true regimeAi ∈ S, we find the detected regimeBj ∈ S′ that maximizes the
+Jaccard overlap. The Covering Metric then aggregates these best-match scores across all true
+regimes, weighting each by its relative length|Ai|/Tso that the reconstruction quality of long,
+important regimes contributes more than that of short ones.
+11
+5 From Constant to Time-Varying Hazard Rate Research internship report
+Definition 4.2(Covering Metric).LetS={A 1, . . . , AK+1}be the ground truth partition and
+S ′ ={B 1, . . . , BK′+1}be the partition induced by the algorithm’s detected changepoints. The
+Covering Metric is defined as:
+C(S,S ′) = 1T
+K+1X
+i=1
+|Ai| ·maxBj ∈S′ J(A i, Bj)∈[0,1](4.2)
+C= 1indicates a perfect reconstruction of the ground truth partition,C= 0no overlap.
+4.2 Mean Squared Error
+It is not all aboutclustering(i.e. segmenting correctly). We may also do predictions, so we
+introduce a metric that evaluates theforecastingcapability.
+The recursive inference of the BOCPD algorithm produces a one-step-ahead forecast at
+each time step. Recall that we can get from the algorithm the predictive posterior distribution:
+P(x t+1|x1:t) =
+X
+rt
+P(x t+1|rt, x(r)t )P(r t|x1:t)
+Each UPM termP(x t+1|rt, x(r)t )is a GaussianN(µ rt, σ2 +σ 2rt), whose meanµ rt is the
+posterior mean of the regime that has been running forrt steps. The overall predictive mean
+is therefore the posterior-weighted average of these regime-specific means.
+Definition 4.3(Predictive Mean).Thepredictive mean(one-step-ahead forecast) at time
+t, denotedˆµt, is the expected value of the next observation under the full posterior predictive
+distribution:
+ˆµt =
+tX
+rt=0
+µrt P(r t |x 1:t)(4.3)
+whereµ rt is the posterior mean of the Gaussian UPM for run lengthrt, andP(r t |x 1:t)is the
+run length posterior.
+Definition 4.4(Mean Squared Error).The Mean Squared Error (MSE) of the one-step-ahead
+forecasts over the time horizon{0, . . . , T}is defined as:
+MSE= 1T
+TX
+t=1
+ 
+ˆµt−1 −x t
+2
+(4.4)
+We now have two complementary tools: the Covering Metric judges the quality of the segmen-
+tation, while the MSE judges the quality of the prediction. Together, they provide a satisfying
+picture of an algorithm’s performance.
+5 From Constant to Time-Varying Hazard Rate
+5.1 The fundamental limitation of a constant hazard rate
+The regimes in the data span different durations. Yet the baseline BOCPD model assumes a
+single, constant hazard rate1/hthat governs the prior probability of a changepoint at every
+time step, leading to an irreconcilable dilemma:
+•Ifhis calibrated to detect short, rapid regime changes (smallh), the algorithm becomes
+hyper-reactive. It will successfully catch micro-regimes, but it will also fragment the long
+stable periods with dozens of false positives.
+12
+5 From Constant to Time-Varying Hazard Rate Research internship report
+•Ifhis calibrated to respect the long stable periods (largeh), the algorithm becomes too
+conservative. It will correctly preserve the long regimes, but it may completely miss the
+short-lived regimes and the subtle jumps.
+The optimum is therefore not a satisfying solution: it is merely the “least bad” compromise in
+a trade-off that has no ideal resolution within the constant-hazard framework.
+To handle data where regime lengths are inherently heterogeneous, as they are in real
+financial markets, we need to abandon the assumption of a constant hazard rate and move
+towards atime-varying hazard rateht.
+5.2 The structural flaw: the geometric constraint
+The standard BOCPD algorithm models the run lengthrt as evolving according to a Bernoulli
+process with a constant hazard rateH= 1/h. At every time stept, regardless of how long
+the current regime has already survived, the algorithm assumes a fixed probability1/hthat a
+changepoint will occur at the next step. This assumption imposes a structural constraint on
+the distribution of regime durations.
+Proposition 5.1(Geometric regime durations under constant hazard).If the hazard rate is
+constantH(r) =pfor allr≥0, wherep= 1/h∈(0,1), then the durationdof any regime
+follows a Geometric distribution with parameterp:
+P(d=k) = (1−p) k−1 p, k= 1,2,3, . . .(5.1)
+with expected durationE[d] = 1/p=hand varianceV[d] = (1−p)/p 2.
+5.3 From HMM to HSMM
+Moving from a constant hazard rate toward atime-varying hazard raterequires switching
+from the implicit Hidden Markov Model (HMM) underlying standard BOCPD to a fundamen-
+tally different generative framework, the Hidden semi-Markov Model (HSMM).
+Hidden Markov Models (HMM)
+Definition 5.1(Hidden Markov Model).A Hidden Markov Model (HMM) is a doubly stochas-
+ticprocesswhereanunderlyingsequenceofhiddenstates{z t}t≥1 governsthedistributionofase-
+quence of continuous observations{xt}t≥1. The system is fully characterized by the hidden state
+sequence{z t}, which satisfies the first-order Markov propertyP(zt+1 |z t, . . . , z1) =P(z t+1 |z t),
+and by the emission distributionsP(xt |z t).
+The generative process of an HMM: at each step, the hidden state transitions based solely on
+the current state, and an observation is emitted from the corresponding distribution.
+A critical consequence of this memoryless state transition rule is that the time the system
+spends residing in any given state is implicitly constrained. If the system is in stateiwith a
+self-transition probabilitya ii =P(z t+1 =i|z t =i), the probability that it remains in state
+ifor exactlykconsecutive steps before transitioning out isP(d=k|z=i) =a k−1ii (1−a ii),
+which is a Geometric distribution with parameter1−aii.
+13
+5 From Constant to Time-Varying Hazard Rate Research internship report
+Hidden semi-Markov Models (HSMM)
+To escape this constraint, we must abandon the Markov property on state transitions while
+keeping the conditional independence of the observations.
+Definition 5.2(Hidden semi-Markov Model).A Hidden semi-Markov Model (HSMM) is a
+generalization of the HMM in which the duration of each state is governed by an explicit
+distributionP(d|z), rather than being implicitly determined by self-transition probabilities.
+The generative process is defined as follows:
+1.State entry:When a new regime begins, a hidden statezis selected.
+2.Duration draw:A total durationdis drawn directly from an explicit, state-specific
+duration distribution:d∼P(d|z).
+3.Emission:For exactlydconsecutive time steps, observations are emitted from the active
+state distributionP(x|z). During this period, the statezis locked and cannot change.
+4.Transition:After thedobservations have been emitted, the regime terminates deter-
+ministically, and the process returns to Step 1 to instantiate a new state.
+The prefix “semi” denotes that the Markov property is relaxed on the time dimension. In a
+standard HMM, the decision to stay or leave a state is made independently at every single time
+step. In an HSMM, the total duration is drawn once at the regime’s birth, and the regime is
+then deterministically locked for that duration (making it non-Markovian on time).
+Notation 5.1(HSMM state variables).At each time stept, the full latent state of an HSMM
+is described by a triplet:
+•z t ∈ {1, . . . , K}: the active hidden state index. In the context of standard changepoint
+detection (and ourK= 1reduction),z t tracks the identity of the current regimeρ,
+meaning every changepoint instantiates a new set of parameters rather than jumping
+between pre-defined discrete classes.
+•d t ∈N ∗: the total duration drawn at the birth of the current regime.
+•r t ∈ {0,1, . . . , dt−1}: the run length, tracking the number of observations already emitted
+since the current regime began.
+5.4 The HSMM-consistent data generation process
+To rigorously test our inference algorithms later, we must generate synthetic data from a
+generative process that is strictly consistent with the HSMM assumptions.
+Definition 5.3(HSMM Generative Process for Synthetic Data).Given a time horizonT, a
+prior distributionN(µ 0, σ20)for regime means, a known observation varianceσ2, and a chosen
+duration distribution, the datax1:T is generated as follows:
+1.Initialize:Sett start = 0.
+2.Draw a regime durationd:Sampled∼P(d), rounded to the nearest integer and
+floored at1.
+3.Draw regime mean:Sample a regime meanµ ρ ∼ N(µ0, σ20).
+4.Generate observations:Fort=t start, . . . , tstart +d−1, samplex t ∼ N(µρ, σ2).
+5.Advance:Sett start ←t start +d. Ift start < T, return to Step 2.
+In this generative model, the total durationdt of a regime is predetermined at its birth. The
+regime terminates when its age reachesrt =d t −1. However, from the perspective of an online
+inference algorithm receiving data tick-by-tick, this total durationdt is obviously unknown.
+14
+5 From Constant to Time-Varying Hazard Rate Research internship report
+5.5 From 3D Inference to 2D
+The fundamental challenge of online HSMM inference is the dimensionality of the latent
+space. An algorithm would seemingly need to maintain a posterior distribution over a three-
+dimensional object:P(r t, dt, zt |x 1:t).
+Updating this 3D joint distribution naively is impractical, and even with dynamic pro-
+gramming it costsO(K2 +D 2K)per step for exponential family UPMs (Agudelo-España et al.,
+2020). However, a crucial insight, implemented in theirC++codebase, enables a dimensionality
+reduction to a tractable 2D matrixP(r t, zt |x 1:t). It is made possible by the fact that the
+observationx t carries no information about the total durationdt of the segment.
+Proposition 5.2(Duration-agnostic UPM).If the predictive likelihood is agnostic to the total
+segment duration, i.e.P(x t |r t, dt, zt) =P(x t |r t, zt), thend t enters the recursion only through
+the hazard function and can be marginalized out.
+From deterministic termination to probabilistic hazard
+A question arises:if we discard the explicit total durationdt from the posterior, how does the
+algorithm retain the memory of the specific duration distribution chosen for the regimes?
+The answer lies in the fundamental difference between data generation (nature) and online
+inference (the algorithm). In the generative model, the total durationdt is drawn at birth; the
+regime’s termination is therefore a deterministic event.
+However, during online inference, the total durationdt is unknown. Because the algorithm
+does not know when the regime ends, it cannot make a deterministic decision. Instead, it
+maintains and evaluates a termination probability at every single time step. The algorithm
+answers the following question:Given that the current segment has survived up to ager, what
+is the probability that it terminates at the very next step?This conditional probability is exactly
+thehazard function.
+This represents the theoretical bridge between the 3D HSMM and the 2D BOSD frame-
+work, which is reflected in theC++codebase by Agudelo-España et al. (2020) who implemented
+the exact 3D inference which maintains a tensor to track the full(d, r, z)space, but also another
+class that operates on the 2D matrixP(rt, zt |x 1:t). The duration prior is thus compiled into
+a 1D hazard vectorH(r).
+5.6 TheK= 1Reduction: our implementation
+The full BOSD (Bayesian Online Segment Detection) framework, as introduced by Agudelo-
+España et al. (2020), tracks the joint posteriorP(rt, zt |x 1:t)over both the run lengthrt and a
+discrete hidden meta-statez t ∈ {1, . . . , K}, where each meta-state possesses its own duration
+distributionP(d|z)and its own emission model. We deliberately restrict the model to a single
+meta-state (K= 1), which allows us to isolate the upgrade of the time-varying hazard rate.
+What theK= 1reduction preserves:Under theK= 1reduction, the posterior simplifies
+to a 1D vector,P(r t, zt |x 1:t)
+K=1
+− − →P(rt |x 1:t), which is exactly the same shape as the
+standard BOCPD posterior. The following components of the original Adams and MacKay
+(2007) framework are fully preserved:
+•The conjugate prior structure:When a changepoint occurs, a new regime mean is
+drawn from the priorN(µ0, σ20). The number of possible regime means remains infinite.
+•The Underlying Predictive Model:The closed-form Gaussian predictive likelihood
+P(x t |r t−1, x(r)t−1) =N(µ rt−1, σ2 +σ 2rt−1)is used without modification.
+•The sufficient statistics.
+15
+5 From Constant to Time-Varying Hazard Rate Research internship report
+What theK= 1reduction changes:The only structural change is the replacement of
+the constant hazard rate1/hby the time-varying hazard vectorH(r). The UPM and the
+message-passing structure remain identical.
+5.7 Deriving the Time-Varying Hazard Rate
+Definition 5.4(Hazard Rate function).Letdbe a discrete random variable representing the
+total duration of a regime. Thehazard rate functionis defined as the conditional probability
+that the regime terminates at stepr+ 1, given that it has survived up to and including stepr:
+H(r) =P(d=r+ 1|d > r) = P(d=r+ 1)P(d > r) (5.2)
+The hazard functions of the duration laws used in this work (Gaussian, Pareto, log-normal,
+Poisson) are derived in Appendix B.
+5.8 Benchmarking
+By comparing it against BOCPD with a constant hazard rate on HSMM-generated synthetic
+data, this model allows us to check the contribution of duration-awareness. The Monte Carlo
+validation of the regime-duration laws recovered by BOCPD and BOSD (K= 1) is reported
+in Appendices D and E.
+A new metric: the cumulative Predictive log-Likelihood
+We introduce a third metric which is introduced in the paper of Adams and MacKay (2007),
+and implemented in the Agudelo-España et al. (2020)C++codebase. Recall that the BOCPD
+recursion produces thepredictive posterior distribution.
+This quantity is referred to as theone-step-ahead predictive likelihoodby Agudelo-España
+et al. (2020), which can be a bit confusing as we constantly refer to it as thepredictive
+posterior distribution. Accumulating it over the whole sequence yields the desired metric,
+that we name thePredictive log-Likelihood.
+Definition 5.5(Predictive log-Likelihood).Given an observed sequencex 1:T, thePredictive
+log-Likelihoodis
+L(x1:T ) =
+TX
+t=1
+logP(x t |x 1:t−1)(5.3)
+whereP(x 1 |x 1:0) :=P(x 1)denotes the prior predictive likelihood att= 1.
+It rewards a model for assigning high probability to the data actually observed, and it does so
+using theentirepredictive posterior distributionP(x t |x 1:t−1)at each step, not merely its mean.
+Unlike the Covering Metric,L(x1:t)requires no changepoint-labeling heuristic whatsoever.
+16
+6 Market microstructure and memory of order flow Research internship report
+6 Market microstructure and memory of order flow
+Upgrading the hazard rate from a constant to a duration-dependent function requires specifying
+a distributional family for regime durations. We will see why it must accommodate heavy tails.
+Modern financial markets areorder-driven: rather than a small number of designated
+dealers quoting prices (older “quote-driven” paradigm), every participant may submit orders
+that collectively determine the price (Cartea et al., 2015). The data structure that organises
+this is thelimit order book(LOB). Most of the world’s financial exchanges now operate a
+LOB mechanism to facilitate trade (Gould et al., 2013).
+The LOB is best understood through the two elementary actions available to any market
+participant: submitting an order and cancelling an order.
+Definition 6.1(Order).Anorderx= (p x, ωx, tx)submitted at timet x with pricep x and
+sizeω x is a commitment to trade up to|ωx|units of the asset at a price no worse thanpx. By
+convention,ω x >0denotes a sell order andω x <0a buy order.
+Two resolution parameters govern the granularity of trading. Thetick sizeπis the smallest
+permissible price increment. Thelot sizeσis the smallest tradable quantity. We distinguish
+two categories of orders (Gould et al., 2013; Cartea et al., 2015):
+Limit orders (LOs)arepassiveorders. A trader submitting a limit order specifies a
+price and a quantity, and the order joins the book without triggering an immediate trade. For
+a buy limit order, the specified price is typically at or below the current best buy price. Limit
+order submissions are said toprovide liquidityto the market.
+Market orders (MOs)areaggressiveorders. A trader submitting a market order
+wishes to trade immediately at the best available price. A buy market order matches against
+the cheapest active sell orders; a sell market order matches against the most expensive active
+buy orders. Market order submissions are said toconsume liquidity.
+The active orders in the book partition naturally into the set of active buy ordersB(t)
+(thebid side) and the set of active sell ordersA(t)(theask side).
+Definition 6.2(Bid price, ask price, mid price, and spread).LetL(t)be a limit order book at
+timet. Thebid priceis the highest stated price among active buy orders,b(t) := maxx∈B(t) px;
+theask priceis the lowest stated price among active sell orders,a(t) := min x∈A(t) px. The
+bid-ask spreadiss(t) :=a(t)−b(t), and themid priceism(t) := 12 [a(t) +b(t)].
+buy limit order
+sell limit order
+Bid Side
+Ask Side
+bid-price
+ask-price
+Price
+mid-price
+Depth Available (σ)
+-10
+-9
+-8
+-6
+-5
+-4
+-3
+-1
+-2
+0
+-7
+7
+9
+10
+3
+6
+8
+4
+5
+2
+1
+spread
+Figure 6.1:LOB: bid side, ask side, best
+prices, spread and depth profile.
+The bid priceb(t)is the best price at which one can
+immediately sell; the ask pricea(t)is the best price
+at which one can immediately buy. The spreads(t)
+measures the cost of a round-trip transaction (buying
+and immediately reselling) and is a primary indicator
+of market liquidity.
+Beyond the best prices, thedepth profilede-
+scribesthetotalquantityofactiveordersateachprice
+level. When a large market order arrives whose size
+exceeds the depth available at the best price, it “walks
+the book”: it consumes the entire depth at the best
+price level and then continues to match against or-
+ders at successively worse price levels, causing the
+best price to move. The interaction between aggres-
+sive orders and the available depth is the fundamental
+driver of price formation in electronic markets.
+17
+6 Market microstructure and memory of order flow Research internship report
+6.1 Structure of order flow
+Theorder flowis the time series of market orders arriving at the exchange. Following the stan-
+dard convention in the literature (Lillo et al., 2005; Bouchaud et al., 2018; Sato and Kanazawa,
+2023), we encode the order flow as a sequence of signs:
+Definition 6.3(Order sign sequence).Letε(t)∈ {+1,−1}denote the sign of thet-th market
+order, whereε(t) = +1indicates a buy order andε(t) =−1indicates a sell order. The index
+t∈ {1,2, . . .}is thetick time: it is incremented by one unit at each transaction, regardless of
+the elapsed calendar time between transactions.
+The choice of tick time rather than calendar time is deliberate and important. In calendar time,
+the order flow is highly irregular: there may be hundreds of transactions per second during peak
+activity and seconds of silence during quiet periods. In tick time, events are uniformly spaced
+by construction, which makes autocorrelation analysis meaningful, despite intraday seasonality
+patterns such as the well-documented U-shaped activity profile.
+Definition 6.4(Sign autocorrelation function).The autocorrelation function of the order flow
+is defined asC(τ) := lim T→∞ 1T PTt=1 ε(t)ε(t+τ), whereτ≥0is the time lag measured in
+ticks.
+Because the order signsε(t)take values in{+1,−1}, their productε(t)ε(t+τ)is strictly positive
+if both orders share the same direction (e.g., buy-buy), and negative otherwise. Consequently,
+the autocorrelationC(τ)essentially measures the excess probability that two transactions sep-
+arated byτticks have the same sign. A strictly positive value,C(τ)>0, indicates persistence
+in the order flow.
+6.2 Long-range correlation in order flow
+In the early 2000s, two independent studies made a remarkable discovery. Bouchaud et al.
+(2004), analysing the Paris Stock Exchange, and Lillo and Farmer (2004), analysing the London
+Stock Exchange, both found that the autocorrelation function of the order sign sequenceε(t)
+does not decay exponentially, but instead decays as apower law:
+C(τ)≈ c0
+τ γ , γ∈(0,1),(6.1)
+The fact thatγ <1has a profound mathematical consequence. The process has a non-
+integrable autocorrelation function: P∞τ=1 C(τ) =∞. This divergence is the formal definition
+of along-memoryprocess. The correlation between distant events decays so slowly that
+arbitrarily distant past events still have a statistically significant influence on the present. This
+is different from the exponential decay of a short-memory process, where influence from the
+past fades over a characteristic timescale, which a long-memory process doesn’t have.
+Concretely, this means that buy orders tend to follow buy orders, and sell orders tend to
+follow sell orders, over time horizons as long as several weeks (Lillo and Farmer, 2004). This
+persistence has been confirmed across many markets and asset classes: equities (Bouchaud
+et al., 2004; Lillo and Farmer, 2004), foreign exchange, and cryptocurrency markets, making it
+a well-known fact of financial microstructure.
+This property has consequences well beyond changepoint detection. A non-summable,
+power-law autocorrelation is exactly what characterises processes such as fractional Brownian
+motion with Hurst indexH >1/2— and such processes are not semimartingales, so that
+the classical Itô calculus does not apply and the theory of stochastic integration itself has to
+be rebuilt. This is the purpose of thecalculus via regularizationintroduced by Russo and
+Vallois (1993), later extended to fractional Brownian motion through generalized covariations
+by Gradinaru et al. (2003).
+18
+7 Application to real market data Research internship report
+7 Application to real market data
+We use high-frequency transaction data for two NASDAQ-listed stocks, Apple (AAPL) and
+Microsoft (MSFT), over the four months from August to November 2022, provided by the
+LOBSTER platform. For each stock, the raw record is the sequence of executed transactions,
+each characterised by its timestamp, its traded volumeVk and its directionεk ∈ {+1,−1}, with
+εk = +1for a buyer-initiated trade andε k =−1for a seller-initiated one. Only transactions
+occurring during the continuous trading session are retained; opening and closing auctions are
+excluded.
+The quantity we model is theaggregated signed volume. Rather than sampling in
+calendar time, which would make the series highly irregular because of the intraday variations
+of trading activity, we sample involume clock: transactions are grouped into non-overlapping
+buckets ofNconsecutive executions, and the observation associated with buckettis the net
+signed volume traded within it,
+xt =
+tNX
+k=(t−1)N+1
+εk Vk.(7.1)
+A positivex t therefore indicates a bucket dominated by buyer-initiated volume, a negative one
+a bucket dominated by seller-initiated volume.
+NB:to deal with the scale of the raw volumes without altering the mathematical topology of
+the posterior distribution, we apply a linear scaling factor of10−3 to the series.
+7.1 Calibration results
+We perform a hyper-parameter grid search over the 2022-08 dataset for each asset under two
+distinct selection criteria: minimizing the Mean Squared Error (MSE) of the one-step-ahead
+predictive posterior mean, and maximizing the cumulative Predictive log-Likelihood (Log-Lik).
+The mean of the prior is fixedµ0 = 0. The variance is also fixed according to the global
+variance of a small sample of the dataset. So we perform the grid search over the variance of
+the normal priorσ0 and the specific parameters of the algorithms.
+Table 7.1:Optimal parameters and resulting performance.
+MSFT (N= 542):2739points, mean−0.062, var51.93, model var50;
+AAPL (N= 887):2629points, mean−5.777, var436.32, model var200.
+Calibration Asset Modelvar 0 Parameters MSE Log-Lik
+MSE-optimal
+calibration
+MSFT
+BOCPD 30.0H= 1/60.8432−9108.2
+Pareto BOSD 20.0α= 1.8, d min = 30.8552−9103.8
+Log-Normal BOSD 30.0s= 1.0,scale= 30.8422−9096.5
+AAPL
+BOCPD 60.0H= 1/110.9213−11679.4
+Pareto BOSD 50.0α= 1.05, d min = 10.9243−11718.0
+Log-Normal BOSD 120.0s= 1.5,scale= 10.9075−11474.0
+Log-Lik-optimal
+calibration
+MSFT
+BOCPD 250.0H= 1/300.9577−9007.4
+Pareto BOSD 130.0α= 1.05, d min = 10.9317−9059.9
+Log-Normal BOSD 250.0s= 3.0,scale= 20.9116−8986.2
+AAPL
+BOCPD 250.0H= 1/120.9814−11323.3
+Pareto BOSD 250.0α= 1.05, d min = 10.9993−11442.0
+Log-Normal BOSD 250.0s= 2.0,scale= 10.9209−11271.9
+Calibration Summary:Log-Normal BOSD consistently achieves the best performance. This
+consistent dominance suggests that, among the duration laws considered, the log-normal’s
+combination of a lighter initial hazard than the Pareto and heavier tail than the geometric
+distribution is best aligned with the persistence structure of these order-flow series.
+19
+7 Application to real market data Research internship report
+7.2 Out-of-Sample Comparison
+We now run the algorithms using their respective optimal calibrated parameters on every month
+for each asset, allowing us to perform out-of-sample comparisons. The corresponding run length
+posteriors are displayed in Appendix C.
+Since the true underlying change-points aren’t known, the models can’t be evaluated on
+their clustering capacity with the covering metric but we still have the mean squared error for
+forecasting capacity, and the predictive likelihood. For each dataset, we evaluate every model
+under both of its calibrated parameter sets obtained in the previous subsection.
+The Diebold-Mariano test:To assess whether the difference in forecasting accuracy between
+BOCPD and BOSD is statistically significant, we use the Diebold-Mariano test. For each time
+step, we compute the prediction error of both models and then look at the difference in their
+squared errors. If one model is truly better, this difference should be consistently positive or
+negative over time. This test checks whether the average of these loss differences is significantly
+different from zero by computing a test statistic and a p-value. A small p-value tells us the two
+models genuinely differ in accuracy, and the sign of the statistic tells us which one is better.
+Table 7.2:Out-of-sample performance metrics, 2022-08 to 2022-11. For each asset, period and
+calibration criterion, the best value across the three models is in bold.N cps: number of detected
+changepoints; L: average regime length.
+MSE-calibrated Log-Lik-calibrated
+Period ModelN cps LMSE Log-LikN cps LMSE Log-Lik
+MSFT(N542)
+2022-08
+BOCPD 86 31.5 0.8432−9108.263 42.8 0.9719−9004.6
+Pareto 390 7.0 0.8552−9103.871 38.00.8675−9070.1
+Log-Norm 66 40.90.8422−9096.548 55.9 0.9475−8991.7
+2022-09
+BOCPD 178 15.10.8783−9818.099 27.0 1.1142−9443.0
+Pareto 453 5.9 0.8922−9962.478 34.20.9162−9803.6
+Log-Norm 118 22.7 0.8790−9811.698 27.3 1.0505−9392.7
+2022-10
+BOCPD 153 20.3 0.8980−10928.9100 30.9 1.0640−10670.9
+Pareto 518 6.0 0.9141−11042.9102 30.30.9183−10926.0
+Log-Norm 117 26.40.8952−10918.490 34.3 1.0210−10640.2
+2022-11
+BOCPD 89 22.0 0.8526−6836.756 34.8 0.9618−6722.3
+Pareto 278 7.1 0.8507−6837.558 33.60.8632−6797.5
+Log-Norm 82 23.90.8441−6814.554 36.1 0.9375−6701.9
+AAPL(N887)
+2022-08
+BOCPD 142 18.4 0.9250−11522.9171 15.3 0.9649−11388.0
+Pareto 54 47.8 0.9287−11534.961 42.4 0.9654−11429.3
+Log-Norm 49 52.60.9119−11443.1104 25.00.9199−11353.9
+2022-09
+BOCPD 230 12.6 0.9040−13071.6217 13.4 0.9279−12966.9
+Pareto 97 29.7 0.9038−13080.4111 26.0 0.9256−12960.2
+Log-Norm 78 36.90.8984−12998.4143 20.20.8990−12912.7
+2022-10
+BOCPD 195 14.0 0.9761−12847.3195 14.0 1.0451−12564.6
+Pareto 35 76.30.9613−12884.677 35.2 1.0427−12634.1
+Log-Norm 20 130.8 0.9632−12700.295 28.60.9780−12506.8
+2022-11
+BOCPD 124 12.7 0.8759−6835.0130 12.1 0.8986−6821.6
+Pareto 32 48.2 0.8787−6839.028 54.80.8724−6815.7
+Log-Norm 13 113.50.8751−6828.666 23.7 0.8858−6813.3
+20
+8 From BOCPD to BOCPDMS: Model Selection Research internship report
+Summary of Algorithms’ Performance:To facilitate a comprehensive review of the al-
+gorithms’ performance, Table 7.3 presents a consolidated view of the Global MSE across all
+out-of-sample datasets, under each of the two calibration criteria. For each dataset and crite-
+rion, the lowest MSE (indicating the most accurate forecast) is highlighted in bold.
+Table 7.3:Summary of Global MSE across all out-of-sample datasets.
+P-BOSD: Pareto BOSD; LN-BOSD: Log-Normal BOSD.
+MSE-calibrated
+Dataset BOCPD P-BOSD LN-BOSD
+MSFT 2022-08 0.8432 0.85520.8422
+MSFT 2022-090.87830.8922 0.8790
+MSFT 2022-10 0.8980 0.91410.8952
+MSFT 2022-11 0.8526 0.85070.8441
+AAPL 2022-08 0.9250 0.92870.9119
+AAPL 2022-09 0.9040 0.90380.8984
+AAPL 2022-10 0.97610.96130.9632
+AAPL 2022-11 0.8759 0.87870.8751
+Log-Lik-calibrated
+Dataset BOCPD P-BOSD LN-BOSD
+MSFT 2022-08 0.97190.86750.9475
+MSFT 2022-09 1.11420.91621.0505
+MSFT 2022-10 1.06400.91831.0210
+MSFT 2022-11 0.96180.86320.9375
+AAPL 2022-08 0.9649 0.96540.9199
+AAPL 2022-09 0.9279 0.92560.8990
+AAPL 2022-10 1.0451 1.04270.9780
+AAPL 2022-11 0.89860.87240.8858
+8 From BOCPD to BOCPDMS: Model Selection
+8.1 The problem with a single model
+In the standard BOCPD framework, we fix one model. For instance, we might decide upfront
+that “the data within each regime is iid Gaussian with unknown mean.”
+This is a very strong assumption, especially for multivariate financial data. The data
+could be far more complex than that and we might not be sure about the right structure. In
+the standard BOCPD, we pick one such model before running the algorithm and if we guess
+wrong, the algorithm’s performance will suffer.
+The BOCPDMS framework (Knoblauch and Damoulas, 2018) addresses this by introduc-
+ing amodel universeM={m 1, . . . , mM }: a finite collection of candidate models. Instead of
+betting on a single model, the algorithm maintains a probability distribution over all models
+inMand lets the data decide, in real time, which one fits best.
+8.2 The new latent variable: the model index
+Recall that in standard BOCPD, the latent state at timetis just the run lengthr t. In
+BOCPDMS, the latent state becomes apair(rt, mt), wherer t ∈ {0,1,2, . . .}is the run length,
+the number of time steps since the last changepoint, andmt ∈ Mis the model index.
+Basically, instead of yielding a 1D posteriorP(rt |x 1:t)as in BOCPD, the algorithm now
+provides a2D posteriorP(r t, mt |x 1:t), a matrix where each entry tells us: “given all the data
+observed so far, what is the probability that the current regime has been running forrsteps
+and is described by modelm?”
+8.3 The model prior
+The model priorq(m)is a distribution overM— in the simplest case uniform,q(m) = 1/M.
+We introduce it through the generative perspective, then be precise about the inference process.
+Generative perspective.If we simulate data, the model index evolves as a Markov
+chain coupled to the run length:
+21
+8 From BOCPD to BOCPDMS: Model Selection Research internship report
+q(mt |m t−1, rt) =
+(
+1mt−1(mt)ifr t =r t−1 + 1(no CP)
+q(mt)ifr t = 0(CP). (8.1)
+In words: within a regime the active model is frozen (the indicator forcesmt =m t−1); at a
+changepoint a new model is drawn from the model priorq(m).
+What inference actually does.The online algorithm never draws anything. It main-
+tainsp(r t, mt |x 1:t)over all pairs, and the transition rule steers the probability mass:
+•Growth branch (rt =r t−1 + 1):the model index is carried over unchanged.
+•Changepoint branch (r t = 0):the probability mass is redistributed over the model
+universe in proportion toq(mt).
+Soq(m)is not a mechanism for choosing a model; it is the weight with which each model is
+seeded at every potential changepoint. The algorithm does the actual selecting, by concentrat-
+ing posterior mass on the model that explains the new regime best.
+8.4 The central recursive equation
+As in BOCPD, the heart of BOCPDMS is the message-passing recursive equation that updates,
+at each time step, the joint distribution which isp(x1:t, rt, mt)here.
+p(x1:t, rt, mt) = Pmt−1 Prt−1nfmt(xt |x 1:(t−1), rt)| {z }
+UPM for modelm t
+q(mt |x 1:(t−1), rt, mt−1)| {z }
+model transition term
+p(rt |r t−1)| {z }
+hazard rate
+p(x1:(t−1), rt−1, mt−1)| {z }
+previous message
+o
+•f mt(xt |x 1:(t−1), rt)is theUnderlying Predictive Model(UPM) for modelm t. “Given
+that the regime has run lengthrt and is described by modelmt, how likely is the new
+observationx t?” As in the BOCPD framework, this is where conjugacy matters.
+•q(m t |x 1:(t−1), rt, mt−1)is themodel transition term: “Keep the same model if no
+changepoint, and if there is a changepoint, give every model a given starting weight.”
+•p(r t |r t−1)is thehazard rate.
+•p(x 1:(t−1), rt−1, mt−1)is themessage, the joint distribution from the previous time step.
+NB:When|M|= 1(a single model), the sums overm t disappear, the model transition term
+becomes trivially 1, and we recover the recursion of the standard BOCPD.
+The recursion splits naturally into two cases.
+Growth probability (rt =r t−1 + 1):If the regime continues, the hazard rate is1−
+H(r t−1 + 1) = 1−H(r t)and the model stays the same (mt =m t−1):
+p(x1:t, rt =r t−1 + 1, mt) =f mt(xt |x 1:(t−1), rt)·(1−H(r t))·p(x 1:(t−1), rt−1, mt)
+Changepoint probability (rt = 0):If a changepoint occurs, the total probability mass
+is distributed across the new candidate models according to the priorq(mt):
+p(x1:t, rt = 0, mt) =f mt(xt |x 1:(t−1), rt)·q(m t)·
+X
+mt−1
+X
+rt−1
+n
+H(r t−1 + 1)·p(x 1:(t−1), rt−1, mt−1)
+o
+Once we have the joint distributionp(x1:t, rt, mt)for all pairs of(r t, mt), we compute the
+evidencep(x 1:t) = Pmt∈M Ptrt=0 p(x1:t, rt, mt)which serves as the normalizing constant to
+calculate the proper posterior distribution from the joint distribution.
+22
+8 From BOCPD to BOCPDMS: Model Selection Research internship report
+8.5 The posteriors: what the algorithm gives us
+(a)Thejointmodel-and-run-lengthposterior:p(r t, mt |x 1:t) =p(x 1:t, rt, mt)/p(x1:t).
+This is the full 2D posterior: an entry(r, m)tells us the probability that the current regime
+has been running forrsteps and is described by modelm, given everything we have observed.
+(b) The model posterior:p(m t |x 1:t) = Prt p(rt, mt |x 1:t). This is the marginal
+probability of each model, regardless of how long the current regime has been running: “which
+model best describes the data?”
+(c) The global run-length distribution:p(rt |x 1:t) = Pmt∈M p(rt, mt |x 1:t). This
+is the direct analog of the BOCPD posteriorP(rt |x 1:t), and it can be used for changepoint
+detection in the same way.
+8.6 Prediction: Bayesian Model Averaging
+Knoblauch and Damoulas (2018) call the one-step-ahead point forecast therecursive forecast
+bxt+1 =E(x t+1 |x 1:t). It is exactly the object we called thepredictive meanin the BOCPD
+framework, and we will keep calling it this way. The algorithm yields the posterior distribution
+from which we get theposterior predictive distribution:
+p(xt+1 |x 1:t) =
+X
+rt
+X
+mt∈M
+p(xt+1 |x 1:t, rt, mt)·p(r t, mt |x 1:t)(8.2)
+Each hypothesis(rt, mt)produces its own prediction, and the final prediction is a weighted
+average of all of them, weighted by how plausible each hypothesis is. To get a point forecast,
+we compute the predictive mean by taking the expectation of (8.2):
+ˆµt+1 =E[x t+1 |x 1:t] =
+Z
+x
+X
+rt,mt
+p(x|x 1:t, rt, mt)p(r t, mt |x 1:t)dx
+=
+X
+rt,mt
+E[xt+1 |x 1:t, rt, mt]| {z }
+mean of hypothesis(r t,mt)
+·p(r t, mt |x 1:t).(8.3)
+Transposing the BOCPD predictive mean.Recall the BOCPD case, where the
+predictive mean wasˆµt = Prt µrt P(r t |x 1:t): a posterior-weighted average of the regime-
+specific meansµ rt, each of which came out of the Gaussian UPMN(µrt, σ2rt +σ 2).
+E[xt+1 |x 1:t] =
+Z
+x
+X
+rt
+P(x|r t, x(r)t )P(r t |x 1:t)dx
+=
+X
+rt
+P(r t |x 1:t)
+Z
+x P(x|r t, x(r)t )dx
+| {z }
+mean ofN(µ rt , σ2+σ2rt ) =µ rt
+=
+X
+rt
+µrt P(r t |x 1:t).(8.4)
+In both frameworks the hypothesis-specific parameter is learned online and converges within a
+regime:µ rt starts at the prior meanµ0 and converges to the true regime level, exactly asˆcr
+starts at0and converges to the trueA l. But there is a difference in what drives the forecast
+once learning has settled. In BOCPD,µrt is essentially the running mean of the regime and it
+progressively flattens out onto the true level. In the BVAR,ˆcr likewise settles, but the forecast
+ˆcTr ϕt+1 never flattens, so the prediction keeps tracking the data no matter how long the regime
+has run. The BVAR forecast thus retains a permanent source of variation that the BOCPD
+forecast loses. This is the difference between predicting aleveland predicting adynamic.
+The BVAR case.Concretely, the mean of a multivariate Student-tequals its location
+parameter as soon asνr = 2ar >1:E[x t+1 |x 1:t, rt, mt] = ˆcTr ϕt+1.
+23
+9 Bayesian parameter learning inside BOCPDMS Research internship report
+Proposition 8.1(Predictive mean).The predictive mean, which is the first moment of the
+posterior predictive (8.2), writes
+ˆµt+1 =
+X
+rt
+X
+mt∈M
+ˆcTr ϕt+1 ·p(r t, mt |x 1:t),(8.5)
+a vector inRS: one forecast per component of the series.
+9 Bayesian parameter learning inside BOCPDMS
+In the standard BOCPD in which we suppose the data is distributed over a Gaussian with
+unknown meanµand known varianceσ2, the unknown mean is learned on-the-fly via conjugate
+Bayesian updating. The posterior parametersµr andσ 2r depend on the run lengthr, and the
+UPM computes a different predictive distribution for each run length hypothesis:
+p(xt |r t−1, x(r)t−1) =N(x t |µ rt−1, σ2rt−1 +σ 2)
+whereµ rt−1 is the posterior mean of the regime parameter andσ2rt−1 is the posterior variance,
+obtained by observing data points within the current regime (more data⇒less uncertainty).
+This is theBayesian learningthat makes BOCPD powerful: the algorithm does not
+just detect changepoints, it simultaneously learns the parameters of the regime online.
+9.1 Our multivariate model: the Bayesian VAR
+Knoblauch and Damoulas (2018) propose filling the model universeMwithBayesian Vec-
+tor Autoregressions (BVAR), which are much richer than simple AR(1) and naturally
+include the Bayesian learning. A BVAR model of lagLfor anS-dimensional time series
+xt = (x(1)t , . . . , x(S)t )T takes the form:
+σ2 ∼InverseGamma(a, b)(9.1)ε t |σ 2 ∼ N(0, σ2 ·Ω)(9.2)
+c|σ 2 ∼ N(β0 = 0, σ2 ·V c)(9.3) xt =α+BZ t +
+LX
+l=1
+Alxt−l +ε t (9.4)
+•Equation(9.4) is the observation equation: the current observationxt is a linear combi-
+nation of theLmost recent past observations through the coefficient matricesA1, . . . ,AL,
+plus exogenous variablesZt, plus an interceptα, plus noise.
+•Equation(9.3) is theprior on the parameters. All the model parameters (intercept,
+exogenous coefficients, autoregressive coefficients) are stacked into a single big vectorc,
+and we put a Gaussian prior on it.
+•Equation(9.2) is the noise model: the innovationε t is Gaussian with covarianceσ2Ω,
+whereΩis aknowndiagonal matrix. Being diagonal, it rules out contemporaneous
+(same-time) correlation between locations; a single scalarσ2 then sets the overall noise
+level. Knoblauch and Damoulas (2018) keepΩgeneral-diagonal in the model definition,
+but the NIG variant used in their reference implementation fixesΩ=IS, so all locations
+share the same noise varianceσ2.
+•Equation(9.1) is the prior onσ 2: an Inverse-Gamma distribution with shapeaand scale
+b. With the Gaussian prior onc, it forms a Normal-Inverse-Gamma conjugate setup.
+The matricesA l are unknown and learned from the data.In the BVAR, the
+algorithm observes data within a regime and progressively refines its estimate ofAl (andσ 2)
+24
+9 Bayesian parameter learning inside BOCPDMS Research internship report
+via Bayesian updating. The run lengthrt matters: a regime that has lasted 5 time steps has a
+very rough estimate ofAl, while one that has lasted 200 has a precise estimate.
+Our setting.We assumeZ t =0,α=0(no exogenous variables and no intercept),
+so the only parameters are the autoregressive matricesA1, . . . ,AL. We gather them into a
+singlek×Scoefficient matrixc(withk=LS), whose transpose stacks theA l side by side:
+cT = (A1, . . . ,AL)∈R S×LS. Recovering theAl fromcis just reading off blocks of its transpose.
+NB:KnoblauchandDamoulas(2018)writecasavectorstackingthevectorisedcoefficients,c=
+(vec(A1)T , . . . ,vec(AL)T )T, so that recoveringAl is a reshape. We instead use the equivalent
+matrix layout of their reference implementation, in whichcisk×SandA l is read off by
+transposition. The two describe the same coefficients; we adopt the matrix form because it
+matches the code and makes the updateˆc=FWread directly as a matrix product.
+9.2 Why conjugacy matters (again)
+The reason we choose the BVAR formulation isconjugacy. Recall that conjugacy is what
+gives us a closed-form Bayesian update for BOCPD: the posterior has the same functional form
+as the prior, and updating just means adjusting a few numbers (the sufficient statistics).
+In the univariate BOCPD case (µunknown andσ 2 known), we had the priorµ∼
+N(µ 0, σ20), the likelihoodx t |µ∼ N(µ, σ 2), and the posteriorµ|x 1:N ∼ N(µN , σ2N )with
+simple update rules. The BVAR generalizes this to the multivariate regression setting:
+•Prior:c|σ 2 ∼ N(0, σ2Vc)andσ 2 ∼InverseGamma(a, b).
+•Likelihood:x t |c, σ2 ∼ N(Xtc, σ2Ω)whereX t is the regressor matrix (defined below).
+•Posterior:Normal-Inverse-Gamma, with updated sufficient statistics.
+This conjugacy guarantees that the Bayesian update can be done inclosed form. The
+UPM also has a closed form — it is a multivariate Student-tdistribution. All updates are
+additive. The full derivation, valid for any known SPDΩ, is given in Appendix F.
+9.3 The Bayesian update for BVAR parameters
+Now we detail what the sufficient statistics are. This is the multivariate analog of the precision
+and mean update rules we derived for the univariate Gaussian in the BOCPD section.
+Suppose the current regime has run lengthr, so it contains ther+ 1observations
+xt−r, . . . ,xt. At each stepi, theregressor vectorϕ i ∈R k (k=LS) stacks theLlagged
+observations:ϕ i = (xTi−1, . . . ,xTi−L)T ∈R LS.
+We then define two matrices: theresponse matrixYand theregressor matrixX:
+Y(t−r):t =
+
+
+xTt−r
+...
+xTt
+
+ ∈R (r+1)×S ,X (t−r):t =
+
+
+ϕTt−r
+...
+ϕTt
+
+ ∈R (r+1)×k.
+RowiofXholds the predictors, rowiofYthe target:Xis essentiallyYshifted by one
+step, since each observation first plays the role of a response, then becomes a regressor for later
+steps. Dropping the(t−r):tsubscripts for readability, the sufficient statistics are:
+F(r, t) =
+ 
+XT X+V −1c −1 (9.5)
+W(r, t) =XT Y(9.6)
+When a new observation arrives, we do not need to recompute everything from scratch.
+The updates are incremental:
+25
+9 Bayesian parameter learning inside BOCPDMS Research internship report
+•W(r, t) =W(r−1, t−1) +ϕ t xTt — a simple additive update.
+•P(r, t) =P(r−1, t−1) +ϕ t ϕTt , whereP(r, t) =F(r, t)−1 is the precision.
+The principle is the same: accumulate evidence, refine the estimate. Each data point
+tightenstheposterior, whetheritisoverascalarmeanµoramatrixofautoregressivecoefficients
+Al.
+From sufficient statistics to the tracked coefficients.The MAP estimate of the
+coefficient matrix is a deterministic function of the two statistics above:
+ˆc(r, t) =F(r, t)W(r, t) = XT X+V −1c −1XT Y,
+ak×Smatrix whose transpose recovers the autoregressive coefficients, ˆcT = ( ˆA1, . . . ,ˆAL).
+This is a precision-weighted blend of the prior mean (zero) and the data. Whenris small,
+V−1c dominates and ˆAl ≈0; asrgrows,X T Xdominates and ˆcapproaches the unregularised
+least-squares fit (the prior washes out).
+ˆc(r, t)is not maintained recursively: the conjugate update only ever touches the sufficient
+statistics(P,W), and ˆcis recomputed from them. It is precisely this quantity, at the most
+likely run lengthr∗t, that we track through time.
+Learning the varianceσ 2.The same statistics also drive the variance. The Normal-
+Inverse-Gamma prior is conjugate, so the posterior ofσ2 given run lengthris again Inverse-
+Gamma,σ 2 |r, t∼InverseGamma(a r, br). The updated shape and scale are
+ar =a 0 + S(r+ 1)2 , b r =b 0 + 12 YYr +β T0 V−1c β0 − ˆcTr Prˆcr,
+whereYY r is the response cross-product andβ0 the prior coefficient mean. In our setting the
+prior is centred at zero (β0 =0), so the middle term drops and the scale simplifies to
+br =b 0 + 12
+
+YYr −tr
+ 
+Ω−1WTr P−1r Wr,
+which is the exact form implemented in the reference code. Bothar andb r are pure functions
+of the running sufficient statistics, soσ2 is learned online at no extra cost.
+The full posterior ofσ2 is never collapsed to a point during inference — it is marginalised
+out to produce the Student-tUPM of the next subsection, which is the whole benefit of NIG
+conjugacy. However, if we want to visualise how the variance is learned within a regime, a
+natural summary is the posterior mean of the Inverse-Gamma read at the most likely run
+lengthr ∗t: bσ2(r, t) =br/(ar −1)fora r >1.
+9.4 The UPM with Bayesian parameter learning
+At timet, the algorithm simultaneously maintains multiple hypotheses about the run length:
+“mayber t = 0(a changepoint just happened), maybert = 1, ..., mayber t =t(no changepoint
+has ever occurred).” For each of these hypotheses, the parameters of the model aredifferent.
+Ifr t = 2, the posterior mean is based on only 2 observations and is very uncertain. Ifrt = 100,
+the posterior mean is very precise.
+This is why, in the BOCPD, the posterior meanµr and varianceσ 2r are indexed byr(one
+entry per possible run length). When the UPM is evaluated, it returns a vector oftdifferent
+probabilities — one for each run length hypothesis. In the univariate BOCPD:
+p(xt |r t−1, x(r)t−1) =N(x t |µ rt−1, σ2rt−1 +σ 2)forr= 0,1, . . . , t−1
+FortheBVAR,wemaintainacollectionofsufficientstatistics,{F(r, t),W(r, t), a r, br}, one
+for each possible run lengthr. At each time step, we compute a different predictive probability
+for eachrusing the posterior parameters specific to that run length:fm(xt |x 1:(t−1), rt).
+26
+10 Learning the hyperparameters online Research internship report
+Thanks to conjugacy, the UPM has a closed-form solution: it is amultivariate Student-
+tdistribution. Writingϕ t fortheregressorvectorthatpredictsx t, andwritingh r =ϕ Tt F(r, t)ϕt,
+its degrees of freedom, location and scale depend on the sufficient statistics accumulated over
+ther+ 1observations of the current regime:
+fm(xt |x 1:(t−1), rt) =Student-t 2ar
+
+xt
+ ˆcTr ϕt, brar (1 +h r)Ω  .(9.7)
+NB:The Student-tshape is a consequence of marginalising the unknown varianceσ2, not
+ofthemultivariatesetting. Ifσ 2 isknownandonlythemeancisintegratedout, Normal–Normal
+conjugacy leaves a Gaussian predictive — this is the standard BOCPD setup, and the reason
+the univariate example above is Gaussian. If insteadσ 2 is also unknown and marginalised,
+Normal-Inverse-Gamma conjugacy yields a Student-tpredictive.
+10 Learning the hyperparameters online
+10.1 Hyperparameter optimization
+Our BVAR model learnscandσ 2 from the data. But the priors on these quantities depend on
+fourhyperparametersν m that the Bayesian update never touches (Table 10.1).
+Table 10.1:The hyperparametersν m.
+Hyperparameter Role Shape
+a0 Shape of the Inverse-Gamma prior onσ2 scalar
+b0 Scale of the Inverse-Gamma prior onσ2 scalar
+Vc Prior covariance on the AR coefficients (k, k)
+Ω Noise structure matrix (S, S)
+These parameters shape the priors before any data is seen. And the problem is: if we set
+them badly, the algorithm’s performance gets worse. In the BOCPD and BOSD framework, the
+hyperparameters were the parameters of the prior of regime means (µ0 andσ 0) and they were
+tuned by hand or with an offline calibration pass. Both are painful: hand-tuning is guesswork,
+and offline calibration needs a separate training phase before we can even start.
+Knoblauch and Damoulas (2018) propose two approaches. The first is an offline approach,
+similar to what we’ve done to “calibrate” the BOCPD: run BOCPDMSKtimes on a training
+setx 1:T ′, and find the hyperparameters that maximize the Predictive log-Likelihood.
+The second approach is much more appealing because it is fullyonline. The idea is to
+update the hyperparameters at every time step using gradient ascent (Caron et al., 2012) and
+it has two major advantages:
+1.No separate training phase:inference and hyperparameter learning happen simulta-
+neously, which means the algorithm can be “cold-started” without any pre-tuning.
+2.No computational overhead:the gradient can be computed recursively alongside the
+main BOCPDMS recursion, so the online complexity is unchanged.
+This is a very promising feature: we would not need to manually choose the hyperparameters
+and the algorithm would learn them from the data itself.
+10.2 The idea: online gradient ascent on the hyperparameters
+This is actually a very simple idea:gradient ascent. At every time step, after we observe the
+new data point, we ask “would a small change in the hyperparameters have made our prediction
+better?” If yes, we nudge them in that direction.
+ν m,t+1 =ν m,t +α t ∇νm,t logp(x t+1 |x 1:t,ν m1:t)(10.1)
+27
+10 Learning the hyperparameters online Research internship report
+•ν m,t is the current value of the hyperparameters of modelmat timet.
+•logp(x t+1 |x 1:t,ν m)is thepredictive log-likelihood: how well the model predicted the
+incoming point using everything up to timet. High value = good prediction.
+•∇ νm is the gradient, andαt is thelearning rate: how big a step we take.
+So, after seeingxt+1, we look back at the prediction we made for it, and move the hyper-
+parameters a little in the direction that would have made that prediction more likely.
+We need the gradient of the predictive log-likelihood which is a weighted sum, over all
+run lengths, of the UPM at each run length, weighted by how plausible that run length is:
+logp(x t+1 |x 1:t,ν m) = log
+tX
+r=0
+p(xt+1 |r t, m,νm)| {z }
+UPM at run lengthr
+·p(r t, m|x 1:t)| {z }
+posterior weight
+(10.2)
+Because the log-predictive is a logarithm of a sum, its gradient has a clean form:
+∇νm logp(x t+1 |x 1:t,ν m) =
+X
+r
+p(rt, m|x 1:t)· ∇νm p(xt+1 |r t, m,νm)
+X
+r
+p(rt, m|x 1:t)·p(x t+1 |r t, m,νm)
+(10.3)
+So the gradient is aweighted average of the gradients of each individual UPM,
+where the weights are the posterior probabilities. So the run lengths and models that the
+algorithm currently believes in the most contribute the most to the hyperparameter update
+which is intuitive: we trust the gradient coming from the hypotheses we currently find most
+plausible.
+So, once we know how to differentiate a single Student-tUPM with respect to a hyperpa-
+rameter, we are done: we compute that derivative at every run length, average them with the
+posterior weights, and plug the result into the update.
+10.3 Which hyperparameters do we actually learn?
+In theory, we could learn all four. In practice, we do not. Optimizing the two scalarsa0 and
+b0 is cheap and stable. Optimizing the full matricesVc andΩis a different story: they are
+covariance matrices, so every gradient step would have to keep them positive-definite, which is
+fragile and expensive. So we restrict ourselves to the two Inverse-Gamma scalars.
+•b 0 (the scale of the prior onσ2):This is the simplest and most impactful, because
+b0 directly sets the a priori scale of the variance.
+br =b 0 + 12
+
+YYr −tr
+ 
+Ω−1WTr P−1r Wr =⇒ ∂br∂b0 = 1 =⇒ ∂logf r∂b0 = ∂logf r∂br
+NB:the general formula additionally carries aβT0 V−1c β0 term that vanishes here because
+the coefficient prior is centred at zero (β0 =0).
+•a 0 (the shape of the prior onσ2):
+ar =a 0 + S(r+1)2 =⇒ ∂ar∂a0 = 1 =⇒ ∂logf r∂a0 = ∂logf r∂ar
+NB:The reference implementation of Knoblauch and Damoulas (2018) increments the
+shape by1/2per time step rather than per scalar observation, i.e.ar =a 0 + (r+ 1)/2, while
+its scaleb r accumulatesSsquared residuals per step. The two are inconsistent forS >1: the
+posterior meanb r/(ar −1)then converges toSσ 2 instead ofσ 2. We verified this empirically on
+synthetic data withS= 2andσ 2 = 1, where the estimate settles at2.0.
+28
+10 Learning the hyperparameters online Research internship report
+10.4 The core computation: differentiating the Student-t
+It now comes down to differentiating the log-density of a multivariate Student-t. For anS-
+dimensional Student-twithνdegrees of freedom, locationµand scale matrixΣ, it is:
+logf(x|ν,µ,Σ) =C(ν)− 12 log|Σ| −ν+S2 log1 + 1ν (x−µ) T Σ−1(x−µ)  (10.4)
+withC(ν) = log Γ( ν+S2 )−log Γ( ν2 )− S2 log(νπ). In our BVAR, the density is evaluated atx=xt,
+the location isµr = ˆcTr ϕt, the degrees of freedom areνr = 2ar, and the scale isΣr = brar (1+h r)Ω
+withh r =ϕ Tt P−1r ϕt.
+A quantity that will keep coming back isQr = 1νr (x−µ r)T Σ−1r (x−µ r). The good newsis thatQ r is computed when we evaluate the UPM, so we can grab it for free.
+Proposition 10.1(Q r does not depend onar).WritingΣ −1r = arbr M−1r withM r = (1 +h r)Ω(a matrix that involves neitherar norb r), we get
+Qr = 12ar · arbr ·K r = Kr2br , K r := (x−µ r)T M−1r (x−µ r).
+The factora r cancels exactly.Q r is a function ofbr only, never ofar.
+Derivative with respect tobr
+Since the scale is proportional tobr (∂Σr/∂br =Σ r/br), differentiating each term of (10.4) with
+respect tob r (using∂Q r/∂br =−Q r/br from Proposition 10.1) gives:
+∂logf r
+∂br
+= 12br
+ (νr +S)Q r
+1 +Q r
+−S
+
+(10.5)
+Derivative with respect toar
+Becausea r affects bothν r = 2ar and the scale throughbr/ar, we differentiate each of the three
+terms of (10.4) with respect toar, holdingb r fixed:
+•C(2a r)contributesψ(a r + S2 )−ψ(a r)− S2ar;
+•− 12 log|Σ r|, i.e.− S2 log(br/ar) +const, contributes+ S2ar;
+•the log-term contributes−log(1 +Q r), andnothing else∂Q r/∂ar = 0.
+The two terms inS/(2ar)cancelexactly, leaving a remarkably compact result:
+∂logf r
+∂ar
+=ψ
+
+ar + S2  −ψ(a r)−log(1 +Q r) (10.6)
+This is the good, verified form from the reference code of Knoblauch and Damoulas (2018).
+29
+10 Learning the hyperparameters online Research internship report
+10.5 Can the noise matrix be non-diagonal?
+Recall the noise model of the BVAR:εt |σ 2 ∼ N(0, σ2Ω), where Knoblauch and Damoulas
+(2018) takeΩto be aknowndiagonal matrix, and where the reference implementation (and
+our experiments so far) fixesΩ=I S. But actually the diagonality restriction is not essential:
+•Any known SPD matrixΩpreserves conjugacy.The Normal-Inverse-Gamma
+machinery (closed-form posterior, additive sufficient statistics, Student-tUPM) carries
+over to a full, non-diagonalΩ, as long as it is fixed. We sketch this below and derive it
+in Appendix F; the underlying result is standard in Bayesian multivariate regression.
+•What breaks the framework is learningΩ, not its shape. An unknown noise co-
+variance requires a different conjugate family (Inverse-Wishart), which turns out to be
+compatible with the full BVAR but incompatible with the SSBVAR, and this, with two
+further arguments, is the reason behind the choice of Knoblauch and Damoulas (2018).
+This dividing line is exactly the one drawn by Bishop (2006): in Section 3.3 of his book, he
+develops conjugate Bayesian regression under a noise precision that isknown, and nothing in
+the derivation requires it to be isotropic or diagonal. Conversely, as soon as the covariance is
+unknown, the conjugate family must change: Gaussian-gamma in the univariate case, Gaussian-
+Wishart in the multivariate case (his Section 2.3.6).
+Conjugacy holds for any known SPD Omega
+WithΩ=I S that Knoblauch and Damoulas (2018) actually use, the noise is isotropic, and
+the prior on the stacked coefficient vector isc|σ2 ∼ N(0, σ2Vc). Column by column, this is
+Sindependent conjugate Bayesian linear regressions with known noise precision, exactly as in
+Bishop (2006), Section 3.3, so conjugacy (closed-form posterior, additive sufficient statistics,
+Student-tpredictive) is immediate.
+Where diagonality is (not) used.Writing the posterior ofcwith Bayes’ rule, and
+completing the square, we find that the posterior precision and mean areP=V −1c +X T X
+and ˆc=P −1XT Y, and thatΩ −1 factors out, leavingPand ˆcfree ofΩ. Diagonality ofΩis
+used nowhere.The NIG framework is conjugate for any fixed SPDΩ, so the entire
+BOCPDMS machinery runs unmodified.
+Our implementation already supports it.It is written for a generalΩfrom the
+start. It placesΩonly in the noise-related quantities (the cross-productx Tt Ω−1xt, the trace
+term inb r, and the predictive scale) and keeps the precisionPr free ofΩ. This is precisely the
+coupled-prior configuration; indeed, the fact thatPr is stored as a singlek×kmatrix is the
+signature of that choice, since the plain prior would not factor into one. ForΩ=IS it reduces
+to the plain prior of Knoblauch and Damoulas (2018), so our runs so far are unaffected by the
+distinction, and passing a non-diagonal SPDΩrequires no structural change to the code.
+30
+11 Experiments on synthetic data Research internship report
+11 Experiments on synthetic data
+This section tests our BOCPDMS implementation through a series of controlled experiments
+on synthetic data. In all of them the model universeMcontains a single, well-specifiedV AR(1)
+model, so the model-selection machinery is not yet exercised: we first isolate and validate the
+Bayesian-learning engine and the online hyperparameter optimisation.
+Setup and reporting conventions
+Thealgorithmisnevertoldthetruecoefficients, thetrueinnovationvariance, orthechangepoint
+locations: it only receives the streamx1:T and the prior specification. Unless stated otherwise,
+every experiment usesS= 2,L= 1,T= 500,H= 1/150.
+Hyperparameters.In BOCPD the hyperparameters were(µ 0, σ0): a prior mean and
+spread for the regime mean. Here they are less directly readable, so Table 11.1 details what
+each one controls. The unknown scaleσ2 is shared by the noise and the coefficient prior;Vc
+andΩare shape matrices, held fixed (onlya 0, b0 are learned online).
+Table 11.1:Reading the hyperparametersν m.
+What it fixes How to read it Value
+Ω relative noise level of
+each component
+IS: all components share one
+varianceσ 2;diag(ω s)would
+give componentsthe variance
+σ2ωs
+IS
+a0 concentration of the
+prior onσ 2
+the confidence:a r =a 0 +S(r+
+1)/2, so each step addsS/2
+2.0
+b0 a priori scale ofσ2 sets the prior meanE[σ 2] =
+b0/(a0 −1)
+0.5
+Vc width of the coefficient
+prior (∼analogue ofσ 0)
+prior std √v σper coefficient,
+i.e.10σ
+102 ·I k
+The learning figures.The light curve is the estimate atr∗t =argmax r,mp(rt, mt |x 1:t)
+and the darker one is the posterior-averaged reading that weights every hypothesis by the
+model-specific run-length distribution:
+¯ct =
+X
+rt
+ˆc(rt, t)p(rt |m ∗t ,x 1:t),¯σ 2t = X
+rt
+brt
+art −1 p(rt |m ∗t ,x 1:t).
+Every panel of Figures 11.1 to 11.4 reports, for the corresponding experiment: (a) data; (b) run-
+length posterior; (c) online learning ofˆA; (d) online learning ofbσ2; (e) online hyperparameters
+learning.
+11.1 One change in the AR matrix (diagonal matrices)
+We simulate a bivariate VAR(1) of lengthT= 500with a single changepoint att⋆ = 250:
+xt =A x t−1 +ε t,ε t
+iid
+∼ N(0, σ2I2), σ 2 = 1,
+A(1) =
+0.9 0
+0 0.7
+
+− →A(2) =
+0.1 0
+0 0.2
+
+.
+Both matrices are diagonal, so the two components evolve independently:x(1)t =a 11x(1)t−1 +ε (1)t
+andx (2)t =a 22x(2)t−1 +ε (2)t .
+31
+11 Experiments on synthetic data Research internship report
+−4
+−2
+0
+2
+4
+xt
+Data
+0 100 200 300 400 5000
+100
+200
+rt
+MSE = 0.5571
+Covering metric = 0.9481
+BOCPDMS: Run Length Posterior
+most likely path
+−0.5
+0.0
+0.5
+A1, 1
+̂A1, 1 at r *
+̂A1, 1 averaged
+True
+−0.5
+0.0
+0.5
+1.0
+A1, 2
+̂A1, 2 at r *
+̂A1, 2 averaged
+True
+−0.50
+−0.25
+0.00
+0.25
+0.50
+0.75
+A2, 1
+̂A2, 1 at r *
+̂A2, 1 averaged
+True
+0 100 200 300 400 500
+Time t
+−1
+0
+1
+2
+A2, 2
+̂A2, 2 at r *
+̂A2, 2 averaged
+True
+AR Coefficient Learning Within Regimes
+0 100 200 300 400 500
+Time t
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+̂σ2
+̂σ2 at r *
+̂σ2 averaged
+True σ2
+Variance Learning (posterior mean of the Inverse-Gamma)
+2.0
+2.5
+a0(t)
+0 100 200 300 400 500
+Time t
+0.2
+0.4
+b0(t)
+Online Hyperparameter Learning
+Figure 11.1:Experiment 1.(a) data; (b) run-length posterior; (c) online learning of ˆA; (d) online
+learning of cσ2; (e) online hyperparameters learning.
+32
+11 Experiments on synthetic data Research internship report
+11.2 One change in the AR matrix (cross-dependencies)
+Same setting, but the post-changepoint matrix now carries cross terms:
+A(1) =
+0.9 0
+0 0.7
+
+− →A(2) =
+0.1 0.3
+0.4 0.2
+
+.
+See Figure 11.2(a).
+11.3 One change in the variance of the noise
+SamebivariateVAR(1), butnowtheautoregressivematrixisheldconstant(A=diag(0.9,0.7)),
+and the innovation variance changes:
+εt ∼ N(0, σ2(1)I2)− → N(0, σ2(2)I2), σ 2(1) = 1.0, σ2(2) = 5.0
+See Figure 11.2(b).
+−6
+−4
+−2
+0
+2
+xt
+Data
+0 100 200 300 400 5000
+100
+200
+rt
+MSE = 0.5436
+Covering metric = 0.9380
+BOCPDMS: Run Length Posterior
+most likely path
+−1.0
+−0.5
+0.0
+0.5
+1.0
+1.5
+A1, 1
+̂A1, 1 at r *
+̂A1, 1 averaged
+True
+0.0
+0.5
+1.0
+1.5A1, 2
+̂A1, 2 at r *
+̂A1, 2 averaged
+True
+−1.0
+−0.5
+0.0
+0.5
+A2, 1
+̂A2, 1 at r *
+̂A2, 1 averaged
+True
+0 100 200 300 400 500
+Time t
+−0.5
+0.0
+0.5
+1.0
+A2, 2
+̂A2, 2 at r *
+̂A2, 2 averaged
+True
+AR Coefficient Learning Within Regimes
+0 100 200 300 400 500
+Time t
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+̂σ2
+̂σ2 at r *
+̂σ2 averaged
+True σ2
+Variance Learning (posterior mean of the Inverse-Gamma)
+(a)Exp. 2 — AR matrix, cross-dependencies
+−20
+−10
+0
+10
+20
+xt
+Data
+0 100 200 300 400 5000
+100
+200
+rt
+MSE = 0.2412
+Covering metric = 0.9701
+BOCPDMS: Run Length Posterior
+most likely path
+−0.5
+0.0
+0.5
+1.0
+A1, 1
+̂A1, 1 at r *
+̂A1, 1 averaged
+True
+−1.0
+−0.5
+0.0
+0.5
+A1, 2
+̂A1, 2 at r *
+̂A1, 2 averaged
+True
+−1.0
+−0.5
+0.0
+0.5
+1.0
+1.5
+2.0
+A2, 1
+̂A2, 1 at r *
+̂A2, 1 averaged
+True
+0 100 200 300 400 500
+Time t
+0.00
+0.25
+0.50
+0.75
+1.00
+1.25A2, 2
+̂A2, 2 at r *
+̂A2, 2 averaged
+True
+AR Coefficient Learning Within Regimes
+0 100 200 300 400 500
+Time t
+0
+5
+10
+15
+20
+25
+̂σ2
+̂σ2 at r *
+̂σ2 averaged
+True σ2
+Variance Learning (posterior mean of the Inverse-Gamma) (b)Exp. 3 — noise variance
+Figure 11.2:Experiments 2–3: a single changepoint att⋆ = 250, affecting the AR matrix with cross
+terms, then the innovation variance.
+33
+11 Experiments on synthetic data Research internship report
+11.4 One change in the mean of the noise
+Same bivariate VAR(1),A=diag(0.9,0.7)held constant, and the innovation mean changes:
+εt ∼ N(µ1, σ2I2)− → N(µ2, σ2I2),µ 1 = (1.0,1.0),µ 2 = (5.0,5.0), σ= 1
+See Figure 11.3(a).
+11.5 Multiple changepoints in the AR matrix
+We generate a bivariate VAR(1) process withεt ∼ N(0,I2). The changepoints follow a con-
+stant hazardH= 1/h,h= 150. At every changepoint a fresh AR matrixAis drawn with
+i.i.d. standard-Gaussian entries and then rescaled so that its spectral radius equals0.9, which
+guarantees the process stays stationary. OnlyAchanges across regimes. The model is correctly
+specified in its hazard, of course. See Figure 11.3(b).
+0
+10
+20
+30
+40
+50xt
+Data
+0 100 200 300 400 5000
+100
+200
+300
+400
+rt
+MSE = 0.0083
+Covering metric = 0.9960
+BOCPDMS: Run Length Posterior
+most likely path
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0A1, 1
+̂A1, 1 at r *
+̂A1, 1 averaged
+True
+0.0
+0.2
+0.4
+0.6A1, 2
+̂A1, 2 at r *
+̂A1, 2 averaged
+True
+−3
+−2
+−1
+0
+1
+A2, 1
+̂A2, 1 at r *
+̂A2, 1 averaged
+True
+0 100 200 300 400 500
+Time t
+0.0
+0.5
+1.0
+1.5A2, 2
+̂A2, 2 at r *
+̂A2, 2 averaged
+True
+AR Coefficient Learning Within Regimes
+0 100 200 300 400 500
+Time t
+0.2
+0.4
+0.6
+0.8
+1.0
+1.2
+1.4
+1.6
+̂σ2
+̂σ2 at r *
+̂σ2 averaged
+True σ2
+Variance Learning (posterior mean of the Inverse-Gamma)
+(a)Exp. 4 — noise mean, single changepoint
+−5
+0
+5
+10
+xt
+Data
+0 100 200 300 400 5000
+100
+200
+rt
+MSE = 0.1658
+Covering metric = 0.7830
+BOCPDMS: Run Length Posterior
+most likely path
+−1.0
+−0.5
+0.0
+0.5
+1.0
+1.5
+A1, 1
+̂A1, 1 at r *
+̂A1, 1 averaged
+True
+0.0
+0.5
+1.0
+1.5A1, 2
+̂A1, 2 at r *
+̂A1, 2 averaged
+True
+−3
+−2
+−1
+0
+1
+2
+A2, 1
+̂A2, 1 at r *
+̂A2, 1 averaged
+True
+0 100 200 300 400 500
+Time t
+−1.0
+−0.5
+0.0
+0.5
+1.0
+1.5
+A2, 2
+̂A2, 2 at r *
+̂A2, 2 averaged
+True
+AR Coefficient Learning Within Regimes
+0 100 200 300 400 500
+Time t
+0.2
+0.4
+0.6
+0.8
+1.0
+1.2
+1.4
+̂σ2
+̂σ2 at r *
+̂σ2 averaged
+True σ2
+Variance Learning (posterior mean of the Inverse-Gamma) (b)Exp. 5 — AR matrix, multiple changepoints
+Figure 11.3:Experiments 4–5: a single changepoint in the innovation mean, then multiple change-
+points drawn with constant hazardh= 150in the AR matrix.
+34
+11 Experiments on synthetic data Research internship report
+11.6 Multiple changepoints in the variance of the noise
+Identical generative setup to Experiment 5, but the breaks affect the innovation variance only,
+the AR matrix being held constantA=diag(0.9,0.7). At every changepoint a new scalar
+standard deviationσis drawn from a Gaussian prior truncated to the positive half-line, and
+the innovation isεt ∼ N(0, σ2 I2); the change is thus isotropic across the two components. See
+Figure 11.4(a).
+11.7 Multiple changepoints in the mean of the noise
+Identical generative setup to Experiment 5, but the breaks affect the innovation mean only; the
+AR matrixA=diag(0.9,0.7)and the noise levelσ= 1are held constant. At every changepoint
+a new mean vectorµ∈R 2 is drawn, each component i.i.d. from a Gaussian distribution, and
+εt ∼ N(µ, σ2I2).
+NB:the induced shift in the level ofxt is amplified by a per-component gain1/(1−a).
+See Figure 11.4(b).
+−20
+−10
+0
+10
+xt
+Data
+0 100 200 300 400 5000
+100
+200
+rt
+MSE = 0.2931
+Covering metric = 0.6714
+BOCPDMS: Run Length Posterior
+most likely path
+−1
+0
+1
+2
+A1, 1
+̂A1, 1 at r *
+̂A1, 1 averaged
+True
+−1.5
+−1.0
+−0.5
+0.0
+0.5
+1.0
+A1, 2
+̂A1, 2 at r *
+̂A1, 2 averaged
+True
+−2
+−1
+0
+1
+A2, 1
+̂A2, 1 at r *
+̂A2, 1 averaged
+True
+0 100 200 300 400 500
+Time t
+−0.5
+0.0
+0.5
+1.0
+1.5
+2.0
+A2, 2
+̂A2, 2 at r *
+̂A2, 2 averaged
+True
+AR Coefficient Learning Within Regimes
+0 100 200 300 400 500
+Time t
+0.0
+2.5
+5.0
+7.5
+10.0
+12.5
+15.0
+̂σ2
+̂σ2 at r *
+̂σ2 averaged
+True σ2
+Variance Learning (posterior mean of the Inverse-Gamma)
+(a)Exp. 6 — noise variance
+−40
+−20
+0
+20
+xt
+Data
+0 100 200 300 400 5000
+100
+200
+rt
+MSE = 0.0119
+Covering metric = 0.6248
+BOCPDMS: Run Length Posterior
+most likely path
+0.0
+0.5
+1.0
+1.5
+2.0A1, 1
+̂A1, 1 at r *
+̂A1, 1 averaged
+True
+−2
+−1
+0
+1
+2
+3
+A1, 2
+̂A1, 2 at r *
+̂A1, 2 averaged
+True
+0.00
+0.25
+0.50
+0.75
+1.00
+1.25A2, 1
+̂A2, 1 at r *
+̂A2, 1 averaged
+True
+0 100 200 300 400 500
+Time t
+−1.0
+−0.5
+0.0
+0.5
+1.0
+1.5
+A2, 2
+̂A2, 2 at r *
+̂A2, 2 averaged
+True
+AR Coefficient Learning Within Regimes
+0 100 200 300 400 500
+Time t
+0.5
+1.0
+1.5
+2.0
+2.5
+3.0
+̂σ2
+̂σ2 at r *
+̂σ2 averaged
+True σ2
+Variance Learning (posterior mean of the Inverse-Gamma) (b)Exp. 7 — noise mean
+Figure 11.4:Experiments 6–7: multiple changepoints drawn with constant hazardh= 150, affecting
+the innovation variance, then the innovation mean.
+35
+12 Experiments on real data Research internship report
+12 Experiments on real data
+We now work with a bivariate series built from the same source and the same two stocks
+as in Section 7, but with a different sampling scheme. The multivariate model requires the
+two components to be observed at the same instants, which volume-clock sampling does not
+guarantee: bucketsofNexecutionsofMSFTandofAAPLarenotalignedintime. Wetherefore
+revert to calendar time and aggregate the signed volume over fixed60-second buckets, so that
+component1and component2ofx t = (xMSFTt , xAAPLt )T refer to the same minute of the same
+trading day. A trading day contains390one-minute bars; over the month of June 2022 this
+givesT= 8190observations, that is21trading days.
+The two series are strongly dependent.Their contemporaneous correlation is high,
+which is what makes a joint model worth considering at all: if the two flows were unrelated, a
+bivariate model could only lose against two separate univariate ones. Two further choices are
+fixed identically for every model, so that the comparison is fair:
+•No intercept.Our BVAR has no intercept (α=0), so to keep the comparison sym-
+metric the frequentist baselines also run without one.
+•Scaling.Same as in the experiments on the univariate baseline.
+12.1 The frequentist baseline: an expanding-window VAR(q)
+SomeofourexperimentscompareBOCPDMSagainstaVAR(q)forecasterwithnoregimes.
+This is a stripped-down baseline: no Bayesian prior, no changepoint detection, a single set of
+coefficients assumed valid over the whole sample. A VAR(q) writes the current observation as
+a linear combination of theqmost recent ones,
+xt =A 1xt−1 +· · ·+Aqxt−q +ε t =C T ϕt +ε t,(12.1)
+with the same regressor vectorϕt = (xTt−1, . . . ,xTt−q)T ∈R k (k=qS) and the same coefficient
+layoutC T = (A1, . . . ,Aq)that we used for the BVAR. EachAl is aS×Smatrix, so the two
+stocks may influence each other across lags, the cross-dependence that Experiment 2 isolates.
+Estimation by OLS.Given a window of data, we stack the predictors in a matrixX
+(rowiisϕ Ti ), the targets inY(rowiisx Ti ), and fit the coefficients by ordinary least squares.
+The expanding window.Rather than fitting once, we replay the position of a forecaster
+who, at each instant, only knows the past. At timetwe estimate ˆConx 1:(t−1), forecast
+ˆxt = ˆCT ϕt, then observe the truext and record the error. We then move one step forward: the
+windowgrowsby one observation, and we repeat. Two properties follow:
+•No look-ahead.The forecast ofx t uses only strictly earlier data.
+•A refining estimate.Early on, ˆCis fit on very few points and is noisy. We therefore
+skip the very first steps, where the estimate is meaningless, and start evaluating only at
+a timet min large enough thatXT Xis invertible, i.e.t min ≥q+k.
+12.2 Evaluation metrics
+All models are evaluated on their one-step-ahead forecasts over acommon windowt∈
+{tmin, . . . , T}, chosen so that every model is scored on exactly the same time points. We report
+thenormalizedmean squared error
+MSE =
+P
+c err2cP
+c Var(xc) ,err t,c =x t,c −ˆµt,c,(12.2)
+36
+12 Experiments on real data Research internship report
+where both the average and the variance are taken over the evaluation window, and the sums
+run over theScomponents. We also report theper-componentvalues err2c/Var(xc).
+The normalizer is the realized variance on the evaluation window. It is computed
+once and passed identically to every model.
+12.3 A scale problem
+Our first runs of the bivariate BOCPDMS produced an MSEwell above1— that is, worse
+than simply forecasting zero. So we compared the forecast to the target on two grounds. First,
+their correlation: atρ≈0.36, it is nearly as high as that of the frequentist VAR (≈0.42),
+so the forecast is far from meaningless, it moves with the data. Second, its variance: the
+BOCPDMS forecast has a variance several times that of the data itself, whereas the frequentist
+VAR produces forecasts with about a fifth of the data variance. The forecast therefore points
+in roughly the right direction but is grossly over-sized, and it is this over-sizing, not a lack of
+predictive content, that produces the large error.
+Two further observations confirm it. The largest BOCPDMS forecastsexceed the
+largest value ever taken by the data. The model predicts values the series never at-
+tains, which no reasonable forecast should do. And the top1%of squared errors carries a
+noticeably larger share of the total MSE than it does for the frequentist VAR on the same data.
+This is because the signed data is heavy-tailed. Within a short regime, the autoregressive
+coefficient is estimated on few points and can be badly off; when it is then multiplied by an
+incoming spike, the product is a very big forecast. The frequentist VAR is better because
+its coefficient is a stable global fit. Here is a slightly counter-intuitive finding:the adaptivity
+of BOCPDMS, which is its strength on regime-switching data, becomes a liability when the
+innovations are heavy-tailed and the regimes are short.
+Why the prior did not prevent it.The coefficient prior is supposed to keep this
+under control. It failed because it acts on both series through a single scalar,Vc =v cI, while
+on raw data the two series can have very different variances, here one carries roughly twice the
+variance of the other. The samevc therefore has very different effects on the two series, and no
+single value can suit both at once. This is what led us to put the two series on a common scale.
+Standardization.The remedy that follows is to put the two series on the same scale, so that
+the prior acts on them identically. We standardize each component separately,
+x′t,c = xt,cσc , c= 1, . . . , S,(12.3)
+withσ c the standard deviation of componentc. This is aninvertibletransformation.
+Estimatingσ c without looking ahead.If the scale is computed on the whole sample,
+the model uses information from the future, which would flatter the results. We therefore
+estimateσ c on aprefix sampleand apply them unchanged to the rest of the sample.
+This raises a practical difficulty. Because the data are heavy-tailed, the sample standard
+deviation of a short prefix is itself an unstable quantity: a calm stretch can under-estimate the
+scale of the rest of the month by a factor of two. We observed exactly this with a short prefix.
+The remedy we adopt is simply to make the prefixlong enough to be representative: we
+sett min to several full trading days, estimateσc on that stretch, and evaluate on the remainder.
+37
+12 Experiments on real data Research internship report
+12.4 Parameter choices
+All settings are fixed once and shared by the three experiments.
+•PriorV c = 0.001I.Selected by a sweep: it minimizes the error.
+•a 0 = 2.0,b 0 = 0.5, learned online; their effect on this data is negligible.
+•HazardH= 1/hconstant, withh= 390/3 = 130.
+•t min = 1170(3trading days).Burn-in of the most demanding baseline, and the window
+on which the scale andΩare estimated.
+The three specifications ofΩ.All are estimated on the prefixx 1:tmin only. Writingx i =
+(xMSFTi , xAAPLi )T for the prefix observations and¯xfor their mean:
+DiagonalΩ— independent noise.We keep the variance of each series and set the
+cross terms to zero. On standardized data, it isI2, the series has unit variance on the prefix.
+FullΩ— covariance of the observations.We keep the cross term as well, i.e.
+the full empirical covariance matrix. This is the simplest way to take cross-correlation into
+consideration.
+Ωdiag = diag
+
+Var(xMSFT),Var(x AAPL),Var(x c) = 1tmin tminXi=1  xci −¯xc2,Ω full = 1tmin −1 tminXi=1 (xi − ¯x)(xi − ¯x)T .
+Ωvar — covariance of the VAR innovations.Ωdescribes the covariance of the
+noiseε t, i.e. of what remains once the predictable partAx t−1 has been removed, whereas
+the observations still contain that predictable part. So we estimate it from the residuals,
+and our frequentist baseline already produces them. We fit an expanding-window VAR on
+the prefix sample (the firsttmin = 1170observations), and collect its one-step-ahead residuals
+ˆεt =x t − ˆCTt ϕt. Their empirical covariance givesΩvar = 1n Pt ˆεtˆεTt , where the sum runs over
+the retained residuals andnis their number.
+NB:we discard the first50residuals. At the very start of the prefix the coefficients are fitted
+on a handful of points and are wildly off, so the residuals they produce are huge and would
+inflate the estimate. Without this precaution the estimated innovation variance of one series
+came out larger than its data variance.
+12.5 Results
+We report the MSE over the common window[tmin :T], witht min = 1170andT= 8190.
+Estimated on the sample[ 0:1170]:σ= (6.33,11.09)with ratio AAPL/MSFT= 1.75,
+againstσ= (9.68,13.72)and ratio1.42on the evaluation window, and(9.28,13.37)with ratio
+1.44over the whole month. The standardized series have variance(2.34,1.53)on[t min :T].
+Experiment 1 — BOCPDMS versus expanding-window VAR(q)(Table 12.1).
+Table 12.1:Expanding-window VAR(q),q= 1, . . . ,10; best orderq⋆ = 2. For reference, BOCPDMS
+attains0.8891with a VAR(1) and0.8707with a VAR(2). The BOCPDMS VAR(1) sits above the
+best frequentist VAR, while the BOCPDMS VAR(2) sits below it.
+q MSE q MSE q MSE q MSE q MSE
+1 0.8815 3 0.9011 5 0.9179 7 0.9237 9 0.9222
+2 0.8791 4 0.9112 6 0.9190 8 0.9208 10 0.9234
+38
+12 Experiments on real data Research internship report
+Experiments 2 and 3 — univariate baseline and noise structure.With the first
+50residuals discarded,Ω var =
+0.820 0.481
+0.481 0.754
+
+. Table 12.2 collects both experiments.
+Table 12.2:Experiment 2 (top block): bivariate BOCPDMS against two independent univariate
+BOCPDs. Experiment 3 (bottom block): effect of the noise specification, with the best frequentist
+VAR as a reference. The two univariate BOCPDs detect97(MSFT) and84(AAPL) changepoints.
+Model MSE MSFT AAPL
+Experiment 2 — multivariate vs. two univariate filters
+M4 BOCPDMS VAR(2), bivariate 0.8707 0.8582 0.8899
+M1 2×BOCPD, univariate, summed 0.7705 0.7351 0.8247
+Experiment 3 — contemporaneous noise structure
+M2 BOCPDMS VAR(1), diagonalΩ 0.8891 0.8733 0.9134
+M3 BOCPDMS VAR(1), fullΩ(observations) 0.8874 0.8727 0.9098
+M4 BOCPDMS VAR(2), diagonalΩ 0.8707 0.8582 0.8899
+M5 BOCPDMS VAR(2), fullΩ(observations) 0.8916 0.8753 0.9164
+M6 BOCPDMS VAR(2),Ω=Ω var (innovations) 0.8877 0.8720 0.9118
+M7 VAR(q= 2) 0.8791 0.8255 0.9611
+Diebold–Mariano tests.Pairwise comparisons under squared-error loss at horizon
+h= 1on[t min :T](Table 12.3). Each cell gives the DM statistic and thep-value. A negative
+statistic favours the row model. Only the M1–M4 duel of Experiment 2 involves the univariate
+baseline; the remaining pairs are those of Experiment 3.
+Table 12.3:DM statistics (top) andp-values (bottom, smaller type), on each series.
+MSFT M2 M3 M4 M5 M6 M7
+M1 −0.78
+0.434
+M2 +1.21 +1.00 −0.12 +0.07 +0.38
+0.225 0.318 0.907 0.942 0.702
+M3 +0.96 −0.15 +0.04 +0.38
+0.336 0.884 0.966 0.705
+M4 −1.52 −1.35 +0.26
+0.129 0.177 0.794
+M5 +0.68 +0.39
+0.494 0.694
+M6 +0.37
+0.714
+AAPL M2 M3 M4 M5 M6 M7
+M1 −0.48
+0.630
+M2 +0.94 +1.26 −0.14 +0.07 −0.48
+0.347 0.206 0.888 0.946 0.634
+M3 +1.15 −0.34 −0.09 −0.52
+0.251 0.737 0.929 0.605
+M4 −1.43 −1.20 −0.72
+0.154 0.229 0.473
+M5 +0.78 −0.48
+0.433 0.629
+M6 −0.52
+0.602
+None of the pairwise differences reaches conventional significance: on this sample, no
+model is demonstrably a better forecaster than another. The M1–M4 duel deserves a word,
+since a12%gap in MSE returningp= 0.43is surprising at first sight. The loss differential is
+overwhelmingly carried by a handful of observations: the ten worst bars out of7020account
+for about70%of P |dt|. The test therefore measures the variance of those few points more
+than any systematic difference. Two robustness diagnostics support this reading: winsorizing
+the most extreme0.5%of|d t|makes the advantage of the univariate pair clearly significant
+(DM = 3.50on MSFT,8.60on AAPL), and under absolute-error loss the same holds on AAPL
+(DM = 8.40,p <10 −4), MSFT remaining a draw (0.32,p= 0.75).
+39
+12 Experiments on real data Research internship report
+12.6 Implementation notes
+Computational cost.The real datasets are far larger than the500-point synthetic series
+used in the controlled experiments, and each calibration run tests several thousand parameter
+combinations, so the grid searches for the optimal BOCPD and BOSD (K= 1) parameters
+are infeasible in pure Python. We first parallelised the grid search over7of the8available
+cores, which divided the running time by roughly the same factor, but calibration runs still
+took hours. We therefore compiled the core filtering loops of both algorithms withnumba, a
+just-in-time compiler that translates annotated Python functions into optimised machine code.
+numbasupportsnumpyoperations but notscipyones, which the original loop used. Runs that
+previously took hours finished in about fifteen minutes on much larger grids. The same work
+proved even more necessary for BOCPDMS: on our bivariate real datasets (T >8000), a single
+run takes minutes with the compiled kernel and is prohibitively long without it.
+The changepoint heuristic.While working on BOSD (K= 1) we could not explain
+some unsatisfactory results on synthetic data, where the covering metric is available. The main
+symptom was over-segmentation: far too many changepoints. Part of it comes from the Pareto
+hazard, whose sharp peak just afterdmin (see Appendix B) makes the filter hyper-vigilant at
+the start of a regime and inflates the chance of declaring a change (one of the motivations for
+introducing the log-normal specification, which has no such peak). But this did not remove the
+problem. Most of it turned out to be due to the detection heuristic. The original rule declares
+a changepoint whenever the most likely path falls below a fixed threshold. On synthetic data
+resembling the real series — withσ 20 small relative toσ 2, so that regimes differ little and
+changepoints are masked by noise — the most likely path hugs the horizontal axis, even though
+clear triangles are visible in the probability mass above it. With a threshold of5, a path
+dropping to2and climbing back four times produces four spurious changepoints. We adopted
+a new heuristic that keeps the threshold but additionally requires an actualdrop, comparing
+the most likely run length attto its value att−1. We experimented with other rules as well,
+some abandoning the most likely path entirely, aiming for something closer to what one reads
+by eye from the triangles and drops in the posterior mass. The difficulty is that the rule must
+remainonline. Methods to extract the segmentation from the full run-length posterior matrix
+exist, but they are offline. Since this was not the object of the present work, we kept the first
+satisfactory rule; it improved the results considerably.
+A pre-computed hazard vector.Our implementation of the duration-aware algorithm
+pre-computes the hazard vectorH(r)before the filtering loop, whereas the referenceC++code-
+base recomputes it at each step. The choice is equivalent for fixed duration parameters and
+strictly faster, but it rules out online re-estimation of the duration law and makes the memory
+footprint grow withT.
+An inconsistency in the reference implementation.Validating the online learning
+ofσ 2 on synthetic data withσ2 = 1gave a posterior mean converging to2.0. The cause was not
+our code but the shape convention of the reference implementation,ar =a 0 + (r+ 1)/2, which
+is inconsistent with a scale accumulatingSresiduals per step wheneverS >1(Section 10).
+BOCPDMS.We re-implemented the algorithm of Knoblauch and Damoulas (2018) from
+the authors’ reference code, but following the conventions of our own BOCPD codebase, and
+rewrote the plotting routines to display the online-learning outputs. The first runs on real
+data gave an MSE above1, which looked like an implementation error but was not: the
+standardization of the data fixed the symptom without altering the conclusion.
+40
+13 Conclusion Research internship report
+13 Conclusion
+This report asked whether Bayesian Online Changepoint Detection captures the regime struc-
+ture of high-frequency order flow, and whether duration-awareness and multivariate model
+selection improve on the baseline.
+For the first extension the answer is positive. Replacing the constant hazard rate by a
+run-length-dependent one, derived from an explicit duration law within a hidden semi-Markov
+formulation, improves both segmentation and forecasting. The log-normal specification domi-
+nates the geometric baseline and the Pareto alternative on both assets and under both calibra-
+tion criteria, and the Monte Carlo validation confirms that each model recovers the duration
+law it assumes. The financial motivation and the statistical result agree: order flow has no
+characteristic timescale, and a duration law with a heavier tail than the geometric describes
+it better. Reaching this conclusion also required work of a different nature. The calibration
+grids were infeasible at the scale of the real datasets until the core loops were parallelised and
+compiled, and the over-segmentation observed initially turned out to originate in the detection
+heuristic rather than in the duration law, which led us to redesign it.
+For the second extension the answer is negative, and arguably more instructive. The
+multivariate filter, equipped with Bayesian vector autoregressions and online hyperparameter
+learning, is outperformed by two independent univariate filters whatever the noise specification,
+and the Diebold–Mariano tests separate none of the models on this sample. The adaptivity
+that makes the model effective on regime-switching data becomes a liability on heavy-tailed
+innovations with short regimes: an autoregressive coefficient estimated on a handful of obser-
+vations, multiplied by an incoming volume spike, produces forecasts larger than any value the
+series ever attains. A globally fitted vector autoregression is immune precisely because it can-
+not adapt. This result should nonetheless be read as provisional, since only a small part of the
+framework has been exercised here: the model universe was never populated with competing
+specifications, which is the mechanism that motivates it.
+Two methodological observations also emerge. A conjugate model must be verified on
+synthetic data with known parameters before any implementation of it is trusted, a precau-
+tion that revealed the inconsistency in the shape convention of the reference implementation
+discussed above. And a scaling artefact must be distinguished from a genuine modelling limi-
+tation, which here required examining the correlation, the variance and the error concentration
+of the forecasts rather than a single aggregate figure.
+Several extensions follow directly. The most immediate is the addition of an intercept
+to the Bayesian vector autoregression: prepending a constant to the regressor vector changes
+neither the sufficient statistics, nor the predictive distribution, nor the gradients, preserves
+conjugacytrivially, andmakesthemultivariatemodelnesttheunivariateonethatoutperformed
+it, since vanishing autoregressive coefficients leave a constant mean per regime. It requires only
+a block-structured coefficient prior, so that the level is free to move while the dynamics stay
+regularised, and our implementation already accepts one. Level-only, autoregression-only and
+level-plus-autoregression specifications could then be placed together in the model universe and
+left to compete, which is the use of model selection that our single-model runs never exercised.
+A second extension is the combination of the run-length-dependent hazard with the multivariate
+framework, with which our implementation is already compatible. A third would be to learn
+the hazard rate, or the parameters of the duration law, online by gradient ascent, in the spirit of
+what is already implemented for the two Inverse-Gamma hyperparameters; this would remove
+the last offline step from the pipeline.
+41
+References Research internship report
+References
+Ryan Prescott Adams and David J.C. MacKay. Bayesian online changepoint detection.
+arXiv:0710.3742, 2007.
+Diego Agudelo-España, Sebastian Gomez-Gonzalez, Stefan Bauer, Bernhard Schölkopf, and Jan
+Peters. Bayesian online prediction of change points. InProceedings of the 36th Conference on
+Uncertainty in Artificial Intelligence (UAI), volume 124 ofProceedings of Machine Learning
+Research, pages 320–329. PMLR, 2020.
+Christopher M. Bishop.Pattern Recognition and Machine Learning. Springer, 2006.
+Jean-Philippe Bouchaud, Yuval Gefen, Marc Potters, and Matthieu Wyart. Fluctuations and
+response in financial markets: the subtle nature of ‘random’ price changes.Quantitative
+Finance, 4(2):176–190, 2004.
+Jean-Philippe Bouchaud, Julius Bonart, Jonathan Donier, and Martin Gould.Trades, Quotes
+and Prices: Financial Markets Under the Microscope. Cambridge University Press, 2018.
+François Caron, Arnaud Doucet, and Raphael Gottardo. On-line changepoint detection and
+parameter estimation with application to genomic data.Statistics and Computing, 22(2):
+579–595, 2012. doi: 10.1007/s11222-011-9248-x.
+Álvaro Cartea, Sebastian Jaimungal, and José Penalva.Algorithmic and High-Frequency Trad-
+ing. Cambridge University Press, Cambridge, 2015.
+Martin D Gould, Mason A Porter, Stacy Williams, Mark McDonald, Daniel J Fenn, and Sam D
+Howison. Limit order books.Quantitative Finance, 13(11):1709–1748, 2013.
+Mihai Gradinaru, Francesco Russo, and Pierre Vallois. Generalized covariations, local time and
+Stratonovich Itô’s formula for fractional Brownian motion with Hurst indexh≥1/4.The
+Annals of Probability, 31(4):1772–1820, 2003. doi: 10.1214/aop/1068646366.
+Jeremias Knoblauch and Theodoros Damoulas. Spatio-temporal bayesian on-line changepoint
+detection with model selection.Proceedings of the 35th International Conference on Machine
+Learning, 80:2718–2727, 2018.
+Fabrizio Lillo and J Doyne Farmer. The long memory of the efficient market.Studies in
+Nonlinear Dynamics & Econometrics, 8(3), 2004.
+Fabrizio Lillo, Szabolcs Mike, and J. Doyne Farmer. Theory for long memory in supply and
+demand.Physical Review E, 71(6):066122, 2005.
+Kevin P. Murphy. Conjugate bayesian analysis of the gaussian distribution. Technical report,
+University of British Columbia, 2007.
+Francesco Russo and Pierre Vallois. Forward, backward and symmetric stochastic integration.
+Probability Theory and Related Fields, 97(3):403–421, 1993. doi: 10.1007/BF01195073.
+Yuki Sato and Kiyoshi Kanazawa. Quantitative statistical analysis of order-splitting behaviour
+of individual trading accounts in the Japanese stock market over nine years.arXiv preprint
+arXiv:2308.01112, 2023.
+Ioanna-Yvonni Tsaknaki, Fabrizio Lillo, and Piero Mazzarisi. Online learning of order flow and
+market impact with bayesian change-point detection methods.Quantitative Finance, 25:
+307–322, 2025.
+42
+Appendices
+A Proofs of the results of Section 2 Research internship report
+A Proofs of the results of Section 2
+This appendix collects the derivations underlying the results stated in Section 2. We first es-
+tablish the Gaussian conjugate update, then prove the three propositions that rely on it: the
+Gaussian predictive posterior, the recursive message-passing decomposition, and the closed-form
+Underlying Predictive Model.
+A.1 Gaussian conjugate update: unknown meanµ, known variance
+σ2
+Let dataD={x 1, . . . , xN }be drawn independently fromN(µ, σ 2). Our aim is to infer the
+unknown meanµsequentially. The likelihood function is given by:
+p(D|µ) =
+NY
+n=1
+p(xn|µ) = 1(2πσ 2)N/2 exp n − 12σ2 NXn=1(xn −µ) 2o (A.1)
+To exploit conjugacy, we choose a Gaussian prior for the mean:
+p(µ) =N(µ|µ 0, σ20) = 1p2πσ 20 exp n − 12σ20 (µ−µ 0)2o
+FollowingBayes’rule, theposterioristheproductofthelikelihoodandtheprior:p(µ|D)∝
+p(D|µ)p(µ). We can expand the terms in the exponent and drop any terms that do not depend
+onµ, absorbing them into the proportionality constant (details in Murphy (2007)):
+p(µ|D)∝exp
+n
+− 12σ2
+NX
+n=1
+(xn −µ) 2 − 12σ20 (µ−µ 0)2o
+= exp
+n
+− 12σ2  NXn=1 x2n +N µ2 −2µ NXn=1 xn − 12σ20 µ2 +µ 20 −2µµ 0o
+∝exp
+n
+− 12  N µ2σ2 − 2µN µM Lσ2 + µ2σ20 − 2µµ0σ20 o
+= exp
+n
+− 12 µ2  Nσ2 + 1σ20 | {z }
+a
+−2µ
+ N µM L
+σ2 + µ0σ20 | {z }
+b
+o
+(A.2)
+whereµ M L= 1N PNn=1 xn is the empirical mean (which is the Maximum Likelihood solution).
+To recognize this as a Gaussian distributionN(µ|µN , σ2N ), the exponent must be of the
+form− 12σ2N (µ−µ N )2. We achieve this by "completing the square" and, ignoring the constant
+term, the posterior becomes:p(µ|D)∝exp
+n
+− a2
+
+µ− ba
+2o
+IdentifyingthetermsyieldstheformalupdaterulesstatedinProposition2.5: theposterior
+remains Gaussian,p(µ|D) =N(µ|µ N , σ2N ), with
+1
+σ2N = Nσ2 + 1σ20  µN = N σ20N σ20 +σ 2 µM L+ σ2N σ20 +σ 2 µ0
+44
+A Proofs of the results of Section 2 Research internship report
+A.2 Gaussian Predictive Posterior
+Proposition(Gaussian Predictive Posterior).Given the posterior distribution of the mean
+N(µ N , σ2N )and the known observation varianceσ2, the posterior predictive distribution is:
+p(xN+1 |D) =
+Z
+N(x N+1 |µ, σ2)N(µ|µ N , σ2N )dµ=N(µ N , σ2N +σ 2)N(µ N , σ2N +σ 2)N(µ N , σ2N +σ 2)
+Proof.To evaluate this predictive distribution, we must compute the integral of the product
+of two Gaussians. Dropping the normalizing constants that do not depend onµorxN+1, we
+have:
+p(xN+1 |D)∝
+Z
+exp
+n
+− 12σ2 (xN+1 −µ) 2o exp n − 12σ2N (µ−µ N )2odµ
+We expand the terms in the exponent and group them by powers ofµ:
+− 12  x2N+1 −2x N+1 µ+µ 2σ2 + µ2 −2µµ N +µ 2Nσ2N  =− 12
+
+µ2
+ 1
+σ2 + 1σ2N
+
+| {z }
+A
+−2µ
+ xN+1
+σ2 + µNσ2N
+
+| {z }
+B
++
+ x2N+1
+σ2 + µ2Nσ2N | {z }
+C
+
+
+By completing the square forµ, the expression in the brackets becomesA
+ 
+µ− BA 2 +  C−
+B2
+A
+
+.
+The integral overµof the first termexp
+
+− A2  µ− BA 2	 is a standard Gaussian integral
+which evaluates to a constant (
+p
+2π/A) that does not depend onxN+1. The remaining term,
+which does depend onxN+1, isexp
+
+− 12  C− B2A 	. Let us algebraically simplifyC− B2A :
+C− B2
+A =
+ x2N+1
+σ2 + µ2Nσ2N  −  xN+1σ2 + µNσ2N 21σ2 + 1σ2N = x2N+1 σ2N +µ 2N σ2σ2σ2N − (σ2N xN+1 +σ 2µN )2σ2σ2N (σ2 +σ 2N )
+= (x2N+1 σ2N +µ 2N σ2)(σ2 +σ 2N )−(σ 4N x2N+1 +σ 4µ2N + 2σ2σ2N xN+1 µN )σ2σ2N (σ2 +σ 2N )
+= σ2σ2N (x2N+1 +µ 2N −2x N+1 µN )σ2σ2N (σ2 +σ 2N ) = (xN+1 −µ N )2σ2 +σ 2N(xN+1 −µ N )2σ2 +σ 2N(xN+1 −µ N )2σ2 +σ 2N
+This is exactly the kernel of a Gaussian distribution with meanµN and varianceσ 2 +σ 2N:
+p(xN+1 |D)∝exp
+n
+− 12(σ2 +σ 2N ) (xN+1 −µ N )2o
+A.3 Recursive Message Passing
+Proposition(Recursive Message Passing).By applying Bayes’ chain rule and the conditional
+independence of the run length, the joint distribution decomposes recursively into three distinct
+computational blocks:
+P(r t, x1:t) =
+X
+rt−1
+P(r t, xt|rt−1, x1:t−1)P(r t−1, x1:t−1)
+=
+X
+rt−1
+P(r t|rt−1)| {z }
+Hazard Rate
+P(x t|rt−1, x(r)t−1)| {z }
+UPM
+P(r t−1, x1:t−1)| {z }
+Previous Message
+45
+A Proofs of the results of Section 2 Research internship report
+Proof.Starting with the term inside the sum, we can separate the newly arriving variables
+(rt, xt) from the past variables (rt−1, x1:t−1) using Bayes’ chain rule:
+p(rt, x1:t, rt−1) =p(r t, xt, rt−1, x1:t−1) =p(r t, xt|rt−1, x1:t−1)p(r t−1, x1:t−1)p(rt−1, x1:t−1)p(rt−1, x1:t−1)
+The second term here is exactly themessagepassed from the previous time step. We
+apply the chain rule to the first term:
+p(rt, xt |r t−1, x1:t−1) =p(x t |r t, rt−1, x1:t−1)×p(r t |r t−1, x1:t−1)
+Now we apply our two conditional independence assumptions.
+•Underlying Predictive Model (UPM):The new observationx t only depends on the
+currentrunlengthr t andthedatawithinthisrun, sop(x t |r t, rt−1, x1:t−1) =p(x t |r t, x(r)t−1)p(xt |r t, x(r)t−1)p(xt |r t, x(r)t−1)
+•Hazard Rate:The new run lengthr t depends only on the previous run lengthrt−1, so
+p(rt |r t−1, x1:t−1) =p(r t |r t−1)p(rt |r t−1)p(rt |r t−1).
+A.4 Closed-form UPM for the Gaussian case
+Proposition(Closed-form UPM for the Gaussian Case).If the data within a regime is mod-
+eled as a Gaussian with an unknown mean and a known varianceσ2, and we use a conjugate
+Gaussian prior, the UPM evaluates to a closed-form Gaussian distribution:
+p(xt |r t−1, x(r)t−1) =N(x t |µ rt−1, σ2 +σ 2rt−1)N(x t |µ rt−1, σ2 +σ 2rt−1)N(x t |µ rt−1, σ2 +σ 2rt−1)
+whereµ rt−1 andσ 2rt−1 are the updated sufficient statistics using strictly thert−1 observations of
+the current regime, using the Gaussian conjugate update of Appendix A.1.
+Proof.To evaluate the UPM, we marginalize over the unknown mean of the current regime:
+p(xt |r t−1, x(r)t−1) =
+Z
+p(xt |µ ρ)p(µρ |x (r)t−1)dµρ
+ThisisidenticaltotheintegralsolvedinAppendixA.2. Becausewerestrictedourmodelto
+the exponential family with a conjugate prior, the posterior distribution of the meanp(µρ |x (r)t−1)
+is natively a GaussianN(µrt−1, σ2rt−1). The number of valid observations is simply the run length
+N=r t−1. This yields exactly the distributionN(xt |µ rt−1, σ2 +σ 2rt−1).
+46
+B Regime duration distributions for BOSD (K= 1) Research internship report
+B Regime duration distributions for BOSD (K= 1)
+In the HSMM framework, the distribution of regime durations must be explicitly defined.
+Because the inference algorithm operates in discrete time steps, we must map probability
+distributions to a discrete hazard rate. For a duration random variabled:
+H(r) =P(d=r+ 1|d > r) = S(r)−S(r+ 1)S(r) = 1− S(r+ 1)S(r)
+We formally define four distributions and derive their corresponding discrete hazard functions.
+B.1 The Gaussian Model
+Definition B.1(Normal Distribution).A random variabled∼ N(µ d, σ2d)has densityf(x)
+and survival functionS(x)given by:
+f(x) = 1σd√2π exp− (x−µ d)22σ2d  , S(x) = 12erfc  x−µ dσd√2  (B.1)
+where erfc is the complementary error function.
+Proposition B.1(Gaussian Hazard Function).
+HGauss(r) = 1− erfc
+ 
+(r+ 1−µ d)/σd
+√
+2
+
+erfc
+ 
+(r−µ d)/σd
+√
+2
+ (B.2)
+B.2 The Pareto Model
+Definition B.2(Pareto Distribution).Letd∼Pareto(α, d min)with shape parameterα >0
+and scale parameterdmin ≥1:
+f(x) = α dαmin
+xα+1 , S(x) =
+ dmin
+x
+α
+, x≥d min (B.3)
+Proposition B.2(Pareto Hazard Function).
+HPareto(r) = 1− S(r+ 1)S(r) = 1−  rr+ 1 α (B.4)
+B.3 The Log-Normal Model
+The Log-Normal distribution provides a middle ground: it has a characteristic peak (mode)
+but exhibits a heavier right tail than the Gaussian distribution.
+Definition B.3(Log-Normal Distribution).Letd∼LogNormal(µ ℓ, s2).
+f(x) = 1x s√2π exp− (lnx−µ ℓ)22s2  , S(x) = 12erfc  lnx−µ ℓs√2  (B.5)
+Proposition B.3(Log-Normal Hazard Function).
+HLogNorm(r) = 1− erfc
+ 
+(ln(r+ 1)−µ ℓ)/s
+√
+2
+
+erfc
+ 
+(ln(r)−µ ℓ)/s
+√
+2
+ (B.6)
+47
+B Regime duration distributions for BOSD (K= 1) Research internship report
+B.4 The Poisson Model
+Definition B.4(Poisson Distribution).d∼Poisson(λ)has probability mass function and
+survival function:
+P(d=k) = λke−λ
+k! , S(k) =P(d > k) =
+∞X
+j=k+1
+λje−λ
+j! (B.7)
+Proposition B.4(Poisson Hazard Function).Because the Poisson distribution is natively
+discrete, its hazard function can be evaluated directly from its PMF and SF:HPoisson(r) =
+P(d=r+ 1)/S(r).
+B.5 Summary
+A wrong approach to computing the discrete hazard rate from a continuous distribution is to
+approximate the numeratorP(d=r+ 1)using the pointwise continuous probability density
+function. The exact discrete probability mass must be computed by integrating the continuous
+density over the interval. Figure B.1 illustrates this discrepancy by plotting both the biased
+approximation (PDF-based) and the exact formulation.
+(a)Normal
+ (b)Pareto
+(c)Log-Normal
+ (d)Poisson
+Figure B.1:Discrete hazard rate functionsH(r)derived from the four duration distributions.
+48
+C Outputs of the univariate out-of-sample runs Research internship report
+C Outputs of the univariate out-of-sample runs
+−20
+0
+20
+xt
+MSFT_2022-08_N542
+0
+10
+20
+30
+40
+rt
+BOCPD : Run Length Posterior
+most likely path
+0
+36
+72
+108
+144
+rt
+Pareto BOSD K=1 : Run Length Posterior
+most likely path
+0 500 1000 1500 2000 2500
+Time step (t)
+0
+27
+54
+81
+108
+rt
+Log-Normal BOSD K=1 : Run Length Posterior
+most likely path
+(a)MSFT — MSE-calibrated
+−20
+0
+20
+xt
+MSFT_2022-08_N542
+0
+62
+124
+186
+248
+rt
+BOCPD : Run Length Posterior
+most likely path
+0
+116
+232
+348
+464
+rt
+Pareto BOSD K=1 : Run Length Posterior
+most likely path
+0 500 1000 1500 2000 2500
+Time step (t)
+0
+118
+236
+354
+472
+rt
+Log-Normal BOSD K=1 : Run Length Posterior
+most likely path (b)MSFT — Log-Lik-calibrated
+−50
+0
+50
+xt
+AAPL_2022-08_N887
+0
+31
+62
+93
+124
+rt
+BOCPD : Run Length Posterior
+most likely path
+0
+52
+104
+156
+208
+rt
+Pareto BOSD K=1 : Run Length Posterior
+most likely path
+0 500 1000 1500 2000 2500
+Time step (t)
+0
+48
+96
+144
+192
+rt
+Log-Normal BOSD K=1 : Run Length Posterior
+most likely path
+(c)AAPL — MSE-calibrated
+−50
+0
+50
+xt
+AAPL_2022-08_N887
+0
+29
+58
+87
+116
+rt
+BOCPD : Run Length Posterior
+most likely path
+0
+71
+142
+213
+284
+rt
+Pareto BOSD K=1 : Run Length Posterior
+most likely path
+0 500 1000 1500 2000 2500
+Time step (t)
+0
+54
+108
+162
+216
+rt
+Log-Normal BOSD K=1 : Run Length Posterior
+most likely path (d)AAPL — Log-Lik-calibrated
+Figure C.1:Run Length Posteriors on the 2022-08 datasets, under both calibration criteria.
+49
+C Outputs of the univariate out-of-sample runs Research internship report
+−25
+0
+25
+xt
+MSFT_2022-09_N542
+0
+10
+20
+30
+40
+rt
+BOCPD : Run Length Posterior
+most likely path
+0
+29
+58
+87
+116
+rt
+Pareto BOSD K=1 : Run Length Posterior
+most likely path
+0 500 1000 1500 2000 2500
+Time step (t)
+0
+21
+42
+63
+84
+rt
+Log-Normal BOSD K=1 : Run Length Posterior
+most likely path
+(a)MSFT — MSE-calibrated
+−25
+0
+25
+xt
+MSFT_2022-09_N542
+0
+64
+128
+192
+256
+rt
+BOCPD : Run Length Posterior
+most likely path
+0
+61
+122
+183
+244
+rt
+Pareto BOSD K=1 : Run Length Posterior
+most likely path
+0 500 1000 1500 2000 2500
+Time step (t)
+0
+61
+122
+183
+244
+rt
+Log-Normal BOSD K=1 : Run Length Posterior
+most likely path (b)MSFT — Log-Lik-calibrated
+−50
+0
+50
+xt
+AAPL_2022-09_N887
+0
+32
+64
+96
+128
+rt
+BOCPD : Run Length Posterior
+most likely path
+0
+46
+92
+138
+184
+rt
+Pareto BOSD K=1 : Run Length Posterior
+most likely path
+0 500 1000 1500 2000 2500
+Time step (t)
+0
+26
+52
+78
+104
+rt
+Log-Normal BOSD K=1 : Run Length Posterior
+most likely path
+(c)AAPL — MSE-calibrated
+−50
+0
+50
+xt
+AAPL_2022-09_N887
+0
+24
+48
+72
+96
+rt
+BOCPD : Run Length Posterior
+most likely path
+0
+31
+62
+93
+124
+rt
+Pareto BOSD K=1 : Run Length Posterior
+most likely path
+0 500 1000 1500 2000 2500
+Time step (t)
+0
+28
+56
+84
+112
+rt
+Log-Normal BOSD K=1 : Run Length Posterior
+most likely path (d)AAPL — Log-Lik-calibrated
+Figure C.2:Run Length Posteriors on the 2022-09 datasets, under both calibration criteria.
+50
+C Outputs of the univariate out-of-sample runs Research internship report
+−20
+0
+20
+xt
+MSFT_2022-10_N542
+0
+8
+16
+24
+32
+rt
+BOCPD : Run Length Posterior
+most likely path
+0
+34
+68
+102
+136
+rt
+Pareto BOSD K=1 : Run Length Posterior
+most likely path
+0 500 1000 1500 2000 2500 3000
+Time step (t)
+0
+25
+50
+75
+100
+rt
+Log-Normal BOSD K=1 : Run Length Posterior
+most likely path
+(a)MSFT — MSE-calibrated
+−20
+0
+20
+xt
+MSFT_2022-10_N542
+0
+54
+108
+162
+216
+rt
+BOCPD : Run Length Posterior
+most likely path
+0
+74
+148
+222
+296
+rt
+Pareto BOSD K=1 : Run Length Posterior
+most likely path
+0 500 1000 1500 2000 2500 3000
+Time step (t)
+0
+69
+138
+207
+276
+rt
+Log-Normal BOSD K=1 : Run Length Posterior
+most likely path (b)MSFT — Log-Lik-calibrated
+−50
+0
+50
+xt
+AAPL_2022-10_N887
+0
+16
+32
+48
+64
+rt
+BOCPD : Run Length Posterior
+most likely path
+0
+28
+56
+84
+112
+rt
+Pareto BOSD K=1 : Run Length Posterior
+most likely path
+0 500 1000 1500 2000 2500
+Time step (t)
+0
+28
+56
+84
+112
+rt
+Log-Normal BOSD K=1 : Run Length Posterior
+most likely path
+(c)AAPL — MSE-calibrated
+−50
+0
+50
+xt
+AAPL_2022-10_N887
+0
+25
+50
+75
+100
+rt
+BOCPD : Run Length Posterior
+most likely path
+0
+59
+118
+177
+236
+rt
+Pareto BOSD K=1 : Run Length Posterior
+most likely path
+0 500 1000 1500 2000 2500
+Time step (t)
+0
+55
+110
+165
+220
+rt
+Log-Normal BOSD K=1 : Run Length Posterior
+most likely path (d)AAPL — Log-Lik-calibrated
+Figure C.3:Run Length Posteriors on the 2022-10 datasets, under both calibration criteria.
+51
+C Outputs of the univariate out-of-sample runs Research internship report
+−20
+0
+20
+xt
+MSFT_2022-11_N542
+0
+13
+26
+39
+52
+rt
+BOCPD : Run Length Posterior
+most likely path
+0
+128
+256
+384
+512
+rt
+Pareto BOSD K=1 : Run Length Posterior
+most likely path
+0 250 500 750 1000 1250 1500 1750
+Time step (t)
+0
+128
+256
+384
+512
+rt
+Log-Normal BOSD K=1 : Run Length Posterior
+most likely path
+(a)MSFT — MSE-calibrated
+−20
+0
+20
+xt
+MSFT_2022-11_N542
+0
+76
+152
+228
+304
+rt
+BOCPD : Run Length Posterior
+most likely path
+0
+128
+256
+384
+512
+rt
+Pareto BOSD K=1 : Run Length Posterior
+most likely path
+0 250 500 750 1000 1250 1500 1750
+Time step (t)
+0
+76
+152
+228
+304
+rt
+Log-Normal BOSD K=1 : Run Length Posterior
+most likely path (b)MSFT — Log-Lik-calibrated
+−50
+0
+50
+xt
+AAPL_2022-11_N887
+0
+15
+30
+45
+60
+rt
+BOCPD : Run Length Posterior
+most likely path
+0
+28
+56
+84
+112
+rt
+Pareto BOSD K=1 : Run Length Posterior
+most likely path
+0 200 400 600 800 1000 1200 1400
+Time step (t)
+0
+22
+44
+66
+88
+rt
+Log-Normal BOSD K=1 : Run Length Posterior
+most likely path
+(c)AAPL — MSE-calibrated
+−50
+0
+50
+xt
+AAPL_2022-11_N887
+0
+18
+36
+54
+72
+rt
+BOCPD : Run Length Posterior
+most likely path
+0
+55
+110
+165
+220
+rt
+Pareto BOSD K=1 : Run Length Posterior
+most likely path
+0 200 400 600 800 1000 1200 1400
+Time step (t)
+0
+43
+86
+129
+172
+rt
+Log-Normal BOSD K=1 : Run Length Posterior
+most likely path (d)AAPL — Log-Lik-calibrated
+Figure C.4:Run Length Posteriors on the 2022-11 datasets, under both calibration criteria.
+52
+D BOCPD regime duration distributions Research internship report
+D BOCPD regime duration distributions
+A theoretical property of the standard BOCPD framework is that if the hazard function is a
+constantH= 1/h, the distribution of regime durations should be a Geometric distribution.
+D.1 Data Generating Process and Experimental Setup
+We perform a loop of 1000 runs with long synthetic datasets ofT= 1,000data points to
+ensure a statistically significant number of regimes. Within each regime, the data follows
+xt ∼ N(µ, σ2)where the variance is fixed atσ 2 = 10 2. The data hazard rate is fixed at
+Hdata = 1/hdata = 1/100. When a changepoint is triggered, the new regime meanµis redrawn
+from a Gaussian prior distribution:µ∼ N(µ0 = 0, σ20).
+The standard BOCPD algorithm is run using an identical hazard rate parameterhalgo =
+100, perfectly matching the hazard rate of the data-generating process.
+D.2 Theoretical Distribution vs. Empirical Histogram
+Mathematically, given a constant hazard rateH, the probability that a regime survives for
+exactlyn−1steps and terminates at then-th step is governed by the geometric probability
+distribution. Under this distribution, the theoretical expected length of a regime is given by
+E[d] = 1/H=h data.
+By extracting the durations of all the regimes successfully detected by the BOCPD algo-
+rithm, we construct an empirical frequency histogram (Figure D.1).
+50 100 150 200 250 300 350
+Regime Duration (ticks)
+0.000
+0.002
+0.004
+0.006
+0.008
+0.010
+0.012Probability
+Mean MSE = 0.0981
+Synthetic BOCPD (H = 1/100, σ20  = 50², 1000 runs): BOCPD Regime Durations
+BOCPD (mean = 87.86)
+Geometric law (p = 1/100, mean = 100)
+(a)σ 0 = 50
+50 100 150 200 250 300 350
+Regime Duration (ticks)
+0.000
+0.002
+0.004
+0.006
+0.008
+0.010
+0.012
+0.014Probability
+Mean MSE = 0.2442
+Synthetic BOCPD (H = 1/100, σ20  = 25², 1000 runs): BOCPD Regime Durations
+BOCPD (mean = 80.20)
+Geometric law (p = 1/100, mean = 100) (b)σ 0 = 25
+50 100 150 200 250 300
+Regime Duration (ticks)
+0.000
+0.005
+0.010
+0.015
+0.020
+0.025Probability
+Mean MSE = 0.6400
+Synthetic BOCPD (H = 1/100, σ20  = 10², 1000 runs): BOCPD Regime Durations
+BOCPD (mean = 54.71)
+Geometric law (p = 1/100, mean = 100)
+(c)σ 0 = 10
+50 100 150 200 250 300
+Regime Duration (ticks)
+0.000
+0.005
+0.010
+0.015
+0.020
+0.025
+0.030
+0.035
+0.040Probability
+Mean MSE = 0.8874
+Synthetic BOCPD (H = 1/100, σ20  = 5², 1000 runs): BOCPD Regime Durations
+BOCPD (mean = 35.72)
+Geometric law (p = 1/100, mean = 100) (d)σ 0 = 5
+Figure D.1:Empirical histograms of detected regime lengths against the theoretical Geometric dis-
+tribution curve. Averaged over 1000 runs on synthetic data.
+53
+D BOCPD regime duration distributions Research internship report
+D.3 Empirical Validation on real data
+We now perform an empirical validation to verify this property on real data. For each asset,
+we pool the detected regime durations across the four available 2022 months and build a single
+averaged empirical histogram, compared against the theoretical Geometric distribution implied
+by the calibrated hazard rate (Figure D.2).
+5 10 15 20 25 30 35 40 45
+Regime Duration (ticks)
+0.00
+0.02
+0.04
+0.06
+0.08
+0.10Probability
+Mean MSE = 0.9176
+AAPL 2022-08 to 2022-11: BOCPD Regime Durations
+BOCPD (mean = 10.24)
+Geometric law (p = 1/11, mean = 11)
+(a)AAPL — MSE-calibrated
+10 20 30 40
+Regime Duration (ticks)
+0.00
+0.02
+0.04
+0.06
+0.08
+0.10Probability
+Mean MSE = 0.9789
+AAPL 2022-08 to 2022-11: BOCPD Regime Durations
+BOCPD (mean = 10.06)
+Geometric law (p = 1/12, mean = 12) (b)AAPL — Log-Lik-calibrated
+20 40 60 80 100
+Regime Duration (ticks)
+0.00
+0.02
+0.04
+0.06
+0.08
+0.10
+0.12
+0.14
+0.16Probability
+Mean MSE = 0.8680
+MSFT 2022-08 to 2022-11: BOCPD Regime Durations
+BOCPD (mean = 20.66)
+Geometric law (p = 1/6, mean = 6)
+(c)MSFT — MSE-calibrated
+20 40 60 80 100 120
+Regime Duration (ticks)
+0.00
+0.01
+0.02
+0.03
+0.04
+0.05
+0.06Probability
+Mean MSE = 1.0170
+MSFT 2022-08 to 2022-11: BOCPD Regime Durations
+BOCPD (mean = 24.44)
+Geometric law (p = 1/30, mean = 30) (d)MSFT — Log-Lik-calibrated
+Figure D.2:Detected regime durations pooled over 2022-08 to 2022-11, against the theoretical Geo-
+metric law implied by the calibrated hazard rate.
+54
+E BOSD (K= 1) regime duration distributions Research internship report
+E BOSD (K= 1) regime duration distributions
+The BOSD framework was introduced precisely to lift the constraint of Geometric distribution
+for the regime durations. We verify that when the data is generated by an HSMM whose
+regime durations follow a chosen distribution, and the matching hazard vector is supplied to
+the algorithm, the durations of the detected regimes recover that same distribution.
+E.1 Data Generating Process and Experimental Setup
+We reproduce the Monte Carlo protocol of the BOCPD validation, replacing the memoryless
+Bernoulli generator by the HSMM-consistent generative process. The total duration of each
+regime is now drawn directly from an explicit duration distribution. The BOSD (K= 1)
+algorithm is then run with the hazard vectorH(r)derived from the same duration distribution,
+so that the inference model is perfectly matched to the generative process. This is the exact
+analogue of settinghalgo =h data in the BOCPD experiment.
+E.2 Theoretical Distributions vs. Empirical Histograms
+Pareto duration distribution.The Pareto distribution with shapeαand minimumd min
+yields a continuous hazard, which decreases: the longer a regime has already survived, the less
+likely it is to terminate at the next step. Forα= 1.5andd min = 2, the mean duration is
+E[d] =αd min/(α−1) = 6, while the variance is infinite (a finite variance would requireα >2).
+Log-Normal duration distribution.The Log-Normal distribution with shapesand
+scalee µ has the meanE[d] = exp(µ+s 2/2). Fors= 1and scale= 5(i.e.µ= ln 5), this yields
+E[d] = 5e1/2 ≈8.24. The Log-Normal is lighter-tailed than the Pareto, and its hazard first rises
+and then decays.
+55
+E BOSD (K= 1) regime duration distributions Research internship report
+5 10 15 20 25 30 35 40
+Regime Duration (ticks)
+0.0
+0.1
+0.2
+0.3
+0.4Probability
+Mean MSE = 0.4273
+Synthetic Pareto HSMM (α = 1.5, dmin = 2, σ20  = 50², 1000 runs):
+Pareto BOSD K=1 Regime Durations
+Pareto BOSD K=1 (mean = 6.60)
+Pareto law (α = 1.5, dmin = 2, mean = 6.00)
+(a)σ 0 = 50
+5 10 15 20 25 30 35
+Regime Duration (ticks)
+0.0
+0.1
+0.2
+0.3
+0.4Probability
+Mean MSE = 0.5273
+Synthetic Pareto HSMM (α = 1.5, dmin = 2, σ20  = 25², 1000 runs):
+Pareto BOSD K=1 Regime Durations
+Pareto BOSD K=1 (mean = 5.85)
+Pareto law (α = 1.5, dmin = 2, mean = 6.00) (b)σ 0 = 25
+2.5 5.0 7.5 10.0 12.5 15.0 17.5 20.0 22.5
+Regime Duration (ticks)
+0.0
+0.1
+0.2
+0.3
+0.4Probability
+Mean MSE = 0.8036
+Synthetic Pareto HSMM (α = 1.5, dmin = 2, σ20  = 10², 1000 runs):
+Pareto BOSD K=1 Regime Durations
+Pareto BOSD K=1 (mean = 5.19)
+Pareto law (α = 1.5, dmin = 2, mean = 6.00)
+(c)σ 0 = 10
+2 4 6 8 10 12 14 16
+Regime Duration (ticks)
+0.0
+0.1
+0.2
+0.3
+0.4Probability
+Mean MSE = 0.9541
+Synthetic Pareto HSMM (α = 1.5, dmin = 2, σ20  = 5², 1000 runs):
+Pareto BOSD K=1 Regime Durations
+Pareto BOSD K=1 (mean = 4.98)
+Pareto law (α = 1.5, dmin = 2, mean = 6.00) (d)σ 0 = 5
+Figure E.1:Empirical histograms of BOSD-detected regime lengths against the theoretical Pareto
+distribution (α= 1.5,d min = 2). Averaged overN= 1000runs.
+10 20 30 40 50
+Regime Duration (ticks)
+0.00
+0.02
+0.04
+0.06
+0.08
+0.10
+0.12Probability
+Mean MSE = 0.2921
+Synthetic Log-Normal HSMM (s = 1, scale = 5, σ20  = 50², 1000 runs):
+Log-Normal BOSD K=1 Regime Durations
+Log-Normal BOSD K=1 (mean = 10.65)
+Log-Normal law (s = 1, scale = 5, mean = 8.24)
+(a)σ 0 = 50
+5 10 15 20 25 30 35 40
+Regime Duration (ticks)
+0.00
+0.02
+0.04
+0.06
+0.08
+0.10
+0.12Probability
+Mean MSE = 0.4032
+Synthetic Log-Normal HSMM (s = 1, scale = 5, σ20  = 25², 1000 runs):
+Log-Normal BOSD K=1 Regime Durations
+Log-Normal BOSD K=1 (mean = 9.28)
+Log-Normal law (s = 1, scale = 5, mean = 8.24) (b)σ 0 = 25
+5 10 15 20 25 30
+Regime Duration (ticks)
+0.00
+0.02
+0.04
+0.06
+0.08
+0.10
+0.12Probability
+Mean MSE = 0.7409
+Synthetic Log-Normal HSMM (s = 1, scale = 5, σ20  = 10², 1000 runs):
+Log-Normal BOSD K=1 Regime Durations
+Log-Normal BOSD K=1 (mean = 7.93)
+Log-Normal law (s = 1, scale = 5, mean = 8.24)
+(c)σ 0 = 10
+5 10 15 20 25 30 35 40
+Regime Duration (ticks)
+0.00
+0.02
+0.04
+0.06
+0.08
+0.10
+0.12Probability
+Mean MSE = 0.9363
+Synthetic Log-Normal HSMM (s = 1, scale = 5, σ20  = 5², 1000 runs):
+Log-Normal BOSD K=1 Regime Durations
+Log-Normal BOSD K=1 (mean = 9.88)
+Log-Normal law (s = 1, scale = 5, mean = 8.24) (d)σ 0 = 5
+Figure E.2:Empirical histograms of BOSD-detected regime lengths against the theoretical (dis-
+cretized) Log-Normal distribution (s= 1, scale= 5). Averaged overN= 1000runs.
+56
+F Posterior for a general known SPD noise matrix Research internship report
+F Posterior for a general known SPD noise matrix
+This appendix gives in full the derivation sketched in Section 10.5, where we argue that the
+Normal-Inverse-Gamma conjugacy of the BVAR holds for any known symmetric positive-definite
+noise matrixΩ, and not only for a diagonal one.
+Setting and notation
+Over a regime of run lengthr, stack the responses and regressors as in Section 9:Y∈R(r+1)×S,
+X∈R (r+1)×k, withn:=r+ 1observations. The model is
+Y|c, σ 2 ∼ MN Xc, σ2In,Ω ,
+c|σ 2 ∼ MN 0, σ2Vc,Ω , σ 2 ∼InvGamma(a 0, b0),
+whereMN(M,U,V)denotes the matrix-normal law with meanM, row covarianceUand
+column covarianceV. In vectorised form the coefficient prior readsvec(c)|σ2 ∼ N(0, σ2(Ω⊗
+Vc)): this is thecoupledprior, and it is what makesΩfactor out below.
+Posterior of the coefficients
+The joint density of(Y,c)givenσ 2 is proportional to
+exp
+n
+− 12σ2trΩ−1(Y−Xc) T (Y−Xc) o exp n − 12σ2trΩ−1cT V−1c co.
+Both exponents carry the same factorΩ−1 inside the trace, so it can be collected. Expanding
+and completing the square incgives
+(c− ˆc)T P(c− ˆc) +Y T Y− ˆcT Pˆc,P:=V −1c +X T X, ˆc:=P −1XT Y.
+Proposition F.1(Posterior ofc, general SPDΩ).Under the coupled prior, the conditional
+posterior of the coefficient matrix is matrix-normal,c|Y, σ 2 ∼ MN(ˆc, σ2P−1,Ω). Neither
+the posterior precisionPnor the MAP estimateˆcdepends onΩ: it appears only as the column
+covariance.
+With theplainprior the two exponents would carryΩ −1 andI S respectively, the trace
+would not collapse, andˆcwould depend onΩthrough an unwieldy Kronecker expression —
+still conjugate, but no longer reducible to a singlek×kprecision matrix.
+Posterior of the variance and predictive
+Marginalisingcout leaves an Inverse-Gamma kernel inσ 2 with
+ar =a 0 + S(r+ 1)2 , b r =b 0 + 12 YYr −tr Ω−1WT P−1W,
+withYY r :=tr[Ω −1YT Y], which is exactly the expression used in Section 9. The shape
+incrementS/2per observation is the one discussed in Section 10 in connection with the online
+learning of the hyperparameters. Marginalising bothcandσ 2 against the new regressorϕ t,
+withh r =ϕ Tt P−1ϕt:
+57
+F Posterior for a general known SPD noise matrix Research internship report
+Proposition F.2(UPM, general SPDΩ).
+f(x t |x 1:(t−1), rt) = Student-t2ar
+
+xt
+ ˆcTr ϕt, brar (1 +h r)Ω ,
+identical in form to the Student-tUPM (9.7), withΩnow arbitrary SPD.
+Consequence for the results on real data.The location of the predictive isΩ-free,
+so the point forecast — and hence the MSE — is unaffected by the choice ofΩexcept through
+the sufficient statistics; only the predictivedensity, and therefore the log-likelihood and the
+learnedb 0, are reweighted. This is precisely why the three specifications ofΩtested on the
+bivariate order-flow data (Table 12.2) produce MSE values so close to one another.
+58

@@ -1,0 +1,2092 @@
+arXiv 2512.15592  https://arxiv.org/abs/2512.15592
+
+Inference for Forecasting Accuracy: Pooled versus Individual
+Estimators in High-dimensional Panel Data
+Tim Kutta ∗ Martin Schumann † Holger Dette ‡
+December 18, 2025
+Abstract
+Panels with large time(T)and cross-sectional(N)dimensions are a key data structure in social
+sciences and other fields. A central question in panel data analysis is whether to pool data across
+individuals or to estimate separate models. Pooled estimators typically have lower variance but may
+suffer from bias, creating a fundamental trade-off for optimal estimation. We develop a new inference
+method to compare the forecasting performance of pooled and individual estimators. Specifically,
+we propose a confidence interval for the difference between their forecasting errors and establish its
+asymptotic validity. Our theory allows for complex temporal and cross-sectional dependence in the
+model errors and covers scenarios whereNcan be much larger thanT—including the independent
+case under the classical conditionN/T 2 →0. The finite-sample properties of the proposed method
+are examined in an extensive simulation study.
+1 Introduction
+Panel data arise in settings where information is observed across both individuals and time. In many
+applications, panels feature a large number of individualsNand a non-negligible time dimensionT, en-
+abling researchers to study both cross-sectional heterogeneity and temporal dynamics. Most practically
+used panel models account for individual heterogeneity through unit-specific intercepts, but the vast ma-
+jority impose (complete) homogeneity on the slope coefficients of interest. This modeling choice effectively
+implies the use of pooled estimators that aggregate data across individuals. While pooling can improve
+efficiency by reducing variance, it may lead to misleading conclusions when slope coefficients differ across
+units. Such heterogeneity is frequently observed in empirical work (see, for discussions, Hsiao and Pesaran,
+2008, Baltagi et al., 2008, Browning et al., 2007 among many others).
+To make data-driven decisions about whether to pool or not, one strand of research—following the seminal
+work of Swamy (1970)—has developed tests for cross-sectional slope homogeneity. Examples include
+Phillips and Sul (2003), Pesaran and Yamagata (2008), and Ando and Bai (2015). These tests are typically
+derived under the assumption that model errors are independent across both individuals and time, with
+a few exceptions such as Blomquist and Westerlund (2016), who consider scenarios with smallNand
+∗Department of Mathematics, Aarhus University,tim.kutta@math.au.dk; corresponding author
+†School of Business and Economics, Maastricht University,m.schumann@maastrichtuniversity.nl
+‡Fakultät für Mathematik, Ruhr-Universität Bochum,holger.dette@rub.de
+1
+arXiv:2512.15592v1  [stat.ME]  17 Dec 2025
+T→ ∞. While cross-sectional slope homogeneity is certainly sufficient to justify pooling, it is not a
+necessary condition. In large-Npanels, complete slope homogeneity is often unrealistic, and consequently
+a number of less restrictive criteria have been explored in the literature. One important example involves
+latent group structures, where slopes are homogeneous within but not across groups (see Su et al., 2016;
+Wang et al., 2018). A recent extension by Wang and Zhu (2024) considers models with a large number
+of covariates. A quantitative measure for slope homogeneity in large-N, large-Tsettings was proposed
+by Kutta and Dette (2024), where small values of this measure suggest the use of pooled estimators.
+Another, more direct approach to assessing the cost of pooling was introduced by Campello et al. (2019),
+who developed tests for the hypothesis of no slope heterogeneity bias. While this hypothesis can still be
+practically restrictive for largeN, this contribution is important by widening the discussion about what
+counts as a reasonable pooling criterion.
+In this paper, we investigate a different pooling criterion that is directly motivated by prediction—a
+primary concern for applied users. Rather than testing for precise slope homogeneity (possibly after
+grouping), we ask which estimators—individual or pooled—yield lower prediction errors. This approach
+is motivated by the insight that in most practical applications, some degree of slope heterogeneity is
+unavoidable, even within groups. The key question is therefore whether heterogeneity can be safely
+ignored or whether it meaningfully affects forecasting accuracy. Our pooling criterion is based on the
+mean squared forecasting error (MSFE), first suggested for this purpose by Pesaran et al. (2022). While
+we adopt minimal MSFE as a decision rule, the statistical model and asymptotic framework developed
+here differ substantially from those in Pesaran et al. (2022). The most important conceptual distinction is
+that we allow for fixed (non-random) slopes, whereas Pesaran et al. (2022) derive their inference methods
+within the random coefficient model of Swamy (1970). The latter framework is particularly suitable
+when the goal is consistent estimation of a mean slope coefficient. However, as we argue in this paper,
+assuming that individual slopes—or their deviations from the mean—follow a specific distribution is both
+unnecessary and potentially restrictive. Moreover, Pesaran et al. (2022) develop, technically speaking,
+an oracle procedure for fixedTandN→ ∞, though in practice a largeTseems necessary for variance
+estimation. Our approach, in contrast, is fully feasible and provably consistent for large time and cross-
+sectional dimension. We defer a detailed comparison to Remark 2.11 below. We summarize the main
+contributions of this paper as follows:
+(1) We develop the first asymptotic confidence interval for the difference between pooled and individual
+prediction errors in large data panels.
+(2) Our methodology accommodates general error distributions and simultaneous temporal and cross-
+sectional dependence.
+(3) We establish validity for large samples withT, N→ ∞, allowing forN≫T. New asymptotics
+are derived under a “moderately heterogeneous” model, where the decision whether to pool is most
+challenging and statistical inference most valuable.
+The remainder of this paper is organized as follows: Statistical methodology is developed and theoretically
+justified in Section 2. Finite sample properties of our approach are studied in Section 3. Proofs and
+additional simulations are located in the Appendix.
+2
+2 Inference for the prediction error in panel data
+In this section, we develop new methodology to quantify the difference of prediction errors between pooled
+and individual slope estimators. Methods are theoretically justified in an asymptotic regime, where both
+the length of the time seriesTand the size of the cross-sectionNare large. To derive meaningful
+probabilistic limits, theory is developed for regimes ofmoderate heterogeneity(Assumption 2.5), where
+the decision for the superior forecasting method is most challenging. The main statistical result is the
+Gaussian approximation for the distribution of the estimated forecasting error in Theorem 2.9, which
+implies confidence intervals for the forecasting error (2.15). We begin this section, by introducing some
+mathematical concepts which are important for our subsequent mathematical analysis.
+2.1 Mathematical preliminaries
+Strongly mixing panelsIn this work, we study panels of dependent random variables. Dependence is
+captured byα-mixing, with weak dependence expressed by fast decaying mixing coefficients. In the follow-
+ing, we provide a general outline ofα-mixing for multivariate panels of random variables (see Doukhan,
+1994). For an overview of mixing concepts, we refer the reader to Bradley (2007).
+LetM ⊂Z d for somed∈Nbe endowed with the maximum norm∥ · ∥∞ and(Ξ z)z∈M be a panel of
+random variables indexed inM. For index setsIandJwe define the distance w.r.t. the maximum norm
+as
+dist(I,J) = min(∥i−j∥ ∞ :i∈ I, j∈ J)
+and denote byF I =σ
+ 
+Ξz :z∈ I
+
+the sigma field generated by the random variables{Ξz :z∈ I}. For
+r∈N 0 therthα-mixing coefficient is defined by
+α(r) = sup
+n
+|P(A∩B)−P(A)P(B)|:A∈ F I, B∈ FJ , dist(I,J)≥r,I,J ⊂ M
+o
+.
+The panel is calledα-mixing ifα(r)→0asr→ ∞. In the case of this work, we will consider the dimension
+d= 2, even though extensions to higher dimensional panels are possible.
+Conditional Landau symbolsOne characteristic of this work is the development of conditional infer-
+ence methods for panel data. We therefore have to clarify notions of conditional convergence of random
+variables. Suppose that(Xn)n,(Y n)n are sequences of random variables and(an)n is a sequence of positive,
+real numbers. Then we say, that
+Xn =O |YnP (an)⇔ ∀δ >0 : limC→∞ lim supn PP |Xn|/an > C|Y n > δ = 0,
+Xn =o |YnP (an)⇔ ∀C, δ >0 : limn PP |Xn|/an > C|Y n > δ = 0. (2.1)
+2.2 Statistical methodology
+Panel modelWe consider the linear regression panel
+yi,t =x ′i,tβi +ε i,t i= 1, ..., N, t= 1, ..., T,(2.2)
+wherex i,t is aK-dimensional vector of regressors,β i is aK-dimensional vector of slope coefficients and
+εi,t a centered, real model error with unknown distribution. We calltthetime componentof the panel
+3
+anditheindividualorcross-sectional component. We collect all equations concerning theith individual
+in the model
+yi =X iβi +ε i i= 1, ..., N,(2.3)
+whereX i = (x i,1, ..., xi,T )′ is a regression matrix of dimensionT×Kandy i = (y i,1, ..., yi,T )′ andε i =
+(εi,1, ..., εi,T )′ areT−dimensional vectors. Sometimes we refer to all regressors collectively and therefore
+define the compounded matrixX= (X 1, ..., XN ). Often panel models comprise constant, individual
+specific intercepts, which are omitted in model (2.3) for simplicity, and would practically be removed. We
+illustrate this case in our simulation study in Section 3.
+EstimatorsFor model (2.2), we define the individual ordinary least squares (OLS) slope estimator for
+theith individual as
+ˆβi := [X ′iXi]−1X ′iyi.
+Next, drawing on data from allNindividuals, we define the pooled version
+ˆβpool :=  NX
+i=1
+X ′iXi
+−1 NX
+i=1
+X ′iyi.
+The estimator ˆβpool is commonly used under the assumption of slope homogeneityβ1 =...=β N, where
+it is substantially more efficient than the individual estimators ˆβ1, ...,ˆβN due to its smaller variance.
+However, the effectiveness of the pooled estimator relies on the individual slopes being, if not the same,
+at least very similar - otherwise, it can be severely biased. A standard way to assess slope homogeneity is
+the use of slope homogeneity tests as discussed in the Introduction. While these tests are very powerful
+for largerN, their very power often makes them oversensitive to even minor inhomogeneities of slopes,
+discouraging pooling even when practically beneficial. In the below discussion, we therefore try to shift
+the subject, away from somewhat stylized assumptions on the true slopes, towards the comparative merits
+of the estimators in terms of forecasting.
+Individual and pooled MSEThe performance of the individual estimatorsˆβ1, ...,ˆβN and the pooled
+version ˆβpool can be assessed by comparing their prediction accuracy for a new vector of predictor-response
+pairs(x i,T+1 , yi,T+1 )i=1,...,N. Thus, following Pesaran et al. (2022), we invoke the mean squared prediction
+error (MSPE) in(xi,T+1 , yi,T+1 )i=1,...,N conditionally on the known matrix of regressorsX= (X1, ..., XN ).
+More precisely, we define respectively the individual and pooled prediction errors as
+Eind := 1N
+NX
+i=1
+Eindi := 1N
+NX
+i=1
+E
+
+(x′i,T+1 ˆβi −y i,T+1 )2X,(2.4)
+Epool := 1N
+NX
+i=1
+Epooli := 1N
+NX
+i=1
+E
+
+(x′i,T+1 ˆβpool −y i,T+1 )2X.(2.5)
+Noticethatinthisformulation, thevectorofpredictors(x i,T+1 )i=1,...,N isnon-random-theuserdetermines
+in which predictors they would like to make the comparison. Selecting(xi,T+1 )i=1,...,N means specifying a
+scenario where forecasts are of interest and we seek to determine which forecasting method is most suitable
+for it. The responses at timeT+ 1are defined asyi,T+1 :=x ′i,T+1 βi +ε i,T+1 with model errorsεi,T+1 and
+the expectations inE ind andE pool are taken over all model errorsεi,t,i= 1, ..., Nandt= 1, ..., T+ 1.
+A closed form for the prediction errorFor our formal analysis of the prediction error, we impose
+some mathematical assumptions. In the following, let∥ · ∥2 denote the Euclidean norm (Frobenius norm)
+for vectors and matrices.
+4
+Assumptions 2.1.
+i) (Moments) For someM∈NwithM≥16and a constantC >0, the errorsε i,t and regressorsx i,t
+satisfy
+max
+i,t
+E|εi,t|M ≤C <∞,max i,t E∥xi,t∥M2 ≤C <∞.
+ii) (Error covariance) The errorsεi,t are centered. The vector of errorsε= (ε ′1, ...., ε′N )′ ∈R N Thas
+a covariance matrixΣ = Σ N ⊗Σ T, where "⊗" denotes the Kronecker product,ΣT ∈R T×T is a
+covariance matrix of a stationary process andΣN ∈R N×N is another covariance matrix.
+iii) (Exogeneity) The vector of errorsεand the matrix of regressorsXare independent of each other.
+iv) (Prediction) The regressorsxi,T+1 are fixed, non-random vectors. The vector(ε1,T+1 , ..., εN,T+1 )is
+independent of(ε,X), centered and has covariance matrix(ΣT )1,1 ·Σ N.
+Conditionsi)andii)permit the existence of complex error structures. Error distributions are non-
+parametric and only some polynomial moments are required. Moreover, the errors can be dependent
+acrossspaceandtimesimultaneously. Moreprecisely, thecovariancematrixoftheerrors(ε ′1, . . . , ε′N )′ isthe
+Kronecker productΣN ⊗Σ T, where the first factor captures cross-sectional and the second factor temporal
+dependence. This structure is more general than those typically assumed in the literature and which are
+special cases of this setting. For example, the traditional assumptions of independent, homoscedastic
+errors is captured byσ 2 ·I N ⊗I T, whereσ 2 >0is the variance andI N , IT are the identity matrices
+of dimensionNandT, respectively. Independent errors with individual-specific variances are similarly
+captured byD⊗I T, whereD=diag(σ 21, ..., σ2N ). The case of cross-sectional dependence only, as used e.g.
+by Zellner (1962), is incorporated byΣN ⊗IT (this is also closely related to Ando and Bai (2015)). Allowing
+both factors to differ from the identity matrix (simultaneous temporal and cross-sectional dependence)
+obviously encompasses much richer models than have been treated before, particularly in high dimensional
+panels. Separable covariance structures are a standard tool in the analysis of spatio-temporal data and
+often appropriate for panels, where the individual component can, in a broad sense, be interpreted as a
+location. Conditioniii)is standard in the study of linear models and stronger than the common exogeneity
+assumptions used in the literature on panel data. We require it, to rigorously formulate weak convergence
+results conditionally on the regressorsX, even though we expect similar results to be true if errors and
+regressors are weakly dependent. Finally, Conditioniv)implies that the errors in the (hypothetical) time
+periodT+ 1are independent of all previous errors and maintain the same covariance structure.
+Using Assumption 2.1, we can give a closed form for the prediction errors defined in (2.4) and (2.5).
+Lemma 2.2.Suppose that Assumption 2.1 holds, then
+Eindi =(ΣN )i,iT rhΣT Xi[X ′iXi]−1xi,T+1 x′i,T+1 [X ′iXi]−1X ′ii + (ΣN )i,i(ΣT )1,1.
+Epooli =
+
+x′i,T+1
+ NX
+j=1
+X ′jXj
+−1 NX
+j=1
+X ′jXj(βj −β i)
+2
++T r
+ NX
+j=1
+X ′jXj
+−1
+xi,T+1 x′i,T+1
+ NX
+j=1
+X ′jXj
+−1 X
+j,k
+(ΣN )j,kX ′jΣT Xk
+
++ (ΣN )i,i(ΣT )1,1.
+5
+and in particularEind −E pool =E 1 −E 2 −E 3, where
+E1 :=T r
+h
+ΣT
+NX
+i=1
+ 1
+N (ΣN )i,iXi[X ′iXi]−1xi,T+1 x′i,T+1 [X ′iXi]−1X ′i
+i
+(2.6)
+E2 := 1N
+NX
+i=1
+
+x′i,T+1
+ NX
+j=1
+X ′jXj
+−1 NX
+j=1
+X ′jXj(βj −β i)
+2
+(2.7)
+E3 :=T r
+ NX
+j=1
+X ′jXj
+−1 1
+N
+NX
+i=1
+
+xi,T+1 x′i,T+1 	 NX
+j=1
+X ′jXj
+−1 X
+j,k
+(ΣN )j,kX ′jΣT Xk
+
+.(2.8)
+Our main object of interest is the differenceEind −E pool, because, e.g.,Eind −E pool <0implies that the
+pooled estimator is outperformed by the individual estimators. Lemma 2.2 now implies that to understand
+Eind −E pool we may study the termsE1, E2, E3.
+Analysis ofE i We first have to impose some additional assumptions.
+Assumptions 2.3.
+i) (Regressor convergence) For eachi= 1, ..., Nthere exists a positive definite matrixQi, such that
+max
+i
+∥X ′iXi/T−Q i∥2 P→0,0< c 1 ≤mini λmin(Qi),max i ∥Qi∥2 ≤c 2.
+Here,λ min denotes the smallest eigenvalue of a matrix andc1, c2 some fixed positive constants.
+ii) (Boundednessx i,T+1) There exists a constantc3 >0, such thatmax i ∥xi,T+1 ∥2 ≤c 3.
+iii) (Errors) The errors{εi,t : 1≤i≤N,1≤t≤T}form a strongly mixing field, with mixing coefficients
+satisfying for allrsufficiently large, and some constantψ >0thatα(r)≤ψ −r.
+Assumptions of the sort imposed by Conditioni)are typical in the study of large panel data (see, e.g.,
+Assumption 2 in Pesaran and Yamagata (2008)). The regressor matrices converge to respective limitsQi
+that are positive definite (smallest eigenvalue is positive) and have uniformly bounded norm. The second
+condition ensures that the forecasting error is calculated forxi,T+1 that are not too large, which can be
+seen as a condition to avoid extrapolating into areas that are far apart from the original data. Finally, we
+assume that the model errors are weakly dependent along the space and time dimensions. This structure
+allows for general dependence patterns that are more realistic than traditional models with independent
+errors. The exponential decay condition on mixing coefficients is satisfied by most of the typical time
+series models such as ARMA processes (see Mokkadem, 1988). We also point out that in the Appendix
+we prove our results for even weaker, polynomial mixing conditions (see condition (B.2)). Such conditions
+come at the cost of a more restrictive relation betweenNandT(see condition (B.3)) and are therefore
+not further discussed here.
+Analysis of the variance termsAs a first step to analyze the error termsE1, E2, E3 from Lemma 2.2,
+we investigate their (asymptotic) order of magnitudes. We begin by studying the two termsE1 andE 3
+that are independent of the regression slopes and represent the variance of the individual estimators and
+the pooled estimator, respectively. Convergence is formulated conditionally onXto harmonize this with
+later results, but obviously,E1, E3 areX-measurable and hence the derived rates hold conditionally and
+unconditionally.
+6
+Lemma 2.4.Suppose that Assumptions 2.1 and 2.3 hold, then
+E1 =O |XP (T −1),andE 3 =O |XP ((N T)−1).
+The derived rates of convergence are highly intuitive. For the individual slope estimators that are based
+(each) onTobservations, the variance of predictions are of size≈C/T. Similarly, the predictions based
+on the pooled estimator have variance of size≈C/(N T), which is much smaller. While the variance of
+the pooled predictions are much smaller, the pooled estimator can produce biased results if the slopes
+are different. Here, the bias is measured byE 2. Under the classical hypothesis of slope homogeneity
+(β1 =. . .=β N) it directly follows thatE2 = 0. In other, very heterogeneous scenarios,E 2 =O P (1)is
+possible such thatE2 dominates bothE 1 andE 3. These two extremes illustrate situations, where a pooled
+estimator is either evidently superior (because of high homogeneity) or evidently inferior (because of high
+heterogeneity) compared to individual estimators. In applications, the situation is often less clear-cut. For
+this reason, we investigate in the following the practically more relevant intermediate case, whereE2 is
+of the same order of magnitude asE1. In this scenario, statistical inference can be invoked to make an
+informed decision on which prediction method is better. We hence impose further assumptions.
+Assumptions 2.5.
+i) (Bounded slopes) The slopesβ1, β2, ...are uniformly boundedmaxi ∥βi∥ ≤c4 for somec 4 >0.
+ii) (Moderate heterogeneity)maxi,j ∥βi −β j∥ ≤c5/
+√
+Tfor somec 5 >0.
+iii) (Intersect-time relation) There exists a constantη∈(0,2)such thatN/T η →0.
+The first condition is standard in the literature on slope homogeneity and guarantees that no single slope
+dominates the final test statistics. The second condition helps us focus on the main case of interest, where
+the two errors, individual and pooled, are of the same order of magnitude. Lemma 2.4 entails thatE3 is
+negligible compared toE1 and hence, forE1 −E 2 −E 3 to be close to0,E 2 has to be of the same order as
+E1. We provide a short calculation to illustrate that under moderate slope heterogeneityE2 =O P (T −1)
+(just asE 1). Using Assumption 2.3 part i), we have
+E2 = 1N T
+NX
+i=1
+
+x′i,T+1
+h 1
+N T
+NX
+j=1
+X ′jXj
+i−1 1
+N
+NX
+j=1
+X ′jXj
+T [
+√
+T(β j −β i)]
+2
+≈ 1T  1N NXi=1 x′i,T+1 h 1N NXj=1 Qji−1 1N NXj=1 Qj[√T(β j −β i)]2.
+Now, consider the right side: Under Assumption 2.5 part ii), the object on the inside of the round bracket
+is of orderO(1)and hence the entire term inside the curved bracket is also of sizeO(1), suggesting that
+E2 =O P (T −1)(see Lemma 2.4). It is clear that the formulation of Conditionii)can be relaxed such that
+not all slopes have to be close to one another, but only the majority. For instance, one may impose that
+there exists an index setN ⊂ {1, ..., N}of exceptions such that only the weaker assumption
+max
+i,j∈{1,...,N}\N
+∥βi −β j∥ ≤c5/
+√
+T
+holds. As long asNis small enough, say if|N |=o(
+√
+N), the results in this section remain valid. The final
+Condition iii) in Assumption 2.5 moderates the size of the temporal dimension of the panel, compared to
+7
+its cross-sectional component. The assumptionN/T 2 →0has been used in classical slope homogeneity
+tests (see the discussion in Pesaran and Yamagata, 2008) and the fact that in our caseN/Tη →0forη
+arbitrarily close to2is required is a small additional price that we pay for allowing temporal and cross-
+sectional dependence. Finally, notice that Assumption 2.5 does not impose any distribution on the slope
+coefficients as is typically the case in random coefficient models. While distributional assumptions are
+convenient when the focus is on consistent estimation of the average slope coefficient, these assumptions
+can prove to be restrictive when the main objective is prediction.
+Statistical inferenceWe now develop an inference method for the difference of prediction errors. As a
+first step, we propose the estimator
+ˆE:= 1N
+NX
+i=1
+
+x′i,T+1
+ NX
+j=1
+X ′jXj
+−1 NX
+j=1
+X ′jXj( ˆβj − ˆβi)
+2
+.(2.9)
+On the first glance, ˆEmay seem like a simple plug-in estimator forE 2 (see eq. (2.7)). Yet, a careful
+analysis reveals that ˆEactually approximates the error sumE1 +E 2. It can therefore serve as a building
+block to approximate our true object of interestE1 −E 2.
+Lemma 2.6.Suppose that Assumptions 2.1 and 2.3 hold. Then
+| ˆE−(E 1 +E 2)|=O |XP (T −1N −1/2).
+This lemma is a consequence of the much more precise analysis in the proof of Theorem 2.9, where we study
+the weak convergence behavior of an appropriately standardized version ofˆE. We state the lemma here,
+to make the next step of our procedure more understandable. We recall that for our inference method,
+we do not need an estimator for(E1 +E 2), but rather for(E1 −E 2). Therefore, we supplement ˆEwith
+additional estimator ˆE1 ofE 1. We will then have
+ˆE−2 ˆE1 ≈E 2 −E 1.
+Let us define theT×Tmatrix
+ˆΣ(i,k)(b) := ( ˆξ(i,k)(|s−t|)I{|s−t|< b}) 1≤s,t≤T ,(2.10)
+where the entry
+ˆξ(i,k)(h) := (yi −X i ˆβi)′1:T−h (yk −X k ˆβk)h+1:T
+T−h−K (2.11)
+= 1T−h−K
+T−hX
+t=1
+(yi −X i ˆβi)t(yk −X k ˆβk)t+h
+is an estimator of the autocovariance of lagh. Herebis a regularization parameter (allh-diagonals with
+h > bare set equal to0). Finally, we define the estimate
+ˆE1 := 1N
+NX
+i=1
+T r
+h
+ˆΣ(i,i)(b)Xi[X ′iXi]−1xi,T+1 x′i,T+1 [X ′iXi]−1X ′i
+i
+=: 1N
+NX
+i=1
+ˆE(i)1 .(2.12)
+Notice that ˆE1 is the direct, empirical analogue toE1 defined in (2.6).
+8
+Lemma 2.7.Under Assumptions 2.1, 2.3 and 2.5 it holds that
+| ˆE1 −E 1|=O |XP
+ b
+T 2 + b7/4√N T3/2 .
+If we chooseb=T ρ with
+0< ρ <min
+
+1− η2 , 27 
+the right side is of ordero|XP (1/(√N T)).
+Notice that the above Lemmata now imply that
+√
+N T
+
+( ˆE−2 ˆE1)−(E ind −E pool)	 = √N T ˆE−(E 1 −E 2)	 +o |XP (1).
+We can thus develop statistical inference for the differenceEind −E pool, by studying the weak convergence
+of the statistic
+√
+N T{ˆE−(E 1 −E 2)}. For this purpose, we define the following two terms
+Λ :=
+ NX
+j=1
+X ′jXj
+N T
+−1n NX
+i=1
+xi,T+1 x′i,T+1
+N
+ NX
+j=1
+X ′jXj
+N T
+−1 NX
+j=1
+X ′jXj(βj −β i)
+N
+√
+T
+o
+,
+Λk :=
+ X ′kXk
+T
+−1
+xk,T+1 x′k,T+1
+ NX
+j=1
+X ′jXj
+N T
+−1 NX
+j=1
+X ′jXj(βj −β k)
+N
+√
+T
+.
+Therewith, we define the conditional asymptotic variance
+τ 2N = 1N
+NX
+i,k=1
+
+2(ΣN )2i,k(x′i,T+1 (X ′iXi/T) −1[X ′iΣT X ′k/T](X ′kXk/T) −1xk,T+1 )2 (2.13)
++ 4(Λ + Λi)′ X ′i(ΣN )i,kΣT XkT (Λ + Λk)
+As we show in the proof of Theorem 2.9,τ2N is asymptotically close to the variance ofˆEand can thus be
+used for standardization. As common in the study of dependent time series, we have to ensure that the
+variance does not asymptotically degenerate.
+Assumptions 2.8.
+(Non-degenerate variance) The random variableτN satisfies the two conditions
+τN =O P (1), τ −1N =O P (1).
+Let us define the standardized estimator
+˘E:=
+√
+N T
+τN
+
+( ˆE−2 ˆE1)−(E pool −E ind)	 ∼F ˘E,(2.14)
+whereF ˘E refers to the cumulative distribution function of˘E, conditional onXandτ N is defined in (2.13).
+Theorem 2.9.Suppose that Assumptions 2.1, 2.3, 2.5 and 2.8 hold. Denoting byΦthe cumulative
+distribution function of a standard normal distribution, we have
+E
+h
+sup
+z∈R
+|F ˘E(z)−Φ(z)|
+
+=o(1).
+9
+The proof of Theorem 2.9 is technically challenging in two respects. First, the derivation of conditional
+weak convergence requires a non-standard application of a Berry-Esseen theorem for random variables
+conditional on the regressors. In the scenario of moderate heterogeneity an unusual linearization of˘E
+occurs that features both linear and squared error terms. These different terms influence the variance
+τ 2N, where two terms in the curly brackets occur, one for the squared errors (first term) and one for the
+non-squared errors (last term). Second, due to the complex dependence structure, it is difficult to prove
+that standardizing byτ2N is asymptotically equal to standardizing by the true variance ofˆE. In the special
+case of Gaussian data, the proof turns out to be much simpler because the squared and linear errors are
+uncorrelated; ifZ 1, Z2 are jointly normally distributed,E[Z1Z 22 ] = 0regardless of the covariance structure.
+Yet, for general error distribution, the analysis is substantially more intricate.
+A conditional confidence intervalTheorem 2.9 can be used to construct confidence intervals for the
+difference of prediction errorsEpool −E ind. Suppose that the conditional varianceτ2N is known. Then, an
+asymptotic(1−α)confidence interval forE pool −E ind is given by
+C1−α :=
+h τN Φ−1(α)√
+N T
++ ˆE−2 ˆE1, τN Φ−1(1−α)√N T + ˆE−2 ˆE1i.(2.15)
+Notice thatC 1−α is an approximate1−αconfidence interval in the sense that
+P
+ 
+(Epool −E ind)∈ C1−α|X P→1−α.(2.16)
+Remark 2.10.(Variance estimation) To conduct statistical inference it is necessary to estimate the long-
+run varianceτ 2N. In practice, an estimator might use additional prior knowledge available to the user, such
+as independence of the individuals acrossior the like. Yet, it is possible to construct fully non-parametric
+estimators forτ 2N. For this purpose, defineˆΛ, ˆΛk as the sample versions ofΛ,Λk, where the slopesβi have
+been replaced by the OLS estimatorsˆβi. Moreover, recall the covariance estimatorˆΣ(i,k). Finally, letKbe
+a continuous, symmetric, non-negative function, such thatK(x)is non-increasing forx≥0. We assume
+thatK(0) = 1andK(1) = 0and letb ′ >0be a bandwidth choice. Then, we define
+ˆτ2N := 1N
+NX
+i,k=1
+K
+ |i−k|
+b′
+
+2
+
+(x′i,T+1 (X ′iXi/T) −1 X ′i ˆΣ(i,k)(b)Xk)s,t/T (X ′kXk/T) −1xk,T+1 )2
++ 4(ˆΛ + ˆΛi)′ X ′i ˆΣ(i,k)(b)XkT (ˆΛ + ˆΛk).(2.17)
+Two bandwidth parameters have to be chosen in this estimator, namelyb, b′, which quantify dependence
+across time and individuals respectively. Stronger dependence requires larger values of the bandwidth
+choices. In the case of temporal independence, one can simply chooseb= 1and in the case of spatial
+independenceb ′ = 1.
+Remark 2.11.(Relation to existing work) We discuss certain aspects of the contribution, compared to
+Pesaran et al. (2022). We have already mentioned that work in our Introduction, where we have pointed
+out its pivotal role of defining the forecasting error as a pooling criterion. We now focus on more technical
+aspects of that work.
+i) Pesaran et al. (2022) developed their procedures in a different model from ours: slopes are random
+and a procedure is developed for fixedTand asN→ ∞. The proposed approach is technically
+10
+speaking an oracle procedure andT→ ∞is needed to estimate variances for practical inference.
+In our paper, by contrast, we have modeled slopes as fixed. The reason is that a random model is
+not helpful when assessing the forecasting error for largeN, Tscenarios. The forecasting error can
+be estimated at a precision of1/
+√
+N T, while the average ofNslopes fluctuates at a larger order of
+magnitude1/
+√
+N. So, with random slopes and largeN, T, one either has to condition on the slopes
+(rendering them again fixed) or one has to see an inference procedure dominated not by the model
+errors, but by the "random variation of the slopes" which may be undesirable. For this reason, in
+our largeN, Tpanel setup, we believe that fixed slopes are the preferable model. We also notice that
+fixing slopes avoids imposing assumptions on the joint slope distribution, which may be restrictive
+in practice.
+ii) The inference tools developed in this paper and that of Pesaran et al. (2022) are different - we develop
+a confidence interval for the difference of forecasting errors, while they develop a hypothesis test. It
+turns out that these results are not equivalent, and we have made a confidence interval specifically to
+avoid challenges associated with conditional hypothesis testing. To be precise, Pesaran et al. (2022)
+develop a test for the point hypothesis of equivalent forecasting errors (eq. (19) of that work). This
+hypothesis is strictly speaking random and under standard assumptions only holds with probability
+0. Even when interpreted in a one-sided sense, it seems difficult to formulate standard asymptotic
+criteria for statistical tests, such as an asymptotic error rate or consistency. In contrast, we develop
+an asymptotic confidence interval that, in a clearer way, holds the asymptotic level1−α(see eq.
+(2.16) above).
+iii) On a more basic level, theory in Pesaran et al. (2022) is developed for iid Gaussian model errors,
+while our approach can accommodate temporal and spatial dependence, and only imposes some weak
+moment assumptions on the error distributions.
+3 Finite sample properties
+We investigate the finite sample properties of our new confidence interval (CI) by means of a Monte Carlo
+study based on 5,000 iterations, with sample sizesN∈ {100,500}andT∈ {10,15,20,25,30,40,60,80}.
+In each setup, we simulatex i,t as a5-dimensional vector, where each element is independently drawn
+fromN(1,1). We report the empirical coverage rates of the feasible confidence intervalˆC1−α, whereτ N in
+(2.15) is replaced by the square root ofˆτ2N defined in (2.17). As an infeasible benchmark, denoted asC∗1−α,
+we computeC 1−α under the assumption that the true values forτN,Σ N andΣ T are known. Therefore,
+randomness inC ∗1−α stems only from the estimation of the slope parameters. For both the feasible and the
+infeasible confidence interval, we report their average lengthsL(ˆC1−α)andL(C ∗1−α), respectively. Across
+all simulations,α= 0.05.
+We begin by simulating homogeneous slope parameters with spherical errors by settingβi = 1for all
+individuals,Σ N = I N×N andΣ T = I T×T (Table 1). Next, we analyze the properties of our CI under
+heterogeneous slopes, i.e.,β i = 1for the first half of the sample andβ i = 2for the remainder, while
+maintaining spherical errors (Table 2). This is followed by results for homogeneous and heterogeneous
+slopes under serial correlation in the model errors (Tables 3 and 4), whereεi,t =ϕε i,t−1 +u i,t withϕ= 0.3
+andu it ∼ N(0,1). Consequently,ΣT is a Toeplitz matrix with(ΣT )s,t = 11−ϕ2 ϕ|t−s|. Motivated by the
+upper bound onρin Lemma 2.7, the bandwidth is set tob=T 2/7 in the simulations with dynamic
+11
+errors. Finally, we report results for a data generating process containing unobserved individual fixed
+effects (Tables 5 and 6), i.e.,Yi,t =x ′i,tβi +α i +ε i,t, whereα i ∼ N(¯xi,1)and¯x i =T −1 PTt=1 xi,t. In
+this case, our methodology can be applied by replacingxi,t with the demeaned version¨xi,t =x i,t −¯x
+and by adapting the estimator of the error covariance matrix to the demeaning operation by multiplying
+MT =I T −1 T 1′T /T, where1 T denotes a vector of ones, from both sides toˆΣ(i,i)(b).
+In the Appendix, we report simulation results for heteroskedastic model errors, which are not covered
+by our theory (Tables 7 - 10). Here, we setvar(ε i,t) =|(x i,t)1|, i.e., the variance ofε i,t depends on
+the absolute value of the first component ofxi,t. We then illustrate that our CI can be made robust to
+heteroskedasticity by adapting the estimator of the covariance matrix of the model errors to this feature
+of the data generating process. Furthermore, we apply a similar parametric estimation strategy to models
+with dynamic model errors and show that this approach can lead to a substantial improvement in the
+empirical coverage rate of your CI. While we do not provide a formal proof, we further illustrate that our
+CI can be made robust to both serial correlation and heteroskedasticity in the model errors by using a
+heteroskedasticity and autocorrelation consistent (HAC) type estimator for the covariance matrix of the
+model errors. Finally, we present results for the heterogeneous model with individual fixed effects, where
+the slope coefficientsβi arei.i.d.draws from a standard normal distribution (see Table 17). We find that
+our CI performs well, which is not surprising, as our theory does not impose any distributional assumptions
+on the slope coefficients.
+3.1 Results
+Across all simulations, the empirical coverage rate of the infeasible confidence intervalC∗0.95 practically
+coincides with the desired nominal level so thatL(C∗0.95)provides a sensible benchmark for the length of
+thefeasibleconfidenceinterval. Table1illustratesthatourfeasibleconfidenceintervalisconservativeinthe
+homogeneous slopes model when the model errors are uncorrelated. Unsurprisingly, it is thus substantially
+wider than the infeasible CI for any sample size. We find that this is due to the overestimation of the
+conditional asymptotic varianceτ 2N under slope homogeneity, asΛ = Λ k = 0in (2.13) whereas ˆΛand
+ˆΛi are non-zero in (2.17). Arguably, when choosing between the pooled and the heterogeneous model for
+prediction, being conservative under slope homogeneity is somewhat desirable, as it implies that the right
+endpoint of the CI is rarely below zero, correctly indicating that the pooled estimator is preferable in terms
+of the prediction error. When slope coefficients are heterogeneous, the feasible CI closely approximates
+the infeasible CI, as shown in Table 2, even whenTis only moderately large. A similar behavior can be
+observed when the model errors follow an AR(1) process (see Tables 3 and 4), albeit with the additional
+requirement thatNshould not be too large relative toT, as expected in the presence of time dependence.
+For instance, Tables 3 and 4 show thatˆC0.95 can undercover the true difference of prediction errors when
+Nis very large relative toT, since estimation error in ˆΣ(i,i)(b)affects the accuracy of the point estimate
+ˆE−2 ˆE1. However,Tonly needs to be moderately large relative toN(e.g.,N= 500andT≈30), to make
+this effect negligible. As we illustrate in the Appendix, distortions in the empirical coverage rate can be
+more severe with higher levels of serial correlation (see Tables 11 and 12) so that longer panels might be
+necessary for a satisfactory coverage rate. However, we also provide numerical evidence that the empirical
+coverage rate can be further improved when a parametric estimator is used to estimate the covariance
+matrix of the model errors instead of the nonparametric estimatorˆΣ(i,i)(b)(see Tables 13 and 14). When
+the model errors are independent but the model contains an unobserved individual fixed effect, the data
+must be demeaned across time, leading to serial correlation in the demeaned model errors. Consequently,
+12
+the results in Tables 5 and 6 resemble the ones in 3 and 4. Again, the feasible CI undercovers the true
+difference in prediction errors only whenNis very large relative toT. However, already whenTis as
+small as 20, the empirical level is close to the nominal level, and the length of the feasible CI closely
+approximates the length of the infeasible benchmark. As illustrated by Table 17, our approach is also
+robust to individual fixed effects when the slope heterogeneity is not fixed but rather follows a random
+coefficients specification whereβi is drawn from a standard normal distribution. As before, the empirical
+coverage rate is very accurate whenTis moderately large, i.e.,T≈20.
+N= 100N= 500
+T ˆC0.95 L( ˆC0.95)C ∗0.95 L(C∗0.95) ˆC0.95 L( ˆC0.95)C ∗0.95 L(C∗0.95)
+10 0.9922 1.6420 0.9498 0.9006 0.9890 1.2841 0.9530 0.7388
+15 0.9972 0.8861 0.9572 0.4983 0.9968 0.3134 0.9510 0.1755
+20 0.9980 0.4761 0.9566 0.2701 0.9982 0.1905 0.9502 0.1075
+25 0.9988 0.3169 0.9580 0.1802 0.9974 0.1454 0.9518 0.0826
+30 0.9982 0.2660 0.9514 0.1517 0.9992 0.1084 0.9488 0.0617
+40 0.9990 0.1820 0.9518 0.1038 0.9986 0.0741 0.9526 0.0424
+60 0.9990 0.1046 0.9538 0.0600 0.9986 0.0482 0.9480 0.0276
+80 0.9990 0.0794 0.9474 0.0456 0.9988 0.0339 0.9512 0.0195
+Table 1: Coverage rates and length of feasible and infeasible confidence interval with homogeneous slope
+coefficients.
+13
+N= 100N= 500
+T ˆC0.95 L( ˆC0.95)C ∗0.95 L(C∗0.95) ˆC0.95 L( ˆC0.95)C ∗0.95 L(C∗0.95)
+10 0.9652 3.0652 0.9536 2.7388 0.9732 1.7765 0.9524 1.4231
+15 0.9608 2.1541 0.9542 2.0317 0.9604 0.8114 0.9512 0.7689
+20 0.9660 1.5388 0.9598 1.4877 0.9552 0.6446 0.9466 0.6250
+25 0.9564 1.3201 0.9554 1.2948 0.9556 0.5575 0.9494 0.5444
+30 0.9598 1.1893 0.9568 1.1693 0.9528 0.4808 0.9494 0.4725
+40 0.9596 0.9772 0.9568 0.9668 0.9556 0.3978 0.9536 0.3931
+60 0.9602 0.7370 0.9590 0.7324 0.9514 0.3186 0.9490 0.3161
+80 0.9538 0.6435 0.9528 0.6403 0.9526 0.2699 0.9486 0.2684
+Table 2: Coverage rates and length of feasible and infeasible confidence interval with heterogeneous slope
+coefficients.
+N= 100N= 500
+T ˆC0.95 L( ˆC0.95)C ∗0.95 L(C∗0.95) ˆC0.95 L( ˆC0.95)C ∗0.95 L(C∗0.95)
+10 0.9760 2.8087 0.9506 1.6053 0.9298 1.5023 0.9510 0.8435
+15 0.9792 1.1745 0.9562 0.6975 0.8740 0.5415 0.9512 0.3168
+20 0.9910 0.7589 0.9600 0.4471 0.9102 0.3393 0.9554 0.1998
+25 0.9942 0.5597 0.9622 0.3298 0.9424 0.2485 0.9514 0.1460
+30 0.9958 0.4463 0.9576 0.2627 0.9594 0.1961 0.9522 0.1152
+40 0.9980 0.3149 0.9574 0.1852 0.9782 0.1390 0.9502 0.0816
+60 0.9994 0.1988 0.9574 0.1167 0.9918 0.0880 0.9536 0.0515
+80 0.9992 0.1444 0.9538 0.0843 0.9962 0.0647 0.9526 0.0378
+Table 3: Coverage rates and length of feasible and infeasible confidence interval with homogeneous slope
+coefficients and AR(1) model errors withϕ= 0.3.
+14
+N= 100N= 500
+T ˆC0.95 L( ˆC0.95)C ∗0.95 L(C∗0.95) ˆC0.95 L( ˆC0.95)C ∗0.95 L(C∗0.95)
+10 0.9592 4.1472 0.9494 3.5791 0.9366 2.0391 0.9480 1.6667
+15 0.9494 2.4120 0.9516 2.3537 0.9184 1.0872 0.9482 1.0488
+20 0.9512 1.9234 0.9536 1.9169 0.9332 0.8457 0.9500 0.8415
+25 0.9494 1.6337 0.9504 1.6393 0.9334 0.7218 0.9494 0.7243
+30 0.9534 1.4501 0.9560 1.4603 0.9392 0.6382 0.9492 0.6427
+40 0.9498 1.2086 0.9548 1.2217 0.9422 0.5380 0.9508 0.5434
+60 0.9486 0.9627 0.9522 0.9749 0.9454 0.4291 0.9482 0.4343
+80 0.9554 0.8286 0.9586 0.8364 0.9466 0.3674 0.9516 0.3709
+Table 4: Coverage rates and length of feasible and infeasible confidence interval with heterogeneous slope
+coefficients and AR(1) model errors withϕ= 0.3.
+N= 100N= 500
+T ˆC0.95 L( ˆC0.95)C ∗0.95 L(C∗0.95) ˆC0.95 L( ˆC0.95)C ∗0.95 L(C∗0.95)
+10 0.8386 5.0807 0.9562 3.3365 0.3550 2.4451 0.9464 1.5662
+15 0.9790 1.4493 0.9620 0.8762 0.7832 0.6764 0.9480 0.4065
+20 0.9910 0.9164 0.9522 0.5432 0.9422 0.4005 0.9576 0.2373
+25 0.9944 0.6681 0.9534 0.3937 0.9742 0.2821 0.9508 0.1658
+30 0.9988 0.4909 0.9570 0.2872 0.9872 0.2171 0.9528 0.1271
+40 0.9990 0.3455 0.9568 0.2015 0.9940 0.1513 0.9496 0.0881
+60 0.9990 0.2076 0.9596 0.1209 0.9976 0.0941 0.9464 0.0546
+80 0.9996 0.1485 0.9482 0.0862 0.9992 0.0678 0.9564 0.0393
+Table 5: Coverage rates and length of feasible and infeasible confidence interval with homogeneous slopes
+and individual fixed effects.
+15
+N= 100N= 500
+T ˆC0.95 L( ˆC0.95)C ∗0.95 L(C∗0.95) ˆC0.95 L( ˆC0.95)C ∗0.95 L(C∗0.95)
+10 0.8894 8.5260 0.9544 7.7738 0.6284 4.8723 0.9494 3.9320
+15 0.9522 4.3905 0.9540 4.1887 0.9002 1.9939 0.9504 1.8926
+20 0.9510 3.1799 0.9496 3.0716 0.9446 1.4991 0.9512 1.4498
+25 0.9560 2.8129 0.9520 2.7550 0.9514 1.2308 0.9538 1.2063
+30 0.9556 2.3995 0.9532 2.3718 0.9500 1.0865 0.9468 1.0696
+40 0.9562 1.9759 0.9558 1.9589 0.9482 0.8913 0.9474 0.8818
+60 0.9518 1.5410 0.9524 1.5321 0.9504 0.7028 0.9488 0.6984
+80 0.9492 1.3044 0.9490 1.3010 0.9512 0.5944 0.9518 0.5918
+Table 6: Coverage rates and length of feasible and infeasible confidence interval with slope heterogeneity
+and individual fixed effects.
+4 Conclusion
+Researchers frequently face a bias-variance trade-off when choosing between pooled and individual-specific
+estimators for the slope coefficients in panel data analysis. A sensible strategy is to use the estimator
+that yields a smaller mean squared prediction error. Here, we have derived a closed form expression of the
+difference in mean squared prediction errors between the pooled and the individual-specific OLS estimators
+for panel data models with potentially heterogeneous slopes. We have then constructed a novel confidence
+interval for the said difference in mean squared prediction errors. Our asymptotic analysis shows that
+our confidence interval has asymptotically the correct coverage asN, T→ ∞, while allowing for the
+cross-sectional dimension to grow at a faster rate than the time-dimension. By means of an extensive
+simulation study, we have demonstrated that the empirical coverage rate is close to the nominal coverage
+rate in sufficiently long panels, even when the cross-sectional dimension is much larger than the time series
+dimension. Finally, we have illustrated that our confidence interval can be flexibly adapted to features of
+the data generating process to further enhance its small-sample performance.
+Acknowledgments.Holger Dette has been partially supported by the Deutsche Forschungsgemeinschaft
+(DFG), project number 45723897, and by TRR 391Spatio-temporal Statistics for the Transition of Energy
+and Transport, project number 520388526 (DFG). Tim Kutta’s work has been partially funded by AUFF
+grants 47331 and 47222.
+16
+References
+Ando, T. and J. Bai (2015). A simple new test for slope homogeneity in panel data models with interactive
+effects.Economics Letters 136, 112–117.
+Baltagi, B. H., G. Bresson, and A. Pirotte (2008). To pool or not to pool? InThe econometrics of panel
+data: Fundamentals and recent developments in theory and practice, pp. 517–546. Springer.
+Blomquist, J. and J. Westerlund (2016). Panel bootstrap tests of slope homogeneity.Empirical Eco-
+nomics 50, 1359–1381.
+Bradley, R. C. (2007).Introduction to Strong Mixing Conditions. Kendrick Press.
+Browning, M., J. Carro, et al. (2007). Heterogeneity and microeconometrics modelling.Econometric
+Society Monographs 43, 47.
+Campello, M., A. F. Galvao, and T. Juhl (2019). Testing for slope heterogeneity bias in panel data models.
+Journal of Business & Economic Statistics 37(4), 749–760.
+Dehling, H., T. Mikosch, and M. Sørensen (2002).Empirical process techniques for dependent data.
+Birkhäuser.
+Doukhan, P. (1994).Mixing. Lecture Notes in Statistics 85. Heidelberg: Springer.
+Fazekas, I., A. Kukush, and T. Tómács (2000). On the Rosenthal inequality for mixing fields.Ukrainian
+Mathematical Journal - UKR MATH J 52, 305–318.
+Galántai, A. (2004).Projectors and Projection Methods. Springer Science + Business Media, LLC. New
+York: Wiley & Sons.
+Hsiao, C. and M. H. Pesaran (2008). Random coefficient models. InThe econometrics of panel data:
+Fundamentals and recent developments in theory and practice, pp. 185–213. Springer.
+Kendall, M. G. (1954). Note on bias in the estimation of autocorrelation.Biometrika 41(3-4), 403–404.
+Kutta, T. and H. Dette (2024). Validating approximate slope homogeneity in large panels.Journal of
+Econometrics 246(1–2), 105898.
+Marriott, F. and J. Pope (1954). Bias in the estimation of autocorrelations.Biometrika 41(3/4), 390–402.
+Mokkadem, A. (1988). Mixing properties of ARMA processes.Stochastic Processes and their Applica-
+tions 29(2), 309–315.
+Newey, W. K. and K. D. West (1987). A simple, positive semi-definite, heteroskedasticity and autocorre-
+lation consistent covariance matrix.Econometrica 55(3), 703–708.
+Pesaran, H., A. Pick, and A. Timmermann (2022). Forecasting with panel data: Estimation un-
+certainty versus parameter heterogeneity.CESifo Working Paper No. 9690, Available at SSRN:
+http://dx.doi.org/10.2139/ssrn.4083587.
+Pesaran, M. H. and T. Yamagata (2008). Testing slope homogeneity in large panels.Journal of Econo-
+metrics 142(1), 50 – 93.
+17
+Phillips, P. C. B. and D. Sul (2003). Dynamic panel estimation and homogeneity testing under cross
+section dependence.The Econometrics Journal 6(1), 217–259.
+Su, L., Z. Shi, and P. C. Phillips (2016). Identifying latent structures in panel data.Econometrica 84(6),
+2215–2264.
+Sunklodas, J. (1984). Rate of convergence in the central limit theorem for random variables with strong
+mixing.Lithuanian Mathematical Journal 24, 182–190.
+Swamy, P. A. V. B. (1970). Efficient inference in a random coefficient regression model.Economet-
+rica 38(2), 311–323.
+Wang, W., P. C. Phillips, and L. Su (2018). Homogeneity pursuit in panel data models: Theory and
+application.Journal of Applied Econometrics 33(6), 797–815.
+Wang, W. and Z. Zhu (2024). Homogeneity and sparsity analysis for high-dimensional panel data models.
+Journal of Business & Economic Statistics 42(1), 26–35.
+Yoshihara, K. (1978). Moment inequalities for mixing sequences.Kodai Math. J. 1, 316–328.
+Zellner, A. (1962). An efficient method of estimating seemingly unrelated regressions and tests for aggre-
+gation bias.Journal of the American Statistical Association 57(298), 348–368.
+18
+Appendix
+A Additional simulation results
+In this section, we present additional simulation results complementing our main simulations. As men-
+tioned in Section 3, the empirical coverage rate of our CI depends on the accuracy of the estimator of the
+covariance matrix of the model errorsˆΣ(i,k)(b). While we do not provide explicit proofs for each case, we
+illustrate by means of a simulation study that using estimators of the error covariance matrix that are
+specifically tailored to features of the data generating process leads to substantially improved coverage of
+our CI. Through this strategy, our CI can be made more reliable even in "short" panel data sets, where
+the cross-sectional dimension is much larger than the time series dimension.
+We first consider the case where the functional form of heteroskedasticity is explicitly modeled. Assume
+that the model error can be written asεi,t =ω(x i,t)·u i,t, whereω(·)is a known positive scaling function
+andu i,t is a zero-mean, homoskedastic process with strictly temporal correlation. The error covariance
+matrix can then be estimated as follows. First, the standardized residualsˆεi,t = ˆui,t/ω(xi,t)are computed.
+Since the standardized residuals are homoskedastic, we can then computeˆΣ(i,i)(b)as in (2.10). The final
+estimator of the covariance of the model errors is
+˜ˆΣ(i,i)(b) = Ωi ˆΣ(i,i)(b)Ωi,(A.1)
+whereΩ i = diag(ω(x i,1), . . . , ω(xi,T )). Table 7 shows that if the presence of heteroskedasticity is not
+accounted for, the CI can undercover whenNis large and slopes are homogeneous. This is not surprising
+as heteroskedasticity violates Assumption 2.3. However, under heterogeneous slopes, a sufficiently large
+time series appears to yield approximately accurate coverage irrespective of the cross-sectional dimension
+(Table 8). An intuitive explanation for this finding is that the additional variation in the errors due to
+heteroskedasticity (which is not captured byˆΣ(i,i)(b)in (2.10)) matters less when most of the variation
+in the data stems from heterogeneous slope coefficients. In contrast, the corresponding results where
+ˆΣ(i,i)(b)is replaced by ˜ˆΣ(i,i)(b)(Tables 9 and 10) show that the heteroskedasticity-robust version of the
+CI performs very well, even whenTis small relative toN. Intuitively, ˜ˆΣ(i,i)(b)correctly incorporates
+additional variation due to heteroskedasticity, leading to reliable inference in short panels irrespective of
+the nature of the slope coefficients.
+Next, we illustrate that a similar parametric estimation strategy improves the empirical coverage rate of
+our CI for smallTwhen the errors follow an AR(1) process with high levels of serial correlation. Since
+the model errors are generated asεi,t =ϕε i,t−1 +u i,t, we first obtain the least squares estimatorˆϕfrom
+a regression of the residuals on the lagged residuals. Asˆϕsuffers from small-sample bias in short time
+series, we compute the bias-corrected estimator ˆϕbc = ˆϕ+ (1 + 3 ˆϕ)/T(see Marriott and Pope, 1954
+and Kendall, 1954). Next, we estimateσ 2ui =Var(u i,t)by the sample variance of the residuals, i.e.,
+ˆσ2u,i = 1T−K PTt=1 ˆε2i,t. Finally, the estimated covariance matrix of the model errors is obtained as the
+Toeplitz matrix with entries
+˙ˆΣ(i,i)s,t = ˆσ2u,i ˆϕ|s−t|i (A.2)
+fors, t∈ {1, ..., T}. Our results show that replacing the nonparametric kernel estimatorˆΣ(i,i)(b)with the
+parametric ˙ˆΣ(i,i) that (correctly) imposes an AR(1) structure on the errors yields a notable improvement in
+the performance of the feasible confidence interval. As shown in Tables 11 and 12, where the nonparametric
+19
+estimator ˆΣ(i,i)(b)is used, the empirical coverage rate can be substantially lower than the nominal rate
+ifNis too large relative toT. Therefore, when serial correlation in the model errors is strong, a longer
+time series is required for accurate inference when the nonparametric kernel estimator is used. In contrast.
+Tables 13 and 14 show that the empirical coverage is acceptable already whenT≈25when the covariance
+matrix of the model errors is estimated using the parametric estimator˙ˆΣ(i,i).
+Finally, we illustrate that it is not necessary to impose a parametric specification on the model errors in
+the presence of both heteroskedasticity and serial correlation. However, we also show that nonparametric
+estimation comes at a cost, as much longer time dimensions are necessary for satisfactory coverage. To
+do so, we generateε i,t =|(x i,t)1|ui,t andu i,t = 0.3u i,t−1 +η i,t withη i,t drawn independently from a
+standard normal distribution. Instead of using a parametric specification of the heteroskedasticity and
+serial correlation as before, we employ a heteroskedasticity and autocorrelation consistent (HAC) type of
+estimator (Tables 15 and 16). Recall the OLS residualˆεi,t =y i,t −x ′i,t ˆβi for individualiat timet. The
+estimator ˆΣ(i,i)HAC (b)has elements
+( ˆΣ(i,i)HAC (b))s,t =w s,t(b) ˆεi,s ˆεi,t,1≤s, t≤T,(A.3)
+wherew s,t(b) = (1− |s−t|b+1 )I{|s−t|< b}are the Bartlett Kernel weights as in Newey and West (1987). In
+our simulations, we choose the bandwidth parameterb=T2/7. The simulation results in Tables 15 and 16
+show that the CI based on the HAC estimator works well whenTis large. Our results therefore suggest
+that our CI can be made robust to both serial correlation and heteroskedasticity of unknown form when
+a sufficiently long time series is available.
+N= 100N= 500
+T ˆC0.95 L( ˆC0.95)C ∗0.95 L(C∗0.95) ˆC0.95 L( ˆC0.95)C ∗0.95 L(C∗0.95)
+10 0.9784 1.8746 0.9528 1.0744 0.9894 1.2405 0.9556 0.6154
+15 0.9982 1.0523 0.9618 0.5985 0.9384 0.3662 0.9530 0.2125
+20 0.9980 0.5339 0.9526 0.3119 0.9004 0.2304 0.9480 0.1375
+25 0.9970 0.3806 0.9600 0.2265 0.8808 0.1706 0.9528 0.1037
+30 0.9984 0.3196 0.9598 0.1888 0.8450 0.1288 0.9500 0.0776
+40 0.9982 0.2112 0.9560 0.1266 0.8028 0.0886 0.9524 0.0543
+60 0.9956 0.1256 0.9588 0.0772 0.7430 0.0570 0.9458 0.0352
+80 0.9982 0.0961 0.9556 0.0586 0.7596 0.0406 0.9508 0.0253
+100 0.9986 0.0720 0.9506 0.0434 0.7876 0.0318 0.9482 0.0196
+Table 7: Coverage rates and length of feasible and infeasible confidence interval with homogeneous slope
+coefficients and heteroskedastic errors.
+20
+N= 100N= 500
+T ˆC0.95 L( ˆC0.95)C ∗0.95 L(C∗0.95) ˆC0.95 L( ˆC0.95)C ∗0.95 L(C∗0.95)
+10 0.9604 3.2795 0.9568 2.9978 0.9762 1.7721 0.9516 1.3960
+15 0.9590 2.3875 0.9494 2.2371 0.9340 0.8704 0.9486 0.8548
+20 0.9620 1.6265 0.9610 1.6196 0.9324 0.6993 0.9462 0.7105
+25 0.9510 1.4247 0.9530 1.4429 0.9348 0.5981 0.9494 0.6109
+30 0.9598 1.2904 0.9594 1.2895 0.9348 0.5151 0.9532 0.5331
+40 0.9530 1.0263 0.9594 1.0592 0.9354 0.4279 0.9532 0.4456
+60 0.9560 0.7980 0.9608 0.8282 0.9318 0.3429 0.9512 0.3604
+80 0.9484 0.7024 0.9544 0.7242 0.9306 0.2902 0.9480 0.3059
+100 0.9510 0.6032 0.9582 0.6256 0.9370 0.2576 0.9526 0.2715
+Table 8: Coverage rates and length of feasible and infeasible confidence interval with heterogeneous slope
+coefficients and heteroskedastic errors.
+N= 100N= 500
+T ˆC0.95 L( ˆC0.95)C ∗0.95 L(C∗0.95) ˆC0.95 L( ˆC0.95)C ∗0.95 L(C∗0.95)
+10 0.9902 2.7163 0.9534 1.4944 0.9876 1.4680 0.9508 0.8058
+15 0.9948 1.0852 0.9548 0.6194 0.9886 0.4993 0.9514 0.2831
+20 0.9982 0.6805 0.9560 0.3890 0.9962 0.3029 0.9572 0.1729
+25 0.9984 0.4902 0.9574 0.2811 0.9964 0.2187 0.9488 0.1252
+30 0.9992 0.3873 0.9590 0.2228 0.9976 0.1702 0.9498 0.0978
+40 0.9996 0.2680 0.9568 0.1546 0.9990 0.1185 0.9490 0.0682
+60 0.9988 0.1664 0.9564 0.0965 0.9992 0.0737 0.9524 0.0425
+Table 9: Coverage rates and length of feasible and infeasible confidence interval with homogeneous slope
+coefficients and heteroskedastic errors.ˆΣ(i,i)(b)is replaced with ˜ˆΣ(i,i)(b)in (A.1).
+21
+N= 100N= 500
+T ˆC0.95 L( ˆC0.95)C ∗0.95 L(C∗0.95) ˆC0.95 L( ˆC0.95)C ∗0.95 L(C∗0.95)
+10 0.9680 4.0582 0.9466 3.3854 0.9716 2.0019 0.9464 1.5865
+15 0.9576 2.2923 0.9500 2.1557 0.9562 1.0295 0.9462 0.9604
+20 0.9568 1.7938 0.9556 1.7325 0.9570 0.7872 0.9500 0.7592
+25 0.9546 1.5033 0.9490 1.4664 0.9554 0.6651 0.9524 0.6490
+30 0.9578 1.3266 0.9550 1.3032 0.9498 0.5833 0.9464 0.5729
+40 0.9536 1.0928 0.9524 1.0811 0.9516 0.4863 0.9480 0.4807
+60 0.9508 0.8603 0.9506 0.8580 0.9476 0.3829 0.9464 0.3817
+Table 10: Coverage rates and length of feasible and infeasible confidence interval with heterogeneous slope
+coefficients and heteroskedastic errors.ˆΣ(i,i)(b)is replaced with ˜ˆΣ(i,i)(b)in (A.1).
+N= 100N= 500
+T ˆC0.95 L( ˆC0.95)C ∗0.95 L(C∗0.95) ˆC0.95 L( ˆC0.95)C ∗0.95 L(C∗0.95)
+10 0.9280 1.8027 0.9544 1.0244 0.9482 1.2874 0.9580 0.6929
+15 0.8974 1.1248 0.9590 0.6848 0.8186 0.3381 0.9506 0.1988
+20 0.9070 0.6659 0.9564 0.4103 0.9100 0.2095 0.9472 0.1231
+25 0.9450 0.4441 0.9590 0.2703 0.9450 0.1638 0.9454 0.0961
+30 0.9640 0.3810 0.9506 0.2330 0.9502 0.1255 0.9488 0.0739
+40 0.9688 0.2786 0.9500 0.1708 0.9814 0.0859 0.9504 0.0503
+60 0.9942 0.1656 0.9498 0.0990 0.9900 0.0570 0.9480 0.0333
+80 0.9944 0.1300 0.9518 0.0778 0.9952 0.0403 0.9484 0.0235
+Table 11: Coverage rates and length of feasible and infeasible confidence interval with homogeneous slope
+coefficients and AR(1) model errors withϕ= 0.5.
+22
+N= 100N= 500
+T ˆC0.95 L( ˆC0.95)C ∗0.95 L(C∗0.95) ˆC0.95 L( ˆC0.95)C ∗0.95 L(C∗0.95)
+10 0.9334 3.2449 0.9580 3.1588 0.8632 1.8881 0.9514 1.5780
+15 0.9236 2.4419 0.9550 2.5324 0.7856 0.9347 0.9504 0.9803
+20 0.9250 1.8296 0.9590 1.9552 0.8508 0.7578 0.9500 0.8072
+25 0.9338 1.5833 0.9530 1.6796 0.8886 0.6715 0.9504 0.7119
+30 0.9368 1.4651 0.9592 1.5604 0.8940 0.5959 0.9482 0.6345
+40 0.9366 1.2333 0.9586 1.3205 0.9216 0.5001 0.9546 0.5320
+60 0.9484 0.9570 0.9618 1.0009 0.9336 0.4161 0.9472 0.4355
+80 0.9500 0.8526 0.9582 0.8863 0.9362 0.3555 0.9512 0.3699
+Table 12: Coverage rates and length of feasible and infeasible confidence interval with heterogeneous slope
+coefficients and AR(1) model errors withϕ= 0.5.
+N= 100N= 500
+T ˆC0.95 L( ˆC0.95)C ∗0.95 L(C∗0.95) ˆC0.95 L( ˆC0.95)C ∗0.95 L(C∗0.95)
+10 0.9040 3.1536 0.9504 1.9124 0.5436 1.6283 0.9516 0.9765
+15 0.9586 1.4680 0.9562 0.8803 0.7598 0.6796 0.9488 0.3985
+20 0.9854 1.0007 0.9582 0.5797 0.8662 0.9790 0.9500 0.9922
+25 0.9930 0.7564 0.9612 0.4362 0.9516 0.3354 0.9494 0.1926
+30 0.9950 0.6072 0.9568 0.3493 0.9758 0.2679 0.9542 0.1535
+40 0.9978 0.4360 0.9570 0.2506 0.9908 0.1927 0.9452 0.1106
+60 0.9982 0.2774 0.9522 0.1599 0.9972 0.1229 0.9532 0.0706
+Table 13: Coverage rates and length of feasible and infeasible confidence interval with homogeneous slope
+coefficients and AR(1) model errors withϕ= 0.5. ˆΣ(i,i)(b)is replaced by ˙ˆΣ(i,i) in (A.2).
+23
+N= 100N= 500
+T ˆC0.95 L( ˆC0.95)C ∗0.95 L(C∗0.95) ˆC0.95 L( ˆC0.95)C ∗0.95 L(C∗0.95)
+10 0.9224 4.5282 0.9514 4.0328 0.7526 2.1923 0.9468 1.8693
+15 0.9428 2.8311 0.9536 2.7314 0.8898 1.2851 0.9480 1.2185
+20 0.9534 2.3211 0.9538 2.2558 0.9334 1.0264 0.9500 0.9922
+25 0.9528 1.9920 0.9496 1.9465 0.9390 0.8791 0.9498 0.8588
+30 0.9554 1.7696 0.9550 1.7372 0.9438 0.7811 0.9488 0.7655
+40 0.9524 1.4834 0.9528 1.4649 0.9466 0.6610 0.9504 0.6519
+60 0.9512 1.1823 0.9512 1.1750 0.9488 0.5282 0.9488 0.5241
+Table 14: Coverage rates and length of feasible and infeasible confidence interval with heterogeneous slope
+coefficients and AR(1) model errors withϕ= 0.5. ˆΣ(i,i)(b)is replaced by ˙ˆΣ(i,i) in (A.2).
+N= 100N= 500
+T ˆC0.95 L( ˆC0.95)C ∗0.95 L(C∗0.95) ˆC0.95 L( ˆC0.95)C ∗0.95 L(C∗0.95)
+40 0.6734 0.2972 0.9592 0.1966 0.0034 0.1326 0.9498 0.0869
+60 0.9082 0.1932 0.9544 0.1226 0.1416 0.0868 0.9474 0.0545
+80 0.9646 0.1455 0.9578 0.0899 0.4758 0.0652 0.9570 0.0402
+100 0.9848 0.1138 0.9540 0.0692 0.7168 0.0518 0.9506 0.0314
+120 0.9894 0.0960 0.9574 0.0579 0.8472 0.0433 0.9552 0.0260
+150 0.9958 0.0767 0.9542 0.0459 0.9150 0.0345 0.9488 0.0206
+180 0.9974 0.0642 0.9570 0.0381 0.9554 0.0287 0.9476 0.0171
+Table 15: Coverage rates and length of feasible and infeasible confidence interval with homogeneous slope
+coefficients and heteroskedastic errors.ˆΣ(i,i)(b)is replaced by the HAC estimator in (A.3).
+24
+N= 100N= 500
+T ˆC0.95 L( ˆC0.95)C ∗0.95 L(C∗0.95) ˆC0.95 L( ˆC0.95)C ∗0.95 L(C∗0.95)
+40 0.9060 1.0924 0.9526 1.2183 0.7966 0.4884 0.9470 0.5429
+60 0.9302 0.8934 0.9528 0.9670 0.8882 0.4001 0.9486 0.4317
+80 0.9380 0.7891 0.9554 0.8369 0.9126 0.3489 0.9468 0.3698
+100 0.9430 0.7027 0.9552 0.7376 0.9334 0.3131 0.9534 0.3281
+120 0.9438 0.6444 0.9552 0.6707 0.9352 0.2864 0.9496 0.2981
+150 0.9462 0.5750 0.9534 0.5945 0.9410 0.2564 0.9528 0.2653
+180 0.9492 0.5270 0.9558 0.5429 0.9458 0.2342 0.9524 0.2410
+Table 16: Coverage rates and length of feasible and infeasible confidence interval with heterogeneous slope
+coefficients and heteroskedastic errors.ˆΣ(i,i)(b)is replaced by the HAC estimator in (A.3).
+N= 100N= 500
+T ˆC0.95 L( ˆC0.95)C ∗0.95 L(C∗0.95) ˆC0.95 L( ˆC0.95)C ∗0.95 L(C∗0.95)
+10 0.8894 8.5260 0.9544 7.7738 0.6284 4.8723 0.9494 3.9320
+15 0.9522 4.3905 0.9540 4.1887 0.9002 1.9939 0.9504 1.8926
+20 0.9510 3.1799 0.9496 3.0716 0.9446 1.4991 0.9512 1.4498
+25 0.9560 2.8129 0.9520 2.7550 0.9514 1.2308 0.9538 1.2063
+30 0.9556 2.3995 0.9532 2.3718 0.9500 1.0865 0.9468 1.0696
+40 0.9562 1.9759 0.9558 1.9589 0.9482 0.8913 0.9474 0.8818
+60 0.9518 1.5410 0.9524 1.5321 0.9504 0.7028 0.9488 0.6984
+80 0.9492 1.3044 0.9490 1.3010 0.9512 0.5944 0.9518 0.5918
+Table 17: Coverage rates and length of feasible and infeasible confidence interval withβi ∼N(1,1)and
+individual fixed effects.
+25
+B Proofs and technical details
+Throughout the Appendix,Cdenotes a generic, positive constant that can change form one line to another.
+Cand all (stochastic) constants implied by Landau symbols are always independent ofN, T, as well as
+individual indicesi, t. In the following, we will frequently use a simple relation between stochastic Landau
+symbols and conditional stochastic Landau symbols. More precisely, for a sequence(a N )N of positive
+numbers and a sequence of random variables(zN )N, that areX-measurable, it holds that
+zN =O P (aN )⇒z N =O |XP (aN ).(B.1)
+Next, we recall some properties regarding matrices: First, let us denote by∥ · ∥1 the trace norm of a
+matrix, by∥ · ∥2 its Frobenius norm, by∥ · ∥∞ its spectral norm, by∥ · ∥row is absolute row sum norm and
+byT r[·]the trace. Then, we recall for a matricesA, B, C
+M1)∥A∥ ∞ ≤ ∥A∥2 ≤ ∥A∥1 with equality ifAhas rank1.
+M2)∥AB∥ 1 ≤ ∥A∥1∥B∥∞.
+M3)T r[ABC] =T r[CAB].
+M4)T r[A]≤ ∥A∥1, with equality ifAis a covariance matrix.
+M5)∥ABC∥ p ≤ ∥A∥p∥B∥p∥C∥ p, forp∈ {1,2,∞}.
+M6)∥A∥ ∞ ≤ ∥A∥row for a symmetric matrixA.
+Here, in conditions M3) and M5) we have assumed that the respective matrix products on both sides make
+sense. Property M5) can be found in Galántai (2004) (p.17). M6) is a special case of Gershgorin’s circle
+theorem and often useful when considering the normed difference of covariance matrices.
+Finally, we come to the assumptions in our proofs. In Assumption 2.3,iii)we have assumed that the
+model errors have exponentially decaying mixing coefficients and in Assumption 2.5,iii)thatN/Tη →0
+for someη∈(0,2). In the Appendix, we present proofs under somewhat more general conditions. Namely,
+we assume that the mixing coefficients satisfy for some constantathe polynomial decay condition
+α(r)≤Cr −a,witha > 24(M+ 2)M−3 (B.2)
+and that at the same timeN/Tη →0for
+0< η≤2− 2Ma(M−2) +M .(B.3)
+If mixing coefficients are indeed exponentially decaying (as claimed in the main part of this paper), we may
+chooseain the above conditions arbitrary large and thus the condition onηis satisfied for anyη∈(0,2).
+Yet, the above formulation is interesting because it implies a more general trade-off between the strength
+of dependence and the relation ofNandT. More precisely, if dependence is stronger (polynomial mixing
+coefficients with smallera), thenTneeds to be larger compared toN. This makes intuitive sense, because
+more temporal data is needed to offset dependence. In our proofs, we will then refer by Assumption 2.3,
+iii)to the weaker condition (B.2) and by Assumption 2.5,iii)to the condition (B.3).
+26
+B.1 Proof of Lemma 2.2
+We begin by considering the individual error
+Eindi :=E (x′i,T+1 ˆβi −y i,T+1 )2X.
+By definition of the OLS estimator andyi,T+1 =x ′i,T+1 βi +ε i,T+1 it holds that
+x′i,T+1 ˆβi −y i,T+1 =x ′i,T+1 [X ′iXi]−1Xiεi −ε i,T+1 .
+Both terms are conditionally independent, which implies
+Eindi =E
+
+T r
+h
+ε′iXi[X ′iXi]−1xi,T+1 x′i,T+1 [X ′iXi]−1X ′iεi +ε ′i,T+1 εi,T+1
+iX
+=(ΣN )i,iT r
+h
+ΣT
+
+Xi[X ′iXi]−1xi,T+1 x′i,T+1 [X ′iXi]−1X ′i
+i
++ (ΣN )i,i(ΣT )1,1.
+In the second step we have used M3) and the fact that the covariance of the errors is separable (see
+Condition i) of Assumption 2.1). We have thus shown the desired form ofEindi . In the next step, we
+consider the pooled errors
+Epooli :=E (x′i,T+1 ˆβpool −y i,T+1 )2X.
+By definition of the pooled OLS estimator, we have
+x′i,T+1 ˆβpool −y i,T+1 =x ′i,T+1
+ NX
+j=1
+X ′jXj
+−1 NX
+j=1
+{X ′jXjβj +X ′jεj} −x′i,T+1 βi −ε i,T+1
+=x′i,T+1
+ NX
+j=1
+X ′jXj
+−1 NX
+j=1
+{X ′jXj(βj −β i) +X ′jεj} −εi,T+1 .
+Hence
+Epooli =
+
+x′i,T+1
+ NX
+j=1
+X ′jXj
+−1 NX
+j=1
+X ′jXj(βj −β i)
+2
++T r
+ NX
+j=1
+X ′jXj
+−1
+xi,T+1 x′i,T+1
+ NX
+j=1
+X ′jXj
+−1 X
+j,k
+(ΣN )j,kX ′jΣT Xk
+
++ (ΣN )i,i(ΣT )1,1.
+B.2 Proof of Lemma 2.4
+Notice that the termsE1, E3 are bothX-measurable and according to (B.1) it suffices to show the desired
+rates in the lemma unconditionally.
+We begin by investigatingE1, defined in (2.6). By some simple calculations, we get
+|E1| ≤1T maxi=1,...,N (ΣN )i,i[X ′iXi/T] −1xi,T+1 x′i,T+1 [X ′iXi/T] −1(X ′iΣT Xi)/T 1 (B.4)
+≤ CT maxi=1,...,N ∥[X ′iXi/T] −1∥1∥xi,T+1 x′i,T+1 ∥1∥[X ′iXi/T] −1∥1∥(X ′iΣT Xi)/T∥ 1.
+Here, we have used M4) in the first inequality and M5) in the second one. Using M1), M5) and finally
+Condition ii) of Assumption 2.3 shows that
+∥xi,T+1 x′i,T+1 ∥1 =∥x i,T+1 x′i,T+1 ∥2 ≤ ∥xi,T+1 ∥22 ≤c 23.
+27
+Herec 3 >0is the constant from the named assumption. Using Lemma C.1 (parts i) and v) respectively)
+shows that
+max
+i
+∥[X ′iXi/T] −1∥1 =O P (1),max i ∥(X ′iΣT Xi)/T∥ 1 =O P (1).
+It hence follows thatE1 =O P (1/T).
+Next, we turn toE3, defined in (2.8). Using M4) and then M5) shows that
+|E3| ≤ 1N Tn 1N T NXj=1 X ′jXjo−121 1N NXi=1 ∥xi,T+1 x′i,T+1 ∥1 1N Xj,k |(ΣN )j,k| · ∥(X′jΣT Xk)/T∥ 1.
+All three factors in round brackets on the right side are of orderOP (1). For the first one this holds by
+Lemma C.1, part iii), for the second one by Assumption 2.3, part ii) and for the last one by Lemma C.1,
+parts iv) and v). This demonstrates the desired rate
+E3 =O P
+ 1
+N T
+
+.
+B.3 Proof of Theorem 2.9:
+Proof.Recall the following version of the third binomial formula:a2 −b 2 = 2(a−b)b+ (a−b) 2. We can
+use it to observe the following decomposition
+√
+N T(ˆE−E 2) =E 2,1 +E 2,2,where
+E2,1 := 2T√N
+NX
+i=1
+
+x′i,T+1
+ NX
+j=1
+X ′jXj
+−1 NX
+j=1
+X ′jXj([ ˆβj −β j]−[ ˆβi −β i])
+′
+
+x′i,T+1
+ NX
+j=1
+X ′jXj
+−1 NX
+j=1
+X ′jXj(βj −β i)
+
+E2,2 := T√N
+NX
+i=1
+
+x′i,T+1
+ NX
+j=1
+X ′jXj
+−1 NX
+j=1
+X ′jXj([ ˆβj −β j]−[ ˆβi −β i])
+2
+.
+First, we turn to the termE2,2 that we rewrite as
+E2,2 = T√N
+NX
+i=1
+
+x′i,T+1
+ NX
+j=1
+X ′jXj
+−1 NX
+j=1
+X ′jεj −x ′i,T+1 (X ′iXi)−1X ′iεi
+2
+.
+Using the second binomial formula impliesE2,2 =E 2,2,1 −2E 2,2,2 +E 2,2,3, with
+E2,2,1 = T√N
+NX
+i=1
+(x′i,T+1 (X ′iXi)−1X ′iεi)2
+E2,2,2 = 1√N  1√N T NXj=1 ε′jXj NXℓ=1 X ′ℓXℓ/(N T)−1 1√N T NXi=1 xi,T+1 x′i,T+1 (X ′iXi/T) −1X ′iεi
+E2,2,3 = 1√N  NXj=1 X ′jXj/(N T)−1 NXj=1 1√N TX ′jεj′
+×
+ 1
+N
+NX
+i=1
+xi,T+1 x′i,T+1
+ NX
+j=1
+X ′jXj/(N T)−1 NX
+j=1
+1√
+N T
+X ′jεj
+
+.
+28
+According to Lemma B.1 below, it follows that
+E2,2,2, E2,2,3 =O |XP (1/√N).
+Consequently, we have
+√
+N T(ˆE−E 1 −E 2) =E 2,1 +{E 2,2,1 − √N T E1}+O |XP (1/√N),(B.5)
+and we now analyze the two non-negligible terms on the right. We will write these terms as sums of mixing
+random variables and demonstrate a moment condition for each variable. These steps are fundamental for
+the central limit theorem that we subsequently employ. We begin with
+E2,2,1 −
+√
+N T E1 = 1√N
+NX
+k=1
+E(k)2,2,1,
+where
+E(k)2,2,1 := (x′i,T+1 (X ′iXi/T) −1X ′iεi/√T) 2 −E[(x ′i,T+1 (X ′iXi/T) −1X ′iεi/√T) 2|X]	.
+Now, we study the conditional fourth moment ofE(k)2,2,1. According to Lemma C.1, parts viii) we observe
+that
+E
+
+|E(k)2,2,1|4X ≤CE  (x′i,T+1 (X ′iXi/T) −1X ′iεi/√T) 24X =O P (1).
+Next, we will analyzeE2,1. We decompose further intoE2,1 =E 2,1,1 +E 2,1,2, with
+E2,1,ℓ := 1√N
+NX
+k=1
+E(k)2,1,ℓ
+where
+E(k)2,1,1 :=2 ε′kXk√T  NXj=1 X ′jXjN T −1n NXi=1 xi,T+1 x′i,T+1N  NXj=1 X ′jXjN T −1 NXj=1 X ′jXj(βj −β i)N √T o
+E(k)2,1,2 :=2 ε′kXk√T  X ′kXkT −1xk,T+1 x′k,T+1  NXj=1 X ′jXjN T −1 NXj=1 X ′jXj(βj −β k)N √T .
+It is easy to see that each termE(k)2,1,ℓ is conditionally centered. Next, we can study the conditional fourth
+moment ofE (k)2,1,ℓ. For purposes of illustration, we confine the proof to the termE(k)2,1,1 and omit the easier
+caseE (k)2,1,2. First, notice that|E (k)2,1,1|=|T r[E (k)2,1,1]|, sinceE (k)2,1,1 is just a real number. We can then use
+M4) and M5) to obtain
+E
+
+|E(k)2,1,1,|4X ≤4E ε′kXk√T 41X NXj=1 X ′jXjN T −141 NXi=1 xi,T+1 x′i,T+1N 41
+ NX
+j=1
+X ′jXj
+N T
+−14
+1
+ NX
+j=1
+X ′jXj
+N T
+4
+1
+∥max
+i,j
+√
+T(β j −β i)∥42.
+29
+Each of the norms on the right-hand side if of orderOP (1), uniformly overk, which follows by Lemma
+C.1 part vii) (first factor), part iii) (second and fourth factor), part vi) (fifth factor), Assumption 2.3,
+Condition ii) (third factor) and Assumption 2.5 Condition ii) (last factor). We thus conclude
+max
+k
+E
+
+|E(k)2,1 |4X ≤Cmaxk E|E(k)2,1,1|4X +Cmaxk EE(k)2,1,2|4X =O P (1).(B.6)
+We can now express
+˜E:=E 2,1 +{E 2,2,1 − √N T E1}= 1√N NXk=1 n(E(k)2,1,1 +E (k)2,1,2) +E (k)2,2,1o,(B.7)
+and notice that according to (B.5) we have
+√
+N T(ˆE−E 1 −E 2) = ˜E+o |XP (1).
+Now, to study the weak convergence behavior of˜E, we first define its conditional variance
+˜τ2N :=Var( ˜E|X)(B.8)
+and therewith the conditional distribution function
+F ˜E(z) :=P( ˜E/˜τN ≤z|X)
+forz∈R. Now, we want to apply a Berry Esseen Theorem toF ˜E(z). More precisely, we consider the
+difference
+∆N :=E
+
+sup
+z
+|F ˜E(z)−Φ(z)|
+X
+and want to apply Theorem 2 from Sunklodas (1984), which rests on two conditions: Strong mixing of the
+random variables and uniformly bounded moments of all terms. First, the random variablesεn are strongly
+mixing acrossn, with mixing coefficientsα(n)≤Cn −a anda >12. Hence, the first condition of the named
+theorem is satisfied. The second condition of the named theorem requires uniform boundedness of fourth
+moments ofE (k)2,1 , E(k)2,2,1. While the conditional moments are not uniformly bounded, we can define for a
+constantL >0the event
+E(L) :=
+
+E[(E(k)2,1 )4|X]≤L,E[(E (k)2,2,1)4|X]≤L 	.
+Hence, we can decompose∆N as follows
+∆N ≤E
+
+sup
+z
+|F ˜E(z)−Φ(z)|
+XIE(L) +I E(L)c =: ∆(1)N + ∆(2)N .
+For any fixedL >0, Theorem 2 in Sunklodas (1984) implies that
+∆(1)N P→0
+and evaluating the double limit
+lim
+L→∞
+lim sup
+N
+∆(2)N P= 0
+yields∆ N =o P (1). To complete the proof of weak convergence, we still have to prove that
+˘∆N :=E  sup
+z
+|F ˘E(z)−Φ(z)|
+X →0,
+30
+where ˘Eis defined in (2.14). If Assumption 2.8 holds, this follows by standard arguments, since our above
+proof implies ˘E= ˜E+o P (1)and since˜τ 2N =τ 2N +o P (1), as we will show below. Hence, we omit the
+details.
+We now proceed to the last part of this proof: To show that
+˜τ2N =τ 2N +o P (1)
+whereτ 2N is defined in (2.13). It turns out that the proof of this fact requires some rather lengthy
+calculations.
+In view of (B.7) and (B.8) it holds that
+˜τ2N =Var( ˜E|X) = 1N Xi,k c(1)i,k +c (2)i,k +c (3)i,k
+where
+i)c (1)i,k :=E[E (i)2,2,1(E(k)2,1,1 +E (k)2,1,2)|X]
+ii)c (2)i,k :=E[(E (i)2,1,1 +E (i)2,1,2)(E(k)2,1,1 +E (k)2,1,2)|X]
+iii)c (3)i,k :=E[E (i)2,2,1E(k)2,2,1|X].
+We now analyze each of thec(ℓ)i,k forℓ= 1,2,3separately.
+Part i):In order to studyc(1)i,k, we further decompose it into
+c(1)i,k =c (1,1)i,k +c (1,2)i,k :=E[E (i)2,2,1E(k)2,1,1|X] +E[E (i)2,2,1E(k)2,1,2|X].
+It can be shown that
+max
+i,k
+{c(1,1)i,k , c(1,2)i,k } →0.(B.9)
+Heuristically this is this the case since we consider the covariance of an (approximately) centered chi-
+squared distributionE (i)2,2,1 times an (approximately) normal distributionE(k)2,1,1, E(k)2,1,2 which is should be
+≈0regardless of the correlation between these variables.
+We will confine our proof toc(1,1)i,k since the proof for the other term works analogously. Notice that we
+can writeX ′iεi = Pt εi,txi,t. We now define
+vi :=(X ′iXi/T) −1xi,T+1 ,(B.10)
+V:=2
+ NX
+j=1
+X ′jXj
+N T
+−1n NX
+i=1
+xi,T+1 x′i,T+1
+N
+ NX
+j=1
+X ′jXj
+N T
+−1 NX
+j=1
+X ′jXj(βj −β i)
+N
+√
+T
+o
+.(B.11)
+Consequently, we have
+c(1,1)i,k :=|E[E(i)2,2,1E(k)2,1,1|X]|(B.12)
+=
+E[(v′iX ′iεi/√T) 2 −E{(v ′iX ′iεi/√T) 2|X}](εkX ′kV /√T)|X 
+≤ 1T 3/2 Xq,r,s |E[εi,q(x′i,qvi)εi,r(x′i,rvi)εk,s(x′k,sV)|X]|
+≤ 1T 3/2 maxi,q {|x′i,qvi|}2 maxi,s {|(x′i,sV)|} Xq,r,s |E[εi,qεi,rεk,s]|.
+31
+Let us consider the maximum on right side first. According to Lemma C.2 we have
+max
+i
+∥vi∥=O P (1),∥V∥=O P (1)
+and hence
+max
+i,q
+{|x′i,qvi|}2 maxi,s {|(x′i,sV)|} ≤ OP (1)(maxi,t ∥xi,t∥)3 =O P (T 3/M)(B.13)
+where we have used Lemma C.2 again to get the rate in the last equality. Next, we turn to the sum over
+the error terms on the right side of (B.12). We can carve up the sum along various subsets of indices. In
+the following we consider the sum over the subset of indices whereq≤r≤s(other combinations work
+analogously). We can now for a sufficiently smallζ >3M/2(precisely specified later) decompose this set
+into
+Iclose :={(q, r, s) :q≤r≤s,|q−r| ≤T 1/4−ζ,|r−s| ≤T 1/4−ζ},
+If ar:={(q, r, s) :q≤r≤s} \ Iclose.
+Notice that|I close|=O(T 3/2−2ζ)by a simple combinatorial argument: There areTpossible choices forq
+and for eachqthere are at most2T 1/4−ζ possible choices forrandsgiving at most4T×T 1/4−ζ ×T 1/4−ζ
+combinations of indices. Consequently
+1
+T 3/2
+X
+(q,r,s)∈Iclose
+|E[εi,qεi,rεk,s]|=O P (T −2ζ),(B.14)
+uniformly overi, k. Here we have also used that
+|E[εi,qεi,rεk,s]| ≤maxi,q E|εi,q|3 ≤C,
+where we have used Assumption 2.1, part i) and the fact thatM≥3. On the other hand, considering the
+sum overI f aryields
+1
+T 3/2
+X
+(q,r,s)∈If ar
+|E[εi,qεi,rεk,s]| ≤C T 3T 3/2 α(⌊T 1/4−ζ⌋)(M−3)/M =O(T 3/2−a(1/4−ζ)(M−3)/M ).(B.15)
+Here we have used the fact that inIf arthere always exists at least one pair of indices with distance at
+leastT 1/4−ζ. So, for example, suppose that|q−r|> T 1/4−ζ. Then we can use Lemma 3.11 in Dehling
+et al. (2002), to see that
+|E[εi,qεi,rεk,s]| ≤ {E|εi,q|M }1/M{E|εi,rεk,s|M/2}2/Mα(|q−r|) (M−3)/M .(B.16)
+Now, putting the bounds (B.12), (B.14) and (B.15) together yields
+c(1,1)i,k =O  T 3/M−2ζ  +O  T 3/M+3/2−a(1/4−ζ)(M−3)/M .
+The right side converges to0at some polynomial speed, if the two following conditions hold
+3
+M <2ζand 3M + 32 < a 14 −ζ  M−3M
+32
+SinceM >12, we can choose3/(2M)< ζ <1/8. The first condition in (B.16) follows since3/(2M)< ζ.
+For the second one we useζ <1/8and see that it is implied by Assumption 2.3, condition iii) which
+implies
+6 + 3M
+2M < a8 M−3M ⇔ 8(6 + 3M)M−3 < a.
+This completes the proof of (B.9).
+Part ii):Next, we consider the covariancec(2)i,k =E[E (i)2,2,1E(k)2,2,1]. We can write this covariance explicitly
+as
+E[E(i)2,2,1E(k)2,2,1] = 1T 2 E Xt εi,t(x′i,tvi)2 Xt εk,t(x′k,tvk)2 (B.17)
+−E
+h X
+t
+εi,t(x′i,tvi)2XiEh X
+t
+εk,t(x′k,tvk)2XiX
+= 1T 2 Xs,t,q,r E[εi,sεi,tεk,qεk,r]−E[ε i,sεi,t]E[εk,qεk,r]	νi,k,s,t,q,r ,
+whereν i,k,s,t,q,r :=
+
+(x′i,svi)(x′i,tvi)(x′k,qvk)(x′k,rvk)	.(B.18)
+Notice that according to Lemma C.2 it holds uniformly in all indices that
+|νi,k,s,t,q,r |=O P (T 4/J ).(B.19)
+We will now analyze the sum on the right of (B.17) and we will do that once more by carving up the
+set of indices. For the rest of this proof, we introduce some terminology, to facilitate referencing different
+objects. First, we will call a sum of the form
+X
+E[εi,sεi,tεk,qεk,r]
+an "unseparated sum", while we call a sum of the form
+X
+E[εi,sεi,t]E[εk,qεk,r]
+a "separated sum". The terms unseparated and separated refer to the separation of the expectation of
+the four random variables into two smaller expectations. Second, we will parcel up the index set over all
+combinations ofs, t, q, rinto ordered subsets, where e.g.s < t < q < rors < r < t < q. It will make a
+difference in the analysis if in an ordering both pairss, tandq, rare next to each other, such as in
+[s < t <[q < r, [q < r <[t < s
+or whether this is not so, as in
+s < q < r < t, q < r < t < s.
+We call the sets where the two pairs are together "adjacent orderings" and those where at least one pair
+is separated "non-adjacent orderings". Finally, it is clear that besides strict orderings an analysis of the
+index combinations also has to take account of one or more equalities in the indices, says=t < q < ror
+s=t=q < r. The analysis for these index sets will not be considered here. We only notice that it works
+along similar lines as for the strictly ordered indices.
+In the following, we will consider two strict orderings of indices: First,s < t < q < ras an example of
+33
+an adjacent ordering and seconds < r < t < qas an example of a non-adjacent ordering. We begin with
+s < t < q < rand parcel up these indices into a number of subsets:
+I≤,≤,≤ :={s < t < q < r:|s−t| ≤T1/4,|t−q| ≤T 1/4,|q−r| ≤T 1/4},
+I>,≤,≤ :={s < t < q < r:|s−t|> T1/4,|t−q| ≤T 1/4,|q−r| ≤T 1/4},
+I≤,>,≤ :={s < t < q < r:|s−t| ≤T1/4,|t−q|> T 1/4,|q−r| ≤T 1/4},
+·
+I>,>,> :={s < t < q < r:|s−t|> T1/4,|t−q|> T 1/4,|q−r|> T 1/4}.
+There are three different types of index sets that we need to analyze: First,I≤,≤,≤ where all indices are
+relatively close to one another. Then,I≤,>,≤ where the pairss, tandq, rare close to each other, but the
+pairs are far away from one another and finally any other index set, where there is a large distance between
+the elements of at least one pairs, torq, r. Let us begin by consideringI≤,≤,≤. By a simple combinatorial
+argument, we see that|I ≤,≤,≤| ≤CT7/4 (Tchoices forsand2×T 1/4 fort, q, rrespectively). It then
+follows that
+1
+T 2
+X
+(s,t,q,r)∈I ≤,≤,≤
+
+E[εi,sεi,tεk,qεk,r]−E[ε i,sεi,t]E[εk,qεk,r]
+	
+νi,k,s,t,q,r =O P (T −1/4+4/M) =o(1).
+Here, we have used the bound onνi,k,s,t,q,r from Lemma C.2 in the first equality. In the second equality
+we have exploited thatM≥16. Next, let us turn to one of those sets where at least one pairs, torq, r
+is separated by a distance ofT1/4. As an example we considerI>,≤,≤. We can exploit that|s−t|> T 1/4
+so that a mixing inequality becomes applicable (again Lemma 3.11 in Dehling et al. (2002)), that implies
+|E[εi,sεi,tεk,qεk,r]|,|E[ε i,sεi,t]E[εk,qεk,r]| ≤Cα(T1/4)(M−4)/M .
+By a simple calculation we observe that|I>,≤,≤| ≤CT 1+1+1/4+1/4 =CT 5/2. Using this number, the
+above mixing bound and the bound (B.19) we obtain
+1
+T 2
+X
+(s,t,q,r)∈I>,≤,≤
+
+E[εi,sεi,tεk,qεk,r]−E[ε i,sεi,t]E[εk,qεk,r]
+	
+νi,k,s,t,q,r
+=OP
+ T 2.5T 4/M
+T 2 α(⌊T 1/4⌋)(M−4)/M
+
+=O P
+
+T 1/2+4/J−(a/4)(M−4)/M
+
+.
+ExploitingM≥16, we see that the right side is polynomially decaying to0, if
+3
+4 < a4 M−4M ⇔ 3M(M−4) < a.
+We can now iterate these arguments for the analysis of all index sets exceptI≤,>,≤ and observe that in all
+cases the sum is negligible if the mixing coefficients are sufficiently fast decaying. The strongest condition
+that we obtain is for the index setI>,>,> that hasO(T 4)elements and gives us the condition
+OP
+ 
+T 2+4/J α(T 1/4)M/(M−4)  =O P
+
+T 2+4/J−(a/4)(M−4)/M
+
+.
+Here, the right side decays poynomially if
+9
+4 < a4 M−4M ⇔ 9MM−4 < a
+34
+which holds due to Assumption 2.3, condition iii). Finally, we turn to the index setI≤,>,≤. Here, we can
+use Lemma 3.11 in Dehling et al. (2002) to see that
+E[εi,sεi,tεk,qεk,r] =E[ε i,sεi,t]E[εk,qεk,r] +O P (α(⌊T 1/4⌋)(M−4)/M ) =O P
+
+T 1/2+4/J−(a/4)(M−4)/M
+
+.
+Using the fact that|I≤,>,≤| ≤CT5/2, this implies that
+1
+T 2
+X
+(s,t,q,r)∈I >,≤,≤
+
+E[εi,sεi,tεk,qεk,r]−E[ε i,sεi,t]E[εk,qεk,r]
+	
+νi,k,s,t,q,r
+=O(α(⌊T 1/4⌋)(M−4)/M T 1/2+4/J ),
+where as before the right side is going to0at polynomial speed, using the mixing condition iii) of As-
+sumption 2.3 and similar arguments as before. Notice the subtle difference here: For any index set besides
+I≤,>,≤ both separated and unseparated sum are individually vanishing. OnI≤,>,≤ they both are not van-
+ishing, but they are close to each other and hence asymptotically their difference vanishes. Our derivations
+up to this point show that
+1
+T 2
+X
+s<t<q<r
+
+E[εi,sεi,tεk,qεk,r]−E[ε i,sεi,t]E[εk,qεk,r]
+	
+νi,k,s,t,q,r =o(1).(B.20)
+Similarly, we can show for any adjacent ordering of indices that the difference of separated and non-
+separated sums vanishes.
+Now, we turn to the different case of a non-adjacent set of indices and for the purpose of illustration choose
+s < r < t < q. By making the same sorts of arguments as before (further decomposing the set of indices)
+we obtain that here, the separated sum is always of vanishing order and thus
+1
+T 2
+X
+s<r<t<q
+|E[εi,sεi,t]E[εk,qεk,r]νi,k,s,t,q,r |=o P (1).(B.21)
+Roughly speaking, the reason is the following: Defining the index sets in analogy to before, the sum over
+I≤,≤,≤ is again negligible due to a small number of terms. For any other index set, there exist at least
+two indicess, rorr, tort, qthat are further apart thanT 1/4. For sake of argument, let us suppose
+|t−q|> T 1/4. Then, becauser < t < q, it follows that|r−q|> T1/4. Then, using Lemma 3.11 in Dehling
+et al. (2002) we obtain the inequality
+|E[εk,qεk,r]| ≤Cα(⌊T1/4⌋)(M−2)/M .
+Using this argument for all terms, we obtain that
+1
+T 2
+X
+s<r<t<q
+|E[εi,sεi,t]E[εk,qεk,r]νi,k,s,t,q,r |
+≤ 1T 2 Xs<r<t<q Cα(T 1/4)(M−2)/M |νi,k,s,t,q,r |=O P T 2+4/J α(⌊T 1/4⌋)(M−2)/M 
+=OP
+
+T 2+4/J−a(M−2)/(4M)
+
+,
+where we have sued that the sum contains less thanT4 terms in total and that|νi,k,s,t,q,r |=O P (T 4/J )
+according to Lemma C.2. As before, it follows that the right side isoP (1). This means that the separated
+35
+sum will be asymptotically negligible. However, the non-separated sum is not negligible and we can show
+that
+1
+T 2
+X
+s<r<t<q
+E[εi,sεi,tεk,qεk,r]νi,k,s,t,q,r = 1T 2 Xs<r<t<q E[εi,sεk,r]E[εi,tεk,q]νi,k,s,t,q,r +o P (1).(B.22)
+Now, let us piece these results together. First, recall (B.17) and appreciate that we can decompose the
+right side further into
+1
+T 2
+X
+s,t,q,r
+all indices
+dif f erent
+
+E[εi,sεi,tεk,qεk,r]−E[ε i,sεi,t]E[εk,qεk,r]
+	
+νi,k,s,t,q,r
++ 1T 2 Xs,t,q,r
+at least two
+indices equal
+
+E[εi,sεi,tεk,qεk,r]−E[ε i,sεi,t]E[εk,qεk,r]
+	
+νi,k,s,t,q,r =:S 1 +S 2.
+Let us focus onS1. The quadruple of indices falls into one of the strictly ordered combinations considered
+above, adjacent or non-adjacent. In total there are24possible orderings of four indices,8of them adjacent
+and16non-adjacent. Our above proof shows the following three facts:
+First, whenever we consider an adjacent ordering of indices it follows that (according to (B.20))
+1
+T 2
+X 
+E[εi,sεi,tεk,qεk,r]−E[ε i,sεi,t]E[εk,qεk,r]
+	
+νi,k,s,t,q,r =o(1).
+Second, whenever an ordering is non-adjacent, we have due to (B.21) a vanishing separated sum
+1
+T 2
+X
+|E[εi,sεi,t]E[εk,qεk,r]νi,k,s,t,q,r |=o P (1).
+Third, in the non-adjacent case it follows that (according to (B.22))
+1
+T 2
+X
+E[εi,sεi,tεk,qεk,r]νi,k,s,t,q,r = 1T 2 X E[εi,sεk,r]E[εk,qεi,t]νi,k,s,t,q,r +o P (1).
+We conclude, because of these observations that
+S1 = 16T 2 Xs<r<t<q E[εi,sεk,r]E[εi,tεk,q]νi,k,s,t,q,r +o P (1)
+= 16T 2 Xs<r<t<q(ΣT )s,r(ΣT )t,q(ΣN )2i,kνi,k,s,t,q,r +o P (1)
+=2
+ 8
+T 2
+X
+s<t<q<r
+(ΣT )s,r(ΣT )t,q(ΣN )2i,kνi,k,s,t,q,r
+
++o P (1)
+= 2T 2 Xs,t,q,r
+all indices
+dif f erent
+(ΣT )s,r(ΣT )t,q(ΣN )2i,kνi,k,s,t,q,r +o P (1).
+In the last step, we have used the fact that there are 8 adjacent ordering for the four indices and only on
+these orderings the separated sum is non-vanishing. Making analogous arguments for the combinations
+where not all indicess, t, q, rare different we can analyzeS2 and get that
+S1 +S 2 =
+2(ΣN )2i,k
+T 2
+X
+s,t,q,r
+(ΣT )s,r(ΣT )t,qνi,k,s,t,q,r .
+36
+Now, plugging in the definition ofνi,k,s,t,q,r in (B.18), we obtain that
+c(3)i,k = ¯c(3)i,k +O P (T −ζ′).(B.23)
+Here,
+¯c(3)i,k := 2(ΣN )2i,k(x′i,T+1 (X ′iXi/T) −1[X ′iΣT X ′k/T](X ′kXk/T) −1xk,T+1 )2.(B.24)
+and the rate B.23 is uniform ini, kand holds for a sufficiently smallζ′ >0, essentially because all decay
+rates in this part of the proof were at some (slow) polynmial speed inT.
+Part ii):Finally, we consider the covarianceE(E (i)2,1,1 +E (i)2,1,2)(E(k)2,1,1 +E (k)2,1,2). To make our notation
+slightly more convenient, let us define
+Λ :=
+ NX
+j=1
+X ′jXj
+N T
+−1n NX
+i=1
+xi,T+1 x′i,T+1
+N
+ NX
+j=1
+X ′jXj
+N T
+−1 NX
+j=1
+X ′jXj(βj −β i)
+N
+√
+T
+o
+,
+Λk :=
+ X ′kXk
+T
+−1
+xk,T+1 x′k,T+1
+ NX
+j=1
+X ′jXj
+N T
+−1 NX
+j=1
+X ′jXj(βj −β k)
+N
+√
+T
+.
+We now obtain
+c(2)i,k =E(E (i)2,1,1 +E (i)2,1,2)(E(k)2,1,1 +E (k)2,1,2) = 4N (Λ + Λi)′ X ′i(ΣN )i,kΣT XkT (Λ + Λk).
+Conclusion:Remember that we want to show˜τ2N =τ 2N +o P (1)and that
+˜τ2N = 1N Xi,k c(1)i,k +c (2)i,k +c (3)i,k , τ 2N = 1N Xi,k c(2)i,k + ¯c(3)i,k .
+Hence, we get for the difference of the variances
+|˜τ2N −τ 2N |= 1N X
+|i−k|<T ζ′ /2
+|c(3)i,k −¯c(3)i,k |+ 1N X
+|i−k|>T ζ′ /2
+|c(3)i,k |+ 1N X
+|i−k|>T ζ′ /2
+|¯c(3)i,k |
+=:S1,c +S 2,c +S 3,c.
+Using the rate (B.23) we obtain that
+S1,c =O P (T −ζ′/2).
+The analysis ofS2,c, S3,c works by the same method and therefore we focus onS2,c. Using the definition of
+c(3)i,k :=E[E (i)2,2,1E(k)2,2,1|X]andthefactestablishedearlierinthisproofthatE[E (k)2,2,1|4X] =O P (1)(uniformly
+ink), we obtain
+c(3)i,k ≤α(|i−k|) 1/2E[E(i)2,2,1|4X]1/4E[E(k)2,2,1|4X]1/4 =α(|i−k|) 1/2OP (1),
+where again theOP-term is uniform ini, k. Since by Assumption 2.3, Condition iii)
+α(|i−k|) 1/2 ≤C(|i−k|+ 1) −a/2
+is summable, we obtain by standard arguments thatS3,c =o P (1). Then˜τ2N =τ 2N +o P (1)follows, which
+completes the proof.
+37
+Lemma B.1.Under the Assumptions of Lemma 2.6 it holds that
+E2,2,2, E2,2,3 =O |XP (1/(N T)).
+Proof.In order to prove the lemma, let us first investigateE2,2,2. We decompose it into three parts
+E2,2,2 = 1√N E2,2,2,1 ·E 2,2,2,2 ·E 2,2,2,3,
+where we define
+E2,2,2,1 = 1√N T
+NX
+j=1
+ε′jXj,
+E2,2,2,2 =
+ NX
+ℓ=1
+X ′ℓXℓ/(N T)−1,
+E2,2,2,3 = 1√N T
+NX
+i=1
+xi,T+1 x′i,T+1 (X ′iXi/T) −1X ′iεi.
+The desired rate is shown, ifE2,2,2,k =O XP (1)fork= 1,2,3. Fork= 2this follows by Lemma C.1 part
+iii). Fork= 1,3it suffices to investigateE[∥E 2,2,2,k∥2|X], which follows by the conditional Chebychev
+inequality. Since both proofs are practically identical, we focus onk= 1.E2,2,2,1 is a vector of lengthK
+and we can investigate any of its coordinates separately, say thepth one. Then, using Proposition 1 in the
+first step and Lemma C.1, part vii) in the second one yields
+E[(E2,2,2,1)2p|X]≤ CN
+NX
+n=1
+E[∥ε′jXj/√T∥ 4|X]1/2 ≤Cmaxj E[∥ε′jXj/√T∥ 4|X]1/2 =O P (1).
+The proof forE2,2,3 works analogously.
+B.4 Proof of Lemma 2.7
+We prove the following, stronger result than Lemma 2.7:
+Lemma B.2.Suppose that Assumptions 2.1, 2.3,i)−ii)and 2.5,ii)−iii)hold. Furthermore, suppose
+that(B.2)and(B.3)hold. Then, it follows that
+| ˆE1 −E 1|=O |XP
+ b
+T 2 + 1b−a(1−2/M)+1 + b7/4√N T3/2 .
+If we chooseb=T ρ with
+ρ∈
+ η
+a(1−2/M) + 1 ,min
+
+1− η2 , 27 
+the right side is of ordero|XP (1/(√N T).
+We begin by defining the covariane matrix
+Σ(i,i) :=E[ε iε′i]
+38
+and the “ideal” estimator for the residual covariance of theith individual with time laghas
+˜ξi(h) := (εi)′1:T−h (εi)h+1:TT−h−K = 1T−h−K T−hXi=1 εi,tεi,t+h.(B.25)
+Therewith we define the “ideal estimated temporal matrix” as
+˜Σ(i,i)(b) := ( ˜ξi(|s−t|)I{|s−t|< b})) 1≤s,t≤T ,
+which corresponds to the matrix ˆΣi,i defined in (2.10). Let us also introduce the notation ofΣ(i,i)(b),
+a banded version ofΣ (i,i) with bandwidthbandΣ (i,i)(b)c, which is defined by the identityΣ (i,i) =
+Σ(i,i)(b)−Σ (i,i)(b)c. We can then decomposeˆE1 −E 1 =E 1,1 +E 1,2 +E 1,3, where
+E1,1 := 1N
+NX
+i=1
+T r
+h
+{ ˜Σ(i,i)(b)−Σ (i,i)(b)}Xi[X ′iXi]−1xi,T+1 x′i,T+1 [X ′iXi]−1X ′i
+i
+=: 1N
+NX
+i=1
+E(i)1,1,
+E1,2 := 1N
+NX
+i=1
+T r
+h
+{ ˆΣ(i,i)(b)− ˜Σi(b)}Xi[X ′iXi]−1xi,T+1 x′i,T+1 [X ′iXi]−1X ′i
+i
+=: 1N
+NX
+i=1
+E(i)1,2,
+E1,3 := 1N
+NX
+i=1
+T r
+h
+{Σ(i,i)(b)c −Σ (i,i)(b)}Xi[X ′iXi]−1xi,T+1 x′i,T+1 [X ′iXi]−1X ′i
+i
+=: 1N
+NX
+i=1
+E(i)1,3.
+We begin by analyzing the termE1,3, and more precisely focus onE(i)1,3. We observe the upper bound
+E(i)1,3 ≤∥Σ(i,i)(b)c −Σ (i,i)(b)∥∞∥Xi[X ′iXi]−1xi,T+1 x′i,T+1 [X ′iXi]−1Xi∥1
+=∥Σ(i,i)(b)c −Σ (i,i)(b)∥∞T r[Xi[X ′iXi]−1xi,T+1 x′i,T+1 [X ′iXi]−1Xi]
+≤ 1T ∥Σ(i,i)(b)c −Σ (i,i)(b)∥∞∥X ′iXi/T∥ 1∥xi,T+1 ∥21∥[X ′iXi/T] −1∥21 = ∥Σ(i,i)(b)c −Σ (i,i)(b)∥∞T OP (1).
+Here we have used M2) in the first, M4) in the second and M3), M4) and M2 in the third step. In the
+last equation, we have used Lemma C.1 parts i) and ix). Now, to upper bound the remaining term, we
+observe that according to M6)
+∥Σ(i,i)(b)c −Σ (i,i)(b)∥∞ ≤ ∥Σ(i,i)(b)c −Σ (i,i)(b)∥row ≤2 X
+h≥b
+|E[εi,1εi,h]|.
+Using the mixing inequality (3.19) in Dehling et al. (2002), together with Assumptions 2.1 i) (moments)
+and Assumption 2.3 iii) (mixing) we see that
+|E[εi,1εi,h]| ≤C{EεMi,1EεMi,h}1/M(h−1) −a((M−2)/M) .
+Consequently, we get
+∥Σ(i,i)(b)c −Σ (i,i)(b)∥∞ ≤ ∥Σ(i,i)(b)c −Σ (i,i)(b)∥row ≤C X
+h≥b
+(h−1) −a((M−2)/M) ≤Cb −a((M−2)/M)+1 .
+Now, if we chooseb=CT 2−ρ and forρ∈[η,2), it is easy to see thatb −a((M−2)/M)+1 ≤CT −η if
+ρ≤2− ηa(M−2)/M+ 1 .
+39
+This condition can be fulfilled, if the above inequality holds withρ=η, which leads by straightforward
+transformations to the condition
+η≤2 a(M−2)/M+ 1a(M−2)/M+ 2 = 2− Ma(M−2) + 2M
+which holds according to Assumption 2.5 iii).
+Next, we turn to the analysis ofE1,2. For this purpose, let us introduce the annihilation matrixAj:k,
+that equals an identity matrix in all rows, except thejth to thekth, which are set equal to0. Now, let us
+study an individual termE(i)1,2, which can be upper bounded by
+T r
+h
+X ′i{ ˆΣ(i,i)(b)− ˜Σ(i,i)(b)}Xi[X ′iXi]−1xi,T+1 x′i,T+1 [X ′iXi]−1
+i
+≤∥X ′i{ ˆΣ(i,i)(b)− ˜Σ(i,i)(b)}Xi/T 2∥2∥[X ′iXi/T] −1∥22∥xi,T+1 ∥22 =O P (1)∥X ′i{ ˆΣ(i,i)(b)− ˜Σ(i,i)(b)}Xi/T 2∥2
+≤OP (1)∥X ′i{ ˆΣ(i,i)(b)− ˜Σ(i,i)(b)}Xi/T 2∥∞ ≤ OP (1)∥Xi∥2∞/T∥{ ˆΣ(i,i)(b)− ˜Σ(i,i)(b)}/T∥ ∞
+≤OP (1)∥{ ˆΣ(i,i)(b)− ˜Σ(i,i)(b)}/T∥ ∞
+InthefirststepwehaveusedM5)andinthesecondoneLemmaC.1partix), togetherwiththeboundedness
+of thex i,T+1 in Assumption 2.3, Condition ii). In the third step, we have used that on the space ofK×K
+matrices all matrix norms are equivalent and in the fourth step M5) once more. In the last step, we have
+used that the Frobenius norm upper bounds the spectral norm, leading to the inequalities
+∥Xi∥2∞/T≤ ∥Xi∥22/T=∥X ′iXi/T∥ 2 =O P (1),
+where we have used Lemma C.1 part i) to get a uniformO-term overion the right side. Now, recall that
+according to M6) it holds that
+∥{ ˆΣ(i,i)(b)− ˜Σ(i,i)(b)}/T∥ ∞ ≤ ∥{ˆΣ(i,i)(b)− ˜Σ(i,i)(b)}/T∥ row
+≤ 2T
+bX
+h=1
+|( ˆΣ(i,i))h,1 −( ˜Σ(i,i))h,1|.
+Now, let us consider for some fixedhone of the terms on the right. Notice, that we can rewrite it, using
+the annihilator matricesAas
+|ˆε′iA1:hAT−h+1:T ˆεi −ε ′iA1:hAT−h+1:T εi|/T
+=
+T r{ˆεi ˆε′i −ε iε′i}A1:hAT−h+1:T /T
+≤
+T r{(ˆεi −ε i)ˆε′i}A1:hAT−h+1:T /T+ T r{εi(ˆεi −ε i)′}A1:hAT−h+1:T /T.
+Both terms can be analyzed similarly and hence we focus on the (more difficult) first one. Recall that
+εi −ˆεi =X i(X ′iXi)−1X ′iεi, whereX i(X ′iXi)−1X ′i is a projection matrix on a space of dimensionK.
+Consequently, we have
+T r{(ˆεi −ε i)ˆε′i}A1:hAT−h+1:T  = T rXi(X ′iXi)−1X ′iεiε′iX ′i(X ′iXi)−1XiA1:hAT−h+1:T 
+≤∥Xi(X ′iXi)−1X ′iεiε′iX ′i(X ′iXi)−1Xi∥1∥A1:hAT−h+1:T ∥∞
+=T r[Xi(X ′iXi)−1X ′iεiε′iX ′i(X ′iXi)−1Xi] =T r[εiε′iX ′i(X ′iXi)−1Xi]
+40
+Here we have used in the first inequality M4) and M2), subsequently, then that∥A1:hAT−h+1:T ∥∞ = 1,
+M4) again (the case of equality) and finally that M3), togeter with the fact thatX′i(X ′iXi)−1Xi is a
+projection. So, up to this point we have proved that
+E1,2 ≤ OP (1) bT 2 n 1N NXi=1 T rε′iεiXi(X ′iXi)−1X ′io.
+The last factor is non-negative and we observe that its conditional expectation satisfies
+E
+"n 1
+N
+NX
+i=1
+T r
+
+ε′iεiXi(X ′iXi)−1X ′ioX = 1N NXi=1(ΣN )i,iT rΣT Xi(X ′iXi)−1X ′i
+≤ 1N
+NX
+i=1
+(ΣN )i,i∥ΣT ∥∞∥Xi(X ′iXi)−1X ′i∥1 ≤ 1N
+NX
+i=1
+(ΣN )i,i∥ΣT ∥∞T r[Xi(X ′iXi)−1X ′i]
+≤ 1N
+NX
+i=1
+(ΣN )i,i∥ΣT ∥∞T r[IdK×K ]≤C.
+Here, we have used the covariance structure from Assumption 2.1, part i) in the first step, M4) and M2)
+in the second step, M4) in the case of equality in the third step, M3) in the fourth step and finally the
+fact hat∥Σ T ∥∞ ≤C, from Lemma C.1 part iv). Combined, our considerations show that
+E1,2 =O P
+ b
+T 2
+
+.
+Finally, we turn toE1,1. Here, it is sufficient to show that
+E[(E1,1)2|X] =o P (1/(N T2)).
+We employ Proposition 1 withϕ=ξ= 2andd= 1, which yields
+E[(E1,1)2|X]≤ 1N 2
+NX
+i=1
+{E[(E(i)1,1)4|X]}1/2.(B.26)
+The mixing condition of the named proposition is satisfied sincea >2in Assumption 2.3, part iii). Now,
+it suffices to show that
+E[(E(i)1,1)4|X] =O P (1/T 4).
+We observe the following bounds
+|E(i)1,1|= T rh{ ˜Σ(i,i)(b)−Σ (i,i)(b)}Xi[X ′iXi]−1xi,T+1 x′i,T+1 [X ′iXi]−1X ′ii
+≤∥X ′i{ ˜Σ(i,i)(b)−Σ (i,i)(b)}Xi/T 2∥1∥xi,T+1 x′i,T+1 ∥1∥[X ′iXi/T] −1∥21
+≤OP (1)∥X ′i{ ˜Σ(i,i)(b)−Σ (i,i)(b)}Xi/T 2∥∞.
+In the second step, we have used first M3), then M4) and then M5). In the third step we have used Lemma
+C.1 part ix) and Condition ii) of Assumption 2.3. Finally, we have replaced the trace norm, by the spectral
+norm, since all matrix norms inRK are equivalent. Using M5) shows that
+∥X ′i{ ˜Σ(i,i)(b)−Σ (i,i)(b)}Xi/T 2∥∞ ≤ ∥X′i∥2∞/T∥ ˜Σ(i,i)(b)−Σ (i,i)(b)T∥ ∞
+≤∥X ′iXi/T∥ 2∥{ ˜Σ(i,i)(b)−Σ (i,i)(b)}/T∥ ∞ =O P (1)∥{ ˜Σ(i,i)(b)−Σ (i,i)(b)}/T∥ ∞.
+41
+Here, we have used the bound M1) in the second step. We can thus focus on∥{˜Σ(i,i)(b)−Σ (i,i)(b)}/T∥ ∞.
+Now, by M6), we have
+∥{ ˜Σ(i,i)(b)−Σ (i,i)(b)}/T∥ ∞ ≤ ∥{˜Σ(i,i)(b)−Σ (i,i)(b)}/T∥ row
+≤ 2T
+bX
+h=1
+|T r[ε′iεiA1:hAT−h+1:T /(T−h)]−(Σ N )i,i(ΣT )1,h]|.
+It is a special case of Hölder’s inequality that
+ bX
+i=1
+|xi|
+p
+≤b p−1
+bX
+i=1
+|xi|p
+forp >1and we can employ this bound to see that
+∥{ ˜Σ(i,i)(b)−Σ (i,i)(b)}/T∥ 4∞ ≤ Cb 3T 4 bXh=1 |T r[ε′iεiA1:hAT−h+1:T /(T−h)]−(Σ N )i,i(ΣT )1,h]|4.
+So, up to this point we have demonstrated that
+E[{E(i)1,1}4|X]≤ OP (1) b3T 4 Eh bXh=1 |T r[ε′iεiA1:hAT−h+1:T /(T−h)]−(Σ N )i,i(ΣT )1,h]|4Xi.
+We now study for some fixed but arbitraryha term in the sum on the right side. We can express it as
+E
+h 1
+T−h
+T−hX
+ℓ=1
+εi,ℓεi,ℓ+h −E[ε i,ℓεi,ℓ+h]
+4i
+≤ Cb 4
+T 2 ,
+where the constantCcan be chosen independently ofh, ifb/T→0. Here we have used the main theorem
+in Fazekas et al. (2000). Combining this result with (B.26), shows that
+{E[(E1,1)2|X]}1/2 ≤ OP
+ b7/4
+√
+N T3/2
+
+,
+completing the proof.
+42
+C Additional details
+Lemma C.1.Under Assumptions 2.1 and 2.3 it holds for any matrix norm∥ · ∥that
+i)
+max
+i
+∥X ′iXi/T∥=O P (1).
+ii) With probability tending to1it holds that
+min
+i
+λmin(X ′iXi/T)≥c 1/2.
+iii)
+ 1N T NXj=1 X ′jXj−1 =O P (1).
+iv)
+∥ΣT ∥∞, 1N Xj,k |(ΣN )j,k|=O(1).
+v)
+max
+j,k
+∥(X ′jΣT Xk)/T∥=O P (1).
+vi)
+ 1N T NXj=1 X ′jXj =O P (1).
+vii)
+max
+i
+E
+ ε′iXi√T 8X =O P (1).
+viii)
+E
+ √
+T x′i,T+1 (X ′iXi)−1X ′iεi8X =O P (1).
+ix)
+max
+i
+∥(X ′iXi/T) −1∥=O P (1).
+Proof.To prove part i), we simply notice that
+max
+i
+∥X ′iXi/T∥ ≤maxi ∥Qi∥+ maxi ∥X ′iXi/T−Q i∥.
+Assumption 2.3, Condition i) implies that the terms on the right areO(1)and andOP (1)respectively.
+Part ii) follows by Weyl’s inequality, which entails
+λmin(X ′iXi/T)≥λ min(Qi) +λ min(X ′iXi/T−Q i)≥c 1 +o P (1).
+Here we have used in the last step thatmini λmin(Qi)≥c 1 >0and thatmax i ∥X ′iXi/T−Q i∥=o P (1)
+(both according to Assumption 2.3, Condition i).
+In order to prove iii) we notice that for aK×Kmatrix of full rankA, it holds that
+∥A−1∥2 ≤T r[A−1]≤Kλ max(A−1).
+43
+The largest eigenvalue ofA−1 is(λ min(A))−1. This yields
+∥A−1∥2 ≤C(λ min(A))−1.
+Finally suppose that forN∈NAcan be expressed as the averageA= 1N PNn=1 An, whereA n is aK×K
+matrix, withλ min(A)≥c, for some fixedc >0. Then it holds thatλ min(A)≥min n λmin(An)and
+∥A−1∥2 ≤C(minn λmin(An))−1.
+Applying this result toAn =X ′nXn/Tand using the lower bound from Condition i) of Assumption 2.3
+yields the desired result.
+To prove iv), we first recall that((ΣN )1,1)ΣT =Eε 1ε′1. Let us hence focus on(ΣN )1,1ΣT. Since according
+to M6) we can upper bound the spectral norm of a covariance matrix by its absolute row sum norm∥·∥row,
+it holds that
+∥(ΣN )1,1ΣT ∥∞ ≤
+X
+t≥1
+2|Eε1,1ε1,t| ≤C
+X
+t≥1
+{E|ε1,1|M }2/Mα(t)1−2/M ≤C X
+t≥1
+t−a(1−2/M).
+To obtain the second inequality, we have used eq. (3.19) in Dehling et al. (2002). Sincea(1−2/M)<−1
+by assumption 2.3 conditon iii), the right side converges and the first claim follows. For the second claim,
+we use the fact that(ΣT )1,1ΣN is the covariance of the vector(ε1,1, ..., εN,1). Using once more the mixing
+Condition iii) of Assumption 2.3, we obtain
+|Eε1,jε1,i| ≤ {E|ε1,1|M }2/Mα(|i−j|+ 1) (M−2)/M .
+Now, the absolute sum over all elements in(ΣT )1,1ΣN divided byNis upper bounded by
+NX
+i=1
+1
+N
+∞X
+j=1
+|Eε1,1ε1,j| ≤2|Eε1,1ε1,j| ≤
+X
+j≥1
+Cα(j) (M−2)/M <∞,
+because as before the right sum converges due to Condition iii) in 2.3.
+Turning to part v) of the Lemma, we recall that for any matrixA,∥A∥2 =
+p
+T r[A′A], by definition of the
+Frobenius norm. Then using M3) in the first step and M4), M2), M5) in the second one implies
+∥(X ′jΣT Xk)/T∥ 2 = qT r[{(XkX ′k)/T}{(X jX ′j)/T}Σ T ΣT ]≤ q∥(XkX ′k)/T∥ 1∥(XjX ′j)/T∥ 1∥ΣT ∥2∞.
+We thus obtain
+p
+∥ΣT ΣT ∥∞ maxj,k ∥(X ′jΣT Xk)/T∥ 2 ≤maxj,k
+q
+∥(XkX ′k)/T∥ 1∥(XjX ′j)/T∥ 1 =O P (1).
+In the last step we have used parts i) and iv) of this lemma to bound the second factor. For the first
+factor, we can use that
+p
+∥ΣT ΣT ∥∞ ≤ ∥ΣT ∥∞ ≤ ∥ΣT ∥row. Here we have used M5) in the first and M6)
+in the second inequality. We have already established in part iv) of this lemma that∥ΣT ∥∞ is bounded.
+Part vi) of the Lemma follows by similar techniques as before and is therefore omitted.
+To see part vii), we first rewrite the eighth moment as
+E
+h ε′kXk√T 8Xi =E h 1√T TXt=1 εk,txk,t8Xi ≤Cmaxℓ=1,...,K Eh 1√T TXt=1 εk,t(xk,t)ℓ8Xi.
+44
+Now, we employ Theorem 3 in Yoshihara (1978) which is a moment inequality for sums of mixing random
+variables. We use the parameter choices (in the terms of that theorem) ofm= 8,δ=M−8,at = (xk,t)ℓ.
+The conditions of named Theorem apply sincemaxk,t E(εkt)8 ≤Cand
+X
+i≥1
+(i+t) 3α(i)(M−8)/M ≤C X
+i≥1
+(i+t) 3(i+ 1) a(M−8)/M <∞.
+Now, applying named theorem for eachℓthen yields collectively
+E
+ 1√T TXt=1 εk,txk,t8 ≤ CT 4  TXt=1 ∥xk,t∥24 =CT r[XkX ′k/T] 4 =CT r[X′kXk/T] 4 =O P (1).
+Next, we prove part viii). For this purpose, we notice that
+|
+√
+T x′i,T+1 (X ′iXi)−1X ′iεi| ≤ ∥x′i,T+1 ∥∥(X ′iXi/T) −1∥∥X ′iεi/√T∥=O P (1)∥X ′iεi/√T∥.
+Here we have used M5) in the first step and part i) of this Lemma, s.t. thatOP-term on the right side is
+uniform ini(notice that it is also measurable w.r.t.X). Hence, it suffices to show that
+E[∥X ′iεi/√T∥ 8|X] =O P (1).
+This follows directly from part vii) of this Lemma, concluding the proof.
+Part ix) follows directly from part ii), sinceX′iXi/Tis a matrix of (fixed) dimensionK×K. Consequently
+∥(X ′iXi/T) −1∥1 ≤Kλ max((X ′iXi/T) −1)≤Kλ min(X ′iXi/T) −1 =O P (1).
+Lemma C.2.Under the Assumptions of Theorem 2.9 and with the definitions ofv i, Vin(B.10)and
+(B.11)respectively, it holds that
+max
+i
+∥vi∥=O P (1),∥V∥=O P (1),maxi,t ∥xi,t∥=O P (T 1/J ),
+max
+i,k,s,t,q,r
+|νi,k,s,t,q,r |=O P (T 4/J ).
+Proposition 1.Suppose that(Ξ z)z∈M is anα-mixing field of random variables, thatϕ >1andχ >0
+such thatE|Ξ z|ϕ+χ <∞ ∀z∈ M. Furthermore, assume thatf(c)<∞, where
+f(u) :=
+X
+r≥1
+rd(u−1)−1α(r) χχ+u <∞,(C.1)
+andcis the smallest even integerc≥ϕ. Then there exists a constantC 1
+E
+ X
+z∈M
+Ξz
+ϕ ≤C 1 X
+z∈M
+
+E
+
+|Ξz|ϕ+χ ϕϕ+χ 	 ∨1 (ϕ/2)∨1.
+Ifϕ= 2, both ”∨1” can be dropped in the above formula. The constantC 1 only depends on the mixing
+coefficients and can be upper bounded as follows:C1 ≤C 2C3, whereC 2 only depends onϕandχand
+C3 =C 3(f(1), f(2), ..., f(c))is monotone in each component.
+45

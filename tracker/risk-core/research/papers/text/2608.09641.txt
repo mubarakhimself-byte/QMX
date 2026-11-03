@@ -1,0 +1,1231 @@
+arXiv 2608.09641  https://arxiv.org/abs/2608.09641
+
+Lower spectrum of ﬁnancial correlation matrices: a
+new perspective on market synchronization
+Rosanna Grassi a, Caterina Pastorino b,∗, Pierpaolo Uberti a
+aDepartment of Statistics and Quantitative Methods, Universi ty of
+Milano-Bicocca, Milan, Italy
+bDepartment of Economics, Management and Statistics, Univers ity of
+Milano-Bicocca, Milan, Italy
+Abstract
+In this paper we investigate the information content of the l ower part of
+the spectrum of ﬁnancial correlation matrices, as a source o f information
+on market synchronization. In a ﬁnancial context, a classic al application
+of Principal Component Analysis and Random Matrix Theory id entiﬁes the
+largest eigenvalues as indicators of dominant market facto rs and synchroniza-
+tion patterns. We complement this perspective by showing th at the smallest
+eigenvalues also contain relevant information about the eﬀ ective structure of
+ﬁnancial markets. The paper presents the methodological pr oposal and vali-
+dates its eﬀectiveness through comprehensive real data exp eriments in both
+descriptive and predictive settings.
+Keywords: Correlation Matrices, Random Matrix Theory, Lower
+Spectrum, Market synchronization, Diversiﬁcation
+1. Introduction
+Financial markets are characterized by alternating period s in which assets
+evolve independently and periods in which their dynamics be come increas-
+ingly synchronized. As synchronization increases, the eﬀe ctive dimensional-
+ity of the market decreases, reducing the number of independ ent opportuni-
+∗Corresponding author
+Email addresses: rosanna.grassi@unimib.it (Rosanna Grassi),
+caterina.pastorino@unimib.it (Caterina Pastorino), pierpaolo.uberti@unimib.it
+(Pierpaolo Uberti)
+arXiv:2608.09641v1  [q-fin.ST]  10 Aug 2026
+ties for diversiﬁcation. These structural changes become p articularly evident
+during episodes of severe market distress. The 2008 subprim e global crisis
+clearly showed the eﬀects of a large-scale market synchroni zation, and this
+reinforced the need for quantitative tools capable of chara cterizing its evolu-
+tion. Driven by the growing interconnectedness of global ﬁn ancial markets
+(Diebold and Yılmaz (2014)), asset returns have become incr easingly prone
+to collective co-movement (Lavin et al. (2021); Magner et al . (2022)). When
+market synchronization intensiﬁes, reduced diversiﬁcati on accelerates shock
+propagation across the market, driving ﬁnancial contagion (Nguyen et al.
+(2026)) and systemic crises (Alexandre et al. (2021); Wei et al. (2025)). These
+recurring episodes have stimulated an extensive body of lit erature on sys-
+temic risk assessment and monitoring has emerged; for compr ehensive re-
+views, we refer to Bisias et al. (2012); Rodríguez-Moreno an d Peña (2013);
+Silva et al. (2017); Benoit et al. (2017); Bardoscia et al. (2 021). Within this
+wide context, understanding how market synchronization ev olves has become
+an important research direction.
+Since this phenomenon is related to the correlation structu re among as-
+sets, the spectral analysis of correlation matrices has bec ome one of the main
+quantitative approaches to investigate the collective mar ket dynamics. A
+large part of the literature investigated the relevant econ omic information
+contained in the largest eigenvalues. In this direction, an important role
+is played by Random Matrix Theory (RMT), used as a benchmark t o dis-
+tinguish meaningful spectral information from noise in ﬁna ncial correlation
+matrices (Laloux et al. (1999)). Other studies mainly focus ed on the largest
+eigenvalues, interpreting them as dominant market factors or market mode
+(Plerou et al. (2002); Junior and Franca (2012); MacMahon an d Garlaschelli
+(2013); Lux et al. (2020)). Moving from this interpretation , the information
+contained by the higher eigenvalues has been exploited to co nstruct sev-
+eral quantitative indicators to track changes in collectiv e market behaviors.
+Among these approaches, Principal Component Analysis (PCA ) has become
+one of the most widely adopted frameworks. Indeed, the ﬁrst p rincipal com-
+ponents are interpreted as common market factors driving co -movements of
+asset returns. These indicators have been applied in diﬀere nt contexts, in-
+cluding the measurement of systemic risk (Billio et al. (201 2); Zheng et al.
+(2012); Zhang and Broadstock (2020)). These approaches sha re a common
+aspect, that is they detect economically relevant informat ion almost exclu-
+sively focusing on the upper part of the spectrum. In contras t, the opposite
+side of the spectrum, has received considerably less attent ion.
+2
+The aim of this work is to investigate the information embedd ed in the
+lower part of the spectrum, that is the smallest eigenvalues and their relation
+with diversiﬁcation collapse and eﬀective dimensionality reduction. In our
+framework, Random Matrix Theory plays a diﬀerent role. Inde ed, rather
+than being used as a benchmark to identify informative eigen values of the
+correlation matrix, it provides a deﬁnitive result on their distribution. If the
+columns of a given matrix are the realizations of n independent and iden-
+tical distributed random variables, then its eigenvalues f ollow the so-called
+Marchenko-Pastur distribution (Marchenko and Pastur (196 7)). Therefore,
+the eigenvalues of the correlation matrix range in a suitabl e interval, and
+the presence of eigenvalues outside the theoretical Marche nko–Pastur sup-
+port indicates departures from a random-correlation bench mark and signals
+the presence of non-trivial dependence structures in the da ta. In the ﬁnan-
+cial context, when many securities move in a similar way, the number of
+eﬀectively independent investments decreases and the dive rsiﬁcation oppor-
+tunities reduce.
+To correctly interpret the information included in the lowe r part of the
+spectrum, we rely on the concepts of numerical nullity and nu merical rank
+of the correlation matrix. Indeed, we show that the extreme p arts of the
+spectrum are strongly related to both numerical nullity and rank of the cor-
+relation matrix. This provides a natural bridge between the mathematical
+properties and its ﬁnancial interpretation.
+It is worth point out that, by RMT, our approach avoids an arbi trary
+deﬁnition of the lower part of the spectrum. The threshold is theoretically
+determined by the Marchenko–Pastur distribution, and the c orresponding
+number of small eigenvalues follows naturally from this cho ice. According to
+this pattern, we introduce a lower-spectrum indicator base d on the number
+of eigenvalues below the lower Marchenko–Pastur bound. Fro m a geometric
+perspective, this corresponds to a correlation matrix appr oaching a low di-
+mensional structure. The deﬁnition arises in a natural way a nd we prove that
+the proposed indicator belongs to the class of the so-called Proper Measures
+of Connectedness (Maggi et al. (2020)).
+To show the eﬀectiveness of the proposed indicator, we test i t on three
+ﬁnancial datasets, diﬀerent in both assets type and in size. The ﬁrst one is
+the sectoral portfolios constructed by the S&P500 index fol lowing the global
+industry classiﬁcation standard (GICS). In the second data base the assets
+are the stocks constituting the whole index. The scope is eva luating the
+proposed indicator across diﬀerent scales of market aggreg ation. The third
+3
+dataset contains the assets of the Nikkei index, used to supp ort the robustness
+of our ﬁndings. To allow a correct applicability of the theor etical conditions,
+the dimensionality of the datasets is reduced by a clusterin g procedure. For
+comparison purposes, we also report the behavior of an upper -spectrum in-
+dicator, based on eigenvalues above the upper Marchenko–Pa stur bound and
+closely related to the standard PCA/RMT literature.
+Findings deﬁnitely conﬁrm the solidity of the proposed theo retical method-
+ology. Indeed, the indicator captures episodes of stress in both the in-sample
+and out-of-sample analyses. In particular, it reveals inte resting predictive
+capabilities, proving to be more informative than measures constructed ex-
+clusively on the upper part of the spectrum. The paper is orga nized as
+follows: Section 2 deﬁne the theoretical framework; Subect ion 2.2 provides
+the deﬁnitions of the extreme spectrum indicators, togethe r with the theo-
+retical properties. Section 3 is dedicated to the in-sample and out-of-sample
+empirical applications on real ﬁnancial data. Finally, Sec tion 4 draws the
+conclusions.
+2. The theoretical framework
+2.1. Theoretical background
+This section introduces the theoretical framework underly ing the pro-
+posed lower-spectrum indicator. We recall the axiomatic fr amework of Proper
+Measures of Connectedness (Maggi et al. (2020)) and Marchen ko–Pastur dis-
+tribution (Marchenko and Pastur (1967)), and the deﬁnition of numerical
+rank and numerical nullity of a matrix (Golub and Van Loan (20 13)).
+Let us denote by MatT ×n(R), with T ≥ n ≥ 2, the set of T × n real
+matrices. Given A ∈ MatT ×n(R), the rank of A, rank(A), is the dimension of
+its column space (or row space), and the nullity of A, null(A), is the dimension
+of the kernel of A. By the rank-nullity theorem, null(A) = n−rank(A). Using
+a standard notation, σ1(A) ≥ . . . ≥ σn(A) ≥ 0 are the singular values of A.
+The rank is equal to the number of nonzero singular values of A. We denote
+by MT ×n the subset of MatT ×n(R) containing all the matrices with full rank,
+then equal to n.
+Let A ∈ M T ×n be the matrix of returns of n risky assets, where the ith column
+Ai ∈ RT contains the time series of T returns of the asset i, i = 1, . . . , n.
+Deﬁnition 1 (Proper Measure of Connectedness (Maggi et al., 2020)) . A
+real-valued function C : MT ×n → R is a Proper Measure of Connectedness
+(PMC) if it satisﬁes the following properties 1, 2, 3 and 4:
+4
+Property 1. C(A) ≥ 0, for any A ∈ M T ×n.
+Property 2. C(A) is invariant for any permutation of the columns of A ∈
+MT ×n.
+Property 3. C(A) > C (B) if and only if C(αA) > C (αB), for any A, B ∈
+MT ×n and for any real number α > 0.
+Property 4. Let A1, A2, A3 ∈ RT with ‖A2‖ = ‖A3‖ and ⟨1, A2⟩ = ⟨1, A3⟩ =
+0, where 1 is the vector of ones, ⟨·, ·⟩ represents the scalar product and ‖ · ‖
+is the Euclidean norm. Let Aij = ( Ai|Aj) ∈ M T ×2, and ρij be the linear
+correlation coeﬃcient between Ai and Aj, i, j = 1 , 2, 3. If |ρ12| ≥ | ρ13| then
+C(A12) ≥ C(A13).
+We denote by ST ×n the subset of MT ×n that contains all the T × n
+full rank matrices with standardized columns 1. Notice that, given a matrix
+of returns A ∈ M T ×n, it is always possible to construct the correspondent
+version SA ∈ S T ×n by standardizing the columns of A. Let us denote by
+1
+T S′ASA the correlation matrix between the assets, where S′A is the transpose
+of SA. Without loss of generality, we directly work with a matrix i n ST ×n.
+A classical result in RMT is the following:
+Theorem 5 (Marchenko-Pastur distribution). Given S ∈ S T ×n, if each col-
+umn Si, for i = 1 , . . . , n, contains T realizations of independent and iden-
+tically distributed random variables, then for T → +∞ and n → +∞, with
+n
+T → λ ∈ (0, 1) it holds that
+λ1, λ2, . . . , λn ∈ (λmin, λmax)
+where λmin = (1 −
+√
+λ)2, λmax = (1 + √λ)2 and λ1 ≥ λ2 ≥ . . . ≥ λn are the
+eigenvalues of 1T S′S, written in non-increasing order.
+The theorem states that, if the columns of S are independent and identical
+distributed, then its eigenvalues range in the interval (λmin, λmax). We exploit
+this result in Section 3, where, starting from the matrix of r eturns A ∈ M T ×n,
+we construct the correlation matrix 1T S′ASA, with SA ∈ S T ×n.
+We underline that the assumption rank(A) = n guarantees the linear
+independence of the random variables that generate the colu mns of SA.
+1S = [si,j] ∈ S T ×n is such that 1T∑Ti=1 si,j = 0 and 1T∑Ti=1 s2i,j = 1, for j = 1, . . . , n.
+5
+Nevertheless, the linear independence and the fact that the columns of SA
+all have equal mean and variance, do not imply that the random vari-
+ables that generate the columns of SA are independent and identically dis-
+tributed. However, the application of Theorem 5 under these general hy-
+potheses is commonly accepted in the literature (see, among others Yaskov
+(2016); MacMahon and Garlaschelli (2013); Lux et al. (2020) ; Guerini et al.
+(2023)), and the Marchenko–Pastur theorem provides a bench mark for iden-
+tifying deviations from random correlation structures.
+However, to interpret the information included in the lower part of the spec-
+trum, a link with the algebraic properties of the correlatio n matrix is needed.
+This bridge is naturally provided through the concepts of nu merical nullity
+and numerical rank of a matrix.
+Given a parameter ε > 0, the numerical ε− nullity and the numerical ε−
+rank of a matrix are deﬁned as follows (see Golub and Van Loan (2013 )).
+Deﬁnition 2. Let ε > 0; the numerical ε− nullity and numerical ε− rank
+of a matrix A ∈ MatT ×n(R), denoted by Nε(A) and Rε(A) respectively, are
+deﬁned by
+Nε(A) := maxB∈MatT ×n(R){null(B) : ‖B − A‖ ≤ ε}
+Rε(A) := minB∈MatT ×n(R){rank(B) : ‖B − A‖ > ε}.
+Equivalently, using the singular values of A, Nε(A) and Rε(A) are deﬁned
+by:
+Nε(A) := # {k ∈ {1, . . . , n} | σk(A) ≤ ε}
+Rε(A) := # {k ∈ {1, . . . , n} | σk(A) > ε}.
+The numerical nullity (the numerical rank) of a matrix A is the number of
+its singular values that are lower (greater) than a certain t hreshold parameter
+ε > 0. The extreme parts of the spectrum are then strongly related to both
+numerical nullity and rank of the correlation matrix.
+The role of the parameter ε deserves a particular discussion. In general,
+this parameter identiﬁes the tolerance that discriminates the numbers that
+are indistinguishable from zero from the ones that are signi ﬁcantly positive.
+In standard numerical applications, ε is equal to the machine tolerance, this
+parameter is arbitrary and needs to be decided.
+6
+One of the main advantages of our proposal is that RMT avoid an y ar-
+bitrariness on the choice of ε. Indeed, our approach replaces an arbitrary
+tolerance parameter with a theoretically motivated value d erived from RMT,
+as highlighted in the next section.
+2.2. Lower-spectrum and upper-spectrum indicators
+As previously said, the random correlation structures are b ounded in
+a theoretical interval by Theorem 5. Thus, it is worth invest igating the
+information contained in the eigenvalues falling out of thi s interval. Although
+the upper side of the spectrum has been extensively studied i n the literature,
+the lower side has not been suﬃciently investigated yet. Bot h sides have a
+mathematical interpretation through the concepts of numer ical ε-rank and
+ε-numerical nullity. Therefore, we deﬁne the following indi cators as:
+Deﬁnition 3. Let SA ∈ S T ×n and, let ε− = 1 − √λ and ε+ = 1 + √λ, where
+λ is deﬁned as in Theorem 5, then
+m− = m−(SA) := # {k ∈ {1, . . . , n} | σk(SA) ≤ ε−}. (1)
+and
+m+ = m+(SA) := # {k ∈ {1, . . . , n} | σk(SA) > ε +} (2)
+Notice that ε− and ε+ in Deﬁnition 3 are not arbitrarily chosen, but they
+depend on the Marchenko-Pastur distribution 2
+Remark 1. As the square matrix 1T S′ASA is constructed starting from A,
+the deﬁnition of the measures m− and m+ can be formulated equivalently
+in terms of the number of the eigenvalues of 1T S′ASA. Thus, m− counts the
+eigenvalues of the correlation matrix that are smaller than λmin, while m+
+counts the eigenvalues of the correlation matrix larger tha n λmax.
+Deﬁnitions 2 and 3 are strictly related. From Deﬁnition 3 it i s straight-
+forward to observe that, if ε− = ε+ = ε, then m+ and m− would be re-
+spectively the numerical rank and the numerical nullity of SA of Deﬁnition
+2. Actually, this occurrence is impossible in the framework of RMT since
+(ε−)2 = λmin < λ max = (ε+)2.
+2Diﬀerent choices of the parameters λmin, λmax following eventual alternative criteria
+are possible, but this is beyond the scope of the present rese arch.
+7
+This allows us giving to the proposed measures a deeper inter pretation,
+as highlighted in the following. Both indicators identify d eviations from
+the Marchenko–Pastur interval at opposite sides of the spec trum. We fo-
+cus on the low part of the spectrum: the measure m− counts the number
+of eigenvalues below the lower Marchenko–Pastur bound. Acc ording to the
+interpretation of the numerical nullity, the presence of se veral small eigenval-
+ues indicates that the correlation matrix approaches a lowe r-rank structure.
+As a consequence, groups of assets become increasingly line arly dependent.
+From a portfolio perspective, this corresponds to a reducti on of the eﬀective
+diversiﬁcation opportunities during periods of market dis tress. Note that
+the upper-spectrum indicator m+ is closely related to the standard PCA and
+RMT literature, where large eigenvalues are interpreted as dominant market
+factors, or a market mode, as deﬁned in MacMahon and Garlasch elli (2013).
+In this paper we focus on the lower part of the spectrum, and us e m+ mainly
+as a benchmark and a comparison tool.
+The following proposition shows that both indicators satis fy the axioms
+of a Proper Measure of Connectedness. This result allows to c lassify m−
+within the connectedness-measurement literature.
+Proposition 6. m+ and m−, deﬁned as in Deﬁnition 3, satisfy the properties
+of a PMC, ∀SA ∈ S T ×n.
+Proof. Let SA ∈ S T ×n with singular values σ1(SA) ≥ . . . ≥ σn(SA) > 0.
+Property 1 immediately follows from Deﬁnition 3.
+Since the singular values of a matrix are independent from an y column
+permutation, then m+ and m− satisfy Property 2.
+To prove Property 3, it is suﬃcient to note that SA = SαA for each
+α ∈ R+. A positive rescaling of all the entries of a matrix does not a ﬀect the
+singular values.
+We now prove Property 4. By Remark (1), we can refer to the deﬁn i-
+tion in terms of eigenvalues instead of singular values. Con sider the returns
+A1, A2, A3 ∈ RT such that ‖A2‖ = ‖A3‖ and ⟨1, A2⟩ = ⟨1, A3⟩ = 0 and the
+correlation matrices:
+1
+T S′A12SA12 =
+[
+1 ρ12
+ρ12 1
+] 1
+T S′A13SA13 =
+[
+1 ρ13
+ρ13 1
+]
+.
+Under these assumptions, if |ρ12| ≥ | ρ13| we have to prove the following
+inequalities: m−(SA12) ≥ m−(SA13) and m+(SA12) ≥ m+(SA13).
+8
+Observe that the eigenvalues of 1T S′A12SA12 are 1±|ρ12| and those of 1T S′A13SA13
+are 1 ± |ρ13|. Moreover:
+1 + |ρ12| ≥ 1 + |ρ13| > 1 − |ρ13| ≥ 1 − |ρ12|.
+Focusing on the measure m−, the threshold ε− is equal to 1−√ 2T and, thanks
+to the assumption T > n = 2:
+1 + |ρ12| ≥ 1 + |ρ13| >
+(
+1 −
+√
+2
+T
+)2
+= (ε−)2.
+Thus, we need to compare the threshold ε− only with the two smallest eigen-
+values. Only three cases are possible:
+
+
+
+1 − |ρ12| >
+(
+1 −
+√
+2
+T
+)2
+then m−(SA12) = m−(SA13)) = 0
+1 − |ρ12| ≤
+(
+1 −
+√
+2
+T
+)2
+≤ 1 − |ρ13| then m−(SA12) = 1 , m −(SA13) = 0
+1 − |ρ13| <
+(
+1 −
+√
+2
+T
+)2
+then m−(SA12) = m−(SA13) = 1
+.
+In all the cases m−(SA12) ≥ m−(SA13), concluding that m− veriﬁes Prop-
+erty 4.
+An analogous argument can be used for m+. In this case, ε+ = 1 +√ 2T
+and in all the cases m+(SA12) ≥ m+(SA13). This concludes the proof.
+3. Empirical Analysis
+In this section, we evaluate the performance of the proposed lower-spectrum
+indicator on real data in both descriptive and predictive se ttings. The ﬁrst
+subsection provides a brief description of the experiment a nd data. Then,
+we present the in-sample and out-of-sample experiments, re spectively.
+3.1. Empirical design and datasets
+The analysis is performed in a rolling window framework. We s tart from
+the matrix A ∈ M T ×n containing the time series of T returns of n risky
+assets and we set the length of the rolling window equal to w (with w > n ).
+9
+Then, we compute the eigenvalues of the correlation matrix c onstructed with
+respect to the ﬁrst w × n entries of SA. More precisely, we extract the w
+rows from A, then we standardize its columns and construct the correlat ion
+matrix.
+For each rolling window, the indicator m− is computed according to Deﬁni-
+tion 3. Since the window length w and the number of assets n are given, the
+ratio λ = nw and, consequently, the values of λmax and λmin remain constant
+throughout the experiment. This procedure is repeated shif ting the rolling
+window one day ahead. The resulting time series of the measur e is then com-
+pared with the corresponding market index to investigate ho w these changes
+capture diﬀerent market conditions. Whenever relevant, th e corresponding
+upper-spectrum indicator m+ is also reported as a benchmark. The choice
+of the parameter w is crucial in our framework for many reasons. At ﬁrst,
+let us recall that w > n is the necessary condition to apply RMT. Moreover,
+it identiﬁes a referring time horizon for the duration of the systemic event.
+A short w permits to compute the measures on the most recent data, the
+ones that better describe actual market conditions. Moreov er, a measure
+calculated on a short window is expected to be reactive and he lpful also
+in a predictive framework. The main drawback of working with a reactive
+measure is the potential high number a false signals. On the o pposite, if w
+is long, the measure is stable, but it can loose the capacity o f timing the
+market, not just in a predictive, but also in a descriptive co ntext.
+We perform our analysis on three diﬀerent datasets:
+• SPsector contains the daily logarithmic returns from 01-03-1990 to 0 9-
+17-2020 of the S&P500 index and its n = 10 sector sub-indexes based on
+GICS (Global Industry Classiﬁcation Standard): ﬁnancials , informa-
+tion technology, telecommunication services, health care , industrials,
+consumer discretionary, energy, consumer staples, utilit ies, materials.
+• SPstocks includes the daily logarithmic returns of the S&P500 index
+and n = 377 of its constituents from 01-05-2005 to 09-17-2020.
+• Nikkei contains the daily logarithmic returns of the Nikkei225 ind ex
+and n = 199 of its constituents from 01-05-2005 to 09-17-2020.
+The choice of the datasets allows us to evaluate the proposed indicator
+across diﬀerent scales of market aggregation. In particula r, at the sectoral-
+level, we investigate the behavior of lower-spectrum indic ator across various
+10
+economic sectors, whereas the stock-level datasets assess whether the pro-
+posed indicator also remains informative in higher-dimens ional settings. It
+is worth to note that the number of stocks in SPstocks and Nikk ei is smaller
+than the nominal number of the index constituents because we restrict the
+analysis to the stocks with complete time series on the chose n period.
+3.2. In-Sample Analysis
+The aim of the in-sample analysis is to examine how eﬀective d imen-
+sionality of the market correlation structure evolves acro ss diﬀerent market
+conditions. The lower-spectrum indicator provides the emp irical proxy for
+this evolution. We use the S&P500 index as a reference indica tor of the mar-
+ket (Sections 3.2.1 and 3.2.2). To support the robustness of our results, the
+experiment is replicated on the NIKKEI index (Section 3.2.3 ).
+3.2.1. Experiment 1: SPsector, (n = 10, w = 20)
+For the ﬁrst experiment on the SPsector database, we set w = 20.
+11
+0
+5
+10
+0
+6
+10
+1995 2000 2005 2010 2015 2020
+-0.02
+-0.01
+0
+0.01
+3.
+4.
+5. 6. 8.
+7.2.1.
+- -  Alert Level
+     Sytemic Crises
+Figure 1: Daily average returns of the S&P500 index from 1990 to 2020 (bottom panel);
+m− (central panel) and m+ (top panel) computed on SPsector dataset, w = 20 . Circles
+highlight the peaks of m− associated with periods of market distress. Global events
+according to Sümer (2023): 1. Gulf War or the US Savings and Lo ans Crisis (1989-1991),
+2. East Asian Economic crisis (1997), 3. Subprime crisis (20 07-2009), 4. and 5. European
+Debt crisis (2010-2012), 6. Greece default to the IMF (2015) , see Laeven and Valencia
+(2020), 7. to be deﬁned, probably the presence of high volati lity in the money market as
+explained in a FEDS Note, see Anbil et al. (2020), 8. COVID-19 crisis.
+Figure 1 depicts the time evolution of the lower-spectrum in dicator (cen-
+tral panel) together with the daily average returns of the ma rket index (bot-
+tom panel). This allows us to relate changes in the eﬀective d imensionality
+of the market correlation structure with the events of marke t distress. The
+measure m+ (top panel) is used as a benchmark. First, we observe that the
+value of m− ranges between 0 and 7. Small values of m− correspond to the
+periods where the market index, SPsector, is stable or grows moderately.
+Conversely, high values of m− indicate that the numerical nullity of the
+correlation matrix is increasing, hence a signiﬁcant perce ntage of the numer-
+ical rank of the correlation matrix is reduced. Consequentl y, the correlation
+structure approaches a lower-dimensional conﬁguration, r educing the num-
+ber of eﬀectively independent investments and, therefore, the diversiﬁcation
+opportunities. The empirical evidence is consistent with t he theoretical in-
+12
+terpretation developed in Section 2. During the most severe market events,
+the numerical rank of the correlation matrix decreases from its maximum
+value of 10 to 3. Consequently, although the market consists of ten sector
+portfolios, its correlation structure behaves as if only ab out three eﬀectively
+independent investments were available, implying a signiﬁ cant reduction in
+diversiﬁcation opportunities. The historical maximum poi nts of m− can be
+compared ex-post with the major events of market distress do cumented in
+the literature. In the period under analysis, the largest va lues of m− are
+observed during several of the major events of market distre ss described by
+Sümer (2023) and Laeven and Valencia (2020): the recession o f the early 90s,
+probably related to the Gulf war, and US Savings and Loans Cri sis (1989-
+1991); the Asian ﬁnancial crisis of 1997; the 2007-2009 subp rimes crisis; the
+European debt crisis of 2010; the COVID-19 pandemic.
+Observe that we do not have any widely recognized global even t in cor-
+respondance to the peak identiﬁed by the circle 7 in Figure 1, central panel.
+Indeed, the proposed approach is unable to discriminate the direction of the
+market when the correlations increase. Then, we cannot excl ude that a large
+majority of the assets correlate in a positive direction, as in the case of a
+speculative bubble. This limitation is expected, since the proposed indica-
+tor depends only on the correlation structure and not on the s ign of market
+returns. An alternative possibility is that some market con ﬁgurations char-
+acterized by a similar correlation structure are actually n ot associated with
+widely recognized episodes of ﬁnancial distress. Indeed, t he measurement ob-
+jectively associates a natural number with a market conﬁgur ation, described
+in terms of lower-spectrum of the correlation matrix.
+For comparison purposes, we ﬁnally investigate the high par t of the spec-
+trum. This comparison highlights the diﬀerent information conveyed by the
+extreme parts of the spectrum. Observe that m+ only takes the values 0, 1
+and 2. In the large majority of the periods m+ = 1 . This shows that, very
+often, only one eigenvalue of the correlation matrix is larg er than λmax. Many
+authors refer to the largest eigenvalue of the correlation m atrix as the market
+mode, see, for instance, MacMahon and Garlaschelli (2013). The m ost inter-
+esting aspect is that the few situations in which m+ ⁄= 1 are not correlated
+with any particular market behavior. Even if m+ is a proper measure of
+connectedness, it does not provide useful information, at l east in the present
+application.
+To provide empirical support to the previous interpretatio n, we analyze
+the densities of the distribution of the index average daily returns conditioned
+13
+Figure 2: SPsector, w = 20 , distributions of the index daily average returns conditio ned
+to the values of m− (left panel) and m+ (right panel).
+to the values of m− (Figure 2, left panel). The distributions are obtained
+using MatLab Gaussian kernel smoothing function ksdensity, see Peter D
+(1985). As the value of m− increases, the mean of the conditional distri-
+butions of returns decreases and the variance increases. Th is reinforces the
+interpretation that larger values of the lower-spectrum in dicator correspond
+to market conﬁgurations characterized by a substantial red uction in eﬀective
+diversiﬁcation opportunities. As a benchmark, we report th e similar analysis
+by using m+ (right panel), but no clear relationship with the returns of the
+referring index can be detected.
+As already pointed out, the analysis at the sectoral level al lows us to
+investigate the behavior of lower-spectrum indicator acro ss various economic
+sectors. However, the shortcoming of using the sector portf olios instead of
+the single stocks is that their returns present a smoother be havior and a less
+variegate correlation structure, due to their positive and high correlations. To
+have a more realistic feedback about the proposed approach, it is necessary
+thus extending the analysis in a high dimensional framework , as we will show
+in the following subsection.
+3.2.2. Experiment 2: SPstocks (n = 377, w = 20)
+In this experiment, we consider the SPstocks dataset to asse ss whether
+the proposed indicator still remains informative in a high- dimensional set-
+ting. Then, the size of the set of constituents passes from n = 10 to n = 377.
+Maintaining the same ratio wn as in the previous experiment, described in
+Section 3.2.1, requires setting w = 754 . In this way, the Marchenko–Pastur
+thresholds are unchanged and the proposed methodology rema ins mathemat-
+14
+ically consistent.
+Its empirical informativeness, however, depends on the com patibility between
+the estimation window and the temporal scale of the market ev ents under
+investigation. Indeed, the resulting estimation window sp ans three years of
+daily observations, reducing the temporal response of the l ower spectrum
+indicator to signiﬁcant market events.
+0
+20
+40
+60
+80
+100
+2008 2009 2010 2011 2012 2013 2014 2015 2016
+-0.02
+-0.01
+0
+0.01
+Figure 3: Daily average returns of the S&P500 index from 01-0 3-2008 to 30-10-2016 (bot-
+tom panel); m− (top panel) computed on SPstocks, w = 754 .
+This is evident from the inspection of Figure 3, that compare s the market
+index– the average returns of the S&P index – with the measure m−. The
+main peak of m− is observed in 2011, long after the onset of the 2007–2009 ﬁ-
+nancial crisis. This delayed response is the natural conseq uence of estimating
+the indicator over such a long rolling window. More precisel y, the application
+of the proposed methodology to high-dimensional datasets r equires satisfy-
+ing two complementary conditions. On the one hand, the estim ation window
+must be suﬃciently short to follow the temporal evolution of the market. On
+the other hand, the resulting correlation matrix must prese rve the theoretical
+interpretation of the lower spectrum.
+To meet the ﬁrst condition, we set w = 20. However, for a high-dimensional
+dataset, as the case of the SPstocks, this implies that n > w . Then, the cor-
+relation matrix necessarily becomes rank-deﬁcient, and a l arge number of
+15
+eigenvalues are zero by construction. As a consequence, the structural zero
+eigenvalues become indistinguishable from the small eigen values associated
+with the numerical nullity, and the theoretical interpreta tion of m− is not
+longer valid. We therefore need to restore the conditions un der which the
+lower part of the spectrum contains only the eigenvalues ass ociated with the
+numerical nullity. The methodology proposed in Section 2 mu st be adapted
+so that the lower-spectrum indicator reﬂects only the numer ical nullity in-
+duced by the correlation structure. In this way, the lower-s pectrum indicator
+recovers its theoretical interpretation developed in Sect ion 2. This can be
+achieved by reducing the dimensionality of the space of cons tituents. To this
+end, we group the constituents into k clusters adopting one among the stan-
+dard clustering procedures - where we ﬁx k as an arbitrary value 3 such that
+w > k and then by choosing k portfolios each representing the constituents of
+its respective cluster. We then construct the matrix T × k in which columns
+are the returns of the aforementioned k portfolios and the resulting reduced
+representation satisﬁes the inequality w > k .
+Operatively, this reduction can be obtained through an aggl omerative hi-
+erarchical clustering procedure 4. The assets are partitioned into k clusters,
+and one representative portfolio is associated with each cl uster. The ﬂexibil-
+ity of this process allows us to select the clustering level, or scale, that best
+ﬁts the requirements of the application (in our case, k = 10 ). This yields
+a reduced correlation matrix on which the lower-spectrum in dicator can be
+computed according to the methodology developed in Section 2.
+As a further step we need to investigate whether the proposed cluster
+procedure also maintain its empirical eﬀectiveness.
+3For a direct comparison with the experiment in Section 3.2.1 we set k = 10
+4Hierarchical clustering is implemented through MATLAB’s l inkage and cluster func-
+tions. These routines construct a hierarchical cluster tre e (dendrogram), from which a
+partition into k clusters is obtained
+16
+2006 2008 2010 2012 2014 2016 2018 2020
+-0.02
+-0.01
+0
+0.01
+0
+2
+4
+6
+8
+10
+ - -  Alert Level
+o Systemic Crises
+1.
+2.
+2. 3.
+4.
+4. 5.
+6.
+6. 7. 8. 9.
+10.
+1.
+3.
+5. 7.
+8. 9.
+10.
+Figure 4: Left panel: SPstocks, w = 20 . A verage daily returns of the S&P500 index and
+m− computed on after the reduction through hierarchical clust er tree procedure (number
+of clusters k = 10 ). Identiﬁable global crises during the period: 1. 2. and 3. G lobal
+Financial crisis 2007/09, 4. and 5. European Debt crisis, 7. Greece default in 2015, see
+Laeven and Valencia (2020), 8. Brexit shock in 2016, see Qiao et al. (2021), 10. COVID-
+19 crisis. Negative spikes n. 6 and n. 9 are not associated wit h known systemic events.
+Right panel: scatter plot w.r.t m− and the correspondent conditional distributions of
+returns.
+Figure 4 reports the results obtained for the SPstocks datas et with w =
+20. What emerges is that, even after this reduction, the peaks o f m− are
+associated with the major events of market distress. Using t he same in-
+terpretation as in the Experiment 1 (Section 3.2.1), and setting the critical
+threshold to 5 the measure intercepts the following systemic events: the
+Global Financial Crisis (2007-2009), the European Debt Cri sis (2010-2012),
+the Greece default (2015), the Brexit eﬀect (2016), and the C OVID-19 crisis
+(2020). As in the Experiment 1, not every peak can be unequivo cally asso-
+ciated with a widely recognized systemic event. This is not i n contrast with
+the interpretation of the indicator, as it measures changes in the correlation
+structure rather than predeﬁned crisis labels.
+Since the ﬁnancial literature traditionally focuses on the information car-
+ried by the largest eigenvalues of the correlation matrix, i t is natural to
+compare the proposed methodology with an analogous constru ction based
+on the upper spectrum, by computation of the measure m+. However, as in
+the previous case, its computation requires a reduction of t he dimensional-
+ity of the set of constituents 5. This is not unusual in the literature, and a
+natural method to obtaining this reduction is to perform a Pr incipal Compo-
+5We underline that the upper part of the correlation matrix sp ectrum is independent
+17
+nent Analysis (PCA) on the original matrix. Notice that the t wo indicators
+require diﬀerent dimensionality-reduction methods becau se they rely on com-
+plementary parts of the spectrum.
+Inspired by the work of Ortobelli and Tich` y (2015) we follow this ap-
+proach to reduce the dimension of the data in order to compute m+. We se-
+lect the ﬁrst k principal components of the correlation matrix 6 and therefore
+we build the corresponding principal portfolios (for a deﬁn ition of principal
+portfolio the reader can refer to Meucci (2009)). We then com pute their
+historical returns, and estimate a linear k-funds separation model, where the
+regressors are the returns of the k principal portfolios (for more details see
+Ross (1978)). The returns of the original matrix are then app roximated us-
+ing the linear factor model. It is important to note that this procedure, as
+it is based on PCA, focuses only on the ﬁrst k eigenvalues. Moreover, the
+procedure of reduction to the ﬁrst k principal portfolios, and the subsequent
+reconstruction of the assets as their linear combination im plies that the re-
+maining n − k eigenvalues are zero. The mathematical construction of the
+procedure, together with the proof that the ﬁrst k eigenvalues are preserved,
+is reported in Appendix A.
+In Figure 5 we report the values of the measure m+ computed by applying the
+procedure previously described. Compared with Figure 4 (le ft panel), what
+is evident is that a few eigenvalues are above the upper bound deﬁned by
+the Marchenko-Pastur benchmark. This is the sign that this m easure weakly
+react to the systemic events. In conclusion, the informatio n carried by the
+lower spectrum is substantially diﬀerent from that contain ed in upper part.
+In this application, the lower-spectrum indicator provide s a substantially
+more informative description of systemic market events tha n the benchmark
+measure m+.
+from the implemented dimensionality reduction procedure, as proved in the Appendix A.
+Nevertheless, the value of m+ depends on the value λmax that is a function of matrix
+dimension.
+6In line with what previously done, we set k = 10
+18
+0
+2
+4
+6
+8
+10
+2006 2008 2010 2012 2014 2016 2018 2020
+-0.02
+-0.01
+0
+0.01
+Figure 5: SPstocks, w = 20 . Daily returns of the S&P500 index (bottom panel) and the
+correspondent value of m+ calculated the PCA procedure (top panel).
+3.2.3. Experiment 3: Nikkei (n = 199, w = 20)
+In this Section, we replicate the experiment using the Nikke i index. As
+in the SPstocks application, the dimensionality of the spac e of constituents
+is reduced in order to preserve the theoretical interpretat ion of the lower-
+spectrum indicator.
+To this end, we set w = 20, and compute the measure m− after applying
+hierarchical clustering to select k = 10 portfolios. Results are reported in
+Figure 6. In line with the previous empirical experiments, w e set the criti-
+cal value equal to 5. The measure m− reacts to the major systemic events
+during the period under analysis: the subprime crisis of 200 7-09, the Eu-
+ropean Debt crisis, the Greek default (2015), the Brexit eﬀe ct (2016), and
+the COVID-19 crisis (2020) (Figure 6, left panel). Some peak s are also ob-
+served during periods that are not immediately associated w ith recognized
+systemic events. This phenomenon, that we have previously d etected also
+for the other experiments, is more relevant in this case than in the previous
+one. This may be partly explained by the low dimensionality o f the index, in
+terms of number of constituents. Also, the index is not inter national enough
+to eﬀectively represent a proxy of the global economy. As a co nsequence,
+the events captured by the measure impact the majority of the index assets,
+but they remain conﬁned to the Japanese market, without spre ading to the
+19
+0
+2
+4
+6
+8
+10
+ - -  Alert Level
+o Systemic Crises
+2006 2008 2010 2012 2014 2016 2018 2020
+-0.03
+-0.02
+-0.01
+0
+0.01
+0.02
+1. 2. 3. 4. 5. 6. 7. 8. 10.9. 12.
+11.
+13.
+14. 15.
+1. 2.
+3. 4.
+5.
+6. 7. 8. 9.
+10.
+11.
+12.
+13. 14.
+15.
+Figure 6: Nikkei database, w = 20. Daily returns of the NIKKEI index and the values of
+m− using hierarchical cluster tree procedure (left panel). Sc atter plot w.r.t m− and the
+correspondent conditional distributions of returns (righ t panel). Left panel systemic crises
+Sümer (2023): 4. and 5. Global Financial crisis 2007/09, 6. E uropean Debt crisis 2011,
+9. Greece default in 2015, see Laeven and Valencia (2020), 11 . Brexit shock in 2016, see
+Qiao et al. (2021), 10. COVID-19 crisis. Unidentiﬁed events : peaks 1 - 3, 7, 8, 12, 13 and
+14
+global ﬁnancial system. Nevertheless, the returns densiti es conditioned to
+the values of m−, (Figure 6 right panel), conﬁrm the ability of the measure
+to identify the largest losses of the corresponding index.
+0
+2
+4
+6
+8
+10
+2006 2008 2010 2012 2014 2016 2018 2020
+-0.03
+-0.02
+-0.01
+0
+0.01
+0.02
+Figure 7: Nikkei database, w = 20 . Daily time series of NIKKEI index and m+ using
+PCA procedure.
+20
+For completeness, Figure 7 reports the values of the benchma rk measure
+m+ computed through the PCA procedure described in the previou s experi-
+ment. The behavior of m+ is uninformative for detection of systemic events.
+3.3. Out-of-sample Analysis
+Section 3.2 established the descriptive validity of the low er-spectrum in-
+dicator. The next step is to investigate whether the informa tion provided by
+the lower part of the spectrum can be exploited to anticipate future market
+conditions. This requires an out-of-sample analysis, wher e the indicator is
+used without relying on the information contained in the obs ervations to be
+predicted. The S&P500 is still used as a reference indicator of the market,
+with the same datasets (SPsectors and SPstocks) described i n Section 3.1.
+The analysis is still conducted using a rolling-window fram ework, as de-
+scribed in Section 3.1. Speciﬁcally, given a window length w, the ﬁrst w
+observations of the matrix A are used to compute the indicator. Then, start-
+ing from time w + 1, m− is matched with the future returns of the ﬁnancial
+index representing the economic system.
+As in the in-sample analysis, the choice of the correct windo w length de-
+serves attention also in a predictive framework, and a suita ble w should be
+established. Indeed, w must be large enough to ensure a stable estimate of
+both the eigenvalue distribution and the ratio λ = nw , consistent with the the-
+oretical framework, without reducing the ability of the mea sure to promptly
+react to changes in market conditions. Let us recall that m− is computed
+in two steps. First, the spectrum is calculated starting fro m the matrix A,
+then the value of the measure is obtained by counting the numb er of ele-
+ments of the spectrum below the interval of the Marchenko-Pa stur theorem.
+In both steps the window length plays a central role, respect ively identifying
+the number of rows extracted from A and the threshold λ, which is needed
+to identify the interval.
+The theoretical framework provides the methodology; howev er, its ap-
+plication to real ﬁnancial data requires assessing if the th eoretical threshold
+remains appropriate also in a predictive setting. To this en d, we consider in
+this analysis exogenous values of λ ﬁxed independently of the parameter w
+to assess the robustness of the results. For these reasons, i n this experiment
+the past w returns are used to compute the spectrum of A, while diﬀerent
+values of the threshold λ are imposed exogenously.
+Figures 8 and 9 highlight this aspect by computing m− for w = 20 and for
+diﬀerent values of λ, ﬁxed independently of the parameter w, and reporting
+21
+the box plots of the future (one-day-ahead) returns of the in dex (S&P500 in
+this case) conditioned to the values of m−. The top-left panels clearly show
+that m− has very limited out-of-sample discriminating power when c omputed
+with respect to the endogenous threshold; in this case, λ = 0 .5 is the value
+implied by w = 20 . Indeed, large losses (and also gains) almost uniformly
+correspond to all the possible values the measure can take.
+0 1 2 3 4 5 6 7
+-0.1
+-0.05
+0
+0.05
+0.1
+ = 0.50
+1 2 3 4 5 6 7 8 9
+-0.1
+-0.05
+0
+0.05
+0.1
+ = 0.17
+2 3 4 5 6 7 8 9
+-0.1
+-0.05
+0
+0.05
+0.1
+ = 0.08
+3 4 5 6 7 8 9
+-0.1
+-0.05
+0
+0.05
+0.1
+ = 0.04
+4 5 6 7 8 9
+-0.1
+-0.05
+0
+0.05
+0.1
+ = 0.02
+4 5 6 7 8 9
+-0.1
+-0.05
+0
+0.05
+0.1
+ = 0.01
+Figure 8: SPsector database. Box plots with respect to m− and the corresponding condi-
+tional distributions of future (one-day-ahead) returns of the S&P500 index.
+As shown in Figures 8 and 9, for both the SPsector and SPstock d atabases,
+the eﬀectiveness of the measure in forecasting large losses becomes clearer
+for small values of λ. Indeed, returns decrease when m− increases, then the
+predictive performance of m− improves when using w = 20 combined with a
+value of λ that is smaller than the theoretical one. As graphically evi dent,
+the best results are obtained for λ = 0 .01 (see the bottom-right panels of
+22
+0 1 2 3 4 5 6 7
+-0.1
+-0.05
+0
+0.05
+0.1
+ = 0.50
+2 3 4 5 6 7 8 9
+-0.1
+-0.05
+0
+0.05
+0.1
+ = 0.17
+3 4 5 6 7 8 9
+-0.1
+-0.05
+0
+0.05
+0.1
+ = 0.08
+4 5 6 7 8 9
+-0.1
+-0.05
+0
+0.05
+0.1
+ = 0.04
+4 5 6 7 8 9
+-0.1
+-0.05
+0
+0.05
+0.1
+ = 0.02
+5 6 7 8 9
+-0.1
+-0.05
+0
+0.05
+0.1
+ = 0.01
+Figure 9: SPstock database. Box plots with respect to m− and the corresponding condi-
+tional distributions of future (one-day-ahead) returns of the S&P500 index.
+Figures 8 and 9), where large losses (and also large gains 7) correspond to
+large values of the measure. This result can be explained by t he fact that,
+due to the non-i.i.d. nature of real ﬁnancial data, the eﬀect ive value of λ is
+likely to be smaller than the theoretical one.
+In principle, reducing λ would require increasing the window length w.
+However, in a forecasting context, a larger w implies estimating the corre-
+lation matrix over a longer window, assigning excessive wei ght to older ob-
+servations and reducing the responsiveness of the measure t o recent market
+conditions. This trade-oﬀ is a standard issue in out-of-sam ple applications:
+7Let us underline how, in a predictive framework, m− seems to be less able to discrim-
+inate between large positive and negative gains than in a des criptive context; see Section
+3.2.
+23
+good predictions require primarily relying on more recent d ata, while the
+statistical and mathematical properties of the estimators call for longer time
+series. To address this issue, we introduce a decay factor th at assigns larger
+weights to more recent observations and progressively smaller weights to older
+data. This is a common approach in ﬁnance, where the decay fac tor quan-
+tiﬁes the rate at which information exposures diminish in eﬀ ectiveness (see
+JPMorgan (1996)). In our application, the decay factor can b e interpreted
+as a persistent parameter following an exponential weighti ng scheme, where
+past observations are discounted at a constant rate. Formal ly, observations
+receive an exponential weight proportional to a given δ, with 0 < δ < 1,
+which is the decay factor 8 . Speciﬁcally, each observation is weighted by δt.
+This approach allows us to maintain a long window length w, i.e., a small
+value of the endogenous λ, while preserving sensitivity to recent information.
+The decay factor thus reconciles the theoretical requireme nts of the model
+with the empirical features of ﬁnancial data in a forecastin g context.
+5 6 7 8 9
+-0.1
+-0.08
+-0.06
+-0.04
+-0.02
+0
+0.02
+0.04
+0.06
+0.08
+0.1
+Figure 10: SPsector database. Box plot with respect to m− and the corresponding condi-
+tional distributions of future (one-day-ahead) returns of the S&P500 index for δ = 0.7.
+Figure 10 shows the results for w = 1000, λ = nw = 0.01, and δ = 0.7. This
+value of δ corresponds approximately to using the most recent 20 observations
+8The decay factor δ is the general term of the geometric series (1 − δ)∑∞t=0 δt.
+24
+to estimate the spectrum. While maintaining the endogenous determination
+of the threshold, this conﬁguration of parameters preserve s the forecasting
+power of m−, as is clear from Figure 10.
+In the following, the experiment is extended to all the remai ning databases.
+For each database, n is equal to 10, or reduced to that value using the clus-
+tering procedure described in Section 3.2.2.
+Table 1: Mean, standard deviation, Value at Risk at the 1% sig niﬁcance level, and the
+cardinality of the classes ( N ) of future (one-day-ahead) return distributions conditio ned
+on m− for diﬀerent databases. The parameters are w = 1000 , λ = nw = 0.01, and δ = 0.7.
+m− N Mean Std V@R1%
+SPsector
+5 5 -0.0015 0.0092 0.0124
+6 352 0.0001 0.0095 0.0276
+7 2341 0.0002 0.0099 0.0279
+8 2367 0.0003 0.0115 0.0316
+9 673 0.0001 0.0180 0.0676
+SPstock
+5 1 -0.0022 - -
+6 109 0.0001 0.0081 0.0288
+7 791 0.0005 0.0095 0.0257
+8 834 0.0004 0.0116 0.0355
+9 218 0.0004 0.0155 0.0453
+NIKKEI
+6 40 0.0009 0.0095 0.0179
+7 505 0.0000 0.0128 0.0323
+8 994 0.0003 0.0147 0.0359
+9 308 0.0011 0.0176 0.0416
+Table 1 reports the main statistics (mean, standard deviati on and value
+at risk (V@R) at 1% signiﬁcance level) of future (one-day-ah ead) return dis-
+tributions conditioned on the values of m−. We group the future returns
+in dependence on the value of the measure; that is, we report t he absolute
+frequency N of each class respect to m−. Interesting results are common
+across the diﬀerent databases. In particular, higher level s of m− are asso-
+ciated with higher levels of both standard deviation and V@R . This fact
+supports the capacity of m− to predict future market turbulence. More-
+over, the cardinality N of the classes identiﬁed by the possible values of the
+25
+measure provides very useful information on the discrimina ting power of the
+measure. As highlighted in Table 1, the maximum value of the m easure cor-
+responds to a relatively small number of observations. In ot her words, m− is
+able to eﬃciently identify risky situations discriminatin g them with respect
+to natural market ﬂuctuations. To exemplify, suppose an age nt wants to use
+the measure as an early warning indicator. In this case, a goo d measure is
+expected to prevent future losses while not providing the wa rning signal too
+often. Indeed, false alarms represent an opportunity cost, requiring hedging
+against future losses that will not occur. Thus, an ideal ear ly warning system
+would prevent large losses while minimizing false signals. As already evident
+by inspection of Figures 8, 9, and 10, this is also conﬁrmed by the fact that
+no notable relationship between the value of m− and the average return is
+observed. In fact, the present approach is designed for risk detection and is
+not intended to forecast market direction.
+To further support the robustness of our ﬁndings, we compare the results
+with those obtained using the cumulative risk fraction (CRF) , a systemic
+risk measure proposed in Billio et al. (2012). Since this mea sure is computed
+starting from the spectrum of the returns matrix, as are the o nes proposed
+in the present research, the comparison is direct and meanin gful. The CRF
+relies on the idea that, during crises, a small number of domi nant principal
+components explain a large fraction of market variance. Hen ce, the risk mea-
+sure is computed starting from the leading eigenvalues, fol lowing an intuition
+similar to that behind m+.9
+Figure 11 (left panel), shows the scatter plot of the future ( one-day-
+ahead) return distribution of the S&P 500 index with respect to the values
+of CRF. Let us note that CRF is continuous and can theoretical ly take values
+in the interval (0, 1), while m− can only assume integer values. Therefore,
+to directly compare the two measures we discretize CRF by par titioning its
+eﬀective codomain, in this case the interval (0.85, 1), into 10 intervals of
+equal length. Then, the forecasting power of CRF is graphica lly represented
+similarly to what was done for m−; see Figure 11, right panel.
+Both panels of Figure 11 show that larger values of CRF corres pond to
+large losses (and also large gains). Nevertheless, CRF is le ss eﬀective in
+9Let σ1, . . . , σn denote the n singular values of matrix A, enumerated in non-ascending
+order. The cumulative risk fraction is deﬁned as CRF k(A) =
+∑k
+j=1 σ2j (A)∑n
+j=1 σ2j (A) , for k = 1, . . . , n.
+For more details see Billio et al. (2012).
+26
+0.85 0.9 0.95 1
+CRF
+-0.15
+-0.1
+-0.05
+0
+0.05
+0.1
+0.15
+Returns
+CRF
+-0.1
+-0.05
+0
+0.05
+0.1
+Returns
+Figure 11: SPsector database. Scatter plot (left panel) and Box plot (right panel) with
+respect to CRF and the corresponding conditional distribut ions of future (one-day-ahead)
+returns of the S&P500 index.
+systemic risk detection than m−. This depends on the fact that the classes
+with higher values of CRF contain a multitude of observation s, not just a
+limited number of extreme returns. Therefore, the discrimi nating capacity
+of CRF is lower.
+Table 2 reports the principal statistics summarizing the ap plication of
+CRF to the other databases under analysis. Comparing Tables 1 and 2,
+a few interesting evidences need to be underlined. First, th e larger values
+of standard deviation and V@R do not generally correspond to the larger
+values of the measure. Let us underline that this fact does no t depend on
+the discretization performed for the comparison. Moreover , the classes of the
+values of the measure containing larger losses are characte rized by a large
+cardinality. This implies that the measure has limited disc riminating power.
+In other words, implementing an early warning system based o n CRF would
+generate many false signals, with a negative impact in terms of opportunity
+costs. Finally, as for m−, the average return and the value of CRF show no
+notable relationship.
+To summarize, m− performs well in a predictive setting, even when com-
+pared with CRF, an alternative similar measure proposed in t he literature.
+Moreover, the results suggest that disregarding the smalle st eigenvalues of
+the spectrum entails a loss of relevant information in a fore casting framework.
+27
+Table 2: Mean, standard deviation, Value at Risk at the 1% sig niﬁcance level, and the
+cardinality of the classes ( N ) of future (one-day-ahead) return distributions conditio ned
+on CRF for diﬀerent databases.
+CRF N Mean Std V@R1%
+SPsector
+[0.85–0.865] 4 0.0001 0.0085 0.0112
+[0.865–0.88] 26 -0.0025 0.0109 0.0188
+[0.88–0.895] 75 -0.0003 0.0131 0.0278
+[0.895–0.91] 157 -0.0004 0.0141 0.0385
+[0.91–0.925] 158 0.0014 0.0136 0.0313
+[0.925–0.94] 140 0.0003 0.0135 0.0314
+[0.94–0.955] 474 0.0000 0.0129 0.0305
+[0.955–0.97] 902 0.0005 0.0134 0.0363
+[0.97–0.985] 2716 0.0001 0.0115 0.0342
+[0.985–1] 3046 0.0005 0.0102 0.027
+SPstocks
+[0.69–0.725] 18 -0.0009 0.0113 0.0325
+[0.725–0.76] 96 -0.0014 0.0105 0.0274
+[0.76–0.795] 254 -0.0003 0.0156 0.0503
+[0.795–0.83] 531 0.0005 0.0123 0.0369
+[0.83–0.865] 891 -0.0003 0.0139 0.0404
+[0.865–0.9] 832 0.0008 0.009 0.0287
+[0.9–0.935] 822 0.0003 0.0107 0.0319
+[0.935–0.97] 388 0.0010 0.0127 0.0359
+NIKKEI
+[0.5–0.55] 45 0.0009 0.0091 0.0289
+[0.55–0.6] 238 -0.0010 0.0136 0.0398
+[0.6–0.65] 556 0.0012 0.0116 0.0279
+[0.65–0.7] 786 -0.0002 0.0116 0.0293
+[0.7–0.75] 873 0.0001 0.0130 0.0386
+[0.75–0.8] 666 -0.0003 0.0160 0.0498
+[0.8–0.85] 431 0.0005 0.0182 0.0575
+[0.85–0.9] 135 0.0018 0.0221 0.0640
+[0.9–0.95] 72 0.0012 0.0362 0.0476
+[0.95–1] 5 0.0074 0.0262 0.0166
+28
+4. Conclusions
+This paper deal with the issue of interpreting the informati on contained
+in the lower part of the spectrum of ﬁnancial correlation mat rices. The pro-
+posed approach aims to be complementary to the traditional o ne, that looks
+at the upper part of the spectrum to extract relevant informa tion about the
+market co-movement. The lower spectrum is interpreted thro ugh the con-
+cepts of numerical nullity, providing a rigorous mathemati cal interpretation
+that allows to connect spectral properties and the eﬀective dimensionality
+of ﬁnancial markets. From a ﬁnancial perspective, the propo sed approach
+suggests that the lower spectrum provides a natural way to de scribe the pro-
+gressive reduction of eﬀective diversiﬁcation opportunit ies associated with
+increasing market synchronization. The interpretation of the lower part of
+the spectrum opens a new perspective on the way to address a fu ndamental
+ﬁnancial phenomenon such as the market synchronization.
+Declarations
+Data availability. The datasets analyzed in the current study are available
+from the corresponding author on a reasonable request.
+Appendix A. PCA procedure for upper part of the spectrum
+This appendix reports the formal construction of the PCA pro cedure for
+the upper part of the spectrum.
+Let Vk ∈ M n×k be the matrix obtained applying the PCA to the matrix
+SA - that is the matrix with columns given by the ﬁrst k principal components
+obtained by the correlation matrix 1T S′ASA. Notice that by construction, Vk
+is an orthonormal matrix, i.e. V ′kVk = Ik. Let us compute ˜X ∈ M T ×k by
+multiplying SA ∈ M T ×n and Vk ∈ M n×k, that is ˜X = SAVk. This means
+that we are expressing the assets returns as a linear combina tion of the k
+principal components.
+We then perform the regression ˆSA = ˜Xβ , where β = ( ˜X ′ ˜X)−1 ˜X ′SA. In
+this way we obtain a new matrix ˆSA ∈ M T ×n, of rank k, representing the re-
+turns, in which every asset is estimated using the regressor s of the k principal
+portfolios.
+The following result holds:
+29
+Proposition 7. The matrices 1T S′ASA and 1T ˆS′A ˆSA share the same ﬁrst k
+eigenvalues.
+Proof. Let λ1 ≥ λ2 ≥ · · · ≥ λn be the eigenvalues of 1T S′ASA and Λk =
+diag(λ1, . . . , λk) the diagonal matrix of the eigenvalues corresponding to the
+orthonormal matrix Vk. By deﬁnition of eigenvalues and eigenvectors, we
+have: 1
+T (S′ASA)Vk = VkΛk
+Being ˜X = SAVk, we have
+˜X ′ ˜X = V ′kS′ASAVk = T V ′k( 1T S′ASA)Vk = T V ′kVkΛk = T IkΛk = T Λk,
+and
+˜X ′SA = V ′kS′ASA = T V ′k
+( 1
+T S′ASA
+)
+= T ΛkV ′k.
+where V ′k( 1T S′ASA) = Λ kV ′k being the matrix 1T S′ASA symmetric. Therefore,
+by using the previous chain of equalities:
+β = ( ˜X ′ ˜X)−1 ˜X ′SA = (T Λk)−1T ΛkV ′k = Λ −1k ΛkV ′k = V ′k.
+that is the OLS coeﬃcient matrix β is equal to the transpose of matrix Vk
+collecting the ﬁrst k principal eigenvectors. It follows that
+ˆSA = ˜Xβ = SAVkV ′k.
+Recall that by construction, rank( ˆSA) = k, then only k eigenvalues of the
+matrix 1T ˆS′A ˆSA are diﬀerent from zero, whereas the remaining n − k are zero.
+Hence,
+1
+T
+ˆS′A ˆSA = 1T VkV ′kS′ASAVkV ′k
+= VkV ′kVkΛkV ′k
+= VkIkΛkV ′k
+= VkΛkV ′k.
+Hence, the eigenvalues of 1T ˆS′A ˆSA are λ1, . . . , λk, together with n − k zero
+eigenvalues. Therefore, 1T S′ASA and 1T ˆS′A ˆSA share the same ﬁrst k eigenvalues.
+30
+References
+Alexandre, M., Silva, T.C., Connaughton, C., Rodrigues, F. A., 2021. The
+drivers of systemic risk in ﬁnancial networks: a data-drive n machine learn-
+ing analysis. Chaos, Solitons & Fractals 153, 111588.
+Anbil, S., Anderson, A., Senyuz, Z., 2020. What happened
+in money markets in september 2019? FEDS Notes. Wash-
+ington: Board of Governors of the Federal Reserve Sys-
+tem. URL: https://doi.org/10.17016/2380-7172.2527,
+doi:10.17016/2380-7172.2527.
+Bardoscia, M., Barucca, P., Battiston, S., Caccioli, F., Ci mini, G., Gar-
+laschelli, D., Saracco, F., Squartini, T., Caldarelli, G., 2021. The physics
+of ﬁnancial networks. Nature Reviews Physics 3, 490–507.
+Benoit, S., Colliard, J.E., Hurlin, C., Pérignon, C., 2017. Where the risks
+lie: A survey on systemic risk. Review of Finance 21, 109–152 .
+Billio, M., Getmansky, M., Lo, A.W., Pelizzon, L., 2012. Eco nometric mea-
+sures of connectedness and systemic risk in the ﬁnance and in surance sec-
+tors. Journal of Financial Economics 104, 535–559.
+Bisias, D., Flood, M., Lo, A.W., Valavanis, S., 2012. A surve y of systemic
+risk analytics. Annual Reviews of Financial Economics 4, 25 5–296.
+Diebold, F.X., Yılmaz, K., 2014. On the network topology of v ariance de-
+compositions: Measuring the connectedness of ﬁnancial ﬁrm s. Journal of
+Econometrics 182, 119–134.
+Golub, G.H., Van Loan, C.F., 2013. Matrix computations. JHU press.
+Guerini, M., Luu, D.T., Napoletano, M., 2023. Synchronizat ion patterns in
+the european union. Applied Economics 55, 2038–2059.
+JPMorgan, 1996. Riskmetrics technical document.
+Junior, L.S., Franca, I.D.P., 2012. Correlation of ﬁnancia l markets in times of
+crisis. Physica A: Statistical Mechanics and its Applicati ons 391, 187–208.
+Laeven, L., Valencia, F., 2020. Systemic banking crises dat abase ii. IMF
+Economic Review 68, 307–361.
+31
+Laloux, L., Cizeau, P., Bouchaud, J.P., Potters, M., 1999. N oise dressing of
+ﬁnancial correlation matrices. Physical Review Letters 83 , 1467.
+Lavin, J.F., Valle, M.A., Magner, N.S., 2021. A network-bas ed approach to
+study returns synchronization of stocks: the case of global equity markets.
+Complexity 2021, 7676457.
+Lux, T., Luu, D.T., Yanovski, B., 2020. An analysis of system ic risk in
+worldwide economic sentiment indices. Empirica 47, 909–92 8.
+MacMahon, M., Garlaschelli, D., 2013. Community detection for correlation
+matrices. arXiv preprint arXiv:1311.1924 .
+Maggi, M., Torrente, M.L., Uberti, P., 2020. Proper measure s of connected-
+ness. Annals of Finance 16, 547–571.
+Magner, N., Lavín, J.F., Valle, M.A., 2022. Modeling synchr onization risk
+among sustainable exchange trade funds: A statistical and n etwork anal-
+ysis approach. Mathematics 10, 3598.
+Marchenko, V.A., Pastur, L.A., 1967. Distribution of eigen values for some
+sets of random matrices. Matematicheskii Sbornik 114, 507– 536.
+Meucci, A., 2009. Managing diversiﬁcation. Risk , 74–79.
+Nguyen, A.P.N., Bezbradica, M., Crane, M., 2026. Community -level con-
+tagion among diverse ﬁnancial assets. Chaos, Solitons & Fra ctals 205,
+117858.
+Ortobelli, S., Tich` y, T., 2015. On the impact of semideﬁnit e positive corre-
+lation measures in portfolio theory. Annals of Operations R esearch 235,
+625–652.
+Peter D, H., 1985. Kernel estimation of a distribution funct ion. Communi-
+cations in Statistics-Theory and Methods 14, 605–620.
+Plerou, V., Gopikrishnan, P., Rosenow, B., Amaral, L.A.N., Guhr, T., Stan-
+ley, H.E., 2002. Random matrix approach to cross correlatio ns in ﬁnancial
+data. Physical Review E 65, 066126.
+32
+Qiao, K., Liu, Z., Huang, B., Sun, Y., Wang, S., 2021. Brexit a nd its impact
+on the us stock market. Journal of Systems Science and Comple xity 34,
+1044–1062.
+Rodríguez-Moreno, M., Peña, J.I., 2013. Systemic risk meas ures: The simpler
+the better? Journal of Banking & Finance 37, 1817–1831.
+Ross, S.A., 1978. Mutual fund separation in ﬁnancial theory —the separating
+distributions. Journal of Economic Theory 17, 254–286.
+Silva, W., Kimura, H., Sobreiro, V.A., 2017. An analysis of t he literature on
+systemic ﬁnancial risk: A survey. Journal of Financial Stab ility 28, 91–114.
+Sümer, L., 2023. The world economy and ﬁnancial system: a par adigm
+change oﬀering a sustainable approach. Springer Nature.
+Wei, H., An, F., Gao, X., Sun, X., 2025. Self-dynamics and int er-dynamics
+network reconstruction for characterizing the systemic ri sk in stock market.
+Chaos, Solitons & Fractals 201, 117312.
+Yaskov, P., 2016. The necessary and suﬃcient conditions in t he Marchenko–
+Pastur theorem. Journal of Multivariate Analysis 147, 240– 250.
+Zhang, D., Broadstock, D.C., 2020. Global ﬁnancial crisis a nd rising con-
+nectedness in the international commodity markets. Intern ational Review
+of Financial Analysis 68, 101239.
+Zheng, Z., Podobnik, B., Feng, L., Li, B., 2012. Changes in cr oss-correlations
+as an indicator for systemic risk. Scientiﬁc Reports 2, 1–8.
+33

@@ -1,0 +1,545 @@
+arXiv 2609.21271  https://arxiv.org/abs/2609.21271
+
+Nested Clustered Optimization Is One End of a Schur Bridge,
+and the Interior Is Sometimes Provably Better
+Peter Cotton ∗
+September 17, 2026
+Abstract
+Nested clustered optimization allocates within each cluster from the cluster’s own covariance
+block and then across the resulting cluster portfolios. Block inversion says the unconstrained
+minimum-variance portfolio has the same two-tier shape, with each block replaced by its Schur
+complement against every other asset. Conditioning instead on one knot from each other cluster
+truncates the conditioning set in the manner of a Vecchia approximation, and we give the
+rank-one model of cross-cluster dependence under which it is exact. Damping the complement
+by γ∈ [0, 1]then gives a bridge with nested clustered optimization atγ = 0and the global
+optimum atγ = 1, with no linear solve larger than a cluster or the number of clusters. Under
+estimation error the optimalγ can be strictly interior and full coupling can remain optimal, and
+we give the local theorem at the minimum-variance end with exact examples of both, including a
+symmetric family in which the optimum is a closed form.
+1 Introduction
+Two-stage cluster methods partition the assets, allocate inside each cluster, and then allocate across
+clusters. In nested clustered optimization, NCO [1], the inner step optimizes each cluster on its
+own covariance block and the outer step optimizes across the resulting cluster portfolios. The outer
+problem has one dimension per cluster, which is the source of the method’s numerical stability.
+The inner step reads only the cluster’s own block. The only channel by which one cluster’s
+weights respond to another cluster is its scalar budget.
+Schur-complementary allocation [2] removes the same blind spot from hierarchical risk parity
+[3]. At each split of a bisection tree it replaces a block by its Schur complement against the sibling
+block, damped byγ∈ [0, 1], and carries a companion vector alongside. The result is a bridge with
+hierarchical risk parity atγ= 0and minimum variance atγ= 1.
+This note builds the corresponding bridge for a flat partition. The left end is NCO and the
+right end is the unconstrained global minimum-variance portfolio. The obstacle is cost, since the
+complement of a cluster against everything else needs an inverse of nearly full size.
+Spatial statistics meets the same obstacle by conditioning on a few chosen indices rather than
+on everything [4]. The conditionals there are Schur complements, so the device transfers directly.
+We borrow its vocabulary. One member of each cluster is itsknot, as in the low-rank spatial
+models of Banerjee et al. [5] that Katzfuss and Guinness [6] place inside the Vecchia framework. The
+other clusters’ knots are a cluster’sconditioning set. We state the model under which conditioning
+on that set loses nothing.
+∗Microprediction. Email: peter.cotton@microprediction.com. A companion verification script is
+paper/verify_schur_nco_bridge.pyatgithub.com/microprediction/schur.
+1
+arXiv:2609.21271v1  [q-fin.MF]  18 Sep 2026
+Section 7 asks where to sit on the bridge when the covariance is estimated. Part of the analysis
+of the tree in [7] transfers, and exact examples show that both an interior optimum and a locally
+optimal full coupling occur. Section 8 treats singular covariances, where the parameterization byγ
+itself becomes singular.
+All exactness statements concern the unconstrained, fully invested, long-short problem. With
+box or long-only constraints no block decomposition of the optimum is exact, here or on the tree.
+2 Setup
+LetΣ ≻ 0be the covariance ofn assets partitioned into clustersI1,...,I k. Cluster i has a knot
+pi∈I i and remaining membersJi = Ii\{pi}. Write P ={p1,...,p k} and P−i = P\{p i}. For
+index setsX,Y writeΣ XY for the corresponding block,Σii for the block of clusteri, and−i for the
+complement ofIi.
+A two-stage method chooses a portfoliovi for each cluster, supported onIi with1⊤vi = 1, and
+then budgets across the clusters. WithVthen×kmatrix of cluster portfolios,
+a= alloc
+(
+V⊤ΣV), w=Va.(1)
+NCO takesvi to be the minimum-variance portfolio ofΣii and minimum variance for the outer
+allocation.
+3 Block inversion
+Fix a vectoruand a clusteri. Block inversion ofΣon the partition(I i,−i)gives [2, App. A]
+(
+Σ−1u)Ii = (Σcii)−1bi,(2)
+where
+Σcii = Σii−Σi,−iΣ−1−i,−iΣ−i,i, b i =u Ii−Σi,−iΣ−1−i,−iu−i.(3)
+For a positive-definiteQ and a vectorb we callQ−1b ageneralized minimum-variance direction. Up
+to scale it minimizesx⊤Qx subject tob⊤x = 1, which is ordinary minimum variance only when
+b=1.
+With u =1, the blocks of the global minimum-variance directionΣ−11are therefore generalized
+minimum-variance directions, one per cluster, on the cluster’s covariance conditional on everything
+else. There is no cross-cluster optimizer in the global optimum. The cluster totals are whatever
+the stacked directions sum to, and every piece of cross-cluster information enters through the
+conditioning.
+NCO has the same shape with the conditioning removed. Restoring it costs an inverse of size
+n−|I i|per cluster, which is what a two-stage method exists to avoid.
+4 The gateway model
+Definition 1(Gateway model).For every cluster j, the residual of the remaining membersJj
+after linear regression on their own knot is uncorrelated with every asset outsideIj. Equivalently
+the cross-cluster residual
+Rj(pj) = Σ Jj,−j−ΣJjpjσ−2pj Σpj,−j (4)
+is zero.
+2
+A member may be correlated with anything, but its correlation with other clusters passes entirely
+through its knot. The knot is the cluster’s only gateway. Each cross-cluster block ofΣthen has
+rank at most one.
+This is a strong assumption, and clustering alone does not imply it. It asks that member
+residuals be uncorrelated both with the other knots and with the other clusters’ member residuals.
+Proposition 1(Knots are sufficient).Under the gateway model, for each clusteriand everyu,
+Σcii = Σ ii−Σi,P−i Σ−1P−iP−i ΣP−i,i, b i =u Ii−Σi,P−i Σ−1P−iP−iuP−i.(5)
+Proof. The matrixΣi,−iΣ−1−i,−i holds the coefficients of the linear regression of clusteri on all other
+assets. Split the regressors into the other knotsP−i and the other remaining membersJ−i, and write
+J−i =βP−i +ε for the block-diagonal regression of each set of remaining members on its own knot.
+The map from(P−i,J−i)to( P−i,ε )is invertible, so the regression may be run on the latter pair.
+Under the gateway modelε is uncorrelated with clusteri and withP−i, so its coefficients vanish
+and the coefficients onP−i areΣ i,P−iΣ−1P−iP−i. Substituting into(3) gives (5), withu−i contributing
+only through itsP−i entries.
+Conditioning clusteri on the other knots is the same as conditioning it on everything. The
+inverse in (5) is(k−1)×(k−1).
+Remark 1(Relation to Vecchia approximations).A Vecchia approximation orders the variables
+and replaces each conditioning set by a small subset of the predecessors, which defines one acyclic
+approximate joint law [4, 6]. The conditionals are Schur complements. Replacing−i by P−i in (3)
+is the same truncation of a conditioning set, but it is applied to the full conditional of every cluster
+at once. Those conditionals are mutually cyclic and no approximate joint law is formed, so the
+recipe is Vecchia-inspired rather than a Vecchia approximation.
+The gateway model itself does have an exact Vecchia form.
+Corollary 1(Gaussian factorization).If the returns r are jointly Gaussian, the gateway model
+holds if and only if
+f(r) =f(r P )
+k∏
+i=1
+f
+(
+rJi|r pi
+)
+.(6)
+Proof. Under the model the residualsεi =rJi−βirpi are uncorrelated withrP and with each other,
+hence independent under Gaussianity, which gives(6). Conversely (6) makes εi independent of
+every asset outsideIi.
+With the knots ordered first,(6) is a block-Vecchia factorization, a sparser relative of the
+knot-based cases collected by Katzfuss and Guinness [6]. The covariance results in this note do not
+need Gaussianity.
+Remark 2(Testing the model).Regressing each remaining member on its own knot and the other
+knots, and checking that the other-knot coefficients vanish, does not test the model. Member residuals
+can be orthogonal to every knot and still be correlated with each other across clusters, and the
+sufficiency of the knots then fails. The model holds exactly whenRj(pj) = 0for every j, which can
+be checked from the sample covariance before any portfolio is built.
+3
+Remark 3(Measuring the loss and choosing knots).The raw size ofRj does not measure what is
+lost when the model fails. A residual with varianceδ2 and covariancecδ with an outside asset has
+R =cδ→ 0, while the Schur correction it carries,c2, does not move. The loss for clusteri is the
+omitted correction
+∆i = Σ i,−iΣ−1−i,−iΣ−i,i−Σi,P−iΣ−1P−iP−iΣP−i,i ⪰0,(7)
+the part of clusteri explained by the other assets beyond their knots. A scale-free screen for a
+candidate knotp∈I j is the largest canonical correlation between the residual ofIj\{p} on p and
+the assets outsideIj. Both need a large inverse, but they are diagnostics computed once and are not
+part of the allocation.
+Remark 4(A symmetric factor model).Suppose instead that every member of clusterj loads on a
+latent cluster factor,rm =λmfj +ηm, with idiosyncratic terms uncorrelated with each other and
+with the factors. ThenRj(p) = (1−ρp)λJj Cov(fj,r−j), whereρp =λ2p Var(fj)/σ2p is the share of
+the knot’s variance explained by the factor. The gateway model holds to the extent the knot is the
+factor. A knot with a highρp is then the natural choice, and the member most aligned with the
+cluster’s first principal component approximates it.
+5 The bridge
+Following [2], damp the conditioning. Forγ∈[0,1]define theconditioned pairof clusteri,
+Qi(γ) = Σii−γΣ i,P−iΣ−1P−iP−iΣP−i,i,
+bi(γ) =u Ii−γΣ i,P−iΣ−1P−iP−iuP−i, (8)
+and the directiondi(γ) = Qi(γ)−1bi(γ). Let Dγ be the n×k matrix with di(γ)in column i,
+supported onIi. The bridge portfolio is
+wγ ∝D γ
+(
+D⊤γ ΣDγ)−1D⊤γu.(9)
+It solves, on the span of thek directions, the problem thatΣ−1u solves on the whole space. Since
+bi(γ) =uIi−γa i with ai = Σi,P−iΣ−1P−iP−iuP−i fixed, a direction can vanish only at isolatedγ, and
+there its shape has the limit−Qi(γ)−1ai. We use that limiting direction, which keeps the span
+continuous inγ; only its scale is lost, and scale does not enter(9). A cluster is dropped only when
+uIi = 0.
+Two-tier reading.The right side of (9) does not change when a column ofDγ is rescaled. When
+every total1⊤di(γ)is nonzero, set vi = di/1⊤di. Then (9) is the two-stage method(1) with
+a∝ (V⊤ΣV )−1V⊤u. The induced outer inputs are thek×k covarianceV⊤ΣV and thek-vector
+V⊤u, which is1when u =1. The unnormalized form(9) has no singularity when a cluster total
+crosses zero.
+Proposition 2(The two ends of the bridge).
+1. Atγ= 0withu=1the recipe is NCO with minimum variance at both tiers.
+2. Under the gateway model the nonvanishing columns ofD1 are the blocks ofΣ−1u, andw1∝
+Σ−1u.
+4
+Proof. Atγ = 0the pair is(Σ ii, 1), sodi = Σ−1ii 1has a positive total,vi is the minimum-variance
+portfolio of the block, and the outer tier is minimum variance across the cluster portfolios. For the
+second claim,(2) and proposition 1 giveΣ−1u as the sum of the nonvanishing columns ofD1, which
+lies in the column span ofD1 whatever replaces a vanishing column. ThenD1(D⊤1 ΣD1)−1D⊤1u =
+D1(D⊤1 ΣD1)−1D⊤1 ΣD1α=D 1αfor theαwithΣ −1u=D 1α.
+γMethod
+0NCO [1]
+(0,1)the interior of the bridge
+1unconstrained global minimum variance, under the gateway model
+Table 1: The bridge withu=1and minimum variance at both tiers.
+Scope.The right end is the unconstrained, fully invested, long-short solution. No condition on
+cluster totals is needed for(9). A global solution can hold a self-financing position inside a cluster
+with zero net weight. The two-tier reading fails there, because no cluster budget times a normalized
+cluster portfolio represents it, and (9) does not.
+Remark 5(Other objectives).Proposition 2 is stated for a directionΣ−1u. Withu =µ the direction
+Σ−1µ maximizes the Sharpe ratio. Its fully invested multiple does so only when1⊤Σ−1µ> 0. When
+that total is negative the fully invested multiple has the opposite orientation and the lowest signed
+Sharpe ratio.
+Mean–variance problems with a budget constraint have solutions that combineΣ−1µ andΣ−11,
+and each part is covered separately. Risk parity is not of this form. The recipe still runs with a
+risk-parity outer tier, but nothing is exact atγ= 1.
+Remark 6(Rules that read only a covariance).An inner rule that cannot take a constraint vector
+can be applied after a change of variables. Withy =bi◦x the constraintb⊤i x = 1becomes1 ⊤y = 1
+and the covariance becomesM = diag(bi)−1Qi diag(bi)−1. Apply the rule toM and map back by
+x = y/bi, coordinate by coordinate. For minimum variance this returnsQ−1i bi. It requiresbi to
+have no zero entry. Applying minimum variance toM without mapping back returnsdiag(bi)Q−1i bi,
+which is a different portfolio.
+Remark 7(Relation to the tree).Schur complements compose: the complement of a complement
+is the complement against the union. So atγ = 1the recursion of [2], run down any tree whose
+leaves are the clusters and stopped there, hands each cluster the pair(3). The flat construction and
+the iterated one agree at the right end. They differ in the interior, because the tree damps at every
+split and the damping compounds along the path, while(8) damps each cluster once against all the
+other knots.
+6 Structure under the gateway model
+The gateway model gives both the outer covariance and the cluster directions a simple form.
+Proposition 3(Knot covariance plus a ridge).Under the gateway model, letvi be any portfolios
+supported on their clusters. Writeβi = ΣJipi/σ2pi for the member betas,Ei = ΣJiJi−βiβ⊤i σ2pi for
+the residual covariance, andκi =v i,pi +β⊤i vi,Ji for the cluster portfolio’s beta to its knot. Then
+V⊤ΣV=KΣ PP K+D, K= diag(κ i), D= diag (v⊤i,JiEivi,Ji).(10)
+5
+Proof. Under the gateway modelΣJi,l =βiΣpi,l for every assetl outside Ii. Applying this on both
+sides givesv⊤i ΣIiIlvl = κiκlΣpipl for i̸ = l. On the diagonal, the knot is uncorrelated with the
+member residual, sov⊤i Σiivi =κ 2iσ2pi +v⊤i,JiEivi,Ji.
+The outer problem sees the knot covariance, scaled by the cluster portfolios’ knot betas, plus
+their residual variances on the diagonal. The diagonal term raises the smallest eigenvalue of the
+outer covariance by at least the smallest residual variance. The remaining members supply a ridge,
+which is one reading of why the outer tier of NCO is stable.
+Proposition 4(Only the knots move).Under the gateway model, split the directiondi(γ)into its
+member partdi,Ji and its knot exposureκi =d i,pi +β⊤i di,Ji. Then
+di,Ji(γ) =E −1i (uJi−βiupi), κ i(γ) = upi−γa iσ2pi−γc i,(11)
+whereai = Σpi,P−iΣ−1P−iP−iuP−i andci = Σpi,P−iΣ−1P−iP−iΣP−i,pi. The member part depends on neither
+γnor any other cluster.
+Proof. Under the modelΣIi,P−i =
+( 1
+βi
+)
+Σpi,P−i, soQi(γ) = Σii−γci
+( 1
+βi
+)( 1
+βi
+)⊤
+andbi(γ) =uIi−γai
+( 1
+βi
+)
+.
+In the coordinates(κ,xJ)the quadratic formx⊤Qixis(σ 2pi−γc i)κ2 +x⊤JEixJ and the constraint
+b⊤i xis(u pi−γa i)κ+ (uJi−βiupi)⊤xJ. The two parts decouple, andQ−1i bi is (11).
+NCO and the global optimum hold the same member position inside every cluster, up to the
+cluster’s scale. Moving along the bridge reprices only the knot. Withu =1a member earns weight
+in proportion to1−β, its shortfall in beta to the knot, per unit of residual variance.
+Corollary 2(A cluster is a knot and one independent asset).Take u =1and put δi = (1−
+βi)⊤E−1i (1−βi). Under the gateway model, replace each cluster by its knot together with one asset
+that is uncorrelated with everything and has variance1/δi. ThenV0(γ)is unchanged for everyγ. So
+is F (γ,τ )of section 7 under noise that perturbs only the knot covariance and preserves the gateway
+structure.
+Proof. By proposition 4 the direction of clusteri has knot exposureκi(γ), total weightκi(γ) +δi
+and residual varianceδi. By proposition 3 the outer tier, and the variance of the resulting portfolio,
+read the cluster only through these and the knot covariance. The replacement cluster hasβ = 0
+andE= 1/δ i, which gives the same three quantities.
+A large cluster interior therefore never obscures the analysis: it enters as one scalar. If every
+member has unit beta to its knot thenδi = 0, the members carry no budget, andwγ is the same for
+everyγat which the knot exposures are nonzero.
+For the rest of this section takeu =1and write S = ΣPP for the knot covariance,si = Sii,
+h =S−11and νi = 1/(S−1)ii, the variance of knoti left unexplained by the other knots. In the
+notation of proposition 4,νi =s i−ci andh i = (1−a i)/νi.
+Proposition 5(Effective damping).Withr i =ν i/si,
+κi(γ) = (1−λ i) 1si +λihi, λ i = γri1−γ+γr i,that is λi1−λ i =r i γ1−γ .(12)
+Proof. Write the denominator ofκi as si(1−γ ) +γνi and the numerator as(1−γ ) +γνihi, and
+divide.
+6
+The knot exposure interpolates between its NCO value1/si and its minimum-variance valuehi,
+and λi is the interpolation actually achieved. A commonγ does not damp the clusters equally. A
+knot that the other knots nearly explain has smallri, and its exposure barely moves untilγ is very
+close to1.
+Proposition 6(Lost precision).Suppose every δi > 0. Put∆ = diag(δi), Kγ = diag(κi(γ)),
+Z=1 ⊤h+ ∑iδi andW γ =(S−1 +Kγ∆−1Kγ)−1. The minimum variance isV⋆ = 1/Z, and
+V0(γ)−V ⋆ = LγZ(Z−L γ), L γ = (h−κ) ⊤Wγ (h−κ).(13)
+Proof. By corollary 2 work with2k assets of covariancediag(S, ∆−1)and budget vector(1, 1). The
+unconstrained precision isZ and its direction is(h,δ ). The bridge restricts the knot exposures
+to Kγa and the member weights to∆a, and its precision1/V0(γ)falls short ofZ by the squared
+distance from(h,δ )to that subspace,mina{(h−Kγa)⊤S (h−Kγa)+(1−a)⊤∆ (1−a)}. Eliminating
+aand applying the Woodbury identity givesLγ.
+SinceW γ≻0, the bridge attains the minimum variance exactly whenκ=h, and
+κi(γ)−h i = (1−γ) (1−s ihi)(1−γ)s i +γν i .(14)
+Soifsome sihi̸= 1then γ = 1istheuniqueglobalminimizerof V0 on[0, 1]. Ifevery sihi = 1thewhole
+bridge is already optimal. The curvature at the end is explicit as well. Withpi =κ′i(1) = (sihi−1)/νi
+andW 1 =
+(
+S−1 + diag(h2i/δi))−1,
+V′′0 (1) = 2p⊤W1pZ2 .(15)
+Equicorrelated knots.Let the k knots have unit variance and common correlationρ, and take
+u=1. Thena=ρ(k−1)/
+(
+1 + (k−2)ρ
+)
+andc=ρa, so every cluster has
+κ(γ) = 1 + (k−2)ρ−γρ(k−1)1 + (k−2)ρ−γρ 2(k−1) .
+Forρ> 0the knot exposure falls from1at the NCO end to1/
+(
+1+(k− 1)ρ
+)
+at the minimum-variance
+end, which is the scale of the equicorrelated minimum-variance weight. The more knots and the
+higher their correlation, the further the bridge has to travel.
+Remark 8(Degenerate partitions).With every asset its own cluster each direction is a multiple
+of a coordinate vector, so with the limiting direction at a vanishing the directions span the whole
+space at everyγ. With a single cluster there is nothing to condition on. In both caseswγ is the
+minimum-variance portfolio for everyγ, and no model is needed. The bridge has length only for
+partitions strictly between the two.
+7 Where to sit on the bridge
+The cross-knot regression coefficients in(8) are estimated, andγ is how much of that estimate to
+trust. The analysis of the tree in [7] transfers in part. This section takesu=1.
+Let ˆΣτ = Σ+τE be an estimate, whereE is a random symmetric matrix whose law is unchanged
+byE↦→−E , andˆΣτ≻ 0on the range ofτ considered. Every quantity in the recipe is computed
+7
+from ˆΣτ. The partition and the knots are held fixed asτ varies, since reclustering or reselecting
+knots from the data can destroy smoothness. The portfoliowγ of (9) is normalized by1⊤wγ = 1,
+and we assume the normalizing total stays nonzero. Define the expected out-of-sample variance and
+its noiseless profile,
+F(γ,τ) =E
+[
+wγ(ˆΣτ)⊤ Σwγ(ˆΣτ)], V 0(γ) =F(γ,0).(16)
+It is even inτ. We assume F is smooth, put G(γ) = 12∂2τF (γ, 0), and assume the expansion
+F=V 0 +τ 2G+O(τ 4)holds inC 2 as a function ofγ.
+Proposition 7(Incremental noise cost).LetΦ( γ,τ ) =F (γ,τ )−F (0,τ )−
+[
+V0(γ)−V 0(0)
+]
+. Then
+Φ(γ,τ) =γτ 2H(γ,τ)for a smoothH.
+Proof. Φ(0,τ ) = 0, soΦ = γ Φ1 withΦ 1 smooth. AlsoΦ(γ, 0) = 0, soΦ 1(γ, 0) = 0, andΦ 1 is even
+inτ, soΦ 1 =τ 2H.
+On the tree, under noise supported only on the top-level cross-block, the hierarchical end does not
+read that block, and the uncentred costF−V 0 already carries the factorγ [7]. Under whole-matrix
+noise that fails on the tree as well, becauseF(0,τ)is then noisy.
+NCO is different even under cross-cluster noise alone. Its outer tier reads cross-cluster covariance
+at γ = 0, so NCO has an estimation cost of its own, and the factorγ appears only after centring at
+the noisy NCO end. The centred statement holds for the general noise of this section, and the cost
+of moving away from NCO is still of orderγτ2.
+Corollary 3(Separation from NCO).If V′0(0)< 0then ∂γF (0,τ )< 0for all sufficiently small τ,
+and NCO is strictly suboptimal.
+Proof.By proposition 7,∂ γF(0,τ) =V ′0(0) +τ 2H(0,τ).
+Proposition 8(The minimum-variance end).Under the gateway modelV′0(1) = 0and V′′0 (1) =
+2 ˙w⊤Σ ˙w, where ˙w= ∂γwγ at γ = 1. Suppose ˙w̸= 0. Then for all sufficiently smallτ the map
+F(·,τ)has a unique stationary point near1, a strict local minimizer, at
+˜γ(τ) = 1− G′(1)V′′0 (1)τ 2 +O(τ 4).(17)
+If G′(1) > 0this local minimizer is strictly inside the bridge for smallτ > 0. If G′(1) < 0then
+γ = 1is a strict local minimizer ofF (·,τ )on[0 , 1]. IfG′(1) = 0the second order is silent and the
+fourth or a higher order decides.
+Suppose in addition thatγ = 1is the unique global minimizer ofV0 on[0, 1]and that F (·,τ )→V 0
+uniformly on[0,1]. Then for all sufficiently smallτthese local minimizers are the global optimum
+over[0,1].
+Proof. Since1⊤wγ = 1we have1 ⊤ ˙w= 0and1 ⊤ ¨w= 0. By proposition 2,w1 = Σ−11/1⊤Σ−11,
+soΣ w1∝ 1. Hence V′0(1) = 2 ˙w⊤Σw1 = 0, and inV′′0 (1) = 2 ˙w⊤Σ ˙w+ 2 ¨w⊤Σw1 the second term
+vanishes. Apply the implicit function theorem to∂γF (γ,τ ) = 0at(1 , 0), where∂2γF =V′′0 (1)> 0.
+This gives (17) and strict convexity ofF(·,τ)on a neighbourhood of1that does not depend onτ.
+When G′(1) < 0the stationary point lies beyond1, so F (·,τ )decreases up to the boundary.
+Under the additional hypotheses the global minimizers ofF (·,τ )converge to1, so for smallτ they
+lie in that neighbourhood.
+8
+When everyδi > 0the uniqueness hypothesis is supplied by proposition 6, unless the whole
+bridge is already optimal. It remains a hypothesis when someδi = 0, since gateway exactness alone
+does not exclude anotherγ <1that produces the same portfolio.
+The displacement in(17) is of second order in the noise, and the gain from making it is of fourth
+order. WhenG′(1)>0,
+F(1,τ)−F(˜γ(τ),τ) = G′(1)2
+2V ′′0 (1)τ 4 +O(τ 6).(18)
+A large gain at finite noise should not be inferred from the local sign.
+The structure of the bridge does not determine the sign ofG′(1). Both signs occur, and each is
+strict in the examples below, so each persists on a relatively open set within the gateway-model
+parameterization.
+7.1 Identical clusters
+Give each ofk clusters a knot of unit variance and one independent asset of variance1/δ, and let
+every pair of knots have correlationc. By corollary 2 this is less special than it looks. By symmetry
+a portfolio is described by one number, the total weightx on the knots, and withL = 1 + (k− 1)c
+its variance is
+V(x) = 1k[Lx 2 + (1−x) 2δ ], V(x)−V(x ⋆) = L+ 1/δk (x−x ⋆)2, x ⋆ = 11 +δL.(19)
+The bridge is estimating the split between a correlated basket and an independent one.
+If the estimated knot correlation isz, proposition 4 gives the member partδ and the knot
+exposure
+tγ(z) = 1 + (k−2)z−γ(k−1)z1 + (k−2)z−γ(k−1)z 2,sox γ(z) = tγ(z)tγ(z) +δ .(20)
+No matrix inversion remains. For0<z < 1the exposure is strictly decreasing inγ, because∂γtγ(z)
+has the sign of−z(k−1)(1−z)
+(
+1 + (k−2)z
+)
+.
+An exact interior optimum.Let the estimate be Z∈{ 0, 2c} with equal probability, for some
+0<c< 12. On the branchZ= 0damping does nothing. On the branchZ= 2cthe choice
+γ⋆ = 1 + 2(k−2)c2[1 + (k−3)c ] (21)
+givestγ⋆(2c) = 1/L and hencex =x⋆, the population optimum. One branch is constant and the
+other attains its absolute minimum, uniquely sincetγ is strictly monotone. Soγ⋆ is the unique
+global optimum. It lies strictly inside(0,1)and does not depend onδ.
+With two clusters,c = 14 andδ = 1the optimum isγ⋆ = 23, and in exact arithmeticF (0)−F ( 23) =
+1/576andF(1)−F( 23) = 1/900.
+Both signs in one model.Now let the noise be small and symmetric,Z =c±τ , withk = 10and
+c= 14. Then (17) becomes
+˜γ(τ) = 1− 8−δ1 + 13δ/4τ 2 +O(τ 4).(22)
+9
+For δ < 8the optimum is interior for small noise, for δ > 8it stays at full coupling, and at
+δ = 8higher orders decide. Here V0 has a unique minimizer, again becausetγ is monotone, and
+F(·,τ)→V 0 uniformly, so by proposition 8 these conclusions are global on the bridge.
+Takeδ = 12. Then ˜γ= 1 + τ 2/10 +O(τ 4)and the constrained optimum stays at1under
+small noise. At the larger noise levelτ = 14, which isZ∈{ 0, 12}, (21) givesγ⋆ = 10/11. The same
+symmetric model sits at full coupling under small noise and moves inside under larger noise.
+Why the sign can go either way.At full couplingx1(Z) = 1/
+(
+1 +δ[1 + (k− 1)Z]
+)
+, which is convex
+in Z. Unbiased correlation noise therefore biases the expected knot allocation upward. Damping
+toward NCO also raises the knot allocation when correlations are positive. It reduces sensitivity to
+the noise and can worsen that bias, and the sign ofG′(1)is the outcome of the competition.
+7.2 Less symmetric examples
+A quartic.Take clusters {1, 2} and{3, 4} with knots1and3, unit variances exceptΣ 33 = 4,
+a single nonzero correlation entryΣ 13 = 12, and the estimate ˆΣ13 = Z∈ { 0, 1} with equal
+probability. On the branchZ = 1the second knot exposure isx =κ2(γ) = (1−γ )/(4−γ )and
+the population variance isV (x) = (49x4− 7x3 + 36x2− 2x + 6)/(2(7x2 + 3)2). Its derivative has
+the sign ofP (x) = 49x4 + 84x3− 21x2 + 48x− 6, which is increasing on[0, 14]with P (0) =−6and
+P( 14) = 1585/256.
+So there is a unique optimumγ⋆≈ 0.5587, strictly inside the bridge, withF (0)−F ( 12) = 3/1210
+and F (1)−F ( 12) = 5/1452in exact arithmetic. With small symmetric noiseZ = 12±τ the same
+covariance hasG′(1) = 31779128936/554523204167and V′′0 (1) = 48136/3571279, and(17) predicts
+˜γ(0.05)≈0.9894against a computed optimum of0.9896.
+Full coupling under asymmetric noise.Take three clusters, each a knot and one remaining member
+that is uncorrelated with everything, with member variances1,4and8. Let the knot covariance
+and its estimates be
+S=
+
+5 6 56 332 12
+5 12 252
+
+, ˆSτ =S±τ
+
+ 0−1 0−1 0 2
+0 2 0
+
+,
+the two signs equally likely. The noise is symmetric, touches only cross-knot entries, and preserves
+the gateway model. Exact differentiation givesV′′0 (1)≈2.3949and
+G′(1) =− 4720238484060245648386156800806907939268294475102923640251≈−0.0058498<0,
+so by proposition 8 full coupling is a strict local minimizer for all sufficiently smallτ. As a spot check,
+at τ = 110 and τ = 1100 exact evaluation givesF (γ,τ )> F(1,τ )for γ∈{ 0.999, 0.99, 0.9, 0.5, 0},
+which is consistent with a global optimum there but does not prove one.
+Neither end owns the bridge. An interior optimum is not a consequence of the architecture, and
+a statement that it is generic needs a noise model. The derivatives quoted in both examples are
+exact, computed by truncated bivariate jets in rational arithmetic.
+8 Rank deficiency
+Everything so far assumesΣ≻0. This section allowsΣ⪰0.
+10
+A singular covariance is one of two kinds. If some null portfolio has a nonzero total, a fully
+invested portfolio of zero variance exists. If every null portfolio is self-financing, the redundant
+assets can be removed, and only then is the pseudoinverse formulaw⋆ = Σ†1/1⊤Σ†1valid. The
+condition is1∈range (Σ). ForΣ =
+( 1 2
+2 4
+)
+the portfolio(2,− 1)has budget1and variance0, while
+normalizingΣ†1gives( 13, 23)with variance25/9.
+Harmless redundancy breaks the recipe.Take two clusters, each a knot and an independent asset,
+all of unit variance, and make the two knots duplicates. The budget vector lies in the range ofΣ,
+the optimum isw⋆ = ( 16, 13, 16, 13)in the order knot, member, knot, member, andV⋆ = 13. For every
+γ <1the pairs are Qi = diag(1−γ, 1)and bi = (1−γ, 1), so both directions are(1, 1)and the
+bridge holds equal weights.
+Construction Variance
+Global optimum1/3
+Bridge at everyγ <1 3/8
+Bridge atγ= 1with eachQ −1i replaced byQ†i 1/2
+Table 2: Duplicated knots.
+At full conditioning each knot is completely explained by the other, and each local pseudoinverse
+discards its own knot. Together they discard a common return that is still useful. The singular Schur
+equations leave some weights undetermined, and choosing a minimum-norm solution separately in
+each cluster does not coordinate those choices.
+Proposition 5 explains the approach to this case. As a knot becomes redundantri→ 0, so at
+every fixedγ <1its effective damping tends to zero and all the movement is compressed into a
+shrinking interval nearγ = 1. The limits do not commute. With the knot covariance regularized to
+11⊤ +εI,
+lim
+ε↓0
+lim
+γ↑1
+V0 = 13,lim γ↑1 limε↓0V0 = 38.
+This is more than numerical instability. The parameterization byγis itself singular there.
+Proposition 9(A bridge in effective exposure).Let the knot covariance S⪰ 0have positive
+diagonal, let1∈range(S), and let everyδ i>0. Puth=S †1and, forλ∈[0,1],
+¯κi(λ) = (1−λ) 1si +λh i,(23)
+keep the member parts of proposition 4, and allocate across the resulting cluster portfolios as before.
+The outer matrix ¯KS ¯K + ∆is positive definite, the portfolio is continuous inλ, it is NCO atλ = 0,
+and it is minimum variance atλ= 1.
+Proof. Positive definiteness follows from∆≻ 0. Atλ = 1,Sh =1gives
+(
+diag(h)Sdiag (h) + ∆
+)
+1=
+h +δ, so the outer solution isa =1and the portfolio has knot exposures proportional toh and
+member weights proportional toE−1i (1−β i), which is the minimum-variance portfolio of the
+compressed problem.
+For duplicated knots¯κi = 1−λ/ 2, and the portfolio moves continuously from variance3/8to
+1/3. WhenS≻ 0this path gives every cluster the same effective dampingλ, which corresponds
+to cluster-specific parametersγi =λ/
+(
+ri + (1−ri)λ
+)
+. It is a different interior path with the same
+two ends, and we do not claim it performs better out of sample. It makes a design choice visible:
+whether clusters should share a nominalγor an effectiveλ.
+11
+Remark 9(Noise around a singular covariance).IfΣis singular and bothΣ + τE andΣ −τE are
+positive semidefinite for someτ >0, thenEker (Σ) = 0. Forv∈ker Σboth signs forcev⊤Ev = 0,
+and a positive semidefinite matrix withv⊤(Σ +τE )v = 0has(Σ + τE )v = 0. Symmetric additive
+noise must therefore preserve the structural null space. A singular sample estimate of a positive
+definite population covariance is a different problem, since its empirical null directions are not
+riskless. In proposition 8 the condition˙w̸= 0becomes˙w⊤Σ ˙w>0.
+9 Cost
+No step forms ann×n inverse. The largest linear solve has dimensionmax(k,maxi|Ii|), as in NCO:
+the outer tier isk×k and each conditioning inverse is(k− 1)× (k− 1). The bridge adds work that
+NCO does not do: the cross-block productsΣi,P−i, and a leave-one-knot-out inverse per cluster,
+obtainable fromΣ−1PP by a rank-one downdate.
+If the gateway model fails,(5) approximates the full complement in(3), and∆i in (7) is what is
+lost.
+10 Closing
+Nested clustered optimization has been treated as belonging to a different family from optimization
+proper: a clustering heuristic that quarantines the instability of Markowitz rather than a relaxation
+of it. This paper shows otherwise. Under a rank-one model of cross-cluster dependence, a Schur
+relaxation places NCO and the global minimum-variance portfolio at the two ends of a one-parameter
+family of portfolios, at a cost no greater than NCO’s own.
+The family has structure. Along it only the knots move, each by an explicit fraction of its
+journey, and the variance given up at every setting is in closed form. It also comes with conditions
+for where to sit under estimation error. The sign of one derivative at the minimum-variance end
+decides whether remaining at that endpoint is optimal out of sample, and a symmetric family
+exhibits both outcomes in a single model, with the optimal coupling exact.
+The separation reasserts itself when the knot covariance is rank deficient. There the parame-
+terization byγ is itself singular, and NCO and the optimum stay apart on it, though a path in
+effective exposure still joins the two ends. The ingredients throughout are old: block inversion, the
+truncation of a conditioning set as in Vecchia approximations, and the damping of [2].
+Two directions are open. Proposition 1 may serve Schur-complementary allocation on the tree,
+where the complement against a sibling block could be taken against that block’s knots. The
+whole-matrix analysis of [7] rests on a scalar reduction specific to the tree and needs a replacement
+here. We leave both, and an empirical comparison, to future work.
+References
+[1] M. López de Prado,Machine Learning for Asset Managers, Cambridge University Press, 2020.
+[2] P. Cotton,Schur complementary allocation: a unification of hierarchical risk parity and
+minimum variance portfolios, arXiv:2411.05807, 2024.
+[3] M. López de Prado,Building diversified portfolios that outperform out of sample, Journal of
+Portfolio Management42(4) (2016), 59–69.
+12
+[4] A. V. Vecchia,Estimation and model identification for continuous spatial processes, Journal of
+the Royal Statistical Society: Series B50(2) (1988), 297–312.
+[5] S. Banerjee, A. E. Gelfand, A. O. Finley, and H. Sang,Gaussian predictive process models for
+large spatial data sets, Journal of the Royal Statistical Society: Series B70(4) (2008), 825–848.
+[6] M. Katzfuss and J. Guinness,A general framework for Vecchia approximations of Gaussian
+processes, Statistical Science36(1) (2021), 124–141.
+[7] P. Cotton,When the out-of-sample-optimal Schur portfolio lies between HRP and
+minimum variance, working paper, 2026. https://schur.microprediction.org/
+neither-end-of-the-bridge.pdf
+13

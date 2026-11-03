@@ -1,0 +1,2533 @@
+arXiv 2606.12612  https://arxiv.org/abs/2606.12612
+
+The Mathematics of Heuristic Portfolio Optimization (HPO)
+Miquel Noguer i Alonso
+Artificial Intelligence Finance Institute
+June 12, 2026
+Abstract
+Practitioners often allocate capital with forecast-light rules such as equal weight, inverse
+volatility, risk parity, HRP, and return-adjusted HRP (RA-HRP). This paper develops
+Heuristic Portfolio Optimization(HPO): portfolio construction as an information-restricted
+projection of the Markowitz/tangency solution onto a stable rule class. The implied-return
+principle,wis maximum-Sharpe iff µe ∝ Σw, yields closed-form optimality sets for the
+main heuristics and exposes the Schur-complement substitutions behind HRP. For RA-HRP
+we add fixed-tree cluster-Sharpe recursion, unit-free HRP–RA-HRP interpolation, nonlinear
+tangency-coincidence conditions, Schur-RA-HRP conditional-risk splits, and pathwise/KL
+decompositions of HRP–RA-HRP weight distortion; a first-order Sharpe calculus along the
+unit-free homotopy expresses the marginal value of return information as a sum of nodewise
+alphas against HRP and certifies a KL trust budget linear in the interpolation weight. We
+then formalize generic HPO maps, define the implied-return defect, prove that it equals
+squared Sharpe inefficiency, characterize tree-HPO coincidence by nodewise mass ratios,
+and give an exact bias–variance decomposition for estimated heuristic rules. The final
+contribution embeds HPO into Reinforcement Learning Portfolio Optimization (RLPO):
+every HPO map induces a deterministic stationary policy; static HPO is the γ = 0 no-friction
+face of the Bellman problem; RA-HRP provides a hierarchical policy prior through node-level
+split probabilities; and dynamic policy improvement is justified exactly when continuation
+value exceeds myopic HPO defect and trading frictions; a performance-difference identity
+prices the total value gap of acting myopically, yielding an ε/(1 −γ ) myopia bound, and the
+nodewise alphas reappear as the myopic policy-gradient coordinates of the hierarchical actor
+at its prior. The resulting framework treats HPO as the static optimality layer and RLPO
+as the dynamic control layer. The conditions remain GRS-testable, transfer to mean–CVaR
+and expected utility under ellipticity, and become Kelly-growth conditions in diffusion limits.
+Keywords:heuristic portfolio optimization, HPO, reinforcement learning portfolio opti-
+mization, RLPO, hierarchical risk parity, return-adjusted HRP, Schur complement, implied
+returns, Sharpe efficiency, policy priors, model ambiguity.
+1
+arXiv:2606.12612v1  [q-fin.PM]  10 Jun 2026
+Contents
+1 Introduction 4
+2 Scope, Standing Assumptions, and Paper Map 6
+2.1 Standing assumptions . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 6
+2.2 Contribution map . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 7
+2.3 What the theory deliberately does not assert . . . . . . . . . . . . . . . . . . . . 7
+3 Setup, the Implied-Return Principle, and the Geometry of Optimality 7
+3.1 Notation . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 7
+3.2 The first-order characterization . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8
+3.3 Efficiency is an angle . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 9
+3.4 The catalogue . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 10
+4 Exact Conditions: Equal Weight, Inverse Volatility, Minimum Variance,
+Maximum Diversification 10
+4.1 Equal weight . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 10
+4.2 Inverse volatility . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 11
+4.3 Minimum variance . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 11
+4.4 Maximum diversification . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 11
+5 One-F actor Structure: Conditions in Observables 12
+6 Risk Parity: Existence, Uniqueness, and Optimality as Performance Parity 12
+6.1 Existence and uniqueness . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 13
+6.2 Optimality . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 13
+7 Hierarchical and Return-Adjusted Hierarchical Risk Parity 14
+7.1 The algorithm . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 14
+7.2 What the optimizer actually does at a split . . . . . . . . . . . . . . . . . . . . . 14
+7.3 Exact coincidence results . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 15
+7.4 Return-adjusted hierarchical risk parity . . . . . . . . . . . . . . . . . . . . . . . 16
+7.5 First-order Sharpe calculus along the HRP–RA-HRP homotopy . . . . . . . . . . 21
+8 The Mathematics of Heuristic Portfolio Optimization (HPO) 23
+8.1 HPO maps as information-restricted portfolio rules . . . . . . . . . . . . . . . . . 24
+8.2 The implied-return defect of a heuristic rule . . . . . . . . . . . . . . . . . . . . . 24
+8.3 Tree HPO: local scores as stochastic kernels . . . . . . . . . . . . . . . . . . . . . 25
+8.4 The exact Schur-tangency split . . . . . . . . . . . . . . . . . . . . . . . . . . . . 26
+8.5 Sampling error, approximation error, and the HPO bias–variance identity . . . . 27
+8.6 The master HPO objective . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 28
+9 F rom HPO to Reinforcement Learning Portfolio Optimization (RLPO) 28
+9.1 Controlled market formulation . . . . . . . . . . . . . . . . . . . . . . . . . . . . 29
+9.2 Continuation value versus myopic HPO defect . . . . . . . . . . . . . . . . . . . . 30
+9.3 The exact value gap of an HPO policy . . . . . . . . . . . . . . . . . . . . . . . . 31
+9.4 HPO-regularized RLPO objectives . . . . . . . . . . . . . . . . . . . . . . . . . . 32
+9.5 RA-HRP as a hierarchical policy prior . . . . . . . . . . . . . . . . . . . . . . . . 32
+9.6 Tree topology, regime shifts, and the dynamic open problem . . . . . . . . . . . . 33
+9.7 Operational blueprint . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 34
+2
+10 T ransfer: Elliptical Risk Measures and Growth Optimality 35
+10.1 Elliptical transfer . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 35
+10.2 Growth-optimal transfer . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 35
+11 Symmetry and Bayes Optimality: When the Heuristic Is the Optimizer 36
+12 Ambiguity , Robustness, and Estimation 37
+13 Constrained, Costly , and Implementable Optimality 38
+13.1 Normal-cone optimality under mandate constraints . . . . . . . . . . . . . . . . . 38
+13.2 Transaction-cost wedges . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 39
+13.3 Benchmark-relative and factor-neutral mandates . . . . . . . . . . . . . . . . . . 40
+14 Estimation Geometry , High-Dimensional Risk, and Empirical Diagnostics 40
+14.1 First-order sensitivity of tangency weights . . . . . . . . . . . . . . . . . . . . . . 40
+14.2 Projection onto a heuristic optimality set . . . . . . . . . . . . . . . . . . . . . . 41
+14.3 GRS and spanning tests as optimality tests . . . . . . . . . . . . . . . . . . . . . 41
+14.4 High-dimensional covariance and the inversion tax . . . . . . . . . . . . . . . . . 42
+14.5 A reproducible empirical protocol . . . . . . . . . . . . . . . . . . . . . . . . . . . 42
+14.6 Computational profile of the allocation ladder . . . . . . . . . . . . . . . . . . . . 43
+15 Non-Elliptical T ails, Downside Risk, and Where the Conditions Break 43
+16 Synthesis: The Optimality Map 44
+17 Limitations and Open Problems 48
+18 Conclusion 48
+A T echnical Appendix: Identities Used Repeatedly 50
+A.1 Block inverse and Schur complement . . . . . . . . . . . . . . . . . . . . . . . . . 50
+A.2 Ray projection . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 50
+A.3 Tree products and binary KL . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 50
+3
+1 Introduction
+Seventy years after Markowitz (1952), a striking share of institutional capital is allocated by
+rules that refuse to optimize. The equal-weight portfolio ignores both means and covariances;
+inverse-volatility weighting uses only marginal volatilities; equal-risk-contribution (ERC, “risk
+parity”) portfolios use the full covariance matrix but no means (Maillard et al., 2010; Roncalli,
+2013; Qian, 2006); maximum diversification uses volatilities and covariances in a specific ratio
+(Choueifaty and Coignard, 2008); hierarchical risk parity (HRP) uses the covariance matrix only
+through a clustering tree and a sequence of within-cluster variances (L´ opez de Prado, 2016);
+and return-adjusted HRP (RA-HRP) keeps the tree but lets local cluster-Sharpe scores tilt the
+recursive budget (Noguer i Alonso, 2026). The key refinement is not merely that RA-HRP uses
+expected returns, but that return information is consumed locally, after clustering, through
+dimensionless split fractions that can be interpolated continuously from HRP without mixing
+inverse variances and Sharpe ratios. The standard defense of these rules is empirical: optimized
+portfolios inherit estimation error in µ at first order (Merton, 1980; Michaud, 1989; Best and
+Grauer, 1991; Chopra and Ziemba, 1993), and naive rules are hard to beat out of sample
+(DeMiguel et al., 2009).
+We use the termHeuristic Portfolio Optimization(HPO) for this discipline: the mathematical
+study of portfolio maps that deliberately consume less information than the full Markowitz
+optimizer, together with the exact optimality, efficiency, estimation, and belief conditions under
+which that deletion of information is harmless or beneficial. In this sense HPO is not the opposite
+of optimization. It is optimization after restricting the admissible decision maps to those that
+are stable, interpretable, low-inversion, low-turnover, or compatible with a reduced information
+set.
+This paper develops the theory behind that practice at five levels of depth.
+Level 1: exact optimality conditions.The implied-return principle (Theorem 3.3) states
+that a fully invested portfolio with positive expected excess return is maximum-Sharpe if and
+only if expected excess returns are proportional toΣw. Consequentlyeveryheuristic is optimal
+forsomeparameter configuration, and the substantive object is the exact shape of itsoptimality
+set
+O(w◦) ={(µ e,Σ) :µ e =aΣw ◦, a >0},
+because adopting the rule is behaviorally equivalent to asserting membership. We compute this
+set in closed form for every rule in common use (Sections 4–7): zero alpha against itself for equal
+weight (Theorem 4.1); Sharpe ratios proportional to correlation row sums for inverse volatility
+(Theorem 4.3); equal premia for minimum variance (Theorem 4.5); equal Sharpe ratios, with no
+restriction on correlations, for maximum diversification (Theorem 4.7); and, for risk parity, the
+new characterization that the equalriskbudget must double as an equalperformancebudget,
+wiµe,i constant (Theorem 6.2), of which the equal-Sharpe/constant-correlation condition of
+Maillard et al. (2010) is a corollary and demonstrably far from necessary. For HRP we first derive
+the exact Schur-complement bisection identity satisfied by the true minimum-variance portfolio
+(Theorem 7.2), which isolates the three substitutions the algorithm makes — raw block for Schur
+complement, flat budget for tilted budget, inverse variance for within-cluster minimum variance —
+and then prove the two regimes in which all three are simultaneously costless: diagonal covariance
+underanydendrogram (Theorem 7.5) and uncorrelated exchangeable blocks under balanced tree-
+aligned bisection (Proposition 7.6), together with the minimal two-asset counterexample marking
+the boundary (Remark 7.7). For RA-HRP we show that adding returns changes the optimality
+set from a ray to a nonlinear fixed-point set: the exact condition is µe = aΣΦRAT,ε (µe, Σ),
+equivalently node-by-node equality between the RA-HRP floored cluster-Sharpe split and the
+exact Schur-tangency split (Theorem 7.15). We also prove a two-asset boundary result, a
+balanced equal-volatility diagonal exactness result, and a pathwise/KL decomposition of the
+4
+distortion from HRP to RA-HRP (Corollary 7.20, Proposition 7.21, Theorem 7.22). A first-order
+Sharpe calculus along the homotopy (Section 7.5) then computes the derivative of efficiency
+in the interpolation weight as a sum of nodewise alphas against HRP itself (Theorem 7.27),
+making the marginal value of return information a GRS-estimable quantity, and bounds the
+induced reallocation by a KL trust budget linear in λ (Proposition 7.29). The interpolation from
+HRP to RA-HRP is made at the level of local branch probabilities rv, sv ∈ (0, 1), not by adding
+inverse-variance scores to Sharpe scores; this unit-free homotopy is the mathematically clean way
+to control how much local return information enters the hierarchy. We then add Schur-RA-HRP,
+which replaces standalone cluster risk by conditional Schur risk and therefore targets exactly the
+cross-cluster covariance gap diagnosed by the HRP Schur identity.
+Level 2: the geometry and cost of suboptimality .Conditions that hold on a measure-
+zero set would be a curiosity unless violations were cheap. Both halves are theorems. The
+Sharpe ratio ofanyportfolio obeys the exact angular identity S(w) = Smax cosθ Σ(w, wT ) in
+theΣ-inner product (Theorem 3.7): inefficiency is purely angular. Each optimality set is a
+ray — Lebesgue-null in RN — so under any diffuse belief, exact optimality of a fixed heuristic
+is a probability-zero event (Proposition 3.8). Yet the efficiency map isstationaryon the set:
+perturbing µe off the coincidence ray by εv degrades squared Sharpe efficiency by an explicitly
+computable O(ε2) term whose coefficient is a generalized residual variance (Theorem 3.9). Never
+optimal, rarely costly — with the rate and the constant. Each condition is moreover a zero-
+intercept restriction in time-series regressions on the heuristic itself, hence directly testable by
+the F -test of Gibbons et al. (1989,C) (Remark 3.6). Under one-factor structure, every condition
+becomes a statement about observable betas and idiosyncratic variances (Section 5), including
+a self-contained derivation of the minimum-variance threshold-beta representation of Clarke
+et al. (2011) and the result that maximum diversification is optimal in a priced one-factor world
+precisely when all assets are equally correlated with the factor.
+Level 3: in what sense the heuristics are right.Two transfer theorems show the conditions
+are not artifacts of the quadratic objective: under elliptical returns they govern mean–CVaR
+optimality at every confidence level and expected-utility optimality for every risk-averse investor
+(Theorem 10.2), and in the continuous-time limit they are simultaneously the conditions for
+(fractional) Kelly growth optimality (Proposition 10.3). The deepest reading then inverts the
+question: each heuristic is theexactly optimalpolicy of an investor whose information set is
+smaller than (µe, Σ), with ignorance resolved by symmetry. We prove Bayes-optimality theorems
+at three rungs (Section 11): full exchangeability of beliefs forces the Bayes portfolio to be
+1/N (Theorem 11.3); exchangeability of beliefs aboutstandardizedreturns, volatilities known,
+forces inverse volatility (Theorem 11.4); and conjugate mean uncertainty with an uninformative
+premium prior forces minimum variance (Proposition 11.5). The 1 /N rule is also the exact limit
+of distributionally robust optimization as the ambiguity radius diverges (Pflug et al., 2012,C),
+and constraint-induced shrinkage (Jagannathan and Ma, 2003,C) plays the analogous role for
+minimum variance. Comparable foundations for ERC and HRP are, to our knowledge, open; we
+say so explicitly rather than assert them.
+Level 4: implementation and statistical diagnostics.The population theory is extended
+to mandate constraints and trading frictions. For any closed convex feasible set, exact optimality
+becomes a normal-cone implied-return condition: residual alphas must be shadow prices of active
+constraints (Theorem 13.1); with quadratic transaction costs, implied returns acquire an explicit
+turnover wedge (Proposition 13.4). We then derive the first differential of the tangency map
+(Theorem 14.1), showing exactly why mean errors dominate covariance errors, convert every
+optimality condition into a projection diagnostic against its implied-return ray (Proposition 14.3),
+state the usable GRS formula, and add the high-dimensional random-matrix inversion tax for
+5
+plug-in GMV (Proposition 14.6). Finally, we isolate the exact place where the elliptical transfer
+fails: nonconstant standardized tail shape adds a first-order downside-risk wedge.
+Level 5: HPO as the static policy face of RLPO.The final layer connects the static
+theory to Reinforcement Learning Portfolio Optimization (RLPO). An HPO rule Φ is a statewise
+portfolio map; in a Markov decision problem it therefore induces the deterministic stationary
+policy πΦ(· |s) = δΦ(s). When the discount factor is zero, trading frictions are absent, and the
+one-period reward is the same static objective used by HPO, the Bellman problem collapses
+exactly to the HPO problem. For γ >0, state-dependent costs, regime transitions, and feedback
+effects, RLPO is the dynamic policy-improvement operator over the HPO prior. The paper
+formalizes this bridge in Section 9: the HPO implied-return defect becomes a reward-shaping
+penalty, RA-HRP becomes a hierarchical actor prior through node-level branch probabilities,
+and dynamic deviations from HPO are justified precisely when continuation value exceeds
+myopic HPO inefficiency and turnover costs. A performance-difference identity (Proposition 9.7)
+prices the total value gap of the myopic policy as an occupancy-weighted HPO advantage
+with an ε/(1 −γ ) myopia bound (Corollary 9.8), and the nodewise alphas of the homotopy
+calculus reappear as the myopic policy-gradient coordinates of the hierarchical actor at its prior
+(Corollary 9.10).
+Claim tiering.Following the discipline used throughout our research program, every result is
+labeled.Pmarks results proved in this paper with self-contained proofs;Cmarks results proved
+in the cited literature and stated without proof;Emarks empirical regularities reported in cited
+work. We make no conjectural claims and report no numerics of our own.
+2 Scope, Standing Assumptions, and Paper Map
+This section fixes the boundary of the results. The paper does not claim that any single
+heuristic dominates out of sample, nor that a neural policy can replace portfolio theory. It claims
+something narrower and stronger: for each information-restricted allocation map, one can write
+the exact population condition under which the rule is optimal, the exact geometric loss when it
+is not, the statistical diagnostics that test the condition, and the dynamic Bellman inequality
+that decides whether an RL policy should deviate from it.
+2.1 Standing assumptions
+Unless explicitly stated otherwise, the paper uses the following standing assumptions.
+A1. Finite asset universe.There are N <∞ risky assets and a riskless asset with rate rf .
+Expected excess returns areµ e =µ−r f 1and the covariance matrix satisfiesΣ≻0.
+A2. Population versus implementation.Population statements use the true pair ( µe, Σ).
+Estimated rules replace this pair by statewise estimates ( bµe,t, bΣt) and are analyzed sepa-
+rately through sampling, turnover, and diagnostic terms.
+A3. Feasibility.The baseline tangency and mean–variance results are stated on the fully
+invested affine hyperplane. Long-only constraints, caps, benchmark bands, and transaction-
+cost wedges are introduced explicitly in Section 13 through normal cones and cost-adjusted
+implied returns.
+A4. Rule versus family .A fixed heuristic is a map Φ from a reduced information statistic to
+the simplex. A tunable heuristic family {Φλ} is selected by projecting the full optimizer
+onto a lower-complexity image set, not by pretending that the heuristic image set equals
+the full feasible set.
+6
+A5. Tree stability.HRP, RA-HRP, and Schur-RA-HRP are first analyzed for a fixed tree.
+Rolling-window implementations with re-estimated dendrograms add a discrete topology
+layer; the relevant quantities are merge preservation, cophenetic perturbation, and pathwise
+split distortion.
+A6. Claim tiering.A labelPin a result header denotes a result proved here,Cdenotes a
+cited theorem or classical result used without reproving it, andEdenotes an empirical
+regularity reported in the literature. Open problems are explicitly marked as open.
+2.2 Contribution map
+Layer Question answered Mathematical object produced
+Static optimality When is a named heuristic exactly
+Markowitz/tangency optimal?
+Implied-return sets {µe = aΣw} and
+rule-specific coincidence restrictions.
+Approximate effi-
+ciency
+If exact optimality is generically false,
+how costly is misspecification?
+Angular Sharpe identity and second-
+order efficiency expansion around each
+coincidence ray.
+Hierarchical HPO What information does HRP delete,
+and what does RA-HRP restore?
+Schur-bisection identity, score-tree ker-
+nels, pathwise/KL split attribution,
+and Schur-RA-HRP conditional-risk
+scores.
+Statistical imple-
+mentation
+Why can a biased heuristic beat a plug-
+in optimizer?
+Exact mean–variance bias–variance
+identity, tangency-map differential,
+GRS/Wald diagnostics, and high-
+dimensional inversion tax.
+Dynamic policy im-
+provement
+How should a learned policy use a
+heuristic prior?
+HPO-induced stationary policies,
+deviation inequality, performance-
+difference identity, and nodewise
+hierarchical actor gradients.
+T able 1:Contribution map: each layer converts a practitioner question into a theorem-level object.
+2.3 What the theory deliberately does not assert
+The framework is falsifiable. A heuristic can fail its zero-alpha or implied-return condition,
+exhibit a large angular loss, generate excessive turnover after realistic costs, or break down under
+non-elliptical tail-shape heterogeneity. A learned RLPO policy can also fail if its continuation-
+value gain is not large enough to pay for added HPO defect and trading frictions. These are not
+exceptions to the theory; they are exactly the diagnostics the theory prescribes.
+3 Setup, the Implied-Return Principle, and the Geometry of
+Optimality
+3.1 Notation
+There are N risky assets with return vectorr, mean µ = E[r], and covariance matrixΣ ≻ 0. A
+riskless rate rf is available; µe = µ−r f 1denotes expected excess returns, assumed nonzero.
+Volatilities are σi = √Σii, D = diag(σ1, . . . , σN ), and the correlation matrix is R = D−1ΣD−1,
+soΣ= DRD. Sharpe ratios are Si = µe,i/σi. A portfolio isw ∈R N , fully invested if
+1⊤w= 1. Portfolio variance is σ2p(w) =w ⊤Σw, the Sharpe ratio is S(w) =w ⊤µe/σp(w), and
+⟨u,v⟩ Σ =u ⊤Σv,∥u∥ Σ =⟨u,u⟩ 1/2Σ denote theΣ-inner product and norm.
+7
+Definition 3.1(Tangency coincidence).Assume1 ⊤Σ−1µe > 0. Thetangency(maximum-
+Sharpe) portfolio is
+wT = Σ−1µe1⊤Σ−1µe , S max :=S(w T ) = qµ⊤e Σ−1µe.(3.1)
+A fully investedw ◦ coincides with the tangency portfolioifw ◦ =w T . This is the canonical
+notion of optimality in this paper: with a riskless asset, every mean–variance investor holds cash
+plusw T , so a heuristic equal tow T is optimal for all risk aversions simultaneously.
+Definition 3.2(Frontier membership).A fully investedw ◦ isfrontier-efficientif it solves
+maxw{w⊤µ− λ2 w⊤Σw:1 ⊤w= 1}for someλ >0.
+3.2 The first-order characterization
+Theorem 3.3(Implied-return principle;P).Letw ◦ be fully invested.
+(i)w ◦ =w T if and only if there existsa >0such that
+µe =aΣw ◦.(3.2)
+(ii)w ◦ is frontier-efficient if and only if there exista >0andb∈Rsuch that
+µ=aΣw ◦ +b1.(3.3)
+Proof. (i) If µe = aΣw◦ with a >0, thenΣ −1µe = aw◦, and normalizing by1 ⊤Σ−1µe = a >0
+(using1 ⊤w◦ = 1) givesw T =w ◦. Conversely, ifw ◦ =w T then µe = (1⊤Σ−1µe)Σw ◦ with
+positive scalar.
+(ii) The program in Definition 3.2 is strictly concave with one affine constraint; the Karush–
+Kuhn–Tucker conditions µ−λ Σw −γ 1= 0,1 ⊤w= 1 are necessary and sufficient. Identify
+a=λ,b=γ.
+Corollary 3.4(Reverse optimization;P, classical).Every fully investedw ◦ withw ◦⊤Σw◦ > 0
+is the tangency portfolio of theimpliedexcess returns µimpe =Σw ◦ (up to positive scaling), and
+frontier-efficient forΣw ◦ +b1, anyb.
+This is the reverse-optimization step of Black and Litterman (1992) and the sensitivity
+logic of Best and Grauer (1991). Its consequence is worth stating bluntly:no heuristic can be
+unconditionally suboptimal. The substantive question is the shape of the optimality set, because
+adopting the rulew ◦ is behaviorally equivalent to asserting (µ e,Σ)∈ O(w◦).
+Remark 3.5(Beta form).Condition (3.2) says expected excess returns are proportional to
+covariances with the candidate: µe,i = aCov (ri, w◦⊤r). Dividing by the candidate’s own excess
+return gives the exact one-factor pricing relation
+µe,i =β i(w◦)  w◦⊤µe, β i(w◦) = Cov(ri,w ◦⊤r)Var(w◦⊤r) .(3.4)
+A heuristic is maximum-Sharpe iff no asset has alpha against it — it prices the cross-section
+as if it were the market portfolio of a one-factor CAPM (Sharpe, 1964). All conditions below
+specialize(3.4).
+Remark 3.6(Testability;C).Relation (3.4) is the null hypothesis α = 0in the system of
+time-series regressions re,i,t = αi + βi r◦e,t + ϵi,t where r◦e,t is the heuristic’s realized excess return.
+Hence every optimality condition in this paper is directly testable by the finite-sample F -statistic
+of Gibbons et al. (1989) for the mean–variance efficiency of a given portfolio: “is equal weight
+8
+optimal in this universe” is a GRS test with the equal-weight portfolio as the candidate factor, and
+identically for IV, ERC, MD, GMV, HRP, and any fixed realization of RA-HRP. If the RA-HRP
+weights are estimated from the same return panel used in the test, the clean interpretation
+requires a split-sample or out-of-sample implementation; conditionally on the realized candidate
+weights, the GRS null is still the same zero-alpha restriction. The asymptotic and finite-sample
+distribution theory is otherwise standard.
+3.3 Efficiency is an angle
+Coincidence conditions classify the boundary; the angular identity measures everything else.
+Theorem 3.7(Angular efficiency identity;P).For any portfoliow̸= 0,
+S(w) =S max cosθ Σ(w,w T ),cosθ Σ(w,w T ) := ⟨w,w T ⟩Σ∥w∥Σ ∥wT ∥Σ .(3.5)
+In particular the Sharpe efficiency η(w) := S(w)/Smax = cosθ Σ, and1 −η (w)2 = sin2 θΣ
+exactly. A portfolio attains the maximum Sharpe ratio iff it isΣ-parallel toΣ −1µe, recovering
+Theorem 3.3(i).
+Proof. Let ˜w =Σ −1µe (unnormalized tangency direction). Thenw ⊤µe =w ⊤Σ ˜w = ⟨w, ˜w⟩Σ
+and∥ ˜w∥2Σ =µ ⊤e Σ−1µe =S 2max. Hence
+S(w) = ⟨w, ˜w⟩Σ
+∥w∥Σ
+=∥ ˜w∥Σ
+⟨w, ˜w⟩Σ
+∥w∥Σ∥ ˜w∥Σ
+=S max cosθ Σ(w, ˜w),
+andθ Σ(w, ˜w) =θ Σ(w,w T ) sincew T ∝ ˜wwith positive constant.
+The identity converts every question about heuristic performance into a question about an
+angle in the metric defined by risk itself. Two structural consequences follow: optimality sets
+are thin, and the efficiency surface is flat across them.
+Proposition 3.8(Genericity: exact optimality is null;P).FixΣ ≻ 0and a fully investedw ◦.
+The tangency-coincidence set OΣ(w◦) = {µe : µe = aΣw◦, a >0} is an open ray — a one-
+dimensional, Lebesgue-null subset of RN for N≥ 2. The frontier set {µ : µ = aΣw◦ +b1, a >0}
+is an open half-plane, null for N≥ 3. Consequently, under any belief about µe (or µ) absolutely
+continuous with respect to Lebesgue measure, the probability that a fixed heuristic is exactly
+maximum-Sharpe (exactly frontier-efficient) is zero.
+Proof. The sets are images of (0 ,∞ ) and (0 ,∞ ) ×R under injective affine maps, hence smooth
+manifolds of dimension 1 and 2; sets of dimension < Nhave Lebesgue measure zero, and null
+sets have probability zero under absolutely continuous laws.
+Theorem 3.9(Second-order robustness;P).FixΣ ≻ 0, a fully investedw ◦ with A :=
+w◦⊤Σw◦ > 0, and a point on the coincidence ray µ0e = aΣw◦, a >0. Perturb in an arbitrary
+direction v∈R N : µe(ε) = aΣw◦ + εv. Then the squared Sharpe efficiency ofw ◦ satisfies,
+exactly,
+η2(ε) = (aA+εb) 2
+A
+ 
+a2A+ 2aεb+ε 2c , b:=v ⊤w◦, c:=v ⊤Σ−1v,(3.6)
+and therefore
+1−η 2(ε) = ε2
+a2 · cA−b 2A2 +O(ε 3), cA−b 2 ≥0,(3.7)
+with cA−b 2 = 0iff v is itself on the ray ( v∝ Σw◦). In particular ddε η2ε=0 = 0forevery
+direction v: the efficiency map is stationary on the coincidence set, and the leading loss is
+quadratic with coefficient equal to theΣ −1-residual ofvafter projection on the ray.
+9
+Proof.S (w◦)2 = (w◦⊤µe)2/A = (aA + εb)2/A and S2max = µ⊤e Σ−1µe = a2A + 2aεb + ε2c, giving
+(3.6). Expanding,
+η2 = a2A2 + 2aεbA+ε 2b2
+a2A2 + 2aεbA+ε 2cA = 1−ε 2 cA−b 2a2A2 +O(ε 3).
+Nonnegativity of cA−b 2 is Cauchy–Schwarz in theΣ −1-inner product applied to v andΣw ◦:
+⟨v,Σw ◦⟩Σ−1 =v ⊤w◦ =band∥Σw ◦∥2Σ−1 =A, sob 2 ≤cAwith equality iffv∥Σw ◦.
+Remark 3.10(Never optimal, rarely costly).Proposition 3.8 and Theorem 3.9 jointly formalize
+the folklore. Exact optimality of any fixed rule is a probability-zero event; but because the efficiency
+surface has a vanishing gradient on the entire coincidence ray, an order- ε misspecification of
+premia costs only order- ε2 in squared Sharpe efficiency. The same flatness, viewed from the
+optimizer’s side, is the source of mean–variance instability — the optimum moves at order ε
+while the objective moves at order ε2 (Best and Grauer, 1991; Michaud, 1989; Chopra and
+Ziemba, 1993) — so a single geometric fact explains simultaneously why heuristics are cheap
+and why optimizers are fragile.
+3.4 The catalogue
+Definition 3.11(Allocation rules).All rules are fully invested and long-only by construction.
+Equal weight (EW):w i = 1/N.(3.8)
+Inverse volatility (IV):w i =σ −1i
+. P
+j σ−1j .(3.9)
+Inverse variance (IVar):w i =σ −2i
+. P
+j σ−2j .(3.10)
+Global minimum variance (GMV):w GMV =Σ −111⊤Σ−11.(3.11)
+Equal risk contribution (ERC):w i (Σw)i = w⊤ΣwN ∀i,w>0,1 ⊤w= 1.(3.12)
+Maximum diversification (MD):w MD = arg max
+1⊤w=1
+w⊤σ√
+w⊤Σw .(3.13)
+Hierarchical risk parity (HRP): Definition 7.1 below. (3.14)
+The MD portfolio satisfiesw MD ∝ Σ−1σ by the argument of Theorem 3.3(i) with σ in place
+of µe; whenΣ −1σ has negative entries the long-only MD portfolio differs, and our statements
+concern the unconstrained solution. Existence and uniqueness of ERC is Theorem 6.1 below.
+4 Exact Conditions: Equal W eight, Inverse V olatility , Minimum
+Variance, Maximum Diversification
+4.1 Equal weight
+Theorem 4.1(P).The equal-weight portfolio coincides with the tangency portfolio if and only
+if
+µe ∝Σ1(positive constant),(4.1)
+i.e. iff every asset’s expected excess return is proportional to its covariance with the equal-weight
+portfolio — equivalently, every asset has zero alpha in (3.4) withw ◦ =1 /N. It is frontier-efficient
+iffµ∈ {aΣ1+b1:a >0, b∈R}.
+Proof. Theorem 3.3 withw ◦ =1 /N. For the beta form: with µe = c Σ1, c >0, βi · (1⊤µe/N) =
+N(Σ1) i
+1⊤Σ1 · c1 ⊤Σ1N =c(Σ1) i =µ e,i.
+10
+Corollary 4.2(Symmetry suffices;P).If µe = m1with m >0andΣ1= c1(equal row sums;
+e.g. equal volatilities with constant correlation, or any( µe, Σ)invariant under all permutations
+of assets), then EW is the tangency portfolio.
+Proof.µ e = m1= ( m/c)Σ1, c =1 ⊤Σ1/N >0. Permutation invariance forces both hypotheses.
+Note what isnotrequired: volatilities need not be equal and correlations need not be
+constant. The exact requirement couples means to covariance row sums; an asset may carry
+twice the covariance with the market of another provided it also carries twice the risk premium.
+Section 11 upgrades the symmetry observation from a sufficient condition on parameters to a
+Bayes-optimality theorem on beliefs.
+4.2 Inverse volatility
+Theorem 4.3(P).WriteΣ= DRD. The inverse-volatility portfolio coincides with the tangency
+portfolio if and only if
+Si ∝(R1) i =
+NX
+j=1
+ρij ∀i(positive constant) : (4.2)
+each asset’s Sharpe ratio must be proportional to the row sum of its correlations.
+Proof. wIV ∝D −11; coincidence iff µe ∝ ΣD−11= DRD D−11= DR1, i.e. µe,i ∝σ i(R1)i, i.e.
+Si ∝(R1) i, positive constants throughout.
+Corollary 4.4(P).If Si ≡S > 0and R has equal row sums, R1= κ1— in particular under
+constant pairwise correlation ρ >−1/(N− 1), where κ = 1 + (N− 1)ρ >0— then IV is the
+tangency portfolio.
+4.3 Minimum variance
+Theorem 4.5(P).The GMV portfolio coincides with the tangency portfolio if and only if
+expected excess returns are equal across assets:µ e =m1,m >0.
+Proof.Σ −1µe ∝Σ −11(positive constant) iffµ e ∝1, sinceΣ −1 is a bijection.
+Remark 4.6.GMV is always frontier-efficient — the vertex of the frontier — so the content
+of Theorem 4.5 concerns coincidence with the portfolio every investor holds when a riskless
+asset exists. The equal-premium condition is the formal statement of the agnosticism motivating
+minimum-variance investing (Clarke et al., 2011): GMV is the optimizer of an investor who
+believes risk is forecastable and premia are not. Proposition 11.5 makes the belief statement
+exact.
+4.4 Maximum diversification
+Theorem 4.7(P).The (unconstrained) maximum-diversification portfolio coincides with the
+tangency portfolio if and only if all Sharpe ratios are equal: µe ∝σ , positive constant. No
+restriction onRis required.
+Proof. wMD ∝ Σ−1σ,w T ∝ Σ−1µe; equality up to positive scaling iff µe ∝σ . At the level
+of objectives: if µe = Sσ then S(w) = S· w⊤σ/σp(w), so the Sharpe functional and the
+diversification ratio are positive multiples and share a maximizer.
+This was the design premise of Choueifaty and Coignard (2008): MD is the bet that risk
+is priced uniformly per unit of volatility. Comparing Theorems 4.3 and 4.7 quantifies the gap
+between IV and MD: both encode equal Sharpe ratios, but IV additionally requires equal
+correlation row sums, because it ignores the correlation structure MD inverts.
+11
+5 One-Factor Structure: Conditions in Observables
+The conditions above restrict the unobservable pair ( µe, Σ). Under one-factor structure they
+become statements about betas and idiosyncratic variances — quantities the practitioner actually
+estimates.
+Assumption 5.1(Priced one-factor model). re,i = βife + ui with E[fe] = λm > 0, Var(fe) = σ2m,
+E[ui] = 0, Cov(ui, uj) = δ2i 1{i = j}, Cov(fe, ui) = 0. Hence µe = λmβ andΣ= σ2mββ⊤ + ∆,
+∆ = diag(δ21, . . . , δ2N )≻0. Exact pricing (α= 0) is part of the assumption.
+Lemma 5.2(Sherman–Morrison;P).Under Assumption 5.1, withq:=β ⊤∆−1β,
+Σ−1 = ∆−1 − σ2m ∆−1ββ⊤∆−1
+1 +σ 2mq ,Σ −1β= ∆−1β1 +σ 2mq .
+Proof. The first display is the Sherman–Morrison identity for the rank-one updateΣ= ∆ +
+(σmβ)(σmβ)⊤. Applying it to β:Σ −1β = ∆−1β−σ 2m∆−1βq/ (1 +σ2mq) = ∆−1β/ (1 +σ2mq).
+Proposition 5.3(Tangency and GMV in observables;P; GMV form after Clarke et al., 2011).
+Under Assumption 5.1:
+(i) The tangency portfolio isw T ∝∆ −1β, i.e.w T,i ∝β i/δ2i .
+(ii) The GMV portfolio admits the threshold-beta representation
+wGMV,i ∝ 1δ2i 1− βiβL , β L = 1 +σ 2m β⊤∆−1βσ2m β⊤∆−11 ,
+(assumingβ ⊤∆−11>0): assets withβ i > βL are shorted, and long-only GMV concentrates
+in low-beta, low-idiosyncratic-risk names.
+(iii) Coincidence conditions in observables: EW is tangency iff βi ∝δ 2i ; IVar is tangency iff
+βi ∝δ 2i /σ2i ; IV is tangency iff βi ∝δ 2i /σi; GMV is tangency iff βi is constant (consistent
+with (ii): constant betas givew GMV ∝ ∆−11 ∝ wT ); MD is tangency iff βi ∝σ i, i.e. iff all
+assets have the same correlation with the factor,Corr(r i, f) =βiσm/σi constant.
+Proof.(i)w T ∝Σ −1µe =λ mΣ−1β∝∆ −1βby Lemma 5.2. (ii) Apply Lemma 5.2 to1:
+Σ−11= ∆ −11− σ2m(β⊤∆−11)1 +σ 2mq ∆−1β=⇒(Σ −11)i = 1δ2i 1− βiβL 
+with βL as displayed. (iii) Each statement is Theorem 3.3(i): the heuristic must be proportional
+to ∆ −1β. EW:1 ∝ ∆−1β⇐ ⇒β i ∝δ 2i . IVar: D−21 ∝ ∆−1β⇐ ⇒β i ∝δ 2i /σ2i . IV:
+D−11 ∝ ∆−1β⇐ ⇒β i ∝δ 2i /σi. GMV: µe ∝ 1(Theorem 4.5) iff βi constant. MD: µe ∝σ
+(Theorem 4.7) iffλ mβi ∝σ i.
+Statement (iii) is the practical payoff: in a priced single-factor world, the question “which
+heuristic should be closest to optimal in this universe” reduces to inspecting the cross-sectional
+relation between βi, δ2i , and σi — no premium estimates required, because exact pricing has
+already collapsedµ e ontoβ.
+6 Risk Parity: Existence, Uniqueness, and Optimality as Per-
+formance Parity
+Risk contributions RCi(w) = wi(Σw)i satisfy the Euler identity Pi RCi = σ2p, which underwrites
+their interpretation as a decomposition of risk (Qian, 2006). Define analogously theperformance
+contributionPC i(w) =w i µe,i, with Pi PCi =w ⊤µe.
+12
+6.1 Existence and uniqueness
+Theorem 6.1(P; cf. Maillard et al., 2010; Roncalli, 2013).For everyΣ ≻ 0there exists exactly
+one fully investedw>0with equal risk contributions.
+Proof. Fix c >0 and consider Fc(w) = 12 w⊤Σw −c Pi lnw i on the open orthant RN++. Fc is
+strictly convex (Σ ≻ 0 plus convexity of −ln ) and coercive: Fc → ∞as ∥w∥ → ∞(the quadratic
+dominates the logarithm) and as any wi ↓ 0 (the barrier diverges; on bounded sets the quadratic
+and the remaining logarithms are bounded below). Hence a unique minimizerw( c) ∈R N++ exists,
+characterized by the first-order conditionΣw= c w−1 (elementwise reciprocal), i.e. wi(Σw)i = c
+for all i: every barrier solution is an unnormalized ERC portfolio. The family is a single ray: if
+Σw= c w−1 thenΣ( tw) = (t2c) (tw)−1, sow( t2c) = t w(c). Normalizing to the simplex gives
+existence. For uniqueness, supposeu , vare both fully invested ERC portfolios with constants
+cu =u ⊤Σu/N, cv. Thenu=w( cu) andv=w( cv) by uniqueness of barrier minimizers, and by
+the ray propertyv=tuwitht=
+p
+cv/cu; full investment of both forcest= 1.
+6.2 Optimality
+Theorem 6.2(ERC optimality = performance parity;P).Letwbe the ERC portfolio. Then
+wcoincides with the tangency portfolio if and only if performance contributions are also equal:
+wi µe,i = w⊤µeN ∀i.(6.1)
+Proof. Sincewis ERC, (Σw) i = σ2p/(N wi), wi > 0. By Theorem 3.3(i), coincidence holds iff
+µe = aΣw, a >0, i.e. iff µe,i = aσ2p/(N wi) for all i, i.e. iff wiµe,i is constant; summing identifies
+the constant, anda >0 iffw ⊤µe >0.
+The economic reading is sharp: a risk parity portfolio is mean–variance optimal precisely
+when the equal risk budget doubles as an equalreturnbudget — each line contributes the same
+expected excess return in currency terms. When risk budgets and performance budgets disagree
+under the trueµ e, ERC is on neither the tangency ray nor, generically, the frontier.
+Corollary 6.3(Frontier version;P).The ERC portfolio is frontier-efficient iff there exist κ >0,
+b∈R with wiµi = κ + b wi for all i: performance contributions affine in weights, with the
+tangency caseb=r f ·1-adjusted to(6.1).
+Proof. Theorem 3.3(ii) with (Σw) i = σ2p/(N wi): µi = aσ2p/(N wi) + b⇐ ⇒w iµi = aσ2p/N +
+b wi.
+Theorem 6.4(Budgeted generalization;P).Let bi > 0, Pi bi = 1, and letwsatisfy RCi(w) =
+bi σ2p. Thenwcoincides with the tangency portfolio iff PCi(w) = bi w⊤µe for all i: performance
+must be budgeted in the same proportions as risk.
+Proof.As in Theorem 6.2 withσ 2p/Nreplaced byb iσ2p.
+Proposition 6.5(Constant correlation collapses ERC to IV;P, after Maillard et al., 2010).If
+R = (1 −ρ )I + ρ 11⊤ with ρ >−1/(N− 1), the ERC portfolio is the inverse-volatility portfolio.
+Proof. Take wi = σ−1i /T , T = Pj σ−1j . Then (Σw) i = σi Pj ρijσjwj = σiT  1 + (N− 1)ρ, so
+wi(Σw)i = (1 + (N−1)ρ)/T 2 is constant. Conclude by Theorem 6.1.
+Corollary 6.6(Sufficient condition of Maillard et al., 2010;P).Equal Sharpe ratios and constant
+pairwise correlation imply that ERC coincides with the tangency portfolio.
+Proof.Proposition 6.5 gives ERC = IV; Corollary 4.4 gives IV = tangency.
+13
+Remark 6.7(The sufficient condition is far from necessary;P).By Corollary 3.4, takeany
+Σ ≻ 0— in particular one with wildly non-constant correlations — compute its ERC portfolio
+w, and set µe =Σw. Then ERC is exactly the tangency portfolio while the Maillard et al.
+(2010) hypotheses fail. The exact optimality set is the performance-parity condition (6.1), a
+codimension-(N− 1)restriction; equal-Sharpe-plus-constant-correlation is a thin, interpretable
+slice of it.
+Proposition 6.8(Variance ordering and interpolation;C).On the long-only simplex one has
+the bracketing σp(w+GMV) ≤σ p(wERC) ≤σ p(wEW), wherew +GMV is long-only GMV. The proof
+of Maillard et al. (2010) runs through the variational problem of Theorem 6.1 in constrained
+form, min{
+√
+w⊤Σw : Pi lnw i ≥c, 1⊤w= 1 , w ≥ 0}: as c increases to its maximal feasible
+value −NlnN (attained only at EW, by strict concavity of Pi lnw i on the simplex), the feasible
+set shrinks from the full simplex to {wEW} and the minimized volatility increases monotonically;
+ERC arises at an intermediate level. See also Roncalli (2013).
+The interpolation reading anticipates Section 12: ERC sits between the rule that trusts
+Σcompletely (GMV) and the rule that trusts nothing (EW), exactly as an estimator shrunk
+between a sample-efficient and a maximally robust target.
+7 Hierarchical and Return-Adjusted Hierarchical Risk Parity
+7.1 The algorithm
+Definition 7.1(HRP; L´ opez de Prado, 2016).GivenΣwith correlation matrixR:
+(1) Tree clustering.Compute dij =
+p
+(1−ρ ij)/2 and build a dendrogram T by hierarchical (in
+the original, single-linkage) clustering.
+(2)Quasi-diagonalization.Reorder assets so the dendrogram’s leaves are contiguous.
+(3) Recursive bisection.Initialize wi = 1. Recursively split each cluster C into A and B; assign
+αA =
+eVB
+eVA + eVB
+, α B = 1−α A, eVK = ˜w⊤KΣK ˜wK,˜w K,i = σ−2iP
+j∈K σ−2j ,(7.1)
+multiply the running weights inAbyα A and inBbyα B, and recurse to singletons.
+We call the bisectiontree-alignedif every split occurs at a node of T , andbalancedif the
+two sub-clusters at every split have equal cardinality. (The original implementation splits the
+quasi-diagonalized list in half; common variants split at dendrogram nodes. Our exactness results
+hold for whichever scheme satisfies the stated hypotheses.)
+7.2 What the optimizer actually does at a split
+To see precisely which information HRP discards, write the minimum-variance solution of a
+two-block system in split form.
+Theorem 7.2(Exact Schur bisection identity;P).Consider a partition C = A∪B with
+ΣC =
+ ΣA ΣAB
+ΣBA ΣB
+
+≻0. Define the Schur complements and tilted budget vectors
+SA =Σ A −Σ ABΣ−1B ΣBA,S B =Σ B −Σ BAΣ−1A ΣAB,
+bA =1 A −Σ ABΣ−1B 1B,b B =1 B −Σ BAΣ−1A 1A.
+Then the unnormalized GMV vector splits exactly as
+ 
+Σ−1C 1CA =S −1A bA,  Σ−1C 1CB =S −1B bB,(7.2)
+14
+so the GMV mass allocated to A is1 ⊤AS−1A bA 1⊤AS−1A bA +1 ⊤BS−1B bB and the within- A compo-
+sition isS −1A bA renormalized.
+Proof. By the block-inverse formula forΣ C ≻ 0 (both Schur complements are positive definite),
+ 
+Σ−1C AA =S −1A ,  Σ−1C AB =−S −1A ΣABΣ−1B ,
+hence (Σ−1C 1C)A =S −1A 1A −S −1A ΣABΣ−1B 1B =S −1A bA; symmetrically forB.
+Corollary 7.3(The three substitutions;P).At every split, HRP computes its allocation
+from the triple(Σ K, 1K,inverse-variance weights )where the exact recursion (7.2) requires
+(SK, bK,minimum-variance weights ). The algorithm therefore commits exactly three substi-
+tutions: (i) raw block for Schur complement,Σ K ← SK — discarding the variance reduction
+available from cross-hedging against the sibling cluster; (ii) flat budget for tilted budget,1 K ← bK
+— discarding the demand tilt induced by cross-cluster covariance; (iii) inverse variance for within-
+cluster minimum variance — discarding within-cluster correlations in the composition and in
+the cluster-variance functional used by the split rule. All three are exact whenΣ AB = 0 and
+the within-cluster IV portfolio is the within-cluster GMV; the theorems below identify when
+that happens, and Cotton (2024) constructs the one-parameter family that reinstates (i)–(ii)
+continuously, interpolating between HRP and exact GMV, with the recursive Schur reduction
+developed further by Mograby (2025).
+7.3 Exact coincidence results
+Lemma 7.4(Harmonic aggregation;P).IfΣ K is diagonal, the cluster variance in (7.1) equals
+eVK =  Pi∈K σ−2i −1 = 1/TK, TK := Pi∈K σ−2i , and the inverse-variance weights are exactly
+the GMV weights ofΣ K, with eVK = (1⊤Σ−1K 1)−1.
+Proof. eVK = Pi∈K ˜w2K,iσ2i = Pi∈K σ−2i /T 2K = 1/TK; andΣ −1K 1= (σ −2i )i∈K gives the rest.
+Theorem 7.5(Diagonal exactness;P).IfΣis diagonal, then for every dendrogram and
+every bisection scheme HRP returns the inverse-variance portfolio, which is the GMV portfolio:
+wHRPi =σ −2i / Pj σ−2j =w GMVi .
+Proof. By Lemma 7.4, at any split of C into A, B, αA = 1/TB1/TA+1/TB = TATA+TB = TATC . Asset i’s
+final weight is the product of fractions along its root-to-leaf path, which telescopes: wHRPi =Q Tchild
+Tparent =
+T{i}
+Troot = σ−2iPj σ−2j , independent of the tree; GMV for diagonalΣis the same vector.
+Equivalently:Σ AB = 0 everywhere and IV = GMV in every cluster, so all three substitutions of
+Corollary 7.3 are identities.
+Proposition 7.6(Uncorrelated exchangeable blocks;P).LetΣbe block-diagonal with two blocks,
+block K∈ {A, B}exchangeable:Σ K = σ2K[(1−ρK)I +ρK11⊤]with nK assets, ρK >− 1/(nK −1),
+nK a power of two. Suppose the bisection is tree-aligned with the top split at the block boundary
+and balanced within blocks. Then HRP=GMV exactly:
+wGMVi∈K = mKnK(mA +m B) , m K :=1 ⊤Σ−1K 1= nKσ2K(1 + (nK −1)ρ K) .
+Proof. Within blocks.Equal volatilities make inverse-variance weights on any sub-cluster equal
+weights. A sub-cluster of size k inside block K has cluster variance at equal weights eV (k) =
+σ2K(1 + (k− 1)ρK)/k. Balanced bisection gives both children equal size, hence equal eV , hence
+1/2–1/2 splits; recursing down nK = 2 q yields equal weights 1 /nK within the block. Since
+ΣK1= σ2K(1 + (nK − 1)ρK)1, block GMV is also equal weights.Across blocks.At the top
+split, eV (nK) = σ2K(1 + (nK − 1)ρK)/nK = 1/mK, so αA = mA/(mA + mB), which is the GMV
+15
+mass on A: block-diagonality stacksΣ −1A 1andΣ −1B 1, with block masses mK/(mA + mB). (In
+the language of Corollary 7.3:Σ AB = 0 makes (i)–(ii) identities at the top split; within blocks
+the substitutions are not identities individually, but exchangeability plus balance makes their
+composition weight-neutral.)
+Remark 7.7(Minimal counterexample;P).Exactness fails as soon as a split must absorb
+within-cluster correlation with unequal volatilities. For N = 2, correlation ρ, volatilities σ1 ̸= σ2:
+HRP ignores ρ (the children are singletons) and returns wHRP1 = σ22/(σ21 + σ22), while wGMV1 =
+(σ22 −ρσ 1σ2)/(σ21 + σ22 − 2ρσ1σ2). These coincide iff ρ = 0or σ1 = σ2 (when σ1 = σ2 both
+equal1 /2for every ρ). The hypotheses of Theorem 7.5 and Proposition 7.6 — zero correlation
+wherever volatilities differ within a cluster, equal volatilities wherever correlation survives — are
+not artifacts of the proofs but the boundary of exactness, and the deviation is exactly substitution
+(iii) of Corollary 7.3 at the bottom split.
+Corollary 7.8(Mean–variance optimality of HRP;P).Under the hypotheses of Theorem 7.5 or
+Proposition 7.6, HRP coincides with the tangency portfolio iff, in addition, µe ∝ 1(Theorem 4.5).
+Under the diagonal hypothesis this reads: equal premia and uncorrelated assets, in which case
+HRP=IVar=GMV=tangency simultaneously.
+Remark 7.9(What HRP is actually for;E).None of the above is the operative defense of HRP.
+L´ opez de Prado (2016) motivates the algorithm by the instability of ˆΣ−1 under estimation error
+— quasi-diagonalization and recursion avoid inverting an ill-conditioned matrix — and reports
+Monte Carlo evidence of superior out-of-sample variance relative to plug-in minimum variance.
+That defense is empirical and belongs to the information-set logic of Sections 11–12, not to exact
+optimality; Corollary 7.3 gives it structure by listing precisely which estimated objects (Σ AB,
+within-cluster correlations) HRP declines to trust.
+7.4 Return-adjusted hierarchical risk parity
+Standard HRP is deliberately risk-only. RA-HRP keeps the clustering and quasi-diagonalization
+stages fixed, but replaces the inverse-variance split score by a local cluster-Sharpe score. This
+makes the rule materially different from the flat heuristics above: its weight vector is a function
+of bothΣand µe, so the implied-return condition is no longer a fixed ray in µe for fixedΣ. It
+is a nonlinear fixed point.
+Definition 7.10(Fixed-tree RA-HRP;P, notation following Noguer i Alonso, 2026).Fix a
+binary dendrogram T and a score floor ε > 0. For every nonempty cluster K⊂ {1, . . . , N}
+define the inverse-variance portfolio
+˜wK,i = σ−2iP
+j∈K σ−2j , i∈K,
+its local mean, variance, and floored Sharpe score by
+MK :=
+X
+i∈K
+˜wK,iµe,i, V K := ˜w⊤KΣK ˜wK, Q K := max
+ MK√VK , ε .(7.3)
+At an internal nodeC=A∪B, RA-HRP allocates the parent budget by
+βRAA = QAQA +Q B , β RAB = 1−β RAA = QBQA +Q B .(7.4)
+The final portfolio obtained by multiplying these branch fractions along root-to-leaf paths is
+denoted
+wRA = ΦRAT,ε (µe,Σ).
+When the raw score MK/√VK exceeds ε for every cluster, the floor is inactive and the split is
+exactly a cluster-Sharpe split.
+16
+Theorem 7.11(Well-posedness and lower bounds;P).For fixed( µe, Σ,T, ε)withΣ ≻ 0and
+ε >0, RA-HRP defines a unique portfoliow RA ∈ ∆N−1 . If DT is the maximum root-to-leaf
+depth andM Q := maxK∈T QK, then every leaf satisfies
+wRAi ≥
+ ε
+ε+M Q
+DT
+.(7.5)
+On any region where the active/inactive status of the floor does not change and all cluster
+variances remain positive, the map(µ e,Σ)7→Φ RAT,ε (µe,Σ)is smooth.
+Proof.At every node,Q A, QB ≥ε, so the denominator in (7.4) is strictly positive and
+ε
+ε+M Q
+≤β RAA , βRAB ≤ MQε+M Q <1.
+The tree has finitely many nodes, and the recursive multiplication of deterministic split fractions
+therefore gives a unique strictly positive leaf weight. Budgets are conserved at every split because
+βRAA + βRAB = 1, so the leaf weights sum to one. The lower bound follows by multiplying the
+worst possible branch fraction along a path of length at most DT . Smoothness on a fixed floor
+regime follows because the IV weights, MK, VK, QK, and the rational split map are compositions
+of smooth functions with positive denominators.
+Definition 7.12(Unit-free HRP–RA-HRP interpolation;P).At an internal node C = A∪B ,
+write the standard HRP left-branch fraction and the RA-HRP left-branch fraction as
+rA := VBVA +V B , s A := QAQA +Q B ,(7.6)
+where VK and QK are the cluster IVP variance and floored cluster-Sharpe score from (7.3). For
+λ∈[0,1], define the interpolated local split
+β(λ)A := (1−λ)r A +λs A, β (λ)B := 1−β (λ)A .(7.7)
+Applying(7.7)recursively on the same tree defines the interpolated portfoliow (λ).
+Proposition 7.13(Properties of the unit-free interpolation;P).For the family (7.7): (i) λ = 0
+gives HRP; (ii) λ = 1gives RA-HRP; (iii) λ7→β (λ)A is affine and continuous on[0 , 1]; and (iv)
+d
+dλ β(λ)A =s A −r A.(7.8)
+Consequently the local path is monotone whenever the HRP and RA-HRP branch fractions differ.
+Proof. Substitution of λ = 0 and λ = 1 gives the two endpoints. The map in (7.7) is an affine
+function of λ, hence continuous and differentiable, with derivative (7.8). Since both rA and sA
+lie in (0,1), every interpolated split remains feasible.
+Remark 7.14(Why the interpolation is economically clean).The interpolation is performed
+on branch probabilities, not on raw scores. This matters because inverse variances and Sharpe
+ratios have different units and different estimation errors. Blending rA and sA gives λ a literal
+interpretation: it is the local weight placed on the return-adjusted allocation decision relative to
+the risk-only decision. This is the correct homotopy for empirical sensitivity analysis and for
+any future theorem that treats RA-HRP as a controlled perturbation of HRP.
+Theorem 7.15(Exact RA-HRP tangency coincidence;P).Fix(T, ε)and define
+wRA = ΦRAT,ε (µe,Σ).
+Assume1 ⊤Σ−1µe >0. Then the following are equivalent:
+17
+(i) RA-HRP is the tangency portfolio:w RA =w T .
+(ii) There existsa >0such that
+µe =aΣΦ RAT,ε (µe,Σ).(7.9)
+(iii) RA-HRP has zero alpha against itself: for every asseti,
+µe,i =β i(wRA)  wRA⊤µe.
+Moreover, at any split C = A∪B of an exact tangency recursion, with local covariance–premium
+pair(Γ C, νC), write
+ΓC =
+ ΓA ΓAB
+ΓBA ΓB
+
+, S A = ΓA −Γ ABΓ−1B ΓBA, S B = ΓB −Γ BAΓ−1A ΓAB,
+νSchA =ν A −Γ ABΓ−1B νB, ν SchB =ν B −Γ BAΓ−1A νA,
+and
+LA :=1 ⊤AS−1A νSchA , L B :=1 ⊤BS−1B νSchB .(7.10)
+When LA, LB > 0, the exact tangency split is LA/(LA + LB). Hence the RA-HRP split is locally
+exact at that node if and only if
+QA
+QB
+= LA
+LB
+.(7.11)
+Full tree coincidence holds if and only if (7.11) holds at every internal node when the right-
+hand side is computed from the Schur-updated conditional pair generated by the exact tangency
+recursion.
+Proof. The equivalence of (i) and (ii) is Theorem 3.3(i), with the important difference that the
+candidatew RA itself depends on ( µe, Σ). The equivalence of (i) and (iii) is the beta form in
+Remark 3.5.
+For the split statement, the unnormalized tangency direction on a local pair (Γ C, νC) is
+xC = Γ−1C νC. The block-inverse identity gives
+xA =S −1A  νA −Γ ABΓ−1B νB, x B =S −1B  νB −Γ BAΓ−1A νA.
+Therefore the unnormalized capital masses assigned by the exact tangency direction to the two
+children are LA =1 ⊤AxA and LB =1 ⊤BxB. If both are positive, the exact local budget share of A
+is LA/(LA + LB). The RA-HRP local share is QA/(QA + QB); equality is equivalent to the ratio
+identity (7.11). Recursing is legitimate because xA = S−1A νSchA is itself the tangency direction of
+the Schur-updated pair ( SA, νSchA ) inside child A, and analogously for B. Matching every local
+split on the tree is equivalent to matching every root-to-leaf product of split fractions, hence to
+full portfolio coincidence.
+Remark 7.16(What RA-HRP fixes and what it does not).RA-HRP repairs one weakness of
+standard HRP: it no longer allocates solely by inverse cluster variance, and therefore it can tilt
+toward clusters with superior estimated reward per unit of local risk. But Theorem 7.15 shows that
+the exact Markowitz split is not a raw cluster-Sharpe split. The optimizer uses Schur-adjusted
+covariance SA, SB and Schur-adjusted premia νSchA , νSchB . RA-HRP therefore replaces HRP’s
+purely risk-based local score by a return-aware local score, while still avoiding the exact Schur
+and global-inversion machinery. Its optimality set is larger and more economically flexible than
+HRP’s equal-premium GMV set, but it remains a restrictive nonlinear fixed-point set rather than
+a generic property.
+18
+Definition 7.17(Schur-RA-HRP local score;P).This is the local conditional-risk extension of
+RA-HRP developed in Noguer i Alonso (2026). At a sibling split C = A∪B , partition the local
+covariance matrix as
+ΣC =
+ΣAA ΣAB
+ΣBA ΣBB
+
+.
+Define the conditional Schur covariance blocks
+ΣA|B :=Σ AA −Σ ABΣ−1BB ΣBA,Σ B|A :=Σ BB −Σ BAΣ−1AAΣAB.(7.12)
+Using the same within-cluster IVP weights ˜wA, ˜wB and the same cluster meansM A, MB, set
+V SchA|B := ˜w⊤AΣA|B ˜wA, Q SchA|B := max
+
+
+
+MAq
+V SchA|B
+, ε
+
+
+ ,(7.13)
+and analogously forB|A. The Schur-RA-HRP split is
+βSchRAA = QSchA|BQSchA|B +Q SchB|A , β SchRAB = 1−β SchRAA .(7.14)
+Proposition 7.18(Conditional-risk reduction and the Schur score wedge;P).IfΣ C ≻ 0, then
+0< V SchA|B =V A − ˜w⊤AΣABΣ−1BB ΣBA ˜wA ≤V A,(7.15)
+with equality if and only ifΣ BA ˜wA = 0. Moreover,
+0≤V A −V SchA|B ≤ ∥ΣBA ˜wA∥22λmin(ΣBB ) ,(7.16)
+and analogously for B|A . Hence, whenever the cluster mean is positive, the raw Schur score
+MA/
+q
+V SchA|B is weakly larger than the standalone RA-HRP score MA/√VA; after the floor, the
+score cannot decrease.
+Proof. SinceΣ C ≻ 0, both principal blocks are positive definite and the Schur complements
+in (7.12) are positive definite. Expanding the quadratic form gives the identity in (7.15); the
+subtracted term equals ∥Σ−1/2BB ΣBA ˜wA∥22 ≥ 0, with equality exactly whenΣ BA ˜wA = 0. The
+operator inequalityΣ −1BB ⪯λ min(ΣBB )−1I yields (7.16). If MA > 0, reducing the denominator
+weakly raises the raw score; if MA ≤ 0, both raw scores are at or below the positive floor, so the
+floored score remainsεunless the Schur adjustment pushes it above the floor.
+Remark 7.19(Relation to the exact Schur-tangency split).Schur-RA-HRP repairs a second
+HRP substitution. Standard RA-HRP replaces inverse-variance splitting by return-aware cluster-
+Sharpe splitting, but it still uses standalone cluster variance. Definition 7.17 replaces that
+standalone risk by conditional risk. It therefore moves the rule toward the exact nodewise
+condition (7.11). It is still not a global Markowitz optimizer: it uses local block inversions only,
+keeps the tree fixed, and uses IVP aggregation inside clusters. Its purpose is to recover the
+economically important cross-cluster hedging term without paying the full global inversion tax.
+Corollary 7.20(Two-asset boundary;P).Consider two assets, assume the floor is inactive
+and the relevant quantities are positive. Write ρ for their correlation. RA-HRP coincides with
+tangency if and only if
+µe,1/σ1
+µe,2/σ2
+= σ22µe,1 −ρσ 1σ2µe,2
+σ21µe,2 −ρσ 1σ2µe,1 .(7.17)
+In particular, when ρ = 0and µe,1, µe,2 > 0, RA-HRP is tangency if and only if σ1 = σ2. Thus
+even for diagonal covariance, RA-HRP is generally not the plug-in Markowitz rule: with two
+uncorrelated assets it allocates by signal-to-volatility, whereas tangency allocates by signal-to-
+variance.
+19
+Proof.With two singleton children, the inactive-floor RA-HRP ratio is
+wRA1
+wRA2 = µe,1/σ1µe,2/σ2 .
+The unnormalized tangency direction is
+Σ−1µe ∝
+σ22µe,1 −ρσ 1σ2µe,2
+σ21µe,2 −ρσ 1σ2µe,1
+
+,
+which gives (7.17). Setting ρ = 0 and cancelling the positive premia gives σ2/σ1 = σ22/σ21, hence
+σ1 =σ 2.
+Proposition 7.21(Balanced equal-volatility diagonal exactness;P).SupposeΣ=σ 2I, every
+split in T is balanced, all cluster premium sums are positive, and the floor is inactive. Then
+RA-HRP coincides with the tangency portfolio:
+wRAi = µe,iP
+j µe,j
+=w T,i .
+Proof.For a clusterK, IV weights are equal weights,V K =σ 2/|K|, and
+QK = |K| −1 Pi∈K µe,i
+σ/
+p
+|K|
+=
+P
+i∈K µe,i
+σ
+p
+|K|
+.
+At a balanced splitK=A∪B,|A|=|B|, so
+βRAA =
+P
+i∈A µe,iP
+i∈A µe,i + Pi∈B µe,i .
+Multiplying these branch ratios along a root-to-leaf path telescopes to µe,i/ Pj µe,j. Since
+Σ=σ 2I, the tangency portfolio is proportional toΣ −1µe =σ −2µe, giving the result.
+Theorem 7.22(Pathwise HRP–RA-HRP distortion and KL attribution;P).Fix a common tree
+T . Let rv ∈ (0, 1)be the HRP left-branch split at internal node v and sv ∈ (0, 1)the RA-HRP
+left-branch split. For a leaf i, let P(i)be its set of ancestor internal nodes and let ηv(i) = 1if i
+descends through the left child ofvand0otherwise. Then
+wRAi
+wHRPi =
+Y
+v∈P(i)
+ sv
+rv
+ηv(i)  1−s v
+1−r v
+1−ηv(i)
+.(7.18)
+Moreover, viewing the two long-only portfolios as probability measures on leaves,
+DKL(wRA∥wHRP) = X
+v∈Vint
+W RAv
+
+sv log svrv + (1−s v) log 1−s v1−r v
+
+,(7.19)
+whereW RAv is the RA-HRP total capital entering nodev.
+Proof. Both portfolios are products of local branch fractions along a root-to-leaf path. Dividing
+the two products gives (7.18). Taking logarithms, multiplying by wRAi , summing over leaves,
+and exchanging the order of summation gives (7.19). At node v, the sum of RA-HRP weights in
+the left subtree is W RAv sv and in the right subtree is W RAv (1 −s v), which yields the binary KL
+term.
+20
+Corollary 7.23(Exact Sharpe-efficiency comparison;P).Let ηH = S(wHRP)/Smax and
+ηR = S(wRA)/Smax. The reduction in squared Sharpe loss obtained by moving from HRP to
+RA-HRP is exactly
+(1−η 2H )−(1−η 2R) =η 2R −η 2H (7.20)
+= S(w RA)2 −S(w HRP)2
+S2max (7.21)
+= cos2 θΣ(wRA,w T )−cos 2 θΣ(wHRP,w T ).(7.22)
+Therefore RA-HRP improves the exact-optimality gap precisely when its pathwise split distortion
+moves the final portfolio closer to the tangency ray in theΣ-angle. Equation (7.18) attributes the
+source of that movement to individual tree nodes; Equation (7.19) measures how much capital
+was reallocated at each node.
+Proof.This is Theorem 3.7 applied once tow HRP and once tow RA.
+Remark 7.24(Statistical status and empirical scope;C/E).The fixed-tree RA-HRP paper
+proves existence, uniqueness, explicit leaf lower bounds, local split curvature, pathwise HRP–
+RA-HRP distortion, KL decomposition, and fixed-tree consistency/asymptotic normality under
+fixed dimension, finite fourth moments, and an inactive floor (Noguer i Alonso, 2026). It also
+emphasizes the theory–empirics gap created by re-estimating dendrograms in rolling windows: tree
+changes make the implemented map piecewise smooth rather than globally smooth. Empirically,
+the reported 15-stock US backtest is best read as proof of concept: RA-HRP improves traditional
+HRP in that sample, but a capped within-universe market-cap proxy attains an even higher
+Sharpe ratio. This is exactly the right evidentiary status for the present paper: RA-HRP is a
+disciplined return-aware extension of HRP, not a theorem of universal dominance.
+Remark 7.25(Open problem: data-driven trees as random topologies).The fixed-tree theory is
+the right first theorem because all split maps are smooth away from floor and variance boundaries.
+The implemented strategy, however, usually re-estimates the dendrogram. Theorem 7.22 suggests
+a natural route to a full estimated-tree theory: compare two random trees by the split ratios
+induced on common root-to-leaf paths and by distances between their merge sets, cophenetic
+matrices, or tree-edit representations. One possible program is: (i) prove high-probability topology
+preservation under a merge-separation condition on the population distance matrix; (ii) on
+that event, apply the fixed-tree delta method; (iii) off that event, control the portfolio jump by
+pathwise products such as (7.18) and by a metric on dendrogram topologies; and (iv) combine
+the two pieces into a uniform-in-tree convergence bound. The empirical merge-preservation and
+cophenetic-correlation diagnostics reported in Noguer i Alonso (2026) are therefore not merely
+descriptive; they are the measurable quantities a future random-tree asymptotic theorem must
+control.
+7.5 First-order Sharpe calculus along the HRP–RA-HRP homotopy
+The unit-free interpolation of Proposition 7.13 turns “how much local return information to
+admit” into a one-dimensional decision. This subsection differentiates the Sharpe objective
+along that path. The derivative turns out to be a sum over internal nodes of the products of
+two estimable quantities: the displacement of the local split and thealpha, against the HRP
+portfolio itself, of the self-financing switch between the node’s two children. The marginal value
+of return information is therefore a nodewise zero-alpha computation — the same object the
+GRS machinery of Remark 3.6 estimates.
+Lemma 7.26(Node-switch vectors;P).Fix T , strictly interior splits rv, sv ∈ (0, 1)at every
+internal node v, and the interpolated portfoliow (λ) of (7.7). Let W Hv := Pi:v∈P(i) wHRPi be the
+21
+HRP capital enteringv. Defineg v ∈R N by
+gv,i :=w HRPi
+ ηv(i)
+rv
+− 1−η v(i)1−r v
+
+ifv∈ P(i), g v,i := 0 otherwise. (7.23)
+Then:
+(i)1 ⊤gv = 0: eachg v is a self-financing reallocation.
+(ii)g v = W Hv  uL(v) − uR(v), whereu K is the HRP composition inside subtree K renormalized
+to unit mass: gv moves one unit of node- v capital from the right-child HRP composition to
+the left-child HRP composition, levered by the capital actually present at the node.
+(iii)λ7→w (λ) is a polynomial inλ, and
+d
+dλ w(λ)
+
+λ=0
+=
+X
+v∈Vint
+(sv −r v)g v.(7.24)
+Proof. Each leaf weight is the root-to-leaf product of branch fractions (the representation
+underlying Theorem 7.22), here of the affine functions β(λ)v = (1 −λ )rv + λsv along its path,
+hence a polynomial inλ. Logarithmic differentiation atλ= 0 gives
+d
+dλ w(λ)i
+
+λ=0
+=w HRPi X
+v∈P(i)
+(sv −r v)
+ ηv(i)
+rv
+− 1−η v(i)1−r v
+
+,
+which is the i-th coordinate of (7.24). For (i)–(ii): the HRP mass in the left subtree of v is W Hv rv
+and in the right subtree W Hv (1 −r v), so summing (7.23) over the left child gives W Hv rv/rv = W Hv
+and over the right child −W Hv ; the totals cancel, and dividing each child’s restriction ofw HRP
+by its subtree mass exhibits the two unit-mass compositionsu L(v),u R(v).
+Theorem 7.27(Nodewise-alpha representation of the homotopy derivative;P).LetΣ ≻ 0,
+µe ̸= 0, and writea ∗(w) =w ⊤µe/w⊤Σwand
+α(w) :=µ e −a ∗(w)Σw
+for the implied-return residual ofw; by Remark 3.5, αi(w) = µe,i −β i(w)(w⊤µe)is exactly the
+vector of alphas in (3.4), and α(w)is the minimizing residual in the defect (8.2). Then, with
+wH :=w HRP and
+αv :=g ⊤v α(wH) =g ⊤v µe − g⊤v ΣwHwH⊤ΣwH  wH⊤µe,(7.25)
+the Sharpe ratio and the squared Sharpe efficiency satisfy
+d
+dλ S
+ 
+w(λ)
+λ=0
+= 1σp(wH) Xv∈Vint(sv −r v)α v,
+d
+dλ
+ 
+1−η 2 w(λ)
+λ=0
+=− 2S(w H)S2max σp(wH) Xv∈Vint(sv −r v)α v. (7.26)
+The scalar αv is precisely the alpha of the self-financing node- v switch gv in the one-factor
+regression of Remark 3.6 with the HRP portfolio as the candidate factor.
+Proof. Forw ̸= 0, ∇S(w) = µe/σp(w) − (w⊤µe)Σw/σp(w)3 = α(w)/σp(w). The chain rule
+with Lemma 7.26(iii) gives the first display in (7.26); the second follows from 1−η 2 = 1−S 2/S2max
+with Smax independent of λ. For the alpha interpretation: gv is zero-cost by Lemma 7.26(i),
+its beta againstw H is β(gv) = g⊤v ΣwH/wH⊤ΣwH, and its alpha in the sense of (3.4) is
+g⊤v µe −β (gv)(wH⊤µe), which is (7.25). That this equals the minimizing residual of Definition 8.3
+contracted withg v is Theorem 8.4:a ∗ in (8.4) is the same scalar.
+22
+Corollary 7.28(Marginal value of return information;P).To first order at λ = 0, admitting
+local return information improves the Sharpe ratio if and only if
+X
+v∈Vint
+(sv −r v)α v >0.(7.27)
+Each node contributes the product of the split displacement sv −r v (how far the floored cluster-
+Sharpe score moves the local budget away from the inverse-variance split) and the node alpha
+αv (whether the implied child switch is priced by the HRP portfolio). In particular: (i) if every
+node switch has zero alpha against HRP — the nodewise refinement of the zero-alpha null of
+Remark 3.6 restricted to the |Vint| tradable directions {gv} — the homotopy is first-order flat
+regardless of the score displacements; (ii) a node helps exactly when its score tilts toward the
+child whose switch carries positive alpha. Since αv = Pi gv,i αi(wH)is a fixed linear combination
+of the regression intercepts entering the GRS statistic (14.5), the entire derivative (7.26) is
+estimable from a single set of time-series regressions on the realized HRP return, with standard
+errors inherited from ˆα.
+Proof. Sign reading of (7.26); (i)–(ii) are immediate, and the estimability statement is the
+linearity of (7.25) inα(w H).
+Proposition 7.29(KL trust budget along the homotopy;P).For every internal node v, the
+map λ7→d KL
+ 
+β(λ)v ∥rv (binary KL divergence) is convex on[0 , 1], vanishes together with its
+derivative at λ = 0, and satisfies the chord bound dKL
+ 
+β(λ)v ∥rv ≤λ dKL(sv∥rv). Consequently,
+withW (λ)v the interpolated capital enteringv,
+DKL
+ 
+w(λ) ∥w HRP = X
+v∈Vint
+W (λ)v dKL β(λ)v ∥rv ≤λ X
+v∈Vint
+W (λ)v dKL(sv∥rv)
+≤λ D T maxv dKL(sv∥rv),
+(7.28)
+since Pv W (λ)v = Pi w(λ)i |P(i)| ≤DT is the capital-weighted tree depth.
+Proof. The identity in (7.28) is Theorem 7.22 with sv replaced by β(λ)v : the proof there uses
+only the product structure of tree weights, never the specific form of the splits. For fixed
+r∈ (0, 1), x7→d KL(x∥r) = xlog (x/r) + (1 −x ) log
+ 
+(1 −x )/(1 −r )
+
+is convex with derivative
+log(x/r) −log
+ 
+(1 −x )/(1 −r )
+
+, which vanishes at x = r; composing with the affine path β(λ)v
+preserves convexity, and the value and derivative at λ = 0 are zero, so the map is nondecreasing.
+Convexity with the endpoint values 0 and dKL(sv∥rv) gives the chord bound. Finally each unit of
+leaf capital is counted once per ancestor, so Pv W (λ)v = Pi w(λ)i |P(i)|, bounded by the maximal
+root-to-leaf depth.
+The economic reading: λ is acertified trust budget. Choosing the interpolation level caps the
+capital reallocated away from the risk-only baseline linearly in λ, node by node, before any data
+are seen — which is exactly the role the λKL penalty plays dynamically in the RLPO objective
+(9.11) below. Theorem 7.27 says where that budget earns alpha; Proposition 7.29 says how much
+structural movement it can cause.
+8 The Mathematics of Heuristic Portfolio Optimization (HPO)
+The preceding sections compute exact coincidence conditions rule by rule. This section abstracts
+from the individual names and treats heuristic portfolio construction itself as a mathematical
+object. The key move is to separate three layers that are often conflated in practice: the full
+population optimizer, the information-restricted portfolio map, and the estimated implementation
+of that map.
+23
+8.1 HPO maps as information-restricted portfolio rules
+Definition 8.1(Information-restricted portfolio map).Let
+Θ :={(µ e,Σ) :µ e ∈R N ,Σ∈S N++}
+be the population parameter space. Aninformation setis a statistic
+I: Θ→ Z,
+and aheuristic portfolio mapis a measurable function
+Φ :Z →∆N−1 ,∆ N−1 :={w∈R N :1 ⊤w= 1, w i ≥0}.
+The induced portfolio at population pointθ= (µ e,Σ)is
+wΦ(θ) := Φ(I(θ)).
+A parametric HPO family is a collection {Φλ : λ∈ Λ}, where λ may represent a shrinkage
+intensity, a score floor, a tree depth, a turnover penalty, or the HRP–RA-HRP interpolation
+weight.
+Examples are immediate. Equal weight has a trivial information set. Inverse volatility uses
+only diag(Σ). ERC usesΣbut not µe. HRP uses a dendrogram and recursively aggregated
+cluster variances. RA-HRP uses the same tree plus local cluster-premium and cluster-risk scores.
+Schur-RA-HRP enlarges the local information set by allowing sibling-block Schur complements.
+Thus the rule name is less important than the map
+(µe,Σ)7− → I(µe,Σ)7− →Φ(I(µ e,Σ)).
+HPO studies the geometry and sampling behavior of this composition.
+Definition 8.2(Population HPO projection).For a family {Φλ}λ∈Λ and a population point
+θ = (µe, Σ)with positive tangency portfolio, the population-optimal member of the heuristic
+family is
+λ∗(θ)∈arg max
+λ∈Λ
+S
+ 
+wΦλ(θ)
+
+= arg min
+λ∈Λ
+θΣ
+ 
+wΦλ(θ),w T (θ)
+
+,(8.1)
+whereθ Σ is the angle in theΣ-inner product from Theorem 3.7.
+Equation (8.1) is the clean mathematical definition of HPO: it is not full optimization over
+all portfolios; it is angular projection of the tangency direction onto a lower-complexity image
+set generated by admissible heuristic maps. The image set may be finite (choose among EW, IV,
+ERC, HRP), one-dimensional (HRP–RA-HRP interpolation), or high-dimensional (a family of
+trees, floors, shrinkage operators, and cost penalties).
+8.2 The implied-return defect of a heuristic rule
+The implied-return principle gives a natural residual for every heuristic. Ifwwere exactly
+optimal, µe would lie on the ray spanned byΣw. The distance to that ray is the exact HPO
+defect.
+Definition 8.3(HPO implied-return defect).For a fully invested portfoliowwithw ⊤µe > 0,
+define
+d(w;µ e,Σ) := mina>0 ∥µe −aΣw∥ 2Σ−1 ,∥x∥ 2Σ−1 :=x ⊤Σ−1x.(8.2)
+The normalized defect is
+D(w;µ e,Σ) := d(w;µ e,Σ)µ⊤e Σ−1µe .(8.3)
+For a ruleΦ, writeD Φ(θ) :=D(w Φ(θ);θ).
+24
+Theorem 8.4(Defect equals squared Sharpe inefficiency;P).Letwbe fully invested with
+w⊤µe >0. Then the minimizer in(8.2)is
+a∗ = w⊤µe
+w⊤Σw ,(8.4)
+and
+d(w;µ e,Σ) =S 2max −S(w) 2,D(w;µ e,Σ) = 1−η(w) 2 = sin2 θΣ(w,w T ).(8.5)
+Thus the implied-return residual, the angular error, and squared Sharpe inefficiency are the same
+object in three coordinate systems.
+Proof.Letx=µ e andy=Σw. In theΣ −1-inner product,
+⟨x, y⟩Σ−1 =x ⊤Σ−1y=µ ⊤e w=w ⊤µe,∥y∥ 2Σ−1 =w ⊤Σw.
+The least-squares projection of x onto the positive ray spanned by y has coefficient (8.4), which
+is positive by assumption. Therefore
+d=∥x∥ 2Σ−1 − ⟨x, y⟩2Σ−1∥y∥2Σ−1 =µ ⊤e Σ−1µe − (w⊤µe)2w⊤Σw =S 2max −S(w) 2.
+Dividing byS 2max and applying Theorem 3.7 gives (8.5).
+Corollary 8.5(Near-optimality tubes;P).FixΣ ≻ 0and a portfoliowwithw ⊤Σw > 0. The
+set
+Tδ(w;Σ) :={µ e :D(w;µ e,Σ)≤δ}
+is exactly the cone around the ray {aΣw: a >0} with aperture arcsin
+√
+δ in theΣ −1 geometry.
+Hence exact optimality is the zero-aperture cone, while approximate optimality is a positive-
+volume tube around the same ray. If a prior density for µe is bounded on boundedΣ −1-balls,
+then for smallδthe probability ofT δ inside any fixed ball is of orderδ (N−1)/2 .
+Proof. By Theorem 8.4, D = sin2 ∠Σ−1(µe, Σw), so the sublevel set is the stated cone. In N
+dimensions a cone of angular radius α has solid angle proportional to αN−1 as α↓ 0. Since
+α = arcsin
+√
+δ∼
+√
+δ, bounded-density probabilities inside fixed-radius balls scale as δ(N−1)/2 .
+Remark 8.6(Why this defect is useful).The defectD Φ is simultaneously a diagnostic, a test
+target, and an optimization objective. As a diagnostic, it reports exactly how far the heuristic’s
+implied premia a∗ΣwΦ are from the estimated premia. As a test target, it is equivalent to the
+zero-alpha restriction in Remark 3.6. As an HPO objective, it ranks heuristic families without
+pretending that every member is globally Markowitz-optimal.
+8.3 Tree HPO: local scores as stochastic kernels
+HRP, RA-HRP, Schur-RA-HRP, and their interpolations are all examples of a common object:
+a tree-indexed product of local binary allocation kernels.
+Definition 8.7(Positive score-tree HPO).Fix a binary tree T with leaf set {1, . . . , N}. At each
+internal node v, let L(v)and R(v)denote its left and right child clusters. A positive score-tree
+HPO rule assigns scores
+Gv(L(v))>0, G v(R(v))>0,
+and local split
+βv := Gv(L(v))Gv(L(v)) +G v(R(v)) .(8.6)
+25
+For a leaf i, let P(i)be the internal nodes on the root-to-leaf path and let ηv(i) = 1if i descends
+through the left branch ofvand0otherwise. The resulting leaf weight is
+wΦi = Y
+v∈P(i)
+βηv(i)v (1−β v)1−ηv(i).(8.7)
+The main rules correspond to different choices of Gv. HRP uses Gv(K) = eV −1K . RA-HRP uses
+Gv(K) = S+(K). Schur-RA-HRP uses conditional scores Gv(K) = S+Sch(K|K cv), where Kcv is
+the sibling cluster at node v. Unit-free HRP–RA-HRP interpolation is obtained by interpolating
+the local branch probabilitiesβ v, not by adding raw scores with incompatible units.
+Theorem 8.8(Exact coincidence for score-tree HPO;P).Fix θ = ( µe, Σ)and suppose
+xT :=Σ −1µe has strictly positive subtree masses
+MT (K) :=1 ⊤KxT >0
+for every cluster K appearing in T . LetΦbe a positive score-tree HPO rule on T . Thenw Φ
+coincides with the tangency compositionw T = xT /(1⊤xT )if and only if, at every internal node
+v,
+Gv(L(v))
+Gv(R(v)) = MT (L(v))MT (R(v)) .(8.8)
+Equivalently, every heuristic local split must equal the exact tangency mass split:
+βv = MT (L(v))MT (L(v)) +M T (R(v)) .
+Proof. Ifw Φ =w T , then the total portfolio mass assigned to the left child of any node v divided
+by the total mass assigned to its sibling equals MT (L(v))/MT (R(v)). But under the recursive
+rule, the same ratio is βv/(1 −β v) = Gv(L(v))/Gv(R(v)), proving necessity. Conversely, if (8.8)
+holds at every node, then the heuristic sends exactly the same fraction of each parent subtree
+mass to each child as the tangency portfolio. Starting from root mass one, induction down the
+tree shows that every leaf receives the tangency mass, hencew Φ =w T .
+Remark 8.9(RA-HRP as one score choice).Theorem 8.8 is the abstract version of Theorem 7.15.
+RA-HRP chooses a particular economically interpretable score, the floored local cluster Sharpe
+ratio. Exact optimality requires that this score ratio reproduce the exact subtree mass ratio
+ofΣ −1µe. Schur-RA-HRP changes the score in order to move the local ratio closer to the
+Schur-adjusted tangency mass, while still avoiding the global inverse.
+8.4 The exact Schur-tangency split
+The score-tree theorem identifies the target local mass ratio. The next theorem writes that
+target in Schur form. This is the return-aware analogue of the GMV Schur identity used earlier
+for HRP.
+Theorem 8.10(Exact Schur-tangency bisection;P).Let C = A∪B and partitionΣ C and µC
+conformably:
+ΣC =
+ ΣA ΣAB
+ΣBA ΣB
+
+,µ C =
+µA
+µB
+
+.
+Define Schur complements and Schur-adjusted premia
+SA :=Σ A −Σ ABΣ−1B ΣBA, ν A|B :=µ A −Σ ABΣ−1B µB,
+SB :=Σ B −Σ BAΣ−1A ΣAB, ν B|A :=µ B −Σ BAΣ−1A µA.
+26
+Then the unnormalized tangency vectorx C =Σ −1C µC satisfies
+(xC)A =S −1A νA|B,(x C)B =S −1B νB|A.(8.9)
+Consequently the exact tangency mass allocated toAat this split is
+βTA = 1⊤AS−1A νA|B1⊤AS−1A νA|B +1 ⊤BS−1B νB|A ,(8.10)
+whenever the denominator is positive and both masses are positive.
+Proof.Apply the block-inverse formula. TheAblock ofΣ −1C µC is
+S−1A µA −S −1A ΣABΣ−1B µB =S −1A νA|B.
+TheBblock is symmetric. Summing coordinates in each block gives the mass formula.
+Corollary 8.11(The HPO approximation ladder;P).At a node C = A∪B , exact local
+Markowitz/tangency allocation consumes four objects: the Schur covarianceS K, the Schur-
+adjusted premium νK|K c, the inverseS −1K , and the resulting subtree mass1 ⊤KS−1K νK|K c. The
+main hierarchical HPO rules are obtained by deleting or compressing these objects in stages:
+Exact Schur tangency :G(K) =1 ⊤KS−1K νK|K c,
+Schur-RA-HRP :G(K) =S +Sch(K|K c),
+RA-HRP :G(K) =S +(K),
+HRP :G(K) = eV −1K .
+Thus the “heuristic” label describes a precise algebraic operation: replace exact Schur-tangency
+masses by stable positive scores whose estimation error is smaller and whose economic meaning
+is transparent.
+Proof. The first line is Theorem 8.10. The remaining lines are definitions of the corresponding
+score-tree rules. The claim is therefore an identity of information sets: each step removes either
+Schur conditioning, premium conditioning, local inversion, or premium information, and then
+renormalizes the remaining positive scores through (8.6).
+8.5 Sampling error, approximation error, and the HPO bias–variance identity
+HPO is useful only if the information it deletes is sufficiently noisy. The next result gives the
+exact quadratic accounting identity behind this statement.
+Theorem 8.12(Exact mean–variance bias–variance decomposition for estimated HPO;P).Fix
+γ >0and define the budget-constrained mean–variance objective
+Uγ(w) =w ⊤µe − γ2 w⊤Σw,1 ⊤w= 1.
+Letw ⋆γ be its unique maximizer on the affine budget hyperplane, and let bwΦ be any random fully
+invested portfolio produced by an estimated heuristic rule. IfE∥ bwΦ∥2 <∞, then
+E
+
+Uγ(w⋆γ)−U γ( bwΦ) = γ2 E[ bwΦ]−w ⋆γ2Σ + tr ΣCov( bwΦ) .(8.11)
+Proof.The first-order condition for the budget-constrained optimum is
+µe −γΣw ⋆γ =λ1
+27
+for some Lagrange multiplier λ. For any fully investedw,1 ⊤(w − w⋆γ) = 0, so the linear term in
+the second-order expansion vanishes:
+Uγ(w⋆γ)−U γ(w) = γ2 (w−w ⋆γ)⊤Σ(w−w ⋆γ).
+Apply this identity to bwΦ and take expectations. The standard Hilbert-space bias–variance
+decomposition in theΣnorm gives
+E∥ bwΦ −w ⋆γ∥2Σ =∥E[ bwΦ]−w ⋆γ∥2Σ + tr ΣCov( bwΦ).
+Remark 8.13(When a heuristic beats the plug-in optimizer).Equation (8.11) is the formal
+answer to the Markowitz optimization enigma. A heuristic can be farther from the population
+optimum in bias but closer in expected realized utility if it has sufficiently lower estimation
+variance. HRP, RA-HRP, inverse volatility, ERC, and constrained/shrunk optimizers all exploit
+this identity in different ways. HRP and RA-HRP reduce variance by replacing global inversion
+with local score maps; Schur-RA-HRP spends some variance budget on local block inversions to
+recover cross-cluster hedge information; full MVO spends the most variance budget by estimating
+and inverting the complete covariance matrix and using the full mean vector.
+8.6 The master HPO objective
+The preceding results suggest a practical HPO loss for selecting among heuristic families:
+LHPO(Φ) = bDΦ +λ est \tr ΣCov( bwΦ) +λ tc ∥ bwΦ −w −∥1 +λ top dT ( bT,T −),(8.12)
+where bDΦ measures implied-return misspecification, the second term measures weight estimation
+variance, the third measures turnover, and the fourth measures tree instability when the rule
+is hierarchical. Equation (8.12) is not a new theorem; it is the operational synthesis of the
+theorems above. It turns HPO into a disciplined model-selection problem rather than a collection
+of unrelated allocation recipes.
+Remark 8.14(How this section changes the interpretation of the paper).The earlier sections
+answer, for each named rule, “when is it exactly optimal?” This section answers the broader
+question, “what is a heuristic portfolio rule mathematically?” It is an information-restricted
+map; its population error is an implied-return projection residual; its Sharpe loss is the squared
+sine of an angle; its hierarchical forms are products of local binary kernels; its exact nodewise
+target is a Schur-tangency mass; and its out-of-sample value is governed by a bias–variance–cost
+trade-off. That is the mathematics of HPO.
+9 F rom HPO to Reinforcement Learning Portfolio Optimization
+(RLPO)
+The preceding section is static: given a statewise estimate ( bµe,t, bΣt), possibly together with a tree
+bTt, a heuristic map produces a portfoliow t = Φ(st). RLPO starts from the same action object
+but changes the question. It asks how a portfolio agent should rebalance through time when
+today’s action affects future states, trading costs, inventory, drawdown, tax lots, liquidity, and
+regime exposure. Thus HPO is themyopic policy faceof RLPO; RLPO is the dynamic control
+layer that learns when the continuation value of deviating from the HPO prior compensates for
+its instantaneous optimality defect.
+28
+9.1 Controlled market formulation
+Definition 9.1(RLPO environment).An RLPO environment is a discounted controlled market
+M= (S,{A(s)} s∈S , P, R, γ),0≤γ <1,
+where st ∈ Sis the observed market state, A(st) ⊆ ∆N−1 is the feasible portfolio set, P (ds′ |s, w)
+is the controlled transition law, R(s, w, s′)is the one-period reward, and γ is the discount factor.
+A Markov policyπassigns a distributionπ(· |s)onA(s). Its value is
+V π(s) =E π
+
+X
+t≥0
+γtR(st, wt, st+1)|s 0 =s
+
+ .(9.1)
+Writingr(s, w) :=E[R(s, w, s′)|s, w], the optimal value satisfies the Bellman equation
+V ⋆(s) = sup
+w∈A(s)
+
+r(s, w) +γE
+
+V ⋆(s′)|s, w 	 .(9.2)
+This is the usual dynamic-programming formulation of sequential control (Bellman, 1957;
+Bertsekas, 2017; Sutton and Barto, 2018). In portfolio applications the state may include
+lagged returns, macro variables, volatility estimates, factor exposures, the current dendrogram,
+the previous portfoliow −, turnover budget, margin constraints, and execution-cost estimates.
+The reward may be raw excess return, mean–variance utility, downside-risk-adjusted return,
+a drawdown-penalized objective, or a transaction-cost-adjusted utility as in dynamic trading
+models with predictable returns and frictions (Gˆ arleanu and Pedersen, 2013).
+Definition 9.2(HPO-induced policy).Let G : S → Zbe a state summarizer producing the
+information consumed by an HPO rule, for example
+G(st) = ( bµe,t, bΣt), G(s t) = ( bµe,t, bΣt, bTt),
+or the reduced statistics used by EW, IV, ERC, HRP, RA-HRP, or Schur-RA-HRP. Any feasible
+HPO mapΦ :Z →∆ N−1 induces the deterministic stationary policy
+πΦ(· |s) =δΦ(G(s)),Φ(G(s))∈ A(s).(9.3)
+Proposition 9.3(HPO policies as stationary RLPO policies;P).Every feasible measurable
+HPO map induces an admissible deterministic stationary RLPO policy through(9.3). Ifγ= 0,
+the reward has no next-state dependence, and R(s, w, s′) = u(G(s), w)equals the one-period
+static objective used to define the HPO map, then the RLPO problem reduces state by state to
+the corresponding static HPO problem. In particular, if
+Φ(G(s))∈arg max
+w∈A(s)
+u(G(s), w),
+thenπ Φ is optimal for the RLPO environment withγ= 0.
+Proof. Measurability and feasibility imply that s7→δ Φ(G(s)) is a valid stationary Markov policy.
+If γ = 0, then (9.1) reduces to the one-period conditional objective V π(s) = E[R(s, w, s′) |s, w].
+Under the stated reward specification this is u(G(s), w), so the Bellman maximization is exactly
+maxw∈A(s) u(G(s), w). A statewise optimizer Φ( G(s)) therefore induces an optimal deterministic
+policy.
+Remark 9.4(The conceptual hierarchy).HPO answers the question “given the current estimated
+pair( bµt, bΣt)and any reduced structure such as a tree, which portfolio map is locally justified?”
+RLPO answers the dynamic question “given the current state and the effect of today’s action on
+tomorrow’s state, when should the agent deviate from that locally justified map?” The action
+space is the same simplex. The difference is the objective: HPO optimizes an instantaneous
+geometric criterion, while RLPO optimizes the Bellman criterion(9.2).
+29
+9.2 Continuation value versus myopic HPO defect
+At states, write
+bµe(s), bΣ(s),w Φ(s) := Φ(G(s))
+for the estimated excess-premium vector, covariance matrix, and HPO baseline. The statewise
+implied-return defect is
+ds(w) := mina>0
+ bµe(s)−a bΣ(s)w2bΣ(s)−1 .(9.4)
+By Theorem 8.4, this is not an ad hoc regularizer: it is exactly
+ds(w) =S 2max(s)−S 2s (w),
+the statewise squared Sharpe inefficiency measured in the metric of the estimated covariance
+matrix.
+Proposition 9.5(Dynamic deviation principle;P).Fix a state s, a baseline HPO action
+wΦ =w Φ(s), and a candidate actionw∈ A(s). Decompose the one-period reward as
+r(s, w) =r0(s, w)−cs(w, w−)−λ HPOds(w),
+wherer 0 is the trading reward before HPO regularization,c s is an implementation cost relative
+to the previous portfolio w−, and λHPO ≥ 0. Define the instantaneous loss of choosing w rather
+than the HPO action by
+∆inst(s, w|w Φ) :=r 0(s, wΦ)−r 0(s, w) +cs(w, w−)−c s(wΦ, w−)
++λ HPO{ds(w)−d s(wΦ)}, (9.5)
+and the continuation-value gain by
+∆cont(s, w|w Φ) :=γE[V ⋆(s′)|s, w]−γE[V ⋆(s′)|s, w Φ].(9.6)
+Thenwweakly improves on the HPO action in Bellman value if and only if
+∆cont(s, w|w Φ)≥∆ inst(s, w|w Φ).(9.7)
+Proof.Subtract the Bellman score ofw Φ from that ofw:
+{r(s, w) +γE[V⋆(s′)|s, w]} − {r(s, wΦ) +γE[V ⋆(s′)|s, w Φ]}.
+Substituting the reward decomposition and rearranging gives ∆ cont(s, w|w Φ) − ∆inst(s, w|w Φ).
+Nonnegativity is exactly (9.7).
+Remark 9.6(Economic interpretation).Equation (9.7) is the precise mathematical statement
+of the HPO–RLPO relation. A dynamic policy should not deviate from a locally justified HPO
+portfolio merely because a neural policy can output different weights. It should deviate only when
+the expected continuation-value gain caused by that deviation is large enough to pay for three
+quantities: the lost instantaneous reward, the incremental turnover or implementation cost, and
+the additional implied-return defect. RLPO is therefore not a replacement for HPO. It is a
+disciplined dynamic policy-improvement layer over an HPO prior.
+30
+9.3 The exact value gap of an HPO policy
+Proposition 9.5 is a one-step comparison. The classical performance-difference identity upgrades
+it to an exact global accounting of how much value the myopic HPO policy leaves on the table,
+in the same advantage units, summed along the trajectory of whatever policy challenges it.
+Proposition 9.7(Exact value gap of the HPO policy;P, identity after Kakade and Langford,
+2002).Assume |R(s, w, s′)| ≤¯R <∞ and γ∈ [0, 1), so all values are bounded by ¯R/(1 −γ ).
+Define theHPO advantageof actionwat statesby
+AπΦ(s, w) :=r(s, w) +γEV πΦ(s′)|s, w  −V πΦ(s),(9.8)
+which satisfies AπΦ
+ 
+s, wΦ(s)
+
+= 0by Bellman consistency of the deterministic stationary policy
+πΦ. Then for every Markov policyπand initial states 0,
+V π(s0)−V πΦ(s0) =E π
+
+X
+t≥0
+γtAπΦ(st, wt)  s0
+
+ = 11−γ E(s,w)∼dπs0 AπΦ(s, w),(9.9)
+where dπs0 := (1 −γ ) Pt≥0 γt Lawπ (st, wt) |s 0 is the normalized discounted occupancy measure.
+In particular, takingπ=π ⋆,
+V ⋆(s0)−V πΦ(s0) = 11−γ E(s,w)∼dπ⋆s0 AπΦ(s, w) : (9.10)
+the exact price of acting myopically is the occupancy-weighted HPO advantage, and only the
+states where the optimal policy actually deviates from the heuristic contribute.
+Proof.Substituting (9.8) and using the tower property underπ,
+Eπ
+" TX
+t=0
+γtAπΦ(st, wt)
+#
+=E π
+" TX
+t=0
+γtRt
+#
++E π
+" TX
+t=0
+
+γt+1V πΦ(st+1)−γ tV πΦ(st)# .
+The second sum telescopes to
+γT+1 Eπ[V πΦ(sT+1 )]−V πΦ(s0).
+Boundedness sends the discounted terminal term to zero as T→ ∞, leaving V π(s0) −V πΦ(s0).
+Dominated convergence justifies the limit, and the occupancy form is the bounded-Fubini
+rewriting of the discounted sum. Bellman consistency,
+V πΦ(s) =r(s,w Φ(s)) +γE V πΦ(s′)|s,w Φ(s) ,
+givesA πΦ(s,w Φ(s)) = 0.
+Corollary 9.8(ε-myopic optimality and shaped localization;P).(i) If no feasible one-step de-
+viation gains more thanε≥0against the HPO policy’s own continuation value, i.e.
+AπΦ(s, w)≤εfor everysand everyw∈ A(s),
+then
+V ⋆(s)≤V πΦ(s) + ε1−γ for everys.
+(ii) Under the reward decomposition of Proposition 9.5, the advantage splits exactly as
+AπΦ(s, w) =e∆cont(s, w|w Φ)−∆ inst(s, w|w Φ),
+e∆cont(s, w|w Φ) :=γE V πΦ(s′)|s, w  −γE V πΦ(s′)|s,w Φ(s),
+with the same instantaneous-loss term (9.5) and the continuation gain evaluated under V πΦ.
+Hence (9.10) is the occupancy-weighted integral of exactly the quantity the deviation principle
+tests pointwise; and because the λHPO term sits inside∆ inst, every deviation along the optimal
+trajectory pays its incremental implied-return defectd s(w)−d s(wΦ(s))state by state.
+31
+Proof. (i) Bound the integrand in (9.10) by ε. (ii) Subtract and add r(s, wΦ(s)) in (9.8), use
+Bellman consistency of πΦ to cancel V πΦ(s), and substitute the reward decomposition; the
+algebra is that of Proposition 9.5 withV πΦ in place ofV ⋆.
+This closes the logical loop between the two layers. Statically, “never optimal, rarely costly”
+is Proposition 3.8 plus Theorem 3.9. Dynamically, the analogue is (9.10) plus Corollary 9.8(i):
+the HPO policy forfeits at most the discounted occupancy average of its statewise advantage
+gaps, and when continuation values never reward deviation by more than ε, acting myopically
+costs at most ε/(1 −γ ) — a bound expressed entirely in the advantage units that the deviation
+principle already prices.
+9.4 HPO-regularized RLPO objectives
+The preceding proposition suggests the following regularized RLPO objective for a parametric
+policyπ θ:
+JRLPO(θ) :=E πθ
+X
+t≥0
+γt
+h
+w⊤t re,t+1 −c t(wt, wt−1)−λ riskρt(wt)
+−λ HPOd(wt; bµe,t, bΣt)−λ KLDKL(wt ∥w Φ(st))
+i
+.
+(9.11)
+Here ρt is a risk functional, ct is the trading-cost model, d is the implied-return defect from
+Definition 8.3, and the KL term keeps the learned policy near the HPO prior unless the data
+supply enough dynamic evidence to move away from it. If λHPO and λKL are large, the solution
+collapses toward the HPO baseline. If they are zero, the problem becomes an unconstrained RLPO
+objective. Intermediate values implement dynamic residual learning around a mathematically
+interpretable prior.
+A particularly stable actor parametrization is the convex-residual policy
+wθt = (1−λ θt )wΦ(st) +λ θt ψθ(st), λ θt ∈[0,1], ψ θ(st)∈∆ N−1 .(9.12)
+This guarantees long-only full investment by construction. The scalar λθt has a direct interpreta-
+tion: the state-dependent degree of trust placed on dynamic RLPO relative to static HPO. A
+conservative agent learns mostly λθt ; a more expressive agent learns both λθt and the residual
+portfolioψ θ.
+9.5 RA-HRP as a hierarchical policy prior
+RA-HRP is especially natural inside RLPO because the policy is already factorized over a tree.
+Instead of asking an actor network to output N unrelated weights, one can ask it to output local
+split probabilities. Fix a tree T . For each internal node v, let βRAv (s) denote the RA-HRP split
+fraction at states, and leta θv(s) be a learned dynamic residual. Define the actor by
+logitβ θv (s) = logitβ RAv (s) +a θv(s), β θv (s)∈(0,1).(9.13)
+For leafi, with pathP(i) and branch indicatorη v(i), the induced portfolio is
+wθi (s) = Y
+v∈P(i)
+
+βθv (s)ηv(i) 1−β θv (s)1−ηv(i) .(9.14)
+Proposition 9.9(Budget feasibility and baseline recovery of the RA-HRP actor;P).For any
+collection of split probabilities {βθv (s) ∈ (0, 1) : v∈ Vint}, the weights in (9.14) are strictly positive
+and sum to one. If aθv(s) = 0for every internal node, then wθ(s) = wRA(s)exactly. Moreover,
+for two hierarchical policiesAandBon the same tree,
+DKL(wA(s)∥w B(s)) = X
+v∈Vint
+W Av (s)d KL βAv (s)∥β Bv (s),(9.15)
+32
+where W Av (s)is the capital mass reaching node v under policy A and dKL is the binary KL
+divergence.
+Proof. Budget feasibility follows by induction down the tree: the root has mass one, and every
+internal node sends fractions βθv and 1 −β θv to its two children, so total mass is conserved at each
+split. Positivity follows from βθv ∈ (0, 1). If all residuals vanish in (9.13), every local split equals
+the RA-HRP split, hence the product representation recovers RA-HRP. The KL identity is the
+same pathwise decomposition proved in Theorem 7.22: expand the log ratio of leaf weights as a
+sum of log ratios of local branch probabilities and exchange the sums over leaves and internal
+nodes.
+Equation (9.15) is the main reason RA-HRP is a better RLPO prior than a black-box weight
+vector. The global distance between the learned dynamic policy and the baseline decomposes into
+node-level binary divergences. Root nodes receive large capital weights and therefore dominate
+global deviation; deep nodes allow fine local tilts. This gives a precise attribution of the actor’s
+dynamic behavior: one can identify whether RLPO is overriding the top-level sector allocation,
+a mid-level cluster split, or a leaf-level security choice.
+Corollary 9.10(Myopic policy gradient at the hierarchical prior;P).Fix a state s and evaluate
+the myopic Sharpe objective Ss(w) := w⊤ bµe(s)/ w⊤ bΣ(s) w1/2 on the hierarchical actor (9.13)
+at the prior,a θv(s) = 0for allv, so thatw θ(s) =w RA(s). Then for every internal nodev,
+∂Ss
+ 
+wθ(s)
+∂aθv
+
+aθ=0
+= βRAv (s) 1−β RAv (s)σp wRA(s) αRAv (s),(9.16)
+where αRAv (s) = gRAv (s)⊤ bµe(s) −a ∗ wRA(s) bΣ(s) wRA(s) is the node alpha of Theorem 7.27
+computed with the RA-HRP weights and splits in the node-switch vectors of Lemma 7.26. Hence
+the myopic component of the policy gradient at the prior is, coordinate by coordinate, the nodewise
+alpha left unexplained by the prior, damped by the logistic variance βv(1 −β v): the actor receives
+its first learning signal exactly where the baseline misprices a child switch, and that signal is
+automatically attenuated at saturated splits.
+Proof. At aθ = 0, ∂β θv /∂aθv = βRAv (1 −β RAv ) from the logit parametrization, so by the product
+representation (9.14), ∂w θi /∂aθv = βRAv (1 −β RAv ) wRAi  ηv(i)/βRAv − (1 −η v(i))/(1 −β RAv ), which
+is βRAv (1 −β RAv ) times the node-switch vector gRAv of Lemma 7.26 built from the RA weights
+and splits. Contract with∇S s(w) =
+ bµe(s)−a ∗(w) bΣ(s)w/σp(w) as in Theorem 7.27.
+A Schur-RA-HRP prior is obtained by replacing βRAv (s) in (9.13) by the conditional-risk
+split from Definition 7.17. The actor then learns deviations around a baseline that already
+incorporates local cross-cluster hedging while still avoiding a global inverse. This gives the
+natural approximation ladder
+exact Bellman policy
+↓
+RL residual over Schur-RA-HRP
+↓
+RL residual over RA-HRP
+↓
+RL residual over HRP.
+(9.17)
+9.6 Tree topology, regime shifts, and the dynamic open problem
+The fixed-tree theory in Sections 7 and 8 is deliberately sharp because it isolates the local score
+map from the discrete topology. RLPO makes the open problem unavoidable: the state may
+33
+include a time-varying tree Tt, and the policy must decide whether changes in the estimated
+dendrogram are signal, noise, or regime transition. A dynamic tree-regularized objective can be
+written as
+Jtree(θ) =J RLPO(θ)−λ T Eπθ
+X
+t≥0
+γtdT (Tt,T t−1),(9.18)
+where dT may be a merge-preservation distance, a cophenetic-matrix distance, a leaf-order
+rank distance, or a split-probability path distance. The pathwise factorization of hierarchical
+weights suggests the right mathematical route for future theory: prove uniform convergence of
+the value of node-split policies over a class of random trees, controlling both continuous score
+perturbations and discrete topology changes. In this sense the dendrogram-stability diagnostics
+used for RA-HRP are not merely empirical checks; they are the observable coordinates of the
+missing uniform-in-tree RLPO theorem.
+9.7 Operational blueprint
+The HPO–RLPO synthesis leads to a practical architecture.
+1. Construct a state st containing market features, estimates ( bµe,t, bΣt), the current tree bTt when
+hierarchical rules are used, previous weightsw t−1, and cost/liquidity variables.
+2. Compute a baseline HPO priorw Φ(st), preferably RA-HRP or Schur-RA-HRP when a stable
+tree is available.
+3. Parametrize the actor either as the convex residual (9.12) or, for hierarchical policies, through
+node-level residual logits (9.13).
+4. Train the policy on the cost-adjusted Bellman objective (9.11), using the HPO defect and KL
+penalties to prevent economically unjustified deviations.
+5. Attribute the learned deviations through (9.15), separating root-level regime allocation from
+local security-level tilts.
+Static HPO object RLPO counterpart Interpretation
+HPO map Φ(G(s)) deterministic policy πΦ(· |s) =
+δΦ(G(s))
+every heuristic is a stationary
+Markov policy
+Implied-return defect ds(w) reward-shaping penalty dynamic deviations must pay for
+local Sharpe inefficiency
+RA-HRP node splitβ RAv actor prior logitβ θv =
+logitβ RAv +a θv
+RL learns interpretable residuals
+rather than unrelated weights
+Pathwise KL decomposition tree-level policy regularizer global policy distance decomposes
+into node-level deviations
+Tree-stability diagnostics topology regularizer
+dT (Tt,T t−1)
+regime changes and dendrogram
+jumps become controlled state vari-
+ables
+Homotopy derivativeP
+v(sv −r v)αv
+myopic policy-gradient coordi-
+nates (9.16)
+the actor’s first learning signal is
+the nodewise alpha the prior leaves
+unexplained
+HPO advantageA πΦ (s, w) performance-difference identity
+(9.9)
+exact discounted price of acting
+myopically; ε-myopic bound ε/(1−
+γ)
+T able 2:Static-to-dynamic bridge between HPO and RLPO. HPO supplies the myopic geometry and
+policy priors; RLPO supplies continuation value and dynamic policy improvement.
+34
+The central message is therefore simple. HPO gives exact statewise optimality defects.
+RA-HRP gives structured hierarchical policy priors. RLPO learns dynamic deviations under
+costs, regimes, and feedback. The three pieces are complementary rather than competing.
+10 Transfer: Elliptical Risk Measures and Growth Optimality
+Mean–variance optimality is the natural benchmark, but the conditions above would be parochial
+if they were artifacts of the quadratic objective. They are not.
+10.1 Elliptical transfer
+Assumption 10.1(Ellipticity).The return vector is elliptical,r ∼E N (µ, Σ, ψ): the charac-
+teristic function is ϕ(t) = eit⊤µ ψ(t⊤Σt), with finite second moments normalized soΣis the
+covariance matrix.
+Theorem 10.2(Risk-measure transfer;P, assembling classical results).Under Assumption 10.1,
+let ϱ be any risk measure on portfolio losses Lw = −w⊤rthat is law-invariant, positively
+homogeneous, and cash-translative (ϱ(L−c) = ϱ(L)−c), with ϱ(Z) ∈ (0,∞ )for Z the standardized
+one-dimensional marginal. Then
+ϱ(Lw) =−w ⊤µ+ √w⊤Σwϱ(Z),(10.1)
+so for every target mean the ϱ-minimizing fully invested portfolio is the variance-minimizing
+one, the mean– ϱ frontier coincides with the mean–variance frontier, and the generalized-Sharpe
+maximizer arg maxw w⊤µe/ϱ(Lw + rf )is the maximum-Sharpe portfolio. Consequently every
+coincidence condition of Sections 4–7 is simultaneously the condition for mean– CVaRα optimality
+at every level α, and frontier portfolios are optimal for every nonsatiated risk-averse expected-
+utility investor.
+Proof. Ellipticity implies the location–scale property of linear functionals:w ⊤r d= w⊤µ +√
+w⊤ΣwZ with Z standardized, the same law for allw(Owen and Rabinovitch, 1983; Embrechts
+et al., 2002). Apply law invariance, translativity, and positive homogeneity to Lw = −w⊤µ−√
+w⊤ΣwZ (using −Z d=Z by symmetry of elliptical marginals) to obtain (10.1). For fixed
+mean, minimizing ϱ is minimizing
+√
+w⊤Σw; CVaR at any α∈ (0, 1) satisfies the hypotheses
+with ϱ(Z) = CVaRα(Z) > 0 (Rockafellar and Uryasev, 2000). The expected-utility statement is
+the characterization of Chamberlain (1983): under ellipticity with finite means, expected utility
+is a function of mean and variance alone, increasing in the former and decreasing in the latter
+for concave increasing u — and Chamberlain’s result is an exact characterization, so ellipticity
+is also essentially the largest class for which this transfer can hold for all utilities.
+An allocator who replaces variance by CVaR escapes none of the conditions in this paper
+unless she simultaneously departs from ellipticity. The frameworks separate only through tails
+and asymmetry — skewness, asymmetric heavy tails, state-dependent dependence — which is
+where genuine mean–CVaR-versus-mean–variance trade-offs live.
+10.2 Growth-optimal transfer
+Proposition 10.3(Kelly coincidence;P, classical setting).In the standard diffusion market
+dSi,t/Si,t = µi dt + (σdB t)i withΣ= σσ ⊤ ≻ 0and money-market rate rf , the almost-sure
+long-run growth rate of a constant-proportion strategy holding fractionswin risky assets is
+g(w) = rf +w ⊤µe − 12 w⊤Σw, maximized uniquely at the Kelly allocationw K =Σ −1µe (Kelly,
+1956; Merton, 1971). Hence a fully invested heuristicw ◦ is proportional to the growth-optimal
+risky allocation — i.e. is the risky composition of every fractional-Kelly strategy — if and only
+35
+if µe ∝ Σw◦:the same condition (3.2). Every optimality set in this paper is simultaneously a
+Kelly-coincidence set in the diffusion limit.
+Proof. Itˆ o’s formula onlnW t for the constant-proportion wealth dynamics gives dlnW t =
+(rf +w ⊤µe − 12 w⊤Σw) dt +w ⊤σdB t; the time-average of the martingale part vanishes a.s.,
+leaving g(w), a strictly concave quadratic with maximizerΣ −1µe. Proportionalityw ◦ ∝ wK is
+condition (3.2) verbatim.
+11 Symmetry and Bayes Optimality: When the Heuristic Is the
+Optimizer
+The exact conditions classify parameter configurations; this section classifiesbeliefs. The claim
+to be made precise is: each flat heuristic is theexactly optimalBayes portfolio of an investor
+whose uncertainty is symmetric under the group corresponding to her information set. Ignorance,
+formalized as invariance, does not approximately rationalize the heuristics — it derives them.
+Lemma 11.1(Predictive reduction;P).Let the investor hold a belief π over( µe, Σ)and
+maximize the one-period objective Eπ[w⊤re] − λ2 Varπ(w⊤re), wherer e is the predictive excess
+return (parameters integrated out, with E[re |µ e, Σ] = µe, Var(re |µ e, Σ) =Σ). Then the
+objective equalsw ⊤ ¯µe − λ2 w⊤ ˆΣwwith
+¯µe =E π[µe], ˆΣ=E π[Σ] + Covπ(µe)≻0,
+and the Bayes portfolio isw ⋆ = 1λ ˆΣ−1 ¯µe — the tangency portfolio of thepredictivepair.
+Proof. Law of total expectation and total variance: Varπ(w⊤re) = Eπ[w⊤Σw] + Varπ(w⊤µe) =
+w⊤(Eπ[Σ] + Covπ(µe))w. The maximizer is the unconstrained quadratic optimum.
+Lemma 11.2(Commutant of the symmetric group;P).If M∈R N×N is symmetric and
+P M P⊤ = M for every permutation matrix P , then M = uI + v11⊤ for scalars u, v; if
+additionallyM≻0thenu >0andu+N v >0, andM −11= (u+N v) −11.
+Proof. Invariance under the transposition of i and j forces Mii = Mjj and Mik = Mjk for
+k̸ = i, j; ranging over transpositions equalizes all diagonal entries and all off-diagonal entries.
+Positive definiteness gives the eigenvalue conditions ( u with multiplicity N− 1 on1 ⊥, u + N von
+1), andM1= (u+N v)1inverts as claimed.
+Theorem 11.3(Exchangeability ⇒ equal weight;P).Suppose the belief π is invariant under the
+full symmetric group acting on assets,( µe, Σ) 7→ (Pµ e, PΣP ⊤), and ¯µe ̸= 0with1 ⊤ ˆΣ−1 ¯µe > 0.
+Then the Bayes portfolio of Lemma 11.1, normalized to full investment, is exactly the equal-weight
+portfolio — for every risk aversionλand every exchangeableπ.
+Proof. Invariance of π makes ¯µe a fixed vector of every permutation, hence ¯µe = m1; and
+makes both Eπ[Σ] and Covπ(µe) invariant matrices, hence by Lemma 11.2 ˆΣ = uI + v11⊤ with
+ˆΣ−11∝1. Thusw ⋆ ∝ ˆΣ−1m1∝1, and the sign condition fixesm >0.
+Theorem 11.4(Standardized exchangeability ⇒ inverse volatility;P).Suppose volatilities
+σ1, . . . , σN are known, and the belief about thestandardizedexcess returnsz= D−1re is
+exchangeable, with predictive mean ¯z = ¯s1, ¯s >0, and predictive covariance ˆZ≻ 0. Then the
+Bayes portfolio, normalized to full investment, is exactly the inverse-volatility portfolio.
+Proof. Exchangeability of the predictive law ofzforces ¯z∝ 1and, by Lemma 11.2, ˆZ = uI +v11⊤.
+The predictive pair forr e =Dzis (¯sD1, D ˆZD), so
+w⋆ ∝(D ˆZD) −1¯sD1= ¯s D−1 ˆZ−11∝D −11,
+the IV weights, using ˆZ−11= (u+N v) −11.
+36
+Proposition 11.5(Uninformative premia with conjugate uncertainty ⇒ minimum variance;
+P).SupposeΣis known, the belief about µe has mean ¯µe = m1, m >0, and conjugate-form
+uncertainty Covπ(µe) = τ 2Σ, τ≥ 0. Then the Bayes portfolio, normalized to full investment, is
+exactly the GMV portfolio, for everyτ.
+Proof. ˆΣ= (1 +τ 2)Σ, sow ⋆ ∝Σ −11.
+Remark 11.6(MD, ERC, HRP at this rung).Maximum diversification is the degenerate case:
+a point-mass belief µe = Sσ with knownΣgivesw ⋆ ∝ Σ−1σ immediately (Theorem 4.7 read
+as a Bayes statement). For ERC, HRP, and RA-HRP we know of no theorem of comparable
+cleanliness: ERC arises from the symmetric beliefs of Theorem 11.4 only on the constant-
+correlation slice where it collapses to IV (Proposition 6.5), HRP’s defining objects — the tree
+and the recursive split — have no invariance-group derivation we are aware of, and RA-HRP
+additionally requires a belief-level account of why noisy local cluster-Sharpe estimates should be
+trusted after aggregation but not globally inverted. A robust-control foundation for ERC under
+Sharpe-ratio ambiguity with a trusted correlation matrix, for HRP under ambiguity confined to
+inter-cluster blocks (the objects substitutions (i)–(ii) of Corollary 7.3 discard), and for RA-HRP
+under ambiguity-penalized local Sharpe scores are the natural conjectured forms; we state them
+as open problems, not results.
+The pattern of Theorems 11.3–11.4 and Proposition 11.5 is the group-theoretic content of
+the information-set ladder: choose the subgroup of asset relabelings under which your knowledge
+is genuinely indistinguishable, impose invariance of beliefs under it, and the Bayes portfolio is
+forced into the corresponding heuristic. The heuristics are not approximations to optimization;
+they are optimization under symmetry.
+12 Ambiguity, Robustness, and Estimation
+The Bayes theorems condition on symmetric beliefs; robust and finite-sample results show that
+the same portfolios emerge from adversarial and frequentist formulations.
+Proposition 12.1(1 /N as the high-ambiguity limit;C).In distributionally robust portfolio
+selection where the return law is known only to lie in a ball (Kantorovich/Wasserstein-type) of
+radius ε around a nominal model and the investor minimizes the worst case of a convex risk
+functional over the ball, Pflug et al. (2012) prove that as ε→ ∞the robust optimal portfolio
+converges to equal weight: uniform diversification is the exact limit of robust optimization under
+extreme ambiguity. Garlappi et al. (2007) obtain multi-prior portfolios interpolating between the
+plug-in optimum and conservative diversification as confidence shrinks.
+Proposition 12.2(Constraints as shrinkage;C).Jagannathan and Ma (2003) prove that
+the long-only (and upper-bounded) minimum-variance portfolio computed from an estimate ˆΣ
+equals theunconstrainedminimum-variance portfolio of a modified matrix in which constraint
+multipliers shrink the covariances of assets at the bounds: imposing the “wrong” constraints
+performs covariance shrinkage (cf. Ledoit and Wolf, 2004), which is why constrained GMV often
+beats unconstrained GMV out of sample.
+Remark 12.3(Estimation error and the empirical record;E).The sample counterpart is well
+documented. Errors in estimated means degrade mean–variance utility by roughly an order of
+magnitude more than comparable errors in variances at moderate risk aversion (Chopra and
+Ziemba, 1993); optimized weights are extremely sensitive to means (Best and Grauer, 1991;
+Michaud, 1989); and expected returns are the slowest quantity to learn from data (Merton, 1980).
+DeMiguel et al. (2009) show across datasets and fourteen optimizing models that none consistently
+beats1 /N out of sample in Sharpe ratio or certainty equivalent, with the estimation window
+37
+required for the plug-in tangency portfolio to overtake1 /N growing far beyond available histories
+as N increases; Kan and Zhou (2007) derive the optimal finite-sample combination of riskless
+asset, sample tangency, and sample GMV, formalizing the shrinkage the heuristics implement
+for free; and Tu and Zhou (2011) show that optimally combining1 /N with sophisticated rules
+can dominate both ingredients — the sample-level analogue of the HPO projection (8.1) over a
+two-member family. These are finite-sample statements, distinct from the population conditions
+of this paper:1 /N can dominate theestimatedtangency portfolio while being far from thetrue
+one. Theorem 3.9 is the population-side bridge: because efficiency is flat across each coincidence
+set, the heuristic forfeits only second-order Sharpe when its condition nearly holds, while the
+plug-in optimizer pays first-order weight instability for second-order objective gains.
+13 Constrained, Costly, and Implementable Optimality
+The previous sections use the clean population benchmark: full investment, no short-sale
+constraints unless a rule imposes them internally, no turnover penalty, and no implementation
+wedge between a mathematical weight and a tradable portfolio. Actual mandates almost never
+look like that. They impose long-only constraints, concentration caps, sector limits, benchmark
+bands, turnover limits, and sometimes explicit transaction-cost models. The central message
+survives, but the exact condition changes from an equality to anormal-conestatement: the
+missing implied returns may be supplied by active constraints.
+13.1 Normal-cone optimality under mandate constraints
+Let K⊂R N be a nonempty closed convex feasible set. In applications K usually includes the
+full-investment constraint, lower and upper bounds, and possibly linear exposure restrictions.
+Its normal cone atw∈Kis
+NK(w) ={n∈R N :n ⊤(v−w)≤0∀v∈K}.(13.1)
+Theorem 13.1(Constrained implied-return principle;P).Fix γ > 0and a closed convex
+mandate setK. A feasible portfoliow ◦ ∈Ksolves the constrained mean–variance problem
+max
+w∈K
+n
+w⊤µe − γ2 w⊤Σwo (13.2)
+if and only if there existsn∈N K(w◦)such that
+µe =γΣw ◦ +n.(13.3)
+Equivalently, the unconstrained implied-return residual
+a(w◦) :=µ e −γΣw ◦ (13.4)
+must be entirely explainable by the shadow prices of the active mandate constraints.
+Proof. The objective in (13.2) is strictly concave becauseΣ ≻ 0. Therefore first-order variational
+optimality is necessary and sufficient:
+(µe −γΣw ◦)⊤(v−w ◦)≤0∀v∈K.
+This is preciselyµ e −γΣw ◦ ∈N K(w◦).
+Corollary 13.2(Box-constrained implied returns;P).Let
+K={w:1 ⊤w= 1, ℓ i ≤w i ≤u i ∀i}.
+38
+Thenw ◦ solves (13.2) iff there exist b∈R , lower-bound multipliers λi ≥ 0, and upper-bound
+multipliersξ i ≥0satisfying complementarity
+λi(w◦i −ℓ i) = 0, ξ i(ui −w ◦i ) = 0,
+and
+µe =γΣw ◦ +b1−λ+ξ.(13.5)
+Thus a zero weight does not require the asset to have zero optimal unconstrained demand; it only
+requires that its negative implied-return residual be absorbed by the lower-bound shadow price.
+Likewise, a capped name may have a positive residual absorbed by an upper-bound shadow price.
+Proof. The normal cone of the equality-plus-box set is the span of1plus outward normals to
+active lower and upper faces. Using the sign convention in Theorem 13.1 gives (13.5).
+Remark 13.3(Why this matters for heuristic portfolios).Theorems 4.1–4.7 and 6.2 classify
+exact unconstrained coincidence. Theorem 13.1 gives the mandate version. A long-only equal-
+weight, inverse-volatility, ERC, MD, HRP, or GMV portfolio can be constrained-optimal even
+when it is not unconstrained-optimal, but only if the residual alphas are located on the active
+faces of the feasible set. This is the precise population analogue of the finite-sample result of
+Jagannathan and Ma (2003): constraints do not merely “regularize” the optimizer; they add
+shadow premia.
+13.2 Transaction-cost wedges
+Suppose the current portfolio isw − and the investor pays a quadratic trading penalty with
+positive semidefinite matrix Λ⪰0 and intensityκ≥0:
+max
+w∈K
+n
+w⊤µe − γ2 w⊤Σw− κ2 (w−w −)⊤Λ(w−w −)o .(13.6)
+Quadratic costs are a local model of market impact and turnover aversion, and they are the
+static one-period analogue of dynamic transaction-cost models such as Gˆ arleanu and Pedersen
+(2013).
+Proposition 13.4(Cost-adjusted implied returns;P).A feasiblew ◦ ∈K solves (13.6) iff there
+existsn∈N K(w◦)such that
+µe =γΣw ◦ +κΛ(w ◦ −w −) +n.(13.7)
+In the unconstrained full-investment case, this becomes
+µe =γΣw ◦ +κΛ(w ◦ −w −) +b1.(13.8)
+Proof. The gradient of the objective in (13.6) is µe −γ Σw −κ Λ(w − w−). Apply the same
+variational inequality as in Theorem 13.1.
+Remark 13.5(No-trade interpretation).Ifw ◦ =w −, the cost wedge vanishes; if the candidate
+rule demands a large rebalance, the wedge can dominate the statistical signal. Equation (13.7)
+says that a rule is implementably optimal only when expected excess returns compensate both risk
+and the marginal cost of moving from the current book. This is why the same population-optimal
+rule may be undesirable at daily frequency and reasonable at quarterly frequency.
+Remark 13.6(Linear costs, quadratic wedges, and RA-HRP turnover;E).The quadratic
+wedge in (13.7) is the differentiable local approximation to implementation frictions. A one-way
+linear cost c∥w − w−∥1 gives the same economic message with a nonsmooth subgradient: the
+implied-return residual must compensate risk plus an element of c ∂∥w − w−∥1, together with any
+39
+mandate normal cone. The RA-HRP evidence is consistent with both descriptions. The reported
+rolling implementation has monthly two-way turnover of approximately10 .0%for traditional
+HRP,11 .1%for RA-HRP, and12 .5%for Schur-RA-HRP; under one-way cost stress tests of
+5–20 basis points, the RA-HRP net Sharpe remains close to the gross Sharpe (Noguer i Alonso,
+2026). Thus the same structural feature that avoids the global inverse — local, bounded split
+revisions on a tree — also keeps trading frictions modest under linear and quadratic cost models.
+13.3 Benchmark-relative and factor-neutral mandates
+Many institutional portfolios are not judged in absolute variance but relative to a benchmarkw b.
+Let active weights bex=w − wb, with1 ⊤x= 0, active covariance stillΣ, and active expected
+excess returnµ a. A tracking-error mandate solves
+max
+x∈Ka
+n
+x⊤µa − γ2 x⊤Σxo .(13.9)
+The identical normal-cone result gives
+µa =γΣx ◦ +n a,n a ∈N Ka(x◦).(13.10)
+Therefore a heuristic active overlay is optimal exactly when it prices active alphas through active
+covariances, after accounting for active constraints. In particular, the equal-weight theorem has
+a benchmark-relative form: equal active weights across an eligible sleeve require zero alphas
+against the active equal-weight sleeve, not against the absolute portfolio.
+14 Estimation Geometry , High-Dimensional Risk, and Empirical
+Diagnostics
+The paper has so far separated population truth from finite-sample practice. This section
+connects them. The exact optimality sets tell us what must be true; the estimation geometry
+tells us why, even when those conditions are false, a rule that ignores some inputs may dominate
+an optimizer that estimates them badly.
+14.1 First-order sensitivity of tangency weights
+Let
+T(µ e,Σ) = Σ−1µe1⊤Σ−1µe
+be the normalized tangency map and writec=1 ⊤Σ−1µe >0,w T =T(µ e,Σ).
+Theorem 14.1(Differential of the tangency map;P).For perturbations( δµ, δΣ)small enough
+thatΣ+ δΣ ≻ 0and the denominator remains positive, the first differential of the tangency
+weights is
+δwT =
+
+I−w T 1⊤
+  1
+c Σ−1δµ−Σ −1δΣ wT
+
++o(∥δµ∥+∥δΣ∥).(14.1)
+Consequently, mean errors enter with amplification1 /c, while covariance errors enter through
+the already-chosen directionw T .
+Proof.Letx=Σ −1µe andc=1 ⊤x, sow T =x/c. The differential ofxis
+δx=Σ −1δµ−Σ −1δΣ Σ−1µe =Σ −1δµ−cΣ −1δΣ wT .
+Sinceδc=1 ⊤δx,
+δwT = δxc − xδcc2 = 1c (I−w T 1⊤)δx,
+which gives (14.1).
+40
+Remark 14.2(Why means dominate).Equation (14.1) is the infinitesimal version of the
+empirical findings of Merton (1980), Best and Grauer (1991), Chopra and Ziemba (1993), and
+Michaud (1989). Expected returns are small in annualized units, so c =1 ⊤Σ−1µe is often small;
+the inverse factor1 /c turns modest premium errors into large allocation errors. A volatility-only
+rule may be population-suboptimal yet estimation-robust because it deletes the most unstable term
+in(14.1).
+14.2 Projection onto a heuristic optimality set
+The exact conditions can be turned into diagnostics. FixΣand a candidatew ◦. Its tangency-
+coincidence set is the ray {aΣw◦ : a >0}. Given an estimated premium vector ˆµe, ask how far
+it is from that ray.
+Proposition 14.3(Closest implied-return ray;P).Let M≻ 0define a diagnostic norm
+∥z∥2M =z ⊤Mzand setq=Σw ◦. The best positive-ray approximation to ˆµe is
+a∗ = max
+
+0, q⊤M ˆµe
+q⊤Mq
+
+, ˆµproje =a ∗q,(14.2)
+and the squared distance
+d2M ( ˆµe,O Σ(w◦)) =∥ ˆµe −a ∗Σw◦∥2M (14.3)
+quantifies the violation of the heuristic’s exact optimality condition.
+Proof. Minimize the one-dimensional quadratic Q(a) = ∥ ˆµe −a q∥2M over a≥ 0. The uncon-
+strained minimizer is (q ⊤M ˆµe)/(q⊤Mq); projection onto [0,∞) gives (14.2).
+Remark 14.4(A useful choice of metric).Taking M = ˆΩ−1µ , where ˆΩµ is the estimated covariance
+matrix of premium estimates, turns (14.3) into a Wald-type statistic. Taking M =Σ −1 measures
+distance in the same dual metric that appears in S2max = µ⊤e Σ−1µe. Either way, the diagnostic
+decomposes the failure of a heuristic into a scalar scale estimate a∗ plus an orthogonal residual
+premium vector.
+14.3 GRS and spanning tests as optimality tests
+Remark 3.6 states the principle. The usable formula is as follows. For T excess-return observa-
+tions, regress each asset on the candidate heuristic excess returnr ◦e,t:
+re,i,t =α i +β ir◦e,t +ϵ i,t.(14.4)
+Let ˆα be the vector of intercepts, ˆΣϵ the residual covariance matrix, ¯r◦ the sample mean of the
+candidate return, and ˆσ2◦ its sample variance. With one candidate factor, the Gibbons–Ross–
+Shanken statistic is
+GRS = T−N−1N ˆα⊤ ˆΣ−1ϵ ˆα1 + (¯r◦)2/ˆσ2◦ ∼F N,T−N−1 (14.5)
+under the Gaussian exact-efficiency null (Gibbons et al., 1989). Small-sample refinements and
+related asymptotics are discussed by Jobson and Korkie (1980) and Memmel (2003). Mean–
+variance spanning tests such as Huberman and Kandel (1987) provide the multi-portfolio
+analogue: a set of heuristic sleeves spans the efficient frontier iff adding the remaining assets
+does not improve the frontier.
+Remark 14.5(Interpreting rejection).Rejection of (14.5) does not mean the heuristic is useless;
+it means the exact population condition is statistically inconsistent with the sample. Theorem 3.9
+then gives the next question: is the rejection economically large? A large p-value is evidence of
+statistical non-rejection; a small angular loss1 −η 2 is evidence of economic adequacy. They
+answer different questions.
+41
+14.4 High-dimensional covariance and the inversion tax
+Even a rule with a clean population foundation can fail in finite samples if it requires inverting a
+noisy covariance matrix. This is the high-dimensional counterpart of mean-estimation fragility.
+Proposition 14.6(Sample GMV risk inflation;C).Let ˆΣ be the sample covariance matrix
+from T independent Gaussian observations on N assets with true covarianceΣ ≻ 0, and
+let ˆwGMV = ˆΣ−11/(1⊤ ˆΣ−11)whenever ˆΣ is nonsingular. In the high-dimensional regime
+N/T→q∈(0,1), random-matrix results imply the out-of-sample variance inflation
+ˆw⊤GMVΣ ˆwGMV
+w⊤GMVΣwGMV − →11−q (14.6)
+under standard regularity conditions. This is theinversion tax: as the cross-section approaches
+the sample length, the plug-in GMV portfolio becomes mechanically overfit. See El Karoui (2010)
+and the shrinkage literature of Ledoit and Wolf (2004).
+Remark 14.7(What HRP and shrinkage are buying).Equation (14.6) clarifies the empirical
+appeal of HRP, RA-HRP, inverse volatility, ERC, and covariance shrinkage. They give up exact
+global inversion ofΣin exchange for reduced estimation variance. Fixed-tree RA-HRP belongs
+to this low-inversion family: its Jacobian is a composition of local rational split maps whose
+denominators are cluster variances, score sums, and floors, rather than the smallest eigenvalue
+of the full covariance matrix. Schur-RA-HRP restores some cross-cluster information through
+local block inversions, but it still avoids a single globalΣ −1. Cotton ’s Schur-complement view
+of HRP and minimum variance, and subsequent hierarchical minimum-variance constructions,
+make this trade-off explicit by partially restoring the cross-block covariance information that HRP
+discards (Cotton, 2024; Mograby, 2025). Cotton ’s 2024 paper introduces Schur Complementary
+Allocation as a bridge between HRP and minimum-variance portfolios, while Mograby’s 2025
+work develops a recursive Schur-complement framework for hierarchical minimum variance; both
+directly support the interpretation of HRP as a controlled deletion or restoration of inverse-
+covariance information.
+14.5 A reproducible empirical protocol
+A paper claiming that a heuristic is “optimal” should report three layers, not one.
+1. Population-condition diagnostic.Estimate the rule-specific restriction: EW zero alphas
+against EW; IV Sharpe ratios versus correlation row sums; ERC performance parity; MD
+equal Sharpe ratios; GMV equal premia; HRP Schur-substitution residuals.
+2. Statistical test.Report the GRS statistic (14.5), a spanning test when several sleeves are
+compared, and robust/HAC versions when returns are serially dependent or heteroskedastic.
+3. Economic loss.Report realized Sharpe efficiency, angular loss 1 −η 2, turnover, transaction-
+cost-adjusted Sharpe, drawdown, and CVaR. Statistical rejection with economically negligible
+angular loss is not a failure of the heuristic; non-rejection with high turnover may still be
+implementation failure.
+4. Stability .Use rolling windows, block bootstrap, and perturbation experiments. Report how
+often the ranking of rules changes under resampling. This directly measures the estimation
+terms isolated in Theorem 14.1.
+5. Dimensionality.Always report q = N/T for the covariance window. Without q, a
+comparison between plug-in optimization and heuristics is uninterpretable, because (14.6)
+changes the expected cost of inversion.
+42
+14.6 Computational profile of the allocation ladder
+The exact optimality results should be read together with the numerical burden of the rule. In
+dense implementations, the usual computational profile is summarized in Table 3. The point is
+not that lower complexity is automatically better; it is that every avoided inversion, local score,
+or tree constraint deletes a specific source of estimation variance and replaces it by a specific
+structural assumption.
+Rule Typical dense cost Main numerical
+bottleneck
+Interpretation of the cost
+EWO(N) none Maximum symmetry; no sampling
+burden beyond defining the uni-
+verse.
+IV / IVarO (N ) after vol esti-
+mates
+volatility estimation Uses diagonal risk only; deletes
+correlation and premium informa-
+tion.
+GMVO (N 3) after covari-
+ance estimation
+global covariance in-
+version and condition-
+ing
+Buys the full covariance signal at
+the price of the high-dimensional
+inversion tax.
+ERC iterative, often
+O(KN 2) for K
+solver steps
+nonlinear risk-budget
+solve
+Uses covariance without premia;
+solver stability depends on condi-
+tioning and constraints.
+HRP clustering plus recur-
+sive local variances
+dendrogram stability Replaces global inversion by tree
+topology and local variance aggre-
+gation.
+RA-HRP HRP cost plus local
+mean/Sharpe scores
+local premium noise
+and floor activation
+Spends a controlled amount
+of mean-estimation risk locally
+rather than globally.
+Schur-RA-HRP RA-HRP plus sibling-
+block inversions
+conditioning of local
+Schur blocks
+Restores cross-cluster hedging in-
+formation without paying the full
+global inverse.
+RLPO residual
+policy
+training-dependent off-policy error, re-
+ward design, turnover
+and regime shift
+Learns dynamic deviations only
+when continuation value pays for
+the static HPO defect.
+T able 3:Computational profile of the HPO–RLPO ladder. Costs are indicative for dense implementations
+and should be reported with the covariance-window ratioq=N/T.
+A reproducible empirical implementation should therefore report not only realized returns
+but also the cost of producing the weights: the length of the estimation window, q = N/T ,
+covariance-conditioning diagnostics, tree-stability diagnostics, floor-activation frequencies for
+RA-HRP, local Schur-block conditioning for Schur-RA-HRP, and post-cost turnover. Without
+these quantities, an empirical comparison confounds portfolio skill with numerical fragility.
+15 Non-Elliptical Tails, Downside Risk, and Where the Condi-
+tions Break
+The elliptical transfer theorem is intentionally sharp. It says that replacing variance by CVaR
+does not change the optimality conditions when all linear portfolios share the same standardized
+marginal shape. The converse message is equally important: departures from ellipticity are
+exactly where different objectives begin to disagree.
+43
+Definition 15.1(Tail-shape residual).For a portfoliow, define the standardized excess-return
+residual
+Zw = w⊤(r−µ)√w⊤Σw .(15.1)
+The tail-shape residual between two portfolioswandvat levelαis
+∆α(w,v) = CVaR α(−Zw)−CVaR α(−Zv).(15.2)
+Under ellipticity,∆ α(w,v) = 0for allw,v, α.
+Proposition 15.2(First-order downside wedge;P).Assume a law-invariant homogeneous
+downside risk measure admits the representation
+ϱ(Lw) =−w ⊤µ+k w√w⊤Σw,(15.3)
+where kw is differentiable in a neighborhood ofw ◦. Then the first-order condition for maximizing
+mean per unit downside risk contains the additional tail-shape term ∇kw|w=w◦. In particular,
+the mean–variance implied-return condition µe ∝ Σw◦ remains sufficient only when kw is locally
+constant along feasible directions.
+Proof. Differentiate the generalized denominator kw(w⊤Σw)1/2. In addition to the variance-
+gradient term kwΣw/(w⊤Σw)1/2, one obtains (w ⊤Σw)1/2∇kw. The latter vanishes exactly
+when standardized tail shape is locally invariant.
+Remark 15.3(Practical implication).This identifies the boundary of the paper’s transfer
+claims. If assets have asymmetric crash exposure, volatility targeting, option-like payoffs, or
+regime-dependent correlations, then a heuristic can be Sharpe-near-optimal and CVaR-poor. The
+missing state variable is not variance but tail-shape heterogeneity. Empirically, this means the
+protocol in Section 14.5 should report both angular Sharpe loss and tail-shape residuals.
+16 Synthesis: The Optimality Map
+Table 6 collects the exact population conditions; Table 7 collects the belief-level foundations.
+Together they give the information-set ladder theorem-level content at every rung where such
+content currently exists, and mark the missing rungs as open.
+Table 4 separates the same rules by inputs, inversion profile, estimation vulnerability, and
+topological coincidence boundary. Table 5 then places those static rules inside the dynamic
+RLPO hierarchy developed in Section 9. Together with the HPO defect and bias–variance
+identities of Section 8, this is the practical map: it explains why a rule can be theoretically
+suboptimal and still empirically robust when the coordinates required by the optimizer are too
+noisy, and why an RL policy should deviate from that rule only when continuation value pays
+for the static defect.
+44
+Allocation
+rule
+Inputs consumed Inversion pro-
+file
+Primary estimation vul-
+nerability
+T opological coincidence bound-
+ary
+Equal weight None None Symmetry misspecification,
+not estimation noise
+µe ∝Σ1
+Inverse volatil-
+ity
+Marginal volatilities
+σi
+None Volatility estimates and
+correlation-row-sum mis-
+match
+Si ∝ Pj ρij
+Global min vari-
+ance
+FullΣGlobalΣ −1 High-dimensional inversion
+tax 1/(1 −q ) and covariance
+conditioning
+µe ∝1for tangency coincidence
+Traditional
+HRP
+Tree plus cluster
+IVP variances
+No global in-
+verse
+Dendrogram instability and
+Schur-substitution residuals
+DiagonalΣunder any tree; uncor-
+related exchangeable blocks under
+balanced tree-aligned bisection; plus
+equal premia for tangency
+RA-HRP Tree plus cluster
+means and IVP vari-
+ances
+No global in-
+verse
+Persistence and noise of local
+cluster-Sharpe scores
+Nonlinear fixed point µe =
+aΣΦRAT,ε (µe, Σ); nodewise equality
+of RA splits and Schur-tangency
+splits
+Schur-RA-HRP Tree, cluster pre-
+mia, and Schur con-
+ditional risks
+Local block in-
+versions
+Cross-cluster conditional-
+covariance estimation and
+block conditioning
+Collapses to RA-HRP when sib-
+ling hedge terms vanish; exact only
+when conditional Schur scores match
+Schur-tangency capital masses node
+by node
+T able 4:Structural comparison of heuristic, hierarchical, and return-adjusted allocation rules. The table
+distinguishes the economic input set from the numerical inversion profile and from the exact population
+boundary required for tangency coincidence.
+Layer Mathematical object Role in the research program
+HPO / exact optimality static map w = Φ( bµ,bΣ, bT ) and
+defectd
+identifies when a heuristic is lo-
+cally optimal and how much myopic
+Sharpe efficiency it loses
+RA-HRP / Schur-RA-
+HRP
+tree-factorized map with branch
+probabilities{β v}
+supplies interpretable hierarchical
+policy priors and node-level KL at-
+tribution
+RLPO Markov policy πθ(w|s ) with
+Bellman value
+learns dynamic deviations from HPO
+under costs, regimes, and continua-
+tion value
+T able 5:Division of labor between static HPO, hierarchical RA-HRP priors, and dynamic RLPO.
+45
+Rule Uses Exact tangency condition(this
+paper)
+Informational
+regime
+Equal weight nothing zero alpha vs. EW:µ e ∝Σ1[P,
+Thm. 4.1]
+total ambiguity
+Inverse volatil-
+ity
+σi Si ∝ Pj ρij [P, Thm. 4.3] vols known, correla-
+tions exchangeable
+ERC / risk par-
+ity
+Σ(noµ) performance parity:w iµe,i equal [P,
+Thm. 6.2]; sufficient: equal Si, con-
+stantρ[P, Cor. 6.6]
+Σtrusted, premia
+exchangeable per
+unit risk budget
+Max. diversifica-
+tion
+σ,Σequal Sharpe ratios:µ e ∝σ[P,
+Thm. 4.7]
+risk priced uniformly
+per unit vol
+HRP tree + cluster vari-
+ances
+GMV-coincidence: diagonalΣ, any
+tree [P, Thm. 7.5]; uncorrelated ex-
+changeable blocks [P, Prop. 7.6]; then
+µe ∝ 1[P, Cor. 7.8]; gap = three
+Schur substitutions [P, Cor. 7.3]
+ordinal correlation
+structure trusted,
+Σ−1 not
+RA-HRP tree + cluster
+Sharpe scores
+nonlinear fixed point µe =
+aΣΦRAT,ε (µe, Σ) [P, Thm. 7.15];
+nodewise Schur-tangency split
+matching; HRP–RA pathwise/KL
+attribution [P, Thm. 7.22]
+tree trusted; premia
+trusted only through
+local IVP aggrega-
+tion/flooring; no
+global inverse
+Schur-RA-HRP tree + cluster
+Sharpe scores +
+Schur complements
+conditional-risk score from Def. 7.17;
+Schur score wedge [P, Prop. 7.18];
+locally exact only when conditional
+scores reproduce Schur-tangency
+masses
+tree trusted; cross-
+cluster covariance
+trusted locally, but
+global inverse still
+avoided
+Minimum vari-
+ance
+Σµ e ∝1[P, Thm. 4.5] risk forecastable,
+premia not
+Tangencyµ e,Σ— (benchmark) full knowledge
+T able 6:The optimality map. All conditions are also Kelly-coincidence conditions in the diffusion limit
+[P, Prop. 10.3], transfer to mean–CVaR and expected utility under ellipticity [P, Thm. 10.2], and are
+GRS-testable as zero-alpha restrictions [C, Rem. 3.6]. One-factor translations are in Prop. 5.3.
+46
+Rule Belief-level foundation Status
+Equal weight Bayes rule under any fully exchangeable
+belief
+proved [P, Thm. 11.3]; also
+robust high-ambiguity limit [C,
+Prop. 12.1]
+Inverse volatility Bayes rule under exchangeable beliefs on
+standardized returns,σ i known
+proved [P, Thm. 11.4]
+Minimum variance Bayes rule under conjugate mean uncer-
+tainty with prior mean∝1,Σknown
+proved [P, Prop. 11.5]; constraints-
+as-shrinkage in sample [C,
+Prop. 12.2]
+Max. diversifica-
+tion
+degenerate beliefµ e ∝σ,Σknown immediate [P, Rem. 11.6]
+ERC / risk parity robust foundation under Sharpe ambiguity
+with trusted correlations
+open[Rem. 11.6]
+HRP robust foundation under ambiguity con-
+fined to inter-cluster blocks
+open[Rem. 11.6]
+RA-HRP local cluster-Sharpe shrinkage on a fixed
+tree; exact symmetry/robust foundation
+for noisy premia remains unresolved
+fixed-tree theory and empirical
+proof of concept in Noguer i Alonso
+(2026); belief-level foundationopen
+[Rem. 11.6]
+Schur-RA-HRP local conditional-risk version of RA-
+HRP; robust foundation under uncertainty
+about cross-cluster hedge terms remains
+unresolved
+Schur extension in Def. 7.17; belief-
+level foundationopen[Rem. 11.6]
+T able 7:Belief-level foundations: symmetry-derived Bayes optimality and robust limits.
+47
+17 Limitations and Open Problems
+The paper closes several algebraic gaps but leaves important research problems open. These
+limitations are useful because they identify the exact objects that a referee, implementer, or
+subsequent paper should attack.
+Random dendrogram asymptotics.The fixed-tree theory is sharp, but rolling HRP and
+RA-HRP estimate the tree. A complete asymptotic theory must combine a continuous delta
+method on the score maps with a discrete stability theorem for merge sets, cophenetic matrices,
+or tree-edit representations. The correct theorem should condition on a population merge-
+separation event, prove topology preservation with high probability, and then control off-event
+portfolio jumps through the pathwise product formula of Theorem 7.22.
+Robust-control foundations for ERC, HRP, and RA-HRP.The Bayes foundations
+for EW, IV, and GMV are clean because the relevant symmetry groups are clean. Comparable
+foundations for ERC, HRP, RA-HRP, and Schur-RA-HRP require ambiguity sets that act on risk
+budgets, inter-cluster covariance blocks, and local Sharpe scores. Corollary 7.3, Theorem 7.15,
+and Theorem 8.10 identify the exact algebraic quantities such ambiguity sets must preserve or
+penalize.
+Non-elliptical downside risk.The mean–CVaR transfer is exact under ellipticity and fails
+precisely through standardized tail-shape heterogeneity. A full downside-risk extension would
+replace the scalar angular defect by a pair consisting of Sharpe-angle loss and tail-shape residual
+∆α(w, v), then study when local hierarchical scores can control both simultaneously.
+Dynamic market impact and partial observability .The RLPO bridge uses a discounted
+Markov formulation with explicit rewards and costs. Realistic execution adds transient impact,
+hidden liquidity, delayed fills, and partial observability. The natural extension is a belief-state
+RLPO formulation in which the HPO prior is computed from filtered estimates and the deviation
+principle is applied to belief-state continuation values.
+Uniform empirical validation.The theory supplies falsification diagnostics but does not
+report new numerics. A definitive empirical companion should run the protocol of Section 14.5
+across asset classes, universes, rebalance frequencies, covariance estimators, cost models, and
+tree-linkage rules; report split-sample GRS tests and angular losses; and attribute RA-HRP or
+RLPO gains node by node through the KL and alpha decompositions.
+18 Conclusion
+Eight structural facts organize everything above.
+First, HPO is a mathematical object in its own right. A heuristic portfolio rule is an
+information-restricted map from a reduced statistic to the simplex; its population error is the
+implied-return projection defect DΦ; and Theorem 8.4 proves that this defect is exactly squared
+Sharpe inefficiency. The score-tree formalism then shows that HRP, RA-HRP, Schur-RA-HRP,
+and their interpolations are products of local binary kernels, while Theorem 8.10 identifies the
+exact Schur-tangency mass each node is trying to approximate.
+Second, by the implied-return principle, “is this heuristic optimal” is never yes-or-no; it is a
+question about a closed-form set of parameter configurations, and adopting a ruleisasserting
+its set. Equal weight asserts zero alphas against itself; inverse volatility asserts Sharpe ratios
+aligned with correlation row sums; maximum diversification asserts equal Sharpe ratios with
+no view on correlations; minimum variance asserts equal premia; risk parity asserts that its
+48
+risk budget is simultaneously a performance budget; HRP asserts that the three pieces of
+covariance information it discards at every split — the Schur correction, the budget tilt, and
+within-cluster correlation — are genuinely zero; RA-HRP asserts the nonlinear fixed point in
+which its floored cluster-Sharpe splits match the exact Schur-tangency splits; Schur-RA-HRP
+asserts the analogous condition after replacing standalone cluster risk by conditional Schur risk.
+The unit-free HRP–RA-HRP interpolation shows how to move continuously from the risk-only
+assertion to the return-adjusted assertion without mixing incompatible score units. Every one of
+these assertions is GRS-testable, and under one-factor structure every one of them is readable
+off betas and idiosyncratic variances.
+Third, the geometry of suboptimality is angular and flat. Sharpe efficiency is exactly the
+cosine of theΣ-angle to tangency; the optimality sets are Lebesgue-null, so exact optimality is a
+probability-zero event under any diffuse belief; and yet the efficiency surface is stationary on
+each set, so order- ε violations cost order- ε2 efficiency with an explicit constant. “Never optimal,
+rarely costly” is two theorems, and the same flatness, read from the other side, is the first-order
+weight instability that makes plug-in optimization fragile.
+Fourth, none of this is about variance per se. Under elliptical returns the identical conditions
+govern mean–CVaR at every confidence level and expected utility for every risk-averse investor,
+and in the diffusion limit they are the conditions for fractional-Kelly growth optimality; only
+tail asymmetry separates the objectives.
+Fifth, the deepest sense in which the heuristics are right is not that their parameter con-
+ditions hold — generically they do not — but that each rule isexactlythe optimal policy
+under the symmetry group of its information set. Full exchangeability of beliefs forces equal
+weight; exchangeability of standardized returns with known volatilities forces inverse volatility;
+uninformative premia with conjugate uncertainty force minimum variance; and the equal-weight
+limit also emerges from adversarial robustness as ambiguity diverges. The heuristics are not
+shortcuts around optimization; they are what optimization itself returns when the inputs it
+would need are replaced by honest symmetry. The missing rungs — a robust-control derivation
+of ERC under Sharpe ambiguity with trusted correlations, of HRP under ambiguity confined to
+inter-cluster structure, and of RA-HRP under ambiguity-penalized local Sharpe scores — are
+stated here as open problems; Corollary 7.3 and Theorem 7.15 suggest the exact ambiguity sets
+in which to look.
+Sixth, RLPO is the dynamic continuation of HPO, not a replacement for it. Proposition 9.3
+shows that every HPO rule is a deterministic stationary policy inside the RLPO Markov decision
+problem, and the γ = 0 no-friction Bellman problem collapses to static HPO. Proposition 9.5
+gives the economic test for dynamic improvement: a learned policy should deviate from the
+HPO baseline only when its continuation-value gain exceeds the instantaneous reward loss,
+incremental turnover cost, and added implied-return defect. This makes the HPO defect a
+principled reward-shaping term rather than an arbitrary regularizer. Proposition 9.7 completes
+the accounting: the total value gap of acting myopically is exactly the discounted occupancy
+average of the HPO advantage, so statewise ε-adequacy of the heuristic implies a global ε/(1 −γ )
+guarantee (Corollary 9.8) — the dynamic analogue of “never optimal, rarely costly.”
+Seventh, RA-HRP supplies the natural actor architecture for RLPO. Its weights factorize
+through node-level branch probabilities, so a learned policy can be centered on the RA-HRP
+or Schur-RA-HRP split via residual logits. Proposition 9.9 proves that this hierarchical actor
+remains long-only and fully invested by construction, recovers RA-HRP when residuals vanish,
+and decomposes the global KL distance from the baseline into node-level binary divergences.
+This gives RLPO a transparent attribution system: root-level deviations are regime allocation
+decisions, and deeper-node deviations are local cluster or security tilts. The homotopy calculus
+of Section 7.5 supplies the matching learning signal: at the prior, the myopic policy gradient
+with respect to each residual logit is the nodewise alpha the baseline leaves unexplained, damped
+by the logistic variance of the split (Corollary 9.10).
+49
+Eighth, constraints, costs, topology, and tails are the implementation layer. A constrained
+heuristic is optimal only when its unexplained alpha vector lies in the normal cone of the mandate,
+and a costly heuristic is optimal only when premia compensate both risk and marginal turnover.
+For HRP and RA-HRP, the additional object is tree stability: merge preservation, cophenetic
+distance, and pathwise split perturbations are the bridge between fixed-tree theorems and traded
+rolling-window strategies. In RLPO these diagnostics become state variables and topology
+regularizers. Outside ellipticity, tail-shape residuals are the further object that separates Sharpe
+optimality from downside-risk optimality.
+The result is a precise division of labor. Static optimization is the right tool when the
+information set includes the coordinates it consumes at the accuracy it requires. HPO is the right
+tool when those coordinates are noisy, unavailable, or economically untrustworthy. RLPO is the
+right tool when the state is dynamic and deviations from HPO can be paid for by continuation
+value. The theorems above say, line by line, which beliefs separate the three situations — and
+what each situation costs.
+A Technical Appendix: Identities Used Repeatedly
+This appendix records the three algebraic identities used throughout the paper. They are
+included to make the paper self-contained and to separate reusable linear-algebra facts from
+portfolio-specific interpretation.
+A.1 Block inverse and Schur complement
+If
+M=
+A B
+C D
+
+≻0,
+with A and D nonsingular, then the Schur complements SA = A−BD −1C and SD = D−CA −1B
+are positive definite and
+M −1 =
+ S−1A −S−1A BD −1
+−D−1CS −1A D−1 +D −1CS −1A BD −1
+
+after eliminating the D block, with the symmetric expression obtained after eliminating the A
+block. The HRP and Schur-RA-HRP identities in Sections 7 and 8 are portfolio interpretations
+of this formula.
+A.2 Ray projection
+For any inner product induced by M≻ 0, the closest point on the positive ray {aq : a≥ 0} to a
+vectorxis
+a⋆q, a ⋆ = max
+
+0, q⊤M xq⊤M q .
+Choosing x = µe, q =Σw, and M =Σ −1 gives the implied-return defect and its equality with
+squared Sharpe inefficiency.
+A.3 Tree products and binary KL
+If two hierarchical portfolios p and q are generated on the same binary tree by local splits pv
+andq v, then every leaf probability is a product of branch probabilities and
+DKL(p∥q) =
+X
+v∈Vint
+Pv
+
+pv log pvqv + (1−p v) log 1−p v1−q v
+
+,
+50
+where Pv is the capital mass reaching node v under p. This is the identity behind the HRP–RA-
+HRP distortion theorem and the hierarchical RLPO regularizer.
+References
+Richard Bellman.Dynamic Programming. Princeton University Press, 1957.
+Dimitri P. Bertsekas.Dynamic Programming and Optimal Control. Athena Scientific, 4 edition,
+2017.
+Michael J. Best and Robert R. Grauer. On the sensitivity of mean-variance-efficient portfolios to
+changes in asset means: Some analytical and computational results.The Review of Financial
+Studies, 4(2):315–342, 1991.
+Fischer Black and Robert Litterman. Global portfolio optimization.Financial Analysts Journal,
+48(5):28–43, 1992.
+Gary Chamberlain. A characterization of the distributions that imply mean-variance utility
+functions.Journal of Economic Theory, 29(1):185–201, 1983.
+Vijay K. Chopra and William T. Ziemba. The effect of errors in means, variances, and covariances
+on optimal portfolio choice.Journal of Portfolio Management, 19(2):6–11, 1993.
+Yves Choueifaty and Yves Coignard. Toward maximum diversification.Journal of Portfolio
+Management, 35(1):40–51, 2008.
+Roger Clarke, Harindra de Silva, and Steven Thorley. Minimum-variance portfolio composition.
+Journal of Portfolio Management, 37(2):31–45, 2011.
+Peter Cotton. Schur complementary allocation: A unification of hierarchical risk parity and
+minimum variance portfolios, 2024.
+Victor DeMiguel, Lorenzo Garlappi, and Raman Uppal. Optimal versus naive diversification:
+How inefficient is the 1/n portfolio strategy?The Review of Financial Studies, 22(5):1915–1953,
+2009.
+Noureddine El Karoui. High-dimensionality effects in the markowitz problem and other quadratic
+programs with linear constraints: Risk underestimation.The Annals of Statistics, 38(6):
+3487–3566, 2010.
+Paul Embrechts, Alexander McNeil, and Daniel Straumann. Correlation and dependence in risk
+management: Properties and pitfalls.Risk Management: Value at Risk and Beyond, pages
+176–223, 2002.
+Lorenzo Garlappi, Raman Uppal, and Tan Wang. Portfolio selection with parameter and model
+uncertainty: A multi-prior approach.The Review of Financial Studies, 20(1):41–81, 2007.
+Nicolae Gˆ arleanu and Lasse Heje Pedersen. Dynamic trading with predictable returns and
+transaction costs.The Journal of Finance, 68(6):2309–2340, 2013.
+Michael R. Gibbons, Stephen A. Ross, and Jay Shanken. A test of the efficiency of a given
+portfolio.Econometrica, 57(5):1121–1152, 1989.
+Gur Huberman and Shmuel Kandel. Mean-variance spanning.The Journal of Finance, 42(4):
+873–888, 1987.
+51
+Ravi Jagannathan and Tongshu Ma. Risk reduction in large portfolios: Why imposing the wrong
+constraints helps.The Journal of Finance, 58(4):1651–1683, 2003.
+J. D. Jobson and Bob Korkie. Estimation for markowitz efficient portfolios.Journal of the
+American Statistical Association, 75(371):544–554, 1980.
+Sham Kakade and John Langford. Approximately optimal approximate reinforcement learning.
+InProceedings of the Nineteenth International Conference on Machine Learning (ICML),
+pages 267–274. Morgan Kaufmann, 2002.
+Raymond Kan and Guofu Zhou. Optimal portfolio choice with parameter uncertainty.Journal
+of Financial and Quantitative Analysis, 42(3):621–656, 2007.
+John L. Kelly. A new interpretation of information rate.The Bell System Technical Journal, 35
+(4):917–926, 1956.
+Olivier Ledoit and Michael Wolf. Honey, i shrunk the sample covariance matrix.Journal of
+Portfolio Management, 30(4):110–119, 2004.
+Marcos L´ opez de Prado. Building diversified portfolios that outperform out of sample.Journal
+of Portfolio Management, 42(4):59–69, 2016.
+S´ ebastien Maillard, Thierry Roncalli, and J´ erˆ ome Te ¨ ıletche. The properties of equally weighted
+risk contribution portfolios.Journal of Portfolio Management, 36(4):60–70, 2010.
+Harry Markowitz. Portfolio selection.The Journal of Finance, 7(1):77–91, 1952.
+Christoph Memmel. Performance hypothesis testing with the sharpe ratio.Finance Letters, 1
+(1):21–23, 2003.
+Robert C. Merton. Optimum consumption and portfolio rules in a continuous-time model.
+Journal of Economic Theory, 3(4):373–413, 1971.
+Robert C. Merton. On estimating the expected return on the market: An exploratory investiga-
+tion.Journal of Financial Economics, 8(4):323–361, 1980.
+Richard O. Michaud. The markowitz optimization enigma: Is optimized optimal?Financial
+Analysts Journal, 45(1):31–42, 1989.
+G. Mograby. Hierarchical minimum variance portfolios: A theoretical and recursive schur
+complement framework, 2025.
+Miquel Noguer i Alonso. Return-adjusted hierarchical risk parity and schur portfolios: Mathe-
+matical foundations and empirical evidence, March 2026. Working paper.
+Joel Owen and Ramon Rabinovitch. On the class of elliptical distributions and their applications
+to the theory of portfolio choice.The Journal of Finance, 38(3):745–752, 1983.
+Georg Ch. Pflug, Alois Pichler, and David Wozabal. Uniform investment strategy as a limit of
+ambiguous portfolio optimization.Journal of Banking and Finance, 36(2):410–417, 2012.
+Edward E. Qian. On the financial interpretation of risk contribution: Risk budgets do add up.
+Journal of Investment Management, 4(4):41–51, 2006.
+R. Tyrrell Rockafellar and Stanislav Uryasev. Optimization of conditional value-at-risk.Journal
+of Risk, 2(3):21–41, 2000.
+Thierry Roncalli.Introduction to Risk Parity and Budgeting. CRC Press, 2013.
+52
+William F. Sharpe. Capital asset prices: A theory of market equilibrium under conditions of
+risk.The Journal of Finance, 19(3):425–442, 1964.
+Richard S. Sutton and Andrew G. Barto.Reinforcement Learning: An Introduction. MIT Press,
+2 edition, 2018.
+Jun Tu and Guofu Zhou. Markowitz meets talmud: A combination of sophisticated and naive
+diversification strategies.Journal of Financial Economics, 99(1):204–215, 2011.
+53

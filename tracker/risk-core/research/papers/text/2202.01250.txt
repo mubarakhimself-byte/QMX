@@ -1,0 +1,1944 @@
+arXiv 2202.01250  https://arxiv.org/abs/2202.01250
+
+Catoni-style confidence sequences
+for heavy-tailed mean estimation ∗
+Hongjian Wang1 and Aaditya Ramdas2
+1, 2Machine Learning Department, Carnegie Mellon University
+2Department of Statistics and Data Science, Carnegie Mellon University
+{hjnwang,aramdas}@cmu.edu
+June 13, 2023
+Abstract
+A confidence sequence (CS) is a sequence of confidence intervals that is valid at arbitrary
+data-dependent stopping times. These are useful in applications like A/B testing, multi-
+armed bandits, off-policy evaluation, election auditing, etc. We present three approaches to
+constructing a confidence sequence for the population mean, under the minimal assumption
+that only an upper bound σ2 on the variance is known. While previous works rely on
+light-tail assumptions like boundedness or subGaussianity (under which all moments of a
+distribution exist), the confidence sequences in our work are able to handle data from a wide
+range of heavy-tailed distributions. The best among our three methods — the Catoni-style
+confidence sequence — performs remarkably well in practice, essentially matching the state-
+of-the-art methods for σ2-subGaussian data, and provably attains the plog logt/t lower
+bound due to the law of the iterated logarithm. Our findings have important implications
+for sequential experimentation with unbounded observations, since the σ2-bounded-variance
+assumption is more realistic and easier to verify than σ2-subGaussianity (which implies the
+former). We also extend our methods to data with infinite variance, but having pth central
+moment (1 < p <2).
+1 Introduction
+We consider the classical problem of sequential nonparametric mean estimation. As a motivating
+example, let P be a distribution on R from which a stream of i.i.d. sample X1, X2, . . .is drawn.
+The mean of the distribution,
+µ =
+Z
+R
+x dP = E[Xi], (1)
+is unknown and is our estimand. The traditional and most commonly studied approaches to
+this problem include, among others, the construction of confidence intervals (CI). That is, we
+construct a σ(X1, . . . , Xt)-measurable random interval CI t for each t ∈ N+ such that
+∀t ∈ N+, P[µ ∈ CIt] ⩾ 1 − α. (2)
+It is, however, also well known that confidence intervals suffer from numerous deficiencies. For
+example, random stopping rules frequently arise in sequential testing problems, and it is well
+known that confidence intervals (2) typically fail to satisfy the guarantee
+∀ stopping time τ, P[µ ∈ CIτ ] ⩾ 1 − α. (3)
+∗Published in Stochastic Processes and their Applications, https://doi.org/10.1016/j.spa.2023.05.007.
+1
+arXiv:2202.01250v6  [math.ST]  7 Feb 2024
+In other words, traditional confidence intervals are invalid and may undercover at stopping
+times. To remedy this, a switch of order between the universal quantification over t and the
+probability bound in the definition of CI (2) was introduced [Darling and Robbins, 1967]:
+P[∀t ∈ N+, µ∈ CIt] ⩾ 1 − α. (4)
+The random intervals 1 {CIt} that satisfy the property above are called a (1 − α)-confidence
+sequence (CS). The definition of CS (4) and the property of stopped coverage (3) are actually
+equivalent, due to Howard et al. [2021, Lemma 3].
+It is known that CSs do not suffer from the perils of applying CIs in sequential settings (e.g.
+continuous monitoring or peeking at CIs as they arrive). For example, Howard et al. [2021,
+Figure 1(b)] shows in a similar context that the cumulative type-I error grows without bound
+if a traditional confidence interval is continuously monitored, but a confidence sequence has the
+same error bounded at α; also see Johari et al. [2017] for a similar phenomenon stated in terms
+of p-values.
+Prior studies on constructing confidence sequences for mean µ hinge on certain stringent
+assumptions on P . Darling and Robbins [1967] considered exclusively the case where P was
+a normal distribution. Jennison and Turnbull [1989] made the same parametric assumption.
+Later authors including Lai [1976], Csenki [1979], and recently Johari et al. [2021] (who notably
+defined “always-valid p-values”) allowed P to be a distribution belonging to a fixed exponential
+family. More recently, Howard et al. [2020, 2021] performed a systematic study of nonparametric
+confidence sequences, whose assumptions on P ranged among subGaussian, sub-Bernoulli, sub-
+gamma, sub-Poisson, and sub-exponential, which in most cases considered involve a bounded
+moment generating function, and in particular, that all moments exist. The latest advance
+in CSs was the paper by Waudby-Smith and Ramdas [2023] that studied the case of bounded
+P largely because of its “betting” set-up, which of course implies all moments exist. Finally,
+the prior result closest to our setting is a recent study on heavy-tailed bandits by Agrawal
+et al. [2021, Proposition 5], whose implicit CS is based on empirical likelihood techniques,
+but it demands a nontrivial and costly optimization computation and its code is currently not
+publicly available.
+In this paper, we remove all the parametric and tail lightness assumptions of the existing
+literature mentioned above, and make instead only one simple assumption (Assumption 2 in
+Section 2): the variance of the distribution exists and is upper bounded by a constant σ2 known
+a priori , Z
+R
+(x − µ)2 dP = V ar[Xi] ⩽ σ2. (5)
+Further, we shall show that, even under this simple assumption that allows for a copious
+family of heavy-tailed distributions (whose third moment may be infinite), the (1 − α)-CS {CIt}
+which we shall present achieves remarkable width control. We characterize the tightness of a
+confidence sequence from two perspectives. First, the rate of shrinkage, that is how quickly
+| CIt |, the width of the interval CIt, decreases as t → ∞; Second, the rate of growth, that is how
+quickly | CIt | increases as α → 0. It is useful to review here how the previous CIs and CSs in
+the literature behave in these regards. Chebyshev’s inequality, which yields (2) when requiring
+(5), states that
+CIChebt =
+
+bµt ± σ√αt  , where bµt = Pti=1 Xit (6)
+forms a (1 − α)-CI at every t, which is of shrinkage rate O(t−1/2) and growth rate O(α−1/2).
+Strengthening the assumption from (5) to subGaussianity with variance factor σ2 [Boucheron
+1We use “confidence interval” to also refer to confidence sets, allowing CI t sometimes to be the finite union
+of intervals.
+2
+et al., 2013, Section 2.3], the Chernoff bound ensures that (1 − α)-CIs can be constructed by
+CIChert =
+"
+bµt ± σ
+r
+2 log(2/α)
+t
+#
+, (7)
+i.e. the stronger subGaussianity assumption leads to a sharper growth rate of O
+p
+log(1/α)
+
+.
+It is Catoni [2012, Proposition 2.4] who shows the striking fact that by discarding the empirical
+mean bµt and using an influence function instead to stabilize the outliers associated with heavy-
+tailed distributions, a O(log(1/α)) growth rate can be achieved even when only the variance is
+bounded (5); similar results can be found in the recent survey by Lugosi and Mendelson [2019].
+In the realm of confidence sequences, we see that recent results by Howard et al. [2021],
+Waudby-Smith and Ramdas [2023], while often requiring stringent Chernoff-type assumption
+on the distribution, all have O
+p
+log t/t
+
+shrinkage rates and O
+p
+log(1/α)
+
+growth rates.
+For example, Robbins’ famous two-sided normal mixture confidence sequence for subGaussian
+P with variance factor σ2 (see e.g., Howard et al. [2021, Equation (3.7)]) is of the form
+CINMixt =
+
+bµt ± σ
+q
+(t + 1) log 4(t+1)α2
+t
+
+ . (8)
+The best among the three confidence sequences in this paper (Theorem 9) draws direct
+inspiration from Catoni [2012], and achieves a provable shrinkage rate of ˜O(t−1/2), where the
+˜O hides polylog t factors, and growth rate O(log(1/α)). A fine-tuning of it leads to the exact
+shrinkage rate O(
+p
+log logt/t), matching the lower bound of the law of the iterated logarithm
+under precisely the same assumption (5). The significance of this result, in conjunction with
+Howard et al. [2021], is that moving from one-time valid interval estimation to anytime valid
+intervals estimation (confidence sequences), no significant excess width is necessary to be in-
+curred; nor does weakening the distribution assumption from sub-exponential to finite variance
+results in any cleavage of interval tightness, in both CI and CS alike. Our experiments demon-
+strate that published subGaussian CSs are extremely similar to our finite-variance CSs, but the
+former assumption is harder to check and less likely to hold (all moments may not exist for
+unbounded data in practice). We summarize and compare the mentioned works in terms of
+tightness in Table 1.
+2 Problem set-up and notations
+Let {Xt}t∈N+ be a real-valued stochastic process adapted to the filtration {Ft}t∈N0 where F0 is
+the trivial σ-algebra. We make the following assumptions.
+Assumption 1. The process has a constant, unknown conditional expected value:
+∀t ∈ N+, E[Xt | Ft−1] = µ. (9)
+Assumption 2. The process is conditionally square-integrable with a uniform upper bound,
+known a priori, on the conditional variance:
+∀t ∈ N+, E[(Xt − µ)2 | Ft−1] ⩽ σ2. (10)
+The task of this paper is to construct confidence sequences {CIt} for µ from the observations
+X1, X2, . . ., that is,
+P[∀t ∈ N+, µ ∈ CIt] ⩾ 1 − α. (11)
+3
+CI CS
+Light-tailed
+(MGF exists)
+Chernoff bound (EM):
+O(t−1/2), O(plog(1/α)) Howard et al. [2021] (EM):O(plog t/t) or O(plog logt/t),
+O(
+p
+log(1/α))
+Heavy-tailed
+(only finite variance)
+Chebyshev inequality
+(EM):
+O(t−1/2), O(α−1/2).
+Catoni [2012]:
+O(t−1/2), O(log(1/α))
+This paper (Corollary 10.1):
+O(log logt
+p
+log t/t)), O(log(1/α))
+w.h.p.
+This paper (Corollary 10.2):
+O(
+p
+log logt/t), O(
+p
+log(1/α)) w.h.p.
+Heavier-tailed
+(only finite pth mo-
+ment)
+Markov inequality (EM):
+O(t−(p−1)/p), O(α−1/p)
+Chen et al. [2021]:
+O(t−(p−1)/p),
+O(log(1/α))
+This paper (Corollary 15.1):
+O(t−(p−1)/p log t), O(log(1/α)) w.h.p.
+Table 1: Comparison of asymptotic tightnesses among prominent confidence intervals and confi-
+dence sequences. Here “(EM)” indicates that the corresponding CI or CS is constructed around
+the empirical mean; “w.h.p.” stands for “with high probability” (used when the interval widths
+are not deterministic). The “Markov inequality” bounds in the last cell of the “CI” column can
+be derived from e.g. the martingale Lp bound Lemma 7 in Wang et al. [2021], Appendix A.
+We remark that our assumptions, apart from incorporating the i.i.d. case (with E[Xt] = µ
+and V ar[Xt] ⩽ σ2) mentioned in Section 1, allow for a wide range of settings. The Assump-
+tion 1 is equivalent to stating that the sequence {Xt − µ} forms a martingale difference (viz.
+{Pti=1(Xi − µ)} is a martingale), which oftentimes arises as the model for non-i.i.d., state-
+dependent noise in the optimization, control, and finance literature (see e.g. Kushner and Yin
+[2003]). A very simple example would be the drift estimation setting with the stochastic differ-
+ential equation dGt = σf (Gt, t)dWt + µdt, where f is a function such that |f (Gt, t)| ⩽ 1 and Wt
+denotes the standard Wiener process. When sampling Xt = Gt − Gt−1, the resulting process
+{Xt} satisfies our Assumption 1 and Assumption 2.
+We further note that Assumption 1 and Assumption 2 can be weakened to drifting con-
+ditional means and growing conditional pth central moment bound (1 < p ⩽ 2) respectively,
+indicating that our framework may encompass any Lp stochastic process {Xt}. These issues are
+to be addressed in Section 9 and Section 10.2, while we follow Assumption 1 and Assumption 2
+in our exposition for the sake of simplicity. Finally, we remark that the requirement for a known
+moment upper bound like Assumption 2 may seem restrictive, but is known to be minimal in
+the sense that no inference on µ would be possible in its absence, which we shall discuss in
+Section 10.1.
+Throughout the paper, an auxiliary process {λt}t∈N+ consisting of predictable coefficients
+(i.e. each λt is an Ft−1-measurable random variable) is used to fine-tune the intervals. We denote
+by [m ± w] the open or closed (oftentimes the endpoints do not matter) interval [ m − w, m+ w]
+or (m − w, m+ w) to simplify the lengthy expressions for CIs and CSs; and by min( I), max(I)
+respectively the lower and upper endpoints of an intervalI. The asymptotic notations follows the
+conventional use: for two sequences of nonnegative numbers {at} and {bt}, we write at = O(bt)
+if lim supt→∞ at/bt < ∞, at = Θ( bt) if both at = O(bt) and bt = O(at) hold, and at ≍ bt if
+limt→∞ at/bt exists and 0 < limt→∞ at/bt < ∞. We write at = polylog( bt) if there exists a
+universal polynomial p such that at = O(p(log bt)). Finally, if at = O(bt polylog(t)), we say
+at = ˜O(bt).
+4
+3 Confidence sequence via the Dubins-Savage inequality
+The following inequality by Dubins and Savage [1965] is widely acknowledged to be a seminal
+result in the martingale literature and it will be the foundation of our first confidence sequence.
+Lemma 1 (Dubins-Savage inequality). Let {Mt} be a square-integrable martingale with M0 = 0
+and Vt = E[(Mt − Mt−1)2 | Ft−1]. Then, for all a, b >0,
+P
+"
+∃t ∈ N+, Mt ⩾ a + b
+tX
+i=1
+Vi
+#
+⩽ 1ab + 1. (12)
+We prove Lemma 1 in Appendix B for completeness. Recall from Section 2 that {λt}t∈N+
+is a sequence of predictable coefficients. Define processes
+M +t =
+tX
+i=1
+λi(Xi − µ), M −t =
+tX
+i=1
+−λi(Xi − µ). (13)
+As a consequence of Assumption 1, E[λt(Xt − µ) | Ft−1] = 0. Hence both of {M +t } and {M −t }
+are martingales. Applying Lemma 1 to these two martingales yields the following result.
+Theorem 2 (Dubins-Savage confidence sequence). Let {λt}t∈N+ be any predictable process. The
+following intervals {CIDSt } form a (1 − α)-confidence sequence of µ:
+CIDSt =
+" Pt
+i=1 λiXi ±
+ 
+2/α − 1 + σ2 Pti=1 λ2i Pt
+i=1 λi
+#
+. (14)
+The straightforward proof of this theorem is in Appendix C.
+Now, we shall choose the coefficients{λt} that appear in the theorem in order to optimize the
+interval widths {| CIDSt |}. Our heuristic for optimizing the width is inspired by Waudby-Smith
+and Ramdas [2023, Equations (24–28)]; that is, we first fix a target time t⋆ and consider
+λ1 = λ2 = · · ·= λ⋆, (15)
+a constant sequence. After finding the λ⋆ that minimizes | CIDSt⋆ |, we set λt⋆ to this value. The
+detailed tuning procedure can be found in Appendix A.1, where we show that
+λt =
+r
+2/α − 1
+σ2t (16)
+is a prudent choice. Then, the width of the confidence sequence at time t is
+| CIDSt | = 2
+p
+2/α − 1 σ(1 + Pi i−1)P
+i i−1/2 ≍
+p
+2/α − 1 σ log t√
+t . (17)
+Let us briefly compare the O(α−1/2) rate of width growth, and the ˜O(t−1/2) rate of width
+shrinkage we achieved in (17) with the well-known case of confidence intervals. Both the
+O(α−1/2) rate of growth and the O(t−1/2) rate of shrinkage of the Chebyshev CIs (6), which
+hold under a stronger assumption than our paper (i.e. independence and variance upper bound
+V ar[Xi] ⩽ σ2), are matched by our Dubins-Savage CS, up to the log t factor. It is worth re-
+marking that the Chebyshev CIs {CIChebt } never form a confidence sequence at any level —
+almost surely, there exists some CI Chebt0 that does not contain µ.
+While the ˜O(t−1/2) rate of shrinkage cannot be improved (which shall be discussed in Sec-
+tion 7), we shall see in the following sections that growth rates sharper than O(α−1/2) can
+be achieved. The sharper rates require eschewing the (weighted) empirical means, e.g. theP λiXiP λi that centers the interval CI DSt in (14) above, because they have equally heavy tails as
+the observations {Xt}.
+5
+4 Intermezzo: review of Ville’s inequality
+The remaining two types of confidence sequence in this paper are both based on the technique
+of constructing an appropriate pair of nonnegative supermartingales [Howard et al., 2020]. This
+powerful technique results in dramatically tighter confidence sequences compared to the previous
+approach ` a laDubins-Savage.
+A stochastic process {Mt}t∈N, adapted to the filtration {Ft}t∈N, is called a supermartingale
+if E[Mt | Ft−1] ⩽ Mt−1 for all t ∈ N+. Since many of the supermartingales we are to construct
+are in an exponential, multiplicative form, we frequently use the following (obvious) lemma.
+Lemma 3. Let Mt = Qti=1 mi where each mi ⩾ 0 is Fi-measurable. Then, the process {Mt} is
+a nonnegative supermartingale if E[mt | Ft−1] ⩽ 1 for all t ∈ N+.
+A remarkable property of nonnegative supermartingales is Ville’s inequality [Ville, 1939]. It
+extends Markov’s inequality from a single time to an infinite time horizon.
+Lemma 4 (Ville’s inequality) . Let {Mt}t∈N be a nonnegative supermartingale with M0 = 1 .
+Then for all α ∈ (0, 1),
+P[∃t ∈ N+, Mt ⩾ 1/α] ⩽ α. (18)
+A very concise proof of Lemma 4 can be found in, for example, Howard et al. [2020, Section
+6.1].
+5 Confidence sequence by self-normalization
+Our second confidence sequence comes from a predictable-mixing version of Delyon [2009, Propo-
+sition 12] and Howard et al. [2020, Lemma 3 (f)].
+Lemma 5. Let {λt}t∈N+ be any predictable process. The following process is a nonnegative
+supermartingale:
+M SNt =
+tY
+i=1
+exp
+
+λi(Xi − µ) − λ2i ((Xi − µ)2 + 2σ2)6  . (19)
+The proof is in Appendix C. We can obtain another nonnegative supermartingale by flip-
+ping {λt} into {−λt} in (19). Applying Ville’s inequality (Lemma 4) on the two nonnegative
+supermartingales, we have the following result which is again proved in Appendix C.
+Lemma 6 (Self-normalized anti confidence sequence). Let {λt}t∈N+ be any predictable process.
+Define
+U +t =
+Pt
+i=1 λ2i Xi
+3 −
+tX
+i=1
+λi, U −t =
+Pt
+i=1 λ2i Xi
+3 +
+tX
+i=1
+λi. (20)
+We further define the interval aCISN+t to be2
+
+
+ 
+U +t  ± r U +t 2 − 2 P λ2i3 log(2/α) − P λiXi + P λ2i X 2i +2σ2 P λ2i6 
+P λ2i
+3
+
+ (21)
+2When the term inside the square root is negative, by convention the interval is taken to be ∅.
+6
+(where each P stands for Pti=1), and the interval aCISN−t to be
+
+
+ 
+U −t  ± r U −t 2 − 2 P λ2i3 log(2/α) + P λiXi + P λ2i X 2i +2σ2 P λ2i6 
+P λ2i
+3
+
+ . (22)
+Then, both {aCISN+t } and {aCISN−t } form a (1 − α/2)-anticonfidence sequence for µ. That is,
+P
+h
+∀t ∈ N+, µ /∈ aCISN+t i ⩾ 1 − α/2, (23)
+P
+h
+∀t ∈ N+, µ /∈ aCISN−t i ⩾ 1 − α/2. (24)
+Applying union bound on Lemma 6 immediately gives rise to the following confidence se-
+quence.
+Theorem 7 (Self-normalized confidence sequence) . The following random sets {CISNt } form a
+(1 − α)-confidence sequence of µ.
+CISNt = R \ aCISN+t ∪ aCISN−t  , (25)
+where aCISN+t and aCISN−t are defined in (21) and (22).
+It is not difficult to perform a cursory analysis on the topology of CI SNt . Without loss of
+generality assume µ = 0 since the method is translation invariant. When we take {λt} to be a
+decreasing sequence, with high probability P λ2i X 2i will be much smaller than P λi in the long
+run, implying that U +t < 0 while U −t > 0. Thus, with high probability,
+max(aCISN+t ) ⩽ U +t + |U +t |P λ2i /3 = 0 = U −t − |U −t |P λ2i /3 ⩽ min(aCISN−t ). (26)
+101 102 103
+time
+40
+20
+0
+20
+40 Self-normalized CS
+Figure 1: Self-normalized con-
+fidence sequence {CISNt } under
+Xt
+i.i.d.
+∼ N (0, 1), λt = 1 /
+√
+t,
+and α = 0 .05. The trichoto-
+mous topology (27) manifests
+after around t = 30.
+Therefore, we expect the disjoint union of three intervals
+CISNt = −∞, min(aCISN+t )i ∪h
+max(aCISN+t ), min(aCISN−t )i ∪ hmax(aCISN−t ), ∞
+=: LSNt ∪ MSNt ∪ USNt (27)
+to be the typical topology of CISNt for large t. Indeed, we demon-
+strate this with the a simple experiment under Xt i.i.d.∼ N(0, 1)
+and λt = 1/
+√
+t, plotted in Figure 1.
+We now come to the question of choosing the predictable
+process {λt} to optimize the confidence sequence. Since the
+set CI SNt always has infinite Lebesgue measure, a reasonable
+objective is to ensure min(aCISN+t ) → −∞, max(aCISN−t ) → ∞,
+and make the middle interval M SNt as narrow as possible. We
+resort to the same heuristic approach as in the Dubins-Savage
+case when optimizing | MSNt |, which is detailed in the Appendix A.2. The result of our tuning
+is
+λt =
+s
+6t log(2/α)
+t(Pt−1i=1 X 2i + 2σ2t) − (Pt−1i=1 Xi)2 . (28)
+Indeed, min(aCI SN+t ) → −∞, max(aCI SN−t ) → ∞almost surely if we set {λt} as above. We
+remark that the removal of the “spurious intervals” LSNt and USNt is easily achieved. For example,
+7
+split α = α′ + α′′ such that α′′ ≪ α′. First, construct a (1 − α′′)-CS {CI◦t } that does not have
+such spurious intervals – e.g., the Dubins-Savage CS (14). Next, construct the self-normalized
+CS {CISNt } at 1 − α′ confidence level. A union bound argument yields that {CI◦t ∩ CISNt } is a
+(1 − α)-CS, and the intersection with {CI◦t } helps to get rid of the spurious intervals L SNt and
+USNt .
+6 Confidence sequence via Catoni supermartingales
+Our last confidence sequence is inspired by Catoni [2012], where under only the finite variance
+assumption, the author constructs an M-estimator for mean that is O(log(1/α))-close to the
+true mean with probability at least 1 − α; hence a corresponding (1 − α)-CI whose width
+has O(log(1/α)) growth rate exists; cf. (6). We shall sequentialize the idea of Catoni [2012] via
+constructing two nonnegative supermartingales which we shall call theCatoni Supermartingales.
+Following Catoni [2012, Equation (2.1)], we say that ϕ : R → R is a Catoni-type influence
+function, if it is increasing and − log(1 − x + x2/2) ⩽ ϕ(x) ⩽ log(1 + x + x2/2). A simple
+Catoni-type influence function is
+ϕ(x) =
+(
+log(1 + x + x2/2), x ⩾ 0;
+− log(1 − x + x2/2), x < 0. (29)
+Lemma 8 (Catoni supermartingales) . Let {λt}t∈N+ be any predictable process, and let ϕ be a
+Catoni-type influence function. The following processes are nonnegative supermartingales:
+M Ct =
+tY
+i=1
+exp
+ 
+ϕ(λi(Xi − µ)) − λ2i σ2/2 ; (30)
+N Ct =
+tY
+i=1
+exp
+ 
+−ϕ(λi(Xi − µ)) − λ2i σ2/2 . (31)
+This lemma is proved in Appendix C. We now remark on the “tightness” of Lemma 8.
+On the one hand, it is tight in the sense that the pair of processes make the fullest use of
+Assumption 2 to be supermartingales, which we formalize in Appendix C with Proposition 16;
+on the other hand, a slightly tighter (i.e. larger) pair of supermartingales do exist, but are not
+as useful in deriving CS (see Section 10.5). In conjunction with Ville’s inequality (Lemma 4),
+Lemma 8 immediately gives a confidence sequence.
+Theorem 9 (Catoni-style confidence sequence). Let {λt}t∈N+ be any predictable process, and let
+ϕ be a Catoni-type influence function. The following intervals {CICt } form a (1 − α)-confidence
+sequence for µ:
+CICt =
+
+m ∈ R : − σ2 Pti=1 λ2i
+2 −log(2/α) ⩽
+tX
+i=1
+ϕ(λi(Xi −m)) ⩽ σ2 Pti=1 λ2i2 +log(2/α). (32)
+Although this confidence sequence lacks a closed-form expression, it is easily computed using
+root-finding methods since the function m 7→ Pti=1 ϕ(λi(Xi − m)) is monotonic. A preliminary
+experiment is shown in Figure 2.
+We follow Catoni [2012, Proposition 2.4] in choosing the appropriate {λt} sequence to opti-
+mize the interval widths,
+λt =
+s
+2 log(2/α)
+t(σ2 + η2t ) where ηt =
+s
+2σ2 log(2/α)
+t − 2 log(2/α) . (33)
+8
+101 102 103
+time
+2
+1
+0
+1
+2
+Catoni-style CS
+Figure 2: Catoni-style con-
+fidence sequence {CICt } un-
+der Xt
+i.i.d.
+∼ N (0, 1), λt =
+min{1/
+√
+t, 0.1}, and α = 0 .05.
+Notice the difference in scale of
+the y-axis from Figure 1.
+We shall show very soon in extensive experiments (Section 8)
+that the Catoni-style confidence sequence performs remarkably
+well controlling the width | CICt |, not only outperforming the
+previously introduced two confidence sequences, but also match-
+ing the best-performing confidence sequences and even confi-
+dence intervals in the literature, many of which require a much
+more stringent distributional assumption. On the theoretical
+side, we establish the following nonasymptotic concentration
+result on the width | CICt |.
+Theorem 10. Suppose the coefficients {λt}t∈N+ are nonrandom
+and let 0 < ε <1. Suppose further that
+ tX
+i=1
+λi
+!2
+−2
+ tX
+i=1
+λ2i
+!  
+σ2
+tX
+i=1
+λ2i + log(2/ε) + log(2/α)
+!
+⩾ 0.
+(34)
+Then, with probability at least 1 − ε,
+| CICt | ⩽ 4(σ2 Pti=1 λ2i + log(2/ε) + log(2/α))Pt
+i=1 λi
+. (35)
+The proof of the theorem is inspired by the deviation analysis of the nonsequential Catoni
+estimator Catoni [2012, Proposition 2.4] itself, and can be found in Appendix C.
+We remark that (34) is an entirely deterministic inequality when{λi}i∈N+ are all nonrandom.
+When λt = ˜Θ(t−1/2), which is the case for (33), the condition (34) holds for large t sincePt
+i=1 λi = ˜Θ(√t) while Pti=1 λ2i grows logarithmically. This gives us the following qualitative
+version of Theorem 10.
+Corollary 10.1. Suppose λt = ˜Θ(t−1/2) and is nonrandom, such as in (33). Then if t >
+polylog(1/ε, 1/α), with probability at least 1 − ε,
+| CICt | ⩽ ˜O(t−1/2(log(1/ε) + log(1/α))). (36)
+Here, the notation ˜O only hides logarithmic factors in t.
+We hence see that the Catoni-style confidence sequence enjoys the ˜O(t−1/2) and O(log(1/α))
+near-optimal rates of shrinkage and growth. If we do not ignore the logarithmic factors in t, for
+example, taking λt ≍ 1/√t log t, the rate shall be | CICt | = O(log logtplog t/t) (cf. Waudby-
+Smith and Ramdas [2023, Table 1]).
+It is now natural to ask whether the Catoni-style CS can obtain the law-of-the-iterated-
+logarithm rate Θ(
+p
+log logt/t). This cannot be achieved by tuning the sequence {λt} alone
+[Waudby-Smith and Ramdas, 2023, Table 1], but can be achieved using a technique called
+stitching [Howard et al., 2021].
+Corollary 10.2. Let {CICt (Λ, α)} denote the Catoni-style confidence sequence as in (32) with
+σ2 = 1 , constant {λt} sequence λ1 = λ2 = · · ·= Λ , and error level α. Then, let tj = e j,
+αj = α(j+2)2 , and Λj = plog(2/αj)e−j. The following stitched Catoni-style confidence sequence
+CICstcht = CICt (Λj, αj), for tj ⩽ t < tj+1 (37)
+is a (1 − α)-CS for µ and satisfies
+P
+"
+| CICstcht | ⩽ 8(e + 1)
+r
+log(2/α) + 2 log log e2t
+t
+#
+⩾ 1 − α/4 (38)
+when t >polylog(1/α).
+9
+{CICstcht } forms a (1 − α)-CS because of a union bound over Pj⩾0 αj ⩽ α. The width in (38)
+matches both the Θ(
+p
+log(1/α)) lower bound on the growth rate, and the Θ(
+p
+log logt/t) lower
+bound on the shrinkage rate (which we shall present soon in Section 7). It pays the price of a
+larger multiplicative constant to achieve the optimal shrinkage rate, so we only recommend it
+when long-term tightness is of particular interest. The proof of this corollary is in Appendix C.
+Remark 1. While the union bound argument of Corollary 10.2 asymptotically improves an
+existing t−1/2 polylog(t) CS to a plog logt/t CS, there is a related (but much less involved)
+idea to construct a CS from a sequence of CIs: split α = P∞t=1 αt and define the CS as the CI
+at time t with error level αt. This, however, leads to poor performance. Because the events
+{µ ∈ CIt} and {µ ∈ CIt+1} are highly dependent, making the union bound over t ∈ N+ very
+loose. In Figure 3, we visually demonstrate the Catoni CIs with αt = α/[t(t + 1)] (forming what
+we call the “trivial Catoni CS”), versus our supermartingale-based Catoni-style CS (32).
+246 880 10000
+1.0
+0.5
+0.0
+0.5
+1.0
+1.5
+2.0
+2.5
+3.0
+Trivial Catoni CS (CI w/ union bound)
+population mean
+Catoni CI
+Catoni-style CS
+Figure 3: To achieve the
+same level of lower tightness
+(e.g. when lower confidence
+bound surpasses 0), the triv-
+ial Catoni CS needs a sam-
+ple of size 880, about 4 times
+the Catoni-style CS which
+only takes 246.
+7 Lower bounds
+For the sake of completeness, we now discuss the lower bounds of confidence sequences for
+mean estimation. We first introduce the following notion of tail symmetry, which is a standard
+practice when constructing two-sided confidence intervals and sequences.
+Definition 1 (tail-symmetric CI/CS) . Let Q be a family of distributions over RN+ such that
+for each Q ∈ Q, EQ[Xt] = µQ is independent of t. A sequence of data-dependent intervals
+{[lwt, upt]}t∈N+ where lwt, upt : Rt → R is called a sequence of tail-symmetric (1 − α)-CI over
+Q if for any t ∈ N+,
+∀Q ∈ Q, P
+{Xi}∼Q
+[µQ ⩽ lwt(X1, . . . , Xt)] ⩽ α2 , P{Xi}∼Q [µQ ⩾ upt(X1, . . . , Xt)] ⩽ α2 . (39)
+Further, it is called a tail-symmetric (1 − α)-CS over P if
+∀Q ∈ Q, P
+{Xi}∼Q
+
+∀t ∈ N+, µQ ⩽ lwt(X1, . . . , Xt) ⩽ α2 ,
+P
+{Xi}∼Q
+
+∀t ∈ N+, µQ ⩾ upt(X1, . . . , Xt) ⩽ α2 . (40)
+The following lower bound of minimax nature, akin to Catoni [2012, Section 6.1]), charac-
+terizes the minimal growth rate of confidence intervals (hence also confidence sequences) when
+α is small. Its proof shall be found in Appendix C.
+Proposition 11 (Gaussian lower bound). We define
+Mt(α, ε) = inf[lwt,upt] supQ∈Qσ2 wQ,εt , (41)
+10
+where the supremum is taken over Qσ2, the set of all distributions of {Xt} satisfying Assump-
+tion 1 (where µ ranges over R) and Assumption 2 (where σ2 is fixed), the infimum over all
+tail-symmetric (1 − α)-confidence intervals {[lwt, upt]} over Qσ2, and wQ,εt is the number such
+that P{Xi}∼Q[upt − lwt ⩽ wQ,εt ] = 1 − ε.
+Let Φ−1 be the quantile function of the standard normal distribution. Then, as long as
+α + 2ε <1,
+Mt(α, ε) ⩾ 2σ√t Φ−1(1 − α/2 − ε)
+= 2σ√t
+ s
+log 4(α + 2ε)2 − log log 4(α + 2ε)2 − log(2π) + O(1)
+!
+. (42)
+Here O(1) is with respect to α, ε→ 0.
+The next lower bound, due to the law of the iterated logarithm (LIL), lower bounds the
+shrinkage rate of confidence sequences as t → ∞. The proof is again delayed to Appendix C.
+Proposition 12 (LIL lower bound) . Let P be a distribution on R with mean µ and variance
+σ2. Let {CIt} be a (1 − α)-confidence sequence for Xt iid∼ P such that bµt ∈ CIt. Then,
+P
+
+lim sup
+t→∞
+| CIt |
+σ
+r t
+2 log logt ⩾ 1
+
+⩾ 1 − α. (43)
+Remark 2. The assumption bµt ∈ CIt is true for many existing confidence sequences for mean
+estimation in the literature Darling and Robbins [1967], Jennison and Turnbull [1989], Howard
+et al. [2021], meaning that our CS that matches this lower bound (38) is fundamentally not
+worse than them even under the much weaker Assumption 2. While assuming bµt ∈ CIt does not
+encompass all the CSs in the literature, it can be relaxed by assuming instead that there exists
+an estimator bθt ∈ CIt that follows the law of the iterated logarithm . For example, it is known
+that the weighted empirical average satisfies the LIL Teicher [1974], which implies that all of
+the predictable mixture confidence sequences due to Waudby-Smith and Ramdas [2023], as well
+as our Theorem 2, are subject to a similar LIL lower bound. Relatedly, the LIL is also satisfied
+by some M-estimators He and Wang [1995], Schreuder et al. [2020]. However, these LIL-type
+results are only valid under constant weight multipliers (in our parlance, that is the sequence
+{λt} is constant, in which case our CSs do not shrink), and hence the M-estimators for µ can be
+inconsistent, the limit of the LIL-type convergence being some value other than µ. The search
+for new LIL-type results for consistent M-estimators under decreasing {λt} sequence, e.g. the
+zero of Pti=1 ϕ(λi(Xi − m)) which is included in the Catoni-style CS (32), shall stimulate our
+future study.
+8 Experiments
+We first examine the empirical cumulative miscoverage rates of our confidence sequences as well
+as Catoni’s confidence interval. These are the frequencies at time t that any of the intervals
+{CIi}1⩽i⩽t does not cover the population mean µ, under 2000 (for all CSs) or 250 (for the Catoni
+CI3) independent runs of i.i.d. samples of size t = 800 from a Student’s t-distribution with 3
+degrees of freedom, randomly centered and rescaled to variance σ2 = 25. Its result, in Figure 4,
+shows the clear advantage of CSs under continuous monitoring as they never accumulate error
+more than the preset α, unlike the Catoni CI whose cumulative miscoverage rate goes beyond
+α early on. In fact, a similar experiment in the light-tailed regime by Howard et al. [2021,
+Figure 1(b)] shows that the cumulative miscoverage rate of CIs will grow to 1 if we extend the
+sequential monitoring process indefinitely.
+11
+0 200 400 600 800
+time
+0.00
+0.02
+0.04
+0.06
+0.08
+0.10miscoverage
+Catoni CI
+Catoni-style CS
+Dubins-Savage CS
+Self-normalized CS
+Figure 4: Cumulative miscover-
+age rates when continuously mon-
+itoring CSs and CI under t 3 dis-
+tribution, which (provably) grow
+without bound for the Catoni CI,
+but are guaranteed to stay within
+α = 0.05 for CSs.
+10 3
+10 2
+10 1
+error probability 
+0.0
+2.5
+5.0
+7.5
+10.0
+12.5
+15.0
+17.5
+20.0CI/CS width
+(a) Growths under t 3 distribution.
+10 3
+10 2
+10 1
+error probability 
+0
+2
+4
+6
+8
+10
+12CI/CS width
+Catoni-style CS
+Self-normalized CS
+Stitched sub-Gaussian CS
+Predictably-mixed Hoeffding CS
+Catoni CI
+Dubins-Savage CS
+Chernoff CI (b) Growths under normal distribution.
+Figure 5: Comparison of CI/CS growth rates at t = 250. In both figures, triangular markers denote
+random widths (for which we repeat 10 times to let randomness manifest), and square markers deter-
+ministic widths; hollow markers denote the widths of CIs, while filled markers the widths of CSs. Our
+Catoni-style CS is among the best CSs (even CIs) in terms of tightness under small error probability
+α, in heavy and light tail regimes alike. In the right figure, note the overlap of the Chernoff-CI with
+Catoni-CI, as well as that of the Hoeffding-type subGaussian CS with the Catoni-style CS.
+We then compare the confidence sequences in terms of their growth rates. That is, we shall
+take decaying values of error level α and plot the length of the CSs, with the corresponding
+{λt} sequences (16), (28), and (33) 4 we choose. We draw a t = 250 i.i.d. sample from the
+same Student’s t-distribution as above ( σ2 = 25). The Dubins-Savage CS has deterministic
+interval widths, while the self-normalized (we only consider | MSNt |) and Catoni-style CS both
+have random interval widths, for which we repeat the experiments 10 times each. We add the
+Catoni CI for the sake of reference. The comparison of widths is exhibited in Figure 5a.
+We observe from the graph that the self-normalized CS and the Catoni-style CS both exhibit
+restrained growth of interval width when α becomes small. On the other hand, the Dubins-
+Savage CS, with its super-logarithmic O(α−1/2) growth, perform markedly worse in contrast to
+those with logarithmic growth.
+We run the same experiment again, this time with Gaussian data with variance σ2 = 25
+and we add two CSs and one CI for subGaussian random variables with variance factor σ2 from
+previous literature for comparison. First, the stitched subGaussian CS [Howard et al., 2021,
+Equation (1.2)] which we review in Lemma 17; Second, the predictably-mixed Hoeffding CS
+CIPM-Ht =
+" Pt
+i=1 λiXi ± (σ2 Pti=1 λ2i /2 + log(2/α))Pt
+i=1 λi
+#
+(44)
+3due to its inherent non-sequentializable computation
+4Actually we use {λmax{t,9}} for the Catoni-style CS to facilitate the root-finding in (32).
+12
+with (33); Third, the standard subGaussian Chernoff CI from (7). Recall that all three of the
+above bounds are not valid under only a finite variance assumption, but require a subGaussian
+moment generating function. This extended comparison is plotted in Figure 5b.
+Next, we examine the rates of shrinkage as t → ∞. We sequentially sample from (i) a
+Student’s t-distribution with 5 degrees of freedom, randomly centered and rescaled to variance
+σ2 = 25, (ii) a normal distribution with variance σ2 = 25, at each time calculating the intervals.
+We include again the Catoni’s CI in both cases, the three subGaussian CI/CSs in the Gaussian
+case. The evolution of these intervals is shown in Figures 6a and 6b, and their widths in
+Figures 6c and 6d.
+102 103 104
+time
+4
+6
+8
+10
+12
+(a) Comparison of intervals under
+t3 distribution.
+102 103 104
+time
+6
+7
+8
+9
+10
+11
+population mean
+Dubins-Savage CS
+Self-normalized CS
+Catoni-style CS
+Stitched Catoni-style CS
+Catoni CI
+Stitched sub-gaussian CS
+PM Hoeffding CS
+Chernoff CI
+(b) Comparison of intervals under
+normal distribution.
+102 103 104
+time
+0
+2
+4
+6
+8
+10
+(c) Width shrinkage curves under
+t3 distribution.
+102 103 104
+time
+0
+1
+2
+3
+4
+5
+6
+Dubins-Savage CS
+Self-normalized CS
+Catoni-style CS
+Stitched Catoni-style CS
+Catoni CI
+Stitched subGaussian CS
+PM Hoeffding CS
+Chernoff CI
+(d) Width shrinkage curves under
+normal distribution.
+Figure 6: Comparison of CI/CS shrinkage rates atα = 0.05. In the heavy-tailed regime, our Catoni-style
+CS performs markedly better than the other two CSs, and is close to the Catoni CI. In the Gaussian
+setting, our Catoni-style CS is approximately at a same caliber as the best subGaussian CSs in the
+literature. There appears no benefit in using the minimax optimal stitched Catoni-style CS for sample
+sizes within 10,000 due to its large constant. These new observations appear to be practically useful.
+It is important to remark that in the particular instantiation of the random variables that
+were drawn for the runs plotted in these figures, the Catoni CI seems to always cover the true
+mean; however, we know for a fact (theoretically from the law of the iterated logarithm for M-
+estimators [Schreuder et al., 2020]; empirically from Figure 4) that the Catoni CI will eventually
+miscover with probability one, and it will in fact miscover infinitely often, in every single run.
+13
+When the first miscoverage exactly happens is a matter of chance (it could happen early or
+late), but it will almost surely happen infinitely [Howard et al., 2021]. Thus, the Catoni CI
+cannot be trusted at data-dependent stopping times, as encountered via continuous monitoring
+in sequential experimentation, but the CSs can. The price for the extra protection offered by the
+CSs is in lower order terms (polylogarithmic), and the figures suggest that it is quite minimal,
+the Catoni-CS being only ever so slightly wider than the Catoni CI.
+9 Heteroscedastic and infinite variance data
+In lieu of Assumption 2, we can consider a much more general setting that encompasses data
+drawn from distributions without a finite variance, e.g. Pareto distribution or stable distribution
+with index in (1 , 2), and possibly those that are increasing in scale.
+Assumption 3. The process is conditionally Lp with an upper bound, known a priori, on the
+conditional central pth moment:
+∀t ∈ N+, E[|Xt − µ|p | Ft−1] ⩽ vt, (1 < p⩽ 2) (45)
+where {vt}t∈N+ is a predictable, nonnegative process.
+When p = 2, all of the three confidence sequences can extend naturally to handle such
+scenario of heteroscedasticity. We leave the details of the heteroscedastic versions of the Dubins-
+Savage CS and the self-normalized CS to Appendix D. For the infinite variance case 1 < p <2,
+the generalization of the Dubins-Savage inequality in this infinite variance regime by Khan
+[2009] can easily be used to construct a confidence sequence under Assumption 3, extending our
+Theorem 2. However, due to the relatively unsatisfactory performance of the Dubins-Savage
+CS, we do not elaborate upon this extension.
+Let us focus primarily on extending our Catoni-style CS in Theorem 9 to Assumption 3
+in this section. To achieve this, we resort to an argument similar to the generalization of the
+Catoni CI by Chen et al. [2021].
+We say that ϕp : R → R is a p-Catoni-type influence function, if it is increasing and
+− log(1 − x + |x|p/p) ⩽ ϕp(x) ⩽ log(1 + x + |x|p/p). A simple example is
+ϕp(x) =
+(
+log(1 + x + xp/p), x ⩾ 0;
+− log(1 − x + (−x)p/p), x < 0. (46)
+Lemma 13 (p-Catoni supermartingales). Let ϕp be a p-Catoni-type influence function. Under
+Assumption 1 and Assumption 3, the following processes are nonnegative supermartingales,
+M Ct p =
+tY
+i=1
+exp (ϕp(λi(Xi − µ)) − λpi vi/p) ; (47)
+N Ct p =
+tY
+i=1
+exp (−ϕp(λi(Xi − µ)) − λpi vi/p) . (48)
+The proof is straightforwardly analogous to the one of Lemma 8. The corresponding CS can
+be easily expressed akin to Theorem 9.
+Theorem 14 (p-Catoni-style confidence sequence) . Let ϕp be a p-Catoni-type influence func-
+tion. Under Assumption 1 and Assumption 3, the following intervals {CICt p} form a (1 − α)-
+confidence sequence of µ:
+CICt p =
+(
+m ∈ R : −
+Pt
+i=1 viλpi
+p − log(2/α) ⩽
+tX
+i=1
+ϕp(λi(Xi − m)) ⩽
+Pt
+i=1 viλpi
+p + log(2/α)
+)
+.
+(49)
+14
+Chen et al. [2021] point out that in the i.i.d. case (i.e. assuming vt = v for all t in Assump-
+tion 3), the asymptotically optimal choice for the rate of decrease of {λt}, when working with
+this Lp set-up, would be λt ≍ t−1/p. Specifically, in Chen et al. [2021, Proof of Theorem 2.6],
+the authors recommend the tuning
+λt = 12  2p log(2/α)tv 1/p (50)
+to optimize their CI. We adopt exactly the same tuning (50) in our experiment, shown in
+Figure 7, with i.i.d., infinite variance Pareto data. Indeed, employing λt ≍ t−1/p also leads to
+a width concentration bound of optimal shrinkage rate t−(p−1)/p, similar to Theorem 10 and
+proved in Appendix C.
+101 102 103 104
+time
+6
+4
+2
+0
+2
+4
+6
+1.5-Catoni-style CS
+Figure 7: p-Catoni-style (p = 1.5) confidence sequence {CICt p}
+under Xt
+i.i.d.
+∼ Pareto(1.8) (recentered to µ = 0), v = 5, and
+α = 0.05. The sequence {λt} follows (50).
+Theorem 15. Suppose the coefficients {λt} and the conditional pth moments {vt} are all non-
+random and let 0 < ε <1. Suppose further that
+ tX
+i=1
+λpi
+!1/(p−1)  tX
+i=1
+λi
+!−p/(p−1)  tX
+i=1
+5λpi vi/p + log(2/ε) + log(2/α)
+!
+⩽ p − 1p . (51)
+Then, with probability at least 1 − ε,
+|CICt p| ⩽
+Pt
+i=1 10λpi vi + 2p log(2/ε) + 2p log(2/α)Pt
+i=1 λi
+. (52)
+Similar to the case in Theorem 10, (51) is an entirely deterministic inequality when {vt}
+and {λt} are all nonrandom. When vt = ˜Θ(1) and λt = ˜Θ(t−1/p), which is the case for (50),
+the condition (51) holds for large t since Pti=1 λi = ˜Θ(t(p−1)/p) while Pti=1 λpi grows logarith-
+mically. This gives us the following qualitative version of Theorem 15, like (and generalizing)
+Corollary 10.1.
+Corollary 15.1. Suppose vt = ˜Θ(1), λt = ˜Θ(t−1/p), both nonrandom, such as in (50). Then if
+t >polylog(1/ε, 1/α), with probability at least 1 − ε,
+|CICt p| ⩽ ˜O(t−(p−1)/p(log(1/ε) + log(1/α))). (53)
+Here, the notation ˜O only hides logarithmic factors in t.
+We remark that this shrinkage rate, up to a logarithmic factor in t, matches the lower bound
+for CIs by Devroye et al. [2016, Theorem 3.1]. If we let {vt} grow, say in a rate of vt = ˜Θ(tγ),
+one may match the scale growth of data by adjusting the {λt} sequence to a more decreasing
+one, in order to optimize the width bound in Theorem 15.
+15
+Corollary 15.2. Suppose 0 ⩽ γ < p− 1 and vt = ˜Θ(tγ), λt = ˜Θ(t−(1+γ)/p), both nonrandom.
+Then if t >polylog(1/ε, 1/α), with probability at least 1 − ε,
+|CICt p| ⩽ ˜O(t−(p−1−γ)/p(log(1/ε) + log(1/α))). (54)
+Here, the notation ˜O only hides logarithmic factors in t.
+10 Discussions and extensions
+10.1 Minimality of the moment assumptions
+We stress here that an upper bound on a (1+δ)th moment, for example the upper variance bound
+σ2 in Assumption 2, is required to be known. We have seen in Section 9 that Assumption 2 can
+be weakened in various ways, but is not eliminated since another moment bound is introduced.
+Such assumptions, strong as they may seem at first sight, are necessitated by the results
+of Bahadur and Savage [1956], which immediately imply that if no upper bound on a moment
+is known a priori , mean estimation is provably impossible. Indeed, without a known moment
+bound, even nontrivial tests for whether the mean equals zero do not exist, meaning that all
+tests have trivial power (since power is bounded by the type-I error), and thus cannot have
+power going to 1 while the type-I error stays below α. The lack of power one tests for a point
+null, thanks to the duality between CIs and families of tests, in turn implies the impossibility
+of intervals that shrink to zero width. In a similar spirit, one can see that the lower bound
+of Proposition 11 grows to infinity as σ does, indicating that a confidence interval (hence a
+confidence sequence) must be unboundedly wide when no bound on σ is in place.
+10.2 Drifting means
+Our three confidence sequences also extend, at least in theory, to the case when Assumption 1
+is weakened to
+∀t ∈ N+, E[Xt | Ft−1] = µt (55)
+where {µt} is any predictable process. This, in conjunction with Section 9, implies that our
+work provides a unified framework for any L2 process {Xt}. Such generalization is done by
+replacing every occurrence of ( Xi − µ) in the martingales (13) and supermartingales (19), (30)
+by (Xi − µi). The closed-form Dubins-Savage confidence sequence (14) now tracks the weighted
+average
+µ⋆t =
+Pt
+i=1 λiµiPt
+i=1 λi
+(56)
+by P[∀t ∈ N+, µ⋆t ∈ CIDSt ] ⩾ 1 − α. In the case of self-normalized and Catoni-style confidence
+sequence, a confidence region CRt ⊆ Rt can be solved from the Ville’s inequality at each t, such
+that P[∀t ∈ N+, (µ1, . . . , µt) ∈ CRt] ⩾ 1 − α. The exact geometry of such confidence regions
+shall be of interest for future work.
+10.3 Sharpening the confidence sequences by a running intersection
+It is easy to verify that if {CIt} forms a (1 − α)-CS for µ, so does the sequence of running
+intersections
+fCIt =
+t\
+i=1
+CIi, (57)
+a fact first pointed out by Darling and Robbins [1967]. The intersected sequence { fCIt} is at
+least at tight as the original one {CIt}, while still enjoying a same level of sequential confidence.
+However, Howard et al. [2021, Section 6] points out that such practice does not extend to the
+16
+drifting parameter case, and may suffer from empty interval. We remark that, following the
+discussion in Section 10.2, we can still perform an intersective tightening under drifting means.
+To wit, if{CRt} is a confidence region sequence satisfyingP[∀t ∈ N+, (µ1, . . . , µt) ∈ CRt] ⩾ 1−α,
+so is the sequence formed by
+gCRt =
+t\
+i=1
+ 
+CRi ×Rt−i . (58)
+The peril of running intersection, however, is that it may result in an empty interval. Though
+this happens with probability less than α by the definition of CS, an empty interval is a prob-
+lematic result in practice that one would like to avoid.
+10.4 Sequential hypothesis testing and one-sided inexact nulls
+It is clear that our construction of confidence sequences provides a powerful tool to sequentially
+test the null hypothesis of Assumption 1 against the alternative
+Ha : ∀t ∈ N+, E[Xt | Ft−1] = µa ̸= µ, (59)
+viz., we reject Assumption 1 whenever µ /∈ CIt. For the self-normalized CS and Catoni-style
+CS which are based on a pair of supermartingales, it is when either of the supermartingales
+exceeds 2/α, and there is no need to explicitly calculate the interval CI SNt or CICt . When these
+supermartingales are used in this manner, they are commonly called test supermartingales for
+the null Assumption 1. The case of the Dubins-Savage CS is slightly different, discussed in
+Appendix B.
+Further, it is common in statistics to consider the following one-sided testing problem:
+H0 : ∀t ∈ N+, E[Xt | Ft−1] ⩽ µ; (60)
+Ha : ∀t ∈ N+, E[Xt | Ft−1] > µ. (61)
+We demonstrate briefly here that our invention can easily handle this scenario. Note that
+one of the Catoni supermartingales, {M Ct } (30), is still a supermartingale when the weaker
+assumption H0 (60) instead of Assumption 1 holds. This implies that the following one-sided
+intervals {CIC+t } form a (1 − α)-confidence sequence5 of µ, under any distribution of the null:
+CIC+t =
+
+m ∈ R :
+tX
+i=1
+ϕ(λi(Xi − m)) ⩽ σ2 Pti=1 λ2i2 + log(1/α) = [min(CIC+t ), ∞). (62)
+Hence, the sequential test of rejecting H0 when min(CIC+t ) > µattains type I error control
+within α.
+10.5 Tighter supermartingales
+If one scrutinizes the proof of our Catoni-style CS (Theorem 9), from (90), it is tempting to
+consider the following supermartingales
+M C∗t =
+tY
+i=1
+(1 + λt(Xi − µ) + λ2t (Xi − µ)2/2) · exp(−λ2t σ2/2), (63)
+N C∗t =
+tY
+i=1
+(1 − λt(Xi − µ) + λ2t (Xi − µ)2/2) · exp(−λ2t σ2/2). (64)
+5Even though µ is no longer a functional of the distribution (but a upper bound thereof), we still call {CIt}
+a (1 − α)-CS for µ if (4) holds.
+17
+since M Ct ⩽ M C∗t and N Ct ⩽ N C∗t . By Lemma 18 in Appendix C, this larger pair of super-
+martingales indeed yields a CS even tighter than the Catoni-style CS. However, we remark that
+the difference between this tighter CS and the Catoni-style CS is small as λt decreases; and
+this tighter CS is computationally infeasible: finding the root of M C∗t , NC∗t = 2/α suffers from
+non-monotonicity (so that we may not easily find the largest/smallest root which defines the
+endpoints of the CS) and high sensitivity. However, following the discussion in Section 10.4, it
+is easy to test if µ is in this tighter CS, i.e. if M C∗t , NC∗t ⩽ 2/α actually holds. Therefore, we
+recommend that one use the Catoni supermartingales when constructing a CS, but use (63),
+(64) when sequentially testing the null Assumption 1.
+11 Concluding remarks
+In this paper, we present three kinds of confidence sequences for mean estimation of increasing
+tightness, under an extremely weak assumption that the conditional variance is bounded. The
+third of these, the Catoni-style confidence sequence, is shown both empirically and theoretically
+to be close to the previously known confidence sequences and even confidence intervals that
+only work under light tails requiring the existence of all moments, as well as their decay.
+This elegant result bears profound theoretical implications. We now know that the cele-
+brated rate of shrinkage O(t−1/2) and rate of growth O(log(1/α)) of confidence intervals pro-
+duced by MGF-based concentration inequalities (e.g. Chernoff bound (7)) extend essentially
+in two directions simultaneously: heavy tail up to the point where only the second moment is
+required to exist, and sequentialization to the anytime valid regime.
+Our work shall also find multiple scenarios of application, many of which are related to multi-
+armed bandits and reinforcement learning. For example, the best-arm identification problem
+[Jamieson and Nowak, 2014] in the stochastic bandit literature relies on the construction of
+confidence sequences, and most previous works typically study the cases of Bernoulli and sub-
+Gaussian bandits. Given the result of this paper, we may now have a satisfactory solution when
+heavy-tailed rewards [Bubeck et al., 2013] are to be learned. A similar locus of application is
+the off-policy evaluation problem [Thomas et al., 2015] in contextual bandits, whose link to con-
+fidence sequences was recently established [Karampatziakis et al., 2021]. While Karampatziakis
+et al. [2021] only considered bounded rewards, our work provides the theoretical tools to handle
+a far wider range of instances.
+Besides the issues of drifting means we mentioned in Section 10.2, the search for an all-
+encompassing LIL lower bound we mentioned in Section 7, we also expect future work to address
+the problem of multivariate or matrix extensions. The study by Catoni and Giulini [2017], we
+speculate, can be a starting point. Finally, the online algorithm for approximating the interval
+in the Catoni-style CS (32) can also be studied.
+Acknowledgments
+Research reported in this paper was sponsored in part by the DEVCOM Army Research Lab-
+oratory under Cooperative Agreement W911NF-17-2-0196 (ARL IoBT CRA). The views and
+conclusions contained in this document are those of the authors and should not be interpreted
+as representing the official policies, either expressed or implied, of the Army Research Labora-
+tory or the U.S. Government. The U.S. Government is authorized to reproduce and distribute
+reprints for Government purposes notwithstanding any copyright notation herein.
+References
+S. Agrawal, S. K. Juneja, and W. M. Koolen. Regret minimization in heavy-tailed bandits. In
+Conference on Learning Theory, pages 26–62. PMLR, 2021.
+18
+R. R. Bahadur and L. J. Savage. The nonexistence of certain statistical procedures in nonpara-
+metric problems. The Annals of Mathematical Statistics , 27(4):1115–1122, 1956.
+S. Boucheron, G. Lugosi, and P. Massart. Concentration inequalities: A nonasymptotic theory
+of independence. Oxford University Press, 2013.
+S. Bubeck, N. Cesa-Bianchi, and G. Lugosi. Bandits with heavy tail. IEEE Transactions on
+Information Theory, 59(11):7711–7717, 2013.
+O. Catoni. Challenging the empirical mean and empirical variance: a deviation study. In
+Annales de l’IHP Probabilit´ es et statistiques, volume 48, pages 1148–1185, 2012.
+O. Catoni and I. Giulini. Dimension-free PAC-Bayesian bounds for matrices, vectors, and linear
+least squares regression. arXiv preprint arXiv:1712.02747 , 2017.
+P. Chen, X. Jin, X. Li, and L. Xu. A generalized Catoni’s M-estimator under finiteα-th moment
+assumption with α ∈ (1, 2). Electronic Journal of Statistics , 15(2):5523–5544, 2021.
+A. Csenki. A note on confidence sequences in multiparameter exponential families. Journal of
+Multivariate Analysis, 9(2):337–340, 1979.
+D. A. Darling and H. Robbins. Confidence sequences for mean, variance, and median. Pro-
+ceedings of the National Academy of Sciences of the United States of America , 58(1):66–68,
+1967.
+B. Delyon. Exponential inequalities for sums of weakly dependent variables. Electronic Journal
+of Probability, 14:752–779, 2009.
+L. Devroye, M. Lerasle, G. Lugosi, and R. I. Oliveira. Sub-Gaussian mean estimators. The
+Annals of Statistics , 44(6):2695 – 2725, 2016.
+L. E. Dubins and L. J. Savage. A Tchebycheff-like inequality for stochastic processes.Proceedings
+of the National Academy of Sciences of the United States of America , 53(2):274–275, 1965.
+X. He and G. Wang. Law of the iterated logarithm and invariance principle for M-estimators.
+Proceedings of the American Mathematical Society, 123(2):563–573, 1995.
+S. R. Howard, A. Ramdas, J. McAuliffe, and J. Sekhon. Time-uniform Chernoff bounds via
+nonnegative supermartingales. Probability Surveys, 17:257–317, 2020.
+S. R. Howard, A. Ramdas, J. McAuliffe, and J. Sekhon. Time-uniform, nonparametric,
+nonasymptotic confidence sequences. The Annals of Statistics , 49(2):1055–1080, 2021.
+K. Jamieson and R. Nowak. Best-arm identification algorithms for multi-armed bandits in
+the fixed confidence setting. In 2014 48th Annual Conference on Information Sciences and
+Systems (CISS) , pages 1–6. IEEE, 2014.
+C. Jennison and B. W. Turnbull. Interim analyses: the repeated confidence interval approach.
+Journal of the Royal Statistical Society: Series B (Methodological), with discussion, 51(3):
+305–361, 1989.
+R. Johari, P. Koomen, L. Pekelis, and D. Walsh. Peeking at A/B tests: Why it matters, and
+what to do about it. In Proceedings of the 23rd ACM SIGKDD International Conference on
+Knowledge Discovery and Data Mining , pages 1517–1525, 2017.
+R. Johari, L. Pekelis, and D. J. Walsh. Always valid inference: Bringing sequential analysis to
+A/B testing. Operations Research, 70(3):1806–1821, 2021.
+19
+N. Karampatziakis, P. Mineiro, and A. Ramdas. Off-policy confidence sequences. In Interna-
+tional Conference on Machine Learning , pages 5301–5310. PMLR, 2021.
+R. A. Khan. Lp-version of the Dubins–Savage inequality and some exponential inequalities.
+Journal of Theoretical Probability, 22(2):348–364, 2009.
+H. Kushner and G. G. Yin. Stochastic approximation and recursive algorithms and applications,
+volume 35. Springer Science & Business Media, 2003.
+T. L. Lai. On confidence sequences. The Annals of Statistics , pages 265–280, 1976.
+G. Lugosi and S. Mendelson. Mean estimation and regression under heavy-tailed distributions:
+A survey. Foundations of Computational Mathematics , 19(5):1145–1190, 2019.
+N. Schreuder, V.-E. Brunel, and A. Dalalyan. A nonasymptotic law of iterated logarithm for
+general M-estimators. In International Conference on Artificial Intelligence and Statistics ,
+pages 1331–1341. PMLR, 2020.
+H. Teicher. On the law of the iterated logarithm. The Annals of Probability , pages 714–728,
+1974.
+P. Thomas, G. Theocharous, and M. Ghavamzadeh. High-confidence off-policy evaluation. In
+Proceedings of the AAAI Conference on Artificial Intelligence , volume 29, pages 3000–3006,
+2015.
+J. Ville. Etude critique de la notion de collectif . Gauthier-Villars, 1939.
+H. Wang and A. Ramdas. Huber-robust confidence sequences. In International Conference on
+Artificial Intelligence and Statistics , pages 9662–9679. PMLR, 2023.
+H. Wang, M. Gurbuzbalaban, L. Zhu, U. Simsekli, and M. A. Erdogdu. Convergence rates of
+stochastic gradient descent under infinite noise variance. Advances in Neural Information
+Processing Systems, 34:18866–18877, 2021.
+I. Waudby-Smith and A. Ramdas. Estimating means of bounded random variables by betting.
+Journal of the Royal Statistical Society: Series B (Methodological), with discussion, 2023.
+20
+A Tuning the coefficients {λt}
+A.1 Tuning the coefficients in the Dubins-Savage confidence sequence
+Note that when (15) happens, the half-width of the CI at t⋆ is
+1
+2 | CIDSt⋆ | = 2/α − 1 + σ2t⋆λ⋆2t⋆λ⋆ = 2/α − 1t⋆λ⋆ + σ2λ⋆, (65)
+which obtains optimal width when
+λ⋆ =
+r
+2/α − 1
+σ2t⋆ . (66)
+With the above guidance, in Theorem 2, we take
+λt =
+r
+2/α − 1
+σ2t . (67)
+Then, the CS half-width at time t is
+1
+2 | CIDSt | = 2/α − 1 + σ2 Pti=1 2/α−1σ2iPt
+i=1
+q
+2/α−1
+σ2i
+=
+p
+2/α − 1 σ(1 + P i−1)P i−1/2 ≍ p2/α − 1 σ log t√t . (68)
+A.2 Tuning the coefficients in the self-normalized confidence sequence
+Take t⋆ as fixed and λ1 = λ2 = · · ·= λ⋆ as constant. Define Sℓ = Pt⋆i=1 X ℓi . The middle interval
+length is now
+| MSNt⋆ |
+=
+2t⋆λ⋆−
+vuut λ⋆2S13 −t⋆λ⋆2−4 t⋆λ⋆26  log(2/α)−λ⋆S1+ λ⋆2(S2+2σ2t⋆)6 !−vuut λ⋆2S13 +t⋆λ⋆!2−4 t⋆λ⋆26  log(2/α)+λ⋆S1+ λ⋆2(S2+2σ2t⋆)6 !
+t⋆λ⋆2
+3
+=
+2t⋆−
+vuut λ⋆S13 −t⋆2− 2t⋆3  log(2/α)−λ⋆S1+ λ⋆2(S2+2σ2t⋆)6 !−vuut λ⋆S13 +t⋆2− 2t⋆3  log(2/α)+λ⋆S1+ λ⋆2(S2+2σ2t⋆)6 !
+t⋆λ⋆
+3
+≈ −
+λ⋆2(S1)2
+9 −2t⋆ λ⋆S13 − 2t⋆3 log(2/α)−λ⋆S1+ λ⋆2(S2+2σ2t⋆)6 
+2t⋆ −
+λ⋆2(S1)2
+9 +2t⋆ λ⋆S13 − 2t⋆3 log(2/α)+λ⋆S1+ λ⋆2(S2+2σ2t⋆)6 
+2t⋆
+t⋆λ⋆
+3
+=
+4t⋆
+3
+
+log(2/α) + λ⋆2(S2+2σ2t⋆)6  − 2λ⋆2(S1)29
+2t⋆2λ⋆
+3
+=
+2t⋆(S2+2σ2t⋆)−2(S1)2
+9 λ⋆ + 4t⋆ log(2/α)3 1λ⋆
+2t⋆2
+3
+,
+where we use the approximation
+√
+t2 + smaller term ≈ t + smaller term2t . Examining the final
+expression, the optimal λ⋆ is hence taken as
+λ⋆ ≈
+s
+6t⋆ log(2/α)
+t⋆(S2 + 2σ2t⋆) − (S1)2 . (69)
+Since we need λt to be Ft−1-measurable, we replace S2 and S1 with Pt−1i=1 X 2i and Pt−1i=1 Xi, but
+all other occurrences of t⋆ with t in (69) to obtain our predictable sequence {λt} of choice for
+Theorem 7,
+λt =
+s
+6t log(2/α)
+t(Pt−1i=1 X 2i + 2σ2t) − (Pt−1i=1 Xi)2 . (70)
+21
+B Discussion on the Dubins-Savage confidence sequence
+We first present here a short and self-contained proof of the Dubins-Savage inequality [Dubins
+and Savage, 1965, Khan, 2009].
+Proof of Lemma 1. Consider the function Q(x) = 11−min(x,0) . It is not hard to see that, for any
+x ∈ R and m ⩽ 0,
+Q(x) ⩽ (1 − m) + (x − m) + (x − m)2
+(1 − m)2 ; (71)
+and for any x, m⩽ 0,
+1 − 2m − x
+(1 − m − x)2 ⩽ Q(x). (72)
+See Figure 8 for an illustration.
+Now define the following random variables:
+xt = −ab + bMt − b2
+tX
+i=1
+Vi; (73)
+mt = E[xt|Ft−1] = −ab + bMt−1 − b2
+tX
+i=1
+Vi; (74)
+m′t = mt − xt−1 = −b2Vt. (75)
+We shall show that {Q(xt)} is a supermartingale, meaning that E[Q(xt)|Ft−1] ⩽ Q(xt−1).
+First, if xt−1 > 0, the inequality is trivial. Second, when xt−1 ⩽ 0, we have mt = xt−1 + m′t ⩽ 0.
+So, using (71) and (72),
+E[Q(xt)|Ft−1] ⩽ E
+ (1 − mt) + (xt − mt) + (xt − mt)2
+(1 − mt)2
+Ft−1 (76)
+=E
+ (1 − mt) + b(Mt − Mt−1) + b2(Mt − Mt−1)2
+(1 − mt)2
+Ft−1 (77)
+= (1 − mt) + b2V 2t
+(1 − mt)2 = 1 − 2m′t − xt−1(1 − m′t − xt−1)2 ⩽ Q(xt−1). (78)
+Since x0 = −ab and Q(x0) = 1/(1 +ab), we define R(x) := (1 +ab)Q(x) to obtain a nonnegative
+supermartingale {R(xt)} with R(x0) = 1, on which we can use Ville’s inequality (Lemma 4) to
+8
+ 6
+ 4
+ 2
+ 0 2 4
+0.00
+0.25
+0.50
+0.75
+1.00
+1.25
+1.50
+m = -2
+Q(x)
+8
+ 6
+ 4
+ 2
+ 0 2 4
+0.00
+0.25
+0.50
+0.75
+1.00
+1.25
+1.50 m = -4
+Q(x)
+Figure 8: Illustration of the upper ((71), plotted in dashed red) and lower ((72), plotted in dashed blue)
+bounding functions of Q(x) with m = −2, −4.
+22
+conclude that
+P
+"
+∃t ∈ N+, Mt ⩾ a + b
+tX
+i=1
+Vi
+#
+= P
+
+∃t ∈ N+, xt ⩾ 0 = P ∃t ∈ N+, Q(xt) ⩾ 1 (79)
+= P[∃t ∈ N+, R(xt) ⩾ 1 + ab] ⩽ 11 + ab , (80)
+concluding the proof.
+Indeed, we can see from the proof that the Dubins-Savage inequality can actually be derived
+from Ville’s inequality on a nonnegative supermartingale. In the parlance of Section 10.4, the
+process {R(xt)} can be used as a test supermartingale for the null Assumption 1, when setting
+Mt to be P λi(Xi − µ). However, there is a major difference in how this test supermartingale
+relates to the the Dubins-Savage confidence sequence: if one fixes a priori the parameters a and
+b, the rejection rule R(xt) ⩾ 1/α is equivalent to the Dubins-Savage CS (Theorem 2) only when
+α = 1/(1 + ab). This is unlike the cases of the other two CSs in this paper, where the duality
+between confidence sequence and sequential testing holds for any α.
+C Omitted proofs and additional propositions
+Proof of Theorem 2. We apply Lemma 1 to the two martingales (13) with a = (2 /α − 1)/b.
+Then we have,
+P
+"
+∀t ∈ N+,
+tX
+i=1
+λi(Xi − µ) ⩽ 2/α − 1b + b tXi=1 λ2i E[(Xi − µ)2|Fi−1]# ⩾ 1 − α2 ; (81)
+P
+"
+∀t ∈ N+, −
+tX
+i=1
+λi(Xi − µ) ⩽ 2/α − 1b + b tXi=1 λ2i E[(Xi − µ)2|Fi−1]# ⩾ 1 − α2 . (82)
+Using Assumption 2, we then have,
+P
+"
+∀t ∈ N+,
+tX
+i=1
+λi(Xi − µ) ⩽ 2/α − 1b + bσ2 tXi=1 λ2i # ⩾ 1 − α2 ; (83)
+P
+"
+∀t ∈ N+, −
+tX
+i=1
+λi(Xi − µ) ⩽ 2/α − 1b + bσ2 tXi=1 λ2i # ⩾ 1 − α2 . (84)
+We remark here that the parameter b in the inequalities above is actually redundant and can
+be eliminated (i.e., take b = 1), since tuning b is equivalent to tuning the coefficients λi. To wit,
+multiplying b by a constant λ0 results in the same inequalities as dividing each λi by λ0.
+Putting b = 1 in the inequalities above and taking a union bound, we immediately arrive at
+the result.
+Proof of Lemma 5. It is known (see Delyon [2009, Proposition 12]) that exp( x − x2/6) ⩽ 1 +
+x + x2/3 for all x ∈ R. Therefore,
+E
+
+exp
+
+λt(Xt − µ) − λ2t ((Xt − µ)2 + 2σ2)6 Ft−1
+= E
+
+exp
+
+λt(Xt − µ) − λ2t (Xt − µ)26 Ft−1 · exp − λ2t σ23 
+⩽ E
+
+1 + λt(Xt − µ) + λ2t3 (Xt − µ)2Ft−1 · exp − λ2t σ23 
+⩽
+
+1 + λ2t σ2
+3
+
+· exp
+
+− λ2t σ2
+3
+
+⩽ 1.
+23
+It immediately follows from Lemma 3 that {M SNt } is a nonnegative supermartingale.
+Proof of Lemma 6. Applying Ville’s inequality (Lemma 4) on the nonnegative supermartingale
+(19), we have that
+P
+"
+∀t ∈ N+,
+tX
+i=1
+
+λt(Xt − µ) − λ2t ((Xt − µ)2 + 2σ2)6  ⩽ log(2/α)# ⩾ 1 − α2 . (85)
+Solving µ from the quadratic inequality
+tX
+i=1
+
+λt(Xt − µ) − λ2t ((Xt − µ)2 + 2σ2)6  > log(2/α) (86)
+yields the interval (each P standing for Pti=1)
+
+
+ P λ2i Xi
+3 − P λi ± r P λ2i Xi3 − P λi2 − 4 P λ2i6 log(2/α) − P λiXi + P λ2i (X 2i +2σ2)6 
+P λ2i
+3
+
+ ,
+(87)
+which then forms a (1 − α/2)-anticonfidence sequence for µ, the aCI SN+t at issue. Another
+(1 − α/2)-anticonfidence sequence, aCI SN−t , can be formed by replacing each λt with −λt,
+
+
+ P λ2i Xi
+3 + P λi ± r P λ2i Xi3 + P λi2 − 4 P λ2i6 log(2/α) + P λiXi + P λ2i (X 2i +2σ2)6 
+P λ2i
+3
+
+ .
+(88)
+Proof of Lemma 8. We observe that
+E
+
+exp
+ 
+±ϕ(λt(Xt − µ)) − λ2t σ2/2Ft−1 (89)
+⩽ E
+
+1 ± λt(Xt − µ) + λ2t (Xt − µ)2/2Ft−1 · exp  −λ2t σ2/2 (90)
+⩽ (1 + λ2t σ2/2) exp(−λ2t σ2/2) ⩽ 1. (91)
+Hence {M Ct } and {N Ct } are both nonnegative supermartingales by Lemma 3.
+We have the following statement on the tightness of Lemma 8, which states that the variance
+bound Assumption 2 is necessary for the processes {M Ct } and {N Ct } to be supermartingales —
+the violation of Assumption 2 on any non-null set will prevent {M Ct } and {N Ct } from being
+supermartingales.
+Proposition 16. Let {Yt} be a process that satisfies Assumption 1, but there exists a t such
+that E[(Yt − µ)2|Ft−1] = vt and S = {vt > (1 + 2κ)σ2} is a set in Ft−1 with non-zero P-measure,
+where κ >0. Further, suppose there exists a δ >0 such that E[|Yt − µ|2+δ|Ft−1] < ∞. Then,
+there exists a Ft−1-measurable λt, such that
+E
+
+exp
+ 
+±ϕ(λt(Xt − µ)) − λ2t σ2/2Ft−1 > 1 (92)
+P-a.s. on S.
+24
+Proof of Proposition 16. Let η be any real number in (0 , 1/2). There exists a positive number
+xb such that for any ϕ that is a Catoni-type influence function, when |x| < xη, ϕ(x) ⩾ log(1 +
+x + ηx2). Note that
+E [exp (ϕ(λ(Yt − µ))) |Ft−1] ⩽ 1 + 12 λ2vt. (93)
+And we have
+lim inf
+λ→0
+λ−2 (E [exp (ϕ(λ(Yt − µ))) |Ft−1] − 1) (94)
+⩾ lim inf
+λ→0
+λ−2  E 1 {|λ(Yt−µ)|<xη} exp (ϕ(λ(Yt − µ))) |Ft−1 − 1 (95)
+⩾ lim inf
+λ→0
+λ−2  E 1 {|λ(Yt−µ)|<xη}(1 + λ(Y − µ) + ηλ2(Yt − µ)2)|Ft−1 − 1 (96)
+⩾ lim inf
+λ→0
+λ−2(P[|λ(Yt − µ)| < xη|Ft−1] − 1) + lim infλ→0 λ−2E 1 {|λ(Yt−µ)|<xη}λ(Yt − µ)|Ft−1 +
+(97)
+lim inf
+λ→0
+λ−2E 1 {|λ(Yt−µ)|<xη}ηλ2(Yt − µ)2|Ft−1 (98)
+=0 + 0 +ηvt = ηvt. (99)
+The first two limits inferior above are 0 since Yt has finite conditional (2 + δ)th moment.
+Since η is arbitrary in (0 , 1/2) it follows that
+lim inf
+λ→0
+λ−2 (E [exp (ϕ(λ(Yt − µ))) |Ft−1] − 1) ⩾ vt2 . (100)
+(Actually it is not hard to see that the inequality above is equality.) Now, recall that vt >
+(1 + 2κ)σ2 on the set S ∈ Ft−1. By (100) there exists some λ0 such that when λ < λ0,
+E [exp (ϕ(λ(Yt − µ))) |Ft−1] ⩾ 1 + 12 λ2(1 + κ)σ2 on S.
+Let g(κ)6 be the unique positive zero of ex −1−(1+ κ)x; so when x ∈ (0, g(κ)), 1+(1+ κ)x >
+ex. Hence, when 0 < λ⩽ min{λ0, p2g(κ)/σ},
+E [exp (ϕ(λ(Yt − µ))) |Ft−1] ⩾ 1 + 12 λ2(1 + κ)σ2 > exp  12 λ2σ2 (101)
+on S. The case for E [exp (−ϕ(λ(Yt − µ))) |Ft−1] is analogous.
+Proof of Theorem 10. We define ft(m) to be the random function
+ft(m) =
+tX
+i=1
+ϕ(λi(Xi − m)) (102)
+in (32), which is always strictly decreasing in m. First, for all m ∈ R, let
+Mt(m) =
+tY
+i=1
+exp
+
+ϕ(λi(Xi − m)) − λi(µ − m) − λ2i2 (σ2 + (µ − m)2)) . (103)
+6One may express g by the Lambert W function.
+25
+Let vt = E[(Xt − µ)2|Ft−1]. Note that
+E
+
+exp
+
+ϕ(λt(Xt − m)) − λt(µ − m) − λ2t2 (σ2 + (µ − m)2)Ft−1
+=E [exp(ϕ(λt(Xt − m)))|Ft−1] exp
+
+−λt(µ − m) − λ2t2 (σ2 + (µ − m)2)
+⩽E
+
+1 + λt(Xt − m) + λ2t2 (Xt − m)2Ft−1 exp −λt(µ − m) − λ2t2 (σ2 + (µ − m)2)
+=
+
+1 + λt(µ − m) + λ2t2 (vt + (µ − m)2) exp −λt(µ − m) − λ2t2 (σ2 + (µ − m)2)
+⩽
+
+1 + λt(µ − m) + λ2t2 (σ2 + (µ − m)2) exp −λt(µ − m) − λ2t2 (σ2 + (µ − m)2)
+⩽ 1.
+Hence, again due to Lemma 3, {Mt(m)} is a nonnegative supermartingale. Note that {Mt(µ)}
+is just the Catoni supermartingale {M Ct } defined in (30). We hence have EMt(m) ⩽ 1; that is,
+E exp(ft(m)) ⩽ exp
+ tX
+i=1
+
+λi(µ − m) + λ2i2 (σ2 + (µ − m)2)! . (104)
+Similarly, define Nt(m) = Qti=1 exp −ϕ(λi(Xi − m)) + λi(µ − m) − λ2i2 (σ2 + (µ − m)2)) and
+it will also be a nonnegative supermartingale for all m ∈ R, with
+E exp(−ft(m)) ⩽ exp
+ tX
+i=1
+
+−λi(µ − m) + λ2i2 (σ2 + (µ − m)2)! . (105)
+Define the functions
+B+t (m) =
+tX
+i=1
+
+λi(µ − m) + λ2i2 (σ2 + (µ − m)2) + log(2/ε) (106)
+=
+tX
+i=1
+λ2i
+2 (m − µ)2 −
+tX
+i=1
+λi(m − µ) +
+tX
+i=1
+λ2i σ2
+2 + log(2/ε); (107)
+B−t (m) =
+tX
+i=1
+
+λi(µ − m) − λ2i2 (σ2 + (µ − m)2) − log(2/ε) (108)
+= −
+tX
+i=1
+λ2i
+2 (m − µ)2 −
+tX
+i=1
+λi(m − µ) −
+tX
+i=1
+λ2i σ2
+2 − log(2/ε). (109)
+By Markov’s inequality,
+∀m ∈ R, P[ft(m) ⩽ B+t (m)] ⩾ 1 − ε/2, (110)
+∀m ∈ R, P[ft(m) ⩾ B−t (m)] ⩾ 1 − ε/2. (111)
+Let us now consider the equation
+B+t (m) = −
+tX
+i=1
+λ2i σ2
+2 − log(2/α), (112)
+which, by rearrangement, can be written as (each P standing for Pti=1)
+X
+λ2i /2 (m − µ)2 − X λi (m − µ) + X λ2i σ2 + log(2/ε) + log(2/α) = 0. (113)
+26
+As a quadratic equation, it has solutions if and only if
+X
+λi
+2
+− 4
+X
+λ2i /2 X λ2i σ2 + log(2/ε) + log(2/α) ⩾ 0, (114)
+which is just the condition (34). Let m = πt be the smaller solution of (112). Since {λt} is
+assumed to be non-random, the quantity πt is also non-random. Then, we can put m = πt into
+(110),
+P
+"
+ft(πt) ⩽ −
+tX
+i=1
+λ2i σ2
+2 − log(2/α)
+#
+⩾ 1 − ε/2. (115)
+Note that ft(max(CICt )) = − Pti=1 λ2i σ22 − log(2/α). Hence
+P[ft(πt) ⩽ ft(max(CICt ))] ⩾ 1 − ε/2, (116)
+which indicates that
+P[max(CICt ) ⩽ πt] ⩾ 1 − ε/2. (117)
+Now notice that
+πt = µ +
+P λi − q(P λi)2 − 4(P λ2i /2)(P λ2i σ2 + log(2/ε) + log(2/α))
+2 P λ2i /2 (118)
+= µ +
+P λi − (P λi)r1 − 4(P λ2i /2)(P λ2i σ2+log(2/ε)+log(2/α))(P λi)2
+2 P λ2i /2 (119)
+⩽ µ +
+P λi − (P λi)(1 − 4(P λ2i /2)(P λ2i σ2+log(2/ε)+log(2/α))(P λi)2 )
+2 P λ2i /2 (120)
+= µ + 2(P λ2i σ2 + log(2/ε) + log(2/α))P λi . (121)
+Combining (117) and (121) gives us the one-sided concentration
+P
+
+max(CICt ) ⩽ µ + 2(P λ2i σ2 + log(2/ε) + log(2/α))P λi  ⩾ 1 − ε/2. (122)
+Now, let ρt be the larger solution of
+B−t (m) =
+tX
+i=1
+λ2i σ2
+2 + log(2/α). (123)
+A similar analysis yields
+P[min(CICt ) ⩾ ρt] ⩾ 1 − ε/2, (124)
+and
+ρt = µ +
+− P λi + q(P λi)2 − 4(P λ2i /2)(P λ2i σ2 + log(2/ε) + log(2/α))
+2 P λ2i /2 (125)
+⩾ µ − 2(P λ2i σ2 + log(2/ε) + log(2/α))P λi . (126)
+Hence we have the other one-sided concentration
+P
+
+min(CICt ) ⩾ µ − 2(P λ2i σ2 + log(2/ε) + log(2/α))P λi  ⩾ 1 − ε/2. (127)
+27
+Hence, a union bound on (122) and (127) gives rise to the concentration on the interval
+width we desire,
+P
+
+max(CICt ) − min(CICt ) ⩽ 4(P λ2i σ2 + log(2/ε) + log(2/α))P λi  ⩾ 1 − ε. (128)
+This concludes the proof.
+Before we prove Corollary 10.2, we review the technique of stitching as appeared in Howard
+et al. [2021, Section 3.1]. Let {Yt} be an i.i.d. sequence of random variable of mean µ and
+subGaussian with variance factor 1. Then, for any λ ∈ R, the following process is a nonnegative
+supermartingale,
+exp
+
+Λ(Y1 + · · ·+ Yt − tµ) − Λ2t/2	 , (129)
+which, in conjunction with Ville’s inequality, yields the following “linear boundary” confidence
+sequence,
+CIlint (Λ, α) =
+
+bµt ± tΛ2/2 + log(2/α)tΛ  . (130)
+The idea of Howard et al. [2021] is to divide α = P∞j=0 αj, take some sequences {Λj} and {tj}
+(t0 = 1), and consider the following CS:
+CIstcht = CIlint (Λj, αj), when tj ⩽ t < tj+1, (131)
+which is indeed a (1 − α)-CS due to union bound. Howard et al. [2021] shows that using geo-
+metrically spaced epochs {tj}, the lower bound
+p
+log logt/t of the law of the iterated logarithm
+can be matched. We prove a slightly different bound than Howard et al. [2021, Equation (11)]
+below.
+Lemma 17. Let tj = e j, αj = α(j+2)2 , and Λj = plog(2/αj)e−j. Note that P∞j=0 αj < α.
+Then,
+tΛ2j /2 + log(2/αj)
+tΛj
+⩽ (1 + e)
+r
+log(2/α) + 2 log log e2t
+t , when tj ⩽ t < tj+1. (132)
+This implies that the stitched CS (131) enjoys the following closed-form expression,
+CIstcht ⊆
+"
+bµt ± (1 + e)
+r
+log(2/α) + 2 log log e2t
+t
+#
+. (133)
+Proof of Lemma 17. We have
+tΛ2j /2 + log(2/αj)
+tΛj
+= log(2/αj)(te−j + 1)
+t
+p
+log(2/αj)e−j ⩽ log(2/αj)(e + 1)tplog(2/αj)t−1 = (e + 1)
+r
+log(2/αj)
+t (134)
+=(e + 1)
+r
+log(2/α) + 2 log(j + 2)
+t ⩽ (e + 1)
+r
+log(2/α) + 2 log(logt + 2)
+t . (135)
+This ingredient of stitching leads to our Corollary 10.2.
+Proof of Corollary 10.2. Applying Theorem 10, (122) and (127) to the case where λt = Λ, we
+see that as long as  1
+2 − Λ2
+
+t ⩾ log(2/ε) + log(2/α), (136)
+28
+we have that
+CICt (Λ, α) ⊆
+
+µ ± 2(tΛ2 + log(2/α) + log(2/ε))tΛ  with probability at least 1 − ε. (137)
+Using the same tj = ej, αj = α(j+2)2 , and Λj = plog(2/αj)e−j as Lemma 17, we see that (taking
+ε = α0 = α/4)
+2(tΛ2j + log(2/αj) + log(2/ε))
+tΛj
+⩽
+4(tΛ2j /2 + log(2/αj))
+tΛj
+⩽ 4(e + 1)
+r
+log(2/α) + 2 log log e2t
+t
+(138)
+when tj ⩽ t < tj+1.
+Further, we see that  1
+2 − Λ2j
+
+tj ⩾ log(2/ε) + log(2/αj) (139)
+holds as long as e j > polylog(1/α). Hence (136) is met when t >polylog(1/α). Combining all
+above we arrive at the desired conclusion.
+Proof of Proposition 11. Let bθt = lwt + upt2 and rt = wQ,ε2 . Due to union bound, for any Q ∈ Qσ2,
+P
+{Xi}∼Q
+h
+bθt ⩽ µQ − rt
+i
+⩽ α2 + ε, P{Xi}∼Q hbθt ⩾ µQ + rti ⩽ α2 + ε. (140)
+Now by Catoni [2012, Proposition 6.1] (note that rt here is a data-independent constant), there
+exists µ0 ∈ R such that when Xi iid∼ N(µ0, σ2),
+P
+h
+bθt ⩾ µ0 + rt
+i
+⩾ P [bµt ⩾ µ0 + rt] , or P
+h
+bθt ⩽ µ0 − rt
+i
+⩾ P [bµt ⩽ µ0 − rt] . (141)
+Without loss of generality suppose the latter holds. Surely N (µ0, σ2)⊗N+ ∈ Qσ2. We see that
+α
+2 + ε ⩾ P
+h
+bθt ⩽ µ0 − rt
+i
+⩾ P [bµt ⩽ µ0 − rt] , (142)
+indicating that
+rt ⩾ σ√t Φ−1(1 − α/2 − ε). (143)
+This shows that
+wN (µ0,σ2)⊗N+ ,εt ⩾ 2σ√t Φ−1(1 − α/2 − ε) (144)
+holds for any tail-symmetric CI, which clearly imlpies the minimax lower bound.
+Proof of Proposition 12. By the law of the iterated logarithm,
+lim sup
+t→∞
+|bµt − µ|
+σ
+r t
+2 log logt = 1, almost surely. (145)
+With probability at least 1 − α, bµt, µ∈ CIt for every t, which implies that | CIt | ⩾ |bµt − µ| for
+every t. Hence, with probability at least 1 − α,
+lim sup
+t→∞
+| CIt |
+σ
+r t
+2 log logt ⩾ 1. (146)
+29
+Lemma 18. Let {Rmt } and {Smt } be two families of nonnegative adapted processes indexed by
+m ∈ R, among which {Rµt } and {Sµt } are supermartingales with Rµ0 = Sµ0 = 1. If almost surely
+for any m ∈ R, Rmt ⩾ Smt , then the (1 − α)-CSs
+CIR,t = {m : Rmt ⩽ 1/α}, CIS,t = {m : Smt ⩽ 1/α} (147)
+satisfy
+CIR,t ⊆ CIS,t a.s. (148)
+Proof of Lemma 18. First, by Ville’s inequality (Lemma 4) we see that {CIR,t} and {CIR,t} are
+indeed confidence sequences for µ. Then, almost surely, for all m ∈ CIR,t,
+Smt ⩽ Rmt ⩽ 1/α, (149)
+which implies that m ∈ CIS,t. Hence almost surely CI R,t ⊆ CIS,t.
+Before we prove Theorem 15, let us introduce three lemmas, which are also used to prove the
+infinite variance case in the recent follow-up work on robust Catoni-style confidence sequences,
+Wang and Ramdas [2023]. Our proof of Theorem 15 is also inspired by [Wang and Ramdas,
+2023, Proof of Theorem 5], which in turns roughly follows the proof of Theorem 10 in this paper.
+Lemma 19 (Lemma 8 of Wang and Ramdas [2023], Appendix A) . Let p ∈ (1, 2], C >0, and
+g(y) = yp −y+C. Suppose there is a c >0 such that C =  c(1+c)p 1/(p−1). Then g((1+ c)C) = 0.
+Lemma 20 (Lemma 9 of Wang and Ramdas [2023], Appendix A) . Let p ∈ (1, 2], A, B, C >
+0, and g(x) = Axp − Bx + C. Suppose there is a c > 0 such that A1/(p−1)B−p/(p−1)C =
+c
+(1+c)p
+1/(p−1)
+. Then g has a positive zero (1 + c)B−1C.
+Lemma 21 (One-dimensional special case of Lemma 7 of Wang et al. [2021], Appendix A) . Let
+p ∈ (1, 2]. For any real x and y, |x + y|p ⩽ |x|p + 4|y|p + py|x|p−1 sgn(x).
+The first two lemmas are proved by direct substitution; the third by Taylor expansion. We
+refer the reader to the works cited for their proof. Now we are ready to prove Theorem 15.
+Proof of Theorem 15. We define fpt(m) to be the random function
+fpt(m) =
+tX
+i=1
+ϕp(λi(Xi − m)). (150)
+Consider the process
+M Ct p(m) =
+tY
+i=1
+exp
+
+ϕp(λi(Xi − m)) − λi(µ − m) − λpip (4vi + |µ − m|p) . (151)
+30
+Note that
+E
+
+exp
+
+ϕ(λt(Xt − m)) − λt(µ − m) − λptp (4vt + |µ − m|p)Ft−1 (152)
+=E [exp (ϕ(λt(Xt − m)))|Ft−1] exp
+
+−λt(µ − m) − λptp (4vt + |µ − m|p) (153)
+⩽E[1 + λt(Xt − m) + 1p λpt |Xt − m|p|Ft−1] exp−λt(µ − m) − λptp (4vt + |µ − m|p) (154)
+(by Lemma 21) (155)
+⩽
+E[1 + λt(Xt − m) + 1p λpt (|µ − m|p + 4|Xt − µ|p + p(Xt − µ)|µ − m|p−1 sgn(µ − m))|Ft−1]
+exp
+
+λt(µ − m) + λptp (4vt + |µ − m|p)
+(156)
+=
+1 + λt(µ − m) + 1p λpt (|µ − m|p + 4E[|Xt − µ|p|Ft−1])
+exp
+
+λt(µ − m) + λptp (4vt + |µ − m|p) (157)
+⩽
+1 + λt(µ − m) + 1p λpt (|µ − m|p + 4v2t )
+exp
+
+λt(µ − m) + λptp (4vt + |µ − m|p) ⩽ 1. (158)
+{M Ct p(m)} is thus a nonnegative supermartingale issued at 1. Note that this time, unlike the
+finite variance case, {M Ct p(µ)} does not equal {M Ct p}. We thus have EM Ct p(m) ⩽ 1; that is,
+E exp(fpt(m)) ⩽ exp
+ tX
+i=1
+
+λi(µ − m) + λpip (4vi + |µ − m|p)! . (159)
+Define the function
+Bpt(m) =
+tX
+i=1
+
+λi(µ − m) + λpip (4vi + |µ − m|p) + log(2/ε). (160)
+By Markov’s inequality,
+∀m ∈ R, P[fpt(m) ⩽ Bpt(m)] ⩾ 1 − ε/2. (161)
+Let us now consider the equation
+Bpt(m) = −
+Pt
+i=1 viλpi
+p − log(2/α), (162)
+which, by rearrangement, can be written as (each P standing for Pti=1),
+X
+λpi /p |m − µ|p − X λi (m − µ) + X 5λpi vi/p + log(2/ε) + log(2/α) = 0. (163)
+By Lemma 20, it has a positive zero if there exists a c >0 such that
+X
+λpi /p1/(p−1) X λi−p/(p−1) X 5λpi vi/p + log(2/ε) + log(2/α) =  c(1 + c)p 1/(p−1) .
+(164)
+By elementary calculus, the function x(1+x)p (x >0) takes its maximum J = (p−1)p−1pp at xp =
+1
+p−1 . Therefore, due to the assumption (51), the left hand side of the equation above is smaller
+31
+than the maximum of the right hand, meaning that such c does exist, and is smaller than
+xp = 1p−1 . So, the equation (163), i.e. the equation (162), has a positive zero
+πt = µ + (1 + c)
+X
+λi
+−1 X
+5λpi vi/p + log(2/ε) + log(2/α) (165)
+⩽µ + pp − 1 P 5λpi vi/p + log(2/ε) + log(2/α)P λi = µ + P 5λpi vi + p log(2/ε) + p log(2/α)P λi . (166)
+Let us put m = πt into (161), obtaining
+P
+"
+fpt(πt) ⩽ −
+Pt
+i=1 viλpi
+p − log(2/α)
+#
+⩾ 1 − ε/2, (167)
+which in turns implies, with probability at least 1 − ε/2,
+max(CICt p) ⩽ πt ⩽ µ +
+P 5λpi vi + p log(2/ε) + p log(2/α)P λi . (168)
+The other side of the concentration similarly follows. So
+P
+
+max(CICt p) − min(CICt p) ⩽
+P 10λpi vi + 2p log(2/ε) + 2p log(2/α)P λi  , (169)
+concluding the proof.
+D Heteroscedastic Dubins-Savage and self-normalized CS
+Suppose in this section that instead of Assumption 2, the following assumption holds.
+Assumption 4. The process is conditionally square-integrable with an upper bound, known a
+priori, on the conditional variance:
+∀t ∈ N+, E[(Xt − µ)2 | Ft−1] ⩽ σ2t , (170)
+where {σt}t∈N+ is a predictable, nonnegative process.
+We can easily generalize Theorem 2 as follow 7.
+Theorem 22 (Dubins-Savage confidence sequence) . The following intervals {CIDSt }, under
+Assumption 1 and Assumption 4, form a (1 − α)-confidence sequence of µ:
+CIDS′t =
+" P λiXi ±  2/α − 1 + P λ2i σ2i P λi # . (171)
+If we consider the simple case of deterministic polynomial growth σ2t = ˜Θ(tγ), we see that
+matching the growth of {σt} with {λt} via setting λt = ˜Θ(t−(γ+1)/2) can result in the best
+possible asymptotic shrinkage rate
+| CIDS′t | = ˜Θ(t(γ−1)/2), (172)
+which is indeed a “shrinkage” if γ <1, cf. Corollary 15.2.
+Similarly, Theorem 7 can be reformulated in the following way.
+7We develop this section without any proof since all theorems here can be easily deduced by modifying
+previously proved counterparts, changing every application ofE[(Xt −µ)2|Ft−1] ⩽ σ2 into E[(Xt −µ)2|Ft−1] ⩽ σ2t .
+32
+Theorem 23 (Self-normalized confidence sequence) . We define the intervals aCISN+′ to be
+aCISN+′t =
+
+
+ 
+U +t  ± r U +t 2 − 2 P λ2i3 log(2/α) − P λiXi + P λ2i X 2i +2 P λ2i σ2i6 
+P λ2i
+3
+
+ ; (173)
+aCISN−′t =
+
+
+ 
+U −t  ± r U −t 2 − 2 P λ2i3 log(2/α) + P λiXi + P λ2i X 2i +2 P λ2i σ2i6 
+P λ2i
+3
+
+ . (174)
+(U ±t are defined back in (20).) Then, setting CISN′t = R \ (aCISN+′t ∪ aCISN−′t ), we have that
+{CISN′t } forms a 1 − α confidence sequence for µ, under Assumption 1 and Assumption 4.
+33

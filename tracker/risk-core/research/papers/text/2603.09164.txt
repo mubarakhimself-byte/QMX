@@ -1,0 +1,883 @@
+arXiv 2603.09164  https://arxiv.org/abs/2603.09164
+
+Slippage-at-Risk (SaR):
+A Forward-Looking Liquidity Risk Framework
+for Perpetual Futures Exchanges
+Otar Sepper
+SepperLabs
+Formerly Gauntlet
+otar@sepperlabs.com
+March 2026
+Abstract
+We introduceSlippage-at-Risk (SaR), a quantitative framework for measuring liquidity
+risk in perpetual futures exchanges. Unlike backward-looking metrics such as Value-at-Risk
+computed on historical returns or realized deficit distributions, SaR provides aforward-looking
+assessment of liquidation execution risk derived from current order book microstructure.
+The framework comprises three complementary metrics: SaR(α), the cross-sectional slippage
+quantile; ESaR(α), the expected slippage in the distributional tail; and TSaR(α), the aggre-
+gate dollar-denominated tail slippage. We extend the base framework with aconcentration
+adjustmentthat penalizes fragile liquidity structures where a small number of market makers
+dominate quote provision. Drawing on recent work by Chitra et al. (2025) on autodeleverag-
+ing mechanisms and insurance fund optimization, we establish a direct mapping from SaR
+metrics to optimal capital requirements. Empirical analysis using Hyperliquid order book
+data, including the October 10, 2025 liquidation cascade, demonstrates SaR’s predictive
+validity as a leading indicator of systemic stress. We conclude with practical implementation
+guidance and discuss philosophical implications for risk management in decentralized financial
+systems.
+arXiv:2603.09164v1  [q-fin.RM]  10 Mar 2026
+Slippage-at-Risk Framework 2
+Keywords:Liquidity risk, perpetual futures, order book microstructure, autodeleveraging,
+insurance fund, DeFi risk management
+Slippage-at-Risk Framework 2
+Contents
+1 Introduction 4
+1.1 Motivation . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 4
+1.2 The Gap in Existing Approaches . . . . . . . . . . . . . . . . . . . . . . . . . . . 4
+1.3 Contribution and Outline . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 5
+2 Preliminaries: Perpetuals Exchange Mechanics 5
+2.1 Positions and Leverage . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 5
+2.2 Margin Requirements and Liquidation . . . . . . . . . . . . . . . . . . . . . . . . 6
+2.3 Execution and Bad Debt . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 6
+2.4 Insurance Fund and Autodeleveraging . . . . . . . . . . . . . . . . . . . . . . . . 7
+3 The Slippage-at-Risk F ramework 7
+3.1 Setup and Notation . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 7
+3.2 The Slippage Function . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 7
+3.3 Notional Calibration . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8
+3.4 Cross-Sectional SaR . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 9
+3.5 Expected Slippage at Risk (ESaR) . . . . . . . . . . . . . . . . . . . . . . . . . . 9
+3.6 Total Dollar Slippage at Risk (TSaR) . . . . . . . . . . . . . . . . . . . . . . . . 9
+3.7 Weighted SaR . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 9
+4 Concentration Adjustment 10
+4.1 The Fragility of Concentrated Liquidity . . . . . . . . . . . . . . . . . . . . . . . 10
+4.2 Concentration Metrics . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 10
+4.3 The Concentration Haircut . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 11
+4.3.1 Withdrawal Scenario Analysis . . . . . . . . . . . . . . . . . . . . . . . . . 11
+4.3.2 Connection Between HHI and Withdrawal Impact . . . . . . . . . . . . . 11
+4.3.3 Parametric Haircut Formula . . . . . . . . . . . . . . . . . . . . . . . . . . 12
+4.4 Concentration-Adjusted Slippage and SaR . . . . . . . . . . . . . . . . . . . . . . 12
+5 Theoretical Connections 13
+5.1 The Causal Chain: From Order Books to Deficits . . . . . . . . . . . . . . . . . . 13
+5.2 Forward-Looking vs. Backward-Looking Metrics . . . . . . . . . . . . . . . . . . 13
+5.3 Optimal Insurance Fund Sizing . . . . . . . . . . . . . . . . . . . . . . . . . . . . 13
+5.4 SaR-Implied Insurance Fund . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 14
+6 Extensions 14
+6.1 Cascade Adjustment . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 14
+6.2 Time Dynamics and Regime Detection . . . . . . . . . . . . . . . . . . . . . . . . 15
+6.3 Cross-Token Correlation . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 15
+6.4 Spoofing Detection . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 15
+7 Empirical Analysis 16
+7.1 Data Description . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16
+Slippage-at-Risk Framework 3
+7.2 SaR Computation and Characteristics . . . . . . . . . . . . . . . . . . . . . . . . 16
+7.3 Concentration Analysis . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 18
+7.4 Validation: SaR as Leading Indicator . . . . . . . . . . . . . . . . . . . . . . . . . 19
+7.5 Case Study: October 10, 2025 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 21
+7.5.1 Pre-Event Conditions . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 21
+7.5.2 Realized vs. Predicted Slippage . . . . . . . . . . . . . . . . . . . . . . . . 22
+7.5.3 Insurance Fund Implications . . . . . . . . . . . . . . . . . . . . . . . . . 23
+7.5.4 Concentration Effects During the Cascade . . . . . . . . . . . . . . . . . . 24
+8 Implementation Guide 24
+8.1 Data Requirements . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 24
+8.2 Computation Pipeline . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 25
+8.3 Parameter Calibration . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 25
+8.4 Monitoring and Alerts . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 26
+9 Conclusion 26
+9.1 Summary of Contributions . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 26
+9.2 Practical Implications . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 26
+9.3 Philosophical Implications . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 27
+9.4 Limitations and Future Work . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 27
+A Proofs 29
+A.1 Proof of Proposition 4.5 (HHI and Withdrawal Impact) . . . . . . . . . . . . . . 29
+B Additional Empirical Results 30
+B.1 Full Token-Level Results . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 30
+C Symbol Reference 31
+Slippage-at-Risk Framework 4
+1 Introduction
+1.1 Motivation
+Perpetual futures have emerged as the dominant derivative instrument in cryptocurrency
+markets, with daily trading volumes regularly exceeding$100 billion across major venues.
+Unlike traditional futures contracts with fixed expiration dates, perpetuals use a funding rate
+mechanism to maintain price alignment with spot markets, enabling indefinite position holding.
+This innovation has democratized access to leveraged trading, but introduced novel systemic
+risks that existing frameworks do not adequately address.
+The core vulnerability lies in the interaction between leverage, liquidations, and order book
+liquidity. When a leveraged position’s collateral falls below maintenance requirements, the
+exchange must liquidate it - selling long positions or buying back short positions at prevailing
+market prices. During periods of market stress, cascading liquidations can overwhelm available
+liquidity, resulting in execution prices far worse than theoretical bankruptcy prices. The resulting
+bad debt - the shortfall between bankruptcy price and actual execution price - must be absorbed
+by the exchange’s insurance fund or socialized across profitable traders through autodeleveraging
+(ADL).
+The October 10, 2025, Hyperliquid event starkly illustrated these dynamics:$2.1 billion in
+liquidations over 12 minutes generated$304.5 million in deficits requiring socialization, with the
+exchange’s queue-based ADL policy expending$704.6 million in haircuts - an 8 × overutilization
+relative to the actual deficit [ 2]. This event was not a black swan but rather the predictable
+consequence of thin order books under stress conditions that were, in principle, observable before
+the cascade began.
+1.2 The Gap in Existing Approaches
+Current risk management frameworks for perpetuals exchanges exhibit several critical limitations:
+1. Backward-looking metrics:Traditional Value-at-Risk (VaR) and Expected Shortfall
+(ES) are computed on historical return distributions. They capture past volatility, but
+they provide no direct measurement of current capacity to absorb liquidations.
+2. Undefined for new assets:Historical deficit-based metrics cannot be computed for
+newly listed tokens that have not yet experienced stress events. This creates a dangerous
+blind spot precisely where risk is highest - illiquid markets with unproven depth.
+3. Static calibration:Position limits and leverage caps are typically set at the time of
+listing and adjusted infrequently, failing to adapt to evolving liquidity conditions.
+4. Ignoring microstructure:The order book - the actual resource that determines execution
+quality - is rarely incorporated into formal risk metrics.
+Slippage-at-Risk Framework 5
+1.3 Contribution and Outline
+This paper introduces Slippage-at-Risk (SaR), a framework that directly addresses these lim-
+itations by measuring liquidation execution risk from the observable order book state. Our
+contributions are:
+1. Core F ramework (Section 3):We define the slippage function Si(Q) and derive three
+complementary metrics: SaR(α), ESaR(α), and TSaR(α). We establish their interpretation
+as cross-sectional liquidity quantiles and discuss notional calibration.
+2. Concentration Adjustment (Section 4):We formalize the fragility of concentrated
+liquidity and derive a haircut formula based on the Herfindahl-Hirschman Index (HHI)
+that adjusts slippage upward for books dominated by few providers.
+3. Theoretical Connections (Section 5):We establish the causal chain from order
+book depth to deficit distributions and derive the SaR-implied insurance fund formula,
+connecting our work to Chitra et al. (2025).
+4. Extensions (Section 6):We extend the framework to incorporate cascade effects, time
+dynamics, cross-token correlation, and spoofing detection.
+5. Empirical Analysis (Section 7):We apply the framework to Hyperliquid order book
+data, validate SaR’s predictive properties, and analyze the October 10, 2025 event.
+6. Implementation and Implications (Sections 8–9):We provide practical guidance for
+deployment and discuss broader implications for DeFi risk management.
+2 Preliminaries: Perpetuals Exchange Mechanics
+We briefly review the mechanics of perpetual futures exchanges, following the notation of Chitra
+et al. (2025). Readers familiar with these concepts may proceed to Section 3.
+2.1 Positions and Leverage
+A position on a perpetuals exchange is a tuplep i = (qi, ci, ti, bi) where:
+•q i ∈Ris the signed quantity (positive for long, negative for short)
+•c i >0 is the collateral posted
+•t i is the entry timestamp
+•b i ∈ {−1,+1}indicates direction (long/short)
+Theleverageof positioniat timetis:
+ℓi,t = pt · |qi|ci,t (1)
+Slippage-at-Risk Framework 6
+where pt is the mark price and ci,t is current collateral (initial collateral adjusted for realized
+PnL and funding payments). Exchanges impose a maximum leverage ℓmax, typically 10-100×
+depending on the asset.
+2.2 Margin Requirements and Liquidation
+Positions are subject to two margin thresholds:
+• Initial Margin (IM):Minimum collateral required to open a position, typically IM =
+1/ℓmax of notional.
+• Maintenance Margin (MM):Minimum collateral required to keep a position open,
+typically MM =µ·IM for someµ∈(0,1).
+Theequityof positioniat timetis:
+ei,t =c i,t + PnLi,t =c i,t +q i(pt −p ti) (2)
+A position is liquidated when equity falls below maintenance margin:
+ei,t <MM i =⇒liquidation triggered (3)
+Define thebankruptcy pricep bki as the price at which equity equals zero:
+pbki =p ti − ciqi (for longs) (4)
+and theliquidation pricep liqi as the price at which equity equals maintenance margin.
+2.3 Execution and Bad Debt
+When liquidating position i with quantity ∆qi = −qi, the exchange executes a market order that
+consumes order book liquidity. Theexecution price pexeci depends on available depth. Under a
+linear market impact model:
+pexeci =p t − λ2 ∆qi (5)
+whereλ >0 is the impact coefficient.
+Bad debt arises when execution price is worse than bankruptcy price. For a liquidated position
+i, the deficit is:
+Di = max
+
+0, qi ·
+ 
+pbki −p execi  (6)
+That is, Di > 0 only when the position is closed at a price beyond its bankruptcy level, generating
+a loss that must be absorbed by the insurance fund.
+Total deficit at timeTisD T = Pi Di over all liquidated positions.
+Slippage-at-Risk Framework 7
+2.4 Insurance Fund and Autodeleveraging
+The insurance fund IF t absorbs deficits up to its capacity:
+IFt+1 = IFt + (liquidation fees) + (trading fees)−min{IF t, Dt}(7)
+When Dt >IF t, the residual Rt = max(0, Dt −IFt) triggers autodeleveraging: profitable positions
+are forcibly closed to cover the shortfall. Different ADL policies (Queue, Pro-Rata, Risk-Aware
+Pro-Rata) allocate haircuts differently across winners, with significant implications for fairness
+and revenue [2].
+3 The Slippage-at-Risk Framework
+3.1 Setup and Notation
+Consider a perpetuals exchange at time t listing N tokens indexed by i∈ {1, . . . , N}. For each
+tokeni, we observe:
+•p i,t: mid-price
+•OI i,t: open interest (total outstanding notional)
+•B i(·): bid-side cumulative depth function
+•A i(·): ask-side cumulative depth function
+The order book is represented as a set of limit orders. On the bid side, let {(pbk, qbk)}Kbk=1 denote
+price-quantity pairs withp b1 > pb2 >· · ·> pbKb. The cumulative depth at pricepis:
+Bi(p) =
+X
+k:pbk≥p
+qbk (8)
+with analogous definition for the ask side.
+3.2 The Slippage Function
+Definition 3.1(Slippage Function).For token i, theslippage function Si : R+ →R + measures
+the volume-weighted average execution shortfall when liquidating notional quantityQ:
+Si(Q) = 1Q Z Q0 [pmid −p(q)]dq(9)
+wherep(q) is the marginal execution price for theq-th unit.
+For a discrete order book, slippage is computed by walking the book. Algorithm 1 provides the
+pseudocode.
+Slippage-at-Risk Framework 8
+Algorithm 1Compute Slippage from Order Book
+Require:order book= list of (price, size) sorted best-to-worst
+Require:Q= quantity to liquidate,mid price= reference price
+Ensure:Slippage as percentage of mid price
+remaining←Q;total cost←0
+foreach level (price,size) inorder bookdo
+fill←min(size,remaining)
+total cost←total cost+fill×(mid price−price)
+remaining←remaining−fill
+ifremaining= 0then exit loop
+end if
+end for
+ifremaining>0then return∞▷Insufficient liquidity
+end if
+returntotal cost/(Q×mid price)▷As percentage
+Example 3.2.Liquidating 100 BTC at mid =$60,000 with total cost of$180,000 gives slippage
+= 3%.
+Remark3.3 (Directional Slippage).Liquidations are directional: long liquidations sell into bids,
+short liquidations buy into asks. Define:
+Sbidi (Q) : slippage from sellingQ(long liquidations) (10)
+Saski (Q) : slippage from buyingQ(short liquidations) (11)
+In practice, use the direction matching dominant positioning. If open interest is skewed long,
+Sbidi is the relevant measure.
+3.3 Notional Calibration
+The quantity Qi at which to evaluate slippage should reflect a stress liquidation scenario. We
+parameterize:
+Qi = min (β·OI i,VaR 0.95(Position Sizei)) (12)
+where:
+•β∈ [0.05, 0.20] is thestress parameter, representing the fraction of open interest that
+liquidates simultaneously in a stress scenario.
+•VaR 0.95(Position Sizei) caps Qi at the 95th percentile of historical position sizes, preventing
+extreme outliers from dominating.
+Remark3.4 (Choosingβ).The appropriate stress parameter depends on market conditions:
+•Normal conditions:β= 0.05-0.10
+•Elevated volatility:β= 0.10-0.15
+Slippage-at-Risk Framework 9
+•Crisis scenarios:β= 0.15-0.20
+During the October 10, 2025 Hyperliquid event, realized liquidations represented approximately
+15% of pre-event open interest for affected tokens.
+3.4 Cross-Sectional SaR
+Definition 3.5(Slippage-at-Risk).TheSlippage-at-Riskat confidence level α∈ (0, 1) is the
+α-quantile of slippage across all tokens:
+SaR(α) = inf
+(
+s∈R + : 1N NXi=1 1{Si(Qi)≤s} ≥α ) (13)
+Interpretation: SaR(0.95) = 3% means that 95% of tokens have slippage at or below 3% when
+liquidating their calibrated stress notional. The remaining 5% are “tail” tokens with critically
+thin liquidity.
+3.5 Expected Slippage at Risk (ESaR)
+Definition 3.6(Expected Slippage at Risk).TheExpected Slippage at Riskis the conditional
+expected slippage among tail tokens:
+ESaR(α) =E
+
+Si(Qi)
+ Si(Qi)>SaR(α)  (14)
+ESaR measures theseverityof tail liquidity risk, not merely its boundary. It is the slippage
+analog of Expected Shortfall in the VaR literature.
+3.6 Total Dollar Slippage at Risk (TSaR)
+Definition 3.7(Total Dollar Slippage at Risk).TheTotal Dollar Slippage at Riskaggregates
+dollar-denominated slippage from tail tokens:
+TSaR$(α) =
+X
+i:Si(Qi)>SaR(α)
+Si(Qi)·Q i (15)
+TSaR$ represents thetotal execution shortfallthat would materialize if stress liquidations
+occurred across all tail tokens simultaneously. This quantity maps directly to potential deficit
+exposure.
+3.7 Weighted SaR
+The basic SaR treats all tokens equally. For risk management purposes, weighting by exposure
+is often more appropriate:
+Slippage-at-Risk Framework 10
+Definition 3.8(Open Interest-Weighted SaR).
+SaRw(α) = inf
+(
+s∈R + :
+P
+i:Si(Qi)≤s OIiPN
+i=1 OIi
+≥α
+)
+(16)
+SaRw(0.95) answers: “What slippage level contains 95% of the open interest (not 95% of tokens)?”
+This weights toward tokens with larger aggregate positions.
+4 Concentration Adjustment
+4.1 The Fragility of Concentrated Liquidity
+Raw slippage Si(Q) measures depth but ignores itsstructure. Two order books with identical
+depth profiles can have vastly different fragility:
+Example 4.1.Consider two order books, each with$1M total bid-side liquidity:
+•Book A (Distributed):100 market makers, each providing$10,000
+•Book B (Concentrated):2 market makers, each providing$500,000
+Both yieldS(Q) =sfor some quantityQ. However, if one participant withdraws:
+•Book A loses 1% of depth
+•Book B loses 50% of depth
+Book B’s apparent liquidity is fragile - it can vanish suddenly if a dominant provider exits.
+This fragility is especially concerning in the context of:
+•Spoofing:Artificial liquidity placed to manipulate prices, withdrawn before execution
+•Correlated withdrawal:Market makers pulling quotes simultaneously during stress
+• Single points of failure:Dominant providers experiencing technical issues or insolvency
+4.2 Concentration Metrics
+For tokeni, letM i accounts provide liquidity with quantitiesℓ 1, . . . , ℓMi. Define shares:
+wm = ℓmPMi
+j=1 ℓj
+, m= 1, . . . , Mi (17)
+Definition 4.2(Herfindahl-Hirschman Index).
+HHIi =
+MiX
+m=1
+w2m (18)
+Properties:
+Slippage-at-Risk Framework 11
+•HHI∈[1/M,1]
+•HHI = 1/Mwhen liquidity is uniformly distributed
+•HHI = 1 when a single provider supplies all liquidity (monopoly)
+Definition 4.3(Effective Number of Providers).
+Neff = 1HHI (19)
+Neff represents the number of equal-sized providers that would produce the observed concentration.
+In the example above, Book A hasN eff = 100 while Book B hasN eff = 2.
+Definition 4.4(Top-kConcentration Ratio).
+CRk =
+kX
+m=1
+w(m) (20)
+wherew (m) is them-th largest share. CR 1 measures dominance of the single largest provider.
+4.3 The Concentration Haircut
+We now derive a haircut that adjusts slippage upward based on concentration.
+4.3.1 Withdrawal Scenario Analysis
+Consider the scenario where provider m withdraws. Let S(−m)i (Q) denote slippage computed on
+the residual book. Thewithdrawal-based haircutis:
+hwithdrawi = S(−1)i (Q)−S i(Q)Si(Q) = S(−1)i (Q)Si(Q) −1 (21)
+where (−1) indicates removal of the largest provider.
+4.3.2 Connection Between HHI and Withdrawal Impact
+Proposition 4.5.Assume slippage scales inversely with depth: S∝ 1/L where L is total
+liquidity. If providermis selected uniformly at random to withdraw, then:
+E
+"
+S(−m)
+S −1
+#
+=E
+ wm
+1−w m
+
+≈ HHI1−1/M +O(HHI 2) (22)
+for small concentration.
+Proof.After providermwithdraws, remaining depth is (1−w m)L. Under linear slippage:
+S(−m)
+S = L(1−w m)L = 11−w m (23)
+Slippage-at-Risk Framework 12
+Thus:
+E
+ 1
+1−w m
+−1
+
+=E
+ wm
+1−w m
+
+(24)
+For smallw m, wm1−wm ≈w m +w 2m +O(w 3m). Taking expectation:
+E
+ wm
+1−w m
+
+≈E[w m] +E[w 2m] = 1M + HHI (25)
+Rearranging yields the result.
+4.3.3 Parametric Haircut F ormula
+Based on the above analysis, we propose:
+Definition 4.6(Concentration Haircut).
+hconci =λ·max
+ 
+0, Ntarget
+N (i)eff −1
+!
++µ·max
+
+0,CR (i)1 −CR thresh1  (26)
+where:
+•N target: target number of effective providers (e.g., 10-20)
+•CR thresh1 : maximum acceptable share for top provider (e.g., 0.25)
+•λ, µ >0: sensitivity parameters (typicallyλ= 0.5,µ= 0.3)
+The first term penalizes books with too few effective providers. The second term adds an extra
+penalty when a single account dominates, which may indicate spoofing.
+4.4 Concentration-Adjusted Slippage and SaR
+Definition 4.7(Adjusted Slippage).
+Sadji (Q) =S i(Q)·(1 +h conci ) (27)
+All SaR metrics are then computed using adjusted slippage values:
+SaRadj(α) = quantileα
+
+{Sadji (Qi)}Ni=1
+
+(28)
+ESaRadj(α) =E hSadji |S adji >SaR adj(α)i (29)
+TSaRadj$ (α) = X
+i:Sadji >SaRadj(α)
+Sadji (Qi)·Q i (30)
+Slippage-at-Risk Framework 13
+5 Theoretical Connections
+5.1 The Causal Chain: From Order Books to Deficits
+Liquidation deficits emerge through a clear causal process:
+Liquidity Withdrawal→Thin Order Books→High Slippage→Bad
+Debt→ADL/Socialization
+SaR measures theupstreamcause (liquidity conditions), while VaR on historical deficits measures
+thedownstreamconsequence. SaR is aleading indicator- liquidity withdrawal precedes and
+predicts cascade events.
+5.2 Forward-Looking vs. Backward-Looking Metrics
+Table 1: Comparison of Risk Metrics
+Metric Basis Nature Information Source Defined F or
+Historical VaR Returns Backward Past price moves All assets
+Deficit VaR Historical deficits Backward Past ADL events Assets with history
+SaROrder book depthF orwardCurrent MM beliefsAll assets
+SaR-implied VaR SaR distribution Forward Current liquidity All assets
+The forward-looking nature of SaR has critical advantages:
+1. Universally defined:Computable for any token with an order book, regardless of crisis
+history.
+2. Encodes market maker beliefs:Order book depth reflects liquidity providers’ assess-
+ments of risk.
+3. Leading indicator:Liquidity withdrawal → SaR increases → (lag) → cascade → VaR
+reacts. SaR flags risk at step 2, potentially days before the event.
+5.3 Optimal Insurance Fund Sizing
+Chitra et al. (2025) derive the optimal insurance fund by minimizing expected total cost:
+IF∗ = argminIF≥0 {r·IF +κ·E[max(0, D−IF)]}(31)
+where:
+•r: opportunity cost per unit capital held in IF
+•κ: reputation/social cost per unit deficit socialized
+•D: random deficit
+Slippage-at-Risk Framework 14
+Theorem 5.1(Chitra et al. (2025)).The optimal insurance fund is:
+IF∗ = VaR1−r/κ(D) (32)
+i.e., the(1−r/κ)-quantile of the deficit distribution.
+5.4 SaR-Implied Insurance Fund
+If deficits are driven primarily by slippage during cascades, we can approximate:
+D≈c·TSaR $(α) (33)
+where c > 1 captures the amplification from maintenance margin gaps, fees, and cascade
+dynamics.
+Corollary 5.2(SaR-Implied Insurance Fund).Under the slippage-driven deficit approximation:
+IF∗ ≈c·TSaR adj$
+ r
+κ
+
+(34)
+Interpretation:Size the insurance fund based on current liquidity conditions, not historical
+deficit data. For newly listed tokens with no crisis history, the SaR-implied IF provides actionable
+guidance. In typical exchange settings, r/κ≈ 0.05 (opportunity cost is much smaller than
+reputational cost), yielding IF ∗ ≈c·TSaR adj$ (0.05).
+Remark5.3 (Calibratingc).The proportionality constantcdepends on:
+•Maintenance margin buffer (larger buffer→smallerc)
+•Liquidation fee structure
+•Cascade amplification dynamics
+Empirically,c∈[1.5,3.0] is typical, with higher values during volatile periods.
+6 Extensions
+6.1 Cascade Adjustment
+Liquidations trigger feedback loops: price impact from liquidation A pushes other positions
+toward their liquidation prices, triggering more liquidations. We incorporate this via leverage-
+weighted slippage:
+Definition 6.1(Cascade-Adjusted Slippage).
+Scascadei (Q) =S i(Q)·  1 +γ· ¯ℓi (35)
+where ¯ℓi is the average leverage on positions in token i, and γ >0 is the cascade sensitivity
+parameter.
+Higher leverage implies more positions near liquidation thresholds, amplifying cascade potential.
+Slippage-at-Risk Framework 15
+6.2 Time Dynamics and Regime Detection
+Liquidity is non-stationary. Track rolling statistics for regime detection:
+Definition 6.2(SaR Time Series Statistics).
+SaR-Levelt =E τ∈[t−T,t] [SaRτ (α)] (36)
+SaR-Dispersiont =
+q
+Varτ∈[t−T,t] [SaRτ (α)] (37)
+SaR-Volt = std (SaRt−k, . . . ,SaRt) (38)
+SaR-Trendt = ˆβfrom SaR τ =a+bτ+ϵ τ (39)
+W arning signals:
+•Rising SaR-Level:Systemic liquidity deterioration
+•Widening SaR-Dispersion:Bifurcation between liquid and illiquid tokens
+•High SaR-V ol:Unstable liquidity regime - itself a risk factor
+•Positive SaR-T rend:Sustained liquidity withdrawal
+6.3 Cross-Token Correlation
+During market stress, liquidations cluster across tokens. For portfolio-level risk:
+Definition 6.3(Correlated TSaR).
+TSaRport =
+sX
+i,j
+ρij ·Slippage i ·Slippage j (40)
+whereρ ij is the correlation of liquidation events between tokensiandj.
+6.4 Spoofing Detection
+Beyond concentration, spoofing exhibits specific signatures:
+•Quote flickering:High cancel/replace ratio
+•Depth retreat:Liquidity pulls away as price approaches
+•Asymmetric books:One side much deeper than the other
+Define a spoofing risk score:
+Spoofi =f(cancel rate i,retreat rate i,asymmetry i) (41)
+and incorporate into the total haircut:
+htotali =h conci +δ·Spoof i (42)
+Slippage-at-Risk Framework 16
+7 Empirical Analysis
+7.1 Data Description
+We analyze order book data from Hyperliquid, a decentralized perpetuals exchange. The dataset
+comprises:
+•Period:October 9 - November 3, 2025 (26 days)
+•T okens:184 actively traded perpetual contracts
+•Order book snapshots:5-minute frequency, full depth to 2500 bps
+•Account-level attribution:Available for concentration metrics via on-chain data
+•Open interest:15-minute snapshots per token
+•Liquidation records:Timestamp, size, execution price
+Table 2: Summary Statistics: Order Book Data
+Statistic Mean Median Std Min Max
+Tokens per snapshot 184 184 0 184 184
+Bid depth at 100bps ($M) 5.47 0.42 38.2 0.001 6,487
+Ask depth at 100bps ($M) 5.31 0.39 36.8 0.001 5,892
+Total exchange depth ($M) 974 891 312 284 2,847
+Open interest per token ($M) 46.2 8.4 142.3 0.02 2,180
+Total exchange OI ($B) 8.51 7.91 1.84 5.42 12.31
+Neff (effective providers) 8.4 5.2 9.1 1.1 47.3
+The data spans a period of significant market activity, including the October 10, 2025 liquidation
+cascade which saw total exchange OI decline from$9.8B to$6.1B within hours.
+7.2 SaR Computation and Characteristics
+We compute SaR metrics using β = 0.10 (10% stress scenario) and bid-side depth at 100 basis
+points. Figure 1 shows the cross-sectional distribution of concentration-adjusted slippage.
+Slippage-at-Risk Framework 17
+Figure 1: Cross-sectional distribution of concentration-adjusted slippage across 184 tokens. The
+vertical line indicates SaRadj(0.95) = 3.47%. The 9 tokens to the right (5% tail) exhibit elevated
+liquidity risk.
+Table 3: SaR Metrics Summary (Full Sample Period)
+Metric V alue Interpretation
+SaR(0.95) 2.84% 95% of tokens have slippage≤2.84%
+SaRadj(0.95) 3.47% After concentration adjustment
+ESaRadj(0.95) 8.92% Average slippage among tail tokens
+TSaRadj$ (0.95)$127.4M Total dollar slippage exposure
+Tokens in tail 9 5% of 184 tokens
+Tail OI share 2.3%$196M of$8.51B
+Slippage-at-Risk Framework 18
+Figure 2: Evolution of SaR and ESaR over the sample period. The spike during October 10-11
+corresponds to the liquidation cascade event. Note that SaR began rising 6-12 hours before the
+cascade peak, demonstrating its leading indicator properties.
+7.3 Concentration Analysis
+We find significant heterogeneity in liquidity concentration across tokens. Major tokens (BTC,
+ETH, SOL) exhibit distributed liquidity with Neff > 20, while many smaller tokens show
+concentrated structures vulnerable to withdrawal.
+Slippage-at-Risk Framework 19
+Figure 3: Relationship between effective number of providers ( Neff ) and raw slippage. Tokens
+in the lower-left quadrant (low Neff , moderate raw slippage) receive the largest concentration
+haircuts. The horizontal line indicatesN target = 15.
+Table 4: Concentration Statistics by Asset Class
+Asset Class N T okens MeanN eff MeanCR 1 Mean Haircut
+Major (OI>$500M) 5 31.2 0.08 0%
+Midcap ($50M-$500M) 23 14.7 0.16 12%
+Smallcap ($5M-$50M) 68 6.8 0.28 47%
+Micro (<$5M) 88 3.2 0.41 89%
+The concentration haircut substantially increases adjusted slippage for illiquid tokens: micro-cap
+tokens see their effective slippage nearly double on average.
+7.4 Validation: SaR as Leading Indicator
+We test whether SaR predicts subsequent deficit events using lead-lag correlation analysis. For
+each 6-hour window, we compute the correlation between SaR metrics and realized liquidation
+deficits (total bad debt generated).
+Slippage-at-Risk Framework 20
+Table 5: Lead-Lag Correlation: SaR vs. Realized Deficits
+Lag (hours) SaR(0.95) ESaR(0.95) TSaR$(0.95)
+−24 0.31 0.38 0.42
+−12 0.47 0.54 0.61
+−6 0.58 0.67 0.73
+0 0.72 0.79 0.84
++6 0.43 0.48 0.51
++12 0.28 0.31 0.34
++24 0.19 0.22 0.24
+Note: Correlations are computed over rolling 6-hour windows. Negative lags indicate SaR leading
+deficits.
+Figure 4: Lead-lag correlation heatmap between SaR metrics and realized deficits. The gradient
+from left to right shows that SaR metrics lead deficit events by 6-24 hours.
+Key findings:
+1. Peak correlation at lag 0:SaR metrics are most correlated with contemporaneous
+deficits (as expected, since both reflect current stress).
+2. Significant predictive power at negative lags:TSaR shows 0.61 correlation with
+deficits 12 hours in the future and 0.42 correlation at 24 hours. This demonstrates SaR’s
+value as an early warning system.
+3. TSaR outperforms:Dollar-denominated TSaR has stronger predictive power than
+percentage-based SaR, likely because it captures both liquidity thinness and exposure
+magnitude.
+4. Asymmetric decay:Correlations decay faster for positive lags than negative lags,
+confirming that SaR leads rather than lags deficit events.
+Granger Causality T est:
+Slippage-at-Risk Framework 21
+We conduct a Granger causality test with 4 lags (24 hours at 6-hour frequency):
+Null Hypothesis F-statistic p-value
+TSaR does not Granger-cause Deficits 8.47<0.001
+Deficits does not Granger-cause TSaR 2.13 0.087
+We find that TSaR Granger-causes deficits (F = 8.47, p < 0.001), while the reverse is not
+statistically significant. This provides evidence that SaR is a genuine leading indicator, not
+merely a coincident measure.
+7.5 Case Study: October 10, 2025
+The October 10, 2025 Hyperliquid cascade provides a natural experiment for validating the SaR
+framework. Between 20:00 and 21:15 UTC, a sharp price decline across major cryptocurrencies
+triggered cascading liquidations totaling$2.1 billion in notional.
+7.5.1 Pre-Event Conditions
+Table 6: SaR Metrics: 24 Hours Before October 10 Event
+Metric Oct 9, 08:00 Oct 9, 20:00 Oct 10, 08:00 Oct 10, 20:00
+SaRadj(0.95) 2.41% 2.68% 3.12% 11.47%
+ESaRadj(0.95) 6.82% 7.54% 8.91% 28.34%
+TSaRadj$ (0.95)$89.2M$118.7M$156.3M$847.2M
+Tokens in tail 7 9 11 31
+Total exchange depth$1,124M$987M$742M$284M
+Figure 5: Order book depth collapse during the October 10 cascade. Total exchange depth at
+100bps fell from$1.12B to$284M - a 75% decline - in the 36 hours preceding the event.
+Key observations:
+Slippage-at-Risk Framework 22
+1. Depth deterioration:Total exchange depth at 100bps fell from$1.12B to$284M in the
+36 hours preceding the event - a 75% decline. This was visible in real-time.
+2. SaR escalation: SaRadj(0.95) rose from 2.41% to 3.12% in the 24 hours before the cascade,
+a 30% increase that would have triggered alerts under our recommended thresholds.
+3. T ail expansion:The number of tokens in the liquidity tail grew from 7 to 11, indicating
+systemic (not idiosyncratic) stress.
+4. TSaR surge:Dollar-denominated tail exposure grew from$89M to$156M before the
+event, then spiked to$847M during the cascade as depth collapsed.
+7.5.2 Realized vs. Predicted Slippage
+We compare pre-event SaR predictions (computed at 08:00 on October 10) with actual realized
+slippage during the cascade (20:00-21:15).
+Figure 6: Scatter plot comparing pre-event adjusted slippage predictions (x-axis) with realized
+slippage during the October 10 cascade (y-axis). The strong correlation ( R2 = 0.78) validates
+SaR’s predictive accuracy. The slope > 1 indicates the model slightly underpredicted realized
+slippage, consistent with cascade amplification effects.
+Slippage-at-Risk Framework 23
+Regression results:
+Realized Slippagei = 0.42 + 1.12×S adji +ϵ i (43)
+•R 2 = 0.78
+•Slope 95% CI: [1.03,1.21]
+• The positive intercept and slope > 1 suggest the model is slightly conservative, which is
+appropriate for risk management.
+7.5.3 Insurance F und Implications
+From Chitra et al. (2025), the October 10 event generated$304.5M in deficits. We compute the
+SaR-implied insurance fund using pre-event data:
+Table 7: Insurance Fund Sizing: SaR-Implied vs. Actual
+Metric V alue ($M) Notes
+Actual Hyperliquid IF (pre-event)∼25 Estimated from public data
+Realized deficit 304.5 From Chitra et al. (2025)
+SaR-implied IF (c= 2.0) 312.6 Using Oct 10, 08:00 TSaR
+SaR-implied IF (c= 2.5) 390.8 Conservative estimate
+Figure 7: Insurance fund sizing comparison. The SaR-implied IF ($312.6M with c = 2.0) closely
+matches the realized deficit ($304.5M), while the actual IF ($25M) was an order of magnitude
+too small.
+Using the formula IF ∗ =c·TSaR adj$ (0.05) withc= 2.0:
+IF∗ = 2.0×$156.3M = $312.6M (44)
+Slippage-at-Risk Framework 24
+This closely matches the realized deficit of$304.5M, validating the SaR-implied insurance fund
+methodology. The actual IF of ∼$25M was an order of magnitude too small, a gap that was
+identifiable from SaR metrics hours before the cascade.
+7.5.4 Concentration Effects During the Cascade
+The October 10 event revealed dramatic concentration effects as market makers withdrew:
+Table 8: Concentration Dynamics During October 10 Cascade
+Time (UTC) MeanN eff MeanCR 1 T okens withNeff <3
+Oct 10, 18:00 8.7 0.24 42
+Oct 10, 20:00 5.2 0.38 89
+Oct 10, 21:00 2.8 0.51 134
+Oct 10, 22:00 4.1 0.42 97
+Oct 11, 00:00 6.9 0.31 61
+Figure 8: Concentration dynamics during the October 10 cascade. Left: Mean Neff collapsed
+from 8.7 to 2.8 at the cascade peak while CR1 spiked to 0.51. Right: 73% of tokens had critically
+low concentration (Neff <3) at peak stress.
+At the cascade peak (21:00 UTC), 73% of tokens had Neff < 3, meaning effective liquidity was
+provided by fewer than 3 participants. This extreme concentration amplified slippage far beyond
+what raw depth metrics would suggest.
+8 Implementation Guide
+8.1 Data Requirements
+1. Order book snapshots:Full depth profile at regular intervals (minimum 1-minute
+frequency recommended)
+Slippage-at-Risk Framework 25
+2. Account-level attribution:Required for concentration metrics; available on fully on-
+chain DEXs
+3.Open interest:Per-token, for notional calibration
+4.Position distribution:Historical position sizes for VaR-basedQcap
+8.2 Computation Pipeline
+Algorithm 2 provides the complete SaR computation pipeline.
+Algorithm 2SaR Computation Pipeline
+Require:tokens= list of{order book, open interest, provider shares}
+Require:α= confidence level (e.g., 0.95),β= liquidation fraction (e.g., 0.05)
+Require:liquidation cap= maximum single liquidation size
+Ensure:SaR(α), ESaR(α), TSaR $(α)
+Step 1: Compute concentration-adjusted slippage for each token
+foreach tokenido
+Qi ←min(β×OI i,liquidation cap)▷Liquidation quantity
+Si ←Slippage(order booki, Qi,mid pricei)▷Raw slippage
+HHIi ← Pm(sharem)2;N eff ←1/HHI i; CR 1 ←max m(sharem)
+hi ←0.5·max(0,15/N eff −1) + 0.3·max(0,CR 1 −0.5)▷Haircut
+Sadji ←S i ·(1 +h i)▷Adjusted slippage
+end for
+Step 2: Compute portfolio-level risk metrics
+Sort{S adji }in ascending order
+SaR(α)←S adj(⌈αN⌉) ▷Slippage atα-th percentile
+tail← {i:S adji >SaR(α)}▷Tail tokens
+ESaR(α)← 1|tail| Pi∈tail Sadji ▷Mean tail slippage
+TSaR$(α)← Pi∈tail Sadji ·Q i ▷Total dollar exposure
+returnSaR(α), ESaR(α), TSaR $(α)
+8.3 Parameter Calibration
+Table 9: Recommended Parameter Values
+Parameter Symbol Recommended Notes
+Stress fractionβ0.10 Increase to 0.15-0.20 in volatility
+Confidence levelα0.95 Standard tail threshold
+Target providersN target 15 Higher for major tokens
+Max top share CR thresh1 0.25 Flag potential spoofing
+Provider sensitivityλ0.5 Calibrate to withdrawal events
+Dominance sensitivityµ0.3 Calibrate to withdrawal events
+Deficit multiplierc2.0-2.5 Higher during volatility
+Slippage-at-Risk Framework 26
+8.4 Monitoring and Alerts
+Table 10: Recommended Alert Thresholds
+Alert Type Condition Severity Action
+SaR Level SaR adj(0.95)>3% Warning Review tail tokens
+SaR Level SaR adj(0.95)>5% Critical Reduce leverage limits
+TSaR Exposure TSaR adj$ (0.95)>2×IF Critical Halt new positions in tail
+ConcentrationN eff <3 for any token Warning Flag for review
+Concentration CR 1 >0.5 for any token Critical Investigate spoofing
+Trend SaR-Trend positive for 24h Warning Prepare contingencies
+Depth Exchange depth down>30% in 12h Critical Activate circuit breakers
+9 Conclusion
+9.1 Summary of Contributions
+This paper introduced Slippage-at-Risk (SaR), a forward-looking framework for measuring
+liquidity risk in perpetual futures exchanges. Our key contributions are:
+1. Novel metrics: SaR(α), ESaR(α), and TSaR$(α) provide complementary views on
+cross-sectional liquidity risk.
+2. Concentration adjustment:The HHI-based haircut accounts for the fragility of concen-
+trated liquidity structures.
+3. Theoretical foundation:We established the causal chain from microstructure to deficits
+and derived the SaR-implied insurance fund formula.
+4. Empirical validation:Analysis of Hyperliquid data demonstrates SaR’s predictive
+validity, including for the October 10, 2025 cascade.
+9.2 Practical Implications
+For exchange operators and risk managers:
+• Insurance fund sizing:Use IF∗ ≈c·TSaR adj$ (r/κ) for dynamic, forward-looking capital
+requirements. Our analysis suggestsc≈2.0 provides accurate sizing.
+• Position limits:Tighten limits on tokens with persistent tail membership or high
+concentration (Neff <5).
+• New listings:SaR provides risk assessment for tokens with no deficit history - critical
+for responsible exchange expansion.
+• Early warning:Monitor SaR-Trend and depth deterioration for 12-24 hour advance
+warning of potential cascades.
+Slippage-at-Risk Framework 27
+9.3 Philosophical Implications
+The SaR framework embodies a broader principle:measure the cause, not the consequence.
+Traditional risk metrics focus on realized outcomes (returns, deficits); SaR focuses on the
+underlying resource (liquidity) that determines those outcomes. This forward-looking orientation
+aligns with the ethos of proactive risk management.
+In decentralized finance, where code is law and interventions are costly, anticipatory metrics
+are especially valuable. SaR provides a quantitative basis for the intuition that liquidity is the
+lifeblood of markets - thin books are not merely inconvenient but systemically risky.
+9.4 Limitations and Future Work
+Several limitations warrant future investigation:
+• Data requirements:Account-level attribution is essential for concentration metrics but
+may not be available on all venues.
+• Model assumptions:The slippage-to-deficit proportionality ( c) is empirically calibrated
+and may vary across market conditions.
+• Cross-margin:This paper focuses on isolated margin; extension to cross-margin portfolios
+requires additional modeling.
+• Adversarial manipulation:Sophisticated actors may game SaR by temporarily inflating
+depth.
+Slippage-at-Risk Framework 28
+References
+[1] Almgren, R. and Chriss, N. (2001). Optimal execution of portfolio transactions.Journal of
+Risk, 3:5–40.
+[2] Chitra, T., Evans, A., and Angeris, G. (2025). Autodeleveraging: Mechanism design and
+optimizations.arXiv preprint arXiv:2512.01112.
+[3] Cont, R., Kukanov, A., and Stoikov, S. (2014). The price impact of order book events.
+Journal of Financial Econometrics, 12(1):47–88.
+[4] Embrechts, P., Kl¨ uppelberg, C., and Mikosch, T. (1997).Modelling Extremal Events for
+Insurance and Finance. Springer.
+[5] Gu´ eant, O., Lehalle, C.-A., and Fernandez-Tapia, J. (2012). Optimal portfolio liquidation
+with limit orders.SIAM Journal on Financial Mathematics, 3(1):498–530.
+[6] Hasbrouck, J. (2007).Empirical Market Microstructure. Oxford University Press.
+[7] Kyle, A. S. (1985). Continuous auctions and insider trading.Econometrica, 53(6):1315–1335.
+[8] Obizhaeva, A. A. and Wang, J. (2013). Optimal trading strategy and supply/demand
+dynamics.Journal of Financial Markets, 16(1):1–32.
+Slippage-at-Risk Framework 29
+A Proofs
+A.1 Proof of Proposition 4.5 (HHI and Withdrawal Impact)
+Proof. Let total depth be L = Pm ℓm and shares wm = ℓm/L. Under the linear slippage model,
+S=k/Lfor some constantkdepending on order quantity.
+After providermwithdraws, remaining depth isL (−m) =L−ℓ m =L(1−w m). Hence:
+S(−m) = kL(1−w m) = S1−w m (45)
+The relative increase is:
+S(−m)
+S −1 = 11−w m −1 = wm1−w m (46)
+If providermis selected uniformly at random:
+E
+ wm
+1−w m
+
+= 1M MXm=1 wm1−w m (47)
+For smallw m (many providers), Taylor expand:
+wm
+1−w m
+=w m +w 2m +w 3m +· · · ≈wm +w 2m (48)
+Taking expectation:
+E
+ wm
+1−w m
+
+≈E[w m] +E[w 2m] (49)
+= 1M Xm wm + 1M Xm w2m (50)
+= 1M ·1 + 1M ·M·HHI (51)
+= 1M + HHI (52)
+For largeM, 1/M≈0, and:
+E
+"
+S(−m)
+S −1
+#
+≈HHI +O(HHI 2) (53)
+Rearranging gives the stated result.
+Slippage-at-Risk Framework 30
+B Additional Empirical Results
+B.1 Full Token-Level Results
+Table 11: Token-Level SaR Metrics (Top 20 by OI)
+T oken OI ($M) Q ($M)S(Q)N eff CR1 HaircutS adj
+BTC 2,180 218.0 0.42% 47.3 0.05 0% 0.42%
+ETH 1,847 184.7 0.51% 38.6 0.06 0% 0.51%
+SOL 892 89.2 0.78% 29.4 0.08 0% 0.78%
+HYPE 634 63.4 1.24% 12.8 0.14 8% 1.34%
+XRP 412 41.2 0.93% 18.2 0.11 0% 0.93%
+DOGE 287 28.7 1.47% 11.4 0.18 16% 1.70%
+A V AX 198 19.8 1.82% 8.7 0.21 36% 2.48%
+LINK 176 17.6 1.63% 9.2 0.19 32% 2.15%
+ARB 142 14.2 2.14% 7.1 0.24 56% 3.34%
+OP 128 12.8 2.38% 6.4 0.26 68% 4.00%
+SUI 118 11.8 2.67% 5.8 0.28 79% 4.78%
+APT 96 9.6 2.91% 5.2 0.31 94% 5.65%
+INJ 84 8.4 3.24% 4.7 0.33 110% 6.80%
+TIA 72 7.2 3.58% 4.2 0.36 129% 8.20%
+SEI 61 6.1 3.92% 3.8 0.39 147% 9.68%
+RNDR 54 5.4 4.31% 3.4 0.42 168% 11.55%
+FET 47 4.7 4.78% 3.1 0.45 192% 13.96%
+NEAR 42 4.2 5.12% 2.8 0.47 214% 16.08%
+STX 38 3.8 5.67% 2.5 0.51 250% 19.85%
+WIF 34 3.4 6.24% 2.2 0.54 291% 24.38%
+Note: Data represents average values over the sample period. Haircuts computed withN target = 15,
+CRthresh1 = 0.25,λ= 0.5,µ= 0.3.
+Slippage-at-Risk Framework 31
+C Symbol Reference
+Table 12: Symbol Reference
+Symbol Description
+Si(Q) Slippage function for tokeniat quantityQ
+SaR(α)α-quantile of slippage across all tokens
+ESaR(α) Expected slippage conditional on exceeding SaR(α)
+TSaR$(α) Total dollar slippage from tail tokens
+HHI Herfindahl-Hirschman Index (concentration measure)
+Neff Effective number of liquidity providers (= 1/HHI)
+CRk Top-kconcentration ratio
+hconci Concentration haircut for tokeni
+Sadji Concentration-adjusted slippage
+αConfidence level for SaR computation
+βStress parameter (fraction of OI in stress scenario)
+λProvider concentration sensitivity (haircut parameter)
+µDominance sensitivity (haircut parameter)
+Qi Stress notional for tokeni
+OIi Open interest for tokeni
+IF∗ Optimal insurance fund size
+rOpportunity cost per unit capital
+κReputation/social cost per unit deficit
+cSlippage-to-deficit proportionality constant
+DT Total deficit at timeT
+RT Residual deficit after IF depletion
+ℓi,t Leverage of positioniat timet
+pbki Bankruptcy price for positioni
+pliqi Liquidation price for positioni
+pexeci Execution price for positioni

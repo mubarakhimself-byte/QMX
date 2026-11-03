@@ -1,0 +1,607 @@
+arXiv 2606.26731  https://arxiv.org/abs/2606.26731
+
+Robust Hedging Valuation Adjustment under Liquidity–Demand
+Stress
+Takayuki Sakuma∗
+Soka University
+Abstract
+This paper develops a robust hedging valuation adjustment (HVA) measure for dynamic hedging.
+Simulated rebalancing and maturity-unwind trades generate a loss distribution for each no-trade-band
+rule, and we define robust HVA as the worst-case expected loss over a relative-entropy neighborhood
+of that distribution. Because band width affects turnover, the same relative-entropy radius applied to
+different bands can imply different levels of demand–liquidity stress. We distinguish a fixed-radius con-
+vention from a fixed benchmark-stress convention and show that wider no-trade bands lower rebalancing
+costs but raise hedge-error risk.
+Keywords:hedging valuation adjustment; transaction costs; liquidity–demand stress; relative entropy;
+hedge-error risk.
+1 Introduction
+Dynamic hedging is not frictionless: discrete rebalancing, bid–ask spreads, and market impact can make
+even standard derivative hedges costly. Burnett [Burnett, 2020] formulates hedging valuation adjustment
+(HVA) as the effect of transaction costs on derivative portfolio value. Burnett and Williams [Burnett and
+Williams, 2021] extend this idea to the cost of hedging XVA, including frictions from hedging the underlying
+asset and counterparty credit. Related HVA research also examines frictions beyond direct transaction costs.
+Albanese et al. [2022] link HVA to model risk, Bénézet and Crépey [2024] discuss its role in XVA model-
+risk management, and Bénézet et al. [2026] study callable-product settings where recalibration and hedging
+adjustments interact.
+Our focus on liquidity costs relates to the literature on hedging with transaction costs. Leland [1985]
+studies modified-volatility replication under transaction costs. Davis et al. [1993] develop utility-based val-
+uation and hedging. Whalley and Wilmott [1997] derive small-transaction-cost asymptotic approximations
+for the no-transaction region. Soner et al. [1995] show that nontrivial replication breaks down under pro-
+portional transaction costs. Jump risk is also an issue for hedging with frictions. Kennedy et al. [2009]
+study dynamic hedging under jump diffusion with transaction costs and Sepp [2012] derives approximate
+delta-hedging error distributions under jump diffusion with discrete trading and transaction costs.
+In this paper, we turn hedging costs into stressed valuation adjustments by applying entropy-based robust
+risk measurement. For risk measurement, Kullback–Leibler (KL), or relative-entropy, neighborhoods around
+a baseline distribution provide tractable worst-case expectations [Glasserman and Xu, 2014]. We compare
+robust HVA across hedge policies under liquidity and demand stress, and our approach lets each policy
+generate its own turnover, hedge-error risk, and empirical loss distribution. We focus on no-trade-band delta
+hedging, where the hedge is updated only when the target delta moves beyond a specified band width. The
+costs of rebalancing define the empirical HVA loss sample for that policy. This policy dependence creates a
+practical comparison issue. Applying a different band to the same simulated scenarios alters turnover, the
+hedge-demand measure, and the empirical HVA loss sample. A common relative-entropy radius fixes the
+admissible probability tilt but not necessarily the economic demand and liquidity stress. A lower robust HVA
+for one band might merely reflect a lower effective stress level, rather than a genuinely safer hedge policy.
+∗e-mail: tsakuma@soka.ac.jp.
+1
+arXiv:2606.26731v2  [q-fin.RM]  26 Jun 2026
+We therefore introduce two measures. A fixed-radius convention uses the same relative-entropy radius for
+every hedge band. A fixed benchmark-stress convention instead fixes the demand–liquidity stress label and
+allows the required KL radius to vary. Our numerical results indicate that valuations under fixed-radius
+and benchmark-stress conventions are close in high-liquidity environments but diverge when liquidity is low.
+Wider no-trade bands reduce rebalancing costs and robust HVA, though they increase hedge-error risk.
+2 No-trade-band policy
+LetH(S T )be the derivative payoff at maturityTand letSbe the underlying asset. The numerical exper-
+iments use an at-the-money European call,H(ST ) = (ST−K) + withK=S 0. The baseline hedge is the
+Black–Scholes–Merton delta [Black and Scholes, 1973, Merton, 1973],
+V(t,S) =SΦ(d 1)−Ke −r(T−t) Φ(d2), ˆ∆t =∂ SV(t,S t) = Φ(d1),(1)
+where
+d1,2 = log(S/K) + (r± 12σ2)(T−t)σ√T−t .
+Consider rebalancing dates0 =t 0 < t1 <···< t n =T. The band widthb≥0is measured in units of
+underlying per option. Let∆ti(b)be the hedge position held after rebalancing atti. Initializing∆t0(b) = ˆ∆t0
+and fori= 1,...,n−1,
+∆ti(b) =
+{ˆ∆ti,if| ˆ∆ti−∆ti−1(b)|>b,
+∆ti−1(b),otherwise. (2)
+At maturity the hedge is unwound by setting
+∆tn(b) = 0.
+We define the rebalancing trade at timeti as the change in the underlying position,
+∆qi(b) = ∆ti(b)−∆ ti−1(b).
+A positive∆qi(b)is a purchase of the underlying, and turnover is measured by the trading volume
+Xi(b) =S ti|∆qi(b)|.
+3 Kullback–Leibler robust HVA
+Letm ti≥1denote the pathwise illiquidity multiplier at the rebalancing dateti. The valuemti = 1indicates
+normal liquidity, while higher values indicate poorer liquidity. In the numerical liquidity environments,mti
+is treated as exogenous; Section 5.1 outlines the two-state normal–stress specification.
+Letsrepresent the baseline half-spread and letκdenote the quadratic impact coefficient. The discounted
+hedging-friction loss along a single path is given by
+L(b) =
+n∑
+i=1
+e−rtimti
+(
+sXi(b) +κXi(b)2
+)
+.(3)
+Equation (3) defines the paper’s HVA loss functional. It implements the HVA idea in a discrete-time
+transaction-cost setting: rebalancing and unwind frictions enter the valuation adjustment as hedge costs
+[Burnett, 2020, Burnett and Williams, 2021]. The termsXi(b)represents the linear spread cost andκXi(b)2
+reflects the convex temporary market impact. Rebalancing trades correspond toi= 1,...,n−1, and the
+maturity unwind corresponds toi=n. The position∆ t0(b) = ˆ∆t0 is not charged.
+LetP ind be the baseline simulation law under which the liquidity multiplier process is generated inde-
+pendently of prices. The baseline mean HVA of policybunder this law is the expected discounted loss
+value,
+HVAind(b) =E P ind[L(b)](4)
+2
+andP ind is represented by an equally weighted Monte Carlo sample,
+L1(b),...,L N(b).
+The robust HVA framework allows the scenario weights to vary within a relative-entropy neighborhood. For
+a radiusε≥0, we define
+Uε =
+
+
+w∈R N+ :
+N∑
+j=1
+wj = 1,
+N∑
+j=1
+wj log(Nwj)≤ε
+
+
+,(5)
+wherew 0 = (1/N,...,1/N)denotes the baseline empirical weights. The expression in (5) represents the
+relative entropy ofwwith respect tow 0, and the radiusεdetermines the allowed probability tilt. A larger
+εallows higher weight to be placed on high-loss scenarios.
+We define the KL-robust upper HVA for bandbas
+HVAε(b) = sup
+w∈Uε
+N∑
+j=1
+wjLj(b).(6)
+The KL-robust expectation has the entropic dual representation [Glasserman and Xu, 2014]:
+HVAε(b) = infθ>0
+
+
+θε+θlog
+
+ 1
+N
+N∑
+j=1
+exp(Lj(b)/θ)
+
+
+
+
+.(7)
+For a fixed Lagrange multiplierθ >0on the entropy constraint andηon the probability normalization
+constraint, the Lagrangian is
+N∑
+j=1
+wjLj(b)−θ
+N∑
+j=1
+wj log(Nwj) +η
+
+
+N∑
+j=1
+wj−1
+
+.
+Differentiating with respect towj gives
+Lj(b)−θ{log(Nw j) + 1}+η= 0.
+Thusw j is proportional toexp(Lj(b)/θ), and normalizing and evaluating atθ⋆ gives
+w⋆j (b,ε) = exp(Lj(b)/θ⋆)∑N
+k=1 exp(Lk(b)/θ⋆).(8)
+4 Robust HVA increment
+We use two stress measures. The first is the Kullback–Leibler radiusε, which controls how far the worst-case
+scenario weights may move from the baseline empirical weights. The second is the Gaussian benchmark-stress
+labelρ G, which translates the KL stress increment into a demand–illiquidity stress.
+The Gaussian benchmark is a one-parameter translation convention. The parameterρ G changes the
+rank pairing between turnover and illiquidity while preserving their marginal distributions. Kendall’sτfrom
+data is mapped to the Gaussian rank-correlation scale throughρ= sin(πτ/2). This distinction is important
+because the KL stress is applied to the loss sample generated by each hedge policy. Different policies lead to
+different trading paths, and thus to varying turnover, trade-size, and distributions. Consequently, applying
+the same numerical KL radius across policies can mix the chosen stress severity with policy-driven changes
+in the loss distribution.
+The KL stress increment over the baseline HVA for bandbis
+∆KLb (ε) = HVAε(b)− HVA0(b), HVA0(b) = HVAind(b).(9)
+3
+To interpret this increment, we compare it with a Gaussian rank-coupling benchmark. For each band, the
+benchmark keeps the simulated marginal distributions of turnover and illiquidity fixed, but changes their
+rank pairing. WhenρG = 0, high-turnover paths are not consistently paired with high-illiquidity paths. As
+ρG increases, high-turnover paths become more frequently paired with high-illiquidity paths, increasing the
+benchmark HVA cost.
+LetC Gb (ρG)represent the average HVA cost in this Gaussian benchmark; Appendix B describes how
+CGb (ρG)is constructed. We define the benchmark increment as
+∆Gb (ρG) =C Gb (ρG)−C Gb (0).(10)
+Hence∆Gb (ρG)measures the increase in benchmark HVA cost when the turnover and illiquidity rank coupling
+changes from0toρ G.
+The finite-sample benchmark increment curve consists of the gridρGj ↦→∆ Gb (ρGj ), and Monte Carlo noise
+can cause this grid to be nonmonotone. The inverse map therefore applies the monotone envelope
+~∆Gb (ρGj ) = maxk≤j ∆Gb (ρGk )
+and the benchmark-stress label linked to a KL increment is
+ρGeq(b;ε) = inf{ρG : ~∆Gb (ρG)≥∆ KLb (ε)}.(11)
+Conversely, the KL radius required to match a benchmark-stress levelρG0 is
+εreq(b;ρG0 ) = inf{ε: ∆ KLb (ε)≥ ~∆Gb (ρG0 )}.(12)
+These definitions provide two conventions for comparing policies. The fixed-radius convention setsε(b) =
+εfixed for allb. The fixed benchmark-stress convention setsε(b) =εreq(b;ρG0 ). The first keeps the admissible
+probability tilt constant. The second keeps the benchmark-stress level constant and allows the required KL
+radius to vary by band. It does not keep a common dollar increment constant across bands, since each band
+has its own turnover and effective-liquidity marginal scales.
+In practice, a risk committee or model-governance process can set the stress labelρG0 . This determines the
+severity of the demand–illiquidity stress used to compare hedge policies. For each bandb, the benchmark
+increment ~∆Gb (ρG0 )is calculated from that band’s turnover and effective-illiquidity marginal scales. The
+required KL radiusε req(b;ρG0 )is then selected so that the KL stress increment equals this benchmark
+increment. HenceρG0 is common across policies, whileεreq, robust HVA, and hedge-error risk remain specific
+to each policy. The resulting robust HVA represents the reserve cost of a hedge policy under a common
+benchmark-stress label, and it should be considered together with the tracking-error measureTE(b)defined
+in Section 5.4.
+5 Numerical results
+5.1 Setting
+Table 1 gives the common settings. The band grid ranges from daily rebalancing (b= 0) to a wide no-trade
+band (b= 0.5). The three liquidity environments are generated with a risk-neutral Merton jump-diffusion
+[Merton, 1976],
+dSt
+St−
+= (r−λ JκJ)dt+σ mamdWt + (J−1)dN t,logJ∼N(µ J,σ 2J),(13)
+whereN t has intensityλJ andκ J = exp(µJ + 12σ2J)−1. Table 2 gives the liquidity environments. They
+vary the half-spread, the quadratic impact coefficient, the stress multiplier, liquidity persistence, diffusion
+volatility, and the jump parameters. The high-liquidity case assumes a small half-spread with almost no
+impact. The medium- and low-liquidity cases use largersandκto represent more expensive trading. The
+high-liquidityenvironmentsetsλ J = 0andthereforereducestoadiffusionbenchmark. Inanimplementation,
+4
+these inputs could be replaced by desk- or asset-class-specific estimates of spreads and temporary market
+impact. In each environment, the liquidity multiplier follows a two-state normal–stress process with values
+1andm stress. The transition probabilitiesp NN andp SS in Table 2 control persistence in the normal and
+stress states.
+Table 1: Baseline HVA specification.
+Item Value
+Instrument European call option
+SpotS 0 1.0
+StrikeK1.0
+MaturityT1.0 year
+Risk-free rater0.02
+Volatilityσm 0.2
+Time steps (nsteps) 252 (dt=0.0040)
+Monte Carlo paths 20,000
+Band grid 0.0, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5
+KL radius grid 0.0, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1
+Table 2: Liquidity environments.
+Liquidity environments κ m stress pNN pSS am λJ µJ σJ
+High-liquidity 0.0001 0 5 0.985 0.75 1 0 -0.05 0.1
+Medium-liquidity 0.0005 0.0015 10 0.975 0.9 1.25 0.5 -0.06 0.12
+Low-liquidity 0.0025 0.008 20 0.96 0.95 1.5 2 -0.1 0.18
+5.2 Reference benchmark-stress level
+The fixed benchmark-stress calculations useρ G0 = 0.4. In the Gaussian benchmark,ρ G represents how
+closely demand and illiquidity ranks move together. In the simulated HVA samples, demand arises from
+hedge turnover. Since trade-level hedge turnover is not available in public daily data, we rely on a related
+public-data reference: the co-movement between market stress and market illiquidity.
+We use the CBOE VIX series from FRED as the measure of market stress [Chicago Board Options
+Exchange, 2026]. Daily SPY prices and volumes are taken from Stooq [Stooq.com, 2026]. Using the SPY
+data, we compute the Amihud illiquidity measure
+ILLIQt = |rt|Pt×volumet,
+following Amihud [2002], wherert =P t/Pt−1−1denotes the daily SPY return. The VIX and SPY Amihud
+series are matched by trading day.
+The calculation uses 756-trading-day rolling windows, roughly three years, and shifts the window forward
+every 21 trading days. The first window spans from 2005-02-28 to 2008-02-28, and the last one extends from
+2023-01-05 to 2026-01-09. For each window, we calculate Kendall’s rank correlationτbetween VIX and
+the SPY Amihud measure. Since the Gaussian benchmark in Section 4 is defined by the Gaussian rank-
+correlationρ G, Kendall’sτis translated to the Gaussian scale as
+ρpub = sin(πτ/2).
+The relevant stress case involves positive co-movement between market stress and illiquidity, so we keep
+ρpubwwr = max(ρpub,0).
+5
+Next, we focus on high-stress windows, defined as rolling windows whose average VIX falls within the top
+decile of all rolling-window averages. The public-data reference value corresponds to the 90th percentile of
+ρpubwwr within those windows. In the 756-trading-day calculation, this yieldsρtarget≈0.364; the corresponding
+95th percentile is approximately 0.368. We useρG0 = 0.4as a rounded benchmark stress level. Shorter rolling
+windows produce higher reference values, and Appendix A.1 shows the sensitivity.
+Figure 1 shows the Kullback–Leibler radiusεand the equivalent Gaussian benchmark-stress labelρGeq(ε).
+For eachε, the KL stress increment∆KL(ε)is aligned with the monotone Gaussian benchmark increment
+curve so that
+~∆G(ρGeq(ε)) = ∆KL(ε).
+Whenεbecomes large, the matched value reaches the top boundary of the benchmark grid; this is therefore
+reported as a boundary value, not as an exact structural value. Appendix A.2 discusses whether the main
+policy conclusions depend on the specific choiceρG0 = 0.4.
+Figure 1: Public-data map from Kullback–Leibler radiusεto equivalent benchmark-stress labelρ Geq(ε).
+Values at the top grid boundary indicate boundary-limited matches.
+5.3 Fixed-radius versus fixed benchmark-stress
+Table 3 reports the fixed radii used in the fixed-radius comparison. For each liquidity environment, the
+radius is calibrated atb= 0by solving∆ KL0 (ε) = ~∆G0 (ρG0 )withρ G0 = 0.4.
+Table 3: Fixed KL radii.
+Liquidity environmentε fixed
+High-liquidity 0.0029
+Medium-liquidity 0.0036
+Low-liquidity 0.0038
+Using the fixed radii in Table 3, Table 4 reports the matchedρGeq(b;ε fixed)for selected bands. The fixed
+benchmark-stress calculation solves forεreq(b;ρG0 ), the radius needed to maintainρG0 = 0.4for that band.
+Atb= 0, the two results coincide but away fromb= 0, they diverge. The divergence is small in the
+high-liquidity environment but grows as liquidity deteriorates.
+6
+Table 4: Fixed-radius interpretation at selected bands.
+Liquidity environmentb ρ Geq(b;ε fixed)ε req/εfixed HVAεfixed(b) HVAεreq(b)
+High-liquidity 0 0.400 1.000.000 74 0.000 74
+High-liquidity 0.02 0.357 1.220.000 63 0.000 63
+High-liquidity 0.5 0.317 1.548.71×10 −5 8.85×10 −5
+Medium-liquidity 0 0.399 1.000.0132 0.0132
+Medium-liquidity 0.1 0.334 1.390.0081 0.0082
+Medium-liquidity 0.5 0.263 2.290.0029 0.0031
+Low-liquidity 0 0.400 1.000.244 0.244
+Low-liquidity 0.3 0.208 3.030.1287 0.1396
+Low-liquidity 0.5 0.252 2.430.0593 0.063
+Figures 2 and 3 apply the same calculation to the full band grid. Figure 2 plots the label implied by
+the fixed-radius calculation. Figure 3 plots the ratioεreq(b;ρG0 )/εfixed needed to keep the benchmark-stress
+label fixed. The fixed-radius interpretation is not invariant to policy-induced turnover; it may weaken when
+the band significantly changes trading demand. The required KL-radius ratio reaches its highest level in the
+low-liquidity case.
+Figure 2: Equivalent benchmark-stress labelρGeq(b;ε fixed)under the fixed-radius view.
+7
+Figure 3: Required KL-radius ratioεreq(b;ρG0 )/εfixed needed to keepρG0 = 0.4.
+5.4 Grid-selected no-trade bands
+To isolate hedge error, we recompute the terminal replication error after setting bid–ask and market-impact
+costs to zero.TE(b)reflects replication error only while HVA captures trading-friction costs. Let ˜Sti =
+e−rtiSti and letP ref0 denote the initial derivative value used in this computation. The discounted terminal
+value of the self-financing hedge induced byb, before subtracting any transaction costs, is given by
+˜V (0)T (b) =P ref0 +
+n−1∑
+i=0
+∆ti(b)
+( ˜Sti+1− ˜Sti), E (0)(b) = ˜V (0)T (b)−e −rTH(ST ),(14)
+whereP ref0 =V(0,S 0)in the high-liquidity environment and the Monte Carlo risk-neutral valueP ref0 =
+N−1∑je−rTH(ST,j )in the jump-diffusion stress environments. We define tracking-error risk as the 95%
+CVaR of the replication shortfall:
+TE(b) = CVaR95%
+(
+−E (0)(b)).(15)
+To keep the tracking-error penalty comparable across liquidity regimes, the experiments set
+λ=λ ⋆λnorm, λ ⋆ = HVA0(0)TE(0) .(16)
+Thusλ norm = 1gives theb= 0mean HVA and theb= 0tracking-error risk equal weight at the reference
+point. Unless otherwise stated, the policy-selection tables useλnorm = 1. Alternative tracking-error weights
+appear in Appendix A.4.
+Forapolicyviewv, letHVA v(b)denotetheHVAmeasureusedinthatview. Inthefixedbenchmark-stress
+view,HVAv(b) = HVAεreq(b;ρG0 )(b). The cost–risk trade-off is summarized by
+Jv(b) = HVAv(b) +λTE(b), b ⋆v = arg minb Jv(b).
+For each environment and band, we computeHVAv(b)andTE(b), formJ v(b), and select the grid bandb⋆v
+with the lowest objective value. Table 5 identifiesb= 0.02in the high-liquidity environment,b= 0.10in
+the medium-liquidity environment, and the wide-band pointb= 0.30in the low-liquidity environment. The
+corresponding relative robust HVA increments are 3.77%, 12.76%, and 21.58%. The low-liquidity objective
+surface appears almost flat across nearby wide bands. Further sensitivity to the tracking-error weight is
+discussed in Appendix A.4.
+8
+Table 5: Grid-selected no-trade band underρG0 = 0.4andλ norm = 1.
+Liquidity environmentb ⋆ HVA0(b⋆) HVAεreq(b⋆) ∆ KLb ∆KLb /HVA0 (%)TE(b ⋆)
+High-liquidity 0.020.000 61 0.000 63 2.283×10 −5 3.770.0085
+Medium-liquidity 0.10.007 31 0.008 24 0.000 9312.760.0654
+Low-liquidity 0.30.1148 0.1396 0.024 7821.580.1547
+5.5 Gamma sensitivity
+In this section, we let the band depend on gamma and discuss whether high gamma changes turnover,
+transaction costs, and robust HVA. We use delta hedging only; gamma is not hedged with an additional
+option or other convex instrument. High gamma makes the target delta more sensitive to underlying-price
+changes and therefore raises rebalancing demand. LettingΓi be the Black–Scholes gamma, the first-order
+approximation gives
+∆t+∆t−∆t≈Γ t(St+∆t−St).
+Combining this with the diffusion-scale standard deviation
+sd(St+∆t−St)≈S tσmam
+√
+∆t
+gives the one-step gamma measure
+Gi =|Γ i|Siσmam
+√
+∆t.(17)
+Let ~Gi denoteG i normalized by its 90th percentile. For a base bandb0, we compare the fixed bandbi =b 0
+with two state-dependent variants,
+btighti = max{0.25b0, b0/(1 +~Gi)},(18)
+bwidei = min{3b0, b0(1 +~Gi)}.(19)
+The tightened rule rebalances more actively in high-Gi observations. In Table 6, Turnover denotes the path-
+average total trading volume and Trades denotes the path-average number of rebalancing trades across the
+one-year hedge horizon. The gamma-widened rule lowers robust HVA and turnover in high- and medium-
+liquidity environments, yet it increasesTE(b). Conversely, the gamma-tightened rule decreasesTE(b)in
+medium- and low-liquidity environments but raises robust HVA and turnover.
+Table 6: Gamma no-trade-band sensitivity under the fixed benchmark-stress view,ρG0 = 0.4andλ norm = 1.
+Liquidity environment Policy Base bandb 0 Robust HVATETurnover Trades Top-10%G i turnover share
+High-liquidity Gamma-widened 0.019 0.00050 0.01151 4.006 66.5 23.2%
+High-liquidity Fixed band 0.020 0.00059 0.01054 4.707 101.1 23.3%
+High-liquidity Gamma-tightened 0.023 0.00063 0.0105 5.044 129.4 22.7%
+Medium-liquidity Gamma-widened 0.070 0.0076 0.05945 2.102 12.7 20.6%
+Medium-liquidity Fixed band 0.100 0.0078 0.05916 2.291 14.6 26.5%
+Medium-liquidity Gamma-tightened 0.100 0.0089 0.05692 3.112 33.1 29.6%
+Low-liquidity Fixed band 0.250 0.1322 0.1593 1.462 4.0 18.3%
+Low-liquidity Gamma-tightened 0.210 0.1424 0.1523 2.102 11.7 29.5%
+Low-liquidity Gamma-widened 0.150 0.1317 0.1619 1.457 4.3 13.9%
+Figure 4 reports the share of total turnover that occurs whenGi is in the top decile of its empirical
+distribution. These cases account for 10% of path-date observations. A share greater than 10% indicates
+that high-Gi observations produce more turnover than their frequency by itself would suggest. Further
+weight-based measures for the KL tilt appear in Appendix A.3.
+9
+Figure 4: Share of total turnover occurring whenGi is in the top decile of its empirical distribution. Values
+above 10% indicate concentration of turnover in these high-Gi observations.
+6 Conclusion
+This paper studies robust hedging valuation adjustment under liquidity–demand stress. The robust layer
+applies exponential tilting to simulated HVA loss samples generated by no-trade-band hedging policies.
+Because the hedge policy changes turnover, it also changes the empirical loss distribution to which the
+KL ball is applied. We distinguish two comparison conventions: a fixed-radius convention that keeps the
+relative-entropy radius constant across hedge bands, and a fixed benchmark-stress convention that keeps
+the benchmark demand–liquidity stress label constant while allowing the required KL radius to vary by
+band. The numerical results show that the difference is small in high-liquidity markets but larger under low
+liquidity. Wider no-trade bands lower rebalancing costs and robust HVA, yet they raise hedge-error risk. The
+gamma sensitivity analysis indicates that high-gamma delta movement accounts for a disproportionate share
+of rebalancing demand, so state-dependent bands can shift the balance between robust HVA and hedge-error
+risk. Future work could apply the same policy-comparison logic to other HVA settings, such as XVA hedging
+costs, model-risk HVA, and callable products, path-dependent derivatives, or other structured instruments.
+Declaration of AI-assisted technologies
+During the preparation of this manuscript, the author used generative AI and AI-assisted tools to assist with
+manuscript drafting, language refinement, code drafting and debugging, and discussion of the presentation
+of the research. The author directed the project, reviewed, revised, and verified the manuscript and code,
+and takes full responsibility for the final manuscript.
+References
+Claudio Albanese, Cyril Bénézet, and Stéphane Crépey. Hedging valuation adjustment and model risk.
+Technical report, Working paper, November 2022. Version dated November 18, 2022. Available athttps:
+//perso.lpsm.paris/~crepey/papers/HVA-model.pdf.
+Yakov Amihud. Illiquidity and stock returns: Cross-section and time-series effects.Journal of Financial
+Markets, 5(1):31–56, 2002. doi: 10.1016/S1386-4181(01)00024-6.
+10
+Cyril Bénézet and Stéphane Crépey. Handling model risk with xvas.Frontiers of Mathematical Finance, 3
+(4):490–519, 2024. doi: 10.3934/fmf.2024016.
+Cyril Bénézet, Stéphane Crépey, and Dounia Essaket. The recalibration conundrum: Hedging Valuation
+Adjustment for callable claims, 2026. arXiv:2304.02479.
+Fischer Black and Myron Scholes. The pricing of options and corporate liabilities.Journal of Political
+Economy, 81(3):637–654, 1973. doi: 10.1086/260062.
+Benedict Burnett. Hedging valuation adjustment: Fact and friction. Technical report, SSRN, October 2020.
+Available at SSRN:https://ssrn.com/abstract=3709477.
+Benedict Burnett and Ieuan Williams. The cost of hedging xva. Technical report, SSRN, February 2021.
+Available at SSRN:https://ssrn.com/abstract=3777095.
+Chicago Board Options Exchange. CBOE volatility index: VIX [VIXCLS]. Federal Reserve Bank of St.
+Louis, FRED, 2026. Retrieved March 24, 2026, fromhttps://fred.stlouisfed.org/series/VIXCLS.
+Mark H. A. Davis, Vassilios G. Panas, and Thaleia Zariphopoulou. European option pricing with transaction
+costs.SIAM Journal on Control and Optimization, 31(2):470–493, 1993. doi: 10.1137/0331022.
+Paul Glasserman and Xingbo Xu. Robust risk measurement and model risk.Quantitative Finance, 14(1):
+29–58, 2014. doi: 10.1080/14697688.2013.822989.
+J. S. Kennedy, P. A. Forsyth, and K. R. Vetzal. Dynamic hedging under jump diffusion with transaction
+costs.Operations Research, 57(3):541–559, 2009. doi: 10.1287/opre.1080.0598.
+Hayne E. Leland. Option pricing and replication with transactions costs.The Journal of Finance, 40(5):
+1283–1301, 1985. doi: 10.1111/j.1540-6261.1985.tb02383.x.
+Robert C. Merton. Theory of rational option pricing.The Bell Journal of Economics and Management
+Science, 4(1):141–183, 1973. doi: 10.2307/3003143.
+Robert C. Merton. Option pricing when underlying stock returns are discontinuous.Journal of Financial
+Economics, 3(1–2):125–144, 1976. doi: 10.1016/0304-405X(76)90015-2.
+Artur Sepp. An approximate distribution of delta-hedging errors in a jump-diffusion model with discrete
+trading and transaction costs.Quantitative Finance, 12(7):1119–1141, 2012. doi: 10.1080/14697688.2010.
+494613.
+H. Mete Soner, Steven E. Shreve, and Jakša Cvitanić. There is no nontrivial hedging portfolio for option
+pricing with transaction costs.The Annals of Applied Probability, 5(2):327–355, 1995.
+Stooq.com. SPY.US historical daily OHLCV data.https://stooq.com, 2026. Accessed March 25, 2026.
+A. Elizabeth Whalley and Paul Wilmott. An asymptotic analysis of an optimal hedging model for option
+pricing with transaction costs.Mathematical Finance, 7(3):307–324, 1997. doi: 10.1111/1467-9965.00034.
+11
+A Supplementary numerical analyses
+A.1 Window sensitivity
+Table 7 summarizes the window sensitivity. With 126-day windows, the stress targetρGtarget ranges from 0.459
+to 0.550 andε calib ranges from 0.0035 to 0.0048. With 252-day windows, the target is 0.472–0.482. With
+756-day windows, the target range falls to about 0.362–0.368 and the radius range to about 0.0021–0.0022.
+The columnn stress is the number of windows classified as high-stress.
+Table 7: Public-data window sensitivity across rolling-window rules.
+Window (trading days)ρ Gtarget range KL radius range KL increment rangen stress range
+126 0.459–0.550 0.0035–0.0048 2.02e-05–2.37e-05 13–25
+252 0.472–0.482 0.0037–0.0038 2.07e-05–2.11e-05 12–26
+756 0.362–0.368 0.0021–0.0022 1.57e-05–1.60e-05 11–31
+A.2 Benchmark-stress-level sensitivity
+Table 8 repeats the policy comparison for benchmark-stress levelsρ G0 = 0.2,0.4,0.6underλ norm = 1.
+The selected policy region is stable in the high- and medium-liquidity environments. In the low-liquidity
+environment, the selected band remains wide; the highest benchmark-stress level selectsb= 0.2instead of
+b= 0.3, consistent with the flat wide-band objective surface.
+Table 8: Sensitivity to the benchmark-stress level under the fixed benchmark-stress view,λnorm = 1.
+Liquidity environmentρ G0 b⋆ HVAεreq(b⋆) ∆ KLb ∆KLb /HVA0 (%)TE(b ⋆)
+High-liquidity 0.2 0.020.000 62 1.26×10 −5 2.080.0085
+High-liquidity 0.4 0.020.000 63 2.28×10 −5 3.770.0085
+High-liquidity 0.6 0.020.000 65 3.23×10 −5 5.330.0085
+Medium-liquidity 0.2 0.10.0078 0.000 496.630.065
+Medium-liquidity 0.4 0.10.0083 0.000 9312.760.065
+Medium-liquidity 0.6 0.10.0087 0.001 3718.720.065
+Low-liquidity 0.2 0.30.1282 0.013 3911.660.1547
+Low-liquidity 0.4 0.30.1396 0.024 7821.580.1547
+Low-liquidity 0.6 0.20.1587 0.034 5627.850.1505
+A.3 Worst-case weights and joint-tail amplification
+This subsection reports weight-based measures for the KL tilt. In the fixed-radius view, letw⋆j (b,ε)denote
+the worst-case weights from Eq. (8). The effective sample size is given by
+ESS(b,ε) = 1∑N
+j=1(w⋆j (b,ε)) 2.(20)
+This represents the inverse concentration index of the worst-case weights. It equalsNwhen all paths have
+equal weight and becomes smaller when the robust HVA depends on fewer heavily weighted paths.
+LetD j(b)denote the discounted total turnover on pathj, and letM j be the corresponding turnover-
+weighted average illiquidity multiplier. Define the baseline(95%,95%)joint-tail event as
+A95,95(b) ={D j(b)≥q 00.95(D(b))}∩{M j≥q 00.95(M)},(21)
+12
+where the quantiles are computed under the baseline empirical weights. The joint-tail amplification ratio is
+defined as
+R95,95(b,ε) =
+∑
+jw⋆j (b,ε)1{(Dj(b),Mj)∈A 95,95(b)}
+N−1∑j 1{(Dj(b),Mj)∈A 95,95(b)} .(22)
+Here, the numerator gives the probability of the same baseline-defined joint-tail event under the worst-
+case weightsQ⋆, while the denominator gives its baseline empirical probability underP. Values above one
+indicate that the worst-case weights assign more mass to paths where turnover and illiquidity are jointly
+high. Confidence intervals in Table 9 are obtained by resampling paths and renormalizing the worst-case
+weights within each resample; the implementation uses 200 resamples and 95% intervals.
+Table 9: Joint-tail amplificationQ⋆(A)/P(A)for the baseline(95%,95%)turnover–illiquidity event.
+Liquidity environment Band Spread-costQ ⋆(A)/P(A)(95% CI) Impact-costQ ⋆(A)/P(A)(95% CI)
+High-liquidity 0.00 1.363 [1.341, 1.388] 1.148 [1.120, 1.179]
+High-liquidity 0.02 1.377 [1.352, 1.399] 1.162 [1.132, 1.192]
+Medium-liquidity 0.00 1.320 [1.306, 1.336] 1.397 [1.379, 1.415]
+Medium-liquidity 0.10 1.336 [1.310, 1.361] 1.438 [1.418, 1.459]
+Low-liquidity 0.00 1.204 [1.191, 1.216] 1.353 [1.333, 1.373]
+Low-liquidity 0.30 1.349 [1.295, 1.419] 1.395 [1.369, 1.427]
+A.4 Tracking-error-weight sensitivity
+Table 10 and Figure 5 present an additional sensitivity analysis. Asλnorm increases, the preferred band
+becomes narrower since tracking error carries greater weight. The low-liquidity environment has wider
+bands across a broad range ofλnorm.
+Table 10: Grid-selected band under the fixed benchmark-stress view for alternative tracking-error weights.
+Liquidity environmentλ norm = 0λ norm = 0.1λ norm = 0.3λ norm = 1λ norm = 3λ norm = 10λ norm = 30
+High-liquidity 0.5 0.1 0.05 0.02 0.01 0.005 0
+Medium-liquidity 0.5 0.5 0.2 0.1 0.1 0.05 0.05
+Low-liquidity 0.5 0.5 0.5 0.3 0.1 0.1 0.1
+13
+Figure 5: Grid-selected no-trade band as a function ofλnorm underρ G0 = 0.4.
+B Gaussian benchmark construction
+This appendix defines the Gaussian benchmark curve used to translate a KL stress increment into the
+benchmark-stress labelρ G. The Gaussian copula is used only as a rank-coupling device: it provides a
+reproducible benchmark increment curve against which the KL stress increment can be reported. The
+parameterρ G below is the Gaussian rank-correlation parameter used to construct that curve. Appendix C
+gives the computational steps for the fixed-radius and fixed benchmark-stress calculations.
+For pathjand bandb, define the discounted linear and quadratic turnover summaries
+D(1)j,b =
+n∑
+i=1
+e−rtiXj,i(b), D (2)j,b =
+n∑
+i=1
+e−rtiXj,i(b)2.(23)
+Define the corresponding effective illiquidity multipliers by
+M(1)j,b =
+∑n
+i=1e−rtimj,iXj,i(b)∑n
+i=1e−rtiXj,i(b) , M (2)j,b =
+∑n
+i=1e−rtimj,iXj,i(b)2∑n
+i=1e−rtiXj,i(b)2 ,(24)
+with the multiplier set to one when the denominator is zero. This convention does not affect the cost when
+there is no turnover. These definitions rewrite the path loss as
+Lj(b) =sD (1)j,bM(1)j,b +κD (2)j,bM(2)j,b.(25)
+For a candidate benchmark-stress levelρG∈[0,0.99], draw(Z 1j,Z 2j),j= 1,...,N G, from a centered
+bivariate normal distribution with unit variances and correlationρG, and setUkj = Φ(Zkj). The benchmark
+variables are empirical-quantile transforms,
+D(ℓ),Gj,b (ρG) =Q D(ℓ)b (U1j), M (ℓ),Gj,b (ρG) =Q M(ℓ)b (U2j), ℓ∈{1,2},(26)
+whereQ X denotes the empirical quantile function of the path-level sampleX. The same demand rank
+U1j is used forD (1) andD (2), and the same liquidity rankU 2j is used forM (1) andM (2). Thus, the
+benchmark modifies the demand–liquidity pairing while keeping the observed marginal scales of the turnover
+and liquidity.
+14
+Then the benchmark cost for pathjis
+CGj,b(ρG) =sD (1),Gj,b (ρG)M(1),Gj,b (ρG) +κD (2),Gj,b (ρG)M(2),Gj,b (ρG)(27)
+and the Gaussian benchmark increment is
+∆Gb (ρG) = 1NG
+NG∑
+j=1
+CGj,b(ρG)− 1NG
+NG∑
+j=1
+CGj,b(0).(28)
+The mapρG↦→∆ Gb (ρG)may not be perfectly monotone, so the inverse map uses the monotone envelope
+~∆Gb (ρGj ) = maxk≤j ∆Gb (ρGk )(29)
+for an ordered gridρ G1 <···< ρ GJ. Linear interpolation on this envelope defines the inverse reporting
+metric. If the target lies within the evaluated grid, interpolation is then applied. The resulting inverse value
+is denotedρGeq in the main text.
+C Computational algorithms
+C.1 Loss-sample generation with maturity unwind
+Algorithm 1 produces the HVA loss sample. The maturity unwind at the final step is treated separately
+from the mid-period band updates.
+Algorithm 1Loss samples under no-trade-band delta hedging
+Require:Bandb, time gridt 0,...,t n, price pathS i, target delta ˆ∆i, discount factorsB i =e −rti, cost
+parameters(s,κ), illiquidity multipliersm i
+Ensure:Path lossL, discounted turnover summaries
+1:ϕ 0← ˆ∆0,L←0,turn1←0,turn2←0
+2:fori= 1,...,n−1do
+3:if| ˆ∆i−ϕi−1|>bthen
+4:ϕ i← ˆ∆i
+5:else
+6:ϕ i←ϕ i−1
+7:end if
+8:X i←S i|ϕi−ϕi−1|
+9:L←L+B imi(sXi +κX 2i )
+10:turn1←turn1 +B iXi,turn2←turn2 +B iX2i
+11:end for
+12:Maturity unwind:ϕ n←0,X n←S n|ϕn−ϕn−1|
+13:L←L+B nmn(sXn +κX 2n)
+14:turn1←turn1 +B nXn,turn2←turn2 +B nX2n
+15
+C.2 KL upper bound and weights
+Algorithm 2KL-robust upper HVA and worst-case weights
+Require:Loss samplesL 1,...,L N, radiusε≥0
+Ensure:Robust upper expectation, realized KL, ESS, weights
+1:ifε= 0then
+2:w j←1/Nfor allj
+3: HVA0←N−1∑jLj,ESS←N, realized KL←0
+4:else
+5:Minimizeg(θ) =θε+θlog(N −1∑j exp(Lj/θ))overθ>0
+6:Setw j∝exp(L j/θ⋆)using log-sum-exp normalization
+7: HVAε←∑jwjLj
+8:realized KL← ∑jwj log(Nwj)
+9:ESS←( ∑jw2j )−1
+10:end if
+C.3 Fixed-radius and benchmark-stress map
+This algorithm applies the Gaussian benchmark curve from Appendix B and computes both the fixed-radius
+and fixed benchmark-stress quantities.
+Algorithm 3Fixed-radius and fixed benchmark-stress map
+Require:Band gridB, KL-radius gridE, fixed KL radiusε fixed, target stressρG0 , loss samplesL(b), path-
+level summaries(D (1),D (2),M (1),M (2))
+1:forb∈Bdo
+2:Compute∆ KLb (ε)for allε∈Eusing Algorithm 2
+3:Compute benchmark increments∆ Gb (ρG)over a grid of benchmark-stress levelsρG
+4:Form the monotone envelope ~∆Gb (ρG)from Eq. (29)
+5:Evaluate the fixed-radius view: compute∆ KLb (εfixed)and interpolateρ Geq(b;ε fixed)from Eq. (11)
+6:Evaluate the fixed benchmark-stress view: interpolateε req(b;ρG0 )from the curveε↦→∆ KLb (ε)using
+Eq. (12)
+7:If the target lies outside the evaluated grid, report a boundary value
+8:end for
+16

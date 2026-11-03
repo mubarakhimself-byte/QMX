@@ -1,0 +1,1876 @@
+arXiv 2608.12660  https://arxiv.org/abs/2608.12660
+
+Universality ofe-detectors for ARL control
+Aaditya Ramdas ∗
+August 14, 2026
+Abstract
+An e-detector for a pre-change classP is a nonnegative processM such thatEP [Mτ]≤E P [τ]
+for all stopping timesτ and allP∈P . Thresholding e-detectors controls the average run length
+(ARL): declaring a change at the first timeTb when M crosses b ensures that infP∈P EP [T ]≥b .
+But e-detectors do substantially more than control the ARL; they also satisfy aoptional-horizon
+inequality:
+P(Tb≤σ)≤E P [σ]/b
+for every data-dependent stopping time (monitoring horizon)σ and P∈P . In particular,
+every e-detector-based procedure obeysP (T≤t )≤t/b at each fixedt, thus avoiding early
+false alarms. Remarkably, the converse also holds: every stopping timeT that satisfies the
+optional-horizon inequality must in fact arise from thresholding an e-detector. We also derive a
+universal representation of stopping times that satisfy (only) ARL control. These are represented
+byweake-detectors, that only require EP [Mτ]≤E P [τ]to hold at all threshold stopping timesTb.
+Appendices present universal representations for other (less common) change detection metrics.
+Keywords:average run length; change detection; e-detector; e-process; false alarm; first-passage
+time; level-crossing time; optional stopping; sequential testing; universality.
+1 Introduction
+A useful way to understand a statistical formalism is to ask whether it is merely sufficient for
+validity or whether it isuniversal: can every valid procedure be recovered within that formalism?
+Such representation results distinguish restrictions intrinsic to the error criterion from restrictions
+introduced by a construction method.
+E-values give the simplest example. IfR∈{ 0, 1} is the realized decision of a level-α test, then
+E =R/α is an e-value, and the test rejects exactly whenE≥ 1/α. Randomized tests are covered by
+adjoining the external randomizer that produces the realized binary decision. Thus every hypothesis
+test can be represented by thresholding an e-value; see Ramdas and Wang (2025).
+The same phenomenon holds sequentially. A one-sided sequential test is identified with an alarm
+timeTsatisfying
+sup
+P∈P
+P(T <∞)≤α.
+Then
+En := 1α 1{T≤n}, n≥0,(1)
+∗Department of Statistics, Stanford University. Email:aramdas@stanford.edu
+1
+arXiv:2608.12660v1  [math.ST]  12 Aug 2026
+is an e-process, and its first crossing of1/α is exactlyT. Conversely, thresholding an e-process
+controls the probability of ever crossing. Hence every sequential test—and every change-detection
+rule controlling the probability of false alarm (PFA)—is recovered by thresholding an e-process.
+Proposition 7.8 of Ramdas and Wang (2025) gives this exact sequential-test representation.
+Change detection is more often calibrated by average run length (ARL), though we consider other
+metrics later. Under a no-change lawP, the ARL of an alarm timeT is EP [T ], and a conventional
+target is
+inf
+P∈P
+EP [T]≥b.(2)
+Unlike PFA control,(2) is only a mean constraint. It permits eventual false alarm with probability
+one, and it allows false-alarm probability to be distributed very unevenly over time. This leads to
+the paper’s motivating question:
+Is there an object for ARL control that has an exact universality property analogous to
+those of e-values and e-processes?
+A natural candidate is the e-detector of Shin et al. (2024). A nonnegative adapted processM,
+initialized at zero, is an e-detector when
+EP [Mτ]≤E P [τ](3)
+for every null law and every stopping horizonτ, with extended expectations; equivalently, it is
+enough to check bounded horizons. The above authors showed that thresholding an e-detector at
+b gives an alarm time with ARL at leastb. The original definition is also stable under mixtures,
+which is crucial for the Shiryaev–Roberts-, CUSUM-, and mixture-style constructions their work.
+The universality answer (to the earlier posed question) is subtle because(3) encodes much more
+than ARL. If
+Tb(M) := inf{n≥1 :M n≥b},
+then every integrable, possibly data-dependent stopping timeσ satisfies the followingoptional
+horizon inequality:
+P
+(
+Tb(M)≤σ
+)
+≤ EP [σ]b .(4)
+In particular,
+P
+(
+Tb(M)≤t
+)
+≤ tb (t∈N).(5)
+Thus an e-detector-based procedure cannot obtain a large ARL by placing excessive false-alarm
+mass near the beginning and compensating with a very long right tail. This distributional guarantee
+is one of the paper’s principal practical conclusions.
+It turns out that e-detectors precisely characterize all alarm times for which the optional horizon
+inequality holds. We prove that if some alarm timeT satisfies P (T≤σ )≤E P [σ]/b for all stopping
+times σ, thenT must have been obtained by thresholding some e-detector atb, i.e.T =Tb(M)for
+some e-detectorM.
+We also introduce the notion of aweake-detector, which is only required to satisfy(3) for a particular
+subset of stopping times: the level-crossings ofM itself, i.e. for stopping times of the formTb(M)
+only. Weak e-detectors do not satisfy the optional horizon inequality, but thresholding them does
+control the ARL. In fact, every stopping timeT that controls (only) the ARL can be recovered by
+thresholding a weak e-detector.
+2
+Clocked e-processes.A convenient way to organize and unify these ideas is through aclock
+C, which is a nondecreasing adapted process that records the accumulated false-alarm budget. A
+strongC-clocked e-processsatisfies
+EP [Mτ]≤E P [Cτ]
+at every admissible horizon. The choicesCn≡ 1and Cn =n recover, respectively, e-processes and
+the original e-detectors. We prove the following general equivalence:
+P(T≤σ)≤ EP [Cσ]b for all admissibleσ⇐⇒T=T b(M)for a strongC-clocked e-process.
+(6)
+The canonical witness is alwaysMn =b1{T≤n} . The optional-horizon theorem also leads to an
+exact characterization of null run-length distributions. For every strongly representable rule, the
+self-censoring horizonT∧mgives the necessary inequality
+bP(T≤m)≤E P [T∧m], m∈N.(7)
+When the filtration is the minimal one generated by the alarm time itself, these inequalities are
+also sufficient. Thus(7) completely characterizes which run-length laws can arise from a strong
+e-detector in the absence of side information. It is strictly stronger than the deterministic tail and
+ARL constraints taken together, yet it includes both geometric and deterministic run lengths. Under
+richer filtrations, the law alone is not enough: information revealed before the alarm can create
+adaptive horizons that violate optional validity.
+For a lower bound on the expected clock at the alarm,
+inf
+P∈P
+EP [CT ]≥b,
+the exact representing object is weaker: the clock inequality need only hold at the process’s own
+level-crossing times. With the calendar clockCn =n, this yields the weak e-detector, because the
+above display reduces to ARL control. Weak e-detectors are sound at every threshold and universal
+for ARL. We call the original e-detectorstrongonly to distinguish these two notions in this paper.
+The weak theorem should be interpreted carefully. Its canonical certificate is a restatement of
+the target alarm event, and the weak class is not even closed under convex combinations. By
+contrast, the strong class is convex and has a genuinely checkable optimal-stopping certificate:
+for each null lawP, Mn−n is dominated by an integrableP-supermartingale with initial value
+zero. This Snell-envelope characterization explains why strong e-detectors support the mixture and
+aggregation operations used in practice, while weak e-detectors are best viewed as a language for
+formal completeness. The main correspondences are summarized in Table 1.
+Beyond the representation theorems, we develop a structural theory for the two classes. Strong
+e-detectors are convex and stable under independent enlargement, whereas weak e-detectors are
+nonconvex but admit a monotone normalization that the strong class does not preserve. Convexity
+permits an independent exponential clock to pin the actual ARL of a nondegenerate strong detector
+between two explicit bounds. A optimal-stopping value and its ratio form, the maximal strong
+scale, quantify the weak–strong gap. Snell envelopes characterize strong validity through both
+supermartingale and martingale domination, while the truncated-mean inequalities above exactly
+characterize strong run-length laws under the minimal alarm filtration. A time-inhomogeneous
+Gaussian Shewhart chart then supplies a genuine detection procedure with exact ARL that violates
+the strong optional-horizon bound: its first-observation power is larger than that of any strongly
+3
+Setting Validity condition Canonical witness Representing class
+Fixed testP(R= 1)≤α E=α −1Re-value
+Sequential test /
+PFA
+P(T <∞)≤α E n =α−11{T≤n}e-process
+Proper expected
+clock
+E[CT ]≥b M n =b1{T≤n}weakC-clocked process
+Optional clockP(T≤σ)≤E[C σ]/b M n =b1{T≤n}strongC-clocked process
+Table 1: Four exact representation statements, shown for one null law to reduce notation. The
+expected-clock row requires a proper clock. ARL and strong e-detector validity are obtained by
+taking Cn =n; e-process validity is obtained from the fixed clockCn≡ 1. The fixed clock has no
+nontrivial weak counterpart at scalesb>1, becauseC T≡1.
+representable rule in the same Gaussian experiment, but its worst-case continuation delay is
+correspondingly larger.
+The paper is organized as follows. Section 2 fixes conventions and reviews related work. Section 3
+develops the clock abstraction that unifies e-processes and e-detectors. Section 4 shows why
+strong e-detectors are not universal for ARL alone and gives lottery and Gaussian-chart examples.
+Section 5 proves weak universality, studies closure under mixtures, and gives an exponential-clock
+calibration. Section 7 separates own-crossing from optional validity. Section 8 characterizes the
+strong class, derives the run-length-law and Snell-envelope characterizations, and studies tail and
+hazard implications. Section 9 addresses constructibility and statistical consequences. The references
+appear before a set of self-contained appendices extending the same representation program to other
+false-alarm metrics; a guide explains their purpose and organization.
+2 Background, notation, and related work
+2.1 Filtered setup and stopping conventions
+Let(Ω ,F, (Fn)n≥0)be a filtered measurable space, and letP be a nonempty class of probability
+measures on(Ω,F ). The laws inP represent possible no-change (or pre-change) distributions. No
+independence, identical-distribution, domination, or parametric assumptions are imposed.
+We writeN ={1, 2,...} and N0 ={0, 1, 2,...} . Generic stopping horizons such asτ andσ may take
+values in N0∪{∞}. Analarm timeordetection rule T, however, always takes values inN∪{∞} ;
+in particular, an alarm cannot occur at time zero. This convention is essential for exact threshold
+representations because every level-crossing time below starts at time one.
+For false-alarm events involving a possibly infinite horizon,{T≤σ} means{T <∞, T≤σ} . The
+distinction is immaterial whenσ is almost surely finite. For a nonnegative processX, define at a
+possibly infinite stopping time
+Xτ := lim infN→∞ Xτ∧N.
+We also use the killed stopped value
+X†τ :=
+∞∑
+n=0
+Xn1{τ=n},(8)
+4
+which equals zero on{τ =∞}. Whenever EP [τ]<∞ , the stopping time is finite almost surely and
+the two conventions agree.
+For an adapted nonnegative processMandc>0, its level-crossing time is
+Tc(M) := inf{n≥1 :M n≥c},inf∅:=∞.(9)
+The termfirst-passage timeis equally standard; “own level crossing” emphasizes that the stopping
+rule is generated by the same process whose validity is being assessed.
+We will repeatedly use the following clocked localization fact. It removes all integrability caveats
+from the validity definitions below: extended expectations are permitted, and it is enough to test
+bounded horizons.
+Lemma 2.1(Clocked localization).Let M be nonnegative and adapted, and letC be a nonnegative
+adapted process that is pathwise nondecreasing. Define
+Mτ := lim infN→∞ Mτ∧N, C τ := limN→∞Cτ∧N.
+If
+EP [Mτ]≤E P [Cτ](10)
+for every bounded stopping timeτ, then (10) holds for every stopping time, possibly infinite. Hence
+validity over bounded, almost surely finite, or arbitrary stopping times is equivalent whenever the
+right-hand side is interpreted in[0,∞].
+Proof. For an arbitrary stopping timeτ, apply the bounded-horizon property toτ∧N . Fatou’s
+lemma on the left and monotone convergence on the right give
+EP [Mτ]≤lim infN→∞ EP [Mτ∧N ]≤limN→∞ EP [Cτ∧N ] =E P [Cτ].
+For a stopping ruleT, define
+PFAP(T) := sup
+P∈P
+P(T <∞),(11)
+ARLP(T) := infP∈P EP [T].(12)
+PFA control at levelα requires PFAP(T )≤α . ARL control at scaleb requires ARLP(T )≥b ; the
+usual parameterization isb= 1/α, in which case the false-alarm rateFAR = 1/ARLis at mostα.
+These criteria have fundamentally different geometry. PFA control reserves probability at infinity:
+under every null, the procedure must never alarm with probability at least1−α . ARL control
+permits eventual alarm with probability one. It constrains only the first moment of the alarm time
+and permits the distribution of false alarms to be highly front-loaded.
+2.2 E-values, e-processes, and e-detectors
+An e-value forP is a nonnegative random variableE satisfying supP∈P EP [E]≤ 1. Markov’s
+inequality yields a level-α test by rejecting whenE≥ 1/α, while every realized binary level-α test
+Rgives the all-or-nothing e-valueR/α.
+5
+An e-process is a nonnegative adapted processEsatisfying
+EP [Eτ]≤1(13)
+for everyP∈P and every stopping timeτ, with the infinite-horizon convention above. By Lemma 2.1
+with the fixed clockCn≡ 1, it is equivalent to check bounded or almost surely finite stopping times.
+Ville’s inequality turns threshold crossing at1/α into a level-α sequential test. Conversely, every
+level-α sequential test is recovered by an all-or-nothing e-process; see Proposition 7.8 of Ramdas
+and Wang (2025). The e-detector of Shin et al. (2024, Definition 2.2) replaces the fixed unit budget
+of an e-process by a budget that grows linearly with elapsed time.
+Definition 2.2(Strong e-detector; original definition).A nonnegative adapted process M =
+(Mn)n≥0, withM 0 = 0, is astrongP-e-detectorif, for everyP∈Pand every stopping timeτ,
+EP [Mτ]≤E P [τ].(14)
+The inequality is interpreted in the extended sense and, by Lemma 2.1, may equivalently be checked
+only at bounded horizons. The modifierstrongis used only to distinguish this original notion from
+Definition 5.1. Thresholding a strong e-detector atb gives ARL at leastb, as established by Shin
+et al. (2024, Theorem 2.4). The class is convex: averages and, more generally, mixtures of strong
+e-detectors remain strong (Shin et al., 2024, Proposition 2.3).
+2.3 Related work
+ARL has been a central false-alarm metric since the early control-chart and quickest-detection
+literature. Shewhart’s control chart (Shewhart, 1931), Page’s CUSUM (Page, 1954), and the
+Shiryaev and Shiryaev–Roberts procedures (Shiryaev, 1963; Roberts, 1966) are foundational. The
+minimax formulations of Lorden (1971) and Pollak (1985), together with the exact Lorden optimality
+result of Moustakides (1986) and its decision-theoretic development by Ritov (1990), form the
+classical quickest-detection backbone. Optimality properties of the Shiryaev–Roberts procedure
+are studied by Pollak and Tartakovsky (2009b); head-started and quasi-stationary variants and
+their higher-order behavior are developed by Polunchenko and Tartakovsky (2010); Tartakovsky
+et al. (2012). Standard monographs and surveys include Siegmund (1985); Basseville and Nikiforov
+(1993); Poor and Hadjiliadis (2008); Tartakovsky et al. (2014); Xie et al. (2021).
+The run-length distribution has long been studied in addition to its mean. Brook and Evans (1972)
+compute exact probabilities and quantiles for CUSUM run lengths, and Pollak and Tartakovsky
+(2009a) establish asymptotic exponentiality for broad first-exit models. Mei (2008) emphasizes that
+a large ARL can hide substantial early false-alarm risk. Fast-initial-response and head-start designs
+intentionally trade later in-control behavior for quicker startup response (Lucas and Crosier, 1982);
+their false-alarm probability functions can differ markedly even at similar ARL values (Nishina and
+Nishiyuki, 2003). Pergamenchtchikov and Tartakovsky (2018) develops local unconditional and
+conditional false-alarm classes over moving windows. The equilibrium-distribution and new-better-
+than-used-in-expectation (NBUE) literature provides a complementary reliability-theoretic language
+for comparing a lifetime law with its length-biased residual-life law (Marshall and Olkin, 2007; Nair
+et al., 2012); Section 8.2 identifies an exact connection to strong e-detector run lengths. These
+strands motivate our focus on the lower tail and on optional selection of the monitoring horizon.
+Much of the classical optimality theory assumes specified pre- and post-change laws. Composite,
+adaptive, and robust variants use generalized likelihood ratios, mixtures, or least-favorable laws;
+6
+representative contributions include Lai (1995); Mei (2006); Unnikrishnan et al. (2011); Xie and
+Siegmund (2013); Molloy and Ford (2017). Recent work develops nonparametric reductions using
+backward confidence sequences (Shekhar and Ramdas, 2023) and information-theoretic ARL–
+delay bounds for composite pre-change classes (Ram and Ramdas, 2026). These papers concern
+construction and efficiency. Our question is orthogonal: once a null-validity criterion is fixed, which
+stopping rules admit an exact threshold representation?
+E-values and test martingales trace back at least to Ville (1939). Modern methods in anytime-
+valid inference and game-theoretic statistics are surveyed by Ramdas et al. (2023) and treated
+systematically by Ramdas and Wang (2025). E-processes can be strictly more general than a single
+nonnegative supermartingale under composite nulls (Ruf et al., 2023). Nevertheless, Snell envelopes
+and martingale domination provide powerful structural descriptions of admissible anytime-valid
+procedures (Ramdas et al., 2022); we use the same technique to characterize strong e-detectors.
+Shin et al. (2024) introduced e-detectors for nonparametric sequential change detection with
+finite-sample ARL guarantees. Their constructions aggregate e-processes started at candidate
+changepoints and recover Shiryaev–Roberts- and CUSUM-style statistics. The present work asks
+what validity condition these objects encode exactly, and why that condition is stronger and more
+construction-friendly than a bare ARL constraint.
+3 Clocked e-processes: a common representation theorem
+E-processes and e-detectors differ in the budget against which stopped expectation is compared. A
+clockis a nonnegative adapted processC = (Cn)n≥0 that is pathwise nondecreasing. For a stopping
+timeT, set
+CT := limN→∞CT∧N ∈[0,∞].(15)
+The terminology in this section is proposed, but the two principal examples are established objects.
+Definition 3.1(Strong clocked e-process).A nonnegative adapted processM is astrong C-clocked
+P-e-processif
+EP [Mτ]≤E P [Cτ](16)
+for everyP∈Pand every stopping timeτ. By Lemma 2.1, bounded stopping times suffice.
+ForCn≡ 1, (16) is exactly the e-process property by Lemma 2.1. ForCn =n, it is exactly the strong
+e-detector property. More generally,Cn =∑nj=1aj for predictableaj≥ 0measures accumulated
+exposure instead of calendar time.
+Definition 3.2(Optional-clock false-alarm control).Fix b> 0. An alarm timeT hasoptional-clock
+false-alarm control at scalebif
+P(T≤σ)≤ EP [Cσ]b (17)
+for everyP∈Pand every stopping timeσ, with the inequality interpreted in the extended sense.
+Theorem 3.3(Optional-clock universality).Fix b> 0and an alarm timeT. The following are
+equivalent.
+(i)Tsatisfies optional-clock false-alarm control(17).
+(ii)There exists a strongC-clockedP-e-processMsuch thatT=T b(M).
+7
+Under(i), the canonical witness is
+MT,bn :=b1{T≤n}.(18)
+Proof. Suppose (ii) holds. FixP and a stopping horizonσ, and putρ =Tb(M)∧σ. ThenCρ≤C σ,
+whileM ρ≥bon{T b(M)≤σ}. Hence
+bP(Tb(M)≤σ)≤E P [Mρ]≤E P [Cρ]≤E P [Cσ].
+Conversely, under (i), the process in (18) crossesbexactly atT, and for every stopping timeτ,
+EP [MT,bτ ] =bP(T≤τ)≤E P [Cτ].
+The optional-clock theorem has the following specializations:
+(a) If Cn≡ 1, then threshold crossing obeysP (Tb<∞ )≤ 1/b, and every PFA-controlled alarm
+time has an e-process representation.
+(b) If Cn =n, then threshold crossing obeys optional-horizon linear false-alarm control,P (Tb≤
+σ)≤E[σ]/b.
+(c) IfCn =∑j≤naj, then the false-alarm budget is proportional to expected accumulated exposure.
+Example 3.4(An exposure clock).Suppose observation opportunities occur in calendar time, but
+the detector is updated only when a predictable indicatoran∈{ 0, 1} says that a sample is actually
+collected. The clock
+Cn :=
+n∑
+j=1
+aj
+counts samples rather than elapsed periods. Optional-clock control then gives
+P(T≤σ)≤ E[Cσ]b ,
+so the false-alarm budget is charged per expected sample collected, even when the sampling schedule
+is adaptive. More generally, predictable costsaj ≥ 0yield cost-weighted monitoring. This is
+useful for intermittent sensors, batched inspections, or settings in which observations have unequal
+acquisition costs.
+There is a parallel weak theorem. Assume now thatC0 = 0and
+Cn↑∞P-almost surely for everyP∈P.(19)
+Call such a clockproper.
+Definition 3.5(Weak clocked e-process).For a proper clockC, a nonnegative adapted processM,
+withM 0 = 0, is aweakC-clockedP-e-processif, for everyP∈Pand everyc>0,
+EP
+[
+M†Tc(M)]≤E P [CTc(M)].(20)
+Theorem 3.6(Expected-clock universality).Let C be proper. Fixb> 0and an alarm timeT. The
+following are equivalent.
+8
+(i)Clocked ARL control holds:
+inf
+P∈P
+EP [CT ]≥b.(21)
+(ii)There exists a weakC-clockedP-e-processMsuch thatT=T b(M).
+Under(i), one may again takeMn =b1{T≤n}.
+Proof. Suppose (ii) holds. IfP (T =∞) > 0, properness implies EP [CT ] =∞. Otherwise weak
+validity at levelbgives
+b≤E P [M†T ]≤E P [CT ].
+Conversely, setMn =b1{T≤n}. At each level0<c≤b, its crossing time isT, and
+EP [M†T ]≤b≤E P [CT ].
+At levelsc>b, it never crosses. ThusMis weaklyC-clocked and representsT.
+WithCn =n, Theorem 3.6 is precisely ARL universality. The remainder of the main text specializes
+these clocked results, identifies strict separations, and studies which version has useful closure and
+verification properties.
+4 Strong e-detectors are not universal for ARL
+The failure of strong universality is already visible from a consequence of(14) that is stronger than
+mean control.
+Proposition 4.1(Optional-horizon false-alarm inequality).Let M be a strongP-e-detector, fix
+b>0, and letT b =T b(M). Then, for everyP∈Pand every stopping timeσ,
+P(Tb≤σ)≤ EP [σ]b .(22)
+Proof.Setρ:=T b∧σ. On{T b≤σ}, one hasρ=T b<∞, and henceM ρ≥b. Therefore
+bP(Tb≤σ)≤E P [Mρ]≤E P [ρ]≤E P [σ],
+where the middle inequality is the strong e-detector property.
+Takingσ≡tgives the following deterministic tail bound.
+Corollary 4.2(Linear deterministic-horizon bound).Under the assumptions of Proposition 4.1,
+for every integert≥1,
+P(Tb≤t)≤ tb.(23)
+In particular,P(T b = 1)≤1/b.
+The gap between ordinary ARL and optional-horizon control can be summarized by one number.
+9
+Definition 4.3(Maximal strong scale).For a null lawP, define
+b∗P (T) := infσa stopping time
+EP [σ]<∞,P(T≤σ)>0
+EP [σ]
+P(T≤σ) ,(24)
+with the infimum of the empty set interpreted as∞. For a composite null class, set
+b∗P(T) := infP∈P b∗P (T).
+We call this themaximal strong scaleofT.
+Proposition 4.4(Meaning of the strong scale).An alarm timeT satisfies optional-horizon linear
+false-alarm control at scaleboverPif and only if
+b≤b ∗P(T).
+Consequently, after the representation theorem in Theorem 8.3,b∗P(T )is exactly the largest scale at
+whichTis representable by a strong e-detector. IfTis integrable underP, then
+b∗P (T)≤E P [T],(25)
+so the ratioEP [T]/b∗P (T)quantifies the weak–strong gap for that law and filtration.
+Proof. The optional-horizon inequality is equivalent tob≤E P [σ]/P (T≤σ )for every horizon
+appearing in (24); taking the infimum overσ and then overP proves the first claim. If T is
+integrable, the choiceσ=Tgives (25).
+ARL control imposes no comparable bound. The following elementary example is useful because
+every quantity is explicit.
+Example 4.5(An early-alarm lottery).Let b = 4, letY∼Bernoulli (1/2), revealY at time one,
+and define
+T:=
+{
+1, Y= 1,
+7, Y= 0.
+ThenTis a stopping time and
+E[T] = 12·1 + 12·7 = 4 =b.
+ThusT has exact ARLb. YetP (T = 1) = 1/2> 1/4 = 1/b, so Corollary 4.2 rules out representing
+Tas the level-bcrossing time of any strong e-detector.
+Corollary 4.6(Failure of strong universality for ARL).For every b >1, there exist a filtered
+probability space, a singleton null classP, and an alarm timeT with ARLP(T )≥b that is not the
+level-bcrossing time of any strongP-e-detector.
+10
+5 Weak e-detectors and exact universality for ARL
+For threshold-based ARL control, the defining inequality of a strong e-detector is applied at one
+special stopping time: the process’s own threshold crossing. This motivates the following weakening.
+Definition 5.1(Weak e-detector).A nonnegative adapted processM = (Mn)n≥0, withM0 = 0, is
+aweakP-e-detectorif, for everyP∈Pand every levelc>0,
+EP
+[
+M†Tc(M)]≤E P[Tc(M)].(26)
+Thus validity is required only at the process’s own level-crossing times, at every level. Clearly,
+every strongP-e-detector is a weakP-e-detector. The weak definition retains exactly the argument
+needed for ARL control: thresholding a weak e-detector atc results in a stopping time with ARL at
+leastc.
+Theorem 5.2(ARL control for weak e-detectors.).IfM is a weakP-e-detector, then for every
+c>0,
+inf
+P∈P
+EP [Tc(M)]≥c.(27)
+Proof. Fix P∈P . If EP [Tc(M)] =∞, there is nothing to prove. Otherwise,Tc(M)<∞ almost
+surely andMTc(M)≥c. Hence
+c≤E P [MTc(M)]≤E P [Tc(M)].
+Taking the infimum overPproves the claim.
+Weakness is strict. The early-alarm lottery from Example 4.5 already supplies a transparent witness.
+Example 5.3(A weak e-detector that is not strong).For the stopping timeT in Example 4.5,
+define
+Mn := 41{T≤n}.(28)
+For every0<c≤4, the crossing timeT c(M)equalsT, and
+E[MTc(M)] = 4 =E[T c(M)].
+Forc> 4, the process never crosses and the weak inequality is automatic. ThusM is weak. It is
+not strong, since at the deterministic stopping timeτ≡1,
+E[M1] = 4P(T= 1) = 2>1 =E[τ].
+5.1 Closure under mixtures and the limits of weak constructibility
+The two detector classes have sharply different closure properties.
+Proposition 5.4(Strong convexity and weak nonconvexity).(a) Strong e-detectors are closed
+under fixed mixtures.
+(b)The class of weak e-detectors need not be convex, even for a singleton null law.
+11
+Proof. For (a), ifMa is strong for eacha and µ is a probability measure, Tonelli’s theorem gives,
+for every admissibleτ,
+EP
+[∫
+Maτ dµ(a)
+]
+=
+∫
+EP [Maτ ]dµ(a)≤E P [τ].
+This is the mixture property of Shin et al. (2024, Proposition 2.3).
+For (b), letY∼Bernoulli(1/2)be revealed at time one. Define
+T=
+{
+1, Y= 1,
+7, Y= 0, T′ =
+{
+1, Y= 0,
+7, Y= 1.
+Both have mean four. Define
+M (1)n = 41{T≤n}, M (2)n = 41{T′≤n}.
+For either process and every0<c≤ 4, the level-c crossing is the corresponding alarm time and
+the stopped value has expectation four, equal to the expected crossing time. Forc> 4, the process
+never crosses. Thus both processes are weak e-detectors, by direct verification. Their average is
+deterministic:
+M (1)n +M (2)n
+2 =
+{
+2,1≤n≤6,
+4, n≥7.
+At levelc= 2, its crossing time is one and its stopped value is two, so
+E
+[(
+M (1) +M (2)
+2
+)
+T2
+]
+= 2>1 =E[T 2].
+The average is not weak.
+There is a second, complementary asymmetry.
+Proposition 5.5(Monotone normalization and running maxima).(a) Every weak e-detectorM
+may be replaced by the nondecreasing process
+Mn := max0≤j≤nMj
+without changing any level-crossing time or any stopped value at a first crossing. In particular,
+Mis weak wheneverMis weak.
+(b)Strong e-detectors are not closed under running maxima.
+Proof. For (a), fixc> 0. The first time that the running maximum reachesc is exactly the first
+time thatM reaches c. If this time is finite, every earlier value is belowc, whereas the crossing
+value is at leastc; henceMTc(M) =M Tc(M). Weak validity is therefore unchanged.
+For (b), letK >2, letB be an event withP (B) = 2/K, takeF1 trivial andF2 =σ(B), and define
+M0 = 0, M 1 = 1, M 2 =K1 B, M n = 0 (n≥3).
+If a stopping timeτ is not identically zero or one, triviality ofF1 forces τ≥ 2almost surely, and
+then
+E[Mτ]≤KP(B) = 2≤E[τ].
+12
+The casesτ≡0andτ≡1are immediate, soMis strong. At deterministic time two, however,
+E[M 2] =KP(B) +P(B c) = 3− 2K >2.
+ThusMis not strong.
+Thefailureisnotcosmetic. Takingmixturesoverbettingparametersiscentrale-detectorconstruction
+tool. Strong validity survives this operation automatically; weak validity does not. Weak e-detectors
+therefore provide an exact representation of ARL-valid stopping rules, but not a comparably robust
+recipe for building them.
+Convexity also yields a useful way to make the actual ARL finite and quantitatively close to the
+threshold while retaining a data-driven detector. Randomization enlarges the filtration, so we first
+record the stability statement that makes this operation legitimate.
+Lemma 5.6(Independent enlargement).Let M be a strongC-clockedP-e-process on(Ω,F, (Fn)).
+Let(Ω′,F′,(F′n),Q)carry independent auxiliary randomness, and equip the product space with
+~Fn :=F n⊗F′n, ~P:={P⊗Q:P∈P}.
+ViewingM and C as processes on the product space that do not depend onω′, M remains a strong
+C-clocked ~P-e-process.
+Proof. Let τ be a stopping time for the product filtration. For each fixedω′, the sectionτω′(ω) :=
+τ(ω,ω′)is an( Fn)-stopping time, because sections of{τ≤n}∈F n⊗F′n belong toFn. Strong
+clocked validity holds fiberwise, and Tonelli’s theorem gives
+EP⊗Q [Mτ] =
+∫
+EP [Mτω′]Q(dω′)≤
+∫
+EP [Cτω′]Q(dω′) =E P⊗Q [Cτ].
+Proposition 5.7(Exponential-clock ARL pinning).Let M be a strongP-e-detector on(Ω,F, (Fn)).
+On an auxiliary filtered space, letU1,U 2,... be i.i.d. Exp(1)under Q, revealed sequentially, and use
+the product filtration and product null class
+~P:={P⊗Q:P∈P}.
+Define
+Bn :=
+n∑
+j=1
+Uj, ~M (ρ)n := (1−ρ)M n +ρBn, ρ∈(0,1].
+Then the pulled-back processM, the auxiliary clockB, and~M (ρ) are strong~P-e-detectors. Moreover,
+for everyγ >0and every ~P=P⊗Q∈ ~P,
+γ≤E ~P
+[
+Tγ
+(
+~M (ρ)
+)]
+≤ γρ + 1.(29)
+In particular, takingρ= (1 +η) −1 gives
+γ≤E ~P
+[
+Tγ
+(
+~M (ρ)
+)]
+≤(1 +η)γ+ 1.
+13
+Proof. By Lemma 5.6,M remains strong on the product filtration. It is enough to verify validity of
+B at bounded stopping times. Ifτ≤N , then{τ≥n}∈ ~Fn−1, so it is independent of the fresh
+incrementU n. Tonelli’s theorem yields
+E~P [Bτ] =
+N∑
+n=1
+E~P [Un1{τ≥n}] =
+N∑
+n=1
+~P(τ≥n) =E ~P [τ].
+ThusB is strong by Lemma 2.1, and~M (ρ) is strong by Proposition 5.4. The lower bound in(29)
+follows from strong-e-detector soundness. SinceM≥0,
+Tγ
+(
+~M (ρ)
+)
+≤S γ/ρ := inf{n≥1 :B n≥γ/ρ}.
+The partial sumsBn are the arrival times of a unit-rate Poisson process, soSx has the same law as
+1 + Poisson(x), and henceE[Sx] =x+ 1. This proves the upper bound.
+SinceB n↑∞almost surely,
+Tγ
+(
+~M (ρ)
+)
+≤S γ/ρ <∞ ~P-almost surely,
+and more precisely
+~P
+(
+Tγ
+(
+~M (ρ)
+)
+>n
+)
+≤Q(B n<γ/ρ).
+Thus the auxiliary clock deliberately forces an eventual null alarm, even on paths where the
+data-driven component would never cross.
+5.2 A universality result for ARL control
+We now obtain the exact universality theorem for ordinary ARL control.
+Theorem 5.8(Universality of weak e-detectors).Fix b> 0and a stopping timeT. The following
+statements are equivalent.
+(i)inf P∈P EP [T]≥b.
+(ii)There exists a weakP-e-detectorMsuch thatT=T b(M).
+When(i)holds, one may take the canonical weak e-detector
+MT,bn :=b1{T≤n}, n≥0.(30)
+Proof.The implication (ii)⇒(i) is Theorem 5.2.
+For the converse, assume (i) and defineMT,b by (30). Adaptedness follows from the stopping-time
+property ofT. Pathwise, MT,bn = 0before T and equalsb from T onward, so its level-b crossing
+time is exactlyT.
+It remains to verify weak validity at an arbitrary levelc> 0. Ifc>b , the process never reachesc, so
+Tc(MT,b) =∞ and (26) is automatic. If0 <c≤b , thenTc(MT,b) =T. FixP∈P . If EP [T ] =∞,
+the desired inequality is again automatic. IfEP [T]<∞, thenT <∞almost surely and
+EP
+[
+MT,bTc(MT,b )] =b≤E P [T] =E P[Tc(MT,b)].
+ThusM T,b is weak.
+14
+Several points about Theorem 5.8 are worth recording.
+Remark5.9 (Level-free validity, scale-specific representation).The weak definition is level-free: one
+process must certify ARL at every threshold it crosses. The canonical witness for a target scaleb,
+however, is intentionally simple. It representsT at levelb, represents the sameT at all lower levels,
+and never crosses a higher level. The theorem is therefore a universality statement at each target
+scale; it does not claim that an arbitrary family of stopping rules indexed byb can be represented
+by one common process.
+Remark5.10 (Overshoots).The weak condition uses the actual stopped valueMTc(M), not merely
+the thresholdc. This accounts automatically for overshoot. The canonical indicator witness has no
+overshoot, but practical weak or strong e-detectors may.
+Corollary 5.11(Early-tail restrictions preclude ARL universality).For everyb> 1and γ <1,
+there exist a filtered probability space and an alarm timeTsuch that
+E[T]≥bbutP(T= 1)>γ.
+Consequently, no representation principle that imposes the same nontrivial upper boundP (T = 1)≤γ
+on every filtered probability space can be universal for ARL control.
+Proof. Take a space supporting a Bernoulli variable revealed at time one. Choosep∈ (γ, 1), let
+T = 1with probability p, and letT =L otherwise for an integerL large enough thatE[T ]≥b .
+The corollary rules out any universal class that retains a nontrivial common upper bound on
+first-step false-alarm probability. It does not make the weak definition logically minimal. At a fixed
+target scaleb, imposing the own-crossing inequality only at levelb would already suffice for the
+canonical representation. Requiring it at every level instead gives one process that is sound at every
+threshold, as in Theorem 5.2, without sacrificing scale-by-scale universality.
+6 Pros and cons of weak versus strong detectors
+Example 6.1(A sharp fast-start Gaussian tradeoff).Suppose that under the no-change law
+X1,X 2,...are i.i.d.N(0,1). Fixb≥2andp∈(1/b,1). At time one, raise an alarm when
+X1≥a:= Φ −1(1−p).
+Conditional on no alarm at time one, use the more conservative threshold
+c:= Φ−1(1−q), q:= 1−pb−1 ,
+and raise an alarm at the firstn≥ 2with Xn ≥c . The resulting alarm time T is a time-
+inhomogeneous Shewhart chart. Its null run length satisfies
+P∞(T= 1) =p, P ∞(T≥n) = (1−p)(1−q) n−2 (n≥2),
+and therefore
+E∞[T] = 1 + 1−pq =b.
+Becausep> 1/b, the chart violates Corollary 4.2 and has no strong e-detector representation at level
+b, although it has an exact weak representation. In fact, its maximal strong scale can be computed
+15
+exactly in the full data filtration. For any integrable stopping timeσ, the conditional null hazard is
+pat time one andqthereafter, so
+P∞(T≤σ) =pP ∞(σ≥1) +q
+∞∑
+n=2
+P∞(σ≥n, T≥n)
+≤p
+∞∑
+n=1
+P∞(σ≥n) =pE ∞[σ],
+becauseq <p. Henceb ∗P∞(T)≥1/p, whileσ≡1attains equality. Therefore
+b∗P∞(T) = 1p.(31)
+Thus a chart with ARLbcan be strongly representable only at the much smaller scale1/p.
+For an immediate shift toN(µ,1),µ>0, define
+βµ(r) := 1−Φ
+(
+Φ−1(1−r)−µ ),
+the power of the most powerful size-r test ofN(0, 1)against N(µ, 1). Every strongly representable
+rule at scaleb obeys P∞(T = 1)≤ 1/b. Hence, when the time-one information consists ofX1 and
+an independent randomizer, the Neyman–Pearson lemma (Neyman and Pearson, 1933) gives
+P1,µ(T= 1)≤β µ(1/b).(32)
+The fast-start chart has first-observation powerβµ(p)>β µ(1/b). The stationary Shewhart chart with
+null hazard1/b attains the upper bound in(32), soβµ(1/b)is exactly the maximum first-observation
+power over the strong class in this experiment.
+The same calculation identifies the price under Lorden’s criterion. LetPν,µ denote the law with a
+change toN(µ,1)at timeν, and write
+DL(T) := sup
+ν≥1
+ess supEν,µ
+[
+(T−ν+ 1) +|F ν−1
+]
+.
+Sincep>1/b,
+q= 1−pb−1 < 1b,
+so the post-change success probability after time one isβµ(q)<β µ(1/b). Conditional on survival to
+any changepointν≥ 2, the remaining delay is geometric with mean1/βµ(q). Atν = 1, its mean is
+1 + 1−β µ(p)βµ(q) ≤ 1βµ(q).
+Consequently the Lorden worst-case delay of the fast-start chart is
+DL(T) = 1βµ(q) > 1βµ(1/b),(33)
+where the right-hand side is the Lorden delay of the stationary strong chart.
+In summary, when comparing the same pair of charts,the extra freedom provided by the weak e-
+detector can strictly improve immediate-change power, but it strictly worsens the minimax criterion.
+16
+For example, takeb = 100,p = 0.1, andµ = 1. Thena≈ 1.282, q≈ 0.00909, andc≈ 2.362. The
+immediate-change power is
+β1(0.1)≈0.389,
+whereas the maximum over all strongly representable rules is
+β1(0.01)≈0.0924.
+The continuation power isβ1(q)≈ 0.0866, giving Lorden delay approximately11.5, compared with
+approximately10.8for the stationary strong chart. This is a precise startup-versus-minimax tradeoff,
+closely related to the fast-initial-response and head-start principles studied for CUSUM charts by
+Lucas and Crosier (1982). The weak rule can approach perfect first-observation power: asp↑ 1, the
+power βµ(p)↑ 1, while every scale-b strong rule remains capped at the fixed valueβµ(1/b). The
+price is explicit:q↓0, so the Lorden delay in (33) diverges.
+The Gaussian example proves that the weak–strong gap is statistically active for immediate-change
+power, while also showing that this particular use of the extra freedom is counterproductive under
+Lorden’s minimax criterion.
+The phenomenon is completely general. For anyb> 1and any p∈ (1/b, 1), choose a sufficiently
+large integerL and letT = 1with probability p and T = L otherwise. Then E[T ]≥b , while
+P (T = 1) = p >1/b. The large late value subsidizes an arbitrarily aggressive early false-alarm
+probability.
+7 Own level-crossing validity does not recover optional validity
+One might wonder whether restricting attention to a process’s own level crossings is somehow
+sufficient to recover an all-stopping-times property. It is not. The distinction already appears for
+e-processes in a two-point example.
+Call a nonnegative adapted processE = (En)n≥0, with E0 = 1, anown-crossing e-certificate.
+The normalizationE0 = 1is conventional for this comparison; ordinary e-processes, including the
+canonical indicator process in(1), need only satisfyE[E0]≤ 1and may start at zero. We require
+that, for everyc>1,
+EP
+[
+E†τc(E)]≤1, τ c(E) := inf{n≥1 :E n≥c}.(34)
+Every e-process is an own-crossing e-certificate, because the e-process inequality may be evaluated
+atτ c(E). The converse fails.
+Example 7.1(Own crossings miss a fixed-time violation).LetY∼Bernoulli (1/2), revealY at
+time one, setE0 = 1, and for everyn≥1let
+En :=
+{
+1.3, Y= 1,
+0.9, Y= 0.
+For1<c≤1.3, the process crossescat time one only on{Y= 1}, so
+E[E†τc(E)] = 1.3· 12 = 0.65≤1.
+17
+Forc> 1.3, it never crosses and the left side is zero. HenceE is an own-crossing e-certificate. It is
+not an e-process, because the deterministic stopping timeτ≡1gives
+E[E1] = 12(1.3) + 12(0.9) = 1.1>1.
+The own-crossing condition ignores the branch on which the process remains below the threshold.
+A fixed-time expectation sees both branches. The same mechanism separates weak from strong
+e-detectors: weak validity controls precisely the stopped values needed for the process’s own ARL
+guarantees, while strong validity controls every way an observer might choose a horizon after seeing
+the data.
+This example also clarifies the nature of the weak universality theorem. Weak e-detectors are not
+an alternative characterization of strong e-detectors, just as own-crossing e-certificates are not an
+alternative characterization of e-processes. They are the exact objects associated with a weaker
+target guarantee.
+8 The exact universality class of strong e-detectors
+Proposition 4.1 gives a necessary condition for representability by a strong e-detector. It is also
+sufficient.
+Definition 8.1(Optional-horizon linear false-alarm control).Fix b> 0. A stopping timeT has
+optional-horizon linear false-alarm control at scaleb overP if, for everyP∈P and every stopping
+timeσ,
+P(T≤σ)≤ EP [σ]b .(35)
+The terminology in Definition 8.1 is descriptive rather than standard. The key feature is that
+the comparison horizon may be data-dependent. Takingσ≡t gives the deterministic linear tail
+inequality
+P(T≤t)≤ tb, t∈N.(36)
+Takingσ=Tshows that optional-horizon control includes ordinary ARL control.
+Proposition 8.2(Optional-horizon control implies ARL).IfTsatisfies(35), then
+inf
+P∈P
+EP [T]≥b.
+Proof. Fix P. If EP [T ] =∞, the claim is immediate. Otherwise,T is an admissible choice ofσ and
+P(T≤T) = 1, so1≤E P [T]/b.
+We can now state the second exact representation theorem.
+Theorem 8.3(Universality of strong e-detectors).Fix b> 0and a stopping timeT. The following
+statements are equivalent.
+(i)Thas optional-horizon linear false-alarm control at scaleb, as in(35).
+(ii)There exists a strongP-e-detectorMsuch thatT=T b(M).
+18
+When(i)holds, the canonical process
+MT,bn :=b1{T≤n}(37)
+is a strongP-e-detector and crosses levelbexactly atT.
+Proof.The implication (ii)⇒(i) is Proposition 4.1.
+For the converse, assume (i) and defineMT,b by (37). As in the proof of Theorem 5.8, the level-b
+crossing time is exactlyT. Now fixP∈P and an integrable stopping timeτ. Sinceτ <∞ almost
+surely,
+MT,bτ =b1{T≤τ}.
+Therefore, by optional-horizon control,
+EP [MT,bτ ] =bP(T≤τ)≤E P [τ].
+ThusM T,b is strong.
+The theorem identifies the precise “tail bound in addition to ARL” that recovers the original
+e-detector. Importantly, the deterministic family(36) is not sufficient; one needs its optional-horizon
+strengthening.
+8.1 Optimal stopping and the maximal strong scale
+For a fixed null lawP, define the optimal-stopping value
+VPb (T) := sup
+σbounded
+EP [b1{T≤σ}−σ].(38)
+The horizonσ≡0is admissible and alarm times are positive, soV Pb (T)≥0.
+Proposition 8.4(Optimal-stopping formulation).For an alarm time T and a scaleb >0, the
+following are equivalent for a null lawP:
+(i)Thas optional-horizon linear false-alarm control at scalebunderP;
+(ii)V Pb (T) = 0;
+(iii)b≤b ∗P (T).
+Thus “stop immediately” solves the optimal-stopping problem with rewardb1{T≤n}−n exactly
+whenTis strongly representable at scaleb.
+Proof.Optional-horizon control is equivalent, by Lemma 2.1, to
+EP [b1{T≤σ}−σ]≤0
+for every bounded stopping time. Since the zero horizon attains zero, this is equivalent toVPb (T ) = 0.
+Equivalence with (iii) is Proposition 4.4, and equivalence with strong representation is Theorem 8.3.
+The quantityb∗P (T )is therefore a ratio-form optimal-stopping value. Unlike ARL, it is filtration-
+sensitive: an observer may lower the ratio by spending monitoring time selectively on histories on
+which the alarm is likely. For Markovian charts, the numerator and denominator can be handled by
+standard fractional optimal-stopping or dynamic-programming methods.
+19
+8.2 Which run-length laws are strongly representable?
+Optional-horizon validity is a property of a stopping time together with its filtration, not merely of
+its marginal law. Nevertheless, the law admits an exact characterization when no information is
+available beyond whether the alarm has already occurred. Define theminimal alarm filtration
+GTn :=σ({T≤j}: 1≤j≤n ), n∈N 0.(39)
+Before the alarm, the surviving set{T≥n}is a single atom ofG Tn−1.
+Lemma 8.5(Horizons in the minimal alarm filtration).Ifσ is a stopping time for(GTn ), then there
+is a deterministicm∈N 0∪{∞}such that
+σ∧T=T∧m.(40)
+Proof.For everyn≥1,
+{σ∧T≥n}={σ≥n}∩{T≥n}∈G Tn−1.
+Because{T≥n}is an atom ofG Tn−1, this event is either empty or all of{T≥n}. Define
+m:= sup{n≥0 :{σ∧T≥j}={T≥j}for everyj≤n}.
+If the first failure occurs atm + 1, then{σ∧T≥m + 1} = ∅ while{T≥m + 1}̸ = ∅; because the
+left-hand events decrease, they remain empty thereafter, even if{T≥n} later also becomes empty.
+Hence
+{σ∧T≥n}=
+{
+{T≥n}, n≤m,
+∅, n>m,
+which is exactly the tail-event description ofT∧m.
+Theorem 8.6(Truncated-mean characterization of strong run-length laws).Fix b >0and an
+alarm timeT.
+(a)Strong representability at scalebimplies, for everyP∈Pand everym∈N,
+bP(T≤m)≤E P [T∧m].(41)
+(b) If the working filtration is the minimal alarm filtration(GTn ), then(41) for everyP∈P and
+m∈N is equivalent to optional-horizon linear false-alarm control at scaleb, and hence to
+strong e-detector representability at levelb. The canonical representative isMn =b1{T≤n} .
+Consequently, a probability law onN∪{∞} is the null run-length law of some strong e-detector at
+scaleb, on its own natural alarm filtration, if and only if it satisfies(41).
+Proof. For (a), apply optional-horizon control to the bounded stopping timeσ = T∧m . Since
+{T≤T∧m}={T≤m}, this gives (41).
+For (b), necessity follows from part (a). Conversely, letσ be any integrable(GTn )-stopping time.
+Replacing σ by σ∧T preserves the event{T≤σ} and can only reduce its expectation. By
+20
+Lemma 8.5,σ∧T =T∧m for some deterministicm∈N 0∪{∞}. Ifm = 0, thenP (T≤σ ) = 0
+because alarm times are positive. If1≤m<∞, then
+bP(T≤σ) =bP(T≤m)≤E P [T∧m] =E P [σ∧T]≤E P [σ].
+Ifm=∞, thenσ∧T=T. Letting the finite truncation level tend to infinity in (41) gives
+bP(T <∞)≤E P [T] =E P [σ∧T]≤E P [σ]
+by monotone convergence. ThusT has optional-horizon control, and Theorem 8.3 supplies the
+canonical strong representative.
+Corollary 8.7(Strong scale in the minimal alarm filtration).Under the minimal alarm filtration
+and a fixed null lawP,
+b∗P (T) = infm∈N∪{∞}
+P(T≤m)>0
+EP [T∧m]
+P(T≤m) .(42)
+Equivalently,
+VPb (T) = sup
+m∈N0
+{bP(T≤m)−E P [T∧m]}.(43)
+Proof. Replacing any horizonσ byσ∧T preserves{T≤σ} and weakly decreases its expectation.
+By Lemma 8.5, the replacement equalsT∧m for a deterministicm. Substitution into(24) and (38)
+proves both formulas; the casem=∞follows by monotone convergence.
+The condition has a useful budget interpretation. For one null law, write
+Dm :=E[T∧m]−bP(T≤m) =
+m∑
+n=1
+(
+P(T≥n)−bP(T=n)
+)
+.(44)
+Ifh n =P(T=n|T≥n), then
+Dm =
+m∑
+n=1
+P(T≥n)(1−bh n).
+Strong representability under the minimal filtration is exactly the requirement that the cumulative
+reserveDm never become negative. A hazard may exceed1/b at some time, provided earlier low
+hazards have accumulated enough reserve. Forb≥ 1, the geometric law with hazard1/b hasDm = 0
+for everym. Conversely, equality at every horizon forces, after differencing successive equalities,
+P(T=n) = 1bP(T≥n),
+so the geometric law is unique. By contrast, for integer b, the deterministic lawT≡b first
+accumulates reserve and then spends it in one step.
+There is also a classical reliability-theoretic interpretation. Suppose the run length is exactly
+calibrated, withµ:=E[T] =b<∞, and define its discrete equilibrium lifetimeT eq by
+P(T eq =n) := P(T≥n)µ , n≥1.
+21
+Then
+P(T eq≤m) = E[T∧m]µ ,
+so (41) is equivalent toT≥ stT eq. This is precisely the discrete new-better-than-used-in-expectation
+(NBUE) condition; see Marshall and Olkin (2007); Nair et al. (2012). Hence, among null run lengths
+with exact meanb, strong representability on the natural alarm filtration is equivalent to NBUE.
+The geometric law is the boundary case, while deterministic run lengths are strict NBUE examples.
+The truncated inequalities immediately imply both familiar consequences:
+bP(T≤m)≤E[T∧m]≤m
+gives the linear deterministic tail bound, while lettingm→∞ gives the ARL bound. Atm = 1,
+the inequality already rules out the early-alarm lottery in Example 4.5. More strongly, the family is
+strictly stronger than the deterministic tail and ARL requirements taken together: in Example 8.13,
+b = 10, P (T≤ 5) = 1/2, and E[T∧ 5] = 4, so(41) fails even though every deterministic tail bound
+and the ARL constraint hold.
+Corollary 8.8(Rigidity at a saturated deterministic horizon).IfT is strongly representable at
+scaleband
+P(T≤m) = mb
+for somem∈N, thenT≥malmost surely and
+P(T=m) = mb .
+Thus the linear tail envelope can be saturated at a horizon only by a rule that never alarms before
+that horizon.
+Proof.Strong representability gives
+m=bP(T≤m)≤E[T∧m]≤m.
+Equality throughout forcesT∧m =m almost surely, henceT≥m . Therefore{T≤m} ={T =
+m}.
+Example 8.9(A deterministic strong run length).Letb∈N , setT≡b , and defineMn =b1{n≥b} .
+For every integrable stopping timeτ,
+E[Mτ] =bP(τ≥b)≤E[τ],
+because τ≥b on{τ≥b} . Thus M is strong and its level-b crossing time is the deterministic
+valueb. In particular, optional-horizon validity alone does not force a geometric or approximately
+exponential null run length.
+The filtration qualification in Theorem 8.6 is essential. Letb = 10and let T equal5or15, each
+with probability one half. Its law satisfies (41): for5≤m<15, both sides are bounded by
+10P(T≤m) = 5≤ 5 +m2 =E[T∧m],
+22
+and equality holds oncem≥ 15. Hence the law is strongly representable under its minimal alarm
+filtration. If, however, the branch indicator is revealed at time one, the horizonσ = 5on {T = 5}
+andσ= 1on{T= 15}is a stopping time with
+P(T≤σ) = 12 > 310 = E[σ]10 .
+The same marginal law therefore fails strong validity in the enriched filtration. Optional-horizon
+control is sensitive to anticipatory side information in exactly the way its definition suggests.
+8.3 Snell envelopes and martingale domination
+Strong validity has a checkable optimal-stopping characterization. The following clocked version is
+the e-detector analogue of martingale-domination results for anytime-valid inference, and its proof
+uses the Snell-envelope mechanism emphasized by Ramdas et al. (2022).
+Theorem 8.10(Snell and martingale domination).Fix P∈P . LetC be a clock withC0 = 0and
+EP [Cn]<∞ for every finiten, and letM be nonnegative and adapted withM0 = 0. The following
+are equivalent.
+(i)Mis a strongC-clockedP-e-process.
+(ii)There exists an integrableP-supermartingaleY= (Y n)n≥0 such that
+Y0 = 0, M n−Cn≤Y n P-almost surely for everyn.(45)
+(iii)There exists an integrableP-martingaleL= (L n)n≥0 such that
+L0 = 0, M n≤C n +Ln P-almost surely for everyn.(46)
+For the calendar clockCn =n, this characterizes strong e-detectors.
+For a composite null class, the theorem applies pointwise and yields a possibly different majorant
+YP orLP for everyP∈P . It does not supply one process that is simultaneously a supermartingale
+or martingale under all null laws. Without additional structure, such a common majorant cannot
+generally be expected; this parallels the distinction between pointwise and common supermartingale
+domination for composite-null e-processes (Ruf et al., 2023).
+Proof. Assume (i) and writeXn =Mn−Cn. Strong clocked validity at deterministic timej gives
+EP [Mj]≤E P [Cj]<∞. Consequently, for every finiteN,
+EP
+[
+max
+0≤j≤N
+|Xj|
+]
+≤
+N∑
+j=0
+EP [Mj +Cj]<∞.
+Thus the finite-horizon Snell envelopes below are well defined and admit optimal stopping times.
+For integersN≥n, let
+Y (N)n := ess sup
+τ:n≤τ≤N
+EP [Xτ|F n].
+This process dominatesXn and is a supermartingale overn≤N.
+23
+Letτ∗n,N be an optimal finite-horizon stopping time and putA ={Y (N)n > 0}∈F n. Stop atτ∗n,N on
+Aand atnonA c. Strong clocked validity gives
+0≥E P
+[
+1AY (N)n +1AcXn],
+so
+EP [(Y (N)n )+]≤E P [X−n ]≤E P [Cn].
+AlsoY (N)n ≥X n≥−C n. SinceY (N)n is nondecreasing inN, the limit
+Yn := limN→∞Y (N)n
+is finite and integrable. Conditional Fatou’s lemma, using the integrable lower bound−Cn+1, shows
+that Yn≥E P [Yn+1|F n]. ThusY is a supermartingale and dominatesX. At time zero,X0 = 0.
+The same pasting argument with fallback time zero givesY (N)0 ≤ 0, while immediate stopping gives
+Y (N)0 ≥0; henceY 0 = 0. This proves (ii).
+By the discrete-time Doob decomposition, an integrable supermartingale withY0 = 0can be
+written asY =L−A , whereL is an integrable martingale withL0 = 0and A is predictable and
+nondecreasing withA 0 = 0. HenceY≤L, and (ii) implies (iii).
+Finally, suppose (iii) holds. For every bounded stopping timeτ, optional sampling gives
+EP [Mτ]≤E P [Cτ] +EP [Lτ] =E P [Cτ].
+Clocked localization extends the inequality to arbitrary stopping times, proving (i).
+Corollary 8.11(General-filtration certificate for a run length).An alarm time T is strongly
+representable at scaleb under P if and only if there exists an integrable martingaleL, withL0 = 0,
+such that
+b1{T≤n}≤n+L n P-almost surely for everyn.
+Equivalently, the reward processb1{T≤n}−n has a supermartingale majorant starting from zero.
+This is the Snell certificate for the optimal-stopping formulation in Proposition 8.4.
+Remark8.12 (A sufficient drift condition, but not a characterization).IfMn−n is itself a supermartin-
+gale, then Theorem 8.10 applies withYn =Mn−n. For the canonical detectorMn =b1{T≤n} ,
+the one-step drift condition
+P(T=n|F n−1)≤b −11{T≥n}
+implies exactly this supermartingale property. The converse fails, so the Snell envelope is doing
+genuine work. For example, let
+M0 = 0, M 1 = 0, M 2 = 2, M n = 0 (n≥3).
+ThenM τ = 21{τ= 2}, soE[M τ]≤E[τ]for every stopping time andMis strong. Yet
+E[M2−2|F 1] = 0>−1 =M 1−1,
+soM n−nis not a supermartingale.
+The domination theorem makes convexity transparent: convex combinations of martingale or
+supermartingale majorants remain valid majorants. No analogous all-horizon certificate exists for
+the weak class, consistent with Propositions 5.4 and 5.5.
+24
+8.4 Deterministic-horizon bounds are not enough
+Example 8.13(A deterministic tail bound defeated by an adaptive horizon).Letα = 0.1, so
+b = 10. Let V∼Bernoulli (1/2), letU be independent and uniform on{1, 2, 3, 4, 5}, and reveal
+(U,V)at time one. Define
+T:=
+{
+U, V= 1,
+20, V= 0.
+Then for1≤t≤5,
+P(T≤t) = 12t5 = 0.1t,
+while for5 < t <20, P (T≤t ) = 1/2≤ 0.1t, and fort≥ 20, P (T≤t ) = 1 ≤ 0.1t. Thus the
+deterministic boundP(T≤t)≤t/10holds at every time. Also,
+E[T] = 12·3 + 12·20 = 11.5≥10.
+Now choose the data-dependent stopping horizon
+σ:=
+{
+5, V= 1,
+1, V= 0.
+This is a stopping time becauseV is observed at time one. On{V = 1}, one always hasT =U≤
+5 =σ; on{V= 0}, one hasT= 20>1 =σ. Consequently,
+P(T≤σ) = 12, E[σ]10 = 12·5 + 12·110 = 0.3.
+The optional-horizon inequality fails. By Theorem 5.8,T is representable by a weak e-detector; by
+Theorem 8.3, it is not representable by a strong one.
+The adaptive horizon spends more observation time on the branch where an alarm is likely and
+stops quickly on the other branch. No deterministic horizon can express this selection effect. This is
+exactly the distinction between a collection of marginal tail inequalities and an optional-stopping
+guarantee.
+8.5 A sufficient conditional-hazard condition
+Optional-horizon control may initially look difficult to verify. A simple conditional hazard condition
+is sufficient and gives a familiar example.
+Proposition 8.14(Bounded conditional false-alarm hazard).Let b> 0, and suppose that for every
+P∈Pand everyn≥1,
+P(T=n|F n−1)≤ 1b 1{T≥n}P-almost surely.(47)
+1 ThenThas optional-horizon linear false-alarm control at scaleb.
+1For an upper bound, the at-risk indicator is algebraically redundant because the stopping-time property already
+forces P (T =n|F n−1) = 0on {T <n}. We retain it to display the hazard interpretation. In the lower bound of
+(48), the indicator is essential.
+25
+Proof. Fix P and an integrable stopping timeσ. The event{σ≥n} belongs toFn−1. By Tonelli’s
+theorem and (47),
+P(T≤σ) =
+∞∑
+n=1
+EP
+[
+1{σ≥n}1{T=n}
+]
+=
+∞∑
+n=1
+EP [1{σ≥n}P(T=n|F n−1)]
+≤ 1b ∞∑n=1P(σ≥n, T≥n)
+≤ 1b ∞∑n=1P(σ≥n) = EP [σ]b .
+Example 8.15(Geometric false alarms).Let b≥ 1. Suppose that under every null law the
+procedure alarms at each time with conditional probability1/b, given survival to that time. ThenT
+is geometric with meanb, (47) holds with equality, and the canonical indicator processb1{T≤n}
+is a strong e-detector. Notice thatP (T <∞) = 1: strong e-detector validity is compatible with
+eventual false alarm almost surely, unlike e-process/PFA validity. What it controls is the rate at
+which false-alarm probability can be accumulated, including after optional selection of the horizon.
+Proposition 8.16(Nonasymptotic geometric sandwich).Suppose constants0 ≤q ≤q≤ 1satisfy,
+for everyn≥1,
+q 1{T≥n}≤P(T=n|F n−1)≤ q1{T≥n}P-almost surely.(48)
+Then
+(1− q)n≤P(T >n)≤(1−q )n, n≥0.(49)
+In particular, an upper hazard bound1/b, withb≥ 1, implies thatT stochastically dominates a
+geometric random variable of meanb. If additionally E[T ] = b, thenP (T > n) = (1− 1/b)n for
+everyn, and the null run length is exactly geometric.
+Proof. Since{T≥n}∈F n−1, subtracting the conditional probability of{T =n} from1{T≥n}
+gives
+(1− q)1{T≥n}≤E[1{T >n}|F n−1]≤(1−q )1{T≥n}.
+Take expectations and iterate. For the last claim, the one-sided bound givesP (T >n)≥ (1− 1/b)n.
+Summing overn≥0givesE[T]≥b. Equality of the sums forces equality term by term.
+The geometric sandwich is stronger than the linear deterministic boundP (T≤t )≤t/b . It gives a
+finite-sample route to the approximately exponential run-length behavior studied asymptotically
+by Pollak and Tartakovsky (2009a). The optional-horizon inequality alone does not imply such
+exponentiality: Example 8.9 is a strong e-detector whose run length is a point mass.
+26
+9 Discussion
+9.1 On weak versus strong e-detectors
+The clock theorems give two exact correspondences. Expected-clock lower bounds are represented by
+weak own-crossing objects; optional-clock false-alarm bounds are represented by strong all-stopping-
+times objects. For calendar time, these become ARL control and optional-horizon linear false-alarm
+control, respectively.
+The canonical weak detectorb1{T≤n} proves formal completeness, but its validity condition is
+close to the ARL statement it certifies. It is zero before the alarm, supplies no graded evidence, and
+does not simplify verification of a pre-existing rule. More importantly, Proposition 5.4 shows that
+weak e-detectors are not stable under averaging. Weak detectors can always be put in nondecreasing
+form by taking running maxima, but Proposition 5.5 shows that this operation need not preserve
+strong validity. These asymmetric closure properties reinforce the same conclusion: the weak class
+is a representation language, not a robust algebra for constructing procedures.
+Strong e-detectors are different. Their all-horizon inequality is convex, survives independent
+enlargement by Lemma 5.6, is preserved by the aggregation operations used in Shin et al. (2024),
+and has the optimal-stopping and martingale certificates in Proposition 8.4 and Theorem 8.10.
+The canonical strong indicator remains degenerate, but the class contains nondegenerate evidence-
+accumulating procedures with favorable detection delay.
+9.2 The operational content of strong validity
+Every strong e-detector threshold obeysP (Tb≤t )≤t/b at fixed horizons and the optional-horizon
+inequality at data-dependent horizons. Hence any e-detector-based CUSUM, Shiryaev–Roberts, or
+mixture procedure automatically avoids the extreme front-loading permitted by an ARL constraint.
+This matters in deployments with a finite mission, batch, or monitoring window, and it addresses
+the concern that a large ARL can conceal high early false-alarm risk (Mei, 2008).
+The maximal strong scale makes the protection quantitative. The largest scale at which a given rule
+can be advertised as strongly valid is
+b∗P (T) = infσ EP [σ]P(T≤σ) ,
+whereas the largest weak scale is its ARL. ThusEP [T ]/b∗P (T )measures how much of the nominal
+ARL is created by histories that an adaptive horizon can avoid. For the fast-start chart,b∗P (T ) = 1/p:
+atb= 100andp= 0.1, an ARL of100supports only strong calibration at scale10.
+The self-censoring horizonsTb∧malready give the sharper diagnostic
+bP(Tb≤m)≤E[T b∧m].
+Under the minimal alarm filtration, Theorem 8.6 shows that these inequalities are not merely
+consequences but a complete characterization of the attainable run-length laws. The reserve
+process in(44) distinguishes a geometric rule, which spends its budget locally at every step, from a
+deterministic rule, which can accumulate budget and spend it later. Corollary 8.8 adds a sharp
+no-front-loading statement: if the linear tail envelope is saturated at one horizon, then the procedure
+cannot alarm before that horizon.
+27
+Optional-horizon control may be read as an ARL analogue of anytime validity. An observer may
+allocate more monitoring time to sample paths that appear likely to alarm and less time elsewhere,
+as in Example 8.13. A strong e-detector remains valid under every such allocation. The clock view
+makes the distinction concise: an e-process has a fixed unit budget; an e-detector receives one unit
+of budget per expected unit of monitored time.
+The exponential-clock construction in Proposition 5.7 supplies a complementary practical point.
+Convexity and stability under independent enlargement permit a nondegenerate data-driven strong
+detector to be mixed with an external random clock, producing an actual ARL in[γ, (1 +η)γ + 1]
+rather than only a lower bound. The price is explicit: the auxiliary component forces an eventual
+null crossing and places a Poisson-tail upper bound on the run length, so the mixture should be
+understood as calibrated regularization rather than free additional evidence.
+9.3 Does the weak–strong gap buy detection power?
+Example 6.1 gives an exact rather than benchmark-dependent separation. At the same ARL, its
+first-observation power exceeds the maximum possible for every strongly representable rule in the
+Gaussian shift experiment. Indeed, asp↑ 1, this power approaches one while the strong-class
+optimum remains fixed atβµ(1/b). Thus the weak rule can approach the maximal possible power
+one while the strong-class optimum stays fixed strictly below one. Its price is equally stark: the
+continuation hazard tends to zero and the Lorden delay diverges. Thus the weak freedom is provably
+active for an immediate change and provably harmful for this particular minimax comparison.
+Existing strong e-detector constructions can attain first-order asymptotically optimal delay in broad
+nonparametric and composite settings (Shin et al., 2024; Ram and Ramdas, 2026), so strong validity
+need not impose a first-order asymptotic cost in those models.
+The weak representation theorem is scale-specific. For eachb, it produces a process representing
+one ARL-validT at levelb. A whole family{Tb}b>0 need not be realizable as all thresholds of
+one weak detector, even whenE[Tb]≥b for everyb. Appendix G gives an exact characterization:
+pathwise threshold coherence is necessary, and the canonical running level must satisfy an additional
+overshoot inequality. This simultaneous-family problem is a more stringent and genuinely nontrivial
+notion of universality.
+The appendices also show that conjunctions of validity criteria need not require a new canonical
+statistic. ARL and a deterministic tail envelope are represented by the same indicator process,
+provided it satisfies both an own-crossing budget and a fixed-time running-maximum budget; see
+Appendix H. Restart-indexed criteria reveal another useful boundary: weak residual ARL has its
+own field representation, whereas requiring strong validity after every observed history is exactly
+equivalent to conditional hazard control; see Appendix E.
+10 Conclusion
+The appropriate universal object for change detection depends on the false-alarm criterion. A
+general budget clock makes this dependence explicit. Optional-clock false-alarm control is equivalent
+to thresholding a strong clocked e-process, while an expected-clock lower bound is equivalent to
+thresholding a weak own-crossing object.
+For the calendar-time clock, the original e-detectors of Shin et al. (2024) exactly represent the
+28
+alarm times satisfying optional-horizon linear false-alarm control. Their thresholds therefore obey
+nontrivial lower-tail guarantees at every deterministic and data-dependent horizon; they cannot hide
+aggressive startup false alarms behind a long right tail. The maximal strong scaleb∗(T )quantifies
+the largest defensible strong calibration of any rule. Under the minimal filtration generated by the
+alarm, the sharp truncated-mean inequalitiesbP (T≤m )≤E [T∧m ]completely characterize the
+possible null run-length laws, equivalently through an NBUE condition at exact calibration. The
+geometric law balances this inequality at every horizon, but deterministic and other nongeometric
+laws are also possible.
+Weak e-detectors exactly represent the larger class of ARL-controlled alarm times. This extra
+freedom is statistically real: the fast-start Gaussian chart can drive immediate-change power
+arbitrarily close to one while retaining a fixed ARL, beyond the sharp strong-class cap, but its
+maximal strong scale collapses and its Lorden delay diverges. Thus ARL alone permits an explicit
+startup-versus-minimax tradeoff that optional-horizon control rules out.
+The notions also differ structurally. Strong e-detectors are convex, stable under independent
+randomization, and admit Snell-envelope, supermartingale, and martingale-domination certificates.
+Their convexity supports nondegenerate exponential-clock calibration with explicit two-sided ARL
+bounds. Weak e-detectors are not convex, although they admit monotone normalization; conversely,
+running maxima can destroy strong validity. Weak universality should therefore be understood
+as formal completeness rather than as a general construction method. Bare ARL is sufficiently
+weak to admit a universal certificate but too weak to force a useful algebra of certificates. The
+stronger optional-horizon criterion is what supports operational protection, interpretable run-length
+restrictions, and constructive e-detector methodology.
+Acknowledgments
+The author thanks Ashwin Ram for useful technical conversations and feedback on an early preprint.
+AI tools were used for developing some of the extensions in the Appendix, some exposition, and
+creating some illuminating examples, but the author takes responsibility for their correctness.
+References
+M. Basseville and I. V. Nikiforov.Detection of Abrupt Changes: Theory and Application. Prentice
+Hall, Englewood Cliffs, NJ, 1993.
+D. Brook and D. A. Evans. An approach to the probability distribution of CUSUM run length.
+Biometrika, 59(3):539–549, 1972. doi: 10.1093/biomet/59.3.539.
+T. L. Lai. Sequential changepoint detection in quality control and dynamical systems.Journal of the
+Royal Statistical Society: Series B, 57(4):613–644, 1995. doi: 10.1111/j.2517-6161.1995.tb02052.x.
+G. Lorden. Procedures for reacting to a change in distribution.The Annals of Mathematical
+Statistics, 42(6):1897–1908, 1971. doi: 10.1214/aoms/1177693055.
+J. M. Lucas and R. B. Crosier. Fast initial response for CUSUM quality-control schemes: Give your
+CUSUM a head start.Technometrics, 24(3):199–205, 1982. doi: 10.1080/00401706.1982.10487759.
+A. W. Marshall and I. Olkin.Life Distributions: Structure of Nonparametric, Semiparametric, and
+Parametric Families. Springer, New York, 2007. doi: 10.1007/978-0-387-68477-2.
+29
+Y. Mei. Sequential change-point detection when unknown parameters are present in the pre-change
+distribution.The Annals of Statistics, 34(1):92–122, 2006. doi: 10.1214/009053605000000859.
+Y. Mei. Is average run length to false alarm always an informative criterion?Sequential Analysis,
+27(4):354–376, 2008. doi: 10.1080/07474940802445790.
+T. L. Molloy and J. J. Ford. Misspecified and asymptotically minimax robust quickest
+change detection.IEEE Transactions on Signal Processing, 65(21):5730–5742, 2017. doi:
+10.1109/TSP.2017.2740202.
+G. V. Moustakides. Optimal stopping times for detecting changes in distributions.The Annals of
+Statistics, 14(4):1379–1387, 1986. doi: 10.1214/aos/1176350164.
+N. U. Nair, P. G. Sankaran, and M. Preeth. Reliability aspects of discrete equilibrium dis-
+tributions.Communications in Statistics—Theory and Methods, 41(3):500–515, 2012. doi:
+10.1080/03610926.2010.529525.
+J. Neyman and E. S. Pearson. On the problem of the most efficient tests of statistical hypotheses.
+Philosophical Transactions of the Royal Society of London. Series A, 231:289–337, 1933. doi:
+10.1098/rsta.1933.0009.
+K. Nishina and S. Nishiyuki. False alarm probability function of CUSUM charts.Stochastics and
+Quality Control, 18(1):101–112, 2003. doi: 10.1515/EQC.2003.101.
+E. S. Page. Continuous inspection schemes.Biometrika, 41(1/2):100–115, 1954. doi:
+10.1093/biomet/41.1-2.100.
+S. M. Pergamenchtchikov and A. G. Tartakovsky. Asymptotically optimal pointwise and minimax
+quickest change-point detection for dependent data.Statistical Inference for Stochastic Processes,
+21(1):217–259, 2018. doi: 10.1007/s11203-016-9149-x.
+M. Pollak. Optimal detection of a change in distribution.The Annals of Statistics, 13(1):206–227,
+1985. doi: 10.1214/aos/1176346587.
+M. Pollak and A. G. Tartakovsky. Asymptotic exponentiality of the distribution of first exit times for
+a class of Markov processes with applications to quickest change detection.Theory of Probability
+and Its Applications, 53(3):430–442, 2009. doi: 10.1137/S0040585X97983742.
+M. Pollak and A. G. Tartakovsky. Optimality properties of the Shiryaev–Roberts procedure.
+Statistica Sinica, 19(4):1729–1739, 2009.
+A. S. Polunchenko and A. G. Tartakovsky. On optimality of the Shiryaev–Roberts procedure
+for detecting a change in distribution.The Annals of Statistics, 38(6):3445–3457, 2010. doi:
+10.1214/09-AOS775.
+H. V. Poor and O. Hadjiliadis.Quickest Detection. Cambridge University Press, Cambridge, 2008.
+doi: 10.1017/CBO9780511754678.
+A. Ram and A. Ramdas. Asymptotically optimal sequential change detection for bounded means.
+arXiv preprint arXiv:2602.05272, 2026. arXiv:2602.05272.
+A. Ramdas, J. Ruf, M. Larsson, and W. M. Koolen. Admissible anytime-valid sequential infer-
+ence must rely on nonnegative martingales.arXiv preprint arXiv:2009.03167, version 3, 2022.
+arXiv:2009.03167.
+30
+A. Ramdas, P. Grünwald, V. Vovk, and G. Shafer. Game-theoretic statistics and safe anytime-valid
+inference.Statistical Science, 38(4):576–601, 2023. doi: 10.1214/23-STS894.
+A. Ramdas and R. Wang.Hypothesis Testing with E-values. Foundations and Trends in Statistics,
+1(1–2):1–390, 2025. doi: 10.1561/3600000002.
+Y. Ritov. Decision theoretic optimality of the CUSUM procedure.The Annals of Statistics,
+18(3):1464–1469, 1990. doi: 10.1214/aos/1176347761.
+S. W. Roberts. A comparison of some control chart procedures.Technometrics, 8(3):411–430, 1966.
+doi: 10.2307/1266688.
+J. Ruf, M. Larsson, W. M. Koolen, and A. Ramdas. A composite generalization of Ville’s martingale
+theorem using e-processes.Electronic Journal of Probability, 28:1–21, 2023. doi: 10.1214/23-
+EJP1019.
+S. Shekhar and A. Ramdas. Sequential changepoint detection via backward confidence sequences. In
+Proceedings of the 40th International Conference on Machine Learning, volume 202 ofProceedings
+of Machine Learning Research, pages 30908–30930, 2023.
+W. A. Shewhart.Economic Control of Quality of Manufactured Product. D. Van Nostrand Company,
+New York, 1931.
+J. Shin, A. Ramdas, and A. Rinaldo. E-detectors: A nonparametric framework for sequential change
+detection.The New England Journal of Statistics in Data Science, 2(2):229–260, 2024. doi:
+10.51387/23-NEJSDS51.
+A. N. Shiryaev. On optimum methods in quickest detection problems.Theory of Probability and Its
+Applications, 8(1):22–46, 1963. doi: 10.1137/1108002.
+D. Siegmund.Sequential Analysis: Tests and Confidence Intervals. Springer, New York, 1985. doi:
+10.1007/978-1-4757-1862-1.
+A. G. Tartakovsky, M. Pollak, and A. S. Polunchenko. Third-order asymptotic optimality of
+generalized Shiryaev–Roberts changepoint detection procedures.Theory of Probability and Its
+Applications, 56(3):457–484, 2012. doi: 10.1137/S0040585X97985534.
+A. Tartakovsky, I. Nikiforov, and M. Basseville.Sequential Analysis: Hypothesis Testing and
+Changepoint Detection. CRC Press, Boca Raton, 2014.
+J. Unnikrishnan, V. V. Veeravalli, and S. P. Meyn. Minimax robust quickest change detection.IEEE
+Transactions on Information Theory, 57(3):1604–1614, 2011. doi: 10.1109/TIT.2011.2104993.
+J. Ville.Étude critique de la notion de collectif. Gauthier-Villars, Paris, 1939.
+L. Xie, S. Zou, Y. Xie, and V. V. Veeravalli. Sequential (quickest) change detection: Classical results
+and new directions.IEEE Journal on Selected Areas in Information Theory, 2(2):494–514, 2021.
+doi: 10.1109/JSAIT.2021.3072962.
+Y. Xie and D. Siegmund. Sequential multi-sensor change-point detection.The Annals of Statistics,
+41(2):670–692, 2013. doi: 10.1214/13-AOS1094.
+31
+Guide to the appendices
+The main text develops the common clock abstraction and then focuses on its two calendar-
+time specializations: weak e-detectors for ARL and strong e-detectors for optional-horizon linear
+false-alarm control. The appendices serve a different purpose. They test how far the same
+indicator-certificate method extends to other natural type-I error metrics, and they separate exact
+representation statements from practically checkable construction principles. None of the main
+weak–strong results depends on these extensions.
+Appendix A shows that weighted false-alarm losses, including discounted and Bayesian criteria,
+require no new process class: ordinary e-processes with curved boundaries are universal. Appendix B
+treats deterministic run-length tail envelopes using marginal e-values and exhibits their failure under
+optional stopping. Appendix C develops conditional one-step hazard certificates and connects them
+back to strong clocked validity. Appendix D considers rolling-window error control; its survival-
+conditioned representation is exact but self-referential, so it should be read as a completeness
+theorem rather than a row-by-row construction recipe. Appendix E treats both weak residual-ARL
+fields and their strong, historywise counterpart; the latter turns out to be equivalent to a conditional
+hazard bound. Appendix F handles repeated alarms.
+Two new appendices address questions raised by scale-specific universality. Appendix G characterizes
+when an entire family{Tb} can be represented by one weak detector and shows that scale-wise
+ARL bounds are insufficient. Appendix H represents simultaneous ARL and deterministic-tail
+requirements. Finally, Appendix I summarizes the resulting taxonomy. Terms such astail e-envelope,
+e-hazard sequence, androlling e-fieldare proposed bookkeeping terminology, not claims of established
+usage.
+A Weighted false-alarm losses and curved e-boundaries
+The main text contrasts two familiar criteria: PFA, which bounds the probability of ever alarming,
+and ARL, which lower-bounds the mean alarm time. A broad intermediate family assigns a
+deterministic loss to the time at which a false alarm occurs. These criteria require no new process
+class: ordinary e-processes remain universal, but the appropriate crossing boundary is generally
+time-dependent.
+Let
+w:N∪{∞}−→[0,∞)
+be deterministic, with0 < w(n) <∞ for every finiten, and setw(∞) = 0. The quantity w(T )
+may be interpreted as the loss incurred by a false alarm at timeT. No monotonicity assumption is
+needed for the representation theorem, although in applicationsw will often be nonincreasing so
+that early alarms are penalized more heavily.
+Theorem A.1(Universality for weighted stopping losses).Fixα> 0and a stopping timeT. The
+following are equivalent.
+(i)
+sup
+P∈P
+EP [w(T)]≤α.(50)
+32
+(ii)There exists aP-e-processE= (E n)n≥0 such that
+T= inf
+{
+n≥1 :E n≥ w(n)α }.(51)
+When(i)holds, one may take
+ET,wn := w(T)α 1{T≤n}, n≥0.(52)
+Proof. Assume (ii) and letTN :=T∧N . On{T≤N} , the process has crossed its boundary at
+timeT, so
+ETN =E T≥ w(T)α .
+SinceEis an e-process,
+EP
+[
+w(T)1{T≤N}
+]
+≤αE P [ETN ]≤α
+for everyP∈P. Monotone convergence andw(∞) = 0give (50).
+Conversely, assume (i) and defineET,w by (52). For every stopping timeτ,
+EP [ET,wτ ] = 1α EP[w(T)1{T≤τ} ]≤ 1α EP [w(T)]≤1.
+ThusET,w is an e-process. BeforeT it is zero, while atT it equalsw(T )/α, so its first crossing of
+the curved boundary in (51) is exactlyT.
+RemarkA.2 (PFA is the constant-loss case).Takingw(n)≡1at finite times recovers
+sup
+P∈P
+P(T <∞)≤α
+and the usual constant e-process boundary1/α. Thus the familiar PFA universality theorem is the
+constant-loss member of Theorem A.1.
+Example A.3(Bayesian false-alarm probability).Suppose a change timeν is independent of the
+pre-change observations and has survival function
+Π(n) :=P(ν >n),
+assume P (ν <∞ ) = 1, and assume Π(n) > 0at every finite n. We set Π(∞) = 0, as required
+by Theorem A.1. A finite-support prior can instead be handled by the censoring argument in
+Remark A.4. Under the usual coupling in which observations beforeνhave the no-change law,
+P(T <ν) =E ∞[Π(T)].(53)
+Consequently, Bayesian false-alarm control is represented by an ordinary e-process crossing the
+boundary Π(n)/α. For a geometric prior with hazardρ, this boundary is(1−ρ )n/α. It decreases
+with time because a late alarm is less likely to precede the random change. Weighted false-alarm
+probabilities of this form are classical in Bayesian quickest detection; see, for example, Shiryaev
+(1963); Tartakovsky et al. (2014).
+33
+RemarkA.4 (Finite-horizon PFA).The loss w(n) =1{n≤H} vanishes at finite times afterH, so
+it falls outside the strictly positive convention used in Theorem A.1. The criterion is nevertheless
+an immediate PFA problem after censoring. Define
+T [H] :=
+{
+T, T≤H,
+∞, T >H.
+ThenP(T≤H) =P(T [H] <∞), and the canonical e-process is
+En = 1α 1{T≤n∧H}.
+Its crossing time isTon{T≤H}and infinity otherwise.
+B Deterministic tail envelopes and marginal e-certificates
+A deterministic family of false-alarm bounds has the form
+P(T≤n)≤g(n), n≥1,(54)
+where g : N→ (0, 1]is nondecreasing. This criterion is stronger than no restriction at all on early
+false alarms but weaker than optional-horizon validity: the horizon in (54) is fixed in advance.
+Definition B.1(Tail e-envelope).A g-tail e-envelopeis a nonnegative adapted sequence of e-values
+E= (E n)n≥1, meaning that
+sup
+P∈P
+EP [En]≤1for every deterministicn,(55)
+such that the calibrated certificate
+An :=g(n)E n (56)
+is pathwise nondecreasing. Its alarm time is
+Tg(E) := inf{n≥1 :A n≥1}.(57)
+Thus each En is an e-value at the fixed timen, but the sequence need not be an e-process.
+Monotonicity is imposed on the calibrated certificateAn, not onEn itself.
+Theorem B.2(Universality for deterministic tail envelopes).Fix a nondecreasingg : N→ (0, 1]
+and a stopping timeT. The following are equivalent.
+(i)P(T≤n)≤g(n)for everyP∈Pand everyn≥1.
+(ii)There exists ag-tail e-envelopeEsuch thatT=T g(E).
+Under(i), the canonical envelope is
+ET,gn := 1{T≤n}g(n) .(58)
+34
+Proof.Assume (ii). SinceAis nondecreasing,
+{Tg(E)≤n}⊆{A n≥1}.
+Markov’s inequality and (55) imply
+P(Tg(E)≤n)≤E P [An] =g(n)E P [En]≤g(n).
+Conversely, assume (i) and defineET,g by (58). ThenEP [ET,gn ]≤1, while
+g(n)ET,gn =1{T≤n}
+is nondecreasing. It jumps to one exactly atT, proving the representation.
+Example B.3(The linear tail envelope need not control ARL).Letb≥ 2be an integer, reveal
+U∼Unif{1,...,b}at time one, and setT=U. Then
+P(T≤n) = min
+{n
+b,1
+}
+,
+so the linear deterministic tail bound holds with equality. Nevertheless,
+E[T] = b+ 12 <b.
+Thus deterministic linear-tail control does not imply ARL control. Conversely, Example 4.5 shows
+that ARL control does not imply the linear tail bound. The two criteria are generally incomparable.
+For the canonical envelope withg(n) = min{n/b, 1}, evaluation at the data-dependent timeT gives
+ET,gT = bT,E[E T,gT ] = b∑t=1 1t >1.
+Hence the marginal e-values are not an e-process. This explicit optional-stopping failure is exactly
+what distinguishes deterministic-horizon control from optional-horizon control.
+Quantile run-length requirements are special cases of(54); one choosesg to encode the desired
+bounds at selected horizons and fills the gaps by a nondecreasing envelope. Such distribution-
+sensitive alternatives to ARL have been advocated in the change-detection literature, particularly
+when a large mean can conceal substantial early false-alarm risk; see Mei (2008).
+C Conditional hazards and e-hazard sequences
+The most local false-alarm criterion controls the chance of alarming at the next observation,
+conditional on the complete current history. Letαn∈(0,1]beF n−1-measurable. A stopping time
+Thashistorywise hazard controlif
+P(T=n|F n−1)≤α n1{T≥n}P-almost surely (59)
+for everyP∈Pand everyn≥1.
+35
+Definition C.1(E-hazard sequence).Ane-hazard sequenceis a nonnegative adapted sequence
+(En)n≥1 satisfying
+EP [En|F n−1]≤1P-almost surely (60)
+for everyP∈Pand everyn. Given a predictable boundary sequence1/α n, define
+Tα(E) := inf
+{
+n≥1 :E n≥ 1αn
+}
+.(61)
+EachEn is a one-step conditional e-value. Conditional e-values are standard ingredients in e-process
+constructions; see Ramdas and Wang (2025). Here the terms are thresholded separately rather than
+multiplied.
+Theorem C.2(Universality of e-hazard sequences).Fix a predictable sequence(αn)with values in
+(0,1], and a stopping timeT. The following are equivalent.
+(i)Tsatisfies historywise hazard control(59).
+(ii)There exists an e-hazard sequenceEsuch thatT=T α(E).
+Under(i), the canonical sequence is
+ETn := 1{T=n}αn .(62)
+Proof. Suppose (ii) holds. The event {Tα(E)≥n} belongs toFn−1, and conditional Markov
+inequality gives
+P(Tα(E) =n|F n−1) =1{T α(E)≥n}P
+(
+En≥ 1αn
+⏐⏐⏐⏐Fn−1)
+≤α n1{Tα(E)≥n}E P [En|F n−1]
+≤α n1{Tα(E)≥n}.
+Conversely, assume (i) and defineET by (62). Then
+EP [ETn|F n−1] = P(T=n|F n−1)αn ≤1{T≥n}≤1.
+BeforeT, the sequence is zero; atT, it equals the boundary1/αT. Hence its first individual crossing
+is exactlyT.
+RemarkC.3 (Survival-conditioned hazard).The weaker criterion
+P(T=n|T≥n)≤α n
+for deterministicαn has an analogous representation byat-risk e-values, defined through
+EP [En|T≥n]≤1.
+The same canonical variableα−1n 1{T =n} proves the converse. This version averages over histories
+among paths still under surveillance, whereas (59) protects everyFn−1-history.
+36
+One-step hazard bounds integrate into an optional-clock guarantee.
+Proposition C.4(From local hazards to an optional budget).Supposeqn∈ [0, 1]is predictable and
+P(T=n|F n−1)≤q n1{T≥n}(63)
+under everyP∈P. Define the cumulative hazard clock
+Cn :=
+n∑
+j=1
+qj.
+Then, for every stopping horizonσ, with both sides interpreted in[0,∞],
+P(T≤σ)≤E P [Cσ].(64)
+Equivalently,1{T≤n}is a strongC-clocked e-process.
+Proof.Since{σ≥n}∈F n−1, Tonelli’s theorem and (63) give
+P(T≤σ) =
+∞∑
+n=1
+EP
+[
+1{σ≥n}1{T=n}
+]
+≤
+∞∑
+n=1
+EP
+[
+1{σ≥n}q n1{T≥n}
+]
+≤
+∞∑
+n=1
+EP
+[
+1{σ≥n}q n
+]
+=E P [Cσ].
+The final statement follows from Theorem 3.3 withb = 1, or directly from the same calculation.
+Takingqn≡ 1/b recovers Proposition 8.14. In that case the canonical one-step certificates are
+En =b1{T=n}, while their cumulative sum is
+n∑
+j=1
+Ej =b1{T≤n},
+the canonical strong e-detector from Theorem 8.3. The local and cumulative e-concepts therefore fit
+together exactly.
+D Local-window control and rolling e-fields
+A one-step hazard can be too granular for practice. A natural compromise controls the probability
+of at least one false alarm during each upcoming window of lengthm, conditional on the procedure
+still running at the start of that window. Local unconditional and conditional false-alarm classes
+of this kind have been studied as alternatives to ARL, particularly for non-i.i.d. observations; see
+Pergamenchtchikov and Tartakovsky (2018) and the discussion surrounding Mei (2008).
+Fixm∈Nandα∈(0,1]. We use the ratio form
+P(k<T≤k+m)≤αP(T >k), k≥0,(65)
+37
+which remains meaningful whenP(T >k) = 0and is equivalent to
+P(k<T≤k+m|T >k)≤α
+whenever the conditioning event has positive probability.
+The criterion is indexed by every possible restart timek, so the natural representing object has two
+time indices.
+Definition D.1(At-risk rolling e-field).For everyk≥0, let
+E(k) = (E(k)n )k+mn=k
+be a nonnegative adapted row withE(k)k = 0. Define the rolling-consensus alarm
+TE := inf
+{
+n≥1 : min
+(n−m)∨0≤k≤n−1
+E(k)n ≥ 1α
+}
+.(66)
+The field is anat-risk rollingm-window e-fieldif, for everyP∈P , everyk≥ 0, and every stopping
+timeτtaking values in{k,...,k+m},
+EP
+[
+E(k)τ 1{TE >k}]≤P(T E >k).(67)
+When P (TE >k )> 0, (67) says that thek-th row is an e-process under the survival-conditioned
+null lawP (·|T E >k ), restricted to the nextm observations. The definition is mathematically well
+posed: the field determinesTE pathwise before validity is assessed. It is nevertheless self-referential
+as a construction criterion, because the validity of one row depends on the alarm generated by
+the entire field. Accordingly, Theorem D.2 is best viewed as an exact representation theorem, not
+as a recipe whose rows can be verified independently. The stronger historywise formulation in
+Proposition D.3 has genuinely row-wise conditional validity.
+Theorem D.2(Universality for local conditional false-alarm control).Fixm and α, and letT be a
+stopping time. The following are equivalent.
+(i)Tsatisfies(65)for everyP∈Pand everyk≥0.
+(ii)There exists an at-risk rollingm-window e-fieldEsuch thatT=T E.
+Under(i), a canonical field is
+E(k)n := 1α 1{k<T≤n}, k≤n≤k+m.(68)
+Proof.Assume (ii) and writeT=T E. Fixk, and let
+τk :=
+(
+inf
+{
+n∈{k+ 1,...,k+m}:E (k)n ≥ 1α})∧(k+m),
+with the usual convention that the infimum of the empty set is infinity. Ifk<T≤k +m, then the
+k-th row is active at timeT, and the consensus condition forcesE(k)T ≥ 1/α. Hence that row crosses
+byτ k, and 1
+αP(k<T≤k+m)≤E P
+[
+E(k)τk 1{T >k}]≤P(T >k).
+38
+This is (65).
+Conversely, assume (i) and define the field by (68). For any row-valued stopping timeτ,
+EP
+[
+E(k)τ 1{T >k}] = 1αP(k<T≤τ)
+≤ 1αP(k<T≤k+m)≤P(T >k),
+so the field is at-risk valid. BeforeT, every active row is zero. At timeT, every active index
+k∈{ (T−m )∨ 0,...,T− 1} satisfies k < T≤k +m, so every active row equals1/α. The
+rolling-consensus crossing is therefore exactlyT.
+The minimum in(66) expresses a logical consensus: an alarm lying in several overlapping windows
+must carry a certificate for every one of those windows. The canonical field shows that this loses
+no generality as a representation theorem. It may nevertheless be conservative and inconvenient
+as a design principle, especially because survival-conditioned row validity cannot be checked
+independently.
+There is a stronger historywise version.
+Proposition D.3(Historywise local-window universality).Replace(65)by
+P(k<T≤k+m|F k)≤α1{T >k}P-almost surely.(69)
+Then the same rolling-consensus representation is exact if row validity is strengthened to
+EP [E(k)τ |F k]≤1P-almost surely(70)
+for every row-valued stopping timeτ. The canonical field remains(68).
+Proof. Conditional Markov inequality applied to the first crossing of thek-th row proves soundness.
+Conversely,
+EP [E(k)τ |F k] = 1αP(k<T≤τ|F k)≤ 1αP(k<T≤k+m|F k)≤1{T >k}≤1.
+The pathwise recovery argument is unchanged.
+Form = 1, Proposition D.3 reduces to the e-hazard representation in Theorem C.2. The standard
+survival-conditioned version in Theorem D.2 reduces to the at-risk hazard notion in Remark C.3.
+An unconditional local-window criterion,
+P(k<T≤k+m)≤α,
+has the same representation with ordinary finite-horizon e-process rows, obtained by dropping
+1{T >k} and P (T >k)from (67). Thus unconditional, survival-conditioned, and historywise local
+control correspond to three increasingly strong notions of row-wise e-validity.
+E Residual criteria and restartable detector fields
+A global ARL guarantee is evaluated only at startup. Residual criteria ask whether comparable
+protection remains after the procedure has survived to an arbitrary age. They naturally produce
+restart-indexed fields rather than one scalar process. There are two different versions, mirroring the
+weak–strong distinction in the main text.
+39
+E.1 Residual ARL and weak rows
+The survival-conditioned residual ARL criterion is
+EP [T−k|T >k]≥b(71)
+for everyP∈Pand everykwithP(T >k)>0.
+For each suchk, let
+PTk :={P(·|T >k) :P∈P, P(T >k)>0},(72)
+viewed on the shifted filtration(Fk+j)j≥0.
+Definition E.1(Restartable weak e-detector field).Arestartable weak e-detector field at scaleb
+forTis a family
+M={M (k) = (M (k)j )j≥0 :k≥0}
+such that, for eachk, the shifted processM(k) is a weakPTk -e-detector and
+T−k=T b(M (k))under every law inP Tk.(73)
+Theorem E.2(Universality for residual ARL).Fix b> 0and an alarm timeT. The following are
+equivalent.
+(i)Tsatisfies residual ARL control(71)for every null law and every admissible restart timek.
+(ii)Tadmits a restartable weak e-detector field at scaleb.
+Under(i), the canonical row started atkis
+M (k)j :=b1{k<T≤k+j}, j≥0.(74)
+Proof. If (ii) holds, apply Theorem 5.2 under each conditional null classPTk . The level-b crossing
+has conditional mean at leastb, which is exactly (71).
+Conversely, suppose (i) holds and defineM (k) by (74). Under any law inPTk , the process jumps
+from zero tob after exactlyT−k shifted observations, so(73) holds. At every level0<c≤b , its
+crossing time isT−k, and the killed stopped value satisfies
+E
+[
+(M (k)T−k )†] =bP(T <∞|T >k)≤b≤E[T−k|T >k].
+At levelsc > b, it never crosses. Hence every row is a weak e-detector under the corresponding
+survival-conditioned null class.
+Example E.3(ARL does not imply residual ARL).For the early-alarm lottery in Example 4.5,T
+equals one or seven with equal probability and hasE[T ] = 4. Conditional on survival to time six,
+however,T= 7with probability one, so
+E[T−6|T >6] = 1.
+Thus the rule has a weak e-detector representation at scale four, but it has no restartable weak
+e-detector field at that scale.
+40
+E.2 Historywise optional residual control and strong rows
+A strong restart condition allows the future horizon to depend on the observations after the restart
+and requires validity conditional on the entire current history. Call a random variableτ∈N 0∪{∞}
+ashifted stopping time afterkif{τ≤j}∈F k+j for everyj≥0. Consider
+P(k<T≤k+τ|F k)≤ 1{T >k}b EP [τ|F k](75)
+for everyP∈P , everyk≥ 0, and every bounded shifted stopping timeτ. Bounded horizons suffice
+by conditional monotone convergence.
+Definition E.4(Restartable strong e-detector field).Arestartable strong e-detector field at scaleb
+for T is a family{M (k) :k≥ 0} such that, under every survival-conditioned law inPTk , the row
+M (k) is a strong e-detector on the shifted filtration and its level-bcrossing isT−k.
+Theorem E.5(Strong restartability is conditional-hazard control).Fixb> 0. The following are
+equivalent.
+(i)For everyP∈Pand everyn≥1,
+P(T=n|F n−1)≤b −11{T≥n}P-almost surely.(76)
+(ii)The historywise optional residual inequality(75)holds.
+(iii)Tadmits a restartable strong e-detector field at scaleb.
+Under these conditions, the canonical strong row is again
+M (k)j =b1{k<T≤k+j}.
+Proof. Assume (i). For a bounded shifted stopping timeτ, the event{τ≥j} belongs toFk+j−1.
+Conditional Tonelli and the tower property give
+P(k<T≤k+τ|F k) =
+∑
+j≥1
+EP [1{τ≥j}1{T=k+j}|F k]
+≤ 1b∑j≥1 EP [1{τ≥j}1{T≥k+j}|F k]
+≤ 1{T >k}b ∑j≥1P(τ≥j|F k)
+= 1{T >k}b EP [τ|F k],
+which is (ii). Conversely, (ii) withτ≡1yields (i).
+Under (ii), fixk and P with P (T > k) > 0, integrate(75), and divide byP (T > k). For every
+bounded shifted stopping timeτ,
+bP(T−k≤τ|T >k)≤E P [τ|T >k].
+Therefore the canonical row is strong underP(·|T >k)and crosses atT−k, proving (iii).
+41
+Finally, assume (iii). Fix k, a null law withP (T > k) > 0, and an event A∈ Fk. Under
+Q =P (·|T >k ), the shifted horizonτA :=1 A is a stopping time. Optional-horizon validity of the
+row gives
+Q(A∩{T=k+ 1}) =Q(T−k≤τ A)≤ Q(A)b .
+Since this holds for everyA∈Fk, it implies (76) at timek+ 1. Thus (iii) implies (i).
+The theorem shows that, when the full shifted filtration is retained, a uniformly strong restart
+property is not a genuinely intermediate criterion: it is exactly the historywise hazard condition
+from Proposition 8.14. It does imply global strong validity by takingk = 0, and the implication is
+strict. For example, the deterministic run lengthT≡b in Example 8.9 is strongly representable
+at scaleb> 1, but after survival to timeb− 1the residual alarm time is one with probability one,
+violating (75). By contrast, the weak residual criterion only controls a conditional mean and does
+not collapse to a one-step hazard requirement.
+F Repeated alarms and counting e-detectors
+When monitoring restarts after an alarm, the first run length no longer captures the full type-
+I behavior. Repeated or multi-cyclic operation is classical in statistical process control and in
+stationary formulations of Shiryaev–Roberts monitoring; see, for example, Pollak and Tartakovsky
+(2009b). LetNn denote the number of false alarms declared by timen, withN0 = 0, and assumeN
+is adapted, integer-valued, and pathwise nondecreasing.
+A natural optional count-rate criterion is
+EP [Nτ]≤λE P [τ](77)
+for every P∈ P and every integrable stopping timeτ, where λ > 0is the allowed expected
+false-alarm intensity.
+Proposition F.1(Counting e-detectors).The optional count-rate condition (77) holds if and only
+if
+Mn := Nnλ (78)
+is a strongP-e-detector.
+Proof.Substituting (78) into the defining inequality of a strong e-detector gives exactly (77).
+Although elementary, this equivalence has useful consequences. Let
+Sj := inf{n≥1 :N n≥j}(79)
+be the time of thej-th false alarm. ThenSj =T j/λ(M), and the strong e-detector results give
+EP [Sj]≥ jλ,(80)
+P(Sj≤σ)≤ λEP [σ]j (81)
+42
+for every integrable stopping horizonσ. Thus a single counting e-detector controls every successive
+false-alarm time.
+A predictable intensity bound gives a more local representation. Write∆Nn = Nn−N n−1, let
+λn>0be predictable, and define
+Cn :=
+n∑
+j=1
+λj.
+Proposition F.2(Conditional e-values for false-alarm increments).The following are equivalent
+for eachn:
+(i)
+EP [∆Nn|F n−1]≤λ n P-almost surely for everyP∈P.(82)
+(ii)E n := ∆Nn/λn is a conditional e-value, meaning
+EP [En|F n−1]≤1.
+Moreover, if(82)holds for everyn, thenNis a strongC-clocked e-process:
+EP [Nτ]≤E P [Cτ](83)
+for every bounded stopping timeτ, and by monotone convergence for every stopping time for which
+the right side is finite.
+Proof. The equivalence is immediate by division by the positive predictable variableλn. For the
+cumulative statement,{τ≥n}∈F n−1, so
+EP [Nτ] =
+∞∑
+n=1
+EP
+[
+1{τ≥n}∆N n
+]
+≤
+∞∑
+n=1
+EP
+[
+1{τ≥n}λ n
+]
+=E P [Cτ].
+Example F.3(Conditionally Bernoulli false alarms).Letλ∈(0,1). Suppose∆N n∈{0,1}and
+P(∆Nn = 1|F n−1)≤λ
+at every time. Then∆Nn/λ is a conditional e-value,Nn/λ is a strong e-detector, and thej-th false
+alarm has mean at leastj/λ. Under equality with conditionally independent increments,Sj has the
+negative-binomial waiting-time law with mean exactlyj/λ.
+The deterministic criterionE[Nn]≤λn for everyn corresponds only to a sequence of fixed-time
+e-valuesN n/(λn); it does not by itself imply optional count-rate control.
+Example F.4(Fixed-time count control is not optional).Letb≥ 2be an integer, setλ = 1/b,
+revealU∼Unif{1,...,b}at time one, and define
+Nn :=1{n≥U}.
+43
+Then
+E[Nn] = min{n/b,1}≤λn
+for every deterministicn. At the stopping timeτ=U, however,
+E[Nτ] = 1> b+ 12b =λE[τ].
+Thus deterministic expected-count bounds do not imply optional count-rate control.
+The still weaker asymptotic condition
+lim sup
+n→∞
+E[Nn]
+n ≤λ
+canbewrittenas lim supn E[Mn]/n≤ 1for M =N/λ, butthisismerelyanasymptoticnormalization,
+not an anytime-valid e-concept. For repeated alarms, optional or predictable intensity control is
+therefore the most natural analogue of strong e-detector validity.
+G Simultaneous representation of a threshold family
+The weak universality theorem represents one alarm time at one target level. A stronger question
+asks when a family{Tb :b> 0} can be realized asallthreshold crossings of a single weak e-detector.
+Call the familythreshold coherentif, pathwise,
+b<c=⇒T b≤T c,(84)
+Tb = sup
+q∈Q+,q<b
+Tq (b>0).(85)
+The second condition is the left-continuity forced by crossings of a real-valued process. (In Exam-
+ple G.2, the ceiling function causes no problem becauseb↦→⌈b⌉ is left-continuous.) Define the
+canonical running level
+An := sup{q∈Q + :T q≤n},sup∅:= 0.(86)
+It is adapted and pathwise nondecreasing. We call the familylocally boundedifAn<∞ pathwise
+for every finiten; this is necessary for representation by a finite-valued process.
+Theorem G.1(Simultaneous-family characterization).A family{T b :b>0}is representable as
+Tb =T b(M)for everyb>0
+by one finite-valued weakP-e-detectorM if and only if it is threshold coherent, locally bounded, and,
+for everyP∈Pand everyb>0,
+EP [A†Tb]≤E P [Tb],(87)
+whereAis defined by(86). When these conditions hold,Aitself is a representing weak e-detector.
+Proof.Assume first that the family is threshold coherent. The definitions imply
+An≥b⇐⇒T b≤n.
+44
+The forward implication uses(85) when the supremum in(86) reaches b only through rationals
+belowb. HenceT b(A) =T b for everyb. Condition (87) is exactly weak validity ofAat every level.
+Conversely, suppose a weak detectorM represents the family. Threshold crossings of any process
+satisfy (84)–(85). Replace M by its running maximumMn = maxj≤nMj. This preserves every
+crossing time and every value at the first crossing, hence preserves weak validity. The family
+determines this running maximum uniquely through
+Mn = sup{b:T b(M)≤n}=A n.
+ThereforeAmust satisfy (87).
+The extra condition is an overshoot constraint, and scale-wise ARL bounds do not imply it.
+Example G.2(Finite ARL at every scale is insufficient).Fix p∈ (0, 1)and H > 1, let Y∼
+Bernoulli(p), and revealYat time one. For0<b≤H, define
+Tb =
+
+
+
+1,0<b≤1,
+1,1<b≤HandY= 1,⌈b−p
+1−p
+⌉
+,1<b≤HandY= 0.
+Choose a constantK≥ 1large enough that⌈Kb⌉≥⌈ (H−p )/(1−p )⌉ for everyb > H, and set
+Tb =⌈Kb⌉ deterministically forb>H . The resulting family is threshold coherent and every crossing
+time is finite. Moreover,
+E[Tb] =p+ (1−p)
+⌈b−p
+1−p
+⌉
+≥b,1<b≤H,
+while E[Tb] = 1≥b for b≤ 1and E[Tb] =⌈Kb⌉≥b for b>H . Thus the scale-wise ARL inequality
+holds with finite expectation at every scale.
+At time one, however, the canonical running level is
+A1 =
+{
+H, Y= 1,
+1, Y= 0.
+SinceT 1 = 1,
+E[AT1] =pH+ (1−p)>1 =E[T 1].
+The overshoot condition in Theorem G.1 fails. Hence no single weak e-detector can realize the entire
+family, even though everyTb is almost surely finite and separately has a weak representation at its
+own scale.
+H Conjunctions of ARL and tail criteria
+A procedure may be required to have both a large mean run length and a prescribed deterministic
+lower-tail envelope. These two conditions can be represented by one process, but validity must be
+imposed in two different ways.
+For a processM, writeMn = max1≤j≤nMj.
+45
+Theorem H.1(Universality for an ARL–tail conjunction).Fixb> 0, a nondecreasingg : N→ (0, 1],
+and an alarm timeT. The following are equivalent.
+(i)For everyP∈P,
+EP [T]≥bandP(T≤n)≤g(n)for everyn≥1.(88)
+(ii)There exists a weakP-e-detectorMsuch thatT=T b(M)and
+EP [Mn]≤bg(n)for everyP∈Pandn≥1.(89)
+Under(i), the canonical witness isMn =b1{T≤n}.
+Proof.Under (ii), weak soundness givesEP [T]≥b. Moreover,
+{T≤n}={T b(M)≤n}⊆{ Mn≥b},
+so Markov’s inequality and (89) giveP(T≤n)≤g(n).
+Conversely, defineMn =b1{T≤n} . The ARL part of(88) makesM weak by Theorem 5.8. Since
+Mis nondecreasing,
+EP [Mn] =bP(T≤n)≤bg(n).
+The conjunction does not require taking the maximum of two separate indicator certificates: the
+same all-or-nothing process works, but it is tested both at its own crossings and at deterministic
+horizons. Forg(n) = min{n/b, 1}, this conjunction remains weaker than optional-horizon control;
+Example 8.13 satisfies both ARL and the linear deterministic envelope but fails the adaptive-horizon
+inequality.
+I Synthesis: horizons, clocks, windows, and restarts
+The main clock theorem and the preceding appendices suggest a general taxonomy. An error metric
+specifies both abudgetand a class ofhorizonsat which that budget must remain valid. Fixed-time
+validity yields marginal e-values; validity at all stopping times yields e-processes or strong clocked
+e-processes; validity only at a process’s own crossings yields weak e-detectors; criteria indexed by
+restart times require fields; and simultaneous requirements impose several validity conditions on the
+same process.
+Several patterns are worth emphasizing.
+First, the canonical representations remain all-or-nothing. Their purpose is to establish completeness
+of an e-language for a validity criterion, not to provide a powerful detection statistic. Practical
+procedures should generally seek smoother evidence accumulation, favorable post-change growth,
+and efficient delay.
+Second, the same indicatorb1{T≤n} can represent distinct criteria because the validity requirement
+is imposed at different horizon classes. Own crossings encode an expected-clock lower bound;
+deterministic times encode a tail envelope; all stopping times encode optional-clock control. Under
+the minimal alarm filtration, the intermediate family of self-censoring horizonsT∧m already
+characterizes optional validity through the truncated-mean inequalities in Theorem 8.6. The process
+46
+False-alarm criterion Universal e-representation Canonical certificate
+E[w(T)]≤αe-process with boundaryw(n)/α α −1w(T)1{T≤n}
+E[CT ]≥bweakC-clocked e-processb1{T≤n}
+P(T≤σ)≤E[C σ]/bstrongC-clocked e-processb1{T≤n}
+P(T≤n)≤g(n)g-tail e-envelopeg(n) −11{T≤n}
+Historywise hazard≤α n e-hazard sequenceα −1n 1{T=n}
+Localm-window probability≤αrolling at-risk e-fieldα −11{k<T≤n}
+Residual ARL≥brestartable weak e-detector fieldb1{k<T≤k+j}
+Historywise optional residual
+control
+restartable strong e-detector field;
+equivalently e-hazard control
+b1{k<T≤k+j}
+Optional expected count rate≤λcounting e-detectorN/λnormalized count process
+One family{Tb}at every
+threshold
+coherent weak detector plus
+overshoot control
+canonical running levelAn
+ARL and deterministic tail jointly weak detector plus
+running-maximum budget
+b1{T≤n}
+Table 2: Exact e-representations for alternative false-alarm criteria. The clock terminology is
+developed in the main text; the terms e-hazard, tail e-envelope, and rolling e-field are proposed in
+the appendices.
+formula alone does not identify the error metric—the quantification over horizons and the available
+filtration do.
+Third, local criteria are intrinsically restart-indexed. A scalar process can encode a global PFA,
+ARL, or optional-clock constraint, but a guarantee for every rolling window or every residual
+lifetime naturally produces a two-parameter family. Weak residual ARL yields genuinely weaker
+restartable rows. Requiring strong row validity after every history collapses exactly to the one-step
+conditional-hazard criterion, so the e-hazard sequence is the strong boundary case of the restartable
+viewpoint.
+Finally, clocks separate the amount of budget from the passage of calendar time. The choices
+Cn≡ 1, Cn =n, andCn =∑j≤naj correspond, respectively, to a fixed testing budget, a linearly
+replenished detection budget, and an exposure-weighted budget. This clock perspective provides a
+common home for e-processes, e-detectors, and several new variants developed above.
+47

@@ -1,0 +1,2021 @@
+arXiv 2503.04662  https://arxiv.org/abs/2503.04662
+
+Risk-aware Trading Portfolio Optimization
+Marco Bianchetti1,2,†, Gabriele D’Acunto∗3, Gianmarco De Francisci Morales4,
+Yuko Kuroki4, Marco Scaringi†5, and Fabio Vitale4
+1Financial & Market Risk Management, Intesa Sanpaolo, Milan, Italy
+2Department of Statistical Sciences “Paolo Fortunati”, University of Bologna, Italy
+3Department of Information Engineering, Electronics and Telecommunications, Sapienza
+University, Rome, Italy
+4CENTAI, Turin, Italy
+5Risk Trading Quant Department, ING Bank N. V., Milan, Italy
+†Corresponding author, marco.bianchetti@unibo.it
+Abstract
+We investigate portfolio optimization in financial markets from a trading and risk manage-
+ment perspective. We term this task Risk-Aware Trading Portfolio Optimization (RATPO),
+formulate the corresponding optimization problem, and propose an efficient Risk-Aware Trad-
+ing Swarm (RATS) algorithm to solve it. The key elements of RATPO are a generic initial
+portfolio P, a specific set of Unique Eligible Instruments (UEIs), their combination into an
+Eligible Optimization Strategy (EOS), an objective function, and a set of constraints. RATS
+searches for an optimal EOS that, added to P, improves the objective function repecting the
+constraints.
+RATS is a specialized Particle Swarm Optimization method that leverages the param-
+eterization of P in terms of UEIs, enables parallel computation with a large number of
+particles, and is fully general with respect to specific choices of the key elements, which can
+be customized to encode financial knowledge and needs of traders and risk managers.
+We showcase two RATPO applications involving a real trading portfolio made of hundreds
+of different financial instruments, an objective function combining both market risk (VaR)
+and profit&loss measures, constrains on market sensitivities and UEIs trading costs. In the
+case of small-sized EOS, RATS successfully identifies the optimal solution and demonstrates
+robustness with respect to hyper-parameters tuning. In the case of large-sized EOS, RATS
+markedly improves the portfolio objective value, optimizing risk and capital charge while
+respecting risk limits and preserving expected profits.
+Our work bridges the gap between the implementation of effective trading strategies and
+compliance with stringent regulatory and economic capital requirements, allowing a better
+alignment of business and risk management objectives.
+∗The work of Gabriele D’Acunto was supported by CENTAI Institute, Turin, Italy, and conducted during his
+affiliation with the Institute.
+†The present study was conducted while Marco Scaringi was affiliated with Financial & Market Risk Management,
+Intesa Sanpaolo, Milan, Italy.
+1
+arXiv:2503.04662v1  [q-fin.RM]  6 Mar 2025
+Contents
+1 Introduction 3
+2 Preliminaries 6
+3 Risk-aware trading portfolio optimization 9
+4 Risk-aware trading swarm algorithm 11
+5 Empirical assessment 14
+5.1 Experimental setting . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 15
+5.2 Comparison with the Markowitz-like approach . . . . . . . . . . . . . . . . . . . 18
+5.3 Small-sized eligible optimization strategy . . . . . . . . . . . . . . . . . . . . . . 20
+5.4 Large-sized eligible optimization strategy . . . . . . . . . . . . . . . . . . . . . . 22
+6 Conclusions and perspectives 24
+References 25
+A Hyper-parameters 28
+B Data for UEIs 28
+C Running time 31
+D Estimated parameters for Euro Stoxx 50 Index 32
+JEL classifications: D8, H51.
+MSC Classification: 35A01, 65L10, 65L12, 65L20, 65L70.
+Keywords: Portfolio optimization, risk management, trading, particle swarm optimization.
+Acknowledgements: the authors contributed equally to this work. The authors acknowledge
+fruitful discussions with many colleagues from Intesa Sanpaolo Risk Management and Front Office
+Departments, Francesco Terribile and Pietro Gallo from Politecnico di Milano, who collaborated
+to the early stage of this work, Luca Lamorte, who joined at later stage, and Laura Li Puma,
+Arianna Miola, and Luigi Ruggerone from Intesa Sanpaolo Innovation Center for supporting the
+research team. Marco Scaringi declares that the views and opinions expressed here are his own
+and do not represent the views of his previous or current employers; they are not responsible for
+any use that may be made of these contents.
+2
+1 Introduction
+The financial crisis started in 2007, and the subsequent period of severe market stresses revealed
+weaknesses in the risk capital framework of the global banking and financial system. Since
+then, regulators increased pressure towards risk-based capital reserves. The Basel Committee
+on Banking Supervision (BCBS), the main international body that develops global banking
+standards, issued the so-called Basel III and Basel IV accords (Basel Committee on Banking
+Supervision 2011; Basel Committee on Banking Supervision 2017), introducing substantial
+amendments to the capital treatment of all risk classes (market, liquidity, counterparty, credit
+and operational risk). 1 The BCBS proposals are transposed into legal frameworks by national
+and international authorities. 2
+The trading and risk management practices of financial institutions has developed according
+to regulatory requests. Nowadays, banks typically put huge efforts into research, development,
+implementation, and production of several different risk measures, which are the main inputs to
+compute capital reserves, both for regulatory purposes (regulatory capital and Risk-Weighted
+Assets—R W A) and internal managerial purposes (economic capital). In particular, market risk
+measures (e.g., Value at Risk, Stressed Value at Risk, Incremental Risk Charge) are typically
+computed with daily frequency, both for managerial reporting to trading desks, and to determine
+quarterly averages for regulatory reporting of capital reserves. Budgets for human and IT
+resources for risk management purposes have increased accordingly.
+Our goal: risk-aware trading portfolio optimization In the “classic” portfolio optimization
+approach ` a la Markowitz (Markowitz 1952), the point of view of portfolio managers typically
+prevails, who focus on dynamic forward-looking estimates of return and risk by selecting a
+portfolio of assets and looking for a strategy to adjusts the assets’ weights over a given time
+horizon T − t, where t is the rebalancing date.
+In this work, we focus on a different problem, named risk-aware trading portfolio optimization,
+where we take the point of view of the bank’s traders and risk managers, who focus on statical
+portfolio risk measurement and features at a given point in time t, and look for optimal trades
+at the same time t to reduce capital reserves while preserving portfolio value, consistently with
+the business objectives. This view, characterizing our approach, represents a stark difference
+with Markowitz’s framework.
+Another distinguishing feature of our approach concerns the full generality with respect to the
+portfolio composition. More in detail, we consider large heterogeneous trading portfolios typical
+of commercial or investment banks, potentially encompassing millions of financial instruments
+such as stocks, securities, loans, derivatives, and funds, depending on any underlying risk factors ,
+i.e., interest rates, credit, equity, forex, and commodities. These positions can feature any level
+of complexity: linear and non-linear payoffs, plain vanilla and exotic options, multi-asset and
+hybrid derivatives. They are managed through appropriate pricing models and computational
+algorithms such as analytical formulas and Monte Carlo simulations. Moreover, trading portfolios
+are characterized by continuous turnover, driven by expiry of old trades, flows of new trades
+with clients, proprietary investments, speculative or hedging strategies, and generate continuous
+in/out cash flows related to received/paid coupons, collateral exchange, financing operations,
+and fees.
+1The BCBS also maintains the “Basel Framework” ( https://www.bis.org/basel_framework) which provides
+a comprehensive and updated compendium of BCBS financial regulations.
+2The European Union transposed the after-crisis BCBS proposals into the so-called CRD4/CRR package in
+2013 (CRD4 2013; CRR1 2013), the amended CRD5/CRR2 package in 2019 (CRD5 2019; CRR2 2019), and the
+further amended CRD6/CRR3 package in 2024 (CRD6 2024; CRR3 2024), the latter to enter into force in January
+2025 and January 2026, respectively. The European Banking Authority (EBA) maintains the Interactive Single
+Rulebook ( https://www.eba.europa.eu/single-rulebook) which provides a comprehensive compendium of EU
+financial regulations and related Q&As.
+3
+Furthermore, in our approach portfolio risks are measured through various risk measures that
+capture all the different risk sources, e.g., market risk, liquidity risk, credit and counterparty
+risk, and valuation risk. 3 These risks are managed within a global Risk Appetite Framework
+(RAF)4, a structured approach used by Banks to define, manage, and align their willingness to
+assume risks in pursuit of their business objectives. The RAF is based on risk limits , which are
+set, monitored, and reported by a risk management unit independent of business units.
+Core components Several crucial components characterize our risk-aware trading portfolio
+optimization approach. unique eligible instruments are the main building blocks used to optimize
+the portfolio: they uniquely identify liquid market instruments quoted by exchanges, brokers,
+or market makers, typically used by traders for risk management purposes, i.e., to hedge Delta,
+Vega, and Gamma risks. Portfolio optimization is encoded through eligible optimization strategies,
+i.e., combinations of unique eligible instruments added to the portfolio to optimize the selected
+objective function, while complying with a set of constraints and adhering to a specific structure
+reflecting the prior financial knowledge of the bank’s traders and risk managers. The objective
+function consists of a combination of portfolio risk measures and features such as profit and loss
+measures and market transaction costs. Instead, the constraints are associated with risk limits
+to effectively drive the optimization process. More details and practical examples of these core
+components are included in the following sections.
+Challenges Our risk-aware trading portfolio optimization problem presents numerous chal-
+lenges. The objective function is typically non-linear and its computation, particularly in the
+case of risk measures based on historical or Monte Carlo simulation, can require substantial
+computational resources. The unique eligible instruments are determined by various parameters,
+which are either intrinsically categorical (e.g., payoff type, currency, underlying asset), or are
+quoted in market-discrete values (e.g., maturity, strike), though some can be approximated
+continuously (e.g., notional amounts). Hence, a candidate eligible optimization strategy is
+represented by a set of values of the relevant parameters.
+However, the sheer number of potential combinations of the parameters’ values makes the
+brute-force approach (i.e., the direct calculation of all possible solutions) unfeasible even for
+simple portfolios and optimization strategies. Additionally, not every optimization strategy
+satisfies the optimization constraints, depending on their tightness (the tighter the constraints,
+the fewer eligible solutions). Finally, the global optimal solution is often hidden among numerous
+similar local optima due to the inherent complexity of the objective function landscape.
+Optimization meta-heuristics From a computational point of view, we must solve a multidi-
+mensional, non-linear, constrained optimization problem with integer variables, where the value
+of the objective function may change abruptly, thus complicating the search for a global minimum.
+Since simple techniques are insufficient for such complex problems, numerical algorithms based
+on optimization meta-heuristics are typically used. These techniques are recognized as efficient
+approaches for optimization problems that cannot be exactly solved in a “reasonable” time
+limit, overcoming incomplete initial information or limited computation capacity, and sampling a
+portion of the entire set of solutions that is too large to be completely explored. Even though
+these algorithms do not guarantee to converge to the global optimum in a finite computational
+time, their application to our optimization problem is beneficial, since also local optima leading
+to appreciable improvements of the objective function are valuable from a financial point of view.
+3Valuation risk is captured by appropriate valuation risk measures such as fair value adjustments, required by
+EU accounting standards (IFRS, https://www.ifrs.org), and Additional Valuation Adjustments (A V A) deducted
+from Common Equity Tier 1 capital, required by EU prudential regulation (CRR3 2024), etc., which ultimately
+determine the capital structure of the Bank.
+4RAF guidelines are issued by the Basel Committee of Banking Supervision (Basel Committee on Banking
+Supervision 2015) and transposed by the EU into CRD/CRR packages.
+4
+A complete overview of optimization meta-heuristics is presented by Boussaid, Lepagnot,
+and Siarry 2013, who distinguish between single solution based algorithms, such as Simulated
+Annealing (Kirkpatrick, Gelatt, and Vecchi 1983), which start with a single initial solution and
+move along a trajectory in the search space, and population based algorithms, which explore the
+search space using a population of different solutions evolving according to some rules, such as
+Genetic Algorithms (GA, Holland 1992), and Particle Swarm Optimization (PSO, Kennedy and
+Eberhart 1995).
+Related literature The classic portfolio optimization problem following Markowitz 1952 is
+widely discussed in the literature, also using optimization meta-heuristics (Dallagnol, Berg, and
+Mous 2009; Soleimani, Golmakani, and Salimi 2009) and even quantum computers (Rosenberg
+et al. 2016; Venturelli and Kondratyev 2019). Conversely, to the best of our knowledge, the
+risk-aware trading portfolio optimization problem introduced above represents an understudied
+topic. Our work was initially motivated by Kondratyev and Giorgidze 2017, who use GA and
+PSO meta-heuristics to search optimal delta hedging strategies in the context of Margin Valuation
+Adjustment optimization.5 This seminal work is limited to a specific and very simple setting:
+a toy portfolio of USDCNY Non Deliverable FX Forwards (NDF, i.e., linear instruments on a
+single exchange rate) exchanged between two out of five counterparties, one single optimization
+instrument (the USDCNY NDF itself), and no optimization constraints beyond trading cost. An
+apparent application to collateral optimization with multiple Central Counterparties is found in
+Erekhinsky 2017.
+The idea of portfolio optimization based on market risk measures is obviously not new. For
+example, Rockafellar and & Uryasev 2000 and Larsen, Mausser, and Uryasev 2002 minimize
+Conditional Value at Risk (a.k.a. Expected Shortfall) using analytical approaches and linear
+programming techniques. Gaivoronski and G. Pflug 2005 determine an optimal Value at Risk
+portfolio with a given expected return. Gilli, Kellezi, and Hysi 2006 determine optimal quantities
+of n assets which minimize different risk functions for a given return target under constraints on
+the assets’ sizes. J. Faias and Santa-Clara 2011, J. A. Faias and Santa-Clara 2017 and Dao 2014
+consider simplified European options’ portfolios.
+Also the idea of portfolio optimization based on meta-heuristics is largely explored in the
+literature. T. -J. Chang, Yang, and K. -J. Chang 2009 solve portfolio optimization problems by
+employing GA and risk measures based on Markowitz’s mean-variance, semi-variance, mean
+absolute deviation, and variance with skewness. Deng, Lin, and C. -C. Lo 2012 introduce an
+improved PSO to solve the Cardinality Constraints Markowitz Portfolio Optimization problem.
+Das et al. 2023 compare PSO, GA, Dynamic Programming, and Differential Evolutionary
+Algorithm algorithms for portfolio optimization in the NIFTY 50 market using Sharpe Ratio
+and expected return. Jun and Johar 2023 use PSO to maximize the Sharpe Ratio of portfolios
+of Exchange-Traded Funds, demonstrating its effectiveness in achieving higher risk-adjusted
+returns compared to traditional methods. Erwin and Engelbrecht 2023b develop a Multi-Guide
+Set-Based Particle Swarm Optimization for multi-objective portfolio optimization, and test it
+against established algorithms.
+Excellent reviews by Fabozzi, Huang, and Zhou 2010, Ertenlice and Kalayci 2018, Erwin and
+Engelbrecht 2023a, Loke et al. 2023 and Gunjan and Bhattacharyya 2023 are available. Erwin and
+Engelbrecht 2023a review 140 studies using evolutionary and swarm intelligence algorithms for
+portfolio optimization, finding that meta-heuristic approaches as more computationally efficient.
+Our contributions With the partial exception of Kondratyev and Giorgidze 2017, none of
+the cited works addresses the challenges of the risk-based trading portfolio optimization problem
+investigated in this paper. Specifically, our contributions are outlined below.
+5Margin Valuation Adjustment is a valuation adjustment which takes into account the cost of financing initial
+margin collateralization of OTC derivatives, see e.g. Gregory 2020; Green 2015.
+5
+• We introduce and formalize the risk-aware trading portfolio optimization problem, taking
+the point of view of the bank’s traders and risk managers. Toward our goal, we introduce
+and consequently leverage the key concepts of the unique eligible instruments and eligible
+optimization strategies, also including options to allow Delta, Vega, and Gamma optimization.
+• We propose a modified PSO algorithm, called Risk-Aware Trading Swarm (RATS), incor-
+porating a specialized parameterization built around the concepts of the unique eligible
+instruments and eligible optimization strategy. RATS is a versatile framework that leverages
+the parallelizable nature of the optimization problem with respect to the particle dimension
+and can be adapted to different trading portfolios, objective functions, and constraints.
+Additionally, its parameterization enables users to incorporate their financial insights and
+business views by directly shaping the structure of the eligible optimization strategies.
+• We showcase two applications on a real trading portfolio typical of large banks, made of
+hundreds of financial instruments of different kinds, using real market data and tradable
+optimization instruments. In both cases, we seek an eligible optimization strategy that, when
+combined with the initial portfolio, optimizes a fractional, non-convex objective function
+over a non-convex set of eligible optimization strategies defined by the constraints. Inspired
+by the practical needs of traders and risk managers, the objective function accounts for the
+Value at Risk measure, expected P&L, and trading costs. In addition, the set of constraints
+includes sensitivity limits; while the size of the eligible optimization strategy, its diversification,
+and the maximum nominal amount are handled directly via the proposed parameterization.
+In the first application, focused on a small-sized optimization strategy, RATS successfully
+identifies an optimal solution within the optimal solution set and demonstrates robustness to
+hyper-parameters tuning across all tested scenarios. In the second application, involving a
+large-sized optimization strategy, RATS markedly improves the cost-adjusted expected P&L
+and risk measures of the initial portfolio in every setting.
+At a high level, our work overcomes our inspiring paper by Kondratyev and Giorgidze 2017
+and bridges the gap between complying with stringent regulatory requirements and implement-
+ing effective trading strategies that align with the objectives of both business units and risk
+management.
+Roadmap This paper is organized as follows. Section 2 provides the fundamental concepts
+underlying the risk-aware trading portfolio problem. Then, Section 3 formalizes the risk-aware
+trading portfolio optimization problem. Next, Section 4 describes the proposed method, i.e.,
+RATS. Section 5 provides the results of our empirical assessment. In detail, Section 5.1 specifies
+the setting and the building blocks of the risk-aware trading portfolio optimization problem.
+Section 5.2 compares our approach to Markowitz-like approaches, highlighting their limitations
+and key differences. Subsequently, Section 5.3 explores the small-sized application setting, and
+Section 5.4 addresses the large-sized one. Finally Section 6 draws the conclusions and outlines
+future research directions.
+2 Preliminaries
+This section provides the basic notation and key concepts that underlie the risk-aware trading
+portfolio problem. We start the discussion at the individual financial instrument level and then
+move to the portfolio level.
+Notation We denote by [n] the set {1, 2, . . . , n} with n ∈ N. Scalars are lowercase letters, a,
+vectors are lowercase bold, a, matrices are uppercase bold, A, sets are uppercase calligraphic, A,
+elements of a set are uppercase, A. Given a, we denote max(a, 0) by [a]+. The multiset union
+operator is ⊎. The element-wise (Hadamard) product is denoted by ◦. We use subscripts for
+6
+indices, while superscripts are used for everything else. Given an n-dimensional vector a and a
+permutation ≺ such that a≺ = [a≺1 , . . . , a≺n ] is increasing, we denote by S (·) the sort operator
+such that a≺ = S (a). The discrete uniform distribution is U {a, b}, whereas the continuous one
+is U (a, b). We work in a static setting, that is, a fixed point in time t. Hence, throughout the
+paper, we omit any reference to time without any ambiguity, also to ease the notation.
+Unique instruments We consider financial instruments of any type, such as fundamental
+assets (e.g., stocks), derivatives (e.g., swaps, options), securities (e.g., government and corporate
+bonds), and loans (e.g., mortgages). We identify a financial instrument having a unitary nominal
+amount with a set of m (categorical) parameters, namely {ϕ1, . . . , ϕm}. The parameters ϕi can
+vary in their corresponding domains Dϕi. We term the sequence given by concatenating the
+values of the latter parameters unique instrument (UI). For instance, consider a vanilla option.
+A possible parameterization is given by four parameters, i.e., the ticker of the underlying, the
+payoff type, the strike, and the time-to-maturity. In this case, a UI is a sequence obtained
+by concatenating the four values of the previous parameters, each belonging to the associated
+domain. Additional parameters can be considered according to the application need (e.g.,
+currency, dividends, counterparty).
+Risk factors and risk scenarios The UI is associated with a set of random variables
+R = {R1, . . . , Rn}, called risk factors , which fully determine its price. For instance, in the
+case of an option, key risk factors are the price of the underlying S, the implied volatility σ,
+the interest rate R, and the dividend rate D. Each risk factor can be associated with a risk
+distribution, quantifying the likelihood of different values in the risk factor. Hence, estimating
+the risk distribution enables the simulation of risk scenarios for the risk factor. We denote the
+dataset of risk scenarios by F .
+Unique instruments features Features can characterize unique instruments, and we generally
+refer to them as φG. They can be either observed on the market, thus part of the market data
+M, or computed by using risk factors R and risk scenarios F . Below we provide those relevant
+to our empirical assessment in Section 5.
+V alue.Consider a UI, namely G. We indicate its value by vG. The value can be either marked
+to market , in which case the value is quoted on the market, or marked to model , when the value
+is computed using a specific pricing model involving the relevant risk factors. Pricing models
+can be chosen according to the institution’s internal pricing policy. Additionally, they may be
+calibrated to their reference plain vanilla instruments, and may be based on different numerical
+approaches (e.g., analytical formulas or Monte Carlo simulations).
+Profit and loss. The proposed framework is based on historical scenarios of risk factors F
+and the corresponding profit and loss (P&L) distribution. These scenarios simulate past market
+variations at a fixed point in time t to assess changes in the UI value. Consider s simulated
+scenarios. We obtain s historical P&L rGi , with i ∈ [s], as follows. Denote by vG0 and vGi the
+value of the UI at t and at the i-th simulated scenario, respectively. Hence, we have
+rGi = vGi − vG0 , i ∈ [s] . (1)
+We arrange the previous historical P&L in the vector rG = [rG1 , . . . , rGs ]⊤ .
+Greeks. UIs can be characterized by the sensitivity of their value vG to changes in the underlying
+risk factors R. These sensitivities are known as Greeks. We introduce below the most important
+Greeks typically used for risk management and trading purposes. Delta is the sensitivity of vG
+with respect to changes in the underlying price SG,
+∆G = ∂v G
+∂S G . (2)
+7
+Vega is the sensitivity of vG with respect to changes in the implied volatility of the underlying
+asset σG,
+V G = ∂v G
+∂σ G . (3)
+Gamma is the sensitivity of Delta with respect to changes in the underlying price SG,
+ΓG = ∂2vG
+∂S G2 . (4)
+Trading cost. Trading financial instruments incurs trading costs. It is market practice to
+measure such costs in terms of sensitivity, i.e., Delta for linear instruments and additionally Vega
+for options. Given a UI, namely G, we denote such contributions deriving from the buying of a
+unitary notional amount of G by c∆G and cV G ∈ R+, respectively. Hence, the cost for buying a
+unitary notional amount of G is
+cG = c∆G+ cV G . (5)
+The computation of c∆G and cV G is specific to the nature of G. Henceforth, we provide
+the cases of stocks, futures on equity indexes, and European call and put options, which are
+instrumental for the empirical assessment in Section 5.
+Denote by (i) δ the market bid/ask spread for the underlying corresponding to G, (ii)
+δq the market bid/ask spread for futures, and (iii) δK the market bid/ask spread for the
+European options with strike K (expressed as Delta-percentage). The cost contributions for the
+corresponding UIs are
+c∆G =
+(
+1
+2 ∆Gδ if G is either a stock, or a call, or a put ,
+1
+2 δq if G is a futures; (6)
+and
+cV G =
+(
+1
+2 V GδK if G is either a call or a put ,
+0 otherwise . (7)
+Portfolio parameterization A portfolio is canonically viewed as a collection of financial
+instruments with nominal amounts different from zero. The value of a financial instrument may be
+specified in terms of a unitary value in a given currency times the notional amount. In our setting,
+the unitary value is the value vG of the corresponding UI. Accordingly, we represent the portfolio
+as a pair ⟨G, g⟩, where G = {G1, . . . , Gn} is the set of UIs in the portfolio, and g = [g1, . . . , gn]⊤ is
+the integer vector of their corresponding notional amounts, representing long and short positions.
+Such portfolio parameterization is particularly convenient during optimization. First, it enables
+the search on UIs and nominal amounts to be separated. Second, it allows the portfolio features
+and risk measures to be expressed in terms of those of the constituting UIs. Accordingly, we
+can compute relevant features and risk measures at the UI level during the initialization phase.
+Then, instead of recomputing from scratch the portfolio features and risk measures by means of
+pricing functions at each iteration, we exploit the stored values during the optimization process
+thus reducing the computational burden (see Section 4).
+Portfolio features As in the case of the UI, we can associate features with a financial portfolio.
+By exploiting the parameterization ⟨G, g⟩, the portfolio feature φ(G, g) can be written as a linear
+combination of the UIs’ feature φGj , where the coefficients a(gj) depend on the notional amount
+associated with each UI. Mathematically,
+φ(G, g) =
+nX
+j
+a(gj)φGj . (8)
+8
+Starting from Equations (1) to (5), exploiting Equation (8), the portfolio features relevant to our
+empirical assessment read as
+vG =
+nX
+j
+gjvGj , (Value)
+rGi =
+nX
+j
+gjrGji , (P&L for the i-th risk scenario, i ∈ [s])
+∆G =
+nX
+j
+gj∆Gj , (Delta sensitivity)
+V G =
+nX
+j
+gjV Gj , (Vega sensitivity)
+ΓG =
+nX
+j
+gjΓGj , (Gamma sensitivity)
+cG =
+nX
+j
+cGj |gj| . (Trading cost)
+(9)
+As per the UI, we arrange the historical P&L of the portfolio in a vector, namely rG =
+[rG1 , . . . , rGs ]. Additionally, the trading cost involves the absolute notional amount since the
+trading fee is paid for both long and short trades.
+Risk measures Starting from the vector of portfolio P&L, we estimate the portfolio risk
+measures, generally denoted by ρ(G, g). Below we report those relevant to our application in
+Section 5. We remark that our framework is general, and is not limited to using such risk
+measures.
+First, we have the sample profit and loss
+P&L
+G
+= 1s sXi rGi , (10)
+namely the empirical mean of the vector of portfolio P&L.
+Second, the sample Value at Risk at the β percentile, namely β-VaRG, obtained using
+decreasing scenarios weight. Consider λ ∈ (0, 1) the decay factor used to give more weight to the
+most recent scenarios, and define α = 1 − β(1 − λs). Then, setting i⋆ = ⌈ln α/ ln λ⌉, we have
+β-VaRG = S  rGi⋆ , (11)
+viz., β-VaRG is the i⋆-th entry of the vector of sorted portfolio P&L.
+3 Risk-aware trading portfolio optimization
+At a high level our goal can be stated as follows. Consider an initial portfolio ⟨P, p⟩ at time
+t and an objective function f , which will be discussed below. Additionally, consider a set of
+risk- and trading-based constraints associated with portfolio features and risk measures. We
+want to find the portfolio ⟨T , t⟩ optimizing f , which is obtained by adding to ⟨P, p⟩ a suitable
+eligible optimization strategy (EOS), denoted by ⟨H, h⟩, complying with the specified constraints.
+Mathematically,
+⟨T , t⟩ :=
+
+P ⊎ H,
+h
+p⊤, h⊤
+i⊤
+. (12)
+9
+We call this task risk-aware trading portfolio optimization (RATPO). In the sequel, we formulate
+the general RATPO problem.
+Looking at RATPO, the first key ingredient is the initial portfolio ⟨P, p⟩. In our work, P
+may include any UI, as assumed throughout Section 2. The parameterization of such UIs is
+static and does not depend on the specification of RATPO. Accordingly, we call P the set of
+unique static instruments . Analogously, the vector of notional amounts p ∈ Z|P| is fixed during
+the optimization process.
+The second key ingredient is the objective function f . Consider (i) a set of p portfolio risk
+measures, ρi(T , t), i ∈ [p]; and (ii) a set of q portfolio features φj(T , t), j ∈ [q]. The family of
+objective functions considered in RATPO is a general combination of (possibly nonconvex) risk
+measures and portfolio features. Specifically,
+f (T , t)
+(a)
+= f (H, h; P, p) := f (ρ1, . . . , ρp, φ1, . . . , φq) ; (13)
+where in ( a) we recognize that ⟨P, p⟩ is fixed during the optimization. Additionally, in Equa-
+tion (13) we omit the arguments for risk measures and the portfolio features to enhance readability.
+The specific risk measures, portfolio features, and functional form of f can be chosen according
+to the application’s need, as demonstrated in the empirical assessment in Section 5.
+The third key ingredient is a set of z inequality and equality constraints, ψi(H, h; P, p), i ∈ [z].
+Similarly to the objective function, each constraint can be a combination of (possibly nonconvex)
+risk measures and portfolio features, depending on the application need. The constraints entail
+the set of feasible EOS, denoted by E, which can be nonconvex.
+Next, the fourth key ingredient is the total portfolio ⟨T , t⟩. Starting from Equation (12),
+the considered universe of UIs in RATPO, namely U such that T ⊆ U, consists of the multiset
+union of two distinct sets. The first, P, is the set of UIs in the initial portfolio. The second,
+U H such that H ⊆ UH, is the set of all possible UIs constituting the EOS ⟨H, h⟩ ∈ E. The set
+U H depends on the specification of RATPO since it is entailed by the Cartesian product of the
+domains Dϕi associated with the parameters ϕi specifying each UI Hj that can constitute H,
+where j ∈
+U H. We term the Hj unique eligible instrument (UEI), and U H the set of UEIs.
+Note that some UIs in P can potentially be in U H, depending on the application’s need. This is
+the reason why we use the multiset union. Now, we can pose the formal definitions for the UEI
+and for the EOS.
+Definition 1 (Unique eligible instrument, UEI) . A unique eligible instrument Hj ∈ UH refers
+to a financial instrument tradable on the market at the optimization time t. It is represented
+as the sequence resulting from the concatenation of a combination in the Cartesian product
+Dϕ1 × . . .× Dϕm, where ϕ1, . . . , ϕm are the parameters determining the UEI, and Dϕ1, . . . ,Dϕm
+the corresponding domains.
+Definition 2 (Eligible optimization strategy, EOS) . An eligible optimization strategy ⟨H, h⟩ is
+a tradable financial strategy at time t, complying with a set of specified constraints. It is a set
+H ⊆ UH of UEIs, weighted by the corresponding notional amounts hj ∈ h, such that ⟨H, h⟩ ∈ E.
+At this point, we are ready to formally state the general RATPO problem.
+Problem 1 (Risk-aware trading portfolio optimization, RATPO) . Given an initial portfo-
+lio ⟨P, p⟩, the total portfolio that optimizes the objective function f is given by ⟨T ⋆, t⋆⟩ :=
+P ⊎ H⋆, hp⊤, h⋆⊤i⊤, where
+⟨H⋆, h⋆⟩ = arg min
+⟨H,h⟩∈E
+f (H, h; P, p) . (P1)
+10
+The optimization variable in (P1), i.e., the EOS ⟨H, h⟩, can be mapped into an integer vector
+as further discussed in Section 4. Thus, Problem (P1) can be viewed as an integer optimization
+problem with possibly nonconvex objective function and constraint set. We emphasize that
+nonconvexity can easily originate from the risk measures and portfolio features considered by risk
+managers and traders in their daily activities. Hence, the difficulty in solving (P1) boils down
+to the mathematical properties of the objective function in Equation (13) and of the feasible
+solution set E. Establishing a general method that guarantees global convergence for the general
+RATPO problem is not feasible, and each specification of (P1) should be analyzed separately.
+The next section exposes a general-purpose algorithm based on particle swarm optimization.
+This method empirically proves to be effective and efficient in solving an instance of the RATPO
+problem involving the main risk measures and portfolio features used in daily risk management
+and trading activities (see Section 5).
+4 Risk-aware trading swarm algorithm
+Meta-heuristics represent general-purpose approaches for solving optimization problems. Among
+their features, they do not make restrictive assumptions on the mathematical properties of the
+objective function and constraints. This approach allows risk managers and traders to specify
+arbitrarily complex objective functions of the form in Equation (13) arising from the need to satisfy
+trading, risk management, and regulatory objectives. In addition, this aspect allows specifying
+complex constraints set, and thus guiding the optimizer’s search toward solutions to problem
+(P1) having precise financial meaning. In addition, they do not leverage the gradient during the
+optimization. Therefore, they are amenable to handling optimization variables of different natures.
+Finally, they efficiently explore the solution space by balancing the exploration-exploitation
+trade-off (see. Erwin and Engelbrecht 2023a).
+The compromise for this flexibility is the lack of convergence guarantees to a global optimum
+within a finite time. These algorithms may become trapped in local optima, making it challenging
+to assess their proximity to the global optimum. Nonetheless, for risk managers and traders—who
+typically possess deep domain knowledge that can inform the optimization problem through
+constraints—a consistent reduction in the objective function remains valuable.
+In our work, we build upon particle swarm optimization (PSO), originally introduced by
+Kennedy and Eberhart 1995. PSO is inspired by the flocking behavior of birds and fishes, and
+represents one of the most popular meta-heuristics based on the swarm intelligence paradigm by
+Kennedy 2006. In PSO, each particle in the swarm explores positions, i.e., candidate solutions of
+the optimization problem, in an n-dimensional space. Specifically, denoting by np the number
+of particles, the particle is described by the position and velocity vectors, xi and vi, i ∈ [np],
+respectively. The algorithm proceeds by iteratively updating the particles’ position and velocity
+vectors. We denote by yki and zk respectively (i) the best position visited by the i-th particle at
+iteration k, and (ii) the best global position visited by the swarm at iteration k, respectively.
+Given (i) the inertia weight w ∈ R+, (ii) the personal and social coefficients cpers and csoc in R+
+respectively, and (iii) the vectors r1 and r2 drawn from U (0, 1), the particle update recursion is
+
+
+
+vk+1i = wvki + cpersrk+11 ◦ (yki − xki )| {z }
+personal component
++ csocrk+12 ◦ (zk − xki )| {z }
+social component
+,
+xk+1i = xki + vk+1i .
+(R1)
+By building on the key concepts of UEI and EOS, we develop a special version of PSO that
+leverages the parameterization ⟨H, h⟩ and enables parallel computation over the particles to
+efficiently solve the RATPO problem (P1). Our method, termed risk-aware trading swarm
+(RATS), is described below.
+Initialization. As a first step, RATS runs an initialization phase. Consider that the cardinality
+of U H is n, and that the names of the UEIs are sorted in lexicographic order. Since each Hj ∈ UH
+11
+corresponds to a unique combination of the representing parameters’ values, we can simply
+identify the Hj with its index j ∈ [n]6. Hence, the particle position can be represented as a
+2m-dimensional integer vector
+x :=
+
+x1, . . . , xm| {z }
+UEI indices
+, xm+1, . . . , x2m| {z }
+notional amounts
+
+
+⊤
+, with m ≤ n. (14)
+The particle position in Equation (14) entails an optimization strategy ⟨H, h⟩. If ⟨H, h⟩ ∈ E,
+meaning the optimization strategy is eligible, the particle position is called feasible. Conversely,
+if ⟨H, h⟩ /∈ E, the particle position is called unfeasible. Furthermore, the number of distinct UEIs
+represented in x, i.e., |H|, is at most m. This is because, in principle, the first m entries of x
+may include repeated indices. Consequently, RATS enables users to easily set an upper bound
+of m on the number of financial instruments that can be selected, a helpful feature from an
+application viewpoint.
+RATS initializes the entries xj, j ∈ [m], by sampling from U {bj, uj}, where bj and uj ∈ N,
+such that 1 ≤ bj < uj ≤ n. Hence, users can easily specify the relevant UEIs for each entry xj
+through bj and uj. Next, RATS initializes the entries xj+m, j ∈ [m], by sampling from U {ℓj, tj},
+where ℓj and tj are minimum and maximum notional amounts, respectively. Thus, ℓj and tj act
+on the UEIs corresponding to the indices from bj to uj within U H. As far as the velocity vector
+is concerned, RATS initializes its entries by sampling from U (vmin, vmax), where vmin and vmax
+in R are two hyper-parameters corresponding to the minimum and maximum velocity.
+Additionally, starting from the input datasets of risk factors R, market data M, and risk
+scenarios F , RATS precomputes the p features of the UEIs relevant to the optimization problem,
+namely φHjq with q ∈ [p] and j ∈ [n]. This is possible since the features of the UEIs do not
+change during the optimization process. This way, RATS lowers the computational burden of
+the optimization process. Indeed, at each iteration k, to assess the goodness and feasibility of
+the particles’ positions xki , i ∈ [np], we need to compute the features of the optimization strategy
+entailed by xki since they are necessary for the evaluation of Equation (13) and of the constraints
+ψℓ(H, h; P, p), ℓ ∈ [z] (cf. Section 2). In general, assessing a feature of an optimization strategy
+involves evaluating a (nonlinear) function, which can be computationally expensive. On the
+contrary, RATS efficiently exploits the optimization strategy parameterization which allows us
+to use Equation (8). Hence, at each iteration and for each particle, the computational cost of the
+optimization strategy feature evaluation is linear, as it requires 2 m − 1 operations.
+Next, RATS evaluates the fitness of the initial positions of the particles to set yi and z.
+Starting from Equation (13), we define the fitness function as
+¯f (H, h; P, p) := f (H, h; P, p) +
+zX
+ℓ
+λℓ [ψℓ(H, h; P, p)]+ . (15)
+The second term in Equation (15) represents the weighted sum of the violations of the inequality
+and equality constraints, where λj ∈ R+ are penalty hyper-parameters. If the position is feasible,
+the value of the fitness function is equal to that of the objective function. Conversely, it is
+penalized by the weighted sum of constraints’ violations. Henceforth, we refer to the fitness
+function evaluated at the optimization strategy entailed by a particle position x as ¯f x.
+Recursion. After the initialization phase, RATS runs the recursion in (R1) to update the
+position and the velocity of the particle. In our setting, the particle position xki takes on values in
+Z2m, whereas the velocity vector vk+1i ∈ R2m. Hence, after the second update in (R1), we apply
+rounding to ensure that xk+1i is a vector of integers and its entries are within the specified ranges
+6The same mapping can be applied to the notional amounts to handle the case in which the notional amount
+domain is undersampled, that is, the range of the corresponding integers is discretized. We use such a mapping in
+our empirical assessment in Section 5.
+12
+determined by {bj, uj, ℓj, tj}, j ∈ [m]. At this point, RATS evaluates ¯f xk+1i , and accordingly
+determines yk+1i . RATS runs the above steps in parallel over the particles, thus reducing the
+computational time, and allowing the user to choose larger values of np for better exploration.
+Next, RATS updates the global best position if it finds a new position that improves the fitness
+function evaluated at the global best position more than τ f , where τ f ∈ R+ is a small significance
+threshold. Specifically, the condition reads as
+¯f
+
+zk
+− min
+i∈[np]
+¯f
+
+yk+1i > τf . (16)
+In case Equation (16) is not satisfied, RATS increases a counter kstall ∈ N which keeps track of
+the number of stall iterations. Finally, following Shi and Eberhart 1998, we dynamically adjust
+the inertia weight, according to a linearly decaying rule. Given minimum and maximum values,
+wmin and wmax, respectively; and setting w1 = wmax, the rule reads as
+wk+1 = wmax − kkmax  wmax − wmin , (17)
+where kmax is the maximum number of iterations.
+Stopping criteria. RATS exits the recursion either (i) if the maximum number of iterations
+kmax is reached, or (ii) if the global best position is not updated for a specified number of
+consecutive stall iterations kstall ≥ kmax stall, or (iii) if the fraction χ of particles exhibiting a
+personal best position equal to the global best one exceeds a concentration threshold τ p ∈ (0, 1).
+Algorithm 1 summarizes the overall procedure. We emphasize that RATS can be easily
+equipped by the user with different existing variants of PSO.
+13
+Algorithm 1: Risk-aware trading swarm (RATS)
+Input: risk factors R, market data M, risk scenarios F , initial portfolio ⟨P, p⟩, unique
+eligible instruments {Hj} with j ∈ [n], number of particles np,
+minimum/maximum UEI indices/notional amounts {bj, uj, ℓj, tj} with j ∈ [m],
+minimum velocity vmin, maximum velocity vmax, minimum inertia weight wmin,
+maximum inertia weight wmax, small significance threshold τ f , concentration
+threshold τ p, maximum number of iterations kmax, number of consecutive stall
+iterations kmax stall
+Output: z
+1 w ← wmax
+2 kstall ← 0
+3 for j ← 1 to n do
+4 for q ← 1 to p do
+5 φHjq ← Compute it by using R, M, F
+6 for i ← 1 to np do
+7 x0i ← Sample the first m entries from U {bj, uj}, the rest from U {ℓj, tj}, with j ∈ [m]
+8 v0i ← Sample the entries from U  vmin, vmax
+9 y0i ← x0i
+10 ¯f x0i ← Apply Equation (15)
+11 ¯f y0i ← ¯f x0i
+12 z0 ← arg miny0i ¯f y0i
+13 ¯f z0 ← Apply Equation (15)
+14 while k < kmax and kstall < kmax stall and χ < τp do
+15 zk ← zk−1
+16 r1, r2 ← Sample the entries from U (0, 1)
+17 do in parallel
+18 yki ← yk−1i
+19 vki , xki ← Apply (R1)
+20 ¯f xki ← Apply Equation (15)
+21 if ¯f xki < ¯f yki then
+22 yki ← xki
+23 if Equation (16) then
+24 zk ← arg minyki ¯f yki
+25 kstall ← 0
+26 else
+27 kstall ← kstall + 1
+28 wk+1 ← Apply Equation (17)
+5 Empirical assessment
+This section provides the empirical assessment of the proposed approach via two different
+applications. The first, given in Section 5.3, concerns a simplified setting that is instrumental
+to show that RATS described in Section 4 can find a solution in the optimal solution set
+corresponding to the lowest objective function value. Indeed, although the initial portfolio
+is made of hundreds of instruments of different kinds, the cardinality of the solution space is
+tractable (roughly of the order of 10 8), and it is possible to find the optimal objective function
+value and the associated optimal solution set via brute force. This first application is also helpful
+14
+T able 1: Composition, values and sensitivities of ⟨P, p⟩, and its constituents. Specifi-
+cally , we report aggregate values at the type level for the latter. Market data as of
+September 2018, the 28th.
+Instrument Number vP (EUR) ∆ P (EUR) V P (EUR) Γ P (EUR)
+Stocks 75 13 465 008 134 650 0 0
+Futures 14 0 −232 792 0 0
+European options 10 99 177 −20 042 12 159 7520
+American options 28 236 664 73 529 67 391 7424
+Total 127 13 800 849 −44 655 79 550 14 944
+to point out the main differences between the proposed approach and a Markowitz-like approach.
+The second application concerns a more real setting where the initial portfolio is still the
+same, but the set of instruments for building the EOS is larger, and the cardinality of the solution
+space is roughly of the order of 10 110. In this case, finding the optimal value of the objective
+function via brute force is not computationally feasible.
+5.1 Experimental setting
+Throughout the section, we use the diacritics e (tilde) when we refer to the quantities involved
+in the RATPO problem to emphasize that we are in a specific application setting. Below are
+the specifications for the initial portfolio, for the objective function ef , and for the constraints
+determining the feasible set of EOS, namely eE, used in both applications. These specifications
+are needed to pose the RATPO problem (fP1) tackled in our empirical assessment, that is, a
+particular case of (P1).
+Initial portfolio We consider a real trading portfolio ⟨P, p⟩ including 127 financial instruments
+in 6 different currencies on 87 underlying equity stocks and indices, as reported in Table 1. The
+initial portfolio composition, features, and risk measures reflect the trader’s view at t, i.e., as of
+September 28, 2018. The initial portfolio static UIs are determined by parameters ϕi, such as
+underlying, payoff type, maturity, and strike (see Section 2). We consider five features for the
+static UIs, namely the value, the P&L, and the sensitivities Delta, Vega, and Gamma. The value
+at t is marked to market. Conversely, in the case of risk scenarios, for stocks and futures, the
+value is marked to market, whereas for options, it is marked to model, i.e., computed according
+to specific pricing models. 7
+Starting from the features of the static UIs and exploiting Equation (9), we compute the
+initial portfolio value vP , its P&L in the risk scenarios, and the sensitivities ∆ P , V P , ΓP . Table 1
+provides vP , ∆P , V P , and Γ P . Additionally, the P&L distribution is given in Figure 1.
+Objective function The objective function for the two applications is the same. It consists
+of the combination of two portfolio risk measures and one portfolio feature. Let us indicate
+with P&LP the profit we would make in one day by investing ⟨P, p⟩ at the risk-free rate
+corresponding to the rebalancing date. As risk measures of interest for the ⟨T , t⟩ given in
+Equation (12), we consider the sample P&L, denoted by P&L
+T
+, and the β-VaRT with β = 1%,
+7We use the model by Black and Scholes 1973 for European options, and the approximation provided by
+Barone-Adesi and Whaley 1987 for American options. We remark that our approach only requires the usage of
+non-sophisticated pricing models to manage plain vanilla UEIs. Then, the other features are computed by using
+Equations (1) to (4). More precisely, the sensitivities Delta and Gamma are based on a 1% multiplicative shock
+of the underlying asset. The sensitivity Vega is based on a 1% additive shock of the implicit volatility of the
+underlying. All the features are either observed or computed in their reference currencies and then converted to
+EUR currency. The number of considered risk scenarios is s = 250.
+15
+defined in Equations (10) and (11), respectively. In our experiments, we consider the β-VaRT as
+negative-valued. The considered feature is the transaction cost for implementing ⟨T , t⟩, defined
+in Equation (9). Please notice that the transaction cost is only determined by the EOS ⟨H, h⟩
+since ⟨P, p⟩ is fixed. Accordingly, we denote it by cH. Hence, the objective function reads as
+ef (H, h; P, p) = P&L
+T
+− P&LP − cH
+β-VaRT − cH . (18)
+Equation (18) provides a cost-adjusted risk measure of ⟨T , t⟩. The sign of the cost term
+can be easily understood by noticing that (i) at the numerator the cost term erodes the excess
+P&L of ⟨T , t⟩ w.r.t. ⟨P, p⟩, and (ii) at the denominator it represents an additional loss to that
+conveyed by the β-VaRT (which is typically already negative).
+Ideally, we would like to maximize the numerator and to vanish the denominator. Since at the
+denominator we approach zero from the left, the more negative the value of ef , the better ⟨T , t⟩.
+Hence, in our empirical assessment, we aim at minimizing the objective function in Equation (18).
+We remark that the objective function in Equation (18) is a particular case of the general
+objective in Equation (13), and that our approach is not limited to it.
+Constraints We consider Delta, Vega, and Gamma sensitivity constraints. These kinds of
+constraints are common in day-to-day risk management and trading activities. We remark that
+the proposed approach is general and not limited to this specific choice for the constraints.
+The sensitivity constraints are defined according to three portfolio features. Indicate with ∆ P
+the monetary value of the delta sensitivity for ⟨P, p⟩, and the same for the vega and gamma
+sensitivities, V P and ΓP , respectively. Analogously, we indicate by ∆H, V H, and ΓH the monetary
+value of the considered sensitivities for ⟨H, h⟩. Hence, given τ ∆, τV , τΓ ∈ R+, the sensitivity
+constraints read as
+eψ∆(H, h; P, p) :=∆H − τ ∆∆P  ≤ 0 ;
+eψV (H, h; P, p) :=V H − τ V V P  ≤ 0 ;
+eψΓ(H, h; P, p) :=ΓH − τ ΓΓP  ≤ 0 .
+(19)
+Given the linearity of the sensitivities in the vector of notional amounts as per Equation (9), the
+constraints in Equation (19) are linear inequality constraints.
+Unique eligible instruments We consider a list ofu ∈ N underlyings, sorted in lexicographical
+order. Each underlying is either a stock or a stock index. If the underlying is a stock, we consider
+as UEIs European vanilla options written on the stock and the stock itself. Conversely, we
+consider European vanilla options and futures written on the stock index to be UEIs. To formally
+implement Definition 1 in our empirical assessment, we consider the following parameters:
+• ν ∈ [u] the position of the underlying within the list of underlyings;
+• ω ∈ {c, p, q, s} the type of the UEI, i.e., “c” for call, “p” for put, “q” for futures, “s” for stock;
+• K ∈ {0.10, 0.25, 0.50} the strike expressed as ∆-percentage;
+• T ∈ DT1 ∪ . . .∪ DTu the time-to-maturity in days, where DTℓ is the domain corresponding to
+the underlying at the position ν = ℓ within the list of underlyings.
+Please refer to Table 3 in Appendix B for further details regarding the parameters associated
+with the UEIs. Additionally, recall that we denote by n the cardinality of U H, i.e., the number
+of considered UEIs. At this point, we are ready to implement Definition 1 in our application
+setting.
+Implementation of Definition 1 (Unique eligible instrument, UEI) . A unique eligible in-
+strument Hj ∈ UH, j ∈ [n], is the string obtained by the concatenation of the value of the
+16
+parameters (
+νj, and ωj , for stocks;
+νj, ωj, Kj, and Tj , for European options and futures. (20)
+Eligible optimization strategy Next, starting from Implementation of Definition 1, con-
+sidering the sensitivity constraints in Equation (19), we can specify Definition 2 in our setting.
+Implementation of Definition 2 (Eligible optimization strategy) . Given ∆P , V P , ΓP , an
+eligible optimization strategy ⟨H, h⟩ is a set H ⊂ UH of m ≤ n UEIs, weighted by the corresponding
+notional amounts h = [h1, . . . , hm]⊤, satisfying the sensitivity constraints in Equation (19).
+As mentioned in Section 4, thanks to our parameterization we can focus on those EOS having
+a precise structure on both the set of selected UEIs H and corresponding notional amounts in
+h. This structure is meant to reflect the prior knowledge of traders and risk managers. Recall
+that u is the number of underlyings and consider the UEIs sorted in lexicographical order. As an
+example, concerning the structure of H, in our applications, we require that the EOS contains at
+most ni UEIs for each underlying, thus implying a cardinality upper-bound |H| ≤m = ni u for
+the strategy (see Section 4). Specifically, in our experiments, we consider the case where ni = 3.
+Additionally, if the underlying is a stock we require that H contains (at most) two vanilla options
+written on the underlying and the stock itself; if a stock index, (at most) two vanilla options and
+a futures written on the underlying. This is useful in showing how it is possible to control the
+size of the EOS—which is important from the operational viewpoint—and how to favor balanced
+solutions.
+Starting from Equation (14), we know that the particle position x is a 2m-dimensional integer
+vector. The first m entries correspond to the indices of the UEIs, and the second to their notional
+amounts. Hence, to impose the above structure onto H, we partition the first m entries of x into
+triplets, each corresponding to the ni = 3 UEIs for a specific underlying:
+x1,1, x1,2, x1,3| {z }
+1st underlying
+, . . . , xℓ,1, xℓ,2, xℓ,3| {z }
+ℓth underlying
+, . . . , xu,1, xu,2, xu,3| {z }
+uth underlying
+. (21)
+Hereinafter, to enhance readability and with a slight abuse of notation, we use a double indexing:
+the first on triplets, the second on the elements of a triplet. Looking at Equation (21), we have
+that that the ℓ-th triplet corresponds to those UEIs Hj ∈ UH, j ∈ [n], having νj = ℓ. Then,
+within each triplet, we force the first two entries to be European options and the third to be
+either a stock or a stock index, depending on the nature of the ℓ-th underlying. Again, referring
+to the ℓ-th triplet within Equation (21), this means that the xℓ,1 and xℓ,2 correspond to those Hj
+with νj = ℓ and ωj ∈ {c, p}. Analogously, xℓ,3 to those Hj with νj = ℓ and ωj = “s” if the ℓ-th
+underlying is a stock, ωj = “q” if a stock index. Hence, for each entry xℓ,i, where ℓ ∈ [n] and
+i ∈ [ni], we specify accordingly the lower and upper bound [ bℓ,i, uℓ,i]. If i ∈ {1, 2}, then bℓ,i is the
+lower bound of the range of indices corresponding to the UEIs with νj = ℓ and ωj = c, whereas
+uℓ,i is the upper bound of the range of indices corresponding to the UEIs with νj = ℓ and ωj = p
+(notice that “c” precedes “p” and the underlyings are lexicographically sorted). If i = 3 and the
+ℓ-th underlying is a stock, then bℓ,i = uℓ,i is the index of the (only) UEI with νj = ℓ and ωj = s
+(see Implementation of Definition 1). Instead, if the ℓ-th underlying is a stock index, then bℓ,i is
+the lower bound of the range of indices corresponding to the UEIs with νj = ℓ and ωj = q, uℓ,i
+the upper bound.
+Concerning the notional amounts in h, the partition in Equation (21) entails a partition on
+the second m entries of x corresponding to the notional amounts:
+xm+1,1, xm+1,2, xm+1,3| {z }
+1st underlying
+, . . . , xm+ℓ,1, xm+ℓ,2, xm+ℓ,3| {z }
+ℓth underlying
+, . . . , xm+u,1, xm+u,2, xm+u,3| {z }
+uth underlying
+. (22)
+17
+In our empirical assessment, we consider minimum and maximum notional amounts for each
+entry xm+ℓ,i , where ℓ ∈ [u] and i ∈ [ni], denoted by ℓℓ,i and tℓ,i , respectively. Table 3 provides
+the latter values. Furthermore, the ranges [ ℓℓ,i, tℓ,i] are discretized according to the procedure
+detailed in Appendix B. This is instrumental in showing how easy it is to handle cases where
+there is an operational need to trade batches of shares.
+Starting from Implementation of Definition 2, considering the structure for the set of UEIs
+and notional amounts detailed above, we denote by eE the resulting EOS set.
+RATPO problem Starting from the objective function in Equation (18), considering Im-
+plementation of Definition 2 and eE given as above, we pose the implementation of the general
+RATPO Problem 1 we aim at solving in the applications in Sections 5.3 and 5.4.
+Implementation of Problem 1. Given an initial portfolio ⟨P, p⟩, the total portfolio that opti-
+mizes the objective function in Equation (18) subject to the sensitivity constraints in Equation (19)
+is given by ⟨T ⋆, t⋆⟩ :=
+
+P ⊎ H⋆, hp⊤, h⋆⊤i⊤, where
+⟨H⋆, h⋆⟩ = arg min
+⟨H,h⟩∈ eE
+P&L
+T
+− P&LP − cH
+β-VaRT − cH . (fP1)
+We denote the set of optimal solutions by eE ⋆.
+Unfortunately, (fP1) is nonconvex. First, the fractional objective function contains the β-VaRT
+at the denominator, which is inherently nonconvex (Lwin, Qu, and MacCarthy 2017 and refs.
+therein). Second, the EOS set eE is nonconvex as well due to the structure we impose on H
+(see paragraph “Eligible optimization strategy” above). Indeed, from a canonical optimization
+perspective, imposing this structure boils down to a group-wise cardinality constraint on the
+ℓ0-norm8 of h, which is nonconvex.
+Although we do not exclude the possibility of deriving a convex surrogate of Equation (18)
+(Wozabal, Hochreiter, and G. C. Pflug 2010 and refs. therein), and approximating with differ-
+entiable functions the (group-wise) cardinality constraint as proposed by Malek-Mohammadi
+et al. 2016, we believe that such an investigation for deriving an alternative (gradient-based)
+optimization approach is beyond the scope of our empirical assessment, aimed at demonstrating
+the relevance of the RATPO problem and the general applicability of RATS given in Algorithm
+1.
+5.2 Comparison with the Markowitz-like approach
+Before delving into the case studies, we relate our approach to a possible variation of the
+Markowitz mean-variance optimization framework, focusing on the challenges to be addressed
+for solving ( fP1) with a Markowitz-like approach.
+The M-approach In his seminal work, Markowitz 1952 defines the portfolio selection problem
+in terms of expected returns and the variance of returns of na assets composing an investment
+universe U := {A1, . . . , Ana}. Indicate with y = [y1, . . . , yna]⊤, y ∈ Rna, the vector of portfolio
+weights for the assets in U . Assume that the portfolio is fully invested, i.e., Pj∈[na] yj = 1. Denote
+by z := [zi, . . . , zna]⊤, z ∈ Rna, the vector of assets returns. Indicate with µ = E[z], µ ∈ Rna,
+the assets expected returns, and assume the covariance matrix Σ = E
+
+(z − µ)(z − µ)⊤ , Σ ∈
+Rna×na, to be positive-definite. Hence, the portfolio expected return and variance read as:
+(i) µ(y) = µ⊤y, (ii) σ2(y) = y⊤Σy . (23)
+8The ℓ0-norm of a vector is a pseudo-norm defined as the number of nonzero elements in the vector.
+18
+By indicating with γ ∈ R+ the investor risk aversion, exploiting (i) and (ii) in Equation (23),
+the Markowitz portfolio optimization problem reads as the following quadratic programming
+problem:
+y⋆ = arg min
+y
+γ
+2 σ2(y) − µ(y) ,
+subject to
+X
+j∈[na]
+yj = 1 . (P2)
+Given the positive-definiteness assumption on Σ, (P2) is convex and thus y⋆ exists. Over
+time, several variants of (P2) have been proposed to consider modifications in the objective
+function, regularizations, and additional constraints (Perrin and Roncalli 2020 and refs. therein).
+Notably, the works of Puelz 2001; Larsen, Mausser, and Uryasev 2002; Gaivoronski and G. Pflug
+2005; Fabozzi, Huang, and Zhou 2010 represent variants considering β-VaR (and thus the P&L
+distribution) as a measure of risk. Furthermore, Bertsimas and A. W. Lo 1998 consider the
+optimization of the vector of instrument notionals instead of y. Hereinafter, we refer to the
+above variants of (P2) as M-approaches.
+Distinguishing features As mentioned in Section 1, a first distinguishing feature of our
+approach is that we adopt the viewpoint of bank traders and risk managers, who focus on portfolio
+risk measurement and features at a given point in time t, and look for optimal trades at the same
+time t. Mathematically, this means that unlike the M-approach, centered on forward-looking
+expected values of return and risk, in our approach the relevant portfolio risk measures and
+features are estimated based on historical scenarios of interest, as given in Section 2.
+A second distinguishing feature between the proposed approach and the M-approach concerns
+the parameterization. Specifically, as given in Equation (14), our optimization variables are the
+positions of the particles, i.e., 2 m-dimensional integer vectors each entailing an optimization
+strategy ⟨H, h⟩, where m ≤ n is the desired cardinality of H. In contrast, in the M-approach,
+the variable to be optimized would be a vector of notionals in Nn, where n is the cardinality of
+the UEI universe U H. As shown in the paragraph “Eligible optimization strategy” in Section 5.1,
+our parameterization allows the user to easily specify a (complex) structure for both H and h.
+A third distinguishing feature concerns the direct applicability to objective functions of the
+form in Equation (13), i.e., general combinations of portfolio features and risk measures. Indeed,
+the objective function in (P2) is convex and, although there are variants of (P2) that consider
+β-VaR (Fabozzi, Huang, and Zhou 2010 and refs. therein), the fractional form of the objective
+function in Equation (18) is a challenge for the M-approach. In particular, the nonconvexity
+and potential non-differentiability of the objective function could impair the direct applicability
+of the M-approach to the RATPO problem. Specifically, it would be necessary to investigate
+suitable convex and differentiable surrogates to tackle problems as (fP1), as is done, for example,
+in the successive convex approximation optimization scheme extensively discussed by Scutari
+and Sun 2018.
+Finally, another distinguishing feature concerns direct applicability in the presence of an
+arbitrarily complex set of constraints to be handled. In fact, although sensitivity constraints in
+Equation (19) are linear inequality constraints in the notional amounts (see Equation (9)), the
+group cardinality constraint entailed by the specified structure for H would result in a constraint
+on the ℓ0-norm of groups of instruments associated with each underlying, where the groups
+must discriminate the type of instrument (see paragraph “Eligible optimization strategy” in
+Section 5.1). Looking at the development of an M-approach for solving (fP1), a possible way
+to enforce such a structure in the solution would be to replace the entailed group cardinality
+constraint with a convex regularization term within the objective function based on the mixed
+ℓ1/ℓ2-norm 9 of the vector of notional amounts. Acting at the level of the groups, the ℓ2-norm
+would promote sparsity in the solution without causing the vanishing of the notional amounts of
+9Consider I = {I1, . . . ,Iu} partition of [ n] and a vector a ∈ Rn. Denote by aν,i the i-th entry within the
+19
+T able 2: P&L
+G
+, β-VaRG, trading cost cG, and corresponding objective function value
+when ⟨G, g⟩ is (i) ⟨P, p⟩, (ii) ⟨T ⋆, t⋆⟩ for the small-sized EOS case computed via
+brute-force, and (iii) ⟨ bT , bt⟩ for the large-sized EOS case retrieved by RA TS, in the
+different settings determined by the value of τ g. Notice that ⟨P, p⟩ is the same in
+all case studies and settings. Additionally , since in the small-sized EOS case RA TS
+retrieves a solution within the optimal solution set (cf. Figure 2), we report only
+⟨T ⋆, t⋆⟩ in the table, as it coincides with the estimated one.
+Portfolio
+⟨G, g⟩
+Case
+Study τ g P&LG (EUR) β-VaRG (EUR) cG (EUR) ef (⟨G, g⟩)
+⟨P, p⟩ All All 33 918 −735 750 0 −0.0455
+⟨T ⋆, t⋆⟩
+Small-
+sized
+EOS
+0.10 31 875 −590 677 905 −0.0517
+0.50 32 727 −585 979 1035 −0.0533
+1.00 32 634 −582 060 1027 −0.0535
+⟨ bT , bt⟩
+Large-
+sized
+EOS
+0.10 59 674 −233 573 6570 −0.2194
+0.50 62 150 −230 546 7733 −0.2267
+1.00 61 082 −222 682 7955 −0.2286
+an entire group of instruments. Acting within groups, the ℓ1-norm would result in the zeroing of
+the notional amounts of some UEIs belonging to each group. However, such a solution would
+introduce a bias in estimating the notional amounts, and it may not be possible to satisfy exactly
+the group cardinality imposed through our approach. Conversely, due to our parametrization
+(see Equation (14)), the proposed approach easily allows a desired composition to be enforced in
+the solution.
+We believe that developing an M-approach to solve (fP1) is an intriguing research question to
+investigate, as highlighted by the above challenges to be addressed, thus not only interesting from
+the operational perspective. We, therefore, plan to tackle this research question in the future.
+5.3 Small-sized eligible optimization strategy
+In this case, we consider a single underlying, the Euro Stoxx 50 Index (.STOXX50E). Given the
+discussion in the paragraph “Eligible optimization strategy” of Section 5.1, since the underlying
+is a stock index, H has to be composed of only two vanilla options and one future written on
+the specified underlying. Given the domains corresponding to the Euro Stoxx 50 Index features
+in Table 3, we have n = 54 UEIs. Additionally, we set the values of τ ∆, τ V , and τ Γ equal to
+τ g. We investigate three different sensitivity constraint settings, that is, τ g ∈ {0.1, 0.5, 1.0}. The
+latter values represent tight, medium, and loose sensitivity constraints.
+Since, in this case, the cardinality of the solution space is of the order of 10 8, we can compute
+the optimal value for the objective function in Equation (18) via brute force. Appendix D provides
+the parameters representing one of the solutions in eE ⋆, for the three settings. Additionally,
+Table 2 shows the EUR value of the P&L
+G
+, β-VaRG, and trading cost cG for ⟨P, p⟩ and for
+⟨T ⋆, t⋆⟩, along with those of the corresponding objective function, in the three settings.
+Even though the P&L
+G
+is slightly lower, we see that the β-VaR of ⟨T ⋆, t⋆⟩ is consistently
+lower than that of ⟨P, p⟩ in all settings. Regarding the cost, it is null in the case of ⟨P, p⟩ due to
+subgroup ν of a entailed by I. Then, the mixed ℓp/ℓq-norm of a is
+∥a∥p,q :=
+
+
+uX
+ν=1
+
+
+|Iν |X
+i=1
+|aν,i|p
+
+
+q
+p
+
+
+1
+q
+.
+20
+the absence of transactions. In the case of ⟨T ⋆, t⋆⟩, the cost is contained and similar in the three
+settings. Accordingly, the objective function evaluated at ⟨T ⋆, t⋆⟩ is lower as well.
+Looking across the settings τ g, the objective function evaluated at ⟨T ⋆, t⋆⟩ improves as τ g
+increases. This trend is mainly driven by the reduction in the (cost-adjusted) β-VaRG. This
+result aligns with the fact that the sensitivity constraints loosen as τ g increases.
+−0.5 0.0 0.5 1.0 1.5
+P&L (€) ×106
+Comparison between⟨P, p⟩ and⟨T ⋆, t⋆⟩
+Portfolio
+⟨P, p⟩
+⟨T ⋆, t⋆⟩, τg = 0.1
+⟨T ⋆, t⋆⟩, τg = 0.5
+⟨T ⋆, t⋆⟩, τg = 1.0
+Figure 1: Empirical distribution of the P&L of ⟨P, p⟩ and ⟨T ⋆, t⋆⟩, along with the risk
+scenarios P&L represented as points and overlayed by the corresponding boxplot,
+for all the investigated settings determined by the value of τ g.
+Additionally, Figure 1 depicts the empirical distribution of the P&L of ⟨P, p⟩ and ⟨T ⋆, t⋆⟩,
+as well as the scenarios P&L overlayed by the corresponding boxplot, for all the investigated
+settings. Consistently with the provided cost-adjusted β-VaRG reduction, in all the settings
+⟨T ⋆, t⋆⟩ pushes towards zero the left-tail of the distribution of ⟨P, p⟩. Furthermore, the empirical
+distributions associated with ⟨T ⋆, t⋆⟩ are very similar in the three settings.
+At this point, to compare the solution retrieved by RATS with the optimal one found via
+brute force, we solve (fP1) through RATS using np = 1000 particles, setting kmax = 500, and by
+investigating its behavior when both cpers and csoc take value in the discretized interval (0 ., 2.),
+where we move with a step size equal to 0 .1. The complete list of the RATS hyper-parameters
+values is given in Appendix A. We remark that, although the number of particles is large, the
+time required by RATS to perform the allowed maximum number of iterations for solving (fP1)
+is only of the order of 10 seconds. This holds also for the second application, see Appendix C for
+details.
+The plots in Figure 2 depict the objective function value corresponding to the solution ⟨ bT , bt⟩
+estimated by RATS, in all the settings and for all the tested hyper-parameters values. Within
+each plot, we represent with a star ⋆ the case in which our algorithm returns a solution belonging
+to the optimal solution set eE ⋆ of the corresponding RATPO problem, i.e., a solution equivalent
+to that found via brute force.
+Our results empirically prove that RATS can retrieve a solution in the optimal solution set
+in all the settings. In case τ g ∈ {0.5, 1.0}, the optimal solution is returned for the most pairs of
+21
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+1.1
+1.2
+1.3
+1.4
+1.5
+1.6
+1.7
+1.8
+1.9
+cpers
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+1.1
+1.2
+1.3
+1.4
+1.5
+1.6
+1.7
+1.8
+1.9
+csoc
+τ g = 0.1
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+1.1
+1.2
+1.3
+1.4
+1.5
+1.6
+1.7
+1.8
+1.9
+cpers
+τ g = 0.5
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+1.1
+1.2
+1.3
+1.4
+1.5
+1.6
+1.7
+1.8
+1.9
+cpers
+τ g = 1.0
+Solution in ~E⋆
+−0.053
+−0.052
+−0.051
+−0.050
+−0.049
+−0.048
+−0.047
+−0.046
+Objective function values
+Figure 2: Objective function value corresponding to the solution ⟨ bT , bt⟩ estimated by
+RA TS, in all the settings and for all the tested (cpers, csoc) pairs.
+hyper-parameters value (cpers, csoc), suggesting that RATS is also robust to the hyper-parameters
+choice when the sensitivity constraints loosen.
+Looking at the objective function values related to the color legend in Figure 2, we see that,
+in case τ g = 0.5, we have no variation as we always retrieve a solution in the optimal solution set.
+Regarding the case τ g = 1.0, most solutions belong to the optimal solution set. We also observe
+a few nearly optimal solutions, represented as points within the plot, characterized by a dark red
+color, which is almost indistinguishable from that of the stars. Instead, in the more restrictive
+case τ g = 0.1, a consistent color gradient shows up, thus signaling that the fine-tuning of the
+hyper-parameters value becomes more important when the constraints tighten. Nevertheless, the
+minima of the objective function in the three settings are close in value.
+5.4 Large-sized eligible optimization strategy
+In this case, we consider u = 13 underlyings. Hence, given the domains in Table 3, we have
+n = 620 UEIs. In this case, the cardinality of the solution space is of the order of 10 110. Thus, it
+is not feasible to compute the optimal objective function value and corresponding eE ⋆ via brute
+force.
+We apply RATS by using the same values for the hyper-parameters as in Section 5.3,
+provided in Appendix A. Appendix D provides the parameters within ⟨ bT , bt⟩ corresponding to the
+.STOXX50E underlying to enhance the comparison between the two case studies. In addition,
+Table 2 gives the EUR value of the P&L
+G
+, β-VaRG, and trading cost cG for ⟨ bT , bt⟩, along with
+those of the corresponding objective function, in the three settings. Overall, we see that RATS
+consistently improves the P&L
+G
+while reducing the β-VaRG of ⟨P, p⟩. This is also true when we
+consider the trading cost, which is contained and similar in the three settings. Accordingly, the
+objective function evaluated at ⟨ bT , bt⟩ is consistently lower than that evaluated at ⟨P, p⟩.
+Overall, looking across the settings τ g, the objective values associated with the retrieved
+solutions are very close, suggesting that RATS is able to find a suitable EOS also in case of tighter
+sensitivity constraints. In detail, the objective function evaluated at ⟨ bT , bt⟩ slightly improves as
+τ g increases. The reduction of the β-VaRG mainly drives this trend. This result is consistent
+with that in Section 5.3.
+Figure 3 depicts the empirical distribution of the P&L of ⟨P, p⟩ and ⟨ bT , bt⟩, as well as
+the scenarios P&L overlayed by the corresponding boxplot, for all the investigated settings.
+Consistently with the provided β-VaRG reduction, in all the settings ⟨ bT , bt⟩ pushes towards zero
+the left-tail of the distribution of ⟨P, p⟩. Furthermore, the empirical distributions associated
+with ⟨ bT , bt⟩ are very similar in the three settings. This further confirms that RATS can find a
+performing EOS in all settings.
+22
+−0.5 0.0 0.5 1.0 1.5 2.0
+P&L (€) ×106
+Comparison between⟨P, p⟩ and⟨ ˆT , ˆt⟩
+Portfolio
+⟨P, p⟩
+⟨ ˆT , ˆt⟩, τg = 0.1
+⟨ ˆT , ˆt⟩, τg = 0.5
+⟨ ˆT , ˆt⟩, τg = 1.0
+Figure 3: Empirical distribution of the P&L of ⟨P, p⟩ and ⟨ bT , bt⟩, along with the risk
+scenarios P&L represented as points and overlayed by the corresponding boxplot,
+for all the investigated settings determined by the value of τ g.
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+1.1
+1.2
+1.3
+1.4
+1.5
+1.6
+1.7
+1.8
+1.9
+cpers
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+1.1
+1.2
+1.3
+1.4
+1.5
+1.6
+1.7
+1.8
+1.9
+csoc
+τ g = 0.1
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+1.1
+1.2
+1.3
+1.4
+1.5
+1.6
+1.7
+1.8
+1.9
+cpers
+τ g = 0.5
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+1.1
+1.2
+1.3
+1.4
+1.5
+1.6
+1.7
+1.8
+1.9
+cpers
+τ g = 1.0
+Best solution⟨ ˆT , ˆt⟩
+−0.22
+−0.20
+−0.18
+−0.16
+−0.14
+−0.12
+−0.10
+−0.08
+Objective function values
+Figure 4: Objective function value corresponding to the solution ⟨ bT , bt⟩ estimated by
+RA TS, in all the settings and for all the tested (cpers, csoc) pairs.
+Additionally, Figure 4 depicts objective function value corresponding to the solution ⟨ bT , bt⟩
+estimated by RATS, for the three settings and all the considered pairs ( cpers, csoc). In this
+case, for each setting, we put a star ⋆ in correspondence of the pair of values ( cpers, csoc) that
+returns the best-estimated solution ⟨ bT , bt⟩. Looking at Figure 4, in the case of looser sensitivity
+constraints (τ g ∈ {0.5, 1.0}), the objective function values corresponding to the retrieved solutions
+for the different hyper-parameters pairs become closer. This confirms that RATS is robust to
+the hyper-parameters choice when the sensitivity constraints loosen, as observed in Section 5.3.
+Additionally, in the case of tighter sensitivity constraints ( τ g = 0.1), the quality of the retrieved
+solution improves as we move toward the top-left corner of the grid. This suggests that, from
+23
+the particle viewpoint, having a stronger tilt toward the global best position at each iteration is
+beneficial to navigating the more challenging solution space.
+−0.225 −0.200 −0.175 −0.150 −0.125 −0.100 −0.075 −0.050
+Objective function values
+Empirical distributions comparison
+τ g
+0.1
+0.5
+1.0
+Figure 5: Empirical distributions of the objective function corresponding to the
+solution ⟨ bT , bt⟩ estimated by RA TS, in all the settings and for all the tested (cpers, csoc)
+pairs.
+Finally, Figure 5 shows the empirical distributions of the objective function values in the
+three settings. Consistently with the discussion above, the distribution spread is lower in case
+τ g ∈ {0.5, 1.0}. Nevertheless, the three minima are close in value.
+6 Conclusions and perspectives
+We proposed and investigated the risk-aware trading portfolio optimization problem (RATPO),
+which takes the point of view of a bank’s traders and risk managers, looking for optimal trades to
+reduce capital reserves while preserving portfolio value, consistently with the business objectives
+and limits. The problem solution leverages the basic financial concepts of unique eligible
+instruments and optimization strategies.
+We developed RATS, a versatile computational tool that leverages the parallelizable nature
+of the optimization problem with respect to the particle dimension. RATS can be adapted
+to different trading portfolios, objective functions, and constraints. Furthermore, RATS may
+incorporate the financial insights and business views of traders and risk managers.
+We provided a comprehensive numerical evaluation of the proposed approach through two
+real-world applications on trading portfolios. In the first application, we demonstrated the ability
+of RATS to identify an optimal solution set, highlighting its advantages over M-approaches. 10 In
+the second application, we considered 13 underlyings and 620 unique eligible instruments, where
+the solution space grows to the order of 10 110. We demonstrated that RATS was able to scale
+10Recall that we use M-approach to refer to the variants of the quadratic programming problem (P2).
+24
+efficiently and handle the complexity of this larger problem, demonstrating its practical utility in
+large-scale portfolio optimization scenarios.
+Our RATPO problem is general with respect to initial portfolios, risk measures and limits,
+eligible optimization instruments, trading strategies, and optimization algorithms. It can be
+applied to real portfolios of financial institutions. Strong financial insight is needed both to
+select the optimization parameters, i.e. the eligible optimization strategies, and to understand
+the financial soundness of the solutions proposed by RATS. In conclusion, our work bridges the
+gap between the implementation of effective trading strategies and compliance with stringent
+regulatory and economic capital requirements, allowing a better alignment of business and risk
+management objectives.
+Future work, as discussed in Section 5.2, could investigate the development of a gradient-
+based, continuous optimization M-approach to solve (fP1). This research direction is relevant
+from an operational perspective and poses stimulating challenges. For example, a major issue is
+the non-convexity and potential non-differentiability of the objective function in Equation (18),
+which may hinder the direct application of these variants to portfolio optimization problems.
+Addressing this problem would involve the exploration of suitable convex and differentiable
+surrogates. Moreover, managing the complexities of the feasible set of eligible optimization
+strategies will be a critical area of our future research. Indeed, the entailed constraints might
+include non-linear forms, and require methods to promote sparsity in the solutions without
+biasing the estimation of notional amounts.
+References
+Barone-Adesi, Giovanni and Robert E Whaley (1987). “Efficient analytic approximation of
+American option values”. In: The Journal of Finance 42.2, pp. 301–320. doi: /10.1111/j.
+1540-6261.1987.tb02569.x.
+Basel Committee on Banking Supervision (June 2011). Basel III: A global regulatory framework for
+more resilient banks and banking systems . url: https://www.bis.org/publ/bcbs189.htm.
+— (July 2015). Corporate governance principles for banks . url: https://www.bis.org/bcbs/
+publ/d328.htm.
+— (Dec. 2017). Basel III: finalising post-crisis reforms . url: https://www.bis.org/bcbs/
+publ/d424.htm.
+Bertsimas, Dimitris and Andrew W Lo (1998). “Optimal control of execution costs”. In: The
+Journal of Financial Markets 1.1, pp. 1–50. doi: /10.1016/S1386-4181(97)00012-8.
+Black, Fischer and Myron Scholes (1973). “The pricing of options and corporate liabilities”. In:
+Journal of political economy 81.3, pp. 637–654. doi: /10.1086/260062.
+Boussaid, Ilhem, Julien Lepagnot, and Patrick Siarry (July 2013). “A survey on optimization
+metaheuristics”. In: Information sciences 237, pp. 82–117. doi: 10.1016/j.ins.2013.02.
+041.
+Chang, Tun-Jen, Sang-Chin Yang, and Kuang-Jung Chang (2009). “Portfolio optimization prob-
+lems in different risk measures using genetic algorithm”. In: Expert Systems with Applications
+36.7, pp. 10529–10537. doi: /10.1016/j.eswa.2009.02.062.
+CRD4 (June 2013). “Directive 2013/36/EU of the European Parliament and of the Council of
+26 6 2013 on access to the activity of credit institutions and the prudential supervision of
+credit institutions and investment firms”. In: Official Journal of the European Union . url:
+https://eur-lex.europa.eu/eli/dir/2013/36/oj.
+CRD5 (May 2019). “Directive (EU) 2019/878 of the European Parliament and of the Council of
+20 5 2019 amending Directive 2013/36/EU as regards exempted entities, financial holding
+companies, mixed financial holding companies, remuneration, supervisory measures and
+powers and capital conservation measures”. In: Official Journal of the European Union . url:
+https://eur-lex.europa.eu/eli/dir/2019/878/oj.
+25
+CRD6 (June 2024). “Directive (EU) 2024/1619 of the European Parliament and of the Council
+of 31 5 2024 amending Directive 2013/36/EU as regards supervisory powers, sanctions,
+third-country branches, and environmental, social and governance risks”. In: Official Journal
+of the European Union . url: https://eur-lex.europa.eu/eli/dir/2024/1619/oj.
+CRR1 (June 2013). “Regulation (EU) No 575/2013 of the European Parliament and of the
+Council of 26 6 2013 on prudential requirements for credit institutions and investment firms
+and amending Regulation (EU) No 648/2012”. In: Official Journal of the European Union .
+url: https://eur-lex.europa.eu/eli/reg/2013/575/oj.
+CRR2 (June 2019). “Regulation (EU) 2019/876 of the European Parliament and of the Council
+of 20 5 2019 amending Regulation (EU) No 575/2013 as regards the leverage ratio, the net
+stable funding ratio, requirements for own funds and eligible liabilities, counterparty credit
+risk, market risk, exposures to central counterparties, exposures to collective investment
+undertakings, large exposures, reporting and disclosure requirements, and Regulation (EU)
+No 648/2012”. In: Official Journal of the European Union . url: https://eur-lex.europa.
+eu/eli/reg/2019/876/oj.
+CRR3 (June 2024). “Regulation (EU) 2024/1623 of the European Parliament and of the Council
+of 31 5 2024 amending Regulation (EU) No 575/2013 as regards requirements for credit risk,
+credit valuation adjustment risk, operational risk, market risk and the output floor”. In:
+Official Journal of the European Union . url: https://eur-lex.europa.eu/eli/reg/2024/
+1623/oj.
+Dallagnol, V.A.F., J. van der Berg, and L. Mous (2009). “Portfolio Management Using Value
+at Risk: A Comparison between Genetic Algorithms and Particle Swarm Optimization”. In:
+International Journal of Intelligent Systems 24, pp. 766–792. doi: 10.1002/int.20360.
+Dao, Binh (2014). “Optimal Portfolio with Options in a Framework of Mean-CVaR”. In: Available
+at SSRN 2543722 . doi: /10.2139/ssrn.2543722.
+Das, Akashdeep et al. (2023). “Selection of Appropriate Portfolio Optimization Strategy”.
+In: Theoretical and Applied Computational Intelligence 1.1, pp. 58–81. doi: 10 . 31181 /
+taci1120237. url: http://www.taci-journal.org/index.php/taci/article/view/7.
+Deng, Guang-Feng, Woo-Tsong Lin, and Chih-Chung Lo (2012). “Markowitz-based portfolio
+selection with cardinality constraints using improved particle swarm optimization”. In: Expert
+Systems with Applications 39.4, pp. 4558–4566. doi: 10.1016/j.eswa.2011.09.129.
+Erekhinsky, Alexei (Oct. 2017). Searching for a risk target in discrete world . WBS 13th Fixed
+Income Conference.
+Ertenlice, Okkes and Can B. Kalayci (2018). “A survey of swarm intelligence for portfolio
+optimization: Algorithms and applications”. In: Swarm and Evolutionary Computation 39,
+pp. 36–52. issn: 2210-6502. doi: 10.1016/j.swevo.2018.01.009.
+Erwin, Kyle and Andries Engelbrecht (2023a). “Meta-heuristics for portfolio optimization”. In:
+Soft Computing 27.24, pp. 19045–19073. doi: 10.1007/s00500-023-08177-x .
+— (2023b). “Multi-guide set-based particle swarm optimization for multi-objective portfolio
+optimization”. In: Algorithms 16.2, p. 62. doi: 10.1007/s00500-023-08177-x .
+Fabozzi, Frank J., Dashan Huang, and Guofu Zhou (2010). “Robust portfolios: Contributions
+from operations research and finance”. In: Annals of Operations Research 176, pp. 191–220.
+doi: 10.1007/s10479-009-0515-6 .
+Faias, Jos´ e and Pedro Santa-Clara (2011). “Optimal Option Portfolio Strategies”. In:AF A 2011
+Denver Meetings Paper , 38 pages. doi: 10.2139/ssrn.1569380.
+Faias, Jos´ e Afonso and Pedro Santa-Clara (2017). “Optimal Option Portfolio Strategies: Deepening
+the Puzzle of Index Option Mispricing”. In: Journal of Financial and Quantitative Analysis
+52.1, pp. 277–303. doi: 10.1017/S0022109016000831.
+Gaivoronski, Alexei and Gerog Pflug (2005). “Value-at-risk in portfolio optimization: properties
+and computational approach”. In: The Journal of Risk 7 (2), pp. 1–31. doi: 10.21314/JOR.
+2005.106.
+26
+Gilli, Manfred, Evis Kellezi, and Hilda Hysi (2006). “A data-driven optimization heuristic for
+downside risk minimization”. In: The Journal of Risk 8 (3), pp. 1–18. doi: 10.21314/JOR.
+2006.129.
+Green, Andrew (Nov. 2015). XV A: Credit, Funding and Capital Valuation Adjustment. Wiley
+Finance. John Wiley & Sons.
+Gregory, Jon (Apr. 2020). The Xva Challenge: Counterparty Risk, Funding, Collateral, Capital
+and Initial Margin . Wiley Finance. John Wiley & Sons Inc.
+Gunjan, Abhishek and Siddhartha Bhattacharyya (2023). “A brief review of portfolio optimization
+techniques”. In: Artificial Intelligence Review 56.5, pp. 3847–3886. doi: 10.1007/s10462-
+022-10273-7.
+Holland, John H. (Apr. 1992). Adaptation in Natural and Artificial systems . Complex Adaptive
+Systems. The MIT Press. isbn: 9780262581110.
+Jun, Cheng Seng and Farhana Johar (2023). “Portfolio Optimization of Exchange-Traded Funds
+Listed on the New York Stock Exchange Using Particle Swarm Optimization”. In: Proceedings
+of Science And Mathematics . Vol. 16, pp. 46–57.
+Kennedy, James (2006). “Swarm intelligence”. In: Handbook of nature-inspired and innovative
+computing: integrating classical models with emerging technologies . Springer, pp. 187–219.
+Kennedy, James and Russell Eberhart (1995). “Particle swarm optimization”. In: Proceedings of
+ICNN’95 - International Conference on Neural Networks . Vol. 4. IEEE, pp. 1942–1948. doi:
+10.1109/ICNN.1995.488968.
+Kirkpatrick, S., C. D. Gelatt, and M. P. Vecchi (1983). “Optimization by Simulated Annealing”.
+In: Science 220.4598, pp. 671–680. doi: 10.1126/science.220.4598.671.
+Kondratyev, Alexei and George Giorgidze (2017). Evolutionary Algos for Optmizing MV A.
+Larsen, Nicklas, Helmut Mausser, and Stanislav Uryasev (2002). “Algorithms for Optimization of
+Value-at-Risk”. In: Financial Engineering, E-commerce and Supply Chain . Ed. by Panos M.
+Pardalos and Vassilis K. Tsitsiringos. Boston, MA: Springer US, pp. 19–46. isbn: 978-1-4757-
+5226-7. doi: 10.1007/978-1-4757-5226-7_2 .
+Loke, Zi Xuan et al. (2023). “Portfolio optimization problem: a taxonomic review of solution
+methodologies”. In: IEEE Access 11, pp. 33100–33120. doi: 10.1109/ACCESS.2023.3263198.
+Lwin, Khin T, Rong Qu, and Bart L MacCarthy (2017). “Mean-VaR portfolio optimization: A
+nonparametric approach”. In: European Journal of Operational Research 260.2, pp. 751–766.
+doi: 10.1016/j.ejor.2017.01.005.
+Malek-Mohammadi, Mohammadreza et al. (2016). “Successive concave sparsity approximation
+for compressed sensing”. In: IEEE Transactions on Signal Processing 64.21, pp. 5657–5671.
+doi: 10.1109/TSP.2016.2585096.
+Markowitz, Harry (1952). “Portfolio Selection”. In: The Journal of Finance 7.1, pp. 77–91. doi:
+10.1111/j.1540-6261.1952.tb01525.x. (Visited on 01/22/2023).
+Perrin, Sarah and Thierry Roncalli (2020). “Machine learning optimization algorithms & portfolio
+allocation”. In: Machine Learning for Asset Management: New Developments and Financial
+Applications, pp. 261–328. doi: 10.1002/9781119751182.ch8.
+Puelz, Amy v. (2001). “Value-at-Risk Based Portfolio Optimization”. In: Stochastic Optimization:
+Algorithms and Applications . Ed. by Stanislav Uryasev and Panos M. Pardalos. Boston, MA:
+Springer US, pp. 279–302. isbn: 978-1-4757-6594-6. doi: 10.1007/978-1-4757-6594-6_13 .
+url: https://doi.org/10.1007/978-1-4757-6594-6_13 .
+Rockafellar, R. Tyrrel and Stanislav & Uryasev (Apr. 2000). “Optimization of conditional
+value-at-risk”. In: The Journal of Risk 2 (3), pp. 21–41. doi: 10.21314/JOR.2000.038.
+Rosenberg, Gili et al. (June 2016). “Solving the Optimal Trading Trajectory Problem Using a
+Quantum Annealer”. In: IEEE Journal of Selected Topics in Signal Processing 10.6, pp. 1053–
+1060. doi: 10.1109/JSTSP.2016.2574703.
+Scutari, Gesualdo and Ying Sun (2018). “Parallel and Distributed Successive Convex Approxima-
+tion Methods for Big-Data Optimization”. In: Multi-agent Optimization: Cetraro, Italy 2014 .
+27
+Ed. by Francisco Facchinei and Jong-Shi Pang. Cham: Springer International Publishing,
+pp. 141–308. isbn: 978-3-319-97142-1. doi: 10.1007/978-3-319-97142-1_3 .
+Shi, Yuhui and Russell Eberhart (1998). “A modified particle swarm optimizer”. In: 1998 IEEE
+International Conference on Evolutionary Computation Proceedings. IEEE World Congress
+on Computational Intelligence (Cat. No. 98TH8360) , pp. 69–73. doi: 10.1109/ICEC.1998.
+699146.
+Soleimani, Hamed, Hamid Reza Golmakani, and Mohammad Hossein Salimi (2009). “Markowitz-
+based portfolio selection with minimum transaction lots, cardinality constraints and regarding
+sector capitalization using genetic algorithm”. In: Expert Systems with Applications 36.3,
+Part 1, pp. 5058–5063. issn: 0957-4174. doi: 10.1016/j.eswa.2008.06.007.
+Venturelli, Daniele and Alexei Kondratyev (Apr. 2019). “Reverse quantum annealing approach
+to portfolio optimization problems”. In: Quantum Machine Intelligence 1.6, pp. 17–30. doi:
+10.1007/s42484-019-00001-w .
+Wozabal, David, Ronald Hochreiter, and Georg Ch Pflug (2010). “A difference of convex formu-
+lation of Value-at-Risk constrained optimization”. In: Optimization 59.3, pp. 377–400. doi:
+10.1080/02331931003700731.
+Appendix A Hyper-parameters
+Here we provide the detailed values of the hyper-parameters for the RATS in Algorithm (1) used
+in the empirical assessment in Section 5.
+• Number of particles np = 1000;
+• Particle personal coefficient
+cpers ∈ {0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9};
+• Particle social coefficient
+csoc ∈ {0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9};
+• Particle maximum velocity vmax = 1.0;
+• Particle minimum velocity vmin = −1.0;
+• Particle maximum inertia wmax = 1.0;
+• Particle minimum inertia wmin = 1.0;
+• Significance threshold τ f = 10−4;
+• Concentration threshold for the particle population τ p = 0.75.
+• Maximum number of iteration kmax = 500;
+• Maximum number of of stall iteration kmax stall = 100.
+Appendix B Data for UEIs
+Table 3 shows the considered underlyings for the empirical assessment in Section 5, as well as the
+corresponding parameters to determine the UEIs according to Implementation of Definition 1.
+The ranges of the notional amounts for the options were selected to cover the Vega sensitivity
+of the initial portfolio, namely V P . The ranges for stocks and futures were selected to cover
+the Delta sensitivity of the initial portfolio, namely ∆ P . Specifically, ∀ ℓ ∈ [u], indicate with ∆ cℓ
+and ∆pℓ the Delta sensitivity of the at-the-money (ATM) call and put options with the highest
+maturity associated with the ℓ-th underlying. Analogously, ∀ ℓ ∈ [u], indicate with V cℓ the Vega
+28
+sensitivity of the ATM call option with the highest maturity associated with the underlying.
+Hence, define
+ηaℓ := V PV cℓ  , and ηbℓ := ∆Pmax(∆cℓ, ∆pℓ ) . (24)
+At this point, round both ηaℓ and ηbℓ to the closest hundred, thousand, and so on, depending
+on the order of magnitude. Mathematically, given x ∈ R, the applied rounding reads as
+¯x =
+ 1
+2
+j
+2 x10⌊log10(x)⌋ k · 10⌊log10(x)⌋. (25)
+For instance, according to Equation (25), for x = 75 we have ¯x = 80; for x = 740 we have
+¯x = 700. Hence, ∀ ℓ ∈ [u], the ranges of notional amounts are given by
+[ℓℓ,i, tℓ,i] =
+(
+[−¯ηaℓ , ¯ηaℓ ], if i ∈ {1, 2};
+[−¯ηbℓ, ¯ηbℓ], if i = 3. (26)
+Starting from Equation (26), for each i ∈ [ni] and ℓ ∈ [u], the domain of the notional amount
+Dhℓ,i is given by 21 evenly-spaced integer values (including 0) in [ ℓℓ,i, tℓ,i].
+29
+T able 3: The table shows (i) the considered underlyings divided by category , i.e., stock and stock index; (ii) the parameters to
+determine for each underlying ℓ the set of UEIs relevant for the EOS, that is, ωℓ,i, Kℓ,i, Tℓ,i ; and (iii) the ranges of the notional
+associated with the first two instruments (vanilla options) and the third instrument (stock/futures). Specifically , 21 evenly-spaced
+values have been selected within the specified range (extremes and zero included).
+ωℓ,i Kℓ,i Tℓ,i [ℓℓ,i, tℓ,i], i∈ [2] [ ℓℓ,i, tℓ,i], i= 3
+Category Underlying
+Stock ν = 1 : AXAF.PA c, p, s 0.10, 0.25, 0.50 21, 49, 84, 168, 266, 630 [-760 000, 760 000] [-340 000, 340 000]
+2 : FB.O c, p, s 0.10, 0.25, 0.50 21, 49, 112, 168, 266, 476, 630 [-120 000, 120 000] [-50 000, 50 000]
+3 : GTO.AS c, p, s 0.10, 0.25, 0.50 21, 49, 84, 168, 266, 630 [-310 000, 310 000] [-160 000, 160 000]
+4 : IBM.N c, p, s 0.10, 0.25, 0.50 21, 49, 112, 168, 266, 476, 630 [-130 000, 130 000] [-60 000, 60 000]
+5 : KO.N c, p, s 0.10, 0.25, 0.50 21, 49, 112, 168, 266, 476, 630 [-410 000, 410 000] [-190 000, 190 000]
+6 : ORCL.N c, p, s 0.10, 0.25, 0.50 21, 49, 84, 168, 266, 476, 630 [-370 000, 370 000] [-140 000, 140 000]
+7 : PG.N c, p, s 0.10, 0.25, 0.50 21, 49, 112, 168, 266, 476, 630 [-230 000, 230 000] [-110 000, 110 000]
+8 : T.N c, p, s 0.10, 0.25, 0.50 21, 49, 112, 168, 266, 476, 630 [-570 000, 570 000] [-280 000, 280 000]
+Stock Index 9 : .FTMIB c, p, q 0.10, 0.25, 0.50 21, 49, 84, 168, 266, 630 [-800, 800] [-500, 500]
+10 : .FTSE c, p, q 0.10, 0.25, 0.50 21, 49, 84, 168, 266, 630 [-2 000, 2 000] [-2 000, 2 000]
+11 : .GSPC c, p, q 0.10, 0.25, 0.50 21, 49, 84, 168, 266, 476, 630 [-7 000, 7 000] [-3 000, 3 000]
+12 : .NDX c, p, q 0.10, 0.25, 0.50 21, 49, 84, 168, 266, 476, 630 [-3 000, 3 000] [-1 000, 1 000]
+13 : .STOXX50E c, p, q 0.10, 0.25, 0.50 21, 49, 84, 168, 266, 630 [-5 000, 5 000] [-3 000, 3 000]
+30
+Appendix C Running time
+This appendix provides details regarding the total running time required by RATS for solving
+(fP1). Since in the two applications given in Sections 5.3 and 5.4 the iterations run by RATS
+might vary over different simulations (each determined by a specific pair of values ( cpers, csoc)),
+here we monitor the total running time (measured in seconds) divided by the performed number
+of iterations. We remark that this is not exactly the time per iteration, as the total running time
+also includes the cost of the initialization (cf. Algorithm 1).
+0.1 0.5 1.0
+τ g
+0.050
+0.075
+0.100
+0.125
+0.150
+0.175
+0.200
+Time/Iterations (s)
+Small-sized⟨H, h⟩
+0.1 0.5 1.0
+τ g
+Large-sized⟨H, h⟩
+Figure 6: Box plot for the total running time (measured in seconds) divided by the
+performed number of iterations for (left) the first and (right) second application,
+and for all the considered values of τ g. F or each application and for each value of τ g,
+we create the box plot with the running time and number of iterations associated
+with the 361 simulations corresponding to the tested pairs (cpers, csoc).
+Figure 6 provides the box plot corresponding to the monitored quantity for (left) the first
+and (right) second application, and for all the considered values of τ g. For each application and
+for each value of τ g, we create the box plot with the running time and number of iterations
+associated with the 361 simulations corresponding to the tested pairs ( cpers, csoc). Given the
+hyper-parameters in Appendix A, from the figure we deduce that the time required by RATS
+for running kmax iterations is roughly of the order of 10 seconds, in both case studies. This
+empirically proves that performing RATS takes a short time, even when the number of particles
+is large.
+Even though it is beyond the scope of this appendix, from Figure 6 we notice that in the first
+application, the monitored quantity seems to increase along τ g, while in the second, it shows no
+dependence. We hypothesize that one of the causes of this behavior is a side-effect of the usage
+of just-in-time (JIT) compilation in our code.
+When using JIT compilation, there is an initial loading cost due to compiling code at runtime.
+This cost affects the total execution time, and its impact is larger when the number of iterations
+that reuse the precompiled code is low.
+Figure 7 shows the number of iterations for the tested ( cpers, csoc) for (a) the first and (b)
+second application. From Figure 7a we see that as τ g increases, the number of simulations
+performing a number of iterations lower than kmax increases. Hence, the impact of the loading
+cost increases as well. This explains the (false) dependence on τ g of the value of the total
+execution time divided by the number of iterations observed in Figure 7a. Conversely, Figure 7b
+shows that the number of iterations performed by RATS is roughly the same in all the investigated
+settings. Accordingly, in this case, we do not observe any dependence in Figure 7b.
+31
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+1.1
+1.2
+1.3
+1.4
+1.5
+1.6
+1.7
+1.8
+1.9
+cpers
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+1.1
+1.2
+1.3
+1.4
+1.5
+1.6
+1.7
+1.8
+1.9
+csoc
+τ g = 0.1
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+1.1
+1.2
+1.3
+1.4
+1.5
+1.6
+1.7
+1.8
+1.9
+cpers
+τ g = 0.5
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+1.1
+1.2
+1.3
+1.4
+1.5
+1.6
+1.7
+1.8
+1.9
+cpers
+τ g = 1.0
+0
+100
+200
+300
+400
+500
+Number of iterations
+(a) Small-sized EOS
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+1.1
+1.2
+1.3
+1.4
+1.5
+1.6
+1.7
+1.8
+1.9
+cpers
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+1.1
+1.2
+1.3
+1.4
+1.5
+1.6
+1.7
+1.8
+1.9
+csoc
+τ g = 0.1
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+1.1
+1.2
+1.3
+1.4
+1.5
+1.6
+1.7
+1.8
+1.9
+cpers
+τ g = 0.5
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+1.1
+1.2
+1.3
+1.4
+1.5
+1.6
+1.7
+1.8
+1.9
+cpers
+τ g = 1.0
+0
+100
+200
+300
+400
+500
+Number of iterations
+(b) Large-sized EOS
+Figure 7: Number of iterations for the tested (cpers, csoc) for (a) the first and (b)
+second application.
+This side-effect is further visualized in Figure 8, which shows that the monitored value tends
+to be higher for the simulations that are shown to perform a fewer number of iterations for the
+optimization of the EOS in Figure 7.
+Appendix D Estimated parameters for Euro Stoxx 50 Index
+Table 4 provides, as an example, the solutions retrieved by RATS for both case studies described
+in Section 5, for all the investigated settings. As a reminder, in the small-sized EOS case, the
+solutions estimated by RATS are equivalent to the optimal obtained through brute force. It
+can be observed that RATS selects varying quantities of call/put options and futures (in the
+large-sized EOS case, only the .STOXX50E underlying is shown for simplicity), adhering to their
+respective discrete domains (see Table 3) and the imposed constraints. Notably, in the large-sized
+EOS case study, the two null notional amount values in the rightmost column indicate instances
+where RATS identifies simplified trading strategies as more effective, involving only one option
+rather than two. This behavior is not explicitly favored in our implementation.
+32
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+1.1
+1.2
+1.3
+1.4
+1.5
+1.6
+1.7
+1.8
+1.9
+cpers
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+1.1
+1.2
+1.3
+1.4
+1.5
+1.6
+1.7
+1.8
+1.9
+csoc
+τ g = 0.1
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+1.1
+1.2
+1.3
+1.4
+1.5
+1.6
+1.7
+1.8
+1.9
+cpers
+τ g = 0.5
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+1.1
+1.2
+1.3
+1.4
+1.5
+1.6
+1.7
+1.8
+1.9
+cpers
+τ g = 1.0
+0.04
+0.06
+0.08
+0.10
+0.12
+0.14
+0.16
+0.18
+Time/Iterations (s)
+(a) Small-sized EOS
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+1.1
+1.2
+1.3
+1.4
+1.5
+1.6
+1.7
+1.8
+1.9
+cpers
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+1.1
+1.2
+1.3
+1.4
+1.5
+1.6
+1.7
+1.8
+1.9
+csoc
+τ g = 0.1
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+1.1
+1.2
+1.3
+1.4
+1.5
+1.6
+1.7
+1.8
+1.9
+cpers
+τ g = 0.5
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+1.1
+1.2
+1.3
+1.4
+1.5
+1.6
+1.7
+1.8
+1.9
+cpers
+τ g = 1.0
+0.04
+0.06
+0.08
+0.10
+0.12
+0.14
+0.16
+0.18
+Time/Iterations (s)
+(b) Large-sized EOS
+Figure 8: Total running time (measured in seconds) divided by the performed
+number of iterations for (a) the first and (b) second application, and for all the
+considered values of τ g.
+33
+T able 4: Parameters ωℓ,i, Kℓ,i, Tℓ,i, and hℓ,i identifying the selected UEIs and corre-
+sponding notionals for the .STOXX50E underlying within the solution retrieved
+by RA TS. W e report the parameters’ values for all the settings investigated in the
+empirical assessment provided in Section 5.
+Case Study Underlying τ g i ω ℓ,i Kℓ,i Tℓ,i hℓ,i
+Small-sized EOS .STOXX50E
+0.10
+1 c 0.50 49 −3500
+2 p 0.25 21 5000
+3 q 0.10 21 3000
+0.50
+1 c 0.50 266 −4500
+2 p 0.10 49 5000
+3 q 0.10 21 3000
+1.00
+1 c 0.50 266 −5000
+2 p 0.10 21 5000
+3 q 0.10 21 3000
+Large-sized EOS .STOXX50E
+0.10
+1 c 0.25 630 0
+2 c 0.50 168 −4000
+3 q 0.25 21 −600
+0.50
+1 c 0.10 84 0
+2 c 0.50 630 −4000
+3 q 0.25 21 600
+1.00
+1 c 0.50 266 −3000
+2 p 0.10 21 5000
+3 q 0.25 21 900
+34

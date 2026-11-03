@@ -1,0 +1,3998 @@
+arXiv 2504.06566  https://arxiv.org/abs/2504.06566
+
+Diffusion Factor Models:
+Generating High-Dimensional Returns with
+Factor Structure
+Minshuo Chen ∗, Renyuan Xu †, Yumin Xu ‡, and Ruixun Zhang §
+First version: April 2025
+This version: January 2026
+Abstract
+Financial scenario simulation is essential for risk management and portfolio optimization, yet it
+remains challenging especially in high-dimensional and small data settings common in finance. We
+propose adiffusion factor modelthat integrates latent factor structure into generative diffusion
+processes, bridging econometrics with modern generative AI to address the challenges of the curse
+of dimensionality and data scarcity in financial simulation. By exploiting the low-dimensional factor
+structure inherent in asset returns, we decompose the score function—a key component in diffusion
+models—using time-varying orthogonal projections, and this decomposition is incorporated into the
+design of neural network architectures. We derive rigorous statistical guarantees, establishing non-
+asymptotic error bounds for both score estimation ateO
+
+d5/2n− 2k+5  and generated distribution
+at eO
+
+d5/4n− 12(k+5) , primarily driven by the intrinsic factor dimensionkrather than the number
+of assetsd, surpassing the dimension-dependent limits in the classical nonparametric statistics
+literature and making the framework viable for markets with thousands of assets. Numerical
+studies confirm superior performance in mean and covariance estimation as well as latent subspace
+recovery under small data regimes. Empirical analysis demonstrates the economic significance
+of our framework in constructing mean-variance optimal portfolios and factor portfolios. This
+work presents the first theoretical integration of factor structure with diffusion models, offering
+a principled approach for high-dimensional financial simulation with limited data. Our code is
+available athttps://github.com/xymmmm00/diffusion_factor_model.
+Keywords: Generative Modeling; Diffusion Model; Asset Return Generation; Factor Model; Error
+Bound; Portfolio Construction;
+∗Department of Industrial Engineering and Management Sciences, Northwestern University.minshuo.chen@nor
+thwestern.edu(email).
+†Department of Management Science & Engineering, Stanford University.renyuanxu@stanford.edu(email).
+‡School of Mathematical Sciences, Peking University.xuyumin@pku.edu.cn(email).
+§School of Mathematical Sciences, Center for Statistical Science, Laboratory for Mathematical Economics and
+Quantitative Finance, and National Engineering Laboratory for Big Data Analysis and Applications, Peking Univer-
+sity.zhangruixun@pku.edu.cn(email).
+arXiv:2504.06566v5  [q-fin.ST]  11 Jan 2026
+Contents
+1 Introduction 1
+1.1 Our Work and Contributions . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 2
+1.2 Related Literature . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 3
+1.3 Notation . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 5
+2 Problem Set-up for Diffusion Factor Models 5
+2.1 Generative Diffusion Models . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 5
+2.2 Asset Returns and Unknown Factor Structure . . . . . . . . . . . . . . . . . . . . . . 7
+3 Score Decomposition under Diffusion Factor Model 8
+3.1 Score Decomposition . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8
+3.2 Choosing Score Network Architecture . . . . . . . . . . . . . . . . . . . . . . . . . . 10
+4 Score Approximation and Estimation 11
+4.1 Theory of Score Approximation . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 12
+4.2 Theory of Score Estimation . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 14
+5 Theory of Distribution Estimation 15
+5.1 Main Results . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 15
+5.2 Highlights of Technical Novelties . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 19
+6 Numerical Study with Synthetic Data 20
+7 Empirical Analysis 23
+7.1 Mean-Variance Optimal Portfolio . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 24
+7.2 Factor Portfolio . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 28
+8 Conclusion and Future Work 29
+A Omitted Proof in Section 3 40
+B Omitted Proofs in Section 4 41
+B.1 Proof of Theorem 1 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 41
+B.2 Proof of Theorem 2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 45
+B.3 Supporting Lemmas and Proofs . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 52
+C Omitted Proofs in Section 5 58
+C.1 Proof of Theorem 3 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 59
+C.2 Supporting Lemmas for Theorem 3 . . . . . . . . . . . . . . . . . . . . . . . . . . . . 61
+C.2.1 Proof of Lemma 2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 61
+C.2.2 Proof of Lemma 3 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 63
+C.2.3 Other Supporting Lemmas for Theorem 3 . . . . . . . . . . . . . . . . . . . . 66
+D Additional Details of the Numerical Study with Synthetic Data 70
+E Additional Details of the Empirical Analysis 72
+E.1 Data Preprocessing, Training, and Evaluation . . . . . . . . . . . . . . . . . . . . . . 72
+E.2 Robustness Analysis on Transaction Costs and Risk Aversion . . . . . . . . . . . . . 73
+E.3 Robustness Analysis on Norm Constraints . . . . . . . . . . . . . . . . . . . . . . . . 75
+E.4 Robustness Analysis on Update Frequency . . . . . . . . . . . . . . . . . . . . . . . . 78
+3
+1 Introduction
+Financial scenario simulation, central to quantitative finance and risk management, has evolved
+significantly over recent decades (Alexander 2005, Eckerli and Osterrieder 2021, Brophy et al. 2023).
+Generating realistic and diverse financial scenarios is crucial not only for institutional traders to
+better manage their strategy risks, but also for regulators to ensure market stability (Acharya
+et al. 2023, Schneider, Strahan, and Yang 2023, Shapiro and Zeng 2024). The US Federal Reserve
+evaluates market conditions and releases a series of market stress scenarios on an annual basis
+(Federal Reserve Board 2023). Financial institutions are required to apply these scenarios to their
+portfolios to estimate and mitigate potential losses during market downturns. With the rise of
+trading automation and technological advancements, there is a pressing need from both parties to
+simulate more complex and high-dimensional financial scenarios (Reppen and Soner 2023). This
+request challenges traditional model-based simulation approaches (Behn, Haselmann, and Vig 2022,
+Hambly, Xu, and Yang 2023), highlighting the need for sophisticated data-driven techniques.
+With the advances in machine learning techniques and computational power, generative AI has
+become a transformative force and is increasingly popular in financial applications. Its capabilities
+are now being harnessed for a wide range of tasks, such as generating financial time series (Yoon,
+Jarrett, and Van der Schaar 2019, Cont et al. 2022, Brophy et al. 2023, Acciaio, Eckstein, and Hou
+2024), modeling volatility surfaces (Vuletić and Cont 2025), simulating limit order book dynamics
+(Coletta et al. 2023, Cont et al. 2023, Hultin et al. 2023), forecasting and imputing missing values
+(Tashiro et al. 2021, Vuletić, Prenzel, and Cucuringu 2024), and constructing portfolio strategies
+(Cetingoz and Lehalle 2025).
+In recent years, several families of generative models have been explored in this context, includ-
+ing generative adversarial networks (GANs), autoencoders, and variational autoencoders (VAEs).
+In financial applications, GANs have been the primary workhorse (Yoon, Jarrett, and Van der
+Schaar 2019, Cont et al. 2022, Liao et al. 2024, Cetingoz and Lehalle 2025, Vuletić and Cont 2025),
+but are hindered by several issues, including training instability, mode collapse, high computational
+costs, and evaluation difficulties (Saatci and Wilson 2017, Borji 2019). In addition, developing a
+theoretical understanding of GANs is challenging due to their minimax structure and complex
+training process, which has hindered principled analysis and sustainable improvements since their
+inception (Creswell et al. 2018, Gui et al. 2021). Non-adversarial latent-variable models such as
+autoencoders and VAEs often face non-identifiable problems (Locatello et al. 2019), which can yield
+unstable performance on complex data (Saatci and Wilson 2017, Borji 2019, He et al. 2019, Dai,
+Wang, and Wipf 2020), risk posterior collapse, and residual-risk underestimation (Hoffman and
+Johnson 2016, He et al. 2019, Dai, Wang, and Wipf 2020).
+More recently, generative diffusion models have gained traction as a more robust alternative,
+offering significant advantages in financial applications (Xiao, Kreis, and Vahdat 2022, Kotelnikov
+et al. 2023, Coletta et al. 2024, Li, Dai, and Qu 2024, Barancikova, Huang, and Salvi 2025). Com-
+pared to autoencoders, VAEs, and GANs, diffusion models can capture complex data distributions
+with more robust and stable performance, ease of training, and enhanced stability and efficiency
+1
+(Nichol and Dhariwal 2021, Dhariwal and Nichol 2021, Karras et al. 2022), achieving state-of-the-
+art results in practice and making them invaluable tools in advancing generative AI for finance.
+In particular, it is well documented that the diffusion model works well and beats alternatives in
+the small-data regime (Kotelnikov et al. 2023, Li, Dai, and Qu 2024). In addition, the diffusion
+model framework is grounded in rigorous stochastic and statistical analysis (Chen et al. 2024, Gao,
+Zha, and Zhou 2024, Tang and Zhao 2025), providing a theoretically sound basis for incorporating
+domain-specific properties, such as those in finance.
+1.1 Our Work and Contributions
+We develop a deep generative model based on diffusion models to simulate high-dimensional asset
+returns that follow anunknownfactor structure, which we term thediffusion factor model. The
+returns of thed-dimensional assets are explained by the linear combination ofkunknowncommon
+factors(k≪d)and an idiosyncratic noise that varies from asset to asset (see Equation (8)).1 We
+develop the theory for our diffusion factor model and establish statistical guarantees of the error of
+diffusion-generated returns, which overcomes the curse of dimensionality in the number of assets.
+We also conduct numerical and empirical studies to demonstrate its practical relevance.
+Our generative model is particularly relevant for the high-dimensional small-data setting, a
+classical challenge for medium- (e.g., daily) to low- (e.g., weekly or monthly) frequency return
+data in finance. In empirical applications, the number of assetsdoften ranges from hundreds to
+thousands, easily exceeding the number of available observations in a stationary period (Kan and
+Zhou 2007, Nagel 2013, Gu, Kelly, and Xiu 2020). While machine learning is commonly perceived as
+a “big data” tool, many core finance questions are hindered by the “small data” nature of economic
+time series. Our model offers a methodology to tackle this challenge: fitting the diffusion model on
+the limited data and then generating additional realistic data for downstream tasks.
+As a result, our diffusion factor model can be used to simulate realistic financial data for
+potential applications in a wide range of important contexts, including asset pricing and factor
+analysis across stock (Fama and French 1993, 2015a), option (Büchner and Kelly 2022), bond
+(Kelly, Palhares, and Pruitt 2023, Elkamhi, Jo, and Nozawa 2024), and cryptocurrency markets
+(Liu, Tsyvinski, and Wu 2022), large-scale asset covariance estimation (Bickel and Levina 2008,
+Fan, Liao, and Liu 2016, Ledoit and Wolf 2022), robust portfolio construction (DeMiguel et al.
+2009, Avramov and Zhou 2010, Fabozzi, Huang, and Zhou 2010, Tu and Zhou 2010, Jacquier and
+Polson 2011), and systematic and institutional risk management (Bisias et al. 2012, Cont et al.
+2022, He, Kou, and Peng 2022).
+Our contributions are multi-fold. First, our diffusion factor model presents the first theoretical
+integration of factor models with generative diffusion models. It fully exploits the structural prop-
+erty of factor models, using observations of asset returns with heterogeneous idiosyncratic noises,
+and without requiring prior knowledge of the exact factors. In particular, our framework addresses
+the curse of dimensionality issue in the “small data” regime by achieving a sample complexity that
+scales exponentially in the desired error, with an exponent that primarily depends on the intrinsic
+2
+factor dimensionkrather than the ambient asset dimensiond.
+Second, the success of the diffusion factor model hinges on accurately estimating Stein’s score
+function, which we achieve by decomposing the score function via a time-varying projection into
+a subspace component in ak-dimensional space and a linear component (Lemma 1). This de-
+composition informs our neural network design—integrating denoising scheme, an encoder-decoder
+structure, and skip connections—to efficiently approximate the score function (Theorem 1). We es-
+tablish a statistical guarantee that theL2 error between the neural score estimator and the ground
+truth is ˜O(d
+5
+2 n− 2k+5 )(Theorem 2), demonstrating that the dependence on the sample sizenis
+governed primarily bykrather thand, effectively mitigating the curse of dimensionality.2
+Third, we establish statistical guarantees for the errors in the generated return distribution
+as well as the subspace recovery. The output return distribution of our diffusion factor model
+is close to the true distribution in total variation distance, achieving an error of˜O(d
+5
+4 n− 1−δ(n)2(k+5) ),
+whereδ(n)vanishes asngrows. By applying singular value decomposition (SVD), we can also
+achieve latent subspace recovery with an error of order˜O(d
+5
+4 n− 1−δ(n)k+5 )(Theorem 3). These results
+are achieved by the design of our sampling algorithm (Algorithm 1) and a novel analysis based
+on matrix concentration inequalities and coupling argument of stochastic processes (Lemmas 2
+and 3). Furthermore, our efficient sample complexities hold true under a mild Lipschitz assumption
+(Assumption 3), demonstrating the generality of our analysis.
+Fourth, numerical studies with synthetic data confirm that our diffusion factor model is capable
+of simulating realistic return data. It delivers substantial improvements in mean and covariance
+estimation as well as in subspace recovery, especially in the “small data” regime where the number
+of samples is small relative to the number of assets. These improvements suggest that our diffusion
+factor model automatically adapts to the (unknown) underlying factor structure and captures
+patterns of the data distribution more effectively than direct empirical estimation from limited data.
+From a statistical perspective, our methodology acts as a form of data-dependent regularization,
+introducing a modest modeling bias while substantially reducing the estimation variance, thus
+improving the moment estimation.
+Finally, empirical analysis of the U.S. stock market shows that data generated by our diffusion
+factor model improves both mean and covariance estimation, leading to superior mean-variance
+optimal portfolios and factor portfolios. Portfolios using diffusion-generated data consistently out-
+perform traditional methods, including equal-weight and shrinkage approaches, with higher mean
+returns and Sharpe ratios. In addition, factors estimated from the generated data capture inter-
+pretable economic characteristics and the corresponding tangency portfolios exhibit higher Sharpe
+ratios, effectively capturing systematic risk. These results demonstrate that our diffusion factor
+model can serve as a practical and broadly applicable tool for learning return distributions and
+constructing robust portfolios from limited, heavy-tailed financial data.
+1.2 Related Literature
+Our work is broadly related to two strands of the literature on factor models and diffusion models.
+3
+Factor Models.There is a vast econometric literature on factor models. Classic factor-based as-
+set pricing models primarily focus on risk premium estimation, time-varying factors, model validity,
+and factor structure interpretability. Recent methodological advances have pioneered techniques
+for analyzing large, high-dimensional datasets, incorporating semiparametric estimation, robust
+inference, machine learning techniques, and time-varying risk premiums (Ferson and Harvey 1991,
+Connor, Hagmann, and Linton 2012, Feng, Giglio, and Xiu 2020, Gu, Kelly, and Xiu 2020, Raponi,
+Robotti, and Zaffaroni 2020, Chen, Pelger, and Zhu 2024, Feng et al. 2024, Giglio, Xiu, and Zhang
+2025). We refer interested readers to survey papers such as Fama and French (2004), Giglio, Kelly,
+and Xiu (2022), Kelly, Xiu et al. (2023), and Bagnara (2024).
+While we assume the (target) data distribution follows a factor model structure, the implemen-
+tation and analysis of the diffusion modelsdo not require observingthe factors. In fact, our goal
+is to uncover the latent low-dimensional factor space through the data generation process. This
+is extremely valuable for financial applications, particularly in identifying effective factors, which
+is often challenging using traditional methods, see, for example, Chen, Roll, and Ross (1986), Je-
+gadeesh and Titman (1993), Jagannathan and Wang (1996), Lettau and Ludvigson (2001), Pástor
+and Stambaugh (2003), Yogo (2006), Adrian, Etula, and Muir (2014), Hou, Xue, and Zhang (2015),
+He, Kelly, and Manela (2017), Lettau and Pelger (2020a) and Lettau and Pelger (2020b).
+Diffusion Models and Their Theoretical Underpinnings.Diffusion models have shown
+groundbreaking success and quickly become the state-of-the-art method in diverse domains (Yang
+et al. 2023, Cao et al. 2024, Guo et al. 2024, Liu et al. 2024).
+Despite significant empirical advances, the development of theoretical foundations for diffusion
+models falls behind. Recently, intriguing statistical and sampling theories emerged for deciphering,
+improving, and harnessing the power of diffusion models. Specifically, sampling theory considers
+whether diffusion models can generate a distribution that closely mimics the data distribution,
+given that the diffusion model is well-trained (De Bortoli et al. 2021, De Bortoli 2022, Albergo,
+Boffi, and Vanden-Eijnden 2023, Chen et al. 2023b, Chen, Daras, and Dimakis 2023, Benton et al.
+2024, Huang, Huang, and Lin 2025, Li et al. 2024a, Li, Di, and Gu 2025).
+Complementary to sampling theory, statistical theory of diffusion models mainly concerns how
+well the score function can be learned given finitely many training samples (Yang and Wibisono
+2022, Koehler, Heckett, and Risteski 2023, Chen et al. 2023a, Oko, Akiyama, and Suzuki 2023, Dou
+et al. 2024, Wibisono, Wu, and Yang 2024, Zhang et al. 2024). Later, end-to-end analyses in Chen
+et al. (2023a), Oko, Akiyama, and Suzuki (2023), Azangulov, Deligiannidis, and Rousseau (2024),
+Fu et al. (2024), Tang and Yang (2024), Zhang et al. (2024), Yakovlev and Puchkin (2025) present
+statistical complexities of diffusion models for estimating nonparametric data distributions. It is
+worth noting that Chen et al. (2023a), Oko, Akiyama, and Suzuki (2023), Azangulov, Deligiannidis,
+and Rousseau (2024), Tang and Yang (2024), Wang et al. (2024) prove the adaptivity of diffusion
+models to the intrinsic structures of data—they can circumvent the curse of ambient dimensionality
+when data are exactly concentrated on a low-dimensional space.
+4
+Two works most closely related to ours are Chen et al. (2023a) and Wang et al. (2024), both
+of which consider subspace-structured data. Chen et al. (2023a) assume that each data pointX
+lies exactly on a low-dimensional subspace, i.e.,X=AZfor some unknown matrixA∈R d×k and
+latent variableZ∈R k. In contrast, our factor model (Equation (8)) relaxes this strict subspace
+assumption by allowing idiosyncratic noise in the asset returns. The neural network architecture
+and parts of our analysis are inspired by Chen et al. (2023a), but the presence of high-dimensional
+idiosyncratic noise introduces substantial technical challenges in our setting. We discuss these
+technical novelties in detail in Section 5.2. Wang et al. (2024) also consider noisy subspace data,
+but assume that the latent variableZfollows a Gaussian mixture distribution. By comparison,
+we only require that the distribution of the latent variable satisfies a general sub-Gaussian tail
+condition. During the preparation of this manuscript, Yakovlev and Puchkin (2025) generalize the
+study to noisy nonlinear low-dimensional data structures. They assume that the data follow a
+transformation on a latent variable, which is uniformly distributed in a hypercube. This is very
+different from our study on the factor model structure.
+1.3 Notation
+We denote vectors and matrices by bold letters. For a vectorv, we denote∥v∥2,∥v∥ ∞ as itsℓ 2
+andℓ ∞ norm, respectively. For a matrixM, we denotetr(M),∥M∥ F and∥M∥ op as its trace,
+Frobenius norm, and operator norm, respectively. WhenMis symmetric, we denoteλ max(M)
+andλ k(M)as the maximal and thek-th largest eigenvalues. We also denote a matrix-induced
+norm as∥v∥ 2M =v ⊤Mv. For two symmetric matrices, we associate a partial orderingM⪰N
+ifM−Nis positive semi-definite. For a random vectorXfollowing distributionP, we denote
+∥X∥2L2(P) =E[∥X∥ 22]. We denoteϕ(·;µ,Σ)as the Gaussian density function with meanµand
+covarianceΣ. Throughout the paper, we use uppercase letters (e.g.,X) for random variables and
+lowercase letters (e.g.,x) for their realizations.
+2 Problem Set-up for Diffusion Factor Models
+Given limited market data, our objective is to design and train a diffusion-based factor model
+capable of simulating realistic, high-dimensional asset returns. This section introduces the two
+core components of our approach: generative diffusion models and the underlying factor structure.
+Section 2.1 defines diffusion models and emphasizes the central role of score functions in their
+construction. Section 2.2 presents a framework for modeling high-dimensional asset returns with
+an unknown low-dimensional latent structure, typically captured by a factor model—an essential
+feature for enabling efficient and robust modeling in small-data environments.
+2.1 Generative Diffusion Models
+Diffusion models consist of two interconnected processes: a forward process progressively injects
+noise into data over time, and a time-reverse process that constructs new data by progressively
+5
+removing noise (Anderson 1982, Haussmann and Pardoux 1986, Song and Ermon 2019, Ho, Jain,
+and Abbeel 2020, Song et al. 2021). The forward process is employed during training, whilethe
+time-reverse process is used for data generation. In the following, we formulate both processes using
+stochastic differential equations (SDEs) and detail the training methodology for diffusion models.
+Forward and Time-Reverse SDEs.For ease of theoretical analysis, we follow the convention in
+the literature (Ho, Jain, and Abbeel 2020, Song and Ermon 2020) and adopt Ornstein-Ulhenbeck
+(O-U) process for the forward process. In particular, we study a simple O-U process with a
+deterministic and nondecreasing weight functionη(t)>0as
+dRt =− 12 η(t)Rtdt+ pη(t)dWt withR 0 ∼P data andt∈[0, T],(1)
+where(W t)t≥0 is a standard Wiener process,Tis a terminal time andPdata is the data distribu-
+tion, i.e., the distribution of high-dimensional asset returns. We also denotePt as the marginal
+distribution ofR t with a corresponding density functionpt. Given an initial valueR0 =r, at time
+t, the conditional distribution ofRt |R 0 =ris Gaussian, i.e.,
+Rt |R 0 =r∼ N(α tr, htId),(2)
+whereα t = exp
+
+−
+R t
+0
+1
+2 η(s)ds
+
+is the shrinkage ratio andht = 1−α 2t is the variance of the added
+Gaussian noise. For simplicity, we takeη(t) = 1throughout the paper. Note that the terminal
+distributionP T isclosetoP ∞ =N(0,I d)whenTissufficientlylarge, sincethemarginaldistribution
+of an O-U process converges exponentially fast to its stationary distribution (Bakry et al. 2014,
+Chen et al. 2023b).
+To design a procedure to generate new samples, we reverse the forward process in time (An-
+derson 1982, Song et al. 2021). Under mild regularity conditions (Haussmann and Pardoux 1986),
+this yields a well-defined backward process that transforms (white) noise into data. We denote the
+time-reversed SDE (backward process) associated with (1) as
+dR←t =
+ 1
+2 R←t +∇logp T−t (R←t )
+
+dt+ d Wt withR ←0 ∼Q 0 andt∈[0, T],(3)
+where( Wt)t≥0 is another Wiener process independent of(Wt)t≥0,∇logp t(·)is known as thescore
+functionandQ 0 is the initial distribution of the backward process. If we setQ0 =P T, under mild
+assumptions, the time-reverse process has thesame marginal distributionas the forward process in
+the sense ofLaw(R←t ) = Law(RT−t ); see Anderson (1982) and Haussmann and Pardoux (1986) for
+details. In particular, we haveLaw(R←T ) =P data, which leads us to recover the data distribution.
+In practice, however, (3) cannot be directly used to generate samples from the data distribution
+Pdata as both the score function and the distributionPT areunknown. To train a simulator that
+generates data (closely) fromPdata, the key is to accurately learn the score function. With a score
+estimator psthat approximates∇logp t and an initial distributionQ 0 :=N(0,I d)that is easy to
+6
+sample, we specify the following implementable process for data generation
+d pR←t =
+ 1
+2
+pR←t + ps  pR←t , T−t  dt+ d Wt with pR←0 ∼ N(0,Id).(4)
+For O-U processes, the error introduced by takingQ0 =N(0,I d)usually decays exponentially with
+respect toT(Chen et al. 2023b, Lee, Lu, and Tan 2023, Tang and Zhao 2024, Gao, Nguyen, and
+Zhu 2025).
+Training by Score Matching.To learn the score function∇logp t in (3), a natural method is
+to minimize a mean-squared error between the estimated and true scores (Hyvärinen and Dayan
+2005), i.e.,
+min
+s∈S
+Z T
+t0
+w(t)ERt
+h
+∥s(Rt, t)− ∇logpt(Rt)∥22
+i
+dt,(5)
+wherew(t)is a positive weighting function andsis a parameterized estimator of the score function
+from a classSsuch as neural networks. Here,t 0 >0is a small early-stopping time to prevent the
+score function from blowing up ast→0(Song and Ermon 2019, Chen et al. 2023a).
+A key challenge in minimizing the score-matching loss (5) is that the target term,∇logpt, is
+generally intractable—it cannot be computed directly from observed data. Alternatively, one can
+equivalently minimize the following denoising score matching proposed in Vincent (2011), Song
+et al. (2020), which utilizes the conditional density ofRt |R 0 in (2):
+min
+s∈S
+Z T
+t0
+w(t)ER0
+h
+ERt|R0
+h
+∥s(Rt, t)− ∇logϕ(Rt;α tR0, htId)∥22
+ii
+dt.(6)
+Hereϕis the Gaussian density function defined at the end of Section 1. For technical conve-
+nience, we choose a uniform weightw(t) = 1/(T−t0). Note that under the forward dynamics (1),
+∇logϕ(r t;α tr0, htId)in (6) has an analytical form,
+∇logϕ(r t;α tr0, htId) =− rt −α tr0ht .
+In practice, we can only observe a finite sample of asset returns{ri}ni=1 fromP data. Therefore, we
+train the diffusion model using the following empirical score-matching objective:
+min
+s∈S
+pL(s) := 1n nXi=1 ℓ(ri,s)withℓ(r i,s) = 1T−t 0 Z Tt0 ERt|R0=ris(Rt, t) +Rt −α triht 22dt.(7)
+Henceforth we write the population loss function in (6) asL(s) :=E[pL(s)].
+2.2 Asset Returns and Unknown Factor Structure
+To improve sample efficiency, especially in small-data regimes, the central idea is to incorporate
+domain knowledge into the diffusion model. Specifically, we leverage a key insight from the finance
+7
+literature: a relatively small set of latent factors—reflecting both macroeconomic and firm-specific
+variables—can effectively explain a broad class of asset returns (Ross 2013, Fan, Liao, and Wang
+2016, Aït-Sahalia and Xiu 2019, Giglio and Xiu 2021, Bryzgalova et al. 2023, Kelly, Malamud, and
+Pedersen 2023). Following these studies, we consider the asset returnR∼P data satisfying the
+following factor model structure:
+R=βF+ε,(8)
+whereF∈R k areunknownfactors withk≪d,β∈R d×k is a factor loading matrix, andε∈Rd is
+the vector of idiosyncratic residuals.
+We want to emphasize that, while we assume the data distributionPdata follows a factor model
+structure (8), the implementation and analysis of the diffusion modelsdo not require observingthe
+factors. Instead, our approach is capable of uncovering the latent low-dimensional factor space
+through the data generation process; see Section 5 for more details.
+Under the unknown factor scenario, factors and their loadings are identifiable only up to an
+invertible linear transformation, e.g., rescaling and rotation (Kelly, Xiu et al. 2023). Thus, it
+is reasonable to assume thatβhas orthonormal columns. Otherwise, one can perform a QR
+decomposition to writeβ=β ′H, whereβ ′ ∈R d×k has orthonormal columns andH∈R k×k is an
+upper triangular matrix.
+In light of the factor structure in (8), we aim to develop a diffusion model framework that
+explicitly exploits this low-dimensional representation. Crucially, the statistical guarantees of our
+approach depend primarily on the number of latent factorsk, rather than the ambient data di-
+mensiond. This dimensionality reduction enables the diffusion model to be trained effectively on
+a limited number of observations, while still generating realistic high-dimensional samples. As a
+result, the proposed framework addresses two central challenges in modeling financial data: the
+curse of dimensionality and data scarcity.
+3 Score Decomposition under Diffusion Factor Model
+To simulate high-dimensional asset returns using diffusion factor models, the key challenge is ac-
+curately learning the score function via neural networks. However, due to the high dimensionality
+of asset returns and limited market data, directly estimating the score function is impractical as
+it suffers from the curse of dimensionality. To overcome this, we analyze the structural properties
+of score functions under factor models, deriving a tractable decomposition. This decomposition
+informs a neural network architecture designed to perform effectively in small-data regimes.
+3.1 Score Decomposition
+With factor model structure in (8), we show that the score function∇logpt can be decomposed
+into a subspace score in ak-dimensional space and a complementary component, each possessing
+distinct properties.
+To ensure the decomposition is well-defined, we impose the following assumption.
+8
+Assumption 1(Factor model).We assume the following conditions on the factor model(8):
+(i) The factor loadingβ∈R d×k has orthonormal columns.
+(ii) The factorF∈R k follows a distribution that has a density function denoted aspfac and has
+a finite second moment, i.e.,
+R
+∥f∥ 22 pfac(f)df<∞.
+(iii) The residualεis Gaussian with densityϕ(·;0,diag{σ 21, σ22, . . . , σ2d})and there exists a positive
+constantσ max >0such that
+σmax ≥σ 1 ≥σ 2 ≥ · · · ≥σd >0.
+(iv)Fandεare independent.
+As a result,Rhas a positive definite covariance matrix, defined as
+Σ0 :=E[RR ⊤]−E[R]E[R] ⊤.(9)
+Next, for an arbitrary timet∈[0, T], we consider a linear subspaceVt spanned by the column
+vectors ofΛ
+− 12
+t β, withΛ t defined as
+Λt := diag
+n
+ht +σ 21α2t , ht +σ 22α2t , . . . , ht +σ 2dα2t
+o
+.(10)
+We further defineTt as the matrix of orthogonal projection ontoVt:
+Tt :=Λ
+− 12
+t βΓtβ⊤Λ− 12t withΓ t := (β⊤Λ−1t β)−1.(11)
+MatrixΓ t is well-defined asβ⊤Λ−1t βis positive definite due to Assumption 1. The following lemma
+presents the score decomposition.
+Lemma 1.Suppose Assumption 1 holds. The score function∇logpt(r)can be decomposed into a
+subspace score and a complement score as
+∇logp t(r) =T tΛ
+1
+2
+t β· ∇logpfact (β⊤Λ
+1
+2
+t Tt ·Λ
+− 12
+t r)| {z }
+Subspace score
+−Λ
+− 12
+t (I−T t)·Λ
+− 12
+t r| {z }
+Complement score
+,(12)
+wherep fact (·) := R ϕ(·;α tf,Γ t)pfac(f)dfandΛ t,Γ t,T t are defined in(10)and(11).
+For future convenience, we denote the subspace score ass sub :R k ×[0, T]→R d and the
+complement score asscomp :R d ×[0, T]→R d:
+ssub(z, t) :=TtΛ
+1
+2
+t β· ∇logpfact (z),and (13)
+scomp(r, t) :=−Λ
+− 12
+t (I−T t)Λ
+− 12
+t r.(14)
+We defer the proof to Appendix A. A few discussions are in place.
+9
+Motivation and Insights of Score Decomposition.Lemma 1 is proved using an orthogonal
+decomposition of the rescaled noisy data,Λ −1/2t r=T t ·Λ −1/2t r+ (I−T t)·Λ −1/2t r, with the
+two decomposed terms serving different roles. Specifically,s sub is responsible for recovering the
+distribution of the low-dimensional factors, whilescomp progressively adjusts the covariance of the
+generated returns to match that of the heterogeneous noise.
+Furthermore, Lemma 1 provides key insights into an efficient representation of the score func-
+tion. As observed, the subspace score depends only on ak-dimensional input, while the complement
+score is linear, suggesting a natural dimension reduction in representing the score. Learning a low-
+dimensional nonlinear function together with a linear component is substantially more efficient—in
+terms of both sample complexity and computational cost—than learning a high-dimensional non-
+linear function. Indeed, the score network architecture introduced in Section 3.2, along with the
+subsequent statistical analysis in Sections 4 and 5, reflects this critical observation.
+3.2 Choosing Score Network Architecture
+When training a diffusion model, we parameterize the score function using neural networks, where a
+properlychosennetworkarchitectureplaysavitalroleineffectivetraining. Thescoredecomposition
+in Lemma 1 suggests a well-informed network architecture design. Before we introduce our network
+architecture, we briefly summarize our notion of ReLU networks considered in this paper.
+LetS ReLU be a family of neural networks with ReLU activations determined by a set of hyper-
+parametersL,M,J,K,κ,γ 1, andγ 2. Roughly speaking,Lis the depth of the network,Mis the
+width of the network,Jis the number of non-zero weight parameters,Kis the range of network
+output,κis the largest magnitude of weight parameters, andγ 1 as well asγ 2 are both Lipschitz
+coefficients as we detail below. Formally, considering that a score network takes noisy datarand
+timetas input, we defineS ReLU as
+SReLU(L, M, J, K, κ, γ1, γ2)
+=
+n
+gζ(r, t) =WL ·ReLU(· · ·ReLU(W1[z⊤, t]⊤ +b 1)· · ·) +bL withζ:={W ℓ,b ℓ}Lℓ=1 :
+network width bounded byM,sup
+r,t
+∥gζ(r, t)∥2 ≤K,
+max{∥bℓ∥∞,∥W ℓ∥∞} ≤κforℓ= 1, . . . , L,
+LX
+ℓ=1
+(∥bℓ∥0 +∥W ℓ∥0)≤J,
+∥gζ(r1, t)−gζ(r2, t)∥2 ≤γ 1∥r1 −r 2∥2 for anyt∈(0, T],
+∥gζ(r, t1)−g ζ(r, t2)∥2 ≤γ 2|t1 −t 2|for anyr
+o
+,
+(15)
+whereReLUactivation is applied entrywise, and each weight matrixWℓ is of dimensiondℓ ×d ℓ+1.
+Correspondingly, the width of the network is denoted byM= maxℓ dℓ. Here, the uniform bound
+supr,t ∥gζ(r, t)∥2 ≤Kand the sparsity constraint PLℓ=1(∥bℓ∥0 +∥W ℓ∥0)≤Jare standard and
+practically assumptions for ReLU networks (Bartlett, Foster, and Telgarsky 2017, Louizos, Welling,
+10
+and Kingma 2018, Hoefler et al. 2021, Song et al. 2021).3 The Lipschitz continuity ongζ is often
+enforced by Lipschitz network training (Gouk et al. 2021) or induced by implicit bias of the training
+algorithm (Soudry et al. 2018, Bartlett et al. 2020).
+Now, usingS ReLU, we design our score network architecture by first rearranging terms in (12)
+as
+∇logp t(r) =Λ −1t β
+R
+αtf·ϕ(Γ tβ⊤Λ−1t r;α tf,Γ t)pfac(f) dfR
+ϕ(Γtβ⊤Λ−1t r;α tf,Γ t)pfac(f) df −Λ −1t r
+=α tΛ−1t β·ξ(β ⊤Λ−1t r, t)−Λ−1t r,(16)
+whereξ:R k ×[0, T]→R k is defined as
+ξ(z, t) :=
+R
+f·ϕ(Γ tz;α tf,Γ t)pfac(f) dfR
+ϕ(Γtz;α tf,Γ t)pfac(f) df forz∈R k.(17)
+Thei-th element ofξ(z, t)is denoted asξ i(z, t). Note that the coefficientα t forces the first
+term to decay exponentially. Therefore, for sufficiently larget, the score function∇logp t(r)is
+approximately a linear function, corresponding to the second term in (16).
+When choosing the score network architecture, we aim to reproduce the functional form in (16).
+Accordingly, we define a class of neural networks built uponSReLU as
+SNN(L, M, J, K, κ, γ1, γ2, σmax)
+=
+n
+sθ(r, t) =αtDtV·g ζ(V⊤Dtr, t)−Dtrwithθ:={c,V,ζ}:
+c:= [c 1, c2, . . . , cd]⊤ ∈[0, σmax]d,V∈R d×kwith orthogonal columns,
+Dt := diag
+
+1/(ht +α 2t c1), . . . ,1/(ht +α 2t cd)	induced byc,
+gζ ∈ SReLU(L, M, J, K, κ, γ1, γ2)
+o
+.
+(18)
+In (18),Vrepresents the unknown factor loadingβandD t representsΛ −1t . The ReLU network
+gζ is responsible for implementingξ. We remark thatV ⊤ andVserve as the linear encoder
+and decoder, respectively, and−D tris incorporated as a shortcut connection within the U-Net
+framework (Ronneberger, Fischer, and Brox 2015). When there is no confusion, we drop the hyper-
+parameters and denote the network classes in (15) and (18) asSReLU andS NN, respectively.
+4 Score Approximation and Estimation
+Given the score decomposition and score network architectureSNN, this section establishes two
+intriguing properties: 1) with appropriate hyper-parameters,SNN can well approximate any score
+function in the form (12), and 2) learning the score function withinS NN leads to an efficient
+sample complexity. Specifically, we establish an approximation theory to the score function in
+Section 4.1. Building on the approximation guarantee, Section 4.2 derives bounds on the statistical
+11
+error, providing finite-sample guarantees for score estimation, where the sample complexity bounds
+depend primarily on the number of factorskrather than ambient dimensiond.
+4.1 Theory of Score Approximation
+The following assumptions on the factor distribution and score function are needed to establish our
+score approximation guarantee.
+Assumption 2(Factor distribution).The density function for the factors,pfac(·), is non-negative
+and twice continuously differentiable. In additionpfac(·)has sub-Gaussian tail, namely, there exist
+constantsB, C1, andC 2 such that
+pfac(f)≤(2π) − k2 C1 exp(−C2∥f∥ 22/2)when∥f∥ 2 ≥B.(19)
+Assumption 2 is commonly adopted both in the literature of high-dimensional statistics (Ver-
+shynin 2018, Wainwright 2019) and in recent work on diffusion-model theory (De Bortoli et al.
+2021, Chen et al. 2023a, Oko, Akiyama, and Suzuki 2023, Cole and Lu 2024). In finance, Assump-
+tion 2 is standard in the factor/econometrics literature (e.g., Bai and Ng 2002, 2023) for modeling
+low-frequency returns, which are well known to exhibit the aggregated Gaussianity property (Fan
+and Yao 2003). We also need the following regularity assumption on the score function.
+Assumption 3.The subspace score functionssub(z, t)isL s-Lipschitz inzfor anyt∈[0, T].
+The Lipschitz assumption on the score function is a standard assumption in the diffusion model
+literature (Lee, Lu, and Tan 2022, Chen et al. 2023b, Han, Razaviyayn, and Xu 2024). Note that
+Assumption 3 only requires the Lipschitz continuity for the subspace score. But it implies that
+∇logp t is Lipschitz with coefficient
+
+Ls · ht+σ21α2tht+σ2dα2t + 1ht+σ2dα2t , which is in a similar spirit to the
+condition proposed in Lee, Lu, and Tan (2022). As a concrete example, a Gaussian distribution
+with a nondegenerate covariance satisfies Assumption 3.
+Example 1(Gaussian factors).Assume the factorFfollows a nondegenerate Gaussian distribu-
+tion, i.e.,
+F∼ N(0,Σ)withΣ= diag{ς 1, . . . , ςk} ≻0.(20)
+Then, an explicit calculation gives rise to
+∇logp t(r) = (−Λ−1t βΓt(Γt +α 2t Σ)−1)β⊤Λ
+1
+2
+t Tt ·Λ
+− 12
+t r−Λ
+− 12
+t (I−T t)·Λ
+− 12
+t r.
+Correspondingly, the subspace scoressub is written as
+ssub(z, t) = (−Λ−1t βΓt(Γt +α 2t Σ)−1)z,
+which is Lipschitz inz.
+We state our theory of score approximation as follows.
+12
+Theorem 1.Suppose Assumptions 1-3 hold. Given an approximation errorϵ >0, there exists a
+network ¯sθ ∈ SNN such that for anyt∈[0, T], it presents an upper bound
+ERt∼Pt∥sθ(Rt, t)− ∇logpt(Rt)∥2 ≤ (
+√
+k+ 1)ϵ
+min{σ2d,1} .(21)
+The configuration of the network architectureSNN satisfies
+M=O
+
+T τ(1 +Ls)k(1 +σ kmax)ϵ−(k+1)  log 1ϵ +k  k2
+
+, γ1 = 20k(1 +L s)(1 +σ 4max),
+L=O
+
+log 1ϵ +k , J=O T τ(1 +Ls)k(1 +σ kmax)ϵ−(k+1)  log 1ϵ +k  k+22 , γ2 = 10τ,
+K=O
+
+(1 +L s)(1 +σ 4max)
+
+log 1ϵ +k  12 , κ= max (1 +L s)(1 +σ 4max)  log 1ϵ +k  12 , T τ	,
+(22)
+where
+τ= sup
+t∈[0,T],∥z∥ ∞≤
+√
+(1+σ2max)(k+(log 1/ϵ))
+ ∂∂t ξ(z, t)2 withξdefined in(17).
+As shown in (21), the approximation error has a benign dependence on the dimension. It
+primarily depends onmin{σ 2d,1}andk, rather thand. The proof is deferred to Appendix B.1.
+Below, we provide key insights offered by Theorem 1, along with a proof sketch and a discussion
+of the main technical challenges.
+Discussion on Network Architecture.In contrast to conventional neural network designs for
+universalapproximation, suchasthoseinYarotsky(2017), ournetworkemploysonlyLipschitzfunc-
+tionsg ζ rather than a broad family of unrestricted functions. As illustrated in (18), we incorporate
+timetas an additional input, and the network size is determined solely by thek-dimensional space
+due to the encoder-decoder architecture. Our results indicate that the error bound is determined
+bykand remains free of the Lipschitz parametersγ1 andγ 2.
+Technical Challenges and Proof Overview.One key challenge lies in approximating the score
+function under the factor model (8) when data presents high-dimensional noiseε. To address this
+challenge, we utilize the score function decomposition in (16) to separately approximate the low-
+dimensional termξ(z, t)and the noise-related termΛ−1/2t r. With the designed network architecture
+in (18), the noise-related term can be perfectly captured by settingD t =Λ −1t . For the low-
+dimensional term, we provide an approximation based on a partition ofRk into a compact subset
+C={z∈R k :∥z∥ 2 ≤S}with a radiusS=O( p(1 +σ 2max)(k+ log(1/ϵ)))and its complement.
+Specifically, we construct a networkgζ to achieve anL∞ approximation guarantee within the set
+C ×[0, T], and takegζ = 0in the complement ofC ×[0, T].
+To constructgζ as an approximation toξ(z, t)over the domainC ×[0, T], we begin by forming a
+uniformgridofhypercubescoveringC×[0, T]andbuildlocalapproximationswithineachhypercube.
+13
+For thei-th componentξ i ofξ, we use a Taylor polynomial¯gi to obtain a local approximation
+satisfying∥¯gi−ξi∥∞ =O(ϵ)on each hypercube. Since ReLU networks can approximate polynomials
+to arbitrary accuracy in theL∞ norm, we construct a network¯gζ,i that approximates¯gi within
+errorϵ/2. By combining these approximations across all hypercubes, we obtain a networkgζ that
+achieves anL ∞ approximation ofξonC ×[0, T].
+Finally, the proof of Theorem 1 is completed by showing that theL 2 approximation error
+on the complement ofC ×[0, T]can be well controlled due to the sub-Gaussian tail property
+assumed in Assumption 2. Note that the designed network architecture takes the formsθ(r, t) =
+αtΛ−1t β gζ(β⊤Λ−1t r, t)−Λ−1t r. See the details in Appendix B.1.
+4.2 Theory of Score Estimation
+We now turn to the estimation of score functions using a finite number of samples. With the score
+function parameterized bySNN in (18), we can express the score matching objective as
+psθ = arg min
+sθ∈SNN
+pL(sθ),(23)
+where recall pLis defined in (7). Givenni.i.d. samples, we provide anL2 error bound for the neural
+score estimator psθ. The result is presented in the following theorem.
+Theorem 2.Suppose Assumptions 1-3 hold. We chooseSNN in Theorem 1 withϵ=n − 1−δ(n)k+5 for
+δ(n) = (k+10) log(logn)2 logn . Givenni.i.d. samples fromP data, with probability1− 1n, it holds that
+1
+T−t 0
+Z T
+t0
+ERt∼Pt
+h
+∥psθ(Rt, t)− ∇logpt(Rt)∥22
+i
+dt= ˜O
+ 1
+t0
+(1 +σ 2kmax)d 52 k k+102 n− 2−2δ(n)k+5 log4 n,
+where ˜O(·)omits factors associated withL s and polynomial factors onlogt0,logd, andlogk.
+Discussion on the Convergence Rate.The convergence rate in Theorem 2 depends not only
+on the intrinsic factor dimensionkbut also mildly on the asset return dimensiond, which appears
+only in a non-leading polynomial term. This polynomial dependency arises because the noise termε
+spans the entireRd space, introducing a truncation error component that scales withd. Fortunately,
+this dependency does not appear in the leading termn− 2−2δ(n)k+5 , whereδ(n) = (k+10) log logn2 logn . This
+suggests that the convergence rate is primarily dominated by the sample sizenand the latent
+factor dimensionalityk, rather than the ambient dimensionalityd. Whennis sufficiently large,
+δ(n)becomes negligible, indicating the squaredL 2 estimation error to converge at the rate of
+˜O
+
+1
+t0 (1 +σ 2kmax)d 52 k k+102 n− 2k+5 log4 n.
+Proof Sketch.The full proof is deferred to Appendix B.2; here, we present a sketch of the main
+argument. The proof relies on a decomposition of the population lossL(psθ). Specifically, for any
+14
+a∈(0,1), it holds that
+L( psθ)≤ Ltrunc (psθ)−(1 +a) pLtrunc (psθ)| {z }
+(A)
++L( psθ)− Ltrunc (psθ)| {z }
+(B)
++(1 +a) inf
+sθ∈SNN
+pL(s θ)
+| {z }
+(C)
+,
+whereL trunc is defined as
+Ltrunc (sθ) :=
+Z
+ℓtrunc(r;s θ)pt(r)drwithℓ trunc(r;s θ) :=ℓ(r;s θ)1{∥r∥ 2 ≤ρ},
+and a truncation radiusρto be determined. Here, the term(A)captures the statistical error due
+to finite (training) samples, while terms(B)and(C)represent sources ofbiasin the estimation
+of the score function. Specifically,(B)captures the domain truncation error, while(C)accounts
+for the approximation error ofSNN. We bound terms(A),(B), and(C)separately. For term(A),
+we utilize a Bernstein-type concentration inequality on a compact domain. In addition, we show
+that the term(B)is non-leading for sufficiently large radiusρ, thanks to the sub-Gaussian tail
+conditions. Then, we show that term(C)is bounded by the network approximation error (21) in
+Theorem 1. To balance these three terms, we chooseρ=O(√d+ logn),a=n − 1−δ(n)k+5 , and setSNN
+in Theorem 1 withϵ=n − 1−δ(n)k+5 to obtain the desired result.
+5 Theory of Distribution Estimation
+This section establishes statistical guarantees for the estimation of high-dimensional return distri-
+bution. Given the neural score estimatorpsθ in Theorem 2, we define the learned distributionpPt0
+as the marginal distribution ofpR←T−t 0 in (4), starting fromN(0,I d). To assess the quality ofpPt0,
+we examine two key aspects: the estimation error relative to the ground-truth distributionPdata
+and the accuracy of reconstructing the latent factor space.
+5.1 Main Results
+We estimate the latent subspace using generated samples as described in Algorithm 1.
+The following theorem shows that the simulated distribution and the recovered latent factor
+subspace are accurate with high probability.
+Theorem 3.Given the neural score estimatorpsθ in Theorem 2, we chooseT= (4γ1+2)(1−δ(n))k+5 logn
+andt 0 =n − 1−δ(n)k+5 , whereγ 1 is the Lipschitz parameter in Theorem 1. DenoteEigen-gap(k) =
+λk(Σ0)−λ k+1(Σ0)with the covariance matrix of returnsΣ0 defined in(9). Further denoteU∈
+Rd×k as thek-dimensional leading eigenspace ofΣ0. Then, the following two results hold.
+1.Estimation of return distribution.With probability1−1/n, the total variation distance
+15
+Algorithm 1Sampling and Singular Value Decomposition (SVD)
+Require:Score network psθ in Theorem 2, number of generated datam, and timet0 andT.
+1:Generatemrandom samples{R 1, . . . ,Rm}at early stopping timet0 via the backward process
+(4).4
+2:Perform SVD on sample covariance matrix:
+pΣ0 := 1m−1 mXi=1(Ri − ¯R)(Ri − ¯R)⊤ with ¯R= 1m mXi=1 Ri.(24)
+3:Obtain the largestkeigenvalues{ pλ1, . . . ,pλk}and the correspondingk-dimensional eigenspace
+pU∈R d×k.
+4:return{R 1, . . . ,Rm}, pΣ0,{ pλ1, . . . ,pλk}, and pU.
+between pPt0 andP data satisfies
+TV
+
+Pdata, pPt0
+
+= ˜O
+
+(1 +σ kmax)d 54 k k+104 n− 1−δ(n)2(k+5) log 52 n .
+2.Latent subspace recovery.Setm= ˜O
+
+λ−2max(Σ0)dn
+2(1−δ(n))
+k+5 logn
+
+.For any1≤i≤k,
+with probability1−1/n, it holds that
+ λi( pΣ0)λi(Σ0) −1  = ˜O λmax(Σ0)(1 +σ kmax)d 54 k k+104λi(Σ0) ·n − 1−δ(n)k+5 log 52 n!.
+Meanwhile, the correspondingk-dimensional eigenspace can be recovered with
+∥ pU pU⊤ −UU ⊤∥F = ˜O
+ 
+λmax(Σ0)(1 +σ kmax)d 54 k k+124
+Eigen-gap(k) ·n − 1−δ(n)k+5 log 52 n
+!
+,
+where recall thatpUis thek-dimensional leading eigenspaces of pΣ0.
+A few explanations are in line.
+Trade-off on Early Stopping.The distribution estimation in Theorem 3 highlights a trade-off
+associated witht 0. Specifically, we can upper boundTV(Pdata, pPt0)by three terms
+TV(Pdata, pPt0)≤TV(P data, Pt0) + TV(Pt0, ePt0) + TV( ePt0, pPt0),(25)
+where ePt0 is the distribution ofpR←T−t 0, defined in (4), initialized withpR←0 ∼P T. As shown in (25),
+thelatentdistributionerrorTV(P data, pPt0)arisesfromearlystopping, scorenetworkestimation, and
+the mixing of forward process (1). Ast0 increases, the score estimation error decreases according
+to Theorem 2. As a result, the error termTV(P t0, ePt0)decreases. However, the early stopping
+errorTV(P data, Pt0)increases due to the heavier injected Gaussian noise. Under a training horizon
+16
+ofT= ˜O(logn), the choice oft 0 =n − 1−δ(n)k+5 optimally balances the early stopping error and the
+score estimation error.
+Eigenspace Estimation using Generated Samples.The latent subspace estimation in The-
+orem 3 shows that the subspace can be accurately recovered with high probability. Specifically,
+generating ˜O dn 2(1−δ(n))k+5 logn  samples from the trained diffusion model ensures that the eigenval-
+ues and eigenspace of the sample covariance matrixpΣ0 closely approximate those ofΣ0, with the
+error proportional to the score estimation error. Moreover, ifEigen-gap(k)increases—indicating
+an improvement in the factor model identification, then the estimation error of thek-dimensional
+eigenspace decreases.
+Further Discussion on Dimension Dependence.Our sample complexity bounds in Theo-
+rem 3 circumvent the curse of ambient dimensionalitydunder very mild assumptions, namely, score
+function being Lipschitz and the distribution of factors being sub-Gaussian. In the meantime, we
+emphasize that our focus is not on optimizing the non-leading term (e.g.,k
+k+10
+4 ) to derive a sharp
+bound, but on the structural dependence onk(versusd). As a result, these bounds characterize
+learning efficiency being adaptive to the subspace dimensionkeven in the most challenging scenar-
+ios. In practical applications, however, data distributions often possess more favorable regularity
+properties—such as higher-order smoothness in the score function or the distribution of returns—
+which may lead to better learning efficiency compared to the theoretical bound. For example, if one
+assumes that thek-dimensional subspace score function is Hölder-scontinuous, the error bound
+can be improved ton− s2s+k. Ass→ ∞, the rate is approximatelyn− 12, which has been shown to
+be optimal (Tsybakov 2009). While refining our bounds under such additional properties is beyond
+the scope of this paper, we present comprehensive numerical and empirical results in Sections 6
+and 7 to illustrate the strong performance of diffusion factor models, particularly in the small-data
+regime.
+Proof Sketch.The proof is deferred to Appendix C.1; here, we highlight its main ideas. The out-
+line has two parts: (I) the key steps in establishing the distribution estimation result in Theorem 3,
+and (II) the technical components for proving the latent subspace recovery results, emphasizing
+novel coupling and concentration arguments.
+(I) Estimation of return distribution.We bound each term in the decomposition (25) separately.
+1. TermTV(P data, Pt0)is the early-stopping error. By direct calculations using the Gaussian
+transition kernel, we show that it is bounded byO(dt0).
+2. TermTV(P t0, ePt0)captures the statistical estimation error. We apply Girsanov’s Theorem
+(Karatzas and Shreve 1991, Theorem 5.1; Revuz and Yor 2013, Theorem 1.4) to show that
+the KL divergenceKL(P t0, ePt0)is bounded by theL 2 score estimation error developed in
+Theorem 2. Further, by Pinsker’s inequality (Tsybakov 2009, Lemma 2.5), we convert the
+KL divergence bound into a total variation distance bound.
+17
+3. TermTV( ePt0, pPt0)reflects the mixing error of the forward process (1). Using the data pro-
+cessing inequality (Thomas and Joy 2006, Theorem 2.8.1), we show that it is a non-leading
+error term of order ˜O(exp(−T)).
+(II) Latent subspace recovery.The crux is to bound the covariance estimation error∥pΣ0 −Σ 0∥op
+by the following lemma.
+Lemma 2.Assume the same assumptions as in Theorem 3 and takepΣ0 as the estimator in(24)
+withmsamples from Algorithm 1. It holds that, with probability at least1−δ,
+∥ pΣ0 −Σ 0∥op =O
+
+λmax(Σ0)(1 +σ kmax)d 54 k k+104 n− 1−δ(n)k+5 log 52 n.(26)
+Here,msatisfies
+m=O
+
+λ−2max(Σ0)dn 2(1−δ(n))k+5 logn  .(27)
+The complete proof of Lemma 2 is deferred to Appendix C.2.1. Using Lemma 2 in combination
+with Weyl’s theorem and Davis-Kahan theorem (Davis and Kahan 1970), we derive the desired
+results for latent subspace recovery.
+Proving Lemma 2 is similar to that for the estimation of return distribution. We upper bound
+∥ pΣ0 −Σ 0∥op by
+ pΣ0 −Σ 0op ≤ Σ0 −Σ t0op| {z }
+(A)
++
+Σt0 − eΣt0op| {z }
+(B)
++
+ eΣt0 − qΣt0op| {z }
+(C)
++
+ pΣ0 − qΣt0op| {z }
+(D)
+,
+whereΣ t0, eΣt0, qΣt0 are the covariance ofPt0, ePt0 and pPt0, respectively. Analogous to the upper
+bound of the total variation distance in (25), term(A)corresponds to the early-stopping error;
+term(B)captures the statistical estimation error; and term(C)reflects the mixing error. The
+additional term(D)represents a finite-sample concentration error arising from the use ofmsamples
+in Algorithm 1.
+We bound each term separately. Term(A)can be bounded by direct calculations using the
+Gaussian transition kernel; term(D)is bounded using matrix concentration inequalities (Vershynin
+2018, Theorems 3.1.1 and 4.6.1). However, bounding terms(B)and(C)requires a novel analysis,
+as small total variation distancesTV(Pt0, ePt0)andTV( ePt0, pPt0)do not immediately imply small
+error bounds on the covariance matrix. In fact, we show the followingL2 bound based on a coupling
+between two backward SDEs, which converts to bounds on(B)and(C).
+Lemma 3.Assume the same assumptions as in Theorem 3. Consider the following coupled SDEs:
+
+
+
+dR←t =  12 R←t +∇logp T−t (R←t )dt+ d ¯Wt,withR ←0 ∼P T ,
+d pR←t =  12 pR←t + psθ( pR←t , T−t) dt+ d ¯Wt,with pR←0 ∼ N(0,Id) orP T , (28)
+18
+whereP T is the terminal distribution of the forward SDE(1). It holds that
+E∥R←T−t 0 − pR←T−t 0∥22 =O
+
+(1 +σ kmax)d 54 k k+104 n− 1−δ(n)k+5 log 52 n .(29)
+The proof of Lemma 3 is deferred to Appendix C.2.2. By the Cauchy-Schwarz inequality
+and Lemma 3, we bound∥Σ t0 − eΣt0∥op as well as∥ eΣt0 − qΣt0∥op byO  qE∥R←T−t 0 − pR←T−t 0∥22 · q
+E∥R←T−t 0∥22 +
+q
+E
+ pR←T−t 022, where the second moments ofR←T−t 0 and ˆR←T−t 0 are clearly finite.
+Putting together all the error terms, we complete the proof of Lemma 2.
+5.2 Highlights of Technical Novelties
+With the statements of our theoretical results in place, we now summarize the main differences
+between our setting and that of Chen et al. (2023a), and highlight the corresponding technical
+novelties.
+Difference in Data Structure.Our setting differs fundamentally from Chen et al. (2023a)
+because our data follow a factor-model structure with heterogeneous idiosyncratic noise that spans
+the full high-dimensional space, rather than lying on a noise-free low-dimensional subspace, which
+is fundamental and crucial for financial applications. The perturbed dataRt therefore contain two
+sources of noise—a homogeneous diffusion noise with varianceht and a heterogeneous residual noise
+α2t σ2i—so thei-th coordinate is perturbed by Gaussian noise with a total variance ofht +α 2t σ2i.
+This heterogeneity introduces substantial technical challenges, particularly in controlling how this
+noise propagates into the final approximation error.
+Technical Differences/Novelties.To address the challenges posed by high-dimensional id-
+iosyncratic noise, we develop a time-varying score decomposition alongside a tailored neural net-
+work architecture. Specifically, we derive a time-varying orthogonal decomposition of the score into
+subspace and complementary components, which we operationalize through a factor-aware, time-
+varying encoder-decoder with skip connections. We further introduce a time-dependent projection
+matrix that allows the model to effectively accommodate heterogeneous, high-dimensional noise.
+In contrast, in the noise-free linear setting of Chen et al. (2023a), a fixed projection matrix suffices
+for both score decomposition and network design.
+From a technical standpoint, Lemmas 2 and 3 are both novel and essential to our analysis, and
+they highlight a key distinction between our work and Chen et al. (2023a):
+•Lemma 2 establishes an error bound for covariance estimation and latent subspace recovery
+using samples generated by Algorithm 1, with only mild dependence ond(non-leading order)
+despite the presence of heterogeneous high-dimensional noise. Because the idiosyncratic noise
+is full-rank, the problem cannot be reduced to ak-dimensional setting, making the analysis
+substantially more challenging. Consequently, our theoretical guarantees are derived in the
+19
+fulld-dimensional space, in contrast to Chen et al. (2023a), who work entirely within the
+k-dimensional latent subspace.
+•Lemma 3 quantifies the discrepancy between the reverse processes driven by the true score
+∇logp t and the learned score psθ, thereby converting score estimation error into distribu-
+tional error (e.g., total variation). Unlike Chen et al. (2023a), which analyzes a time-reverse
+process projected onto a time-invariant subspace, our setting involves a time-varying latent
+subspace induced by the projectionsΛ−1/2t β. This introduces significant analytical challenges
+in characterizing the relationship between the corresponding time-varying projected backward
+processes. To overcome these difficulties, we develop a coupling argument that enables a gen-
+eral comparison between the true and estimated reverse dynamicsR←T−t 0 and pR←T−t 0 in (3)
+and (4).
+6 Numerical Study with Synthetic Data
+In this section, we use our diffusion factor model to learn high-dimensional asset returns under a
+synthetic factor model setup. We numerically evaluate its effectiveness in terms of recovering both
+the latent subspace and the return distribution (as in Theorem 3).
+To simulate a practically challenging scenario, we follow the widely used practice in the econo-
+metrics literature (Bai and Ng 2002, 2023) to simulate a latent factor model withd= 211 = 2048
+assets andk= 16factors, which satisfies Assumptions 1–3 in our framework. For diffusion models,
+we use a U-Net (Ronneberger, Fischer, and Brox 2015) as a practical implementation of our theoret-
+ical neural networkSNN in (18), and set its bottleneck width as the factor dimensionk. Appendix
+D provides more details on how we construct simulated returns and train diffusion models.
+We denoteµandΣas the ground truth mean and covariance matrix of returns. Similarly, we
+denoteµ Diff andΣ Diff as the mean and covariance matrix estimated using diffusion-generated data,
+andµ Emp andΣ Emp as the empirical mean and covariance matrix estimated using training data.
+Latent Subspace Recovery.We compare the following two methods to recover the latent sub-
+space:
+1.Diff Method: Our proposed diffusion factor model—we first estimate the return distribution
+using our diffusion factor model trained on the training dataset, then generate a large set of
+new data, and finally apply principal component analysis (PCA) on the generated data to
+estimate the eigenvalues and eigenspaces.
+2.Emp Method: A naïve PCA method—we directly perform PCA on the training data and
+extract the leading eigenvalues and eigenspaces.
+It is worth noting that the comparison between two methods is fair because the above two methods
+have access to exactly the same training data.
+20
+We denote{λi}1≤i≤k as the top-keigenvalues andUU⊤ as the leadingk-dimensional principal
+components of the ground-truthΣ. We perform SVD onΣDiff (resp.Σ Emp) to extract the top-k
+eigenvalues{λ Diffi }1≤i≤k (resp.{λ Empi }1≤i≤k) and the leadingk-dimensional principal components 
+UU⊤Diff (resp.  UU⊤Emp).
+To assess the accuracy of the eigenvalue estimation, we compute theℓ1 relative error forDiff
+MethodandEmp Methodas
+Diff RE1 = 1k kXi=1  λDiffiλi −1  and Emp RE 1 = 1k kXi=1  λEmpiλi −1  .(30)
+To evaluate the recovery of the principal components, we compute the relative Frobenius norm
+errors for the two methods as
+Diff RE2 =
+ UU⊤Diff −UU ⊤F
+∥UU⊤∥F and Emp RE 2 =
+ UU⊤Emp −UU ⊤F
+∥UU⊤∥F .(31)
+Table 1 reports the errors in estimating the top-keigenvalues (30) in Panel A and the errors in
+recovering thek-dimensional principal components (31) in Panel B for both theDiff Methodand
+Emp Method, for a variety of training sample sizesN= 29,2 10, . . . ,213.
+Table 1: Relative error of the estimated top-keigenvalues (30) andk-dimensional principal com-
+ponents (31) for varying sample sizes (standard deviations in parentheses).
+Panel A: Eigenvalues
+NDiff RE 1 Emp RE1 Diff RE1/Emp RE1
+29 = 5120.144 (±0.011) 0.160 0.898 (±0.069)
+210 = 10240.130 (±0.008) 0.141 0.919 (±0.056)
+211 = 20480.116 (±0.005) 0.121 0.957 (±0.041)
+212 = 40960.081 (±0.004) 0.081 1.003 (±0.047)
+213 = 81920.069 (±0.003) 0.067 1.024 (±0.045)
+Panel B: Principal Components
+NDiff RE 2 Emp RE2 Diff RE2/Emp RE2
+29 = 5120.247 (±0.012) 0.274 0.901 (±0.044)
+210 = 10240.202 (±0.006) 0.218 0.926 (±0.028)
+211 = 20480.153 (±0.005) 0.159 0.960 (±0.033)
+212 = 40960.110 (±0.004) 0.109 1.009 (±0.036)
+213 = 81920.085 (±0.004) 0.084 1.012 (±0.047)
+Table 1 reveals the advantage of our method in small-data regimes (N≤d), which is particularly
+important for practical applications. In particular, whenN≤2048,Diff Methodconsistently
+outperformsEmp Method, as shown by error ratios being statistically below 1. When there is enough
+sample (N≥4096), simply using empirical estimates suffices to yield good subspace recovery. It is
+worth highlighting thatN= 2048corresponds to approximately 8 years of daily return observations
+or 39 years of weekly return observations. It is rarely the case that one enjoys the luxury of having
+21
+that much data to estimate a factor model, because return distributions do not remain stable over
+such a long period of time.
+Generated Return Distribution.In Figure 1, we visualize the (empirical) return distribution
+generated by our diffusion factor model (trained on211 samples) for a few selected assets, which
+is compared with direct sampling from the ground truth. With the same number of211 samples,
+Diff Methodproducesasmootherempiricaldistributionthatmorecloselyapproximatestheground
+truth. This suggests that our diffusion factor model may be more effective at capturing patterns
+and regularities of the underlying distribution than direct sampling.
+Figure 1: Examples of asset return distribution (the blue is constructed using output samples from
+the diffusion model and the green is based on samples from the ground truth.)
+(a) Asset with the largest variance.
+ (b) Asset with the smallest variance.
+(c) Asset with the largest mean.
+ (d) Asset with the smallest mean.
+Moreover, to evaluate the accuracy of estimating the first two moments, Table 2 reports the
+relative estimation errors for the mean and the covariance matrix, across a range of sample sizes
+N= 2 9,2 10, . . . ,213. Specifically, we compute theℓ 2 relative error of the mean and the relative
+Frobenius-norm error of the covariance matrix forDiff MethodandEmp Methodas follows:
+Diff RE3 = ∥µDiff −µ∥ 2∥µ∥2 ,Emp RE 3 =
+µEmp −µ 2
+∥µ∥2
+,(32)
+Diff RE4 = ∥ΣDiff −Σ∥ F∥Σ∥F ,and Emp RE 4 = ∥ΣEmp −Σ∥ F∥Σ∥F .(33)
+Table 2 further demonstrates that, in small-sample regimes (N≤2048), theDiff Method
+consistently attains lower estimation errors for both the mean and covariance than theEmp Method,
+as evidenced by error ratios below 1. ForN≥4096, the two methods become indistinguishable.
+22
+Table 2: Relative error of the estimated mean (32) and covariance matrix (33) for varying sample
+sizes (standard deviations in parentheses).
+Panel A: Mean
+NDiff RE 3 Emp RE3 Diff RE3/Emp RE3
+29 = 5120.089 (±0.007) 0.097 0.916 (±0.070)
+210 = 10240.057 (±0.002) 0.060 0.954 (±0.033)
+211 = 20480.047 (±0.001) 0.048 0.966 (±0.023)
+212 = 40960.026 (±0.001) 0.026 1.001 (±0.021)
+213 = 81920.022 (±0.001) 0.022 1.009 (±0.020)
+Panel B: Covariance Matrix
+NDiff RE 4 Emp RE4 Diff RE4/Emp RE4
+29 = 5120.257 (±0.016) 0.290 0.885 (±0.055)
+210 = 10240.209 (±0.011) 0.230 0.911 (±0.046)
+211 = 20480.157 (±0.005) 0.167 0.941 (±0.027)
+212 = 40960.115 (±0.002) 0.115 0.997 (±0.018)
+213 = 81920.089 (±0.001) 0.088 1.007 (±0.009)
+Statistical Interpretation.From a statistical perspective, our superior performance can be
+explained by the bias–variance trade-off. TheEmp Methodhas small bias but often suffers from
+high variance in small-data regimes. In contrast, theDiff Methodfirst fits a diffusion model to the
+availabledataandthenusesthetrainedmodeltogeneratealargenumberofsamplesfordownstream
+estimation tasks. Once the diffusion model is well trained (using observed data) to represent the
+underlying unknown distribution, our method can generate arbitrarily many additional samples.
+TheDiff Methodcan therefore be viewed as a data-dependent regularization of theEmp Method,
+increasing the effective sample size to reduce estimation variance at the cost of a small modeling bias
+(Li et al. 2025). In small-data regimes, estimation variance typically dominates the error (Jorion
+1986, Ledoit and Wolf 2003, 2004), and the resulting variance reduction leads theDiff Methodto
+outperform theEmp Method. This insight is further developed in the next section through empirical
+analysis.
+7 Empirical Analysis
+In this section, we apply our diffusion factor model to real-world data and evaluate its economic
+relevance in constructing both mean-variance optimal portfolios (Zhou and Li 2000, DeMiguel et al.
+2009) and factor portfolios (Giglio, Kelly, and Xiu 2022, Feng et al. 2023). Although our theoretical
+analysis relies on distributional assumptions of sub-Gaussian tails, we challenge our framework with
+real asset returns, which are well documented to be heavy-tailed while still well captured by factor
+models (Chamberlain and Rothschild 1983, Cont 2001, Fan, Liao, and Mincheva 2013). Specifically,
+Section 7.1 compares mean-variance optimal portfolios derived from diffusion-generated data with
+those based on other robust portfolio rules in the literature. Section 7.2 assesses the performance
+of factor portfolios estimated using diffusion-generated data and benchmarks them against other
+23
+prominent factor models in the literature.
+We use daily excess return data for U.S. stocks from May 1, 2001, to April 30, 2024.5 The
+dataset is obtained from the Center for Research in Security Prices (CRSP), available through
+Wharton Research Data Services. We use a five-year rolling window to estimate the diffusion
+model, and we update the estimation quarterly. Specifically, at the beginning of each rebalancing
+quarterT(i.e., on February 1, May 1, August 1, and November 1), we update model parameters
+using training data from the preceding five years (T−20toToffset quarters). We test the model on
+data in the next quarterT+ 1to evaluate out-of-sample performance. Appendix E.1 provides more
+details on data preprocessing and training of diffusion models. Appendix E.4 provides a robustness
+check with annually updated diffusion models.6
+7.1 Mean-Variance Optimal Portfolio
+We follow the literature to consider the mean-variance optimization problem with a norm constraint
+(Jagannathan and Ma 2003, Bertsimas, Pachamanova, and Sim 2004, DeMiguel et al. 2009, Gotoh
+and Takeda 2011) to yield a fully invested and reasonably diversified portfolio:
+max
+ω
+ω⊤µ− η2 ω⊤Σω,subject toω ⊤1= 1and∥ω∥ ∞ ≤0.05,(34)
+whereωdenotes the portfolio weights,µis the expected return in excess of the risk-free rate,Σ
+is the covariance matrix, andη >0is the risk aversion parameter. As a robustness check, we also
+consider anℓ 1-norm constraint when solving the portfolio weights (Bertsimas, Pachamanova, and
+Sim 2004, Gotoh and Takeda 2011), and report the corresponding results in Appendix E.3.7
+Methods of Portfolio Construction.We evaluate a series of portfolio construction methods
+that differ in their data source (real observed data or diffusion-generated data) and in their esti-
+mation techniques for the mean and covariance matrix. We first describe classical approaches that
+rely solely on observed data.
+1.EW: A simple strategy with equal weights on all risky assets. DeMiguel, Garlappi, and Uppal
+(2009) have documented its surprisingly efficient and robust performance.
+2.VW: A value-weighted strategy that assigns each asset a weight proportional to its market
+capitalization relative to the total market capitalization in the dataset.
+3.Real Emp+Real Emp: A baseline that directly uses the sample meanµ Emp and sample co-
+variance matrixΣEmp as inputs to (34) to solve the optimal portfolio weights.
+As the empirical estimator is suboptimal and may be unstable in small-data regimes, we also
+include shrinkage estimators, which are well documented to improve upon empirical estimators in
+such settings (Jorion 1986, Ledoit and Wolf 2003, 2004).
+24
+4.Real BS+Real Emp: A robust portfolio proposed by Jorion (1986) that utilizes a Bayes-Stein
+shrinkage meanµBS:
+µBS = (1−γ BS)·µ Emp +γ BS ·µ gmv1d
+to solve (34), whereµ gmv =1 ⊤d Σ−1Empµd/1⊤d Σ−1Emp1d denotes the average excess return on
+the sample global minimum-variance portfolio, andγBS is the shrinkage weight estimated by
+Jorion (1986, Equation (17)). The covariance estimator is still the sample covarianceΣEmp.
+5.Real OLSE+Real Emp: A robust portfolio proposed by Bodnar, Okhrin, and Parolya (2019)
+that uses an Optimal Linear Shrinkage Estimator (OLSE) for high-dimensional meanµOLSE:
+µOLSE =α OLSE ·µ Emp +β OLSE ·1 d
+to solve (34), whereαOLSE andβ OLSE are the shrinkage weights estimated by Jorion (1986,
+Equations (6) and (7)). The covariance estimator is still the sample covarianceΣEmp.
+6.Real Emp+Real LW: A robust portfolio proposed by Ledoit and Wolf (2003, 2004) that uses
+a shrinkage covariance matrixΣLW:
+ΣLW = (1−γ LW)·Σ Emp +γ LW ·uI d
+to solve (34), whereu= tr(ΣEmp)/d, andγLWis the shrinkage parameter estimated by Ledoit
+and Wolf (2022, Equation (2.14)). The mean estimator is still the sample meanµEmp.
+7.Real BS+Real LW: A robust portfolio that combines Bayes–Stein shrinkage meanµ BS with
+the shrinkage covarianceΣLW to solve (34).
+8.Real OLSE+Real LW: A robust portfolio that combines OLSE meanµOLSE with the shrinkage
+covarianceΣ LW to solve (34).
+We further consider six methods that rely on our diffusion-generated data.
+9.Diff Emp+Diff Emp: It extendsReal Emp+Real Empby replacing the empirical mean and
+covariance estimates with those obtained from diffusion-generated data.
+10.Diff BS+Diff Emp: It extendsReal BS+Real Empby replacing the Bayes-Stein mean and
+empirical covariance estimates with those obtained from diffusion-generated data.
+11.Diff OLSE+Diff Emp: It extendsReal OLSE+Real Empby replacing the OLSE mean and
+empirical covariance estimates with those obtained from diffusion-generated data.
+12.Diff Emp+Diff LW:ItextendsReal Emp+Real LWbyreplacingtheempiricalmeanandLedoit-
+Wolf covariance estimates with those obtained from diffusion-generated data.
+13.Diff BS+Diff LW:ItextendsReal BS+Real LWbyreplacingtheBayes-SteinmeanandLedoit-
+Wolf covariance estimates with those obtained from diffusion-generated data.
+25
+14.Diff OLSE+Diff LW:ItextendsReal OLSE+Real LWbyreplacingtheOLSEmeanandLedoit-
+Wolf covariance estimates with those obtained from diffusion-generated data.
+Finally, we consider two additional hybrid methods.
+15.Real Emp+Diff Emp: It uses the empirical mean estimated from real data and the empirical
+covariance matrix estimated from diffusion-generated data to solve (34).
+16.Diff Emp+Real Emp: It uses the empirical mean estimated from diffusion-generated data and
+the empirical covariance matrix estimated from real data to solve (34).
+Methods 9–14 serve as diffusion-based counterparts to Methods 3–8 to evaluate the benefits of
+using diffusion-generated data in both mean and covariance estimation. Methods 15 and 16 are
+hybrid approaches designed to understand the contribution of diffusion-generated data in mean and
+covariance estimation, respectively.
+Main Results.Target weights are updated quarterly and rebalanced daily. Following Kan and
+Zhou (2007), we setη= 3and assume a transaction cost of 20 basis points. We also examine other
+values ofηand the scenario without transaction costs, and find similar results; see Appendix E.2 for
+details. Table 3 reports out-of-sample portfolio performance under scenarios with transaction costs,
+including the average return (Mean), standard deviation (Std), Sharpe ratio (SR), certainty equiv-
+alent return (CER, i.e., the objective value in (34)), maximum drawdown (MDD), and turnover
+(TO).8 Figure 2 further shows the cumulative returns of different portfolios in log scale with trans-
+action costs.
+Figure 2: Cumulative returns of different portfolios in log scale with transaction cost forη= 3.
+First, using diffusion-generated data,Diff Emp+Diff Empconsistently outperforms by a large
+margin all alternative methods in Mean, SR, and CER, with transaction costs. Other diffusion-
+based methods also outperform their counterparts. In particular,Diff Emp+Diff Empoutperforms
+EWby a large margin, achieving approximately twice the Sharpe ratio. This is a highly nontrivial
+26
+Table 3: Performance of different portfolios with transaction costs forη= 3(model updated
+quarterly)
+.
+Method Mean Std SR CER MDD (%) TO
+Methods based on real observed data
+EW0.100 0.206 0.486 0.037 53.1283.031
+VW0.096 0.220 0.437 0.024 58.086 3.464
+Real Emp+Real Emp-0.017 0.128 -0.129 -0.041 45.011 46.722
+Real BS+Real Emp-0.021 0.126 -0.168 -0.045 45.864 45.612
+Real OLSE+Real Emp-0.039 0.127 -0.305 -0.063 55.596 45.952
+Real Emp+Real LW-0.003 0.123 -0.023 -0.025 38.852 38.827
+Real BS+Real LW-0.0070.121-0.059 -0.029 39.369 37.900
+Real OLSE+Real LW-0.024 0.122 -0.200 -0.047 45.864 38.543
+Methods based on diffusion-generated data
+Diff Emp+Diff Emp0.2160.1591.361 0.17832.603 28.751
+Diff BS+Diff Emp0.213 0.157 1.357 0.176 32.610 27.978
+Diff OLSE+Diff Emp0.212 0.157 1.356 0.176 32.615 27.876
+Diff Emp+Diff LW0.180 0.152 1.186 0.145 32.781 26.353
+Diff BS+Diff LW0.178 0.150 1.184 0.144 32.862 25.773
+Diff OLSE+Diff LW0.178 0.150 1.184 0.144 32.882 25.697
+Methods based on both real observed data and diffusion-generated data
+Diff Emp+Real Emp0.037 0.134 0.275 0.010 37.423 29.323
+Real Emp+Diff Emp0.163 0.150 1.090 0.13030.76023.313
+benchmark to beat, as shown by DeMiguel, Garlappi, and Uppal (2009), because all other methods
+without diffusion-generated data fail to beatEWin terms of risk-adjusted returns.
+Second,Diff Emp+Diff Empoutperforms both hybrid methods in risk-adjusted returns. Be-
+tween them,Real Emp+Diff EmpbeatsDiff Emp+Real Emp, and both significantly outperform
+sample-based methods includingReal Emp+Real Empand other classical shrinkage methods. This
+result reflects improvements in both the mean and covariance estimation from diffusion-generated
+data, but most of the improvements come from the improved covariance estimation, which is not
+surprising given the very design of our diffusion factor model. From a statistical perspective, again,
+the performance gains ofDiff Emp+Diff Empcan be interpreted through a bias–variance trade-off:
+our diffusion factor model acts as a form of data-dependent regularization, introducing a modest
+modeling bias while substantially reducing finite-sample estimation variance, thereby yielding more
+robust moment estimators (Kotelnikov et al. 2023, Li et al. 2025).
+Finally, with diffusion-generated data, shrinkage estimates of both the mean and covariance
+matrix are no longer necessary, as shown by the superior performance ofDiff Emp+Diff Emp
+compared with other diffusion-based shrinkage methods. Although the shrinkage estimates have
+historically played an impactful role for robust portfolios, as shown by reviews in the literature
+(Avramov and Zhou 2010, Bodnar, Okhrin, and Parolya 2022, Ledoit and Wolf 2022), our results
+show that modern generative modeling techniques such as diffusion models may provide a simple
+yet effective and robust way to deal with data scarcity.
+27
+7.2 Factor Portfolio
+To further demonstrate the benefits of diffusion-generated data, we apply existing statistical meth-
+ods on top of our diffusion-generated data to obtain factors and evaluate the performance of the
+corresponding tangency portfolios.
+Methods of Factor Estimation.We compare seven methods to estimate factors, where a
+projection matrix is first estimated from either observed data or diffusion-generated data, and
+then applied to test data to extract factors. Existing approaches that rely solely on observed data
+include:
+1.FF Method: Firm characteristics-based factors that includes the Fama and French (2015a) five
+factors: market (Mkt-RF), size (SMB), value (HML), profitability (RMW), and investment
+(CMA), the momentum factor (MOM) of Carhart (1997), and the short-term and long-term
+reversal factors (ST-Rev and LT-Rev).9
+2.PCA Method: Perform PCA on observed training data to obtain a projection matrixWPCA.
+3.POET Method: Principal Orthogonal complEment Thresholding (POET) proposed by Fan,
+Liao, and Mincheva (2013), in which one computes a robust POET covariance estimator
+ˆΣPOET and then apply SVD to obtain the projection matrixWPOET.
+4.RPPCA Method: Risk-premia PCA (RP-PCA) proposed by Lettau and Pelger (2020b), in
+whichoneperformsPCAon 1n Pni=1 rir⊤i +γRPPCA¯r¯r⊤ toobtainaprojectionmatrixW RPPCA,
+where{r i}ni=1 denotes samples of asset returns,¯r= 1n Pni=1 ri is the sample mean, andγRPPCA
+is a tuning parameter.
+Methods based on our diffusion factor model are implemented by applying the same factor estima-
+tion procedures to diffusion-generated data, rather than to the observed training data:
+5.Diff+PCA Method: It extendsPCA Methodby using diffusion-generated data.
+6.Diff+POET Method: It extendsPOET Methodby using diffusion-generated data.
+7.Diff+RPPCA Method: It extendsRPPCA Methodby using diffusion-generated data.
+Main Results.Next, we construct tangency portfolios that maximize the Sharpe ratio using the
+extracted factors by solving the following optimization problem:
+max
+ω
+ω⊤µfacp
+ω⊤Σfacω ,subject toω ⊤1= 1,(35)
+whereωdenotes the portfolio weights, andµ fac andΣ fac are the mean and covariance matrix of
+the factors, respectively. Table 4 reports the Sharpe ratios of the tangency portfolios constructed
+across varying numbers of factors.10
+28
+Table 4: Out-of-sample Sharpe ratios of factor tangency portfolios (model updated quarterly)
+. The number of factors is set to be3,5,6, and8, respectively.
+# FactorsDiff+PCA Diff+POET Diff+RPPCA FF PCA POET RPPCA
+31.204 1.1671.4740.431 0.480 0.856 0.857
+52.280 2.2642.5550.474 0.519 0.963 0.928
+62.698 2.7013.0700.552 0.630 1.375 1.433
+83.536 3.4713.6680.810 0.735 1.811 1.861
+Methods based on our diffusion factor model consistently outperformFF Methodand their cor-
+responding PCA counterparts. In particular,Diff+PCA Methodexceeds bothFF MethodandPCA
+Methodby a wide margin, achieving approximately three and five times their Sharpe ratios, re-
+spectively. Furthermore, applying the robust methods of factor estimation proposed by Fan, Liao,
+and Mincheva (2013), Lettau and Pelger (2020b) to diffusion-generated data yields additional im-
+provements in portfolio performance. These results highlight the effectiveness of diffusion-generated
+factors in capturing systematic risk.
+Finally, we assess whether diffusion-generated factors capture interpretable economic character-
+istics by analyzing their correlations with firm characteristics-based factors. For each method based
+on diffusion-generated data, Figure 3 reports the correlations between top eight factors estimated
+using diffusion-based methods and traditional factors inFF Method. Diffusion-generated factors
+exhibit notable correlations with traditional factors, with Mkt-RF, LT-REV, and MOM being the
+three leading factors for all three methods.
+Figure 3: Correlation between the top 8 factors obtained using diffusion-based methods and those
+from theFF Method.
+(a)Diff+PCA Method
+ (b)Diff+POET Method
+ (c)Diff+RPPCA Method
+8 Conclusion and Future Work
+We propose a diffusion factor model that embeds the latent factor structure into generative diffusion
+processes. To exploit the low-dimensional nature of asset returns, we introduce a time-varying score
+decomposition via orthogonal projections and design a score network with an encoder-decoder
+architecture. These modeling choices lead to a concise and structure-aware representation of the
+29
+score function.
+On the theoretical front, we provide statistical guarantees for score approximation, score es-
+timation, and distribution recovery. Our analysis introduces new techniques to address heteroge-
+neous residual noise and time-varying subspaces, yielding error bounds that depend primarily on
+the intrinsic factor dimensionk, with only mild dependence on the ambient dimensiond. These
+results demonstrate that our framework effectively mitigates the curse of dimensionality in high-
+dimensional settings.
+Simulation studies confirm that the proposed method achieves more accurate subspace recovery
+and smoother distribution estimation than classical baselines, particularly when the sample size is
+smaller than the asset dimension. The generated data reliably capture the true mean and covariance
+structure.
+Finally, our empirical experiments on real data show that diffusion-generated data improves
+mean and covariance estimation, leading to superior mean-variance optimal portfolios. Our ap-
+proach consistently outperforms traditional methods, achieving higher Sharpe ratios. Addition-
+ally, factors estimated from generated data exhibit interpretable economic characteristics, enabling
+tangency portfolios that better capture systematic risk. These findings highlight the substantial
+potential of our diffusion factor model for real-world financial applications.
+With the widely used factor-model structure, our results open a path toward integrating fi-
+nancial data structures into generative AI architectures that admit statistical guarantees. Looking
+ahead, we plan to investigate several interesting and more sophisticated settings. These include un-
+derstanding how the statistical guarantees change when the noise distribution is heavy-tailed; using
+diffusion models for missing-data imputation; establishing theoretical guarantees for how diffusion
+models improve decision-making; and developing methods for generating dynamic time-series data.
+Notes
+1The number of factorskvaries from 1 to several dozen, balancing predictive power and economic interpretability
+(Harvey, Liu, and Zhu 2016, Giglio, Liao, and Xiu 2021).
+2It is worth noting that complete independence fromdis unattainable due to idiosyncratic noise spanning the
+fulld-dimensional space. We achieve a mild polynomial dependence of the estimated score function on the ambient
+dimensiondfrom the residual noise.
+3The bounded-output conditionsupr,t ∥gζ(r, t)∥2 ≤Kis often enforced in practice by clipping the layer of ReLU
+networks (e.g.,g(a) = ReLU(a−R)−ReLU(a+R)−Rclips to[−R, R]), which is a standard assumption for the
+score approximation in the score-based models (Vincent 2011, Bartlett, Foster, and Telgarsky 2017, Ho, Jain, and
+Abbeel 2020, Song et al. 2021). The sparsity constraintPLℓ=1(∥bℓ∥0 +∥W ℓ∥0)≤Jdirectly controls the complexity
+of the neural network class and enters our covering-number bound in Lemma B.4. Empirically, sparsity in neural
+networks is typically induced by regularization; for example, explicitℓ1 regularization (akin to LASSO) on weight
+matrices induces sparsity (Srinivas, Subramanya, and Babu 2017, Louizos, Welling, and Kingma 2018) and large
+neural networks can be compressed by training a sparse sub-network without sacrificing performance (Han, Mao, and
+Dally 2016, Frankle and Carbin 2019, Hoefler et al. 2021).
+4For practical implementation, we can use denoising diffusion probabilistic models (DDPM) discretization (Ho,
+30
+Jain, and Abbeel 2020). Fori= 1,2, . . . , m,
+Ri,tj−1 = 1√αtj (Ri,tj + (1−α t)psθ(Ri,tj , tj)) + 1−α tjαtj ztj ,withR i,T ∼ N(0,Id),
+wheret 0 < t1 < t2 · · ·< tℓ =Tand{z t}Tt=t0 are i.i.d. followingN(0,I d). In our analysis, the discretization error is a
+minor term that does not affect the main theoretical results. More specifically, previous work on score-based diffusion
+sampling (e.g., Chen et al. (2023b), Li et al. (2024b), Tang and Zhao (2025)) has shown that for a time step size∆t,
+the discretization error scales asO(
+√
+∆t)and hence constitutes a negligibleo(1)when∆tis sufficiently small.
+5The U.S. Securities and Exchange Commission (SEC) mandated the conversion to decimal pricing for all U.S.
+stock markets by April 9, 2001.
+6With a five-year rolling window, each quarterly update replaces roughly5%of the training data and reuses the
+remaining95%, which balances information refresh against the computational cost of retraining the diffusion model.
+As a robustness check, an annually update frequency also leads to similar results; see Appendix E.4 for details.
+7In the norm-constrained portfolio literature, various norms have been studied, includingℓ1-,ℓ 2-,ℓ ∞-, andA-
+norm constraints (Jagannathan and Ma 2003, Bertsimas, Pachamanova, and Sim 2004, DeMiguel et al. 2009, Gotoh
+and Takeda 2011). It has been shown that these constraints have certain mathematical equivalence in terms of
+obtaining the portfolio weights (Bertsimas, Pachamanova, and Sim 2004, Gotoh and Takeda 2011). As a robustness
+check, we construct mean–variance portfolios underℓ1-norm constraints and evaluate their performance; see details
+in Appendix E.3.
+8We rebalance daily to track the target weights, since daily return fluctuations cause realized weights to drift away
+from the targets and require small but frequent adjustments to maintain the target allocation. The reported turnover
+is annualized from daily trades, hence these adjustments can accumulate into a relatively high annual turnover,
+especially when the absolute values of the target weights are more extreme.
+9These two factors are obtained from French’s data libraryhttps://mba.tuck.dartmouth.edu/pages/faculty/k
+en.french/data_library.html.
+10As noted by Kelly, Pruitt, and Su (2019), factor tangency portfolios may not be directly implementable, but
+they serve as important theoretical benchmarks for evaluating mean–variance efficiency. Compared to mean–variance
+portfolios, their generally higher Sharpe ratios may stem from two main sources. First, the relatively low dimension-
+ality of the factor space compared to individual assets improves the stability of estimated means and covariances.
+Second, the exclusion of transaction costs can further enhance performance. Similar observations have been made in
+the literature; see Gu, Kelly, and Xiu (2020, 2021).
+References
+Acciaio, B., S. Eckstein, and S. Hou, 2024, Time-causal vae: Robust financial time series generator,arXiv
+preprint arXiv:2411.02947.
+Acharya, V. V., R. Berner, R. Engle, H. Jung, J. Stroebel, X. Zeng, and Y. Zhao, 2023, Climate stress
+testing,Annual Review of Financial Economics15, 291–326.
+Adrian, T., E. Etula, and T. Muir, 2014, Financial intermediaries and the cross-section of asset returns,The
+Journal of Finance69, 2557–2596.
+Aït-Sahalia, Y., and D. Xiu, 2019, Principal component analysis of high-frequency data,Journal of the
+American Statistical Association114, 287–303.
+Albergo, M. S., N. M. Boffi, and E. Vanden-Eijnden, 2023, Stochastic interpolants: A unifying framework
+for flows and diffusions,arXiv preprint arXiv:2303.08797.
+Alexander, C., 2005, The present and future of financial risk management,Journal of Financial Econometrics
+3, 3–25.
+Anderson, B. D., 1982, Reverse-time diffusion equation models,Stochastic Processes and their Applications
+12, 313–326.
+31
+Anthony, M., and P. L. Bartlett, 2009,Neural network learning: Theoretical foundations(Cambridge Uni-
+versity Press).
+Avramov, D., and G. Zhou, 2010, Bayesian portfolio analysis,Annual Review of Financial Economics2,
+25–47.
+Azangulov, I., G. Deligiannidis, and J. Rousseau, 2024, Convergence of diffusion models under the manifold
+hypothesis in high-dimensions,arXiv preprint arXiv:2409.18804.
+Bagnara, M., 2024, Asset pricing and machine learning: a critical review,Journal of Economic Surveys38,
+27–56.
+Bai, J., and S. Ng, 2002, Determining the number of factors in approximate factor models,Econometrica
+70, 191–221.
+Bai, J., and S. Ng, 2023, Approximate factor models with weaker loadings,Journal of Econometrics235,
+1893–1916.
+Bakry, D., I. Gentil, M. Ledoux, et al., 2014,Analysis and geometry of Markov diffusion operators, volume
+103 (Springer).
+Baldi, P., and K. Hornik, 1989, Neural networks and principal component analysis: Learning from examples
+without local minima,Neural Networks2, 53–58.
+Barancikova, B., Z. Huang, and C. Salvi, 2025, Sigdiffusions: Score-based diffusion models for long time
+series via log-signature embeddings, inInternational Conference on Learning Representations.
+Bartlett, P. L., D. J. Foster, and M. J. Telgarsky, 2017, Spectrally-normalized margin bounds for neural
+networks,Advances in Neural Information Processing Systems30.
+Bartlett, P. L., P. M. Long, G. Lugosi, and A. Tsigler, 2020, Benign overfitting in linear regression,National
+Academy of Sciences117, 30063–30070.
+Behn, M., R. Haselmann, and V. Vig, 2022, The limits of model-based regulation,The Journal of Finance
+77, 1635–1684.
+Benton, J., V. De Bortoli, A. Doucet, and G. Deligiannidis, 2024, Nearlyd-linear convergence bounds for
+diffusion models via stochastic localization, inInternational Conference on Learning Representations.
+Bertsimas, D., D. Pachamanova, and M. Sim, 2004, Robust linear optimization under general norms,Oper-
+ations Research Letters32, 510–516.
+Bickel, P. J., and E. Levina, 2008, Regularized estimation of large covariance matrices,The Annals of
+Statistics36, 199 – 227.
+Bisias, D., M. Flood, A. W. Lo, and S. Valavanis, 2012, A survey of systemic risk analytics,Annual Review
+of Finance Economics4, 255–296.
+Bodnar, T., O. Okhrin, and N. Parolya, 2019, Optimal shrinkage estimator for high-dimensional mean vector,
+Journal of Multivariate Analysis170, 63–79.
+Bodnar, T., Y. Okhrin, and N. Parolya, 2022, Optimal shrinkage-based portfolio selection in high dimensions,
+Journal of Business & Economic Statistics41, 140–156.
+Borji, A., 2019, Pros and cons of GAN evaluation measures,Computer Vision and Image Understanding
+179, 41–65.
+Brophy, E., Z.Wang, Q.She, andT.Ward, 2023, Generativeadversarialnetworksintimeseries: Asystematic
+literature review,ACM Computing Surveys55, 1–31.
+Bryzgalova, S., V. DeMiguel, S. Li, and M. Pelger, 2023, Asset-pricing factors with economic targets,SSRN
+Electronic JournalWorking paper.
+Büchner, M., and B. Kelly, 2022, A factor model for option returns,Journal of Financial Economics143,
+1140–1161.
+Cao, H., C. Tan, Z. Gao, Y. Xu, G. Chen, P.-A. Heng, and S. Z. Li, 2024, A survey on generative diffusion
+models,IEEE Transactions on Knowledge and Data Engineering.
+Carhart, M. M., 1997, On persistence in mutual fund performance,The Journal of Finance52, 57–82.
+Cetingoz, A. R., and C.-A. Lehalle, 2025, Synthetic data for portfolios: A throw of the dice will never abolish
+chance,arXiv preprint arXiv:2501.03993.
+32
+Chamberlain, G., and M. Rothschild, 1983, Arbitrage, factor structure, and mean–variance analysis on large
+asset markets,Econometrica51, 1281–1304.
+Chazottes, J.-R., P. Collet, and F. Redig, 2021, Evolution of gaussian concentration bounds under diffusions,
+Markov Processes and Related Fields27, 707–754.
+Chen, L., M. Pelger, and J. Zhu, 2024, Deep learning in asset pricing,Management Science70, 714–750.
+Chen, M., Z. Xu, K. Q. Weinberger, and F. Sha, 2012, Marginalized denoising autoencoders for domain
+adaptation, inInternational Conference on Machine Learning.
+Chen, M., K. Huang, T. Zhao, and M. Wang, 2023a, Score approximation, estimation and distribution
+recoveryofdiffusionmodelsonlow-dimensionaldata, inInternational Conference on Machine Learning,
+4672–4712, PMLR.
+Chen, M., H. Jiang, W. Liao, and T. Zhao, 2022, Nonparametric regression on low-dimensional manifolds
+using deep relu networks: Function approximation and statistical recovery,Information and Inference:
+A Journal of the IMA11, 1203–1253.
+Chen, M., X. Li, and T. Zhao, 2020, On generalization bounds of a family of recurrent neural networks, in
+International Conference on Artificial Intelligence and Statistics, volume 108, 1233–1243 (PMLR).
+Chen, M., W. Liao, H. Zha, and T. Zhao, 2020, Statistical guarantees of generative adversarial networks for
+distribution estimation,arXiv preprint arXiv:2002.039389.
+Chen, M., S. Mei, J. Fan, and M. Wang, 2024, Opportunities and challenges of diffusion models for generative
+ai,National Science Review11, nwae348.
+Chen, N.-F., R. Roll, and S. A. Ross, 1986, Economic forces and the stock market,Journal of Business
+383–403.
+Chen, S., S. Chewi, J. Li, Y. Li, A. Salim, and A. Zhang, 2023b, Sampling is as easy as learning the score:
+theory for diffusion models with minimal data assumptions, inInternational Conference on Learning
+Representations.
+Chen, S., G. Daras, and A. Dimakis, 2023, Restoration-degradation beyond linear diffusions: A non-
+asymptotic analysis for ddim-type samplers, inInternational Conference on Machine Learning, 4462–
+4484, PMLR.
+Cole, F., and Y. Lu, 2024, Score-based generative models break the curse of dimensionality in learning a
+family of sub-gaussian probability distributions, inInternational Conference on Learning Representa-
+tions.
+Coletta, A., S. Gopalakrishnan, D. Borrajo, and S. Vyetrenko, 2024, On the constrained time-series genera-
+tion problem,Advances in Neural Information Processing Systems36.
+Coletta, A., J. Jerome, R. Savani, and S. Vyetrenko, 2023, Conditional generators for limit order book
+environments: Explainability, challenges, and robustness, inACM International Conference on AI in
+Finance, 27–35.
+Connor, G., M. Hagmann, and O. Linton, 2012, Efficient semiparametric estimation of the fama–french
+model and extensions,Econometrica80, 713–754.
+Cont, R., 2001, Empirical properties of asset returns: Stylized facts and statistical issues,Quantitative
+Finance1, 223–236.
+Cont, R., M. Cucuringu, J. Kochems, and F. Prenzel, 2023, Limit order book simulation with generative
+adversarial networks,SSRN Electronic JournalWorking paper.
+Cont, R., M. Cucuringu, R. Xu, and C. Zhang, 2022, Tail-GAN: Learning to simulate tail risk scenarios,
+arXiv preprint arXiv:2203.01664.
+Creswell, A., T. White, V. Dumoulin, K. Arulkumaran, B. Sengupta, and A. A. Bharath, 2018, Generative
+adversarial networks: An overview,IEEE Signal Processing Magazine35, 53–65.
+Dai, B., Z. Wang, and D. Wipf, 2020, The usual suspects? reassessing blame for vae posterior collapse, in
+International Conference on Machine Learning, 2313–2322 (PMLR).
+Davis, C., and W. M. Kahan, 1970, The rotation of eigenvectors by a perturbation. iii,SIAM Journal on
+Numerical Analysis7, 1–46.
+33
+DeBortoli, V., 2022, Convergenceofdenoisingdiffusionmodelsunderthemanifoldhypothesis,arXiv preprint
+arXiv:2208.05314.
+De Bortoli, V., J. Thornton, J. Heng, and A. Doucet, 2021, Diffusion schrödinger bridge with applications to
+score-based generative modeling,Advances in Neural Information Processing Systems34, 17695–17709.
+DeMiguel, V., L. Garlappi, F. J. Nogales, and R. Uppal, 2009, A generalized approach to portfolio optimiza-
+tion: Improving performance by constraining portfolio norms,Management Science55, 798–812.
+DeMiguel, V., L. Garlappi, and R. Uppal, 2009, Optimal versus naive diversification: How inefficient is the
+1/n portfolio strategy?,The Review of Financial Studies22, 1915–1953.
+Dhariwal, P., and A. Nichol, 2021, Diffusion models beat gans on image synthesis,Advances in Neural
+Information Processing Systems34, 8780–8794.
+Dou, Z., S. Kotekal, Z. Xu, and H. H. Zhou, 2024, From optimal score matching to optimal sampling,arXiv
+preprint arXiv:2409.07032.
+Eckerli, F., and J. Osterrieder, 2021, Generative adversarial networks in finance: an overview,arXiv preprint
+arXiv:2106.06364.
+Elkamhi, R., C. Jo, and Y. Nozawa, 2024, A one-factor model of corporate bond premia,Management
+Science70, 1875–1900.
+Fabozzi, F. J., D. Huang, and G. Zhou, 2010, Robust portfolios: contributions from operations research and
+finance,Annals of Operations Research176, 191–220.
+Fama, E. F., and K. R. French, 1993, Common risk factors in the returns on stocks and bonds,Journal of
+Financial Economics33, 3–56.
+Fama, E. F., and K. R. French, 2004, The capital asset pricing model: Theory and evidence,Journal of
+Economic Perspectives18, 25–46.
+Fama, E. F., and K. R. French, 2015a, A five-factor asset pricing model,Journal of Financial Economics
+116, 1–22.
+Fama, E. F., and K. R. French, 2015b, A five-factor asset pricing model,Journal of Financial Economics
+116, 1–22.
+Fan, J., J. Guo, and S. Zheng, 2022, Estimating number of factors by adjusted eigenvalues thresholding,
+Journal of the American Statistical Association117, 852–861.
+Fan, J., Y. Liao, and H. Liu, 2016, An overview of the estimation of large covariance and precision matrices,
+The Econometrics Journal19, C1–C32.
+Fan, J., Y. Liao, and M. Mincheva, 2013, Large covariance estimation by thresholding principal orthogonal
+complements,Journal of the Royal Statistical Society Series B: Statistical Methodology75, 603–680.
+Fan, J., Y. Liao, and W. Wang, 2016, Projected principal component analysis in factor models,Annals of
+Statistics44, 219.
+Fan, J., and Q. Yao, 2003,Nonlinear time series: nonparametric and parametric methods(Springer).
+Federal Reserve Board, 2023, 2023 stress test scenarios,https://www.federalreserve.gov/publication
+s/2023-stress-test-scenarios.htm.
+Feng, G., S. Giglio, and D. Xiu, 2020, Taming the factor zoo: A test of new factors,The Journal of Finance
+75, 1327–1370.
+Feng, G., J. He, N. G. Polson, and J. Xu, 2024, Deep learning in characteristics-sorted factor models,Journal
+of Financial and Quantitative Analysis59, 3001–3036.
+Feng, G., L. Jiang, J. Li, and Y. Song, 2023, Deep tangency portfolio,Available at SSRN 3971274.
+Ferson, W. E., and C. R. Harvey, 1991, The variation of economic risk premiums,Journal of Political
+Economy99, 385–415.
+Frankle, J., and M. Carbin, 2019, The lottery ticket hypothesis: Finding sparse, trainable neural networks,
+inInternational Conference on Learning Representations.
+Fu, H., Z. Yang, M. Wang, and M. Chen, 2024, Unveil conditional diffusion models with classifier-free
+guidance: A sharp statistical theory.
+34
+Gao, X., H. M. Nguyen, and L. Zhu, 2025, Wasserstein convergence guarantees for a general class of score-
+based generative models,Journal of Machine Learning Research26, 1–54.
+Gao, X., J. Zha, and X. Y. Zhou, 2024, Reward-directed score-based diffusion models via q-learning,arXiv
+preprint arXiv:2409.04832.
+Giglio, S., B. Kelly, and D. Xiu, 2022, Factor models, machine learning, and asset pricing,Annual Review
+of Financial Economics14, 337–368.
+Giglio, S., Y. Liao, and D. Xiu, 2021, Thousands of alpha tests,The Review of Financial Studies34, 3456–
+3496.
+Giglio, S., andD.Xiu, 2021, Assetpricingwithomittedfactors,Journal of Political Economy129, 1947–1990.
+Giglio, S., D. Xiu, and D. Zhang, 2025, Test assets and weak factors,The Journal of Finance80, 259–319.
+Gotoh, J.-y., and A. Takeda, 2011, On the role of norm constraints in portfolio selection,Computational
+Management Science8, 323–353.
+Gouk, H., E. Frank, B. Pfahringer, and M. J. Cree, 2021, Regularisation of neural networks by enforcing
+lipschitz continuity,Machine Learning110, 393–416.
+Gu, S., B. Kelly, and D. Xiu, 2020, Empirical asset pricing via machine learning,The Review of Financial
+Studies33, 2223–2273.
+Gu, S., B. Kelly, and D. Xiu, 2021, Autoencoder asset pricing models,Journal of Econometrics222, 429–450.
+Gui, J., Z. Sun, Y. Wen, D. Tao, and J. Ye, 2021, A review on generative adversarial networks: Algorithms,
+theory, and applications,IEEE Transactions on Knowledge and Data Engineering35, 3313–3332.
+Guo, Z., J. Liu, Y. Wang, M. Chen, D. Wang, D. Xu, and J. Cheng, 2024, Diffusion models in bioinformatics
+and computational biology,Nature Reviews Bioengineering2, 136–154.
+Hambly, B., R. Xu, and H. Yang, 2023, Recent advances in reinforcement learning in finance,Mathematical
+Finance33, 437–503.
+Han, S., H. Mao, and W. J. Dally, 2016, Deep compression: Compressing deep neural networks with pruning,
+trained quantization and huffman coding, inInternational Conference on Learning Representations.
+Han, Y., M. Razaviyayn, and R. Xu, 2024, Neural network-based score estimation in diffusion models:
+Optimization and generalization, inInternational Conference on Learning Representations.
+Harvey, C. R., Y. Liu, and H. Zhu, 2016, ... and the cross-section of expected returns,The Review of
+Financial Studies29, 5–68.
+Haussmann, U. G., and E. Pardoux, 1986, Time reversal of diffusions,The Annals of Probability1188–1205.
+He, J., D. Spokoyny, G. Neubig, and T. Berg-Kirkpatrick, 2019, Lagging inference networks and posterior
+collapse in variational autoencoders, inInternational Conference on Learning Representations.
+He, X. D., S. Kou, and X. Peng, 2022, Risk measures: robustness, elicitability, and backtesting,Annual
+Review of Statistics and Its Application9, 141–166.
+He, Z., B. Kelly, and A. Manela, 2017, Intermediary asset pricing: New evidence from many asset classes,
+Journal of Financial Economics126, 1–35.
+Ho, J., A. Jain, and P. Abbeel, 2020, Denoising diffusion probabilistic models,Advances in Neural Informa-
+tion Processing Systems33, 6840–6851.
+Hoefler, T., D. Alistarh, T. Ben-Nun, N. Dryden, and A. Peste, 2021, Sparsity in deep learning: Pruning and
+growth for efficient inference and training in neural networks,Journal of Machine Learning Research
+22, 1–124.
+Hoffman, M. D., and M. J. Johnson, 2016, Elbo surgery: yet another way to carve up the variational evidence
+lower bound, inNIPS 2016 Workshop in Advances in Approximate Bayesian Inference, volume 1.
+Hou, K., C.Xue, andL.Zhang, 2015, Digestinganomalies: Aninvestmentapproach,The Review of Financial
+Studies28, 650–705.
+Huang, D. Z., J. Huang, and Z. Lin, 2025, Convergence analysis of probability flow ODE for score-based
+generative models,IEEE Transactions on Information Theory71, 4581–4601.
+Hultin, H., H. Hult, A. Proutiere, S. Samama, and A. Tarighati, 2023, A generative model of a limit order
+book using recurrent neural networks,Quantitative Finance23, 931–958.
+35
+Hyvärinen, A., and P. Dayan, 2005, Estimation of non-normalized statistical models by score matching.,
+Journal of Machine Learning Research6.
+Jacquier, E., and N. Polson, 2011, Bayesian methods in finance, inThe Oxford Handbook of Bayesian
+Econometrics, chapter 9, 439–512 (Oxford University Press).
+Jagannathan, R., and T. Ma, 2003, Risk reduction in large portfolios: Why imposing the wrong constraints
+helps,The Journal of Finance58, 1651–1683.
+Jagannathan, R., and Z. Wang, 1996, The conditional capm and the cross-section of expected returns,The
+Journal of Finance51, 3–53.
+Jegadeesh, N., and S. Titman, 1993, Returns to buying winners and selling losers: Implications for stock
+market efficiency,The Journal of Finance48, 65–91.
+Jorion, P., 1986, Bayes-stein estimation for portfolio analysis,Journal of Financial and Quantitative analysis
+21, 279–292.
+Kan, R., and G. Zhou, 2007, Optimal portfolio choice with parameter uncertainty,Journal of Financial and
+Quantitative Analysis42, 621–656.
+Karatzas, I., and S. Shreve, 1991,Brownian motion and stochastic calculus, volume 113 (Springer Science
+& Business Media).
+Karras, T., M. Aittala, T. Aila, and S. Laine, 2022, Elucidating the design space of diffusion-based generative
+models,Advances in Neural Information Processing Systems35, 26565–26577.
+Kelly, B., S. Malamud, and L. H. Pedersen, 2023, Principal portfolios,The Journal of Finance78, 347–387.
+Kelly, B., D. Palhares, and S. Pruitt, 2023, Modeling corporate bond returns,The Journal of Finance78,
+1967–2008.
+Kelly, B., D. Xiu, et al., 2023, Financial machine learning,Foundations and Trends®in Finance13, 205–363.
+Kelly, B. T., S. Pruitt, and Y. Su, 2019, Characteristics are covariances: A unified model of risk and return,
+Journal of Financial Economics134, 501–524.
+Koehler, F., A. Heckett, and A. Risteski, 2023, Statistical efficiency of score matching: The view from
+isoperimetry, inInternational Conference on Learning Representations.
+Kotelnikov, A., D. Baranchuk, I. Rubachev, and A. Babenko, 2023, Tabddpm: Modelling tabular data with
+diffusion models, inInternational Conference on Machine Learning, 17564–17579, PMLR.
+Ledoit, O., and M. Wolf, 2003, Improved estimation of the covariance matrix of stock returns with an
+application to portfolio selection,Journal of Empirical Finance10, 603–621.
+Ledoit, O., and M. Wolf, 2004, A well-conditioned estimator for large-dimensional covariance matrices,
+Journal of Multivariate Analysis88, 365–411.
+Ledoit, O., and M. Wolf, 2022, The power of (non-) linear shrinking: A review and guide to covariance
+matrix estimation,Journal of Financial Econometrics20, 187–218.
+Lee, H., J. Lu, and Y. Tan, 2022, Convergence for score-based generative modeling with polynomial com-
+plexity,Advances in Neural Information Processing Systems35, 22870–22882.
+Lee, H., J. Lu, and Y. Tan, 2023, Convergence of score-based generative modeling for general data distribu-
+tions, inInternational Conference on Algorithmic Learning Theory, 946–985, PMLR.
+Lettau, M., and S. Ludvigson, 2001, Consumption, aggregate wealth, and expected stock returns,The
+Journal of Finance56, 815–849.
+Lettau, M., and M. Pelger, 2020a, Estimating latent asset-pricing factors,Journal of Econometrics218,
+1–31.
+Lettau, M., and M. Pelger, 2020b, Factors that fit the time series and cross-section of stock returns,The
+Review of Financial Studies33, 2274–2325.
+Li, G., Y. Wei, Y. Chen, and Y. Chi, 2024a, Towards non-asymptotic convergence for diffusion-based gener-
+ative models, inInternational Conference on Learning Representations.
+Li, G., Y. Wei, Y. Chi, and Y. Chen, 2024b, A sharp convergence theory for the probability flow odes of
+diffusion models,arXiv preprint arXiv:2408.02320.
+36
+Li, R., Q. Di, and Q. Gu, 2025, Unified convergence analysis for score-based diffusion models with determin-
+istic samplers, inInternational Conference on Learning Representations.
+Li, X., Y. Dai, and Q. Qu, 2024, Understanding generalizability of diffusion models requires rethinking the
+hidden gaussian structure,Advances in Neural Information Processing Systems37, 57499–57538.
+Li, Z., Q. Huang, L. Yang, and M. van Leeuwen, 2025, Diffusion models for tabular data: Challenges, current
+progress, and future directions,arXiv preprint arXiv:2502.17119.
+Liao, S., H. Ni, M. Sabate-Vidales, L. Szpruch, M. Wiese, and B. Xiao, 2024, Sig-wasserstein gans for
+conditional time series generation,Mathematical Finance34, 622–670.
+Liu, H., T. Zhu, N. Jia, J. He, and Z. Zheng, 2024, Learning to simulate from heavy-tailed distribution via
+diffusion model,Available at SSRN 4975931.
+Liu, Y., A. Tsyvinski, and X. Wu, 2022, Common risk factors in cryptocurrency,The Journal of Finance77,
+1133–1177.
+Locatello, F., S. Bauer, M. Lucic, G. Rätsch, S. Gelly, B. Schölkopf, and O. Bachem, 2019, Challenging
+common assumptions in the unsupervised learning of disentangled representations, inInternational
+Conference on Machine Learning, volume 97, 4114–4124.
+Louizos, C., M. Welling, and D. P. Kingma, 2018, Learning sparse neural networks throughl0 regularization,
+inInternational Conference on Learning Representations.
+Lyu, Z., X. Xu, C. Yang, D. Lin, and B. Dai, 2022, Accelerating diffusion models via early stop of the
+diffusion process,arXiv preprint arXiv:2205.12524.
+Nagel, S., 2013, Empirical cross-sectional asset pricing,Annual Review of Finance Economics5, 167–199.
+Nichol, A. Q., and P. Dhariwal, 2021, Improved denoising diffusion probabilistic models, inInternational
+Conference on Machine Learning, 8162–8171, PMLR.
+Oko, K., S. Akiyama, and T. Suzuki, 2023, Diffusion models are minimax optimal distribution estimators,
+inInternational Conference on Machine Learning, volume 202, 26517–26582 (PMLR).
+Onatski, A., 2010, Determining the number of factors from empirical distribution of eigenvalues,The Review
+of Economics and Statistics92, 1004–1016.
+Pástor, L., and R. F. Stambaugh, 2003, Liquidity risk and expected stock returns,Journal of Political
+Economy111, 642–685.
+Raponi, V., C. Robotti, and P. Zaffaroni, 2020, Testing beta-pricing models using large cross-sections,The
+Review of Financial Studies33, 2796–2842.
+Reppen, A. M., and H. M. Soner, 2023, Deep empirical risk minimization in finance: Looking into the future,
+Mathematical Finance33, 116–145.
+Revuz, D., and M. Yor, 2013,Continuous martingales and Brownian motion, volume 293 (Springer Science
+& Business Media).
+Ronneberger, O., P. Fischer, and T. Brox, 2015, U-net: Convolutional networks for biomedical image seg-
+mentation, inMedical Image Computing and Computer-Assisted Intervention–MICCAI 2015: 18th
+International Conference, Munich, Germany, October 5-9, 2015, proceedings, part III 18, 234–241,
+Springer.
+Ross, S. A., 2013, The arbitrage theory of capital asset pricing, inHandbook of the fundamentals of financial
+decision making: Part I, 11–30 (World Scientific).
+Saatci, Y., and A. G. Wilson, 2017, Bayesian gan,Advances in Neural Information Processing Systems30.
+Schneider, T., P. E. Strahan, and J. Yang, 2023, Bank stress testing: Public interest or regulatory capture?,
+Review of Finance27, 423–467.
+Shapiro, J., and J. Zeng, 2024, Stress testing and bank lending,The Review of Financial Studies37, 1265–
+1314.
+Song, Y., andS.Ermon, 2019, Generativemodelingbyestimatinggradientsofthedatadistribution,Advances
+in Neural Information Processing Systems32.
+Song, Y., and S. Ermon, 2020, Improved techniques for training score-based generative models,Advances in
+Neural Information Processing Systems33, 12438–12448.
+37
+Song, Y., S. Garg, J. Shi, and S. Ermon, 2020, Sliced score matching: A scalable approach to density and
+score estimation, inUncertainty in Artificial Intelligence, 574–584, PMLR.
+Song, Y., J. Sohl-Dickstein, D. P. Kingma, A. Kumar, S. Ermon, and B. Poole, 2021, Score-based generative
+modeling through stochastic differential equations,International Conference on Learning Representa-
+tions.
+Soudry, D., E. Hoffer, M. S. Nacson, S. Gunasekar, and N. Srebro, 2018, The implicit bias of gradient descent
+on separable data,Journal of Machine Learning Research19, 1–57.
+Srinivas, S., A. Subramanya, and R. V. Babu, 2017, Training sparse neural networks, inConference on
+Computer Vision and Pattern Recognition Workshops, 455–462, IEEE.
+Tang, R., and Y. Yang, 2024, Adaptivity of diffusion models to manifold structures, inInternational Con-
+ference on Artificial Intelligence and Statistics, 1648–1656, PMLR.
+Tang, W., and H. Zhao, 2024, Contractive diffusion probabilistic models,arXiv preprint arXiv:2401.13115.
+Tang, W., and H. Zhao, 2025, Score-based diffusion models via stochastic differential equations,Statistics
+Surveys19, 28–64.
+Tashiro, Y., J. Song, Y. Song, and S. Ermon, 2021, Csdi: Conditional score-based diffusion models for
+probabilistic time series imputation,Advances in Neural Information Processing Systems34, 24804–
+24816.
+Thomas, M., and A. T. Joy, 2006,Elements of information theory(Wiley-Interscience).
+Tsybakov, A. B., 2009,Introduction to Nonparametric Estimation, first edition (Springer).
+Tu, J., and G. Zhou, 2010, Incorporating economic objectives into bayesian priors: Portfolio choice under
+parameter uncertainty,Journal of Financial and Quantitative Analysis45, 959–986.
+Tukey, J. W., 1962, The future of data analysis, inBreakthroughs in Statistics: Methodology and Distribution,
+408–452 (Springer).
+Vershynin, R., 2018,High-dimensional probability: An introduction with applications in data science, vol-
+ume 47 (Cambridge university press).
+Vincent, P., 2011, A connection between score matching and denoising autoencoders,Neural Computation
+23, 1661–1674.
+Vuletić, M., and R. Cont, 2025, VOLGAN: A generative model for arbitrage-free implied volatility surfaces,
+Applied Mathematical Finance1–36.
+Vuletić, M., F. Prenzel, and M. Cucuringu, 2024, Fin-GAN: Forecasting and classifying financial time series
+via generative adversarial networks,Quantitative Finance24, 175–199.
+Wainwright, M. J., 2019,High-dimensional statistics: A non-asymptotic viewpoint, volume 48 (Cambridge
+university press).
+Wang, P., H. Zhang, Z. Zhang, S. Chen, Y. Ma, and Q. Qu, 2024, Diffusion models learn low-dimensional
+distributions via subspace clustering,arXiv preprint arXiv:2409.02426.
+Weitzner, D., M. Delbracio, P. Milanfar, and R. Giryes, 2025, The diffusion process as a correlation machine:
+Linear denoising insights,Transactions on Machine Learning Research.
+Wibisono, A., Y. Wu, and K. Y. Yang, 2024, Optimal score estimation via empirical bayes smoothing, in
+Conference on Learning Theory, volume 247 (PMLR).
+Xiao, Z., K. Kreis, and A. Vahdat, 2022, Tackling the generative learning trilemma with denoising diffusion
+gans, inInternational Conference on Learning Representations.
+Yakovlev, K., and N. Puchkin, 2025, Generalization error bound for denoising score matching under relaxed
+manifold assumption, inConference on Learning Theory, volume 291, 5824–5891 (PMLR).
+Yang, K. Y., and A. Wibisono, 2022, Convergence in kl and rényi divergence of the unadjusted langevin
+algorithm using estimated score, inNeurIPS 2022 Workshop on Score-Based Methods.
+Yang, L., Z. Zhang, Y. Song, S. Hong, R. Xu, Y. Zhao, W. Zhang, B. Cui, and M.-H. Yang, 2023, Diffusion
+models: A comprehensive survey of methods and applications,ACM Computing Surveys56, 1–39.
+Yarotsky, D., 2017, Error bounds for approximations with deep relu networks,Neural Networks94, 103–114.
+38
+Yogo, M., 2006, A consumption-based explanation of expected stock returns,The Journal of Finance61,
+539–580.
+Yoon, J., D. Jarrett, and M. Van der Schaar, 2019, Time-series generative adversarial networks,Advances
+in Neural Information Processing Systems32.
+Zhang, K., H. Yin, F. Liang, and J. Liu, 2024, Minimax optimality of score-based diffusion models: Beyond
+the density lower bound assumptions, inInternational Conference on Machine Learning, volume 235,
+60134–60178 (PMLR).
+Zhou, X.Y., andD.Li, 2000, Continuous-timemean-varianceportfolioselection: AstochasticLQframework,
+Applied Mathematics and Optimization42, 19–33.
+39
+A Omitted Proof in Section 3
+In this section, we provide the formal proof of Lemma 1.
+Proof of Lemma 1.By definition, the marginal distribution ofRt is
+pt(r) =
+Z
+ϕ(r;α tr0, htId)| {z }
+Gaussian transition kernel
+pdata(r0)dr0
+(i)
+=
+Z
+ϕ(r;α t(βf+ε), h tId)pfac(f)ϕ
+ 
+ε;0,diag{σ 21, σ22, . . . , σ2d}dfdε.
+Here, equality(i)invokes the factor model (8) to representr0 and the independence between factor
+and noise.
+Sinceεis Gaussian with uncorrelated entries, we can simplifypt as
+pt(r) =
+Z 1
+(2πht)d/2 exp
+
+− ∥r−α t(βf+ε)∥ 22
+2ht
+ dY
+i=1
+1√
+2πσi
+exp
+
+− ε2i
+2σ2i
+
+pfac(f)dε idf
+(i)
+=
+Z dY
+i=1
+1q
+2π(ht +σ 2i α2t ) exp
+
+− ([r−α tβf] i)2
+2(ht +σ 2i α2t )
+
+pfac(f)df
+=
+Z 1p
+(2π)d det(Λt) exp
+
+− ∥Λ
+− 12
+t r−α tΛ
+− 12
+t βf∥ 22
+2
+
+ pfac(f)df,(A.1)
+where(i)holds by completing the squares and integrating with respect toεi, and the last equality
+holds by applying the formula ofΛt in (10).
+NowwedefineorthogonaldecompositionoftherescaledreturnsΛ
+− 12
+t rintothesubspacespanned
+byΛ
+− 12
+t βand its complement:
+Λ
+− 12
+t r= (I−T t)Λ
+− 12
+t r+T tΛ
+− 12
+t r,
+whereΓ t andT t are defined in (11), respectively. Along with the fact thatTt(I−T t) =0, we can
+rewritep t(r)in (A.1) as
+pt(r) = (2π)− d2pdet(Λt) exp  − ∥(I−T t)Λ− 12t r∥222  Z exp  − ∥TtΛ− 12t r−α tΛ− 12t βf∥ 222 pfac(f)df.
+(A.2)
+Take the take gradient oflogpt with respect torusing expression in (A.2), we obtain:
+∇logp t(r) =−Λ
+− 12
+t (I−T t)2 Λ− 12t r
+40
+−
+R
+Λ
+− 12
+t Tt(TtΛ
+− 12
+t r−α tΛ
+− 12
+t βf) exp
+ 
+− ∥TtΛ
+− 12
+t r−αtΛ
+− 12
+t βf∥ 22
+2
+!
+pfac(f)df
+R
+exp
+ 
+− ∥TtΛ
+− 12
+t r−αtΛ
+− 12
+t βf∥ 22
+2
+!
+pfac(f)df
+(i)
+=−Λ
+− 12
+t (I−T t)Λ
+− 12
+t r
+−
+R
+Λ−1t β(β⊤Λ
+1
+2
+t TtΛ
+− 12
+t r−α tf) exp
+ 
+− ∥Λ
+− 12
+t β(β⊤Λ
+1
+2
+t TtΛ
+− 12
+t r−αtf)∥ 22
+2
+!
+pfac(f)df
+R
+exp
+ 
+− ∥Λ
+− 12
+t β(β⊤Λ
+1
+2
+t TtΛ
+− 12
+t r−αtf)∥ 22
+2
+!
+pfac(f)df
+(ii)
+=−Λ
+− 12
+t (I−T t)·Λ
+− 12
+t r| {z }
+scomp(r,t):Complement score
++T tΛ
+1
+2
+t β· ∇logpfact (β⊤Λ
+1
+2
+t Tt ·Λ
+− 12
+t r)| {z }
+ssub(β⊤Λ
+1
+2
+t Tt·Λ
+− 12
+t r,t):Subspace score
+,
+where(i)holds due to the fact that(I−Tt)2 =I−T t and the following straightforward calculation
+by invoking the formulaTt in (11) andβ⊤β=I k:
+TtΛ
+− 12
+t r−α tΛ
+− 12
+t βf=Λ
+− 12
+t βΓtβ⊤Λ− 12t ·Λ − 12t r−α tΛ− 12t βf=Λ − 12t β β⊤Λ 12t TtΛ− 12t r−α tf  .
+In addition,(ii)follows the definition ofp fact .□
+B Omitted Proofs in Section 4
+In this section, we provide proofs of Theorem 1, Theorem 2 and the lemmas used in the proof.
+B.1 Proof of Theorem 1
+Proof.Given the neural network architecture defined in (15), our goal is to construct a diagonal
+matrixD t = diag
+
+1/(ht +α 2t c1), . . . ,1/(ht +α 2t cd)	 ∈R d induced by a vectorc= (c 1, . . . , cd)∈
+Rd, a matrixV∈R d×k with orthonormal columns, and a ReLU networkgζ(V⊤Dtr, t)∈ SReLU so
+thats θ(r, t)serves as a good approximator to∇logp t(r). Thanks to the score decomposition in
+(16), we chooseDt(σ1, . . . , σd) = diag{1/(ht +σ 21α2t ), . . . ,1/(ht +σ 2dα2t )}andV=β. It remains to
+choose neural network hyper-parameters to guarantee the desired approximation power.
+Step 1: Approximation onC ×[0, T].DefineC=
+
+z∈R k| ∥z∥2 ≤S 	 as ak-dimensional ball
+of radiusS >0, with the choice of
+S=O(
+p
+(1 +σ 2max)(k+ log(1/ϵ))).(B.1)
+OnC ×[0, T], we approximate the coordinateξ i separately for eachi= 1, . . . , d. To ease the
+41
+analysis, we define the following linear transformation:
+ξ′(y′, t′) :=ξ(z, t)withy ′ := (z+S1)/(2S)andt ′ :=t/T(B.2)
+such that the domain ofC ×[0, T]is transformed to be contained within[0,1]k ×[0,1]. Therefore,
+we can equivalently approximateξ′i for eachi= 1, . . . , don the new domain[0,1]k ×[0,1].
+Recall that the subspace scoressub (z, t)isL s-Lipschitz inzby Assumption 3. Then, by the
+definition ofssub andξin (13) and (17), we derive thatξ(z, t)is2(1 +Ls)(1 +σ4max)-Lipschitz inz.
+Immediately, we obtain thatξ′(y′, t′)is4S(1+L s)(1+σ 4max)-Lipschitz iny′; so is each coordinateξi.
+DenoteL z = 2(1 +L s)(1 +σ 4max).
+Next, define
+τ(S) := sup
+t∈[0,T]
+sup
+z∈C
+ ∂∂t ξ(z, t)2 .(B.3)
+Then for anyy′ ∈[0,1] k, the Lipschitz constant ofξ′(y′, t′)with respect tot ′ is bounded byT τ(S).
+Substituting the order ofSin (B.1) into the upper bound ofτ(S)in (B.32) in Lemma B.1, we have
+τ(S) =O(L s(1 +σ 7max) polyk 3/2 log3/2(1/ϵ)).(B.4)
+For notation simplicity, we abbreviateτ(S)asτwhen there is no confusion.
+Now we construct a partition of the product space[0,1]k ×[0,1]. For the hypercube[0,1] k, we
+partition it uniformly into smaller, non-overlapping hypercubes, each with an edge length ofe1.
+Similarly, we partition the interval[0,1]into non-overlapping subintervals, each of lengthe2. Here,
+we take
+e1 =O
+ ϵ
+SLz
+
+ande 2 =O
+ ϵ
+T τ
+
+.
+In addition, we denoteN1 =
+l
+1
+e1
+m
+, N2 =
+l
+1
+e2
+m
+.
+Letm= [m 1, . . . , mk]⊤ ∈ {0, . . . , N1 −1} k be a multi-index. We define a function¯g′ :R k+1 7→
+Rk, with thei-th componentg ′i being
+¯g′i  y′, t′ = X
+m,j=0,...,N2−1
+ξ′i
+ m
+N1
+, jN2
+
+Ψm,j
+ 
+y′, t′ .(B.5)
+HereΨ m,j (y′, t′)is a partition of unity function. Specifically, we chooseΨ m,j as a product of
+coordinate-wise trapezoid functions:
+Ψm,j
+ 
+y′, t′ =ψ 3N2 t′ − jN2  dYi=1 ψ 3N1 y′i − miN1  ,
+42
+whereψis a one-demensional trapezoid function with the specific formula:
+ψ(a) =
+
+
+
+1,|a|<1
+2− |a|,|a| ∈[1,2]
+0,|a|>2
+.
+For any1≤i≤k, we claim that
+1.¯g′i defined in (B.5) can approximateξi arbitrarily well as long asN1 andN 2 are sufficiently
+large;
+2.¯g′i can be well approximated by a ReLU neural network¯g′ζ,i with a controllable error.
+The above two claims can be verified using Lemma 10 in Chen et al. (2020), in which we substitute
+the Lipschitz coefficients4S(1 +L s)(1 +σ 4max)andT τofξ ′ into the error analysis. Specifically,
+for any1≤i≤k, we consider the ReLU neural network¯g ′ζ,i that satisfies the following Lipschitz
+property:
+¯g′ζ,i  y′1, t′ −¯g′ζ,i  y′2, t′∞ ≤10kSL z y′1 −y ′12 ,∀y ′1,y ′1 ∈[0,1] k, t′ ∈[0,1],and¯g′ζ,i  y′, t′1 −¯g′ζ,i  y′, t′2∞ ≤10T τ∥t1 −t 2∥2 ,∀t ′1, t′2 ∈[0,1],y ′ ∈[0,1] k.
+By concatenating¯g′ζ,i’s together, we constructgζ = [¯gζ,1, . . . ,¯gζ,k ]⊤. For a given error levelϵ >0,
+with a neural network configuration
+M=O
+ 
+T τ(Ls + 1)k(1 +σ kmax)ϵ−(k+1)
+
+log 1ϵ +k  k2 ! , γ1 = 20k(1 +L s)(1 +σ 4max),
+L=O
+
+log 1ϵ +k  , J=O  T τ(1 +Ls)k(1 +σ kmax)ϵ−(k+1) log 1ϵ +k  k+22 ! , γ2 = 10τ,
+K=O
+
+(1 +L s)(1 +σ 4max)
+
+log 1ϵ +k  12 , κ= max(1 +L s)(1 +σ 4max) log 1ϵ +k  12 , T τ,
+we have
+sup
+(y′,t′)∈[0,1]k×[0,1]
+g′ζ(y′, t′)−ξ ′(y′, t′)∞ ≤ϵ.
+To transform the functiong′ζ back to domainC ×(0, T], we define
+gζ(z, t) :=g′ζ(y′, t′)1{∥z∥ 2 ≤S}.(B.6)
+By the definition ofξ′ in (B.2), we deduce that
+sup
+(z,t)∈C×[0,T]
+gζ(z, t)−ξ(z, t)∞ ≤ϵ.(B.7)
+43
+Also by the variable transformation in (B.2), we obtain thatgζ is Lipschitz continuous inzandt.
+Specifically, for anyz1,z 2 ∈ Candt∈[0, T], it holds that
+gζ (z1, t)−gζ (z2, t)∞ ≤10kL z ∥z1 −z 2∥2 .
+In addition, for anyt1, t2 ∈[0, T]andz∈ C, it holds that
+gζ (z, t1)− gζ (z, t2)∞ ≤10τ|t 1 −t 2|.
+By definition ofgζ in (B.6), we havegζ (z, t) =0for∥z∥ 2 > S. Therefore, the Lipschitz continuity
+property inzcan be extended toR k.
+Step 2: BoundingL 2 Approximation Error. DenoteZ=β ⊤Λ−1t Rt with the distribution
+Pfact . TheL 2 approximation error ofgζ can be decomposed into two terms
+ξ(Z, t)− gζ (Z, t)L2(P fact ) =  ξ(Z, t)− gζ (Z, t) 1{∥Z∥ 2 < S}L2(P fact )
++∥ξ(Z, t)1{∥Z∥ 2 > S}∥L2(P fact ) .
+(B.8)
+By applying theL∞ approximation error bound in (B.7), the first term in (B.8) is bounded by
+ ξ(Z, t)− gζ (Z, t) 1{∥Z∥ 2 < S}L2(P fact ) ≤ √ksup(z,t)∈C×[0,T]  ξ(z, t)− gζ (z, t)∞ ≤ √kϵ.
+(B.9)
+The second term on the right-hand side of (B.8) is controlled by the upper bound (B.38) in Lemma
+B.2. Specifically, by choosingS=O(
+p
+(1 +σ 2max)(k+ log(1/ϵ))), we have
+∥ξ(Z, t)1{∥Z∥ 2 > S}∥L2(P fact ) ≤ϵ.(B.10)
+Combining (B.9) and (B.10), we deduce that
+ξ(Z, t)− gζ (Z, t)L2(P fact ) ≤( √k+ 1)ϵ.(B.11)
+Furthermore, by involving¯gζ, we construct the following approximatorsθ for∇logp t(r)
+sθ(r, t) :=αtΛ−1t βgζ(β⊤Λ−1t r, t)−Λ−1t r.(B.12)
+Then, by applying the formula of∇logpt and sθ in (16) and (B.12) respectively, we obtain that
+∥∇logp t(·)− sζ(·, t)∥L2(Pt) =
+αtΛ−1/2t β(ξ(Z, t)−gζ(Z, t))L2(P fact ) ≤ (√k+ 1)ϵmin{σ2d,1} ,
+where the inequality invokes∥Λ −1t β∥op ≤1/(h t +σ 2dα2t )≤1/min{σ 2d,1}and the error bound
+(B.11). □
+44
+B.2 Proof of Theorem 2
+Proof.
+Step 1: Error Decomposition.The proof is based on the following bias-variance decomposition
+onL( psθ). For anya∈(0,1), we decomposeL( psθ)as
+L( psθ) =L( psθ)−(1 +a) pL( psθ) + (1 +a) pL( psθ)
+≤ Ltrunc (psθ)−(1 +a) pLtrunc (psθ)| {z }
+(A)
++L( psθ)− Ltrunc (psθ)| {z }
+(B)
++(1 +a) inf
+sθ∈SNN
+pL(s θ)
+| {z }
+(C)
+,
+whereL trunc is defined as
+Ltrunc (sθ) :=
+Z
+ℓtrunc(r;s θ)pt(r)drwithℓ trunc(r;s θ) :=ℓ(r;s θ)1{∥r∥ 2 ≤ρ}(B.13)
+subject to some truncation radiusρto be determined. In the sequel, we bound(A)–(C)separately.
+The term(A)is the statistical error due to finite samples, term(B)is the truncation error, term
+(C)reflects the approximation error ofSNN.
+Note that the introduction of the hyper-parametera >0(to be determined) is to handle the
+bias by applying Lemma 15 of Chen et al. (2023a), which is a standard Bernstein-type concentration
+inequality for empirical processes over function classes (see, for example, Theorem 3.27, Theorem
+4.10, and Chapter 5 in Wainwright (2019)). Conversely, settinga= 0results in a convergence rate
+atO(n −1/2), as derived using only Hoeffding’s concentration inequality.
+Step 2: Bounding Term(A).We denoteG:=
+
+ℓtrunc (·;s θ) :s θ ∈ SNN	 as the class of loss func-
+tions induced by the score networkSNN. We first determine an upper bound on all functions inG
+by boundingsup sθ∈SNN supr∈Rd |ℓtrunc(r;s θ)|.
+To start, we consider
+sθ(r′, t) +(r′ −α tr)ht 2 ≤ ∥sθ(r′, t) +Dtr′∥2 +  (I−h tDt)r′ht 2 +  αtrht 2
+(i)
+=α t∥DtVgθ(V⊤Dtr′, t)∥2 + ∥I−h tDt∥2∥r′∥2ht + αt∥r∥2ht
+=O
+ K+∥r ′∥2 +∥r∥ 2
+ht
+
+,(B.14)
+where(i)holds by applying the formula ofs θ in (18) and(ii)follows from the facts thatα 2t ≤1,
+∥Dt∥op ≤1/h t,∥V∥ op = 1, and∥g θ∥2 ≤K.
+By the definition ofℓtrunc in (B.13), for anysθ ∈ SNN we haveℓtrunc(r;s θ) = 0if∥r∥ 2 > ρ. For
+any∥r∥ 2 ≤ρ, we have
+ℓtrunc(r;s θ) = 1T−t 0
+Z T
+t0
+ERt|R0=r
+sθ(Rt, t) +Rt −α trht 22 ·1{∥r∥ 2 ≤ρ}dt
+45
+(i)
+=O
+ 1
+T−t 0
+Z T
+t0
+ERt|R0=r
+ K2 +∥R t∥22 +∥r∥ 22
+h2t
+
+·1{∥r∥ 2 ≤ρ}dt
+
+(ii)
+=O
+ 1
+T−t 0
+Z T
+t0
+ 2ρ2 +K 2
+h2t + dht
+
+dt
+
+=O
+ ρ2 +K 2
+t0 (T−t 0) + dT−t 0 log Tt0
+
+,
+where(i)holds by the uniform upper bound (B.14);(ii)holds by applying the facts that(Rt|R0 =
+r)∼ N(αtr, htId)and∥r∥ 2 ≤ρandα 2t ≤1.
+To bound term(A), it is essential to consider the covering number ofSNN, as it measures the
+approximation power of the neural network class. Takesθ1 ands θ2 such that
+sup
+∥r′∥2≤3ρ+√dlogd,t∈[t 0,T]
+sθ1(r′, t)−sθ2(r′, t)2 ≤ι,
+we then have
+ℓtrunc (·;s θ1)−ℓ trunc (·;s θ2)∞
+= sup
+∥r∥2≤ρ
+1
+T−t 0
+Z T
+t0
+ERt|R0=r
+
+∥sθ1 (Rt, t)−sθ2 (Rt, t)∥2 ·
+sθ1 (Rt, t) +sθ2 (Rt, t) +2(Rt −α tr)ht 2 dt
+(i)
+≤sup
+∥r∥2≤ρ
+1
+T−t 0
+Z T
+t0
+ERt|R0=r
+ 2
+ht
+(K+∥R t∥2 +∥r∥ 2)∥s θ1 (Rt, t)−sθ2 (Rt, t)∥2
+·1
+n
+∥Rt∥2 ≤3ρ+
+p
+dlogd
+oi
+dt
++ sup
+∥r∥2≤ρ
+1
+T−t 0
+Z T
+t0
+ERt|R0=r
+ 2
+ht
+(K+∥R t∥2 +∥r∥ 2)∥s θ1 (Rt, t)−sθ2 (Rt, t)∥2
+·1
+n
+∥Rt∥2 >3ρ+
+p
+dlogd
+oi
+dt
+(ii)
+≤sup
+∥r∥2≤ρ
+2ι
+T−t 0
+Z T
+t0
+ERt|R0=r
+ 1
+ht
+(K+∥R t∥2 +∥r∥ 2)·1
+n
+∥Rt∥2 ≤3ρ+
+p
+dlogd
+o
+dt
++ sup
+∥r∥2≤ρ
+1
+T−t 0
+Z T
+t0
+ERt|R0=r
+ 2
+ht
+(K+∥R t∥2 +∥r∥ 2)∥s θ1 (Rt, t)−sθ2 (Rt, t)∥2
+·1
+n
+∥Rt∥2 >3ρ+
+p
+dlogd
+oi
+dt,
+where(i)follows from applying the upper bound in (B.14) and decomposing the error into two
+parts: within the compact domain of radius3ρ+√dlogd, and outside this domain;(ii)holds since
+∥sθ1(r′, t)−sθ2(r′, t)∥2 ≤ιin the compact domain∥r ′∥ ≤3ρ+√dlogd. Then, we deduce that
+∥ℓtrunc(·;s θ1)−ℓ trunc(·;s θ2)∥∞
+(i)
+=O
+ 2ι
+T−t 0
+Z T
+t0
+K+ √htd+ 2ρ
+ht
+dt+ 2T−t 0
+Z T
+t0
+1
+ht
+
+ρK2h− d+42t  ρd d exp  − ρ2ht dt
+46
+(ii)
+=O
+
+ι· (ρ+K) log(T /t0) +
+√
+d(
+√
+T− √t0)
+T−t 0
++ρK 2
+ ρ
+d
+ d
+2
+exp
+
+− ρ2
+2hT
+ 
+,
+where(i)holds by applying(R t|R0 =r)∼ N(αtr, htId),∥r∥ 2 ≤ρand the upper bound (B.43) in
+Lemma B.3;(ii)follows from the facts thath t =O(t)ast→0and the second term in(i)has a
+dominating exponential decay rateexp(−ρ2/ht). For notational simplicity, we denote
+η:=ρK 2(ρ/d)d/2 exp(−ρ2/(2hT )).(B.15)
+Denote theτ-covering number of a class of functionsHunder a metricΨ(·)by
+N(τ,H,Ψ(·)) = inf{|H 1|:H 1 ⊆ H,∀h∈ H,∃h1 ∈ H,s.t.Ψ(h, h1)≤τ},(B.16)
+where|H 1|represents the number of functions in the classH1. Immediately, we can deduce that
+anι-covering ofS NN induces a covering ofGwith an accuracyι· (ρ+K) log(T /t0)+
+√
+d(
+√
+T− √t0))
+T−t 0 +η.
+To apply Bernstein-type concentration inequality (Chen et al. 2023a, Lemma 15) forℓtrunc (·;s θ),
+let us takeB=O( ρ2+K2+t0dlog(T /t0)t0(T−t 0) ),τ=ιand the corresponding covering number ofS NN as
+N
+ (ι−η)(T−t 0)
+(ρ+K) log(T /t0) +
+√
+d(
+√
+T− √t0)) ,SNN,∥ · ∥2
+
+Then by Lemma 15 of Chen et al. (2023a), with probability1−δ, it holds that
+(A) =O
+
+ (1 + 3a )  ρ2+K2+t0dlog( Tt0 )t0(T−t 0) n log N (ι−η)(T−t 0)(ρ+K) log(Tt0 )+√d(√T− √t0) ,SNN,∥ · ∥2δ + (2 +a)ι  .
+(B.17)
+Step 3: Bounding Term(B). By applying the formulas ofℓandℓ trunc in (7) and (B.13), we
+have
+(B) = 1T−t 0
+Z T
+t0
+ER0∼PdataERt|R0
+psθ(Rt, t) +(Rt −α tR0)ht 221{∥R 0∥2 > ρ}dt
+≤ 2T−t 0
+Z T
+t0
+ER0∼Pdata
+ htd+K 2 + 2∥R0∥22
+h2t 1{∥R 0∥2 > ρ}
+
+dt,
+wheretheinequalityfollowsfromapplyingtheupperbound(B.14)and(R t|R0 =r)∼ N(αtr, htId).
+Notice that the density ofR0 =βF+εcan be bounded by
+pdata(r) =
+dY
+i=1
+1√
+2πσi
+exp
+
+− ε2i
+2σ2i
+
+pfac(f)
+(i)
+≤ (2π)−(d+k)/2C1Qd
+i=1 σi
+exp
+
+− σ−2max∥ϵ∥22 +C 2∥βf∥ 22
+2
+
+47
+≤ C1(2π)−(d+k)/2Qd
+i=1 σi
+exp
+
+− ∥r∥22
+2(σ2max + 1/C2)
+
+,(B.18)
+where(i)follows from the sub-Gaussian tail (19) in Assumption 2 and the fact thatβis a norm-
+preserving transformation satisfyingβ ⊤β=Iin Assumption 1. Therefore, by applying the upper
+bound ofp data in (B.18), we obtain
+(B)≤ 2T−t 0
+Z T
+t0
+ htd+K 2 + 2∥r∥2
+h2t
+ C1(2π)− d+k2
+Qd
+i=1 σi
+exp
+
+− ∥r∥22
+2(σ2max + 1/C2)
+
+1{∥r∥ 2 > ρ}
+
+dt
+(i)
+≤ C1d(σ2max + 1/C2)2−(d+k)/2
+(Qdi=1 σi)(T−t 0)Γ(d/2 + 1) exp
+
+− ρ2
+2(σ2max + 1/C2)
+ Z T
+t0
+ρd−1(htd+K 2 +ρ 2)
+h2t dt
+=O
+ 
+dρd−12−(d+k)/2(σ2max + 1/C2)
+(Qdi=1 σi)(T−t 0)Γ(d/2 + 1)
+ ρ2 +K 2
+t0
++dlog Tt0
+
+exp
+
+− ρ2
+2(σ2max + 1/C2)
+!
+,
+(B.19)
+where(i)follows from the tail estimation in Proposition 2.6.6 of Vershynin (2018).
+Step 4: Bounding Term(C). Recall that sθ is the constructed network approximator in Theo-
+rem 1. For anyϵ >0, we have
+(C)≤ pL(sθ)−(1 +a)L trunc(sθ)| {z }
+(♠)
++(1 +a)L trunc(sθ)| {z }
+(♣)
+,
+where(♠)is the statistical error and(♣)is the approximation error.
+First, we can bound(♠)with high probability using the fact thatR0 has a sub-Gaussian tail.
+Specifically, applying Proposition 2.6.6 of Vershynin (2018) toR0 with density bound (B.18), we
+obtain
+P(∥R 0∥2 > ρ)≤ C1d(σ2max + 1/C2)2−(d+k)/2
+(T−t 0)Γ(d/2 + 1)
+Qd
+i=1 σi
+ ρd−1 exp
+
+− ρ2
+2(σ2max + 1/C2)
+
+:=q.(B.20)
+Applying union bound forni.i.d. data samples{R i0}ni=1 fromP data leads to
+P
+ Ri02 ≤ρfor alli= 1, . . . , n ≥1−nq.
+Immediately, we obtain that, with probability1−nq, it holds
+(♠) = pLtrunc(sθ)−(1 +a)L trunc(sθ).
+Meanwhile, Lemma 15 of Chen et al. (2023a) implies that with probability1−δ, it holds that
+(♠) =O
+ (1 + 6/a)
+n
+ ρ2 +K 2
+t0(T−t 0) + dT−t 0 log Tt0
+
+log 1δ .(B.21)
+48
+Here, we takeδdefined in (B.17). For(♣), we have
+(♣)≤ L(sθ) = 1T−t 0
+Z T
+t0
+ERt∼Pt ∥sθ(Rt, t)− ∇logpt(Rt)∥22 dt
++L( sθ)− 1T−t 0
+Z T
+t0
+ERt∼Pt ∥sθ(Rt, t)− ∇logpt(Rt)∥22 dt
+| {z }
+(E)
+.(B.22)
+Then, by Theorem 1, we have
+(♣) =O
+ kϵ2
+t0(T−t 0)
+
++ (E).(B.23)
+Note that the two terms in(E)are equivalent to the score-matching objectives (5) and (6), hence
+(E)is on a constant order.
+Combining two error bounds for(♠)and(♣)in (B.21) and (B.23), we deduce that, with
+probability(1−nq)(1−δ), it holds
+(C) =O
+ (1 + 6/a)
+n
+ ρ2 +K 2
+t0 (T−t 0) + dT−t 0 log Tt0
+
+log 1δ + (1 +a)kϵ 2t0(T−t 0)  + (1 +a)·(E).(B.24)
+Step 5: Choosingρand putting together(A),(B)and(C). Under a fixedδ >0in (B.17),
+we chooseρandτas the following to balance terms(A),(B), and(C),
+ρ=O
+q
+σ21 (d+ logK+ log(n/δ))
+
+andτ=O
+ 1
+nt0(T−t 0)
+
+.(B.25)
+By direct calculation, our choice ofρimplies thatq≤δ/n, whereqis defined in (B.20). Next, we
+derive the error bound for terms (A)-(C) under our choice of the hyper-parameters.
+1. For term(A), we first give an upper bound forηdefined in (B.15). Substituting the order of
+ρin (B.25) into (B.15), we deduce that
+η=O
+ 1
+nt0(T−t 0)
+
+.(B.26)
+Then, substituting the order ofKin (22) in Theorem 1 and the hyperparameters in (B.25)
+49
+and (B.26) into (B.17), we obtain that with probability1−δ, it holds that
+(A) =O
+ (1 +σ 8max)(1 + 3/a)(1 +L s)2  log 1ϵ +k 2 +d+ log nδ 
+nt0(T−t 0)
+·log
+N
+
+1
+nt0(ρ+K+
+√
+d(
+√
+T− √t0)) ,SNN,∥ · ∥2
+
+δ + 1nt0(T−t 0)
+!
+(i)
+=O
+ 
+(1 +σ 8max)(1 + 3/a) (Ls + 1)2(log 1ϵ +k) 2 +d+ log nδ 
+nt0(T−t 0)
+·
+
+dk+T τ(1 +L s)k(1 +σ kmax)ϵ−(k+1)  log 1ϵ +k  k+42
+
+log T τ dkt0ιϵ + 1nt0(T−t 0)
+!
+,
+(B.27)
+where(i)follows from applying the upper bound (B.46) for the covering number ofSNN in
+Lemma B.4.
+2. For term(B), by plugging the order ofρandK, defined in (B.25) and (22), into (B.19) and
+by straightforward calculations, we have
+(B) =O
+ 1
+nt0(T−t 0)
+
+.(B.28)
+3. For term(C), applying the fact thatq≤ δn and the order ofρandKin (B.25) and (22) to
+(B.24), with probability1−2δ, it holds
+(C) =O
+
+
+(1 +σ 8max)(1 + 6/a)(1 +L s)2  log 1ϵ +k 2 +d+ log nδ 
+nt0(T−t 0) log 1δ
++ 1nt0(T−t 0) + kϵ2min{σ4d,1}  + (1 +a)·(E). (B.29)
+Summing up the error terms in (B.27)-(B.29), we derive that with probability1−3δ, it holds that
+L( psθ)≤(A) + (B) + (1 +a)·(C)
+=O
+ 
+(1 +σ 8max)(1 + 6/a) (1 +L s)2(log 1ϵ +k 2 +d+ log nδ )
+nt0(T−t 0)
+·
+
+dk+T τ(1 +L s)k(1 +σ kmax)ϵ−(k+1)
+
+log 1ϵ +k  k+42  log T τ dkt0ιϵ !
++O
+ 
+1
+nt0(T−t 0) + kϵ2t0(T−t 0) ! + (1 +a) 2 ·(E).
+50
+By the definition of(E)in (B.22) and settinga=ϵ 2, with probability1−3δ, it holds that
+1
+T−t 0
+Z T
+t0
+ERt∼Pt ∥sθ(Rt, t)− ∇logpt(Rt)∥22 dt
+=O
+ 
+(1 +σ 8max)  (1 +L s)2(log 1ϵ +k 2 +d+ log nδ )
+ϵ2nt0(T−t 0)
+·
+
+dk+T τ(1 +L s)k(1 +σ kmax)ϵ−(k+1)
+
+log 1ϵ +k  k+42  log T τ dkt0ιϵ !
++O
+ 
+1
+nt0(T−t 0) + kϵ2t0(T−t 0) !
+=: (E1) + (E2).
+Step 6: Balancing Error Terms.Takeδ= 1/(3n)such that with probability1−1/n, it holds
+that
+(E1) =O
+ (1 +σ k+8max)(1 +L s)k(d2 logd)(k k+72 logk)(τlogτ)T ϵ −(k+3) log k+72 ( 1ϵ ) log3 n
+nt0
+
+(i)
+=O
+ (1 +σ 2kmax)(1 +L s)k(d 72 logd)(k k+102 log 52 k)ϵ−(k+3) log k+102 ( 1ϵ ) log92 n
+nt0
+
+(ii)
+= ˜O
+ 1
+n ϵ−(k+3) log k+102 ( 1ϵ )
+and
+(E2) = ˜O
+ 1
+n +ϵ 2
+
+.(B.30)
+Here(i)follows from invoking the upper bound ofτ(S)in (B.4) and ˜O(·)in(i)holds by keeping
+terms only on the sample sizenand the error termϵ.
+To balance two error terms(E1)and(E 2), we chooseϵas the following
+ϵ=n − 1−δ(n)k+5 withδ(n) = (k+ 10) log logn2 logn .(B.31)
+Consequently, we obtain
+1
+n ϵ−(k+3) log k+102 (1/ϵ) =n −1+ (k+3)(1−δ(n))k+5 (1/ϵ) (k+10) log log(1/ϵ)2 log(1/ϵ)
+=n − 2−2δ(n)k+5 ·n −1+ 1+ (k+10) log log(1/ϵ)2(k+5) log(1/ϵ)  1−δ(n)
+(i)
+=O
+
+n− 2−2δ(n)k+5
+
+=ϵ 2,
+where(i)holds by the formula ofδ(n)in (B.31). By straightforward calculations, we deduce that,
+51
+with probability1− 1n, it holds
+1
+T−t 0
+Z T
+t0
+ERt∼Pt ∥sθ(Rt, t)− ∇logpt(Rt)∥22 dt
+=O
+ 1
+t0
+(1 +σ 2kmax)(1 +L s)kd2k k+102
+√
+dn− 2−2δ(n)k+5 +n − k+3+2δ(n)k+5
+
+logdlog 4 n
+
+= ˜O
+ 1
+t0
+(1 +σ 2kmax)d 52 k k+102 n− 2−2δ(n)k+5 log4 n,
+where the last equality follows from omitting terms associated withLs and polynomial terms in
+logt 0,logd, andlogk.□
+B.3 Supporting Lemmas and Proofs
+Lemma B.1.Under the same assumptions as in Theorem 1, it holds that
+τ(S) =O
+
+Ls poly(1 +σ 2max) poly(√kS),(B.32)
+whereτ(S)is defined in(B.3)andpoly(·)represents a cubic polynomial.
+Proof of Lemma B.1.
+Recall thatτ(S)is associated withξ(z, t), which is defined in (17). By direct calculation, we
+have
+∂ξ
+∂t =− 12
+R
+f ∂∥Γ
+− 12
+t (z−αtf)∥ 22
+∂t ϕ(z;α tf,Γ t)pfac(f) dfR
+ϕ(z;α tf,Γ t)pfac(f) df + 12 ξ
+R ∂∥Γ− 12t (z−αtf)∥ 22
+∂t ϕ(z;α tf,Γ t)pfac(f) dfR
+ϕ(z;α tf,Γ t)pfac(f) df
+(i)
+= α2t
+2 E[FF⊤β⊤Λ−2t βF|Z=z] + αt2 Cov[F|Z=z]C tz+ α2t2 E[F|Z=z]E[F ⊤β⊤Λ−2t βF|Z=z],
+(B.33)
+where(i)follows from plugging in
+∂∥Γ
+− 12
+t (z−α tf)∥ 22
+∂t =−α 2t f ⊤β⊤Λ−2t βf+α tf ⊤Ctz+z ⊤β⊤(Λ−1t −Λ −2t )βz
+withC t =β ⊤(2Λ−2t −Λ −1t )βand re-arranging terms. To bound∥∂ξ/∂t∥2, we provide the following
+two upper bounds.
+Conditional Third Moment Bound.By Cauchy-Schwarz inequality, we have
+E[FF⊤β⊤Λ−2t βF|Z=z] 2 ≤ qE[∥F∥22|Z=z]·E[∥F ⊤β⊤Λ−2t βF∥22|Z=z]
+≤ 1ht +σ 2dα2t qE[∥F∥22|Z=z]·E[∥F∥ 42|Z=z],(B.34)
+52
+where the second inequality holds due toβ⊤β=I k and∥Λ −2t ∥op ≤1/(h t +σ 2dα2t ).
+Conditional Covariance Bound.Recalls sub defined in (13). Taking the derivative ofssub with
+respect toz, we have
+∂ssub (z, t)
+∂z =−Λ −1t β+α 2t Λ−1t β
+R
+ff ⊤Γ−1t ϕ(z;α tf,Γ t)pfac(f)dfR
+ϕ(z;α tf,Γ t)pfac(f)df
+−α 2t Λ−1t β
+R
+fϕ(z;α tf,Γ t)pfac(f)dfR
+ϕ(z;α tf,Γ t)pfac(f)df
+R
+f ⊤Γ−1t ϕ(z;α tf,Γ t)pfac(f)dfR
+ϕ(z;α tf,Γ t)pfac(f)df
+=α 2t Λ−1t β
+
+Cov (F|Z=z)Γ −1t − 1α2t Ik
+
+.(B.35)
+Sinces sub isL s-Lipschitz by Assumption 3, we deduce from (B.35) that for anyt∈(0, T], it holds
+∥Cov (F|Z=z)∥ op ≤ (ht +σ 2maxα2t )(1 +L s(ht +σ 2maxα2t ))α2t ≤(1 +σ 4max)(1 +L s),
+where the second inequality follows from takingt= 0.
+Furthermore, as
+∥Ct∥op =∥β ⊤(2Λ−2t −Λ −1t )β∥op ≤ ∥2Λ−2t −Λ −1t ∥op ≤ 3(ht +σ 2dα2t )2 ,
+it holds that
+∥Cov[F|Z=z]C tz∥2 ≤ 3(ht +σ 2dα2t )2 ∥Cov[F|Z=z]∥ op ∥z∥2 (B.36)
+≤ 3(1 +σ 4max)(1 +L s)(ht +σ 2dα2t )2 ∥z∥2.(B.37)
+By substituting the conditional third moment bound in (B.34) and covariance bound in (B.36)
+into (B.33), and using the fact thatF,Zhave the sub-Gaussian tails in the compact domainS, we
+conclude that
+τ(S) =O
+
+Ls(1 +σ 4max) poly(√kS).
+wherepoly(·)represents a cubic polynomial.□
+Lemma B.2.Suppose Assumption 2 holds. Letξbe defined in(17)andZ=β ⊤Λ−1t Rwith
+distributionP fact . Givenϵ >0, withS=c p(1 +σ 2max)(k+ log(1/ϵ))  for some constantc >0,
+it holds that
+∥ξ(Z, t)1{∥Z∥ 2 > S}∥L2(P fact ) ≤ϵ,∀t∈(0, T].(B.38)
+Proof of Lemma B.2.
+53
+Plugging in the expression ofξin (17), we obtain that
+Z Z fϕ(Γ tβ⊤Λ−1t r;α tf,Γ t)pfac(f)dfR ϕ(Γtβ⊤Λ−1t r;α tf,Γ t)pfac(f)df 22 1{∥β ⊤Λ−1t r∥2 > S}pt(r)dr
+(i)
+≤
+Z
+∥β⊤Λ−1t r∥2>S ∥f∥ 22 ϕ(Γtβ⊤Λ−1t r;α tf,Γ t)pfac(f)dfR ϕ(Γtβ⊤Λ−1t r;α tf,Γ t)pfac(f)df pt(r)dr
+(ii)
+≤
+Z Z
+∥β⊤Λ−1t r∥2>S ∥f∥ 22ϕ(TtΛ− 12t r;α tΛ− 12t βf,I)ϕ((I−T t)Λ− 12t r;0,I)p fac(f)drdf
+=
+Z
+∥β⊤Λ−1t r∥2>S
+Z
+∥Λ
+− 12
+t βf∥ 2≤ 12 ∥TtΛ− 12t r∥2 ∥f∥ 22ϕ(TtΛ− 12t r;α tΛ− 12t βf,I)p fac(f)dfd(T tΛ− 12t r)| {z }
+(A)
++
+Z
+∥β⊤Λ−1t r∥2>S
+Z
+∥Λ
+− 12
+t βf∥ 2> 12 ∥TtΛ− 12t r∥2 ∥f∥ 22ϕ(TtΛ− 12t r;α tΛ− 12t βf,I)p fac(f)dfd(T tΛ− 12t r)| {z }
+(B)
+,
+where(i)holds due to the Cauchy-Schwarz inequality,(ii)invokes the expression ofpt(r)in (A.2)
+and re-arranging terms, and the last equality holds by straightforward calculations.
+Bounding Term(A).We define the change of variableX:=T tΛ
+− 12
+t Rt and denote byxa
+realization ofX. By the Cauchy-Schwarz inequality and∥Λ
+− 12
+t βf∥ 2 ≤ 12 ∥TtΛ− 12t r∥2, we have
+∥x−α tΛ
+− 12
+t βf∥ 22 ≥ 12 ∥x∥22 −α 2t ∥Λ− 12t βf∥ 22 ≥ 14 ∥x∥22.
+As a result, we can deduce that
+(A)≤
+Z
+∥β⊤Λ− 12t x∥2>S
+Z
+∥Λ
+− 12
+t βf∥ 2≤ 12 ∥x∥2
+∥f∥ 22(2π)− k2 exp − ∥x∥228  pfac(f)dfdx
+≤E
+
+∥f∥ 22 · Z
+∥β⊤Λ− 12t x∥2>S(2π)− k2 exp − ∥x∥228  dx
+(i)
+≤E
+
+∥f∥ 22 · Z
+∥x∥2>(ht+σ2dα2t ) 12 S(2π)− k2 exp − ∥x∥228  dx
+(ii)
+≤E
+
+∥f∥ 22 · 2− k2 +2kS k−2(ht +σ 2dα2t )(k−2)/2( 12 −η)Γ( k2 + 1) exp − (ht +σ 2dα2t )S28  .(B.39)
+where(i)holds due to∥β ⊤Λ− 12t ∥op ≤(h t +σ 2dα2t )− 12, and(ii)follows from the sub-Gaussian tail in
+Proposition 2.6.6 of Vershynin (2018).
+Bounding Term(B).We define the change of variableY:=β ⊤Λ−1t Rt and denote byythe
+realization ofY. GivenS >min{B/2,1}, applying the sub-Gaussian tail ofp fac(f)in (19), we
+54
+obtain that
+(B)≤
+Z
+∥y∥2>S
+Z
+∥Λ
+− 12
+t βf∥ 2> 12 ∥Λ− 12t βΓty∥2 ϕ(Λ
+− 12
+t βΓty;α tΛ
+− 12
+t βf,I)· C1
+(2π)
+k
+2
+∥f∥ 22 exp
+
+− C2∥f∥ 22
+2
+
+dfdy
+(i)
+≤ C1
+(2π)k
+Z
+∥y∥2>S
+Z
+∥Λ
+− 12
+t βf∥ 2> 12 ∥Λ− 12t βΓty∥2 exp
+ 
+− C2
+(α2t Ik +C 2Γt)− 12 Γty22
+2
+!
+· ∥f∥22 exp
+ 
+−
+(α2t Γ−1t +C 2Ik) 12  f−α t(α2t Γ−1t +C 2Ik)−1y 22
+2
+!
+dfdy
+(ii)
+≤ C1
+(2π)k
+Z
+∥y∥2>S
+Z
+∥Λ
+− 12
+t βf∥ 2> 12 ∥Λ− 12t βΓty∥2 exp
+ 
+− C2
+(α2t Ik +C 2Γt)− 12 Γty22
+2
+!
+· ∥f∥22 exp
+ 
+− C2
+f−α t(α2t Γ−1t +C 2Ik)−1y22
+2
+!
+dfdy,(B.40)
+where(i)invokes the formula ofϕ(y;α tf,Γ t)in (12) and completing the square forf,(ii)follows
+from∥α 2t Γ−1t +C 2Ik∥op ≥C 2.
+Furthermore, applyingE[∥f∥ 22]≤α 2t ∥(α2t Γ−1t +C 2Ik)− 12 y∥22 +kto (B.40), we deduce that
+(B)≤ C1
+C
+k
+2
+2 (2π)k
+Z
+∥y∥2>S
+
+α2t ∥(α2t Γ−1t +C 2Ik)−1y∥22 +k  ·exp
+ 
+− C2
+(α2t Ik +C 2Γt)− 12 Γty22
+2
+!
+dy
+≤ C12− k2 +2kS k
+C2Γ( k2 + 1)(α2t +C 2(ht +σ 2maxα2t )) exp
+
+− (α2t +C 2(ht +σ 2maxα2t ))C2S2
+2
+
+,(B.41)
+wherethelastinequalityisdueto∥Γ t∥op ≥h t+σ2dα2t,∥(α 2t Ik+C2Γt)− 12 ∥op ≥ pα2t +C 2(ht +σ 2maxα2t )
+andthesub-GaussiantailinProposition2.6.6ofVershynin(2018)andsimilaroperatornormbounds
+in(ii).
+Combining the error bounds (B.39) and (B.41) for(A)and(B), we conclude that
+∥ξ(Z, t)1{∥Z∥ 2 > S}∥L2(P fact ) ≤c′ 2− k2 +3k(ht +σ 2dα2t ) k2 SkΓ( k2 + 1)(α2t +C 2(ht +σ 2maxα2t )) exp − (ht +σ 2dα2t )S28 
+(B.42)
+for some constantc′ >0. Given anyϵ >0, by the upper bound of truncation error in (B.42), we
+can choose
+S=c
+ s
+1 +σ 2max
+
+k+ log 1ϵ ! ,
+such that∥ξ(Z, t)1{∥Z∥ 2 > S}∥L2(P fact ) ≤ϵ. Here,cis an absolute constant.□
+Lemma B.3.Suppose Assumption 2 holds. For anys θ1 (·, t)ands θ2 (·, t), whenρis sufficiently
+55
+large, it holds that
+sup
+∥r∥2≤ρ
+ERt|R0=r
+
+(K+∥R t∥2 +∥r∥ 2)∥s θ1 (Rt, t)−sθ2 (Rt, t)∥2 ·1
+n
+∥Rt∥2 >3ρ+
+p
+dlogd
+o 
+=O
+
+ρK2h−2− d2t  ρd d exp − ρ2ht  .(B.43)
+Proof of Lemma B.3.DenoteD ti = diag{1/(h t +c i1α2t ), . . . ,1/(ht +c i1α2t )}fori= 1,2.
+Applying the formula ofsθ1 ands θ2 in (18), we calculate
+ERt|R0=r
+
+(K+∥R t∥2 +∥r∥ 2)∥s θ1 (Rt, t)−sθ2 (Rt, t)∥2 ·1
+n
+∥Rt∥2 >3ρ+
+p
+dlogd
+o 
+(i)
+≤
+Z 
+K+
+r′2 +∥r∥ 2 ∥(Dt1 −D t2)r′∥2 +∥α t(Dt1V1 −D t2V2)gζ1(V⊤1 Dt1r′, t)∥2
++∥α tDt2V2(gζ1(V⊤1 Dt1r′, t)−gζ2(V⊤2 Dt2r′, t))∥2
+
+·1
+nr′2 >3ρ+ pdlogd o ϕ(r′;α tr, htI)dr′
+(ii)
+=O
+ Z
+∥r′∥2>3ρ+√dlogd
+(K+∥r ′∥2 +∥r∥ 2)(K+∥r ′∥2)
+h2t (2πht) d2 exp
+
+− 12ht
+ 1
+2
+r′22 − ∥r∥22 dr′,
+(B.44)
+where(i)is due to Cauchy-Schwarz inequality;(ii)follows from the upper bounds (15) and (18) of
+{gθi,V i,D ti}i=1,2,α 2t ≤1and
+ϕ(r′;α tr, htI)≤(2πh t)− d2 exp − 12ht  12 r′22 − ∥r∥22 .
+Then, substituting the upper bound for the tail estimation in Proposition 2.6.6 of Vershynin (2018)
+into (B.44), we deduce that
+(B.44)=O
+ (K2 +K∥r∥ 2)(2ht)−2− d2 (3ρ+ √dlogd) d−2
+Γ( d2 + 1) exp
+
+− (3ρ+ √dlogd) 2
+4ht
++ ∥r∥22
+2ht
+ 
++ (2K+∥r∥ 2)(2ht)−2− d2 (3ρ+ √dlogd) d−1
+Γ( d2 + 1) exp
+
+− (3ρ+ √dlogd) 2
+4ht
++ ∥r∥22
+2ht
+
++ (2ht)−2− d2 (3ρ+ √dlogd) d
+Γ( d2 + 1) exp
+
+− (3ρ+ √dlogd) 2
+4ht
++ ∥r∥22
+2ht
+
+=O
+
+K2∥r∥2h−2− d2t  ρd d exp − 9ρ2 −2∥r∥ 224ht  .(B.45)
+Here, the last inequality holds sinceΓ(d2 + 1) =O( Q d2j=1 j)and
+2− d2 (3ρ+ √dlogd) d exp − 6ρ√dlogd+dlogd4ht 
+Γ( d2 + 1) =O
+  ρ
+d
+d 
+56
+for a sufficiently largeρ >max{B, d}.
+Immediately, substituting∥r∥ 2 ≤ρinto (B.45), we obtain the desired result.□
+Lemma B.4.For any givenϵ >0,δ >0, andρ=O
+p
+σ2max (d+ logK+ log(n/δ))
+
+defined in
+(B.25), theν-covering number ofS NN in(18)is
+logN(ν,S NN,∥ · ∥2) =
+
+dk+T τ(1 +L s)k(1 +σ kmax)ϵ−(k+1)
+
+log 1ϵ +k  k+42  log T τ dkt0νϵ .
+(B.46)
+Proof of Lemma B.4.SNN consists of three components:
+1. A vectorc= (c 1, c2, . . . , cd)∈[0, σ max]d and its induced matrix
+Dt = diag{1/(ht +α 2t c1),1/(h t +α 2t c2), . . . ,1/(ht +α 2t cd)}.
+2. A matrixVwith orthonormal columns.
+3. A ReLU networkgζ.
+DenoteD ti = diag{1/(ht +α 2t ci1),1/(h t +α 2t ci2), . . . ,1/(ht +α 2t cid)}fori= 1,2. Directly incorpo-
+rating the sub-additive property ofL2 norm andα 2t ≤1, we have
+∥sθ1(r, t)−sθ2(r, t)∥2
+≤ ∥(Dt1V1 −D t2V1)gζ1(V⊤1 Dt1r, t)∥2 +∥(D t2V1 −D t2V2)gζ1(V⊤1 Dt1r, t)∥2
++∥D t2V2(gζ1(V⊤1 Dt1r, t)−gζ2(V⊤1 Dt1r, t))∥2 +∥D t2V2(gζ2(V⊤1 Dt1r, t)−gζ2(V⊤2 Dt1r, t))∥2
++∥D t2V2(gζ2(V⊤2 Dt1r, t)−gζ2(V⊤2 Dt2r, t))∥2 +∥(D t1 −D t2)r∥2
+≤ ∥Dt1 −D t2∥op∥gζ1(V⊤1 Dt1r, t)∥2 +∥D t2∥op∥V1 −V 2∥op∥gζ1(V⊤1 Dt1r, t)∥2
++∥D t2∥op∥gζ1(V⊤1 Dt1r, t)−gζ2(V⊤1 Dt1r, t)∥2 +γ∥D t2∥op∥V1 −V ⊤2 ∥op∥Dt1∥op∥∥r∥2
++γ∥D t2∥op∥Dt1 −D t2∥op∥r∥2 +∥D t1 −D t2∥op∥r∥2,(B.47)
+where the last inequality follows from the fact that{V i}i=1,2 are orthogonal and{g ζi}i=1,2 is
+γ-Lipschitz.
+To analyze the covering number ofSNN, we consider
+∥c1 −c 2∥∞ ≤δ c,∥V 1 −V 2∥op ≤δ V ,andsup
+∥r∥2≤3ρ+√dlogd,t∈[t 0,T] ∥gζ1(r, t)−gζ2(r, t)∥2 ≤δ f .(B.48)
+Immediately, we can deduce that
+sup
+t∈[t0,T]
+∥Dt1 −D t2∥op ≤ δct20 .(B.49)
+57
+Then, on the domain with radius∥r∥2 ≤3ρ+ √dlogdandt∈[t 0, T], by substituting the upper
+bounds (B.48) and (B.49) into (B.47), we obtain
+sup
+∥r∥2≤3ρ+√dlogd,t∈[t 0,T] ∥sθ1(r, t)−sθ2(r, t)∥2
+≤ δcKt20 + δV Kt0 + δft0 + γδV (3ρ+ √dlogd)t20 + γδc(3ρ+ √dlogd)t30 + δc(3ρ+ √dlogd)t20
+(i)
+= δc(γ(3ρ+ √dlogd) +t 0K+t 0(3ρ+ √dlogd))t30 + δV (γ(3ρ+ √dlogd) +t 0K)t20 + δft0
+(ii)
+=O
+ δcγ(3ρ+ √dlogd) +t 0δV γ(3ρ+ √dlogd) +t 20δf
+t30
+
+,
+where(i)follows from rearranging terms, and(ii)holds by omitting higher-order terms onδ c,
+δV, andδ f. For a hypercube[0, σmax]d, theδ c-covering number is bounded by  σmaxδc d. For a
+set of matrices{V∈R d×k :∥V∥ op ≤1}, itsδ V-covering number is bounded by 1 + 2√kδV dk
+(a standard volume-ratio bound for matrices with a bounded operator norm; see Lemma 5.7
+and Example 5.8 of Wainwright (2019) and Lemma 8 in Chen, Li, and Zhao (2020)). Follow-
+ing Lemma 5.3 in Chen et al. (2022), which providesδf-covering number bounds for ReLU network
+classes (see also Chapters 14 and 16 of Anthony and Bartlett (2009)), we take the upper bound
+2L2M(3ρ+ √dlogd)κ LM L+1
+δf
+J
+for theδ f-covering number of the function class (15). Therefore, with
+ρ=O
+ p
+σ2max(d+ logK+ log(n/δ)) , we have
+logN(ν,S NN,∥ · ∥2)≤ O
+ 
+dlog
+ σmaxγ(3ρ+ √dlogd)
+t30ν
+
++dklog
+ 
+1 + 2
+√
+kγ(3ρ+ √dlogd)
+t20ν
+!
++Jlog
+ 2L2M(3ρ+ √dlogd)κ LM L+1
+t0ν
+
+(i)
+=O
+
+dk+T τ(1 +L s)k(1 +σ kmax)ϵ−(k+1)
+
+log 1ϵ +k  k+42  log T τ dkt0νϵ ,
+where(i)follows from invoking the order of network parameters in (22) in Theorem 1 and omitting
+higher orders terms such aslog logdandlog logk.□
+C Omitted Proofs in Section 5
+In this section, we provide the proof of Theorem 3 and the lemmas used in the proof.
+58
+C.1 Proof of Theorem 3
+Proof.The proof contains two parts: the distribution estimation and the latent subspace recovery.
+For notational simplicity, let us denote
+ϵ:= 1t0 (1 +σ 2kmax)d 52 k k+102 n− 2−2δ(n)k+5 log4 n.(C.1)
+Part 1: Return Distribution Estimation.First, we can decomposeTV(Pdata, pPt0)into
+TV(Pdata, pPt0)≤TV(P data, Pt0) + TV(Pt0, ePt0) + TV( ePt0, pPt0),
+whereP data is the initial distribution ofRin (8), pPt0 and ePt0 are the marginal distribution of the
+estimated backward process pR←T−t 0 in (4) initialized with pR←0 ∼ N(0,Id)and pR←0 ∼P T, respec-
+tively. Here,TV(P data, Pt0)is the early-stopping error,TV(P t0, ePt0)captures the approximation
+error of the score estimation, andTV(ePt0, pPt0)reflects the mixing error. We bound each term in
+Lemma C.1 and the error bound (C.28) is given by
+TV
+
+Pdata, pPt0
+
+=O
+
+dt0Ls(1 +σ 2max) + pϵ(T−t 0) + pKL (Pdata∥N(0,I d)) exp(−T)
+= ˜O
+
+(1 +σ kmax)d 54 k k+104 n− 1−δ(n)2(k+5) log 52 n
+where the last equality follows from invoking the order ofϵin (C.1),t0 =n − 1−δ(n)k+5 , andT=O(logn)
+and omitting the lower-order terms indt0. Hence the distribution estimation result in Theorem 3
+is completed.
+Part 2: Latent Subspace Recovery.First, we generatem=O
+
+λ−2max(Σ0)dn
+2(1−δ(n))
+k+5 logn
+
+new samples via Algorithm 1. By the error bound (26) in Lemma 2, we obtain that, with probability
+1−1/n, it holds
+ pΣ0 −Σ 0op = ˜O λmax(Σ0)(1 +σ kmax)d 54 k k+104 n− 1−δ(n)k+5 log 52 n!.
+Therefore, applying Weyl’s theorem topΣ0 andΣ 0, we deduce that for anyi= 1,2, . . . , d, it holds
+that
+λi( pΣ0)−λ i(Σ0) = ˜O λmax(Σ0)(1 +σ kmax)d 54 k k+104 n− 1−δ(n)k+5 log 52 n!.
+In addition, for anyi= 1,2, . . . , k, it holds that
+ λi( pΣ0)λi(Σ0) −1  = ˜O λmax(Σ0)(1 +σ kmax)d 54 k k+104λi(Σ0) n− 1−δ(n)k+5 log 52 n!.
+59
+Next, we analyze the SVD ofpΣ0. Recall that the topk-dimensional eigenspace ofΣ0 and pΣ0 are
+denoted asUand pU, respectively. For anyj= 1,2, . . . , k, define
+cos∠ j( pU,U) := max
+pu∈Col( pU),u∈Col(U)
+|pu⊤u|
+∥pu∥2∥u∥2
+:=| pu⊤j uj|,
+subject to pu⊤j puℓ = 0andu ⊤j uℓ = 0,for anyℓ= 1,2, . . . , j−1,
+whereCol(·)represents the column space, pu0 :=0, andu 0 :=0. Applying Davis-Kahan-sin(θ)
+Theorem of Davis and Kahan (1970) topUandU, we have
+∥sin∠( pU,U)∥ F ≤ ∥ pΣ0 −Σ 0∥Fλk(Σ0)−λ k+1(Σ0) =O  λmax(Σ0)(1 +σ kmax)d 54 k k+104Eigen-gap(k) ·n − 1−δ(n)k+5 log 52 n,
+(C.2)
+where
+sin∠( pU,U) :=
+
+1−cos 2 ∠1( pU,U),1−cos 2 ∠2( pU,U), . . . ,1−cos2 ∠k( pU,U) .(C.3)
+The inequality in (C.2) follows from the fact that∥A∥F ≤
+√
+k∥A∥op for anyA∈R d×k. By the
+property of SVD, we can find two orthogonal matricesO1,O 2 ∈R k×k such that
+pU⊤U=O ⊤1 diag ncos∠ 1( pU,U),cos∠ 2( pU,U), . . . ,cos∠k( pU,U) o O2.
+Immediately, it holds that
+pU⊤UU⊤ pU=O ⊤1 diag cos2(∠1), . . . ,cos2(∠k)	 O1.(C.4)
+Therefore, we deduce that
+∥ pU pU⊤ −UU ⊤∥2F = tr( pU pU⊤ +UU ⊤ −2 pU pU⊤UU⊤)
+(i)
+= tr( pU⊤ pU) + tr(U⊤U)−2 tr(O ⊤1 diag cos2(∠1), . . . ,cos2(∠k)	 O1)
+(ii)
+= 2k−
+kX
+i=1
+cos2(∠i) = 2∥sin∠( pU,U)∥ 2F,(C.5)
+where(i)invokes (C.4) and(ii)holds due to the fact that pU,U, andO 1 have orthogonal columns,
+and the last equality holds by the definition ofsin∠defined in (C.3). Therefore, substituting the
+error bound of∥sin∠( pU,U)∥ 2F in (C.2) into (C.5), we obtain
+∥ pU pU⊤ −UU ⊤∥F = ˜O
+ 
+λmax(Σ0)(1 +σ kmax)d 54 k k+124
+Eigen-gap(k) n− 1−δ(n)k+5 log 52 n
+!
+.□
+60
+C.2 Supporting Lemmas for Theorem 3
+Recall that Lemma 2 and Lemma Lemma 3 are key results of our development. We provide their
+proofs in Appendices C.2.1 and C.2.2 respectively. Some additional lemmas that support the proof
+of Theorem 3 are stated and proved in Appendix C.2.3.
+C.2.1 Proof of Lemma 2
+Proof.
+For notational simplicity, let us define
+Σt0 :=E Rt0 ∼Pt0
+h
+Rt0R⊤t0
+i
+−E Rt0 ∼Pt0 [Rt0]ERt0 ∼Pt0 [Rt0]⊤,
+eΣt0 :=E Rt0 ∼ ePt0
+h
+Rt0R⊤t0
+i
+−E Rt0 ∼ ePt0 [Rt0]ERt0 ∼ ePt0 [Rt0]⊤,and
+qΣt0 =E Rt0 ∼ pPt0
+h
+Rt0R⊤t0
+i
+−E Rt0 ∼ pPt0 [Rt0]ERt0 ∼ pPt0 [Rt0]⊤.
+(C.6)
+The proof is based on the following error decomposition.
+Error Decomposition.We decompose the target operator norm as
+ pΣ0 −Σ 0op ≤ Σ0 −Σ t0op| {z }
+(A)
++
+Σt0 − eΣt0op| {z }
+(B)
++
+ eΣt0 − qΣt0op| {z }
+(C)
++
+ pΣ0 − qΣt0op| {z }
+(D)
+,(C.7)
+where term(A)is the early-stopping error, term(B)is the approximation error ofS NN term(C)
+is the mixing error of forward process (1), term(D)is the finite-sample error.
+Bounding Term(A).Using the fact thatR t0 =e −t0/2R0 +B 1−e−t0, we have
+Σ0 −Σ t0 =Σ 0 −e −t0Σ0 −(1−e −t0)Id = (1−e −t0)(Σ0 −I d).
+Therefore, by the definition of(A)in (C.7) andt0 =n − 1−δ(n)k+5 , we obtain
+(A) =O
+
+λmax(Σ0)·n − 1−δ(n)k+5 .(C.8)
+Bounding Term(B).Under the coupled SDE system (28), we have
+(B)≤
+ERt0 ∼Pt0 hRt0R⊤t0i −E Rt0 ∼ pPt0 hRt0R⊤t0i op
++
+ERt0 ∼Pt0 [Rt0]ERt0 ∼Pt0 [Rt0]⊤ −E Rt0 ∼ pPt0 [Rt0]ERt0 ∼ pPt0 [Rt0]⊤op
+=
+E h(R←T−t 0)(R←T−t 0)⊤i −E h( pR←T−t 0)( pR←T−t 0)⊤i 
+op
+(C.9)
+61
++
+E R←T−t 0 E R←T−t 0⊤ −E h pR←T−t 0i E h pR←T−t 0i⊤ 
+op
+,(C.10)
+where the last equality invokesR←t and pR←t defined in (28). For term (C.9), we have
+(C.9)≤
+E h(R←T−t 0 − pR←T−t 0)(R←T−t 0)⊤iop + E h( pR←T−t 0)(R←T−t 0 − pR←T−t 0)⊤iop
+≤
+q
+E
+R←T−t 0 − pR←T−t 022 · qER←T−t 022 + qE pR←T−t 022 ,(C.11)
+where (C.11) follows from the Cauchy-Schwarz inequality and rearranging terms. Similarly, for
+term (C.10), using the Cauchy-Schwarz inequality, we have
+(C.10)≤
+(E R←T−t 0 −E[ pR←T−t 0])E R←T−t 0⊤op + E[ pR←T−t 0](E R←T−t 0⊤ −E[ pR←T−t 0]⊤)op
+≤
+q
+E
+R←T−t 0 − pR←T−t 022 · qER←T−t 022 + qE pR←T−t 022 ,(C.12)
+Then, substituting (C.11) and (C.12) into (C.9) and (C.10), we deduce that
+(B)≤2
+q
+E
+R←T−t 0 − pR←T−t 022 · qER←T−t 022 + qE pR←T−t 022
+=O
+
+(1 +σ kmax)d 54 k k+104 n− 1−δ(n)k+5 log 52 n,(C.13)
+where the last equality follows from applying the upper bound (29) in Lemma 3 and using the fact
+that
+E
+R←T−t 022 =E e−t0/2R0 +B 1−e−t0 22 ≤e −t0ER022 + 1−e −t0 =O(1)and
+E
+ pR←T−t 022 ≤2E R←T−t 0 − pR←T−t 022 + 2ER←T−t 022 =O(1).
+Bounding Term(C).Applying Lemma 3 to the estimated backward process starting fromP T
+andN(0,I d), respectively, we obtain
+ eΣt0 − qΣt0op =O  2E∥ pR←T−t 0 −R ←T−t 0∥22 =O (1 +σ kmax)d 54 k k+104 n− 1−δ(n)k+5 log 52 n.(C.14)
+Bounding Term(D).By introducing the estimation error between ¯R0 andE[R i], we have
+(D)≤
+ 1m−1 mXi=1 (Ri −E[R i])(Ri −E[R i])⊤ − qΣt0op
++
+ ¯R0( ¯R0 −E[R i])⊤
+op
++
+( ¯R0 −E[R i])E[Ri]⊤
+op
+(i)
+≤
+ 1m−1 mXi=1 (Ri −E[R i])(Ri −E[R i])⊤ − qΣt0op
+62
++∥ ¯R0∥2∥ ¯R0 −E[R i]∥2 +∥ ¯R0 −E[R i]∥2∥E[Ri]∥2
+(ii)
+≤
+ 1m−1 mXi=1 ( qΣt0)−1/2(Ri −E[R i])(Ri −E[R i])⊤( qΣt0)−1/2 −I d op qΣt0op
++∥( qΣt0)− 12 ¯R0∥2∥( qΣt0)− 12 ( ¯R0 −E[R i])∥2∥ qΣt0∥op
++∥( qΣt0)− 12 ( ¯R0 −E[R i])∥2∥( qΣt0)− 12 E[Ri]∥2∥ qΣt0∥op,
+where(i)follows from the H¨older inequality and(ii)holds due to the covariance normalization
+using( qΣt0)− 12. Applying Theorem 3.1.1 and Theorem 4.6.1 of Vershynin (2018) to
+( qΣt0)−1/2( ¯R0 −E[R i])and 1m−1 mXi=1( qΣt0)−1/2(Ri −E[R i])(Ri −E[R i])⊤( qΣt0)−1/2,
+respectively, we obtain that with probability1−δ, it holds
+(D) =O
+
+max
+ √d+ plog(2/δ)√m ,  √d+ plog(2/δ)√m 2 ·  qΣt0op
+=O
+
+λmax(Σ0)(1 +σ kmax)d 54 k k+104 n− 1−δ(n)k+5 log 52 n,(C.15)
+where the last inequality the last inequality invokes the order ofmin (27) and the fact that
+ qΣt0op ≤  qΣt0 − eΣt0op +  eΣt0 −Σ t0op + Σt0 −Σ 0op + Σ0op.
+Summing up the upper bound of(A)–(D)in (C.8) and (C.13)–(C.15), we obtain the desired
+result. □
+C.2.2 Proof of Lemma 3
+Proof.For notational simplicity, we denote psT−t (·) := psθ (·, T−t)and let pσ2min and pσ2max be the
+minimal and maximal elements ofcin psθ, respectively. First, by direct calculation, we obtain
+dE∥R←t − pR←t ∥22
+dt = 2E
+
+R←t − pR←t
+⊤ 1
+2 R←t − 12 pR←t +∇logp T−t (R←t )− psT−t ( pR←t )
+=E∥R ←t − pR←t ∥22 + 2E h(R←t − pR←t )⊤(∇logp T−t (R←t )− psT−t ( pR←t ))i| {z }
+(∗)
+.
+Consider ˜gζ :R k ×[0, T]→R k, equivalent togζ defined via transformation, defined as
+˜gζ(z, t) :=gζ(V⊤DtVz, t),(C.16)
+whereV,D t, andg ζ are components ofpsθ defined in (18). Note that the Lipschitz constant of the
+ReLU network ˜gζ with respect tozis also on the order ofγdefined in (22). Then, for term(∗),
+63
+we have
+(∗) =E
+h
+(R←t − pR←t )⊤(∇logp T−t (R←t )− psT−t (R←t ))i
++E
+h
+(R←t − pR←t )⊤(psT−t (R←t )− psT−t ( pR←t ))i
+(i)
+≤ E∥R←t − pR←t ∥22
+4 +E∥ psT−t (R←t )− ∇logpT−t (R←t )∥22
++E
+h
+(R←t − pR←t )⊤D1/2T−t (αT−t γ1D1/2T−t V(V⊤DT−t V)−1V⊤D1/2T−t −I)D 1/2T−t (R←t − pR←t )i
+(ii)
+≤
+ 1
+4 + (αT−t γ1 −1)1{α T−t γ1 >1}hT−t +pσ2minα2T−t + (αT−t γ1 −1)1{α T−t γ1 ≤1}hT−t +pσ2maxα2T−t
+
+E∥R←t − pR←t ∥22
++E∥ psT−t (R←t )− ∇logpT−t (R←t )∥22 ,
+where(i)holds due to the Cauchy-Schwarz inequality and the fact thatpsT−t (·)isγ 1-Lipschitz;(ii)
+follows from
+λmax(αT−t γ1V(V⊤DT−t V)−1V⊤DT−t −I) =α T−t γ1 −1,
+and
+1
+hT−t + pσ2maxα2T−t ≤ ∥pDT−t ∥op ≤ 1hT−t + pσ2minα2T−t .
+Notice thatα T−t γ1 ≤1is equivalent tot≤T−2 logγ 1. By Gr¨onwall’s inequality, we obtain
+E∥R←T−t 0 − pR←T−t 0∥22
+≤
+
+E∥R←0 − pR←0 ∥22 +
+Z T−t 0
+0
+2E∥ psT−t (R←t )− ∇logpT−t (R←t )∥22 dt
+
+·exp
+ Z T−2 logγ1
+0
+ 
+3
+2 + 2(αT−t γ1 −1)hT−t + pσ2maxα2T−t
+!
+dt+
+Z T−t 0
+T−2 logγ1
+ 
+3
+2 + 2(αT−t γ1 −1)hT−t + pσ2minα2T−t
+!
+dt
+!
+=
+
+E∥R←0 − pR←0 ∥22 +
+Z T−t 0
+0
+2E∥ psT−t (R←t )− ∇logpT−t (R←t )∥22 dt
+
+(C.17)
+·exp
+ 3
+2 (T−t 0) +
+Z 2 logγ1
+t0
+2(αwγ1 −1)
+hw + pσ2minα2w dw+
+Z T
+2 logγ1
+2(αwγ1 −1)
+hw +pσ2maxα2w dw
+
+,(C.18)
+where the last equality follows from rearranging the terms and a change of variableT−t=w.
+Now we claim that
+Z 2 logγ1
+t0
+2(αwγ1 −1)
+hw + pσ2minα2w dw+
+Z T
+2 logγ1
+2(αwγ1 −1)
+hw + pσ2maxα2w dw≤4γ 1
+ 
+1−log( pσ2min +t 0) −2(T−t 0).(C.19)
+64
+To verify this, consider the integral
+Z αwγ1 −1
+hw +cα 2w dw=
+
+
+
+C− 2γ1 arctan(√c−1e −w/2)√c−1 −log(e w +c−1),∀c >1(C.20)
+C−2γ 1e−w/2 −w, c= 1(C.21)
+C−
+γ1 log
+
+1+e−w/2√1−c
+1−e−w/2√1−c
+
+√1−c −log(e w +c−1),∀0< c <1(C.22)
+1. For the casec >1, note that
+−log
+ eT +c−1
+et0 +c−1
+
+≤ −(T−t0) + log(1 + (c−1)e −t0)≤log(c−(c−1)t 0)−(T−t 0),
+− arctan(√c−1e −T /2)−arctan( √c−1e −t0/2)√c−1 ≤e −t0/2 −e −T /2≤1.
+(C.23)
+Then, by substituting (C.23) into the integral (C.20), we obtain
+Z T
+t0
+αwγ1 −1
+hw +cα 2w dw≤2γ 1 + log(c−(c−1)t 0)−(T−t 0).(C.24)
+2. For the casec= 1, applyinge −w/2 ≤1, we obtain that the integral in (C.21) satisfies
+Z T
+t0
+αwγ1 −1
+hw +cα 2w dw≤ −2γ1(e−T −e −t0)−(T−t 0)≤2γ 1 −(T−t 0).(C.25)
+3. For the case0< c <1, due to the continuity of the integral (C.22) with respect tocand the
+bound in (C.25), we only need to focus on the casec≪1. Without loss of generality, we
+considerc <1/2. By direct calculation, we have
+− 1√1−c
+ 
+log
+ 1 +e −T /2√1−c
+1−e −T /2√1−c
+
+−log
+ 1 +e −t0/2√1−c
+1−e −t0/2√1−c
+!
+≤ 1√1−c log  1 +e −t0/2√1−c1−e −t0/2√1−c 
+≤
+√
+2(log 4−log(c+t 0)),(C.26)
+where the last inequality follows from the fact thate−x ≤1/(1 +x), √1−c≤1−c/2, and
+log((1 +x)/(1−x))is increasing inx; and rearranging terms. Then, by substituting (C.23)
+and (C.26) into (C.22), we obtain
+Z T
+t0
+αwγ1 −1
+hw +cα 2w dw≤2γ 1(1−log(c+t 0))−(T−t 0).(C.27)
+Combining the results in (C.24), (C.25), and (C.27), we verified the claim in (C.19). Finally,
+65
+applying the upper bound of score estimation in (29) and substituting (C.19) into (C.17) and
+(C.18), we deduce that
+E∥R←T−t 0 − pR←T−t 0∥22
+≤
+
+E∥R←0 − pR←0 ∥22 + 2ϵ(T−t 0) ·exp  32 (T−t 0) + 4γ1(1−log(pσ2min +t 0))−2(T−t 0)
+=O
+
+(1 +σ kmax)d 54 k k+104 n− 1−δ(n)k+5 log 52 n,
+where the last equality follows from invokingE∥R←0 − pR←0 ∥22 =O(e −T )and rearranging terms.□
+C.2.3 Other Supporting Lemmas for Theorem 3
+Lemma C.1.Suppose thatP data is sub-Gaussian, and bothpsθ(r, t)and∇logp t(r)are Lipschitz
+with respect to bothrandt. Consider the score estimation error satisfying
+Z T
+t0
+ERt∼Pt ∥psθ(Rt, t)− ∇logpt (Rt)∥22 dt=O(ϵ(T−t 0)).
+Then, the total variation distance is bounded by
+TV(Pdata, pPt0) =O
+
+dt0Ls(1 +σ 2max) + pϵ(T−t 0) + pKL (Pdata∥N(0,I d)) exp(−T),(C.28)
+whereP data is the initial distribution ofRin(8)and pPt0 is the marginal distribution of the backward
+process pR←T−t 0 in(4)starting fromN(0,I d).
+Proof of Lemma C.1.To estimateTV(Pdata, pPt0), we leverage the error decomposition in (25).
+Recall that ePt0 is the marginal distribution of pR←T−t 0 in (4) initialized with pR←0 ∼P T. In the
+decomposition (25),TV(P data, Pt0)is the early stopping error,TV(P t0, ePt0)is the statistical error
+arising from the score estimation, andTV(ePt0, pPt0)is the mixing error of the forward process (1).
+1. For termTV(P data, Pt0), applying the upper bound (C.34) witht=t 0 in Lemma C.4, we
+obtain
+TV (Pdata, Pt0) =O(dt 0).(C.29)
+2. For termTV(P t0, ePt0), by Pinsker’s inequality (Tsybakov 2009, Lemma 2.5) and the upper
+bound of KL-divergence (C.33) in Lemma C.3, we have
+TV(Pt0, ePt0)≤KL(P t0|| ePt0) =O  pϵ(T−t 0).(C.30)
+3. For termTV( ePt0, pPt0), by Pinsker’s inequality (Tsybakov 2009, Lemma 2.5) and Data pro-
+66
+cessing inequality (Thomas and Joy 2006, Theorem 2.8.1) , we deduce that
+TV( ePt0, pPt0)≤
+q
+KL( ePt0∥ pPt0)≤ pKL (PT ∥N(0,I d)) =O  pKL (Pdata∥N(0,I d)) exp(−T),
+(C.31)
+where in the last inequality, we use the exponential mixing property of the O-U process.
+Substituting the upper bounds (C.29), (C.30), and (C.31) into (25), we obtain the desired result.
+□
+Lemma C.2(Novikov’s condition).Under the assumptions in Lemma C.1, it holds
+E(R←t )t∈[0,T−t 0]
+
+exp
+ 1
+2
+Z T−t 0
+0
+∥psθ(R←t , t)− ∇logpT−t (R←t )∥22 dt
+ 
+<∞,(C.32)
+where the expectation is taken over the backward diffusion process(R←t )t∈[0,T−t 0] in(3).
+Proof of Lemma C.2.The result follows from a straightforward calculation using the same
+techniques as in (Chen et al. 2023a, Lemma 11).□
+Lemma C.3.Suppose that the assumptions in Lemma C.1 hold. When both the ground-truth and
+the learned backward processes start withR←0 d= pR←0 ∼P T, the KL-divergence between the laws of
+the terminal distributions of the processesR←T−t 0 and pR←T−t 0 can be bounded by
+KL(Pt0|| ePt0)≤E
+ 1
+2
+Z T−t 0
+0
+∥psθ (R←t , T−t)− ∇logpT−t (R←t )∥22 dt
+
+=O
+
+ϵ(T−t 0)
+
+.(C.33)
+Proof of Lemma C.3.By Lemma C.2, the Novikov’s condition holds. By the data processing
+inequality of the KL divergence (Thomas and Joy 2006, Theorem 2.8.1), we have
+KL
+ 
+Pt0
+ ePt0 ≤KL  (R←t )0≤t≤T−t 0||( pR←t )0≤t≤T−t 0
+= 12 E Z T−t 00 psθ(R←t , T−t)− ∇logpT−t (R←t )22dt .
+Immediately, we obtain the results directly using Girsanov’s Theorem (Chen et al. 2023b, Theorem
+9). □
+Lemma C.4.Suppose that the assumptions in Lemma C.1 hold. Then, for anyt <1/d, we have
+TV(Pdata, Pt) =O(dt).(C.34)
+Proof of Lemma C.4.GivenR 0,R t can be represented as
+Rt =e −t/2R0 +
+Z t
+0
+e−(t−s)/2dWs,
+67
+whereR 0 and
+R t
+0 e−(t−s)/2dWs are independent. Then, the density ofRt is given by
+pt(r) =
+Z
+pdata(y)ϕ(r;α ty, ht)dy.
+Define
+S(d, t) :=O(
+p
+d+ log(1/t))(C.35)
+as a truncation radius and we have
+TV (Pdata, Pt) = 12 Z |pt(r)−p data(r)|dr
+≤ 12 Z∥r∥2>S(d,t) pt(r) +pdata(r)dr(C.36)
++ 12 Z∥r∥2≤S(d,t)  Z (pdata(y)ϕ(r;α ty, ht)−p data(r))dydr.(C.37)
+By the density upper bound in (B.18) and Theorem 3.1 of Chazottes, Collet, and Redig (2021),
+it holds thatp data andp t(r)are sub-Gaussian and there exists a constantA 1 >0such that
+(pt(r) +pdata(r))≤exp(−A 1∥r∥22/2).
+For term (C.36), using the sub-Gaussian tail in Proposition 2.6.6 of Vershynin (2018) and
+invoking the order ofS(d, t)in (C.35), we obtain that
+(C.36)=O
+ 2− d2 dS(d, t)d−2
+A1Γ
+  d
+2 + 1
+ exp
+
+− A1S(d, t)2
+2
+ 
+=O
+ 
+texp (−A1d)
+
+.(C.38)
+For term (C.37), by taking a change of variablez:= (r−αty)/√ht, we deduce that
+(C.37)=
+Z
+∥r∥2≤S(d,t)
+Z pdata(α−1t (r− phtz))ϕ(z;0,I)−p data(r) dz dr
+(i)
+=O
+ Z
+∥r∥2≤S(d,t)
+ Z ∇pdata(r) tr2 − √tzϕ(z;0,I)dz dr(C.39)
++
+Z
+∥r∥2≤S(d,t)
+ 12  tr2 − √tz⊤∇2pdata(r) tr2 − √tzϕ(z;0,I)dz dr,(C.40)
+where(i)involves the Taylor expansionα −1t = 1 +t/2 +O(t 2),h t =t+O(t 2)and the fact that
+pdata(et/2(r− phtz)) =p data(r) +∇pdata(r) tr2 − √tz + 12  tr2 − √tz⊤∇2pdata(r) tr2 − √tz.
+The integrals associated with the kernel functionϕ(z;0,I)satisfy
+Z
+pdata(r)ϕ(z;0,I)dz=p data(r)(C.41)
+68
+and
+Z
+∇pdata(r)
+ tr
+2 −
+√
+tz
+
+ϕ(z;0,I)dz= t2 ∇logp data(r)rpdata(r) =O(t∥r∥ 2∥∇logp data(r)∥2 ·p data(r)).
+(C.42)
+Moreover, since the Hessian matrix satisfies the following property
+∇2pdata(r) = (∇2 logpdata(r) +∇logp data(r)∇logp data(r)⊤)·p data(r), (C.43)
+we deduce
+Z  1
+2
+ tr
+2 −
+√
+tz
+⊤
+∇2pdata(r)
+ tr
+2 −
+√
+tz
+
+ϕ(z;0,I)dz
+(i)
+= tr
+ 1
+8 t2∇2pdata(r)rr⊤ + 12 t∇2pdata(r)
+(ii)
+= tr
+ 1
+8 t2rr⊤ + 12 t(∇2 logpdata(r) +∇logp data(r)∇logp data(r)⊤)·p data(r)
+=O
+
+(t2∥r∥22 +t) tr  (∇2 logpdata(r) +∇logp data(r)∇logp data(r)⊤)·p data(r).(C.44)
+where(i)is follows from
+R
+zz⊤ϕ(z;0,I)dz=I d and rearranging terms, and(ii)follows (C.43).
+Therefore, by substituting (C.41), (C.42) and (C.44) into (C.39) and (C.40), we obtain that
+(C.37)=O
+ Z
+∥r∥2≤S(d,t)
+
+t∥r∥2∥∇logp data(r)∥2
++ tr
+ 
+(t2∥r∥22 +t)(∇ 2 logpdata(r) +∇logp data(r)∇logp data(r)⊤)pdata(r)dr
+(i)
+=O
+
+tS(d, t)
+q
+ER0∼Pdata[∥∇logp data(R0)∥22]
++ (t2S2(d, t) +t) tr
+ Z
+(∇2 logpdata(r) +∇logp data(r)∇logp data(r)⊤)pdata(r)dr)
+
+(ii)
+=O
+ 
+t
+√
+dS(d, t) +t2dS2(d, t)·Ls(σ2max + 1) =O  dtLs(σ2max + 1).(C.45)
+where(i)is due to the Cauchy-Schwarz inequality and∥r∥ 2 ≤S(d, t), and(ii)invokes the upper
+bound (C.46) in Lemma C.5.
+Combining the upper bound of (C.36) and (C.37) in (C.38) and (C.45), we obtain the desired
+result. □
+Lemma C.5.Suppose Assumptions 1-3 holds. Then, it holds
+ER0∼Pdata ∥∇logp data(R0)∥22 =O(dL s(σ2max + 1)).(C.46)
+69
+Proof of Lemma C.5.Takingt= 0in the formula of∇logp t in (12) of Lemma 1, we have
+∇logp data(r) =s sub(Γ0β⊤Λ−10 r,0)−Λ − 120 (I−Λ − 120 βΓ0β⊤Λ− 120 )Λ− 120 r.
+Under Assumption 3, for anyr1,r 2 ∈R d, it holds that
+∥∇logp data(r1)− ∇logpdata(r2)∥2 ≤L s∥Γ0β⊤Λ−10 ∥op∥r1 −r 2∥2 +∥Λ −10 ∥op∥r1 −r 2∥2
+≤ Ls(σ2max + 1)σ2d · ∥r1 −r 2∥2,(C.47)
+where the last equality follows from∥Γ0∥op ≤σ 2max and∥Λ −10 ∥op ≤1/σ 2d. This indicates that the
+Lipschitz constant of∇logp data is bounded byLs(1 +σ 2max)/σ2d. Furthermore, we have
+ER0∼Pdata
+
+∥∇logp data(R0)∥22
+
+= tr
+ Z
+∇logp data(r)∇logp data(r)⊤pdata(r)dr
+
+(i)
+= tr
+
+−
+Z
+∇2 logpdata(r)⊤pdata(r)dr
+
+=O(dL s(σ2max + 1)),
+where(i)is due to the integration by parts and the last inequality follows from invoking (C.47).□
+D Additional Details of the Numerical Study with Synthetic Data
+Here we explain additional details of the numerical experiment setup for Section 6. Following the
+standard setup in the econometrics literature (Bai and Ng 2002, 2023), we construct the ground-
+truthenvironmentofhigh-dimensionalassetreturnsusingasub-Gaussianfactormodel. Specifically,
+the universe consists ofd= 2048assets, whose returns are driven byk= 16latent factors. Here,
+the choice ofdas a power of 2 enhances the computational efficiency.
+Denoteµ F = (µ F1 , µF2 , . . . , µF k)as the expected return andΣ F = diag{σ 2F1 , σ2F2 , . . . , σ2F k}
+the covariance matrix of the latent factor. In addition, denoteΣε = diag{σ 2ε1, σ2ε2, . . . , σ2εd}as the
+covariance of the idiosyncratic noise of the asset. We then construct samples from the ground-truth
+environment as follows:
+1.Latent Factor.The components ofµ F are drawn i.i.d. fromUniform(0,0.1)and we set
+σF i = 1.5µ F ifori= 1,2, . . . , kto ensure that the volatility scales proportionally to the
+corresponding mean.
+2.Factor Loadings.We generate the factor loading matrixβ∈R d×k, where each element
+is drawn i.i.d. fromN(0,1), ensuring that the loadings are symmetrically distributed with
+comparable magnitudes across assets and factors.
+3.Idiosyncratic Risk.{σ εi}di=1 are drawn i.i.d. fromUniform(0,0.4), ensuring uncorrelated
+idiosyncratic returns across assets.
+70
+4.Asset Return.We generate a total of2 13 = 8192simulated samples. Asset returns are
+sampled i.i.d. according to the following procedure. First, the factor is drawn from a multi-
+variate normal distributionF∼ N(µF ,Σ F ). Then the asset-specific noise terms are drawn
+i.i.d. fromε∼ N(0,Σ ε). Finally, the asset return is constructed byR=βF+ε. We denote
+byµ Ri andσ Ri the mean and standard deviation of the ground-truth return for asseti, where
+i= 1,2, . . . , d.
+Summary Statistics of the Synthetic Data.To show that our simulation setting is close
+to the realistic market scenario, we benchmark our simulation set-up against the S&P 500 index.
+Specifically, denote byµS&P 500,iandσ S&P500,i the mean and standard deviation of historical returns
+for stockiin the S&P 500 index over the period 2000–2020. Table D.1 reports the summary
+statistics of{µ Ri}di=1 and compares them with{µS&P500,i}500i=1. The range of both the simulated
+mean and standard deviation of returns closely matches that of the empirical quantities of stocks
+in the S&P 500 index.
+In addition, the variance of the factors accounts for 50.42% of the total variance in our synthetic
+data, which corresponds to the populationR-squared.
+Table D.1: Summary statistics for simulation return data and comparison with S&P 500 over the
+period 2000-2020.
+Mean Std Min 25% 50% 75% Max
+Synthetic{µ Ri}0.000 0.235 -0.809 -0.154 -0.007 0.155 0.751
+S&P 500{µ S&P500,i}0.070 0.234 -0.817 -0.057 -0.124 0.182 0.929
+Synthetic{σ Ri}0.475 0.126 0.243 0.377 0.473 0.576 0.739
+S&P 500{σ S&P500,i}0.380 0.142 0.203 0.273 0.345 0.450 0.725
+Data Preprocessing.We preprocess the data in the following steps.
+1. First, we sort the asset returns by their variance, prioritizing those with greater variability
+for subsequent analysis.
+2. Next, we normalize the data by subtracting the mean return of each asset and reshape the
+data from a one-dimensional vector of length211 into a two-dimensional matrix of size(25,2 6).
+This reshaping step ensures compatibility with the 2D-Unet architecture and allows the model
+to effectively leverage spatial hierarchies in the data.
+Training.We train our diffusion factor model using a 2-dimensional U-Net architecture (Ron-
+neberger, Fischer, and Brox 2015), which is a convolutional encoder-decoder network with skip
+connections. The U-Net serves as a practical implementation of the encoder-decoder architecture
+analyzed in theory. Specifically, in our theoretical analysis, we consider a linear encoder-decoder
+architecture, which first projects the input data into a low-dimensional latent space and then re-
+constructs it back to the original space. Thisproject-then-lift network architecturenot only reduces
+71
+the number of trainable parameters by operating in a low-dimensional latent space, but also effec-
+tively captures data intrinsic structures such as the factor model in Assumption 1. In experiments,
+U-Net implements the same encoder-decoder architecture with nonlinear networks, which is further
+shown to accommodate complex real-world data, such as the U.S. stock returns in Section 7 and
+Appendix E. Nonetheless, whether the mappings are linear or nonlinear issecondary, since linear
+transformations are only assumed to enable tractable analysis and are standard in the theoretical
+study of deep learning (Baldi and Hornik 1989, Chen et al. 2012, 2023a, Weitzner et al. 2025).
+Besides, guided by the theoretical results in Sections 3-5, we choose the latent space dimension—
+the bottleneck dimension of the encoder and decoder architecture—based on the underlying factor
+model. More specifically, in synthetic experiments, we set the bottleneck width equal to the true
+factor dimension,k= 16. The U-Net has approximately one billion parameters and is trained to ap-
+proximate the score function by minimizing the empirical loss defined in (7). To assess performance
+under different data regimes, we set the number of training samples to beN= 29,2 10, . . . ,213. For
+fairness, bothDiff MethodandEmp Methodare trained on thesameNsimulated returns for
+eachN. TheDiff Methodthen uses the trained model to generate2 13 new samples for latent
+subspace recovery and distribution estimation, while theEmp Methodprovides empirical estimates
+solely onNtraining samples. To ensure that the results are robust rather than due to chance, each
+experiment is repeated five times.
+E Additional Details of the Empirical Analysis
+In this section, we provide further details on the empirical setup in Section 7 and report robustness
+analysis with respect to transaction costs, risk aversions, norm constraints, and model update
+frequency.
+E.1 Data Preprocessing, Training, and Evaluation
+Data Selection and Preprocessing.We select and preprocess the stock return data in the
+following steps:
+1. We first exclude stocks with more than 5% missing values and then select the 512 stocks with
+the largest market capitalizations from the remaining universe.
+2. Rank the selected stocks by return volatility in descending order.
+3. Within each rolling window of the training data, we standardize the returns by subtracting
+the (empirical) mean and dividing by the (empirical) standard deviation for each stock.
+4. Winsorize returns for each stock at 2.5% each side by resampling non-extreme values with
+the same sign, which preserves the empirical distribution while mitigating the influence of
+outliers (Tukey 1962).
+72
+Training and Sampling.We employ a 2D-UNet architecture with approximately one billion
+parameters to train our diffusion factor model. For real data, the true factor dimension is unknown;
+following common practice, we set the bottleneck width to8as an educated estimate consistent
+with factor dimensions commonly used in the literature (Fama and French 1993, Bai and Ng 2002,
+Onatski 2010, Fama and French 2015b, Fan, Guo, and Zheng 2022, Bai and Ng 2023). Following a
+similar setup as Lyu et al. (2022), we set the total number of training steps toT= 200and apply
+early stopping atT ′ = 180for the sampling of time-reversed process (4). For the downstream
+evaluation on mean-variance portfolios and factor-tangency portfolios, we use the trained model to
+generate2 12 = 4096new samples for each rolling window.
+Performance Evaluations.Next, we specify the performance evaluation metrics used in Sec-
+tion 7.
+1. SR is defined asˆµ/ˆσ, whereˆµandˆσdenote the sample mean and standard deviation, respec-
+tively, of excess portfolio returns over the testing periods.
+2. CER is defined asˆµ−12 ηˆσ2, whereηis the risk aversion parameter.
+3. MDD is defined as
+MDD= max
+t∈Dt
+ maxs≤t Vs −V t
+maxs≤t Vs
+
+,
+whereD t contains all the dates of the test set andVt denotes the portfolio value on dayt.
+4. TO on daytis defined as
+TOt =
+X
+i∈At
+wi,t − wi,t−1(1 +r i,t−1)PNi=1 wi,t−1(1 +r i,t−1)  ,
+whereA t contains all assets of the test set on dayt,wi,t is the target weight of stockion day
+t, andr i,t denotes the return of stockion dayt.
+We visualize the return distribution generated by our diffusion factor model for selected assets
+in Figure E.1 (trained on data from May 1, 2009 to April 30, 2014), which is compared with the
+observed training data. The generated data distribution is smoother and closely approximates the
+empirical distribution.
+E.2 Robustness Analysis on Transaction Costs and Risk Aversion
+For mean-variance portfolios withη= 3, we report out-of-sample portfolio performance under the
+scenario without transaction costs in Table E.1. TheDiff Emp+Diff Empoutperforms all other
+methods, which are consistent with those observed in the scenario with transaction costs.
+For the case ofη= 5, we report out-of-sample portfolio performance under scenarios with and
+without transaction costs in Table E.2 and plot the cumulative returns with transaction cost in
+73
+Figure E.1: Examples of asset return distribution (the blue histogram is constructed using samples
+generated from the diffusion model and the green one uses actual data samples.)
+(a) The asset with the largest variance.
+ (b) The asset with the smallest variance.
+(c) The asset with the largest mean.
+ (d) The asset with the smallest mean.
+Table E.1: Performance of different portfolios without transaction costs forη= 3(model updated
+quarterly).
+Method Mean Std SR CER MDD (%) TO
+Methods based on real observed data
+EW0.106 0.206 0.516 0.043 52.4373.031
+VW0.103 0.220 0.468 0.031 57.322 3.464
+Real Emp+Real Emp0.077 0.126 0.608 0.053 33.642 46.722
+Real BS+Real Emp0.070 0.124 0.565 0.047 32.092 45.612
+Real OLSE+Real Emp0.053 0.125 0.427 0.030 33.188 45.952
+Real Emp+Real LW0.075 0.121 0.617 0.053 32.264 38.827
+Real BS+Real LW0.0690.1190.575 0.047 31.558 37.900
+Real OLSE+Real LW0.053 0.120 0.438 0.031 33.503 38.543
+Methods based on diffusion-generated data
+Diff Emp+Diff Emp0.2730.1571.740 0.23632.159 28.751
+Diff BS+Diff Emp0.269 0.155 1.729 0.232 32.113 27.978
+Diff OLSE+Diff Emp0.268 0.155 1.728 0.232 32.110 27.876
+Diff Emp+Diff LW0.233 0.150 1.547 0.199 32.048 26.353
+Diff BS+Diff LW0.230 0.149 1.539 0.196 31.995 25.773
+Diff OLSE+Diff LW0.229 0.149 1.539 0.196 31.991 25.697
+Methods based on both real observed data and diffusion-generated data
+Real Emp+Diff Emp0.210 0.149 1.410 0.17730.09823.313
+Diff Emp+Real Emp0.095 0.133 0.720 0.069 33.777 29.323
+74
+Figure E.2. TheDiff Emp+Diff Empoutperforms all other methods with the highest Mean, SR,
+and CER. These results are consistent with those observed in the case ofη= 3.
+Figure E.2: Cumulative returns of different portfolios in log scale with transaction cost forη= 5
+(model updated quarterly).
+E.3 Robustness Analysis on Norm Constraints
+As a robustness check on the choice of norm constraints, for mean-variance portfolios, we solve
+the target weight by replacing theℓ∞-norm constraint in (34) with anℓ1-norm constraint∥ω∥ 1 =Pd
+i=1 |wi| ≤3. We report the out-of-sample portfolio performance with and without transaction
+costs in Table E.3 and plot the cumulative returns with transaction costs (in log scale) in Figure E.3.
+TheDiff Emp+Diff Empachieves the highest Mean, SR, and CER, which is similar to the results
+under theℓ ∞-norm constraint.
+Figure E.3: Cumulative returns of different portfolios in log scale with transaction cost underℓ1
+norm constraints.
+75
+Table E.2: Performance of different portfolios with and without transaction costs forη= 5.
+Method Mean Std SR CER MDD (%) TO
+Panel A: Without Transaction Costs
+Methods based on real observed data
+EW0.106 0.206 0.516 0.000 52.4373.031
+VW0.103 0.220 0.468 -0.018 57.322 3.464
+Real Emp+Real Emp0.071 0.124 0.573 0.033 32.477 45.764
+Real BS+Real Emp0.067 0.123 0.546 0.029 31.390 45.359
+Real OLSE+Real Emp0.057 0.124 0.462 0.019 32.432 45.405
+Real Emp+Real LW0.070 0.120 0.584 0.034 31.503 38.025
+Real BS+Real LW0.0660.1190.556 0.031 31.657 37.706
+Real OLSE+Real LW0.057 0.120 0.438 0.021 32.850 38.004
+Methods based on diffusion-generated data
+Diff Emp+Diff Emp0.2340.1461.607 0.18131.836 22.226
+Diff BS+Diff Emp0.232 0.145 1.597 0.179 31.804 21.881
+Diff OLSE+Diff Emp0.231 0.145 1.595 0.179 31.802 21.834
+Diff Emp+Diff LW0.207 0.142 1.452 0.156 32.409 21.410
+Diff BS+Diff LW0.205 0.142 1.445 0.155 32.442 21.176
+Diff OLSE+Diff LW0.205 0.142 1.444 0.155 32.456 21.144
+Methods based on both real observed data and diffusion-generated data
+Real Emp+Diff Emp0.203 0.141 1.153 0.15430.19420.049
+Diff Emp+Real Emp0.082 0.127 0.643 0.041 32.531 25.921
+Panel B: With Transaction Costs
+Methods based on real observed data
+EW0.100 0.206 0.486 -0.006 53.1283.031
+VW0.096 0.220 0.437 -0.025 58.086 3.464
+Real Emp+Real Emp-0.020 0.126 -0.160 -0.060 45.671 45.764
+Real BS+Real Emp-0.023 0.125 -0.186 -0.063 46.280 45.359
+Real OLSE+Real Emp-0.034 0.126 -0.267 -0.073 51.562 45.405
+Real Emp+Real LW-0.006 0.121 -0.051 -0.043 39.176 38.025
+Real BS+Real LW-0.0090.120-0.077 -0.046 39.598 37.706
+Real OLSE+Real LW-0.019 0.121 -0.160 -0.056 43.379 38.004
+Methods based on diffusion-generated data
+Diff Emp+Diff Emp0.1900.1471.292 0.13632.459 22.226
+Diff BS+Diff Emp0.188 0.146 1.285 0.134 32.532 21.881
+Diff OLSE+Diff Emp0.188 0.146 1.284 0.134 32.551 21.834
+Diff Emp+Diff LW0.164 0.144 1.143 0.113 33.410 21.410
+Diff BS+Diff LW0.163 0.143 1.138 0.112 33.435 21.176
+Diff OLSE+Diff LW0.163 0.143 1.138 0.112 33.448 21.144
+Methods based on both real observed data and diffusion-generated data
+Real Emp+Diff Emp0.163 0.142 1.153 0.11331.11120.049
+Diff Emp+Real Emp0.030 0.128 0.234 -0.011 35.536 25.921
+76
+Table E.3: Performance of different portfolios with and without transaction costs underℓ1-norm
+constraints.
+Method Mean Std SR CER MDD (%) TO
+Panel A: Without Transaction Costs
+Methods based on real observed data
+EW0.106 0.206 0.516 0.043 52.4373.031
+VW0.103 0.220 0.468 0.031 57.322 3.464
+Real Emp+Real Emp0.056 0.114 0.487 0.036 34.460 16.514
+Real BS+Real Emp0.051 0.114 0.446 0.031 34.637 16.410
+Real OLSE+Real Emp0.040 0.114 0.354 0.021 35.004 16.418
+Real Emp+Real LW0.057 0.114 0.501 0.038 34.369 16.250
+Real BS+Real LW0.0520.1130.456 0.032 34.534 15.968
+Real OLSE+Real LW0.042 0.114 0.370 0.023 34.863 15.952
+Methods based on diffusion-generated data
+Diff Emp+Diff Emp0.2390.1641.454 0.19928.627 21.141
+Diff BS+Diff Emp0.234 0.163 1.436 0.194 29.512 20.790
+Diff OLSE+Diff Emp0.234 0.163 1.434 0.194 29.663 20.731
+Diff Emp+Diff LW0.206 0.160 1.289 0.168 31.520 20.343
+Diff BS+Diff LW0.202 0.159 1.274 0.164 32.292 20.081
+Diff OLSE+Diff LW0.202 0.159 1.273 0.164 32.401 20.038
+Methods based on both real observed data and diffusion-generated data
+Real Emp+Diff Emp0.191 0.158 1.208 0.15428.41419.440
+Diff Emp+Real Emp0.066 0.115 0.574 0.046 34.225 18.574
+Panel B: With Transaction Costs
+Methods based on real observed data
+EW0.100 0.206 0.486 0.037 53.1283.031
+VW0.096 0.220 0.437 0.024 58.086 3.464
+Real Emp+Real Emp0.022 0.115 0.196 0.003 35.023 16.514
+Real BS+Real Emp0.018 0.114 0.156 -0.002 35.198 16.410
+Real OLSE+Real Emp0.008 0.115 0.066 -0.012 39.104 16.418
+Real Emp+Real LW0.025 0.114 0.215 0.005 34.926 16.250
+Real BS+Real LW0.0200.1130.174 0.000 35.089 15.968
+Real OLSE+Real LW0.010 0.114 0.090 -0.009 39.040 15.952
+Methods based on diffusion-generated data
+Diff Emp+Diff Emp0.1970.1651.190 0.15628.859 21.141
+Diff BS+Diff Emp0.193 0.164 1.175 0.152 29.749 20.790
+Diff OLSE+Diff Emp0.192 0.164 1.174 0.152 29.896 20.731
+Diff Emp+Diff LW0.165 0.160 1.029 0.126 31.709 20.343
+Diff BS+Diff LW0.162 0.160 1.016 0.124 32.464 20.081
+Diff OLSE+Diff LW0.162 0.160 1.015 0.124 32.570 20.038
+Methods based on both real observed data and diffusion-generated data
+Real Emp+Diff Emp0.152 0.159 0.959 0.11528.68019.440
+Diff Emp+Real Emp0.047 0.115 0.411 0.027 34.525 18.574
+77
+E.4 Robustness Analysis on Update Frequency
+As a robustness check on the model update frequency, we also evaluate an annual update scheme
+with a rolling five-year window. Specifically, on May 1 of each yearT, we reselect and pre-process
+the stocks, and update the model parameters using training data from May 1 of yearT−5to April
+30 of yearT. We test the model on data from May 1 of yearTto April 30 of yearT+ 1to evaluate
+out-of-sample performance.
+For mean-variance portfolios, we report out-of-sample portfolio performance under scenarios
+without and with transaction costs in Tables E.4 and E.5 forη= 3andη= 5, respectively.
+Additionally, we plot the cumulative returns with transaction cost (in log scale) forη= 3and
+η= 5in Figure E.4.Diff Emp+Diff Empoutperforms all alternatives, which is consistent with the
+result observed under quarterly updates.
+Figure E.4: Cumulative returns of different portfolios in log scale with transaction cost (model
+updated annually).
+(a)η= 3.
+ (b)η= 5.
+Moreover, for factor tangency portfolios, we report Sharpe ratios across varying number of
+factors in Table E.6 and plot the correlation heatmaps between top eight factors estimated using
+diffusion-based methods and traditional factors inFF Methodin Figure E.5. The diffusion-based
+methods exhibit higher Sharpe ratios and outperform all other approaches. The diffusion-generated
+factors are notably correlated with traditional factors, with Mkt-RF, LT-REV, and MOM as the
+three dominant factors across all three methods. Overall, the findings are similar to those under
+quarterly updates.
+78
+Table E.4: Performance of different portfolios with and without transaction costs forη= 3(model
+updated annually).
+Method Mean Std SR CER MDD (%) TO
+Panel A: Without Transaction Costs
+Methods based on real observed data
+EW0.102 0.221 0.462 0.029 58.1143.273
+VW0.098 0.218 0.448 0.026 61.400 3.717
+Real Emp+Real Emp0.087 0.142 0.611 0.057 34.651 38.120
+Real BS+Real Emp0.078 0.140 0.553 0.048 31.806 37.344
+Real OLSE+Real Emp0.090 0.144 0.625 0.059 35.069 38.112
+Real Emp+Real LW0.085 0.134 0.635 0.058 31.475 32.143
+Real BS+Real LW0.0760.1330.569 0.049 31.963 31.540
+Real OLSE+Real LW0.086 0.136 0.632 0.058 35.529 32.417
+Methods based on diffusion-generated data
+Diff Emp+Diff Emp0.1890.1920.983 0.13342.406 17.507
+Diff BS+Diff Emp0.185 0.190 0.972 0.131 42.021 17.203
+Diff OLSE+Diff Emp0.184 0.190 0.970 0.130 41.990 17.168
+Diff Emp+Diff LW0.155 0.169 0.917 0.112 38.046 16.332
+Diff BS+Diff LW0.152 0.168 0.906 0.110 37.908 16.115
+Diff OLSE+Diff LW0.152 0.168 0.904 0.110 37.897 16.090
+Methods based on both real observed data and diffusion-generated data
+Real Emp+Diff Emp0.124 0.148 0.840 0.09131.05716.752
+Diff Emp+Real Emp0.113 0.167 0.676 0.071 34.043 23.360
+Panel B: With Transaction Costs
+Methods based on real observed data
+EW0.096 0.221 0.433 0.022 58.8073.273
+VW0.090 0.218 0.414 0.019 62.127 3.717
+Real Emp+Real Emp0.011 0.144 0.073 -0.021 39.327 38.120
+Real BS+Real Emp0.003 0.142 0.022 -0.027 40.017 37.344
+Real OLSE+Real Emp0.012 0.146 0.082 -0.020 45.209 38.112
+Real Emp+Real LW0.021 0.136 0.153 -0.00732.21332.143
+Real BS+Real LW0.0130.1350.094 -0.015 33.666 31.540
+Real OLSE+Real LW0.021 0.138 0.152 -0.007 43.520 32.417
+Methods based on diffusion-generated data
+Diff Emp+Diff Emp0.1530.1920.797 0.09843.651 17.507
+Diff BS+Diff Emp0.150 0.191 0.788 0.096 43.267 17.203
+Diff OLSE+Diff Emp0.150 0.191 0.786 0.095 43.236 17.168
+Diff Emp+Diff LW0.122 0.170 0.720 0.079 38.127 16.332
+Diff BS+Diff LW0.120 0.168 0.711 0.077 37.974 16.115
+Diff OLSE+Diff LW0.119 0.168 0.709 0.077 37.962 16.090
+Methods based on both real observed data and diffusion-generated data
+Real Emp+Diff Emp0.090 0.148 0.608 0.057 34.729 16.752
+Diff Emp+Real Emp0.019 0.170 0.111 -0.024 36.913 23.360
+79
+Table E.5: Performance of different portfolios with and without transaction costs forη= 5(model
+updated annually).
+Method Mean Std SR CER MDD (%) TO
+Panel A: Without Transaction Costs
+Methods based on real observed data
+EW0.102 0.221 0.462 -0.020 58.1143.273
+VW0.098 0.218 0.448 -0.021 61.400 3.717
+Real Emp+Real Emp0.080 0.140 0.568 0.030 32.223 38.121
+Real BS+Real Emp0.074 0.140 0.525 0.024 32.181 37.243
+Real OLSE+Real Emp0.061 0.142 0.426 0.010 33.213 37.553
+Real Emp+Real LW0.0780.1330.584 0.033 31.312 32.143
+Real BS+Real LW0.0720.1330.542 0.028 32.301 31.452
+Real OLSE+Real LW0.058 0.135 0.430 0.013 33.637 31.901
+Methods based on diffusion-generated data
+Diff Emp+Diff Emp0.1550.1670.925 0.08545.760 17.647
+Diff BS+Diff Emp0.153 0.166 0.920 0.084 45.951 16.996
+Diff OLSE+Diff Emp0.152 0.166 0.918 0.084 45.937 16.970
+Diff Emp+Diff LW0.140 0.156 0.901 0.080 42.809 16.440
+Diff BS+Diff LW0.139 0.155 0.896 0.079 42.719 15.907
+Diff OLSE+Diff LW0.139 0.155 0.894 0.079 42.709 15.892
+Methods based on both real observed data and diffusion-generated data
+Real Emp+Diff Emp0.124 0.147 0.848 0.071 33.164 16.887
+Diff Emp+Real Emp0.084 0.149 0.566 0.02931.20518.639
+Panel B: With Transaction Costs
+Methods based on real observed data
+EW0.096 0.221 0.433 -0.026 58.8073.273
+VW0.090 0.218 0.414 -0.029 62.127 3.717
+Real Emp+Real Emp0.005 0.143 0.035 -0.046 39.696 38.121
+Real BS+Real Emp-0.001 0.142 -0.005 -0.051 40.889 37.243
+Real OLSE+Real Emp-0.014 0.144 -0.100 -0.066 41.295 37.553
+Real Emp+Real LW0.0140.1350.107 -0.03133.28732.143
+Real BS+Real LW0.0090.1350.068 -0.036 35.225 31.452
+Real OLSE+Real LW-0.006 0.136 -0.042 -0.052 40.965 31.901
+Methods based on diffusion-generated data
+Diff Emp+Diff Emp0.1280.1670.766 0.05847.549 17.647
+Diff BS+Diff Emp0.127 0.166 0.762 0.057 47.720 16.996
+Diff OLSE+Diff Emp0.126 0.166 0.760 0.057 47.704 16.970
+Diff Emp+Diff LW0.114 0.156 0.732 0.053 44.622 16.440
+Diff BS+Diff LW0.113 0.156 0.727 0.053 44.518 15.907
+Diff OLSE+Diff LW0.113 0.156 0.726 0.052 44.508 15.892
+Methods based on both real observed data and diffusion-generated data
+Real Emp+Diff Emp0.099 0.147 0.673 0.045 35.558 16.887
+Diff Emp+Real Emp0.043 0.149 0.288 -0.013 36.045 18.639
+80
+Table E.6: Out-of-sample Sharpe ratios of factor tangency portfolios (model updated annually).
+The number of factors is set to be3,5,6, and8, respectively.
+# FactorsDiff+PCA Diff+POET Diff+RPPCA FF PCA POET RPPCA
+31.805 1.8411.9850.648 0.402 0.872 0.631
+52.158 2.1782.3670.726 0.453 0.930 1.250
+62.322 2.3392.5500.861 0.528 1.356 1.701
+82.631 2.7392.8100.881 0.673 1.463 1.892
+Figure E.5: Correlation between the top 8 factors obtained using diffusion-based methods and those
+from theFF Method(model updated annually).
+(a)Diff+PCA Method
+ (b)Diff+POET Method
+ (c)Diff+RPPCA Method
+81

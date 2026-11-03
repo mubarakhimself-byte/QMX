@@ -1,0 +1,689 @@
+arXiv 2608.27734  https://arxiv.org/abs/2608.27734
+
+What survives honest evaluation? Leakage-safe, search-aware
+assessment of LLM-driven trading strategy discovery
+Eray Gençaya
+aIndependent Researcher, Stuttgart, Germany
+ARTICLE INFO
+Keywords:
+large language models
+algorithmic trading
+backtest overfitting
+deflated Sharpe ratio
+data leakage
+agent evaluation
+ABSTRACT
+Large language models (LLMs) are increasingly used to discover trading strategies, and much
+of the resulting literature shares a methodological weakness: many candidate strategies are
+generated,thebestisreported,andneitherlook-aheadbiasnortheintensityofthesearchbehind
+the reported result is corrected for. We present a strategy-discovery system that makes both
+corrections structural rather than procedural. First, the agent can only act through registry-
+validated tools whose feature space excludes look-ahead by construction; we show that this
+guardrailisnotredundantwithstatisticalcorrection:adeliberatelyleakyoraclepostingaSharpe
+ratio of 35survivesDeflated Sharpe and probability-of-backtest-overfitting testing completely.
+Second,thesystemrecordseverystrategyevaluationitssearchperformsanddeflatesallreported
+performance by that trial count, tracing how the best in-sample Sharpe ratio climbs with each
+trial while the deflation threshold, driven by the agent’s own search, climbs faster. Across a
+453-stock point-in-time US equity universe and a 39-ETF multi-asset universe with realistic
+transaction, impact, and borrow costs, honest evaluation certifies passive benchmarks (out-of-
+sampleconfidenceintervalsexcludingzero),rejectseveryLLM-discoveredstrategy(acrosstwo
+frontier models, search budgets up to one hundred candidates, and five repeated runs), catching
+selection luck, predicted rank degradation, and out-of-sample collapse through complementary
+instruments,andevaluatesahumantrader’sproductionrulesystemunderidenticalinstruments.
+The framework formalizes why pre-registered hypotheses earn lower evidential bars than brute
+search, and quantifies the sample sizes that credible certification of moderate edges actually
+requires.
+1. Introduction
+Largelanguagemodelsarenowroutinelyembeddedinsystemsthatgeneratetradingstrategies:asalphaminers,as
+trading agents with memory and tool use, and as interactive co-pilots for quantitative research (Yang, Liu and Wang,
+2023;Yu,Li,Chen,Jiang,Li,Zhang,Liu,SuchowandKhashanah,2023b;Zhang,Zhao,Xia,Sun,Sun,Qin,Li,Zhao,
+Zhao,Cai,Zheng,WangandAn,2024;Wang,Yuan,Zhou,Ni,ShumandGuo,2023;Wang,Yuan,NiandGuo,2024;
+Yu,Xue,Ao,Chen,Heetal.,2023a).Thisliteraturehasgrownquickly,andithasinheritedamethodologicalweakness
+that the empirical-finance community diagnosed years before LLMs arrived: when a search process generates many
+candidate strategies and the best backtest is reported, the reported performance is inflated by selection, and small
+violations of point-in-time discipline inflate it further (Bailey, Borwein, Lopez de Prado and Zhu, 2014; Bailey and
+López de Prado, 2014; Harvey, Liu and Zhu, 2016; Harvey and Liu, 2015; Arnott, Harvey and Markowitz, 2019;
+Lopez de Prado, 2018). The instruments to correct both pathologies exist (the Deflated Sharpe Ratio, the probability
+of backtest overfitting, strict point-in-time data protocols), but they are rarely applied in the LLM strategy-discovery
+literature, a gap that independent audits have since documented (Yao and Zheng, 2026; Li, Kim, Cucuringu and Ma,
+2025). The result is a growing collection of reported Sharpe ratios that a skeptical practitioner cannot readily act on.
+An autonomous agent makes this problem worse in a specific, quantifiable way:autonomy inflates the trial count.
+AnLLMagentthatproposes,evaluates,andrefinesstrategiesinaloopperformsdozensofimplicitbacktestsbeforeits
+operatorseesasinglenumber.Ifthereportedresultisnotdeflatedbythatsearchintensity,theagent’sveryproductivity
+becomes a bias amplifier. Conversely, prompting an LLM to “avoid look-ahead bias” is a weak guardrail: a text
+instruction does not prevent a generated strategy from consuming future information if the execution environment
+exposes it.
+eray.gencay@gmail.com(E. Gençay)
+ORCID(s):0000-0002-1510-5628(E. Gençay)
+Gençay:Preprint submitted to ElsevierPage 1 of 15
+arXiv:2608.27734v1  [q-fin.ST]  27 Aug 2026
+What survives honest evaluation?
+Thispaper’spositionisthatbothcorrectionsmustbestructural,propertiesofthesystemthatholdbyconstruction,
+ratherthanproceduralconventionsthatauthorspromisetohavefollowed.Wepresentastrategy-discoverysystembuilt
+around two such structures and an experimental protocol that tests what remains of LLM-discovered alpha once they
+areinplace.Wereporttheresultssymmetrically:whattheevaluationrejectsandwhatitcertifies.Onthemostheavily
+arbitragedcornerofworldmarkets,noactivestrategyinoursuitesurvives,whilethesameinstrumentscertifypassive
+riskpremia,exposeaplantedlook-aheadoracleasuncatchablebydeflationalone,predictanoverfitdiscoverybeforeit
+fails out-of-sample, and give a human trader’s production system the same hearing as the LLM’s proposals. Although
+theinstrumentscomefromempiricalfinance,theunderlyingselectionproblemisnotspecifictoit:anyagenticsystem
+that searches asolution space and self-reportsits best result faces thesame inflation. The design patterndemonstrated
+here,avalidatedactionsurfaceplusacompleteself-recordedsearchledger,isofferedasanevaluationarchitecturefor
+autonomous discovery; trading is the case study in which the corrective instruments already exist.
+Our contributions are:
+1.A leakage-safe discovery architecture.The agent composes strategies exclusively through registry-validated
+tools: every feature, signal-graph node, and portfolio archetype it can reference is checked in-loop, parameters
+are validated against typed schemas, and the feature registry excludes look-ahead constructions from the agent-
+selectable set. Look-ahead is not discouraged; it isinexpressible. A deterministic audit layer independently
+enforces publication delays for external event data. The architecture includes a stateful rule-based archetype
+that can express discrete human trading systems (entry/exit rules with position state), which we use to port a
+production strategy rule-for-rule.
+2.Search-aware honest evaluation.The system records every distinct strategy evaluation its search performs
+in a trial ledger and computes, for every reported arm: the Deflated Sharpe Ratio against the search’s own
+trial count and Sharpe dispersion (Bailey and López de Prado, 2014), the probability of backtest overfitting
+via combinatorially symmetric cross-validation (Bailey et al., 2014), stationary-bootstrap confidence intervals
+(Politis and Romano, 1994), and paired tests against buy-and-hold. Anevaporation curvetraces the best in-
+sample Sharpe ratio against its rising deflation threshold as the agent’s trial count grows.
+3.A six-experiment protocol on real data.E1–E6b each answer a named methodological objection, on a 453-
+stock point-in-time US equity universe and a 39-ETF multi-asset universe, with realistic costs (commissions,
+spreads, square-root market impact, short borrow) and held-out evaluation windows of four and nine years.
+4.Findings with practical import.(i) Deflation does not catch leakage: a planted oracle with a Sharpe ratio of
+35 passes every statistical test, so the two guardrails are complementary, not substitutes. (ii) Honest evaluation
+certifies passive premia while rejecting every discovered strategy, across universes, cost levels, two frontier
+LLMs, and search budgets up to one hundred candidates; three distinct failure modes (selection luck; predicted
+rankdegradation;out-of-samplecollapse)areeachcaughtbytheinstrumentbuiltforthem.(iii)Theframework
+formalizes why a pre-registered hypothesis faces almost no deflation while a broad search faces a high bar,
+andthestatistical-powerarithmeticquantifieswhycertifyingmoderatelow-frequencyedgesrequiresdecadesof
+out-of-sample data or substantial breadth.
+The remainder of the paper is organized as follows. Section 2 positions the work between the LLM-agent finance
+literatureandthebacktest-overfittingliterature.Section3describesthediscoveryarchitecture.Section4describesthe
+evaluation methodology. Section 5 specifies the experimental protocol, and Section 6 reports the results. Section 7
+discusses implications, Section 8 states limitations, and Section 9 concludes.
+2. Related work
+LLMs and agents for trading.A rapidly growing body of work applies LLMs to strategy generation and trading.
+FinGPT provides open financial LLM infrastructure (Yang et al., 2023); FinMem and FinAgent build trading agents
+with layered memory, multimodal inputs, and tool augmentation (Yu et al., 2023b; Zhang et al., 2024); Alpha-
+GPT and QuantAgent frame alpha mining as human–AI interaction or self-improving search (Wang et al., 2023,
+2024); AlphaGen searches formulaic alpha collections with reinforcement learning (Yu et al., 2023a). These systems
+demonstrateimpressivegenerationcapability,andtheytypicallyevaluatediscoveredstrategiesbyreportingbacktested
+performance, in some cases with out-of-sample splits, but, to our knowledge, never with multiple-testing correction
+indexed to the search’s own trial count, and never with a demonstration that their execution environments make look-
+ahead impossible rather than merely discouraged. Earlier work on machine learning for asset pricing established both
+Gençay:Preprint submitted to ElsevierPage 2 of 15
+What survives honest evaluation?
+thepromiseandthefragilityofdata-drivensignals(Gu,KellyandXiu,2020;Heaton,PolsonandWitte,2017;Fischer
+and Krauss, 2018; Kelly, Pruitt and Su, 2019; Dixon, Halperin and Bilokon, 2020), and text-based signals have a long
+pre-LLM history (Tetlock, 2007; Tetlock, Saar-Tsechansky and Macskassy, 2008; Loughran and McDonald, 2011;
+Engelberg and Parsons, 2011; Bollen, Mao and Zeng, 2011; Ranco, Aleksovski, Caldarelli, Grčar and Mozetič, 2015;
+Nassirtoussi et al., 2014; Luss and d’Aspremont, 2015; Yang et al., 2020; Wu et al., 2023).
+Backtest overfitting and multiple testing.A parallel literature, largely disjoint from the above, quantifies how
+search inflates backtests. Bailey et al. (2014) define the probability of backtest overfitting (PBO) and estimate it by
+combinatorially symmetric cross-validation (CSCV); Bailey and López de Prado (2014) derive the Deflated Sharpe
+Ratio (DSR), which tests an observed Sharpe ratio against a threshold that rises with the number of trials and their
+dispersion;Harveyetal.(2016)andHarveyandLiu(2015)arguethatmostclaimedfactorsfailappropriatelydeflated
+hurdles; Arnott et al. (2019) codify a backtesting protocol; Lopez de Prado (2018) treats leakage, embargoing, and
+deflationasfirst-classconcerns.ThisliteraturesuppliesexactlytheinstrumentstheLLMliteraturelacks,butitpredates
+agents, and it has no notion of a system thatrecords its own searchso that deflation can be indexed to it.
+Tool-augmented agents.Tool use is usually motivated by capability: letting models call calculators, retrievers, or
+APIs(Schick,Dwivedi-Yu,Dessì,Raileanu,Lomeli,Zettlemoyer,CanceddaandScialom,2023;Yaoetal.,2023;Wei,
+Wang,Schuurmans,Bosma,Ichter,Xia,Chi,LeandZhou,2022).Multi-agentdecompositionsassignspecializedroles
+(Parketal.,2023;Li,Hammoud,Itani,KhizbullinandGhanem,2023;Hong,Zhuge,Chen,Zheng,Cheng,Wang,Liu,
+WangandJiang, 2023;Wooldridge,2009).We usethesamemachinery foradifferentend:avalidatedtoolsurfaceas
+a safety boundary. The agent’s action space is the registry of typed, audited operations; anything outside it, including
+any look-ahead feature, is not a possible action. Interpretability requirements in high-stakes settings (Rudin, 2019;
+Lo, 2010) favor the same design, since every discovered strategy is a declarative, human-readable plan rather than
+generated code.
+Independent audits and re-evaluations.Two contemporaneous works document the same gap from outside our
+harness. Yao and Zheng (2026) audit execution assumptions across thirty trade-relevant LLM studies and conclude
+thatsystemarchitectureisreportedmoreconsistentlythantheevaluationassumptionsareaderneedsinordertojudge
+whether a result is interpretable; they ship a reporting checklist, but they do not re-evaluate the systems they audit.
+Li et al. (2025) re-evaluate published LLM timing strategies over two decades and more than a hundred symbols and
+find that the reported advantages deteriorate substantially under the broader cross-section and longer horizon, naming
+survivorship, look-ahead, and data-snooping bias explicitly. Their remedy is to broaden the evaluation until inflated
+advantageswashout;oursistomakethesearchintensityitselfthedeflator,soaresultisjudgedagainstthenumberof
+trialsthatproducedit.Neitherworkmakesleakage-safetyapropertyoftheactionspace,andneitherdeflatesareported
+number by a recorded trial count, but both are independent evidence that the pattern this paper corrects for is real.
+Gap.We are not aware of prior work that connects these literatures: an LLM discovery system whose leakage-
+safety is structural, whose search intensity is recorded by construction, and whose every reported number carries
+thecorrespondingdeflatedverdict.Theauditsabovemeasurethegapfromtheoutside;thispaperaddressesitinsidea
+discovery system.
+3. A discovery system that is honest by construction
+3.1. Strategies as declarative plans
+Astrategyinoursystemisaplan:alistoftypedfeaturespecifications(e.g.,momentum(window=252)),anoptional
+signalgraphofnamednodes(transformsoverfeaturesorearliernodes:arithmetic,comparisons,rollingstatistics,lags
+withnon-negativeshiftonly),aweightedsignalcombination,andaportfolioarchetypethatturnsthesignalintotarget
+weights.Fivearchetypesareregistered:alineartilt;across-sectionalranklong/short(top-𝑘/bottom-𝑘,equal-weighted,
+with a re-ranking cadence); a volatility-targeting overlay that scales a base archetype’s weights to a trailing realized-
+volatilitytarget;adeterministicrandom-weightsnull;andastatefulruleengine(Section3.4).Plansaredeclarativeand
+human-readable; every experiment in this paper, including the port of a human trader’s production system, is a JSON
+configuration interpretable at the feature level. This satisfies the interpretability desideratum directly (Rudin, 2019):
+there is no generated code to audit, only named features and named rules.
+Gençay:Preprint submitted to ElsevierPage 3 of 15
+What survives honest evaluation?
+LLM agent
+(gpt-4.1)
+Registry tool surface
+add_feature·add_node
+·add_signal_term
+select_strategy·set_combo·finalize
+Validated plan
+features + signal graph
++ archetype
+Deterministic audit
+event publication delay
+Deterministic engine
+PIT universe·realistic costs
+design window (selection)
+·eval window (held out)
+Trial ledger
+every evaluation
+the search performs
+Honest verdicts
+DSR·PBO·bootstrap
+CI·paired vs. B&H
+evaporation curve
+tool calls
+validation
+errors
+records
+Figure 1:System overview. The agent acts only through registry-validated tools; invalid calls return structured errors for
+in-loop self-correction, and look-ahead features are not in the agent-selectable registry. Validated plans pass a deterministic
+audit and are executed by a deterministic engine over a point-in-time universe with realistic costs, backtesting separately on
+the design window (where all selection happens) and the held-out evaluation window. Every evaluation the search performs
+is recorded in the trial ledger, which drives the deflated verdicts attached to every reported number.
+3.2. The tool surface as a safety boundary
+The agent never writes code and never emits free-form strategy descriptions that are later parsed on trust. It
+composes a plan by calling tools generated from the same registries that define the system (Fig. 1):add_feature,
+add_node,add_signal_term,select_strategy,set_combo,finalize. Each call is validated immediately
+against parameter schemas, reference resolution, archetype names, and portfolio-knob allow-lists; a signal term may
+only consume features or nodes that exist. An invalid call returns a structured error that the model corrects in-loop.
+Three properties follow.
+First,look-ahead is inexpressible. The feature registry contains a deliberately leaky family (used in experiment
+E1), but it is excluded from the agent-selectable set; the tool schema’s enumeration, the catalog shown to the model,
+and the server-side validation all derive from the same registry flag. Second,parameter hallucination is eliminated
+rather than punished. In a matched 60-iteration run of a JSON-emitting critic without in-loop validation, 60 of 60
+proposals were rejected for invalid feature names or parameters; through the tool loop, 99 of 100 (gpt-4.1) and 80 of
+100 (claude-sonnet-5) proposals in the hundred-candidate searches of Section 6.3 were valid, because each feature’s
+exact parameters are advertised in the tool catalog and validated per call; every invalid construction (duplicate feature
+roles, empty plans) was rejected by validation rather than evaluated. Third,the search becomes observable: every
+candidate the agent composes flows through the same evaluation entry point, which is what makes the trial ledger of
+Section 4 complete by construction rather than by author diligence.
+A deterministic audit layer independently checks event-timing declarations (external signals must respect a
+publicationdelay),andrejectsplansratherthanrepairingthem.Executionishandledbyadeterministicengine:signals
+computed at day𝑡use bars up to and including𝑡and are held from𝑡+1(the engine applies the one-day execution lag
+globally); costs include commissions, spreads, square-root market impact against trailing dollar volume, and short-
+borrow financing; the tradeable universe is re-selected point-in-time from trailing liquidity, so universe membership
+embeds no future information.
+Relation to structured generation.Registry-validated tool composition is complementary to, not in competition
+with,grammar-andschema-constraineddecoding(WillardandLouf,2023;Geng,Josifoski,PeyrardandWest,2023)
+or typed function calling. Those techniques enforcesyntacticvalidity, meaning the output parses and the types check,
+andthetoolsurfaceherealreadyinheritsthatlayer,sinceeachtoolisatypedcallwhoseenumerationsderivefromthe
+registries. What token-level constraints cannot enforce is validity that depends on system state and accumulated plan
+context: whether a feature is registeredandflagged leakage-safe, whether a reference resolves to a node the agent has
+actuallyadded,whetheraparametersatisfiesitsregisteredrange.Thosechecksliveserver-side,inthesamevalidation
+paththathuman-authoredconfigurationstraverse,andtheirstructurederrorreturnsarewhatletthemodelrepairinvalid
+calls in-loop. The load-bearing property is not the shape of the model’s output but that validity is defined once, by the
+system’s registries, and enforced at the single entry point that also makes the trial ledger complete.
+Gençay:Preprint submitted to ElsevierPage 4 of 15
+What survives honest evaluation?
+3.3. Autonomous discovery
+Discovery runs as a bounded, design-only refinement loop. In each iteration the LLM composes a complete fresh
+strategythroughthetoolloopunderarotatingeconomichypothesishint(momentum,reversal,lowvolatility,volatility
+breakout, volume, oscillator mean-reversion, trend filters, and combinations); each candidate is audited, evaluated on
+the design window only, and recorded. The evaluation window is never visible to the search. The manifest records
+the model identity (gpt-4.1for the primary experiments, with a cross-model replication onclaude-sonnet-5; see
+Section 6.3), the full per-iteration trace, and the resulting trial ledger.
+3.4. A rule archetype for human systems
+Humantradersrarelyholdcontinuoussignal-proportionalpositions;theyenterwhenarulefires,holdwithposition
+state, and exit on a different rule. A stateless weight map cannot express this hysteresis. Therule_long_short
+archetype reads four named condition nodes from the plan’s signal graph (long_entry,long_exit,short_entry,
+short_exit) and walks dates carrying per-symbol position state: a flat book enters when an entry condition fires
+(blocked if the same side’s exit fires on the same bar, matching common trading-platform semantics), and holds
+until the exit condition fires; a decision cadence parameter lets a weekly-chart system run on daily bars at its native
+rhythm. Unknown (warm-up) conditions never trigger actions. This archetype is exercised in experiment E6b, where
+a production PineScript system, a stateful trend-following rule engine with candle-pattern filters, is expressed as an
+84-node signal graph and cross-validated, bar for bar, against a reference implementation of the original script.
+4. Search-aware honest evaluation
+Everyreportednumberinthispapercarriesadeflatedverdict.Thissectiondefinestheinstruments;allarecomputed
+per run and persisted in the run’s manifest.
+4.1. Deflated Sharpe Ratio indexed to the recorded search
+Let ̂𝑆𝑅be the per-observation Sharpe ratio of a strategy’sdesign-windowreturns over𝑇observations with
+skewness𝛾3 and kurtosis𝛾4. The Probabilistic Sharpe Ratio against a benchmark𝑆𝑅∗ is
+PSR(𝑆𝑅∗) = Φ
+⎛
+⎜
+⎜
+⎜
+⎜⎝
+(̂𝑆𝑅−𝑆𝑅 ∗)√𝑇−1√
+1−𝛾 3̂𝑆𝑅+ 𝛾4−14 ̂𝑆𝑅2
+⎞
+⎟
+⎟
+⎟
+⎟⎠
+,(1)
+and the Deflated Sharpe Ratio isDSR=PSR(𝑆𝑅∗0)with the selection-aware threshold
+𝑆𝑅∗0 = √𝑉 [(1−𝛾)Φ −1(1− 1𝑁)+𝛾Φ −1(1− 1𝑁𝑒)],(2)
+where𝑁is the number of trials,𝑉the variance of the trials’ Sharpe ratios, and𝛾the Euler–Mascheroni constant
+(Bailey and López de Prado, 2014). The crucial design decision is what𝑁and𝑉are: in this system they come
+from atrial ledgerthat records every distinct strategy evaluation the search performed, meaning every refinement
+iteration that produced a design-window backtest and every experimental arm, rather than from an author’s estimate.
+Because all agent-composed candidates flow through one evaluation entry point (Section 3.2), the ledger is complete
+byconstruction.Deliberatelyplanteddemonstrationarms(theE1oracle)areexcludedsothattheirpathologicalSharpe
+ratios cannot distort the deflation of honest arms.
+4.2. Probability of backtest overfitting
+PBO is estimated by CSCV (Bailey et al., 2014): the design window is partitioned into𝑆=16blocks; for each of
+the ( 𝑆𝑆∕2) in-sample/out-of-sample block combinations, the in-sample-best candidate’s out-of-sample rank𝜔yields a
+logit𝜆=ln 𝜔1−𝜔, andPBO=𝑃(𝜆≤0), the probability that the search’s in-sample winner underperforms the mediancandidate out of sample. The candidate matrix contains the design-window return series of every ledger entry, so the
+column count equals the trial count by an enforced invariant.
+Gençay:Preprint submitted to ElsevierPage 5 of 15
+What survives honest evaluation?
+Table 1
+The objection-to-experiment map. Each experiment answers a methodological objection a skeptical reviewer or practitioner
+would raise.
+Exp. Objection answered
+E1 “Leakage-safe is asserted, not shown. And doesn’t deflation catch leakage
+anyway?”
+E2 “Does anything simple survive honest evaluation on this universe? What does
+an honest factor search show?”
+E3 “What happens when the LLM itself discovers strategies, and its own search
+is the deflator?”
+E4 “Is the conclusion an artifact of cost assumptions, universe breadth, or one
+LLM sample?”
+E5 “Is this just an expensive proof of the random walk? Can the referee ever
+say yes?”
+E6/E6b “How does a human trader’s pre-registered production system fare under
+identical instruments?”
+4.3. Out-of-sample inference
+Ontheheld-outevaluationwindowwereportstationary-bootstrapconfidenceintervals(PolitisandRomano,1994)
+for annualized Sharpe ratio and total return, and a paired block-bootstrap test of daily return differences against buy-
+and-hold. Design-window instruments (DSR, PBO) measure selection; evaluation-window instruments measure what
+survivedit.Astrategyiscertifiedinourterminologywhenitsevaluation-windowSharpeconfidenceintervalexcludes
+zero.
+4.4. The evaporation curve
+For𝑘= 1,…,𝑁over the ledger in evaluation order, take the best-of-first-𝑘candidates by design Sharpe ratio
+and deflate it by𝑘trials and the dispersion of those𝑘Sharpe ratios (Eq. 2). The resulting curve shows the raw best
+Sharpe ratio (a running maximum, non-decreasing) against its deflation threshold (increasing in𝑘and dispersion).
+Where the threshold overtakes the best, the search’s own intensity has outrun its discoveries: the marginal trial costs
+more evidence than it finds. This makes the multiple-testing accountingvisiblein a single figure (Fig. 4).
+4.5. Pre-registration semantics
+Equation 2 has an important corollary: at𝑁=1the threshold collapses to the benchmark and DSR equals PSR,
+so a single pre-registered hypothesis faces almost no deflation. The framework thereforerewardshypothesis-driven
+design over brute search, formalizing why a single pre-specified economic thesis tested against decades of evidence
+earns a lower evidential bar than a machine that tried a thousand variants, unless the machine pays for the thousand.
+A human hypothesis enters the protocol as a pre-registered arm (E6/E6b) and the ledger grows honestly with each
+specified variant.
+5. Experimental design
+The suite is organized so that each experiment answers a specific methodological objection (Table 1).
+Data and universes.E1–E4 run on daily OHLCV bars for 453 liquid US large-capitalization stocks plus the SPY
+benchmark(Tiingo,2015–2026).Thetradeablesetisre-selectedpoint-in-timeasthetop200namesbytrailing63-day
+dollar volume, re-evaluated every 21 trading days, which removes universe-selection look-ahead. The constituent list
+isa fixedcurrent list; theresulting survivorshipbiasis disclosedand boundedinSection 8(it flattersactivestrategies,
+makingournullconservative),andthepaneldoesincludeeightnamesthatdelistmid-sample.E5–E6brunon39multi-
+asset ETFs (country and sector equity, Treasuries and credit, gold and commodities, currencies, bitcoin; 2005–2026),
+wheredocumented cross-assetpremia reside(Moskowitz,Ooi andPedersen, 2012;Asness,Moskowitz andPedersen,
+2013; Jegadeesh and Titman, 1993).
+Gençay:Preprint submitted to ElsevierPage 6 of 15
+What survives honest evaluation?
+Table 2
+E1 (453-stock universe, PIT top-200; design 2017–2021, eval 2022–2025). The look-ahead oracle survives statistical
+deflation completely; only the structural guardrail removes it. The oracle is excluded from the trial ledger so its Sharpe
+cannot distort other arms’ deflation.
+Arm Design SR Eval SR DSR
+Look-ahead oracle (unsafe) 34.7 51.51.00
+Buy-and-hold (equal-weight) 1.15 0.60 0.99
+SPY buy-and-hold 0.98 0.67 0.97
+Random floor 0.06−0.09 0.46
+Momentum L/S (safe)−0.07 0.01 0.35
+Windows and power.E1–E4 use design 2017–2021 and held-out evaluation 2022–2025. E5–E6b use design 2007–
+2016andevaluation2017–2025:thenine-yearwindowisadeliberatepowerchoice,sincea𝑡-statisticonaSharperatio
+grows as𝑆𝑅√years, so nine years suffices to certify𝑆𝑅≈0.7at conventional levels while four years cannot certify
+moderate edges at all, a fact the results repeatedly illustrate.
+Costs.Allexperimentscharge1bpcommission,2bpspread,square-rootmarketimpactagainsttrailing21-daydollar
+volume, and 50bp annualized borrow on short notional. E4 stress-tests these at×0.5and×2.
+Model and reproducibility.Agent runs use OpenAIgpt-4.1, with a cross-model replication on Anthropic
+claude-sonnet-5, through a provider-agnostic interface; the manifest records provider, model, code revision,
+package versions, data content hashes, the full refinement trace, and the statistics block. Every experiment is a JSON
+configuration; the deterministic experiments (E1, E2, E4 cost/universe variants, E5 reference arms, E6, E6b) involve
+no LLM calls and reproduce exactly.
+6. Results
+6.1. E1: deflation does not catch leakage
+A deliberately leaky feature (tomorrow’s return, available today) is registered in the system but excluded from the
+agent-selectable set; E1 plants it in a literal configuration arm, something the agent path cannot do, next to a leakage-
+safe momentum arm, a random-weights null, and passive benchmarks. The oracle is a proof by counterexample: an
+intentionally extreme contamination that bounds what any statistics-only defense can catch, not a model of the subtler
+alignment errors that produce leakage in practice.
+Table2showsthecentralnegativeresultforstatistics-onlydefenses:theoraclepostsadesignSharperatioof34.7,
+anevaluationSharpeof51.5,andaDSRof1.00.Deflationcorrectsforselectionamonghonestlycomputedbacktests;
+it has no mechanism against a strategy whose information set is contaminated, and the contamination survives out
+of sample by construction. Leakage-safety and search-deflation are therefore complementary guardrails rather than
+substitutes, and a framework relying on deflation alone leaves this failure mode uncovered. The magnitude of the
+oracle’sSharpealsocalibrateswhatleakagebuys:areviewerseeingatwo-digitSharpeshouldsuspecttheinformation
+set, not the alpha.
+6.2. E2: the baseline landscape
+E2 runs classic price factors (126-day momentum, low-volatility, short-term reversal, all as market-neutral rank
+long/short books) against the random null and passive benchmarks, with a small hyperparameter grid refined on the
+design window (trial ledger𝑁=9).
+No factor comes near significance (Table 3, Fig. 2): every active arm sits at DSR≤0.32, the CSCV estimate flags
+the hyperparameter search itself as likely overfit (PBO= 0.83; Fig. 3), and only the passive arms approach the 0.95
+level, where equal-weight buy-and-hold clears it (0.97) and SPY sits just below (0.94). On one of the most heavily
+arbitraged corners of world markets, with realistic costs and market-neutral construction that deliberately forfeits the
+equity risk premium, this is the baseline against which the discovery claims that follow should be read.
+Gençay:Preprint submitted to ElsevierPage 7 of 15
+What survives honest evaluation?
+Table 3
+E2 baseline landscape (same universe/windows as E1). No classic factor survives deflation; the search itself is flagged as
+overfit (PBO=0.83).
+Arm Design SR Eval SR DSR
+Buy-and-hold (equal-weight) 1.15 0.600.97
+SPY buy-and-hold 0.98 0.67 0.94
+Random floor 0.06−0.09 0.32
+Short-term reversal L/S−0.04−0.20 0.25
+Momentum L/S−0.07 0.01 0.22
+Low-volatility L/S−0.58−0.78 0.03
+Figure 2:E2: Probabilistic (grey) vs. Deflated (blue) Sharpe per arm. The gap between the bars is the price of the search;
+only equal-weight buy-and-hold clears the 0.95 significance level (SPY sits just below at 0.94), and every active arm is far
+away.
+Table 4
+E3 autonomous discovery (gpt-4.1,𝑁=102trials, PBO=0.01). The agent’s best find beats buy-and-hold in sample, then
+fails certification against its own trial count and collapses out of sample.
+Arm Design SR Eval SR Eval ret. DSR
+Agent (RSI×volume)1.690.18+4.7%0.86
+Buy-and-hold 1.15 0.60+40.8%0.45
+SPY buy-and-hold 0.98 0.67+51.5%0.31
+Momentum reference−0.07 0.01−1.6%0.00
+Random floor 0.06−0.09−1.0%0.01
+6.3. E3: autonomous discovery, deflated by its own search
+E3 is the headline protocol. The agent composes one hundred complete strategies through the tool loop under
+a rotating set of twenty economic hypothesis hints (Section 3.3); 99 of 100 candidates are valid, interpretable plans
+(versus0of60foraJSON-emittingcriticwithoutin-loopvalidation),spanning22distinctfeaturecombinations(unique
+setsoffeaturenamesamongtheevaluatedcandidates;parametervaluesandsignalwiringmaydifferwithinaset).The
+ledger reaches𝑁=102.
+The result is deliberately uncomfortable (Table 4). The agent’s best discovery, an interpretable contrarian book
+overRSIandavolumez-score,re-rankedmonthly,postsadesignSharpeof1.69,betterinsamplethanbuy-and-hold.
+It is the kind of number a paper could lead with. Honest evaluation withholds certification: after the agent’s own 102
+recorded trials, the deflation threshold reaches 1.21 and the DSR stops at 0.86, short of the 0.95 level (Fig. 4), and the
+Gençay:Preprint submitted to ElsevierPage 8 of 15
+What survives honest evaluation?
+Figure 3:E2: CSCV logit distribution. The mass at𝜆≤0is the probability that the in-sample-best candidate underperforms
+the median out of sample (PBO=0.83).
+Figure 4:E3: the evaporation curve over 102 self-recorded trials. The agent’s best in-sample Sharpe (solid) is a running
+maximum, climbing from−0.07to1.69; the deflation threshold implied by the agent’s own trial count and Sharpe dispersion
+(dashed) chases it to1.21. The search partially outruns its bar (DSR ends at0.86) yet remains below the0.95certification
+level, and the held-out window (Table 4) vindicates the caution.
+held-out window vindicates the caution, with the discovery collapsing to an evaluation Sharpe of 0.18 (+4.7%over
+fouryears,CI[−0.80,+1.14])whilebuy-and-holdreturned+40.8%.Notably,PBOislowhere(0.01):thewinnerkeeps
+itsrankamong the mostly losing candidates out of sample while losing its absolute edge, so the failure is caught by
+theheld-outinterval,nottherankstatistic(Section7).Twopresentationnotes:thebenchmarkarmswerenotsearched,
+so their deflation by this search’s wide dispersion is conservative (as pre-registered references their𝑁=1verdicts are
+their PSRs, 0.99 and 0.98; Section 4), and a grid-refined single-proposal variant of the protocol (𝑁=21, PBO=0.11)
+reachesthesameverdictfromtheotherside:itsdiscoverylostinbothwindows(design−0.80,evaluation−0.75,DSR
+=0.001).
+Cross-modelreplication.Theidenticalprotocolonasecondvendor’sfrontiermodel,Anthropic’sclaude-sonnet-5,
+reaches the sameverdict through different searchbehavior: 80 of 100 proposalsvalid (all twenty rejections areinvalid
+constructions, sixteen duplicate feature roles and four empty plans, caught by validation and never evaluated), 39
+Gençay:Preprint submitted to ElsevierPage 9 of 15
+What survives honest evaluation?
+Table 5
+E4 robustness. Top: deterministic variants of E2, reporting each variant’s strongest factor. Bottom: five independent
+repetitions of the E3 discovery protocol.
+Variant Best factor (DSR) B&H DSR
+Costs×0.5reversal (0.46) 0.96
+Costs×2momentum (0.14) 0.96
+Universe top-100 momentum (0.62) 0.73
+Universe top-300 reversal (0.25) 0.98
+Multi-seed discovery (5 independent gpt-4.1 runs,𝑁=18each):
+5/5 valid; all converge on the volatility-breakout family;
+eval SR0.59–0.70(+26–33%); DSR0.15–0.29;0/5 survive.
+Table 6
+E5 fair field (39 multi-asset ETFs; design 2007–2016, eval 2017–2025; ledger𝑁=20, PBO=0.80). “Certified” = evaluation-
+window Sharpe CI excludes zero.
+Arm Des. SR Eval SR Eval ret. Eval 95% CI
+SPY buy-and-hold 0.42 0.85+249% [+0.24,+1.53]
+B&H (39 ETFs) 0.33 0.71+108% [+0.07,+1.46]
+TSM long/flat 0.42 0.49+55% [−0.13,+1.24]
+XS momentum L/S 0.24 0.20+12% [−0.39,+0.82]
+Divergence (pre-reg.) 0.34−0.15−13% [−0.73,+0.56]
+Random floor−0.57 0.55+23% [−0.06,+1.18]
+Agent discovery 0.37−0.23−21% [−0.82,+0.33]
+distinct feature combinations explored (a more diverse search than gpt-4.1’s 22), best find a price-to-moving-average
+spread with design Sharpe 0.44 that degrades out of sample to−0.33(−29%), DSR= 0.18, PBO= 0.51. Neither
+vendor’s hundred-candidate search produces a certifiable strategy; each manifest records the provider, model, and
+complete search trace.
+6.4. E4: robustness of the null
+The null survives every assumption change we tested (Table 5). Halving or doubling all cost components leaves
+every factor far from significance (best DSR0.46) while the passive benchmark’s verdict is essentially unchanged
+(DSR≈ 0.96). Narrowing the point-in-time universe to the top 100 names makes momentum borderline-interesting
+(DSR=0.62, evaluation Sharpe0.71), still below the bar; widening to 300 collapses it (PBO=0.91). Most tellingly,
+five independent repetitions of the full autonomous protocol converge on thesameinterpretable strategy family, all
+fiveprofitableoutofsample,andnoneofthefivesurvivesdeflation.Thediscoveryisreproducible;itsevidence,atthe
+agent’sownsearchintensityoverafour-yearwindow,isinsufficient,andreproduciblyso.Anindependentre-evaluation
+ofpublishedLLMtimingstrategiesoveralongerhorizonandawidercross-sectionreportsthesamedirectionofresult
+(Li et al., 2025), which is evidence that the pattern is not an artefact of this harness.
+6.5. E5: the fair field, and what the referee certifies
+If Sections 6.2–6.4 were the whole story, the framework could be dismissed as an expensive proof of market
+efficiency. E5 moves to the arena where documented premia actually live, 39 multi-asset ETFs, and relaxes the
+constraints that suppress them: long/flat and long-only books are allowed, rebalancing is slow, and the evaluation
+window is nine years. A pre-registered human hypothesis (a divergence signal specified before any results were seen)
+enters as an arm alongside the agent’s discovery, classic cross-asset momentum, time-series momentum (Moskowitz
+et al., 2012), the random null, and passive benchmarks.
+Five findings (Table 6, Fig. 5):
+1.The referee says yes when it should.Equal-weight multi-asset buy-and-hold and SPY are certified. The
+instruments are not a universal rejector; they pass real premia and reject noise, both behaviors on the same
+table.
+Gençay:Preprint submitted to ElsevierPage 10 of 15
+What survives honest evaluation?
+Figure 5:E5: evaluation-window Sharpe with stationary-bootstrap 95% intervals. Only the passive benchmarks exclude
+zero. A CI spanning zero is not evidence of absence; it is a statement about evidence, which is the point.
+Table 7
+E6b: the ported production system on gold (GLD; design 2007–2016, eval 2017–2025;𝑁=1).𝑝: paired bootstrap vs.
+holding gold.
+Arm Des. SR / ret. Eval SR / ret. Eval CI𝑝
+Gold buy-and-hold 0.38 /+75%1.04 /+257% [+0.42,+1.62]—
+SPY buy-and-hold 0.42 /+92%0.85 /+249% [+0.24,+1.53]0.94
+Production system 0.33 /+34% −0.12/−13% [−0.77,+0.49]<0.001
+2.Thepowerarithmetic,madeconcrete.Time-seriesmomentum,amongthemostrobustdocumentedpremia,is
+positive in both windows and returns+55%over nine held-out years, and isstillunder-powered (𝑡≈0.49
+√
+9≈
+1.5). Certifying moderate low-frequency edges requires decades or breadth; Section 7 draws the consequences.
+3.Rawout-of-sampleprofitisnotevidence.Therandom-weightsnullmade+23%overthenineevaluationyears.
+Itsverdict(designSharpe−0.57,DSR=0.0008)isthecleanestillustrationinthesuiteofwhyunauditedbacktest
+profits, even “out-of-sample” ones, are not by themselves evidence of skill.
+4.PBO predicted the agent’s failure in advance.On this field the agent’s best in-sample discovery (+0.37)
+degraded out of sample (−0.23); the search’s PBO of0.80, computed on design data alone, said before the
+evaluationwindowwasopenedthatthein-samplewinnerwouldlikelyunderperform.TogetherwithE3,thetwo
+distinct failure modes, uncertifiable selection luck and genuine overfitting, are each caught by the instrument
+built for them.
+5.Pre-registration earns a lower bar, not a free pass.The human divergence hypothesis, entering at near-zero
+deflation,simplydidnotgeneralizecross-asset.Theframeworkrewardedtheepistemicpostureandstillreported
+the outcome.
+6.6. E6/E6b: a human production system under the same instruments
+Thepre-registeredsignalofE5/E6wasasimplification;theauthor’sactualproductionsystemisadiscreteweekly
+rule engine (PineScript) in which the divergence quantity serves as ahold/exittest inside a trend-following state
+machine, with linear-regression slope gating, candle-anatomy filters, and all-in/all-out position state. E6b ports it
+faithfully: the system is expressed as an 84-node signal graph executed by the rule archetype (Section 3.4), and
+the translation is cross-validated bar-for-bar against a reference implementation of the original script, with zero
+mismatching bars on all four entry/exit conditions, before any performance is examined. It enters the protocol as a
+pre-registered production system (𝑁=1).
+The verdict is two-sided (Table 7). The system was genuinely profitable across its development decade:+34%
+through both a gold bull and the 2011–2015 bear, in a position only a third of all days, PSR= 0.85at the minimal
+Gençay:Preprint submitted to ElsevierPage 11 of 15
+What survives honest evaluation?
+deflation its pre-registration earned. It did not persist: over the nine evaluation years its flat and short states forfeited
+a historic bull market that buy-and-hold collected in full, and the paired test rejects it against holding gold. Notably,
+the author’s own trading-platform backtest (zero costs, spot data, fixed-lot sizing) independently shows buy-and-hold
+finishingaheadofthestrategyoverthefullsample,corroboratingthebenchmark-relativeconclusionunderadifferent
+implementation. Methodologically, E6b is the suite’s completeness proof: a real human system, state machine and
+candle patterns included, runs under exactly the instruments that judge the LLM, with the same costs, the same
+windows, and the same verdicts.
+7. Discussion
+The power arithmetic governs everything.A𝑡-statistic on a Sharpe ratio grows as𝑆𝑅√years: a true𝑆𝑅=0.6
+strategy needs roughly eleven years of out-of-sample data to reach𝑡≈ 2, and deflation raises the bar further. This
+single fact organizes the results. It explains why nothing moderate certifies on four-year windows (E1–E4) and why
+even a robust premium at+55%over nine years does not (E5). It also explains, without mysticism, the canonical
+counterexamples to market efficiency: a high-frequency operation performing thousands of trades a day accumulates
+statistical power in months, and a long-only factor investor compounding for five decades accumulates it the slow
+way, consistent with the factor-based decompositions of such track records (Frazzini, Kabiller and Pedersen, 2018).
+Non-certification is not non-existence; the referee reports evidence, not conviction, and quantifies exactly how much
+evidence a claimed edge still lacks.
+Scaling the search.Nothing in the architecture caps the budget at one hundred candidates, and larger budgets do
+not weaken the accounting; they tighten it. The ledger costs one row per trial, and the deflation threshold of Eq. 2
+grows withΦ−1(1−1∕𝑁): at equal trial dispersion, a search of104 candidates faces a bar roughly1.5×higher than
+thehundred-candidatesearchesreportedhere.Underthisaccountingabiggersearchcannotmanufacturecertification;
+itcanonlycertifyadiscoverywhoseedgeoutrunstherisingthreshold,andtheevaporationcurve(Section4.4)makes
+exactly that race visible at any budget.
+Three failure modes, three instruments.The suite’s discoveries failed in three distinct ways. The multi-seed finds
+were profitable out of sample yet indistinguishable from selection luck at the agent’s own trial count (a DSR failure);
+E5’sfinddegradedoutofsampleexactlyasitsdesign-windowPBOpredicted(aCSCVsuccess);andE3’slarge-budget
+findcollapsedoutofsampledespitealowPBO,becauseitswinnerkeptitsrankamongmostlylosingcandidateswhile
+losing its absolute edge, which the held-out confidence interval caught. A single reported backtest number cannot
+expressthesedistinctions,whichisourargumentforcomputingallthreeinanevaluationlayerforstrategy-discovering
+agents.
+Structuralguardrailsoverproceduralpromises.E1quantifieswhythetwocorrectionscannotsubstituteforeach
+other: a sufficiently contaminated information set survives statistical deflation entirely (DSR= 1.00at Sharpe 35).
+Symmetrically, no amount of leakage discipline corrects for search intensity. The engineering consequence is that
+both belong in thetype systemof the platform, the agent-selectable feature registry and the single evaluation entry
+point, rather than in prompts, conventions, or reviewer trust. These comparisons double as component ablations: the
+JSON-criticbaselineisthesystemwithoutitsvalidatedactionsurface(0/60usablecandidates),theraw-versus-deflated
+columnsofTables4–6arethesystemwithoutsearchcorrection,andEq.2at𝑁=1isthesystemwithoutthetrialledger.
+Each removal reverts to precisely the pathology it was built to prevent.
+Beyond finance.Any agentic system that searches a solution space and self-reports its best result, such as code
+agents benchmarked on the tasks they iterated on or scientific-discovery agents reporting their best hypothesis, shares
+this structure: autonomy inflates the trial count, and honest reporting requires the search to be recorded and paid
+for. Trading is the domain where the accounting instruments already exist. We have not tested the design pattern
+demonstrated here (validated tool surface; complete trial ledger; deflation indexed to it) outside finance, but nothing
+in it is finance-specific. What replaces the Deflated Sharpe Ratio outside finance is the same correction in different
+clothes:amultiplicityadjustmentindexedtotherecordednumberofevaluations.Foracodeagent,thatisperformance
+on a sequestered test set judged against the number of candidate patches scored on the visible tests; for a discovery
+agent ranking hypotheses, false-discovery-rate control (Benjamini and Hochberg, 1995) over every hypothesis the
+search actually scored. DSR is finance’s instantiation, an expected-maximum threshold specialized to non-normal
+Gençay:Preprint submitted to ElsevierPage 12 of 15
+What survives honest evaluation?
+return series, but the requirement it expresses is domain-independent: the trial count entering the correction must be
+the true one, which is precisely what a validated action surface feeding a complete ledger guarantees.
+8. Limitations
+Survivorship.The equity constituent list is a fixed current list; delisted names are absent except for eight that
+leavemid-sample.Thisflatters theactivestrategies(survivorstrendupward),so itbiasesagainstournullresultrather
+than for it; the point-in-time liquidity selection removes the selection-timing component. A fully delisting-inclusive
+panel requires commercial data.Feature scope.News-sentiment and point-in-time fundamental features exist in the
+systembutwereexcludedfromtheheadlinediscoveryrunsforreproducibility(rate-limitedandfiler-dependentexternal
+sources);theprice-featureactionspaceboundswhattheagentcouldfind.Modelcoverage.Agentrunsusegpt-4.1and
+claude-sonnet-5; the provider layer is model-agnostic, but we do not claim generality beyond these two models.
+Notably, default-temperature sampling converged within a model: three of five gpt-4.1 repetitions composed near-
+identical best strategies, so multi-seed dispersion understates search diversity.Window dependence.The 2017–2025
+evaluation window contains a historic gold and equity bull; timing systems are structurally disadvantaged in such
+regimes (E5/E6b), which the paired tests report but cannot deconfound.E6b fidelity.The port uses rolling five-day
+weeksonexchange-hoursETFdatawithnotionalsizing;theoriginalrunsoncalendarweeks,spotdata,fixedlots,and
+zerocosts.Thetranslationisexactattherulelevel(cross-validated),notatthemarket-microstructurelevel.Statistical
+caveats.DSR assumes trials are exchangeable draws; our hypothesis-rotation makes candidates heterogeneous, and
+duplicated candidates (the rotation wraps after twenty hints) are counted at face value; both choices are conservative
+for the agent. PBO with𝑁≈20candidates is coarse.
+9. Conclusion
+We asked what remains of LLM-driven trading strategy discovery when the two corrections the empirical-finance
+literature has demanded for a decade, leakage-safety and search-aware deflation, are made structural properties of the
+discovery system itself. The answer is symmetric and, we argue, more useful than another reported Sharpe ratio. The
+instruments certify the arms with genuine out-of-sample evidence: passive risk premia pass with confidence intervals
+excluding zero. They withhold certification from what the evidence does not yet support: every LLM-discovered
+strategy in this suite, across two universes, two frontier models, cost regimes, search budgets up to one hundred
+candidates,andfiverepeatedruns,includingdiscoveriesthatweregenuinelyprofitableoutofsample,failscertification
+againsttheagent’sownrecordedtrialcount,withthreedistinctfailuremodescaughtbytheinstrumentsbuiltforthem.
+They also expose a limit of statistical correction: a planted look-ahead oracle survives deflation at a Sharpe ratio of
+35, which is our argument for treating leakage-safety as structural. And they extend the same hearing to a human
+production system, ported bar-for-bar and judged by identical rules.
+The system functions as a certification mechanism: it builds strategiesandtells its operator which ones may be
+trusted, at what evidential price. The LLM’s discoveries are real programs with real out-of-sample returns, and none
+of them, under honest accounting at the search intensity recorded here, is yet distinguishable from luck. That is not a
+failure of the system. It is the system working.
+CRediT authorship contribution statement
+Eray Gençay:Conceptualization, Methodology, Software, Validation, Formal analysis, Investigation, Data cura-
+tion, Writing – original draft, Writing – review & editing, Visualization.
+Funding
+This research did not receive any specific grant from funding agencies in the public, commercial, or not-for-profit
+sectors.
+Declaration of competing interest
+The author declares that he has no known competing financial interests or personal relationships that could have
+appeared to influence the work reported in this paper.
+Gençay:Preprint submitted to ElsevierPage 13 of 15
+What survives honest evaluation?
+Data and code availability
+A public archive containing the statistical evaluation code implementing the instruments of Section 4 (with its
+offline test suite), every experiment configuration, and the canonical run manifest and complete search trace behind
+each reported table is available on Zenodo.1 The full discovery platform is available from the author on reasonable
+request for research verification purposes. Raw market data were obtained from Tiingo, SEC EDGAR, GDELT, and
+FRED under their respective terms of use and cannot be redistributed by the author; the system includes resumable
+scripts that reconstruct the exact data panels from a free-tier Tiingo API key, and the manifests’ content hashes allow
+independent verification that equivalent data were obtained.
+References
+Arnott, R., Harvey, C.R., Markowitz, H., 2019. A backtesting protocol in the era of machine learning. The Journal of Financial Data Science 1,
+64–74.
+Asness, C.S., Moskowitz, T.J., Pedersen, L.H., 2013. Value and momentum everywhere. The Journal of Finance 68, 929–985.
+Bailey, D., Borwein, J., Lopez de Prado, M., Zhu, Q., 2014. The probability of backtest overfitting. Journal of Computational Finance 20, 39–69.
+Bailey,D.H.,LópezdePrado,M.,2014. ThedeflatedSharperatio:correctingforselectionbias,backtestoverfitting,andnon-normality. TheJournal
+of Portfolio Management 40, 94–107.
+Benjamini,Y.,Hochberg,Y.,1995. Controllingthefalsediscoveryrate:Apracticalandpowerfulapproachtomultipletesting. JournaloftheRoyal
+Statistical Society: Series B (Methodological) 57, 289–300.
+Bollen, J., Mao, H., Zeng, X., 2011. Twitter mood predicts the stock market. Journal of Computational Science 2, 1–8.
+Dixon, M., Halperin, I., Bilokon, P., 2020. Machine Learning in Finance: From Theory to Practice. Springer.
+Engelberg, J., Parsons, C., 2011. The causal impact of media in financial markets. Journal of Finance 66, 67–97.
+Fischer,T.,Krauss,C.,2018.Deeplearningwithlongshort-termmemorynetworksforfinancialmarketpredictions.EuropeanJournalofOperational
+Research 270, 654–669.
+Frazzini, A., Kabiller, D., Pedersen, L.H., 2018. Buffett’s alpha. Financial Analysts Journal 74, 35–55.
+Geng, S., Josifoski, M., Peyrard, M., West, R., 2023. Grammar-constrained decoding for structured NLP tasks without finetuning, in: Proceedings
+of the 2023 Conference on Empirical Methods in Natural Language Processing, pp. 10932–10952.
+Gu, S., Kelly, B., Xiu, D., 2020. Empirical asset pricing via machine learning. Review of Financial Studies 33, 2223–2273.
+Harvey, C., Liu, Y., Zhu, H., 2016. ... and the cross-section of expected returns. Review of Financial Studies 29, 5–68.
+Harvey, C.R., Liu, Y., 2015. Backtesting. The Journal of Portfolio Management 42, 13–28.
+Heaton,J.,Polson,N.,Witte,J.H.,2017. Deeplearningforfinance:Deepportfolios. AppliedStochasticModelsinBusinessandIndustry33,3–12.
+Hong, S., Zhuge, M., Chen, J., Zheng, X., Cheng, Y., Wang, C., Liu, Z., Wang, J., Jiang, Y., 2023. Metagpt: Meta programming for a multi-agent
+collaborative framework. arXiv preprint arXiv:2308.00352 .
+Jegadeesh, N., Titman, S., 1993. Returns to buying winners and selling losers: Implications for stock market efficiency. The Journal of Finance 48,
+65–91.
+Kelly,B.,Pruitt,S.,Su,Y.,2019. Characteristicsarecovariances:Aunifiedmodelofriskandreturn. JournalofFinancialEconomics134,501–524.
+Li, G., Hammoud, H.A.A.K., Itani, H., Khizbullin, D., Ghanem, B., 2023. Camel: Communicative agents for “mind” exploration of large language
+model society. arXiv preprint arXiv:2303.17760 .
+Li, W.W., Kim, H., Cucuringu, M., Ma, T., 2025. Can LLM-based financial investing strategies outperform the market in long run? SSRN preprint
+doi:10.2139/ssrn.5250454. introduces the FINSABER backtesting framework.
+Lo, A.W., 2010. The adaptive markets hypothesis. Journal of Portfolio Management 30, 15–29.
+Loughran, T., McDonald, B., 2011. When is a liability not a liability? textual analysis, dictionaries, and 10-ks. Journal of Finance 66, 35–65.
+Luss, R., d’Aspremont, A., 2015. Support vector machine classification for large data sets. Machine Learning .
+Moskowitz, T.J., Ooi, Y.H., Pedersen, L.H., 2012. Time series momentum. Journal of Financial Economics 104, 228–250.
+Nassirtoussi, A., et al., 2014. Text mining for market prediction: A systematic review. Expert Systems with Applications 41, 7653–7670.
+Park,J.S.,etal.,2023. Generativeagents:Interactivesimulacraofhumanbehavior. ProceedingsoftheACMSymposiumonUserInterfaceSoftware
+and Technology .
+Politis, D.N., Romano, J.P., 1994. The stationary bootstrap. Journal of the American Statistical Association 89, 1303–1313.
+Lopez de Prado, M., 2018. Advances in Financial Machine Learning. Wiley.
+Ranco, G., Aleksovski, D., Caldarelli, G., Grčar, M., Mozetič, I., 2015. The effects of twitter sentiment on stock price returns. PLOS ONE 10,
+e0138441.
+Rudin,C.,2019. Stopexplainingblackboxmachinelearningmodelsforhighstakesdecisionsanduseinterpretablemodelsinstead. NatureMachine
+Intelligence 1, 206–215.
+Schick, T., Dwivedi-Yu, J., Dessì, R., Raileanu, R., Lomeli, M., Zettlemoyer, L., Cancedda, N., Scialom, T., 2023. Toolformer: Language models
+can teach themselves to use tools. arXiv preprint arXiv:2302.04761 .
+Tetlock, P.C., 2007. Giving content to investor sentiment: The role of media in the stock market. Journal of Finance 62, 1139–1168.
+Tetlock, P.C., Saar-Tsechansky, M., Macskassy, S., 2008. More than words: Quantifying language to measure firms’ fundamentals. Journal of
+Finance 63, 1437–1467.
+1DOI:https://doi.org/10.5281/zenodo.21261868
+Gençay:Preprint submitted to ElsevierPage 14 of 15
+What survives honest evaluation?
+Wang, S., Yuan, H., Ni, L.M., Guo, J., 2024. QuantAgent: seeking holy grail in trading by self-improving large language model. arXiv preprint
+arXiv:2402.03755 .
+Wang, S., Yuan, H., Zhou, L., Ni, L.M., Shum, H.Y., Guo, J., 2023. Alpha-GPT: human-AI interactive alpha mining for quantitative investment.
+arXiv preprint arXiv:2308.00016 .
+Wei,J.,Wang,X.,Schuurmans,D.,Bosma,M.,Ichter,B.,Xia,F.,Chi,E.H.,Le,Q.V.,Zhou,D.,2022. Chain-of-thoughtpromptingelicitsreasoning
+in large language models. arXiv preprint arXiv:2201.11903 .
+Willard, B.T., Louf, R., 2023. Efficient guided generation for large language models. arXiv preprint arXiv:2307.09702 .
+Wooldridge, M., 2009. An Introduction to MultiAgent Systems. John Wiley & Sons.
+Wu, S., et al., 2023. Bloomberggpt: A large language model for finance. arXiv preprint arXiv:2303.17564 .
+Yang, H., Liu, X.Y., Wang, C.D., 2023. FinGPT: open-source financial large language models. arXiv preprint arXiv:2306.06031 .
+Yang, Y., et al., 2020. Finbert: A pretrained language model for financial communications. arXiv preprint arXiv:2006.08097 .
+Yao, J., Zheng, Z., 2026. Beyond agent architecture: Execution assumptions and reproducibility in LLM-based trading systems. arXiv preprint
+arXiv:2606.08285 .
+Yao, S., et al., 2023. React: Synergizing reasoning and acting in language models. arXiv preprint arXiv:2210.03629 .
+Yu,S.,Xue,H.,Ao,X.,Chen,F.,He,Q.,etal.,2023a. Generatingsynergisticformulaicalphacollectionsviareinforcementlearning,in:Proceedings
+of the 29th ACM SIGKDD Conference on Knowledge Discovery and Data Mining.
+Yu,Y.,Li,H.,Chen,Z.,Jiang,Y.,Li,Y.,Zhang,D.,Liu,R.,Suchow,J.W.,Khashanah,K.,2023b. FinMem:aperformance-enhancedLLMtrading
+agent with layered memory and character design. arXiv preprint arXiv:2311.13743 .
+Zhang, W., Zhao, L., Xia, H., Sun, S., Sun, J., Qin, M., Li, X., Zhao, Y., Zhao, Y., Cai, X., Zheng, L., Wang, X., An, B., 2024. A multimodal
+foundation agent for financial trading: tool-augmented, diversified, and generalist, in: Proceedings of the 30th ACM SIGKDD Conference on
+Knowledge Discovery and Data Mining.
+Gençay:Preprint submitted to ElsevierPage 15 of 15

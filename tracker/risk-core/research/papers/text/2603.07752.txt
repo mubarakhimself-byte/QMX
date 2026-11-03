@@ -1,0 +1,769 @@
+arXiv 2603.07752  https://arxiv.org/abs/2603.07752
+
+Dynamic slippage control and rejection feedback in spot FX market making
+Alexander Barzykin∗
+HSBC, 8 Canada Square, Canary Wharf, London E14 5HQ, United Kingdom
+March 10, 2026
+Abstract
+We study an OTC FX market-making problem, built on the Avellaneda-Stoikov tradition, in which a
+dealer streams size-dependent quotes on a discrete ladder and manages inventory risk over a finite horizon
+under Poisson arrivals of trade requests. Adverse selection is modeled through latency-driven price moves
+over a delay window, represented by Gaussian marks whose conditional means can depend on the quoted
+spread, capturing selective client reaction to stale quotes. The dealer can address latency risk through trade
+rejection when slippage breaches a tolerance threshold. We treat slippage tolerance as an explicit control
+jointly optimized with quotes: upon receiving a trade request, the dealer chooses an acceptance/rejection
+rule, which makes the trade economically akin to an embedded option written on the latency price move.
+We further introduce rejection feedback through an EMA-based rejection score used as a reputation proxy,
+so that client intensity is endogenously modulated by past rejections via a multiplicative factor. Using
+dynamic programming, we derive a Markov control problem with state variables (inventory, rejection-score)
+and show how rejection decision enters the Hamilton-Jacobi-Bellman equation through Hamiltonians that
+include an expectation over the latency mark and a maximization over both quote and rejection rule
+parameters. For practical control evaluation, we develop an adiabatic-quadratic approximation: fixing
+reputation on the inventory-control time scale, expanding Hamiltonians to the second order à la Bergault
+et al., and adopting quadratic ansatz in inventory, yielding tractable Riccati-type ODE and closed-form
+expressions for approximate quotes and slippage thresholds. This approximation provides a fast surrogate
+for policy design and enables self-consistent calibration of rejection behavior. We complement the analysis
+with exact numerical solutions of the reduced HJB and compare unrestricted and fair rejection protocols in
+terms of spread, rejection probability, and value.
+Keywords:Foreign Exchange; Market Making; Stochastic Optimal Control; Market Impact; Algorithmic
+Trading; Price Validation; Trade Rejection; Last Look; Adverse Selection; Latency
+1 Introduction
+Electronic dealer-to-client (D2C) markets, especially in spot FX and related OTC products, routinely expose
+liquidity providers (LPs) to latency risk: a client may hit a streamed quote that was formed on information
+that is already stale by the time the request reaches the dealer’s pricing and risk stack. A widely used response
+specific to FX is last look (LL), i.e., a short post-request window in which the dealer can accept or reject
+the trade, sometimes subject to protocol constraints on permissible price improvement or slippage. As this
+practice reallocates execution risk between dealers and clients, its fairness relies on design choices such as
+whether the acceptance rule is symmetric or asymmetric, whether price improvements are passed through,
+∗Email:alexander.barzykin@hsbc.com
+1
+arXiv:2603.07752v1  [q-fin.RM]  8 Mar 2026
+and how much discretion the dealer has. These issues are central enough that industry codes emphasize
+transparency and the interpretation of LL as a risk-control mechanism rather than a profit tool (GFXC 2024).
+LL is primarily treated as an execution protocol shaping the client’s effective costs and risks. Oomen
+(2017b) develops a unified framework to compare LL designs – symmetric versus asymmetric thresholds, and
+variants allowing or disallowing price improvements/slippage – focusing on execution risk, effective spreads,
+and how LL changes the trader’s experience across protocols. Closely related, Stevenson (2016) frames LL
+as a millisecond-expiry option embedded in the trading protocol and studies valuation and the incentives
+created by this opportunity. Oomen (2017a) models execution through an aggregator that routes to the best
+displayed price among multiple LPs and highlights how competition for (apparently) uninformed flow can
+generate a “winner’s curse” and adverse selection-type effects at the LP level. Carteaet al.(2019) develop an
+equilibrium-style model of FX trading with LL that distinguishes between fast and slow traders, and study
+how LL and competition affect spreads, rejection rates, and welfare across participant types. Cartea and
+Sánchez-Betancourt (2021), Carteaet al.(2021) further study the interplay between latency and liquidity risk.
+Current institutional practice reduces post-request hold time to zero – the decision is made as soon as
+the request is received and resembles in this sense the mechanics of an exchange with firm liquidity. The
+term “last look” itself may be misleading here, and one can talk about price validation instead. There is
+an important difference from the exchange logic, however. The dealer typically keeps slippage tolerance as
+a control parameter with an understanding that latency inherent in delocalized FX markets can lead to
+excessive rejections.
+The market-making literature beginning with Avellaneda-Stoikov (2008) and subsequent refinements
+(Guéantet al.2013, Carteaet al.2014, 2015, Guéant 2016) provides tractable stochastic-control foundations
+for optimal quoting under inventory risk and Poisson trade arrivals, but typically treats price dynamics
+as exogenous and does not model trade rejection decision as part of the control set. Recently, Olding
+(2022) explicitly adapts classical market-making control models to incorporate LL via an exogenous sur-
+vival/cancellation mechanism (e.g., symmetric cancellation when the mid moves beyond a threshold during the
+LL window), deriving reservation-price adjustments and optimal quotes under LL. Importantly, in Olding’s
+control formulation LL parameters (window/threshold) are treated as given, while the dealer optimizes quotes.
+Finally, beyond LL-specific work, the growing literature on informational risk in market making (e.g., alpha
+signals, quote-dependent adverse selection, price reading) underscores that dealers’ pricing choices can affect
+both the volume and the toxicity of the flow they attract (Cartea and Wang 2020, Barzykinet al.2025).
+Despite this rich literature, two practical dimensions remain underdeveloped:
+• Endogenous rejection policy design.Dealers often choose rejection logic (e.g., a symmetric “validity
+band”) as a dynamic risk-control policy that varies by market conditions, inventory, or relationship.
+Much of the academic work either analyzes rejection as a static protocol feature (optionality/effective
+costs) or embeds slippage tolerance into market-making models with parameters fixed. A natural step is
+to treat rejection decision – subject to fairness/protocol constraints – as an optimizable state-dependent
+control alongside quoting.
+• Intertemporal feedback from rejection decisions to future order flow.Real OTC relationships
+are not memoryless: frequent rejections can reduce subsequent client engagement, routing priority, or
+hit rates. Industry discussions emphasize transparency and appropriate use precisely because clients
+respond to perceived “unfair” or overly discretionary LL (GFXC 2024). Yet most tractable models
+do not include a reputational state variable that couples the current rejection decision to future flow
+intensity.
+In this paper, we propose a tractable stochastic-control framework for D2C market making with latency
+that builds on the Avellaneda-Stoikov tradition, enhanced by optimal slippage tolerance with rejection feedback
+in response to latency risk. We apply this framework to unconstrained rejection decisions and to one of the
+fair protocols, proposed by Oomen (2017b), under strict zero hold-time policy (immediate decision upon
+request). We also suggest an efficient adiabatic-quadratic approximation providing closed-form solutions,
+particularly in a simple but practically important case of constant adverse selection slippage.
+2
+2 Unconstrained rejection as an arrival-time binary decision
+2.1 Problem setup
+LetS t denote the reference mid price and assume that it undergoes the Brownian motionWt so that
+dSt =σdW t,(1)
+with constant volatilityσ >0on a finite operational horizon[0,T ]of the market maker (MM). The MM
+streams OTC quotes to clients for a finite set of trade sizes{zn}Nn=1⊂N (Avellaneda and Stoikov 2008,
+Bergault and Guéant 2021). For each bucketn and sidei∈{b,a} (bid/ask), the MM controls the quote
+offsetsδ n,it , so the executable quotes are
+Sn,it =S t∓δ n,it , i∈{b,a}.(2)
+Client requests arrive according to counting processesMn,it with intensities 1
+λn,it =g(R t)Λn0e−κnδn,it ,(3)
+whereΛ n0 > 0,κn> 0and g : [0, 1]→R + is a decreasing function of a rejection-score variableRt (a reputation
+proxy) constructed as an exponentially weighted moving average (EMA) of past rejects.2
+A request of type(n,i )arriving at time t is a response to a quoteδ that isτn old. LetYn,it (δ)denote the
+sign-adjusted mid-price change over that latency window (positive move is in the dealer’s favour). We assume
+a Gaussian mark with a quote-dependent mean:
+Yn,it (δ) =m n(δ) +νnξ, ξ∼N(0,1), ν n :=σ√τn.(4)
+wheremn(δ)is a measurable function encoding adverse selection.3 In what follows, we assume side-symmetric
+latency marks: the conditional law ofYn,it depends on the side only through the sign convention used to
+define favourable and adverse moves, while the functionsmn(·)and νn are common to bid and ask. The mark
+is observed by the MM prior to accepting or rejecting the trade. Hereinafter, we assume zero hold time by
+the dealer, i.e., the decisionℓn,it ∈{ 0, 1} is made as soon as the trade request is received. Hereℓ = 1denotes
+acceptance andℓ= 0rejection. Reputation (rejection score) is updated per request
+R+ = (1−ρ)R+ρ(1−ℓ), ρ∈(0,1),(5)
+with maps
+Racc(R) = (1−ρ)R, R rej(R) = (1−ρ)R+ρ.(6)
+ThusR t∈[0,1]wheneverR 0∈[0,1]. 4
+Letqt∈Z denote inventory andXt∈R cash. When a bid request is accepted the MM buyszn atSt−δn,bt ;
+when an ask request is accepted the MM sellszn atS t +δ n,at . Hence
+dqt =
+N∑
+n=1
+znℓn,bt dMn,bt −
+N∑
+n=1
+znℓn,at dMn,at ,(7)
+dXt =−
+N∑
+n=1
+ℓn,bt zn(St−δ n,bt )dM n,bt +
+N∑
+n=1
+ℓn,at zn(St +δ n,at )dM n,at .(8)
+1Exponential intensity is a natural assumption, but sigmoid is also used, particularly for RFQ (Barzykinet al.2023).
+2One can easily verify whether the effect is present in the system by regressing the number of requests over a period of time
+(say, one hour) versus the average realized rejection rate over the previous period.
+3Exponential saturation is a natural default (Barzykinet al.2025).
+4An alternative way to define the reputation variable is via an Ornstein-Uhlenbeck process driven by rejections.
+3
+The dealer aims to maximize expected terminal mark-to-market wealth penalized by running inventory risk
+(Carteaet al.2014):
+sup
+δ,ℓ
+E
+[
+XT +qTST− 12γσ2
+∫ T
+0
+q2tdt
+]
+, γ >0,(9)
+possibly with a terminal penalty.
+2.2 HJB and optimal controls
+Define the value function on the full stateU(t,x,q,R,S ). The corresponding Hamilton-Jacobi-Bellman (HJB)
+equation reads:
+0 =∂ tU+ 12σ2∂SSU− 12γσ2q2 + ∑i∈{b,a} N∑n=1 supδn,iλn,iE[supℓ (Un,i0 (ℓ)−U )],(10)
+where Un,i0 (ℓ)denotes the value immediately after processing the request of type(n,i )under decision ℓ and
+expectation is over the Gaussian markYn,i(δ).
+Since the objective is linear in cash and mark-to-market wealth, we employ the affine ansatz
+U(t,x,q,R,S) =x+qS+V(t,q,R)(11)
+for the reduced value functionV. This removes the mid-price state from the HJB. For a request of size bucket
+n, acceptance generates incremental value
+∆n,iacc =z n
+(
+δ+Y n,i(δn,i)−D n±V(t,q,R) ) (12)
+while rejection generates
+∆n,irej =J RV(t,q,R),(13)
+where
+pn,i(t,q,R)≡D n±V(t,q,R) := V
+(
+t,q,R
+)
+−V
+(
+t,q±z n,R acc(R)
+)
+zn
+,(14)
+J(t,q,R)≡J RV(t,q,R) :=V(t,q,R rej(R))−V(t,q,R).(15)
+Thus, the optimal decision induces a pointwise maximum. Hence, the reduced HJB forV (t,q,R )can be
+written as
+0 =∂ tV− 12γσ2q2 +g(R) ∑i∈{b,a} N∑n=1 supδn,i Λn0e−κnδn,iE[max(∆n,iacc,∆n,irej)],(16)
+with terminal conditionV (T,q,R ) =T (q,R ).5 Note that sinceg(R)is decreasing and a rejection moves the
+score fromR to Rrej(R)≥R , it is natural to expect the value function to be non-increasing inR. Under this
+monotonicity,J(t,q,R)≤0. We can interpretJas the continuation loss from worsening reputation.
+LetΦandϕdenote the standard normal CDF and PDF, respectively, and define
+Ψn(µ) :=E
+[(
+N(µ+ν nξ)
+)
++
+]
+=ν nϕ(µ/νn) +µΦ(µ/νn).(17)
+Usingmax(A,B) =B+ (A−B) +, we obtain
+E
+[
+max
+(
+zn(δ+Y−p),J
+)]
+=J+z nΨn
+(
+δ+m n−p− Jzn
+)
+(18)
+5We are primarily interested in the near-stationary solution, so the terminal condition can be set to zero.
+4
+when Y∼N (mn,ν 2n). Here the second term can be identified as the value of exercising the accept option, as
+illustrated in Figure 1. If we define for each size bucketnthe bid/ask Hamiltonians
+Hn(p,J) := sup
+δ∈R
+Λn0e−κnδ
+[
+J+z nΨn
+(
+δ+m n(δ)−p− Jzn
+)]
+,(19)
+we can further transform the reduced HJB to
+0 =∂ tV− 12γσ2q2 +g(R) ∑i∈{b,a} N∑n=1Hn(pn,i(t,q,R),J(t,q,R) ).(20)
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5
+Density
+Reject Accept
+yn* (q, R) 0
+Sign-adjusted Latency Move Y
+Request Value
+J(q, R)
+zn( p + Y)
+Figure 1: Latency markY∼N (mn(δ),ν 2n)and embedded-option view of request-level payoff for unrestricted
+rejection policy. Red dashed line depicts optimal decision threshold: the request is accepted whenY >=
+yn∗ (q,R).
+5
+For each(n,i), optimal quotes solve thesup
+δ
+in HJB:
+δn,i∗ (t,q,R) =argmaxδ Λn0e−κnδ
+[
+J(t,q,R) +z nΨn
+(
+δ+m n(δ)−p n,i(t,q,R)− J(t,q,R)zn
+)]
+.(21)
+For an interior maximizerδ∗ =δ∗n(p,J), the first-order condition (FOC) is
+znΦ
+(µn(δ∗;p,J)
+νn
+)(
+1 +m′n(δ∗)) =κ n(J+z nΨn(µn(δ∗;p,J) )),(22)
+where
+µn(δ;p,J) =δ+m n(δ)−p− Jzn.(23)
+When J≡ 0and mn≡ 0and νn→ 0, the model collapses to the standard OTC HJB (without rejection
+control) and the familiarδn,i∗ = 1/κn +Dn±Vregime (Guéantet al.2013).
+The optimal decision arises from the comparison of the accept vs. reject value increments:
+ℓn,i∗ = 1iffz n
+(
+δn,i∗ +Y n,i(δn,i∗ )−p n,i
+)
+≥J(t,q,R).(24)
+2.3 Adiabatic quadratic approximation
+In our practical definition, the rejection scoreR is an EMA of the rejection indicator and, therefore, tracks
+the rejection probability. It is intentionally filtered and is expected to change slowly, maintaining stationarity.
+The full problem thus couples a fast inventory control with a slow reputation state. In the adiabatic regime,
+we approximateR as quasi-static over the quoting horizon, setg(R) =:g and dropR-dependence from the
+value function. In the self-consistent closure, we replace the continuation difference by a constantJ≤ 0
+calibrated to match the corresponding rejection rate. HJB becomes inventory-only.
+Following Bergaultet al.(2021) we expand the Hamiltonians inpup to the second order
+Hn(p,J)≃H n(0,J) +H np (0,J)p+ 12Hnpp(0,J)p 2,(25)
+and assume a standard symmetric quadratic ansatz for the value function
+V(t,q) =−A(t)q 2−C(t).(26)
+Substituting into HJB and matching the coefficients ofq2 yields the Riccati ODE forA(t):
+A′(t) + 12γσ2 = 4gA(t)2Σ(J),Σ(J) := N∑n=1Hnpp(0,J).(27)
+In the stationary (long-horizon) limitA(t)′ = 0, the concave branch gives
+A=
+√
+γσ2
+8gΣ(J).(28)
+A free constant does not influence the controls. GivenA, one can computepn,i(q) =A(zn± 2q)and obtain
+quotes by solving FOC.
+6
+Special case: constant slippage
+We now specialize the adiabatic-quadratic approximation to constant (quote-independent) slippage:
+mn(δ)≡−θ n, θ n≥0,(29)
+which yields explicit forms for Hamiltonian derivatives and particularly simple controls. In this case,
+Hn(p,J) = Λ n0e−κnδ
+[
+J+z nΨn
+(
+δ−θ n−p− Jzn
+)]
+.(30)
+Settingu=δ−pyields
+Hn(p,J) =e −κnpHn(0,J),(31)
+and, therefore, the maximizer satisfies the exact shift rule
+δ∗n(p,J) = ¯δn(J) +p, ¯δn(J) :=δ ∗n(0,J).(32)
+Define
+¯µn(J) := ¯δn(J)−θ n− Jzn,˜µ n(J) := ¯µn(J)νn .(33)
+The myopic optimizer atp= 0satisfies
+Φ(˜µn) =κ n
+(J
+zn
++νn
+(
+ϕ(˜µn) + ˜µnΦ(˜µn)
+))
+,(34)
+and once solved for˜µn,
+¯δn(J) =θ n + Jzn +νn˜µn(J).(35)
+Using the FOC at the optimizer, we find
+Hnpp(0,J) = Λ n0e−κn¯δn(J)znκnΦ(˜µn(J)).(36)
+Hence
+Σ(J) =
+N∑
+n=1
+Λn0e−κn¯δn(J)znκnΦ(˜µn(J)).(37)
+By the shift rule, the adiabatic optimal quotes become explicit
+δn,i∗ = ¯δn(J) +A(z n±2q),(38)
+and for trade acceptance/rejection controls we have
+ℓn,i∗ = 1iffY n,i≥y n,i∗ := Jzn− ¯δn(J).(39)
+Calibration ofJby average rejection rate
+At p = 0, the reject probability under the optimal quote in size bucketn is1 − Φ
+(
+˜µn(J)
+)
+. A natural
+intensity-weighted average rejection rate is, therefore,
+¯r(J) =
+∑N
+n=1 Λn0e−κn¯δn(J)(1−Φ (˜µn(J)))∑N
+n=1 Λn0e−κn¯δn(J) .(40)
+Then we setJ such that¯r(J) =R. Interpretationally,J plays the role of a shadow continuation loss associated
+with a rejection. Under slow reputation dynamics, we solve the fast inventory-control problem at frozenR,
+compute the resulting stationary reject frequency¯r(J), and chooseJ so that this stationary reject frequency
+matches the current reputation level. This provides a self-consistent local closure linking the fast control
+problem to the slow reputation state.
+7
+0.1 0.2 0.3 0.4 0.5 0.6 0.7
+Latency (s)
+0.70
+0.75
+0.80
+0.85
+0.90
+TOB Spread (bp)
+Spread
+Rejection
+0.00
+0.05
+0.10
+0.15
+0.20
+Rejection Probability
+Figure 2: Top of book (z = z1) spread and rejection probability of optimal MM facing toxic flow with
+unrestricted rejection and no reputation feedback as a function of latency. The top dashed line corresponds to
+the spread with toxic flow, but no rejection, and the bottom dashed line shows the spread without toxicity
+and without rejection. Parameters in the text.
+2.4 Numerical examples
+As an illustration, consider a standard size-ladder of∆n = (1, 2, 5, 10, 20)M notional and an exponential
+intensity function withΛn0 = (2000, 800, 600, 400, 100)day−1 and κn = (3.0, 2.5, 2.0, 1.5, 1.0)bp−1. Here bp
+stands for basis points.6 This set of parameters corresponds to a liquid currency pair with a daily turnover of
+≃ 4billion notional and a top-of-book spread of≃ 0.7bp. We also assume a daily volatility of100bp and a
+risk aversion coefficient ofγ= 10−3 bp−1 M−1.
+We begin without rejection feedback and set a small constant toxicity ofθn = 0.1bp across sizes. Figure 2
+demonstrates that if the quote-to-received-request latency is capped at 100 ms, there is no point for the dealer
+to reject at these parameters.7 Understandably, the optimal spread is wider than without toxicity. With
+increasing latency, the MM starts rejecting, and the spread tightens, a well-known phenomenon (Oomen
+2017a,b, Carteaet al.2019). Rejection thresholds are not sensitive to inventory in this constant-toxicity setting.
+To introduce inventory dependence, we next use a quote-dependent toxicity specificationmn(δ) =−θne−βnδ,
+and setβn = 0.5bp−1, as shown in Figure 3. Rejection thresholds remain relatively deep, indicating that
+even an unconstrained MM does not reject immediately upon observing adverse slippage.
+Now consider optimal market making with rejection feedback. We set EMA smoothing parameter to
+ρ = 0.01and let g(R) = exp(−ρgR)with ρg = 0.1. We also assume thatτn = 0.5s and βn = 0.3bp −1.
+All other parameters are the same as defined above. Figure 4 illustrates a mechanism that may appear
+counter-intuitive at first: when the rejection scoreR is high, the dealer tightens spreads yet becomes more
+selective ex post. The reason is that, under adiabatic approximation, a higherR reduces future flow through
+g(R), while the continuation loss from an additional rejection becomes smaller in magnitude. Tighter quoting
+6This implies GBM while we deal here with simple Brownian motion. The difference is negligible in FX market making due to
+short trading horizons.
+7The corresponding one-dimensional HJB is solved numerically.
+8
+60
+ 40
+ 20
+ 0 20 40 60
+Inventory (M)
+ 0.46
+ 0.44
+ 0.42
+ 0.40
+ 0.38
+ 0.36
+ 0.34
+Rejection threshold (bp) 
+Bid
+Ask
+Figure 3: Bid and ask unrestricted rejection thresholds for trade requests of sizez1 as functions of inventory
+for optimal MM facing flow with toxicity functionmn(δ) =−0.1 exp(−0.5δ)and latency windowτn = 0.5s.
+Other parameters in the text.
+then helps restore reputation faster through a higher arrival rate and hence a faster dilution of past rejections
+in calendar time. This “repair-exploit” incentive to tighten in order to restore reputation faster while using
+the optionality of unconditional rejection to filter losses is a structural feature of the model and provides a
+motivation for considering fair protocols that attenuate the embedded one-sided option value.8
+At the same time, fast reputation repair implies staying close to stationarity. From the EMA update, the
+conditional mean change per request isρ(¯r−R), where ¯ris the intensity-weighted reject probability. Thus in
+calendar time ˙R≈ρλ (q,R ) (¯r(q,R)−R) with λ(q,R ) =∑λn,i(q,R ). Stationary reputation levels satisfy
+the fixed-point relation (for fixed inventoryq)
+R∗ = ¯r(q,R∗),(41)
+which is independent ofλ, whileλρ controls the speed of convergence toR∗. Figure 5 demonstrates that in
+the stationary state, the rejection probability actually decreases and the spread widens when we increase
+the reputation-induced flow decay parameterρg, as expected. In other words, the dealer will try to avoid
+rejection on average, even unconditionally, in the presence of reputation feedback.
+Finally, we check the validity of the adiabatic quadratic approximation. For our parameter set (with
+ρg = 0.1), the equilibrium reputation level isR∗≃ 0.03. This is the value we use to evaluate pricing in
+Figure 6. The accuracy is reasonable, particularly for small inventories (comparison is only demonstrated for
+the smallest size bucketz1). We have also verified rejection thresholds and found a good correspondence (not
+shown).
+8ChangingRto be driven by rejections alone can help as well.
+9
+0.0 0.2 0.4 0.6 0.8 1.0
+R
+0.55
+0.60
+0.65
+0.70
+0.75
+0.80
+0.85
+TOB Spread (bp) 
+Spread
+Rejection
+0.00
+0.02
+0.04
+0.06
+0.08
+0.10
+0.12
+Rejection Probability
+Figure 4: Optimal top of book spread and rejection probability as functions of the rejection scoreR for zero
+inventory. Parameters in the text.
+3 Towards fair execution
+Reputation feedback ensures that excessive rejection practice is penalized. One can even introduce dedicated
+reputation-dependent penalties into the utility function to gain more control. However, the question of
+rejection fairness will still remain because the decision is with the dealer while the opportunity cost is with the
+client, particularly if the dealer rejects adverse selection but harvests favorable selection. A number of protocols
+have been discussed in detail by Oomen (2017b) offering fairness via decision symmetry and/or fill price
+adjustments. Under certain scenarios, the benefit of rejection can totally disappear, at least theoretically,9 so
+the modelling framework is as important as the policy design.
+So far, we have defined slippage tolerance as a function of the reference mid-price move over the latency
+window. The approach is aligned with “fairness” narratives, yet in most OTC FX implementations, the price
+check is expressed against the dealer’s own price stream. This is precisely the object used in standard protocol
+definitions (Oomen 2017a). The goal of this section is to replace mid-move marks by dealer-quote-move
+marks and embed fair execution protocols into the dynamic control framework with reputation feedback and
+inventory risk.
+We begin by introducing the sign-adjusted quote move
+Yn,it :=± (Sn,it −S n,it−τn),(42)
+so thatY >0means the move is in the dealer’s favour, as before. We retain the Gaussian-mark assumption
+(now interpreted as a distribution for own-quote revisions):
+Yn,i(δ) =m n(δ) +νnξ, ξ∼N(0,1), ν n =σ√τn.(43)
+At this point, one should note that the quote move may in principle contain both exogenous market motion and
+endogenous quote revisions generated by the dealer’s own policy updates. In the present tractable formulation,
+9For example, under quadratic inventory penalty and symmetric rejection boundary without adverse selection, as demonstrated
+by Olding (2022).
+10
+0.00                 0.05               0.10              0.15              0.20 
+g 
+0.78
+0.80
+0.82
+0.84
+0.86
+0.88
+TOB Spread (bp) 
+Spread
+Rejection
+0.00
+0.02
+0.04
+0.06
+0.08
+0.10
+0.12
+Rejection Probability
+Figure 5: Stationary top of book spread and rejection probability as functions of the rejection score decay
+parameterρ g, such thatg(R) = exp(−ρgR). Parameters in the text.
+we treat the valudation markYn,it as an exogenous effective quote-revision variable with conditional law
+mn(δ) +νnξ. Equivalently, one may viewSn,i here as the reference quote stream used for validation,10
+with the control frozen over the latency window on the decision scale. This approximation preserves the
+dynamic-programming structure while aligning the validation rule with standard OTC protocol definitions.
+All the reputation/inventory machinery from the previous section remains unchanged; only the economic
+mapping fromYto execution P&L is modified to reflect the chosen protocol.
+3.1 Symmetric tolerance with capped slippage
+Following Oomen (2017b), we consider the execution policy with symmetric toleranceϵ:
+•Reject ifY <−ϵ.
+•Accept on-rate if−ϵ≤Y≤ϵ(dealer keeps the realized slippage).
+•Accept with rebate ifY >ϵ(dealer’s favourable slippage is capped atϵ).
+Equivalently, conditional on acceptance, the dealer’s slippage term becomesmin(Y,ϵ )with ϵ being one of the
+dealer’s controls. This protocol is not statistically symmetric in the realized slippage, but it is economically
+symmetric in the sense that extreme favorable slippage is rebated while extreme adverse slippage leads to
+rejection. It is therefore comparatively easy to communicate and defend, while remaining rich enough to
+illustrate the optimal-control and embedded-option viewpoints, as shown in Figure 7.
+At state(t,q,R )we define, as before,J = J(t,q,R ) = V (t,q,R rej(R))−V (t,q,R )and p = pn,i(t,q,R )
+being the appropriate accept marginalsDn±V (t,q,R ). Given(δ,ϵ ), a single request contribution (inside the
+intensity-weighted Hamiltonian) is
+J·1 Y<−ϵ +zn (δ−p+ min(Y,ϵ))·1 Y≥−ϵ.(44)
+10Desks often maintain reference streams.
+11
+40
+ 30
+ 20
+ 10
+ 0 10 20 30 40
+Inventory (M)
+2
+1
+0
+1
+2
+Quote offset (bp)
+Ask
+Bid
+Figure 6: Optimal pricing as a function of inventory under a stationary rejection score. Parameters in the
+text. Lighter colour shades correspond to larger values ofzn in the ladder. Dashed lines show adiabatic
+quadratic approximation for sizez1.
+Define the standardized cutoffs
+an =−ϵ−m nνn , b n = ϵ−m nνn (45)
+Then
+P(Y <−ϵ) = Φ(an),P(−ϵ≤Y≤ϵ) = Φ(b n)−Φ(a n),P(Y >ϵ) = 1−Φ(b n),(46)
+and
+E[Y·1 −ϵ≤Y≤ϵ ] =m n (Φ(bn)−Φ(a n)) +νn (ϕ(an)−ϕ(b n)).(47)
+So the closed-form expected increment is
+Gn(δ,ϵ;p,J) =JΦ(a n) +zn(δ−p)B n +znCn,(48)
+where we have introduced
+Bn = 1−Φ(a n), C n =m n (Φ(bn)−Φ(a n)) +νn (ϕ(an)−ϕ(b n)) +ϵ(1−Φ(b n)).(49)
+The bucket Hamiltonian becomes
+Hn(p,J) := sup
+δ∈R,ϵ≥0
+Λn0e−κnδGn(δ,ϵ;p,J),(50)
+to be substituted into the reduced HJB of Eq. 20.
+3.2 Adiabatic quadratic approximation and constant slippage
+The logic is the same as with unconstrained rejections. We freeze reputation and replace the state-dependent
+reject jumpJ(t,q,R )by a constant J≤ 0defined with self-consistent adiabatic closure. This yields an
+12
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5
+Density
+Reject Accept Rebate
+n(q, R)
+ 0 n(q, R)
+Sign-adjusted Latency Move Y
+Request Value J(q, R)
+Figure 7: Latency markY∼N (mn(δ),ν 2n)and embedded-option view of request-level payoff for fair rejection
+policy as described in the text. For clarity, side indices are suppressed in the figure; in the model, the
+corresponding marginal valuepn,i(t,q,R )remains side dependent. Red dashed lines depict optimal decision
+thresholds: the request is rejected whenY <−ϵn(q,R ); whenY >ϵn(q,R ), the request is accepted with price
+improvement for the client.
+inventory-only HJB, which is solved using second-order Hamiltonian expansion and quadratic ansatz for the
+value function. Main findings remain the same. Under constant slippage,mn(δ)≡−θ n, we observe significant
+simplifications:
+•Translational invariance in the shadow pricep(hence a shift rule for optimal quotes).
+•Closed-form relations for Hamiltonian derivatives in terms of the myopic optimizer atp= 0.
+For fixedϵandp, the bucket objective is
+fn(δ,ϵ;p,J) = Λ n0e−κnδGn(δ,ϵ;p,J),(51)
+13
+which is the exponential intensity multiplied by an affine function ofδ. Its interior maximizer is explicit:
+δ∗n(p,ϵ,J) =p+ ¯δn(ϵ,J) =p+
+(
+1
+κn
+− JΦ
+(
+an(ϵ)
+)
++znCn(ϵ)
+znBn(ϵ)
+)
+.(52)
+Substitutingδ=δ ∗n(0,ϵ,J) =: ¯δn(ϵ,J)into the objective yields a one-dimensional maximization problem:
+(
+¯ϵn(J), ¯δn(J)
+)
+∈argmax
+ϵ≥0
+fn
+(
+¯δn(ϵ,J),ϵ,0,J
+)
+, ¯δn(J) := ¯δn(¯ϵn(J),J).(53)
+There is generally no closed form for¯ϵn(J), but numerical 1D maximization is cheap.
+Becausemn,Cn andBn do not depend onδ, the Hamiltonian depends onp only through the combination
+u=δ−p. Therefore,
+Hn(p,J) =e −κnpHn(0,J),(54)
+as before. Moreover, using FOC at the optimizer yields a particularly simple identity
+Hnpp(0,J) = Λ n0e−κn¯δn(J)znκnBn(¯ϵn(J)).(55)
+This is a direct analogue of the earlier formula for unconstrained rejections, with the acceptance probability
+Φ(˜µn)replaced by the protocol acceptance probabilityBn(¯ϵn). With this substitution, optimal quotes are
+still given by Eq. 38, and fair control is a symmetric tolerance
+ϵ∗n = ¯ϵn(J).(56)
+In order to ensure self-consistency for reputation under the protocol, we note that with multiple buckets,
+a natural closure is the intensity-weighted average rejection probability at the myopic pointp= 0:
+¯r(J) =
+∑N
+n=1 Λn0e−κn¯δn(J)rn(J))∑N
+n=1 Λn0e−κn¯δn(J) , r n(J) :=P(Y <−¯ϵn(J)) = Φ(an(¯ϵn(J))).(57)
+Jis calibrated by solving¯r(J) =R, as before.
+3.3 Numerical examples
+Here we consider the same basic parameter set as earlier, with specifics:θn = 0.1bp, τn≡τ = 0.5s, ρ = 0.01,
+ρg = 0.1. The dealer controls(δ,ϵ ). Figure 8 illustrates the corresponding stationary value function. The
+gradient toward reducing inventory and improving reputation is very clear. Table 1 further compares different
+optimal protocols with and without reputation feedback for an intentionally large latency setting ofτ = 1s
+and a constant slippage ofθn = 0.1bp (except the reference entry with no adverse selection whereθn = 0).
+The results were obtained by numerically solving the corresponding HJB. We observe that adverse selection
+significantly harms performance, and the MM responds by widening spreads. With unconstrained rejections,
+the utility improves, but clearly at the expense of a high reject rate. The symmetric protocol results in a
+materially lower reject ratio and a smaller utility improvement due to rebates. It is important to note that the
+optimal threshold level is very reasonable in this case and corresponds to approximately half the top-of-book
+spread. Reputation feedback causes both protocols to reduce rejections dramatically.
+Simulation
+Finally, we provide a Monte Carlo simulation of market making with adverse selection and reputation feedback
+under a stationary optimal policy. We consider constant slippage here and assume that the mechanism is
+11V(0,0, R ∗).
+14
+40
+ 20
+ 0 20 40
+q
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5
+R
+175
+180
+185
+190
+195
+V(0, q, R)
+Figure 8: Optimal stationary value functionV (0,q,R )for symmetric tolerance with capped slippage protocol
+and rejection feedback. Parameters in the text.
+Modelρ g Spread (bp) Threshold (bp) Rejection Utility 11
+no rejection, no adverse selection0 0.69∞0 235.4
+no rejection0 0.89∞0 195.1
+unconstrained0 0.53 0.25 0.33 201.7
+0.05 0.64 0.40 0.22 199.5
+0.10 0.72 0.54 0.15 198.3
+0.15 0.76 0.67 0.10 197.4
+0.20 0.80 0.79 0.06 196.9
+symmetric0 0.71 0.43 0.17 199.4
+0.05 0.75 0.49 0.13 198.2
+0.10 0.78 0.55 0.09 197.4
+0.15 0.81 0.61 0.07 196.9
+0.20 0.83 0.68 0.05 196.5
+Table 1: Comparison of optimal trade acceptance/rejection protocols. “Threshold” denotes the optimal
+one-sided rejection cutoff in the unconstrained model and the optimal symmetric toleranceϵ in the fair
+protocol. Parameters are given in the text.
+driven by endogenous adverse quote selection. The simulator steps in units of latencyτ and models a single
+step as∆S∼N(0,σ 2τ). RFQs are then chosen with tilted intensities
+λn,i(∆S) =λ n,ibase exp(−αnYi),(58)
+15
+where Yi =±∆S and αn = θn/(σ2τ)so that Y|RFQ∼N (−θn,σ 2τ). In order to keep the unconditional
+RFQ rate unchanged, we include the intensity rescaling
+Λn0,adj = Λn0 exp
+(
+−12α2nσ2τ).(59)
+This rescaling exactly offsets the Gaussian exponential tilt because, under the untilted law,E
+[
+exp
+(
+−αnYi
+)]
+=
+exp
+(
+1
+2α2nσ2τ). Hence the unconditional RFQ arrival rate remains equal to the original baseline level. The
+algorithm uses exact stationary controls obtained by numerically solving the corresponding HJB and supports
+both the unrestricted and fair protocols.
+0 1 2 3 4 5
+Time (h)
+0.000
+0.025
+0.050
+0.075
+0.100
+0.125
+0.150
+Rejection Rate 
+R(t)
+r(t)
+ r(t)
+Figure 9: Relaxation of the simulated rejection score (rejection-rate EMA) to the stationary state. The
+mean rejection rate is optimal from the start, with the standard deviation decreasing as the stationary state
+is approached. Parameters in the text.
+Simulation was run for the fair acceptance/rejection protocol with latencyτn = 0.5s, constant slippage
+θn = 0.1bp and reputation parametersρ =ρg = 0.01, a total of5· 104 trajectories. Optimal controls from the
+HJB solution were passed to the simulator with initial conditionsq = 0, R = 0. Figure 9 illustrates relaxation
+of the reputation variable to the stationary state as the dealer maintains the optimal rejection rate from the
+start. Initially, with a low rejection score (smallR), the dealer is more flexible in their decision, as evidenced
+by the high standard deviation. Figure 10 demonstrates how the value function (inventory risk adjusted P&L)
+depends on the realized rejection rate. This kind of plot can be verified empirically.
+4 Concluding remarks
+FX dealers respond to latency risk with spread widening and rejection protocols. So far, these protocols
+have been a matter of design rather than optimization, with fairness and transparency being in the spotlight
+(GFXC 2024). In this paper, we provide a tractable framework that builds on the Avellaneda-Stoikov tradition
+(2008) and treats the rejection decision – subject to fairness or protocol constraints – as an optimizable
+16
+0.03 0.04 0.05 0.06 0.07 0.08 0.09 0.10
+Rejection Rate
+370
+375
+380
+385
+390
+395
+Risk Adjusted P&L (a.u.)
+Figure 10: Inventory risk adjusted P&L (optimization objective) as a function of the realized rejection
+rate atT = 2.4hours. Circles are averages of a thousand consecutive sorted realizations. The dashed line
+corresponds to the stationary state. Parameters in the text.
+state-dependent control alongside quoting. Optimal thresholds are found to be conservative, even in the
+presence of toxic flow, although the actual values depend on market conditions. We have also introduced the
+so-called rejection-score feedback mechanism to model how frequent rejections can reduce subsequent client
+engagement. Rejection-score-aware control makes the dealer even less inclined to reject in order to protect the
+flow. An adiabatic quadratic approximation with self-consistent closure was suggested as a simple, practical
+way to calculate optimal controls.
+Acknowledgments
+The author is grateful to Eric Mathew John (HSBC) for fruitful discussions and to Richard Anthony (HSBC)
+for support throughout the project and valuable comments. The views expressed are those of the author and
+do not necessarily reflect the views or practices at HSBC.
+References
+Avellaneda, M. and Stoikov, S., High-frequency trading in a limit order book.Quant. Finance, 2008,8, 217–224.
+Barzykin, A., Bergault, P. and Guéant, O., Algorithmic market making in dealer markets with hedging and market
+impact.Math. Finance, 2023,33, 41–79.
+Barzykin, A., Bergault, P., Guéant, O. and Lemmel, M., Optimal quoting under adverse selection and price reading,
+arXiv:2508.20225 [q-fin.TR], 2025.
+Bergault, P., Evangelista, D., Guéant, O. and Vieira, D., Closed-form approximations in multi-asset market making.
+Appl. Math. Finance, 2021,28, 101–142.
+Bergault, P. and Guéant, O., Size matters for otc market makers: general results and dimensionality reduction techniques.
+Math. Finance, 2021,31, 279–322.
+17
+Cartea, Á, Jaimungal, S. and Ricci, J., Buy low, sell high: A high frequency trading perspective.SIAM J. Financ. Math.,
+2014,5, 415–444.
+Cartea, Á, Jaimungal, S. and Penalva, J.,Algorithmic and High Frequency Trading, 2015 (Cambridge University Press:
+Cambridge, United Kingdom).
+Cartea, Á, Jaimungal, S. and Walton, J., Foreign exchange markets with last look.Math. Financ. Econ., 2019,13, 1–30.
+Cartea, Á and Wang, Y., Market making with alpha signals.Int. J. Theor. Appl. Finance, 2020,23, 2050016.
+Cartea, Á and Sánchez-Betancourt, L., The shadow price of latency: Improving intraday fill ratios in foreign exchange
+markets.SIAM J. Financ. Math., 2021,12, 254–294.
+Cartea, Á, Jaimungal, S. and Sánchez-Betancourt, L., Latency and liquidity risk.Int. J. Theor. Appl. Finance, 2021,24,
+2150035.
+Global Foreign Exchange Committee (GFXC), FX Global Code, 2024.
+Guéant, O., Lehalle, C.-A. and Fernandez-Tapia, J., Dealing with the inventory risk: a solution to the market making
+problem.Math. Financ. Econ., 2013,7, 477–507.
+Guéant, O.,The Financial Mathematics of Market Liquidity: From optimal execution to market making, 2016 (Chapman
+and Hall/CRC: Boca Raton, FL).
+Olding, K., Market making with and without last look. PhD thesis. University of Bath, United Kingdom, 2022.
+Oomen, R., Execution in an aggregator.Quant. Finance, 2017,17, 383–404.
+Oomen, R., Last look.Quant. Finance, 2017,17, 1057–1070.
+Stevenson, J., The value of millisecond expiry options in spot foreign exchange markets.J. Gov. Regul., 2016,5, 85–89.
+18

@@ -1,0 +1,1596 @@
+arXiv 2510.18569  https://arxiv.org/abs/2510.18569
+
+QuantEvolve: Automating Quantitative Strategy Discovery
+through Multi-Agent Evolutionary Framework
+Junhyeog Yun* Hyoun Jun Lee* Insu Jeon†
+AI Tech Lab, Qraft Technologies
+{junhyeog.yun,hyounjun.lee,insu.jeon}@qraftec.com
+Abstract
+Automating quantitative trading strategy development in dynamic
+markets is challenging, especially with increasing demand for per-
+sonalized investment solutions. Existing methods often fail to ex-
+plore the vast strategy space while preserving the diversity essen-
+tial for robust performance across changing market conditions. We
+present QuantEvolve, an evolutionary framework that combines
+quality-diversity optimization with hypothesis-driven strategy gen-
+eration. QuantEvolve employs a feature map aligned with investor
+preferences—such as strategy type, risk profile, turnover, and return
+characteristics—to maintain a diverse set of effective strategies. It
+also integrates a hypothesis-driven multi-agent system to system-
+atically explore the strategy space through iterative generation and
+evaluation. This approach produces diverse, sophisticated strate-
+gies that adapt to both market regime shifts and individual invest-
+ment needs. Empirical results show that QuantEvolve outperforms
+conventional baselines, validating the effectiveness. We release a
+dataset of evolved strategies to support future research.
+1 Introduction
+As financial markets evolve, the demand for faster and more adap-
+tive trading strategy development has become critical. Traditional
+quantitative research relies on human researchers to design, test,
+and refine trading algorithms. This process involves analyzing his-
+torical data, identifying profitable patterns, and adapting to market
+conditions [3, 5, 9, 15]. However, human researchers struggle to nav-
+igate diverse strategic frameworks due to inherent cognitive biases
+and limited attentional capacity [7, 18]. These constraints become
+especially acute during rapid regime changes, as delays in the re-
+search process often lead to missed alpha opportunities [3, 5, 9, 15].
+Recent technological advances, particularly in large language
+models (LLMs) and multi-agent systems, have paved the way for
+sophisticated automation in quantitative finance. Researchers have
+begun deploying these systems throughout the investment pipeline,
+from discovering predictive alpha factors to executing real-time
+trading decisions, with the aim of supporting or extending tra-
+ditional human-driven research [23, 25]. Notable examples, such
+as R&D-Agent-Quant and QuantAgent, leverage self-improving
+agent architectures to generate and refine trading strategies [10, 17].
+These studies demonstrate that LLMs can facilitate efficient devel-
+opment and implementation of trading algorithms.
+Despite these advances, current LLM-based and agent-driven ap-
+proaches still face important limitations in real-world applications.
+First, although they enhance the automation of strategy discovery,
+they often struggle to accommodate the diversity and complexity
+*Equal Contribution.
+†Corresponding Author.
+of modern financial environments [2, 16]. Most existing work fo-
+cuses on optimizing isolated strategies or narrow objectives such as
+short-term returns, limiting their ability to account for the breadth
+of market conditions, trading styles, and risk regimes that coex-
+ist in practice. Second, a major shortcoming of these automated
+systems lies in their inability to address the growing demand for
+personalized asset management. While scalable, such systems often
+overlook the fundamental heterogeneity in investor preferences.
+For example, direct indexing assets reached $864.3 billion by Decem-
+ber 2024, growing at a 22.4% compound annual growth rate (CAGR).
+Robo-advisory platforms now manage $1.4 trillion in assets, yet
+still serve only 5% of U.S. investors, primarily due to limited per-
+sonalization capabilities [4, 19]. These trends point to a critical gap:
+instead of relying on a single optimal strategy, future systems must
+dynamically generate and manage portfolios aligned with diverse
+investor preferences—each tailored to specific trading philosophies
+(e.g., momentum vs. mean-reversion), risk profiles, and investment
+horizons (e.g., high-frequency vs. low-turnover)—while maintain-
+ing adaptability to regime shifts.
+To address these challenges, we present QuantEvolve, an evo-
+lutionary multi-agent framework, designed for the automated cre-
+ation of trading strategies. Leveraging recent advancements—such
+as AlphaEvolve and The AI Scientist—that demonstrate the suc-
+cess of evolutionary computation in tackling intricate scientific
+problems [12, 14], we adapt these methodologies to quantitative
+finance. QuantEvolve explores a diverse set of strategies using a
+feature map aligned with investor preferences. It also utilizes a
+hypothesis-driven multi-agent system that facilitates a systematic
+exploration of the strategy search space through structured reason-
+ing and iterative refinement during the evolutionary cycle. This
+integration enables QuantEvolve to generate a broad range of high-
+performance strategies adaptable to fluctuating market regimes
+while meeting the specific needs of personalized investment.
+The primary contributions of this paper are as follows:
+• We introduce QuantEvolve, a multi-agent evolutionary frame-
+work that produces diverse trading strategies, adaptable to
+changing markets and personalized investment goals.
+• We design a hypothesis-driven multi-agent system within
+an evolutionary framework that enables efficient explo-
+ration of a vast, high-dimensional strategy space, thereby
+facilitating systematic and in-depth research.
+• We demonstrate that QuantEvolve produces strategies that
+outperform conventional baselines, validating its effective-
+ness and potential for broader use in automated quantitative
+strategy development.
+• We release a detailed dataset of strategies generated by
+QuantEvolve, facilitating further research on automated
+quantitative finance and evolutionary strategy generation.
+arXiv:2510.18569v1  [cs.AI]  21 Oct 2025
+Junhyeog Yun, Hyounjun Lee, and Insu Jeon
+Figure 1: Architecture of the proposed QuantEvolve framework.
+2 Related Work
+2.1 LLM Agents In Finance
+The emergence of LLMs and their derivative agentic architectures
+has generated transformative applications across multiple indus-
+tries, with finance among the most prominent domains. In this
+context, LLM-based agents have enabled advances in portfolio con-
+struction [8, 22], explainable investment products [6, 11], and sig-
+nal processing [21, 26], broadening the analytical toolkit available
+to practitioners. Frameworks such as AlphaAgents and FinRobot
+demonstrate how agentic systems can integrate heterogeneous
+financial data sources and uncover insights beyond traditional
+human-driven methods [27, 28]. Yet most existing efforts remain
+oriented toward narrow subtasks and rely heavily on semantic cues,
+making them difficult to backtest and limiting their robustness in
+real-world settings. These challenges motivate further exploration
+into how multi-agent systems can be designed to address the more
+demanding requirements of quantitative trading.
+2.2 LLM Agents in Quant Trading
+Subsequent research focuses on multi-agent frameworks that can
+be empirically tested with reusable evaluation methodologies. Al-
+phaGPT and R&D-Agent-Quant demonstrate how specialized agents
+can collaborate to generate and refine trading strategies through
+distributed processing and iterative improvement [10, 23]. These
+systems primarily focus on alpha factor discovery, identifying indi-
+vidual predictive signals that require subsequent integration into
+complete trading systems. While such approaches show promise
+in controlled environments, they remain constrained by architec-
+tural limitations that restrict deployment to narrow factor mining
+tasks rather than comprehensive strategy development. Current
+implementations lack mechanisms for developing end-to-end trad-
+ing systems that integrate multiple interacting factors with execu-
+tion logic, position sizing, and risk management components. This
+persistent gap highlights the imperative to advance multi-agent
+orchestration toward architectures that can systematically generate
+complete trading strategies through scientific methodology, mov-
+ing beyond individual factor discovery to maintain empirical rigor,
+ensure reproducibility, and deliver operational adaptability across
+diverse market regimes.
+2.3 Evolutionary LLM
+The limitations of traditional multi-agent frameworks have prompted
+exploration of evolutionary approaches that systematically navi-
+gate complex strategy spaces while maintaining behavioral diver-
+sity. Recent systems such as AI Scientist [12] and AlphaEvolve [14]
+demonstrate how evolutionary algorithms can enhance multi-agent
+coordination by preventing mode collapse and promoting novel
+solution exploration. These approaches, inspired by Darwin-Gödel
+machines [24] that combine evolutionary principles with formal
+reasoning, have shown promise in general AI domains but re-
+main largely unexplored in quantitative trading. Building upon
+these insights, our work introduces an evolutionary multi-agent
+architecture specifically designed for quantitative strategy devel-
+opment, combining population-based diversity preservation with
+hypothesis-driven strategy generation to achieve robust perfor-
+mance across varying market conditions.
+3 Methodology
+We propose QuantEvolve, a multi-agent-aided evolutionary frame-
+work for generating diverse, high-performing trading strategies.
+QuantEvolve addresses two key challenges: maintaining population
+diversity across investor preferences and efficiently exploring the
+high-dimensional strategy search space [13]. To preserve diversity,
+we employ a feature map—a multi-dimensional archive that char-
+acterizes strategies by attributes aligned with investor needs (risk
+profile, trading frequency, return characteristics) and retains only
+the best performer in each behavioral niche. To enable effective
+search, we deploy a hypothesis-driven multi-agent system that
+QuantEvolve: Automating Quantitative Strategy Discovery through Multi-Agent Evolutionary Framework
+Figure 2: Multi-agent evolution architecture.
+systematically explores and refines promising strategy concepts
+through structured reasoning. Figure 1 illustrates the framework
+architecture. We describe the feature map design in Sec. 4 and the
+multi-agent evolution process in Sec. 5.
+4 Feature Map of QuantEvolve
+The feature map organizes the strategy population as a multi-
+dimensional grid where each dimension represents a strategy at-
+tribute (e.g., Sharpe ratio, trading frequency, strategy category).
+Each dimension is discretized into bins, and their combination
+forms afeature vectorthat uniquely identifies a cell. Each cell stores
+the best-performing strategy for that feature vector, ensuring that
+diverse behavioral profiles are preserved throughout evolution.
+This structure provides two advantages: it enables personal-
+ized strategy recommendation by matching investor preferences
+to specific feature combinations, and it improves robustness by
+maintaining strategies optimized for different market regimes. The
+likelihood of discovering superior strategies also increases with
+greater population diversity.
+4.1 Feature Dimensions
+We select dimensions that align with common investor require-
+ments as detailed in Tab. 1.
+This design enables targeted matching: risk-averse investors
+seeking stable returns can select strategies with high Sharpe ratios
+and low maximum drawdown, while aggressive investors may
+prefer high trading frequency and total return.
+Dimension Description
+Strategy Category Momentum, mean-reversion, arbitrage, etc.
+Trading Frequency Number of trades per period
+Maximum Drawdown Largest peak-to-trough decline
+Sharpe Ratio Risk-adjusted return
+Sortino Ratio Downside risk-adjusted return
+Total Return Cumulative return
+Table 1: Feature map dimensions
+The feature map is extensible to asset-specific requirements. For
+futures trading, dimensions such as rollover costs or roll yield can be
+added; for cryptocurrency markets, asset type categories (payment
+tokens, utility tokens, meme coins) can be incorporated.
+4.2 Feature Bins
+Each feature dimension is partitioned into discrete bins, with the
+number of bins per dimension determined by the desired granularity.
+Continuous variables such as trading frequency or Sharpe ratio are
+discretized by equally dividing the range between the minimum
+and maximum values.
+To maximize strategy diversity, we represent the strategy cate-
+gory dimension using binary encoding.
+Given three strategy families—momentum, arbitrage, and mean-
+reversion—a strategy exhibiting both momentum and mean-reversion
+characteristics would be encoded as 101. This binary representation
+Junhyeog Yun, Hyounjun Lee, and Insu Jeon
+Algorithm 1QuantEvolve
+Require: Number of islands 𝑁 , number of generations 𝐺, migration interval 𝑀, insight curation interval 𝐾, feature dimensionsD=
+{𝑑1,...,𝑑 𝐷}, bin sizes per dimensionB={𝐵 1,...,𝐵 𝐷}, exploitation-exploration balance𝛼∈[0,1]
+Notation:ℎ(hypothesis),𝑐(code),𝑚(backtest results),𝑎(analysis)
+1:Initialization:
+2:Initialize feature mapFwith dimensionsDand bin sizesB
+3:Initialize evolutionary databaseDBcontaining feature map and archive
+4:Initialize𝑁islands{𝐼 1,𝐼 2,...,𝐼 𝑁}with seed strategies usingDataAgent
+5:Initialize insight repositoryI←∅
+6:forgeneration𝑔=0to𝐺−1do
+7:foreach island𝐼 𝑖 where𝑖∈{1,...,𝑁}do
+8:// Parent and Cousin Sampling
+9:𝑠 𝑝←SampleParent(𝐼𝑖,DB,𝛼)⊲Sample parent strategy; Equation (1)
+10:C←SampleCousins(𝑠 𝑝,𝐼𝑖,DB)⊲Sample cousins; Sec. 5.2.2
+11:// Multi-Agent-Aided Strategy Generation
+12:ℎ←ResearchAgent(𝑠 𝑝,C,I)⊲Generate hypothesis
+13:(𝑐,𝑚)←CodingTeam(ℎ,𝑠 𝑝,C)⊲Generate code𝑐and backtest results𝑚
+14:𝑎←EvaluationTeam(ℎ,𝑐,𝑚)⊲Analyze hypothesis, code, and results
+15:// Database Update
+16:𝑠 𝑛𝑒𝑤←(ℎ,𝑐,𝑚,𝑎)⊲Compose complete strategy
+17:f←ComputeFeatures(𝑠 𝑛𝑒𝑤 )⊲Compute feature vector from backtest results
+18:UpdateDatabase(𝑠 𝑛𝑒𝑤 ,f,DB,𝐼 𝑖)⊲Update feature map and island
+19:I←I∪{𝑎}⊲Accumulate insights for future generations
+20:end for
+21:// Migration and Insight Management
+22:if𝑔mod𝑀=0and𝑔>0then
+23:MigrateStrategies({𝐼 1,...,𝐼 𝑁},DB)⊲Migrate top 10% from each island to neighbors
+24:end if
+25:if𝑔mod𝐾=0and𝑔>0then
+26:I←ManageInsights(I)⊲Filter redundancy & Curate and consolidate insights
+27:end if
+28:end for
+29:returnEvolutionary databaseDB
+ensures that all possible category combinations occupy distinct
+bins, preventing strategies with different behavioral profiles from
+competing directly for the same cell .
+4.3 Feature Cells
+When a new strategy is generated, its characteristics are evaluated
+and mapped to a feature vector by determining the appropriate bin
+for each dimension. This vector identifies a unique cell in the feature
+map. The new strategy is added to that cell only if it outperforms
+the currently stored strategy; otherwise, the existing strategy is
+retained. Although rejected strategies are not added to the feature
+map, we preserve them in a separate archive for potential use in
+future strategy generation. We refer to the feature map together
+with this archive as theEvolutionary Database.
+4.4 Islands and Migration
+To balance exploration and exploitation, we employ an island model
+where multiple populations evolve independently while sharing a
+common feature map. Each island is initialized with strategies from
+different categories (Sec. 5.1) and evolves in isolation during early
+Figure 3: Exchange of superior strategies across islands.
+generations, developing specialized expertise in particular trading
+approaches.
+Periodically, islands exchange their best-performing strategies
+through migration. This mechanism gradually enriches each pop-
+ulation with diverse trading concepts, enabling the emergence of
+sophisticated hybrid strategies that combine characteristics from
+multiple approaches. Over time, the evolutionary focus shifts from
+depth within specialized categories to breadth across the entire
+QuantEvolve: Automating Quantitative Strategy Discovery through Multi-Agent Evolutionary Framework
+Figure 4: Initialization of QuantEvolve.
+strategy landscape (Fig. 3), producing increasingly complex and
+robust solutions.
+5 Multi-Agent System of QuantEvolve
+To effectively explore the high-dimensional search space of trading
+strategies and discover high-performance solutions, we propose
+a novel multi-agent system that evolves strategies based on hy-
+potheses, as illustrated in Fig. 2. This multi-agent system generates
+new strategies following the process outlined below, using a par-
+ent strategy sampled from the feature map and cousin strategies
+with similar characteristics. We implement our multi-agent system
+using an ensemble of Qwen3-30B-A3B-Instruct-2507 (lightweight,
+faster responses) and Qwen3-Next-80B-A3B-Instruct (larger, more
+thoughtful analysis), balancing efficiency with reasoning depth [20].
+(1) Hypothesis Generation: The research agent analyzes parent
+and cousin strategies to generate new hypotheses about trading
+strategies.
+(2) Strategy Implementation: Based on the generated hypotheses,
+the coding team develops trading strategy code. They perform
+a backtest with the generated code and iteratively refine it if
+issues are identified.
+(3) Evaluation and Analysis: The evaluation team analyzes the
+hypotheses, strategy code, and backtesting results to derive
+new insights.
+(4) Strategy Storage: The generated strategy is stored in the appro-
+priate cell of the feature map according to its characteristics. If
+a superior strategy already exists in that cell, the new strategy
+is rejected.
+5.1 Initialization with Data Agent
+We initialize QuantEvolve by constructing an evolutionary data-
+base that serves as the foundation for subsequent optimization. As
+shown in Fig. 4, we provide theData Agentwith the available data
+universe—in our case, daily OHLCV data for six equities and two
+futures contracts. The agent analyzes the input data structure, in-
+cluding file format (CSV, Parquet), schema, column definitions, and
+metadata required for reliable backtesting. Based on this analysis,
+the agent generates aData Schema Prompt, a structured specifica-
+tion that guides subsequent strategy design.
+In parallel, the data agent identifies𝐶 strategy categories deriv-
+able from the data universe, such as momentum, breakout, season-
+ality, and mean-reversion. For each category, theCoding Teamgen-
+erates a simple but representative seed strategy using the schema
+prompt and category specification. For instance, the team produces
+a baseline momentum strategy for the momentum category and a
+prototypical breakout strategy for the breakout category. The team
+also generates a buy-and-hold benchmark, yielding 𝐶+ 1initial
+strategies total.
+Each of these𝐶+ 1strategies forms a separate island in the evo-
+lutionary database, representing distinct starting points for strategy
+evolution. The initialization procedure thus constructs𝑁=𝐶+ 1
+islands, with each island populated by a single seed strategy that
+serves as the foundation for subsequent evolutionary processes.
+Subsequent evolutionary cycles iteratively reproduce, mutate, re-
+combine, and migrate strategies within and across islands, enabling
+the emergence of increasingly sophisticated solutions.
+5.2 Parent and Cousins Sampling
+In our framework, reproduction is performed by sampling a parent
+strategy and cousin strategies that share similar characteristics with
+the parent. The parent strategy serves as the primary reference
+for generating a new strategy, while the cousin strategies help to
+diversify its traits and explore novel combinations.
+5.2.1 Parent Strategy Selection.When sampling a parent strategy,
+we balance exploitation of high-performing strategies with explo-
+ration of diverse characteristics to prevent premature convergence.
+We randomly select an island, then apply one of two sampling
+methods:
+• Best parent:Uniformly samples from strategies on the feature
+map within the selected island.
+• Diverse parent:Uniformly samples from the entire population
+of the selected island.
+Formally, let𝐼 denote the selected island and𝑀𝐼⊆𝐼 represent
+strategies from island𝐼 that exist on the feature map. The parent
+selection probability is:
+𝑃(𝑠𝑝 =𝑠)=
+( 𝛼
+|𝑀𝐼| if𝑠∈𝑀 𝐼 (best parent)
+1−𝛼
+|𝐼| if𝑠∈𝐼(diverse parent) (1)
+where𝛼∈ [ 0, 1] controls the exploitation-exploration trade-
+off. Higher𝛼 increases selection pressure toward high-performing
+strategies, while lower𝛼 promotes diversity. We use𝛼= 0.5in our
+experiments to balance performance and diversity equally.
+5.2.2 Cousin Strategies Selection.To enrich the context for repro-
+duction, we select not only a parent strategy but also other strategies
+with similar characteristics, which we refer to as cousin strategies.
+To enhance strategy quality while promoting diversity, we select
+cousin strategies using three methods:
+• Best Cousins:High-performing strategies from the parent’s
+island.
+Junhyeog Yun, Hyounjun Lee, and Insu Jeon
+• Diverse Cousins:Strategies close to the parent in the feature
+space.
+• Random Cousins:Strategies selected uniformly at random from
+the entire population of the parent’s island.
+We formalize diverse cousin selection as follows.
+Letf𝑝 =(𝑓 1𝑝,𝑓 2𝑝,...,𝑓 𝐷𝑝) denote the parent strategy’s feature vec-
+tor, where𝐷 is the number of feature dimensions and𝑓𝑑𝑝 represents
+the bin index for dimension𝑑. For each dimension, we perturb the
+parent’s feature bin to generate a neighbor feature vectorf𝑐:
+𝑓𝑑𝑐 =
+(
+⌊N(𝑓 𝑑𝑝,𝜎 2𝑑)⌋if dimension𝑑is continuous
+BitFlip(𝑓 𝑑𝑝,𝑘𝑏𝑓)if dimension𝑑is strategy category (2)
+where𝜎𝑑 controls the sampling radius for continuous dimension
+𝑑, and BitFlip(𝑏,𝑘𝑏𝑓) randomly selects and flips one bit from the
+binary encoding𝑏, repeated𝑘𝑏𝑓 times. Note that the same bit can
+be selected multiple times, potentially canceling out previous flips.
+We then retrieve from the feature map the strategy with feature
+vectorf𝑐 as a diverse cousin.
+For instance, given a parent with Sharpe ratio in bin 3 and strat-
+egy category bin ’1001’, we sample a diverse cousin by drawing
+the Sharpe ratio bin from⌊N( 3,𝜎 2𝑑)⌋ and performing𝑘𝑏𝑓 bitflips
+on ’1001’. In our experiments, we set𝜎𝑑 = 1.0for all continuous
+dimensions and𝑘𝑏𝑓 =𝑛/ 4, where𝑛 is the bit length of the strategy
+category. We select two best cousins, three diverse cousins, and
+two random cousins per parent.
+5.3 Research Agent
+The research agent generates new hypotheses for trading strategies
+based on insights from parent and cousin strategies. To formulate a
+hypothesis, we provide three key inputs to the agent: (1) the parent
+and cousin strategies’ hypothesis, code, backtesting results, and
+analysis, (2) the Data Schema Prompt, and (3) insights accumulated
+from previous generations. The agent constructs each hypothesis
+with the following components:
+(1) Hypothesis: A testable statement grounded in financial theory,
+market dynamics, or statistical analysis that defines the core
+trading strategy.
+(2) Rationale: Theoretical and empirical justification based on par-
+ent and cousin strategies, data patterns, or financial theories.
+(3) Objectives: Specific quantitative and qualitative goals serving
+as evaluation criteria.
+(4) Expected Insights: Anticipated learning outcomes and contri-
+butions to future strategy evolution.
+(5) Risks and Limitations: Potential risks and limitations, includ-
+ing data bias, overfitting risks, and exceptional market conditions.
+(6) Experimentation Ideas: Future directions for modifying, ex-
+tending, or combining the hypothesis with other approaches.
+We adopt this hypothesis-driven method to address two funda-
+mental challenges in evolutionary strategy generation. First, the
+trading strategy search space is exceptionally high-dimensional.
+Second, evolutionary frameworks naturally favor broad, shallow
+exploration over deep, focused refinement. Our approach provides
+directional guidance that enables systematic improvement while
+preserving diversity, allowing convergence toward superior perfor-
+mance within limited generations.
+5.4 Coding Team
+The coding team translates hypotheses into executable Python
+trading strategies. When a hypothesis presents well-defined logic,
+the team implements it directly; when further exploration is needed,
+the team develops experimental code to validate concepts before
+full implementation. The workflow follows four stages:
+(1) Initial Implementation: We translate the hypothesis into
+Python code adhering to the data schema and backtesting frame-
+work, handling edge cases (missing data, execution constraints).
+(2) Backtesting: We execute backtests to generate performance
+metrics (total return, Sharpe ratio, Sortino ratio, Maximum
+Drawdown, Trading frequency, Information Ratio).
+(3) Iterative Refinement: When backtesting reveals issues—logical
+errors, performance anomalies, unexpected behaviors—we it-
+eratively refine the code by debugging edge cases, optimizing
+efficiency, adjusting parameters, or adding risk constraints.
+(4) Performance Reporting: Once the strategy passes backtesting
+without errors and demonstrates stable performance, we finalize
+the implementation and report code with metrics.
+We leverage Zipline [29], an open-source backtesting engine sim-
+ulating market mechanics (slippage, commissions), and QuantStats [1]
+for quantitative analysis and risk metrics.
+5.5 Evaluation Team
+The evaluation team analyzes hypotheses, code, and backtesting
+results to derive actionable insights guiding evolution. This team
+provides critical feedback, ensuring each generation’s learnings are
+systematically captured. The analysis comprises five functions:
+(1) Hypothesis Analysis: We evaluate hypothesis quality—assessing
+financial grounding, comprehensiveness (rationale, objectives,
+risks), testability, internal consistency, and market alignment.
+(2) Code Analysis: We verify implementation fidelity to hypothe-
+ses, checking correct trading logic, proper edge case handling,
+code quality (e.g., readability, efficiency), and categorize strate-
+gies for feature map placement.
+(3) Backtest Analysis: We treat results as hypothesis experiments,
+determining whether outcomes support, refute, or nuance the
+hypothesis. We identify successful/failed components, diag-
+nose failure modes, and propose modifications or additional
+experiments (parameter optimization, alternative indicators,
+robustness tests).
+(4) Insight Extraction: We synthesize actionable insights from
+hypotheses, code, and results—capturing success/failure pat-
+terns, promising directions, and unexplored strategy space areas.
+These insights directly inform future hypothesis generation.
+(5) Insight Management: Every 50 generations, we curate accu-
+mulated insights—filtering redundancy, consolidating findings,
+and maintaining island-specific institutional memory to prevent
+repeated failures while reinforcing successful patterns.
+This systematic analysis creates a knowledge feedback loop accel-
+erating evolution. By transforming results into structured insights,
+we enable the research agent to generate increasingly sophisticated
+hypotheses building on prior learnings. This cumulative knowledge
+QuantEvolve: Automating Quantitative Strategy Discovery through Multi-Agent Evolutionary Framework
+Market Symbols
+EquitiesAAPL, NVDA, AMZN, GOOGL, MSFT, TSLA
+FuturesES, NQ
+Table 2: Asset Universes.
+Market Period Date Range Duration
+Equities
+Training 2015-08-01 to 2020-07-31 5 years
+Validation 2020-08-01 to 2022-07-31 2 years
+Test 2022-08-01 to 2025-07-31 3 years
+Futures
+Training 2018-01-01 to 2021-07-31 3.6 years
+Validation 2021-08-01 to 2022-07-31 1 year
+Test 2022-08-01 to 2024-01-01 1.4 years
+Table 3: Temporal Data Split Configuration.
+acquisition distinguishes our approach from purely stochastic meth-
+ods, enabling efficient convergence while maintaining population
+diversity.
+6 Experimental Setup
+6.1 Datasets
+We evaluate QuantEvolve across two asset universes with different
+temporal configurations due to data availability constraints. Table 2
+presents the asset universes, while Tab. 3 details the temporal split
+configuration for each asset universe. To ensure realistic backtesting
+conditions, we simulate per-share commission costs of $0.0075
+with a minimum of $1.00 per trade, and implement volume-based
+slippage as a quadratic function of percentage of historical volume.
+All results are reported using a train-validation-test framework:
+strategies evolve on training data, the best-performing strategy on
+the validation set (measured by combined score) is selected, and
+final performance is evaluated on the held-out test period.
+6.2 Baseline Strategies
+For equities, we construct a market capitalization-weighted portfo-
+lio of the six stocks rebalanced monthly, and an equal-weighted port-
+folio strategy rebalanced daily. We also compare against three tech-
+nical indicator-based strategies: Risk Parity (RP), Relative Strength
+Index (RSI), and Moving Average Convergence Divergence (MACD).
+These strategies represent common quantitative approaches and
+serve as active baselines. All strategies, including baselines and
+evolved strategies, apply identical transaction costs (0.075% com-
+mission) to ensure comparability.
+For futures, we use individual buy-and-hold baselines for ES
+and NQ contracts. Each contract is sized with equal notional allo-
+cation at initialization based on price and point value, then held
+throughout the evaluation period. We report the average perfor-
+mance across both contracts as the aggregate baseline. While unified
+futures portfolio benchmarks are impractical due to heterogeneous
+contract specifications, this approach provides a fair reference for
+evaluating per-contract performance.
+6.3 Evaluation Metrics
+We evaluate strategies using four standard quantitative metrics and
+a composite objective for evolutionary selection.
+6.3.1 Individual Metrics.
+• Sharpe Ratio (SR): Risk-adjusted return measuring excess re-
+turn per unit of volatility: 𝑆𝑅=
+¯𝑅𝑝−𝑅𝑓
+𝜎𝑝 , where ¯𝑅𝑝 is average
+portfolio return,𝑅𝑓 is the risk-free rate (set to 0), and𝜎𝑝 is return
+standard deviation.
+• Sortino Ratio (SOR): Similar to Sharpe but penalizes only down-
+side volatility:𝑆𝑂𝑅=
+¯𝑅𝑝−𝑅𝑓
+𝜎𝑑 , where𝜎𝑑 is the standard deviation
+of negative returns.
+• Information Ratio (IR): Benchmark-relative performance:𝐼𝑅=
+¯𝑅𝑝− ¯𝑅𝑏
+𝜎𝑝−𝑏 , where ¯𝑅𝑏 is benchmark return and𝜎𝑝−𝑏 is tracking error.
+• Maximum Drawdown (MDD): Largest peak-to-trough decline:
+𝑀𝐷𝐷=min 𝑡
+ Trough𝑡−Peak𝑡
+Peak𝑡
+
+.
+6.3.2 Combined Score for Evolution.To guide evolutionary selec-
+tion, we construct a composite objective balancing profitability,
+benchmark outperformance, and downside risk:
+Score=𝑆𝑅+𝐼𝑅+𝑀𝐷𝐷(3)
+This formulation rewards both absolute (SR) and relative (IR) risk-
+adjusted returns while penalizing drawdown severity. The equal
+weighting (1:1:1) avoids overemphasizing any single dimension, en-
+couraging strategies that balance consistent alpha generation with
+capital preservation. This composite objective transforms evolution
+from pure return maximization into a robust measure of long-term
+viability across market regimes.
+7 Results in Equity Markets
+7.1 Evolution of the Feature Map
+Figure 5 presents three-dimensional projections of the feature map,
+enabling us to track its evolution across generations. We visualize
+the feature map using strategy category and max drawdown as the
+two axes, where each cell displays the strategy with the highest
+Sharpe ratio among all strategies sharing the same category and
+max drawdown bin.
+At generation 0, the feature map consists exclusively of a buy-
+and-hold baseline and representative strategies from each prede-
+fined category, the details of which are provided in the Tab. 6. As
+evolution progresses, the cells of the feature map gradually become
+populated with increasingly diverse strategies, and the performance
+within each cell shows consistent improvement. This visualization
+demonstrates both the exploratory capacity of the evolutionary pro-
+cess—filling previously empty regions of the strategy space—and its
+ability to refine solution quality within each niche over successive
+generations.
+Figure 6 presents the final generation’s feature map visualiza-
+tions across different dimension pairs, including number of trans-
+actions and cumulative return, among others, evaluated using the
+information ratio. Several noteworthy patterns emerge from these
+visualizations. First, strategies with higher cumulative returns tend
+to exhibit moderate levels of maximum drawdown rather than ex-
+treme values at either end of the spectrum. This inverted U-shaped
+Junhyeog Yun, Hyounjun Lee, and Insu Jeon
+(a) Gen 0
+ (b) Gen 50
+ (c) Gen 100
+ (d) Gen 150
+Figure 5: Evolution of the feature map across max drawdown and category dimensions, measured by Sharpe ratio.
+(a) Num Transactions & Category
+ (b) MDD & Returns
+ (c) Category & SR
+ (d) MDD & Num Transactions
+Figure 6: Feature map visualizations across different dimension pairs, including the number of transactions and cumulative
+return, evaluated using the information ratio.
+relationship suggests a trade-off between risk-taking and return
+generation: strategies with excessively low maximum drawdown
+appear to operate conservatively, resulting in limited upside poten-
+tial, while those with very high maximum drawdown may expose
+portfolios to excessive downside risk that undermines long-term
+compounding. Second, we observe a positive association between
+Sharpe ratio and information ratio across the feature map, which
+is intuitive given that both metrics evaluate risk-adjusted perfor-
+mance, albeit with different benchmark specifications.
+These patterns indicate that the evolutionary process success-
+fully identifies a diverse set of strategies occupying distinct regions
+of the risk-return space, rather than converging prematurely to a
+narrow subset of solutions.
+7.2 Evolution of the Strategy
+Figure 7 illustrates the evolutionary trajectory from generation 0
+to 130, showing how the framework explores different strategy
+designs through iterative hypothesis testing. The initial strategy
+(generation 0) employed volume-momentum signals. Generation
+10 expanded the signal space by incorporating momentum analysis
+across multiple timeframes, volatility filtering, and mean-reversion
+components. While this approach increased cumulative returns, the
+maximum drawdown expanded. Analysis suggested that the pri-
+mary limitation had shifted from signal diversity to portfolio-level
+risk management: uniform weighting across assets did not account
+for differing volatility characteristics, and periodic rebalancing gen-
+erated trades regardless of market conditions.
+Generation 40 redirected focus toward risk management design.
+Rather than continuing to refine individual signals, this iteration
+0 20 40 60 80 100 120 140
+Generation
+1.2
+1.3
+1.4
+1.5
+1.6
+1.7
+1.8Score
+Multi-signal:
+Volatility + momentum + z-score
+Per-asset filtering
+ Portfolio-level regime detection
+Paradigm shift to pairs trading
+Back to momentum with robust exits:
+Universal stops + per-asset volatility
+Figure 7: The evolutionary process leading to the optimal
+strategy in equity markets.
+introduced portfolio-wide volatility monitoring. It separated exit
+decisions from the monthly rebalancing schedule, enabling more re-
+sponsive position management during adverse market movements.
+These changes reduced the maximum drawdown compared to gen-
+eration 10, although the improvement in the Sharpe ratio remained
+modest.
+Generation 80 explored an alternative approach based on coin-
+tegration pairs trading, testing whether relative-value strategies
+could offer different risk-return characteristics. This exploration
+QuantEvolve: Automating Quantitative Strategy Discovery through Multi-Agent Evolutionary Framework
+0 20 40 60 80 100 120 140
+Generation
+1.2
+1.3
+1.4
+1.5
+1.6
+1.7
+1.8Score
+Momentum alone fails; tighten
+risk thresholds when volatility rises
+Growth stocks need sector-specific risk
+controls in high-volatility regimes
+Use asset-specific volatility
+and correlation dynamics
+Dynamic volatility thresholds must be
+computed per-asset, not across the portfolio
+Figure 8: The evolutionary process of the insights in equity
+markets.
+failed to generate positive returns, primarily due to the unstable
+cointegration relationships during volatile periods.
+Generation 130 selectively integrated insights from previous gen-
+erations while maintaining implementation simplicity. The strategy
+retained volume-momentum signals as the core component, in-
+corporated per-asset volatility adjustments to address the uniform
+weighting limitation identified in generation 10, and adopted con-
+tinuous position monitoring rather than schedule-dependent exits
+as explored in generation 40. Notably, the framework avoided the
+complexity that contributed to the failure of generation 80. The
+resulting strategy is comprised of three straightforward compo-
+nents: momentum-based entry signals, volatility-scaled position
+sizing, and trailing stop-loss rules. This design contrasts with ac-
+cumulating all features from each iteration, which would increase
+the parameter count and risk of overfitting.
+This trajectory illustrates that strategy evolution in our frame-
+work proceeds through the exploration of different design choices,
+the selective retention of practical components, and the prioritiza-
+tion of robustness over architectural complexity.
+7.3 Evolution of the Insights
+Figure 8 presents the evolutionary process of the insights in eq-
+uity markets. Generation 10 identified that simple volatility indica-
+tors fail during market crises, and recognized the need to combine
+volatility z-scores with VIX or moving averages. Additionally, an
+alternative hypothesis emerged proposing sector diversification
+instead of signal refinement. This diversity of approaches prevented
+premature convergence on a single solution.
+Generations 40-80 yielded specialized insights. For example,
+building on generation 10’s observations, generation 40 found that
+growth stocks require sector-specific risk controls in high-volatility
+regimes. As migration progressed, the framework began to com-
+bine previously separate findings: VIX integration, asset-specific
+thresholds, and volatility modeling emerged together in unified in-
+sights. It also began distinguishing implementation errors from con-
+ceptual failures. For instance, it determined that regime detection
+mechanisms failed due to incorrect volatility annualization rather
+ModelSR MDD IR CR
+BaselinesMarketCap 0.99 -33% - 99%
+Equal 1.07 -36% 0.80 129%
+MACD 1.10 -39% 0.75 171%
+RSI 1.03 -37% 0.39 136%
+RP 1.22-29%0.44 130%
+OursGen 0 0.99 -35% 0.03 100%
+Gen 50 1.07 -34% 0.49 119%
+Gen 100 1.11 -32%0.87128%
+Gen 150 1.52-32% 0.69256%
+Table 4: Experimental results in equity markets. MarketCap
+represents a portfolio strategy that rebalances monthly with
+each stock weighted by its market capitalization. We use this
+strategy as the benchmark for calculating the information
+ratio. Equal represents an equal-weighted portfolio strategy
+that rebalances daily. For detailed implementation of each
+baseline, please refer to the Sec. B.
+than flawed logic. Generation 80 integrated per-asset volatility
+thresholds with correlation effects, while new directions emerged
+investigating momentum persistence and market microstructure.
+Generation 130 demonstrates insight consolidation and refine-
+ment. The framework documented over 30 failed approaches, in-
+cluding returns-based volatility detection, sector moving average
+filters, and various covariance estimation methods. Generation
+10’s insights evolved into detailed implementation specifications,
+such as requiring dynamic volatility thresholds to be computed
+per-asset rather than across the portfolio. Through experimental
+validation, the framework found several techniques used in quanti-
+tative finance practice, including multi-signal confirmation, Kalman
+filtering for beta estimation, and risk parity scaling.
+7.4 Performance of the Strategies
+In our study, we benchmarked the proposed framework against a set
+of widely adopted portfolio management approaches. The baseline
+methods comprised two fundamental weighting schemes: Market-
+Cap, a market capitalization-weighted portfolio rebalanced monthly
+that serves as the benchmark for information ratio calculations, and
+Equal, an equal-weighted portfolio rebalanced daily. Additionally,
+we included the Risk Parity strategy (RP), which equalizes risk con-
+tributions across assets through inverse-volatility weighting, and
+two indicator-driven strategies: the Relative Strength Index (RSI),
+a contrarian mean-reversion framework, and the Moving Average
+Convergence Divergence (MACD), a momentum-following rule
+based on moving average crossovers. These baselines represent
+complementary investment paradigms—passive indexing, risk bal-
+ancing, momentum persistence, and mean reversion—providing a
+rigorous basis for comparison with the strategies generated by our
+QuantEvolve framework.
+Table 4 shows that our framework achieves competitive out-of-
+sample test performance, demonstrating favorable results across
+both SR and CR relative to the baseline strategies. These results
+suggest that evolutionary frameworks can be effectively applied to
+quantitative research and automated strategy generation.
+Junhyeog Yun, Hyounjun Lee, and Insu Jeon
+0 20 40 60 80 100
+Generation
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+1.2Score
+Adaptive Volatility
++ Momentum Filter
+Dual-Mode Regime:
+Mean-Rev + Momentum
+Dynamic Trailing Stop:
+Volatility-Adaptive ATR
+ADX Regime Detection:
+Wilder's Smoothing
+Figure 9: Strategy evolution in futures markets from genera-
+tion 0 to 100.
+8 Results in Futures Markets
+8.1 Evolution of the Strategy
+Figure 9 illustrates the evolutionary trajectory in ES futures trading.
+Generation 0 employed static mean reversion with fixed Bollinger
+Band thresholds and time-based exits, suffering from the inability
+to adapt to regime changes.
+Generation 10 introduced dynamic volatility scaling and momen-
+tum confirmation. By calculating adaptive Z-scores from rolling
+volatility and requiring directional momentum alignment, it pre-
+vented counter-trend trades during strong moves. ATR-based po-
+sition sizing and contract roll management substantially reduced
+drawdown, though performance remained inconsistent across regimes.
+Generation 20 implemented a dual-mode system with explicit
+regime detection. During low-volatility periods, it applied mean-
+reversion with adaptive Bollinger Bands (2𝜎 to 3𝜎) and volume con-
+firmation; during high-volatility regimes, it switched to momentum-
+following with trend filters. Rolling ATR quantiles and sigmoid
+transitions enabled smooth regime adaptation.
+Despite evolution continuing through generation 100, genera-
+tion 20 achieved superior out-of-sample performance. Later gener-
+ations introduced increasingly complex mechanisms—ADX regime
+detection, multi-signal systems—that degraded generalization. Gen-
+eration 20’s balance between adaptive sophistication and imple-
+mentation parsimony exemplifies successful navigation of the bias-
+variance tradeoff.
+8.2 Evolution of the Insights
+Figure 10 shows the accumulation of strategic knowledge. Genera-
+tion 10 identified that static volatility thresholds fail during regime
+transitions and documented that ATR-based position sizing reduces
+drawdowns more effectively than fixed contract allocation. It also
+recognized the importance of momentum confirmation to avoid
+premature mean-reversion entries.
+Generation 20 synthesized these findings into regime-specific in-
+sights: low-volatility environments favor mean-reversion with tight
+bands, while high-volatility periods require momentum-following
+0 20 40 60 80 100
+Generation
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+1.2Score
+Regime-aware systems
+adapt to market conditions
+vs. static rules
+Volatility clustering
++ ATR trailing stops
+for drawdown control
+Adaptive risk params
+to handle exit timing
+in volatile regimes
+Trend strength detection
+enables directional trading
+with proper filtering
+Figure 10: Insight evolution in futures markets.
+ModelSR MDD IR CR
+Baseline B&H ES 0.66 -16.7% - 14.4%
+B&H NQ 0.97 -21.6% - 31.3%
+OursGen 0 -1.21 -26.1% -1.36 -25.4%
+Gen 10 -0.41-15.0%-0.76 -7.1%
+Gen 20 1.03-15.4%0.49 37.4%
+Table 5: Performance on futures test set (Aug 2022 - Jan 2024).
+Baselines represent individual buy-and-hold positions for ES
+and NQ contracts. Generation 20 outperforms both baselines
+across risk-adjusted metrics.
+with wider thresholds. It discovered that volume confirmation pre-
+vents false signals during low-liquidity periods and that trailing
+stops should scale with current ATR rather than entry-time volatil-
+ity. Critically, it documented failed approaches including returns-
+based regime detection and fixed holding periods, preventing future
+iterations from repeating these errors.
+By generation 20, the framework had established that regime-
+aware systems outperform static rules in futures markets, that
+smooth transitions between modes reduce whipsaws, and that im-
+plementation simplicity often trumps theoretical sophistication.
+8.3 Performance on Futures Markets
+To demonstrate QuantEvolve’s scalability across asset classes, we
+applied the framework to ES and NQ futures contracts. Table 5
+and Fig. 11 present the results.
+The futures results demonstrate QuantEvolve’s ability to gen-
+erate effective strategies across asset classes with distinct charac-
+teristics. Generation 0’s poor performance (SR=-1.21, CR=-25.4%)
+confirms that naive mean-reversion fails in trending futures mar-
+kets. The framework rapidly adapted: generation 10 substantially
+reduced drawdown to -15.0%, while generation 20 achieved positive
+risk-adjusted returns (SR=1.03) that exceeded both ES (SR=0.66)
+and NQ (SR=0.97) baselines.
+Notably, the evolved strategy delivered 37.4% cumulative return
+compared to 14.4% for ES and 31.3% for NQ, with lower maximum
+QuantEvolve: Automating Quantitative Strategy Discovery through Multi-Agent Evolutionary Framework
+Figure 11: Portfolio value evolution for futures strategies and
+baselines over the test period.
+0 50 100 150
+Generation
+1.0
+1.1
+1.2
+1.3
+1.4
+1.5SR
+1-bin
+4-bin
+16-bin
+0 50 100 150
+Generation
+1.0
+1.2
+1.4
+1.6
+1.8
+2.0
+2.2
+2.4
+2.6CR
+1-bin
+4-bin
+16-bin
+Figure 12: Impact of bin size on evolutionary performance.
+Higher bin resolution (16-bin) enables sustained improve-
+ment across generations, while lower resolutions (1-bin, 4-
+bin) lead to premature convergence.
+drawdown than the NQ baseline (-15.4% vs -21.6%). The Information
+Ratio of 0.49 indicates consistent outperformance relative to the
+baseline, validating that the hypothesis-driven evolutionary pro-
+cess successfully identified regime-adaptive mechanisms suited to
+futures market dynamics. This cross-asset generalization—without
+manual recalibration of the framework—supports QuantEvolve’s
+potential for scalable automated strategy discovery across diverse
+financial instruments.
+9 Ablation Study
+9.1 Feature Bin Sizes
+To investigate the impact of bin size on evolutionary dynamics, we
+conducted an ablation study comparing three configurations: 1-bin,
+4-bin, and 16-bin per feature dimension. The bin size determines
+the resolution of the feature map, directly influencing the balance
+between diversity maintenance and selection pressure. Fewer bins
+reduce the number of distinct niches, potentially accelerating con-
+vergence but limiting exploration capacity, while more bins expand
+the behavioral space but may slow early-stage optimization. In the
+extreme case of 1-bin, the feature map collapses to a single cell
+46.3%
+18.8%
+11.7%
+(a) w/o category dimension
+17.9%
+16.8%
+16.6% (b) w/ category dimension
+Figure 13: Distribution of strategy categories across strategies
+in the evolutionary database. Each pie slice represents the
+proportion of strategies in a given category, with the top 9
+most frequent categories displayed individually and remain-
+ing categories aggregated. Percentages are shown for the top
+3 categories only.
+where all strategies compete directly, eliminating diversity mainte-
+nance.
+Figure 12 presents the evolution of test performance across gener-
+ations for different bin size configurations. The 16-bin configuration
+exhibits sustained improvement throughout the evolutionary pro-
+cess, achieving a Sharpe ratio of 1.52 and a cumulative return of
+256% by generation 150. This trajectory demonstrates continuous
+exploration and refinement, with performance gains accelerating in
+later generations as the framework identifies and exploits promising
+strategy patterns.
+In contrast, both 1-bin and 4-bin configurations display early
+convergence followed by performance stagnation or degradation.
+The 1-bin setting begins with relatively strong initial performance
+(SR = 1.24, CR = 191%). However, it fails to sustain improvement
+beyond generation 50, ultimately declining to SR = 1.12 and CR
+= 150% by generation 150. The 4-bin configuration follows a simi-
+lar pattern, with initial performance of SR = 1.24 and CR = 191%
+declining to SR = 1.06 and CR = 135% by generation 150.
+These results suggest that insufficient bin resolution leads to
+premature convergence by constraining niche diversity. When the
+feature map contains too few cells, strategies with distinct behav-
+ioral characteristics are forced to compete within the same niche,
+eliminating potentially valuable exploration directions. This compe-
+tition favors strategies that perform well during training under the
+observed market conditions but may sacrifice the robustness and
+generalization capacity required for out-of-sample performance.
+Furthermore, the sustained performance of the 16-bin configura-
+tion indicates that higher bin resolution enables the preservation
+of diverse strategy populations, potentially reducing the risk of
+overfitting.
+9.2 Feature Dimensions
+To examine the impact of including the strategy category as a
+feature dimension, we compare two evolutionary runs: one ex-
+cluding the category dimension (Figure 13a) and one including it
+(Figure 13b). Without the category dimension, the most dominant
+bin accounts for 46.3% of all strategies, indicating a strong bias
+toward specific strategy categories. This concentration suggests
+Junhyeog Yun, Hyounjun Lee, and Insu Jeon
+limited strategic diversity, with the evolutionary process favoring
+specific categories disproportionately. Consequently, the frame-
+work may fail to adequately explore diverse strategic approaches,
+instead converging prematurely on a narrow subset of solution
+types. In contrast, including the category dimension results in a
+more balanced distribution. This more equitable allocation indi-
+cates that incorporating strategy category as a feature dimension
+effectively promotes population diversity and reduces the risk of
+premature convergence, enabling the evolutionary process to ex-
+plore a broader range of strategic paradigms.
+10 Discussion
+Robustness and Overfitting.This study focuses on applying
+evolutionary frameworks to quantitative finance; consequently,
+comprehensive robustness testing remains an area for improvement.
+As such, strategies generated by the framework may be susceptible
+to data snooping bias. Future work will integrate more sophisticated
+and rigorous validation methodologies.
+Hypothesis Quality.We have not formally validated whether
+generated hypotheses reflect established market theories or pro-
+vide post-hoc rationalizations for data-mined patterns. Future work
+should incorporate external validation mechanisms—comparison
+against academic literature, expert review, or causal inference frame-
+works—to verify hypotheses represent meaningful insights.
+LLM Inference Cost.Each evolutionary cycle requires 5-10 LLM
+inferences. This limits scalability for resource-constrained settings.
+Evaluation Scope.Our evaluation uses six equities and two futures
+over limited date ranges with relatively simple baselines. While ade-
+quate for demonstrating comparative performance, these baselines
+do not represent state-of-the-art quantitative approaches. Future
+work should evaluate against sophisticated benchmarks and expand
+to larger asset universes with longer time horizons.
+Fully automated quantitative research remains an open challenge.
+While QuantEvolve demonstrates the feasibility of an evolutionary
+framework for generating diverse strategies, substantial work is
+needed to ensure robustness, validate the quality of hypotheses,
+and bridge the research-to-deployment gap.
+11 Conclusion
+We present QuantEvolve, a multi-agent-aided evolutionary frame-
+work that systematically generates diverse, high-performing trad-
+ing strategies. QuantEvolve employs a feature map that preserves
+population diversity across feature dimensions relevant to investor
+needs, and utilizes a multi-agent system to effectively explore a high-
+dimensional search space of trading strategies through hypothesis-
+driven reproduction. By combining evolutionary computation’s
+exploration with structured hypothesis-driven reasoning, QuantE-
+volve bridges the gap between broad discovery and deep, theoretically-
+grounded refinement. Our empirical evaluation across equity and
+futures markets demonstrates that QuantEvolve produces diverse
+strategies with distinct behavioral characteristics, suggesting our
+framework can complement human expertise by exploring combi-
+nations and inefficiencies at scales infeasible for manual research.
+By generating strategies across the full spectrum of risk profiles
+and trading philosophies, QuantEvolve enables personalized as-
+set management adapting to individual constraints—a capability
+increasingly demanded yet underserved by existing platforms.
+12 Disclaimer
+This framework is intended for research purposes only. Users are
+solely responsible for validating all generated strategies and as-
+sessing their suitability for specific use cases. The framework’s
+outputs do not reflect the opinions of Qraft Technologies. Qraft
+Technologies assumes no liability for any outcomes resulting from
+the use of this framework.
+References
+[1] Ran Aroussi. 2024. QuantStats: Portfolio Analytics for Quants. https://github.
+com/ranaroussi/quantstats. Accessed: 2025-09-30.
+[2] Ahmed BenSaïda. 2015. The frequency of regime switching in financial market
+volatility.Journal of Empirical Finance32 (2015), 63–79.
+[3] Md. Abul Bhuiyan et al. 2025. Deep learning for algorithmic trading: A systematic
+review.Finance Research Letters66 (2025), 104123. doi:10.1016/j.frl.2025.104123
+[4] Cerulli Associates. 2025.Direct Indexing Assets Close Year-End 2024 at $864.3
+Billion. https://www.cerulli.com/press-releases/direct-indexing-assets-close-
+year-end-2024-at-864.3-billion Accessed: 2025-09-30.
+[5] Farah Dakalbab et al. 2024. Artificial intelligence techniques in financial trading.
+Journal of King Saud University - Computer and Information Sciences36, 6 (2024),
+10456–10472. doi:10.1016/j.jksuci.2024.10456
+[6] Sorouralsadat Fatemi and Yuheng Hu. 2024. FinVision: A multi-agent frame-
+work for stock market prediction. InProceedings of the 5th ACM International
+Conference on AI in Finance. 582–590.
+[7] Jian Guo, Saizhuo Wang, Lionel M Ni, and Heung-Yeung Shum. 2024. Quant
+4.0: engineering quantitative investment with automated, explainable, and
+knowledge-driven artificial intelligence.Frontiers of Information Technology
+& Electronic Engineering25, 11 (2024), 1421–1445.
+[8] Taian Guo, Haiyang Shen, Jinsheng Huang, Zhengyang Mao, Junyu Luo, Zhuoru
+Chen, Xuhui Liu, Bingyu Xia, Luchen Liu, Yun Ma, et al. 2025. MASS: Multi-Agent
+Simulation Scaling for Portfolio Construction.arXiv preprint arXiv:2505.10278
+(2025).
+[9] Minh Le. 2025. Quantitative Trading, Discretionary Trading, Hedge Funds:
+Traditional Traders vs. Quant Traders.SSRN Electronic Journal(2025). doi:10.
+2139/ssrn.5197573
+[10] Yuante Li, Xu Yang, Xiao Yang, Minrui Xu, Xisen Wang, Weiqing Liu, and Jiang
+Bian. 2025. R&D-Agent-Quant: A Multi-Agent Framework for Data-Centric
+Factors and Model Joint Optimization.arXiv preprint arXiv:2505.15155(2025).
+[11] Xiao-Yang Liu, Guoxuan Wang, Hongyang Yang, and Daochen Zha. 2023. Fingpt:
+Democratizing internet-scale data for financial large language models.arXiv
+preprint arXiv:2307.10485(2023).
+[12] Chris Lu, Cong Lu, Robert Tjarko Lange, Jakob Foerster, Jeff Clune, and David Ha.
+2024. The ai scientist: Towards fully automated open-ended scientific discovery.
+arXiv preprint arXiv:2408.06292(2024).
+[13] Jean-Baptiste Mouret and Jeff Clune. 2015. Illuminating search spaces by mapping
+elites.arXiv preprint arXiv:1504.04909(2015).
+[14] Alexander Novikov, Ngân V ˜u, Marvin Eisenberger, Emilien Dupont, Po-Sen
+Huang, Adam Zsolt Wagner, Sergey Shirobokov, Borislav Kozlovskii, Francisco JR
+Ruiz, Abbas Mehrabian, et al. 2025. AlphaEvolve: A coding agent for scientific
+and algorithmic discovery.arXiv preprint arXiv:2506.13131(2025).
+[15] Philip Treleaven, Michal Galas, and Vidhi Lalchand. 2013. Algorithmic Trading
+Review.Commun. ACM56, 11 (2013), 76–85. doi:10.1145/2500117
+[16] Jun Tu. 2010. Is regime switching in stock returns important in portfolio deci-
+sions?Management Science56, 7 (2010), 1198–1215. doi:10.1287/mnsc.1100.1177
+[17] Saizhuo Wang, Hang Yuan, Lionel M Ni, and Jian Guo. 2024. Quantagent: Seeking
+holy grail in trading by self-improving large language model.arXiv preprint
+arXiv:2402.03755(2024).
+[18] Saizhuo Wang, Hang Yuan, Leon Zhou, Lionel M Ni, Heung-Yeung Shum, and
+Jian Guo. 2023. Alpha-gpt: Human-ai interactive alpha mining for quantitative
+investment.arXiv preprint arXiv:2308.00016(2023).
+[19] Yahoo Finance. 2025.Robo Advisor Market Projected to Reach USD 3.2 Trillion by
+2030. https://finance.yahoo.com/news/robo-advisor-market-projected-reach-
+143000875.html Accessed: 2025-09-30.
+[20] An Yang, Anfeng Li, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng,
+Bowen Yu, Chang Gao, Chengen Huang, Chenxu Lv, et al. 2025. Qwen3 technical
+report.arXiv preprint arXiv:2505.09388(2025).
+[21] Yangyang Yu, Haohang Li, Zhi Chen, Yuechen Jiang, Yang Li, Jordan W Suchow,
+Denghui Zhang, and Khaldoun Khashanah. 2025. Finmem: A performance-
+enhanced llm trading agent with layered memory and character design.IEEE
+QuantEvolve: Automating Quantitative Strategy Discovery through Multi-Agent Evolutionary Framework
+Transactions on Big Data(2025).
+[22] Yangyang Yu, Zhiyuan Yao, Haohang Li, Zhiyang Deng, Yuechen Jiang, Yupeng
+Cao, Zhi Chen, Jordan Suchow, Zhenyu Cui, Rong Liu, et al . 2024. Fincon: A
+synthesized llm multi-agent system with conceptual verbal reinforcement for
+enhanced financial decision making.Advances in Neural Information Processing
+Systems37 (2024), 137010–137045.
+[23] Hang Yuan, Saizhuo Wang, and Jian Guo. 2024. Alpha-GPT 2.0: Human-in-the-
+Loop AI for quantitative investment.arXiv preprint arXiv:2402.09746(2024).
+[24] Jenny Zhang, Shengran Hu, Cong Lu, Robert Lange, and Jeff Clune. 2025. Darwin
+Godel Machine: Open-Ended Evolution of Self-Improving Agents.arXiv preprint
+arXiv:2505.22954(2025).
+[25] Tianping Zhang, Yuanqi Li, Yifei Jin, and Jian Li. 2020. Autoalpha: an efficient
+hierarchical evolutionary algorithm for mining alpha factors in quantitative
+investment.arXiv preprint arXiv:2002.08245(2020).
+[26] Wentao Zhang, Lingxuan Zhao, Haochong Xia, Shuo Sun, Jiaze Sun, Molei Qin,
+Xinyi Li, Yuqing Zhao, Yilei Zhao, Xinyu Cai, et al. 2024. A multimodal founda-
+tion agent for financial trading: Tool-augmented, diversified, and generalist. In
+Proceedings of the 30th acm sigkdd conference on knowledge discovery and data
+mining. 4314–4325.
+[27] Tianjiao Zhao, Jingrao Lyu, Stokes Jones, Harrison Garber, Stefano Pasquali, and
+Dhagash Mehta. 2025. AlphaAgents: Large Language Model based Multi-Agents
+for Equity Portfolio Constructions.arXiv preprint arXiv:2508.11152(2025).
+[28] Tianyu Zhou, Pinqiao Wang, Yilin Wu, and Hongyang Yang. 2024. Finrobot:
+Ai agent for equity research and valuation with large language models.arXiv
+preprint arXiv:2411.08804(2024).
+[29] Zipline Reloaded Maintainers. 2024. Zipline Reloaded: Pythonic Algorithmic
+Trading Library. https://github.com/zipline-live/zipline-reloaded. Accessed:
+2025-09-30.
+Junhyeog Yun, Hyounjun Lee, and Insu Jeon
+A Multi-agent Evolution Prompts
+Data Agent Prompts
+Data Agent – Feasible Categories (Island Creation) Prompt
+You a r e a d a t a a g e n t s p e c i a l i z i n g i n quant t r a d i n g s t r a t e g y .
+TASK : G e n e r a t e a taxonomy o f q u a n t i t a t i v e t r a d i n g s t r a t e g y f a m i l i e s
+t h a t can be implemented u s i n g ONLY t h e p r o v i d e d d a t a f i e l d s .
+DATA STRUCTURE : { d a t a _ s t r u c t u r e }
+CONSTRAINTS :
+−Use EXCLUSIVELY t h e f i e l d s l i s t e d i n t h e d a t a s t r u c t u r e above
+−Do NOT assume a v a i l a b i l i t y o f : fundamentals , i n t r a d a y t i c k data ,
+o p t i o n s c h a i n s , a l t e r n a t i v e d a t a s e t s , or e x t e r n a l market d a t a
+−Output high−l e v e l s t r a t e g y f a m i l i e s only ( no sub−s t r a t e g i e s , i n d i c a t o r s ,
+or i m p l e m e n t a t i o n d e t a i l s )
+Data Agent – Prompt to create Data Schema Prompt
+# Based on t h e f o l l o w i n g d a t a u n i v e r s e and i t s d a t a s t r u c t u r e ,
+g e n e r a t e a CONSIDERATIONS s e c t i o n t h a t e x p l a i n s t h e d a t a s t r u c t u r e
+and c o n t e x t p a r a m e t e r s a v a i l a b l e f o r t h i s s p e c i f i c u n i v e r s e .
+U n i v e r s e S t r u c t u r e I n f o r m a t i o n :
+{ u n i v e r s e _ s t r u c t u r e }
+{ c o n t e x t _ i n f o }
+P l e a s e r e t u r n a message i n t h e f o l l o w i n g s t y l e t h a t s t a r t s with
+'DATA STRUCTURE :'and i n c l u d e s :
+1 . The a c t u a l d a t a f o r m a t (OHLCV, columns , sample d a t a f o r m a t )
+2 . The c o m p l e t e c o n t e x t p a r a m e t e r s a v a i l a b l e i n h a n d l e _ d a t a ( )
+3 . S p e c i f i c examples o f how t o a c c e s s t h i s u n i v e r s e d a t a
+4 . Any bundle−s p e c i f i c c o n s i d e r a t i o n s ( f u t u r e s vs e q u i t i e s ,
+d a i l y vs minute d a t a )
+F o l lo w t h i s e x a c t f o r m a t and be s p e c i f i c t o t h i s bundle :
+DATA STRUCTURE : [ D e s c r i b e t h e a c t u a l d a t a f o r m a t found i n t h e CSV f i l e s ]
+Context P a r a m e t e r s A v a i l a b l e i n h a n d l e _ d a t a ( )
+[ I n c l u d e t h e c o m p l e t e l i s t o f Z i p l i n e d a t a c o n t e x t p a r a m e t e r s ,
+with examples s p e c i f i c t o t h i s bundle ]
+Make i t comprehensive and s p e c i f i c t o t h e a c t u a l d a t a s t r u c t u r e
+found i n t h i s bundle .
+ASSET CONSTRAINTS :
+L i s t only t h e b a s e a s s e t symbols a v a i l a b l e i n t h i s u n i v e r s e
+Strategy Agent Prompts
+Strategy Agent – Hypothesis System Prompt
+Your t a s k i s t o c r e a t e a new , novel , c r e a t i v e , high−p e r f o r m i n g t r a d i n g s t r a t e g y .
+=====================================================================================
+# H y p o t h e s i s t e s t−d r i v e n approach :
+B e f o r e w r i t i n g t h e code , you must f o r m u l a t e a c l e a r h y p o t h e s i s about
+why t h i s s t r a t e g y w i l l perform w e l l . T h i s h y p o t h e s i s s h o u l d be grounded
+QuantEvolve: Automating Quantitative Strategy Discovery through Multi-Agent Evolutionary Framework
+i n f i n a n c i a l theory , market dynamics , s t a t i s t i c a l a n a l y s i s , r i s k management ,
+and h i s t o r i c a l p a t t e r n s i n s t o c k markets . Make i t as d e t a i l e d and
+comprehensive as p o s s i b l e , i n c l u d i n g :
+−The c o r e h y p o t h e s i s i t s e l f .
+−The r a t i o n a l e : Why d i d you form t h i s h y p o t h e s i s ? R e f e r e n c e s p e c i f i c
+f i n a n c i a l c o n c e p t s , i n d i c a t o r s , or d a t a p a t t e r n s .
+−O b j e c t i v e s : What do you aim t o t e s t or a c h i e v e with t h i s h y p o t h e s i s
+( e . g . , improving Sharpe r a t i o , r e d u c i n g drawdowns ) ?
+−E x p e c t e d i n s i g h t s : What can be l e a r n e d i f t h e h y p o t h e s i s h o l d s or f a i l s ?
+How might i t inform f u t u r e i t e r a t i o n s ?
+−P o t e n t i a l r i s k s or l i m i t a t i o n s : Any edge c a s e s , assumptions , or weaknesses
+i n t h e h y p o t h e s i s .
+−Next S t e p i d e a s : How t h i s h y p o t h e s i s c o u l d be v a r i e d or e x t e n d e d i n
+f u t u r e i t e r a t i o n s .
+Strategy Agent – Hypothesis User Prompt
+# S t r u c t u r e t h i s h y p o t h e s i s and d e t a i l s u s i n g XML−l i k e t a g s w i t h i n a
+mu lti−l i n e comment ( u s i n g t r i p l e q u o t e s " " " ) a t t h e very top o f your o u t p u t .
+For example :
+" " "
+< h y p o t h e s i s > [ Core h y p o t h e s i s s t a t e m e n t ] </ h y p o t h e s i s >
+< r a t i o n a l e > [ D e t a i l e d e x p l a n a t i o n o f why t h i s h y p o t h e s i s was formed ] </ r a t i o n a l e >
+< o b j e c t i v e s > [ What you aim t o t e s t / a c h i e v e ] </ o b j e c t i v e s >
+< e x p e c t e d _ i n s i g h t s > [ P o t e n t i a l l e a r n i n g s and i m p l i c a t i o n s ] </ e x p e c t e d _ i n s i g h t s >
+< r i s k s _ l i m i t a t i o n s > [ Any r i s k s , assumptions , or weaknesses ] </ r i s k s _ l i m i t a t i o n s >
+< n e x t _ s t e p _ i d e a s > [ I d e a s f o r v a r i a t i o n s or f u t u r e t e s t s ] </ n e x t _ s t e p _ i d e a s >
+" " "
+Code Team Prompts
+Code Team – Code Creation User Prompt
+# Context : { c o n t e x t }
+# Task
+−Improve t h e performance o f t h e c u r r e n t program on t h e s p e c i f i e d m e t r i c s
+by o p t i m i z i n g a l g o r i t h m s , r e d u c i n g c o m p u t a t i o n a l c o m p l e x i t y , or enhancing
+r e s o u r c e u t i l i z a t i o n .
+−F i x i s s u e s i n t h e c u r r e n t program by a d d r e s s i n g bugs , r e s o l v i n g e r r o r s ,
+c o r r e c t i n g l o g i c fl a w s , or e l i m i n a t i n g p o t e n t i a l v u l n e r a b i l i t i e s t h a t
+a f f e c t f u n c t i o n a l i t y .
+−Continue t o v a l i d a t e t h e h y p o t h e s e s o f t h e c u r r e n t program through
+comprehensive t e s t i n g , v e r i f i c a t i o n o f assumptions , and c o n f i r m a t i o n o f
+e x p e c t e d b e h a v i o r s .
+−Continue t o e x p e r i m e n t or a n a l y z e based on t h e a n a l y s i s r e s u l t s o f t h e
+c u r r e n t program , b u i l d i n g upon p r e v i o u s f i n d i n g s and i n s i g h t s .
+−Improve t h e s t r u c t u r e , r e a d a b i l i t y , m a i n t a i n a b i l i t y , s c a l a b i l i t y ,
+e f f i c i e n c y , or s t a b i l i t y o f t h e c u r r e n t program through code r e f a c t o r i n g
+Junhyeog Yun, Hyounjun Lee, and Insu Jeon
+and a r c h i t e c t u r a l enhancements .
+−Try a c o m p l e t e l y new approach t h a t a d d r e s s e s t h e same problem u s i n g
+d i f f e r e n t m e t h o d o l o g i e s , frameworks , or d e s i g n p a t t e r n s .
+IMPORTANT : Make s u r e your r e w r i t t e n program m a i n t a i n s t h e same i n p u t s and
+o u t p u t s as t h e o r i g i n a l program , but with improved i n t e r n a l i m p l e m e n t a t i o n
+t h a t enhances o v e r a l l f u n c t i o n a l i t y and performance .
+` ` `{ l a n g u a g e }
+# Your r e w r i t t e n program goes h e r e
+Code Team – Code Creation System Prompt
+# System prompt used t o g e n e r a t e t h e o r i g i n a l code : { o r i g i n a l _ s y s t e m _ p r o m p t }
+# User prompt used t o g e n e r a t e t h e o r i g i n a l code : { o r i g i n a l _ u s e r _ p r o m p t }
+# O r i g i n a l code t o be f i x e d :
+```python
+{ o r i g i n a l _ c o d e }
+E r r o r message r e c e i v e d when running t h e o r i g i n a l code : { e r r o r _ m e s s a g e }
+T r a c e b a c k o f t h e e r r o r : { t r a c e b a c k }
+P l e a s e p r o v i d e t h e c o r r e c t e d code :
+Evaluation Team Prompts
+Evaluation Team – Evaluation System Prompt
+You a r e an e x p e r t code r e v i e w i n g team s p e c i a l i z i n g i n q u a n t i t a t i v e t r a d i n g s t r a t e g i e s .
+Your j o b i s t o a n a l y z e t h e p r o v i d e d code and e v a l u a t e i t s y s t e m a t i c a l l y as a team .
+# I m p o r t a n t C o n s t r a i n t s f o r T r a d i n g S t r a t e g y :
+−The code must c o n t a i n e x a c t l y two f u n c t i o n s :`i n i t i a l i z e ( c o n t e x t )`and`h a n d l e _ d a t a (
+c o n t e x t , d a t a )`.
+−The`i n i t i a l i z e`f u n c t i o n s e t s up t h e t r a d i n g s t r a t e g y , d e f i n e s e q u i t y , and i n i t i a l i z e s
+c o n t e x t v a r i a b l e s .
+−The`h a n d l e _ d a t a`f u n c t i o n c o n t a i n s t h e t r a d i n g l o g i c and i s c a l l e d on each t r a d i n g day .
+−When implementing t r a d i n g l o g i c , you can only use p a s t and p r e s e n t d a t a .
+−The s t r a t e g y must a v o i d Lookahead B i a s . I f t h e s t r a t e g y u s e s e q u i t y d a t a f o r d e c i s i o n
+making , i t i s c o n s i d e r e d i n v a l i d . T h i s i s t h e most i m p o r t a n t c o n s t r a i n t .
+−You have t o o r d e r l e s s than or e q u a l t o t h e a v a i l a b l e cash .
+−P r o p e r l y h a n d l e e x c e p t i o n s and edge c a s e s ( e . g . , i n s u f f i c i e n t data , c o n t r a c t r o l l o v e r ) .
+−The`i n i t i a l i z e`f u n c t i o n must i n c l u d e t h e f o l l o w i n g commission and s l i p p a g e s e t t i n g s :
+`c o n t e x t . s e t _ c o m m i s s i o n ( commission . P e r S h a r e ( c o s t = 0 . 0 0 7 5 , m i n _ t r a d e _ c o s t = 1 . 0 ) )`
+`c o n t e x t . s e t _ s l i p p a g e ( s l i p p a g e . V o l u m e S h a r e S l i p p a g e ( ) )`
+Evaluation Team – Evaluation User Prompt
+# Code t o e v a l u a t e :```python { c u r r e n t _ p r o g r a m }` ` `
+# Code's performance m e t r i c s : { m e t r i c s }
+# A d d i t i o n a l i n f o r m a t i o n about t h e code's performance : { m e t a _ i n f o }
+QuantEvolve: Automating Quantitative Strategy Discovery through Multi-Agent Evolutionary Framework
+# At t h e end o f your c o n v e r s a t i o n s and e v a l u a t i o n s r e t u r n t h e f i n a l answer as a JSON
+o b j e c t with t h e f o l l o w i n g f o r m a t :
+{
+" h y p o t h e s i s _ e v a l u a t i o n _ s c o r e " : [ f l o a t between 0 . 0 and 1 . 0 ] ,
+" h y p o t h e s i s _ e v a l u a t i o n _ r e a s o n i n g " : [ D e t a i l e d e x p l a n a t i o n ] ,
+" p r o g r a m _ a l i g n m e n t _ e v a l u a t i o n _ s c o r e " : [ f l o a t between 0 . 0 and 1 . 0 ] ,
+" p r o g r a m _ a l i g n m e n t _ e v a l u a t i o n _ r e a s o n i n g " : [ D e t a i l e d e x p l a n a t i o n , i n c l u d i n g sub−n o t e s
+on r e a d a b i l i t y , m a i n t a i n a b i l i t y , e f f i c i e n c y ] ,
+" r e s u l t s _ a n a l y s i s _ s c o r e " : [ f l o a t between 0 . 0 and 1 . 0 ] ,
+" r e s u l t s _ a n a l y s i s _ r e a s o n i n g " : [ D e t a i l e d a n a l y s i s , c o n c l u s i o n s , and s u g g e s t i o n s ] ,
+" r e a d a b i l i t y " : [ f l o a t between 0 . 0 and 1 . 0 ] ,
+" m a i n t a i n a b i l i t y " : [ f l o a t between 0 . 0 and 1 . 0 ] ,
+" e f f i c i e n c y " : [ f l o a t between 0 . 0 and 1 . 0 ] ,
+" r e a s o n i n g " : " [ B r i e f o v e r a l l summary and recommendations f o r n e x t i t e r a t i o n ] " ,
+" i n s i g h t " : " [ what ground t r u t h does t h e r e s u l t r e v e a l . S y n t h e s i z e t h e h y p o t h e s i s and
+based on t h e r e s u l t e x p l a i n what i n s i g h t we can i n f e r E . g . A s s e t X r e a c t s Y way
+d u r i n g Z ] "
+}
+Evaluation Team – Categorization System Prompt
+You a r e a t r a d i n g s t r a t e g y c a t e g o r i z e r . Your only t a s k i s t o c a t e g o r i z e t h e g i v e n t r a d i n g
+s t r a t e g y code w i t h i n t h e p r o v i d e d l i s t o f s t r a t e g y f a m i l i e s .
+∗ ∗S t r a t e g y F a m i l i e s :∗ ∗
+{ p r o g r a m _ c a t e g o r i e s }
+∗ ∗I n s t r u c t i o n s :∗ ∗
+−Analyze t h e t r a d i n g s t r a t e g y h y p o t h e s i s
+−S e l e c t ONLY from t h e p r o v i d e d s t r a t e g y f a m i l i e s above ( use ONLY Keys , NOT d e s c r i p t i o n s )
+−I f t h e s t r a t e g y doesn't c l e a r l y f i t any c a t e g o r y , use " other−[ c a t e g o r y ] " as a p r e f i x
+−M u l t i p l e c a t e g o r i e s a r e a l l o w e d i f t h e s t r a t e g y combines a p p r o a c h e s
+Evaluation Team – Categorization User Prompt
+You a r e an e x p e r t q u a n t i t a t i v e f i n a n c e a n a l y s t s p e c i a l i z i n g i n t r a d i n g s t r a t e g y
+c l a s s i f i c a t i o n and taxonomy . Your r o l e i s t o a c c u r a t e l y c a t e g o r i z e t r a d i n g s t r a t e g i e s
+based on t h e i r c o r e l o g i c and i m p l e m e n t a t i o n approach .
+# Key r e s p o n s i b i l i t i e s :
+−Analyze t r a d i n g s t r a t e g y h y p o t h e s e s and i m p l e m e n t a t i o n s
+−C l a s s i f y s t r a t e g i e s a c c o r d i n g t o e s t a b l i s h e d q u a n t i t a t i v e f i n a n c e c a t e g o r i e s
+−Focus on t h e f u n d a m e n t a l t r a d i n g l o g i c r a t h e r than j u s t t e c h n i c a l i n d i c a t o r s used
+−P r o v i d e a c c u r a t e , c o n c i s e c a t e g o r i z a t i o n s i n t h e r e q u e s t e d JSON f o r m a t
+−Do not c r e a t e new c a t e g o r i e s or modify e x i s t i n g c a t e g o r y names .
+−Do not a t t e m p t t o c l a s s i f y a s t r a t e g y i n t o a l l a p p l i c a b l e c a t e g o r i e s a t once . For each
+c a t e g o r y w i t h i n t h e g i v e n s t r a t e g y f a m i l i e s , c a r e f u l l y d e t e r m i n e whether t h e g i v e n
+s t r a t e g y t r u l y b e l o n g s t o t h a t c a t e g o r y on a one−by−one b a s i s .
+Junhyeog Yun, Hyounjun Lee, and Insu Jeon
+−Each c a t e g o r i z a t i o n d e c i s i o n must be made a f t e r a thorough u n d e r s t a n d i n g o f t h e c a t e g o r y
+'s d e f i n i t i o n and c h a r a c t e r i s t i c s , as w e l l as t h e g i v e n s t r a t e g y's i m p l e m e n t a t i o n and
+l o g i c .
+B Baseline Strategy Codes for Equity Markets
+Equal-Weighted Rebalancing
+from z i p l i n e . f i n a n c e impo rt commission , s l i p p a g e
+from z i p l i n e . a p i impo rt o r d e r _ t a r g e t _ p e r c e n t , r e c o r d , symbols
+d e f i n i t i a l i z e ( c o n t e x t ) :
+c o n t e x t . a s s e t s = symbols ( " AAPL " , "NVDA" , "AMZN" , "GOOGL" , " MSFT " , " TSLA " )
+c o n t e x t . s e t _ c o m m i s s i o n ( commission . P e r S h a r e ( c o s t = 0 . 0 0 7 5 , m i n _ t r a d e _ c o s t = 1 . 0 ) )
+c o n t e x t . s e t _ s l i p p a g e ( s l i p p a g e . V o l u m e S h a r e S l i p p a g e ( ) )
+# Equal weight f o r each a s s e t
+c o n t e x t . t a r g e t _ w e i g h t = 1 . 0 / l e n ( c o n t e x t . a s s e t s )
+d e f h a n d l e _ d a t a ( c o n t e x t , d a t a ) :
+# D a i l y r e b a l a n c i n g t o e q u a l w e i g h t s
+f o r a s s e t i n c o n t e x t . a s s e t s :
+i f d a t a . c a n _ t r a d e ( a s s e t ) :
+t a r g e t _ w e i g h t = c o n t e x t . t a r g e t _ w e i g h t
+o r d e r _ t a r g e t _ p e r c e n t ( a s s e t , t a r g e t _ w e i g h t )
+r e c o r d ( p o r t f o l i o _ v a l u e = c o n t e x t . p o r t f o l i o . p o r t f o l i o _ v a l u e )
+MACD
+from z i p l i n e . f i n a n c e imp ort commission , s l i p p a g e
+from z i p l i n e . a p i imp ort o r d e r _ t a r g e t _ p e r c e n t , r e c o r d , symbols
+d e f c a l c u l a t e _ m a c d ( p r i c e s , f a s t =12 , slow =26 , s i g n a l = 9 ) :
+exp1 = p r i c e s . ewm( span = f a s t ) . mean ( )
+exp2 = p r i c e s . ewm( span = slow ) . mean ( )
+m a c d _ l i n e = exp1−exp2
+s i g n a l _ l i n e = m a c d _ l i n e . ewm( span = s i g n a l ) . mean ( )
+h i s t o g r a m = m a c d _ l i n e−s i g n a l _ l i n e
+r e t u r n macd_line , s i g n a l _ l i n e , h i s t o g r a m
+d e f i n i t i a l i z e ( c o n t e x t ) :
+QuantEvolve: Automating Quantitative Strategy Discovery through Multi-Agent Evolutionary Framework
+c o n t e x t . a s s e t s = symbols ( " AAPL " , "NVDA" , "AMZN" , "GOOGL" , " MSFT " , " TSLA " )
+c o n t e x t . s e t _ c o m m i s s i o n ( commission . P e r S h a r e ( c o s t = 0 . 0 0 7 5 , m i n _ t r a d e _ c o s t = 1 . 0 ) )
+c o n t e x t . s e t _ s l i p p a g e ( s l i p p a g e . V o l u m e S h a r e S l i p p a g e ( ) )
+# MACD p a r a m e t e r s
+c o n t e x t . f a s t = 12
+c o n t e x t . slow = 26
+c o n t e x t . s i g n a l = 9
+c o n t e x t . lookback_window = max ( c o n t e x t . slow + c o n t e x t . s i g n a l , 5 0 )
+d e f h a n d l e _ d a t a ( c o n t e x t , d a t a ) :
+t r y :
+# Get h i s t o r i c a l p r i c e s
+p r i c e s = d a t a . h i s t o r y (
+c o n t e x t . a s s e t s , " c l o s e " , c o n t e x t . lookback_window + 1 , " 1 d "
+)
+# Equal weight i f i n s u f f i c i e n t d a t a
+i f p r i c e s i s None or p r i c e s . empty or l e n ( p r i c e s ) < c o n t e x t . lookback_window :
+e q u a l _ w e i g h t = 1 . 0 / l e n ( c o n t e x t . a s s e t s )
+f o r a s s e t i n c o n t e x t . a s s e t s :
+i f d a t a . c a n _ t r a d e ( a s s e t ) :
+o r d e r _ t a r g e t _ p e r c e n t ( a s s e t , e q u a l _ w e i g h t )
+r e c o r d ( p o r t f o l i o _ v a l u e = c o n t e x t . p o r t f o l i o . p o r t f o l i o _ v a l u e )
+r e t u r n
+# C a l c u l a t e MACD f o r each a s s e t
+m a c d _ s i g n a l s = { }
+f o r a s s e t i n c o n t e x t . a s s e t s :
+i f a s s e t i n p r i c e s . columns :
+a s s e t _ p r i c e s = p r i c e s [ a s s e t ] . dropna ( )
+i f l e n ( a s s e t _ p r i c e s ) >= c o n t e x t . lookback_window−1 0 :
+macd_line , s i g n a l _ l i n e , h i s t o g r a m = c a l c u l a t e _ m a c d (
+a s s e t _ p r i c e s , c o n t e x t . f a s t , c o n t e x t . slow , c o n t e x t . s i g n a l
+)
+m a c d _ s i g n a l s [ a s s e t ] = {
+" s i g n a l " : h i s t o g r a m . i l o c [−1] > 0 ,
+}
+# C a l c u l a t e w e i g h t s based on MACD s i g n a l s
+b u y _ a s s e t s = [
+a s s e t
+f o r a s s e t , s i g n a l i n m a c d _ s i g n a l s . i t e m s ( )
+i f s i g n a l . g e t ( " s i g n a l " , F a l s e )
+]
+# P o r t f o l i o a l l o c a t i o n l o g i c
+Junhyeog Yun, Hyounjun Lee, and Insu Jeon
+i f b u y _ a s s e t s :
+# Equal weight among buy s i g n a l s
+t a r g e t _ w e i g h t = 1 . 0 / l e n ( b u y _ a s s e t s )
+f o r a s s e t i n c o n t e x t . a s s e t s :
+i f d a t a . c a n _ t r a d e ( a s s e t ) :
+weight = t a r g e t _ w e i g h t i f a s s e t i n b u y _ a s s e t s e l s e 0 . 0
+o r d e r _ t a r g e t _ p e r c e n t ( a s s e t , weight )
+e l s e :
+# No buy s i g n a l s : e q u a l weight cash−l i k e a l l o c a t i o n or s t a y i n cash
+e q u a l _ w e i g h t = 1 . 0 / l e n ( c o n t e x t . a s s e t s )
+f o r a s s e t i n c o n t e x t . a s s e t s :
+i f d a t a . c a n _ t r a d e ( a s s e t ) :
+o r d e r _ t a r g e t _ p e r c e n t ( a s s e t , e q u a l _ w e i g h t )
+e x c e p t E x c e p t i o n as e :
+e q u a l _ w e i g h t = 1 . 0 / l e n ( c o n t e x t . a s s e t s )
+f o r a s s e t i n c o n t e x t . a s s e t s :
+i f d a t a . c a n _ t r a d e ( a s s e t ) :
+o r d e r _ t a r g e t _ p e r c e n t ( a s s e t , e q u a l _ w e i g h t )
+r e c o r d ( p o r t f o l i o _ v a l u e = c o n t e x t . p o r t f o l i o . p o r t f o l i o _ v a l u e )
+RSI & KDJ
+from z i p l i n e . f i n a n c e impo rt commission , s l i p p a g e
+from z i p l i n e . a p i impo rt o r d e r _ t a r g e t _ p e r c e n t , r e c o r d , symbols
+im port pandas as pd
+d e f c a l c u l a t e _ r s i ( p r i c e s , p e r i o d = 1 4 ) :
+d e l t a = p r i c e s . d i f f ( )
+g a i n = ( d e l t a . where ( d e l t a > 0 , 0 ) ) . r o l l i n g ( window= p e r i o d ) . mean ( )
+l o s s = (−d e l t a . where ( d e l t a < 0 , 0 ) ) . r o l l i n g ( window= p e r i o d ) . mean ( )
+r s = g a i n / l o s s
+r s i = 100−( 1 0 0 / ( 1 + r s ) )
+r e t u r n r s i
+d e f c a l c u l a t e _ s t o c h a s t i c ( high , low , c l o s e , k _ p e r i o d =14 , d _ p e r i o d = 3 ) :
+l o w e s t _ l o w = low . r o l l i n g ( window= k _ p e r i o d ) . min ( )
+h i g h e s t _ h i g h = high . r o l l i n g ( window= k _ p e r i o d ) . max ( )
+k _ p e r c e n t = 100∗( ( c l o s e−l o w e s t _ l o w ) / ( h i g h e s t _ h i g h−l o w e s t _ l o w ) )
+d _ p e r c e n t = k _ p e r c e n t . r o l l i n g ( window= d _ p e r i o d ) . mean ( )
+j _ p e r c e n t = 3∗k _ p e r c e n t−2∗d _ p e r c e n t
+QuantEvolve: Automating Quantitative Strategy Discovery through Multi-Agent Evolutionary Framework
+r e t u r n k _ p e r c e n t , d _ p e r c e n t , j _ p e r c e n t
+d e f i n i t i a l i z e ( c o n t e x t ) :
+c o n t e x t . a s s e t s = symbols ( " AAPL " , "NVDA" , "AMZN" , "GOOGL" , " MSFT " , " TSLA " )
+c o n t e x t . s e t _ c o m m i s s i o n ( commission . P e r S h a r e ( c o s t = 0 . 0 0 7 5 , m i n _ t r a d e _ c o s t = 1 . 0 ) )
+c o n t e x t . s e t _ s l i p p a g e ( s l i p p a g e . V o l u m e S h a r e S l i p p a g e ( ) )
+# T e c h n i c a l i n d i c a t o r p a r a m e t e r s
+c o n t e x t . r s i _ p e r i o d = 14
+c o n t e x t . k d j _ k _ p e r i o d = 14
+c o n t e x t . k d j _ d _ p e r i o d = 3
+c o n t e x t . lookback_window = max ( c o n t e x t . r s i _ p e r i o d , c o n t e x t . k d j _ k _ p e r i o d ) + 10
+# S i g n a l t h r e s h o l d s
+c o n t e x t . r s i _ o v e r s o l d = 30
+c o n t e x t . r s i _ o v e r b o u g h t = 70
+c o n t e x t . k d j _ o v e r s o l d = 20
+c o n t e x t . k d j _ o v e r b o u g h t = 80
+d e f h a n d l e _ d a t a ( c o n t e x t , d a t a ) :
+t r y :
+# Get h i s t o r i c a l p r i c e d a t a
+p r i c e s = d a t a . h i s t o r y (
+c o n t e x t . a s s e t s ,
+[ " c l o s e " , " high " , " low " ] ,
+c o n t e x t . lookback_window + 1 ,
+" 1 d " ,
+)
+# Equal weight i f i n s u f f i c i e n t d a t a
+i f p r i c e s i s None or p r i c e s . empty or l e n ( p r i c e s ) < c o n t e x t . lookback_window :
+e q u a l _ w e i g h t = 1 . 0 / l e n ( c o n t e x t . a s s e t s )
+f o r a s s e t i n c o n t e x t . a s s e t s :
+i f d a t a . c a n _ t r a d e ( a s s e t ) :
+o r d e r _ t a r g e t _ p e r c e n t ( a s s e t , e q u a l _ w e i g h t )
+r e c o r d ( p o r t f o l i o _ v a l u e = c o n t e x t . p o r t f o l i o . p o r t f o l i o _ v a l u e )
+r e t u r n
+# C a l c u l a t e t e c h n i c a l i n d i c a t o r s f o r each a s s e t
+s i g n a l s = { }
+f o r a s s e t i n c o n t e x t . a s s e t s :
+t r y :
+# M u l t i I n d e x DataFrame : i n d e x =( date , a s s e t ) , columns = ['c l o s e','high','
+low']
+# Use xs t o c r o s s−s e c t i o n by a s s e t
+a s s e t _ d a t a = p r i c e s . xs ( a s s e t , l e v e l = 1 )
+c l o s e _ p r i c e s = a s s e t _ d a t a [ " c l o s e " ] . dropna ( )
+Junhyeog Yun, Hyounjun Lee, and Insu Jeon
+h i g h _ p r i c e s = a s s e t _ d a t a [ " high " ] . dropna ( )
+l o w _ p r i c e s = a s s e t _ d a t a [ " low " ] . dropna ( )
+i f l e n ( c l o s e _ p r i c e s ) >= c o n t e x t . lookback_window−5 :
+# C a l c u l a t e RSI
+r s i = c a l c u l a t e _ r s i ( c l o s e _ p r i c e s , c o n t e x t . r s i _ p e r i o d )
+c u r r e n t _ r s i = r s i . i l o c [−1] i f not pd . i s n a ( r s i . i l o c [−1 ] ) e l s e 50
+# C a l c u l a t e KDJ
+k_pct , d_pct , j _ p c t = c a l c u l a t e _ s t o c h a s t i c (
+h i g h _ p r i c e s ,
+l o w _ p r i c e s ,
+c l o s e _ p r i c e s ,
+c o n t e x t . k d j _ k _ p e r i o d ,
+c o n t e x t . k d j _ d _ p e r i o d ,
+)
+c u r r e n t _ k = k _ p c t . i l o c [−1] i f not pd . i s n a ( k _ p c t . i l o c [−1 ] ) e l s e 50
+c u r r e n t _ d = d _ p c t . i l o c [−1] i f not pd . i s n a ( d _ p c t . i l o c [−1 ] ) e l s e 50
+c u r r e n t _ j = j _ p c t . i l o c [−1] i f not pd . i s n a ( j _ p c t . i l o c [−1 ] ) e l s e 50
+# G e n e r a t e s i g n a l s
+# Buy s i g n a l : RSI o v e r s o l d AND KDJ o v e r s o l d
+r s i _ o v e r s o l d = c u r r e n t _ r s i < c o n t e x t . r s i _ o v e r s o l d
+k d j _ o v e r s o l d = (
+c u r r e n t _ k < c o n t e x t . k d j _ o v e r s o l d
+and c u r r e n t _ d < c o n t e x t . k d j _ o v e r s o l d
+)
+b u y _ s i g n a l = r s i _ o v e r s o l d and k d j _ o v e r s o l d
+# S e l l s i g n a l : RSI overbought OR KDJ overbought
+r s i _ o v e r b o u g h t = c u r r e n t _ r s i > c o n t e x t . r s i _ o v e r b o u g h t
+k d j _ o v e r b o u g h t = (
+c u r r e n t _ k > c o n t e x t . k d j _ o v e r b o u g h t
+or c u r r e n t _ d > c o n t e x t . k d j _ o v e r b o u g h t
+)
+s e l l _ s i g n a l = r s i _ o v e r b o u g h t or k d j _ o v e r b o u g h t
+# S t r o n g buy s i g n a l : Very o v e r s o l d c o n d i t i o n s
+s t r o n g _ b u y = c u r r e n t _ r s i < 25 and c u r r e n t _ k < 15
+# S i g n a l s t r e n g t h ( f o r p o s i t i o n s i z i n g )
+i f s t r o n g _ b u y :
+s i g n a l _ s t r e n g t h = 2 . 0
+e l i f b u y _ s i g n a l :
+s i g n a l _ s t r e n g t h = 1 . 0
+e l i f s e l l _ s i g n a l :
+s i g n a l _ s t r e n g t h = 0 . 0
+e l s e :
+s i g n a l _ s t r e n g t h = 0 . 5
+QuantEvolve: Automating Quantitative Strategy Discovery through Multi-Agent Evolutionary Framework
+s i g n a l s [ a s s e t ] = {
+" r s i " : c u r r e n t _ r s i ,
+" k " : c u r r e n t _ k ,
+" d " : c u r r e n t _ d ,
+" j " : c u r r e n t _ j ,
+" b u y _ s i g n a l " : b u y _ s i g n a l ,
+" s e l l _ s i g n a l " : s e l l _ s i g n a l ,
+" s t r o n g _ b u y " : strong_buy ,
+" s i g n a l _ s t r e n g t h " : s i g n a l _ s t r e n g t h ,
+}
+e x c e p t ( KeyError , I n d e x E r r o r , V a l u e E r r o r ) as e :
+# S k i p a s s e t i f d a t a i s not a v a i l a b l e
+c o n t i n u e
+# P o r t f o l i o a l l o c a t i o n l o g i c
+t o t a l _ s i g n a l _ s t r e n g t h = sum (
+s i g n a l . g e t ( " s i g n a l _ s t r e n g t h " , 1 . 0 ) f o r s i g n a l i n s i g n a l s . v a l u e s ( )
+)
+i f t o t a l _ s i g n a l _ s t r e n g t h > 0 :
+f o r a s s e t i n c o n t e x t . a s s e t s :
+i f d a t a . c a n _ t r a d e ( a s s e t ) and a s s e t i n s i g n a l s :
+s i g n a l _ i n f o = s i g n a l s [ a s s e t ]
+# Weight based on s i g n a l s t r e n g t h
+t a r g e t _ w e i g h t = (
+s i g n a l _ i n f o . g e t ( " s i g n a l _ s t r e n g t h " , 1 . 0 ) / t o t a l _ s i g n a l _ s t r e n g t h
+)
+o r d e r _ t a r g e t _ p e r c e n t ( a s s e t , t a r g e t _ w e i g h t )
+e l s e :
+f o r a s s e t i n c o n t e x t . a s s e t s :
+i f d a t a . c a n _ t r a d e ( a s s e t ) :
+o r d e r _ t a r g e t _ p e r c e n t ( a s s e t , 0 . 0 )
+e x c e p t E x c e p t i o n as e :
+# Log e r r o r and f a l l b a c k t o e q u a l weight
+e q u a l _ w e i g h t = 1 . 0 / l e n ( c o n t e x t . a s s e t s )
+f o r a s s e t i n c o n t e x t . a s s e t s :
+i f d a t a . c a n _ t r a d e ( a s s e t ) :
+o r d e r _ t a r g e t _ p e r c e n t ( a s s e t , e q u a l _ w e i g h t )
+r e c o r d ( p o r t f o l i o _ v a l u e = c o n t e x t . p o r t f o l i o . p o r t f o l i o _ v a l u e )
+Risk Parity
+from z i p l i n e . f i n a n c e impo rt commission , s l i p p a g e
+Junhyeog Yun, Hyounjun Lee, and Insu Jeon
+from z i p l i n e . a p i impo rt o r d e r _ t a r g e t _ p e r c e n t , r e c o r d , symbols
+im port numpy as np
+d e f i n i t i a l i z e ( c o n t e x t ) :
+c o n t e x t . a s s e t s = symbols ( " AAPL " , "NVDA" , "AMZN" , "GOOGL" , " MSFT " , " TSLA " )
+c o n t e x t . s e t _ c o m m i s s i o n ( commission . P e r S h a r e ( c o s t = 0 . 0 0 7 5 , m i n _ t r a d e _ c o s t = 1 . 0 ) )
+c o n t e x t . s e t _ s l i p p a g e ( s l i p p a g e . V o l u m e S h a r e S l i p p a g e ( ) )
+# R i s k P a r i t y p a r a m e t e r s
+c o n t e x t . lookback_window = 60
+c o n t e x t . r e b a l a n c e _ f r e q = 1 # R e b a l a n c e e v e r y 1 days t o r e d u c e t r a n s a c t i o n c o s t s
+c o n t e x t . day_count = 0
+d e f h a n d l e _ d a t a ( c o n t e x t , d a t a ) :
+c o n t e x t . day_count += 1
+# Only r e b a l a n c e e v e r y N days and a f t e r s u f f i c i e n t h i s t o r y
+i f (
+c o n t e x t . day_count < c o n t e x t . lookback_window
+or c o n t e x t . day_count % c o n t e x t . r e b a l a n c e _ f r e q ! = 0
+) :
+r e t u r n
+# Get h i s t o r i c a l p r i c e s f o r v o l a t i l i t y c a l c u l a t i o n
+t r y :
+p r i c e s = d a t a . h i s t o r y (
+c o n t e x t . a s s e t s , " c l o s e " , c o n t e x t . lookback_window + 1 , " 1 d "
+)
+i f p r i c e s i s None or p r i c e s . empty :
+r e c o r d ( p o r t f o l i o _ v a l u e = c o n t e x t . p o r t f o l i o . p o r t f o l i o _ v a l u e )
+r e t u r n
+# C a l c u l a t e r e t u r n s and v o l a t i l i t y
+r e t u r n s = p r i c e s . p c t _ c h a n g e ( ) . dropna ( )
+i f l e n ( r e t u r n s ) < c o n t e x t . lookback_window :
+r e c o r d ( p o r t f o l i o _ v a l u e = c o n t e x t . p o r t f o l i o . p o r t f o l i o _ v a l u e )
+r e t u r n
+# C a l c u l a t e r o l l i n g v o l a t i l i t y ( a n n u a l i z e d )
+v o l a t i l i t i e s = r e t u r n s . s t d ( )∗np . s q r t ( 2 5 2 )
+# Handle any NaN or z e r o v o l a t i l i t i e s
+v o l a t i l i t i e s = v o l a t i l i t i e s . f i l l n a ( v o l a t i l i t i e s . mean ( ) )
+v o l a t i l i t i e s = v o l a t i l i t i e s . r e p l a c e ( 0 , v o l a t i l i t i e s . mean ( ) )
+QuantEvolve: Automating Quantitative Strategy Discovery through Multi-Agent Evolutionary Framework
+Category Description
+Momentum/Trend Momentum/Trend Following Strategies
+Mean-Reversion Mean Reversion Strategies
+Volatility Volatility-Based Strategies
+Volume/Liquidity Volume/Liquidity Analysis Strategies
+Breakout/Pattern Breakout/Pattern Recognition Strategies
+Correlation/Pairs Correlation / Pairs / Cross-Asset / Statistical Arbitrage Trading Strategies
+Risk/Allocation Risk Parity / Allocation / Risk Management Strategies
+Seasonal/Calendar Effects Seasonal/Calendar Effects Strategies
+Table 6: Strategy categories in equity markets
+# C a l c u l a t e i n v e r s e v o l a t i l i t y w e i g h t s
+i n v _ v o l = 1 / v o l a t i l i t i e s
+w e i g h t s = i n v _ v o l / i n v _ v o l . sum ( )
+# R e b a l a n c e p o r t f o l i o
+f o r a s s e t i n c o n t e x t . a s s e t s :
+i f d a t a . c a n _ t r a d e ( a s s e t ) and a s s e t i n w e i g h t s . i n d e x :
+t a r g e t _ w e i g h t = w e i g h t s [ a s s e t ]
+o r d e r _ t a r g e t _ p e r c e n t ( a s s e t , t a r g e t _ w e i g h t )
+e x c e p t E x c e p t i o n as e :
+e q u a l _ w e i g h t = 1 . 0 / l e n ( c o n t e x t . a s s e t s )
+f o r a s s e t i n c o n t e x t . a s s e t s :
+i f d a t a . c a n _ t r a d e ( a s s e t ) :
+o r d e r _ t a r g e t _ p e r c e n t ( a s s e t , e q u a l _ w e i g h t )
+r e c o r d ( p o r t f o l i o _ v a l u e = c o n t e x t . p o r t f o l i o . p o r t f o l i o _ v a l u e )

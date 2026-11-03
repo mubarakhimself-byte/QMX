@@ -1,0 +1,1690 @@
+arXiv 2608.19227  https://arxiv.org/abs/2608.19227
+
+M3: A State-Event Generative Foundation Model for Market Microstructure
+Dynamics
+Yanzhi Zhang1,2,3, Yu Ma2, Yilin Cheng2, Jian Li5, Yitong Duan2,4∗
+1Academy of Mathematics and Systems Science, Chinese Academy of Sciences
+2Zhongguancun Academy
+3University of Chinese Academy of Sciences
+4Zhongguancun Institute of Artificial Intelligence
+5IIIS, Tsinghua University
+zhangyanzhi20@mails.ucas.ac.cn, duanyitong@zgci.ac.cn
+Abstract
+Market microstructure simulation aims to model how liq-
+uidity, prices, and order flow evolve in electronic financial
+markets. Since market data reveal only one realized trajec-
+tory, many important questions are inherently counterfac-
+tual and require realistic trajectory-level simulation. Exist-
+ing financial generative models, however, often model or-
+der events and market states, such as the LOB, in isola-
+tion, overlooking the dynamic interaction between order flow
+and liquidity in market microstructure. We propose theM3
+(MarketMicrostructureModel),astate-eventgenerativefoun-
+dation model for market microstructure dynamics.M3learns
+to generate future order-flow trajectories, while accounting
+for the evolving interaction between order events and limit-
+order-book liquidity. Trained on large-scale order-level real
+stock market data,M3exhibits predictable scaling behav-
+ior, reproduces key market stylized facts, and enables practi-
+calsimulation-basedapplicationsincludingforecasting,stress
+testing, and market-impact analysis. These results suggest a
+scalable foundation-model paradigm for counterfactual mar-
+ket simulation at the microstructure level.
+Code:
+ ArthurZhang02/m3-market-microstructure
+Model:
+ Arthur210/M3-market-microstructure
+Introduction
+Financial markets are complex adaptive systems whose dy-
+namicsemergefromtheinteractionofheterogeneouspartici-
+pants,informationacquisition,strategictrading,andliquidity
+conditions (Grossman and Stiglitz 1980; Kyle 1985; Farmer
+and Lo 1999; Lo 2004). Historical market data only reveals
+one realized path. We do not know the range of alternative
+futures that could have unfolded, nor the market response to
+some interventions. Many practical questions are therefore
+inherentlydistributionalorcounterfactual:howmightprices,
+spreads,andavailableliquidityevolveoverthenextinterval;
+howwouldalargeexecutionprogramreshapesubsequentor-
+der flow and price impact; and how would a trading strategy
+perform across different market regimes? Answering such
+questions requires trajectory-level market modeling: instead
+of predicting a single next outcome, the model should gen-
+erate multiple market trajectories.
+∗Corresponding author.
+Modern electronic financial markets can be viewed as
+event-driven state-transition systems organized around the
+limit order book (LOB). Participants submit and cancel or-
+derstoexpressheterogeneousbeliefs,manageinventory,and
+implement trading strategies. These events are processed
+by exchange matching rules and update the LOB, which
+records the liquidity available at different price levels. Con-
+versely,thecurrentLOBstate—includingdepth,spread,and
+imbalance—shapestheexecutionoutcome,priceimpact,and
+liquidity cost of subsequent orders. At the microstructure
+level, order events supply, consume, and redistribute liquid-
+ity, while the LOB determines the execution outcome and
+priceimpactofincomingorders.Marketdynamicstherefore
+arise from a sequence of state transitions in which incoming
+ordersupdatethebookandtheupdatedbookstateshapessub-
+sequent order flow (Gould et al. 2013; Cont and de Larrard
+2013; Bouchaud, Farmer, and Lillo 2009). At the data level,
+thisfeedbackloopisobservedthroughtwocoremodalitiesof
+market microstructure: order events and LOB states. Order
+events are irregular records involving price, volume, time,
+side,andaction,whereastheLOBisastructuredmulti-level
+representation of liquidity. The heterogeneity of these two
+modalities, together with their tight coupling, makes market
+microstructure modeling challenging.
+Order Events
+09:30:15.001
+action side price vol
+Buy+ Add 100.25 300
+09:30:15.048
+action side price vol
+100.27 200
+09:30:15.055
+action side price vol
++ Add 600
+09:30:15.138
+action side price vol
+400
+09:30:15.169
+action side price vol
+Buy 200
+− Cxl Sell
+Sell
++ Add Sell
+− Cxl
+State shapes 
+execution and impact
+Order events 
+update the book
+LOB Snapshot
+Bid depth Price Ask depth
+100.30
+100.29
+100.28
+100.27
+100.26
+100.25
+100.24
+100.23
+100.22
+100.21
+Mid-price
+Spread
+100.26
+100.28
+100.24
+Best bid
+Depth
+Imbalance
+Price 
+impact
+slippage
+1 2
+Best ask
+100.20
+Arrival 
+Intensity
+Matching
+Engine
+Execute
+Post
+Figure1:Heterogeneousmarketmicrostructuredata.Un-
+structured order events are processed by matching engine to
+update the structured multi-level LOB, whose state in turn
+shapes execution outcomes and price impact.
+arXiv:2608.19227v1  [q-fin.CP]  29 Jul 2026
+Recentworkhasbeguntoexploregenerativemodelingfor
+market simulation. Early efforts integrate conditional gen-
+erative agents into market simulation environments (Coletta
+et al. 2022), while subsequent models generate tokenized
+LOB messages or event streams using autoregressive, dif-
+fusion, or large-scale Transformer architectures (Nagy et al.
+2023; Zheng et al. 2024; Li et al. 2025; Kawawa-Beaudan
+et al. 2026). However, existing approaches typically model
+either LOB states or order flow as the primary representa-
+tion, while treating the other as auxiliary conditioning. As
+a result, they do not explicitly model the coupled dynamics
+between order events and liquidity states. This direction is
+also closely related toworld modeling, which aims to sim-
+ulate future trajectories for forecasting, planning, and coun-
+terfactual analysis (Ha and Schmidhuber 2018). In market
+microstructure, this perspective requires a generative model
+that represents both order events and local liquidity states,
+produces executable order-level trajectories, and preserves
+the state transitions induced by exchange matching rules.
+To meet this requirement, a market generative model
+should represent order events and LOB states within a
+common modeling framework, rather than treating them
+as isolated sequences. We therefore proposeM3(M arket
+Microstructure Model), a state–event generative foundation
+model for market microstructure dynamics.M3transforms
+heterogeneous order events and structured LOB snapshots
+into a unified token-based representation and models their
+dependencieswithanautoregressiveTransformer.Theinitial
+LOB snapshot compactly summarizes the liquidity environ-
+mentandmarkethistoryaccumulateduptothismoment;itis
+encoded into state prefix tokens, and by jointly attending to
+statetokensandtheprecedingordertokens,themodellearns
+howthisliquiditycontextshapessubsequentorderflow.Dur-
+ing simulation, generated order tokens are decoded into ex-
+ecutable orders and processed by a matching engine, which
+deterministicallyupdatestheLOBaccordingtomarketrules.
+Inthisway,theTransformermodelsthestate-conditioneddy-
+namics of order flow, while the matching engine realizes the
+event-induced state transitions. This enables counterfactual
+simulation and downstream tasks such as forecasting, stress
+testing, and market-impact evaluation.
+Our contributions are as follows:
+•Market Microstructure Model.We proposeM3
+(MarketMicrostructureModel),anevent-levelmodelfor
+electronic markets that represents heterogeneous order
+eventsandLOBstateswithinaunifiedtoken-basedframe-
+work. Through a vector-quantized order tokenizer and a
+dedicated LOB encoder,M3provides a common repre-
+sentation interface for modeling event-level market dy-
+namics.
+•Scalinglawformarketworldmodeling.WetrainM3on
+large-scalerealstockmarketdataandempiricallystudyits
+scalingbehavior.WefurtherfitaChinchilla-stylescaling
+law,characterizinghowmarket-modelinglossvarieswith
+model size and training-token budget.
+•Empirical validation on downstream tasks.We vali-
+dateM3through a range of market simulation tasks, in-
+cluding stylized-facts reproduction, liquidity stress test-
+ing, and market-impact analysis. The results show that
+M3produces realistic market dynamics, recovers mean-
+ingful impact patterns such as the square-root law, and
+supports counterfactual evaluation under different order-
+flow interventions.
+Related Work
+Generative market models.Recent work has explored
+generative models for market simulation. One line of work
+learns data-driven world agents to emulate aggregate mar-
+ket behavior, reducing the need to manually calibrate het-
+erogeneous trader populations (Coletta et al. 2022). At the
+order level, Nagy et al. (2023) propose an autoregressive
+model that generates tokenized LOB messages and updates
+the book through a matching engine. Diffusion-based ap-
+proaches provide another alternative: LOBDIF models the
+joint distribution of event types and arrival times for LOB
+event-stream generation (Zheng et al. 2024). More recently,
+foundation-stylemarketmodelshavescaledorder-flowmod-
+eling to larger datasets and model sizes. MarS introduces
+a Large Market Model with an order model for autoregres-
+sive dependencies and an order-batch model for higher-level
+temporalpatternsrepresentedasorder-batchimages(Lietal.
+2025).TradeFMstudiesorder-flowdynamicswithadecoder-
+only Transformer trained on billions of trade tokens, using
+scale-invariantfeaturesanduniversaltokenizationacrosseq-
+uities (Kawawa-Beaudan et al. 2026).
+Deep learning for limit order books.Deep learning has
+beenwidelyappliedtomarketmicrostructuremodeling,par-
+ticularly for short-horizon price prediction from limit order
+book(LOB)states.RepresentativemodelssuchasDeepLOB
+combine convolutional layers to capture the spatial struc-
+ture of the LOB with recurrent modules to model temporal
+dependencies, achieving strong performance in mid-price
+movement prediction (Zhang, Zohren, and Roberts 2019).
+Discrete tokenization.Our model is related to discrete
+representation learning in generative modeling. VQ-VAE
+converts continuous observations into discrete codebook in-
+dices, allowing autoregressive models to learn priors over
+compact latent tokens instead of raw high-dimensional in-
+puts (van den Oord, Vinyals, and Kavukcuoglu 2018). This
+idea has become a common design in multimodal genera-
+tion: VQ-VAE-2, DALL-E, VQGAN, and video tokenizers
+represent images or videos as discrete visual tokens before
+sequencemodeling(Razavi,vandenOord,andVinyals2019;
+Rameshetal.2021;Esser,Rombach,andOmmer2021;Yan
+et al. 2021; Yu et al. 2023). More recently, Emu3 shows
+that images, videos, text, and actions can be unified as dis-
+crete token sequences and modeled with a single next-token
+prediction objective (Wang et al. 2026).
+Agent-centric market simulation.Agent-centric models
+constituteaclassicalapproachtofinancialmarketsimulation,
+ranging from artificial stock markets with heterogeneous
+adaptive agents (Arthur et al. 1997; LeBaron, Arthur, and
+Palmer 1999) to microstructure models that simulate order
+submissionsandcancellationsthroughexplicitorempirically
+calibrated rules (Mike and Farmer 2008). Modern platforms
+(a) VQ Tokenizer
+(b) LOB-conditioned AR Modeling
+··· TokenizerEncoder ··· VQQuantizer ··· TokenizerDecoder ···
+LOB Snapshot
+LOB Encoder
+Transformer
+Encoder
+···
+LOB state hidden
+Cross
+Attention
+··· ···
+LOB prefix hidden (state) order tokens (events)
+Causal
+Transformer
+Block ×N
+Next-token
+prediction
+trainable modules
+LOB state tokens
+order event tokensprice
+mid-price
+ask1
+bid1
+ask3ask2
+bid2
+bid3 cancellation of orders
+volume
+new limit order
+new market order
+𝑐1 𝑐2 𝑐𝑇
+𝑐1 𝑐2 𝑐3 𝑐𝑇𝑟1 𝑟2 𝑟3 𝑟𝑃
+orders 𝒙𝟏:𝑻 latent 𝒛𝟏:𝑻 codes 𝒄𝟏:𝑻 reconstructedorders ෝ𝒙𝟏:𝑻
+Figure 2:Architecture of Market Microstructure Model.(a) A VQ tokenizer discretizes raw order events into order tokens
+while preserving reconstructability through a decoder. (b) The autoregressive model conditions on the initial LOB state by
+encoding it into LOB prefix hidden, and then predicts subsequent order tokens.
+suchasABIDESfurtherprovidehigh-fidelitydiscrete-event
+environments with realistic exchange protocols and laten-
+cies (Byrd, Hybinette, and Balch 2019). Recent LLM-based
+simulatorsextendthisparadigmbyreplacinghand-designed
+behavioral rules with generative agents that make trading
+decisionsfrommarketobservations,news,policies,andfun-
+damentals. ASFM combines LLM traders with an order-
+matching market (Gao et al. 2024), while MarketSim scales
+this approach to large agent populations in a high-frequency
+continuousdouble-auctionenvironmentandseparatesstrate-
+gic reasoning from execution (Piao et al. 2026).
+Preliminaries
+Market Microstructure
+Modern electronic markets are typically organized around a
+limit order book(LOB), which records available buy and
+sell liquidity across multiple price levels. The highest bid
+and lowest ask define thebest bidandbest ask, respec-
+tively. Their difference is thebid–ask spread, while their
+averagedefinesthemid-price.Thevolumeavailableateach
+price level constitutesmarket depth. Together, spread and
+depthcharacterizemarketliquidity,ortheabilitytotradein
+sizewithlimitedpriceimpact.Schematicillustrationsofthe
+LOB structure and the order book feedback mechanism are
+provided in Figures 1 and 2.
+Acentralfeatureofelectronicmarketsisthefeedbackloop
+between order flow and the LOB state. Traders condition
+their actions on the current book, while order submissions
+andcancellations,togetherwiththeresultingexecutions,up-
+date available depth and the best quotes. In turn, submitted
+orders, cancellations, and executions immediately reshape
+thebookbyconsumingdepth,movingthebestquotes,orre-
+plenishingliquidityatspecificlevels.Marketmicrostructure
+studies these fine-grained interactions and how they jointly
+govern price formation, liquidity provision, and information
+incorporation.
+Problem Formulation
+An order event is characterized by five basic attributes: ac-
+tion,side,price,volume,andarrivaltime.Wedenotetheraw
+order submitted at event timetbyo t = [a t, dt, Pt, Vt, τt],
+whereP t,V t, andτt are the raw order price, raw order size,
+and submission time, respectively. Andat ∈ {0,1}denotes
+the order action (1: add,0: cancel), anddt ∈ {0,1}denotes
+the side (0: ask,1: bid).
+Wedonotdistinguishbetweenlimitandmarketorders;all
+submittedeventsarerepresentedwithinaunifiedeventspace
+as feature vectors, denoted asxt = [ropent , ℓvt ,∆τ t, at, dt].
+However,departingfromthemodels(Kawawa-Beaudanetal.
+2026; Li et al. 2025) that normalize prices against the pre-
+vailing mid-price, we use the dailyopen pricePopen as our
+anchor. Accordingly, the relative price feature is defined as
+ropent = (P t −P open)/P open. For the remaining features,
+order volume is log-transformed asℓvt = log(1 +V t), and
+the inter-arrival time is given by∆τt =τ t −τ t−1.
+The limit order book (LOB) state is captured by
+the topd L levels on both sides, denoted asL t =
+{(Ait, VA,it , Bit, VB,it )}dLi=1, whereA it andB it are the ask
+and bid prices, andV A,it andV B,it are the corresponding
+volumes at leveli. The initial LOB snapshot is encoded as
+a tensorL 0 ∈R 2×dL×2 indexed by side, level, and feature
+(price or volume). In this paper, we setdL = 10.
+Model Architecture
+Overview
+Our framework generates executable order-flow trajectories
+conditioned on an initial market state. It consists of two
+main components: a vector-quantized order tokenizer and
+an auto-regressive model with an LOB encoder. The tok-
+enizermapscontinuousordereventsintodiscretetokensand
+decodes generated tokens back into order events. In parallel,
+anLOB encoderconverts theinitialorder-book snapshotL 0
+and auxiliary state variabless0 into a sequence of continu-
+ous prefix embeddings. A causal Transformer then models
+theconditionaldistributionoffutureordertokens.Duringin-
+ference,generatedtokensaredecodedintoexecutableorders
+and replayed through the matching engine, producing both
+an order-flow trajectory and its corresponding LOB states.
+Tokenization
+Order tokenization with vector quantization.A natural
+approachtoorder-flowtokenizationistodiscretizeprice,vol-
+ume,time,actiontype,andsideseparatelyandcombinetheir
+bin indices into a joint order token (Li et al. 2025; Kawawa-
+Beaudan et al. 2026). However, increasing the resolution of
+multiple attributes causes the joint vocabulary to grow mul-
+tiplicatively, making fine-grained reconstruction inefficient.
+More importantly, mid-relative price discretization intro-
+duces atraining–inference mismatch. Duringtraining,
+each relative price is computed using the ground-truth mid-
+price. Duringinference, the mid-price must instead be re-
+coveredbyreplayingpreviouslygeneratedandreconstructed
+orders through the simulated book. Reconstruction errors in
+these orders can perturb the simulated LOB and shift its
+mid-price, causing subsequent prices to be decoded using
+an inaccurate anchor and creating a feedback loop of accu-
+mulating errors. Moreover, continuously recentering prices
+around the current mid-priceremoves information about
+their global intraday position: the same relative-price to-
+kenmaycorrespondtosubstantiallydifferentabsolutemarket
+levels at different stages of the trajectory, making it harder
+for the model to capture cumulative price movements and
+long-range market context.
+We therefore normalize prices relative to the daily open
+price,whichisfixedandidenticallyavailableduringtraining
+andinference. This avoids dependence on the reconstructed
+mid-price and preserves cumulative price movements from
+the open. However, the open-relative price distribution is
+substantially wider, so uniform binning would require ei-
+ther many bins or coarse resolution. We instead use vector
+quantizationtolearnacompact,non-uniformcodebookover
+the joint order-feature space. As shown in the appendix,the
+simulated-mid bin baseline suffers substantially larger
+reconstruction errors than its oracle counterpart, while
+the proposed open-anchor VQ tokenizer achieves higher
+reconstruction fidelity.
+We now describe the construction of the order tokenizer.
+Eachordereventisrepresentedbyanormalizedfeaturevec-
+tor combining continuous and categorical attributes. Given
+an order-flow windowX= (x 1, . . . ,xT ),the tokenizer
+mapseacheventx t toadiscretetokenc t ∈ {0, . . . , K−1},
+whereKis the codebook size. The first three entries ofxt,
+namelyr opent ,ℓ vt, and∆τt, are continuous, whileat andd t
+are categorical. Following Shi et al. (2025), tokenization is
+performedbyacausalencoderE θ,avectorquantizerQ,anda
+causaldecoderD ϕ.Theencoderproducescontextuallatents:
+zt =E θ(x≤t)∈R dz .The quantizer maintains a learnable
+codebookE={e k}K−1k=0 ,e k ∈R dz ,andassignseachlatent
+to its nearest entry:ct = arg mink ∥zt −e k∥22 ,q t =e ct ,wherec t is the order token andqt the quantized embed-
+ding. The decoder then reconstructs the input features via
+ˆxt =D ϕ(q≤t).Further detailsonthe codebooksize, EMA-
+based updates, and codebook utilization are provided in the
+appendix.
+Auto-regressive Model Structure
+After tokenization, each order-flow trajectory is repre-
+sented as a sequence of discrete VQ tokensC=
+(c1, . . . , cT ), c t ∈ {0, . . . , K−1}.
+LOB-conditioned auto-regressive model.To model how
+the prevailing liquidity state shapes subsequent order-flow
+dynamics,weintroduceanLOB-conditionedauto-regressive
+model. Rather than using LOB information as an auxiliary
+prediction feature, we encode the initial market state into
+continuous prefix tokens that share the same causal Trans-
+former backbone with generated order tokens. This enables
+the model to learn how the current liquidity configuration
+influencesfutureorderevents,whilegeneratedorderssubse-
+quently drive LOB evolution through the matching engine.
+TheLOBencoderfirstconstructsnormalizedlevelfeatures
+ui =
+h
+pi−m0
+m0 ,log(1 +v i),1 valid,i
+i
+∈R 3,where1 valid,i
+indicates whether the level is valid.
+Each level feature is projected to the Transformer hid-
+den dimension and augmented with side embeddings, level-
+index embeddings, and projected initial state features. A
+lightweight Transformer encoder then models interactions
+among the 20 LOB levels. Finally, a set of learned query
+tokens attends to the encoded LOB levels and producesP
+LOB prefix embeddings:rlob1:P =G ψ(L0,s 0)∈R P×d model .
+The LOB prefix embeddings are prepended to the order-
+token embeddings. So the training objective is
+LLOB-AR =−
+TX
+t=1
+logp
+ 
+ct |r lob1:P , c0, c<t .(1)
+Duringtraining,labelsattheLOB-prefixandBOSpositions
+are masked. During inference, each generated token is de-
+coded into an executable order and applied to the matching
+engine, which deterministically updates the LOB. The real-
+izedLOBateachgenerationstepisthereforeadeterministic
+function of the initial LOB and the preceding decoded order
+events. Accordingly, we encode the LOB only once at the
+beginning of the rollout rather than recurrently re-encoding
+the updated book after generating.
+Thisdesignisanalogoustoavision-languagemodel:the
+LOB encoder converts structured market-state information
+intocontinuouslatenttokens,andthecausallanguage-model
+backbonegeneratesfuturediscreteordertokensthroughjoint
+attentiontothesestatetokensandtheprecedingeventtokens.
+The impact of LOB information on next-order prediction is
+reported in the appendix. Our formulation allows the Trans-
+formertolearnthecoupleddynamicsbetweenliquiditystates
+and order flow.
+10M
+75M
+1.27BModel size
+1B
+10B
+Training tokens
+6.0
+6.4
+6.8
+7.2
+31.9B
+(a) Fitted loss surface
+1B 3B 10B 31.9B
+Training tokens
+6.0
+6.3
+6.6
+6.9
+7.2Validation loss
+10M
+25M
+75M
+366M
+1.27B
+(b) Fixed model size
+Fitted curve
+Observed data
+10M 100M 1.27B
+Model size
+5.75
+6.00
+6.25
+6.50
+6.75
+7.00Validation loss
+1B
+3B
+10B
+31.9B
+(c) Fixed data size
+Figure 3:Chinchilla-style scaling law.Fitted validation-loss surface over model size and training tokens. Black dots denote
+observed runs, while dashed curves show fitted scaling-law slices at fixed model sizes and fixed dataset sizes.
+Inthedownstreamexperimentsthatfollow,allprice-based
+evaluations use a common order-replay protocol. To obtain
+price paths, we initialize a matching engine from the LOB
+snapshot observed at the beginning of each order sequence
+and replay subsequent order events in chronological order;
+full matching rules are provided in the appendix.
+6.29B 20B 100B
+6.0
+6.5Loss
+(a) Training loss
+6.29B 20B 100B
+5.5
+6.0
+6.5
+(b) Val. loss
+6.29B 20B 100B
+Training tokens
+250
+500
+750Perplexity
+(c) Val. perplexity
+Model size
+10M
+25M
+75M
+366M
+1.27B
+Figure 4:Training dynamics across model scales.Loss
+curves and validation perplexity for five model sizes over
+four training epochs.
+Experiments
+Dataset
+We use order-level market data covering the full constituent
+universe of the CSI 300 and CSI 500 indices, comprising
+800non-overlappingequitiesintotal,coveringJanuary2024
+to December 2025. The models are trained on data from
+January2024toNovember2025,comprisingapproximately
+31.9 billion order events, and evaluated on the strictly held-
+outDecember2025period.Detailsofthedatasetandprepro-
+cessingprocedureareprovidedintheappendix.Thetraining
+loss curves are shown in Figure 4. Model hyperparameters
+and scaling configurations are provided in the appendix.
+Scaling Law
+PriorstudiesonLLMscalinghaveshownthatlanguagemod-
+eling loss follows predictable trends as a function of model
+size, data scale, and training compute (Kaplan et al. 2020;
+Hoffmann et al. 2022). To examine whether similar scaling
+behavior emerges in thefinancial domain, we fit a Chin-
+chilla’s scaling law to the validation losses observed for our
+market models. The resulting fitted loss function is
+L(N, D) = 5.3697 + 1.5987N 0.3795 + 1.0027D0.3117 ,(2)
+whereNdenotesthenumberofmodelparametersinmillions
+andDdenotesthenumberoftrainingtokensinbillions.Fig-
+ure 3 visualizes the predictions implied by the fitted scaling
+law.
+To assess predictive validity, we performed leave-one-
+model-size-out validation and a residual bootstrap over the
+fitted parameters. Refitting Eq. (2) on each four-size subset
+predictstheheld-outsizewithameanabsoluterelativeerror
+of0.66%across folds ; a fit restricted to models up to 366M
+predicts the held-out 1.27B within0.53%. Bootstrap 90%
+CIsareα= 0.379 [0.281,0.485],β= 0.312 [0.211,0.423]
+andE= 5.370[5.065,5.529]. Details are in the appendix.
+Stylized Facts
+We examine whether the generated order-flow trajectories
+reproduce stylized facts of financial markets. We replay the
+generated orders through the matching engine and compare
+the resulting mid-price returns with empirical market paths.
+We focus on four widely documented stylized facts:heavy
+tails,aggregationalGaussianity,weaklinearautocorrela-
+tionofreturns,andvolatilityclustering(Mandelbrot1963;
+Cont2001;Ding,Granger,andEngle1993).Forhorizon∆,
+we define the mid-price log return asrt,∆ = log mt+∆mt .
+Figure 5a shows that both empirical and generated short-
+horizon returns are sharply peaked and heavy-tailed, while
+their distributions become less peaked at longer horizons,
+consistentwithaggregationalGaussianity.Figure5bshows
+that raw-return autocorrelations decay rapidly, whereas
+absolute-return autocorrelations remain positive over longer
+Panel A: Log-return distributional fidelity
+Kolmogorov–Smirnov Wasserstein (W 1, bp)
+∆tr (s) ZI Hawkes M3 ZI Hawkes M3
+100.158 0.1390.1022.77 3.711.60
+300.173 0.1720.1553.55 6.362.85
+600.220 0.2180.2074.83 10.134.25
+1200.2870.297 0.364 7.41 15.656.69
+Panel B: Aggregational Gaussianity
+Fact∆t r (s) Real ZI Hawkes M3
+Kurtosis60 20.08 54.86 49.2129.63
+Winsorized kurtosis60 8.63 15.82 19.3310.63
+Kurtosis180 17.63 37.75 30.6315.36
+Winsorized kurtosis180 6.75 11.94 15.588.31
+Kurtosis300 12.16 31.54 26.7214.09
+Winsorized kurtosis300 5.96 10.51 14.017.58
+Table 1: Log-return distributional fidelity and aggregational
+Gaussianity.
+lags, reproducingweak autocorrelation of returnsand
+volatility clustering.
+Table 1 comparesM3against two baselines: aZero-
+Intelligence agent (ZI)and aCompound Hawkes Process
+(Hawkes). Distributional fidelity is evaluated using the
+Kolmogorov–Smirnovstatistic,Wassersteindistance,andre-
+turn kurtosis across multiple time scales.M3achieves the
+closest match to real data under both distributional-distance
+metrics and under kurtosis. Details are provided in the ap-
+pendix. We do not compare with recent large-scale genera-
+tive models such as TradeFM and MarS, as their pretrained
+weights are not publicly released, precluding faithful repro-
+duction.
+Prediction
+Prediction in financial markets requires modeling both the
+direction and the uncertainty of future prices. Our model
+generates future order trajectories, replays the generated or-
+dersthroughthematchingengine,andevaluatestheinduced
+future mid-price paths. This allows the generative model to
+support multiple downstream predictive diagnostics, includ-
+ing mid-price movement and realized volatility (Li et al.
+2025). Evaluation details are provided in the appendix.
+Mid-priceprediction.Weevaluatewhethergeneratedtra-
+jectories contain predictive information about short-horizon
+price movements. For each prompt, we derive an ensemble
+return forecast from the generated mid-price paths and rank
+promptsintopredictedDown,Flat,andUpterciles.Figure6
+shows that the tail predictions are directionally informative
+and that conditioning on LOB consistently improves accu-
+racy over both the no-LOB baseline and DeepLOB. Our
+DeepLOB baseline follows the original three-class train-
+ing objective and achieves good overall three-class accuracy
+at short horizons; its lower score in Figure 6 reflects the
+direction-only evaluation, which focuses on distinguishing
+Up from Down rather than recognizing the Flat class. The
+sign and tercile confusion matrices further indicate that the
+generatedtrajectoriespreservedirectionalandrankinginfor-
+−150−100 0 100 150
+Log return (bp)
+0.00
+0.01
+0.02
+0.03
+0.04Density
+Kurtosis
+real=8.6
+M3=10.6
+1 min
+−150−100 0 100 150
+Log return (bp)
+Kurtosis
+real=6.7
+M3=8.3
+3 min
+−150−100 0 100 150
+Log return (bp)
+Kurtosis
+real=6.0
+M3=7.6
+5 min
+real M3 (ours)
+(a) Return distributions and aggregational Gaussianity.
+0 10 60 120 180 300
+Lag (seconds)
+0.0
+0.5
+1.0ACF
+Return autocorrelation
+0 10 60 120 180 300
+Lag (seconds)
+0.00
+0.25
+0.50
+0.75
+1.00ACF
+Absolute-return autocorrelation
+real M3 (ours) Hawkes ZI
+(b) Return autocorrelation and volatility clustering.
+Figure 5:Stylized facts of generated market trajectories.
+(a) Mid-price log-return distributions at 1, 3, and 5 minute
+horizons for generated trajectories and empirical market
+paths. (b) Autocorrelation functions of raw returns and ab-
+solute returns.
+30 s 1 min 3 min 5 min
+Prediction horizon
+40
+50
+60
+70Accuracy (%)
+(a) Directional accuracy
+> 0 < 0
+True return
+Up
+DownPredicted tail
+59.1 40.9
+37.6 62.4
+(b) Sign confusion (3 min)
+Up Flat Down
+True tercile
+Up
+Flat
+DownPredicted tercile
+49.1 29.1 21.8
+25.2 39.6 35.1
+25.2 31.5 43.2
+(c) Tercile confusion (3 min)
+LOB prefix No LOB prefix DeepLOB 50% naive
+Figure 6:Mid-price predictive diagnostics.(a) Tail direc-
+tional accuracy across horizons for the LOB-conditioned
+model, the no-LOB baseline, and the DeepLOB baseline.
+(b) Sign confusion matrix for the LOB-conditioned predic-
+tions at 3-min horizon. (c) Return-tercile confusion matrix
+for the LOB-conditioned model at 3-min horizon.
+Q1 Q2 Q3 Q4 Q5
+0
+10
+20
+30
+40
+50True realized volatility (bp)
+1 min
+Mean Median
+Q1 Q2 Q3 Q4 Q5
+3 min
+Q1 Q2 Q3 Q4 Q5
+5 min
+Predicted realized variance quintile
+Figure 7:Predicted realized volatility.Mean and median
+realized volatility of the future paths, grouped by predicted
+realized-variance quintile.
+mation.
+Volatility prediction.We evaluate whether the generated
+trajectories contain predictive information about future mar-
+ket volatility. For each prompt, we estimate future realized
+variance by averaging across Monte Carlo trajectories and
+group the prompts into forecast quintiles. As shown in Fig-
+ure 7, realized volatility increases monotonically with the
+predicted quintile, indicating that the model distinguishes
+0 25 50 75 100 125 150 175
+Time after prompt (seconds)
+−80
+−60
+−40
+−20
+0
+20
+40
+60
+80
+Cumulative mid-price return (bp)
+baseline
+sell 5x
+sell 10x
+sell 20x
+buy 5x
+buy 10x
+buy 20x
+(a) Counterfactual stress testing.
+-7.0 -6.5 -6.0 -5.5 -5.0
+log(Q/Vday)
+-3.2
+-3.0
+-2.8
+-2.6
+-2.4
+-2.2
+-2.0
+log(I/σday)
+β = 0.532
+R2 = 0.908
+Buy
+-7.0 -6.5 -6.0 -5.5 -5.0
+log(Q/Vday)
+-3.2
+-3.0
+-2.8
+-2.6
+-2.4
+-2.2
+-2.0
+ β = 0.524
+R2 = 0.819
+Sell
+0.03 0.04 0.05 0.06 0.07 0.08 0.09
+√ Q/Vday
+0.04
+0.06
+0.08
+0.10
+0.12
+0.14
+I/σday
+Y = 1.509
+R2 = 0.896
+0.03 0.04 0.05 0.06 0.07 0.08 0.09
+√ Q/Vday
+0.04
+0.06
+0.08
+0.10
+0.12
+0.14
+ Y = 1.493
+R2 = 0.887 (b) TWAP market impact.
+Figure 8:What-if analysis of the market microstructure model.Left: directional buy- and sell-side order-flow pressure
+produces economically consistent mid-price responses. Right: TWAP meta-order simulations exhibit concave square-root-like
+impact scaling with respect to executed quantity. Details are reported in the appendix.
+between low- and high-volatility market states.
+What-if Analysis
+Intervention-baseddiagnostics.Amarketmicrostructure
+model should respond plausibly to controlled interven-
+tions. Following the “what-if” evaluations in TradeFM and
+MarS (Kawawa-Beaudan et al. 2026; Li et al. 2025), we
+consider two complementary tests: a directional stress test
+that isolates the mechanical response of the order book to
+one-sided order-flow pressure, and a TWAP experiment that
+measures the price impact of meta-orders.
+Directionalstresstesting.Wereplayeachgeneratedevent
+sequence under an unmodified baseline and under buy- and
+sell-sidestressatseveralintensities.Buystressamplifiesbuy-
+sideaddeventswhileleavingsell-sideeventsunchanged,and
+sellstressisdefinedsymmetrically.Figure8ashowsthatbuy
+stress raises the mid-price relative to the baseline, whereas
+sell stress lowers it. The displacement increases with inter-
+vention strength but is sublinear over the tested range, qual-
+itatively consistent with concave market impact (Bouchaud,
+Farmer, and Lillo 2009; Bucci et al. 2019). The precise in-
+tervention and aggregation procedures are in the appendix.
+Marketimpactandthesquare-rootlaw.Empirically,the
+impact of a meta-order is commonly approximated by the
+square-root relation
+I(Q)≈Y σ d
+p
+Q/Vd,(3)
+whereQis the meta-order size,V d is daily trading volume,
+σd isdailyrealizedvolatility,andYisaconstant(Moroetal.
+2009; Tóth et al. 2011; Bucci et al. 2019).
+WetestthisrelationbyinjectingbuyandsellTWAPmeta-
+orders into 300-second closed-loop simulations. The target
+participation rate ranges from0.10%to1.00%. Interven-
+tion orders are processed by the simulated matching engine
+andfedbackintotheautoregressivecontext,allowingfuture
+backgroundorderflowtorespondtotherealizedintervention.
+We measure baseline-adjusted, direction-normalized impact
+relativetodailyvolatilityandplotitagainstexecutedquantity
+normalized by daily volume.
+Figure 8b shows a concave price impact for both sides.
+The estimated log-log slopes based on executed quantities
+are0.532forbuymeta-ordersand0.524forsellmeta-orders,
+withR 2 values of0.908and0.819, respectively. Both esti-
+mates are close to the square-root benchmark exponent of
+1/2, indicating that the simulator produces market-impact
+scaling under closed-loop TWAP interventions.
+Conclusion
+WeintroducedM3(M arketMicrostructureModel),amarket
+microstructure world model for order-level financial market
+simulation.M3represents heterogeneous order events and
+LOB states as discrete tokens, explicitly capturing the inter-
+action between order events and market state, and then gen-
+erated orders are recursively executed through the matching
+engine. This design allows the model to generate multiple
+future market trajectories.
+Empirically,M3demonstrates strong and scalable order-
+flow modeling ability. Through empirical evaluation, we
+show that the generated trajectories reproduce key market
+properties, preserve short-horizon predictive information,
+and support counterfactual analysis such as liquidity stress
+testingandmeta-orderimpactestimation.Theseresultssug-
+gest that order-level generative world models can provide
+a useful foundation for simulation-based market analysis,
+risk evaluation, and strategy development. Future work may
+includeincorporatingrichercross-assetinformationandim-
+provingtheoriginalcontextlengthoffoundationmodels.We
+believe that microstructure models offer a promising direc-
+tion for studying financial markets.
+References
+Arthur, W. B.; Holland, J. H.; LeBaron, B.; Palmer, R. G.;
+and Tayler, P. 1997. Asset Pricing Under Endogenous Ex-
+pectations in an Artificial Stock Market.Economic Notes,
+26(2): 297–330.
+Bouchaud,J.-P.;Farmer,J.D.;andLillo,F.2009. HowMar-
+ketsSlowlyDigestChangesinSupplyandDemand. InHens,
+T.; and Schenk-Hoppé, K. R., eds.,Handbook of Financial
+Markets: Dynamics and Evolution, Handbooks in Finance,
+57–160. San Diego: North-Holland.
+Bucci, F.; Benzaquen, M.; Lillo, F.; and Bouchaud, J.-P.
+2019. CrossoverfromLineartoSquare-RootMarketImpact.
+Physical Review Letters, 122(10): 108302.
+Byrd, D.; Hybinette, M.; and Balch, T. H. 2019. ABIDES:
+Towards High-Fidelity Market Simulation for AI Research.
+arXiv:1904.12066.
+Coletta, A.; Moulin, A.; Vyetrenko, S.; and Balch, T. 2022.
+Learning to Simulate Realistic Limit Order Book Markets
+from Data as a World Agent. InProceedings of the Third
+ACM International Conference on AI in Finance, 428–436.
+Cont, R. 2001. Empirical Properties of Asset Returns: Styl-
+izedFactsandStatisticalIssues.Quantitative Finance,1(2):
+223–236.
+Cont, R.; and de Larrard, A. 2013. Price Dynamics in a
+MarkovianLimitOrderMarket.SIAM Journal on Financial
+Mathematics, 4(1): 1–25.
+Ding, Z.; Granger, C. W. J.; and Engle, R. F. 1993. A Long
+MemoryPropertyofStockMarketReturnsandaNewModel.
+Journal of Empirical Finance, 1(1): 83–106.
+Esser,P.;Rombach,R.;andOmmer,B.2021. TamingTrans-
+formers for High-Resolution Image Synthesis. InProceed-
+ings of the IEEE/CVF Conference on Computer Vision and
+Pattern Recognition, 12873–12883.
+Farmer, J. D.; and Lo, A. W. 1999. Frontiers of Finance:
+EvolutionandEfficientMarkets.Proceedings of the National
+Academy of Sciences, 96(18): 9991–9992.
+Gao, S.; Wen, Y.; Zhu, M.; Wei, J.; Cheng, Y.; Zhang, Q.;
+and Shang, S. 2024. Simulating Financial Market via Large
+Language Model based Agents. arXiv:2406.19966.
+Gould, M. D.; Porter, M. A.; Williams, S.; McDonald, M.;
+Fenn, D. J.; and Howison, S. D. 2013. Limit Order Books.
+Quantitative Finance, 13(11): 1709–1742.
+Grossman, S. J.; and Stiglitz, J. E. 1980. On the Impossi-
+bility of Informationally Efficient Markets.The American
+Economic Review, 70(3): 393–408.
+Ha, D.; and Schmidhuber, J. 2018. World Models.arXiv
+preprint arXiv:1803.10122.
+Hoffmann, J.; Borgeaud, S.; Mensch, A.; Buchatskaya, E.;
+Cai, T.; Rutherford, E.; de Las Casas, D.; Hendricks, L. A.;
+Welbl, J.; Clark, A.; Hennigan, T.; Noland, E.; Millican, K.;
+van den Driessche, G.; Damoc, B.; Guy, A.; Osindero, S.;
+Simonyan,K.;Elsen,E.;Rae,J.W.;Vinyals,O.;andSifre,L.
+2022. Training Compute-Optimal Large Language Models.
+arXiv:2203.15556.
+Kaplan, J.; McCandlish, S.; Henighan, T.; Brown, T. B.;
+Chess, B.; Child, R.; Gray, S.; Radford, A.; Wu, J.; and
+Amodei, D. 2020. Scaling Laws for Neural Language Mod-
+els. arXiv:2001.08361.
+Kawawa-Beaudan, M.; Sood, S.; Papasotiriou, K.; Borrajo,
+D.; and Veloso, M. 2026. TradeFM: A Generative Foun-
+dation Model for Trade-flow and Market Microstructure.
+arXiv:2602.23784.
+Kyle, A. S. 1985. Continuous Auctions and Insider Trading.
+Econometrica, 53(6): 1315–1335.
+LeBaron, B.; Arthur, W. B.; and Palmer, R. 1999. Time
+Series Properties of an Artificial Stock Market.Journal of
+Economic Dynamics and Control, 23(9–10): 1487–1516.
+Li,J.;Liu,Y.;Liu,W.;Fang,S.;Wang,L.;Xu,C.;andBian,J.
+2025. MarS:aFinancialMarketSimulationEnginePowered
+by Generative Foundation Model. arXiv:2409.07486.
+Lo, A. W. 2004. The Adaptive Markets Hypothesis: Market
+EfficiencyfromanEvolutionaryPerspective.The Journal of
+Portfolio Management, 30(5): 15–29.
+Mandelbrot, B. 1963. The Variation of Certain Speculative
+Prices.The Journal of Business, 36(4): 394–419.
+Mike, S.; and Farmer, J. D. 2008. An Empirical Behavioral
+Model of Liquidity and Volatility.Journal of Economic
+Dynamics and Control, 32(1): 200–234.
+Moro, E.; Vicente, J.; Moyano, L. G.; Gerig, A.; Farmer,
+J. D.; Vaglica, G.; Lillo, F.; and Mantegna, R. N. 2009.
+MarketImpactandTradingProfileofHiddenOrdersinStock
+Markets.Physical Review E, 80(6): 066102.
+Nagy, P.; Frey, S.; Sapora, S.; Li, K.; Calinescu, A.; Zohren,
+S.;andFoerster,J.2023.GenerativeAIforEnd-to-EndLimit
+OrderBookModelling:AToken-LevelAutoregressiveGen-
+erative Model of Message Flow Using a Deep State Space
+Network. InProceedings of the Fourth ACM International
+Conference on AI in Finance, 91–99.
+Piao, J.; Liu, Z.; Huang, C.; Huang, J.; Li, S.; Wang, R.;
+andLi,Y.2026. MarketSim:SimulatingStockMarketswith
+Large-Scale Generative Agents. InProceedings of the 43rd
+International Conference on Machine Learning.ICML2026.
+Ramesh, A.; Pavlov, M.; Goh, G.; Gray, S.; Voss, C.; Rad-
+ford, A.; Chen, M.; and Sutskever, I. 2021. Zero-Shot Text-
+to-ImageGeneration. InMeila,M.;andZhang,T.,eds.,Pro-
+ceedings of the 38th International Conference on Machine
+Learning, volume 139 ofProceedings of Machine Learning
+Research, 8821–8831. PMLR.
+Razavi, A.; van den Oord, A.; and Vinyals, O. 2019. Gen-
+erating Diverse High-Fidelity Images with VQ-VAE-2. In
+Advances in Neural Information Processing Systems, vol-
+ume 32.
+Shazeer,N.2020.GLUVariantsImproveTransformer.arXiv
+preprint arXiv:2002.05202.
+Shi, Y.; Fu, Z.; Chen, S.; Zhao, B.; Xu, W.; Zhang, C.; and
+Li, J. 2025. Kronos: A Foundation Model for the Language
+of Financial Markets. arXiv:2508.02739.
+Su, J.; Lu, Y.; Pan, S.; Murtadha, A.; Wen, B.; and Liu,
+Y. 2023. RoFormer: Enhanced Transformer with Rotary
+Position Embedding. arXiv:2104.09864.
+Tóth, B.; Lempérière, Y.; Deremble, C.; de Lataillade, J.;
+Kockelkoren,J.;andBouchaud,J.-P.2011. AnomalousPrice
+ImpactandtheCriticalNatureofLiquidityinFinancialMar-
+kets.Physical Review X, 1(2): 021006.
+Touvron, H.; Lavril, T.; Izacard, G.; Martinet, X.; Lachaux,
+M.-A.; Lacroix, T.; Rozière, B.; Goyal, N.; Hambro, E.;
+Azhar, F.; Rodriguez, A.; Joulin, A.; Grave, E.; and Lample,
+G.2023. LLaMA:OpenandEfficientFoundationLanguage
+Models.arXiv preprint arXiv:2302.13971.
+van den Oord, A.; Vinyals, O.; and Kavukcuoglu,
+K. 2018. Neural Discrete Representation Learning.
+arXiv:1711.00937.
+Vaswani, A.; Shazeer, N.; Parmar, N.; Uszkoreit, J.; Jones,
+L.; Gomez, A. N.; Kaiser, Ł.; and Polosukhin, I. 2017. At-
+tention is All You Need. InAdvances in Neural Information
+Processing Systems.
+Wang, X.; Cui, Y.; Wang, J.; et al. 2026. Multimodal learn-
+ing with next-token prediction for large multimodal models.
+Nature, 650: 327–333.
+Yan, W.; Zhang, Y.; Abbeel, P.; and Srinivas, A. 2021.
+VideoGPT: Video Generation using VQ-VAE and Trans-
+formers. arXiv:2104.10157.
+Yu, L.; Cheng, Y.; Sohn, K.; Lezama, J.; Zhang, H.; Chang,
+H.; Hauptmann, A. G.; Yang, M.-H.; Hao, Y.; Essa, I.; and
+Jiang, L. 2023. MAGVIT: Masked Generative Video Trans-
+former. InProceedings of the IEEE/CVF Conference on
+Computer Vision and Pattern Recognition, 10459–10469.
+Zhang, B.; and Sennrich, R. 2019. Root Mean Square Layer
+Normalization. InAdvances in Neural Information Process-
+ing Systems.
+Zhang, Z.; Zohren, S.; and Roberts, S. 2019. DeepLOB:
+DeepConvolutionalNeuralNetworksforLimitOrderBooks.
+IEEE Transactions on Signal Processing, 67(11): 3001–
+3012.
+Zheng,Z.;Li,G.;Ouyang,D.;Liang,D.;andShao,J.2024.
+Limit Order Book Event Stream Prediction with Diffusion
+Model.arXiv preprint arXiv:2412.09631.
+Data and Preprocessing
+Dataset Details
+Our raw dataset consists of order book data for the CSI
+500 and CSI 300 constituents, covering January 2024 to
+November 2025 for training and December 2025 for testing.
+In total, the training set contains approximately 31.9 billion
+orderevents.Wepreservealllimitandmarketordersintheir
+originalarrivalorderwithoutseparatingthembyordertype.
+-0.01 -0.005 0 0.005 0.01
+log(price / mid-price)
+0
+150
+300
+450
+600Probability density
+(a) relative mid-price
+-0.05 -0.025 0 0.025 0.05
+log(price / open-price)
+0
+8
+16
+24Probability density
+(b) relative open-price
+0 1000 2000 3000 4000
+volume
+0.000
+0.004
+0.008
+0.012
+0.016Probability density
+(c) volume
+0.0 0.4 0.8 1.2 1.6
+log1p(inter-arrival time)
+0
+15
+30
+45
+60Probability density
+(d) inter-arrival time
+Figure 9: Empirical distributions of the continuous order-
+flow features. Panels (a)–(d) show the distributions of rela-
+tive mid-price, relative open-price, order volume, and inter-
+arrival time, respectively. The features exhibit strong dis-
+creteness and heavy tails.
+Input Preprocessing
+Eachinputordersequenceisdenotedasx 1:T,wherex t ∈R 5.
+To ensure that the continuous feature dimensions—such as
+price, log1p(volume), and the time feature∆τ—maintain
+a consistent scale for tokenizer training and to guarantee
+model robustness, we clip these features at the 0.5th and
+99.5th percentiles.
+Following the aforementioned data preprocessing
+pipeline, we restrict the sequence length to a maximum of
+1,024tokens.Consequently,aslidingwindowoflength1,024
+isuniformlyadoptedforbothtokenizertrainingandthesub-
+sequent autoregressive modeling tasks.
+Tokenizer Details
+Tokenizer Architecture
+Network Design.We employ a symmetric Transformer
+encoder-decoder architecture equipped with learned abso-
+lute positional embeddings to capture sequential dependen-
+cies. The core representation learning relies on multi-head
+self-attention:
+Attention(Q, K, V) =softmax
+ QK T
+√dk
+
+V(4)
+whereQ,K, andVdenote the query, key, and value ma-
+trices, andd k is the key dimension. To stabilize training
+and enhance non-linear expressivity, we utilize Pre-Layer
+Normalization (Pre-LN) coupled with GELU activations.
+The continuous encoder representations are projected into
+a lower-dimensional latent space and discretized via a Vec-
+tor Quantization (VQ) bottleneck before being passed to the
+decoder for reconstruction.
+Model Configuration.The tokenizer comprises approxi-
+mately 15.2M trainable parameters across 3 encoder and 3
+decoder layers. The multi-head self-attention module em-
+ploys 6 independent heads with a hidden dimension of
+dmodel = 384, while the feed-forward networks expand to
+dff = 1536. Designed to process sequences up to 1024
+timesteps, the model linearly projects encoder outputs into
+a 128-dimensional bottleneck. Discretization is performed
+against a high-capacity learned codebook ofK= 32,768
+latent embeddings, providing a robust vocabulary to capture
+complex order events.
+Tokenizer Training Objective
+Composite Objective Function.To ensure both micro-
+structural fidelity and macroscopic statistical consistency in
+the reconstructed data, the model is optimized using a com-
+positelossfunction,L total,definedasaweightedsumoffour
+components:
+Ltotal =L recon_cont +Lrecon_categorical +Lvq +λtickLfinancial (5)
+•Continuous Reconstruction (L recon_cont):A weighted
+Mean Squared Error (MSE) applied to continu-
+ous features. Asymmetric dimensional weighting (e.g.,
+[100,1,1])isstrictlyappliedtoheavilyprioritizethepre-
+cisereconstructionofcorepricetrajectoriesoverauxiliary
+signals.
+•Categorical Reconstruction (L recon_categorical):A stan-
+dard Cross-Entropy (CE) loss to reconstruct discrete
+structural attributes, such as market actions and order
+sides.
+•Quantization Constraints (Lvq):Standard VQ penalty
+terms—including codebook, commitment, and usage
+losses—to align encoder outputs with the discrete latent
+space and mitigate codebook collapse.
+•Financial Heuristics (L financial):A domain-specific
+Open Tick Loss (λtick = 0.001) designed to enforce
+micro-structural realism by ensuring that reconstructed
+prices precisely align with valid, discrete market tick in-
+tervals. We compute a Smooth L1 loss (Huber loss) be-
+tween the continuous reconstructed tick values and the
+discrete target tick indices.
+VQ-VAE Training Details.We used a codebook ofK=
+32,768embeddings, each with dimension 128, and assigned
+each encoder output to its nearest code under Euclidean dis-
+tance. The codebook was initialized using 10 iterations of
+k-means and updated by exponential moving averages with
+decay0.99, rather than by gradient descent. Codes with an
+EMAclustersizebelow2werereplacedusingcurrent-batch
+encodervectors.TheVQobjectivecontainedacommitment
+lossβ∥z e −sg(e q)∥22 withβ= 0.25; no separate code-
+bookregressionorcode-diversityregularizerwasused.Gra-
+dients through the hard assignment were propagated using
+the rotation-trick estimator , rather than the conventional
+identity straight-through estimator. We monitored codebook
+utilization asU=|{k:n k >0}|/Kand code perplexity as
+exp[− Pk pk logp k]. At the selected checkpoint, all 32,768codeshadbeenselectedduringtraining,givingacumulative
+utilizationof100%.Theloggedper-minibatchutilizationwas
+22,696 codes69.3%with a perplexity of 16,815 . The com-
+pleteeliminationofdeadcodes,coupledwithhighcodebook
+utilizationandperplexity,confirmstheabsenceofcodebook
+collapse. Rather than a pathological degradation, these met-
+rics systematically document a highly active discrete latent
+spacecharacterizedbythenaturalnon-uniformityoftheem-
+pirical data distribution.
+Reconstruction Evaluation
+Table 2 evaluates order-event reconstruction under a com-
+mon vocabulary budget ofK= 32768. For all tokenizers,
+wekeeptheoriginalordersequencefixed:eachoriginalevent
+is encoded and decoded, and the decoded event is then sub-
+mitted to the matching engine to construct a reconstructed
+order-book trajectory.
+Thetwobinresultsdifferinthepriceanchoravailabledur-
+ing decoding. Bin-O is a privileged oracle diagnostic: each
+event is decoded relative to the contemporaneous mid-price
+from the original order-book trajectory. Although this an-
+chor is available in an offline reconstruction experiment, it
+is unavailable during autoregressive generation, because the
+ground-truth order-book trajectory is then unknown. Bin-S
+instead uses the mid-price of the reconstructed book ob-
+tained by replaying all previously decoded events through
+the matching engine. It therefore reproduces the anchoring
+mechanismthatmustbeusedatgenerationtime.Smallprice
+or volume reconstruction errors can alter the reconstructed
+book, shift the anchor used for subsequent events, and ac-
+cumulate along the trajectory. The difference between Bin-
+O and Bin-S consequently measures the sensitivity of the
+relative-midtokenizertothisrecursiveanchorfeedback;Bin-
+Oshouldnotbeinterpretedasageneration-feasiblebaseline.
+OurVQtokenizeravoidsthisfeedbackmechanismbyrep-
+resentingpricesrelativetothedailyopenprice,whichisfixed
+andavailablethroughoutbothreconstructionandgeneration.
+It additionally learns a compact discrete codebook over the
+continuousorderfeatures.Amongthegeneration-feasiblede-
+coding schemes, VQ outperforms Bin-S on every reported
+price metric, reducing the price MAE from4.3×10−1 to
+2.51×10 −2, increasing both exact-tick and within-one-tick
+accuracy, and reducing the P90 and P99 errors from 26 and
+764 ticks to 6 and 28 ticks, respectively. It also consistently
+improvesthereconstructionoftheothercontinuousfeatures.
+These results motivate VQ as the discretization interface for
+autoregressive order-flow modeling.
+Autoregressive Model Details
+Autoregressive Backbone
+We adopt a standard decoder-only LLaMA2-style Trans-
+former as the autoregressive backbone for modeling dis-
+crete order tokens (Vaswani et al. 2017; Touvron et al.
+2023). Given input tokensc= (c 1, . . . , cT ), wherec t ∈
+Oracle diagnostic Generation-feasible
+Metric Bin-O † Bin-S VQ
+Price MAE5.86×10 −2 4.3×10 −1 2.51×10 −2
+Exact tick rate 0.765 0.3070.377
+Within 1 tick 0.846 0.5480.662
+Err. P90 (ticks) 4 266
+Err. P99 (ticks) 123 76428
+†Bin-O is unavailable during generation and must not be inter-
+preted as a deployable baseline. Bold denotes the better result
+among generation-feasible methods.
+(a) Price reconstruction under oracle and generation-time informa-
+tionsettings(↓MAE/P90/P99,↑hitrates).Bin-Ousestheground-
+truth contemporaneous mid-price and is included only as a non-
+causal diagnostic; the deployable comparison is Bin-S versus VQ.
+Metric Bin tokenizer VQ tokenizer
+Relative price MAE1.119×10 −3 5.250×10 −4
+Log-volume MAE6.910×10 −2 3.530×10 −2
+Volume MAE5.064×10 2 1.171×10 2
+Delta-time MAE2.380×10 −2 1.260×10 −2
+Event-time MAE4.4431.553
+Final-time abs. err.8.6162.770
+(b) Reconstruction accuracy of other continuous features
+(↓better).
+Notes.Bold indicates the best value in each row. Lower
+is better for error metrics; higher is better for rate met-
+rics.“Bin(oracle)”usesthetruecurrentmid-priceanchor,
+while“Bin(sim.)”usesasimulatedmid-priceanchor.The
+bin tokenizer decodes each token by the median value of
+its bin.
+Table 2: Reconstruction accuracy comparison under a fixed
+vocabulary size ofK= 32768. For the bin-based tokenizer,
+the vocabulary is factorized into32price bins,16volume
+bins,16time bins,2action types, and2sides.
+{0, . . . , K−1}, the model learns the causal factorization
+pθ(c) = QTt=1 pθ(ct |c <t).Thisautoregressiveformulationensures that each token is predicted only from its historical
+context, which is consistent with the temporal ordering of
+order flow data.
+The input token ids are first mapped into continu-
+ous embeddings and then passed through a stack ofL
+LLaMA2 decoder layers. Each decoder layer consists of
+pre-normalized causal multi-head self-attention with rotary
+positional embeddings, followed by a gated feed-forward
+network with SiLU activation (Su et al. 2023; Zhang and
+Sennrich 2019; Shazeer 2020). In our implementation,
+standard multi-head attention rather than grouped-query
+attention is used in the model. After the final decoder
+layer, a final RMSNorm is applied, and a linear language-
+modelingheadprojectsthehiddenstatestovocabularylogits:
+O= LMHead
+ 
+RMSNorm
+ 
+H(L) ,O∈R B×T×K .
+The model is optimized using the standard next-token pre-
+diction objective:
+LAR =− 1N
+BX
+i=1
+T−1X
+t=0
+logp θ (ci,t+1 |c i,≤t),(6)
+whereNdenotes the number of valid target tokens.
+6.29B 10B 20B 50B 100B
+Number of training tokens
+6.2
+6.3
+6.4
+6.5
+6.6
+6.7Validation loss
+Input setting
+Without LOB
+With LOB
+Loss reduction
+Figure 10: LOB loss comparison.
+LOB Prefix Encoder
+For each order-flow window, we use the contemporaneous
+LOBsnapshotobservedimmediatelybeforethefirsteventin
+thewindow.Thesnapshotrepresentstheliquiditystatefrom
+whichthesubsequenteventsequenceevolves.Sincethisstate
+containsimportantinformationaboutthesupplyanddemand
+conditions faced by subsequent order arrivals, we introduce
+aLOBprefixencodertoconditiontheautoregressivepredic-
+tion model on the initial market state.
+For each sample, the LOB snapshot is represented as a
+tensorB∈R 2×10×2,wherethefirstdimensioncorresponds
+to the two book sides, the second dimension corresponds
+to the ten price levels on each side, and the last dimension
+contains the absolute price and volume. Letps,l andv s,l
+denote the price and volume at sidesand levell, respec-
+tively.Wefirstnormalizepricesbyareferencemid-pricem:
+rs,l = clip
+
+ps,l−m
+m ,−c p, cp
+
+,wherec p is the price clip-
+ping threshold (0.20 in our implementation). Volumes are
+transformed using a logarithmic scale,us,l = log(1 +v s,l).
+Inaddition,weincludeavalidityindicatora s,l todistinguish
+valid book entries from missing or invalid levels. Therefore,
+each LOB position is represented by a three-dimensional
+feature vectorzs,l = [rs,l, us,l, as,l].
+Each feature vector is projected into the model hidden
+dimension through a linear layer. To encode the structural
+identity of each LOB entry, we add two types of learnable
+embeddings: a side embedding for the bid/ask side and a
+levelembeddingforthedepthlevel.Thus,theinputtokenfor
+sidesand levellis given by
+h(0)s,l =W lobzs,l +e sides +e levell .(7)
+This factorized design distinguishes the2×10 = 20LOB
+positions while sharing statistical structure across sides and
+depth levels. We also add a projected global market-state
+vector, including normalized spread, time since the open,
+and return from the open, to all LOB tokens.
+The resulting 20 LOB tokens are processed by a
+lightweight Transformer encoder (Vaswani et al. 2017). In
+ourimplementation,theencoderisinstantiatedwithtwolay-
+ers and four multi-head self-attention heads. The encoder
+produces contextualized hidden states
+HLOB = TransformerEncoder
+
+H(0)LOB
+
+∈R 20×d,(8)
+wheredis the hidden dimension.
+Finally, we compress the encoded LOB states into a
+fixed number of prefix tokens usingcross-attention pool-
+ing. Specifically, we introducePlearnable query tokens
+Qlob ∈R P×d, which attend to the 20 encoded LOB states
+as keys and values:
+PLOB = LayerNorm
+
+MHA
+ 
+Qlob,H LOB,H LOB
+
+∈R P×d . (9)
+The resultingP LOB serves as a compact prefix representa-
+tion of the initial liquidity state and is used to condition the
+subsequent autoregressive order prediction model.
+Matching Engine
+Totranslateorder-eventsequencesintopricetrajectories,we
+use a lightweight deterministic matching engine that main-
+tains the bid and ask books, a simulation clock, and the
+resultingmid-pricepath.Atthebeginningofeachsequence,
+the engine is initialized from the corresponding observed
+LOB snapshot and subsequently evolves only through the
+replayed order events.
+Deterministic matching.The engine represents each side
+of the LOB as aggregate volume at discrete price levels.
+Decoded order prices are converted to absolute limit prices
+using the opening-price anchor and rounded to the nearest
+tick (δ= 0.01); volumes are rounded to the nearest unit lot.
+The event space contains add and cancel messages. A buy
+order consumes ask liquidity from the lowest ask upward
+while the resting ask does not exceed its limit price, and
+a sell order analogously consumes bid liquidity from the
+highestbiddownward.Ateachlevel,theexecutedquantityis
+theminimumoftheincomingresidualandtherestingdepth,
+allowing partial fills and execution across multiple levels.
+Anyunexecutedresidualispostedattheoriginallimitprice.
+A cancellation removes available aggregate depth only at its
+specified side and price level; any unmatched cancellation
+quantityisrecordedbutdoesnotalterotherlevels.Theengine
+therefore enforces price priority across levels, but does not
+modelorderidentifiersorFIFOprioritywithinalevel.After
+every event, the best quotes and mid-price are updated.
+Model Hyperparameters
+Our final hyperparameters are shown in Table 3.
+Evaluation Details
+Scaling Law
+Held-out validation and bootstrap uncertainty.We as-
+sessed the predictive validity of scaling law using the com-
+plete5×4gridof20observedlosses,comprisingfivemodel
+Model Size Hidden FFN Layers Heads
+tiny 10M 128 512 3 4
+small 25M 256 1024 6 4
+base 75M 512 2048 8 8
+large 366M 1024 4096 16 16
+xlarge 1.27B 2048 5504 20 16
+Table 3: Transformer hyperparameters for each model scale.
+Allconfigurationsuseavocabularysizeof32,768anduntied
+input/output embeddings.
+sizes (9.66M,24.99M,74.75M,366.06M, and1.27B pa-
+rameters)andfourtraining-tokenbudgets(1B,3B,10B,and
+31.9B tokens). For each leave-one-model-size-out fold, we
+jointly removed all four observations corresponding to one
+model size, refitted the quation to the remaining 16 obser-
+vations using the same Huber objective on log-loss residu-
+als (δ= 10 −3), and predicted the four held-out losses. We
+define the signed relative error as100(bL−L)/Land re-
+port its absolute value averaged over the four token budgets
+as the fold MAPE. The MAPEs for held-out sizes9.66M,
+24.99M,74.75M,366.06M, and1.27B were1.14%,0.40%,
+0.56%,0.70%, and0.53%, respectively, giving an overall
+mean absolute relative error of0.66%across the 20 held-
+out predictions. The endpoint folds constitute extrapolation
+tests,whereasthethreeinteriorfoldstestinterpolation.Inthe
+strict upper-extrapolation setting, fitting only models up to
+366.06Mpredictedtheheld-out1.27BrunswithaMAPEof
+0.53%and a maximum absolute relative error of1.12%. At
+tokenbudgetsof1B,3B,10B,and31.9B,thecorresponding
+signederrorswere+1.12%,−0.11%,−0.27%,and+0.60%.
+Toquantifyfinite-sampleuncertainty,weadditionallyper-
+formed a fixed-design residual bootstrap with 2,000 repli-
+cates.Specifically,afterfittingtheequationtoall20observa-
+tions, we computed and centered the log-loss residualsϵi =
+logL i −log bLi. For each replicate, residuals were sampled
+with replacement and pseudo-observations were generated
+asL ∗i = bLi exp(ϵ∗i )at the original(N i, Di)design points.
+The same Huber objective was then refitted to each pseudo-
+dataset. Percentile intervals were obtained directly from
+the resulting parameter distributions. The 90% bootstrap
+confidence intervals wereα= 0.379 [0.281,0.485],β=
+0.312 [0.211,0.423],andE= 5.370 [5.065,5.529];thecor-
+responding 95% intervals wereα= 0.379 [0.259,0.510],
+β= 0.312 [0.193,0.456], andE= 5.370 [4.972,5.562].
+These intervals quantify residual uncertainty conditional on
+theobserved(N, D)gridandtheassumedscaling-lawform;
+theydonotcapturerun-to-runtrainingstochasticitybecause
+only one loss observation is available at each configuration.
+Stylized Facts
+Foratimehorizon∆,letm t denotethemid-priceanddefine
+thelogreturnasr t,∆ = log mt+∆mt .Wecomputethisquantityforbothempiricaltrajectoriesandgeneratedtrajectoriesover
+multiple aggregation horizons.
+Returndistributions.Forthedistributionaldiagnosticsin
+Figures 5 and 5a of the main paper, we compare the log-
+returndistributionsobtainedfromempiricalmarkettrajecto-
+rieswiththosegeneratedbyM3,theZero-Intelligencemodel
+(ZI), and the Compound Hawkes Process model (Hawkes).
+Eachgeneratedordersequenceisreplayedthroughthesame
+matching engine to obtain its corresponding mid-price tra-
+jectory.
+Comparedmarketsimulators.Letanordereventberep-
+resented asxi = (∆ti, ai, si, di, vi),where∆t i is the inter-
+eventtime,a i istheadd/deleteaction,s i istheorderside,d i
+is the price depth relative to the prevailing mid-price, andvi
+is the order volume.
+The ZI baseline assumes that successive events are in-
+dependent and that the event attributes are sampled from
+calibratedmarginaldistributions.Itseventdistributionisfac-
+torized as
+pZI(xi) =p(a i)p(s i)p(∆t i)p(d i)p(v i).(10)
+The action and side are sampled from categorical distribu-
+tions estimated from their empirical frequencies:
+ai ∼Cat(π a), s i ∼Cat(π s).(11)
+The inter-event time and order volume are modeled using
+exponential distributions,
+∆ti ∼Exp(λ t), v i ∼Exp(λ v),(12)
+while the price-depth distribution is represented by a Gaus-
+sian mixture:
+p(di) =
+QdX
+q=1
+ωq N
+ 
+di;µ q, σ2q  , Q d = 5.(13)
+Consequently,ZImatchestheunconditionalfrequenciesand
+marginaldistributionsoforderattributesbutdoesnotmodel
+temporal dependence or endogenous clustering in the order
+flow.
+The Compound Hawkes Process baseline introduces tem-
+poraldependencethroughmutuallyexcitingeventintensities.
+Events are divided into four types:
+{buy-delete,buy-add,sell-delete,sell-add}.
+Letk i ∈ {1,2,3,4}denote the type of eventi, and let
+Ht denote the event history before timet. The conditional
+intensity of typekis
+λk(t| Ht) =µ k +
+4X
+j=1
+QhX
+q=1
+αkjq βq
+X
+n:t (j)n <t
+exp
+ 
+−βq(t−t (j)n ),
+(14)
+whereµ k is the background intensity,αkjq controls the ex-
+citation from source typejto target typek, andβ q deter-
+mines the decay rate of theq-th exponential kernel. We use
+Qh = 4temporal scales, parameterized by the half-lives
+τq ∈ {0.05,0.5,5,60}s, β q = log 2τq .The price-depth and
+volumemarksareconditionedonthesampledeventtype.In
+particular, the type-specific mark distributions take the form
+p(di |k i =k) =
+QdX
+q=1
+ωkq N
+ 
+di;µ kq, σ2kq ,(15)
+and
+vi |k i =k∼Exp(λ v,k).(16)
+The Hawkes model therefore captures event clustering and
+cross-excitation between different order types, while retain-
+ingaparametricstructurefortheeventintensitiesandmarks.
+AsreportedinPanelAofTable1,M3achievesthesmallest
+Wassersteindistanceatallfourreturnhorizonsandthesmall-
+estK–Sstatisticat10,30,and60seconds.Atthe120-second
+horizon,ZIobtainsasmallerK–Sstatistic,whereasM3con-
+tinues to achieve the smallest Wasserstein distance. Overall,
+these results indicate that M3 more closely reproduces the
+empirical log-return distribution across the evaluated time
+scales.
+Mid-price Prediction
+During long-horizon simulation, we maintain arolling au-
+toregressivecontext.TheLOBprefixisretainedthroughout
+therollout,whileonlythemostrecentorder-eventtokensare
+kept when the event history exceeds the maximum context
+length.
+For each prompt at timetand prediction horizonk∈
+{0.5,1,3,5}minutes, we compute generated and realized
+horizonlogreturnsinbasispoints.Letm tdenotetheprompt
+mid-price,bmt+k the ensemble generated mid-price at hori-
+zonk, andm obst+k the mid-price of the held-out market path.
+The corresponding returns are
+brt,k = 104 (logbmt+k −logm t),
+rt,k = 104  logm obst+k −logm t . (17)
+For both generated and observed paths, we use the mid-
+price observation closest to the target horizon and retain a
+prompt only when the absolute time mismatch is within the
+evaluation tolerance.
+LOB ablation.We compare the LOB-conditioned model
+withtwobaselines:anotherwisematchedmodelthatdoesnot
+receive the initial LOB prefix, and DeepLOB, a supervised
+discriminative baseline for mid-price movement prediction.
+Allmodelsareevaluatedonthesamepromptsandprediction
+horizons. Figure 6(a) reports their tail directional accuracy,
+together with a 50% naive directional benchmark.
+Tercilelabelsandtailaccuracy.Ateachhorizon,prompts
+are ranked by their predicted returnsbrt,k. The bottom, mid-
+dle, and top thirds define the predicted Down, Flat, and Up
+groups,respectively.RealizedDown,Flat,andUplabelsare
+constructed independently by ranking the observed returns
+rt,k.
+Tail directional accuracy evaluates only the two extreme
+predicted groups:
+Acctail(k) = Ndown(k) +N up(k)Ntail(k) ,(18)
+where
+Ndown(k) = #{ bYt,k = Down, rt,k <0},(19)
+Nup(k) = #{ bYt,k = Up, rt,k >0},(20)
+and
+Ntail(k) = #{ bYt,k ∈ {Down,Up}}.(21)
+This metric measures whether prompts assigned to the pre-
+dicted return tails subsequently move in the corresponding
+direction. It should be interpreted as a predictive ranking
+diagnostic rather than as the performance of an executable
+trading strategy.
+Confusion matrices.The sign confusion matrix retains
+only the predicted Up and Down groups and compares them
+withthesignoftheobservedreturn.Realizedzeroreturnsare
+excluded from the positive and negative sign columns. The
+tercileconfusionmatrixcomparesthepredictedandrealized
+Down, Flat, and Up labels.
+The matrices in Figure 6(b,c) are reported for the LOB-
+conditioned model at the 3-minute horizon. Raw counts are
+normalized within each predicted-label row. An uninforma-
+tive sign prediction corresponds to approximately 50% in
+each row of the sign matrix, whereas an uninformative ter-
+cile ranking corresponds to approximately one third in each
+row of the tercile matrix.
+Volatility Prediction
+Foreachprompt,wegenerateSfuturemid-pricetrajectories
+and resample each trajectory on a one-second previous-tick
+grid. Letm (s)tj denote the resampled mid-price of generated
+trajectorysatgridpointt j.Itsrealizedvarianceoverforecast
+horizonkis
+R V(s)t,k =
+JkX
+j=1
+
+logm (s)tj −logm (s)tj−1
+2
+.(22)
+We use the Monte Carlo average
+cR Vt,k = 1S
+SX
+s=1
+R V(s)t,k (23)
+as the model forecast of future realized variance.
+Prompts are sorted into five equal-sized bins according
+to cR Vt,k. For each forecast quintile, we report the mean
+and median realized volatility of the corresponding held-out
+future paths. Specifically, lettingR Vobst,k denote the realized
+variance of the observed future path, we compute
+Volobst,k = 104
+q
+R Vobst,k ,(24)
+where the factor104 expresses volatility in basis points.
+An uninformative forecast would yield a nearly flat rela-
+tionship between forecast quintiles and subsequent realized
+volatility. By contrast, an informative conditional volatility
+forecast should produce increasing realized volatility from
+Q1 to Q5.
+Directional Stress Testing
+Weusedirectionalstresstestingtoevaluatewhetherthesimu-
+latorproduceseconomicallyconsistentpriceresponsesunder
+controlled order-flow imbalance. For each sampled contin-
+uation, we construct buy- and sell-stressed replays from the
+sameinitiallimit-order-bookstate.Underbuystress,themul-
+tiplicityofeachbuy-sideaddeventissettom∈ {5,10,20},
+whilesell-sideeventsareleftunchanged.Sellstressisdefined
+symmetricallybyincreasingthemultiplicityofsell-sideadd
+events and leaving buy-side events unchanged.
+Allstressedeventstreamsareprocessedbythesamelimit-
+order-book matching engine as the unmodified replay. Let
+M (s)t denote the mid-price in scenarios, and letM0 be the
+initialmid-price.Wereportcumulativemid-pricelogreturns
+in basis points,
+r(s)t = 104
+
+logM (s)t −logM 0
+
+.(25)
+Foreachpromptandstressscenario,MonteCarlorolloutsare
+first averaged within the prompt. The reported trajectory is
+then the cross-prompt mean of these prompt-level averages,
+and confidence bands are computed across prompts. This
+replay-based diagnostic isolates the mechanical response of
+the order book to directional order-flow pressure.
+TWAP Market Impact
+WeevaluatemarketimpactusingaTWAPmeta-orderproto-
+col. For a participation rateρ, the target meta-order size for
+security-day(i, d)is
+Q=ρV i,d,(26)
+whereV i,d is the same security-day daily trading volume.
+The target quantity is rounded to the nearest lot. We use the
+participation grid
+ρ∈ {0.0010,0.0015,0.0020,0.0025,0.0030,0.0035,
+0.0040,0.0050,0.0075,0.0085,0.0100}.
+(27)
+The experiment uses 64 liquidity-matched prompt windows
+selected by daily trading volume. For each prompt, partici-
+pation rate, and side, we generate four rollouts.
+TWAPexecution.Eachmeta-orderisexecutedovera300
+second horizon and split intoN= 20child orders, arriv-
+ingat15,30, . . . ,300seconds.Ateachchild-ordertime,the
+simulator prices the intervention from the current simulated
+book. A buy child order is submitted as an aggressive limit
+order at the current best ask plus 10 ticks, while a sell child
+order is submitted at the current best bid minus 10 ticks.
+Closed-loop feedback.After a child order is submitted, it
+is processed by the same limit-order-book matching engine
+usedforgeneratedbackgroundorders.Theresultingeventis
+encoded into the discrete order-token representation and ap-
+pended to the autoregressive context. Subsequent generated
+orders therefore condition on the realized intervention his-
+tory. This distinguishes the protocol from static intervention
+replay,whereintervention ordersareconstructedinadvance
+from the initial book and are not fed back into the model
+state.
+Impact normalization and aggregation.For each in-
+tervention path, impact is computed relative to the same
+prompt’s baseline terminal return atT= 300seconds.
+Letr si,o(T) = log(m si,o(T)/m i(0))denote the terminal log
+return for prompti, rollouto, and scenarios. We define
+direction-adjusted impact as
+I buyi,o =r buyi,o (T)−¯r basei (T), I selli,o = ¯rbasei (T)−r selli,o (T).
+(28)
+Positive values therefore indicate price movement in the in-
+tendedeconomicdirectionforbothbuyandsellmeta-orders.
+We normalize impact by the same security-day realized
+volatilityσ i,d and normalize size by the same security-day
+daily volumeV i,d. The main figure uses executed quantity
+Qexec, because aggressive child orders may execute only
+partially; a target-quantity version is reported as a robust-
+nesscheck.Theplottedpointsarebin-levelmedians.Specif-
+ically, rollouts are first averaged within each prompt-side-
+participation cell, and the resulting prompt-level values are
+thensummarizedbytheirmedianwithineachsideandpartic-
+ipationbin.Thisavoidstakinglogarithmsofnoisyindividual
+impacts and makes the fitted curve less sensitive to outlier
+prompts.

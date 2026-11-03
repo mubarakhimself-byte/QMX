@@ -1,0 +1,961 @@
+arXiv 2107.06839  https://arxiv.org/abs/2107.06839
+
+Correlation scenarios and correlation stress testing ∗† ‡
+N. Packham § and F. Woebbeking ¶
+September 7, 2022
+Abstract
+We develop a general approach for stress testing correlations of ﬁnancial asset portfolios.
+The correlation matrix of asset returns is speciﬁed in a parametric form, where correlations
+are represented as a function of risk factors, such as country and industry factors. A sparse
+factor structure linking assets and risk factors is built using Bayesian variable selection
+methods. Regular calibration yields a joint distribution of economically meaningful stress
+scenarios of the factors. As such, the method also lends itself as a reverse stress testing
+framework: using the Mahalanobis distance or highest density regions (HDR) on the joint
+risk factor distribution allows to infer worst-case correlation scenarios. We give examples of
+stress tests on a large portfolio of European and North American stocks.
+Keywords: Correlation stress testing, reverse stress testing, factor selection, scenario selection,
+Bayesian variable selection, market risk management
+JEL classiﬁcation: G11, G32
+∗We acknowledge helpful comments from Martin Aichele, Carol Alexander, Michael Eichhorn, Bertrand Mail-
+let, Radu Tunaru, two anonymous referees as well as participants at the 2nd Financial Economic Meeting:
+Post-Crisis Challenges 2021, the MathFinance Digital Conference 2021, the CQF Institute, the FAST Seminar
+at the University of Sussex, and the Research Seminar in Statistics and Mathematics at WU Vienna.
+†Declarations of interest: none
+‡This research was supported by the Deutsche Forschungsgesellschaft (DFG) through the International Re-
+search Training Group 1792 “High Dimensional Nonstationary Time Series”.
+§Berlin School of Economics and Law, natalie.packham@hwr-berlin.de
+¶Goethe University Frankfurt, woebbeking@ﬁnance.uni-frankfurt.de
+1
+arXiv:2107.06839v2  [q-fin.RM]  5 Sep 2022
+1 Introduction
+Correlation is one of the most important, if not the most important risk factor in ﬁnance,
+driving everything from na¨ ıve diversiﬁcation to the eﬀectiveness of hedges. It is well-established
+that correlations ﬂuctuate over time and may be strongly aﬀected by speciﬁc events (Karolyi
+and Stulz, 1996; Longin and Solnik, 2001; Ang and Bekaert, 2002; Wied et al. , 2012; Pu and
+Zhao, 2012; Adams et al. , 2017). Changes in correlation may lead to potentially unexpected
+or unquantiﬁed losses, see e.g. LTCM (Jorion, 2000), Amaranth Advisors (Chincarini, 2007),
+JPMorgan’s “London Whale” (Packham and Woebbeking, 2019). Regulators have since called
+for a better correlation risk management.1 However, a uniﬁed and generally accepted correlation
+risk management framework does not yet exist.
+Building on the work of Packham and Woebbeking (2019), this article develops a universal
+framework for building realistic correlation scenarios, correlation stress testing and reverse stress
+testing. The novelty of this approach is the link between correlations and observable risk factors.
+“Classical” stress testing determines the impact on a ﬁnancial position as a consequence of
+changes in risk factors, see e.g. (EBA, 2021). Here, we consider the impact on asset correlations
+of a risk factor scenario. With this framework, one can challenge diversiﬁcation beneﬁts based
+on economic scenarios. Likewise, one can assess the eﬀectiveness and risks of hedges based
+on economic scenarios. In particular, correlation stress tests produce extreme, yet plausible
+correlation scenarios from economically relevant risk factors. Our method therefore addresses:
+ﬁrst, the selection of appropriate correlation risk factors for a given portfolio; second, the
+parameterization of large correlation matrices and their mapping into risk measures; third, the
+identiﬁcation of critical scenarios through reverse stress testing. The method is particularly
+relevant for supervisors who “ are considering the ways in which stress tests can be integrated
+best into the regulatory framework ” (Pliszka, 2021). Reverse stress testing complements other
+stress testing methods, such as stressed value-at-risk, introduced in the Basel 2.5 framework
+(BIS, 2011). Stressed VaR determines portfolio risk using the parameters of a time period
+considered as stressful. Reverse stress testing, on the other hand, determines the risk factor
+conﬁguration that is both stressful and plausible for a given portfolio.
+Contrary to extremely prudent scenarios where diversiﬁcation eﬀects are ignored, we are
+1See for example the European Capital Requirements Regulation (CRR): Articles 375(1), 376(3)(b), 377.
+2
+particularly interested in establishing a link between risk factors and assessing the plausibility
+of scenarios. It is this link that enables reverse stress testing, i.e., the identiﬁcation of critical
+risk factor scenarios, which, from the point of view of a practitioner, may see as the most
+valuable aspect of stress testing.
+A widespread method in ﬁnancial risk management and in asset management is to capture
+correlations through factor models, see e.g. (McNeil et al., 2005, Section 3.4). A common choice
+for the factors are industries and geographic regions. In this article, correlations are modelled
+by linking each asset to a subset out of the set of factors. Asset correlations are speciﬁed in a
+functional form, where the correlation between any two assets is determined by the shared, resp.
+unshared links. The degree by which shared or unshared links aﬀect correlations is obtained by
+calibrating “weight” parameters to empirical correlations. Scenarios are generated by varying
+these parameters.
+Given the history of calibrated parameters, the method lends itself to reverse stress testing
+as it is capable of identifying the factor structure of worst case scenarios. More speciﬁcally, given
+the mapping of correlation risk factors to a risk measure, one can ﬁnd the global maximum of the
+risk measure and infer the corresponding risk factor scenario. As each parameter represents an
+economically relevant correlation risk factor, it is therefore possible to identify critical portfolio
+structures (“smoking guns”) that might require particular attention from a risk management
+perspective.
+Plausibility, or lag thereof, is a common problem for scenarios that are generated through
+reverse stress testing. This article addresses plausibility by assigning a joint probability dis-
+tribution to the correlation parameters, which in turn allows to quantify the plausibility of
+correlation scenarios. In this article, the constraint is speciﬁed via the Mahalanobis distance
+and highest density regions (HDR), both of which can be thought of generalising the concept of
+a quantile to a multivariate setting, as will be explained below.
+Assigning the appropriate correlation risk factors to an asset is a delicate exercise: ignor-
+ing relevant risk factors might lead to undetected correlation risk, while selecting an excessive
+amount of risk factors potentially renders the economic interpretation meaningless, as the im-
+pact of speciﬁc risk drivers becomes indistinguishable across assets. A good factor selection
+mechanism should therefore focus on a sparse selection of relevant factors for each asset. In
+3
+addition, since typically some persistent information about the relationships between assets and
+factors is available (such as the country of the headquarter and the main industry), the factor
+selection method should oﬀer the ability to incorporate prior knowledge. Bayesian variable
+selection methods support both of these requirements by allowing to specify prior information
+as well a giving control over the number of factors selected.
+The framework developed here can be implemented for any ﬁnancial application that bears
+correlation risk, such as asset allocation or hedging. As an example, we apply the factor-model
+approach to a large and well-diversiﬁed equity portfolio. For this particular portfolio, geographic
+regions and industries serve as correlation risk factors.
+A further application where correlation scenario and stress testing can reveal inherent risks is
+the practice of so-called “portfolio margining” in initial margin calculations of clearing houses.
+Here, netting of oﬀsetting positions reduces the margin requirement. However, if positions
+hedging each other are not perfect substitutes, but only highly correlated, then signiﬁcant de-
+correlation could lead to substantial margin calls, thereby increasing counterparty risk at a
+systematic level.
+The literature on the role of correlation and dependence in ﬁnance is vast, but interestingly
+the literature on establishing correlation stress tests is comparably scarce. It is well established
+that correlations are not constant over time and may be strongly aﬀected by speciﬁc events
+(Longin and Solnik, 2001; Wied et al. , 2012; Pu and Zhao, 2012). Adams et al. (2017) ob-
+serve that correlations vary over time and, in addition, experience level shifts and structural
+breaks that occur in response to economic or ﬁnancial shocks. The regime switching behaviour
+of ﬁnancial asset correlations, especially in times of crisis, is conﬁrmed and at the heart of
+several studies, including Sandoval Jr. and Franca (2012); Buccheri et al. (2013); Papenbrock
+and Schwendner (2015). Krishnan et al. (2009) and Mueller et al. (2017) provide empirical
+evidence that investors demand a correlation risk premium, which is related to the uncertainty
+about future correlation changes. Buraschi et al. (2010) develop a framework for inter-temporal
+portfolio choice that includes hedging components against correlation risk. Tumminello et al.
+(2010); Keskin et al. (2011) analyse the topology of correlation matrices as networks or hier-
+archical trees, providing insights on the structure, taxonomy and hierarchy of ﬁnancial asset
+correlations. This last strand of the literature is probably closest to our framework in the sense
+4
+that it provides an interpretation of the factors driving correlation changes.
+Packham and Woebbeking (2019) introduce a correlation stress testing methodology tailored
+to the case of the so-called “London Whale” , a USD 6.2 billion loss on a credit derivatives
+portfolio at JPMorgan. The loss was partly due to the de-correlation of positions that were
+supposed to act as hedges for each other. Correlation stress testing would have revealed this
+risk early on and might therefore have led to a more prudent assessment and de-leveraging of
+the position. The factors in the “London Whale” case were tailored to match characteristics
+of the credit derivatives, such as their maturity, credit quality (investment grade versus high
+yield) and geographic origin (CDX in the US, iTraxx in Europe).
+The prominent role of correlation in ﬁnancial portfolios has led regulatory agencies to call
+for risk model stress tests that account for “signiﬁcant shifts in correlations” (BCBS, 2006,
+p. 207 ﬀ.). However, there is little literature on parametric correlation modelling, an exception
+being parametric functions for correlation and volatility in interest rate modelling (e.g. LIBOR
+market model), see Rebonato (2002); Brigo (2002); Schoenmakers and Coﬀey (2003). Another
+strand of the literature on correlation stress testing deals with the question of ensuring positive
+semi-deﬁniteness of the matrix, see Higham (2002); Qi and Sun (2010); Ng et al. (2014).
+The selection of plausible scenarios poses a challenge in the development of stress testing
+methods in general. The use of historical or hypothetical scenarios is problematic, as the
+probability and thus the plausibility of a scenario is unknown and relevant scenarios might be
+neglected. In an extensive study, Alexander and Sheedy (2008) compare various well-known
+models in their ability to conduct meaningful stress tests. Glasserman et al. (2015) develop an
+empirical likelihood approach for the selection of stress scenarios, with a focus on reverse stress
+testing. Kopeliovich et al. (2015) present a reverse stress testing method to determine scenarios
+that lead to a speciﬁed loss level. Breuer et al. (2009) and Flood and Korenko (2015) use the
+Mahalanobis distances to select scenarios from a multivariate distribution of risk factors.
+Breuer and Csisz´ ar (2013) extend these approaches and consider various application sce-
+narios, amongst them stressed default correlations, which refer to the correlations of Bernoulli
+variables denoting the default or survival of loans or obligors. Studer (1999) considers corre-
+lation breakdowns by identifying the worst-case correlation scenario in a constrained region of
+P&L scenarios. However, solving the problem turns out to be computationally intractable. 2
+2More precisely, the optimisation problem is NP-hard, i.e., requires a non-deterministic polynomial computa-
+5
+Also, the likelihood or plausibility of such a correlation scenario is not known. The diﬀerence
+in our setting is that we model correlation itself in a parametric way and – imposing a risk
+factor distribution calibrated from historical data – ﬁnd the risk-factor scenario that produces
+the worst loss within a given plausibility region.
+In summary, we contribute to the literature by proposing a ﬂexible correlation stress testing
+framework that is capable of adapting to diﬀerent requirements and settings. A central feature
+of our method is the Bayesian selection of correlation risk factors. Choosing the “right” factors
+is a timely and relevant exercise, especially from a regulatory perspective. 3 Furthermore, we
+explore how reverse stress testing can help to construct and understand extreme yet plausible
+risk factor scenarios. This article tests the method on a large equity portfolio; however, the
+method would easily adopt to any other ﬁnancial portfolio.
+The article is structured as follows: Section 2 lays out the factor model for correlation stress
+testing. Section 3 introduces the Bayesian correlation factor selection mechanism. Section 4
+applies the stress testing framework to a large stock portfolio; and Section 5 concludes.
+2 Correlation stress testing methodology
+This section presents the correlation stress testing framework. First, we deﬁne a factor model
+structure on correlations, which establishes a correlation matrix under stress. Second, we infer
+the impact of the stressed correlations by calculating value-at-risk with the modiﬁed correlation
+matrix. Finally, by imposing a probability distribution on the factors driving correlation, we
+determine plausible worst-case correlation stress scenarios. The last step is commonly known
+as reverse stress testing.
+2.1 Factor model
+An economically meaningful correlation stress testing framework requires linking correlations
+with risk factors, such as economic variables or ﬁnancial market indicators. In the context of
+portfolio allocation or risk management, the factors could represent industries and countries.
+While Packham and Woebbeking (2019) applied correlation stress testing in a very speciﬁc
+tion time.
+3Banks, for example, present capital models that contain factor models to regulators. Approving these factor
+models is challenging as the literature provides little guidance on how to check if the factors in the model are
+well chosen.
+6
+context, this article aims to develop a generic and ﬂexible correlation stress testing framework,
+intended to work in diﬀerent contexts and for diﬀerent applications.
+Consider a portfolio of p assets and assume that there are d risk factors. Each asset is
+associated with a number of these risk factors. We will introduce details on how factors are
+assigned in Section 3; it should be noted, however, that for a stress test to be meaningful, the
+number of factors associated with an asset needs to be suﬃciently small.
+The association of asset i∈{ 1,...,p } with factor k∈{ 1,...,d } is denoted by the indicator
+variable 1{k,i}. The correlation of asset returns i and j is modelled as
+cij = tanh
+(
+η +
+d∑
+k=1
+λk|1{k,i}− 1{k,j}|
+| {z }
+“inter”-correlations
++
+d∑
+k=1
+νk1{k,i}1{k,j}
+| {z }
+“intra”-correlations
+)
+, (1)
+with coeﬃcients η,λ 1,...,λ d,ν 1,...,ν d ∈ R and tanh : R↦→ [−1, 1] the tangens hyper-
+bolicus. Aside from conveniently mapping to [ −1, 1] and being monotone increasing, the main
+motivation for choosing the function tanh is its use in inferential statistics on sample correla-
+tion coeﬃcients. 4 The following summation formula serves as useful a approximation for the
+interpretation of individual coeﬃcients, especially if the coeﬃcients are close to zero:
+tanh(x +y) = tanhx + tanhy1 + tanhx tanhy≈ tanhx + tanhy. (2)
+The constantη can be thought of as a “base” correlation.5 The coeﬃcientsλ1,...,λ d model
+“inter-factor” correlations: the higher λk, the higher the correlation impact if exactly one of
+the two assets is associated with the k-th factor (in which case |1{k,i}− 1{k,j}| = 1). Similarly,
+ν1,...,ν d express “intra-factor” correlation: the higher νk, the higher the correlation between
+assets jointly exposed to factor k (since in this case 1{k,i}1{k,j} = 1). The concept of “inter”-
+and “intra”-correlations is found in the context of credit risk in e.g. (D¨ ullmann et al., 2008).
+Given a sample correlation matrix at one point in time, the coeﬃcientsη,λ 1,...,λ d,ν 1,...,ν d
+can be determined e.g. by ordinary least squares on arctanh( cij), the inverse of tanh. Simple
+4The argument of the tanh function, z := arctanh(cij) is the so-called Fisher z-transformation (Fisher, 1915,
+1921). See also e.g. Casella and Berger (2002) and Remillard (2016). Fisher (1921) shows that if cn is the sample
+correlation determined from an n-sized sample of a bivariate normal distribution with correlation |ρ| < 1, then√n(zn−α) L−→N(0, 1) as n→∞ .
+5Due to multicollinearity issues, it may be necessary to omit the constant.
+7
+correlation scenarios such as “the correlation between assets exposed to factor k and assets not
+exposed to factor k increases” is then implemented by increasing λk. Likewise, a scenario such
+as “the correlation of ﬁrms exposed to factork increases” is implemented by increasingνk. With
+time series of historical data, the coeﬃcients can be calibrated on a regular basis, from which
+resonable scenarios can be determined.
+The matrix deﬁned by Equation (1) is not guaranteed to be positive semideﬁnite and thus
+may need to be further transformed to yield a valid correlation matrix. Converting a non-
+positive-semideﬁnite matrix ˜C∈ Rn×n into a positive-semideﬁnite matrix can be approached as
+a matrix nearness problem, with nearness expressed by a suitable norm, such as the Frobenius
+norm (sum of absolute diﬀerence of all matrix entries). Higham (2002) provides an algorithm
+that ﬁnds the correlation matrix satisfying min {|| ˜C−C|| : C is a correlation matrix} by ex-
+ploiting the spectral properties of ˜C. It may also be possible that a correlation matrix fails to
+be positive semideﬁnite due to computational precision, in which case the eigenvalues of the
+matrix are just slightly below zero. In this case it can be suﬃcient to transform the matrix as
+C = (1−ϵ) ˜C +ϵI, where I is the identity matrix and ϵ is a small constant.
+2.2 Stress testing
+With a portfolio’s value being just the sum the constituents’ values, a ceteris paribus shift
+in correlation has no instantaneous eﬀect on the value. Therefore, to reveal the impact of
+a correlation stress test requires calculating portfolio risk measures. In the simplest setting,
+portfolio risk is measured by value-at-risk (VaR) in a variance-covariance approach, i.e.,
+VaRα =−N1−α·V0· (w⊺ Σ w)1/2, (3)
+where N 1−α denotes the (1−α)-quantile of the standard normal distribution, V0 denotes the
+current position value, w is the vector of portfolio weights and Σ denotes the covariance matrix
+of the portfolio returns. In this setting we assume that the expected return is zero, which is a
+common and reasonable assumption for short time horizons.
+The normal distribution assumption can easily be generalised, e.g. to a Student t-distri-
+bution. The t-VaR is discussed in Packham and Woebbeking (2019), together with the possibil-
+ity to jointly apply correlation and volatility stress scenarios. In fact, any model or method that
+8
+takes a correlation matrix as an input is suitable for the correlation stress testing approach.
+2.3 Reverse stress testing
+When stress testing, aside from understanding the impact of given scenarios, one is also inter-
+ested in the opposite question: What is the worst scenario amongst all scenarios that occur
+within some pre-given range? In a univariate setting, one would select a quantile of the risk
+factor distribution – this is the principal idea underlying value-at-risk. Diﬀerent extensions of
+quantiles to a multivariate setting exist, for example the Mahalanobis distance (Mahalanobis,
+1936), highest density regions (HDR) (Hyndman, 1996) or concepts based on norms, see e.g.
+(Serﬂing, 2002).
+The Mahalanobis distance of a vector X∈ Rn with expectation µ∈ Rn and covariance
+Σ∈ Rn× Rnn is deﬁned as D(x,µ, Σ) = ( x−µ)⊺Σ−1(x−µ), see e.g. (Mahalanobis, 1936;
+Kent et al., 1979; McNeil et al., 2005). The Mahalanobis distance is an appropriate measure for
+reverse stress testing if the underlying distribution is elliptic or at least symmetric. Moreover,
+if X is normally distributed, then D2(X)∼ χ2(n), where n is the length of X, which greatly
+simpliﬁes identifying if scenarios lie within a range speciﬁed by a probability.
+The highest-density region (HDR) (Hyndman, 1996) generalises the idea of the Mahalanobis
+distance to arbitrary probability distributions. It is deﬁned as the region with probability
+1−α that has the smallest possible volume in the sample space; equivalently, every point
+inside the region should have probability density at least as large as every point outside of the
+region. Formally, if f(x) is the density of X, then the (1−q)–HDR is the subset R(fq) of the
+sample space such that R(fq) = {x : f(x)≥ fq}, where fq is the largest constant such that
+P(X∈R(fq))≥ 1−q.
+A straightforward way to calculate the HDR is via Monte Carlo simulation, see Hyndman
+(1996). Note that P(f(X)≥ fq) = 1−q; in other words, fq is the q-quantile of f(X). Given
+an iid sample of observations, fq can be estimated from the sample, and all samples in the
+HDR are easily identiﬁed by having a density value greater than fq. If the sample size is large
+enough, then a reduction of the estimator’s variance is achieved by a variant of Latin Hypercube
+Sampling (LHS) targeted at dependent random vectors (Packham and Schmidt, 2010).
+In order to allow for skewness and more variation in tail heaviness than a normal distribution,
+9
+we calibrate the time series of coeﬃcientsβ = (η,λ 1,...,λ d,η 1,...,η d)⊺ to a multivariate normal
+inverse Gaussian (NIG) distribution (see Appendix A) 6 and infer reverse stress test scenarios
+as the worst scenarios within the HDR at a given level α, i.e.,
+β∗ = argmax
+{β∈R(fq)}
+VaRα(β), (4)
+where VaRα is given by Equation (3) with correlation matrix imposed by β. From Equa-
+tion (3), it is obvious that maximising VaR α does not depend on α and is equivalent to
+maximising the variance. A trivial consequence is that β∗ also maximises expected shortfall
+ESα = 11−α∫ 1α VaRu du.
+3 Factor selection
+As mentioned in the introduction, Packham and Woebbeking (2019) demonstrate the correla-
+tion stress testing methodology tailored to the case of the so-called “London Whale”, where the
+factors were manually chosen to match characteristics of the underlying credit derivatives port-
+folio, such as their maturity, credit quality (investment grade versus high yield) and geographic
+origin (CDX in the US, iTraxx in Europe).
+In general, the choice of factors will depend on the type of correlation stress test to be
+conducted, and the assignment of relevant factors to assets may not be as straightforward as
+in the “London Whale” case. In a standard credit risk or asset allocation setting, one could
+choose industries and geographic locations as factors. While it is straightforward to assign one
+industry and one geographic location to a company, this may fail capture the dependence on
+further relevant industries and geographic locations of internationally operating ﬁrms.
+We employ Bayesian variable selection (BVS) methods using both the prior knowledge of
+the main industry and headquarter location of a ﬁrm and allowing to select further factors,
+while controlling the expected number of factors. This gives a stable assignment of factors to
+assets to be used in (1).
+To this end we impose a linear factor structure on asset returns. In a (linear) factor model
+(see e.g. Chapter 6 of (McNeil et al., 2015)), the return vector of p ﬁrms,r = (r1,...,r p)T , is
+6The NIG distribution can be thought of a generalisation of the multivariate normal distribution, allowing for
+skewness and more variation in the tail while still being light-tailed, which appears appropriate for the parameters.
+10
+represented as
+ri =αi +βi1x1 +βi2x2 +··· +βidxd +εi, i = 1,...,p,
+where x1,...,x d are the common factors , βi1,βi2,...,β id are the factor loadings and ε =
+(ε1,...,ε p)T are the idiosyncratic error terms , assumed to be uncorrelated and with mean
+0. Contrary to an OLS estimator, which typically assigns non-zero factor loadings to all factors,
+methods such as Lasso (e.g. Hastie et al. (2009)) select a (small) subset of factors by assigning
+both zero and non-zero factor loadings. If identical priors for all factors are used, then Lasso
+could be employed instead of a BVS method (see (Fahrmeir et al., 2013, Section 4.4.2) for the
+connection of Lasso and BVS). However, given that prior knowledge about some factors (e.g.
+the company VW is an automotive company headquartered in Germany) is available, a BVS
+method with non-identical priors is preferred.
+Below we outline Bayesian model selection, the method used in this article. A further
+popular BVS method, BVS with spike and slab priors, is developed in (George and McCulloch,
+1997).
+For every ﬁrm i, we estimate the posterior inclusion probability (PIP) of each factor k and
+set 1k,i = 1 if the PIP is greater than 1 /2. This is the so-called median probability model .
+Barbieri and Berger (2004) show that the median probability model is often optimal in terms
+of prediction. In our example, prior is initially set to force inclusion of a ﬁrm’s headquarter’s
+country and its primary industry, all other prior inclusion probabilities are set to include six
+factors on average. As the PIP’s are recalibrated periodically, the current PIP’s are chosen as
+the new prior inclusion probabilities. This provides a greater stability of the parameters over
+time.
+3.1 Bayesian linear model
+We consider the linear model
+y =Xβ +ε.
+In the Bayesian setting – see Section 3.5 (Fahrmeir et al., 2013) – we assume that
+y|β,σ 2∼ N(Xβ,σ 2I),
+11
+withβ and σ2 stochastic.
+A conjugate prior, i.e., where the prior and the posterior distributions are from the same
+distribution family, is
+β|σ2∼ N(m,σ 2M)
+σ2∼ IG(a,b ),
+where IG(a,b ) denotes the inverse gamma distribution with parameters a,b . An equivalent
+formulation is that the pair (β,σ 2) follows an normal inverse gamma distribution
+(β,σ 2)∼ N-Γ−1(m,M,a,b ).
+The posterior distribution is given as (see e.g. Fahrmeir et al. (2013))
+(β,σ 2)|y∼ N-Γ−1( ˜m, ˜M, ˜a,˜b),
+where
+˜M =(X′X +M−1)−1
+˜m = ˜M(M−1m +X′y)
+˜a =a + n2
+˜b =b + 12(y′y +m′M−1m− ˜m′ ˜M−1 ˜m).
+3.2 Bayesian model comparison and selection
+This method for variable selection considers candidate models Mi, i = 1,...,m . In the linear
+setting, each model Mi includes a speciﬁc set of independent variables and excludes the other
+variables. For the posterior model probability we have
+p(Mi|y)∝p(y|Mi)p(Mi),
+12
+with p(y|Mi) the so-called marginal likelihood. Deﬁne indicator variables γ1,...,γ d, with γk =
+1{βk⁄=0},i.e., if γk = 1, then the xk is included in the model. A prior model is then
+p(Mi) =
+d∏
+k=1
+wγkk (1−wk)1−γk,
+where wk∈ [0, 1], k = 1,...,d . If wk = 1/2, then p(Mi|y)∝p(y|Mi).
+In our setting we set wk = 1 initially for the industry and location that is hard-coded for a
+ﬁrm (this data is available on Bloomberg). All other weights wk are set to θ = E[S]/d, where
+S is the (unknown) model size. Under the assumption that S follows a binomial distribution
+B(d,θ ), E(S) =θ·d, so θ is chosen to attain a target expected model size.
+The marginal likelihood can be calculated from the poster density for model Mi,
+p(β,σ 2|y,Mi) = p(y|β,σ 2,Mi)p(β,σ 2|Mi)p(y|Mi) ,
+by re-arranging to
+p(y|Mi) = p(y|β,σ 2,Mi)p(β,σ 2|Mi)p(β,σ 2|y,Mi) .
+This can be calculated analytically or by Markov Chain Monte Carlo methods (MCMC) if the
+number of models, 2d, is large. The posterior probability of γk across all models is given by the
+posterior inclusion probability (PIP) ,
+P(γk = 1|y) =
+∑
+βk∈Mi,i=1,...,2d
+P(Mi|y). (5)
+If MCMC is used (as in our case), then PIP’s are estimated as the frequency of visited models
+including the covariate relative to the total number of visited models.
+4 Application to stock market data
+In this section, we use historical data to demonstrate the outcome of correlation stress testing
+on a typical stock portfolio. After introducing the data, we ﬁrst look at the factor selection and
+resulting parameterisation, and then at the stress testing results.
+13
+Table 1: MSCI indices that are used as correlation risk factors.
+RIC Name Description
+.dMINA00000PUS MM-Americas North America price index
+.dMIEU00000PUS MM-Europe Europe price ondex
+.dMIPC00000PUS MM-Paciﬁc Paciﬁc price index
+.dMILA00000PUS EM-Americas Emerging markets Latin America price index
+.dMIEE00000PUS EM-EMEA Emerging markets EMEA price index
+.dMIMS00000PUS EM-Asia Emerging markets Asia price index
+.dMIWD0EN00PUS Energy ACWI energy sector price index
+.dMIWD0MT00PUS Materials ACWI materials sector price index
+.dMIWD0IN00PUS Industrials ACWI industrials sector price index
+.dMIWD0CD00PUS ConsDiscr ACWI consumer discretionary sector price index...
+.dMIWD0CS00PUS ConsStaples ACWI consumer staples sector price index
+.dMIWD0HC00PUS Healthcare ACWI health care sector price index
+.dMIWD0FN00PUS Financials ACWI ﬁnancials sector price index
+.dMIWD0IT00NUS InfoTech ACWI information technology sector price index
+.dMIWD0TC00PUS Comm ACWI communications services sector price inde...
+.dMIWD0UT00PUS Utilities ACWI utilities sector price index
+.dMIWD0RE00PUS RealEstate ACWI real estate sector price index
+4.1 Data
+The methods developed in this article apply to any portfolio of risky assets. As a showcase, we
+download daily equity data from Reﬁnitiv Eikon for the period of 1999 to 2021. The data set
+includes 505 constituents from the S&P 500 and 30 constituents from the German DAX index.
+An equally weighted portfolio of these assets will build the baseline.
+Given a portfolio of risky assets, it is necessary to select a universe of relevant correlation risk
+factors, which will be the basis for the Bayesian factor selection. We choose to stress country
+and industry factors and, hence, download historical equity index data from Reﬁnitiv Eikon that
+represents these factors (see Table 1). 7 More speciﬁcally, from the MSCI All Country World
+Index family (ACWI) we download 8 regional indices, including 4 mature market (MM) and 4
+emerging market (EM) indices. Industry factors are represented by 11 MSCI Global Industry
+Classiﬁcation Standard (GICS) sector indices.
+7One could easily extend this by adding additional indices, e.g. MSCI’s Small Cap, Large Cap, Growth, Value
+or Momentum indices.
+14
+4.2 Factor selection and ﬁt
+Using the Bayesian factor selection procedure from Section 3, correlation risk factors are assigned
+to each asset in the portfolio. Knowledge of a company’s primary country and industry is used
+by setting their initial prior probabilities to one, which ensures they are included as risk factors.
+These are the country where the company is headquartered and its primary industry as provided
+by Reﬁnitiv Eikon.
+Factors are re-selected at a quarterly frequency. For every ﬁrm i we estimate the posterior
+inclusion probability (PIP) of each factor k and set 1k,i = 1 if the PIP is greater than 1 /2
+(cf. Section 3.2). Every quarter, the previous parameter inclusion probabilities enter as prior
+probabilities. This modelling choice supports a robust allocation of factors, yet leaves enough
+ﬂexibility to add or remove factors if the evidence at the time of selection is strong enough.
+This caters to the fact that most companies have a relatively rigid business model, but evolve
+through time and tend to occasionally enter or exit diﬀerent markets and sectors.
+Figure 1 shows the factor allocation for four exemplary assets. As factors are re-calibrated
+on a quarterly basis, the plots show how often a factor has been included. Of the 88 quarters
+in the sample, SAP SE (SAPG.DE) – a German IT company – has both MM-Europe and
+InfoTech always included. Both factors are also the initial prior. In contrast, the BVS consis-
+tently selected InfoTech and MM-Europe as additional correlation risk factors for Amazon Inc.
+(AMZN.O). This is a very reasonable result as Amazon is not only a large US online retailer,
+but also the world’s largest provider of computing services (AWS) with a very strong presence
+in Europe. Looking at the extremes, PPG Industries Inc. (PPG) provides materials to a broad
+range of companies worldwide, thereby exposing itself to the highest number of correlation risk
+factors in our sample.
+The parameters η, λ1,...,λ d and ν1...,νd are easily determined by standard regression tech-
+niques such as OLS on the transformed correlations tanh −1(cij). The ﬁt is computationally
+eﬃcient and hence, allows the processing of very large and complex portfolios. With param-
+eters calibrated on a regular basis, the parameter history can be used to better understand
+correlation dynamics and to put a plausibility constraint on correlation scenarios. Here, param-
+eters are calibrated daily from the 250 log-returns preceding day t. As outlined in Section 2.1,
+we test for positive-semideﬁniteness and, if necessary, use the search algorithm in Higham (2002)
+15
+MM-Europe
+InfoTech
+ConsDiscr
+MM-Pacific
+ConsStaples
+Utilities
+Materials
+Industrials
+Financials
+EM-Asia
+Energy
+MM-Americas
+Comm
+EM-EMEA
+EM-Americas
+Healthcare
+RealEstate
+0
+20
+40
+60
+80Number of quarters (max dashed)
+SAPG.DE
+MM-Americas
+ConsDiscr
+InfoTech
+MM-Europe
+MM-Pacific
+Industrials
+EM-Asia
+Financials
+Materials
+RealEstate
+ConsStaples
+Healthcare
+Utilities
+Energy
+EM-EMEA
+EM-Americas
+Comm
+0
+20
+40
+60
+80Number of quarters (max dashed)
+AMZN.O
+MM-Americas
+Healthcare
+ConsStaples
+ConsDiscr
+EM-Americas
+Comm
+Utilities
+InfoTech
+Financials
+Industrials
+MM-Europe
+Materials
+Energy
+EM-Asia
+EM-EMEA
+MM-Pacific
+RealEstate
+0
+20
+40
+60
+80Number of quarters (max dashed)
+DVA
+MM-Americas
+Materials
+Healthcare
+Industrials
+MM-Pacific
+InfoTech
+ConsStaples
+EM-EMEA
+MM-Europe
+ConsDiscr
+Financials
+Energy
+EM-Asia
+RealEstate
+Utilities
+EM-Americas
+Comm
+0
+20
+40
+60
+80Number of quarters (max dashed)
+PPG
+Figure 1: Correlation factor allocation. Factors are re-calibrated on a quarterly basis; the
+plots show how often a factor has been included. Top left: SAP is a German IT company. Top
+right: Amazon is a US based online retailer; however, it is also the world’s largest provider of
+computing services (AWS) with a strong presence in Europe. Bottom: lowest (left) and highest
+(right) factor allocation.
+to ﬁnd the nearest correlation matrix that tests positive deﬁnite.
+The heatmaps in Figure 2 show empirical correlations over 250 trading days (left) as well as
+the corresponding ﬁtted correlation matrices (right), where a brighter colour indicates a higher
+correlation. The model is capable of capturing a number of correlation structures that are
+visible as shaded areas or stripes in all heatmaps. The top rows and left most columns show
+correlations between German DAX assets and US S&P 500 assets. Naturally, cross-country
+correlations are structurally lower than within country correlations.
+Owing to the COVID-19 outbreak, New York City – one of the world’s largest ﬁnancial
+centres – started to lock down on Friday, 13 March 2020. The following days saw some of
+the largest market drops in history. As is symptomatic for falling markets, correlations spiked
+during the downturn. The heatmaps, being depicted on an identical color scale, show this
+by jumping from a dark purple (top) to a bright orange (bottom). We will later show that
+this constituted, at least partially, the worst-case scenario of the portfolio. In other words,
+diversiﬁcation beneﬁts diminished at times where they would have been needed most.
+The time series of ﬁtted correlation parameters in Figure 3 shows correlation dynamics over
+time. One can clearly see the spikes in correlation during the ﬁnancial crisis, the government
+16
+Figure 2: Heatmaps of empirical (left) and ﬁtted (right) correlations. The spike in correlations
+between 18 Feb (top) and 18 Mar 2020 (bottom) was caused by markets reacting to the COVID-
+19 crisis. Empirical correlations are calculated on a window of 250 trading days.
+debt crisis and most recently the COVID-19 pandemic. The correlation dynamics within the
+ﬁnancial sector during 2008 are particularly interesting. The factor load on ﬁnancials is almost
+entirely consumed by global factors as soon as the crisis spills over into the whole economy. To
+this end, recall the summation formula in (2), which approximates correlations in our model by
+sums of individual correlation risk factor loads. It is therefore natural that the (ﬁnancial) sector
+speciﬁc correlation structure was temporarily subsumed by the more common Americas factors.
+For the 250 trading days leading up to the default of Lehman Brothers, the average correlation
+among all assets was 0.32 while the correlation within the ﬁnancial sector was 0.40. The model
+would therefore add sector speciﬁc correlation through the corresponding “intra Financials”
+factor load, which at the time was roughly 0.1. During the following 250 trading days, i.e.
+during the ﬁnancial crisis, the average correlation increased to a level of 0.50 overall and 0.51
+for ﬁnancials, which explains the increase in “Americas” and decrease in “Financials” factor
+loads.
+17
+Figure 4 presents box-plots of coeﬃcients of correlations between factors (left) and within
+factors (right). Unsurprisingly, the factor representing correlations within North America (“in-
+tra MM-Americas”) captures the majority of the correlation dynamics in our portfolio, followed
+by the factor capturing correlations between North America and other countries. This shows
+that the method adapts well to the underlying portfolio, which comprises only US and German
+assets.
+In general, intra-correlations are higher than inter-correlations. This is not surprising as
+correlations are higher for similar assets, such as assets within the same country or industry.
+4.3 Stress test results
+A shift in correlation has, ceteris paribus, no instantaneous eﬀect on a portfolio’s value, there-
+fore, to reveal the impact of a correlation stress test requires calculating portfolio risk measures.
+Value-at-risk (VaR) in a variance-covariance approach has been proposed in Section 2 as a
+straightforward portfolio risk measure.
+In order to impose a plausibility constraint on the correlation stress scenario we ﬁt the
+correlation parameters to a multivariate normal-inverse Gaussian (NIG) distribution (cf. Sec-
+tion 2.3). The (multivariate) NIG distribution belongs to the family of normal-mean-variance
+mixtures, which generalise the (multivariate) normal distribution. It allows for skewness in the
+margins as well as a higher variation in tail behaviour compared to the normal distribution,
+while still being a light-tailed distribution, which is appropriate for the correlation parameters.
+For reasons of computation time, the NIG distribution is calibrated using every 10 th observa-
+tion from the parameter data set, ie., 552 samples over time. Calibration is done using the
+expectation-maximization (EM) algorithm described in McNeil et al. (2005, Chapter 3), which
+goes back to Dempster et al. (1977). We use a Kolmogorov–Smirnov test to assess the quality
+of the calibration. The null hypothesis of the test is not rejected for 19 out of 34 marginal
+distributions at the 5% level, despite being ﬁt to 34-dimensional data. The boxplots in Figure 4
+show the range (whiskers) and inter quartile range (box) of the correlation parameters from the
+NIG distribution. The highest density region that is relevant for the stress test is represented
+by a grey area.
+Figure 4 shows the worst correlation stress scenario at the 95% level. Two approaches
+18
+are used to determine the stress scenario. First, historical simulation, where each empirically
+observed set of correlation parameters is associated with a portfolio risk metric (here VaR). The
+parameter constellation that yields the highest risk within the 95% quantile is indicated by a
+right pointing triangle. Second, Monte Carlo simulation, where we sample from the continuous
+parameter distribution. The sample space is then restricted to all scenarios that fulﬁl f(x)≥
+f0.05 (cf. Section 2.3). Within that restricted sample, the parameter constellation that produces
+the highest risk is indicated by a left pointing triangle.
+Both, historical simulation and Monte Carlo simulation yield similar scenarios. However,
+the Monte Carlo scenario is more extreme, as it reaches a broader range of potential parameter
+constellations. In any case, the worst scenario for the test portfolio is always an increase in cor-
+relations. This result is intuitive as the portfolio at hand only beneﬁts from na¨ ıve diversiﬁcation.
+A hedged portfolio, on the other hand, would likely suﬀer under decorrelation scenarios.
+Stars in Figure 4 represent correlation parameters for speciﬁc dates. One can see that on
+2020-02-18 most parameters were close to the center of their distribution. One month later, on
+2020-03-18, the worst case has been partially realized, as indicated by the stars shifting closer
+to the triangles. The parameter constellation of the correlation stress scenario itself remains
+unchanged because it depends primarily on the portfolio weights and the correlation risk factors
+associated with the portfolio constituents. This consistency of the worst case scenario is a
+welcome result, from a risk management perspective, as it shows that the method is capable of
+providing stable guidance on the risks of a speciﬁc portfolio.
+Figure 5 shows the 1-day VaR 99% with and without stressed correlations. All VaR’s are
+calculated using Equation (3). Stressed VaR uses the correlation matrix from the 95%-stress
+scenario of 2021-05-04, the last day in the data. 8 As stressed VaR measures the impact of a
+plausible correlation stress scenario on historical data, the diﬀerence between stressed VaR and
+unstressed VaR gives insights into the severity of this scenario in the recent history. Loosely
+speaking, the diﬀerence in VaR’s can be attributed to correlation risk. The distance between
+both VaRs is highest during “normal” markets (i.e., when VaR is comparably low), where it
+often exceeds 50% of the unstressed VaR. This is a signiﬁcant value, given that the stressed
+portfolio is equally weighted and, thus, only beneﬁts from na¨ ıve diversiﬁcation. A portfolio
+8The scenario itself is very similar to the scenario shown in Figure 4 as ‘Worst-case (MC)’. Naturally, given
+the large number of US assets in the data, the worst case scenario is dominated by increasing correlations among
+‘Americas’ assets.
+19
+that beneﬁts from greater diversiﬁcation, e.g. because it is “optimally-weighted” or hedged to
+minimize risks, would presumable react more sensitive to correlation changes.
+During distress periods, the distance between VaR and stressed VaR diminishes, indicating
+that the stress scenario is at least partially realized. This can be observed during the 2008 ﬁnan-
+cial crisis, the subsequent government debt crisis and most recently during the 2020 COVID-19
+crisis.
+5 Conclusion
+Correlation, as the driver of diversiﬁcation, has been extensively studied in the ﬁnance literature.
+For example, multivariate time series models such as DCC-GARCH capture the time variation of
+correlation. The more recent literature uses hierarchical clustering methods to infer dependence
+networks from correlation data, which allows to determine economic linkages between assets.
+However, other than that the literature on linking economic risk factors and correlations is
+scarce. Likewise, stress testing of correlations by translating an economic scenario into a change
+of correlations, is largely an unexplored ﬁeld.
+We develop a ﬂexible correlation stress testing framework that links risk factors with asset
+correlations. The process consists of three steps:
+First, the correlation matrix of asset returns is speciﬁed as a parametric function of risk
+factors, involving both “intra”- and “inter”-correlations amongst the risk factors. “Intra”-
+correlations are correlation contributions where assets share a risk factor, and “inter”-correlations
+are correlation contributions where assets do not share a risk factor. The functional form is
+calibrated to market data in two steps: Identifying an assets’ relevant risk factors is achieved
+using Bayesian variable selection, which allows to specify prior information (such as the country
+of the ﬁrm’s headquarter) as well as control the number of factors selected. The risk factor
+loadings are calibrated from an empirical correlation matrix.
+Second, scenarios, in particular stress scenarios, are applied by adjusting the risk factor
+loadings. The impact from the correlation stress scenario is determined as the change to a risk
+measure such as value-at-risk, expected shortfall or any other measure that employs a correlation
+matrix.
+Third, with correlation factor loadings calibrated on a regular basis, the parameter history
+20
+can be used to better understand correlation dynamics and to put a plausibility constraint on
+correlation scenarios. In particular, reverse stress tests can be conducted, identifying critical
+risk factor scenarios for the portfolio at hand. The idea is to ﬁt the risk factors loadings
+to a probability distribution and deﬁne plausible scenarios as those that lie within a given
+conﬁdence level. In a multivariate setting, the range of plausible scenarios can be identiﬁed
+as those that lie within a certain Mahalanobis distance or highest density regions (HDR) of
+the average scenario. In this sense, the Mahalanobis distance and HDR can be thought of
+as multivariate generalisations of quantiles. The scenario with the highest risk (value-at-risk)
+within the conﬁdence level represents the outcome of the reverse stress test: it is both extreme
+and plausible. Being able to identify the relevant risk factors of the scenario provides valuable
+information for portfolio managers and risk managers in order to understand the correlation
+risk drivers of their portfolio.
+In an extensive empirical example, we calculate the stressed value-at-risk over time and
+identify worst-case stress scenarios. We ﬁnd that these scenarios are extreme enough to pose a
+relevant threat from a risk management perspective, yet are common enough to be realized on
+several occasions in our data history.
+The framework developed in this paper can be employed by any stakeholder wishing to
+identify the economic risk of adverse correlation changes. The method is particularly relevant
+to regulators, for example when approving banks’ capital models that contain factor models.
+Future directions of research may lead to extensions involving other kinds of risk factors, such
+as macroeconomic factors or latent factors (e.g. principal components).
+A Normal-inverse Gaussian (NIG) distribution
+The NIG distribution arises as a special case of so-callednormal-mean-variance mixtures (NMVM),
+and more speciﬁcally as a special case of the family ofGeneralized Hyperbolic (GH)distributions.
+NMVM combine a number of useful properties, amongst them their ﬂexibility in modelling skew-
+ness and heavy tails as well as their tractability, both for numerical calculations and simulation
+purposes. We refer to Section 3.2.2 of (McNeil et al., 2005) for more details.
+Deﬁnition 1. The random vector X is said to have a (multivariate) normal mean-variance
+21
+mixture distribution if
+X L= m(W ) +√WAZ,
+where
+(i) Z∼ Nk(0,Ik);
+(ii) W≥ 0 is a non-negative, scalar-valued random variable independent of Z;
+(iii) A∈ Rd×k is a matrix;
+(iv) m : [0,∞)→ Rd is a measurable function.
+We have
+X|W =w∼ Nd(m(w),w Σ),
+where Σ = AA′. A possible concrete speciﬁcation of m(W ) is
+m(W ) =µ +Wγ, (6)
+where µ and γ are vectors in Rd. If γ = 0, then the distribution is a NVM.
+A special case are the generalized hyperbolic (GH) distributions , which are NMVM’s with
+mean speciﬁcation (6) and mixing distributionW∼N−(λ,χ,ψ ), a generalised inverse Gaussian
+(GIG) distribution. We write X∼ GHd(λ,χ,ψ,µ, Σ,γ ). The speciﬁcation is not unique in the
+sense that scaled versions of the parameters describe the same distribution.
+The NIG distribution arises as the special case where λ =−1/2. An extensive treatment
+of the NIG distribution is found in (Barndorﬀ-Nielsen, 1997). Amongst other useful properties,
+closed formulas for the moment-generating function exist, so all moments are easily calculated;
+linear combinations of NIG variables are again NIG-distributed; the NIG distribution features
+inﬁnite divisibility, giving rise to the NIG L´ evy process, which may be represented as a Brownian
+motion with a random time change.
+References
+Adams, Z., R. F¨ uss, and T. Gl¨ uck. Are correlations constant? Empirical and theoretical results
+on popular correlation models in ﬁnance. Journal of Banking & Finance , 84:9–24, 2017.
+22
+Alexander, C. and E. Sheedy. Developing a stress testing framework based on market risk
+models. Journal of Banking & Finance , 32(10):2220–2236, 2008.
+Ang, A. and G. Bekaert. International asset allocation with regime shifts. Review of Financial
+Studies, 15(4):1137–1187, 2002.
+Barbieri, M. M. and J. O. Berger. Optimal predictive model selection. The Annals of Statistics ,
+32(3):870–897, 2004.
+Barndorﬀ-Nielsen, O. E. Normal inverse Gaussian distributions and stochastic volatility mod-
+elling. Scandinavian Journal of statistics , 24(1):1–13, 1997.
+BCBS. International convergence of capital measurement and capital standards. Technical
+report, Basel Committee on Banking Supervision, 2006.
+BIS. Revisions to the Basel II market risk framework. Basel Committee on Banking Supervision,
+Bank for International Settlements, February 2011.
+Breuer, T. and I. Csisz´ ar. Systematic stress tests with entropic plausibility constraints.Journal
+of Banking & Finance , 37(5):1552–1559, 2013.
+Breuer, T., M. Jandaˇ cka, K. Rheinberger, and M. Summer. How to ﬁnd plausible, severe, and
+useful stress scenarios. International Journal of Central Banking , 5(3):205–224, 2009.
+Brigo, D. A note on correlation and rank reduction. Working Paper, May 2002.
+Buccheri, G., S. Marmi, and R. N. Mantegna. Evolution of correlation structure of industrial
+indices of us equity markets. Physical Review E, 88(1):012806, 2013.
+Buraschi, A., P. Porchia, and F. Trojani. Correlation risk and optimal portfolio choice. The
+Journal of Finance , 65(1):393–420, 2010.
+Casella, G. and R. L. Berger. Statistical inference. Duxbury Paciﬁc Grove, CA, 2 edition, 2002.
+Chincarini, L. B. The Amaranth debacle: Failure of risk measures or failure of risk management?
+The Journal of Alternative Investments , 10(3):91–104, 2007.
+23
+Dempster, A. P., N. M. Laird, and D. B. Rubin. Maximum likelihood from incomplete data
+via the EM algorithm. Journal of the Royal Statistical Society: Series B (Methodological) ,
+39(1):1–22, 1977.
+D¨ ullmann, K., M. Scheicher, and C. Schmieder. Asset correlations and credit portfolio risk: an
+empirical analysis. Journal of Credit Risk , 4(2):37–63, 2008.
+EBA. 2021 EU-Wide Stress Test – Methodological Note. Technical Document, European
+Banking Authority, 2021.
+Fahrmeir, L., T. Kneib, S. Lang, and B. Marx. Regression. Springer, 2013.
+Fisher, R. A. Frequency distribution of the values of the correlation coeﬃcient in samples from
+an indeﬁnitely large population. Biometrika, 10(4):507–521, 1915.
+Fisher, R. A. On the ”probable error” of a coeﬃcient of correlation deduced from a small
+sample. Metron, 1:3–32, 1921.
+Flood, M. D. and G. G. Korenko. Systematic scenario selection: stress testing and the nature
+of uncertainty. Quantitative Finance, 15(1):43–59, 2015.
+George, E. I. and R. E. McCulloch. Approaches for Bayesian variable selection.Statistica sinica,
+pages 339–373, 1997.
+Glasserman, P., C. Kang, and W. Kang. Stress scenario selection by empirical likelihood.
+Quantitative Finance, 15(1):25–41, 2015.
+Hastie, T., R. Tibshirani, J. Friedman, and J. Franklin. The Elements of Statistical Learning.
+Data Mining, Inference, and Prediction . Springer, 2nd edition, 2009.
+Higham, N. J. Computing the nearest correlation matrix? A problem from ﬁnance. IMA journal
+of Numerical Analysis, 22(3):329–343, 2002.
+Hyndman, R. J. Computing and graphing highest density regions. The American Statistician ,
+50(2):120–126, 1996.
+Jorion, P. Risk management lessons from Long-Term Capital Management. European Financial
+Management, 6(3):277–300, 2000.
+24
+Karolyi, G. A. and R. M. Stulz. Why do markets move together? an investigation of US-Japan
+stock return comovements. The Journal of Finance , 51(3):951–986, 1996.
+Kent, J., J. Bibby, and K. Mardia. Multivariate analysis. Academic press Amsterdam, 1979.
+Keskin, M., B. Deviren, and Y. Kocakaplan. Topology of the correlation networks among
+major currencies using hierarchical structure methods. Physica A: Statistical Mechanics and
+its Applications, 390(4):719–730, 2011.
+Kopeliovich, Y., A. Novosyolov, D. Satchkov, and B. Schachter. Robust risk estimation and
+hedging: A reverse stress testing approach. The Journal of Derivatives , 22(4):10–25, 2015.
+Krishnan, C., R. Petkova, and P. Ritchken. Correlation risk. Journal of Empirical Finance ,
+16(3):353–367, 2009.
+Longin, F. and B. Solnik. Extreme correlation of international equity markets. The Journal of
+Finance, 56(2):649–676, 2001.
+Mahalanobis, P. C. On the generalized distance in statistics. National Institute of Science of
+India, 1936.
+McNeil, A., R. Frey, and P. Embrechts. Quantitative Risk Management . Princeton University
+Press, Princeton, NJ, 2005.
+McNeil, A., R. Frey, and P. Embrechts. Quantitative Risk Management . Princeton University
+Press, Princeton, NJ, 2nd edition, 2015.
+Mueller, P., A. Stathopoulos, and A. Vedolin. International correlation risk.Journal of Financial
+Economics, 126(2):270–299, 2017.
+Ng, F., W. Li, and P. L. Yu. A Black-Litterman approach to correlation stress testing. Quan-
+titative Finance, 14(9):1643–1649, 2014.
+Packham, N. and W. M. Schmidt. Latin hypercube sampling with dependence and applications
+in ﬁnance. Journal of Computational Finance , 13(3):81–111, 2010.
+Packham, N. and C. F. Woebbeking. A factor-model approach for correlation scenarios and
+correlation stress testing. Journal of Banking & Finance , 101:92–103, 2019.
+25
+Papenbrock, J. and P. Schwendner. Handling risk-on/risk-oﬀ dynamics with correlation regimes
+and correlation networks. Financial Markets and Portfolio Management, 29(2):125–147, 2015.
+Pliszka, K. System-wide and banks’ internal stress tests: Regulatory requirements and literature
+review. Discussion Paper No. 19/2021, Deutsche Bundesbank, 2021.
+Pu, X. and X. Zhao. Correlation in credit risk changes. Journal of Banking & Finance ,
+36(4):1093–1106, 2012.
+Qi, H. and D. Sun. Correlation stress testing for value-at-risk: an unconstrained convex opti-
+mization approach. Computational Optimization and Applications , 45(2):427–462, 2010.
+Rebonato, R. Modern Pricing of Interest-Rate Derivatives: The LIBOR Market Model and
+Beyond. Princeton University Press, 2002.
+Remillard, B. Statistical methods for ﬁnancial engineering . Chapman and Hall/CRC, 2016.
+Sandoval Jr. L. and I. D. P. Franca. Correlation of ﬁnancial markets in times of crisis. Physica
+A: Statistical Mechanics and its Applications , 391(1-2):187–208, 2012.
+Schoenmakers, J. and B. Coﬀey. Systematic generation of parametric correlation structures for
+the libor market model. International Journal of Theoretical and Applied Finance , 6(5):507–
+519, 2003.
+Serﬂing, R. Quantile functions for multivariate analysis: approaches and applications. Statistica
+Neerlandica, 56(2):214–232, 2002.
+Studer, G. Risk measurement with maximum loss. Mathematical Methods of Operations Re-
+search, 50(1):121–134, 1999.
+Tumminello, M., F. Lillo, and R. N. Mantegna. Correlation, hierarchies, and networks in
+ﬁnancial markets. Journal of Economic Behavior & Organization , 75(1):40–58, 2010.
+Wied, D., W. Kr¨ amer, and H. Dehling. Testing for a change in correlation at an unknown point
+in time using an extended functional delta method.Econometric Theory, 28(3):570–589, 2012.
+26
+2005 2010 2015 2020
+timestamp
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5
+Selected parameter time series (grey vertical lines indictate variable selection intervals)
+MM-Americas
+intra_Financials
+intra_MM-Americas
+2005 2010 2015 2020
+timestamp
+0.05
+0.00
+0.05
+0.10
+0.15
+0.20
+0.25
+0.30
+Selected parameter time series (grey vertical lines indictate variable selection intervals)
+EM-Americas
+EM-Asia
+EM-EMEA
+MM-Americas
+MM-Europe
+MM-Pacific
+2005 2010 2015 2020
+timestamp
+0.1
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5
+Selected parameter time series (grey vertical lines indictate variable selection intervals)
+intra_EM-Americas
+intra_EM-Asia
+intra_EM-EMEA
+intra_MM-Americas
+intra_MM-Europe
+intra_MM-Pacific
+Figure 3: Top: ﬁtted parameters for risk factors with high loads. Bottom left: ﬁtted “inter”
+parameters for regional risk factors (“λk”). Bottom right: ﬁtted “intra” parameters for regional
+risk factors (“νk”). Grey vertical lines indicate factor selection intervals.
+27
+MM-Americas
+MM-Europe
+MM-Pacific
+EM-Americas
+EM-EMEA
+EM-Asia
+Energy
+Materials
+Industrials
+ConsDiscr
+ConsStaples
+Healthcare
+Financials
+InfoTech
+Comm
+Utilities
+RealEstate
+intra_MM-Americas
+intra_MM-Europe
+intra_MM-Pacific
+intra_EM-Americas
+intra_EM-EMEA
+intra_EM-Asia
+intra_Energy
+intra_Materials
+intra_Industrials
+intra_ConsDiscr
+intra_ConsStaples
+intra_Healthcare
+intra_Financials
+intra_InfoTech
+intra_Comm
+intra_Utilities
+intra_RealEstate
+0.4
+0.2
+0.0
+0.2
+0.4
+0.6
+0.8
+HDR Boxplots of Correlation Parameters
+2020-02-18
+2020-03-18
+Worst-case
+HDR
+Figure 4: Reverse stress test, i.e., worst-case scenario within the 95% highest density region as
+of 2020-02-18. Triangles indicate stress scenarios from Monte Carlo and historical simulation.
+The stress scenario was partially realized by 2020-03-18. Stars indicate correlation parameters
+for speciﬁc dates. The large shift in correlations around that time is owed to the COVID-19
+crisis.
+2004 2006 2008 2010 2012 2014 2016 2018 2020
+timestamp
+1
+2
+3
+4
+5
+6
+7
+8
+9Portfolio value at risk (%)
+VaR
+Stressed VaR
+Figure 5: One day 99% VaR and stressed VaR. The stressed war uses the reverse stress scenario
+of 2021-05-04. The diﬀerence between both VaRs diminishes occasionally, indicating that the
+stress scenario has been realized.
+28

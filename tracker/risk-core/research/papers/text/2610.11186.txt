@@ -1,0 +1,1777 @@
+arXiv 2610.11186  https://arxiv.org/abs/2610.11186
+
+Improved E-Value Thresholds with Applications to
+Multiple and Sequential Testing
+Jiayi Shen1∗ Houzhen Liu1∗ Qirun Zeng2 Manhin Poon2
+Weiqi Yang1 Qixin Zhang3 Weiwei Zhuang1
+1University of Science and Technology of China, Hefei, China
+2City University of Hong Kong, Hong Kong SAR, China
+3Nanyang Technological University, Singapore
+{ustcsjy2021, liuhz0919, ywqyw123}@mail.ustc.edu.cn
+{qirun.zeng,manhinpoon4-c}@my.cityu.edu.hk
+qixin.zhang@ntu.edu.sg weizh@ustc.edu.cn
+Abstract
+E-values provide a flexible framework for statistical inference, but the univer-
+sal threshold 1/α can be conservative when the null distribution has additional
+structure. We study how structural restrictions limit the worst-case concentration
+underlying Markov’s inequality, using a nondecreasing density model to constrain
+tail allocation and an L-Lipschitz density model to control local concentration. The
+nondecreasing model gives to the minimax rejection threshold, and the Lipschitz
+condition yields a sharper closed-form threshold with an O(L−1/2) relative im-
+provement over 1/α. We further show that this threshold is asymptotically sharp
+as α → 0, in the sense that no uniformly valid threshold can improve on it by a
+fixed positive L-dependent amount. We then incorporate the Lipschitz calibration
+into multiple testing procedures with FDR control and use the same structural in-
+formation to construct calibrated conditional e-values for anytime-valid sequential
+inference. Numerical experiments illustrate the resulting gains in discoveries and
+the trade-offs of the sequential procedures.
+1 Introduction
+An e-value is a nonnegative random variable E satisfying E0[E] ≤ 1 under the null hypothesis;
+large values indicate evidence against the null (V ovk and Wang, 2021). This expectation-based
+criterion provides a framework for constructing and combining statistical evidence on a common
+scale. E-values arise in likelihood-ratio and Bayes-factor testing (Shafer et al., 2011) and have
+also been studied for composite hypothesis testing (Zhang et al., 2024). Their use extends from
+individual hypotheses to collections of decisions: e-BH controls the false discovery rate (FDR) under
+arbitrary dependence (Wang and Ramdas, 2022), and e-value-based methods provide confidence
+regions and bounds on false discoveries (V ovk and Wang, 2023). Applications include online multiple
+testing (Xu and Ramdas, 2024) and knockoff-based variable selection (Ren and Barber, 2024). When
+observations arrive sequentially, conditional e-values and e-processes provide evidence that remains
+valid under optional stopping and continuation (Grünwald et al., 2024; Ramdas et al., 2023), with
+nonnegative supermartingales supplying time-uniform error guarantees (Howard et al., 2020). In these
+settings, the evidence can be used as data accumulate, without fixing the stopping time in advance.
+Across these uses, statistical decisions depend on how the evidence is calibrated against a rejection
+threshold. A central issue in applications of e-values is that the universal rejection threshold 1/α may
+∗Equal contribution.
+Preprint.
+arXiv:2610.11186v1  [stat.ME]  8 Oct 2026
+be conservative for structured null distributions. This threshold follows from Markov’s inequality:
+P(E ≥ 1/α) ≤ α. The bound is attained by placing probability α at 1/α and the remaining mass at
+zero, a construction that uses only the mean constraint and allows probability to concentrate in the
+most favorable way. Additional assumptions on the null distribution can therefore rule out or weaken
+this worst-case behavior and permit smaller valid thresholds. Recent work (Blier-Wong and Wang,
+2024) shows that restrictions such as decreasing or unimodal null densities can indeed sharpen the
+standard Markov calibration.
+This naturally motivates us to ask:
+How much can additional structural information sharpen the rejection threshold?
+To answer this question, we focus on two features underlying the Markov worst case: placing tail
+mass near the rejection threshold and concentrating probability mass in sharp local spikes. These two
+features suggest two complementary ways of restricting the null distribution. More specifically, a
+nondecreasing density constrains how tail mass can be distributed, whereas an L-Lipschitz density
+limits how sharply probability mass can concentrate locally. The resulting thresholds show how these
+two forms of structure lead to different degrees of improvement over the Markov calibration.
+We further extend the Lipschitz calibration to multiple testing and sequential inference. In multiple
+testing, the improved threshold is incorporated into e-BH procedures with FDR control. In sequential
+inference, Lipschitz information is used to calibrate a new conditional e-value sequence whose product
+forms an anytime-valid e-process. Simulations study the resulting gains in multiple testing, while a
+retrospective study of S&P 500 constituents examines the behavior of the sequential construction and
+its detection trade-offs. To summarize, we make the following contributions:
+• We analyze a model on a bounded interval with an atom at zero and a nondecreasing density
+on the positive part, and derive its exact minimax rejection threshold.
+• Under an L-Lipschitz constraint on the null density, we derive the sharper threshold
+T (L)α = 1α
+
+1 −
+√
+2(1−α)3/2
+3
+√
+L
+
+, yielding an explicit relative reduction of order L−1/2 from
+the standard threshold 1/α. We further establish small-α asymptotic sharpness, showing
+that this threshold cannot be uniformly lowered by any fixed positive L-dependent additive
+margin.
+• We incorporate the improved thresholds into e-BH procedures and establish FDR control
+under independence. An e-value boosting construction provides FDR control under arbitrary
+dependence.
+• We extend the Lipschitz framework to anytime-valid sequential inference through new
+evidence updates, yielding an LC-process with time-uniform error control.
+• Numerical experiments evaluate the discovery gains from Lipschitz calibration in multiple
+testing and its detection behavior in sequential inference, including controlled Gaussian
+experiments and a retrospective S&P 500 study.
+1.1 Related work
+E-values have been developed as a general measure of statistical evidence, with close connections to
+likelihood ratios, Bayes factors, test martingales, and game-theoretic statistics (Shafer et al., 2011;
+V ovk and Wang, 2021; Ramdas et al., 2023). Recent work has further studied the construction and
+power of e-values for composite hypotheses (Zhang et al., 2024), as well as broader frameworks for
+safe and anytime-valid inference based on e-values and e-statistics (Grünwald et al., 2024; Pérez-Ortiz
+et al., 2024). These developments provide the theoretical background for the use of e-values in both
+fixed-sample and sequential inference.
+In fixed-sample multiple testing, e-BH and related procedures establish FDR control under broad
+dependence conditions (Wang and Ramdas, 2022), extending the classical Benjamini–Hochberg
+framework (Benjamini and Hochberg, 1995; Benjamini and Yekutieli, 2001). Related developments
+include stepwise, closed-testing, and post hoc procedures (Holm, 1979; Simes, 1986; Shaffer, 1986;
+Marcus et al., 1976; Blanchard and Roquain, 2008; Blanchard et al., 2020). Subsequent work has
+developed broader confidence and discovery procedures based on e-values (V ovk and Wang, 2023),
+2
+online multiple testing (Xu and Ramdas, 2024), and knockoff-based variable selection (Ren and
+Barber, 2024). Power improvements for e-BH have also been studied through randomization and
+conditional calibration (Xu and Ramdas, 2026; Lee and Ren, 2024). Our fixed-sample results sharpen
+the calibration of e-value rejection thresholds using additional regularity of the null distribution.
+The sequential setting requires additional care. Nonnegative supermartingales provide a classical
+route to anytime-valid inference, with Ville’s inequality controlling their running maxima (Ville, 1939;
+Howard et al., 2020). Modern work connects these martingale ideas to e-processes and anytime-valid
+inference (Ramdas et al., 2020, 2023), and develops safe testing, powerful e-statistics, and methods
+for combining sequential e-values (Grünwald et al., 2024; Pérez-Ortiz et al., 2024; V ovk and Wang,
+2024). Randomized Ville calibration retains the standard boundary during monitoring and adds an
+independent randomized check at the terminal stopping time (Ramdas and Manole, 2026). In our
+sequential construction, Lipschitz regularity is used to construct new conditional e-value sequence
+whose product forms a valid supermartingale.
+Most directly related, Blier-Wong and Wang (2024) obtain approximately factor-two small-α thresh-
+old reductions for decreasing or unimodal densities and also study boosting e-values for e-BH under
+additional distributional assumptions. Motivated by the Markov worst case, we study a nondecreasing
+density to restrict tail allocation and a Lipschitz density to control local concentration. This use
+of Lipschitz regularity follows the standard nonparametric idea of describing a density through a
+smoothness class (Tsybakov, 2009).
+2 Problem Setup
+Let E be a nonnegative e-variable satisfying E[E] ≤ 1 under the null hypothesis. For α ∈ (0, 1) and
+a nonempty class E of admissible e-variables, define the smallest rejection threshold that controls the
+type-I error at significance level α by
+Tα(E) ≜ inf
+
+t ≥ 0 : sup
+E∈E
+P(E ≥ t) ≤ α
+
+.
+For unrestricted e-variables, Markov’s inequality gives Tα = 1/α. Under additional structure on the
+null distribution, smaller valid thresholds may be possible. We study two such structural restrictions.
+Definition 2.1 (Nondecreasing-density class). Let b >0 be a fixed support bound. The class Eb
+consists of e-variables whose null distribution is supported on [0, b], allows an atom at zero, and
+admits a non-decreasing density f on (0, b].
+Definition 2.2 (Lipschitz-density class). Let L >0 be a known bound. The class EL consists of
+e-variables whose null distribution admits a density f on [0, ∞) satisfying
+|f (x) − f (y)| ≤L|x − y|, x, y ≥ 0.
+Here L is an upper bound, not necessarily the smallest Lipschitz constant. We next introduce the two
+standard e-value inference procedures used in our later developments: e-BH for multiple testing and
+e-processes for sequential inference.
+For multiple testing, consider K hypotheses with e-values E1, . . . , EK, and write K = {1, . . . , K}
+and H0 ⊆ Kfor the true-null indices. Let e(1) ≥ · · · ≥e(K) denote the ordered realizations. Given
+deterministic thresholds t1 ≥ · · · ≥tK, the step-up procedure rejects the hypotheses corresponding
+to the R largest e-values, where
+R ≜ max
+
+k ∈ K: e(k) ≥ tk
+	
+, (1)
+with R = 0 if the set is empty. Let R denote the rejection set. The false discovery rate is
+FDR ≜ E
+ |R ∩ H0|
+R ∨ 1
+
+,
+and the target is FDR ≤ α. Standard e-BH uses tk = K/(kα) (Wang and Ramdas, 2022).
+For sequential inference, let (Ft)t≥0 be a filtration. A nonnegative, adapted sequence (Et)t≥1 is
+called a sequence of conditional e-values if E[Et | Ft−1] ≤ 1 under the null hypothesis. The
+cumulative product Mt = Qts=1 Es is a nonnegative supermartingale with M0 = 1 (V ovk and Wang,2024). At level α ∈ (0, 1), the sequential test rejects at
+τα ≜ inf{t ≥ 1 : Mt ≥ 1/α},
+where inf ∅ = ∞. Ville’s inequality guarantees P(τα < ∞) ≤ α (Ville, 1939; Howard et al., 2020).
+3
+3 Rejection Thresholds under Structural Constraints
+Markov’s inequality uses only the first-moment bound E[E] ≤ 1. Its extremal distribution places all
+tail mass exactly at the threshold and the remaining mass at zero; the mean then equals the threshold
+multiplied by the tail probability. The two structural classes in Section 2 restrict different parts of this
+construction. For Eb, nondecreasingness forces tail mass to extend towards the support bound. For
+EL, Lipschitz regularity forces mass near zero to occupy an interval of positive width. We develop
+the two calibrations separately: the first admits an exact minimax characterization, while the second
+gives an explicit threshold with additive asymptotic sharpness.
+3.1 Thresholds under Nondecreasing Densities
+In the class Eb, we examine whether the density constraint permits a lower threshold within the
+support, and how far it can be reduced while keeping the rejection probability at most α for every
+null distribution in the class.
+Theorem 3.1 (Nondecreasing-density thresholds and minimax optimality). Let α ∈ (0, 1) and b >0.
+For 0 < t < b,
+sup
+E∈Eb
+P(E ≥ t) = min
+
+1, 2t + b  ,
+whereas P(E ≥ b) = 0 for every E ∈ Eb. The minimax threshold infimum is
+Tα(Eb) =
+min{b, 2/α − b}, b < 2/α,
+0, b ≥ 2/α.
+When b <2/α, the threshold T (b)α = min{b, 2/α − b} > 0 is uniformly valid and minimax optimal.
+When b ≥ 2/α, every strictly positive threshold is uniformly valid.
+Proof Sketch. For 0 < t < b, Chebyshev’s integral inequality gives
+1 ≥ E[E] ≥
+Z b
+t
+xf (x) dx
+≥ 1b − t Z bt x dx Z bt f (x) dx = t + b2 P(E ≥ t).
+The upper bound is attained by placing mass min{1, 2/(t + b)} uniformly on [t, b] and the rest at
+zero. The resulting density is nondecreasing on (0, b], and its mean is at most one. This construction
+establishes the minimax optimality of the positive threshold stated in the theorem. Appendix A.1
+provides the full proof.
+The first-moment calculation also identifies the source of the improvement. For 0 < t < b, nonde-
+creasingness yields
+E[(E − t)1{E ≥ t}] ≥ b − t2 P(E ≥ t).
+Thus each unit of tail probability contributes at least (t + b)/2 to the mean, rather than the t used in
+Markov’s bound. Probability mass at zero contributes zero to the mean. The sharper calibration in
+this class is therefore driven by the excess first moment within the tail.
+3.2 Thresholds under Lipschitz Densities
+The class EL supplies a different kind of information: it bounds the density’s local variation while
+allowing nonmonotone shapes and unbounded support. Its calibration relies on the probability below
+the rejection threshold. A fixed amount of mass cannot be packed arbitrarily close to zero under a
+slope bound, and moving that mass away from zero forces it to contribute to the mean. The following
+lemma quantifies the smallest possible contribution.
+4
+Lemma 3.2 (Lipschitz integral inequality). Let L, t >0 and let f : [0, t] → R≥0 be L-Lipschitz. If
+m =
+R t
+0 f (x) dx and t ≥
+p
+2m/L, then
+Z t
+0
+xf (x) dx ≥
+√
+2
+3
+√
+L
+m3/2.
+Equality holds exactly for f (x) = (
+√
+2Lm − Lx)+.
+The equality case is a triangular density profile descending from zero with the largest permitted slope.
+It places the prescribed mass as far to the left as the Lipschitz condition allows, and its support has
+width
+p
+2m/L. The lemma therefore turns a bound on local concentration into a lower bound on the
+first moment. Applied below a threshold satisfying t ≥
+p
+2P(E < t)/L, it gives
+E[E1{E < t}] ≥
+√
+2
+3
+√
+L
+P(E < t)3/2.
+Combining this contribution with the tail moment yields
+1 ≥ E[E] ≥
+√
+2
+3
+√
+L
+P(E < t)3/2 + tP(E ≥ t).
+At the target rejection probability α, the mass below the threshold is 1 − α. Accounting for its
+required first moment leads to the following explicit calibration.
+Theorem 3.3 (Lipschitz threshold). Let α ∈ (0, 1) and L ≥ 4/9. The threshold
+T (L)α = 1α
+ 
+1 −
+√
+2(1 − α)3/2
+3
+√
+L
+!
+∈ (0, 1/α)
+satisfies supE∈EL P(E ≥ T (L)α ) ≤ α.
+Proof Sketch. Set t = T (L)α and suppose P(E ≥ t) > α. L ≥ 4/9 ensures t ≥ q 2(1−α)L ≥q
+2P(E<t)
+L , so the preceding moment bound applies. Rearranging it gives
+t ≤ 1 −
+√
+2 P(E < t)3/2/(3√L)
+P(E ≥ t) .
+The function u 7→ [1−
+√
+2(1−u)3/2/(3√L)]/u is strictly decreasing on (0, 1]. Since P(E ≥ t) > α,
+the right-hand side is strictly smaller than T (L)α , a contradiction. The range and monotonicity
+calculations, together with the proof of Lemma 3.2, appear in Appendix A.2.
+The correction subtracts the first moment forced below the threshold before assigning the remaining
+budget to the tail. It depends explicitly on both the rejection level and the density bound:
+1 − αT (L)α =
+√
+2(1 − α)3/2
+3
+√
+L
+.
+A smaller valid bound L gives a larger correction, while the threshold approaches 1/α as L increases.
+L ≥ 4/9 is sufficient for the lemma’s interval requirement to hold at the proposed threshold for every
+α ∈ (0, 1).
+The proposed threshold may not be exactly minimax optimal for a fixed α. However, the following
+theorem shows that, for each fixed L >4/9, its difference from the minimax threshold tends to zero
+as α ↓ 0.
+Theorem 3.4 (Small-α asymptotic sharpness). Fix L >4/9. For every ε >0 and all sufficiently
+small α >0, there exists E ∈ EL such that
+P
+ 
+E ≥ T (L)α − ε > α.
+Consequently,
+0 ≤ T (L)α − Tα(EL) − →0 ( α ↓ 0).
+5
+The proof constructs a null distribution in EL from a triangular component near zero and a narrow
+triangular tail, each with slopes bounded in absolute value by L. The first component attains the
+lemma’s lower bound for the mass below the threshold. The tail is centered so that the total mean is
+one, and its width shrinks with its probability mass. With tail massα, its left endpoint isT (L)α −pα/L.
+A small increase in the tail mass then makes any proposed fixed additive reduction invalid once α is
+sufficiently small. The explicit construction and its proof are given in Appendix A.3.
+At the same time, the relative improvement over Markov calibration remains nonzero:
+1 − αT (L)α − →
+√
+2
+3
+√
+L
+(α ↓ 0).
+The distinction between these two scales is useful. The Lipschitz restriction removes a fixed fraction
+of the Markov threshold as rejection becomes rare, while any further uniformly valid improvement
+over the proposed threshold must tend to zero in absolute size. The persistent relative gain arises
+because the probability below the threshold approaches one and continues to require a positive first
+moment.
+Unified view. Both calibrations refine the decomposition
+E[E] = tP(E ≥ t) + E[E1{E < t}] + E[(E − t)1{E ≥ t}].
+Markov’s inequality retains only the first term. Nondecreasingness supplies a lower bound on the
+excess moment within the tail, while the Lipschitz argument supplies a lower bound on the moment
+below the threshold. These contributions are zero for Markov’s extreme value distribution. Together,
+these bounds show that structural constraints make a given tail probability more costly in terms of the
+first moment, which leads to a smaller valid rejection threshold.
+4 Applications of the Lipschitz Calibration
+The Lipschitz threshold refines the Markov calibration for structured e-values (V ovk and Wang, 2021).
+We show that the same structural calibration enters both multiple testing and sequential inference: in
+multiple testing, it gives a uniformly sharper replacement for the e-BH threshold (Wang and Ramdas,
+2022); in sequential inference, it yields an explicit update interface for constructing anytime-valid
+processes (Ville, 1939; Howard et al., 2020; Ramdas et al., 2023).
+4.1 Multiple Testing
+We first incorporate the Lipschitz threshold into the standard step-up framework (Benjamini and
+Hochberg, 1995). Since e-BH rejects by comparing ordered e-values to Markov-based thresh-
+olds (Wang and Ramdas, 2022), a natural modification is to replace those thresholds by their
+Lipschitz-calibrated counterparts. The resulting procedure denoted e-LC rejects the hypotheses
+corresponding to the R largest e-values, with R defined in Eq. (1) and tk ≜ T (L)kα/K. The next
+proposition establishes FDR control when the inputs are independent.
+Proposition 4.1 (Lipschitz-calibrated e-BH under independence). Fix α ∈ (0, 1) and L ≥ 4/9. Let
+H0 denote the set of true nulls and let K0 = |H0|. Assume that the e-values (E1, . . . , EK) are
+mutually independent and that, for each i ∈ H0, the null distribution of Ei belongs to EL. Then the
+above step-up procedure satisfies
+FDR ≤ K0
+K α ≤ α. (2)
+The proof inverts the threshold curve to obtain induced p-values and applies BH to them. Monotonicity
+and uniform validity of T (L)u at each level u make these p-values super-uniform under their nulls;
+independence is inherited from the original e-values. Algorithm 1 gives the direct implementation.
+The procedure requires O(K log K) time due to sorting and O(K) space.
+To retain the arbitrary-dependence guarantee of standard e-BH, we use the regularity information to
+transform the inputs themselves. The lower-tail moment bound limits the null expectation contributed
+by e-values above T (L)α . Truncating below this threshold and rescaling the retained values therefore
+produces valid boosted e-values, to which the usual e-BH guarantee applies.
+6
+Algorithm 1: e-LC procedure
+Input: Nonnegative e-values (ei)Ki=1; level α ∈ (0, 1); bound L ≥ 4/9.
+Output: Rejected original indices R ⊆ Kand count R = |R|.
+1 Sort indices π(1), . . . , π(K) so that eπ(1) ≥ · · · ≥eπ(K) (break ties by original index);
+2 R ← 0;
+3 for k = 1 to K do
+4 u ← αk/K;
+5 tk ←
+ 
+1 −
+√
+2(1 − u)3/2/(3√L)/u;
+6 if eπ(k) ≥ tk then
+7 R ← k;
+8 end
+9 end
+10 R ← {π(j) : 1 ≤ j ≤ R} ; // Empty if R = 0
+11 return (R, R);
+Theorem 4.2 (Boosted e-LC under arbitrary dependence). Let α ∈ (0, 1), L ≥ 4/9, and dα,L =
+1 −
+√
+2(1 − α)3/2/(3√L). Given {Ek}k∈K, define
+Ebi = Eidα,L 1{Ei ≥ T (L)α }.
+If every true-null Ei belongs to EL, standard e-BH at level α applied to Eb1 , . . . , EbK satisfies
+FDR ≤ (K0/K)α ≤ α under arbitrary dependence. Equivalently, the original-scale step-up
+thresholds are tbk = dα,LK/(αk), k ∈ K.
+Proof Sketch. For each true null i, the threshold and lower-tail moment bounds imply E0[Ei1{Ei ≥
+T (L)α }] ≤ dα,L. Dividing by dα,L makes Ebi a valid null e-value. Standard e-BH then gives the stated
+FDR guarantee (Wang and Ramdas, 2022). Since dα,LK/(αk) ≥ T (L)α , its rejection condition on
+the boosted scale is equivalent to the stated threshold on the original scale. Appendix A.5 gives the
+complete argument.
+The two e-LC variants use the same Lipschitz correction in different ways. The direct rule applies
+the calibrated threshold at each rank level kα/K, whereas the boosted rule uses the common
+normalization dα,L to preserve e-value validity. Their thresholds satisfy
+T (L)kα/K ≤ tbk ≤ Kkα , k ∈ K.
+Thus both procedures improve on standard e-BH (Wang and Ramdas, 2022). The direct rule retains
+the sharper rank-dependent thresholds with FDR control under independence, while the boosted rule
+trades some of this sharpness for validity under arbitrary dependence.
+4.2 Sequential Inference
+Sequential validity requires a different use of the Lipschitz condition. The fixed-sample threshold
+T (L)α controls the tail probability of a single e-value, whereas sequential inference requires time-
+uniform control of a cumulative process. We therefore keep Ville’s boundary 1/α unchanged and use
+Lipschitz regularity to calibrate each one-step update. Specifically, we transformEt into eEt = ϕt(Et)
+and form Mt = Qts=1 eEs. Let (Ft) denote the underlying filtration, with Et measurable with respectto Ft. For a nonnegative update ϕ, define ΨL(ϕ) = supE∈EL E[ϕ(E)].
+Lemma 4.3 (Supermartingale Property of Inference Function). If ϕt is a nonnegative predictable
+update, ΨL(ϕt) ≤ 1, and Et | Ft−1 has distribution in EL, then M0 = 1 and Mt = Qts=1 ϕs(Es)form a nonnegative supermartingale.
+We now seek a simple update family whose worst-case expectation can be calibrated explicitly.
+Consider the thresholded linear update
+ϕλ,η,τ (x) = (1 − λ) + λη(x − τ )+,
+7
+0.02 0.04 0.06 0.08 0.1
+7,400
+7,600
+7,800
+8,000
+α
+Rejects
+(a) Set 1 (L ≈ 0.788)
+0.020 0.021 0.022 0.023
+7,740
+7,760
+7,780
+0.02 0.04 0.06 0.08 0.1
+7,400
+7,600
+7,800
+8,000
+α
+Rejects
+(b) Set 2 (L ≈ 0.585)
+0.08 0.09 0.10
+7,930
+7,940
+7,950
+e-LC e-BH eBH with monotonicity
+Figure 1: Mean rejection counts under two representative Lipschitz settings. Bands show SD over 20
+repetitions.
+where λ ∈ [0, 1], η ≥ 0, and τ ≥ 0. The parameter λ controls the aggressiveness of the update, while
+τ determines which part of the input contributes to evidence accumulation.
+We next derive an explicit calibration of η. This requires controlling the worst-case value of E[(E −
+τ )+]. To obtain a closed-form bound, we impose the additional boundary condition f (0) = 0 .
+Together with Lipschitz regularity, this condition limits the probability mass near zero and leads to
+the following calibration.
+Theorem 4.4 (Closed-form Sequential Calibration) . Let L > 0, and let E 0L denote the subclass
+of EL whose densities satisfy f (0) = 0 . Suppose that E 0L is nonempty, which necessarily implies
+L ≥ 8/9. Let Ψ0L denote the corresponding worst-case expectation operator over E 0L. For any
+threshold τ ∈ [0, 1/
+√
+2L], define
+ηL(τ ) ≜ 11 − τ + 13 Lτ 3 . (3)
+Then for every strategy parameter λ ∈ [0, 1], this calibration ensures Ψ0L(ϕλ,ηL(τ ),τ ) ≤ 1.
+Consequently, for any predictable sequence ϕt = ϕλt,ηL(τt),τt with λt ∈ [0, 1] and 0 ≤ τt ≤ 1/
+√
+2L,
+if the conditional null law of each Et belongs to E 0L and satisfies E[Et | Ft−1] ≤ 1, then M0 = 1
+and Mt = Qts=1 ϕs(Es) form a nonnegative supermartingale. Hence, for every α ∈ (0, 1),
+P
+ 
+supt≥1Mt ≥ 1/α
+
+≤ α.
+Proof Sketch. The boundary condition gives f (x) ≤ Lx and bounds the mass below τ. Combining
+this with Lemma 3.2 yields supE∈E 0L E[(E − τ )+] ≤ 1 − τ + Lτ 3/3. Its reciprocal calibration
+therefore ensures Ψ0L(ϕt) ≤ 1. Conditional expectation and Ville’s inequality give the result. The
+moment calculation and positivity check are in Appendix A.7.
+5 Numerical Experiments
+We have shown that Lipschitz calibration yields sharper thresholds in fixed-sample multiple testing
+(Theorem 3.3) and valid one-step updates for sequential testing (Theorem 4.4). In this section, we
+examine whether these calibrations lead to more discoveries and detections. All experiments were
+run on standard CPU hardware; no GPU acceleration was required.
+5.1 Power Gain in Multiple Testing
+We first show how the threshold gain from Lipschitz calibration translates into more discoveries
+in fixed-sample multiple testing. We compare e-LC with standard e-BH and the benchmark from
+Blier-Wong and Wang (2024) using the same e-values. Our null e-values follow the normalized
+8
+0.2 0.4 0.6 0.8 1
+0
+0.02
+0.04
+0.06
+λ (α = 0.05)
+Rejection rate
+0.2 0.4 0.6 0.8 1
+0
+0.05
+0.1
+0.15
+λ (α = 0.1)
+Rejection rate
+(a) S&P 500 rejection rates
+0 25 50 75 100 105 110 115
+−1
+0
+1
+2
+3
+4 Weak Signal Region
+Et ≤ τ (24/23)
+Strong Signal Region
+Et > τ(24/23)
+log(1/0.1) = 2.303
+log(1/0.05) = 2.996
+Update step
+Unstopped log Mt
+45 50 55
+−1.6×10−1
+−1.5×10−1
+−1.4×10−1
+0.2 0.4 0.6 0.8 1
+100
+150
+200
+λ (α = 0.05)
+Mean First-crossing step
+0.35 0.5 0.75 1.0
+107
+113
+119
+(b) Gaussian delayed-signal experiment
+LC (s = 2) Vanilla LC (s = 1) LC (s = 0.5)
+Figure 2: Sequential LC experiments on S&P 500 paths and Gaussian delayed signals.
+two-segment piecewise-linear density
+f0(x) = c
+
+
+
+1 − k1x, 0 ≤ x ≤ x1,
+1 − k1x1 − k2(x − x1), x 1 < x≤ x2,
+0, otherwise,
+(4)
+where c is the normalizing constant. Notice this density is both nonincreasing and L-Lipschitz with
+L = c max{k1, k2}. At rank level u = kα/K, the Lipschitz condition gives the e-LC threshold in
+Theorem 3.3, while the nonincreasing-density condition gives the threshold 1/(2u) of Blier-Wong
+and Wang (2024). Because both structural calibrations apply to the same null family,1/(2u) provides
+a direct benchmark for isolating the gain from Lipschitz calibration. All three procedures are applied
+to the same e-values and evaluated over 100 equally spaced levelsα ∈ [0.02, 0.10]. Full configuration
+details are provided in Appendix B.
+Comparing T (L)u in Theorem 3.3 with 1/(2u), e-LC is more aggressive whenever L < 89 (1 −
+u)3. This condition holds broadly across feasible settings in the piecewise-linear family. We
+performed a randomized feasibility study retaining only valid e-value distributions where e-LC has a
+lower threshold than the monotonicity benchmark in 72.82%, 81.88%, and 85.21% of the feasible
+configurations at α ∈ {0.05, 0.02, 0.01}, respectively. We, therefore, illustrate the L−1/2 correction
+in Theorem 3.3 using two representative examples. In Figure 1(a), where L ≈ 0.788, the two
+thresholds are close over the relevant range of u, and e-LC performs similarly to the monotonicity
+benchmark. In Figure 1(b), where L ≈ 0.585, the correction is larger, and e-LC yields more rejections
+than the monotonicity benchmark throughout the tested levels. Thus, smaller L produces a larger
+threshold reduction, which translates into larger discovery gains in this experiment.
+5.2 Sequential and Anytime-Valid Inference
+We then investigate Lipschitz calibration in sequential testing via a controlled Gaussian mechanistic
+demonstration and a retrospective S&P 500 analysis. The Gaussian demonstration uses a single
+shared likelihood-ratio e-value path Et = exp(θXt − θ2/2) with θ = 0.3. The weak-signal phase
+is constructed so that Et < τL for every LC calibration, while the common strong-signal phase
+is constructed so that Et > 24/23. All methods use the same realized inputs in both phases. We
+9
+compare L = cL0 with c ∈ {0.5, 1, 2} and directly verify the Gaussian null expectation for each
+LC calibration. The S&P 500 experiment uses adjusted-close prices from January 2017 to June
+2026, where each stock forms a sequential path and consecutive selected prices define the ratio inputs
+Ebasek,j = Pk,j /Pk,j−1. For each path, we estimate a working Lipschitz scale from a fitted lognormal
+density and evaluate the same scale multipliers. The stock experiment is retrospective because the
+conditional e-value and conditional density assumptions are not established by the historical data.
+Selective LC calibration can convert stronger late evidence into earlier Ville-boundary crossings. To
+preserve the null-expectation constraint, LC suppresses weak observations through (Et − τ )+ and
+uses the calibrated scaling ηL(τ ) to place more weight on sufficiently strong observations. Under our
+choice τ = 0.5/
+√
+2L, the calibrated evidence term isηL(τ )(Et − τ )+, and it exceeds the vanilla term
+Et whenever Et > 24/23. Thus observations below this crossover are suppressed relative to vanilla,
+while observations above it lie in the LC amplification regime. The resulting factor of Section 4.2
+therefore remains valid while allowing larger multiplicative increments when the observed evidence
+is strong. As shown in the upper panel of Section 5.2, the weak-signal phase is constructed such
+that Et < τk for all LC calibrations, so (Et − τk)+ = 0 and all LC variants use the common factor
+1 − λ, slightly below the vanilla update. In the strong-signal phase, Et > 24/23 by construction,
+so the LC update exceeds the vanilla update, causing faster growth and earlier crossings of both
+Ville boundaries. The lower panel further shows that LC has a smaller mean first-crossing time than
+vanilla across the tested range of λ. Earlier crossings increase the chance that a path rejects before
+the monitoring horizon, which can translate into a higher rejection rate. Consistently, Section 5.2
+shows higher rejection rates for all LC variants than vanilla.
+It should be noted that although Section 5.1 and Section 5.2 both show that gains from Lipschitz
+calibration can translate into more rejections or detections, the two setting, however, use Lipschitz
+information differently and therefore the source of the gains are different. In Section 5.1, the gain
+comes from a lower rejection threshold established in Theorem 3.3. Since the same e-values are
+compared against a smaller threshold than in standard e-BH, more hypotheses can satisfy the rejection
+condition and be discovered. Furthermore, the relative threshold reduction is of order O(L−1/2), so a
+smaller L allows a larger reduction and potentially larger discovery gains. In Section 5.2, the gain
+comes from the multiplicative update applied to each evidence term. The vanilla update uses the
+factor (1 − λ) +λE, while the LC update consider (1 − λ) +ληL(τ )(E − τ )+. Under the conditions
+of Theorem 4.4 and with both processes compared against the same Ville boundary, this calibrated
+update preserves the supermartingale validity, while ηL(τ )(E − τ )+ can exceed the vanilla term
+E for sufficiently strong observations. The cumulative LC process can therefore grow faster along
+favorable paths and cross the same Ville boundary more often, which provides a mechanism for the
+higher rejection rates observed in Section 5.2.
+6 Discussion
+This work starts from the worst-case construction behind Markov’s inequality and asks how much
+the rejection threshold can improve once different parts of that construction are restricted. A
+nondecreasing density limits how tail mass can be placed and gives an exact threshold characterization.
+A Lipschitz density limits sharp local concentration and yields an explicit improvement with small-α
+asymptotic sharpness. We further incorporate Lipschitz information into both e-BH procedures and
+anytime-valid sequential inference. These results show how modest distributional information can be
+translated into sharper and more broadly useful e-value procedures.
+Future work includes developing valid data-driven upper bounds for L from empirical or prior
+information, beyond settings where L can be derived analytically. Another direction is to develop
+practical guidelines for choosing sequential strategies under different data settings, signal patterns,
+and inferential goals.
+10
+References
+Benjamini, Y . and Hochberg, Y . (1995). Controlling the false discovery rate: a practical and powerful
+approach to multiple testing. Journal of the Royal statistical society: series B (Methodological),
+57(1):289–300.
+Benjamini, Y . and Yekutieli, D. (2001). The control of the false discovery rate in multiple testing
+under dependency. The Annals of Statistics, 29(4):1165–1188.
+Blanchard, G., Neuvial, P., and Roquain, E. (2020). Post hoc confidence bounds on false positives
+using reference families. The Annals of Statistics, 48(3):1281 – 1303.
+Blanchard, G. and Roquain, E. (2008). Two simple sufficient conditions for FDR control. Electronic
+Journal of Statistics, 2:963–992.
+Blier-Wong, C. and Wang, R. (2024). Improved thresholds for e-values. arXiv preprint
+arXiv:2408.11307.
+Grünwald, P., de Heide, R., and Koolen, W. (2024). Safe testing. Journal of the Royal Statistical
+Society Series B: Statistical Methodology, 86(5):1091–1128.
+Holm, S. (1979). A simple sequentially rejective multiple test procedure. Scandinavian journal of
+statistics, pages 65–70.
+Howard, S. R., Ramdas, A., McAuliffe, J., and Sekhon, J. (2020). Time-uniform Chernoff bounds via
+nonnegative supermartingales. Probability Surveys, 17(none):257 – 317.
+Lee, J. and Ren, Z. (2024). Boosting e-bh via conditional calibration. arXiv preprint
+arXiv:2404.17562.
+Marcus, R., Eric, P., and Gabriel, K. R. (1976). On closed testing procedures with special reference
+to ordered analysis of variance. Biometrika, 63(3):655–660.
+Pérez-Ortiz, M. F., Lardy, T., de Heide, R., and Grünwald, P. D. (2024). E-statistics, group invariance
+and anytime-valid testing. The Annals of Statistics, 52(4):1410–1432.
+Ramdas, A., Grünwald, P., V ovk, V ., and Shafer, G. (2023). Game-theoretic statistics and safe
+anytime-valid inference. Statistical Science, 38(4):576–601.
+Ramdas, A. and Manole, T. (2026). Randomized and exchangeable improvements of markov’s,
+chebyshev’s and chernoff’s inequalities. Statistical Science, 41(1):121–142.
+Ramdas, A., Ruf, J., Larsson, M., and Koolen, W. (2020). Admissible anytime-valid sequential
+inference must rely on nonnegative martingales. arXiv preprint arXiv:2009.03167.
+Ren, Z. and Barber, R. F. (2024). Derandomised knockoffs: leveraging e-values for false discovery
+rate control. Journal of the Royal Statistical Society Series B: Statistical Methodology, 86(1):122–
+154.
+Shafer, G., Shen, A., Vereshchagin, N., and V ovk, V . (2011). Test martingales, bayes factors and
+p-values. Statistical Science, pages 84–101.
+Shaffer, J. P. (1986). Modified sequentially rejective multiple test procedures.Journal of the American
+Statistical Association, 81(395):826–831.
+Simes, R. J. (1986). An improved bonferroni procedure for multiple tests of significance. Biometrika,
+73(3):751–754.
+Tsybakov, A. B. (2009). Introduction to Nonparametric Estimation. Springer Series in Statistics.
+Springer, New York.
+Ville, J. (1939). Étude critique de la notion de collectif. Gauthier-Villars, Paris. Doctoral dissertation,
+University of Paris.
+V ovk, V . and Wang, R. (2021). E-values: Calibration, combination and applications.The Annals of
+Statistics, 49(3):1736–1754.
+V ovk, V . and Wang, R. (2023). Confidence and discoveries with e-values. Statistical Science,
+38(2):329–354.
+V ovk, V . and Wang, R. (2024). Merging sequential e-values via martingales.Electronic Journal of
+Statistics, 18(1):1185–1205.
+Wang, R. and Ramdas, A. (2022). False discovery rate control with e-values. Journal of the Royal
+Statistical Society Series B: Statistical Methodology, 84(3):822–852.
+Xu, Z. and Ramdas, A. (2024). Online multiple testing with e-values. In International Conference on
+Artificial Intelligence and Statistics, pages 3997–4005. PMLR.
+Xu, Z. and Ramdas, A. (2026). More powerful multiple testing under dependence via randomisation.
+Bernoulli. Forthcoming.
+Zhang, Z., Ramdas, A., and Wang, R. (2024). On the existence of powerful p-values and e-values for
+composite hypotheses. The Annals of Statistics, 52(5):2241–2267.
+11
+A Proofs
+A.1 Proof of Theorem 3.1
+Proof. First, Fb is nonempty for every b > 0: with p = min {1, 2/b}, the mixture (1 − p)δ0 +
+p Unif(0, b) has mean pb/2 ≤ 1 and a constant density on (0, b].
+Fix t ∈ (0, b) and write pt ≜ P(E ≥ t) =
+R b
+t f (x) dx. Since both x and f (x) are non-decreasing on
+[t, b], Chebyshev’s integral inequality gives
+1 ≥ E[E] ≥
+Z b
+t
+xf (x) dx
+≥ 1b − t
+ Z b
+t
+x dx
+!  Z b
+t
+f (x) dx
+!
+= t + b2 pt.
+Together with pt ≤ 1, this yields
+sup
+E∈Fb
+P(E ≥ t) ≤ min
+
+1, 2t + b  .
+To attain this bound, set q = min{1, 2/(t + b)} and consider
+P ∗E = (1 − q)δ0 + q Unif[t, b].
+Its positive continuous part has density f ∗(x) = q(b − t)−11{t ≤ x ≤ b} on (0, b], which is
+non-decreasing and has mass q. Moreover, EP ∗E [E] = q(t + b)/2 ≤ 1 and PP ∗E (E ≥ t) = q. Hence
+the tail bound is exact for every t ∈ (0, b).
+At t = b, the tail probability is zero because the positive part is absolutely continuous and has no
+atom at b; it also vanishes for t > b. At t = 0, nonnegativity gives P(E ≥ 0) = 1 for every member
+of the class.
+It remains to derive the threshold infimum. For 0 < t < b, the exact worst-case tail probability is
+at most α if and only if 2/(t + b) ≤ α, equivalently t ≥ 2/α − b. If b ≤ 1/α, then 2/α − b ≥ b,
+so no threshold in (0, b) is valid and the smallest valid threshold is b. If 1/α < b <2/α, then
+2/α − b ∈ (0, b) is the smallest valid threshold. Finally, if b ≥ 2/α, then every t ∈ (0, b), and
+therefore every t >0, is valid, so the threshold infimum is zero. These three cases give the stated
+expression.
+In the last regime, the infimum is not attained by the rule E ≥ t, since P(E ≥ 0) = 1 > α. As t ↓ 0,
+the events {E ≥ t} increase to {E >0}, so continuity of probability and the tail bound give
+P(E >0) ≤ min
+
+1, 2b  .
+The mixture (1 − p)δ0 + p Unif(0, b) from the first paragraph attains this bound, since its positive
+mass is p = min{1, 2/b}. Thus E >0 is a valid rejection rule when b ≥ 2/α.
+A.2 Proof of Theorem 3.3
+In this section, we provide the detailed proofs for the Lipschitz-constrained results presented in
+Theorem 3.3. We begin with a technical lemma establishing the minimum first moment of a Lipschitz
+function, which forms the basis for the main theorem.
+Proof of Lemma 3.2. If m = 0, nonnegativity and continuity imply f ≡ 0, so the inequality and
+equality characterization hold. Hence assume m >0. Let
+h =
+√
+2Lm, n = hL =
+r
+2m
+L ≤ t, s =
+Z t
+n
+f (x) dx,
+and define f1 = f + s/n on [0, n] and f1 = 0 on (n, t]. Then
+R n
+0 f1 = m, f1 is L-Lipschitz on [0, n],and Z t
+0
+xf (x) dx −
+Z n
+0
+xf1(x) dx =
+Z t
+n
+xf (x) dx − sn Z n0 x dx ≥ ns2 ≥ 0. (5)
+12
+Set f ∗(x) = h − Lx on [0, n]. Since R n0 f ∗(x) dx = h2/(2L) = m, the function g = f1 − f ∗ haszero integral. Moreover, for 0 ≤ x < y≤ n,
+g(y) − g(x) = f1(y) − f1(x) + L(y − x) ≥ 0,
+so g is nondecreasing. Chebyshev’s integral inequality therefore gives
+R n
+0 xg(x) dx ≥ 0. Combiningthis with (5), Z t
+0
+xf (x) dx ≥
+Z n
+0
+x(h − Lx) dx = h3
+6L2 =
+√
+2
+3
+√
+L
+m3/2.
+For equality, (5) forces s = 0. The Chebyshev gap satisfies
+Z n
+0
+xg(x) dx = 12n Z n0 Z n0 (x − y) g(x) − g(y) dx dy.
+Its integrand is nonnegative, and equality forces the continuous, nondecreasing function g to be
+constant; since
+R n
+0 g = 0, this constant is zero. Hence f = h − Lx on [0, n] and f = 0 on (n, t].
+Conversely, f (x) = max{h − Lx, 0} is L-Lipschitz, has mass m, and its first moment is h3/(6L2),
+so it attains equality.
+Proof of Theorem 3.3. For L ≥ 4/9,
+T (L)α ≥
+r
+2(1 − α)
+L ,
+because this is equivalent to L ≥ 2(1 − α)(1 + 2α)2/9, whose right-hand side is at most 4/9.
+Fix E ∈ EL with density f and let α′ = P(E ≥ t). First take t = T (L)α and suppose, for contradiction,
+that α′ > α. Then t ≥ p2(1 − α′)/L, so Lemma 3.2 applies on [0, t]. With cL = √2/(3√L),
+1 ≥ E[E] ≥ cL(1 − α′)3/2 + tα′,
+where the two terms lower-bound the moments on [0, t] and [t, ∞), respectively. Hence
+t ≤ G(α′), G (u) = 1 − cL(1 − u)3/2
+u .
+Moreover,
+G′(u) = −1 + cL
+√1 − u(1 + u/2)
+u2 < 0,
+since [√1 − u(1 + u/2)]2 = 1 − 3u2/4 − u3/4 ≤ 1 and cL ≤ 1/√2 < 1. Thus
+t ≤ G(α′) < G(α) = T (L)α ,
+which is impossible because t = T (L)α . Therefore P(E ≥ T (L)α ) ≤ α.
+Finally, if t > T(L)α and α′ ≥ α, the same moment argument gives t ≤ G(α′) ≤ G(α) = T (L)α , a
+contradiction. Hence P(E ≥ t) < αfor every t > T(L)α .
+A.3 Proof of Theorem 3.4
+Proof. Write
+T (L)u = 1u
+ 
+1 −
+√
+2
+3
+√
+L
+(1 − u)3/2
+!
+, t m(u, L) = T (L)u −
+r u
+L .
+Define κL ≜ 1 −
+√
+2
+3
+√
+L > 0 because L >4/9, and set
+u0(L) ≜ κL
+√
+L
+1 +
+√
+2 .
+13
+Fix an alternative threshold satisfying
+Tnew ≤ T (L)α − εL.
+Since
+p
+α/L → 0 as α → 0, for all sufficiently small α we have
+tm(α, L) = T (L)α −
+r α
+L ≥ T (L)α − εL2 .
+Therefore
+Tnew ≤ T (L)α − εL ≤ tm(α, L) − εL2 .
+Since tm(u, L) is continuous in u, we may choose α1 > αsufficiently close to α such that
+tm(α1, L) ≥ Tnew.
+Moreover, because the theorem assumes α is sufficiently small, we can choose α1 additionally
+satisfying α1 < min{1, u0(L)}. Then
+tm(α1, L) >
+r
+2(1 − α1)
+L ,
+which ensures the head and tail supports are disjoint. We now construct the separated extremal
+distribution with tail mass α1.
+Define the head density by
+fhead(x) = max{
+p
+2L(1 − α1) − Lx, 0}.
+It has mass 1 − α1 and first moment
+Z ∞
+0
+xfhead(x) dx =
+√
+2
+3
+√
+L
+(1 − α1)3/2.
+For the tail, set aα1 =
+p
+α1/L and define
+ftail(x) =
+
+
+
+L(x − tm(α1, L)), t m(α1, L) ≤ x ≤ tm(α1, L) + aα1 ,
+L(tm(α1, L) + 2aα1 − x), t m(α1, L) + aα1 < x≤ tm(α1, L) + 2aα1 ,
+0, otherwise.
+The head support is
+supp(fhead) =
+"
+0,
+r
+2(1 − α1)
+L
+#
+,
+and the tail starts at tm(α1, L). We now verify separation. For any u ∈ (0, 1), since (1 − u)3/2 ≤ 1,
+we have
+T (L)u ≥ 1u
+ 
+1 −
+√
+2
+3
+√
+L
+!
+= κL
+u ,
+hence
+tm(u, L) = T (L)u −
+r u
+L ≥ κLu − r uL ≥ κLu − 1√L .
+Therefore, if u < u0(L), then
+tm(u, L) > 1 +
+√
+2√
+L
+− 1√
+L
+=
+r
+2
+L ≥
+r
+2(1 − u)
+L .
+Because α is sufficiently small, we can choose α1 > αclose enough to α while still satisfying
+α1 < u0(L). Thus
+tm(α1, L) >
+r
+2(1 − α1)
+L ,
+and hence
+supp(fhead) ∩ supp(ftail) = ∅.
+14
+The tail has mass α1, left endpoint tm(α1, L), and first moment
+Z ∞
+0
+xftail(x) dx = α1tm(α1, L) + α3/21√L .
+Hence f ∗ = fhead + ftail has total mass one and
+E[E] =
+√
+2
+3
+√
+L
+(1 − α1)3/2 + α1tm(α1, L) + α3/21√L
+=
+√
+2
+3
+√
+L
+(1 − α1)3/2 + α1
+
+T (L)α1 −
+r α1
+L
+
++ α3/21√
+L
+= 1.
+Thus f ∗ defines a valid separated L-Lipschitz e-variable construction. Moreover, f ∗ is globally
+L-Lipschitz: it is a continuous piecewise-affine function with segment slopes in {−L, 0, +L}, hence
+|(f ∗)′(x)| ≤L almost everywhere. Therefore, for any x < y,
+|f ∗(y) − f ∗(x)| =
+Z y
+x
+(f ∗)′(u) du
+ ≤ Z y
+x
+|(f ∗)′(u)| du ≤ L|y − x|.
+Finally, since Tnew ≤ tm(α1, L), the entire tail mass lies above Tnew. Therefore
+Pr(E ≥ Tnew) ≥ α1 > α.
+Hence every threshold satisfying
+Tnew ≤ T (L)α − εL
+is invalid for level α, because a valid L-Lipschitz e-variable can be constructed whose rejection
+probability exceeds α. Consequently, T (L)α cannot be lowered by any fixed L-dependent additive
+margin while maintaining uniform level-α validity in the small-α regime.
+A.4 Proof of Proposition 4.1
+Proof. We reduce the e-LC step-up procedure to the classical BH procedure applied to induced
+p-values. Throughout the proof, the independence assumption is the stated mutual independence of
+the e-values (E1, . . . , EK). For u ∈ (0, 1), Theorem 3.3 directly gives
+P0(Ei ≥ T (L)u ) ≤ u, i ∈ H0.
+Extend the formula by T (L)1 = 1, for which the bound by 1 is trivial. For each hypothesis, define the
+induced p-value
+˜pi = inf
+n
+u ∈ (0, 1] : Ei ≥ T (L)u
+o
+∪ {1}
+
+.
+We first show that each true-null ˜pi is super-uniform. Fix i ∈ H0 and x ∈ (0, 1). For any ε >0 such
+that x + ε <1, we claim that
+{˜pi ≤ x} ⊆ {Ei ≥ T (L)x+ε}.
+On the event {˜pi ≤ x}, the set
+n
+u ∈ (0, 1] : Ei ≥ T (L)u
+o
+∪ {1} is nonempty and has infimum at
+most x. Therefore there exists v in this set such that v ≤ x + ε. Since x + ε <1, this v cannot be
+the added singleton 1. Hence v ∈ (0, 1] and Ei ≥ T (L)v . By monotonicity of u 7→ T (L)u , v ≤ x + ε
+implies
+T (L)v ≥ T (L)x+ε.
+Thus Ei ≥ T (L)x+ε, proving the inclusion. By exact-threshold validity,
+P0(˜pi ≤ x) ≤ P0(Ei ≥ T (L)x+ε) ≤ x + ε.
+Letting ε → 0+ gives
+P0(˜pi ≤ x) ≤ x, x ∈ (0, 1).
+Since P0(˜pi ≤ 1) = 1 , ˜pi is super-uniform. Next, we prove the exact threshold equivalence. Fix
+a ∈ (0, 1). We claim that, for every i,
+Ei ≥ T (L)a ⇐ ⇒˜pi ≤ a.
+15
+If Ei ≥ T (L)a , then a belongs to {u ∈ (0, 1] : Ei ≥ T (L)u }, and therefore ˜pi ≤ a. Conversely,
+suppose ˜pi ≤ a. For every ε >0 such that a + ε <1, the definition of the infimum gives some
+v ∈
+n
+u ∈ (0, 1] : Ei ≥ T (L)u
+o
+∪ {1} satisfying v ≤ a + ε. Since a + ε < 1, this v cannot be 1.
+Hence v ∈ (0, 1] and Ei ≥ T (L)v . By monotonicity,
+Ei ≥ T (L)v ≥ T (L)a+ε.
+Therefore Ei ≥ T (L)a+ε for every sufficiently small ε >0. Since u 7→ T (L)u is right-continuous at a,
+letting ε → 0+ yields
+Ei ≥ T (L)a .
+This proves the equivalence. Let E(1) ≥ · · · ≥E(K) denote the ordered e-values, and let ˜p(1) ≤
+· · · ≤˜p(K) denote the ordered induced p-values. The threshold equivalence implies that, for every
+a ∈ (0, 1),
+#{i : Ei ≥ T (L)a } = #{i : ˜pi ≤ a}.
+Hence, for every k ∈ {1, . . . , K}, since kα/K ∈ (0, 1),
+E(k) ≥ T (L)kα/K ⇐ ⇒˜p(k) ≤ kαK .
+Therefore the e-LC step-up index satisfies
+RLC = max
+
+{0} ∪
+
+k ∈ K: ˜p(k) ≤ kαK  ,
+which is exactly the BH step-up index applied to ˜p1, . . . ,˜pK. We use the rejection convention
+RLC =
+n
+i : Ei ≥ T (L)RLCα/K
+o
+when RLC > 0, and RLC = ∅ when RLC = 0 . If RLC > 0, the threshold equivalence with
+a = RLCα/K gives
+RLC =
+
+i : ˜pi ≤ RLCαK  .
+Thus e-LC has exactly the same rejection set as BH applied to the induced p-values. It re-
+mains to verify the assumptions needed for the BH theorem under independence. We have al-
+ready shown that every true-null induced p-value is super-uniform. Moreover, the map x 7→
+inf
+n
+u ∈ (0, 1] : x ≥ T (L)u
+o
+∪ {1}
+
+is measurable, so each ˜pi is a measurable function of Ei.
+Since (E1, . . . , EK) are mutually independent by assumption, the induced p-values (˜p1, . . . ,˜pK) are
+also mutually independent. Therefore, the classical BH theorem under independence applies and
+gives
+FDR(RLC) ≤ K0K α.
+Since K0 ≤ K, we also have FDR(RLC) ≤ α. Finally, the threshold comparison follows from
+T (L)u ≤ 1/u for all u ∈ (0, 1). Substituting u = kα/K gives
+T (L)kα/K ≤ Kkα , k ∈ K.
+Hence the e-LC threshold sequence is uniformly no larger than the e-BH threshold sequence.
+A.5 Proof of Theorem 4.2
+Proof of Theorem 4.2. Recall that
+CL =
+√
+2
+3
+√
+L
+, d α,L = 1 − CL(1 − α)3/2, T (L)α = dα,Lα ,
+and
+bα,L(e) = edα,L 1{e ≥ T (L)α }, E bi = bα,L(Ei).
+16
+Fix a true null and write E for its original e-value, Eb = bα,L(E) for its boosted e-value, and f for
+its null density. Let
+t = T (L)α .
+By Theorem 3.3,
+P0(E ≥ t) ≤ α.
+Define the head mass
+m =
+Z t
+0
+f (x)dx.
+Then m = P0(E < t) ≥ 1 − α. From the proof of Theorem 3.3, the condition L ≥ 4/9 implies
+T (L)α ≥
+r
+2(1 − α)
+L .
+Since t = T (L)α , this is equivalent to
+1 − α ≤ Lt2
+2 .
+Set c = (1 − α)/m ≤ 1 and g = cf on [0, t]. Then g is nonnegative and L-Lipschitz, and it has
+mass 1 − α. The preceding display is precisely the condition needed to apply Lemma 3.2 to g. Since
+g ≤ f, Z t
+0
+xf (x)dx ≥
+Z t
+0
+xg(x)dx ≥ CL(1 − α)3/2.
+Using the e-value condition E0[E] ≤ 1,
+E0[E1{E ≥ t}] = E0[E] −
+Z t
+0
+xf (x)dx ≤ 1 − CL(1 − α)3/2 = dα,L.
+Thus
+E0[Eb] = E0
+ E
+dα,L
+1{E ≥ T (L)α }
+
+≤ 1.
+Hence Eb is a valid e-value under the true null.
+Now apply standard e-BH at level α to Eb1 , . . . , EbK. Let
+R = max
+
+k ∈ {1, . . . , K} : Eb(k) ≥ Kαk  ,
+with no rejections if the set is empty. Let R be the rejected set and let V = |R ∩ H0|. If R = 0, then
+V /(R ∨ 1) = 0. If R >0 and i ∈ R ∩ H0, then
+Ebi ≥ KαR .
+Hence
+1{i ∈ R}
+R ∨ 1 ≤ αEbiK .
+Summing over true nulls gives
+V
+R ∨ 1 ≤
+X
+i∈H0
+αEbi
+K .
+Taking expectations,
+FDR = E
+ V
+R ∨ 1
+
+≤ αK Xi∈H0 E0[Ebi ] ≤ K0K α ≤ α.
+This argument does not use independence or positive dependence, so the result holds under arbitrary
+dependence.
+Finally, since bα,L is nondecreasing, (Eb)(k) = bα,L(E(k)). The e-BH condition
+(Eb)(k) ≥ Kαk
+17
+is equivalent to
+E(k) ≥ dα,LKαk ,
+because
+dα,LK
+αk ≥ dα,Lα = T (L)α
+for every k ≤ K. Hence the original-scale thresholds are
+tbk = dα,LKαk , k ∈ K.
+Since 0 < dα,L < 1 under L ≥ 4/9,
+tbk < Kαk .
+Moreover, to compare with the original e-LC threshold, write
+T (L)kα/K = Kkα
+ 
+1 − CL
+
+1 − kαK 3/2! , t bk = Kkα 1 − CL(1 − α)3/2 .
+Since kα/K ≤ α, we have 1 − kα/K ≥ 1 − α, hence
+
+1 − kαK 3/2 ≥ (1 − α)3/2,
+and therefore
+1 − CL
+
+1 − kαK 3/2 ≤ 1 − CL(1 − α)3/2.
+Multiplying by K/(kα) > 0 yields
+T (L)kα/K ≤ tbk.
+Therefore
+T (L)kα/K ≤ tbk ≤ Kαk , k ∈ K.
+A.6 Proof of Lemma 4.3
+Proof of Lemma 4.3. Let
+M0 = 1, M t =
+tY
+s=1
+ϕs(Es), t ≥ 1.
+Since each ϕs is nonnegative, we haveMt ≥ 0 almost surely. Let DL denote the densities of variables
+in EL, and let D0L denote those with f (0) = 0. It remains to verify the supermartingale inequality.
+Fix t ≥ 1. By assumption, conditionally on Ft−1, the law of Et belongs to EL and satisfies
+E[Et | Ft−1] ≤ 1. Therefore, by definition of
+ΨL(ϕt) = sup
+f ∈DL, Ef [X]≤1
+Z ∞
+0
+ϕt(x)f (x) dx,
+the condition ΨL(ϕt) ≤ 1 implies
+E[ϕt(Et) | Ft−1] ≤ 1
+almost surely.
+Using the multiplicative update Mt = Mt−1ϕt(Et) and the fact that Mt−1 is Ft−1-measurable,
+E[Mt | Ft−1] = E[Mt−1ϕt(Et) | Ft−1] = Mt−1 E[ϕt(Et) | Ft−1] ≤ Mt−1.
+Induction gives E[Mt] ≤ 1, so each Mt is integrable. Hence (Mt)t≥0 is a nonnegative supermartin-
+gale with respect to (Ft).
+18
+A.7 Proof of Theorem 4.4
+Proof of Theorem 4.4. We show that the linear update family ϕλ,η,τ (x) ≜ (1 − λ) + λη(x − τ )+
+admits an explicit structural calibration under the boundary-restricted Lipschitz class E 0L, and that
+the resulting multiplicative process is anytime valid. We first derive an explicit lower bound on L.
+Fix any f ∈ D0L with Ef [X] ≤ 1. Since f (0) = 0 and f is L-Lipschitz, we have f (x) ≤ Lx for all
+x ≥ 0. Hence, for F (x) ≜
+R x
+0 f (u) du,
+F (x) ≤
+Z x
+0
+Lu du = Lx2
+2 .
+Using the tail-integral identity for nonnegative X,
+Ef [X] =
+Z ∞
+0
+ 
+1 − F (x)
+
+dx ≥
+Z ∞
+0
+
+1 − min
+
+1, Lx2
+2
+
+dx
+=
+Z √2/L
+0
+
+1 − Lx2
+2
+
+dx = 2
+√
+2
+3
+√
+L
+.
+Since Ef [X] ≤ 1, we must have 2
+√
+2
+3
+√
+L ≤ 1, so L ≥ 89.
+Fix λ ∈ [0, 1], η ≥ 0, and τ ∈ [0, 1/
+√
+2L]. By definition of the worst-case expectation operator Ψ0L,
+Ψ0L(ϕλ,η,τ ) = sup
+f ∈D0L, Ef [X]≤1
+Z ∞
+0
+ 
+(1 − λ) + λη(x − τ )+
+
+f (x) dx.
+Using
+R ∞
+0 f (x)dx = 1 for any density f, we obtain
+Ψ0L(ϕλ,η,τ ) = (1 − λ) + λη sup
+f ∈D0L, Ef [X]≤1
+Ef [(X − τ )+].
+Therefore, it suffices to upper bound
+H 0L(τ ) ≜ sup
+f ∈D0L, Ef [X]≤1
+Ef [(X − τ )+].
+For τ = 0, the desired positive-part bound is simply Ef [X] ≤ 1. Hence assume τ > 0. Fix any
+f ∈ D0L with Ef [X] ≤ 1, and set
+q ≜
+Z τ
+0
+f (x) dx = Pf (X < τ).
+Since f (0) = 0 and f is L-Lipschitz, we have f (x) ≤ Lx for all x ≥ 0. Hence
+q =
+Z τ
+0
+f (x) dx ≤
+Z τ
+0
+Lx dx = Lτ 2
+2 .
+Equivalently, τ ≥
+p
+2q/L. Therefore the condition of Lemma 3.2 is satisfied on the interval [0, τ]
+with head mass q, and we get Z τ
+0
+xf (x) dx ≥
+√
+2
+3
+√
+L
+q3/2.
+Now decompose the positive-part expectation as
+Ef [(X − τ )+] = Ef [X] − τ +
+Z τ
+0
+(τ − x)f (x) dx.
+Since Ef [X] ≤ 1, this gives
+Ef [(X − τ )+] ≤ 1 − τ + τ q−
+Z τ
+0
+xf (x) dx.
+19
+Applying the preceding lower bound,
+Ef [(X − τ )+] ≤ 1 − τ + τ q−
+√
+2
+3
+√
+L
+q3/2.
+On the interval 0 ≤ q ≤ Lτ 2/2, the function τ q−
+√
+2
+3
+√
+L q3/2 is increasing, since its derivative is
+τ −
+√
+2
+2
+√
+L
+√q ≥ τ /2 ≥ 0. Therefore its maximum over this interval is attained at q = Lτ 2/2, and
+hence
+τ q−
+√
+2
+3
+√
+L
+q3/2 ≤ 13 Lτ 3.
+Consequently,
+H 0L(τ ) ≤ 1 − τ + 13 Lτ 3 =: UL(τ ).
+We now verify that UL(τ ) > 0 on the admissible range τ ∈ [0, 1/
+√
+2L]. Since
+U ′L(τ ) = −1 + Lτ 2 ≤ −1 + 12 = − 12 < 0
+on this interval, UL is decreasing in τ, so its minimum is at τ = 1/
+√
+2L. Therefore
+UL(τ ) ≥ UL
+ 1√
+2L
+
+= 1 − 5
+6
+√
+2L
+.
+Since L ≥ 8/9, we have
+√
+2L ≥
+p
+16/9 = 4/3, hence
+UL(τ ) ≥ 1 − 56√2L ≥ 1 − 58 > 0.
+Thus UL(τ ) is strictly positive on the admissible range, and ηL(τ ) = 1/UL(τ ) is well-defined and
+nonnegative.
+Returning to Ψ0L(ϕλ,η,τ ), we obtain
+Ψ0L(ϕλ,η,τ ) ≤ (1 − λ) + ληUL(τ ).
+Thus the calibration
+ηL(τ ) = 1UL(τ ) = 11 − τ + 13 Lτ 3
+ensures
+Ψ0L(ϕλ,ηL(τ ),τ ) ≤ (1 − λ) + λ = 1
+for all λ ∈ [0, 1].
+Now let ϕt = ϕλt,ηL(τt),τt be any predictable sequence withλt ∈ [0, 1] and 0 ≤ τt ≤ 1/
+√
+2L. Under
+the null, conditional on Ft−1, suppose the e-value Et has conditional density in D0L with conditional
+mean at most 1. Then
+E[ϕt(Et) | Ft−1] ≤ 1.
+Defining M0 ≜ 1 and Mt ≜ Qts=1 ϕs(Es), we have E[Mt | Ft−1] ≤ Mt−1, hence (Mt)t≥0 is anonnegative supermartingale. Ville’s inequality yields, for any α ∈ (0, 1),
+P
+
+sup
+t≥1
+Mt ≥ 1/α
+
+≤ α.
+This establishes the claimed anytime validity.
+B Full Setup for the Main Text Experiments
+This section provides the complete implementation details for the numerical experiments in Section 5,
+complementing the concise descriptions in the main text. The setup is organized into two parts
+corresponding to the fixed-sample multiple-testing simulation (Section 5.1) and the sequential real-
+data experiment (Section 5.2).
+20
+B.1 Multiple-Testing Simulation Setup
+The simulation aims to examine the power performance of the Lipschitz calibration in fixed-sample
+multiple testing. All procedures are applied to the same set of e-values, differing only in their
+threshold calibration. Competing methods include the standard Markov-calibrated e-BH (Wang and
+Ramdas, 2022) and the monotone benchmark (Blier-Wong and Wang, 2024).
+Data Generation. Null e-values are generated from a normalized two-segment piecewise-linear
+profile. To distinguish density height from the null proportion, let pht denote the unnormalized height
+at zero and define
+ef (x) = pht
+
+
+
+1 − k1x, 0 ≤ x ≤ x1,
+1 − k1x1 − k2(x − x1), x 1 < x≤ x2,
+0, otherwise,
+where x2 = x1 + (1 − k1x1)/k2 makes the two pieces continuous and brings the profile to zero. The
+null density is f0 = ef /N, where N = R ef, and its Lipschitz constant is
+L = pht
+N max{k1, k2}.
+Candidate parameters satisfy pht > 0, k1, k2, x1 > 0, and k1x1 < 1, which make the profile
+nonnegative and givex2 > x1. After normalization, we retain only profiles with null meanE0[E] ≤ 1
+and L ≥ 4/9, as required for the stated e-LC calibration. This family is not the separated body-and-
+tail extremal construction used in Theorem 3.4. Non-null e-values are sampled independently from
+U (0, 1000) to represent strong signals. Each repetition contains exactly K = 10,000 hypotheses:
+2,000 nulls and 8,000 alternatives.
+Configurations and Calibration. Among the feasible profiles, we selected Set 1 with (k1, k2, x1) =
+(0.63, 0.10, 1.53) for a visible e-LC gain over the monotonicity benchmark; Set 2 retains the valid
+profile (0.62, 0.44, 0.20). This is an illustrative parameter choice, not a random sample of feasible
+profiles. The endpoint x2 follows from the continuity formula above. Normalization gives null
+means approximately 0.706570 and 0.728048, and Lipschitz constants approximately 0.455446 and
+0.585116. The raw height cancels on normalization. We evaluate the constants in exact rational
+arithmetic and round upward for calibration. These nonincreasing densities also permit the decreasing-
+density comparator with threshold 1/(2u) at rank level u = kα/K (Blier-Wong and Wang, 2024);
+this comparator is distinct from the bounded nondecreasing class in Appendix A.1.
+Evaluation Metric. Each configuration uses 20 independent repetitions (PCG64 seed 42), with the
+same data used for all three methods and all 100 equally spaced levels α ∈ [0.02, 0.10]. Null draws
+use the analytic inverse CDF. We report mean rejection counts and population standard deviations
+across repetitions. Every method’s threshold exceeds the null support throughout this grid, so all
+false-rejection counts are zero by construction; these panels measure discovery counts under strong
+alternatives, not stress-test FDR control.
+21
+B.2 Sequential Real-Data Experiment Setup
+Algorithm 2: LC-process procedure
+Input: Conditional e-values E1, . . . , ET whose conditional null laws belong to E 0Lc, revealed
+sequentially; horizon T ≥ 1; level α ∈ (0, 1); fixed λ ∈ [0, 1], Lc ≥ 8/9, and
+τ ∈ [0, 1/√2Lc].
+Output: (D, σ): rejection indicator D ∈ {0, 1} and first crossing time σ ∈ {1, . . . , T} ∪ {∞};
+σ = ∞ means no crossing by T .
+1 η ←
+ 
+1 − τ + Lcτ 3/3−1;
+2 M ← 1;
+3 for t = 1 to T do
+4 Observe Et;
+5 M ← M
+
+(1 − λ) + λη max{Et − τ, 0}
+
+;
+6 if M ≥ 1/α then
+7 return (1, t);
+8 end
+9 end
+10 return (0, ∞);
+This subsection provides the detailed setup for the two sequential experiments in Section 5.2. The
+Gaussian experiment is a controlled mechanistic demonstration of the suppression and amplification
+behavior of the LC update, while the S&P 500 experiment provides a retrospective comparison
+on real financial paths. Both experiments start from M0 = 1 and use the same Ville boundary
+1/α. Algorithm 2 gives the theorem-backed LC procedure when the conditional assumptions of
+Theorem 4.4 hold.
+Gaussian Mechanistic Design. We construct a single Gaussian likelihood-ratio path
+Et = exp(θXt − θ2/2),
+with θ = 0 .3 and NumPy seed 20261007. Under the null, Xt
+iid
+∼ N(0, 1). For the mechanistic
+illustration, the observations are independent with
+Xt ∼ N
+ log 0.025 + θ2/2
+θ , 1
+
+, t ≤ 100,
+and
+Xt ∼ N
+ 0.95 + θ2/2
+θ , 1
+
+, 101 ≤ t ≤ 260.
+The same realized inputs are used by vanilla and by every LC calibration, so all methods share one
+weak-signal phase and one common strong-signal phase. Vanilla uses the one-step factor
+1 − λt + λtEt,
+while LC uses
+1 − λt + λtηL(Et − τL)+,
+where
+τL = 1√8L , η L = 1 − τL + Lτ 3L3 −1 .
+We use λt = 0.003 before the phase switch and λt = 0.15 afterward. No clipping or resetting is
+applied.
+Gaussian Null Model and Calibration. Under the Gaussian null,
+log Et ∼ N(−θ2/2, θ2), E0[Et] = 1.
+The induced null distribution is lognormal and satisfies the boundary condition f (0) = 0. Let
+L0 = sup
+e>0
+|f ′(e)| = 4.6535404
+22
+denote its analytic Lipschitz constant. We compare
+L = cL0, c ∈ {0.5, 1, 2}.
+For c = 1 and c = 2, L is a valid upper bound on the null-density Lipschitz constant. For c = 0.5, the
+working value underestimates the true Lipschitz constant, so the sufficient condition in Theorem 4.4
+does not apply directly. We therefore check the Gaussian null expectation
+E0[ηL(Et − τL)+] ≤ 1
+directly for every reported calibration. On the displayed path, all weak-phase inputs satisfy Et < τL
+for every LC calibration, so the truncated term is zero throughout the weak-signal phase. All strong-
+phase inputs satisfy Et > 24/23, so the calibrated LC term exceeds the vanilla term throughout the
+common strong-signal phase.
+Gaussian Evaluation. All processes are evaluated on the same realized path and are compared
+against the Ville boundaries corresponding to α ∈ {0.1, 0.05}. We record the first crossing of
+log(1/α) for each method. The displayed trajectory is designed to isolate the two LC mechanisms,
+with suppression in the weak-signal phase followed by amplification in the strong-signal phase.
+Parameters were tuned over 630 configurations per panel for this mechanistic illustration. For the
+separate absolute-L panel, we use L ∈ {2, 1, 0.5} and set the post-switch value to λt = 0.2, with the
+remaining construction unchanged.
+We constructed a frozen panel of adjusted closing prices from Yahoo Finance usingyfinance. The
+ticker universe was taken from the S&P 500 constituent list available when the panel was assembled.
+Its 503 ticker columns span January 3, 2017 to June 3, 2026. The universe is selected retrospectively
+and does not reconstruct historical index membership, so survivorship and selection effects may
+influence the results. The supplied panel contains no nonpositive prices. We omit FDXF, which has
+fewer than three selected prices, leaving 502 sequential stock paths. Positive observations alone
+do not establish either the conditional e-value mean constraint or the density boundary condition
+required by the sequential theory.
+S&P 500 Path Construction. For each stock, we deterministically select the first and last available
+adjusted-close prices in each calendar year from 2017 through 2026. Of the 502 paths, 475 contain
+20 selected prices and the remaining paths are shorter. After chronological ordering, consecutive
+selected prices define Ebasek,j = Rk,j = Pk,tj /Pk,tj−1 for j = 1, . . . , nk, where nk is the number
+of ratios for stock k. These intervals alternate between within-year first-to-last periods and short
+year-end transitions. A monitoring step therefore does not correspond to a fixed number of trading
+days.
+S&P 500 Null and Update Rules. The formal stock-level null is E[Rk,j | Fj−1] ≤ 1 for every j,
+where Fj−1 represents the available history before the current ratio is observed. The historical data
+do not provide verified null and alternative labels for individual stocks. We compare the vanilla factor
+(1 − λ) + λE with the LC factor (1 − λ) + ληLc,k (τc,k)(E − τc,k)+. Both processes start from one
+and reject at their first crossing of the common Ville boundary 1/α.
+S&P 500 Working Lipschitz Scale. We fit a lognormal density to each complete ratio path
+using the mean and sample standard deviation of its log ratios. Let ˆLk denote the maximum
+absolute finite-difference derivative of the fitted density over 1,000 equally spaced points on
+[0.8 minj Rk,j , 1.2 maxj Rk,j ]. We define the working scale as
+Lc,k = max{0.5, sˆLk}, s ∈ {0.5, 1, 2}.
+For each working scale, we use τc,k = 0.5/
+p
+2Lc,k and ηLc,k (τc,k) = (1 − τc,k + Lc,kτ 3c,k/3)−1.
+The fitted grid estimate does not certify an upper bound on the true conditional null-density Lipschitz
+constant. Fitting the complete path also makes the working calibration depend on observations
+occurring after earlier updates. The empirical S&P 500 procedure therefore does not establish
+the predictable-update or conditional-density assumptions of Theorem 4.4. The theorem-backed
+algorithm serves as a formal reference for the update construction and not as a validity certificate for
+these historical stock paths.
+S&P 500 Evaluation. We use 80 evenly spaced values ofλ in [0.05, 1], both α ∈ {0.05, 0.1}, and
+all three working scales. For each configuration, the rejection rate is the fraction of the 502 eligible
+stock paths whose cumulative process crosses 1/α before the end of the available monitoring path.
+23
+0
+0.05
+0.1
+0.15
+α = 0.05, Rejection rate
+12
+14
+16
+α = 0.05, ASN
+−0.5
+0
+0.5
+1
+α = 0.05, Return/SD
+0.2 0.4 0.6 0.8 1
+0
+0.1
+0.2
+0.3
+λ
+α = 0.1, Rejection rate
+0.2 0.4 0.6 0.8 1
+10
+12
+14
+16
+λ
+α = 0.1, ASN
+0.2 0.4 0.6 0.8 1
+0
+0.5
+1
+λ
+α = 0.1, Return/SD
+LC–Ville LC–R–Ville EP–Ville EP–R–Ville
+Figure 3: Retrospective comparison with terminal randomization at scale s = 1, using 500 paths with
+three future ratios reserved. All four methods share the restricted monitoring window. Randomized
+metrics are probability-weighted summaries.
+The same stock paths and ratio inputs are used for the vanilla and LC procedures at each value of
+λ and α. The reported curves therefore compare the frequency of Ville-boundary crossings under
+the different one-step update rules. Because the Lipschitz scales are retrospective plug-in quantities
+and the required conditional assumptions are not verified, these rejection rates are interpreted as an
+exploratory comparison of detection behavior and not as estimates of prospective statistical power or
+a validation of anytime-valid error control.
+B.2.1 Terminal Randomization Comparison
+Reserved Returns and Monitoring Window. Figure 3 compares ordinary and terminal randomized
+Ville calibration (Ramdas and Manole, 2026). We use scale s = 1 and restrict monitoring to
+mk = nk − 3 steps, leaving three future ratios available for any rejection by that cutoff. Stocks Q and
+SNDK have only three ratios and are additionally excluded, leaving 500 paths. An early rejection still
+uses the three ratios immediately after its own crossing, which can precede the terminal cutoff. The
+LC path is truncated after fitting its calibration on all nk ratios, so the reserved future returns also
+enter the fit; this is not an independent calibration holdout.
+Randomized Ville monitoring checks 1/α strictly before the terminal step. If an early crossing
+occurs at tk, its conditional rejection probability is wk = 1 ; otherwise set tk = mk and wk =
+min{αMmk , 1}. We integrate over the independent uniform randomization rather than simulate its
+draw. Expected rejection rate is Pk wk/500, and randomized ASN is Pk wktk/ Pk wk. For thecorresponding post-rejection returns, we retain the probability-weighted summaries
+¯rw =
+P
+k wkrk
+W , s 2w =
+P
+k wk(rk − ¯rw)2
+W − Pk w2k/W , W =
+X
+k
+wk,
+and report ¯rw/sw when at least two positive-weight returns and a positive variance denominator and
+standard deviation are available. These are ratios of weighted summaries, not expectations of the
+sample ASN or return/SD ratio over realized randomizations. The retained complete-path fitting and
+conditional-model limitations make both real-data figures exploratory retrospective comparisons, not
+demonstrations of prospective performance or anytime-valid error control.
+In Figure 3, randomization increases both processes’ rejection rates; randomized LC has higher rates
+and smaller probability-weighted ASN than randomized EP over the grid, with mixed differences in
+return/SD. This illustrates their interaction in the retrospective calculation.
+24
+C Additional Experiments
+C.1 Computing the Lipschitz Constant under a Gaussian Model
+In the case of
+E = P (X | H1)P (X | H0) = exp µX − µ22  ,
+where X ∼ N(0, 1) under H0, the random variable E follows a log-normal distribution. For µ ̸= 0,
+we have log E ∼ N(m, s2), where
+m = − µ2
+2 , s = |µ| > 0.
+When µ = 0, E = 1 almost surely, so its distribution is degenerate and does not admit a Lebesgue
+density.
+Let fE(e) denote the probability density function of E. The corresponding L value is defined as
+L = sup
+e>0
+|f ′E(e)| ,
+where f ′E(e) denotes the derivative of fE(e) with respect to e. Note that e here denotes a variable,
+rather than Euler’s number.
+The density of E admits the closed-form expression
+fE(e) = 1es√2π exp− (log e − m)22s2  , e > 0,
+and its derivative is given by
+f ′E(e) = fE(e)
+
+− log e − ms2e − 1e  .
+The Lipschitz constant can be computed from two analytic candidates. Set z = log e and write
+D(z) = |1 + (z − m)/s2|s√2π exp−2z − (z − m)22s2  .
+Away from the zeroz = m−s2, differentiating log D(z) gives −2−(z−m)/s2+1/(s2+z−m) = 0.
+Its two solutions are
+z± = m − 32 s2 ± s2 ps2 + 4, L = max{D(z−), D(z+)}.
+Both endpoint limits of D are zero, so these candidates give the global maximum. The density and its
+derivative also vanish at the origin, establishing the boundary condition for the sequential calibration
+when s >0.
+For a fully specified Gaussian null and likelihood ratio, this expression gives a deterministic model-
+based Lipschitz constant; numerical implementations use an upward-rounded upper bound. A finite
+grid maximum alone can underestimate L, particularly when the density’s steepest slope is near zero.
+Fitting a lognormal model to observed ratios does not certify the true conditional null density. The
+fixed-sample simulations use the analytic bound and, if necessary, raise it to 4/9; the sequential
+simulations use their conditional Gaussian model, with the Lipschitz constant recomputed for each
+batch size. The working scales in the retrospective S&P 500 comparison remain descriptive plug-in
+values.
+For scale, at α = 0.05 the Gaussian likelihood-ratio models with µ = 0.5 and µ = 1 give L ≈ 3.19
+and L ≈ 10.71. The corresponding relative reductions from the Markov threshold are
+1/α − T (L)α
+1/α =
+√
+2(1 − α)3/2
+3
+√
+L
+≈ 24.4% and 13.3%,
+respectively. Thus the practically relevant gain is largest in the moderate- L regime, while the
+correction necessarily vanishes at rate L−1/2 as L grows.
+25
+Table 1: Smooth Beta likelihood-ratio experiments: empirical FDR and mean number of rejections.
+Null vs. alternative α Method Empirical FDR Rejections
+Beta(3, 3) vs. Beta(4, 1) 0.05 e-BH 0.000516 42.16
+0.05 e-LC 0.000484 44.03
+0.10 e-BH 0.000961 81.35
+0.10 e-LC 0.001113 85.76
+Beta(4, 3) vs. Beta(5, 1) 0.05 e-BH 0.000451 40.75
+0.05 e-LC 0.000738 42.95
+0.10 e-BH 0.001234 81.22
+0.10 e-LC 0.001383 85.25
+Beta(5, 3) vs. Beta(6, 1) 0.05 e-BH 0.000187 40.24
+0.05 e-LC 0.000185 42.44
+0.10 e-BH 0.001063 77.94
+0.10 e-LC 0.001132 82.18
+C.2 Smooth Beta Likelihood-Ratio Experiment
+To check that the power gain is not specific to the piecewise-linear family, we also generate null
+observations from three smooth Beta models and form e-values as likelihood ratios against the
+indicated Beta alternatives. In each configuration, K = 10,000, pnull = 0.8, and the results average
+200 independent repetitions. For a = 3, 4, 5, the likelihood ratio is E = 2X/[a(a + 2)(1 − X)2].
+We bound the absolute derivative of its induced null density on 10,000 rational subintervals of
+X ∈ [0, 1], inflate the certified bound by 10%, and round upward. The resulting L values are
+99.149160, 88.677529, and 85.298118 (rounded upward here). Each model uses an independent
+PCG64 stream derived from seed 42, with the same observations for both methods and levels. Table 1
+reports the nominal levels α = 0.05 and 0.10.
+Across all six comparisons, e-LC produces more discoveries while empirical FDR remains well below
+the nominal level. This experiment is deliberately separated from the piecewise-linear benchmark
+and the extremal construction used in the sharpness proof.
+C.3 Empirical FDR Validation for Multiple Testing
+To complement the power comparison in Section 5.1, we evaluate e-LC using Gaussian likelihood-
+ratio e-values E = exp(4X − 8). Each run uses K = 10,000 hypotheses: 8,000 null observations
+from N (0, 1) and 2,000 alternatives from N (4, 1). We evaluate 100 equally spaced levels α ∈
+[0.02, 0.10] on the same 20 independent repetitions (MT19937 seed 42). Empirical FDR is the mean
+FDP, and the shaded band is one population standard deviation across repetitions. The analytic
+Lipschitz constant is L ≈ 7.20754 × 1019, evaluated with outward-rounded arithmetic. The resulting
+correction is negligible: e-LC and e-BH have identical rejection sets in these repetitions. In this
+setup, e-values are generated independently across hypotheses, so this validation is aligned with the
+independence regime of e-LC in Proposition 4.1.
+As shown in Figure 4a, the empirical FDR curve stays below the diagonal reference y = α across the
+tested range, so no empirical FDR inflation is observed at the tested levels. This finite simulation is a
+diagnostic; validity follows from the theorem only when its assumptions hold.
+C.4 Sensitivity to Underestimating the Lipschitz Constant
+We next study misspecification in Gaussian likelihood-ratio models. Under H0, X ∼ N(0, 1) and
+E = exp(µX − µ2/2), giving Ltrue ≈ 3.19 for µ = 0.5 and Ltrue ≈ 10.71 for µ = 1. Each run
+contains K = 100,000 hypotheses with null proportion 0.8, and empirical FDR is averaged over 200
+repetitions. We deliberately use
+Lused = Ltrue/c
+and scan 501 geometrically spaced factors c ∈ [10, 105]. For each nominal level, Table 2 reports the
+largest grid value c for which empirical FDR does not exceed α at that value and at all smaller factors
+on the tested grid.
+26
+Table 2: Largest empirically non-inflating underestimation factor c = Ltrue/Lused on the tested grid.
+Original simulation code and the alternative distribution remain to be verified.
+µ\α 0.01 0 .10 0 .20
+0.5 14 .3× 14.2× 14.1×
+1.0 47 .9× 46.5× 45.0×
+No empirical FDR inflation is observed up to the factors in Table 2. This is a finite-grid diagnostic,
+not a robustness theorem: underestimating L violates the sufficient condition used in our proofs, and
+the transition beyond the reported grid boundary is abrupt in this experiment. The table therefore
+quantifies behavior in these two simulated models but does not justify replacing a conservative upper
+bound by an empirical underestimate.
+0.02 0.06 0.1
+10−3
+10−2
+10−1
+α
+Empirical FDR
+e-LC
+y = α
+(a) Empirical FDR
+0 500 1,000
+1
+2
+3
+4
+5
+Batch size
+Mean of Mmax
+α = 0.1
+α = 0.05
+α = 0.01
+(b) Effect of batch size
+0 0.5 1 1.5 2
+0
+200
+400
+µ
+Batch size
+accu-LC
+(c) Sample size
+Figure 4: Additional simulations. (a) Empirical FDR; shading is one standard deviation and the
+red line is y = α. (b) LC null crossing probabilities by batch size, with pointwise 95% Wilson
+intervals and nominal reference levels. (c) Restricted stopping samples min(T, H) for LC and EP on
+a logarithmic y-axis, H = 50,000; shading is one Monte Carlo standard error.
+C.5 Simulation of Sequential Inference
+We evaluate the process in Section 4 on independent Gaussian observations. The likelihood-ratio
+design parameter is fixed at θ = 0.1, distinct from the data-generating mean µ. For a fresh, disjoint
+block of b observations, the input is
+E = exp
+ 
+θ
+bX
+i=1
+Xi − bθ2/2
+!
+.
+Under the null, Xi ∼ N(0, 1), so log E ∼ N(−bθ2/2, bθ2). We recompute the analytic Lipschitz
+constant for each b, use an upward numerical guard of 10−12 in relative terms, and set λ = 0 .5,
+τ = 0.5/
+√
+2L, and η = (1 − τ + Lτ 3/3)−1. The numerical implementation also checks the exact
+lognormal expectation of each update against one. Both EP and LC multiply fresh block factors along
+one continuing path, starting from M0 = 1.
+Null Crossing Probabilities. For each of the 18 batch sizes b from 1 to 1000 shown in Figure 4b,
+we simulate 5,000 paths with a common budget of 36,000 raw observations, giving 36,000/b up-
+dates. We estimate Pr(max0≤t≤36,000/b Mt ≥ 1/α) at α ∈ {0.1, 0.05, 0.01}. In Figure 4b, LC
+crossing estimates stay below their nominal levels; bands are pointwise 95% Wilson intervals across
+independent paths, not simultaneous confidence bands. This finite-horizon check complements the
+conditional-model argument, which supplies the anytime-valid guarantee. The expectation of a
+running maximum need not be at most one, even for a valid nonnegative supermartingale, so it is not
+used as a validity criterion.
+Stopping Samples and Censoring. For b = 1, generate Xt ∼ N(µ, 1) at 200 equally spaced
+means µ ∈ [0, 2], retaining θ = 0 .1. Each mean uses 1,000 paired EP/LC paths, α = 0 .1, and
+horizon H = 50,000 observations. We record first crossings and treat paths without a crossing by H
+27
+as censored; each contributes H to min(T, H). Figure 4c reports the mean of min(T, H) over all
+paths, with one Monte Carlo standard error; it is neither an uncensored expected stopping time nor an
+average over successful paths only. The simulation uses seed 20260926 with separate random-number
+streams across design settings; within each setting, EP and LC are evaluated on the same simulated
+paths.
+At µ = 0, the LR inputs are nondegenerate because θ remains 0.1: EP and LC cross on 99/1000
+and 17/1000 paths, with restricted means 45,229.0 and 49,165.6. At µ = 2, both cross on all paths,
+with means 22.86 and 21.73. LC has a smaller restricted mean at 152 of the 200 tested means, but is
+slower at the remaining 48. Thus truncation can delay weak-signal detection; the calibration does not
+imply uniform sample-efficiency dominance. Per-path results and crossing probabilities are retained
+with the experiment code.
+28

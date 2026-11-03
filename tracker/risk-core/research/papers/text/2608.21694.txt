@@ -1,0 +1,2897 @@
+arXiv 2608.21694  https://arxiv.org/abs/2608.21694
+
+Gaussian-efficient testing by betting on the mean of bounded data
+Diego Martinez-Taboada 1 and Aaditya Ramdas 2
+1Department of Statistics & Data Science, Carnegie Mellon University
+2Department of Statistics, Stanford University
+diegomar@andrew.cmu.edu, aramdas@stanford.edu
+November 2, 2026
+Abstract
+Given[0,1]-valuedrandomvariablesX 1, . . . , Xn suchthatE[X i|X1, . . . , Xi−1] =µforalli, wepropose
+a new nonasymptotic confidence interval forµthat is obtained by inverting terminal e-values generated
+by a novel betting strategy. When the data are iid, its limiting width matches that of the central
+limit theorem (“Gaussian-efficient”), finally surpassing the inefficient limits of previous betting intervals.
+Our main conceptual advance involves designing betting fractions that track the conditional rejection
+probability of the most powerful terminal test in a limiting Gaussian experiment. When one predictable
+variance estimator is shared across candidate means, the deterministic inversion is an interval for every
+data sequence and its two endpoints can be found easily. The width can be improved further with external
+randomization. In simulations, our method yields the tightest intervals to date; for every distribution
+tested and all sufficiently largen, our deterministic version beats STaR-Bets and is competitive with
+Gaffke, while the randomized improvement beats both. It thus combines finite-sample validity under
+martingaledependence, easyendpointcomputation, Gaussian-efficientinferenceforiiddata, andexcellent
+empirical performance. We further combine GE-betting with a mixture of constant-fraction bets to attain
+both Gaussian and large-deviation efficiency under iid sampling while retaining martingale validity. We
+also extend the construction and its efficiency theory to sampling without replacement, where it again
+achieves state-of-the-art empirical performance.
+1 Introduction
+Constructing a confidence interval for the mean of bounded data is one of the most basic problems in
+statistical inference. Boundedness permits honest finite-sample inference without a parametric model, but a
+useful interval should also adapt to the observed variance, be sharp at realistic sample sizes, and approach
+the classical central limit theorem interval when the sample is large (“Gaussian-efficient”).
+Classical concentration inequalities provide distribution-free control (Bennett, 1962; Hoeffding, 1963;
+Azuma, 1967; Freedman, 1975; de la Peña, 1999; Bercu and Touati, 2008; Bentkus, 2003; Pinelis, 2006a;
+Bentkus et al., 2006; Kuchibhotla, 2024). Sharper approaches include empirical-Bernstein, CDF-envelope,
+small-sample, and finite-sample Gaussian constructions (Maurer and Pontil, 2009; Anderson, 1969; Fishman,
+1991; Rosenblum and van der Laan, 2009; Austern and Mackey, 2022).
+These developments make clear that validity and sharpness are distinct design goals. Gaffke’s Dirichlet-
+randomization interval was the previous empirical state of the art among finite-sample confidence intervals
+for bounded data (Gaffke, 2005; Learned-Miller and Thomas, 2020; Vlassis and Thomas, 2026; Ming et al.,
+2026). However, Gaffke’s interval is not valid under martingale dependence, and STaR-Bets (Vorácek and
+Orabona, 2026) is the empirical state-of-the-art in this setting, despite not being proven to strictly improve
+thewidthofotherempirical-Bernsteinconstructions(Waudby-SmithandRamdas,2024). Wewillextensively
+compare to these two methods in particular.
+Three desiderata.At a known horizonn, we seek one two-sided1−δconfidence intervalI n satisfying
+three requirements. The first ismartingale validity: wheneverXi ∈[0,1]andE(X i | Fi−1) =µ, the interval
+has the finite-sample guaranteeP{µ∈ In} ≥1−δ. Independence is not required, and conditional variances
+1
+arXiv:2608.21694v2  [stat.ME]  30 Oct 2026
+and higher moments may change with the history. The second isiid efficiency: if the observations are
+independent and identically distributed (iid) with meanµ∈(0,1)and varianceσ 2 >0, the width attains
+the Gaussian benchmark
+len(In) = 2σz1−δ/2√n +o(n −1/2)almost surely.(1.1)
+The third isefficient computation: for every observed data sequence, the accepted candidate means form
+one interval. The interval can therefore be computed by finding its two endpoints rather than searching for
+an arbitrary subset of[0,1]. These requirements concern different properties: the conditional-mean model
+supplies martingale validity, the iid submodel supplies the sharp local benchmark, and interval geometry is
+a deterministic property of the update for each fixed data sequence.
+Testing by betting gives a well-known route to the first requirement (Waudby-Smith and Ramdas, 2024).
+For a candidate meanm, predictable betting fractions generate a nonnegative test supermartingale under
+the corresponding null; its terminal value is an e-value. Markov’s or Ville’s inequality then controls rejection,
+and inversion overmproduces a confidence set; this outline is now well known. WriteΦ,ϕ, andzq = Φ−1(q)
+for the standard normal cdf, density, and quantile. Our new ingredient is the use of an idealized hypothetical
+Gaussian experiment in order to derive the optimal betting strategy (which we refer to asGaussian-efficient
+betting, orGE-betting), and then mimic that in finite samples. Define
+ψ(p) = ϕ{Φ−1(p)}p ,0< p <1.
+By convention,Φ −1(0) =−∞,Φ −1(1) =∞,ψ(0) =∞,ψ(1) = 0(see Figure 3). Ifp= (δ/2)Kis current
+wealth divided by the rejection threshold,t∈[0,1)is the fraction of the horizon elapsed, andvis the variance
+per observation in an idealized Gaussian design calculation, the optimal fraction of current wealth bet per
+unit change in the centeredn−1/2-scaled partial sum is
+L(p, t, v) = ψ(p)p
+(1−t)v
+.(1.2)
+Theorem 5.1 proves that the discrete implementation below is martingale-valid, its inversion is an interval on
+every sample path, and its width satisfies (1.1) under iid sampling. The same update also permits optional
+external randomization of the terminal threshold, which we include explicitly below. Section 5.1 derives the
+following rule from the most powerful fixed-horizon Gaussian test.
+The proposed confidence interval.Discretizing the preceding strategy at the known horizonngives
+the following GE-betting implementable update. Compute the single mean and variance estimates, for
+t= 0, . . . , n−1,
+bµt =
+1/2 + Ptj=1 Xj
+t+ 1 ,bv t =
+1/4 + Ptj=1(Xj −bµj−1)2
+t+ 1 .(1.3)
+These estimates are available beforeX t+1, and the samebvt is used for every candidate and both wealth
+sequences. For terminal calibration, drawU+, U− ∼Unif(0,1), independently of the data, and hold this one
+pair fixed over every candidate mean (they could be drawn iid, or coupled, for example set to be equal or
+to sum to one). If external randomization is not desirable, simply setU+ =U − = 1. For eachm∈[0,1],
+initializeK +0 (m) =K −0 (m) = 1. The upper-tail process uses the incrementX i −m, and the lower-tail
+process usesm−X i. Fixc∈(0,1]; our default isc= 1. At roundi= 1, . . . , n, for each process whose
+wealth lies strictly between zero and the rejection threshold2/δ, define
+ℓ+i,n(m) = min
+(
+ψ{(δ/2)K +i−1(m)}p
+(n−i+ 1)bvi−1
+, cm
+)
+, ℓ −i,n(m) = min
+(
+ψ{(δ/2)K −i−1(m)}p
+(n−i+ 1)bvi−1
+, c1−m
+)
+,(1.4)
+and update
+K +i (m) = min
+ 2
+δ , K+i−1(m){1 +ℓ +i,n(m)(Xi −m)}
+
+, K −i (m) = min
+ 2
+δ , K−i−1(m){1 +ℓ −i,n(m)(m−X i)}
+
+.
+(1.5)
+2
+Figure 1: Mean √n-scaled widths of 99% confidence intervals for three representative iid distributions.
+Our GE-betting width rapidly approaches the Gaussian limit (dotted line). First row: all methods are
+deterministic, and GE-betting improves on STaR betting, which clearly converges to an inefficient limit,
+while being competitive with Gaffke, which is also Gaussian-efficient but not martingale-valid. Second row:
+all methods use external randomization, and GE-betting clearly dominates Gaffke and STaR betting. The
+full nine-distribution comparison appears in Figure 4.
+Atm= 0, definec/m= +∞, so the upper-tail cap is absent; atm= 1, definec/(1−m) = +∞, so the
+lower-tail cap is absent. Once a wealth reaches zero or2/δ, leave it unchanged. The proposed confidence
+interval for the chosen calibration pair is
+In(U+, U−) =
+
+m∈[0,1] :K +n (m)< 2U+δ , K−n (m)< 2U−δ  .(1.6)
+We writeI n =I n(1,1)for the deterministic interval analyzed in Theorem 5.1. Drawing the two uniforms
+gives uniformly randomized Markov calibration; the uniforms change only the two terminal thresholds, not
+the betting updates. Thus either interval can be implemented directly from (1.3)–(1.6), with no Gaussian
+approximation or numerical dynamic program.
+Empirically, the uniformly randomized version of this procedure produces the tightest bounded-mean con-
+fidence intervals to date across our experiments, generally improving on Gaffke’s leading independence-based
+finite-sample interval. Figure 1 gives an early view of this comparison for three representative distributions.
+Sampling without replacement.The same design principle applies whenX1, . . . , Xn are drawn without
+replacement from a fixed populationx1:N ∈[0,1] N. Unlike under iid sampling, the centered partial sum is
+constrained to return to zero when the population is exhausted:SN −N µN = 0. Its proportional-sampling
+Gaussian limit is therefore a Brownian bridge, which is pinned at zero at time one, rather than Brownian
+motion. This pinning captures the negative dependence between draws and the decline in uncertainty as
+more of the population is revealed. For a candidate population meanm, letSi = Pij=1 Xj and define
+mi(m) = N m−Si−1N−i+ 1 , Y i(m) =X i −m i(m).
+3
+At the true population mean,mi(m)is the conditional mean of the next draw, so predictable nonnegative
+betting fractions applied toY i(m)again generate valid wealth processes. For a fixed horizonn < N, the
+Gaussian-bridge design calculation gives the raw fractions
+eℓbr,±i,n (m) =ψ{(δ/2)K ±i−1(m)}
+s
+N−n
+(N−i)(n−i+ 1)bv i−1
+.(1.7)
+Herebvi−1 is the shared estimator in (1.3). As above, we setc= 1; the upper and lower fractions are capped
+atc/m i(m)andc/{1−m i(m)}, respectively. The deterministic interval inverts the two terminal wealths
+over the feasible rangeMn = [Sn/N,{S n +N−n}/N]:
+I brN,n =
+
+m∈ Mn :K +n (m)< 2δ , K−n (m)< 2δ  .(1.8)
+Section 7 derives the bridge correction in (1.7), gives the complete bounded-data update, and establishes
+finite-population validity and Gaussian efficiency. Across our experiments, the proposed betting strategy
+yields the tightest bounded-mean confidence intervals to date. Figure 2 highlights this performance across
+three representative distributions.
+Figure 2: Mean√n-scaled widths of 99% confidence intervals under sampling without replacement for three
+representative finite-population families, with sampling fractionn/N=.5and varying population sizeN.
+Our GE-betting interval rapidly approaches the Gaussian finite-population benchmark (dotted line). GE-
+betting is compared to the confidence intervals from Waudby-Smith and Ramdas (2024) (WSR running
+intersection), which serve as the tightest empirical baseline. First row: both methods use deterministic
+Markov calibration, and GE-betting is substantially narrower than WSR running intersection, for moderate
+and largeN. Second row: both methods use uniformly randomized Markov calibration, under which GE-
+betting again clearly improves upon WSR. A full nine-population comparison, alongside further alternative
+confidence intervals such as those from Bardenet and Maillard (2015), appears in Figure 6.
+Our contributions.First, we give a common derivation of product and STaR betting through conditional
+expectations of terminal e-values in an auxiliary Gaussian experiment. At timet, thecontinuation valueis
+4
+the conditional expectation of the terminal e-value given the current Gaussian partial sum. Its derivative
+with respect to that partial sum gives the predictable betting amount. This common calculation reveals why
+a valid strategy can remain inefficient when it tracks the wrong terminal event.
+Second, applying the same calculation to the most powerful fixed-horizon Gaussian rejection event yields
+the betting fraction above and hence the GE-betting update. We prove its finite-sample martingale validity,
+that its inversion is an interval for every data sequence when the estimator is shared, and its iid Gaussian
+efficiency. Our empirical study shows that this theoretical efficiency translates into particularly sharp finite-
+sample intervals, including in challenging low-variance settings. We also show how to combine GE-betting
+with a mixture of constant-fraction bets to attain both Gaussian and large-deviation efficiency under iid
+sampling while retaining martingale validity.
+Third, we extend the same design principle to sampling without replacement. The relevant Gaussian
+experiment is then a Brownian bridge rather than Brownian motion, and its continuation value yields a GE-
+betting strategy that accounts for depletion of the population. We prove finite-population validity, interval-
+valued inversion, and Gaussian efficiency under proportional sampling, and find that these guarantees are
+accompanied by sharp empirical performance across the same range of bounded populations.
+Outline.Having stated the proposed interval and its principal guarantee, we devote the remainder of
+the paper to its derivation and analysis. Section 2 reviews related work, while Section 3 recaps testing
+by betting, product betting, and STaR betting. Section 4 then expresses those existing methods through
+conditional Gaussian e-values, revealing which terminal event each strategy tracks. Using that comparison,
+Section 5 derives the efficient fixed-horizon strategy: Subsection 5.1 obtainsϕ{Φ−1(p)}from the optimal
+Gaussian event, Subsection 5.2 explains its transfer to the bounded-data update already displayed above,
+and Subsection 5.3 states the formal validity and efficiency result. Within Section 6, Subsection 6.1 proves
+interval geometry, Subsection 6.2 discusses fixed-horizon calibration, and Subsection 6.3 reports the experi-
+ments. Subsection 6.4 shows how to attain both Gaussian and large-deviation efficiency, and Subsection 6.5
+constructsp-values from GE-betting by backward inversion. Section 7 extends the construction to sampling
+without replacement: Subsection 7.1 gives the Gaussian-bridge design, Subsection 7.2 gives the bounded-data
+update, Subsection 7.3 states its guarantees, and Subsection 7.4 reports the finite-population experiments.
+Section 8 concludes.
+2 Related work
+Testing by betting.Nonnegative wealth processes unify gambling, likelihood ratios, e-values, and safe
+tests (Vovk and Wang, 2021; Grünwald et al., 2024; Ramdas et al., 2023; Ramdas and Wang, 2025). For
+boundedmeans, Waudby-SmithandRamdas(2024)developvariance-adaptivebettingintervals, Shekharand
+Ramdas (2023) study their near-optimality, and Vorácek and Orabona (2026) introduce target recalculation.
+Recent work also learns horizon-dependent strategies (Taga et al., 2026). Related finite-horizon approaches
+formulate the choice of betting fractions as a dynamic-programming or stochastic-control problem (Clerico
+et al., 2026; Baas et al., 2026). Our construction instead starts from a chosen terminal Gaussian payoff,
+computesitsconditional expectation, anddifferentiatesthatexpectationwith respect tothecurrentGaussian
+partial sum to obtain the next betting amount; it requires no numerical dynamic program. The uniformly
+randomized Markov inequality (Ramdas and Manole, 2026) is an optional terminal calibration applicable to
+every fixed-horizon e-value considered here. Our focus is instead the construction of a fixed-horizon e-value
+whose inversion is Gaussian efficient and empirically sharp. The conditional-e-value calculation also identifies
+the terminal event tracked by each earlier strategy and thereby explains its width penalty.
+Finite-sample intervals for bounded means.Fixed-sample intervals can also be obtained by invert-
+ing distributional or concentration bounds. Examples include Hoeffding and empirical-Bernstein intervals
+(Hoeffding, 1963; Maurer and Pontil, 2009), CDF-envelope methods (Anderson, 1969), and small-sample
+bounded-mean constructions (Fishman, 1991; Rosenblum and van der Laan, 2009). Sharper recent bench-
+marks include finite-sample Gaussian approximations (Austern and Mackey, 2022) and Gaffke’s interval, the
+previous empirical state of the art among finite-sample confidence intervals for bounded data (Gaffke, 2005;
+Learned-Miller and Thomas, 2020; Vlassis and Thomas, 2026; Ming et al., 2026). Ming et al. (2026) further
+5
+propose a randomized product-orthant p-value, whose inversion need not improve Gaffke’s endpoints despite
+its pointwise p-value improvement. These methods exploit independence or distributional envelopes directly.
+Our experiments compare their sharpness with that of a procedure valid under martingale dependence. GE-
+betting is generally tighter; independence is imposed only for efficiency analysis.
+Sampling without replacement.Classical concentration results for sampling without replacement begin
+with Hoeffding’s comparison inequality and Serfling’s finite-population correction (Hoeffding, 1963; Serfling,
+1974). Bardenet and Maillard (2015) sharpen these bounds and derive an empirical Bernstein–Serfling
+interval. Inthebettingliterature, Waudby-SmithandRamdas(2024)centereachdrawatthecandidatemean
+of the remaining population to obtain variance-adaptive confidence intervals and confidence sequences. More
+recently, Shekhar and Ramdas (2026) derive empirical-rate intervals for finite alphabets and an eventually
+valid almost-sure interval for general bounded populations. Exact hypergeometric inversion provides an
+additional benchmark for binary populations, but does not extend directly to arbitrary values in[0,1]. Our
+construction uses the same remaining-mean identity as earlier betting methods, but chooses its fixed-horizon
+fractions by tracking the optimal Gaussian-bridge rejection event.
+Tracking terminal decisions.The event–martingale viewpoint behind our construction goes back to
+Ville (1939). SupposeAis an event (perhaps a terminal rejection event for a nullP0) withP 0(A) =α. At
+timet,P 0(A| Ft)is simply the probability, given the data so far, thatAwill eventually occur. These
+probabilities form a martingale (called the Doob martingale). Ville’s theorem states that for any eventAof
+probabilityα, there exists a nonnegative martingale which reaches1/αifAoccurs: this martingale is simply
+P0(A| Ft)/P0(A)ifα >0; Ville’s deep contribution was handling theα= 0case. The same conditional-
+rejection probability appeared also in stochastic curtailment (Lan et al., 1982). Ramdas et al. (2022) show
+that an admissible point-null sequential test is obtained by thresholding the normalized Doob martingale
+obtained from any other existing sequential test (of which fixed-sample tests are of course a special case).
+The same Doob martingale construction was later explored by Koning and van Meer (2026) and Holmes and
+Walker (2026) from more practical perspectives. Our objective is different: we track the Neyman–Pearson
+event in an auxiliary Gaussian experiment to derive bounded-data betting fractions whose fixed-horizon
+confidence-set inversion is Gaussian efficient.
+3 Background
+Let(F i)ni=0 be a filtration, withXi ∈[0,1]measurable with respect toF i. We assume
+E[Xi | Fi−1] =µ, i= 1, . . . , n,(3.1)
+for an unknownµ∈[0,1]; no independence is required. A nonnegative random variableEis ane-variable
+for a null hypothesis if its null expectation is at most one; its realized value is ane-value. As is customary,
+we also use “e-value” for the random variable when no confusion can arise. An adapted nonnegative process
+(Kt), withK 0 = 1, is a test supermartingale ifE(Kt | Ft−1)≤K t−1 under the null. EveryK t is then an
+e-variable, and Ville’s inequality gives
+P
+
+max
+t≤n
+Kt ≥1/α
+
+≤α.
+Markov’s inequality gives the corresponding fixed-time guarantee,P{Kn ≥1/α} ≤α. This is the source of
+our finite-sample guarantees under martingale dependence.
+3.1 Testing by betting
+To test the point nullHm :µ=m, we construct nonnegative wealth processes from predictable bets. Fixm.
+Nonnegative fractionsλ +i (m)andλ −i (m)generate the upper- and lower-tail wealth processes
+K +t (m) =
+tY
+i=1
+{1 +λ +i (m)(Xi −m)},
+6
+K −t (m) =
+tY
+i=1
+{1 +λ −i (m)(m−X i)}, K +0 (m) =K −0 (m) = 1.(3.2)
+The fraction used at roundimay depend on the past but not onXi. We impose the nonnegativity constraints
+0≤λ +i (m)≤ 1m ,0≤λ −i (m)≤ 11−m (3.3)
+which keep the factors nonnegative for everyXi ∈[0,1]. Underµ≤m,K +(m)is a nonnegative supermartin-
+gale; underµ≥m, the same is true ofK −(m). At the point nullHm :µ=m, both are test martingales.
+Hence their average and their Bonferroni-scaled maximum,
+Eavt (m) = 12 {K +t (m) +K −t (m)}, E maxt (m) = 12 max{K +t (m), K−t (m)}
+are both e-values forHm; indeed,E maxt (m)≤E avt (m). Their Markov inversions are
+Cavn ={m:E avn (m)<1/δ},
+Cmaxn ={m:E maxn (m)<1/δ}
+={m:K +n (m)<2/δ, K −n (m)<2/δ}.
+(3.4)
+Each set containsµwith probability at least1−δ. Hereδis the two-sided error probability, and each
+one-sided test is allocated error probabilityδ/2. Predictability and the conditional-mean restriction control
+expected wealth, while (3.3) keeps wealth nonnegative. These two facts establish validity; the procedures
+below differ only in their predictable betting fractions.
+Betting inversions are not automatically convex. For example, averaging a decreasing upper-tail e-value
+and an increasing lower-tail e-value can produce a disconnected sublevel set. Our main results instead use
+the maximum inversion, which intersects the two one-sided acceptance sets. Proposition 6.1 shows that,
+when the two processes share a predictable variance scale, this inversion is an interval on every sample path.
+The confidence intervals in the main results are therefore convex and easy to compute by locating their two
+endpoints.
+3.2 The fixed-horizon product bet
+The fixed-horizon strategy of Waudby-Smith and Ramdas (2024) sets its betting fraction using a predictable
+variance estimate. With the regularized estimatorbvt already defined in (1.3), its fraction before enforcing
+the nonnegativity bound is
+eλi =
+s
+2 log(2/δ)
+nbvi−1
+.
+The actual fractions are
+λ+i (m) = minneλi, cm o , λ −i (m) = mineλi, c1−m  ,0< c≤1.(3.5)
+We setc= 1in the experiments. The variance estimate is adaptive, but the target and horizon in the
+unclipped fraction are fixed in advance.
+This strategy also illustrates the distinction in (3.4). Because the same predictable variance estimate is
+used for every candidatem, each one-sided wealth is monotone in the appropriate direction. The inversion of
+Emaxn is therefore an interval. The inversion ofEavn , which adds the two one-sided wealths before thresholding,
+need not be an interval and may require convexification.
+3.3 The STaR bet
+STaR recalculates its plan after every observation (Vorácek and Orabona, 2026). LetT= 2/δbe the wealth
+threshold for one-sided rejection, and letbv±t (m)estimate the next squared centered increment for the two
+one-sided processes. At timet < n, define the remaining log-wealth gaps
+g±t ={log(T /K±t )}+.
+7
+STaR betting uses
+λ+,STaRt+1 (m) =1{K +t < T}min
+(s
+2g+t
+(n−t)bv+t (m) , cm
+)
+,
+λ−,STaRt+1 (m) =1{K −t < T}min
+(s
+2g−t
+(n−t)bv−t (m) , c1−m
+)
+.(3.6)
+The experiments usec= 1. After each update, the strategy solves the same remaining-horizon problem.
+Equivalently, ifp ±t =K ±t /T= (δ/2)K ±t , the wealth-dependent factor in its betting fraction isfsqrt(p) =p
+2 log(1/p). Once a wealth reachesT, it is held fixed, so later data cannot reverse rejection. The use of
+the remaining wealth gap and remaining horizon changes power, but not the e-value validity established in
+Subsection 3.1.
+Vorácek and Orabona (2026) note that their candidate-dependent STaR inversion need not be convex.
+Their implementation estimates the centered variance separately for each candidate null, so the update need
+not preserve an order inm. This does not rule out convex inversion for STaR betting itself. Section 6 shows
+that using one predictable variance estimator shared across candidate means makes the maximum-based
+inversion an interval pathwise.
+3.4 Betting under sampling without replacement
+Fix a populationx1:N ∈[0,1] N, and reveal its values in a uniformly random order. Let
+St =
+tX
+j=1
+Xj,F t =σ(X 1, . . . , Xt),0≤t≤N.(3.7)
+The population mean and variance, with denominatorN, are
+µN = 1N
+NX
+j=1
+xj, σ 2N = 1N
+NX
+j=1
+(xj −µ N )2.(3.8)
+For a simple random sample of sizen, the standard error of¯Xn =S n/nis
+τN,n =σ N
+s
+N−n
+n(N−1) .(3.9)
+Aftertdraws, the observed values can be completed to a population in[0,1]N with meanmif and only if
+m∈ Mt :=
+ St
+N , St +N−tN  .(3.10)
+This completion identity also gives the centered observations used for betting. Immediately before draw
+i, a population with candidate meanmmust have mean
+mi(m) = N m−Si−1N−i+ 1 (3.11)
+among its remaining values. Thusmi(µN ) =E(X i | Fi−1). Ifµ N ≤m, the actual conditional mean is at
+mostm i(m); ifµ N ≥m, it is at leastmi(m). Define
+Yi(m) =X i −m i(m).(3.12)
+For predictable fractions satisfying
+0≤λ +i (m)≤ 1mi(m) ,0≤λ −i (m)≤ 11−m i(m) ,
+8
+the one-sided updates are
+K +i (m) =K +i−1(m){1 +λ +i (m)Yi(m)},
+K −i (m) =K −i−1(m){1 +λ −i (m)(−Yi(m))}.(3.13)
+The caps keep both multiplicative factors nonnegative. The upper process is a test supermartingale under
+µN ≤m, and the lower process is one underµN ≥m. Every admissible predictable choice is therefore valid;
+the choice of fractions determines the width of the resulting interval.
+4 Conditional Gaussian e-values as a design principle
+The Gaussian calculations in this section are design devices, not distributional assumptions on the data. The
+observations remain bounded and thus non-Gaussian; under a candidate null, their centered partial sums
+are sums of martingale differences. We use an auxiliary Gaussian experiment (a null experiment in which a
+variance-normalized Gaussian partial sum evolves as Brownian motion) to derive predictable betting rules,
+and then apply those rules to the bounded observations. Their exact finite-sample validity follows from
+predictability, the conditional-mean restriction, and clipping, not from the Gaussian approximation.
+Product betting and STaR betting initially look quite different: product betting uses a fixed fraction,
+whereas STaR recomputes its fraction from current wealth and the remaining horizon. In the auxiliary
+experiment, each process is obtained by conditioning a terminal e-value on the current Gaussian partial sum.
+Product betting uses an exponential terminal e-value; STaR uses the indicator of a path-dependent barrier-
+hitting event. In each case, the derivative with respect to the current Gaussian partial sum determines
+the next betting amount. This common representation identifies the event rewarded by each strategy and
+explains its fixed-horizon performance. It also motivates Section 5, where we instead track the most powerful
+terminal rejection event.
+4.1 Product betting from the exponential test function
+We first apply the conditional-e-value construction in the auxiliary Gaussian experiment. Let(Wt)0≤t≤1 be
+standard Brownian motion with natural filtration(Ft), and letZ∼ N(0,1)be independent of this process.
+Giveng≥0satisfying0<Eg(Z)<∞, normalize the terminal payoff asE 1 =g(W 1)/Eg(Z). Conditional
+onW t =x, the future increment has variancev= 1−t. Define
+u(v, x) =Eg(x+ √vZ).
+The functionusatisfies the heat equation, and
+Et = u(1−t, Wt)u(1,0) =E 0(E1 | Ft)
+is a nonnegative martingale starting from one, and hence an e-process; hereE0 denotes expectation under
+the null Brownian law. Itô’s formula gives
+dEt = ∂xu(1−t, Wt)u(1,0) dWt.
+Thus∂ xu/u(1,0)is the amount bet per unit increment inWt, whereas∂ xu/uis the corresponding fraction
+of current wealth. For product betting, takegη(x) =e ηx. Its conditional expectation atW t =x, withv
+units of variance remaining, is
+uη(v, x) =Eeη(x+√vZ) =e ηx+η 2v/2.
+After normalization by the initial valueuη(1,0), the value process is
+uη(1−t, Wt)
+uη(1,0) = exp{ηWt −η 2t/2},
+9
+the familiar Gaussian exponential e-process. The parameterηis the betting fraction: a larger value makes
+wealth more responsive to favorable increments but also incurs a larger variance penalty. Since∂xuη(v, x) =
+ηuη(v, x), the amount bet is always the fractionηof current wealth. Indeed, if current wealth isK=
+uη(v, x)/uη(1,0), then the amount bet per unit increment is
+∂xuη(v, x)
+uη(1,0) =η uη(v, x)uη(1,0) =ηK,
+so the amount bet is exactlyηK. The conditional-e-value construction therefore recovers ordinary product
+betting. Thus, for a bounded-data incrementy=X i −m, the corresponding update is
+Ki =K i−1 +ηK i−1y=K i−1(1 +ηy).(4.1)
+The amount bet before observingXi is therefore predictable and equal toηKi−1. Predictability and (3.3),
+rather than the Gaussian approximation, establish the e-value property.
+The fixed-horizon scale is already visible from
+logK n ≈η
+nX
+i=1
+(Xi −m)− η2nσ22 .
+Under a local alternative, the centered partial sum is of order√n, so the linear gain and quadratic variance
+cost are both of constant order whenη≍(nσ 2)−1/2. Product betting is therefore the bounded-data coun-
+terpart of the exponential Gaussian e-process, with a predictable variance estimate supplying the unknown
+scale. Appendix B applies the same conditional-e-value construction to a squared hinge that more closely
+approximates an indicator.
+4.2 STaR betting and its barrier-hitting event
+STaR fits the same conditional-e-value construction, although the event it tracks is initially implicit in its
+wealth-dependent betting fraction. In the continuous Gaussian limit, relative wealthPt =K t/T= (δ/2)K t,
+held fixed after reaching one, is a bounded null martingale starting fromδ/2. If this wealth converges at the
+deadline to either zero or one, thenPt =P 0(A| Ft)for some eventA. We now identify that event.
+LetY t denote the null Brownian partial-sum process in Gaussian variance time. Relative STaR wealth
+satisfies
+dPt =P t
+r
+2 log(1/Pt)
+1−t dYt.
+Define the remaining standardized distance to rejection by
+Rt =
+p
+2(1−t) log(1/P t).
+A direct change-of-variable calculation gives
+dRt =−dY t − dt2Rt , τ 0 = inf{t:R t = 0}.(4.2)
+AfterR t reaches zero, it remains zero because STaR freezes the one-sided wealth process at the rejection
+target. ForQ t =R 2t, the same calculation yields
+dQt =−2
+p
+Qt dYt = 2
+p
+Qt dWt, W t =−Y t.
+This is called a dimension-zero squared-Bessel process;dimensionis the name of its drift parameter and has
+nothing to do with the dimension of the observations. Its probability of hitting zero withinvremaining units
+of variance is
+H(v, r) :=Pr(τ0 ≤v) = exp{−r 2/(2v)}.(4.3)
+HereP r denotes probability for the process initialized atR0 =r. In particular,P t =H(1−t, R t)is the
+conditional probability of the eventASTaR ={τ 0 ≤1}. STaR betting therefore spends its one-sided error
+probability on a path-dependent hitting event.
+10
+Conversely, solvingp=H(v, r)for the required distance gives
+r(p, v) =
+p
+2vlog(1/p).(4.4)
+Differentiating the conditional hitting probability with respect to the current Gaussian partial sum gives the
+betting fraction per unit increment,
+Rt
+1−t =
+r
+2 log(1/Pt)
+1−t .(4.5)
+Replacing remaining Gaussian variance by a predictable estimate yields
+ℓSTaRt+1 (m) =
+s
+2 log(T /Kt)
+(n−t)v t(m) ,(4.6)
+the STaR betting fraction. Here(n−t)v t(m)estimates the conditional variance of the centered sum still to
+be observed, while the logarithm converts the current wealth shortfall into the standardized distance in (4.4).
+Thus the square-root rule is the derivative of the conditional hitting probability divided by that probability,
+recomputed after every observation.
+Product betting and STaR betting are thus both conditional-e-value strategies: the former reveals an
+exponential terminal e-variable, while the latter reveals a barrier-hitting indicator. This interpretation also
+explains why STaR is not efficient at a fixed horizon. The most powerful Gaussian test rejects according
+to the terminal Gaussian observation, whereas STaR allocates null probability to paths that hit the barrier
+early, including paths that subsequently finish below the terminal cutoff. Finite-sample e-value validity does
+not remove this mismatch between the path-dependent hitting event and the optimal terminal event.
+5 Gaussian-efficient testing by betting
+The conditional-e-value calculation suggests starting from the fixed-horizon test one ultimately wants to
+perform. In the Gaussian shift experiment, this is the most powerful terminal test. GE-betting tracks its
+conditional rejection probability and uses the resulting martingale representation to define a finite-sample-
+valid e-value for bounded data. The benchmark analyses in Section 4 show why this choice matters: a
+strategy can be perfectly valid yet inefficient when its wealth tracks a different event.
+The derivation proceeds in three steps. First, Subsection 5.1 obtains the betting rule in an auxiliary
+Gaussian experiment, without imposing Gaussianity on the observed data. Next, Subsection 5.2 transfers
+that rule to the bounded-data update already stated in Section 1. Finally, Subsection 5.3 establishes finite-
+sample validity and iid efficiency. Appendix C extends the construction to planned-window confidence
+sequences.
+5.1 Gaussian design device: the optimal fixed-horizon e-value
+This subsection is a design calculation in a Gaussian experiment. It is used only to derive a betting fraction;
+the bounded observations to which the resulting strategy is applied will not be Gaussian.
+In the Gaussian shift experiment, let(Bt)be standard Brownian motion and writedY t = dB t +hdt,
+0≤t≤1, so thatY 1 ∼ N(h,1). For testingh= 0againsth >0, the most powerful level-δ/2event and its
+indicator e-value are
+A∗ ={Y 1 ≥z 1−δ/2}, E ∗1 = 2δ 1A∗ .
+Underh= 0, the future incrementY 1 −Y t is independent Gaussian noise with variance1−t. The conditional
+rejection probability is therefore
+pt =P 0(A∗ |Y t) = Φ
+ Yt −z 1−δ/2√1−t  .(5.1)
+The formula is a conditional normal probability:√1−tis the standard deviation of the future increment,
+so the argument ofΦis the signed distance to rejection in units of remaining uncertainty. In particular,pt
+11
+0.0 0.2 0.4 0.6 0.8 1.0
+Current wealth divided by target, p
+0
+1
+2
+3
+4(p) = { 1(p)}/p
+Fraction of current wealth
+0.0 0.2 0.4 0.6 0.8 1.0
+Current wealth divided by target, p
+0.0
+0.1
+0.2
+0.3
+0.4p (p) = { 1(p)}
+Amount bet relative to target
+Figure 3: The GE-betting fraction and the corresponding amount bet as a fraction of the rejection target.
+The fraction of current wealth is largest when wealth is small (left), but the amount relative to the target
+goes to zero both near zero wealth and near the rejection target (right).
+is a bounded null martingale. Under the identificationKt := (2/δ)pt, we havept = (δ/2)Kt, sop t is current
+wealth as a fraction of the one-sided target.
+To obtain the corresponding betting fraction, letU(t, y) = Φ{(y−z1−δ/2)/√1−t}. Differentiating with
+respect to the current partial sum and applying the Brownian martingale representation gives
+dpt = ϕ{Φ−1(pt)}√1−t dYt.
+Dividing the last display bypt = (δ/2)Kt gives
+dKt
+Kt
+=L opt(pt,1−t) dY t.
+Thus
+Lopt(p, r) =ψ(p)√r , ψ(p) = ϕ{Φ−1(p)}p .(5.2)
+Herep∈(0,1)is current wealth divided by its target,ris the remaining Gaussian variance, andL opt(p, r)
+is the fraction of current wealth bet per unit Gaussian increment. The notationLopt refers to the Neyman–
+Pearson fixed-horizon event, not to a general optimality statement for finite-sample betting strategies.
+Figure 3 separates the fraction of current wealth bet from the amount bet as a fraction of the rejection
+target. The left panel shows thatψ(p)is positive and strictly decreasing: it diverges asp↓0and tends to
+zero asp↑1. A strategy far below its target therefore bets a larger fraction of its current wealth, whereas a
+strategy close to its target bets a smaller fraction. The amount bet as a fraction of the target is
+pψ(p) =ϕ{Φ −1(p)}.
+As the right panel shows, this amount tends to zero at both endpoints, is symmetric aboutp= 1/2, and
+is largest atp= 1/2. Thus the large value ofψ(p)near zero does not imply a large amount bet relative
+to the target, because current wealth is itself small. The strict concavity ofpψ(p), shown by{pψ(p)}′′ =
+−1/ϕ{Φ−1(p)}<0, is also the property used in Section 6.1 to prove that inversion gives an interval.
+Under the null Gaussian experiment, the two betting strategies in the main text have the common form
+dPt =σ f (Pt) dYt/√1−t. The denominator is the standard deviation of the future Gaussian increment. The
+numeratorσ f (p)is the amount bet, expressed as a fraction of the rejection target, per unit increment inYt
+when relative wealth isp. STaR betting usesp
+p
+2 log(1/p), whereas GE-betting usesϕ{Φ−1(p)}. They use
+the same remaining-variance scale but correspond to different fixed-horizon events. Only (5.1) tracks the
+Neyman–Pearson event. We now leave the Gaussian design experiment: the next subsection explains how
+this Gaussian betting fraction leads to the bounded-data update displayed in the introduction.
+12
+5.2 From the Gaussian design to the bounded-data update
+The implementable strategy is already given in (1.3)–(1.6). Here we explain the short passage from the
+Gaussian design calculation to that finite-sample-valid bounded-data update.
+The continuous-time betting fraction diverges at the deadline, but in discrete time the last round retains
+one observation of variance. For a positive predictable estimatebvi−1, replacing the remaining Gaussian
+variance1−tby(n−i+ 1)bv i−1 gives the untruncated fraction
+ℓeffi,n(m) = ψ{(δ/2)K i−1(m)}p{n−i+ 1}bvi−1 ,(5.3)
+where(δ/2)K i−1 is current wealth divided by the rejection threshold2/δ. Applying this fraction to the
+upper and reflected lower increments gives the two fractions in (1.4). Their caps,c/mandc/(1−m), with
+c= 1, keep the next wealth nonnegative for everyXi ∈[0,1]. Holding wealth fixed after it reaches2/δmakes
+rejection irreversible.
+Predictability controls the conditional expectation of each update, while the caps keep it nonnegative.
+Each one-sided wealth process in (1.5) is therefore a nonnegative supermartingale under its one-sided null.
+Running the two reflected processes and inverting their terminal decisions gives (1.6). Sharing the estimator
+across the two processes and candidate means is not needed for pointwise e-value validity, but it makes the
+inversion an interval. Section 6.2 justifies the two choices of(U+, U−)included in the introductory definition;
+they change neither the betting strategy nor this derivation.
+5.3 Gaussian efficiency of GE-betting
+Estimated variance, clipping, and the rule that freezes wealth at zero or the rejection target separate the
+bounded-data strategy from its Gaussian idealization. The next result gathers the three main guarantees:
+finite-sample validity under the conditional-mean model, interval-valued inversion on every sample path, and
+optimal first-order Gaussian width under iid sampling. We state it for the regularized estimator (1.3), which
+is the choice used throughout our comparisons.
+Theorem 5.1(Validity and Gaussian efficiency of GE-betting).Fixδ∈(0,1)andc∈(0,1]. In(1.4)–
+(1.5), use the estimatorbvi−1 from(1.3), shared by both wealth sequences and every candidate mean, and
+letI n =I n(1,1)use deterministic terminal calibration. For any adapted observationsXi ∈[0,1]satisfying
+(3.1),I n is an interval on every sample path and
+P{µ∈ In} ≥1−δ.
+The same validity and interval conclusions hold forIn(U+, U−), whereU +, U− are the independent uniforms
+used for randomized terminal calibration. If, in addition, the observations are iid withµ∈(0,1)and variance
+σ2 >0, then √n
+2σ len(In)
+a.s.
+− − →z1−δ/2.
+SinceI n(U+, U−)⊆ I n(1,1)pathwise, the iid conclusion also giveslim sup n
+√nlen{I n(U+, U−)} ≤
+2σz1−δ/2 almost surely.
+Proof sketch.The validity and interval claims require no asymptotics. Atm=µ, the predictable fractions
+and nonnegativity caps make both one-sided wealth processes test supermartingales, so deterministic or
+uniformly randomized Markov calibration and a union bound give coverage1−δ. Moreover,pψ(p) =
+ϕ{Φ−1(p)}is concave, and the variance estimator is shared across both processes and all candidate means.
+Proposition 6.1 therefore shows that the inverted confidence set is an interval, for every fixed pair of terminal
+thresholds.
+The efficiency argument is driven by one exact cancellation. In the Gaussian design (5.1), relative wealth
+isΦapplied to a shifted, rescaled partial sum. ApplyingΦ −1 therefore recovers that statistic, suggesting
+the same transformationΦ −1 for bounded data to expose the empirical sum underlying the Gaussian test.
+Hence, letpi = (δ/2)Ki be upper-tail wealth divided by its target, and letqi = Φ−1(pi)be its normal-quantile
+transform (when0< K i <2/δ). We shall prove that, for somejn smaller but close ton,q jn /√nis roughly
+13
+the aforementioned shifted rescaled partial sum; the remaining(n−j n)-rounds polarize this preterminal
+separation into rejection or acceptance.
+In particular, denoter i =n−i+ 1andY i =X i −m. While the cap is inactive and wealth has not
+reached a boundary, the update is
+pi −p i−1 =ϕ(q i−1) Yipribvi−1 .
+Since(Φ −1)′(p) = 1/ϕ{Φ−1(p)}, and callingq= Φ −1(p), we have the key identity
+(Φ−1)′(p)ϕ(q) = 1.(5.4)
+This identity allows us to infer that the first-order change inqi is the standardized centered observation
+Yi/
+p
+ribvi−1. Indeed, a first-order Taylor expansion ofqi = Φ−1(pi)gives
+qi −q i−1 ≈(Φ −1)′(pi−1)(pi −p i−1) = Yipribvi−1 .
+The above discrete derivative expresses a change in relative wealth on the normal-quantile scale: its first-
+order increment does not depend on current wealth. To pass from this one-step relation to the cumulative
+expansion, we rescaleq i by
+p
+(n−i)/n, the ratio of the remaining to the total standard deviation. The
+second-order Taylor term cancels, to first order, the average change caused by this decreasing factor:
+r
+ri −1
+n qi −
+r ri
+n qi−1 = Yipnbvi−1 + qi−12√nri
+ Y 2i
+bvi−1
+−1
+
++ ei,n√n .
+For local candidates,E(Y 2i | Fi−1)≈σ 2 ≈bvi−1, so the expression in braces has approximately zero condi-
+tional mean. The proof shows that its accumulated contribution and the remainder are negligible, leaving the
+linear termY i/
+p
+nbvi−1 ≈Y i/(σ√n), whose sum gives the standardized empirical sum below. The displayed
+identity is (E.4) divided by√n, with the remainderei,n bounded in (E.5). Ati=j n =n−k n, the rescaling
+factor is
+p
+kn/n. Form=µ−hσ/ √nandj n =n−k n, the resulting expansion afterjn observations is1
+r
+kn
+n qjn = 1σ√n
+jnX
+i=1
+(Xi −m)−z 1−δ/2 +o(1) =
+√n( ¯Xn −µ)
+σ| {z }
+Zn
++h−z 1−δ/2 +o(1)almost surely.
+The quantityZn +h= √n( ¯Xn −m)/σis precisely the usual standardized statistic for the candidate mean
+m. The displayed expansion shows thatqjn becomes large and positive when the test statisticZn +hstays
+above the cutoffz1−δ/2 by a fixed amount, and large and negative when it stays below the cutoff by a fixed
+amount. For the remainingkn-rounds, probabilistic argument then shows that this preterminal separation
+polarizes into rejection or acceptance, so that the resulting acceptance–rejection boundary agrees with that
+of the Gaussianz-test.
+The proof is given in Appendix E.1.1.
+6 From betting strategies to confidence intervals
+Two issues remain after constructing the e-valueKn(m): whether its inversion is connected, and how it is
+calibrated into a test. We address them in turn.
+1This is the step that fails for the earlier betting strategies. Ifσf (p)denotes the amount bet as a fraction of the target, its
+first-order multiplier on the normal-quantile scale isσf (p)/ϕ{Φ−1(p)}. For STaR this multiplier has numeratorpp2 log(1/p),
+and for product betting it has a numerator proportional top; neither ratio is constant. Their recursions forq i = Φ −1(pi)
+therefore retain a wealth-dependent weight instead of reducing to the ordinary standardized sample mean.
+14
+6.1 When does inversion give an interval?
+Pointwise validity does not imply connected inversion. Candidate-dependent variance estimates can make
+the statistic at timenoscillate withm. A predictable scale shared across candidate means restores an order
+property for the betting strategies considered here. Appendix A.2 shows that sharing the variance estimator
+need not increase width: in the paired experiments, the shared-estimator intervals are comparable to, and
+sometimes narrower than, their candidate-dependent counterparts.
+This distinction also appears in earlier betting intervals. Hedged-CI uses fractions independent ofm,
+apart from clipping that keeps wealth nonnegative, and has interval-valued one-sided inversion; candidate-
+dependent aGRAPA need not (Waudby-Smith and Ramdas, 2024). STaR-Bets estimatesE[(X−m)2]sepa-
+rately for eachmand returns the interval enclosing nonrejected grid cells (Vorácek and Orabona, 2026).
+Writep∈[0,1]for wealth relative to a one-sided target,f(p)for the betting fraction before division
+by the predictable scale, andσ f (p) =pf(p)for the amount bet relative to the target. With a common
+predictable scales >0, observationx, candidatem, and clipping constantc∈(0,1], the upper-tail update,
+with wealth held at one after reaching the normalized rejection target, is
+Tx,m,s(p) = min
+
+1, p
+
+1 + min
+ f(p)
+s , cm  (x−m)  .(6.1)
+Atm= 0, definec/m= +∞. For the reflected lower-tail update atm= 1, definec/(1−m) = +∞. These
+definitions remove the nonnegativity cap on the side where the centered observation cannot make wealth
+negative.
+Proposition 6.1(Pathwise interval inversion under a shared scale).Supposes i >0is predictable and
+common to both one-sided processes and allm. Assumeσf is nonnegative and concave on[0,1], continuously
+differentiable on(0,1), andσ f (0) = 0. For any fixed one-sided thresholdsu+, u− ∈(0,1], the set accepted by
+the two reflected updates(6.1)is an interval, possibly empty.
+The proof is given in Appendix E.1.2. For STaR betting,
+σsqrt(p) =p
+p
+2 log(1/p), σ ′′sqrt(p) =− 1 +{2 log(1/p)} −1
+p
+p
+2 log(1/p)
+<0,
+whereas for GE-betting, withq= Φ −1(p),
+σeff (p) =ϕ(q), σ ′eff (p) =−q, σ ′′eff (p) =− 1ϕ(q) <0.
+Both second derivatives are negative. The fixed-horizon product rule is covered by the analogous Hedged-CI
+argument of Waudby-Smith and Ramdas (2024). Hence the inversions of both shared-scale betting strategies
+in the main text are intervals pathwise.
+6.2 Fixed-horizon calibration by uniformly randomized Markov
+E-value construction and fixed-horizon calibration are separate. For methodAand candidatem, letK+n,A(m)
+andK −n,A(m)denote its terminal one-sided e-values. ThusEK±n,A(m)≤1under the corresponding one-sided
+null. Deterministic Markov calibration rejects whenK ±n,A(m)≥2/δ. The uniformly randomized Markov
+inequality (Ramdas and Manole, 2026) drawsU+, U−
+iid
+∼Unif(0,1), independently of the data, and rejects
+when
+K ±n,A(m)≥ 2U±δ .(6.2)
+Equivalently, the randomized e-value corresponding to this decision is
+E±n,A(m) = 2δ 1nU± ≤min (δ/2)K ±n,A(m),1 o .(6.3)
+The same pair(U+, U−)is held fixed over allmduring inversion. The randomizers do not alter the betting
+fractions, variance estimator, clipping, or rule that freezes wealth at a boundary. They change only the
+15
+terminal threshold, allowing rejection below2/δwhen the independent uniform randomizer is sufficiently
+small. Randomized Markov therefore changes only the conversion of the terminal e-value into a binary test
+decision; it is not a new betting strategy.
+Proposition 6.2(Validity of fixed-horizon calibration).Deterministic and uniformly randomized Markov
+calibration each give a level-δ/2test from any one-sided e-valueK±n,A(m). Inverting the two reflected tests
+gives coverage at least1−δ.
+The proof is given in Appendix E.1.3. SettingU + =U − = 1recovers deterministic Markov. Since
+U± ≤1, the randomized confidence set is pathwise contained in its deterministic counterpart. For the
+shared-scale strategies of Proposition 6.1, fixed random thresholds also preserve interval geometry. Uniformly
+randomized Markov is generic. The contribution of GE-betting is its fraction in (5.3); Section 6.3 compares
+both calibrations for the main-text procedures.
+6.3 Experiments
+We setδ=.01andc= 1for all betting methods, and study nine bounded distributions, including three
+low-variance examples. Appendix A.3 examines the sensitivity of the results to the choice ofc. Figure 4
+extends the introductory comparison to all methods, distributions, and calibrations in one display. Its
+first row uses10≤n≤10 6, its second row uses10 2 ≤n≤10 6, and its third row uses10 3 ≤n≤
+106. The figure shows deterministic and uniformly randomized versions of product betting, STaR betting,
+GE-betting, and Gaffke. For Gaffke, the randomized version is its product-orthant refinement in Ming
+et al. (2026). Gaffke’s interval was the previous empirical state of the art for finite-sample bounded-data
+confidence intervals and is therefore our main independence-based benchmark. The code can be found at
+https://github.com/DMartinezT/betting.
+Each betting method is shown under deterministic and uniformly randomized Markov calibration. Within
+abettingexperiment, oneuniformpairissharedacrossmethodsandheldfixedoverm; therandomizedGaffke
+refinement likewise holds its one-sided randomizers fixed throughout inversion. The STaR curve uses the
+shared predictable variance estimator in (1.3) and wealth absorbed at the rejection target, so its inversion
+is an interval on every sample path; the product and GE-betting curves likewise use shared estimators.
+Proposition 6.1 gives the common pathwise argument. Appendix A.1 gives the distributions, replication
+counts, Gaffke implementation, and numerical details.
+Figure 4 makes the theoretical separation visible across the full range of distributions and horizons.
+Product betting approaches its wider exponential-test-function limit, STaR betting retains its efficiency gap,
+and GE-betting rapidly tracks the Gaussian benchmark. Atn= 106, uniformly randomized GE-betting is
+within0.11%of the benchmark in every panel, and deterministic GE-betting is within0.81%.
+The comparison with Gaffke depends on the GE-betting calibration. Uniformly randomized GE-betting
+has smaller mean width than both Gaffke versions at most displayed horizons, with exceptions concentrated
+at shorter horizons, most notably for Bernoulli(.1); its advantage is largest in the low-variance panels. De-
+terministic GE-betting gives a more mixed comparison: for the first six distributions it is often wider than
+Gaffke at shorter horizons and becomes nearly indistinguishable asngrows, whereas in the low-variance
+panels it is generally narrower. Thus these experiments suggest that the martingale-valid randomized GE-
+betting interval can improve on the independence-based benchmark, while deterministic GE-betting is better
+described as competitive with it, particularly in low-variance settings.
+UniformlyrandomizedMarkovcalibrationprovidesitslargestimprovementatshorthorizonsandbecomes
+nearly indistinguishable from deterministic calibration asngrows. The two Gaffke curves likewise coincide
+whenever the ordinary endpoints lie within the sample range; the randomized product-orthant refinement
+can shorten them at the smallest horizons. The comparisons are descriptive rather than a finite-sample
+dominance theorem, but their consistency across shapes, variances, and sample sizes reinforces the main
+conclusion: martingale-valid inference need not pay an empirical width penalty.
+16
+Figure 4: Mean √n-scaled confidence-interval widths. The first row covers10≤n≤10 6, the second102 ≤
+n≤10 6, and the low-variance third row103 ≤n≤10 6. Color and marker identify the construction: product,
+STaR, GE-betting, or Gaffke. Within each construction, dashed curves with hollow markers are deterministic
+and solid curves with filled markers are uniformly randomized. For betting methods, randomization means
+uniformly randomized Markov; for Gaffke, it means the product-orthant refinement. Product betting is
+shown only in the first row, and dotted lines show the Gaussian and product limits.
+17
+6.4 On Gaussian and large deviation efficiency
+Gaussian efficiency fixes the error probability while increasing the sample size. A complementary benchmark
+lets the error probability decrease exponentially: ifXi are iid from a lawPon[0,1]andn −1 log(1/δn)→
+ρ∈(0,∞), the information limit is
+d(P, m) = inf
+Q:E QX=m
+KL(P∥Q),
+Jρ(P) ={m∈[0,1] :d(P, m)≤ρ}= [l ρ(P), uρ(P)].
+(6.4)
+HereQranges over all laws on[0,1]. The large deviation optimality of KL-inf intervals is studied by Deep
+et al. (2025). This benchmark differs from the Gaussian benchmark: convergence of an unscaled width to
+zero does not identify its leading constant on then−1/2 scale. Both benchmarks can be attained by averaging
+the underlying wealths.
+Form∈(0,1), define the two constant-fraction mixture wealth processes
+M +t (m) =
+Z 1
+0
+tY
+i=1
+
+1−u+u Xi
+m
+
+du,
+M −t (m) =
+Z 1
+0
+tY
+i=1
+
+1−u+u 1−X i
+1−m
+
+du.
+(6.5)
+Use their one-sided limits atm= 0,1. Forh= log(2/δ), set
+wG = nn+h , w K = hn+h ,
+H ±t,n(m) =w GK ±t (m;δw G) +w KM ±t (m).
+(6.6)
+HereK ±t (m;δw G)denotes the GE-betting wealth in (1.4)–(1.5), computed withδw G in place ofδ. The
+horizon remainsn, and the shared variance estimate is (1.3). As in (1.6), accept a candidate meanm∈[0,1]
+whenH +n,n(m)<2/δandH −n,n(m)<2/δ. LetI Hn (δ)be the closed interval whose endpoints are the infimum
+and supremum of the accepted means; if no mean is accepted, setI Hn (δ) ={ ¯Xn}. EachH ±t,n(µ)is a
+nonnegative test supermartingale starting from one, and its one-sided dependence onmis monotone. Thus
+inversion remains an interval with coverage at least1−δunder (3.1).
+Proposition 6.3(Gaussian and large deviation efficiency).LetX 1, X2, . . .be iid fromP, with meanµ∈
+(0,1)and varianceσ 2. Ifσ 2 >0, then for each fixedδ∈(0,1),
+infI Hn (δ) = ¯Xn − σz1−δ/2√n +o(n −1/2),
+supI Hn (δ) = ¯Xn + σz1−δ/2√n +o(n −1/2)almost surely.
+If insteadn −1 log(1/δn)→ρ∈(0,∞), then, including whenσ 2 = 0,
+infI Hn (δn) a.s.− − →lρ(P),supI Hn (δn) a.s.− − →uρ(P).
+Moreover, any interval procedureCn with coverage at least1−δ n for every iid law on[0,1]satisfies, under
+sampling fromP,
+d(P, m)< ρ=⇒P{m∈C n for all sufficiently largen}= 1.
+The proof is in Appendix E.1.5. At fixedδ,wG →1and the additional mixture wealth is negligible on
+the Gaussian scale. In the large deviation regime,wK →ρ/(1 +ρ)>0, and the constant allocation changes
+the logarithmic rejection threshold by onlyo(n). Finite-sample validity continues to allow conditional-mean
+dependence; independence is used only for these efficiency conclusions.
+18
+6.5 Constructing p-values from GE-betting
+GE-betting is tuned to a significance level through its wealth-dependent fractions. Nevertheless, ap-value
+can be computed without rerunning the strategy over a grid of levels. Normalizing wealth by its rejection
+target removes the level from every update, leaving it only in the initial value. A backward recursion then
+identifies the smallest initial value that leads to rejection.
+Fixn,m∈[0,1], andc∈(0,1], and use the same variance estimates (1.3) at every level. Write
+si =
+p
+(n−i+ 1)bvi−1 andγ(p) =ϕ{Φ −1(p)}, withγ(0) =γ(1) = 0. The normalized updates are
+F +i (p;m) = min
+
+1, p+ (Xi −m) min
+ γ(p)
+si
+, cpm  ,
+F −i (p;m) = min
+
+1, p+ (m−X i) min
+ γ(p)
+si
+, cp1−m  . (6.7)
+Atm= 0, omit the upper-tail cap, and atm= 1, omit the lower-tail cap; in all cases setF ±i (0;m) = 0
+andF ±i (1;m) = 1. For a one-sided levela∈(0,1), letV a,±0 =aandV a,±i =F ±i (V a,±i−1 ;m). This is the GE
+wealth process calibrated to target1/a, multiplied bya; its deterministic rejection event is{Va,±n = 1}.
+Proposition 6.4(Backward inversion of GE-betting).Initializeq ±n (m) = 1and compute, fori=n, . . . ,1,
+q±i−1(m) = inf{p∈[0,1] :F ±i (p;m)≥q ±i (m)}.(6.8)
+Thenπ ±n (m) =q ±0 (m)satisfies{π ±n (m)≤a}={V a,±n (m) = 1}for everya∈(0,1). Under the conditional-
+mean null atm, these are valid one-sidedp-values, and
+pGEn (m) = min{1,2π +n (m),2π −n (m)}(6.9)
+is a valid two-sidedp-value.
+The proof is given in Appendix E.1.6.
+WritingI GEn (δ)for the deterministic GE interval at levelδ, the construction gives the exact identity
+{m∈[0,1] :p GEn (m)> δ}=I GEn (δ), δ∈(0,1).(6.10)
+Consequently it retains both interval geometry and the fixed-level Gaussian efficiency of Theorem 5.1. For
+each candidatem, two backward passes ofnscalar inversions suffice. Bisection must locate the leftmost
+crossing, including when the target is one;Biterations per inversion requireO(nB)map evaluations, inde-
+pendent of the number of levels subsequently queried. This is a fixed-horizon computation using the stored
+observations and scales. It encodes the family of level-specific wealth processes rather than the reciprocal of
+one terminal e-value.
+7 GE-betting under sampling without replacement
+We now apply the Gaussian design principle to the finite-population model in Subsection 3.4. Under iid
+sampling, the centered partial sum has a Brownian-motion limit. Without replacement, however, revealing
+the whole population forcesSN −N µN = 0, so the centered process is pinned at zero at time one and has
+a Brownian-bridge limit. Designing the bet in this bridge experiment therefore accounts for the uncertainty
+removed as the population is revealed and produces the square-root correction in (1.7); a Brownian-motion
+calculation misses this first-order effect whenn/Ndoes not vanish.
+We first derive this update in the Gaussian-bridge experiment, then transfer it to bounded observations us-
+ing the exact Doob martingale of the terminal sample mean. We next state the finite-sample and asymptotic
+guarantees and compare the resulting interval with existing without-replacement methods. As in Section 5,
+the Gaussian experiment is only a device for choosing the betting fractions; the observed population need
+not be Gaussian, and finite-sample validity follows from the remaining-population conditional mean and non-
+negative predictable betting. Appendix D extends the GE-betting construction to a horizon-free confidence
+sequence under sampling without replacement.
+19
+7.1 Gaussian-bridge design
+Let(B t)0≤t≤1 be a standard Brownian bridge and fix a terminal sampling fractionρ∈(0,1). The standard-
+ized terminal statistic is
+Zρ = Bρpρ(1−ρ) .(7.1)
+IfG t =σ(B s :s≤t), then
+Mt =E(Z ρ | Gt) = 1−ρ1−t Btpρ(1−ρ) ,0≤t≤ρ.(7.2)
+The variance clock of this martingale is
+u(t) = Var(Mt) = (1−ρ)tρ(1−t) , u(ρ) = 1.(7.3)
+Indeed,Cov(M s, Mt) =u(s)fors≤t, soM t has the same law as Brownian motion evaluated at timeu(t).
+Consider the level-δ/2upper-tail event
+A⋆ ={Z ρ ≥z 1−δ/2}
+and its indicator e-value21{A⋆}/δ. Conditional onG t,
+Zρ =M t +
+p
+1−u(t)ξ t, ξ t ∼ N(0,1), ξ t ⊥ Gt.
+Hence its continuation probability is
+pt =P(A ⋆ | Gt) = Φ
+(
+Mt −z 1−δ/2p
+1−u(t)
+)
+.(7.4)
+IfK t = 2p t/δ, thenp t = (δ/2)K t is current wealth relative to the rejection threshold. Differentiating the
+continuation probability with respect to the revealed martingale gives
+dpt = ϕ{Φ−1(pt)}p1−u(t) dMt.(7.5)
+Thus the betting fraction per unit increment inMt is
+ψ(pt)p
+1−u(t)
+.(7.6)
+The denominator is the standard deviation of the part of the terminal statistic that has not yet been observed.
+Equivalently, ifHt is an unstandardized terminal-statistic martingale andVt = Var(Hρ | Gt), then
+dpt = ϕ{Φ−1(pt)}√Vt dHt.(7.7)
+7.2 The bounded-data update
+Fix a horizon1≤n < N, an error levelδ∈(0,1), and a clipping constantc∈(0,1]. For a candidate
+population meanm, the terminal statistic before standardization is
+An(m) =S n −nm.(7.8)
+The processS t −tmis not a martingale under sampling without replacement. The appropriate process is
+instead the conditional expectation ofAn(m). Under the point nullµN =m, this Doob martingale is
+H (n)t (m) =E m{An(m)| Ft}= N−nN−t (St −tm),0≤t≤n.(7.9)
+20
+It terminates atH (n)n (m) =A n(m), and its increments satisfy
+H (n)i (m)−H (n)i−1(m) =γ iYi(m), γ i = N−nN−i .(7.10)
+If theN−i+ 1values remaining before drawihave variance
+vremi−1 = 1N−i+ 1 Xxremaining {x−m i(m)}2,
+then the conditional variance remaining at the horizon and the resulting standardization are
+Vi−1 := Varm{An(m)| Fi−1}= (n−i+ 1) N−nN−i vremi−1 ,
+γip
+Vi−1
+=
+s
+N−n
+(N−i)(n−i+ 1)v remi−1 .(7.11)
+Thusγ i measures the contribution of the next centered draw to the terminal statistic, whileVi−1 measures
+the uncertainty still remaining at the horizon. Substituting the shared predictable estimatorbvi−1 from (1.3)
+forv remi−1 gives
+bi,n =
+s
+N−n
+(N−i)(n−i+ 1)bv i−1
+.(7.12)
+The GE-betting procedure now follows directly from the betting rule in Section 1. On the feasible range
+Mn, use the raw fractions in (1.7), with scalebi,n, and apply the clipping, absorbing, and wealth-update
+rules in (1.4)–(1.5), replacingXi −mandm−X i byY i(m)and−Y i(m). Inverting the terminal wealths gives
+the deterministic intervalIbrN,n in (1.8). Replacing its two thresholds by2U+/δand2U −/δ, as in Section 1,
+defines the randomized intervalIbrN,n(U+, U−); settingU + =U − = 1gives the deterministic version. Every
+quantityusedinanupdateispredictable, andthevarianceestimatorissharedacrosscandidatemeans. Hence
+validity comes from nonnegative betting rather than the Gaussian approximation, while the endpoints can
+be found by bisection overMn.
+7.3 Validity and Gaussian efficiency
+The next result collects the same three guarantees as Theorem 5.1: finite-sample validity, interval-valued
+inversion, and optimal first-order Gaussian width. We use the regularized estimator (1.3), shared by both
+wealth processes and all candidate means.
+Theorem 7.1(Validity and Gaussian efficiency under sampling without replacement).Fixδ∈(0,1)and
+c∈(0,1], and construct the intervals in Subsection 7.2. For every fixed populationx1:N ∈[0,1] N and every
+n < N,IbrN,n is an interval on every sample path, and
+Px1:N {µN ∈ IbrN,n} ≥1−δ.(7.13)
+The same validity and interval conclusions hold forIbrN,n(U+, U−).
+Now letxN,1:N be a deterministic triangular array with population meansµN and variancesσ2N →σ 2 >0,
+and letn=n N satisfyn N /N→ρ∈(0,1). Couple the uniformly random permutations of the rows on any
+common probability space; independence across rows is not required. Then
+len(I brN,nN )
+2z1−δ/2τN,nN
+a.s.
+− − →1.(7.14)
+Proof sketch.The validity and interval claims follow as in Theorem 5.1. For efficiency, the Gaussian
+formula (7.4) in Subsection 7.1 again motivates applyingΦ−1: it recovers the predicted terminal statistic
+minus its rejection cutoff, divided by the remaining standard deviation. For a candidate meanm, let
+21
+Ki =K +i (m)be upper-tail wealth,p i = (δ/2)Ki its value divided by the rejection target, andqi = Φ−1(pi)
+while0< p i <1.
+The quantities from Subsection 7.2 account for the dependence between draws. WriteYi =X i −m i(m),
+wherem i(m) = (N m−Si−1)/(N−i+ 1)is the remaining-population mean implied bym, and put
+γi = N−nN−i , r i,N = (n−i+ 1)(N−n)N−i , r n+1,N = 0.
+By (7.9)–(7.10),γ iYi is the change in the conditional predictionH(n)i (m)of the final centered sumSn −nm.
+Meanwhile, (7.11) shows thatr i,N times the remaining-population variance is the conditional variance of
+that sum before drawi. Replacing the remaining-population variance by the shared estimatorbvi−1 gives the
+scaleb i,n =γ i/
+p
+ri,N bvi−1 used in the update.
+While the cap is inactive and wealth has not reached a boundary,
+pi −p i−1 =ϕ(q i−1) γiYipri,N bvi−1 .
+To use the full-sample scale, we multiplyqi by
+p
+ri+1,N /r1,N, the counterpart of
+p
+(n−i)/nin the iid sketch.
+The same identity(Φ −1)′(p)ϕ{Φ−1(p)}= 1as in the iid sketch, together with a second-order Taylor
+expansion, therefore gives
+r ri+1,N
+r1,N
+qi −
+r ri,N
+r1,N
+qi−1 = γiYipr1,N bvi−1 + qi−12√r1,N ri,N
+ γ2i Y 2i
+bvi−1
+−(r i,N −r i+1,N )
+
++R i,N .
+HereR i,N collects the remaining approximation errors, bounded in (E.25) after division by√r1,N. The first
+term is the change in the predicted final sum, divided by the estimated standard deviation of the full sample
+sum. The key calculation is thatri,N decreases by approximatelyγ2i per draw:
+ri,N −r i+1,N =γ 2i {1 +O(N −1)}.
+For candidate means close toµN,E(Y 2i | Fi−1)/bvi−1 ≈1, so the two terms in braces in the rescaled update
+have conditional average approximatelyγ2i. Their difference therefore has approximately zero conditional
+mean, which is the cancellation needed to recover the standardized sum.
+The proof choosesk N → ∞withk N /n→0and stops the expansion atj N =n−k N, before a single
+late draw can make the Taylor approximation inaccurate. Recall thatτN,n =σ N
+p
+(N−n)/{n(N−1)}is
+the standard error of ¯Xn, sonτ N,n =σ N √r1,N is the standard deviation ofSn. For local candidatesm=
+µN −hτ N,n, wherehmeasures distance fromµ N in standard-error units, summing the rescaled increments
+and usingq 0 = Φ−1(δ/2) =−z 1−δ/2 gives
+r rjN +1,N
+r1,N
+qjN =
+H (n)jN (m)
+nτN,n
+−z 1−δ/2 +o(1) =
+¯Xn −m
+τN,n
+−z 1−δ/2 +o(1)almost surely.
+Here the omitted final draws and variance-estimation errors contribute onlyo(1).
+The right-hand side is the usual finite-population Gaussian statistic minus its rejection cutoff. ThusqjN
+becomes large and positive when that statistic stays above the cutoff by a fixed amount, and large and
+negative when it stays below by a fixed amount. Direct bounds for the lastkN draws turn these two cases
+into rejection and acceptance, respectively. The proof makes the error probabilities summable overNon a
+grid of candidate means, so these decisions hold eventually almost surely. The reflected argument handles
+the lower-tail wealth, and monotonicity then places the endpoints at¯Xn ±z 1−δ/2τN,n +o(τ N,n)almost surely.
+Subtracting them gives (7.14). Appendix E.1.4 gives the complete argument.
+7.4 Experiments
+We setδ=.01andc= 1throughout. For the fixed-horizon experiment, we setN= 4000and use 200
+uniformly random reveal orders at eachρ=n/N∈ {.1, .3, .5, .7, .8, .9}. For the fixed-fraction experiment,
+we setρ=.5and vary
+N∈ {50,100,500,10 3,5×10 3,10 4,5×10 4,10 5,5×10 5,10 6},
+22
+using 50 reveal orders throughN= 10 4, 30 atN∈ {5×10 4,10 5}, and 20 atN∈ {5×105,10 6}. The nine
+finite-population families correspond to the same distributions as Figure 4. For GE-betting and the WSR
+running intersection, we report both deterministic and uniformly randomized Markov calibration. At each
+reveal order and design point, one independent pair(U+, U−)is shared by the two methods and held fixed
+over candidate population means. We leave the remaining bounds in their published form: the empirical
+Bernstein–Serfling interval of Bardenet and Maillard (2015) is assembled from several concentration events
+rather than presented as the inversion of one terminal e-value, and Shekhar and Ramdas (2026) do not
+discuss a randomized calibration. For Bernoulli populations, exact hypergeometric inversion is a particularly
+informative baseline because it uses the exact finite-population sampling law; those panels also include the
+finite-alphabet rate interval of Shekhar and Ramdas (2026). Appendix A.4 gives the population construction
+and numerical details. Figure 5 reports mean widths normalized by the finite-population Gaussian width
+2z.995τN,n, while Figure 6 reports mean√n-scaled widths asNvaries atρ=.5.
+Across the six standard populations in the fixed-horizon comparison, GE-betting stays close to the Gaus-
+sian finite-population benchmark and, under each calibration, is uniformly narrower than the corresponding
+WSR running intersection. The fixed-fraction comparison reinforces this pattern: asNincreases, the √n-
+scaled GE-betting widths approach the Gaussian benchmark and are generally narrower than WSR under
+the matched calibration. In both figures, the randomized curves lie below or coincide with their deterministic
+counterparts because the randomized interval is pathwise contained in the deterministic one. In the low-
+variance panels, the regularization in (1.3) is visible at the smallest sampling fractions or population sizes,
+but GE-betting remains much sharper than the empirical Bernstein–Serfling and AS intervals and is gener-
+ally narrower than WSR under the matched calibration. In the Bernoulli panels it also closely tracks exact
+hypergeometric inversion, the natural exact baseline for binary populations. The finite-alphabet rate inter-
+val is finite-sample valid for those populations, whereas the continuous-alphabet AS-CI has an asymptotic
+almost-sure guarantee. We report these procedures as width benchmarks under their respective guarantees.
+8 Conclusion
+Testing by betting can deliver more than finite-sample validity: it can produce fixed-horizon inference that
+is theoretically efficient and empirically state-of-the-art. GE-betting achieves this combination by tracking
+the conditional probability of the optimal terminal Gaussian rejection event. Its clipped predictable updates
+remain finite-sample valid under the constant-conditional-mean model, so the coverage guarantee allows
+martingale dependence. Under iid sampling, a predictable variance estimator shared across candidate means
+yields an interval pathwise and recovers the first-order Gaussian width. Under sampling without replacement,
+the corresponding Brownian-bridge design retains these guarantees while incorporating the finite-population
+correction.
+The simulations reinforce the theory. Across our experiments, GE-betting achieves the tightest confidence
+intervals to date for bounded data, with its largest gains in the low-variance settings. This is an empiri-
+cal comparison rather than a dominance theorem, but it demonstrates the paper’s main practical point:
+martingale-valid inference need not be conservative relative to the best independence-based finite-sample
+benchmark.
+Two lines of research appear particularly promising. First, this conditional-e-value construction suggests
+a broader efficiency theory for e-values. For a given local statistical experiment, one would like to characterize
+which rejection regions can be tracked without first-order loss by nonnegative betting processes and obtain
+matching lower bounds. Natural extensions beyond the one-dimensional mean include inference on variance
+(Maurer and Pontil, 2009; Catoni, 2012; Martinez-Taboada and Ramdas, 2025), vector-valued means in
+Euclidean or smooth Banach spaces (Pinelis, 1994; Catoni and Giulini, 2018; Martinez-Taboada and Ramdas,
+2026a), self-normalized constructions in which a random scale or covariance enters the state (de la Peña et al.,
+2004; Clerico et al., 2025; Martinez-Taboada et al., 2026b), and matrix-valued means (Tropp, 2012; Wang
+and Ramdas, 2025; Martinez-Taboada and Ramdas, 2026b). These works provide sharp concentration and
+nonasymptotic estimation tools for the corresponding settings; a broader efficiency theory would ask when
+those tools can be converted into finite-sample-valid e-values that retain the corresponding local efficiency,
+including with nuisance parameters and richer forms of martingale dependence. Second, the construction
+couldbeextendedbeyondboundedobservations. ThegoalistoreplacetheknownrangeusedinSection5.2by
+23
+Figure 5: (FixedN, varyingρ.) Normalized mean fixed-horizon width over 200 random reveal orders for
+nine fixed populations. Color and marker identify the construction. For GE-betting and WSR, dashed
+curves with hollow markers use deterministic Markov calibration, while solid curves with filled markers use
+uniformly randomized Markov calibration. The remaining intervals are shown in their published form, and
+the dotted line is the Gaussian finite-population benchmark. Exact hypergeometric and finite-alphabet rate
+intervals appear only for Bernoulli populations. Bardenet–Maillard and Shekhar–Ramdas curves are omitted
+from rows two and three because their much wider intervals obscure the comparison with WSR.
+24
+Figure 6: (Fixedρ, varyingN.) √n-scaled mean 99% confidence-interval width at the fixed sampling fraction
+n/N=.5, as the population sizeNvaries, for nine finite-population families. Means are computed over
+50 random reveal orders forN≤10 4, 30 forN∈ {5×10 4,10 5}, and 20 forN∈ {5×10 5,10 6}. Color
+and marker identify the construction. For GE-betting and WSR, dashed curves with hollow markers use
+deterministic Markov calibration, while solid curves with filled markers use uniformly randomized Markov
+calibration. The remaining intervals are shown in their published form, and the dotted line is the√n-scaled
+Gaussian finite-population benchmark. Exact hypergeometric and finite-alphabet rate intervals appear only
+for Bernoulli populations. Bardenet–Maillard and Shekhar–Ramdas curves are omitted from rows two and
+three because their much wider intervals obscure the comparison with WSR. For readability, the top, middle,
+and bottom rows begin atN= 50,N= 10 2, andN= 10 3, respectively.
+25
+conditional moment or tail assumptions while retaining finite-sample-valid e-values and Gaussian efficiency.
+Possible tools include predictable truncation and mixture e-values that adapt to unknown scale and tail
+behavior without changing the target rejection event at first order.
+Acknowledgements
+DMT thanks Arun Kuchibhotla and Ben Chugg for insightful conversations. AI was employed to assist with
+the preparation of this paper, but the authors maintain responsibility for correctness of the claims.
+References
+Anderson, T. W. (1969). Confidence limits for the expected value of an arbitrary bounded random variable
+with a continuous distribution function.Bulletin of the International Statistical Institute, 43(2):249–251.
+Austern, M. and Mackey, L. (2022). Efficient concentration with Gaussian approximation.arXiv preprint
+arXiv:2208.09922.
+Azuma, K. (1967). Weighted sums of certain dependent random variables.Tohoku Mathematical Journal,
+19(3):357–367.
+Baas, S., ter Schure, J., and van Rosmalen, J. (2026). Adaptive clinical trials based on design-optimal
+e-values with automatic curtailment: An application to single-arm trials with binary data.arXiv preprint
+arXiv:2605.28653.
+Bardenet, R. and Maillard, O.-A. (2015). Concentration inequalities for sampling without replacement.
+Bernoulli, 21(3):1361–1385.
+Bennett, G. (1962). Probability inequalities for the sum of independent random variables.Journal of the
+American Statistical Association, 57(297):33–45.
+Bentkus, V.(2002). AremarkontheinequalitiesofBernstein, Prokhorov, Bennett, Hoeffding, andTalagrand.
+Liet. Mat. Rink, 42(3):332–342.
+Bentkus, V. (2003). An inequality for tail probabilities of martingales with differences bounded from one
+side.Journal of Theoretical Probability, 16(1):161–173.
+Bentkus, V. (2004). On Hoeffding’s inequalities.Annals of Probability, pages 1650–1673.
+Bentkus, V., Kalosha, N., and Van Zuijlen, M. (2006). On domination of tail probabilities of (super)
+martingales: explicit bounds.Lithuanian Mathematical Journal, 46(1):1–43.
+Bercu, B. and Touati, A. (2008). Exponential inequalities for self-normalized martingales with applications.
+The Annals of Applied Probability, 18(5):1848–1869.
+Catoni, O. (2012). Challenging the empirical mean and empirical variance: A deviation study.Annales de
+l’Institut Henri Poincaré, Probabilités et Statistiques, 48(4):1148–1185.
+Catoni, O. and Giulini, I. (2018). Dimension-free PAC-Bayesian bounds for the estimation of the mean of a
+random vector.
+Clerico, E., Flynn, H., Kotłowski, W., and Neu, G. (2025). Confidence sequences for generalized linear
+models via regret analysis.arXiv preprint arXiv:2504.16555.
+Clerico, E., Wegel, T., Azangulov, I., and Rebeschini, P. (2026). Time-sensitive anytime-valid testing.arXiv
+preprint arXiv:2605.06521.
+de la Peña, V. H. (1999). A general class of exponential inequalities for martingales and ratios.The Annals
+of Probability, 27(1):537–564.
+26
+de la Peña, V. H., Klass, M. J., and Lai, T. L. (2004). Self-normalized processes: Exponential inequalities,
+moment bounds and iterated logarithm laws.The Annals of Probability, 32(3A):1902–1933.
+Deep, V., Bassamboo, A., and Juneja, S. (2025). Asymptotic optimality theory of confidence intervals of the
+mean.arXiv preprint arXiv:2501.19126. Version 5, revised August 10, 2026.
+Fishman, G. S. (1991). Confidence intervals for the mean in the bounded case.Statistics & Probability
+Letters, 12(3):223–227.
+Freedman, D. A. (1975). On tail probabilities for martingales.The Annals of Probability, 3(1):100–118.
+Gaffke, N.(2005). Threeteststatisticsforanonparametricone-sidedhypothesisonthemeanofanonnegative
+random variable.Mathematical Methods of Statistics, 14(4):451–467.
+Grünwald, P., de Heide, R., and Koolen, W. (2024). Safe testing.Journal of the Royal Statistical Society
+Series B: Statistical Methodology, 86(5):1091–1128.
+Hoeffding, W.(1963). Probabilityinequalitiesforsumsofboundedrandomvariables.Journal of the American
+Statistical Association, 58(301):13–30.
+Holmes, C. and Walker, S. G. (2026). Predicting fixed-sample test decisions enables anytime-valid inference.
+arXiv:2602.13872.
+Honda, J. and Takemura, A. (2010). An asymptotically optimal bandit algorithm for bounded support
+models. InProceedings of the 23rd Annual Conference on Learning Theory, pages 67–79.
+Koning, N. W. and van Meer, S. (2026). Anytime validity is free: Inducing sequential tests.Journal of the
+Royal Statistical Society Series B: Statistical Methodology, page qkag050.
+Kuchibhotla, A. K. (2024). On the missing factor in some concentration inequalities for martingales.arXiv
+preprint arXiv:2412.20542.
+Kuchibhotla, A. K. and Zheng, Q. (2021). Near-optimal confidence sequences for bounded random variables.
+InInternational Conference on Machine Learning, pages 5827–5837. PMLR.
+Lan, K. K. G., Simon, R., and Halperin, M. (1982). Stochastically curtailed tests in long-term clinical trials.
+Communications in Statistics. Part C: Sequential Analysis, 1(3):207–219.
+Learned-Miller, E. and Thomas, P. S. (2020). A new confidence interval for the mean of a bounded random
+variable.arXiv preprint arXiv:1905.06208.
+Martinez-Taboada, D., Chugg, B., and Ramdas, A. (2026a). Bentkus-type asymptotic e-values.arXiv
+preprint arXiv:2606.06332.
+Martinez-Taboada, D., González, T., and Ramdas, A. (2026b). Vector-valued self-normalized concentration
+inequalities beyond sub-Gaussianity. InProceedings of the 37th International Conference on Algorithmic
+Learning Theory, volume 313 ofProceedings of Machine Learning Research, pages 1–31. PMLR.
+Martinez-Taboada, D. and Ramdas, A. (2025). Sharp empirical Bernstein bounds for the variance of bounded
+random variables.arXiv preprint arXiv:2505.01987.
+Martinez-Taboada, D. and Ramdas, A. (2026a). Empirical Bernstein in smooth Banach spaces.The Annals
+of Applied Probability, 36(3):2199–2236.
+Martinez-Taboada, D. and Ramdas, A. (2026b). Intrinsic dimension concentration inequalities for self-adjoint
+operators.arXiv preprint arXiv:2602.13465.
+Maurer, A. and Pontil, M. (2009). Empirical Bernstein bounds and sample variance penalization. In
+Proceedings of the 22nd Annual Conference on Learning Theory.
+Ming, J., Ramdas, A., Shen, Y., Wang, R., and Waudby-Smith, I. (2026). Gaffke’s confidence interval for
+the mean of bounded data is inadmissible but asymptotically efficient.arXiv preprint arXiv:2607.18661.
+27
+Orabona, F. and Jun, K.-S. (2024). Tight concentrations and confidence sequences from the regret of
+universal portfolio.IEEE Transactions on Information Theory, 70(1):436–455.
+Pinelis, I. (1994). Optimum bounds for the distributions of martingales in Banach spaces.The Annals of
+Probability, 22(4):1679–1706.
+Pinelis, I. (2006a). Binomial upper bounds on generalized moments and tail probabilities of (super) martin-
+gales with differences bounded from above.Lecture Notes-Monograph Series, pages 33–52.
+Pinelis, I. (2006b). On normal domination of (super) martingales.Electronic Journal of Probability [electronic
+only], 11:1049–1070.
+Pinelis, I.(2014). OntheBennett-Hoeffdinginequality.Annales de l’IHP Probabilités et statistiques, 50(1):15–
+27.
+Ramdas, A., Grünwald, P., Vovk, V., and Shafer, G. (2023). Game-theoretic statistics and safe anytime-valid
+inference.Statistical Science, 38(4):576–597.
+Ramdas, A. and Manole, T. (2026). Randomized and exchangeable improvements of Markov’s, Chebyshev’s
+and Chernoff’s inequalities.Statistical Science, 41(1):121–142.
+Ramdas, A., Ruf, J., Larsson, M., and Koolen, W. M. (2022). Admissible anytime-valid sequential inference
+must rely on nonnegative martingales.arXiv preprint arXiv:2009.03167.
+Ramdas, A. and Wang, R. (2025). Hypothesis testing with e-values.Foundations and Trends®in Statistics,
+1(1-2):1–390.
+Rosenblum, M. A. and van der Laan, M. J. (2009). Confidence intervals for the population mean tailored
+to small sample sizes, with applications to survey sampling.The International Journal of Biostatistics,
+5(1):1–46.
+Serfling, R. J. (1974). Probability inequalities for the sum in sampling without replacement.The Annals of
+Statistics, 2(1):39–48.
+Shekhar, S. and Ramdas, A. (2023). On the near-optimality of betting confidence sets for bounded means.
+arXiv preprint arXiv:2310.01547.
+Shekhar, S. and Ramdas, A. (2026). Tighter confidence intervals under without replacement sampling via
+empirical rate functions. arXiv:2603.14423.
+Taga, E. O., Oymak, S., and Shekhar, S. (2026). Learning to bet for horizon-aware anytime-valid testing.
+arXiv preprint arXiv:2603.19551.
+Talagrand, M. (1995). The missing factor in Hoeffding’s inequalities.Annales de l’IHP Probabilités et
+statistiques, 31(4):689–702.
+Tropp, J. A. (2012). User-friendly tail bounds for sums of random matrices.Foundations of Computational
+Mathematics, 12(4):389–434.
+Ville, J. (1939).Étude critique de la notion de collectif. PhD thesis, Université de Paris.
+Vlassis, N. and Thomas, P. S. (2026). An exact distribution-free test for means of nonnegative random
+variables.arXiv preprint arXiv:2607.08415.
+Vorácek, V. and Orabona, F. (2026). STaR-Bets: Sequential target-recalculating bets for tighter confidence
+intervals.Advances in Neural Information Processing Systems, 38:161909–161953.
+Vovk, V. and Wang, R. (2021). E-values: Calibration, combination and applications.The Annals of Statistics,
+49(3):1736–1754.
+Wang, H. and Ramdas, A. (2025). Sharp matrix empirical Bernstein inequalities. InAdvances in Neural
+Information Processing Systems, volume 38.
+28
+Waudby-Smith, I. and Ramdas, A. (2024). Estimating means of bounded random variables by betting.
+Journal of the Royal Statistical Society: Series B (Statistical Methodology), 86(1).
+A Experimental details
+A.1 Experimental design under sampling with replacement
+All experiments setδ=.01and retain chronological order. The six standard distributions are Beta(2,2),
+Beta(1,5), Beta(1/2,1/2), Uniform(0,1), Bernoulli(.5), and Bernoulli(.1); the low-variance distributions are
+Beta(50,50), Beta(20,80), and Uniform(.45, .55), with variances approximately.00248,.00158, and.00083.
+Every betting method in the main experiment is evaluated under deterministic and uniformly randomized
+Markov calibration. Randomized calibration uses one independent uniform for each one-sided test, held fixed
+over candidate means and shared across methods within a dataset. Product, STaR, and GE-betting all use
+the solvency constantc= 1.
+The betting curves in Figure 4 and the fixed-hinge comparison in Figure 9 use
+n∈ {10,50,100,500,10 3,5000,10 4,5·10 4,10 5,5·10 5,10 6}.
+The first row contains Uniform(0,1), Beta(1/2,1/2), and Bernoulli(.1), with horizons beginning at10. The
+second contains Beta(2,2), Beta(1,5), and Bernoulli(.5), with horizons beginning at102; the third contains
+the three low-variance distributions, with horizons beginning at10 3. The product-betting curve in the
+first row, along with all STaR and GE-betting curves, uses the predictable variance estimator in (1.3),
+shared across candidate means. In particular, the plotted STaR implementation keeps the square-root
+dependence on current wealth, uses this shared estimator, and holds wealth fixed after it reaches its one-
+sided target. Its inverted acceptance set is therefore an interval for every dataset. Figure 7 separately
+contrasts this implementation with the published candidate-centered STaR implementation and gives the
+analogous comparison for GE-betting.
+The Gaffke curves in Figure 4 come from a dedicated experiment in which one simulated sequence supplies
+all nested sample sizes. For the six standard distributions, the short-horizon points usen∈ {10,50,100,500}.
+Fromn= 10 3 onward, all nine distributions usen∈ {103,3·10 3,10 4,3·10 4,10 5,3·10 5,10 6}. Ordinary
+Gaffke is evaluated by normalized B-splines throughn= 3000for continuous data and by a fourth-order
+Cornish–Fisher approximation to the exact Dirichlet moments thereafter. The experiment uses 120 paths
+per distribution and horizon throughn= 10 3, 60 throughn= 10 4, and 30 thereafter, for 6,120 paths per
+calibration. The randomized product-orthant endpoints are computed on the same paths with one saved
+uniform for each one-sided test, held fixed throughout inversion. This refinement can differ from ordinary
+Gaffke only when an ordinary endpoint lies beyond the sample range, which occurs mainly at the shortest
+horizons. The Gaffke curves report means. The saved experiments also retain the pointwise 10th–90th
+percentiles of the widths, although Figure 4 displays only their means.
+The betting sample contains 7,560 paired datasets per method and calibration: 120 per distribution
+and horizon throughn= 10 3, 60 throughn= 10 4, and 30 thereafter. One-sided processes using a shared
+estimator are inverted directly by bisection. For the auxiliary fixed squared-hinge comparison, we evaluate
+decisions on an adaptively refined grid over the full candidate range. If this grid finds more than one
+connected accepted piece, we report the distance from the smallest to the largest accepted candidate. The
+large-sample comparison in Figure 7 uses 30 paired sequences per distribution and horizon for103 ≤n≤10 7.
+Candidate-centered endpoints are first bracketed and then found by bisection. For the candidate-dependent
+GE-betting rule, we also use the adaptively refined full grid to check for disconnected accepted pieces. The
+two methods using a shared estimator are inverted by bisection at their ordered one-sided boundaries.
+A.2 Empirical cost of enforcing an interval-valued inversion
+Figure 7 compares candidate-centered implementations of STaR and GE-betting with their counterparts
+using a shared estimator. Using a predictable variance estimator shared across candidate means makes
+the latter two inversions intervals before post-processing. For the candidate-dependent GE-betting rule, we
+show both the distance between its smallest and largest accepted grid points and the length of its largest
+29
+connected accepted piece. The candidate-centered STaR curve reports the connected piece containing the
+sample mean.
+Figure 7: Direct paired comparison of mean√n-scaled widths for STaR and GE-betting over103 ≤n≤10 7.
+Color and marker identify the betting construction. Dashed curves with hollow markers use candidate-
+specific variance estimators; solid curves with filled markers use an estimator shared across candidate means.
+The dotted GE-betting curve gives the length of the largest connected accepted piece; its dashed counterpart
+gives the distance between the smallest and largest accepted grid points. Candidate-centered STaR reports
+the connected piece containing the sample mean, while the curves using a shared estimator are interval
+widths for every dataset. All four procedures use uniformly randomized Markov calibration, with the same
+one-sided uniforms held fixed and shared within each dataset. Every curve averages the same 30 datasets
+per distribution and horizon.
+There is no deterministic ordering between a candidate-dependent strategy and its counterpart using a
+shared estimator. Sharing the estimator across candidate means changes the predictable variance estimate,
+not merely the post-processing of a fixed confidence set, so it can move either endpoint. Empirically, how-
+ever, both procedures with shared estimators retain essentially the same width as their candidate-centered
+counterparts while guaranteeing interval geometry on every path.
+For GE-betting, the interval using the shared estimator is narrower on average in seven of nine panels
+atn= 10 3, with its largest reduction for Uniform(.45, .55), and the two implementations become nearly
+indistinguishableatthelargesthorizons. TheSTaRcomparisonshowsthesamepracticalmessage: theshared
+predictable variance estimator yields a convex confidence set at little empirical cost. These comparisons
+describe average performance; they do not claim one method is narrower on every dataset.
+30
+A.3 Sensitivity to the e-value-preserving nonnegativity cap
+The constantc∈(0,1]determines how close a predictable betting fraction may come to its one-step non-
+negativity boundary. In the upper-tail process the cap isc/m, and in the reflected lower-tail process it is
+c/(1−m). The main experiments usec= 1. To display the empirical effect of this choice, Figure 8 repeats
+the fixed-sample experiment withc∈ {1/2,3/4,1}.
+The comparison is paired: each value ofcuses the same simulated sequences, horizons, and replication
+counts. Figure 8 shows only deterministic product betting, STaR betting, and GE-betting. Color identifies
+the betting construction, while line and marker identify the solvency fraction.
+Figure 8: Mean √n-scaled widths of deterministic confidence intervals for product betting, STaR betting,
+and GE-betting atc∈ {1/2,3/4,1}. Color identifies the betting construction; solid lines with circles use
+c= 1/2, dashed lines with diamonds usec= 3/4, and dotted lines with triangles usec= 1.
+A.4 Experimental design under sampling without replacement
+The experiment in Figure 5 uses populations of sizeN= 4000corresponding to the same nine distributions
+as the main with-replacement experiment. Figure 6 uses the same deterministic construction separately at
+each population size. For each continuous distribution, the finite population consists of its(j−1/2)/N
+quantiles,j= 1, . . . , N. The Bernoulli populations contain exactly the corresponding proportions of zeros
+31
+and ones. Thus both experiments fix each population and average only over the random reveal order; neither
+introduces a second layer of iid sampling from the named distribution.
+We setδ=.01andc= 1, and use 200 uniformly random reveal orders at each sampling fraction
+ρ=n/N∈ {.1, .3, .5, .7, .8, .9}.
+For Figure 6, we instead fixρ=.5and use
+N∈ {50,100,500,10 3,5×10 3,10 4,5×10 4,10 5,5×10 5,10 6}.
+We use 50 reveal orders forN≤104, 30 forN∈ {5×104,10 5}, and 20 forN∈ {5×105,10 6}. For GE-betting
+and the running-intersection WSR product strategy, we report both deterministic and uniformly randomized
+Markov calibration. For each population, reveal order, and design point, the randomized versions use one
+independent pairU +, U− ∼Unif(0,1), shared across the two betting methods and held fixed throughout
+inversion over the candidate mean. The permutation and randomizer streams are generated separately from
+the master seed (20260813). Betting-interval endpoints are located by 30 bisection steps for Figure 5 and 24
+for Figure 6. We retain the published calibrations for the empirical Bernstein–Serfling interval of Bardenet
+and Maillard (2015) and the continuous-alphabet AS-CI of Shekhar and Ramdas (2026): the former combines
+several concentration events rather than inverting one explicit terminal e-value, while the latter paper does
+not discuss randomized calibration. For the two Bernoulli populations, we additionally report exact equal-
+tail hypergeometric inversion and the finite-alphabet rate interval of Shekhar and Ramdas (2026). These
+last two procedures use the binary population structure and are therefore omitted from the other seven
+panels. Every interval is intersected with the feasible rangeM n. In Figure 5, each width is divided by
+2z.995σN
+p
+(N−n)/{n(N−1)}. Figure 6 instead plots the Monte Carlo mean of √ntimes the width; its
+dotted benchmark is2z .995σN
+p
+(N−n)/(N−1). The saved data contain every pathwise width as well as
+the displayed means and their Monte Carlo standard errors.
+For a binary population, the exact hypergeometric continuation probability also gives a useful interpre-
+tation of GE-betting. SupposeM=N mis an integer, letAbe an upper-tail terminal event, and write
+pi =P m(A| Fi). Ifp (1)i andp (0)i are the continuation probabilities after the next observation is one or zero,
+then
+pi−1 =m i(m)p(1)i +{1−m i(m)}p(0)i (A.1)
+and
+pi =p i−1 +{p (1)i −p (0)i }{Xi −m i(m)}.(A.2)
+The exact betting fraction is consequently
+ℓexacti = p(1)i −p (0)ipi−1 .(A.3)
+GE-betting replaces the hypergeometric continuation probability by its Gaussian approximation and the
+finite difference in (A.3) by the derivative in (7.5). This explains why the new interval can approach exact
+hypergeometric inversion while remaining applicable to arbitrary populations in[0,1]N.
+B Near-optimal concentration and squared-hinge betting
+Product betting may be understood as tracking the conditional expectation of an exponential terminal e-
+value. The exponential is a smooth approximation to the rejection indicator, not the indicator itself. After
+normalization at the rejection boundary, it majorizes that indicator and has an explicit null expectation.
+Conditioning on the current Gaussian partial sum and differentiating gives the next predictable betting
+amount. This convenience has a cost: the exponential is positive far below the rejection boundary and
+continues to grow far above it, so its null expectation assigns weight to outcomes that do not affect the test
+decision.
+The conditional-e-value calculation is not tied to the exponential. We can replace it by a test function
+closer to the indicator, take its conditional expectation in the same Gaussian design experiment, and transfer
+32
+the derivative of that expectation to bounded data. Powered hinges interpolate between an indicator and
+an exponential; the squared hinge is the simplest smooth choice that retains explicit Gaussian conditional
+expectations. This appendix develops that construction and compares its finite-sample performance with
+product betting.
+Related work on near-optimal concentration.Near-optimal concentration replaces exponential Cher-
+noff majorants by sharper comparison inequalities and positive-part moments (Talagrand, 1995; Bentkus,
+2002, 2003, 2004; Pinelis, 2006a; Bentkus et al., 2006; Pinelis, 2006b, 2014; Kuchibhotla, 2024). Kuchibhotla
+and Zheng (2021) obtain near-optimal confidence sequences from Bentkus bounds, while Martinez-Taboada
+et al. (2026a) use the same ideas to remove an analogous constant-factor loss for asymptotic e-values. Here
+the squared hinge is used only to choose a predictable betting amount. The resulting e-value is validated
+directly under the conditional-mean model, rather than through the comparison inequality.
+B.1 Powered hinges and their Gaussian benchmark
+Near-optimal concentration can be understood through the test-function form of Markov’s inequality. Iff
+is nonnegative and nondecreasing, then
+1{Y≥x} ≤ f(Y)f(x) ,P{Y≥x} ≤ Ef(Y)f(x) .(B.1)
+The test function majorizes the rejection indicator and has a tractable expectation. Chernoff’s choicef(y) =
+eλy is convenient but loose: it is positive far below the boundary and continues to grow far above it. A
+tractable majorant closer to the indicator can therefore produce sharper inference. The same principle
+applies when an e-value is calibrated by Markov’s inequality, or an e-process by Ville’s inequality.
+Bentkus–Pinelis inequalities useα-powered hinges, whereαis a shape parameter rather than an error
+probability:
+fα,t(y) =
+
+1 + y−tα α+ ,0< α <∞.
+This is a rescaled positive-part power with truncation pointa=t−α. Its two endpoints are
+f0,t(y) =1{y≥t}, f ∞,t(y) =e y−t,
+where the second limit follows from(1 +u/α) α →e u. Finiteαinterpolates between the indicator and
+exponential: it vanishes below a truncation point but retains smooth polynomial growth above it. This
+family underlies near-optimal bounds of Bentkus and Pinelis (Bentkus, 2004; Pinelis, 2006a; Bentkus et al.,
+2006).
+The corresponding Gaussian benchmark makes the improvement quantitative. ForZ∼ N(0,1), let
+Iα(a) =E[(Z−a) α+], E α,a(Z) = (Z−a) α+Iα(a) .
+Thresholding this normalized hinge at2/δrejects when
+Z≥U α,δ/2(a) :=a+
+ 2Iα(a)
+δ
+1/α
+, q α,δ/2 := infa∈R Uα,δ/2(a).(B.2)
+Martinez-Taboada et al. (2026a) show that the optimized cutoff is near-optimal:
+z1−δ/2 ≤q α,δ/2 ≤z 1−δ/(2cα), c α =e αα−αΓ(α+ 1),(B.3)
+with the indicator endpointα= 0attaining the exact Gaussian quantile. Consequently, inversion in a
+Gaussian mean experiment has first-order two-sided width
+2σqα,δ/2√n .(B.4)
+Subsection B.2 specializes this construction toα= 2. Its bounded-data strategy has the same Gaussian
+cutoff, and Figure 9 illustrates the resulting width.
+33
+B.2 A squared-hinge terminal e-value and an exact bounded-data strategy
+The exponential test function is tractable, but Markov’s (or Ville’s) inequality uses it only as a majorant of
+the rejection indicator. It assigns positive value even far below the rejection region and can therefore spend
+null expectation where it does not help the test. The powered-hinge construction above suggests replacing
+it by the squared hingeh a(z) = (z−a) 2+, which is zero below its truncation pointaand increases only
+when the Gaussian statistic exceedsa, the side on which the test can reject. This gives the fixed-horizon
+connection with near-optimal testing by betting: choose a fixed-horizon e-value closer to the indicator, then
+construct a predictable bounded-data betting strategy from its conditional expectation. Define
+I2(a) =Eh a(Z), U 2,δ/2(a) =a+
+p
+2I2(a)/δ.
+Thenh a(Z)/I 2(a)is a Gaussian e-value whose level-δ/2cutoff isZ≥U 2,δ/2(a). HereI 2(a)is its normalizing
+constant, whileU 2,δ/2(a)is the standardized Gaussian cutoff for rejection. This is theα= 2instance of
+(B.2). We therefore choose
+a∗δ/2 ∈arg mina≥0 U2,δ/2(a).(B.5)
+The optimization selects the truncation point that reaches the rejection threshold with the smallest Gaussian
+cutoff. We use the resulting Gaussian e-value to choose a predictable betting amount, and then validate the
+bounded-data e-value directly.
+With current Gaussian partial sumxand remaining variancev, its conditional expectation and spatial
+derivative are
+Ua(v, x) =E[(x+ √vZ−a) 2+],
+Da(v, x) =∂xUa(v, x) = 2{(x−a)Φ(d) + √vϕ(d)}, d= (x−a)/ √v.(B.6)
+Although the fixed-horizon hinge is nonsmooth, averaging over the unobserved Gaussian increment smooths
+its conditional expectation. The standardized distanced= (x−a)/ √vrecords how far the current partial
+sum is from the truncation point in units of remaining uncertainty. Consequently,Da(v, x)is small when
+this point is remote and increases as the data make rejection plausible. For standard Brownian motion
+(Wt)0≤t≤1, the martingale representation gives
+I2(a) +
+Z t
+0
+Da(1−s, Ws) dWs =U a(1−t, Wt).
+HenceD a is the predictable betting amount per unit Gaussian increment associated with the squared-hinge
+e-variable. The finite-sample construction replaces the Brownian partial sum and variance by predictable
+bounded-data counterparts. Letγ i be the scale of the next centered increment,v i−1 the variance still
+available before the horizon, andSi−1 = Pj<i γj(Xj −m)the scaled partial sum already observed. The
+chain rule then gives the unclipped upper-tail betting amount
+ebi =γ iDa(vi−1, Si−1).
+Starting fromK 0 =I 2(a), and for a clipping constant0< c≤1, we use
+bi = min{ebi, cKi−1/m}, K i =K i−1 +b i(Xi −m),
+and reflect the construction for the lower tail. The normalized terminal wealthKn/I2(a)is the resulting
+one-sided e-value. The Gaussian calculation determines how much to bet, whereas clipping prevents a worst-
+case bounded jump from making wealth negative. Clipping changes only the amount actually bet; it does
+not alter the scaled partial sum used to compute later betting amounts.
+The same Gaussian calculation suggests the following heuristic first-order prediction: under consistent
+studentization, vanishing increments, and an asymptotically inactive clip, one expects for largenthat (the
+squared hinge limit is)
+√nlen(C hingen, ¯X )≈2σU 2,δ/2(a), U 2,δ/2(a) =a+
+r
+2I2(a)
+δ ,(B.7)
+34
+Figure9: Mean √n-scaledconfidence-intervalwidthsforproductbettingandfixedsquared-hingebettingover
+the nine distributions in the main experiment. Color and marker identify the betting construction; dashed
+curves with hollow markers use deterministic Markov calibration, and solid curves with filled markers use
+uniformly randomized Markov calibration. Dotted lines show the product Gaussian limit and the heuristic
+squared-hinge Gaussian prediction.
+35
+whereC hingen, ¯X is the accepted component containing ¯Xn. Ata=a ∗δ/2, the right-hand side is the predicted
+optimized Bentkus–Pinelis constant. This local prediction concerns the component containing the empirical
+mean and does not exclude remote accepted components.
+Figure 9 compares the present squared-hinge construction with product betting from Section 4.1. The
+squared-hinge strategy empirically approaches the sharper prediction in (B.7), whereas product betting
+approaches its exponential-test-function limit. The comparison is descriptive: both methods retain their
+finite-sample validity under the conditional-mean model.
+C Planned-window confidence sequences under sampling with re-
+placement
+The fixed-horizon interval in Subsection 5.2 is designed to be narrow at one chosen sample size. Suppose
+instead that a maximum sample sizenis known, but the interval may be inspected or the experiment may
+stop at anyt≤n. We want simultaneous coverage over this entire window without concentrating the design
+att=n. The construction below places the fixed-horizon GE-betting rule at a geometric collection of
+checkpoints and combines the resulting accounts into one e-process. In this sense it is horizon-free within
+the planned window; the known upper bound makes the portfolio finite, but is not the target maturity of
+the portfolio. The construction applies to every finiten, however large.
+C.1 Construction
+LetX 1, . . . , Xn ∈[0,1]satisfy the constant conditional-mean model (3.1). Choose checkpointsh 0 <· · ·<
+hL =napproximately geometrically in ordinary time. More precisely, forη >1, set
+hk+1 = min{n,max{h k + 1,⌈ηh k⌉}}.(C.1)
+This schedule hasO{log(n/h 0)}accounts, so enlarging the planned window increases the work per update
+only logarithmically. Fix deterministic weightsw 0, . . . , wL >0with Pk wk = 1, writeT= 2/δ, and, for
+every candidate meanm∈[0,1], initialize
+A+0,k(m) =A −0,k(m) =w k.
+Accountkfollows the fixed-horizon update from Subsection 5.2, withhk in place ofn. Whilei≤h k and
+0< A±i−1,k(m)< T, define
+p±i−1,k(m) = δ2 A±i−1,k(m), b i,k = 1p(hk −i+ 1)bvi−1 ,(C.2)
+ℓ+i,k(m) = min nψ{p+i−1,k(m)}bi,k, cm o , ℓ −i,k(m) = min ψ{p−i−1,k(m)}bi,k, c1−m  .(C.3)
+Herebvi−1 is the shared predictable estimator in (1.3). As in the main construction, the upper cap is absent
+atm= 0, and the lower cap is absent atm= 1. The wealth updates are
+A+i,k(m) = min hT, A+i−1,k(m){1 +ℓ +i,k(m)(Xi −m)} i ,
+A−i,k(m) = min hT, A−i−1,k(m){1 +ℓ −i,k(m)(m−X i)}i .(C.4)
+An account is held fixed after timehk, or after its wealth reaches zero orT. Sum the accounts within each
+one-sided test,
+K +t (m) =
+LX
+k=0
+A+t,k(m), K −t (m) =
+LX
+k=0
+A−t,k(m),
+and invert them:
+Jt ={m∈[0,1] :K +t (m)< T, K−t (m)< T}, C t =
+t\
+r=1
+Jr.(C.5)
+The raw intervalsJt already form a confidence sequence. The running intersectionsCt are an optional nested
+version.
+36
+C.2 Why the construction works
+Under iid sampling with varianceσ2, the pointwise standard error at timetisσ/√t. Thus ordinary timet,
+rather than the bridge clockt/(N−t)from Appendix D, indexes the amount of information. A geometric
+grid intconsequently places the accounts at geometric variance scales. Each account is locally designed
+for one such scale, while the portfolio covers every intermediate time. The largest checkpointnonly closes
+the finite schedule: unlike the fixed-horizon interval, the construction does not give all initial wealth to an
+account designed forn.
+Proposition C.1(Anytime validity and interval inversion).For any adapted observationsX 1, . . . , Xn ∈
+[0,1]satisfying(3.1),
+P{µ∈J t for everyt= 1, . . . , n} ≥1−δ.(C.6)
+The same guarantee holds for(Ct)nt=1. Moreover,J t andC t are intervals on every sample path.
+Proof.Atm=µ, the centered increments in (C.4) have conditional mean zero. The solvency caps make every
+account nonnegative, and stopping or truncating an account atTpreserves the supermartingale inequality.
+Indeed, before stopping, conditional Jensen’s inequality gives
+E[min{T, A(1 +ℓY)} | Fi−1]≤min{T, A}=A
+wheneverA < TandE[Y| Fi−1] = 0. Each account is therefore a nonnegative supermartingale starting from
+wk. Consequently,K +t (µ)andK −t (µ)are test supermartingales, each starting from one. Ville’s inequality
+and a union bound give
+P
+
+sup
+t≤n
+K +t (µ)≥T
+
++P
+
+sup
+t≤n
+K −t (µ)≥T
+
+≤ 2T =δ,
+which proves (C.6). Taking running intersections does not change the event that the true mean is ever
+excluded.
+For the interval claim, the amount bet relative to the rejection target ispψ(p) =ϕ{Φ−1(p)}, a nonnegative
+concave function ofp. The predictable scaleb i,k is shared across candidate means. The argument of
+Proposition 6.1, applied to each account, shows that every upper-tail wealth is nonincreasing inmand
+every lower-tail wealth is nondecreasing. These orders are preserved by summation, soJt is an interval; the
+intersectionC t is also an interval.
+C.3 Experiment
+We usen= 10,000,δ=.05, and 40 iid paths from each of the nine laws in Figure 4. The proposed procedure
+takesh 0 = 5,η= 1.3, uniform weights over the resulting 29 checkpoints, andc= 1. We compare it with
+three modern confidence sequences for bounded means. Hedged-CS and aGRAPA use the predictable plug-in
+strategies of Waudby-Smith and Ramdas (2024), both withc= 1/2, prior mean1/2, prior variance1/4, and
+one initial pseudo-observation. For Hedged-CS, the unclipped one-sided fraction is
+ℓHi =
+s
+2 log(2/δ)
+bvi−1ilog(i+ 1) .(C.7)
+We also include PRECiSE-A-CO96, the constant-time universal-portfolio approximation of Orabona and Jun
+(2024), using the authors’ Cover–Ordentlich regret bound. These competitors represent predictable plug-in
+and universal- portfolio approaches that are among the sharpest current confidence sequences for bounded
+means.
+The figure reports the raw current-time intervals for every method; running intersections can only shorten
+them. For aGRAPA we report the convex hull of the numerically inverted acceptance set, which preserves
+coverage if the set is disconnected. All coverage diagnostics monitor the true mean at every time1, . . . , n,
+rather than only at the displayed times. Width is divided by the pointwise Gaussian reference2z.975σ/
+√
+t.
+This denominator is a scale reference, not a time-uniform interval.
+37
+Figure10: Normalizedmeanconfidence-sequencewidthover40iidpathsfortheninedistributionsinFigure4.
+The horizontal axis is the fractiont/nof the known planning window. Color and marker identify the
+construction, and the dotted line is the pointwise Gaussian width used only as a scale reference. Stitched
+GE-betting usesc= 1; aGRAPA and Hedged-CS usec= 1/2.
+38
+Figure 10 shows that distributing initial wealth over checkpoint-specific GE-betting accounts is partic-
+ularly effective after the earliest part of the window. aGRAPA or Hedged-CS is often narrower at the
+first few displayed times, but stitched GE-betting overtakes them as information accumulates. For the six
+standard-variance laws, it has the smallest terminal mean width by15%–28%. It is also slightly narrower
+than aGRAPA for the two low-variance Beta laws. For Uniform(.45, .55), aGRAPA is narrower at the ter-
+minal time; here the regularization inbvt remains visible over a larger fraction of the window. Thus stitched
+GE-betting has the smallest terminal mean width in eight of the nine panels, even though it was not designed
+to optimizet=nalone.
+As a numerical check, simultaneous coverage over all10,000times occurred on respectively348,341,357,
+and354of the 360 paths for stitched GE-betting, aGRAPA, PRECiSE-A-CO96, and Hedged-CS. The 129-
+point aGRAPA topology scan found no disconnected acceptance set at any of the 4,320 displayed inversions.
+These finite simulation counts are diagnostic rather than a coverage argument; Proposition C.1 supplies the
+finite-sample guarantee for the proposed sequence.
+D Horizon-free GE-betting confidence sequences
+Section 7.2 constructs a confidence interval for a fixed sampling horizon. If the stopping time will instead
+be chosen from the data, recomputing that interval at every time is not valid: changing the horizon also
+changes the bets that would have been placed on earlier draws. This appendix obtains a confidence sequence
+by fixing a portfolio of horizon-specific accounts before sampling begins. Each account uses the GE-betting
+rule at one checkpoint, and their sum is a single e-process.
+D.1 Construction
+We retain the notation of Subsection 3.4. In particular, for a candidate population meanm,mi(m)and
+Yi(m)are given by (3.11) and (3.12), and candidates at timetare restricted toMt in (3.10). Let
+ut = tN−t ,1≤t < N,
+and choose checkpointsh 0 <· · ·< hL =N−1approximately geometrically in this clock. More precisely,
+forη >1, set
+hk+1 = min
+
+N−1,min
+
+h > hk : hN−h ≥η hkN−h k
+
+.(D.1)
+Fix deterministic weightsw0, . . . , wL >0with Pk wk = 1, and writeT= 2/δ. For each checkpoint and each
+of the two one-sided tests, initialize
+A+0,k(m) =A −0,k(m) =w k.
+The update is the fixed-horizon rule from Subsection 7.2, applied separately to every checkpoint. While
+i≤h k and0< A ±i−1,k(m)< T, define
+p±i−1,k(m) = δ2 A±i−1,k(m), b i,k =
+s
+N−h k
+(N−i)(h k −i+ 1)bvi−1
+,(D.2)
+λ+i,k(m) = min
+
+ψ{p+i−1,k(m)}bi,k, cmi(m)  , λ −i,k(m) = min ψ{p−i−1,k(m)}bi,k, c1−m i(m)  ,(D.3)
+whereψ(p) =ϕ{Φ −1(p)}/pandbv i−1 is the shared predictable estimator in (1.3). Whenmi(m) = 0, the
+upper cap in (D.3) is absent; whenmi(m) = 1, the lower cap is absent. The wealth updates are
+A+i,k(m) = min hT, A+i−1,k(m){1 +λ +i,k(m)Yi(m)}i ,
+A−i,k(m) = min hT, A−i−1,k(m){1−λ −i,k(m)Yi(m)}i .(D.4)
+39
+An account is held fixed after timehk, or after its wealth reaches zero orT. Sum the accounts within each
+one-sided test,
+K +t (m) =
+LX
+k=0
+A+t,k(m), K −t (m) =
+LX
+k=0
+A−t,k(m),
+and invert them:
+Jt ={m∈ Mt :K +t (m)< T, K−t (m)< T}, C t =
+t\
+r=1
+Jr.(D.5)
+Att=N, setJ N ={S N /N}andC N =C N−1 ∩J N. The raw setsJ t already form a confidence sequence;
+the running intersectionsCt are an optional nested version.
+D.2 Why the construction works
+The bridge clock in (D.1) follows directly from the finite-population standard error:
+τ 2N,t =σ 2N N−tt(N−1) = σ2N(N−1)u t .(D.6)
+Thus a geometric grid inut places checkpoints at geometric variance scales. At checkpointhk, the factor
+bi,k in (D.2) is exactly the predictable bridge scalebi,hk from (7.12). Accountkis therefore the fixed-horizon
+GE-betting strategy athk, initialized with capitalwk. After division bywk, its rejection threshold is2/(δwk),
+corresponding to one-sided errorδwk/2. The weighted sum of these stopped e-processes is again an e-process.
+Proposition D.1(Anytime validity and interval inversion).For every fixed populationx1:N ∈[0,1] N,
+Px1:N {µN ∈J t for everyt= 1, . . . , N} ≥1−δ.(D.7)
+The same guarantee holds for(Ct)Nt=1. Moreover,J t andC t are intervals on every sample path.
+Proof.Atm=µ N,Y i(m)has conditional mean zero. Each stopped account in (D.4) is consequently
+a nonnegative test supermartingale starting fromw k. HenceK +t (µN )andK −t (µN )are nonnegative test
+supermartingales starting from one. Ville’s inequality and a union bound give
+P
+
+sup
+t<N
+K +t (µN )≥T
+
++P
+
+sup
+t<N
+K −t (µN )≥T
+
+≤ 2T =δ,
+which proves (D.7); taking running intersections does not change the event that the true mean is ever
+excluded.
+For interval geometry, the amount bet relative to the target ispψ(p) =ϕ{Φ −1(p)}, a nonnegative
+concave function ofp. The scaleb i,k is shared across candidate means. The argument of Proposition 6.1,
+applied account by account, shows that every upper wealth is nonincreasing inmand every lower wealth is
+nondecreasing. Summing preserves these orders, soJt is an interval; the intersection definingCt is also an
+interval.
+D.3 Experiment
+We useN= 1000,δ=.05, and 40 uniformly random reveal orders of the nine deterministic populations
+corresponding to the distributions in Figure 4. The stitched procedure usesh 0 = 5,η= 1.3, uniform
+checkpoint weights, andc= 1. We compare it with the Hedged-WoR predictable plug-in confidence sequence
+of Waudby-Smith and Ramdas (2024), whose unclipped fraction is
+λHi =
+s
+2 log(2/δ)
+bvi−1ilog(i+ 1) .(D.8)
+That benchmark usesc= 1/2, as specified for this implementation. Both methods use the same remaining-
+mean innovations and shared variance estimator. The figure reports the raw intervalsJt; using running
+40
+Figure 11: Normalized mean confidence-sequence width over 40 random reveal orders for the nine fixed
+populations corresponding to Figure 4. Color and marker identify the construction, and the dotted line is
+the pointwise Gaussian width used only as a scale reference. The stitched GE-betting procedure usesc= 1,
+whereas Hedged-WoR usesc= 1/2.
+41
+intersections can only shorten them. Width is divided by the pointwise Gaussian reference2z.975τN,t, which
+is a scale reference rather than a time-uniform interval.
+Figure 11 shows the cost of distributing capital across future checkpoints at the earliest sampling fractions.
+Across all nine populations, stitched GE-betting becomes narrower than Hedged-WoR and remains narrower
+near the census. Its normalized width stays near1.5–1.7in the six standard-variance panels. The predictable
+variance regularization is more visible for the three low-variance populations, but the stitched sequence still
+improves substantially on Hedged-WoR there.
+As a numerical check, simultaneous coverage over everyt= 1, . . . , N−1occurred in 354 of 360 stitched
+runs and 356 of 360 Hedged-WoR runs. These counts are only diagnostic; Proposition D.1 provides the
+finite-sample guarantee.
+E Proofs
+This appendix proves the two Gaussian-efficiency theorems and the propositions used to construct and
+calibrate the confidence intervals.
+E.1 Proofs of the main-text results
+E.1.1 Proof of Theorem 5.1
+Proof.The proof separates the two finite-sample claims from the iid efficiency claim. Step 1 uses only the
+conditional-mean model, whereas Steps 2–4 assume iid sampling and identify the two endpoints on then−1/2
+scale.
+•Step 1: finite-sample validity and interval geometry.Each one-sided wealth process is a test super-
+martingale under its corresponding null, so its terminal value is an e-value. Markov’s inequality and
+a union bound give coverage, while concavity of the GE-betting amount and the shared variance
+estimator make the inversion an interval.
+•Step 2: strong preterminal tracking.Before the finalk n observations, expand relative wealth on the
+normal-quantile scale. The second-order cancellation makes this transform track the standardized
+partial sum almost surely, uniformly over a slowly expanding grid of local candidates.
+•Step 3: summable terminal polarization.Control the finalk n updates directly. A positive preterminal
+separation reaches the rejection threshold exactly, while a negative one remains accepted, with error
+probabilities summable overn.
+•Step 4: from grid decisions to the interval endpoints.Monotonicity converts the grid decisions into
+almost-sure bounds for both endpoints; subtracting those bounds gives the Gaussian width.
+We now prove each of the four steps.
+Step 1: finite-sample validity and interval geometry.Atm=µ, the two centered increments
+in (1.5) have conditional mean zero. Their betting fractions are predictable, the caps keep every wealth
+nonnegative, and truncating an overshoot at2/δcan only decrease wealth. Consequently,K+n (µ)andK −n (µ)
+are nonnegative supermartingales starting from one. Markov’s inequality gives
+P{K ±n (µ)≥2/δ} ≤ δ2 EK ±n (µ)≤ δ2 .
+The true mean is excluded only if at least one of these events occurs, so a union bound provesP{µ∈ In} ≥
+1−δ. Proposition 6.2 gives the same coverage bound under uniformly randomized Markov calibration.
+For interval geometry, relative wealth isp= (δ/2)K, and the GE-betting amount as a fraction of the
+rejection threshold is
+σeff (p) =pψ(p) =ϕ{Φ −1(p)}.
+42
+Writingq= Φ −1(p), we have
+σ′eff (p) =−q, σ ′′eff (p) =− 1ϕ(q) <0.
+Thusσ eff is nonnegative and concave, withσ eff (0) = 0. At every round, the scale in (1.4) is positive,
+predictable, and common to both processes and every candidate mean. Proposition 6.1 therefore implies
+thatI n(u+, u−)is an interval on every sample path for every fixedu+, u− ∈(0,1], including the deterministic
+choiceu + =u − = 1.
+Step 2: strong preterminal tracking.For the remainder of the proof, assume the observations are iid
+with varianceσ 2 >0. Putz=z 1−δ/2 and
+Zn = 1σ√n
+nX
+i=1
+(Xi −µ).
+Forh∈R, introduce the local candidates
+mn,ℓ(h) =µ− hσ√n , m n,u(h) =µ+ hσ√n .
+For the upper- and lower-tail processes, respectively, write
+Y +i,n(h) =X i −m n,ℓ(h), p +i,n(h) = (δ/2)K +i {mn,ℓ(h)},
+Y −i,n(h) =m n,u(h)−X i, p −i,n(h) = (δ/2)K −i {mn,u(h)}.
+While a process is active, letq±i,n(h) = Φ −1{p±i,n(h)}, and putr i,n =n−i+ 1. Thusp= 1means that the
+one-sided rejection threshold has been reached, whileq→ ∞andq→ −∞correspond top→1andp→0.
+Controlling the estimator errors.Writeξ i =X i −µ. Hoeffding’s inequality, a martingale Bernstein
+inequality, and Borel–Cantelli give
+tX
+i=1
+ξi =O{
+p
+tlog(t+ 1)},bv t −σ 2 =O
+(r
+log(t+ 1)
+t+ 1
+)
+almost surely.(E.1)
+For completeness, the second rate follows by puttingDi−1 =bµi−1 −µand expanding
+(Xi −bµi−1)2 =ξ 2i −2ξ iDi−1 +D 2i−1.
+The first relation in (E.1) gives
+Di−1 =O
+(r
+log(i+ 1)
+i
+)
+,
+tX
+i=1
+D2i−1 =O{(log(t+ 1)) 2}almost surely.
+The centered sum of theξ 2i’s isO{ ptlog(t+ 1)}almost surely. The cross term is a martingale whose
+conditional variance is bounded by a constant timesPi≤t D2i−1, so Bernstein’s inequality and Borel–Cantelli
+make it smaller than this first centered sum. Dividing the residual-square expansion byt+ 1proves the
+variance-estimator rate. In particular, almost surely,
+σ2
+2 ≤bvt ≤2for every sufficiently larget.(E.2)
+Taking a Taylor expansion.Choose, only for this proof,
+kn =
+√n{log(n+ 1)} 8 , j n =n−k n.
+We next record the one-step identity that drives the argument. Suppressn, h, and the sign, and write
+r=r i,n, v=bv i−1, q=q i−1,n, Y=Y i,n.
+43
+While the process is active and the nonnegativity cap is inactive, its relative wealth satisfies
+pi,n −p i−1,n =ϕ(q) Y√rv .
+Consequently, witha=Y /√rv, a third-order Taylor expansion ofΦ−1{Φ(q) +ϕ(q)a}gives
+qi,n =q+a+ 12 qa2 +R i,n,|R i,n| ≤C(1 +q2)|a|3,(E.3)
+whenever|a|(1+|q|)is sufficiently small. Multiply this identity by√r−1and subtract √r q. The elementary
+expansions
+p
+1−r −1 = 1 +O(r −1),
+√r−1
+2r = 12√r +O(r −3/2), √r− √r−1 = 12√r +O(r −3/2)
+yield
+p
+ri,n −1q i,n − √ri,n qi−1,n
+= Yi,n
+σ +Y i,n
+ 
+bv−1/2i−1 −σ −1 + qi−1,n2√ri,n
+(
+Y 2i,n
+bvi−1
+−1
+)
++e i,n,(E.4)
+where
+|ei,n| ≤C
+ |Yi,n|
+ri,n
+p
+bvi−1
++ |qi−1,n|
+r3/2i,n
+ 
+1 + Y 2i,n
+bvi−1
+!
++ (1 +q 2i−1,n)|Yi,n|3
+ri,nbv3/2i−1
+
+.(E.5)
+The centered quadratic term in (E.4) is essential. The curvature ofΦ−1 producesqY 2/(2rv), while replacing√rby √r−1produces−q/(2r). SinceE(Y 2 | Fi−1)is asymptoticallyσ 2 andvestimatesσ 2, these two terms
+cancel to first order. What remains is a centered fluctuation whose cumulative contribution is negligible.
+Controlling the Taylor expansion error term within a grid.Fix a mesh size and letGn be a deterministic
+grid in[−log(n+ 1),log(n+ 1)]. Then|G n|=O{log(n+ 1)}. We will prove, jointly overh∈G n and both
+one-sided processes,
+max
+h∈Gn
+r knn q+jn,n(h)−(Z n +h−z)  − →0,(E.6)
+max
+h∈Gn
+r knn q−jn,n(h)−(−Z n +h−z)  − →0almost surely.
+We verify the upper-tail display; reflection gives the second. For eachh∈Gn, letτ +n,h be the first round
+i≤j n at which
+|q+i−1,n(h)|qri,n/n > C0 log(n+ 1),
+or at which the unconstrained fraction is clipped or the proposed relative wealth reaches zero or one; set
+τ +n,h =∞if no such round exists. All expansions and martingale estimates below are first applied to the
+process stopped immediately beforeτ +n,h. Defineτ −n,h analogously for the lower-tail process. PutA i =
+bv−1/2i−1 −σ −1. On the probability-one event in (E.1),
+Ai =O
+(r
+log(i+ 1)
+i
+)
+,
+nX
+i=1
+A2i =O{(log(n+ 1)) 2}.
+The linear studentization error in (E.4) is
+X
+i≤s
+Y +i,n(h)Ai = X
+i≤s
+ξiAi + hσ√n Xi≤s Ai.
+44
+The first sum is a martingale transform with conditional varianceO{(log(n+ 1))2}. Uniformly overGn, the
+second sum, after division by√n, is at most
+C|h|
+n
+jnX
+i=1
+|Ai|=O
+ (log(n+ 1)) 3/2
+√n
+
+=o(1).
+A maximal Bernstein inequality and a union bound overGn therefore make the linear erroro(√n)almost
+surely, uniformly over its upper summation limit.
+For the quadratic term, putBi =ξ 2i −σ 2 andd n =hσ/ √n. The identity
+Y +i,n(h)2
+bvi−1
+−1 = Bi
+bvi−1
++
+ σ2
+bvi−1
+−1
+
++ 2dnξi +d 2n
+bvi−1
+(E.7)
+separates a martingale difference, variance-estimation error, and local shift. Under the stopping rule, the
+martingale transform in the quadratic term of (E.4), after division by√n, has conditional varianceO{(log(n+
+1))2/kn}. The variance-estimation part is bounded by
+Clog(n+ 1)
+jnX
+i=1
+|bvi−1 −σ 2|
+ri,n
+=O
+ (log(n+ 1)) 5/2
+√n
+
+=o(1)
+almost surely, where the sum is split atn/2and (E.1) is used on each part. The two local-shift terms in
+(E.7) are smaller. Bernstein’s inequality is again summable after the union bound overGn, so the stopped
+quadratic sum iso(√n)almost surely.
+Finally, the stopping rule and (E.5) give
+1√n maxh∈Gn
+jnX
+i=1
+|ei,n(h)|=O
+ log(n+ 1)√n + log(n+ 1)kn + {log(n+ 1)} 2√nkn  =o(1).
+Summing (E.4) now telescopes the left-hand side:
+jnX
+i=1
+p
+ri,n −1q +i,n(h)− √ri,n q+i−1,n(h)	
+=
+p
+kn q+jn,n(h)− √n q0,n = 1σ jnXi=1 Y +i,n(h) +o( √n),
+almost surely and uniformly over the grid. Sinceq0,n = Φ−1(δ/2) =−z, division by √ngives
+r
+kn
+n q+jn,n(h) =−z+ 1σ√n
+jnX
+i=1
+Y +i,n(h) +o(1)
+almost surely, uniformly over the grid, as long as the process has not stopped.
+Proving that the process has not stopped.LetEn be the event that all of the finite-n, stopped maximal
+inequalities and variance-estimator inequalities used above hold simultaneously overh∈Gn and both signs.
+Enlarging the constants in the displayed bounds if necessary, Bernstein’s and Hoeffding’s inequalities and
+the union bound overGn give
+P(Ecn)≤Cn −2,and hence X
+n
+P(Ecn)<∞.
+OnE n, the same estimates hold maximally up to the corresponding first-exit time. Uniformly overh∈Gn
+andi≤j n ∧τ +n,h, they give
+r ri,n
+n |q+i−1,n(h)| ≤ |z|+O{plog(n+ 1)}+ log(n+ 1) +o{log(n+ 1)}.
+45
+Here theO(
+p
+log(n+ 1))term comes from the centered partial sum, whereas the local drift is at most
+|h| ≤log(n+1). The right-hand side is therefore smaller thanC0 log(n+1)for all sufficiently largenwhenC 0
+is chosen large enough, so the normal-quantile process cannot cross the auxiliary boundC0 log(n+1)
+p
+n/ri,n
+beforej n.
+On this region,
+|q| ≤C0 log(n+ 1)
+r n
+r , r≥k n.
+The Mills bound
+c
+1 +|q| ≤ min{Φ(q),1−Φ(q)}ϕ(q) ≤ C1 +|q| , q∈R,(E.8)
+leads to the inverse Mills boundψ{Φ(q)} ≤C(1 +|q|). The inverse Mills bound, together with the eventual
+lower bound onv=bvi−1, consequently gives
+ψ{Φ(q)}√rv ≤C  1√kn + √nlog(n+ 1)kn  =o(1).
+Thus the unconstrained betting fraction is eventually smaller than the nonnegativity cap: because the local
+candidates converge uniformly toµ∈(0,1), the caps remain bounded away from zero, whereas, up to the
+respective first-exit times, the unconstrained fractions satisfy
+sup
+h∈Gn, s∈{+,−}
+i≤jn∧τ sn,h
+ψ{Φ(q si−1,n(h))}p
+ri,nbvi−1
+=o(1),inf
+h∈Gn
+min
+ c
+mn,ℓ(h) , c1−m n,u(h)  − →min cµ , c1−µ  >0.
+Thus the minimum defining the betting fraction eventually selects the unconstrained fraction rather than
+the nonnegativity cap. This argument holds for every fixedc∈(0,1].
+Moreover, sincea=Y / √rvandYis bounded, the same calculation yields
+|a|(1 +|q|)≤C
+ 1√kn + √nlog(n+ 1)kn  =o(1).
+Hence every proposed update withi≤j n ∧τ +n,h eventually lies in the neighborhood on which the Taylor
+expansion is valid, and none of the stopping conditions is triggered. Since|a|(1 +|q|) =o(1)uniformly, the
+Mills bound (E.8) implies that
+|ϕ(q)a|
+min{Φ(q),1−Φ(q)} ≤C|a|(1 +|q|) =o(1).
+Thus the incrementϕ(q)ais eventually smaller in absolute value than the distance fromp= Φ(q)to either
+boundary. Consequently,
+0<Φ(q) +ϕ(q)a <1,
+so the updated relative wealth reaches neither zero nor the rejection threshold beforej n. These strict
+bounds rule out every possible first exit in the definition ofτ+n,h; the reflected argument does the same for
+τ −n,h. Consequently,
+En ⊆
+
+min
+h∈Gn, s∈{+,−}
+τ sn,h > jn
+
+,
+and therefore X
+n
+P
+
+min
+h∈Gn, s∈{+,−}
+τ sn,h ≤j n
+
+<∞.
+Thus the stopped and original processes agree throughjn for all sufficiently largen, almost surely.
+Approximating the final observations .It remains only to replace the sum throughjn by the full stan-
+dardized sum. Hoeffding’s inequality gives, for everyρ >0,
+P
+
+
+
+ nXi=jn+1 ξi > ρ√n ≤2 exp{−c ρn/kn}.
+46
+These probabilities are summable, andmaxh∈Gn kn|h|/n→0. Since
+1
+σ√n
+jnX
+i=1
+Y +i,n(h) =Z n +h− 1σ√n
+nX
+i=jn+1
+ξi − knhn ,
+Borel–Cantelli proves the first line of (E.6). Replacingξi by−ξ i proves the second.
+Step 3: summable terminal polarization.Define the terminal rejection indicators
+D+n (h) =1{p +n,n(h) = 1}, D −n (h) =1{p −n,n(h) = 1}.
+The goal of this step is to show that the sign of the preterminal normal-quantile state determines the
+terminal decision with summably small error probability. Starting fromq+jn,n(h)≥Q, failure to reject can
+occur only if the process loses a substantial part of its positive separation or if no favorable final observation
+forces an exact threshold hit, whereas starting fromq+jn,n(h)≤ −Q, a false rejection requires the process to
+lose its negative separation.
+We control the lastkn observations directly, rather than extending the Taylor expansion to rounds in
+which a single standardized observation need not be small. Fixη >0and put
+Qn := η2 r nkn .(E.9)
+There existC, c >0such that, for all sufficiently largen, all|h| ≤log(n+ 1), and allQ≥Q n, whenever
+(E.2) holds,
+1{q+jn,n(h)≥Q}P{D +n (h) = 0| Fjn } ≤Cexp
+
+− cQ2
+logk n
+
++Cexp(−cQ 2),(E.10)
+1{q+jn,n(h)≤ −Q}P{D+n (h) = 1| Fjn } ≤Cexp
+
+− cQ2
+logk n
+
+.
+To justify the conditional calculation, first replace only the final-block variance estimates by their trunca-
+tions to[σ 2/2,2]. The resulting updates have deterministic upper and lower variance bounds. Sincejn → ∞,
+(E.2) implies that the truncated and original updates agree for all sufficiently largen, almost surely.
+Proving theCexp
+
+−cQ2/logk n	 term in(E.10).Theq-scale Taylor expansion from Step 2 is not used
+in the final block. Instead, put
+H+(q) = log{1−Φ(q)}, λ +(q) = ϕ(q)1−Φ(q) ,
+and, for the lower tail of thep-scale,
+H−(q) = log Φ(q), λ −(q) = ϕ(q)Φ(q) .
+These transforms record the logarithmic distances ofp= Φ(q)from its two boundaries:H+(q) = log(1−p)
+is useful when positiveqmoves away from the rejection boundary at one, whereasH−(q) = logpis useful
+when negativeqmoves away from the lower boundary toward rejection. Taking logarithms turns the additive
+update ofpinto a relative change in the appropriate tail probability, which is why the two inverse Mills
+ratiosλ + andλ − appear below. Write the capped betting fraction as a predictable multipleθi ∈[0,1]of the
+unconstrained fraction and putai =Y +i,n(h)/pri,nbvi−1. On paths that do not hit the upper threshold, the
+first identity below is exact; for the second, truncation at that threshold can only decreaseH−. Thus, with
+boundary values interpreted by continuity,
+H+(qi)−H +(qi−1) = log 1−p i1−p i−1 = log1−θ i ϕ(qi−1)1−Φ(q i−1) ai
+= log{1−θ iλ+(qi−1)ai} ≤ −θiλ+(qi−1)ai,(E.11)
+47
+H−(qi)−H −(qi−1) = log pipi−1
+≤log
+ pi−1 +θ iϕ(qi−1)ai
+pi−1
+
+= log
+
+1 +θ i
+ϕ(qi−1)
+Φ(qi−1) ai
+
+= log{1 +θ iλ−(qi−1)ai} ≤θiλ−(qi−1)ai.(E.12)
+Thus these bounds remain valid when|ai|(1 +|q i−1|)is not small; in particular, no Taylor expansion on the
+q-scale is being used.
+The Mills bounds in (E.8) imply,
+H+(v) = log{1−Φ(v)}
+= logϕ(v)−log(1 +v) +O(1)
+=− v2
+2 −log(1 +v)− 12 log(2π) +O(1), v→ ∞,
+H−(−v) = log Φ(−v) = log{1−Φ(v)}=H +(v),
+and so, asu→ ∞,
+H+(u/2)−H +(u) =H −(−u/2)−H −(−u)
+=
+
+− u2
+8 −log(1 +u/2)
+
+−
+
+− u2
+2 −log(1 +u)
+
++O(1)
+= 3u2
+8 + log
+ 1 +u
+1 +u/2
+
++O(1) = 3u2
+8 +O(1)≥cu 2.(E.13)
+Consequently, a loss of half the magnitude ofqrequires an adverse log-tail fluctuation of orderu2. Because
+the inverse Mills ratios grow with|q|, their contribution cannot be bounded uniformly by a multiple ofQ
+unless the path is localized. We therefore divide the possible magnitudes ofqinto dyadic ranges and prove
+the downcrossing bound separately on each range.
+Foru= 2 sQ,s≥0, letτ u be the first final-block round whose pre-update state satisfiesu≤ |qi−1| ≤2u,
+and letρ u be the first subsequent exit fromu/2≤ |qi| ≤2u, with the infimum of the empty set equal to
+infinity. Define the stopped-band downcrossing event
+Du ={τ u ≤n, ρ u ≤n,|q ρu |< u/2}.
+Throughout this stopped segment,λ+(q)∨λ −(q)≤Cu: indeed, (E.8) givesλ +(q)∨λ −(q)≤C(1 +|q|), and
+here|q| ≤2uwithu≥Q→ ∞. After variance truncation,|a i| ≤
+√
+2/σ, so|∆H ±| ≤Cufor the adverse
+increments on the stopped band. Thus band-edge overshoot costs onlyO(u) =o(u2); replacing the gapcu2
+bycu 2 −O(u)leaves the same exponential bound below. Writing¯ai =E(a i | Fi−1), the martingale parts on
+the right-hand sides of (E.11)–(E.12) are sums of
+∓θiλ±(qi−1)(ai −¯ai).
+BecauseX i ∈[0,1], their conditional Hoeffding variance proxy on this excursion is at most
+Cu 2 X
+r≤kn
+1
+r ≤Cu 2 logk n
+and their predictable drift has absolute value at most
+Cu |h|√n Xr≤kn 1√r ≤Cu|h| pkn/n=o(u 2)
+uniformly for|h| ≤log(n+ 1)and the levelsu≥Q n used below. Thus, after subtracting the negligible
+drift, a downcrossing requires a martingale fluctuation of orderu2. The conditional martingale Hoeffding
+inequality and (E.13) bound its probability by
+Cexp
+
+− cu4
+u2 logk n
+
+≤Cexp
+
+− cu2
+logk n
+
+.
+48
+Any path that eventually loses half of its initial separation, even if it first moves farther from zero, must
+incurD u on at least one of these magnitude scales. A union bound overu= 2sQtherefore gives
+X
+s≥0
+Cexp
+
+− c4sQ2
+logk n
+
+≤Cexp
+
+− c′Q2
+logk n
+
+,
+where the final inequality follows becauseQ2/logk n → ∞. Consequently,
+P{qloses half its initial magnitude| Fjn } ≤Cexp
+
+− cQ2
+logk n
+
+.(E.14)
+Proving theCexp(−cQ 2)term in(E.10).It remains to ensure an exact hit of the rejection threshold
+when the initialqis positive. PutL=⌊c 0Q2⌋, wherec 0 >0is sufficiently small. Ifqhas not lost half its
+magnitude, then, wheneverri,n ≤L,
+q+i−1,n(h)p
+ri,nbvi−1
+≥ 12√2c0 .
+Sinceσ 2 >0, there areξ, π >0such thatP{X i −µ≥2ξ} ≥π. Uniformly over|h| ≤log(n+ 1), this event
+impliesX i −m n,ℓ(h)≥ξfor all largen.
+At the beginning of the update,p= Φ(q), so its remaining distance to the rejection target is1−Φ(q).
+On a favorable observationY≥ξ, the uncapped update addsϕ(q)Y /
+√
+rbv. Since
+q√
+rbv
+≥ 12√2c0 ,
+choosingc 0 ≤ξ 2/8ensures thatqY /√rbv≥1. Consequently, the normal Mills bound gives
+ϕ(q)Y√
+rbv
+= ϕ(q)q qY√rbv≥ ϕ(q)q ≥1−Φ(q).
+Thus the increment is at least the entire distance fromp= Φ(q)to one, and the threshold truncation sets
+the updated relative wealth equal topi = 1. If the nonnegativity cap is active, the same conclusion holds
+for sufficiently largeQ: thenp= Φ(q)is arbitrarily close to one, whileY≥ξmakes the capped multiplier
+strictly larger than one.
+The probability that none of the lastLobservations is favorable is thus at most(1−π)L ≤Cexp(−cQ 2).
+This proves (E.10); reflection gives the same bounds forD−n (h).
+Combining(E.6)and(E.10).We restrict attention to grid candidates separated by a fixed positive
+margin from the Gaussian boundary, because this margin is converted into the diverging rawq-separation
+needed for the terminal error probabilities to be summable uniformly over the grid.
+The fixedηin (E.9) measures separation from the Gaussian boundary on theZn +h−zscale. On either
+margin
+|Zn +h−z| ≥ηor| −Z n +h−z| ≥η.
+The quantityηis a fixed distance on the Gaussian-statistic scaleZn +h−z, which remains of order one. By
+(E.6), the corresponding distance on the rawq-scale is at leastQn, and
+Q2n
+logk n
+≍
+√n
+{log(n+ 1)} 9 .
+The bounds in (E.10) are summable inn, even after a union bound overGn: since|G n|=O{log(n+ 1)},
+for sufficiently largen0,
+X
+n≥n0
+|Gn|
+
+Cexp
+
+− cQ2n
+logk n
+
++Cexp(−cQ 2n)
+
+≤C ′ X
+n≥n0
+log(n+ 1) exp
+
+− cη
+√n
+{log(n+ 1)} 9
+
+<∞.
+49
+Taking expectations in the conditional bounds and applying Borel–Cantelli gives, almost surely for all large
+n,
+D+n (h) =1{Z n +h > z}wheneverh∈G n and|Z n +h−z| ≥η,(E.15)
+D−n (h) =1{−Z n +h > z}wheneverh∈G n and| −Zn +h−z| ≥η.
+Step 4: from grid decisions to the interval endpoints.Fix0< ε < z, take the grid mesh at most
+ε/4, and setη=ε/2. The law of the iterated logarithm gives
+|Zn|=O(
+p
+log logn) =o(log(n+ 1))almost surely.
+Thus all local indices used below eventually lie inside the grid. Each is of the form±Zn ±cfor a fixedc, so
+it lies within the grid range with room for both neighboring grid points:
+max
+s,t∈{−1,1}
+|sZn +tc|+ ε4 ≤ |Zn|+|c|+ ε4 <log(n+ 1)eventually almost surely.
+The candidate
+m= ¯Xn − cσ√n
+equalsm n,ℓ(hn)forh n =c−Z n, andZ n +h n −z=c−z. Bracketh n by its two neighboring grid points.
+The upper-tail decision is nondecreasing inh, so (E.15) gives, for every fixed|c−z| ≥η,
+1
+
+K +n
+
+¯Xn − cσ√n  ≥ 2δ  − →1{c > z}almost surely.(E.16)
+The reflected argument similarly gives
+1
+
+K −n
+
+¯Xn + cσ√n  ≥ 2δ  − →1{c > z}almost surely.
+Usetheserelationswithc=z−εandc=z+ε. Atalower-sidecandidatem= ¯Xn−cσ/√n, thelocalindex
+for the lower-tail process isZn −c, so its Gaussian boundary expression is−Zn + (Zn −c)−z=−c−z <0;
+hence that process accepts. The reflected calculation shows that the upper-tail process accepts at each
+upper-side candidate. Proposition 6.1 then gives, eventually almost surely,
+¯Xn − σ(z+ε)√n ≤infI n ≤ ¯Xn − σ(z−ε)√n ,
+¯Xn + σ(z−ε)√n ≤supI n ≤ ¯Xn + σ(z+ε)√n .
+The two inner points are accepted by both one-sided tests, soIn is eventually nonempty. Subtracting the
+endpoint bounds gives
+z−ε≤
+√n
+2σ len(In)≤z+ε
+eventually almost surely. Intersecting the resulting probability-one events over positive rationalε↓0proves
+the theorem.
+E.1.2 Proof of Proposition 6.1
+Proof.We first takem∈(0,1). Atm= 0, the upper-tail cap is defined asc/m= +∞; atm= 1, the
+reflected lower-tail cap is defined asc/(1−m) = +∞. Substituting these definitions into the update gives
+the same order inequalities at the endpoints. We prove that one upper-tail update is nondecreasing in its
+current normalized wealthpand nonincreasing in the candidatem.
+First fixpand puta=f(p)/s. Before normalized wealth reaches one, the uncapped branch is
+p{1 +a(x−m)}, m≤c/a,
+50
+whereas the capped branch is
+p(1−c+cx/m), m≥c/a.
+Both are nonincreasing inm, and they have the same value atm=c/a. Taking the minimum with one
+preserves this order.
+Now fixm. Concavity ofσ f, together withσ f (0) = 0, implies thatf(p) =σ f (p)/pis nonincreasing.
+Thus the capped and uncapped formulas again agree where their roles switch, and the capped branch is a
+nonnegative multiple ofp. On the uncapped branch, write
+R(p) =p+σ f (p)d, d= x−ms .
+ThenR ′(p) = 1 +σ ′f (p)d. The two tangent bounds for a nonnegative concave function on[0,1]are
+− σf (p)1−p ≤σ ′f (p)≤ σf (p)p .
+Ifd >0andR ′(p)<0, the left inequality forcesd >(1−p)/σ f (p), whenceR(p)>1; the minimum with one
+makes the actual update constant there. Ifd <0andR ′(p)<0, the right inequality forces−d > p/σf (p),
+whenceR(p)<0, which cannot occur on a nonnegative uncapped branch. The update is continuous in
+p, because the capped and uncapped formulas agree at every switch; a continuous function that is locally
+nondecreasing on an interval is globally nondecreasing. Thus the update, including the minimum with one,
+is nondecreasing inp.
+Induction over observations makes the upper-tail terminal fraction nonincreasing inm. Reflection makes
+the lower-tail fraction nondecreasing. Each one-sided acceptance set at a fixed threshold is an interval, and
+their intersection is an interval as well.
+E.1.3 Proof of Proposition 6.2
+Proof.For deterministic calibration, Markov’s inequality gives
+P{K ±n,A(m)≥2/δ} ≤ δ2 EK ±n,A(m)≤ δ2
+under the corresponding one-sided null.
+For randomized calibration, condition on the e-value at timen. Independence and uniformity ofU± give
+P
+n
+U± ≤min{(δ/2)K ±n,A,1}  K ±n,Ao
+= min{(δ/2)K ±n,A,1} ≤δ2 K ±n,A.
+Taking expectations again bounds the one-sided rejection probability byδ/2. At the point null both one-
+sided statements apply, so a union bound gives two-sided coverage at least1−δ. Finally, replacing an
+accepted set by its convex hull can only enlarge it and therefore cannot reduce coverage.
+E.1.4 Proof of Theorem 7.1
+Proof.The proof has the same structure as the proof of Theorem 5.1. Step 1 establishes the two finite-sample
+claims for an arbitrary fixed population. Steps 2–4 consider the triangular array in the theorem and identify
+the endpoints on the finite-population standard-error scale.
+•Step 1: finite-sample validity and interval geometry.At the true population mean, the remaining-
+population residuals are martingale differences. The clipped wealth processes are therefore e-processes,
+and the shared bridge scale makes their inversion an interval.
+•Step 2: strong preterminal bridge tracking.Transform relative wealth byΦ −1 and stopk N rounds
+before the horizon. A bridge-clock identity cancels the quadratic term in the transformed update,
+leaving the standardized Doob martingale of the terminal sample sum.
+51
+•Step 3: summable terminal polarization.Treat the lastk N draws directly. A positive preterminal
+separation reaches the rejection threshold and a negative separation remains accepted, with error
+probabilities summable overN.
+•Step 4: from grid decisions to the interval endpoints.Monotonicity turns the local decisions into
+almost-sure endpoint bounds at ¯Xn ±z 1−δ/2τN,n, which yield the asserted width.
+We now prove each of the four steps.
+Step 1: finite-sample validity and interval geometry.Fix a populationx 1:N and let its values be
+revealed in uniformly random order. Atm=µ N, the quantitymi(m)is the average of theN−i+ 1values
+remaining before drawi. Consequently,
+E{Yi(µN )| Fi−1}= 0.
+The upper- and lower-tail fractions are predictable, and their caps keep the wealth multipliers nonnegative.
+Absorption at0or2/δcan only decrease the uncapped martingale wealth. ThusK +i (µN )andK −i (µN )are
+nonnegative supermartingales starting from one. Markov’s inequality and a union bound give
+Px1:N
+
+K +n (µN )≥ 2δ orK −n (µN )≥ 2δ  ≤δ.
+The true population mean belongs toMn on every reveal order, so this proves (7.13).
+For uniformly randomized Markov calibration, condition on either terminal wealthKand its independent
+uniform randomizerU. Since
+P
+
+K≥ 2Uδ  K = min  δ2 K,1  ≤ δ2 K,
+each one-sided rejection probability is again at mostδ/2. The same union bound proves randomized coverage.
+It remains to verify the shape of the inversion. Relative wealth isp= (δ/2)K, and the amount bet as a
+fraction of the rejection threshold is
+pψ(p) =ϕ{Φ −1(p)},
+which is nonnegative and concave on[0,1]. The scalebi,n is positive, predictable, and shared across candidate
+means, while
+mi(m) = N m−Si−1N−i+ 1
+is increasing inm. The one-step order argument in Proposition 6.1, applied withmi(m)in place ofm, shows
+inductively thatK +n (m)is nonincreasing andK −n (m)is nondecreasing. Intersecting their two sublevel sets
+withM n therefore gives an interval. This remains true for any fixed randomized thresholds.
+Step 2: strong preterminal bridge tracking.Now consider the triangular array in the theorem, write
+n=n N, and put
+z=z 1−δ/2, s N =nτ N,n =σ N
+r
+n(N−n)
+N−1 , Z N = Sn −nµ NsN .
+Forh∈R, define the lower- and upper-side local candidates
+mN,ℓ(h) =µ N −hτ N,n, m N,u(h) =µ N +hτ N,n.
+Letp +i,N (h) = (δ/2)K +i {mN,ℓ(h)}andp −i,N (h) = (δ/2)K −i {mN,u(h)}. While a process is active, write
+q±i,N (h) = Φ−1{p±i,N (h)}.
+Setting the bridge clock.The deterministic bridge clock before drawiis
+ri,N = (n−i+ 1)(N−n)N−i , i= 1, . . . , n,(E.17)
+52
+and we putrn+1,N = 0. Recallγ i = (N−n)/(N−i). The scale in (7.12) can then be written exactly as
+bi,n = γipri,N bvi−1 .(E.18)
+Moreover, uniformly ini≤n,
+di,N :=r i,N −r i+1,N , di,Nγ2i = (N−n−1)(N−i)(N−n)(N−i−1) = 1 +O(N −1).(E.19)
+The last identity is the discrete finite-population analogue of the variance clock in (7.3).
+Controlling the estimator errors.We first record the almost-sure estimates used below. Letvremi−1,N denote
+the variance of the population remaining before drawi, centered at its remaining mean. Hoeffding bounds
+for random permutations, applied to bothxandx2, followed by a union bound over the prefixes of each row,
+imply that, almost surely,
+|ZN |=O(
+p
+log(N+ 1)),(E.20)
+max
+(log(N+1)) 4≤t≤n
+s
+t
+log(N+ 1)
+bvt −σ 2N  =O(1),(E.21)
+max
+i≤n
+vremi−1,N −σ 2N  =O
+ r
+log(N+ 1)
+N
+!
+.(E.22)
+To see the middle display, expandXi −bµi−1 = (X i −µ N )−(bµi−1 −µ N ), sum the squares, and use the
+prefix bounds for the two population moments. The cross term is handled by summation by parts, and the
+squared estimation errors contributeO{log2(N+ 1)}. This gives (E.21). The remaining population always
+has at leastN−n≍Nvalues, so the same bounds applied to the complement of a prefix give (E.22). The
+failure probabilities can be taken of orderN−3; hence the conclusions hold for any coupling of the rows by
+Borel–Cantelli. Sinceσ 2N →σ 2 >0, these estimates also give, eventually almost surely,
+σ2
+2 ≤bvt ≤2,(log(N+ 1)) 4 ≤t≤n.(E.23)
+The rounds before this lower variance bound becomes available are negligible. Indeed, withL N =
+⌈{log(N+ 1)} 4⌉, regularization givesbvi−1 ≥1/(4i), whiler i,N ≍Nfori≤L N. Hence each standardized
+increment in (E.18) is at mostC
+p
+i/N, and their sum throughLN isO(L 3/2N /√N) =o(1). We may therefore
+begin the uniform Taylor and martingale estimates below atLN; the omitted initial contribution is absorbed
+into their remainder.
+Taking a Taylor expansion.Choose, only for this proof,
+kN =
+l√
+N{log(N+ 1)} 8
+m
+, j N =n−k N .
+We next identify the transformed one-step update. The upper-tail argument is enough, since reflection gives
+the lower-tail statement. PutYi,N (h) =X i −mi{mN,ℓ(h)}. Before clipping or absorption, the relative-wealth
+update and (E.18) give
+p+i,N (h) =p +i−1,N (h) +ϕ{q +i−1,N (h)} γiYi,N (h)pri,N bvi−1 .
+Taylor expansion ofΦ−1, followed by multiplication by√ri+1,N, yields
+√ri+1,N q+i,N (h)− √ri,N q+i−1,N (h)
+= γiYi,N (h)σN +γ iYi,N (h) bv−1/2i−1 −σ −1N 
++
+q+i−1,N (h)
+2√ri,N
+ γ2i Yi,N (h)2
+bvi−1
+−d i,N
+
++e i,N (h).(E.24)
+53
+Uniformly while|q +i−1,N (h)|pri,N /r1,N ≤C 0 log(N+ 1)andr i,N ≥k N /2, boundedness of the observations
+and (E.23) give
+|ei,N (h)| ≤C
+(
+1
+ri,N
++
+|q+i−1,N (h)|
+r3/2i,N +
+1 +|q +i−1,N (h)|2
+ri,N
+)
+.(E.25)
+Terms arising from replacing
+p
+ri+1,N /ri,N by one are included in this remainder.
+The centered quadratic term in (E.24) is the key point. Conditional onFi−1,E{Y i,N (0)2 | Fi−1}=v remi−1,N.
+Equations (E.21)–(E.19) therefore give
+γ2i vremi−1,N
+bvi−1
+−d i,N =o(1)
+uniformly away from the first(log(N+ 1))4 rounds. Thus the curvature term fromΦ−1 cancels the decrease
+in the bridge clock, leaving a centered martingale fluctuation. This is precisely the cancellation that would
+be missed by using a Brownian-motion clock.
+Controlling the Taylor expansion error within a grid.LetG N be a deterministic grid in[−log(N+
+1),log(N+ 1)]with fixed mesh, so|G N |=O{log(N+ 1)}. We claim that, almost surely,
+max
+h∈GN
+r rjN +1,Nr1,N q+jN ,N (h)−(Z N +h−z)  − →0,(E.26)
+max
+h∈GN
+r rjN +1,Nr1,N q−jN ,N (h)−(−Z N +h−z)  − →0.
+Here are the details. For eachh∈G N, letτ +N,h be the first roundi≤j N at which
+|q+i−1,N (h)|qri,N /r1,N > C0 log(N+ 1),
+the unconstrained fraction is clipped, or relative wealth is absorbed at zero or one. Setτ+N,h =∞if no
+such round exists. All calculations below are initially made for the process stopped immediately beforeτ+N,h;
+defineτ −N,h by reflection. The linear variance-estimation error in (E.24) is a martingale transform plus the
+local shift
+mi(µN )−m i{mN,ℓ(h)}= N hτN,nN−i+ 1 =O  |h|√N  .
+Bernstein’s inequality and (E.21) make the cumulative linear erroro(√r1,N ), uniformly overG N. For the
+quadratic term, write
+Yi,N (0)2 −v remi−1,N
+as a bounded martingale difference. Its predictable transform in (E.24) has conditional varianceO{log2(N+
+1)/kN }after division byr 1,N. The predictable remainder iso(1)by (E.21)–(E.19), and the local-shift terms
+are smaller. Finally, summing (E.25) and dividing by√r1,N gives
+O
+(
+log(N+ 1)√
+N
++ {log(N+ 1)} 2√NkN ) =o(1).
+The Bernstein bounds remain summable after a union bound overGN.
+Summing (E.24) now telescopes. We haveq0,N = Φ−1(δ/2) =−zand
+jNX
+i=1
+γiYi,N (h) =H (n)jN {mN,ℓ(h)}.
+Therefore,
+r rjN +1,N
+r1,N
+q+jN ,N (h) =−z+ H (n)jN {mN,ℓ(h)}σN √r1,N +o(1)(E.27)
+54
+almost surely and uniformly over the grid.
+Proving that the process has not stopped.It remains to remove the stopping. LetEN collect the finite-N,
+stopped maximal concentration and variance events used above for allh∈GN and both signs. Enlarging
+their constants if necessary, the bounds above and a union bound overGN giveP(E cN )≤CN −2, and henceP
+N P(EcN )<∞. OnE N, uniformly up to the corresponding first-exit time,
+r ri,N
+r1,N
+|q±i−1,N (h)| ≤ |z|+O{plog(N+ 1)}+ log(N+ 1) +o{log(N+ 1)},
+which is strictly belowC0 log(N+ 1)whenC 0 is sufficiently large. Moreover,r i,N ≳k N, the inverse Mills
+bound, and boundedness of the observations give
+sup
+h∈GN , s∈{+,−}
+i≤jN ∧τ sN,h
+"
+ψ{Φ(q si−1,N (h))}γip
+ri,N bvi−1
+∨
+γi{1 +|q si−1,N (h)|}p
+ri,N bvi−1
+#
+≤C
+(
+1√kN +
+√
+Nlog(N+ 1)
+kN
+)
+=o(1)
+up to first exit. The first term inside the supremum is the unconstrained betting fraction, while the second
+bounds|a|{1 +|q si−1,N (h)|}, whereais the corresponding signed standardized observationγ iY /pri,N bvi−1,
+since the observations are bounded. Positive limiting variance forces the remaining-population means to stay
+away from zero and one, and the local-candidate perturbation is uniformlyo(1); hence the solvency caps
+remain bounded away from zero and are eventually inactive.
+Moreover, (E.8) and the second bound above give
+|ϕ(q)a|
+min{Φ(q),1−Φ(q)} ≤C|a|(1 +|q|) =o(1).
+Thus the proposed increment is smaller than the distance fromp= Φ(q)to either boundary, so the proposed
+relative wealth remains strictly between zero and one. None of the three exit conditions can therefore be the
+first one to occur onEN, and
+EN ⊆
+
+min
+h∈GN , s∈{+,−}
+τ sN,h > jN
+
+.
+Consequently, X
+N
+P
+
+min
+h∈GN , s∈{+,−}
+τ sN,h ≤j N
+
+<∞.
+It follows that the stopped and original bridge processes agree throughjN for all sufficiently largeN, almost
+surely.
+Approximating the final observations.It remains to replace the preterminal Doob martingale by its
+terminal value. The finalk N martingale increments are bounded, and their conditional variance isO(kN ).
+Hence, for everyε >0,
+P
+
+max
+h∈GN
+H (n)n {mN,ℓ(h)} −H(n)jN {mN,ℓ(h)} > ε√N  ≤Clog(N+ 1) exp{−c εN/kN }.
+This is summable. Since
+H (n)n {mN,ℓ(h)}=S n −nµ N +nhτ N,n =s N (ZN +h)
+ands N =σ N
+√r1,N, Borel–Cantelli proves the first line of (E.26). Reflection proves the second.
+Step 3: summable terminal polarization.LetD +N (h)andD −N (h)indicate that the corresponding
+wealth has reached2/δby timen. Fixη >0. Becauser 1,N ≍Nandr jN +1,N ≍k N, put
+QN := η2 r r1,NrjN +1,N ≍ r NkN .
+55
+There existC, c >0such that, for all sufficiently largeN, all|h| ≤log(N+ 1), and allQ≥QN, conditionally
+onF jN,
+1{q+jN ,N (h)≥Q}P{D +N (h) = 0| FjN } ≤Cexp{−cQ2/logk N }+Cexp(−cQ 2),(E.28)
+1{q+jN ,N (h)≤ −Q}P{D+N (h) = 1| FjN } ≤Cexp{−cQ2/logk N }.
+To justify this conditional calculation, first truncate only the final-block variance estimates to[σ2/2,2]. The
+resulting updates have deterministic variance bounds, while (E.23) implies that the truncated and original
+updates agree for all sufficiently largeN, almost surely. The variance of each remaining population is likewise
+bounded above and away from zero at timejN by (E.22). This is anFjN-measurable condition, and removing
+at mostkN =o(N)bounded values from a remaining population of orderNpreserves the same bounds along
+every continuation of the final block.
+Proving theCexp{−cQ 2/logk N }term in(E.28).As in the iid proof, theq-scale Taylor expansion is not
+used in the final block. Instead, use
+H+(q) = log{1−Φ(q)}, H −(q) = log Φ(q),
+with inverse Mills ratios
+λ+(q) = ϕ(q)1−Φ(q) , λ −(q) = ϕ(q)Φ(q) .
+These transforms measure relative changes in the distances ofp= Φ(q)from its two boundaries, so they
+remain useful when one update is too large for a Taylor expansion on theq-scale.
+Put
+ai,N (h) = γiYi,N (h)pri,N bvi−1 ,
+and write the capped fraction as a predictable multipleθi,N ∈[0,1]of the unconstrained fraction. Suppress
+Nandhinq +i,N (h)in the next display. The exact relative-wealth update gives, with boundary values
+interpreted by continuity,
+H+(qi)−H +(qi−1) = log{1−θ i,N λ+(qi−1)ai,N (h)} ≤ −θi,N λ+(qi−1)ai,N (h),(E.29)
+H−(qi)−H −(qi−1)≤log{1 +θ i,N λ−(qi−1)ai,N (h)} ≤θi,N λ−(qi−1)ai,N (h).(E.30)
+The first inequality is used on paths that do not hit the upper threshold; truncation at that threshold can
+only decrease the left-hand side of the second. Neither inequality requires|ai,N (h)|(1 +|q i−1|)to be small.
+By (E.13), moving from magnitudeutou/2requires an adverse log-tail fluctuation of orderu2. Because
+|q|may first increase before returning toward zero, consider separately the scalesu= 2 sQ,s≥0. Let
+τu,N be the first final-block round whose pre-update state satisfiesu≤ |qi−1| ≤2u, and letρ u,N be the
+first subsequent exit fromu/2≤ |qi| ≤2u, with the infimum of the empty set equal to infinity. Define the
+stopped-band downcrossing event
+Du,N ={τ u,N ≤n, ρ u,N ≤n,|q ρu,N |< u/2}.
+On this stopped segment, (E.8) givesλ+(q)∨λ −(q)≤C(1+|q|)≤Cu. After variance truncation,|a i,N (h)| ≤√
+2/σ, so|∆H ±| ≤Cufor the adverse increments on the stopped band. Thus band-edge overshoot costs
+onlyO(u) =o(u 2), and the required log-tail gap remains of orderu2.
+Write¯ai,N (h) =E{a i,N (h)| Fi−1}. The centered parts of (E.29)–(E.30) are martingale transforms of
+bounded remaining-population draws. Their conditional Hoeffding variance proxy is, by (E.19), at most
+Cu 2
+nX
+i=jN +1
+γ2i
+ri,N
+≤Cu 2
+nX
+i=jN +1
+Cd i,N
+ri,N
+≤Cu 2 logk N .
+Moreover, the local-shift identity from Step 2 andPni=jN +1 γi/√ri,N ≤C √kN give the predictable-driftbound nX
+i=jN +1
+θi,N {λ+(qi−1)∨λ −(qi−1)}|¯ai,N (h)| ≤Cu|h|
+p
+kN /N=o(u 2)
+56
+uniformly for|h| ≤log(N+ 1)andu≥Q N. A downcrossing therefore requires a centered fluctuation of
+orderu 2. The conditional martingale Hoeffding inequality bounds its probability by
+Cexp
+
+− cu4
+u2 logk N
+
+≤Cexp
+
+− cu2
+logk N
+
+.
+Any path that loses half its initial separation must incurDu,N at one of the scalesu= 2sQ. Hence
+X
+s≥0
+Cexp
+
+− c4sQ2
+logk N
+
+≤Cexp
+
+− c′Q2
+logk N
+
+.(E.31)
+Proving theCexp(−cQ 2)term in(E.28).It remains to ensure an exact hit of the rejection threshold
+when the initialqis positive. PutL=⌊c 0Q2⌋, withc 0 >0sufficiently small. Ifqhas not lost half its
+magnitude, then during the finalLdraws,q≥Q/2,r i,N ≤L,γ i is bounded away from zero, andbvi−1 ≤2.
+Hence
+q+i−1,N (h)γip
+ri,N bvi−1
+≥ c√c0 .
+Because the remaining-population variance is bounded below, there are fixedξ, π >0such that, at every
+such round, at least a proportionπof the remaining values satisfyXi −m i(µN )≥2ξ. The local-candidate
+shift is uniformlyo(1), so these values also satisfyYi,N (h)≥ξfor all largeN.
+Choosec 0 so that a favorable draw has
+q+i−1,N (h)γiYi,N (h)p
+ri,N bvi−1
+≥1.
+The normal Mills bound then gives
+ϕ(q)γiYi,N (h)p
+ri,N bvi−1
+≥ ϕ(q)q ≥1−Φ(q),
+so the update covers the entire remaining distance fromp= Φ(q)to one and reachespi = 1. If the solvency
+cap is active, the same conclusion holds for largeQ, as in the iid argument. Conditionally at each of the last
+Lrounds, a favorable draw has probability at leastπ; therefore,
+P{no favorable draw in the lastLrounds| Fn−L} ≤(1−π)L ≤Cexp(−cQ 2).
+The same bound holds after conditioning onFjN by the tower property. Together with (E.31), this proves
+(E.28); reflection gives the same conclusion for the lower-tail wealth.
+Combining(E.26)and(E.28).TakingQ=Q N in (E.28), we have
+Q2N
+logk N
+≍
+√
+N
+{log(N+ 1)} 9 .
+The error bounds are summable even after a union bound overG N. Combining them with (E.26) and
+applying Borel–Cantelli gives, almost surely for all sufficiently largeN,
+D+N (h) =1{Z N +h > z}ifh∈G N and|Z N +h−z| ≥η,(E.32)
+D−N (h) =1{−Z N +h > z}ifh∈G N and| −ZN +h−z| ≥η.
+Step 4: from grid decisions to the interval endpoints.Fix0< ε < z, choose the grid mesh at most
+ε/4, and takeη=ε/2. By (E.20),|Z N |=o{log(N+ 1)}almost surely, so the random local indices below
+eventually lie inside the grid. For fixeda >0,
+¯Xn −aτ N,n =m N,ℓ(a−Z N ), Z N + (a−Z N )−z=a−z.
+57
+Bracketinga−Z N by neighboring grid points and using the monotonicity proved in Step 1 turns (E.32) into
+1
+
+K +n ( ¯Xn −aτ N,n)≥ 2δ  − →1{a > z}almost surely
+for every fixed|a−z| ≥η. Reflection gives the analogous statement forK−n ( ¯Xn +aτ N,n).
+The positive limiting variance implies thatµN stays in a compact subset of(0,1), whilen/N→ρ∈(0,1).
+The four local candidates used below therefore belong to the feasible intervalMn eventually almost surely. At
+a lower-side candidate, the lower-tail process accepts because its limiting boundary expression is−a−z <0;
+the upper-tail process likewise accepts at an upper-side candidate. Applying the preceding decisions with
+a=z−εanda=z+εyields
+¯Xn −(z+ε)τ N,n ≤infI brN,n ≤ ¯Xn −(z−ε)τ N,n,
+¯Xn + (z−ε)τ N,n ≤supI brN,n ≤ ¯Xn + (z+ε)τ N,n
+eventually almost surely. The two inner candidates are accepted by both one-sided tests, so the interval is
+eventually nonempty. Subtracting the endpoint bounds gives
+z−ε≤
+len(I brN,n)
+2τN,n
+≤z+ε
+eventually almost surely. Intersecting over positive rationalε↓0proves (7.14).
+E.1.5 Proof of Proposition 6.3
+Proof.The proof separates the finite-sample guarantees from the two iid efficiency claims. Steps 1–2 require
+no independence. Step 3 proves the Gaussian endpoint expansions whenσ2 >0, whereas Steps 4–5 establish
+large deviation efficiency without a positive-variance assumption.
+•Step 1: finite-sample validity and interval geometry.The weighted wealths are test supermartingales,
+so Markov’s inequality and a union bound give coverage. Monotonicity in the candidate mean makes
+their inversion an interval.
+•Step 2: the information profile and a portfolio bound.Relate the KL-inf profile to the optimal constant-
+fraction log wealth. A bound for the mixture wealths then places the accepted interval inside a sublevel
+set of the empirical information profile.
+•Step 3: Gaussian efficiency.Monotonicity in the significance level preserves the GE endpoint expan-
+sions at the allocated level. A local quadratic profile expansion and the GE terminal-polarization
+bounds show that the additional mixture wealth does not change those endpoints on the Gaussian
+scale.
+•Step 4: a lower bound for every honest interval.Change of measure, Borel–Cantelli, and the strong
+law show that every fixed mean strictly inside the information contour must eventually be included,
+almost surely, by any honest interval procedure.
+•Step 5: large deviation efficiency.The strong law excludes fixed means outside the information contour.
+Combining this outer bound with Step 4 and using countable bracketing gives almost-sure convergence
+of both endpoints.
+We now prove each of the five steps.
+Step 1: finite-sample validity and interval geometry.Under a candidate meanm, each fixed-u
+product in (6.5) is a nonnegative martingale under (3.1); integrating preserves this property. Atm= 0,
+the upper mixture wealth is1/(t+ 1)if alltobservations are zero and+∞otherwise, whileM −t (0) = 1
+under the null; reflection gives the values atm= 1. Thus these processes remain supermartingales under
+the boundary nulls, which force all observations to equal the corresponding endpoint almost surely. The GE
+58
+wealth processes are test supermartingales by Theorem 5.1. Their deterministic convex combination starts
+from one, so Markov’s inequality and a union bound over the two directions give coverage1−δ. Replacing
+an empty set by a singleton cannot reduce coverage.
+Proposition 6.1 gives monotonicity of the upper-tail GE wealth inm, and the same monotonicity fol-
+lows directly forM +t (m)from its integrand. Both are nonincreasing; the reflected wealth processes are
+nondecreasing. Their sums therefore have interval inversion, as does its closure or the specified singleton
+replacement.
+Step 2: the information profile and a portfolio bound.The bounded-mean variational identity
+(Honda and Takemura, 2010) is
+d(P, m) = sup
+λ∈[−1/(1−m),1/m]
+EP log{1 +λ(X−m)},0< m <1.(E.33)
+For completeness, writewλ(x) = 1 +λ(x−m). For everyQof meanm,E Qwλ = 1; the variational inequality
+for relative entropy givesEP logw λ ≤KL(P∥Q). At an interior maximizerλ ∗ of the concave objective, its
+first-order condition shows thatQ(dx) =P(dx)/w λ∗ (x)is a probability measure of meanm, giving equality.
+Ifλ ∗ = 1/m, the one-sided condition givesr=E P (m/X)≤1, andQ(dx) = (m/x)P(dx) + (1−r)δ 0(dx)
+gives equality instead. Reflection handles the other endpoint by adding missing mass at one. A boundary
+maximizer cannot havewλ∗ = 0on a set of positiveP-mass, since its objective would then be−∞, whereas
+λ= 0gives zero. This proves (E.33).
+With bPn =n −1 Pi δXi, writeL n(m) =nd( bPn, m). For arbitraryei ≥0, expansion in the Bernstein basis
+gives
+nY
+i=1
+(1−u+ue i) =
+nX
+k=0
+n
+k
+
+uk(1−u) n−kAk, A k = 1 n
+k
+
+X
+|S|=k
+Y
+i∈S
+ei.
+The right side is a convex combination of theAk, and its integral is(n+ 1)−1 Pk Ak. Consequently,
+Z 1
+0
+nY
+i=1
+(1−u+ue i)du≥ 1n+ 1 supu∈[0,1]
+nY
+i=1
+(1−u+ue i).(E.34)
+Takinge i =X i/mand(1−X i)/(1−m)covers the two signs ofλin (E.33). Thus raw acceptance by the
+hedged wealths implies
+Ln(m)<log 2(n+ 1)δwK .(E.35)
+The corresponding non-strict sublevel set is a closed interval containing¯Xn: convexity of relative entropy in
+its second argument makesd(bPn, m)convex inm, and its value at¯Xn is zero. Closedness follows from lower
+semicontinuity of relative entropy and weak compactness of the laws on[0,1]. The sublevel set therefore
+also contains the closure of the raw acceptance interval and its singleton replacement. Likewise, before
+replacement, nonnegativity of the mixture wealths gives containment in the closure of the GE interval at
+levela n =δw G.
+Step 3: Gaussian efficiency.Fixδand writez=z 1−δ/2. The shared-scale normalized GE recursion is
+independent of its levelaapart from its initial valuep0 =a/2. The proof of Proposition 6.1 shows that this
+recursion is nondecreasing in current normalized wealth. Hencep±t,n(m;a) = (a/2)K ±t (m;a)is nondecreasing
+ina, and the GE acceptance interval is nonincreasing ina. Sincean →δ, squeezing between fixed levels on
+either side ofδ, using the endpoint conclusion in Step 4 of Appendix E.1.1, gives the same Gaussian endpoint
+expansions at levelan.
+We also need that averaging cannot move either endpoint inward on this scale. Uniformly for each fixed
+R <∞,
+sup
+|t|≤R
+Ln ¯Xn + t√n  − t22σ2  − →0almost surely.(E.36)
+To see this directly, the empirical second moment about¯Xn +t/ √nconverges uniformly toσ 2 >0. The
+derivative of the concave objective in (E.33), evaluated atλ=±C/ √nfor sufficiently large fixedC, has
+59
+opposite signs uniformly over|t| ≤R. Its maximizer is thereforeO(n−1/2). Taylor expansion of the bounded
+logarithmic factors then gives (E.36). Each integrand in (6.5) is at mostexpLn(m), so both mixture wealths
+areO(1)uniformly on this neighborhood, almost surely. Becausew K =O(1/n)at fixedδ, their weighted
+contributions vanish uniformly there.
+For any0< ε < z, putm ±n = ¯Xn ±σ(z−ε)/ √n. The negative-separation argument in Step 3 of
+Appendix E.1.1 gives more than acceptance: (E.14) keeps the terminal normal-quantile state below half its
+diverging negative preterminal separation. Its summable bounds, the same grid argument, and monotonicity
+used in Step 4 therefore give
+p+n,n(m±n ;δ)− →0, p −n,n(m±n ;δ)− →0almost surely.
+Sincea n ≤δ, the same holds atan. The normalized hedged wealth is
+δ
+2 H ±n,n(m) =p ±n,n(m;a n) + δwK2 M ±n (m).
+Thus bothm −n andm +n are eventually accepted, almost surely. The interval is then nonempty and its outer
+endpoints are bounded by the GE interval at levelan. Lettingε↓0proves the two Gaussian expansions.
+Step 4: a lower bound for every honest interval.Supposen −1 log(1/δn)→ρ >0, andC n has
+coverage1−δ n for every iid law on[0,1]. Fixmwithd(P, m)< ρ. Choose a lawQof meanmwith
+D= KL(P∥Q)< ρ, and chooseϵ >0withD+ϵ < ρ. ForA n ={m /∈Cn}andR n = Pni=1 log(dP/dQ)(X i),
+change of measure gives
+∞X
+n=1
+P ⊗n(An ∩ {Rn ≤n(D+ϵ)})≤
+∞X
+n=1
+en(D+ϵ)δn <∞,
+where summability follows fromD+ϵ < ρ. Borel–Cantelli therefore implies that these truncated exclusion
+events occur only finitely often, almost surely. Finite relative entropy makes the log likelihood ratio integrable
+underP, so the strong law givesRn/n→Dalmost surely. ThusR n ≤n(D+ϵ)eventually, and hencem∈C n
+eventually, almost surely. This proves the asserted universal lower bound. Applying it to countable sequences
+of fixed points approaching the endpoints ofJρ(P)from within bounds the endpoints of an honest interval
+from inside, almost surely. Independent external randomization is covered by using the same randomization
+law underPandQ; no independence across horizons is needed.
+Step 5: large deviation efficiency.For0< µ <1, the functiond(P, m)is finite and continuous for
+0< m <1, convex inm, zero only atµ, and divergent asmapproaches zero or one. Indeed, finiteness
+follows by mixingPwith mass at zero or one, and data processing under the kernelY|X∼Bernoulli(X)
+givesd(P, m)≥kl(µ, m). Convexity then makes it strictly monotone on each side ofµ. Thus0< lρ(P)<
+µ < uρ(P)<1, with profile valueρat both endpoints.
+Fixm∈(0,1)outsideJ ρ(P). By (E.33), an interior fractionλhas expected log returnr > ρ. One
+can choose an interior fraction by contracting any fraction with return aboveρslightly toward zero. Its log
+return is bounded, so the strong law yields
+lim inf
+n
+Ln(m)
+n ≥E P log{1 +λ(X−m)}=r > ρalmost surely.
+In this regimew K →ρ/(1 +ρ)>0, and the threshold in (E.35) divided byntends toρ. Consequently
+the profile interval eventually excludes each such fixedm. It contains¯Xn →µ, so fixed points arbitrarily
+close outsidel ρ(P)andu ρ(P)bound its endpoints from outside. The hedged interval is contained in that
+profile interval, while its own honesty supplies the matching inner bounds just proved. Apply both bounds
+to countable sequences of fixed points approachinglρ(P)andu ρ(P)from each side. On the intersection of
+the resulting probability-one events, for every sufficiently small member of a sequenceηk ↓0, eventually
+lρ(P)−η k ≤infI Hn (δn)≤l ρ(P) +η k,
+uρ(P)−η k ≤supI Hn (δn)≤u ρ(P) +η k.
+Thus both endpoints converge almost surely. The argument uses no positive variance assumption, so it also
+applies whenPis a point mass at an interior mean.
+60
+E.1.6 Proof of Proposition 6.4
+Proof.For either sign, the inner minimum in (6.7) is a nonnegative concave function ofp, vanishing at
+zero and one. With a nonnegative centered increment, the clipped update is concave, bounded above by
+one, and equals one atp= 1, so is nondecreasing. With a negative increment, the update is convex
+and nonnegative by the cap, vanishes at zero, and is therefore nondecreasing as well. Thus each map
+is continuous and nondecreasing, fixing zero and one. For everyq∈[0,1], its upper level set is exactly
+[inf{p:F ±i (p;m)≥q},1]; forq= 0the infimum is zero. Applying this equivalence backward proves the
+stated pathwise identity, including equality at the rejection boundary. For each fixeda, predictability and
+clipping giveEV a,±n ≤a, whence
+P{π±n (m)≤a}=P{V a,±n (m) = 1} ≤EVa,±n (m)≤a.
+A union bound over the two tails proves two-sided validity.
+61

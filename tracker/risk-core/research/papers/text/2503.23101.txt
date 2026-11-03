@@ -1,0 +1,874 @@
+arXiv 2503.23101  https://arxiv.org/abs/2503.23101
+
+arXiv:2503.23101v2  [cs.LG]  20 Jun 2025
+RL2Grid: Benchmarking Reinforcement Learning
+in Power Grid Operations
+Enrico Marchesini
+Massachusetts Institute of Technology
+emarche@mit.edu
+Benjamin Donnot
+RTE France
+benjamin.donnot@rte-france.com
+Constance Crozier
+Georgia Institute of Technology
+Ian Dytham
+National Grid ESO
+Christian Merz
+50Hertz
+Lars Schewe
+University of Edinburgh
+Nico Westerbeck
+50Hertz
+Cathy Wu
+Massachusetts Institute of Technology
+Antoine Marot
+RTE France
+antoine.marot@rte-france.com
+Priya L. Donti
+Massachusetts Institute of Technology
+donti@mit.edu
+Abstract
+Reinforcement learning (RL) can provide adaptive and scalable controllers essential
+for power grid decarbonization. However, RL methods struggle with power grids’
+complex dynamics, long-horizon goals, and hard physical constraints. For these
+reasons, we present RL2Grid, a benchmark designed in collaboration with power
+system operators to accelerate progress in grid control and foster RL maturity.
+Built on RTE France’s power simulation framework, RL2Grid standardizes tasks,
+state and action spaces, and reward structures for a systematic evaluation and
+comparison of RL algorithms. Moreover, we integrate operational heuristics and
+design safety constraints based on human expertise to ensure alignment with
+physical requirements. By establishing reference performance metrics for classic
+RL baselines on RL2Grid’s tasks, we highlight the need for novel methods capable
+of handling real systems and discuss future directions for RL-based grid control.1
+1 Introduction
+Power grids require a rapid transition to low-carbon energy and improved robustness against climate-
+induced extremes in order to combat climate change. This requires operating under increasing speed,
+scale, and uncertainty, due in large part to evolving supply and demand profiles resulting from
+distributed devices and variable renewable energy sources (VREs) (Li et al., 2023). This integration
+creates significant challenges for human operators and traditional power system solvers (Marot et al.,
+2022b). To clarify what a power grid is, Figure 1 shows a simplified scenario with four substations
+(dots) interconnected by transmission lines (edges), two power generators, and two loads connected to
+buses within each substation. Generators produce power that flows through transmission lines to meet
+demands (loads). Transmission leads to power losses due to resistive heat on the lines, and substations
+(which may contain multiple buses) can act as “switches” to direct power flows to an extent. All
+these electrical components have physical constraints that must be satisfied (e.g., generators have
+Preprint. Under review.
+1Code is available at https://github.com/emarche/RL2Grid
+Figure 1: A high-level overview of a power grid action (bus split) to address an overloaded line (red).
+ramping limits preventing arbitrary instantaneous changes in power output, and transmission lines
+have maximum capacities, with prolonged overloads causing disconnections and permanent damage).
+Deep reinforcement learning (RL) is a promising approach for power grid operations, having demon-
+strated impressive control performance over the last decade (Mnih et al., 2013; Silver et al., 2016;
+Wurman et al., 2022). However, power grids encompass many open research questions in RL , includ-
+ing dealing with complex dynamics, aleatoric uncertainty, learning long-horizon goals, and satisfying
+hard physical constraints. Investigating realistic power grid tasks from an RL perspective could thus
+yield substantial benefits for both society and the RL research community. Nonetheless, progress in
+relevant RL methodologies is hindered by a lack of standardized benchmarks that can help promote
+and monitor progress, identify bottlenecks, and develop insights to address real-world challenges. We
+fill this gap by introducing RL2Grid, an RL benchmark for realistic power grid operations designed in
+collaboration with major transmission system operators (TSOs). RL2Grid aims to accelerate progress
+in grid control and advance RL methods tailored for real-world problems by modeling a diverse,
+standardized set of increasingly complex power grid environments for RL research. These tasks build
+upon RTE France’s Grid2Op (RTE France, 2020), a realistic power grid simulation framework, and
+are presented within a standard Gymnasium-based interface, alongside common state and action
+spaces, and rewards, to provide a shared base for comparison. We additionally perform an in-depth
+analysis of RL2Grid’s design choices by investigating the quality of the actions available in different
+task settings. To incorporate power grids’ real operation practices and hard physical requirements,
+we also introduce a heuristic module incorporating common line reconnection and idle practices in
+the grid dynamics (RTE France, 2020), as well as constrained task formalizations for safe RL (Gu
+et al., 2024). Finally, by extending the well-known CleanRL library (Huang et al., 2022) to include
+flexible configurations for algorithm implementation details, we conduct a comprehensive empirical
+comparison of classic RL algorithms that are frequently used in the literature as baselines or building
+blocks for more complex approaches. Our codebase is available as supplementary material.
+Finally, our collaboration with TSOs allows us to extensively discuss (Section 6): (i) directions to
+further improve the realism of power grid simulators to enable last-mile development and deployment
+of the methodological advances we hope RL2Grid will promote; and (ii) the relationship of power
+grid operations to open challenges in RL. Through RL2Grid, we aim to foster the maturity of RL
+methods for real-world power grid domains and provide a standardized basis for comparative analysis.
+2 Preliminaries
+A power grid task can be modeled as a Markov decision process (MDP)—a tuple (S, A, P, ρ, R, γ),
+where S and A are the finite sets of states and actions, respectively, P : S × A × S →[0, 1] is
+the state transition probability distribution, ρ : S →[0, 1] is the initial uniform state distribution,
+R : S × A →R is a reward function, and γ ∈ [0, 1) is the discount factor. In policy optimization
+algorithms, agents learn a parameterized policy π : S × A →[0, 1], modeling the probability of
+taking an action at ∈ Ain a state st ∈ Sat a certain step t. In value-based algorithms, agents learn
+state and/or action value functions Vπ and Qπ, representing the expected discounted return when
+starting from a state s (and action a for Qπ) and following the policy π thereafter. In these contexts,
+agents typically use a greedy policy taking the action corresponding to argmax over Qπ. The goal is
+to find a policy that maximizes the expected discounted return Eπ[P∞t=0 γtR(st, at)].
+To promote safety, we also model grid tasks as constrained MDPs (CMDPs) (Altman, 1998), by
+adding a set of constraints C := {Ci}i=1,...,n defined over unsafe state and action pairs identified by
+indicator cost functions. These can be used to describe both instantaneous constraints which must
+be satisfied at every point in time, and cumulative constraints specifying limits on the accumulation
+2
+of cost over a specified horizon. For instance, policy optimization approaches typically transform
+the CMDP into an equivalent unconstrained Lagrangian optimization problem L over the policy
+parameters using dual variables as Lπ(λ) =JR + LC(λ), where LC(λ) =− Pni=1 λi(V πCi − τi),
+JR is the return objective to maximize, λ = {λi}i=1,...,n act as penalties on JR for each constraint,
+τ = {τi}i=1,...,n are the constraint thresholds, and V πC = {V πCi }i=1,...,n are the expected cost returns.
+3 RL2Grid Benchmark
+RL2Grid considers the general setting of operating a power grid via topology optimization, as well as
+redispatch and curtailment actions (wrapped within a traditional Gymnasium interface), in order to
+keep the grid operational over a long horizon—a month of operations divided into 5 minute steps:
+(i) Topology optimization involves identifying substations where a bus-split action can mitigate
+the overload by adjusting the grid topology (i.e., how elements are interconnected in the grid).
+This approach is cost-effective for grid operators as it typically involves simple switch activation.2
+However, determining the “optimal” topology from the exponential number of possible configurations
+is typically infeasible using existing optimization-based solvers.
+(ii) Redispatch or curtailment deals with adjusting the power flow by redispatching or curtailing
+the power output of fossil and renewable power generators (respectively). However, this method is
+often economically demanding, as it disrupts the normal operations of third parties controlling the
+generators and can lead to additional power costs.
+Figure 2: IEEE 14-bus sample grid.
+RL2Grid tasks are designed on top of 7 main “base
+grids” from Grid2Op. Each of these grids has a dou-
+ble bus system—every electrical component (i.e., gen-
+erator, load, and transmission line) has two possible
+connections within a substation. Table 1 summarizes
+these base grids, along with the features and the num-
+ber of components they include. These grids present
+two possible types of contingencies: (i) Maintenance
+(M): Scheduled maintenance events observed by the
+agent where a line is disconnected and cannot be re-
+connected until a fixed number of steps (a cooldown)
+has passed; and (ii) Opponent (O): Unforeseen events (e.g., weather conditions) that introduce
+stochasticity by causing a random line to disconnect, entering its cooldown state. The agent does not
+know about these events in advance and must address the contingencies that such a disconnection
+might cause in real time. Environments may also include storage units (Batteries (B)) that can act as
+both generators (discharge) and loads (charge).
+Transition dynamics. Each scenario in RL2Grid is defined over time series of synthetic but
+operationally realistic load demand and generation profiles created with ChroniX2Grid (Marot et al.,
+2020b).3 At the beginning of each episode, a random time index is sampled from the full-time series
+Table 1: List of base grid environments and contingencies currently supported by RL2Grid.
+ID Maintenance Opponent Battery # Subs. # Lines # Gens. # Loads
+bus14 ✓ × × 14 20 6 11
+bus36-M ✓ × × 36 59 22 37
+bus36-MO-v0 ✓ ✓ × 36 59 22 37
+bus36-MO-v1 ✓ ✓ × 36 59 22 37
+bus118-M ✓ × × 118 186 62 99
+bus118-MOB-v0 ✓ ✓ ✓ 118 186 62 91
+bus118-MOB-v1 ✓ ✓ ✓ 118 186 62 99
+2There is some uncertainty (and debate) regarding how frequently each component can be switched safely in
+practice, without degrading the underlying equipment.
+3We use the time series integrated in Grid2Op’s base grids, which consists of months to years’ worth of data
+simulating generation and demand profiles happening over extended periods of time. Due to confidentiality and
+privacy constraints, up-to-date real-world grid time series data is typically unavailable to use.
+3
+to initialize the environment, ensuring that agents are trained under a wide variety of grid conditions
+and do not overfit to specific temporal patterns.
+From there, at each step, the environment transitions from state st to st+1 through a multi-stage
+process that reflects realistic grid operations. First, stochastic (unforeseen) opponent events (e.g.,
+line faults caused by weather events) are applied, following distributions specific to each base grid.
+Agent actions (e.g., topology or redispatch changes) are then executed, and invalid actions (e.g.,
+those violating cooldowns) do not have any effect. The environment updates cooldown timers and
+applies any scheduled maintenance events. The underlying Grid2Op power simulation framework
+then simulates physical power flows using an AC power flow solver; if the system is infeasible due
+to islanding or demand shortfall, the episode ends. Otherwise, line overloads are identified, and
+persistent overloads lasting more than three steps trigger automated disconnections. More details on
+this are discussed in RTE France (2020). The next state is constructed by updating grid variables
+(e.g., topology, power flows, forecasts), capturing the nonlinear, nonconvex, and stochastic dynamics
+of real-world power systems.
+State space. Agents have access to the state of the power grid at each time step. The state includes
+common grid features such as production at each generator, load demands, status, capacity, and
+cooldown of transmission lines, and the current step. Additional features are provided based on the
+environment’s characteristics (e.g., maintenance, opponent events, and/or batteries—see Table 1)
+and the action space. In the topological case, the state includes the topological vector (an integer
+vector indicating where each device is connected), the connection status of lines, overflow status,
+and substation cooldowns. In the continuous case, the state consists of target and actual dispatches,
+curtailment, and generator ramping limits. These are the main features used by the AC power
+flow solver to transition the grid to the next state. Due to space limitations, an exhaustive list and
+description of the features that comprise the state is discussed in Appendix D.
+Action spaces. Each grid has two types of tasks, depending on the nature of their action space.
+(i) Topology space: Agents take discrete actions that modify the topology of the substations—
+disconnecting or reconnecting a line, or changing the bus to which a component is connected.4 Line
+switching introduces one discrete action per line, whereas bus reassignments (or “bus-splitting”)
+yield an exponentially large number of valid actions depending on the number of elements connected
+to the substations. Specifically, the topological action space for a double bus substation composed of
+Nlines lines, Ng generators, Nl loads, has size N = 2Nlines+Ng+Nl−1 − 1 (Chauhan et al., 2023). For
+instance, substation #5 in Figure 2 has 7 elements, resulting in 63 possible actions, while in the larger
+bus36 and bus118 grids, a single substation can have over 65,000 possible configurations.
+Figure 3: Action ranking for the bus14 task. The
+dashed line separates the difficulty levels (i.e., with
+50 and 209 actions).
+Considering the size of the space, we propose
+“difficulty levels” in which the action space has
+an increasing number of topology actions. We
+selected these action spaces through extensive
+simulations (72 hours on the computer cluster
+detailed in Section 4) by ranking the full action
+space based on the survival rate for the grid.
+This rate represents the number of steps that
+each action maintains the grid in normal con-
+ditions over an episode, and is defined as the
+normalized number of steps for which an action
+does not cause a grid collapse (because the to-
+tal demand is not satisfied or parts of the grid
+become disconnected). In detail, we uniformly
+sampled topological actions, and after ordering
+them by highest survival rate, we took the firstNactions from the ordered space, whereNactions increases
+with each difficulty level. For example, Figure 3 shows the ranking for the bus14 grid, highlighting
+how suitable all the topological actions are to address grid contingencies (and how easier levels
+contain actions that are more likely to address a contingency). To further motivate our method, we
+visually analyze the impact of the resultant action spaces in Appendix C, where we also summarize
+4Human operators currently modify the grid topology manually based on historical behaviors; there is no
+tractable approach to obtain optimal topology optimization solutions (at scale) as of yet.
+4
+the difficulty levels and the size of their discrete action spaces. Considering these levels, RL2Grid
+has a total of 32 topology-based tasks.
+(ii) Redispatching and curtailment space : Agents take continuous actions changing how power
+generation is scheduled. Unlike topology actions, which only involve remotely activating a switch,
+these actions are not free. Economic costs arise from altering the planned generation schedule
+of power plants, increased fuel costs, and financial compensation for renewable energy producers.
+Redispatching actions apply to fossil fuel-based generators, while curtailment actions apply to
+renewable energy-based generators. Batteries, if present, are also considered generators and come
+with continuous actions for charging/discharging operations. This action space is relatively tractable
+for RL algorithms since it involves one continuous action per generator (i.e., N = Ng). Thus, we
+present a total of 7 continuous action-based training environments (one per base grid).
+Reward. The reward design is informed by TSOs’ mandate to satisfy real-world grid operation
+requirements: promote long-term safety and efficiency by rewarding grid survival and penalizing
+unsafe or costly actions (in terms of economic costs). At each step t, the reward an agent gets is
+Rt = αRsurvive,t + βRoverload,t + ηRcost,t, where the weights are evaluated in Appendix F. Specifically,
+the agent gets a cumulative positive constant Rsurvive,t for each step, normalized by the total length of
+a training episode (∈ [0, 1]). The overload and cost rewards are defined as:
+(i) Overload: Penalizes line overloads and disconnections, and rewards available line capacity based
+on the difference between line flows and capacity limits. In unconstrained settings, disconnected
+lines incur a fixed penalty. This is more formally defined as:
+Roverload,t =
+X
+ℓ∈L
+"
+max
+ 
+0,
+PF,ℓ,t − P maxF,ℓ
+P maxF,ℓ + ϵ
+!
+− 1 (ℓ is disconnected)
+#
+,
+where PF,ℓ,t is the power flow on line ℓ at time t, P maxF,ℓ is its capacity limit, ϵ is a small constant to
+avoid divisions by 0, and the indicator function returns 1 if the line is disconnected. This term is then
+normalized to lie within [−1, 1].
+(ii) Cost: Penalizes redispatching or curtailment actions based on deviations from planned dispatch
+schedules and energy losses. This is defined as:
+Rcost,t = − [(PG,t − PD,t) +|credisp,t| + |Pstorage,t|] cmarginal,t,
+where PG,t and PD,t denote the total power generated and total demand consumed at time t, respec-
+tively, with their difference representing transmission losses, credisp,t corresponds to the redispatched
+power (i.e., the absolute deviation from scheduled generator setpoints), and Pstorage,t represents the
+power exchanged with storage units. All cost components are scaled by the marginal generation cost
+cmarginal,t, defined as the cost per MWh of the most expensive generator currently producing power.
+This value is also normalized to lie in the range [−1, 0].
+3.1 Heuristic-guided Transitions
+To reduce the problem horizon and (potentially) improve learning stability and sample efficiency,
+RL2Grid incorporates two expert-informed heuristics that modify the transition dynamics described
+above. These heuristics emulate human operator behavior: they suppress agent actions when the grid
+is stable and allow the agent to try to recover normal operations when contingencies occur.
+The idle heuristic (I) is triggered when all line loadings are below a safety threshold set to 95% of
+their capacity. In this case, the agent’s control is suspended and replaced by no-op actions. The
+?
+idleRestore RLoperations
+ recovery 
+action?
+Get substations
+to recover
+Recover the
+substation with
+most elements to
+restore
+(transition to the next step)
+Pause RL operations
+Yes
+NoNo
+Yes
+Figure 4: Recovery heuristic combining L2RPN strategies and operator expertise. The agent acts
+under risk (e.g., line overloads); otherwise, the heuristic incrementally restores the original topology.
+5
+recovery heuristic (R), shown in Figure 4, activates when the grid is safe but the topology differs
+from its original configuration. It incrementally restores the original topology, modifying at most one
+substation per step, and defaults to idle once recovery is complete.
+These heuristics modify the environment so that each agent action initiates a sequence of n-step
+heuristic-guided transitions during which rewards accumulate. While our heuristics encode opera-
+tional priors from winning L2RPN competitors (Marot et al., 2020a, 2021), our methods have the
+benefit of being embedded directly in the environment for compatibility with standard RL libraries
+and are systematically benchmarked. We believe this design balances expert-in-the-loop guidance
+with the learning process, enabling more sample-efficient training and improved policy performance
+in realistic, safety-critical scenarios.
+3.2 Fostering Safe Operations via Constrained RL
+While prior works such as L2RPN have not incorporated constrained formulations to foster
+safety (Marot et al., 2020a, 2021, 2022b), RL2Grid introduces CMDP-based tasks that reflect
+two key classes of safety violations faced by system operators as constraints.
+In the load shedding and islanding (LSI) case, unsatisfied demand and islanding trigger a positive cost.
+Let us denote the total demand and generation at time t as PD,t and PG,t, respectively, and define
+Lt = 1 (PG,t < PD,t), I t = 1 (NI,t > 0), where NI,t is the number of disconnected components.
+The LSI cost is CLSI(t) =Lt + It, with a zero cumulative threshold Pt CLSI(t) = 0to model a hardsafety constraint. For transmission line overload (TLO), a positive cost occurs upon thermal overloads
+and line disconnections. Let us denote the power flow on line ℓ as PF,ℓ,t, its capacity as P maxF,ℓ , and
+define Oℓ,t = 1 (PF,ℓ,t > PmaxF,ℓ ), D ℓ,t = 1 (ℓ is disconnected), where Dℓ,t excludes scheduled
+maintenance or opponent-driven disconnections. The TLO cost is CTLO(t) =Pℓ∈L(Oℓ,t + Dℓ,t),
+with a cumulative threshold PTt=0 CTLO(t) < τto model this as a “soft” constraint.
+These constraints are applied across all 32 topology-based environments, resulting in 64 additional
+constrained variants.5 By modeling these critical safety violations, RL2Grid enables the development
+and benchmarking of safe RL methods for real-world grid operations.
+4 Experiments
+We evaluate the performance of baseline RL algorithms that typically serve as building blocks for
+more complex algorithms in representative RL2Grid tasks. In particular, we test: (i) (double) DQN
+(van Hasselt et al., 2016), PPO (Schulman et al., 2017), and SAC (Haarnoja et al., 2018) and their
+heuristic versions on the discrete topological action space for the bus14, bus36-MO-v0, bus118-M,
+bus118-MOB-v0 tasks over most levels of difficulty; (ii) PPO, SAC, and TD3 (Fujimoto et al., 2018)
+in the continuous redispatching action space of these environments; (iii) and the Lagrangian version of
+PPO, LagrPPO (Stooke et al., 2020), in the two constrained versions (LSI and TLO) of the topological
+bus14 task. We consider these tasks to be representative, as they provide sufficient empirical evidence
+of the current performance of the baselines in power grid operations.
+Implementation and Data Collection. Data collection is performed on Xeon E5-2650 CPU nodes
+with 256GB of RAM, using CleanRL-based implementations for the baselines (Huang et al., 2022)
+and the hyperparameters—selected via grid search—in Appendix F. If not specified otherwise, the
+results show the average survival smoothed over 500 episodes of 10 runs per method, with shaded
+regions representing the 95% confidence intervals. As described above, the survival denotes the
+normalized number of time steps the grid remains operational over an episode, with a survival rate of
+1 indicating one month of successful grid operations. We set a strict time limit on the nodes used
+for data collection, set to 48 hours for each individual run. The experiments in this work (excluding
+the hyperparameter search) required a total of >180,000 CPU hours to execute, and Appendix E
+addresses the associated environmental impact and our efforts to offset estimated CO2 emissions.
+Results. We indicate with V the “vanilla” baselines, and with I and R the experiments with the
+heuristics described in Section 3.1. Overall, the RL baselines struggle to deal with the real-world
+5Constraints are compatible with redispatching tasks but are primarily evaluated on topology due to their
+operational relevance and the complexity of associated actions.
+6
+Table 2: Average survival rate (higher is better) in a subset of difficulty 0 tasks with topological
+actions for the baselines: idle (I), MILP optimization (MILP); and RL algorithms: vanilla RL (V),
+and the heuristic versions (I, R) for DQN, PPO, and SAC.
+Baseline DQN PPO SAC
+Env. Diff. I MILP V I R V I R V I R
+bus14 0 0.18 0.06 0.07 0.86 0.74 0.74 0.99 0.97 0.17 0.56 0.16
+bus36-MO-v0 0 0.03 0.06 0.04 0.14 0.19 0.06 0.17 0.29 0.01 0.10 0.13
+bus118-MOB-v0 0 0.10 0.05 0.07 0.19 0.27 0.04 0.18 0.28 0.01 0.15 0.19
+Table 3: Average survival rate (higher is better) of the grid in a subset of tasks with continuous
+redispatching actions obtained by an idle baseline (I) and RL-based vanilla baselines (V) for PPO,
+SAC, and TD3.
+Env. Diff. I PPO (V) SAC (V) TD3 (V)
+bus14 0 0.00 0.17 0.01 0.06
+bus36-MO-v0 0 0.08 0.08 0.02 0.01
+bus118-MOB-v0 0 0.11 0.25 0.08 0.07
+complexities of power grid operations. As expected, we also notice that the heuristic-guided transi-
+tions reduce the problem complexity and typically achieve higher performance, despite being not
+nearly sufficient to operate complex grid setups for long periods of time.
+Figure 5 compares the training performance of the baseline algorithms, the heuristic versions, and
+the constrained variants on the topological bus14 grid at difficulty level 0. Among the unconstrained
+baselines, only PPO successfully learns an effective policy in this relatively simple environment.
+However, incorporating human-informed heuristic operations leads to notable improvements in both
+performance and sample efficiency across all methods. With heuristic augmentation, PPO achieves
+good long-term control, while DQN and SAC also exhibit strong performance. Interestingly, our
+results indicate that performing idle operations in smaller grid domains—rather than reverting to the
+original topology—can improve RL performance. In contrast, introducing constraints significantly
+increases task difficulty: agents are penalized for violations, and LagrPPO struggles even in this
+basic setting, failing to learn effective control and frequently exceeding constraint thresholds (see
+Appendix G for details). Finally, Tables 2 and 3 report the average survival at convergence for
+the unconstrained baselines in both topological and redispatching tasks.6 For topology control, we
+evaluate two traditional baselines: an “idle” policy (I) and the MILP-based agent from Grid2Op
+(RTE France, 2022), which minimizes line overloads via topological actions under DC power flow
+approximations.7 For redispatching, only the idle baseline is considered, as no built-in agent is
+provided in Grid2Op. Notably, even model-free RL-based agents consistently outperform these
+traditional methods across both settings.
+Figure 5: Average survival of the baselines (left), heuristic versions (center), and constrained variants
+(right) on the bus14 task with topological actions at difficulty 0 (higher values are better).
+6Due to space constraints, we report only average performance. Full results and training curves, including
+the bus118-M task and higher difficulty levels, are available in Appendix G.
+7This approximation is necessary due to the intractability of AC formulations (Marot et al., 2020a, 2021).
+7
+Figure 6: Average score for key operational components across vanilla baselines. The first column
+represents line margins, where higher values indicate better contingency management. The second
+column tracks overload penalties, with lower values reflecting improved grid stability. The third
+column captures topology modifications, showing the extent to which agents reconfigure the grid.
+These performance results motivate the need for further advancements in RL algorithms that can
+contend with the complex dynamics and aleatoric uncertainty, long-horizon goals, and hard physical
+constraints of real-world tasks such as power grid operations .
+Performance analysis. Figure 6 analyzes how the baseline algorithms are learning to control the
+grid.8 In particular, we quantify three distinct operational metrics—maring, overloads, and topology—
+each defined and shown (with 95% confidence intervals) as a scalar-valued “score" signal derived
+from the agent’s interaction with the environment:
+• Margin (first column): Represents the cumulative available margin across all transmission
+lines, where disconnections are penalized and lower power usage is rewarded. It is defined
+per-step t as: Pℓ∈L mℓ,t, where mℓ,t = max0, PmaxF,ℓ − |PF,ℓ,t|, if line ℓ is connected,
+mℓ,t = −1 if not. Higher values indicate that the agent maintains greater flexibility to
+handle contingencies. Overall, we find that successful agents tend to maximize line margins.
+• Overloads (second column): Shows the overload componentRoverload,t as defined in Section 3.
+Lower values imply that the agent maintains power flows within safe operational limits,
+which is a key characteristic of effective policies. Unsurprisingly, the unconstrained agents
+violate the overload constraints. Perhaps surprisingly, the constrained versions actually
+exhibit even more severe violations of these constraints, which we hypothesize is due to
+their overall difficulty in optimizing performance in the constrained environment.
+• Topology (third column): Quantifies deviations from the initial grid configuration (where
+all elements are connected to the first bus). It is defined per-step t as: −d(Gt, G0), where
+Gt denotes the grid topology at time t, and d(Gt, G0) is the Hamming distance of the
+topology at time t from the initial topology G0. This metric quantifies the extent of grid
+reconfiguration. Negative values indicate more significant structural interventions, which
+often correlate with better operational performance in learned policies. A value close to 0
+suggests minimal changes, while higher values indicate significant topological modifications.
+We find that successful agents tend to actively reconfigure the grid to optimize operations.
+5 Related Work
+Recent attempts to develop sequential decision-making in power system operations benchmarks
+often focus on small-scale problems and/or simplified setups (Chen et al., 2022). Examples include
+Henri et al. (2020) for microgrids, CityLearn for demand response and urban energy management
+(Vazquez-Canteli et al., 2020), and gym-ANM for small electricity distribution networks (Henry
+and Ernst, 2021). RL environments for electric vehicle (EV) charging and electricity markets have
+also been introduced (Zhang et al., 2020). Recently, SustainGym spanned diverse tasks ranging
+from EV charging to carbon-aware data center job scheduling (Yeh et al., 2023). The ARPA-
+E GO Competition provides a large-scale benchmark for power grid operations, but is more-so
+geared towards offline optimization approaches (ARPA-E, 2023). On the methodological side,
+recent contributions in the field include works on cascading failure mitigation, demand response
+optimization, and real-time grid control using RL (Matavalam et al., 2022; Lehna et al., 2023; van der
+8A similar analysis for the heuristic and constrained experiments is available in Appendix H.
+8
+Sar et al., 2024). Nonetheless, these works are more geared towards methodological advancements
+rather than proposing a benchmark. For this reason, we refer the reader to recent reviews for details
+on RL applications in power grid operations (Li et al., 2023; Su et al., 2024).
+Relationship with Grid2Op. Grid2Op is an open-source power simulation framework designed
+by RTE France to model power grid controllers (RTE France, 2020). It simulates grid operations,
+requiring that grids work for long horizons in a way that is robust to contingency events, as well
+as adhering to physical and operational constraints. For the latter, Grid2Op models: (i) cooldown
+periods to prevent immediate reconnection of disconnected lines, and limits on the frequency of
+actions on the same line to avoid asset degradation; (ii) limited thermal capacity of transmission
+lines; (iii) ramp rates on generators that restrict how much power generation can change between
+time periods; and (iv) adherence to AC power flow constraints. Grid2Op has been primarily used
+as the base for the L2RPN competitions (Marot et al., 2020a, 2021, 2022a). While RL methods
+have been used for L2RPN, they fail to provide a common ground to foster advancements in the
+field—each method uses custom input features and action spaces of (very) limited size, often without
+providing sufficient evidence on how and why these spaces were considered. Hence, to date, there is
+no standardized solution that allows RL researchers to easily get started in this field and compare
+over an established benchmark.9
+6 Tackling the Challenges of Power Grids with RL
+Applying RL in power grids presents numerous open problems, each offering significant opportunities
+for advancing both grid operations and RL methodologies (Marot et al., 2022b). While we address a
+subset of these challenges via our work, there remains ample room for future work.
+6.1 Relevant RL Methodologies
+RL has the potential to be beneficial in addressing open grid problems. There are also potential
+risks (e.g., with respect to safety, reliability, and robustness) that are important to address. Here, we
+summarize interesting avenues for future research.
+Safe RL. Safety is paramount in power grid operations. Safe RL methods aim to ensure that learning
+and control policies adhere to strict safety constraints, preventing actions that could lead to blackouts
+or equipment damage (RTE France, 2020). Ensuring safety while optimizing performance is a critical
+area of research (Garcıa and Fernández, 2015; Marzari et al., 2025). In particular, incorporating
+novel algorithms based on our CMDP representations can be particularly beneficial for ensuring that
+solutions adhere to physical and operational limits (Liu et al., 2021; Marchesini et al., 2023).
+Human-in-the-loop. Effective grid management requires human expertise and intervention. In-
+corporating human supervision, interaction, and feedback into RL systems allows for a synergistic
+approach where human operators and AI work together to optimize grid operations (Marot et al.,
+2022b). This collaboration can enhance decision-making and build trust in AI-driven solutions.
+Hierarchical control and multi-agent RL. Power grids operate across multiple hierarchical levels,
+from individual substations to entire regions. Effective coordination within and across these levels is
+crucial for maintaining efficient and reliable operations. Hierarchical RL methods can be developed to
+manage multi-level control tasks, in a way that addresses the scale and complexity of grid operations
+(Pateria et al., 2021; Aydeniz et al., 2023). Another promising direction is the use of multi-agent
+representations. Given the vast and distributed nature of power grids, scalability can be enhanced by
+dividing the grid into distinct areas or agents, each responsible for its own operations. Multi-agent RL
+(MARL) frameworks can enable these agents to learn and coordinate actions (Papoudakis et al., 2021;
+Marchesini et al., 2024), to improve overall grid performance while managing local contingencies
+more effectively.
+Robust RL. The integration of renewable energy sources introduces significant variability and
+uncertainty into power grids, leading to non-stationary environments. RL algorithms need to adapt to
+these evolving dynamics to ensure stable and efficient grid operations despite fluctuating supply and
+demand profiles. Handling non-stationarity is thus a critical research direction (Moos et al., 2022;
+Marchesini and Amato, 2023).
+9Appendix A further discusses the relationship between L2RPN and RL2Grid.
+9
+Model-based RL. Model-based RL methods leverage models of the grid dynamics to improve
+learning efficiency and policy performance. These methods can provide more accurate predictions
+and better generalize across different scenarios, leading to faster and more robust solutions (Luo et al.,
+2022). Additionally, the AlphaZero algorithm, which combines tree search with deep learning, has
+shown remarkable success in games like chess and Go and could offer new strategies for handling
+complex, sequential decision-making tasks with high-dimensional spaces (Liu et al., 2023).
+Better representations. Improving model representations for RL in power grids can also lead to more
+efficient learning and better policy performance. Leveraging graph neural networks (GNNs) offers a
+potential avenue for advancement. Power grids can be naturally represented as graphs, with nodes
+representing buses and edges representing transmission lines. GNNs can effectively model these
+structures, capturing the spatial and topological dependencies inherent in power grids. Integrating
+GNNs with RL algorithms can enhance the representation and learning of grid dynamics.
+Non-RL approaches. While RL holds great promise, it is also essential to consider non-RL ap-
+proaches such as optimization solvers, which are relevant particularly for problems with well-defined
+optimization objectives and constraints. In addition, exploring hybrid methods that combine RL with
+traditional optimization techniques can yield powerful tools for complex grid management tasks.
+6.2 Improving Realism of Power Grid Environments
+It is important to acknowledge that RL2Grid is only a first step. Notably, developing “last-mile”
+deployable solutions will require further improvements in the realism of power grid environments,
+which we now discuss.
+Scalability. Realistic power systems akin to those managed by RTE France and other transmission
+system operators may capture hundreds to thousands of buses. To ensure that RL solutions are
+applicable to real-world scenarios, improving the size and scale of grid environments is essential.
+Real data. Grid2Op (and thus, RL2Grid) relies on realistic but synthetic data, which already provide
+significant challenges for RL. After scaling up RL to deal with the challenges provided by RL2Grid,
+future environments should (in a way that is cognizant of privacy issues) publicly release real or more
+realistic synthetic grid data to design to bridge the gap with real power grid operations.
+N-1 security. Grid operators must ensure the system can withstand failure of any single component.
+Rather than modeling failures via random opponents, environments should handle this exhaustively
+and/or through adversarial agents tailored specifically to the method being tested.
+Topology vs. redispatch. Different grid operators handle the relationship between redispatch and
+topology optimization differently (e.g., some co-optimize these processes, whereas others prefer to
+handle them separately). Future benchmarks should reflect this heterogeneity in how different power
+grids are managed. Moreover, Grid2Op’s current approach of disconnecting lines after unaddressed
+overloads does not fully capture real-world practices, where operators attempt to prevent overheating
+at all costs. Incorporating more realistic consequences for unaddressed overloads, such as system
+costs, can improve the fidelity of benchmarks. Additionally, grid operators cannot switch every
+element to every busbar, and there are limits on the number of connected components per substation.
+Reflecting these constraints can lead to more practical and applicable RL solutions. Storage assets
+also play an increasingly important role in grid operations. Future benchmarks should accurately
+model storage and clarify the extent of control grid operators have over these assets.
+Phase-shift transformers. Phase-shift transformers, currently modeled as integer variables in the
+action space, should be represented more accurately to reflect their operational impact. Maintenance
+activities also vary significantly, with Type A involving physical presence at the site and Type B
+allowing remote interventions. Differentiating these types of maintenance activities in benchmarks
+can provide a more accurate representation of real-world constraints.
+7 Conclusions
+Power grids are essential in combating climate change, requiring a transition to low-carbon energy
+and enhanced resilience against climate-induced extremes. The integration of VRE sources introduces
+complexities and uncertainties in grid operations, posing significant challenges for human operators
+and traditional solvers. Our work aims to foster progress towards these challenges by introducing
+10
+RL2Grid, a benchmark designed to bridge the gap between current grid management practices and RL
+research. RL2Grid provides a standardized interface for power grid environments, featuring common
+rewards, state spaces, action spaces, and safety constraints across a pre-designed set of diverse and
+complex grid tasks in order to provide a common ground for monitoring and promoting progress.
+We perform a comprehensive evaluation of the performance of popular baselines on RL2Grid tasks,
+including versions augmented with domain-informed heuristics aimed at improving performance and
+sample efficiency, and find that there is still significant room for improvement in the performance of
+these methods. RL2Grid aims to accelerate algorithmic innovation towards improving power grid
+operations amidst the evolving challenges posed by climate change.
+Acknowledgments
+This work was supported in part by the MIT Climate Nucleus Fast Forward Faculty Fund Grant
+Program, the AI2050 program at Schmidt Sciences (Grant G-24-66236), and the MIT-IBM Watson
+AI Lab.
+References
+Altman, E. (1998). Constrained markov decision processes with total cost criteria: Lagrangian
+approach and dual linear program. In Mathematical methods of Operations Research.
+ARPA-E (2023). Grid Optimization (GO) Competition. https://gocompetition.energy.gov/.
+Aydeniz, A. A., Marchesini, E., Loftin, R., and Tumer, K. (2023). Entropy maximization in high
+dimensional multiagent state spaces. In 2023 International Symposium on Multi-Robot and
+Multi-Agent Systems (MRS), pages 92–99.
+Chauhan, A., Baranwal, M., and Basumatary, A. (2023). Powrl: A reinforcement learning framework
+for robust management of power networks. In AAAI.
+Chen, X., Qu, G., Tang, Y ., Low, S., and Li, N. (2022). Reinforcement learning for selective key
+applications in power systems: Recent advances and future challenges. IEEE Transactions on
+Smart Grid, 13(4):2935–2958.
+Fujimoto, S., van Hoof, H., and Meger, D. (2018). Addressing function approximation error in
+actor-critic methods. In International Conference on Machine Learning (ICML).
+Garcıa, J. and Fernández, F. (2015). A comprehensive survey on safe reinforcement learning. In
+Journal of Machine Learning Research (JMLR).
+Gu, S., Yang, L., Du, Y ., Chen, G., Walter, F., Wang, J., and Knoll, A. (2024). A review of
+safe reinforcement learning: Methods, theories and applications. IEEE Transactions on Pattern
+Analysis and Machine Intelligence.
+Haarnoja, T., Zhou, A., Abbeel, P., and Levine, S. (2018). Soft actor-critic: Off-policy maximum
+entropy deep reinforcement learning with a stochastic actor. In International Conference on
+Machine Learning (ICML).
+Henri, G., Tanguy Levent, A. H., Alami, R., and Cordier, P. (2020). pymgrid: An open-source python
+microgrid simulator for applied artificial intelligence research. arXiv.
+Henry, R. and Ernst, D. (2021). Gym-anm: Open-source software to leverage reinforcement learning
+for power system management in research and education. Software Impacts, 9.
+Huang, S., Dossa, R. F. J., Ye, C., Braga, J., Chakraborty, D., Mehta, K., and Araújo, J. G. (2022).
+Cleanrl: High-quality single-file implementations of deep reinforcement learning algorithms.
+Journal of Machine Learning Research, 23(274):1–18.
+Lehna, M., Jan Viebahn, C. S., Marot, A., and Tomforde, S. (2023). Managing power grids through
+topology actions: A comparative study between advanced rule-based and reinforcement learning
+agents. Energy and AI.
+11
+Li, Y ., Yu, C., Shahidehpour, M., Yang, T., Zeng, Z., and Chai, T. (2023). Deep reinforcement
+learning for smart grid operations: Algorithms, applications, and prospects. Proceedings of the
+IEEE, 111(9):1055–1096.
+Liu, S., Liu, J., Ye, W., Yang, N., Zhang, G., Zhong, H., Kang, C., Jiang, Q., Song, X., Di, F., et al.
+(2023). Real-time scheduling of renewable power systems through planning-based reinforcement
+learning. arXiv preprint arXiv:2303.05205.
+Liu, Y ., Halev, A., and Liu, X. (2021). Policy learning with constraints in model-free reinforcement
+learning: A survey.
+Luo, F.-M., Xu, T., Lai, H., Chen, X.-H., Zhang, W., and Yu, Y . (2022). A survey on model-based
+reinforcement learning.
+Marchesini, E. and Amato, C. (2023). Improving deep policy gradients with value function search.
+In The Eleventh International Conference on Learning Representations.
+Marchesini, E., Baisero, A., Bhati, R., and Amato, C. (2024). On stateful value factorization in
+multi-agent reinforcement learning.
+Marchesini, E., Marzari, L., Farinelli, A., and Amato, C. (2023). Safe deep reinforcement learn-
+ing by verifying task-level properties. In International Conference on Autonomous Agents and
+MultiAgent Systems (AAMAS).
+Marot, A., Donnot, B., Chaouache, K., Kelly, A., Huang, Q., Hossain, R.-R., and Cremer, J. L. (2022a).
+Learning to run a power network with trust. Electric Power Systems Research, 212:108487.
+Marot, A., Donnot, B., Dulac-Arnold, G., Kelly, A., O’Sullivan, A., Viebahn, J., Awad, M., Guyon, I.,
+Panciatici, P., and Romero, C. (2021). Learning to run a power network challenge: a retrospective
+analysis. In NeurIPS 2020 Competition and Demonstration Track, pages 112–132. PMLR.
+Marot, A., Donnot, B., Romero, C., Donon, B., Lerousseau, M., Veyrin-Forrer, L., and Guyon, I.
+(2020a). Learning to run a power network challenge for training topology controllers. Electric
+Power Systems Research, 189:106635.
+Marot, A., Kelly, A., Naglic, M., Barbesant, V ., Cremer, J., Stefanov, A., and Viebahn, J. (2022b).
+Perspectives on future power system control centers for energy transition. Journal of Modern
+Power Systems and Clean Energy, 10(2):328–344.
+Marot, A., Megel, N., Renault, V ., and Jothy, M. (2020b). ChroniX2Grid - The Extensive PowerGrid
+Time-serie Generator. https://github.com/BDonnot/ChroniX2Grid.
+Marzari, L., Liu, C., Donti, P., and Marchesini, E. (2025). Improving policy optimization viaϵ-retrain.
+In International Conference on Autonomous Agents and MultiAgent Systems (AAMAS).
+Matavalam, A. R. R., Guddanti, K. P., Weng, Y ., and Ajjarapu, V . (2022). Curriculum based rein-
+forcement learning of grid topology controllers to prevent thermal cascading. IEEE Transactions
+on Power Systems.
+Mnih, V ., Kavukcuoglu, K., Silver, D., Graves, A., Antonoglou, I., Wierstra, D., and Riedmiller,
+M. (2013). Playing atari with deep reinforcement learning. In Conference on Neural Information
+Processing Systems (NeurIPS).
+Moos, J., Hansel, K., Abdulsamad, H., Stark, S., Clever, D., and Peters, J. (2022). Robust reinforce-
+ment learning: A review of foundations and recent advances. Machine Learning and Knowledge
+Extraction, 4(1):276–315.
+Papoudakis, G., Christianos, F., Schäfer, L., and Albrecht, S. V . (2021). Comparative evaluation
+of multi-agent deep reinforcement learning algorithms. In Conference on Neural Information
+Processing Systems Datasets and Benchmarks Track (NeurIPS).
+Pateria, S., Subagdja, B., Tan, A.-h., and Quek, C. (2021). Hierarchical reinforcement learning: A
+comprehensive survey. ACM Comput. Surv., 54(5).
+12
+RTE France (2020). Grid2op: A testbed platform to model sequential decision making in power
+systems. https://GitHub.com/rte-france/grid2op.
+RTE France (2022). Grid2op MILP agent. https://github.com/Grid2op/
+grid2op-milp-agent.
+Schulman, J., Levine, S., Abbeel, P., Jordan, M., and Moritz, P. (2015). Trust region policy optimiza-
+tion. In International Conference on Machine Learning (ICML).
+Schulman, J., Wolski, F., Dhariwal, P., Radford, A., and Klimov, O. (2017). Proximal policy
+optimization algorithms. In arXiv.
+Silver, D., Huang, A., Maddison, C. J., Guez, A., Sifre, L., Van Den Driessche, G., Schrittwieser, J.,
+Antonoglou, I., Panneershelvam, V ., Lanctot, M., et al. (2016). Mastering the game of go with
+deep neural networks and tree search. Nature, 529:484–489.
+Stooke, A., Achiam, J., and Abbeel, P. (2020). Responsive safety in reinforcement learning by pid
+lagrangian methods. In International Conference on Machine Learning (ICML).
+Su, T., Wu, T., Zhao, J., Scaglione, A., and Xie, L. (2024). A review of safe reinforcement learning
+methods for modern power systems. arXiv preprint arXiv:2407.00304.
+van der Sar, E., Zocca, A., and Bhulai, S. (2024). Multi-agent reinforcement learning for power grid
+topology optimization.
+van Hasselt, H., Guez, A., and Silver, D. (2016). Deep reinforcement learning with double q-learning.
+In AAAI Conference on Artificial Intelligence.
+Vazquez-Canteli, J. R., Dey, S., Henze, G., and Nagy, Z. (2020). Citylearn: Standardizing research in
+multi-agent reinforcement learning for demand response and urban energy management. arXiv.
+Wandb (2025). Experiment tracking with weights and biases. Accessed: 2025-05-15.
+Wurman, P. R., Barrett, S., Kawamoto, K., MacGlashan, J., Subramanian, K., Walsh, T. J., Capo-
+bianco, R., Devlic, A., Eckert, F., Fuchs, F., Gilpin, L., Kompella, V ., Khandelwal, P., Lin, H.,
+MacAlpine, P., Oller, D., Sherstan, C., Seno, T., Thomure, M. D., Aghabozorgi, H., Barrett, L.,
+Douglas, R., Whitehead, D., Duerr, P., Stone, P., Spranger, M., , and Kitano, H. (2022). Outracing
+champion gran turismo drivers with deep reinforcement learning. Nature, 62:223–28.
+Yeh, C., Li, V ., Datta, R., Arroyo, J., Zhang, C., Chen, Y ., Hosseini, M., Golmohammadi, A.,
+Shi, Y ., Yue, Y ., and Wierman, A. (2023). SustainGym: Reinforcement learning environments
+for sustainable energy systems. In Thirty-seventh Conference on Neural Information Processing
+Systems Datasets and Benchmarks Track.
+Zhang, Z., Zhang, D., and Qiu, R. C. (2020). Deep reinforcement learning for power system
+applications: An overview. CSEE Journal of Power and Energy Systems, 6(1):213–225.
+13
+A Relationship of RL2Grid to L2RPN tasks and solutions
+In this section, we clarify the relationship of the tasks presented within RL2Grid, as well as the
+baseline methods evaluated, to the tasks and solutions presented within the L2RPN competition
+series.
+We remind that our work builds on Grid2Op to provide a benchmark with standardized tasks,
+state and action spaces, rewards, and a safe (constrained) formalization, as well as comprehensive
+evaluation of common baselines inspired by L2RPN. These are critical to provide a common basis
+for assessing advances in RL methods (Papoudakis et al., 2021) as well as to improve accessibility to
+RL practitioners who may have limited prior knowledge of power systems.
+Tasks. RL2Grid employs all the main Grid2Op “base environments” (which are likewise employed
+in L2RPN). However, the solutions developed for L2RPN relied on different customized components.
+Every competition relied on different time series, making effective comparisons far from trivial. For
+these reasons, on top of the standardization proposed in our work (see Section 3), we have made
+some underlying changes to the base environments to better reflect the current and future challenges
+of RL research. Examples include (i) episodes with longer horizons (i.e., an RL2Grid episode models
+a month of grid operations, ∼8000 steps, compared to weekly episodes of most prior work); (ii)
+making the tasks as uniform as possible (i.e., by integrating curtailment operations in all Grid2Op
+tasks); (iii) enabling simulation steps inside the Gymnasium interface (a feature added in our code
+revision, which is not currently available in Grid2Op). These decisions were driven by our goal
+of ensuring that our benchmark is accessible, standardized, and provides a clear starting point for
+researchers who may not be familiar with the nuances of these competitions and power grids.
+Baselines. Due to the different choices of input features and action spaces considered by different
+methods submitted to the L2RPN challenges, it was not possible to directly benchmark these
+specific methods on the RL2Grid tasks. However, the baselines chosen are representative of the
+methods submitted to past L2RPN competitions, in addition to representing commonly-used methods
+within the RL community as a whole. In particular, within the L2RPN submissions, a common
+approach was to incorporate heuristics. These heuristics varied significantly between methods and
+pushed us to design one that mimicked human operations in real grid operations. We developed
+this heuristic in collaboration with power system operators who have contributed to our work,
+incorporating fundamental insights from previous solutions while keeping the focus on standardization
+and benchmarking.
+B RL baselines
+In this section, we briefly introduce the baseline RL algorithms employed in our evaluation, referring
+to the original papers for exhaustive details about these methods (Mnih et al., 2013; Schulman et al.,
+2017; Haarnoja et al., 2018; Fujimoto et al., 2018).
+DQN (Mnih et al., 2013). A DQN agent uses a neural network to approximate the action value
+function Q by taking as input the state of the environment and outputting Q-values for every possible
+action. During training, the agent uses an ϵ-greedy policy to select random actions or follow the
+greedy policy on these Q-values, according to a linearly decaying probability ϵ. The Q network is
+thus updated to minimize the difference between predicted Q-values and a target derived from actual
+rewards and future Q-values. To deal with overestimation, we use Double-DQN (van Hasselt et al.,
+2016) and decouple action selection from action evaluation using a target Q network. Due to its
+value-based nature, a DQN agent can only consider discrete (topological) actions.
+PPO (Schulman et al., 2017) and Lagrangian PPO (LagrPPO) (Stooke et al., 2020). A PPO agent
+uses its neural network to directly approximate a policy. The agent learns the policy parameters by
+simplifying the TRPO (Schulman et al., 2015) algorithm, using a computationally tractable clipped
+objective. This clipping mechanism prevents large changes to the policy that could destabilize the
+training. At a high level, such a surrogate objective balances policy improvement and limits the
+divergence between policy updates. To drive the policy training, PPO also learns an advantage
+function to determine how much better (or worse) taking an action is compared to the expected
+value. By employing different probability distributions as a policy, a PPO agent can deal with both
+continuous (redispatching) and discrete (topological) actions. The Lagrangian version applies the
+same intuitions while learning additional value functions for each constraint. It then changes to policy
+14
+training by considering the Lagrangian discussed in Section 2. In more detail, Lagrangian algorithms
+take gradient ascent steps in π and descent steps in λ to trade off safety and task performance. These
+methods focus on satisfying the constraints using penalties λ that grows unbounded when constraints
+are violated. When constraints are satisfied, λ scale down (to zero), allowing the algorithm to
+maximize the task objective.
+SAC (Haarnoja et al., 2018). Similarly to PPO, a SAC agent learns different networks to maintain
+a policy and two value functions that mitigate positive bias in value estimates. Overall, the agent
+maximizes both the expected return and the entropy of the policy. The entropy term encourages ex-
+ploration by promoting stochastic policies, which helps prevent premature convergence to suboptimal
+policies. In terms of actions, the SAC agent can deal with the same action types as PPO.
+TD3 (Fujimoto et al., 2018). A TD3 agent learns multiple networks similarly to SAC. However,
+unlike the stochastic policies learned by PPO and SAC, TD3 learns a deterministic policy and can
+only deal with continuous actions. To encourage exploration, the agent does not maximize the entropy
+of the policy but adds noise to the output of the policy network.
+C Environments
+As discussed in Section 3, here we introduce the different levels of difficulty for the topological-based
+environments, as well as the reward function employed in all the tasks. Each increasing level of
+task difficulty corresponds to a higher dimensional discrete action space. Table C.1 summarizes the
+difficulty levels and the corresponding total number of actions.
+C.1 Action Spaces Analysis
+In this section, we visually analyze the action spaces of one representative environment for each
+power grid size (i.e., bus14, bus36-MO-v0, bus118-M).
+For each difficulty level, Figures C.1, C.2 and C.3 show the percentage of actions considered for each
+substation within the action space. The x-axis lists the substation IDs in descending order based on
+the number of available actions. The y-axis represents the ratio of actions used in the action space to
+the total number of available actions for each substation. Consequently, the highest difficulty level
+indicates that the action space includes all possible actions for all substations. Overall, this analysis
+suggests that the substation with the most electric components (i.e., the most possible topologies) is
+best suited to handle contingencies.
+Table C.1: Action space sizes for the considered environments. Left: Difficulty for environments with
+a (discrete) topology-based action space. Right: (continuous) redispatching and curtailment tasks.
+# Actions per difficulty level
+Topology (T) Redispatching and curtailment (R)
+0 1 2 3 4 0
+bus14 50 209 - - - 6
+bus36-M 50 302 1829 11071 66978 22
+bus36-MO-v0 50 302 1829 11071 66978 22
+bus36-MO-v1 50 302 1829 11071 66978 22
+bus118-M 50 308 1903 11744 72461 69
+bus118-MOB-v0 50 309 1914 11849 73328 69
+bus118-MOB-v1 50 309 1915 11852 73357 69
+15
+Figure C.1: Percentage of actions considered for each substation within the action space for bus14
+(discrete) topological tasks (difficulty level is indicated with the number on the top left).
+Figure C.2: Percentage of actions considered for each substation within the action space for bus36-
+MO-v0 (discrete) topological tasks (difficulty level is indicated with the number on the top left).
+Figures C.4 and C.5 then present the data collected during the action ranking mechanism described in
+Section 3.
+As a sanity check, Figure C.4 shows an example of the uniform sampling strategy used to select
+which action to simulate at each simulation step. The x-axis shows the total number of actions for the
+bus14 (discrete) topological task; the y-axis indicates the number of times each action was sampled
+during the ranking process.
+Figure C.5 shows the final ranking of the actions for the three representative environments. The
+x-axis shows the total number of actions for each task; the y-axis indicates the average survival rate
+of each action during the ranking process. Crucially, most of the actions are relevant (i.e., with a high
+survival rate) in the tasks, motivating the increasing levels of difficulty we proposed for the (discrete)
+topological environments.
+D State Space
+Regardless of the task, at a certain time-step t an agent gets the following set of features:
+[t, GenP , Genθ, LoadP , Loadθ, ρ,Cooldownlines]. Additionally, based on the nature of the task, the
+agent can observe additional features as follows:
+16
+Figure C.3: Percentage of actions considered for each substation within the action space for bus118-M
+(discrete) topological tasks (difficulty level is indicated with the number on the top left).
+Figure C.4: Number of times each action is sampled over the ranking process time.
+• Topological actions: when an agent operates using (discrete) topological actions, it observes
+[Topovect, Linestatus, Timeoverflow, Timesub-cooldown].
+• Redispatching actions: when an agent operates using (continuous) redispatching actions, it
+observes [Tgdispatch, Currdispatch, Genmargin-up, Genmargin-down].
+• Curtailment actions: when an agent operates using (continuous) curtailment actions, it
+observes [GenPcurt, Curtail, Curtaillimit].
+• Maintenance: when the task has maintenance contingencies (see Table 1), the agent gets
+[Timenext-maint, Durationnext-maint].
+17
+Figure C.5: Average survival rate of the action spaces after the ranking process time.
+• Storage: when the task has batteries (see Table 1), the agent gets[Storagecharge, Storagepowertg,
+Storagepower, Storageθ].
+Such a distinction is useful to reduce the size of the space the agent can observe when there are
+features that are not relevant to a specific task. For example, if an agent uses only discrete actions
+(topology), then everything related to target dispatch, actual dispatch, and storage is irrelevant as they
+will not change. Likewise, if an agent uses only continuous actions, it is not necessary to include
+features related to “topology” as they will not be modified. Additionally, all the features related to
+voltage (e.g., voltage for generators, loads, . . .) and reactive values (e.g., reactive power for generator,
+loads, . . .) can be neglected.
+For the interested RL practitioner, we refer to the original Grid2Op documentation for exhaustive
+descriptions of these features (RTE France, 2020).
+E Environmental Impact
+Despite each training run being “relatively” computationally inexpensive due to the use of CPUs,
+the experiments of our evaluation led to cumulative environmental impacts due to computations that
+run on computer clusters for an extended time. Our experiments were conducted using a private
+infrastructure with a carbon efficiency of ≈ 0.275 kgCO2eqkWh . Total emissions are estimated to be≈ 216.56kgCO2eq using the Machine Learning Impact calculator, and we purchased offsets for this
+amount through Treedom. We do not directly estimate or offset other categories of environmental
+impacts (such as water usage or embodied hardware impacts), though recognizing that these are
+additionally important to consider.
+F Hyperparameters
+Table F.1 lists the hyperparameters considered during our initial grid search and the final (best-
+performing) parameters used for our experiments.
+18
+Table F.1: Details of the grid search used to find the best-performing hyperparameters for each
+algorithm in the topological (T) and redispatching (R) cases.
+Algorithm Parameter Grid search Chosen value (T - R)
+Shared N° parallel envs 10, 20, 50 50
+Learning starts 20000 20000
+Max gradient norm 10, 20, 50 10
+Discount γ 0.9, 0.95, 0.99 0.9
+α 0.1, 0.5, 1.0 1.0
+β 0.1, 0.5, 1.0 0.5
+η 0.1, 0.25, 0.5 0.5
+λ 0, 50 0 (TLO), 50 (LSI)
+DQN Train frequency 50, 100, 1000 50
+Target network update 1000, 5000, 10000 5000
+Buffer size 100000, 250000, 500000, 1000000 1000000
+Batch size 64, 128, 256 128
+Learning rate 0.003, 0.0003, 0.00003 0.0003
+ϵ-decay fraction 0.3, 0.5 0.7 0.5
+PPO N° steps (total) 10000, 20000, 50000 20000
+N° minibatches 4, 8, 12 4
+N° update epochs 20, 40, 80 40
+Actor learning rate 0.003, 0.0003, 0.00003 0.0003 - 0.00003
+Critic learning rate 0.003, 0.0003, 0.00003 0.0003 - 0.00003
+ϵ-clip 0.1, 0.2, 0.3 0.2
+SAC Train frequency 50, 100, 1000 50
+Actor delayed update 2, 4 2
+Noise clip 0.5 0.5
+Buffer size 100000, 250000, 500000, 1000000 500000
+Batch size 64, 128, 256 128
+Actor learning rate 0.003, 0.0003, 0.00003 0.0003 - 0.00003
+Critic learning rate 0.003, 0.0003, 0.0003 0.0003 - 0.00003
+Entropy regularization 0.02, 0.2, 0.4 0.2
+TD3 Actor delayed update 2, 4 2
+Buffer size 100000, 250000, 500000, 1000000 1000000
+Batch size 64, 128, 256 128
+Actor learning rate 0.003, 0.0003, 0.00003 0.0003 - 0.00003
+Critic learning rate 0.003, 0.0003, 0.00003 0.0003 - 0.00003
+τ 0.005, 0.0005 0.005
+Policy noise 0.2 0.2
+Exploration noise 0.1 0.1
+19
+G Omitted Figures in Section 5
+The following figures report plots collected on Wandb (Wandb, 2025). Figure G.1 shows the training
+curves for the remaining (discrete) topological action spaces. Due to the strict time limit imposed on
+the computation nodes (see Section 4) and the different computational requirements of the algorithms,
+not all the baselines perform the same number of steps in the time limit and the experiments with 36
+and 118 bus consider 5 runs. The demands and limited performance of the topological baselines led
+us to exclude the results with the complete action space (i.e., difficulty set to 4). Additionally, despite
+the grid search of Table F.1, some baselines achieved lower performance than expected (e.g., SAC
+and DQN in the bus14 scenarios).
+0
+0
+0
+0
+Figure G.1: Average survival rate for the discrete topological case in bus14, bus36-M, bus118-M,
+bus118-MOB-v0 using the SAC, PPO, and DQN baselines. We indicate the difficulty level (ranging
+from 0 to 3) next to the environment identifier.
+20
+Figure G.2 shows the training curves for the (continuous) redispatching action spaces.
+Figure G.2: Average survival rate for the continuous redispatching case inbus14, bus36-M, bus118-M,
+bus118-MOB-v0 using the SAC, PPO, and TD3 baselines.
+Figure G.3 shows the cost obtained over the training for the constrained experiments.
+Figure G.3: Average cost rate for constrained case in the representative bus14 using the LagrPPO
+baseline. The constrained threshold (red line) is set to 0 and 50 for the TLO and LSI cases, respec-
+tively.
+H Omitted Performance Analysis in Section 5
+Figure H.1: Average score for key operational components across heuristic and constraints-based
+baselines (reported on separate rows). The first column represents line margins, where higher values
+indicate better contingency management. The second column tracks overload penalties, with lower
+values reflecting improved grid stability. The third column captures topology modifications, showing
+the extent to which agents reconfigure the grid.
+21

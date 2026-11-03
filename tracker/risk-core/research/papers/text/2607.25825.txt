@@ -1,0 +1,1843 @@
+arXiv 2607.25825  https://arxiv.org/abs/2607.25825
+
+CHILL-Harness: Counterfactual Harness Learning for Efficient
+Reasoning in Long-Horizon Agents
+Jiarun Fu1 Lizhong Ding1,∗ Sida Chen1 Honglei Xin1 Chunhui Zhang1
+Pengqi Li1 Qiuning Wei1 Ye Yuan1 Guoren Wang1
+1School of Computer Science and Technology, Beijing Institute of Technology, Beijing, China
+Contact:jrfu@bit.edu.cn
+Abstract
+Agent harnesses have become the operational infrastructure
+of modern large language model agents, coordinating con-
+text, tools, verification, and execution control to translate
+latent model capability into reliable long-horizon behavior.
+However,reliablelong-horizonbehaviorrequiresharnesscon-
+trol to adapt to task demands, execution environments, and
+evolving execution states, whereas current harnesses predom-
+inantly rely on hand-crafted or globally fixed policies; this
+mismatch manifests as unnecessary computational overhead
+and, in adverse cases, reduced task success. To address this
+limitation, we formulate the task of enabling adaptive orches-
+tration in harness systems as a causal learning problem and
+proposeCounterfactualHarnessInterventionLearning for
+Long-Horizon Agents (CHILL-Harness). CHILL-Harness
+intervenes at the orchestration layer to enable advantage-
+guided workflow adaptation, thereby improving reasoning
+and execution efficiency while preserving task performance.
+Specifically, we develop causal intervention effect learn-
+ing as the effect-estimation component of CHILL-Harness
+to estimate intervention-relative workflow advantage from
+confidence-weightedexecutionevidenceandidentifyadvanta-
+geous workflow adaptations. We further introduce advantage-
+realizing causal orchestration as its realization component
+to adaptively allocate counterfactual reasoning and realize
+only workflow adjustments supported by sufficient expected
+advantage. Finally, we incorporate a success-preserving ob-
+jective and advantage-margin authorization constraints into
+CHILL-Harness to promote reliable adaptation. Extensive
+experiments on heterogeneous long-horizon tasks spanning
+information seeking, software engineering, and terminal in-
+teraction show that CHILL-Harness consistently preserves
+or improves task success while substantially reducing token
+consumption and execution time.
+Code: https://github.com/csdstar/chill-dev
+Introduction
+Large language model agents are increasingly deployed on
+long-horizon tasks Zhou et al. (2024); Xie et al. (2024) that
+require sustained context management Wang et al. (2025b),
+external tool interaction Yao et al. (2025), intermediate verifi-
+cationPanetal.(2025),failurerecoveryWangandLiu(2025),
+andexecutioncontrolGuoetal.(2026).Agentharnesseshave
+therefore become critical runtime infrastructure for translat-
+ing latent model capability into reliable behavior Meng et al.
+(2026); Kapoor et al. (2026). However, effective harness con-
+trol should adapt to task demands Hu, Wang, and McAuley
+(2025), execution environments Ba, Li, and Li (2026), and
+evolving execution states Zhang et al. (2026), whereas exist-
+ing harnesses remain largely governed by hand-crafted rules,
+fixed thresholds, or globally configured workflows Li et al.
+(2026);Marchandetal.(2026).Overlongexecutionhorizons,
+this mismatch can compound redundant reasoning, delayed
+correction, and unnecessary workflow disruption, increasing
+executioncostandpotentiallydegradingtasksuccessHeetal.
+(2026); Sun et al. (2026).
+Existing harness-level approaches to adaptive harness or-
+chestration can be broadly grouped into two categories: (1)
+task-oriented engineered harnesses such as Terminus-KIRA
+integrate hand-engineered reasoning and tool-use procedures
+across long-horizon tasks KRAFTON AI and Ludo Robotics
+(2026), OpenHands and CodeSweep–SWE-agent provide
+iterative repository inspection, editing, and verification work-
+flows for software repair Wang et al. (2025a); Yang et al.
+(2024); Kimi Team (2025), and LemonHarness develops a
+high-performing execution stack for complex terminal tasks
+Ren et al. (2026); despite their strong task-level performance,
+these systems rely primarily on domain-specific or globally
+configuredcontrollogicandprovidelimitedadaptationtothe
+value of an intervention at the current execution state; and
+(2) orchestration and harness optimization methods improve
+system-level coordination—AWorld dynamically organizes
+multi-agent collaboration Yu, Lu, and Chenyi Zhuang (2025),
+OWL Workforce coordinates a planner, coordinator, and spe-
+cialized workers through hierarchical orchestration Hu et al.
+(2025b), and Meta-Harness performs outer-loop search over
+harness implementations using execution traces and evalu-
+ation feedback Lee et al. (2026); however, these methods
+primarily optimize collaboration structures or aggregate har-
+ness configurations rather than determine whether a concrete
+orchestration intervention causally improves the ongoing
+workflow. Consequently, existing methods still lack a unified
+framework that assesses whether a concrete orchestration
+adjustment improves the current workflow and translates
+1
+arXiv:2607.25825v1  [cs.MA]  28 Jul 2026
+this assessment into adaptive, success-preserving harness
+decisions for efficient reasoning.
+In this work, we leverage a causal perspective to address
+this limitation. Causal reasoning is well suited to decisions
+whose observed outcomes conflate the effect of an action
+with the context in which it is taken Kuroki and Pearl (2014),
+since causal interventions can isolate the contribution of the
+action under a fixed context Rubin (1980); Pearl (2009). It
+has therefore been increasingly used to distinguish genuine
+contributions from spurious associations in large-language-
+model reasoning and autonomous driving Chi et al. (2024);
+Pourkeshavarz,Zhang,andRasouli(2024);Tangetal.(2026).
+Harness orchestration exhibits the same structure: the current
+workflow provides a factual reference, while admissible al-
+ternatives define counterfactual interventions under the same
+executioncontext.Wethereforeformulatethetaskofenabling
+adaptive orchestration in harness systems as a causal learn-
+ing problem. Specifically, we introduce thecausal harness
+orchestration problem:
+How can a harness leverage causal interventions
+to realize efficient and admissible workflow orches-
+tration while preserving task success?
+To address this problem, we proposeCounterfactual
+HarnessInterventionLearning forLong-Horizon Agents
+(CHILL-Harness), a causal framework for adaptive har-
+ness orchestration and efficient long-horizon reasoning.
+CHILL-Harness intervenes at the orchestration layer to en-
+able advantage-guided workflow adaptation. Specifically,
+we develop Causal Intervention Effect Learning (CIEL)
+as its effect-estimation component, which unifies hetero-
+geneous orchestration behaviors and estimates their context-
+conditionedintervention-relativeadvantagesfromconfidence-
+weightedexecutionevidence.WefurtherintroduceAdvantage-
+Realizing Causal Orchestration (ARCO) as its realization
+component, which routes counterfactual deliberation before
+candidate generation and authorizes workflow adaptations
+only when they exhibit sufficient causal–operational advan-
+tage. Finally, we incorporate a success-preserving objective
+and advantage-margin authorization constraints to promote
+reliable orchestration under effect-estimation uncertainty. Ex-
+tensive experiments on long-horizon tasks spanning informa-
+tion seeking, software engineering, and terminal interaction
+showthatCHILL-Harnesspreservesorimprovestasksuccess
+whilesubstantiallyreducingtokenconsumptionandexecution
+time. Our contributions are summarized as follows:
+• WeproposeCHILL-Harness,whichformulatesadaptive
+orchestration in harness systems as a causal learning
+problem over factual and admissible alternative work-
+flows, enabling efficient reasoning through intervention.
+• WeintroduceCausalInterventionEffectLearning,which
+unifiesheterogeneousorchestrationbehaviorsandlearns
+their context-conditioned intervention-relative advan-
+tages from confidence-weighted execution evidence,
+enabling selective harness-level intervention.
+• We develop Advantage-Realizing Causal Orchestra-
+tion, which realizes workflow adaptations supported
+by sufficient estimated advantage, thereby achieving effi-
+cient and reliable harness orchestration under success-
+preserving constraints.
+Preliminaries and Related Work
+This section introduces the agent-harness setting and causal
+formulation, followed by a review of adaptive harness orches-
+tration and causal intervention methods.
+Preliminaries: Causal Adaptation in Harnesses
+An agent harness is the runtime infrastructure that governs
+how a base language-model agent maintains context, invokes
+tools,verifiesprogress,andinteractswithitstaskenvironment
+(Meng et al., 2026; Guo et al., 2026). At execution step𝑡, the
+current context is represented as
+𝜒𝑡 =  𝑠𝑡,𝑐 env𝑡 ,𝑔𝑡,
+where𝑠𝑡,𝑐env𝑡 ,and 𝑔𝑡 denotetheexecutionstate,environment
+context, and current task objective, respectively. Given𝜒𝑡,
+the base agent proposes a factual workflow𝜔0𝑡, consisting of
+the reasoning, tool-use, and execution operations.
+LetA𝑡 denote the admissible workflow set under the
+current task, environment, safety, and resource constraints,
+with𝜔0𝑡∈A 𝑡, and defineAcf𝑡 =A 𝑡\{𝜔 0𝑡}. The workflow
+selected for execution therefore satisfies𝑊𝑡∈{𝜔 0𝑡}∪A cf𝑡 .
+Executing𝑊𝑡 =𝜔 produces downstream task performance
+𝑈𝑡 under the common continuation and evaluation protocol.
+Adaptive harness orchestration determines whether to retain
+𝜔0𝑡 or execute an admissible alternative under𝜒𝑡.
+Thisdecisionnaturallyinducesapotential-outcomeformu-
+lation (Rubin, 1974; Pearl, 2009). For each𝜔∈ A𝑡, let
+𝑈𝑡(𝜔) denote the performance under do(𝑊𝑡 =𝜔) with
+𝜒𝑡 fixed. Under intervention consistency,𝑈𝑡 =𝑈 𝑡(𝑊𝑡),
+and the workflow effect relative to the factual workflow
+isΓ𝑡(𝜔)=E
+
+𝑈𝑡(𝜔)−𝑈 𝑡(𝜔0𝑡)|𝜒 𝑡,Γ𝑡(𝜔0𝑡)=0.
+Related Work: Adaptive Harness Orchestration and
+Causal Intervention
+Existing work on adaptive harness orchestration includes en-
+gineered execution systems, automated harness optimization,
+and component-level adaptation. OpenHands, SWE-agent,
+and OWL improve execution through specialized interfaces
+or coordination (Wang et al., 2025a; Yang et al., 2024; Hu
+et al., 2025b); Automated Design of Agentic Systems, Multi-
+Agent Architecture Search, and Meta-Harness optimize agent
+structures, resources, or complete harnesses (Hu, Lu, and
+Clune,2025;Zhangetal.,2025;Leeetal.,2026),whileAgent
+Workflow Memory, HiAgent, and OSCAR adapt workflow
+reuse,contextmanagement,andrecovery(Wangetal.,2025b;
+Hu et al., 2025a; Wang and Liu, 2025). Causal methods
+have also been explored for language-model reasoning and
+agent decision making. Causal Sufficiency and Necessity
+refines reasoning chains through counterfactual analysis (Yu
+2
+et al., 2025), Counterfactual Planning revises task-level ac-
+tions using structural causal models (Fu et al., 2026), and
+Robust Agents Learn Causal World Models exploits causal
+environmentstructureforrobustcontrol(RichensandEveritt,
+2024).
+These methods target reasoning steps, agent actions, or
+environmentmodels,butdonotassessheterogeneousharness-
+leveldecisionsorefficientlyrealizeonlyworkflow-improving
+adaptations. CHILL-Harness fills this gap by estimating
+context-conditioned workflow effects and translating them
+into success-preserving workflow adaptations.
+CHILL-Harness: Counterfactual Harness
+Intervention Learning
+CHILL-Harness decomposes causal harness orchestration
+into two coupled problems.
+Definition 1(Harness Intervention Effect Problem).The
+Harness Intervention Effect Problem evaluates whether an
+admissible workflow alternative improves execution relative
+to the factual workflow under the same execution context.
+Definition 2(Harness Intervention Realization Problem).
+The Harness Intervention Realization Problem determines
+whether the estimated benefit of an admissible alternative is
+sufficient to justify replacing the factual workflow.
+Followingthepreliminaries, 𝜒𝑡,𝜔0𝑡,A𝑡,and Γ𝑡(𝜔) denote
+the execution context, factual workflow, admissible work-
+flow set, and expected gain of𝜔 over𝜔0𝑡, respectively. As
+illustrated in Figure 1, CHILL-Harness addresses the two
+problems throughCausal Intervention Effect Learning
+(CIEL)andAdvantage-Realizing Causal Orchestration
+(ARCO), under explicit success-preserving workflow autho-
+rization constraints.
+CIEL: Causal Intervention Effect Learning
+CIEL learns workflow-grounded intervention preferences for
+the Harness Intervention Effect Problem and converts them
+into factorized deliberation, revision, and completion signals.
+Unified Causal Intervention Induction.CIEL abstracts
+recurring harness adaptations, including additional reason-
+ing, workflow correction, execution recovery, and answer
+construction, into a unified intervention space (Wang et al.,
+2025b; Yang et al., 2024; Wang and Liu, 2025). Let
+R={Inspect,Verify,Visual},Q={Dedup,NoOpRecovery}
+denote the revision and stabilization modes. The intervention
+space and its workflow realization are
+Iwf𝑡 ={Keep,Deliberate,AnswerSynthesis}
+∪{Revise(𝑟)|𝑟∈R}∪{Stabilize(𝑞)|𝑞∈Q},
+G𝑡(𝜄)≡G
+
+𝜄;𝜒𝑡,𝜔 0𝑡
+
+⊆A 𝑡,G 𝑡(Keep)={𝜔 0𝑡}.
+Here,Iwf𝑡 specifies adaptation intent andG𝑡(𝜄) maps it to
+admissible workflows.Keeppreserves the factual workflow;
+Deliberaterequests additional reasoning;Reviseacquires,
+verifies, or visually inspects evidence;Stabilizesuppresses
+repetition or recovers ineffective execution; andAnswer-
+Synthesisredirects execution toward nonterminal answer
+construction.Eachinterventioninheritsitscausalcontribution
+from its realized workflow (details in Appendix A.2).
+CIEL estimates the context-conditioned workflow effect as
+bΓ𝜙(𝜔;𝜒 𝑡,𝜔 0𝑡)≈Γ 𝑡(𝜔), with the factual workflow serving as
+the zero-effect reference. The estimates induce intervention-
+family preferences that are amortized into online prediction:
+b𝑉 int𝑡 (𝜄)=max𝜔∈G 𝑡(𝜄) bΓ𝜙
+
+𝜔;𝜒𝑡,𝜔 0𝑡
+
+,(1a)
+𝜄∗𝑡 =arg max𝜄∈I wf𝑡 b𝑉 int𝑡 (𝜄),(1b)
+b𝜄𝑡 =arg max
+𝜄∈I wf𝑡
+𝑝𝜃𝑢
+
+𝜄|𝜒 𝑡,𝜔 0𝑡
+
+.(1c)
+Equations (1a)–(1c) separate workflow-effect aggregation,
+offline intervention induction, and amortized online predic-
+tion. BecauseG𝑡(Keep)={𝜔 0𝑡}, conservative tie-breaking
+selectsKeepwhenever no alternative family has a positive
+estimated effect. The workflow-effect estimator learns from
+checkpointed paired records, while the intervention predictor
+amortizes the induced offline preference:
+Leff =EDpair
+
+𝑤𝑡,𝜔
+
+bΓ𝜙
+
+𝜔;𝜒𝑡,𝜔 0𝑡
+
+− eΓpair𝑡 (𝜔)2,
+Lint=−log𝑝 𝜃𝑢
+
+𝜄∗𝑡|𝜒 𝑡,𝜔 0𝑡
+
+.
+Here,Dpair contains factual–candidate executions restored
+from the same context,eΓpair𝑡 (𝜔) is their empirical utility
+difference, and𝑤𝑡,𝜔 is its reliability weight.
+For analysis, define𝑉 int𝑡 (𝜄)=max 𝜔∈G 𝑡(𝜄) Γ𝑡(𝜔), 𝜄†𝑡 =
+arg max𝜄∈I wf𝑡 𝑉 int𝑡 (𝜄), and let C𝑡 = —𝜄∈I wf𝑡 G𝑡(𝜄). Theworkflow-effect error and amortization gap are
+𝜀𝑡 =sup
+𝜔∈C 𝑡
+bΓ𝜙 𝜔;𝜒𝑡,𝜔 0𝑡 −Γ𝑡(𝜔), 𝜌 𝑡 = b𝑉 int𝑡 (𝜄∗𝑡)− b𝑉 int𝑡 (b𝜄𝑡).
+(2)
+Then
+𝑉 int𝑡 (𝜄†𝑡)−𝑉 int𝑡 (b𝜄𝑡)≤2𝜀 𝑡+𝜌 𝑡.(3)
+Thus,effect-estimationandamortizationerrorsjointlycontrol
+intervention selection regret; Appendix A.3 proves the result,
+and Appendix A.4 details paired-effect construction.
+Factorized Intervention Decision Learning.CIEL factor-
+izes online control into three decisions governing additional
+deliberation, workflow revision, and task completion.
+Counterfactual Deliberation Effect (CDE).CDE ad-
+dresses harness over-deliberation, where costly planning is
+repeatedly invoked even when the factual workflow is already
+sufficient. It predicts the required deliberation route:
+𝑝𝜃𝑝
+
+𝑧𝑡|𝜒 𝑡,𝜔 0𝑡,b𝜄𝑡
+
+, 𝑧 𝑡∈Z={Skip,Light,Full}.
+(4)
+3
+CHILL-Harness
+Counterfactual Harness Intervention Learning for Long-Horizon Agents
+2 CIEL: Causal Intervention         Effect Learning
+Factual execution
+Intervention / revision
+Monitoring / observation
+Authorized execution
+1 Agent + Environment Context
+Factual workflow ???
+1 2 3 H…
+Agent acts in environment
+Environment / Task Context
+(execution state, 
+environment context,
+ task objective)
+(A) Unified Causal Intervention Induction
+1 2 3 H
+Keep
+ Deliberate
+1 2 3 H
+Revise
+Selected intervention and estimated 
+workflow effects  ??, ??(??), ??,?(⋅)
+(B) Factorized Intervention Decision Learning
+deliberation 
+route
+CDE
+Skip
+Light
+Full
+CRE
+revision support
+factual path
+CAE
+completion 
+support
+——
+——
+——
+——
+Workflow-effect head: offline checkpointed pairs
+Decision heads: trajectory-based weak supervision
+counterfactual 
+path
+3 ARCO: Advantage-Realizing      Causal Orchestration
+Stabilize
+1 2 H
+AnswerSynthesis
+1
+Route before
+ generation
+Select 
+feasible ??
+2
+Generate
+ candidates
+from ??(??)
+4
+Effect--
+operational 
+valuation
+?????
+3
+Admissibility
+ filtering
+?? = ?? ∩ ??
+5
+Conservative
+ authorization
+CRE+
+???? ≥ ???
+Factual trajectory(observed)
+1 2 3 H… …t
+Scoring &
+comparison
+0.42
+0.78
+0.35
+…
+Counterfactual candidates
+from ??(??)
+1 2 3 H…a b
+1 2 3 H…c d
+1 2 3 H…e f
+Intervention point(s)
+Select
+best
+candidate
+??+
+ Authorize 
+??⋆
+Completion 
+Authorization
+ 
+??????
+4 Execution & Outcome
+1 2 3 H…
+Completion
+ authorization ??????
+Outcome, cost,
+and traces
+decision evidence & traces
+cost / latency
+performance metrics
+MONITOR
+Pass-rate 
+degradation ≤ ?????
+Preserve pass 
+rate
+Tokens, latency, 
+orchestration overhead. 
+Reduce trajectory 
+cost
+Penalize adaptations that turn 
+reference success into failure
+Break-aware 
+supervision
+Safety, schema, task, budget, 
+and explicit evidence
+Admissibility & 
+completion constraints
+Success-Preserving Objective & Authorization Constraints
+??
+ Estimated 
+advantage
+????
+Offline paired effect + trajectory-based decision supervision
+If ?????? = ?:
+Invoke task-
+terminal action
+?? ?????? = 0:  Execute 
+authorized workflow ??⋆
+AnswerSynthesis 
+≠Complete
+Figure 1: Overview of CHILL-Harness. Given context𝜒𝑡 and factual workflow𝜔0𝑡, CIEL estimates workflow effects and
+predicts intervention, deliberation, revision, and completion signals. ARCO realizes them through route-before-generation,
+admissibility filtering, causal–operational valuation, and conservative authorization. Offline checkpointed paired executions
+supervise workflow-effect estimation, while trajectory outcomes provide weak supervision for the factorized decision heads.
+Skipbypasses candidate generation,Lightenables restricted
+diagnostics,andFullenablesbroaderevaluation.Thus,thein-
+terventionfamilyspecifieswhatadaptationisuseful,whereas
+CDE determineshow muchcomputation realizes it.
+Counterfactual Revision Effect (CRE).CRE addresses
+both workflow inertia and harmful replacement: the factual
+workflow may require correction, while an unsupported alter-
+native may further degrade execution. Given an alternative
+workflow 𝜔, CRE predicts whether it provides sufficient
+support for replacing the factual workflow:
+𝑝𝜃𝑐
+
+𝑦chg𝑡 |𝜒 𝑡,𝜔 0𝑡,𝜔,b𝜄𝑡
+
+, 𝑦 chg𝑡 ∈{Keep,Change}.
+(5)
+Keepretains 𝜔0𝑡, whereasChangesupports replacement by
+the evaluated alternative.
+Completion Attribution Effect (CAE).CAE predicts
+completion support to prevent both continued execution after
+task success and termination triggered solely by futility:
+𝑝𝜃𝑒(𝑏𝑡|𝜒 𝑡,𝑜𝑡,ℎ𝑡), 𝑏 𝑡∈{0,1}.(6)
+Here, 𝑜𝑡 and ℎ𝑡 denote the latest observation and recent
+execution summary;𝑏𝑡 =1 supports completion, which still
+requires explicit task evidence.
+Loggedexecutiontracesprovideweaktargets 𝑧∗𝑡,𝑦chg,∗𝑡 ,and
+𝑏∗𝑡 for CDE, CRE, and CAE, respectively. Here,𝑧∗𝑡 denotes
+the preferred deliberation route,𝑦chg,∗𝑡 denotes the preferred
+revision decision, and𝑏∗𝑡 denotes whether retrospective task
+evidencesupportscompletion.Efficiency-relateddecisionsre-
+ceivepositivesupervisiononlywhentasksuccessispreserved.
+The corresponding losses are
+LCDE=−log𝑝 𝜃𝑝
+
+𝑧∗𝑡|𝜒 𝑡,𝜔 0𝑡,b𝜄𝑡
+
+,
+LCRE=−log𝑝 𝜃𝑐
+
+𝑦chg,∗𝑡 |𝜒 𝑡,𝜔 0𝑡,𝜔+𝑡,b𝜄𝑡
+
+,
+LCAE=−log𝑝 𝜃𝑒
+ 𝑏∗𝑡|𝜒 𝑡,𝑜𝑡,ℎ𝑡.
+Thus,LCDE supervises the amount of additional reasoning,
+LCREsupervisesfactual-versus-candidateworkflowselection,
+andLCAE supervises evidence-attributed completion. The
+complete CIEL objective is
+LCIEL=L eff+L int+L CDE+L CRE+L CAE.(7)
+Equation(7)jointly supervises workflow effects, intervention
+preferences, deliberation, revision, and completion. Detailed
+weak-target construction is provided in Appendix A.4.
+Remark.CIEL separateswhatadaptation is beneficial from
+howit should be realized: workflow-effect learning induces
+interventionpreferences,whileCDE,CRE,andCAEfactorize
+deliberation, revision, and completion decisions.
+4
+ARCO: Advantage-Realizing Causal Orchestration
+ARCO addresses the Harness Intervention Realization Prob-
+lem through route selection, candidate valuation, conser-
+vative revision, and evidence-grounded completion. Let
+bΓ𝜙,𝑡(𝜔):= bΓ𝜙(𝜔;𝜒 𝑡,𝜔 0𝑡). Then
+ARCO
+
+𝜒𝑡,𝜔 0𝑡,𝑜𝑡,ℎ𝑡,b𝜄𝑡, bΓ𝜙,𝑡(·)↦−→  𝜔★𝑡,𝑑 term𝑡 .
+Using the CDE predictor defined in Equation(4), ARCO
+first selects the provisional deliberation route:
+e𝑧𝑡 =arg max𝑧∈Z 𝑝𝜃𝑝
+
+𝑧|𝜒 𝑡,𝜔 0𝑡,b𝜄𝑡
+
+.
+Under Skip≺Light≺Full,𝑧 𝑡 is the highest feasible route
+not exceedinge𝑧𝑡.Skipretains 𝜔0𝑡; otherwise, the selected
+route exposesΩ𝑡 ⊆{𝜔 0𝑡}∪G 𝑡(b𝜄𝑡),Ω𝑡 = Ω𝑡∩A 𝑡, where
+Ω𝑡 contains the admissible route-exposed workflows. Route
+feasibility is detailed in Appendix B.1.
+Each admissible candidate is valued by combining opera-
+tional utility and estimated workflow effect:
+b𝑈ARCO
+
+𝜔|𝜒 𝑡,𝑧𝑡, bΓ𝜙,𝑡
+
+= b𝑈op(𝜔|𝜒 𝑡,𝑧𝑡)+𝜂 ΓbΓ𝜙,𝑡(𝜔).
+(8)
+Here, b𝑈op aggregates progress, cost, risk, information gain,
+robustness, and safety, while𝜂Γ≥0 weights estimated inter-
+vention evidence; Appendix B.2 gives the full construction.
+ARCO selects the highest-valued workflow among the
+admissible route-exposed candidates:
+𝜔+𝑡 =arg max
+𝜔∈Ω𝑡
+b𝑈ARCO
+
+𝜔|𝜒 𝑡,𝑧𝑡, bΓ𝜙,𝑡
+
+,
+with advantage over the factual workflow
+Δcf𝑡 = b𝑈ARCO
+
+𝜔+𝑡 |𝜒 𝑡,𝑧𝑡, bΓ𝜙,𝑡
+
+− b𝑈ARCO
+
+𝜔0𝑡|𝜒 𝑡,𝑧𝑡, bΓ𝜙,𝑡
+
+.
+Instantiating the CRE predictor in Equation(5) with the
+selected candidate𝜔+𝑡 , ARCO obtains
+𝑦chg𝑡 =arg max𝑦∈{Keep,Change} 𝑝𝜃𝑐
+
+𝑦|𝜒 𝑡,𝜔 0𝑡,𝜔+𝑡,b𝜄𝑡
+
+.
+The candidate is executed only when both CRE and its
+estimated advantage support revision:
+𝜔★𝑡 =
+(
+𝜔+𝑡, 𝑦 chg𝑡 =Change∧Δ cf𝑡 ≥𝛿 b𝜄𝑡,
+𝜔0𝑡,otherwise. (9)
+In Equation(9),𝛿b𝜄𝑡≥0 is an intervention-dependent autho-
+rizationmargin.ARCOexecutes 𝜔+𝑡 onlywhenboththeCRE
+decision and its estimated advantage support replacement;
+otherwise, it retains𝜔0𝑡 (see Appendix B.3 for details).
+Finally, ARCO instantiates the CAE predictor in Equa-
+tion (6) and combines its output with explicit task evidence:
+b𝑏𝑡 =arg max𝑏∈{0,1} 𝑝𝜃𝑒(𝑏|𝜒 𝑡,𝑜𝑡,ℎ𝑡),
+𝑒comp𝑡 =I[V𝑡(𝜒𝑡,𝑜𝑡,ℎ𝑡)=1],
+𝑑term𝑡 = b𝑏𝑡𝑒comp𝑡 .
+Here,V𝑡 is the task verifier andI[·]is the binary indicator.
+Remark.ARCOrealizeslearnedeffectsconservatively:rout-
+ing limits candidate-generation cost, causal–operational val-
+uation ranks admissible alternatives, and advantage-margin
+authorization retains the factual workflow when evidence is
+insufficient.
+Success-Preserving Objective and Authorization Con-
+straints
+Let𝜏 be a complete execution trajectory,𝜋CHILL,Θ the policy
+inducedbyCIELandARCO, Θ={𝜙,𝜃 𝑢,𝜃 𝑝,𝜃𝑐,𝜃𝑒},and 𝜋ref
+the matched reference harness. CHILL-Harness minimizes
+trajectory cost subject to bounded success degradation:
+min
+Θ
+E𝜏∼𝜋 CHILL,Θ[Jeff(𝜏)]
+s.t.PassRate  𝜋CHILL,Θ≥PassRate(𝜋ref)−𝜖 pass,
+whereJeff(𝜏) aggregates trajectory-level resource cost and
+𝜖pass≥0is the allowed pass-rate degradation.
+At each step, only admissible route-exposed workflows
+may be executed, and termination requires both learned and
+verified completion evidence:
+𝜔★𝑡 ∈Ω𝑡 =Ω 𝑡∩A𝑡, 𝑑 term𝑡 = b𝑏𝑡𝑒comp𝑡 .
+Because environment execution is not directly differen-
+tiable, the constrained objective is realized through outcome-
+conditioned weak supervision rather than trajectory-level
+backpropagation. Let𝑌𝜏,𝑌 ref∈{0,1} denote the current and
+referencetrajectoryoutcomes,andlet 𝜆fail,𝜆 break≥0 betheir
+penalty weights. We define
+Ltraj(𝜏)=J eff(𝜏)+𝜆 fail(1−𝑌 𝜏)+𝜆 breakI[𝑌ref =1∧𝑌 𝜏 =0].
+(10)
+Equation (10) penalizes resource cost, task failure, and
+success-breaking adaptation, and constructs weak targets
+for CDE, CRE, and CAE.
+Remark.Thesuccess-preservingobjectiveandauthorization
+constraintsjointlyprotecttaskperformance:efficiency-related
+decisions receive positive supervision only when success is
+preserved, while unsupported workflow revision and prema-
+ture termination are disallowed.
+Algorithm 1 summarizes the inference flow; Appendices
+C.1–C.4 provide the complete objectives and authorizations.
+Experiments
+We evaluate whether CHILL-Harness resolves the causal
+harnessorchestrationproblembylearningbeneficialworkflow
+interventions, realizing them efficiently and admissibly, and
+preserving task success. We examine these requirements
+through three empirical questions:
+• RQ1: Effectiveness.Does solving the Harness Interven-
+tion Effect Problem in Definition 1 identify adaptations
+that preserve or improve task success?
+• RQ2:Efficiency.DoessolvingtheHarnessIntervention
+RealizationProbleminDefinition2reducereasoningand
+executioncostwithoutprematurefailureortermination?
+5
+Benchmark Method Success Tokens Token Gainvs. Min.-Token Tokens/Solved Rel. Runtime Time Gainvs. Min.-Runtime
+GAIA
+Terminus-KIRA 70.2% 134M – 2.03M1.00×–
+AWorld 69.7% 161M – 2.45M1.25×–
+OWL Workforce 69.1% 174M – 2.68M1.30×–
+CHILL-Harness 71.3% 96M 28.4%↓1.43M0.534×46.6%↓
+SWE-bench
+Verified
+Terminus-KIRA 65.0% 157M – 2.42M1.00×–
+OpenHands 65.4% 165M – 2.52M1.10×–
+CodeSweep–SWE-agent 53.4% 153M – 2.87M0.92×–
+CHILL-Harness 65.6% 133M 13.1%↓2.25M0.682×25.9%↓
+Terminal-
+Bench 2.0
+Terminus-KIRA 49.4% 291M – 7.11M1.00×–
+Meta-Harness 52.6% 340M – 5.00M1.25×–
+LemonHarness 57.4% 380M – 5.05M1.40×–
+CHILL-Harness 56.1% 224M 23.1%↓4.87M0.974×2.6%↓
+Table1:Effectivenessandefficiencyacrossthreelong-horizonbenchmarks.TokenGainandTimeGainusetheeligible
+non-CHILL baseline with the lowest token consumption and runtime, respectively. Relative runtime is normalized to
+Terminus-KIRA within each benchmark. Token totals are rounded to the nearest million, whereas Tokens/Solved is
+reported to two decimal places. CHILL-Harness token totals include all additional model calls for counterfactual
+deliberation and candidate valuation.
+Algorithm 1CHILL-Harness Overview (Full Procedure in
+Appendix C.4)
+1:Input:𝜒 𝑡,𝜔 0𝑡,𝑜𝑡,ℎ𝑡;Output:𝜔 ★𝑡,𝑑 term𝑡
+2:(b𝜄𝑡,e𝑧𝑡)←CIEL(𝜒 𝑡,𝜔 0𝑡)
+3:Set𝑧 𝑡 to the highest feasible route not exceedinge𝑧𝑡
+4:if𝑧 𝑡 =Skipthen
+5:Ω 𝑡←{𝜔 0𝑡}
+6:else
+7:GenerateΩ 𝑡 fromG𝑡(b𝜄𝑡)∪{𝜔 0𝑡}
+8:end if
+9: Ω𝑡←Ω 𝑡∩A𝑡; select the highest-valued candidate𝜔+𝑡
+10:Authorize𝜔 ★𝑡 using CRE and candidate advantage
+11:Authorize𝑑 term𝑡 using CAE and completion evidence
+12:if𝑑 term𝑡 =1then
+13:Invoke the task-terminal action
+14:else
+15:Execute𝜔 ★𝑡
+16:end if
+17:Log execution evidence
+• RQ3: Generalization.Do the effectiveness and effi-
+ciency benefits hold across heterogeneous execution
+environments?
+We conduct baseline comparisons to verify that CHILL-
+Harness preserves effectiveness while improving efficiency
+across benchmarks, and perform anAlways-Fullablation
+to establish the contribution of counterfactual orchestration.
+Experimental Setup
+Benchmarks.We evaluate CHILL-Harness onGAIAfor
+informationseekingandtool-assistedreasoning(Mialonetal.,
+2024),SWE-bench Verifiedfor repository-level software
+repair (Jimenez et al., 2024; OpenAI, 2025), andTerminal-
+Bench 2.0for long-horizon terminal interaction (Merrill,
+Shaw, and Nicholas Carlini, 2026). These benchmarks cover
+deliberation, revision, stabilization, verification, and comple-
+tion under distinct execution environments.
+Baselines.Each CHILL-Harness evaluation is paired with
+a reference run using the same model, tools, environment,
+task, and resource limits. For external comparison, we report
+Terminus-KIRAonallbenchmarks(KRAFTONAIandLudo
+Robotics, 2026); AWorld and OWL Workforce on GAIA (Yu,
+Lu, and Chenyi Zhuang, 2025; Hu et al., 2025b); OpenHands
+and CodeSweep–SWE-agent on SWE-bench Verified (Wang
+et al., 2025a; Yang et al., 2024; Kimi Team, 2025); and
+Meta-Harness and LemonHarness on Terminal-Bench 2.0
+(Lee et al., 2026; Ren et al., 2026).
+Model Configuration.GAIA uses deepseek-v4-flash,
+whereas SWE-bench Verified and Terminal-Bench 2.0 use
+deepseek-v4-proDeepSeek-AI(2026).CIEListrainedoffline
+on disjoint paired traces and frozen for evaluation; check-
+pointed replay is disabled at test time. All model calls use
+temperature1.0and at most150interaction turns.
+Evaluation Metrics.Let 𝑚 denote a method,𝑁 the number
+oftasks,and 𝑦(𝑚)𝑖 ∈{0,1} whether𝑚 solvestask 𝑖.Effective-
+ness is measured bySuccess(𝑚)= 1𝑁 ˝𝑁𝑖=1𝑦(𝑚)𝑖 ×100%.
+Reasoning cost is measured by Tokens(𝑚)=˝𝑁
+𝑖=1
+˝
+𝑘∈K 𝑚
+
+Tokin𝑖,𝑘+Tokout𝑖,𝑘
+
+,Tokens/Solved(𝑚)=
+Tokens(𝑚)˝𝑁
+𝑖=1𝑦(𝑚)𝑖 , where K𝑚 includes all model-based har-
+ness components. Let 𝑇(𝑚)𝑖 be the end-to-end run-
+time of method 𝑚 on task 𝑖, including inference,
+orchestration, tools, interaction, and verification:
+6
+50 55 60 65 70
+Success Rate (%)
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+Solved Tasks per 1M Tokens
+Higher success
+Higher efficiency
+CHILL-Harness Baseline harness
+Terminus-KIRA
+AWorld
+OWL Workforce
+Terminus-KIRA OpenHandsCodeSweep--SWE-agent
+Terminus-KIRA
+Meta-Harness LemonHarness
+GAIA
+SWE-bench
+T erminal-Bench
+Figure2:Jointeffectiveness–efficiencycomparisononGAIA,
+SWE-benchVerified,andTerminal-Bench2.0.Thehorizontal
+axis reports task success and the vertical axis reports solved
+tasks per one million tokens; higher values on both axes are
+preferred.StarsdenoteCHILL-Harness,circlesdenotepublic
+baseline harnesses, and colors group methods evaluated on
+the same benchmark.
+RelativeRuntime(𝑚;𝑏 𝑇)=
+˝𝑁
+𝑖=1𝑇(𝑚)𝑖
+˝𝑁
+𝑖=1𝑇(𝑏𝑇)𝑖 . For𝑋∈{Tokens,𝑇} ,
+resource gain is Gain𝑋(𝑚;𝑏 𝑋)=
+
+1− 𝑋(𝑚)𝑋(𝑏 𝑋)
+
+×100%.
+Here,𝑏𝑇 and𝑏𝑋 denote the runtime and resource reference
+baselines, respectively.
+Main Results
+Table 1 reports effectiveness and resource measurements
+against baselines, while Figure 2 summarizes their joint
+success–token efficiency. Controlled matched-reference com-
+parisons assess success preservation, whereas comparisons
+with public systems assess external competitiveness.
+RQ1: Effectiveness.Under matched model, tool, environ-
+ment, task, and resource settings, CHILL-Harness preserves
+or improves task success on all three benchmarks. It achieves
+thehighestsuccessrateamongthecomparedsystemsonGAIA
+(71.3%) and SWE-bench Verified (65.6%). On Terminal-
+Bench 2.0, its56.1% success exceeds Terminus-KIRA and
+Meta-Harness and remains close to LemonHarness (57.4%).
+Thus,theefficiencygainsdonotarisefrombroadlysacrificing
+task effectiveness.
+RQ2: Efficiency.CHILL-Harness achieves the highest num-
+ber of solved tasks per one million tokens in each benchmark
+group. Against the lowest-token public baselines, it reduces
+token consumption by28.4%, 13.1%, and23.1% on GAIA,
+SWE-bench Verified, and Terminal-Bench 2.0, respectively.
+Against the fastest eligible baselines, it reduces runtime by
+46.6%,25.9%, and2.6%.
+RQ3: Generalization.CHILL-Harness improves both suc-
+cess and token efficiency over all displayed baselines on
+GAIA and SWE-bench Verified. On Terminal-Bench 2.0, it
+achieves the highest token efficiency, while LemonHarness
+retains a small success advantage, placing both systems on
+theeffectiveness–efficiencyfrontier.Thispatternholdsacross
+informationseeking,softwarerepair,andterminalinteraction.
+Remark.Controlled comparisons support success preser-
+vation, while public-system comparisons show that CHILL-
+Harness consistently improves token efficiency and remains
+competitive in task effectiveness across heterogeneous long-
+horizon environments.
+Ablation Experiment
+We evaluate the contribution of CDE and its route-before-
+generation realization in ARCO. TheAlways-Fullvariant
+disablesadaptivedeliberationbysetting 𝑧𝑡 =Full whenever
+feasible, while retaining CIEL intervention prediction, CRE,
+and CAE, as well as ARCO candidate generation, admissi-
+bility filtering, valuation, and authorization. The comparison
+therefore isolates the effect of selecting deliberation depth
+before candidate generation.
+Table 2 shows that forced full deliberation causes over-
+intervention on GAIA, increases cost while reducing suc-
+cess on SWE-bench Verified, and incurs substantial planner
+overhead with little benefit on Terminal-Bench 2.0. These
+results validate the contribution of CDE and its route-before-
+generation realization in ARCO.
+Remark.CDEactsbeforecandidategeneration:CREcanre-
+jectunsupportedworkflowrevisionsonlyafterthecorrespond-
+ing candidate-generation cost has been incurred, whereas
+route-before-generation suppresses low-value deliberation
+and avoids the associated planner overhead.
+Conclusion
+We introduced CHILL-Harness, a causal framework that
+learns whether and how the harness should intervene in
+the choice between factual and alternative workflows. The
+empirical results support affirmative answers to our three
+research questions: CIEL identifies interventions that pre-
+serve or improve task effectiveness, ARCO realizes them
+with lower reasoning and execution cost, and these benefits
+generalize across heterogeneous long-horizon environments.
+Experiments on information seeking, software repair, and
+terminalinteraction,togetherwiththeAlways-Fullablation,
+support both the overall effectiveness of CHILL-Harness and
+the necessity of selective counterfactual deliberation. We
+hope this work encourages the community to move beyond
+fixedharnessengineeringtowardlearned,causal,andsuccess-
+preserving orchestration, providing a foundation for more
+efficient and reliable long-horizon agents.
+7
+Benchmark Variant Success Tokens Tokens/Solved Full Calls /Revision Rate Always-Full Overhead
+GAIA CHILL-Harness 71.3% 96.00M 1.43M– –
+Always-Full 27.7% 114.33M 4.40M 2,615 / 76.1% 18.33M tokens37.73 h
+SWE-bench
+Verified
+CHILL-Harness 65.6% 133.00M 2.25M– –
+Always-Full 53.3% 160.40M 3.34M 3,708 / 3.5% 27.40M tokens70.95 h
+Terminal-
+Bench 2.0
+CHILL-Harness 56.1% 224.19M 4.87M– –
+Always-Full 56.3% 259.77M 5.65M 4,234 / 3.9% 35.58M tokens91.98 h
+Table 2: Ablation Experiment Results. Full Calls / Revision Rate reports the number of full CDE events
+and the fraction of those events that authorize workflow revision. Always-Full Overhead reports the
+additional planner token consumption and cumulative planner latency incurred by Always-Full relative
+to CHILL-Harness on the same benchmark.
+8
+References
+Ba,L.;Li,Q.;andLi,S.2026. Ciber:Acomprehensivebench-
+mark for security evaluation of code interpreter agents.
+arXiv:2602.19547.
+Chi, H.; Li, H.; Yang, W.; Liu, F.; Lan, L.; Ren, X.; Liu, T.;
+and Han, B. 2024. Unveiling Causal Reasoning in Large
+Language Models: Reality or Mirage?NeurIPS.
+DeepSeek-AI. 2026. DeepSeek-V4: Towards Highly Efficient
+Million-Token Context Intelligence.
+Fu, J.; Ding, L.; Wei, Q.; Guo, Y.; Cheng, Y.; and Zhang, J.
+2026. Counterfactual Planning for Generalizable Agents’
+Actions.AAAI.
+Guo, J.; Hao, Z.; Wang, C.; Fan, C.; Luo, T.; Li, H.; Gao,
+Y.; Mei, H.; Peng, J.; Xu, R.; et al. 2026. From Question
+AnsweringtoTaskCompletion:ASurveyonAgentSystem
+and Harness Design.arXiv:2606.20683.
+He, Z.; Wang, Y.; Zhi, C.; Hu, Y.; Chen, T.-P.; Yin, L.; Chen,
+Z.; Wu, T. A.; Ouyang, S.; Wang, Z.; et al. 2026. Memor-
+yArena: Benchmarking Agent Memory in Interdependent
+Multi-Session Agentic Tasks.arXiv:2602.16313.
+Hu, M.; Chen, T.; Chen, Q.; Mu, Y.; Shao, W.; and Luo,
+P. 2025a. Hiagent: Hierarchical working memory man-
+agement for solving long-horizon agent tasks with large
+language model.ACL.
+Hu, M.; Zhou, Y.; Fan, W.; Nie, Y.; Xia, B.; Sun, T.; Ye,
+Z.; Jin, Z.; Li, Y.; Chen, Q.; Zhang, Z.; Wang, Y.; Ye, Q.;
+Ghanem, B.; Luo, P.; and Li, G. 2025b. OWL: Optimized
+Workforce Learning for General Multi-Agent Assistance
+in Real-World Task Automation.NeurIPS.
+Hu, S.; Lu, C.; and Clune, J. 2025. Automated design of
+agentic systems.ICLR.
+Hu, Y.; Wang, Y.; and McAuley, J. 2025. Evaluating mem-
+ory in llm agents via incremental multi-turn interactions.
+arXiv:2507.05257.
+Jimenez,C.E.;Yang,J.;Wettig,A.;Yao,S.;Pei,K.;Press,O.;
+and Narasimhan, K. R. 2024. SWE-bench: Can Language
+Models Resolve Real-world Github Issues?ICLR.
+Kapoor, S.; Stroebl, B.; Kirgis, P.; Nadgir, N.; Siegel, Z. S.;
+Wei, B.; Xue, T.; Chen, Z.; Chen, F.; Utpala, S.; Ndzomga,
+F.; Oruganty, D.; Luskin, S.; Liu, K.; Yu, B.; Arora, A.;
+Hahm, D.; Trivedi, H.; Sun, H.; Lee, J.; Jin, T.; Mai, Y.;
+Zhou, Y.; Zhu, Y.; Bommasani, R.; Kang, D.; Song, D.;
+Henderson, P.; Su, Y.; Liang, P.; and Narayanan, A. 2026.
+Holistic Agent Leaderboard: The Missing Infrastructure
+for AI Agent Evaluation.ICLR.
+Kimi Team. 2025. Kimi K2: Open Agentic Intelligence.
+arXiv:2507.20534.
+KRAFTON AI; and Ludo Robotics. 2026. Terminus-KIRA:
+Boosting Frontier Model Performance on Terminal-Bench
+with Minimal Harness.
+Kuroki, M.; and Pearl, J. 2014. Measurement bias and effect
+restoration in causal inference.Biometrika, 101: 423–437.
+Lee,Y.;Nair,R.;Zhang,Q.;Lee,K.;Khattab,O.;andFinn,C.
+2026. Meta-Harness: End-to-End Optimization of Model
+Harnesses.arXiv:2603.28052.
+Li, J.; Xiao, X.; Zhang, Y.; Liu, C.; Zhao, L.; Liao, X.; Ji,
+Y.; Wang, J.; Ge, Y.; Xu, W.; Fang, X.; Xu, X.; Zhao, T.;
+Kim, Y.; Hamm, J.; Wang, T.; and Reddy, C. 2026. Agent
+Harness Engineering: A Survey.
+Marchand, R.; Cathain, A. O.; Wynne, J.; Giavridis, P. M.;
+Deverett, S.; Wilkinson, J.; Gwartz, J.; and Coppock, H.
+2026. QuantifyingFrontierLLMCapabilitiesforContainer
+Sandbox Escape.ICML.
+Meng, Q.; Wang, Y.; Chen, L.; Wu, W.; Li, Y.; Jiang, W.;
+Wang,Q.;Lu,C.;Gao,Y.;Wu,Y.;andHu,Y.2026. Agent
+Harness for Large Language Model Agents: A Survey.
+Preprints:0.20944/preprints202604.0428.v3.
+Merrill, M. A.; Shaw, A. G.; and Nicholas Carlini, e. 2026.
+Terminal-Bench: Benchmarking Agents on Hard, Realistic
+Tasks in Command Line Interfaces.ICLR.
+Mialon, G.; Fourrier, C.; Swift, C.; Wolf, T.; LeCun, Y.; and
+Scialom, T. 2024. GAIA: a benchmark for General AI
+Assistants.ICLR.
+OpenAI. 2025. Introducing SWE-bench Verified. OpenAI
+Research.
+Pan, J.; Wang, X.; Neubig, G.; Jaitly, N.; Ji, H.; Suhr, A.; and
+Zhang, Y. 2025. Training software engineering agents and
+verifiers with swe-gym.ICML.
+9
+Pearl, J. 2009.Causality. Cambridge university press.
+Pourkeshavarz, M.; Zhang, J.; and Rasouli, A. 2024. CaDeT:
+ACausalDisentanglementApproachforRobustTrajectory
+Prediction in Autonomous Driving.CVPR.
+Ren, K.; Sun, F.; Liu, J.; Yang, L.; Yin, Z.; Li, J.; Yin, C.;
+He, M.; Huo, Y.; Liu, J.; Chen, Z.; Huangfu, Y.; Li, R.;
+Wu, Y.; Su, X.; Xu, Y.; Wu, L.; Zhao, H.; Zhang, L.; Geng,
+X.; and Fan, J. 2026. LemonHarness Technical Report.
+arXiv:2606.24311.
+Richens,J.;andEveritt,T.2024. RobustAgentsLearnCausal
+World Models.ICLR.
+Rubin, D. B. 1974. Estimating Causal Effects of Treatments
+in Randomized and Nonrandomized Studies.Journal of
+Educational Psychology, 66: 688–701.
+Rubin, D. B. 1980. Randomization Analysis of Experimental
+Data: The Fisher Randomization Test Comment.Journal
+of the American Statistical Association, 75: 591.
+Sun, S.; Song, H.; Huang, L.; Jiang, J.; Le, R.; Lv, Z.; Chen,
+Z.; Hu, Y.; Luo, W.; Zhao, W. X.; Song, Y.; Xu, H.; Zhang,
+T.; and Wen, J.-R. 2026. SWE-World: Building Soft-
+ware Engineering Agents in Docker-Free Environments.
+arXiv:2602.03419.
+Tang, J.; Zhou, Z.; He, Z.; Zhang, J.; Zhang, K.; and Pu,
+J. 2026. CausalVAD: De-confounding End-to-End Au-
+tonomous Driving via Causal Intervention.CVPR.
+Wang, X.; Li, B.; Song, Y.; Xu, F. F.; Tang, X.; Zhuge, M.;
+Pan, J.; Song, Y.; Li, B.; Singh, J.; Tran, H. H.; Li, F.;
+Ma, R.; Zheng, M.; Qian, B.; Shao, Y.; Muennighoff, N.;
+Zhang, Y.; Hui, B.; Lin, J.; Brennan, R.; Peng, H.; Ji, H.;
+and Neubig, G. 2025a. OpenHands: An Open Platform for
+AI Software Developers as Generalist Agents.ICLR.
+Wang,X.;andLiu,B.2025. Oscar:Operatingsystemcontrol
+via state-aware reasoning and re-planning.
+Wang,Z.Z.;Mao,J.;Fried,D.;andNeubig,G.2025b. Agent
+workflow memory.ICML.
+Xie, T.; Zhang, D.; Chen, J.; Li, X.; Zhao, S.; Cao, R.; Hua,
+T. J.; Cheng, Z.; Shin, D.; Lei, F.; et al. 2024. Osworld:
+Benchmarking multimodal agents for open-ended tasks in
+real computer environments.NeurIPS.
+Yang, J.; Jimenez, C. E.; Wettig, A.; Lieret, K.; Yao, S.;
+Narasimhan,K.R.;andPress,O.2024. SWE-agent:Agent-
+Computer Interfaces Enable Automated Software Engi-
+neering.NeurIPS.
+Yao,S.;Shinn,N.;Razavi,P.;andNarasimhan,K.2025. \𝑡𝑎𝑢-
+bench: A Benchmark for Tool-Agent-User Interaction in
+Real-World Domains.ICLR.
+Yu, C.; Lu, S.; and Chenyi Zhuang, e. 2025. AWorld:
+Orchestrating the Training Recipe for Agentic AI.
+arXiv:2508.20404.
+Yu, X.; Wang, Z.; Yang, L.; Li, H.; Liu, A.; Xue, X.; Wang,
+J.; and Yang, M. 2025. Causal Sufficiency and Necessity
+Improves Chain-of-Thought Reasoning.NeurIPS.
+Zhang, G.; Niu, L.; Fang, J.; Wang, K.; Bai, L.; and Wang, X.
+2025. Multi-agent architecture search via agentic supernet.
+ICML.
+Zhang, Y.; Wang, J.; Ge, Y.; Xu, W.; Hamm, J.; and Reddy,
+C.K.2026.StopcomparingLLMagentswithoutdisclosing
+the harness.arXiv:2605.23950.
+Zhou, S.; Xu, F. F.; Zhu, H.; Zhou, X.; Lo, R.; Sridhar, A.;
+Cheng,X.;Ou,T.;Bisk,Y.;Fried,D.;etal.2024.Webarena:
+A realistic web environment for building autonomous
+agents.ICLR.
+10
+Appendix A: Problem Formalization and CIEL
+Foundations
+This appendix provides the formal definitions, theoretical
+grounding, and training implementation of Causal Interven-
+tionEffectLearning(CIEL).AppendixA.1formalizesthetwo
+harness intervention problems. Appendix A.2 specifies the
+structuralconnectionbetweensemanticinterventionsandexe-
+cutable workflows. Appendix A.3 derives an error-dependent
+bound for amortized intervention selection. Appendix A.4 es-
+tablishespaired-replayidentificationanddetailstheseparated
+supervision of workflow effects and factorized decisions.
+A.1 Formalization of the Harness Intervention Problems
+At execution step𝑡, let
+𝜒𝑡 =  𝑠𝑡,𝑐 env𝑡 ,𝑔𝑡
+denote the fixed execution context, where𝑠𝑡 is the execution
+state,𝑐env𝑡 is the environment context, and𝑔𝑡 is the current
+task objective.
+Let 𝜔0𝑡 denote the factual workflow proposed without
+additionalharnessadaptation,andlet A𝑡 denotetheworkflows
+admissible under the current task, environment, safety, and
+resource requirements, with
+𝜔0𝑡∈A 𝑡.
+Theexecutedworkflowisrepresentedby 𝑊𝑡,anditstask-and
+resource-aware execution performance is represented by𝑈𝑡.
+For any𝜔∈A 𝑡,
+do(𝑊𝑡 =𝜔)
+denotes executing workflow𝜔 while holding𝜒𝑡 fixed. All
+potentialoutcomesareevaluatedunderthesamecontinuation
+policy𝜋cont,evaluationhorizon,resource-accountingrule,and
+taskevaluator.𝑈𝑡(𝜔) capturesdownstreamtaskperformance,
+whereas local cost, risk, and execution-quality signals are
+represented separately byb𝑈op.
+Definition A.1: Harness Intervention Effect Problem.For
+an admissible workflow
+𝜔∈A 𝑡\{𝜔 0𝑡},
+its intervention effect relative to the factual workflow is
+Γ𝑡(𝜔)=E [𝑈𝑡|do(𝑊 𝑡 =𝜔),𝜒 𝑡]−E
+
+𝑈𝑡|do(𝑊 𝑡 =𝜔 0𝑡),𝜒 𝑡.
+(A1)
+A positive value indicates expected improvement relative
+to the factual workflow, whereas a negative value indicates
+expected degradation. The factual workflow is the zero-effect
+reference:
+Γ𝑡(𝜔0𝑡)=0.
+The estimand therefore assigns causal value to concrete exe-
+cutableworkflowsratherthandirectlytoabstractintervention
+labels.
+DefinitionA.2:HarnessInterventionRealizationProblem.
+Let
+bΓ𝜙,𝑡(𝜔):= bΓ𝜙
+
+𝜔;𝜒𝑡,𝜔 0𝑡
+
+denote the estimated workflow effect, and letΩ𝑡⊆A 𝑡 be the
+route-exposed admissible workflow set with𝜔0𝑡 ∈ Ω𝑡. The
+highest-valued exposed candidate is
+𝜔+𝑡 =arg max
+𝜔∈Ω𝑡
+b𝑈ARCO
+
+𝜔|𝜒 𝑡,𝑧𝑡, bΓ𝜙,𝑡
+
+.(A2)
+The authorized workflow then satisfies
+𝜔★𝑡 ∈ 𝜔0𝑡,𝜔+𝑡 	.(A3)
+Candidate selection and execution authorization are dis-
+tinct: selection identifies the strongest currently ex-
+posed candidate, whereas replacement additionally re-
+quires admissibility, learned revision support, and
+a sufficient estimated advantage. The resulting or-
+chestration chain is workflow-effect estimation−→
+route-exposed valuation−→execution authorization.
+A.2 Workflow-Grounded Intervention Induction
+Let
+𝐼𝑡∈I wf𝑡
+denote the semantic harness intervention selected at step𝑡.
+The intervention families have the following meanings.
+•Keeppreserves the factual workflow𝜔 0𝑡.
+• Deliberateallocates additional reasoning without pre-
+scribing a particular workflow revision.
+• Revise(Inspect) acquires execution evidence missing
+from the current context.
+• Revise(Verify) validates an intermediate state, tool
+result, or candidate answer.
+• Revise(Visual) invokes visual processing when image
+or multimodal evidence is required.
+• Stabilize(Dedup) suppresses repeated or semantically
+redundant operations.
+• Stabilize(NoOpRecovery) redirects an execution that
+has produced an empty, ineffective, or stalled action.
+• AnswerSynthesisredirects broad exploration toward
+evidence organization and answer construction without
+itself terminating execution.
+These intervention families describe adaptation intents
+rather than unique workflows. The realization map
+G𝑡(𝜄)=G
+
+𝜄;𝜒𝑡,𝜔 0𝑡
+
+⊆A 𝑡
+instantiates intervention𝜄 according to the current context,
+factual workflow, available tools, and task constraints. Un-
+available intervention families are removed from the set
+considered at step𝑡, soG𝑡(𝜄)≠∅ for every family entering a
+maximization.
+11
+Implementation correspondence.The intervention predic-
+torproducesadiscreteintervention-familylabel.Aworkflow-
+construction component then converts the label into one or
+more structured workflow candidates. ForKeep, the con-
+structed set contains only𝜔0𝑡. ForDeliberate, the harness
+allocates an additional reasoning step without forcing a tool
+or workflow change. For the threeRevisemodes, candidate
+templates constrain the next workflow toward evidence in-
+spection, result verification, or visual analysis. For the two
+Stabilizemodes, recent execution traces are checked for
+duplicate actions, repeated tool arguments, empty results, or
+stalled progress.AnswerSynthesisgenerates a nonterminal
+workflow that organizes available evidence into a candidate
+answer. Each generated workflow is parsed into the same in-
+ternal representation used by the base harness before ARCO
+filtering and valuation.
+Assumption A.1: Workflow Mediation.For fixed𝜒𝑡, each
+𝜔∈G 𝑡(𝜄) is an executable realization of intervention𝜄, in-
+tervention𝐼𝑡 affects𝑈𝑡 only through the realized workflow
+𝑊𝑡, and intervention consistency holds. This is a structural
+modeling restriction rather than an identification result: se-
+mantic labels index workflow families but are not assigned
+context-independent causal values.
+Under this assumption,
+E[𝑈𝑡|do(𝐼 𝑡 =𝜄,𝑊 𝑡 =𝜔),𝜒 𝑡]=E[𝑈𝑡|do(𝑊 𝑡 =𝜔),𝜒 𝑡].
+(A4)
+Hence, the effect associated with intervention𝜄is evaluated
+through its concrete realization𝜔, relative to𝜔0𝑡. The same
+intervention family may therefore induce different effects
+across contexts and workflow realizations.
+A.3 Error-Bounded Amortized Intervention Selection
+For fixed(𝜒𝑡,𝜔 0𝑡), define the true and estimated values of
+intervention family𝜄as
+𝑉 int𝑡 (𝜄)=max𝜔∈G 𝑡(𝜄) Γ𝑡(𝜔),(A5)
+b𝑉 int𝑡 (𝜄)=max𝜔∈G 𝑡(𝜄) bΓ𝜙
+
+𝜔;𝜒𝑡,𝜔 0𝑡
+
+.(A6)
+Let
+C𝑡 =
+Ø
+𝜄∈I wf𝑡
+G𝑡(𝜄)
+denoteallworkflowsconsideredatstep 𝑡,includingthefactual
+workflow, and define
+𝜀𝑡 =sup
+𝜔∈C 𝑡
+bΓ𝜙 𝜔;𝜒𝑡,𝜔 0𝑡 −Γ𝑡(𝜔).
+Let
+𝜄†𝑡 =arg max𝜄∈I wf𝑡 𝑉 int𝑡 (𝜄)
+be a true best intervention family,
+𝜄∗𝑡 =arg max𝜄∈I wf𝑡 b𝑉 int𝑡 (𝜄)
+be the offline estimated target, and define the amortization
+gap
+𝜌𝑡 = b𝑉 int𝑡 (𝜄∗𝑡)− b𝑉 int𝑡 (b𝜄𝑡)≥0.
+Proposition A.1: Effect-and-Amortization Error Bound.
+For any estimated workflow-effect function and online inter-
+vention predictor,
+𝑉 int𝑡 (𝜄†𝑡)−𝑉 int𝑡 (b𝜄𝑡)≤2𝜀 𝑡+𝜌 𝑡.(A7)
+Proof.Foreveryinterventionfamily 𝜄,themaximumoperator
+and the definition of𝜀𝑡 imply
+b𝑉 int𝑡 (𝜄)−𝑉 int𝑡 (𝜄)≤𝜀 𝑡.
+Therefore,
+𝑉 int𝑡 (𝜄†𝑡)≤ b𝑉 int𝑡 (𝜄†𝑡)+𝜀 𝑡
+≤ b𝑉 int𝑡 (𝜄∗𝑡)+𝜀 𝑡
+= b𝑉 int𝑡 (b𝜄𝑡)+𝜌 𝑡+𝜀𝑡
+≤𝑉 int𝑡 (b𝜄𝑡)+2𝜀 𝑡+𝜌 𝑡.
+Rearranging proves Equation (A7).□
+Corollary A.1: Exact Intervention Recovery.Suppose that
+𝜄†𝑡 is unique and define its true margin as
+Δint𝑡 =𝑉 int𝑡 (𝜄†𝑡)−max
+𝜄≠𝜄†𝑡
+𝑉 int𝑡 (𝜄).
+If
+Δint𝑡 >2𝜀 𝑡+𝜌 𝑡,
+then
+b𝜄𝑡 =𝜄†𝑡.
+The result does not assume that estimated and true rankings
+are identical. Instead, it quantifies how workflow-effect esti-
+mationerrorandamortizedpredictionerrorjointlydetermine
+intervention-selection quality. When the online predictor re-
+produces the offline target,𝜌𝑡 =0 , and the selection regret is
+bounded by2𝜀𝑡.
+A.4 CIEL Training and Separated Supervision
+CIEL separates workflow-effect supervision from factorized
+decisionsupervision.Theworkflow-effectestimatoristrained
+onlyfromofflinecheckpointedpairedexecutionsthatcompare
+factual and alternative workflows from the same execution
+context. Retrospective trajectory evidence provides weak su-
+pervisionfordeliberation,revision,andcompletiondecisions,
+but is not treated as an identified workflow-effect observation.
+Checkpointed paired intervention records.For a selected
+training state, the harness checkpoints the execution context
+𝜒𝑡, including the agent context, recent execution memory,
+environment state, tool state, intermediate artifacts, and cur-
+rent task progress. The checkpoint is restored to execute the
+factual workflow𝜔0𝑡 and an admissible counterfactual candi-
+date𝜔 as two isolated branches. Both branches use the same
+12
+continuation policy𝜋cont, evaluation horizon, model and tool
+configuration, task evaluator, and resource-accounting rule.
+Branch-specific planning, model inference, tool interaction,
+and execution costs are included in the resulting utility. Post-
+checkpoint randomness is either matched across branches
+or independently sampled from the same distribution and
+remains independent of workflow assignment.
+The analysis setC𝑡 in Appendix A.3 intentionally includes
+the factual workflow. For paired replay, define only the coun-
+terfactual subset
+Ccf𝑡 =C𝑡\{𝜔 0𝑡}.(A8)
+No replay count is required for𝜔0𝑡, whose relative effect is
+fixedtozero.If Ccf𝑡 =∅ ,nopaired-effectrecordisconstructed
+at that state andKeepremains the only available reference
+family.
+For each𝜔∈C cf𝑡 , let𝐾𝑡,𝜔 ≥1 be the number of valid
+paired replays, and let
+𝑈(𝑘)𝑡 (𝜔)and𝑈 (𝑘)𝑡 (𝜔0𝑡)
+denote the candidate and factual utilities in replay𝑘. The
+paired workflow-effect target is
+eΓpair𝑡 (𝜔)= 1𝐾𝑡,𝜔
+𝐾𝑡 , 𝜔∑︁
+𝑘=1
+h
+𝑈(𝑘)𝑡 (𝜔)−𝑈 (𝑘)𝑡 (𝜔0𝑡)i.(A9)
+The factual reference is fixed by construction:
+eΓpair𝑡 (𝜔0𝑡)= bΓ𝜙
+
+𝜔0𝑡 ;𝜒𝑡,𝜔 0𝑡
+
+=0.
+Assumption A.2: State-Sufficient Paired Replay.The re-
+stored checkpoint contains the pre-intervention variables
+required to reproduce the execution context relevant to post-
+intervention performance. After restoration, the branches
+differ only in their assigned workflow, follow the same con-
+tinuation and evaluation protocol, do not interfere, and use
+post-checkpointrandomnessindependentofworkflowassign-
+ment. The candidate set, replay count, and replay-inclusion
+criteria are fixed before paired outcomes are observed; replay
+validity does not depend on the sign or magnitude of the
+observed utility difference.
+Proposition A.2: Identification and Concentration by
+Paired Replay.Under Assumption A.2,
+E
+h
+eΓpair𝑡 (𝜔)|𝜒 𝑡
+i
+=Γ𝑡(𝜔)(A10)
+for every𝜔∈C cf𝑡 .
+Suppose additionally that
+𝑈𝑡(𝜔)∈[𝑢 min,𝑢 max], 𝑅=𝑢 max−𝑢 min.
+For nonemptyCcf𝑡 , define
+𝑀𝑡 =
+Ccf𝑡 , 𝐾 pair𝑡 =min𝜔∈C cf𝑡 𝐾𝑡,𝜔.
+Ifpairedreplaysareindependentconditionalon 𝜒𝑡,then,with
+probability at least1−𝜁,
+sup
+𝜔∈C cf𝑡
+eΓpair𝑡 (𝜔)−Γ 𝑡(𝜔)≤𝑅 √︄2 log(2𝑀𝑡/𝜁)𝐾pair𝑡 .(A11)
+Proof.Because both branches begin from the same restored
+context and workflow assignment is independent of post-
+checkpoint randomness, each branch follows the potential-
+outcome distribution associated with its assigned workflow.
+Linearity of expectation yields Equation(A10). For each
+candidate, the paired difference lies in[−𝑅,𝑅] . Hoeffding’s
+inequality bounds the empirical-mean deviation, and a union
+bound over the𝑀𝑡 counterfactual candidates yields Equa-
+tion (A11).□
+Connection to intervention-selection error.Define the
+effect-model fitting error over paired targets as
+𝛼𝑡 =sup
+𝜔∈C cf𝑡
+bΓ𝜙 𝜔;𝜒𝑡,𝜔 0𝑡 − eΓpair𝑡 (𝜔).
+Because the factual effect and its estimate are both zero, the
+error 𝜀𝑡 defined over the full setC𝑡 equals the supremum
+overCcf𝑡 whenever this subset is nonempty. Therefore, with
+probability at least1−𝜁,
+𝜀𝑡≤𝛼 𝑡+𝑅
+√︄
+2 log(2𝑀𝑡/𝜁)
+𝐾pair𝑡 .
+Combining this inequality with Proposition A.1 gives
+𝑉 int𝑡 (𝜄†𝑡)−𝑉 int𝑡 (b𝜄𝑡)≤2𝛼 𝑡+2𝑅
+√︄
+2 log(2𝑀𝑡/𝜁)
+𝐾pair𝑡 +𝜌 𝑡.
+(A12)
+Thus, intervention-selection quality is jointly controlled by
+workflow-effect fitting error, finite paired-replay error, and
+amortized prediction error.
+Paired workflow-effect training set.The workflow-effect
+training set is
+Dpair=
+n
+𝜒𝑡,𝜔 0𝑡,𝜔, eΓpair𝑡 (𝜔),𝑤 𝑡,𝜔
+
+:𝜔∈C cf𝑡
+o
+,
+where𝑤𝑡,𝜔 ≥0 is a reliability weight determined from pre-
+specified replay-validity diagnostics, replay count, and com-
+parisonstability,withoutusingthesignoftheobservedeffect.
+Pairs are excluded when the checkpoint cannot be restored,
+the branches do not share the same continuation protocol,
+or branch outcomes cannot be isolated. Only checkpointed
+paired executions are treated as workflow-effect observations.
+Unpaired trajectories, incomplete comparisons, and model-
+scored candidates do not directly supervisebΓ𝜙 and are not
+interpreted as identified causal effects.
+The workflow-effect estimator is trained by
+Leff =E 𝜒𝑡,𝜔 0𝑡,𝜔, eΓpair𝑡 (𝜔),𝑤 𝑡 , 𝜔∼Dpair
+
+𝑤𝑡,𝜔
+
+bΓ𝜙
+
+𝜔;𝜒𝑡,𝜔 0𝑡
+
+− eΓpair𝑡 (𝜔)2.
+(A13)
+Interventiontargetandobjective.Candidateworkflowsare
+grouped by semantic intervention family. The offline target is
+induced by the learned workflow-effect estimator:
+𝜄∗𝑡 =arg max𝜄∈I wf𝑡 max𝜔∈G 𝑡(𝜄) bΓ𝜙
+
+𝜔;𝜒𝑡,𝜔 0𝑡
+
+.(A14)
+13
+When no alternative family has a positive estimated effect,
+conservative tie-breaking assigns
+𝜄∗𝑡 =Keep.
+The amortized intervention predictor is trained by
+Lint=−log𝑝 𝜃𝑢
+
+𝜄∗𝑡|𝜒 𝑡,𝜔 0𝑡
+
+.(A15)
+Trajectory evidence for factorized decisions.For each
+intervention step, the implementation extracts
+Edec𝑡 = 𝑌𝜏,𝑌 ref,𝐸 err𝑡 ,𝐶 main𝑡 ,𝐶 plan𝑡 ,𝑟𝑡,𝑐𝑡,Δ cf𝑡 ,H exec𝑡 ,
+where𝑌𝜏 and𝑌ref arethecurrentandreferencetaskoutcomes;
+𝐸err𝑡 records execution failure;𝐶main𝑡 and𝐶plan𝑡 record main-
+agent and planner costs;𝑟𝑡 and 𝑐𝑡 summarize route and
+candidate statistics; andH exec𝑡 contains progress, repetition,
+failure, and completion evidence. A decision-target operator
+produces
+Ψdec
+
+Edec𝑡
+
+=
+
+𝑧∗𝑡,𝑦 chg,∗𝑡 ,𝑏∗𝑡
+
+.
+These are outcome-conditioned weak decision labels, not
+observations ofΓ𝑡(𝜔).
+Counterfactual Deliberation Effect target.The target
+𝑧∗𝑡∈{Skip,Light,Full}
+specifies the preferred amount of additional deliberation.
+Skipis assigned when the factual workflow is sufficient or
+additional planning produces no useful decision evidence.
+Lightis assigned when restricted diagnostics or a small
+candidatesetissufficient.Fullisassignedonlywhenbroader
+generation or evaluation materially improves intervention
+selection, recovers ineffective execution, or prevents a high-
+risk factual action. Among routes preserving decision quality
+and task success, the target selects the least costly route.
+Counterfactual Revision Effect target.The target
+𝑦chg,∗𝑡 ∈{Keep,Change}
+specifieswhethertheselectedcandidate 𝜔+𝑡 shouldreplacethe
+factual workflow.Changerequires evidence that the candi-
+date improves the factual execution while preserving success
+and satisfying authorization conditions. When paired execu-
+tion evidence is available, its observed workflow difference
+provides the primary comparison. Unpaired retrospective evi-
+dencemayprovideauxiliarydecisionsupervisionbutdoesnot
+enterDpair. Unsafe, invalid, task-incompatible, over-budget,
+duplicate, ineffective, or success-breaking candidates receive
+Keepsupervision.
+Completion Attribution Effect target.The target
+𝑏∗𝑡∈{0,1}
+indicates whether task completion is supported by evidence
+already available at step𝑡. The label𝑏∗𝑡 =1 requires retro-
+spective evidence that the task requirements were already
+satisfied,suchasavalidfinalanswer,passingtests,arequired
+artifact, or an environment-provided success state. Budget
+exhaustion, inactivity, repeated failure, predicted futility, or
+the absence of another action does not produce a positive
+completion target.
+Head-specific objectives.The factorized decision heads are
+trained by
+LCDE=−log𝑝 𝜃𝑝
+
+𝑧∗𝑡|𝜒 𝑡,𝜔 0𝑡,b𝜄𝑡
+
+,(A16)
+LCRE=−log𝑝 𝜃𝑐
+
+𝑦chg,∗𝑡 |𝜒 𝑡,𝜔 0𝑡,𝜔+𝑡,b𝜄𝑡
+
+,(A17)
+LCAE=−log𝑝 𝜃𝑒
+ 𝑏∗𝑡|𝜒 𝑡,𝑜𝑡,ℎ𝑡.(A18)
+The complete CIEL objective is
+LCIEL=L eff+L int+L CDE+L CRE+L CAE.(A19)
+Theobjectivesusedistinctsourcesofsupervision: Leff learns
+workflow effects from offline checkpointed paired execu-
+tions;Lint amortizes the preference induced by the learned
+workflow effects; andLCDE,LCRE, andLCAE learn route,
+revision, and completion decisions from success-preserving
+trajectory evidence. This separation prevents heuristic or
+model-scored trajectory signals from being interpreted as
+identified workflow-effect observations.
+Appendix B: ARCO Realization and
+Authorization Details
+This appendix explains how Advantage-Realizing Causal
+Orchestration (ARCO) implements CIEL decisions through
+route selection, candidate generation, causal–operational val-
+uation, workflow authorization, and completion verification.
+B.1 Route Feasibility and Candidate Construction
+Let
+Z= {Skip,Light,Full},Skip≺Light≺Full.
+The ordering represents increasing deliberation depth,
+candidate-generation coverage, and execution cost. The pro-
+visional route is
+e𝑧𝑡 =arg max𝑧∈Z 𝑝𝜃𝑝
+
+𝑧|𝜒 𝑡,𝜔 0𝑡,b𝜄𝑡
+
+.(B1)
+Let𝐶plan(𝑧) bethepredictedplanningcostofroute 𝑧,𝐵plan𝑡
+the remaining planning budget,𝑁full𝑡 the number of previous
+full-deliberation calls,𝐵full their maximum allowed number,
+𝑡fulllast the most recent full-deliberation step,𝜅 the full-route
+cooldown,T(𝑧) the tools or capabilities required by route𝑧,
+andT avail𝑡 the currently available tools and capabilities. If no
+full route has previously been executed, set𝑡fulllast =−∞.
+Define the common planning-and-tool feasibility indicator
+as
+𝑔𝑡(𝑧)=I
+h
+𝐶plan(𝑧)≤𝐵 plan𝑡
+i
+I
+
+T(𝑧)⊆T avail𝑡 .(B2)
+14
+The route feasibility is
+𝑓𝑡(𝑧)=
+ 
+
+1, 𝑧=Skip,
+𝑔𝑡(𝑧), 𝑧=Light,
+𝑔𝑡(𝑧)I
+
+𝑁full𝑡 < 𝐵full,
+𝑡−𝑡 fulllast≥𝜅
+
+, 𝑧=Full.
+(B3)
+The feasible route set is
+F𝑡 ={𝑧∈Z:𝑓 𝑡(𝑧)=1 }.
+BecauseSkipis always feasible,F𝑡 ≠∅ . The executed route
+is
+𝑧𝑡 =max≺ {𝑧∈F 𝑡 :𝑧⪯e𝑧 𝑡}.(B4)
+Thus, an infeasible prediction is downgraded to the highest
+feasible route and is never upgraded beyond the learned
+prediction.
+The raw route-specific candidate set is
+Ωraw𝑡 =
+ 
+
+{𝜔0𝑡}, 𝑧 𝑡 =Skip,
+{𝜔0𝑡}∪G light𝑡 (b𝜄𝑡), 𝑧 𝑡 =Light,
+{𝜔0𝑡}∪G 𝑡(b𝜄𝑡), 𝑧 𝑡 =Full.
+(B5)
+Here,Glight𝑡 (b𝜄𝑡)⊆G 𝑡(b𝜄𝑡) is a restricted, low-cost realization
+set. Candidate exposure is bounded by
+𝐾Skip=1, 𝐾 Light<𝐾 Full.
+These route budgets are distinct from the paired-replay quan-
+tity𝐾 pair𝑡 in Appendix A.4.
+Let b𝑆𝑡(𝜔|𝜒 𝑡) be the workflow-safety score and𝜉𝑡 its
+minimumacceptedthreshold.Beforeexpensivevaluation,the
+retained candidate set is
+Ω𝑡 ={𝜔 0𝑡}∪TopK 𝐾𝑧𝑡−1
+n
+𝜔∈Ω raw𝑡 \{𝜔 0𝑡}: b𝑆𝑡(𝜔|𝜒 𝑡)≥𝜉 𝑡
+o
+,
+(B6)
+where TopK0(·)=∅ . When more candidates pass the safety
+threshold than the route budget allows,TopKretains them
+according to the low-cost workflow-construction score pro-
+ducedbeforefullvaluation.Theadmissibleroute-exposedset
+is
+Ω𝑡 =Ω 𝑡∩A𝑡.(B7)
+Because𝜔 0𝑡∈A 𝑡, the filtered set is nonempty.
+Implementation correspondence.The CDE head outputs
+scores for the three route classes. A deterministic feasibil-
+ity stage checks route-specific planning budgets, full-route
+limitsandcooldown,requiredtools,andenvironmentcapabil-
+ities. UnderSkip, planner and candidate-generation calls are
+bypassed. UnderLight, the implementation uses restricted
+diagnosticsandasmallcandidatebudget.UnderFull,allcon-
+figuredroute-compatiblegenerationandevaluationoperations
+are available. The implementation records the provisional
+route, executed route, downgrade reason, exposed candidates,
+prescreening decisions, and incurred planning cost.
+B.2 Causal–Operational Valuation
+For each𝜔∈ Ω𝑡, let b𝑃𝑡(𝜔), b𝐶𝑡(𝜔), b𝑅𝑡(𝜔), b𝐼𝑡(𝜔), b𝐵𝑡(𝜔),
+and b𝑆𝑡(𝜔|𝜒 𝑡) denote estimated task progress, execution
+cost,operationalrisk,informationgain,robustness,andwork-
+flow safety, respectively. All available signals are calibrated
+to a common bounded range before aggregation. A signal
+unavailable for a benchmark is omitted rather than assigned
+an arbitrary value.
+Define the shared progress–risk–safety score and the full-
+route information–robustness bonus as
+b𝑄𝑡(𝜔)=𝛼 progb𝑃𝑡(𝜔)−𝛼 risk b𝑅𝑡(𝜔)+𝛼 safeb𝑆𝑡(𝜔|𝜒 𝑡),(B8)
+b𝐻𝑡(𝜔)=𝛼 infob𝐼𝑡(𝜔)+𝛼 robb𝐵𝑡(𝜔).(B9)
+The route-conditioned operational utility is
+b𝑈op(𝜔|𝜒 𝑡,𝑧𝑡)=
+ 
+
+0, 𝑧 𝑡 =Skip,
+b𝑄𝑡(𝜔)−𝛼 lightcost b𝐶𝑡(𝜔), 𝑧 𝑡 =Light,
+b𝑄𝑡(𝜔)−𝛼 fullcostb𝐶𝑡(𝜔)+ b𝐻𝑡(𝜔), 𝑧 𝑡 =Full.
+(B10)
+All coefficients are nonnegative. The light route omits
+information-gain and robustness estimation when restricted
+diagnostics are sufficient, whereas the full route uses the
+complete configured valuation.
+The causal–operational utility is
+b𝑈ARCO
+
+𝜔|𝜒 𝑡,𝑧𝑡, bΓ𝜙,𝑡
+
+= b𝑈op(𝜔|𝜒 𝑡,𝑧𝑡)+𝜂 ΓbΓ𝜙,𝑡(𝜔),
+(B11)
+where𝜂Γ≥0 controlsthecontributionofestimatedworkflow
+effect evidence. The strongest exposed candidate is
+𝜔+𝑡 =arg max
+𝜔∈Ω𝑡
+b𝑈ARCO
+
+𝜔|𝜒 𝑡,𝑧𝑡, bΓ𝜙,𝑡
+
+.(B12)
+Its advantage over the factual workflow is
+Δcf𝑡 = b𝑈op  𝜔+𝑡 |𝜒 𝑡,𝑧𝑡− b𝑈op 𝜔0𝑡|𝜒 𝑡,𝑧𝑡
++𝜂 Γ
+h
+bΓ𝜙,𝑡(𝜔+𝑡)− bΓ𝜙,𝑡(𝜔0𝑡)i. (B13)
+The estimator enforces
+bΓ𝜙,𝑡(𝜔0𝑡)=0.
+Implementation correspondence.Task-progress signals
+may be derived from newly acquired evidence, intermediate
+environment states, test results, or predicted goal advance-
+ment. Cost signals use expected or observed model tokens,
+planner calls, tool calls, and latency. Risk signals capture
+invalid actions, destructive operations, execution errors, or
+uncertain state changes. Information-gain signals estimate
+whether the candidate obtains evidence absent from the fac-
+tual path. Robustness signals favor candidates that depend
+lessonunverifiedassumptionsorfragileexecutionsequences.
+The final score ranks only candidates in the route-exposed
+admissible setΩ𝑡.
+15
+B.3 Conservative Workflow Authorization
+The CRE decision for the selected candidate is
+𝑦chg𝑡 =arg max𝑦∈{Keep,Change} 𝑝𝜃𝑐
+
+𝑦|𝜒 𝑡,𝜔 0𝑡,𝜔+𝑡,b𝜄𝑡
+
+.(B14)
+Keepretains the factual workflow, whereasChangeprovides
+learned support for replacement by𝜔+𝑡 . CRE and causal–
+operational valuation have complementary roles: CRE deter-
+mines whether replacement is contextually supported, while
+Δcf𝑡 determines whether the estimated improvement is large
+enough to justify revision.
+The authorization rule is
+𝜔★𝑡 =
+(
+𝜔+𝑡, 𝑦 chg𝑡 =Change∧Δ cf𝑡 ≥𝛿 b𝜄𝑡,
+𝜔0𝑡,otherwise, (B15)
+where𝛿b𝜄𝑡≥0 is the authorization margin for the predicted
+intervention family. Because𝜔+𝑡 is selected fromΩ𝑡, admis-
+sibility, safety, schema, task-compatibility, and budget checks
+have already been satisfied before this rule is applied.
+For implementation diagnostics, define
+𝑎sup𝑡 =I h𝑦chg𝑡 =Change i I Δcf𝑡 ≥𝛿 b𝜄𝑡,𝑎 feas𝑡 =I h𝜔+𝑡 ∈Ω𝑡i,
+(B16)
+and
+𝑎chg𝑡 =𝑎 sup𝑡 𝑎feas𝑡 .
+The learned CRE output and final authorization result are
+logged separately, allowing prediction errors to be distin-
+guished from constraint-triggered fallback. If either support
+or feasibility fails, ARCO retains𝜔0𝑡.
+Scopeofworkflowoptimality.ARCOdoesnotclaimglobal
+optimization over the complete admissible workflow space
+A𝑡. Instead,
+𝜔+𝑡 =arg max
+𝜔∈Ω𝑡
+b𝑈ARCO
+
+𝜔|𝜒 𝑡,𝑧𝑡, bΓ𝜙,𝑡
+
+is optimal only within the route-exposed admissible set.
+CHILL-Harness executes this candidate when authorized
+and otherwise retains the factual workflow.
+B.4 Evidence-Grounded Completion and Answer Synthe-
+sis
+The CAE prediction is
+b𝑏𝑡 =arg max𝑏∈{0,1} 𝑝𝜃𝑒(𝑏|𝜒 𝑡,𝑜𝑡,ℎ𝑡).(B17)
+The value b𝑏𝑡 =1 indicates learned completion support,
+whereas b𝑏𝑡 =0 indicates that completion is unsupported by
+the CAE head.
+An explicit task verifier produces
+𝑒comp𝑡 =I[V𝑡(𝜒𝑡,𝑜𝑡,ℎ𝑡)=1],(B18)
+whereV𝑡 isthetask-specificcompletionverifier.Termination
+is authorized by
+𝑑term𝑡 = b𝑏𝑡𝑒comp𝑡 .(B19)
+Thus, termination requires both learned completion support
+and explicit task evidence.
+The verifier may decompose completion evidence into
+strong, weak, and contradictory signals:
+𝑒comp𝑡 =I h𝐸strong𝑡 =1∨ 𝐸weak𝑡 =1∧𝐸 fail𝑡 =0 i .
+Strong evidence includes passing tests, successful builds,
+accepted solutions, or explicit environment success. Weak
+evidence includes a valid final answer or task-completion sig-
+nal, whereas traceback, assertion, permission, and execution
+failures constitute contradictory evidence.
+Implementation correspondence.The CAE head does not
+directly invoke the terminal action; its output is passed to
+the task-specific verifier. Depending on the benchmark, the
+verifier checks a required answer format, successful tests
+or evaluator results, the existence and validity of a required
+artifact, an environment-provided success state, or another
+explicit completion condition. Predicted futility, budget ex-
+haustion, repeated failure, or lack of progress does not set
+𝑒comp𝑡 =1 . Such signals may instead redirect execution to-
+wardAnswerSynthesisor another workflow adaptation.
+Therefore,
+AnswerSynthesis≠Complete.
+The former is a nonterminal adaptation; the latter is an
+authorizedterminaldecision.Theimplementationrecordsthe
+CAE output, verifier result, supporting evidence, synthesis
+decision, and final terminal action.
+Appendix C: Success-Preserving Learning and
+Complete Inference
+This appendix specifies the trajectory-level objective, the
+separatedsupervisionscheme,localauthorizationconstraints,
+offline paired-effect collection, and the complete CHILL-
+Harness inference procedure.
+C.1 Success-Preserving Trajectory Objective
+The learnable CIEL parameter set is
+Θ=
+
+𝜙,𝜃𝑢,𝜃 𝑝,𝜃𝑐,𝜃𝑒
+	
+.
+ARCOintroducesnoseparatepredictionparametersinthecur-
+rent formulation. It realizes CIEL outputs through candidate
+generation, valuation, filtering, and rule-based authorization
+with calibrated weights and thresholds.
+LetK denote the resource channels measured for a bench-
+mark. The trajectory-level execution cost is
+Jeff(𝜏)=
+∑︁
+𝑘∈K
+𝜆𝑘𝐶𝑘(𝜏),(C1)
+where𝐶𝑘(𝜏) is the amount of resource𝑘 consumed by trajec-
+tory𝜏,and 𝜆𝑘≥0 isitsweight.Forthereportedexperiments,
+the principal resource channels are
+𝐶tok(𝜏)=𝐶 inmain(𝜏)+𝐶 outmain(𝜏)+𝐶 inplan(𝜏)+𝐶 outplan(𝜏),
+16
+and
+𝐶time(𝜏)=𝑇 main(𝜏)+𝑇 plan(𝜏)+𝑇 tool(𝜏)+𝑇 env(𝜏)+𝑇 verify(𝜏).
+(C2)
+The reported total token count includes main-agent and
+counterfactual-planner calls made during benchmark infer-
+ence. Offline paired-replay collection is a training-data con-
+struction procedure and is not included in test-time token or
+runtime measurements; its cost is tracked separately.
+The global objective is
+min
+Θ
+E𝜏∼𝜋 CHILL,Θ[Jeff(𝜏)]
+s.t.PassRate  𝜋CHILL,Θ≥PassRate(𝜋ref)−𝜖 pass. (C3)
+Here,𝜋CHILL,Θ is the execution policy induced by CIEL and
+ARCO;𝜋ref is the matched reference harness;PassRate(𝜋)
+is the fraction of evaluated tasks completed successfully
+by policy𝜋; and𝜖pass≥0 is the allowed aggregate pass-
+rate degradation. Success is determined by the benchmark
+evaluator rather than by the harness completion prediction.
+C.2TrajectorySupervisionandDecision-TargetConstruc-
+tion
+Let
+𝑌𝜏∈{0,1}and𝑌 ref∈{0,1}
+indicate whether the CHILL-Harness and matched reference
+trajectories succeed, respectively. The trajectory supervision
+score is
+Ltraj(𝜏)=J eff(𝜏)+𝜆 fail(1−𝑌 𝜏)+𝜆 breakI[𝑌ref =1∧𝑌 𝜏 =0].
+(C4)
+The first term measures execution cost, the second penalizes
+task failure, and the third penalizes adaptations that break a
+successful reference trajectory. The coefficients𝜆fail,𝜆 break≥
+0control the two failure penalties.
+Separated supervision correspondence.The trajectory
+score is not differentiated through external tools or the en-
+vironment. Instead, it determines valid samples, confidence
+weights, and weak decision targets:
+Ltraj−→
+
+𝑧∗𝑡,𝑦 chg,∗𝑡 ,𝑏∗𝑡
+
+.
+Workflow-effect supervision is constructed separately:
+Dpair−→eΓpair𝑡 (𝜔)−→ bΓ𝜙−→𝜄∗𝑡.
+Thus, retrospective trajectory evidence does not directly de-
+fine or supervise the identified workflow-effect target. CDE
+targetsselecttheleastcostlyroutepreservingdecisionquality;
+CRE targets determine whether the selected candidate should
+replace the factual workflow; and CAE targets determine
+whether completion is already supported by evidence.
+C.3 Local Authorization Constraints
+Using the unified safety score from Appendix B, the admissi-
+ble workflow set is
+A𝑡 ={𝜔: b𝑆𝑡(𝜔|𝜒 𝑡)≥𝜉 𝑡
+∧SchemaValid(𝜔)
+∧TaskCompatible (𝜔;𝜒𝑡)
+∧WithinBudget (𝜔;𝜒𝑡)
+∧¬Repeated 𝑡(𝜔)}.
+(C5)
+Here, b𝑆𝑡(𝜔|𝜒 𝑡) is the workflow-safety score and𝜉𝑡 its
+minimum threshold;SchemaValidchecks workflow and tool-
+call structure; TaskCompatible checks that proposed oper-
+ations are permitted in the current task and environment;
+WithinBudgetchecks remaining model, planning, tool, revi-
+sion, and execution budgets; andRepeated𝑡 identifies dupli-
+cate or repeatedly ineffective workflows.
+Each generated candidate is parsed and passed through
+these checks before valuation and authorization. Rejected
+candidates are removed from
+Ω𝑡 =Ω 𝑡∩A𝑡,
+and their rejection reasons are stored in the execution trace.
+Revision satisfies
+𝜔★𝑡 =𝜔+𝑡 =⇒ h𝑦chg𝑡 =Change∧Δ cf𝑡 ≥𝛿 b𝜄𝑡i,
+and completion satisfies
+𝑑term𝑡 =1=⇒ hb𝑏𝑡 =1∧𝑒 comp𝑡 =1 i.
+Together, these constraints ensure
+𝜔★𝑡 ∈Ω𝑡⊆A 𝑡
+and prevent unsupported revision or premature termination.
+17
+C.4 Complete Inference, Offline Pairing, and Logging
+Algorithm 2Complete CHILL-Harness Inference
+1:Input:𝜒 𝑡,𝜔 0𝑡,𝑜𝑡,ℎ𝑡;Output:𝜔 ★𝑡,𝑑 term𝑡
+2:Predict
+b𝜄𝑡 =arg max
+𝜄∈I wf𝑡
+𝑝𝜃𝑢
+
+𝜄|𝜒 𝑡,𝜔 0𝑡
+
+3:Predict the provisional route
+e𝑧𝑡 =arg max𝑧∈Z 𝑝𝜃𝑝
+
+𝑧|𝜒 𝑡,𝜔 0𝑡,b𝜄𝑡
+
+and select the highest feasible route𝑧𝑡⪯e𝑧𝑡
+4: Generate the raw route-conditioned candidate setΩraw𝑡
+using Equation (B5)
+5: Prescreen candidates using Equation(B6)and obtainΩ𝑡
+6:Filter admissible candidates:
+Ω𝑡 =Ω 𝑡∩A𝑡
+7:For each𝜔∈ Ω𝑡, estimate
+bΓ𝜙,𝑡(𝜔)= bΓ𝜙
+
+𝜔;𝜒𝑡,𝜔 0𝑡
+
+and computeb𝑈ARCO(𝜔|𝜒 𝑡,𝑧𝑡, bΓ𝜙,𝑡)
+8: Select𝜔+𝑡 and computeΔcf𝑡 using Equations(B12) and
+(B13)
+9:Predict CRE support:
+𝑦chg𝑡 =arg max𝑦∈{Keep,Change} 𝑝𝜃𝑐
+
+𝑦|𝜒 𝑡,𝜔 0𝑡,𝜔+𝑡,b𝜄𝑡
+
+10:Authorize𝜔 ★𝑡 using Equation (B15)
+11:Compute
+b𝑏𝑡 =arg max𝑏∈{0,1} 𝑝𝜃𝑒(𝑏|𝜒 𝑡,𝑜𝑡,ℎ𝑡)
+and
+𝑑term𝑡 = b𝑏𝑡 I[V𝑡(𝜒𝑡,𝑜𝑡,ℎ𝑡)=1]
+12:if𝑑 term𝑡 =1then
+13:Invoke the task-terminal action
+14:else
+15:Execute𝜔 ★𝑡
+16:end if
+17: Log decisions, candidate evaluations, rejection reasons,
+execution costs, observations, errors, and task outcomes
+The inference record contains at least
+
+𝜒𝑡,𝜔 0𝑡,b𝜄𝑡,e𝑧𝑡,𝑧𝑡,Ω raw𝑡 ,Ω𝑡,Ω𝑡,𝜔+𝑡,Δ cf𝑡 ,𝑦 chg𝑡 ,𝜔★𝑡,b𝑏𝑡,𝑒 comp𝑡 ,𝑑 term𝑡
+
+,
+(C6)
+togetherwithtoolcalls,observations,rejectionreasons,costs,
+errors, and final task outcomes.
+Offlinepaired-effectcollection.Checkpointedpairedreplay
+is performed only during offline training-data construction.
+For each selected training checkpoint and counterfactual
+candidate, the implementation restores the same checkpoint,
+executes the factual and candidate branches under the com-
+mon continuation and evaluation protocol, computes Equa-
+tion (A9), and adds the resulting record toDpair. CIEL pa-
+rameters are then trained on the designated training split
+and frozen before benchmark evaluation. No paired replay,
+effect-model update, or decision-head update is performed
+on evaluation tasks.
+The complete learning and execution flow is
+offline paired execution−→ eΓpair𝑡 −→ bΓ𝜙 −→
+𝜄∗𝑡,trajectory evidence−→ 𝑧∗𝑡,𝑦 chg,∗𝑡 ,𝑏∗𝑡,
+frozen CIEL predictions−→ARCO realization−→
+authorized execution.
+18

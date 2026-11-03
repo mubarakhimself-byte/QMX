@@ -1,0 +1,1334 @@
+arXiv 2611.01236  https://arxiv.org/abs/2611.01236
+
+RiskReason: A Benchmark for Verifiable Financial Risk Reasoning
+Nazanin Yousefi
+Dataism Laboratory for Quantitative
+Finance
+Mohammadreza Ghafouri
+Independent Researcher
+Seyedreza Tavakoli
+Dataism Laboratory for Quantitative
+Finance
+MohammadJavad Gharegozlou
+Independent Researcher
+Arman Khaledian
+Independent Researcher
+Amir Amini
+Bendheim Center for Finance
+Princeton University
+Dataism Laboratory for Quantitative
+Finance
+Eghbal Rahimikia
+Alliance Manchester Business School,
+University of Manchester
+The Alan Turing Institute
+Gholamali Aminian
+The Alan Turing Institute
+Marjan Alirezaie
+Department of Computer Science
+Toronto Metropolitan University
+Ali Habibnia
+Department of Economics
+Virginia Tech
+Dataism Laboratory for Quantitative
+Finance
+Abstract
+Robust financial-risk inference requires more than mathematical
+correctness. Models must accurately apply conditional rules, main-
+tain evolving financial states, and make decisions that respect op-
+erational constraints. This work introducesRiskReason, a bench-
+mark for verifiable financial-risk reasoning that spans diverse risk-
+management mechanisms. The benchmark includes Standard tasks,
+which assess individual financial mechanisms, and Long-horizon
+tasks, which combine multiple mechanisms through extended de-
+pendencies. Each task provides reference outcomes, formal specifi-
+cations, reasoning annotations, and dependency representations to
+support systematic analysis of model performance. Eleven model
+configurations are evaluated using strict single-attempt accuracy,
+complemented by structural and qualitative failure analyses. The
+strongest configurations achieve 80.0–90.2% overall accuracy, with
+several maintaining high performance on composed financial sce-
+narios. However, analysis of failures reveals incorrect risk decisions
+despite accurate intermediate calculations, inconsistent propaga-
+tion of financial states, and remediation actions that violate binding
+constraints. In contrast, some strict evaluation failures result from
+incomplete reporting rather than incorrect financial conclusions.
+These findings indicate that aggregate accuracy alone is insufficient
+to characterize financial-risk reasoning reliability and motivate eval-
+uations that distinguish numerical correctness, state consistency,
+constraint satisfaction, and decision validity.
+Keywords
+financial risk management, financial reasoning, benchmark, large
+language models, reasoning graphs, robustness, evaluation
+Accepted at the Workshop on The 3rd Workshop on LLMs and Generative AI for
+Finance
+Project repository: https://github.com/DataismLab/RiskReason-A-Benchmark
+Corresponding author: habibnia@vt.edu
+1 Introduction
+Large language models (LLMs) have shown impressive results in
+financial question answering, numerical reasoning, and solving
+problems within specific domains [ 13, 15, 18]. Still, performing
+well on these tasks does not guarantee accurate reasoning when
+it comes to financial risk management. For example, a bank with
+$50M in eligible liquid assets and $45M in stressed net cash outflows
+would calculate a liquidity coverage ratio of 111.11%. If $8M of those
+assets become ineligible due to a downgrade rule, the ratio drops
+to 93.33%. A model might compute the ratio correctly but misjudge
+the situation by not updating which assets are eligible. The core
+difficulty is not just in doing the math, but in properly applying
+financial rules as conditions change.
+Financial risk management is a vital area where such reason-
+ing matters greatly. Judging credit exposure, liquidity, collateral,
+leverage, and regulatory capital often depends on how financial
+relationships, contracts, and regulations interact [3, 8]. A change in
+any one amount may impact later obligations, resources, or allowed
+actions. As a result, strong reasoning here means more than just
+calculating risk measures—it demands keeping track of changing
+numbers, conditions, constraints, and decisions throughout the
+process.
+While current financial benchmarks have improved how we
+evaluate financial knowledge, numerical reasoning, and complex
+problem-solving —including tasks related to risk and structured
+verification [13, 15, 17]—they do not fully capture how different
+financial risk mechanisms work together. Specifically, knowing a
+model’s accuracy on overall tasks does not reveal if it can mon-
+itor changes in financial states, follow conditional rules, respect
+constraints, or use its calculations to make the right risk decisions.
+To explore these abilities, this article presentsRiskReason—a
+benchmark designed for evaluating financial risk reasoning in a
+arXiv:2611.01236v1  [q-fin.RM]  31 Oct 2026
+verifiable way. RiskReason covers a variety of financial-risk mecha-
+nisms with two types of tasks. Standard tasks focus on individual or
+basic combinations of mechanisms. In contrast, long-horizon tasks
+bring together multiple mechanisms in longer sequences, where
+each step’s results affect the following financial states and rules.
+Every task comes with a verifiable answer, a formal outline, and or-
+ganized reasoning notes that show how each step is related. These
+features help assess both model performance and what aspects of
+financial problems lead to a model’s success or failure.
+This work offers three main contributions: (1) a specialized
+benchmark for assessing financial-risk reasoning in both individual
+and long-term, combined scenarios; (2) structured task outlines that
+clearly represent financial values, conditional rules, system changes,
+and their interdependencies; and (3) an evaluation of eleven model
+setups, looking at overall results, structural links, and common mis-
+takes. The results show that strong model performance on complex
+financial scenarios can still coincide with major errors in applying
+rules, updating states, or meeting constraints. In addition, incom-
+plete or unconventional reporting can lead to evaluation failures,
+even when the financial decision itself isn’t wrong. Altogether,
+these findings highlight the need for more decision-focused assess-
+ments of financial reasoning reliability, rather than just aggregate
+accuracy.
+2 Related Work
+2.1 Financial Reasoning Benchmarks
+Financial reasoning benchmarks have progressed from numerical
+question answering over financial reports and tables, as exempli-
+fied by FinQA and TAT-QA [ 2, 19], toward broader evaluations
+of financial question answering, domain knowledge, and complex
+problem solving [ 9, 13, 15, 18]. Complementary initiatives such
+as PIXIU and Open-FinLLMs have developed finance-specialized
+models and evaluation resources covering diverse tasks and data
+modalities [7, 16].
+These developments have substantially expanded financial LLM
+evaluation. However, their primary emphasis is on broad financial
+capabilities, numerical reasoning, or knowledge-intensive problem
+solving. Although several benchmarks include risk-related tasks,
+the consistency of financial-risk calculations, state transitions, con-
+ditional constraints, and resulting decisions is not generally their
+central organizing principle.
+2.2 Financial Risk Reasoning
+Financial risk management involves more than isolated calcula-
+tions. Risk outcomes can depend on contractual and regulatory
+conditions, threshold activation, temporal state changes, and the
+propagation of shocks across interconnected market, credit, liq-
+uidity, collateral, and capital positions [3, 8]. These characteristics
+make the consistency between computed quantities, financial states,
+and applicable constraints particularly important.
+Research on LLMs in finance has examined stock-return pre-
+dictability from news [11], finance-specialized models in portfolio
+management [12], and speculative behavior among LLM agents in
+financial markets [1]. Ghafouri et al. [5] further investigate LLM
+risk preferences, ambiguity attitudes, and decision-making under
+uncertainty. More directly related to risk evaluation, FinBen in-
+cludes risk-management applications such as credit scoring, fraud
+detection, and financial distress [15], while Fazlija et al. [4] inves-
+tigate LLM reasoning for assigning regulatory risk weights under
+the Basel III standardized approach to credit risk.
+These studies establish the relevance of LLMs to financial out-
+comes and risk-related applications. RiskReason addresses a com-
+plementary question: whether models can consistently apply and
+coordinate financial-risk mechanisms to derive verifiable outcomes
+and decisions, particularly when intermediate changes alter subse-
+quent obligations or constraints.
+2.3 Structured, Verifiable, and Long-Horizon
+Reasoning
+Recent benchmarks have introduced more explicit representations
+of financial reasoning. FinMathBench constructs multi-formula
+financial problems using hierarchical directed acyclic graphs to
+control computational dependencies [ 6]. FinChain employs pa-
+rameterized symbolic templates and executable reasoning traces
+to evaluate final-answer correctness and intermediate reasoning
+consistency [17]. V-FiLLM generates verified financial problems
+from executable computation trees, controlling dimensions such
+as computation depth, expression breadth, and financial concept
+complexity [10]. FinIndices further examines structural and tem-
+poral reasoning challenges across long financial statements and
+multi-period financial quantities [14].
+RiskReason complements these approaches by focusing on de-
+pendencies among financial-risk mechanisms rather than computa-
+tional composition or document length alone. Its tasks incorporate
+changing exposures, conditional rules, temporal transitions, and
+binding constraints that can determine subsequent financial states
+and admissible actions. Formal specifications and dependency an-
+notations characterize these relationships, while the evaluation
+examines task-level performance and observable financial errors.
+The resulting emphasis is on the consistency of the calculation-to-
+decision process in financial risk management.
+3 The RiskReason Benchmark
+RiskReason evaluates whether large language models can derive
+verifiable financial-risk outcomes by correctly applying financial re-
+lationships, maintaining consistent financial states, and respecting
+applicable rules and constraints. As illustrated in Figure 1, the bench-
+mark spans diverse financial domains and reasoning requirements,
+extending beyond isolated risk calculations to their interactions
+and downstream consequences.
+The benchmark comprises two complementary task regimes.
+Standard tasks assess individual or moderately combined financial-
+risk mechanisms, whereas Long-horizon tasks connect multiple
+mechanisms through extended dependencies in which intermediate
+outcomes influence subsequent financial states and decisions. Both
+regimes draw on the same financial and reasoning dimensions
+rather than constituting separate domain-specific evaluations.
+Each task includes a verifiable reference answer, a formal finan-
+cial specification, reasoning annotations, and a machine-readable
+dependency representation. These components support systematic
+2
+evaluation of task outcomes and analysis of the financial relation-
+ships associated with model successes and failures.
+3.1 Design Principles
+RiskReason follows four design principles.Verifiabilityrequires
+outcomes that can be checked against specified financial relation-
+ships, assumptions, and constraints. When a task intentionally
+provides insufficient information for a unique answer, the expected
+outcome identifies the missing information or determinable bounds.
+Mechanism orientationemphasizes the application of financial
+rules, exposure and balance updates, threshold evaluation, and
+feasible financial decisions rather than factual recall.Minimal-
+sufficient informationrequires models to identify and apply
+the appropriate financial procedures without unnecessary solution
+cues. Finally,diagnostic structurerecords task-level financial and
+computational dependencies to support analysis beyond aggregate
+accuracy.
+3.2 Task Construction and Ground Truth
+Tasks are manually constructed using synthetic financial quantities,
+contracts, cash flows, and market or credit shocks, drawing on
+established financial-risk management principles [3, 8]. Rather than
+reproducing published exercises, scenarios are designed to combine
+financial relationships and constraints in controlled settings. This
+reduces direct overlap with existing questions, although exposure
+to related financial concepts during model pretraining cannot be
+excluded.
+Reference answers are derived from the governing financial re-
+lationships, conventions, and stated constraints. Depending on the
+task, the required outputs may include numerical quantities, clas-
+sifications, conditional decisions, multi-period financial states, or
+structured combinations of these elements. Intermediate quantities
+are documented where they determine subsequent calculations or
+decisions. For intentionally underdetermined tasks, the reference
+instead specifies the valid range or the information required to
+obtain a unique solution.
+Task formulations and references underwent financial review
+for consistency and sufficiency. Identified reference and scoring
+issues are documented separately in the evaluation audit rather
+than assumed to be resolved. Where available, original and refined
+formulations are retained as task annotations, but are not treated
+as separate evaluation regimes.
+3.3 Reasoning Taxonomy and Complexity
+Each task is annotated by financial domain, subdomain, and rel-
+evant reasoning characteristics, as illustrated in Figure 1. These
+annotations are not mutually exclusive: a scenario may combine
+quantitative calculations, temporal dependencies, conditional rules,
+and shock propagation. Additional annotations describe operations,
+conditional logic, units, and representations.
+Reasoning demands are not determined by numerical workload
+or prompt length alone. Tasks may involve similar calculations
+but differ in the dependencies among intermediate results, the
+activation of conditional rules, or the need to maintain financial
+states across successive events. RiskReason therefore combines
+authored reasoning annotations with graph-derived measures of
+task structure. These measures characterize different aspects of
+the problems but are not independently validated difficulty scores.
+Their associations with observed model performance are examined
+in Section 5.
+3.4 Formal Representation and Reasoning DAGs
+Each task includes a formal specification identifying its inputs, fi-
+nancial relationships, conditions, constraints, and required outputs.
+Dependencies among these elements are encoded as a directed
+acyclic graph (DAG),
+𝐺𝑇 =(𝑉 𝑇,𝐸 𝑇),(1)
+where each vertex represents a task-relevant quantity or reason-
+ing operation, and an edge(𝑢,𝑣)∈𝐸 𝑇 indicates that determining𝑣
+depends on𝑢.
+The machine-readable graphs distinguish five vertex types: in-
+puts, operations, conditions, states, and outputs. Their edges cap-
+ture data dependencies between quantities, control dependencies
+associated with conditional rules, temporal dependencies between
+successive states, and dependencies connecting intermediate results
+to requested outputs. Shared intermediate quantities can support
+multiple downstream operations, while state changes are repre-
+sented at the relevant stages. Finite repeated calculations may be
+summarized through series-level vertices rather than expanded into
+individual iterations.
+This representation captures the intended logical structure of
+a financial task, not a model’s observed or prescribed chain of
+thought. It enables the characterization of structural properties
+such as longest-path depth, branching, merging, conditional op-
+erations, and state transitions. Because these properties depend
+partly on the granularity of graph construction, they describe
+the represented dependency structure rather than an intrinsic,
+representation-independent measure of task difficulty.
+The formal specifications and graphs are not provided to evalu-
+ated models, which respond to the natural-language tasks. Instead,
+they support structural analysis and, where model responses expose
+relevant intermediate results, examination of observable departures
+from the expected financial relationships. They do not reveal unob-
+served model reasoning or automatically establish the cause of a
+failed response.
+3.5 Long-Horizon Financial Risk Reasoning
+RiskReason’s Long-horizon regime extends financial-risk reasoning
+through the composition of dependent mechanisms rather than
+textual length alone (Figure 1). These tasks combine processes such
+as market-value shocks, collateral requirements, funding actions,
+cash-flow allocation, and capital constraints, so that the outcome of
+one stage changes the financial quantities or applicable conditions
+of subsequent stages.
+Correct solutions must propagate financial states across suc-
+cessive events, apply conditional rules at the appropriate stages,
+and evaluate downstream decisions against updated balances and
+constraints. For example, a market shock may reduce collateral
+value, trigger a margin requirement, create a liquidity shortfall, and
+require additional borrowing that subsequently affects leverage
+compliance. The financial outcome depends on the consistency
+3
+Credit risk
+Default risk, credit metrics,
+credit ratings
+Market risk
+Market risk measures, VaR,
+sensitivity
+Liquidity risk
+Liquidity coverage, funding,
+cash flows
+Counterparty risk
+Exposure, CV A/DV A,
+counterparty limits
+Collateral & margin
+Margining, haircuts,
+collateral eligibility
+Capital & regulatory
+Regulatory capital, R W A,
+capital ratios
+Asset & portfolio risk
+Diversification, allocation
+V aluation & pricing
+Instrument valuation,
+pricing models
+T reasury & ALM
+Funding, interest rate risk,
+asset–liability management
+Corporates & financial
+statements
+Financial analysis, ratios,
+cash flow
+Derivatives &
+structured products
+Pricing, hedging,
+structured notes
+Macroeconomic &
+systemic risk
+Macro factors, systemic
+risk, stress scenarios
+Financial domains
+Quantitative composition
+Multi-step calculations, derived quantities,
+interdependent metrics
+State and temporal reasoning
+Evolving financial states, time dependencies,
+scenario updates
+Rule and constraint reasoning
+Regulatory rules, thresholds, eligibility,
+conditional logic
+Probabilistic and statistical reasoning
+Probabilities, distributions, expected values,
+risk measures
+Scenario and propagation reasoning
+Scenario analysis, sensitivity, shock
+propagation
+Interpretive and comparative
+reasoning
+Model comparison, risk drivers, relative
+analysis
+Reasoning families
+Each task is annotated
+with its financial domain(s)
+and reasoning family(ies)
+Standard tasks
+Verifiable financial-risk tasks covering individual
+mechanisms across diverse domains and reasoning
+structures
+Long-horizon tasks
+Composed multi-step scenarios that connect
+several financial mechanisms through extended
+dependency chains
+Liquidity risk, rule-based
+Update the liquidity
+coverage ratio after a
+downgrade of eligible assets
+under the specified rule.
+Market risk, quantitative
+Compute the portfolio’s
+VaR given asset
+correlations and volatility
+inputs.
+Cross-domain composition
+Analyze the impact of a market shock on
+collateral eligibility, funding needs, and regulatory
+capital over multiple periods.
+Dashed boxes: example tasks from each regime.
+Figure 1: Overview of the financial domains, reasoning families, and two task regimes of RiskReason. The examples illustrate
+individual mechanisms and their long-horizon composition; the annotations are not mutually exclusive.
+of the entire sequence rather than the correctness of any single
+calculation.
+Where Long-horizon tasks incorporate mechanisms also rep-
+resented in the Standard regime, their source relationships are
+recorded to support compositional analysis. These relationships
+do not constitute controlled before-and-after comparisons, as the
+composed scenarios may differ in parameters, conditions, and re-
+quired outputs. Accordingly, comparisons between the two regimes
+characterize observed performance on different classes of financial
+problems rather than isolating the causal effect of reasoning-chain
+length.
+4 Evaluation Methodology
+4.1 Models and Evaluation Scope
+We evaluate eleven model configurations: Claude Sonnet 5.5; GPT-
+6 Astra, Sol, and Luna; Gemini 3.1 Pro Preview and Gemini 3.8
+Flash; Phi-4-Reasoning-Plus (BF16); DeepSeek-R1-Distill-Qwen-
+32B (Q8_0); Fin-o1-8B (Q8_0); DianJin-R1-7B (Q8_0); and Qwen2.5-
+7B-Instruct (Q8_0). The evaluation covers two task regimes: Stan-
+dard, comprising 175 tasks, and Long-horizon, comprising 30 com-
+posed scenarios. Task identifiers retain their original prefixes for
+4
+reproducibility, but the evaluation reports only the Standard and
+Long-horizon regimes.
+Nine configurations have recorded grades for all 205 evaluated
+tasks. GPT-6 Astra and Sol each have 204 grades, missingrisk-119
+and risk-117, respectively. DeepSeek and Fin-o1 have full Stan-
+dard and Long-horizon coverage. For DianJin and Qwen2.5, the
+corrected scoring records are treated as the final versions of their
+respective evaluations. The exact task-ID intersection comprises
+203 tasks, including all 30 Long-horizon tasks. Missing evaluations
+are excluded from denominators rather than treated as failures.
+The results describe the recorded configurations rather than iso-
+lating architecture or training effects. Providers, serving conditions,
+and response instructions were not fully standardized, while the
+corrected grading of selected configurations uses content-based ac-
+ceptance rules. These differences qualify cross-model comparisons.
+4.2 Answer Extraction and Pass@1 Scoring
+Each evaluated model–task pair has one recorded response. We
+report Pass@1 as strict single-attempt task accuracy:
+Pass@1(𝑚)= 1|I𝑚| ∑︁𝑖∈I𝑚 I 𝑔𝑚,𝑖 =pass ,(2)
+whereI𝑚 denotes the set of tasks evaluated for model configura-
+tion𝑚, and𝑔𝑚,𝑖 is the recorded task grade. A response passes only
+when all required answer components satisfy the reference rubric.
+Numerical quantities are evaluated using the grader’s tolerance and
+precision rules, while categorical decisions, financial states, and
+structured outputs are assessed against their corresponding targets.
+Recorded outcomes include pass, partial, near, fail_close,
+and fail. Only pass contributes to strict accuracy. Missing evalua-
+tions are excluded from the denominator rather than counted as
+failures. Because each task was attempted once per configuration,
+the reported metric describes observed single-attempt performance;
+repeated-trial reliability and Pass@3 are not estimated.
+Strict accuracy measures completion of the full answer contract,
+which is not necessarily equivalent to correctness of the princi-
+pal financial decision. A response may reach the appropriate risk
+conclusion but fail because of an incorrect secondary quantity, an
+omitted field, or a representation mismatch. We therefore retain
+available field-level grades and reviewed responses for diagnostic
+analysis without modifying the recorded strict-pass scores.
+4.3 Structural Evaluation
+To investigate how task characteristics relate to model performance,
+we join task-level grades with the benchmark’s dependency rep-
+resentations. The resulting attributes include longest-path depth,
+vertex and output counts, branching and merging structures, con-
+ditional operations, and state transitions. These attributes describe
+the represented dependencies and are not treated as independent
+measures of intrinsic task difficulty.
+The structural analysis includes all eleven configurations, com-
+prising 2,253 recorded responses across 205 tasks. Of these, 1,923
+correspond to the 175 Standard tasks. We examine associations
+between structural characteristics and strict task success, including
+exploratory binomial logistic regressions with model-configuration
+and task-source fixed effects and task-clustered standard errors.
+The principal explanatory variables are longest-path depth and the
+logarithm of one plus the number of graph output vertices, allow-
+ing dependency length to be considered alongside answer-output
+complexity.
+Because graph construction involves representational choices,
+including the summarization of some repeated calculations, struc-
+tural measurements depend partly on graph granularity. Moreover,
+output count is related to the number of opportunities for failure
+under strict all-fields-correct grading. The analyses are therefore
+interpreted as associations within RiskReason rather than causal
+estimates of the effects of reasoning complexity.
+4.4 Qualitative Failure Analysis and
+Adjudication
+We complement aggregate scores with task-level examination of
+available model responses, intermediate calculations, final decisions,
+structured outputs, and grading notes. The analysis distinguishes
+numerical execution errors, incorrect application of financial rules
+or thresholds, inconsistent state transitions, infeasible remediation
+decisions, and discrepancies arising from answer formatting or
+reference specifications.
+The qualitative review focuses on observable differences between
+model outputs and the expected financial outcomes. Where inter-
+mediate calculations are available, task dependencies help identify
+how an incorrect quantity or state affects subsequent decisions.
+These observations do not establish a model’s unobserved internal
+reasoning process.
+Review coverage varies across configurations and grading cat-
+egories. Selected partial and closely graded responses received
+detailed adjudication, whereas not every unsuccessful response
+underwent equivalent review. Complete raw responses were avail-
+able for Claude but not for the Gemini analyses. Consequently,
+failures of answer extraction cannot always be attributed to specific
+financial-reasoning errors, and the selected cases are not used to
+estimate the prevalence of failure mechanisms.
+We preserve the recorded grades for quantitative comparisons
+while distinguishing substantive financial mistakes from report-
+ing discrepancies and independently identified reference issues.
+Cases requiring additional ground-truth or scoring adjudication
+are documented separately in the failure analysis and appendix.
+Data and code availability.The RiskReason project repository
+for benchmark materials, model-evaluation results, and accom-
+panying resources is available at https://github.com/DataismLab/
+RiskReason-A-Benchmark.
+5 Results
+5.1 Overall and Matched-Task Performance
+Table 1 shows a wide range of strict single-attempt performance
+across the evaluated configurations. Six achieve at least 80% overall
+accuracy, led by Claude Sonnet 5.5 (185/205; 90.2%), while smaller
+configurations have substantially lower rates. Yet high aggregate
+accuracy does not amount to uniform financial reliability: even the
+leading model leaves one in ten tasks without a strict pass, and
+configurations with similar overall results can behave differently
+on composed scenarios. The contrast between Phi-4 and DeepSeek,
+5
+each with 92/205 passes but different Long-horizon outcomes, il-
+lustrates why the two regimes and individual task outcomes must
+be examined alongside the aggregate score. Figure 2 visualizes this
+relationship by placing each configuration simultaneously in the
+Standard and Long-horizon regimes.
+The 203 identical tasks attempted by all eleven configurations
+produce similar ordering at the top, with Claude passing 184, Astra
+180, and Sol 178. Differences are modest: on the 204 shared Claude–
+Astra tasks, Claude alone passes ten and Astra alone five; against
+Sol these counts are ten and four. These comparisons use identical
+tasks and do not treat missing grades as unsuccessful attempts.
+5.2 Long-Horizon Financial Reasoning
+Long-horizon tasks assess whether models can maintain consis-
+tent financial states, apply conditional rules, and satisfy constraints
+across successive decisions. Despite strong performance among
+leading configurations, substantial differences emerge across mod-
+els (Table 1). Notably, Phi-4 and DeepSeek achieve identical overall
+accuracy but differ considerably on Long-horizon tasks, indicating
+that aggregate performance can conceal weaknesses in composed
+financial reasoning.
+Reviewed failures reveal several points at which these dependen-
+cies break down (Table 2). Models may correctly compute initial
+exposures or identify risk triggers but fail to propagate updated
+balances, apply rules at the appropriate stage, or verify that a pro-
+posed corrective action satisfies all constraints. Such errors can
+invalidate financially consequential decisions even when most in-
+termediate calculations are correct. Conversely, some non-passes
+arise from reporting discrepancies or incomplete outputs rather
+than demonstrably incorrect financial reasoning. These observa-
+tions suggest that Long-horizon reliability depends on maintaining
+consistency from initial calculations through final decisions, rather
+than reasoning length alone.
+5.3 Agreement and Task Characteristics
+Comparable overall rates can conceal different solved tasks. For
+example, Phi-4 and DeepSeek each pass 92 of 205 tasks, but overlap
+on only 64 passes, each solving 28 tasks that the other does not.
+Likewise, Gemini Flash and Pro pass different subsets despite their
+relatively close aggregate scores. On the 203-task common set, 13
+tasks receive no exact pass from any configuration, while five are
+passed by all eleven; these counts reflect strict answer contracts as
+well as problem-solving performance.
+Graph-derived measures provide a complementary view of task
+characteristics. Pooling the eleven configurations on Standard tasks,
+exact-pass rates are 621/957 (64.9%) for tasks with one to three
+DAG output nodes and 114/242 (47.1%) for tasks with at least ten.
+In an exploratory logistic regression with configuration and task-
+source controls and task-clustered standard errors, the number of
+output nodes is negatively associated with strict-pass odds (OR
+≈ 0.48per doubling of1+output nodes). The adjusted longest-path
+measure shows no equally clear association ( 𝑝≈ 0.060). Graph
+output counts include unscored nodes, and strict scoring creates
+more opportunities for mismatch in tasks requesting more fields;
+these results describe associations, not causal effects.
+Figure 3 summarizes the resulting gradient across all Standard
+evaluations. The pooled rate decreases as graph output count rises,
+although individual model patterns are not uniformly monotonic.
+Since output count is correlated with answer requirements, neither
+this descriptive gradient nor the adjusted regression isolates a causal
+effect of graph complexity.
+Figure 4 disaggregates Standard-task performance across six au-
+thored financial reasoning families. The variation in model rankings
+suggests that aggregate accuracy alone does not fully characterize
+their relative strengths across different financial reasoning require-
+ments.
+6 Failure Analysis
+Aggregate accuracy does not distinguish incorrect financial cal-
+culations from failures in rule application, state propagation, or
+decision-making. Nor does every non-passing response necessarily
+indicate incorrect financial reasoning, as strict scoring also penal-
+izes incomplete or noncanonical outputs. We therefore examine re-
+viewed model responses according to the financial consequences of
+their observable discrepancies. Table 2 summarizes representative
+cases, which illustrate distinct failure mechanisms and evaluation
+boundaries rather than their prevalence across models.
+6.1 Financial Measurement and Decision
+Consistency
+Correctly computing a risk measure does not guarantee that a
+model applies it to the appropriate financial decision. Inprobe-036,
+Gemini 3.1 Pro Preview derives the posterior and stressed default
+probabilities, loss-given-default rate, and expected credit loss, but
+evaluates the monitoring threshold using the posterior rather than
+the stressed probability. Similarly, in probe-004, GPT-6 Sol and
+Luna calculate declining CET1 capital while accepting a claim of
+organic capital strengthening. In both cases, the relevant financial
+information is available, yet the resulting assessment is inconsistent
+with it.
+The converse also occurs. In probe-030, Luna reaches the re-
+quired escalation decision despite understating exposure at default
+following an incorrect collateral conversion. These cases distin-
+guish measurement accuracy from decision accuracy: a correct
+risk classification can coexist with an incorrect exposure estimate,
+just as an accurate calculation can lead to an incorrect financial
+conclusion.
+6.2 Temporal Consistency and Feasible
+Remediation
+Sequential financial scenarios require models to update states and
+apply rules at the appropriate stages. In risk-057, reviewed Phi-4
+and 7B responses mis-time a covenant-triggered interest-spread
+adjustment. In long-012, Phi-4 correctly identifies the initial cash-
+flow waterfall and trigger but treats a principal collection as an
+increase in senior debt rather than a reduction. This incorrect bal-
+ance subsequently affects interest allocation, illustrating how a
+state-transition error can propagate through later calculations.
+Other failures arise when models identify a risk constraint but
+fail to produce a compliant action. In long-029, Phi-4 recommends
+6
+Table 1: Strict single-attempt task accuracy, reported as passed/evaluated (%). The common subset comprises 203 identical tasks
+attempted by all eleven configurations. Two GPT-6 runs omit one task each; missing evaluations are excluded rather than
+counted as failures.
+Model configuration Overall Standard Long-horizon Common (203)
+Claude Sonnet 5.5 185/205 (90.2%) 157/175 (89.7%) 28/30 (93.3%) 184/203 (90.6%)
+GPT-6 Astra 180/204 (88.2%) 153/174 (87.9%) 27/30 (90.0%) 180/203 (88.7%)
+GPT-6 Sol 178/204 (87.3%) 152/174 (87.4%) 26/30 (86.7%) 178/203 (87.7%)
+GPT-6 Luna 171/205 (83.4%) 144/175 (82.3%) 27/30 (90.0%) 171/203 (84.2%)
+Gemini 3.8 Flash 170/205 (82.9%) 144/175 (82.3%) 26/30 (86.7%) 170/203 (83.7%)
+Gemini 3.1 Pro Preview 164/205 (80.0%) 143/175 (81.7%) 21/30 (70.0%) 164/203 (80.8%)
+Phi-4-Reasoning-Plus 92/205 (44.9%) 82/175 (46.9%) 10/30 (33.3%) 92/203 (45.3%)
+DeepSeek-R1-Distill-32B 92/205 (44.9%) 87/175 (49.7%) 5/30 (16.7%) 92/203 (45.3%)
+Fin-o1-8B 59/205 (28.8%) 58/175 (33.1%) 1/30 (3.3%) 59/203 (29.1%)
+DianJin-R1-7B 14/205 (6.8%) 14/175 (8.0%) 0/30 (0.0%) 14/203 (6.9%)
+Qwen2.5-7B-Instruct 13/205 (6.3%) 13/175 (7.4%) 0/30 (0.0%) 13/203 (6.4%)
+an asset-sale combination that leaves the CET1 ratio below the re-
+quired 6% minimum. In long-018, DianJin matches 24 of 25 graded
+fields but overstates the final permissible distribution by $2M. These
+examples demonstrate that the financial significance of an error
+depends not only on the number of correct intermediate quan-
+tities, but also on whether the resulting action satisfies binding
+constraints.
+6.3 Numerical Execution and Branch
+Consistency
+Some responses identify the appropriate procedure but fail to ex-
+ecute all of its components correctly. In risk-018, Gemini 3.8
+Flash calculates the return without dividend reinvestment correctly
+but produces an incorrect result for the reinvestment scenario. In
+risk-116, Gemini 3.1 Pro Preview derives the daily price-range
+components but substitutes a single-session range for the requested
+multi-period average true range. These cases illustrate that success-
+ful execution of one calculation does not guarantee consistency
+across related computational branches.
+Claude provides an additional contrast in risk-119: it ob-
+tains the long-only portfolio solution but not the unconstrained
+minimum-variance weights. In risk-120, it leaves all 16 requested
+VAR information criteria uncomputed. In risk-116, its ATR of
+50.2714 matches a simple moving average of true ranges, whereas
+the reference is approximately 50.81 under Wilder smoothing; the
+task requires clarification of the intended method before assigning
+that discrepancy wholly to model error.
+Such errors differ from failures in financial interpretation: the
+model may select the relevant formula or intermediate quantities
+but miscalculate, aggregate, or report a required result. Distinguish-
+ing these mechanisms is important because an incorrect numerical
+result and an incorrect decision based on an otherwise correct
+calculation represent different limitations.
+6.4 Answer Fidelity and Reference Adjudication
+Strict task accuracy also captures discrepancies that do not neces-
+sarily establish incorrect financial reasoning. In long-025, Claude
+and both Gemini configurations preserve the principal numerical
+borrowing-base, cash, and revolver states in the reviewed outputs,
+while some event descriptions are missing or differ from the refer-
+ence. Claude’s long-028 response likewise preserves the financial
+waterfall and capital effects, with non-passes arising from signs and
+percentage representations. Other responses contain alternative
+signs, scales, labels, or omitted structured fields. These discrepancies
+violate the recorded answer contract but should be distinguished
+from incorrect financial decisions. Similarly, an unparsed response
+establishes unsuccessful extraction under the evaluation procedure,
+not a specific reasoning failure without access to the raw response.
+Reference validity introduces a separate consideration. For ex-
+ample, risk-005 permits alternative median conventions, while
+risk-092 contains conflicting leverage definitions. The reference
+estimates for risk-120, a vector-autoregression lag-selection task,
+also require independent replication. Although none of the eleven
+configurations receives a strict pass on that task, disagreement with
+an unresolved reference cannot by itself establish a numerical rea-
+soning error. Additional numerical checks have flagged risk-117
+and risk-125. Claude’s risk-126 response was truncated at its
+16,384-token output limit, so that non-pass is a completion-budget
+event rather than a localizable financial calculation error.
+Taken together, the reviewed cases distinguish three aspects of
+financial-risk reliability: computing the required quantities, main-
+taining the financial states and constraints on which those quanti-
+ties depend, and deriving valid financial decisions. Errors can arise
+at any of these stages, while some strict non-passes reflect report-
+ing or reference issues instead. Because review coverage differs
+across configurations and grading categories, the selected examples
+identify observable failure mechanisms without establishing their
+relative frequencies.
+7 Discussion
+Our findings highlight a distinction between numerical competence
+and reliable financial-risk reasoning. Several evaluated configu-
+rations achieve high accuracy, including on composed scenarios
+involving interacting financial mechanisms. Nevertheless, the re-
+viewed failures show that models can compute relevant risk quan-
+tities while applying rules to incorrect states, propagating inconsis-
+tent balances, or proposing actions that violate binding constraints.
+7
+0 20 40 60 80 100
+0
+20
+40
+60
+80
+100
+Claude
+Astra
+Sol
+Luna
+Flash
+Pro
+Phi-4
+DeepSeek
+Fin-o1DianJin
+Qwen
+Bubble area∝overall accuracy
+90%
+60%
+30%
+Standard strict task accuracy (%)
+Long-horizon strict task accuracy (%)
+𝑦=𝑥
+Frontier/API
+Open-weight mid-scale
+Open-weight 7–8B
+Figure 2: Performance landscape across the two benchmark regimes. Marker size reflects overall strict task accuracy, with
+a minimum size for visibility. The diagonal indicates equal performance across regimes. Points below it perform worse on
+Long-horizon tasks. Qwen2.5 and DianJin achieve zero Long-horizon accuracy and appear near the horizontal axis.
+40 50 60 70
+1–3
+4–9
+10+
+64.9%
+56.9%
+47.1%
+Strict task accuracy (%)
+Figure 3: Pooled Standard accuracy by DAG output count,
+across all eleven evaluated configurations. The three bins
+contain 957, 724, and 242 recorded responses, respec-
+tively. The gradient is descriptive: graph output counts are
+representation-dependent and create more opportunities for
+mismatch under strict all-fields-correct scoring.
+These errors suggest that reliable financial-risk reasoning depends
+on the consistency of the entire calculation-to-decision process,
+rather than the correctness of individual computations alone.
+Claude provides an informative high-performing contrast:
+28/30 Long-horizon passes coexist with a failure to complete
+VAR information-criterion estimation on risk-120 and an in-
+correct unconstrained optimization branch on risk-119. Thus,
+strong accuracy on extended financial compositions does not
+guarantee uniform competence across statistical estimation and
+financial-method selection.
+This distinction also has implications for benchmark evaluation.
+Strict task accuracy is useful for assessing whether models satisfy
+complete answer requirements, but it combines errors with different
+financial consequences. A response may preserve the correct risk
+assessment while omitting a required field, whereas another may
+reproduce nearly every intermediate quantity yet reach an incorrect
+compliance decision or permissible action. Evaluating financial-
+risk reasoning therefore benefits from distinguishing numerical
+accuracy, state consistency, constraint satisfaction, decision validity,
+and reporting completeness. These dimensions are complementary
+and should not be reduced to an unweighted count of correct fields.
+The results do not support a simple relationship between reason-
+ing length and observed performance. Several higher-performing
+configurations maintain comparable accuracy across Standard and
+Long-horizon tasks, while others experience substantial declines.
+Similarly, differences in output requirements complicate the in-
+terpretation of task-level accuracy under strict scoring. These ob-
+servations suggest that financial reasoning difficulty cannot be
+adequately characterized by task length or dependency structure
+alone. The nature of the financial relationships being coordinated,
+the conditions governing state transitions, and the validity of down-
+stream decisions are also important considerations. Because the
+task regimes are not controlled matched pairs, these comparisons
+do not establish the causal effect of reasoning-chain length.
+Cross-model comparisons further illustrate the limits of aggre-
+gate rankings. Configurations with similar accuracy can succeed on
+different tasks, while differences in performance cannot be attrib-
+uted solely to model architecture, size, or financial specialization.
+Inference conditions and response instructions were not fully stan-
+dardized, and the evaluation contains only one recorded attempt
+per model–task pair. Controlled comparisons and repeated evalua-
+tions would be necessary to separate these factors from underlying
+reasoning capabilities.
+Taken together, RiskReason supports a more decision-oriented
+approach to financial LLM evaluation. Beyond checking final nu-
+merical answers, evaluations should examine whether intermediate
+quantities, evolving financial states, conditional rules, and resulting
+8
+Quantitative
+composition
+𝑛= 45
+Temporal and
+state
+𝑛= 27
+Rule and
+constraint
+𝑛= 18
+Scenario
+propagation
+𝑛= 11
+Epistemic
+𝑛= 11
+Probabilistic
+𝑛= 8
+Claude Sonnet 5.5 93 89 83 100 100 75
+GPT-6 Astra 91 81 83 100 91 88
+GPT-6 Sol 93 85 89 91 82 88
+GPT-6 Luna 87 74 67 91 91 88
+Gemini 3.8 Flash 82 70 83 91 91 88
+Gemini 3.1 Pro Preview 78 67 83 100 100 88
+Phi-4-Reasoning-Plus 40 41 39 55 36 62
+DeepSeek-R1-Distill-32B 47 41 56 55 45 50
+Fin-o1-8B 31 30 28 36 18 50
+DianJin-R1-7B 9 0 0 9 0 12
+Qwen2.5-7B-Instruct 4 4 0 9 0 12
+Figure 4: Strict pass@1 (%) for 120 Standard tasks with authored primary-family labels, grouped by reasoning family. This is an
+annotated subset of the 175-task Standard regime, not a separate evaluation set. Family sizes are shown above the columns;
+small groups should be interpreted descriptively.
+actions remain mutually consistent. The present findings are limited
+to synthetic, self-contained scenarios and do not establish reliability
+in operational risk-management settings. They nevertheless iden-
+tify concrete failure mechanisms and evaluation dimensions that
+can inform future financial reasoning benchmarks and verification
+procedures.
+8 Limitations
+Evaluation conditions and reproducibility.Our findings are
+based on one recorded response per model–task pair and there-
+fore do not establish repeated-trial reliability. Inference providers,
+serving conditions, and response instructions were not fully stan-
+dardized, while some configurations were scored with corrected
+content-based review. Consequently, observed performance differ-
+ences cannot be attributed solely to model architecture, scale, or
+financial specialization. Controlled evaluations with matched in-
+ference conditions and repeated attempts would provide stronger
+evidence about these factors.
+Scoring and reference validity.Strict task accuracy requires ev-
+ery specified output to satisfy the reference rubric, combining sub-
+stantive financial errors with omissions and representation differ-
+ences. The qualitative review distinguishes these outcomes where
+evidence permits, but coverage varies across models and grading
+categories, and complete raw Gemini responses were unavailable.
+Selected reference values and financial conventions also require
+independent adjudication. Claude’s risk-126 was cut off at its
+16,384-token response limit, and its run log requests follow-up even
+though the grade summary lists no reruns; this result is retained as
+recorded pending an appropriately budgeted rerun. We retain the
+recorded grades and document these cases rather than applying
+unverified corrections. Additionally, the dependency graphs reflect
+authored task structure rather than models’ internal reasoning,
+and their structural measurements depend partly on representation
+granularity.
+Benchmark scope and generalizability.RiskReason uses syn-
+thetic, self-contained, text-based financial scenarios. It does not
+capture the full complexity of operational risk management, includ-
+ing incomplete external data, evolving regulations, institutional
+controls, and tool-assisted workflows. The evaluation also does not
+include a matched human-expert performance baseline. Although
+the reviewed cases identify consequential reasoning failures, their
+frequencies cannot be inferred from the nonuniformly reviewed
+sample. Accordingly, benchmark performance should not be in-
+terpreted as evidence of suitability for autonomous financial-risk
+decisions.
+9 Conclusion
+We introduced RiskReason, a benchmark for evaluating verifiable
+financial-risk reasoning through the application of financial rela-
+tionships, evolving states, and conditional constraints. Our evalua-
+tion of eleven model configurations shows that strong task accu-
+racy, including on composed financial scenarios, can coexist with
+consequential errors in rule application, state propagation, and
+remediation decisions. Conversely, some strict evaluation failures
+reflect incomplete or noncanonical reporting rather than incor-
+rect financial conclusions. These findings highlight the limitations
+of aggregate accuracy for characterizing financial-risk reliability
+and motivate evaluations that distinguish numerical correctness,
+state consistency, constraint satisfaction, and decision validity. By
+combining verifiable financial scenarios with structured task rep-
+resentations and qualitative failure analysis, RiskReason provides
+a framework for examining where financial reasoning succeeds
+and where it becomes unreliable. Future work should strengthen
+reference validation, standardize evaluation conditions, and extend
+assessment to repeated trials and realistic financial-risk workflows.
+9
+Table 2: Representative financial-risk reasoning errors and evaluation boundaries from reviewed model outputs. Cases illustrate
+distinct mechanisms and do not estimate their frequency across the benchmark.
+Mechanism Model / Task Observed discrepancy
+Decision after correct calcula-
+tion
+Gemini Pro,probe-036 Computes stressed PD (23.62%) but assesses the 15% monitoring threshold using
+posterior PD (13.39%), incorrectly reporting no breach.
+Rule activation Phi-4,risk-057Applies a covenant-triggered interest-spread adjustment in the wrong quarter.
+State propagation Phi-4,long-012 Increases rather than amortizes senior debt following a $12M principal collection,
+distorting subsequent interest allocation.
+Infeasible remediation Phi-4,long-029Proposed asset sales leave CET1/RWA near 5.61%, below the required 6% threshold.
+Material terminal error DianJin,long-018 Matches 24 of 25 graded fields but reports a $2.4M permissible distribution instead of
+$0.4M.
+Branch-specific computation Gemini Flash,risk-018 Correctly computes the non-reinvestment return (549.39%) but reports 625.14% rather
+than 603.56% for the reinvestment scenario.
+Optimization branch Claude,risk-119 Obtains the long-only minimum-variance portfolio but reports incorrect uncon-
+strained portfolio weights.
+Answer-contract mismatch Claude and both Gemini models,
+long-025
+The central numerical borrowing-base and liquidity states are correct, but certain
+event descriptions fail the structured reporting contract.
+Estimation execution Claude and both Gemini models,
+risk-120
+Claude and Gemini Pro return no computed AIC/BIC estimates; Gemini Flash reports
+numerical criteria that disagree with the stored reference, which remains subject to
+independent verification.
+Declarations
+Funding and computational resources.This study received no
+project-specific research funding. No computing resources from
+Virginia Tech or the authors’ other affiliated universities were used
+in this study.
+References
+[1] Álvaro Cartea, Patrick Chang, Nan Chen, and Mingyue Zhong. 2026.AI Bubbles
+with Large Language Models. Technical Report. SSRN. doi:10.2139/ssrn.6426761
+Working paper; revised July 2026.
+[2] Zhiyu Chen, Wenhu Chen, Charese Smiley, Sameena Shah, Iana Borova, Dylan
+Langdon, Reema Moussa, Matt Beane, Ting-Hao Huang, Bryan Routledge, and
+William Yang Wang. 2021. FinQA: A Dataset of Numerical Reasoning over
+Financial Data. InProceedings of the 2021 Conference on Empirical Methods in
+Natural Language Processing. Association for Computational Linguistics, Online
+and Punta Cana, Dominican Republic, 3697–3711. arXiv:2109.00122 doi:10.18653/
+v1/2021.emnlp-main.300
+[3] Michel Crouhy, Dan Galai, and Robert Mark. 2023.The Essentials of Risk Man-
+agement(3 ed.). McGraw Hill, New York, NY, USA.
+[4] Bledar Fazlija, Meriton Ibraimi, Aynaz Forouzandeh, and Arber Fazlija. 2025.
+Reasoning with financial regulatory texts via Large Language Models.Journal of
+Behavioral and Experimental Finance47 (Sept. 2025), 101067. doi:10.1016/j.jbef.
+2025.101067
+[5] Mohammadreza Ghafouri, Nazanin Yousefi, Arian Akbari, Reza Tavakoli, Far-
+bod Davoodi, Gholamali Aminian, Nariman Khaledian, and Arman Khaledian.
+2025. Risk, Ambiguity, and Infinity: Behavioral Signatures of Modern Large
+Language Models. doi:10.2139/ssrn.5688064 AI for Finance Symposium, ICAIF
+2025, Singapore.
+[6] Yi He, Ping Wang, Shiqiang Xiong, Chao Chen, and Haixiang Hu. 2026. FinMath-
+Bench: A Formula-Driven Benchmark for Evaluating LLMs’ Math Reasoning
+Capabilities in Finance.Proceedings of the AAAI Conference on Artificial Intelli-
+gence40, 37 (2026), 30987–30995. doi:10.1609/aaai.v40i37.40358
+[7] Jimin Huang, Mengxi Xiao, Dong Li, et al. 2024. Open-FinLLMs: Open Multimodal
+Large Language Models for Financial Applications. arXiv:2408.11878 [cs.CL]
+doi:10.48550/arXiv.2408.11878 Revised June 2025.
+[8] John C. Hull. 2023.Risk Management and Financial Institutions(6 ed.). John Wiley
+& Sons, Hoboken, NJ, USA.
+[9] Pranab Islam, Anand Kannappan, Douwe Kiela, Rebecca Qian, Nino Scherrer, and
+Bertie Vidgen. 2023. FinanceBench: A New Benchmark for Financial Question
+Answering. arXiv:2311.11944 doi:10.48550/arXiv.2311.11944 arXiv preprint.
+[10] Alicia Larsen, Victoire Laurent, Aulia Kharis Rakhmasari, Lara Turgut, and Nino
+Antulov-Fantulin. 2026. V-FiLLM: Verified Financial LLM Reasoning Benchmark.
+arXiv:2608.11047 [cs.AI] doi:10.48550/arXiv.2608.11047
+[11] Alejandro Lopez-Lira and Yuehua Tang. 2026. Can ChatGPT Forecast Stock
+Price Movements? Return Predictability and Large Language Models.Journal of
+Financial Economics184 (2026), 104335. doi:10.1016/j.jfineco.2026.104335
+[12] Eghbal Rahimikia and Felix Drinkall. 2024.Re(Visiting) Large Language Models
+in Finance. Technical Report. SSRN. doi:10.2139/ssrn.4963618 Working paper;
+revised August 2026.
+[13] Zichen Tang, Haihong E, Ziyan Ma, Haoyang He, Jiacheng Liu, Zhongjun Yang,
+Zihua Rong, Rongjin Li, Kun Ji, Qing Huang, Xinyang Hu, Yang Liu, and Qianhe
+Zheng. 2025. FinanceReasoning: Benchmarking Financial Numerical Reasoning
+More Credible, Comprehensive and Challenging. InProceedings of the 63rd Annual
+Meeting of the Association for Computational Linguistics (Volume 1: Long Papers),
+Wanxiang Che, Joyce Nabende, Ekaterina Shutova, and Mohammad Taher Pile-
+hvar (Eds.). Association for Computational Linguistics, Vienna, Austria, 15721–
+15749. arXiv:2506.05828 [cs.CL] doi:10.18653/v1/2025.acl-long.766
+[14] Xinke Tong, Xuanming Zhang, Tianyi Tang, An Yang, Jiatu Hu, Guojie Lin,
+Zhenzhen Shi, Lingfeng Zeng, Boyu Yang, Bing Zhao, Hu Wei, Lin Qu, and
+Dayiheng Liu. 2026. Are the Financial Reasoning from LLMs Credible? A Real
+World Test over Long-Horizon Statements. arXiv:2607.28661 [cs.CL] https:
+//arxiv.org/abs/2607.28661
+[15] Qianqian Xie, Weiguang Han, Zhengyu Chen, Ruoyu Xiang, Xiao Zhang, Yueru
+He, Mengxi Xiao, Dong Li, Yongfu Dai, Duanyu Feng, Yijing Xu, Haoqiang Kang,
+Ziyan Kuang, Chenhan Yuan, Kailai Yang, Zheheng Luo, Tianlin Zhang, Zhi-
+wei Liu, Guojun Xiong, Zhiyang Deng, Yuechen Jiang, Zhiyuan Yao, Haohang
+Li, Yangyang Yu, Gang Hu, Jiajia Huang, Xiao-Yang Liu, Alejandro Lopez-Lira,
+Benyou Wang, Yanzhao Lai, Hao Wang, Min Peng, Sophia Ananiadou, and Jimin
+Huang. 2024. FinBen: A Holistic Financial Benchmark for Large Language Models.
+InAdvances in Neural Information Processing Systems 37 (NeurIPS 2024), Datasets
+and Benchmarks Track, Vol. 37. Neural Information Processing Systems Foun-
+dation, Inc. (NeurIPS), Vancouver, BC, Canada, 95716–95743. arXiv:2402.12659
+doi:10.52202/079017-3033
+[16] Qianqian Xie, Weiguang Han, Xiao Zhang, Yanzhao Lai, Min Peng, Alejandro
+Lopez-Lira, and Jimin Huang. 2023. PIXIU: A Comprehensive Benchmark,
+Instruction Dataset and Large Language Model for Finance. InAdvances in
+Neural Information Processing Systems, Vol. 36. Neural Information Process-
+ing Systems Foundation, Inc. (NeurIPS), New Orleans, LA, USA, 33469–33484.
+doi:10.52202/075280-1454
+[17] Zhuohan Xie, Daniil Orel, Rushil Thareja, Dhruv Sahnan, Hachem Madmoun,
+Fan Zhang, Debopriyo Banerjee, Georgi Nenkov Georgiev, Xueqing Peng, Lingfei
+Qian, Jimin Huang, Jinyan Su, Aaryamonvikram Singh, Rui Xing, Rania Elbadry,
+Chen Xu, Haonan Li, Fajri Koto, Ivan Koychev, Tanmoy Chakraborty, Yuxia Wang,
+Salem Lahlou, Veselin Stoyanov, Sophia Ananiadou, and Preslav Nakov. 2026. Fin-
+Chain: A Symbolic Benchmark for Verifiable Chain-of-Thought Financial Reason-
+ing. InProceedings of the 64th Annual Meeting of the Association for Computational
+Linguistics (Volume 1: Long Papers). Association for Computational Linguistics,
+10
+San Diego, California, United States, 14529–14553. arXiv:2506.02515 [cs.CL]
+doi:10.18653/v1/2026.acl-long.662
+[18] Zhihan Zhang, Yixin Cao, and Lizi Liao. 2025. XFinBench: Benchmarking LLMs in
+Complex Financial Problem Solving and Reasoning. InFindings of the Association
+for Computational Linguistics: ACL 2025, Wanxiang Che, Joyce Nabende, Ekaterina
+Shutova, and Mohammad Taher Pilehvar (Eds.). Association for Computational
+Linguistics, Vienna, Austria, 8715–8758. arXiv:2508.15861 [cs.CL] doi:10.18653/
+v1/2025.findings-acl.457
+[19] Fengbin Zhu, Wenqiang Lei, Youcheng Huang, Chao Wang, Shuo Zhang,
+Jiancheng Lv, Fuli Feng, and Tat-Seng Chua. 2021. TAT-QA: A Question An-
+swering Benchmark on a Hybrid of Tabular and Textual Content in Finance. In
+Proceedings of the 59th Annual Meeting of the Association for Computational Lin-
+guistics and the 11th International Joint Conference on Natural Language Processing
+(Volume 1: Long Papers). Association for Computational Linguistics, Online, 3277–
+3287. arXiv:2105.07624 doi:10.18653/v1/2021.acl-long.254
+11
+Appendix
+A Evaluation Records and Reference Checks
+Evaluation record.The evaluation contains 175 Standard and
+30 Long-horizon tasks, each scored from one recorded response
+per model configuration. All eleven configurations have grades for
+the 30 Long-horizon tasks; Astra and Sol each lack one Standard
+evaluation (risk-119 and risk-117, respectively). As a result, the
+intersection of evaluated task IDs contains 203 tasks. An additional
+graph record, risk-006, has no evaluation among the eleven config-
+urations and is not included in accuracy calculations. We preserve
+the original identifiers for traceability, without treating identifier
+prefixes as separate task regimes.
+Only the grade pass contributes to exact Pass@1. The other
+recorded statuses (partial, near, fail_close, and fail) are non-
+passes rather than ordinal measures of financial-error severity. Re-
+sponse extraction, numerical tolerances, and field-level complete-
+ness affect these outcomes. The selected manual reviews help in-
+terpret individual cases but do not establish failure-category preva-
+lence. Detailed grade distributions, paired-pass tabulations, and
+supplementary cases are retained as machine-readable and source
+artifacts accompanying the project, rather than repeated as manu-
+script tables.
+Reference and scoring checks.The audit distinguishes conven-
+tional choices from potentially incorrect numerical references.
+Financial conventions require clarification for the median in
+risk-005, annualized-return conventions in risk-034, the
+moving-average signal in risk-063, leverage definitions in
+risk-092, and the simple-versus-Wilder average-true-range
+interpretation in risk-116. Numerical checks are still required
+for the Pearson correlations in risk-117, vector-autoregression
+information criteria in risk-120, and Jarque–Bera statistics in
+risk-125. The reported yield matching in risk-082 merits a
+tolerance and extraction audit. Claude’s risk-126 run reached
+the 16,384-token output budget, which establishes a completion
+limitation rather than a specific financial-reasoning failure. These
+flags do not automatically vindicate divergent model outputs;
+grades are retained as recorded pending verified corrections.
+B Illustrative Financial Dependency
+The Long-horizon task long-001 illustrates how individually
+straightforward calculations can lead to a conflicting pair of
+financial constraints. Its machine-readable dependency graph
+contains 31 vertices and 35 directed edges. The following summary
+traces the key quantities; it is not intended as a full rendering of
+the graph.
+Market shock and collateral.A bank holds $60M of bonds with
+modified duration 5.2 and faces a 120-basis-point increase in yield.
+The specified duration approximation gives a $3.744M loss, reducing
+collateral value to $56.256M. The $48M secured borrowing requires
+125% collateral coverage, creating a $3.744M margin call:
+Bond loss=60(5.2)(0.012)=3.744,
+Margin call=1.25(48)−56.256=3.744.
+Funding response and constraint check.Paying the call reduces
+the bank’s $4M cash balance to $0.256M. It draws $1.244M on an
+emergency credit line to restore the $1.5M cash floor. That financing
+decision raises total debt to $80.744M, resulting in
+Required draw=1.5−0.256=1.244,
+Debt
+Equity = 80.74420 =4.0372.
+The cash-floor condition is satisfied, but the debt-to-equity ratio
+exceeds the permitted4.0× ceiling. The example shows why a valid
+financial-risk conclusion must propagate the effects of a liquidity
+remedy to subsequent leverage constraints: restoring compliance
+at one stage can create noncompliance at another.
+C Evaluated Model Specifications and Profiles
+This appendix provides architectural specifications, release meta-
+data, and primary target workloads for all evaluated models.
+C.1 Detailed Model Profiles
+C.1.1 Claude Sonnet 5.5.Claude Sonnet 5.5 is Anthropic’s sec-
+ond release in the Claude 5.5 generation, announced on September
+28, 2026 (https://www.anthropic.com/claude-sonnet-5-5). Its exact
+parameter count has not been officially disclosed. The model is
+engineered to operate over 30% faster and cost up to 30% less than
+Claude Sonnet 5 across common enterprise tasks, exhibiting special-
+ized capabilities in agentic coding, extended multi-step workflows,
+long-horizon software engineering, and multimodal visual analysis.
+C.1.2 GPT-6 Astra.GPT-6 Astra is OpenAI’s flagship frontier
+model released in September 2026 (https://developers.openai.
+com/api/docs/models/gpt-6-astra), with its exact parameter count
+undisclosed. Positioned above Sol and Luna in the GPT-6 family, it
+is engineered for the most demanding end-to-end workloads. Astra
+exhibits specialized, state-of-the-art capabilities in computer and
+browser use, long-horizon agentic operations, multi-step software
+engineering, and deep research across extensive context windows.
+C.1.3 GPT-6 Sol.GPT-6 Sol is a flagship OpenAI foundation
+model released in September 2026 (https://azure.microsoft.com/en-
+us/blog/gpt-6-astra-sol-and-luna-for-production-agents-in-
+microsoft-foundry/) with undisclosed parameter counts. Positioned
+as the architectural successor to GPT-5.6 Sol, it is optimized for
+high-complexity knowledge synthesis and autonomous production
+agents, demonstrating heightened fidelity in code refactoring, pro-
+longed debugging tasks, and tool-augmented multi-step reasoning
+over wide context windows.
+C.1.4 GPT-6 Luna.GPT-6 Luna represents the low-latency
+companion architecture to GPT-6 Sol within the OpenAI lineup,
+released in September 2026 (https://docs.aws.amazon.com/bedrock/
+latest/userguide/model-card-openai-gpt-6-luna.html) with an
+undisclosed parameter size. Tailored specifically for cost-effective,
+high-throughput execution at enterprise scale, it targets structured
+entity extraction, document summarization, operational routing,
+and standard conversational interactions where compute-intensive
+multi-hop reasoning is unnecessary.
+C.1.5 Gemini 3.8 Flash.Gemini 3.8 Flash is Google’s primary high-
+efficiency reasoning engine, launched in September 2026 (https:
+//ai.google.dev/gemini-api/docs/models/gemini-3.8-flash) with pa-
+rameter weights not publicly disclosed. It balances low operational
+12
+Table 3: Summary of Evaluated Language Models
+Model Developer / Family Parameters Release Date Primary Specialization
+Claude Sonnet 5.5 Anthropic Undisclosed Sep 28, 2026 Agentic coding, vision, multi-step workflows
+GPT-6 Astra OpenAI Undisclosed Sep 2026 Computer use, long-horizon agents, deep research
+GPT-6 Sol OpenAI Undisclosed Sep 2026 Complex reasoning, long-context tool use
+GPT-6 Luna OpenAI Undisclosed Sep 2026 High-throughput extraction, summarization
+Gemini 3.8 Flash Google Undisclosed Sep 2026 Autonomous agents, fast enterprise pipelines
+Gemini 3.1 Pro Preview Google Undisclosed Feb 2026 Frontier reasoning, multimodal, finance/sheets
+Phi-4-Reasoning-Plus Microsoft Research 14B Apr 2025 CoT reasoning in memory-constrained setups
+DeepSeek-R1-Distill-32B DeepSeek 32B Early 2025 Distilled mathematical and logical reasoning
+Fin-o1-8B TheFinAI 8B Feb 2025 Financial reasoning and domain logic
+DianJin-R1-7B DianJin 7B Early 2025 Structured reasoning (SFT + GRPO)
+Qwen2.5-7B-Instruct Alibaba 7B Mid 2025 General instruction, multilingual, code
+latency with deep analytical capabilities, targeting fast autonomous
+agent execution, high-frequency enterprise backend pipelines, and
+continuous software engineering tasks.
+C.1.6 Gemini 3.1 Pro Preview.Gemini 3.1 Pro Preview is Google’s
+multimodal frontier reasoning model made available in February
+2026 (https://openrouter.ai/google/gemini-3.1-pro-preview), featur-
+ing an undisclosed parameter scale. The system natively integrates
+visual processing, native function execution, schema-constrained
+outputs, and real-time retrieval grounding, targeting complex quan-
+titative domains including spreadsheet automation, econometric
+modeling, and multimodal analysis.
+C.1.7 Phi-4-Reasoning-Plus.Phi-4-Reasoning-Plus is an open-
+weight, 14-billion-parameter dense decoder-only model released by
+Microsoft Research in April 2025 (https://huggingface.co/microsoft/
+Phi-4-reasoning-plus). Fine-tuned from the Phi-4 base architecture
+via chain-of-thought supervised trajectories and reinforcement
+learning, it delivers enhanced mathematical and logical reasoning
+within resource-constrained execution environments.
+C.1.8 DeepSeek-R1-Distill-32B.DeepSeek-R1-Distill-32B is a
+32-billion-parameter open-weight reasoning model released in
+early 2025 (https://huggingface.co/deepseek-ai/DeepSeek-R1-
+Distill-Qwen-32B). Built by distilling reasoning outputs from
+the full DeepSeek R1 model into a Qwen foundational backbone,
+it retains high mathematical, scientific, and deductive reason-
+ing performance while maintaining a footprint deployable on
+consumer-tier accelerator hardware.
+C.1.9 Fin-o1-8B.Fin-o1-8B is an 8-billion-parameter research
+model developed by TheFinAI and released in February 2025
+(https://huggingface.co/TheFinAI/Fin-o1-8B). Derived as a special-
+ized fine-tune of Qwen3-8B, the architecture is tailored explicitly
+toward corporate finance reasoning, fiscal statement parsing, and
+specialized quantitative arithmetic tasks.
+C.1.10 DianJin-R1-7B.DianJin-R1-7B is an open-source, 7-
+billion-parameter language model published in early 2025
+(https://huggingface.co/DianJin/DianJin-R1-7B). Derived from
+Qwen2.5-7B-Instruct, it was trained via a two-stage alignment
+pipeline comprising Supervised Fine-Tuning (SFT) over reasoning
+trajectories followed by Group Relative Policy Optimization (GRPO)
+reinforcement learning to reinforce structural consistency and
+factual precision.
+C.1.11 Qwen2.5-7B-Instruct.Qwen2.5-7B-Instruct is an instruction-
+tuned, 7-billion-parameter foundational model created by Alibaba
+and released in mid 2025 (https://huggingface.co/Qwen/Qwen2.5-
+7B-Instruct). Pre-trained on an 18-trillion token multilingual corpus
+and incorporating architectural mechanisms such as Grouped
+Query Attention (GQA) and SwiGLU activations, it delivers com-
+petitive general-purpose baseline performance across multilingual
+translation, coding, and mathematical reasoning.
+D Illustrative Evaluation Example
+To illustrate the end-to-end evaluation, we present one successful
+Long-horizon task from the recorded evaluation. This example is
+selected for its interconnected market, liquidity, funding, and capital
+constraints; it is illustrative rather than representative of average
+performance. The stored task record contains a natural-language
+scenario, a reference solution, and a prescribed output template. The
+response was generated bygpt-6-astrain one recorded attempt
+(pass@1).
+Task.Task long-009 presents the following scenario. The text
+below reproduces the substantive task prompt; the common in-
+struction to fill an exact JSON template is not repeated because the
+populated response is given in full immediately afterward.
+A bank has $100M of total assets, $10M of equity, and $3M of
+cash. It pledges a $50M bond portfolio against $38M of repo
+borrowing. The bonds have modified duration 4.0. Market
+yields rise by 100 basis points; ignore convexity. At the same
+time, the repo haircut rises from 20% to 25%.
+After the shock, required collateral market value equals repo
+borrowing divided by (1−haircut). Any collateral shortfall is
+met with a cash margin payment. The bank must maintain
+at least $1M of cash; if the margin payment would push cash
+below that level, it borrows unsecured funds just sufficient
+to restore the $1M minimum.
+The bond loss reduces both assets and equity. New unsecured
+borrowing adds cash and liabilities but does not change
+equity. The maximum assets/equity leverage ratio is 12×.
+13
+Assume any equity injection is retained as cash and therefore
+increases both assets and equity dollar-for-dollar.
+Calculate the bond loss and stressed collateral value, new
+collateral requirement, margin call, cash after the call, unse-
+cured funding needed, post-funding assets/equity and lever-
+age, and the minimum equity injection required to restore
+leverage to 12×.
+Recorded model response.The model first connected the interest-
+rate shock to the duration-based bond loss, then recalculated the
+repo collateral requirement, determined the cash shortfall and un-
+secured borrowing, and finally solved for the cash-retained equity
+injection needed to satisfy the leverage limit. Its structured answer,
+reproduced without numerical rounding or edited fields, was:
+{
+"bond_loss_m": 2,
+"stressed_collateral_value_m": 48,
+"new_collateral_requirement_m": 50.6666666667,
+"margin_call_m": 2.6666666667,
+"cash_after_call_m": 0.3333333333,
+"unsecured_funding_needed_m": 0.6666666667,
+"post_funding_equity_m": 8,
+"post_funding_assets_m": 98.6666666667,
+"post_funding_leverage_ratio": 12.3333333333,
+"minimum_equity_injection_m": 0.2424242424,
+"post_equity_cure_leverage_ratio": 12
+}
+The accompanying final explanation in the recorded response
+read:
+All dollar amounts are in millions. The 100-basis-point yield
+increase causes an approximate bond loss of 50× 4× 0.01
+= 2, leaving stressed collateral worth 48. At the new 25%
+haircut, required collateral is 38 / 0.75 = 50.666667, so the
+cash margin call is 2.666667. Available cash after the call
+is 0.333333, requiring unsecured borrowing of 0.666667 to
+restore the minimum cash balance of 1. Posted cash margin
+remains an asset rather than an expense. Consequently, post-
+funding assets are 100− 2 + 0.666667 = 98.666667, and equity
+is 10− 2 = 8. Leverage is therefore 12.333333 times. Since
+an equity injection increases both assets and equity, the
+minimum injection is (98.666667− 12× 8) / 11 = 0.242424,
+approximately $242,424.24. The resulting leverage ratio is
+exactly 12 times.
+Reference verification and grading.The benchmark reference
+independently specifies all 11 quantities. The main financial depen-
+dencies can be checked directly (dollar amounts in millions):
+Bond loss=50(4)(0.01)=2,
+Collateral required=38/(1−0.25)=50.6667,
+Cash margin call=50.6667−48=2.6667,
+Unsecured funding=1−(3−2.6667)=0.6667,
+Post-funding leverage=98.6667/8=12.3333,
+Equity injection= 98.6667−12(8)12−1 ≈0.242424.
+As specified in the task, posted cash collateral remains an asset;
+the margin transfer therefore does not itself reduce total assets. The
+bond-price loss reduces assets and equity by $2 million, whereas
+new unsecured financing increases assets and liabilities without
+increasing equity. An equity injection retained as cash raises both
+assets and equity, producing the requested 12-times leverage ratio.
+For this single response, the evaluator reported status=pass,
+matched=11/11, and schema_ok=true. Every required reference
+field was matched under the benchmark’s strict numerical compar-
+ison, and the recorded response respected the prescribed output
+schema. This is a complete task-level pass, not partial credit from
+isolated correct numbers.
+E Financial Domain Coverage and Annotated
+Difficulty
+Table 4 summarizes the primary financial domains represented in
+the evaluated benchmark: 175 Standard tasks and 30 Long-horizon
+tasks. Domains refer to the primary task annotation rather than
+mutually exclusive financial reasoning skills; a task can involve
+multiple concepts while contributing to only one domain count. We
+report an authored difficulty score alongside the counts to describe
+the composition of the task set, not to estimate model performance.
+The difficulty scores are metadata derived from annotated rea-
+soning requirements (depth, structure, representation, temporal,
+probabilistic, conditional, unit-conversion, and domain-knowledge
+components). They should not be read as empirically calibrated
+difficulty or as independent measurements of financial expertise.
+Domain-level averages are particularly sensitive to individual tasks
+in small categories.
+14
+Table 4: Financial-domain distribution and authored difficulty for all 205 RiskReason tasks. Difficulty is the sum of eight task-
+annotation scores; “Median [range]” reports the median and minimum–maximum within each domain. Shares are individually
+rounded to one decimal, and reasoning drivers are illustrative rather than exhaustive.
+Financial domain Std. Long Total % Mean Median [range] Illustrative reasoning drivers
+Credit Risk 29 7 36 17.6 16.00 16 [6–24] Default probabilities; LGD; expected loss
+Investments & Portfolio Management 31 1 32 15.6 8.66 8 [4–20] Return statistics; portfolio measures
+Banking & ALM 22 6 28 13.7 15.61 17.5 [6–23] Interest-rate gaps; liquidity; leverage
+Market Risk 19 3 22 10.7 12.77 13 [4–19] VaR; volatility; EWMA series
+Corporate Finance 15 6 21 10.2 13.33 12 [4–20] WACC; capital budgeting; cash flows
+Counterparty Credit Risk 9 3 12 5.9 17.08 18 [9–23] Exposure modeling; collateral conditions
+Derivatives 12 0 12 5.9 11.50 11.5 [7–17] Option valuation; payoff scenarios
+Capital Markets & Trading 8 1 9 4.4 11.33 10 [5–20] Indicators; signal and execution rules
+Fixed Income 9 0 9 4.4 8.56 8 [3–13] Bond pricing; yields; discounting
+Enterprise Risk Management 8 0 8 3.9 20.25 20 [17–27] Cross-risk dependencies; conditional logic
+Insurance & Actuarial 6 1 7 3.4 13.00 11 [9–20] Actuarial values; cash-flow chains
+Retirement & Pensions 3 1 4 2.0 9.50 7 [5–19] Annuities; contribution decisions
+Operational Risk 2 0 2 1.0 15.50 15.5 [9–22] Scenario analysis; branching rules
+Regulatory & Capital Risk 1 1 2 1.0 17.50 17.5 [17–18] Capital ratios; multi-step regulatory rules
+Model Risk 1 0 1 0.5 20.00 20 [20–20] Structured validation; conditional logic
+Total 175 30 205 100.0— — —
+15

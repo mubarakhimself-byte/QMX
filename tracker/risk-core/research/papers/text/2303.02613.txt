@@ -1,0 +1,604 @@
+arXiv 2303.02613  https://arxiv.org/abs/2303.02613
+
+arXiv:2303.02613v1  [math.OC]  5 Mar 2023
+On Data-Driven Drawdown Control
+with Restart Mechanism in Trading
+Chung-Han Hsieh ∗
+∗ Department of Quantitative Finance,
+National Tsing Hua University, Hsinchu 30044, Taiwan R.O.C .
+(e-mail: ch.hsieh@mx.nthu.edu.tw).
+Abstract: This paper extends the existing drawdown modulation control policy to include
+a novel restart mechanism for trading. It is known that the drawdown modulation policy
+guarantees the maximum percentage drawdown no larger than a pr especiﬁed drawdown limit for
+all time with probability one. However, when the prespeciﬁed limit is app roaching in practice,
+such a modulation policy becomes a stop-loss order, which may miss th e proﬁtable follow-
+up opportunities, if any. Motivated by this, we add a data-driven re start mechanism into the
+drawdown modulation trading system to auto-tune the performan ce. We ﬁnd that with the
+restart mechanism, our policy may achieve a superior trading perfo rmance to that without the
+restart, even with a nonzero transaction costs setting. To supp ort our ﬁndings, some empirical
+studies using equity ETF and cryptocurrency with historical price d ata are provided.
+Keywords: Control applications, stochastic systems, algorithmic trading, ﬁn ancial engineering,
+drawdown control.
+1. INTRODUCTION
+Starting from the pioneering work by Markowitz (1952,
+1959), the portfolio optimization problem is often solved
+by the mean-variance approach. That is, the trader seeks
+an optimal trade-oﬀ between payoﬀ and risk measured
+by the portfolio returns’ mean and variance. While the
+variance is widely used as a standard risk metric in ﬁnance,
+it is more to the dispersion risk, which treats both positive
+and negative deviation from the mean as equally risky; see
+Fabozzi et al. (2007) for a good introduction to this topic.
+1.1 Downside Risks
+To remedy the equal riskiness on the dispersion risks, many
+surrogate risk measures are proposed to pay attention to
+the downside risks . This includes Value at Risk (VaR);
+see Jorion (2000), Conditional Value at Risk (CVaR); see
+Rockafellar and Uryasev (2000), absolute drawdown; see
+Magdon-Ismail and Atiya (2004); Hayes (2006), condi-
+tional expected drawdown (CED), the tail mean of maxi-
+mum drawdown distributions, see Goldberg and Mahmoud
+(2017), and the more general coherent risk that axiomatize
+the risk measures; see Luenberger (2013); Shapiro et al.
+(2021). See also Korn et al. (2022) for an empirical study
+of comparing various drawdown-based risk metrics. In this
+paper, we focus on a more practical drawdown measure,
+the maximum percentage drawdown , the maximum per-
+centage drops in wealth over time, as the risk measure.
+⋆ This paper was supported in part by Ministry of Science and
+Technology, R.O.C. Taiwan, under Grant: MOST 111–2221–E–0 07–
+124– .
+1.2 Control of Drawdown
+Diﬀerent types of drawdown and methodologies are stud-
+ied extensively in the existing literature. For example,
+optimal drawdown control problem in a continuous-time
+setting are studied in Grossman and Zhou (1993); Cvitanic
+and Karatzas (1994); Chekhlov et al. (2005); Malekpour
+and Barmish (2012, 2013). See also Boyd et al. (2017) for
+a study on multiperiod portfolio optimization problems
+involving drawdown as a constraint in a discrete-time set-
+ting. A recent study that uses deep reinforcement learning
+to address practical drawdown issues can be found in Wu
+et al. (2022).
+Among all the existing papers, the prior works in Hsieh
+and Barmish (2017a,b) are the most closely related papers,
+where the key result, the so-called drawdown modulation
+lemma, is proved. Roughly speaking, it shows a neces-
+sary and suﬃcient conditions for a broad class of control
+policies that guarantees an almost sure maximum per-
+centage drawdown protection for all time. However, Hsieh
+and Barmish (2017a) indicate that, in practice, when the
+prespeciﬁed drawdown limit is approaching, the trading
+policy may behave like a stop-loss order, and the trading
+may be stopped; see also Hsieh (2022a) for a study on a
+class of aﬃne policies with a stop-loss order. To this end,
+we extend the drawdown modulation policy with a novel
+restart mechanism to remedy the stop-loss phenomenon.
+1.3 Contributions of the Paper
+This paper extends the existing drawdown modulation
+policy with a novel restart mechanism. The preliminaries
+are provided in Section 2. We formulate an optimal draw-
+down control problem for a two-asset portfolio with one
+risky and one riskless asset. Then we extend the existing
+drawdown modulation theory so that the riskless asset is
+explicitly involved; see Lemma 3.1. The necessary and suf-
+ﬁcient conditions for a broad class of control policy which
+we call the drawdown modulation policy are provided.
+Then, the modulation policy with a restart mechanism is
+discussed in Section 3. The idea of the restart is simple:
+When the percentage drawdown up-to-date is close to the
+prespeciﬁed drawdown limit, we restart the trades with
+an updated policy. We also provide numerical examples
+involving ETF and cryptocurrency historical price data to
+support our ﬁndings; see Section 4.
+2. PRELIMINARIES
+We now provide some useful preliminaries for the sections
+to follow.
+2.1 Asset Trading Formulation
+Fix an integer N > 0. For stage k = 0 , 1, . . . , N, we
+let S(k) > 0 denote the prices of the underlying ﬁnancial
+asset at stage k. The associated per-period returns are
+given by X(k) := S(k+1)−S(k)S(k) and the returns are assumed
+to be bounded, i.e., Xmin ≤ X(k) ≤ Xmax with Xmin
+and Xmax being points in the support, denoted by X , and
+satisfying −1 < X min < 0 < X max. For the money market
+asset, e.g., bond or bank account, we use rf (k) to denote
+the interest rate at stage k.
+Remark 2.1. Note that the returns considered here are not
+necessarily independent and can have an arbitrary but
+bounded distribution with the bounds Xmin and Xmax.
+2.2 Account Value Dynamics
+Beginning at some initial account value V (0) > 0, con-
+sider a portfolio consisting of two assets, with one being
+risky and the other being a riskless asset with inter-
+est rate rf (k) ∈ [0, Xmax] for all k almost surely. For
+stage k = 0, 1, . . ., we let V (k) denote the account value at
+stage k. Then the evolution of the account value dynamics
+is described by the stochastic recursion
+V (k + 1) = V (k) + u(k)X(k) + (V (k) − u(k))rf (k).
+Given a prespeciﬁed drawdown limit dmax ∈ (0, 1), we
+focus on conditions on selecting a policy u(k) under which
+satisfaction of the constraint d(k) ≤ dmax is assured for
+all k with probability one where d(k) is the percentage
+drawdown up to date k, which is deﬁned below.
+Deﬁnition 2.1. (Maximum Percentage Drawdown). For k =
+0, 1, . . . , N, the percentage drawdown up to date k, denoted
+by d(k), is deﬁned as
+d(k) := Vmax(k) − V (k)Vmax(k)
+where Vmax(k) := max 0≤i≤k V (i). The maximum percent-
+age drawdown, call it d∗, is then deﬁned as
+d∗ := max
+0≤k≤N
+d(k).
+Remark 2.2. It is readily seen that the percentage draw-
+down satisﬁes d(k) ∈ [0, 1] for all k with probability one.
+3. DRA WDOWN MODULATION WITH RESTART
+According to Hsieh and Barmish (2017a), it states a nec-
+essary and suﬃcient condition on any trading policy u(k)
+that guarantees the percentage drawdown up to date d(k)
+is no greater than a given level dmax for all k with proba-
+bility one. Below, we extend the result to include a riskless
+asset.
+Lemma 3.1. (Drawdown Modulation). Let dmax ∈ (0, 1)
+be given. An trading policy u(·) guarantees prespeciﬁed
+drawdown limit satisfying d(k) ≤ dmax for all k with
+probability one if and only if for all k, the condition
+− M (k) + rf (k)Xmax − rf (k) V (k) ≤ u(k) ≤ M (k) + rf (k)|Xmin| + rf (k) V (k)
+is satisﬁed along all sample paths where
+M (k) := dmax − d(k)1 − d(k) .
+Proof. The idea of the proof is similar to that of Hsieh and
+Barmish (2017a). However, for the sake of completeness,
+we provide full proof here. To prove necessity, assuming
+that d(k) ≤ dmax for all k and all sequences of returns, we
+must show the condition on u(k) holds along all sequences
+of returns. Fix k. Since both d(k) ≤ dmax and d(k +
+1) ≤ dmax for all sequences of returns, we claim this
+forces the required inequalities on u(k). Without loss of
+generality, we prove the right-hand inequality for the case
+u(k) ≥ 0 and note that an almost identical proof also
+works for u(k) < 0. To establish the condition on u(k)
+for all sequences of returns, it suﬃces to consider the
+path with the worst loss |Xmin|u(k). In this case, we have
+Vmax(k + 1) = Vmax(k). Hence,
+d(k + 1)
+= Vmax(k + 1) − V (k + 1)Vmax(k + 1)
+= Vmax(k) − V (k + 1)Vmax(k)
+= Vmax(k) − V (k) + u(k)|Xmin| − (V (k) − u(k))rf (k)Vmax(k)
+= d(k) + u(k)|Xmin| − (V (k) − u(k))rf (k)Vmax(k) ≤ dmax
+We now substitute Vmax(k) = V (k)1−d(k) > 0 into the
+inequality above and obtain
+|Xmin|u(k) − (V (k) − u(k))rf (k) ≤ M (k)V (k),
+where M (k) = dmax−d(k)1−d(k) . This implies that
+(|Xmin| + rf (k))u(k) ≤ (M (k) + rf (k)) V (k).
+Or equivalently,
+u(k) ≤ M (k) + rf (k)|Xmin| + rf (k) V (k).
+To prove suﬃciency, assuming that the stated bounds
+on u(k) hold along all sequences of returns, we must
+show d(k) ≤ dmax for all k and all sequences of re-
+turns. Proceeding by induction, for k = 0, we trivially
+have d(0) = 0 ≤ dmax. To complete the inductive argu-
+ment, we assume that d(k) ≤ dmax for all sequences of
+returns, and must show d(k + 1) ≤ dmax for all sequences
+of returns. Without loss of generality, we again provide a
+proof for the case u(k) ≥ 0 and note that a nearly identical
+proof is used for u(k) < 0. Indeed, by noting that
+d(k + 1) = 1 − V (k + 1)Vmax(k + 1) ,
+and Vmax(k) ≤ Vmax(k + 1) for all sequences of returns, we
+split the argument into two cases: If Vmax(k) < Vmax(k+1),
+then Vmax(k + 1) = V (k + 1) and we have d(k + 1) = 0 ≤
+dmax. On the other hand, if Vmax(k) = Vmax(k + 1), with
+the aid of the dynamics of account value, we have
+d(k + 1) = 1 − V (k) + u(k)X(k) + (V (k) − u(k))rf (k)Vmax(k)
+≤ 1 + −V (k)(1 + rf (k)) + u(k)(|Xmin| + rf (k))Vmax(k) .
+Using the upper bound on u(k); i.e.,
+u(k) ≤ M (k) + rf (k)|Xmin| + rf (k) V (k)
+and Vmax(k) = V (k)1−d(k) , we obtain
+d(k + 1) ≤ 1 + (−1 + M (k))(1 − d(k))
+= d(k) + M (k)(1 − d(k)).
+Using the deﬁnition of M (k) = dmax−d(k)1−d(k) , it follows
+that d(k + 1) ≤ dmax, and the proof is complete. ✷
+3.1 Drawdown Modulation Policy
+Consistent with Hsieh and Barmish (2017a), ﬁx the pre-
+speciﬁed drawdown limit dmax ∈ (0, 1). With the aid
+of Lemma 3.1, one can readily obtain a class of policy
+functions u(k) expressed as a linear time-varying feedback
+controller parameterized by a gain γ, leading to the sat-
+isfaction of the drawdown speciﬁcation. Speciﬁcally, we
+express u(k) in the feedback form
+u(k) := K(k)V (k) (1)
+with K(k) := γM (k) and
+γ ∈ Γ :=
+[ −1
+Xmax − maxk rf (k) , 1|Xmin| + maxk rf (k) ] .
+Equation ( 1) is called the drawdown modulation policy ,
+which is parameterized by the two parameters ( γ, dmax).
+Remark 3.1. (i) It is readily veriﬁed that the drawdown
+modulation policy ( 1) satisﬁes Lemma 3.1. ( ii) To link
+back to ﬁnance concepts, the special case of buy-and-hold
+is obtained when K(k) ≡ 1. Note that u(k) < 0 stands
+for short selling . 1 (iii) Instead of using a ﬁxed feasible
+set Γ, it is also possible to allow a time-varying feasible
+set, say Γ k, to reﬂect the time dependency of the returns.
+Corollary 3.1. (Maximum Drawdown Protection). With the
+drawdown modulation policy (1), the maximum percentage
+drawdown satisﬁes d∗ ≤ dmax.
+Proof. Since the drawdown modulation policy satisﬁes
+Lemma 3.1, it assures d(k) ≤ dmax for all k with prob-
+ability one. Therefore, it follows that
+d∗ = max
+0≤k≤N
+d(k) ≤ dmax. ✷
+1 Short selling a stock means that a trader borrows the stocks f rom
+someone who owns it and selling it with the hope that the price s of
+the stock will drop in the near future; see Luenberger (2013).
+3.2 Optimal Drawdown Control Problem
+Having obtained the drawdown modulation policy ( 1), a
+natural question arises of how to select an “optimal” γ. To
+this end, we deﬁne the total return up to terminal stage N
+as a ratio
+Rγ(N ) := V (N )V (0)
+where the subscript of Rγ(·) is used to emphasize the
+dependence on the gain γ. Deﬁne J(γ) := E[Rγ(N )]. Then,
+we consider a multiperiod drawdown-based stochastic op-
+timization problem
+J ∗ := max
+γ∈Γ
+J(γ)
+subject to
+V (k + 1) = V (k) + u(k)X(k) + (V (k) − u(k))rf (k)
+= [1 + rf (k) + γM (k)(X(k) − rf (k))]V (k).
+It is readily veriﬁed that
+V (N )
+V (0) =
+N −1∏
+k=0
+[1 + rf (k) + γM (k)(X(k) − rf (k))].
+Therefore, we rewrite the problem as the following equiv-
+alent form
+max
+γ∈Γ
+E[Rγ (N )]
+= max
+γ∈Γ
+E
+[N −1∏
+k=0
+[1 + rf (k) + γM (k)(X(k) − rf (k))]
+]
+. (2)
+In the sequel, we shall use γ∗ to denote a maximizer of
+the optimization problem above. In practice, if one view
+that the optimum γ∗ obtained may be too aggressive, a
+practical but arguably suboptimal way is to introduce an
+additional fraction, call it α, that is used to shrink the
+investment size; see Maclean et al. (2010) for a similar
+idea. That is, instead of working with γ∗, one may work
+with αγ∗ where α ∈ (0, 1].
+Remark 3.2. (Non-Convexity). It is important to note
+that solving Problem ( 2) is challenging since the mod-
+ulation function M (k) depends on γ and the history
+of X(0), . . . , X(k − 1), which in general yields a nonconvex
+problem; e.g., see Figure 4 in Section 4 for an illustration of
+non-convexity nature. Therefore, Monte-Carlo simulations
+are often needed to obtain the optimum.
+3.3 Modulation with Restart
+As mentioned in Section 1, while the derived drawdown
+modulation policy provides almost sure drawdown protec-
+tion, it may incur a stop-loss behavior. To remedy this, we
+now introduce a restart mechanism into the modulation
+policy. Speciﬁcally, let ε ∈ (0, dmax) be a prespeciﬁed
+threshold parameter. Then we set the threshold for restart-
+ing the trade by
+d(k) + ε > d max (3)
+If, at some stage k = k0, Inequality ( 3) is satisﬁed, the
+trading is restarted by re-initializing d(k0) := 0 and reset
+the time-varying gain function K(k) of the modulation
+policy u(k) = K(k)V (k) at that stage k = k0 as
+K(k0) := γ∗αe−k0/NM (k0) (4)
+where αe−k0/N represents a forgetting factor with frac-
+tion α ∈ (0, 1] mentioned previously. Then we continue
+the trade until the next restart stage or to the terminal
+stage N .
+Remark 3.3. (i) The forgetting factor in Equation ( 4)
+reﬂects the idea that the trading size should be shrunk
+after the restart. Said another way, if the trades are
+approaching the prespeciﬁed drawdown limit dmax, the
+follow-up trades should be more conservative after the
+restart. ( ii) Note that after the restart, the control policy
+satisﬁes |u(k0)| ≤ | γ∗|αdmax since M (k) ≤ dmax for all k
+with probability one. (iii) While it does not consider in this
+paper, we should note that the optimal γ∗ in Equation ( 4)
+can also be re-calculated at each restart time by using
+the previous k0 − m stages information for some integer
+m > 1; see also Wang and Hsieh (2022) for a similar
+idea for obtaining a data-driven log-optimal portfolio via
+a sliding-window approach.
+4. ILLUSTRATIVE EXAMPLES
+In this section, two trading examples are proposed to sup-
+port our theory. The ﬁrst example is trading with ETF and
+riskless asset. The second example is trading with Bitcoin
+and a riskless asset. For the sake of simplicity, we take a
+constant daily interest rate rf (k) := 0 .01/365 for all k,
+which corresponds to a 1% annual rate. While our theory
+allows leveraging, in the sequel, we impose an additional
+cash-ﬁnancing condition by imposing that |u(k)| ≤ V (k)
+for all k, which corresponds to |K ∗(k)| ≤ 1.
+4.1 Trading with ETF and Riskless Asset
+Consider the Vanguard Total World Stock Index Fund
+ETF (Ticker: VT) 2 to be the risky asset covering a
+one-year in-sample period for optimization from Jan-
+uary 02, 2019 to January 02, 2020, and the out-of-sample
+period from January 02, 2020 to September 20, 2022,
+which contains a total of N = 684 trading days; see
+Figure 2 where the cyan colored trajectory is used for
+in-sample optimization and the blue colored trajectory
+is used for the out-of-sample trading test. It should be
+noted that due to the COVID-19 pandemic, the considered
+prices covering the 2020 stock market crash from Febru-
+ary 20, 2020 to April 7, 2020, and a recovery period after
+the crash. Thus, we view this dataset as an excellent back-
+testing case for our proposed drawdown modulation policy
+with the restart.
+Without loss of generality, consider the initial account
+value to be V (0) := $1. To implement the drawdown
+modulation policy with restart, we set dmax := 0 .1 and
+restart threshold ε := dmax/10. With the data collected
+in the in-sample period, the corresponding feasible set
+is Γ ≈ [−30.79, 34.9]. Then we numerically solve the
+optimization problem ( 2) via Monte-Carlo simulations. It
+follows that any γ ∈ (8.5, 34.9) share an almost identical
+optimal value when the cash-ﬁnancing condition is im-
+posed. For the sake of risk-averseness, we pick the inﬁmum
+2 VT invests in both foreign and U.S. stocks; hence it can be vie wed
+as a good representative of the global stock market
+Fig. 1. Stock Prices of VT
+of the candidates, i.e., γ∗ := 8 .5. Using this γ, we obtain
+the drawdown modulation policy u∗(k) = γ∗M (k)V (k).
+The corresponding trading performance is shown in Fig-
+ure 2, where the green dots indicate that the trade is
+restarted. In the same ﬁgure, we also compare it with
+the standard buy-and-hold strategy 3 and the modulation
+policy without restart. We see clearly that the modulation
+policy with restart leads to superior performance. Some
+key performance metrics, including maximum drawdown
+and cumulative rate returns, and N -period Sharpe ratio 4
+are reported in Table 1.
+0 100 200 300 400 500 600 700
+0.6
+0.7
+0.8
+0.9
+1
+1.1
+1.2
+1.3
+1.4
+Buy and Hold
+Modulation Policy with Restart
+Modulation Policy without Restart
+Fig. 2. Drawdown Modulation with/without Restart
+(Green Dots Indicate a Restart)
+4.2 Trading with Cryptocurrency and Riskless Asset
+As a second example, we consider a portfolio consisting of
+cryptocurrency BTC-USD and a riskless asset. The BTC-
+USD asset covers the same in-sample and out-of-sample
+periods described in Example 4.1. From January 02, 2020
+to September 20, 2022, it has a total of N = 993 trading
+3 Here, we mean buy and hold on the risky asset VT with K(k) = 1.
+4 The per-period Sharpe ratio is SR := µ−rfσ where µ is the per-
+period sample mean return, σ is the per-period sample standard
+deviation, and rf is the per-period riskless return.
+Table 1. Performance Metrics for Trading VT and Riskless Asset
+Trading Performance with dmax = 0.1 and ε = dmax/10
+Trading Policy Buy and Hold Modulation without Restart Modulation with Restart
+Maximum percentage drawdown d∗ 34.24% 10.00% 10.00%
+Cumulative rate of return V (N)−V (0)V (0) 10.64% −8.422% 20.97%
+N -period Sharpe ratio
+√
+N · SR 0.4082 −1.3375 1.0462
+days 5 ; see Figure 3. The corresponding feasible set for γ
+is Γ = [ −5.761, 7.083].
+Fig. 3. Prices of BTC-USD (In-Sample and Out-of-
+Sample)
+Take dmax := 0 .2 and restart threshold ε := dmax/10.
+By solving the optimal drawdown control problem ( 2), we
+obtain γ∗ ≈ 5.138; see Figure 4 for J(γ) versus γ ∈ Γ.
+Note that the J(γ) is clearly not concave for γ ∈ Γ. To
+consider the volatile nature of cryptocurrency and unfore-
+seen estimation error, we consider using a fractional γ∗
+by αγ∗ with α = 1 /2. That is, u∗(k) = K ∗(k)V (k) with
+K ∗(k) = γ∗2 M (k)V (k). The trading performances usingdrawdown modulation policy with and without restart,
+and buy-and-hold strategy are shown in Figure 5, where
+the green dots indicate that the trades were restarted.
+Some performance metrics are summarized in Table 2
+where we see that the modulation with restart provides
+the highest Sharpe ratio among all the other strategies.
+Transaction Costs Considerations. Traditionally, with
+cryptocurrency as the underlying asset, most exchanges
+typically charge transaction fees from 0% to 1%, depending
+on the trading volumes. While we are not developing
+the drawdown modulation theory involving the transac-
+tion costs, in this example, we perform backtests to see
+the eﬀects with percentage costs of 0 .1% per trade. 6
+Take dmax = 0 .2, ε = dmax/10 and γ∗ = 2 .69, the trading
+performances are shown in Figure 6. From the ﬁgure, we
+see that, even with transaction costs, the proposed mod-
+ulation policy with a restart mechanism is still superior
+to that without a restart. The corresponding Sharpe ratio
+is about 1 .521 compared with that without restart, where
+the Sharpe ratio is down to −0.043.
+5 It is worth noting that the cryptocurrency is typically trad ed at 24
+hours a day, seven days a week. Therefore, it has longer tradi ngs days
+than that trades with VT in Section 4.1.
+6 This cost level is typical in common cryptocurrency exchang es such
+as Binance; see Hsieh (2022b).
+-4 -2 0 2 4 6
+-0.2
+-0.1
+0
+0.1
+0.2
+0.3
+0.4
+Fig. 4. Seeking the Optimum: J(γ) Versus γ ∈ Γ
+0 200 400 600 800 1000
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+Buy and Hold
+Modulation
+with Restart
+Modulation
+without Restart
+Fig. 5. Trading Performance of BTC-USD with dmax := 0.2
+and ε := dmax/10.
+5. CONCLUDING REMARKS
+This paper extended the existing drawdown modulation
+policy with a novel data-driven restart mechanism. We
+ﬁrst derived a drawdown modulation policy by proving a
+lemma for a two-asset portfolio involving one risky and
+riskless asset. Then we modiﬁed the derived modulation
+policy by adding the restart mechanism. Subsequently, we
+showed an auto-tuned trading performance using historical
+price data for an ETF and cryptocurrency within a dura-
+tion where the prices are volatile. Overall, our modulation
+policy with restart dynamically controls the drawdown and
+maintains the proﬁts level.
+Some possible future research directions might include the
+multi-asset problem, which will be considered in the sub-
+sequent journal version of this paper. The other possibility
+is to consider the consumption-investment problem; i.e.,
+Table 2. Performance Metrics for Trading BTC-USD and Riskless Ass et
+Trading Performance with dmax = 0.2 and ε = dmax/10
+Trading Policy Buy and Hold Modulation without Restart Modulation with Restart
+Maximum percentage drawdown d∗ 72.12% 20.00% 20.18%
+Cumulative rate of return V (N)−V (0)V (0) 170.43% 17.41% 101.82%
+N -period Sharpe ratio
+√
+N · SR 1.4424 0.6970 2.1363
+0 200 400 600 800
+1
+1.2
+1.4
+1.6
+1.8
+2
+2.2
+2.4
+2.6
+2.8 Modulation with RestartModulation without Restart
+Modulation with
+Restart (Costs)
+Modulation without
+Restart (Costs)
+Fig. 6. Trading Performance with and without Transaction
+Costs
+sup
+γ
+E
+[T −1∑
+k=0
+U1(c(k)) + U2(V (N ))
+]
+where U1 and U2 are two utility functions with c(k) be-
+ing the amount consumed at time k. See Cvitanic and
+Zapatero (2004). Lastly, one might consider a more gen-
+eral portfolio optimization problem that seeks γ maximiz-
+ing sup γ E [U (Vγ(N ))] where U : R → R is a strictly
+increasing and concave utility function. One example
+is to consider a general hyperbolic absolute risk aver-
+sion (HARA) class of utilities; i.e.,
+U (x) = 1 − θθ ( ax1 − θ + b)θ
+for a, b > 0 and θ < 1. The HARA utility functions in-
+clude the quadratic, exponential, and the isoelastic utility
+function as special cases.
+ACKNOWLEDGMENT
+The author thanks Chia-Yin Lee for coding and running
+some preliminary numerical examples on the early draft of
+this paper.
+REFERENCES
+Boyd, S., Busseti, E., Diamond, S., Kahn, R.N., Koh,
+K., Nystrup, P., Speth, J., et al. (2017). Multi-Period
+Trading via Convex Optimization. Foundations and
+Trends® in Optimization , 3(1), 1–76.
+Chekhlov, A., Uryasev, S., and Zabarankin, M. (2005).
+Drawdown Measure in Portfolio Optimization. Interna-
+tional Journal of Theoretical and Applied Finance , 8(1),
+13–58.
+Cvitanic, J. and Karatzas, I. (1994). On Portfolio Op-
+timization Under “Drawdown” Constraints. IMA Vol-
+umes in Mathematics and its Applications , 65, 35–46.
+Cvitanic, J. and Zapatero, F. (2004). Introduction to the
+Economics and Mathematics of Financial Markets . MIT
+press.
+Fabozzi, F.J., Focardi, S.M., Kolm, P.N., and
+Pachamanova, D.A. (2007). Robust Portfolio
+Optimization and Management . John Wiley &
+Sons.
+Goldberg, L.R. and Mahmoud, O. (2017). Drawdown:
+From Practice to Theory and Back Again. Mathematics
+and Financial Economics , 11(3), 275–297.
+Grossman, S.J. and Zhou, Z. (1993). Optimal Investment
+Strategies for Controlling Drawdowns. Mathematical
+Finance, 3(3), 241–276.
+Hayes, B.T. (2006). Maximum Drawdowns of Hedge Funds
+with Serial Correlation. The Journal of Alternative
+Investments, 8(4), 26–38.
+Hsieh, C.H. (2022a). Generalization of Aﬃne Feedback
+Stock Trading Results to Include Stop-Loss Orders.
+Automatica, 136, 110051.
+Hsieh, C.H. (2022b). On Robustness of Double Linear
+Trading with Transaction Costs. To appear in the IEEE
+Control Systems Letters .
+Hsieh, C.H. and Barmish, B.R. (2017a). On Drawdown-
+Modulated Feedback Control in Stock Trading. IF AC-
+PapersOnLine, 50(1), 952–958.
+Hsieh, C.H. and Barmish, B.R. (2017b). On Ineﬃciency of
+Markowitz-Style Investment Strategies when Drawdown
+is Important. In Proceedings of the IEEE Conference on
+Decision and Control (CDC) , 3075–3080.
+Jorion, P. (2000). Value at Risk.
+Korn, O., M¨ oller, P.M., and Schwehm, C. (2022). Draw-
+down Measures: Are They All the Same? The Journal
+of Portfolio Management , 48(5), 104–120.
+Luenberger, D.G. (2013). Investment Science . Oxford
+University Press.
+Maclean, L.C., Thorp, E.O., and Ziemba, W.T. (2010).
+Long-Term Capital Growth: the Good and Bad Proper-
+ties of the Kelly and Fractional Kelly Capital Growth
+Criteria. Quantitative Finance, 10(7), 681–687.
+Magdon-Ismail, M. and Atiya, A.F. (2004). Maximum
+Drawdown. Risk Magazine , 17(10), 99–102.
+Malekpour, S. and Barmish, B.R. (2012). How Useful
+Are Mean-Variance Considerations in Stock Trading
+via Feedback Control? In Proceedings of the IEEE
+Conference on Decision and Control (CDC) , 2110–2115.
+Malekpour, S. and Barmish, B.R. (2013). A Drawdown
+Formula for Stock Trading via Linear Feedback in a
+Market Governed by Brownian Motion. In Proceedings
+of the European Control Conference (ECC) , 87–92.
+Markowitz, H.M. (1952). Portfolio Selection. The Journal
+of Finance, 7, 77–91.
+Markowitz, H.M. (1959). Portfolio Selection: Eﬃcient
+Diversiﬁcation of Investments , volume 16. John Wiley
+New York.
+Rockafellar, R.T. and Uryasev, S. (2000). Optimization of
+Conditional Value-at-Risk. Journal of Risk , 2, 21–42.
+Shapiro, A., Dentcheva, D., and Ruszczynski, A. (2021).
+Lectures on Stochastic Programming: Modeling and The-
+ory. SIAM.
+Wang, P.T. and Hsieh, C.H. (2022). On Data-Driven Log-
+Optimal Portfolio: A Sliding Window Approach. To
+appear in the IF AC-PapersOnline.
+Wu, J.M.T., Lin, S.H., Syu, J.H., and Wu, M.E. (2022).
+Embedded Draw-Down Constraint Reward Function for
+Deep Reinforcement Learning. Applied Soft Computing ,
+125, 109150.

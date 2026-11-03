@@ -1,0 +1,2176 @@
+arXiv 2506.11813  https://arxiv.org/abs/2506.11813
+
+Optimal Execution under Liquidity Uncertainty
+Etienne CHEV ALIER* Yadh HAFSI* Vathana LY V ATH† Sergio PULIDO †‡
+April 14, 2026
+Abstract
+We study an optimal execution strategy for purchasing a large block of shares over a fixed time
+horizon. The execution problem is subject to a general price impact that gradually dissipates due to
+market resilience. We allow for general limit order book shapes to characterize instantaneous mar-
+ket impact. To model the resilience dynamics, we introduce a stochastic process that governs the
+rate at which the deviation between the impacted and unaffected prices decays. Thisvolume-effect
+process reflects fluctuations in market activity that drive the pace of liquidity replenishment. Ad-
+ditionally, we incorporate stochastic liquidity variations through a regime-switching Markov chain
+to capture abrupt shifts in market conditions. We study this singular control problem, where the
+trader optimally determines the timing and rate of purchases to minimize execution costs. The
+associated value function to this optimization problem is shown to satisfy a system of variational
+Hamilton–Jacobi–Bellman inequalities. Moreover, we establish that it is the unique viscosity solu-
+tion to this HJB system and study the analytical properties of the free boundary separating the
+execution and continuation regions. To illustrate our results, we present numerical examples under
+different limit-order book configurations, highlighting the interplay between price impact, resilience
+dynamics, and stochastic liquidity regimes in shaping the optimal execution strategy.
+Keywords:Optimal Execution, Singular Control, Viscosity Solutions, Free Boundary Problem,
+Regime Switching.
+Mathematical subject classifications:93E20, 49L25, 91B70.
+1 Introduction
+The problem of optimal execution in financial markets has been extensively studied over the past
+decades, with early research focusing on deterministic and linear price impact models. Classical
+approaches assumed that market participants could execute large trades with predictable and stable
+costs, often modeling price impact as a linear function of trading volume as in Bertsimas and Lo [9]
+and Almgren [4]. These models provided foundational insights into the trade-off between execution
+cost and market risk, establishing a framework in which traders optimize their execution trajectories
+over a fixed time horizon. However, empirical studies such as Bouchaud, Farmer, and Lillo [11] and
+Zhou [50], have shown that the assumption of a simple linear price impact does not accurately
+reflect real-world market dynamics. Market impact is often nonlinear, transient, and influenced by
+complex interactions within the limit order book (LOB).
+As a result, recent research has moved beyond simplistic assumptions, incorporating more ad-
+vanced models that better capture this non-linearity. Obizhaeva and Wang [37] introduced a frame-
+work where market impact depends explicitly on the LOB shape, showing that execution strategies
+∗Laboratoire de Math´ ematiques et Mod´ elisation d’Evry, Universit´ e Paris-Saclay, UEVE, UMR 8071 CNRS, France;
+email: etienne.chevalier@univ-evry.fr, yadh.hafsi@universite-paris-saclay.fr.
+†Laboratoire de Math´ ematiques et Mod´ elisation d’Evry, Universit´ e Paris-Saclay, ENSIIE, UEVE, UMR 8071 CNRS,
+France; email: vathana.lyvath@ensiie.fr, sergio.pulidonino@ensiie.fr.
+‡The work of Sergio Pulido benefited from the financial support of the research program Chaire Deep learning in
+finance and Statistics (Fondation de l’ ´Ecole polytechnique, ´Ecole polytechnique and Qube R&T).
+1
+arXiv:2506.11813v2  [q-fin.MF]  11 Apr 2026
+should adapt to liquidity fluctuations. Alfonsi, Fruth, and Schied [3] extended this idea by consid-
+ering a continuous LOB model where price impact depends on both the execution rate and liquidity
+replenishment. These advancements laid the foundation for further research on execution strategies,
+notably Pemy, Zhang, and Yin [38], Alfonsi and Blanc [2], Moreau, Muhle-Karbe, and Soner [34],
+Ekren and Muhle-Karbe [24], and Cay´ e, Herdegen, and Muhle-Karbe [15]. A significant contri-
+bution in this direction was made by Predoiu, Shaikhet, and Shreve [43], who analyzed optimal
+execution in a one-sided limit order book with nonlinear price impact and resilience. Their model,
+which accommodates an arbitrary order book shape, derives the optimal strategy as a sequence
+of lump-sum trades interspersed with continuous trading at a rate matching order book resiliency.
+These results formalized the interaction between execution strategies and market recovery, provid-
+ing a framework for modeling price impact in order-driven markets. However, the assumption of
+deterministic resilience limits its applicability, as stochastic fluctuations in liquidity have been well
+documented; see for instance in Taranto et al. [49].
+Building on this, Becherer, Bilarev, and Frentrup [8] studied a two-dimensional singular control
+problem of finite fuel type over an infinite time horizon, motivated by the optimal liquidation of an
+asset position in a financial market with multiplicative and transient price impact. This framework
+incorporates stochastic liquidity, where thevolume effectprocess is driven by its own random noise,
+and they derive an explicit closed-form solution under the assumption of multiplicative price im-
+pact. Fruth, Schoneborn, and Urusov [27] introduced a stochastic order book depth, addressing the
+limitations of models that assume constant or deterministically varying liquidity. They establish the
+existence and uniqueness of optimal execution strategies when order book depth follows a general
+diffusion process. Unlike prior work assuming deterministic liquidity variations, this framework cap-
+tures stochastic liquidity fluctuations. More recently, Ackermann, Kruse, and Urusov [1] explored
+optimal execution in a market where order book depth and resilience evolve stochastically. The
+authors formulated a discrete-time trading model and derive a recursive equation for the minimal
+expected execution cost. The authors analyzed conditions under which traders should execute im-
+mediately or gradually. Horst and Xia [31] studied the optimal liquidation of multi-asset portfolios
+in markets where resilience is stochastic. The authors developed a framework that accounts for both
+immediate and persistent price impacts, formulating the problem using backward stochastic Riccati
+differential equations (BSRDEs) to characterize the value function. To handle the singular terminal
+conditions in these equations, they introduced an approximation method via penalization, solving
+a sequence of unconstrained problems that enforce full liquidation. Their results provide explicit
+optimal trading strategies. Finally, Fouque, Jaimungal, and Saporito [26] examined optimal trading
+in markets where price impact is stochastic and often exhibits fast mean reversion. Using singular
+perturbation methods, the authors developed approximations to the resulting optimal control prob-
+lem and established their accuracy by constructing sub- and super-solutions. The analysis highlights
+how stochastic trading frictions influence execution strategies. Muhle-Karbe, Wang, and Webster
+[36] demonstrate that in concave price impact models a tractable linear approximation emerges in
+the high-frequency limit. The authors show that a stochastic liquidity parameter effectively captures
+the model’s nonlinearity, yielding a diffusion limit that preserves key features and performs well on
+limit order book data.
+In this work, we introduce a stochastic volume effect governed by a jump diffusion process,
+allowing the model to capture both continuous liquidity variation and sudden market shocks. The
+price impact function is allowed to be discontinuous, accommodating abrupt changes in market
+conditions. Instead of specifying a particular model for the fundamental price, we require only a
+martingale property, making the framework applicable under general market dynamics. Liquidity
+regimes are incorporated through a finite-state Markov chain, reflecting structural shifts in market
+depth. We formulate the resulting optimization as a singular stochastic control problem. Unlike
+most singular stochastic control problems, which are typically posed in infinite horizon settings (see,
+e.g., Shreve and Soner [48], Bank and El Karoui [6]), our problem is inherently finite-horizon due
+to the nature of execution tasks. In the execution literature, problems are often formulated either
+in discrete time or as impulse controls over a finite horizon, highlighting the distinctive structure
+of our continuous-time formulation. Moreover, our model avoids explicit cost functions often used
+2
+in classical formulations, as our setting focuses on liquidity-induced frictions rather than inventory
+or running penalties. To the best of our knowledge, the closest related work is that of Predoiu,
+Shaikhet, and Shreve [43], which addresses a similar execution setting but in a static framework,
+whereas our approach is fully dynamic.
+We incorporate different market regimes to model liquidity variations more realistically. Empir-
+ical evidence, such as Chevalier, Hafsi, and Ly Vath [17], shows that market liquidity distribution
+varies significantly throughout the trading day. Studies like Pemy, Zhang, and Yin [40], Bayraktar
+and Ludkovski [7], Colaneri et al. [19], Chung Siu et al. [18], Dammann and Ferrari [22], Cartea
+and S´ anchez-Betancourt [14], and Chevalier, Hafsi, and Ly Vath [16] have addressed this gap by
+modeling liquidity as a stochastic process. To capture this, we model liquidity regimes as a finite
+state Markov chain. In our framework, liquidity regime variations affect only the shape of the limit
+order book, while the underlyingvolume effectdynamics remain unchanged. This ensures that price
+evolution is not exogenously driven by regime shifts but instead results from structural changes in
+supply and demand at different liquidity levels. By allowing the LOB’s form to vary across regimes,
+we account for regime-dependent price impact, where trades in low-liquidity states induce greater
+price responses than in high-liquidity conditions. This approach captures transient liquidity shocks,
+aligns with empirical evidence, and provides a more precise characterization of execution risk.
+Finally, we address an optimal execution problem formulated as a singular control problem. Our
+approach is guided by techniques from Ma et al. [33], Liu [32], and Shao and Tian [47], which
+connect regime-switching models with the first component of the Hamilton-Jacobi-Bellman Quasi-
+Variational Inequalities (HJBQVI). These works reformulate the execution problem as a stochastic
+control problem for a Markov jump linear system, deriving the value function and optimal feedback
+strategy through coupled differential Riccati equations. We also formulate our study as a free
+boundary problem in the spirit of Caffarelli [13], Pham [41] and Figalli and Serra [25], focusing on
+obstacle-type formulations and regularity properties. Due to the multi-dimensionality of the state
+space, classical verification techniques are not applicable, as the value function and optimal control
+cannot be characterized in closed form. To address this, we adopt a viscosity solution framework
+and characterize our value function as the unique solution to the HJB system. This allows us
+to describe the structure of the continuation and intervention regions, and to show the existence
+of a connected free boundary separating them. Due to the lack of sufficient regularity properties
+inherent in our setting, we rely on approximation methods to construct the solution. We illustrate
+our findings with numerical examples across various limit order book configurations. The viscosity
+solution is approximated using an implicit-explicit finite difference scheme for the PIDE, following
+Cont and Voltchkova [20]. The simulations show that higher market activity reduces market impact.
+In particular, increased volatility and resilience in the volume effect lead to greater liquidity and
+lower exercise boundaries, while the opposite holds in less active markets. We also examine how
+different limit order book shapes influence the free boundary.
+The article is organized as follows. Section 2 introduces the model describing the price and
+liquidity dynamics of a single asset, with a LOB featuring stochastic resilience and accounting for
+the stochastic market liquidity. This section also formulates the singular control problem associated
+with the execution strategy. Section 3 examines the analytical properties of the value function and
+establishes its continuity over the domain. In Section 4, we demonstrate that the value function
+uniquely solves the system of variational inequalities as a viscosity solution and prove the connect-
+edness of the free boundary. We present the numerical scheme to approximate the viscosity solution
+in Section 5. Finally, Section 6 presents numerical illustrations, analyzing the influence of state
+variables and price impact on the value function and the free boundary.
+Notation 1.1.Forx∈R k, wherekis determined by the context,∥x∥denotes its Euclidean norm,
+andB r(x)represents the open ball centered atxwith radiusr >0. The scalar product is denoted
+by⟨·,·⟩, and for a vectorx∈R k, its transpose is denoted byx T . For a setA⊂R k,∂Adenotes its
+boundary, whileint(A)or equivalently ˚Adenote its interior. The symbol⊗represents the Kronecker
+product of two matrices. For a functionφ:R +×Rd×Rk→R, the gradient and Hessian matrix
+are denoted byDφandD 2φ, respectively, whenever they are well-defined.
+3
+2 Optimal Execution Problem
+Consider a complete filtered probability space (Ω,F,F={F t}t≥0,P), where{F t}t≥0 is a right-
+continuous filtration. We assume that the filtration{Ft}t≥0 supports a standardP-Brownian motion
+W, a continuous Markov chainI, and a random Poisson measureMonR +×R + with compensator
+λtν(dz)dt, whereλ: [0,T]→[0, λ], andνis a measure onR. Throughout this paper, unless
+explicitly stated otherwise, any equality between random variables is understood to holdP-almost
+surely when it is not explicitly stated.
+2.1 Model Setup
+We consider{I t}t≥0 to be a continuous-time Markov chain with values in a finite state space
+Im :={1,...,m} ⊂Nand with c` adl` ag sample paths. We denoteF I ={F It}t≥0 the natural
+filtration generated byI, augmented by theP-null sets. The processIrepresents the liquidity
+state within the limit order book. Its infinitesimal generatorQ(t) = (Q ij(t))1≤i,j≤m captures the
+intensities of transitioning between different liquidity states. The off-diagonal elementsQ ij(t) for
+i̸=jcorrespond to the continuous and bounded instantaneous rate of transition from stateito
+statej. We assume thatIis stable and conservative, i.e., for all (j,k)∈I 2m andt≥0,
+Qjj(t) =−
+∑
+k̸=j
+Qjk(t),andQ jj(t)<+∞.(1)
+Volume Effect.Leti∈I m be a liquidity regime. We defineA:= (A t)t≥0 as the reference price
+of the assets, which we assume to be a continuous (P,F)-martingale. In our model, we assume that,
+in the absence of trading, the number of available shares at timetin the price interval [A t,At +x[ is
+FIt(x). Here,F i is a non-decreasing and left-continuous function associated to an infinite measure
+µi :R +→R + in the following way:
+Fi(x) :=µ i([0,x[),∀x∈R +.
+The shape of theshadow limit order book(LOB) dynamically evolves as the liquidity regime changes.
+This allows the model to adapt to varying market conditions.
+Remark 2.1.This model is general and accommodates various limit order book structures and mar-
+ket impacts. Examples include block, modified block, and discrete order books (see Predoiu, Shaikhet,
+and Shreve [43]). It also supports other types, such as power-law order books (see Brokmann et al.
+[12] and Avellaneda and Stoikov [5]).
+LetYbe anF-adapted nonnegative process representing thevolume effectprocess. Economi-
+cally,Ymeasures how much liquidity has been temporarily removed from the ask side of the LOB.
+This includes both the liquidity consumed by the trader and the liquidity taken by other market
+participants. A high value ofYmeans that the book is thinner and that buying becomes more
+expensive. The processYevolves according to
+{ dYu =−h(Y u−)du+σ(Y u−)dWu +∫Rq(Yu−,z)M(du,dz),
+Yt− =y, (2)
+witht≥0,u∈[t,T],y≥0,h:R +→R,σ:R +→Randq:R +×R→R. We denote
+ˇYu− :=Y u− + ∆MYu,
+where ∆MYu represents the jump contribution of the measureMtoYat timeu.
+Each term in (2) has the following interpretation: The drift term−h(Y u−) models the rate at
+which the LOB refills after liquidity is consumed. The diffusion termσ(Y u−) dWu captures small
+fluctuations in the volume displaced from the shadow LOBF Iu. These fluctuations are caused by
+the continuous flow of limit orders and cancellations. A larger value ofσcorresponds to a higher
+4
+level of market activity, in the sense that the available volume fluctuates more rapidly during periods
+of intense trading. The jump term
+∫
+Rq(Yu−,z)M(du,dz) models abrupt liquidity shocks generated
+by block trades or large market orders submitted by other participants.
+Assumptions 2.1.We assume that the processesIandMdo not have mutual covariation.
+Remark 2.2.Assumption 2.1 simplifies the analysis without minimal loss of generality, as any
+dependence can typically be absorbed into the dynamics ofMor handled via a change of measure.
+The ask price is no longer the reference price but is given byP:=A+D. Here, the processD
+defines the price deviation process, such that
+Du :=ψ Iu(Yu),∀u≥0
+In plain terms,Dmeasures how far the impacted ask price is from the reference/equilibrium price
+A. A larger value ofYleads to a larger price deviation, since more liquidity has been taken out of
+the book. The functionψ i is left-continuous and verifies
+ψi(y) := sup{a≥0 :F i(a)<y},∀y≥0,(3)
+withψ i(0) := 0. It follows from the monotonicity and the left-continuity ofF i thatψ i is non-
+decreasing onR + and thatF i(ψi(y)) =y, for ally∈R +.
+Price
+Quantity
+Fi(x)
+At
+ At + x
+Price
+Quantity
+Yu FIu(x) Yu
+Au Au + Du Au + x
+Figure 1: Representation of the limit order book at timest − andu. The left panel illustrates the
+initial state withY t− =y= 0, while the right panel shows the LOB after transactions occurring
+betweent− andu. The shaded areaY u indicates the volume of consumed shares.
+The volume consumption affecting the LOB also accounts for the influence of other market
+participants, modeled through the Brownian motionWand the jump termM, with compensator
+λuν(dz)du. The jumps here capture the impact of block trades and large orders placed by external
+market participants.
+Remark 2.3.The framework naturally extends to a multi-asset setting (see, e.g., Pemy and Zhang
+[39]). For each assetk∈{1,...,d}, letY k denote the corresponding volume effect. Cross-impact
+effects, as discussed in Hey et al. [30], might be incorporated by allowing the deviation process of
+assetkto depend on the liquidity states of all assets, for instance throughD ku = ΨkIu(Y 1u,...,Y du ),
+whereΨ k captures both self- and cross-liquidity interactions. A formulation of the corresponding
+multidimensional model is provided in Appendix C.
+We list the following assumptions to support our study of the control problem later.
+Assumptions 2.2.Assume that:
+(A1) There existsb>0,β >0anda>0such that
+Fi(x)≥bx β,∀(x,i)∈[a,+∞[×I m.
+(A2) The measureν(dz)satisfies ∫
+R
+(1 +z 2)ν(dz)<+∞.
+5
+(A3) There exists a constantC >0such that, for ally≥0,
+|h(y)|+|σ(y)|+
+∫
+R
+|q(y,z)|ν(dz)≤C(1 +|y|).
+(A4) There exists a constantL>0such that, for ally,y ′≥0,
+|h(y)−h(y ′)|+|σ(y)−σ(y ′)|+
+∫
+R
+|q(y,z)−q(y ′,z)|ν(dz)≤L|y−y ′|.
+Assumption (A1) prevents the placement of buy orders with finite size at infinitely high prices.
+This condition imposes a power–law lower bound on the cumulative LOB shapeF i. This condition
+is well supported empirically: numerous studies report that market impact grows as a concave power
+law of traded volume, see Bouchaud, Farmer, and Lillo [11] and Gabaix [28]. It provides an upper
+bound for the resilience functionψ i, which is crucial for establishing the joint continuity of the value
+function introduced in the following sections. It also plays a key role in proving the Comparison
+Principle (see Theorem 4.3) for the viscosity solutions of the value function. Assumptions (A2),
+(A3), and (A4) guarantee the existence and uniqueness of a strong solution to the SDE (2) via
+Proposition 2.1, as well as a comparison property for thevolume effectprocess through Lemma 1.
+These assumptions hold for the rest of this study.
+2.2 Problem Formulation
+Our goal is to address an optimal purchase problem for a single asset over a finite time horizonT.
+As this study is conducted in a continuous trading context rather than high-frequency trading, we
+consider singular controls as admissible strategies, where jumps correspond to block trades.
+A financial agent wants to buy Xshares of an illiquid asset over the time interval [0,T]. The
+agent’s holdingsXform anF-progressively measurable process.
+Definition 2.1(Admissible strategies).DefineA t(x)as the set of admissible controls for an agent
+with a positionx∈R + at timet∈[0,T]. An admissible purchase strategy consists of a non-
+decreasingF-adapted right-continuous processX= (X u)t≤u≤T such thatX t− =xandX T =X. We
+denote by∆X u =X u−Xu− the jump at timeu. We also representX c as the continuous component
+ofX.
+We define the controlled dynamics of thevolume effectprocessY t,y,X as
+{
+dYt,y,Xu = dXu−h(Y t,y,Xu− )du+σ(Y t,y,Xu− )dWu +∫Rq(Yt,y,Xu− ,z)M(du,dz),
+Yt,y,Xt− =y, (4)
+withu∈[t,T] andy≥0. Using classical theory (see Protter [44]), we can directly conclude that
+the given system of stochastic differential equations has a unique strong solution.
+Proposition 2.1.For anyF t-measurable random variableξvalued inR + such thatE(|ξ| p)<+∞,
+for somep >1, the SDE(4)admits, for allt∈[0,T], a unique strong solutionY t,ξ,X , with
+Yt,ξ,Xt =ξ. Moreover,
+E
+[
+sup
+0≤u≤T
+|Yt,ξ,Xu |p]≤C T(1 +E(|ξ|p)),
+where the constantC T∈R + only depends onT, Xand the Lipschitz coefficients ofh,σandq.
+We state a comparison result for the sample paths ofY, which will be used in proving the
+monotonicity ofvand later in the proof of continuity.
+Lemma 1(Comparison property).Lett∈[0,T],x∈[0, X]andX∈A t(x). For any two controlled
+solutionsY t,Y 10,X andY t,Y 20,X of the SDE(4)satisfyingY 10 ≤Y 20 , it holds that
+P
+(
+Yt,Y 10,Xu ≤Y t,Y 20,Xu ,∀u∈[t,T] ) = 1.
+6
+Proof.Refer to Theorem 2.3 in Dawson and Li [23].
+Note that thevolume effectprocessY t,y,X incorporates the impact of the investor’s trading
+Xwithin its dynamics. Equation (4) specifies how the order book is affected by the transactions
+of the trader. If a large transaction happens at timetwith the investor buyingxshares, then
+Yt,y,Xt = ˇYt,y,Xt +x. The ask price jumps fromA t− +ψIt− (Yt,y,Xt− ) toA t +ψIt( ˇYt,y,Xt +x) after the
+transaction. Based on the limit order book structure described in Section 2.1, the purchase cost for
+a large trade of sizey, in excess ofA t, at timetis expressed, for every regimei∈I m, as
+Φi(y) :=
+∫ ψi(y)
+0
+ξdFi(ξ)
+=
+∫ y
+0
+ψi(ζ) dζ,∀y≥0.
+(5)
+In other words, the cost of placing a buy order of sizeyat timetat priceP t is given by
+πit(y) =
+∫ y
+0
+[
+Pt +ψi(ζ)
+]
+dζ=P ty/bracehtipupleft/bracehtipdownright/bracehtipdownleft/bracehtipupright
+Cost at the current price
++ Φ i(y)/bracehtipupleft/bracehtipdownright/bracehtipdownleft/bracehtipupright
+Impact cost
+.
+We assume that the Markov chainIstarts in stateiat timet. SinceXis nonnegative and bounded
+byX, withX t− =x, we express the cost of the purchase strategyXover [t,T], under suitable
+conditions on the priceA, as described in Predoiu, Shaikhet, and Shreve [43]. In this case, the cost
+is equal to
+∫ T
+t
+(Au + ˇDu−)dXcu + ∑
+t≤u≤T
+Au∆Xu + ΦIu(Yt,y,Xu )−Φ Iu( ˇYt,y,Xu− )
+=
+∫ T
+t
+ψIu( ˇYt,y,Xu− )dXcu +AT ¯X−A tx−
+∫ T
+t
+XudAu +
+∑
+t≤u≤T
+ΦIu(Yt,y,Xu )−Φ Iu( ˇYt,y,Xu− ),
+where ˇDu :=ψ Iu( ˇYt,y,Xu ) andu∈[t,T]. Consequently, assuming the common condition that the ask
+priceAis a martingale, minimizing slippage is equivalent to minimizing the total cost of purchases.
+This leads to the following optimization problem, where we aim to minimize the expected cost in
+excess ofA t(X−x) over the set of admissible strategies, defined by the value functionv:= (v i)i∈Im,
+such that
+vi(t,x,y) := infX∈At(x) E
+[∫ T
+t
+ψIu( ˇYt,y,Xu− )dXcu + ∑
+t≤u≤T
+ΦIu(Yt,y,Xu )−Φ Iu( ˇYt,y,Xu− )],(6)
+with (t,x,y)∈S:= [0,T[×[0, X[×R∗+ andi∈I m. We denoteSas the closure ofS.
+The boundary conditions are defined by the immediate purchase of the remaining shares as
+vi(T,x,y) = Φ i(y+ X−x)−Φ i(y),
+vi(t,X,y) = 0.
+(7)
+Note thatv i satisfies the following growth condition (see Proposition 3.1)
+0≤v i(t,x,y)≤Φ i(y+ X−x)−Φ i(y).(8)
+2.3 Examples
+We begin by presenting examples that inspired our study. For clarity, these illustrations focus on
+the single-regime case (m= 1), although we consider the general setting throughout the paper.
+Let (t,x,y)∈ S, andX∈ A t(x). Assume that thevolume effectis deterministic, meaning
+σ≡q≡0. Further, suppose that processY t,y,X has finite variation and satisfiesY t,y,Xt− =y.
+7
+Under these conditions, the setup corresponds to Model 1 in Alfonsi, Fruth, and Schied [3] within a
+discrete-time framework and, more specifically, to the one detailed in Predoiu, Shaikhet, and Shreve
+[43]. Applying Itˆ o’s formula, we obtain
+Φ(Yt,y,XT )−Φ(y) =
+∫ T
+t
+ψ(Yt,y,Xu )(dXcu−h(Y t,y,Xu )du) + ∑
+t≤u≤T
+Φ(Yt,y,Xu )−Φ(Y t,y,Xu− ).
+Hence,
+v(t,x,y) = inf
+X∈At(x)
+E
+[
+Φ(Yt,y,XT ) +
+∫ T
+t
+g(h(Yt,y,Xu ))du]−Φ(y),
+where
+g(y) =yψ(h −1(y)).
+If one further assumes thatgis a convex function, Jensen’s inequality implies that
+∫ T
+t
+g(h(Yt,y,Xu ))du≥(T−t)g ( 1T−t ∫ Tt h(Yt,y,Xu ) du).
+Knowing thatY t,y,XT =y+ X−x− ∫Tt h(Yt,y,Xu ) du, we get
+v(t,x,y)≥inf
+X∈At(x)
+E
+[
+Gt,x,y(Yt,y,XT )]−Φ(y),
+whereG t,x,y(e) = Φ(e) + (T−t)g
+(
+X−x+y−e
+T−t
+)
+. We define a typeAstrategy as a strategy that has
+an initial jump at timet, satisfying dX u = dXcu =h(Y u)duon ]t,T[, with the agent unwinding the
+remaining position at timeT. Assume thate ∗t,x,y minimizesG t,x,y, and
+e∗t,x,y∈{Yt,y,XT :X∈A t(x) is of typeA }.
+Then,
+v(t,x,y) =G(e ∗t,x,y)−Φ(y).(9)
+Theorem 4.2 of Predoiu, Shaikhet, and Shreve [43] establishes that the typeAstrategy associated
+toe ∗t,x,y is the unique solution to the optimization purchase problem whengis strictly convex.
+Furthermore, the authors demonstrate that a solution to the optimal execution problem exists even
+if the convexity ofgno longer holds (see Theorem 4.5). Under this alternative situation, the trader
+initially purchases a lump sum of shares,X 0 =y, at time 0. Subsequently, shares are bought at a
+constant rate, dXt =h(y) dt, over the intervalt∈[0,t 0[, maintainingY t =y. At timet 0, another
+lump sum purchase is made, after which the trader continues to buy shares at a constant rate,
+dXt =h(Y t0) dt, duringt∈[t 0,T[, keepingY t =Y t0. Finally, the remaining shares are purchased
+at timeT. For example, consider a block-shaped order book as described in Obizhaeva and Wang
+[37], with a densityq 0 = 1 and a resilience rateρ= 1, resulting inF(x) =ψ(x) =h(x) =x, for all
+x≥0. In this case, Φ(x) = x22 andg(x) =x 2, for allx≥0. Additionally, ifX∈A t(x) is of type
+A, the following holds
+e∗t,x,y = 2(X−x+y)T−t+ 2 .
+In the framework proposed by Predoiu, Shaikhet, and Shreve [43], the volume effect is assumed to be
+non-dynamic, effectively treating it as deterministic throughout the execution horizon. As a result,
+the authors implicitly assume that the initial state lies within the execution region when starting
+fromx= 0 andy= 0. However, this assumption does not necessarily hold when the volume effect
+is dynamic. In general,e ∗t,x,y is attainable by a typeAstrategy if and only if
+X−x−(1 + (T−t))y≥0.
+8
+Furthermore, the value function in this region is equal to
+v(t,x,y) = ( ¯X−x+y) 2
+2 +T−t − y22 .
+The representation of the value function in the next section enables its characterization beyond this
+domain. Observe that this case falls within the framework of Alfonsi and Blanc [2] if we assume
+that the strategic trader’s proportion of permanent price impact is identical to that of other traders
+and equal to zero. Suppose further that the measuremsatisfiesm≡0, the jump size ofYsatisfies
+q≡1, and that the process ∫ t
+0
+σ2(Yu) dWu
+isF-martingale, whereYis the solution of the uncontrolled SDE (2). The argument in the proof of
+Theorem 2.1 of Alfonsi and Blanc [2] shows that there are no Price Manipulation Strategies (PMS)
+in this setting and that the control problem is equivalent to the execution problem of Obizhaeva and
+Wang [37]. This example motivates our study of the general case, in which the volume effect evolves
+dynamically as a jump diffusion process. In this setting, we aim to characterize the properties of
+the value function within each region and along the free boundary.
+Remark 2.4.The framework introduced by Alfonsi and Blanc [2] was extended by Chevalier, Hafsi,
+and Ly Vath [16] to incorporate impulse controls. Although this extension enhances the modeling of
+price impact, the limit order book remains static, meaning that its shape does not respond to incoming
+orders, and exhibits a deterministic volume effect with fixed resilience. Additionally, the dynamics
+are solely driven by point processes representing order flow. As a result, while these models are well
+suited to high-frequency trading environments, they are less appropriate for longer time scales. This
+motivates the use of Brownian noise in(2)to capture stochastic resilience effects.
+3 Analytical Properties of the Value Function
+In this section, we will denote, for any (i,t,x,y)∈I m×S, and any admissible strategyX∈A t(x),
+Ci(t,x,y,X) :=
+∫ T
+t
+ψIu( ˇYt,y,Xu− )dXcu + ∑
+t≤u≤T;∆Xu>0
+ΦIu(Yt,y,Xu )−Φ Iu( ˇYt,y,Xu− ).
+We start by stating standard results on the finiteness and monotonicity of the value function.
+Proposition 3.1.The value functionvdescribed in(6)is finite.
+Proof.Let (t,x,y)∈ Sbe the state variable at timetandi∈I m. If the investor buys X−x
+immediately, the associated cost would be equal to Φ i(y+ X−x)−Φ i(y). Therefore,
+0≤v i(t,x,y)≤Φ i(y+ X−x)−Φ i(y)
+onS. This concludes the proof.
+Proposition 3.2(Monotonicity).For any(i,t,x,y)∈I m×S, the following results hold:
+1.t 0↦→v i(t0,x,y)is non-decreasing on[0,T].
+2.x 0↦→v i(t,x 0,y)is non-increasing on[0, X].
+3.y 0↦→v i(t,x,y 0)is non-decreasing onR +.
+Proof.1.Leti∈I m,x∈[0, X] andy≥0. Suppose that 0≤t≤t ′≤Tand considerX ′ =
+(X′u)t′≤u≤T∈A t′(x) such thatX ′t′− =xandX ′T =X. Using the strong Markov property, we get
+9
+that
+E
+[
+Ci(t′,x,y,X ′)|Ft′] =E[∫ T−t′+t
+t
+ψIu( ˇYt,y,~X′u− )d~Xcu + ∑
+t≤u≤T−t′+t
+∆~Xu>0
+ΦIu(Yt,y,~X′u )−Φ Iu( ˇYt,y,~X′u− )|Ft],
+with ~X′ = (X′u−t+t′)t≤u≤T−t′+t. Define the strategyX∈A t(x) as
+Xu =
+{
+~Xu,ifu∈[t,T−t ′ +t],
+0,else.
+Note thatE
+[
+Ci(t′,x,y,X ′)|Ft′
+]
+=E
+[
+Ci(t,x,y,X)|F t
+]
+. SinceX∈A t(x), then
+vi(t,x,y)≤E
+[
+Ci(t′,x,y,X ′)|Ft′].
+AsX ′ is arbitrary, it follows thatv i(t,x,y)≤v i(t′,x,y), completing the proof.
+2.Leti∈I m,t∈[0,T] andy≥0. Suppose that 0≤x≤x ′≤X. Letε >0 be arbitrary and
+assume thatX∈A t(x) is anε-optimal strategy that satisfies
+vi(t,x,y) +ε≥E[C i(t,x,y,X)].
+Letτbe anF-stopping time, such that
+τ:= inf
+{
+u≥t:X u−x≥ X−x ′}.
+We define the strategyX ′∈A t(x′) as
+X′u =
+{ Xu +x′−x,ifu<τ,
+X,else.
+Using the comparison property established in Lemma 1, we have that
+Ci(t,x′,y,X ′)≤C i(t,x,y,X).
+Taking expectations on both sides, we deduce that
+vi(t,x′,y)≤E[C i(t,x′,y,X ′)]≤E[C i(t,x,y,X)]≤v i(t,x,y) +ε.
+Sinceεis arbitrary, the conclusion follows.
+3.This result follows directly from the comparison property established for the processYand the
+fact that Φi andψ i are non-decreasing onR + for alli∈I m.
+To prove the continuity of the value function, we need the following lemmata. The first result
+concerns the continuity of the flow ofY. The second is related to a continuity modulus.
+Lemma 2.For any non-decreasing, right-continuous, adapted processXand any initial timet∈
+[0,T], the mappingy↦→Y t,y,X. , representing the flow of the solution to SDE(4), is continuous on
+R+.
+Proof.See TheoremsV.37 andV.38 in Protter [44].
+Lemma 3.Let0≤t≤s≤T,x∈[0, X],y≥0andX∈A t(x). For any nonnegative random
+variableξwith finite moments, it holds that
+E
+[
+ΦIs
+(
+Yt,y,Xs +ξ)−ΦIs(Yt,y,Xs )]≤ρ y(ξ),
+where the mapping(y,ζ)↦→ρ y(ζ)is continuous inyand non-decreasing inζonR +, satisfying
+10
+limζ→0ρy(ζ) = 0. Additionally,ρ y(ξ)converges in probability to0asξtends to0in probability, if
+its moments are uniformly bounded.
+Proof.Refer to Appendix A.
+We conclude this section by presenting a key result on the continuity of the value function.
+Theorem 3.1.The value functionvdefined in(6)is a continuous function on S.
+Proof.We will study separately the continuity of the value function int,xandy, for eachi∈I m.
+1.We first prove the continuity ofv i inx, uniformly with respect tot. We fixt∈[0,T],y≥0,
+0≤x ′ <x≤ Xandε>0. There existsX∈A t(x) which satisfies
+vi(t,x,y) +ε≥E
+[
+Ci(t,x,y,X)
+]
+.
+By adding a jump of sizex−x ′ at timeTtoXwe obtain ˆX∈A(t,x ′). We have that
+Ci(t,x′,y, ˆX) =C i(t,x,y,X) + Φ IT (Yt,y,XT +x−x ′)−Φ IT (Yt,y,XT ).
+Taking expectations on both sides of this equation we deduce that
+E
+[
+Ci(t,x′,y, ˆX)]≤v i(t,x,y) +ε+E [ΦIT (Yt,y,XT +x−x ′)−Φ IT (Yt,y,XT )].
+On the other hand since, by Proposition 3.2, the value function is decreasing inx, we conclude that
+vi(t,x,y)≤v i(t,x′,y)≤v i(t,x,y) +ε+E [ΦIT (Yt,y,XT +x−x ′)−Φ IT (Yt,y,XT )].
+We deduce from Lemma 3 that
+0≤v i(t,x′,y)−v i(t,x,y)≤ε+ρ y(x−x ′).
+Therefore, we have obtained the continuity of the value functionvinxuniformly int.
+2.Next, we prove the continuity ofv i iny, uniformly with respect totandx. Fixy≥0,y ′≥0,
+ε>0,t∈[0,T] andx∈[0, X]. There existsX∈A t(x) which satisfies
+vi(t,x,y) +ε≥E
+[
+Ci(t,x,y,X)
+]
+.
+Our goal here will be to construct an admissible strategy ~Xthat bounds
+vi(t,x,y′)−v i(t,x,y)≤ε+E [Ci(t,x,y′, ~X)−C i(t,x,y,X) ].
+To do so, we compare the sample paths ofY t,y,X andY t,y′,~X, and aim to bound their difference
+using terms that depend only on the initial parametersy,y′ and their difference|y′−y|, as illustrated
+in Figure 2. This, combined with the continuity modulus presented in Lemma 3, should allow us to
+achieve the uniform continuity iny. Consider ˆX∈A t(x) such that
+dˆXcu = 0,and ∆ ˆXu = ∆Xu,∀u∈[0,T[.
+Letτbe the followingF-stopping time,
+τ:= inf
+{
+u≥t:Y t,y′,ˆXu ≤Y t,y,Xu }∧T,
+ξdefine the random variable
+ξ:=
+∫ τ
+t
+dXcu−(Yt,y,Xτ −Y t,y′,ˆXτ ),
+11
+andθbe anF-stopping time, such that
+θ:= inf
+{
+u≥τ: ˆXτ +Xu−Xτ≥X}.
+Observe that wheny′≤y,τ=tandξ=y ′−y≤0. We construct a strategy ~Xbelonging toA t(x)
+satisfying
+d~Xu :=
+
+
+
+dˆXu,ift≤u<τ,(
+∆Xu +Y t,y,Xu −Y t,y′,ˆXu )∧(X− ˆXτ−),ifu=τ,
+dZu,ifτ <u≤T.
+whereZis a non-decreasingF-adapted process withZ τ = 0. Ifξ≥0,
+dZu :=
+{ dXu,ifτ <u<T,
+∆Xu +ξ,ifu=T.
+Ifξ <0,
+dZu =
+
+
+
+dXu,ifτ <u<θ,
+X−
+(ˆXτ +Xθ−−Xτ),ifu=θandτ <θ≤T,
+0,else.
+The goal of this construction is to align the paths ofu↦→Y t,y,Xu andu↦→Y t,y′,ˆXu at a chosen time
+τ, allowing for their comparison and the derivation of bounds for inequality (10).
+0.00 0.20 0.40 0.60 0.80 1.00
+Time
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+1.2Value
+Yt, y′, X
+Yt, y, X
+Figure 2: Illustration ofY t,y,X andY t,y′,~X sample paths in the scenario wherey < y′,τ < θ < T
+and ∆Xu +Y t,y,Xu −Y t,y′,ˆXu <X− ˆXτ−.
+Therefore, we obtain the following inequality
+vi(t,x,y′)−v i(t,x,y)≤ε+R 1 +R 2 +R 3 +R 4 +R 5 +R 6, (10)
+where
+R1 =E
+[∫ T
+t
+ψIu( ˇYt,y′,~Xu− )d~Xcu−∫ Tt ψIu( ˇYt,y,Xu− )dXcu]≤0,
+R2 =E
+[ ∑
+t≤u<τ;∆Xu>0
+ΦIu(Yt,y′,~Xu )−Φ Iu( ˇYt,y′,~Xu− )]−E[ ∑
+t≤u<τ;∆Xu>0
+ΦIu(Yt,y,Xu )−Φ Iu( ˇYt,y,Xu− )],
+R3 =E
+[
+ΦIτ (Yt,y′,~Xτ )−Φ Iτ ( ˇYt,y′,~Xτ− )]−E[ΦIτ (Yt,y,Xτ )−Φ Iτ ( ˇYt,y,Xτ− )],
+R4 =E
+[
+1 l{ξ≥0}(ΦIT (Yt,y′,~XT− +ξ)−Φ IT (Yt,y,XT− ))],
+R5≤E
+[
+1 l{ξ<0}(ΦIθ( ˇYt,y′,~Xθ− + ∆~Xθ)−Φ Iθ( ˇYt,y,Xθ− + ∆Xθ))]≤0.
+12
+We begin with finding an upper bound forR 2. Denote byu k ∈[t,τ[ the jump times ofX.
+Note thaty↦→Φ Iu(y) is non-decreasing onR. An application of the comparison property ofY(see
+Lemma 1) yields ˇYt,y,Xu− ≤ ˇYt,y′,~Xu− ≤ ˇYt,y′,Xu− , for allu<τ. Therefore,
+R2≤E
+[ ∑
+t≤uk<τ
+ΦIuk (Yt,y′,Xuk )−Φ Iuk (Yt,y,Xuk )]
+≤E
+[ ∑
+t≤uk<τ
+ΦIuk (Yt,y,Xuk +γuk)−Φ Iuk (Yt,y,Xuk )], (11)
+withγ u := ˇYt,y′,Xu − ˇYt,y,Xu ≥0, for allu∈[t,τ[. It follows from the dynamics ofYthat
+d( ˇYt,y′,Xu − ˇYt,y,Xu )c
+=c
+( ˇYt,y′,Xu− − ˇYt,y,Xu− )c−1[−(h( ˇYt,y′,Xu− )−h( ˇYt,y,Xu− )) du+ (σ( ˇYt,y′,Xu− )−σ( ˇYt,y,Xu− )) dWu]
++ c(c−1)2 ( ˇYt,y′,Xu− − ˇYt,y,Xu− )c−2⏐⏐⏐σ( ˇYt,y′,Xu− )−σ( ˇYt,y,Xu− )⏐⏐⏐2 du
++
+∫
+R
+[( ˇYt,y′,Xu− − ˇYt,y,Xu− +q( ˇYt,y′,Xu− ,z)−q( ˇYt,y,Xu− ,z))c−( ˇYt,y′,Xu− − ˇYt,y,Xu− )c]M(du,dz)
++
+∫
+R
+c
+( ˇYt,y′,Xu− − ˇYt,y,Xu− )c−1(q( ˇYt,y′,Xu− ,z)−q( ˇYt,y,Xu− ,z))λuν(dz) du,
+for allu∈[t,T] andc>0. Using Assumption (A4) that for all jump timesu k∈[t,τ[,
+E[|γuk|c]≤|y ′−y|+L ′E[∫ uk
+0
+|Yt,y,Xu− −Y t,y′,Xu− |c du].
+withL′ >0. Thanks to the Gr¨ onwall inequality, we can then assert that
+E[|γuk|c]≤|y ′−y|eLT.
+Applying the inequality (1+x)γ−1≤γx+C γxγ withγ= β+1β >1 andC γ := supx>0 (1+x)γ−1−γxxγ ≥
+0 forx>−1 (see Hardy, Littlewood, and P´ olya [29, Chapter 3]), we obtain
+ρy(ξ) =
+m∑
+i=1
+Cyi E[((1 + ξFi(a))γ−1)2] 12≤ m∑i=1Cyi(2γ2 E[ξ2]Fi(a)2 + 2C2γ E[|ξ|2γ]Fi(a)2γ ) 12.(12)
+Lemma 3 combined with (11) and iterated expectations yields
+R2≤E
+[ ∑
+t≤uk<τ
+ρy(γuk)
+]
+≤Tρ ′y(|y′−y|),
+whereρ′y :ξ↦→ ∑mi=1Cyi( 2γ2 E[ξ2]Fi(a)2 + 2C2γ E[|ξ|2γ]Fi(a)2γ ) 12 . Similarly, we have that
+R3≤ρ′y(|y′−y|)
+sincey↦→Φ Iu(y) is non-decreasing onR, and ˇYt,y,Xτ− ≤ ˇYt,y′,~Xτ− ≤ ˇYt,y′,Xτ− , foru < τ. The second
+inequality follows directly from Lemma 1. We turn to finding an upper bound forR 4. Notice that
+we haveR 5 = 0 wheny ′≤y. Ify ′ >y, thenE[ξ]≤y ′−y. In this case,
+R4≤E
+[
+ΦIT (Yt,y,XT +γT +ξ)−Φ IT (Yt,y,XT )].
+Observe thatξsatisfies the conditions of Lemma 3 due to the strong solution result in Proposition
+13
+2.1, and that the admissible controls have bounded variations. Therefore,
+R4≤E
+[
+ρy(γτ +γT )
+]
+≤ρ′y(2|y′−y|).
+We conclude this proof by recalling thatζ→ρ y(ζ) is uniformly continuous onR +, for ally≥0.
+3.Finally, we demonstrate the continuity ofvint. Letx∈[0, X],y≥0 and 0≤u < t. Now,
+consider a strategyX∈A u(x) such that
+vi(u,x,y) +ε≥C i(u,x,y,X).
+In the following, we will construct a strategy ˆX∈A s(x) that consists of not doing anything on [s,t[
+and then following the strategyXsimilarly to the previous proof. We introduce theF-stopping
+timeτ, defined by
+τ:= inf
+{
+u≥t: ˇYu,y,ˆXu− ≤y}∧T.
+Let ˆXdefine an admissible strategy inA t(x), such that
+dˆXu =
+
+
+
+(
+∆Xτ +y− ˇYu,y,ˆXτ− )∧(X−x ),ifu=τ,
+dXu,ifτ <u<θ,
+X− ˆXu−,ifu=θ,
+0,ifθ<u≤T,
+where
+θ:= inf
+{
+u≥τ: ˆXu− + ∆Xu≥X}∧T.
+Considering anε-optimal strategyX∈A t(x), we can show that
+vi(u,x,y)−v i(t,x,y)≤C i(u,x,y, ˆX)−C i(t,x,y,X) +ε
+≤E
+[
+Ci(t,x,Y u,y,ˆXt− , ˆX)−C i(t,x,y,X) ] +ε
+≤f(ε),
+with limε→0f(ε) = 0.
+We can combine the uniform continuity ofv i inxwith respect tot, inyuniformly with respect
+totandx, and intto get joint continuity on S.
+Proposition 3.3.The value functionvdefined in(6)is differentiable almost everywhere on Sand
+has finite one-derivatives everywhere.
+Proof.The value functionv i is continuous and monotonic onS, and thus, by Lebesgue’s Theorem, it
+is differentiable almost everywhere for alli∈I m. Therefore, there exists a set of Lebesgue measure
+zero wherev i may not be differentiable. We denote the right and left partial derivatives ofv i with
+respect toxandyas∂ ±xvi and∂±yvi. Based on the proof of Theorem 3.1, we have that
+0≤ vi(t,x+h,y)−v i(t,x,y)h ≤ ρ′y(h)h ,∀(t,x,y,h)∈ S×R +.
+Moreover, it follows that
+lim
+h→0+
+ρ′y(h)
+h =
+m∑
+i=1
+Cyi
+√
+2γ
+Fi(a) <+∞,
+which implies that∂ +xvi is finite onS. Similarly,∂ −xvi is finite. Hence,v i is differentiable inxon S.
+The same argument applies totandy, establishing differentiability in all variables on S.
+14
+4 Viscosity Characterization of the Value Function
+This section aims to provide a PDE characterization of the value functionsv.
+Lemma 4(Dynamic programming principle).For any stopping timeτin[t,T], we have
+vi(t,x,y) =
+inf
+X∈At(x)
+E
+[∫ τ
+t
+ψIu( ˇYt,y,Xu− )dXcu + ∑
+t≤u≤τ
+(
+ΦIu(Yt,y,Xu )−Φ Iu( ˇYt,y,Xu− )) +v(τ,I τ,Xτ,Y t,y,Xτ )],
+where(t,x,y)∈Sandi∈I m.
+Proof.This is an adaptation of the results from Bouchard and Touzi [10], leveraging the continuity
+of the value functionsv i established in Theorem 3.1.
+Building on the problem formulation 2.2, we consider the following Hamilton-Jacobi-Bellman
+Quasi-Variational Inequalities forv, for alli∈I m,
+max
+(
+− ∂vi
+∂t −Lvi−
+∑
+j̸=i
+(vj−vi)Qij,−∂vi∂x − ∂vi∂y −ψi) = 0,onS.(13)
+The partial integro-differential operatorLis given by
+Lφ:= 12σ2(y)∂2φ∂y2−h(y) ∂φ∂y +λt∫R (φ(t,x,y+q(y,z))−φ)ν(dz).
+The boundary/terminal conditions here are specified in (7).
+Remark 4.1.Vectors are assumed to bem-dimensional unless stated otherwise, and all operations
+are performed component-wise. Deviations from these notations must be explicitly specified.
+4.1 Viscosity Solution Property
+As the value functionvmay lack smoothness, it is formulated as a discontinuous viscosity solution
+of a quasi-variational inequalities (13) with appropriate boundary conditions, following Crandall,
+Ishii, and Lions [21].
+Definition 4.1(Viscosity solution).We define a viscosity solution of(13)as follows :
+1.vis a continuous viscosity supersolution (resp. subsolution) of(13)onI m×Sif it satisfies
+the growth conditions(8), and if
+max
+(
+−
+(∂φ
+∂t +Lφ+
+∑
+j̸=i
+(vj−vi)Qij
+)
+(t,x,y),−
+(∂φ
+∂x +∂φ∂y +ψi)(t,x,y))≥0 (resp.≤),(14)
+for any(i,t,x,y)∈I m×Sand any smooth test functionφ∈C 1,2(S)such that(v i−φ)attains
+a local minimum (resp. maximum) at(t,x,y)over the set[t,t+δ[×[x,x+δ[×B δ(y)⊂Sfor
+someδ >0, with(v i−φ)(t,x,y) = 0.
+2.vis a continuous viscosity solution onI m×Sif it is both a viscosity supersolution and subso-
+lution of(13).
+Next, we prove that the value function is a viscosity solution as defined in Definition 4.1.
+Theorem 4.1.The value functionvdefined in(6)is a viscosity subsolution of(13).
+Proof.Refer to Appendix B.1.
+Theorem 4.2.The value functionvdefined in(6)is a viscosity supersolution of(13).
+Proof.Refer to Appendix B.2.
+15
+4.2 Uniqueness Result
+The continuity ofvestablished in Theorem 3.1, together with the results of Theorems 4.1 and 4.2,
+and the at most polynomial growth of the power function, show thatvis a viscosity solution of (13).
+Although the techniques used to prove the comparison theorem are standard, the regime switching
+and jump terms render it nontrivial, motivating us to present the full argument here.
+Theorem 4.3(Strong comparison principle).Ifv i is a continuous viscosity subsolution of(13)
+andw i is a continuous viscosity supersolution of(13), such that
+vi(t,X,y)≤w i(t,X,y),andv i(T,x,y)≤w i(T,x,y),
+for all(i,t,x,y)∈I m×S, thenv i≤w i onS.
+Proof.Letβ >0 such that
+lim
+y→+∞
+max
+i∈Im
+Φi(y+ X−x)−Φ i(y)
+yβ = 0,∀(x,y)∈[0, X]×R +.(15)
+The existence of such a constantβfollows from Assumption (A1). Leti∈I m, and defineφ i :S→R
+such that
+φi(t,x,y) :=−e −ct((−a1x+a 2)yβ−b 1x+b 2),∀(t,x,y)∈ S,
+wherea 1,a 2,b 1,b 2 andcare positive constants satisfyinga 2 >a 1Xandb 2 >b 1X. Additionally, we
+seta(x) :=−a 1x+a 2 >0, for allx∈[0, X]. Fix an arbitrary pointz:= (t,x,y)∈ S. Hence, we
+obtain the following inequality
+(∂φi
+∂t +Lφi
+)
+(z) =e−ct(c(a(x)yβ−b 1x+b 2)− β(β−1)2 a(x)σ(y)2yβ−2)
++e−ct(−βh(y)a(x)y β−1 +λta(x)∫
+R+
+((y+q(y,z)) β−yβ)ν(dz))
+≥a(x)e−ctyβ(c−β h(y)y − β(β−1)2 σ(y)2y2 − ¯λ∫R+ν(dz)) +ce−cT(−b 1X+b 2)
+≥ce−cT(−b 1X+b 2).
+The final passage follows from the linear growth assumption (A3) onhandσand is true forcbig
+enough. Moreover, knowing thatψ i≥0, we have
+(∂φi
+∂x + ∂φi∂y +ψi)(z) =e−ct(a1yβ +b 1−βa(x)y β−1) +ψi(y)≥ε,
+forε>0 andb 1 big enough compared toa 1 anda 2. Definev i,m :S→Rsuch that
+vi,m :=v i + 1mφi,
+withm∈N ∗. Combining (15) with the continuity ofφ i onS, we get that
+lim
+y→+∞
+1
+mφi(t,x,y) + Φ i(y+ X−x)−Φ i(y) =−∞,∀(t,x)∈[0,T]×[0, X].
+Note that∑j̸=i(φj−φi)Qij = 0. Therefore,v i,m is a strict subsolution of equation (14) in the sense
+that it satisfies
+max
+(
+− ∂vi,m
+∂t −Lvi,m−
+∑
+j̸=i
+(φj−φi)Qij,− ∂vi,m∂x − ∂vi,m∂y −ψi)≤− εm <0,onS.(16)
+16
+Toward Ishii’s lemma.Our goal is to show thatϱ:= sup z∈Svi,m(z)−w i(z)≤0. Suppose on
+the contrary thatϱ>0. Based on the growth condition (8), we know that
+vi(z)≤Φ i(y+ X−x)−Φ i(y),∀z∈S.
+Therefore,
+lim
+x→X
+vi,m−wi≤0.
+Additionally, using the previous results, we get,
+lim
+y→+∞
+vi,m−wi =−∞, and limt→Tvi,m−wi≤0.
+This means that the supremum is attained an interior pointz 0 := (t 0,x 0,y 0)∈ O⊂ S, with
+O:=]0,T[×]0, X[×]0,Y[. In other words, we haveϱ=v i,m(z0)−w i(z0). Letk≥1 and define, for
+all (t,x,y,y ′)∈S×R +,
+Hk(t,x,y,y ′) :=v i,m(t,x,y)−w i(t,x,y′)−d k(y,y′),
+whered k(y,y′) := k2|y−y ′|2. Defineϱ k := sup
+O×[0,Y]
+Hk(t,x,y,y ′). SinceH k is continuous and co-
+ercive, its supremum is attained at some point ( ˆtk,ˆxk,ˆyk,ˆy′k)∈ O×[0, Y]. By means of the
+Bolzano–Weierstrass theorem, there exists a subsequence ( ˆtnk,ˆxnk,ˆynk,ˆy′nk) that converges to a
+point (ˆt0,ˆx0,ˆy0,ˆy′0)∈O×[0, Y] ask→+∞. In the following, we will continue usingkas an index
+instead ofn k to avoid the proliferation of indices. Forklarge enough, we can then assume that
+ˆtk <T,and ˆxk >0. Consider the following inequality
+Hk(ˆt0,ˆx0,ˆy0,ˆy0)≤H k(ˆtk,ˆxk,ˆyk,ˆy′k).
+In particular, we have
+k
+2|ˆyk−ˆy′k|2≤−v i,m(ˆt0,ˆx0,ˆy0) +wi(ˆt0,ˆx0,ˆy0) +vi,m(ˆtk,ˆxk,ˆyk)−w i(ˆtk,ˆxk,ˆy′k).
+Asv i,m andw i are continuous on the compact setO, there existsC >0 such that
+|ˆyk−ˆy′k|2≤ Ck.(17)
+Lettingkgo to +∞, we find ˆy 0 = ˆy′0. Finally, we show thatϱ k tends toϱwhenkgoes to +∞. Note
+that
+ϱ=v i,m(z0)−w i(z0) =H k(t0,x 0,y 0,y 0)≤H k(ˆtk,ˆxk,ˆyk,ˆy′k).
+Therefore,ϱ≤ϱ k. Moreover, we have
+ϱk =v i,m(ˆtk,ˆxk,ˆyk)−w i(ˆtk,ˆxk,ˆy′k)− k2|ˆyk−ˆy′k|2≤v i,m(ˆtk,ˆxk,ˆyk)−w i(ˆtk,ˆxk,ˆy′k).
+Sincev i,m andw i are continuous onS, we get that
+lim
+k→+∞
+vi,m(ˆtk,ˆxk,ˆyk)−w i(ˆtk,ˆxk,ˆy′k) =v i,m(ˆt0,ˆx0,ˆy0)−w i(ˆt0,ˆx0,ˆy0)≤ϱ.
+We conclude that limk→+∞ϱk =ϱand lim k→+∞|ˆyk−ˆy′k|2 = 0. Moreover, we have
+vi,m(ˆt0,ˆx0,ˆy0)−w i(ˆt0,ˆx0,ˆy0) =ϱ.
+17
+Ishii’s lemma.We now apply Theorem 3.2 from Crandall, Ishii, and Lions [21] at the point
+(ˆtk,ˆxk,ˆyk,ˆy′k), ensuring the existence ofM,M ′∈Rsuch that
+(−k−∥A∥0
+0−k−∥A∥
+)
+≤
+( M0
+0−M ′
+)
+≤A+ 1kA2,
+withA=D 2dk(ˆyk,ˆy′k) =
+( k−k
+−k k
+)
+. LetKandIbe the operators defined by
+K[p,M](y) := σ2(y)2 M−h(y)p,andI[g](t,x,y) := ∫R(g(t,x,y+q(y,ζ))−g(t,x,y))ν(dζ).(18)
+Using the relationship between superjets and Definition 4.1 of viscosity supersolutions, along with
+inequality (16), we deduce from Ishii’s Lemma that
+ε/m≤min
+(
+K[∂dk
+∂y (ˆyk,ˆy′k),M](ˆyk) +λ ˆtkI[vi,m](ˆtk,ˆxk,ˆyk), ∂dk∂y (ˆyk,ˆy′k) +ψi(ˆyk)),(19)
+0≥min
+(
+−K[ ∂dk
+∂y′ (ˆyk,ˆy′k),−M′](ˆy′k) +λ ˆtkI[wi](ˆtk,ˆxk,ˆy′k),− ∂dk∂y′ (ˆyk,ˆy′k) +ψi(ˆy′k)).(20)
+From the second inequality, we have two cases:
+1.− ∂dk∂y′ (ˆyk,ˆy′k) +ψi(ˆy′k)≤0.
+2.−K[ ∂dk∂y′,−M′](ˆy′k) +λ ˆtkI[wi](ˆtk,ˆxk,ˆy′k)≤0.
+In the first case, we haveψ i(ˆy′k)≤ ∂dk∂y′ (ˆyk,ˆy′k). Applying inequality (19), it follows that
+ε
+m≤ ∂dk∂y (ˆyk,ˆy′k) +ψi(ˆyk)−ψ i(ˆy′k) +ψi(ˆy′k)
+≤ ∂dk
+∂y (ˆyk,ˆy′k) +∂dk∂y′ (ˆyk,ˆy′k) +ψi(ˆyk)−ψ i(ˆy′k)
+≤ψ i(ˆyk)−ψ i(ˆy′k).
+Sinceψ i is continuous at ˆy0, it follows that limk→+∞ψi(ˆyk)−ψ i(ˆy′k) = 0, which leads to a contra-
+diction. In the second case, applying inequality (19) once more yields
+1
+2(Mσ(ˆyk)2−M′σ(ˆy′k)2)−k(h(ˆyk)−h(ˆy′k))(ˆyk−ˆy′k) +λ ˆtk(I[vi,m](ˆtk,ˆxk,ˆyk)−I[w i](ˆtk,ˆxk,ˆy′k))
+=K[ ∂dk
+∂y (ˆyk,ˆy′k),M](ˆyk) +λ ˆtkI[vi,m](ˆtk,ˆxk,ˆyk) +K[∂dk∂y′ (ˆyk,ˆy′k),−M′](ˆy′k)−λ ˆtkI[wi](ˆtk,ˆxk,ˆy′k)
+≥ εm.
+Using the continuity ofh,λ,v i,m andw i, we deduce that
+ε
+m≤λ ˆt0 (I[vi,m]−I[w i]) (ˆt0,ˆx0,ˆy′0) + limk→+∞ 12⟨( M00−M ′ ) (σ(ˆyk),σ(ˆy′k))T,(σ(ˆyk),σ(ˆy′k))⟩
+≤λ ˆt0I[H0](ˆt0,ˆx0,ˆy0) + limk→+∞ 12⟨(A+ 1kA2)(σ(ˆyk),σ(ˆy′k))T,(σ(ˆyk),σ(ˆy′k))⟩,
+withH 0(t,x,y) :=H 0(t,x,y,y), for all (t,x,y)∈S. By definition ofρ=H 0(ˆt0,ˆx0,ˆy0), we get
+H0(ˆt0,ˆx0,ˆy0 +q(y 0,ζ))−H 0(ˆt0,ˆx0,ˆy0)≤0,∀ζ∈R.
+18
+Consequently, it follows thatI[H 0](ˆt0,ˆx0,ˆy0)≤0 and
+ε
+m≤limk→+∞
+1
+2
+⟨(
+A+ 1kA2)(σ(ˆyk),σ(ˆy′k))T,(σ(ˆyk),σ(ˆy′k))⟩ = limk→+∞ 32k(σ(ˆyk)−σ(ˆy′k))2≤ 32C.
+The last equality follows from the Lipschitz continuity ofσand inequality (17). Sinceεis arbitrary,
+this results in a contradiction, thereby concluding the proof.
+4.3 The Free Boundary Problem
+The value functionv i is differentiable almost everywhere by Proposition 3.3. LetN i denote the set
+of Lebesgue measure zero wherev i may not be differentiable. We now define the associated free
+boundary.
+Definition 4.2.We define the exercise regionE i := int(Ediffi )as the closure of the interior of the
+setE diffi , with
+Ediffi :={(t,x,y)∈S\N i :− ∂vi∂x − ∂vi∂y −ψi = 0},
+and we define the continuation regionC i :=S\E i as its complement.
+We now study the geometry of the free boundary∂E i :=Ci∩E i separating the continuation
+regionC i and the exercise regionE i.
+Lemma 5(Partial smooth-fit principle).For all(t 0,x 0,y 0)∈ S\N i, the mappings
+y↦→∂ xvi(t0,x 0,y)andx↦→∂ yvi(t0,x,0)
+are continuous almost everywhere onR + and on the interval[0, X], respectively.
+Proof.We know thatv i is jointly continuous on Sand uniformly continuous in the variabley.
+Additionally, the mapx↦→v i(t,x,y) is differentiable for almost eachx∈[0, ¯X]. Define, forh̸= 0,
+Dh(t,x,y) := vi(t,x+h,y)−v i(t,x,y)h ,∀z∈ S\N i.
+Based on the proof of Theorem 3.1, we have that
+|Dh(t,x,y)−D h(t,x,y′)|≤ w(|y−y ′|)|h| ,
+withwa continuous function onR +. Hence, the family{D h}h is equicontinuous inyon compact
+subsets ofS. Given the pointwise convergenceD h →h→0 ∂xvi almost everywhere, the equicontinuity
+and uniform boundedness iny, the Arzel` a-Ascoli Theorem ensures uniform convergence inyover
+compact subsets of S, for almost everyx∈[0, X]. Hence,∂ xvi is the uniform limit of continuous
+functions inyandy↦→∂ xvi(t,x,y) is continuous almost everywhere onR +.
+Similarly, the mapx↦→∂ yvi(t,x,0) is continuous almost everywhere on [0, X]. This follows from
+a combination of Rademacher’s Theorem and the fact that the difference quotients for (t,x)↦→
+∂yvi(t,x,0) converge uniformly inxon compact sets due to the joint continuity ofv i and uniform
+bound inxwith respect tot. This concludes the proof.
+Proposition 4.1(Connectedness).Assume thatψ i is continuous, that the interiors ofC i andE i
+are non-empty, and thatσ+λ>0. Then, for eachi∈I m, the free boundary∂E i is non-empty and
+path-connected. Moreover, if(t,x,y)∈E i, then
+(t,x,y′)∈E i for all0≤y ′≤y,and(t,x ′,0)∈E i for all0≤x ′≤x.
+Proof.As ˚Ci and ˚Ei are non-empty, we can considerz 0 := (t0,x 0,y 0)∈ ˚Ei be an interior point of
+Ei. By contradiction, we suppose that{0< y < y 0 : (t0,x 0,y)∈C i}is non-empty. Being interior
+19
+points, each admits a neighborhood fully contained inC i orE i, respectively. Define the boundary
+pointz 1 := (t0,x 0,y 1) withy 1 :=y 0−δ. Letδ:= sup{0<y <y 0 : (t0,x 0,y)∈C i}andδ ′ >0 such
+that{(t 0,x 0,y) :y 0−δ−δ ′ <y <y 0−δ}⊂C i. Defineε:= min{δ,δ ′}. The following holds,
+Oc :={(t 0,x 0,y) :y 0−δ−ε<y <y 0−δ}⊂C i,andO e :={(t 0,x 0,y) :y 0−δ <y <y0−δ+ε}⊂E i.
+Figure 3 provides a graphical representation of the previously defined sets.
+0.0 0.3 0.6 0.9 1.2
+x
+0.0
+0.3
+0.6
+0.9
+1.2y
+i
+i
+i
+c e
+(t0, x0, y0 )
+(t0, x0, y0 ′)
+(t0, x0, y0)
+Figure 3: Illustration ofO e andO c.
+In this setting, define the functionf 0 :O c∪Oe∪{(t 0,x 0,y 1)}→Rsatisfying
+f0(t0,x 0,y) :=
+{
+−∂+xvi(t0,x 0,y 1)−∂ −yvi(t0,x 0,y)−ψ i(y),ify <y 1.
+−∂+xvi(t0,x 0,y 1)−∂ +yvi(t0,x 0,y)−ψ i(y),ify≥y 1. (21)
+Given thatf 0(t0,x 0,y 1) = lim infy→y1+f0(t0,x 0,y) = 0, two scenarios may arise:
+lim inf
+y→y1−
+f0(t0,x 0,y)<η 0 <0,or lim infy→y1−f0(t0,x 0,y) = 0.
+Case 1.lim inf y→y1−f0(t0,x 0,y)<η 0 <0.
+Define the functionφ ε :S→R, forε>0 andz∈S, as
+φε(z) :=v i(z1)+∂ +t vi(z1)(t−t 0)+∂ +xvi(z1)(x−x 0)−(∂ +xvi(z1)+ψi(y1)+ η02 )(y−y 1)− 12ε(y−y 1)2.
+Sincev i is continuous and non-decreasing function iny, it holds, as established in Rudin [46], that
+lim sup
+y→y−1
+∂−yvi(t0,x 0,y)≤∂ −yvi(t0,x 0,y 1) and∂ +yvi(t0,x 0,y 1)≤lim infy→y +1 ∂+yvi(t0,x 0,y).
+Using Taylor’s expansion, we have that fort≥t 0,x≥x 0 and∥z−z 1∥small enough,
+vi(z)−φ ε(z)≤g i(z)(y−y 1) + o(∥z−z 1∥),
+whereg i :S→Rare non-positive and defined, for allz∈S, as
+gi(z) :=
+{
+−lim infy→y1−f0(t0,x 0,y) + η02 ify <y 1,
+η0
+2 else.
+Sinceg i(z)(y−y 1)< η02|y−y 1|<0, thenφ ε is a test function inC 2(S) such thatz 1 achieves a
+local maximum ofv i−φ ε andv i(z1) =φ ε(z1). Using Theorem 4.2, we get thatv i is a viscosity
+20
+subsolution of (13). Therefore,
+max
+(
+−
+(∂φε
+∂t +Lφε +
+∑
+j̸=i
+Qij(vj−φε)
+)
+(z1),−
+(∂φε
+∂x + ∂φε∂y +ψi)(z1))≤0.
+We know that
+Lφε(z1) =− 12εσ2(y1)−(∂+xvi(z1)+ψi(y1)+η02)(h(y1)+λt∫Rq(y1,z)ν(dz))− 12ελt∫Rq2(y1,z)ν(dz).
+Hence, we have limε→0−Lφε(z1) = +∞, while−
+(
+Lφε +∑j̸=iQij(vj−vi))(z1)≤0 which leads to
+a contradiction and the initial assumption does not hold true.
+Case 2.lim inf y→y1−f0(t0,x 0,y) = 0.
+Since lim infy→y1−f0(t0,x 0,y)≤lim sup y→y1−f0(t0,x 0,y)≤0, then lim y→y1−f0(t0,x 0,y) =f 0(t0,x 0,y 1).
+Hence,y↦→f 0(t0,x 0,y) is left-continuous iny 1. The fact thatf 0(t0,x 0,y)<0 for almost every
+y <y1, combined withf 0(t0,x 0,y 1) = 0, and the left-continuity off 0, implies the existence ofδ 0 >0
+such thaty↦→f 0(t0,x 0,y) is increasing on [y 1−δ0,y 1]. Moreover, sinceψ i is continuous onR +, then
+y↦→∂ −yvi(t0,x 0,y) is also continuous on the interval [y 1−δ 0,y 1]. Given thatψ i is non-decreasing
+onR + and positive, and that
+∂−yvi(t0,x 0,y)≥0,∀y >0,
+we conclude that forf 0 to vanish atz 1, the functiony↦→∂ −yvi(t0,x 0,y) must be decreasing on
+[y1−δ 0,y 1],otherwisef 0 would remain negative inz 1. Therefore, the mapy↦→v i(t0,x 0,y) is
+strictly concave on [y 1−δ 0,y 1], since the existence of a decreasing left derivative implies strict
+concavity (see Rockafellar [45, Theorem 24.1]). This means that fory 2∈]y1−δ 0,y 1[, there exists
+c>0 such that, for ally∈]y 1−δ 0,y 1[,
+vi(t0,x 0,y)<v i(t0,x 0,y 2) +c(y−y 2).
+For anyε>0, define the function ~φε :S→Rby
+~φε(z) :=v i(z2) +∂ +t vi(z2)(t−t 0) +∂ +xvi(z2)(x−x 0) +c(y−y 2)− 12ε(y−y 2)2.
+It follows thatv i−~φε is negative with respect toyin a neighborhood ofz 2, excludingz 2 itself. In
+particular, ~φε∈C 2(S) strictly dominatesv i locally aroundz 2. Repeating the same reasoning as in
+the previous case thus leads to a contradiction.
+Similarly, we have that
+(t,x,0)∈E i ⇒(t,x ′,0)∈E i for all 0≤x ′≤x.
+As a result, the exercise region always lies below the continuation region with respect to the volume
+variable. That is, for any fixed (t 0,x 0)∈[0,T]×[0, X], it is not possible to have 0≤y 1 <y 2 <y 3
+such that{(t 0,x 0,y) :y 2 < y < y3}⊆E i while simultaneously{(t 0,x 0,y) :y 1 < y < y2}⊆C i.
+A similar argument establishes that the exercise region is always to the left of the continuation
+regionC i in terms of the inventory dimension wheny= 0. Consequently, the free boundary must
+be connected.
+Remark 4.2.The non-emptiness assumption in Proposition 4.1 is not restrictive, as it merely
+excludes trivial cases whereS=E i orS=C i.
+5 Approximation Scheme
+We introduce a numerical scheme to solve the PIDE (13), employing a discretization approach
+that ensures stability and accuracy in approximating the integral-differential operator. We apply
+a standard finite difference scheme to discretize the differential terms while handling the integral
+21
+term using a suitable quadrature rule, following the approach of Cont and Voltchkova [20] in the
+finite activity case.
+Discretization.The time domain [0,T] is discretized intoN T steps with ∆t:=T/N T , such that
+tn :=T−n∆t, withn∈ {0,...,N T}. To ensure numerical feasibility, we localizey, which is
+normally inR +, by restricting it to a bounded domain of size Y. The state space is discretized into
+NX andN Y steps, respectively. The spatial domain is discretized into (N X + 1)×(N Y + 1) grid
+points. The spatial step sizes are defined as ∆x:= X/NX and ∆y:= Y/NY , leading to the spatial
+grid points
+(xk,yl) := ((k−1)∆x,(l−1)∆y),∀(k,l)∈I NX+1×INY +1.
+A function evaluated at a grid pointtn is denoted with the superscriptn. The matrixv n := (vni )i∈Im
+has entries representingv ni :=(vni (xk,yl))(k,l)∈INX +1×INY +1.
+Finite Difference Scheme.The scheme follows a fully implicit-explicit method to ensure sta-
+bility. The HJBQVI is discretized, for alli∈I m andn∈{1,...,N T−1}, as
+max
+(
+− vn+1i −vni
+∆t −Jv ni −Iv n+1i −∑j̸=i(vn+1j −vn+1i )Qn+1ij ,− ∂vn+1i∂x − ∂vn+1i∂y −ψi) = 0,
+withJ(g) :=K[ ∂g∂y, ∂2g∂y 2 ] = σ2(y)2 ∂2g∂y 2−h(y) ∂g∂y , and the operatorsKandIare defined in (18). The
+first-order derivatives are approximated as
+∂vni
+∂x (xk,yl)≈ vni (xk+1,yl)−v ni (xk,yl)∆x ,and ∂vni∂y (xk,yl)≈ vni (xk,yl+1)−v ni (xk,yl)∆y ,
+for all (k,l)∈{1,...,N X}×{1,...,N Y}. The second-order derivative is discretized using a centered
+finite difference scheme for interior points, while first-orderNeumann conditionsare imposed at the
+boundaries. In other words, for allk∈I NX+1,
+∂2vni
+∂y2 (xk,yl)≈
+
+
+
+vni (xk,y3)−2vni (xk,y2)+vni (xk,y1)
+∆y2 ,ifl= 1,
+vni (xk,yl+1)−2vni (xk,yl)+vni (xk,yl−1)
+∆y2 ,if 2≤l≤N Y,
+vni (xk,yNY +1)−2vni (xk,yNY )+vni (xk,yNY−1)
+∆y2 ,ifl=N Y + 1.
+The integral term inIis discretized using a trapezoidal quadrature scheme, such that for all
+(k,l)∈I NX+1×INY +1, we have
+Ivni (xk,yl)≈λ tn
+NZ∑
+p=1
+wp
+(
+vni (xk,yl +q(yl,zp))−v ni (xk,yl)),
+wherez p are quadrature points, andw p are corresponding quadrature weights such that∑NZp=1wp =∫
+Rν(dz). Sinceq(y l,zp) does not necessarily coincide with a grid point, interpolation is necessary.
+In such cases, the shifted valuey l +q(yl,zp) is approximated using linear interpolation between the
+closest grid pointsy j andy j+1, satisfyingy l +q(y l,zp)∈[y j(p),yj(p)+1]. The interpolation formula
+is given byv ni (xk,yl +q(yl,zp))≈v n,pi (xk,yl), with
+vn,pi (xk,yl) := (1−α p)vni (xk,yj(p)) +αpvni (xk,yj(p)+1),
+whereαp =
+yl+q(yl,zp)−yj(p)
+yj(p)+1−yj(p) . Substituting this into the discretized integral, we obtain the formulation
+Ivni (xk,yl)≈λ tn
+NZ∑
+p=1
+wp
+(
+vn,pi (xk,yl)−v ni (xk,yl)),∀(k,l)∈I NX+1×INY +1.
+22
+Note that we handle the integral part using an implicit time-stepping approach to circumvent the
+inversion of the dense matrixI. DefineF ni andG ni such that
+Fni (xk,yl) :=(− vni −vn−1i∆t −Jv n−1i −Iv ni −∑j̸=i(vnj−vni )Qnij)(xk,yl),∀(k,l)∈I NX+1×INY +1,
+Gni (xk,yl) :=− vni (xk+1,yk)−v ni (xk,yl)∆x − vni (xk,yl+1)−v ni (xk,yl)∆y −ψi(yl),∀(k,l)∈I NX×INY.
+Since max(Fni ,Gni ) = 0, we define theactive regionas
+Eni ={(x k,yl)∈[0, X]×[0, Y] :F ni (xk,yl)<G ni (xk,yl)},
+and thepassive regionas
+Cni ={(x n,yn)∈[0, X]×[0, Y] :F ni (xn,yn)≥G ni (xn,yn)}.
+Rearranging for all grid points inE n+1i results in a linear system formulated as
+((
+Im+∆tQn+1))⊗Im)vn+1+∆tλtn+1
+NZ∑
+p=1
+wp(Im⊗Im)(vn+1,p−vn+1) =((Im−∆tA)⊗Im)vn,(22)
+whereI m is the identity matrix of sizem×m. The matrixAis defined as a tridiagonal matrix of
+size (NY + 1)×(N Y + 1) with the structure
+A:=
+
+
+B1 A1 0 0...0
+C2 B2 A2 0...0
+0C 3 B3 A3 ...0
+... ... ... ... ... ...
+0 0 0C NY BNY ANY
+0 0 0 0C NY +1 BNY +1
+
+.
+The coefficientsA l,Bl andC l are defined, forl= 1 andl=N y + 1, as
+A1 := σ2(y1)2∆y2 ,B 1 :=− σ2(y1)∆y2 ,B NY +1 :=− σ2(yNY +1)∆y2 ,andC NY +1 := σ2(yNY +1)∆y2 .
+Forl∈{2,...,N Y},
+Al := σ2(yl)2∆y2 − h(yl)2∆y,B l :=− σ2(yl)∆y2 andC l := σ2(yl)2∆y2 + h(yl)2∆y.
+On the hand, if we are inC n+1i , we have, for all (k,l)∈I NX×INY ,
+−vn+1i (xk+1,yl)−v n+1i (xk,yl)∆x − vn+1i (xk,yl+1)−v n+1i (xk,yl)∆y −ψn+1i (yl) = 0.
+The boundary and terminal conditions are enforced explicitly, ensuring that
+vNTi (xk,yl) = Φni (yl +X−x k)−Φ ni (yl),andv ni (xNX+1,yl) = 0,∀(k,l)∈I NX+1×INY +1.
+To ensure numerical stability, we impose a Courant-Friedrichs-Lewy (CFL) condition
+∆t≤Cmin{(∆x) 2,(∆y) 2},
+whereCis a positive constant.
+We select the time step based on a reference spatial scale proportional to the domain’s upper
+23
+bound. This follows Morton and Mayers [35] and ensures stability in regions with steep gradients.
+The following algorithm summarizes the time-stepping scheme.
+Algorithm 1Time-Stepping Scheme for PIDE Solution
+1:Initialize:Set terminal conditionv NTi (x,y) = ΦNTi (y+ X−x)−Φ NTi (y).
+2:forn=N T to 1do
+3:Findv n−1 that solves the linear system (22):F n = 0.
+4:fori=mto 1do
+5:Updatev n−1i :v n−1i (x,y)← −infa∈{0,...,X−x}vn−1i (x+a,y+a) + Φ i(y+a)−Φ i(y).
+6:Find the regionsE n−1i andC n−1i .
+7:end for
+8:end for
+9:Output:Approximate solutionv ni (x,y).
+6 Numerical Results
+In this section, we analyze the optimal trading strategy using the numerical scheme detailed in
+Section 5. We examine various limit order book shapes and illustrate the structure of the optimal
+exercise and continuation regions for each case. In this numerical study, we define the coefficients
+in a multiplicative form as
+h(y) =cy, σ(y) =dy,andq(y,z) =eyz,∀y,z∈R +,
+wherec,dandeare non-negative constants. The controlledvolume effectprocess (4) in this ex-
+ample satisfies both Lipschitz continuity and linear growth assumptions. Here, the drift term is
+proportional toy, ensuring a Geometric Brownian Motion (GBM) structure, the diffusion coeffi-
+cient scales with the process to maintain a normal-type distribution, and the jump term remains
+proportional to the current state. We assume that the jumps, which correspond to block trades
+by external agents, follow an exponential distribution, meaning that the L´ evy measureνtakes the
+form
+ν(dz) =ηe −ηz 1 {z>0}dz,∀z∈R,
+whereη >0 controls the decay rate of large jumps. This choice is in line with the existing literature
+on the subject, notably Pomponio and Abergel [42]. We propose in this case a price impact model
+in which the trading size influences the price in a concave manner based on the work of Bouchaud,
+Farmer, and Lillo [11]. The shape functions are given by the power law family with
+dFi(x) = κ(x+ 1)γi dx,∀(i,x)∈I m×R +.
+In other words, for all (i,x,y)∈I m×R 2+, the functionsF i andψ i are given by
+Fi(x) =
+
+
+
+κx,ifγ i = 0,
+κlog(x+ 1),ifγ i = 1,
+κ
+1−γi
+[
+(x+ 1) 1−γi−1],else. andψ i(y) =
+
+
+
+y
+κ,ifγ i = 0,
+e
+y
+κ−1,ifγ i = 1,[
+1 + (1−γ i)yκ] 11−γi−1,else.
+We use the following default parameters for all numerical results unless stated otherwise. These
+parameters reflect a square root impact.
+6.1 Single Regime Case
+To isolate the effects of stochastic resilience and liquidity, we first examine the single-regime case,
+where the Markov chainIremains fixed in a single state. This is equivalent to setting the transition
+24
+Parameterc d e η κ γ 0 λ X Y T
+V alue0.5 0.1 0.2 1.0 0.8 -1 0.5 4 5 4.0
+Table 1: Default parameter values.
+rate matrixQto zero, making each state absorbing. By doing so, we can analyze the impact of
+stochasticvolume effectindependently from the influence of changing liquidity regimes.
+First, we examine how the value function responds to changes in various model parameters. The
+plots in Figure 4 illustrate the impact of drifth, jump intensityλ, and volatilityσon execution costs,
+where a lower volume effect corresponds to higher liquidity and improved execution. In particular, a
+higher volatility indicate greater market activity. The left hand side of Figure 4 shows that a higher
+jump intensity leads to less favorable execution opportunities, thereby raising the overall execution
+cost. Likewise, increased volatility in the volume process reflects a dynamic market, helping to
+reduce execution costs. Figure 4 also shows that higher resilience, which reflects a higher mean
+reversion speed, improves execution by accelerating liquidity replenishment.
+0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+t
+8
+10
+12
+14
+16
+18
+20V
+ = 0.25
+ = 0.5
+ = 0.75
+0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+t
+5
+10
+15
+20V
+c = 0.25
+c = 0.5
+c = 0.75
+0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
+t
+7.5
+10.0
+12.5
+15.0
+17.5
+20.0
+22.5V
+d = 0.25
+d = 0.5
+d = 0.75
+Figure 4: Variation of the value function over time under different market conditions with jump
+intensity on the left, resilience in the middle, and volatility on the right.
+Next, we illustrate the optimal execution strategy under the square root price impact model.
+0.0 1.0 2.0 3.0 4.0 5.0
+x
+0.0
+1.0
+2.0
+3.0
+4.0
+5.0y
+Continuation Region
+Exercise Region
+Selected Exercise Point
+T arget Continuation Point
+Figure 5: Illustration of continuation (blue) and exercise (red) regions, plotted against purchased
+quantity (x-axis) and volume effect (y-axis) for X= 5. The arrow shows an impulse shifting a state
+from exercise to continuation alongy=x.
+As the x-axis in Figure 5 represents the quantity already acquired, the continuation region ex-
+pands with increasingx, indicating that larger holdings reduce the urgency to buy more immediately.
+The curved boundary between the regions reflects the trade-off between acquiring now or waiting,
+as price impact increases with trade size but at a decreasing rate. Upon reaching the exercise region,
+the optimal strategy is to purchase the smallest possible amount to reach the continuation region,
+thus reducing market impact in an optimal manner.
+25
+Subsequently, we verify in Figure 6 the validity of the previous results by examining how varia-
+tions affect the exercise and continuation regions.
+0.0 0.8 1.6 2.4 3.2 4.0
+x
+0.0
+0.5
+1.0
+1.5
+2.0
+2.5y
+ = 0.1
+ = 0.3
+ = 0.5
+0.0 0.8 1.6 2.4 3.2 4.0
+x
+0.0
+0.5
+1.0
+1.5
+2.0
+2.5y
+c = 0.25
+c = 0.5
+c = 0.75
+0.0 0.8 1.6 2.4 3.2 4.0
+x
+0.0
+0.5
+1.0
+1.5
+2.0
+2.5y
+d = 0.25
+d = 0.5
+d = 0.75
+Figure 6: Variation of the exercise boundaryx↦→y ∗(T/2,x) under different market conditions with
+jump intensity on the left, resilience in the middle, and volatility on the right.
+The exercise region expands in response to jumps. Indeed, when jump intensity is high, the op-
+timal strategy involves anticipating increased future price impact by executing larger trades earlier.
+Conversely, when the volatility of the process governing the volume effect is high, the optimal policy
+is to acquire fewer shares. This reflects the expectation of more favorable market conditions ahead.
+The same holds when market resilience increases. This outcome aligns with the previous findings
+in Figure 4 and those of Alfonsi, Fruth, and Schied [3].
+6.2 Regime-Switching case
+Next, we extend the analysis to the multi-regime case, where both sources of uncertainty interact.
+We assume a two-state homogeneous Markov chain, with the transition rate matrixQ(t) at time
+t∈[0,T] given by
+Q(t) =
+(−q1 q1
+q2 −q2
+)
+,
+whereq 1 andq 2 are positive constants. We begin by fixingq 1 =q 2 = 0.2 andγ 1 = 0. With
+these parameters set, we will then vary the price impact parameterγ 2 to analyze its effect on the
+continuation and exercise regions of the value functionsv 1 andv 2.
+0.0 0.8 1.6 2.4 3.2 4.0
+x
+0.0
+0.8
+1.6
+2.4
+3.2
+4.0y
+2 = 0
+2 = 0.2
+2 = 0.33
+2 = 0.4
+0.0 0.8 1.6 2.4 3.2 4.0
+x
+0.0
+0.8
+1.6
+2.4
+3.2
+4.0y
+2 = 0
+2 = 0.2
+2 = 0.33
+2 = 0.4
+Figure 7: Variation of the exercise boundaryx↦→y ∗(T/2,x) ofv 1 on the left andv 2 on the right
+under different price impacts.
+Figure 7 illustrates that whenγ 1 < γ2, the trader anticipates costlier execution in regime 2
+and adjusts their strategy accordingly. Indeed, in regime is 1, where the price impact is lower
+than in regime 2, an increase in the parameterγ 2 leads to an expansion of the exercise region
+(in regime 1), as illustrated on the left-hand side of Figure 7. Conversely, the right-hand side of
+Figure 7 shows that if we are in regime 2, where the price impact is higher, the exercise region
+contracts asγ 2 increases. Consequently, the trader increases order sizes in regime 1 to preempt
+higher execution costs associated with a potential switch to regime 2, while in regime 2, the trader
+26
+decreases order sizes in anticipation of a favorable transition to regime 1, where trading conditions
+are more advantageous.
+Next, we study the case where the price impact parameter is set toγ 1 = 0 in regime 1 and
+γ2 = 0.33 in regime 2. We considerq 1 =q 2 =q 0 and vary the values ofq 0. This setup corresponds
+to a scenario where there is an equal probability of being in either regime, but the frequency of
+transitions between regimes changes. The results of this analysis are presented in Figure 8.
+0.0 0.8 1.6 2.4 3.2 4.0
+x
+0.0
+0.6
+1.2
+1.8
+2.4
+3.0y
+q0 = 0
+q0 = 0.1
+q0 = 0.2
+q0 = 0.3
+0.0 0.8 1.6 2.4 3.2 4.0
+x
+0.0
+0.6
+1.2
+1.8
+2.4
+3.0y
+q0 = 0
+q0 = 0.1
+q0 = 0.2
+q0 = 0.3
+Figure 8: Variation of the exercise boundaryx↦→y ∗(T/2,x) ofv 1 on the left andv 2 on the right
+under different regime switching intensities.
+A higher switching intensity expands the exercise region in the low price impact regime (see the
+left-hand side of Figure 8) and contracts it in the high impact regime (see the right-hand side of
+Figure 8). In regime 1, the increased likelihood of a regime shift prompts the trader to execute
+larger order sizes in anticipation of deteriorating execution conditions in the former. In the latter
+(regime 2), the same anticipation leads to smaller order sizes, as the trader expects a transition to a
+more favorable regime. This behavior is consistent with the earlier observation that traders adjust
+their execution strategy based on the expected direction of the regime shift and its impact on future
+trading costs.
+Finally, we analyze the case where the price impact parameter is set toγ 1 = 0 in regime 1 and
+γ2 = 0.33 in regime 2. We fixq 1 = 0.2 and varyq 2, allowing us to study how the asymmetry in
+regime-switching probabilities affects execution.
+0.0 0.8 1.6 2.4 3.2 4.0
+x
+0.0
+0.8
+1.6
+2.4
+3.2
+4.0y
+q2 = 0.1
+q2 = 0.2
+q2 = 0.3
+q2 = 0.4
+0.0 0.8 1.6 2.4 3.2 4.0
+x
+0.0
+0.8
+1.6
+2.4
+3.2
+4.0y
+q2 = 0.1
+q2 = 0.2
+q2 = 0.3
+q2 = 0.4
+Figure 9: Variation of the exercise boundaryx↦→y ∗(T/2,x) ofv 1 on the left andv 2 on the right
+under different asymmetric regime switching intensities.
+Figure 9 confirms our previous findings and highlights the effect of asymmetry in the switching
+dynamics. The exercise region expands in the low-impact regime when the transition rate matrix
+implies a higher long-term probability of remaining in the high-impact regime 2. Conversely, as
+regime 2 becomes more persistent, the exercise region contracts in regime 2 and expands in regime
+1, reflecting adjustments in order sizes based on anticipated execution costs.
+27
+References
+[1] Julia Ackermann, Thomas Kruse, and Mikhail Urusov. “Optimal Trade Execution in an
+Order Book Model with Stochastic Liquidity Parameters”. In:
+SIAM Journal on Financial Mathematics 12.2 (2021), pp. 788–822.doi:
+10.1137/20M135409X.
+[2] Aur´ elien Alfonsi and Pierre Blanc. “Dynamic optimal execution in a mixed-market-impact
+Hawkes price model”. In: Finance and Stochastics 20 (Jan. 2016).doi:
+10.1007/s00780-015-0282-y.
+[3] Aur´ elien Alfonsi, Antje Fruth, and Alexander Schied. “Optimal execution strategies in limit
+order books with general shape functions”. In: Quantitative Finance 10.2 (2010),
+pp. 143–157.doi:10.1080/14697680802595700.
+[4] Robert Almgren. “Optimal Trading with Stochastic Liquidity and Volatility”. In:
+SIAM Journal on Financial Mathematics 3.1 (2012), pp. 163–181.doi:10.1137/090763470.
+[5] Marco Avellaneda and Sasha Stoikov. “High Frequency Trading in a Limit Order Book”. In:
+Quantitative Finance 8 (Apr. 2008), pp. 217–224.doi:10.1080/14697680701381228.
+[6] Peter Bank and Nicole El Karoui. “A stochastic representation theorem with applications to
+optimization and obstacle problems”. In: The Annals of Probability 32.1A (2004),
+pp. 103–136.
+[7] Erhan Bayraktar and Michael Ludkovski. “Optimal Trade Execution in Illiquid Markets”. In:
+Mathematical Finance 21.4 (2011), pp. 681–701.doi:
+https://doi.org/10.1111/j.1467-9965.2010.00446.x.
+[8] Dirk Becherer, Todor Bilarev, and Peter Frentrup. “Optimal liquidation under stochastic
+liquidity”. In: Finance and Stochastics 22.1 (Jan. 2018), pp. 39–68.issn: 1432-1122.doi:
+10.1007/s00780-017-0346-2.
+[9] Dimitris Bertsimas and Andrew W. Lo. “Optimal control of execution costs”. In:
+Journal of Financial Markets 1.1 (1998), pp. 1–50.issn: 1386-4181.doi:
+https://doi.org/10.1016/S1386-4181(97)00012-8.
+[10] Bruno Bouchard and Nizar Touzi. “Weak Dynamic Programming Principle for Viscosity
+Solutions”. In: SIAM Journal on Control and Optimization 49.3 (2011), pp. 948–962.doi:
+10.1137/090752328.
+[11] Jean-Philippe Bouchaud, J. Doyne Farmer, and Fabrizio Lillo. “How Markets Slowly Digest
+Changes in Supply and Demand”. In:
+Handbook of Financial Markets: Dynamics and Evolution. North-Holland, 2009, pp. 57–160.
+doi:https://doi.org/10.1016/B978-012374258-2.50006-3.
+[12] X. Brokmann, E. S´ eri´ e, J. Kockelkoren, and J.-P. Bouchaud. “Slow Decay of Impact in
+Equity Markets”. In: Market Microstructure and Liquidity 01.02 (2015), p. 1550007.doi:
+10.1142/S2382626615500070.
+[13] Luis A. Caffarelli. “The regularity of free boundaries in higher dimensions”. In:
+Acta Mathematica 139.1 (1977), pp. 155–184.doi:10.1007/BF02392236.
+[14] ´Alvaro Cartea and Leandro S´ anchez-Betancourt. “Optimal execution with stochastic delay”.
+In: Finance and Stochastics 27.1 (Jan. 2023), pp. 1–47.issn: 1432-1122.doi:
+10.1007/s00780-022-00491-w.
+[15] Thomas Cay´ e, Martin Herdegen, and Johannes Muhle-Karbe. “Trading with Small
+Nonlinear Price Impact”. In: The Annals of Applied Probability 30.2 (2020), pp. 706–746.
+issn: 10505164, 21688737.
+28
+[16] Etienne Chevalier, Yadh Hafsi, and Vathana Ly Vath. “Optimal Execution under Incomplete
+Information”. In: (2024).doi:10.48550/arXiv.2411.04616.
+[17] Etienne Chevalier, Yadh Hafsi, and Vathana Ly Vath. “Uncovering Market Disorder and
+Liquidity Trends Detection”. In: (2023).doi:10.48550/arXiv.2310.09273.
+[18] Chi Chung Siu, Ivan Guo, Song-Ping Zhu, and Robert J. Elliott. “Optimal execution with
+regime-switching market resilience”. In: Journal of Economic Dynamics and Control 101
+(2019), pp. 17–40.issn: 0165-1889.doi:https://doi.org/10.1016/j.jedc.2019.01.006.
+[19] Katia Colaneri, Zehra Eksi, Rudiger Frey, and Michaela Szolgyenyi. “Optimal liquidation
+under partial information with price impact”. In:
+Stochastic Processes and their Applications 130.4 (2020), pp. 1913–1946.issn: 0304-4149.
+doi:https://doi.org/10.1016/j.spa.2019.06.004.
+[20] Rama Cont and Ekaterina Voltchkova. “A Finite Difference Scheme for Option Pricing in
+Jump Diffusion and Exponential L´ evy Models”. In:SIAM Journal on Numerical Analysis
+43.4 (2005), pp. 1596–1626.doi:10.1137/S0036142903436186.
+[21] Michael Crandall, Hitoshi Ishii, and Pierre-Louis Lions. “User’s Guide to Viscosity Solutions
+of Second Order Artial Differential Equations”. In:
+Bulletin of the American Mathematical Society 27 (July 1992).doi:
+10.1090/S0273-0979-1992-00266-5.
+[22] Felix Dammann and Giorgio Ferrari. “Optimal execution with multiplicative price impact
+and incomplete information on the return”. In: Finance and Stochastics 27.3 (July 2023),
+pp. 713–768.issn: 1432-1122.doi:10.1007/s00780-023-00508-y.
+[23] Donald A. Dawson and Zenghu Li. “Stochastic equations, flows and measure-valued
+processes”. In: The Annals of Probability 40.2 (2012), pp. 813–857.doi:
+10.1214/10-AOP629.
+[24] Ibrahim Ekren and Johannes Muhle-Karbe. “Portfolio choice with small temporary and
+transient price impact”. In: Mathematical Finance 29.4 (2019), pp. 1066–1115.doi:
+https://doi.org/10.1111/mafi.12204.
+[25] Alessio Figalli and Joaquim Serra. “On the fine structure of the free boundary for the
+classical obstacle problem”. In: Inventiones mathematicae 215.1 (2019), pp. 311–366.doi:
+10.1007/s00222-018-0827-8.
+[26] Jean-Pierre Fouque, Sebastian Jaimungal, and Yuri F. Saporito. “Optimal Trading with
+Signals and Stochastic Price Impact”. In: SIAM Journal on Financial Mathematics 13.3
+(2022), pp. 944–968.doi:10.1137/21M1394473.
+[27] Antje Fruth, Torsten Schoneborn, and Mikhail Urusov. “Optimal trade execution in order
+books with stochastic liquidity”. In: Mathematical Finance 29.2 (2019), pp. 507–541.doi:
+https://doi.org/10.1111/mafi.12180.
+[28] Xavier Gabaix. “Power Laws in Economics: An Introduction”. In:
+The Journal of Economic Perspectives 30.1 (2016), pp. 185–205.issn: 08953309.url:
+http://www.jstor.org/stable/43710016(visited on 12/02/2025).
+[29] G. H. Hardy, J. E. Littlewood, and G. P´ olya. “Inequalities”. In: (1952).
+[30] Natascha Hey, Iacopo Mastromatteo, Johannes Muhle-Karbe, and Kevin Webster. “Trading
+with Concave Price Impact and Impact Decay—Theory and Evidence”. In:
+Operations Research 73.3 (2025), pp. 1230–1247.doi:10.1287/opre.2023.0620.
+[31] Ulrich Horst and Xiaonyu Xia. “Multi-dimensional optimal trade execution under stochastic
+resilience”. In: Finance and Stochastics 23.4 (Oct. 2019), pp. 889–923.issn: 1432-1122.doi:
+10.1007/s00780-019-00394-3.
+29
+[32] R. H. Liu. “Optimal stopping of switching diffusions with state dependent switching rates”.
+In: Stochastics 88.4 (2016), pp. 586–605.doi:10.1080/17442508.2015.1110152.
+[33] Guiyuan Ma, Chi Chung Siu, Song-Ping Zhu, and Robert J. Elliott. “Optimal portfolio
+execution problem with stochastic price impact”. In: Automatica 112 (2020), p. 108739.issn:
+0005-1098.doi:https://doi.org/10.1016/j.automatica.2019.108739.
+[34] Ludovic Moreau, Johannes Muhle-Karbe, and H. Mete Soner. “Trading with Small Price
+Impact”. In: Mathematical Finance 27.2 (2017), pp. 350–400.doi:
+https://doi.org/10.1111/mafi.12098.
+[35] K. W. Morton and D. F. Mayers.
+Numerical Solution of Partial Differential Equations: An Introduction. 2nd. Cambridge
+University Press, 2005.isbn: 9780521607933.
+[36] Johannes Muhle-Karbe, Zexin Wang, and Kevin Webster. “Stochastic Liquidity as a Proxy
+for Nonlinear Price Impact”. In: Operations Research 72.2 (2024), pp. 444–458.doi:
+10.1287/opre.2022.0627.
+[37] Anna A. Obizhaeva and Jiang Wang. “Optimal trading strategy and supply/demand
+dynamics”. In: Journal of Financial Markets 16.1 (2013), pp. 1–32.issn: 1386-4181.doi:
+https://doi.org/10.1016/j.finmar.2012.09.001.
+[38] M. Pemy, Q. Zhang, and G. Yin. “Selling a large stock position: a stochastic control
+approach with state constraints”. In: Communications in Information and Systems 7.1
+(2007), pp. 93–110.
+[39] Moustapha Pemy and Na Zhang. “Optimal Liquidation of a Basket of Stocks using
+Reinforcement Learning”. In:
+2023 Proceedings of the Conference on Control and its Applications (CT) (2023), pp. 41–47.
+doi:10.1137/1.9781611977745.6.
+[40] Moustapha Pemy, Qing Zhang, and G. George Yin. “Liquidation of a Large Block of Stock
+with Regime Switching”. In: Mathematical Finance 18.4 (2008), pp. 629–648.doi:
+https://doi.org/10.1111/j.1467-9965.2008.00351.x.
+[41] Huyˆ en Pham. “Optimal stopping, free boundary, and American option in a jump-diffusion
+model”. In: Applied Mathematics and Optimization 35.2 (1997), pp. 145–164.
+[42] Fabrizio Pomponio and Fr´ ed´ eric Abergel. “Trade-throughs: Empirical Facts and Application
+to Lead-lag Measures”. In:
+Econophysics of Order-driven Markets: Proceedings of Econophys-Kolkata V. Milano:
+Springer Milan, 2011, pp. 3–16.doi:10.1007/978-88-470-1766-5_1.
+[43] Silviu Predoiu, Gennady Shaikhet, and Steven Shreve. “Optimal Execution in a General
+One-Sided Limit-Order Book”. In: SIAM J. Financial Math. 2 (Jan. 2011), pp. 183–212.doi:
+10.1137/10078534X.
+[44] P.E. Protter. Stochastic Integration and Differential Equations. Stochastic Modelling and
+Applied Probability. Springer Berlin Heidelberg, 2005.isbn: 9783540003137.
+[45] R. Tyrrell Rockafellar. “Convex Analysis”. In: Princeton Mathematical Series 28 (1970).
+[46] Walter Rudin. “Principles of Mathematical Analysis”. In: (1976).
+[47] Jinghai Shao and Taoran Tian. “From the Optimal Singular Stochastic Control to the
+Optimal Stopping for Regime-Switching Processes”. In:
+SIAM Journal on Control and Optimization 61.3 (2023), pp. 1631–1650.doi:
+10.1137/22M1506705.
+30
+[48] Steven E. Shreve and H. Mete Soner. “Optimal investment and consumption with
+transaction costs”. In: Annals of Applied Probability 4.3 (1994), pp. 609–692.
+[49] Eduardo Damian Taranto, Giacomo Bormetti, Jean-Philippe Bouchaud, Fabrizio Lillo, and
+Bence Toth. “Linear models for the impact of order flow on prices. I. History dependent
+impact models”. In: Quantitative Finance 18.6 (2018), pp. 903–915.doi:
+10.1080/14697688.2017.1395903.
+[50] Wei-Xing Zhou. “Universal price impact functions of individual trades in an order-driven
+market”. In: Quantitative Finance 12.8 (2012), pp. 1253–1263.doi:
+10.1080/14697688.2010.504733.
+A Proofs of the Results in Section 3
+A.1 Continuity Modulus
+Proof of Lemma 3.Let 0≤t≤s≤T,x∈[0, X],y≥0 andX∈A t(x). Supposeξis a nonnegative
+random variable with finite moments. We have
+∆ :=E
+[
+ΦIs
+(
+Yt,y,Xs +ξ)−ΦIs(Yt,y,Xs )] =E[∫ ξ
+0
+ψIs
+(
+Yt,y,Xs +ζ) dζ].
+Note that under Assumption (A1), we have thatψ Is(y)≤b
+1
+βy
+1
+β,for ally≥F Is(a).Asy↦→ψ Is(y)
+is non-decreasing onR +, we have
+∆ :=E
+[∫ ξ
+0
+ψIs
+(
+Yt,y,Xs +ζ) dζ]
+≤E
+[∫ ξ
+0
+b
+1
+β (FIs(a) +ζ)
+1
+β 1 l{Yt,y,Xs ≤FIs(a)}dζ+
+∫ ξ
+0
+b
+1
+β
+(
+Yt,y,Xs +ζ) 1β 1 l{Yt,y,Xs >FIs(a)}dζ]
+=
+m∑
+i=1
+β
+1 +β b
+1
+β E
+[
+1 l{Is=i} (Fi(a))
+β+1
+β 1 l{Yt,y,Xs ≤Fi(a)}
+((
+1 + ξFi(a))β+1β −1)]
++
+m∑
+i=1
+β
+1 +β b
+1
+β E
+[
+1 l{Is=i}
+(
+Yt,y,Xs
+)β+1
+β
+1 l{Yt,y,Xs >Fi(a)}
+((
+1 + ξ
+Yt,y,Xs
+)β+1
+β −1)]
+≤
+m∑
+i=1
+β
+1 +β b
+1
+β E
+[(
+Fi(a)
+β+1
+β + sup
+0≤u≤T
+|Yt,y,Xu |β+1β )((1 + ξFi(a))β+1β −1)].
+Using Cauchy-Schwarz inequality,
+∆≤
+m∑
+i=1
+β
+1 +β b
+1
+β E
+[(
+Fi(a)
+β+1
+β + sup
+0≤u≤T
+|Yt,y,Xu |β+1β )2] 12 E[((1 + ξFi(a))β+1β −1)2] 12.
+Finally, based on Proposition 2.1, we get that
+∆≤
+m∑
+i=1
+Cyi E[((1 + ξFi(a))β+1β −1)2] 12
+=ρ y(ξ),
+whereC yi := 2β1+βb 1β(Fi(a) 2(β+1)β +CT(1 +|y| 2(β+1)β )) 12 . This completes the proof.
+31
+B Proofs of the Results in Section 4
+B.1 Viscosity Subsolution Property
+Proof of Theorem 4.1.Letz 0 := (t0,x 0,y 0)∈Sandi∈I m. Consider a test functionφ∈C 1,2(S)
+such thatz 0 achieves a local maximum ofv i−φandv i(z0) =φ(z 0). In other words, there exists
+r0 >0 such that
+vi(z)≤φ(z),∀z∈ Br0(z0).
+Define, for all (j,z)∈I m×S,
+Ψ(z,j) =
+{ φ(z),ifj=i,
+vj(z),ifj̸=i.
+Observe thatv j(t,x,y)≤Ψ(z,j) holds within the neighborhood Br0(z0). DefineZ z0,Xu as the tuple(
+u,Xu,Y t0,y0,Xu ) for allu∈[0,T]. Next, defineτ r0 as the first exit time ofZ z0,X fromBr0(z0), i.e.,
+τr0 = inf
+{
+u≥t 0 :Z z0,Xu /∈Br0(z0)}.
+Similarly, letτ I1 denote the first jump time of theIafter timet 0, given by
+τI1 = inf{u≥t 0 :I u̸=i}.
+Furthermore, we introduce theF-stopping timeτ 0 such thatτ 0∈
+]
+t0,(τ I1∧τ r0)∧T [. Note that
+τI1 >t 0 and thatIu =i, for allu∈[t 0,τ I1 [. Consider an admissible controlX∈A t0(x0) in which the
+agent buys 0≤η <( ¯X−x 0)∧r 0 assets at timet 0 and then remains inactive until time (t0 +ε)∧τ 0,
+whereε>0. Using the DPP introduced in Proposition 4, we have
+Ψ(z0,i) =φ(z 0)
+≤E
+[
+ΦI(t0+ε)∧τ0 (y0 +η)−Φ I(t0+ε)∧τ0 (y0) +v((t 0 +ε)∧τ 0,x 0 +η,Y t0,y0,X(t0+ε)∧τ0,I (t0+ε)∧τ0)]
+≤E
+[
+Φi(y0 +η)−Φ i(y0) + Ψ((t0 +ε)∧τ 0,x 0 +η,Y t0,y0,X(t0+ε)∧τ0,i)].
+(23)
+Applying Itˆ o’s formula and taking the expectation over the interval [t0,(t 0 +ε)∧τ 0], while noting
+thatE
+[
+Ψ(Zz0,Xt0 ,It0)] =E[φ(Zz0,Xt0 )], we obtain
+E
+[
+Ψ(Zz0,X(t0+ε)∧τ0,I (t0+ε)∧τ0)] =φ(t 0,x 0 +η,y 0 +η)
++E
+[∫ (t0+ε)∧τ0
+t0
+(∂φ
+∂t +Lφ
+)
+(u,x 0 +η,Y t0,y0,Xu )du]
++E
+[∫ (t0+ε)∧τ0
+t0
+∑
+j̸=i
+Qij(u)
+(
+vj−φ
+)
+(u,x 0 +η,Y t0,y0,Xu )du].
+(24)
+In the last equality, the martingale expectation vanishes sinceφ(Zz0,Xu ) andDφ(Z z0,Xu ) are bounded,
+given thatZ z0,Xu ∈Br0(z0) for allu∈[t 0,(t 0 +ε)∧τ 0]. For allu∈[t 0,(t 0 +ε)∧τ 0], sinceZ z0,Xu
+remains in Br0(z0), we obtain thatv i(Zz0,Xu )≤φ(Z z0,Xu ). Combining this with relations (23) and
+(24) yields
+E
+[∫ (t0+ε)∧τ0
+t0
+(∂φ
+∂t +Lφ
+)
+(u,x 0+η,Y t0,y0,Xu− ) +∑
+j̸=i
+Qij(u)
+(
+vj−φ
+)
+(u,x 0 +η,Y t0,y0,Xu− )du]
+≥φ(z 0)−φ(t 0,x 0 +η,y 0 +η)−Φ i(y0 +η) + Φi(y0).
+(25)
+Assume that the agent decides to do nothing, meaningη= 0. We know from Theorem 3.1 thatv j
+is continuous onS, for allj∈I m. Additionally,Qis continuous onR +. Dividing inequality (25) by
+32
+εand lettingεgoing to 0 and recalling thatφ(z 0) =v i(z0), we get that
+(∂φ
+∂t +Lφ+
+∑
+j̸=i
+Qij(vj−vi)
+)
+(z0)≥0.
+Assume now that the agent executes a partη >0 of the position at timet 0. By sendingεto 0, we
+get
+0≥−φ(t 0,x 0 +η,y 0 +η) +φ(t 0,x 0,y 0)−Φ i(y0 +η) + Φi(y0).
+It follows from equation (5) that
+∫ η
+0
+∂φ
+∂x (t0,x 0 +v,y 0 +η)dv+
+∫ η
+0
+∂φ
+∂y (t0,x 0,y 0 +v) dv+
+∫ y0+η
+y0
+ψi(ξ) dξ≥0.
+The functionψ i is left-continuous and non-decreasing onR +. Dividing byηand lettingη→0, we
+obtain (∂φ
+∂x + ∂φ∂y +ψi)(z0)≥0.
+This proves the required subsolution property
+max
+(
+−
+(∂φ
+∂t +Lφ+
+∑
+j̸=i
+Qij(vj−vi)
+)
+(z0),−
+(∂φ
+∂x + ∂φ∂y +ψi)(z0))≤0.
+B.2 Viscosity Supersolution Property
+Proof of Theorem 4.2.Suppose thatvdoes not satisfy the supersolution property. Then, there
+existsi 0∈I m,z 0 := (t 0,x 0,y 0)∈S, a test function ¯φ∈C 1,2(S) such thatz 0 achieves a local
+minimum ofv i0−¯φandv i0(z0) = ¯φ(z0), andη >0 such that
+−
+(∂¯φ
+∂t +L¯φ+
+∑
+j̸=i0
+(vj−vi0)Qi0j
+)
+(z0)<−η,and−
+(∂¯φ
+∂x + ∂¯φ∂y +ψi0)(z0)<−η.
+Sincez 0 achieves a local minimum ofv i0−¯φ, there existsr 0 >0 such that
+vi0(z)≥¯φ(z),∀z∈ Br0(z0).
+By Theorem 3.1, the value functions (v j)j∈Im are continuous on ¯S. Moreover, the test function ¯φ
+belongs toC 1,2(S), and eachψ i0 is non-decreasing and left-continuous. Consequently, there exists
+r1 >0 such thatt 0 +r 1 <Tand for allz:= (t,x,y)∈ Br1(z0),
+−
+(∂¯φ
+∂t +L¯φ+
+∑
+j̸=i0
+(vj−vi0)Qi0j
+)
+(z)<−η,and−
+(∂¯φ
+∂x + ∂¯φ∂y +ψi0)(z)<−η,(26)
+whereBr1(z0) :={z∈S:∥z−z 0∥≤r 1}. Define, for all (j,z)∈I m×S,
+Ψ(z,j) =
+{ ¯φ(z),ifj=i 0,
+vj(z),ifj̸=i 0.
+LetXand admissible strategy inA t0(x0) andZ z,Xu represent the tuple (u,Xu,Y t,y,Xu ) for all
+(u,z)∈[0,T]×S. Additionally, set the radiusε 0 asε 0 :=r 0∧r 1. Defineτ B as the first exit time
+ofZ z0,X fromBε0(z0), i.e.,
+τB = inf
+{
+u≥t 0 :Z z,Xu /∈Br0(z0)∩ Br1(z0)}
+33
+for any admissible controlX∈A t0(x0). Letτ I1 be the first jump time after timet 0 of the Markov
+chainIsuch that
+τI1 = inf{u≥t 0 :I u̸=i 0}.
+Next, we introduce theF-stopping timeτ 1 such thatτ 1 :=τ I1∧τB. Note thatτ B <T,t 0 <τ I1 and
+thatI u =i 0, for allu∈[0,τ I1 [. Applying Itˆ o’s formula betweent0 andτ −1 , we obtain
+E
+[
+Ψ(Zz0,Xτ−1 ,Iτ−1 )] = ¯φ(z0) +E[∫ τ−10 (∂¯φ∂x + ∂¯φ∂y)(Zz0,Xu− ) dXcu]
++E
+[∫ τ−1
+t0
+(∂¯φ
+∂t +L¯φ+
+∑
+j̸=i
+(vj−¯φ)Qi0j
+)
+(Zz0,Xu− )du]
++E
+[ ∑
+t0≤u<τ1
+¯φ(u,Xu,Y t0,y0,Xu )−¯φ(u,Xu−, ˇYt0,y0,Xu− )].
+(27)
+In the last equality, the martingale expectation vanishes sinceφ(Zz0,Xu ) andDφ(Z z0,Xu ) are bounded,
+given thatZ z0,Xu ∈ Bε0(z0) for allu∈[t 0,τ 1[. From (26) the fact that ∆X u :=X u−X u− =
+Yt0,y0,Xu − ˇYt0,y0,Xu− for allt 0≤u<τ 1, we deduce that
+¯φ(u,Xu,Y t0,y0,Xu )−¯φ(u,Xu−, ˇYt0,y0,Xu− ) =
+∫ ∆Xu
+0
+(∂¯φ
+∂x + ∂¯φ∂y)(u,Xu− +v, ˇYt0,y0,Xu− +v) dv
+≥η∆X u−
+∫ ∆Xu
+0
+ψi0( ˇYt0,y0,Xu− +ζ) dζ
+=η∆X u−Φi0(Yt0,y0,Xu ) + Φi0( ˇYt0,y0,Xu− ).
+(28)
+Note thatE
+[
+Ψ(Zz0,Xτ−1 ,Iτ−1 )] =E[ ¯φ(Zz0,Xτ−1 )]. Plugging (26) and (28) in equation (27), we obtain
+E
+[
+¯φ(Zz0,Xτ−1 )]≥¯φ(z0) +ηE[τ1−t 0 +∫ τ−1t0 dXu]−E[∫ τ−1t0 ψi0( ˇYt0,y0,Xu− )dXcu]
+−E
+[ ∑
+t0≤u<τ1
+Φi0(Yt0,y0,Xu )−Φ i0( ˇYt0,y0,Xu− )].
+Therefore, we obtain
+vi0(z0) = ¯φ(z0)≤E
+[∫ τ−1
+t0
+ψi0( ˇYt0,y0,Xu− )dXcu + ¯φ(Zz0,Xτ−1 )]
++E
+[ ∑
+t0≤u<τ1
+Φi0(Yt0,y0,Xu )−Φ i0( ˇYt0,y0,Xu− )−η (∫ τ−1
+t0
+du+
+∫ τ−1
+t0
+dXu
+)]
+.
+(29)
+Define the set
+Dε0 :={ω∈Ω :τ B(ω)<τ I1 (ω) and ˇYt0,y0,Xτ−1 (ω)∈[y 0−ε 0,y 0 +ε 0]},
+and theF τ1-random variable,
+Z(γ)τ1 :=(τ1, ˇYt0,y0,Xτ−1 +γ∆X τ1,Xτ−1 +γ∆X τ1).
+We know that ifτ 1 =τ B and ˇYt0,y0,Xτ−1 ∈[y 0−ε 0,y 0 +ε 0], thenZ z0,Xτ1 either lies on the boundary
+∂ ¯Bε0(z0) or has exited ¯Bε0(z0) at timeτ 1. Since ˇYt0,y0,Xτ−1 accounts for the jumps ofM, only the
+jumps in the inventory processXcan causeZ z0,X to cross the boundary atτ 1. Consequently, there
+34
+exists anF τ1-measurable random variableγ∈[0,1] such that
+ˇYt0,y0,Xτ−1 +γ∆X τ1∈{y0−ε 0,y 0 +ε 0},andZ (γ)τ1 ∈Bε0(z0),
+on the setD ε0. It follows from the DPP (see Lemma 4), that
+vi0(Z(γ)τ1 (ω))≤v i0(Zz0,Xτ−1 (ω)) + Φi0(Yt0,y0,Xτ1 (ω))−Φ i0( ˇYt0,y0,Xτ−1 (ω) +γ∆Xτ1(ω)),∀ω∈D ε0.
+Additionally, given thatZ (γ)τ1 ∈Bε0(z0), it follows that, for allω∈D ε0,
+¯φ(Zz0,Xτ−1 (ω)) = ¯φ(Z(γ)τ1 (ω))−
+∫ γ(ω)∆Xτ1(ω)
+0
+(∂¯φ
+∂x + ∂¯φ∂y)(t,Xτ−1 (ω) +v, ˇYt0,y0,Xτ−1 (ω) +v) dv
+≤¯φ(Z(γ)τ1 (ω))−ηγ(ω)∆X τ1(ω) + Φi0( ˇYt0,y0,Xτ−1 (ω) +γ(ω)∆X τ1(ω))−Φ i0( ˇYt0,y0,Xτ−1 (ω))
+≤v i0(Zz0,Xτ−1 (ω))−ηγ(ω)∆X τ1(ω) + Φi0(Yt0,y0,Xτ1 (ω))−Φ i0( ˇYt0,y0,Xτ−1 (ω)).
+Plugging the last inequality in (29), we obtain
+vi0(z0)≤E
+[ ∑
+t0≤u≤τ1
+Φi0(Yt0,y0,Xu )−Φ i0(Yt0,y0,Xu− ) +
+∫ τ1
+t0
+ψi0( ˇYt0,y0,Xu− )dXcu +vi0(Zz0,Xτ1 )]
+−ηE
+[∫ τ−1
+t0
+du+
+∫ τ−1
+t0
+dXu +γ∆X τ11 l{ ˇYt0,y0,X
+τ−1 ∈[y0−ε0,y0+ε0]}1 l{τB<τI1}
+]
+.
+From the DPP, it follows that
+0≤−inf
+X∈At0(x0)
+E
+[
+τ1−t 0 +Xτ−1 −x 0 +γ∆X τ11 l{ ˇYt0,y0,Xτ−1 ∈[y0−ε0,y0+ε0]}1 l{τB<τI1}
+]
+.
+Using the sequential characterization of the supremum, we can find a sequence of admissible controls
+Xn = (Xn)n≥0 such that
+E
+[
+τn1−t 0 +X nτn−1 −x 0 +γ∆X nτn1 1 l{ ˇYt0,y0,Xnτn1− ∈[y0−ε,y0+ε]}1 l{τnB<τI1}
+]
+≤ 1n,
+whereτ nB := inf {t≥t 0 : (t,X nt,Y t0,y0,Xnt )/∈Bε0(z0)} andτ n1 :=τ nB∧τ I1 . Asτ n1 −t 0≥0 and
+Xnτn−1 −x 0≥0, we have that
+max
+{
+E
+[
+τn1−t 0],E [Xnτn−1 −x 0],E [γ∆Xnτn1 1 l{ ˇYt0,y0,Xnτn1− ∈[y0−ε,y0+ε]}1 l{τnB<τI1}]}≤ 1n.
+Moreover,γ∆X nτn1 =y 0 +ε 0− ˇYt0,y0,Xnτn1− ≥y 0 +ε 0−y 0 =ε 0. Therefore,
+1
+n≥ε 0P
+(
+y0−ε 0≤ ˇYt0,y0,Xnτn1− ≤y 0 +ε 0 , τnB <τ I1)
+≥ε 0
+(
+P
+(
+y0−ε 0≤ ˇYt0,y0,Xnτn1− ≤y 0 +ε 0) +P(τnB <τ I1)−1). (30)
+On the other hand, we have
+lim
+n→+∞
+P(τn1 =t 0) = 1,and limn→+∞ P(Xnτn−1 =x 0) = 1.
+Therefore,
+lim
+n→+∞
+P(τnB =t 0) = 1,limn→+∞ P( ˇYt0,y0,Xnτn1− =y 0) = 1 and limn→+∞ P(y0−ε 0≤ ˇYt0,y0,Xnτn1− ≤y 0 +ε 0) = 1.
+35
+Since limn→+∞ P
+(
+τnB <τ I1) =P(t0 <τ I1) = exp(−∫t0t0 Qii(u) du) = 1,we get from inequality (30)whenngoes to +∞that
+0≥ε 0
+(
+1 + lim
+n→∞
+P
+(
+τnB <τ I1)−1) =ε 0 >0.
+This leads to a contradiction. Therefore, we obtain the required viscosity supersolution property.
+C Multi-Asset Extension
+In this section, we briefly describe a multi-asset extension of the framework introduced above. We
+do not pursue here the full analytical study of this extension, but we present the corresponding state
+dynamics, optimization problem, and the multidimensional quasi-variational inequalities extending
+(13). This formulation is particularly relevant for high-dimensional numerical methods, including
+recent reinforcement-learning approaches to singular stochastic control problems in finance.
+Letd≥1 be the number of assets and let
+X= (X
+1
+,..., X
+d
+)∈R d+
+denote the target inventory vector. For each assetk∈{1,...,d}, letA k = (Akt )t≥0 be the unaffected
+price process, assumed to be a continuous (P,F)-martingale. We write
+At = (A1t,...,A dt )∈R d,∀t≥0.
+The liquidity regime processI= (I t)t≥0 is the same finite-state Markov chain with values inIm and
+generatorQas in Section 2.1.
+For each regimei∈I m, we now consider a multidimensional impact map
+Ψi = (Ψ1i,...,Ψ di ) :R d+→R d+,
+where Ψki (y) represents the price deviation of assetkwhen the vector of volume effects isy=
+(y1,...,y d)∈R d+. This allows for cross-impact effects, since the deviation of assetkmay depend
+on the liquidity state of all assets. The impacted ask-price vector is then given by
+Pt =A t +Dt,andD t = ΨIt(Yt),
+wheret≥0 andY= (Y 1,...,Y d) denotes the multidimensional volume-effect process.
+LetX= (X 1,...,X d) be the cumulative purchase process. For (t,x)∈[0,T]×Π dk=1[0,Xk], we
+defineA t(x) as the set ofR d+-valued c` adl` ag,F-adapted processesX= (Xu)t≤u≤T such that each
+componentX k is non-decreasing and satisfies
+Xt− =x,andX T =X.
+We denote byX c the continuous part ofXand by ∆X u =X u−Xu− its jump at timeu.
+The controlled multidimensional volume-effect process is defined by
+
+
+
+dYu = dXu−h(Yu−)du+ Σ(Yu−)dWu +
+∫
+E
+q(Yu−,z)M(du,dz),
+Yt− =y∈R d+, (31)
+where
+h:R d+→R d,Σ :R d+→R d×r,andq:R d+×E→R d,
+Wis anr-dimensional Brownian motion, andMis a Poisson random measure onR +×Ewith
+compensatorλ tν(dz)dt. As in the one-dimensional case, we denote by
+ˇYu− :=Y u− + ∆MYu
+36
+the post-jump value ofYdue to the jumps ofMalone. For each regimei∈I m and each asset
+k∈{1,...,d}, letF ki denote the corresponding LOB shape and letψ ki be its generalized inverse (see
+(3)). Fory= (y 1,...,y d)∈R d+, we define the multidimensional impact-cost function Φi :R d+→R +,
+which extends the one-dimensional quantity introduced in (5),
+Φi(y) :=
+d∑
+k=1
+Φki (yk),and Φ ki (yk) :=
+∫ ψki (yk)
+0
+ξdF ki (ξ) =
+∫ yk
+0
+ψki (ζ) dζ.
+Accordingly, if the current volume-effect state isy∈R d+ and a block trade of sizea∈R d+ is
+submitted, then the resulting impact cost in regimeiis
+Φi(y+a)−Φ i(y).
+Accordingly, for (i,t,x,y)∈I m×[0,T]×[0, X]×R d+, we define the cost functional
+Ci(t,x,y,X) :=E
+[∫ T
+t
+d∑
+k=1
+ΨkIu( ˇYt,y,Xu− ) d(Xku)c + ∑
+t≤u≤T
+(
+ΦIu(Yt,y,Xu )−Φ Iu( ˇYt,y,Xu− ))]. (32)
+The associated value function is then
+vi(t,x,y) := infX∈At(x)Ci(t,x,y,X).(33)
+The terminal and boundary conditions take the form
+vi(T,x,y) = Φ i(y+ X−x)−Φ i(y),andv i(t,X,y) = 0,(34)
+where all vector operations are understood componentwise.
+Letφ=φ(t,x,y) be a smooth test function defined on [0,T]×R d+×R d+. The infinitesimal
+generator of the uncontrolled multidimensional volume-effect process is
+Lφ(t,x,y) :=−h(y)·D yφ(t,x,y) + 12Tr(Σ(y)Σ(y)TD2yyφ(t,x,y))
++λt
+∫
+E
+(
+φ(t,x,y+q(y,z))−φ(t,x,y)
+)
+ν(dz).
+(35)
+The multidimensional HJBQVI extending (13) is therefore
+max
+(
+− ∂vi
+∂t −Lvi−
+∑
+j̸=i
+(vj−vi)Qij,max1≤k≤d
+{
+− ∂vi
+∂xk
+− ∂vi
+∂yk
+−Ψki}) = 0,(36)
+for alli∈I m and on [0,T)× ∏dk=1[0,Xk)×R d+.
+As in the one-dimensional case, the first term in (36) corresponds to the continuation region, while
+the gradient constraints characterize the intervention region. More precisely, an infinitesimal pur-
+chase in assetkbecomes optimal when
+−∂vi
+∂xk
+− ∂vi
+∂yk
+−Ψki = 0.
+Hence, in the multi-asset setting, the exercise region is determined by the set of points where at
+least one of these constraints is binding.
+37

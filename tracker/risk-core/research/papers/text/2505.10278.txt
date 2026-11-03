@@ -1,0 +1,1063 @@
+arXiv 2505.10278  https://arxiv.org/abs/2505.10278
+
+Preprint, under review
+MASS: MULTI-AGENTSIMULATIONSCALING
+FORPORTFOLIOCONSTRUCTION
+Taian Guo1,3, Haiyang Shen 2,1,†, Jinsheng Huang 1,3, Zhengyang Mao 1,3, Junyu Luo1, BinQi Chen1,3,
+Zhuoru Chen3, Xuhui Liu 3, Bingyu Xia 3, Luchen Liu 3,†, Yun Ma 2,1,✉, Ming Zhang 1,✉
+1School of Computer Science, Peking University
+2Institute for Artificial Intelligence, Peking University
+3Zhengren Quant, Beijing, China
+{taianguo, hyshen}@stu.pku.edu.cn,
+{mayun, mzhang_cs}@pku.edu.cn,
+Explore codes and datasets at:https://github.com/gta0804/MASS
+†Project Leader, ✉Corresponding Author
+ABSTRACT
+The application of LLM-based agents in financial investment has shown significant
+promise, yet existing approaches often require intermediate steps like predicting
+individual stock movements or rely on predefined, static workflows. These limita-
+tions restrict their adaptability and effectiveness in constructing optimal portfolios.
+In this paper, we introduce the Multi-Agent Scaling Simulation (MASS), a novel
+framework that leverages multi-agent simulation for direct, end-to-end portfo-
+lio construction. At its core, MASS employs a backward optimization process
+to dynamically learn the optimal distribution of heterogeneous agents, enabling
+the system to adapt to evolving market regimes. A key finding enabled by our
+framework is the exploration of the scaling effect for portfolio construction: we
+demonstrate that as the number of agents increases exponentially (up to 512), the
+aggregated decisions yield progressively higher excess returns. Extensive exper-
+iments on a challenging, self-collected dataset from the 2023 Chinese A-share
+market show that MASS consistently outperforms seven state-of-the-art baselines.
+Further backtesting, stability analyses and the experiment on data leakage concerns
+validate its enhanced profitability and robustness. We have open-sourced our code,
+dataset, and training snapshots athttps://github.com/gta0804/MASS/ to foster
+further research.
+1 INTRODUCTION
+The application of LLM-based agents in investment analysis has recently garnered significant attention
+from both academia and industry (Tang et al., 2025; Xiao et al., 2025b; Li et al., 2025b). By assigning
+LLMs with distinct roles and providing them with relevant financial context, researchers have
+developed agent-based systems to tackle complex tasks such as alpha factor mining (Cao et al., 2025;
+Li et al., 2025b) and stock trend prediction (Koa et al., 2024; Yu et al., 2024). These pioneering efforts
+highlight the potential of LLMs to process and reason over vast amounts of multi-modal financial
+data, including news, reports, and market indicators.
+Despite their promise, existing LLM-based approaches in finance exhibit two primary limitations.
+First, many systems are designed for individual stock forecasting (Koa et al., 2024; Yu et al., 2024;
+Xiao et al., 2025b). While useful, predicting the movement of single stocks does not directly translate
+to constructing an optimal portfolio, which requires a holistic assessment of asset correlations, market
+sentiment, and risk diversification. Second, these systems typically rely on predefined procedural
+workflows to orchestrate agent interactions (Guo et al., 2024). This reliance on static, pre-programmed
+processes limits their ability to adapt to the highly dynamic and non-stationary nature of financial
+markets, potentially compromising their performance during market regime shifts.
+In this paper, we introduce the Multi-Agent Scaling Simulation (MASS) to address these challenges.
+MASSshifts the paradigm from individual stock prediction to direct portfolio construction by
+simulating a market of heterogeneous investor agents. Instead of relying on static workflows,
+1
+arXiv:2505.10278v2  [cs.AI]  25 Sep 2025
+Preprint, under review
+MASSintroduces a novel backward optimization process. This mechanism uses historical market
+data to dynamically learn the optimal distribution of agent types that maximizes portfolio returns,
+allowing the system to adapt its strategy. This approach provides MASSwith three key advantages:
+(1) It leverages aggregated information from a multi-agent simulation for direct, end-to-end portfolio
+construction, bypassing intermediate steps like individual stock prediction; (2) It replaces predefined
+workflows with a data-driven optimization process, enhancing adaptability and performance; and (3)
+It enables us to explore the multi-agent scaling effect for portfolio construction: as the number of
+agents increases exponentially, the system’s decisions achieve higher excess returns. To the best of
+our knowledge, MASSis the first work to scale multi-agent simulation for this task up to 512 agents.
+To rigorously evaluate MASS, we collected a rather comprehensive and challenging dataset from the
+Chinese A-share market for the entirety of 2023, a period marked by significant volatility and two
+major market shifts. Our dataset, covering theSSE50,CSI 300, andChiNext 100indices, includes
+detailed firm-level features and macroeconomic indicators. Extensive experiments demonstrate
+that MASSsignificantly outperforms seven state-of-the-art baselines. Rigorous backtesting further
+confirms its ability to generate consistent excess returns with lower drawdowns. To address concerns
+about data leakage in the LLM (Qwen-2.5-72B-Instruct), we validate our findings on new data
+from the first quarter of 2025. Additional experiments confirm MASS’s scalability, stability in
+dynamic markets, and robustness to hyperparameters, while visualizations of the agent distribution
+dynamics offer insights into its adaptive mechanism.
+In summary, this paper makes the following contributions:
+• We introduce MASS, a novel framework leveraging multi-agent simulation with end-to-end
+backward optimization for decision-making in portfolio construction.
+• To our best knowledge, we are the first to explore and demonstrate a scaling effect in multi-agent
+simulation for portfolio construction, expanding the number of agents up to 512.
+• Extensive experiments show that MASSoutperforms state-of-the-art baselines, delivering consis-
+tent excess returns, scalability, and stability. We also address potential data leakage concerns and
+validate our simulation’s effectiveness through visualization.
+• We have introduced and released a comprehensive, realistic, and rich dataset, along with our code
+and training snapshots, to facilitate future research in this domain.
+2 RELATEDWORK
+This section reviews related work across three key areas to contextualize our research. We first
+discuss our primary research domain: existing investment analysis approaches within the financial
+market. We then survey the landscape of LLM-based multi-agent systems, which constitute our
+methodological approach. Finally, we cover the emerging research on scaling effects for multi-agent
+systems, a significant finding that informs our understanding of system performance.
+2.1 INVESTMENTANALYSIS
+Investment analysis research traditionally focuses on two main tracks: formulaic alpha mining and
+stock price trend prediction. Alpha mining aims to discover mathematical expressions from financial
+data that predict future returns, using techniques like genetic algorithms (Chen et al., 2021), deep
+reinforcement learning (Yu et al., 2023; Shi et al., 2025a), and more recently, LLM-based agents (Tang
+et al., 2025; Cao et al., 2025; Ding et al., 2025; Li et al., 2025b; Shi et al., 2025b). Stock price trend
+prediction employs methods ranging from traditional time-series analysis (Choi, 2018) and deep
+learning models (Yoo et al., 2021; Xu et al., 2021; Luo et al., 2023; Du et al., 2024a; Li et al., 2024a;
+Yang et al., 2025a; Chen et al., 2025). reinforcement learning models (Niu et al., 2022; Yuan et al.,
+2025) to the latest LLM-based agents (Koa et al., 2024; Xiao et al., 2025b; Zhang et al., 2024c) and
+foundation model training (Liu et al., 2025; Xiao et al., 2025a; Shi et al., 2025c). While effective to a
+degree, alpha mining often treats the market monolithically, overlooking stock-specific idiosyncrasies,
+while most trend prediction methods focus on individual assets rather than portfolio-level optimization.
+Furthermore, many recent LLM-agent approaches rely on fixed, predefined workflows, limiting their
+adaptability. Additionally, LLMs trained on massive historical data introduce the risk of data leakage,
+as the historical data may encapsulate past market information.
+2
+Preprint, under review
+MASSdistinguishes itself from these works by shifting the focus from individual stock prediction
+or factor mining to the direct task of portfolio construction. Unlike methods that rely on predefined
+workflows, MASSemploys a data-driven, end-to-end optimization framework to dynamically infer
+the underlying distribution of investor archetypes that leads to optimal portfolio performance. This
+simulation-based approach allows MASSto holistically model market dynamics and adapt to changing
+conditions, offering superior performance and market adaptability compared to forecasting individual
+asset movements in isolation.
+2.2 LLM-BASEDMULTI-AGENTSYSTEMS
+LLM-based multi-agent systems (MAS) are broadly classified into two categories:Simulationand
+Application(Guo et al., 2024). Simulation-focused MAS are used to model emergent social (Park
+et al., 2023), economic (Zhao et al., 2024; Li et al., 2023b), or psychological phenomena (Kovac et al.,
+2023; Zhang et al., 2024b). Their primary goal is to validate existing theories or generate analytical
+insights. In contrast, Application-focused MAS employ specialized agents organized in structures
+like layers (Liu et al., 2024) or centralized hierarchies (Qian et al., 2025) to collaboratively execute
+specific tasks, such as software development (Li et al., 2023a) or scientific debate (Du et al., 2024b).
+These systems typically follow predefined procedural workflows to ensure efficient coordination.
+MASSbridges the gap between these two categories. Compared to existing simulations, which are
+primarily used for analysis, MASSutilizes the aggregated output of its simulation for concrete, real-
+world decision-making, thereby expanding the practical boundaries of multi-agent simulation. Unlike
+existing applications that depend on rigid, predefined processes, MASSleverages a data-driven,
+end-to-end backward optimization mechanism. This allows the system to learn its own optimal
+collaborative strategy from market feedback, resulting in superior performance and adaptability
+without the need for hand-crafted workflows.
+2.3 SCALINGEFFECTS INMULTI-AGENTSYSTEMS
+The study of scaling effects—predictable performance improvements with increased model size,
+data, or compute—is a key component of modern LLM research (Kaplan et al., 2020). One notable
+study explores cooperative scaling effects for various predefined agent architectures (e.g., linear, tree),
+expanding the agent count up to 64 (Qian et al., 2025). Another recent work (Dang et al., 2025)
+proposes an evolving orchestration where an RL-trained puppeteer dynamically organizes agents into
+cost-effective collaboration topologies, enhancing scaling in MAS.
+As for scaling effects in MAS on the financial domain, Mars (Li et al., 2025a) investigates the effect of
+training data scale on the realism of financial market simulations, but focuses on simulating the limited
+order books given by investors rather than the investors within it. StockAgent (Zhang et al., 2024a)
+introduces an LLM-driven multi-agent system to simulate investor trading behaviors in an LLM-
+generated stock market environment in response to external factors and market dynamics. TwinMarket
+(Yang et al., 2025b) is a novel scalable multi-agent framework leveraging Large Language Models to
+simulate investor behavior in financial markets through dynamic social networks. These studies either
+constrain agent interactions to fixed topologies or do not focus on utilizing the simulation results to
+guide real market investments.
+In contrast, MASSintroduces and investigates a novel scaling paradigm for multi-agent decision-
+making. Our scaling effect does not rely on a prescribed form of cooperation. Instead, each agent
+is given a partial view of the market, and as the number of agents increases, the system’s collective
+awareness of the market grows. The core challenge, which we address via our backward optimization
+process, is learning how to aggregate this distributed intelligence to achieve a specific real-world
+objective (i.e., maximizing portfolio returns). MASSis the first work to demonstrate this scaling
+effect in a financial application, expanding the number of simulated agents to 512 and showing a
+clear correlation between agent scale and investment performance.
+3 METHOD
+In this section, we introduce MASS, a novel framework that formulates portfolio construction as a
+dynamic online learning problem. The core idea is to simulate a market of heterogeneous investor
+3
+Preprint, under review
+agents and learn to optimally aggregate their diverse decisions. MASSoperates in a daily cycle of
+two key processes:Forward Propagation, where agents generate investment signals for the current
+day, andBackward Optimization, which refines the model by learning from the previous day’s
+outcomes. This adaptive loop, illustrated in Figure 1, allows MASSto continuously adjust to evolving
+market conditions. The overall procedure is formalized in Algorithm A.1.
+Consensus     Disagreement
+𝜶𝒎𝒔(𝒋) − (𝟏 − 𝜶)𝝈𝒔(𝒋)
+Portfolio 𝑠𝑗 Best Portfolio 𝑦𝑗
+ 
+Initialized Investors
+Stock Data
+Optimizer
+𝒎𝒂𝒙
+𝒅
+𝓢(𝒔𝒋, 𝒚𝒋)
+Forward / Backward
+Macroeconomic Data
+Candidate stock pool
+Investment strategies
+Next trading day
+Various investors
+Adjusted Investors
+Figure 1: MASSoperates in a loop consisting of forward propagation and backward optimization. In
+the forward propagation, MASSinitializes investors using the previous day’s investor distribution
+along with today’s stock and macroeconomic data. It then constructs portfolios sj based on the
+market disagreement hypothesis. During backward optimization, an optimizer updates the investor
+distribution, which is then passed to the next trading day.
+3.1 FORWARDPROPAGATION
+The forward propagation process simulates market activity on a given day j to produce a signal
+that guides the construction of the portfolio. This involves initializing a diverse population of
+agents, executing their investment strategies, and aggregating their collective decisions based on a
+multi-modal stock datasetX.
+3.1.1 INVESTORINITIALIZATION
+To capture the diverse perspectives within a real market, MASSinitializes a population of N=
+ntype ×n inv agents. These agents are categorized into ntype distinct types, each embodying a unique
+investment style (e.g., style outline, risk appetite, rationality). This heterogeneity is crucial for
+creating a rich and realistic simulation. Each agent type i is provided access to a specific subset of
+multi-modal data Xi ⊂ X. Furthermore, to model the practical constraint that no single investor can
+monitor the entire market, each individual agent (i, k)is assigned a static, random subset of stocks,
+denoted as Pool(i, k), where |Pool(i, k)|=n sel. This design choice also manages the context length
+limitations of the underlying LLM. The design details of investor initialization are in Appendix A.3.2.
+3.1.2 INVESTMENTSTRATEGYEXECUTION
+On each trading day j, agents first formulate a daily strategy and then make investment decisions.
+First, to ensure strategies are adaptive to the prevailing economic climate, each agent type i generates
+a daily investment strategy by interpreting the latest macroeconomic data Mj within the context of
+its intrinsic style. This is performed by an LLM-based functionF 1:
+Strategyi,j =F 1
+ 
+StyleDesci,M j
+
+(1)
+where StyleDesci is the textual description of agent typei’s investment philosophy.
+Next, each agent (i, k)applies this daily strategy to its observable stock universe Pool(i, k). The
+agent analyzes the relevant features for these stocks and selects a subset for investment. This decision
+4
+Preprint, under review
+is modeled by a second LLM-based functionF 2:
+Codesi,k,j =F 2
+
+Strategyi,j,{data fors∈Pool(i, k)},StyleDesc i
+
+(2)
+where Codesi,k,j ⊆Pool(i, k)is the set of stocks selected by agent(i, k)on day j. The design details
+of this section are provided in Appendix A.3.3.
+3.1.3 SCOREAGGREGATION
+To derive an actionable signal for each stock, we aggregate the decisions from all N agents. Our
+aggregation strategy is grounded in the market disagreement hypothesis (Miller, 1977; Diether et al.,
+2002), which posits that stocks with high consensus and low disagreement among investors tend to
+yield higher future returns. This provides a theoretically sound basis for combining agent outputs.
+We provide more details about market disagreement hypothesis on Appendix A.3.1.
+Let Vi,s,j be the fraction of agents of type i that selected stock s on day j. Let dj−1 =
+[d1,j−1, . . . , dntype,j−1]⊤ be the distribution of agent types, optimized from the previous day. We
+quantify consensus and disagreement for each stock s by computing the weighted mean (ms) and
+weighted standard deviation (σs) of selections across all agent types:
+ms(j) =
+ntypeX
+i=1
+di,j−1 ·V i,s,j (Consensus) (3a)
+σs(j) =
+vuutntypeX
+i=1
+di,j−1(Vi,s,j −m s(j))2 (Disagreement) (3b)
+The final signal for each stock integrates these two components, rewarding consensus and penalizing
+disagreement:
+Signal(s, j) =α·m s(j)−(1−α)·σ s(j)(4)
+where α∈[0,1] is a hyperparameter balancing the two effects. This signal is then used to rank stocks
+and construct the daily portfolioP j.
+3.2 BACKWARDOPTIMIZATION
+A key innovation of MASSis its ability to adapt to changing market regimes. This is achieved
+through the backward optimization process, which dynamically adjusts the agent type distribution dj
+at the end of each day j. The objective is to find the distribution that would have yielded the best
+performance over a recent historical window, ensuring the model continuously learns from market
+feedback.
+Specifically, at the end of day j, we define a look-back window 1 of size ωopt. We use the agent
+decisions {Vi,s,t} and the actual market returns {Yt} for the period t∈[j−ω opt + 1, j]. For any
+candidate distribution d, we can compute the historical signals Signald(s, t)for this period. The goal
+is to find the optimal distribution dj that maximizes the correlation between these historical signals
+and the actual returns. This is formulated as an optimization problem:
+dj = arg max
+d∈∆ntype −1
+S
+
+{Signald(:, t)}jt=j−ωopt+1,{Y t}jt=j−ωopt+1
+
+(5)
+where ∆ntype−1 is the probability simplex, and S is a similarity metric such as the Rank Information
+Coefficient (RIC). We employ simulated annealing (Kirkpatrick et al., 1983) as the optimizerO to
+solve this problem. The resulting distribution dj is then carried forward to the next day’s forward
+propagation step (Eq. 3), completing the online learning cycle.
+5
+Preprint, under review
+Table 1: Comparisons with baselines and the experiment on data leakage concern. MASSoutperforms
+all others across all 3 stock pools. The best performance in each column is highlighted inbold. For
+more evaluation metrics on portfolio construction, please refer to Appendix A.5.
+Main Experiments (Throughout 2023)
+Method SSE50 CSI 300 Chi Next 100
+RIC RICIR IC ICIR RIC RICIR IC ICIR RIC RICIR IC ICIR
+Proxy Indicator (Diether et al., 2002) 3.82 19.73 2.89 16.63 3.84 30.44 3.60 27.03 -0.94 -7.05 0.16 1.29
+LightGBM (Ke et al., 2017) 3.25 21.78 4.51 27.30 5.20 36.06 3.19 23.62 2.94 30.69 0.88 8.70
+DTML (Yoo et al., 2021) 5.04 28.15 4.93 26.71 4.91 35.72 4.17 31.10 3.45 26.55 3.21 21.97
+MASTER (Li et al., 2024b) 5.13 28.37 4.97 27.01 5.01 35.47 4.23 30.78 3.92 31.03 4.07 28.62
+SEP (Koa et al., 2024) 4.79 27.56 4.16 26.40 3.83 5.42 0.61 7.65 4.81 34.88 5.29 36.98
+FinCON (Yu et al., 2024) 4.88 26.18 4.35 25.67 0.70 9.57 0.96 13.42 5.01 37.18 5.53 40.54
+TradingAgents (Xiao et al., 2025b) 4.92 27.71 4.33 25.69 3.01 10.14 1.02 14.80 5.37 38.15 5.60 41.06
+MASS 8.16 41.74 5.90 33.43 6.50 43.49 4.65 33.32 7.62 62.87 6.28 55.88
+Experiments on data leakage concern (The first quarter of 2025)
+Method SSE50 CSI 300 CSI A500
+RIC RICIR IC ICIR RIC RICIR IC ICIR RIC RICIR IC ICIR
+MASS 4.50 24.41 6.12 38.33 3.91 37.44 3.36 34.56 5.19 56.17 4.66 48.82
+4 EVALUATION
+Optimization Strategy:We employ simulated annealing (Kirkpatrick et al., 1983) as the optimizer
+in our backward optimization process to align the investor distribution with optimal market portfolios.
+Complexity:Although the total time complexity for a historical simulation is O(ntype ×n inv ×T) , in
+a live trading scenario, the daily cost is onlyO(n type ×n inv). This is because we can store the latest
+agent distribution snapshot and update it with the newly arriving data stream. To ensure MASS’s
+reproductivity, a detailed analysis of time and computational costs is provided in Appendix A.3.4.
+Dataset and Stock Pools:While prior studies Koa et al. (2024); Zhang et al. (2024c); Xiao et al.
+(2025b) provide valuable insights, their evaluations often focus on US markets during stable bull
+periods Nasdaq (2025). To test model robustness in a more volatile context, and lacking a comparable
+multimodal US dataset, we introduce a new dataset from the Chinese A-share market. Our dataset
+covers the entirety of 2023, a period marked by high volatility and two major shifts, thus offering a
+challenging benchmark. To foster further research, we have open-sourced one of our dataset. The
+data covers three key indices:SSE 50(China Securities Index Co., 2020),CSI 300(China Securities
+Index Co., 2023), andChiNext 100(Shenzhen Securities Information Co., 2019). For each stock, the
+dataset includes news, financial reports, price-volume features, and fundamental data, complemented
+by macroeconomic indicators. Details about the construction of our dataset are in Appendix A.2.
+Baselines:We compare MASSwith various baselines across different categories: a traditional proxy
+indicator (Diether et al., 2002); a machine learning model, LightGBM (Ke et al., 2017); deep learning
+models, DTML (Yoo et al., 2021) and MASTER (Li et al., 2024b); and three SOTA agent-based
+methods, SEP (Koa et al., 2024), FINCON (Yu et al., 2024), and TradingAgents (Xiao et al., 2025b).
+While Mars (Li et al., 2025a) is relevant, a direct comparison is not possible because their model
+weights are still under review 2. Further details about baseline descriptions and our implementations
+are in Appendix A.4.
+Metrics:We use four standard metrics to assess both correlation and consistency: the Information
+Coefficient (IC) and Rank Information Coefficient (RIC) quantify Pearson and Spearman correlations
+between predicted (Signal) and actual returns (r), respectively. Their stability is measured by the
+Information Coefficient Information Ratio (ICIR) and Rank Information Coefficient Information
+Ratio (RICIR), defined as E[IC]/Std(IC) and E[RIC]/Std(RIC). Besides, to ensure the robustness of
+our evaluation process, we incorporate more metrics on Appendix A.5.
+Experiment-Specific Settings:We utilizeQwen2.5 72B Instruct(Qwen et al., 2025) to implement
+MASS. For the Main Experiments (Table 1), we set ntype = 16 and ninv = 32. For SSE 50 and
+1To avoid inadvertent use of future information, Yk[:, j−k] is excluded, because this label depends on the
+first 15 minutes on dayj+ 1and latency in live trading systems should be considered.
+2 https://github.com/microsoft/MarS
+6
+Preprint, under review
+ChiNext 100, nsel is 20; for the larger CSI 300, it is 30. We set α= 0.5 for SSE 50 and CSI 300. For
+ChiNext 100, we useα= 0.2, reflecting that for China’s growth market, where valuations are often
+disconnected from fundamentals, disagreement factors (σs) are more predictive than consensus factors
+(ms).For the backward optimization process, we employ simulated annealing (SA) (Kirkpatrick et al.,
+1983). The key hyperparameters are configured as follows: an initial temperature of 40, a maximum
+of 100 iterations, and a cooling rate of 0.95. The optimizer look-back window ωopt is set to 5. For
+the Data Leakage Experiments (Table 1), we used Qwen2.5-72B-Instruct (released Sept. 2024)
+and evaluated it on data from Q1 2025 across SSE 50, CSI 300, and the new CSI A500 index (China
+Securities Index Co., 2024). For other experiments, we primarily used the CSI 300 pool due to its
+size and popularity, unless specified otherwise.
+4.1 RESULTS ANDANALYSIS
+4.1.1 MAINEXPERIMENTS
+Table 1 presents the primary comparison against baselines. The key observations are twofold. First,
+MASSachieves the best performance across all metrics and stock pools, consistently outperforming
+the next-best methods (TradingAgents, SEP, FinCON and MASTER). Second, we observe that
+while agent-based methods like SEP and FINCON perform reasonably on smaller pools, their
+effectiveness diminishes significantly on the larger CSI 300. Our analysis indicates this is because
+their self-reflection mechanisms, which require processing extensive historical results in-context, face
+comprehension and decision-making challenges with an increasing number of stocks. MASSavoids
+this bottleneck as its architecture does not require any single agent to process vast global information,
+demonstrating superior scalability.
+4.1.2 EXPERIMENTS ON DATA LEAKAGE CONCERN
+To confirm that MASS’s performance is not merely a result of the LLM memorizing 2023 market data,
+we conducted rigorous tests on unseen data. As shown in the lower part of Table 1, MASSmaintains
+significant effectiveness on both unseen data from existing indices (SSE 50, CSI 300 in Q1 2025) and
+on a completely new stock pool (CSI A500). This result provides strong evidence that the model’s
+success stems from its methodological framework rather than prior knowledge.
+4.1.3 BACKTESTINGEXPERIMENTS
+2023-01 2023-03 2023-05 2023-07 2023-09 2023-11 2024-01
+0.15
+0.10
+0.05
+0.00
+0.05
+0.10
+0.15
+Cumulative Return
+DTML
+FINCON
+LGBM
+MASS
+ProxyIndicator
+SEP
+TradingAgents
+MASTER
+CSI 300
+Figure 2: Backtesting on the CSI 300 Stock Pool compared with Baselines and the CSI 300 Index.
+Figure 2 translates the statistical metrics into a practical financial outcome via backtesting. The plot
+of cumulative excess returns shows that MASSnot only generates substantially higher returns than
+the baselines and the CSI 300 index but also maintains significantly lower drawdowns. This result
+7
+Preprint, under review
+highlights MASS’s dual advantages in both profitability and risk control, underscoring its real-world
+applicability. Backtesting implementation details are in Appendix A.6.
+4.1.4 SCALINGEXPERIMENTS
+0 0.2 0.4 0.6 0.8 1.0
+Hyparameter  in score aggregation
+0.0
+0.02
+0.04
+0.06
+0.08
+0.1
+RankIC
+CSI 300 ( )
+ CSI 300 ( )
+0 2 4 6 8 10
+Hyparameter optimizer look-back window 
+Figure 3: MASSexhibits a moderate sensitivity
+to changes in hyperparameters.
+64 128 256 512
+Number of Agents
+0.0
+0.02
+0.04
+0.06
+0.08
+0.1
+RankIC
+SSE 50
+CSI 300
+ChiNext 100
+Figure 4: As the number of agents increases
+exponentially, MASSis able to obtain even more
+refined market information.
+To verify the multi-agent scaling effect, we investigated the performance of MASSas we exponentially
+increased the number of agents (ntype ×n inv) while keeping other parameters fixed. The results in
+Figure 4 show a clear, approximately linear growth in the RankIC metric as the total number of
+agents increases. This confirms that by simulating more agents, MASSis able to capture more refined
+market information, leading to better investment decisions. To the best of our knowledge, we are the
+first to explore this scaling effect in multi-agent simulation for portfolio construction, expanding the
+agent count up to 512.
+4.1.5 ABLATIONSTUDIES
+Table 2: Ablation study results for CSP, PMD, BO, MDH, and an investigation of MASS, which daily
+updates the candidate stock pool, called MASS(DU). The best performance is indicated inbold. The
+EMCL refers to the inability to operate when exceeding the maximum context length of the LLM.
+Method SSE 50 CSI 300 Chi Next 100
+RIC RICIR IC ICIR RIC RICIR IC ICIR RIC RICIR IC ICIR
+w/o CSP 1.65 11.19 1.67 11.73 EMCL EMCL
+w/o PMD 5.25 29.75 3.43 21.10 2.57 33.38 2.23 30.64 2.26 17.16 2.99 22.70
+w/o BO 0.76 4.75 -0.13 -8.44 0.36 5.36 0.41 6.69 2.88 19.43 3.12 22.03
+w/o MDH 6.28 32.68 3.85 25.39 4.65 31.03 2.98 27.86 -3.12 -28.93 -2.46 -26.44
+MASS(DU) 8.03 41.68 5.79 33.52 6.48 42.86 4.52 32.95 7.65 63.02 6.29 55.91
+MASS 8.16 41.74 5.90 33.43 6.50 43.49 4.65 33.32 7.62 62.87 6.28 55.88
+Table 2 presents the results of ablating four key design choices and our variant of our proposed MASS:
+• w/o CSP (Candidate Stock Pool):Removing this component causes the model to fail on larger
+indices due to exceeding the LLM’s context length (EMCL). This confirms that CSP is essential
+for the system’s scalability.
+• w/o PMD (Provide Macro Data):Removing macroeconomic data leads to a significant perfor-
+mance drop, as agents lack the context to make diverse, timely decisions, thus reducing system
+randomness and adaptability.
+• w/o BO (Backward Optimization):This is the most critical ablation study. Disabling the
+optimization process in Equation 5 causes performance to collapse, yielding near-zero or negative
+IC values. This proves that the end-to-end, adaptive learning of agent distribution is the core
+mechanism driving MASS’s success.
+8
+Preprint, under review
+• w/o MDH (Market Disagreement Hypothesis):Relying solely on consensus led to a major
+performance drop and was even counterproductive on the ChiNext index, demonstrating the
+importance of our theory-grounded aggregation method.
+• MASS(DU) (Daily Updated Candidate Stock Pool):In Section 3.1.1, we construct each agents’
+a static candidate stock pool. To confirm the robustness of MASSand eliminate the possible
+impact of this pre-defined set, we also test a variant which updates each agent’s candidate stock
+pool on each trading day, finding its impact negligible. This suggests that the key is the partitioned
+view, not whether the view is static or dynamic.
+4.1.6 STABILITY ANDAGENTDISTRIBUTIONVISUALIZATIONEXPERIMENT
+2023-022023-032023-042023-052023-062023-072023-082023-092023-102023-112023-12
+0%
+20%
+40%
+60%
+80%
+100%Proportion (%)
+Regime shift A Regime shift B
+CSI_300 Index
+MASS
+excess returns
+20%
+15%
+10%
+5%
+0%
+5%
+10%
+15%
+20%
+Cummulative Return (%)
+Figure 5: The distribution of agents in MASSswiftly adapts to changes in market styles (A and B),
+allowing it to consistently achieve stable excess returns compared to the CSI 300 Index.
+Figure 5 provides a visual proof of MASS’s adaptability. The background color tracks the temporal
+evolution of the agent distribution throughout 2023, with the left y-axis representing the proportion
+of different agent types. The right y-axis indicates the cumulative return, which is used to plot the
+performance of our MASS(blue line) and the CSI 300 Index (black dashed line). The orange line
+illustrates the excess cumulative return of MASScompared to the CSI 300 benchmark. The two
+major market shifts in February (rebound to consolidation) and August (consolidation to decline)
+are marked as A and B. It is evident that during both transitions, MASS’s backward optimization
+mechanism swiftly adapted the agent distribution to align with the new market style. This rapid
+adaptation enabled MASSto consistently achieve stable excess returns compared to the CSI 300
+index, even during periods of high volatility.
+4.1.7 PARAMETERSENSITIVITYEXPERIMENTS
+To investigate the sensitivity of MASSto its parameters, we analyzed two hyperparameters: the
+score aggregation weight α (Equation 4) and the optimizer look-back window ωopt. The parameter
+α manages the balance between disagreement and consensus components in portfolio construction,
+while ωopt influences information capacity—too short a window limits it, whereas too long a duration
+hinders regime adaptation. The experimental results are presented in Figure 3.
+We observe that although adjustments to these two hyperparameters lead to slight variations in
+system performance, these changes are within acceptable limits. This indicates that MASSexhibits a
+moderate sensitivity to parameter changes.
+9
+Preprint, under review
+5 CONCLUSION
+In this paper, we introduce MASS, a multi-agent scaling simulation framework designed for portfolio
+construction. MASSleverages large-scale agent simulations and a backward optimization process to
+achieve a comprehensive understanding of market dynamics. This approach offers various advantages,
+including enhanced scalability, robustness, and the ability to generate stable excess returns.
+In the future, we anticipate that the paradigm established by MASSwill extend beyond investment
+portfolio management to encompass a wider range of tasks, such as supply chain optimization,
+agricultural decision-making, and weather prediction.
+REFERENCES
+Turan G Bali, Bryan T Kelly, Mathis Mörke, and Jamil Rahman. Machine forecast disagreement.
+Working Paper 31583, National Bureau of Economic Research, August 2023. URL http://www.
+nber.org/papers/w31583.
+Lang Cao, Zekun Xi, Long Liao, Ziwei Yang, and Zheng Cao. Chain-of-alpha: Unleashing the power
+of large language models for alpha mining in quantitative trading.arXiv preprint arXiv:2508.06312,
+2025.
+Tianxiang Chen, Wei Chen, and Luyao Du. An empirical study of financial factor mining based on
+gene expression programming. In2021 4th International Conference on Advanced Electronic
+Materials, Computers and Software Engineering (AEMCSE), pp. 1113–1117. IEEE, 2021.
+Weijun Chen, Shun Li, Heyuan Wang, and Tengjiao Wang. Enhancer: A distribution-aware framework
+with temporal-relational meta-learning for stock prediction. InProceedings of the 31st ACM
+SIGKDD Conference on Knowledge Discovery and Data Mining V . 2, pp. 250–261, 2025.
+Ltd China Securities Index Co.Compilation of the SSE 50 Index, 2020. URL https://oss-ch.cs
+index.com.cn/static/html/csindex/public/uploads/indices/detail/files/zh_CN/0
+00016_Index_Methodology_cn.pdf.
+Ltd China Securities Index Co.Compilation of the CSI 300 Index, 2023. URL https://oss-ch.cs
+index.com.cn/static/html/csindex/public/uploads/indices/detail/files/zh_CN/0
+00300_Index_Methodology_cn.pdf.
+Ltd China Securities Index Co.Compilation of the CSIA500 Index, 2024. URL https://oss-ch.
+csindex.com.cn/static/html/csindex/public/uploads/indices/detail/files/zh_CN
+/000510_Index_Methodology_cn.pdf.
+Hyeong Kyu Choi. Stock price correlation coefficient prediction with arima-lstm hybrid model, 2018.
+URLhttps://arxiv.org/abs/1808.01560.
+Yufan Dang, Chen Qian, Xueheng Luo, Jingru Fan, Zihao Xie, Ruijie Shi, Weize Chen, Cheng
+Yang, Xiaoyin Che, Ye Tian, et al. Multi-agent collaboration via evolving orchestration. InThe
+Thirty-ninth Annual Conference on Neural Information Processing Systems, 2025.
+Karl B Diether, Christopher J Malloy, and Anna Scherbina. Differences of opinion and the cross
+section of stock returns.The Journal of Finance, 57(5):2113–2141, 2002. doi: 10.1111/0022-108
+2.00490.
+Hongjun Ding, Binqi Chen, Jinsheng Huang, Taian Guo, Zhengyang Mao, Guoyi Shao, Lutong Zou,
+Luchen Liu, and Ming Zhang. Alphaeval: A comprehensive and efficient evaluation framework
+for formula alpha mining.arXiv preprint arXiv:2508.13174, 2025.
+Kelvin Du, Rui Mao, Frank Xing, and Erik Cambria. Explainable stock price movement predic-
+tion using contrastive learning. InProceedings of the 33rd ACM International Conference on
+Information and Knowledge Management, CIKM ’24, pp. 529–537, New York, NY , USA, 2024a.
+Association for Computing Machinery. ISBN 9798400704369. doi: 10.1145/3627673.3679544.
+URLhttps://doi.org/10.1145/3627673.3679544.
+10
+Preprint, under review
+Yilun Du, Shuang Li, Antonio Torralba, Joshua B. Tenenbaum, and Igor Mordatch. Improving
+factuality and reasoning in language models through multiagent debate. InProceedings of the 41st
+International Conference on Machine Learning, ICML’24. JMLR.org, 2024b.
+Taicheng Guo, Xiuying Chen, Yaqi Wang, Ruidi Chang, Shichao Pei, Nitesh V . Chawla, Olaf Wiest,
+and Xiangliang Zhang. Large language model based multi-agents: A survey of progress and
+challenges. In Kate Larson (ed.),Proceedings of the Thirty-Third International Joint Conference
+on Artificial Intelligence, IJCAI-24, pp. 8048–8057. International Joint Conferences on Artificial
+Intelligence Organization, 8 2024. doi: 10.24963/ijcai.2024/890. URL https://doi.org/10.2
+4963/ijcai.2024/890. Survey Track.
+Jared Kaplan, Sam McCandlish, Tom Henighan, Tom B. Brown, Benjamin Chess, Rewon Child,
+Scott Gray, Alec Radford, Jeffrey Wu, and Dario Amodei. Scaling laws for neural language models,
+2020. URLhttps://arxiv.org/abs/2001.08361.
+Guolin Ke, Qi Meng, Thomas Finley, Taifeng Wang, Wei Chen, Weidong Ma, Qiwei Ye, and Tie-Yan
+Liu. Lightgbm: a highly efficient gradient boosting decision tree. InProceedings of the 31st
+International Conference on Neural Information Processing Systems, NIPS’17, pp. 3149–3157,
+Red Hook, NY , USA, 2017. Curran Associates Inc. ISBN 9781510860964.
+Scott Kirkpatrick, C Daniel Gelatt, and Mario P Vecchi. Optimization by simulated annealing.
+Science, 220(4598):671–680, 1983.
+K. J. L. Koa et al. Learning to generate explainable stock predictions using self-reflective large
+language models. InProceedings of the ACM Web Conference (WWW), 2024. doi: 10.1145/3589
+334.3645611. URLhttps://dl.acm.org/doi/10.1145/3589334.3645611.
+Grgur Kovac, Rémy Portelas, Peter Ford Dominey, and Pierre-Yves Oudeyer. The socialAI school:
+Insights from developmental psychology towards artificial socio-cultural agents. InFirst Workshop
+on Theory of Mind in Communicating Agents, 2023. URL https://openreview.net/forum?i
+d=Y5r8Wa67Ob.
+Guohao Li, Hasan Abed Al Kader Hammoud, Hani Itani, Dmitrii Khizbullin, and Bernard Ghanem.
+Camel: communicative agents for "mind" exploration of large language model society. InProceed-
+ings of the 37th International Conference on Neural Information Processing Systems, NIPS ’23,
+Red Hook, NY , USA, 2023a. Curran Associates Inc.
+Junjie Li, Yang Liu, Weiqing Liu, Shikai Fang, Lewen Wang, Chang Xu, and Jiang Bian. Mars: a
+financial market simulation engine powered by generative foundation model. InThe Thirteenth
+International Conference on Learning Representations, 2025a. URL https://openreview.net
+/forum?id=Yqk7EyT52H.
+Shuqi Li, Yuebo Sun, Yuxin Lin, Xin Gao, Shuo Shang, and Rui Yan. Causalstock: Deep end-
+to-end causal discovery for news-driven multi-stock movement prediction. In A. Globerson,
+L. Mackey, D. Belgrave, A. Fan, U. Paquet, J. Tomczak, and C. Zhang (eds.),Advances in Neural
+Information Processing Systems, volume 37, pp. 47432–47454. Curran Associates, Inc., 2024a.
+URL https://proceedings.neurips.cc/paper_files/paper/2024/file/54d689d58fe54
+c92aee2d732fc49fca8-Paper-Conference.pdf.
+Tong Li, Zhaoyang Liu, Yanyan Shen, Xue Wang, Haokun Chen, and Sen Huang. Master: Market-
+guided stock transformer for stock price forecasting. InProceedings of the AAAI Conference on
+Artificial Intelligence, volume 38, pp. 162–170, 2024b.
+Yang Li, Yangyang Yu, Haohang Li, Zhi Chen, and Khaldoun Khashanah. Tradinggpt: Multi-agent
+system with layered memory and distinct characters for enhanced financial trading performance.
+arXiv preprint arXiv:2309.03736, 2023b.
+Yuante Li, Xu Yang, Xiao Yang, Minrui Xu, Xisen Wang, Weiqing Liu, and Jiang Bian. R&d-agent-
+quant: A multi-agent framework for data-centric factors and model joint optimization. InThe
+Thirty-ninth Annual Conference on Neural Information Processing Systems, 2025b.
+11
+Preprint, under review
+Zhaowei Liu, Xin Guo, Fangqi Lou, Lingfeng Zeng, Jinyi Niu, Zixuan Wang, Jiajie Xu, Weige Cai,
+Ziwei Yang, Xueqian Zhao, Chao Li, Sheng Xu, Dezhi Chen, Yun Chen, Zuo Bai, and Liwen
+Zhang. Fin-r1: A large language model for financial reasoning through reinforcement learning,
+2025. URLhttps://arxiv.org/abs/2503.16252.
+Zijun Liu, Yanzhe Zhang, Peng Li, Yang Liu, and Diyi Yang. A dynamic llm-powered agent network
+for task-oriented agent collaboration. InFirst Conference on Language Modeling, 2024.
+Di Luo, Weiheng Liao, Shuqi Li, Xin Cheng, and Rui Yan. Causality-guided multi-memory in-
+teraction network for multivariate stock price movement prediction. In Anna Rogers, Jordan
+Boyd-Graber, and Naoaki Okazaki (eds.),Proceedings of the 61st Annual Meeting of the Associa-
+tion for Computational Linguistics (Volume 1: Long Papers), pp. 12164–12176, Toronto, Canada,
+July 2023. Association for Computational Linguistics. doi: 10.18653/v1/2023.acl-long.679. URL
+https://aclanthology.org/2023.acl-long.679/.
+Edward M Miller. Risk, uncertainty, and divergence of opinion.The Journal of Finance, 32(4):
+1151–1168, 1977. doi: 10.1111/j.1540-6261.1977.tb03317.x.
+Inc. Nasdaq.NASDAQ-100 Index, 2025. URL https://www.nasdaq.com/market-activity/in
+dex/ndx.
+Hui Niu, Siyuan Li, and Jian Li. Metatrader: An reinforcement learning approach integrating diverse
+policies for portfolio optimization. InProceedings of the 31st ACM international conference on
+information & knowledge management, pp. 1573–1583, 2022.
+Joon Sung Park, Joseph O’Brien, Carrie Jun Cai, Meredith Ringel Morris, Percy Liang, and Michael S.
+Bernstein. Generative agents: Interactive simulacra of human behavior. InProceedings of the
+36th Annual ACM Symposium on User Interface Software and Technology, UIST ’23, New
+York, NY , USA, 2023. Association for Computing Machinery. ISBN 9798400701320. doi:
+10.1145/3586183.3606763. URLhttps://doi.org/10.1145/3586183.3606763.
+Chen Qian, Zihao Xie, YiFei Wang, Wei Liu, Kunlun Zhu, Hanchen Xia, Yufan Dang, Zhuoyun Du,
+Weize Chen, Cheng Yang, Zhiyuan Liu, and Maosong Sun. Scaling large language model-based
+multi-agent collaboration. InThe Thirteenth International Conference on Learning Representations,
+2025. URLhttps://openreview.net/forum?id=K3n5jPkrU6.
+Qwen, :, An Yang, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chengyuan
+Li, Dayiheng Liu, Fei Huang, Haoran Wei, Huan Lin, Jian Yang, Jianhong Tu, Jianwei Zhang,
+Jianxin Yang, Jiaxi Yang, Jingren Zhou, Junyang Lin, Kai Dang, Keming Lu, Keqin Bao, Kexin
+Yang, Le Yu, Mei Li, Mingfeng Xue, Pei Zhang, Qin Zhu, Rui Men, Runji Lin, Tianhao Li, Tianyi
+Tang, Tingyu Xia, Xingzhang Ren, Xuancheng Ren, Yang Fan, Yang Su, Yichang Zhang, Yu Wan,
+Yuqiong Liu, Zeyu Cui, Zhenru Zhang, and Zihan Qiu. Qwen2.5 technical report, 2025. URL
+https://arxiv.org/abs/2412.15115.
+Ronnie Sadka and Anna Scherbina. Analyst disagreement, mispricing, and liquidity.The Journal of
+Finance, 62(5):2367–2403, 2007. doi: 10.1111/j.1540-6261.2007.01278.x.
+Ltd Shenzhen Securities Information Co.Compilation of the ChixNext 100 Index, 2019. URL https:
+//www.szse.cn/marketServices/message/index/project/P020190201583986359118.pdf.
+Hao Shi, Weili Song, Xinting Zhang, Jiahe Shi, Cuicui Luo, Xiang Ao, Hamid Arian, and Luis Angel
+Seco. Alphaforge: A framework to mine and dynamically combine formulaic alpha factors.
+In Toby Walsh, Julie Shah, and Zico Kolter (eds.),AAAI-25, Sponsored by the Association
+for the Advancement of Artificial Intelligence, February 25 - March 4, 2025, Philadelphia, PA,
+USA, pp. 12524–12532. AAAI Press, 2025a. doi: 10.1609/AAAI.V39I12.33365. URL
+https://doi.org/10.1609/aaai.v39i12.33365.
+Yu Shi, Yitong Duan, and Jian Li. Navigating the alpha jungle: An llm-powered mcts framework for
+formulaic factor mining.arXiv preprint arXiv:2505.11122, 2025b.
+Yu Shi, Zongliang Fu, Shuo Chen, Bohan Zhao, Wei Xu, Changshui Zhang, and Jian Li. Kronos: A
+foundation model for the language of financial markets.arXiv preprint arXiv:2508.02739, 2025c.
+12
+Preprint, under review
+Ziyi Tang, Zechuan Chen, Jiarui Yang, Jiayao Mai, Yongsen Zheng, Keze Wang, Jinrui Chen, and
+Liang Lin. Alphaagent: Llm-driven alpha mining with regularized exploration to counteract alpha
+decay. InProceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data
+Mining V . 2, pp. 2813–2822, 2025.
+Yijia Xiao, Edward Sun, Tong Chen, Fang Wu, Di Luo, and Wei Wang. Trading-r1: Financial trading
+with llm reasoning via reinforcement learning, 2025a. URL https://arxiv.org/abs/2509.114
+20.
+Yijia Xiao, Edward Sun, Di Luo, and Wei Wang. Tradingagents: Multi-agents LLM financial trading
+framework. InThe First MARW: Multi-Agent AI in the Real World Workshop at AAAI 2025, 2025b.
+URLhttps://openreview.net/forum?id=4QPrXwMQt1.
+Wentao Xu, Weiqing Liu, Lewen Wang, Yingce Xia, Jiang Bian, Jian Yin, and Tie-Yan Liu. Hist: A
+graph-based framework for stock trend forecasting via mining concept-oriented shared information.
+arXiv preprint arXiv:2110.13716, 2021.
+Chen Yang, Jingyuan Wang, Xiaohan Jiang, and Junjie Wu. Learning universal multi-level market
+irrationality factors to improve stock return forecasting. InProceedings of the 31st ACM SIGKDD
+Conference on Knowledge Discovery and Data Mining V .1, KDD ’25, pp. 1739–1750, New
+York, NY , USA, 2025a. Association for Computing Machinery. ISBN 9798400712456. doi:
+10.1145/3690624.3709328. URLhttps://doi.org/10.1145/3690624.3709328.
+Xiao Yang, Weiqing Liu, Dong Zhou, Jiang Bian, and Tie-Yan Liu. Qlib: An ai-oriented quantitative
+investment platform.arXiv preprint arXiv:2009.11189, 2020.
+Yuzhe Yang, Yifei Zhang, Minghao Wu, Kaidi Zhang, Yunmiao Zhang, Honghai Yu, Yan Hu, and
+Benyou Wang. Twinmarket: A scalable behavioral and social simulation for financial markets. In
+The Thirty-ninth Annual Conference on Neural Information Processing Systems, 2025b.
+Jaemin Yoo, Yejun Soun, Yong-chan Park, and U Kang. Accurate multivariate stock movement
+prediction via data-axis transformer with multi-level contexts. InProceedings of the 27th ACM
+SIGKDD Conference on Knowledge Discovery & Data Mining, KDD ’21, pp. 2037–2045, New
+York, NY , USA, 2021. Association for Computing Machinery. ISBN 9781450383325. doi:
+10.1145/3447548.3467297. URLhttps://doi.org/10.1145/3447548.3467297.
+Shuo Yu, Hongyan Xue, Xiang Ao, Feiyang Pan, Jia He, Dandan Tu, and Qing He. Generating
+synergistic formulaic alpha collections via reinforcement learning. InProceedings of the 29th
+ACM SIGKDD Conference on Knowledge Discovery and Data Mining, 2023. doi: 10.1145/3580
+305.3599831.
+Yangyang Yu, Zhiyuan Yao, Haohang Li, Zhiyang Deng, Yuechen Jiang, Yupeng Cao, Zhi Chen, Jor-
+dan W. Suchow, Zhenyu Cui, Rong Liu, Zhaozhuo Xu, Denghui Zhang, Koduvayur Subbalakshmi,
+GUOJUN XIONG, Yueru He, Jimin Huang, Dong Li, and Qianqian Xie. Fincon: A synthesized
+LLM multi-agent system with conceptual verbal reinforcement for enhanced financial decision
+making. InThe Thirty-eighth Annual Conference on Neural Information Processing Systems, 2024.
+URLhttps://openreview.net/forum?id=dG1HwKMYbC.
+Haochen Yuan, Minting Pan, Yunbo Wang, Siyu Gao, Philip S. Yu, and Xiaokang Yang. Your offline
+policy is not trustworthy: Bilevel reinforcement learning for sequential portfolio optimization,
+2025. URLhttps://arxiv.org/abs/2505.12759.
+Chong Zhang, Xinyi Liu, Zhongmou Zhang, Mingyu Jin, Lingyao Li, Zhenting Wang, Wenyue Hua,
+Dong Shu, Suiyuan Zhu, Xiaobo Jin, Sujian Li, Mengnan Du, and Yongfeng Zhang. When ai
+meets finance (stockagent): Large language model-based stock trading in simulated real-world
+environments, 2024a. URLhttps://arxiv.org/abs/2407.18957.
+Jintian Zhang, Xin Xu, Ningyu Zhang, Ruibo Liu, Bryan Hooi, and Shumin Deng. Exploring
+collaboration mechanisms for LLM agents: A social psychology view. In Lun-Wei Ku, Andre
+Martins, and Vivek Srikumar (eds.),Proceedings of the 62nd Annual Meeting of the Association
+for Computational Linguistics (Volume 1: Long Papers), pp. 14544–14607, Bangkok, Thailand,
+August 2024b. Association for Computational Linguistics. doi: 10.18653/v1/2024.acl-long.782.
+URLhttps://aclanthology.org/2024.acl-long.782/.
+13
+Preprint, under review
+Wentao Zhang, Lingxuan Zhao, Haochong Xia, Shuo Sun, Jiaze Sun, Molei Qin, Xinyi Li, Yuqing
+Zhao, Yilei Zhao, Xinyu Cai, Longtao Zheng, Xinrun Wang, and Bo An. A multimodal foundation
+agent for financial trading: Tool-augmented, diversified, and generalist. InProceedings of the 30th
+ACM SIGKDD Conference on Knowledge Discovery and Data Mining, KDD ’24, pp. 4314–4325,
+New York, NY , USA, 2024c. Association for Computing Machinery. ISBN 9798400704901. doi:
+10.1145/3637528.3671801. URLhttps://doi.org/10.1145/3637528.3671801.
+Qinlin Zhao, Jindong Wang, Yixuan Zhang, Yiqiao Jin, Kaijie Zhu, Hao Chen, and Xing Xie.
+Competeai: understanding the competition dynamics of large language model-based agents. In
+Proceedings of the 41st International Conference on Machine Learning, ICML’24. JMLR.org,
+2024.
+A APPENDIX
+A.1 HIGH-LEVEL WORKFLOW OFMASS
+Algorithm 1:MASS: Online Learning Framework
+Input:Multi-modal stock featuresX, macroeconomic dataM, historical stock returnsY,
+number of agent types ntype, agents per type ninv, look-back window ωopt, trading days T
+Output:Daily investment portfolioP
+1Initialize agent type distributiond 0 ←[ 1ntype , . . . ,1ntype ]⊤;
+;// Uniform initial distribution
+2Initialize all agents(i, k)fori∈ {1, . . . , ntype},k∈ {1, . . . , ninv};
+3foreach trading datej∈Tdo
+// — Forward Propagation: Generate signal for day j —
+4foragent typei= 1ton type do
+5foragentk= 1ton inv do
+6Generate investment strategy Strategy i,j using Eq. 1;
+7Agent(i, k)selects stocks Codes i,k,j via Eq. 2;
+8Aggregate agent decisions to computeSignal(s, j)for all stockssvia Eqs. 3, 4 using
+distributiond j−1;
+// — Portfolio Construction for day j —
+9Construct portfolioP j fromSignal(:, j)using a Top-kstrategy;
+// — Backward Optimization: Update distribution for day j+1 —
+10Optimize distributiond j using historical data up to dayjvia Eq. 5;
+11returnSequence of daily portfolios{P j}j∈T ;
+A.2 DATASET DETAILS
+A.2.1 STOCK POOL DETAILS
+• SSE 50:This index includes the 50 largest and most liquid stocks on the Shanghai Stock Exchange,
+mainly large state-owned enterprises and industry leaders. It is stable and blue-chip, suitable for
+risk-averse and long-term investors focusing on defensive strategies.
+• CSI 300:Comprising the top 300 stocks from the Shanghai and Shenzhen markets, this index
+covers diverse industries and company sizes, offering broad market representation. It is ideal for
+investors seeking diversification and medium- to long-term returns.
+• ChiNext 100:Featuring 100 stocks from the Shenzhen ChiNext Market, this index focuses on
+high-tech and innovative firms. Known for its growth potential and higher volatility, it suits
+investors with high-risk tolerance and those interested in technology sectors.
+• CSI A500:This index selects 500 leading stocks from A-shares, covering all 35 CSI secondary
+industries and 91 out of 93 tertiary industries. It emphasizes sector-balanced exposure, ESG
+screening, and inclusion of innovative "New Quality Productivity" sectors (e.g., IT, industrials,
+healthcare). With strong profitability (71% of A-share net profits) and low valuation (14.16x
+P/E), it serves as a "China S&P 500" for diversified core-asset allocation and long-term growth
+strategies.
+14
+Preprint, under review
+A.2.2 DATASET CONSTRUCTION DETAILS
+We construct our dataset with individual stock data and macroeconomic data.
+Individual stock data
+• News: Stock news is collected from various data sources. We use their titles and summaries as a
+substitute.
+• Financial Report: Financial Report is collected from Wind API. We use their titles and summaries
+as a substitute.
+• E/P_TTM: The inverse of the P/E ratio (E/P) indicates the earnings yield, showing the percentage
+of profit generated per dollar invested in the stock.
+• B/P_TTM: Inverse of P/B (B/P) indicates the book yield, showing the return on book value per
+dollar invested.
+• S/P_TTM: The inverse of the price-to-sales ratio (S/P) reflects the sales yield, quantifying the
+amount of sales revenue generated for each dollar invested in the company. A higher value
+indicates greater efficiency in converting investment into sales.
+• CF/P_TTM: Inverse of P/CF (CF/P) shows the cash flow yield, representing cash flow generated
+per dollar invested.
+• Log-orthogonalized E/P: Log-orthogonalized version of E/P, removing some kind of cap
+basis.Log-orthogonalized version of E/P, removing some kind of cap basis.
+• Log-orthogonalized B/P:Log-orthogonalized version of the book-to-price ratio, which accounts
+for and removes certain capitalization effects, thereby isolating the information content of B/P
+independent of market capitalization.
+• Log-orthogonalized CF/P:The log-orthogonalized version of the cash flow-to-price ratio, which
+is employed to control for capitalization influences, ensuring that the ratio captures the true
+predictive power of cash flow relative to price.
+•Log-orthogonalized S/P:Log-orthogonalized version of S/P, removing some kind of cap basis.
+• EBITDA/EV: Measures a company’s return on enterprise value, indicating operating earnings
+(EBITDA) generated per dollar of EV .
+• ROE: ROE measures profitability by indicating how much net income is generated for each
+dollar of shareholders’ equity. Higher values signify more effective utilization of equity capital to
+generate earnings.
+• ROE stability: TS_Mean(ROE, 8) / TS_Std(ROE, 8), measuring both absolute value and stability
+of ROE.
+• ROA stability: TS_Mean(ROA, 8) / TS_Std(ROE, 8), measuring both absolute value and stability
+of ROA.
+• Dividend yield: Dividend yield indicates annual dividends received per dollar invested, expressed
+as a percentage of the stock price.
+• Log-orthogonalized dividend yield: Log-orthogonalized version of dividend yield, removing
+some kind of cap basis.
+• Dividend yield incl repo & mjrholder trans: Dividend yield including stock repurchasing and
+major holder trading.
+• Revenue TTM YoY growth rate: Measures the percentage change in trailing twelve months’
+revenue compared to the same period last year.
+• Net profit TTM YoY growth rate: Measures the percentage change in trailing twelve months’
+net profit compared to the same period last year.
+• Non-GAAP net profit YoY growth rate: Indicates the percentage change in non-GAAP net
+profit compared to the same period last year.
+•Interday volatility: The price fluctuation range of a stock across trading days.
+•Liquidity: Weighted average of monthly, quarterly, and yearly turnover ratios.
+15
+Preprint, under review
+• Residual volatility: Residual volatility measures the unexplained variability in a security’s returns
+after accounting for market or factor influences, indicating idiosyncratic risk.
+• Stock Base data: The open, high, low, close, volume, and value data of individual stocks on a
+daily timeframe. (forward-adjusted)
+•industry index return: One-day return of holding the sector’s constituent stocks.
+• Price-volume feature: Various features extracted from Alpha 158 (Yang et al., 2020) based on
+price and volume.
+Macroeconomic data
+• The latest 1-year loan prime rate.
+• The latest month China CPI YOY growth rate.
+• The latest yield of China ten ten-year government bonds.
+• The latest PE and PE quantile of the CSI 300 index.
+A.3 MORE DETAILS ABOUTMASS
+A.3.1 MORE DETAILS OFMARKETDISAGREEMENT HYPOTHESIS
+Market disagreement describes heterogeneous investor beliefs that drive trading activities. The
+market disagreement hypothesis posits that such divergence systematically distorts security valua-
+tions: when optimistic investors dominate trading while pessimists face short-selling constraints,
+securities become overpriced and exhibit lower future returns (Miller, 1977). This theory establishes
+disagreement as a persistent market friction that generates predictable return patterns, with empirical
+studies confirming thathigh-disagreement stocks consistently underperform consensus-driven
+counterparts(Diether et al., 2002; Sadka & Scherbina, 2007).
+A.3.2 THEDESIGN OFINVESTORINITIALIZATION
+System & User Prompts
+System Prompt
+You are a helpful assistant. Make sure you carefully and fully understand the details
+of the user’s requirements before you start solving the problem.
+User Prompt
+Give the following input data:
+1. Input time-series data column name and their descriptions in JSON format(textual
+data example).
+2. latest macroeconomic and market insights. Please try to analyze and summarize an
+abstract investing style description.
+The output format is a json. The specific format of the output JSON is:
+{ "Outline": "The outline and general description for investment style within 50 words.
+The outline is a summarization about your investing strategy and your insights into
+the subsequent trend of the stock market, without any details below.",
+"Details": { "Risk Appetite": "conservative | moderate | moderately conservative |
+moderately aggressive | aggressive",
+"Holding Period": "one day | about one week | about one month | about half a year |
+more than one year",
+"Strategy Consistency": [0, 1] (Refers to the investor’s ability to adhere to and execute
+their investment strategy with persistence and coherence, regardless of short-term
+market fluctuations or emotional influences. Higher number means high consistency",
+"Rationality": [0, 1] (Refers to whether the investor’s decision-making process is based
+on logic, data, and long-term objectives rather than emotions, biases, or short-term
+market noise. Higher number means high rationality",
+"StockPoolSelector": "Specify what kind of preference you’d like to construct your
+watchlist stocks. The possible preferences are:
+1. RandomStockSelector: Randomly construct your watchlist.
+2. IndustryEqualStockSelector: Construct a stock pool with balanced distribution across
+industries.
+3. MVEqualStockSelector: Construct a stock pool with balanced distribution across
+market capitalizations.
+16
+Preprint, under review
+4.IndustryBasisStockSelector: Prefer stocks from specific industries and output the
+preferred industries. The result is presented in a list format.",
+"Others": "Extra information about your investing strategy, maybe correlated with
+latest market and macroeconmic information and others. No more than 30 words." } }
+{examples}
+Input data:
+E/P,B/P,CF/P, S/P,Log-orthogonalized E/P,Log-orthogonalized B/P,Log-orthogonalized
+CF/P,Log-orthogonalized S/P,
+Macro data:
+The latest 1-year loan prime rate is 3.45. The latest month China CPI YOY growth rate
+is -0.5. The latest yield of China’s ten-year government bonds is 2.6733%, while the
+yield has increased 0 BP over the past one day, increased -4 BP over the past one month,
+and increased -21 BP over the past half a year. The latest CSI_300 PE is 10.9478,
+and the current PE ratio of the CSI 300 is at the 5.4th percentile over the past 5
+years(0 indicates most undervalued, and 100 indicates most overvalued). The latest
+market sentiment index got a 0.63% return.
+Your investing style:
+{’Outline’: ’A value-oriented investment approach focusing on fundamentally strong
+companies with a long-term perspective, leveraging current market undervaluation and
+stable economic indicators to build a diversified portfolio.’,
+’Details’: {’Risk Appetite’: ’moderate’, ’Holding Period’: ’more than one
+year’, ’Strategy Consistency’: ’0.85’, ’Rationality’: ’0.9’, ’StockPoolSelector’:
+’IndustryEqualStockSelector’, ’Others’: ’Leverage low CPI and undervalued CSI 300
+PE for potential upside.’}
+(END_OF_EXAMPLES)
+Input data: {input_data}
+Macro data: {macro_data}
+Your investing style:
+A.3.3 THE DESIGN OFINVESTMENTSTRATEGY EXECUTION
+User Prompts
+User Prompt
+Giving following
+1. Input data in table format and their descriptions in JSON format.
+2. investing style to make investment decisions in JSON format.
+Please output {num_stocks} stocks you tend to invest in. The result is in JSON format,
+key is "Stock", and value is a list containing the stock code. Please make sure:
+1. You output legal stock code. The stock code is legal if and only if it is in the
+input data "Stock" list.
+2. The number of stock codes is correct, actually equal to {num_stocks}. Here is an
+example.
+For stock_nums in investing instructions, we use 3 in this example. Input Data for
+investing decision:
+1.Input Data Description:
+{"E/P": "The inverse of the P/E ratio (E/P) indicates the earnings yield, showing the
+percentage of profit generated per dollar invested in the stock.",
+"B/P": "Inverse of P/B (B/P) indicates the book yield, showing the return on book value
+per dollar invested.",
+"S/P": "Inverse of P/S (S/P) reflects the sales yield, showing sales generated per
+dollar invested.",
+"CF/P": "Inverse of P/CF (CF/P) shows the cash flow yield, representing cash flow
+generated per dollar invested.",
+"Log-orthogonalized E/P": "Log-orthogonalized version of E/P, removing some kind of
+cap basis.",
+"Log-orthogonalized B/P": "Log-orthogonalized version of B/P, removing some kind of
+cap basis.",
+"Log-orthogonalized CF/P": "Log-orthogonalized version of CF/P, removing some kind of
+cap basis.",
+"Log-orthogonalized S/P": "Log-orthogonalized version of S/P, removing some kind of
+cap basis.",
+17
+Preprint, under review
+"EBITDA/EV": "Measures a company’s return on enterprise value, indicating operating
+earnings (EBITDA) generated per dollar of EV."}
+2.Investing Style:
+{"Outline": "A value-driven investment approach focusing on stocks with strong
+fundamentals, undervalued valuations, and consistent cash flows over the long term.",
+"Details": { "Risk Appetite": "Moderately conservative", "Holding Period": "More than
+one year", "Strategy Consistency": "0.85", "Rationality": "0.9", "StockPoolSelector":
+"MVEqualStockSelector" }}
+3.Input data:
+’,Stock,Date,E/P,B/P,CF/P,S/P,
+Log-orthogonalized E/P,Log-orthogonalized B/P,Log-orthogonalized CF/P,
+Log-orthogonalized S/P, EBITDA/EV,
+965494,000858,20190102, 0.06295366,
+0.30744636,0.038947526,0.19324197,
+-4.032941,-1.1295723,3.594055,
+-1.2754831,0.124886042941460,
+002594,20190102,0.020888906,
+0.37708813,0.09185906,0.9017491,-4.038043,
+-0.6966869,5.084233,0.3152281,0.09258402716,
+600519,20190102,0.042301364,0.13605072,
+0.036664255,0.09038502,-7.6968794,-2.2439895,
+1.2049837,-2.2207088,0.0797575348104294,
+600900,20190102,0.066111766,0.4052357,0.1183,
+0.15322393,-5.3881683,-1.0025798,3.743841,
+-1.5840118,0.1050353948267292,601012,
+20190102,0.062190603,0.30756927,0.032795224,
+0.41643697,-0.72993636,-0.7708632,
+5.801872,-0.31826368,0.0887390158431868,
+601288,20190102,0.16604953,1.2584949,
+0.12149128,0.4757528,-7.5973797,-0.1158539,
+1.556502,-0.6272717,0.059454748665067,
+601888,20190102,0.02850359,0.1358013,
+0.034710173,0.35662726,-3.433404,-1.7193639,
+4.34933,-0.59344673,0.0511954139068489,
+603259,20190102,0.024971908,0.12955885,
+0.018961666,0.10751114,-2.9358995,
+-1.8100101,4.314365,-1.7471998,0.04303389’
+LLM output:
+{’Stock’: [’000858’, ’600900’, ’601288’]}
+Note that in this example, we ask LLM to output 3 stocks. However, in real scenarios,
+you should follow the "num_stocks" args in the instruction.
+(END OF EXAMPLES)
+{input_data}
+A.3.4 TIME COMPLEXITY AND TOKEN COST
+Table 3: MASS’s average time cost and api call fees on each trading day.
+Stock Pool Time Cost
+SSE50 125s $0.679
+CSI 300 378s $2.265
+Chi Next 100 227s $1.192
+For practical deployment, the operational efficiency of MASSis a key consideration. We have
+incorporated several strategic design choices to minimize API-related costs and ensure computational
+feasibility in a live trading scenario.
+First, we recognize that the macroeconomic data informing the investor initialization module (Sec-
+tion 3.1.1) changes at a low frequency. For instance, metrics like the CPI growth rate are updated
+monthly, while others, such as government bond yields and market-wide PE percentiles, evolve gradu-
+18
+Preprint, under review
+ally. To substantially mitigate API overhead, we therefore limit the re-invocation of this initialization
+module to only once per week, specifically on the first trading day.
+Second, and critically, we cache the individual investment decisions generated by each agent during
+the forward propagation stage. Consequently, the backward optimization process—while computation-
+ally intensive in its re-aggregation of historical signals for different candidate distributions—operates
+entirely on these cached results. This design ensures that the backward optimization step incurszero
+additional LLM token costs.
+These optimization strategies ensure the economic viability of MASSin a real-world setting. To
+provide a transparent assessment of its practicality, we report the average daily computational time
+and API costs for a 512-agent configuration in Table 3.
+A.4 BASELINE DETAILS
+• Proxy indicators: Various features can be used as a proxy to quantify market disagreement
+(Diether et al., 2002). We use the earning stability of the listed company (implemented by
+calculating the std of annualized ROE) as a baseline.
+• LightGBM: A high-efficiency, leaf-wise gradient boosting decision tree framework by Microsoft
+Research, employing histogram-based algorithms for accelerated training and reduced memory
+footprint. Following (Bali et al., 2023) and Equation 4, we simulate market disagreement by
+constructing various LightGBM agents visible to different features.
+• DTML: DTML (Yoo et al., 2021) is an attention-based model that exploits the correlations
+between stocks to make investment decisions. We use the open-source implementation 3 to
+implement this baseline.
+• MASTER: MASTER (Li et al., 2024b) is a stock transformer for stock price forecasting, which
+models the momentary and cross-time stock correlation and guides feature selection with market
+information. We use the open-source implementation 4 to implement this baseline.
+• SEP: SEP (Koa et al., 2024) utilizes a verbal self-reflective agent and A PPO that allows the
+LLM to teach itself how to generate explainable single stock predictions. We use the open-source
+link 5 to implement SEP.
+• FINCON: FINCON (Yu et al., 2024) is a multi-agent framework for single stock price prediction
+and simple investment portfolio construction with conceptual verbal reinforcement.
+• TradingAgents: TradingAgents (Xiao et al., 2025b) is a multi-agent framework. that utilizes
+trading firms’ collaborative dynamics to construct investment portfolios. We use the open-source
+link 6 to implement TradingAgents.
+A.5 FURTHER EXPERIMENT RESULTS ON MORE EVALUATION METRICS
+In this section, we provide more evaluation metrics to demonstrate the superiority of MASS. These
+metrics are as follows:
+1.Annualized Return (AR)
+The average annual return of the strategy, calculated by scaling the periodic return (e.g.,
+daily, monthly) to an annual basis. It reflects the strategy’s profitability over time, with the
+formula:
+Rannual = (1 +R periodic)n −1
+wherenis the number of periods in a year.
+2.Maximum Drawdown (MDD)
+The largest peak-to-trough decline in portfolio value, expressed as a percentage. It measures
+the strategy’s downside risk, defined as:
+MDD= max
+
+1− Vt
+Vpeak
+
+whereV t is the portfolio value at timet, andV peak is the maximum value beforet.
+3https://github.com/ceteris11/DTML
+4https://github.com/SJTU-DMTai/MASTER
+5https://github.com/koa-fin/sep
+6https://github.com/TauricResearch/TradingAgents
+19
+Preprint, under review
+Table 4: Comparisons with baselines on more evaluation metrics. MASSoutperforms all others
+across all 3 stock pools, showing impressive cumulative returns compared to the stock index. The
+best performance in each column is highlighted inbold.
+Main Experiments (Throughout 2023)
+Method SSE50 CSI 300 Chi Next 100
+AR Sharpe MDD AR Sharpe MDD AR Sharpe MDD
+Proxy Indicator (Diether et al., 2002) -2.39 -1.22 14.04 -3.60 -1.62 20.57 -20.01 -3.24 24.15
+LightGBM (Ke et al., 2017) -1.88 -1.14 13.16 -4.55 -2.12 18.57 -19.32 -3.01 23.96
+DTML (Yoo et al., 2021) -1.69 -1.08 12.99 -0.33 -0.14 22.34 -8.23 -3.20 24.55
+MASTER (Li et al., 2024b) -1.67 -0.92 12.91 0.79 0.33 22.05 -7.88 -3.17 24.06
+SEP (Koa et al., 2024) -2.01 -1.07 13.12 -10.24 -4.32 22.67 -6.84 -3.14 24.01
+FinCON (Yu et al., 2024) -1.82 -0.98 13.05 -9.25 -3.28 23.74 -6.01 -2.80 23.75
+TradingAgents (Xiao et al., 2025b) -2.44 -1.71 13.15 -7.19 -3.02 19.61 -4.65 -2.82 23.84
+MASS 2.16 1.98 11.98 4.95 2.23 14.04 1.17 0.99 19.06
+Stock pool Index -9.98 -2.37 21.62 -9.75 -2.92 21.44 -19.18 -3.17 32.26
+Experiments on data leakage concern (The first quarter of 2025)
+Method SSE50 CSI 300 CSI A500
+AR Sharpe MDD AR Sharpe MDD AR Sharpe MDD
+MASS 9.74 2.42 2.91 9.36 2.66 2.99 11.34 2.93 4.08
+Stock pool Index -1.88 -2.97 5.63 -3.88 -3.15 5.86 -1.28 -3.26 6.04
+3.Sharpe Ratio (Sharpe)
+A measure of risk-adjusted return, calculated as the excess return over the risk-free rate
+divided by the strategy’s volatility:
+SR= Rstrategy −R f
+σstrategy
+where Rf is the risk-free rate and σstrategy denotes the standard deviation of strategy returns.
+A higher value indicates superior risk-adjusted performance.
+A.6 BACKTESTING EXPERIMENTS DETAILS
+We conduct backtesting experiments on a simulated system. We conduct backtesting using a tradi-
+tional index-enhancement strategy. The portfolio is rebalanced weekly, with a round-trip transaction
+cost of 0.1%. During the first fifteen minutes after the market opens on the first trading day of each
+week, we first exclude stocks that are limit-up or limit-down. Subsequently, we rank the portfolio
+construction signals and equally weight the top 20% of the ranked stocks. Stocks currently held but
+no longer in the top 20% are sold.
+20
