@@ -166,6 +166,16 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
 
 28. **M34: the deliverable is unchanged.** All of this serves the first message of 3 Nov: a malleable, self-configuring, extensible **risk-and-sizing template for the unit** that ships through builders. The idea bank is renamed the **unit idea bank** (`linking/UNIT-IDEA-BANK.md`).
 
+29. **R6 and R7 done and committed.**
+    - R6: 48 papers read in full; thin on stops and exits, stress scenarios, energy, and pooling parameters across instruments.
+    - R7: Kubernetes plus the VPA is the closest software match to a self-configuring unit. A typed document with defaults; a learner publishing a target with low and high bounds; an applier in an owner-chosen mode (off/shadow, at start, live). QMX has the learner but no applier: `authority` is parsed and never used. Argo Rollouts with Kayenta-style analysis is the match for versions.
+    - **Stage A started early**, to use the wait for R4: four Opus dissectors on the shared brief `linking/STAGE-A-BRIEF.md`. Outputs go to `linking/components/A<n>-*.yaml` and `linking/unit-ideas/A<n>-*.md`:
+      - A1 sizing and allocation;
+      - A2 brakes, drift and exits;
+      - A3 structure, regimes and scenarios;
+      - A4 template, agents and telemetry.
+    - Each notes the last R4 chat it covered; a small top-up pass dissects the rest of R4 when it lands. Then Stage B.
+
 ## The unit build is not ours to audit (operator, 2026-11-01)
 
 The build has just started (about 12 of 73 PRs). Its risk and sizing pieces are placeholders, not decisions: nothing is set for risk or sizing yet, and this session is what sets it. Do not report build-level slips (e.g. the A2 `risk_fraction` "0.5" unit) unless the plan itself makes them persist. The placeholders' values (0.5 %, 2R, 48 bars, empty halts) carry no weight in the design.
