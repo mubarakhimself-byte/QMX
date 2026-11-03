@@ -220,6 +220,14 @@ def _number(value: object) -> Decimal | None:
     return found if found is not None and found.is_finite() else None
 
 
+_NO_FIELDS: Final[Mapping[str, object]] = MappingProxyType({})
+
+
+def _fields(entry: object) -> Mapping[str, object]:
+    """One listed entry of a result's measures read as its named fields, or none at all."""
+    return cast(Mapping[str, object], entry) if isinstance(entry, Mapping) else _NO_FIELDS
+
+
 def _whatif(measures: Mapping[str, object], problems: list[str]) -> list[Counted]:
     """A what-if run's `may_improve` scenarios, each counted, and a refusal of every
     `worsen_only` one that came out better than its base (`judge.md` §4). A scenario that left
@@ -231,7 +239,7 @@ def _whatif(measures: Mapping[str, object], problems: list[str]) -> list[Counted
     counted: list[Counted] = []
     names: list[str] = []
     for entry in cast(list[object], listed):
-        named = cast(Mapping[str, object], entry) if isinstance(entry, Mapping) else {}
+        named = _fields(entry)
         name, direction = named.get("name"), named.get("direction")
         base, value = _number(named.get("base")), _number(named.get("value"))
         if not isinstance(name, str) or not name or direction not in (WORSEN_ONLY, MAY_IMPROVE):
@@ -272,7 +280,7 @@ def _counted(kind: str, measures: Mapping[str, object], problems: list[str]) -> 
     listed = measures.get("counted")
     counted: list[Counted] = []
     for entry in cast(list[object], listed) if isinstance(listed, list) else []:
-        named = cast(Mapping[str, object], entry) if isinstance(entry, Mapping) else {}
+        named = _fields(entry)
         name, market = named.get("name"), named.get("market")
         if not isinstance(name, str) or not name or not (market is None or isinstance(market, str)):
             problems.append(f"each thing a {kind} run tried has a name, and a market when alone")
