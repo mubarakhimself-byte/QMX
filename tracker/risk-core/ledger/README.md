@@ -28,7 +28,9 @@ uv run --no-project --with pyyaml python ledger/check.py --with-additions
 - `variables.yaml` is always loaded. Extra files are checked together with it, so an additions file may point at v0 ids and at ids in other files you name.
 - `--with-additions` loads every `additions/*.yaml`.
 - `--strict` fails on warnings too. `--no-paths` skips the source path check. `--no-write` leaves `couplings.md` alone.
+- If your sandbox stops Python from writing files, the checker warns instead of crashing. Then run `... ledger/check.py --print-couplings > ledger/couplings.md`: the Markdown goes to stdout and the report to stderr.
 - Exit code 1 means errors. Fix every error before you hand a file over. Read every warning.
+- Only the funnel (or whoever owns v0) regenerates `couplings.md` for the whole set. An expansion agent checking its own file may pass `--no-write`.
 
 What it reports:
 - **Errors:** a missing or unknown field, a value outside its list, a duplicate id, an `inputs` or `affects` id that exists in no loaded file, a default without a derivation.
@@ -37,13 +39,14 @@ What it reports:
 
 ## The rule: a default needs a derivation
 
-- `default` holds a value only when a source states one as a design default. Placeholders from the unit build and figures a source calls "evidence only" go in `seen_values`, not in `default`.
+- `default` holds a value only when the current design states it: code that runs on the unit path (not a value labelled placeholder), the latest docs, or his own ruling. Placeholders from the unit build, figures a source calls "evidence only", and values from an earlier generation that a later one dropped or left blank go in `seen_values`, not in `default`.
 - A non-null `default` needs a `derivation` that is not "open". The checker refuses it otherwise.
 - `basis` says how good the derivation is:
   - `formula`: computed from its `inputs` by a formula written in `derivation`.
   - `reasoned`: a source gives a reason for the value.
   - `stated`: a source gives the value with no working. Say so in `derivation`. These are the numbers he says "carry no weight" until someone derives them.
-  - `open`: nobody ever said. `default` must be null and `derivation` starts with "open".
+  - `open`: nobody ever said, or the generations disagree. `default` must be null and `derivation` starts with "open".
+  - With a null default, `basis` describes the value in `seen_values` that the derivation talks about (for example `stated` for an old July number with no working).
 - Never invent a value. A null default with an honest derivation note is correct.
 - When generations disagree, leave `default` null, list each value in `seen_values`, and name the conflict in `open_questions`.
 
@@ -70,7 +73,7 @@ One YAML list. One item per variable. Unknown fields are errors.
 | `status` | yes | `running` (runs in the shipped stack), `built_not_running` (code exists, nothing on the unit path runs it), `docs_only`, `dropped` (an earlier generation had it and a later one removed it), `proposal`, `idea` |
 | `sources` | yes | `[{gen, ref, note?}]` |
 | `seed_ids` | no | his asks in `seeds/SEEDS.md`, for example `A26`, `C27` |
-| `aliases` | no | every other name the same idea had in any generation |
+| `aliases` | no | every other name the same idea had in any generation. Aliases of three characters or fewer are maths symbols and compare case-sensitively (July's `B` breaker count and `b` shaping factor are different); longer aliases compare case-insensitively |
 | `notes` | no | plain words |
 | `open_questions` | no | list of plain-word questions |
 

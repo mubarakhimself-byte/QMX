@@ -361,7 +361,7 @@ def mermaid(nodes: dict[str, Entry], edges, levels_to_show: list[str], title: st
     return f"### {title}\n\n" + "\n".join(lines) + "\n"
 
 
-def write_couplings(entries: list[Entry], edges, files: list[Path]) -> None:
+def couplings_markdown(entries: list[Entry], edges, files: list[Path]) -> str:
     by_id = {e.id: e for e in entries}
     parts = [
         "# Variable couplings",
@@ -396,7 +396,7 @@ def write_couplings(entries: list[Entry], edges, files: list[Path]) -> None:
     parts += ["", "## Variables", "", "| Id | Level | Kind | Status | Name |", "|---|---|---|---|---|"]
     for e in sorted(entries, key=lambda x: (LEVELS.index(x.data["level"]) if x.data.get("level") in LEVELS else 99, x.id)):
         parts.append(f"| `{e.id}` | {e.data.get('level')} | {e.data.get('kind')} | {e.data.get('status')} | {str(e.data.get('name', '')).replace('|', '/')} |")
-    OUT_FILE.write_text("\n".join(parts) + "\n", encoding="utf-8")
+    return "\n".join(parts) + "\n"
 
 
 def table(title: str, counter: Counter, order: list[str]) -> str:
@@ -413,7 +413,20 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--strict", action="store_true", help="fail on warnings too")
     parser.add_argument("--no-paths", action="store_true", help="skip the check that source paths and lines exist")
     parser.add_argument("--no-write", action="store_true", help="do not write couplings.md")
+    parser.add_argument(
+        "--print-couplings", action="store_true",
+        help="print couplings.md to stdout and the report to stderr, for sandboxes where Python may not write files: "
+             "... check.py --print-couplings > ledger/couplings.md",
+    )
     args = parser.parse_args(argv)
+    for handle in (sys.stdout, sys.stderr):
+        if hasattr(handle, "reconfigure"):
+            handle.reconfigure(encoding="utf-8", newline="\n")
+    out = sys.stdout
+    stream = sys.stderr if args.print_couplings else sys.stdout
+
+    def say(*parts: object) -> None:
+        print(*parts, file=stream)
 
     files = [BASE_FILE]
     for f in args.files:
@@ -442,6 +455,8 @@ def main(argv: list[str]) -> int:
             report.err(dup, f"id used {n} times ({homes})")
     known = set(ids)
 
+    # Short aliases are maths symbols (July's S seed and s spread, B and b), so
+    # they compare case-sensitively; longer names compare case-insensitively.
     owner: dict[str, str] = {}
     for e in entries:
         owner.setdefault(e.id, e.id)
@@ -449,7 +464,8 @@ def main(argv: list[str]) -> int:
         for alias in e.data.get("aliases") or []:
             if not isinstance(alias, str):
                 continue
-            key = alias.strip().lower()
+            alias = alias.strip()
+            key = alias if len(alias) <= 3 else alias.lower()
             if key in known and key != e.id:
                 report.warn(e.where, f"alias '{alias}' is another entry's id; merge them or drop the alias")
             elif key in owner and owner[key] != e.id:
@@ -480,51 +496,57 @@ def main(argv: list[str]) -> int:
             if isinstance(src, str) and (src, e.id) not in affects_pairs:
                 one_sided += 1
 
-    print(f"Loaded {len(entries)} variables from {len(files)} file(s): {', '.join(p.name for p in files)}")
-    print()
-    print(table("By level", Counter(e.data.get("level") for e in entries), LEVELS))
-    print(table("By kind", Counter(e.data.get("kind") for e in entries), KINDS))
-    print(table("By status", Counter(e.data.get("status") for e in entries), STATUSES))
-    print(table("By basis", Counter(e.data.get("basis", "(none)") for e in entries), BASES))
+    say(f"Loaded {len(entries)} variables from {len(files)} file(s): {', '.join(p.name for p in files)}")
+    say()
+    say(table("By level", Counter(e.data.get("level") for e in entries), LEVELS))
+    say(table("By kind", Counter(e.data.get("kind") for e in entries), KINDS))
+    say(table("By status", Counter(e.data.get("status") for e in entries), STATUSES))
+    say(table("By basis", Counter(e.data.get("basis", "(none)") for e in entries), BASES))
     with_default = [e for e in entries if e.data.get("default") is not None]
     derived = [e for e in with_default if isinstance(e.data.get("derivation"), str) and not is_open(e.data["derivation"])]
-    print()
-    print(f"Defaults set: {len(with_default)}; with a derivation: {len(derived)}; "
+    say()
+    say(f"Defaults set: {len(with_default)}; with a derivation: {len(derived)}; "
           f"of those reasoned or formula: {sum(1 for e in derived if e.data.get('basis') in ('reasoned', 'formula'))}, "
           f"stated without working: {sum(1 for e in derived if e.data.get('basis') == 'stated')}")
-    print(f"Null defaults: {len(entries) - len(with_default)} "
+    say(f"Null defaults: {len(entries) - len(with_default)} "
           f"(open derivation: {sum(1 for e in entries if e.data.get('default') is None and is_open(str(e.data.get('derivation', ''))))})")
-    print(f"Couplings: {len(edges)} ({sum(1 for x in edges if x[2] != 'feeds')} from affects, "
+    say(f"Couplings: {len(edges)} ({sum(1 for x in edges if x[2] != 'feeds')} from affects, "
           f"{sum(1 for x in edges if x[2] == 'feeds')} from inputs only)")
-    print(f"Orphans (no coupling either way): {len(orphans)}")
+    say(f"Orphans (no coupling either way): {len(orphans)}")
     for o in orphans:
-        print(f"  {o}")
-    print(f"Nothing affects these (roots that only push on others): {len(unaffected)}")
+        say(f"  {o}")
+    say(f"Nothing affects these (roots that only push on others): {len(unaffected)}")
     if unaffected:
-        print("  " + ", ".join(unaffected))
-    print(f"Info: {one_sided} input links are not mirrored in the source's affects list (drawn as 'feeds').")
+        say("  " + ", ".join(unaffected))
+    say(f"Info: {one_sided} input links are not mirrored in the source's affects list (drawn as 'feeds').")
 
-    if not args.no_write and not report.errors:
-        write_couplings(entries, edges, files)
-        print(f"Wrote {OUT_FILE}")
-    elif report.errors:
-        print("couplings.md not written because of errors.")
+    if report.errors:
+        say("couplings.md not written because of errors.")
+    elif args.print_couplings:
+        out.write(couplings_markdown(entries, edges, files))
+        say("Printed couplings.md to stdout.")
+    elif not args.no_write:
+        try:
+            OUT_FILE.write_text(couplings_markdown(entries, edges, files), encoding="utf-8", newline="\n")
+            say(f"Wrote {OUT_FILE}")
+        except OSError as exc:
+            report.warn("couplings.md", f"could not write ({exc}); rerun with --print-couplings > ledger/couplings.md")
 
     if report.warnings:
-        print()
-        print(f"WARNINGS ({len(report.warnings)}):")
+        say()
+        say(f"WARNINGS ({len(report.warnings)}):")
         for line in report.warnings:
-            print(f"  {line}")
+            say(f"  {line}")
     if report.errors:
-        print()
-        print(f"ERRORS ({len(report.errors)}):")
+        say()
+        say(f"ERRORS ({len(report.errors)}):")
         for line in report.errors:
-            print(f"  {line}")
+            say(f"  {line}")
         return 1
     if args.strict and report.warnings:
         return 1
-    print()
-    print("OK")
+    say()
+    say("OK")
     return 0
 
 
