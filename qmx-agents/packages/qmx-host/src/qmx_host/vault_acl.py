@@ -140,19 +140,22 @@ if sys.platform != "win32":
             if error.errno == errno.ELOOP:
                 raise KeyRefused(LINKED) from None
             raise
-        with os.fdopen(handle, "rb") as file:
+        try:
             found = os.fstat(handle)
             if stat.S_ISDIR(found.st_mode):
                 raise IsADirectoryError(errno.EISDIR, "a folder")
             if not stat.S_ISREG(found.st_mode):
                 raise OSError(errno.EINVAL, "not a file")
+            if found.st_nlink != 1:
+                raise KeyRefused(HARD_LINKED)
             if found.st_uid != os.geteuid():
                 raise KeyRefused(FOREIGN)
             if found.st_mode & LOOSE_BITS:
                 raise KeyRefused(LOOSE)
-            if found.st_nlink != 1:
-                raise KeyRefused(HARD_LINKED)
-            return file.read()
+            with os.fdopen(handle, "rb", closefd=False) as file:
+                return file.read()
+        finally:
+            os.close(handle)
 
 else:
     import ctypes

@@ -217,9 +217,9 @@ def test_a_hard_link_in_the_vault_refuses_the_start_and_leaves_the_other_name_al
 
 def test_an_apps_secret_that_is_a_hard_link_is_refused_and_never_read(tmp_path: Path) -> None:
     vault = tmp_path / "vault"
+    planted(vault, "other-secret")
     owner_only(vault)
     os.link(outside(tmp_path), vault / "fixture-secret")
-    planted(vault, "other-secret")
     read = vault_secrets(vault)
 
     with pytest.raises(AppError) as refused:
