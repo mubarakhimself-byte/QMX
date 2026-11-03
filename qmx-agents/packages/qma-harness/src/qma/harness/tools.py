@@ -45,6 +45,7 @@ from qmx_control.catalog import (
     rows,
     spill,
 )
+from qmx_control.service import plain_https
 from qmx_home.classes import secret_globs, secret_paths
 
 from qma.harness.delegate import DelegateRefused
@@ -1109,6 +1110,11 @@ def server_config(
             "env": {str(k): str(v) for k, v in cast("dict[object, object]", env).items()},
         }
     if isinstance(url, str) and url and isinstance(ref, str):
+        if not plain_https(url):
+            raise ValueError(
+                "a stored credential goes only to an HTTPS url (plain HTTP on the loopback) with "
+                "no user, password, query or fragment"
+            )
         token = (secret(ref) or "").strip()
         if not token or any(char.isspace() for char in token):
             raise NotOffered(f"{ref} holds no single token in Credential Manager; paste one")

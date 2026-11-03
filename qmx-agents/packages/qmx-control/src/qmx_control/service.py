@@ -362,7 +362,7 @@ def _check_ctrader(row: JsonValue) -> None:
     if (
         not isinstance(row.get("enabled", False), bool)
         or any(row.get(key, value) != value for key, value in CTRADER_MCP.items())
-        or ("url" in row and not _plain_https(row["url"]))
+        or ("url" in row and not plain_https(row["url"]))
     ):
         raise ControlError(
             "invalid_settings",
@@ -371,7 +371,7 @@ def _check_ctrader(row: JsonValue) -> None:
         )
 
 
-def _plain_https(url: JsonValue) -> bool:
+def plain_https(url: JsonValue) -> bool:
     """An HTTPS url with a host and no user, password, query or fragment to hold a secret. Plain
     HTTP passes only on the loopback, where a fixture server stands in for the broker's."""
     try:

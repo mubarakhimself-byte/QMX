@@ -388,6 +388,9 @@ def test_only_the_ctrader_mcp_ref_leaves_the_keyring_as_a_bearer() -> None:
     }
     with pytest.raises(ValueError, match="not wired yet"):
         server_config("firecrawl", firecrawl, secret)
+    for typed in ("http://mcp.ctrader.example/mcp", "https://mcp.ctrader.example/mcp?t=1"):
+        with pytest.raises(ValueError, match="only to an HTTPS url"):
+            server_config("ctrader", {"url": typed, "credential_ref": "qmx/ctrader-mcp"}, secret)
     assert read == []
     ctrader = {"url": "https://mcp.ctrader.example/mcp", "credential_ref": "qmx/ctrader-mcp"}
     assert server_config("ctrader", ctrader, secret) == {
