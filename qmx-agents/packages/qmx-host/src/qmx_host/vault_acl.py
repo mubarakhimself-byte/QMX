@@ -180,8 +180,10 @@ else:
     _OPEN_EXISTING: Final = 3
     _OPEN_REPARSE_POINT: Final = 0x00200000
     _BACKUP_SEMANTICS: Final = 0x02000000
-    """Lets the handle open a folder or a junction, so the reader refuses it by its tag."""
+    """Lets the handle open a folder or a junction, so the reader refuses a junction by its tag."""
     _DIRECTORY: Final = 0x10
+    """A plain folder answers PermissionError, the error Windows gave before the handle could open
+    one, which `test_server_secrets.py` pins."""
     _TAG_INFO: Final = 9
     _MISSING: Final = frozenset({2, 3})
     _INVALID: Final = wintypes.HANDLE(-1).value
@@ -438,7 +440,7 @@ else:
             if tag.attributes & REPARSE_POINT and tag.tag & NAME_SURROGATE:
                 raise KeyRefused(LINKED)
             if tag.attributes & _DIRECTORY:
-                raise IsADirectoryError(errno.EISDIR, "a folder")
+                raise PermissionError(errno.EACCES, "a folder")
             if os.fstat(fd).st_nlink != 1:
                 raise KeyRefused(HARD_LINKED)
             owner, descriptor = _p(), _p()
