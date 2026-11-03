@@ -1,0 +1,591 @@
+# Ledger additions from X0, the trading lens (Stage B, 3 Nov 2026).
+# Schema: ledger/README.md. Existing ids are reused in inputs and affects, never redefined.
+# Every id here is new. Sources point at the component catalogue and the research files the hybrids rest on.
+
+- id: holding_horizon
+  name: Planned holding time of a unit's trades (the style dial)
+  level: unit
+  kind: other
+  measure: "other: minutes"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Set from the unit's exit logic (time exit, half-life, flat-by-close) or measured as the median hold of its own closed trades. X0-49 proposes it as the axis every style default derives from: cost in R, brake windows, volatility forecast horizon and gap allowance all read it."
+  inputs: [max_hold_time]
+  affects:
+    - {id: round_trip_cost_r, direction: up, how: "A shorter hold means a tighter stop, so the same cost is a larger share of R."}
+    - {id: gap_allowance_r, direction: up, how: "A hold that crosses a close or a weekend needs a gap allowance; a scalper's does not."}
+    - {id: hourly_volatility_profile, direction: either, how: "The volatility forecast is made for the planned hold, not for a fixed bar."}
+  configurable: true
+  changed_by: [operator, agent_proposal, automatic]
+  status: idea
+  sources:
+    - {gen: research, ref: "linking/components/A3-structure-regimes-scenarios.yaml", note: "A3-016 forecast for the planned hold; A3-236 limits by signal horizon"}
+    - {gen: expansion, ref: "expansion/X0-trading-lens.md", note: "X0-49 style as a dial"}
+  seed_ids: [A5, A7]
+  notes: "Categorical style words (scalper, intraday, swing) stay as presets that set a range of this number. Marked wild in X0-49; the other layers may keep types."
+  open_questions:
+    - "Is holding horizon enough to derive every style default, or do entry logic families (mean reversion, breakout, trend) need their own axis?"
+
+- id: routine_risk_usd
+  name: Routine risk of a sleeve at its holding horizon
+  level: unit
+  kind: measure
+  measure: USD
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "P&L volatility or expected shortfall of the sleeve (a unit or a cluster) at its holding horizon, in account currency, from its own closed trades; pooled toward its class when the record is thin. One of the three numbers every sleeve carries (A3-001)."
+  inputs: [result_spread_r, risk_amount_usd, holding_horizon]
+  affects:
+    - {id: unit_day_risk_share, direction: either, how: "Shares of the day budget are set so each sleeve's routine risk adds up to the budget."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A3-structure-regimes-scenarios.yaml", note: "A3-001 three-number sleeve record"}
+    - {gen: research, ref: "research/R4-alphaxiv/R4-alphaxiv-synthesis.md", note: "chat 23, three quantities per sleeve"}
+  notes: "Volatility spreads the budget; it never defines it alone."
+
+- id: stress_loss_usd
+  name: Stress loss of a sleeve under the mandatory scenario set
+  level: unit
+  kind: measure
+  measure: USD
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "The sleeve's loss under the mandatory scenario set with correlations raised, gaps applied and stops filled at the stressed spread. Binds swing and anything held over a close; feeds the buffer above the floor."
+  inputs: [gap_loss_beyond_stop, open_risk_at_stop, unit_result_correlation]
+  affects:
+    - {id: unit_day_risk_share, direction: down, how: "A sleeve whose stress loss exceeds its share is cut to fit."}
+    - {id: bms_buffer_before_floor, direction: up, how: "The buffer is sized from the summed stress loss of what is live."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A3-structure-regimes-scenarios.yaml", note: "A3-001; A3-028 worst one-step move table; A3-147 mandatory scenario set"}
+  notes: "Only as good as the scenario set (X4's job)."
+
+- id: feasible_size_usd
+  name: Money at risk of the smallest allowed position, costs and stressed slippage included
+  level: unit
+  kind: measure
+  measure: USD
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "min_lot x stop_distance x value_per_point, plus the round-trip cost and the stressed stop slippage for one minimum position, in account currency. The third number on every sleeve record; it binds scalpers on a small account."
+  inputs: [min_lot, stop_distance, value_per_point, round_trip_cost_r, slippage_cost]
+  affects:
+    - {id: class_feasibility_verdict, direction: either, how: "A feasible size above the sleeve's share makes the class simulate-only."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A1-sizing-allocation.yaml", note: "A1-157 minimum-size feasibility per class; A1-142 size bound with costs"}
+    - {gen: research, ref: "research/R3-edge-verification-and-analogues.md", note: "worked number: EURUSD micro lot tradable, Micro E-mini rounds to zero on $500"}
+  notes: "Never round up to reach it."
+
+- id: class_feasibility_verdict
+  name: Whether a class may trade live at the current budget, or stays simulated
+  level: portfolio
+  kind: other
+  measure: "other: tradable, simulate_only or wait"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "tradable when feasible_size_usd is at or below the unit's day risk share and the regulatory leverage cap allows the minimum lot; simulate_only otherwise; wait when the record is too thin to compute either. Re-derived per broker and as the budget grows (A3-013)."
+  inputs: [feasible_size_usd, unit_day_risk_share, leverage]
+  affects:
+    - {id: live_unit_count, direction: down, how: "A simulate-only verdict keeps that class's units off the live count."}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A3-structure-regimes-scenarios.yaml", note: "A3-013 per-class scalping realism; A3-002 round toward less risk"}
+    - {gen: research, ref: "linking/components/A5-topup.yaml", note: "A5-042 tier feasibility; A5-096 leverage cap"}
+  seed_ids: [D16, D17]
+  notes: "Categorical. The verdict is shown, never silent, so an untradable class is visible (A3-002 known failure)."
+
+- id: unit_day_risk_share
+  name: A unit's share of the day risk budget, set by effective bets
+  level: unit
+  kind: size_input
+  measure: USD
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "portfolio_daily_risk_budget x 1 / sqrt(N (1 + (N - 1) rho)), with N the live units sharing the budget and rho their average result correlation; falls back to 1/N when rho is unknown. Ten independent units each carry about 0.32 of the budget, not 0.10 (R2 section 4.3). This is the volatility-target answer to his day-capital split (C29)."
+  inputs: [portfolio_daily_risk_budget, live_unit_count, unit_result_correlation, effective_independent_bets, routine_risk_usd, stress_loss_usd]
+  affects:
+    - {id: risk_amount_usd, direction: up, how: "The per-trade risk is derived inside this share and the unit's own trade rate."}
+    - {id: unit_daily_loss_limit, direction: up, how: "A unit's daily limit is its share, or a multiple of it the money brake sets."}
+    - {id: class_feasibility_verdict, direction: either, how: "The share is what the feasible size is compared against."}
+  configurable: true
+  changed_by: [operator, agent_proposal, automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "research/R2-trader-practice-windows-drift-isolation-breadth.md", note: "section 4.3, three rules compared"}
+    - {gen: research, ref: "linking/components/A1-sizing-allocation.yaml", note: "A1-087 three answers for N units; A1-088 his day-capital split"}
+    - {gen: operator_words, ref: "seeds/operator-words-2026-11-03.md", note: "M10: split the total capital to be spent in a day across the units"}
+  seed_ids: [C29, C31]
+  aliases: [day budget share]
+  notes: "Collides with his plain 1/N reading and with the lead's 'each unit gets its full size'. X0-02 keeps this as baseline and the Kelly-independent full size as an accelerator behind proof."
+  open_questions:
+    - "Does rho come from result correlation (slow, needs trades) or from exposure overlap (fast, needs the exposure ledger)?"
+
+- id: edge_to_cost_ratio_min
+  name: Smallest ratio of the edge's lower bound to stressed round-trip cost that may trade
+  level: unit
+  kind: limit
+  measure: ratio
+  applies_to: {classes: [all], styles: [scalper, intraday], timeframes: all}
+  default: 2
+  basis: reasoned
+  derivation: "The lower confidence bound of expected gross edge per trade, divided by the stressed expected round-trip cost, must be at least 2; 3 for negative-skew logics or thin live evidence. Reason: a 2x margin survives a doubling of costs, which is what news hours, rollover and a broker change do (A3-003). Starting value is the assistant's proposal in R4 chat-24, not a paper result."
+  seen_values:
+    - {value: 2, gen: research, ref: "research/R4-alphaxiv/R4-alphaxiv-synthesis.md", note: "chat 24 admission gate; 3 for negative skew"}
+  inputs: [expectancy_r, round_trip_cost_r, cost_stress_multiple, edge_t_statistic, hourly_cost_profile]
+  affects:
+    - {id: trade_rate, direction: down, how: "Hours or instruments where the ratio is below the floor are refused, so the unit trades less."}
+    - {id: risk_amount_usd, direction: either, how: "A ratio far above the floor may lift size inside the share; below it, size is zero."}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A3-structure-regimes-scenarios.yaml", note: "A3-003; A3-005 five-gate falsification"}
+    - {gen: research, ref: "linking/components/A2-brakes-drift-exits.yaml", note: "A2-223; A2-206"}
+  seed_ids: [A11, A24, A14]
+  notes: "The gate is the honest form of 'cost is the master state' for scalpers. Collides with A14 (too safe) when the bound is undefined for a thin record: the unit waits."
+
+- id: hourly_cost_profile
+  name: Round-trip cost per instrument, venue, hour and session, measured
+  level: unit
+  kind: cost
+  measure: "other: R per round trip by hour bucket"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Measured from QMX's own fills and quotes (spread crossed, commission, slippage against the contemporaneous mid, rejects and requotes), per instrument, venue, hour and session, converted to R at the unit's typical stop. A missing cell refuses sizing; it is never zero. Calibrated per world; demo never stands in for live (G7 4.3)."
+  inputs: [spread_cost, commission_cost, slippage_cost, session_windows]
+  affects:
+    - {id: round_trip_cost_r, direction: either, how: "The per-trade cost in R is read from the cell for the hour the trade is placed."}
+    - {id: edge_to_cost_ratio_min, direction: either, how: "The gate compares the edge with this cell's stressed value."}
+    - {id: premium_window_flag, direction: either, how: "A window is a slice where cost is low and net edge high; the cost side comes from here."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A3-structure-regimes-scenarios.yaml", note: "A3-017 vol and cost tables kept separate; A3-039 hourly spread profile; A3-084 hourly cost profile"}
+    - {gen: grounding, ref: "grounding/G7-unit-inputs-qmb-mis-instruments.md", note: "section 4.3: costs never reach the sizer"}
+  seed_ids: [A11, D17]
+  notes: "The table that makes 'costs reach the sizer' a fact. One of two per-instrument-hour tables (X0-37)."
+
+- id: hourly_volatility_profile
+  name: Volatility forecast per instrument and hour bucket for the planned hold
+  level: unit
+  kind: measure
+  measure: "other: volatility per hour bucket"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Seasonal hour-bucket pattern x the day's volatility level x short-term clustering (the multiplicative component model), per instrument, forecast for the planned holding horizon; pooled across the class when the instrument's own record is thin (A5-097). Kept apart from the cost table: busy can mean deep, wide, fast or all three."
+  inputs: [session_windows, holding_horizon]
+  affects:
+    - {id: volatility_target, direction: either, how: "The target is met with a size that reads this forecast, not a fixed bar."}
+    - {id: risk_amount_usd, direction: down, how: "An elevated forecast for the hold cuts size inside the share."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A3-structure-regimes-scenarios.yaml", note: "A3-016 multiplicative component model; A3-017; A3-054 HAR-RV"}
+    - {gen: research, ref: "linking/components/A5-topup.yaml", note: "A5-097 pooled volatility dynamics"}
+  notes: "The other of the two per-instrument-hour tables (X0-37). Crypto uses activity sessions, not the clock."
+
+- id: regime_probability_vector
+  name: Filtered regime probabilities per class, point in time
+  level: portfolio
+  kind: evidence
+  measure: "other: probability vector over named states"
+  applies_to: {classes: [fx, index, metal, energy, futures, stock], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Filtered, never smoothed, probabilities from a Markov-switching or statistical jump model fitted per class on point-in-time data, recomputed daily and at scheduled releases. A stale or conflicting input falls back to the pre-approved conservative state. Crypto has too little macro history for its own model and takes the overlay."
+  inputs: [cross_market_stress_reading]
+  affects:
+    - {id: macro_state_multiplier, direction: either, how: "The per-class multiplier table is weighted by these probabilities."}
+  configurable: false
+  changed_by: [automatic]
+  status: idea
+  sources:
+    - {gen: research, ref: "linking/components/A3-structure-regimes-scenarios.yaml", note: "A3-043 filtered probabilities; A3-044 sticky jump model; A3-041 slow governor"}
+  notes: "Macro never picks trades; it only governs how much risk the book may carry (X0-06, X0-42)."
+
+- id: macro_state_multiplier
+  name: Per-class budget multiplier from the macro state (cut-only live)
+  level: portfolio
+  kind: size_input
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. A table of multipliers per macro state and class, weighted by regime_probability_vector. Starts in shadow mode and goes live as cut-only (never above 1) until a walk-forward shows raises pay. The assistant's starting table (calm 1.00 except energy 0.75 and crypto 0.50; risk-off 0.25 to 0.80; shock 0.25 everywhere) is a policy to backtest, not a result."
+  seen_values:
+    - {value: "1.00 / 0.50 / 0.65 / 0.25 (equities by state)", gen: research, ref: "research/R4-alphaxiv/R4-alphaxiv-synthesis.md", note: "chat 26 starting multipliers, untested"}
+  inputs: [regime_probability_vector, instrument_class]
+  affects:
+    - {id: class_risk_cap, direction: down, how: "The class cap is the approved cap times this multiplier times the fast-layer multiplier."}
+  configurable: true
+  changed_by: [operator, agent_proposal, automatic]
+  status: idea
+  sources:
+    - {gen: research, ref: "linking/components/A3-structure-regimes-scenarios.yaml", note: "A3-042 class limit formula; A3-045 regimes cut gross, never re-weight"}
+    - {gen: research, ref: "linking/components/A4-template-agents-telemetry.yaml", note: "A4-002 applier modes off, shadow, live"}
+  seed_ids: [C27]
+  notes: "Lowers fast, raises slowly, with hysteresis (A2-045). Unknown is not calm (A3-094)."
+
+- id: class_risk_cap
+  name: Risk a class may carry now, in loss units
+  level: portfolio
+  kind: limit
+  measure: USD
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "approved normal cap for the class x macro_state_multiplier (slow layer) x the volatility-and-liquidity multiplier from the fast layer (realised volatility, co-movement, spread state every 5-15 minutes). Falls at once, rises slowly with hysteresis. Sits below the cluster cap and above the instrument cap (two layers, A3-048)."
+  inputs: [macro_state_multiplier, cross_market_stress_reading, cluster_exposure_cap]
+  affects:
+    - {id: cluster_exposure_cap, direction: down, how: "A class cap tighter than the cluster cap binds first."}
+    - {id: unit_day_risk_share, direction: down, how: "Units in a capped class share less."}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A3-structure-regimes-scenarios.yaml", note: "A3-042; A3-048 two layers of caps; A3-041"}
+  seed_ids: [C27, B15]
+
+- id: co_loss_breadth
+  name: Share of live units losing inside one loss-event window, and the loss given that
+  level: portfolio
+  kind: measure
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Count the live units whose losses fall inside the same loss_event_window (the hours clause), divided by the live count, and the summed loss when it happens. Feeds the parent limit: a BMS limit is set below the sum of the children by how often they lose together (A3-161)."
+  inputs: [loss_event_window, live_unit_count]
+  affects:
+    - {id: bms_daily_loss_limit, direction: down, how: "Children that lose together more often need a tighter parent."}
+    - {id: portfolio_daily_risk_budget, direction: down, how: "High co-loss breadth means fewer effective bets, so a smaller day budget for the same swing."}
+    - {id: effective_independent_bets, direction: down, how: "Measured co-loss is the realised side of the effective-bet count."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A3-structure-regimes-scenarios.yaml", note: "A3-146 hours clause; A3-158 co-loss breadth; A3-161 parent below sum"}
+    - {gen: research, ref: "linking/components/A2-brakes-drift-exits.yaml", note: "A2-026 insurance hours clause"}
+  seed_ids: [C32, B15]
+  notes: "All losses from one move count as one event for every count brake (X0-10)."
+
+- id: money_brake_percentile
+  name: Percentile of the unit's own daily P&L distribution at which its money brake trips
+  level: unit
+  kind: brake_threshold
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: 1
+  basis: reasoned
+  derivation: "The brake trips when today's loss in R passes the unit's own k-th percentile of daily P&L, computed at its trade rate and win rate from its record (or by simulation on the card before a record exists). R9 found a brake at the unit's 1 percent worst day fires on 1-3 percent of days at any trade frequency, which is what a count brake cannot do. The 1 percent default is the operator's floor rule read as a daily quantile: almost never, not never."
+  seen_values:
+    - {value: "-4R at 4 trades, -6R at 10, -8R at 16, -10R at 40 (55 percent unit, 1st percentile)", gen: research, ref: "research/R9-accelerators-and-brake-pairs.md", note: "numbers worth carrying"}
+  inputs: [trade_rate, win_rate, daily_r_digest, loss_points_total]
+  affects:
+    - {id: unit_daily_loss_limit, direction: either, how: "The unit's daily limit is this quantile in R times the money per R."}
+    - {id: circuit_breaker_strikes, direction: down, how: "For high-frequency units the money quantile replaces the strike count; the count stays only for low-frequency units."}
+  configurable: true
+  changed_by: [operator, agent_proposal, automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "research/R9-accelerators-and-brake-pairs.md", note: "section 4.1-4.2 money brakes against count brakes"}
+    - {gen: research, ref: "linking/components/A5-topup.yaml", note: "A5-144 money brake at the unit's own percentile; A5-145 two ledgers"}
+    - {gen: research, ref: "linking/components/A2-brakes-drift-exits.yaml", note: "A2-078 count threshold scaled to trade count; A2-091 loss points"}
+  seed_ids: [A6, A26, A28, C31, C33]
+  notes: "Counts a fast-invalidation cut by its size and a breakeven as nothing, which answers A28. Collides with his 'brake at about three' (A6) for scalpers."
+  open_questions:
+    - "Is the quantile the same at unit, book and BMS, or does each level get its own sweet spot (C33)?"
+
+- id: gap_allowance_r
+  name: Gap allowance added to the stop in the sizing denominator for positions that may hold through a close
+  level: trade
+  kind: size_input
+  measure: R
+  applies_to: {classes: [fx, index, metal, energy, futures, stock], styles: [intraday, swing], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "The instrument's historical gap at a chosen percentile over the kind of close the hold may cross (weekend, overnight, maintenance break, halt), in R of the planned stop. Size = risk / (stop + gap allowance). Scalpers and ORB are flat by rule and carry zero."
+  inputs: [gap_loss_beyond_stop, holding_horizon]
+  affects:
+    - {id: risk_amount_usd, direction: down, how: "A bigger denominator means less money at the nominal stop for the same budget."}
+    - {id: lot_size, direction: down, how: "Fewer lots for the same risk when a gap is in the denominator."}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A3-structure-regimes-scenarios.yaml", note: "A3-025 gap allowance and Friday-flat; A3-028 worst one-step move table; A3-024 cash and overnight split"}
+  notes: "Crypto has no weekend close but thin weekend books; its allowance comes from weekend realised moves, not a gap."
+
+- id: tail_loss_sizing_factor
+  name: Size divisor for negative-skew logics until their own tail record exists
+  level: unit
+  kind: size_input
+  measure: ratio
+  applies_to: {classes: [all], styles: [scalper, intraday], timeframes: all}
+  default: 1.3
+  basis: stated
+  derivation: "Landolfi's simulations put mean-reversion and short-volatility drawdown worst cases at 1.30-1.34x the Gaussian figure (A3-008). Applied as a divisor on size for many-small-wins logics until the unit has enough trades to show its own tail. Stated, not derived from QMX data."
+  seen_values:
+    - {value: "1.30-1.34", gen: research, ref: "linking/components/A3-structure-regimes-scenarios.yaml", note: "A3-008"}
+  inputs: [payoff_ratio, win_rate]
+  affects:
+    - {id: risk_amount_usd, direction: down, how: "Negative-skew units size smaller than a symmetric unit with the same expectancy."}
+  configurable: true
+  changed_by: [operator, agent_proposal, automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A3-structure-regimes-scenarios.yaml", note: "A3-008 size negative skew on tail loss"}
+  seed_ids: [A20]
+  notes: "Applies to his high-win-rate scalpers by construction: low reward-to-risk and high win rate is negative skew."
+
+- id: event_impact_measured
+  name: Measured move and spread change per scheduled release and instrument, in event time
+  level: node
+  kind: evidence
+  measure: "other: move and spread multiple per release and instrument"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Measured from QMX's own quotes around each scheduled release against matched non-event minutes, per instrument and release, with driver tags beyond the headline currency (both FX legs, home exchange, region, commodity). Replaces the calendar's colour levels. A stale calendar fails entries closed."
+  inputs: [news_impact_level_map]
+  affects:
+    - {id: event_window_width, direction: either, how: "Window width per event type is derived from the measured impact."}
+    - {id: news_blackout_before, direction: either, how: "The before-window becomes a measured number, not a fixed minute count."}
+    - {id: news_blackout_after, direction: either, how: "The after-window ends when spread and move settle, as measured."}
+  configurable: false
+  changed_by: [automatic, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A3-structure-regimes-scenarios.yaml", note: "A3-130 measured event impact; A3-131 driver tags; A3-133 surprise backstop; A3-229 calibrate in event time"}
+  seed_ids: [C28, D9]
+  notes: "News becomes data the template reads, not a kill-switch colour."
+
+- id: event_window_width
+  name: Entry-block window width per event type and unit style
+  level: node
+  kind: schedule
+  measure: minutes
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Derived from event_impact_measured per event type (the minutes until spread and move return to the matched baseline), widened for shorter holding horizons (scalpers widest), with a floor for the calendar's own lag. Blocks entries only, never exits."
+  inputs: [event_impact_measured, holding_horizon]
+  affects:
+    - {id: trade_rate, direction: down, how: "Blocked minutes reduce the unit's trades; the blocked share is reported."}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A3-structure-regimes-scenarios.yaml", note: "A3-132 window width by measured impact and unit type; A3-228 policy by event type"}
+  seed_ids: [C28]
+  notes: "Scenario A3-208 (medium news every hour swallows the day) is the test that the width is not too wide."
+
+- id: caution_window_width
+  name: Width of the session-open, hand-over and fix caution windows
+  level: node
+  kind: schedule
+  measure: minutes
+  applies_to: {classes: [fx, index, metal, energy, futures, stock], styles: [scalper, intraday], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. No generation ever derived it (A3-036 known failure). Proposed: the minutes after an open, hand-over or fix during which the instrument's measured spread or volatility sits above its matched baseline, in event time, per instrument; scalper entries blocked inside it, ORB entries allowed by design."
+  seen_values:
+    - {value: 25, gen: april, ref: "grounding/G3-old-system.md", note: "London-New York overlap warm-up of 25 minutes, never derived"}
+  inputs: [hourly_cost_profile, hourly_volatility_profile, session_windows]
+  affects:
+    - {id: session_handover_buffer_width, direction: either, how: "The node's hand-over buffer kind takes this width."}
+    - {id: daily_dead_zone_width, direction: either, how: "The dead zone and the caution window share the measured spread baseline."}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A3-structure-regimes-scenarios.yaml", note: "A3-036 session-open caution; A3-035 fix windows; A3-229"}
+  seed_ids: [D9]
+  notes: "Same idea as the dropped warm_up_window (methodology level); kept as a node schedule with a derivation. Collides with a fix unit (UB-18): a window that blocks all units blocks the one built for the fix."
+
+- id: tick_rate_relative
+  name: Quote updates per minute against the usual at the same minute of the session
+  level: unit
+  kind: evidence
+  measure: ratio
+  applies_to: {classes: [fx, metal, index], styles: [scalper, intraday], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Quote updates in the last minute divided by the median at the same minute of the session over 20 weeks, per instrument and broker. Stands in for relative volume on broker feeds that carry no real volume (spot FX, CFDs). Recalibrated on any broker change."
+  inputs: []
+  affects:
+    - {id: rvol_multiplier, direction: either, how: "Where no volume exists, the in-play gate reads this ratio instead."}
+    - {id: premium_window_flag, direction: either, how: "Activity concentration is one of the two things a window measures."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A3-structure-regimes-scenarios.yaml", note: "A3-074 activity gauge from waits between quotes; A3-021 in-play gate with the tick-rate stand-in"}
+    - {gen: research, ref: "research/R5-mql5-corpus-ideas.md", note: "24742: quietest half hour waits 47x the busiest on EURUSD"}
+  notes: "Retail ticks are quote changes, not trades; never call it volume."
+
+- id: activity_session_windows
+  name: Activity-defined session windows for 24/7 instruments
+  level: system
+  kind: schedule
+  measure: "other: named windows per instrument"
+  applies_to: {classes: [crypto], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Crypto has no exchange open. Windows are cut from the hourly activity and volatility profiles (stock-hour overlap, weekends, funding minutes at 00:00, 08:00 and 16:00 UTC on Binance-style venues, quarter-hour bursts) per venue. Replaces clock sessions for perps and spot; the day boundary for budgets must be declared because nothing closes."
+  inputs: [tick_rate_relative, hourly_volatility_profile]
+  affects:
+    - {id: session_windows, direction: either, how: "For crypto the session table is these windows, not Tokyo, London, New York."}
+    - {id: day_boundary, direction: either, how: "A 24/7 class needs an explicit day for daily budgets and brakes."}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A3-structure-regimes-scenarios.yaml", note: "A3-040 activity sessions for crypto; A3-058 weekend crypto factor"}
+  notes: "Funding minutes are caution minutes for perps."
+
+- id: day_budget_breadth_scale
+  name: Scale on the day risk budget from how much of the usual breadth is open now
+  level: portfolio
+  kind: size_input
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "effective bets open now divided by the usual effective bets, floored at a declared minimum. On an FX weekend only crypto is open, so the day budget shrinks rather than crypto inheriting the whole book's budget (scenario A3-214)."
+  inputs: [effective_independent_bets, activity_session_windows]
+  affects:
+    - {id: portfolio_daily_risk_budget, direction: down, how: "Fewer open bets, smaller day budget for the same swing."}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: idea
+  sources:
+    - {gen: research, ref: "linking/components/A3-structure-regimes-scenarios.yaml", note: "A3-114 scale the day budget with open breadth"}
+  notes: "Collides with X0-54 (crypto as the 24/7 spine) if the floor is set too low."
+
+- id: tier_dwell
+  name: Dwell before a size tier may step up, counted in the unit's own clock
+  level: unit
+  kind: schedule
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: stated
+  derivation: "Topstep steps a funded account up one tier after 10 active days and down the same day; no tier is skipped. For QMX the dwell is counted in active days for intraday and swing units and in trades for scalpers, because a scalper's day holds many independent trials. No source measures the effect of the dwell itself."
+  seen_values:
+    - {value: "10 active days", gen: research, ref: "research/R9-accelerators-and-brake-pairs.md", note: "Topstep live rules"}
+  inputs: [trade_rate]
+  affects:
+    - {id: size_levels, direction: either, how: "A level may rise only after the dwell; it falls at once."}
+    - {id: size_ramp_to_full, direction: either, how: "The ramp is a sequence of dwells."}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A5-topup.yaml", note: "A5-123 tier ladder with dwell; A5-137 settle before the next change"}
+  seed_ids: [C19, A21]
+  notes: "Heparin's recheck after four half-lives is the same shape in another field (A5-136)."
+
+- id: pyramid_add_rule
+  name: "Add-on rule for trend units: smaller adds on the way, one stop for the whole position"
+  level: unit
+  kind: accelerator
+  measure: "other: adds per favourable move"
+  applies_to: {classes: [fx, index, metal, energy, futures, stock, crypto], styles: [swing], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Turtle form: one unit every half-N (ATR) move in favour, up to four, each add at falling risk, all behind one stop; the unit's open risk never exceeds its cap. Allowed only for trend units whose returns persist at their horizon (A5-079); never for mean reversion or scalpers (A5-119: pressing is worth about nothing on independent trades)."
+  inputs: [volatility_target, stop_distance, stop_premium_check]
+  affects:
+    - {id: open_risk_at_stop, direction: up, how: "Each add raises the position's risk at the common stop."}
+    - {id: max_position_size_lots, direction: either, how: "The cap bounds the total after adds."}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: idea
+  sources:
+    - {gen: research, ref: "linking/components/A5-topup.yaml", note: "A5-120 Turtle pyramiding; A5-119 pressing after wins"}
+    - {gen: research, ref: "linking/components/A1-sizing-allocation.yaml", note: "A1-071 pyramiding with a unified stop and falling risk"}
+  notes: "Default off everywhere; on only for a unit tagged trend by its own persistence test."
+
+- id: venue_capacity_cap
+  name: Ceiling on size growth per venue and instrument from counterparty pushback
+  level: account
+  kind: limit
+  measure: "other: lots or notional per venue and instrument"
+  applies_to: {classes: [all], styles: [scalper, intraday], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Found by probe-and-drain: briefly size above the current level, keep the gain only if fills, rejects, requotes and markout do not worsen, then drain back. Any accelerator stops at this cap. The real-money betting case (A5-148) shows the cap arrives suddenly, so it is checked, not assumed."
+  inputs: [slippage_cost]
+  affects:
+    - {id: max_position_size_lots, direction: down, how: "The venue cap is a second ceiling under the record's max lot."}
+    - {id: max_lot, direction: down, how: "Where pushback is measured, the effective max lot is lower than the venue's published one."}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: idea
+  sources:
+    - {gen: research, ref: "linking/components/A5-topup.yaml", note: "A5-148 venue capacity ceiling; A5-135 probe and drain"}
+    - {gen: research, ref: "linking/components/A3-structure-regimes-scenarios.yaml", note: "A3-015 dealer skew; A3-238 last look"}
+  notes: "Marked wild in X0-12. Retail FX and CFD brokers with last look are the closest analogue."
+
+- id: cost_of_conservatism
+  name: Risk budget left idle, and R forgone by brakes that were not needed, per sleeve per day
+  level: unit
+  kind: measure
+  measure: USD
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "day risk share allowed minus day risk used, plus the R that would have been earned during brake holds whose precision later showed no action was needed. The sitting duck made visible; feeds the BMS re-slot between styles."
+  inputs: [unit_day_risk_share, brake_precision]
+  affects:
+    - {id: slot_rebalance_rule, direction: either, how: "A sleeve that leaves budget idle for long is a candidate to lose a slot; one that is always at its cap is a candidate to gain one."}
+  configurable: false
+  changed_by: [automatic]
+  status: idea
+  sources:
+    - {gen: research, ref: "linking/components/A5-topup.yaml", note: "A5-073 measure the cost of conservatism"}
+    - {gen: operator_words, ref: "seeds/operator-words-2026-11-03.md", note: "M10: BMS self-optimises slots if the capital allows"}
+  seed_ids: [C26, A14]
+  notes: "Marked wild in X0-52."
+
+- id: stop_premium_check
+  name: Whether the unit's own returns persist at its horizon, so a stop or breakeven rule can help
+  level: unit
+  kind: evidence
+  measure: "other: momentum, mean-reverting or unknown"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Measured on the unit's own trade paths (MAE and MFE excursions) at its holding horizon: a stop-loss rule adds value only under momentum and costs value under mean reversion (Kaminski-Lo). Momentum allows a trailing or breakeven move; mean reversion gets a time exit and no stop move; unknown keeps the disaster stop only."
+  inputs: [excursion_mae_mfe_r, holding_horizon]
+  affects:
+    - {id: stop_policy_per_style, direction: either, how: "The stop policy is chosen per logic from this check, not per style name."}
+    - {id: breakeven_trigger, direction: either, how: "A breakeven move is allowed only where the check says momentum."}
+  configurable: true
+  changed_by: [agent_proposal, automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A5-topup.yaml", note: "A5-079 stopping-premium pre-check; A5-081 trend reversal as the exit"}
+    - {gen: research, ref: "linking/components/A2-brakes-drift-exits.yaml", note: "A2-249 Kaminski-Lo; A2-234 breakeven only when the forecast changes; A2-269 his memory of dynamic SL/TP"}
+  seed_ids: [A10, A28]
+  notes: "Answers M15 (dynamic SL/TP for intraday, fast invalidation for scalpers) with a test instead of a style rule."
