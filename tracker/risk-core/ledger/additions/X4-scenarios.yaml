@@ -1,0 +1,3276 @@
+# X4 scenarios: ledger additions. Schema per ledger/README.md. Written 2026-11-03 by the Stage B X4 agent.
+# Every id here is new; ids the draft used that already existed in v0 were mapped onto v0 (see expansion/X4-scenarios.md Part 1c).
+# Defaults are null unless a shipped number or his ruling states one. Likelihoods and severities in the catalogue are judgments, not ledger values.
+
+# ---------- Shared drivers, same bet, breadth (scenarios 01-03, 64, 91-93) ----------
+
+- id: shared_driver_tags
+  name: "Driver tags per instrument (both FX legs, home exchange, region, class, named events)"
+  level: system
+  kind: other
+  measure: "other: list of tags"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: seeded by class defaults (FX pair = both currencies; CFD = home exchange and region; crude and gas = EIA report; CAD = energy), refined by the measured event impact per release and instrument."
+  inputs: [instrument_class, measured_event_impact]
+  affects:
+    - {id: news_impact_level_map, direction: either, how: "a release resolves to every instrument carrying its tag, not to the quote currency"}
+    - {id: loss_event_window, direction: either, how: "the window is opened per driver tag"}
+    - {id: same_bet_exposure_cap, direction: either, how: "the bet key is built from the tags"}
+  configurable: true
+  changed_by: [operator, agent_proposal, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 01, 17, 21, 79; idea 95"}
+    - {gen: grounding, ref: grounding/G9-runtime-brakes-isolation-evidence.md:105, note: "no base-currency field today"}
+  seed_ids: [C27, C28]
+
+- id: same_bet_exposure_cap
+  name: "Cap on open risk per bet key across units"
+  level: portfolio
+  kind: limit
+  measure: R
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a bet key is logic family plus driver tags plus direction; the cap per key is the risk one well-sized unit would take on that bet; set from the per-driver cap and the number of keys sharing a driver."
+  inputs: [bet_key_rule, per_driver_exposure_cap, open_risk_at_stop]
+  affects:
+    - {id: lot_size, direction: down, how: "the order that would pass the cap is trimmed or refused"}
+    - {id: effective_independent_bets, direction: up, how: "capping same bets raises the realised N_eff toward the unit count"}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 01, 03, 23, 64; idea 92"}
+    - {gen: grounding, ref: grounding/G9-runtime-brakes-isolation-evidence.md:220, note: "the cross-unit hook passes every order today"}
+  seed_ids: [C18, C29, D10]
+
+- id: bet_key_rule
+  name: "How a bet key is built from an intent"
+  level: portfolio
+  kind: other
+  measure: "other: rule"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: default key = methodology tag + driver tags + direction; a template may declare a narrower or wider key."
+  inputs: [methodology_tag, shared_driver_tags]
+  affects:
+    - {id: same_bet_exposure_cap, direction: either, how: "defines what counts as the same bet"}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 64; idea 92"}
+
+- id: per_driver_exposure_cap
+  name: "Cap on open risk per shared driver, sized to a tail gap"
+  level: portfolio
+  kind: limit
+  measure: R
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "cap = bms_buffer_before_floor / tail_gap_assumption_pct for that driver, so a tail gap on one driver costs at most the buffer; he may change the tail assumption or the formula."
+  inputs: [bms_buffer_before_floor, tail_gap_assumption_pct, shared_driver_tags]
+  affects:
+    - {id: same_bet_exposure_cap, direction: down, how: "the sum of same-bet caps on one driver may not exceed the driver cap"}
+    - {id: currency_exposure_limit, direction: either, how: "the currency limit is the FX form of the driver cap"}
+    - {id: cluster_exposure_cap, direction: either, how: "the cluster cap is the class form of the driver cap"}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 35, 87; idea 92"}
+    - {gen: research, ref: research/R2-trader-practice-windows-drift-isolation-breadth.md:209, note: "the correlation that bites is shared exposure"}
+  seed_ids: [C10, C27]
+
+- id: tail_gap_assumption_pct
+  name: "Assumed tail gap per driver for sizing the driver cap"
+  level: portfolio
+  kind: size_input
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: expert-set per driver and labelled as an assumption (a pegged currency near 20 %, an index near 7 %, a crypto cascade near 30 %), revised from the harness's replayed shock list."
+  inputs: []
+  affects:
+    - {id: per_driver_exposure_cap, direction: down, how: "a bigger assumed gap gives a smaller cap"}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 35; idea 92"}
+    - {gen: research, ref: research/R8-gap-topup.md:372, note: "scenario parameters may be expert-set when data are scarce, labelled"}
+
+- id: methodology_tag
+  name: "Logic-family tag on a unit (the methodology level's key)"
+  level: methodology
+  kind: other
+  measure: "other: tag"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: declared on the unit template (mean reversion, ORB, trend); the methodology level pools every unit sharing a tag."
+  inputs: []
+  affects:
+    - {id: methodology_pooled_cusum, direction: either, how: "defines the pooled stream"}
+    - {id: bet_key_rule, direction: either, how: "part of the bet key"}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 03, 04, 64"}
+  seed_ids: [B1]
+
+- id: methodology_pooled_cusum
+  name: "CUSUM on the pooled R stream of a logic family"
+  level: methodology
+  kind: brake_threshold
+  measure: R
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the per-unit CUSUM limit scaled for the pooled count, discounted for correlation across the family's units; flags in days what one unit needs about 240 trades to see."
+  inputs: [methodology_tag, cusum_limit, unit_result_correlation]
+  affects:
+    - {id: size_level_now, direction: down, how: "a pooled alarm steps the family's share down one level"}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 04, 60, 65"}
+    - {gen: research, ref: research/R2-trader-practice-windows-drift-isolation-breadth.md:90, note: "about 240 trades for one unit"}
+  seed_ids: [A25]
+
+- id: co_loss_breadth
+  name: "Share of units losing together in a window, and the loss given that share"
+  level: portfolio
+  kind: measure
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: measured from the journal per event window; reported beside N_eff."
+  inputs: [loss_event_window]
+  affects:
+    - {id: effective_independent_bets, direction: either, how: "a high co-loss breadth means a low realised N_eff"}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 64"}
+
+- id: correlation_stress_rho
+  name: "Stressed correlation used for sizing the correlated group"
+  level: portfolio
+  kind: size_input
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the higher of measured and stressed rho; the stressed value from the scenario set's risk-off case (correlations raised)."
+  inputs: [unit_result_correlation, scenario_set_version]
+  affects:
+    - {id: same_bet_exposure_cap, direction: down, how: "sizing on stressed rho shrinks new entries in the group during a spike"}
+    - {id: effective_independent_bets, direction: down, how: "stressed rho gives the lower N_eff"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 02, 87"}
+    - {gen: research, ref: research/R2-trader-practice-windows-drift-isolation-breadth.md:163, note: "correlation rises in bear moves"}
+
+- id: entry_size_trim_on_comove
+  name: "Trim on new entries in a correlated group while a co-move tell is on"
+  level: portfolio
+  kind: brake_threshold
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: derived from the stressed-rho N_eff against the normal N_eff for the group."
+  inputs: [co_move_score, correlation_stress_rho]
+  affects:
+    - {id: lot_size, direction: down, how: "new entries in the group are sized at the trim while the tell is on"}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 02"}
+
+- id: open_breadth_budget_scale
+  name: "Scale of the day budget with the breadth that is open now"
+  level: portfolio
+  kind: size_input
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "scale = N_eff(open now) / N_eff(weekday full breadth), capped at 1; a weekend with two crypto units open spends two units' share, not ten."
+  inputs: [effective_independent_bets, live_unit_count]
+  affects:
+    - {id: bms_daily_loss_limit, direction: down, how: "the spendable budget falls with open breadth"}
+    - {id: class_budget_share_cap, direction: either, how: "the open class may not spend more than its weekday share"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 24, 93"}
+  seed_ids: [C1, D10]
+
+- id: class_budget_share_cap
+  name: "Cap on the share of the day budget one class may spend"
+  level: portfolio
+  kind: limit
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the class's weekday share of N_eff, so a class alone at the weekend cannot spend the whole budget."
+  inputs: [open_breadth_budget_scale]
+  affects:
+    - {id: bms_daily_loss_limit, direction: down, how: "binds the per-class spend inside the budget"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 24"}
+
+# ---------- House money and accelerators (scenarios 05, 63, 86) ----------
+
+- id: house_money_lockout
+  name: "Conditions under which house money and every accelerator are off"
+  level: unit
+  kind: other
+  measure: "other: rule"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: off inside any event window, news window, caution or isolation, in a yellow or red edge zone, during a version's settling period, and whenever any brake is active (any brake blocks every raise)."
+  inputs: [loss_event_window, isolation_mode, edge_zone, accelerator_lockout_trades_after_version]
+  affects:
+    - {id: house_money_winnings_share, direction: down, how: "the share is zero while locked out"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 05, 15, 63, 86"}
+    - {gen: research, ref: research/R9-accelerators-and-brake-pairs.md:345, note: "any brake blocks every raise"}
+  seed_ids: [A21, C19]
+
+- id: tier_dwell_trades
+  name: "Trades or active days a unit must spend in a size tier before the next step up"
+  level: unit
+  kind: schedule
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: Topstep uses 10 active days per tier; for a unit the dwell is the trades needed to measure the tier (the settling rule), set from its trade rate."
+  inputs: [trade_rate, settling_trades_after_change]
+  affects:
+    - {id: size_level_now, direction: up, how: "a step up waits for the dwell; a step down is same-day"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 63"}
+    - {gen: research, ref: research/R9-accelerators-and-brake-pairs.md:35, note: "Topstep tiers: up after 10 active days, down the same day"}
+
+- id: persistence_block_test_pass
+  name: "Whether the unit's own block-persistence test passed, gating any pressing rule"
+  level: unit
+  kind: evidence
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: positive and significant block-sum autocorrelation at the unit's horizon with tries counted (about 950 trades for a 500-trade regime in R9's script)."
+  inputs: []
+  affects:
+    - {id: house_money_winnings_share, direction: up, how: "a pressing rule is allowed only after the pass"}
+  configurable: false
+  changed_by: [automatic]
+  status: idea
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 63"}
+    - {gen: research, ref: research/R9-accelerators-and-brake-pairs.md:34, note: "measure persistence in blocks"}
+
+- id: trip_memory_ceiling
+  name: "Remembered size level at the last trip; regrowth slows near it"
+  level: unit
+  kind: brake_reset
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the TCP ssthresh and CUBIC plateau pattern; regrow fast to a fraction of the trip level, then slowly near it."
+  inputs: [size_level_now]
+  affects:
+    - {id: size_level_now, direction: down, how: "caps the speed of steps up after a trip"}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 63"}
+    - {gen: research, ref: research/R9-accelerators-and-brake-pairs.md:211, note: "remember the trip level"}
+
+- id: settling_trades_after_change
+  name: "Trades at the current size before the next size change may happen"
+  level: unit
+  kind: schedule
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the heparin four-half-lives idea: enough trades at the new size to measure it; set from the unit's trade rate and daily spread."
+  inputs: [trade_rate]
+  affects:
+    - {id: size_level_now, direction: either, how: "no step in either direction inside the settling count, except a hard breach"}
+    - {id: tier_dwell_trades, direction: up, how: "the dwell is at least the settling count"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 55, 63, 86"}
+    - {gen: research, ref: research/R9-accelerators-and-brake-pairs.md:217, note: "settling time"}
+
+- id: best_day_share_max
+  name: "Consistency rule: the best day may be at most this share of total profit"
+  level: unit
+  kind: limit
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: FTMO uses 50 % (30 % on Instant); a breach holds accelerators and the verdict, it never stops the unit."
+  inputs: []
+  affects:
+    - {id: house_money_lockout, direction: either, how: "a breach locks accelerators until the share falls back"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 63, 66"}
+    - {gen: research, ref: research/R2-trader-practice-windows-drift-isolation-breadth.md:268, note: "best day at most 50 % of profit"}
+
+- id: accelerator_lockout_trades_after_version
+  name: "Trades after any version or world change during which every accelerator is locked"
+  level: unit
+  kind: schedule
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: at least the settling count; the slow-start period of a new version."
+  inputs: [settling_trades_after_change]
+  affects:
+    - {id: house_money_lockout, direction: either, how: "locked for the count"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 55, 86"}
+
+# ---------- Books, budgets, equity (scenarios 06, 07) ----------
+
+- id: equity_refresh_s
+  name: "Seconds between refreshes of account equity and margin on the node"
+  level: account
+  kind: schedule
+  measure: "other: seconds"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: on every fill and on a timer; today cTrader equity is read once at sign-in."
+  inputs: []
+  affects:
+    - {id: account_equity, direction: either, how: "a fresh equity is what every marked brake reads"}
+    - {id: margin_used, direction: either, how: "margin refreshes with it"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 06, 68"}
+    - {gen: grounding, ref: grounding/G9-runtime-brakes-isolation-evidence.md:136, note: "equity read once at sign-in on C-12d"}
+
+- id: burn_rate_slow_window
+  name: "Slow window for the cushion burn rate (the ticket class)"
+  level: portfolio
+  kind: schedule
+  measure: "other: hours"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: SRE opens a ticket at 10 % of the monthly budget in 3 days; the slow window is days, the page window hours."
+  inputs: []
+  affects:
+    - {id: cushion_burn_rate, direction: either, how: "defines the slow burn measure"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 07"}
+    - {gen: research, ref: research/R3-edge-verification-and-analogues.md:249, note: "burn rate over two windows"}
+
+- id: burn_rate_ticket_threshold
+  name: "Burn rate over the slow window that opens a ticket and steps size down"
+  level: portfolio
+  kind: brake_threshold
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a burn rate of 1 over 3 days in SRE terms; for a cushion, the rate at which the plan's monthly loss allowance would be gone inside the month."
+  inputs: [cushion_burn_rate, burn_rate_slow_window]
+  affects:
+    - {id: size_level_now, direction: down, how: "a slow burn steps size down one level"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 07"}
+
+- id: burn_rate_page_threshold
+  name: "Burn rate over the fast window that pages and stops entries"
+  level: portfolio
+  kind: brake_threshold
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: SRE pages at 2 % of the monthly budget in 1 hour (rate 14.4); for the BMS, the rate that would spend the day budget inside a session."
+  inputs: [cushion_burn_rate]
+  affects:
+    - {id: bms_circuit_breaker, direction: either, how: "a fast burn is one trigger of the BMS breaker"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 07, 14"}
+    - {gen: research, ref: research/R3-edge-verification-and-analogues.md:249}
+
+- id: cushion_burn_rate
+  name: "Rate at which the cushion above the floor is being spent, over two windows"
+  level: portfolio
+  kind: measure
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "burn = (cushion lost in window) / (planned loss allowance for the window), computed on a fast and a slow window."
+  inputs: [account_equity, portfolio_floor, burn_rate_slow_window]
+  affects:
+    - {id: burn_rate_ticket_threshold, direction: either, how: "compared against it"}
+    - {id: burn_rate_page_threshold, direction: either, how: "compared against it"}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 07"}
+
+# ---------- Isolation (scenarios 08-14, 37, 85, 94) ----------
+
+- id: co_move_score
+  name: "Share of a scope's instruments beyond their usual spread or volatility for this minute of the session"
+  level: portfolio
+  kind: evidence
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "score = instruments in the scope with spread or volatility above their percentile band / instruments in the scope with fresh quotes; stale markets are excluded, never counted as calm."
+  inputs: [sqs_score, feed_stale_after]
+  affects:
+    - {id: cross_market_stress_reading, direction: up, how: "one of the readings the stress reading is built from"}
+    - {id: market_isolation_trigger, direction: up, how: "a high score is one tell"}
+    - {id: entry_size_trim_on_comove, direction: either, how: "a high score switches the trim on"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 02, 08, 32, 80; idea 94"}
+    - {gen: research, ref: research/R2-trader-practice-windows-drift-isolation-breadth.md:172, note: "the useful extra tell is co-movement"}
+  seed_ids: [C27]
+
+- id: isolation_two_tell_rule
+  name: "Two tells must agree before an isolation fires"
+  level: portfolio
+  kind: other
+  measure: "other: rule"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: spread and volatility, or one tell plus a calendar event tagged to the scope, with a minimum co-move count; scored on history for precision and recall."
+  inputs: [co_move_score, baseline_calendar_aware]
+  affects:
+    - {id: market_isolation_trigger, direction: either, how: "defines the trigger's evidence"}
+    - {id: brake_precision, direction: up, how: "two tells raise precision"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 09; idea 94"}
+    - {gen: research, ref: research/R3-edge-verification-and-analogues.md:261, note: "alarm fatigue"}
+
+- id: baseline_calendar_aware
+  name: "Whether tell baselines know holidays, half days and DST"
+  level: node
+  kind: other
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the MIS baseline is the same minute of the session over 20 weeks; a holiday flag per calendar keeps thin days out of the baseline or in their own one."
+  inputs: [holiday_thin_flag]
+  affects:
+    - {id: co_move_score, direction: either, how: "a calendar-aware baseline stops holiday afternoons reading as stress"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 09, 27"}
+
+- id: isolation_ttl
+  name: "Time to live of an isolation before its staged resume starts"
+  level: portfolio
+  kind: schedule
+  measure: minutes
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: by mode and scope; a retrip doubles the next TTL; an agent proposal card carries its own TTL."
+  inputs: [isolation_mode, isolation_retrip_backoff]
+  affects:
+    - {id: isolation_end_rule, direction: either, how: "the TTL is the earliest end; tells clear is the other condition"}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 08, 12, 13, 85; idea 94"}
+  seed_ids: [C27]
+
+- id: isolation_mode
+  name: "What an isolation does: no new entries, reduce, or flatten"
+  level: portfolio
+  kind: other
+  measure: "other: no_new_entries, reduce, flatten"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: graded by evidence strength; flatten is the top level only and pages when positions are open."
+  inputs: [co_move_score, isolation_two_tell_rule]
+  affects:
+    - {id: soft_kill_exit_schedule, direction: either, how: "reduce and flatten run the staged exit schedule"}
+    - {id: house_money_lockout, direction: either, how: "any mode locks accelerators in the scope"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 11; idea 94"}
+    - {gen: grounding, ref: grounding/G10-brakes-decay-slots-all-generations.md:226, note: "April soft kill: staged exits"}
+  seed_ids: [C21, C27]
+
+- id: settling_time
+  name: "Settling time after an isolation release during which entries run at the resume fraction"
+  level: portfolio
+  kind: schedule
+  measure: minutes
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: April used 15 minutes after a soft kill with weights at x0.1; set per scope from the measured aftershock rate on history."
+  inputs: []
+  affects:
+    - {id: resume_size_fraction, direction: either, how: "the fraction applies for the settling time"}
+    - {id: retrip_lockout_rule, direction: either, how: "a retrip inside the settling time locks out"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 12, 37"}
+    - {gen: grounding, ref: grounding/G10-brakes-decay-slots-all-generations.md:226}
+
+- id: resume_size_fraction
+  name: "Size fraction on first entries after an isolation or bench release"
+  level: portfolio
+  kind: brake_reset
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: half size is the exchange reopen idea; April used x0.1 in the settling window."
+  inputs: [settling_time]
+  affects:
+    - {id: lot_size, direction: down, how: "entries in the settling time are sized at the fraction"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 12, 71"}
+
+- id: isolation_retrip_backoff
+  name: "Multiplier on the next TTL after a retrip"
+  level: portfolio
+  kind: brake_reset
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: doubling is the recloser and TCP back-off pattern."
+  inputs: []
+  affects:
+    - {id: isolation_ttl, direction: up, how: "each retrip lengthens the next TTL"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 12, 37, 85"}
+    - {gen: research, ref: research/R3-edge-verification-and-analogues.md:208, note: "retry before lockout"}
+
+- id: retrip_lockout_rule
+  name: "Lockout after a second trip inside the settling window"
+  level: portfolio
+  kind: brake_reset
+  measure: "other: rule"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: lock the scope out for the day; under the absence policy, until acknowledged."
+  inputs: [settling_time, absence_policy]
+  affects:
+    - {id: isolation_end_rule, direction: either, how: "a lockout overrides the TTL end"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 37, 85"}
+
+- id: budget_rotation_on_isolation
+  name: "Whether the budget freed by an isolated scope moves to open scopes"
+  level: portfolio
+  kind: other
+  measure: "other: park or rotate"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: April rotated the freed budget to open regions; July forbade redistribution inside a cycle; his call."
+  inputs: []
+  affects:
+    - {id: bms_daily_loss_limit, direction: either, how: "rotate lets open scopes spend the isolated scope's share"}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 10"}
+    - {gen: grounding, ref: grounding/G10-brakes-decay-slots-all-generations.md:381, note: "the July conflict"}
+  open_questions:
+    - "Park or rotate the freed budget during an isolation?"
+
+- id: agent_proposal_bounds
+  name: "Bounds on what an agent's proposal may change (de-risk only by default, typed, expiring)"
+  level: system
+  kind: other
+  measure: "other: rule"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: de-risking proposals apply with a TTL after his click; loosening proposals need evidence above a higher bar and a cooling time after any loss."
+  inputs: [loosening_evidence_bar, get_even_cooling_min, proposal_ttl_h]
+  affects:
+    - {id: isolation_ttl, direction: either, how: "a proposed isolation carries its own TTL"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 13, 57"}
+  seed_ids: [D41, D42]
+
+- id: loosening_evidence_bar
+  name: "Evidence bar for a proposal that raises size, widens a stop or loosens a brake"
+  level: system
+  kind: evidence
+  measure: "other: rule"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: more evidence for bigger or irreversible changes; never a bar loosened because it rejects too much."
+  inputs: []
+  affects:
+    - {id: agent_proposal_bounds, direction: either, how: "the loosening class reads this bar"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 57"}
+
+- id: get_even_cooling_min
+  name: "Cooling time after a loss before any size increase may be proposed or applied"
+  level: unit
+  kind: schedule
+  measure: minutes
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: flags the get-even pattern for humans and agents; the length is per style."
+  inputs: []
+  affects:
+    - {id: agent_proposal_bounds, direction: either, how: "a size increase inside the cooling time is refused"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 57"}
+    - {gen: research, ref: research/R8-gap-topup.md:131, note: "traders who raise risk after morning losses lose more"}
+
+- id: proposal_ttl_h
+  name: "Hours an applied agent proposal stays in force before it expires"
+  level: system
+  kind: schedule
+  measure: "other: hours"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: every proposal expires; the TTL is on the card."
+  inputs: []
+  affects:
+    - {id: agent_proposal_bounds, direction: either, how: "part of the bounds"}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 57"}
+
+# ---------- News and calendar (scenarios 15-21, 79, 82, 95) ----------
+
+- id: news_fail_safe_affected
+  name: "An instrument with no mapping for a release counts as affected"
+  level: node
+  kind: other
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: true
+  basis: reasoned
+  derivation: "Gen 3 docs: a missing exposure record means affected plus an alarm; April: failed scope resolution blocks all. Fail safe up is the only honest rule for a free calendar."
+  inputs: []
+  affects:
+    - {id: news_impact_level_map, direction: either, how: "unknown mappings resolve to affected"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 15, 16, 79"}
+    - {gen: grounding, ref: grounding/G10-brakes-decay-slots-all-generations.md:386, note: "fail safe up in three generations"}
+
+- id: surprise_caution_min
+  name: "Length of the short caution raised by a volatility surprise the calendar did not predict"
+  level: portfolio
+  kind: schedule
+  measure: minutes
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a volatility doubling shows within about 12 one-minute bars; the caution covers the minutes after."
+  inputs: []
+  affects:
+    - {id: market_isolation_trigger, direction: either, how: "a surprise is a short-lived, narrow trigger"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 16"}
+    - {gen: research, ref: research/R2-trader-practice-windows-drift-isolation-breadth.md:168}
+
+- id: measured_event_impact
+  name: "Measured move and spread per release and instrument in the minutes after"
+  level: system
+  kind: evidence
+  measure: "other: pips and spread multiple"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: event-study on history per release class and instrument, kept in a versioned event file; replaces the provider's colour."
+  inputs: []
+  affects:
+    - {id: news_blackout_before, direction: either, how: "window width by measured impact"}
+    - {id: news_blackout_after, direction: either, how: "window width by measured impact"}
+    - {id: shared_driver_tags, direction: either, how: "an instrument that moves on a release earns its tag"}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 15, 17, 18; idea 95"}
+    - {gen: research, ref: research/R2-trader-practice-windows-drift-isolation-breadth.md:179}
+
+- id: news_block_impact_min
+  name: "Lowest impact class a unit type blocks on"
+  level: unit
+  kind: other
+  measure: "other: impact class"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: per unit type; a 5-minute scalper may block only high, an ORB blocks high and medium around its open."
+  inputs: [measured_event_impact]
+  affects:
+    - {id: entries_blocked_by_window, direction: either, how: "a lower bar blocks more hours"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 18"}
+
+- id: entries_blocked_by_window
+  name: "Hours and entries blocked by windows per day, reported as a cost"
+  level: unit
+  kind: measure
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: counted from the guard rows; shown beside R saved."
+  inputs: [news_block_impact_min]
+  affects:
+    - {id: trip_tax_record, direction: up, how: "part of the trip tax"}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 18"}
+
+- id: cost_state
+  name: "Cost state word per instrument: normal, elevated, toxic"
+  level: portfolio
+  kind: evidence
+  measure: "other: normal, elevated, toxic"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: from the hourly cost profile against its own history; elevated means half size for scalpers; toxic means no entries."
+  inputs: [spread_cost, slippage_cost, holiday_thin_flag]
+  affects:
+    - {id: lot_size, direction: down, how: "elevated halves scalper size"}
+    - {id: unit_cost_target, direction: either, how: "toxic means every scalper's cost target is breached"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 19, 27, 39"}
+    - {gen: research, ref: research/R2-trader-practice-windows-drift-isolation-breadth.md:210, note: "for scalpers, cost is the master state"}
+  seed_ids: [A11]
+
+- id: exits_never_blocked
+  name: "Invariant: no QMX control blocks a close, a cancel or a tighter stop"
+  level: system
+  kind: other
+  measure: "other: invariant"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: true
+  basis: reasoned
+  derivation: "His ruling (C21), confirmed in code: exits, broker stops and kill closes skip the stand-downs. The market may still block (a halt, a venue cap); the invariant covers QMX's own controls."
+  inputs: []
+  affects:
+    - {id: isolation_mode, direction: either, how: "no mode may block an exit"}
+  configurable: false
+  changed_by: [none]
+  status: running
+  sources:
+    - {gen: operator_words, ref: seeds/SEEDS.md:515, note: "C21"}
+    - {gen: unit_build, ref: grounding/G9-runtime-brakes-isolation-evidence.md:67, note: "exits skip the stand-downs"}
+  seed_ids: [C21]
+
+- id: window_end_requires_fresh_quotes
+  name: "A news window's end needs fresh quotes and a clean tell, with the timer as the earliest end"
+  level: node
+  kind: other
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: unknown is not calm; the post-release end is state-based with the timer as a floor."
+  inputs: [news_blackout_after, feed_stale_after]
+  affects:
+    - {id: news_blackout_after, direction: up, how: "the window may extend past the timer"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 82"}
+
+- id: energy_event_sources
+  name: "Sources of the energy event calendar (EIA petroleum, EIA gas storage, OPEC) read as data"
+  level: node
+  kind: schedule
+  measure: "other: source list"
+  applies_to: {classes: [energy, fx], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the published EIA schedules shift around holidays; the calendar is data with its own refresh, never a hard-coded weekday and hour."
+  inputs: []
+  affects:
+    - {id: news_impact_level_map, direction: either, how: "adds energy releases to the map with their own impact measures"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 79, 89"}
+    - {gen: research, ref: research/R8-gap-topup.md:437, note: "EIA schedules and holiday shifts"}
+
+# ---------- Sessions, clocks, worlds (scenarios 22-30) ----------
+
+- id: session_budget_share
+  name: "Share of the day budget a book assigns to each session, when a template wants one"
+  level: book
+  kind: size_input
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: one budget per day boundary; per-session shares are optional and sum to the day budget."
+  inputs: [period_loss_budget, session_windows]
+  affects:
+    - {id: period_loss_budget, direction: either, how: "splits it by session without resetting it at a hand-over"}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 22"}
+  seed_ids: [D7, D9]
+
+- id: fix_window_min
+  name: "Caution window around benchmark fixes (London 16:00, Tokyo, ECB, gold fixes, month end)"
+  level: node
+  kind: schedule
+  measure: minutes
+  applies_to: {classes: [fx, metal], styles: [scalper, intraday], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the fix reversal is about 2.5 bp and spreads widen into it; width from the measured move and spread per fix."
+  inputs: [measured_event_impact]
+  affects:
+    - {id: entries_blocked_by_window, direction: up, how: "adds blocked minutes"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 22"}
+    - {gen: research, ref: research/R2-trader-practice-windows-drift-isolation-breadth.md:54}
+
+- id: netting_refusal
+  name: "Refuse a second unit on one symbol of a netting account at deploy"
+  level: node
+  kind: limit
+  measure: "other: rule"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the plan's placeholder made real; a hedging account keeps one virtual position per unit instead."
+  inputs: [netting_mode]
+  affects:
+    - {id: positions_per_instrument, direction: down, how: "one unit per symbol on netting"}
+  configurable: false
+  changed_by: [none]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 23"}
+    - {gen: grounding, ref: grounding/G9-runtime-brakes-isolation-evidence.md:221, note: "no such check found"}
+  seed_ids: [D10]
+
+- id: gross_vs_net_exposure
+  name: "Gross and net exposure per instrument across units, shown together"
+  level: portfolio
+  kind: measure
+  measure: R
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "gross = sum of absolute open risk per instrument; net = signed sum; two opposite units show net zero and gross double."
+  inputs: [open_risk_at_stop]
+  affects:
+    - {id: same_bet_exposure_cap, direction: either, how: "the cap reads net; the cost report reads gross"}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 23"}
+
+- id: weekend_mode
+  name: "A crypto unit's weekend behaviour (smaller size, fewer entries, or off)"
+  level: unit
+  kind: other
+  measure: "other: mode"
+  applies_to: {classes: [crypto], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: per unit type; weekend volatility is its own factor with a Monday-open rule."
+  inputs: []
+  affects:
+    - {id: lot_size, direction: down, how: "a smaller weekend size"}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 24"}
+
+- id: weekend_flat_rule
+  name: "Styles that must be flat before the weekend close"
+  level: book
+  kind: other
+  measure: "other: rule"
+  applies_to: {classes: [fx, index, metal, energy, futures, stock], styles: [scalper, intraday], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: scalpers and the ORB never hold over the weekend; swing holds with a gap allowance in its size."
+  inputs: []
+  affects:
+    - {id: weekend_exposure_cap, direction: down, how: "flat styles contribute zero weekend exposure"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 25"}
+  seed_ids: [D7]
+
+- id: gap_allowance_pct
+  name: "Gap allowance added to the stop distance in sizing for held positions, per class and window"
+  level: unit
+  kind: size_input
+  measure: percent
+  applies_to: {classes: [all], styles: [intraday, swing], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the instrument's historical gap at a percentile for the held window (weekend, overnight, a report); energy carries a larger one."
+  inputs: [gap_loss_beyond_stop]
+  affects:
+    - {id: lot_size, direction: down, how: "a bigger allowance gives a smaller size for the same R"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 25, 31, 79"}
+    - {gen: research, ref: research/R8-gap-topup.md:411, note: "a larger gap allowance in the stop for energy"}
+  seed_ids: [A19]
+
+- id: weekend_exposure_cap
+  name: "Cap on open risk held over the weekend"
+  level: portfolio
+  kind: limit
+  measure: R
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: sized so a weekend gap at the allowance costs at most the buffer."
+  inputs: [gap_allowance_pct, bms_buffer_before_floor]
+  affects:
+    - {id: open_risk_at_stop, direction: down, how: "binds Friday's open risk"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 25"}
+
+- id: rollover_window_min
+  name: "Caution window around the 17:00 New York rollover per instrument"
+  level: node
+  kind: schedule
+  measure: minutes
+  applies_to: {classes: [fx, metal, index], styles: [scalper, intraday], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: spreads spike for minutes at the roll; width from the measured spread path per instrument."
+  inputs: [day_boundary]
+  affects:
+    - {id: entries_blocked_by_window, direction: up, how: "adds blocked minutes"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 26"}
+
+- id: triple_swap_day
+  name: "Weekday on which the swap is charged three times, per instrument"
+  level: system
+  kind: schedule
+  measure: "other: weekday"
+  applies_to: {classes: [fx, metal, index], styles: [swing, intraday], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: from the instrument record's swap.triple_day; usually Wednesday."
+  inputs: []
+  affects:
+    - {id: swap_financing_cost, direction: up, how: "three times the swap on that night"}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 26, 44"}
+    - {gen: grounding, ref: grounding/G7-unit-inputs-qmb-mis-instruments.md:190}
+
+- id: holiday_thin_flag
+  name: "Holiday or half-day flag per calendar"
+  level: node
+  kind: evidence
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: exchange calendars carry holidays; forex has none, so FX thin days come from the major-market holidays."
+  inputs: []
+  affects:
+    - {id: cost_state, direction: up, how: "a thin day sets elevated"}
+    - {id: baseline_calendar_aware, direction: either, how: "feeds the baseline"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 27"}
+    - {gen: grounding, ref: grounding/G9-runtime-brakes-isolation-evidence.md:107}
+
+- id: dst_mismatch_check
+  name: "Check of each calendar's session times against the venue's reported session around DST dates"
+  level: node
+  kind: other
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the connect-time verifier run at every session; a mismatch is a ticket and a stand-down on the affected windows."
+  inputs: [session_windows]
+  affects:
+    - {id: session_windows, direction: either, how: "a mismatch suspends clock-based windows"}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 28, 47"}
+
+- id: bench_min_rest
+  name: "Minimum rest after a bench, in hours or trades, carried across the day boundary"
+  level: unit
+  kind: brake_reset
+  measure: "other: hours or trades"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a rolling window instead of a calendar reset; the rest lengthens with each bench in the window."
+  inputs: [circuit_breaker_window]
+  affects:
+    - {id: circuit_breaker_reset, direction: either, how: "the reset waits for the rest, whatever the clock"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 29, 62, 71"}
+    - {gen: grounding, ref: grounding/G10-brakes-decay-slots-all-generations.md:81, note: "April reset every counter at the UTC boundary"}
+
+- id: bench_retry_max_in_window
+  name: "Benches allowed in a rolling window before a lockout for his click"
+  level: unit
+  kind: brake_threshold
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the recloser pattern: a few automatic retries, then lockout; a single-shot scheme allows one."
+  inputs: [circuit_breaker_window]
+  affects:
+    - {id: risk_stop_resume_rule, direction: either, how: "below the max the resume is automatic; at the max it is his"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 71, 74"}
+    - {gen: research, ref: research/R3-edge-verification-and-analogues.md:208}
+
+- id: world_switch_reset_rule
+  name: "What resets on a world or version switch (paper to live, PC to VPS, venue change, new version)"
+  level: unit
+  kind: other
+  measure: "other: rule"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: counters and house money reset to zero, size starts at level 1, costs are uncalibrated until N fills; brake state and anchors carry; the book's state_carry_rule is the per-counter declaration."
+  inputs: [state_carry_rule]
+  affects:
+    - {id: size_level_now, direction: down, how: "level 1 after any switch"}
+    - {id: live_fills_until_calibrated, direction: either, how: "starts the calibration count"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 30, 55, 75"}
+    - {gen: grounding, ref: grounding/G9-runtime-brakes-isolation-evidence.md:124, note: "promote carries the paper lane's calibrated values"}
+  seed_ids: [D13, D19]
+
+- id: size_level_now
+  name: "The unit's current size level on its ladder"
+  level: unit
+  kind: measure
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: starts at 1 after any switch; steps up after a dwell on clean evidence, down one level on a soft breach, to zero on a hard breach; never skips."
+  inputs: [size_levels, edge_zone, tier_dwell_trades]
+  affects:
+    - {id: lot_size, direction: up, how: "the level sets the size multiple"}
+  configurable: false
+  changed_by: [automatic, operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 04, 30, 55, 60, 66, 71"}
+    - {gen: research, ref: research/R3-edge-verification-and-analogues.md:174, note: "dose escalation"}
+
+- id: live_fills_until_calibrated
+  name: "Live fills needed before the unit's live cost is trusted"
+  level: unit
+  kind: evidence
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: until then the size uses the demo cost times a stress multiple; the count is per instrument and hour bucket."
+  inputs: []
+  affects:
+    - {id: cost_stress_multiple, direction: either, how: "the stress multiple applies until calibrated"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 30, 38"}
+
+- id: switch_only_when_flat
+  name: "A world or version switch happens only when the unit is flat and at a boundary, unless he forces it"
+  level: node
+  kind: other
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: true
+  basis: reasoned
+  derivation: "A position belongs to the version that opened it until flat (the plan); switching mid-position loses the sizer's memory and the day's counters."
+  inputs: []
+  affects:
+    - {id: world_switch_reset_rule, direction: either, how: "the reset runs at the switch, which waits for flat"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 30, 55"}
+    - {gen: grounding, ref: grounding/G7-unit-inputs-qmb-mis-instruments.md:242}
+
+# ---------- Market structure (scenarios 31-37) ----------
+
+- id: broker_side_stop_required
+  name: "Invariant: every live position carries a broker-side stop at all times"
+  level: node
+  kind: limit
+  measure: "other: invariant"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: true
+  basis: reasoned
+  derivation: "The only protection that works when the node cannot react (flash crash, link down); the protection escalation closes a position whose stop never shows."
+  inputs: []
+  affects:
+    - {id: protection_retry_max, direction: either, how: "the escalation enforces it"}
+  configurable: false
+  changed_by: [none]
+  status: running
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 31, 45, 83"}
+    - {gen: grounding, ref: grounding/G9-runtime-brakes-isolation-evidence.md:56, note: "protection escalation"}
+  seed_ids: [C21]
+
+- id: velocity_caution_rule
+  name: "Caution on an instrument whose price moved too far too fast"
+  level: portfolio
+  kind: brake_threshold
+  measure: "other: move per lookback"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the CME velocity-logic idea; a move beyond k times the usual range inside a short lookback; several instruments at once feed the co-move score."
+  inputs: []
+  affects:
+    - {id: co_move_score, direction: up, how: "a velocity hit on many instruments is co-movement"}
+    - {id: reentry_cooling_after_gap, direction: either, how: "starts the cooling on that instrument"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 31"}
+    - {gen: research, ref: research/R2-trader-practice-windows-drift-isolation-breadth.md:137}
+
+- id: floor_breach_dwell_s
+  name: "Seconds marked equity must sit below the floor buffer before the floor action counts it as a breach"
+  level: account
+  kind: schedule
+  measure: "other: seconds"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a one-minute spike through the buffer on a flash crash may or may not count; computed on the venue's equity series so an offline breach still counts."
+  inputs: [brake_equity_basis]
+  affects:
+    - {id: floor_touch_tolerance, direction: either, how: "defines what a touch is in time"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 31, 83"}
+  open_questions:
+    - "Does a one-minute marked breach of the buffer count as a floor touch?"
+
+- id: reentry_cooling_after_gap
+  name: "Cooling time before re-entry on an instrument after a fill through the stop"
+  level: unit
+  kind: brake_reset
+  measure: minutes
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the market is broken, not the unit; applies from the reconcile when the fill happened offline."
+  inputs: [gap_loss_beyond_stop]
+  affects:
+    - {id: lot_size, direction: down, how: "no entry on that instrument during the cooling"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 31, 65, 83"}
+
+- id: halt_detection_rule
+  name: "How the node tells a venue halt from a stale feed"
+  level: node
+  kind: other
+  measure: "other: rule"
+  applies_to: {classes: [stock, index, futures], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: venue status, price-limit state and the exchange calendar; a halt is not a feed fault and must not restart anything."
+  inputs: []
+  affects:
+    - {id: feed_stale_after, direction: either, how: "a halted market is excluded from the stale rule"}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 33, 34"}
+
+- id: auction_no_entry_window
+  name: "No-entry window after a halt reopens, covering the auction minutes"
+  level: node
+  kind: schedule
+  measure: minutes
+  applies_to: {classes: [stock, index, futures], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: exchange resumed is not a re-enable signal; spreads, depth and fills inside collars must normalise."
+  inputs: [halt_detection_rule]
+  affects:
+    - {id: entries_blocked_by_window, direction: up, how: "adds blocked minutes"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 33"}
+
+- id: halt_allowance_pct
+  name: "Halt allowance in sizing for halt-prone instruments (the reopen gap)"
+  level: unit
+  kind: size_input
+  measure: percent
+  applies_to: {classes: [stock, index], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the reopen move at a percentile from the instrument's halt history; the allowance that covers 95 %."
+  inputs: []
+  affects:
+    - {id: lot_size, direction: down, how: "a bigger allowance, a smaller size"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 33, 81"}
+
+- id: limit_move_allowance
+  name: "Limit-move allowance in sizing for limit-prone futures and their CFDs"
+  level: unit
+  kind: size_input
+  measure: percent
+  applies_to: {classes: [futures, energy], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the limit sequence the contract can run before trading resumes; a locked position's worst case is in its size."
+  inputs: []
+  affects:
+    - {id: lot_size, direction: down, how: "a bigger allowance, a smaller size"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 34, 89"}
+
+- id: overnight_hold_rule
+  name: "Whether a unit type may hold a limit-prone or halt-prone instrument through the overnight session"
+  level: unit
+  kind: other
+  measure: "other: rule"
+  applies_to: {classes: [futures, energy, index, stock], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: scalpers never; swing with the allowance in the size."
+  inputs: []
+  affects:
+    - {id: limit_move_allowance, direction: either, how: "a unit that holds overnight must carry the allowance"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 34"}
+
+- id: kill_black_auto_trigger
+  name: "Automatic BLACK after a black-swan velocity tell at the top level"
+  level: node
+  kind: brake_threshold
+  measure: "other: rule"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the only automatic raise of the kill switch proposed anywhere; lowering stays his hand."
+  inputs: [velocity_caution_rule]
+  affects:
+    - {id: kill_switch_level, direction: up, how: "raises to BLACK"}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 35"}
+  seed_ids: [C10, C21]
+  open_questions:
+    - "May anything but his hand raise the kill switch to BLACK?"
+
+- id: floor_hit_action
+  name: "What happens when marked equity touches the floor"
+  level: portfolio
+  kind: other
+  measure: "other: stop the pot, or one feasible unit at level 1"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the lead's answer was stop the pot until a re-seed; his C11 leans to letting a small unit rebuild; his call."
+  inputs: [portfolio_floor, class_feasibility_flag]
+  affects:
+    - {id: lot_size, direction: down, how: "zero under stop the pot; level 1 on one feasible unit otherwise"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 35, 69, 88"}
+  seed_ids: [C10, C11, C12]
+  open_questions:
+    - "Stop the pot until a re-seed, or trade one feasible unit at level 1?"
+
+- id: negative_balance_protection
+  name: "Whether the broker offers negative-balance protection (a fact per broker)"
+  level: account
+  kind: other
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a fact to fill per broker; ESMA-regulated CFD brokers must; others may not."
+  inputs: []
+  affects:
+    - {id: tail_gap_assumption_pct, direction: either, how: "without protection the tail assumption must cover beyond zero"}
+  configurable: false
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 35"}
+    - {gen: research, ref: research/R3-edge-verification-and-analogues.md:298}
+
+- id: partial_fill_policy
+  name: "What the node does with a partial fill on an entry or an exit"
+  level: node
+  kind: other
+  measure: "other: rule"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: an entry is complete only with the full quantity and its stop; a residue beyond the lot step is closed reduce-only or the stop is amended to cover it."
+  inputs: [lot_step]
+  affects:
+    - {id: protection_retry_max, direction: either, how: "the escalation handles the residue"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 36, 43"}
+
+- id: fill_quality_by_hour
+  name: "Measured fill quality per instrument and hour (slippage median and p95, rejections)"
+  level: system
+  kind: measure
+  measure: "other: price points and ratio"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: from node order and reconcile rows; feeds placement and the cost profile."
+  inputs: []
+  affects:
+    - {id: slippage_cost, direction: either, how: "the measured input"}
+    - {id: cost_state, direction: either, how: "bad hours read elevated"}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 36, 38"}
+    - {gen: grounding, ref: grounding/G9-runtime-brakes-isolation-evidence.md:141}
+
+# ---------- Costs and execution (scenarios 38-44) ----------
+
+- id: demo_live_slippage_ratio
+  name: "Live slippage over demo slippage per instrument and hour"
+  level: system
+  kind: measure
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: from the two fill streams once live exists; a placement input."
+  inputs: [fill_quality_by_hour]
+  affects:
+    - {id: cost_state, direction: up, how: "a high ratio marks the instrument elevated for scalpers"}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 38"}
+  seed_ids: [D13]
+
+- id: spec_change_fields
+  name: "Record fields whose change raises the spec-change stand-down (lot step, margin, digits, leverage, mode, commission, swap)"
+  level: node
+  kind: other
+  measure: "other: field list"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the plan names lot step, margin, digits, leverage and mode; cost fields are added."
+  inputs: []
+  affects:
+    - {id: leverage, direction: either, how: "a leverage change stands the symbol's units down until his click"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 39, 51, 67"}
+    - {gen: grounding, ref: grounding/G9-runtime-brakes-isolation-evidence.md:51, note: "row only, no producer"}
+
+- id: twin_gap_cause
+  name: "Cause code on a paper-twin gap row (reject, partial, lag, price)"
+  level: unit
+  kind: evidence
+  measure: "other: code"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a closed list; a node cause never benches the unit."
+  inputs: []
+  affects:
+    - {id: replay_match_floor, direction: either, how: "the match is split by cause before it may bench"}
+  configurable: false
+  changed_by: [automatic]
+  status: idea
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 40"}
+
+- id: feed_lag_max_ms
+  name: "Feed lag beyond which a bar is unusable for a unit"
+  level: node
+  kind: limit
+  measure: "other: milliseconds"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a fraction of the unit's bar; unknown is not calm."
+  inputs: []
+  affects:
+    - {id: unit_quote_max_age_s, direction: either, how: "the two limits share the bar fraction"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 40"}
+
+- id: class_feasibility_flag
+  name: "Whether a class or instrument can be traded at the current budget and minimum lot"
+  level: portfolio
+  kind: evidence
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "feasible when the minimum lot's worst-case loss at the stop plus the gap allowance is at or below the unit's level-1 risk; recomputed at every budget change."
+  inputs: [min_lot, sleeve_feasible_min_loss_usd]
+  affects:
+    - {id: style_capital_split, direction: either, how: "a share that can fund no feasible instrument is shown as such"}
+    - {id: floor_hit_action, direction: either, how: "names the one feasible unit near the floor"}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 41, 69"}
+    - {gen: research, ref: research/R3-edge-verification-and-analogues.md:309}
+
+- id: sleeve_feasible_min_loss_usd
+  name: "Loss at the stop of the smallest allowed position, gaps and slippage included"
+  level: unit
+  kind: measure
+  measure: USD
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "min_lot x (stop distance + gap allowance + stressed slippage) x value per point."
+  inputs: [min_lot, stop_distance, gap_allowance_pct, value_per_point]
+  affects:
+    - {id: class_feasibility_flag, direction: either, how: "compared with the level-1 risk"}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 41"}
+
+- id: value_conversion_max_age_s
+  name: "Age beyond which a conversion rate refuses the size"
+  level: node
+  kind: limit
+  measure: "other: seconds"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: fail closed; the record's conversion cross-check at 0.1 % is the companion."
+  inputs: []
+  affects:
+    - {id: value_per_point, direction: either, how: "a stale conversion refuses rather than guesses"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 42"}
+    - {gen: grounding, ref: grounding/G7-unit-inputs-qmb-mis-instruments.md:186}
+
+- id: size_sanity_band_multiple
+  name: "Multiple of the unit's own usual lots on an instrument beyond which an order is refused"
+  level: node
+  kind: limit
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: catches a 10x conversion fault or a 2x version bug inside the per-trade cap; the band is per unit and instrument."
+  inputs: []
+  affects:
+    - {id: lot_size, direction: down, how: "an order outside the band is refused with a reason"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 42, 86"}
+
+- id: order_idempotency_required
+  name: "Every intent carries a key so a retry cannot submit twice"
+  level: node
+  kind: other
+  measure: "other: invariant"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: true
+  basis: reasoned
+  derivation: "Duplicate submissions from a second tick are a real risk event (MQL5 23315)."
+  inputs: []
+  affects:
+    - {id: order_send_breaker_state, direction: either, how: "retries go through the breaker with the same key"}
+  configurable: false
+  changed_by: [none]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 43"}
+    - {gen: research, ref: research/R5-mql5-corpus-ideas.md:256}
+
+- id: order_send_breaker_state
+  name: "Order-send breaker state per venue (closed, open, half-open) with an error taxonomy"
+  level: node
+  kind: measure
+  measure: "other: state"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: transient errors retry with back-off; permanent ones fail fast and never trip; a half-open probe before full restore."
+  inputs: []
+  affects:
+    - {id: lot_size, direction: down, how: "no entries while open; one probe while half-open"}
+  configurable: true
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 43"}
+    - {gen: research, ref: research/R5-mql5-corpus-ideas.md:256}
+
+- id: carry_per_day_r
+  name: "Carry (swap, funding, financing) per day in R on an open position"
+  level: position
+  kind: cost
+  measure: R
+  applies_to: {classes: [all], styles: [intraday, swing], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "carry per day in money / money at risk at entry."
+  inputs: [swap_financing_cost, funding_cost, original_risk_r]
+  affects:
+    - {id: carry_hold_ceiling_share, direction: either, how: "compared against it for the hold decision"}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 44"}
+  seed_ids: [A11]
+
+- id: carry_hold_ceiling_share
+  name: "Share of the expected edge per day that carry may cost before a hold-or-close review"
+  level: unit
+  kind: limit
+  measure: percent
+  applies_to: {classes: [all], styles: [intraday, swing], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: per style; a perp paying 0.9 % a day in a squeeze is above any scalper's edge."
+  inputs: [carry_per_day_r, expectancy_r]
+  affects:
+    - {id: max_hold_time, direction: down, how: "carry above the share shortens the hold"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 44"}
+
+- id: funding_spike_tell
+  name: "Funding-rate spike across perps as a crypto stress tell"
+  level: portfolio
+  kind: evidence
+  measure: "other: funding rate percentile"
+  applies_to: {classes: [crypto], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: funding against its own history; one of the two tells for a crypto isolation."
+  inputs: []
+  affects:
+    - {id: co_move_score, direction: up, how: "a crypto tell"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 44, 80"}
+
+# ---------- Infrastructure (scenarios 45-52) ----------
+
+- id: reconnect_backoff_s
+  name: "Back-off schedule for broker reconnects"
+  level: node
+  kind: schedule
+  measure: "other: seconds"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the healing back-off starts at 1 s and caps at 60 s today; the reconnect schedule is the same shape."
+  inputs: []
+  affects:
+    - {id: link_down_page_after_s, direction: either, how: "the page fires after the schedule has run for this long"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 45"}
+    - {gen: grounding, ref: grounding/G9-runtime-brakes-isolation-evidence.md:71}
+
+- id: link_down_page_after_s
+  name: "Seconds of broker link down with open positions before the page fires"
+  level: node
+  kind: schedule
+  measure: "other: seconds"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the C-18 push exists; the delay is unset."
+  inputs: [reconnect_backoff_s]
+  affects:
+    - {id: page_deadline_min, direction: either, how: "starts the page's deadline"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 45"}
+
+- id: unit_quote_max_age_s
+  name: "Oldest quote a unit may size or signal on, as a fraction of its bar"
+  level: unit
+  kind: limit
+  measure: "other: seconds"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "a fraction of the unit's bar length; the node's 120 s stale rule is a floor, the unit's limit is tighter."
+  inputs: [feed_stale_after, feed_lag_max_ms]
+  affects:
+    - {id: lot_size, direction: down, how: "no entry on an older quote"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 46"}
+
+- id: bad_tick_spread_multiple
+  name: "Tick further than this many spreads from the previous tick, and reverting next tick, is dropped"
+  level: node
+  kind: limit
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a bad-tick guard; the multiple per class."
+  inputs: []
+  affects:
+    - {id: co_move_score, direction: either, how: "dropped ticks never read as volatility"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 46"}
+
+- id: symbol_map_verified_at
+  name: "Time the symbol map was last verified against the venue"
+  level: node
+  kind: evidence
+  measure: "other: timestamp"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the connect-time verifier at every session; a failed check stands the symbol down."
+  inputs: []
+  affects:
+    - {id: feed_stale_after, direction: either, how: "an unverified symbol is treated as stale"}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 46"}
+    - {gen: grounding, ref: grounding/G7-unit-inputs-qmb-mis-instruments.md:198, note: "the verifier has never run"}
+
+- id: venue_time_check_cadence_s
+  name: "Cadence of the clock check against the venue's server time"
+  level: node
+  kind: schedule
+  measure: "other: seconds"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: at every reconnect and on a timer; the record carries server_zone."
+  inputs: []
+  affects:
+    - {id: clock_drift_no_new_entry, direction: either, how: "a second source for the offset"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 47"}
+
+- id: brake_state_persisted
+  name: "Invariant: every brake's counters, bench, anchor and window are journalled and rebuilt on restart"
+  level: node
+  kind: other
+  measure: "other: invariant"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: true
+  basis: reasoned
+  derivation: "Loss counters survive restarts, closes and date changes; a reset anchor voids the drawdown cap (Hsieh: 20.18 % against a 20 % cap)."
+  inputs: [brake_state]
+  affects:
+    - {id: brake_state, direction: either, how: "the state is rebuilt, never reset, on restart"}
+    - {id: day_start_equity, direction: either, how: "the day baseline is persisted and confirmed"}
+  configurable: false
+  changed_by: [none]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 48, 50"}
+    - {gen: research, ref: research/R9-accelerators-and-brake-pairs.md:216}
+
+- id: account_writer_lease
+  name: "One writer per account: a lease with a fence token on every order"
+  level: node
+  kind: other
+  measure: "other: invariant"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a node without the lease reads only; the reconciler flags a position two deployments claim."
+  inputs: []
+  affects:
+    - {id: lease_handover_only_when_flat, direction: either, how: "the hand-over rule"}
+  configurable: false
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 49"}
+  seed_ids: [C23]
+
+- id: lease_handover_only_when_flat
+  name: "A lease hand-over between nodes happens flat and at a boundary unless he forces it"
+  level: node
+  kind: other
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: same shape as switch_only_when_flat."
+  inputs: [account_writer_lease]
+  affects:
+    - {id: switch_only_when_flat, direction: either, how: "a machine switch is a world switch"}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 49"}
+
+- id: journal_write_fail_mode
+  name: "What runs when the brake journal cannot be written"
+  level: node
+  kind: other
+  measure: "other: rule"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: no new entries; exits never depend on the journal write."
+  inputs: [disk_headroom_min]
+  affects:
+    - {id: brake_state_persisted, direction: either, how: "the fail mode protects the invariant"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 50"}
+
+- id: record_refresh_cadence_h
+  name: "Hours between instrument record refreshes from the venue"
+  level: node
+  kind: schedule
+  measure: "other: hours"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the plan says daily and on each change event; a spec change between refreshes is the gap."
+  inputs: []
+  affects:
+    - {id: spec_change_fields, direction: either, how: "sets how stale a spec can be"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 51"}
+    - {gen: grounding, ref: grounding/G7-unit-inputs-qmb-mis-instruments.md:197}
+
+- id: liquidation_buffer_pct
+  name: "Distance the stop must keep above the liquidation price, covering mark-against-last divergence"
+  level: trade
+  kind: limit
+  measure: percent
+  applies_to: {classes: [crypto], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: from the venue's own mark-last divergence history at a percentile; the node refuses a stop past liquidation today."
+  inputs: [liquidation_stop_check, mark_last_divergence_max_pct]
+  affects:
+    - {id: liquidation_stop_check, direction: either, how: "adds the buffer to the check"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 52, 80"}
+    - {gen: grounding, ref: grounding/G11-ledger-exposure-exits-observability.md:140}
+
+- id: exit_cap_rejection_policy
+  name: "What the node does when a venue's worst-price cap rejects an exit"
+  level: node
+  kind: other
+  measure: "other: rule"
+  applies_to: {classes: [crypto], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: retry as a limit at the cap, then escalate; a page on the second rejection."
+  inputs: [protection_retry_max]
+  affects:
+    - {id: exits_never_blocked, direction: either, how: "the market may block; the policy gets the exit through"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 52"}
+    - {gen: grounding, ref: grounding/G9-runtime-brakes-isolation-evidence.md:144}
+
+- id: mark_last_divergence_max_pct
+  name: "Mark-against-last divergence beyond which a crypto market stands down"
+  level: node
+  kind: brake_threshold
+  measure: percent
+  applies_to: {classes: [crypto], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: from the venue's history; a split past the band means the stop and the engine disagree on price."
+  inputs: []
+  affects:
+    - {id: liquidation_buffer_pct, direction: up, how: "the buffer covers the usual divergence"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 80"}
+
+# ---------- Units, software and agents (scenarios 53-59) ----------
+
+- id: per_trade_worst_case_cap_r
+  name: "Cap on the worst-case loss of one order at its stop plus gap allowance, checked outside the unit"
+  level: trade
+  kind: limit
+  measure: R
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a multiple of the unit's planned R; the order-boundary veto computes it on the actual order."
+  inputs: [original_risk_r, gap_allowance_pct]
+  affects:
+    - {id: lot_size, direction: down, how: "an order above the cap is refused"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 53"}
+    - {gen: research, ref: research/R4-alphaxiv/R4-alphaxiv-synthesis.md:336, note: "worst-case loss at the order boundary"}
+
+- id: order_rate_limit_per_min
+  name: "Orders per minute a unit may send, as a multiple of its approved trade rate"
+  level: unit
+  kind: limit
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "k x the baseline card's trade rate converted to per minute at the unit's busiest hour; a jump beyond it stops entries."
+  inputs: [trade_rate]
+  affects:
+    - {id: session_fill_limit, direction: either, how: "the per-minute form of the session fill limit"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 54"}
+
+- id: canary_against_baseline
+  name: "A new version runs beside the old one on the paper twin, metrics split, before it may size up"
+  level: unit
+  kind: other
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: Kayenta's fresh baseline at the same time; no data is a failure."
+  inputs: []
+  affects:
+    - {id: size_level_now, direction: either, how: "no step up until the canary passes"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 55, 86"}
+    - {gen: research, ref: research/R7-software-patterns-self-configuring.md:235}
+
+- id: placeholder_blocks_live
+  name: "A placeholder on any risk number or an empty halt list refuses the live world"
+  level: node
+  kind: other
+  measure: "other: invariant"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: true
+  basis: reasoned
+  derivation: "His D30: no key setting blank; Gen 3's value_status_required; today promote only needs his tick."
+  inputs: []
+  affects:
+    - {id: risk_fraction, direction: either, how: "a placeholder fraction cannot bind live"}
+  configurable: false
+  changed_by: [none]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 56"}
+    - {gen: grounding, ref: grounding/G9-runtime-brakes-isolation-evidence.md:125}
+  seed_ids: [D29, D30]
+
+- id: derivation_fallback_order
+  name: "Order of fallbacks that fills a number when its own derivation has no input (own record, bucket, class, default)"
+  level: system
+  kind: other
+  measure: "other: ordered list"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: defaults, class, bucket, instrument, unit overrides with a residual bucket; nothing is blank by construction."
+  inputs: []
+  affects:
+    - {id: placeholder_blocks_live, direction: either, how: "the ladder is what makes the invariant satisfiable"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 56"}
+    - {gen: research, ref: research/R3-edge-verification-and-analogues.md:335}
+  seed_ids: [D46]
+
+- id: news_item_effect_cap
+  name: "Cap on the effect any single news item from an agent may have"
+  level: portfolio
+  kind: limit
+  measure: "other: effect class"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: one item raises at most a short caution; one feed counts as one risk."
+  inputs: []
+  affects:
+    - {id: surprise_caution_min, direction: either, how: "the most one item can do"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 58"}
+
+- id: news_corroboration_min
+  name: "Sources that must agree before an agent's news record may act"
+  level: portfolio
+  kind: limit
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: two; the scheduled calendar and the market tells outrank any item."
+  inputs: []
+  affects:
+    - {id: news_item_effect_cap, direction: either, how: "below the count the item has no effect"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 58"}
+
+- id: news_agent_de_risk_only
+  name: "Invariant: an agent's news record may only de-risk, expires, and never reaches the kill switch"
+  level: system
+  kind: other
+  measure: "other: invariant"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: true
+  basis: reasoned
+  derivation: "Agents never touch money; outputs are data, never instructions."
+  inputs: []
+  affects:
+    - {id: agent_proposal_bounds, direction: either, how: "the news case of the bounds"}
+  configurable: false
+  changed_by: [none]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 58"}
+    - {gen: operator_words, ref: handoff/AGENT-DEPARTMENT-SEEDS.md:51}
+
+- id: binding_control_on_receipt
+  name: "Every sizer receipt and refusal names the control that bound it"
+  level: trade
+  kind: evidence
+  measure: "other: control id"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: April's binding_clamp on every audit; the rank table makes it unique."
+  inputs: [control_rank_table]
+  affects:
+    - {id: brake_precision, direction: either, how: "fires are counted per named control"}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 59"}
+    - {gen: grounding, ref: grounding/G11-ledger-exposure-exits-observability.md:76}
+
+# ---------- Edge and regime (scenarios 60-66) ----------
+
+- id: edge_zone
+  name: "The unit's evidence zone: green, yellow, red"
+  level: unit
+  kind: evidence
+  measure: "other: green, yellow, red"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: green carry on; yellow hold the size and gather evidence; red step down or demote; from the three detectors (inputs, CUSUM, e-detector) at planned looks."
+  inputs: [drift_state, cusum_limit, cost_drift_multiple, trade_rate_band]
+  affects:
+    - {id: size_level_now, direction: down, how: "red steps the level down; yellow freezes it"}
+    - {id: house_money_lockout, direction: either, how: "yellow or red locks accelerators"}
+  configurable: true
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 60, 73"}
+    - {gen: research, ref: research/R3-edge-verification-and-analogues.md:330, note: "three zones"}
+  seed_ids: [A25]
+
+- id: e_value_reloosen_bar
+  name: "E-value a unit must reach after a cut, plus a minimum time, before a step up"
+  level: unit
+  kind: brake_reset
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: 1/alpha, for example 20, plus a minimum time; never a win streak."
+  inputs: []
+  affects:
+    - {id: size_level_now, direction: up, how: "the only automatic path up after a red"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 60"}
+    - {gen: research, ref: research/R2-trader-practice-windows-drift-isolation-breadth.md:116}
+
+- id: context_need_fail_mode
+  name: "What a unit with a declared context need does on a stale or missing board"
+  level: unit
+  kind: other
+  measure: "other: no_new_entries or trade"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: fail closed for declared needs, fail open for the rest; the board read fails open for everyone today."
+  inputs: [board_stale_after]
+  affects:
+    - {id: lot_size, direction: down, how: "no entries on a stale board under fail closed"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 61"}
+    - {gen: grounding, ref: grounding/G9-runtime-brakes-isolation-evidence.md:166}
+
+- id: class_regime_brake_state
+  name: "Per-class regime brake state from a sticky jump model (cuts gross, never re-weights)"
+  level: portfolio
+  kind: brake_threshold
+  measure: "other: state"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: filtered probabilities only; an anti-flap rule; tested against a random brake of equal rate."
+  inputs: [cross_market_stress_reading]
+  affects:
+    - {id: cluster_exposure_cap, direction: down, how: "a stressed state cuts the class cap"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 61"}
+
+- id: min_events_before_signal
+  name: "Minimum number of events before any count brake may fire"
+  level: unit
+  kind: brake_threshold
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: Kulldorff and Silva: a required minimum keeps the false-alarm rate known; scaled to the unit's trade count."
+  inputs: [trade_rate]
+  affects:
+    - {id: circuit_breaker_strikes, direction: either, how: "no strike counts before the minimum"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 62"}
+    - {gen: research, ref: research/R3-edge-verification-and-analogues.md:187}
+
+- id: bad_day_percentile
+  name: "Percentile of the unit's own daily P&L distribution that defines a bad day for its money brake"
+  level: unit
+  kind: brake_threshold
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the unit's own k-th percentile for its trade count (R9: -4R at 4 trades, -6R at 10, -8R at 16, -10R at 40 for a 55 % unit); fires on a steady share of days at any frequency."
+  inputs: [trade_rate, win_rate]
+  affects:
+    - {id: unit_daily_loss_limit, direction: either, how: "sets the limit at the percentile"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 62"}
+    - {gen: research, ref: research/R9-accelerators-and-brake-pairs.md:246}
+  seed_ids: [A6, C33]
+
+- id: shed_priority_class
+  name: "Declared priority class per unit for staged de-risking"
+  level: book
+  kind: other
+  measure: "other: class"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: few classes; the lowest class is shed first when the budget tightens."
+  inputs: []
+  affects:
+    - {id: leverage_cut_degross_rule, direction: either, how: "ties are broken by class"}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 65"}
+
+- id: disturbance_reserve_share
+  name: "Share of the budget held back after a shock so the rebound can be traded small"
+  level: portfolio
+  kind: size_input
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: robust MPC headroom; released as the tells clear."
+  inputs: []
+  affects:
+    - {id: bms_daily_loss_limit, direction: down, how: "the reserve is not spendable until released"}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 65"}
+
+- id: upside_alarm_cone_percentile
+  name: "Cone percentile above which results hold the verdict and the accelerators for an audit"
+  level: unit
+  kind: brake_threshold
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: results too far above the baseline card are a bug or a lookahead until audited; the shipped gate holds a daily Sharpe above 2."
+  inputs: [monte_carlo_p5_floor, daily_sharpe_audit_trigger]
+  affects:
+    - {id: house_money_lockout, direction: either, how: "locks accelerators until the audit clears"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 66"}
+    - {gen: grounding, ref: grounding/G7-unit-inputs-qmb-mis-instruments.md:69}
+
+# ---------- Account and capital (scenarios 67-73, 88) ----------
+
+- id: margin_headroom_min_share
+  name: "Minimum free margin as a share of equity, kept so a leverage cut cannot trigger the broker's close-out"
+  level: account
+  kind: limit
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: sized so a 2x leverage cut on the open book stays above the close-out level with a gap allowance."
+  inputs: [margin_used, leverage, account_equity]
+  affects:
+    - {id: lot_size, direction: down, how: "an order that would pass the headroom is refused"}
+    - {id: leverage_cut_degross_rule, direction: either, how: "a constraint the de-gross order must satisfy"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 67, 68, 87"}
+    - {gen: grounding, ref: grounding/G4-current-book-bms.md:166, note: "no margin check in the Book"}
+
+- id: leverage_cut_degross_rule
+  name: "Order in which QMX reduces gross on a leverage cut or a margin breach (by stressed contribution)"
+  level: portfolio
+  kind: other
+  measure: "other: rule"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: cut the biggest stressed contributors first; margin headroom as the constraint; done before the broker's level."
+  inputs: [sleeve_stress_loss_usd, margin_headroom_min_share, shed_priority_class]
+  affects:
+    - {id: open_risk_at_stop, direction: down, how: "the de-gross lowers open risk in a declared order"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 67, 87"}
+
+- id: reseed_rule
+  name: "Rule for a re-seed or deposit after losses: priced, journalled, evidence-neutral"
+  level: portfolio
+  kind: other
+  measure: "other: rule"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: his signed act; new capital changes budgets, never verdicts; a re-seeded unit starts at level 1."
+  inputs: [portfolio_seed_capital]
+  affects:
+    - {id: size_level_now, direction: down, how: "level 1 after a re-seed"}
+    - {id: edge_zone, direction: either, how: "unchanged by capital"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 69, 73"}
+    - {gen: grounding, ref: grounding/G6-book-bms-levels-and-paper.md:175}
+  seed_ids: [C11, C12]
+
+- id: share_per_r_cap
+  name: "Cap on the share of equity risked per R under a cushion ladder"
+  level: book
+  kind: limit
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the GitBook ladder climbed from 8.6 % to 12 % at the cap and toward 14.3 % without one; the cap bounds the accelerator the fixed floor creates."
+  inputs: [equity_share_per_r]
+  affects:
+    - {id: equity_share_per_r, direction: down, how: "bounded above"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 70"}
+    - {gen: grounding, ref: grounding/G6-book-bms-levels-and-paper.md:228}
+  seed_ids: [B10, C22]
+
+- id: sweep_share_above_hwm
+  name: "Share of profit above the high-water mark swept out of the risk zone"
+  level: portfolio
+  kind: other
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a BMS act at the mark; his call whether the cap and sweep return."
+  inputs: [high_water_mark_equity]
+  affects:
+    - {id: account_equity, direction: down, how: "the sweep leaves the account or the risk zone"}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 70, 72"}
+    - {gen: research, ref: research/R2-trader-practice-windows-drift-isolation-breadth.md:265}
+  seed_ids: [B10, C12]
+  open_questions:
+    - "Does the sweep cap return, and at which level?"
+
+- id: sweep_min_cushion_after
+  name: "Minimum cushion above the buffer that must remain after any sweep"
+  level: portfolio
+  kind: limit
+  measure: USD
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a sweep never takes the cushion below the buffer (the Topstep lesson)."
+  inputs: [bms_buffer_before_floor]
+  affects:
+    - {id: sweep_share_above_hwm, direction: down, how: "binds the sweep"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 72"}
+
+- id: anchor_reset_on_sweep_rule
+  name: "Which anchors re-derive at a sweep (day ledger, house money, levels) and which never do (floor, mark history)"
+  level: portfolio
+  kind: other
+  measure: "other: rule"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a sweep is a declared boundary event; the mark is recorded before and after; the floor moves only by his hand."
+  inputs: [high_water_mark_equity]
+  affects:
+    - {id: house_money_winnings_share, direction: either, how: "re-anchors at the sweep"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 72"}
+
+- id: anchor_reset_on_reseed_rule
+  name: "Which anchors re-derive at a re-seed or deposit, with two drawdown anchors kept"
+  level: portfolio
+  kind: other
+  measure: "other: rule"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: budgets re-derive; the drawdown from the pre-deposit mark is kept beside the drawdown from the new equity."
+  inputs: [reseed_rule]
+  affects:
+    - {id: high_water_mark_equity, direction: either, how: "two marks kept"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 73"}
+
+- id: cushion_covers_drawdown_percentile
+  name: "Percentile of the unit's own drawdown distribution at level 1 that the cushion must cover before the unit may trade"
+  level: portfolio
+  kind: limit
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: from the baseline card's cone; a unit whose normal pain exceeds the cushion does not trade."
+  inputs: [mc_cone_floor_percentile, bms_buffer_before_floor]
+  affects:
+    - {id: class_feasibility_flag, direction: either, how: "a second feasibility test near the floor"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 88"}
+
+# ---------- Operator (scenarios 74-77) ----------
+
+- id: operator_absent_after_h
+  name: "Hours with no acknowledgement of a page after which the node assumes he is absent"
+  level: node
+  kind: schedule
+  measure: "other: hours"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a dead-man rule; set by him before he leaves, with a default."
+  inputs: []
+  affects:
+    - {id: absence_policy, direction: either, how: "starts the policy"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 74"}
+
+- id: absence_policy
+  name: "What the book does while he is absent (dark after flat, or level 1 under every brake)"
+  level: portfolio
+  kind: other
+  measure: "other: policy"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: his choice in advance; the roundtable's view is that the default must be the conservative one because he will not set it."
+  inputs: [operator_absent_after_h]
+  affects:
+    - {id: lot_size, direction: down, how: "zero or level 1 under the policy"}
+    - {id: retrip_lockout_rule, direction: either, how: "lockouts run until acknowledged"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 74, 85"}
+  open_questions:
+    - "Dark after flat, or level 1 under every brake, while he is away?"
+
+- id: confirm_twice_scopes
+  name: "Scopes and actions that need a second confirmation (resume all after a breaker, kill account, promote to live)"
+  level: node
+  kind: other
+  measure: "other: list"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the widening actions; narrowing actions never need it."
+  inputs: []
+  affects:
+    - {id: kill_switch_scope, direction: either, how: "a resume at all after a breaker confirms twice"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 75"}
+
+- id: resume_undo_window_s
+  name: "Seconds in which a resume that has sent no order can be reverted"
+  level: node
+  kind: schedule
+  measure: "other: seconds"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a cheap undo for a wrong click."
+  inputs: []
+  affects:
+    - {id: kill_switch_level, direction: either, how: "the undo restores the level"}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 75"}
+
+- id: trip_tax_record
+  name: "Replay of each trip and each manual action: units paused, time lost, forgone net P&L, exit costs, loss avoided"
+  level: portfolio
+  kind: measure
+  measure: R
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: computed by a replay job after every trip; shown on the scorecard and after every manual kill."
+  inputs: [entries_blocked_by_window]
+  affects:
+    - {id: brake_precision, direction: either, how: "the cost side of precision"}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 76, 97"}
+
+- id: operator_override_journalled
+  name: "Invariant: every manual kill, resume and override is journalled with the evidence state at the time"
+  level: node
+  kind: other
+  measure: "other: invariant"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: true
+  basis: reasoned
+  derivation: "The node journals a kill rise but not his resume today; both are needed for the watcher and the trip tax."
+  inputs: []
+  affects:
+    - {id: trip_tax_record, direction: either, how: "the record's input"}
+  configurable: false
+  changed_by: [none]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 76"}
+    - {gen: grounding, ref: grounding/G11-ledger-exposure-exits-observability.md:216}
+
+- id: page_deadline_min
+  name: "Minutes a page waits for acknowledgement before the no-answer action runs"
+  level: node
+  kind: schedule
+  measure: minutes
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: every page names an action and a deadline."
+  inputs: []
+  affects:
+    - {id: no_answer_action, direction: either, how: "runs at the deadline"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 77"}
+
+- id: no_answer_action
+  name: "Action at a page's deadline with no acknowledgement (default: keep closing reduce-only, never widen)"
+  level: node
+  kind: other
+  measure: "other: rule"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: his choice; the default is the de-risking one."
+  inputs: [page_deadline_min]
+  affects:
+    - {id: protection_retry_max, direction: either, how: "the escalation continues past the retries"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 77"}
+
+# ---------- Instrument-specific (scenarios 78-81, 89) ----------
+
+- id: roll_days_before_last_trade
+  name: "Days before last trade by which a futures position is rolled or closed"
+  level: unit
+  kind: schedule
+  measure: "other: days"
+  applies_to: {classes: [futures, energy, metal], styles: [swing, intraday], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: several days; the April 2020 negative settlement happened at expiry."
+  inputs: []
+  affects:
+    - {id: max_hold_time, direction: down, how: "the hold ends at the roll"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 78"}
+    - {gen: research, ref: research/R8-gap-topup.md:425}
+
+- id: roll_adjustment_pnl_line
+  name: "Invariant: a CFD roll adjustment is its own P&L line, never a strategy loss or a stop trigger"
+  level: trade
+  kind: other
+  measure: "other: invariant"
+  applies_to: {classes: [energy, index, metal], styles: [all], timeframes: all}
+  default: true
+  basis: reasoned
+  derivation: "A back-adjusted series never counts as P&L; the broker's roll posts a swap credit or debit equal to the gap."
+  inputs: []
+  affects:
+    - {id: exit_reason_code, direction: either, how: "a roll is its own reason, not a stop"}
+  configurable: false
+  changed_by: [none]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 78"}
+    - {gen: research, ref: research/R8-gap-topup.md:488}
+
+- id: stop_in_roll_gap_check
+  name: "Check that no stop sits unflagged inside a known roll gap"
+  level: node
+  kind: other
+  measure: "other: yes or no"
+  applies_to: {classes: [energy, index, metal], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a stop near the roll is moved with the adjustment at the same risk."
+  inputs: []
+  affects:
+    - {id: stop_distance, direction: either, how: "an amendment that keeps the risk"}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 78"}
+
+- id: contract_identity_verified
+  name: "Contract identity (root, month, venue) checked on every futures order"
+  level: node
+  kind: other
+  measure: "other: invariant"
+  applies_to: {classes: [futures], styles: [all], timeframes: all}
+  default: true
+  basis: reasoned
+  derivation: "A hard stop on uncertain contract identity, rejected margin check or mismatch (R4 technique 6)."
+  inputs: []
+  affects:
+    - {id: lot_size, direction: down, how: "an unverified contract sends no order"}
+  configurable: false
+  changed_by: [none]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 78"}
+
+- id: crypto_leverage_cap
+  name: "Leverage cap on crypto positions, below the venue's maximum"
+  level: account
+  kind: limit
+  measure: ratio
+  applies_to: {classes: [crypto], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the ESMA retail cap of 2:1 is a fair default; a cascade allowance is in the size."
+  inputs: [leverage]
+  affects:
+    - {id: lot_size, direction: down, how: "a hard ceiling on crypto size"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 80"}
+    - {gen: research, ref: research/R3-edge-verification-and-analogues.md:296}
+
+- id: earnings_window_policy
+  name: "A stock unit's policy across earnings (flat before, or hold with the gap in its size)"
+  level: unit
+  kind: other
+  measure: "other: rule"
+  applies_to: {classes: [stock], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: per unit type; the earnings calendar is a source of its own."
+  inputs: [halt_allowance_pct]
+  affects:
+    - {id: max_hold_time, direction: down, how: "flat before the date under the flat policy"}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 81"}
+
+- id: borrow_check_required
+  name: "Borrow availability checked before any short on a stock"
+  level: node
+  kind: other
+  measure: "other: yes or no"
+  applies_to: {classes: [stock], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: no stock route exists; recorded for when one does."
+  inputs: []
+  affects:
+    - {id: lot_size, direction: down, how: "no borrow, no short"}
+  configurable: false
+  changed_by: [none]
+  status: idea
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 81"}
+
+# ---------- Combinations (scenarios 82-89) ----------
+
+- id: reconcile_reads_deal_history
+  name: "The reconcile after a reconnect reads the venue's deal history and books every offline fill"
+  level: node
+  kind: other
+  measure: "other: invariant"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the reconciler reads open positions today; offline fills and their slippage are invisible to every brake until booked."
+  inputs: [reconciliation_cadence]
+  affects:
+    - {id: gap_loss_beyond_stop, direction: either, how: "offline gap fills are written after the fact"}
+    - {id: loss_event_window, direction: either, how: "the window opens retroactively at the first offline fill"}
+  configurable: false
+  changed_by: [none]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 83"}
+    - {gen: grounding, ref: grounding/G9-runtime-brakes-isolation-evidence.md:142}
+
+- id: gross_edge_r
+  name: "The unit's edge stream in R before costs"
+  level: unit
+  kind: evidence
+  measure: R
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "r_after_costs plus the trade's cost in R; the CUSUM runs on this stream."
+  inputs: [expectancy_r, round_trip_cost_r]
+  affects:
+    - {id: drift_cause_code, direction: either, how: "the edge half of the attribution"}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 84"}
+
+- id: cost_stream_r
+  name: "The unit's cost stream in R per trade"
+  level: unit
+  kind: cost
+  measure: R
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "spread plus commission plus slippage plus carry per trade, over money at risk."
+  inputs: [round_trip_cost_r]
+  affects:
+    - {id: drift_cause_code, direction: either, how: "the cost half of the attribution"}
+    - {id: cost_drift_multiple, direction: either, how: "the stream the cost drift check reads"}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 84"}
+
+- id: drift_cause_code
+  name: "Cause code on a drift verdict: edge, costs, regime, implementation, unknown"
+  level: unit
+  kind: evidence
+  measure: "other: code"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a cost cause moves placement; an edge cause moves the size level; unknown holds."
+  inputs: [gross_edge_r, cost_stream_r]
+  affects:
+    - {id: edge_zone, direction: either, how: "only an edge cause moves the zone"}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 84"}
+    - {gen: grounding, ref: grounding/G10-brakes-decay-slots-all-generations.md:317, note: "Gen 3: costs never folded into a decay verdict"}
+
+- id: sleeve_stress_loss_usd
+  name: "A sleeve's loss under the standing scenario set with correlations raised"
+  level: unit
+  kind: measure
+  measure: USD
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: from the harness on the current scenario set; the input to the de-gross order and the survival gate."
+  inputs: [scenario_set_version, correlation_stress_rho]
+  affects:
+    - {id: leverage_cut_degross_rule, direction: either, how: "the ranking"}
+    - {id: scorecard_survival_gate, direction: either, how: "a gate input"}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenarios 87, 90"}
+
+- id: roll_report_join_window_h
+  name: "Hours within which a roll and a scheduled energy report are joined into one flat window"
+  level: node
+  kind: schedule
+  measure: "other: hours"
+  applies_to: {classes: [energy], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: two days in the catalogue's example; from the measured joint move on history."
+  inputs: [energy_event_sources, roll_days_before_last_trade]
+  affects:
+    - {id: entries_blocked_by_window, direction: up, how: "adds blocked hours"}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 89"}
+
+- id: reference_unknown_standdown
+  name: "A CFD whose underlying future is halted or limit-locked stands down as reference unknown"
+  level: node
+  kind: other
+  measure: "other: rule"
+  applies_to: {classes: [energy, index, metal], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a CFD quote with no tradable reference is not a price."
+  inputs: [halt_detection_rule]
+  affects:
+    - {id: feed_stale_after, direction: either, how: "a reference-unknown market is excluded like a stale one"}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "scenario 89"}
+
+# ---------- The harness (ideas 90, 96-99) ----------
+
+- id: scenario_set_version
+  name: "Version of the standing scenario set the harness runs"
+  level: system
+  kind: other
+  measure: "other: version"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the mandatory set is this catalogue's solid scenarios; each book and template adds its own; versioned so calm data cannot erase the crisis library."
+  inputs: []
+  affects:
+    - {id: sleeve_stress_loss_usd, direction: either, how: "computed on the set"}
+    - {id: correlation_stress_rho, direction: either, how: "the risk-off case sets it"}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "ideas 90, 96"}
+    - {gen: research, ref: research/R3-edge-verification-and-analogues.md:226, note: "Lloyd's RDS"}
+  seed_ids: [C32, D40]
+
+- id: scenario_severity_percentile
+  name: "Severity percentile of the stressed factors in a run (p95 worst, p50 realistic, p5 best)"
+  level: system
+  kind: other
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: his three cases; the harness runs all three per scenario."
+  inputs: [scenario_set_version]
+  affects:
+    - {id: sleeve_stress_loss_usd, direction: up, how: "a higher percentile, a bigger loss"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "idea 90"}
+  seed_ids: [D40]
+
+- id: conditional_fill_method
+  name: "How the factors a scenario does not stress are filled (pooled model, nearest neighbours, zero as a labelled worst case)"
+  level: system
+  kind: other
+  measure: "other: method"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: their expected value given the stress, never zero alone; the nightly backtest says which method is better."
+  inputs: []
+  affects:
+    - {id: harness_prediction_error, direction: either, how: "the method's error is measured"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "idea 90; problem P3"}
+    - {gen: research, ref: research/R8-gap-topup.md:301}
+
+- id: dependency_concentration_limit
+  name: "Limit on the share of open risk exposed to one common dependency (venue, feed, host, clock, signal family, macro factor, event, session)"
+  level: portfolio
+  kind: limit
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "limit = bms_buffer_before_floor / loss if the dependency fails; shown as 100 % by necessity where only one venue or feed exists."
+  inputs: [bms_buffer_before_floor]
+  affects:
+    - {id: scorecard_survival_gate, direction: either, how: "an accumulation gate"}
+    - {id: portfolio_exposure, direction: either, how: "exposure summed per dependency"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "idea 90; problem P4"}
+    - {gen: research, ref: research/R8-gap-topup.md:354}
+
+- id: brake_path_delta_r
+  name: "Difference between the brake-path loss and the price-path loss in a scenario run"
+  level: system
+  kind: measure
+  measure: R
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "loss with QMX's brakes running inside the path minus loss on the bare price path; negative is the brakes' saving, positive their cost."
+  inputs: [scenario_set_version]
+  affects:
+    - {id: scorecard_survival_gate, direction: either, how: "a gate input"}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "idea 90"}
+    - {gen: research, ref: research/R8-gap-topup.md:387}
+
+- id: harness_prediction_error
+  name: "Predicted against realised P&L from the nightly replay of yesterday as a scenario"
+  level: system
+  kind: evidence
+  measure: R
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the stress engine's own error record; coverage of the predicted band is the target."
+  inputs: [conditional_fill_method]
+  affects:
+    - {id: scenario_likelihood_class, direction: either, how: "measured errors revise the classes"}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "idea 90"}
+    - {gen: research, ref: research/R8-gap-topup.md:326}
+
+- id: event_window_by_driver
+  name: "Event window length per shared driver (the class default as the maximum, tells clear as the end)"
+  level: book
+  kind: schedule
+  measure: minutes
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a state-based end with the class default as the cap; refined from the harness's co-move durations."
+  inputs: [shared_driver_tags, co_move_score]
+  affects:
+    - {id: loss_event_window, direction: either, how: "the per-driver value of the window"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "idea 91; problem P1"}
+
+- id: scenario_likelihood_class
+  name: "Likelihood class on a scenario card (L1 rare to L5 most days), measured or assumed"
+  level: system
+  kind: evidence
+  measure: "other: class"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: assumed at first and labelled; counted on history and the live journal after."
+  inputs: [harness_prediction_error]
+  affects:
+    - {id: scorecard_survival_gate, direction: either, how: "weights the gate"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "idea 96; problem P8"}
+
+- id: scenario_severity_class
+  name: "Severity class on a scenario card (S1 nuisance to S5 beyond the floor) if no brake acts"
+  level: system
+  kind: evidence
+  measure: "other: class"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: assumed and labelled; the harness's bare-path loss replaces it."
+  inputs: []
+  affects:
+    - {id: scorecard_survival_gate, direction: either, how: "weights the gate"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "idea 96"}
+
+- id: scenario_expected_engagements
+  name: "The brakes, accelerators and variables a scenario card expects to engage, checked against what fired"
+  level: system
+  kind: evidence
+  measure: "other: list"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the catalogue's Engages line as data; a run that fires something else is a finding."
+  inputs: [scenario_set_version]
+  affects:
+    - {id: brake_precision, direction: either, how: "expected against actual fires"}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: idea
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "idea 96"}
+
+- id: scorecard_survival_gate
+  name: "PASS or FAIL per template version on the survival rows (floor touches at half edge, worst loss against the buffer, accumulation, margin headroom, brake-path delta)"
+  level: system
+  kind: evidence
+  measure: "other: pass or fail"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a 0 on survival blocks an idea (RANKING); the thresholds are the funnel's."
+  inputs: [sleeve_stress_loss_usd, dependency_concentration_limit, brake_path_delta_r]
+  affects:
+    - {id: size_level_now, direction: either, how: "a failed version may not size up"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "idea 97"}
+    - {gen: research, ref: linking/RANKING.md:14}
+
+- id: cost_of_conservatism_r
+  name: "Idle or under-baseline exposure in a run and the return it missed"
+  level: system
+  kind: measure
+  measure: R
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the growth column beside the survival column; the sitting duck as a number."
+  inputs: [trip_tax_record]
+  affects:
+    - {id: scorecard_survival_gate, direction: either, how: "shown beside the gate, never inside it"}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "idea 97"}
+
+- id: reverse_stress_k_sigma
+  name: "Plausibility radius in sigma for the model-driven reverse stress search"
+  level: system
+  kind: other
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: run at several k; elliptical plausibility understates joint tails, so the data-driven search runs beside it."
+  inputs: []
+  affects:
+    - {id: scenario_set_version, direction: either, how: "a new worst case becomes a scenario"}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "idea 98"}
+    - {gen: research, ref: research/R8-gap-topup.md:332}
+
+- id: reverse_stress_loss_threshold_r
+  name: "Loss beyond which a day enters the data-driven reverse stress average"
+  level: system
+  kind: other
+  measure: R
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: from the book's own history, simulated first; the factor moves on those days are the scenario that breaks us."
+  inputs: []
+  affects:
+    - {id: scenario_set_version, direction: either, how: "feeds a scenario card"}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "idea 98"}
+    - {gen: research, ref: research/R8-gap-topup.md:344}
+
+- id: bench_amplification_delta
+  name: "Extra loss in an interactive simulation with QMX's units reactive against frozen (paired seeds)"
+  level: system
+  kind: measure
+  measure: R
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the crowding diagnostic; compare rules, never forecast P&L."
+  inputs: [simulator_realism_gate_pass]
+  affects:
+    - {id: same_bet_exposure_cap, direction: either, how: "a large delta argues for a tighter family cap"}
+  configurable: false
+  changed_by: [automatic]
+  status: idea
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "idea 99"}
+    - {gen: research, ref: research/R4-alphaxiv/R4-alphaxiv-synthesis.md:744}
+
+- id: simulator_realism_gate_pass
+  name: "Whether the interactive simulator passed its two gates (stylised facts on held-out data, closed-loop response to injected orders)"
+  level: system
+  kind: evidence
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: no result from the bench counts before both gates pass."
+  inputs: []
+  affects:
+    - {id: bench_amplification_delta, direction: either, how: "gates the measure"}
+  configurable: false
+  changed_by: [automatic]
+  status: idea
+  sources:
+    - {gen: expansion, ref: expansion/X4-scenarios.md, note: "idea 99"}
