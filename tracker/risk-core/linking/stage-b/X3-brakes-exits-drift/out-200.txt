@@ -1,0 +1,110 @@
+
+=== fs10: 10/day, healthy EV +0.100R, decayed EV -0.050R, bad EV -0.150R
+    money brake: 1-day window, trips at running P&L <= -7.00R (own p1, healthy fire rate 1.0%); loss points at 9.00 (own p99)
+    arm       |  healthy: R kept, fire%, DDp95 |         decay: R after day 100 |                     badweek: R |       regime: R (fire%), DDp95
+    none      |   250.7R (100.0%)   0.0%  34.0 |                        -69.3R |                         237.4R |    41.8R ( 0.0%)  133.0
+    2stops    |   109.7R ( 43.8%)  97.7%  26.0 |                        -27.0R |                         105.2R |    26.7R (98.4%)   67.0
+    3inrow    |   210.3R ( 83.9%)  40.6%  29.0 |                        -53.9R |                         197.3R |    51.5R (48.9%)   93.0
+    3nonwin   |   210.3R ( 83.9%)  40.6%  29.0 |                        -53.9R |                         197.3R |    51.5R (48.9%)   93.0
+    3inrow_h  |   230.5R ( 91.9%)  40.6%  29.0 |                        -61.6R |                         217.4R |    46.6R (48.9%)  111.5
+    lpts      |   250.7R (100.0%)   0.4%  34.0 |                        -69.4R |                         237.4R |    41.9R ( 1.4%)  132.0
+    money     |   250.2R ( 99.8%)   1.0%  35.0 |                        -69.1R |                         237.2R |    42.8R ( 2.6%)  130.0
+    money_h   |   250.4R ( 99.9%)   1.0%  34.5 |                        -69.2R |                         237.3R |    42.3R ( 2.6%)  131.5
+    money5    |   249.1R ( 99.4%)   3.3%  33.0 |                        -68.9R |                         236.3R |    43.9R ( 7.2%)  125.0
+    money10h  |   247.8R ( 98.9%)   6.3%  34.0 |                        -68.3R |                         235.4R |    44.0R (11.3%)  125.0
+    ladder    |   247.6R ( 98.8%)   6.3%  33.5 |                        -68.2R |                         235.3R |    44.5R (11.3%)  124.0
+    aimd      |   173.8R ( 69.4%)  81.5%  18.7 |                        -21.0R |                         163.6R |    34.0R (94.7%)   36.9
+    random    |   249.5R ( 99.5%)   1.1%  34.0 |                        -69.0R |                         236.1R |    41.1R ( 1.0%)  134.0
+    regime, matched random control: 2stops +26.7R vs random +19.3R (timing +7.4R); 3inrow +51.5R vs random +31.0R (timing +20.5R); lpts +41.9R vs random +41.8R (timing +0.1R); money +42.8R vs random +41.6R (timing +1.2R)
+    slow dens  as policy, total R (no slow lane / demote at alarm / graded): healthy 250.7/247.5/242.0; decay 29.3/46.1/47.9; badweek 237.4/236.1/229.8
+    slow dens : healthy false alarm  5.5% | decay caught in 150 days  48.5%, median delay 76 days | alarm inside 20 days of a bad week  0.0%
+    slow cusum as policy, total R (no slow lane / demote at alarm / graded): healthy 250.7/245.2/243.2; decay 29.3/78.0/81.1; badweek 237.4/228.3/225.4
+    slow cusum: healthy false alarm  5.0% | decay caught in 150 days  97.0%, median delay 40 days | alarm inside 20 days of a bad week  3.0%
+
+=== fi10: 10/day, healthy EV +0.101R, decayed EV -0.050R, bad EV -0.155R
+    money brake: 1-day window, trips at running P&L <= -5.50R (own p1, healthy fire rate 1.2%); loss points at 6.90 (own p99)
+    arm       |  healthy: R kept, fire%, DDp95 |         decay: R after day 100 |                     badweek: R |       regime: R (fire%), DDp95
+    none      |   249.9R (100.0%)   0.0%  25.8 |                        -72.3R |                         241.0R |    45.7R ( 0.0%)  121.6
+    2stops    |   163.1R ( 65.3%)  80.4%  24.5 |                        -42.9R |                         157.2R |    39.3R (84.0%)   76.0
+    3inrow    |   186.4R ( 74.6%)  59.7%  25.2 |                        -47.5R |                         180.6R |    52.3R (68.4%)   76.6
+    3nonwin   |   186.4R ( 74.6%)  59.7%  25.2 |                        -47.5R |                         180.6R |    52.3R (68.4%)   76.6
+    3inrow_h  |   218.2R ( 87.3%)  59.7%  22.7 |                        -59.9R |                         210.8R |    49.0R (68.4%)   94.7
+    lpts      |   249.7R ( 99.9%)   0.7%  25.8 |                        -72.2R |                         240.9R |    45.9R ( 1.6%)  122.4
+    money     |   249.4R ( 99.8%)   1.2%  25.8 |                        -71.7R |                         240.4R |    46.6R ( 3.1%)  115.3
+    money_h   |   249.7R ( 99.9%)   1.2%  25.8 |                        -72.0R |                         240.7R |    46.2R ( 3.1%)  117.3
+    money5    |   247.5R ( 99.0%)   4.6%  25.7 |                        -70.1R |                         238.9R |    48.7R ( 9.5%)  112.0
+    money10h  |   246.6R ( 98.7%)   8.9%  25.1 |                        -70.4R |                         238.4R |    48.4R (15.7%)  113.0
+    ladder    |   246.3R ( 98.6%)   8.9%  25.1 |                        -70.1R |                         238.1R |    48.9R (15.7%)  111.9
+    aimd      |   209.9R ( 84.0%)  57.8%  18.2 |                        -32.6R |                         200.0R |    43.8R (86.3%)   46.0
+    random    |   248.1R ( 99.3%)   1.3%  25.8 |                        -71.6R |                         239.3R |    44.9R ( 1.3%)  119.8
+    regime, matched random control: 2stops +39.3R vs random +23.5R (timing +15.8R); 3inrow +52.3R vs random +29.9R (timing +22.5R); lpts +45.9R vs random +44.9R (timing +0.9R); money +46.6R vs random +45.4R (timing +1.2R)
+    slow dens  as policy, total R (no slow lane / demote at alarm / graded): healthy 249.9/245.5/240.5; decay 28.4/49.8/52.1; badweek 241.0/233.0/225.2
+    slow dens : healthy false alarm  5.0% | decay caught in 150 days  58.0%, median delay 71 days | alarm inside 20 days of a bad week  1.0%
+    slow cusum as policy, total R (no slow lane / demote at alarm / graded): healthy 249.9/243.6/241.5; decay 28.4/84.9/86.0; badweek 241.0/232.2/229.4
+    slow cusum: healthy false alarm  5.0% | decay caught in 150 days  99.5%, median delay 29 days | alarm inside 20 days of a bad week  2.5%
+
+=== fi40: 40/day, healthy EV +0.101R, decayed EV -0.050R, bad EV -0.155R
+    money brake: 1-day window, trips at running P&L <= -10.40R (own p1, healthy fire rate 1.0%); loss points at 20.50 (own p99)
+    arm       |  healthy: R kept, fire%, DDp95 |         decay: R after day 100 |                     badweek: R |       regime: R (fire%), DDp95
+    none      |  1003.7R (100.0%)   0.0%  30.7 |                       -306.4R |                         950.1R |   164.9R ( 0.0%)  177.6
+    2stops    |   181.5R ( 18.1%) 100.0%  25.5 |                        -49.5R |                         169.2R |    49.9R (100.0%)   52.8
+    3inrow    |   278.9R ( 27.8%)  98.4%  25.7 |                        -59.2R |                         268.6R |    95.3R (99.1%)   51.8
+    3nonwin   |   278.9R ( 27.8%)  98.4%  25.7 |                        -59.2R |                         268.6R |    95.3R (99.1%)   51.8
+    3inrow_h  |   641.3R ( 63.9%)  98.4%  20.0 |                       -182.8R |                         609.3R |   130.1R (99.1%)   98.6
+    lpts      |  1003.2R (100.0%)   1.0%  30.7 |                       -306.1R |                         950.1R |   168.1R ( 5.9%)  180.1
+    money     |  1001.3R ( 99.8%)   1.0%  30.6 |                       -300.6R |                         949.8R |   181.7R ( 7.6%)  164.9
+    money_h   |  1002.5R ( 99.9%)   1.0%  30.7 |                       -303.5R |                         949.9R |   173.3R ( 7.6%)  171.9
+    money5    |   987.0R ( 98.3%)   4.8%  31.5 |                       -279.5R |                         940.1R |   210.4R (19.1%)  149.6
+    money10h  |   981.0R ( 97.7%)  10.5%  29.2 |                       -280.1R |                         932.3R |   199.2R (28.5%)  152.2
+    ladder    |   979.8R ( 97.6%)  10.5%  28.5 |                       -277.2R |                         932.1R |   207.6R (28.5%)  142.8
+    aimd      |   835.8R ( 83.3%)  60.0%  21.6 |                        -53.9R |                         767.9R |    83.2R (97.5%)   48.7
+    random    |   999.4R ( 99.6%)   1.0%  30.6 |                       -304.7R |                         945.7R |   164.5R ( 0.9%)  185.5
+    regime, matched random control: 2stops +49.9R vs random +82.7R (timing -32.8R); 3inrow +95.3R vs random +83.3R (timing +12.0R); lpts +168.1R vs random +157.4R (timing +10.7R); money +181.7R vs random +155.8R (timing +25.9R)
+    slow dens  as policy, total R (no slow lane / demote at alarm / graded): healthy 1003.7/979.6/960.3; decay 99.3/319.9/330.7; badweek 950.1/794.7/804.2
+    slow dens : healthy false alarm  5.0% | decay caught in 150 days  99.5%, median delay 36 days | alarm inside 20 days of a bad week 18.0%
+    slow cusum as policy, total R (no slow lane / demote at alarm / graded): healthy 1003.7/983.8/987.8; decay 99.3/380.5/383.1; badweek 950.1/614.3/901.9
+    slow cusum: healthy false alarm  5.0% | decay caught in 150 days  98.5%, median delay 10 days | alarm inside 20 days of a bad week 54.5%
+
+=== be4: 4/day, healthy EV +0.082R, decayed EV -0.050R, bad EV -0.158R
+    money brake: 3-day window, trips at running P&L <= -6.20R (own p1, healthy fire rate 1.2%); loss points at 4.00 (own p99)
+    arm       |  healthy: R kept, fire%, DDp95 |         decay: R after day 100 |                     badweek: R |       regime: R (fire%), DDp95
+    none      |    83.2R (100.0%)   0.0%  26.0 |                        -27.2R |                          79.2R |     3.9R ( 0.0%)   83.0
+    2stops    |    73.1R ( 87.8%)  49.0%  25.8 |                        -22.5R |                          69.7R |     7.8R (55.2%)   72.2
+    3inrow    |    81.7R ( 98.2%)   8.9%  25.8 |                        -26.5R |                          77.7R |     4.2R (12.1%)   81.8
+    3nonwin   |    79.4R ( 95.4%)  21.8%  26.9 |                        -25.3R |                          76.3R |     5.0R (26.8%)   78.7
+    3inrow_h  |    82.5R ( 99.1%)   8.9%  26.0 |                        -26.9R |                          78.4R |     4.0R (12.1%)   79.8
+    lpts      |    83.2R (100.0%)   2.0%  26.0 |                        -27.2R |                          79.2R |     3.9R ( 3.4%)   83.0
+    money     |    82.7R ( 99.4%)   1.2%  26.5 |                        -26.8R |                          78.8R |     4.9R ( 3.5%)   81.7
+    money_h   |    83.0R ( 99.7%)   1.2%  26.3 |                        -27.0R |                          79.0R |     4.4R ( 3.5%)   82.3
+    money5    |    81.2R ( 97.5%)   4.1%  27.0 |                        -25.6R |                          78.0R |     6.9R ( 8.9%)   74.8
+    money10h  |    81.3R ( 97.6%)   8.5%  26.5 |                        -25.8R |                          77.9R |     6.1R (16.1%)   78.0
+    ladder    |    81.0R ( 97.3%)   8.5%  26.3 |                        -25.5R |                          77.8R |     6.6R (16.1%)   77.4
+    aimd      |    64.7R ( 77.7%)  69.8%  18.3 |                        -13.6R |                          61.2R |    10.1R (86.1%)   36.9
+    random    |    82.8R ( 99.4%)   1.1%  25.7 |                        -26.8R |                          78.5R |     3.7R ( 1.2%)   83.3
+    regime, matched random control: 2stops +7.8R vs random +2.3R (timing +5.4R); 3inrow +4.2R vs random +3.9R (timing +0.3R); lpts +3.9R vs random +4.0R (timing -0.1R); money +4.9R vs random +3.8R (timing +1.1R)
+    slow dens  as policy, total R (no slow lane / demote at alarm / graded): healthy 83.2/81.6/79.2; decay 7.5/14.0/15.2; badweek 79.2/76.0/73.8
+    slow dens : healthy false alarm  5.0% | decay caught in 150 days  52.5%, median delay 73 days | alarm inside 20 days of a bad week  2.5%
+    slow cusum as policy, total R (no slow lane / demote at alarm / graded): healthy 83.2/82.2/79.7; decay 7.5/19.7/21.7; badweek 79.2/74.7/73.8
+    slow cusum: healthy false alarm  5.0% | decay caught in 150 days  91.5%, median delay 66 days | alarm inside 20 days of a bad week  4.0%
+
+=== orb2: 2/day, healthy EV +0.200R, decayed EV -0.050R, bad EV -0.160R
+    money brake: 5-day window, trips at running P&L <= -9.00R (own p1, healthy fire rate 1.0%); loss points at 2.00 (own p99)
+    arm       |  healthy: R kept, fire%, DDp95 |         decay: R after day 100 |                     badweek: R |       regime: R (fire%), DDp95
+    none      |    98.3R (100.0%)   0.0%  32.0 |                        -14.4R |                          96.0R |    45.1R ( 0.0%)   63.0
+    2stops    |    98.3R (100.0%)  36.0%  32.0 |                        -14.4R |                          96.0R |    45.1R (40.9%)   63.0
+    3inrow    |    98.3R (100.0%)   0.0%  32.0 |                        -14.4R |                          96.0R |    45.1R ( 0.0%)   63.0
+    3nonwin   |    98.3R (100.0%)   0.0%  32.0 |                        -14.4R |                          96.0R |    45.1R ( 0.0%)   63.0
+    3inrow_h  |    98.3R (100.0%)   0.0%  32.0 |                        -14.4R |                          96.0R |    45.1R ( 0.0%)   63.0
+    lpts      |    98.3R (100.0%)  36.0%  32.0 |                        -14.4R |                          96.0R |    45.1R (40.9%)   63.0
+    money     |    97.8R ( 99.4%)   1.0%  32.0 |                        -14.2R |                          95.5R |    45.4R ( 2.3%)   60.0
+    money_h   |    98.1R ( 99.7%)   1.0%  32.0 |                        -14.3R |                          95.8R |    45.2R ( 2.3%)   61.0
+    money5    |    97.8R ( 99.4%)   4.5%  32.0 |                        -14.2R |                          95.5R |    45.3R ( 8.9%)   60.0
+    money10h  |    96.6R ( 98.2%)   6.9%  30.0 |                        -13.6R |                          94.4R |    45.5R (12.1%)   59.5
+    ladder    |    96.3R ( 98.0%)   6.9%  31.5 |                        -13.5R |                          94.1R |    45.6R (12.1%)   59.5
+    aimd      |    32.0R ( 32.5%)  98.5%   8.7 |                         -2.9R |                          30.7R |    17.6R (98.7%)   13.9
+    random    |    97.5R ( 99.2%)   1.0%  33.0 |                        -14.3R |                          95.1R |    44.7R ( 1.0%)   63.0
+    regime, matched random control: 2stops +45.1R vs random +32.2R (timing +12.9R); 3inrow +45.1R vs random +45.1R (timing +0.0R); lpts +45.1R vs random +31.6R (timing +13.5R); money +45.4R vs random +44.5R (timing +0.8R)
+    slow dens  as policy, total R (no slow lane / demote at alarm / graded): healthy 98.3/96.1/95.3; decay 28.1/29.3/28.9; badweek 96.0/94.4/92.2
+    slow dens : healthy false alarm  5.0% | decay caught in 150 days  25.5%, median delay 93 days | alarm inside 20 days of a bad week  0.5%
+    slow cusum as policy, total R (no slow lane / demote at alarm / graded): healthy 98.3/97.2/95.8; decay 28.1/31.4/32.9; badweek 96.0/94.6/93.1
+    slow cusum: healthy false alarm  5.0% | decay caught in 150 days  68.5%, median delay 99 days | alarm inside 20 days of a bad week  0.5%

@@ -1,0 +1,1052 @@
+# X3 brakes, restores, exits and drift: ledger additions (Stage B). Generated from the X3 expansion; see expansion/X3-brakes-exits-drift.md.
+- id: money_brake_window_trades
+  name: Fewest trades in the money brake window
+  level: unit
+  kind: schedule
+  measure: count
+  applies_to: &id001
+    classes:
+    - all
+    styles:
+    - all
+    timeframes: all
+  default: 10
+  basis: reasoned
+  derivation: 'At least 10 trades, so the window P&L takes enough values to reach a 1 percent tail. Window in days = ceil(10 / trades per day): 1 day at 10+ a day,
+    3 days at 4 a day, 5 days at 2 a day (X3 SIM). He can change the count or switch to a window in hours.'
+  inputs:
+  - trade_rate
+  affects:
+  - id: money_brake_threshold_r
+    direction: either
+    how: sets the window the threshold is read over
+  - id: circuit_breaker_window
+    direction: either
+    how: replaces a fixed day window for the money breaker
+  configurable: true
+  changed_by:
+  - operator
+  - agent_proposal
+  - automatic
+  status: proposal
+  sources:
+  - gen: expansion
+    ref: expansion/X3-brakes-exits-drift.md
+    note: X3-H01
+  - gen: expansion
+    ref: linking/stage-b/X3-brakes-exits-drift/out-200.txt
+    note: orb2 at 2 a day needed a 5-day window to reach a 1 percent tail
+  seed_ids:
+  - A28
+  - C33
+  notes: Refines X0 money_brake_percentile (a daily percentile) for slow units.
+- id: money_brake_threshold_r
+  name: Trip level of the money breaker, in R over its window
+  level: unit
+  kind: brake_threshold
+  measure: R
+  applies_to: *id001
+  default: null
+  basis: formula
+  derivation: Lower tail of the unit's running-minimum P&L over its window, at money_brake_percentile, from a block bootstrap of the frozen card or holdout run through
+    the same brake; then clamped so it is never looser than money_brake_dollar_clamp converted to R. Recomputed by the learner (X3-H61) inside bounds.
+  seen_values:
+  - value: -7.0R
+    gen: expansion
+    ref: linking/stage-b/X3-brakes-exits-drift/out-200.txt
+    note: fs10, own p1 (sim)
+  - value: -10.4R
+    gen: expansion
+    ref: linking/stage-b/X3-brakes-exits-drift/out-200.txt
+    note: fi40, own p1 (sim)
+  inputs:
+  - money_brake_window_trades
+  - money_brake_dollar_clamp
+  - result_spread_r
+  - trade_rate
+  - win_rate
+  affects:
+  - id: unit_daily_loss_limit
+    direction: either
+    how: the unit day limit becomes this window threshold when the window is one day
+  - id: breaker_fire_density
+    direction: down
+    how: a looser threshold fires less often
+  - id: brake_state
+    direction: either
+    how: crossing it benches the unit for the window
+  configurable: true
+  changed_by:
+  - operator
+  - agent_proposal
+  - automatic
+  status: proposal
+  sources:
+  - gen: expansion
+    ref: expansion/X3-brakes-exits-drift.md
+    note: X3-H01
+  - gen: expansion
+    ref: linking/stage-b/X3-brakes-exits-drift/out-200.txt
+    note: fires on 1.0-1.2 percent of healthy days at 2-40 trades a day; keeps 99.4-99.8 percent of healthy R
+  - gen: research
+    ref: linking/components/A5-topup.yaml
+    note: A5-144
+  seed_ids:
+  - A26
+  - A28
+  - C19
+  - C31
+  notes: The percentile itself is X0 money_brake_percentile (default 1); this entry is the window threshold it produces.
+- id: money_brake_dollar_clamp
+  name: Dollar ceiling on how loose a unit money breaker may be
+  level: unit
+  kind: limit
+  measure: USD
+  applies_to: *id001
+  default: null
+  basis: open
+  derivation: 'open: a money figure from his budget split (numbers lens). Purpose: a card that flatters the unit cannot set a loose brake; the money breaker trips
+    at whichever of its own-percentile level and this ceiling comes first.'
+  inputs:
+  - unit_capital_share
+  - portfolio_daily_risk_budget
+  affects:
+  - id: money_brake_threshold_r
+    direction: up
+    how: a lower ceiling tightens the trip level when it binds
+  configurable: true
+  changed_by:
+  - operator
+  status: proposal
+  sources:
+  - gen: expansion
+    ref: expansion/X3-brakes-exits-drift.md
+    note: X3-H01, roundtable amendment (pod-shop seat)
+  seed_ids:
+  - C10
+  - C30
+- id: reduce_step_percentile
+  name: Percentile at which the money ladder halves size (REDUCING)
+  level: unit
+  kind: brake_threshold
+  measure: percent
+  applies_to: *id001
+  default: 10
+  basis: reasoned
+  derivation: Halve at the unit's own 10th percentile of the window running minimum, bench at the 1st (X3-H02). In the X3 SIM this ladder kept 97.3-98.8 percent of
+    healthy R and lifted bad-spell R by 3 to 43R over no brake.
+  inputs:
+  - money_brake_window_trades
+  - result_spread_r
+  affects:
+  - id: reduce_step_factor
+    direction: either
+    how: sets when the reduce factor applies
+  - id: drawdown_pressure_multiplier
+    direction: either
+    how: replaces the April quadratic taper with a two-step ladder
+  configurable: true
+  changed_by:
+  - operator
+  - agent_proposal
+  - automatic
+  status: proposal
+  sources:
+  - gen: expansion
+    ref: expansion/X3-brakes-exits-drift.md
+    note: X3-H02
+  - gen: expansion
+    ref: linking/stage-b/X3-brakes-exits-drift/out-200.txt
+    note: ladder arm
+  - gen: research
+    ref: linking/components/A2-brakes-drift-exits.yaml
+    note: 'A2-023: staged shedding'
+  seed_ids:
+  - A25
+  - C19
+- id: reduce_step_factor
+  name: Size multiplier while a brake holds a unit in REDUCING
+  level: unit
+  kind: size_input
+  measure: ratio
+  applies_to: *id001
+  default: 0.5
+  basis: reasoned
+  derivation: One level on the size ladder; half size keeps money at risk falling fast without a bench (X3-H02). Where the minimum lot cannot be halved, skip every
+    second signal instead.
+  inputs: []
+  affects:
+  - id: risk_amount_usd
+    direction: down
+    how: multiplies the size of every new entry while REDUCING
+  configurable: true
+  changed_by:
+  - operator
+  - agent_proposal
+  - automatic
+  status: proposal
+  sources:
+  - gen: expansion
+    ref: expansion/X3-brakes-exits-drift.md
+    note: X3-H02
+  - gen: expansion
+    ref: linking/stage-b/X3-brakes-exits-drift/out-200.txt
+    note: money_h and ladder arms
+  seed_ids:
+  - A25
+- id: loss_points_percentile
+  name: Percentile of daily loss points at which the loss-points brake benches
+  level: unit
+  kind: brake_threshold
+  measure: percent
+  applies_to: *id001
+  default: 99
+  basis: reasoned
+  derivation: 'Bench when today''s loss points (each loss counted by its size in R, scratches at cost) reach the unit''s own 99th percentile from the card. X3 SIM:
+    0.4-2.0 percent fire days, 99.9-100 percent of healthy R kept, thresholds 6.9 (FI unit), 9.0 (full-stop unit), 20.5 (40 a day).'
+  inputs:
+  - loss_points_total
+  - trade_rate
+  - fast_invalidation_cut_r
+  affects:
+  - id: loss_points_bench_threshold
+    direction: up
+    how: a higher percentile gives a higher bench threshold
+  configurable: true
+  changed_by:
+  - operator
+  - agent_proposal
+  - automatic
+  status: proposal
+  sources:
+  - gen: expansion
+    ref: expansion/X3-brakes-exits-drift.md
+    note: X3-H03
+  - gen: expansion
+    ref: linking/stage-b/X3-brakes-exits-drift/out-200.txt
+    note: lpts arm
+  - gen: research
+    ref: linking/components/A2-brakes-drift-exits.yaml
+    note: A2-091
+  seed_ids:
+  - A9
+  - A28
+- id: density_alarm_ratio
+  name: Fire-rate multiple the breaker sentinel is tuned to detect
+  level: unit
+  kind: brake_threshold
+  measure: ratio
+  applies_to: *id001
+  default: 3
+  basis: formula
+  derivation: The Bernoulli CUSUM on daily breaker fires tests p0 against k x p0, with k = min(3, 0.5 / p0), p0 the card's expected healthy fire rate (X3-H08).
+  inputs:
+  - breaker_expected_fire_rate
+  affects:
+  - id: density_cusum_threshold
+    direction: either
+    how: sets the alternative the sentinel tests for
+  configurable: true
+  changed_by:
+  - operator
+  - agent_proposal
+  - automatic
+  status: proposal
+  sources:
+  - gen: expansion
+    ref: expansion/X3-brakes-exits-drift.md
+    note: X3-H08
+  - gen: expansion
+    ref: linking/stage-b/X3-brakes-exits-drift/out-200.txt
+    note: slow dens
+  seed_ids:
+  - A26
+- id: density_cusum_threshold
+  name: Alarm level of the breaker fire-density sentinel
+  level: unit
+  kind: brake_threshold
+  measure: 'other: log-likelihood units'
+  applies_to: *id001
+  default: null
+  basis: formula
+  derivation: 'The 95th percentile (or 1 minus slow_lane_false_alarm_rate) of the sentinel''s maximum over the horizon on healthy bootstrapped paths of the unit''s
+    card. X3 SIM: catches a dead edge in 25-58 percent of runs at 2-10 trades a day (99.5 percent at 40), median 36-93 days; alarms after 0-2.5 percent of bad weeks
+    at 10 a day.'
+  inputs:
+  - density_alarm_ratio
+  - breaker_expected_fire_rate
+  - slow_lane_false_alarm_rate
+  affects:
+  - id: drift_state
+    direction: either
+    how: crossing it moves the unit to yellow or red
+  - id: drift_size_down_step
+    direction: either
+    how: a crossing triggers one size step down
+  configurable: true
+  changed_by:
+  - operator
+  - agent_proposal
+  - automatic
+  status: proposal
+  sources:
+  - gen: expansion
+    ref: expansion/X3-brakes-exits-drift.md
+    note: X3-H08, X3-H11
+  - gen: expansion
+    ref: linking/stage-b/X3-brakes-exits-drift/out-200.txt
+    note: slow dens
+  seed_ids:
+  - A26
+  - A25
+- id: slow_lane_false_alarm_rate
+  name: Share of healthy units a slow-lane detector may flag per horizon
+  level: unit
+  kind: evidence
+  measure: percent
+  applies_to: *id001
+  default: null
+  basis: open
+  derivation: 'open: a policy choice. The X3 SIM used 5 percent per 250 trading days for both the trade CUSUM and the density sentinel. Split from the BMS lifetime
+    false-demotion budget (ev_lifetime_demotion_budget) when units are many.'
+  inputs:
+  - live_unit_count
+  affects:
+  - id: density_cusum_threshold
+    direction: down
+    how: a lower rate raises the alarm level
+  - id: cusum_limit
+    direction: down
+    how: a lower rate raises the CUSUM limit
+  configurable: true
+  changed_by:
+  - operator
+  - agent_proposal
+  - automatic
+  status: proposal
+  sources:
+  - gen: expansion
+    ref: expansion/X3-brakes-exits-drift.md
+    note: X3-H08, X3-H52
+  - gen: expansion
+    ref: linking/stage-b/X3-brakes-exits-drift/out-200.txt
+    note: slow lane calibration
+  seed_ids:
+  - A25
+  notes: Split from the BMS lifetime false-demotion budget, X5 ev_lifetime_demotion_budget, when units are many.
+- id: demotion_two_key_rule
+  name: How the two slow-lane keys combine into size steps and demotion
+  level: unit
+  kind: other
+  measure: 'other: rule'
+  applies_to: *id001
+  default: either key at warning halves at once, reversibly; paper needs both keys, or one key at alarm past the next planned look
+  basis: reasoned
+  derivation: 'X3 SIM at 40 trades a day: reversible graded steps kept 902R of 950R after a bad week where permanent demotion at the CUSUM alarm kept 614R; both saved
+    the same after a real decay. Roundtable: halve at once (pod practice), paper on two keys (trial practice).'
+  inputs:
+  - cusum_limit
+  - density_cusum_threshold
+  affects:
+  - id: drift_state
+    direction: either
+    how: decides when a unit goes to paper
+  - id: drift_size_down_step
+    direction: either
+    how: decides when size steps down
+  configurable: true
+  changed_by:
+  - operator
+  - agent_proposal
+  - automatic
+  status: proposal
+  sources:
+  - gen: expansion
+    ref: expansion/X3-brakes-exits-drift.md
+    note: X3-H11, X3-H49
+  - gen: expansion
+    ref: linking/stage-b/X3-brakes-exits-drift/out-200.txt
+    note: slow cusum as policy
+  seed_ids:
+  - A25
+  - A26
+  notes: Category value; see X3-H11. Planned looks are X5 ev_look_schedule.
+- id: brake_random_control_margin
+  name: A brake's margin over a random brake with the same fire rate and action
+  level: unit
+  kind: evidence
+  measure: R
+  applies_to: *id001
+  default: null
+  basis: formula
+  derivation: 'R per 100 trades of (brake arm minus matched random arm) on replay of the unit''s own trades, with a block-permutation p-value; repeated on shadow
+    live data. Certified per brake type within a family, then per unit (X3-H13). X3 SIM: 3 in a row +20.5R over 250 days in bad spells; money at own p1 +1.2R at 10
+    a day and +25.9R at 40 a day.'
+  inputs:
+  - brake_precision
+  - breaker_expected_fire_rate
+  affects:
+  - id: brake_state
+    direction: either
+    how: a brake that cannot beat its random twin stays in shadow (X1 x1_brake_shadow_mode) unless its row says its job is the tail
+  - id: brake_precision
+    direction: either
+    how: reported beside precision on the brake row
+  configurable: true
+  changed_by:
+  - operator
+  - agent_proposal
+  - automatic
+  status: proposal
+  sources:
+  - gen: expansion
+    ref: expansion/X3-brakes-exits-drift.md
+    note: X3-H13
+  - gen: expansion
+    ref: linking/stage-b/X3-brakes-exits-drift/out-200.txt
+    note: matched random control
+  - gen: research
+    ref: linking/components/A2-brakes-drift-exits.yaml
+    note: A2-135
+  seed_ids:
+  - A26
+- id: choke_budget_fire_rate
+  name: Most a bench-type brake may fire on a healthy unit
+  level: unit
+  kind: limit
+  measure: percent
+  applies_to: *id001
+  default: 5
+  basis: reasoned
+  derivation: Share of healthy windows on the card. Bench brakes at or under about 5 percent kept 97 percent or more of healthy R in the X3 SIM; brakes firing on
+    40-100 percent of days kept 18-84 percent. A brake above the budget is refused or forced to shadow. He can change the budget or derive it as a share of expected
+    R thrown away.
+  inputs:
+  - breaker_expected_fire_rate
+  - expectancy_r
+  - trade_rate
+  affects:
+  - id: brake_state
+    direction: either
+    how: forces shadow (X1 x1_brake_shadow_mode) for a brake over budget
+  - id: circuit_breaker_strikes
+    direction: up
+    how: a fixed strike count must sit high enough to stay inside the budget
+  configurable: true
+  changed_by:
+  - operator
+  - agent_proposal
+  - automatic
+  status: proposal
+  sources:
+  - gen: expansion
+    ref: expansion/X3-brakes-exits-drift.md
+    note: X3-H65
+  - gen: expansion
+    ref: linking/stage-b/X3-brakes-exits-drift/out-200.txt
+    note: fire days and R kept per arm
+  seed_ids:
+  - C33
+  - C31
+- id: restore_cooldown_trades
+  name: Wait before a benched unit may probe, in its own trades
+  level: unit
+  kind: brake_reset
+  measure: count
+  applies_to: *id001
+  default: null
+  basis: formula
+  derivation: One money-brake window of the unit's expected trades (money_brake_window_trades), counted in time for units that went quiet, times retrip_backoff_multiplier
+    for each consecutive trip.
+  inputs:
+  - money_brake_window_trades
+  - retrip_backoff_multiplier
+  affects:
+  - id: circuit_breaker_reset
+    direction: either
+    how: sets when the half-open probe may start
+  configurable: true
+  changed_by:
+  - operator
+  - agent_proposal
+  - automatic
+  status: proposal
+  sources:
+  - gen: expansion
+    ref: expansion/X3-brakes-exits-drift.md
+    note: X3-H15
+  - gen: research
+    ref: linking/components/A2-brakes-drift-exits.yaml
+    note: A2-007
+  seed_ids:
+  - A25
+- id: retrip_backoff_multiplier
+  name: Growth of the cool-down after each consecutive trip
+  level: unit
+  kind: brake_reset
+  measure: ratio
+  applies_to: *id001
+  default: 2
+  basis: reasoned
+  derivation: Doubles per consecutive trip and decays while healthy, as Envoy ejection time (30 s times consecutive ejections) and TCP back-off do (R7).
+  inputs: []
+  affects:
+  - id: restore_cooldown_trades
+    direction: up
+    how: multiplies the cool-down
+  - id: isolation_end_rule
+    direction: up
+    how: multiplies the next isolation time to live, X4 isolation_ttl (X4 isolation_retrip_backoff is the same factor for isolations only)
+  configurable: true
+  changed_by:
+  - operator
+  - agent_proposal
+  - automatic
+  status: proposal
+  sources:
+  - gen: expansion
+    ref: expansion/X3-brakes-exits-drift.md
+    note: X3-H15, X3-H30, X3-H33
+  - gen: research
+    ref: research/R7-software-patterns-self-configuring.md
+    note: Envoy outlier detection
+- id: level_lockout_days
+  name: How long a size level stays locked after two trips at it
+  level: unit
+  kind: brake_reset
+  measure: 'other: days or trades'
+  applies_to: *id001
+  default: null
+  basis: open
+  derivation: 'open: after a second trip at the same level the level and those above it lock for a period, as BOIN eliminates a too-toxic dose (R3). Differs from
+    X5 ev_level_lockout, which locks on a bad-cohort rate.'
+  inputs: []
+  affects:
+  - id: size_levels
+    direction: down
+    how: removes the locked level and those above for the period (the level is X2 last_trip_size_level)
+  configurable: true
+  changed_by:
+  - operator
+  - agent_proposal
+  - automatic
+  status: idea
+  sources:
+  - gen: expansion
+    ref: expansion/X3-brakes-exits-drift.md
+    note: X3-H17
+  - gen: research
+    ref: linking/components/A2-brakes-drift-exits.yaml
+    note: A2-190
+- id: event_dedup_key
+  name: Key that makes losses from one shared driver count as one event
+  level: book
+  kind: other
+  measure: 'other: key'
+  applies_to: *id001
+  default: shared-driver tag plus loss_event_window
+  basis: reasoned
+  derivation: 'Reinsurance hours clause: all losses from one event inside a window count once (A2-026). Applies to count and density statistics above the unit; money
+    brakes still count every loss in full.'
+  inputs:
+  - loss_event_window
+  - instrument_class
+  affects:
+  - id: chorus_expected_frequency
+    direction: either
+    how: chorus counts events, not unit losses
+  - id: breaker_fire_density
+    direction: down
+    how: fires from one shared event count once in cluster density
+  configurable: true
+  changed_by:
+  - operator
+  - agent_proposal
+  - automatic
+  status: proposal
+  sources:
+  - gen: expansion
+    ref: expansion/X3-brakes-exits-drift.md
+    note: X3-H20
+  - gen: research
+    ref: linking/components/A2-brakes-drift-exits.yaml
+    note: A2-026
+  - gen: research
+    ref: linking/components/A3-structure-regimes-scenarios.yaml
+    note: A3-131
+  seed_ids:
+  - C32
+  - C27
+- id: chorus_k_of_n
+  name: Members that must fire inside one event window for the cluster to trip
+  level: book
+  kind: brake_threshold
+  measure: 'other: K of N'
+  applies_to: *id001
+  default: null
+  basis: formula
+  derivation: Smallest K with P(at least K of N members fire their own money breakers in one window) below the cluster false-alarm target, using each member's p0
+    and the cluster's stressed result correlation.
+  inputs:
+  - breaker_expected_fire_rate
+  - unit_result_correlation
+  - live_unit_count
+  - loss_event_window
+  affects:
+  - id: chorus_expected_frequency
+    direction: either
+    how: turns the expected chorus rate into a trip level
+  - id: brake_state
+    direction: either
+    how: a trip stops new entries in the cluster for the window
+  configurable: true
+  changed_by:
+  - operator
+  - agent_proposal
+  - automatic
+  status: proposal
+  sources:
+  - gen: expansion
+    ref: expansion/X3-brakes-exits-drift.md
+    note: X3-H21
+  - gen: research
+    ref: linking/components/A2-brakes-drift-exits.yaml
+    note: A2-089
+  seed_ids:
+  - C32
+  - B11
+- id: bms_breaker_target_fire_rate
+  name: Most often the BMS breaker should fire on history
+  level: portfolio
+  kind: brake_threshold
+  measure: 'other: fires per month'
+  applies_to: *id001
+  default: null
+  basis: stated
+  derivation: 'X4 draft target: at most about once a month on history, never on a normal day. Used to set the K of N and burn levels of the BMS breaker.'
+  seen_values:
+  - value: about 1 per month
+    gen: expansion
+    ref: expansion/drafts-stopped/X4-scenarios.md
+    note: X4 draft
+  inputs: []
+  affects:
+  - id: bms_circuit_breaker
+    direction: either
+    how: its legs are tuned so history shows no more than this rate
+  configurable: true
+  changed_by:
+  - operator
+  - agent_proposal
+  - automatic
+  status: proposal
+  sources:
+  - gen: expansion
+    ref: expansion/X3-brakes-exits-drift.md
+    note: X3-H24
+  - gen: research
+    ref: linking/components/A2-brakes-drift-exits.yaml
+    note: A2-122
+  seed_ids:
+  - C27
+- id: bucket_stress_percentile
+  name: Percentile of a bucket's own stress score that raises an isolation tell
+  level: portfolio
+  kind: brake_threshold
+  measure: percent
+  applies_to: *id001
+  default: null
+  basis: open
+  derivation: 'open: each bucket (class, region, session) normalises turbulence, correlation surprise and spread or volatility against its own time-of-day history;
+    a tell fires above this percentile. Two tells must agree (X3-H28).'
+  inputs:
+  - cross_market_stress_reading
+  affects:
+  - id: market_isolation_trigger
+    direction: either
+    how: one of the two tells an isolation needs
+  configurable: true
+  changed_by:
+  - operator
+  - agent_proposal
+  - automatic
+  status: proposal
+  sources:
+  - gen: expansion
+    ref: expansion/X3-brakes-exits-drift.md
+    note: X3-H28
+  - gen: research
+    ref: linking/components/A2-brakes-drift-exits.yaml
+    note: A2-080
+  seed_ids:
+  - C27
+- id: class_caution_k_of_n
+  name: Instruments of one class SQS must block at once for a class caution
+  level: portfolio
+  kind: brake_threshold
+  measure: 'other: K of N'
+  applies_to: *id001
+  default: null
+  basis: open
+  derivation: 'open: a broker quote pull shows as 4x spread on every pair with no move (X4 scenario); K of N blocks lift into no new entries for the class until spreads
+    re-cross their band.'
+  inputs:
+  - sqs_score
+  - instrument_class
+  affects:
+  - id: market_isolation_trigger
+    direction: either
+    how: raises a class caution without a loss
+  configurable: true
+  changed_by:
+  - operator
+  - agent_proposal
+  - automatic
+  status: proposal
+  sources:
+  - gen: expansion
+    ref: expansion/X3-brakes-exits-drift.md
+    note: X3-H29
+  - gen: research
+    ref: linking/components/A2-brakes-drift-exits.yaml
+    note: A2-121
+  seed_ids:
+  - C27
+  - C21
+- id: peer_ejection_sd_factor
+  name: Standard deviations below peers at which a unit or instrument is ejected
+  level: portfolio
+  kind: brake_threshold
+  measure: ratio
+  applies_to: *id001
+  default: null
+  basis: stated
+  derivation: 'Envoy ejects a host whose success rate is below the peer mean minus 1.9 standard deviations, with a minimum sample and at least 5 qualifying peers
+    (R7). Peers: same class and logic.'
+  seen_values:
+  - value: 1.9
+    gen: research
+    ref: research/R7-software-patterns-self-configuring.md
+    note: Envoy default
+  inputs:
+  - unit_result_correlation
+  affects:
+  - id: isolation_scope
+    direction: either
+    how: ejects one unit or instrument
+  configurable: true
+  changed_by:
+  - operator
+  - agent_proposal
+  - automatic
+  status: idea
+  sources:
+  - gen: expansion
+    ref: expansion/X3-brakes-exits-drift.md
+    note: X3-H30
+  - gen: research
+    ref: research/R7-software-patterns-self-configuring.md
+    note: Envoy outlier detection
+- id: isolation_max_share
+  name: Most of a cluster that may be ejected or isolated at once by peer rules
+  level: portfolio
+  kind: limit
+  measure: percent
+  applies_to: *id001
+  default: null
+  basis: stated
+  derivation: 'Envoy caps ejection at 10 percent of a cluster (R7). If more look bad, it is the market: the bucket rule (X3-H28) decides instead.'
+  seen_values:
+  - value: 10
+    gen: research
+    ref: research/R7-software-patterns-self-configuring.md
+    note: Envoy default
+  inputs: []
+  affects:
+  - id: isolation_scope
+    direction: down
+    how: caps how much peer ejection can switch off
+  configurable: true
+  changed_by:
+  - operator
+  - agent_proposal
+  - automatic
+  status: idea
+  sources:
+  - gen: expansion
+    ref: expansion/X3-brakes-exits-drift.md
+    note: X3-H30
+  - gen: research
+    ref: research/R7-software-patterns-self-configuring.md
+    note: Envoy max ejection percent
+- id: horizon_autocorrelation
+  name: Persistence of the unit's price or P&L at its holding horizon
+  level: unit
+  kind: evidence
+  measure: ratio
+  applies_to: *id001
+  default: null
+  basis: formula
+  derivation: 'Autocorrelation at the holding horizon from a block test on the unit''s own data. Positive (momentum): price stops and trailing allowed; negative (mean
+    reversion): disaster stop plus thesis and time exits; near zero: disaster stop only (Kaminski-Lo stopping premium, R8).'
+  inputs: []
+  affects:
+  - id: stop_policy_per_style
+    direction: either
+    how: chooses the stop branch
+  - id: trailing_stop_setting
+    direction: either
+    how: trailing only where persistence is positive
+  configurable: true
+  changed_by:
+  - operator
+  - agent_proposal
+  - automatic
+  status: proposal
+  sources:
+  - gen: expansion
+    ref: expansion/X3-brakes-exits-drift.md
+    note: X3-H38
+  - gen: research
+    ref: research/R8-gap-topup.md
+    note: gap 1, Kaminski-Lo
+  - gen: research
+    ref: linking/components/A5-topup.yaml
+    note: A5-079
+  seed_ids:
+  - A10
+  - A28
+- id: fi_cut_mae_percentile
+  name: Share of the unit's winners whose worst excursion stays above the FI cut
+  level: unit
+  kind: other
+  measure: percent
+  applies_to:
+    classes:
+    - all
+    styles:
+    - scalper
+    - intraday
+    timeframes: all
+  default: 90
+  basis: reasoned
+  derivation: 'R8 worked example: if 90 percent of winners never go below -0.4R, a cut at -0.5R loses at most about 10 percent of winners. The cut must beat no cut
+    and cut one bar later after costs, out of sample, counted as a trial. Exit setting.'
+  inputs:
+  - excursion_mae_mfe_r
+  - round_trip_cost_r
+  affects:
+  - id: fast_invalidation_cut_r
+    direction: down
+    how: a higher share pushes the cut further from entry (a deeper cut)
+  configurable: true
+  changed_by:
+  - operator
+  - agent_proposal
+  - automatic
+  status: proposal
+  sources:
+  - gen: expansion
+    ref: expansion/X3-brakes-exits-drift.md
+    note: X3-H39
+  - gen: research
+    ref: research/R8-gap-topup.md
+    note: gap 2, section 2.3
+  - gen: research
+    ref: linking/components/A5-topup.yaml
+    note: A5-087
+  seed_ids:
+  - A9
+  - A28
+- id: edge_peak_bar
+  name: Bar after entry at which the unit's edge ratio peaks
+  level: unit
+  kind: evidence
+  measure: bars
+  applies_to: *id001
+  default: null
+  basis: formula
+  derivation: 'From the edge-versus-time curve: average favourable over adverse excursion N bars after entry, per signal. Sets the time stop of fast exits (MNQ signals
+    that passed used fixed time exits near 60-65 minutes, R8 2.2).'
+  inputs:
+  - excursion_mae_mfe_r
+  affects:
+  - id: max_hold_time
+    direction: either
+    how: the time stop sits near this bar
+  configurable: true
+  changed_by:
+  - operator
+  - agent_proposal
+  - automatic
+  status: proposal
+  sources:
+  - gen: expansion
+    ref: expansion/X3-brakes-exits-drift.md
+    note: X3-H39
+  - gen: research
+    ref: linking/components/A5-topup.yaml
+    note: A5-086
+  seed_ids:
+  - A9
+- id: falsifying_condition
+  name: Named condition that proves a trade's premise wrong
+  level: trade
+  kind: other
+  measure: 'other: rule'
+  applies_to: *id001
+  default: null
+  basis: open
+  derivation: 'open: written per logic (ORB back inside the range; reversion level broken; imbalance flipped). Fires fast invalidation before the price backstop (X3-H40).
+    Exit setting.'
+  inputs: []
+  affects:
+  - id: fast_invalidation_trigger
+    direction: either
+    how: the thesis trigger of fast invalidation
+  - id: exit_reason_code
+    direction: either
+    how: recorded as thesis FI
+  configurable: true
+  changed_by:
+  - operator
+  - agent_proposal
+  - automatic
+  status: idea
+  sources:
+  - gen: expansion
+    ref: expansion/X3-brakes-exits-drift.md
+    note: X3-H40
+  - gen: research
+    ref: linking/components/A2-brakes-drift-exits.yaml
+    note: A2-253
+  seed_ids:
+  - A9
+  - A10
+- id: breakeven_revisit_probability
+  name: Chance of revisiting entry below which the breakeven move pays
+  level: unit
+  kind: other
+  measure: percent
+  applies_to:
+    classes:
+    - all
+    styles:
+    - intraday
+    - swing
+    timeframes: all
+  default: null
+  basis: open
+  derivation: 'open: the breakeven trigger is the profit level past which the unit''s own paths rarely return to entry before the target; breakeven is off by default
+    and on only after the entries-fixed two-arm test (X3-H41). Exit setting.'
+  inputs:
+  - excursion_mae_mfe_r
+  affects:
+  - id: breakeven_trigger
+    direction: either
+    how: sets the trigger from the unit's own paths
+  configurable: true
+  changed_by:
+  - operator
+  - agent_proposal
+  - automatic
+  status: idea
+  sources:
+  - gen: expansion
+    ref: expansion/X3-brakes-exits-drift.md
+    note: X3-H41
+  - gen: research
+    ref: linking/components/A2-brakes-drift-exits.yaml
+    note: A2-234
+  seed_ids:
+  - A10
+  - A28
+  open_questions:
+  - Does any unit type show a clear drop in the revisit chance, after costs?
+- id: hazard_edge_margin
+  name: Margin a survival model needs before it closes a trade early
+  level: trade
+  kind: other
+  measure: R
+  applies_to: *id001
+  default: null
+  basis: open
+  derivation: 'open: competing-risk hazards give a hold-or-close decision with an edge margin; thresholds fitted per instrument on a holdout; shadow until it wins
+    the two-arm test (X3-H42). Exit setting.'
+  inputs:
+  - excursion_mae_mfe_r
+  affects:
+  - id: max_hold_time
+    direction: either
+    how: can end a trade before the time stop
+  configurable: true
+  changed_by:
+  - operator
+  - agent_proposal
+  - automatic
+  status: idea
+  sources:
+  - gen: expansion
+    ref: expansion/X3-brakes-exits-drift.md
+    note: X3-H42
+  - gen: research
+    ref: linking/components/A2-brakes-drift-exits.yaml
+    note: A2-241
+- id: stop_execution_mode
+  name: How a working stop is executed
+  level: unit
+  kind: other
+  measure: 'other: mode'
+  applies_to: *id001
+  default: immediate
+  basis: reasoned
+  derivation: 'immediate by default; a slow unit may declare confirm_on_close for its working stop (never the disaster stop) after a test against immediate (Lo-Remorov:
+    next-day execution beat immediate for tight stops, R8). Exit setting.'
+  inputs: []
+  affects:
+  - id: slippage_cost
+    direction: either
+    how: confirm-on-close changes the fill distribution
+  configurable: true
+  changed_by:
+  - operator
+  - agent_proposal
+  - automatic
+  status: proposal
+  sources:
+  - gen: expansion
+    ref: expansion/X3-brakes-exits-drift.md
+    note: X3-H47
+  - gen: research
+    ref: research/R8-gap-topup.md
+    note: section 2.4
+  seed_ids:
+  - A10
+- id: danger_accumulation_window
+  name: Window over which weak danger signals are summed
+  level: unit
+  kind: schedule
+  measure: minutes
+  applies_to: *id001
+  default: null
+  basis: open
+  derivation: 'open: weak signals (spread percentile, execution anomaly, changepoint probability, loss points) integrate over this window; clear danger acts at once
+    (X3-H66).'
+  inputs: []
+  affects:
+  - id: brake_state
+    direction: either
+    how: halves the unit when enough weak danger gathers
+  configurable: true
+  changed_by:
+  - operator
+  - agent_proposal
+  - automatic
+  status: idea
+  sources:
+  - gen: expansion
+    ref: expansion/X3-brakes-exits-drift.md
+    note: X3-H66
+  - gen: research
+    ref: linking/components/A2-brakes-drift-exits.yaml
+    note: A2-070
