@@ -38,7 +38,7 @@ KEPT = {
 def _libraries() -> list[Path]:
     lock = tomllib.loads((ROOT / APP / "uv.lock").read_text(encoding="utf-8"))
     return [
-        (APP / package["source"]["editable"]).resolve().relative_to(ROOT)
+        (ROOT / APP / package["source"]["editable"]).resolve().relative_to(ROOT)
         for package in lock["package"]
         if "editable" in package["source"]
     ]
