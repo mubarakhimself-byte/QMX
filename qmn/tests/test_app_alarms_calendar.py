@@ -14,7 +14,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from qmn.app.alarms import PushSender, View, market_hours
+from qmn.app.alarms import PushSender, View, calendar_notes, market_hours
 from qmn.app.alarms import Position as Held
 from qmn.app.server import open_node
 from qmn.app.store import Store
@@ -181,7 +181,7 @@ def never_open(market: str, at_ns: int) -> bool:
     return False
 
 
-def test_the_status_names_a_calendar_near_its_last_day_and_one_past_it_keeps_its_sessions(
+def test_the_status_names_a_calendar_near_or_past_its_last_day_or_not_shipped_at_all(
     tmp_path: Path,
 ) -> None:
     node = deployed(tmp_path)
@@ -204,9 +204,17 @@ def test_the_status_names_a_calendar_near_its_last_day_and_one_past_it_keeps_its
         "The market calendar metals-24x5@1 ended on 2027-12-31, 5 days ago; its weekly "
         "sessions still hold, but no closure after it is known.",
     ]
-    assert [open_at("fx.eurusd", at(when)) for when in ("2028-01-05T12:00", "2028-01-08T12:00")] == [
+    assert [
+        open_at("fx.eurusd", at(when)) for when in ("2028-01-05T12:00", "2028-01-08T12:00")
+    ] == [
         True,
         False,
+    ]
+    assert calendar_notes(node.node.context.store, at("2026-11-10T10:00:00"), {}) == [
+        "The market calendar fx-24x5@1 is not shipped with this node, so the alarms that follow "
+        "it push at any hour.",
+        "The market calendar metals-24x5@1 is not shipped with this node, so the alarms that "
+        "follow it push at any hour.",
     ]
 
 

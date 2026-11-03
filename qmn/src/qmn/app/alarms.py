@@ -536,13 +536,18 @@ def market_hours(
 def calendar_notes(
     store: Store, now_ns: int, calendars: Mapping[str, MarketCalendar] | None = None
 ) -> list[str]:
-    """A status line for each calendar the node's markets read that is within
-    ``CALENDAR_WARN_DAYS`` of the last day its data covers, or past it."""
+    """A status line for each calendar the node's markets read that it cannot find, or that is
+    within ``CALENDAR_WARN_DAYS`` of the last day its data covers, or past it."""
     shipped = market_calendars() if calendars is None else calendars
     notes: list[str] = []
     for ref in sorted(set(calendar_refs(store).values())):
         calendar = shipped.get(ref)
-        note = None if calendar is None else calendar.note(now_ns)
+        note = (
+            f"The market calendar {ref} is not shipped with this node, so the alarms that "
+            "follow it push at any hour."
+            if calendar is None
+            else calendar.note(now_ns)
+        )
         if note is not None:
             notes.append(note)
     return notes
