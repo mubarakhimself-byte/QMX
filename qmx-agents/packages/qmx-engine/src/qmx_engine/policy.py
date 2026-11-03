@@ -2,8 +2,10 @@
 names it, and the harness hands it each ask of that chat in-process, so no ask waits on a poller.
 
 A tool the node did not declare (its `policy_args["tools"]`) is denied at once with a reason the
-agent reads. A step that declares a write tool is born in its attempt overlay, which
-`policy_args["overlay"]` names: its file writes are allowed only under that folder, and a declared
+agent reads. An external MCP tool passes: the harness gives an engine chat only the external
+servers its node names as `mcp:` toolsets (C-36). A step that declares a write tool is born in
+its attempt overlay, which `policy_args["overlay"]` names: its file writes are allowed only under
+that folder, and a declared
 `Bash` or `PowerShell` runs, because a shell's writes cannot be bounded by path (AD-60's honest
 boundary; only declared outputs ever leave the overlay). A chat with no overlay is read-only.
 """
@@ -40,7 +42,8 @@ async def engine_policy(call: PolicyCall) -> Answer:
     found = call.args.get("tools")
     declared = [str(t) for t in cast("list[object]", found)] if isinstance(found, list) else []
     overlay = call.args.get("overlay")
-    if call.tool not in declared:
+    external = call.tool.startswith("mcp__") and not call.tool.startswith("mcp__qmx_")
+    if call.tool not in declared and not external:
         tools = ", ".join(declared) if declared else "no tools"
         return Reject(UNDECLARED.format(tool=call.tool, tools=tools))
     if call.tool in WRITES and not isinstance(overlay, str):

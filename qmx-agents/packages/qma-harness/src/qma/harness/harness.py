@@ -156,6 +156,7 @@ if TYPE_CHECKING:
     from qmx_control.models import Document
     from qmx_control.service import ControlService
 
+    from qma.harness.demo_only import AccountWorlds
     from qma.harness.project import Delta, PlanFact
 
 UNKNOWN_OUTCOME = "the last turn ended with an unknown outcome; send a message to continue"
@@ -379,6 +380,7 @@ class Harness:
         test: TestMode | None = None,
         host_reads: Mapping[str, HostRead] | None = None,
         market: MarketPort | None = None,
+        accounts: AccountWorlds | None = None,
     ) -> Harness:
         """Convergent startup, safe to run after any crash. Assumes `qma.boot` already
         scrubbed this process. `test` is None except in check scripts.
@@ -393,7 +395,8 @@ class Harness:
            version and a ChatGPT sign-in is stored.
         `host_reads` are reads the hosting process serves to `agent_tool` catalog rows by
         target, beside the harness's own. `market` is the host's market-data door, which the
-        data tools read through (Lib AD-28, H59)."""
+        data tools read through (Lib AD-28, H59). `accounts` reads account records on the
+        Library's main for a broker MCP server's demo-only check (C-36)."""
         assert_scrubbed(os.environ)
         limit = control.settings_get("budgets").get("agent_memory_mb")
         with contextlib.suppress(LaunchRefused):
@@ -452,6 +455,7 @@ class Harness:
             broker=broker,
             domain=domain,
             on_plan_limits=watch,
+            accounts=accounts,
             test=test,
         )
         return cls(deps, watch, host_reads)

@@ -29,6 +29,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Final, Literal, NewType, cast
 
+import keyring
 from claude_agent_sdk import SdkMcpTool, create_sdk_mcp_server
 from pydantic import JsonValue
 from qmx_broker.models import ReadStamp
@@ -47,6 +48,14 @@ from qmx_control.catalog import (
 from qmx_home.classes import secret_globs, secret_paths
 
 from qma.harness.delegate import DelegateRefused
+from qma.harness.demo_only import (
+    EXPIRED,
+    VENUES,
+    AccountWorlds,
+    NotOffered,
+    ServerCall,
+    demo_account,
+)
 from qma.harness.guard import QMX_SERVER, GuardRules, Rule, is_qmx_server, normalize_path
 
 if TYPE_CHECKING:
@@ -1053,9 +1062,21 @@ SERVER_NAME: Final = re.compile(r"[A-Za-z0-9-]+(?:_[A-Za-z0-9-]+)*")
 """An external MCP server name the CLI keeps unchanged in its tool names, with no `__`."""
 
 
-def server_config(name: str, row: Mapping[str, object]) -> McpServerConfig:
+type Secret = Callable[[str], str | None]
+"""Reads one `qmx/*` Credential Manager entry, or None when it holds nothing."""
+
+
+def stored_secret(ref: str) -> str | None:
+    return keyring.get_password(ref, ref.removeprefix("qmx/"))
+
+
+def server_config(
+    name: str, row: Mapping[str, object], secret: Secret = stored_secret
+) -> McpServerConfig:
     """One settings.toml [mcp_servers] row as an SDK config: `command` with `args` and `env`
-    for stdio, or `url` for HTTP. Raises ValueError naming what is wrong."""
+    for stdio, or `url` for HTTP. An HTTP row's `credential_ref` is read from Credential Manager
+    here, at launch, into an `Authorization` header that only the CLI and vetting receive.
+    Raises ValueError naming what is wrong, NotOffered when the entry holds no token."""
     if is_qmx_server(name):
         raise ValueError(f"the names {SERVER} and {SERVER}_* belong to QMX's own tools")
     if not SERVER_NAME.fullmatch(name):
@@ -1063,9 +1084,14 @@ def server_config(name: str, row: Mapping[str, object]) -> McpServerConfig:
             "a server name takes letters, digits, - and single _ between them, so its tools "
             "read as mcp__<server>__<tool>"
         )
-    if row.get("credential_ref"):
-        raise ValueError("servers that need a stored credential are not wired yet")
+    venue, ref = row.get("venue"), row.get("credential_ref")
+    if venue is not None and venue not in VENUES:
+        raise ValueError(f"venue {venue!r} is not one QMX checks ({', '.join(sorted(VENUES))})")
+    if ref is not None and not (isinstance(ref, str) and ref.startswith("qmx/")):
+        raise ValueError("credential_ref names a qmx/* Credential Manager entry")
     command, url = row.get("command"), row.get("url")
+    if isinstance(command, str) and command and ref is not None:
+        raise ValueError("a stored credential reaches only an HTTP server's Authorization header")
     if isinstance(command, str) and command:
         args = row.get("args", [])
         env = row.get("env", {})
@@ -1077,16 +1103,31 @@ def server_config(name: str, row: Mapping[str, object]) -> McpServerConfig:
             "args": [str(arg) for arg in cast("list[object]", args)],
             "env": {str(k): str(v) for k, v in cast("dict[object, object]", env).items()},
         }
+    if isinstance(url, str) and url and isinstance(ref, str):
+        token = (secret(ref) or "").strip()
+        if not token or any(char.isspace() for char in token):
+            raise NotOffered(f"{ref} holds no single token in Credential Manager; paste one")
+        return {"type": "http", "url": url, "headers": {"Authorization": f"Bearer {token}"}}
     if isinstance(url, str) and url:
         return {"type": "http", "url": url}
     raise ValueError("a server needs a command or a url")
 
 
-async def _list_tools(config: McpServerConfig) -> list[Any]:
+type Check = Callable[[ServerCall, frozenset[str]], Awaitable[object]]
+"""Run on the vetting session after its tools are listed; raises to refuse the server."""
+
+
+async def _list_tools(config: McpServerConfig, check: Check | None = None) -> list[Any]:
+    from httpx2 import AsyncClient, Response, Timeout  # noqa: PLC0415
     from mcp import ClientSession, StdioServerParameters  # noqa: PLC0415
     from mcp.client.stdio import stdio_client  # noqa: PLC0415
     from mcp.client.streamable_http import streamable_http_client  # noqa: PLC0415
     from mcp.types import PaginatedRequestParams  # noqa: PLC0415
+
+    statuses: list[int] = []
+
+    async def seen(response: Response) -> None:
+        statuses.append(response.status_code)
 
     async with AsyncExitStack() as stack:
         spec = cast("dict[str, Any]", config)
@@ -1096,9 +1137,23 @@ async def _list_tools(config: McpServerConfig) -> list[Any]:
             )
             streams = await stack.enter_async_context(stdio_client(parameters))
         else:
-            streams = await stack.enter_async_context(streamable_http_client(spec["url"]))
+            client = await stack.enter_async_context(
+                AsyncClient(
+                    headers=spec.get("headers"),
+                    timeout=Timeout(VET_TIMEOUT_S),
+                    event_hooks={"response": [seen]},
+                )
+            )
+            streams = await stack.enter_async_context(
+                streamable_http_client(spec["url"], http_client=client)
+            )
         session = await stack.enter_async_context(ClientSession(streams[0], streams[1]))
-        await session.initialize()
+        try:
+            await session.initialize()
+        except Exception:
+            if 401 in statuses:
+                raise NotOffered(EXPIRED) from None
+            raise
         found: list[Any] = []
         cursor: str | None = None
         while True:
@@ -1107,7 +1162,23 @@ async def _list_tools(config: McpServerConfig) -> list[Any]:
             found += page.tools
             cursor = page.next_cursor
             if not cursor:
-                return found
+                break
+
+        async def call(tool: str) -> object:
+            result = await session.call_tool(tool, {})
+            if result.is_error:
+                return None
+            if result.structured_content is not None:
+                return result.structured_content
+            text = next((block.text for block in result.content if block.type == "text"), "")
+            try:
+                return json.loads(text)
+            except ValueError:
+                return None
+
+        if check is not None:
+            await check(call, frozenset(str(tool.name) for tool in found))
+        return found
 
 
 @dataclass(frozen=True)
@@ -1116,31 +1187,66 @@ class VettedServer:
     tools: frozenset[str]
 
 
-async def vet_server(name: str, row: Mapping[str, object], cache: VetCache) -> VettedServer:
+def _first(group: BaseExceptionGroup[NotOffered]) -> NotOffered:
+    """The first refusal in a group the MCP client's task groups wrapped it in."""
+    found = group.exceptions[0]
+    return found if isinstance(found, NotOffered) else _first(found)
+
+
+async def vet_server(
+    name: str,
+    row: Mapping[str, object],
+    cache: VetCache,
+    *,
+    accounts: AccountWorlds | None = None,
+    secret: Secret = stored_secret,
+) -> VettedServer:
     """Start one declared server with the Python MCP client and list every page of its tools. A
-    config already in `cache` is not started again. Raises ValueError."""
-    config = server_config(name, row)
+    config already in `cache` is not started again, except a row naming a `venue`: its demo
+    check (`demo_only`) runs at every launch. Raises ValueError, NotOffered among them."""
+    config = await asyncio.to_thread(server_config, name, row, secret)
     digest = config_digest(config)
-    cached = cache.get(digest)
+    checked = row.get("venue") is not None
+    cached = None if checked else cache.get(digest)
     if cached is not None:
         return VettedServer(config, cached)
-    listed = await asyncio.wait_for(_list_tools(config), VET_TIMEOUT_S)
+
+    async def demo(call: ServerCall, tools: frozenset[str]) -> object:
+        return await demo_account(call, tools, accounts)
+
+    try:
+        listed = await asyncio.wait_for(
+            _list_tools(config, demo if checked else None), VET_TIMEOUT_S
+        )
+    except* NotOffered as group:
+        raise _first(group) from None
     tools = frozenset(str(tool.name) for tool in listed)
     cache.put(digest, tools)
     return VettedServer(config, tools)
 
 
-async def vet_mcp_servers(declared: Mapping[str, object], cache: VetCache) -> VettedServers:
+async def vet_mcp_servers(
+    declared: Mapping[str, object],
+    cache: VetCache,
+    *,
+    accounts: AccountWorlds | None = None,
+    secret: Secret = stored_secret,
+) -> VettedServers:
     """Before any launch uses them: vet every enabled server in settings.toml [mcp_servers],
-    all at once. A server that cannot be listed is refused and never launched (H58). A tool the
-    CLI loads that vetting never saw refuses the launch."""
+    all at once. A server that cannot be listed is refused and never launched (H58), and so is
+    a broker server whose session is not bound to a demo account record (`demo_only`). A tool
+    the CLI loads that vetting never saw refuses the launch."""
     rows = {
         name: cast("Mapping[str, object]", row)
         for name, row in declared.items()
         if isinstance(row, Mapping) and cast("Mapping[str, object]", row).get("enabled", True)
     }
     results = await asyncio.gather(
-        *(vet_server(name, row, cache) for name, row in rows.items()), return_exceptions=True
+        *(
+            vet_server(name, row, cache, accounts=accounts, secret=secret)
+            for name, row in rows.items()
+        ),
+        return_exceptions=True,
     )
     configs: dict[str, McpServerConfig] = {}
     tools: dict[str, frozenset[str]] = {}
@@ -1149,6 +1255,8 @@ async def vet_mcp_servers(declared: Mapping[str, object], cache: VetCache) -> Ve
         match result:
             case VettedServer():
                 configs[name], tools[name] = result.config, result.tools
+            case NotOffered():
+                refused[name] = str(result)
             case Exception():
                 refused[name] = f"it could not be vetted ({type(result).__name__}: {result})"
             case _:

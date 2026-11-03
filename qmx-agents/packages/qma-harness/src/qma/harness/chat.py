@@ -169,6 +169,7 @@ if TYPE_CHECKING:
     from qmx_router.relay import Relay, RelayGrant
     from qmx_tools.service import DomainContext
 
+    from qma.harness.demo_only import AccountWorlds
     from qma.harness.guard import GuardRules
     from qma.harness.procs import AgentProcessCap
 
@@ -452,6 +453,9 @@ class ChatDeps:
     which may stop every plan chat."""
     vetted: VetCache = field(default_factory=VetCache)
     """External MCP tool lists already vetted, by config digest, for this harness."""
+    accounts: AccountWorlds | None = None
+    """The host's read of account records on the Library's main, for the demo-only check of a
+    broker MCP server. None refuses every such server."""
     delegate: Callable[[SessionId, str, str], Awaitable[str]] | None = None
     """`Harness._delegate`, called with the calling chat's id, a profile and a prompt."""
     host: Mapping[str, HostRead] = field(default_factory=dict[str, HostRead])
@@ -1273,14 +1277,15 @@ class Chat:
             )
         except ToolSurfaceError as refused:
             raise LaunchRefused(f"the QMX tools cannot start: {refused}") from None
-        empty = not found.builtins and not found.toolsets
+        named = any(name.startswith("mcp:") for name in config.toolsets or ())
+        empty = not found.builtins and not found.toolsets and not named
         declared = {} if empty else await asyncio.to_thread(control.settings_get, "mcp_servers")
         external = {**declared, **config.mcp_servers}
         if config.toolsets is not None:
             external = {
                 name: row for name, row in external.items() if f"mcp:{name}" in config.toolsets
             }
-        vetted = await vet_mcp_servers(external, deps.vetted)
+        vetted = await vet_mcp_servers(external, deps.vetted, accounts=deps.accounts)
         for name, reason in vetted.refused.items():
             await self._note(
                 "needs_you", {"reason": f"the MCP server {name} was refused: {reason}"}
