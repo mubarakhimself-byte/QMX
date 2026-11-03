@@ -10,6 +10,7 @@ full period runner is Epic 26 / TN-25; this module owns the named seam.
 from __future__ import annotations
 
 import json
+import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
@@ -50,8 +51,10 @@ EXTENSIONS: Final = Path(__file__).resolve().parents[4] / "extensions"
 calendars as ``qmx.calendar/1`` files, read from the checkout the node runs from as QMB reads
 them."""
 CALENDAR_WARN_DAYS: Final = 30
-"""`[node] calendar_warn_days`, starting at 30: how close to the last day its data covers a
-market-hours calendar shows on the node's status."""
+"""How close to the last day its data covers a market-hours calendar shows on the node's status:
+30 days, the starting default of `[node] calendar_warn_days`. The node reads no settings file
+yet, so this value holds until one does; the host doctor reads its own
+`clock.calendar_warn_days`."""
 
 BANNED_BARE_CALENDAR: Final[str] = "calendar"
 BANNED_TIME_SUBSTITUTES: Final[frozenset[str]] = frozenset(
@@ -312,16 +315,29 @@ class MarketCalendar:
 
 @cache
 def market_calendars(folder: Path = EXTENSIONS) -> Mapping[str, MarketCalendar]:
-    """Every market-hours calendar the ``qmf-calendar-*`` packages ship, by ref."""
+    """Every market-hours calendar the ``qmf-calendar-*`` packages ship, by ref. A file that
+    cannot be read is left out, named once on stderr, so the node starts and reads it as
+    missing."""
     found: dict[str, MarketCalendar] = {}
     for path in sorted(folder.glob("qmf-calendar-*/src/qmf/calendar_*/calendars/*.json")):
-        document = cast("Mapping[str, object]", json.loads(path.read_text(encoding="utf-8")))
-        ref, issued, age = document["calendar_ref"], document["issued"], document["max_age_days"]
-        hours = open_time(str(ref))
-        if hours is not None and isinstance(issued, str) and isinstance(age, int):
-            last_day = date.fromisoformat(issued) + timedelta(days=age)
-            found[hours.ref] = MarketCalendar(hours, last_day)
+        try:
+            calendar = _market_calendar(path)
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            note = {"event": "calendar_unreadable", "file": path.name}
+            print(json.dumps({**note, "error": type(error).__name__}), file=sys.stderr)
+            continue
+        if calendar is not None:
+            found[calendar.hours.ref] = calendar
     return MappingProxyType(found)
+
+
+def _market_calendar(path: Path) -> MarketCalendar | None:
+    document = cast("Mapping[str, object]", json.loads(path.read_text(encoding="utf-8")))
+    ref, issued, age = document["calendar_ref"], document["issued"], document["max_age_days"]
+    hours = open_time(str(ref))
+    if hours is None or not isinstance(issued, str) or not isinstance(age, int):
+        return None
+    return MarketCalendar(hours, date.fromisoformat(issued) + timedelta(days=age))
 
 
 def _looks_like_day_boundary(port: object) -> bool:

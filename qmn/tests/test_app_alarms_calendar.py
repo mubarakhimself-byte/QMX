@@ -10,14 +10,16 @@ from __future__ import annotations
 
 import json
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
-from qmn.app.alarms import PushSender, View, calendar_notes, market_hours
+from qmb.data.gap_check import OpenTime, open_time
+from qmn.app.alarms import WAITING, PushSender, View, calendar_notes, market_hours
 from qmn.app.alarms import Position as Held
-from qmn.app.server import open_node
+from qmn.app.server import Node, open_node
 from qmn.app.store import Store
+from qmn.time.calendars import market_calendars
 from test_app_alarms import (
     EARLY,
     STALE,
@@ -34,6 +36,10 @@ RISK_STOP = "Risk stop with open trades on fx.eurusd: the daily loss limit is re
 EARLY_PUSH = (
     "Protection escalation on metal.xauusd: the venue held no stop on qa4dqobyh-EARLY, so the "
     "node closed it reduce-only."
+)
+FOREX_FILES = (
+    Path(__file__).resolve().parents[2]
+    / "extensions/qmf-calendar-forex/src/qmf/calendar_forex/calendars"
 )
 
 
@@ -210,12 +216,110 @@ def test_the_status_names_a_calendar_near_or_past_its_last_day_or_not_shipped_at
         True,
         False,
     ]
-    assert calendar_notes(node.node.context.store, at("2026-11-10T10:00:00"), {}) == [
-        "The market calendar fx-24x5@1 is not shipped with this node, so the alarms that follow "
-        "it push at any hour.",
-        "The market calendar metals-24x5@1 is not shipped with this node, so the alarms that "
+    assert calendar_notes(node.node.context.store, at("2026-11-10T10:00:00"), {}, nothing) == [
+        "The market calendar fx-24x5@1 has no readable file on this node, so the alarms that "
+        "follow it push at any hour.",
+        "The market calendar metals-24x5@1 has no readable file on this node, so the alarms that "
         "follow it push at any hour.",
     ]
+
+
+def nothing(ref: str) -> OpenTime | None:
+    del ref
+    return None
+
+
+def installed_qmb(ref: str) -> OpenTime | None:
+    """QMB's calendars as an installed node env sees them: only its built-in forex week."""
+    return open_time(ref) if ref == "fx-24x5@1" else None
+
+
+def test_with_an_empty_calendar_folder_forex_follows_qmbs_week_and_the_status_names_both(
+    tmp_path: Path,
+) -> None:
+    node = deployed(tmp_path)
+    store = node.node.context.store
+    (tmp_path / "calendars").mkdir()
+    none_shipped = market_calendars(tmp_path / "calendars")
+    open_at = market_hours(store, none_shipped, installed_qmb)
+
+    assert none_shipped == {}
+    assert [open_at("fx.eurusd", at(when)) for when in ("2026-11-07T12:00", "2026-11-10T10:00")] == [
+        False,
+        True,
+    ]
+    with pytest.raises(LookupError, match=r"no market calendar metals-24x5@1 for metal\.xauusd"):
+        open_at("metal.xauusd", at("2026-11-10T10:00"))
+    assert calendar_notes(store, at("2026-11-10T10:00:00"), none_shipped, installed_qmb) == [
+        "The market calendar fx-24x5@1 has no readable file on this node, so the alarms that "
+        "follow it read QMB's copy of its week.",
+        "The market calendar metals-24x5@1 has no readable file on this node, so the alarms that "
+        "follow it push at any hour.",
+    ]
+
+
+def test_a_calendar_file_that_cannot_be_read_is_left_out_and_named_and_the_rest_still_load(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    node = deployed(tmp_path)
+    shipped = tmp_path / "extensions"
+    for package, name, text in (
+        ("forex", "fx-24x5@1.json", (FOREX_FILES / "fx-24x5@1.json").read_text(encoding="utf-8")),
+        ("cme", "metals-24x5@1.json", '{"calendar_ref": "metals-24x5@1", "issued": '),
+    ):
+        folder = shipped / f"qmf-calendar-{package}/src/qmf/calendar_{package}/calendars"
+        folder.mkdir(parents=True)
+        (folder / name).write_text(text, encoding="utf-8")
+
+    calendars = market_calendars(shipped)
+
+    assert sorted(calendars) == ["fx-24x5@1"]
+    assert capsys.readouterr().err.splitlines() == [
+        '{"event": "calendar_unreadable", "file": "metals-24x5@1.json", "error": '
+        '"JSONDecodeError"}'
+    ]
+    assert calendar_notes(node.node.context.store, at("2026-11-10T10:00:00"), calendars, nothing) == [
+        "The market calendar metals-24x5@1 has no readable file on this node, so the alarms that "
+        "follow it push at any hour."
+    ]
+
+
+def posts(landed: list[tuple[str, str, str | None, str | None, str]]) -> list[tuple[str, str]]:
+    return [(got[1], got[4]) for got in landed if got[0] == "POST"]
+
+
+def test_an_escalation_never_pushed_survives_two_restarts_and_lands_once_when_ntfy_answers(
+    tmp_path: Path, fake: Fake
+) -> None:
+    (tmp_path / "data").mkdir()
+
+    def run(then: Callable[[Node], None]) -> None:
+        node = open_node(
+            tmp_path / "data", here="fp-pc-1", machine="pc", keys=lambda: keys_to(fake, "c30")
+        )
+        node.start()
+        try:
+            then(node)
+        finally:
+            node.stop()
+            if node.journal is not None:
+                node.journal.close()
+
+    def escalate(node: Node) -> None:
+        assert node.runtime is not None
+        node.runtime.alarms.append(EARLY)
+        node.runtime.wake()
+        wait_for(lambda: len(posts(fake.tried)) == 1, 30)
+
+    fake.mode = "refuses"
+    run(escalate)
+    run(lambda _: wait_for(lambda: len(posts(fake.tried)) == 2, 30))
+    fake.mode = "ok"
+    run(lambda _: wait_for(lambda: posts(fake.landed) != [], 30))
+
+    assert posts(fake.tried) == [("/qmx-c30-topic", EARLY_PUSH)] * 3
+    assert posts(fake.landed) == [("/qmx-c30-topic", EARLY_PUSH)]
+    assert Store(tmp_path / "data/node.sqlite").observed(WAITING) == []
 
 
 def keys_to(fake: Fake, name: str) -> str:

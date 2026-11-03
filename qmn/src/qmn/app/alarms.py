@@ -19,7 +19,7 @@ the setup cards write (``qmx_host.connect_node``).
 Pushes fire only while a market they concern is open on its calendar, except protection
 escalation and the clock halt. Node down is the watcher's. A market's calendar is the one its
 deployment's instrument snapshot names, read from the shipped ``qmx.calendar/1`` files
-(:func:`qmn.time.calendars.market_calendars`).
+(:func:`qmn.time.calendars.market_calendars`), or QMB's copy when the node has no readable file.
 """
 
 from __future__ import annotations
@@ -35,6 +35,7 @@ from enum import StrEnum
 from typing import Final, cast
 from urllib.parse import urlsplit
 
+from qmb.data.gap_check import OpenTime, open_time
 from qmf.core import Ok, Result, is_refusal
 from qmf.core.refusal import RefusalCategory, Retryability, TypedRefusal
 
@@ -58,6 +59,7 @@ __all__ = [
     "PUSH_PASS_S",
     "SEND_TIMEOUT_S",
     "SHORT_LIST",
+    "WAITING",
     "WAITING_MAX",
     "Destinations",
     "HealthchecksSink",
@@ -101,6 +103,9 @@ LOOPBACK: Final = frozenset({"127.0.0.1", "::1", "localhost"})
 PUSHED: Final = "alarms.pushed"
 """The store row holding the keys of the occurrences already pushed that the node still shows,
 so a restart pushes what it had not pushed yet and nothing twice."""
+WAITING: Final = "alarms.waiting"
+"""The store row holding the occurrences taken to push and not pushed yet, in the order they
+arose. A new runtime writes over the rows they came from, so a restart pushes them from here."""
 
 
 class Wake(StrEnum):
@@ -151,6 +156,31 @@ class Raised:
     key: str
     summary: str
     markets: frozenset[str]
+
+    def row(self) -> Json:
+        return {
+            "key": self.key,
+            "wake": self.wake.value,
+            "summary": self.summary,
+            "markets": [*sorted(self.markets)],
+        }
+
+
+def _kept_waiting(value: Json) -> list[Raised]:
+    """The :data:`WAITING` row an earlier run wrote; a row this build cannot read is skipped."""
+    found: list[Raised] = []
+    for row in _rows(value):
+        key, wake, summary = row.get("key"), row.get("wake"), row.get("summary")
+        markets = row.get("markets")
+        if not (isinstance(key, str) and isinstance(summary, str) and isinstance(markets, list)):
+            continue
+        try:
+            woken = Wake(wake)
+        except ValueError:
+            continue
+        named = frozenset(m for m in cast("list[object]", markets) if isinstance(m, str))
+        found.append(Raised(woken, key, summary, named))
+    return found
 
 
 @dataclass(frozen=True, slots=True)
@@ -358,8 +388,9 @@ class PushSender:
     market whose calendar raises reads open, so the push goes rather than wait on a calendar
     that cannot answer, and is named once on stderr. A push that fails stays waiting and is
     tried again on every pass, in the order it arose; past ``waiting_max`` the oldest is dropped
-    and counted in ``dropped``. With a ``store``, the keys pushed are kept in its
-    :data:`PUSHED` row, so a restart pushes what was still waiting and nothing twice."""
+    and counted in ``dropped``. With a ``store``, what waits is kept in its :data:`WAITING` row
+    and the keys pushed in its :data:`PUSHED` row, so a restart pushes what was still waiting
+    and nothing twice."""
 
     def __init__(
         self,
@@ -394,12 +425,20 @@ class PushSender:
         self._thread: threading.Thread | None = None
 
     def start(self) -> None:
-        """Take the keys an earlier run pushed, then pass on a thread. Called before the runtime
-        starts; an occurrence the earlier run never pushed is pushed now."""
-        kept = None if self.store is None else self.store.observed(PUSHED)
-        found = cast("list[object]", kept) if isinstance(kept, list) else []
-        self._pushed.update(key for key in found if isinstance(key, str))
-        self._seen.update(self._pushed)
+        """Take what an earlier run pushed and left waiting, and what the node's rows show now,
+        then pass on a thread. ``Node.start`` calls this before the runtime starts, so the rows
+        an earlier runtime wrote are read before a new one writes over them."""
+        if self.store is not None:
+            kept = self.store.observed(PUSHED)
+            found = cast("list[object]", kept) if isinstance(kept, list) else []
+            self._pushed.update(key for key in found if isinstance(key, str))
+            waiting = _kept_waiting(self.store.observed(WAITING))
+            self.waiting = [item for item in waiting if item.key not in self._pushed]
+        self._seen.update(self._pushed, (item.key for item in self.waiting))
+        try:
+            self._take(self.clock_ns())
+        except Exception as error:  # the thread's passes read again; the node still starts
+            self._pass_failed(error)
         self._thread = threading.Thread(target=self._run, name="node-alarms-push", daemon=True)
         self._thread.start()
 
@@ -418,9 +457,11 @@ class PushSender:
                 print(json.dumps({**note, "error": type(error).__name__}), file=sys.stderr)
             return True
 
-    def pass_once(self) -> None:
-        now = self.clock_ns()
+    def _take(self, now: int) -> set[str]:
+        """Add each new occurrence the node shows that may push now to ``waiting``, and answer
+        the keys of every occurrence it shows."""
         found = raised(self.read(), now, halt_after_ns=self.halt_after_ns)
+        taken = False
         for item in found:
             if item.key in self._seen:
                 continue
@@ -430,12 +471,25 @@ class PushSender:
                 continue
             self._seen.add(item.key)
             self.waiting.append(item)
+            taken = True
         while len(self.waiting) > self.waiting_max:
             oldest = self.waiting.pop(0)
             self.dropped += 1
+            taken = True
             note = {"event": "alarm_dropped", "wake": oldest.wake.value, "dropped": self.dropped}
             print(json.dumps(note), file=sys.stderr)
-        landed = False
+        if taken:
+            self._keep_waiting(now)
+        return {item.key for item in found}
+
+    def _keep_waiting(self, now: int) -> None:
+        if self.store is not None:
+            self.store.observe(WAITING, [item.row() for item in self.waiting], now)
+
+    def pass_once(self) -> None:
+        now = self.clock_ns()
+        shown = self._take(now)
+        landed: set[str] = set()
         for item in list(self.waiting):
             published = self.publisher.publish(
                 failure_id=SHORT_LIST[item.wake].failure_id, summary=item.summary
@@ -445,23 +499,26 @@ class PushSender:
                 continue
             self.waiting.remove(item)
             self.sent += 1
-            self._pushed.add(item.key)
-            landed = True
-        if landed and self.store is not None:
-            self._pushed &= {item.key for item in found}
-            kept: list[Json] = [*sorted(self._pushed)]
-            self.store.observe(PUSHED, kept, now)
+            landed.add(item.key)
+        if landed:
+            # PUSHED is written before WAITING, and a key pushed this pass is kept even when no
+            # row shows it any more, so a crash between the two writes never pushes it twice.
+            self._pushed = (self._pushed & shown) | landed
+            if self.store is not None:
+                kept: list[Json] = [*sorted(self._pushed)]
+                self.store.observe(PUSHED, kept, now)
+                self._keep_waiting(now)
+
+    def _pass_failed(self, error: Exception) -> None:
+        self.failed += 1
+        print(json.dumps({"event": "alarm_pass_failed", "error": repr(error)}), file=sys.stderr)
 
     def _run(self) -> None:
         while not self._stop.is_set():
             try:
                 self.pass_once()
             except Exception as error:  # the sender keeps going; trading never sees it
-                self.failed += 1
-                print(
-                    json.dumps({"event": "alarm_pass_failed", "error": repr(error)}),
-                    file=sys.stderr,
-                )
+                self._pass_failed(error)
             self._stop.wait(self.pass_s)
 
 
@@ -516,38 +573,53 @@ def calendar_refs(store: Store) -> dict[str, str]:
 
 
 def market_hours(
-    store: Store, calendars: Mapping[str, MarketCalendar] | None = None
+    store: Store,
+    calendars: Mapping[str, MarketCalendar] | None = None,
+    fallback: Callable[[str], OpenTime | None] = open_time,
 ) -> Callable[[str, int], bool]:
-    """``open_at`` over the shipped calendars (``market_calendars()`` by default). A market no
-    deployment names a shipped calendar for raises ``LookupError``, which the push sender reads
-    as open."""
+    """``open_at`` over the shipped calendars (``market_calendars()`` by default). A calendar
+    with no readable file reads QMB's copy (``fallback``), which in an installed node env is
+    only its built-in forex week. A market with neither raises ``LookupError``, which the push
+    sender reads as open."""
     shipped = market_calendars() if calendars is None else calendars
 
     def open_at(market_id: str, at_ns: int) -> bool:
         ref = calendar_refs(store).get(market_id)
-        calendar = None if ref is None else shipped.get(ref)
-        if calendar is None:
-            raise LookupError(f"no shipped calendar for {market_id} ({ref})")
-        return calendar.open_at(at_ns)
+        if ref is None:
+            raise LookupError(f"no deployment names a calendar for {market_id}")
+        calendar = shipped.get(ref)
+        hours = fallback(ref) if calendar is None else calendar.hours
+        if hours is None:
+            raise LookupError(f"no market calendar {ref} for {market_id}")
+        return hours.open_at(at_ns)
 
     return open_at
 
 
 def calendar_notes(
-    store: Store, now_ns: int, calendars: Mapping[str, MarketCalendar] | None = None
+    store: Store,
+    now_ns: int,
+    calendars: Mapping[str, MarketCalendar] | None = None,
+    fallback: Callable[[str], OpenTime | None] = open_time,
 ) -> list[str]:
-    """A status line for each calendar the node's markets read that it cannot find, or that is
-    within ``CALENDAR_WARN_DAYS`` of the last day its data covers, or past it."""
+    """A status line for each calendar the node's markets read that has no readable file, or
+    that is within ``CALENDAR_WARN_DAYS`` of the last day its data covers, or past it."""
     shipped = market_calendars() if calendars is None else calendars
     notes: list[str] = []
     for ref in sorted(set(calendar_refs(store).values())):
         calendar = shipped.get(ref)
-        note = (
-            f"The market calendar {ref} is not shipped with this node, so the alarms that "
-            "follow it push at any hour."
-            if calendar is None
-            else calendar.note(now_ns)
-        )
+        if calendar is not None:
+            note = calendar.note(now_ns)
+        elif fallback(ref) is not None:
+            note = (
+                f"The market calendar {ref} has no readable file on this node, so the alarms "
+                "that follow it read QMB's copy of its week."
+            )
+        else:
+            note = (
+                f"The market calendar {ref} has no readable file on this node, so the alarms "
+                "that follow it push at any hour."
+            )
         if note is not None:
             notes.append(note)
     return notes
