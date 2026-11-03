@@ -12,9 +12,11 @@ from __future__ import annotations
 import hashlib
 import re
 import tomllib
+from collections.abc import Mapping
 from dataclasses import dataclass
 from math import ceil
 from pathlib import Path
+from types import MappingProxyType
 from typing import Final, Literal, cast
 
 from jsonschema import Draft202012Validator
@@ -62,6 +64,26 @@ TRADING_GRANT_PREFIXES: Final = ("qmx/trading-node-keys-", "qmx/node-")
 """The venue trading-grant secrets only the trading node may name (Level 0 AD-33's secret map,
 Part C AD-306): its keys document, the per-venue split of it, and its own grant entries
 `qmx/node-<tag>-<venue>`. Compared case-folded, because Credential Manager and NTFS ignore case."""
+HOST_SECRETS: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        "qmx/control-token": "control bearer, which acts as the operator",
+        "qmx/chatgpt": "ChatGPT sign-in",
+        "qmx/rclone-config": "backup configuration password",
+        "qmx/pairing-key": "pairing key, which signs every run pass",
+        "qmx/run-pass-key": "run pass key",
+        "qmx/openobserve-root": "deep-logs root password",
+        "qmx/openobserve-ingest": "deep-logs sign-in",
+        "qmx/openobserve-agent": "deep-logs sign-in",
+    }
+)
+HOST_SECRET_PREFIXES: Final[Mapping[str, str]] = MappingProxyType(
+    {"qmx/chatgpt-": "ChatGPT sign-in"}
+)
+"""The entries QMX makes for itself, which no app may declare on any role: the bearer
+(`qmx_control.server`), the chat sign-ins `qmx/chatgpt` and `qmx/chatgpt-<n>`
+(`qmx_router.gpt.siwc`), the backup password (`qmx_home.rclone`), the vault files a home signs
+passes with (`qmx_host.host.HOST_VAULT`) and the deep-logs sign-in (`qmx_host.connect_logs`).
+Compared case-folded, because Credential Manager and NTFS ignore case."""
 RETIRED: Final = frozenset({"emits", "accepts"})
 """`app.<id>.<event>` and webhook routes are gone: the app's landing is the event (AD-64)."""
 
@@ -308,6 +330,16 @@ def image_hash(root: Path) -> str:
     return digest.hexdigest()
 
 
+def host_secret(service: str) -> str | None:
+    """What `service` is when it names one of the host's own entries, in any letter case."""
+    name = service.casefold()
+    if found := HOST_SECRETS.get(name):
+        return found
+    return next(
+        (what for prefix, what in HOST_SECRET_PREFIXES.items() if name.startswith(prefix)), None
+    )
+
+
 def _checked(manifest: AppDefinition, name: str, schema: Document) -> None:
     try:
         _local_schema(schema)
@@ -357,6 +389,8 @@ class Definition:
                     )
                 if not re.fullmatch(r"qmx/[a-zA-Z0-9_-]+", service):
                     raise ValueError("Secrets must reference qmx/* Credential Manager services.")
+                if owned := host_secret(service):
+                    raise ValueError(f"{service} is the host's own {owned}; no app may declare it.")
             grants = [
                 service
                 for service in manifest.capabilities.secrets.values()
