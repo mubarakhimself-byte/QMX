@@ -42,7 +42,9 @@ catches it every time, in every lane, without anyone having to remember.
 **The sanctioned exemption.** A line bearing ``# mock-data-scan: allow`` exempts
 only the findings on that same line. The directive is line-scoped, not
 file-scoped, and it states its reason inline next to what it sanctions — the same
-discipline the ambient-nondeterminism gate uses.
+discipline the ambient-nondeterminism gate uses. A domain value that only looks
+like a placeholder, in source that cannot carry the directive, is named instead
+in ``DOMAIN_TERMS``: an exact literal and the path prefixes that may hold it.
 
 **Scope.** The gate scans shipped product source only — ``packages/*/src``,
 ``extensions/*/src``, and the same ``src`` layout under the ``qmb`` and ``qml``
@@ -147,6 +149,17 @@ PLACEHOLDER_TOKENS: frozenset[str] = frozenset(
         "example value",
     }
 )
+# Exact literals that are a domain value, not stand-in data, mapped to the path
+# prefixes where they may appear. The trading node tags every risk number the
+# risk-and-sizing session has not set yet with origin "placeholder"; journal rows
+# store that value and the promote route refuses while any are unacknowledged.
+# Renaming it would change journalled data, so the scanner names it here. qmn
+# source cannot carry the line directive while another PR edits those files.
+DOMAIN_TERMS: dict[str, tuple[str, ...]] = {
+    "placeholder": ("qmn/src/qmn/app/", "qmn/src/qmn/protection/"),
+    "PLACEHOLDER_ORIGIN": ("qmn/src/qmn/protection/",),
+    "PLACEHOLDER_KILL_EFFECTS": ("qmn/src/qmn/protection/",),
+}
 # A placeholder that merely *opens* a string is only believable in a short one;
 # past this length the string is prose that happens to mention the word.
 PLACEHOLDER_PREFIX_MAX_LEN = 60
@@ -449,7 +462,9 @@ class _Analyzer:
         if id(node) in self._docstrings:
             return
         text = node.value
-        if isinstance(text, str) and is_placeholder_literal(text):
+        if not isinstance(text, str) or self.filename.startswith(DOMAIN_TERMS.get(text, ())):
+            return
+        if is_placeholder_literal(text):
             self._flag(node, RULE_PLACEHOLDER, "a placeholder literal stands in for a real value")
 
     # -- reporting -----------------------------------------------------------
