@@ -1845,6 +1845,17 @@ def test_the_watcher_names_a_stale_feed_once_proposes_nothing_and_says_when_it_i
     assert sorted({t for t, _ in landed(home)}) == ["node-watch", "note"]
 
 
+def test_the_watcher_counts_a_stand_down_written_at_the_runs_own_instant(home: Path) -> None:
+    beat(home, NOON)
+    now = [(720, node_row("stand_down", 1, stale_feed("start")))]
+    journal(home, "node", "q1", "stand_down", now)
+
+    report, printed = slow_run(home, GW, None, clock=Clock(NOON))
+
+    assert report.status == "passed", report.reason
+    assert [n["word"] for n in printed["gauge"]["findings"]["nodes"]] == ["watch"]
+
+
 def test_the_watcher_quotes_a_nodes_outside_text_and_alarms_on_a_late_heartbeat_and_a_heal(
     home: Path,
 ) -> None:

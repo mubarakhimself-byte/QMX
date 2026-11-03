@@ -74,7 +74,7 @@ def row(at, record):
 
 
 def journalled(kind, since):
-    window = {"start": door.iso(now - since), "end": door.iso(now)}
+    window = {"start": door.iso(now - since), "end": door.iso(now + timedelta(milliseconds=1))}
     answer = door.journal(home, stream="node", window=window, filters={"kind": kind})
     return [row(r["at"], r) for r in answer["rows"]]
 
