@@ -12,9 +12,9 @@ liquidation level is checked against it (``update_closed_data``); then the unit 
 the slice's instant and its intents rest for the next bar (``mint_intents``). A fill's quantity
 is the sizer receipt's rounded down to the market's lot step, or what the node's venue filled of
 it; below the minimum lot the entry is skipped with its reason. The handler closes only
-positions this compiled fingerprint opened. An exit acts by its kind: ``close_full`` closes the position, ``close_partial`` closes its
-lot-rounded quantity and keeps the rest held, and ``amend_protection`` moves the held stop and
-target, tightening only.
+positions this compiled fingerprint opened. An exit acts by its kind: ``close_full`` closes the
+position, ``close_partial`` closes its lot-rounded quantity and keeps the rest held, and
+``amend_protection`` moves the held stop and target, tightening only.
 
 Cash that moves with no fill (swap, financing, funding, dividends, commission) comes from the
 host's cash port as ``CashEvent`` rows and changes the account the unit reads. The node passes

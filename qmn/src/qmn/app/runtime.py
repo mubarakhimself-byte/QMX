@@ -612,9 +612,6 @@ class ConformanceAccount:
     partial_fills: list[Decimal] = field(default_factory=list[Decimal])
     """The quantity each coming entry fills, first entry first; an entry past the list fills
     whole. The rest of a partly filled entry is never filled."""
-    lists_fills: bool = True
-    """False: the read-back lists open orders only, as cTrader's reconcile does, so a filled
-    entry shows only as its labelled position."""
     received: list[Ticket] = field(default_factory=list[Ticket])
     _orders: list[VenueOrder] = field(default_factory=list[VenueOrder])
     _positions: dict[str, _Held] = field(default_factory=dict[str, _Held])
@@ -734,8 +731,7 @@ class ConformanceAccount:
             )
             for name, held in self._positions.items()
         )
-        orders = (o for o in self._orders if self.lists_fills or o.state is OrderState.OPEN)
-        return Ok(ReadBack(tuple(orders), positions))
+        return Ok(ReadBack(tuple(self._orders), positions))
 
     def opened_elsewhere(self, order: VenueOrder, position: VenuePosition | None = None) -> None:
         """An order, and the position it opened, that reached the account from somewhere other
@@ -944,8 +940,9 @@ class OrderPath:
         quote = self.venue.feed.quote(market)
         reference = None if quote is None else quote.ask if side is Side.LONG else quote.bid
         if reference is None:
+            # "venue not ready" is the run journal's health_stop reason code.
             return Blocked(
-                "no quote from the venue since its feed connected, so the stop distance"
+                "venue not ready: no quote since its feed connected, so the stop distance"
                 " cannot be measured yet"
             )
         distance = reference - stop if side is Side.LONG else stop - reference
