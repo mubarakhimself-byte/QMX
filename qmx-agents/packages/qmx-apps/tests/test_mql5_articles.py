@@ -7,13 +7,13 @@ import sqlite3
 from contextlib import closing
 from itertools import pairwise
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import httpx
 import pytest
 from collector import BASE, Store, article_url, collect, parse_article, run_daily
 
-from qmx_apps.artifacts import Artifacts
+from qmx_apps.artifacts import Artifacts, Landing
 from qmx_apps.manifest import Definition
 
 FIXTURE = Path(__file__).with_name("fixtures") / "mql5-623.html"
@@ -214,6 +214,36 @@ def test_the_daily_job_answers_unlanded_articles_until_the_host_stored_them(
     assert (first["landed"], answered(again["outputs"])) == (0, ["2", "5"])
     assert (after["landed"], answered(after["outputs"])) == (1, ["5", "9"])
     assert store.status()["pending_publication"] == 2
+
+
+def test_an_article_whose_library_landing_failed_is_answered_again_and_lands_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = volume(tmp_path, monkeypatch, {"crawl": False})
+    saved(store, 7)
+    definition = Definition.load(APP)
+    landings: list[str] = []
+    down = [True]
+
+    def library(landing: Landing) -> str:
+        if down[0]:
+            raise RuntimeError("the Library is down")
+        landings.append(str(cast(dict[str, Any], landing.data)["source_url"]))
+        return f"library-{len(landings)}"
+
+    host = Artifacts(tmp_path / "home", library)
+    first = run_daily()
+    with pytest.raises(RuntimeError, match="the Library is down"):
+        host.save_all(definition, [(item["output"], item["data"]) for item in first["outputs"]])
+    down[0] = False
+    again = run_daily()
+    host.save_all(definition, [(item["output"], item["data"]) for item in again["outputs"]])
+    after = run_daily()
+
+    assert (again["landed"], answered(again["outputs"])) == (0, ["7"])
+    assert landings == [article_url(7)]
+    assert (after["landed"], after["outputs"]) == (1, [])
+    assert store.status()["pending_publication"] == 0
 
 
 def test_one_run_answers_at_most_per_run_articles_and_an_unreachable_site_still_lands(
