@@ -198,6 +198,7 @@ class Deployment:
     account_id: str
     snapshots: tuple[Mapping[str, object], ...]
     lane: str
+    placement: Placement | None = None
 
 
 def _str(document: Mapping[str, object], name: str) -> str:
@@ -262,7 +263,169 @@ def parse_deployment(document: Mapping[str, object]) -> Deployment:
             if isinstance(item, Mapping)
         ),
         lane=lane,
+        placement=_placement(document.get("placement")),
     )
+
+
+# --- the board feed: an optional placement read (connections C25) ----------------------------
+
+BOARD_FEED: Final = Path("feeds") / "board.json"
+"""The node's ``[feeds.board]`` under its ``data/``. Only the host's feed relay writes it."""
+BOARD_SCHEMA: Final = "qmx.node.feed.board/1"
+_NS: Final = 1_000_000_000
+
+
+@dataclass(frozen=True, slots=True)
+class Placement:
+    """A deployment's placement read: of the unit's markets, those the ``tier`` board reads in
+    one of the ``favours`` words of ``reading``, while that board is at most ``stale_after_ns``
+    old."""
+
+    tier: str
+    reading: str
+    favours: frozenset[str]
+    stale_after_ns: int
+
+
+def _placement(raw: object) -> Placement | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, Mapping):
+        raise ValueError("deployment.placement is an object")
+    read = cast("Mapping[str, object]", raw)
+    tier, reading, favours = read.get("tier"), read.get("reading"), read.get("favours")
+    if not isinstance(tier, str) or not tier or not isinstance(reading, str) or not reading:
+        raise ValueError("deployment.placement names a tier and a reading id")
+    words = cast("list[object]", favours) if isinstance(favours, list) else []
+    if not words or not all(isinstance(word, str) and word for word in words):
+        raise ValueError("deployment.placement.favours is a list of the reading's words")
+    stale = read.get("stale_after_s")
+    if type(stale) is not int or stale <= 0:
+        raise ValueError("deployment.placement.stale_after_s is a whole number of seconds")
+    return Placement(tier, reading, frozenset(cast("list[str]", words)), stale * _NS)
+
+
+@dataclass(frozen=True, slots=True)
+class BoardRead:
+    """What a placement read sees now. Only ``held_back`` changes trading: a market a fresh
+    board reads in a word the read does not favour takes no new entry. Every other market of
+    the unit trades on its own conditions, the read's fallback (Level 0 AD-2): all of them when
+    the board is stale, missing, withheld or unreadable."""
+
+    state: str
+    detail: str
+    as_of_ms: int | None = None
+    """When the board was read by the MIS, on this machine's clock, in ms since the epoch."""
+    favoured: tuple[str, ...] = ()
+    held_back: Mapping[str, str] = field(default_factory=dict[str, str])
+    fallback: tuple[str, ...] = ()
+
+    def document(self) -> dict[str, object]:
+        return {
+            "state": self.state,
+            "detail": self.detail,
+            "as_of_ms": self.as_of_ms,
+            "favoured": list(self.favoured),
+            "held_back": dict(self.held_back),
+            "fallback": list(self.fallback),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class _TierBoard:
+    age_ns: int
+    """Its age when the relay wrote it, on the relay's own clock."""
+    markets: Mapping[str, tuple[Mapping[str, object], Mapping[str, object]]]
+    """Each market's reading words and their freshness words, by reading id."""
+
+
+def _object(value: object) -> Mapping[str, object]:
+    return cast("Mapping[str, object]", value) if isinstance(value, Mapping) else {}
+
+
+def _list(value: object) -> list[object]:
+    return cast("list[object]", value) if isinstance(value, list) else []
+
+
+def _tier_boards(raw: object) -> dict[str, _TierBoard] | tuple[str, str]:
+    """The relayed document's boards by tier, or the state and detail that stand in for them."""
+    document = _object(raw)
+    if document.get("schema_version") != BOARD_SCHEMA:
+        return "unreadable", f"the board feed is not {BOARD_SCHEMA}"
+    withheld = document.get("withheld")
+    if isinstance(withheld, str):
+        return "withheld", withheld
+    found: dict[str, _TierBoard] = {}
+    for item in _list(document.get("boards")):
+        board = _object(item)
+        tier, age = board.get("tier"), board.get("age_ns")
+        if not isinstance(tier, str) or type(age) is not int or age < 0:
+            return "unreadable", "a relayed board lacks its tier or its age"
+        rows = {
+            str(market.get("market_id")): (
+                _object(market.get("states")),
+                _object(market.get("freshness")),
+            )
+            for market in map(_object, _list(board.get("markets")))
+        }
+        found.setdefault(tier, _TierBoard(age, rows))
+    return found
+
+
+class BoardFeed:
+    """The node's ``[feeds.board]``: the relayed board, judged on this machine's clock.
+
+    A board's age is the age the relay stamped plus the time since the file was written, read
+    from the file's own modification time. Both the write and that time belong to this
+    machine, so no host clock is ever compared with the node's."""
+
+    def __init__(self, path: Path, clock_ns: Callable[[], int]) -> None:
+        self.path = path
+        self.clock_ns = clock_ns
+        self._seen: tuple[int, int] | None = None
+        self._boards: dict[str, _TierBoard] | tuple[str, str] = ("missing", "")
+
+    def _load(self) -> tuple[int, dict[str, _TierBoard] | tuple[str, str]]:
+        try:
+            stat = self.path.stat()
+        except OSError:
+            self._seen = None
+            return 0, ("missing", "no board has been relayed to this node")
+        if self._seen != (stat.st_mtime_ns, stat.st_size):
+            try:
+                raw: object = json.loads(self.path.read_bytes())
+            except (OSError, ValueError):
+                raw = None
+            self._boards = _tier_boards(raw)
+            self._seen = (stat.st_mtime_ns, stat.st_size)
+        return stat.st_mtime_ns, self._boards
+
+    def read(self, placement: Placement, markets: Iterable[str]) -> BoardRead:
+        written, boards = self._load()
+        admitted = tuple(markets)
+        if isinstance(boards, tuple):
+            return BoardRead(*boards, fallback=admitted)
+        board = boards.get(placement.tier)
+        if board is None:
+            detail = f"the board holds nothing for the {placement.tier} tier"
+            return BoardRead("empty", detail, fallback=admitted)
+        as_of_ms = (written - board.age_ns) // 1_000_000
+        if board.age_ns + max(0, self.clock_ns() - written) > placement.stale_after_ns:
+            detail = f"older than its stale_after of {placement.stale_after_ns // _NS} s"
+            return BoardRead("stale", detail, as_of_ms, fallback=admitted)
+        favoured: list[str] = []
+        held: dict[str, str] = {}
+        fallback: list[str] = []
+        for market in admitted:
+            states, freshness = board.markets.get(market, ({}, {}))
+            word = states.get(placement.reading)
+            if freshness.get(placement.reading) != "fresh" or not isinstance(word, str):
+                fallback.append(market)
+            elif word in placement.favours:
+                favoured.append(market)
+            else:
+                held[market] = word
+        return BoardRead("fresh", "", as_of_ms, tuple(favoured), held, tuple(fallback))
 
 
 def staging_folder(data: Path, deployment_id: str) -> Path:
@@ -1518,6 +1681,7 @@ class Runtime:
             on_alarm=self.alarms.append,
         )
         self._paper_journal: JournalWriter | None = None
+        self.board = BoardFeed(context.data / BOARD_FEED, clock_ns)
 
     # --- the thread ---
 
@@ -1706,6 +1870,11 @@ class Runtime:
                     return f"paused at {scope_key}"
             if hosted.deployment.deployment_id in self._target.withdrawn:
                 return "the deployment is withdrawn, so it takes no new entry"
+            placed = self.board_read(hosted)
+            if placed is not None and market in placed.held_back:
+                placement = cast("Placement", hosted.deployment.placement)
+                word = placed.held_back[market]
+                return f"the board does not favour {market} now ({placement.reading} is {word})"
             venue = hosted.venue
             if venue is None or not venue.feed.ready:
                 reason = "no session" if venue is None else venue.feed.reason
@@ -1726,6 +1895,14 @@ class Runtime:
             return None if held is None else f"{held.row.blocks} ({held.cause})"
 
         return check
+
+    def board_read(self, hosted: _Hosted) -> BoardRead | None:
+        """What the deployment's placement read sees now over the unit's markets, or None when
+        it has no placement read."""
+        placement = hosted.deployment.placement
+        if placement is None or hosted.unit is None:
+            return None
+        return self.board.read(placement, hosted.unit.records)
 
     # --- stand-downs that wait for him ---
 
@@ -1982,11 +2159,16 @@ class Runtime:
         deployments: dict[str, object] = {}
         units: list[object] = []
         positions: list[object] = []
+        boards: dict[str, object] = {}
         for deployment_id, hosted in self.hosted.items():
             deployments[deployment_id] = {"state": hosted.phase.value, "detail": hosted.detail}
             unit = hosted.unit
+            placed = self.board_read(hosted)
+            if placed is not None:
+                boards[deployment_id] = placed.document()
             units.append(
                 {
+                    **({} if placed is None else {"board": boards[deployment_id]}),
                     "deployment_id": deployment_id,
                     "unit_id": hosted.deployment.unit_id,
                     "state": hosted.phase.value,
@@ -2012,6 +2194,7 @@ class Runtime:
             ("runtime.deployments", deployments),
             ("runtime.units", units),
             ("runtime.positions", positions),
+            ("runtime.board", boards),
             ("runtime.kill", kill),
             ("runtime.venues", venues),
             ("runtime.alarms", list(self.alarms)),

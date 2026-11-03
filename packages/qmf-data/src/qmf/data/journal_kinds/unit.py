@@ -67,6 +67,8 @@ REASON_CODES: Final[frozenset[str]] = frozenset(
         "stop_wrong_side",
         "above_max_lot",
         "sizer_skip",
+        # The node's placement read: a fresh board reads the market in a word it does not favour.
+        "not_favoured",
     }
 )
 """Why a decision was ``skipped`` or ``blocked``. Closed and appendable: add, never redefine."""
