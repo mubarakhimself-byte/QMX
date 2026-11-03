@@ -48,7 +48,8 @@ their article content becomes available after the archive is supplied.
 Neither inspection tool fetches anything. An article answered by a job is
 marked sent under the sha256 the host stores its artifact by. At the next
 job's start it is marked landed once that artifact is in the app's volume, and
-sent again otherwise. The host never lands the same artifact twice, so a
+sent again otherwise. The host writes the artifact there only after the Library
+holds the item, so an article whose landing failed is sent again. The host never lands the same artifact twice, so a
 re-sent article adds no second Library item.
 
 ## Optional Firecrawl for the researcher

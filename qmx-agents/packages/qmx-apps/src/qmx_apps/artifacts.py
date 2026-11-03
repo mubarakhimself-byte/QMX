@@ -203,14 +203,15 @@ class Artifacts:
         self, definition: Definition, checked: Artifacts._Checked, run: Run | None
     ) -> Document:
         """Store a checked output and land it. A ref the Library already holds is not handed to
-        the sink again: a re-sent output refreshes its landing time and keeps its one object."""
+        the sink again: a re-sent output refreshes its landing time and keeps its one object.
+        The blob appears only after the landing and its index row, because an app reads the
+        blob in its volume as proof that the output landed."""
         sha = hashlib.sha256(checked.encoded).hexdigest()
         volume = Volume(self.home, definition.manifest.id)
         volume.check_write("blobs").mkdir(parents=True, exist_ok=True)
         target = volume.check_write(f"blobs/{sha}.json")
         temporary = volume.check_write(f"blobs/{sha}.tmp")
         temporary.write_bytes(checked.encoded)
-        temporary.replace(target)
         ref = ArtifactRef(
             producer_app=definition.manifest.id,
             definition_hash=definition.hash,
@@ -246,6 +247,7 @@ class Artifacts:
                 "(ref, schema, landed_at, library_id, stale_after) VALUES(?,?,?,?,?)",
                 (self._key(ref), json.dumps(checked.schema), at, library_id, checked.stale_after),
             )
+        temporary.replace(target)
         return cast(Document, ref.model_dump(mode="json"))
 
     def _library_id(self, ref: ArtifactRef) -> str | None:
