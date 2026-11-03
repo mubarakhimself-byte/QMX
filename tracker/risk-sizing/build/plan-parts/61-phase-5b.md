@@ -219,11 +219,101 @@ Phase 5, the trading node and external connections. Part C slice C-13, Part C `N
 
 @merge
 
+## Bind the cTrader demo venue in the node (C-12d)
+
+Phase 5, the trading node and external connections. Added by the validation of 2026-11-03 (`VALIDATION-2026-11-03.md`). Part C AD-306 and AD-307, Level 0 AD-37. Ruling 37. Built fact. the installed node opens with no venues (`qmn/src/qmn/app/server.py:204`, `open_node` called without `venues`), and `bind`, `sign_in_begin`, `sign_in_code` and `self_test` all answer `not_set_up` (`qmn/src/qmn/app/operations.py:467-476`). No slice built them, so no real trade is possible. Real step none; his demo sign-in is C-14's real run. Done when the installed node builds its cTrader venue from `NODE_KEYS` and a stored grant, the four operations work against a fake cTrader sign-in, `passport` returns the self-test checks, and under `QMX_STAGE=shadow` the node binds nothing.
+
+**Depends on.** C-12c, C-13, C-11.
+
+**Files.**
+
+- [ ] Edit `qmn/src/qmn/app/operations.py` (real `sign_in_begin`, `sign_in_code`, `bind`, `self_test`; `passport` returns the self-test checks, `:698-713`) and `qmn/src/qmn/app/server.py` (venues from `NODE_KEYS` plus the grant; a conformance binding allowed only on a throwaway folder; nothing bound under `QMX_STAGE=shadow`).
+- [ ] Create `qmn/src/qmn/app/grants.py` (the grant store, in Credential Manager as `qmx/node-<tag>-ctrader` on Windows, `data/grants/` on Linux; refresh through `qmn/src/qmn/secrets/rotation.py`; a live-capable grant discarded unless the host facts say trading profile on) and the adapter from `qmn/src/qmn/venue/live.py` `LiveCTraderClient` to the runtime's venue port.
+- [ ] Edit `qmx-agents/packages/qmx-host/src/qmx_host/connect_node.py`. `_signed_in` (`:415`) names the session words that count as signed in, so an expired session does not unblock the self-test (C-11 review L2), and the keys step calls `rotate_keys` (C-11 review L3).
+- [ ] Create `qmn/tests/test_app_grants.py` and `qmn/tests/test_app_binding.py`.
+
+**Build.**
+
+- [ ] Write the grant store, the adapter and the four operations against a fake cTrader sign-in. No real account is touched. The demo account role stays the only one a live lane accepts (`runtime.py:2273-2276`).
+
+**You see.**
+
+- [ ] On the node, "cTrader demo, signed in" after his one sign-in on cTrader's own page, and a passport whose five self-test lines read ok.
+
+**Verify, unit.**
+
+- [ ] A fake sign-in binds a demo account, the venue reads ready in `status`, `self_test` lands all five `SELF_TEST_CHECKS` (`connect_node.py:75-81`) on the passport, an expired session keeps the self-test blocked, and `QMX_STAGE=shadow` binds nothing. Run `uv run pytest qmn/tests/test_app_grants.py qmn/tests/test_app_binding.py -q`.
+
+**Verify, live.**
+
+@lane1
+- [ ] Lane 2. A throwaway folder, the installed node, a fake cTrader sign-in. Save `c12d-bind.log`. Pass when `status` reads the venue ready and a dummy-unit trade goes through `LiveCTraderClient` code to the fake, with its stop placed, seen and closed.
+- [ ] Lane 3. The same folder under `QMX_STAGE=shadow`. Save `c12d-shadow.log`. Pass when no venue is bound and no grant is read.
+- [ ] Lane 4. A grant refresh during a bound session. Save `c12d-refresh.log`. Pass when the new grant is stored before the old one is discarded and a second refresher is refused.
+- [ ] Lane 5. A fixture live-capable grant with the host facts off. Save `c12d-livegrant.log`. Pass when it is discarded.
+- [ ] Lane 6. Scan every lane output for grant values. Save `c12d-noleak.log`. Pass when none appears.
+@menu
+
+**Verify, perf.**
+
+- [ ] Metric. Seconds from a stored grant to the venue reading ready.
+- [ ] Probe. Lane 2.
+- [ ] Baseline. None, first measure.
+- [ ] Rule. No fail rule. Recorded for the trail.
+
+**Review gate.** Lenses edge-case and adversarial, on a new order path and a new grant store. The blast-radius fact is that every QMX host keeps refusing live-capable grants in its own store (`qmx_broker/adapters.py:103-146`), unchanged.
+
+@merge
+
+## Make app installs pick up fresh source (C-26)
+
+Phase 5, the trading node and external connections. Added by the validation of 2026-11-03. Built fact. a no-editable install runs stale `qmn` code after a source edit, because the wheel cache keys only on `pyproject.toml` (BACKLOG C-12a and the B14 fix round). C-14's real run and C-17's installs need the code he landed. Real step none. Done when an edit under `qmn/src` reaches a reinstalled app env without touching `pyproject.toml`.
+
+**Depends on.** C-12a.
+
+**Files.**
+
+- [ ] Edit `qmn/pyproject.toml`, `qmb/pyproject.toml` and `qml/pyproject.toml` (`tool.uv.cache-keys` cover `src/**`).
+- [ ] Create `tools/tests/test_app_env_fresh.py`.
+
+**Build.**
+
+- [ ] Add the cache keys and the test.
+
+**You see.**
+
+- [ ] Nothing new. An app runs the code that was landed.
+
+**Verify, unit.**
+
+- [ ] Edit a marker under `qmn/src`, reinstall the app env, and read the marker from the installed package. Run `uv run pytest tools/tests/test_app_env_fresh.py -q`.
+
+**Verify, live.**
+
+@lane1
+- [ ] Lane 2. The trading node app installed on a throwaway folder, a source edit, a reinstall. Save `c26-fresh.log`. Pass when the installed node serves the edited code.
+- [ ] Lane 3. A reinstall with no source change. Save `c26-cached.log`. Pass when the cache is reused.
+- [ ] Lane 4. The same for `qmb`. Save `c26-qmb.log`. Pass when the edit reaches it.
+- [ ] Lane 5. A reinstall after a `qml` source edit. Save `c26-qml.log`. Pass when the edit reaches it.
+- [ ] Lane 6. The lock file before and after. Save `c26-lock.log`. Pass when `uv.lock` is unchanged.
+@menu
+
+**Verify, perf.**
+
+- [ ] Metric. Seconds for a reinstall with and without a source change.
+- [ ] Probe. Lanes 2 and 3.
+- [ ] Baseline. None, first measure.
+- [ ] Rule. No fail rule. Recorded for the trail.
+
+**Review gate.** Lens verification-gap. The blast-radius fact is that `uv sync` at the root still resolves the same lock.
+
+@merge
+
 ## Write the first real start as a script he runs (C-14)
 
 Phase 5, the trading node and external connections. Part C slice C-14 (OP-02), Level 0 AD-37, R1-B-04. Ruling 37 (the sign-in waits until there is something to use it for, and only this step waits on it). The real step runs on his own folder after G-LAND and G-DEMO. Done when `tools/first_real_start.py` checks each fact and prints PASS or FAIL per line, passes in rehearsal on a throwaway folder against the conformance venue, and is ready for his real run.
 
-**Depends on.** C-11, C-12a, C-12b, C-12c, C-13, C-23, B15.
+**Depends on.** C-11, C-12a, C-12b, C-12c, C-12d, C-13, C-23, C-26, B15.
 
 **Files.**
 
@@ -233,6 +323,10 @@ Phase 5, the trading node and external connections. Part C slice C-14 (OP-02), L
 
 - [ ] Write the checks in order. Folder found, practice node Ready, demo session ready, a test trade with its stop placed, seen and closed, passport landed, and the practice node's real journal rows found in This PC's store through the records job, the open month within `[records] open_harvest_s` plus a minute.
 - [ ] Give it a rehearsal mode on a throwaway folder against the conformance venue, and a real mode that refuses to run on a folder whose code he has not landed.
+- [ ] The script talks only to the running host's REST. Node reads go through `POST /api/apps/trading-node/tools/{tool}` (`qmx_control/service.py:1879-1887`), with the bearer from Credential Manager. It imports nothing from `qmx-agents`, because the root env has no `qmx_home` or `qmx_host` and `tools/tests` runs in the root env (`tools/test_all.py:64`).
+- [ ] Check the deploy through the node's `deployments` read (`operations.py:677`), never the promote answer, because `NodeLink.flush` settles a refused queued deploy silently (`node_link.py:450-468`).
+- [ ] "Passport landed" means `<home>/trading-node-passport.json` (`connect_node.py:64`) holds every self-test check ok.
+- [ ] "Code he has landed" means the host's source checkout (`connect_compute.source_revision`, `:139-150`) contains the commit on `origin/main` that added `tools/first_real_start.py`. There is no build stamp to compare (`/api/health` answers status, pid and read_only only, and the node's `BUILD` is the constant "0.1.0"), and he squash-merges, so stack SHAs never reach main.
 
 **You see.**
 
@@ -259,7 +353,7 @@ Phase 5, the trading node and external connections. Part C slice C-14 (OP-02), L
 - [ ] Baseline. None, first measure.
 - [ ] Rule. No fail rule. Recorded for the trail.
 
-**Review gate.** Lenses edge-case and verification-gap. The blast-radius fact is that the real mode refuses a folder whose host build is older than the landed stack.
+**Review gate.** Lenses edge-case and verification-gap. The blast-radius fact is that the real mode refuses a folder whose source checkout lacks the main commit that added the script.
 
 @merge
 
