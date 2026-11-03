@@ -198,6 +198,7 @@ from qmx_host.records import Cadence, Harvester, Projection, Pull, Records, appe
 from qmx_host.sessions import RecordedHarness, SessionRecorder, write_snapshot
 from qmx_host.streams import Streams
 from qmx_host.vault_acl import KeyRefused, VaultRefused, owner_only, read_key
+from qmx_host.venue_records import VenueRecords, node_call
 
 type Role = Literal["pc", "node", "server"]
 """`server` is the node role plus the Library service: on the server the one `qmx_host` process
@@ -1122,6 +1123,7 @@ async def serve(
                     store=store,
                 )
                 records = records_job(home, control, role, door, store, nodes)
+                venue_records = VenueRecords(node_call(runtime), store) if role == "pc" else None
                 # Before the engine opens: a restored folder's fires and held runs stay paused.
                 backups.hold_after_restore(store)
                 harness.doctor_from(backups.doctor_line)
@@ -1236,6 +1238,8 @@ async def serve(
                         backups.when_carried_on(lambda: loop.call_soon_threadsafe(sync))
                         copying = asyncio.create_task(backups.run())
                         harvesting = [] if records is None else [asyncio.create_task(records.run())]
+                        if venue_records is not None:
+                            harvesting.append(asyncio.create_task(venue_records.run()))
                         # Uvicorn logs no started line for a socket it was handed.
                         address, _ = sock.getsockname()
                         print(f"qmx_host serves on http://{address}:{port}", file=sys.stderr)
