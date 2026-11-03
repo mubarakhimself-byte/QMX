@@ -1,5 +1,6 @@
 """The control service never holds its lock across a hop onto the engine's loop (C-33): an app
-event and an engine enable that reads settings on the loop, started together, both finish."""
+event the supervisor emits and an engine enable that reads settings on the loop, started together,
+both finish."""
 
 from __future__ import annotations
 
@@ -18,6 +19,7 @@ from qmx_engine.service.context import OPERATOR
 from qmx_library.adapter import EngineLibraryAdapter
 
 from qmx_control import ControlService
+from qmx_control.models import Document
 
 ROOT = Path(__file__).resolve().parents[4]
 APP = "exchange-status"
@@ -95,10 +97,11 @@ def test_an_app_event_and_an_engine_enable_never_wait_on_each_other(tmp_path: Pa
         trigger = control.apps_enable(APP)["trigger"]
         assert isinstance(trigger, dict)
         trigger_id = str(trigger["id"])
-        event = {"app_id": APP, "status": "running"}
+        supervisor = control.app_runtime()
+        event: Document = {"app_id": APP, "status": "running"}
         for round_number in range(ROUNDS):
             finished = together(
-                lambda: control._app_event(APP, event),  # noqa: SLF001
+                lambda: supervisor.emit(APP, event),
                 lambda: control.workflow_triggers_enable(trigger_id),
             )
             if not finished:
