@@ -1,78 +1,43 @@
 {
   "schema": "qmx.workflow/1",
   "id": "rk8-incident-post-mortem",
-  "name": "Incident post-mortem",
+  "name": "Explain a node incident: what restarted or stopped, why and when",
   "inputs": {
     "type": "object",
-    "properties": {"incident_id": {"type": "string", "description": "the closed incident"}}
+    "properties": {
+      "node": {"type": "string", "description": "one node machine; every node by default"},
+      "at": {"type": "string", "description": "an ISO instant: the newest incident at or before it is explained; the run's clock by default"},
+      "lookback_h": {"type": "number", "default": 24, "description": "hours before `at` an incident is looked for"},
+      "around_min": {"type": "number", "default": 30, "description": "minutes either side of the incident the timeline holds"}
+    }
   },
   "outputs": {
     "type": "object",
-    "description": "timeline, impact in R and dollars, cited account, causes, challenges, actions"
+    "description": "one note on the incident, every number held by the read step's receipt, landed as a proposal on the run's own ref; nothing is pressed"
   },
-  "settings": {
-    "timezone": "UTC",
-    "on_error": "park",
-    "caller_policy": "any",
-    "memory": {"scopes": ["workflow"]}
-  },
+  "settings": {"timezone": "UTC", "on_error": "park", "caller_policy": "any"},
   "nodes": [
-    {"id": "start", "name": "On a closed incident", "type": "trigger", "typeVersion": 1,
-     "position": [0, 0], "parameters": {"kinds": ["manual"]}},
-    {"id": "incident", "name": "Incident and timeline", "type": "script", "typeVersion": 1,
-     "position": [220, 0], "effect": "none",
-     "retry": {"max_tries": 3, "backoff_seconds": [60, 300], "retry_on": ["script_exit"]}, "parameters": {"script": "scripts/incident.py"}},
-    {"id": "impact", "name": "Impact in R and dollars", "type": "script", "typeVersion": 1,
-     "position": [440, 120], "effect": "none", "parameters": {"script": "scripts/impact.py"}},
-    {"id": "draft", "name": "Draft the post-mortem", "type": "agent", "typeVersion": 1, "toolsets": ["library"],
-     "position": [660, 0], "role": "synthesiser", "effect": "none", "retry": {"max_tries": 2},
-     "parameters": {"brief_ref": "prompts/draft.md", "output_schema_ref": "schemas/draft.json",
-                    "tools": []}},
-    {"id": "citations", "name": "Every statement cited", "type": "grader", "typeVersion": 1,
-     "position": [880, 0], "effect": "none",
-     "parameters": {"mode": "deterministic", "script": "scripts/citation_check.py"}},
-    {"id": "challenge", "name": "Challenge the draft", "type": "llm", "typeVersion": 1,
-     "position": [1100, -120], "role": "reviewer", "effect": "none",
-     "parameters": {"prompt_ref": "prompts/challenge.md", "schema_ref": "schemas/challenge.json"}},
-    {"id": "assemble", "name": "Post-mortem", "type": "script", "typeVersion": 1,
-     "position": [1320, 0], "effect": "none", "parameters": {"script": "scripts/assemble.py"}},
-    {"id": "grade", "name": "Render and grade", "type": "grader", "typeVersion": 1,
-     "position": [1540, 0], "effect": "none",
-     "parameters": {"mode": "deterministic", "script": "scripts/render_and_grade.py",
-                    "schema_ref": "schemas/output.json"}},
-    {"id": "deliver", "name": "Deliver", "type": "script", "typeVersion": 1,
-     "position": [1760, 0], "effect": "none", "parameters": {"script": "scripts/deliver.py"}},
-    {"id": "stop", "name": "Stop on a failed check", "type": "script", "typeVersion": 1,
-     "position": [1760, 120], "effect": "none", "retry": {"max_tries": 1},
-     "parameters": {"script": "scripts/stop.py"}}
+    {"id": "start", "name": "Each day at 00:50 UTC", "type": "trigger", "typeVersion": 1,
+     "position": [0, 0], "parameters": {"kinds": ["cron", "manual"]}},
+    {"id": "read", "name": "Find the incident and its timeline", "type": "script", "typeVersion": 1,
+     "position": [220, 0], "effect": "none", "parameters": {"script": "scripts/read.py", "door_ref": "scripts/door.py"}},
+    {"id": "quiet", "name": "No incident?", "type": "rule", "typeVersion": 1,
+     "position": [440, 0], "effect": "none", "parameters": {"expr": "items.quiet"}},
+    {"id": "write", "name": "Write the post-mortem", "type": "llm", "typeVersion": 1,
+     "position": [660, 120], "role": "writer", "effect": "none",
+     "parameters": {"prompt_ref": "prompts/write.md", "schema_ref": "schemas/note.json"}},
+    {"id": "check", "name": "Check every number's receipt", "type": "subworkflow",
+     "typeVersion": 1, "position": [880, 120], "parameters": {"workflow": "receipts-grader"}},
+    {"id": "land", "name": "Land the note as a proposal", "type": "script", "typeVersion": 1,
+     "position": [1100, 0], "effect": "none", "parameters": {"script": "scripts/land.py"}}
   ],
   "connections": {
-    "On a closed incident": {"main": [[{"node": "Incident and timeline", "port": "in",
-                                        "map": "one"}]]},
-    "Incident and timeline": {"main": [[{"node": "Impact in R and dollars", "port": "in",
-                                         "map": "one"},
-                                        {"node": "Draft the post-mortem", "port": "in",
-                                         "map": "one"},
-                                        {"node": "Every statement cited", "port": "in",
-                                         "map": "one"},
-                                        {"node": "Render and grade", "port": "in", "map": "one"}]]},
-    "Impact in R and dollars": {"main": [[{"node": "Draft the post-mortem", "port": "in",
-                                           "map": "one"},
-                                          {"node": "Post-mortem", "port": "in", "map": "one"},
-                                          {"node": "Render and grade", "port": "in",
-                                           "map": "one"}]]},
-    "Draft the post-mortem": {"main": [[{"node": "Every statement cited", "port": "in",
-                                         "map": "one"}]]},
-    "Every statement cited": {
-      "pass": [[{"node": "Challenge the draft", "port": "in", "map": "one"},
-                {"node": "Post-mortem", "port": "in", "map": "one"}]],
-      "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]
-    },
-    "Challenge the draft": {"main": [[{"node": "Post-mortem", "port": "in", "map": "one"}]]},
-    "Post-mortem": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
-    "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]],
-                         "fail": [[{"node": "Stop on a failed check", "port": "in",
-                                    "map": "one"}]]}
+    "Each day at 00:50 UTC": {"main": [[{"node": "Find the incident and its timeline", "port": "in", "map": "one"}]]},
+    "Find the incident and its timeline": {"main": [[{"node": "No incident?", "port": "in", "map": "one"},
+                                                     {"node": "Land the note as a proposal", "port": "in", "map": "one"}]]},
+    "No incident?": {"false": [[{"node": "Write the post-mortem", "port": "in", "map": "one"}]]},
+    "Write the post-mortem": {"main": [[{"node": "Check every number's receipt", "port": "in", "map": "one"}]]},
+    "Check every number's receipt": {"main": [[{"node": "Land the note as a proposal", "port": "in", "map": "one"}]]}
   },
-  "meta": {"template": "incident-post-mortem", "needs": ["trading-node"]}
+  "meta": {"template": "incident-post-mortem"}
 }

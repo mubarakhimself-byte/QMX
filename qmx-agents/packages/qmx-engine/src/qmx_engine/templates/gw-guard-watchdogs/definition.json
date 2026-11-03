@@ -1,51 +1,38 @@
 {
   "schema": "qmx.workflow/1",
   "id": "gw-guard-watchdogs",
-  "name": "Check that the trading guards are alive",
+  "name": "Watch each trading node and say when it is unwell",
+  "inputs": {
+    "type": "object",
+    "properties": {
+      "nodes": {"type": "array", "items": {"type": "string"}, "description": "the node machines to watch; every node seen by default"},
+      "here": {"type": "string", "default": "pc", "description": "this machine's place name; a node here is heard by the trading node app's own heartbeat"},
+      "lookback_h": {"type": "number", "default": 24, "description": "hours back that kill rises, protection alarms and heals count"},
+      "stand_down_days": {"type": "number", "default": 30, "description": "days back that a stand-down still held is found"},
+      "heartbeat_stale_after_s": {"type": "number", "default": 120, "description": "seconds after which a node's heartbeat is late"}
+    }
+  },
   "outputs": {
     "type": "object",
-    "description": "the kill-line gauge, the tighten-only verdict per unit, and the alert lines"
+    "description": "a note on each node's health when it changed, landed as a proposal on the run's own ref; nothing is pressed"
   },
-  "settings": {
-    "timezone": "UTC",
-    "on_error": "park",
-    "caller_policy": "any",
-    "memory": {"scopes": ["workflow"]}
-  },
+  "settings": {"timezone": "UTC", "on_error": "park", "caller_policy": "any"},
   "nodes": [
     {"id": "start", "name": "Every 5 minutes", "type": "trigger", "typeVersion": 1,
      "position": [0, 0], "parameters": {"kinds": ["cron", "manual"]}},
-    {"id": "guard", "name": "Read account and guard", "type": "script", "typeVersion": 1,
+    {"id": "watch", "name": "Read each node's health", "type": "monitor", "typeVersion": 1,
      "position": [220, 0], "effect": "none",
-     "retry": {"max_tries": 3, "backoff_seconds": [10, 30], "retry_on": ["script_exit"]}, "parameters": {"script": "scripts/guard.py"}},
-    {"id": "cushion", "name": "Kill-line distance", "type": "script", "typeVersion": 1,
-     "position": [440, -80], "effect": "none", "parameters": {"script": "scripts/cushion.py"}},
-    {"id": "profiles", "name": "Tighten-only check", "type": "script", "typeVersion": 1,
-     "position": [440, 80], "effect": "none",
-     "parameters": {"script": "scripts/profile_check.py"}},
-    {"id": "alerts", "name": "Gauge and alerts", "type": "script", "typeVersion": 1,
-     "position": [660, 0], "effect": "none", "parameters": {"script": "scripts/alerts.py"}},
-    {"id": "grade", "name": "Render and grade", "type": "grader", "typeVersion": 1,
-     "position": [880, 0], "effect": "none",
-     "parameters": {"mode": "deterministic", "script": "scripts/render_and_grade.py",
-                    "schema_ref": "schemas/output.json"}},
-    {"id": "deliver", "name": "Deliver", "type": "script", "typeVersion": 1,
-     "position": [1100, 0], "effect": "none", "parameters": {"script": "scripts/deliver.py"}},
-    {"id": "stop", "name": "Stop on a failed check", "type": "script", "typeVersion": 1,
-     "position": [1100, 120], "effect": "none", "retry": {"max_tries": 1},
-     "parameters": {"script": "scripts/stop.py"}}
+     "parameters": {"source": "scripts/read.py", "door_ref": "scripts/door.py", "wake_when": "changed"}},
+    {"id": "gauge", "name": "Land the gauge", "type": "script", "typeVersion": 1,
+     "position": [440, 0], "effect": "none",
+     "parameters": {"script": "scripts/gauge.py", "door_ref": "scripts/door.py"}},
+    {"id": "land", "name": "Land the note as a proposal", "type": "script", "typeVersion": 1,
+     "position": [660, 0], "effect": "none", "parameters": {"script": "scripts/land.py"}}
   ],
   "connections": {
-    "Every 5 minutes": {"main": [[{"node": "Read account and guard", "port": "in", "map": "one"}]]},
-    "Read account and guard": {"main": [[{"node": "Kill-line distance", "port": "in", "map": "one"},
-                                         {"node": "Tighten-only check", "port": "in", "map": "one"},
-                                         {"node": "Render and grade", "port": "in", "map": "one"}]]},
-    "Kill-line distance": {"main": [[{"node": "Gauge and alerts", "port": "in", "map": "one"}]]},
-    "Tighten-only check": {"main": [[{"node": "Gauge and alerts", "port": "in", "map": "one"}]]},
-    "Gauge and alerts": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
-    "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]],
-                         "fail": [[{"node": "Stop on a failed check", "port": "in",
-                                    "map": "one"}]]}
+    "Every 5 minutes": {"main": [[{"node": "Read each node's health", "port": "in", "map": "one"}]]},
+    "Read each node's health": {"changed": [[{"node": "Land the gauge", "port": "in", "map": "one"}]]},
+    "Land the gauge": {"main": [[{"node": "Land the note as a proposal", "port": "in", "map": "one"}]]}
   },
-  "meta": {"template": "trading-guards-alive", "needs": ["trading-node"], "kind": "maintenance"}
+  "meta": {"template": "trading-guards-alive", "kind": "maintenance"}
 }
