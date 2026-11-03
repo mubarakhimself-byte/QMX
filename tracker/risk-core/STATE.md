@@ -141,6 +141,19 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
     - Then `bmad-cis-problem-solving` on the layer's open problems, and a `bmad-party-mode` roundtable to stress the hybrids.
     - Each agent's `brainstorm.html` doubles as a page he can look at.
 
+25. **M31: creative freedom, ruled.**
+    - Nothing is set in stone. If something better emerges and makes sense, it ships, including restructuring or replacing the Book/BMS system. Starting the risk-and-sizing system or the DevOps layer from scratch is acceptable. New market physics and MIS additions are welcome.
+    - He wants no files from agents (no brainstorm.html). Before architecture, the lead explains it all to him in plain words.
+    - **Architecture comes in several versions**, compared, with the better parts of each picked: the `arena` skill pattern (N candidates, pick a base, graft the strongest parts of the others).
+    - **R7 started** (Opus): which software already works like a self-configuring unit, as VS Code fits mini apps. Candidates: control loops (TCP AIMD, autoscalers, DB auto-tuning), reconciliation (Kubernetes operators), progressive delivery (canary analysis), resilience patterns (half-open breakers), cascading config, plug-in models (ECS, PLC function blocks), MAPE-K self-adaptive systems → `research/R7-software-patterns-self-configuring.md`.
+    - He is upgrading alphaXiv; R4 and R6 told to pause about 5 minutes.
+    - **R5 done and committed**: about 110 articles kept. Key items:
+      - the random-control brake test (23482);
+      - after-trade checks on currency legs (24392);
+      - the half-open probe before restoring (23315);
+      - CUSUM thresholds per instrument (23103);
+      - the trap that any brake looks good on a losing strategy because it trades less.
+
 ## The unit build is not ours to audit (operator, 2026-11-01)
 
 The build has just started (about 12 of 73 PRs). Its risk and sizing pieces are placeholders, not decisions: nothing is set for risk or sizing yet, and this session is what sets it. Do not report build-level slips (e.g. the A2 `risk_fraction` "0.5" unit) unless the plan itself makes them persist. The placeholders' values (0.5 %, 2R, 48 bars, empty halts) carry no weight in the design.

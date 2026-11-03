@@ -238,3 +238,125 @@ For your system, a defensible sequence is:
 In short: **Pav helps answer “how much of this winning Sharpe may be selection noise?” Metel asks “how do uncertain probabilities change the stakes?” Sun–Boyd asks “what allocation survives the worst plausible model?”** None alone resolves few-trade, fat-tail, nonstationary edge estimation; those are the assumptions your validation and uncertainty-set design must explicitly handle.
 
 
+## Turn 3 (follow-up b: asset classes and combinations, model: Smart) - question
+
+Follow-up 2, two parts. (1) Asset classes: how do these sizing methods and their settings change across FX, stock indices, metals, energy, crypto, futures and single stocks (costs, trading sessions, leverage and margin, volatility, correlation, contract mechanics, data quality and history length)? Give the differences per class. (2) Combinations: what would the best papers here combine with from other parts of this system: live alpha-decay detection (e-values, change points), drawdown control, breadth and effective number of bets, risk allocation across strategy clusters (HRP), kill switches, risk-off regime detection, stop and exit design, backtest-overfitting checks (deflated Sharpe, PBO), safe de-risking and re-risking (conservative bandits, safe RL), stress scenarios, cost models, hierarchical Bayesian parameter shrinkage, LLM agents for research and risk? Name concrete pairs or triples of papers with links, what the combined method would do, and why.
+
+## Turn 3 (follow-up b: asset classes and combinations, model: Smart) - answer
+
+**Use one shared sizing architecture, but calibrate its edge uncertainty, costs, leverage limits and stress scenarios separately for each market and instrument.** The strongest combinations are: selection-aware shrinkage before sizing; a promotion gate before live exposure; and portfolio-level robust allocation plus explicit drawdown and execution controls.
+
+## 1. How sizing should differ by asset class
+
+These are **market-structure implications**, not universal parameter values established by one paper. The papers support the methods—shrinkage, uncertainty sets, drawdown constraints and risk calibration—but do not tell you to use, say, 0.2 Kelly in crypto and 0.5 in FX. Calibrate by instrument, holding period and data quality.
+
+| Asset class | Market features that matter for sizing | What I would change in the sizing inputs and limits |
+|---|---|---|
+| **FX** | Trades nearly 24/5, but liquidity and spreads vary sharply by session and around news. Leverage is readily available. Positions across pairs often share a large common currency exposure; swap/rollover and weekend gaps matter. | Estimate edge and cost **by session and pair**, include financing and weekend holding, and group exposures by underlying currency rather than treating pairs as independent bets. Set leverage using stress moves and broker liquidation rules, not just recent volatility. A long EUR/USD and short GBP/USD, for example, may express a much larger USD bet than separate strategy labels suggest. |
+| **Stock indices** | Deep liquidity in major contracts/ETFs, but cash and futures sessions differ; overnight gaps and scheduled macro announcements can dominate intraday estimates. Indices share substantial global-equity and risk-on exposure. | Use session-specific fill costs and gap scenarios. Aggregate index strategies into common equity beta/risk clusters before sizing. Estimate drawdown and edge using the *actual traded vehicle*—cash ETF, CFD or futures contract—not a generic index series. |
+| **Metals** | Gold and silver have different volatility and liquidity; prices respond to real rates, USD and geopolitical shocks. Futures have contract multipliers, expiry/roll and margin; some retail products have wider overnight spreads. | Estimate cost, volatility and edge separately for each metal and contract. Stress gold/silver correlations rising together, USD/rate shocks, and gaps. Convert exposure through the contract multiplier and tick value; do not treat margin posted as maximum loss. |
+| **Energy** | Oil and gas can have abrupt jumps, limits, seasonal effects and large contract-roll/basis effects. A continuous back-adjusted futures series can conceal what a tradable contract actually earned. | Use contract-level data and explicit roll/expiry costs; model jump and limit-move scenarios rather than relying only on Gaussian volatility. Use wider uncertainty sets and tighter notional/exposure caps when the edge estimate depends on sparse or regime-specific events. |
+| **Crypto** | Trades 24/7 across fragmented venues, with funding, liquidation mechanics, exchange outages and sharp regime shifts. Correlations often rise during selloffs; histories are short relative to traditional markets. | Treat venue, funding and liquidation as part of the return distribution and cost model. Use conservative edge shrinkage and uncertainty sets, stress correlation spikes and gaps, and impose hard leverage/liquidation buffers. A nominally independent collection of tokens may collapse into one risk-on cluster in stress. |
+| **Listed futures** | Standardized contracts but discrete expiries, rolls, multipliers, tick values and exchange-specific initial/maintenance margin. Overnight gaps and price limits can matter. | Size in contracts from stressed dollar P&L per contract, including the actual expiry and roll schedule. Re-estimate or adjust for contract changes; do not use a long continuous price history as though the same contract was tradable throughout. Keep a margin buffer above broker requirements. |
+| **Single stocks** | Company-specific gaps from earnings, news, halts and corporate actions; borrow costs and availability matter for shorts. Universe membership and survivorship bias can distort backtests. | Shrink noisy single-name edges toward a **relevant sector/style group**, but retain a stock-specific component only when evidence supports it. Include borrow, corporate-action and gap costs; cap issuer/event concentration. Use point-in-time universes and avoid counting daily bars as independent evidence when trades overlap or the position is held through one event. |
+
+Across all classes, estimate **effective independent evidence**, not just the number of bars or signals: overlapping positions, repeated entries under the same regime, serially correlated returns and repeated tests of similar strategies all make nominal sample size overstate information. For the combined account, also distinguish per-strategy confidence from portfolio risk: multiple small Kelly stakes can add up to a large correlated bet.
+
+## 2. Useful combinations with the rest of the system
+
+### A. Strategy search and promotion: shrink the winner, then require fresh evidence
+
+Combine [**Post-Selection Estimation of Sharpe Ratios**](https://arxiv.org/abs/2606.01650), [**Can We Stop the Backtest Yet? Anytime-Valid Promotion Tests for Adaptive Financial Research Agents**](https://arxiv.org/abs/2611.03384), and [**What survives honest evaluation? Leakage-safe, search-aware assessment of LLM-driven trading strategy discovery**](https://arxiv.org/abs/2608.27734).
+
+- Use the full search ledger to estimate a winner’s Sharpe with selection-aware shrinkage; do not let an agent report only the best result.
+- Use DSR/PBO and leakage-safe, held-out evaluation as **discovery checks**. The 2026 LLM evaluation paper argues these are complementary: statistical deflation does not repair look-ahead leakage. [Complementary Guardrails](https://www.alphaxiv.org/abs/2608.27734v1?page=7)
+- Use Promote as a prospective gate: freeze the executable rule and costs at birth, allocate it a share of a finite testing budget, accumulate evidence only on later net returns, and begin trading no earlier than the next executable period. In the paper’s example, repeated unadjusted tests crossed for at least one null rule in 94.5% of paths, while the funded gate had zero observed crossings in 3,000 paths; its market replay nevertheless promoted no strategy. [Promotion Protocol](https://www.alphaxiv.org/abs/2611.03384v1?page=2)[Audit Results](https://www.alphaxiv.org/abs/2611.03384v1?page=4)[Market Replay](https://www.alphaxiv.org/abs/2611.03384v1?page=5)
+
+**Why combine them:** Sharpe shrinkage estimates how much to trust a *selected* performance estimate; the e-value gate controls repeated opportunities to promote. Neither is the other. Promote’s guarantee also concerns a declared bounded score under a conditional-mean null; it is not proof that an old edge remains profitable after the regime changes. [Promotion Scope](https://www.alphaxiv.org/abs/2611.03384v1?page=2)[Evidence Expiry](https://www.alphaxiv.org/abs/2611.03384v1?page=6)
+
+### B. Live decay monitoring: regime-aware risk estimates plus funded revalidation
+
+Combine Promote with [**Taming Tail Risk in Financial Markets: Conformal Calibration for Nonstationary Portfolio VaR**](https://arxiv.org/abs/2602.03903).
+
+- Maintain a live stream of **net strategy returns** for decay evidence, and separately maintain forecasts of portfolio loss quantiles for exposure controls.
+- On suspected regime deterioration, reduce or suspend risk under a predeclared rule; require a newly funded, prospective evidence window before re-risking.
+- For tail-risk forecasts, use a rolling/time-weighted calibration baseline; add regime similarity only if the base model is slow to adapt and enough comparable observations remain.
+
+The conformal paper’s regime-weighted method combines recency weights with similarity to current volatility conditions, but includes an effective-sample-size safeguard: when local data are too sparse, it falls back to time-weighted calibration. Its benefits depend on the underlying forecaster; its coverage guarantee has stated smoothness and dependence assumptions, and it does **not** certify alpha. [Method](https://www.alphaxiv.org/abs/2602.03903v3?page=2)[Limits](https://www.alphaxiv.org/abs/2602.03903v3?page=3)[Adaptivity](https://www.alphaxiv.org/abs/2602.03903v3?page=6)
+
+**Why combine them:** VaR calibration can inform a risk-off/kill-switch layer, while e-values can support evidence-based promotion or revalidation. A high realized exceedance rate is a reason to constrain risk, not evidence that the alpha is negative; a positive old e-process is not proof of present validity.
+
+### C. Portfolio sizing: shrink noisy edges, then allocate across clusters robustly
+
+Combine post-selection Sharpe shrinkage with [**Distributional Robust Kelly Gambling: Optimal Strategy under Uncertainty in the Long-Run**](https://arxiv.org/abs/1812.10371) and [**The Mathematics of Heuristic Portfolio Optimization (HPO)**](https://arxiv.org/abs/2606.12612).
+
+- Shrink strategy-level edge/Sharpe estimates within defensible families before feeding them to allocation.
+- Build joint return scenarios or a calibrated uncertainty set that preserves correlations across strategies and instruments.
+- Allocate against worst-case expected log growth under practical constraints, rather than summing isolated per-strategy Kelly fractions.
+- Use a clustering/risk-parity or HRP-style structure as a stable *starting allocation* when estimates are noisy; permit return tilts only when their evidence survives shrinkage and validation.
+- Track breadth as well as notional. A useful simple concentration diagnostic is the effective number of equal-sized bets, $N_{\mathrm{eff}}=(\sum_i w_i)^2/\sum_i w_i^2$; for correlated strategies, calculate breadth at the cluster or risk-contribution level too.
+
+Sun and Boyd’s method optimizes worst-case expected log growth over a user-specified uncertainty set; the uncertainty set is an input, not something the optimizer validates for you. [Robust Objective](https://www.alphaxiv.org/abs/1812.10371v3?page=3)[Set Choice](https://www.alphaxiv.org/abs/1812.10371v3?page=9) HPO gives a useful caution: heuristics can reduce estimation variance, but HRP is not universally optimal, and its paper identifies additional theoretical foundations for HRP as open questions. [HRP Caveats](https://www.alphaxiv.org/abs/2606.12612v1?page=16)[Bias-Variance](https://www.alphaxiv.org/abs/2606.12612v1?page=28)
+
+**Why combine them:** Shrinking the numerator and controlling the joint uncertainty set address different errors; cluster allocation addresses concentration and unstable covariance estimation. HRP alone does not decide whether the expected edge is real, while robust Kelly does not make a poorly chosen uncertainty set reliable.
+
+### D. Drawdown controls and kill switches: constrain survival separately from edge
+
+Combine [**Risk-Constrained Kelly Gambling**](https://arxiv.org/abs/1603.06183) with distributionally robust Kelly, then apply a live kill-switch policy outside the optimizer.
+
+- Specify a wealth-floor probability target and solve the paper’s risk-constrained Kelly problem over the chosen scenario distribution; compare with fractional Kelly as a baseline.
+- Add account-level hard limits for daily loss, margin headroom, exposure, data/execution failures and market-wide stress.
+- On a kill switch, cancel or reduce exposure according to a predeclared safe procedure; do not let the research agent silently reset the constraint or immediately re-enter.
+
+The RCK paper derives a convex sufficient condition for bounding the probability that wealth falls below a specified fraction of initial wealth. That is **not** the same as guaranteeing a peak-to-trough drawdown limit or surviving an arbitrary margin liquidation event. [Risk Definition](https://www.alphaxiv.org/abs/1603.06183v1?page=6)[Risk Bound](https://www.alphaxiv.org/abs/1603.06183v1?page=7)
+
+**Why combine them:** Robust Kelly handles uncertainty in the return law; RCK formalizes one class of account-level loss constraint. Neither replaces instrument-specific margin and liquidation rules or operational kill switches. Stress scenarios should include joint losses, widened spreads, slippage, gaps, funding/roll costs and temporary inability to exit.
+
+### E. Safe de-risking and re-risking: treat each model change as a risky update
+
+Combine Promote with [**Safe Meta-Policy Design with Risk Control**](https://arxiv.org/abs/2610.10393).
+
+- Treat a candidate strategy or sizing configuration as a policy update relative to the current live policy.
+- Estimate the value and probability of a harmful change from historical learning/validation trajectories.
+- Set an explicit budget for expected harmful updates; choose when to switch or wait, rather than updating immediately at every positive backtest.
+- Require conservative uncertainty allowances around those estimated update risks.
+
+The meta-policy paper constructs an offline schedule using estimated reward and unsafe-update probabilities, then selects update times by dynamic programming. It is **not** a ready-made online trading bandit: the authors call out the need for additional uncertainty quantification to turn estimated safety feasibility into population guarantees, and its offline assumptions do not capture the live market’s feedback to trading. [Scheduling Method](https://www.alphaxiv.org/abs/2610.10393v1?page=4)[Limitations](https://www.alphaxiv.org/abs/2610.10393v1?page=8)
+
+**Why combine them:** This is a principled way to avoid both reflexes—never changing a decayed strategy, or re-risking immediately after a short lucky run. Keep risk changes bounded and human-approved as in your setup.
+
+### F. Cost, contract mechanics and exits: put the true trade in the return model
+
+Combine robust Kelly with [**Long-run risk-sensitive portfolio optimisation with proportional transaction costs and log Lévy asset prices**](https://arxiv.org/abs/2608.18676), and use instrument-level execution/stress scenarios.
+
+- Define candidate returns after spread, commissions, financing/funding, borrow, roll, slippage and expected market impact.
+- Respect the actual trading opportunity schedule, contract multiplier, tick size, expiry and margin rules.
+- Treat stops and exit rules as part of the strategy definition and return distribution; test gap-through-stop and adverse execution, not just the stop price on historical bars.
+- Recompute feasible size after costs and stress risk; round down to executable lots.
+
+The 2026 paper models proportional costs and discrete/random rebalancing opportunities in a long-run risk-sensitive portfolio problem, and shows a risk-neutral/Kelly limit as risk aversion tends to zero. Its assumptions are continuous-time Lévy price dynamics and specified cost mechanics, so it is a useful modeling template, not validation of any particular retail broker’s fill model. [Costs and Kelly](https://www.alphaxiv.org/abs/2608.18676v1?page=1)[Market Mechanics](https://www.alphaxiv.org/abs/2608.18676v1?page=5)
+
+**Why combine them:** Costs, rolls and exits alter the edge itself. Applying a Kelly fraction to gross backtest returns and subtracting fees afterward can size too aggressively, especially for high-turnover scalpers.
+
+### G. LLM research agents: separate proposal rights from evidence and capital rights
+
+Combine [**What survives honest evaluation?**](https://arxiv.org/abs/2608.27734) with Promote.
+
+- Let the agent propose and test candidates only through a registry-validated, leakage-safe interface.
+- Record every evaluation, candidate version, data version, execution assumption and cost-model version in an immutable ledger.
+- Apply search-aware DSR/PBO and held-out evaluation to research candidates.
+- Give only a separate promotion service authority to allocate a testing budget and issue an authorization; retain human live promotion as the final capital gate.
+
+The 2026 honest-evaluation paper emphasizes that structural point-in-time safeguards and trial-count-aware evaluation are complementary, and reports that none of its LLM-discovered strategies passed its certification procedure in the tested setup. [Evaluation Design](https://www.alphaxiv.org/abs/2608.27734v1?page=2)[Conclusion](https://www.alphaxiv.org/abs/2608.27734v1?page=13) Promote adds a prospective, anytime-valid testing ledger, but still warns that its historical certificate does not prove an edge persists at deployment. [Promotion Scope](https://www.alphaxiv.org/abs/2611.03384v1?page=1)
+
+**Why combine them:** The agent can optimize for proposing falsifiable strategies, but must not choose its own trial count, reset its evidence for free, or touch money. That preserves the separation you described: agent research, statistical promotion, human authorization, deterministic risk controls.
+
+### A practical operating order
+
+The combinations fit naturally in this sequence:
+
+**cost-aware, point-in-time strategy definition → complete search ledger and post-selection correction → prospective promotion/revalidation → shrunk edge and uncertainty set → joint cluster-level allocation → drawdown/margin/stress constraints → execution with kill switches and audited exits.**
+
+For the different instruments, keep the logic consistent but let the inputs vary: sessions and carry for FX; overnight gaps for indices; contract/roll and jump risk for metals, energy and futures; funding, venue and liquidation risk for crypto; and issuer, event and borrow risk for single stocks.
+
+
