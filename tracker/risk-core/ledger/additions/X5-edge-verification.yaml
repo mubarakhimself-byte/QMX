@@ -1,0 +1,3005 @@
+# Ledger additions from the X5 edge verification layer (Stage B, 2026-11-03).
+# Generated from expansion/X5-edge-verification.md; new ids carry the prefix ev_. Existing v0 ids are reused, never redefined.
+# Every default has a derivation; null defaults say why they are open. Nothing here is ratified.
+
+- id: ev_claim_registered
+  name: "Claim card registered with a hash before any test"
+  level: unit
+  kind: other
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "true once the claim card (thesis, context, classes, band, falsification tests) is hashed in the family ledger; a unit without it is refused"
+  inputs: []
+  affects:
+    - {id: effective_tries, direction: up, how: "every registered claim is a counted try"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R6-alphaxiv-papers/T-09-validation-against-overfitting.md"}
+  seed_ids: [D18]
+  notes: "H01. Categorical."
+
+- id: ev_novelty_check
+  name: "Novelty of a claim against the family ledger"
+  level: unit
+  kind: evidence
+  measure: "ratio"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a similarity score of the claim's logic and context against prior claims in the family ledger; no source gives the measure"
+  inputs: []
+  affects:
+    - {id: effective_tries, direction: either, how: "a near-copy is merged into an existing try instead of adding one"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H01."
+
+- id: ev_trial_ledger_id
+  name: "Immutable trial id with parent in the search ledger"
+  level: unit
+  kind: other
+  measure: "other: id"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "assigned by the ledger on every evaluation, failures included; parent is the candidate it was edited from"
+  inputs: []
+  affects:
+    - {id: effective_tries, direction: up, how: "the ledger is what the try count is read from"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R6-alphaxiv-papers/T-09-validation-against-overfitting.md"}
+  notes: "H01, H35."
+
+- id: ev_prereg_weight
+  name: "Weight of a pre-registered claim in the try count"
+  level: methodology
+  kind: evidence
+  measure: "ratio"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: 1
+  basis: reasoned
+  derivation: "a claim registered before its result counts once; an edit after a result counts twice (the post-hoc weight is 2); rewards the habit of stating the pass rule first"
+  inputs: []
+  affects:
+    - {id: effective_tries, direction: up, how: "post-hoc edits raise the count faster"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H01; from R26 §3.1 C and D in the draft."
+
+- id: ev_unseen_data_source
+  name: "Which data could not have shaped the claim"
+  level: unit
+  kind: other
+  measure: "other: sealed-holdout or paper-and-live"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: "paper-and-live"
+  basis: reasoned
+  derivation: "sealed holdouts are off by default (rulings 136-137), so paper and live trades are the unseen data unless a holdout was sealed; backtest trades never count"
+  inputs: []
+  affects:
+    - {id: ev_counts_toward_proof, direction: either, how: "sets which stage tags count"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H02, X5-47."
+
+- id: ev_validity_stamp
+  name: "Conditions a test result ran under"
+  level: unit
+  kind: other
+  measure: "other: record"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "written by QMB on every result: real-tick share, cost model version, fill convention, same-bar rule, data snapshot, decision lag"
+  inputs: []
+  affects:
+    - {id: ev_statistical_authorisation, direction: down, how: "a missing or failed stamp blocks authorisation"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H02."
+
+- id: ev_test_window_scored_once
+  name: "Times the sealed test window may be scored per candidate"
+  level: system
+  kind: limit
+  measure: "count"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: 1
+  basis: reasoned
+  derivation: "the sealed test is scored once; a second look is a new counted try (honest-evaluation and AQuA practice)"
+  inputs: []
+  affects:
+    - {id: effective_tries, direction: up, how: "every extra look adds a try"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R6-alphaxiv-papers/T-09-validation-against-overfitting.md"}
+  notes: "H02."
+
+- id: ev_excess_return_basis
+  name: "Class benchmark the proof gates are computed against"
+  level: unit
+  kind: other
+  measure: "other: benchmark name"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: index drift over the holding time for index units, carry for FX, funding for crypto perpetuals; QMB computes no benchmark today"
+  inputs: []
+  affects:
+    - {id: expectancy_floor_r, direction: either, how: "the floor is on excess, not absolute, return"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R6-alphaxiv-papers/T-09-validation-against-overfitting.md"}
+  notes: "H03. Collision C19."
+
+- id: ev_delay_test_bars
+  name: "Bars of delay in the sign-flip test"
+  level: unit
+  kind: evidence
+  measure: "bars"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: 1
+  basis: reasoned
+  derivation: "a +1 bar delay that flips the sign means the edge lives in the bar boundary (2605.04004)"
+  inputs: []
+  affects:
+    - {id: ev_statistical_authorisation, direction: down, how: "a flipped sign rejects"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R6-alphaxiv-papers/T-09-validation-against-overfitting.md"}
+  notes: "H03."
+
+- id: ev_gate_rejection_rates
+  name: "Share of candidates each gate rejected, per family"
+  level: methodology
+  kind: evidence
+  measure: "percent"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "per gate: rejected / candidates that reached it, per family, printed on the death certificate"
+  inputs: []
+  affects:
+    - {id: ev_gate_lift, direction: either, how: "rates feed the gate scorecard"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H03, H20."
+
+- id: ev_worst_regime_sharpe
+  name: "Lowest per-trade Sharpe in any regime block of the record"
+  level: unit
+  kind: evidence
+  measure: "ratio"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "cut the record into blocks of at least ev_regime_min_length trades (fixed count), take the lowest block mean over its sd"
+  inputs: [ev_regime_min_length]
+  affects:
+    - {id: ev_statistical_authorisation, direction: down, how: "a deeply negative worst block rejects"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R6-alphaxiv-papers/T-08-live-alpha-decay-detection.md"}
+  notes: "H03, H05. By chance 22% of healthy +0.10R units show a negative worst block over 600 trades, so the bar is 'deeply negative', calibrated per unit (H42)."
+
+- id: ev_regime_min_length
+  name: "Minimum trades per regime block"
+  level: unit
+  kind: evidence
+  measure: "count"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: 200
+  basis: reasoned
+  derivation: "three blocks of 200 over a 600-trade record; the block mean's standard error is then 0.07R at sd 1R"
+  inputs: []
+  affects:
+    - {id: ev_worst_regime_sharpe, direction: either, how: "shorter blocks make the worst block noisier"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H05."
+
+- id: ev_edge_band_rule
+  name: "Which shrinkage sets the band's low end"
+  level: unit
+  kind: other
+  measure: "other: rule name"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: "lowest-computable"
+  basis: reasoned
+  derivation: "take the lowest of the computable low ends: deflated holdout minus one SE; James-Stein over the pool; empirical-Bayes family shrink; replication-ratio haircut; 'half the in-sample number' only when none is computable"
+  inputs: [edge_range, effective_tries, judge_market_shrink_k, ev_replication_ratio, ev_family_prior_spread]
+  affects:
+    - {id: edge_range, direction: either, how: "picks the low end the plan and the gate read"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R3-edge-verification-and-analogues.md"}
+  seed_ids: [A24, D14]
+  notes: "H04, X5-38."
+
+- id: ev_replication_ratio
+  name: "Expected out-of-sample over in-sample Sharpe"
+  level: unit
+  kind: evidence
+  measure: "ratio"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: from the number of signals and assets and the history length (2501.03938 gives closed forms for linear models); no QMX piece computes it"
+  inputs: []
+  affects:
+    - {id: edge_range, direction: down, how: "a low ratio cuts the low end"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R6-alphaxiv-papers/T-09-validation-against-overfitting.md"}
+  notes: "H04."
+
+- id: ev_family_prior_spread
+  name: "Spread of true performance across a family, fitted"
+  level: methodology
+  kind: evidence
+  measure: "R"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: fitted on a rolling window of the family's t-statistics; a family whose spread fits near zero pulls every child toward zero"
+  inputs: []
+  affects:
+    - {id: edge_range, direction: either, how: "a narrow family prior pulls the low end toward the family mean"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H04, H27."
+
+- id: ev_edge_band_low_after_live_costs
+  name: "The band's low end after measured live costs"
+  level: unit
+  kind: evidence
+  measure: "R"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "low end of edge_range minus (live round-trip cost minus the card's cost), both in R; below zero is red whatever the backtest"
+  inputs: [edge_range, round_trip_cost_r, unit_cost_target]
+  affects:
+    - {id: drift_state, direction: down, how: "below zero is red"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  seed_ids: [A24]
+  notes: "H38, X5-14."
+
+- id: ev_independent_episodes
+  name: "Non-overlapping episodes behind a trade count"
+  level: unit
+  kind: evidence
+  measure: "count"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "completed campaigns or non-overlapping risk blocks (the observation unit), reported beside days, independent bootstrap blocks and distinct regimes"
+  inputs: [ev_observation_unit]
+  affects:
+    - {id: verification_trades_needed, direction: either, how: "proof is counted in episodes, not fills"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H05."
+
+- id: ev_observation_unit
+  name: "What one observation is for proof"
+  level: unit
+  kind: other
+  measure: "other: campaign or block"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a completed position campaign for units that add to positions, a non-overlapping risk block for units holding several positions; chosen before data; no source sets it for a retail scalper"
+  inputs: []
+  affects:
+    - {id: ev_independent_episodes, direction: either, how: "defines how episodes are cut"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H05. Gap 7."
+
+- id: ev_confidence
+  name: "Confidence the plan prices proof at"
+  level: unit
+  kind: evidence
+  measure: "percent"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: 95
+  basis: reasoned
+  derivation: "one-sided 95%, the common bar in R3's trades-to-proof table; he can change it per template"
+  inputs: []
+  affects:
+    - {id: verification_trades_needed, direction: up, how: "a higher confidence needs more trades"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R3-edge-verification-and-analogues.md"}
+  notes: "H06, X5-01."
+
+- id: ev_power
+  name: "Power the plan prices proof at"
+  level: unit
+  kind: evidence
+  measure: "percent"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: 80
+  basis: reasoned
+  derivation: "80% power, the trial-world default; at 50% (MinTRL) the plan proves a true edge only half the time"
+  inputs: []
+  affects:
+    - {id: verification_trades_needed, direction: up, how: "more power needs more trades"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R3-edge-verification-and-analogues.md"}
+  notes: "H06."
+
+- id: ev_calendar_to_proof
+  name: "Calendar days until proof at the expected trade rate"
+  level: unit
+  kind: schedule
+  measure: "other: days"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "verification_trades_needed divided by (trade_rate per day times effective_independent_bets of the family)"
+  inputs: [verification_trades_needed, trade_rate, effective_independent_bets]
+  affects:
+    - {id: ev_too_thin_verdict, direction: up, how: "a longer calendar makes 'too thin' more likely"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H06, X5-12."
+
+- id: ev_max_incubation_days
+  name: "Days a unit may spend proving before the claim is closed"
+  level: unit
+  kind: schedule
+  measure: "other: days"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: per unit type in the verification template; the old paper windows were 7 to 21 days by family and are too short for proof"
+  inputs: []
+  affects:
+    - {id: ev_too_thin_verdict, direction: down, how: "a longer incubation makes 'too thin' less likely"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  seed_ids: [D22]
+  notes: "H06, X5-02."
+
+- id: ev_too_thin_verdict
+  name: "Whether the edge cannot be proved inside the incubation"
+  level: unit
+  kind: evidence
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "true when ev_calendar_to_proof exceeds ev_max_incubation_days; the plan prints the shortfall and the provable-edge line"
+  inputs: [ev_calendar_to_proof, ev_max_incubation_days]
+  affects:
+    - {id: ev_state_word, direction: either, how: "closed-thin is a state word"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H06."
+
+- id: ev_pool_corr_prior
+  name: "Prior result correlation between units of a family, before paper measures it"
+  level: methodology
+  kind: evidence
+  measure: "ratio"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: by shared driver until measured; this layer's table is a guess: same-USD FX 0.3-0.5, index futures across regions 0.5 in risk-off, crypto coins 0.6-0.8, metals 0.4, cross-class 0.1"
+  inputs: []
+  affects:
+    - {id: effective_independent_bets, direction: down, how: "a higher prior lowers N_eff"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H06. Gap 6. Collision C13."
+
+- id: ev_pool_corr_cap
+  name: "Correlation above which a new unit adds tries, not breadth"
+  level: methodology
+  kind: limit
+  measure: "ratio"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: 0.5
+  basis: reasoned
+  derivation: "R05 §7.3 rule 4; a unit correlated above 0.5 with live family members is flagged as a try, not a new bet"
+  inputs: []
+  affects:
+    - {id: ev_family_id, direction: either, how: "above the cap the unit is merged into the family's count"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H06, X5-37."
+
+- id: ev_event_window_minutes
+  name: "Window inside which losses from one move count once across a family"
+  level: methodology
+  kind: schedule
+  measure: "minutes"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the insurers' hours clause applied to a family; the length per class is unset (a US release, a risk-off hour)"
+  inputs: []
+  affects:
+    - {id: effective_independent_bets, direction: down, how: "one move inside the window is one episode"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R3-edge-verification-and-analogues.md"}
+  notes: "H06, H23, H43."
+
+- id: ev_capacity_note
+  name: "Expected value left when evidence allows the next level"
+  level: unit
+  kind: evidence
+  measure: "R"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: from the family's decay rate and the calendar to proof (certified alpha capacity); marked 'proved too late' when below the level's minimum worthwhile return"
+  inputs: [ev_family_decay_rate, ev_calendar_to_proof]
+  affects:
+    - {id: ev_too_thin_verdict, direction: up, how: "a proof that arrives after the edge has decayed closes the claim"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H06, H45."
+
+- id: ev_family_decay_rate
+  name: "How fast a family's edge has decayed, from retired members"
+  level: methodology
+  kind: evidence
+  measure: "other: R per 100 trades"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: needs retired members' records; none exist yet"
+  inputs: []
+  affects:
+    - {id: ev_capacity_note, direction: down, how: "faster decay leaves less capacity"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H45."
+
+- id: ev_challenge_note_required
+  name: "Whether a challenge note must exist before paper"
+  level: unit
+  kind: other
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: true
+  basis: reasoned
+  derivation: "bank model-risk guidance asks for effective challenge with independence; the note is attached to the passport and the packet"
+  inputs: []
+  affects:
+    - {id: ev_statistical_authorisation, direction: down, how: "no note, no authorisation"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R3-edge-verification-and-analogues.md"}
+  notes: "H07, X5-28."
+
+- id: ev_control_run_requested
+  name: "A random-control run the challenger commissioned"
+  level: unit
+  kind: other
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "set by the challenger; the run is the unit's exits and template with random entries at the same activity"
+  inputs: []
+  affects:
+    - {id: ev_dry_chassis_result, direction: either, how: "the run writes the dry-chassis result"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H07, H08."
+
+- id: ev_event_replay_loss_cap
+  name: "Largest loss allowed on any one recorded event day"
+  level: unit
+  kind: limit
+  measure: "R"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: 3
+  basis: reasoned
+  derivation: "three full stops in one event day; the old Stage H intent with real history; he can change it per class"
+  inputs: []
+  affects:
+    - {id: ev_statistical_authorisation, direction: down, how: "a breach blocks paper"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H08, X5-43."
+
+- id: ev_event_days_count
+  name: "Recorded event days replayed before paper"
+  level: unit
+  kind: evidence
+  measure: "count"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: 7
+  basis: reasoned
+  derivation: "between five and ten per instrument class (NFP, FOMC, EIA, exchange outages, earnings gaps); seven is the middle"
+  inputs: []
+  affects:
+    - {id: ev_event_replay_loss_cap, direction: either, how: "more days, more chances to breach"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H08."
+
+- id: ev_dry_chassis_result
+  name: "The random-entry unit's result on the same battery"
+  level: unit
+  kind: evidence
+  measure: "R"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "mean R of the unit's exits and full template with random entries at the unit's trade rate; every gate must fail it and the unit must beat it"
+  inputs: []
+  affects:
+    - {id: ev_statistical_authorisation, direction: down, how: "a unit that does not beat its dry chassis is not authorised"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H08. A1-173: a 48%-accurate classifier cut drawdown 93% by trading less."
+
+- id: ev_family_false_discovery_rate
+  name: "Share of 'winners' the family's search finds on a no-edge synthetic market"
+  level: methodology
+  kind: evidence
+  measure: "percent"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: needs the no-edge agent-based market, unbuilt (A5-060's two gates)"
+  inputs: []
+  affects:
+    - {id: edge_range, direction: down, how: "a high rate pulls every child's low end down"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H08. Wild."
+
+- id: ev_machine_check_days
+  name: "Days the machine check runs at most"
+  level: unit
+  kind: schedule
+  measure: "other: days"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: 7
+  basis: reasoned
+  derivation: "his '7 days is doable'; at 4 trades a day a halved trade rate is 2.6 sd out after 7 days"
+  inputs: []
+  affects:
+    - {id: ev_state_word, direction: either, how: "closes the machine check"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  seed_ids: [D22]
+  notes: "H09, X5-09."
+
+- id: ev_machine_check_trades
+  name: "Trades the machine check runs at most"
+  level: unit
+  kind: evidence
+  measure: "count"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: 50
+  basis: reasoned
+  derivation: "a 0.05R cost rise is 8.8 standard errors out after 50 trades at a per-trade cost sd of 0.04R"
+  inputs: []
+  affects:
+    - {id: ev_state_word, direction: either, how: "closes the machine check"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H09."
+
+- id: ev_holding_time_band
+  name: "Band of holding time against the card"
+  level: unit
+  kind: brake_threshold
+  measure: "other: percentile band"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: "10-90"
+  basis: reasoned
+  derivation: "inside the card's 10th to 90th percentile of holding time; outside is one inputs fire"
+  inputs: []
+  affects:
+    - {id: drift_state, direction: down, how: "an inputs fire is yellow"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H09, X5-13."
+
+- id: ev_twin_enabled
+  name: "Whether a paper twin runs beside the live unit"
+  level: unit
+  kind: other
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: true
+  basis: reasoned
+  derivation: "the twin started at the same minute is the fair control for fills and costs (Kayenta's fresh baseline)"
+  inputs: []
+  affects:
+    - {id: ev_twin_gap_r, direction: either, how: "no twin, no gap"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R7-software-patterns-self-configuring.md"}
+  notes: "H09, H21, X5-39."
+
+- id: ev_twin_gap_r
+  name: "Per-trade gap between the live unit and its paper twin"
+  level: unit
+  kind: measure
+  measure: "R"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "live R minus twin R on the same signal; its mean is fill-and-cost drift"
+  inputs: [ev_twin_enabled]
+  affects:
+    - {id: drift_state, direction: down, how: "a widening gap is an inputs fire"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: grounding, ref: "grounding/G9-runtime-brakes-isolation-evidence.md"}
+  notes: "H09. Meaningless until paper models slippage (gap 2)."
+
+- id: ev_control_twin_enabled
+  name: "Whether a random-entry control twin runs on paper"
+  level: unit
+  kind: other
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: false
+  basis: reasoned
+  derivation: "off by default: a third paper lane per unit; on when the challenger asks or the template says"
+  inputs: []
+  affects:
+    - {id: ev_statistical_authorisation, direction: down, how: "the unit must beat its control at planned looks when it runs"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H21, X5-51. Wild."
+
+- id: ev_approval_hash
+  name: "Hash of the exact artifact his click approved"
+  level: unit
+  kind: other
+  measure: "other: hash"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "hash of claim card, compiled unit, sizer and cost model versions, market list, level and limits; the runtime may activate only this hash"
+  inputs: []
+  affects:
+    - {id: ev_state_word, direction: either, how: "a hash mismatch revokes live"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  seed_ids: [D19]
+  notes: "H10."
+
+- id: ev_approval_expiry_days
+  name: "Days an approval stays valid without renewal"
+  level: unit
+  kind: schedule
+  measure: "other: days"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: 30
+  basis: reasoned
+  derivation: "single-use, expiring grants; a month is one review cycle; a stale approval revokes live and lands a renewal card"
+  inputs: []
+  affects:
+    - {id: ev_approval_hash, direction: either, how: "expiry revokes the grant"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H10."
+
+- id: ev_approval_level_max
+  name: "Highest size level the approval allows"
+  level: unit
+  kind: limit
+  measure: "other: level"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "set on the packet; a step above it is a request for his click, never automatic"
+  inputs: []
+  affects:
+    - {id: size_levels, direction: down, how: "caps the ladder"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H10, H13."
+
+- id: ev_approval_markets
+  name: "Market list and canary subset the approval covers"
+  level: unit
+  kind: other
+  measure: "other: list of markets"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "from the packet; a market outside the list is refused at use time"
+  inputs: []
+  affects:
+    - {id: ev_canary_share, direction: either, how: "the canary subset is part of the list"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H10, H46."
+
+- id: ev_statistical_authorisation
+  name: "Whether the evidence verdict passed"
+  level: unit
+  kind: evidence
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "true when the low end is positive, the stamp and note exist, the battery passed, the dry chassis was beaten and the e-meter is above the level's bar; logged apart from the portfolio veto"
+  inputs: [ev_evidence_e, sequential_evidence_pass, edge_range]
+  affects:
+    - {id: ev_state_word, direction: either, how: "feeds the packet"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H11, H12."
+
+- id: ev_portfolio_veto_reason
+  name: "Why the portfolio vetoed an authorised unit"
+  level: portfolio
+  kind: other
+  measure: "other: reason code"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: correlation to live units, capacity, concentration, venue, borrow, worst-cluster contribution; 'not now' keeps the evidence clock running"
+  inputs: []
+  affects:
+    - {id: ev_state_word, direction: either, how: "a vetoed unit stays pending"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  seed_ids: [D19]
+  notes: "H11. Collision C21."
+
+- id: ev_promotion_wealth
+  name: "Testing wealth a candidate receives at birth"
+  level: unit
+  kind: evidence
+  measure: "ratio"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "pi from the family's lifetime budget; the wealths of all candidates sum to at most 1; the crossing bar is 1 / (alpha x pi)"
+  inputs: [ev_family_alpha_wealth]
+  affects:
+    - {id: sequential_evidence_pass, direction: up, how: "less wealth, a higher bar"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R6-alphaxiv-papers/T-09-validation-against-overfitting.md"}
+  notes: "H12. Promote 2611.03384."
+
+- id: ev_family_alpha_wealth
+  name: "A family's remaining budget of allowed false discoveries"
+  level: methodology
+  kind: limit
+  measure: "ratio"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: starts at the family's share of a lifetime budget; spent by births, refunded by proved units; who sets the family shares is a numbers-lens question"
+  inputs: []
+  affects:
+    - {id: ev_promotion_wealth, direction: up, how: "funds each birth"}
+    - {id: ev_step_up_permit, direction: up, how: "a spent family freezes step-ups"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  seed_ids: [D42]
+  notes: "H12, H25, X5-26. Collision C8."
+
+- id: ev_alpha_spend_per_test
+  name: "Wealth a new candidate takes from its family"
+  level: methodology
+  kind: limit
+  measure: "ratio"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: LORD-style spending; a constant share or a decaying schedule by birth order"
+  inputs: []
+  affects:
+    - {id: ev_family_alpha_wealth, direction: down, how: "each birth spends"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H12."
+
+- id: ev_alpha_refund_per_discovery
+  name: "Wealth a proved unit returns to its family"
+  level: methodology
+  kind: limit
+  measure: "ratio"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: alpha investing refunds a discovery; the size of the refund is a template number"
+  inputs: []
+  affects:
+    - {id: ev_family_alpha_wealth, direction: up, how: "a proof refunds"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H12."
+
+- id: ev_bet_grid
+  name: "Bet sizes the funded e-process averages over"
+  level: unit
+  kind: other
+  measure: "other: list of bets"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: "0.025, 0.05, 0.10, 0.20, 0.35"
+  basis: stated
+  derivation: "the Promote paper's grid, stated without working for R streams; small-bet-heavy priors do better near the null (A2-156)"
+  inputs: []
+  affects:
+    - {id: ev_evidence_e, direction: either, how: "the grid shapes the wealth path"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R6-alphaxiv-papers/T-09-validation-against-overfitting.md"}
+  notes: "H12."
+
+- id: ev_score_scale_r
+  name: "Scale that clips a trade's R into the betting score"
+  level: unit
+  kind: evidence
+  measure: "R"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "the 95th percentile of absolute R in the holdout; Y = clip(R / scale, -1, 1); this layer's arithmetic used 2R"
+  inputs: []
+  affects:
+    - {id: ev_evidence_e, direction: either, how: "a larger scale slows the meter and clips less"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H12. Per class: crypto clips more often."
+
+- id: ev_evidence_e
+  name: "The running evidence (wealth) of a unit against 'no edge'"
+  level: unit
+  kind: evidence
+  measure: "ratio"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "product over trades of (1 + bet x Y), averaged over the bet grid; paper and live trades only; restarts at demotion and at paid restarts"
+  inputs: [ev_bet_grid, ev_score_scale_r]
+  affects:
+    - {id: drift_state, direction: either, how: "the zone reads it against the level's bar"}
+    - {id: ev_state_word, direction: either, how: "shown as the evidence meter"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H12, H13, H15, X5-05."
+
+- id: ev_level_count
+  name: "Number of size levels above paper"
+  level: unit
+  kind: size_input
+  measure: "count"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: 4
+  basis: reasoned
+  derivation: "paper plus four live levels; enough rungs to spend trades before money and few enough to explain"
+  inputs: []
+  affects:
+    - {id: size_levels, direction: either, how: "defines the ladder's length"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H13, X5-16. The level-to-dollars map is X2's (C4)."
+
+- id: ev_level_evidence_alpha
+  name: "Evidence threshold per size level, as alpha"
+  level: unit
+  kind: evidence
+  measure: "ratio"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: "0.10, 0.05, 0.02, 0.01"
+  basis: reasoned
+  derivation: "e >= 1/alpha per level: 10 to leave paper, 20 at level 1, 50 at level 2, 100 at level 3; a +0.10R unit reaches them in a median 335, 485, 641, 750 trades; more evidence for bigger money, never a bar loosened because it rejects too much"
+  inputs: []
+  affects:
+    - {id: size_levels, direction: either, how: "a step up needs the next level's bar"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  seed_ids: [D18, D22]
+  notes: "H13. Calibrated per unit by H42."
+
+- id: ev_proof_counts_live_min_size
+  name: "Whether level-1 live trades count toward proof"
+  level: unit
+  kind: other
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: true
+  basis: reasoned
+  derivation: "the clinical-trial shape: phase 1 is small and real; paper is short and honest only if proof continues live; pending Q1"
+  inputs: []
+  affects:
+    - {id: ev_counts_toward_proof, direction: either, how: "sets the live-L1 stage tag as counting"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  seed_ids: [D22, D18]
+  notes: "H13, X5-10. Collision C2."
+
+- id: ev_cohort_trades
+  name: "Trades in one cohort for the level ladder"
+  level: unit
+  kind: evidence
+  measure: "count"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: 25
+  basis: reasoned
+  derivation: "25 for scalpers (a bad 25-trade cohort is 9.7% likely for a healthy 55% unit), 10 for ORB, 15 for intraday, 5 for swing; per template"
+  inputs: []
+  affects:
+    - {id: ev_level_up_bar, direction: either, how: "cohort size sets the bars' resolution"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  seed_ids: [A5]
+  notes: "H14, X5-16."
+
+- id: ev_bad_cohort_r
+  name: "Net R at or below which a cohort is bad"
+  level: unit
+  kind: brake_threshold
+  measure: "R"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "the 5th percentile of cohort net R in the card's holdout distribution; -5R for a 55% unit with 25-trade cohorts"
+  inputs: []
+  affects:
+    - {id: ev_bad_cohort_target, direction: either, how: "defines what the target rate counts"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H14."
+
+- id: ev_bad_cohort_target
+  name: "Target bad-cohort rate the ladder aims under"
+  level: unit
+  kind: brake_threshold
+  measure: "percent"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "1.5 times the healthy unit's own bad-cohort rate from the card (15% for a 9.7% healthy rate); a fixed 30% drug default would let a dead unit climb"
+  inputs: [ev_bad_cohort_r]
+  affects:
+    - {id: ev_level_up_bar, direction: up, how: "BOIN bars derive from the target"}
+    - {id: ev_level_down_bar, direction: up, how: "BOIN bars derive from the target"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R3-edge-verification-and-analogues.md"}
+  notes: "H14."
+
+- id: ev_level_up_bar
+  name: "Bad-cohort rate at or below which the unit steps up"
+  level: unit
+  kind: accelerator
+  measure: "percent"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "BOIN lambda_e from the target (11.8% at a 15% target); R9 kind 'evidence step-up'"
+  inputs: [ev_bad_cohort_target, ev_cohort_trades]
+  affects:
+    - {id: size_levels, direction: up, how: "below the bar the level rises one step"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R9-accelerators-and-brake-pairs.md"}
+  notes: "H14."
+
+- id: ev_level_down_bar
+  name: "Bad-cohort rate at or above which the unit steps down"
+  level: unit
+  kind: brake_threshold
+  measure: "percent"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "BOIN lambda_d from the target (17.9% at a 15% target); R9 kind 'step ladder'"
+  inputs: [ev_bad_cohort_target, ev_cohort_trades]
+  affects:
+    - {id: size_levels, direction: down, how: "above the bar the level falls one step"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R9-accelerators-and-brake-pairs.md"}
+  seed_ids: [A25]
+  notes: "H14."
+
+- id: ev_level_lockout
+  name: "Bad-cohort rate at which a level and every higher one lock"
+  level: unit
+  kind: brake_threshold
+  measure: "percent"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "BOIN dose-elimination rule: the posterior chance the level is too dangerous above 0.95; locked until he unlocks"
+  inputs: [ev_bad_cohort_target]
+  affects:
+    - {id: size_levels, direction: down, how: "a locked level cannot be entered"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H14."
+
+- id: ev_level_min_cohorts
+  name: "Cohorts a level must hold before any step"
+  level: unit
+  kind: limit
+  measure: "count"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: 2
+  basis: reasoned
+  derivation: "no slow-lane signal before M events; two cohorts (50 scalper trades) keep the false-alarm rate known"
+  inputs: []
+  affects:
+    - {id: ev_level_up_bar, direction: either, how: "no step before the minimum"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R3-edge-verification-and-analogues.md"}
+  notes: "H14, X5-17."
+
+- id: ev_level_memory_ceiling
+  name: "Level below which regrowth after a step down is fast"
+  level: unit
+  kind: accelerator
+  measure: "other: level"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "one level below the level where the last step down fired; fast regrowth to it, one cohort at a time above it (TCP ssthresh; R9 'memory ceiling')"
+  inputs: []
+  affects:
+    - {id: grow_back_rule, direction: either, how: "shapes the regrowth after a cut"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R9-accelerators-and-brake-pairs.md"}
+  notes: "H14."
+
+- id: ev_slow_start_enabled
+  name: "Whether steps may be two levels at a time before the first warning"
+  level: unit
+  kind: accelerator
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: true
+  basis: reasoned
+  derivation: "R9 'slow start with first-warning switch': big steps while nothing has gone wrong; the first warning switches to one level and double cohorts"
+  inputs: []
+  affects:
+    - {id: size_levels, direction: up, how: "faster climb before any warning"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R9-accelerators-and-brake-pairs.md"}
+  notes: "H14."
+
+- id: ev_step_up_permit
+  name: "Whether the family's budgets permit a step up now"
+  level: methodology
+  kind: accelerator
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "true when neither the fast nor the slow burn window of the family's alpha and loss budgets is breached; R9 'budget-burn permit'"
+  inputs: [ev_family_alpha_wealth, ev_budget_burn_fast_window, ev_budget_burn_slow_window, period_loss_budget]
+  affects:
+    - {id: size_levels, direction: up, how: "no permit, no step up"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R9-accelerators-and-brake-pairs.md"}
+  notes: "H25."
+
+- id: ev_budget_burn_fast_window
+  name: "Fast window for budget burn (pages)"
+  level: methodology
+  kind: schedule
+  measure: "other: days"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: 7
+  basis: reasoned
+  derivation: "SRE two-window burn alerts: a fast burn over a week pages, freezing step-ups and births in the family"
+  inputs: []
+  affects:
+    - {id: ev_step_up_permit, direction: down, how: "a fast burn removes the permit"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R7-software-patterns-self-configuring.md"}
+  notes: "H25."
+
+- id: ev_budget_burn_slow_window
+  name: "Slow window for budget burn (tickets)"
+  level: methodology
+  kind: schedule
+  measure: "other: days"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: 30
+  basis: reasoned
+  derivation: "a slow burn over a month tickets: step-ups need his click"
+  inputs: []
+  affects:
+    - {id: ev_step_up_permit, direction: down, how: "a slow burn turns automatic step-ups into cards"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R7-software-patterns-self-configuring.md"}
+  notes: "H25."
+
+- id: ev_exploration_budget_share
+  name: "Share of risk capacity ring-fenced for proof-pending units"
+  level: portfolio
+  kind: limit
+  measure: "percent"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a numbers-lens number; all level-1 units share it, apart from the live book's capacity; split by class cap"
+  inputs: []
+  affects:
+    - {id: unit_capital_share, direction: down, how: "a level-1 unit draws from this line, not the book's"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H48. Depends on Q5."
+
+- id: ev_cusum_watch_share
+  name: "Share of the CUSUM limit at which a watch is raised"
+  level: unit
+  kind: brake_threshold
+  measure: "ratio"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: 0.7
+  basis: reasoned
+  derivation: "practitioner levels: yellow at 70% of the limit, size down; the alarm itself steps down one level"
+  inputs: [cusum_limit]
+  affects:
+    - {id: drift_state, direction: down, how: "watch is yellow"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H15, X5-19."
+
+- id: ev_first_hundreds_rule
+  name: "Live trades inside which an early CUSUM alarm reads as 'the holdout was optimistic'"
+  level: unit
+  kind: other
+  measure: "count"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: 300
+  basis: reasoned
+  derivation: "the first few hundred live trades; an alarm there re-cuts the band before it is read as decay"
+  inputs: []
+  affects:
+    - {id: edge_range, direction: down, how: "an early alarm re-cuts the low end"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H15, X5-19."
+
+- id: ev_min_viable_edge_r
+  name: "Edge per trade below which the unit is not worth running"
+  level: unit
+  kind: evidence
+  measure: "R"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: either stressed round-trip cost times a cushion factor, or his minimum worthwhile return per unit divided by the trade rate (Q6); the funded confirmation tests against it"
+  inputs: [round_trip_cost_r]
+  affects:
+    - {id: drift_state, direction: down, how: "confirmed below the line is red"}
+    - {id: ev_demotion_cause, direction: either, how: "sets the statistical cause"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H15. Gap 8."
+
+- id: ev_demotion_alpha
+  name: "Per-unit false-demotion level"
+  level: unit
+  kind: evidence
+  measure: "ratio"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "lifetime budget divided by the number of live units (union bound): 0.0025 at 20 units, so e >= 400 to demote"
+  inputs: [ev_lifetime_demotion_budget, live_unit_count]
+  affects:
+    - {id: ev_evidence_e, direction: either, how: "sets the demotion bar"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R6-alphaxiv-papers/T-08-live-alpha-decay-detection.md"}
+  notes: "H15, H16."
+
+- id: ev_lifetime_demotion_budget
+  name: "Lifetime budget of false demotions across all units"
+  level: portfolio
+  kind: limit
+  measure: "ratio"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: 0.05
+  basis: reasoned
+  derivation: "one false demotion in twenty over the book's life; error over patience is logged beside it"
+  inputs: []
+  affects:
+    - {id: ev_demotion_alpha, direction: down, how: "a smaller budget raises every unit's bar"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R6-alphaxiv-papers/T-08-live-alpha-decay-detection.md"}
+  notes: "H16. Holder unassigned (gap 5)."
+
+- id: ev_review_list_rule
+  name: "How many-unit alarms are combined"
+  level: portfolio
+  kind: other
+  measure: "other: e-BH or e-Bonferroni"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: "e-BH for review, e-Bonferroni for demotion"
+  basis: reasoned
+  derivation: "e-BH flags the k largest if the k-th largest e-value is at least K/(k alpha), for the review list; e-Bonferroni for demotion"
+  inputs: []
+  affects:
+    - {id: ev_demotion_alpha, direction: either, how: "the rule decides how the budget is split"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R6-alphaxiv-papers/T-08-live-alpha-decay-detection.md"}
+  notes: "H16."
+
+- id: ev_patience_days
+  name: "How long a unit has been watched"
+  level: unit
+  kind: measure
+  measure: "other: days"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "days since the detector's last restart; shown beside every alarm count, because alarms grow with patience"
+  inputs: []
+  affects:
+    - {id: ev_alarm_recall, direction: either, how: "longer patience, more expected alarms"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H16."
+
+- id: ev_alarm_recall
+  name: "Share of real events an alarm source caught"
+  level: unit
+  kind: evidence
+  measure: "percent"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "caught / real events, from the gate scorecard; beside precision, detection time and reset time"
+  inputs: []
+  affects:
+    - {id: ev_gate_enabled_per_type, direction: either, how: "a source with no recall is switched off per type"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H16, H20."
+
+- id: ev_input_shift_monitor
+  name: "Shift in the unit's live inputs against a frozen reference"
+  level: unit
+  kind: evidence
+  measure: "ratio"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: rank-martingale evidence on spread at entry, hour mix and volatility state against the paper reference; kept apart from the P&L test"
+  inputs: []
+  affects:
+    - {id: drift_state, direction: down, how: "a shift is an inputs fire"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H15."
+
+- id: ev_fallback_dwell_trades
+  name: "Trades the planned-look fallback and the e-process may disagree before the fallback decides"
+  level: unit
+  kind: limit
+  measure: "count"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: 50
+  basis: reasoned
+  derivation: "Simplex architecture: the verified decider wins after a dwell; two cohorts"
+  inputs: []
+  affects:
+    - {id: drift_state, direction: either, how: "after the dwell the looks decide the zone"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R7-software-patterns-self-configuring.md"}
+  notes: "H15."
+
+- id: ev_demotion_cause
+  name: "Why a unit was demoted"
+  level: unit
+  kind: other
+  measure: "other: cause code"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "one of statistical, distribution change, inputs drift, money rule, his hand, plus class-specific codes; written on every demotion"
+  inputs: []
+  affects:
+    - {id: ev_repromotion_episode_budget, direction: either, how: "the cause sets the episode's rules"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R6-alphaxiv-papers/T-08-live-alpha-decay-detection.md"}
+  seed_ids: [A25]
+  notes: "H15, H26."
+
+- id: ev_restart_weight_schedule
+  name: "Weights spent by each restart of the evidence"
+  level: unit
+  kind: other
+  measure: "other: list"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: weights over restart times summing to at most one (restarted conformal detectors); restarts at level changes, world switches and versions"
+  inputs: []
+  affects:
+    - {id: ev_evidence_e, direction: either, how: "a restart resets the meter at a price"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R6-alphaxiv-papers/T-08-live-alpha-decay-detection.md"}
+  notes: "H17."
+
+- id: ev_variance_cap_r
+  name: "Known upper bound on a trade's variance, set at promotion"
+  level: unit
+  kind: limit
+  measure: "R"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: from the X4 stress battery per unit; never a sample variance from a dozen trades; without it money is not monitored statistically"
+  inputs: []
+  affects:
+    - {id: ev_evidence_e, direction: either, how: "the Catoni bound on money needs the cap"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R6-alphaxiv-papers/T-08-live-alpha-decay-detection.md"}
+  notes: "H17. Per class: crypto and single stocks wider."
+
+- id: ev_cone_looks_to_red
+  name: "Looks below the cone's floor before the ladder steps down"
+  level: unit
+  kind: brake_threshold
+  measure: "count"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: 2
+  basis: reasoned
+  derivation: "one look is yellow, two are orange (step down); never a demotion, which is the funded confirmation's job"
+  inputs: [mc_cone_floor_percentile]
+  affects:
+    - {id: drift_state, direction: down, how: "two looks below is orange"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H18, X5-20."
+
+- id: ev_regime_expectation
+  name: "Expected net R per trade in the current regime word"
+  level: unit
+  kind: evidence
+  measure: "R"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: from the unit's validation record per MIS persistence word; falls back to the whole-record cone when the board is stale"
+  inputs: []
+  affects:
+    - {id: drift_state, direction: either, how: "the cone is judged against this, not the whole record"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: grounding, ref: "grounding/G9-runtime-brakes-isolation-evidence.md"}
+  notes: "H18. The board relay is unfed (G9 §4)."
+
+- id: ev_worry_line_depth
+  name: "Max drawdown beyond which the unit is in worry territory, by style"
+  level: unit
+  kind: brake_threshold
+  measure: "R"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "from the unit's Sharpe, horizon and style archetype, or a block bootstrap of its own returns (2608.00127)"
+  inputs: []
+  affects:
+    - {id: drift_state, direction: down, how: "past the line is orange"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H18."
+
+- id: ev_worry_line_duration
+  name: "Time under water beyond which the unit is in worry territory"
+  level: unit
+  kind: brake_threshold
+  measure: "count"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "trades under water from the same model as the depth line; trend units sit under water longer than mean-reversion units at the same Sharpe"
+  inputs: []
+  affects:
+    - {id: drift_state, direction: down, how: "past the line is orange"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H18."
+
+- id: ev_bad_day_percentile
+  name: "Percentile of the card's daily distribution below which a day is an event"
+  level: unit
+  kind: evidence
+  measure: "percent"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: 5
+  basis: reasoned
+  derivation: "down to the 5th percentile a day is 'bad, normal' (a -4R day is one in 24 for a healthy 55% unit at 4 a day); below it is the fast lane's, still not a verdict"
+  inputs: []
+  affects:
+    - {id: daily_r_digest, direction: either, how: "the digest names the day"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  seed_ids: [A25]
+  notes: "H18, X5-48."
+
+- id: ev_brake_fire_band
+  name: "Band of brake fires per 100 trades a healthy unit shows"
+  level: unit
+  kind: brake_threshold
+  measure: "other: fires per 100 trades"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "from the holdout run through the same brakes with the same counting rule; above the band is decay evidence for the ladder"
+  inputs: [breaker_expected_fire_rate]
+  affects:
+    - {id: drift_state, direction: down, how: "above the band is yellow"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  seed_ids: [A26]
+  notes: "H19, X5-21."
+
+- id: ev_trip_tax
+  name: "What a brake trip cost: time lost, forgone net P&L, exit costs, loss avoided"
+  level: unit
+  kind: measure
+  measure: "R"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "replayed per trip on the unit's own record; feeds the brake's precision"
+  inputs: []
+  affects:
+    - {id: brake_precision, direction: either, how: "a trip that cost more than it saved lowers precision"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H19."
+
+- id: ev_gate_lift
+  name: "Share of a gate's passes that later held, over the base rate"
+  level: methodology
+  kind: evidence
+  measure: "ratio"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "P(held | passed) / P(held) on held-back trades, monthly, per gate and unit type"
+  inputs: [ev_gate_rejection_rates]
+  affects:
+    - {id: ev_gate_enabled_per_type, direction: either, how: "no lift, switched off per type"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H20, X5-22."
+
+- id: ev_gate_enabled_per_type
+  name: "Whether a gate is active for a unit type"
+  level: methodology
+  kind: other
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: true
+  basis: reasoned
+  derivation: "every gate starts on; a gate with no lift for a type is reported as a defect and switched off for that type, never loosened globally"
+  inputs: [ev_gate_lift]
+  affects:
+    - {id: ev_statistical_authorisation, direction: either, how: "only enabled gates count"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H20."
+
+- id: ev_pipeline_null_rate
+  name: "False-promotion rate of the whole pipeline on null paths"
+  level: system
+  kind: evidence
+  measure: "percent"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "quarterly: the full gate sequence with sequential stopping on null paths per class"
+  inputs: []
+  affects:
+    - {id: ev_level_evidence_alpha, direction: either, how: "a high null rate tightens the bars"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H20."
+
+- id: ev_pipeline_power
+  name: "Power of the whole pipeline at injected edges"
+  level: system
+  kind: evidence
+  measure: "percent"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "quarterly: injected edges of 0.02, 0.05, 0.10, 0.20R with cost, latency and roll shocks"
+  inputs: []
+  affects:
+    - {id: ev_too_thin_verdict, direction: either, how: "the provable-edge line is what the pipeline can actually prove"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H20."
+
+- id: ev_pipeline_delay_trades
+  name: "Trades (and days) the pipeline takes to promote a true edge"
+  level: system
+  kind: evidence
+  measure: "count"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "median crossing on injected edges; agents design against it"
+  inputs: []
+  affects:
+    - {id: ev_calendar_to_proof, direction: either, how: "the measured delay corrects the plan's estimate"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H20."
+
+- id: ev_would_have_counts
+  name: "What would-have rows count toward"
+  level: unit
+  kind: other
+  measure: "other: rate and replay only"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: "rate and replay only"
+  basis: reasoned
+  derivation: "would-have rows never count toward proof; they count toward trade rate and replay match so a stopped unit's clock does not freeze"
+  inputs: []
+  affects:
+    - {id: ev_counts_toward_proof, direction: down, how: "would-have rows are excluded from proof"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H21, X5-42."
+
+- id: ev_would_have_row
+  name: "A journal row for a trade the unit would have taken while stopped"
+  level: unit
+  kind: other
+  measure: "other: row kind"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "written by the shadow lane under stand-down, isolation, bench, demotion or a shadow-first brake; nothing writes it today"
+  inputs: []
+  affects:
+    - {id: ev_would_have_counts, direction: either, how: "the row is what the rule counts"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: grounding, ref: "grounding/G9-runtime-brakes-isolation-evidence.md"}
+  notes: "H21, H37."
+
+- id: ev_upside_alarm_percentile
+  name: "Cone percentile above which results are too good"
+  level: unit
+  kind: brake_threshold
+  measure: "percent"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: 95
+  basis: reasoned
+  derivation: "above the cone's 95th percentile for two looks is yellow: check sizing bug, hidden shared exposure, broker change"
+  inputs: [mc_cone_floor_percentile]
+  affects:
+    - {id: drift_state, direction: down, how: "too good is yellow"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H22, X5-23."
+
+- id: ev_consistency_best_day_share
+  name: "Largest share of a month's profit one day may hold before a check"
+  level: unit
+  kind: brake_threshold
+  measure: "percent"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: 50
+  basis: reasoned
+  derivation: "FTMO's rule; breached in 15% of healthy months by chance, so it is yellow, never red"
+  inputs: []
+  affects:
+    - {id: drift_state, direction: down, how: "a breach is yellow"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H22."
+
+- id: ev_ruin_audit_flags
+  name: "Fingerprints of hidden risk of ruin found in closed positions"
+  level: unit
+  kind: evidence
+  measure: "count"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "count of: volume escalation after a loss, stacking at worse prices, payoff asymmetry, martingale-shaped sizing; nightly"
+  inputs: []
+  affects:
+    - {id: drift_state, direction: down, how: "any flag is yellow"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H22."
+
+- id: ev_family_id
+  name: "The logic family a unit belongs to, for pooled proof and budget"
+  level: methodology
+  kind: other
+  measure: "other: id"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "proposed by an agent from claim cards and result correlation, confirmed by correlation above the merge threshold; never crosses market mechanics"
+  inputs: [correlated_market_merge_threshold]
+  affects:
+    - {id: effective_independent_bets, direction: either, how: "the family is what N_eff is counted over"}
+    - {id: ev_family_alpha_wealth, direction: either, how: "the family holds the wealth"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H23, H34, X5-50."
+
+- id: ev_cell_key
+  name: "The market x session cell a trade belongs to"
+  level: unit
+  kind: other
+  measure: "other: key"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "market and session (and the MIS word at entry when stamps exist); the unit of per-cell verification"
+  inputs: []
+  affects:
+    - {id: ev_cell_estimate, direction: either, how: "cells are what estimates are shrunk over"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H23, H47, X5-40."
+
+- id: ev_cell_estimate
+  name: "A cell's shrunk edge estimate"
+  level: unit
+  kind: evidence
+  measure: "R"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "w x cell mean + (1 - w) x unit pooled mean, w = n / (n + judge_market_shrink_k); no cell judged alone before its own trades-to-proof"
+  inputs: [ev_cell_key, judge_market_shrink_k]
+  affects:
+    - {id: edge_range, direction: either, how: "a cell below zero after local costs is a drop_market proposal"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H23."
+
+- id: ev_family_stream_alarm
+  name: "Alarm on the family's pooled daily stream"
+  level: methodology
+  kind: evidence
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "CUSUM and e-detector on the pooled R stream of the family on a daily clock, with a graded delay after the units' own; an alarm steps every member down one level"
+  inputs: [cusum_limit]
+  affects:
+    - {id: size_levels, direction: down, how: "a family alarm steps every member down"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H23. A3-164: one logic fading everywhere."
+
+- id: ev_zone_rule
+  name: "How the inputs map to green, yellow, orange, red"
+  level: unit
+  kind: other
+  measure: "other: rule"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "green: on track, may step up; yellow: one inputs fire, watch, cone below once, consistency or upside breach; orange: warning alarm, two inputs fires, cone below twice, cohort rule; red: funded confirmation below the line, or futility at a look"
+  inputs: []
+  affects:
+    - {id: drift_state, direction: either, how: "the rule produces the zone"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R3-edge-verification-and-analogues.md"}
+  seed_ids: [A25]
+  notes: "H24, X5-06, X5-41. Collision with X3's three speeds (C15)."
+
+- id: ev_zone_min_hold
+  name: "Minimum hold in a zone before it may change"
+  level: unit
+  kind: limit
+  measure: "count"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: 25
+  basis: reasoned
+  derivation: "one cohort for scalpers; in days for intraday and swing units; stops chatter (R9 hysteresis)"
+  inputs: []
+  affects:
+    - {id: drift_state, direction: either, how: "no change inside the hold"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R9-accelerators-and-brake-pairs.md"}
+  notes: "H24."
+
+- id: ev_zone_release_days
+  name: "Days a unit must stay clean before yellow or orange releases to green"
+  level: unit
+  kind: brake_reset
+  measure: "other: days"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: 5
+  basis: reasoned
+  derivation: "release is slower than attack: five clean days plus the e-meter back above the level's bar"
+  inputs: []
+  affects:
+    - {id: drift_state, direction: up, how: "release returns the unit to green"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H24."
+
+- id: ev_orange_entry
+  name: "What puts a unit in orange (step down one level)"
+  level: unit
+  kind: other
+  measure: "other: rule"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "a warning alarm, two inputs fires, the cone below for two looks, the cohort rule, or a family-stream alarm; never one day"
+  inputs: []
+  affects:
+    - {id: size_levels, direction: down, how: "orange steps down one level"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  seed_ids: [A25]
+  notes: "H24, X5-41."
+
+- id: ev_repromotion_episode_budget
+  name: "Budget of a re-promotion episode after a demotion"
+  level: unit
+  kind: evidence
+  measure: "ratio"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "alpha_i x 2^-j for episode j; the e-meter restarts on post-demotion paper trades; never a free reset"
+  inputs: [ev_demotion_alpha]
+  affects:
+    - {id: ev_evidence_e, direction: either, how: "sets the episode's crossing bar"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R6-alphaxiv-papers/T-08-live-alpha-decay-detection.md"}
+  notes: "H26, X5-25."
+
+- id: ev_loosen_min_days
+  name: "Days that must pass after a demotion before re-promotion"
+  level: unit
+  kind: brake_reset
+  measure: "other: days"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: longer for swing units; the old rule (10 profitable demo trades) is dropped as too weak"
+  inputs: []
+  affects:
+    - {id: ev_state_word, direction: either, how: "ready for his card only after the days and the e-value"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H26."
+
+- id: ev_rehab_children_max
+  name: "Rehab children a demoted unit may spawn before retirement"
+  level: unit
+  kind: limit
+  measure: "count"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: old WF3 had a rehab branch without a count; each child is a counted try funded from the family"
+  inputs: []
+  affects:
+    - {id: ev_retire_rule, direction: either, how: "exhausting it retires the version"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H27, X5-24."
+
+- id: ev_parent_prior_weight
+  name: "Weight of the parent's live record in a rehab child's prior"
+  level: methodology
+  kind: accelerator
+  measure: "ratio"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a family that keeps paying earns a higher starting weight for new children; wild (X5-54)"
+  inputs: []
+  affects:
+    - {id: edge_range, direction: either, how: "a strong prior pulls the child's band toward the family"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H27. Wild."
+
+- id: ev_retire_rule
+  name: "When a unit version retires for good"
+  level: unit
+  kind: other
+  measure: "other: rule"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "rehab children exhausted, or the family's wealth spent with no refund in sight, or every cell closed-thin; retired units stay in the family prior; a comeback is a new unit with a parent link"
+  inputs: [ev_rehab_children_max, ev_family_alpha_wealth]
+  affects:
+    - {id: ev_state_word, direction: either, how: "retired is a state word"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H27, X5-27."
+
+- id: ev_contract_level_replay
+  name: "Whether futures, energy and metals are verified on individual contracts"
+  level: unit
+  kind: other
+  measure: "other: yes or no"
+  applies_to: {classes: [futures, energy, metal], styles: [all], timeframes: all}
+  default: true
+  basis: reasoned
+  derivation: "a back-adjusted series never counts as P&L; signals may use it, evidence may not"
+  inputs: []
+  affects:
+    - {id: ev_stage_tag, direction: either, how: "contract months are tagged"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H28."
+
+- id: ev_exit_mechanism
+  name: "Which exit closed the trade"
+  level: trade
+  kind: evidence
+  measure: "other: enum"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "stop, FI cut, breakeven, time, signal, forced flat; written from the exit block that fired; the trade row cannot tell these apart today"
+  inputs: []
+  affects:
+    - {id: exit_reason_code, direction: either, how: "the richer field behind the code"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: grounding, ref: "grounding/G11-ledger-exposure-exits-observability.md"}
+  notes: "H29, H37, X5-32. FI is not in code (G11)."
+
+- id: ev_false_exit_budget
+  name: "Allowed share of shadow early exits that would have been wrong"
+  level: unit
+  kind: limit
+  measure: "percent"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: an exit rule runs shadow with would-have rows; it may close live trades only under this budget"
+  inputs: []
+  affects:
+    - {id: ev_exit_mechanism, direction: either, how: "a rule over budget is not enabled"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H29."
+
+- id: ev_explanation_note
+  name: "Plain-words explanation of a zone change, written by an agent"
+  level: unit
+  kind: other
+  measure: "other: note"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "written from the incident bundle after the nightly job; attached, never an input"
+  inputs: []
+  affects:
+    - {id: ev_state_word, direction: either, how: "shown beside the state"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  seed_ids: [E28]
+  notes: "H30, X5-29."
+
+- id: ev_incident_bundle
+  name: "Deterministic record of a zone change: inputs, thresholds, evidence ids"
+  level: unit
+  kind: other
+  measure: "other: record"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "written by the nightly job per transition; the explainer reads it"
+  inputs: []
+  affects:
+    - {id: ev_explanation_note, direction: either, how: "the note is derived from it"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H30."
+
+- id: ev_alarm_triage_rank
+  name: "Rank of an alarm by the chance it is false"
+  level: unit
+  kind: evidence
+  measure: "ratio"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a triage ranker over alarm sources' precision; never silences a critical alarm"
+  inputs: []
+  affects:
+    - {id: ev_explanation_note, direction: either, how: "orders the morning list"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H30."
+
+- id: ev_agent_proposal_kinds
+  name: "Proposal kinds an agent may land through the slow lane"
+  level: system
+  kind: other
+  measure: "other: list"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: "step_down, drop_market, pool_units, isolate, request_control_run"
+  basis: reasoned
+  derivation: "de-risk-only kinds; anything that raises risk becomes a request for his click; the schema is X7's"
+  inputs: []
+  affects:
+    - {id: drift_state, direction: down, how: "a step_down proposal can only lower"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  seed_ids: [D42]
+  notes: "H31."
+
+- id: ev_proposal_ttl_hours
+  name: "Hours an agent proposal stays valid"
+  level: system
+  kind: schedule
+  measure: "other: hours"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: 24
+  basis: reasoned
+  derivation: "proposals expire within a day; the service re-checks the evidence ids at use time"
+  inputs: []
+  affects:
+    - {id: ev_agent_proposal_kinds, direction: either, how: "expiry applies to every kind"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H31."
+
+- id: ev_core_deny_list
+  name: "Numbers no agent and no self-tuner may change"
+  level: system
+  kind: other
+  measure: "other: list"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: "lifetime budget, bet grid, level thresholds, CUSUM lookback, ladder bars"
+  basis: reasoned
+  derivation: "they derive by formula per unit; only he changes the formula (OtterTune deny-list; Steward core)"
+  inputs: []
+  affects:
+    - {id: ev_level_evidence_alpha, direction: either, how: "on the list"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H32. Collision C18: locks tuners and agents, not him."
+
+- id: ev_autonomy_fallback_after_red
+  name: "Whether auto-applied threshold changes fall back to his confirmation after a red"
+  level: unit
+  kind: other
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: true
+  basis: reasoned
+  derivation: "drawdown demotes autonomy: after a red, any self-applied change waits for him until he resets"
+  inputs: []
+  affects:
+    - {id: ev_applier_mode, direction: down, how: "forces shadow mode after a red"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H32."
+
+- id: ev_audit_fail_count
+  name: "Trades or proposals whose reported action, order, fill, account change and evidence disagree"
+  level: unit
+  kind: measure
+  measure: "count"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "nightly audit; an audit-failed trade does not count toward proof and lands a review"
+  inputs: []
+  affects:
+    - {id: ev_counts_toward_proof, direction: down, how: "audit-failed rows are excluded"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H33."
+
+- id: ev_red_team_schedule
+  name: "How often the information path is red-teamed"
+  level: system
+  kind: schedule
+  measure: "other: days"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: 90
+  basis: reasoned
+  derivation: "quarterly: fake headlines, injected notes, stale boards, wrong entities; any proposal that would have raised risk is a defect"
+  inputs: []
+  affects:
+    - {id: ev_agent_proposal_kinds, direction: either, how: "defects narrow the kinds"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H33."
+
+- id: ev_agent_stake
+  name: "Share of family wealth an agent bids on its proposal"
+  level: methodology
+  kind: evidence
+  measure: "ratio"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: wild; a failed unit burns it, a proved one refunds with interest; shown beside the agent's proposals"
+  inputs: []
+  affects:
+    - {id: ev_family_alpha_wealth, direction: down, how: "a stake is spent from the family"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  seed_ids: [D42]
+  notes: "H34, X5-53. Wild."
+
+- id: ev_pipeline_version
+  name: "Version of the governed research pipeline a candidate ran under"
+  level: system
+  kind: other
+  measure: "other: version"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "the outer loop changes the protocol only for the next cycle; finished candidates keep their version"
+  inputs: []
+  affects:
+    - {id: ev_trial_ledger_id, direction: either, how: "every trial records its version"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H35."
+
+- id: ev_protocol_change_log
+  name: "Changes the outer loop made to the pipeline, with reasons"
+  level: system
+  kind: other
+  measure: "other: log"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "append-only; read by the gate scorecard"
+  inputs: []
+  affects:
+    - {id: ev_pipeline_version, direction: up, how: "each change is a new version"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H35."
+
+- id: ev_version_floor_fraction
+  name: "Fraction of the incumbent's cumulative R a new version must hold"
+  level: unit
+  kind: limit
+  measure: "ratio"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: conservative UCB floor; the new version runs beside the incumbent only while its cumulative R stays above this share of the incumbent's"
+  inputs: []
+  affects:
+    - {id: ev_rollout_outcome, direction: either, how: "breaching the floor fails the rollout"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H36."
+
+- id: ev_contrast_bound
+  name: "Bound on new-minus-incumbent R, with prefix refresh"
+  level: unit
+  kind: evidence
+  measure: "R"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "bound the contrast directly, not each arm, so shared market noise is not charged twice; refresh when the incumbent changes"
+  inputs: []
+  affects:
+    - {id: ev_rollout_outcome, direction: either, how: "a positive lower bound passes"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H36."
+
+- id: ev_rollout_outcome
+  name: "Result of a rollout analysis step"
+  level: unit
+  kind: other
+  measure: "other: pass, fail or inconclusive"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "pass continues, fail aborts, inconclusive pauses for his look; no analysis while a version change is in flight"
+  inputs: [ev_version_floor_fraction, ev_contrast_bound]
+  affects:
+    - {id: ev_state_word, direction: either, how: "inconclusive is on the Needs-you list"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R7-software-patterns-self-configuring.md"}
+  notes: "H36, H46."
+
+- id: ev_rollout_promote_time
+  name: "Declared time after which a passing step promotes"
+  level: unit
+  kind: schedule
+  measure: "other: days"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: Flagger's declared promote time; per template"
+  inputs: []
+  affects:
+    - {id: ev_rollout_outcome, direction: either, how: "a step is judged at this time"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H46."
+
+- id: ev_rollout_rollback_time
+  name: "Declared time after which a failing step rolls back"
+  level: unit
+  kind: schedule
+  measure: "other: days"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: Flagger's declared rollback time; per template"
+  inputs: []
+  affects:
+    - {id: ev_rollout_outcome, direction: either, how: "a step is rolled back at this time"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H46."
+
+- id: ev_canary_share
+  name: "Share of a unit's markets that go live first"
+  level: unit
+  kind: limit
+  measure: "percent"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: one market per class where the unit claims several; 'sizeable and long enough to be representative'"
+  inputs: [ev_approval_markets]
+  affects:
+    - {id: size_levels, direction: either, how: "widening the canary is a step up in scope"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R3-edge-verification-and-analogues.md"}
+  notes: "H46, X5-55."
+
+- id: ev_stage_tag
+  name: "Stage a trade belongs to in the evidence ledger"
+  level: trade
+  kind: evidence
+  measure: "other: enum"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "backtest, holdout, event-replay, paper, live-L1, live-L2 and so on; plus world and contract month"
+  inputs: []
+  affects:
+    - {id: ev_counts_toward_proof, direction: either, how: "only paper and later stages count"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H37, X5-08."
+
+- id: ev_counts_toward_proof
+  name: "Whether a trade row counts toward edge proof"
+  level: trade
+  kind: evidence
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "true for paper and live stages that are not would-have and not audit-failed; false for backtest and holdout"
+  inputs: [ev_stage_tag, ev_unseen_data_source]
+  affects:
+    - {id: ev_evidence_e, direction: either, how: "only counting rows move the meter"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H37."
+
+- id: ev_costs_in_r_complete
+  name: "Whether a trade row's costs include commission, swap, funding and slippage"
+  level: trade
+  kind: cost
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "true when every cost leg is on the row; today R leaves out commission and carry (G8 §5.1)"
+  inputs: []
+  affects:
+    - {id: round_trip_cost_r, direction: either, how: "the complete cost is what the band reads"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H37, H38."
+
+- id: ev_money_record_version
+  name: "The risk-profile version a money record belongs to"
+  level: unit
+  kind: other
+  measure: "other: version"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "the logic record in R runs across profile versions; a new sizer or profile starts a new money record"
+  inputs: []
+  affects:
+    - {id: ev_stage_tag, direction: either, how: "money rows carry the profile version"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H37. A4-042."
+
+- id: ev_cost_profile_source
+  name: "Where the per-instrument, per-hour cost profile came from"
+  level: node
+  kind: cost
+  measure: "other: source name"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: node order and reconcile rows once a script writes them; a class prior from research until then"
+  inputs: []
+  affects:
+    - {id: slippage_cost, direction: either, how: "the profile is what slippage is read from"}
+    - {id: round_trip_cost_r, direction: either, how: "feeds the complete cost"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: grounding, ref: "grounding/G9-runtime-brakes-isolation-evidence.md"}
+  notes: "H38, X5-49. No commission key exists (gap 1)."
+
+- id: ev_cost_reconciliation_gap_r
+  name: "Difference between backtest, paper and live costs on the same trades"
+  level: unit
+  kind: measure
+  measure: "R"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "one convention reconciled to zero; the gap is itself a monitored number"
+  inputs: []
+  affects:
+    - {id: drift_state, direction: down, how: "a widening gap is an inputs fire"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H38."
+
+- id: ev_passport
+  name: "The frozen verification record per unit version"
+  level: unit
+  kind: other
+  measure: "other: record"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "claim card, verdict, band with its low ends, counts, plan, challenge note, wealth, looks, zone history, levels, demotions, rehab links, audit flags; appended nightly; its schema generates the card"
+  inputs: []
+  affects:
+    - {id: ev_state_word, direction: either, how: "the screen reads the passport"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H39, X5-34."
+
+- id: ev_trades_toward_proof
+  name: "Counting trades so far against the trades needed"
+  level: unit
+  kind: evidence
+  measure: "count"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "count of rows with ev_counts_toward_proof true since the last restart"
+  inputs: [ev_counts_toward_proof, verification_trades_needed]
+  affects:
+    - {id: ev_next_look_at, direction: either, how: "the next look is the next schedule point above it"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H39, X5-33."
+
+- id: ev_next_look_at
+  name: "Trade count (or date) of the next planned look"
+  level: unit
+  kind: schedule
+  measure: "count"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "the next point of ev_look_schedule above ev_trades_toward_proof"
+  inputs: [ev_look_schedule, ev_trades_toward_proof]
+  affects:
+    - {id: ev_state_word, direction: either, how: "shown on the card"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H39."
+
+- id: ev_state_word
+  name: "The unit's verification state word on screen"
+  level: unit
+  kind: evidence
+  measure: "other: state word"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "proving, proved at level n, pending, closed-thin, demoted, retired; from the zone, the level, the verdicts and the plan"
+  inputs: [drift_state, size_levels, ev_statistical_authorisation, ev_too_thin_verdict]
+  affects:
+    - {id: brake_state, direction: either, how: "the node emits it beside health"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: grounding, ref: "grounding/G11-ledger-exposure-exits-observability.md"}
+  seed_ids: [E28]
+  notes: "H39, H41. Vocabulary is Q4."
+
+- id: ev_verification_template
+  name: "The verification template a unit type uses"
+  level: unit
+  kind: other
+  measure: "other: template name"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "scalper, intraday, ORB or swing; a typed document carrying every ev_ default with its derivation and applier mode"
+  inputs: []
+  affects:
+    - {id: ev_cohort_trades, direction: either, how: "the template sets the cohort"}
+    - {id: ev_look_schedule, direction: either, how: "the template sets the schedule"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  seed_ids: [A5]
+  notes: "H40, X5-46."
+
+- id: ev_applier_mode
+  name: "How a published verification value is applied"
+  level: unit
+  kind: other
+  measure: "other: off, shadow, at start or live"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: "shadow"
+  basis: reasoned
+  derivation: "VPA update modes; shadow by default so every new rule shows before it acts; 'at start' applies at the next session open"
+  inputs: []
+  affects:
+    - {id: number_motion_mode, direction: either, how: "the verification numbers' motion mode"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R7-software-patterns-self-configuring.md"}
+  notes: "H40. QMX has the learner and no applier."
+
+- id: ev_sim_false_alarm
+  name: "Simulated false-alarm rate of each slow-lane rule for this unit"
+  level: unit
+  kind: evidence
+  measure: "percent"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "from 1,000 block-bootstrapped holdout paths; a rule over its budget is loosened by formula and logged"
+  inputs: [ev_sim_paths, ev_sim_block]
+  affects:
+    - {id: ev_threshold_bounds, direction: either, how: "the bounds come from the simulation"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H42, X5-36."
+
+- id: ev_sim_power
+  name: "Simulated power of each slow-lane rule for this unit"
+  level: unit
+  kind: evidence
+  measure: "percent"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "from the same paths with the claimed edge removed"
+  inputs: [ev_sim_paths, ev_sim_block]
+  affects:
+    - {id: ev_threshold_bounds, direction: either, how: "power bounds the loosening"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H42."
+
+- id: ev_sim_paths
+  name: "Bootstrap paths the calibration uses"
+  level: unit
+  kind: evidence
+  measure: "count"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: 1000
+  basis: reasoned
+  derivation: "the old R08 T5 block-bootstrap count; enough for a 1% rate to be seen"
+  inputs: []
+  affects:
+    - {id: ev_sim_false_alarm, direction: either, how: "more paths, finer rates"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H42."
+
+- id: ev_sim_block
+  name: "Block length of the bootstrap, in trades"
+  level: unit
+  kind: evidence
+  measure: "count"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: 5
+  basis: reasoned
+  derivation: "block of five keeps short streaks; per class the block may be a session (FX) or a day (crypto)"
+  inputs: []
+  affects:
+    - {id: ev_sim_false_alarm, direction: either, how: "longer blocks keep more streak structure"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H42."
+
+- id: ev_threshold_bounds
+  name: "Low and high bounds published beside every calibrated threshold"
+  level: unit
+  kind: evidence
+  measure: "other: pair"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "the learner publishes target, low and high (VPA shape); shown on the Numbers tab"
+  inputs: [ev_sim_false_alarm, ev_sim_power]
+  affects:
+    - {id: cusum_limit, direction: either, how: "the calibrated limit replaces the constant"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R7-software-patterns-self-configuring.md"}
+  notes: "H42."
+
+- id: ev_alpha_spending_rule
+  name: "How the false-alarm budget is spent across looks"
+  level: unit
+  kind: other
+  measure: "other: rule name"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: "obrien-fleming"
+  basis: reasoned
+  derivation: "O'Brien-Fleming for trade-count looks (stricter early); Lan-DeMets spending by information fraction for calendar-timed looks on rare traders"
+  inputs: []
+  affects:
+    - {id: ev_look_schedule, direction: either, how: "the rule shapes the schedule's bars"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+    - {gen: research, ref: "research/R3-edge-verification-and-analogues.md"}
+  notes: "H43, X5-04, X5-44."
+
+- id: ev_look_schedule
+  name: "Planned looks, in trades or calendar times"
+  level: unit
+  kind: schedule
+  measure: "count"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "200, 400, 600, 800, 1,000 by default for a 0.1R claim; calendar times for rare traders; one interim plus final under H45"
+  inputs: [ev_alpha_spending_rule, verification_trades_needed]
+  affects:
+    - {id: ev_next_look_at, direction: either, how: "the schedule is what the next look is read from"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  notes: "H43, H45."
+
+- id: ev_gate_requires_low_end_positive
+  name: "Whether level 1 needs a positive low end with evidence"
+  level: unit
+  kind: other
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: true
+  basis: reasoned
+  derivation: "never size a thing with no evidence (D18) while never leaning on the edge for the amount (A24): the low end is the gate, the risk share is the amount"
+  inputs: [edge_range]
+  affects:
+    - {id: size_levels, direction: down, how: "no positive low end, no level above paper"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  seed_ids: [A24, D18]
+  notes: "H44, X5-30."
+
+- id: ev_evidence_multiplier_enabled
+  name: "Whether size at a level is scaled by the edge's t-statistic"
+  level: unit
+  kind: other
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: false
+  basis: reasoned
+  derivation: "off by default: t^2 / (1 + t^2) leans on the edge against A24; a template dial for operators who want it"
+  inputs: [edge_t_statistic]
+  affects:
+    - {id: kelly_shrink_factor, direction: either, how: "when on, the multiplier is the shrink"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X5-edge-verification.md"}
+  seed_ids: [A24]
+  notes: "H44, X5-31. Collision C5."
