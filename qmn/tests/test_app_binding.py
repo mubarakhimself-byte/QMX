@@ -21,11 +21,19 @@ from typing import ClassVar, cast
 
 import pytest
 import test_app_runtime as base
-from qmf.core import Ok, Result, TypedRefusal
+from qmf.core import Ok, PriceDelta, Quantity, Result, TypedRefusal
+from qmf.venue.commands import (
+    Command,
+    OrderParameters,
+    OrderType,
+    SubmissionOutcome,
+    TimeInForce,
+)
+from qml.unit.model import Side
 from qmn.app import grants as grants_module
 from qmn.app import server
 from qmn.app.grants import Grants, TokenEndpoint
-from qmn.app.runtime import Phase, Runtime
+from qmn.app.runtime import Phase, Runtime, Ticket
 from qmn.app.server import DEFINITIONS, CTraderDoor, Node, open_node
 from qmn.app.store import Json, Store
 from qmn.venue.ctrader_account import Codec, CTraderVenue, Wire
@@ -635,6 +643,7 @@ def test_the_dummy_trades_through_the_ctrader_binding_with_its_stop_at_the_venue
         ("SELL", "17200000", "29"),
     ]
     assert {str(o["label"]) for o in orders} == {"qmx:a4dqobyh:dummy-trend-pullback"}
+    assert [len(str(o["clientOrderId"])) for o in orders] == [36, 36]
     assert [(t["exit_kind"], t["quantity"]) for t in trades] == [
         ("close", "0.04"),
         ("target", "1.72"),
@@ -647,6 +656,44 @@ def test_the_dummy_trades_through_the_ctrader_binding_with_its_stop_at_the_venue
     assert runtime.alarms == []
     assert venue.held() == {}
     runtime.stop()
+
+
+def test_an_entry_without_the_node_tags_is_refused_before_anything_is_sent(
+    tmp_path: Path,
+) -> None:
+    rig = bound_rig(tmp_path)
+    signed_in(rig)
+    bind(rig)
+    tick_quotes(rig)
+    venue = cast(CTraderVenue, runtime(rig).venues[ACCOUNT].client)
+    symbol = venue.symbols["fx.eurusd"]
+    gap = PriceDelta.try_create(500, symbol.instrument, symbol.digits)
+    size = Quantity.try_create(1, "lot", 2)
+    assert not isinstance(gap, TypedRefusal) and not isinstance(size, TypedRefusal)
+    params = OrderParameters.try_create(
+        OrderType.MARKET,
+        TimeInForce.IMMEDIATE_OR_CANCEL,
+        size.value,
+        protective_stop_distance=gap.value,
+        instrument=symbol.instrument,
+        trade_side="buy",
+    )
+    assert not isinstance(params, TypedRefusal)
+    command = Command.place_order(venue.account.venue, venue.account, "session-1", 1, params.value)
+    assert not isinstance(command, TypedRefusal)
+    before = rig.fake.requests().count("ProtoOANewOrderReq")
+
+    sent = venue.send(
+        Ticket(command.value, "fx.eurusd", Side.LONG, Decimal("1.08012"), Decimal("0.01"))
+    )
+
+    assert not isinstance(sent, TypedRefusal)
+    assert (sent.value.outcome, sent.value.code) == (
+        SubmissionOutcome.REJECTED_BY_VENUE,
+        "not-a-node-entry",
+    )
+    assert rig.fake.requests().count("ProtoOANewOrderReq") == before == 0
+    runtime(rig).stop()
 
 
 def test_a_grant_that_can_trade_live_money_is_discarded_and_binds_nothing(tmp_path: Path) -> None:
