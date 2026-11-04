@@ -546,7 +546,7 @@ Phase 5, the trading node and external connections. Added by the loose-ends pass
 
 Phase 5, the trading node and external connections. Added from C-30's findings, his ruling of 2026-11-04 (`PLANNER-NOTE-2026-11-04.md` items 2 and 4). It lands in one PR with C-35 and C-29, on `build/us-c35`, so one builder and one reviewer take all three. Built facts. In an env built by `uv sync --no-editable`, `qmn/src/qmn/app/server.py:306-309` and `qmn/src/qmn/time/calendars.py:49` climb `parents[4]` to the env folder, so `bind` answers `definitions_missing` and `market_calendars()` is empty (`evidence/c30/findings-backlog.md`). `_market_calendar` also asks `qmb.data.gap_check.open_time` (`calendars.py:337`), whose `_EXTENSIONS` (`gap_check.py:801`, `:881`) climbs the same way, so both readers must change together. uv_build ships every file under a module's folder, and a built `qmf-calendar-forex` wheel and a built `qmx-broker` wheel were both opened and hold their data files. The trading node is not in `FIRST_APPS` (`qmx_host/first_start.py:600-602`), and `enable_first_party` reads only `first-party.json`, so after a host restart neither This PC nor a server starts the node again. Real step none. Done when, in envs built by `uv sync --no-editable`, the node finds every shipped calendar and its cTrader definitions, a bind on the fake cTrader passes, and a host restart starts the node and the MIS again on any machine where the connect steps enabled them.
 
-**Depends on.** C-12d, C-26b. C-30 is already stacked below it.
+**Depends on.** C-12d, C-26b.
 
 **Files.**
 
@@ -559,6 +559,7 @@ Phase 5, the trading node and external connections. Added from C-30's findings, 
 
 **Build.**
 
+- [ ] This builds on C-30, already stacked below `build/us-c35`, whose status lines show a missing calendar.
 - [ ] `qmx_engine/triggers/preflight.py:73` stays as it is, because the host runs from a checkout and the engine is his. QMB's `_FOREX_WEEK` stays too (`LOOSE-ENDS.md` A4).
 - [ ] The restart fix adds no new mechanism. It is the one first-party list the host already reads at every start, and it touches no Library, replication or backup code.
 
@@ -596,7 +597,7 @@ Phase 5, the trading node and external connections. Added from C-30's findings, 
 
 Phase 5, the trading node and external connections. Part C slice C-14 (OP-02), Level 0 AD-37, R1-B-04. Ruling 37 (the sign-in waits until there is something to use it for, and only this step waits on it). The real step runs on his own folder after G-LAND and G-DEMO. Done when `tools/first_real_start.py` checks each fact and prints PASS or FAIL per line, passes in rehearsal on a throwaway folder against the conformance venue, and is ready for his real run.
 
-**Depends on.** C-11, C-12a, C-12b, C-12c, C-12d, C-12e, C-13, C-23, C-26, C-26b, C-34, C-35, C-37, C-38, B15. C-29 lands with C-35 and C-38 in the PR before this one.
+**Depends on.** C-11, C-12a, C-12b, C-12c, C-12d, C-12e, C-13, C-23, C-26, C-26b, C-34, C-35, C-37, C-38, B15.
 
 **Files.**
 
@@ -604,6 +605,7 @@ Phase 5, the trading node and external connections. Part C slice C-14 (OP-02), L
 
 **Build.**
 
+- [ ] This is the PR after C-35, C-29 and C-38, which land together, so the deploy reads only the chosen market.
 - [ ] Write the checks in order. Folder found, practice node Ready, demo session ready, a test trade with its stop placed, seen and closed, passport landed, and the practice node's real journal rows found in This PC's store through the records job, the open month within `[records] open_harvest_s` plus a minute.
 - [ ] Give it a rehearsal mode on a throwaway folder against the conformance venue, and a real mode that refuses to run on a folder whose code he has not landed. The rehearsal installs the node through the supervisor, as his folder will, and lands its records through C-34's path rather than seeding them, because both gaps showed only on an installed node with an empty Library.
 - [ ] The script talks only to the running host's REST. Node reads go through `POST /api/apps/trading-node/tools/{tool}` (`qmx_control/service.py:1879-1887`), with the bearer from Credential Manager. It imports nothing from `qmx-agents`, because the root env has no `qmx_home` or `qmx_host` and `tools/tests` runs in the root env (`tools/test_all.py:64`).
