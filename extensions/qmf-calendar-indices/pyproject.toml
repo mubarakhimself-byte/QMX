@@ -11,6 +11,9 @@ dependencies = []
 requires = ["uv_build>=0.12,<0.13"]
 build-backend = "uv_build"
 
+[tool.uv]
+cache-keys = [{ file = "pyproject.toml" }, { file = "src/**" }]
+
 [tool.uv.build-backend]
 # PEP 420 namespace submodule, as qmf-calendar-forex: no src/qmf/__init__.py in the distribution.
 module-name = "qmf.calendar_indices"

@@ -22,7 +22,9 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from functools import cache
+from importlib.util import find_spec
 from pathlib import Path
+from pkgutil import iter_modules
 from types import MappingProxyType
 from typing import Final, Protocol, cast, runtime_checkable
 from zoneinfo import ZoneInfo
@@ -798,7 +800,6 @@ class Hole:
     bars_missing: int
 
 
-_EXTENSIONS: Final = Path(__file__).resolve().parents[4] / "extensions"
 _EPOCH_UTC: Final = datetime(1970, 1, 1, tzinfo=timezone.utc)
 _WEEK_DAYS: Final = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 _DAY_MINUTES: Final = 24 * 60
@@ -875,10 +876,26 @@ def _read_calendar(document: Mapping[str, object]) -> OpenTime:
     return OpenTime(str(document["calendar_ref"]), zone, sessions, closures)
 
 
+def calendar_files() -> tuple[Path, ...]:
+    """Every ``qmx.calendar/1`` file the ``qmf.calendar_*`` packages in this env ship, in a checkout
+    or an installed env alike. ``find_spec`` names each package's folder without importing it, so
+    no extension's import-time checks run and QMB still imports none."""
+    root = find_spec("qmf")
+    locations = () if root is None else root.submodule_search_locations or ()
+    files: list[Path] = []
+    names = {module.name for module in iter_modules(locations, "qmf.")}
+    for name in sorted(n for n in names if n.startswith("qmf.calendar_")):
+        spec = find_spec(name)
+        if spec is not None:
+            for folder in spec.submodule_search_locations or ():
+                files.extend(sorted((Path(folder) / "calendars").glob("*.json")))
+    return tuple(files)
+
+
 @cache
 def _shipped() -> Mapping[str, OpenTime]:
     found = {"fx-24x5@1": _read_calendar(_FOREX_WEEK)}
-    for path in sorted(_EXTENSIONS.glob("qmf-calendar-*/src/qmf/calendar_*/calendars/*.json")):
+    for path in calendar_files():
         calendar = _read_calendar(json.loads(path.read_text(encoding="utf-8")))
         found[calendar.ref] = calendar
     return found

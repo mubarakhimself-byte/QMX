@@ -520,9 +520,24 @@ def _all_running(names: Sequence[str], run: Run) -> bool:
     return all(apps.status(app).get("status") == "running" for app in names)
 
 
+def _kept(names: Sequence[str], run: Run) -> bool:
+    """Whether every host start on the node's machine starts these apps."""
+    if not _on_a_server(run):
+        from qmx_host.first_start import first_party_names  # noqa: PLC0415 - it imports this file
+
+        return set(names) <= set(first_party_names(run.world.layout.home))
+    held = _last_json(_shell(run, as_qmx(FIRST_PARTY_READ, node.SERVER_HOME)))
+    return set(names) <= set(cast("list[str]", held or []))
+
+
+def _enabled(names: Sequence[str], run: Run) -> bool:
+    return _all_running(names, run) and _kept(names, run)
+
+
 def _enable(names: Sequence[str], run: Run) -> Card | None:
     """Start the node and every app beside it that is not running yet; a published node starts
-    on its signed version."""
+    on its signed version. Once they run they join the first-party list of the machine they run
+    on, which its host reads at every start, so a restart starts them again."""
     apps = _apps(run)
     for app in names:
         if apps.status(app).get("status") == "running":
@@ -532,6 +547,12 @@ def _enable(names: Sequence[str], run: Run) -> Card | None:
         except AppError as error:
             what = "the trading node" if app == NODE_APP else app
             raise Stopped(f"enable: {what} did not start: {error}") from None
+    if _on_a_server(run):
+        _shell(run, as_qmx(FIRST_PARTY_ADD, node.SERVER_HOME, *names))
+    else:
+        from qmx_host.first_start import add_first_party  # noqa: PLC0415 - it imports this file
+
+        add_first_party(run.world.layout.home, names)
     run.say(f"enable: the trading node runs on {_where(run)}")
     others = [app for app in names if app != NODE_APP]
     if others:
@@ -752,7 +773,7 @@ def setups(ports: Ports) -> tuple[Setup, ...]:
         Setup(Step("clock", "qmx", _never, partial(_clock, ports))),
         Setup(Step("install", "qmx", partial(_proved, ports), partial(_install, ports))),
         Setup(Step("signature", "his", _signed, partial(_sign, _sign_here))),
-        Setup(Step("enable", "qmx", partial(_all_running, names), partial(_enable, names))),
+        Setup(Step("enable", "qmx", partial(_enabled, names), partial(_enable, names))),
         Setup(
             Step("sign-in", "his", _signed_in, _sign_in_card), waiting=True, after=("ctrader-app",)
         ),
@@ -808,6 +829,20 @@ ASK: Final = (
 """One call to the server host's own loopback routes, run there as `qmx` with the bearer the host
 keeps in `keys/`, so the host stays the one writer of its apps. The call and its arguments come
 on the input, never on a command line."""
+
+FIRST_PARTY_READ: Final = (
+    "import json, sys\n"
+    "from pathlib import Path\n"
+    "from qmx_host.first_start import first_party_names\n"
+    "print(json.dumps(first_party_names(Path(sys.argv[1]))))\n"
+)
+FIRST_PARTY_ADD: Final = (
+    "import sys\n"
+    "from pathlib import Path\n"
+    "from qmx_host.first_start import add_first_party\n"
+    "add_first_party(Path(sys.argv[1]), sys.argv[2:])\n"
+)
+"""The server host's own first-party list, read and added to by the code its host runs."""
 
 KEYS_STATE: Final = (
     "import hashlib, json, os, sys\n"
@@ -1322,7 +1357,7 @@ def server_setups(ports: ServerPorts) -> tuple[Setup, ...]:
             Step("install", "qmx", partial(_server_proved, ports), partial(_server_install, ports))
         ),
         Setup(Step("signature", "his", _signed, partial(_sign, _sign_there))),
-        Setup(Step("enable", "qmx", partial(_all_running, names), partial(_enable, names))),
+        Setup(Step("enable", "qmx", partial(_enabled, names), partial(_enable, names))),
         Setup(
             Step("sign-in", "his", _signed_in, _sign_in_card), waiting=True, after=("ctrader-app",)
         ),

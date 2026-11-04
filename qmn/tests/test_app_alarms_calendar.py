@@ -239,8 +239,7 @@ def test_with_an_empty_calendar_folder_forex_follows_qmbs_week_and_the_status_na
 ) -> None:
     node = deployed(tmp_path)
     store = node.node.context.store
-    (tmp_path / "calendars").mkdir()
-    none_shipped = market_calendars(tmp_path / "calendars")
+    none_shipped = market_calendars(())
     open_at = market_hours(store, none_shipped, installed_qmb)
 
     assert none_shipped == {}
@@ -271,7 +270,7 @@ def test_a_calendar_file_that_cannot_be_read_is_left_out_and_named_and_the_rest_
         folder.mkdir(parents=True)
         (folder / name).write_text(text, encoding="utf-8")
 
-    calendars = market_calendars(shipped)
+    calendars = market_calendars(tuple(sorted(shipped.rglob("*.json"))))
 
     assert sorted(calendars) == ["fx-24x5@1"]
     assert capsys.readouterr().err.splitlines() == [

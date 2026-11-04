@@ -45,8 +45,7 @@ from qmf.venue.proto import SPOTWARE_PROTO_PACKAGE, CompiledProto
 T = TypeVar("T")
 
 _RELEASE_91 = (
-    Path(__file__).resolve().parents[3]
-    / "qmx-agents/packages/qmx-broker/src/qmx_broker/protocol/openapi-91.pb"
+    Path(__file__).resolve().parents[1] / "src/qmf/venue/protocol/openapi-91.pb"
 )
 
 

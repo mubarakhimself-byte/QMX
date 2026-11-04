@@ -1071,6 +1071,10 @@ source = { virtual = "." }
 dependencies = [
     { name = "fastmcp" },
     { name = "qmb" },
+    { name = "qmf-calendar-cme" },
+    { name = "qmf-calendar-crypto247" },
+    { name = "qmf-calendar-forex" },
+    { name = "qmf-calendar-indices" },
     { name = "qmf-core" },
     { name = "qmf-data" },
     { name = "qmf-indicators" },
@@ -1084,6 +1088,10 @@ dependencies = [
 requires-dist = [
     { name = "fastmcp", specifier = "==4.0.11" },
     { name = "qmb", editable = "../../../qmb" },
+    { name = "qmf-calendar-cme", editable = "../../../extensions/qmf-calendar-cme" },
+    { name = "qmf-calendar-crypto247", editable = "../../../extensions/qmf-calendar-crypto247" },
+    { name = "qmf-calendar-forex", editable = "../../../extensions/qmf-calendar-forex" },
+    { name = "qmf-calendar-indices", editable = "../../../extensions/qmf-calendar-indices" },
     { name = "qmf-core", editable = "../../../packages/qmf-core" },
     { name = "qmf-data", editable = "../../../packages/qmf-data" },
     { name = "qmf-indicators", editable = "../../../packages/qmf-indicators" },
@@ -1092,6 +1100,36 @@ requires-dist = [
     { name = "qmf-structure", editable = "../../../packages/qmf-structure" },
     { name = "qml", editable = "../../../qml" },
 ]
+
+[[package]]
+name = "qmf-calendar-cme"
+version = "0.1.0"
+source = { editable = "../../../extensions/qmf-calendar-cme" }
+
+[[package]]
+name = "qmf-calendar-crypto247"
+version = "0.1.0"
+source = { editable = "../../../extensions/qmf-calendar-crypto247" }
+
+[[package]]
+name = "qmf-calendar-forex"
+version = "0.1.0"
+source = { editable = "../../../extensions/qmf-calendar-forex" }
+dependencies = [
+    { name = "qmf-core" },
+    { name = "tzdata" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "qmf-core", editable = "../../../packages/qmf-core" },
+    { name = "tzdata", specifier = "==2025.2" },
+]
+
+[[package]]
+name = "qmf-calendar-indices"
+version = "0.1.0"
+source = { editable = "../../../extensions/qmf-calendar-indices" }
 
 [[package]]
 name = "qmf-core"

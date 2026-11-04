@@ -14,6 +14,7 @@ from contextlib import AbstractAsyncContextManager, asynccontextmanager, closing
 from pathlib import Path
 from typing import IO, Any, Final, Protocol, cast
 
+import qmf.venue as venue_package
 from qmf.core import is_refusal
 from qmf.venue.proto import CompiledProto, compile_descriptor_set
 from qmx_home import Layout
@@ -60,7 +61,7 @@ type AdapterFactory = Callable[
     [Broker, Connection, Account], AbstractAsyncContextManager[ReadAdapter]
 ]
 
-PROTOCOL_SET: Final = Path(__file__).parent / "protocol" / "openapi-91.pb"
+PROTOCOL_SET: Final = Path(venue_package.__file__).resolve().parent / "protocol" / "openapi-91.pb"
 """Spotware's Open API FileDescriptorSet at release tag 91, under the MIT licence beside it."""
 PROTOCOL_TAG: Final = 91
 REFRESH_LOCK: Final = "ctrader-refresh.lock"
