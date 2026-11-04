@@ -101,8 +101,11 @@ def test_a_pause_at_one_market_reads_paused_at_that_market(tmp_path: Path) -> No
 
 def stale_feed(node: Rig, market: str) -> None:
     """The stand-down watch reads a binding whose feed on ``market`` last quoted 130 s ago."""
-    quote = SimpleNamespace(receive_time=node.now[0] - 130_000_000_000)
-    feed = SimpleNamespace(ready=True, reason="", markets=(market,), quote=lambda _market: quote)
+
+    def quote(_market: str) -> SimpleNamespace:
+        return SimpleNamespace(receive_time=node.now[0] - 130_000_000_000)
+
+    feed = SimpleNamespace(ready=True, reason="", markets=(market,), quote=quote)
     node.runtime.stand_downs.watch_feed(ACCOUNT, cast("Any", feed))
 
 
