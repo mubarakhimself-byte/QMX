@@ -126,4 +126,6 @@ def test_the_definitions_file_is_the_pinned_one_in_the_venue_package() -> None:
     held = ROOT / "packages/qmf-venue/src/qmf/venue/protocol/openapi-91.pb"
 
     assert hashlib.sha256(held.read_bytes()).hexdigest() == RELEASE_91_SHA256
-    assert not (ROOT / "qmx-agents/packages/qmx-broker/src/qmx_broker/protocol/openapi-91.pb").exists()
+    assert not (
+        ROOT / "qmx-agents/packages/qmx-broker/src/qmx_broker/protocol/openapi-91.pb"
+    ).exists()
