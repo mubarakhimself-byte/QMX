@@ -329,7 +329,7 @@ def deployment(data: Path, placement: Mapping[str, object] | None) -> dict[str, 
         },
         "files": files,
         "starting": {"source": "defaults", "values": {}},
-        "markets": [],
+        "markets": [{"market_id": market} for market in MARKETS],
         "account": {"id": ACCOUNT, "version": 1, "fingerprint": None},
         "snapshots": [
             json.loads((RECORDS / f"{symbol}.json").read_text("utf-8"))

@@ -110,22 +110,29 @@ def errors(owner: Supervisor) -> object:
     return cast(Document, owner.status(APP)["metrics"])["errors"]
 
 
-def test_every_operation_answers_inside_two_seconds_with_no_errors(supervisor: Supervisor) -> None:
+def deployment_on(supervisor: Supervisor, deployment_id: str, account: str) -> Document:
+    """A deployment this node keeps, so its account is a scope the node holds."""
     state, _ = ask(supervisor, "status", {})
     tag = cast(Document, cast(Document, state["value"])["identity"])["tag"]
-    deployment: Document = {
+    return {
         "schema_version": "qmx.node.deployment/1",
-        "deployment_id": "dep-1",
+        "deployment_id": deployment_id,
         "node": {"tag": tag},
         "unit": {"id": "dummy", "version": 1},
-        "unit_document": {},
+        "unit_document": {"markets": [{"market_id": "fx.eurusd"}]},
+        "markets": [{"market_id": "fx.eurusd"}],
+        "starting": {"source": "defaults", "values": {}},
         "compiled_fingerprint": "fp1:sha256:" + "a" * 64,
         "g_record": {"compiled_fingerprint": "fp1:sha256:" + "a" * 64},
         "files": [],
-        "account": {"id": "demo-1"},
+        "account": {"id": account},
         "snapshots": [],
         "lane": "paper",
     }
+
+
+def test_every_operation_answers_inside_two_seconds_with_no_errors(supervisor: Supervisor) -> None:
+    deployment = deployment_on(supervisor, "dep-1", "demo-1")
     good: dict[str, Document] = {**GOOD, "deploy": {"deployment": deployment}}
     answered: dict[str, list[object]] = {}
     slowest = 0.0
@@ -166,6 +173,7 @@ def test_every_operation_answers_inside_two_seconds_with_no_errors(supervisor: S
 def test_the_node_reads_ready_with_no_units_and_declares_every_operation_and_no_job(
     supervisor: Supervisor,
 ) -> None:
+    ask(supervisor, "resume", {"scope": "all"})
     state, _ = ask(supervisor, "status", {})
     manifest = Definition.load(APP_FOLDER).manifest
 
@@ -215,6 +223,10 @@ def test_the_node_reads_ready_with_no_units_and_declares_every_operation_and_no_
 
 def test_an_older_pause_is_superseded_while_an_older_kill_applies(supervisor: Supervisor) -> None:
     scope: Document = {"account": "demo-order"}
+    kept, _ = ask(
+        supervisor, "deploy", {"deployment": deployment_on(supervisor, "dep-order", "demo-order")}
+    )
+    assert kept["ok"] is True, kept
     resumed, _ = ask(
         supervisor,
         "resume",
@@ -243,7 +255,7 @@ def test_an_older_pause_is_superseded_while_an_older_kill_applies(supervisor: Su
 
 
 def test_a_direct_call_without_an_op_id_gets_one_minted(supervisor: Supervisor) -> None:
-    answer, _ = ask(supervisor, "flatten", {"scope": {"account": "demo-9"}})
+    answer, _ = ask(supervisor, "flatten", {"scope": "all"})
 
     assert answer["value"] == {"state": "accepted", "positions": 0}
     assert re.fullmatch(r"[0-9a-f]{32}", str(answer["op_id"]))
