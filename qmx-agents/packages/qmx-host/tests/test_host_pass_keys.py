@@ -11,6 +11,7 @@ import base64
 import hashlib
 import hmac
 import json
+import os
 import shutil
 from collections.abc import Mapping
 from pathlib import Path
@@ -80,13 +81,16 @@ def ask(host: TestClient, token: str) -> tuple[int, str, str]:
 
 def paired(root: Path, place: str) -> str:
     """Pair `place` from This PC: the PC keeps the key, and the server's `host-keys` is the
-    pairing script's heredoc, so the key rides no command line."""
+    pairing script's heredoc, owner-only as the script writes it, so the key rides no command
+    line."""
     key = pair_place(root / "pc", place)
     command, written = pass_key_script(key).split("<<'QMXIN'\n", 1)
     assert key not in command
     vault = root / place / "vault"
     vault.mkdir(parents=True, exist_ok=True)
-    (vault / HOST_KEYS).write_text(written.removesuffix("QMXIN\n"), encoding="utf-8")
+    handle = os.open(vault / HOST_KEYS, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(handle, "w", encoding="utf-8") as out:
+        out.write(written.removesuffix("QMXIN\n"))
     return key
 
 
