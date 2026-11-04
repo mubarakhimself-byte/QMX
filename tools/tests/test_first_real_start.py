@@ -32,7 +32,10 @@ LINES = (
 )
 DEPLOYMENT = "dep-1"
 TAG = "abcd1234"
-CHECKS_OK = [{"name": name, "ok": True, "value": None} for name in script.PASSPORT_CHECKS]
+SETUP_CHECKS = [
+    {"name": "clock band", "ok": False, "value": "warn"},
+    {"name": "disk", "ok": True, "value": 70355161088},
+]
 
 
 @dataclass
@@ -118,7 +121,7 @@ class FakeHost:
             needs = {"card": "sign-in", "line": "sign in"}
         (self.home / "data").mkdir(exist_ok=True)
         (self.home / script.PASSPORT).write_text(
-            json.dumps({"checks": [*self.node_checks, *CHECKS_OK[5:]]}), "utf-8"
+            json.dumps({"checks": [*self.node_checks, *SETUP_CHECKS]}), "utf-8"
         )
         return {
             "id": "job-1",
@@ -167,7 +170,7 @@ class FakeHost:
                     "ok": True,
                     "value": {"entry": "1.08012", "stop": "1.07512", "exit": "1.08"},
                 }
-                for name in script.PASSPORT_CHECKS[:5]
+                for name in script.SELF_TEST_CHECKS
             ]
             self.order_rows += 3 if self.harvest else 0
             return {"ok": True, "value": {"state": "accepted"}}
@@ -179,8 +182,8 @@ class FakeHost:
 
     def _card(self, series: str) -> tuple[int, Any]:
         rows = {
-            f"journal-node/{TAG}/order/-": self.order_rows,
-            f"journal-node/{TAG}/node_lifecycle/-": self.lifecycle_rows,
+            f"journal-node/{TAG}/order/demo.pc": self.order_rows,
+            f"journal-node/{TAG}/node_lifecycle/demo.pc": self.lifecycle_rows,
         }.get(series, 0)
         if not rows:
             return 404, {"detail": "no series is stored under this name"}
@@ -293,6 +296,10 @@ def test_a_healthy_rehearsal_prints_one_pass_per_fact_in_order_and_exits_0(
         "PASS test trade with its stop placed, seen and closed: "
         "entry 1.08012, stop 1.07512, exit 1.08"
     )
+    assert said(out, LINES[4]) == (
+        "PASS passport landed: 5 self-test checks ok, clock band warn; "
+        "records: account 4401, 4 landed on main, 0 unchanged"
+    )
     assert "METRIC seconds end to end: " in out
 
 
@@ -367,20 +374,21 @@ def test_a_refused_promote_says_why_and_what_to_do(
 def test_a_passport_with_a_bad_check_names_it(rig: Rig, capsys: pytest.CaptureFixture[str]) -> None:
     original = rig.host._job
 
-    def clock_off(body: Any) -> dict[str, object]:
+    def feed_stale(body: Any) -> dict[str, object]:
         job = original(body)
         path = rig.home / script.PASSPORT
         held = json.loads(path.read_text("utf-8"))
         held["checks"] = [
-            {**row, "ok": False} if row["name"] == "clock band" else row for row in held["checks"]
+            {**row, "ok": False} if row["name"] == "feed freshness" else row
+            for row in held["checks"]
         ]
         path.write_text(json.dumps(held), "utf-8")
         return job
 
-    rig.host._job = clock_off  # type: ignore[method-assign]
+    rig.host._job = feed_stale  # type: ignore[method-assign]
     assert rig.rehearse() == 1
     assert said(capsys.readouterr().out, LINES[4]) == (
-        "FAIL passport landed: the passport landed and these checks are not ok: clock band"
+        "FAIL passport landed: the passport landed and these checks are not ok: feed freshness"
     )
 
 

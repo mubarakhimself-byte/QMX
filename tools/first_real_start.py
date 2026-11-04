@@ -55,15 +55,15 @@ RECEIVER: Final = ("127.0.0.1", 47613)
 """The node's sign-in redirect (`qmn.app.grants.REDIRECT`), where cTrader sends the one code."""
 DUMMY: Final = "dummy-trend-pullback"
 TEST_TRADE: Final = "demo test trade with its stop placed, observed and closed"
-PASSPORT_CHECKS: Final = (
+SELF_TEST_CHECKS: Final = (
     "broker session",
     "feed freshness",
     TEST_TRADE,
     "kill-switch latency",
     "image digest",
-    "clock band",
-    "disk",
 )
+"""`connect_node.SELF_TEST_CHECKS`: the ones the passport line asks of. The setup's clock band and
+disk are only said beside them, because a clock a little off warns and does not stop the node."""
 READY_WORDS: Final = frozenset({"Ready", "Trading"})
 SIGNED_OUT: Final = frozenset({"signed_out", "expired"})
 HARVEST_GRACE_S: Final = 60.0
@@ -72,6 +72,8 @@ SCRIPT: Final = "tools/first_real_start.py"
 CONNECT_ROUNDS: Final = 5
 """A run answers at most his app card, his signature, and ends on the sign-in card."""
 POLL_S: Final = 1.0
+JOURNAL_VARIANT: Final = "demo.pc"
+"""The practice node's journal world and machine on This PC, as its series keys name them."""
 
 Json: TypeAlias = dict[str, Any]
 
@@ -326,9 +328,9 @@ def _sign_in(world: World) -> list[Json] | str:
 
 
 def _account_to_bind(listed: Sequence[Json], named: str | None) -> str | None:
-    demo = [str(row["account"]) for row in listed if row.get("is_live") is False]
     if named is not None:
-        return named if named in demo else None
+        return named
+    demo = [str(row["account"]) for row in listed if row.get("is_live") is False]
     return demo[0] if len(demo) == 1 else None
 
 
@@ -355,6 +357,8 @@ def _session(world: World) -> tuple[bool, str]:
         if chosen is None:
             names = [str(item.get("account")) for item in listed]
             return False, f"name one demo account with --account; cTrader lists {names}"
+        if not chosen.isdigit():
+            return False, f"--account is cTrader's account number, not {chosen}"
         bind = world.node(
             "bind",
             op_id=f"first-start-bind-{chosen}",
@@ -379,7 +383,7 @@ def _session(world: World) -> tuple[bool, str]:
 
 def _rows(world: World, kind: str) -> tuple[int, str]:
     """The rows and the open month of one node journal kind in This PC's store."""
-    series = f"journal-node/{world.tag}/{kind}/-"
+    series = f"journal-node/{world.tag}/{kind}/{JOURNAL_VARIANT}"
     card = world.host.rest("GET", "/api/data/card", query={"series": series})
     if not card.ok:
         return 0, ""
@@ -428,11 +432,18 @@ def _passport(world: World) -> tuple[bool, str]:
         held = cast(Json, json.loads(path.read_text("utf-8")))
     except (OSError, ValueError):
         return False, f"{path} did not land"
-    checks = {str(row.get("name")): row.get("ok") for row in held.get("checks") or []}
-    wrong = [name for name in PASSPORT_CHECKS if checks.get(name) is not True]
+    rows = cast("list[Json]", held.get("checks") or [])
+    checks = {str(row.get("name")): row for row in rows}
+    wrong = [
+        name
+        for name in SELF_TEST_CHECKS
+        if cast(Json, checks.get(name) or {}).get("ok") is not True
+    ]
     if wrong:
         return False, f"the passport landed and these checks are not ok: {', '.join(wrong)}"
-    return True, f"{len(checks)} checks ok; {'; '.join(world.extras) or 'records already on main'}"
+    band = cast(Json, checks.get("clock band") or {}).get("value")
+    records = "; ".join(world.extras) or "records already on main"
+    return True, f"{len(SELF_TEST_CHECKS)} self-test checks ok, clock band {band}; {records}"
 
 
 def _dummy_version(world: World) -> str | None:
