@@ -96,9 +96,9 @@ def test_a_direct_call_gets_an_op_id_and_a_repeated_op_id_answers_its_first_answ
 ) -> None:
     node = node_in(tmp_path)
 
-    minted = node.call("pause", {"scope": {"account": "demo-1"}})
-    first = node.call("pause", {"op_id": "op-1", "scope": {"account": "demo-1"}})
-    repeat = node.call("pause", {"op_id": "op-1", "scope": {"account": "demo-1"}})
+    minted = node.call("pause", {"scope": "all"})
+    first = node.call("pause", {"op_id": "op-1", "scope": "all"})
+    repeat = node.call("pause", {"op_id": "op-1", "scope": "all"})
 
     op_id = minted["op_id"]
     assert isinstance(op_id, str) and len(op_id) == 32
@@ -109,7 +109,7 @@ def test_a_direct_call_gets_an_op_id_and_a_repeated_op_id_answers_its_first_answ
             (op_id, "pause", "arrival", "accepted"),
             ("op-1", "pause", "arrival", "accepted"),
         ]
-    assert value(node.call("status", {}))["pauses"] == ["account:demo-1"]
+    assert value(node.call("status", {}))["pauses"] == ["all"]
 
 
 def test_a_kill_under_a_pause_op_id_is_refused_as_reused_and_a_fresh_op_id_kill_applies(
@@ -119,7 +119,6 @@ def test_a_kill_under_a_pause_op_id_is_refused_as_reused_and_a_fresh_op_id_kill_
     node.call("pause", {"op_id": "op-1", "scope": "all"})
 
     reused = node.call("kill", {"op_id": "op-1", "scope": "all", "level": "BLACK"})
-    other_scope = node.call("pause", {"op_id": "op-1", "scope": {"account": "demo-1"}})
     killed = node.call("kill", {"op_id": "op-2", "scope": "all", "level": "BLACK"})
 
     assert reused == {
@@ -129,7 +128,6 @@ def test_a_kill_under_a_pause_op_id_is_refused_as_reused_and_a_fresh_op_id_kill_
         "next_step": "Send this change again under a new op id.",
         "op_id": "op-1",
     }
-    assert other_scope["code"] == "op_id_reused"
     assert killed == {"ok": True, "value": {"level_in_force": "BLACK"}, "op_id": "op-2"}
     assert value(node.call("status", {}))["kill_level"] == "BLACK"
 

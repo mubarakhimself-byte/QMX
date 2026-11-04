@@ -86,6 +86,7 @@ from qmf.core import (
     is_refusal,
 )
 from qmf.data.journal_envelope import JournalStream, JournalWorld, RowFacts
+from qmf.data.journal_reader import JournalLine, read_committed, stream_folders
 from qmf.data.journal_writer import JournalWriter, WriterScope
 from qmf.risk.paper import ExecutionTarget
 from qmf.risk.unit_intent import (
@@ -112,7 +113,7 @@ from qmn.app import paper_lane
 from qmn.app.attribution import OrderState, ReadBack, VenueOrder, VenuePosition
 from qmn.app.feed_keeper import Bar, FeedKeeper
 from qmn.app.healing import Healer, StuckWatch
-from qmn.app.operations import Answer, Context, Target, refused
+from qmn.app.operations import Answer, Context, Target, cleared_by, refused, same_market
 from qmn.app.reconciler import Found, Ours, Reconciler
 from qmn.app.stand_down import (
     REPEATED_FAULT_RESTARTS,
@@ -122,7 +123,7 @@ from qmn.app.stand_down import (
     Subject,
     restored,
 )
-from qmn.app.store import Json
+from qmn.app.store import Change, Json, Outcome
 from qmn.journal_dispatch import enact_command
 from qmn.loop.accumulator import RecordingAccumulator
 from qmn.loop.driver import CommandStreamLoop
@@ -1763,6 +1764,25 @@ def deployment_records(deployment: Deployment) -> dict[str, InstrumentRecord] | 
     return found
 
 
+def journalled_resumes(root: Path) -> set[str]:
+    """The op id of each resume the node journal already holds a row for, so a restart lands no
+    second row and still lands the row of a resume it missed. A folder the volume refuses reads
+    as holding none: a repeated row is better than a resume nobody can see."""
+    found: set[str] = set()
+    for folder in stream_folders(root):
+        if not folder.name.startswith(f"{JournalStream.NODE.source}.kill_level."):
+            continue
+        lines = read_committed(folder)
+        if is_refusal(lines):
+            continue
+        for line in lines.value:
+            if isinstance(line, JournalLine):
+                body = cast("Mapping[str, object]", line.record.get("body", {}))
+                if isinstance(body.get("op_id"), str):
+                    found.add(str(body["op_id"]))
+    return found
+
+
 class Runtime:
     """The node's runtime thread over its store, its journal and its venue bindings."""
 
@@ -1795,6 +1815,7 @@ class Runtime:
         self.hosted: dict[str, _Hosted] = {}
         self.alarms: list[Mapping[str, object]] = []
         self.applied: dict[str, KsaLevel] = {}
+        self._resumes_seen = journalled_resumes(context.journal_root)
         self._paths: dict[str, OrderPath] = {}
         self._compiler = ThreadPoolExecutor(max_workers=1, thread_name_prefix="node-compile")
         self._wake = threading.Event()
@@ -2011,6 +2032,7 @@ class Runtime:
             self._observe()
             return
         self._protect(self._kill(target))
+        self._journal_resumes(accepted)
         self._deployments(target)
         faulted = self._repeated_fault()
         self.stand_downs.resumes(accepted)
@@ -2120,6 +2142,34 @@ class Runtime:
             )
         return tried
 
+    def _journal_resumes(self, accepted: Sequence[Change]) -> None:
+        """One ``kill_level`` row per resume he sent, beside the rises, naming the kills it
+        cleared. It is keyed by its op id and read back at start, so it lands once across a
+        restart, and a row the journal refuses is tried again on the next tick."""
+        for index, change in enumerate(accepted):
+            if (
+                change.kind != "resume"
+                or change.outcome is not Outcome.ACCEPTED
+                or change.op_id in self._resumes_seen
+            ):
+                continue
+            scope = str(change.args["scope"])
+            before = Target.fold(accepted[:index])
+            named = same_market(before.deployments, scope)
+            body: dict[str, object] = {
+                "scope": scope,
+                **PLACEHOLDER_KILL_EFFECTS[KsaLevel.GREEN].document(),
+                "positions_closed": 0,
+                "resting_entries_cancelled": 0,
+                "op_id": change.op_id,
+                "cleared": sorted(cleared_by(before.kills, scope, named)),
+            }
+            written = self.journal.append(
+                "kill_level", body, RowFacts(ts_recv=self.clock_ns(), clock_ok=False)
+            )
+            if not is_refusal(written):
+                self._resumes_seen.add(change.op_id)
+
     def _enact(self, scope: str, effect: KillEffect, tried: set[str]) -> int:
         if not (effect.close_positions or effect.close_all_and_pause):
             return 0
@@ -2203,6 +2253,7 @@ class Runtime:
                     "all",
                     f"account:{hosted.deployment.account_id}",
                     f"instrument:{market}",
+                    *(hosted.unit.instrument_scopes(market) if hosted.unit else ()),
                     f"unit:{hosted.deployment.deployment_id}:{market}",
                 )
             )
@@ -2225,8 +2276,9 @@ class Runtime:
 
     def stand_down(self, kind: Kind, scope: str, cause: str) -> bool:
         """Hold a stand-down that waits for him (a repeated fault, a spec change) at ``scope``;
-        True when it was not already held."""
-        return self.stand_downs.hold(kind, scope, cause, covers=(scope,))
+        True when it was not already held. His resume reaches it by either name of its market."""
+        deployments = Target.fold(self.context.store.accepted()).deployments
+        return self.stand_downs.hold(kind, scope, cause, covers=same_market(deployments, scope))
 
     def risk_stop(self, deployment_id: str, market_id: str, rule: str, reason: str) -> str | None:
         """A risk rule stops a hosted unit on one market (standing order 7): one ``lifecycle``
@@ -2472,6 +2524,12 @@ class Runtime:
 
     # --- what he sees ---
 
+    def _unit_level(self, hosted: _Hosted) -> KsaLevel:
+        """The highest kill level over the unit: its deployment, its account, each market."""
+        markets = (None,) if hosted.unit is None else (None, *hosted.unit.records)
+        levels = [self.level_for(hosted, market)[0] for market in markets]
+        return max(levels, key=LEVEL_RANK.__getitem__)
+
     def _observe(self) -> None:
         deployments: dict[str, object] = {}
         units: list[object] = []
@@ -2496,7 +2554,7 @@ class Runtime:
                         "seen": min(unit.warm_seen, unit.warm_needed),
                         "needed": unit.warm_needed,
                     },
-                    "kill_level": self.level_for(hosted)[0].value,
+                    "kill_level": self._unit_level(hosted).value,
                 }
             )
             if unit is not None:

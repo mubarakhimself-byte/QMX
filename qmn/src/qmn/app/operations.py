@@ -35,6 +35,7 @@ from qmf.data.journal_envelope import JournalStream
 from qmf.data.journal_reader import JournalLine, stream_folders
 
 from qmn.app.identity import Standing
+from qmn.app.stand_down import Clears, Word
 from qmn.app.store import Change, Desired, Json, Outcome, Store
 from qmn.protection.ksa import LEVEL_RANK, KsaLevel
 
@@ -79,13 +80,20 @@ _CHANGE_KEYS: Final = frozenset({"op_id", "issued_at"})
 
 
 class BadArgumentError(Exception):
-    """An argument the operation cannot take; answered with its ``code``."""
+    """An argument the operation cannot take; answered with its ``code`` and ``value``."""
 
     code = "bad_argument"
+    value: Json = None
 
 
-class UnknownInstrumentError(BadArgumentError):
-    code = "unknown_instrument"
+class UnknownScopeError(BadArgumentError):
+    """A scope the node holds nothing at, answered with every scope it does hold."""
+
+    code = "unknown_scope"
+
+    def __init__(self, name: str, item: str, held: Sequence[str]) -> None:
+        super().__init__(f"this node holds no {name} {item}; it holds {', '.join(held)}")
+        self.value: Json = list(held)
 
 
 class VenueDoor(Protocol):
@@ -233,42 +241,110 @@ def _table(arguments: Mapping[str, Json], name: str) -> dict[str, Json]:
 def _scope(arguments: Mapping[str, Json], context: Context) -> str:
     """A scope key: ``all``, or ``account:<id>``, ``deployment_id:<id>``, ``instrument:<id>``.
 
-    An instrument is named by a market id or a symbol a deployment on this node trades; any
-    other answers ``unknown_instrument``, so a kill is never accepted at a scope that holds
-    nothing."""
+    Any scope but ``all`` must be one the node holds; any other answers ``unknown_scope`` with
+    those it does, so a kill is never accepted at a scope that holds nothing."""
     value = arguments.get("scope")
     if value in ("all", {"all": True}):
         return "all"
     if isinstance(value, dict) and len(value) == 1:
         (name, item), *_ = value.items()
         if name in _SCOPES and isinstance(item, str) and item.strip():
-            if name == "instrument" and item not in _traded(context):
-                raise UnknownInstrumentError(
-                    f"no deployment on this node trades instrument {item}; name it by a"
-                    " market id or symbol a deployment trades"
-                )
-            return f"{name}:{item}"
+            scope = f"{name}:{item}"
+            held = _held_scopes(context)
+            if scope not in held:
+                raise UnknownScopeError(name, item, held)
+            return scope
     raise BadArgumentError(
         'scope is "all" or one of {"account": id}, {"deployment_id": id}, {"instrument": id}'
     )
 
 
-def _traded(context: Context) -> frozenset[str]:
-    """Each market id and symbol of every deployment kept on this node, withdrawn or not."""
-    found: set[str] = set()
-    for change in Target.fold(context.store.accepted()).deployments.values():
+def _held_scopes(context: Context) -> list[str]:
+    """Every scope this node holds, ``all`` first: each kept deployment, withdrawn or not, with
+    its account and both names of its markets, each account bound, and each scope a kill or a
+    pause still stands at, so his resume always reaches it."""
+    accepted = context.store.accepted()
+    target = Target.fold(accepted)
+    held: set[str] = {*target.kills, *(str(scope) for scope in target.pauses())}
+    for deployment_id, change in target.deployments.items():
+        held.add(f"deployment_id:{deployment_id}")
         document = change.args.get("document")
-        unit = document.get("unit_document") if isinstance(document, dict) else None
+        account = document.get("account") if isinstance(document, dict) else None
+        account_id = account.get("id") if isinstance(account, dict) else None
+        if isinstance(account_id, str):
+            held.add(f"account:{account_id}")
+    held.update(_market_names(target.deployments))
+    bindings = {
+        str(change.args["account"]): change.args["action"]
+        for change in accepted
+        if change.kind == "bind"
+    }
+    held.update(f"account:{name}" for name, action in bindings.items() if action == "add")
+    held.discard("all")
+    return ["all", *sorted(held)]
+
+
+@dataclass(frozen=True, slots=True)
+class TradedMarket:
+    """One market a deployment trades, by the two names a scope may use."""
+
+    deployment_id: str
+    market_id: str
+    symbol: str | None
+
+
+def traded_markets(deployments: Mapping[str, Change]) -> list[TradedMarket]:
+    """The markets his deployments chose, read from each kept document's ``markets``. The unit
+    document may hold more; those it does not name are never traded."""
+    found: list[TradedMarket] = []
+    for deployment_id, change in deployments.items():
+        document = change.args.get("document")
+        if not isinstance(document, dict):
+            continue
+        chosen = document.get("markets")
+        wanted = {
+            market.get("market_id")
+            for market in (chosen if isinstance(chosen, list) else [])
+            if isinstance(market, dict)
+        }
+        unit = document.get("unit_document")
         markets = unit.get("markets") if isinstance(unit, dict) else None
         for market in markets if isinstance(markets, list) else []:
             if not isinstance(market, dict):
                 continue
+            market_id = market.get("market_id")
+            if not isinstance(market_id, str) or market_id not in wanted:
+                continue
             ref = market.get("instrument_ref")
             symbol = ref.get("symbol") if isinstance(ref, dict) else None
-            found.update(
-                item for item in (market.get("market_id"), symbol) if isinstance(item, str)
+            found.append(
+                TradedMarket(deployment_id, market_id, symbol if isinstance(symbol, str) else None)
             )
-    return frozenset(found)
+    return found
+
+
+def _market_names(deployments: Mapping[str, Change]) -> dict[str, str]:
+    """Each ``instrument:`` scope a deployment's market answers to, with the name he knows it by:
+    its symbol when its record gives one."""
+    names: dict[str, str] = {}
+    for market in traded_markets(deployments):
+        shown = market.symbol or market.market_id
+        names[f"instrument:{market.market_id}"] = shown
+        names[f"instrument:{shown}"] = shown
+    return names
+
+
+def same_market(deployments: Mapping[str, Change], scope: str) -> frozenset[str]:
+    """``scope`` and every scope that names the same market: a market id and its symbol are one
+    market. One step only, so two units' clashing market ids never join two real markets."""
+    named = {scope}
+    for market in traded_markets(deployments):
+        names = {f"instrument:{market.market_id}"}
+        if market.symbol is not None:
+            names.add(f"instrument:{market.symbol}")
+        if scope in names:
+            named |= names
+    return frozenset(named)
 
 
 def _issued_at(value: Json) -> int:
@@ -318,14 +394,18 @@ class Target:
                 kills[scope] = level if LEVEL_RANK[level] > LEVEL_RANK[held] else held
             elif change.kind in {"pause", "resume"}:
                 scope = str(change.args["scope"])
+                named = frozenset({scope})
                 if change.kind == "resume":
                     # His resume is the only way a kill level comes down (AD-38): it clears
-                    # the kills that arrived before it at its scope, every scope for "all".
-                    for held in [s for s in kills if scope in ("all", s)]:
+                    # the kills that arrived before it at its market by either name, every
+                    # scope for "all".
+                    named = same_market(deployments, scope)
+                    for held in cleared_by(kills, scope, named):
                         del kills[held]
-                if change.issued_at_ns >= newest_pause.get(scope, -1):
-                    newest_pause[scope] = change.issued_at_ns
-                    paused[scope] = change.kind == "pause"
+                for name in named:
+                    if change.issued_at_ns >= newest_pause.get(name, -1):
+                        newest_pause[name] = change.issued_at_ns
+                        paused[name] = change.kind == "pause"
             elif change.kind == "deploy":
                 deployments[str(change.args["deployment_id"])] = change
                 withdrawn.discard(str(change.args["deployment_id"]))
@@ -339,6 +419,11 @@ class Target:
 
     def pauses(self) -> list[Json]:
         return [scope for scope, on in sorted(self.paused.items()) if on]
+
+
+def cleared_by(kills: Mapping[str, KsaLevel], scope: str, named: frozenset[str]) -> list[str]:
+    """The kill scopes a resume at ``scope`` clears, ``named`` being its market's names."""
+    return [held for held in kills if scope == "all" or held in named]
 
 
 # --- changes ---------------------------------------------------------------------------------
@@ -641,7 +726,7 @@ def answer_change(context: Context, name: str, arguments: Mapping[str, Json]) ->
                 f" the {ISSUED_AHEAD_NS / 1e9:g} s clock skew it takes"
             )
     except BadArgumentError as error:
-        return refused(error.code, f"{name}: {error}")
+        return refused(error.code, f"{name}: {error}", value=error.value)
     # A kept op id is answered from its row by record below: nothing is checked or done again,
     # so a retried self-test never trades twice.
     fresh = context.store.change(op_id) is None and not context.standing().mismatch
@@ -709,11 +794,52 @@ def answer_change(context: Context, name: str, arguments: Mapping[str, Json]) ->
 # --- reads ------------------------------------------------------------------------------------
 
 
+_CLEARS_WHEN: Final[Mapping[str, str]] = {
+    Clears.ITSELF.value: "It clears by itself.",
+    Clears.HIS_RESUME.value: "It waits for your resume.",
+    Clears.HIS_CLICK.value: "It waits for your click on the change card.",
+}
+
+
+def _shown_names(deployments: Mapping[str, Change]) -> dict[str, str]:
+    """How each scope a deployment's market answers to reads in a sentence."""
+    names = _market_names(deployments)
+    for market in traded_markets(deployments):
+        shown = market.symbol or market.market_id
+        names[f"unit:{market.deployment_id}:{market.market_id}"] = shown
+    return names
+
+
+def _where(scope: str, names: Mapping[str, str]) -> str:
+    if scope in names:
+        return names[scope]
+    kind, _, item = scope.partition(":")
+    word = {"deployment_id": "deployment"}.get(kind, kind)
+    return f"{word} {item}" if item else scope
+
+
+def _paused_headline(kills: Sequence[str], pauses: Sequence[str], names: Mapping[str, str]) -> str:
+    """The word "Paused" read out: where the kills hold, or else where the pauses do."""
+    if "all" in kills or "all" in pauses:
+        return "Paused"
+    if kills:
+        return f"Killed at {', '.join(_where(scope, names) for scope in kills)}"
+    return f"Paused at {', '.join(_where(scope, names) for scope in pauses)}"
+
+
+def _stand_down_reason(held: Mapping[str, Json], names: Mapping[str, str]) -> str:
+    scope = str(held["scope"])
+    where = "" if scope == "all" else f" on {_where(scope, names)}"
+    return f"{held['word']}{where}: {held['cause']}. {_CLEARS_WHEN[str(held['clears'])]}"
+
+
 def _status(context: Context, arguments: Mapping[str, Json]) -> Answer:
     _known(arguments, frozenset())
     standing = context.standing()
     target = Target.fold(context.store.accepted())
-    level = target.level_at("all")
+    kills = {scope: held for scope, held in target.kills.items() if held is not KsaLevel.GREEN}
+    level = max(kills.values(), key=LEVEL_RANK.__getitem__, default=KsaLevel.GREEN)
+    names = _shown_names(target.deployments)
     journal_problem = context.store.observed("journal_problem")
     last_write = context.store.observed("journal_write")
     written = last_write if isinstance(last_write, int) else None
@@ -728,35 +854,47 @@ def _status(context: Context, arguments: Mapping[str, Json]) -> Answer:
     units = _observed_list(context, "runtime.units")
     states = [str(cast(dict[str, Json], unit).get("state")) for unit in units]
     trading = states.count("trading")
-    faulted = [
-        cast(dict[str, Json], held)
-        for held in _observed_list(context, "runtime.stand_downs")
-        if cast(dict[str, Json], held).get("stand_down") == "repeated_fault"
+    # A feed the node keeps for a market no deployment trades, such as the self-test's, stops
+    # nothing he asked for, so it does not read here.
+    holding = [
+        held
+        for held in cast("list[dict[str, Json]]", _observed_list(context, "runtime.stand_downs"))
+        if not str(held.get("scope")).startswith("instrument:") or held.get("scope") in names
     ]
-    reasons.extend(
-        f"{held['word']}: {held['cause']}. It waits for your resume." for held in faulted
-    )
+    health = [held for held in holding if held.get("word") == Word.HEALTH.value]
+    risk = [held for held in holding if held.get("word") == Word.RISK.value]
+    reasons.extend(_stand_down_reason(held, names) for held in holding)
     healing = context.store.observed("runtime.healing")
     if isinstance(healing, dict):
         reasons.append(f"Healing after {healing.get('why')}: restart {healing.get('restart')}.")
-    if standing.mismatch or journal_problem is not None or faulted:
+    pauses = target.pauses()
+    if standing.mismatch or journal_problem is not None or health:
         word = "Stopped by a health check"
     elif isinstance(healing, dict):
         word = "Healing"
-    elif level is not KsaLevel.GREEN or target.paused.get("all"):
+    elif risk:
+        word = Word.RISK.value
+    elif kills or pauses:
         word = "Paused"
     elif trading:
         word = "Trading"
     else:
         word = "Ready"
-    if level is not KsaLevel.GREEN:
-        reasons.append(f"The kill switch is at {level.value} for all.")
-    reasons.extend(f"Paused at {scope}." for scope in target.pauses())
+    reasons.extend(
+        f"The kill switch is at {held.value} for {_where(scope, names)}."
+        for scope, held in kills.items()
+    )
+    reasons.extend(f"Paused at {scope}." for scope in pauses)
     reasons.extend(context.calendar_notes())
     if word == "Trading":
         headline = f"Trading, {trading} unit{'' if trading == 1 else 's'}"
     elif word == "Ready" and all(state in {"refused", "stopped"} for state in states):
         headline = "Ready, no units yet"
+    elif word == Word.RISK.value:
+        stopped = ", ".join(_where(str(held["scope"]), names) for held in risk)
+        headline = f"Paused, risk stop on {stopped}"
+    elif word == "Paused":
+        headline = _paused_headline(list(kills), [str(scope) for scope in pauses], names)
     else:
         headline = word
     observed_venues = _observed_list(context, "runtime.venues")
@@ -780,7 +918,7 @@ def _status(context: Context, arguments: Mapping[str, Json]) -> Answer:
             "kill_level": level.value,
             "kill_effects": context.store.observed("runtime.kill"),
             "alarms": context.store.observed("runtime.alarms"),
-            "pauses": target.pauses(),
+            "pauses": pauses,
             "safe_to_restart": context.store.observed("runtime.safe_to_restart")
             or {"ok": True, "reasons": []},
             "heals": _observed_list(context, "runtime.heals"),

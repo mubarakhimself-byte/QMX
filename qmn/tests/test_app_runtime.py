@@ -178,7 +178,10 @@ def deployment(
         "g_record": {"id": "g-test-report", "version": 1, "compiled_fingerprint": tested},
         "files": files,
         "starting": {"source": "defaults", "values": {}},
-        "markets": [],
+        "markets": [
+            {"market_id": market, "instrument": {"id": symbol, "version": 1, "fingerprint": None}}
+            for market, symbol in MARKETS.items()
+        ],
         "account": {"id": ACCOUNT, "version": 1, "fingerprint": None},
         "snapshots": [
             cast("Json", json.loads((RECORDS / f"{symbol}.json").read_text("utf-8")))
