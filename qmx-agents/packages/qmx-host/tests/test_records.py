@@ -195,7 +195,7 @@ def pull(
         tmp_path / "pc" / "records",
         here="pc",
         places=lambda: places,
-        pass_keys=lambda: {FAR: far.key},
+        pass_keys=lambda: {FAR: far.key, DOWN: far.key},
         post=far.post if post is None else post,
         fetch=far.fetch if fetch is None else fetch,
     )
