@@ -1265,6 +1265,32 @@ def test_at_the_live_stage_the_node_opens_its_door_with_its_own_grant_store(
     assert len(read) == 1 and len(read[0]) == 8
 
 
+def test_a_conformance_binding_keeps_its_grant_in_the_volume_and_never_in_the_machines_store(
+    environment: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    read: list[str] = []
+
+    def machine_store(data: Path, tag: str) -> Memory:
+        read.append(tag)
+        return Memory()
+
+    monkeypatch.setattr(server, "grant_store_for", machine_store)
+    os.environ["QMX_STAGE"] = "live"
+    (environment / "data" / "venues").mkdir()
+    (environment / "data" / "venues" / "endpoints.json").write_text(
+        json.dumps({"host": "127.0.0.1", "port": 1, "token_url": "http://127.0.0.1:1/token"}),
+        "utf-8",
+    )
+    node = server.from_environment()
+    try:
+        store = cast(CTraderDoor, node.context.venues).grants.store
+    finally:
+        node.stop()
+
+    assert store.name == "grants/ctrader.json"
+    assert read == []
+
+
 def ctrader_session(node: Node) -> Json:
     venues = cast("list[dict[str, Json]]", value(node.call("status", {}))["venues"])
     return next(row["session"] for row in venues if row["venue"] == "ctrader")

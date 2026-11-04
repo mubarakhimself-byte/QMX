@@ -45,6 +45,7 @@ from qmn.app.grants import (
     Fetch,
     Grant,
     GrantAccount,
+    GrantFile,
     Grants,
     GrantStore,
     Registration,
@@ -956,13 +957,16 @@ def from_environment() -> Node:
 
     door: DoorFactory | None = None
     if os.environ.get("QMX_STAGE") == LIVE_STAGE:
+        where = endpoints(data)
         door = partial(
             CTraderDoor.compose,
             keys=keys,
             facts=volume / HOST_FACTS,
             clock_ns=time.time_ns,
             steady_ns=time.monotonic_ns,
-            endpoints=endpoints(data),
+            endpoints=where,
+            # A loopback fake's grant is no credential, so it stays out of the machine's store.
+            grant_store=None if where.tls else GrantFile(data / "grants" / "ctrader.json"),
         )
     node = open_node(data, here=machine_fingerprint(), machine=machine, door=door, keys=keys)
     node.start()
