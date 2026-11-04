@@ -872,7 +872,7 @@ its two lines from its input."""
 
 SIGN_WINDOW: Final = (
     "import json, sys, urllib.parse, urllib.request\n"
-    "port, token, app, definition_hash, active = sys.argv[1:]\n"
+    "port, token, app, definition_hash, active, timeout = sys.argv[1:]\n"
     "with open(token, encoding='utf-8') as held:\n"
     "    bearer = held.read().strip()\n"
     "query = {'definition_hash': definition_hash}\n"
@@ -881,7 +881,7 @@ SIGN_WINDOW: Final = (
     "url = f'http://127.0.0.1:{port}/api/apps/{app}/sign?' + urllib.parse.urlencode(query)\n"
     "request = urllib.request.Request(url, data=b'', method='POST',\n"
     "    headers={'Authorization': f'Bearer {bearer}'})\n"
-    "with urllib.request.urlopen(request, timeout=60) as answer:\n"
+    "with urllib.request.urlopen(request, timeout=float(timeout)) as answer:\n"
     "    signature = json.load(answer)['signature']\n"
     "print(f'Your signature for {app} {definition_hash[:12]} on this server:')\n"
     "print()\n"
@@ -1266,6 +1266,7 @@ def _sign_there(run: Run, asked: Unsigned) -> Card:
                 NODE_APP,
                 asked.definition_hash,
                 asked.active or "",
+                str(server_apps(run).timeout_s),
             ),
             f"QMX: sign the trading node on {run.place}",
         )
