@@ -122,7 +122,7 @@ def pair_place(home: Path, place: str) -> str:
 SERVER_KEYS_FILE: Final = f"{node.SERVER_HOME}/vault/{HOST_KEYS}"
 """A server's pass keys, This PC's alone, which its host reads per call."""
 PASS_KEY_DIGEST: Final = f"set -eu\nsha256sum {shlex.quote(SERVER_KEYS_FILE)} 2>/dev/null || true\n"
-"""What a server's `host-keys` digest is, read as root; it names no key."""
+"""The script that prints a server's `host-keys` digest, run as root. The digest names no key."""
 
 
 def server_digest(key: str) -> str:
