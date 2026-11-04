@@ -1063,6 +1063,7 @@ async def serve(
     qmx_home = QmxHome(home)
     control = control_for(role, qmx_home)
     name = placement_name(control, role, place)
+    control.place = name
     serving = role == "server"
     # Computed once, so the REST gate, the door's restamp and the Library routes share one bearer.
     bearer = qmx_control.server.local_token(home, create=True)

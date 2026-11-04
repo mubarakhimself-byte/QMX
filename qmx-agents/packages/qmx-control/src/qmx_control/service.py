@@ -886,6 +886,9 @@ class ControlService:
         self.tier = tier
         self.node = node
         self.secret_getter = secret_getter
+        self.place = "pc"
+        """This machine's place name, the home of every app its runtime supervises. A server's
+        host names it before it first asks for the runtime."""
         self.library = Library(self.home)
         self.run_index = RunIndex(self.home)
         self._aggregate = read_cache(ttl=5)(self._aggregate_read)
@@ -2001,6 +2004,7 @@ class ControlService:
                         event_sink=self._app_event,
                         secret_getter=self.secret_getter,
                     )
+                self._apps.placement = self.place
                 self._apps.attach_library(self.library.landed)
             return self._apps
 
