@@ -71,6 +71,7 @@ HOST_SECRETS: Final[Mapping[str, str]] = MappingProxyType(
         "qmx/rclone-config": "backup configuration password",
         "qmx/pairing-key": "pairing key, which signs every run pass",
         "qmx/run-pass-key": "run pass key",
+        "qmx/host-keys": "host pass keys, which sign every call between his machines",
         "qmx/openobserve-root": "deep-logs root password",
         "qmx/openobserve-ingest": "deep-logs sign-in",
         "qmx/openobserve-agent": "deep-logs sign-in",

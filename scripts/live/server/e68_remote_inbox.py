@@ -136,7 +136,7 @@ async def lane(say, check, root: Path) -> None:
         say("the provider now refuses the key on every attempt (fake 401)")
 
         app = FastAPI()
-        app.include_router(forward_router(contabo.remote(), KEY))
+        app.include_router(forward_router(contabo.remote(), lambda: {"pc": KEY}))
         server = uvicorn.Server(
             uvicorn.Config(app, host="127.0.0.1", port=0, log_level="error")
         )

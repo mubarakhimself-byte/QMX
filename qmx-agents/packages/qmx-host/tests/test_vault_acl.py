@@ -16,7 +16,7 @@ from qmx_home import resolve
 
 import qmx_host.host
 import qmx_host.vault_acl
-from qmx_host.host import pairing_key, serve_forever, vault_secrets
+from qmx_host.host import serve_forever, vault_key, vault_secrets
 from qmx_host.vault_acl import VaultRefused, owner_only
 
 windows = pytest.mark.skipif(sys.platform != "win32", reason="the vault's DACL is Windows only")
@@ -260,14 +260,13 @@ def test_the_pairing_key_reads_through_the_vault_and_a_hard_link_stops_it(
     home = tmp_path / "data"
     key = planted(home / "vault")
     owner_only(home / "vault")
-    read = pairing_key(home)
-    assert read() == FAKE
+    assert vault_key(home) == FAKE
 
     key.unlink()
     os.link(outside(tmp_path), key)
 
     with pytest.raises(VaultRefused) as refused:
-        read()
+        vault_key(home)
     assert str(refused.value) == f"the vault file pairing-key {HARD_LINK}"
 
 

@@ -147,7 +147,11 @@ def far(tmp_path: Path) -> Iterator[Far]:
     root.mkdir()
     door = MarketDoor(root=root / "market", placement=Placement.SERVER)
     link = NodeLink(
-        root, here=FAR, apps=cast("Supervisor", None), settings=dict, key=lambda: pairing
+        root,
+        here=FAR,
+        apps=cast("Supervisor", None),
+        settings=dict,
+        pass_keys=lambda: {"pc": pairing},
     )
 
     async def beats() -> Mapping[str, object]:
@@ -155,7 +159,7 @@ def far(tmp_path: Path) -> Iterator[Far]:
 
     answering = Answering(
         link,
-        key=lambda: pairing,
+        pass_keys=lambda: {"pc": pairing},
         heartbeats=beats,
         store_root=lambda: door.store_root,
         answers=Answers(root / ANSWERS),
@@ -191,7 +195,7 @@ def pull(
         tmp_path / "pc" / "records",
         here="pc",
         places=lambda: places,
-        key=lambda: far.key,
+        pass_keys=lambda: {FAR: far.key},
         post=far.post if post is None else post,
         fetch=far.fetch if fetch is None else fetch,
     )
@@ -427,13 +431,35 @@ def test_an_open_month_that_grew_while_it_waited_is_fetched_once_its_pull_is_due
     assert home_rows(tmp_path, OPEN) == (120, False, str(far.state(OPEN)["fingerprint"]))
 
 
-def listing(
-    client: TestClient, pairing: str, *, target: str, principal: str, confirmed: list[str]
+def asked(
+    client: TestClient,
+    pairing: str,
+    *,
+    source: str,
+    target: str,
+    principal: str,
+    confirmed: list[str],
 ) -> dict[str, Any]:
-    source = principal.removeprefix("host:")
     held = mint_host_pass(pairing, source=source, target=target, principal=principal)
     body = {"schema_version": SCHEMA, "verb": "data.list", "args": {"confirmed": confirmed}}
-    answer = client.post("/api/host/forward", json=body, headers={PASS_HEADER: held}).json()
+    return cast(
+        "dict[str, Any]",
+        client.post("/api/host/forward", json=body, headers={PASS_HEADER: held}).json(),
+    )
+
+
+def listing(
+    client: TestClient,
+    pairing: str,
+    *,
+    source: str = "pc",
+    target: str,
+    principal: str,
+    confirmed: list[str],
+) -> dict[str, Any]:
+    answer = asked(
+        client, pairing, source=source, target=target, principal=principal, confirmed=confirmed
+    )
     assert answer["ok"] is True
     return cast("dict[str, Any]", answer["value"])
 
@@ -442,18 +468,24 @@ def test_a_confirmed_list_from_any_principal_but_this_pcs_pull_unpins_nothing(fa
     oldest = str(far.state(CLOSED[0])["fingerprint"])
     every = tuple(f"{FAR}/{month(moment)}" for moment in (*CLOSED, OPEN))
 
-    forged = [
+    other = [
         listing(far.client, far.key, target=FAR, principal=principal, confirmed=[oldest])
-        for principal in ("host:fra-2", "operator", "run:r1")
+        for principal in ("operator", "run:r1")
     ]
+    forged = asked(
+        far.client, far.key, source="fra-2", target=FAR, principal="host:fra-2", confirmed=[oldest]
+    )
     pinned_after_forged = far.door.pinned()
     real = listing(far.client, far.key, target=FAR, principal="host:pc", confirmed=[oldest])
 
-    assert [("unpinned" in value, tuple(value["pinned"])) for value in forged] == [
-        (False, every),
+    assert [("unpinned" in value, tuple(value["pinned"])) for value in other] == [
         (False, every),
         (False, every),
     ]
+    assert (forged["code"], forged["message"]) == (
+        "bad_pass",
+        "this host holds no pass key for 'fra-2'",
+    )
     assert pinned_after_forged == every
     assert real["unpinned"] == [f"{FAR}/{month(CLOSED[0])}"]
     assert far.door.pinned() == every[1:]
@@ -465,7 +497,11 @@ def test_this_pcs_route_never_clears_a_pc_born_pin_by_data_list(tmp_path: Path) 
     commit(door, tmp_path / "pc", CLOSED[0], 30, times=2, born_on=Placement.PC)
     printed = str(state(door, CLOSED[0])["fingerprint"])
     link = NodeLink(
-        tmp_path, here="pc", apps=cast("Supervisor", None), settings=dict, key=lambda: pairing
+        tmp_path,
+        here="pc",
+        apps=cast("Supervisor", None),
+        settings=dict,
+        pass_keys=lambda: {"ldn-1": pairing},
     )
 
     async def beats() -> Mapping[str, object]:
@@ -476,7 +512,7 @@ def test_this_pcs_route_never_clears_a_pc_born_pin_by_data_list(tmp_path: Path) 
         host_router(
             Answering(
                 link,
-                key=lambda: pairing,
+                pass_keys=lambda: {"ldn-1": pairing},
                 heartbeats=beats,
                 store_root=lambda: door.store_root,
                 answers=Answers(tmp_path / ANSWERS),
@@ -486,8 +522,15 @@ def test_this_pcs_route_never_clears_a_pc_born_pin_by_data_list(tmp_path: Path) 
     )
     with TestClient(app) as client:
         answers = [
-            listing(client, pairing, target="pc", principal=principal, confirmed=[printed])
-            for principal in ("host:ldn-1", "host:pc")
+            listing(
+                client,
+                pairing,
+                source="ldn-1",
+                target="pc",
+                principal=principal,
+                confirmed=[printed],
+            )
+            for principal in ("host:ldn-1", "run:r1")
         ]
 
     pin = f"{FAR}/{month(CLOSED[0])}"

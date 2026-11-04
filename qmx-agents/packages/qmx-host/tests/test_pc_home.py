@@ -115,7 +115,7 @@ def this_pc(accounts: Accounts = view_only_demo) -> HomeSignIn:
     keys = CredentialManager()
     return HomeSignIn(
         name=lambda: "pc",
-        key=lambda: None,
+        pass_keys=dict,
         app=lambda: pc_app(keys),
         keys=keys,
         accounts=accounts,
@@ -156,7 +156,7 @@ def test_with_no_server_this_pc_signs_in_and_keeps_the_pair_once_in_credential_m
     opened: list[str] = []
     pc = PcSignIn(
         name=lambda: "pc",
-        key=lambda: None,
+        pass_keys=dict,
         resolve=lambda: target({"redirect": aim.url}, [ROW], {}, this="pc"),
         here=here,
         post=no_server,
@@ -210,7 +210,7 @@ def test_a_fresh_sign_in_on_a_place_deletes_this_pcs_pair(tmp_path: Path, vault:
     with TestClient(home_app(the_home(server))) as rest:
         pc = PcSignIn(
             name=lambda: "pc",
-            key=lambda: PAIRING,
+            pass_keys=lambda: {"contabo": PAIRING},
             resolve=lambda: Target("contabo", aim, "http://contabo.tail"),
             here=this_pc(),
             join=lambda: Joined("ok", False),
@@ -231,7 +231,7 @@ def test_a_refused_sign_in_on_a_place_keeps_this_pcs_pair(tmp_path: Path, vault:
     aim = free_redirect()
     late = HomeSignIn(
         name=lambda: "contabo",
-        key=lambda: PAIRING,
+        pass_keys=lambda: {"pc": PAIRING},
         app=lambda: AppCredential("4242_demo", "app-pass"),
         keys=HomeKeyStore(tmp_path / "server"),
         accounts=view_only_demo,
@@ -242,7 +242,7 @@ def test_a_refused_sign_in_on_a_place_keeps_this_pcs_pair(tmp_path: Path, vault:
     with TestClient(home_app(late)) as rest:
         pc = PcSignIn(
             name=lambda: "pc",
-            key=lambda: PAIRING,
+            pass_keys=lambda: {"contabo": PAIRING},
             resolve=lambda: Target("contabo", aim, "http://contabo.tail"),
             here=this_pc(),
             join=lambda: Joined("ok", False),
@@ -278,7 +278,7 @@ def test_a_grant_that_can_trade_live_money_is_refused_by_name_and_this_pc_keeps_
     aim = free_redirect()
     pc = PcSignIn(
         name=lambda: "pc",
-        key=lambda: None,
+        pass_keys=dict,
         resolve=lambda: target({"redirect": aim.url}, [ROW], {}, this="pc"),
         here=this_pc(live_capable),
         post=no_server,

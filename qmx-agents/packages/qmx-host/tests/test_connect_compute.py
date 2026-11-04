@@ -4,6 +4,7 @@ own checked steps against a fake shell, keeping copies there, and Modal and E2B 
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 import http.server
 import json
 import os
@@ -36,6 +37,7 @@ from qmx_host import connect_compute
 from qmx_host.connect import KINDS, Run, World, run_kind
 from qmx_host.connect_compute import SMOKE_FOLDER, Ports
 from qmx_host.host import remote_worker
+from qmx_host.host_route import SERVER_KEYS_FILE
 from qmx_host.jobs import Stopped
 
 REVISION = "a" * 40
@@ -63,6 +65,7 @@ class Server:
         self.running = False
         self.closed = False
         self.kill = kill
+        self.pass_digest = ""
 
     def __call__(self, command: list[str], stdin: str | None) -> str:
         line = command[-1]
@@ -92,6 +95,8 @@ class Server:
                 self.closed = True
             if SMOKE in script:
                 return self.smoke(script)
+            if SERVER_KEYS_FILE in script:
+                return self.pass_key(script)
             return ""
         if line == "systemctl is-active qmx-host":
             if not self.running:
@@ -115,12 +120,23 @@ class Server:
         del script
         return "run-smoke\n"
 
+    def pass_key(self, script: str) -> str:
+        """The server's `host-keys`: the pairing script's heredoc lands, and the read answers its
+        digest as `sha256sum` prints it."""
+        if HEREDOC in script:
+            written = script.split(HEREDOC, 1)[1].removesuffix("QMXIN\n")
+            self.pass_digest = hashlib.sha256(written.encode("utf-8")).hexdigest()
+            return ""
+        return f"{self.pass_digest}  {SERVER_KEYS_FILE}\n" if self.pass_digest else ""
+
     def scripts(self) -> list[str]:
         return [stdin or "" for command, stdin in self.sent if command[-1] == "sudo bash -s"]
 
 
 SMOKE = SMOKE_FOLDER
 """What names the smoke's script among the scripts a server is sent."""
+HEREDOC = "<<'QMXIN'\n"
+PAIRING_STEPS = ("pass-key", "pass-key held")
 
 
 class Hosted(Server):
@@ -273,6 +289,8 @@ def names(server: Server, revision: str = REVISION) -> list[str]:
             found.append("join the tailnet")
         elif SMOKE in script:
             found.append("smoke")
+        elif SERVER_KEYS_FILE in script:
+            found.append("pass-key" if HEREDOC in script else "pass-key held")
         else:
             found.append(script[:40])
     return found
@@ -305,7 +323,9 @@ def test_the_server_kind_and_qmx_node_setup_send_one_list_and_make_the_same_pc_w
 
     assert cards == ["choose", "address", "secret", "password", "firewall"]
     assert done == 0
-    assert [n for n in names(kind_server) if n != "smoke"] == names(cli_server)
+    assert [n for n in names(kind_server) if n not in ("smoke", *PAIRING_STEPS)] == names(
+        cli_server
+    )
     assert names(cli_server) == [step.name for step in node.setup_steps(REVISION, machine=PLACE)]
     kind_home = there.layout.home
     key = "vault/pairing-key"
@@ -456,7 +476,7 @@ def test_a_rerun_after_a_kill_at_any_step_sends_only_what_did_not_finish_and_wri
 
     every = [step.name for step in node.setup_steps(REVISION, machine=PLACE)]
     assert ended["needs"] is None
-    assert second == [*every[every.index(killed) :], "smoke"]
+    assert second == [*every[every.index(killed) :], "pass-key", "smoke"]
     assert list(stored(there)["engine"]["placement"]) == [PLACE]
 
 
@@ -474,7 +494,7 @@ def test_a_rerun_at_the_same_revision_does_again_a_step_undone_since_it_ran(
     ended = once(there, "server", {})
 
     assert ended["needs"] is None
-    assert names(server)[before:] == [rerun, "smoke"]
+    assert names(server)[before:] == [rerun, "pass-key held", "smoke"]
 
 
 def test_the_tailscale_key_reaches_the_server_in_a_file_and_never_in_a_command_line(

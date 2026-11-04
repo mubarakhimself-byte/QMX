@@ -72,7 +72,7 @@ def view_only_demo(_app: AppCredential, _tokens: Tokens) -> dict[str, Any]:
 def the_home(keys: KeyStore) -> HomeSignIn:
     return HomeSignIn(
         name=lambda: "contabo",
-        key=lambda: PAIRING,
+        pass_keys=lambda: {"pc": PAIRING},
         app=lambda: AppCredential("4242_demo", "app-pass"),
         keys=keys,
         accounts=view_only_demo,
@@ -88,7 +88,12 @@ def home_app(signing: HomeSignIn) -> FastAPI:
     app = FastAPI()
     app.include_router(
         venue_router(
-            PcSignIn(name=lambda: "contabo", key=lambda: PAIRING, resolve=nowhere, here=signing),
+            PcSignIn(
+                name=lambda: "contabo",
+                pass_keys=lambda: {"pc": PAIRING},
+                resolve=nowhere,
+                here=signing,
+            ),
             signing,
         )
     )
@@ -131,7 +136,7 @@ def test_a_sign_in_lands_the_pair_on_the_home_and_a_replayed_code_is_refused(
     with TestClient(home_app(signing)) as rest:
         pc = PcSignIn(
             name=lambda: "pc",
-            key=lambda: PAIRING,
+            pass_keys=lambda: {"contabo": PAIRING},
             resolve=lambda: Target("contabo", aim, "http://contabo.tail"),
             here=the_home(HomeKeyStore(tmp_path / "pc")),
             join=lambda: Joined("ok", False),
@@ -196,7 +201,7 @@ def test_with_no_home_reachable_begin_is_refused_and_no_browser_opens(tmp_path: 
 
     pc = PcSignIn(
         name=lambda: "pc",
-        key=lambda: PAIRING,
+        pass_keys=lambda: {"contabo": PAIRING},
         resolve=lambda: Target("contabo", aim, "http://contabo.tail"),
         here=the_home(HomeKeyStore(tmp_path / "pc")),
         join=lambda: Joined("ok", False),

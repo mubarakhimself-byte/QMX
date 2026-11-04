@@ -1,9 +1,9 @@
-"""Two hosts on two loopback ports with one pairing key (Level 0 AD-46, Part C AD-303, AD-304).
+"""Two hosts on two loopback ports with one pass key (Level 0 AD-46, Part C AD-303, AD-304).
 
 The far host `ldn-1` serves the host route over a real supervisor with two fixture apps: a
 running `runs` app shaped like the trading node, with a read, a `manage` pause and a job, and a
 `money` app that is installed and never started, because a money app starts only after his signed
-publish. This PC asks it through its node link, or with a pass minted here. The pairing key is a
+publish. This PC asks it through its node link, or with a pass minted here. The pass key is a
 fake made at runtime.
 """
 
@@ -221,12 +221,16 @@ def hosts(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Hosts]:
             ]
         )
         far_link = NodeLink(
-            far_home, here=FAR, apps=far_control.app_runtime(), settings=dict, key=lambda: key
+            far_home,
+            here=FAR,
+            apps=far_control.app_runtime(),
+            settings=dict,
+            pass_keys=lambda: {"pc": key},
         )
         store = price_store(root / "market")
         answering = Answering(
             far_link,
-            key=lambda: key,
+            pass_keys=lambda: {"pc": key},
             heartbeats=lambda: heartbeats_read(far_home, FAR)({}),
             store_root=lambda: store,
             answers=Answers(far_home / ANSWERS),
@@ -240,7 +244,7 @@ def hosts(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Hosts]:
             here="pc",
             apps=pc_control.app_runtime(),
             settings=lambda: rows,
-            key=lambda: key,
+            pass_keys=lambda: {FAR: key},
         )
         hosts = Hosts(key, far, far_home, far_control, answering, pc, rows)
         hosts.place(far.url)

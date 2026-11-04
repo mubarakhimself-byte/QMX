@@ -39,7 +39,7 @@ def wire(node: EngineService, key: str = KEY):
     """The far side of the POST: it verifies the pass, then answers from the node's own stores."""
 
     def post(url: str, body: Mapping[str, JsonValue], headers: Mapping[str, str]) -> JsonValue:
-        verify_host_pass(key, headers[PASS_HEADER], target=node.name, now=1_000.0)
+        verify_host_pass({"pc": key}, headers[PASS_HEADER], target=node.name, now=1_000.0)
         try:
             value = node.answer(
                 str(body["verb"]),
@@ -179,15 +179,15 @@ def test_a_host_pass_names_the_pc_and_no_other_engine() -> None:
     pass_ = mint_host_pass(
         KEY, source="pc", target="contabo", principal="operator", now=1_000.0, ttl=30
     )
-    verified = verify_host_pass(KEY, pass_, target="contabo", now=1_029.0)
+    verified = verify_host_pass({"pc": KEY}, pass_, target="contabo", now=1_029.0)
 
     assert (verified.source, verified.principal) == ("pc", "operator")
     with pytest.raises(ForwardRefused) as wrong:
-        verify_host_pass(KEY, pass_, target="qmb", now=1_001.0)
+        verify_host_pass({"pc": KEY}, pass_, target="qmb", now=1_001.0)
     with pytest.raises(ForwardRefused) as late:
-        verify_host_pass(KEY, pass_, target="contabo", now=1_030.0)
+        verify_host_pass({"pc": KEY}, pass_, target="contabo", now=1_030.0)
     with pytest.raises(ForwardRefused) as forged:
-        verify_host_pass(KEY, pass_[:-4] + "AAAA", target="contabo", now=1_001.0)
+        verify_host_pass({"pc": KEY}, pass_[:-4] + "AAAA", target="contabo", now=1_001.0)
     assert (wrong.value.code, late.value.code, forged.value.code) == (
         "wrong_engine",
         "expired_pass",

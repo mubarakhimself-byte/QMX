@@ -1,5 +1,6 @@
 """C-17 lane 3: two QMX hosts on one Linux machine, This PC's side and a server's, each its own
-process on its own loopback port and throwaway QMX folder, sharing one pairing key made here.
+process on its own loopback port and throwaway QMX folder, sharing one pairing key made here and
+paired with a pass key of their own (C-28).
 
 From `qmx-agents/` with the agents venv, on Linux (WSL, or the server in a throwaway folder):
 `uv run --no-sync python ../tools/lanes/two_hosts.py --root <empty folder> --log <file>
@@ -15,6 +16,9 @@ months of fixture bars, then checks, one PASS or FAIL line each:
 - apps.ask status: the route answers the app's read;
 - a queued pause: with the server host stopped, This PC's node link keeps a pause in its outbox,
   and once the host is back the pause applies exactly once and the outbox is empty;
+- forged as him: a pass the server's key signs as `operator` or `host:pc` is refused by This PC;
+- old shared key: a pass signed with the pairing key both hosts hold is refused by the server;
+- re-pair: after pairing again, the old pass key is refused and the new one answered;
 - a run pass: a pass This PC's authority mints reads the server's data, and one minted under
   another key is refused (Part C `BLAST-RADIUS.md` C9).
 
@@ -209,9 +213,18 @@ def seed_market(home: Path) -> tuple[int, int]:
     return january, january + 31 * DAY_NS
 
 
-def ask(host: Host, key: str, verb: str, args: dict[str, Any], **extra: Any) -> tuple[int, Any]:
+def ask(
+    host: Host,
+    key: str,
+    verb: str,
+    args: dict[str, Any],
+    *,
+    source: str = "pc",
+    principal: str = "operator",
+    **extra: Any,
+) -> tuple[int, Any]:
     forward = agents("qmx_engine.service.forward")
-    held = forward.mint_host_pass(key, source="pc", target=host.place, principal="operator")
+    held = forward.mint_host_pass(key, source=source, target=host.place, principal=principal)
     body = {"schema_version": SCHEMA, "verb": verb, "args": args, **extra}
     answer = httpx.post(
         f"{host.url}/api/host/forward", json=body, headers={forward.PASS_HEADER: held}, timeout=60
@@ -219,32 +232,57 @@ def ask(host: Host, key: str, verb: str, args: dict[str, Any], **extra: Any) -> 
     return answer.status_code, answer.json()
 
 
+def owner_only(path: Path, text: str) -> None:
+    handle = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(handle, "w", encoding="utf-8") as written:
+        written.write(text)
+
+
+def pair(pc: Host, far: Host) -> str:
+    """Pair the server the way the server kind's pass-key step does (C-28): This PC keeps a fresh
+    key for it, and the server's `host-keys` holds that key as This PC's alone."""
+    route = agents("qmx_host.host_route")
+    key = route.pair_place(pc.root / "data", far.place)
+    owner_only(far.root / "data/vault" / route.HOST_KEYS, route.keys_document({"pc": key}))
+    return key
+
+
 @contextlib.contextmanager
-def hosts(root: Path, place: str, log: Log, wait: float) -> Generator[tuple[Host, Host, str]]:
+def hosts(root: Path, place: str, log: Log, wait: float) -> Generator[tuple[Host, Host, str, str]]:
+    """The two hosts, the pairing key both still hold (the Library's and the run passes'), and
+    the pass key This PC and the server share."""
     resolve = agents("qmx_home").resolve
-    key = secrets.token_hex(32)
+    shared = secrets.token_hex(32)
     made: list[Host] = []
     for name, role in (("pc", "pc"), (place, "server")):
         layout = resolve(root / name, create=True)
         vault = layout.home / "vault"
         vault.mkdir(mode=0o700, parents=True, exist_ok=True)
-        handle = os.open(vault / "pairing-key", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(handle, "w", encoding="utf-8") as written:
-            written.write(key + "\n")
+        owner_only(vault / "pairing-key", shared + "\n")
         made.append(Host(layout.root, free_port(), role, name, log))
     pc, far = made
     try:
-        yield pc, far, key
+        yield pc, far, shared, pair(pc, far)
     finally:
         for host in made:
             host.stop()
+
+
+def verify_us(key: str, place: str, rounds: int = 10_000) -> float:
+    """Microseconds per pass verify on the server's side, in this process."""
+    forward = agents("qmx_engine.service.forward")
+    token = forward.mint_host_pass(key, source="pc", target=place, principal="operator")
+    began = time.perf_counter()
+    for _ in range(rounds):
+        forward.verify_host_pass({"pc": key}, token, target=place)
+    return (time.perf_counter() - began) / rounds * 1e6
 
 
 def run(root: Path, place: str, log: Log, wait: float) -> None:
     node_link = agents("qmx_host.node_link")
     passes = agents("qmx_router.passes")
     began = time.perf_counter()
-    with hosts(root, place, log, wait) as (pc, far, key):
+    with hosts(root, place, log, wait) as (pc, far, shared, key):
         start, end = seed_market(far.root / "data")
         far.start(wait)
         pc.start(wait)
@@ -290,7 +328,7 @@ def run(root: Path, place: str, log: Log, wait: float) -> None:
             here="pc",
             apps=agents("qmx_apps.supervisor").Supervisor(link_home / "apps"),
             settings=lambda: rows,
-            key=lambda: key,
+            pass_keys=lambda: {place: key},
         )
         far.stop()
         change = link.change(
@@ -315,6 +353,32 @@ def run(root: Path, place: str, log: Log, wait: float) -> None:
             and link.outbox.waiting(place) == [],
             f"queued {queued}, then {again.state}, pauses {pauses}",
         )
+
+        status, as_him = ask(pc, key, "heartbeats", {}, source=place, principal="operator")
+        status_pc, as_pc = ask(pc, key, "heartbeats", {}, source=place, principal="host:pc")
+        log.check(
+            "forged as him",
+            (status, as_him.get("code"), status_pc, as_pc.get("code"))
+            == (401, "bad_pass", 401, "bad_pass"),
+            f"{place}'s key signing operator at This PC: {status} {as_him.get('message')}; "
+            f"host:pc: {status_pc} {as_pc.get('message')}",
+        )
+        status, old = ask(far, shared, "heartbeats", {})
+        log.check(
+            "old shared key",
+            (status, old.get("code"), old.get("message"))
+            == (401, "bad_pass", "the host pass does not verify"),
+            f"a pass signed with the pairing key both hosts hold: {status} {old.get('message')}",
+        )
+        again = pair(pc, far)
+        status_old, before = ask(far, key, "heartbeats", {})
+        status_new, _ = ask(far, again, "heartbeats", {})
+        log.check(
+            "re-pair",
+            (status_old, before.get("code"), status_new) == (401, "bad_pass", 200),
+            f"after pairing again, the old pass key: {status_old}; the new one: {status_new}",
+        )
+        log(f"METRIC pass verify microseconds {verify_us(again, place):.1f} (in process, 10000)")
 
         authority = passes.PassAuthority.for_home(pc.root / "data")
         _, token = authority.mint(run="run-c17", placement=place, data_scope=(SERIES,))

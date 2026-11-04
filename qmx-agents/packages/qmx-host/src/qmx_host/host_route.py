@@ -1,12 +1,17 @@
 """The host route (Level 0 AD-46, Part C AD-304): `POST /api/host/forward`, where another host of
 this home asks this one through a closed set of verbs.
 
-The caller mints one host pass per call with the pairing key, carrying its real principal:
-`operator` for his click, `agent:<id>` for a chat, `run:<id>` for a workflow. The door lets the
-call past the local bearer (`qmx_host.door.host_pass_call`); this route verifies the pass against
-this host's place name before it reads anything else, and a host that holds no pairing key answers
-no pass at all. The principal rides the pass and never an argument: a `manage` operation and a job
-of a `money` app answer only to `operator`. Every answer carries `schema_version`.
+The caller mints one host pass per call with the pass key it shares with this host, carrying its
+real principal: `operator` for his click, `agent:<id>` for a chat, `run:<id>` for a workflow. The
+door lets the call past the local bearer (`qmx_host.door.host_pass_call`); this route verifies
+the pass against this host's place name before it reads anything else, and a host that holds no
+pass key for the sender answers none of its passes. The principal rides the pass and never an
+argument: a `manage` operation and a job of a `money` app answer only to `operator`, which only
+This PC can sign. Every answer carries `schema_version`.
+
+Pairing a server hands it a key of its own (C-28): This PC keeps every server's key in its vault's
+`host-keys` document, and the server keeps only This PC's, so a server cannot sign as This PC to
+another server, nor as him to This PC.
 
 On This PC the route is mounted too, so one host build serves every role; nothing connects into
 This PC (Level 0 AD-44), so there it answers nobody.
@@ -15,7 +20,11 @@ This PC (Level 0 AD-44), so there it answers nobody.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
+import os
+import secrets
+import shlex
 import sqlite3
 import threading
 from collections.abc import Awaitable, Callable, Mapping
@@ -29,13 +38,15 @@ from pydantic import JsonValue
 from qmf.core import is_refusal
 from qmf.data.series import OPEN_NAME, STATE_NAME
 from qmx_apps.errors import AppError
+from qmx_control import node
 from qmx_control.models import Document
 from qmx_engine.service.context import OPERATOR
-from qmx_engine.service.forward import PASS_HEADER, ForwardRefused, verify_host_pass
+from qmx_engine.service.forward import PASS_HEADER, ForwardRefused, HostKeys, verify_host_pass
 from qmx_engine.settings import PC
 from starlette.responses import FileResponse, JSONResponse, Response
 
 from qmx_host.node_link import ROUTE_PATH, SCHEMA, NodeLink
+from qmx_host.vault_acl import read_key
 
 if TYPE_CHECKING:
     from qmx_host.market_data import MarketDoor
@@ -62,6 +73,69 @@ PULLER: Final = f"host:{PC}"
 months (Level 0 AD-28)."""
 KEPT_CODES: Final = frozenset({"not_running", "pin_stale"})
 """Supervisor refusals the route answers by their own code; any other is `app_refused`."""
+HOST_KEYS: Final = "host-keys"
+"""The vault file of this host's pass keys, a `KEYS_SCHEMA` document."""
+KEYS_SCHEMA: Final = "qmx.host.keys/1"
+
+
+def host_keys(text: str | None) -> dict[str, str]:
+    """The pass keys a `host-keys` document holds, by place name. No document, or one QMX did not
+    write, holds none, so every pass is refused until the place is paired again."""
+    try:
+        found = cast("object", json.loads(text or "null"))
+    except ValueError:
+        return {}
+    if not isinstance(found, dict) or cast(Document, found).get("schema_version") != KEYS_SCHEMA:
+        return {}
+    peers = cast(Document, found).get("peers")
+    if not isinstance(peers, dict):
+        return {}
+    return {name: key for name, key in peers.items() if isinstance(key, str) and key}
+
+
+def keys_document(keys: Mapping[str, str]) -> str:
+    return json.dumps({"schema_version": KEYS_SCHEMA, "peers": dict(keys)}, sort_keys=True) + "\n"
+
+
+def held_keys(home: Path) -> HostKeys:
+    """This host's pass keys as its vault holds them, through the vault's one reader (C-32)."""
+    raw = read_key(home / "vault" / HOST_KEYS)
+    return host_keys(None if raw is None else raw.decode("utf-8"))
+
+
+def pair_place(home: Path, place: str) -> str:
+    """This PC's half of pairing `place`: a fresh key for that place alone, kept owner-only
+    beside the other servers' keys, returned for the place's own `host-keys`. The key it held
+    for `place` before stops verifying."""
+    key = secrets.token_urlsafe(32)
+    vault = home / "vault"
+    vault.mkdir(parents=True, exist_ok=True)
+    document = keys_document({**held_keys(home), place: key})
+    part = vault / f"{HOST_KEYS}.part"
+    handle = os.open(part, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(handle, "w", encoding="utf-8") as out:
+        out.write(document)
+    part.replace(vault / HOST_KEYS)
+    return key
+
+
+SERVER_KEYS_FILE: Final = f"{node.SERVER_HOME}/vault/{HOST_KEYS}"
+"""A server's pass keys, This PC's alone, which its host reads per call."""
+PASS_KEY_DIGEST: Final = f"set -eu\nsha256sum {shlex.quote(SERVER_KEYS_FILE)} 2>/dev/null || true\n"
+"""What a server's `host-keys` digest is, read as root; it names no key."""
+
+
+def server_digest(key: str) -> str:
+    """The digest of the `host-keys` a server holds when it was paired with `key`."""
+    return hashlib.sha256(keys_document({PC: key}).encode("utf-8")).hexdigest()
+
+
+def pass_key_script(key: str) -> str:
+    """The server's half of pairing: its `host-keys`, holding This PC's key alone, written as
+    `qmx`, owner-only, from a quoted heredoc, so the key reaches no command line."""
+    write = 'umask 077 && cat > "$1.part" && mv "$1.part" "$1"'
+    line = shlex.join(["runuser", "-u", "qmx", "--", "sh", "-c", write, "sh", SERVER_KEYS_FILE])
+    return f"set -eu\n{line} <<'QMXIN'\n{keys_document({PC: key})}QMXIN\n"
 
 
 class Refused(Exception):
@@ -128,12 +202,12 @@ def _no_door() -> MarketDoor | None:
 @dataclass(frozen=True, slots=True)
 class Answering:
     """What one host answers with: its node link (its place name, its supervisor and where each
-    app is homed), its pairing key read per call, its heartbeat read and its price store. ``door``
+    app is homed), its pass keys read per call, its heartbeat read and its price store. ``door``
     is the price store's market-data door, whose `verify` clears the pins This PC confirms; a host
     without one lists its partitions and clears nothing."""
 
     link: NodeLink
-    key: Callable[[], str | None]
+    pass_keys: Callable[[], HostKeys]
     heartbeats: Callable[[], Awaitable[Mapping[str, object]]]
     store_root: Callable[[], Path | None]
     answers: Answers
@@ -177,12 +251,11 @@ class HostRoute:
         self.link = answering.link
 
     def verify(self, token: str) -> str:
-        """The pass's principal, or the refusal. No pairing key here answers no pass at all."""
-        key = self.answering.key()
-        if not key:
-            raise Refused("bad_pass", "this host holds no pairing key, so it answers no host pass")
+        """The pass's principal, or the refusal. No pass key for its sender answers no pass."""
         try:
-            return verify_host_pass(key, token, target=self.link.here).principal
+            return verify_host_pass(
+                self.answering.pass_keys(), token, target=self.link.here
+            ).principal
         except ForwardRefused as refused:
             raise Refused(refused.code, str(refused)) from refused
 

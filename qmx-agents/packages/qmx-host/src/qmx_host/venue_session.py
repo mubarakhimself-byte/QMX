@@ -9,7 +9,7 @@ can trade live money (ruling 135), and only then writes the pair as `qmx/token/c
 its own key store: Credential Manager on This PC, an owner-only file under `<home>/vault/` on a
 server. The vault refuses any name holding `token`, so the pair never replicates.
 
-On This PC as home every step runs in this host, with no pairing key and no server. A home on a
+On This PC as home every step runs in this host, with no pass key and no server. A home on a
 place is asked with a host pass, and its begin and code routes take a host pass only, so a chat,
 a run pass or an observer reaches neither. One app has one home: moving it is a fresh sign-in on
 the new home, after which This PC deletes its own pair.
@@ -64,10 +64,13 @@ from qmx_broker.service import Connect, ReadRefused, grant_accounts
 from qmx_engine.service.forward import (
     PASS_HEADER,
     ForwardRefused,
+    HostKeys,
     mint_host_pass,
     verify_host_pass,
 )
 from qmx_router.vault import MissingKey, VaultStore, VaultUnavailable, WrongKey, read_machine_key
+
+from qmx_host.host_route import held_keys
 
 if sys.platform == "win32":
     import msvcrt
@@ -211,7 +214,7 @@ class HomeSignIn:
         self,
         *,
         name: Callable[[], str],
-        key: Callable[[], str | None],
+        pass_keys: Callable[[], HostKeys],
         app: Callable[[], AppCredential],
         keys: KeyStore,
         accounts: Callable[[AppCredential, Tokens], Document],
@@ -221,7 +224,7 @@ class HomeSignIn:
         clock: Callable[[], float] = time.time,
     ) -> None:
         self._name = name
-        self._key = key
+        self._pass_keys = pass_keys
         self._app = app
         self.keys = keys
         self._accounts = accounts
@@ -234,11 +237,11 @@ class HomeSignIn:
         self._lock = threading.Lock()
 
     def _check(self, token: str) -> None:
-        key = self._key()
-        if not key:
-            raise Refused("not_paired", "this home has no pairing key", 401)
+        keys = self._pass_keys()
+        if not keys:
+            raise Refused("not_paired", "this home holds no pass key", 401)
         try:
-            verify_host_pass(key, token, target=self._name(), now=self._clock())
+            verify_host_pass(keys, token, target=self._name(), now=self._clock())
         except ForwardRefused as refused:
             raise Refused(refused.code, str(refused), 401) from None
 
@@ -363,7 +366,7 @@ class PcSignIn:
     """The sign-in button: begin on the home, bind the receiver, open the browser, hand over the
     code.
 
-    With this host as the home each step calls `here` in process, so This PC needs no pairing
+    With this host as the home each step calls `here` in process, so This PC needs no pass
     key and no server. With a place as the home it asks that host with a host pass, and once the
     place holds the pair `here` deletes its own: one app's tokens live in one key store.
     """
@@ -372,7 +375,7 @@ class PcSignIn:
         self,
         *,
         name: Callable[[], str],
-        key: Callable[[], str | None],
+        pass_keys: Callable[[], HostKeys],
         resolve: Callable[[], Target],
         here: HomeSignIn,
         join: Callable[[], Joined] = join_ctrader_app,
@@ -382,7 +385,7 @@ class PcSignIn:
         ticks: Callable[[], float] = time.monotonic,
     ) -> None:
         self._name = name
-        self._key = key
+        self._pass_keys = pass_keys
         self._resolve = resolve
         self._here = here
         self._join = join
@@ -395,9 +398,12 @@ class PcSignIn:
         self.last: dict[str, Any] = {"state": "idle"}
 
     def _call(self, aim: Target, route: str, body: Mapping[str, Any]) -> Mapping[str, Any]:
-        key = self._key()
+        key = self._pass_keys().get(aim.home)
         if not key:
-            raise Refused("not_paired", "this PC has no pairing key; pair it with the server")
+            raise Refused(
+                "not_paired",
+                f"this PC holds no pass key for {aim.home}; set {aim.home} up again in Connect",
+            )
         token = mint_host_pass(
             key, source=self._name(), target=aim.home, principal="operator", now=self._clock()
         )
@@ -513,7 +519,7 @@ def for_host(
     accounts: Callable[[AppCredential, Tokens], Document] | None = None,
     connect: Connect = CTraderTransport.connect,
 ) -> APIRouter:
-    """The venue routes as a host mounts them: its name, pairing key, Settings and placements.
+    """The venue routes as a host mounts them: its name, pass keys, Settings and placements.
 
     This PC keeps the app copy and the pair in Credential Manager; any other host keeps the pair
     in its owner-only file and opens the app from its own vault copy. A fresh grant's accounts
@@ -522,10 +528,9 @@ def for_host(
     an in-memory keyring as `keys`, and a recorded account list or a fake `connect`; left out,
     they are his browser, Credential Manager and one cTrader session.
     """
-    key_file = home / "vault" / "pairing-key"
 
-    def key() -> str | None:
-        return key_file.read_text(encoding="utf-8").strip() if key_file.exists() else None
+    def pass_keys() -> HostKeys:
+        return held_keys(home)
 
     def name() -> str:
         return engine.svc.name
@@ -563,7 +568,7 @@ def for_host(
     store: KeyStore = CredentialManager(keys) if on_pc else HomeKeyStore(home)
     signing = HomeSignIn(
         name=name,
-        key=key,
+        pass_keys=pass_keys,
         app=lambda: pc_app(store) if on_pc else vault_app(home, name()),
         keys=store,
         accounts=accounts or one_session,
@@ -572,7 +577,7 @@ def for_host(
     )
     pc = PcSignIn(
         name=name,
-        key=key,
+        pass_keys=pass_keys,
         resolve=resolve,
         here=signing,
         join=lambda: join_ctrader_app(keys),

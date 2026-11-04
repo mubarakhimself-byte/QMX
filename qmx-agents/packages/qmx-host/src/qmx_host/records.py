@@ -58,7 +58,7 @@ from qmf.data.journal_writer import key_token
 from qmf.data.series import JOURNAL_SOURCE_PREFIX, TICKS_KIND, CommitReceipt, SeriesKey
 from qmf.data.store.engines import StoreEngineError
 from qmf.data.store.engines.typed import FLOAT_COLUMNS, TypedWriter
-from qmx_engine.service.forward import PASS_HEADER, mint_host_pass
+from qmx_engine.service.forward import PASS_HEADER, HostKeys, mint_host_pass
 from qmx_judge.paper import (
     PAPER_RUN_KIND,
     PaperLane,
@@ -1035,7 +1035,7 @@ class Pull:
         *,
         here: str,
         places: Callable[[], Mapping[str, Place]],
-        key: Callable[[], str | None],
+        pass_keys: Callable[[], HostKeys],
         post: Post = post_json,
         fetch: Fetch = fetch_file,
     ) -> None:
@@ -1043,7 +1043,7 @@ class Pull:
         self._folder = folder
         self._here = here
         self._places = places
-        self._key = key
+        self._pass_keys = pass_keys
         self._post = post
         self._fetch = fetch
 
@@ -1283,9 +1283,9 @@ class Pull:
         return held is not None and held.frozen and held.fingerprint == printed
 
     def _pass(self, place: Place) -> dict[str, str]:
-        key = self._key()
+        key = self._pass_keys().get(place.name)
         if not key:
-            raise _Missed("this home holds no pairing key, so it asks no node")
+            raise _Missed(f"this home holds no pass key for {place.name}, so it asks it nothing")
         held = mint_host_pass(
             key, source=self._here, target=place.name, principal=f"host:{self._here}"
         )

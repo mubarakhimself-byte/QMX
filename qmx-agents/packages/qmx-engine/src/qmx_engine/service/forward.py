@@ -6,8 +6,10 @@ leaves the last rows this side saw, and marks them "server unreachable since ...
 values. An inbox answer travels the same way, and only the run's home folds it.
 
 A host pass is neither a credential nor a run pass. It is one HMAC over the two instance names,
-the calling principal and an expiry, keyed with the pairing key both machines hold (AD-12). It
-names the PC and the principal, carries no key, and grants nothing beyond these verbs.
+the calling principal and an expiry, keyed with the pass key of that pair of hosts (AD-12, C-28).
+This PC holds one key per server it paired and each server holds only its own, so no server can
+sign a pass to another, and a pass that speaks for him or as This PC verifies only when it comes
+from This PC. It carries no key, and grants nothing beyond these verbs.
 
 Two sides live here: `Forwarder` asks (on the PC), `Remote` answers (on any node), and
 `forward_router` is the one route each node serves for the other.
@@ -34,7 +36,8 @@ from pydantic import JsonValue
 
 from qmx_engine.ports.inbox import Action
 from qmx_engine.ports.settings import SettingsPort
-from qmx_engine.settings import can_run
+from qmx_engine.service.context import OPERATOR
+from qmx_engine.settings import PC, can_run
 
 HOME_ENGINE: Final = "home_engine"
 """The field every merged row carries: the host whose ledger owns it."""
@@ -61,6 +64,12 @@ READ_VERBS: Final[frozenset[str]] = frozenset(
     {"runs.list", "runs.get", "cards", "spans", "inbox.list", "incidents", "explain_trigger"}
 )
 ANSWER_VERBS: Final[frozenset[str]] = frozenset({"inbox.resolve"})
+HOST_PRINCIPAL: Final = "host:"
+
+type HostKeys = Mapping[str, str]
+"""The pass keys a host holds, by the other host's place name: on This PC one per server it
+paired, on a server one, This PC's. A pass is minted with the key of its `to` and verified with
+the key of its `from`."""
 
 
 class ForwardRefused(Exception):
@@ -111,19 +120,40 @@ def mint_host_pass(
     return f"{body}.{_b64(mac)}"
 
 
-def verify_host_pass(key: str, token: str, *, target: str, now: float | None = None) -> HostPass:
-    """The pass the caller minted, or a refusal. `target` is this instance's name."""
+def speaks_for(source: str, principal: str) -> bool:
+    """Whether a pass from `source` may carry `principal`. This PC speaks for every principal;
+    any other host speaks for itself, its runs and its agents, never for him or as another host."""
+    if source == PC:
+        return True
+    if principal == OPERATOR.principal:
+        return False
+    return not principal.startswith(HOST_PRINCIPAL) or principal == f"{HOST_PRINCIPAL}{source}"
+
+
+def verify_host_pass(
+    keys: HostKeys, token: str, *, target: str, now: float | None = None
+) -> HostPass:
+    """The pass the caller minted, or a refusal. `target` is this instance's name. The pass's
+    `from` picks the key, so a pass verifies only under the key this host shares with its sender."""
     at = time.time() if now is None else now
     if token.count(".") != 1:
         raise ForwardRefused("bad_pass", "the host pass is not one signed body")
     body, given = token.split(".", 1)
-    expected = hmac.new(key.encode("utf-8"), body.encode("ascii"), hashlib.sha256).digest()
-    if not hmac.compare_digest(_unb64(given), expected):
-        raise ForwardRefused("bad_pass", "the host pass does not verify")
     try:
-        claims = cast("dict[str, JsonValue]", json.loads(_unb64(body)))
+        claims = cast("object", json.loads(_unb64(body)))
+        signature = _unb64(given)
     except ValueError as error:
         raise ForwardRefused("bad_pass", "the host pass is not JSON") from error
+    if not isinstance(claims, dict):
+        raise ForwardRefused("bad_pass", "the host pass is not JSON")
+    claims = cast("dict[str, JsonValue]", claims)
+    source = claims.get("from")
+    key = keys.get(source) if isinstance(source, str) else None
+    if not isinstance(source, str) or not key:
+        raise ForwardRefused("bad_pass", f"this host holds no pass key for {source!r}")
+    expected = hmac.new(key.encode("utf-8"), body.encode("ascii"), hashlib.sha256).digest()
+    if not hmac.compare_digest(signature, expected):
+        raise ForwardRefused("bad_pass", "the host pass does not verify")
     if claims.get("v") != 1:
         raise ForwardRefused("bad_pass", "another host pass version")
     if str(claims.get("to")) != target:
@@ -131,12 +161,10 @@ def verify_host_pass(key: str, token: str, *, target: str, now: float | None = N
     expires = float(cast(float, claims.get("exp")))
     if expires <= at:
         raise ForwardRefused("expired_pass", "the host pass outlived its call")
-    return HostPass(
-        source=str(claims.get("from")),
-        target=str(claims.get("to")),
-        principal=str(claims.get("principal")),
-        expires_at=expires,
-    )
+    principal = str(claims.get("principal"))
+    if not speaks_for(source, principal):
+        raise ForwardRefused("bad_pass", f"a pass from {source} cannot speak as {principal}")
+    return HostPass(source=source, target=target, principal=principal, expires_at=expires)
 
 
 @dataclass(frozen=True, slots=True)
@@ -370,8 +398,9 @@ class Remote:
             await asyncio.sleep(STREAM_INTERVAL_S)
 
 
-def forward_router(remote: Remote, key: str) -> APIRouter:
-    """The one route a node serves for the PC, and the held stream beside it (AD-65)."""
+def forward_router(remote: Remote, keys: Callable[[], HostKeys]) -> APIRouter:
+    """The one route a node serves for the PC, and the held stream beside it (AD-65). `keys` is
+    read per call, so a pairing after the start is used."""
     router = APIRouter()
 
     @router.post("/api/engine/forward")
@@ -380,7 +409,7 @@ def forward_router(remote: Remote, key: str) -> APIRouter:
         (one writer, AD-23), and FastAPI would run a plain `def` handler in a worker thread."""
         token = request.headers.get(PASS_HEADER, "")
         try:
-            pass_ = verify_host_pass(key, token, target=remote.answered.name)
+            pass_ = verify_host_pass(keys(), token, target=remote.answered.name)
             asked = cast("Mapping[str, JsonValue]", body.get("args") or {})
             value = remote.answer(str(body.get("verb")), asked, principal=pass_.principal)
         except ForwardRefused as refused:
@@ -394,7 +423,7 @@ def forward_router(remote: Remote, key: str) -> APIRouter:
     async def stream(request: Request) -> StreamingResponse:
         token = request.headers.get(PASS_HEADER, "")
         try:
-            verify_host_pass(key, token, target=remote.answered.name)
+            verify_host_pass(keys(), token, target=remote.answered.name)
         except ForwardRefused as refused:
             raise HTTPException(status_code=401, detail={"code": refused.code}) from refused
 
