@@ -9,6 +9,7 @@ environment has no pytest, so the supervised suite is `trading_node_app_test.py`
 from __future__ import annotations
 
 import os
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -25,15 +26,17 @@ class FreshNode(unittest.TestCase):
     """A node composed by the app's own entry, `from_environment`, in a fresh volume."""
 
     def setUp(self) -> None:
-        folder = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
-        self.addCleanup(folder.cleanup)
-        volume = Path(folder.name)
+        # The proof's audit hook refuses tempfile's permission reset, and the node's WAL can still
+        # be mapped here on Windows, so this cleanup only ever ignores what it cannot delete.
+        volume = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, volume, ignore_errors=True)
         (volume / "data").mkdir()
         where = {"QMX_VOLUME": str(volume), "QMX_DATA_DIR": str(volume / "data")}
         with mock.patch.dict(os.environ, where):
             self.node: Node = from_environment()
         if self.node.journal is not None:
             self.addCleanup(self.node.journal.close)
+        self.addCleanup(self.node.stop)
 
     def value(self, operation: str, arguments: dict[str, Json]) -> dict[str, Json]:
         answer = self.node.call(operation, arguments)

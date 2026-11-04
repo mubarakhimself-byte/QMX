@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import sqlite3
+import time
 from collections.abc import Generator
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, field
 from hashlib import sha256
 from pathlib import Path
-from typing import cast
+from typing import Final, cast
 
 from qmx_ledger.journal import RunJournal, encoded
 
@@ -94,10 +95,27 @@ class History:
         return self.records[-1]
 
 
+ROAD_WAIT_S: Final = 60.0
+"""A probe bound, not a cap: how long a road read or step waits for another holder, a backup round
+or a read on another thread, to let the road go. Longer than a road stage takes on This PC."""
+ROAD_POLL_S: Final = 0.2
+
+
+def _road_lease(home: Path, app_id: str) -> VolumeLease:
+    deadline = time.monotonic() + ROAD_WAIT_S
+    while True:
+        try:
+            return VolumeLease(home / "road-locks", app_id)
+        except AppError as busy:
+            if busy.code != "volume_busy" or time.monotonic() >= deadline:
+                raise
+            time.sleep(ROAD_POLL_S)
+
+
 @contextmanager
 def history(home: Path, app_id: str) -> Generator[History]:
     volume = Volume(home, app_id)
-    lease = VolumeLease(home / "road-locks", app_id)
+    lease = _road_lease(home, app_id)
     path = volume.root / "road/steps.jsonl"
     try:
         # The OS lease proves no writer survived; recover a crashed journal lock.
