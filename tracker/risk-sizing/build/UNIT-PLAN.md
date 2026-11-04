@@ -120,7 +120,7 @@ The dispatch order, generated from the sections below by `plan-parts/assemble.mj
 | 62 | C-35 | 5 | Make the node's status and kill tell the truth | C-12d, C-13 |
 | 63 | C-34 | 5 | Land the venue, instrument and account records a deploy reads | C-12d, C-23, C-02 |
 | 64 | C-38 | 5 | Let an installed node read its calendars and cTrader definitions, and come back after a host restart | C-12d, C-26b, C-30 |
-| 65 | C-14 | 5 | Write the first real start as a script he runs | C-11, C-12a, C-12b, C-12c, C-12d, C-12e, C-13, C-23, C-26, C-26b, C-29, C-34, C-35, C-37, C-38, B15 |
+| 65 | C-14 | 5 | Write the first real start as a script he runs | C-11, C-12a, C-12b, C-12c, C-12d, C-12e, C-13, C-23, C-26, C-26b, C-34, C-35, C-37, C-38, B15, C-29 |
 | 66 | C-15 | 5 | Prove attribution, duplicates and refresh on a cTrader demo account | C-14 |
 | 67 | C-16 | 5 | Trade Hyperliquid through CCXT on testnet | C-12a, C-12b |
 | 68 | C-25 | 5 | Keep agents out of every grants folder | C-05e |
@@ -3704,7 +3704,7 @@ Phase 5, the trading node and external connections. Added by the loose-ends pass
 
 Phase 5, the trading node and external connections. Added from C-30's findings, his ruling of 2026-11-04 (`PLANNER-NOTE-2026-11-04.md` items 2 and 4). It lands in one PR with C-35 and C-29, on `build/us-c35`, so one builder and one reviewer take all three. Built facts. In an env built by `uv sync --no-editable`, `qmn/src/qmn/app/server.py:306-309` and `qmn/src/qmn/time/calendars.py:49` climb `parents[4]` to the env folder, so `bind` answers `definitions_missing` and `market_calendars()` is empty (`evidence/c30/findings-backlog.md`). `_market_calendar` also asks `qmb.data.gap_check.open_time` (`calendars.py:337`), whose `_EXTENSIONS` (`gap_check.py:801`, `:881`) climbs the same way, so both readers must change together. uv_build ships every file under a module's folder, and a built `qmf-calendar-forex` wheel and a built `qmx-broker` wheel were both opened and hold their data files. The trading node is not in `FIRST_APPS` (`qmx_host/first_start.py:600-602`), and `enable_first_party` reads only `first-party.json`, so after a host restart neither This PC nor a server starts the node again. Real step none. Done when, in envs built by `uv sync --no-editable`, the node finds every shipped calendar and its cTrader definitions, a bind on the fake cTrader passes, and a host restart starts the node and the MIS again on any machine where the connect steps enabled them.
 
-**Depends on.** C-12d, C-26b, C-30.
+**Depends on.** C-12d, C-26b. C-30 is already stacked below it.
 
 **Files.**
 
@@ -3765,7 +3765,7 @@ Phase 5, the trading node and external connections. Added from C-30's findings, 
 
 Phase 5, the trading node and external connections. Part C slice C-14 (OP-02), Level 0 AD-37, R1-B-04. Ruling 37 (the sign-in waits until there is something to use it for, and only this step waits on it). The real step runs on his own folder after G-LAND and G-DEMO. Done when `tools/first_real_start.py` checks each fact and prints PASS or FAIL per line, passes in rehearsal on a throwaway folder against the conformance venue, and is ready for his real run.
 
-**Depends on.** C-11, C-12a, C-12b, C-12c, C-12d, C-12e, C-13, C-23, C-26, C-26b, C-29, C-34, C-35, C-37, C-38, B15.
+**Depends on.** C-11, C-12a, C-12b, C-12c, C-12d, C-12e, C-13, C-23, C-26, C-26b, C-34, C-35, C-37, C-38, B15. C-29 lands with C-35 and C-38 in the PR before this one.
 
 **Files.**
 
