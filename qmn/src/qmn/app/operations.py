@@ -303,9 +303,9 @@ def traded_markets(deployments: Mapping[str, Change]) -> list[TradedMarket]:
             continue
         chosen = document.get("markets")
         wanted = {
-            market.get("market_id")
+            named
             for market in (chosen if isinstance(chosen, list) else [])
-            if isinstance(market, dict)
+            if isinstance(market, dict) and isinstance(named := market.get("market_id"), str)
         }
         unit = document.get("unit_document")
         markets = unit.get("markets") if isinstance(unit, dict) else None

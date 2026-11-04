@@ -6,9 +6,9 @@ Runs against the conformance venue only.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import cast
+from types import SimpleNamespace
+from typing import Any, cast
 
-from qmn.app.stand_down import Kind
 from qmn.app.store import Json
 from test_app_runtime import ACCOUNT, Rig, deploy, deployment, rig, settle, value
 
@@ -99,16 +99,18 @@ def test_a_pause_at_one_market_reads_paused_at_that_market(tmp_path: Path) -> No
     assert state["pauses"] == ["instrument:EURUSD"]
 
 
+def stale_feed(node: Rig, market: str) -> None:
+    """The stand-down watch reads a binding whose feed on ``market`` last quoted 130 s ago."""
+    quote = SimpleNamespace(receive_time=node.now[0] - 130_000_000_000)
+    feed = SimpleNamespace(ready=True, reason="", markets=(market,), quote=lambda _market: quote)
+    node.runtime.stand_downs.watch_feed(ACCOUNT, cast("Any", feed))
+
+
 def test_a_stand_down_that_clears_itself_reads_too_when_the_node_trades_that_market(
     tmp_path: Path,
 ) -> None:
     node = trading(tmp_path)
-    downs = node.runtime.stand_downs
-    downs.watch_node = lambda: None  # type: ignore[method-assign]
-    downs.watch_feed = lambda _account, _feed: None  # type: ignore[method-assign]
-    downs._observe(  # noqa: SLF001
-        Kind.STALE_FEED, "instrument:metal.xauusd", True, node.now[0], "last quote 130 s ago"
-    )
+    stale_feed(node, "metal.xauusd")
 
     state = status(node)
 
@@ -122,11 +124,6 @@ def test_a_stand_down_on_a_market_no_deployment_trades_leaves_the_word_alone(
     tmp_path: Path,
 ) -> None:
     node = trading(tmp_path)
-    downs = node.runtime.stand_downs
-    downs.watch_node = lambda: None  # type: ignore[method-assign]
-    downs.watch_feed = lambda _account, _feed: None  # type: ignore[method-assign]
-    downs._observe(  # noqa: SLF001
-        Kind.STALE_FEED, "instrument:self.test", True, node.now[0], "last quote 130 s ago"
-    )
+    stale_feed(node, "self.test")
 
     assert said(status(node)) == ("Trading", "Trading, 1 unit", "GREEN")

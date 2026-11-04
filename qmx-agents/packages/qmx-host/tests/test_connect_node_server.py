@@ -67,6 +67,7 @@ from qmx_host.connect_node import (
     server_setups,
 )
 from qmx_host.host import vault_secrets
+from qmx_host.first_start import FIRST_PARTY
 from qmx_host.jobs import Jobs, Stopped
 from qmx_host.vault_acl import owner_only
 
@@ -370,6 +371,9 @@ def test_a_server_is_set_up_with_the_node_and_the_mis_homed_under_its_own_name(
     assert setup.far.apps.home_of(NODE_APP) == PLACE
     assert setup.far.apps.status(NODE_APP)["status"] == "running"
     assert setup.far.apps.status(MIS_APP)["status"] == "running"
+    assert json.loads((setup.far.layout.home / FIRST_PARTY).read_text("utf-8")) == {
+        "enable": [NODE_APP, MIS_APP]
+    }
     assert setup.node_status()["headline"] == "Ready, no units yet"
     lines = setup.said
     assert "enable: the trading node runs on london-1" in lines
