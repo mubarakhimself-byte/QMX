@@ -51,7 +51,7 @@ def agents(module: str) -> Any:
 httpx: Any = agents("httpx")
 
 REPO: Final = Path(__file__).resolve().parents[2]
-EXAMPLE: Final = REPO / "qmx-agents/examples/apps/exchange-status"
+EXAMPLE: Final = REPO / "examples/apps/exchange-status"
 APP: Final = "trading-node"
 SCHEMA: Final = "qmx.host.forward/1"
 SERIES: Final = "dukascopy/EURUSD/bar-m1/-"
@@ -298,6 +298,7 @@ def run(root: Path, place: str, log: Log, wait: float) -> None:
         )
         queued = (change.state, change.document().get("detail"))
         far.start(wait)
+        far.post(f"/api/apps/{APP}/start")
         for _ in range(int(wait)):
             link.tick()
             if not link.outbox.waiting(place):
@@ -333,7 +334,7 @@ def run(root: Path, place: str, log: Log, wait: float) -> None:
             headers={"Authorization": f"Bearer {forged}"},
             timeout=60,
         )
-        rows_read = len(paired.json().get("rows") or []) if paired.status_code == 200 else 0
+        rows_read = paired.json().get("rows") if paired.status_code == 200 else 0
         log.check(
             "run pass",
             paired.status_code == 200 and rows_read == 2 and unpaired.status_code == 401,
