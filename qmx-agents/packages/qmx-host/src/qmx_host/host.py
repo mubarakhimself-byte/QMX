@@ -1475,7 +1475,8 @@ async def heartbeats(
                 clock = await asyncio.to_thread(probe_from, core.settings)
             rows = [
                 beat(home, host_id, me, core, harness, pause, floor=floor, clock=clock),
-                *app_rows(control, core.paused),
+                # Off the loop: an install holds the supervisor's lock and hops onto this loop.
+                *await asyncio.to_thread(app_rows, control, core.paused),
             ]
             await asyncio.to_thread(log.write, rows)
             if link is not None:
