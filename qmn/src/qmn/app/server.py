@@ -30,7 +30,6 @@ from pathlib import Path
 from typing import Final, TypeAlias, cast
 from urllib.parse import urlsplit
 
-import qmf.venue as venue_package
 from qmf.core import Account, AccountRole, Ok, Result, VenueId, is_refusal
 from qmf.data.journal_envelope import JournalStream, JournalWorld, RowFacts
 from qmf.data.journal_writer import JournalWriter, WriterScope
@@ -93,6 +92,7 @@ from qmn.venue.ctrader_account import (
     account_listing,
 )
 from qmn.venue.live import VenueFacts, read_venue_facts
+from qmn.venue.proto_runtime import DEFINITIONS
 
 __all__ = [
     "BUILD",
@@ -304,9 +304,6 @@ def open_node(
 
 
 LIVE_STAGE: Final = "live"
-DEFINITIONS: Final = Path(venue_package.__file__).resolve().parent / "protocol" / "openapi-91.pb"
-"""The pinned Spotware definitions (release 91), beside the venue package the node imports, so a
-checkout and an installed env read the same file."""
 ENDPOINTS: Final = Path("venues") / "endpoints.json"
 """A conformance binding's endpoints in ``data/``: a fake cTrader on this machine. Every host it
 names must be loopback, so it can never reach a broker."""
