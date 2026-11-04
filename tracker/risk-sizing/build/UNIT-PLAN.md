@@ -119,33 +119,34 @@ The dispatch order, generated from the sections below by `plan-parts/assemble.mj
 | 61 | C-37 | 5 | Encode cTrader stop amends as the price cTrader expects | C-12d |
 | 62 | C-35 | 5 | Make the node's status and kill tell the truth | C-12d, C-13 |
 | 63 | C-34 | 5 | Land the venue, instrument and account records a deploy reads | C-12d, C-23, C-02 |
-| 64 | C-14 | 5 | Write the first real start as a script he runs | C-11, C-12a, C-12b, C-12c, C-12d, C-12e, C-13, C-23, C-26, C-26b, C-34, C-35, C-37, B15 |
-| 65 | C-15 | 5 | Prove attribution, duplicates and refresh on a cTrader demo account | C-14 |
-| 66 | C-16 | 5 | Trade Hyperliquid through CCXT on testnet | C-12a, C-12b |
-| 67 | C-25 | 5 | Keep agents out of every grants folder | C-05e |
-| 68 | C-17 | 5 | Set up a trading node on a server with the same checked steps | C-11, C-12a, C-12b, C-12c, C-12d, C-13, C-05d, C-05e, C-25, C-26 |
-| 69 | C-18 | 5 | Wake him through his phone when it matters, and ping a liveness watcher | C-12a, C-11 |
-| 70 | C-19 | 5 | Update a server's node and MIS at a safe moment | C-17 |
-| 71 | C-20 | 5 | Cut the old node shell once the new one has traded on demo | C-14, C-15, C-12d, C-12b, C-12c, C-13 |
-| 72 | C-31 | 5 | Decode each Dukascopy symbol at its own price scale | B11 |
-| 73 | C-32 | 5 | Make the vault owner-only on every machine | C-05d |
-| 74 | C-33 | 5 | Find and fix the control and engine lock-order hang | C-06 |
-| 75 | C-27a | 5 | Move the two example apps off the host's bearer | C-05d |
-| 76 | C-27 | 5 | Refuse the host's own pass in every app manifest | C-05d, C-27a |
-| 77 | C-28 | 5 | Give each host its own pass key | C-17 |
-| 78 | C-29 | 5 | Deploy only the markets he chose, and show a refused deploy | C-23, C-12d |
-| 79 | C-30 | 5 | Let alarms read the market calendar and new keys | C-18, C-12d |
-| 80 | C-36 | 5 | Give every agent cTrader's MCP, on demo accounts only | C-34, C-27 |
-| 81 | C-21 | 5 | Build the deliberate path to bind a live account | C-17, C-18, C-12d, C-25, C-27, C-28, C-29, C-30 |
-| 82 | C-22 | 5 | Let the node read the MIS board, with a fallback | C-09, C-12a |
-| 83 | B2 | 6 | Make every example and first-party app start and answer, tested in CI | B1, B6, C-09, C-10 |
-| 84 | B18a | 6 | Build the shared pieces the build-and-prove templates need | B13, A8 |
-| 85 | B18b | 6 | Build the shared pieces the slow lane needs | B13, B15, C-03 |
-| 86 | B18c | 6 | Fix the shipped templates surgically | B13 |
-| 87 | B19 | 6 | Turn a strategy idea into a tested unit with the build-and-prove family | B14, B18a, B18c, A11 |
-| 88 | B20 | 6 | Run the slow lane on This PC | B15, B18b, C-24, C-09 |
-| 89 | B16 | 6 | Bring node records home from servers | B8, B15, C-06 |
-| 90 | B21 | 6 | Watch trading nodes without ever touching them | B16, C-06, C-12a |
+| 64 | C-38 | 5 | Let an installed node read its calendars and cTrader definitions, and come back after a host restart | C-12d, C-26b, C-30 |
+| 65 | C-14 | 5 | Write the first real start as a script he runs | C-11, C-12a, C-12b, C-12c, C-12d, C-12e, C-13, C-23, C-26, C-26b, C-29, C-34, C-35, C-37, C-38, B15 |
+| 66 | C-15 | 5 | Prove attribution, duplicates and refresh on a cTrader demo account | C-14 |
+| 67 | C-16 | 5 | Trade Hyperliquid through CCXT on testnet | C-12a, C-12b |
+| 68 | C-25 | 5 | Keep agents out of every grants folder | C-05e |
+| 69 | C-17 | 5 | Set up a trading node on a server with the same checked steps | C-11, C-12a, C-12b, C-12c, C-12d, C-13, C-05d, C-05e, C-25, C-26 |
+| 70 | C-18 | 5 | Wake him through his phone when it matters, and ping a liveness watcher | C-12a, C-11 |
+| 71 | C-19 | 5 | Update a server's node and MIS at a safe moment | C-17 |
+| 72 | C-20 | 5 | Cut the old node shell once the new one has traded on demo | C-14, C-15, C-12d, C-12b, C-12c, C-13 |
+| 73 | C-31 | 5 | Decode each Dukascopy symbol at its own price scale | B11 |
+| 74 | C-32 | 5 | Make the vault owner-only on every machine | C-05d |
+| 75 | C-33 | 5 | Find and fix the control and engine lock-order hang | C-06 |
+| 76 | C-27a | 5 | Move the two example apps off the host's bearer | C-05d |
+| 77 | C-27 | 5 | Refuse the host's own pass in every app manifest | C-05d, C-27a |
+| 78 | C-28 | 5 | Give each host its own pass key | C-17 |
+| 79 | C-29 | 5 | Deploy only the markets he chose, and show a refused deploy | C-23, C-12d |
+| 80 | C-30 | 5 | Let alarms read the market calendar and new keys | C-18, C-12d |
+| 81 | C-36 | 5 | Give every agent cTrader's MCP, on demo accounts only | C-34, C-27 |
+| 82 | C-21 | 5 | Build the deliberate path to bind a live account | C-17, C-18, C-12d, C-25, C-27, C-28, C-29, C-30 |
+| 83 | C-22 | 5 | Let the node read the MIS board, with a fallback | C-09, C-12a |
+| 84 | B2 | 6 | Make every example and first-party app start and answer, tested in CI | B1, B6, C-09, C-10 |
+| 85 | B18a | 6 | Build the shared pieces the build-and-prove templates need | B13, A8 |
+| 86 | B18b | 6 | Build the shared pieces the slow lane needs | B13, B15, C-03 |
+| 87 | B18c | 6 | Fix the shipped templates surgically | B13 |
+| 88 | B19 | 6 | Turn a strategy idea into a tested unit with the build-and-prove family | B14, B18a, B18c, A11 |
+| 89 | B20 | 6 | Run the slow lane on This PC | B15, B18b, C-24, C-09 |
+| 90 | B16 | 6 | Bring node records home from servers | B8, B15, C-06 |
+| 91 | B21 | 6 | Watch trading nodes without ever touching them | B16, C-06, C-12a |
 
 ### PR mechanics, for every PR
 
@@ -3699,11 +3700,72 @@ Phase 5, the trading node and external connections. Added by the loose-ends pass
 
 
 
+## Let an installed node read its calendars and cTrader definitions, and come back after a host restart (C-38)
+
+Phase 5, the trading node and external connections. Added from C-30's findings, his ruling of 2026-11-04 (`PLANNER-NOTE-2026-11-04.md` items 2 and 4). It lands in one PR with C-35 and C-29, on `build/us-c35`, so one builder and one reviewer take all three. Built facts. In an env built by `uv sync --no-editable`, `qmn/src/qmn/app/server.py:306-309` and `qmn/src/qmn/time/calendars.py:49` climb `parents[4]` to the env folder, so `bind` answers `definitions_missing` and `market_calendars()` is empty (`evidence/c30/findings-backlog.md`). `_market_calendar` also asks `qmb.data.gap_check.open_time` (`calendars.py:337`), whose `_EXTENSIONS` (`gap_check.py:801`, `:881`) climbs the same way, so both readers must change together. uv_build ships every file under a module's folder, and a built `qmf-calendar-forex` wheel and a built `qmx-broker` wheel were both opened and hold their data files. The trading node is not in `FIRST_APPS` (`qmx_host/first_start.py:600-602`), and `enable_first_party` reads only `first-party.json`, so after a host restart neither This PC nor a server starts the node again. Real step none. Done when, in envs built by `uv sync --no-editable`, the node finds every shipped calendar and its cTrader definitions, a bind on the fake cTrader passes, and a host restart starts the node and the MIS again on any machine where the connect steps enabled them.
+
+**Depends on.** C-12d, C-26b, C-30.
+
+**Files.**
+
+- [ ] Move `openapi-91.pb`, `Spotware-LICENSE.txt` and `.gitattributes` from `qmx-agents/packages/qmx-broker/src/qmx_broker/protocol/` to `packages/qmf-venue/src/qmf/venue/protocol/` with `git mv`. `qmx-broker` already depends on `qmf-venue`, so one file serves both, and the node env gains no broker door, `ccxt` or `keyring`.
+- [ ] Edit `qmn/src/qmn/app/server.py` (`:306-309`, `DEFINITIONS` beside the imported `qmf.venue` package), `qmx-agents/packages/qmx-broker/src/qmx_broker/service.py` (`:63`, `PROTOCOL_SET` the same way) and `packages/qmf-venue/tests/test_encode_amend_double.py` (`:49`).
+- [ ] Edit `qmb/src/qmb/data/gap_check.py` (`:801`, `:881`). A new `calendar_files()` finds each `qmf.calendar_*` folder with `importlib.util.find_spec`, which works installed and editable and does not import the package, so `qmf.calendar_forex`'s import-time TZPATH check does not run and QMB still imports no extension. Edit `qmn/src/qmn/time/calendars.py` (`:49`, `:322`) to read the same `calendar_files()`.
+- [ ] Edit `qmx-agents/apps/trading-node/pyproject.toml` and `uv.lock`, and `qmx-agents/apps/qmb/pyproject.toml` and `uv.lock` (the four `qmf-calendar-*` packages as dependencies and path sources), the four `extensions/qmf-calendar-*/pyproject.toml` (`tool.uv` `cache-keys` over `src/**`, as C-26b gave the qmf packages), and the root `pyproject.toml` and `uv.lock` (`calendar-tzdata` names all four, each with its workspace source and its `src` on the test path).
+- [ ] Edit `qmx-agents/packages/qmx-host/src/qmx_host/first_start.py` (`enable_first_party` finds an enabled app's folder in a table that includes the node; `FIRST_APPS` stays what a new folder starts with) and `connect_node.py` (`_enable`, `:523`, adds the names it started to `first-party.json` once its apps run, on both the PC and the server path).
+- [ ] Create `tools/tests/test_app_env_data.py` and `qmx-agents/packages/qmx-host/tests/test_first_party_node.py`.
+
+**Build.**
+
+- [ ] `qmx_engine/triggers/preflight.py:73` stays as it is, because the host runs from a checkout and the engine is his. QMB's `_FOREX_WEEK` stays too (`LOOSE-ENDS.md` A4).
+- [ ] The restart fix adds no new mechanism. It is the one first-party list the host already reads at every start, and it touches no Library, replication or backup code.
+
+**You see.**
+
+- [ ] Signing in to cTrader works on the installed node, alarms follow market hours, and after a restart your node comes back by itself.
+
+**Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
+
+- [ ] `test_app_env_data.py` builds the node env with `uv sync --no-editable` and, from that env's Python, reads `fx-24x5@1` and `metals-24x5@1` from `market_calendars()`, loads the definitions and compiles them, and checks the file's sha256 is the pin `qmx-broker`'s test holds. It builds the QMB env and reads `open_time("metals-24x5@1")`. `test_first_party_node.py` enables the node through `_enable`, restarts a fake supervisor, and sees it started, with an existing `first-party.json` kept. Run `uv run pytest tools/tests/test_app_env_data.py -q`, `uv run --project qmx-agents pytest packages/qmx-host/tests/test_first_party_node.py packages/qmx-broker/tests/test_protocol_default.py -q`.
+
+**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set. Lanes 5 to 10 are a menu, and the coordinator runs at most one of them.
+
+- [ ] Lane 1. Regression against the parent. The coordinator runs `just ci` at the PR head under `D:/QMX-worktrees/.ci-lock`, with `TEMP` and `TMP` on `D:/Temp`, then reruns any failing test at the parent. Save `c38-ci.log`. Pass when the head fails nothing the parent passes.
+- [ ] Lane 2. Start a real host on a throwaway folder, install the node through the supervisor, and bind it to the fake cTrader. Save `c38-bind.log`. Pass when the answer is not `definitions_missing` and the venue reads ready.
+- [ ] Lane 3. That node's `status` calendar lines. Save `c38-calendars.log`. Pass when no shipped calendar reads missing.
+- [ ] Lane 4. Stop and start that host. Save `c38-restart.log`. Pass when the node and the MIS run again with no click and the node's bound venue comes back.
+- [ ] Lane 5. A QMB run on a gold fixture in its installed env. Save `c38-qmb.log`. Pass when its hole count uses `metals-24x5@1`.
+- [ ] Lane 6. A calendar file edited, the node reinstalled. Save `c38-fresh.log`. Pass when the edit reaches the env.
+- [ ] Lane 7. Grep every lane log of this PR for key, token and password values. Save `c38-leak.log`. Pass when none appears.
+- [ ] Lane 8. Start the host at the head on a fresh throwaway QMX folder, read its health route, then stop it. Save `c38-boot.log`. Pass when the host answers and stops clean.
+- [ ] Lane 9. Run the PR's new tests three times in a row. Save `c38-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 10. Remove the throwaway folders and the check worktree, then list processes. Save `c38-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+
+**Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
+
+- [ ] Metric. Milliseconds for `market_calendars()` in the installed env.
+- [ ] Probe. Lane 3.
+- [ ] Baseline. None, first measure.
+- [ ] Rule. No fail rule. Recorded for the trail.
+
+**Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case and verification-gap, on installed against checkout runs. The blast-radius fact is that `qmx-broker`'s pinned sha256 test still passes on the moved file and QMB imports no extension.
+
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact named above. It writes `review/c38-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] No screenshot or video is made, because no PR in this program changes a screen (ruling 45). The operator reviews the whole stack when he lands it.
+
+**Merge.**
+
+- [ ] The CLEAN verdict at the exact head, or after the one fix round.
+- [ ] Lows in `lows.md`, new findings in `BACKLOG.md` and `IDEAS.md`, the verdict, head, parent and patch-id in `ledger.tsv`.
+- [ ] Appended to the stack on `build/unit-system`. Nothing merges. He lands the stack himself.
+
+
+
 ## Write the first real start as a script he runs (C-14)
 
 Phase 5, the trading node and external connections. Part C slice C-14 (OP-02), Level 0 AD-37, R1-B-04. Ruling 37 (the sign-in waits until there is something to use it for, and only this step waits on it). The real step runs on his own folder after G-LAND and G-DEMO. Done when `tools/first_real_start.py` checks each fact and prints PASS or FAIL per line, passes in rehearsal on a throwaway folder against the conformance venue, and is ready for his real run.
 
-**Depends on.** C-11, C-12a, C-12b, C-12c, C-12d, C-12e, C-13, C-23, C-26, C-26b, C-34, C-35, C-37, B15.
+**Depends on.** C-11, C-12a, C-12b, C-12c, C-12d, C-12e, C-13, C-23, C-26, C-26b, C-29, C-34, C-35, C-37, C-38, B15.
 
 **Files.**
 
@@ -3712,7 +3774,7 @@ Phase 5, the trading node and external connections. Part C slice C-14 (OP-02), L
 **Build.**
 
 - [ ] Write the checks in order. Folder found, practice node Ready, demo session ready, a test trade with its stop placed, seen and closed, passport landed, and the practice node's real journal rows found in This PC's store through the records job, the open month within `[records] open_harvest_s` plus a minute.
-- [ ] Give it a rehearsal mode on a throwaway folder against the conformance venue, and a real mode that refuses to run on a folder whose code he has not landed.
+- [ ] Give it a rehearsal mode on a throwaway folder against the conformance venue, and a real mode that refuses to run on a folder whose code he has not landed. The rehearsal installs the node through the supervisor, as his folder will, and lands its records through C-34's path rather than seeding them, because both gaps showed only on an installed node with an empty Library.
 - [ ] The script talks only to the running host's REST. Node reads go through `POST /api/apps/trading-node/tools/{tool}` (`qmx_control/service.py:1879-1887`), with the bearer from Credential Manager. It imports nothing from `qmx-agents`, because the root env has no `qmx_home` or `qmx_host` and `tools/tests` runs in the root env (`tools/test_all.py:64`).
 - [ ] Check the deploy through the node's `deployments` read (`operations.py:677`), never the promote answer, because `NodeLink.flush` settles a refused queued deploy silently (`node_link.py:450-468`).
 - [ ] "Passport landed" means `<home>/trading-node-passport.json` (`connect_node.py:64`) holds every self-test check ok.
@@ -4053,6 +4115,8 @@ Phase 5, the trading node and external connections. Part C slice C-19, Level 0 A
 **Build.**
 
 - [ ] Write the update job over the Library hub and the step runner, both opened by This PC.
+- [ ] A deployment's files reach a server while This PC is primary, which the shipped work does not do. `library_client` answers None while the PC is primary (`qmx_host/host.py:2394-2408`), so no replicator runs, and a sync copies text-slot blobs only (`qmx_hub/replicate.py:13-16`), so the server's `stage` answers `files_missing` (`node_link.py:371`). When promote deploys to a node homed on a server, This PC pushes that deployment's blobs to that server's Hub with `HubClient.put_blob` (`qmx_library/client.py:314`). Blobs are immutable and content-addressed, so no ref, primary, owner table, replication cursor or backup changes, and the local-first and Library work stays untouched. It needs no step from him. Prove it with `tools/lanes/two_hosts.py`, with This PC primary and no flip.
+- [ ] Two servers paired to one This PC. This PC keeps one `vault/pairing-key`, so pairing a second replaces the first's. Check it on the two-host lane and name the answer in the PR body.
 
 **You see.**
 
@@ -5278,59 +5342,60 @@ Generated by `plan-parts/assemble.mjs` from every Files block. Two PRs on the sa
 | C-05a | B1, B5, C-05b, C-05c, C-10, C-26b, C-17, C-27a, C-27, C-36 | `qmx-agents/packages/qmx-apps/src/qmx_apps/supervisor.py`, `qmx-agents/packages/qmx-apps/src/qmx_apps/manifest.py` |
 | A6 | B3 | `tools/ci.py` |
 | B5b | B9, B10 | `qmb/src/qmb/host/unit_runner.py` |
-| A7 | B5, B6, C-02, A12, A13a, B13, B15, C-05c, C-09, C-01, C-04, C-05d, C-06, C-23, C-32, C-36, C-21 | `qmx-agents/packages/qmx-host/src/qmx_host/host.py`, `qmx-agents/packages/qmx-host/src/qmx_host/first_start.py`, `qmx-agents/packages/qmx-tools/src/qmx_tools/gather.py` |
-| B6 | B3, A7, A8, B9, A11, A12, A13a, B10, B12, B13, B14, B15, C-09, C-24, C-06, C-10 | `qmx-agents/packages/qmx-judge/src/qmx_judge/landing.py`, `qmx-agents/packages/qmx-tools/src/qmx_tools/service.py`, `tools/test_all.py`, `qmx-agents/packages/qmx-host/src/qmx_host/first_start.py`, `qmx-agents/packages/qmx-control/src/qmx_control/catalog.py`, `qmx-agents/packages/qmx-tools/src/qmx_tools/functions.py`, `qmx-agents/apps/qmb/` |
+| A7 | B5, B6, C-02, A12, A13a, B13, B15, C-05c, C-09, C-01, C-04, C-05d, C-06, C-23, C-38, C-32, C-36, C-21 | `qmx-agents/packages/qmx-host/src/qmx_host/host.py`, `qmx-agents/packages/qmx-host/src/qmx_host/first_start.py`, `qmx-agents/packages/qmx-tools/src/qmx_tools/gather.py` |
+| B6 | B3, A7, A8, B9, A11, A12, A13a, B10, B12, B13, B14, B15, C-09, C-24, C-06, C-10, C-38 | `qmx-agents/packages/qmx-judge/src/qmx_judge/landing.py`, `qmx-agents/packages/qmx-tools/src/qmx_tools/service.py`, `tools/test_all.py`, `qmx-agents/packages/qmx-host/src/qmx_host/first_start.py`, `qmx-agents/packages/qmx-control/src/qmx_control/catalog.py`, `qmx-agents/packages/qmx-tools/src/qmx_tools/functions.py`, `qmx-agents/apps/qmb/` |
 | A8 | B6, A11, B12, B13, B15, A14, C-24, C-06, C-25, C-36 | `qmx-agents/packages/qmx-control/src/qmx_control/catalog.py`, `qmx-agents/packages/qmx-tools/src/qmx_tools/functions.py`, `qmx-agents/plugin/plugin.manifest.json`, `qmx-agents/packages/qma-harness/src/qma/harness/tools.py` |
 | B9 | B5b, B6, B10 | `qmb/src/qmb/host/unit_runner.py`, `qmx-agents/apps/qmb/jobs/backtest.py` |
 | A9 | B1, B12, C-17, C-33, C-36, C-21 | `qmx-agents/packages/qmx-control/src/qmx_control/service.py` |
 | A10 | A5 | `qml/src/qml/protocol/unit.py` |
 | C-02 | A7 | `qmx-agents/packages/qmx-tools/src/qmx_tools/gather.py` |
 | A11 | A4, B6, A8, A13a, A13b, A13c, A13d, B12, B13, B15, C-24, C-06 | `qml/src/qml/blocks/stdlib/`, `qmx-agents/packages/qmx-tools/src/qmx_tools/functions.py` |
-| A12 | B5, A7, B6, A13a, B13, B15, C-05c, C-09, C-01, C-04, C-05d, C-06, C-23, C-32, C-36, C-21 | `qmx-agents/packages/qmx-host/src/qmx_host/host.py`, `qmx-agents/packages/qmx-host/src/qmx_host/first_start.py` |
-| A13a | A4, A7, B6, A11, A12, A13b, A13c, A13d, C-09 | `qml/src/qml/blocks/stdlib/`, `qml/tests/golden/indicators/`, `tools/dictionary/golden_talib.py`, `qmx-agents/packages/qmx-host/src/qmx_host/first_start.py`, `qml/catalogue-seed/wave-1/` |
+| A12 | B5, A7, B6, A13a, B13, B15, C-05c, C-09, C-01, C-04, C-05d, C-06, C-23, C-38, C-32, C-36, C-21 | `qmx-agents/packages/qmx-host/src/qmx_host/host.py`, `qmx-agents/packages/qmx-host/src/qmx_host/first_start.py` |
+| A13a | A4, A7, B6, A11, A12, A13b, A13c, A13d, C-09, C-38 | `qml/src/qml/blocks/stdlib/`, `qml/tests/golden/indicators/`, `tools/dictionary/golden_talib.py`, `qmx-agents/packages/qmx-host/src/qmx_host/first_start.py`, `qml/catalogue-seed/wave-1/` |
 | A13b | A4, A11, A13a, A13c, A13d | `qml/src/qml/blocks/stdlib/`, `qml/tests/golden/statistics/`, `qml/catalogue-seed/wave-1/statistics/` |
 | A13c | A4, A11, A13a, A13b, A13d | `qml/src/qml/blocks/stdlib/`, `qml/tests/golden/beyond-fx/`, `qml/catalogue-seed/wave-1/beyond-fx/` |
 | A13d | A4, A11, A13a, A13b, A13c | `qml/src/qml/blocks/stdlib/`, `qml/tests/golden/exits-and-halts/`, `qml/catalogue-seed/wave-1/exits-and-halts/` |
 | A15 | A4 | `qml/src/qml/blocks/api.py` |
 | B7 | B11 | `qmb/src/qmb/host/replay.py` |
-| B10 | B5b, B6, B9 | `qmb/src/qmb/host/unit_runner.py`, `qmx-agents/apps/qmb/server.py` |
+| B10 | B5b, B6, B9, C-38 | `qmb/src/qmb/host/unit_runner.py`, `qmx-agents/apps/qmb/server.py`, `qmb/src/qmb/data/gap_check.py` |
 | B11 | B7, C-31 | `qmb/src/qmb/host/replay.py`, `qmx-agents/packages/qmx-engine/src/qmx_engine/templates/download-dukascopy/` |
 | B12 | B1, B3, B6, A8, A9, A11, B13, B15, C-24, C-06, C-17, C-33, C-36, C-21 | `qmx-agents/packages/qmx-control/src/qmx_control/service.py`, `qmx-agents/packages/qmx-judge/src/qmx_judge/conformance.py`, `qmx-agents/packages/qmx-judge/src/qmx_judge/conformance_pack/`, `qmx-agents/packages/qmx-judge/tests/test_conformance.py`, `qmx-agents/packages/qmx-judge/tests/fixtures/variant-tester/`, `qmx-agents/apps/qmb/jobs/conformance.py`, `qmx-agents/packages/qmx-tools/src/qmx_tools/functions.py` |
 | B13 | B3, B5, A7, B6, A8, A11, A12, B12, B15, C-05c, C-24, C-01, C-04, C-05d, C-06, C-23, C-32, C-36, C-21 | `qmx-agents/packages/qmx-judge/src/qmx_judge/judge.py`, `qmx-agents/packages/qmx-judge/src/qmx_judge/presets.py`, `qmx-agents/packages/qmx-judge/src/qmx_judge/shrink.py`, `qmx-agents/packages/qmx-judge/src/qmx_judge/tries.py`, `qmx-agents/packages/qmx-tools/tests/test_tools.py`, `qmx-agents/packages/qmx-host/src/qmx_host/host.py`, `qmx-agents/packages/qmx-control/src/qmx_control/catalog.py`, `qmx-agents/packages/qmx-tools/src/qmx_tools/functions.py` |
 | B14 | B3, B6 | `qmx-agents/packages/qmx-judge/src/qmx_judge/landing.py`, `qmx-agents/apps/qmb/jobs/sweep.py`, `qmx-agents/apps/qmb/jobs/walk_forward.py`, `qmx-agents/apps/qmb/jobs/robustness.py`, `qmx-agents/apps/qmb/jobs/optimize.py`, `qmx-agents/apps/qmb/jobs/whatif.py`, `qmx-agents/apps/qmb/jobs/replay_check.py`, `qmx-agents/apps/qmb/tests/` |
 | B15 | B3, B5, A7, B6, A8, A11, A12, B12, B13, C-05c, C-24, C-01, C-04, C-05d, C-06, C-23, C-32, C-36, C-21, B16 | `qmx-agents/packages/qmx-tools/tests/test_tools.py`, `qmx-agents/packages/qmx-judge/src/qmx_judge/paper.py`, `qmx-agents/packages/qmx-judge/tests/test_no_bot_writes.py`, `qmx-agents/packages/qmx-host/src/qmx_host/host.py`, `qmx-agents/packages/qmx-tools/src/qmx_tools/functions.py`, `qmx-agents/packages/qmx-control/src/qmx_control/catalog.py`, `qmx-agents/packages/qmx-host/src/qmx_host/records.py` |
 | A14 | A8, C-24 | `qmx-agents/plugin/plugin.manifest.json`, `qmx-agents/packages/qma-harness/tests/live/test_unit_hook_probe.py` |
-| C-03 | C-30 | `extensions/qmf-calendar-cme/`, `extensions/qmf-calendar-indices/`, `extensions/qmf-calendar-crypto247/` |
+| C-03 | C-38, C-30 | `extensions/qmf-calendar-cme/`, `extensions/qmf-calendar-indices/`, `extensions/qmf-calendar-crypto247/` |
 | C-05b | B1, B5, C-05a, C-05c, C-26b, C-17, C-27a | `qmx-agents/packages/qmx-apps/src/qmx_apps/supervisor.py` |
 | C-05c | B1, B5, C-05a, A7, A12, B13, B15, C-05b, C-01, C-04, C-05d, C-06, C-23, C-26b, C-17, C-32, C-27a, C-36, C-21 | `qmx-agents/packages/qmx-apps/src/qmx_apps/supervisor.py`, `qmx-agents/packages/qmx-host/src/qmx_host/host.py` |
 | C-08 | C-20 | `qmn/src/qmn/host/`, `qmn/src/qmn/seats/host.py` |
-| C-09 | B3, A7, B6, A12, A13a, C-10, C-27a | `tools/test_all.py`, `qmx-agents/packages/qmx-host/src/qmx_host/first_start.py`, `qmx-agents/apps/mis/` |
+| C-09 | B3, A7, B6, A12, A13a, C-10, C-38, C-27a | `tools/test_all.py`, `qmx-agents/packages/qmx-host/src/qmx_host/first_start.py`, `qmx-agents/apps/mis/` |
 | C-24 | B6, A8, A11, B12, B13, B15, A14, C-06, C-25, C-36 | `qmx-agents/packages/qmx-control/src/qmx_control/catalog.py`, `qmx-agents/packages/qmx-tools/src/qmx_tools/functions.py`, `qmx-agents/packages/qma-harness/tests/` |
 | C-01 | B5, A7, A12, B13, B15, C-05c, C-04, C-05d, C-06, C-23, C-32, C-36, C-21 | `qmx-agents/packages/qmx-host/src/qmx_host/host.py` |
 | C-04 | B5, A7, A12, B13, B15, C-05c, C-01, C-05d, C-06, C-23, C-17, C-32, C-36, C-21 | `qmx-agents/packages/qmx-host/src/qmx_host/host.py`, `qmx-agents/packages/qmx-host/src/qmx_host/connect_logs.py` |
 | C-05d | B5, A7, A12, B13, B15, C-05c, C-01, C-04, C-06, C-23, C-32, C-36, C-21 | `qmx-agents/packages/qmx-host/src/qmx_host/host.py` |
 | C-05e | C-25 | `qmx-agents/packages/qmx-home/src/qmx_home/classes.py` |
 | C-06 | B3, B5, A7, B6, A8, A11, A12, B12, B13, B15, C-05c, C-24, C-01, C-04, C-05d, C-12a, C-23, C-32, C-33, C-28, C-29, C-36, C-21, B16 | `qmx-agents/packages/qmx-tools/src/qmx_tools/service.py`, `qmx-agents/packages/qmx-tools/tests/test_tools.py`, `qmx-agents/packages/qmx-host/src/qmx_host/host.py`, `qmx-agents/packages/qmx-control/src/qmx_control/catalog.py`, `qmx-agents/packages/qmx-tools/src/qmx_tools/functions.py`, `qmx-agents/packages/qmx-host/src/qmx_host/node_link.py`, `qmx-agents/packages/qmx-engine/src/qmx_engine/control_door.py`, `qmx-agents/packages/qmx-host/src/qmx_host/host_route.py` |
-| C-10 | B3, B5, C-05a, B6, C-09, C-12d, C-35, C-34, C-20, C-27, C-30, C-36, C-21 | `tools/test_all.py`, `qmx-agents/packages/qmx-apps/src/qmx_apps/manifest.py`, `qmn/src/qmn/app/operations.py`, `qmn/src/qmn/app/server.py`, `qmn/src/qmn/app/store.py`, `qmn/src/qmn/app/identity.py`, `qmn/tests/test_app_operations.py`, `qmn/tests/test_app_identity.py` |
+| C-10 | B3, B5, C-05a, B6, C-09, C-12d, C-35, C-34, C-38, C-20, C-27, C-30, C-36, C-21 | `tools/test_all.py`, `qmx-agents/packages/qmx-apps/src/qmx_apps/manifest.py`, `qmn/src/qmn/app/operations.py`, `qmn/src/qmn/app/server.py`, `qmx-agents/apps/trading-node/`, `qmn/src/qmn/app/store.py`, `qmn/src/qmn/app/identity.py`, `qmn/tests/test_app_operations.py`, `qmn/tests/test_app_identity.py` |
 | C-11 | C-12d, C-34, C-17, C-18, C-19, C-28, C-21 | `qmx-agents/packages/qmx-host/src/qmx_host/connect_node.py` |
 | C-12a | C-06, C-12e, C-37, C-35, C-20, C-29, C-21, C-22 | `qmx-agents/packages/qmx-host/src/qmx_host/node_link.py`, `qmn/src/qmn/app/runtime.py`, `qmn/src/qmn/app/feed_keeper.py`, `packages/qmf-venue/src/qmf/venue/encode.py`, `qmn/tests/test_app_runtime.py`, `qmn/tests/test_protection_every_order.py`, `qmn/tests/test_app_feed_keeper.py` |
 | C-12b | C-12e, C-20 | `qmn/src/qmn/app/reconciler.py`, `qmn/src/qmn/app/attribution.py`, `qmn/tests/test_app_attribution.py`, `qmn/tests/test_app_unknown_drill.py` |
 | C-12c | C-20 | `qmn/src/qmn/app/paper_lane.py`, `qmn/src/qmn/app/stand_down.py`, `qmn/tests/test_app_paper_lane.py`, `qmn/tests/test_app_stand_down.py` |
 | C-23 | B5, A7, A12, B13, B15, C-05c, C-01, C-04, C-05d, C-06, C-32, C-29, C-36, C-21 | `qmx-agents/packages/qmx-host/src/qmx_host/host.py`, `qmx-agents/packages/qmx-host/src/qmx_host/promote.py` |
 | C-13 | C-20 | `qmn/src/qmn/app/healing.py`, `qmn/tests/test_app_healing.py` |
-| C-12d | C-10, C-11, C-35, C-34, C-17, C-18, C-19, C-20, C-28, C-30, C-21 | `qmn/src/qmn/app/operations.py`, `qmn/src/qmn/app/server.py`, `qmx-agents/packages/qmx-host/src/qmx_host/connect_node.py`, `qmn/src/qmn/venue/live.py`, `qmn/src/qmn/app/grants.py`, `qmn/tests/test_app_grants.py`, `qmn/tests/test_app_binding.py` |
+| C-12d | C-10, C-11, C-35, C-34, C-38, C-17, C-18, C-19, C-20, C-28, C-30, C-21 | `qmn/src/qmn/app/operations.py`, `qmn/src/qmn/app/server.py`, `qmx-agents/packages/qmx-host/src/qmx_host/connect_node.py`, `qmn/src/qmn/venue/live.py`, `qmn/src/qmn/app/grants.py`, `qmn/tests/test_app_grants.py`, `qmn/tests/test_app_binding.py` |
 | C-26 | C-26b | `tools/tests/test_app_env_fresh.py` |
 | C-26b | B1, B5, C-05a, C-05b, C-05c, C-26, C-17, C-27a | `qmx-agents/packages/qmx-apps/src/qmx_apps/supervisor.py`, `tools/tests/test_app_env_fresh.py` |
 | C-12e | C-12a, C-12b, C-35, C-20, C-29, C-21, C-22 | `qmn/src/qmn/app/runtime.py`, `qmn/src/qmn/app/feed_keeper.py`, `qmn/src/qmn/app/reconciler.py`, `qmn/tests/test_app_partial_fill.py`, `qmn/tests/test_app_reconcile_filled.py`, `qmn/tests/test_app_feed_reconnect.py` |
-| C-37 | C-12a | `packages/qmf-venue/src/qmf/venue/encode.py` |
+| C-37 | C-12a, C-38 | `packages/qmf-venue/src/qmf/venue/encode.py`, `packages/qmf-venue/tests/test_encode_amend_double.py` |
 | C-35 | C-10, C-12a, C-12d, C-12e, C-34, C-20, C-29, C-30, C-21, C-22 | `qmn/src/qmn/app/operations.py`, `qmn/src/qmn/app/runtime.py`, `qmn/tests/test_app_status_truth.py`, `qmn/tests/test_app_kill_scopes.py` |
 | C-34 | C-10, C-11, C-12d, C-35, C-17, C-18, C-19, C-20, C-28, C-30, C-21 | `qmn/src/qmn/app/operations.py`, `qmx-agents/packages/qmx-host/src/qmx_host/connect_node.py`, `qmn/src/qmn/venue/live.py`, `qmn/tests/test_app_records.py` |
+| C-38 | A7, B6, A12, A13a, B10, C-03, C-09, C-10, C-12d, C-37, C-20, C-30, C-21 | `qmx-agents/packages/qmx-host/src/qmx_host/first_start.py`, `qmx-agents/apps/qmb/pyproject.toml`, `qmb/src/qmb/data/gap_check.py`, `extensions/`, `qmn/src/qmn/app/server.py`, `qmx-agents/apps/trading-node/pyproject.toml`, `packages/qmf-venue/tests/test_encode_amend_double.py`, `qmn/src/qmn/time/calendars.py` |
 | C-16 | C-20 | `qmn/tests/test_ccxt_client.py` |
 | C-25 | A8, C-24, C-05e, C-36 | `qmx-agents/packages/qma-harness/src/qma/harness/tools.py`, `qmx-agents/packages/qma-harness/tests/test_guard_secret_globs.py`, `qmx-agents/packages/qmx-home/src/qmx_home/classes.py` |
 | C-17 | B1, B5, C-05a, A9, B12, C-05b, C-05c, C-04, C-11, C-12d, C-26b, C-34, C-18, C-19, C-33, C-27a, C-28, C-36, C-21 | `qmx-agents/packages/qmx-apps/src/qmx_apps/supervisor.py`, `qmx-agents/packages/qmx-control/src/qmx_control/service.py`, `qmx-agents/packages/qmx-host/src/qmx_host/connect_logs.py`, `qmx-agents/packages/qmx-host/src/qmx_host/connect_node.py` |
 | C-18 | C-11, C-12d, C-34, C-17, C-19, C-20, C-28, C-30, C-21 | `qmx-agents/packages/qmx-host/src/qmx_host/connect_node.py`, `qmn/src/qmn/app/alarms.py`, `qmn/src/qmn/observability/alerts.py`, `qmn/tests/test_app_alarms.py` |
 | C-19 | C-11, C-12d, C-34, C-17, C-18, C-28, C-21 | `qmx-agents/packages/qmx-host/src/qmx_host/connect_node.py` |
-| C-20 | C-08, C-10, C-12a, C-12b, C-12c, C-13, C-12d, C-12e, C-35, C-34, C-16, C-18, C-29, C-30, C-21, C-22 | `qmn/src/qmn/host/`, `qmn/src/qmn/seats/`, `qmn/src/qmn/app/`, `qmn/tests/`, `qmn/src/qmn/observability/` |
+| C-20 | C-08, C-10, C-12a, C-12b, C-12c, C-13, C-12d, C-12e, C-35, C-34, C-38, C-16, C-18, C-29, C-30, C-21, C-22 | `qmn/src/qmn/host/`, `qmn/src/qmn/seats/`, `qmn/src/qmn/app/`, `qmn/tests/`, `qmn/src/qmn/observability/` |
 | C-31 | B11 | `qmx-agents/packages/qmx-engine/src/qmx_engine/templates/download-dukascopy/scripts/download.py` |
 | C-32 | B5, A7, A12, B13, B15, C-05c, C-01, C-04, C-05d, C-06, C-23, C-36, C-21 | `qmx-agents/packages/qmx-host/src/qmx_host/host.py` |
 | C-33 | B1, A9, B12, C-06, C-17, C-36, C-21 | `qmx-agents/packages/qmx-control/src/qmx_control/service.py`, `qmx-agents/packages/qmx-engine/src/qmx_engine/control_door.py` |
@@ -5338,9 +5403,9 @@ Generated by `plan-parts/assemble.mjs` from every Files block. Two PRs on the sa
 | C-27 | B5, C-05a, C-10, C-36 | `qmx-agents/packages/qmx-apps/src/qmx_apps/manifest.py` |
 | C-28 | C-06, C-11, C-12d, C-34, C-17, C-18, C-19, C-21, B16 | `qmx-agents/packages/qmx-host/src/qmx_host/host_route.py`, `qmx-agents/packages/qmx-host/src/qmx_host/connect_node.py` |
 | C-29 | C-06, C-12a, C-23, C-12e, C-35, C-20, C-21, C-22 | `qmx-agents/packages/qmx-host/src/qmx_host/node_link.py`, `qmn/src/qmn/app/runtime.py`, `qmx-agents/packages/qmx-host/src/qmx_host/promote.py`, `qmn/tests/test_app_deploy_markets.py` |
-| C-30 | C-03, C-10, C-12d, C-35, C-34, C-18, C-20, C-21 | `extensions/`, `qmn/src/qmn/app/server.py`, `qmn/src/qmn/app/operations.py`, `qmn/src/qmn/app/alarms.py`, `qmn/tests/test_app_alarms_calendar.py` |
+| C-30 | C-03, C-10, C-12d, C-35, C-34, C-38, C-18, C-20, C-21 | `extensions/`, `qmn/src/qmn/app/server.py`, `qmn/src/qmn/app/operations.py`, `qmn/src/qmn/time/calendars.py`, `qmn/src/qmn/app/alarms.py`, `qmn/tests/test_app_alarms_calendar.py` |
 | C-36 | B1, B5, C-05a, A7, A8, A9, A12, B12, B13, B15, C-05c, C-24, C-01, C-04, C-05d, C-06, C-10, C-23, C-25, C-17, C-32, C-33, C-27, C-21 | `qmx-agents/packages/qmx-control/src/qmx_control/service.py`, `qmx-agents/packages/qmx-host/src/qmx_host/host.py`, `qmx-agents/packages/qmx-apps/src/qmx_apps/manifest.py`, `qmx-agents/packages/qma-harness/src/qma/harness/tools.py`, `qmx-agents/packages/qma-harness/tests/test_mcp_credential.py` |
-| C-21 | B1, B5, A7, A9, A12, B12, B13, B15, C-05c, C-01, C-04, C-05d, C-06, C-10, C-11, C-12a, C-23, C-12d, C-12e, C-35, C-34, C-17, C-18, C-19, C-20, C-32, C-33, C-28, C-29, C-30, C-36, C-22 | `qmx-agents/packages/qmx-control/src/qmx_control/service.py`, `qmx-agents/packages/qmx-host/src/qmx_host/host.py`, `qmn/src/qmn/app/server.py`, `qmx-agents/packages/qmx-host/src/qmx_host/connect_node.py`, `qmn/src/qmn/app/runtime.py` |
+| C-21 | B1, B5, A7, A9, A12, B12, B13, B15, C-05c, C-01, C-04, C-05d, C-06, C-10, C-11, C-12a, C-23, C-12d, C-12e, C-35, C-34, C-38, C-17, C-18, C-19, C-20, C-32, C-33, C-28, C-29, C-30, C-36, C-22 | `qmx-agents/packages/qmx-control/src/qmx_control/service.py`, `qmx-agents/packages/qmx-host/src/qmx_host/host.py`, `qmn/src/qmn/app/server.py`, `qmx-agents/packages/qmx-host/src/qmx_host/connect_node.py`, `qmn/src/qmn/app/runtime.py` |
 | C-22 | C-12a, C-12e, C-35, C-20, C-29, C-21 | `qmn/src/qmn/app/runtime.py` |
 | B2 | C-27a | `qmx-agents/packages/qmx-apps/tests/test_shipped_apps.py` |
 | B18c | B19 | `qmx-agents/packages/qmx-engine/src/qmx_engine/templates/b-build-and-prove/scripts/spec.py`, `qmx-agents/packages/qmx-engine/src/qmx_engine/templates/d3-iterate-against-qmb/`, `qmx-agents/packages/qmx-engine/src/qmx_engine/templates/l4-overnight-lab-loop/`, `qmx-agents/packages/qmx-engine/src/qmx_engine/templates/d4-variant-comparison/` |

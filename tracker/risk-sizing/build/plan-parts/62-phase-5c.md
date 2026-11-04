@@ -196,6 +196,8 @@ Phase 5, the trading node and external connections. Part C slice C-19, Level 0 A
 **Build.**
 
 - [ ] Write the update job over the Library hub and the step runner, both opened by This PC.
+- [ ] A deployment's files reach a server while This PC is primary, which the shipped work does not do. `library_client` answers None while the PC is primary (`qmx_host/host.py:2394-2408`), so no replicator runs, and a sync copies text-slot blobs only (`qmx_hub/replicate.py:13-16`), so the server's `stage` answers `files_missing` (`node_link.py:371`). When promote deploys to a node homed on a server, This PC pushes that deployment's blobs to that server's Hub with `HubClient.put_blob` (`qmx_library/client.py:314`). Blobs are immutable and content-addressed, so no ref, primary, owner table, replication cursor or backup changes, and the local-first and Library work stays untouched. It needs no step from him. Prove it with `tools/lanes/two_hosts.py`, with This PC primary and no flip.
+- [ ] Two servers paired to one This PC. This PC keeps one `vault/pairing-key`, so pairing a second replaces the first's. Check it on the two-host lane and name the answer in the PR body.
 
 **You see.**
 

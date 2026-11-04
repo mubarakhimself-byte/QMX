@@ -542,11 +542,61 @@ Phase 5, the trading node and external connections. Added by the loose-ends pass
 @merge
 
 
+## Let an installed node read its calendars and cTrader definitions, and come back after a host restart (C-38)
+
+Phase 5, the trading node and external connections. Added from C-30's findings, his ruling of 2026-11-04 (`PLANNER-NOTE-2026-11-04.md` items 2 and 4). It lands in one PR with C-35 and C-29, on `build/us-c35`, so one builder and one reviewer take all three. Built facts. In an env built by `uv sync --no-editable`, `qmn/src/qmn/app/server.py:306-309` and `qmn/src/qmn/time/calendars.py:49` climb `parents[4]` to the env folder, so `bind` answers `definitions_missing` and `market_calendars()` is empty (`evidence/c30/findings-backlog.md`). `_market_calendar` also asks `qmb.data.gap_check.open_time` (`calendars.py:337`), whose `_EXTENSIONS` (`gap_check.py:801`, `:881`) climbs the same way, so both readers must change together. uv_build ships every file under a module's folder, and a built `qmf-calendar-forex` wheel and a built `qmx-broker` wheel were both opened and hold their data files. The trading node is not in `FIRST_APPS` (`qmx_host/first_start.py:600-602`), and `enable_first_party` reads only `first-party.json`, so after a host restart neither This PC nor a server starts the node again. Real step none. Done when, in envs built by `uv sync --no-editable`, the node finds every shipped calendar and its cTrader definitions, a bind on the fake cTrader passes, and a host restart starts the node and the MIS again on any machine where the connect steps enabled them.
+
+**Depends on.** C-12d, C-26b, C-30.
+
+**Files.**
+
+- [ ] Move `openapi-91.pb`, `Spotware-LICENSE.txt` and `.gitattributes` from `qmx-agents/packages/qmx-broker/src/qmx_broker/protocol/` to `packages/qmf-venue/src/qmf/venue/protocol/` with `git mv`. `qmx-broker` already depends on `qmf-venue`, so one file serves both, and the node env gains no broker door, `ccxt` or `keyring`.
+- [ ] Edit `qmn/src/qmn/app/server.py` (`:306-309`, `DEFINITIONS` beside the imported `qmf.venue` package), `qmx-agents/packages/qmx-broker/src/qmx_broker/service.py` (`:63`, `PROTOCOL_SET` the same way) and `packages/qmf-venue/tests/test_encode_amend_double.py` (`:49`).
+- [ ] Edit `qmb/src/qmb/data/gap_check.py` (`:801`, `:881`). A new `calendar_files()` finds each `qmf.calendar_*` folder with `importlib.util.find_spec`, which works installed and editable and does not import the package, so `qmf.calendar_forex`'s import-time TZPATH check does not run and QMB still imports no extension. Edit `qmn/src/qmn/time/calendars.py` (`:49`, `:322`) to read the same `calendar_files()`.
+- [ ] Edit `qmx-agents/apps/trading-node/pyproject.toml` and `uv.lock`, and `qmx-agents/apps/qmb/pyproject.toml` and `uv.lock` (the four `qmf-calendar-*` packages as dependencies and path sources), the four `extensions/qmf-calendar-*/pyproject.toml` (`tool.uv` `cache-keys` over `src/**`, as C-26b gave the qmf packages), and the root `pyproject.toml` and `uv.lock` (`calendar-tzdata` names all four, each with its workspace source and its `src` on the test path).
+- [ ] Edit `qmx-agents/packages/qmx-host/src/qmx_host/first_start.py` (`enable_first_party` finds an enabled app's folder in a table that includes the node; `FIRST_APPS` stays what a new folder starts with) and `connect_node.py` (`_enable`, `:523`, adds the names it started to `first-party.json` once its apps run, on both the PC and the server path).
+- [ ] Create `tools/tests/test_app_env_data.py` and `qmx-agents/packages/qmx-host/tests/test_first_party_node.py`.
+
+**Build.**
+
+- [ ] `qmx_engine/triggers/preflight.py:73` stays as it is, because the host runs from a checkout and the engine is his. QMB's `_FOREX_WEEK` stays too (`LOOSE-ENDS.md` A4).
+- [ ] The restart fix adds no new mechanism. It is the one first-party list the host already reads at every start, and it touches no Library, replication or backup code.
+
+**You see.**
+
+- [ ] Signing in to cTrader works on the installed node, alarms follow market hours, and after a restart your node comes back by itself.
+
+**Verify, unit.**
+
+- [ ] `test_app_env_data.py` builds the node env with `uv sync --no-editable` and, from that env's Python, reads `fx-24x5@1` and `metals-24x5@1` from `market_calendars()`, loads the definitions and compiles them, and checks the file's sha256 is the pin `qmx-broker`'s test holds. It builds the QMB env and reads `open_time("metals-24x5@1")`. `test_first_party_node.py` enables the node through `_enable`, restarts a fake supervisor, and sees it started, with an existing `first-party.json` kept. Run `uv run pytest tools/tests/test_app_env_data.py -q`, `uv run --project qmx-agents pytest packages/qmx-host/tests/test_first_party_node.py packages/qmx-broker/tests/test_protocol_default.py -q`.
+
+**Verify, live.**
+
+@lane1
+- [ ] Lane 2. Start a real host on a throwaway folder, install the node through the supervisor, and bind it to the fake cTrader. Save `c38-bind.log`. Pass when the answer is not `definitions_missing` and the venue reads ready.
+- [ ] Lane 3. That node's `status` calendar lines. Save `c38-calendars.log`. Pass when no shipped calendar reads missing.
+- [ ] Lane 4. Stop and start that host. Save `c38-restart.log`. Pass when the node and the MIS run again with no click and the node's bound venue comes back.
+- [ ] Lane 5. A QMB run on a gold fixture in its installed env. Save `c38-qmb.log`. Pass when its hole count uses `metals-24x5@1`.
+- [ ] Lane 6. A calendar file edited, the node reinstalled. Save `c38-fresh.log`. Pass when the edit reaches the env.
+@menu
+
+**Verify, perf.**
+
+- [ ] Metric. Milliseconds for `market_calendars()` in the installed env.
+- [ ] Probe. Lane 3.
+- [ ] Baseline. None, first measure.
+- [ ] Rule. No fail rule. Recorded for the trail.
+
+**Review gate.** Lenses edge-case and verification-gap, on installed against checkout runs. The blast-radius fact is that `qmx-broker`'s pinned sha256 test still passes on the moved file and QMB imports no extension.
+
+@merge
+
+
 ## Write the first real start as a script he runs (C-14)
 
 Phase 5, the trading node and external connections. Part C slice C-14 (OP-02), Level 0 AD-37, R1-B-04. Ruling 37 (the sign-in waits until there is something to use it for, and only this step waits on it). The real step runs on his own folder after G-LAND and G-DEMO. Done when `tools/first_real_start.py` checks each fact and prints PASS or FAIL per line, passes in rehearsal on a throwaway folder against the conformance venue, and is ready for his real run.
 
-**Depends on.** C-11, C-12a, C-12b, C-12c, C-12d, C-12e, C-13, C-23, C-26, C-26b, C-34, C-35, C-37, B15.
+**Depends on.** C-11, C-12a, C-12b, C-12c, C-12d, C-12e, C-13, C-23, C-26, C-26b, C-29, C-34, C-35, C-37, C-38, B15.
 
 **Files.**
 
@@ -555,7 +605,7 @@ Phase 5, the trading node and external connections. Part C slice C-14 (OP-02), L
 **Build.**
 
 - [ ] Write the checks in order. Folder found, practice node Ready, demo session ready, a test trade with its stop placed, seen and closed, passport landed, and the practice node's real journal rows found in This PC's store through the records job, the open month within `[records] open_harvest_s` plus a minute.
-- [ ] Give it a rehearsal mode on a throwaway folder against the conformance venue, and a real mode that refuses to run on a folder whose code he has not landed.
+- [ ] Give it a rehearsal mode on a throwaway folder against the conformance venue, and a real mode that refuses to run on a folder whose code he has not landed. The rehearsal installs the node through the supervisor, as his folder will, and lands its records through C-34's path rather than seeding them, because both gaps showed only on an installed node with an empty Library.
 - [ ] The script talks only to the running host's REST. Node reads go through `POST /api/apps/trading-node/tools/{tool}` (`qmx_control/service.py:1879-1887`), with the bearer from Credential Manager. It imports nothing from `qmx-agents`, because the root env has no `qmx_home` or `qmx_host` and `tools/tests` runs in the root env (`tools/test_all.py:64`).
 - [ ] Check the deploy through the node's `deployments` read (`operations.py:677`), never the promote answer, because `NodeLink.flush` settles a refused queued deploy silently (`node_link.py:450-468`).
 - [ ] "Passport landed" means `<home>/trading-node-passport.json` (`connect_node.py:64`) holds every self-test check ok.
