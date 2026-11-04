@@ -47,7 +47,7 @@ import threading
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from pathlib import Path
 from typing import Final, Protocol, cast
@@ -214,6 +214,10 @@ class Deployment:
     account_id: str
     snapshots: tuple[Mapping[str, object], ...]
     lane: str
+    markets: tuple[str, ...] = ()
+    """The unit's markets he chose. Only these get bars, so only these ever trade."""
+    starting: Mapping[str, object] = field(default_factory=dict[str, object])
+    """The numbers the unit starts from, by name, as the document states them."""
     placement: Placement | None = None
 
 
@@ -279,8 +283,35 @@ def parse_deployment(document: Mapping[str, object]) -> Deployment:
             if isinstance(item, Mapping)
         ),
         lane=lane,
+        markets=_chosen_markets(document),
+        starting=_map(_map(document, "starting"), "values"),
         placement=_placement(document.get("placement")),
     )
+
+
+def _chosen_markets(document: Mapping[str, object]) -> tuple[str, ...]:
+    """``deployment.markets`` as market ids of the unit. A document naming none is refused, so an
+    empty list can never read as every market of the unit."""
+    chosen = document.get("markets")
+    if not isinstance(chosen, list) or not chosen:
+        raise ValueError("deployment.markets names at least one market he chose")
+    unit = _map(document, "unit_document").get("markets")
+    held = {
+        cast("Mapping[str, object]", market).get("market_id")
+        for market in (cast("list[object]", unit) if isinstance(unit, list) else [])
+        if isinstance(market, Mapping)
+    }
+    named: list[str] = []
+    for item in cast("list[object]", chosen):
+        market = (
+            cast("Mapping[str, object]", item).get("market_id")
+            if isinstance(item, Mapping)
+            else None
+        )
+        if not isinstance(market, str) or market not in held:
+            raise ValueError(f"deployment.markets names {market}, which the unit does not trade")
+        named.append(market)
+    return tuple(dict.fromkeys(named))
 
 
 # --- the board feed: an optional placement read (connections C25) ----------------------------
@@ -1299,8 +1330,11 @@ class NodeUnit:
         orders: OrderPath,
         journal: RunJournal,
         guard: Callable[[str], str | None],
+        assignment: Mapping[str, Decimal] | None = None,
     ) -> None:
         self.deployment = deployment
+        self.assignment = assignment
+        self.traded = deployment.markets
         self.compiled = compiled
         self.records = records
         self.orders = orders
@@ -1346,7 +1380,11 @@ class NodeUnit:
             scope = self.deployment.deployment_id
             built = (
                 construct_unit(
-                    self.compiled, read_surfaces=read, scope_id=scope, execution_target=target
+                    self.compiled,
+                    read_surfaces=read,
+                    scope_id=scope,
+                    execution_target=target,
+                    assignment=self.assignment,
                 )
                 if snapshot is None
                 else restore_unit(
@@ -1355,6 +1393,7 @@ class NodeUnit:
                     read_surfaces=read,
                     scope_id=scope,
                     execution_target=target,
+                    assignment=self.assignment,
                 )
             )
             if not is_refusal(built):
@@ -1404,7 +1443,7 @@ class NodeUnit:
             if (
                 handler is None
                 or send.get("deployment_id") != self.deployment.deployment_id
-                or market not in self.records
+                or market not in self.traded
                 or name in self.placed
                 or client.closed(name) is not None
             ):
@@ -1761,6 +1800,21 @@ def deployment_records(deployment: Deployment) -> dict[str, InstrumentRecord] | 
         if record is None:
             return f"the deployment holds no record snapshot for {market.get('market_id')}"
         found[str(market["market_id"])] = record
+    return found
+
+
+def starting_assignment(deployment: Deployment, compiled: CompiledUnit) -> dict[str, Decimal] | str:
+    """The calibrated numbers the deployment starts from, or why one does not read as a number.
+    Every other number the document lists is fixed in the compiled plan its G record tested."""
+    found: dict[str, Decimal] = {}
+    for slow in compiled.plan.slow:
+        given = deployment.starting.get(slow.number.name)
+        if given is None:
+            continue
+        try:
+            found[slow.number.name] = Decimal(str(given))
+        except InvalidOperation:
+            return f"the starting value of {slow.number.name} is not a number: {given}"
     return found
 
 
@@ -2267,7 +2321,7 @@ class Runtime:
         placement = hosted.deployment.placement
         if placement is None or hosted.unit is None:
             return None
-        return self.board.read(placement, hosted.unit.records)
+        return self.board.read(placement, hosted.unit.traded)
 
     # --- stand-downs that wait for him ---
 
@@ -2287,7 +2341,7 @@ class Runtime:
         in the second case, with an alarm."""
         hosted = self.hosted.get(deployment_id)
         unit = None if hosted is None else hosted.unit
-        if hosted is None or unit is None or market_id not in unit.records:
+        if hosted is None or unit is None or market_id not in unit.traded:
             return None
         deployment = hosted.deployment
         subject = Subject(
@@ -2377,8 +2431,14 @@ class Runtime:
         if is_refusal(journal):
             hosted.phase, hosted.detail = Phase.REFUSED, "the unit journal would not open"
             return
+        assignment = starting_assignment(deployment, compiled)
+        if isinstance(assignment, str):
+            hosted.phase, hosted.detail = Phase.REFUSED, assignment
+            return
         hosted.venue = venue
-        unit = NodeUnit(deployment, compiled, records, path, journal.value, self.guard(hosted))
+        unit = NodeUnit(
+            deployment, compiled, records, path, journal.value, self.guard(hosted), assignment
+        )
         unit.journal_world = world
         account = venue.client.account
         target = ExecutionTarget.try_create(account.role, account.venue, account.account_id)
@@ -2387,10 +2447,8 @@ class Runtime:
             return
         started = unit.start(venue.client.equity(), target.value)
         if is_refusal(started):
-            hosted.phase, hosted.detail = (
-                Phase.REFUSED,
-                f"the unit would not start ({started.category.value})",
-            )
+            hosted.phase = Phase.REFUSED
+            hosted.detail = f"the unit would not start: {_why(started)}"
             return
         loop = self._loop(unit, account)
         if is_refusal(loop):
@@ -2400,7 +2458,7 @@ class Runtime:
         hosted.phase = Phase.WARMING
         recorded = [
             Bar(market, bar)
-            for market in records
+            for market in unit.traded
             for bar in venue.feed.recording.recent(market, unit.warm_needed)
         ]
         self._drive_one(hosted, recorded)
@@ -2457,7 +2515,7 @@ class Runtime:
         )
         if is_refusal(accumulator):
             return accumulator
-        streams = StreamSet.try_create([DeclaredStream(market, market) for market in unit.records])
+        streams = StreamSet.try_create([DeclaredStream(market, market) for market in unit.traded])
         if is_refusal(streams):
             return streams
         latency = Duration.try_create(MAX_SLICE_LATENCY_NS)
@@ -2496,7 +2554,7 @@ class Runtime:
             return
         by_ns: dict[int, list[Bar]] = {}
         for event in bars:
-            if event.market_id in unit.records:
+            if event.market_id in unit.traded:
                 by_ns.setdefault(event.bar.knowable_at.value_ns, []).append(event)
         for ns in sorted(by_ns):
             for event in by_ns[ns]:
@@ -2526,7 +2584,7 @@ class Runtime:
 
     def _unit_level(self, hosted: _Hosted) -> KsaLevel:
         """The highest kill level over the unit: its deployment, its account, each market."""
-        markets = (None,) if hosted.unit is None else (None, *hosted.unit.records)
+        markets = (None,) if hosted.unit is None else (None, *hosted.unit.traded)
         levels = [self.level_for(hosted, market)[0] for market in markets]
         return max(levels, key=LEVEL_RANK.__getitem__)
 

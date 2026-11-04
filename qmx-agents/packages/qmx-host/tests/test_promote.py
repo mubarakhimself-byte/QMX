@@ -499,7 +499,7 @@ def test_a_withdraw_that_times_out_keeps_the_park_and_a_second_click_finishes_it
     ]
 
 
-def test_a_live_world_account_refuses_a_two_market_unit_before_the_node(rig: Rig) -> None:
+def test_a_live_world_account_takes_one_market_of_a_two_market_unit(rig: Rig) -> None:
     def trading(place: str) -> bool:
         return place == "pc"
 
@@ -510,44 +510,33 @@ def test_a_live_world_account_refuses_a_two_market_unit_before_the_node(rig: Rig
         op_id="click-live", to="live", account={"id": "live-1"}, placeholders_acknowledged=True
     )
 
-    assert (status, answer["code"], answer["message"], answer["next_step"]) == (
-        409,
-        "multi_market_live",
-        "the node runs every market of a unit, and dummy-trend-pullback trades 2 markets;"
-        " a live-world account takes a one-market unit until the node reads deployment.markets",
-        "Make a one-market version of the unit for live money, or promote it onto a demo account.",
-    )
-    assert (len(rig.moves()), len(rig.node.deploys())) == (2, 1)
+    live = rig.node.deploys()[-1]
+    assert (status, answer["value"]["node_answer"]) == (200, "accepted")
+    assert [market["market_id"] for market in cast(list[Document], live["markets"])] == [
+        "fx.eurusd"
+    ]
+    assert (len(rig.moves()), len(rig.node.deploys())) == (3, 2)
 
 
-def test_a_second_market_of_a_running_version_answers_the_deployment_that_runs_it(
-    rig: Rig,
-) -> None:
+def test_a_second_market_of_a_running_version_deploys_on_that_market_alone(rig: Rig) -> None:
     judged(rig.lifecycle, rig.unit, rig.compiled.compiled_fingerprint.value, "metal.xauusd")
     running = paper(rig)
 
-    second = rig.click(op_id="click-gold", to="paper", market_id="metal.xauusd")
-    rig.click(op_id="click-park", to="parked", node=None, account=None)
-    after_park = rig.click(op_id="click-gold-2", to="paper", market_id="metal.xauusd")
+    status, answer = rig.click(op_id="click-gold", to="paper", market_id="metal.xauusd")
 
-    assert (second[0], second[1]["code"], second[1]["value"]) == (
-        409,
-        "already_deployed",
-        {"deployment_id": running},
-    )
-    assert second[1]["message"] == (
-        f"deployment {running} already runs dummy-trend-pullback on fx.eurusd, and the node runs"
-        " every market of a unit, metal.xauusd among them"
-    )
-    assert (after_park[0], after_park[1]["value"]["node_answer"]) == (200, "accepted")
+    euro, gold = rig.node.deploys()
+    assert (status, answer["value"]["node_answer"]) == (200, "accepted")
+    assert answer["value"]["deployment_id"] != running
+    assert [cast(list[Document], d["markets"])[0]["market_id"] for d in (euro, gold)] == [
+        "fx.eurusd",
+        "metal.xauusd",
+    ]
     assert [move[:3] for move in rig.moves()] == [
         ("fx.eurusd", "draft", "tested"),
         ("metal.xauusd", "draft", "tested"),
         ("fx.eurusd", "tested", "paper"),
-        ("fx.eurusd", "paper", "parked"),
         ("metal.xauusd", "tested", "paper"),
     ]
-    assert len(rig.node.deploys()) == 2
 
 
 def test_a_record_that_fails_after_the_deploy_names_what_a_timed_out_withdraw_left(

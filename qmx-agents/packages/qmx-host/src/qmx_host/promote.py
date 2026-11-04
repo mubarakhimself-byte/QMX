@@ -61,7 +61,6 @@ ROUTE: Final = "/api/units/promote"
 SCHEMA: Final = "qmx.units.promote/1"
 DEPLOYMENT_SCHEMA: Final = "qmx.node.deployment/1"
 TRADING: Final = frozenset({State.PAPER, State.LIVE})
-LEAVING: Final = frozenset({State.PARKED, State.RETIRED})
 READ: Final = Principal("operator")
 SHOWN: Final[Mapping[str, str]] = {"applied": "accepted", "waiting": "queued"}
 """A node change's outbox state as his answer says it; a refused change is a refusal."""
@@ -348,7 +347,6 @@ class Promoter:
         document, compiled = self._unit(click)
         probe = self._event(click, digest, current, compiled.compiled_fingerprint.value, None)
         self._allowed(probe, known)
-        self._one_deployment(click, known)
         lane: Lane = "paper" if click.target is State.PAPER else "live"
         report = self._g_record(compiled.compiled_fingerprint.value)
         account = _one(
@@ -363,15 +361,6 @@ class Promoter:
                     f"account {click.account.id} is a live-world account and the host at {place}"
                     " is not in the trading profile",
                     "Bind live money through the deliberate live path first.",
-                )
-            if account.fields.get("world") == "live" and len(_markets(document)) > 1:
-                raise Refused(
-                    "multi_market_live",
-                    f"the node runs every market of a unit, and {click.unit.id} trades"
-                    f" {len(_markets(document))} markets; a live-world account takes a one-market"
-                    " unit until the node reads deployment.markets",
-                    "Make a one-market version of the unit for live money, or promote it onto a"
-                    " demo account.",
                 )
             if compiled.placeholders and not click.placeholders_acknowledged:
                 raise Refused(
@@ -418,33 +407,6 @@ class Promoter:
         )
         refused.value = {"deployment_id": ask}
         return refused
-
-    def _one_deployment(self, click: Click, known: Sequence[Event]) -> None:
-        """Refuse a second deployment of this unit version while his clicks keep one on another
-        of its markets: the node runs every market of the unit document it holds, so a second
-        deployment would run each market twice. A market parked or retired, or a deploy the
-        node refused, holds none."""
-        folded = fold(known, auto_paper=self.lifecycle.auto_paper())
-        for move in reversed(folded.applied):
-            placed = deployment_of(move)
-            if (
-                placed is None
-                or move.version_ref != click.unit.version
-                or move.market_id == click.market_id
-                or folded.state(move.key) in LEAVING
-            ):
-                continue
-            change = self.nodes.outbox.get(placed)
-            if change is not None and change.state == "refused":
-                continue
-            refused = Refused(
-                "already_deployed",
-                f"deployment {placed} already runs {click.unit.id} on {move.market_id}, and the"
-                f" node runs every market of a unit, {click.market_id} among them",
-                f"Park {move.market_id} first, then click again.",
-            )
-            refused.value = {"deployment_id": placed}
-            raise refused
 
     def _leave(self, click: Click, digest: str, known: Sequence[Event]) -> Document:
         """Park or retire: record the move, then ask the node to withdraw each deployment his
