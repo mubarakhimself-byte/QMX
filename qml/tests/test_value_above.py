@@ -266,8 +266,8 @@ def test_k_above_the_conditions_a_slot_is_left_with_refuses() -> None:
 
     assert isinstance(problems, tuple), "it compiled"
     assert [(p.kind, p.where) for p in problems] == [
-        ("binding_not_read", "/logic/long/slots/context/combiner/k"),
-        ("binding_not_read", "/logic/short/slots/context/combiner/k"),
+        ("combiner_not_built", "/logic/long/slots/context/combiner/k"),
+        ("combiner_not_built", "/logic/short/slots/context/combiner/k"),
     ]
 
 
