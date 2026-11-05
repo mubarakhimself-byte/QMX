@@ -309,7 +309,7 @@
           "min_count": 20,
           "shrink_k": 100,
           "step_limit": 1,
-          "rule": "trend-floor-from-record@1",
+          "rule": "trend-floor-from-record@2",
           "rule_params": {
             "buckets": "5"
           }
@@ -482,8 +482,8 @@
       },
       {
         "entry_id": "trend-floor-from-record",
-        "version": 1,
-        "fingerprint": "fp1:sha256:e825e436371e7382efdc0fb680caf3e988e13ae23b5949016a9866799bb76ac6"
+        "version": 2,
+        "fingerprint": "fp1:sha256:b96c38de3fb9d9b633cf02bee7e14da6a442da4a10aeaa7cf156794d22acd1f8"
       }
     ]
   }
