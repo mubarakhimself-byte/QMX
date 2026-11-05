@@ -908,7 +908,7 @@ def land_entry_status(store: Store, item: str) -> None:
     `blocks_check` does, so any exception that code raises stops here."""
     try:
         write_entry_status(store, item)
-    except Exception as refused:  # noqa: BLE001 - see above
+    except Exception as refused:
         print(f"library: the status of {item} was not written: {refused}", file=sys.stderr)
 
 

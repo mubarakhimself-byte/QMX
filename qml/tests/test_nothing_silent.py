@@ -146,7 +146,8 @@ def _as_trigger(face: Document) -> str:
 def _through_a_comparator(face: Document) -> str:
     """A block whose value is no price holds a slot only through `value-above`, as an agent binds it."""
     document = _trigger_document(face)
-    document["pins"] += [p for p in _document()["pins"] if p["entry_id"] == "value-above"]
+    pins = cast("Document", _document())["pins"]
+    document["pins"] += [p for p in pins if p["entry_id"] == "value-above"]
     comparator = {
         "name": "above",
         "block": "value-above@1",
