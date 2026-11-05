@@ -535,6 +535,20 @@ class Supervisor:
         # A missing or unreadable record rebuilds every path source. A new env needs that too,
         # because uv's cached wheel may still hold a module deleted since it was built.
         changed = [name for name, digest in sources.items() if built.get(name) != digest]
+        if changed and built and definition.manifest.risk == "money":
+            with closing(sqlite3.connect(self.catalog)) as db:
+                active = db.execute(
+                    "SELECT hash FROM active WHERE id=?", (definition.manifest.id,)
+                ).fetchone()
+            if active and active[0] == definition.hash:
+                # New order code would run under the old signature. A lost env has no record, so
+                # it can still be rebuilt.
+                raise AppError(
+                    "signature_required",
+                    f"A library changed under {definition.manifest.id}'s signed version, so that "
+                    "code needs a new version and the operator's signature.",
+                    409,
+                )
         code, log = self._run_uv(
             definition.manifest.id,
             [
@@ -760,13 +774,7 @@ class Supervisor:
         if existing:
             return existing.document()
         self.check_profile(self._definition(app_id), profile)
-        home = self.home_of(app_id)
-        if home != self.placement:
-            raise AppError(
-                "not_home",
-                f"{app_id} lives on {home}; this machine is {self.placement}.",
-                409,
-            )
+        self._refuse_off_home(app_id)
         pinned = definition_hash is not None
         if not pinned and not self.proof_mode:
             from qmx_apps.road.history import history, project  # noqa: PLC0415
@@ -779,6 +787,8 @@ class Supervisor:
             existing = self._instances.get(app_id)
             if existing:
                 return existing.document()
+            # A move can finish during the wait, and this machine gave that volume away.
+            self._refuse_off_home(app_id)
             definition = self._definition(app_id)
             if pinned:
                 # This is the version he or the road chose, so what waited for it is settled.
@@ -829,6 +839,15 @@ class Supervisor:
                 "start_failed", "The app did not establish its MCP connection.", 503
             ) from error
         return self.status(app_id)
+
+    def _refuse_off_home(self, app_id: str) -> None:
+        home = self.home_of(app_id)
+        if home != self.placement:
+            raise AppError(
+                "not_home",
+                f"{app_id} lives on {home}; this machine is {self.placement}.",
+                409,
+            )
 
     def check_profile(self, definition: Definition, profile: str | None) -> None:
         """A profile exists only where the app declares a `[profiles]` schema, and its id is a
@@ -1161,7 +1180,8 @@ class Supervisor:
     def _restart_loop(self, app_id: str, healing: Healing) -> None:
         """Wait, start, and wait longer after each start that fails, until one runs or he stops
         the app. A refusal (a 4xx, such as a money app with no signed version) ends the loop,
-        because waiting does not change it. A trip that lands while this loop is starting the app
+        because waiting does not change it, apart from `volume_busy`, which ends when the road or
+        the volume's other holder lets go. A trip that lands while this loop is starting the app
         is caught by the last check, so no trip is left without its restart. An error anywhere
         else in a round counts as a failed start, so it cannot leave the app never restarting."""
         while True:
@@ -1182,7 +1202,7 @@ class Supervisor:
                     if healing.cancel.is_set():
                         return
                     code = error.code if isinstance(error, AppError) else type(error).__name__
-                    if isinstance(error, AppError) and error.status < 500:
+                    if isinstance(error, AppError) and error.status < 500 and code != "volume_busy":
                         self._log(app_id, "restart_refused", {"code": code, "trips": trips})
                         with self._lock:
                             if self._healing.get(app_id) is healing:
