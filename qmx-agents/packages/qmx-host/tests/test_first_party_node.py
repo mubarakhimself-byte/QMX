@@ -112,7 +112,7 @@ def test_the_node_enable_starts_comes_back_at_the_next_host_start(home: Path) ->
 
     assert started == [NODE_APP, MIS_APP]
     assert back.running == {NODE_APP, MIS_APP}
-    assert back.asked == [("start", NODE_APP), ("start", MIS_APP)]
+    assert sorted(back.asked) == [("start", MIS_APP), ("start", NODE_APP)]
     assert back.told == []
 
 

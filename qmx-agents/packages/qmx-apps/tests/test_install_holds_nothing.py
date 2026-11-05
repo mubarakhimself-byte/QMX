@@ -3,12 +3,15 @@ wait on a build or on a road another holder has, and a build that hangs ends by 
 
 from __future__ import annotations
 
+import importlib
 import shutil
+import sqlite3
 import stat
 import sys
 import threading
 import time
 from collections.abc import Callable, Generator
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +24,7 @@ from qmx_apps.manifest import Definition
 from qmx_apps.supervisor import Supervisor
 from qmx_apps.volume import VolumeLease
 
+road_history = importlib.import_module("qmx_apps.road.history")
 EXAMPLE = Path(__file__).resolve().parents[4] / "examples/apps/exchange-status"
 RUNNER = "runner"
 OTHER = "other"
@@ -161,6 +165,38 @@ def test_an_app_cannot_start_during_its_own_build(
     assert refused.value.code == "volume_busy"
     assert still_building
     assert failed == []
+
+
+def test_a_start_that_waited_for_the_road_refuses_a_volume_moved_meanwhile(
+    owner: Supervisor, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    owner.install(source(tmp_path, OTHER), trust="first_party")
+    owner.start(OTHER)
+    owner.stop(OTHER)
+    with closing(sqlite3.connect(owner.home / "apps" / OTHER / "app.db")) as db, db:
+        db.execute("CREATE TABLE IF NOT EXISTS moved (id TEXT)")
+    monkeypatch.setattr(road_history, "ROAD_POLL_S", HELD_SECONDS)
+    held = VolumeLease(owner.home / "road-locks", OTHER)
+    answered: list[object] = []
+
+    def start() -> None:
+        try:
+            answered.append(owner.start(OTHER)["status"])
+        except AppError as refused:
+            answered.append(refused.code)
+
+    waiting = threading.Thread(target=start, daemon=True)
+    waiting.start()
+    time.sleep(0.5)
+    held.close()
+
+    owner.snapshot_instance(OTHER, to="contabo")
+    moved_during_the_wait = waiting.is_alive()
+    waiting.join(30)
+
+    assert moved_during_the_wait
+    assert answered == ["not_home"]
+    assert owner.status(OTHER)["status"] == "stopped"
 
 
 TREE = """\

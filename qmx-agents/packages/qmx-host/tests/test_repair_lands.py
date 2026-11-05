@@ -12,24 +12,32 @@ import secrets
 import shutil
 import stat
 import sys
+import threading
+import time
 from collections.abc import Generator
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
-from typing import cast
+from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
-from qmx_apps.errors import Document
+from qmx_apps.errors import AppError, Document
 from qmx_apps.manifest import Definition
 from qmx_apps.road.models import Stage
 from qmx_apps.supervisor import BUILT_FROM, Supervisor
 
 import qmx_host.connect  # noqa: F401 - connect_node loads through it  # pyright: ignore[reportUnusedImport]
-from qmx_host import first_start
+from qmx_host import connect_node, first_start
 from qmx_host.first_start import FIRST_PARTY, enable_first_party
+from qmx_host.jobs import Stopped
 
 EXAMPLE = Path(__file__).resolve().parents[4] / "examples/apps/exchange-status"
 APP = "exchange-status"
 SECOND = "second"
+WELL_INSIDE_THE_LIMIT_S = 30.0
+"""The promise under test: a money app is up this long after a host start whose other app's install
+is stuck, against the 1800 s default limit that install runs under."""
 SERVER = """\
 from pathlib import Path
 
@@ -256,6 +264,131 @@ def test_a_money_app_keeps_its_signed_version_until_he_signs(
     status = world.runtime.status(APP)
     assert (status["status"], status["definition_hash"]) == ("running", new)
     assert "notice" not in status
+
+
+def drop_the_money_word(folder: Path) -> str:
+    """A repair that changes the app's risk word, and the hash it makes."""
+    repair(folder, "1.0.1")
+    manifest = folder / "app.toml"
+    manifest.write_text(
+        manifest.read_text("utf-8").replace('risk = "money"', 'risk = "shows"'), "utf-8"
+    )
+    return Definition.load(folder).hash
+
+
+def test_a_repair_that_drops_the_money_word_still_waits(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    folder, signed = signed_money_app(world, monkeypatch)
+    new = drop_the_money_word(folder)
+
+    for host_start in ("the first", "the one after it moved the head"):
+        world.start_host()
+
+        status = world.runtime.status(APP)
+        assert (status["status"], status["definition_hash"]) == ("running", signed), host_start
+        assert world.runtime.get(APP)["definition_hash"] == new, host_start
+        assert notice_of(world.runtime, APP) == (
+            "exchange-status 1.0.1 waits for your signature; 1.0.0 keeps running"
+        ), host_start
+
+
+def test_the_connect_door_does_not_publish_a_repair_that_drops_the_money_word(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    folder, signed = signed_money_app(world, monkeypatch)
+    new = drop_the_money_word(folder)
+    world.start_host()
+    road = world.runtime.road
+    active = road.active_revision(APP)
+    run: Any = SimpleNamespace(
+        world=SimpleNamespace(control=SimpleNamespace(app_runtime=lambda: world.runtime)),
+        say=lambda _line: None,
+    )
+
+    with pytest.raises(Stopped, match="require the operator's bound signature"):
+        connect_node._install(connect_node.Ports(apps={APP: folder}), run)  # pyright: ignore[reportPrivateUsage]
+    with pytest.raises(AppError) as unsigned:
+        road.publish(APP, new, active)
+
+    status = world.runtime.status(APP)
+    assert unsigned.value.code == "signature_required"
+    assert (status["status"], status["definition_hash"]) == ("running", signed)
+    assert road.active_revision(APP) == active
+
+    sign(world.runtime, APP, new)
+
+    status = world.runtime.status(APP)
+    assert (status["status"], status["definition_hash"]) == ("running", new)
+
+
+def test_a_stuck_install_does_not_hold_up_the_next_app(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    other, node = app_folder(world.root, SECOND), app_folder(world.root, APP, risk="money")
+    shipped(world, monkeypatch, other, node)
+    other_hash = str(world.runtime.install(other, trust="first_party")["definition_hash"])
+    signed = str(world.runtime.install(node, trust="first_party")["definition_hash"])
+    stages_to_shadow(world.runtime, APP, signed)
+    sign(world.runtime, APP, signed)
+    repair_library(world.root)
+    held = world.root / "uv-is-stuck"
+    held.touch()
+    (world.root / "record_call.py").write_text(
+        f"import time\nfrom pathlib import Path\nwhile Path(r'{held}').exists():\n"
+        f"    time.sleep(0.1)\n{RECORD_CALL}",
+        "utf-8",
+    )
+    world.runtime.close()
+    world.runtime = Supervisor(world.home, secret_getter=lambda _s, _u: "fixture")
+    runtime = world.runtime
+    started: list[str] = []
+    host_start = threading.Thread(
+        target=lambda: started.extend(enable_first_party(world.home, runtime)), daemon=True
+    )
+
+    host_start.start()
+    try:
+        deadline = time.monotonic() + WELL_INSIDE_THE_LIMIT_S
+        while runtime.status(APP)["status"] != "running" and time.monotonic() < deadline:
+            time.sleep(0.1)
+        money_app = runtime.status(APP)
+        still_installing = host_start.is_alive(), runtime.status(SECOND)["status"]
+    finally:
+        held.unlink()
+    host_start.join(60)
+
+    assert (money_app["status"], money_app["definition_hash"]) == ("running", signed)
+    assert still_installing == (True, "stopped")
+    assert started == [SECOND, APP]
+    assert runtime.status(SECOND)["status"] == "running"
+    assert world.uv_calls[-1] == other_hash
+
+
+def test_a_same_bytes_install_of_the_signed_version_takes_no_changed_library(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    folder, signed = signed_money_app(world, monkeypatch)
+    record = world.runtime.environments / signed / BUILT_FROM
+    recorded = record.read_bytes()
+    install = partial(
+        world.runtime.install, folder, trust="first_party", expected_id=APP, expected_hash=signed
+    )
+
+    install()
+    assert world.uv_calls == [signed, signed], "a reinstall with nothing changed still runs"
+
+    repair_library(world.root)
+    with pytest.raises(AppError) as refused:
+        install()
+    assert refused.value.code == "signature_required"
+    assert world.uv_calls == [signed, signed]
+    assert record.read_bytes() == recorded
+
+    record.unlink()
+    install()
+    assert world.uv_calls == [signed, signed, signed], "a lost environment can still be rebuilt"
+    assert record.read_bytes() != recorded
 
 
 def test_a_library_repair_does_not_touch_a_signed_money_app(

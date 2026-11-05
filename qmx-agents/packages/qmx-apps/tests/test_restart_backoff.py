@@ -5,6 +5,7 @@ The waits are recorded, never slept, so the 5 s to 300 s schedule is checked in 
 
 from __future__ import annotations
 
+import importlib
 import secrets
 import shutil
 import threading
@@ -21,7 +22,9 @@ from qmx_apps.manifest import Breaker
 from qmx_apps.road.history import history
 from qmx_apps.road.models import Evidence, Stage
 from qmx_apps.supervisor import Supervisor
+from qmx_apps.volume import VolumeLease
 
+road_history = importlib.import_module("qmx_apps.road.history")
 EXAMPLE = Path(__file__).resolve().parents[4] / "examples/apps/exchange-status"
 APP = "exchange-status"
 SETTLE_SECONDS = 2.0
@@ -254,6 +257,25 @@ def test_a_tool_timeout_on_an_opted_in_app_heals(
     assert waits.seconds == [5]
     assert "breaker_open" in events(supervisor)
     assert not psutil.pid_exists(old)
+
+
+def test_a_crash_while_the_road_is_held_restarts_once_the_road_is_free(
+    supervisor: Supervisor, waits: Waits, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    supervisor.install(source(tmp_path, breaker='restart = "backoff"'), trust="first_party")
+    supervisor.start(APP)
+    monkeypatch.setattr(road_history, "ROAD_WAIT_S", 0.2)
+    held = VolumeLease(supervisor.home / "road-locks", APP)
+    try:
+        old = trip(supervisor)
+        until(lambda: "restart_failed" in events(supervisor), "no failed restart was logged")
+    finally:
+        held.close()
+
+    running_again(supervisor, old)
+
+    assert waits.seconds[:2] == [5, 10]
+    assert "restart_refused" not in events(supervisor)
 
 
 def test_an_error_in_the_restart_loop_does_not_end_it(
