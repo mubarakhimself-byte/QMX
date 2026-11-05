@@ -410,7 +410,7 @@ def test_trader_sentences_map_to_exit_and_halt_entries_and_an_unknown_one_is_an_
     report = match(
         "The minimal ROI is reached. The equity kill switch trips. "
         "The max intraday loss is hit. The triple barrier is touched. "
-        "Martingale doubles the lot. The vanna exposure decays.",
+        "Martingale sizing doubles the lot. The vanna exposure decays.",
         rows,
     )
 
@@ -420,7 +420,7 @@ def test_trader_sentences_map_to_exit_and_halt_entries_and_an_unknown_one_is_an_
             {"sentence": "The equity kill switch trips", "entry": "equity-drawdown-halt@1"},
             {"sentence": "The max intraday loss is hit", "entry": "session-loss-limit-halt@1"},
             {"sentence": "The triple barrier is touched", "entry": "triple-barrier-exit@1"},
-            {"sentence": "Martingale doubles the lot", "entry": "martingale-sizing@1"},
+            {"sentence": "Martingale sizing doubles the lot", "entry": "martingale-sizing@1"},
             {"sentence": "The vanna exposure decays", "entry": "unmatched"},
         ],
         "append_requests": [

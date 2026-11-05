@@ -408,7 +408,9 @@ def _settle(value: object, where: str, found: _Found) -> None:
         if scales_by is not None and (
             not isinstance(params, Mapping) or scales_by not in cast("Mapping[str, object]", params)
         ):
-            found.add(f"{where}/scales_by", f"scales_by is one of its params, not {scales_by!r}", "")
+            found.add(
+                f"{where}/scales_by", f"scales_by is one of its params, not {scales_by!r}", ""
+            )
 
 
 def _any_object(value: object, where: str, found: _Found) -> None:

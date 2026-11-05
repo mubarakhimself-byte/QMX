@@ -131,5 +131,3 @@ def test_pinned_weights_are_checked_by_their_own_fingerprint() -> None:
     ]
     assert isinstance(loaded, Loaded)
     assert loaded.weights == {"ema@1": b"weights-v1"}
-
-

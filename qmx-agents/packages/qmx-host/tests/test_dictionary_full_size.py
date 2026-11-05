@@ -121,9 +121,10 @@ def test_a_start_gives_a_status_to_a_page_an_older_host_saved(control: ControlSe
     land_dictionary_statuses(store)
 
     assert unmarked is None
-    assert cast(dict[str, str], store.get(OPERATOR, older.object_id).annotations["status"])[
-        "value"
-    ] == "named"
+    assert (
+        cast(dict[str, str], store.get(OPERATOR, older.object_id).annotations["status"])["value"]
+        == "named"
+    )
 
 
 def a_draft(entry_id: str, **more: object) -> Draft:
@@ -161,9 +162,7 @@ def test_a_clashing_save_is_refused_and_a_new_version_is_not(
     with pytest.raises(KindRefused) as taken_id:
         store.put(OPERATOR, a_draft("ema", version=1), on=drafts_ref("ema"), expected_head=None)
     saved = store.put(OPERATOR, second, on=drafts_ref("floor-2"), expected_head=None)
-    fresh = store.put(
-        OPERATOR, first_of_a_family, on=drafts_ref("my-new-word"), expected_head=None
-    )
+    fresh = store.put(OPERATOR, first_of_a_family, on=drafts_ref("my-new-word"), expected_head=None)
     later = store.put(
         OPERATOR,
         a_draft("my-new-word", version=2),
@@ -180,9 +179,10 @@ def test_a_clashing_save_is_refused_and_a_new_version_is_not(
     assert (saved.item, fresh.item, later.item) == ("floor-2", "my-new-word", "my-new-word")
     assert store.head("my-average", drafts_ref("my-average")) is None
     assert store.head("ema", MAIN) is None
-    assert cast(dict[str, str], store.get(OPERATOR, later.object_id).annotations["status"])[
-        "value"
-    ] == "named"
+    assert (
+        cast(dict[str, str], store.get(OPERATOR, later.object_id).annotations["status"])["value"]
+        == "named"
+    )
 
 
 def test_an_ordinary_sentence_stays_unmatched(tmp_path: Path, control: ControlService) -> None:

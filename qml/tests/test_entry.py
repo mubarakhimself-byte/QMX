@@ -192,7 +192,9 @@ def _agent_entry(**more: object) -> Entry:
         "origin": "agent",
         "definition": "An agent's own recursive average of the close.",
         "sources": [{"source_ref": "a note", "quote": "its words", "dated": "2026-11-06"}],
-        "inputs": [{"port": "series", "stream_kind": "series", "measure": "price", "data_level": 1}],
+        "inputs": [
+            {"port": "series", "stream_kind": "series", "measure": "price", "data_level": 1}
+        ],
         "output": {"type": "series", "measure": "price"},
         "parameters": {
             "period": {"measure": "bars", "default": "20", "origin": "builder_chosen"},
@@ -208,9 +210,7 @@ def test_an_agent_block_with_no_golden_is_not_implemented() -> None:
     settled = {"params": {"period": "20"}, "bars": 400, "tolerance": "1e-9", "scales_by": "period"}
 
     computed = compute_status(_agent_entry(settle_bars=settled), _AGENT_EMA)
-    ours = compute_status(
-        _agent_entry(settle_bars=settled, origin="qml"), _AGENT_EMA
-    )
+    ours = compute_status(_agent_entry(settle_bars=settled, origin="qml"), _AGENT_EMA)
 
     assert (computed.status, computed.problems, computed.missing) == (
         Status.SPECIFIED,
@@ -232,8 +232,7 @@ def test_an_unsettled_block_fails_check_entry() -> None:
         ),
     ]
     assert [
-        (p.where, p.message)
-        for p in check_entry(_agent_entry(settle_bars=too_short), _AGENT_EMA)
+        (p.where, p.message) for p in check_entry(_agent_entry(settle_bars=too_short), _AGENT_EMA)
     ] == [
         (
             "/settle_bars/bars",
@@ -261,7 +260,8 @@ def test_a_settle_row_scales_with_the_parameter_it_names() -> None:
     ]
     assert face.settle.bars_at({}) == 285
     assert [
-        (p.where, p.message) for p in check_entry(_entry("ema") | {"settle_bars": row | {"scales_by": "fast"}})
+        (p.where, p.message)
+        for p in check_entry(_entry("ema") | {"settle_bars": row | {"scales_by": "fast"}})
     ] == [("/settle_bars/scales_by", "scales_by is one of its params, not 'fast'")]
 
 

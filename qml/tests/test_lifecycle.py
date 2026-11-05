@@ -152,10 +152,13 @@ def test_a_later_stop_stays_in_force_whatever_the_two_clocks_say(node_clock: tim
     assert folded.latest_stop[KEY] == later.event_id
 
 
-@pytest.mark.parametrize(("clears", "refusals", "state"), [
-    ("e10-v1", [Refusal.STOP_NOT_CLEARED], S.STOPPED),
-    ("e12-v1", [], S.LIVE),
-])
+@pytest.mark.parametrize(
+    ("clears", "refusals", "state"),
+    [
+        ("e10-v1", [Refusal.STOP_NOT_CLEARED], S.STOPPED),
+        ("e12-v1", [], S.LIVE),
+    ],
+)
 def test_the_latest_stop_from_one_writer_is_its_highest_sequence_when_its_clock_steps_back(
     clears: str, refusals: list[Refusal], state: State
 ) -> None:
