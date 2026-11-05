@@ -173,6 +173,7 @@ def _lone(block: str, params: Document | None = None, inputs: Document | None = 
 
 
 _NOT_READ = "/logic/long/slots/context/bindings/2"
+_PERIOD = {"period": {"value": "14"}}
 
 
 @pytest.mark.parametrize(
@@ -195,8 +196,33 @@ _NOT_READ = "/logic/long/slots/context/bindings/2"
         ),
         pytest.param(
             _lone("time-exit-bars@1", {"bars": {"value": "48"}}, {}),
-            "Bind value-above@1",
+            "Put it in /exit_set",
             id="an exit in a slot",
+        ),
+        pytest.param(
+            _lone("rsi-series@1", _PERIOD),
+            "series port takes one value, and m15 is a whole bar. Feed it m15.close",
+            id="a value port fed a whole bar",
+        ),
+        pytest.param(
+            _lone("rsi-series@1", _PERIOD, {"series": "m15."}),
+            "series port takes one value, and m15. is a whole bar. Feed it m15.close",
+            id="a value port fed a whole bar with a bare dot",
+        ),
+        pytest.param(
+            _lone("value-above@1", {"level": {"value": "1"}, "below": {"value": "0"}}),
+            "series port takes one value, and m15 is a whole bar. Feed it m15.close",
+            id="a comparator fed a whole bar",
+        ),
+        pytest.param(
+            _lone("adx@1", _PERIOD, {"series": "m15.close"}),
+            "series port takes a whole bar, and m15.close is not one. Feed it m15",
+            id="a whole bar port fed one value",
+        ),
+        pytest.param(
+            _lone("adx@1", _PERIOD, {"series": "trend"}),
+            "series port takes a whole bar, and trend is not one. Feed it m15",
+            id="a whole bar port fed a binding",
         ),
         pytest.param(
             _lone("account-daily-loss-halt@1", {"limit": {"value": "0.05"}}, {}),
@@ -225,10 +251,19 @@ def test_a_binding_that_can_neither_hold_nor_feed_refuses_with_a_pointer(
     assert checked.errors[0].message.startswith("binding_not_read: ")
 
 
-def test_a_halt_a_later_binding_reads_still_refuses_because_it_never_feeds_a_value() -> None:
-    document = _lone("account-daily-loss-halt@1", {"limit": {"value": "0.05"}}, {})(
-        cast("Document", _document())
-    )
+@pytest.mark.parametrize(
+    "edit",
+    [
+        pytest.param(
+            _lone("account-daily-loss-halt@1", {"limit": {"value": "0.05"}}, {}), id="a halt"
+        ),
+        pytest.param(_lone("time-exit-bars@1", {"bars": {"value": "48"}}, {}), id="an exit"),
+    ],
+)
+def test_a_block_a_later_binding_reads_still_refuses_because_it_never_feeds_a_value(
+    edit: Edit,
+) -> None:
+    document = edit(cast("Document", _document()))
     _with_binding(
         document,
         "context",
@@ -244,6 +279,37 @@ def test_a_halt_a_later_binding_reads_still_refuses_because_it_never_feeds_a_val
 
     assert isinstance(problems, tuple), "it compiled"
     assert [(p.kind, p.where) for p in problems] == [("binding_not_read", _NOT_READ)]
+
+
+@pytest.mark.parametrize(
+    ("block", "ref", "hint", "nearest"),
+    [
+        pytest.param(
+            "adx@1",
+            "m16",
+            "feed the whole bar by its stream's name, such as m15",
+            ("m15",),
+            id="a whole bar port",
+        ),
+        pytest.param(
+            "rsi-series@1",
+            "trnd",
+            "feed one value such as m15.close, or a binding written before this one",
+            ("trend",),
+            id="a value port",
+        ),
+    ],
+)
+def test_a_feed_that_does_not_exist_is_told_the_shape_its_port_wants(
+    block: str, ref: str, hint: str, nearest: tuple[str, ...]
+) -> None:
+    document = _lone(block, _PERIOD, {"series": ref})(cast("Document", _document()))
+
+    checked = check(document, _context())
+
+    assert [(p.kind.value, p.hint, p.nearest) for p in checked.errors if p.layer == "B"] == [
+        ("unknown_input", hint, nearest)
+    ]
 
 
 def test_a_value_only_a_derived_number_reads_feeds_and_does_not_refuse() -> None:
