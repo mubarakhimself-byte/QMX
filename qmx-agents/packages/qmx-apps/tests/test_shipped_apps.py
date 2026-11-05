@@ -666,13 +666,13 @@ def test_the_walk_finds_seven_apps_with_an_example_for_every_operation_and_job()
 
 
 APP_VERSIONS: Mapping[tuple[str, str], str] = {
-    ("exchange-status", "1.0.0"): "65bd42b6f9d29881ca7d19393598a9fc0356957c60c4da9925de9898372cdc62",
-    ("macro-daily-bias", "1.0.0"): "32f669c81be8b9c9a201d20dd9c272edb81877638c8b1e439236874c337b5a62",
-    ("mis", "1.0.0"): "da97997e2a7f1b83f9362a5039930ca912d42db2acba323fc15eeca80454c036",
-    ("mql5-articles", "1.0.0"): "dc86e07abe3b8b4442bdc4eeaa758110693106fe802b997b2eb28726587c92cd",
-    ("qmb", "1.0.0"): "b03c2aca41f2e67d1689522f9ffab2a963395a58c9478da78651f1bca90f41da",
-    ("trading-node", "0.1.0"): "474d301af9fc35f3352c3230faf4bb63937e77c9c10fd1e166985bb7496ca971",
-    ("weekend-watcher", "1.0.0"): "2fd02bee829dbbb04b5f0a66dafe66cfb9e77e9945ed81354b454e8a2dcd6a3f",
+    ("exchange-status", "1.0.0"): "65bd42b6f9d29881ca7d19393598a9fc",
+    ("macro-daily-bias", "1.0.0"): "32f669c81be8b9c9a201d20dd9c272ed",
+    ("mis", "1.0.0"): "da97997e2a7f1b83f9362a5039930ca9",
+    ("mql5-articles", "1.0.0"): "dc86e07abe3b8b4442bdc4eeaa758110",
+    ("qmb", "1.0.0"): "b03c2aca41f2e67d1689522f9ffab2a9",
+    ("trading-node", "0.1.0"): "474d301af9fc35f3352c3230faf4bb63",
+    ("weekend-watcher", "1.0.0"): "2fd02bee829dbbb04b5f0a66dafe66cf",
 }
 """One row per app and version, append-only. A change anywhere in an app's folder moves its image
 hash, and the same version with new bytes answers `immutable_version` at his next start, so the
@@ -690,7 +690,7 @@ def folder_digest(folder: Path) -> str:
         digest.update(name)
         digest.update(len(content).to_bytes(8, "big"))
         digest.update(content)
-    return digest.hexdigest()
+    return digest.hexdigest()[:32]
 
 
 def test_a_changed_app_folder_has_a_new_version_row(tmp_path: Path) -> None:

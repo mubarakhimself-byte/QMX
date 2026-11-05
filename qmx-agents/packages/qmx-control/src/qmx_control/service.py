@@ -931,9 +931,9 @@ class ControlService:
             cutoff = (datetime.now(UTC) - timedelta(days=keep)).isoformat()
             with self._connect() as db:
                 db.execute(
-                    "DELETE FROM events WHERE topic IN ('apps','aggregates') "
-                    "AND COALESCE(json_extract(data,'$.recorded_at'),'') < ?",
-                    (cutoff,),
+                    "DELETE FROM events WHERE topic IN (?,?) "
+                    "AND COALESCE(json_extract(data,?),'') < ?",
+                    (*SCREEN_TOPICS, f"$.{RECORDED_AT}", cutoff),
                 )
         except (ValueError, TypeError, OverflowError, OSError, sqlite3.Error) as error:
             LOG.warning("old event rows stayed: %s", error)

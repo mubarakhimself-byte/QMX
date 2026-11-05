@@ -181,7 +181,7 @@ time.sleep(20)
 
 
 def fake_uv(root: Path) -> Path:
-    """A real executable the supervisor finds as `uv`, whose process tree outlives any plain wait."""
+    """A real executable the supervisor finds as `uv`, whose tree outlives any plain wait."""
     script = root / "tree.py"
     script.write_text(TREE)
     marks = root / "marks"
