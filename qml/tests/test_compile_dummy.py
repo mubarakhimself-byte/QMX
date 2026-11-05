@@ -8,9 +8,10 @@ import csv
 import json
 import os
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
-from typing import TypeVar, cast
+from typing import Any, TypeVar, cast
 
 import pytest
 from qmf.core.chrono import CalendarIdentity, Instant
@@ -62,16 +63,18 @@ def _ok(result: Result[_T]) -> _T:
 def _document() -> dict[str, object]:
     document = cast("dict[str, object]", json.loads(_DUMMY.read_text("utf-8")))
     pins: list[dict[str, object]] = []
-    for folder in sorted(p for p in _STDLIB.iterdir() if (p / "1" / "entry.json").is_file()):
-        face = parse_entry((folder / "1" / "entry.json").read_bytes())
+    for entry in sorted(_STDLIB.glob("*/*/entry.json")):
+        face = parse_entry(entry.read_bytes())
         assert isinstance(face, EntryFace), face
-        pins.append({"entry_id": face.entry_id, "version": 1, "fingerprint": face.fingerprint})
+        pins.append(
+            {"entry_id": face.entry_id, "version": face.version, "fingerprint": face.fingerprint}
+        )
     document["pins"] = pins
     return document
 
 
 def _context() -> CompileContext:
-    ids = [p.name for p in _STDLIB.iterdir() if (p / "1" / "block.py").is_file()]
+    folders = [p.parent for p in _STDLIB.glob("*/*/block.py")]
     records: dict[str, InstrumentRecord] = {}
     for market_id, (record_file, _) in _MARKETS.items():
         raw = json.loads(
@@ -79,8 +82,8 @@ def _context() -> CompileContext:
         )
         records[market_id] = _ok(parse_record(raw))
     return CompileContext(
-        sources={f"{i}@1": (_STDLIB / i / "1" / "block.py").read_bytes() for i in ids},
-        entries={f"{i}@1": (_STDLIB / i / "1" / "entry.json").read_bytes() for i in ids},
+        sources={f"{p.parent.name}@{p.name}": (p / "block.py").read_bytes() for p in folders},
+        entries={f"{p.parent.name}@{p.name}": (p / "entry.json").read_bytes() for p in folders},
         records=records,
     )
 
@@ -264,6 +267,88 @@ def test_two_drives_over_the_real_month_give_the_same_steps() -> None:
     _check_month(_slice(_REAL, ""))
 
 
+def adx_above(level: str) -> dict[str, object]:
+    """The dummy with "ADX above `level`" written into its context slot on both sides."""
+    document = _document()
+    numbers = cast("dict[str, dict[str, object]]", document["numbers"])
+    numbers["adx_level"] = {
+        "kind": "fixed",
+        "measure": "ratio",
+        "range": {"min": "0", "max": "100", "step": "1"},
+        "default": level,
+        "motion": {"mode": "fixed"},
+        "authority": "motion_inside_range",
+        "origin": "builder_chosen",
+    }
+    for side in cast("dict[str, dict[str, dict[str, dict[str, Any]]]]", document["logic"]).values():
+        side["slots"]["context"]["bindings"] += [
+            {
+                "name": "adx",
+                "block": "adx@1",
+                "params": {"period": {"value": "14"}},
+                "inputs": {"series": "m15"},
+            },
+            {
+                "name": "strong",
+                "block": "value-above@1",
+                "params": {"level": {"number": "adx_level"}, "below": {"value": "0"}},
+                "inputs": {"series": "adx"},
+            },
+        ]
+    return document
+
+
+def _entry_count(document: dict[str, object]) -> int:
+    bars = _slice()
+    return len(_entries(_drive(_host(_compiled(document), _surfaces(bars)), _instants(bars))))
+
+
+def test_a_value_rule_gates_under_all() -> None:
+    assert _entry_count(adx_above("1")) == 25
+    assert _entry_count(adx_above("99")) == 0
+
+
+def test_a_whole_bar_price_series_compares_the_close() -> None:
+    def as_lone_trigger(block: str) -> dict[str, object]:
+        document = _document()
+        logic = cast("dict[str, dict[str, dict[str, dict[str, Any]]]]", document["logic"])
+        face = json.loads((_STDLIB / block / "1" / "entry.json").read_text("utf-8"))
+        params = {name: {"value": spec["default"]} for name, spec in face["parameters"].items()}
+        for side in logic.values():
+            side["slots"]["trigger"]["bindings"] = [
+                {
+                    "name": "probe",
+                    "block": f"{block}@1",
+                    "params": params,
+                    "inputs": {"series": "m15"},
+                }
+            ]
+        for name in ("rsi_low", "rsi_high", "rsi_period"):
+            del cast("dict[str, object]", document["numbers"])[name]
+        return document
+
+    counts = {
+        block: _entry_count(as_lone_trigger(block))
+        for block in (
+            "alligator-line",
+            "heikin-ashi-close",
+            "heikin-ashi-open",
+            "ichimoku-senkou-a",
+            "moving-average-fractal-adaptive",
+            "price-channel-midpoint",
+        )
+    }
+
+    assert counts == {
+        "alligator-line": 1592,
+        "heikin-ashi-close": 1154,
+        "heikin-ashi-open": 1334,
+        "ichimoku-senkou-a": 1595,
+        "moving-average-fractal-adaptive": 1206,
+        "price-channel-midpoint": 1548,
+    }
+
+
 def _windows(unit: HostedUnit, market: str) -> dict[str, int]:
     markets = cast("Mapping[str, Mapping[str, object]]", unit.snapshot()["markets"])
     blocks = cast("Mapping[str, Mapping[str, list[str]]]", markets[market]["blocks"])
@@ -407,8 +492,34 @@ def test_min_trend_strength_moves_one_shrunk_step_after_its_20th_trade() -> None
     assert after == 20
     assert (row.number, row.old, row.new) == ("min_trend_strength", Decimal(0), Decimal("0.0001"))
     assert (row.from_trade_id, row.to_trade_id, row.count) == ("t01", "t20", 20)
-    assert row.rule == "trend-floor-from-record@1"
+    assert row.rule == "trend-floor-from-record@2"
+    assert row.statistic == {"trades_read": "20", "mean_r": "0.75", "mean_stamp": "0.00114"}
     assert unit.calibrated_values == {"min_trend_strength": Decimal("0.0001")}
+
+
+def _mirror(trades: Sequence[ClosedTrade]) -> list[ClosedTrade]:
+    return [
+        replace(t, side=Side.SHORT, entry_stamps={"strength": -t.entry_stamps["strength"]})
+        for t in trades
+    ]
+
+
+def _moves(document: dict[str, object], trades: Sequence[ClosedTrade]) -> list[tuple[str, str]]:
+    unit = _host(_compiled(document), _surfaces({}, trades))
+    steps = _drive(unit, [_instant_after(n) for n in range(1, 26)])
+    return [(str(row.old), str(row.new)) for s in steps for row in s.calibrations]
+
+
+def test_the_floor_moves_alike_on_a_long_journal_and_its_mirror() -> None:
+    at_version_1 = _document()
+    numbers = cast("dict[str, dict[str, dict[str, object]]]", at_version_1["numbers"])
+    numbers["min_trend_strength"]["motion"]["rule"] = "trend-floor-from-record@1"
+    trades = _journal(25)
+
+    assert _moves(_document(), trades) == [("0", "0.0001")]
+    assert _moves(_document(), _mirror(trades)) == [("0", "0.0001")]
+    assert _moves(at_version_1, trades) == [("0", "0.0001")]
+    assert _moves(at_version_1, _mirror(trades)) == [("0", "0")]
 
 
 def test_motion_off_keeps_min_trend_strength_at_its_default() -> None:

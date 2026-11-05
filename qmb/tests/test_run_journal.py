@@ -40,7 +40,7 @@ from qmf.core.chrono import Instant
 from qmf.core.refusal import TypedRefusal
 from qml.protocol.unit import DecisionRow
 from qml.unit.model import Side
-from test_unit_runner import make_run_folder
+from test_unit_runner import dummy_document, make_run_folder
 
 _APP = Path(__file__).resolve().parents[2] / "qmx-agents" / "apps" / "qmb"
 _START = datetime(2025, 1, 1, tzinfo=UTC)
@@ -241,6 +241,30 @@ def test_min_trend_strength_moves_on_the_runs_own_trades_with_its_receipt(
         "trend-floor-from-record@1",
     )
     assert cast("dict[str, object]", first["read_trades"])["count"] == 62
+
+
+def test_a_short_only_run_moves_the_number_and_the_row_shows_why(tmp_path: Path) -> None:
+    folder = make_run_folder(tmp_path, dummy_document() | {"direction": "short"})
+    _write_window(folder)
+    found = load_unit_folder(folder)
+    assert not isinstance(found, TypedRefusal), found
+    journal = _journal(found.value, tmp_path / "journal")
+
+    result = _run(found.value, journal)
+    moves = [cast("dict[str, object]", r["body"]) for r in _records(_close(journal), "calibration")]
+    first = next(m for m in moves if m["old"] != m["new"])
+
+    assert {t.side for t in result.trades} == {Side.SHORT}
+    assert (first["old"], first["new"], first["rule"]) == (
+        "0",
+        "0.0001",
+        "trend-floor-from-record@2",
+    )
+    assert set(cast("dict[str, str]", first["statistic"])) == {
+        "trades_read",
+        "mean_r",
+        "mean_stamp",
+    }
 
 
 def test_a_gap_in_the_bars_is_a_data_event_the_unit_saw(
