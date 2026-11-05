@@ -16,6 +16,7 @@ from typing import cast
 import psutil
 import pytest
 
+from qmx_apps.errors import AppError, Document
 from qmx_apps.manifest import Breaker
 from qmx_apps.road.history import history
 from qmx_apps.road.models import Evidence, Stage
@@ -215,3 +216,63 @@ def test_a_money_app_restarts_only_its_active_signed_version(
     status = supervisor.status(APP)
     assert (status["definition_hash"], status["version"]) == (signed_hash, "1.0.0")
     assert waits.seconds == [5]
+
+
+def test_a_calm_crash_waits_five_seconds_again(
+    supervisor: Supervisor, waits: Waits, tmp_path: Path
+) -> None:
+    calm_after = 2.0
+    breaker = f'restart = "backoff"\nbackoff_seconds = 1\nbackoff_max_seconds = {calm_after}'
+    supervisor.install(source(tmp_path, breaker=breaker), trust="first_party")
+    supervisor.start(APP)
+
+    pid = running_again(supervisor, trip(supervisor))
+    time.sleep(calm_after + 0.5)
+    running_again(supervisor, trip(supervisor))
+
+    assert pid is not None
+    assert waits.seconds == [1, 1]
+
+
+async def stuck_loop(seconds: float) -> None:
+    time.sleep(seconds)
+
+
+def test_a_tool_timeout_on_an_opted_in_app_heals(
+    supervisor: Supervisor, waits: Waits, tmp_path: Path
+) -> None:
+    supervisor.install(source(tmp_path, breaker='restart = "backoff"'), trust="first_party")
+    supervisor.start(APP)
+    old = cast(int, supervisor.status(APP)["pid"])
+    supervisor._submit(stuck_loop(31))  # pyright: ignore[reportPrivateUsage]
+
+    with pytest.raises(AppError) as timed_out:
+        supervisor.call(APP, "ping", {})
+
+    assert (timed_out.value.code, timed_out.value.status) == ("tool_timeout", 504)
+    assert running_again(supervisor, old) != old
+    assert waits.seconds == [5]
+    assert "breaker_open" in events(supervisor)
+    assert not psutil.pid_exists(old)
+
+
+def test_an_error_in_the_restart_loop_does_not_end_it(
+    supervisor: Supervisor, waits: Waits, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    supervisor.install(source(tmp_path, breaker='restart = "backoff"'), trust="first_party")
+    supervisor.start(APP)
+    shipped = supervisor._log  # pyright: ignore[reportPrivateUsage]
+    failed: list[str] = []
+
+    def log(app_id: str, event: str, data: Document) -> None:
+        if event == "restart_scheduled" and not failed:
+            failed.append(event)
+            raise OSError(28, "No space left on device")
+        shipped(app_id, event, data)
+
+    monkeypatch.setattr(supervisor, "_log", log)
+
+    running_again(supervisor, trip(supervisor))
+
+    assert failed == ["restart_scheduled"]
+    assert supervisor.status(APP)["status"] == "running"
