@@ -32,6 +32,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Mapping, Sequence
+from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, replace
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
@@ -571,15 +572,22 @@ def _motion(
     return tuple(derived), tuple(slow)
 
 
-def _not_read(b: BoundBlock) -> str | None:
-    """Why ``b`` can feed nothing, by the shape of its face and never by its name, so an agent's
-    block of the same shape refuses too."""
+def _not_read(b: BoundBlock, read: AbstractSet[str]) -> str | None:
+    """Why ``b`` can neither hold nor feed, by the shape of its face and never by its name, so an
+    agent's block of the same shape refuses too. A block not built yet answers only for that."""
+    if b.pin in BLOCKS_NOT_BUILT:
+        return None
     unfed = next((p for p in b.face.inputs if p.stream_kind not in _SLOT_PORT_KINDS), None)
-    if unfed is None:
+    if unfed is not None:
+        return (
+            f"{b.pin} reads its {unfed.stream_kind} port {unfed.port}, which no slot is fed, so it "
+            "can neither hold nor feed here"
+        )
+    if _holds_a_slot(b.face) or b.name in read:
         return None
     return (
-        f"{b.pin} reads its {unfed.stream_kind} port {unfed.port}, which no slot is fed, so it can "
-        "neither hold nor feed here"
+        f"{b.pin} outputs a {b.face.output.type.value} that cannot hold a slot, and nothing reads "
+        f"it. Bind value-above@1 with inputs.series {b.name} to compare it with a level"
     )
 
 
@@ -588,20 +596,11 @@ def _with_feeders(side: SidePlan, derived: Sequence[DerivedPlan], problems: _Pro
     read = {d.source for d in derived if d.side is side.side}
     feeders: set[str] = set()
     for b in reversed([b for slot in side.slots for b in slot.bindings]):
-        why = _not_read(b)
+        why = _not_read(b, read)
         if why is not None:
             problems.add("binding_not_read", b.where, why)
         elif not _holds_a_slot(b.face):
-            if b.name in read:
-                feeders.add(b.name)
-            else:
-                problems.add(
-                    "binding_not_read",
-                    b.where,
-                    f"{b.pin} outputs a {b.face.output.type.value} that cannot hold a slot, and "
-                    f"nothing reads it. Bind value-above@1 with inputs.series {b.name} to compare "
-                    "it with a level",
-                )
+            feeders.add(b.name)
         read.update(b.inputs.values())
     marked: list[SlotPlan] = []
     for slot in side.slots:
@@ -614,7 +613,7 @@ def _with_feeders(side: SidePlan, derived: Sequence[DerivedPlan], problems: _Pro
             and (slot.k or 0) > conditions
         ):
             problems.add(
-                "binding_not_read",
+                "combiner_not_built",
                 f"{slot.where}/combiner/k",
                 f"k_of_n needs a k of at most {conditions}, the conditions this slot holds, "
                 "because a binding that only feeds is no condition",
