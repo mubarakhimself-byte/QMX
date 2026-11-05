@@ -413,7 +413,7 @@ def test_a_study_that_allows_gaps_runs_the_month_the_hole_rule_fails(world: Worl
 
 def test_the_hole_limit_and_fill_count_in_settings_reach_the_run(world: World) -> None:
     """The synthetic month's last bar opens on Friday 28 March, so its window ends short by the 108
-    open bars forex has from Sunday 30 March and the 100 gold has, and a limit of 108 passes both."""
+    open bars forex has from Sunday 30 March and the 100 gold has. A limit of 108 passes both."""
     world.control.settings_put("qmb", {"gap_bars_refuse": 108, "calibrated_min_fills": 7})
     try:
         answer = world.backtest["backtest_run"](unit=world.dummy, window=MARCH)["result"]
