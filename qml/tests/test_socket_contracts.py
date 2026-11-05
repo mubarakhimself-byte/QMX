@@ -3,7 +3,9 @@
 Every shipped block whose entry names a sizer, exit or halt component is enrolled here
 automatically, so a risk-session block that lands in the stdlib meets its slot's contract
 before anything binds it. The cross-unit hook is the host's, so its stand-in is checked by name.
+An exit's answers are checked on the evidence the host really passes.
 """
+# pyright: reportPrivateUsage=false
 
 from __future__ import annotations
 

@@ -59,7 +59,7 @@ REPO = Path(__file__).resolve().parents[4]
 ROOTS = (REPO / "examples/apps", REPO / "qmx-agents/apps")
 QMB_VERSION = Definition.load(REPO / "qmx-agents/apps/qmb").manifest.version
 """A PR that changes QMB bumps its `app.toml`, so the examples below follow by themselves."""
-SLICES =REPO / "qml/tests/fixtures/slices"
+SLICES = REPO / "qml/tests/fixtures/slices"
 OPERATOR = Principal("operator")
 CHAT = "agent:shipped-apps"
 MARCH: Document = {"window": {"start": "2025-03-01", "end": "2025-04-01"}, "allow_gaps": True}
@@ -273,9 +273,7 @@ def conformance(host: Host) -> JsonValue:
             app, job, inputs=cast(Document, dict(inputs)), principal=principal
         )
 
-    ran = run_conformance(
-        "qmb", QMB_VERSION, run_job=run_job, library=host.library, principal=CHAT
-    )
+    ran = run_conformance("qmb", QMB_VERSION, run_job=run_job, library=host.library, principal=CHAT)
     return {"passed": ran.verdict.passed, "says": ran.verdict.says()}
 
 

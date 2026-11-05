@@ -10,7 +10,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Final, cast
 
-from qmf.risk.unit_intent import UnitEntryIntent, UnitExitIntent
+from qmf.risk.unit_intent import UnitExitIntent
 from qml.check import check
 from qml.compile import CompiledUnit, compile_unit
 from qml.protocol.unit import OwnPosition, TraceLevel, construct_unit
@@ -274,7 +274,7 @@ def _as_exit(face: Document) -> str:
         for intent in _ok(unit.on_instant(instant)).intents:
             if isinstance(intent, UnitExitIntent):
                 return _FIRED
-            if isinstance(intent, UnitEntryIntent) and (index == 0 or intent.protection.targets):
+            if index == 0 or intent.protection.targets:
                 return _FIRED
     return _SILENT
 

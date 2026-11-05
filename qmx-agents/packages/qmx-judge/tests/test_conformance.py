@@ -61,7 +61,7 @@ QMB = REPO / "qmx-agents" / "apps" / "qmb"
 QMB_VERSION = Definition.load(QMB).manifest.version
 """A PR that changes QMB bumps its `app.toml`, so these lines follow by themselves."""
 VARIANT_VERSION = "1.0.0"
-SLICES =REPO / "qml" / "tests" / "fixtures" / "slices"
+SLICES = REPO / "qml" / "tests" / "fixtures" / "slices"
 PACK_DIR = REPO / "qmx-agents" / "packages" / "qmx-judge" / "src" / "qmx_judge" / "conformance_pack"
 OPERATOR = Principal("operator")
 MARCH: dict[str, Any] = {"start": "2025-03-01", "end": "2025-04-01"}
