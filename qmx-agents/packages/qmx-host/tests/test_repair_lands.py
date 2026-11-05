@@ -153,8 +153,15 @@ def world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[World]:
     calls = tmp_path / "uv-calls.txt"
     program = recording_uv(tmp_path, calls)
     found = shutil.which
-    monkeypatch.setattr(shutil, "which", lambda name: str(program) if name == "uv" else found(name))
-    monkeypatch.setattr(Supervisor, "python", lambda _self, _hash: Path(sys.executable))
+
+    def which(name: str) -> str | None:
+        return str(program) if name == "uv" else found(name)
+
+    def this_interpreter(_self: Supervisor, _definition_hash: str) -> Path:
+        return Path(sys.executable)
+
+    monkeypatch.setattr(shutil, "which", which)
+    monkeypatch.setattr(Supervisor, "python", this_interpreter)
     monkeypatch.setattr(first_start, "APP_FOLDERS", {})
     home = tmp_path / "QMX" / "data"
     made = World(home, tmp_path, calls, Supervisor(home, secret_getter=lambda _s, _u: "fixture"))
@@ -239,8 +246,9 @@ def test_a_money_app_keeps_its_signed_version_until_he_signs(
     assert status["definition_hash"] == signed
     assert status["version"] == "1.0.0"
     assert world.runtime.get(APP)["definition_hash"] == new
-    assert "1.0.1 waits for your signature" in notice_of(world.runtime, APP)
-    assert "1.0.0 keeps running" in notice_of(world.runtime, APP)
+    assert notice_of(world.runtime, APP) == (
+        "exchange-status 1.0.1 waits for your signature; 1.0.0 keeps running"
+    )
 
     stages_to_shadow(world.runtime, APP, new)
     sign(world.runtime, APP, new)
@@ -267,7 +275,9 @@ def test_a_library_repair_does_not_touch_a_signed_money_app(
     assert record.read_bytes() == recorded
     assert status["status"] == "running"
     assert status["definition_hash"] == signed
-    assert "library repair waits for a new signed version" in notice_of(world.runtime, APP)
+    assert notice_of(world.runtime, APP) == (
+        "a library repair for exchange-status waits for a new signed version; 1.0.0 keeps running"
+    )
 
 
 def test_a_library_repair_rebuilds_a_non_money_app_with_its_data(
@@ -294,7 +304,9 @@ def test_a_library_repair_rebuilds_a_non_money_app_with_its_data(
 
     world.start_host()
 
-    assert world.uv_calls == [definition_hash, definition_hash], "an unchanged library builds nothing"
+    assert world.uv_calls == [definition_hash, definition_hash], (
+        "an unchanged library builds nothing"
+    )
 
 
 def test_one_bad_app_does_not_stop_the_others(

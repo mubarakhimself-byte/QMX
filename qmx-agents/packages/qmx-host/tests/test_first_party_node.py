@@ -12,7 +12,9 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
-from qmx_apps.errors import Document
+from qmx_apps.errors import AppError, Document
+from qmx_apps.manifest import Definition
+from qmx_apps.supervisor import path_sources
 
 import qmx_host.connect  # noqa: F401 - connect_node loads through it  # pyright: ignore[reportUnusedImport]
 from qmx_host.connect_node import (
@@ -25,18 +27,40 @@ from qmx_host.first_start import APP_FOLDERS, FIRST_PARTY, enable_first_party
 
 
 class FakeSupervisor:
-    """A machine's apps: what is installed, what runs, and every install and start it was asked."""
+    """A machine's apps, each installed from what ships today and built from the libraries as they
+    stand, so a host start finds nothing to refresh: what is installed, what runs, and every
+    install and start it was asked."""
 
     def __init__(self, *installed: str) -> None:
         self.installed = list(installed)
         self.running: set[str] = set()
         self.asked: list[tuple[str, str]] = []
+        self.told: list[str] = []
 
     def status(self, app_id: str) -> Document:
         return {"status": "running" if app_id in self.running else "stopped"}
 
-    def list(self) -> list[Document]:
-        return [{"definition": {"id": app_id}} for app_id in self.installed]
+    def get(self, app_id: str) -> Document:
+        if app_id not in self.installed:
+            raise AppError("not_found", "The app is not installed.", 404)
+        shipped = Definition.load(APP_FOLDERS[app_id])
+        return {
+            "definition": {"id": app_id, "risk": shipped.manifest.risk},
+            "definition_hash": shipped.hash,
+            "runtime": self.status(app_id),
+        }
+
+    def built_from(self, definition_hash: str) -> Document:
+        folder = next(
+            folder
+            for folder in APP_FOLDERS.values()
+            if Definition.load(folder).hash == definition_hash
+        )
+        return cast(Document, path_sources(folder))
+
+    def notice(self, app_id: str, text: str | None) -> None:
+        if text is not None:
+            self.told.append(f"{app_id}: {text}")
 
     def install(self, folder: Path, *, trust: str) -> Document:
         assert trust == "first_party"
@@ -89,6 +113,7 @@ def test_the_node_enable_starts_comes_back_at_the_next_host_start(home: Path) ->
     assert started == [NODE_APP, MIS_APP]
     assert back.running == {NODE_APP, MIS_APP}
     assert back.asked == [("start", NODE_APP), ("start", MIS_APP)]
+    assert back.told == []
 
 
 def test_an_existing_first_party_list_is_kept_with_its_order(home: Path) -> None:

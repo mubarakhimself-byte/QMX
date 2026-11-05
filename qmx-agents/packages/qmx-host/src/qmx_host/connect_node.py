@@ -438,12 +438,12 @@ def _proved(ports: Ports, run: Run) -> bool:
 
 
 def _install(ports: Ports, run: Run) -> Card | None:
+    from qmx_host.first_start import refresh_first_party  # noqa: PLC0415 - it imports this file
+
     apps = _supervisor(run)
     for app, folder in ports.apps.items():
         try:
-            found = _installed(apps, app) or cast(
-                "dict[str, Any]", apps.install(folder, trust="first_party")
-            )
+            found = cast("dict[str, Any]", refresh_first_party(apps, app, folder))
             ports.prove(apps, app, str(found["definition_hash"]))
         except AppError as error:
             raise Stopped(f"install: {app} did not install or pass its proof: {error}") from None
