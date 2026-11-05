@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import json
 from collections import Counter
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
@@ -69,6 +69,8 @@ NS_PER_MS: Final = 1_000_000
 MS_PER_MINUTE: Final = 60_000
 
 type View = Literal["rows", "trades_with_context", "digest"]
+type HeldFrom = Callable[[str], int | None]
+"""Where the door's holdout starts for a series, in epoch nanoseconds, or None when it has none."""
 
 
 def parse_instant(value: object, name: str) -> int:
@@ -179,6 +181,7 @@ class _Found:
     last_t: int | None
     backfilled: int
     unreadable: list[str]
+    sealed: list[str]
 
 
 def _read(
@@ -188,18 +191,28 @@ def _read(
     end_ns: int,
     filters: Mapping[str, str],
     backfilled: bool,
+    held_from: HeldFrom | None,
 ) -> _Found:
     store = SeriesStore(root)
     rows: list[JournalRow] = []
     last: int | None = None
     left_out = 0
     unreadable: list[str] = []
+    sealed: list[str] = []
     for folder in _series_folders(root, stream, filters):
         months = [
             (key, month)
             for month in sorted(folder.iterdir())
             if (month / STATE_NAME).is_file() and (key := _month_key(stream, folder, month))
         ]
+        boundary = None if held_from is None or not months else held_from(months[0][0].series)
+        if boundary is not None:
+            sealed += [
+                key.text
+                for key, _ in months
+                if key.end_ns > boundary and key.start_ns < end_ns and start_ns < key.end_ns
+            ]
+            months = [(key, month) for key, month in months if key.end_ns <= boundary]
         for index, (key, _month) in enumerate(months):
             overlaps = key.start_ns < end_ns and start_ns < key.end_ns
             newest = index == len(months) - 1
@@ -220,7 +233,7 @@ def _read(
                     continue
                 rows.append(row)
     rows.sort(key=lambda row: (row.t, row.key.text, row.seq))
-    return _Found(rows, last, left_out, unreadable)
+    return _Found(rows, last, left_out, unreadable, sealed)
 
 
 def _decimal(value: object) -> Decimal:
@@ -265,7 +278,13 @@ def _digest(rows: Iterable[JournalRow]) -> list[dict[str, Any]]:
     ]
 
 
-def _with_context(root: Path, rows: Sequence[JournalRow], start_ns: int, end_ns: int) -> list[Any]:
+def _with_context(
+    root: Path,
+    rows: Sequence[JournalRow],
+    start_ns: int,
+    end_ns: int,
+    held_from: HeldFrom | None,
+) -> list[Any]:
     minutes: dict[tuple[str, int], JournalRow] = {}
     widened = _read(
         root,
@@ -274,6 +293,7 @@ def _with_context(root: Path, rows: Sequence[JournalRow], start_ns: int, end_ns:
         end_ns + MS_PER_MINUTE * NS_PER_MS,
         {"kind": "minute"},
         backfilled=True,
+        held_from=held_from,
     )
     for row in widened.rows:
         minutes[str(row.record.get("market_id")), row.t // MS_PER_MINUTE] = row
@@ -297,9 +317,11 @@ def journal_query(
     view: View = "rows",
     include_backfilled: bool = False,
     detailed: bool = False,
+    held_from: HeldFrom | None = None,
 ) -> dict[str, Any]:
     """Read one journal stream over a window; the answer says where the data stops when the
-    window runs past it."""
+    window runs past it. `held_from` says where the door's Settings holdout starts for a series:
+    a sealed month is never read, and a window that reaches one is refused by name."""
     if window is None or "start" not in window or "end" not in window:
         raise ValueError(
             "journal_query needs a time window: pass window = {start, end}, for example "
@@ -319,7 +341,13 @@ def journal_query(
             f"not {', '.join(unknown)}"
         )
     root = home / MARKET_FOLDER / "series"
-    found = _read(root, stream, start_ns, end_ns, given, include_backfilled)
+    found = _read(root, stream, start_ns, end_ns, given, include_backfilled, held_from)
+    if found.sealed:
+        raise ValueError(
+            f"the door's holdout seals journal history; this window reaches "
+            f"{', '.join(found.sealed)}, so it is refused, never answered empty; ask for a window "
+            "that ends before the holdout"
+        )
     answer: dict[str, Any] = {
         "stream": stream,
         "window": {"start": _iso(start_ns // NS_PER_MS), "end": _iso(end_ns // NS_PER_MS)},
@@ -338,7 +366,7 @@ def journal_query(
     if view == "digest":
         answer["rows"] = _digest(found.rows)
     elif view == "trades_with_context":
-        answer["rows"] = _with_context(root, found.rows, start_ns, end_ns)
+        answer["rows"] = _with_context(root, found.rows, start_ns, end_ns, held_from)
     else:
         answer["rows"] = [row.detailed() if detailed else row.concise() for row in found.rows]
     return answer

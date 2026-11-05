@@ -55,7 +55,7 @@ from qma.harness import Harness, QmxHome, SessionId, chat_routes, control_servic
 from qma.harness.home import DoctorLine
 from qma.harness.tools import HostRead
 from qma.telemetry import THIS_PC, configured, target
-from qmf.core import TypedRefusal, is_refusal
+from qmf.core import TypedRefusal, fingerprint_bytes, is_refusal
 from qml.compile import CompileContext, CompiledUnit, compile_unit
 from qmx_apps.artifacts import Ending, Lander
 from qmx_apps.artifacts import Landing as AppLanding
@@ -124,9 +124,10 @@ from qmx_judge.landing import (
 )
 from qmx_judge.landing import Lander as RunLander
 from qmx_judge.paper import PaperRule
-from qmx_judge.runs import BundleRefused, Landing, Ticket, parse_bundle
+from qmx_judge.runs import BundleRefused, Landing, ResultBundle, Ticket, parse_bundle
 from qmx_judge.tries import TRY_KIND, spec_edit_item, try_item
 from qmx_library.adapter import EngineLibraryAdapter
+from qmx_library.cards import Partition, SeriesCard, write_card
 from qmx_library.client import OwnerTable
 from qmx_library.kinds import Checker, Problem
 from qmx_library.landing import NOT_PRIMARY
@@ -189,7 +190,13 @@ from qmx_host.jobs import Jobs, Stopped
 from qmx_host.keys import keys_router
 from qmx_host.lifecycle import LifecycleWriter, MoveRefused, judge_moves
 from qmx_host.maintenance import maintenance_router
-from qmx_host.market_data import MarketDoor, Placement, market_router
+from qmx_host.market_data import (
+    SEAL_READ_REASON,
+    HoldoutAsk,
+    MarketDoor,
+    Placement,
+    market_router,
+)
 from qmx_host.node_link import NodeLink
 from qmx_host.process_record import STATE, recorded_host
 from qmx_host.promote import Promoter, harvested_calibrations, promote_router
@@ -1111,7 +1118,13 @@ async def serve(
                 control.attach_library(store)
                 runtime = control.app_runtime()
                 runtime.attach_landers(
-                    landers(store, runtime, name, settings=lambda: control.settings_get("qmb"))
+                    landers(
+                        store,
+                        runtime,
+                        name,
+                        settings=lambda: control.settings_get("qmb"),
+                        door=door,
+                    )
                 )
                 threading.Thread(
                     target=enable_apps, args=(home, runtime), name="qmx-first-apps", daemon=True
@@ -1825,6 +1838,63 @@ OPERATOR_READ: Final = Principal.parse("operator")
 LINEAGE: Final = "variant-of"
 BAR_SIDES: Final = ("bid", "ask")
 BARS_TEMPLATE: Final = "download-dukascopy"
+DEFAULT_SOURCE: Final = "dukascopy"
+STORE_SHAPES: Final = (("bar-m1", BAR_SIDES), ("ticks", ("-",)))
+"""What a run reads from the market store, a month's bid and ask bars before its ticks, because a
+month holds far fewer of them. The child reads either, so the reader stays when a derived step
+writes `bar-m1` next to the ticks."""
+_CARDS_LOCK: Final = threading.Lock()
+"""One `dataset` card head at a time on this host, so two runs of a new series both land."""
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class CsvPair:
+    """One market's hand-saved bid and ask files for exactly the run's window."""
+
+    bid: Path
+    ask: Path
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class RunWindow:
+    """A run's window, its months, and the seal it reads them through. `run` names that seal only
+    when a study states a holdout: a name fixes its first answer for good, so a name for no stated
+    holdout would keep today's Settings default for this study and window after he changes it."""
+
+    start: str
+    end: str
+    months: tuple[str, ...]
+    holdout: HoldoutAsk
+    run: str | None
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class StoreSide:
+    """One series a market reads: its folder under `in/data/<market>/`, and the window's months
+    oldest first. `card` is `MarketDoor.card` of the whole series, for its `dataset` item."""
+
+    name: str
+    series: str
+    fingerprints: tuple[str, ...]
+    card: Mapping[str, Any]
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class StoreMonths:
+    """One market's whole window in the market store, in one shape and at one stated scale."""
+
+    kind: str
+    scale: int
+    sides: tuple[StoreSide, ...]
+    window: RunWindow
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class NotInStore:
+    """Why a market's window cannot read the store: months no shape holds, series with no scale."""
+
+    months: tuple[str, ...] = ()
+    unscaled: tuple[str, ...] = ()
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -1854,10 +1924,11 @@ class QmbRun:
     the tester reads files only: `in/request.json` with the core's fields filled (among them
     `[qmb] gap_bars_refuse` and `calibrated_min_fills`, `allow_gaps` as a named study states it
     and otherwise as the request does, and `fixture_records` naming any market on a test fixture),
-    the unit, its pinned blocks, the record documents `gather` read, and each market's bid and ask
-    bars for the window. The
-    bars are the CSV pair `<symbol>-<stream>-<side>-<start>-<end>.csv` that dukascopy-node
-    saves, read from `[qmb] bars` (default the market store's `bars/` folder)."""
+    the unit, its pinned blocks, the record documents `gather` read, and each market's data for
+    the window. A market's data is the CSV pair `<symbol>-<stream>-<side>-<start>-<end>.csv` when
+    `[qmb] bars` (default the market store's `bars/` folder) holds it, the test and hand-saved
+    route. Otherwise it is the months in the market store, copied through the door to
+    `in/data/<market>/` beside a `card.json`, and the result links their `dataset` items."""
 
     lander: RunLander
     library: LanderLibrary
@@ -1865,13 +1936,15 @@ class QmbRun:
     """The run folder the supervisor makes for `(app_id, run_id)` inside the app's volume."""
     settings: Callable[[], Mapping[str, object]]
     market: Path
+    door: MarketDoor | TypedRefusal
 
     def open(
         self, app_id: str, version: str, job: str, inputs: Document, principal: str
     ) -> Ticket | None:
         """Refuse a unit or study pin that names no Library object, a unit that does not
-        compile, or a window with no bars before any try lands: the result's `uses` and `tests`
-        edges point at the pins, so such a run could never close."""
+        compile, or a window with no data or a sealed month before any try lands: the result's
+        `uses` and `tests` edges point at the pins, so such a run could never close. A copy that
+        fails after the try opened fails that try, so no run stays open for good."""
         unknown = [
             f"{name} {pin} names no object in the Library"
             for name in ("unit", "study")
@@ -1886,47 +1959,140 @@ class QmbRun:
         bars = None if found is None else self._bars(found, inputs)
         ticket = self.lander.open(app_id, version, job, inputs, principal)
         if ticket is not None and found is not None and bars is not None:
-            self._lay_out(self.folder_of(app_id, ticket.run_id) / "in", ticket, found, bars)
+            try:
+                self._lay_out(self.folder_of(app_id, ticket.run_id) / "in", ticket, found, bars)
+            except (OSError, ValueError, LibraryRefused) as error:
+                self.lander.fail(ticket, str(error), status="failed")
+                raise BundleRefused([str(error)]) from error
         return ticket
 
-    def _bars(self, found: RunUnit, inputs: Document) -> dict[str, dict[str, Path]]:
-        """Each of the unit's markets' bid and ask files for the request's window, or a refusal
-        that names every missing file and the template that downloads it (LD-06)."""
-        asked = inputs.get("markets")
-        if asked is not None and sorted(cast(list[str], asked)) != sorted(found.markets):
-            raise BundleRefused(
-                [
-                    f"QMB replays every market the unit trades, {list(found.markets)}; leave "
-                    "markets out or name them all"
-                ]
+    def _study_fields(self, inputs: Document) -> Mapping[str, Any]:
+        pin = inputs.get("study")
+        if not isinstance(pin, str) or not pin:
+            return {}
+        return self.library.store.get(OPERATOR_READ, pin).fields
+
+    def _bars(self, found: RunUnit, inputs: Document) -> dict[str, CsvPair | StoreMonths]:
+        """Each market the request names and where its window's data sits, or a refusal that
+        names every missing month and the template that downloads it (LD-06)."""
+        window = self._run_window(inputs)
+        self._refuse_sealed(window)
+        study = self._study_fields(inputs)
+        named = self.settings().get("bars")
+        folder = Path(named) if isinstance(named, str) and named else self.market / "bars"
+        stream = found.compiled.plan.stream
+        sources = _sources(inputs.get("source"), study.get("source"))
+        read: dict[str, CsvPair | StoreMonths] = {}
+        lacking: dict[str, NotInStore] = {}
+        files_missing: list[str] = []
+        for market in _asked_markets(found.markets, inputs.get("markets")):
+            record = found.context.records.get(market)
+            symbol = record.symbol if record else market.rsplit(".", 1)[-1]
+            bid, ask = (
+                folder / f"{symbol.lower()}-{stream}-{s}-{window.start}-{window.end}.csv"
+                for s in BAR_SIDES
             )
+            if bid.is_file() and ask.is_file():
+                read[market] = CsvPair(bid, ask)
+                continue
+            files_missing += [str(path) for path in (bid, ask) if not path.is_file()]
+            in_store = self._from_store(market, symbol.upper(), sources, window)
+            if isinstance(in_store, StoreMonths):
+                read[market] = in_store
+            else:
+                lacking[market] = in_store
+        if lacking:
+            csv_named = files_missing if isinstance(named, str) and named else []
+            raise BundleRefused(_lacking_words(lacking, sources, window, csv_named))
+        return read
+
+    def _run_window(self, inputs: Document) -> RunWindow:
         window = inputs.get("window")
         if not isinstance(window, dict) or not {"start", "end"} <= set(window):
             raise BundleRefused(["a unit run names its window, {start, end} as dates"])
         start, end = str(window["start"])[:10], str(window["end"])[:10]
-        named = self.settings().get("bars")
-        folder = Path(named) if isinstance(named, str) and named else self.market / "bars"
-        stream = found.compiled.plan.stream
-        found_bars: dict[str, dict[str, Path]] = {}
-        missing: list[str] = []
-        for market in found.markets:
-            record = found.context.records.get(market)
-            symbol = (record.symbol if record else market.rsplit(".", 1)[-1]).lower()
-            paths = {s: folder / f"{symbol}-{stream}-{s}-{start}-{end}.csv" for s in BAR_SIDES}
-            missing += [str(path) for path in paths.values() if not path.is_file()]
-            found_bars[market] = paths
-        if missing:
+        holdout = self._study_fields(inputs).get("holdout")
+        return RunWindow(
+            start,
+            end,
+            _months_of(start, end),
+            cast("HoldoutAsk", holdout),
+            None if holdout is None else f"{inputs['study']}@{start}/{end}",
+        )
+
+    def _refuse_sealed(self, window: RunWindow) -> None:
+        """A month the run's holdout seals never reaches a run folder, by either route, because
+        `materialise` copies whatever it is given. With no door there is no seal to ask, unless
+        a study states one."""
+        if is_refusal(self.door):
+            if window.holdout is None:
+                return
+            raise BundleRefused([f"this study names a holdout: {shut_line(self.door)}"])
+        sealed = self.door.sealed_months(window.months, holdout=window.holdout, run=window.run)
+        if is_refusal(sealed):
+            raise BundleRefused([_door_reason(sealed)])
+        if sealed.value:
+            raise BundleRefused([f"{SEAL_READ_REASON}: {', '.join(sealed.value)}"])
+
+    def _from_store(
+        self, market: str, symbol: str, sources: Sequence[str], window: RunWindow
+    ) -> StoreMonths | NotInStore:
+        """The one source whose store holds this market's whole window. Two is a refusal, because
+        they can differ only when the request and the study name different sources."""
+        if is_refusal(self.door):
+            raise BundleRefused([f"the market-data door did not open: {shut_line(self.door)}"])
+        found = [self._held(self.door, source, symbol, window) for source in sources]
+        usable = [one for one in found if isinstance(one, StoreMonths)]
+        if len(usable) > 1:
             raise BundleRefused(
                 [
-                    f"no bars for {start} to {end}: {missing[0]} is missing; save the month "
-                    f"with dukascopy-node or the {BARS_TEMPLATE} template",
-                    *missing[1:],
+                    f"{market} holds this window under both {' and '.join(sources)}; the request "
+                    "and the study name different sources, so name one"
                 ]
             )
-        return found_bars
+        if usable:
+            return usable[0]
+        lacking = [one for one in found if isinstance(one, NotInStore)]
+        return NotInStore(
+            tuple(sorted({month for one in lacking for month in one.months})),
+            tuple(sorted({series for one in lacking for series in one.unscaled})),
+        )
+
+    def _held(
+        self, door: MarketDoor, source: str, symbol: str, window: RunWindow
+    ) -> StoreMonths | NotInStore:
+        """The first shape that holds the whole window on every side at one stated scale."""
+        lacking = NotInStore()
+        for kind, variants in STORE_SHAPES:
+            sides: list[StoreSide] = []
+            absent: list[str] = []
+            for variant in variants:
+                series = f"{source}/{symbol}/{kind}/{variant}"
+                card = door.card(series)
+                whole: Mapping[str, Any] = {} if is_refusal(card) else card.value
+                months = {p["month"]: p["fingerprint"] for p in whole.get("partitions", [])}
+                absent += [month for month in window.months if month not in months]
+                name = kind if variant == "-" else variant
+                in_order = tuple(months[m] for m in window.months if m in months)
+                sides.append(StoreSide(name, series, in_order, whole))
+            if absent:
+                lacking = NotInStore(tuple(sorted(set(absent))), lacking.unscaled)
+                continue
+            scales = {door.price_scale(side.series) for side in sides}
+            scale = scales.pop()
+            if scale is None or scales:
+                unscaled = [s.series for s in sides if door.price_scale(s.series) is None]
+                lacking = NotInStore((), (*lacking.unscaled, *unscaled))
+                continue
+            return StoreMonths(kind, scale, tuple(sides), window)
+        return lacking
 
     def _lay_out(
-        self, root: Path, ticket: Ticket, found: RunUnit, bars: Mapping[str, Mapping[str, Path]]
+        self,
+        root: Path,
+        ticket: Ticket,
+        found: RunUnit,
+        bars: Mapping[str, CsvPair | StoreMonths],
     ) -> None:
         settings = self.settings()
         pin = ticket.study
@@ -1944,7 +2110,7 @@ class QmbRun:
             **({"allow_gaps": study["allow_gaps"]} if "allow_gaps" in study else {}),
             "kind": run_kind(ticket.job),
             "run_id": ticket.run_id,
-            "markets": list(found.markets),
+            "markets": list(bars),
             "fixture_records": list(found.fixture_records),
         }
         root.mkdir(parents=True, exist_ok=True)
@@ -1960,17 +2126,70 @@ class QmbRun:
             (root / "records" / f"{market}.json").write_text(
                 json.dumps(document, indent=2), "utf-8"
             )
-        for market, sides in bars.items():
+        for market, data in bars.items():
+            if isinstance(data, StoreMonths):
+                self._copy_months(root / "data" / market, market, data)
+                continue
             (root / "bars" / market).mkdir(parents=True, exist_ok=True)
-            for side, path in sides.items():
-                shutil.copyfile(path, root / "bars" / market / f"{side}.csv")
+            shutil.copyfile(data.bid, root / "bars" / market / "bid.csv")
+            shutil.copyfile(data.ask, root / "bars" / market / "ask.csv")
+
+    def _copy_months(self, folder: Path, market: str, data: StoreMonths) -> None:
+        """A market's months as verified copies, beside the card the tester reads them by."""
+        door = cast(MarketDoor, self.door)
+        files: dict[str, list[str]] = {}
+        for side in data.sides:
+            copied = door.materialise(
+                side.fingerprints,
+                into=folder / side.name,
+                holdout=data.window.holdout,
+                run=data.window.run,
+            )
+            if is_refusal(copied):
+                raise BundleRefused([f"{market}: {_door_reason(copied)}"])
+            files[side.name] = [path.relative_to(folder).as_posix() for path in copied.value]
+        card = {
+            "kind": data.kind,
+            "scale": data.scale,
+            "fidelity": "quotes",
+            "series": [side.series for side in data.sides],
+            "window": {"start": data.window.start, "end": data.window.end},
+            "months": list(data.window.months),
+            "files": files,
+            "datasets": [self._land_card(side, data.scale) for side in data.sides],
+        }
+        (folder / "card.json").write_text(json.dumps(card, indent=2), "utf-8")
+
+    def _land_card(self, side: StoreSide, scale: int) -> str:
+        """The series' `dataset` item as the door states it now, unchanged when it already is."""
+        source, subject, kind, variant = side.series.split("/")
+        parts = tuple(
+            Partition(
+                int(str(part["month"])[:4]),
+                int(str(part["month"])[5:]),
+                str(part["fingerprint"]),
+                int(part["rows"]),
+                bool(part["frozen"]),
+                tuple(str(gap) for gap in part["gaps"]),
+            )
+            for part in side.card["partitions"]
+        )
+        card = SeriesCard(
+            source,
+            subject,
+            kind,
+            "" if variant == "-" else variant,
+            quality={"price_scale": scale},
+        )
+        with _CARDS_LOCK:
+            return write_card(self.library.store, OPERATOR_READ, card, parts).object_id
 
     def close(self, landing: AppLanding) -> str:
         run, data = landing.run, landing.data
         if run is None or not isinstance(data, dict):
             raise BundleRefused(["the result is a qmx.qmb.result-bundle/1 object from a run"])
         ticket = cast(Ticket, run.ticket)
-        bundle = parse_bundle(data)
+        bundle = _with_its_data(parse_bundle(data), run.folder / "in")
         try:
             return self.lander.close(Landing(ticket, bundle, run.folder))
         except LibraryRefused as refused:
@@ -1983,17 +2202,105 @@ class QmbRun:
             raise BundleRefused([str(refused)]) from refused
 
 
+def _months_of(start: str, end: str) -> tuple[str, ...]:
+    """Every `YYYY-MM` a half-open window of dates touches, oldest first."""
+    try:
+        first, last = date.fromisoformat(start), date.fromisoformat(end)
+    except ValueError as error:
+        raise BundleRefused(["a unit run names its window, {start, end} as dates"]) from error
+    if last <= first:
+        raise BundleRefused([f"this window's end, {end}, comes after its start, {start}"])
+    final = last - timedelta(days=1)
+    return tuple(
+        f"{at // 12:04d}-{at % 12 + 1:02d}"
+        for at in range(first.year * 12 + first.month - 1, final.year * 12 + final.month)
+    )
+
+
+def _sources(asked: object, studied: object) -> list[str]:
+    """The sources a run may read: those the request and the study name, else the default. No
+    other is read, so an old import with no stated scale cannot block or change a result."""
+    named = [source for source in (asked, studied) if source is not None]
+    if not all(isinstance(source, str) and source for source in named):
+        raise BundleRefused(["source names one source in the market store, as text"])
+    return list(dict.fromkeys(cast(list[str], named))) or [DEFAULT_SOURCE]
+
+
+def _asked_markets(traded: Sequence[str], asked: object) -> tuple[str, ...]:
+    """The markets a run names, in the unit's order, or every one when it names none."""
+    if asked is None:
+        return tuple(traded)
+    named = cast(list[str], asked)
+    stray = [market for market in named if market not in traded]
+    if stray or not named:
+        raise BundleRefused(
+            [
+                f"this unit does not trade {', '.join(stray) or 'an empty list'}; it trades "
+                f"{', '.join(traded)}"
+            ]
+        )
+    return tuple(market for market in traded if market in named)
+
+
+def _lacking_words(
+    lacking: Mapping[str, NotInStore],
+    sources: Sequence[str],
+    window: RunWindow,
+    csv_missing: Sequence[str],
+) -> list[str]:
+    """Every reason a run has no data, the months first, since the first one is the message."""
+    months = ", ".join(f"{market} {m}" for market, why in lacking.items() for m in why.months)
+    unscaled = sorted({series for why in lacking.values() for series in why.unscaled})
+    words: list[str] = []
+    if months:
+        also = f"; {csv_missing[0]} is missing too" if csv_missing else ""
+        words.append(
+            f"no data for {window.start} to {window.end}: {months} not in the market store under "
+            f"{' or '.join(sources)}; run the {BARS_TEMPLATE} template for each month{also}"
+        )
+    words += [
+        f"{series} states no price scale; run the {BARS_TEMPLATE} template's check on its card, "
+        "or download the month again"
+        for series in unscaled
+    ]
+    return words
+
+
+def _door_reason(refusal: TypedRefusal) -> str:
+    return str(refusal.context.get("reason", refusal.category.value))
+
+
+def _with_its_data(bundle: ResultBundle, laid: Path) -> ResultBundle:
+    """A store run's leave, with what only the core knows: the `dataset` items it read, their
+    series in its labels, and the hash of its request. A hand-saved CSV run has no such card."""
+    cards = [
+        cast("dict[str, list[str]]", json.loads(path.read_text("utf-8")))
+        for path in sorted(laid.glob("data/*/card.json"))
+    ]
+    if not cards:
+        return bundle
+    series = [name for card in cards for name in card["series"]]
+    return dataclasses.replace(
+        bundle,
+        consumed=tuple(dataset for card in cards for dataset in card["datasets"]),
+        request_fp=fingerprint_bytes((laid / "request.json").read_bytes()).value,
+        labels={**(bundle.labels or {}), "datasets": series},
+    )
+
+
 def landers(
     store: Store,
     runtime: Supervisor,
     machine: str,
     *,
     settings: Callable[[], Mapping[str, object]] = lambda: QMB_DEFAULTS,
+    door: MarketDoor | TypedRefusal | None = None,
 ) -> dict[str, Lander]:
     """The core landers this host registers: `qmb-run`, writing as the operator, the one
     principal who puts records on `main`, and minting run ids named for this machine. It runs a
     unit's behaviour check first through the supervisor's own `run_job`. `settings` reads the
-    `[qmb]` section at each run."""
+    `[qmb]` section at each run. `door` is the host's market-data door, or a refusal when it did
+    not open; left out, a door with no holdout on the same store."""
 
     def provides_of(app_id: str, version: str) -> set[str]:
         for row in runtime.versions(app_id):
@@ -2023,7 +2330,11 @@ def landers(
         check_first=CheckFirst(run_job, library),
         family_of=library.family_of,
     )
-    return {QMB_RUN: QmbRun(lander, library, folder_of, settings, runtime.home / MARKET_STORE)}
+    market = runtime.home / MARKET_STORE
+    if door is None:
+        opened = MarketDoor.open(market, {})
+        door = opened if is_refusal(opened) else opened.value
+    return {QMB_RUN: QmbRun(lander, library, folder_of, settings, market, door)}
 
 
 async def keep_facts(control: ControlService) -> None:

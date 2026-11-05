@@ -97,6 +97,30 @@
         "type": "string"
       },
       "holdout": {
+        "oneOf": [
+          {
+            "const": "off"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "boundary",
+              "months"
+            ],
+            "properties": {
+              "boundary": {
+                "type": "string"
+              },
+              "months": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          }
+        ]
+      },
+      "source": {
         "type": "string"
       },
       "cost_rule": {

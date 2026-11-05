@@ -10,7 +10,7 @@ import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from functools import cache
+from functools import cache, partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, Literal, cast
 
@@ -194,13 +194,16 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
         seed: int | None = None,
         motion: Literal["on", "off"] = "on",
         allow_gaps: bool | None = None,
+        source: str | None = None,
         response_format: ResponseFormat = "concise",
     ) -> dict[str, Any]:
         """Backtest a unit on QMB over `window` (`{"start": "2025-03-01", "end": "2025-04-01"}`)
         and land its result in the Library. Answers the run id, and the result id when it
-        finished within the wait; otherwise read it later with backtest_status. A hole in the
-        bars longer than `[qmb] gap_bars_refuse` fails the run unless `allow_gaps` is true;
-        left out, the study's `allow_gaps` decides."""
+        finished within the wait; otherwise read it later with backtest_status. `markets` narrows
+        it to some of the unit's markets. It reads the market store's months under `source`, the
+        study's when left out, else `dukascopy`, and a missing month is refused by name before
+        anything starts. A hole in the bars longer than `[qmb] gap_bars_refuse` fails the run
+        unless `allow_gaps` is true; left out, the study's `allow_gaps` decides."""
         asked = {
             "unit": unit,
             "window": window,
@@ -210,6 +213,7 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
             "seed": seed,
             "motion": motion,
             "allow_gaps": allow_gaps,
+            "source": source,
         }
         request = {name: value for name, value in asked.items() if value is not None}
         return ctx.backtest(request, response_format)
@@ -438,8 +442,10 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
         envelope field (unit_id, market_id, kind, world, account, machine, ...). View `rows`,
         `trades_with_context` (each signal and trade with its market's minute, spread included),
         or `digest` (counts per unit, market and day). Past the data it says where the data
-        stops; backfilled rows are left out unless include_backfilled. Reading history is
-        read with readings_query, which keeps the study's holdout."""
+        stops; backfilled rows are left out unless include_backfilled. A window reaching a month
+        the door's Settings holdout seals is refused by name. Reading history is read with
+        readings_query, which keeps the study's holdout."""
+        door = ctx.market
         answer = journals.journal_query(
             ctx.root,
             stream=stream,
@@ -448,6 +454,7 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
             view=view,
             include_backfilled=include_backfilled,
             detailed=response_format == "detailed",
+            held_from=None if door is None else partial(_held_out_from, door),
         )
         rows = cast("list[Any]", answer.pop("rows"))
         paged = ctx.page(

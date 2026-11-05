@@ -15,6 +15,7 @@ from typing import cast
 import pytest
 from qmf.core import is_refusal
 from qmf.data.series import SeriesKey, SeriesStore
+
 from qmx_tools.functions import domain_functions
 from qmx_tools.service import DomainContext, MarketPort, unwrap
 
