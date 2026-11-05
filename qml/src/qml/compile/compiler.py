@@ -654,8 +654,9 @@ def _warm_up(plan: Plan, problems: _Problems) -> tuple[int, int]:
     """The bars a market needs before entries, and the unit's summed state bound. It builds every
     instance once, so a value no block can run is named at compile.
 
-    A binding is warm at the later of its recorded settle length and the bars its upstream
-    needs plus its own warm-up; a derived number at its source's plus its block's.
+    A binding is warm at the later of its recorded settle length, at this binding's parameters, and
+    the bars its upstream needs plus its own warm-up; a derived number at its source's plus its
+    block's.
     """
     warm: dict[str, int] = {}
     bound_total = 0
@@ -673,7 +674,8 @@ def _warm_up(plan: Plan, problems: _Problems) -> tuple[int, int]:
                     (warm.get(f"{side.side.value}.{ref}", 0) for ref in b.inputs.values()),
                     default=0,
                 )
-                settle = b.face.settle.bars if b.face.settle is not None else 0
+                recorded = b.face.settle
+                settle = recorded.bars_at(_values(b, plan.defaults)) if recorded is not None else 0
                 warm[b.key] = max(settle, upstream + instance.warm_up_bars)
                 bound_total += instance.state_bound
     for d in plan.derived:

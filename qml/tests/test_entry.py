@@ -238,7 +238,7 @@ def test_an_unsettled_block_fails_check_entry() -> None:
         (
             "/settle_bars/bars",
             "agents-average@1 has not settled by bar 5: a run started there differs from a long "
-            "run by more than 1e-9",
+            "run by more than 1E-9",
         ),
     ]
     assert check_entry(_agent_entry(settle_bars=long_enough), _AGENT_EMA) == ()
