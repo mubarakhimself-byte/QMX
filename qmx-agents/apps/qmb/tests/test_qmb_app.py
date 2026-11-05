@@ -262,7 +262,11 @@ def test_an_agent_writes_adx_above_25_and_a_job_runs_it(world: World) -> None:
             "/logic/long/slots/strength": slot,
             "/logic/short/slots/strength": slot,
             "/numbers/adx_level": number,
-            "/pins": [*cast("list[object]", template(DUMMY)["pins"]), pin("adx"), pin("value-above")],
+            "/pins": [
+                *cast("list[object]", template(DUMMY)["pins"]),
+                pin("adx"),
+                pin("value-above"),
+            ],
         },
         title="ADX above 25",
     )
