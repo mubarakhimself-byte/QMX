@@ -1,10 +1,9 @@
 """Shared parts of the PRB-L probes: the store paths, one verdict shape, the evidence log, a p95,
 and read-only copies of his files.
 
-Every probe runs from the repository root with the root venv, for example
-`uv run --no-sync python scripts/probes/library/p_taint.py`, except `p_mem.py`, which runs in the
-throwaway Hindsight venv (see its docstring). No probe opens the ship home or takes the lane lock,
-because none runs a plan turn. His files are read only through copies made by `copy_read_only`.
+`p_taint.py` runs from the repository root with the root venv, as
+`uv run --no-sync python scripts/live/library/p_taint.py`. It opens no ship home and takes no lane
+lock, because it runs no plan turn. His files are read only through copies made by `copy_read_only`.
 """
 
 from __future__ import annotations

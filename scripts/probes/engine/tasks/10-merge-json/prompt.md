@@ -1,1 +1,0 @@
-The work folder holds `base.json` and `override.json`, two JSON objects. Write `merged.json`, a deep merge where values from `override.json` win, nested objects merge key by key, and lists are replaced, not joined.

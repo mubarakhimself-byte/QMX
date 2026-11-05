@@ -324,7 +324,7 @@ def grep(log: Log) -> None:
     names = {f"mcp__qmx_{row.toolset}__{row.op}" for row in rows()}
     listed = subprocess.run(
         ["git", "-C", str(REPO), "grep", "-n", "-o", "-E", r"mcp__qmx_?[A-Za-z0-9_]*",
-         "--", ".", ":!scripts/probes", ":!qmx-agents/packages/qma-daemon",
+         "--", ".", ":!scripts/*/*/FINDINGS*.md", ":!qmx-agents/packages/qma-daemon",
          ":!qmx-agents/packages/qma-harness/tests/test_translate.py"],
         capture_output=True, text=True, check=False,
     ).stdout.splitlines()  # fmt: skip

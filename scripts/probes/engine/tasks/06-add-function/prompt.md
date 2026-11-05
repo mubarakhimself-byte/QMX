@@ -1,1 +1,0 @@
-Add a function `slugify(text)` to `textutil.py` in the work folder. It lowercases the text, turns every run of characters that are not a-z or 0-9 into one `-`, and strips `-` from both ends. `slugify("  Hello, World! 2026 ")` returns `"hello-world-2026"`. Keep the existing function.

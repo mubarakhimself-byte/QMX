@@ -12,7 +12,7 @@ exits 1 if any lane failed. No model, no key, no ship home, no lane lock.
   workflow that uses it. Quarantining r12 shows on both results with the path, refuses the
   workflow's trigger in the real ticker (`quarantined_input`, no run) and turns the hypothesis
   `open`; clearing the mark restores all three, and the next fire runs.
-- `taint` (lane 3): P-TAINT's own 100,000-item graph (`scripts/probes/library/p_taint.py`, same
+- `taint` (lane 3): P-TAINT's own 100,000-item graph (`scripts/live/library/p_taint.py`, same
   seed) loaded into the store's `catalog.db` schema, and `qmx_library.marks.marks` timed on it.
   The probe drew `compiles-to` child to parent like the other walked edges; the Library writes it
   pod to book, so the lane loads those edges reversed and the ancestry stays the probe's.
@@ -60,7 +60,7 @@ EVIDENCE: Final = Path(os.environ.get("LIB2_EVIDENCE", str(BUILD / "evidence" / 
 PREFIX: Final = os.environ.get("LIB2_LOG_PREFIX", "owner-")
 ROOT: Final = Path(__file__).resolve().parents[3]
 CHAIN: Final = ROOT / "qmx-agents" / "packages" / "qmx-engine" / "tests" / "fixtures" / "workflows"
-PROBES: Final = ROOT / "scripts" / "probes" / "library"
+PROBES: Final = ROOT / "scripts" / "live" / "library"
 LANE_LOCK: Final = Path("D:/QMX-worktrees/.engine-lane-lock")
 OPERATOR: Final = Principal("operator")
 AGENT: Final = Principal("agent", "lib2-lane")

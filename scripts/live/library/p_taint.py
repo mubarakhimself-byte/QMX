@@ -8,7 +8,7 @@ each object to three objects one layer up; `cites` and `mentions` edges reach ot
 and must not be walked. `marks()` is one recursive query plus a parent-pointer path, the shape
 LIB2 would ship (Lib AD-8 rule 10: the SQLite edge table with recursive queries first).
 
-    uv run --no-sync python scripts/probes/library/p_taint.py
+    uv run --no-sync python scripts/live/library/p_taint.py
 """
 
 from __future__ import annotations

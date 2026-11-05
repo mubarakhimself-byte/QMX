@@ -11,7 +11,7 @@ The bundle's source is the PC store's `definitions/` folder, which is where a pu
 image is content-addressed by hash; the Library artifact that wraps it is LIB4's, and this probe
 runs before those routes exist.
 
-    <repo python> scripts/probes/server/p_app.py
+    <repo python> scripts/live/server/p_app.py
     <server python> p_app.py --server <app> <snapshot_id> <hash> <generation>
 """
 

@@ -1,7 +1,0 @@
-[
-  {"name": "Ada", "email": "Ada@Example.com", "active": true},
-  {"name": "Bo", "email": "bo@example.com", "active": false},
-  {"name": "Cy", "email": "cy@EXAMPLE.com", "active": true},
-  {"name": "Di", "email": "aaron@example.com", "active": true},
-  {"name": "Ed", "email": "ed@example.com", "active": false}
-]

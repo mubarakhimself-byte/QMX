@@ -32,7 +32,7 @@ PARENT_TREE = Path("D:/Temp/app2b-parent")
 SUITES = {"qmx-apps": "qmx-agents/packages/qmx-apps", "qmx-engine": "qmx-agents/packages/qmx-engine"}
 
 
-sys.path.insert(0, str(REPO / "scripts/probes/server"))
+sys.path.insert(0, str(REPO / "scripts/live/server"))
 import p_app  # noqa: E402
 
 APP = p_app.APP
@@ -134,7 +134,7 @@ def lane_1(_: list[str]) -> bool:
 def lane_2(_: list[str]) -> bool:
     """P-APP, the app server on Contabo from a bundle by hash and the handed lease."""
     done = subprocess.run(
-        [sys.executable, str(REPO / "scripts/probes/server/p_app.py")],
+        [sys.executable, str(REPO / "scripts/live/server/p_app.py")],
         capture_output=True,
         text=True,
         check=False,

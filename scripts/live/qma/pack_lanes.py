@@ -29,9 +29,7 @@ from typing import Any, Final
 
 from common import SHIP_HOME, Log, Session, boot, capture_launches, chat_args, require_login
 
-FIXTURES: Final = (
-    Path(__file__).resolve().parents[3] / "scripts" / "probes" / "harness" / "fixtures"
-)
+FIXTURES: Final = Path(__file__).resolve().parent / "fixtures"
 LOCK: Final = Path("D:/QMX-worktrees/.engine-lane-lock")
 PACKS: Final = ("pack-alpha", "pack-beta")
 FIVE: Final = ("pack-one", "pack-two", "pack-three", "pack-four", "pack-five")
