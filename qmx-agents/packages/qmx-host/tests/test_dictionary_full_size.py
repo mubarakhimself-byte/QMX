@@ -33,6 +33,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from qmx_host.first_start import PORT_SEED, WAVE_SEED, seed_rows
 from qmx_host.host import (
+    land_dictionary_statuses,
     land_dictionary_wave,
     land_first_unit,
     land_ported_dictionary,
@@ -98,6 +99,8 @@ def test_a_fresh_store_lands_and_publishes_with_no_status_none(
         for collection in COLLECTIONS
     ]
     pages = blocks(control, tmp_path)["blocks_find"](words="", limit=1000)["rows"]
+    log = store.annotation_log.read_bytes()
+    land_dictionary_statuses(store)
 
     assert [v.annotations.get("status") is None for v in before] == [False] * 343
     assert sum(c["published"] for c in counts) == 343
@@ -105,6 +108,22 @@ def test_a_fresh_store_lands_and_publishes_with_no_status_none(
     assert len(pages) == 467
     assert [p["entry_id"] for p in pages if p["status"] is None] == []
     assert len(list(STDLIB.glob("*/*/entry.json"))) == 124
+    assert store.annotation_log.read_bytes() == log
+
+
+def test_a_start_gives_a_status_to_a_page_an_older_host_saved(control: ControlService) -> None:
+    store: Store = control.library.store
+    older = Store.put(
+        store, OPERATOR, a_draft("older-word"), on=drafts_ref("older-word"), expected_head=None
+    )
+
+    unmarked = store.get(OPERATOR, older.object_id).annotations.get("status")
+    land_dictionary_statuses(store)
+
+    assert unmarked is None
+    assert cast(dict[str, str], store.get(OPERATOR, older.object_id).annotations["status"])[
+        "value"
+    ] == "named"
 
 
 def a_draft(entry_id: str, **more: object) -> Draft:
@@ -161,6 +180,9 @@ def test_a_clashing_save_is_refused_and_a_new_version_is_not(
     assert (saved.item, fresh.item, later.item) == ("floor-2", "my-new-word", "my-new-word")
     assert store.head("my-average", drafts_ref("my-average")) is None
     assert store.head("ema", MAIN) is None
+    assert cast(dict[str, str], store.get(OPERATOR, later.object_id).annotations["status"])[
+        "value"
+    ] == "named"
 
 
 def test_an_ordinary_sentence_stays_unmatched(tmp_path: Path, control: ControlService) -> None:
