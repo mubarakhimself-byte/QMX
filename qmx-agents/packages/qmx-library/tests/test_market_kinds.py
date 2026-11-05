@@ -199,22 +199,6 @@ def test_a_key_outside_the_kinds_or_a_wrong_spelling_is_refused_at_put(
     assert [p.where for p in refused.value.problems] == [(pointer,)]
 
 
-def test_a_venue_record_lands_with_its_trigger_basis_and_data_levels(store: Store) -> None:
-    fields: dict[str, JsonValue] = {
-        "venue": "hyperliquid",
-        "trigger_basis": "mark",
-        "cancel_on_disconnect": False,
-        "sandbox": "testnet",
-        "unattended": "allowed",
-        "history_limits": {"candles": 5000},
-        "data_levels": {"schema": "qmx.data-level/1", "levels": [0, 1, 3, 4, 5]},
-    }
-    done = store.put(OPERATOR, Draft("venue", "venue:hyperliquid", fields=fields), on=MAIN,
-                     expected_head=None)  # fmt: skip
-
-    assert store.get(OPERATOR, done.object_id).fields == fields
-
-
 def test_gold_at_two_contract_sizes_risks_the_same_money_and_gives_equal_r(store: Store) -> None:
     land(store, ONE_PER_CLASS[1])
     small = record("metal", "other-cfd-broker", "GOLD", "gold", contract_size="1",

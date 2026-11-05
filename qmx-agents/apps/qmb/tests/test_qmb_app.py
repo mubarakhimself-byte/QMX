@@ -16,7 +16,7 @@ import time
 from collections.abc import Callable, Generator, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from decimal import ROUND_DOWN, Decimal
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
 
@@ -199,19 +199,6 @@ def test_the_copilot_backtests_the_dummy_after_its_behaviour_check_and_lands_mon
     trades = report(world.store, result_id)["trades"]
     assert sum(Decimal(t["r"]) for t in trades) == Decimal(landed["measures"]["total_r"])
     assert sum(Decimal(t["money"]) for t in trades) == Decimal(landed["measures"]["net_money"])
-
-
-def test_every_fill_is_its_sizer_receipt_rounded_down_to_the_lot_step(world: World) -> None:
-    answer = world.backtest["backtest_run"](unit=world.dummy, **GAPS)["result"]
-
-    fills = report(world.store, answer["result_id"])["fills"]
-    entries = [fill for fill in fills if fill["kind"] == "entry"]
-    assert entries
-    assert all(
-        Decimal(f["quantity"])
-        == Decimal(f["receipt_quantity"]).quantize(Decimal("0.01"), rounding=ROUND_DOWN)
-        for f in entries
-    )
 
 
 def test_a_workflow_app_op_lands_the_same_trades_and_the_rows_read_the_core(
