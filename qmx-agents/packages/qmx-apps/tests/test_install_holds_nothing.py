@@ -181,7 +181,7 @@ time.sleep(20)
 
 
 def fake_uv(root: Path, body: str) -> Path:
-    """A real executable the supervisor finds as `uv`, running `body` with a folder for its marks."""
+    """A real executable the supervisor finds as `uv`, running `body` with a marks folder."""
     script = root / "tree.py"
     script.write_text(body)
     marks = root / "marks"
