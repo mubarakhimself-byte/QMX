@@ -217,7 +217,7 @@ def run(inputs: Mapping[str, object]) -> dict[str, object]:
             "costs_uncalibrated": COSTS_UNCALIBRATED in main.result.labels,
             "holes_unchecked": HOLES_UNCHECKED in main.result.labels,
             "fixture_records": asked.get("fixture_records", []),
-            "fidelity": "bars",
+            "fidelity": "quotes",
             "motion": asked.get("motion", "on"),
         },
         files=[tester.write(folder, "report.json", report), *files],

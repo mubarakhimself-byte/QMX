@@ -78,7 +78,9 @@ def run(inputs: Mapping[str, object]) -> dict[str, object]:
     for cell in cells.value:
         row = cell.fields()
         root = folder / "cells" / cell.name / "in"
-        ran = trade_cell(base, root, document, cell, tester.unit_body(asked, f"{run_id}/{cell.name}"))
+        ran = trade_cell(
+            base, root, document, cell, tester.unit_body(asked, f"{run_id}/{cell.name}")
+        )
         if is_refusal(ran):
             rows.append(row | {"status": "failed", "reason": tester.reason(ran)})
             continue
@@ -117,7 +119,11 @@ def run(inputs: Mapping[str, object]) -> dict[str, object]:
         run_id,
         "finished",
         measures=measures,
-        labels={"zero_trades": not any(r.get("trades") for r in rows), "fidelity": "bars"},
+        labels={
+            "zero_trades": not any(r.get("trades") for r in rows),
+            "fixture_records": asked.get("fixture_records", []),
+            "fidelity": "quotes",
+        },
         files=[
             tester.write(
                 folder,

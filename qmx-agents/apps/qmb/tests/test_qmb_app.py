@@ -26,7 +26,7 @@ import psutil
 import pytest
 from qmf.core import fingerprint_bytes, is_refusal
 from qmf.data.series import SeriesKey
-from qmf.data.store.engines.typed import TICK_COLUMNS, TypedWriter
+from qmf.data.store.engines.typed import BAR_COLUMNS, TICK_COLUMNS, TypedWriter
 from qmx_apps.errors import AppError, Document
 from qmx_apps.supervisor import Supervisor
 from qmx_apps.volume import Volume
@@ -208,7 +208,7 @@ def test_the_copilot_backtests_the_dummy_after_its_behaviour_check_and_lands_mon
     checks = reports(world.store)[before:]
     assert (answer["status"], again["status"]) == ("finished", "finished")
     assert (landed["status"], landed["kind"], landed["principal"]) == ("finished", "backtest", CHAT)
-    assert landed["tester"] == {"app": "qmb", "version": "1.0.1"}
+    assert landed["tester"] == {"app": "qmb", "version": "1.0.2"}
     assert landed["measures"]["trades"] == 8
     assert landed["labels"]["zero_trades"] is False
     assert len(checks) == 1
@@ -471,6 +471,7 @@ GBPUSD = Market("GBPUSD", "gbpusd", "fx", "fx-24x5@1", "America/New_York", "17:0
 AUDUSD = Market("AUDUSD", "audusd", "fx", "fx-24x5@1", "America/New_York", "17:00")
 NZDUSD = Market("NZDUSD", "nzdusd", "fx", "fx-24x5@1", "America/New_York", "17:00")
 USDCAD = Market("USDCAD", "usdcad", "fx", "fx-24x5@1", "America/New_York", "17:00")
+EURGBP = Market("EURGBP", "eurgbp", "fx", "fx-24x5@1", "America/New_York", "17:00")
 FX_SYMBOL = {"digits": 5, "pip_position": 4, "lot_size": 10_000_000}
 EURUSD_ON_THE_FIXTURE = (
     "no Library record for this market, so it reads QML's test fixture: fx.eurusd reads eurusd.json"
@@ -571,7 +572,7 @@ def fresh(tmp_path_factory: pytest.TempPathFactory) -> Generator[World]:
 
 TICK_OFFSETS_MS = (0, 200_000, 400_000, 880_000)
 """Open, high, low and close, each at its own moment inside a bar, as `bridge.py` cuts them."""
-WITH_NO_STUDY_NEXT_MONTH = {"start": "2025-04-01", "end": "2025-05-01"}
+APRIL = {"start": "2025-04-01", "end": "2025-05-01"}
 THIRTY_ONE_DAYS_MS = 31 * 86_400_000
 
 
@@ -673,6 +674,45 @@ def test_a_fresh_home_with_ticks_in_the_store_lands_a_result(fresh: World) -> No
     assert {Decimal(fill["quantity"]) % Decimal("0.05") for fill in fills} == {Decimal(0)}
 
 
+def test_a_month_of_bid_and_ask_bars_is_read_before_its_ticks(fresh: World) -> None:
+    ticks_in_the_store(fresh, "eurusd", "EURGBP")
+    door = month_door(fresh)
+    staging = fresh.runtime.home / "staging"
+    staged: list[Path] = []
+    for side in ("bid", "ask"):
+        key = SeriesKey.try_create("dukascopy", "EURGBP", "bar-m1", 2025, 3, side)
+        assert not is_refusal(key)
+        with (SLICES / f"synthetic-eurusd-m15-{side}-2025-03-01-2025-04-01.csv").open(
+            encoding="utf-8", newline=""
+        ) as month:
+            rows = [
+                (
+                    int(bar["timestamp"]) + 14 * 60_000,
+                    *(int(Decimal(bar[n]).scaleb(5)) for n in ("open", "high", "low", "close")),
+                    1.0,
+                )
+                for bar in csv.DictReader(month)
+            ]
+        path = staging / "dukascopy" / "EURGBP" / "bar-m1" / side / "2025-03.parquet"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        TypedWriter(path, key.value.text, BAR_COLUMNS).add(rows).finish()
+        staged.append(path)
+        assert not is_refusal(door.state_scale(key.value.series, 5))
+    assert not is_refusal(door.commit(staged, staging=staging, born_on=Placement.PC))
+    unit = a_unit_on(fresh, EURGBP, **FX_SYMBOL, step_volume=100_000, min_volume=100_000)
+
+    answer = fresh.backtest["backtest_run"](unit=unit, **GAPS)["result"]
+
+    landed = fields(fresh.store, answer["result_id"])
+    laid = run_folder(fresh, answer["run_id"]) / "in" / "data" / "fx.eurgbp"
+    assert answer["status"] == "finished"
+    assert json.loads((laid / "card.json").read_text("utf-8"))["kind"] == "bar-m1"
+    assert landed["labels"]["datasets"] == [
+        "dukascopy/EURGBP/bar-m1/bid",
+        "dukascopy/EURGBP/bar-m1/ask",
+    ]
+
+
 def test_no_month_is_refused_naming_the_month_and_the_template(fresh: World) -> None:
     before = run_tries(fresh.store)
 
@@ -749,9 +789,9 @@ def test_a_sealed_month_is_refused_and_no_sealed_file_sits_in_a_run_folder(fresh
 def test_one_market_of_a_two_market_unit_lands_naming_that_market(fresh: World) -> None:
     ticks_in_the_store(fresh, "eurusd", "EURUSD")
 
-    answer = fresh.backtest["backtest_run"](
-        unit=fresh.dummy, markets=["fx.eurusd"], **GAPS
-    )["result"]
+    answer = fresh.backtest["backtest_run"](unit=fresh.dummy, markets=["fx.eurusd"], **GAPS)[
+        "result"
+    ]
 
     landed = fields(fresh.store, answer["result_id"])
     laid = run_folder(fresh, answer["run_id"]) / "in"
@@ -797,7 +837,12 @@ def test_every_other_data_refusal_comes_before_any_try(fresh: World) -> None:
         "check on its card, or download the month again"
     )
     assert refused(
-        {**asked(fresh.dummy, MARCH), "markets": ["fx.eurusd"], "source": "dukascopy", "study": study}
+        {
+            **asked(fresh.dummy, MARCH),
+            "markets": ["fx.eurusd"],
+            "source": "dukascopy",
+            "study": study,
+        }
     ) == (
         "fx.eurusd holds this window under both dukascopy and other; the request and the study "
         "name different sources, so name one"
@@ -831,7 +876,7 @@ def test_a_copy_that_fails_after_the_try_opened_closes_that_try(fresh: World) ->
         fresh.control.app_job(
             "qmb",
             "jobs/backtest.py",
-            inputs=asked(unit, WITH_NO_STUDY_NEXT_MONTH),
+            inputs=asked(unit, APRIL),
             principal=CHAT,
         )
 

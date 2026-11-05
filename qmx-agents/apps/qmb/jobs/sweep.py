@@ -37,7 +37,9 @@ def run(inputs: Mapping[str, object]) -> dict[str, object]:
     for cell in cells.value:
         row = cell.fields()
         root = folder / "cells" / cell.name / "in"
-        ran = trade_cell(base, root, document, cell, tester.unit_body(asked, f"{run_id}/{cell.name}"))
+        ran = trade_cell(
+            base, root, document, cell, tester.unit_body(asked, f"{run_id}/{cell.name}")
+        )
         if is_refusal(ran):
             rows.append(row | {"status": "failed", "reason": tester.reason(ran)})
             continue
@@ -65,7 +67,11 @@ def run(inputs: Mapping[str, object]) -> dict[str, object]:
             "trades": sum(cast("int", row["trades"]) for row in finished),
             "total_r": str(sum((Decimal(str(row["total_r"])) for row in finished), Decimal(0))),
         },
-        labels={"zero_trades": not any(row.get("trades") for row in finished), "fidelity": "bars"},
+        labels={
+            "zero_trades": not any(row.get("trades") for row in finished),
+            "fixture_records": asked.get("fixture_records", []),
+            "fidelity": "quotes",
+        },
         files=[tester.write(folder, "report.json", {"cells": rows})],
         versions={"qmb": tester.TESTER["version"]},
     )
