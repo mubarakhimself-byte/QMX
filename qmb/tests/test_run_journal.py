@@ -65,7 +65,9 @@ def _text(points: int, decimals: int) -> str:
     return f"{whole}.{part:0{decimals}d}"
 
 
-def _write_window(folder: Path) -> None:
+def _write_window(folder: Path, *, mirrored: bool = False) -> None:
+    """The window's bars, or their mirror image about each market's start price, where a short
+    meets what a long meets on the plain window."""
     rng = random.Random(1)  # noqa: S311 - a fixture's seeded walk, not a secret
     for market, symbol in _MARKETS.items():
         start, decimals, move, spread = _SHAPES[symbol]
@@ -80,6 +82,8 @@ def _write_window(folder: Path) -> None:
                 for step in range(1, 5):
                     path.append(last + (target - last) * step // 4 + rng.randint(-move, move))
                 last, n = path[-1], n + 1
+                if mirrored:
+                    path = [2 * start - point for point in path]
                 stamp = int(at.timestamp()) * 1000
                 for side, offset in (("bid", 0), ("ask", spread)):
                     cells = [
@@ -165,7 +169,7 @@ def test_the_window_closes_min_count_trades_on_each_market(
     closed = Counter(t.market_id for t in result.trades)
 
     assert min(closed.values()) >= _MIN_COUNT, f"the window is too short: {closed}"
-    assert closed == {"fx.eurusd": 64, "metal.xauusd": 59}
+    assert closed == {"fx.eurusd": 65, "metal.xauusd": 60}
 
 
 def test_every_kind_lands_in_monthly_partitions_with_its_own_ids(
@@ -176,10 +180,10 @@ def test_every_kind_lands_in_monthly_partitions_with_its_own_ids(
     assert report.rows == {
         "calibration": 6,
         "data_event": 26,
-        "fill": 246,
+        "fill": 250,
         "signal": 407,
         "state": 4,
-        "trade": 123,
+        "trade": 125,
     }
     assert sorted({(p.kind, p.month) for p in report.parts if p.kind == "signal"}) == [
         ("signal", "2025-01"),
@@ -214,8 +218,8 @@ def test_every_decision_carries_its_readings_value_source_and_version(
     assert all(isinstance(r["value"], str) and r["value"] for r in readings)
     reasons = Counter((b["outcome"], b.get("reason")) for b in bodies)
     assert reasons == {
-        ("no_signal", "no_signal"): 202,
-        ("taken", None): 145,
+        ("no_signal", "no_signal"): 200,
+        ("taken", None): 147,
         ("skipped", "stop_wrong_side"): 23,
         ("suppressed_limit", "max_positions"): 20,
         ("suppressed_warming", "warming_up"): 17,
@@ -238,33 +242,46 @@ def test_min_trend_strength_moves_on_the_runs_own_trades_with_its_receipt(
     assert (first["old"], first["new"], first["rule"]) == (
         "0",
         "0.0001",
-        "trend-floor-from-record@1",
+        "trend-floor-from-record@2",
     )
-    assert cast("dict[str, object]", first["read_trades"])["count"] == 62
+    assert cast("dict[str, object]", first["read_trades"])["count"] == 82
 
 
-def test_a_short_only_run_moves_the_number_and_the_row_shows_why(tmp_path: Path) -> None:
-    folder = make_run_folder(tmp_path, dummy_document() | {"direction": "short"})
-    _write_window(folder)
+def _short_only_moves(root: Path, rule: str) -> list[dict[str, object]]:
+    document = dummy_document() | {"direction": "short"}
+    numbers = cast("dict[str, dict[str, dict[str, object]]]", document["numbers"])
+    numbers["min_trend_strength"]["motion"]["rule"] = rule
+    folder = make_run_folder(root, document)
+    _write_window(folder, mirrored=True)
     found = load_unit_folder(folder)
     assert not isinstance(found, TypedRefusal), found
-    journal = _journal(found.value, tmp_path / "journal")
+    journal = _journal(found.value, root / "journal")
 
     result = _run(found.value, journal)
-    moves = [cast("dict[str, object]", r["body"]) for r in _records(_close(journal), "calibration")]
-    first = next(m for m in moves if m["old"] != m["new"])
 
     assert {t.side for t in result.trades} == {Side.SHORT}
+    return [cast("dict[str, object]", r["body"]) for r in _records(_close(journal), "calibration")]
+
+
+def test_a_short_only_run_moves_the_number_and_the_row_shows_why(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> None:
+    moves = _short_only_moves(tmp_path_factory.mktemp("at2"), "trend-floor-from-record@2")
+    at_1 = _short_only_moves(tmp_path_factory.mktemp("at1"), "trend-floor-from-record@1")
+
+    first = next(m for m in moves if m["old"] != m["new"])
+
     assert (first["old"], first["new"], first["rule"]) == (
         "0",
         "0.0001",
         "trend-floor-from-record@2",
     )
-    assert set(cast("dict[str, str]", first["statistic"])) == {
-        "trades_read",
-        "mean_r",
-        "mean_stamp",
+    assert first["statistic"] == {
+        "trades_read": "42",
+        "mean_r": "1.636011904761904761904761905",
+        "mean_stamp": "-0.001167662203892957142857142857",
     }
+    assert {m["new"] for m in at_1} == {"0"}
 
 
 def test_a_gap_in_the_bars_is_a_data_event_the_unit_saw(
@@ -291,12 +308,12 @@ def test_a_slice_written_again_writes_nothing_twice(loaded: LoadedUnit, tmp_path
     assert report.rows == {
         "calibration": 6,
         "data_event": 26,
-        "fill": 246,
+        "fill": 250,
         "signal": 407,
         "state": 4,
-        "trade": 123,
+        "trade": 125,
     }
-    assert report.repeats == 812
+    assert report.repeats == 818
     assert report.warnings == ()
 
 
@@ -360,10 +377,16 @@ def _backtest_job() -> Callable[[Mapping[str, object]], dict[str, object]]:
 
 
 @pytest.fixture
-def job_folder(run_folder: Path, loaded: LoadedUnit, tmp_path: Path) -> Iterator[Path]:
+def job_folder(tmp_path: Path) -> Iterator[Path]:
+    """Long only, because on this window the floor both sides move stops no trade, so the two
+    runs would not part."""
+    long_only = make_run_folder(tmp_path, dummy_document() | {"direction": "long"})
+    _write_window(long_only)
+    found = load_unit_folder(long_only)
+    assert not isinstance(found, TypedRefusal), found
     folder = tmp_path / "qmbr-pc-01JC0000000000000000000000"
-    shutil.copytree(run_folder, folder / "in")
-    request = _body(loaded) | {"compiled_fp": loaded.compiled.compiled_fingerprint.value}
+    shutil.copytree(long_only, folder / "in")
+    request = _body(found.value) | {"compiled_fp": found.value.compiled.compiled_fingerprint.value}
     (folder / "in" / "request.json").write_text(json.dumps(request | {"motion": "both"}), "utf-8")
     yield folder
 
@@ -379,16 +402,16 @@ def test_motion_both_reports_both_runs_and_they_part_at_the_first_move(
     slots = [cast("dict[str, str]", f)["slot"] for f in cast("Rows", bundle["files"])]
 
     assert bundle["status"] == "finished"
-    assert "journal/calibration/2025-01" in slots
+    assert "journal/calibration/2025-02" in slots
     assert "journal/motion_off/signal/2025-03" in slots
     assert not [s for s in slots if s.startswith("journal/motion_off/calibration")]
     measures = cast("dict[str, dict[str, object]]", bundle["measures"])
-    assert (measures["trades"], measures["motion_off"]["trades"]) == (123, 125)
+    assert (measures["trades"], measures["motion_off"]["trades"]) == (65, 67)
     on, off = cast("Rows", report["trades"]), cast("Rows", report["motion_off"]["trades"])
-    first_move = 1_740_049_200_000_000_000
+    first_move = 1_739_473_200_000_000_000
     """The watermark of the first calibration row that moved ``min_trend_strength``."""
     before = [t for t in on if cast("int", t["closed_at"]) <= first_move]
-    assert len(before) == 62
+    assert len(before) == 20
     assert off[: len(before)] == before
     shared = next(i for i, (a, b) in enumerate(zip(on, off, strict=False)) if a != b)
-    assert shared == 63
+    assert shared == 35

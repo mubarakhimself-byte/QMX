@@ -47,10 +47,12 @@ def _script() -> _Script:
 
 def _documents() -> dict[str, dict[str, object]]:
     pins: list[dict[str, object]] = []
-    for entry in sorted(_STDLIB.glob("*/1/entry.json")):
+    for entry in sorted(_STDLIB.glob("*/*/entry.json")):
         face = parse_entry(entry.read_bytes())
         assert isinstance(face, EntryFace), face
-        pins.append({"entry_id": face.entry_id, "version": 1, "fingerprint": face.fingerprint})
+        pins.append(
+            {"entry_id": face.entry_id, "version": face.version, "fingerprint": face.fingerprint}
+        )
     paths = [_QML / "src" / "qml" / "unit" / "templates" / "dummy-trend-pullback.json"]
     paths += sorted((_QML / "tests" / "corpus").glob("*.json"))
     documents = {p.stem: cast("dict[str, object]", json.loads(p.read_text("utf-8"))) for p in paths}
@@ -63,10 +65,10 @@ def _context() -> CompileContext:
         parsed = parse_record(json.loads((_RECORDS / f"{file}.json").read_text("utf-8")))
         assert not isinstance(parsed, TypedRefusal), parsed
         records[market] = parsed.value
-    pins = [p.parent for p in _STDLIB.glob("*/1/block.py")]
+    pins = [p.parent for p in _STDLIB.glob("*/*/block.py")]
     return CompileContext(
-        sources={f"{p.parent.name}@1": (p / "block.py").read_bytes() for p in pins},
-        entries={f"{p.parent.name}@1": (p / "entry.json").read_bytes() for p in pins},
+        sources={f"{p.parent.name}@{p.name}": (p / "block.py").read_bytes() for p in pins},
+        entries={f"{p.parent.name}@{p.name}": (p / "entry.json").read_bytes() for p in pins},
         records=records,
     )
 

@@ -92,7 +92,7 @@ __all__ = [
     "compile_unit",
 ]
 
-COMPILER_FORMAT_VERSION: Final[int] = 2
+COMPILER_FORMAT_VERSION: Final[int] = 3
 """Bumped by any compiler change that alters a decision, which makes a new fingerprint."""
 _FORMAT: Final[str] = f"compiler format {COMPILER_FORMAT_VERSION}"
 
