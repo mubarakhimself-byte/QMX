@@ -122,6 +122,16 @@ def test_a_plan_launch_sets_only_the_plan_home_and_the_launcher_inputs(home: Qmx
     }
 
 
+def test_the_cli_path_starts_with_the_host_interpreter(
+    home: QmxHome, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("PATH", "D:/elsewhere")
+
+    env = launch_env(PlanLaunch(), home=home, session_id=CHAT, cap="c")
+
+    assert env["PATH"].split(os.pathsep) == [str(Path(sys.executable).parent), "D:/elsewhere"]
+
+
 def telemetry_names(home: QmxHome, send_to: str) -> dict[str, str]:
     home.root.mkdir(parents=True, exist_ok=True)
     (home.root / "settings.toml").write_text(

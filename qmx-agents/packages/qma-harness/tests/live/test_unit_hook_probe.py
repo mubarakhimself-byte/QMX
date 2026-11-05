@@ -15,6 +15,9 @@ through `Harness.start_chat` on a QMX home with a plan login, so the CLI loads
   in, on a failing unit, a passing unit, a unit whose market only a Library record could settle,
   a non-unit JSON file and a TOML file, timed. PASS when only the failing unit gets an answer and
   every run ends inside `HOOK_BUDGET_S`.
+- `test_the_hook_tells_the_agent_on_a_library_only_market`. The same command on a broken and a
+  clean unit on GBPUSD. PASS when the broken one is told `outside_range` and nothing else, and the
+  clean one prints nothing.
 
 From `qmx-agents/` on This PC, with the agents venv:
 `QMX_TEST_LIVE=1 uv run --no-sync pytest -p no:xdist -s <this file>`, where the file is
@@ -340,3 +343,44 @@ def test_the_hook_command_alone(tmp_path: Path) -> None:
         answers,
     )
     say.verdict()
+
+
+def hook_answer(shell: str, path: Path, document: object) -> str:
+    """What the shipped command prints after a Write of `document`, inside the hook's budget."""
+    path.write_text(json.dumps(document), encoding="utf-8")
+    event = {"tool_input": {"file_path": path.as_posix()}}
+    ran = subprocess.run(
+        [shell, "-c", hook_command()],
+        input=json.dumps(event),
+        capture_output=True,
+        text=True,
+        timeout=HOOK_BUDGET_S,
+        check=True,
+    )
+    return ran.stdout.strip()
+
+
+def test_the_hook_tells_the_agent_on_a_library_only_market(tmp_path: Path) -> None:
+    shell = hook_shell()
+    if shell is None:
+        pytest.skip("the hook command runs under bash (Git Bash on Windows), and none was found")
+    clean = json.loads(json.dumps(template()))
+    clean["markets"] = [
+        {
+            "market_id": "fx.gbpusd",
+            "instrument_ref": {"venue": "icmarkets-ctrader", "symbol": "GBPUSD"},
+        }
+    ]
+    broken = json.loads(json.dumps(clean))
+    broken["numbers"]["ema_period"]["default"] = "1"
+
+    told = hook_answer(shell, tmp_path / "broken.json", broken)
+    quiet = hook_answer(shell, tmp_path / "clean.json", clean)
+
+    answer = json.loads(told)["hookSpecificOutput"]
+    context = answer["additionalContext"]
+    assert answer["hookEventName"] == "PostToolUse"
+    assert context.startswith(f"{TOLD}broken.json failed.")
+    found = json.loads(context[context.index("{") :])
+    assert [problem["kind"] for problem in found["errors"]] == ["outside_range"]
+    assert quiet == ""
