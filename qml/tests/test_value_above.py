@@ -44,7 +44,7 @@ _ADX = {
 
 def _make(level: str, below: str = "0") -> Any:
     source = (_FOLDER / "block.py").read_bytes()
-    lock = [LockEntry("value-above", 1, block_fingerprint(source))]
+    lock = [LockEntry("value-above", 1, block_fingerprint(source).value)]
     loaded = load(lock, {"value-above@1": source})
     assert isinstance(loaded, Loaded), loaded
     return loaded.blocks["value-above@1"].make(
@@ -211,7 +211,7 @@ _NOT_READ = "/logic/long/slots/context/bindings/2"
             id="a clock nothing reads",
         ),
         pytest.param(
-            _lone("parabolic-sar@1", {"acceleration": {"value": "0.02"}, "maximum": {"value": "0.2"}}),
+            _lone("parabolic-sar@1", {"step": {"value": "0.02"}, "maximum": {"value": "0.2"}}),
             "Bind value-above@1",
             id="a price level nothing reads",
         ),
@@ -226,7 +226,7 @@ _NOT_READ = "/logic/long/slots/context/bindings/2"
             id="a halt on account facts",
         ),
         pytest.param(
-            _lone("losing-days-halt@1", {"limit": {"value": "3"}}, {}),
+            _lone("losing-days-halt@1", {"days": {"value": "3"}}, {}),
             "reads its trades port",
             id="a halt on the unit's trades",
         ),

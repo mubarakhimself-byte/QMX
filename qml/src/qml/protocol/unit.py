@@ -603,7 +603,9 @@ class _Run:
                         spec.range.max, max(spec.range.min, fed)
                     )
         failing = [f"{name}: {why}" for name, (ok, why) in held.items() if not ok]
-        trigger = any(held[s.name][0] for s in plan.slots if s.role is Role.TRIGGER)
+        trigger = any(
+            held[s.name][0] for s in plan.slots if s.role is Role.TRIGGER and s.has_conditions
+        )
         return _Side(not failing, trigger, "; ".join(failing), tuple(trail), order)
 
     @staticmethod
@@ -629,17 +631,24 @@ class _Run:
 
     @staticmethod
     def combine(slot: SlotPlan, conditions: Sequence[bool | None]) -> tuple[bool, str]:
-        absent = [b.name for b, c in zip(slot.bindings, conditions, strict=True) if c is None]
+        kept = [
+            (b, c)
+            for b, c in zip(slot.bindings, conditions, strict=True)
+            if b.name not in slot.feeders
+        ]
+        if not kept:
+            return True, ""
+        absent = [b.name for b, c in kept if c is None]
         if absent and not slot.absent_is_false and slot.combiner is CombinerKind.ALL:
             return False, f"absent input {', '.join(absent)}"
-        true = sum(1 for c in conditions if c is True)
+        true = sum(1 for _, c in kept if c is True)
         match slot.combiner:
             case CombinerKind.ALL:
-                ok = true == len(conditions)
+                ok = true == len(kept)
             case CombinerKind.ANY:
                 ok = true >= 1
             case _:
-                ok = true >= (slot.k or len(conditions))
+                ok = true >= (slot.k or len(kept))
         if ok:
             return True, ""
         if absent and not slot.absent_is_false:
