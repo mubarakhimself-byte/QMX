@@ -227,6 +227,12 @@ def _value(output: object) -> Decimal | None:
     return output if isinstance(output, Decimal) else None
 
 
+def _price_of(given: object) -> Decimal | None:
+    """The price in a binding's input: the value, or a whole bar's close."""
+    value = cast("Mapping[str, object]", given).get("close") if isinstance(given, Mapping) else given
+    return value if isinstance(value, Decimal) else None
+
+
 @dataclass(slots=True)
 class _Side:
     holds: bool
@@ -577,7 +583,9 @@ class _Run:
         def resolve(ref: str) -> object:
             stream, _, part = ref.partition(".")
             if stream == self.plan.stream:
-                return bar.bid.fields() if part == "" else bar.bid.fields()[part]
+                if part == "":
+                    return {**bar.bid.fields(), "time": bar.knowable_at.value_ns}
+                return bar.bid.fields()[part]
             return _value(outputs.get(ref))
 
         for slot in plan.slots:
@@ -620,10 +628,9 @@ class _Run:
             case Decimal() if (
                 b.face.output.type is OutputType.SERIES and b.face.output.measure == "price"
             ):
-                price = next(
-                    (evidence[p] for p in b.inputs if isinstance(evidence.get(p), Decimal)), None
-                )
-                if not isinstance(price, Decimal):
+                inputs = (_price_of(evidence.get(p)) for p in b.inputs)
+                price = next((p for p in inputs if p is not None), None)
+                if price is None:
                     return None
                 return price > out if side is Side.LONG else price < out
             case _:
