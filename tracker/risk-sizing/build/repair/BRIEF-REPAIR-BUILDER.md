@@ -98,7 +98,7 @@ Build only what your section holds. A finding is one line in `S/evidence/<id>/fi
 
 ## If something refuses you
 
-If a permission check refuses an edit or a command, stop. Do not work around it and do not change any permission setting. Push what works and report BLOCKED with the refusal's exact text.
+If the hook tells you how to rerun a command, such as adding `env.sh` or a `timeout`, do that and carry on. If a refusal is a safety rule, or a permission check refuses an edit or a command, do not work around it and do not change any permission setting. Push what works and report BLOCKED with the refusal's exact text.
 
 ## If you are interrupted
 

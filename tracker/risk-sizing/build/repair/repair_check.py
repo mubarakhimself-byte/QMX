@@ -51,16 +51,16 @@ NO_RED_TEST = {"r01"}
 RUNS = r"^(uv run\b.*|\S*python\S*|\"?\$\w+\"?)"
 # What a builder or reviewer never does. The coordinator alone owns these.
 FORBIDDEN = {
-    "ran a whole-repo check": r"^just\s+ci\b|(^|\s)\S*tools[\\/](ci|test_all)\.py\b",
-    "booted a host or ran a lane helper": RUNS + r".*(\s-m\s+qmx_host\b|\S*owner_lane\S*\.py|\S*owner-lane\S*\.py)",
-    "ran the first start for real": RUNS + r".*(\s|[\\/])first_real_start\.py(?!.*--rehears)",
+    "ran a whole-repo check": r"^just\s+ci\b|^(uv run\b(\s+--?\S+)*\s+)?(\S*python\S*\s+)?\S*tools[\\/](ci|test_all)\.py\b",
+    "booted a host or ran a lane helper": RUNS + r".*(\s-m\s+qmx_host\b|\S*owner_lane\S*\.py|\S*owner-lane\S*\.py|\S*safe_host\.py)",
+    "ran the first start for real": r"^(uv run\b(\s+--?\S+)*\s+)?(\S*python\S*\s+)?\S*first_real_start\.py(?!.*--rehears)",
     "moved the stack": r"^git(\s+-[cC]\s+\S+)*\s+((rebase|merge|stash)(\s|$)|branch\s+-[dDmM]\b|worktree\s+(add|remove)(?!.*D:[\\/]Temp[\\/])|worktree\s+prune)",
-    "force-pushed or wrote to a protected branch": r"^git\b.*\bpush\b.*(--force\b|\s-f\b|\b(main|engine/base|integration)\b)",
+    "force-pushed or wrote to a protected branch": r"^git(\s+-[cC]\s+\S+)*\s+push\b.*(--force\b|\s-f\b|\b(main|engine/base|integration)\b)",
     "merged or closed a PR": r"^gh\s+pr\s+(merge|close)\b",
     "changed an environment by hand": r"^(\S*python\S* -m )?pip install\b|^uv (add|remove|pip|lock)\b",
-    "touched a credential": r"^(cmdkey|vaultcmd)\b|" + RUNS + r".*keyring\.(get|set|delete)_password",
+    "touched a credential": r"^(cmdkey|vaultcmd)\b|^(powershell|pwsh)\b.*(cmdkey|vaultcmd)|" + RUNS + r".*keyring\.(get|set|delete)_password",
     "changed a virtual environment": r"(>|\btee\s|\bsed\s+-i\b|^rm\s|^mv\s|^cp\s).*(\.venv|site-packages)",
-    "dropped the credential guard": r"(python\S*|_ENV\"?)\s+-I\b",
+    "dropped the credential guard": r"(python\S*|_ENV\"?)\s+-[IES]+\b|^unset\b.*PYTHON(PATH|_KEYRING)",
 }
 OUT_OF_BOUNDS = r"apps[\\/]qmx-ui|[\\/]\.qmx[\\/]|Desktop[\\/]DATA_NARL|Mubarak[\\/]Documents|\.venv[\\/]|site-packages|[\\/]\.claude[\\/]"
 READ_COMMANDS = ("cat ", "sed ", "head ", "tail ", "type ", "less ", "more ")
@@ -105,25 +105,27 @@ def forbidden_in(command):
 
 
 def read(path):
-    """Tool uses in order, as (name, input), plus the models seen and the idle minutes."""
-    uses, models, stamps = [], set(), []
+    """Tool uses in order, as (name, input), plus the models seen. A call the hook refused never ran, so it is left out."""
+    uses, models, refused = [], set(), set()
     with open(path, encoding="utf-8", errors="replace") as handle:
         for line in handle:
             try:
                 row = json.loads(line)
             except ValueError:
                 continue
-            if row.get("timestamp"):
-                stamps.append(row["timestamp"])
             message = row.get("message") or {}
             if message.get("model"):
                 models.add(message["model"])
             content = message.get("content")
             if isinstance(content, list):
                 for block in content:
-                    if isinstance(block, dict) and block.get("type") == "tool_use":
-                        uses.append((block.get("name", ""), block.get("input") or {}))
-    return uses, models
+                    if not isinstance(block, dict):
+                        continue
+                    if block.get("type") == "tool_use":
+                        uses.append((block.get("id"), block.get("name", ""), block.get("input") or {}))
+                    elif block.get("type") == "tool_result" and "PreToolUse" in json.dumps(block.get("content", "")):
+                        refused.add(block.get("tool_use_id"))
+    return [(name, given) for use_id, name, given in uses if use_id not in refused], models
 
 
 def first_user_line(path):
@@ -280,7 +282,7 @@ def hook(role):
                 reason = f"Start this command with: {ENV} && . That sets the temp and cache folders and holds the credential guard."
             else:
                 for raw, part in parts:
-                    if re.search(r"\bpytest\b|\bpoethepoet\b", part):
+                    if re.match(r"(uv run\b|\S*python\S*\s|\"?\$\w+\"?\s|\S*pytest\b)", part) and re.search(r"\bpytest\b|\bpoethepoet\b", part):
                         limit = re.search(r"\btimeout\s+(\d+)", raw)
                         if not limit or int(limit.group(1)) > MAX_SECONDS:
                             reason = f"Put 'timeout {MAX_SECONDS}' or less in front of it. A longer run goes under 'Needs a long run' for the coordinator, because your cache expires while you wait: {part[:100]}"
