@@ -14,8 +14,13 @@ from typing import Any, cast
 import pytest
 from qmx_apps.errors import Document
 
-import qmx_host.connect  # noqa: F401 - connect_node loads through it
-from qmx_host.connect_node import MIS_APP, NODE_APP, _enable, _enabled
+import qmx_host.connect  # noqa: F401 - connect_node loads through it  # pyright: ignore[reportUnusedImport]
+from qmx_host.connect_node import (
+    MIS_APP,
+    NODE_APP,
+    _enable,  # pyright: ignore[reportPrivateUsage]
+    _enabled,  # pyright: ignore[reportPrivateUsage]
+)
 from qmx_host.first_start import APP_FOLDERS, FIRST_PARTY, enable_first_party
 
 
@@ -49,6 +54,10 @@ class FakeSupervisor:
         return FakeSupervisor(*self.installed)
 
 
+def say_nothing(_line: str) -> None:
+    pass
+
+
 def run_on(home: Path, apps: FakeSupervisor) -> Any:
     return SimpleNamespace(
         kind=SimpleNamespace(id="this-pc"),
@@ -57,7 +66,7 @@ def run_on(home: Path, apps: FakeSupervisor) -> Any:
             layout=SimpleNamespace(home=home),
             control=SimpleNamespace(app_runtime=lambda: apps),
         ),
-        say=lambda _line: None,
+        say=say_nothing,
     )
 
 
