@@ -10,7 +10,8 @@ under `motion_off`, its journal under `journal/motion_off/`.
 The report lists the run's cash events (swap, financing, funding, dividends, commission) and the
 holes it ran over with `allow_gaps`; `net_money` holds the trades' money and the cash. The labels
 say `costs_uncalibrated` until a market's costs come from enough real fills, and
-`holes_unchecked` while a market's calendar is not one QMB reads (B10). A hole past the request's
+`holes_unchecked` while a market's calendar is not one QMB reads (B10), and `fixture_records` lists
+each market with no Library record that ran on a test fixture. A hole past the request's
 `gap_bars_refuse` lands a `failed` result naming it.
 """
 
@@ -215,6 +216,7 @@ def run(inputs: Mapping[str, object]) -> dict[str, object]:
             "zero_trades": not main.result.trades,
             "costs_uncalibrated": COSTS_UNCALIBRATED in main.result.labels,
             "holes_unchecked": HOLES_UNCHECKED in main.result.labels,
+            "fixture_records": asked.get("fixture_records", []),
             "fidelity": "bars",
             "motion": asked.get("motion", "on"),
         },
