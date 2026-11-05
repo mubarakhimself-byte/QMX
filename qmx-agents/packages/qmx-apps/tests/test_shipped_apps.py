@@ -57,7 +57,9 @@ from qmx_apps.supervisor import Supervisor
 
 REPO = Path(__file__).resolve().parents[4]
 ROOTS = (REPO / "examples/apps", REPO / "qmx-agents/apps")
-SLICES = REPO / "qml/tests/fixtures/slices"
+QMB_VERSION = Definition.load(REPO / "qmx-agents/apps/qmb").manifest.version
+"""A PR that changes QMB bumps its `app.toml`, so the examples below follow by themselves."""
+SLICES =REPO / "qml/tests/fixtures/slices"
 OPERATOR = Principal("operator")
 CHAT = "agent:shipped-apps"
 MARCH: Document = {"window": {"start": "2025-03-01", "end": "2025-04-01"}, "allow_gaps": True}
@@ -271,7 +273,9 @@ def conformance(host: Host) -> JsonValue:
             app, job, inputs=cast(Document, dict(inputs)), principal=principal
         )
 
-    ran = run_conformance("qmb", "1.0.0", run_job=run_job, library=host.library, principal=CHAT)
+    ran = run_conformance(
+        "qmb", QMB_VERSION, run_job=run_job, library=host.library, principal=CHAT
+    )
     return {"passed": ran.verdict.passed, "says": ran.verdict.says()}
 
 
@@ -403,7 +407,7 @@ def refused(code: str) -> JsonValue:
     return {"ok": False, "code": code}
 
 
-FINISHED: JsonValue = {"status": "finished", "tester": {"app": "qmb", "version": "1.0.0"}}
+FINISHED: JsonValue = {"status": "finished", "tester": {"app": "qmb", "version": QMB_VERSION}}
 EXAMPLES: Mapping[str, Shipped] = {
     "exchange-status": Shipped(
         asks=(
@@ -531,7 +535,7 @@ EXAMPLES: Mapping[str, Shipped] = {
                 {},
                 {
                     "contract": "qmb/1",
-                    "tester": {"app": "qmb", "version": "1.0.0"},
+                    "tester": {"app": "qmb", "version": QMB_VERSION},
                     "fidelities": ["bars"],
                     "instrument_classes": ["fx", "metal"],
                 },
@@ -671,7 +675,9 @@ APP_VERSIONS: Mapping[tuple[str, str], str] = {
     ("mis", "1.0.0"): "da97997e2a7f1b83f9362a5039930ca9",
     ("mql5-articles", "1.0.0"): "dc86e07abe3b8b4442bdc4eeaa758110",
     ("qmb", "1.0.0"): "b03c2aca41f2e67d1689522f9ffab2a9",
+    ("qmb", "1.0.1"): "7ff074a5c0873da9c6b2267e83464448",
     ("trading-node", "0.1.0"): "474d301af9fc35f3352c3230faf4bb63",
+    ("trading-node", "0.1.1"): "54d22aff076ea337daad3de7bc19ed75",
     ("weekend-watcher", "1.0.0"): "2fd02bee829dbbb04b5f0a66dafe66cf",
 }
 """One row per app and version, append-only. A change anywhere in an app's folder moves its image
