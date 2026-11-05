@@ -1,6 +1,6 @@
 """The first content wave's markets beyond forex (A13c): the market-profile blocks and the session
 clocks against their goldens, cuts restored from state, the clocks across daylight-saving changes,
-the seed statuses, every multi-class word's meaning per class, and every order-flow entry's data
+every multi-class word's meaning per class, and every order-flow entry's data
 level and estimate-labelled fallback chain."""
 
 from __future__ import annotations

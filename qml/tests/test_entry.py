@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import copy
 import json
+from decimal import Decimal
 from pathlib import Path
 from typing import cast
 
+from qml.blocks.api import EntryFace, parse_entry
 from qml.catalogue.entry import EntryProblem, Status, check_entry, compute_status, corpus_problems
 from qml.catalogue.index import find, match, row
+from qml.catalogue.loader import block_fingerprint
 
 _QML = Path(__file__).resolve().parents[1]
 _STDLIB = _QML / "src" / "qml" / "blocks" / "stdlib"
@@ -123,6 +126,143 @@ def test_an_entry_with_only_its_trader_face_saves_as_named() -> None:
             "machine face: mirroring",
         ),
     )
+
+
+_AGENT_EMA = b'''"""An agent's recursive average, which forgets its start only slowly."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from decimal import Decimal
+
+from qml.blocks.api import Side, quantise
+
+
+class _Average:
+    __slots__ = ("_alpha", "_value")
+
+    def __init__(self, period: int) -> None:
+        self._alpha = 2.0 / (period + 1)
+        self._value: float | None = None
+
+    @property
+    def warm_up_bars(self) -> int:
+        return 1
+
+    @property
+    def state_bound(self) -> int:
+        return 1
+
+    def retained(self) -> int:
+        return 1
+
+    def update(self, evidence: Mapping[str, object]) -> Decimal | None:
+        price = evidence.get("series")
+        if not isinstance(price, Decimal):
+            return None
+        now = float(price)
+        before = now if self._value is None else self._value
+        self._value = before + self._alpha * (now - before)
+        return quantise(self._value)
+
+    def export_state(self) -> Mapping[str, object]:
+        return {}
+
+    def import_state(self, state: Mapping[str, object]) -> None:
+        return None
+
+
+class _Block:
+    def make(
+        self, params: Mapping[str, Decimal], inputs: Mapping[str, str], side: Side = Side.LONG
+    ) -> _Average:
+        return _Average(int(params["period"]))
+
+
+BLOCK = _Block()
+'''
+
+
+def _agent_entry(**more: object) -> Entry:
+    return {
+        "schema": "qmx.entry/1",
+        "entry_id": "agents-average",
+        "version": 1,
+        "component_type": "indicator",
+        "origin": "agent",
+        "definition": "An agent's own recursive average of the close.",
+        "sources": [{"source_ref": "a note", "quote": "its words", "dated": "2026-11-06"}],
+        "inputs": [{"port": "series", "stream_kind": "series", "measure": "price", "data_level": 1}],
+        "output": {"type": "series", "measure": "price"},
+        "parameters": {
+            "period": {"measure": "bars", "default": "20", "origin": "builder_chosen"},
+        },
+        "warm_up": {"rule": "1", "bars": 1},
+        "transfer": {"fx": "not_assessed"},
+        "mirroring": "not_applicable",
+        "fingerprint": block_fingerprint(_AGENT_EMA).value,
+    } | more
+
+
+def test_an_agent_block_with_no_golden_is_not_implemented() -> None:
+    settled = {"params": {"period": "20"}, "bars": 400, "tolerance": "1e-9", "scales_by": "period"}
+
+    computed = compute_status(_agent_entry(settle_bars=settled), _AGENT_EMA)
+    ours = compute_status(
+        _agent_entry(settle_bars=settled, origin="qml"), _AGENT_EMA
+    )
+
+    assert (computed.status, computed.problems, computed.missing) == (
+        Status.SPECIFIED,
+        (),
+        ("implementation: golden cases for its cut-against-full run",),
+    )
+    assert (ours.status, ours.missing) == (Status.IMPLEMENTED, ())
+
+
+def test_an_unsettled_block_fails_check_entry() -> None:
+    too_short = {"params": {"period": "20"}, "bars": 5, "tolerance": "1e-9", "scales_by": "period"}
+    long_enough = too_short | {"bars": 400}
+
+    assert [(p.where, p.message) for p in check_entry(_agent_entry(), _AGENT_EMA)] == [
+        (
+            "/settle_bars",
+            "agents-average@1 has not settled by bar 1: a run started there differs from a long "
+            "run by more than 1E-9",
+        ),
+    ]
+    assert [
+        (p.where, p.message)
+        for p in check_entry(_agent_entry(settle_bars=too_short), _AGENT_EMA)
+    ] == [
+        (
+            "/settle_bars/bars",
+            "agents-average@1 has not settled by bar 5: a run started there differs from a long "
+            "run by more than 1e-9",
+        ),
+    ]
+    assert check_entry(_agent_entry(settle_bars=long_enough), _AGENT_EMA) == ()
+    assert compute_status(_agent_entry(settle_bars=too_short), _AGENT_EMA).status is None
+    assert check_entry(_agent_entry(settle_bars=too_short)) == ()
+
+
+def test_a_settle_row_scales_with_the_parameter_it_names() -> None:
+    row = {"params": {"period": "14"}, "bars": 285, "tolerance": "1e-9", "scales_by": "period"}
+
+    face = parse_entry(json.dumps(_entry("rsi-series") | {"settle_bars": row}).encode())
+
+    assert isinstance(face, EntryFace)
+    assert face.settle is not None
+    assert [face.settle.bars_at({"period": Decimal(p)}) for p in ("14", "28", "7", "15")] == [
+        285,
+        570,
+        143,
+        306,
+    ]
+    assert face.settle.bars_at({}) == 285
+    assert [
+        (p.where, p.message) for p in check_entry(_entry("ema") | {"settle_bars": row | {"scales_by": "fast"}})
+    ] == [("/settle_bars/scales_by", "scales_by is one of its params, not 'fast'")]
 
 
 def test_every_link_names_an_entry_the_corpus_holds() -> None:
