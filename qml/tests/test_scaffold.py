@@ -23,7 +23,6 @@ _HOMES = (
     "generation",
     "host",
     "research",
-    "examples",
     "tests",
 )
 _BANNED_IMPORTS = frozenset(
@@ -47,7 +46,7 @@ def test_version_is_display_only_semver_0x() -> None:
 
 def test_module_homes_exist() -> None:
     for home in _HOMES:
-        path = _QML_ROOT / home if home in {"examples", "tests"} else _SRC / home
+        path = _QML_ROOT / home if home == "tests" else _SRC / home
         assert path.is_dir(), f"missing module home {home}: {path}"
 
 

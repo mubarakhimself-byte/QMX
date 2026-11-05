@@ -284,8 +284,6 @@ ignore = [
 # Example scripts use `assert` as a teaching/verification device (like a doctest —
 # it shows the reader the expected result); they carry no other carve-out.
 "packages/*/examples/*" = ["S101"]
-"extensions/*/examples/*" = ["S101"]
-"qml/examples/*" = ["S101"]
 "qmb/examples/*" = ["S101"]
 # QMB composition-root sandbox runner: stdlib process management (B-5).
 # Dynamically-evasive bots are out of V1 scope; this is not a restricted interpreter.

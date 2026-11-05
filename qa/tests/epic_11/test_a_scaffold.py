@@ -25,7 +25,7 @@ QML_SRC = os.path.join(QML_ROOT, "src", "qml")
 # OR-04: these are the original structural seed homes, not an allowlist; any
 # additional home remains subject to QML's package-wide purity/dependency gates.
 SRC_HOMES = ("declaration", "families", "footprint", "protocol", "conformance", "logic")
-ROOT_HOMES = ("examples", "tests")
+ROOT_HOMES = ("tests",)
 
 
 def _iter_module_files() -> list[str]:

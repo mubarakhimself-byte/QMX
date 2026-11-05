@@ -3,9 +3,6 @@
 from __future__ import annotations
 
 import ast
-import os
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -24,7 +21,6 @@ from qmf.core.refusal import RefusalCategory, Retryability, TypedRefusal, is_ok,
 
 _PKG_ROOT = Path(__file__).resolve().parents[1]
 _SRC = _PKG_ROOT / "src" / "qmf" / "calendar_forex"
-_EXAMPLE = _PKG_ROOT / "examples" / "registration_usage.py"
 
 # Shared nouns defined only in qmf-core (FM-5 / AD-2). This extension may import
 # and consume them; it must never define a ClassDef with these names.
@@ -214,21 +210,3 @@ def test_pyproject_declares_no_entry_points() -> None:
     text = (_PKG_ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert "[project.entry-points" not in text
     assert "entry-points" not in text
-
-
-def test_reference_usage_example_runs_clean() -> None:
-    # Workspace install already exposes qmf.calendar_forex + qmf.core; do not
-    # invent a PYTHONPATH that could shadow the locked editable installs.
-    completed = subprocess.run(
-        [sys.executable, str(_EXAMPLE)],
-        capture_output=True,
-        text=True,
-        env=os.environ.copy(),
-        check=False,
-    )
-    assert completed.returncode == 0, completed.stderr
-    assert "explicit composition-root registration: qmf-calendar-forex" in completed.stdout
-    assert "downstream fingerprint: fp1:sha256:" in completed.stdout
-    assert "binding separate from identity: True" in completed.stdout
-    assert "tzdata pin lineage edge: supersedes" in completed.stdout
-    assert "shared nouns consumed from qmf-core only: True" in completed.stdout
