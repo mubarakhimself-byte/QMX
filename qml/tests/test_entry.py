@@ -125,6 +125,26 @@ def test_an_entry_with_only_its_trader_face_saves_as_named() -> None:
     )
 
 
+def test_every_link_names_an_entry_the_corpus_holds() -> None:
+    port = json.loads(
+        (_QML / "catalogue-seed" / "stats-2026-08-26" / "port.json").read_text("utf-8")
+    )
+    corpus = [
+        *(r["fields"]["entry"] for r in port["drafts"]),
+        *(json.loads(p.read_text("utf-8")) for p in _STDLIB.glob("*/*/entry.json")),
+        *(
+            json.loads(p.read_text("utf-8"))
+            for p in (_QML / "catalogue-seed" / "wave-1").glob("*/*.json")
+        ),
+    ]
+    held = {f"{e['entry_id']}@{e['version']}" for e in corpus}
+
+    links = {pin for e in corpus for pin in cast("list[str]", e.get("same_word_as") or [])}
+
+    assert sorted(links - held) == []
+    assert "session-high@1" in links
+
+
 def test_a_name_another_entry_holds_is_a_corpus_problem() -> None:
     clash = _entry("roc-of-series") | {"aliases": ["ROC", "EMA"]}
 

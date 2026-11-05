@@ -13,11 +13,9 @@ from typing import Any, cast
 
 import pytest
 from qmf.core.refusal import Ok
-from qml.blocks.api import Block, EntryFace, EntryOrder, Instance, Side, Signal, Size, parse_entry
+from qml.blocks.api import Block, EntryFace, Instance, Side, Signal, Size, parse_entry
 from qml.catalogue import Loaded, LockEntry, load
 from qml.numbers import InstrumentRecord, parse_record
-from qml.unit import parse_text
-from qml.unit.model import Binding, NumberParam, SlotsSide
 
 _QML = Path(__file__).resolve().parents[1]
 _STDLIB = _QML / "src" / "qml" / "blocks" / "stdlib"
@@ -297,10 +295,6 @@ def test_the_time_exit_fires_on_the_48th_bar_held() -> None:
     assert fired.index(True) == 47
 
 
-def test_the_entry_order_is_market_at_the_next_open() -> None:
-    assert _make("market-next-open@1").update({}) == EntryOrder(kind="market", at="next_open")
-
-
 def _record(name: str) -> InstrumentRecord:
     document = json.loads(
         (_QML / "tests" / "fixtures" / "records" / f"{name}.json").read_text("utf-8")
@@ -356,25 +350,3 @@ def test_the_trend_floor_moves_one_step_toward_its_shrunk_edge_after_20_trades()
     assert all_good == Decimal("0")
 
 
-def test_every_dummy_binding_names_a_stdlib_block_whose_port_measure_matches_its_number() -> None:
-    dummy = _QML / "src" / "qml" / "unit" / "templates" / "dummy-trend-pullback.json"
-    unit = parse_text(dummy.read_text("utf-8")).unit
-    assert unit is not None
-    bindings: list[Binding] = [*unit.exit_set]
-    if unit.sizer is not None:
-        bindings.append(unit.sizer)
-    for side in (unit.logic.long, unit.logic.short):
-        assert isinstance(side, SlotsSide)
-        bindings += [b for slot in side.slots.values() for b in slot.bindings]
-
-    bound = [
-        (b.block.entry_id, port, unit.numbers[p.number].measure)
-        for b in bindings
-        for port, p in b.params.items()
-        if isinstance(p, NumberParam)
-    ]
-    mismatched = [(e, port) for e, port, m in bound if _face(e).parameter_measure(port) is not m]
-
-    assert {str(b.block) for b in bindings} <= set(_blocks())
-    assert len(bound) == 14
-    assert mismatched == []

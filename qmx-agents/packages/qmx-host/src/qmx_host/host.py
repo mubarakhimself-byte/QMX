@@ -859,14 +859,9 @@ JOURNALS: Final = "journals"
 """This PC's journal root, where the host's own streams append (Part B AD-209)."""
 
 
-def lifecycle_writer(home: Path, control: ControlService, machine: str) -> LifecycleWriter:
-    """This PC's one lifecycle writer, reading `[units] lifecycle.auto_paper` at each move."""
-
-    def auto_paper() -> bool:
-        units = cast(dict[str, object], control.settings_get("units"))
-        return cast(dict[str, object], units.get("lifecycle") or {}).get("auto_paper") is True
-
-    return LifecycleWriter(home / JOURNALS, machine, f"qmx-host {qmx_version()}", auto_paper)
+def lifecycle_writer(home: Path, machine: str) -> LifecycleWriter:
+    """This PC's one lifecycle writer."""
+    return LifecycleWriter(home / JOURNALS, machine, f"qmx-host {qmx_version()}")
 
 
 def record_judge_moves(store: Store, writer: LifecycleWriter, verdict_id: str) -> list[str]:
@@ -1106,7 +1101,7 @@ async def serve(
                 if not serving:
                     land_first_unit(store)
                 if role == "pc":
-                    store.lifecycle = lifecycle_writer(home, control, name)
+                    store.lifecycle = lifecycle_writer(home, name)
                     land_ported_dictionary(store)
                     land_dictionary_wave(store)
                 control.attach_library(store)

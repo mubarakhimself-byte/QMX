@@ -103,7 +103,6 @@ class LifecycleWriter:
     root: Path
     machine: str
     build: str
-    auto_paper: Callable[[], bool] = lambda: False
     clock: Callable[[], int] = time.time_ns
     boot_epoch_id: str = dataclasses.field(default_factory=lambda: uuid.uuid4().hex[:12])
     _writers: dict[str, JournalWriter] = dataclasses.field(default_factory=dict[str, JournalWriter])
@@ -127,7 +126,7 @@ class LifecycleWriter:
         return tuple(found)
 
     def state(self, key: MarketKey) -> State:
-        return fold(self.events(key.unit_id), auto_paper=self.auto_paper()).state(key)
+        return fold(self.events(key.unit_id)).state(key)
 
     def record_move(self, event: Event) -> str:
         """Append `event` once and answer its id. A move already written answers its id again
@@ -140,7 +139,7 @@ class LifecycleWriter:
             stamped = dataclasses.replace(
                 event, writer=self.writer_id, sequence=max(mine, default=-1) + 1
             )
-            folded = fold([*known, stamped], auto_paper=self.auto_paper())
+            folded = fold([*known, stamped])
             for rejected in folded.rejected:
                 if rejected.event.event_id == event.event_id:
                     raise MoveRefused(rejected.refusal, rejected.message)

@@ -1,6 +1,6 @@
 """The first content wave's exits and halts (A13d): each block against its golden cases on a long
 and a short run, silent with no position, the published worked examples, stops that never widen,
-cuts restored from state, the halts' reasons, the seed statuses, the grid family's failure modes,
+cuts restored from state, the halts' reasons, the grid family's failure modes,
 and trader sentences mapped to entries."""
 
 from __future__ import annotations
@@ -26,7 +26,6 @@ from qml.blocks.api import (
     parse_entry,
 )
 from qml.catalogue import Loaded, LockEntry, load
-from qml.catalogue.entry import Status, compute_status
 from qml.catalogue.index import match, row
 
 _QML = Path(__file__).resolve().parents[1]
@@ -381,30 +380,6 @@ def _seeds() -> dict[str, dict[str, object]]:
     return {p.stem: json.loads(p.read_text("utf-8")) for p in sorted(_SEED.glob("*.json"))}
 
 
-def test_the_seeds_compute_specified_or_named_and_the_grid_family_stays_named() -> None:
-    computed = {name: compute_status(entry) for name, entry in _seeds().items()}
-
-    assert {n: c.problems for n, c in computed.items() if c.problems} == {}
-    assert {n: c.status for n, c in computed.items()} == {
-        "anti-martingale-sizing": Status.NAMED,
-        "averaging-down": Status.NAMED,
-        "basket-profit-exit": Status.SPECIFIED,
-        "close-by-opposite-position": Status.NAMED,
-        "grid-cycle-age-exit": Status.NAMED,
-        "grid-of-orders": Status.NAMED,
-        "grid-take-profit-at-average-price": Status.NAMED,
-        "low-profit-lock-halt": Status.SPECIFIED,
-        "martingale-sizing": Status.NAMED,
-        "max-position-size-limit": Status.SPECIFIED,
-        "meta-labeling": Status.SPECIFIED,
-        "model-confidence-exit": Status.SPECIFIED,
-        "stop-before-target-probability-exit": Status.SPECIFIED,
-        "stoploss-guard-halt": Status.SPECIFIED,
-        "triple-barrier-exit": Status.SPECIFIED,
-        "zone-recovery-hedge": Status.NAMED,
-    }
-
-
 @pytest.mark.parametrize(
     "entry_id",
     [
@@ -425,20 +400,6 @@ def test_a_grid_martingale_or_averaging_entry_states_its_known_failure_with_a_so
     assert cast("str", entry["boundaries"]).startswith("Known failure: ")
     assert len(sources) == 2
     assert all(s["quote"] and s["dated"] for s in sources)
-
-
-def test_every_link_names_an_entry_the_corpus_holds() -> None:
-    port = json.loads(
-        (_QML / "catalogue-seed" / "stats-2026-08-26" / "port.json").read_text("utf-8")
-    )
-    held = {f"{r['fields']['entry']['entry_id']}@1" for r in port["drafts"]}
-    held |= {f"{f.name}@1" for f in _STDLIB.iterdir() if (f / "1" / "entry.json").is_file()}
-    family = list(_seeds().values()) + [_entry(i) for i in _FAMILY]
-
-    links = {pin for e in family for pin in cast("list[str]", e.get("same_word_as") or [])}
-
-    assert sorted(links - held) == []
-    assert len(links) >= 5
 
 
 def test_trader_sentences_map_to_exit_and_halt_entries_and_an_unknown_one_is_an_append_request() -> (

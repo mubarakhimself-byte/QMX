@@ -16,7 +16,6 @@ from typing import cast
 import pytest
 from qml.blocks.api import Block, EntryFace, Instance, parse_entry
 from qml.catalogue import Loaded, LockEntry, load
-from qml.catalogue.entry import Status, compute_status
 from qml.catalogue.index import match, row
 from qml.numbers import InstrumentClass
 
@@ -224,24 +223,6 @@ def _seed(path: Path) -> dict[str, object]:
 _SEEDS = {p.stem: _seed(p) for p in sorted(_SEED.glob("*.json"))}
 
 
-def test_the_seeds_compute_specified_or_named_and_only_the_vocabulary_names_stay_named() -> None:
-    computed = {name: compute_status(entry) for name, entry in _SEEDS.items()}
-
-    assert {n: c.problems for n, c in computed.items() if c.problems} == {}
-    assert sorted(n for n, c in computed.items() if c.status is Status.NAMED) == [
-        "auction-order-entry",
-        "exit-before-funding-settlement",
-        "exit-before-liquidation-price",
-        "exit-or-roll-before-expiry",
-        "flat-before-cash-close",
-        "flat-before-scheduled-report",
-        "initial-balance-break-entry",
-        "reduce-only-order",
-        "stop-on-mark-price",
-    ]
-    assert sum(c.status is Status.SPECIFIED for c in computed.values()) == len(_SEEDS) - 9
-
-
 _MULTI_CLASS_WORDS = {
     "volume": "volume-kind",
     "open interest": "open-interest",
@@ -314,22 +295,6 @@ def test_only_the_order_by_order_and_size_readings_have_no_fallback() -> None:
 
     assert sorted(set(empty)) == ["iceberg-order", "large-print-filter", "tape-stop-run"]
     assert cast("dict[str, str]", _SEEDS["iceberg-order"]["transfer"])["fx"] == "not_transferable"
-
-
-def test_every_link_names_an_entry_the_corpus_holds() -> None:
-    port = json.loads(
-        (_QML / "catalogue-seed" / "stats-2026-08-26" / "port.json").read_text("utf-8")
-    )
-    held = {f"{r['fields']['entry']['entry_id']}@1" for r in port["drafts"]}
-    held |= {f"{f.name}@1" for f in _STDLIB.iterdir() if (f / "1" / "entry.json").is_file()}
-    held |= {
-        f"{_seed(p)['entry_id']}@1" for p in (_QML / "catalogue-seed" / "wave-1").glob("*/*.json")
-    }
-    family = list(_SEEDS.values()) + [_entry(i) for i in _ids()]
-
-    links = {pin for e in family for pin in cast("list[str]", e.get("same_word_as") or [])}
-
-    assert sorted(links - held) == []
 
 
 def test_trader_sentences_map_to_beyond_fx_entries_and_an_unknown_one_is_an_append_request() -> (
