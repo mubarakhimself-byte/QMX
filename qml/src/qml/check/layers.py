@@ -475,7 +475,8 @@ def _percent_looks_whole(unit: Unit, found: Found) -> None:
 
 def _cadence_at(unit: Unit, found: Found) -> None:
     """Warn on an ``at`` beside ``every_closed_trades``: the count runs and the ``at`` does not. A
-    lone ``at`` is the compiler's refusal, because then nothing would move the number."""
+    lone ``at`` is the compiler's refusal, because the number would move on the default count and
+    the ``at`` would not run."""
     for name, spec in unit.numbers.items():
         cadence = spec.motion.cadence
         if cadence is None or cadence.at is None or cadence.every_closed_trades is None:
