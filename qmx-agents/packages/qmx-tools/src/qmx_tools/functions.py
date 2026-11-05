@@ -899,7 +899,9 @@ def _library_names(store: Store) -> list[dict[str, object]]:
     these fields, because a save runs this and opening every object would cost it dearly."""
     rows = store.catalog.db.execute(
         "SELECT DISTINCT json_extract(o.fields, '$.entry.entry_id'), "
-        "json_extract(o.fields, '$.entry.version'), json_extract(o.fields, '$.entry.aliases') "
+        "json_extract(o.fields, '$.entry.version'), "
+        "CASE json_type(o.fields, '$.entry.aliases') "
+        "WHEN 'array' THEN json_extract(o.fields, '$.entry.aliases') END "
         "FROM heads h JOIN objects o ON o.object_id = h.head "
         "WHERE o.kind = 'component' AND json_extract(o.fields, '$.entry.schema') = ?",
         (ENTRY_SCHEMA,),
