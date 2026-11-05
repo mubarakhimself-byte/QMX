@@ -24,7 +24,8 @@ at, so the source must name `price_scale`. A source with none is refused rather 
 when the source hands in Dukascopy's own `instrument` record for the symbol, its `digits` must
 agree. A run given `check` (a landed series' card) fetches nothing and reports `wrong_scale` when
 that card states another scale; downloading the month again lands the same rows under a card at
-the right scale.
+the right scale. The door keeps the scale a landed month or a `scale_ok` check states, because a
+QMB run refuses a series with none.
 
 Before the month lands, its stamps are checked (a bi5 tick is milliseconds from its UTC hour,
 so the source clock is UTC in milliseconds) and, when the source definition names its market's
@@ -305,8 +306,22 @@ symbol = str(source.get("symbol") or "").strip().upper()
 if symbol == "":
     fail("the source definition names no symbol")
 scale = scale_of(source, symbol)
+shared = Path(os.environ["QMX_WORK_SHARED"])
+home = home_of(shared)
+settings_file = home / "settings.toml"
+settings = tomllib.loads(settings_file.read_text("utf-8")) if settings_file.is_file() else {}
+data = settings.get("data") if isinstance(settings.get("data"), dict) else {}
+root, placement = door_place(home, data)
 if "check" in given:
-    print(json.dumps(scale_report(given["check"], symbol, scale), sort_keys=True))
+    report = scale_report(given["check"], symbol, scale)
+    if report["status"] == "scale_ok":
+        checked = MarketDoor.open(root, data, placement=placement)
+        if is_refusal(checked):
+            fail(f"the market-data door did not open: {checked.context}")
+        stated = checked.value.state_scale(str(report["series"]), scale)
+        if is_refusal(stated):
+            fail(f"the door did not keep the scale: {stated.context}")
+    print(json.dumps(report, sort_keys=True))
     raise SystemExit(0)
 year, month = month_of(str(source.get("month") or ""))
 calendar_ref = str(source.get("calendar") or "").strip() or None
@@ -316,12 +331,6 @@ if calendar_ref and calendar is None:
 confirmed = confirmed_hours(source.get("confirmed_empty") or [])
 if isinstance(confirmed, str):
     fail(f"confirmed_empty: {confirmed}")
-shared = Path(os.environ["QMX_WORK_SHARED"])
-home = home_of(shared)
-settings_file = home / "settings.toml"
-settings = tomllib.loads(settings_file.read_text("utf-8")) if settings_file.is_file() else {}
-data = settings.get("data") if isinstance(settings.get("data"), dict) else {}
-root, placement = door_place(home, data)
 key = SeriesKey.try_create("dukascopy", symbol, "ticks", year, month)
 if is_refusal(key):
     fail(f"the partition key was refused: {key.context}")
@@ -412,6 +421,9 @@ try:
         fail(f"the door refused the commit: {landed.context}")
     receipt = landed.value[0]
     ledger.record(key.value.series, year, month, stamps)
+    stated = door.state_scale(key.value.series, scale)
+    if is_refusal(stated):
+        fail(f"the door did not keep the scale: {stated.context}")
     partitions = (
         Partition(
             year=year,
