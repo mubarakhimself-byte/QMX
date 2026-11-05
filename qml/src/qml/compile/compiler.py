@@ -93,7 +93,7 @@ __all__ = [
     "compile_unit",
 ]
 
-COMPILER_FORMAT_VERSION: Final[int] = 3
+COMPILER_FORMAT_VERSION: Final[int] = 4
 """Bumped by any compiler change that alters a decision, which makes a new fingerprint."""
 _FORMAT: Final[str] = f"compiler format {COMPILER_FORMAT_VERSION}"
 
@@ -112,7 +112,7 @@ ROLES_BUILT: Final[frozenset[Role]] = frozenset(
     }
 )
 _VOLUME: Final[str] = "volume, which no bar carries yet"
-_CLOCK: Final[str] = "the market's clock, which no bar carries yet"
+_CLOCK: Final[str] = "a clock it does not have: use version 2 and name its clock"
 BLOCKS_NOT_BUILT: Final[Mapping[str, str]] = {
     "accumulation-distribution@1": _VOLUME,
     "chaikin-oscillator@1": _VOLUME,
@@ -130,6 +130,7 @@ BLOCKS_NOT_BUILT: Final[Mapping[str, str]] = {
     "tpo-value-area-high@1": _CLOCK,
     "tpo-value-area-low@1": _CLOCK,
     "vwap-session-anchored@1": _CLOCK,
+    "vwap-session-anchored@2": _VOLUME,
 }
 """A binding on one of these refuses, with what it needs. A pin alone does not."""
 _HOLDING_OUTPUTS: Final[frozenset[OutputType]] = frozenset(
