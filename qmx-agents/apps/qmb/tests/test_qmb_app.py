@@ -208,7 +208,7 @@ def test_the_copilot_backtests_the_dummy_after_its_behaviour_check_and_lands_mon
     checks = reports(world.store)[before:]
     assert (answer["status"], again["status"]) == ("finished", "finished")
     assert (landed["status"], landed["kind"], landed["principal"]) == ("finished", "backtest", CHAT)
-    assert landed["tester"] == {"app": "qmb", "version": "1.0.2"}
+    assert landed["tester"] == {"app": "qmb", "version": "1.0.3"}
     assert landed["measures"]["trades"] == 8
     assert landed["labels"]["zero_trades"] is False
     assert len(checks) == 1
@@ -412,7 +412,9 @@ def test_a_study_that_allows_gaps_runs_the_month_the_hole_rule_fails(world: Worl
 
 
 def test_the_hole_limit_and_fill_count_in_settings_reach_the_run(world: World) -> None:
-    world.control.settings_put("qmb", {"gap_bars_refuse": 4, "calibrated_min_fills": 7})
+    """The synthetic month's last bar opens on Friday 28 March, so its window ends short by the 108
+    open bars forex has from Sunday 30 March and the 100 gold has, and a limit of 108 passes both."""
+    world.control.settings_put("qmb", {"gap_bars_refuse": 108, "calibrated_min_fills": 7})
     try:
         answer = world.backtest["backtest_run"](unit=world.dummy, window=MARCH)["result"]
     finally:
@@ -422,7 +424,11 @@ def test_the_hole_limit_and_fill_count_in_settings_reach_the_run(world: World) -
     written = json.loads((run / "in" / "request.json").read_text("utf-8"))
     assert answer["status"] == "finished"
     assert report(world.store, answer["result_id"])["holes"] == []
-    assert (written["gap_bars_refuse"], written["calibrated_min_fills"]) == (4, 7)
+    assert (written["gap_bars_refuse"], written["calibrated_min_fills"]) == (108, 7)
+    assert fields(world.store, answer["result_id"])["labels"]["data_short"] == [
+        {"market_id": "fx.eurusd", "before_first": 0, "after_last": 108},
+        {"market_id": "metal.xauusd", "before_first": 0, "after_last": 100},
+    ]
 
 
 type OnMain = Callable[..., str]

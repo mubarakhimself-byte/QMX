@@ -271,7 +271,7 @@ def conformance(host: Host) -> JsonValue:
             app, job, inputs=cast(Document, dict(inputs)), principal=principal
         )
 
-    ran = run_conformance("qmb", "1.0.2", run_job=run_job, library=host.library, principal=CHAT)
+    ran = run_conformance("qmb", "1.0.3", run_job=run_job, library=host.library, principal=CHAT)
     return {"passed": ran.verdict.passed, "says": ran.verdict.says()}
 
 
@@ -403,7 +403,7 @@ def refused(code: str) -> JsonValue:
     return {"ok": False, "code": code}
 
 
-FINISHED: JsonValue = {"status": "finished", "tester": {"app": "qmb", "version": "1.0.2"}}
+FINISHED: JsonValue = {"status": "finished", "tester": {"app": "qmb", "version": "1.0.3"}}
 EXAMPLES: Mapping[str, Shipped] = {
     "exchange-status": Shipped(
         asks=(
@@ -531,7 +531,7 @@ EXAMPLES: Mapping[str, Shipped] = {
                 {},
                 {
                     "contract": "qmb/1",
-                    "tester": {"app": "qmb", "version": "1.0.2"},
+                    "tester": {"app": "qmb", "version": "1.0.3"},
                     "fidelities": ["quotes"],
                     "instrument_classes": ["fx", "metal"],
                 },
@@ -675,8 +675,10 @@ APP_VERSIONS: Mapping[tuple[str, str], str] = {
     ("qmb", "1.0.0"): "b03c2aca41f2e67d1689522f9ffab2a9",
     ("qmb", "1.0.1"): "abc0f0534c36dc9fc15afe8e2d95c852",
     ("qmb", "1.0.2"): "0bcae551c39204b5cad1128d9bba3163",
+    ("qmb", "1.0.3"): "6c9be175149e048d5f83d462898c6356",
     ("trading-node", "0.1.0"): "474d301af9fc35f3352c3230faf4bb63",
     ("trading-node", "0.1.1"): "2feb6ee2e0d9cf2bd80666e58c175cae",
+    ("trading-node", "0.1.2"): "2ecec90e00d3c17cffdc3ffffa49242c",
     ("weekend-watcher", "1.0.0"): "2fd02bee829dbbb04b5f0a66dafe66cf",
 }
 """One row per app and version, append-only. A change anywhere in an app's folder moves its image
