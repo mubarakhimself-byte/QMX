@@ -1957,7 +1957,9 @@ class QmbRun:
             (block / "entry.json").write_bytes(found.context.entries[pin])
         (root / "records").mkdir(exist_ok=True)
         for market, document in found.record_documents.items():
-            (root / "records" / f"{market}.json").write_text(json.dumps(document, indent=2), "utf-8")
+            (root / "records" / f"{market}.json").write_text(
+                json.dumps(document, indent=2), "utf-8"
+            )
         for market, sides in bars.items():
             (root / "bars" / market).mkdir(parents=True, exist_ok=True)
             for side, path in sides.items():

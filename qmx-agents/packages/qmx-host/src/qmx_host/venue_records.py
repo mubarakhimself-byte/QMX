@@ -107,7 +107,7 @@ def record_markets(node: Mapping[str, object]) -> tuple[Market, ...]:
     host still starts; `settings_put` refuses it by name."""
     try:
         return tuple(Market(**row) for row in cast("list[dict[str, str]]", node["record_markets"]))
-    except (KeyError, TypeError):
+    except KeyError, TypeError:
         return MARKETS
 
 
