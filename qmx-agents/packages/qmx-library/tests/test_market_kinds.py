@@ -18,7 +18,7 @@ from qmf.core import is_refusal
 from qml.numbers import InstrumentClass, InstrumentRecord, distance, parse_record
 from qml.unit.model import Measure
 from qmx_engine.ledger import redact
-from qmx_tools.gather import FIXTURE_WARNING, gather, template
+from qmx_tools.gather import gather, template
 
 from qmx_library.kinds import KindRefused, roster
 from qmx_library.port import Draft
@@ -111,6 +111,12 @@ ONE_PER_CLASS = [
 def store(tmp_path: Path) -> Iterator[Store]:
     with Store.open(tmp_path / "library", redactor=redact) as opened:
         yield opened
+
+
+GOLD_ON_THE_FIXTURE = (
+    "no Library record for this market, so it reads QML's test fixture: "
+    "metal.xauusd reads xauusd.json"
+)
 
 
 def land(store: Store, fields: dict[str, Any], item: str | None = None) -> str:
@@ -261,7 +267,7 @@ def test_the_check_reads_the_librarys_version_and_a_market_with_no_item_reads_th
         "icmarkets-ctrader:EURUSD@2",
         "icmarkets-ctrader:XAUUSD@1",
     )
-    assert gathered.warnings == (f"{FIXTURE_WARNING}: metal.xauusd reads xauusd.json",)
+    assert gathered.warnings == (GOLD_ON_THE_FIXTURE,)
 
 
 def test_two_items_for_one_symbol_or_an_item_missing_a_fact_bind_nothing_and_say_why(
@@ -294,4 +300,4 @@ def test_an_archived_item_binds_nothing_and_its_replacement_binds_alone(store: S
     gathered = gather(store, template())
 
     assert gathered.context.records["fx.eurusd"].name == "icmarkets-ctrader:EURUSD@2"
-    assert gathered.warnings == (f"{FIXTURE_WARNING}: metal.xauusd reads xauusd.json",)
+    assert gathered.warnings == (GOLD_ON_THE_FIXTURE,)
