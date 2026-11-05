@@ -7,8 +7,8 @@
     "properties": {
       "nodes": {"type": "array", "items": {"type": "string"}, "description": "the node machines to watch; every node seen by default"},
       "here": {"type": "string", "default": "pc", "description": "this machine's place name; a node here is heard by the trading node app's own heartbeat"},
-      "lookback_h": {"type": "number", "default": 24, "description": "hours back that kill rises, protection alarms and heals count"},
-      "stand_down_days": {"type": "number", "default": 30, "description": "days back that a stand-down still held is found"},
+      "lookback_h": {"type": "number", "default": 24, "description": "hours back that protection alarms and heals count"},
+      "stand_down_days": {"type": "number", "default": 30, "description": "days back that a stand-down or a kill still held is found"},
       "heartbeat_stale_after_s": {"type": "number", "default": 120, "description": "seconds after which a node's heartbeat is late"},
       "quote_chars": {"type": "number", "default": 500, "description": "characters of a node's outside text quoted before an ellipsis"}
     }
