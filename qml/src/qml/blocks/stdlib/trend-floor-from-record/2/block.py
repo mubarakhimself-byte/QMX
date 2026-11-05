@@ -3,8 +3,9 @@
 Given the unit's closed trades, each with the trend strength stamped at entry and its R after
 costs: once at least ``min_count`` have closed, bucket them by the size of their strength into
 ``buckets`` equal buckets over the number's range, so a short, whose stamp is negative, reads as
-its long mirror does (``@1`` clamped it into the lowest bucket); find the lowest bucket edge above which every bucket that
-holds a trade has a mean R of at least zero; shrink that edge toward the number's default by
+its long mirror does (``@1`` clamped it into the lowest bucket); find the lowest bucket edge
+above which every bucket that holds a trade has a mean R of at least zero; shrink that edge
+toward the number's default by
 n / (n + ``shrink_k``); and move the number at most ``step_limit`` steps toward it, inside its
 range. The motion engine decides when it runs (the cadence); this block only answers.
 """
