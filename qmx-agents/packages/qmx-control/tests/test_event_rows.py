@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import cast
 
 import pytest
+from qmx_apps.manifest import Definition
 from qmx_apps.supervisor import Supervisor
 
 from qmx_control.models import Document
@@ -20,9 +21,17 @@ FIXTURE = Path(__file__).resolve().parents[2] / "qmx-apps/tests/fixture_server.p
 APP = "exchange-status"
 
 
+def this_interpreter(_self: Supervisor, _definition_hash: str) -> Path:
+    return Path(sys.executable)
+
+
+def no_build(_self: Supervisor, _definition: Definition, _image: Path) -> None:
+    pass
+
+
 def test_a_quiet_app_writes_few_rows(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(Supervisor, "python", lambda _self, _hash: Path(sys.executable))
-    monkeypatch.setattr(Supervisor, "_install_environment", lambda _self, _definition, _image: None)
+    monkeypatch.setattr(Supervisor, "python", this_interpreter)
+    monkeypatch.setattr(Supervisor, "_install_environment", no_build)
     folder = tmp_path / "app"
     shutil.copytree(EXAMPLE, folder, ignore=shutil.ignore_patterns(".venv", "__pycache__"))
     shutil.copyfile(FIXTURE, folder / "server.py")
