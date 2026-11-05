@@ -1,8 +1,8 @@
 """L3 acceptance test — the failure-register discipline (NFR-11, R-009).
 
 Oracle: NFR-11 ("every designed failure mode ships a register entry") and the workspace
-convention conventions/failure-register.md that every OTHER roster package (qmf-core, qmf-data, qmf-indicators, qmf-registry,
-qmf-structure) already follows.
+convention conventions/failure-register.md that every OTHER roster package (qmf-core,
+qmf-data, qmf-indicators, qmf-registry, qmf-structure) already follows.
 
 Covers QA-E08-L3-015. A missing register entry is a finding (this is where R-009 gets
 its evidence).
