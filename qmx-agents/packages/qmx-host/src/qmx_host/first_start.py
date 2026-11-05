@@ -53,6 +53,7 @@ from qmf.core import is_refusal
 from qmf.core.fingerprint import fingerprint
 from qmx_apps.errors import AppError, Document
 from qmx_apps.manifest import Definition
+from qmx_apps.road.history import definition as road_definition
 from qmx_apps.supervisor import Supervisor, path_sources
 from qmx_broker.credentials import CredentialManager, KeyStore
 from qmx_control.library import UNFINISHED, old_library
@@ -638,10 +639,11 @@ def refresh_first_party(runtime: Supervisor, app_id: str, folder: Path) -> Docum
     runtime.notice(app_id, None)
     shipped = Definition.load(folder)
     head = str(found["definition_hash"])
-    # The road publishes by the new image's risk alone, so a repair that changed it still waits.
-    money = "money" in (shipped.manifest.risk, cast(Document, found["definition"])["risk"])
     active = cast(Document, found.get("road") or {}).get("active")
     published = str(active["definition_hash"]) if isinstance(active, dict) else None
+    signed = road_definition(runtime.home, app_id, published).manifest.risk if published else None
+    # A repair that changes the word still waits, so the head alone cannot say.
+    money = "money" in (shipped.manifest.risk, cast(Document, found["definition"])["risk"], signed)
     # Installing what he signed again, as a checkout back on it would, rebuilds its environment.
     moved = shipped.hash != head and not (money and shipped.hash == published)
     if moved or (not money and path_sources(folder) != runtime.built_from(head)):
@@ -673,16 +675,18 @@ def refresh_first_party(runtime: Supervisor, app_id: str, folder: Path) -> Docum
 
 def enable_first_party(home: Path, runtime: Supervisor) -> list[str]:
     """Bring each enabled first-party app up to what this program ships and start it, at every
-    host start, and answer the ones that started. One already running is left as it is, so the one
-    click keeps the app up however often the host starts. Each app has its own try: one that fails
-    is named and the next still starts, and one whose refresh failed starts its old version.
-    Installing builds the app's locked environment, which can take minutes the first time."""
+    host start, and answer the ones that started, in the list's order. One already running is left
+    as it is, so the one click keeps the app up however often the host starts. Each app has its own
+    thread, because his kill needs the node up and an install elsewhere can run for its whole limit.
+    One that fails is named and one whose refresh failed starts its old version. Installing builds
+    the app's locked environment, which can take minutes the first time."""
     enabled = home / FIRST_PARTY
     if not enabled.is_file():
         return []
     wanted = cast(list[str], json.loads(enabled.read_text("utf-8")).get("enable", []))
-    started: list[str] = []
-    for app_id in wanted:
+    started: set[str] = set()
+
+    def bring_up(app_id: str) -> None:
         why = ""
         try:
             refresh_first_party(runtime, app_id, APP_FOLDERS[app_id])
@@ -694,10 +698,20 @@ def enable_first_party(home: Path, runtime: Supervisor) -> list[str]:
             why = f"{why}; " if why else ""
             why = f"{why}it did not start, {_refusal(refused)}"
         else:
-            started.append(app_id)
+            started.add(app_id)
         if why:
             _told(runtime, app_id, why)
-    return started
+
+    # Daemon threads, so a host stop does not wait on a stuck install: its Job ends uv at exit.
+    threads = [
+        threading.Thread(target=bring_up, args=(app_id,), name=f"qmx-first-{app_id}", daemon=True)
+        for app_id in wanted
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    return [app_id for app_id in wanted if app_id in started]
 
 
 def _refusal(error: Exception) -> str:
