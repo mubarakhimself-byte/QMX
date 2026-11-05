@@ -197,7 +197,7 @@ def _refusal(answer: Json) -> str:
 
 
 def _stamp() -> str:
-    return datetime.now(UTC).strftime("%Y%m%d%H%M%S%f")
+    return datetime.now(UTC).strftime("%Y%m%d%H%M%S%f")  # ambient-scan: allow - script root
 
 
 # --- the connect dialog, on his answers ---
@@ -656,10 +656,10 @@ def _receive_code(wait_s: float) -> str | None:
         server = http.server.HTTPServer(RECEIVER, Receiver)
     except OSError:
         return None
-    began = time.monotonic()
+    began = time.monotonic()  # ambient-scan: allow - script root
     server.timeout = 1.0
     try:
-        while not codes and time.monotonic() - began <= wait_s:
+        while not codes and time.monotonic() - began <= wait_s:  # ambient-scan: allow - script root
             server.handle_request()
     finally:
         server.server_close()

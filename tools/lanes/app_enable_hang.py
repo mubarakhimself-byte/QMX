@@ -134,11 +134,11 @@ def bounded(work: Callable[[], object], seconds: float) -> tuple[str, float]:
         except Exception as error:
             outcome.append(f"error: {type(error).__name__}: {error}")
 
-    started = time.perf_counter()
+    started = time.perf_counter()  # ambient-scan: allow - lane timing
     thread = threading.Thread(target=target, name="enable", daemon=True)
     thread.start()
     thread.join(seconds)
-    elapsed = (time.perf_counter() - started) * 1000
+    elapsed = (time.perf_counter() - started) * 1000  # ambient-scan: allow - lane timing
     return (outcome[0] if outcome else "timeout"), elapsed
 
 
