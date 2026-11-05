@@ -1,0 +1,21 @@
+id	grade	source	what
+core-n1	must	ground-core section 7	An install holds the supervisor's lock through uv sync, so every call to every running app waits for it, including the node's kill path, and for ever with known-2
+core-n2	should	ground-core section 7	The hook runs a bare python, so it works only if the first python on the CLI's PATH is the host's environment
+core-n3	should	ground-core section 7	A reinstall adds new disabled triggers on every published version and can write the shipped draft over an edited draft head
+core-n4	leave	ground-core section 7	The settings.memory.scopes key in template definitions is read by no engine code
+unit-n1	must	ground-unit section 7	14 price series fed whole bars never hold a slot, and check stays green
+unit-n2	should	ground-unit section 7	_Core.timer builds exits on the long side only, so a repair that only feeds evidence gives shorts exits that never fire
+unit-n3	leave	ground-unit section 7	The copilot's qml_run row can never succeed, because no code fills ctx.bots
+qmb-n1	should	ground-qmb section 7	materialise copies a sealed month into any folder it is given
+qmb-n2	should	ground-qmb section 7	A host keeps the first records it compiled against for its whole life
+qmb-n3	should	ground-qmb section 7	A study's holdout cannot name a real holdout, because the schema types it as a plain string
+qmb-n4	should	ground-qmb section 7	Every job labels fidelity bars while the run replays quotes
+qmb-n5	should	ground-qmb section 7	A run on a fixture says nothing, because gather's warnings are dropped in LanderLibrary._compiled
+start-n1	should	ground-start section 7	A 30 second stall stops the trading node for good, because call runs self.stop on a tool timeout and a stopped app stays down
+start-n2	should	ground-start section 7	Bars the node records cannot be read as bars, because no product code calls append_series, so the MIS on a node machine finds nothing
+start-n3	leave	ground-start section 7	real_bearer ignores UserName
+node-n1	must	ground-node section 7	One deployment naming a symbol the broker does not list kills the whole account after a restart
+node-n2	should	ground-node section 7	The reconcile row writes the node's memory under venue_stop
+node-n3	should	ground-node section 7	A stop he moves by hand in cTrader is never read
+node-n4	should	ground-node section 7	A stop fired while the process is down leaves an entry with no exit and no alarm
+node-n5	should	ground-node section 7	_absorb ignores ProtoOAAccountDisconnectEvent, ProtoOATraderUpdatedEvent and ProtoOASymbolChangedEvent

@@ -1,0 +1,115 @@
+sync root rc=0
+sync agents rc=0
+test-all rc=1 seconds=7149
+money-path-scan rc=0 seconds=11
+secret-scan rc=0 seconds=44
+mock-data-scan rc=0 seconds=7
+ambient-scan rc=1 seconds=8
+corpus-gate rc=0 seconds=202
+fmt-check-root rc=0 seconds=1
+lint-root rc=0 seconds=1
+types-root rc=1 seconds=69
+fmt-check-qmx-agents rc=0 seconds=2
+lint-qmx-agents rc=0 seconds=1
+types-qmx-agents rc=0 seconds=4
+fmt-check-qmx-control rc=0 seconds=1
+lint-qmx-control rc=0 seconds=1
+types-qmx-control rc=0 seconds=10
+fmt-check-qmx-tools rc=0 seconds=1
+lint-qmx-tools rc=0 seconds=1
+types-qmx-tools rc=0 seconds=8
+fmt-check-qmx-apps rc=1 seconds=1
+lint-qmx-apps rc=1 seconds=1
+types-qmx-apps rc=1 seconds=11
+fmt-check-qmx-broker rc=0 seconds=1
+lint-qmx-broker rc=0 seconds=1
+types-qmx-broker rc=0 seconds=7
+fmt-check-qmx-remote rc=0 seconds=1
+lint-qmx-remote rc=0 seconds=1
+types-qmx-remote rc=0 seconds=6
+fmt-check-qmx-ledger rc=0 seconds=1
+lint-qmx-ledger rc=0 seconds=0
+types-qmx-ledger rc=0 seconds=6
+fmt-check-qma-harness rc=0 seconds=1
+lint-qma-harness rc=0 seconds=1
+types-qma-harness rc=0 seconds=12
+fmt-check-qmx-engine rc=0 seconds=1
+lint-qmx-engine rc=0 seconds=2
+types-qmx-engine rc=0 seconds=15
+fmt-check-qmx-host rc=0 seconds=2
+lint-qmx-host rc=1 seconds=1
+types-qmx-host rc=1 seconds=14
+fmt-check-qmx-library rc=0 seconds=1
+lint-qmx-library rc=0 seconds=1
+types-qmx-library rc=0 seconds=9
+fmt-check-qmx-judge rc=0 seconds=1
+lint-qmx-judge rc=0 seconds=1
+types-qmx-judge rc=0 seconds=6
+fmt-check-qmx-router rc=0 seconds=1
+lint-qmx-router rc=0 seconds=1
+types-qmx-router rc=0 seconds=8
+fmt-check-qmx-memory rc=0 seconds=1
+lint-qmx-memory rc=0 seconds=1
+types-qmx-memory rc=0 seconds=6
+fmt-check-qmx-hub rc=0 seconds=1
+lint-qmx-hub rc=0 seconds=1
+types-qmx-hub rc=0 seconds=6
+fmt-check-qmx-home rc=0 seconds=1
+lint-qmx-home rc=0 seconds=1
+types-qmx-home rc=0 seconds=8
+--- failed tests
+FAILED qmn/tests/test_app_grants.py::test_the_windows_store_writes_reads_and_deletes_one_throwaway_entry
+FAILED tests/test_maintenance.py::test_the_upkeep_switched_off_never_runs_while_rounds_and_the_drill_still_do
+FAILED tools/tests/test_ambient_scan.py::test_main_is_clean_on_the_real_workspace
+count 3
+--- suite table
+| Suite | Passed | Failed | Skipped | Xfailed | Duration |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| QMF/QML/QMB/QMN | 7096 | 1 | 42 | 0 | 1337.5s |
+| tools | 678 | 1 | 10 | 0 | 205.7s |
+| tools serial | 2 | 0 | 0 | 0 | 44.3s |
+| adws | 4 | 0 | 0 | 0 | 12.0s |
+| qmx-tools | 42 | 0 | 0 | 0 | 67.0s |
+| qmx-control | 184 | 0 | 2 | 0 | 216.2s |
+| qmx-apps | 182 | 0 | 0 | 0 | 715.7s |
+| qmx-apps serial | 7 | 0 | 2 | 0 | 188.0s |
+| qmx-broker | 102 | 0 | 0 | 0 | 29.0s |
+| qmx-remote | 10 | 0 | 0 | 0 | 9.9s |
+| qmx-ledger | 21 | 0 | 0 | 0 | 8.6s |
+| qma-harness | 831 | 0 | 2 | 0 | 314.6s |
+| qmx-engine | 877 | 0 | 0 | 0 | 1206.5s |
+| qmx-host | 479 | 1 | 15 | 0 | 1019.6s |
+| qmx-judge | 38 | 0 | 0 | 0 | 107.9s |
+| qmx-library | 125 | 0 | 0 | 0 | 26.0s |
+| qmx-router | 298 | 0 | 0 | 0 | 27.0s |
+| qmx-memory | 14 | 0 | 0 | 0 | 5.4s |
+| qmx-hub | 40 | 0 | 0 | 0 | 14.8s |
+| qmx-home | 346 | 0 | 7 | 0 | 218.9s |
+| qmb app | 28 | 0 | 0 | 0 | 162.6s |
+| trading-node app | 13 | 0 | 0 | 0 | 75.1s |
+| mis app | 10 | 0 | 0 | 0 | 66.6s |
+| QA gates | 3 | 0 | 0 | 0 | 6.9s |
+| QA epic_01 | 86 | 0 | 0 | 0 | 14.0s |
+| QA epic_02 | 52 | 0 | 0 | 0 | 7.6s |
+| QA epic_03 | 80 | 0 | 0 | 0 | 8.5s |
+| QA epic_04 | 41 | 0 | 0 | 0 | 5.8s |
+| QA epic_05 | 71 | 0 | 1 | 0 | 8.8s |
+| QA epic_06 | 99 | 0 | 0 | 0 | 7.5s |
+| QA epic_07 | 96 | 0 | 0 | 0 | 6.4s |
+| QA epic_08 | 172 | 0 | 0 | 0 | 10.9s |
+| QA epic_09 | 74 | 0 | 0 | 0 | 6.6s |
+| QA epic_10 | 109 | 0 | 0 | 0 | 7.4s |
+| QA epic_11 | 69 | 0 | 0 | 0 | 10.2s |
+| QA epic_12 | 73 | 0 | 0 | 0 | 10.3s |
+| QA epic_13 | 43 | 0 | 0 | 0 | 27.6s |
+| QA epic_14 | 47 | 0 | 4 | 0 | 11.5s |
+| QA epic_15 | 50 | 0 | 0 | 0 | 27.9s |
+| QA epic_16 | 37 | 0 | 0 | 0 | 9.0s |
+| QA epic_17 | 54 | 0 | 0 | 0 | 8.4s |
+| QA epic_18 | 69 | 0 | 0 | 0 | 27.6s |
+| QA epic_19 | 73 | 0 | 0 | 0 | 9.7s |
+| QA epic_20 | 28 | 0 | 0 | 0 | 21.5s |
+| QA epic_21 | 34 | 0 | 0 | 0 | 8.7s |
+| QA epic_22 | 55 | 0 | 0 | 0 | 7.4s |
+| QA epic_23 | 30 | 0 | 0 | 0 | 7.3s |
+DONE
