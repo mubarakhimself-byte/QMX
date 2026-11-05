@@ -14,7 +14,7 @@
   "origin": "qml",
   "component_type": "calendar",
   "definition": "Seconds from the nearest EIA Weekly Petroleum Status Report, Wednesday 10:30 New York time, negative before it and positive after.",
-  "boundaries": "New York time follows its daylight-saving rule. The weeks EIA moves the release for a holiday are not modelled, so in those weeks the value measures from the standard Wednesday. It is a fixed clock, not the report's numbers. Bars without a time are missing. QML's unit runtime does not yet pass a bars input its time, so inside a unit this value stays missing until it does.",
+  "boundaries": "New York time follows its daylight-saving rule. The weeks EIA moves the release for a holiday are not modelled, so in those weeks the value measures from the standard Wednesday. It is a fixed clock, not the report's numbers. Bars without a time are missing. QML's unit runtime passes each bar its close time, so inside a unit this value reads from the first bar. As a lone slot binding it holds nothing: bind value-above to it to gate on the seconds.",
   "recognition": "Oil units go flat before the Wednesday inventory report.",
   "eligible_roles": [
     "context",
