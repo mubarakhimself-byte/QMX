@@ -662,17 +662,44 @@ def _motion(
     return tuple(derived), tuple(slow)
 
 
-def _not_read(b: BoundBlock, read: AbstractSet[str]) -> str | None:
+def _wrong_feed(b: BoundBlock, streams: AbstractSet[str]) -> str | None:
+    """Why a port of ``b`` would never answer. ``resolve`` hands a whole bar for a stream's bare
+    name and one value or nothing for any other ref, and each port reads only one of those."""
+    for port in b.face.inputs:
+        ref = b.inputs.get(port.port)
+        if ref is None:
+            continue
+        stream, _, part = ref.partition(".")
+        whole_bar = stream in streams and not part
+        if whole_bar and port.stream_kind == "series":
+            return (
+                f"{b.pin}'s {port.port} port takes one value, and {ref} is a whole bar. "
+                f"Feed it {stream}.close or a binding that gives a value"
+            )
+        if not whole_bar and port.stream_kind == "bars":
+            return (
+                f"{b.pin}'s {port.port} port takes a whole bar, and {ref} is not one. "
+                f"Feed it {' or '.join(sorted(streams))}"
+            )
+    return None
+
+
+def _not_read(b: BoundBlock, read: AbstractSet[str], streams: AbstractSet[str]) -> str | None:
     """Why ``b`` can neither hold nor feed, by the shape of its face and never by its name, so an
     agent's block of the same shape refuses too. A block not built yet answers only for that."""
     if b.pin in BLOCKS_NOT_BUILT:
         return None
+    if b.face.output.type is OutputType.EXIT_ACTION:
+        return f"{b.pin} is an exit, and a slot never acts on one. Put it in /exit_set"
     unfed = next((p for p in b.face.inputs if p.stream_kind not in _SLOT_PORT_KINDS), None)
     if unfed is not None:
         return (
             f"{b.pin} reads its {unfed.stream_kind} port {unfed.port}, which no slot is fed, so it "
             "can neither hold nor feed here"
         )
+    wrong_feed = _wrong_feed(b, streams)
+    if wrong_feed is not None:
+        return wrong_feed
     if _holds_a_slot(b.face) or b.name in read:
         return None
     return (
@@ -681,12 +708,17 @@ def _not_read(b: BoundBlock, read: AbstractSet[str]) -> str | None:
     )
 
 
-def _with_feeders(side: SidePlan, derived: Sequence[DerivedPlan], problems: _Problems) -> SidePlan:
+def _with_feeders(
+    side: SidePlan,
+    derived: Sequence[DerivedPlan],
+    streams: AbstractSet[str],
+    problems: _Problems,
+) -> SidePlan:
     """``side`` with its feeders marked. A binding that can neither hold nor feed refuses."""
     read = {d.source for d in derived if d.side is side.side}
     feeders: set[str] = set()
     for b in reversed([b for slot in side.slots for b in slot.bindings]):
-        why = _not_read(b, read)
+        why = _not_read(b, read, streams)
         if why is not None:
             problems.add("binding_not_read", b.where, why)
         elif not _holds_a_slot(b.face):
@@ -1013,7 +1045,8 @@ def compile_unit(
     exits = wiring.exits()
     sizer = wiring.bind(unit.sizer, "sizer", "/sizer") if unit.sizer is not None else None
     derived, slow = _motion(unit, sides, loaded, faces, problems)
-    sides = tuple(_with_feeders(s, derived, problems) for s in sides)
+    streams = frozenset(s.name for s in unit.streams)
+    sides = tuple(_with_feeders(s, derived, streams, problems) for s in sides)
     document_fp = fingerprint(document)
     if is_refusal(document_fp):
         problems.add("document_fingerprint", "", str(document_fp.context.get("reason")))
