@@ -18,11 +18,11 @@ from qmx_library.kinds import KindRefused, kind
 from qmx_library.port import Draft, LibraryRefused
 from qmx_library.principal import MAIN, Principal, drafts_ref
 from qmx_library.store import Store
-from qmx_tools.gather import DUMMY, check_unit, gather, template
+from qmx_tools.gather import DUMMY, FIXTURE_RECORDS, check_unit, gather, template
 
 from qmx_host import first_start, venue_records
 from qmx_host.first_start import Places, make_new
-from qmx_host.host import land_first_unit, open_store, register_checkers
+from qmx_host.host import LanderLibrary, RunUnit, land_first_unit, open_store, register_checkers
 
 OPERATOR = Principal("operator")
 KINDS = Path(first_start.__file__).parents[3] / "qmx-library" / "src" / "qmx_library" / "kinds"
@@ -197,6 +197,53 @@ def test_gather_binds_a_record_by_the_markets_instrument_ref() -> None:
         "fx.eurusd reads eurusd.json",
         "no Library record for this market, so it reads QML's test fixture: "
         "metal.xauusd reads xauusd.json",
+    )
+
+
+def test_one_host_reads_each_record_that_replaces_another_though_they_all_read_version_one(
+    store: Store,
+) -> None:
+    library = LanderLibrary(store)
+    draft_unit(store, template(), "dummy")
+    head = store.head("dummy", drafts_ref("dummy"))
+    assert head is not None
+    pin = head[0]
+    fixture = json.loads((FIXTURE_RECORDS / "xauusd.json").read_text("utf-8"))
+    del fixture["record_version"]
+
+    def gold(item: str, lot_step: str) -> None:
+        fields = {**fixture, "lot_step": lot_step}
+        draft = Draft("instrument", item, item, fields=cast("dict[str, JsonValue]", fields))
+        store.put(OPERATOR, draft, on=MAIN, expected_head=None)
+
+    def read() -> tuple[RunUnit, tuple[str, object, object]]:
+        found = library.unit(pin)
+        assert isinstance(found, RunUnit)
+        record = found.context.records["metal.xauusd"]
+        document = found.record_documents["metal.xauusd"]
+        return found, (record.name, document["lot_step"], document["record_version"])
+
+    on_fixture, fixture_read = read()
+    again, _ = read()
+    gold("gold-first", "0.1")
+    first_item, first_read = read()
+    store.archive(OPERATOR, "gold-first", "withdrawn")
+    gold("gold-second", "0.5")
+    _, second_read = read()
+
+    assert again is on_fixture
+    assert fixture_read == ("icmarkets-ctrader:XAUUSD@1", "0.01", 1)
+    assert first_read == ("icmarkets-ctrader:XAUUSD@1", "0.1", 1)
+    assert second_read == ("icmarkets-ctrader:XAUUSD@1", "0.5", 1)
+    assert on_fixture.fixture_records == (
+        "no Library record for this market, so it reads QML's test fixture: "
+        "fx.eurusd reads eurusd.json",
+        "no Library record for this market, so it reads QML's test fixture: "
+        "metal.xauusd reads xauusd.json",
+    )
+    assert first_item.fixture_records == (
+        "no Library record for this market, so it reads QML's test fixture: "
+        "fx.eurusd reads eurusd.json",
     )
 
 
