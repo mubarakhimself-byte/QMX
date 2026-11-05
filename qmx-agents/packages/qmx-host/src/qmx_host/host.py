@@ -198,7 +198,7 @@ from qmx_host.records import Cadence, Harvester, Projection, Pull, Records, appe
 from qmx_host.sessions import RecordedHarness, SessionRecorder, write_snapshot
 from qmx_host.streams import Streams
 from qmx_host.vault_acl import KeyRefused, VaultRefused, owner_only, read_key
-from qmx_host.venue_records import VenueRecords, node_call
+from qmx_host.venue_records import VenueRecords, node_call, record_markets, refresh_s
 
 type Role = Literal["pc", "node", "server"]
 """`server` is the node role plus the Library service: on the server the one `qmx_host` process
@@ -1125,7 +1125,17 @@ async def serve(
                     store=store,
                 )
                 records = records_job(home, control, role, door, store, nodes)
-                venue_records = VenueRecords(node_call(runtime), store) if role == "pc" else None
+                node_settings = control.settings_get("node")
+                venue_records = (
+                    VenueRecords(
+                        node_call(runtime),
+                        store,
+                        every_s=refresh_s(node_settings),
+                        markets=record_markets(node_settings),
+                    )
+                    if role == "pc"
+                    else None
+                )
                 # Before the engine opens: a restored folder's fires and held runs stay paused.
                 backups.hold_after_restore(store)
                 harness.doctor_from(backups.doctor_line)

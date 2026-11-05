@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING, Final, Literal, cast
 
 from pydantic import JsonValue
 from qmx_apps.errors import AppError, Document
+from qmx_control.service import NODE_DEFAULTS
 from qmx_library.port import Draft, JsonObject, LibraryRefused
 from qmx_library.principal import MAIN, Principal, runs_ref, state_ref
 from qmx_library.store import Store
@@ -52,8 +53,10 @@ __all__ = [
     "land",
     "node_call",
     "read_and_land",
+    "record_markets",
     "records_of",
     "refresh",
+    "refresh_s",
     "said",
     "self_test_passed",
 ]
@@ -64,7 +67,7 @@ KINDS: Final = frozenset({"account", "venue", "instrument"})
 RUN: Final = "venue-records"
 """The run whose ref each record is put on before the engine lands it on `main`."""
 LANDER: Final = Principal("run", RUN)
-REFRESH_S: Final = 86_400
+REFRESH_S: Final = cast("int", NODE_DEFAULTS["records_refresh_s"])
 """`[node] records_refresh_s`, starting at one day: how often the refresh job reads the node's
 records again."""
 MARGIN_PLACES: Final = 4
@@ -93,11 +96,28 @@ class Market:
     day_boundary: str
 
 
-MARKETS: Final = (
-    Market("EURUSD", "eurusd", "fx", "fx-24x5@1", "America/New_York", "17:00"),
-    Market("XAUUSD", "gold", "metal", "metals-24x5@1", "America/New_York", "17:00"),
+MARKETS: Final = tuple(
+    Market(**row) for row in cast("list[dict[str, str]]", NODE_DEFAULTS["record_markets"])
 )
 """`[node] record_markets`: the markets whose records land, starting at the dummy's two."""
+
+
+def record_markets(node: Mapping[str, object]) -> tuple[Market, ...]:
+    """The section's `record_markets`. A table a hand edit broke reads as the starting rows, so a
+    host still starts; `settings_put` refuses it by name."""
+    try:
+        return tuple(Market(**row) for row in cast("list[dict[str, str]]", node["record_markets"]))
+    except (KeyError, TypeError):
+        return MARKETS
+
+
+def refresh_s(node: Mapping[str, object]) -> float:
+    """The section's `records_refresh_s`, or its starting value when it is no positive number."""
+    every = node.get("records_refresh_s")
+    if isinstance(every, bool) or not isinstance(every, int | float) or every <= 0:
+        return float(REFRESH_S)
+    return float(every)
+
 
 type Call = Callable[[str, Mapping[str, object]], Mapping[str, object]]
 """One node operation through the supervisor: the node's answer, `{ok, value}` or a refusal."""

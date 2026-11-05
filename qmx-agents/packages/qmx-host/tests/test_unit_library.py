@@ -234,7 +234,7 @@ def node_call(operation: str, arguments: Mapping[str, object]) -> Mapping[str, o
         "ok": True,
         "value": {
             "venue": {"name": "icmarkets-ctrader", "platform": "ctrader", "sandbox": "demo"},
-            "account": {"id": "9000", "world": "demo"},
+            "account": {"id": "9000", "world": "demo", "leverage": "30"},
             "instruments": [held[symbol] for symbol in asked if symbol in held],
         },
     }
