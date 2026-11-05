@@ -303,7 +303,7 @@ def test_the_connect_door_does_not_publish_a_repair_that_drops_the_money_word(
     active = road.active_revision(APP)
     run: Any = SimpleNamespace(
         world=SimpleNamespace(control=SimpleNamespace(app_runtime=lambda: world.runtime)),
-        say=lambda _line: None,
+        say=print,
     )
 
     with pytest.raises(Stopped, match="require the operator's bound signature"):
