@@ -200,10 +200,10 @@ def _window_ns(given: object) -> Result[tuple[int, int] | None]:
     """A request's ``{start, end}`` dates as a half-open window in ns, or None for no window."""
     if given is None:
         return Ok(None)
-    named = cast("Mapping[str, object]", given) if isinstance(given, Mapping) else {}
+    named = cast("Mapping[str, object]", given if isinstance(given, Mapping) else {})
     start, end = _day_ms(named.get("start")), _day_ms(named.get("end"))
     if start is None or end is None:
-        return invalid("window", "a run's window is {start, end} as dates", given=repr(given))
+        return invalid("window", "a run's window is {start, end} as dates", window=str(named))
     return Ok((start * _NS_PER_MS, end * _NS_PER_MS))
 
 
