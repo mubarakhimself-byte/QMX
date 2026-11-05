@@ -1100,11 +1100,9 @@ def test_b_on_a_library_only_market_reaches_qmb(home: Path, tmp_path: Path) -> N
     record = json.loads((FIXTURE_RECORDS / "eurusd.json").read_text("utf-8"))
     store = DomainContext(root=tmp_path / "library").library.store
     item = "instrument:icmarkets-ctrader:GBPUSD"
-    fields = {**record, "symbol": "GBPUSD", "market_id": "fx.gbpusd"}
-    store.put(
-        Principal("operator"), Draft("instrument", item, item, fields=fields), on=MAIN,
-        expected_head=None,
-    )  # fmt: skip
+    fields: Any = {**record, "symbol": "GBPUSD", "market_id": "fx.gbpusd"}
+    draft = Draft("instrument", item, item, fields=fields)
+    store.put(Principal("operator"), draft, on=MAIN, expected_head=None)
     asked: list[tuple[str, str, Any]] = []
 
     def qmb(app: str, job: str, **given: Any) -> dict[str, Any]:
@@ -1118,8 +1116,8 @@ def test_b_on_a_library_only_market_reaches_qmb(home: Path, tmp_path: Path) -> N
         }
     )
     with fake_service(home, harness=port, executors={"app_op": AppOp(qmb, dispatch=qmb)}) as svc:
-        draft = svc.drafts.put(B.name, Bundle.read(B), 0, caller=OPERATOR).item
-        report = asyncio.run(svc.tests.run(draft, caller=OPERATOR, inputs=IDEA))
+        held = svc.drafts.put(B.name, Bundle.read(B), 0, caller=OPERATOR).item
+        report = asyncio.run(svc.tests.run(held, caller=OPERATOR, inputs=cast(Any, IDEA)))
 
     assert unit_checked(store, built["unit"])["verdict"] == "pass"
     ready = finished_output(home, report, "ready")
@@ -1973,7 +1971,7 @@ def test_the_watcher_reads_a_held_kill_after_a_day_and_clears_on_green(home: Pat
     with fake_service(home, harness=answers(), clock=Clock(NOON)) as svc:
         item = svc.drafts.put(GW.name, Bundle.read(GW), 0, caller=OPERATOR).item
         held = asyncio.run(svc.tests.run(item, caller=OPERATOR, inputs=None))
-        elsewhere = {"scope": "unit:dummy", "level": "GREEN", "op_id": "r1", "cleared": []}
+        elsewhere: Any = {"scope": "unit:dummy", "level": "GREEN", "op_id": "r1", "cleared": []}
         journal(home, "node", "q2", "kill_level", [(600, node_row("kill_level", 3, elsewhere))])
         still = asyncio.run(svc.tests.run(item, caller=OPERATOR, inputs=None))
         resume = {"scope": "all", "level": "GREEN", "op_id": "r2", "cleared": ["account:demo-1"]}

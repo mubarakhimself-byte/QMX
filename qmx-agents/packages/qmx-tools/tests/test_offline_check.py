@@ -12,8 +12,8 @@ from qmx_tools.gather import template
 from qmx_tools.unit_check import checked
 
 NO_RECORD_NOTE = (
-    "no_record at /markets/0: no instrument record was given for fx.gbpusd. A check with no Library "
-    "cannot settle this, and QMB's lander checks it with the Library before any run."
+    "no_record at /markets/0: no instrument record was given for fx.gbpusd. A check with no "
+    "Library cannot settle this, and QMB's lander checks it with the Library before any run."
 )
 
 
@@ -61,9 +61,7 @@ def test_a_second_stop_on_gbpusd_keeps_its_error() -> None:
     document["exit_set"].append({**stop, "name": "second_stop"})
 
     first = cast("dict[str, Any]", unit_check.offline_checked(document))
-    again = cast(
-        "dict[str, Any]", unit_check.offline_checked(document, str(first["problem_set"]))
-    )
+    again = cast("dict[str, Any]", unit_check.offline_checked(document, str(first["problem_set"])))
 
     assert first["verdict"] == "fail"
     assert kinds(first) == ["exit_not_built"]
