@@ -349,6 +349,32 @@ def test_a_whole_bar_price_series_compares_the_close() -> None:
     }
 
 
+def test_a_stop_and_a_target_land_on_a_tick_coarser_than_the_digits() -> None:
+    """On a 0.05 tick a long's stop rounds down, a short's up and a target to the nearest tick. The
+    prices are in hundredths, so a broker on that tick takes each of them."""
+    context = _context()
+    coarse = {
+        market: replace(record, tick_size=Decimal("0.05"), digits=2)
+        for market, record in context.records.items()
+    }
+    bars = _slice()
+    built = compile_unit(_document(), replace(context, records=coarse))
+    assert isinstance(built, CompiledUnit), built
+
+    orders: set[tuple[str, str, int, int]] = set()
+    for _, intent in _entries(_drive(_host(built, _surfaces(bars)), _instants(bars))):
+        stop = intent.protection.stop
+        assert not isinstance(stop, str)
+        target = intent.protection.targets[0].price
+        orders.add((intent.market_id, intent.direction.value, stop.value, target.value))
+
+    assert orders == {
+        ("fx.eurusd", "short", 110, 100),
+        ("metal.xauusd", "long", 324055, 325675),
+        ("metal.xauusd", "long", 323020, 324220),
+    }
+
+
 def _windows(unit: HostedUnit, market: str) -> dict[str, int]:
     markets = cast("Mapping[str, Mapping[str, object]]", unit.snapshot()["markets"])
     blocks = cast("Mapping[str, Mapping[str, list[str]]]", markets[market]["blocks"])
