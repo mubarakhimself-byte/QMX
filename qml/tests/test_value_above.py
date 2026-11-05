@@ -1,6 +1,8 @@
 """`value-above@1` and the slot rule it needs: a value that only feeds is no condition, a slot left
 with none holds, and a binding that can neither hold nor feed refuses with a pointer."""
 
+# pyright: reportPrivateUsage=false
+
 from __future__ import annotations
 
 import json
