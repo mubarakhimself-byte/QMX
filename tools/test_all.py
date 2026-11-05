@@ -62,7 +62,6 @@ def main() -> int:
             ["packages", "extensions", "qml", "qmb", "qmn"],
         ),
         ("tools", ROOT, ["python", "-m", "pytest", "tools/tests", "-q"], ["tools/tests"]),
-        ("adws", ROOT, ["python", "-m", "pytest", "adws/tests", "-q"], ["adws/tests"]),
         (
             "qmx-tools",
             ROOT / "qmx-agents/packages/qmx-tools",

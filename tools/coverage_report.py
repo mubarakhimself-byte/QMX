@@ -22,9 +22,8 @@ mechanically enforces the two story acceptance criteria the aggregate cannot:
   measurable package or contract-branch totals are not coverage evidence.
 
 Wired into ``poe check`` right after ``test`` (which produces ``coverage.json``). A
-single violation exits nonzero and fails the gate. Stdlib only; the SSSF root gate
-(``adws``) is untouched. Run via ``python tools/coverage_report.py`` or ``poe
-cov-report``.
+single violation exits nonzero and fails the gate. Stdlib only. Run via ``python
+tools/coverage_report.py`` or ``poe cov-report``.
 """
 
 from __future__ import annotations

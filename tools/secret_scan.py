@@ -8,11 +8,10 @@ mistake at Tier 1.
 
 **Scope.** The gate walks the whole repository from the root, not just the shipped
 ``packages/ + extensions/ + tools/`` code: repo-root files, ``.github/workflows/``,
-``queue/``, and every other tracked directory are covered, because a leaked
-credential in a workflow, a queued brief, or a root dotfile is exactly as dangerous
-as one in source. Covered surfaces explicitly include source, fixtures, unit files,
-rendered config, logs, and refusal snapshots (QMX-F064 / Story 25.13). ``adws/`` is
-scanned **read-only** (the factory machinery is never modified). Machine-noise and
+and every other tracked directory are covered, because a leaked credential in a
+workflow or a root dotfile is exactly as dangerous as one in source. Covered surfaces
+explicitly include source, fixtures, unit files, rendered config, logs, and refusal
+snapshots (QMX-F064 / Story 25.13). Machine-noise and
 vendored trees are skipped by ``SKIP_DIRS``; path-skipped files are this scanner's
 own planted fixture corpus under ``tools/tests/fixtures`` and the pack-lifecycle
 export-scan fixture that plants a fake PEM so the export oracle can refuse it.
@@ -37,9 +36,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SELF = Path(__file__).resolve()
 
 # Machine-noise and vendored trees never scanned — the same discipline the money-path
-# and ambient scanners apply. ``adw_data`` is the factory's gitignored runtime session
-# output (transcripts, stamped prompts) — not tracked source — so it is skipped too;
-# the tracked ``adws`` machinery is still scanned read-only.
+# and ambient scanners apply.
 SKIP_DIRS: frozenset[str] = frozenset(
     {
         "__pycache__",
@@ -52,7 +49,6 @@ SKIP_DIRS: frozenset[str] = frozenset(
         "node_modules",
         "build",
         "dist",
-        "adw_data",
     }
 )
 
