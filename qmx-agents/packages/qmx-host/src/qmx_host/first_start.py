@@ -640,12 +640,14 @@ def refresh_first_party(runtime: Supervisor, app_id: str, folder: Path) -> Docum
     head = str(found["definition_hash"])
     # The road publishes by the new image's risk alone, so a repair that changed it still waits.
     money = "money" in (shipped.manifest.risk, cast(Document, found["definition"])["risk"])
-    if shipped.hash != head or (not money and path_sources(folder) != runtime.built_from(head)):
-        found = runtime.install(folder, trust="first_party", expected_id=app_id, expected_hash=head)
     active = cast(Document, found.get("road") or {}).get("active")
-    if not isinstance(active, dict):
+    published = str(active["definition_hash"]) if isinstance(active, dict) else None
+    # Installing what he signed again, as a checkout back on it would, rebuilds its environment.
+    moved = shipped.hash != head and not (money and shipped.hash == published)
+    if moved or (not money and path_sources(folder) != runtime.built_from(head)):
+        found = runtime.install(folder, trust="first_party", expected_id=app_id, expected_hash=head)
+    if not isinstance(active, dict) or published is None:
         return found
-    published = str(active["definition_hash"])
     if money:
         version, running = cast(Document, found["definition"])["version"], active["version"]
         if published != shipped.hash:

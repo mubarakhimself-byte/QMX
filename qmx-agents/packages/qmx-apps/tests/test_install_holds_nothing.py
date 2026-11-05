@@ -180,10 +180,10 @@ time.sleep(20)
 """A uv that never ends: it leaves a grandchild holding its output, then sits."""
 
 
-def fake_uv(root: Path) -> Path:
-    """A real executable the supervisor finds as `uv`, whose tree outlives any plain wait."""
+def fake_uv(root: Path, body: str) -> Path:
+    """A real executable the supervisor finds as `uv`, running `body` with a folder for its marks."""
     script = root / "tree.py"
-    script.write_text(TREE)
+    script.write_text(body)
     marks = root / "marks"
     marks.mkdir()
     if sys.platform == "win32":
@@ -206,7 +206,7 @@ def finding_uv_at(program: Path) -> Callable[[str], str | None]:
 
 
 def test_a_stuck_install_fails_by_name(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    program = fake_uv(tmp_path)
+    program = fake_uv(tmp_path, TREE)
     monkeypatch.setattr(shutil, "which", finding_uv_at(program))
     home = tmp_path / "QMX" / "data"
     home.mkdir(parents=True)
@@ -235,6 +235,25 @@ def test_a_stuck_install_fails_by_name(tmp_path: Path, monkeypatch: pytest.Monke
     while any(psutil.pid_exists(pid) for pid in pids) and time.monotonic() < deadline:
         time.sleep(0.05)
     assert [psutil.pid_exists(pid) for pid in pids] == [False, False]
+
+
+def test_a_failed_install_quotes_uv_from_its_log(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    said = 'print("Resolved 3 packages")\nprint("error: the lock is stale")\nraise SystemExit(1)\n'
+    monkeypatch.setattr(shutil, "which", finding_uv_at(fake_uv(tmp_path, said)))
+    supervisor = Supervisor(tmp_path / "QMX" / "data", secret_getter=lambda _s, _u: "fixture")
+    try:
+        with pytest.raises(AppError) as failed:
+            supervisor.install(source(tmp_path, OTHER), trust="first_party")
+    finally:
+        supervisor.close()
+
+    assert failed.value.code == "install_failed"
+    assert str(failed.value) == (
+        "uv could not install the app's lock; check its lock and sources. "
+        "uv said: error: the lock is stale"
+    )
 
 
 def test_a_job_answer_being_replaced_is_read_again(

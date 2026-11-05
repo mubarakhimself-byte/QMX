@@ -280,6 +280,26 @@ def test_a_library_repair_does_not_touch_a_signed_money_app(
     )
 
 
+def test_a_checkout_back_on_the_signed_version_builds_nothing(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    folder, signed = signed_money_app(world, monkeypatch)
+    signed_files = {name: (folder / name).read_bytes() for name in ("server.py", "app.toml")}
+    repair(folder, "1.0.1")
+    world.start_host()
+    builds = list(world.uv_calls)
+    for name, content in signed_files.items():
+        (folder / name).write_bytes(content)
+    repair_library(world.root)
+
+    world.start_host()
+
+    status = world.runtime.status(APP)
+    assert len(builds) == 2
+    assert world.uv_calls == builds
+    assert (status["status"], status["definition_hash"]) == ("running", signed)
+
+
 def test_a_library_repair_rebuilds_a_non_money_app_with_its_data(
     world: World, monkeypatch: pytest.MonkeyPatch
 ) -> None:
