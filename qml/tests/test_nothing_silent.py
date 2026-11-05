@@ -203,6 +203,8 @@ def _exit_document(face: Document) -> Document:
     if index is None:
         document["exit_set"].append(binding)
     else:
+        for param in document["exit_set"][index]["params"].values():
+            del document["numbers"][param["number"]]
         document["exit_set"][index] = binding
     return document
 
