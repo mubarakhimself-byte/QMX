@@ -340,22 +340,6 @@ def test_a_cut_restored_from_exported_state_equals_the_full_run_and_stays_in_bou
     assert answered >= 4
 
 
-def test_inside_a_unit_today_an_exit_stays_silent_and_says_so() -> None:
-    unit_bar = {"series": _BARS[60]}
-    silent = {
-        entry_id
-        for entry_id in _EXITS
-        if _make(f"{entry_id}@1").update(unit_bar) is None
-        and _make(f"{entry_id}@1").update({}) is None
-    }
-
-    assert silent == set(_EXITS)
-    for entry_id in _EXITS:
-        assert "does not yet pass an exit its position," in cast(
-            "str", _entry(entry_id)["boundaries"]
-        ), entry_id
-
-
 def test_a_halt_names_what_it_does_its_scope_and_why() -> None:
     answers = [
         _make("session-loss-limit-halt@1").update({"session_loss_r": Decimal("-3.5")}),

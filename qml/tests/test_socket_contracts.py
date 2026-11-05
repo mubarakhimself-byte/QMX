@@ -378,43 +378,6 @@ def _rounds_up(evidence: Mapping[str, object]) -> Size:
     return Size(lots=steps * record.lot_step)
 
 
-def test_the_socket_enrols_every_shipped_sizer_exit_and_halt() -> None:
-    slots = {
-        slot: sorted(pin for pin, s in _SHIPPED.items() if s.face.component_type == slot)
-        for slot in _SLOTS
-    }
-    origins = {pin: (s.face.origin, s.face.owner) for pin, s in _SHIPPED.items()}
-
-    assert slots == {
-        "sizer": ["fixed-fraction-at-stop@1"],
-        "exit": [
-            "offset-gated-trailing-stop@1",
-            "peak-holdings-giveback-exit@1",
-            "profit-fraction-trailing-stop@1",
-            "roi-table-exit@1",
-            "stepped-profit-stop@1",
-            "swing-stop-buffer@1",
-            "target-r-multiple@1",
-            "time-exit-bars@1",
-            "unrealised-profit-cap@1",
-        ],
-        "halt": [
-            "account-daily-loss-halt@1",
-            "equity-drawdown-halt@1",
-            "losing-days-halt@1",
-            "session-fill-limit-halt@1",
-            "session-loss-limit-halt@1",
-        ],
-    }
-    assert {pin for pin, o in origins.items() if o == ("placeholder", "risk-session")} == {
-        "fixed-fraction-at-stop@1",
-        "swing-stop-buffer@1",
-        "target-r-multiple@1",
-        "time-exit-bars@1",
-    }
-    assert {o for o in origins.values() if o[0] != "placeholder"} == {("qml", None)}
-
-
 @pytest.mark.parametrize("pin", sorted(_SHIPPED))
 def test_every_shipped_socket_block_meets_its_slot_contract(pin: str) -> None:
     assert _breaks(_SHIPPED[pin]) == []

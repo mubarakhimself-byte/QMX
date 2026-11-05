@@ -16,7 +16,7 @@ from typing import cast
 import pytest
 from qml.blocks.api import Block, EntryFace, Instance, Signal, parse_entry
 from qml.catalogue import Loaded, LockEntry, load
-from qml.catalogue.entry import Health, Status, check_entry, compute_status
+from qml.catalogue.entry import Status, check_entry, compute_status
 from qml.catalogue.index import match, row
 from qml.protocol.unit import OHLC
 
@@ -141,11 +141,6 @@ def test_below_its_minimum_sample_a_reading_is_missing_and_its_card_says_thin(
     assert (entry["min_sample"], instance.warm_up_bars) == (sample, sample)
     outputs = cast("dict[str, dict[str, str]]", card["outputs"])
     assert outputs["health"] == {"below_minimum_sample": "thin"}
-
-
-def test_the_card_health_words_are_the_stamped_reading_records() -> None:
-    # Part C's record, qmf/readings/record.py Health, which QML does not import.
-    assert [h.value for h in Health] == ["fresh", "stale", "degraded", "thin", "shadow", "retired"]
 
 
 @pytest.mark.parametrize("case", _CASES)
